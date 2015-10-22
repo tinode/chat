@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:paddingLeft="@dimen/activity_horizontal_margin"
+    android:paddingRight="@dimen/activity_horizontal_margin"
+    android:paddingTop="@dimen/activity_vertical_margin"
+    android:paddingBottom="@dimen/activity_vertical_margin"
+    tools:context="com.tinode.example.chatdemo.MainActivity$ContactsFragment">
+
+    <View
+        android:layout_height="2dip"
+        android:layout_width="fill_parent"
+        android:background="#ffcccccc"
+        android:id="@+id/view"
+        android:layout_marginBottom="8dp"
+        android:layout_below="@+id/textView2" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textAppearance="?android:attr/textAppearanceMedium"
+        android:text="@string/create_or_join_topic"
+        android:id="@+id/textView0"
+        android:padding="4dp"
+        android:layout_alignParentTop="true"
+        android:layout_alignParentLeft="true"
+        android:layout_alignParentStart="true" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textAppearance="?android:attr/textAppearanceMedium"
+        android:text="@string/topicprompt"
+        android:id="@+id/textView"
+        android:layout_alignBottom="@+id/editTopicName"
+        android:padding="4dp"
+        android:gravity="center_vertical"
+        />
+
+    <EditText
+        android:id="@+id/editTopicName"
+        android:layout_width="fill_parent"
+        android:layout_height="wrap_content"
+        android:layout_toLeftOf="@+id/startTopicButton"
+        android:layout_toRightOf="@+id/textView"
+        android:layout_above="@+id/textView2"
+        android:inputType="text"
+        android:hint="!new or topic name"
+        android:layout_below="@+id/textView0" />
+
+    <Button
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/go"
+        android:textAppearance="?android:attr/textAppearanceSmall"
+        android:layout_alignParentRight="true"
+        android:id="@+id/startTopicButton"
+        android:layout_below="@+id/textView0"
+        android:onClick="onStartTopicButton"/>
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textAppearance="?android:attr/textAppearanceMedium"
+        android:text="@string/pickuserprompt"
+        android:padding="4dp"
+        android:layout_below="@+id/startTopicButton"
+        android:id="@+id/textView2"/>
+
+    <ListView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:id="@+id/contact_list"
+        android:layout_centerHorizontal="true"
+        android:textAppearance="?android:attr/textAppearanceListItemSmall"
+        android:layout_below="@+id/view" />
+
+</RelativeLayout>

@@ -1,0 +1,4 @@
+<resources>
+    <dimen name="activity_horizontal_margin">8dp</dimen>
+    <dimen name="activity_vertical_margin">8dp</dimen>
+</resources>
