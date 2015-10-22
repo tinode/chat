@@ -2,7 +2,7 @@
 
 **This documentation covers the next 0.4 release of Tinode. ETA mid-November 2015.**  
 
-Instant messaging server. Backend in pure [Go](http://golang.org) ([Affero GPL 3.0](http://www.gnu.org/licenses/agpl-3.0.en.html)), client-side binding in Java for Android and Javascript ([Apache 2.0](http://www.apache.org/licenses/LICENSE-2.0)), persistent storage [RethinkDB](http://rethinkdb.com/), JSON over websocket. No UI components other than demo apps. Tinode is meant as a replacement for XMPP.
+Instant messaging server. Backend in pure [Go](http://golang.org) ([Affero GPL 3.0](http://www.gnu.org/licenses/agpl-3.0.en.html)), client-side binding in Java for Android and Javascript ([Apache 2.0](http://www.apache.org/licenses/LICENSE-2.0)), persistent storage [RethinkDB](http://rethinkdb.com/), JSON over websocket (long polling is also available). No UI components other than demo apps. Tinode is meant as a replacement for XMPP.
 
 This is alpha-quality software. Bugs should be expected. Version 0.4
 
@@ -22,7 +22,7 @@ This is alpha-quality software. Bugs should be expected. Version 0.4
 * Server-generated presence notifications for people and topics
 * Persistent message store
 * Android Java bindings (dependencies: [jackson](https://github.com/FasterXML/jackson), [android-websockets](https://github.com/codebutler/android-websockets))
-* Javascript bundings with no dependencies
+* Javascript bindings with no dependencies
 * Websocket & long polling transport
 * JSON wire protocol
 * Server-generated message delivery status
@@ -36,7 +36,7 @@ This is alpha-quality software. Bugs should be expected. Version 0.4
 * Clustering
 * Federation
 * Multitenancy
-* Different levels of message persistence (from strict persistence to purely ephemeral messaging)
+* Different levels of message persistence (from strict persistence to store until delivered to purely ephemeral messaging)
 * Support for binary wire protocol
 * User search/discovery
 * Anonymous clients
@@ -84,6 +84,8 @@ Server responds to connection with a `{ctrl}` message. The `params` field contai
 
 ### Websocket
 
+Messages are sent in text frames. Binary frames are reserved for future use.
+
 ### Long polling
 
 
@@ -113,22 +115,26 @@ acc: {
   user: "new", // string, "new" to create a new user, default: current user, optional
   auth: [   // array of authentication schemes to add, update or delete
     {
-      scheme: "basic", // requested authentication scheme for this account, required; only "basic" (default)
-                       // is currently supported. The current basic scheme does not allow changes to username.
-      secret: "username:password" // string, secret for the chosen authentication scheme;
-                     // to delete a scheme use string with a single DEL Unicode
-                     // character "\u2421", required
+      scheme: "basic", // requested authentication scheme for this account, required;
+                       // only "basic" (default) is currently supported. The current
+                       // basic scheme does not allow changes to username.
+      secret: "username:password" // string, secret for the chosen authentication
+                      // scheme; to delete a scheme use string with a single DEL
+                      // Unicode character "\u2421"; required
     }
   ],
-  init: {  // object, user initialization data closely matching that of table initialization; optional
+  init: {  // object, user initialization data closely matching that of table
+           // initialization; optional
     defacs: {
-      auth: "RWS", // string, default access mode for peer to peer conversations between
-                   // this user and other authenticated users
-      anon: "X"  // string, default access mode for peer to peer conversations between this user
-                 // and anonymous (un-authenticated) users
+      auth: "RWS", // string, default access mode for peer to peer conversations
+                   // between this user and other authenticated users
+      anon: "X"  // string, default access mode for peer to peer conversations between
+                 // this user and anonymous (un-authenticated) users
     }, // Default access mode for user's peer to peer topics
-    public: {}, // Free-form application-dependent payload to describe user, available to everyone
-    private: {} // Private application-dependent payload available to user only through `me` topic
+    public: {}, // Free-form application-dependent payload to describe user,
+                // available to everyone
+    private: {} // Private application-dependent payload available to user only
+                // through `me` topic
   }
 }
 ```
@@ -145,9 +151,12 @@ login: {
   id: "1a2b3",     // string, client-provided message id, optional
   scheme: "basic", // string, authentication scheme, optional; only "basic" (default)
                    // is currently supported
-  secret: "username:password", // string, secret for the chosen authentication scheme, required
-  expireIn: "24h", // string, login expiration time in Go's time.ParseDuration format, see below, optional
-  tag: "some string" // string, client instance ID; tag is used to support caching, optional
+  secret: "username:password", // string, secret for the chosen authentication scheme,
+                               // required
+  expireIn: "24h", // string, login expiration time in Go's time.ParseDuration format,
+                   // see below, optional
+  tag: "some string" // string, client instance ID; tag is used to support caching,
+                     // optional
 }
 ```
 Basic authentication scheme expects `secret` to be a string composed of a user name followed by a colon `:` followed by a plan text password.
@@ -188,7 +197,8 @@ sub: {
   init: {
     defacs: {
       auth: "RWS", // string, default access for new authenticated subscribers
-      anon: "X"  // string, default access for new anonymous (un-authenticated) subscribers
+      anon: "X"    // string, default access for new anonymous (un-authenticated)
+                   // subscribers
     }, // Default access mode for the new topic
     public: {}, // Free-form application-dependent payload to describe topic
     private: {} // Per-subscription private application-dependent payload
@@ -265,7 +275,8 @@ get: {
                         // load objects newer than this (inclusive/closed), optional
     before: "2015-10-06T18:07:30.134Z", // datetime as  RFC 3339-formated string,
                         // load objects older than this (exclusive/open), optional
-    limit: 20, // integer, limit the number of returned objects, default: 32, optional
+    limit: 20, // integer, limit the number of returned objects, default: 32,
+               // optional
   } // object, what=data query parameters
 }
 ```
@@ -352,9 +363,10 @@ Generic response indicating an error or a success condition. The message is sent
 ```js
 ctrl: {
   id: "1a2b3", // string, client-provided message id, optional
-  topic: "grp1XUtEhjv6HND", // string, topic name, if this is a response in context of a topic, optional
-  code: 200, // integer, code indicating success or failure of the request, follows the HTTP status
-             //codes model, always present
+  topic: "grp1XUtEhjv6HND", // string, topic name, if this is a response in context
+                            // of a topic, optional
+  code: 200, // integer, code indicating success or failure of the request, follows
+             // the HTTP status codes model, always present
   text: "OK", // string, text with more details about the result, always present
   params: {}, // object, generic response parameters, context-dependent, optional
   ts: "2015-10-06T18:07:30.038Z", // string, timestamp
@@ -368,7 +380,8 @@ Information about topic metadata or subscribers, sent in response to `{set}` or 
 ```js
 ctrl: {
   id: "1a2b3", // string, client-provided message id, optional
-  topic: "grp1XUtEhjv6HND", // string, topic name, if this is a response in context of a topic, optional
+  topic: "grp1XUtEhjv6HND", // string, topic name, if this is a response in
+                            // context of a topic, optional
 	info: {
 
   }, // object, topic description, optional

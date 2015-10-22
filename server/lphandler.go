@@ -107,8 +107,11 @@ func serveLongPoll(wrt http.ResponseWriter, req *http.Request) {
 	wrt.Header().Set("Access-Control-Allow-Origin", "*")
 
 	// Ensure the response is not cached
-	wrt.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate") // HTTP 1.1
-	wrt.Header().Set("Pragma", "no-cache")                                   // HTTP 1.0
+	if req.ProtoAtLeast(1, 1) {
+		wrt.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate") // HTTP 1.1
+	} else {
+		wrt.Header().Set("Pragma", "no-cache")                                   // HTTP 1.0
+	}
 	wrt.Header().Set("Expires", "0")                                         // Proxies
 
 	// TODO(gene): respond differently to valious HTTP methods
@@ -127,7 +130,7 @@ func serveLongPoll(wrt http.ResponseWriter, req *http.Request) {
 			&ServerComMessage{Ctrl: &MsgServerCtrl{
 				Code:      http.StatusCreated,
 				Text:      http.StatusText(http.StatusCreated),
-				Params:    map[string]interface{}{"sid": sess.sid, "ver": VERSION},
+				Params:    map[string]interface{}{"sid": sess.sid, "ver": VERSION, "build": buildstamp},
 				Timestamp: time.Now().UTC().Round(time.Millisecond)}})
 
 		// Any payload is ignored

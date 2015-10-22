@@ -150,7 +150,7 @@ func serveWebSocket(wrt http.ResponseWriter, req *http.Request) {
 	sess.QueueOut(&ServerComMessage{Ctrl: &MsgServerCtrl{
 		Code:      http.StatusCreated,
 		Text:      http.StatusText(http.StatusCreated),
-		Params:    map[string]interface{}{"ver": VERSION},
+		Params:    map[string]interface{}{"ver": VERSION, "build": buildstamp},
 		Timestamp: time.Now().UTC().Round(time.Millisecond)}})
 
 	go sess.writeLoop()

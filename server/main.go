@@ -59,6 +59,9 @@ const (
 	DEFAULT_ANON_ACCESS = types.ModeNone
 )
 
+// Build timestamp set by the compiler
+var buildstamp = ""
+
 var globals struct {
 	hub *Hub
 
