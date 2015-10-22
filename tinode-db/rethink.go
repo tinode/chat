@@ -49,7 +49,8 @@ func gen_rethink(data *Data) {
 		user.CreatedAt = getCreatedTime(uu["createdAt"])
 
 		// store.Users.Create will subscribe user to !me topic but won't create a !me topic
-		if _, err := store.Users.Create(0, &user, uu["passhash"].(string), uu["private"]); err != nil {
+		if _, err := store.Users.Create(0, &user, "basic",
+			uu["username"].(string) + ":" + uu["passhash"].(string), uu["private"]); err != nil {
 			log.Fatal(err)
 		}
 
