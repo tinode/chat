@@ -128,8 +128,8 @@ acc: {
     defacs: {
       auth: "RWS", // string, default access mode for peer to peer conversations
                    // between this user and other authenticated users
-      anon: "X"  // string, default access mode for peer to peer conversations between
-                 // this user and anonymous (un-authenticated) users
+      anon: "X"  // string, default access mode for peer to peer conversations
+                 // between this user and anonymous (un-authenticated) users
     }, // Default access mode for user's peer to peer topics
     public: {}, // Free-form application-dependent payload to describe user,
                 // available to everyone
@@ -151,10 +151,10 @@ login: {
   id: "1a2b3",     // string, client-provided message id, optional
   scheme: "basic", // string, authentication scheme, optional; only "basic" (default)
                    // is currently supported
-  secret: "username:password", // string, secret for the chosen authentication scheme,
-                               // required
-  expireIn: "24h", // string, login expiration time in Go's time.ParseDuration format,
-                   // see below, optional
+  secret: "username:password", // string, secret for the chosen authentication
+                               //  scheme, required
+  expireIn: "24h", // string, login expiration time in Go's time.ParseDuration
+                   //  format, see below, optional
   tag: "some string" // string, client instance ID; tag is used to support caching,
                      // optional
 }
@@ -207,8 +207,9 @@ sub: {
   // Subscription parameters, mirrors {set sub}; sub.user must
   // not be provided
   sub: {
-    mode: "RWS", // string, requested access mode, optional; default: server-defined
-    info: {}    // a free-form payload to pass to the topic manager
+    mode: "RWS", // string, requested access mode, optional;
+                 // default: server-defined
+    info: {}     // a free-form payload to pass to the topic manager
   }, // object, optional
 
   // Metadata to request from the topic; space-separated list, valid strings
@@ -224,7 +225,8 @@ sub: {
                     // load objects newer than this (inclusive/closed), optional
     before: "2015-10-06T18:07:30.134Z", // datetime as  RFC 3339-formated string,
                     // load objects older than this (exclusive/open), optional
-    limit: 20, // integer, limit the number of returned objects, default: 32, optional
+    limit: 20, // integer, limit the number of returned objects,
+               // default: 32, optional
   } // object, optional
 }
 ```
