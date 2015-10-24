@@ -112,11 +112,13 @@ func (a *RethinkDbAdapter) IsOpen() bool {
 	return a.conn != nil
 }
 
-// ResetDb re-initializes the storage. All data is lost.
-func (a *RethinkDbAdapter) ResetDb() error {
+// CreateDb initializes the storage. If reset is true, the database is first deleted losing all the data.
+func (a *RethinkDbAdapter) CreateDb(reset bool) error {
 
 	// Drop database if exists, ignore error if it does not.
-	rdb.DBDrop("tinode").RunWrite(a.conn)
+	if reset {
+		rdb.DBDrop("tinode").RunWrite(a.conn)
+	}
 
 	if _, err := rdb.DBCreate("tinode").RunWrite(a.conn); err != nil {
 		return err

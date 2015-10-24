@@ -64,8 +64,8 @@ func IsOpen() bool {
 	}
 }
 
-func ResetDb() error {
-	return adaptr.ResetDb()
+func InitDb(reset bool) error {
+	return adaptr.CreateDb(reset)
 }
 
 // Register makes a persistence adapter available by the provided name.

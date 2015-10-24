@@ -13,7 +13,7 @@ type Adapter interface {
 	Close() error
 	IsOpen() bool
 
-	ResetDb() error
+	CreateDb(reset bool) error
 
 	// User management
 	GetPasswordHash(appid uint32, username string) (t.Uid, []byte, error)

@@ -9,20 +9,25 @@ import (
 	"time"
 )
 
-func gen_rethink(data *Data) {
+func gen_rethink(reset bool, dbsource string, data *Data) {
 	var err error
 
 	log.Println("Opening DB...")
 
-	err = store.Open("rethinkdb://localhost:28015/tinode?authKey=&discover=false&maxIdle=&maxOpen=&timeout=&workerId=1&uidkey=la6YsO-bNX_-XIkOqc5Svw==")
+	err = store.Open(dbsource)
 	if err != nil {
-		log.Fatal("failed to connect to DB: ", err)
+		log.Fatal("Failed to connect to DB: ", err)
 	}
 	defer store.Close()
 
-	log.Println("Resetting DB...")
+	log.Println("Initializing DB...")
 
-	store.ResetDb()
+	err = store.InitDb(reset)
+	if err != nil {
+		log.Fatal("Failed to init DB: ", err)
+	}
+
+	log.Println("DB successfully initialized")
 
 	if data.Users == nil {
 		log.Println("No data provided, stopping")
@@ -50,7 +55,7 @@ func gen_rethink(data *Data) {
 
 		// store.Users.Create will subscribe user to !me topic but won't create a !me topic
 		if _, err := store.Users.Create(0, &user, "basic",
-			uu["username"].(string) + ":" + uu["passhash"].(string), uu["private"]); err != nil {
+			uu["username"].(string)+":"+uu["passhash"].(string), uu["private"]); err != nil {
 			log.Fatal(err)
 		}
 
