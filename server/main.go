@@ -79,7 +79,7 @@ func main() {
 	log.Printf("Server started with processes: %d",
 		runtime.GOMAXPROCS(runtime.NumCPU()))
 
-	var listenOn = flag.String("bind", "127.0.0.1:8080",
+	var listenOn = flag.String("bind", "",
 		"111.22.33.44:80 - IP address/host name and port number to listen on")
 	var dbsource = flag.String("db", "", "Data source name and configuration")
 	flag.Parse()

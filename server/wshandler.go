@@ -122,26 +122,30 @@ func ws_write(ws *websocket.Conn, mt int, payload []byte) error {
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
+	// Allow connections from any Origin
+	CheckOrigin: func(r *http.Request) bool { return true },
 }
 
 func serveWebSocket(wrt http.ResponseWriter, req *http.Request) {
 	var appid uint32 = 0
 	if appid, _ = checkApiKey(getApiKey(req)); appid == 0 {
 		http.Error(wrt, "Missing, invalid or expired API key", http.StatusForbidden)
+		log.Println("ws: Missing, invalid or expired API key")
 		return
 	}
 
 	if req.Method != "GET" {
 		http.Error(wrt, "Method not allowed", http.StatusMethodNotAllowed)
+		log.Println("ws: Invalid HTTP method")
 		return
 	}
 
 	ws, err := upgrader.Upgrade(wrt, req, nil)
 	if _, ok := err.(websocket.HandshakeError); ok {
-		http.Error(wrt, "Not a websocket handshake", http.StatusBadRequest)
+		log.Println("ws: Not a websocket handshake")
 		return
 	} else if err != nil {
-		log.Println(err)
+		log.Println("ws: failed to Upgrade ", err.Error())
 		return
 	}
 
