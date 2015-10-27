@@ -129,8 +129,9 @@ Public domain. No warranty is offered or implied; use this code at your own risk
 $(function() {
 // Generate your own API key
 var APIKEY = "AQEAAAABAAD_rAp4DJh05a1HAwFT3A6K"
-// Change this URL to point to your messaging server
-var ENDPOINT = "http://localhost:8088/"
+// Change this URL to point to your messaging server if it's different from the server
+// hosting this web app
+var ENDPOINT = undefined
 
 // Fix for hidden form elements
 $("#loginSettingsPanel").hide().removeClass("hidden")
@@ -299,7 +300,8 @@ function show_conversation_panel(topicname) {
 
 function init() {
 	// TODO(gene): remove the baseUrl parameter
-	Tinode.init(APIKEY, $("#baseUrl").val()) // baseUrl is available during debugging only
+	var baseUrl = ($("#baseUrl").val() || ENTRYPOINT || location.protocol + '//' + location.host + "/")
+	Tinode.init(APIKEY, baseUrl) // baseUrl is available during debugging only
 	var transport = $("input:radio[name=transport]:checked" ).val();
 	Tinode.streaming.init(transport)
 	//Tinode.streaming.setEcho($("#requestEcho").is(":checked"))
@@ -532,7 +534,7 @@ function subscriber_update() {
 			<form role="form" id="loginSettings">
 			  <div class="form-group">
 			    <label for="baseUrl">Base URL</label>
-			    <input type="url" class="form-control" id="baseUrl" value="http://localhost:8088/">
+			    <input type="url" class="form-control" id="baseUrl" value="">
 			  </div>
 				<div class="form-group">
 					<label>Streaming transport:</label>
