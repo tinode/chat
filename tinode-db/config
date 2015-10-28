@@ -1,0 +1,8 @@
+{
+	"worker_id": 1,
+	"uid_key": "la6YsO+bNX/+XIkOqc5Svw==",
+	"params": {
+		"database": "tinode",
+		"addresses": "localhost:28015"
+	}
+}

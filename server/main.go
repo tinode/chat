@@ -32,11 +32,13 @@
 package main
 
 import (
+	"encoding/json"
 	_ "expvar"
 	"flag"
 	_ "github.com/tinode/chat/server/db/rethinkdb"
 	"github.com/tinode/chat/server/store"
 	"github.com/tinode/chat/server/store/types"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -68,6 +70,12 @@ var globals struct {
 	sessionStore *SessionStore
 }
 
+type configType struct {
+	Listen        string          `json:"listen"`
+	Adapter       string          `json:"db_adapter"`
+	AdapterConfig json.RawMessage `json:"adapter_config"`
+}
+
 func main() {
 	// For serving static content
 	path, err := os.Getwd()
@@ -76,15 +84,21 @@ func main() {
 	}
 	log.Printf("Home dir: '%s'", path)
 
-	log.Printf("Server started with processes: %d",
-		runtime.GOMAXPROCS(runtime.NumCPU()))
+	log.Printf("Server started with processes: %d", runtime.GOMAXPROCS(runtime.NumCPU()))
 
-	var listenOn = flag.String("bind", "",
-		"111.22.33.44:80 - IP address/host name and port number to listen on")
-	var dbsource = flag.String("db", "", "Data source name and configuration")
+	var configfile = flag.String("config", "./config", "Path to config file")
 	flag.Parse()
 
-	err = store.Open(*dbsource)
+	log.Printf("Using config from: '%s'", *configfile)
+
+	var config configType
+	if raw, err := ioutil.ReadFile(*configfile); err != nil {
+		log.Fatal(err)
+	} else if err = json.Unmarshal(raw, &config); err != nil {
+		log.Fatal(err)
+	}
+
+	err = store.Open(config.Adapter, string(config.AdapterConfig))
 	if err != nil {
 		log.Fatal("failed to connect to DB: ", err)
 	}
@@ -102,8 +116,8 @@ func main() {
 	// Handle long polling clients
 	http.HandleFunc("/v0/channels/lp", serveLongPoll)
 
-	log.Printf("Listening on [%s]", *listenOn)
-	log.Fatal(http.ListenAndServe(*listenOn, nil))
+	log.Printf("Listening on [%s]", config.Listen)
+	log.Fatal(http.ListenAndServe(config.Listen, nil))
 }
 
 func getApiKey(req *http.Request) string {

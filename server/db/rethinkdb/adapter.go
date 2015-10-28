@@ -1,14 +1,12 @@
 package rethinkdb
 
 import (
-	"encoding/base64"
+	"encoding/json"
 	"errors"
 	rdb "github.com/dancannon/gorethink"
 	"github.com/tinode/chat/server/store"
 	t "github.com/tinode/chat/server/store/types"
 	"log"
-	"net/url"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -19,77 +17,70 @@ type RethinkDbAdapter struct {
 }
 
 const (
-	defaultPort     = 28015
-	defaultHost     = "localhost"
+	defaultHost     = "localhost:28015"
 	defaultDatabase = "tinode"
 )
 
-var uGen uidGenerator
+type configType struct {
+	Database            string      `json:"database,omitempty"`
+	Addresses           interface{} `json:"addresses,omitempty"`
+	AuthKey             string      `json:"authkey,omitempty"`
+	Timeout             int         `json:"timeout,omitempty"`
+	WriteTimeout        int         `json:"write_timeout,omitempty"`
+	ReadTimeout         int         `json:"read_timeout,omitempty"`
+	MaxIdle             int         `json:"max_idle,omitempty"`
+	MaxOpen             int         `json:"max_open,omitempty"`
+	DiscoverHosts       bool        `json:"discover_hosts,omitempty"`
+	NodeRefreshInterval int         `json:"node_refresh_interval,omitempty"`
+}
 
-// Open eturns an initialized rethinkdb session
-func (a *RethinkDbAdapter) Open(dsn string) error {
+var uGen t.UidGenerator
+
+// Open initializes rethinkdb session
+func (a *RethinkDbAdapter) Open(jsonconfig string, workerId int, uidkey []byte) error {
 	if a.conn != nil {
 		return errors.New("adapter rethinkdb is already connected")
 	}
 
-	//dsn: "rethinkdb://localhost:28015/database_name?authKey=&discover=false&maxIdle=&maxOpen=&timeout=&workerId=1&uidkey=base64_encoded_string")
-	parts, err := url.Parse(dsn)
-	if err != nil {
-		return err
-	}
+	var err error
+	var config configType
 
-	//Parse connection options passed as query parameters
-	params := parts.Query()
+	if err = json.Unmarshal([]byte(jsonconfig), &config); err != nil {
+		return errors.New("adapter rethinkdb failed to parse config: " + err.Error())
+	}
 
 	// Initialise snowflake
-	var workerId int
-	if v, ok := params["workerId"]; ok && len(v) > 0 {
-		// We can safely ignore the error here because it returns the default 0
-		workerId, _ = strconv.Atoi(v[0])
-	}
-	var uidkey []byte
-	if v, ok := params["uidkey"]; ok {
-		dl := base64.URLEncoding.DecodedLen(len(v[0]))
-		if base64.URLEncoding.EncodedLen(dl) != len(v[0]) {
-			return errors.New("rethinkdb adapter: unable to base64-decode uidkey")
-		}
-
-		uidkey, err = base64.URLEncoding.DecodeString(v[0])
-		if err != nil {
-			return err
-		}
-	}
-	err = uGen.Init(uint(workerId), uidkey)
-	if err != nil {
-		return err
+	if err = uGen.Init(uint(workerId), uidkey); err != nil {
+		return errors.New("adapter rethinkdb failed to init snowflake: " + err.Error())
 	}
 
-	// Initialize database connection
-	if parts.Host == "" {
-		parts.Host = defaultHost + ":" + strconv.Itoa(defaultPort)
+	var opts rdb.ConnectOpts
+
+	if config.Addresses == nil {
+		opts.Address = defaultHost
+	} else if host, ok := config.Addresses.(string); ok {
+		opts.Address = host
+	} else if hosts, ok := config.Addresses.([]string); ok {
+		opts.Addresses = hosts
+	} else {
+		return errors.New("adapter rethinkdb failed to parse config.Addresses")
 	}
-	if parts.Path == "" {
+
+	if config.Database == "" {
 		a.dbName = defaultDatabase
 	} else {
-		a.dbName = parts.Path[1:] // path is returned as "/path", strip leading '/'
+		a.dbName = config.Database
 	}
 
-	opts := rdb.ConnectOpts{
-		Address:  parts.Host,
-		Database: a.dbName,
-	}
-
-	// We can safely ignore the conversion errors here because Atoi returns the default 0 on error
-	if maxIdle, ok := params["maxIdle"]; ok && len(maxIdle) > 0 {
-		opts.MaxIdle, _ = strconv.Atoi(maxIdle[0])
-	}
-	if maxOpen, ok := params["maxOpen"]; ok && len(maxOpen) > 0 {
-		opts.MaxOpen, _ = strconv.Atoi(maxOpen[0])
-	}
-	if timeout, ok := params["timeout"]; ok && len(timeout) > 0 {
-		to, _ := strconv.Atoi(timeout[0])
-		opts.Timeout = time.Duration(to) * time.Second
-	}
+	opts.Database = a.dbName
+	opts.AuthKey = config.AuthKey
+	opts.Timeout = time.Duration(config.Timeout) * time.Second
+	opts.WriteTimeout = time.Duration(config.WriteTimeout) * time.Second
+	opts.ReadTimeout = time.Duration(config.ReadTimeout) * time.Second
+	opts.MaxIdle = config.MaxIdle
+	opts.MaxOpen = config.MaxOpen
+	opts.DiscoverHosts = config.DiscoverHosts
+	opts.NodeRefreshInterval = time.Duration(config.NodeRefreshInterval) * time.Second
 
 	a.conn, err = rdb.Connect(opts)
 
@@ -753,5 +744,5 @@ func remapP2PTopic(topic string, user t.Uid) (string, error) {
 */
 
 func init() {
-	store.Register(&RethinkDbAdapter{})
+	store.Register("rethinkdb", &RethinkDbAdapter{})
 }

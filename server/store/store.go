@@ -22,6 +22,7 @@
 package store
 
 import (
+	"encoding/json"
 	"errors"
 	"github.com/tinode/chat/server/store/adapter"
 	"github.com/tinode/chat/server/store/types"
@@ -36,16 +37,32 @@ const (
 
 var adaptr adapter.Adapter
 
+type configType struct {
+	// The following two values ate used to initialize types.UidGenerator
+	// Snowflake workerId, beteween 0 and 1023
+	WorkerID int `json:"worker_id"`
+	// 16-byte key for XTEA
+	UidKey []byte          `json:"uid_key"`
+	Params json.RawMessage `json:"params"`
+}
+
 // Open initializes the persistence system. Adapter holds a connection pool for a single database.
-func Open(dataSourceName string) error {
+//   name - the name of adapter to use
+//   jsonconf - configuration string
+func Open(name, jsonconf string) error {
 	if adaptr == nil {
 		return errors.New("store: attept to Open an adapter before registering")
 	}
 	if adaptr.IsOpen() {
-		return errors.New("store: connection already opened")
+		return errors.New("store: connection is already opened")
 	}
 
-	return adaptr.Open(dataSourceName)
+	var config configType
+	if err := json.Unmarshal([]byte(jsonconf), &config); err != nil {
+		return errors.New("store: failed to parse config: " + err.Error() + "(" + jsonconf + ")")
+	}
+
+	return adaptr.Open(string(config.Params), config.WorkerID, config.UidKey)
 }
 
 func Close() error {
@@ -71,7 +88,8 @@ func InitDb(reset bool) error {
 // Register makes a persistence adapter available by the provided name.
 // If Register is called twice with the same name or if the adapter is nil,
 // it panics.
-func Register(adapter adapter.Adapter) {
+// Name is currently unused, i.e. only a single adapter can be registered
+func Register(name string, adapter adapter.Adapter) {
 	if adapter == nil {
 		panic("store: Register adapter is nil")
 	}

@@ -1,0 +1,12 @@
+{
+	"listen": ":8080",
+	"db_adapter": "rethinkdb",
+	"adapter_config": {
+		"worker_id": 1,
+		"uid_key": "la6YsO+bNX/+XIkOqc5Svw==",
+		"params": {
+			"database": "tinode",
+			"addresses": "localhost:28015"
+		}
+	}
+}

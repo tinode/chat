@@ -33,20 +33,13 @@ func genTopicName() string {
 func main() {
 
 	var reset = flag.Bool("reset", false, "first delete the database if one exists")
-	var filename = flag.String("data", "(>*<)", "path to sample data to load")
-	var dbsource = flag.String("db",
-		"rethinkdb://localhost:28015/tinode?authKey=&discover=false&maxIdle=&maxOpen=&timeout=&workerId=1&uidkey=la6YsO-bNX_-XIkOqc5Svw==",
-		"data source name and configuration")
+	var datafile = flag.String("data", "", "path to sample data to load")
+	var conffile = flag.String("config", "./config", "config of the database connection")
 	flag.Parse()
 
-	if *filename == "" {
-		*filename = "./data.json"
-	}
-
 	var data Data
-
-	if *filename != "(>*<)" {
-		raw, err := ioutil.ReadFile(*filename)
+	if *datafile != "" {
+		raw, err := ioutil.ReadFile(*datafile)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -56,5 +49,14 @@ func main() {
 		}
 	}
 
-	gen_rethink(*reset, *dbsource, &data)
+	if *conffile != "" {
+		conf, err := ioutil.ReadFile(*datafile)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		gen_rethink(*reset, string(conf), &data)
+	} else {
+		log.Println("No config provided. Exiting.")
+	}
 }

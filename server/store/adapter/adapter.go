@@ -9,7 +9,7 @@ import (
 // Adapter is the interface that must be implemented by a database
 // adapter. The current schema supports a single connection by database type.
 type Adapter interface {
-	Open(dsn string) error
+	Open(config string, workerId int, uidkey []byte) error
 	Close() error
 	IsOpen() bool
 

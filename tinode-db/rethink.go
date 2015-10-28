@@ -14,7 +14,7 @@ func gen_rethink(reset bool, dbsource string, data *Data) {
 
 	log.Println("Opening DB...")
 
-	err = store.Open(dbsource)
+	err = store.Open("rethinkdb", dbsource)
 	if err != nil {
 		log.Fatal("Failed to connect to DB: ", err)
 	}

@@ -9,9 +9,11 @@ Parameters:
  `rethinkdb://localhost:28015/tinode?authKey=&discover=false&maxIdle=&maxOpen=&timeout=&workerId=1&uidkey=base_64_encoded_string==` where
   - `tinode` is database name
   - `workerId` is the host id for snowflake for generating object ids
-  - `uidkey` is XTEA encryption key to (weakly) encrypt snowflake-generated ids so they don't apper to be sequential; you want to keep it private in production
+  - `uidkey` is a base64 URL-encoded 16 byte XTEA encryption key to (weakly) encrypt snowflake-generated IDs so they don't appear to be sequential
   - for `authKey`, `discover`, `timeout`, see [RethinkDB documentation](http://rethinkdb.com/api/javascript/connect/)
   - for `maxIdle`, `maxOpen` see [Gorethink documentation](https://github.com/dancannon/gorethink#connection-pool)
+
+The `uidkey` and `workerId` are only used if the sample data is loaded. In such a case workerId and uidkey should match those of production server (and uidkey should be kept privately), otherwise uniqueness of object keys is not guaranteed.
 
 The default `data.json` file creates five users with user names `alice`, `bob`, `carol`, `dave`, `frank`. Passwords are the same as user name with 123 appended, e.g. user `alice` has password `alice123`. It will also create three group topics, and multiple peer to peer topics. All topics will be filled with random messages.
 
