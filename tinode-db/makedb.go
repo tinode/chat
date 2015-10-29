@@ -50,7 +50,7 @@ func main() {
 	}
 
 	if *conffile != "" {
-		conf, err := ioutil.ReadFile(*datafile)
+		conf, err := ioutil.ReadFile(*conffile)
 		if err != nil {
 			log.Fatal(err)
 		}
