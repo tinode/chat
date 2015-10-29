@@ -131,7 +131,7 @@ $(function() {
 var APIKEY = "AQEAAAABAAD_rAp4DJh05a1HAwFT3A6K"
 // Change this URL to point to your messaging server if it's different from the server
 // hosting this web app
-var ENDPOINT = undefined
+var ENDPOINT = ''
 
 // Fix for hidden form elements
 $("#loginSettingsPanel").hide().removeClass("hidden")
@@ -300,7 +300,7 @@ function show_conversation_panel(topicname) {
 
 function init() {
 	// TODO(gene): remove the baseUrl parameter
-	var baseUrl = ($("#baseUrl").val() || ENTRYPOINT || location.protocol + '//' + location.host + "/")
+	var baseUrl = ($("#baseUrl").val() || ENDPOINT || location.protocol + '//' + location.host + "/")
 	Tinode.init(APIKEY, baseUrl) // baseUrl is available during debugging only
 	var transport = $("input:radio[name=transport]:checked" ).val();
 	Tinode.streaming.init(transport)

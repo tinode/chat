@@ -1,5 +1,5 @@
 {
-	"listen": ":8080",
+	"listen": ":6060",
 	"db_adapter": "rethinkdb",
 	"adapter_config": {
 		"worker_id": 1,
