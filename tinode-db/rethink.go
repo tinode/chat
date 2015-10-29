@@ -6,6 +6,7 @@ import (
 	"github.com/tinode/chat/server/store/types"
 	"log"
 	"math/rand"
+	"strings"
 	"time"
 )
 
@@ -24,11 +25,15 @@ func gen_rethink(reset bool, dbsource string, data *Data) {
 
 	err = store.InitDb(reset)
 	if err != nil {
-		log.Fatal("Failed to init DB: ", err)
+		if strings.Contains(err.Error(), " already exists") {
+			log.Println("DB already exists, NOT reinitializing")
+		} else {
+			log.Fatal("Failed to init DB: ", err)
+		}
+	} else {
+		log.Println("DB successfully initialized")
+
 	}
-
-	log.Println("DB successfully initialized")
-
 	if data.Users == nil {
 		log.Println("No data provided, stopping")
 		return
