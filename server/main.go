@@ -35,15 +35,16 @@ import (
 	"encoding/json"
 	_ "expvar"
 	"flag"
-	_ "github.com/tinode/chat/server/db/rethinkdb"
-	"github.com/tinode/chat/server/store"
-	"github.com/tinode/chat/server/store/types"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
 	"runtime"
 	"time"
+
+	_ "github.com/tinode/chat/server/db/rethinkdb"
+	"github.com/tinode/chat/server/store"
+	"github.com/tinode/chat/server/store/types"
 )
 
 const (
@@ -77,19 +78,14 @@ type configType struct {
 }
 
 func main() {
-	// For serving static content
-	path, err := os.Getwd()
-	if err != nil {
-		log.Fatal(err)
-	}
-	log.Printf("Home dir: '%s'", path)
-
-	log.Printf("Server started with processes: %d", runtime.GOMAXPROCS(runtime.NumCPU()))
-
 	var configfile = flag.String("config", "./config", "Path to config file")
+	// Path to static content.
+	var staticPath = flag.String("static_data", "", "path to /static data for the server.")
 	flag.Parse()
 
 	log.Printf("Using config from: '%s'", *configfile)
+
+	log.Printf("Server started with processes: %d", runtime.GOMAXPROCS(runtime.NumCPU()))
 
 	var config configType
 	if raw, err := ioutil.ReadFile(*configfile); err != nil {
@@ -98,7 +94,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	err = store.Open(config.Adapter, string(config.AdapterConfig))
+	var err = store.Open(config.Adapter, string(config.AdapterConfig))
 	if err != nil {
 		log.Fatal("failed to connect to DB: ", err)
 	}
@@ -107,8 +103,17 @@ func main() {
 	globals.sessionStore = NewSessionStore(2 * time.Hour)
 	globals.hub = newHub()
 
-	// Static content from http://<host>/x/: just read files from disk
-	http.Handle("/x/", http.StripPrefix("/x/", http.FileServer(http.Dir(path+"/static"))))
+	// Serve static content from the directory in -static_data flag if that's
+	// available, if not assume current dir.
+	if *staticPath != "" {
+		http.Handle("/x/", http.StripPrefix("/x/", http.FileServer(http.Dir(*staticPath))))
+	} else {
+		path, err := os.Getwd()
+		if err != nil {
+			log.Fatal(err)
+		}
+		http.Handle("/x/", http.StripPrefix("/x/", http.FileServer(http.Dir(path+"/static"))))
+	}
 
 	// Streaming channels
 	// Handle websocket clients. WS must come up first, so reconnecting clients won't fall back to LP
