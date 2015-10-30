@@ -10,16 +10,11 @@ Coming soon.
 - Install [RethinkDB](https://www.rethinkdb.com/docs/install/)
 - Fetch, build tinode server and tinode-db database initializer
  - `go get github.com/tinode/chat/server && go install github.com/tinode/chat/server`
- - `go get github.com/tinode/chat/tinode-db && go get github.com/tinode/chat/tinode-db`
-- Copy config files to appropriate location (usually `$GOPATH/bin/`):
-  - `cp github.com/tinode/chat/tinode-db/config $GOPATH/bin/config-tinode-db`
-  - `cp github.com/tinode/chat/server/config $GOPATH/bin/config-server`
-- If necessary, copy javascript and html files, as well as sample data:
-  - `cp github.com/tinode/chat/server/static $GOPATH/bin/`
+ - `go get github.com/tinode/chat/tinode-db && go install github.com/tinode/chat/tinode-db`
 - Run RethinkDB:
- `$ rethinkdb --bind all --daemon`
+  `rethinkdb --bind all --daemon`
 - Run DB initializer
- `$ tinode-db --config=config-tinode-db`
- - add `--data=data.json` flag if you want sample data to be loaded
-- Run server `$ $GOPATH/bin/server --config=config-server`
-- Check if everything is running properly by opening http://localhost:6060/x/chatdemo.html
+ `$GOPATH/bin/tinode-db -config=$GOPATH/src/github.com/tinode/chat/tinode-db/config`
+ - add `-data=$GOPATH/src/github.com/tinode/chat/tinode-db/data.json` flag if you want sample data to be loaded.
+- Run server `$GOPATH/bin/server -config=$GOPATH/src/github.com/tinode/chat/server/config -static_data=$GOPATH/src/github.com/tinode/chat/server/static`
+- Check if everything is running properly by opening http://localhost:6060/x/samples/chatdemo.html
