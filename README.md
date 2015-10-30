@@ -78,17 +78,18 @@ Client establishes a connection to the server over HTTP. Server offers two end p
 
 `v0` denotes API version (currently zero). Every HTTP request must include API key in the request. It may be included in the URL as `...?apikey=<YOUR_API_KEY>`, in the request body, or in an HTTP header `X-Tinode-APIKey`.
 
-Server responds to connection with a `{ctrl}` message. The `params` field contains protocol version:
-`"params":{"ver":"0.4"}`  
-
+Once the connection is opened, the server sends a `{ctrl}` message. The `params` field of response contains server's protocol version:
+`"params":{"ver":"0.4"}`. `params` may include other values.
 
 ### Websocket
 
-Messages are sent in text frames. Binary frames are reserved for future use.
+Messages are sent in text frames, one message per frame. Binary frames are reserved for future use. Server allows connections with any value in the `Origin` header.
 
 ### Long polling
 
+Long polling works over `HTTP POST` (preferred) or `GET`. In response to client's veru rirst request server sends a `{ctrl}` message containing `sid` (session ID) in `params`. Long polling client must include `sid` in every subsequent request either in URL or in request body.
 
+Server allows connections from all origins, i.e. `Access-Control-Allow-Origin: *`
 
 ## Messages
 
@@ -98,7 +99,7 @@ All client to server messages may have an optional `id` field. It's set by the c
 
 For brievity the notation below omits double quotes around field names as well as outer curly brackets.
 
-For messages that update application-defined data, such as `{set}` `private` or `public` fields, in case the server-side
+For messages that update application-defined data, such as `{set}` `private` or `public` fields, in case server-side
 data needs to be cleared, use a string with a single Unicode DEL character "&#x2421;" `"\u2421"`.  
 
 ### Client to server messages
@@ -406,6 +407,10 @@ pres: {
 }
 ```
 
+## Users
+
+TODO
+
 ## Access control
 
 Access control manages user's access to topics through access control lists (ACLs) or bearer tokens (not implemented as of version 0.4).
@@ -425,13 +430,34 @@ Topic's default access is established at the topic creation time by `{sub.init.a
 
 ## Topics
 
-Topic is a named communication channel for one or more people. All timestamps are represented as RFC 3999-formatted string with precision to milliseconds and timezone always set to UTC, e.g. `"2015-10-06T18:07:29.841Z"`.
+Topic is a named communication channel for one or more people. All timestamps are represented as RFC 3999-formatted string with precision to milliseconds and timezone always set to UTC, e.g. `"2015-10-06T18:07:29.841Z"`. Topics have persistent properties. These following topic properties can be queried by `{get what="info"}` message.
+
+Topic properties independent of user making the query:
+* created: timestamp of topic creation time
+* updated: timestamp of when topic's `public` or `private` was last updated
+* defacs: object describing topic's default access mode for authenticated and anonymous users; see [Access control][] for details
+ * auth: default access mode for authenticated users
+ * anon: default access for anonymous users
+* lastMsg: timestamp when last `{data}` message was sent through the topic
+* public: an application-defined object that describes the topic. Anyone who can subscribe to topic can receive topic's `public` data.
+
+User-dependent topic properties:
+* acs: object describing given user's current access permissions; see [Access control][] for details
+ * want: access permission requested by this user
+ * given: access permissions given to this user
+* seen: an object describing when the topic was last accessed by the current user from any client instance. This should be useful if the client implements data caching. See [Support for Client-Side Caching][] for more details.
+ * when": timestamp of the last access
+ * tag: string provided by the client instance when it accessed the topic.
+* seenTag: timestamp when the topic was last accessed from a session with the current client instance. See [Support for Client-Side Caching][] for more details
+* private: an application-defined object that is unique to the current user.
+
+Topic usually have subscribers. One the the subscribers may be designated as topic owner (`O` access permission) with full access permissions. The list of subscribers can be queries with a `{get what="sub"}` message. The list of subscribers is returned in a `sub` section of a `{meta}` message.
 
 ### `me` topic
 
-Topic `me` is automatically created for every user at the account creation time. It serves as means for account updates, receiving presence notification from people and topics of interest, invites to join topics, requests to approve subscription for topics where this user is a manager (has `S` permission). Topic `me` cannot be deleted or unsubscribed from. One can leave the topic which will stop all relevant communication and indicate that the user is offline (although the user may still be logged in and may continue to use other topics).
+Topic `me` is automatically created for every user at the account creation time. It serves as means for account updates, receiving presence notification from people and topics of interest, invites to join topics, requests to approve subscription for topics where this user is a manager (has `S` permission). Topic `me` has no owner. The topic cannot be deleted or unsubscribed from. One can leave the topic which will stop all relevant communication and indicate that the user is offline (although the user may still be logged in and may continue to use other topics).
 
-Joining or leaving `me` generates a `{pres}` presence update sent to all users who have peer to peer topics with the given user with appropriate permissions.  
+Joining or leaving `me` generates a `{pres}` presence update sent to all users who have peer to peer topics with the given user and `P` permissions set.  
 
 Topic `me` is read-only. `{pub}` messages to `me` are rejected.
 
@@ -443,28 +469,26 @@ The `{data}` message represents invites and requests to confirm a subscription. 
 * topic: the name of the topic, in case of an invite the current user is invited to this topic; in case of a request to approve, another user wants to subscribe to this topic where the current user is a manager (has `S` permission)
 * user: user ID as a string of the user who is the target of this request. In case of an invite this is the ID of the current user; in case of an approval request this is the ID of the user who is being subscribed.
 * acs: object describing access permissions of the subscription, see [Access control][] for details
-* info: object with a free-form payload. It's passed unchanged from the originating `{sub}` or `{set}` request.
+* info: object with a free-form payload. It's passed unchanged from the originating `{sub}` or `{set}` message.
 
-Message `{get what="info"}` to `me` is automatically replied with a `{meta}` message containing `info` section with the following information:
-* created: timestamp of topic creation time
-* updated: timestamp of when topic's `public` or `private` was last updated
-* acs: object describing user's access permissions, `{"want":"RDO","given":"RDO"}`, see [Access control][] for details
-* lastMsg: timestamp when last `{data}` message was sent through the topic
-* seen: an object describing when the topic was last accessed by the current user from any client instance. This should be used if the client implements data caching. See [Support for Client-Side Caching] for more details.
- * when": timestamp of the last access
- * tag: string provided by the client instance when it accessed the topic.
-* seenTag: timestamp when the topic was last accessed from a session with the current client instance. See [Support for Client-Side Caching] for more details
-* public: an object with application-defined content which describes the user, such user name "Jane Doe" or any other information which is made freely available to other users.
-* private: an object with application-defined content which is made available only to user's own sessions.
+Message `{get what="info"}` to `me` is automatically replied with a `{meta}` message containing `info` section with the topic parameters (see intro to [Topics][] section). The `public` parameter of `me` topic is associated with the user. Changing it changes `public` not just for the `me` topic, but also for all user's peer to peer topics.
 
 Message `{get what="sub"}` to `me` is different from any other topic as it returns the list of topics that the current user is subscribed to as opposite to the user's subscription to `me`.
 
 Message `{get what="data"}` to `me` queries the history of invites/notifications. It's handled the same way as to any other topic.
 
-### Peer to Peer Topics `p2pAAABBB`
+### Peer to Peer Topics
 
+Peer to peer (P2P) topics represent communication channels between strictly two users. The name of the topic is `p2p` followed by base64 URL-encoded concatenation of two 8-byte IDs of participating users. Lower user ID comes first. For example `p2pOj0B3-gSBSshT8s5XBE2xw` is a topic for users `usrOj0B3-gSBSs` and `usrIU_LOVwRNsc`. The P2P topic has no owner.
 
-### Group Topics `grpABCDEFG`
+A P2P topic is created by one user subscribing to topic with the name equal to the ID of the other user. For instance, user `usrOj0B3-gSBSs` can establish a P2P topic with user `usrIU_LOVwRNsc` by sending a `{sub topic="usrIU_LOVwRNsc"}`. Tinode will respond with a `{ctrl}` packet with the name of the newly created topic, `p2pOj0B3-gSBSshT8s5XBE2xw` in this example. The other user will receive a `{data}` message on `me` topic with either a request to confirm the subscription or a notification of successful subscription, depending on user's default permissions.
 
+### Group Topics
+
+Group topics represent communication channels between multiple users. The name of a group topic is `grp` followed by a string of base64 characters. No other assumptions can be made about internal structure of the name.
+
+Group topics always have owners. A group topic is created by sending a `{sub}` message with the topic field set to "new". Tinode will respond with a `{ctrl}` message with the name of the newly created topic, i.e. `{sub topic="new"}` is replied with `{ctrl topic="grpmiKBkQVXnm3P"}`.
 
 ## Support for Client-Side Caching
+
+TODO
