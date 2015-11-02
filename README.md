@@ -210,7 +210,7 @@ sub: {
   sub: {
     mode: "RWS", // string, requested access mode, optional;
                  // default: server-defined
-    info: {}     // a free-form payload to pass to the topic manager
+    info: { ... }  // application-defined payload to pass to the topic manager
   }, // object, optional
 
   // Metadata to request from the topic; space-separated list, valid strings
@@ -331,7 +331,7 @@ del: {
 }
 ```
 
-No special permission is needed to soft-delete messages `hard=false`. Soft-deleting messages hide them from the
+No special permission is needed to soft-delete messages `hard=false`. Soft-deleting messages hides them from the
 requesting user. `D` permission is needed to hard-delete messages. Only owner can delete a topic.
 
 ### Server to client messages
@@ -386,10 +386,30 @@ ctrl: {
   topic: "grp1XUtEhjv6HND", // string, topic name, if this is a response in
                             // context of a topic, optional
 	info: {
-
+    created: "2015-10-24T10:26:09.716Z",
+    updated: "2015-10-24T10:26:09.716Z",
+    defacs: { // topic's default access permissions; present only if the current
+              //user has 'S' permission
+      auth: "RWP", // default access for authenticated users
+      anon: "X" // default access for anonymous users
+    },
+    acs: {  // user's actual access permissions
+      "want":"RWP", // string, requested access permission
+      "given":"RWP" // string, granted access permission
+    },
+    lastMsg: "2015-10-29T16:19:15.03Z", // timestamp of the last {data} message
+    public: { ... }, // application-defined data that's available to all topic subscribers
+    private: { ...} // application-deinfed data that's available to the current user only
   }, // object, topic description, optional
 	sub:  [
-
+    {
+      user: "usr2il9suCbuko", // string, ID of the user this subscription describes
+      updated: "2015-10-24T10:26:09.716Z", // timestamp of the last change in the subscription
+      mode: "RWPSDO",  // string, user's access permission, equal to bitwise (info.given & info.want)
+      public: { ... }, // user's 'public' object
+      private: { ... } // user's 'private' object, present only for the user's own subscription
+    },
+    ...
   ] // array of objects, topic subscribers, optional
   ts: "2015-10-06T18:07:30.038Z", // string, timestamp
 }
@@ -397,7 +417,7 @@ ctrl: {
 
 #### `{pres}`
 
-Notification that topic metadata has changed. Timestamp is not present.
+Notification that topic metadata has changed: `public` was updated, someone joined or left the topic. Timestamp is not present.
 
 ```js
 pres: {
@@ -413,20 +433,26 @@ TODO
 
 ## Access control
 
-Access control manages user's access to topics through access control lists (ACLs) or bearer tokens (not implemented as of version 0.4).
+Access control manages user's access to topics through access control lists (ACLs) or bearer tokens (_bearer tokens are not implemented as of version 0.4_).
 
-User's access to a topic is defined by two sets of permissions: user's desired permissions, and topic's given permissions. Each permission is a bit in a bitmap. It can be either present or absent. The actual access is determined as a bitwise AND of wanted and given permissions. The permissions are represented as a set of symbols, where presence of a symbol means a set permission bit:
+Access control is mostly usable for group topics. Its usability for `me` and P2P topics is limited to managing presence notifications and banning uses from initiating or continuing P2P conversations.
 
-* No access: `N` is not a permission per se but an indicator that permissions are explicitly cleared/not set. It usually means that the default permissions should not be applied.
-* Read: `R`, permission to receive `{data}` packets
+User's access to a topic is defined by two sets of permissions: user's desired permissions "want", and permissions granted to user by topic's manager(s) "given". Each permission is represented by a bit in a bitmap. It can be either present or absent. The actual access is determined as a bitwise AND of wanted and given permissions. The permissions are communicated in messages as a set of ASCII characters, where presence of a character means a set permission bit:
+
+* No access: `N` is not a permission per se but an indicator that permissions are explicitly cleared/not set. It usually means that the default permissions should *not* be applied.
+* Read: `R`, permission to subscribe to topic and receive `{data}` packets
 * Write: `W`, permission to `{pub}` to topic
 * Presence: `P`, permission to receive presence updates `{pres}`
-* Sharing: `S`, permission to invite other people to join a topic and to approve requests to join
+* Sharing: `S`, permission to invite other people to join the topic and to approve requests to join; a user with such permission is topic's manager
 * Delete: `D`, permission to hard-delete messages; only owners can completely delete topics
-* Owner: `O`, user is the topic owner
+* Owner: `O`, user is the topic owner; topic may have a single owner only
 * Banned: `X`, user has no access, requests to share/gain access/`{sub}` are silently ignored
 
-Topic's default access is established at the topic creation time by `{sub.init.acs}` field and can be subsequently modified by `{set}` messages. Default access is applied to all new subscriptions. It can be assigned on a per-user basis by `{set}` messages.
+Topic's default access is established at the topic creation time by `{sub.init.defacs}` and can be subsequently modified by `{set}` messages. Default access is defined for two categories of users: authenticated and anonymous. This value is applied as a default "given" permission to all new subscriptions.
+
+Client may replace explicit permissions in `{sub}` and `{set}` messages with an empty string to tell Tinode to use default permissions. If client specifies no default access permissions at a topic creation time, "auth" will receive a `RWP` permission, "anon" will receive and empty permission which means every subscription request must be explicitly approved by the topic manager.
+
+Access permissions can be assigned on a per-user basis by `{set}` messages.
 
 ## Topics
 
@@ -471,7 +497,7 @@ The `{data}` message represents invites and requests to confirm a subscription. 
 * acs: object describing access permissions of the subscription, see [Access control][] for details
 * info: object with a free-form payload. It's passed unchanged from the originating `{sub}` or `{set}` message.
 
-Message `{get what="info"}` to `me` is automatically replied with a `{meta}` message containing `info` section with the topic parameters (see intro to [Topics][] section). The `public` parameter of `me` topic is associated with the user. Changing it changes `public` not just for the `me` topic, but also for all user's peer to peer topics.
+Message `{get what="info"}` to `me` is automatically replied with a `{meta}` message containing `info` section with the topic parameters (see intro to [Topics][] section). The `public` parameter of `me` topic is associated with the user. Changing it changes `public` not just for the `me` topic, but also everywhere where user's public is shown, such as 'public' of all user's peer to peer topics.
 
 Message `{get what="sub"}` to `me` is different from any other topic as it returns the list of topics that the current user is subscribed to as opposite to the user's subscription to `me`.
 
@@ -483,11 +509,18 @@ Peer to peer (P2P) topics represent communication channels between strictly two 
 
 A P2P topic is created by one user subscribing to topic with the name equal to the ID of the other user. For instance, user `usrOj0B3-gSBSs` can establish a P2P topic with user `usrIU_LOVwRNsc` by sending a `{sub topic="usrIU_LOVwRNsc"}`. Tinode will respond with a `{ctrl}` packet with the name of the newly created topic, `p2pOj0B3-gSBSshT8s5XBE2xw` in this example. The other user will receive a `{data}` message on `me` topic with either a request to confirm the subscription or a notification of successful subscription, depending on user's default permissions.
 
+The 'public' parameter of P2P topics is user-dependent. For instance a P2P topic between users A and B would show user A's 'public' to user B and vice versa. If a user updates 'public', app user's P2P topics will change 'public'.
+
+The 'private' parameter of a P2P topic is defined by each participant individually as with any other topic type.
+
 ### Group Topics
 
-Group topics represent communication channels between multiple users. The name of a group topic is `grp` followed by a string of base64 characters. No other assumptions can be made about internal structure of the name.
+Group topics represent communication channels between multiple users. The name of a group topic is `grp` followed by a string of characters from base64 URL-encoding set. No other assumptions can be made about internal structure or length of the group name.
 
-Group topics always have owners. A group topic is created by sending a `{sub}` message with the topic field set to "new". Tinode will respond with a `{ctrl}` message with the name of the newly created topic, i.e. `{sub topic="new"}` is replied with `{ctrl topic="grpmiKBkQVXnm3P"}`.
+A group topic is created by sending a `{sub}` message with the topic field set to "new". Tinode will respond with a `{ctrl}` message with the name of the newly created topic, i.e. `{sub topic="new"}` is replied with `{ctrl topic="grpmiKBkQVXnm3P"}`. The user who created the topic becomes topic owner. Ownership can be transferred to another user with a `{set}` message but at least one user must remain the topic owner.
+
+A user joining or leaving the topic generates a `{pres}` message to all other users who are currently in the joined state with the topic.
+
 
 ## Support for Client-Side Caching
 

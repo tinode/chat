@@ -627,6 +627,12 @@ func (t *Topic) replyGetInfo(sess *Session, id string, created bool) error {
 
 	// Request may come from a subscriber or a stranger. Give a stranger a lot less info than a subscriber
 	if full {
+		if pud.modeGiven & pud.modeWant & types.ModeShare {
+			info.DefaultAcs = &MsgDefaultAcsMode{
+				Auth: t.accessAuth.String(),
+				Anon: t.accessAnon.String()}
+		}
+
 		info.Acs = &MsgAccessMode{
 			Want:  pud.modeWant.String(),
 			Given: pud.modeGiven.String()}
