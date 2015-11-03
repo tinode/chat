@@ -386,7 +386,8 @@ ctrl: {
   code: 200, // integer, code indicating success or failure of the request, follows
              // the HTTP status codes model, always present
   text: "OK", // string, text with more details about the result, always present
-  params: { ... }, // object, generic response parameters, context-dependent, optional
+  params: { ... }, // object, generic response parameters, context-dependent,
+                   // optional
   ts: "2015-10-06T18:07:30.038Z", // string, timestamp
 }
 ```
@@ -550,7 +551,7 @@ TODO
 
 Tinode uses `{pres}` message to inform users of important events. The following events are tracked by the server and will generate `{pres}` messages provided user has appropriate access permissions:
 
-* User came online of went offline. A user triggers this event by joining/leaving the `me` topic. The message is sent to all users who have P2P topics with the first user. Users receive this event on the `me` topic, `user` field contains user ID `user: "usrIU_LOVwRNsc"`, `what` contains `"on"` or `"off"`.
+* User came online of went offline. A user triggers this event by joining/leaving the `me` topic. The message is sent to all users who have P2P topics with the first user. Users receive this event on the `me` topic, `user` field contains user ID `user: "usr2il9suCbuko"`, `what` contains `"on"` or `"off"`: `{pres topic="me" user="<user ID>" what="on|off"}`. 
 * User updates `public` data. The event is sent to all users who have P2P topics with the first user. Users receive `{pres topic="me" user="<user ID>" what="upd"}`.
 * User joins/leaves a topic. This event is sent to other users who currently joined the topic: `{pres topic="<topic name>" user="<user ID>" what="on|off"}`.
 * Topic is activated/deactivated. Topic becomes active when at least one user joins it. The topic becomes inactive when all users leave it (possibly with some delay). The event is sent to all topic subscribers: `{pres topic="<topic name>" what="on|off"}`.
