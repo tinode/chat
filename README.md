@@ -70,6 +70,12 @@ Changes to topic metadata, such as changes in topic description, or when other u
 
 When user's `me` topic comes online (i.e. an authenticated session attaches to `me` topic), a `{pres}` packet is sent to `me` topics of all other users, who have peer to peer subscriptions with the first user.
 
+## General considerations
+
+Timestamps are always represented as RFC 3999-formatted string with precision to milliseconds and timezone always set to UTC, e.g. `"2015-10-06T18:07:29.841Z"`.
+
+Whenever base64 encoding is mentioned, it means base64 URL encoding with padding characters stripped, see RFC 4648.
+
 ## Connecting to the server
 
 Client establishes a connection to the server over HTTP. Server offers two end points:
@@ -87,7 +93,7 @@ Messages are sent in text frames, one message per frame. Binary frames are reser
 
 ### Long polling
 
-Long polling works over `HTTP POST` (preferred) or `GET`. In response to client's veru rirst request server sends a `{ctrl}` message containing `sid` (session ID) in `params`. Long polling client must include `sid` in every subsequent request either in URL or in request body.
+Long polling works over `HTTP POST` (preferred) or `GET`. In response to client's very first request server sends a `{ctrl}` message containing `sid` (session ID) in `params`. Long polling client must include `sid` in every subsequent request either in URL or in request body.
 
 Server allows connections from all origins, i.e. `Access-Control-Allow-Origin: *`
 
@@ -97,7 +103,7 @@ A message is a logically associated set of data. Messages are passed as JSON-for
 
 All client to server messages may have an optional `id` field. It's set by the client as means to receive an aknowledgement from the server that the message was received and processed. The `id` is expected to be a session-unique string but it can be any string. The server does not attempt to interpret it other than to check JSON validity. It's returned unchanged by the server when it replies to client messages.
 
-For brievity the notation below omits double quotes around field names as well as outer curly brackets.
+For brevity the notation below omits double quotes around field names as well as outer curly brackets.
 
 For messages that update application-defined data, such as `{set}` `private` or `public` fields, in case server-side
 data needs to be cleared, use a string with a single Unicode DEL character "&#x2421;" `"\u2421"`.  
@@ -162,6 +168,8 @@ login: {
 ```
 Basic authentication scheme expects `secret` to be a string composed of a user name followed by a colon `:` followed by a plan text password.
 
+Basic is the only currently supported authentication scheme. _Authentication scheme `none` is planned to support anonymous users in the future._
+
 [time.ParseDuration](https://golang.org/pkg/time/#ParseDuration) is used to parse `expireIn`. The recognized format is a possibly signed sequence of decimal numbers, each with optional fraction and a unit suffix, such as "300ms", "-1.5h" or "2h45m". Valid time units are "ns", "us" (or "µs"), "ms", "s", "m", "h".
 
 Server responds to a `{login}` packet with a `{ctrl}` packet.
@@ -222,9 +230,9 @@ sub: {
   browse: {
     ascnd: true, // boolean, sort in ascending order by time, otherwise
                  // descending (default), optional
-    since: "2015-09-06T18:07:30.134Z", // datetime as RFC 3339-formated string,
+    since: "2015-09-06T18:07:30.134Z", // datetime as string,
                     // load objects newer than this (inclusive/closed), optional
-    before: "2015-10-06T18:07:30.134Z", // datetime as  RFC 3339-formated string,
+    before: "2015-10-06T18:07:30.134Z", // datetime as string,
                     // load objects older than this (exclusive/open), optional
     limit: 20, // integer, limit the number of returned objects,
                // default: 32, optional
@@ -274,9 +282,9 @@ get: {
   browse: {
     ascnd: true, // boolean, sort in ascending order by time, otherwise
                  // descending (default), optional
-    since: "2015-09-06T18:07:30.134Z", // datetime as RFC 3339-formated string,
+    since: "2015-09-06T18:07:30.134Z", // datetime as string,
                         // load objects newer than this (inclusive/closed), optional
-    before: "2015-10-06T18:07:30.134Z", // datetime as  RFC 3339-formated string,
+    before: "2015-10-06T18:07:30.134Z", // datetime as string,
                         // load objects older than this (exclusive/open), optional
     limit: 20, // integer, limit the number of returned objects, default: 32,
                // optional
@@ -340,9 +348,8 @@ del: {
   what: "msg", // string, either "topic" or "msg" (default); what to delete - the
                // entire topic or just the messages, optional, default: "msg"
   hard: false, // boolean, request to delete messages for all users, default: false
-  before: "2015-10-06T18:07:30.134Z", // datetime as a RFC 3339-
-              // formated string, delete messages older than this
-              // (exclusive of the value itself), optional
+  before: "2015-10-06T18:07:30.134Z", // datetime as string, delete messages
+              // older than this (exclusive of the value itself), optional
 }
 ```
 
@@ -354,7 +361,7 @@ requesting user. `D` permission is needed to hard-delete messages. Only owner ca
 Messages to a session generated in response to a specific request contain an `id` field equal to the id of the
 originating message. The `id` is not interpreted by the server.
 
-Most server to client messages have a `ts` field which is a timestamp when the message was generated by the server. Timestamp is in [RFC 3339](https://tools.ietf.org/html/rfc3339) format, timezone is always UTC, precision to milliseconds.
+Most server to client messages have a `ts` field which is a timestamp when the message was generated by the server.
 
 #### `{data}`
 
@@ -438,7 +445,13 @@ ctrl: {
 
 #### `{pres}`
 
-Notification that topic metadata has changed: `public` was updated, someone joined or left the topic. Timestamp is not present.
+Tinode uses `{pres}` message to inform users of important events. The following events are tracked by the server and will generate `{pres}` messages provided user has appropriate access permissions:
+
+* User came online of went offline. A user triggers this event by joining/leaving the `me` topic. The message is sent to all users who have P2P topics with the first user. Users receive this event on the `me` topic, `user` field contains user ID `user: "usr2il9suCbuko"`, `what` contains `"on"` or `"off"`: `{pres topic="me" user="<user ID>" what="on|off"}`.
+* User updates `public` data. The event is sent to all users who have P2P topics with the first user. Users receive `{pres topic="me" user="<user ID>" what="upd"}`.
+* User joins/leaves a topic. This event is sent to other users who currently joined the topic: `{pres topic="<topic name>" user="<user ID>" what="on|off"}`.
+* Topic is activated/deactivated. Topic becomes active when at least one user joins it. The topic becomes inactive when all users leave it (possibly with some delay). The event is sent to all topic subscribers: `{pres topic="<topic name>" what="on|off"}`.
+* A message was sent to the topic. The event is sent to users who have subscribed to the topic but currently not joined `{pres topic="<topic name>" what="msg"}`.
 
 ```js
 pres: {
@@ -448,9 +461,32 @@ pres: {
 }
 ```
 
+The `{pres}` messages are purely transient. No attempt is made to store a `{pres}` message or deliver it later if the target is unavailable.
+
+Timestamp is not present in `{pres}` messages.
+
+
 ## Users
 
-TODO
+User is meant to represent a person, an end-user: producer and consumer of messages.
+
+There are two types of users: authenticated and anonymous. When a connection is first established, the client application can only send either an `{acc}` or a `{login}` message. Sending a `{login}` message will authenticate user or allow him to continue as an anonymous. _Anonymous users are not supported as of the time of this writing._
+
+Each user is assigned a unique ID. The IDs are composed as `usr` followed by base64-encoded 64-bit numeric value, e.g. `usr2il9suCbuko`. Users also have the following properties:
+
+* created: timestamp when the user record was created
+* updated: timestamp of when user's `public` was last updated
+* username: unique string used in `basic` authentication
+* passhash: (not visible to the client application): [bcrypt](https://en.wikipedia.org/wiki/Bcrypt) salted and hashed password used in `basic` authentication
+* defacs: object describing user's default access mode for peer to peer conversations with authenticated and anonymous users; see [Access control][] for details
+ * auth: default access mode for authenticated users
+ * anon: default access for anonymous users
+* public: an application-defined object that describes the user. Anyone who can query user for `public` data.
+* private: an application-defined object that is unique to the current user and accessible only by the user.
+
+A user may maintain multiple simultaneous connections (sessions) with the server. Each session can be tagged with a device ID. See [Support for Client-Side Caching][] foir details.
+
+Logging out is not supported by design. If an application needs to change the user, it should open a new connection and authenticate it with the new user credentials.
 
 ## Access control
 
@@ -460,26 +496,26 @@ Access control is mostly usable for group topics. Its usability for `me` and P2P
 
 User's access to a topic is defined by two sets of permissions: user's desired permissions "want", and permissions granted to user by topic's manager(s) "given". Each permission is represented by a bit in a bitmap. It can be either present or absent. The actual access is determined as a bitwise AND of wanted and given permissions. The permissions are communicated in messages as a set of ASCII characters, where presence of a character means a set permission bit:
 
-* No access: `N` is not a permission per se but an indicator that permissions are explicitly cleared/not set. It usually means that the default permissions should *not* be applied.
+* No access: `N` is not a permission per se but an indicator that permissions are explicitly cleared/not set. It usually indicates that the default permissions should *not* be applied.
 * Read: `R`, permission to subscribe to topic and receive `{data}` packets
 * Write: `W`, permission to `{pub}` to topic
 * Presence: `P`, permission to receive presence updates `{pres}`
 * Sharing: `S`, permission to invite other people to join the topic and to approve requests to join; a user with such permission is topic's manager
 * Delete: `D`, permission to hard-delete messages; only owners can completely delete topics
 * Owner: `O`, user is the topic owner; topic may have a single owner only
-* Banned: `X`, user has no access, requests to share/gain access/`{sub}` are silently ignored
+* Banned: `X`, user has no access, requests to share/gain access are silently ignored
 
 Topic's default access is established at the topic creation time by `{sub.init.defacs}` and can be subsequently modified by `{set}` messages. Default access is defined for two categories of users: authenticated and anonymous. This value is applied as a default "given" permission to all new subscriptions.
 
-Client may replace explicit permissions in `{sub}` and `{set}` messages with an empty string to tell Tinode to use default permissions. If client specifies no default access permissions at a topic creation time, "auth" will receive a `RWP` permission, "anon" will receive and empty permission which means every subscription request must be explicitly approved by the topic manager.
+Client may replace explicit permissions in `{sub}` and `{set}` messages with an empty string to tell Tinode to use default permissions. If client specifies no default access permissions at topic creation time, authenticated users will receive a `RWP` permission, anonymous users will receive and empty permission which means every subscription request must be explicitly approved by the topic manager.
 
 Access permissions can be assigned on a per-user basis by `{set}` messages.
 
 ## Topics
 
-Topic is a named communication channel for one or more people. All timestamps are represented as RFC 3999-formatted string with precision to milliseconds and timezone always set to UTC, e.g. `"2015-10-06T18:07:29.841Z"`. Topics have persistent properties. These following topic properties can be queried by `{get what="info"}` message.
+Topic is a named communication channel for one or more people. Topics have persistent properties. These following topic properties can be queried by `{get what="info"}` message.
 
-Topic properties independent of user making the query:
+Topic properties independent of the user making the query:
 * created: timestamp of topic creation time
 * updated: timestamp of when topic's `public` or `private` was last updated
 * defacs: object describing topic's default access mode for authenticated and anonymous users; see [Access control][] for details
@@ -528,9 +564,9 @@ Message `{get what="data"}` to `me` queries the history of invites/notifications
 
 Peer to peer (P2P) topics represent communication channels between strictly two users. The name of the topic is `p2p` followed by base64 URL-encoded concatenation of two 8-byte IDs of participating users. Lower user ID comes first. For example `p2pOj0B3-gSBSshT8s5XBE2xw` is a topic for users `usrOj0B3-gSBSs` and `usrIU_LOVwRNsc`. The P2P topic has no owner.
 
-A P2P topic is created by one user subscribing to topic with the name equal to the ID of the other user. For instance, user `usrOj0B3-gSBSs` can establish a P2P topic with user `usrIU_LOVwRNsc` by sending a `{sub topic="usrIU_LOVwRNsc"}`. Tinode will respond with a `{ctrl}` packet with the name of the newly created topic, `p2pOj0B3-gSBSshT8s5XBE2xw` in this example. The other user will receive a `{data}` message on `me` topic with either a request to confirm the subscription or a notification of successful subscription, depending on user's default permissions.
+A P2P topic is created by one user subscribing to topic with the name equal to the ID of the other user. For instance, user `usrOj0B3-gSBSs` can establish a P2P topic with user `usrIU_LOVwRNsc` by sending a `{sub topic="usrIU_LOVwRNsc"}`. Tinode will respond with a `{ctrl}` packet with the name of the newly created topic, `p2pOj0B3-gSBSshT8s5XBE2xw` in this example. The other user will receive a `{data}` message on `me` topic with either a request to confirm the subscription or a notification of a successful subscription, depending on user's default permissions.
 
-The 'public' parameter of P2P topics is user-dependent. For instance a P2P topic between users A and B would show user A's 'public' to user B and vice versa. If a user updates 'public', app user's P2P topics will change 'public'.
+The 'public' parameter of P2P topics is user-dependent. For instance a P2P topic between users A and B would show user A's 'public' to user B and vice versa. If a user updates 'public', all user's P2P topics will automatically update 'public' too.
 
 The 'private' parameter of a P2P topic is defined by each participant individually as with any other topic type.
 
@@ -545,16 +581,8 @@ A user joining or leaving the topic generates a `{pres}` message to all other us
 
 ## Support for Client-Side Caching
 
-TODO
+Tinode provides basic mechanism for implementing client-side caching.
 
-## Presence and Change Notifications
+It's assumed that a single user may connect to the server with multiple client applications. Some of them may be able to cache certain information in client-side storage. An identifier of an instance of the client application is communicated to the server in the `tag` field of the `{login}` message. The `tag` is a string which identifies an instance of the client-side cache. For instance if the user flushes the cache the app should change the application tag. The combination of user ID and tag should be unique, i.e. it's acceptable for different users to have the same tag. If the application does not implement caching it should not provide the `tag`.
 
-Tinode uses `{pres}` message to inform users of important events. The following events are tracked by the server and will generate `{pres}` messages provided user has appropriate access permissions:
-
-* User came online of went offline. A user triggers this event by joining/leaving the `me` topic. The message is sent to all users who have P2P topics with the first user. Users receive this event on the `me` topic, `user` field contains user ID `user: "usr2il9suCbuko"`, `what` contains `"on"` or `"off"`: `{pres topic="me" user="<user ID>" what="on|off"}`. 
-* User updates `public` data. The event is sent to all users who have P2P topics with the first user. Users receive `{pres topic="me" user="<user ID>" what="upd"}`.
-* User joins/leaves a topic. This event is sent to other users who currently joined the topic: `{pres topic="<topic name>" user="<user ID>" what="on|off"}`.
-* Topic is activated/deactivated. Topic becomes active when at least one user joins it. The topic becomes inactive when all users leave it (possibly with some delay). The event is sent to all topic subscribers: `{pres topic="<topic name>" what="on|off"}`.
-* A message was sent to the topic. The event is sent to users who have subscribed to the topic but currently not joined `{pres topic="<topic name>" what="msg"}`.
-
-The `{pres}` messages are purely transient. No attempt is made to store a `{pres}` message or deliver it later if the target is unavailable.
+Server tracks timestamps of user's login, topic join and leave requests keyed by tag. When the user issues a `{get what="data"}` (or an equivalent `{sub get="data"}`), the `browse` may be left empty. Then the server will assume that the `browse.since` is the time when the user left the topic, i.e. "fetch all data since last visit".
