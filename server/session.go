@@ -234,13 +234,12 @@ func (s *Session) subscribe(msg *ClientComMessage) {
 	}
 
 	log.Printf("Sub to '%s' (%s) from '%s' as '%s' -- OK!", expanded, msg.Sub.Topic, msg.from, topic)
-	globals.hub.reg <- &sessionJoin{topic: expanded, pkt: msg.Sub, sess: s}
+	globals.hub.join <- &sessionJoin{topic: expanded, pkt: msg.Sub, sess: s}
 	// Hub will send Ctrl success/failure packets back to session
 }
 
 // Leave/Unsubscribe a topic
 func (s *Session) leave(msg *ClientComMessage) {
-	var reply *ServerComMessage
 
 	if msg.Leave.Topic == "" {
 		s.QueueOut(ErrMalformed(msg.Leave.Id, "", msg.timestamp))
@@ -253,22 +252,23 @@ func (s *Session) leave(msg *ClientComMessage) {
 	}
 
 	if sub, ok := s.subs[topic]; ok {
+		// Session has joined the topic
 		if msg.Leave.Topic == "me" && msg.Leave.Unsub {
 			// User should not unsubscribe from 'me'. Just leaving is fine
-			reply = ErrPermissionDenied(msg.Leave.Id, msg.Leave.Topic, msg.timestamp)
+			s.QueueOut(ErrPermissionDenied(msg.Leave.Id, msg.Leave.Topic, msg.timestamp))
 		} else {
-			// unlink from topic
+			// Unlink from topic, topic will send a reply.
 			delete(s.subs, topic)
-
 			sub.done <- &sessionLeave{sess: s, unsub: msg.Leave.Unsub, pkt: msg}
-			reply = NoErr(msg.Leave.Id, msg.Leave.Topic, msg.timestamp)
 		}
+	} else if !msg.Leave.Unsub {
+		// Sessions has not joined the topic, wants to leave - fine, no change
+		s.QueueOut(InfoNotJoined(msg.Leave.Id, msg.Leave.Topic, msg.timestamp))
 	} else {
-		// FIXME(gene): allow topic to unsubscribe to unsubscribe without joining first; send to hub to unsub
-		reply = ErrAttachFirst(msg.Leave.Id, msg.Leave.Topic, msg.timestamp)
+		// Session wants to unsubscribe from the topic it did not join
+		// FIXME(gene): allow topic to unsubscribe without joining first; send to hub to unsub
+		s.QueueOut(ErrAttachFirst(msg.Leave.Id, msg.Leave.Topic, msg.timestamp))
 	}
-
-	s.QueueOut(reply)
 }
 
 // Broadcast a message to all topic subscribers

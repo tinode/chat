@@ -484,6 +484,16 @@ func InfoAlreadySubscribed(id, topic string, ts time.Time) *ServerComMessage {
 	return msg
 }
 
+func InfoNotJoined(id, topic string, ts time.Time) *ServerComMessage {
+	msg := &ServerComMessage{Ctrl: &MsgServerCtrl{
+		Id:        id,
+		Code:      http.StatusNotModified, // 304
+		Text:      "not joined",
+		Topic:     topic,
+		Timestamp: ts}}
+	return msg
+}
+
 // 4xx Errors
 func ErrMalformed(id, topic string, ts time.Time) *ServerComMessage {
 	msg := &ServerComMessage{Ctrl: &MsgServerCtrl{

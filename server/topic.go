@@ -143,21 +143,12 @@ func (t *Topic) run(hub *Hub) {
 			}
 		case leave := <-t.unreg:
 			// Remove connection from topic; session may continue to function
-			delete(t.sessions, leave.sess)
 
 			now := time.Now().UTC().Round(time.Millisecond)
-			pud := t.perUser[leave.sess.uid]
-			if pud.lastSeenTag == nil {
-				pud.lastSeenTag = map[string]time.Time{}
-			}
-			pud.lastSeenTag[leave.sess.tag] = now
-			t.perUser[leave.sess.uid] = pud
-			if err := store.Topics.UpdateLastSeen(t.appid, t.name, leave.sess.uid, leave.sess.tag, now); err != nil {
-				log.Println(err)
-			}
 
-			// User wants to unsubscribe.
 			if leave.unsub {
+				// User wants to unsubscribe.
+
 				// Delete user's subscription from the database
 				if err := store.Subs.Delete(t.appid, t.name, leave.sess.uid); err != nil {
 					if leave.pkt != nil {
@@ -172,10 +163,23 @@ func (t *Topic) run(hub *Hub) {
 
 				// Detach all user's sessions
 				for sess, _ := range t.sessions {
-					delete(t.sessions, sess)
 					if sess.uid == leave.sess.uid {
+						delete(t.sessions, sess)
 						sess.detach <- t.name
 					}
+				}
+			} else {
+				// Just leaving the topic without unsubscribing
+				delete(t.sessions, leave.sess)
+
+				pud := t.perUser[leave.sess.uid]
+				if pud.lastSeenTag == nil {
+					pud.lastSeenTag = map[string]time.Time{}
+				}
+				pud.lastSeenTag[leave.sess.tag] = now
+				t.perUser[leave.sess.uid] = pud
+				if err := store.Topics.UpdateLastSeen(t.appid, t.name, leave.sess.uid, leave.sess.tag, now); err != nil {
+					log.Println(err)
 				}
 			}
 
@@ -184,7 +188,9 @@ func (t *Topic) run(hub *Hub) {
 				killTimer.Reset(keepAlive)
 			}
 
-			// Session sends reply
+			if leave.pkt != nil {
+				leave.sess.QueueOut(NoErr(leave.pkt.Leave.Id, leave.pkt.Leave.Topic, now))
+			}
 
 		case msg := <-t.broadcast:
 			// Message intended for broadcasting to recepients

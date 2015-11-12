@@ -99,9 +99,9 @@ type Hub struct {
 	route chan *ServerComMessage
 
 	// subscribe session to topic, possibly creating a new topic
-	reg chan *sessionJoin
+	join chan *sessionJoin
 
-	// Remove topic
+	// Remove topic from hub
 	unreg chan topicUnreg
 
 	// report presence changes
@@ -135,7 +135,7 @@ func newHub() *Hub {
 		topics: make(map[string]*Topic),
 		// this needs to be buffered - hub generates invites and adds them to this queue
 		route:      make(chan *ServerComMessage, 1024),
-		reg:        make(chan *sessionJoin),
+		join:       make(chan *sessionJoin),
 		unreg:      make(chan topicUnreg),
 		presence:   make(chan *PresenceRequest),
 		meta:       make(chan *metaReq, 32),
@@ -153,7 +153,7 @@ func (h *Hub) run() {
 
 	for {
 		select {
-		case sreg := <-h.reg:
+		case sreg := <-h.join:
 			// Handle a subscription request:
 			// 1. Init topic
 			// 1.1 If a new topic is requested, create it
