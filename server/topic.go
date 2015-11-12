@@ -138,20 +138,12 @@ func (t *Topic) run(hub *Hub) {
 				t.sessions[sreg.sess] = true
 
 			} else if len(t.sessions) == 0 {
-				// Topic is still inactive
+				// Failed to subscribe, the topic is still inactive
 				killTimer.Reset(keepAlive)
 			}
 		case leave := <-t.unreg:
-			// FIXME(gene): distinguish between leave and unsubscribe
-
 			// Remove connection from topic; session may continue to function
-			delete(leave.sess.subs, t.name) // FIXME(gene): potential rece condition
 			delete(t.sessions, leave.sess)
-
-			// If there are no more subscriptions to this topic, start a kill timer
-			if len(t.sessions) == 0 {
-				killTimer.Reset(keepAlive)
-			}
 
 			now := time.Now().UTC().Round(time.Millisecond)
 			pud := t.perUser[leave.sess.uid]
@@ -160,9 +152,36 @@ func (t *Topic) run(hub *Hub) {
 			}
 			pud.lastSeenTag[leave.sess.tag] = now
 			t.perUser[leave.sess.uid] = pud
-			err := store.Topics.UpdateLastSeen(t.appid, t.name, leave.sess.uid, leave.sess.tag, now)
-			if err != nil {
+			if err := store.Topics.UpdateLastSeen(t.appid, t.name, leave.sess.uid, leave.sess.tag, now); err != nil {
 				log.Println(err)
+			}
+
+			// User wants to unsubscribe.
+			if leave.unsub {
+				// Delete user's subscription from the database
+				if err := store.Subs.Delete(t.appid, t.name, leave.sess.uid); err != nil {
+					if leave.pkt != nil {
+						leave.sess.QueueOut(ErrUnknown(leave.pkt.Leave.Id, leave.pkt.Leave.Topic, now))
+					}
+					log.Println(err)
+					continue
+				}
+
+				// Delete per-user data
+				delete(t.perUser, leave.sess.uid)
+
+				// Detach all user's sessions
+				for sess, _ := range t.sessions {
+					delete(t.sessions, sess)
+					if sess.uid == leave.sess.uid {
+						sess.detach <- t.name
+					}
+				}
+			}
+
+			// If there are no more subscriptions to this topic, start a kill timer
+			if len(t.sessions) == 0 {
+				killTimer.Reset(keepAlive)
 			}
 
 			// Session sends reply
@@ -182,7 +201,7 @@ func (t *Topic) run(hub *Hub) {
 					userData := t.perUser[from]
 					if userData.modeWant&userData.modeGiven&types.ModePub == 0 {
 						simpleByteSender(msg.akn, ErrPermissionDenied(msg.id, t.original, msg.timestamp))
-						return
+						continue
 					}
 				}
 
@@ -193,7 +212,7 @@ func (t *Topic) run(hub *Hub) {
 					Content:   msg.Data.Content}); err != nil {
 
 					simpleByteSender(msg.akn, ErrUnknown(msg.id, t.original, msg.timestamp))
-					return
+					continue
 				}
 
 				if msg.id != "" {
@@ -211,7 +230,7 @@ func (t *Topic) run(hub *Hub) {
 					select {
 					case sess.send <- packet:
 					default:
-						log.Printf("topic[%s].run: connection stuck, unsubscribing", t.name)
+						log.Printf("topic[%s].run: connection stuck, detach it", t.name)
 						t.unreg <- &sessionLeave{sess: sess, unsub: false}
 					}
 				}
@@ -627,7 +646,7 @@ func (t *Topic) replyGetInfo(sess *Session, id string, created bool) error {
 
 	// Request may come from a subscriber or a stranger. Give a stranger a lot less info than a subscriber
 	if full {
-		if pud.modeGiven & pud.modeWant & types.ModeShare {
+		if pud.modeGiven&pud.modeWant&types.ModeShare != 0 {
 			info.DefaultAcs = &MsgDefaultAcsMode{
 				Auth: t.accessAuth.String(),
 				Anon: t.accessAnon.String()}
@@ -667,22 +686,28 @@ func (t *Topic) replyGetInfo(sess *Session, id string, created bool) error {
 }
 
 // replySetInfo updates topic metadata, saves it to DB,
-// replies to the caller as {ctrl} message, generates {pres} update
+// replies to the caller as {ctrl} message, generates {pres} update if necessary
 func (t *Topic) replySetInfo(sess *Session, set *MsgClientSet) error {
 	now := time.Now().UTC().Round(time.Millisecond)
 
-	assignAccess := func(upd map[string]interface{}, mode *MsgDefaultAcsMode) {
-		auth, anon := parseTopicAccess(mode, types.ModeInvalid, types.ModeInvalid)
-		access := make(map[string]interface{})
-		if auth != types.ModeInvalid {
-			access["Auth"] = auth
+	assignAccess := func(upd map[string]interface{}, mode *MsgDefaultAcsMode) error {
+		if auth, anon, err := parseTopicAccess(mode, types.ModeInvalid, types.ModeInvalid); err != nil {
+			return err
+		} else if auth&types.ModeOwner != 0 || anon&types.ModeOwner != 0 {
+			return errors.New("default 'O' access is not permitted")
+		} else {
+			access := make(map[string]interface{})
+			if auth != types.ModeInvalid {
+				access["Auth"] = auth
+			}
+			if anon != types.ModeInvalid {
+				access["Anon"] = anon
+			}
+			if len(access) > 0 {
+				upd["Access"] = access
+			}
 		}
-		if anon != types.ModeInvalid {
-			access["Anon"] = anon
-		}
-		if len(access) > 0 {
-			upd["Access"] = access
-		}
+		return nil
 	}
 
 	assignPubPriv := func(upd map[string]interface{}, what string, p interface{}) {
@@ -708,7 +733,7 @@ func (t *Topic) replySetInfo(sess *Session, set *MsgClientSet) error {
 		}
 	}
 
-	// FIXME(gene): check that default access does not give ownership rights
+	var err error
 
 	user := make(map[string]interface{})
 	topic := make(map[string]interface{})
@@ -716,7 +741,7 @@ func (t *Topic) replySetInfo(sess *Session, set *MsgClientSet) error {
 	if t.cat == TopicCat_Me {
 		// Update current user
 		if set.Info.DefaultAcs != nil {
-			assignAccess(user, set.Info.DefaultAcs)
+			err = assignAccess(user, set.Info.DefaultAcs)
 		}
 		if set.Info.Public != nil {
 			assignPubPriv(user, "Public", set.Info.Public)
@@ -724,18 +749,22 @@ func (t *Topic) replySetInfo(sess *Session, set *MsgClientSet) error {
 	} else if t.cat == TopicCat_Grp && t.owner == sess.uid {
 		// Update current topic
 		if set.Info.DefaultAcs != nil {
-			assignAccess(topic, set.Info.DefaultAcs)
+			err = assignAccess(topic, set.Info.DefaultAcs)
 		}
 		if set.Info.Public != nil {
 			assignPubPriv(topic, "Public", set.Info.Public)
 		}
 	}
 
+	if err != nil {
+		simpleByteSender(sess.send, ErrMalformed(set.Id, set.Topic, now))
+		return err
+	}
+
 	if set.Info.Private != nil {
 		assignPubPriv(sub, "Private", set.Info.Private)
 	}
 
-	var err error
 	var change int
 	if len(user) > 0 {
 		err = store.Users.Update(t.appid, sess.uid, user)

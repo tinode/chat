@@ -86,6 +86,12 @@ type Session struct {
 	// outbound mesages, buffered
 	send chan []byte
 
+	// channel for shutting down the session
+	stop chan bool
+
+	// detach - channel for detaching session from topic, buffered
+	detach chan string
+
 	// Map of topic subscriptions, indexed by topic name
 	subs map[string]*Subscription
 
@@ -109,7 +115,7 @@ type Subscription struct {
 	meta chan<- *metaReq
 }
 
-func (s *Session) close() {
+func (s *Session) closeWS() {
 	if s.proto == WEBSOCK {
 		s.ws.Close()
 	}
@@ -140,19 +146,7 @@ func (s *Session) QueueOut(msg *ServerComMessage) {
 	}
 }
 
-/*
-// simpleByteSender attempts to send a JSON to a connection, time out is 1 second
-func simpleByteSender(sendto chan<- []byte, msg *ServerComMessage) {
-	data, _ := json.Marshal(msg)
-	select {
-	case sendto <- data:
-	case <-time.After(time.Second):
-		log.Println("simpleByteSender: timeout")
-	}
-}
-
-*/
-
+// Message received, dispatch
 func (s *Session) dispatch(raw []byte) {
 	var msg ClientComMessage
 
@@ -260,14 +254,18 @@ func (s *Session) leave(msg *ClientComMessage) {
 
 	if sub, ok := s.subs[topic]; ok {
 		if msg.Leave.Topic == "me" && msg.Leave.Unsub {
-			// User should try to unsubscribe from 'me'. Just leaving is fine
+			// User should not unsubscribe from 'me'. Just leaving is fine
 			reply = ErrPermissionDenied(msg.Leave.Id, msg.Leave.Topic, msg.timestamp)
 		} else {
-			sub.done <- &sessionLeave{sess: s, unsub: msg.Leave.Unsub}
+			// unlink from topic
+			delete(s.subs, topic)
+
+			sub.done <- &sessionLeave{sess: s, unsub: msg.Leave.Unsub, pkt: msg}
 			reply = NoErr(msg.Leave.Id, msg.Leave.Topic, msg.timestamp)
 		}
 	} else {
-		reply = InfoNotSubscribed(msg.Leave.Id, msg.Leave.Topic, msg.timestamp)
+		// FIXME(gene): allow topic to unsubscribe to unsubscribe without joining first; send to hub to unsub
+		reply = ErrAttachFirst(msg.Leave.Id, msg.Leave.Topic, msg.timestamp)
 	}
 
 	s.QueueOut(reply)

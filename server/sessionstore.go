@@ -41,6 +41,8 @@ func (ss *SessionStore) Create(conn interface{}, appid uint32) *Session {
 	if s.proto != NONE {
 		s.subs = make(map[string]*Subscription)
 		s.send = make(chan []byte, 64) // buffered
+		s.stop = make(chan bool)
+		s.detach = make(chan string, 64) // buffered
 	}
 
 	s.appid = appid

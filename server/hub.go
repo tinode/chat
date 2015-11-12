@@ -62,6 +62,8 @@ type sessionLeave struct {
 	sess *Session
 	// Leave and unsubscribe
 	unsub bool
+	// Originating request
+	pkt *ClientComMessage
 }
 
 // Remove topic from hub
@@ -279,8 +281,9 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		// 'me' has no owner
 		// t.owner = sreg.sess.uid
 
-		// t.accessAuth = types.ModeBanned
-		// t.accessAnon = types.ModeBanned
+		// Ensure all requests to subscribe are automatically rejected
+		t.accessAuth = types.ModeBanned
+		t.accessAnon = types.ModeBanned
 
 		t.public = user.Public
 
@@ -434,7 +437,13 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 
 			// set default access
 			if sreg.pkt.Init.DefaultAcs != nil {
-				t.accessAuth, t.accessAnon = parseTopicAccess(sreg.pkt.Init.DefaultAcs, t.accessAuth, t.accessAnon)
+				if auth, anon, err := parseTopicAccess(sreg.pkt.Init.DefaultAcs, t.accessAuth, t.accessAnon); err != nil {
+					log.Println("hub: invalid access mode for topic '" + t.name + "': '" + err.Error() + "'")
+				} else if auth&types.ModeOwner != 0 || anon&types.ModeOwner != 0 {
+					log.Println("hub: OWNER default access in topic '" + t.name)
+				} else {
+					t.accessAuth, t.accessAnon = auth, anon
+				}
 			}
 		}
 
@@ -561,7 +570,6 @@ func replyTopicInfoBasic(sess *Session, topic string, get *MsgClientGet) {
 			info.LastMessage = stopic.LastMessageAt
 			info.Public = stopic.Public
 		} else {
-			log.Printf("hub.replyTopicInfoBasic: sending error 1")
 			simpleByteSender(sess.send, ErrUnknown(get.Id, get.Topic, now))
 			return
 		}
@@ -582,7 +590,6 @@ func replyTopicInfoBasic(sess *Session, topic string, get *MsgClientGet) {
 		}
 
 		if uid.IsZero() {
-			log.Printf("hub.replyTopicInfoBasic: sending error 2")
 			simpleByteSender(sess.send, ErrMalformed(get.Id, get.Topic, now))
 			return
 		}
@@ -605,18 +612,18 @@ func replyTopicInfoBasic(sess *Session, topic string, get *MsgClientGet) {
 }
 
 // Parse topic access parameters
-func parseTopicAccess(acs *MsgDefaultAcsMode, defAuth, defAnon types.AccessMode) (auth, anon types.AccessMode) {
+func parseTopicAccess(acs *MsgDefaultAcsMode, defAuth, defAnon types.AccessMode) (auth, anon types.AccessMode, err error) {
 
 	auth, anon = defAuth, defAnon
 
 	if acs.Auth != "" {
-		if err := auth.UnmarshalText([]byte(acs.Auth)); err != nil {
+		if err = auth.UnmarshalText([]byte(acs.Auth)); err != nil {
 			log.Println("hub: invalid default auth access mode '" + acs.Auth + "'")
 		}
 	}
 
 	if acs.Anon != "" {
-		if err := anon.UnmarshalText([]byte(acs.Anon)); err != nil {
+		if err = anon.UnmarshalText([]byte(acs.Anon)); err != nil {
 			log.Println("hub: invalid default anon access mode '" + acs.Anon + "'")
 		}
 	}

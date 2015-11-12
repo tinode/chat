@@ -654,6 +654,12 @@ func (a *RethinkDbAdapter) SubsUpdate(appid uint32, topic string, user t.Uid, up
 	return err
 }
 
+// Delete a subscription.
+func (a *RethinkDbAdapter) SubsDelete(appid uint32, topic string, user t.Uid) error {
+	_, err := rdb.DB(a.dbName).Table("subscriptions").Get(topic + ":" + user.String()).Delete().RunWrite(a.conn)
+	return err
+}
+
 // Messages
 func (a *RethinkDbAdapter) MessageSave(appId uint32, msg *t.Message) error {
 	msg.SetUid(uGen.Get())

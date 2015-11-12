@@ -62,6 +62,10 @@ func (sess *Session) writeOnce() {
 	case <-closed:
 		log.Println("conn.writeOnce: connection closed by peer")
 		sess.wrt = nil
+	case <-sess.stop:
+		sess.wrt = nil
+	case topic := <-sess.detach:
+		delete(sess.subs, topic)
 	case <-time.After(pingPeriod):
 		// just write an empty packet on timeout
 		if _, err := wrt.Write([]byte{}); err != nil {

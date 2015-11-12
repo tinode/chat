@@ -54,14 +54,13 @@ const (
 func (sess *Session) readLoop() {
 	defer func() {
 		log.Println("serveWebsocket - stop")
-		sess.close()
+		sess.closeWS()
 		globals.sessionStore.Delete(sess.sid)
 		for _, sub := range sess.subs {
 			// sub.done is the same as topic.unreg
 			sub.done <- &sessionLeave{sess: sess, unsub: false}
 		}
-		// FIXME(gene): this currently causes occasional panics
-		close(sess.send)
+		sess.stop <- true
 	}()
 
 	sess.ws.SetReadLimit(maxMessageSize)
@@ -73,14 +72,13 @@ func (sess *Session) readLoop() {
 	sess.remoteAddr = sess.ws.RemoteAddr().String()
 
 	for {
-		// Try reading a ClientComMessage
-		_, raw, err := sess.ws.ReadMessage()
-		if err != nil {
+		// Read a ClientComMessage
+		if _, raw, err := sess.ws.ReadMessage(); err != nil {
 			log.Println("sess.readLoop: " + err.Error())
 			return
+		} else {
+			sess.dispatch(raw)
 		}
-
-		sess.dispatch(raw)
 	}
 }
 
@@ -89,7 +87,7 @@ func (sess *Session) writeLoop() {
 
 	defer func() {
 		ticker.Stop()
-		sess.close() // break readLoop
+		sess.closeWS() // break readLoop
 	}()
 
 	for {
@@ -103,6 +101,13 @@ func (sess *Session) writeLoop() {
 				log.Println("sess.writeLoop: " + err.Error())
 				return
 			}
+		case <-sess.stop:
+			// shutdown requested
+			return
+
+		case topic := <-sess.detach:
+			delete(sess.subs, topic)
+
 		case <-ticker.C:
 			if err := ws_write(sess.ws, websocket.PingMessage, []byte{}); err != nil {
 				log.Println("sess.writeLoop: ping/" + err.Error())

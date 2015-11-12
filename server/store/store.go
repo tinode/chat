@@ -342,6 +342,11 @@ func (SubsObjMapper) Update(appid uint32, topic string, user types.Uid, update m
 	return adaptr.SubsUpdate(appid, topic, user, update)
 }
 
+// Delete deletes a subscription
+func (SubsObjMapper) Delete(appid uint32, topic string, user types.Uid) error {
+	return adaptr.SubsDelete(appid, topic, user)
+}
+
 // Messages struct to hold methods for persistence mapping for the Message object.
 type MessagesObjMapper struct{}
 

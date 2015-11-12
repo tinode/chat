@@ -484,16 +484,6 @@ func InfoAlreadySubscribed(id, topic string, ts time.Time) *ServerComMessage {
 	return msg
 }
 
-func InfoNotSubscribed(id, topic string, ts time.Time) *ServerComMessage {
-	msg := &ServerComMessage{Ctrl: &MsgServerCtrl{
-		Id:        id,
-		Code:      http.StatusNotModified, // 304
-		Text:      "not subscribed",
-		Topic:     topic,
-		Timestamp: ts}}
-	return msg
-}
-
 // 4xx Errors
 func ErrMalformed(id, topic string, ts time.Time) *ServerComMessage {
 	msg := &ServerComMessage{Ctrl: &MsgServerCtrl{
@@ -504,18 +494,6 @@ func ErrMalformed(id, topic string, ts time.Time) *ServerComMessage {
 		Timestamp: ts}}
 	return msg
 }
-
-/*
-func ErrUnrecognized(id, topic string, ts time.Time) *ServerComMessage {
-	msg := &ServerComMessage{Ctrl: &MsgServerCtrl{
-		Id:        id,
-		Code:      http.StatusBadRequest, // 400
-		Text:      "unrecognized input",
-		Topic:     topic,
-		Timestamp: ts}}
-	return msg
-}
-*/
 
 func ErrAuthRequired(id, topic string, ts time.Time) *ServerComMessage {
 	msg := &ServerComMessage{Ctrl: &MsgServerCtrl{
@@ -592,6 +570,16 @@ func ErrDuplicateCredential(id, topic string, ts time.Time) *ServerComMessage {
 		Id:        id,
 		Code:      http.StatusConflict, // 409
 		Text:      "duplicate credential",
+		Topic:     topic,
+		Timestamp: ts}}
+	return msg
+}
+
+func ErrAttachFirst(id, topic string, ts time.Time) *ServerComMessage {
+	msg := &ServerComMessage{Ctrl: &MsgServerCtrl{
+		Id:        id,
+		Code:      http.StatusConflict, // 409
+		Text:      "must attach to unsubscribe",
 		Topic:     topic,
 		Timestamp: ts}}
 	return msg

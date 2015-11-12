@@ -51,6 +51,8 @@ type Adapter interface {
 	SubsForTopic(appId uint32, topic string, opts *t.BrowseOpt) ([]t.Subscription, error)
 	// SubsUpdate updates pasrt of a subscription object. Pass nil for fields which don't need to be updated
 	SubsUpdate(appid uint32, topic string, user t.Uid, update map[string]interface{}) error
+	// SubsDelete deletes a subscription
+	SubsDelete(appid uint32, topic string, user t.Uid) error
 
 	// Messages
 	MessageSave(appId uint32, msg *t.Message) error
