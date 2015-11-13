@@ -235,7 +235,7 @@ func (a *RethinkDbAdapter) UserGet(appid uint32, uid t.Uid) (*t.User, error) {
 	}
 }
 
-func (a *RethinkDbAdapter) UserGetAll(appId uint32, ids []t.Uid) ([]t.User, error) {
+func (a *RethinkDbAdapter) UserGetAll(appId uint32, ids ...t.Uid) ([]t.User, error) {
 	uids := []interface{}{}
 	for _, id := range ids {
 		uids = append(uids, id.String())
@@ -260,27 +260,6 @@ func (a *RethinkDbAdapter) UserGetAll(appId uint32, ids []t.Uid) ([]t.User, erro
 func (a *RethinkDbAdapter) UserFind(appId uint32, params map[string]interface{}) ([]t.User, error) {
 	return nil, errors.New("UserFind: not implemented")
 }
-
-/*
-func (a *RethinkDbAdapter) GetLastSeenAndStatus(appid uint32, uid t.Uid) (time.Time, interface{}, error) {
-	row, err := rdb.DB(a.dbName).Table("users").Get(uid.String()).Pluck("lastSeen", "status").Run(a.conn)
-	var timeDefault = time.Unix(1414213562, 0).UTC() // sqrt(2) == 2014-10-25T05:06:02Z
-	if err == nil && !row.IsNil() {
-		var data struct {
-			LastSeen time.Time   `gorethink:"lastSeen"`
-			Status   interface{} `gorethink:"status"`
-		}
-		if err = row.One(&data); err == nil {
-			if data.LastSeen.IsZero() {
-				data.LastSeen = timeDefault
-			}
-			return data.LastSeen, data.Status, nil
-		}
-	}
-
-	return timeDefault, nil, err
-}
-*/
 
 func (a *RethinkDbAdapter) UserDelete(appId uint32, id t.Uid, soft bool) error {
 	return errors.New("UserDelete: not implemented")
@@ -614,7 +593,7 @@ func (a *RethinkDbAdapter) SubsForTopic(appId uint32, topic string, opts *t.Brow
 	var p2p []t.User
 	if strings.HasPrefix(topic, "p2p") {
 		uid1, uid2, _ := t.ParseP2P(topic)
-		if p2p, err := a.UserGetAll(appId, []t.Uid{uid1, uid2}); err != nil {
+		if p2p, err := a.UserGetAll(appId, uid1, uid2); err != nil {
 			return nil, err
 		} else if len(p2p) != 2 {
 			return nil, errors.New("failed to load two p2p users")

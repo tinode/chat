@@ -361,9 +361,24 @@ func (grant AccessMode) Check(want AccessMode) bool {
 	return grant&want == want
 }
 
-// Check if grant mode allows want access
+// Check if banned
 func (a AccessMode) IsBanned() bool {
 	return a&ModeBanned != 0
+}
+
+// Check if owner
+func (a AccessMode) IsOwner() bool {
+	return a&ModeOwner != 0
+}
+
+// Check if owner or sharer
+func (a AccessMode) IsManager() bool {
+	return a.IsOwner() || (a&ModeShare != 0)
+}
+
+// Check if allowed to publish
+func (a AccessMode) CanPub() bool {
+	return a&ModePub != 0
 }
 
 // Relationship between users & topics, stored in database as Subscription

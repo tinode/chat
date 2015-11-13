@@ -158,16 +158,9 @@ func (t *Topic) run(hub *Hub) {
 					continue
 				}
 
-				// Delete per-user data
-				delete(t.perUser, leave.sess.uid)
+				// evict all user's sessions and clear cached data
+				t.evictUser(leave.sess.uid, true, leave.sess)
 
-				// Detach all user's sessions
-				for sess, _ := range t.sessions {
-					if sess.uid == leave.sess.uid {
-						delete(t.sessions, sess)
-						sess.detach <- t.name
-					}
-				}
 			} else {
 				// Just leaving the topic without unsubscribing
 				delete(t.sessions, leave.sess)
@@ -399,6 +392,11 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string, inf
 		modeWant.UnmarshalText([]byte(want))
 	}
 
+	// If the user wants a self-ban, make sure it's the only change
+	if modeWant.IsBanned() {
+		modeWant = types.ModeBanned
+	}
+
 	// Vars for saving changes to access mode
 	var updWant *types.AccessMode
 	var updGiven *types.AccessMode
@@ -436,19 +434,46 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string, inf
 		}
 
 	} else {
+		var ownerChange bool
+
 		// If user did not request a new access mode, copy one from cache
 		if modeWant == types.ModeNone {
 			modeWant = userData.modeWant
 		}
 
-		// Make sure the owner cannot unset the owner flag
-		if t.owner == sess.uid && (modeWant&types.ModeOwner == 0 || modeWant.IsBanned()) {
-			log.Println("requestSub: owner attempts to unset the owner flag")
+		if userData.modeGiven.IsOwner() {
+			// Handle two cases:
+			// 1. Owner changing own settings
+			// 2. Acceptance or rejection of the ownership transfer
+
+			// Make sure the owner cannot unset the owner flag or ban himself
+			if t.owner == sess.uid && (!modeWant.IsOwner() || modeWant.IsBanned()) {
+				log.Println("requestSub: owner attempts to unset the owner flag")
+				simpleByteSender(sess.send, ErrMalformed(pktId, t.original, now))
+				return errors.New("cannot unset ownership or ban the owner")
+			} else if modeWant.IsOwner() {
+				// Ownership transfer
+				ownerChange = true
+			}
+
+			// The owner should be able to grant himself any access permissions
+			if !userData.modeGiven.Check(modeWant) {
+				userData.modeGiven |= modeWant
+				updGiven = &userData.modeGiven
+			}
+		} else if modeWant.IsOwner() {
+			// Ownership transfer can only be initiated by the owner
 			simpleByteSender(sess.send, ErrMalformed(pktId, t.original, now))
-			return errors.New("cannot unset ownership or ban the owner")
+			return errors.New("non-owner cannot request ownership transfer")
+		} else if userData.modeGiven.IsManager() {
+			// The sharer should be able to grant any permissions except ownership
+			if !userData.modeGiven.Check(modeWant & ^types.ModeBanned) {
+				userData.modeGiven |= (modeWant & ^types.ModeBanned)
+				updGiven = &userData.modeGiven
+			}
 		}
 
-		// Check if t.accessAuth has changed since the last attempt to subscribe
+		// Check if t.accessAuth is different now than at the last attempt to subscribe
 		if userData.modeGiven == types.ModeNone && t.accessAuth != types.ModeNone {
 			userData.modeGiven = t.accessAuth
 			updGiven = &userData.modeGiven
@@ -456,11 +481,11 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string, inf
 
 		// This is a request to change access to whatever is currently available
 		if modeWant == types.ModeNone {
-			userData.modeWant = userData.modeGiven
-			updWant = &userData.modeWant
+			modeWant = userData.modeGiven
+		}
 
-			// Access Request to change access
-		} else if userData.modeWant != modeWant {
+		// Access actually changed
+		if userData.modeWant != modeWant {
 			userData.modeWant = modeWant
 			updWant = &modeWant
 		}
@@ -480,26 +505,38 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string, inf
 			}
 		}
 
+		// No transactions in RethinkDB, but two owners are better than none
+		if ownerChange {
+			userData = t.perUser[t.owner]
+			userData.modeGiven = (userData.modeGiven & ^types.ModeOwner)
+			userData.modeWant = (userData.modeWant & ^types.ModeOwner)
+			if err := store.Subs.Update(t.appid, t.name, t.owner,
+				map[string]interface{}{"ModeWant": userData.modeWant, "ModeGiven": userData.modeGiven}); err != nil {
+				return err
+			}
+			t.perUser[t.owner] = userData
+			t.owner = sess.uid
+		}
 	}
 
 	t.perUser[sess.uid] = userData
 
-	// If user is banned from topic, no further action is needed
-	if userData.modeGiven.IsBanned() {
-		if !modeWant.IsBanned() {
-			simpleByteSender(sess.send, ErrPermissionDenied(pktId, t.original, now))
-		}
+	// If the user is (self)banned from topic, no further action is needed
+	if modeWant.IsBanned() {
+		t.evictUser(sess.uid, false, sess)
+		return errors.New("self-banned access to topic")
+	} else if userData.modeGiven.IsBanned() {
+		simpleByteSender(sess.send, ErrPermissionDenied(pktId, t.original, now))
 		return errors.New("topic access denied")
 	}
 
+	// If requested access mode different from given:
 	if !userData.modeGiven.Check(modeWant) {
-		if !modeWant.IsBanned() {
-			// Send req to approve to topic managers
-			for uid, pud := range t.perUser {
-				if pud.modeGiven&pud.modeWant&types.ModeShare != 0 {
-					h.route <- t.makeInvite(uid, sess.uid, sess.uid, types.InvAppr,
-						modeWant, userData.modeGiven, info)
-				}
+		// Send req to approve to topic managers
+		for uid, pud := range t.perUser {
+			if pud.modeGiven&pud.modeWant&types.ModeShare != 0 {
+				h.route <- t.makeInvite(uid, sess.uid, sess.uid, types.InvAppr,
+					modeWant, userData.modeGiven, info)
 			}
 		}
 		// Send info to requester
@@ -518,26 +555,29 @@ func (t *Topic) approveSub(h *Hub, sess *Session, target types.Uid, set *MsgClie
 	now := time.Now().UTC().Round(time.Millisecond)
 
 	// Check if requester actually has permission to manage sharing
-	if userData, ok := t.perUser[sess.uid]; !ok ||
-		(userData.modeGiven&userData.modeWant&types.ModeShare == 0 && userData.modeGiven&types.ModeOwner == 0) {
+	if userData, ok := t.perUser[sess.uid]; !ok || !userData.modeGiven.IsManager() || !userData.modeWant.IsManager() {
 		simpleByteSender(sess.send, ErrPermissionDenied(set.Id, t.original, now))
 		return errors.New("topic access denied")
 	}
 
-	// Parse the access mode granted to or requested by the user
+	// Parse the access mode granted
 	var modeGiven types.AccessMode
 	if set.Sub.Mode != "" {
 		modeGiven.UnmarshalText([]byte(set.Sub.Mode))
 	}
 
+	// If the user is banned from topic, make sute it's the only change
+	if modeGiven.IsBanned() {
+		modeGiven = types.ModeBanned
+	}
+
 	// Make sure no one but the owner can do an ownership transfer
-	if modeGiven&types.ModeOwner != 0 && t.owner != sess.uid {
+	if modeGiven.IsOwner() && t.owner != sess.uid {
 		simpleByteSender(sess.send, ErrPermissionDenied(set.Id, t.original, now))
 		return errors.New("attempt to transfer ownership by non-owner")
 	}
 
-	var accessChanged bool
-
+	var givenBefore types.AccessMode
 	// Check if it's a new invite. If so, save it to database as a subscription.
 	// Saved subscription does not mean the user is allowed to post/read
 	userData, ok := t.perUser[target]
@@ -575,17 +615,13 @@ func (t *Topic) approveSub(h *Hub, sess *Session, target types.Uid, set *MsgClie
 
 		t.perUser[target] = userData
 
-		accessChanged = true
-
 	} else {
 		// Action on an existing subscription (re-invite or confirm/decline)
+		givenBefore = userData.modeGiven
 
 		// Request to re-send invite without changing the access mode
 		if modeGiven == types.ModeNone {
 			modeGiven = userData.modeGiven
-
-			accessChanged = true
-
 		} else if modeGiven != userData.modeGiven {
 			userData.modeGiven = modeGiven
 
@@ -596,8 +632,6 @@ func (t *Topic) approveSub(h *Hub, sess *Session, target types.Uid, set *MsgClie
 			}
 
 			t.perUser[target] = userData
-
-			accessChanged = true
 		}
 	}
 
@@ -614,20 +648,20 @@ func (t *Topic) approveSub(h *Hub, sess *Session, target types.Uid, set *MsgClie
 	if !modeGiven.IsBanned() {
 		if userData.modeWant == types.ModeNone {
 			// (re-)Send the invite to target
-			h.route <- t.makeInvite(target, target, sess.uid, types.InvJoin,
-				userData.modeWant, modeGiven, set.Sub.Info)
-		} else if accessChanged {
+			h.route <- t.makeInvite(target, target, sess.uid, types.InvJoin, userData.modeWant, modeGiven,
+				set.Sub.Info)
+		} else if givenBefore != modeGiven {
 			// Inform target that the access has changed
-			h.route <- t.makeInvite(target, target, sess.uid, types.InvInfo,
-				userData.modeWant, modeGiven, set.Sub.Info)
+			h.route <- t.makeInvite(target, target, sess.uid, types.InvInfo, userData.modeWant, modeGiven,
+				set.Sub.Info)
 		}
 	}
 
 	// Has anything actually changed?
-	if accessChanged {
+	if givenBefore != modeGiven {
 		// inform requester of the change made
 		h.route <- t.makeInvite(sess.uid, target, sess.uid, types.InvInfo, userData.modeWant, modeGiven,
-			map[string]string{"before": userData.modeGiven.String()})
+			map[string]string{"before": givenBefore.String()})
 	}
 
 	return nil
@@ -1067,6 +1101,28 @@ func (me *Topic) presSnapshot() error {
 	}
 
 	return nil
+}
+
+// evictUser evicts all user's sessions from the topic and clear's user's cached data, if requested
+func (t *Topic) evictUser(uid types.Uid, clear bool, ignore *Session) {
+	now := time.Now().UTC().Round(time.Millisecond)
+	note := NoErrEvicted("", t.original, now)
+
+	if clear {
+		// Delete per-user data
+		delete(t.perUser, uid)
+	}
+
+	// Detach all user's sessions
+	for sess, _ := range t.sessions {
+		if sess.uid == uid {
+			delete(t.sessions, sess)
+			sess.detach <- t.name
+			if sess != ignore {
+				sess.QueueOut(note)
+			}
+		}
+	}
 }
 
 func msgOpts2storeOpts(req *MsgBrowseOpts, tag string, lastSeen time.Time) *types.BrowseOpt {

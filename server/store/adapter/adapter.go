@@ -19,7 +19,7 @@ type Adapter interface {
 	GetPasswordHash(appid uint32, username string) (t.Uid, []byte, error)
 	UserCreate(appid uint32, usr *t.User) (err error, dupeUserName bool)
 	UserGet(appId uint32, id t.Uid) (*t.User, error)
-	UserGetAll(appId uint32, ids []t.Uid) ([]t.User, error)
+	UserGetAll(appId uint32, ids ...t.Uid) ([]t.User, error)
 	//GetLastSeenAndStatus(appid uint32, id t.Uid) (time.Time, interface{}, error)
 	UserFind(appId uint32, params map[string]interface{}) ([]t.User, error)
 	UserDelete(appId uint32, id t.Uid, soft bool) error

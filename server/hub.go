@@ -303,8 +303,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		t.accessAuth = types.ModeBanned
 		t.accessAnon = types.ModeBanned
 
-		// modeWant is either default or given in Init, modeGiven are defined in the User object
-		userData := perUserData{modeWant: types.ModeP2P, modeGiven: types.ModeNone}
+		var userData perUserData
 
 		if sreg.pkt.Init != nil {
 			// t.public is not used for p2p topics since each user get a different public
@@ -313,30 +312,61 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		}
 		// Custom default access levels set in sreg.pkt.Init.DefaultAcs are ignored
 
-		// User may set non-default access to topic
+		// Fetch user's public and default access
+		userId1 := sreg.sess.uid
+		userId2 := types.ParseUserId(t.original)
+		users, err := store.Users.GetAll(t.appid, userId1, userId2)
+		if err != nil {
+			log.Println("hub: failed to load users for '" + t.name + "' (" + err.Error() + ")")
+			sreg.sess.QueueOut(ErrUnknown(sreg.pkt.Id, t.name, timestamp))
+			return
+		} else if len(users) != 2 {
+			// invited user does not exist
+			log.Println("hub: missing user for '" + t.name + "'")
+			sreg.sess.QueueOut(ErrUserNotFound(sreg.pkt.Id, t.name, timestamp))
+			return
+		}
+
+		var u1, u2 int
+		if users[0].Uid() == userId1 {
+			u1 = 0
+			u2 = 1
+		} else {
+			u1 = 1
+			u2 = 0
+		}
+
+		// User may set non-default access to topic, just make sure it's no higher than the default
 		if sreg.pkt.Sub != nil && sreg.pkt.Sub.Mode != "" {
 			if err := userData.modeWant.UnmarshalText([]byte(sreg.pkt.Sub.Mode)); err != nil {
 				log.Println("hub: invalid access mode for topic '" + t.name + "': '" + sreg.pkt.Sub.Mode + "'")
+				userData.modeWant = types.ModeP2P
+			} else {
+				userData.modeWant &= types.ModeP2P
 			}
+		} else if users[u1].Access.Auth != types.ModeNone {
+			userData.modeWant = users[u1].Access.Auth
+		} else {
+			userData.modeWant = types.ModeP2P
 		}
 
-		userId1 := sreg.sess.uid
-		userId2 := types.ParseUserId(t.original)
 		user1 := &types.Subscription{
 			User:      userId1.String(),
 			Topic:     t.name,
 			ModeWant:  userData.modeWant,
-			ModeGiven: userData.modeGiven,
+			ModeGiven: types.ModeP2P,
 			Private:   userData.private}
+		user1.SetPublic(users[u1].Public)
 		user2 := &types.Subscription{
 			User:      userId2.String(),
 			Topic:     t.name,
-			ModeWant:  types.ModeNone,
+			ModeWant:  users[u2].Access.Auth,
 			ModeGiven: types.ModeP2P,
 			Private:   nil}
+		user2.SetPublic(users[u2].Public)
 
 		// CreateP2P will set user.Public
-		err := store.Topics.CreateP2P(t.appid, user1, user2)
+		err = store.Topics.CreateP2P(t.appid, user1, user2)
 		if err != nil {
 			log.Println("hub: databse error in creating subscriptions '" + t.name + "' (" + err.Error() + ")")
 			sreg.sess.QueueOut(ErrUnknown(sreg.pkt.Id, t.name, timestamp))

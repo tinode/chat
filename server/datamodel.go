@@ -473,6 +473,16 @@ func NoErrAccepted(id, topic string, ts time.Time) *ServerComMessage {
 	return msg
 }
 
+func NoErrEvicted(id, topic string, ts time.Time) *ServerComMessage {
+	msg := &ServerComMessage{Ctrl: &MsgServerCtrl{
+		Id:        id,
+		Code:      http.StatusResetContent, // 205
+		Text:      "evicted from topic",
+		Topic:     topic,
+		Timestamp: ts}}
+	return msg
+}
+
 // 3xx
 func InfoAlreadySubscribed(id, topic string, ts time.Time) *ServerComMessage {
 	msg := &ServerComMessage{Ctrl: &MsgServerCtrl{

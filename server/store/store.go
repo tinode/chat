@@ -177,9 +177,14 @@ func (UsersObjMapper) Login(appid uint32, scheme, secret string) (types.Uid, err
 	return types.ZeroUid, errors.New("store: unknown authentication scheme '" + scheme + "'")
 }
 
-// TODO(gene): implement
+// Get returns a user object for the given user id
 func (UsersObjMapper) Get(appid uint32, uid types.Uid) (*types.User, error) {
 	return adaptr.UserGet(appid, uid)
+}
+
+// GetAll returns a slice of user objects for the given user ids
+func (UsersObjMapper) GetAll(appid uint32, uid ...types.Uid) ([]types.User, error) {
+	return adaptr.UserGetAll(appid, uid...)
 }
 
 /*
@@ -259,30 +264,7 @@ func (TopicsObjMapper) Create(appid uint32, topic *types.Topic, owner types.Uid,
 
 // CreateP2P creates a P2P topic by generating two user's subsciptions to each other.
 func (TopicsObjMapper) CreateP2P(appid uint32, initiator, invited *types.Subscription) error {
-
-	if users, err := adaptr.UserGetAll(appid, []types.Uid{
-		types.ParseUid(initiator.User),
-		types.ParseUid(invited.User)}); err != nil {
-		return err
-	} else if len(users) == 2 {
-		var other = 1
-		if users[0].Id == invited.User {
-			other = 0
-		}
-		initiator.SetPublic(users[(other+1)%2].Public)
-		invited.SetPublic(users[other].Public)
-		invited.ModeWant = users[other].Access.Auth
-
-	} else {
-		// invited user does not exist
-		return errors.New("invited user does not exist " + initiator.Topic)
-	}
-
-	// initiator is given as much access as permitted by the other user
-	initiator.ModeGiven = invited.ModeWant
-
 	initiator.InitTimes()
-
 	invited.InitTimes()
 
 	return adaptr.TopicCreateP2P(appid, initiator, invited)
