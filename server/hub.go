@@ -305,8 +305,9 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 
 		var userData perUserData
 
-		if sreg.pkt.Init != nil {
+		if sreg.pkt.Init != nil && !isNullValue(sreg.pkt.Init.Private) {
 			// t.public is not used for p2p topics since each user get a different public
+
 			userData.private = sreg.pkt.Init.Private
 			// Init.DefaultAcs and Init.Public are ignored for p2p topics
 		}
@@ -365,7 +366,6 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 			Private:   nil}
 		user2.SetPublic(users[u2].Public)
 
-		// CreateP2P will set user.Public
 		err = store.Topics.CreateP2P(t.appid, user1, user2)
 		if err != nil {
 			log.Println("hub: databse error in creating subscriptions '" + t.name + "' (" + err.Error() + ")")
@@ -462,8 +462,12 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 
 		// User sent initialization parameters
 		if sreg.pkt.Init != nil {
-			t.public = sreg.pkt.Init.Public
-			userData.private = sreg.pkt.Init.Private
+			if !isNullValue(sreg.pkt.Init.Public) {
+				t.public = sreg.pkt.Init.Public
+			}
+			if !isNullValue(sreg.pkt.Init.Private) {
+				userData.private = sreg.pkt.Init.Private
+			}
 
 			// set default access
 			if sreg.pkt.Init.DefaultAcs != nil {

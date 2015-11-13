@@ -352,7 +352,7 @@ func (t *Topic) subCommonReply(h *Hub, sess *Session, pkt *MsgClientSub, sendInf
 		mode = pkt.Sub.Mode
 	}
 
-	if pkt.Init != nil {
+	if pkt.Init != nil && !isNullValue(pkt.Init.Private) {
 		private = pkt.Init.Private
 	}
 

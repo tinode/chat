@@ -291,7 +291,7 @@ type ClientComMessage struct {
 	timestamp time.Time
 }
 
-// *********************************************************
+/////////////////////////////////////////////////////////////
 // Server to client messages
 
 type MsgLastSeenInfo struct {
