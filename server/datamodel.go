@@ -370,7 +370,7 @@ type MsgServerData struct {
 
 type MsgServerPres struct {
 	Topic string `json:"topic"`
-	User  string `json:"user,omitempty"`
+	Src   string `json:"src"`
 
 	What string `json:"what"`
 }

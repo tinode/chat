@@ -105,7 +105,7 @@ type Hub struct {
 	unreg chan topicUnreg
 
 	// report presence changes
-	presence chan<- *PresenceRequest
+	//presence chan<- *PresenceRequest
 
 	// process get.info requests for topic not subscribed to
 	meta chan *metaReq
@@ -134,10 +134,10 @@ func newHub() *Hub {
 	var h = &Hub{
 		topics: make(map[string]*Topic),
 		// this needs to be buffered - hub generates invites and adds them to this queue
-		route:      make(chan *ServerComMessage, 1024),
-		join:       make(chan *sessionJoin),
-		unreg:      make(chan topicUnreg),
-		presence:   make(chan *PresenceRequest),
+		route: make(chan *ServerComMessage, 1024),
+		join:  make(chan *sessionJoin),
+		unreg: make(chan topicUnreg),
+		//presence:   make(chan *PresenceRequest),
 		meta:       make(chan *metaReq, 32),
 		topicsLive: new(expvar.Int)}
 
@@ -279,7 +279,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		}
 
 		// 'me' has no owner
-		// t.owner = sreg.sess.uid
+		// t.owner = nil
 
 		// Ensure all requests to subscribe are automatically rejected
 		t.accessAuth = types.ModeBanned
