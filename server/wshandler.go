@@ -28,6 +28,7 @@
  *    Handler of websocket connections. See also lphandler.go for long polling.
  *
  *****************************************************************************/
+
 package main
 
 import (

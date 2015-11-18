@@ -17,7 +17,7 @@
  *
  *  This code is available under licenses for commercial use.
  *
- *  File        :  lphandler.go
+ *  File        :  pres.go
  *  Author      :  Gene Sokolov
  *  Created     :  13-Nov-2015
  *
@@ -33,17 +33,27 @@ package main
 
 import (
 	"log"
+	"strings"
 
 	"github.com/tinode/chat/server/store"
 	"github.com/tinode/chat/server/store/types"
 )
 
 /*
-1. User joined `me`. Tell the user which of his/her topics/users of interest are currently online
-2. User came online or went offline (joined/left `me` topic).
+1. User joined `me`. Tell the user which of his/her topics/users of interest are currently online:
+	a. if the topic is loaded at this time
+		i. load the list of user's subscriptions
+		ii. store just the names in the t.perSubs with online set to false
+	  	iii. send a {pres} to t.perSub that the user is online
+		iv. Other 'me's will cache user's status in t.perSubs; grp & p2p won't cache
+		v. Other topics reply with their own online status
+	b. if the topic is already loaded, do nothing.
+	c. when the user subscribes (grp or p2p), add new subscription to t.perSub
+	`{pres topic="me" src="<user ID>" what="on"}`
+2. User went offline (left `me` topic).
 	The message is sent to all users who have P2P topics with the first user. Users receive this event on
-	the `me` topic, `src` field contains user ID `src: "usr2il9suCbuko"`, `what` contains `"on"` or `"off"`:
-	`{pres topic="me" src="<user ID>" what="on|off"}`.
+	the `me` topic, `src` field contains user ID `src: "usr2il9suCbuko"`, `what` contains `"off"`:
+	`{pres topic="me" src="<user ID>" what="off"}`.
 3. User updates `public` data. The event is sent to all users who have P2P topics with the first user.
 	Users receive `{pres topic="me" src="<user ID>" what="upd"}`.
 4. User joins/leaves a topic. This event is sent to other users who currently joined the topic:
@@ -53,100 +63,134 @@ import (
 	They will receive it on their `me` topics:
 	`{pres topic="me" src="<topic name>" what="on|off"}`.
 6. A message was sent to the topic. The event is sent to users who have subscribed to the topic but currently
-	not joined `{pres topic="<topic name>" what="msg"}`.
+	not joined `{pres topic="me" src="<topic name>" what="msg"}`.
 7. Topic's `public` is updated. The event is sent to all topic subscribers.
 	Users receive `{pres topic="me" src="<topic name>" what="upd"}`.
 */
 
-// Topic activated or deactivated, announce presence (case 5 above)
-func (t *Topic) presPubTopicOnline(online bool) {
-	if t.cat == TopicCat_Me {
-
-	} else {
-		var count = 0
-
-		// Publish update to subscribers
-		update := &MsgServerPres{Topic: "me", What: "on", Src: t.original}
-		if !online {
-			update.What = "off"
-		}
-		for uid, pud := range t.perUser {
-			if pud.modeGiven&pud.modeWant&types.ModePres != 0 {
-				globals.hub.route <- &ServerComMessage{Pres: update, appid: t.appid,
-					rcptto: uid.UserId()}
-				count++
-			}
-		}
-
-		log.Printf("Presence: topic '%s' came online, updated %d listeners", t.name, count)
-	}
-}
-
-// Publish presence announcement
-func (t *Topic) presPubChange(src, action string) {
-	if t.cat == TopicCat_Me {
-
-	} else {
-		update := &MsgServerPres{Topic: t.original, What: action, Src: src}
-
-		for uid, pud := range t.perUser {
-			if pud.modeGiven&pud.modeWant&types.ModePres != 0 {
-				globals.hub.route <- &ServerComMessage{Pres: update, appid: t.appid,
-					rcptto: uid.UserId()}
-			}
-			log.Println("Presence: sent update to ", uid.String())
-		}
-	}
-}
-
-// Process request to start/stop receiving presence updates from this topic
-func (t *Topic) presProcReq(hub *Hub, req *presSubsReq) {
-
-	log.Printf("Presence: topic[%s]: presence request from '%s'", t.name, req.id.String())
-
-	if req.subscribe {
-		if t.pushTo == nil {
-			t.pushTo = make(map[types.Uid]bool)
-		}
-		t.pushTo[req.id] = true
-		var action string
-		if len(t.sessions) > 0 {
-			action = "on"
-		} else {
-			action = "off"
-		}
-		hub.route <- &ServerComMessage{
-			Pres:   &MsgServerPres{Topic: "me", What: action, Src: t.name},
-			appid:  t.appid,
-			rcptto: req.id.UserId()}
-	} else if t.pushTo != nil {
-		delete(t.pushTo, req.id)
-	}
-}
-
-// User attached to !me topic, get the current state of topics he is interested in
-func (me *Topic) presSnapshot() error {
-	subs, err := store.Users.GetSubs(me.appid, me.owner, nil)
+// loadContacts initializes topic.perSubs to support presence notifications
+// Case 1.a.i, 1.a.ii
+func (t *Topic) loadContacts(uid types.Uid) error {
+	subs, err := store.Users.GetSubs(t.appid, uid, nil)
 	if err != nil {
-		log.Println("Presence: topic me: error loading user's subscriptions ", err)
 		return err
 	}
 
-	var count = 0
-	if len(subs) > 0 {
-		list := make([]string, len(subs))
-
-		for _, sub := range subs {
-			if (sub.ModeGiven & sub.ModeWant & types.ModePres) != 0 {
-				list = append(list, sub.Topic)
-				count++
+	t.perSubs = make(map[string]perSubsData, len(subs))
+	for _, sub := range subs {
+		topic := sub.Topic
+		if strings.HasPrefix(topic, "p2p") {
+			if uid1, uid2, err := types.ParseP2P(topic); err != nil {
+				if uid1 == uid {
+					topic = uid2.UserId()
+				} else {
+					topic = uid1.UserId()
+				}
+			} else {
+				continue
 			}
 		}
+		t.perSubs[topic] = perSubsData{}
+	}
+	return nil
+}
 
-		if count > 0 {
+// Me topic activated, deactivated or updated, push presence to contacts
+// Case 1.a.iii, 2, 3
+func (t *Topic) presPubMeChange(what string) {
+	var count = 0
 
+	// Push update to subscriptions
+	update := &MsgServerPres{Topic: "me", What: what, Src: t.name}
+	for topic, _ := range t.perSubs {
+		globals.hub.route <- &ServerComMessage{Pres: update, appid: t.appid, rcptto: topic}
+		count++
+	}
+
+	log.Printf("Presence: topic '%s' came online, updated %d listeners", t.name, count)
+}
+
+// This topic get a request from a 'me' topic to start/stop receiving presence updates from this topic.
+// Return value indicates if the message should be forwarded to topic subscribers
+// Cases 1.a.iv, 1.a.v
+func (t *Topic) presProcReq(fromTopic string, online, isReply bool) bool {
+
+	log.Printf("Presence: topic[%s]: presence request from '%s'", t.name, fromTopic)
+
+	doReply := true
+	if t.cat == TopicCat_Me {
+		psd := t.perSubs[fromTopic]
+		// If requester's online status has not changed, do not reply, otherwise an endless loop will happen
+		// Introducing isReply to ensure unnecessary {pres} is not sent:
+		// A[online, B:off] to B[online, A:off]: {pres A on}
+		// B[online, A:on] to A[online, B:off]: {pres B on}
+		// A[online, B:on] to B[online, A:on]: {pres A on} <<-- unnecessary, that's why isReply is needed
+		doReply = (psd.online != online)
+		psd.online = online
+		t.perSubs[fromTopic] = psd
+	}
+
+	if online && doReply && !isReply {
+		globals.hub.route <- &ServerComMessage{
+			Pres:   &MsgServerPres{Topic: "me", What: "on", Src: t.name, isReply: true},
+			appid:  t.appid,
+			rcptto: fromTopic}
+	}
+
+	return ??
+}
+
+// Publish presence announcement
+// Case 4, 7
+func (t *Topic) presPubChange(src, what string) {
+
+	update := &MsgServerPres{Topic: t.original, What: what, Src: src}
+
+	for uid, pud := range t.perUser {
+		if pud.modeGiven&pud.modeWant&types.ModePres != 0 {
+			globals.hub.route <- &ServerComMessage{Pres: update, appid: t.appid,
+				rcptto: uid.UserId()}
+		}
+		log.Println("Presence: sent update to ", uid.String())
+	}
+}
+
+// Non-'me' topic activated or deactivated, announce topic presence to its subscribers
+// Case 5
+func (t *Topic) presPubTopicOnline(online bool) {
+	var count = 0
+	var what string
+	if online {
+		what = "on"
+	} else {
+		what = "off"
+	}
+
+	// Publish update to topic subscribers
+	update := &MsgServerPres{Topic: "me", What: what, Src: t.original}
+	for uid, pud := range t.perUser {
+		if pud.modeGiven&pud.modeWant&types.ModePres != 0 {
+			globals.hub.route <- &ServerComMessage{Pres: update, appid: t.appid,
+				rcptto: uid.UserId()}
+			count++
 		}
 	}
 
-	return nil
+	log.Printf("Presence: topic '%s' came online, updated %d listeners", t.name, count)
+}
+
+// Message sent in the topic, notify topic-offline users
+// Cases 6
+func (t *Topic) presPubMessageSent() {
+	var count = 0
+	update := &MsgServerPres{Topic: "me", What: "msg", Src: t.original}
+
+	for uid, pud := range t.perUser {
+		if !pud.online && pud.modeGiven&pud.modeWant&types.ModePres != 0 {
+			globals.hub.route <- &ServerComMessage{Pres: update, appid: t.appid,
+				rcptto: uid.UserId()}
+			count++
+		}
+	}
+	log.Printf("Presence: topic %s, new message notification sent to%d listeners ", t.name, count)
 }

@@ -28,6 +28,7 @@
  *    Create/tear down conversation topics, route messages between topics.
  *
  *****************************************************************************/
+
 package main
 
 import (
@@ -95,7 +96,7 @@ type Hub struct {
 	// Topics must be indexed by appid!name
 	topics map[string]*Topic
 
-	// Channel for routing messages between topics, buffered at 1024
+	// Channel for routing messages between topics, buffered at 2048
 	route chan *ServerComMessage
 
 	// subscribe session to topic, possibly creating a new topic
@@ -134,7 +135,7 @@ func newHub() *Hub {
 	var h = &Hub{
 		topics: make(map[string]*Topic),
 		// this needs to be buffered - hub generates invites and adds them to this queue
-		route: make(chan *ServerComMessage, 1024),
+		route: make(chan *ServerComMessage, 2048),
 		join:  make(chan *sessionJoin),
 		unreg: make(chan topicUnreg),
 		//presence:   make(chan *PresenceRequest),
@@ -183,8 +184,13 @@ func (h *Hub) run() {
 				// Everything is OK, sending packet to known topic
 				log.Printf("Hub. Sending message to '%s'", dst.name)
 
-				simpleSender(dst.broadcast, msg)
-
+				if dst.broadcast != nil {
+					select {
+					case dst.broadcast <- msg:
+					default:
+						log.Printf("hub: topic's broadcast queue is full '%s'", dst.name)
+					}
+				}
 			} else {
 				if msg.Data != nil {
 					// Normally the message is persisted at the topic. If the topic is offline,
@@ -232,9 +238,9 @@ func (h *Hub) run() {
 				close(t.reg)
 				close(t.unreg)
 				close(t.broadcast)
-				if t.pres != nil {
-					close(t.pres)
-				}
+				//if t.pres != nil {
+				//	close(t.pres)
+				//}
 			}
 
 		case <-time.After(IDLETIMEOUT):
@@ -272,8 +278,8 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 			return
 		}
 
-		if err = t.loadSubscriptions(); err != nil {
-			log.Println("hub: cannot load subscritions for '" + t.name + "' (" + err.Error() + ")")
+		if err = t.loadSubscribers(); err != nil {
+			log.Println("hub: cannot load subscribers for '" + t.name + "' (" + err.Error() + ")")
 			sreg.sess.QueueOut(ErrUnknown(sreg.pkt.Id, t.original, timestamp))
 			return
 		}
@@ -531,8 +537,8 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 			return
 		}
 
-		if err = t.loadSubscriptions(); err != nil {
-			log.Println("hub: cannot load subscritions for '" + t.name + "' (" + err.Error() + ")")
+		if err = t.loadSubscribers(); err != nil {
+			log.Println("hub: cannot load subscribers for '" + t.name + "' (" + err.Error() + ")")
 			sreg.sess.QueueOut(ErrUnknown(sreg.pkt.Id, t.original, timestamp))
 			return
 		}
@@ -561,8 +567,8 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 	t.reg <- sreg
 }
 
-// loadSubscriptions loads topic subscribers, sets topic owner & lastMessage
-func (t *Topic) loadSubscriptions() error {
+// loadSubscribers loads topic subscribers, sets topic owner & lastMessage
+func (t *Topic) loadSubscribers() error {
 	subs, err := store.Topics.GetSubs(t.appid, t.name, nil)
 	if err != nil {
 		return err
@@ -581,12 +587,12 @@ func (t *Topic) loadSubscriptions() error {
 			t.owner = uid
 		}
 
-		// For 'me' topic:
-		if sub.LastMessageAt != nil && !sub.LastMessageAt.IsZero() {
+		if t.cat == TopicCat_Me && sub.LastMessageAt != nil && !sub.LastMessageAt.IsZero() {
 			t.lastMessage = *sub.LastMessageAt
 			log.Printf("hub.loadSubscriptions: topic %s set lastMessage to %s", t.name, t.lastMessage.String())
 		}
 	}
+
 	return nil
 }
 
@@ -663,18 +669,6 @@ func parseTopicAccess(acs *MsgDefaultAcsMode, defAuth, defAnon types.AccessMode)
 	}
 
 	return
-}
-
-// simpleSender attempts to send a message to a connection, time out is 1 second
-func simpleSender(sendto chan<- *ServerComMessage, msg *ServerComMessage) {
-	if sendto == nil {
-		return
-	}
-	select {
-	case sendto <- msg:
-	case <-time.After(time.Second):
-		log.Println("simpleSender: timeout")
-	}
 }
 
 // simpleByteSender attempts to send a JSON to a connection, time out is 1 second

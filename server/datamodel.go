@@ -19,7 +19,7 @@ package main
  *
  *  This code is available under licenses for commercial use.
  *
- *  File        :  datamode.go
+ *  File        :  datamodel.go
  *  Author      :  Gene Sokolov
  *  Created     :  18-May-2014
  *
@@ -373,6 +373,9 @@ type MsgServerPres struct {
 	Src   string `json:"src"`
 
 	What string `json:"what"`
+
+	// unroutable, to break the reply loop
+	isReply bool
 }
 
 type MsgServerMeta struct {

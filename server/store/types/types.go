@@ -404,7 +404,7 @@ type Subscription struct {
 
 	Private interface{} // User's private data associated with the subscription to topic
 
-	// Deserialized ephemeral params
+	// Deserialized ephemeral values
 	public interface{} // Deserialized public value from topic or user (depends on context)
 	with   string      // p2p topics only: id of the other user
 }
