@@ -107,7 +107,7 @@ const (
 
 // perUserData holds topic's cache of per-subscriber data
 type perUserData struct {
-	online bool
+	online int
 
 	private     interface{}
 	lastSeenTag map[string]time.Time
@@ -176,6 +176,7 @@ func (t *Topic) run(hub *Hub) {
 
 				pud := t.perUser[leave.sess.uid]
 				if pud.lastSeenTag == nil {
+					pud.online--
 					pud.lastSeenTag = map[string]time.Time{}
 				}
 				pud.lastSeenTag[leave.sess.tag] = now
@@ -228,8 +229,14 @@ func (t *Topic) run(hub *Hub) {
 				}
 
 				t.lastMessage = msg.timestamp
-			} else if msg.Pres != nil {
-				t.presProcReq(msg.Pres.Src, msg.Pres.What, msg.Pres.isReply)
+				t.presPubMessageSent()
+
+			} else if msg.Pres != nil && (msg.Pres.What == "on" || msg.Pres.What == "off") {
+				t.presProcReq(msg.Pres.Src, (msg.Pres.What == "on"), msg.Pres.isReply)
+				if msg.Pres.Topic != t.original {
+					// This is just a request for status, don't forward it to sessions
+					continue
+				}
 			}
 
 			// Broadcast the message. Only {data} and {pres} are broadcastable.
@@ -275,16 +282,16 @@ func (t *Topic) run(hub *Hub) {
 				}
 			}
 
-		//case req := <-t.pres:
-		//	// Request to start/stop receiving presence updates from this topic
-		//	t.presProcReq(hub, req)
-
 		case <-killTimer.C:
 			log.Println("Topic timeout: ", t.name)
 			// Ensure that the messages are no longer routed to this topic
 			hub.unreg <- topicUnreg{appid: t.appid, topic: t.name}
 			// FIXME(gene): save lastMessage value;
-			t.presPubTopicOnline(false)
+			if t.cat == TopicCat_Me {
+				t.presPubMeChange("off")
+			} else if t.cat == TopicCat_Grp {
+				t.presPubTopicOnline(false)
+			} // not publishing online/offline to P2P topics
 			return
 		}
 	}
@@ -377,6 +384,10 @@ func (t *Topic) subCommonReply(h *Hub, sess *Session, pkt *MsgClientSub, sendInf
 	if err := t.requestSub(h, sess, pkt.Id, mode, info, private); err != nil {
 		return err
 	}
+
+	pud := t.perUser[sess.uid]
+	pud.online++
+	t.perUser[sess.uid] = pud
 
 	simpleByteSender(sess.send, NoErr(pkt.Id, t.original, now))
 
@@ -900,7 +911,7 @@ func (t *Topic) replyGetSub(sess *Session, id string) error {
 				mts.Topic = sub.Topic
 				mts.With = sub.GetWith()
 				mts.LastMsg = sub.LastMessageAt
-				mts.UpdatedAt = sub.UpdatedAt
+				mts.UpdatedAt = &sub.UpdatedAt
 				if when, ok := sub.LastSeen[sess.tag]; ok && !when.IsZero() {
 					mts.LastSeenTag = &when
 				}
@@ -1023,6 +1034,11 @@ func (t *Topic) evictUser(uid types.Uid, clear bool, ignore *Session) {
 	if clear {
 		// Delete per-user data
 		delete(t.perUser, uid)
+	} else {
+		// Clear online status
+		pud := t.perUser[uid]
+		pud.online = 0
+		t.perUser[uid] = pud
 	}
 
 	// Detach all user's sessions

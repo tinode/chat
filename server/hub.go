@@ -105,9 +105,6 @@ type Hub struct {
 	// Remove topic from hub
 	unreg chan topicUnreg
 
-	// report presence changes
-	//presence chan<- *PresenceRequest
-
 	// process get.info requests for topic not subscribed to
 	meta chan *metaReq
 

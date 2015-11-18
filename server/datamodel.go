@@ -322,9 +322,9 @@ type MsgAccessMode struct {
 type MsgTopicSub struct {
 	Topic string `json:"topic,omitempty"`
 	// p2p topics only - id of the other user
-	With      string    `json:"with,omitempty"`
-	User      string    `json:"user,omitempty"`
-	UpdatedAt time.Time `json:"updated"`
+	With      string     `json:"with,omitempty"`
+	User      string     `json:"user,omitempty"`
+	UpdatedAt *time.Time `json:"updated,omitempty"`
 	// 'me' topic only
 	LastMsg     *time.Time       `json:"lastMsg,omitempty"` // last message in a topic, "me' subs only
 	LastSeen    *MsgLastSeenInfo `json:"seen,omitempty"`    // user's last access to topic, 'me' subs only

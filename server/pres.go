@@ -32,7 +32,7 @@
 package main
 
 import (
-	"log"
+	//"log"
 	"strings"
 
 	"github.com/tinode/chat/server/store"
@@ -78,9 +78,10 @@ func (t *Topic) loadContacts(uid types.Uid) error {
 
 	t.perSubs = make(map[string]perSubsData, len(subs))
 	for _, sub := range subs {
+		//log.Printf("Pres 1.a.i-ii: topic[%s]: processing sub '%s'", t.name, sub.Topic)
 		topic := sub.Topic
 		if strings.HasPrefix(topic, "p2p") {
-			if uid1, uid2, err := types.ParseP2P(topic); err != nil {
+			if uid1, uid2, err := types.ParseP2P(topic); err == nil {
 				if uid1 == uid {
 					topic = uid2.UserId()
 				} else {
@@ -89,33 +90,34 @@ func (t *Topic) loadContacts(uid types.Uid) error {
 			} else {
 				continue
 			}
+		} else if topic == t.name {
+			// No need to push updates to self
+			continue
 		}
+		//log.Printf("Pres 1.a.i-ii: topic[%s]: caching as '%s'", t.name, topic)
 		t.perSubs[topic] = perSubsData{}
 	}
+	//log.Printf("Pres 1.a.i-ii: topic[%s]: total cached %d", t.name, len(t.perSubs))
 	return nil
 }
 
 // Me topic activated, deactivated or updated, push presence to contacts
 // Case 1.a.iii, 2, 3
 func (t *Topic) presPubMeChange(what string) {
-	var count = 0
-
 	// Push update to subscriptions
 	update := &MsgServerPres{Topic: "me", What: what, Src: t.name}
 	for topic, _ := range t.perSubs {
 		globals.hub.route <- &ServerComMessage{Pres: update, appid: t.appid, rcptto: topic}
-		count++
+		//log.Printf("Pres 1.a.ii, 2, 3: from '%s' (src: %s) to %s [%s]", t.name, update.Src, topic, what)
 	}
-
-	log.Printf("Presence: topic '%s' came online, updated %d listeners", t.name, count)
 }
 
 // This topic get a request from a 'me' topic to start/stop receiving presence updates from this topic.
 // Return value indicates if the message should be forwarded to topic subscribers
 // Cases 1.a.iv, 1.a.v
-func (t *Topic) presProcReq(fromTopic string, online, isReply bool) bool {
+func (t *Topic) presProcReq(fromTopic string, online, isReply bool) {
 
-	log.Printf("Presence: topic[%s]: presence request from '%s'", t.name, fromTopic)
+	//log.Printf("Pres: topic[%s]: req from '%s'", t.name, fromTopic)
 
 	doReply := true
 	if t.cat == TopicCat_Me {
@@ -132,12 +134,12 @@ func (t *Topic) presProcReq(fromTopic string, online, isReply bool) bool {
 
 	if online && doReply && !isReply {
 		globals.hub.route <- &ServerComMessage{
+			// Topic is 'me' even for group topics; group topics will use 'me' as a signal to drop the message
+			// without forwarding to sessions
 			Pres:   &MsgServerPres{Topic: "me", What: "on", Src: t.name, isReply: true},
 			appid:  t.appid,
 			rcptto: fromTopic}
 	}
-
-	return ??
 }
 
 // Publish presence announcement
@@ -151,14 +153,14 @@ func (t *Topic) presPubChange(src, what string) {
 			globals.hub.route <- &ServerComMessage{Pres: update, appid: t.appid,
 				rcptto: uid.UserId()}
 		}
-		log.Println("Presence: sent update to ", uid.String())
+
+		//log.Printf("Pres 4,7: from '%s' (src: %s) to '%s' [%s]", t.name, src, uid.UserId(), what)
 	}
 }
 
 // Non-'me' topic activated or deactivated, announce topic presence to its subscribers
 // Case 5
 func (t *Topic) presPubTopicOnline(online bool) {
-	var count = 0
 	var what string
 	if online {
 		what = "on"
@@ -172,25 +174,23 @@ func (t *Topic) presPubTopicOnline(online bool) {
 		if pud.modeGiven&pud.modeWant&types.ModePres != 0 {
 			globals.hub.route <- &ServerComMessage{Pres: update, appid: t.appid,
 				rcptto: uid.UserId()}
-			count++
+
+			//log.Printf("Pres 5: from '%s' (src %s) to '%s' [%s]", t.name, update.Src, uid.UserId(), what)
 		}
 	}
-
-	log.Printf("Presence: topic '%s' came online, updated %d listeners", t.name, count)
 }
 
 // Message sent in the topic, notify topic-offline users
 // Cases 6
 func (t *Topic) presPubMessageSent() {
-	var count = 0
 	update := &MsgServerPres{Topic: "me", What: "msg", Src: t.original}
 
 	for uid, pud := range t.perUser {
-		if !pud.online && pud.modeGiven&pud.modeWant&types.ModePres != 0 {
+		if pud.online == 0 && pud.modeGiven&pud.modeWant&types.ModePres != 0 {
 			globals.hub.route <- &ServerComMessage{Pres: update, appid: t.appid,
 				rcptto: uid.UserId()}
-			count++
+
+			//log.Printf("Pres 6: from %s (src: %s), to %s [msg]", t.name, update.Src, uid.UserId())
 		}
 	}
-	log.Printf("Presence: topic %s, new message notification sent to%d listeners ", t.name, count)
 }
