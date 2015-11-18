@@ -28,6 +28,7 @@
  *  Handler of long polling clients (see also wshandler for web sockets)
  *
  *****************************************************************************/
+
 package main
 
 import (

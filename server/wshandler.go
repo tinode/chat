@@ -28,6 +28,7 @@
  *    Handler of websocket connections. See also lphandler.go for long polling.
  *
  *****************************************************************************/
+
 package main
 
 import (
@@ -158,7 +159,7 @@ func serveWebSocket(wrt http.ResponseWriter, req *http.Request) {
 
 	sess.QueueOut(&ServerComMessage{Ctrl: &MsgServerCtrl{
 		Code:      http.StatusCreated,
-		Text:      http.StatusText(http.StatusCreated),
+		Text:      "created",
 		Params:    map[string]interface{}{"ver": VERSION, "build": buildstamp},
 		Timestamp: time.Now().UTC().Round(time.Millisecond)}})
 

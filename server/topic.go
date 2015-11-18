@@ -29,15 +29,17 @@
  *
  *
  *****************************************************************************/
+
 package main
 
 import (
 	"encoding/json"
 	"errors"
-	"github.com/tinode/chat/server/store"
-	"github.com/tinode/chat/server/store/types"
 	"log"
 	"time"
+
+	"github.com/tinode/chat/server/store"
+	"github.com/tinode/chat/server/store/types"
 )
 
 // Topic: an isolated communication channel
@@ -70,14 +72,14 @@ type Topic struct {
 
 	// Topic's public data
 	public interface{}
+
 	// Topic's per-subscriber data
 	perUser map[types.Uid]perUserData
+	// User's contact list ('me' topic only)
+	perSubs map[string]perSubsData
 
 	// Sessions attached to this topic
 	sessions map[*Session]bool
-
-	// Send presence/new message notifications to these !usr:Uid topics (all topics when they have subscribers)
-	pushTo map[types.Uid]bool
 
 	// Inbound {data} and {pres} messages from sessions or other topics, already converted to SCM. Buffered = 256
 	broadcast chan *ServerComMessage
@@ -92,7 +94,7 @@ type Topic struct {
 	unreg chan *sessionLeave
 
 	// Presence subscriptions requests -- Request to start/stop receiving presence updates, buffered = ?
-	pres chan *presSubsReq
+	//pres chan *presSubsReq
 }
 
 type TopicCat int
@@ -103,8 +105,10 @@ const (
 	TopicCat_Grp
 )
 
-// Struct ho hold topic's per-user data
+// perUserData holds topic's cache of per-subscriber data
 type perUserData struct {
+	online int
+
 	private     interface{}
 	lastSeenTag map[string]time.Time
 	// cleared     time.Time // time, when the topic was cleared by the user
@@ -112,6 +116,11 @@ type perUserData struct {
 	modeGiven types.AccessMode
 	// P2p only:
 	public interface{}
+}
+
+// perSubsData holds user's (on 'me' topic) cache of subscription data
+type perSubsData struct {
+	online bool
 }
 
 func (t *Topic) run(hub *Hub) {
@@ -167,6 +176,7 @@ func (t *Topic) run(hub *Hub) {
 
 				pud := t.perUser[leave.sess.uid]
 				if pud.lastSeenTag == nil {
+					pud.online--
 					pud.lastSeenTag = map[string]time.Time{}
 				}
 				pud.lastSeenTag[leave.sess.tag] = now
@@ -219,6 +229,14 @@ func (t *Topic) run(hub *Hub) {
 				}
 
 				t.lastMessage = msg.timestamp
+				t.presPubMessageSent()
+
+			} else if msg.Pres != nil && (msg.Pres.What == "on" || msg.Pres.What == "off") {
+				t.presProcReq(msg.Pres.Src, (msg.Pres.What == "on"), msg.Pres.isReply)
+				if msg.Pres.Topic != t.original {
+					// This is just a request for status, don't forward it to sessions
+					continue
+				}
 			}
 
 			// Broadcast the message. Only {data} and {pres} are broadcastable.
@@ -264,16 +282,16 @@ func (t *Topic) run(hub *Hub) {
 				}
 			}
 
-		case req := <-t.pres:
-			// Request to start/stop receiving presence updates from this topic
-			t.presProcReq(hub, req)
-
 		case <-killTimer.C:
 			log.Println("Topic timeout: ", t.name)
 			// Ensure that the messages are no longer routed to this topic
 			hub.unreg <- topicUnreg{appid: t.appid, topic: t.name}
-			// TODO(gene): save lastMessage value;
-			t.presPubChange("off")
+			// FIXME(gene): save lastMessage value;
+			if t.cat == TopicCat_Me {
+				t.presPubMeChange("off")
+			} else if t.cat == TopicCat_Grp {
+				t.presPubTopicOnline(false)
+			} // not publishing online/offline to P2P topics
 			return
 		}
 	}
@@ -290,6 +308,7 @@ func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 
 	// New P2P topic is a special case. It requires an invite/notification for the second person
 	if sreg.created && t.cat == TopicCat_P2P {
+
 		log.Println("about to generate invite for ", t.name)
 		for uid, pud := range t.perUser {
 			if uid != sreg.sess.uid {
@@ -311,12 +330,18 @@ func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 	}
 
 	if sreg.loaded {
-		t.presPubTopicOnline()
-	}
+		// Load the list of contacts for presence notifications
+		if t.cat == TopicCat_Me {
+			if err := t.loadContacts(sreg.sess.uid); err != nil {
+				log.Printf("hub: failed to load contacts for '%s'", t.name)
+			}
 
-	if t.cat == TopicCat_Me {
-		// User attached to !me topic, get the currect state of topics he is interested in
-		t.presSnapshot()
+			t.presPubMeChange("on")
+
+		} else if t.cat == TopicCat_Grp {
+			t.presPubTopicOnline(true)
+		}
+		// Not sending presence notifications for P2P topics
 	}
 
 	if getWhat&constMsgMetaSub != 0 {
@@ -359,6 +384,10 @@ func (t *Topic) subCommonReply(h *Hub, sess *Session, pkt *MsgClientSub, sendInf
 	if err := t.requestSub(h, sess, pkt.Id, mode, info, private); err != nil {
 		return err
 	}
+
+	pud := t.perUser[sess.uid]
+	pud.online++
+	t.perUser[sess.uid] = pud
 
 	simpleByteSender(sess.send, NoErr(pkt.Id, t.original, now))
 
@@ -856,7 +885,6 @@ func (t *Topic) replyGetSub(sess *Session, id string) error {
 
 	if t.cat == TopicCat_Me {
 		// Fetch user's subscriptions, with Topic.Public denormalized into subscription
-		//log.Println("replyGetSub: loading me list of subscriptions")
 		subs, err = store.Users.GetTopics(sess.appid, sess.uid, nil)
 	} else if t.cat == TopicCat_P2P {
 		// Fetch subscriptions for two users, User.Public denormalized into other user's subscription
@@ -883,6 +911,7 @@ func (t *Topic) replyGetSub(sess *Session, id string) error {
 				mts.Topic = sub.Topic
 				mts.With = sub.GetWith()
 				mts.LastMsg = sub.LastMessageAt
+				mts.UpdatedAt = &sub.UpdatedAt
 				if when, ok := sub.LastSeen[sess.tag]; ok && !when.IsZero() {
 					mts.LastSeenTag = &when
 				}
@@ -895,7 +924,6 @@ func (t *Topic) replyGetSub(sess *Session, id string) error {
 			} else {
 				mts.User = uid.UserId()
 			}
-			mts.UpdatedAt = sub.UpdatedAt
 			mts.AcsMode = (sub.ModeGiven & sub.ModeWant).String()
 			mts.Public = sub.GetPublic()
 			if uid == sess.uid {
@@ -998,111 +1026,6 @@ func (t *Topic) makeInvite(notify, target, from types.Uid, act types.InviteActio
 	return msg
 }
 
-// This is a newly created topic (!me or generic), announce topic presence
-func (t *Topic) presPubTopicOnline() error {
-
-	// Load the list of users interested in this topic
-	// Blocking call
-	subs, err := store.Topics.GetSubs(t.appid, t.name, nil)
-	if err != nil {
-		log.Println("Presence: topic: error loading topic sharing ", err)
-		return err
-	}
-
-	var count = 0
-	if len(subs) > 0 {
-		// Publish update to subscribers
-		t.pushTo = make(map[types.Uid]bool)
-		update := &MsgServerPres{Topic: "me", What: "on", User: t.name}
-		var uid types.Uid
-
-		for _, sub := range subs {
-			if (sub.ModeGiven & sub.ModeWant & types.ModePres) != 0 {
-				uid.UnmarshalText([]byte(sub.User))
-				t.pushTo[uid] = true
-				globals.hub.route <- &ServerComMessage{Pres: update, appid: t.appid,
-					rcptto: "usr" + sub.User}
-				count++
-			}
-		}
-
-		log.Printf("Presence: topic '%s' came online, updated %d listeners", t.name, count)
-
-	} else {
-		log.Println("Presence: orphaned topic:", t.name)
-	}
-
-	return nil
-}
-
-// Publish presence announcement
-func (t *Topic) presPubChange(action string) {
-	if t.pushTo == nil {
-		return
-	}
-
-	update := &MsgServerPres{Topic: "me", What: action, User: t.name}
-
-	for usr := range t.pushTo {
-		globals.hub.route <- &ServerComMessage{Pres: update, appid: t.appid,
-			rcptto: usr.UserId()}
-
-		log.Println("Presence: sent online status to ", usr.String())
-	}
-}
-
-// Process request to start/stop receiving presence updates from this topic
-func (t *Topic) presProcReq(hub *Hub, req *presSubsReq) {
-
-	log.Printf("Presence: topic[%s]: presence request from '%s'", t.name, req.id.String())
-
-	if req.subscribe {
-		if t.pushTo == nil {
-			t.pushTo = make(map[types.Uid]bool)
-		}
-		t.pushTo[req.id] = true
-		var action string
-		if len(t.sessions) > 0 {
-			action = "on"
-		} else {
-			action = "off"
-		}
-		hub.route <- &ServerComMessage{
-			Pres:   &MsgServerPres{Topic: "me", What: action, User: t.name},
-			appid:  t.appid,
-			rcptto: req.id.UserId()}
-	} else if t.pushTo != nil {
-		delete(t.pushTo, req.id)
-	}
-}
-
-// User attached to !me topic, get the current state of topics he is interested in
-func (me *Topic) presSnapshot() error {
-	subs, err := store.Users.GetSubs(me.appid, me.owner, nil)
-	if err != nil {
-		log.Println("Presence: topic me: error loading user's subscriptions ", err)
-		return err
-	}
-
-	var count = 0
-	if len(subs) > 0 {
-		list := make([]string, len(subs))
-
-		for _, sub := range subs {
-			if (sub.ModeGiven & sub.ModeWant & types.ModePres) != 0 {
-				list = append(list, sub.Topic)
-				count++
-			}
-		}
-
-		if count > 0 {
-
-		}
-	}
-
-	return nil
-}
-
 // evictUser evicts all user's sessions from the topic and clear's user's cached data, if requested
 func (t *Topic) evictUser(uid types.Uid, clear bool, ignore *Session) {
 	now := time.Now().UTC().Round(time.Millisecond)
@@ -1111,6 +1034,11 @@ func (t *Topic) evictUser(uid types.Uid, clear bool, ignore *Session) {
 	if clear {
 		// Delete per-user data
 		delete(t.perUser, uid)
+	} else {
+		// Clear online status
+		pud := t.perUser[uid]
+		pud.online = 0
+		t.perUser[uid] = pud
 	}
 
 	// Detach all user's sessions

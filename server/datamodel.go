@@ -19,7 +19,7 @@ package main
  *
  *  This code is available under licenses for commercial use.
  *
- *  File        :  datamode.go
+ *  File        :  datamodel.go
  *  Author      :  Gene Sokolov
  *  Created     :  18-May-2014
  *
@@ -322,9 +322,9 @@ type MsgAccessMode struct {
 type MsgTopicSub struct {
 	Topic string `json:"topic,omitempty"`
 	// p2p topics only - id of the other user
-	With      string    `json:"with,omitempty"`
-	User      string    `json:"user,omitempty"`
-	UpdatedAt time.Time `json:"updated"`
+	With      string     `json:"with,omitempty"`
+	User      string     `json:"user,omitempty"`
+	UpdatedAt *time.Time `json:"updated,omitempty"`
 	// 'me' topic only
 	LastMsg     *time.Time       `json:"lastMsg,omitempty"` // last message in a topic, "me' subs only
 	LastSeen    *MsgLastSeenInfo `json:"seen,omitempty"`    // user's last access to topic, 'me' subs only
@@ -370,9 +370,12 @@ type MsgServerData struct {
 
 type MsgServerPres struct {
 	Topic string `json:"topic"`
-	User  string `json:"user,omitempty"`
+	Src   string `json:"src"`
 
 	What string `json:"what"`
+
+	// unroutable, to break the reply loop
+	isReply bool
 }
 
 type MsgServerMeta struct {

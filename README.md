@@ -447,16 +447,18 @@ ctrl: {
 
 Tinode uses `{pres}` message to inform users of important events. The following events are tracked by the server and will generate `{pres}` messages provided user has appropriate access permissions:
 
-* User came online of went offline. A user triggers this event by joining/leaving the `me` topic. The message is sent to all users who have P2P topics with the first user. Users receive this event on the `me` topic, `user` field contains user ID `user: "usr2il9suCbuko"`, `what` contains `"on"` or `"off"`: `{pres topic="me" user="<user ID>" what="on|off"}`.
-* User updates `public` data. The event is sent to all users who have P2P topics with the first user. Users receive `{pres topic="me" user="<user ID>" what="upd"}`.
-* User joins/leaves a topic. This event is sent to other users who currently joined the topic: `{pres topic="<topic name>" user="<user ID>" what="on|off"}`.
-* Topic is activated/deactivated. Topic becomes active when at least one user joins it. The topic becomes inactive when all users leave it (possibly with some delay). The event is sent to all topic subscribers: `{pres topic="<topic name>" what="on|off"}`.
-* A message was sent to the topic. The event is sent to users who have subscribed to the topic but currently not joined `{pres topic="<topic name>" what="msg"}`.
+* A user joins `me`. User receives presence notifications for each of his/her subscriptions: `{pres topic="me" src="<user ID or topic ID>" what="on"}`. Only online status is reported.
+* A user came online or went offline. The user triggers this event by joining/leaving the `me` topic. The message is sent to all users who have P2P topics with the first user. Users receive this event on the `me` topic, `src` field contains user ID `src: "usr2il9suCbuko"`, `what` contains `"on"` or `"off"`: `{pres topic="me" src="<user ID>" what="on|off"}`.
+* User's `public` is updated. The event is sent to all users who have P2P topics with the first user. Users receive `{pres topic="me" src="<user ID>" what="upd"}`.
+* User joins/leaves a topic. This event is sent to other users who currently joined the topic: `{pres topic="<topic name>" src="<user ID>" what="on|off"}`.
+* A group topic is activated/deactivated. Topic becomes active when at least one user joins it. The topic becomes inactive when all users leave it (possibly after some delay). The event is sent to all topic subscribers. They will receive it on their `me` topics: `{pres topic="me" src="<topic name>" what="on|off"}`.
+* Topic's `public` is updated. The event is sent to all topic subscribers. Topic's subscribers receive `{pres topic="me" src="<topic name>" what="upd"}`.
+* A message is sent to the topic. The event is sent to users who have subscribed to the topic but currently not joined `{pres topic="me" src="<topic name>" what="msg"}`.
 
 ```js
 pres: {
   topic: "grp1XUtEhjv6HND", // string, topic affected by the change, always present
-  user: "usr2il9suCbuko", // user affected by the change, present if relevant
+  src: "usr2il9suCbuko", // user or topic affected by the change, always present
   what: "on"  // string, what's changed, always present
 }
 ```
@@ -476,8 +478,7 @@ Each user is assigned a unique ID. The IDs are composed as `usr` followed by bas
 
 * created: timestamp when the user record was created
 * updated: timestamp of when user's `public` was last updated
-* username: unique string used in `basic` authentication
-* passhash: (not visible to the client application): [bcrypt](https://en.wikipedia.org/wiki/Bcrypt) salted and hashed password used in `basic` authentication
+* username: unique string used in `basic` authentication; username is not accessible to other users
 * defacs: object describing user's default access mode for peer to peer conversations with authenticated and anonymous users; see [Access control][] for details
  * auth: default access mode for authenticated users
  * anon: default access for anonymous users
