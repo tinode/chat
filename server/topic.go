@@ -198,7 +198,7 @@ func (t *Topic) run(hub *Hub) {
 		case msg := <-t.broadcast:
 			// Message intended for broadcasting to recepients
 
-			log.Printf("topic[%s].run: got message '%v'", t.name, msg)
+			//log.Printf("topic[%s].run: got message '%v'", t.name, msg)
 
 			// Record last message timestamp
 			if msg.Data != nil {
@@ -407,9 +407,10 @@ func (t *Topic) subCommonReply(h *Hub, sess *Session, pkt *MsgClientSub, sendInf
 //	private	- private value to assign to the subscription
 // Handle these cases:
 // A. User is trying to subscribe for the first time (no subscription)
-// B. User is responsing to an earlier invite (modeWant was "N" in subscription)
-// C. User is already subscribed, changing modeWant
-// D. User is accepting ownership transfer (requesting ownership transfer is not permitted)
+// B. User is already subscribed, just joining without changing anything
+// C. User is responsing to an earlier invite (modeWant was "N" in subscription)
+// D. User is already subscribed, changing modeWant
+// E. User is accepting ownership transfer (requesting ownership transfer is not permitted)
 func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string, info, private interface{}) error {
 	log.Println("requestSub", t.name)
 
@@ -471,22 +472,24 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string, inf
 		}
 
 		if userData.modeGiven.IsOwner() {
-			// Handle two cases:
-			// 1. Owner changing own settings
-			// 2. Acceptance or rejection of the ownership transfer
+			// Check for possible ownership transfer. Handle the following cases:
+			// 1. Owner joining the topic without any changes
+			// 2. Owner changing own settings
+			// 3. Acceptance or rejection of the ownership transfer
 
-			// Make sure the owner cannot unset the owner flag or ban himself
+			// Make sure the current owner cannot unset the owner flag or ban himself
 			if t.owner == sess.uid && (!modeWant.IsOwner() || modeWant.IsBanned()) {
 				log.Println("requestSub: owner attempts to unset the owner flag")
 				simpleByteSender(sess.send, ErrMalformed(pktId, t.original, now))
 				return errors.New("cannot unset ownership or ban the owner")
-			} else if modeWant.IsOwner() {
-				// Ownership transfer
-				ownerChange = true
 			}
 
+			// Ownership transfer
+			ownerChange = modeWant.IsOwner() && !userData.modeWant.IsOwner()
+
 			// The owner should be able to grant himself any access permissions
-			if !userData.modeGiven.Check(modeWant) {
+			// If ownership transfer is rejected don't upgrade
+			if modeWant.IsOwner() && !userData.modeGiven.Check(modeWant) {
 				userData.modeGiven |= modeWant
 				updGiven = &userData.modeGiven
 			}
@@ -494,7 +497,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string, inf
 			// Ownership transfer can only be initiated by the owner
 			simpleByteSender(sess.send, ErrMalformed(pktId, t.original, now))
 			return errors.New("non-owner cannot request ownership transfer")
-		} else if userData.modeGiven.IsManager() {
+		} else if userData.modeGiven.IsManager() && modeWant.IsManager() {
 			// The sharer should be able to grant any permissions except ownership
 			if !userData.modeGiven.Check(modeWant & ^types.ModeBanned) {
 				userData.modeGiven |= (modeWant & ^types.ModeBanned)
@@ -522,25 +525,32 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string, inf
 		// Save changes to DB
 		if updWant != nil || updGiven != nil {
 			update := map[string]interface{}{}
+			// FIXME(gene): gorethink has a bug which causes ModeXYZ to be saved as a string, converting to int
 			if updWant != nil {
-				update["ModeWant"] = *updWant
+				update["ModeWant"] = int(*updWant)
 			}
 			if updGiven != nil {
-				update["ModeGiven"] = *updGiven
+				update["ModeGiven"] = int(*updGiven)
 			}
 			if err := store.Subs.Update(t.appid, t.name, sess.uid, update); err != nil {
 				simpleByteSender(sess.send, ErrUnknown(pktId, t.original, now))
 				return err
 			}
+			//log.Printf("requestSub: topic %s updated SUB: %+#v", t.name, update)
 		}
 
 		// No transactions in RethinkDB, but two owners are better than none
 		if ownerChange {
+			//log.Printf("requestSub: topic %s owner change", t.name)
+
 			userData = t.perUser[t.owner]
 			userData.modeGiven = (userData.modeGiven & ^types.ModeOwner)
 			userData.modeWant = (userData.modeWant & ^types.ModeOwner)
 			if err := store.Subs.Update(t.appid, t.name, t.owner,
-				map[string]interface{}{"ModeWant": userData.modeWant, "ModeGiven": userData.modeGiven}); err != nil {
+				// FIXME(gene): gorethink has a bug which causes ModeXYZ to be saved as a string, converting to int
+				map[string]interface{}{
+					"ModeWant":  int(userData.modeWant),
+					"ModeGiven": int(userData.modeGiven)}); err != nil {
 				return err
 			}
 			t.perUser[t.owner] = userData
@@ -886,11 +896,8 @@ func (t *Topic) replyGetSub(sess *Session, id string) error {
 	if t.cat == TopicCat_Me {
 		// Fetch user's subscriptions, with Topic.Public denormalized into subscription
 		subs, err = store.Users.GetTopics(sess.appid, sess.uid, nil)
-	} else if t.cat == TopicCat_P2P {
-		// Fetch subscriptions for two users, User.Public denormalized into other user's subscription
-		subs, err = store.Topics.GetUsers(sess.appid, t.name, nil)
 	} else {
-		// Fetch subscriptions for a topic, with User.Public denormalized into subscription
+		// Fetch subscriptions, User.Public denormalized into subscription
 		subs, err = store.Topics.GetUsers(sess.appid, t.name, nil)
 	}
 

@@ -132,10 +132,9 @@ func newHub() *Hub {
 	var h = &Hub{
 		topics: make(map[string]*Topic),
 		// this needs to be buffered - hub generates invites and adds them to this queue
-		route: make(chan *ServerComMessage, 2048),
-		join:  make(chan *sessionJoin),
-		unreg: make(chan topicUnreg),
-		//presence:   make(chan *PresenceRequest),
+		route:      make(chan *ServerComMessage, 2048),
+		join:       make(chan *sessionJoin),
+		unreg:      make(chan topicUnreg),
 		meta:       make(chan *metaReq, 32),
 		topicsLive: new(expvar.Int)}
 
@@ -179,7 +178,7 @@ func (h *Hub) run() {
 			timestamp := time.Now().UTC().Round(time.Millisecond)
 			if dst := h.topicGet(msg.appid, msg.rcptto); dst != nil {
 				// Everything is OK, sending packet to known topic
-				log.Printf("Hub. Sending message to '%s'", dst.name)
+				//log.Printf("Hub. Sending message to '%s'", dst.name)
 
 				if dst.broadcast != nil {
 					select {
@@ -235,9 +234,6 @@ func (h *Hub) run() {
 				close(t.reg)
 				close(t.unreg)
 				close(t.broadcast)
-				//if t.pres != nil {
-				//	close(t.pres)
-				//}
 			}
 
 		case <-time.After(IDLETIMEOUT):

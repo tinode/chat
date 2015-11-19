@@ -410,7 +410,7 @@ func (a *RethinkDbAdapter) TopicsForUser(appid uint32, uid t.Uid, opts *t.Browse
 			}
 		}
 
-		log.Printf("RethinkDbAdapter.TopicsForUser 1: %#+v", subs)
+		//log.Printf("RethinkDbAdapter.TopicsForUser 1: %#+v", subs)
 	}
 
 	// Fetch p2p users and join to p2p tables
@@ -432,7 +432,7 @@ func (a *RethinkDbAdapter) TopicsForUser(appid uint32, uid t.Uid, opts *t.Browse
 			}
 		}
 
-		log.Printf("RethinkDbAdapter.TopicsForUser 2: %#+v", subs)
+		//log.Printf("RethinkDbAdapter.TopicsForUser 2: %#+v", subs)
 	}
 
 	return subs, nil

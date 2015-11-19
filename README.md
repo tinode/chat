@@ -430,12 +430,13 @@ ctrl: {
     {
       user: "usr2il9suCbuko", // string, ID of the user this subscription describes
       updated: "2015-10-24T10:26:09.716Z", // timestamp of the last change in the
-                                           // subscription
+                                           // subscription, present only for
+                                           // requester's own subscriptions
       mode: "RWPSDO",  // string, user's access permission, equal to bitwise
                        // AND (info.given & info.want)
       public: { ... }, // application-defined user's 'public' object
       private: { ... } // application-defined user's 'private' object, present only
-                       // for the user's own subscription
+                       // for the requester's own subscriptions
     },
     ...
   ] // array of objects, topic subscribers, optional
