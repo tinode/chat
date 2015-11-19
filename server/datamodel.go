@@ -320,15 +320,19 @@ type MsgAccessMode struct {
 
 // MsgTopicSub: topic subscription details, sent in Meta message
 type MsgTopicSub struct {
-	Topic string `json:"topic,omitempty"`
-	// p2p topics only - id of the other user
-	With      string     `json:"with,omitempty"`
+	Topic     string     `json:"topic,omitempty"`
 	User      string     `json:"user,omitempty"`
 	UpdatedAt *time.Time `json:"updated,omitempty"`
+	Online    string     `json:"online,omitempty"`
+
+	// p2p topics only - id of the other user
+	With string `json:"with,omitempty"`
+
 	// 'me' topic only
 	LastMsg     *time.Time       `json:"lastMsg,omitempty"` // last message in a topic, "me' subs only
 	LastSeen    *MsgLastSeenInfo `json:"seen,omitempty"`    // user's last access to topic, 'me' subs only
 	LastSeenTag *time.Time       `json:"seenTag,omitempty"` // user's last access to topic with the given tag (device)
+
 	// cumulative access mode (mode.Want & mode.Given)
 	AcsMode string      `json:"mode"`
 	Public  interface{} `json:"public,omitempty"`

@@ -142,20 +142,14 @@ func (t *Topic) presProcReq(fromTopic string, online, isReply bool) {
 	}
 }
 
-// Publish presence announcement
-// Case 4, 7
+// Publish presence announcement to topic
+// Cases 4, 7
 func (t *Topic) presPubChange(src, what string) {
 
-	update := &MsgServerPres{Topic: t.original, What: what, Src: src}
-
-	for uid, pud := range t.perUser {
-		if pud.modeGiven&pud.modeWant&types.ModePres != 0 {
-			globals.hub.route <- &ServerComMessage{Pres: update, appid: t.appid,
-				rcptto: uid.UserId()}
-		}
-
-		//log.Printf("Pres 4,7: from '%s' (src: %s) to '%s' [%s]", t.name, src, uid.UserId(), what)
-	}
+	globals.hub.route <- &ServerComMessage{
+		Pres:  &MsgServerPres{Topic: t.original, What: what, Src: src},
+		appid: t.appid, rcptto: t.name}
+	// log.Printf("Pres 4,7: from '%s' (src: %s) [%s]", t.name, src, uid.UserId(), what)
 }
 
 // Non-'me' topic activated or deactivated, announce topic presence to its subscribers

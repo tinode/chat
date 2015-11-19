@@ -1,6 +1,6 @@
 # Tinode Instant Messaging Server
 
-**This documentation covers the next 0.4 release of Tinode. ETA mid-November 2015.**  
+**This documentation covers the next 0.4 release of Tinode. ETA mid-November 2015.**
 
 Instant messaging server. Backend in pure [Go](http://golang.org) ([Affero GPL 3.0](http://www.gnu.org/licenses/agpl-3.0.en.html)), client-side binding in Java for Android and Javascript ([Apache 2.0](http://www.apache.org/licenses/LICENSE-2.0)), persistent storage [RethinkDB](http://rethinkdb.com/), JSON over websocket (long polling is also available). No UI components other than demo apps. Tinode is meant as a replacement for XMPP.
 
@@ -106,7 +106,7 @@ All client to server messages may have an optional `id` field. It's set by the c
 For brevity the notation below omits double quotes around field names as well as outer curly brackets.
 
 For messages that update application-defined data, such as `{set}` `private` or `public` fields, in case server-side
-data needs to be cleared, use a string with a single Unicode DEL character "&#x2421;" `"\u2421"`.  
+data needs to be cleared, use a string with a single Unicode DEL character "&#x2421;" `"\u2421"`.
 
 ### Client to server messages
 
@@ -183,7 +183,7 @@ The `{sub}` packet serves three functions:
 
 User creates a new group topic by sending `{sub}` packet with the `topic` field set to `new`. Server will create a topic and respond back to session with the name of the newly created topic.
 
-User creates a new peer to peer topic by sending `{sub}` packet with `topic` set to peer's user ID.  
+User creates a new peer to peer topic by sending `{sub}` packet with `topic` set to peer's user ID.
 
 The user is always subscribed to and the sessions is attached to the newly created topic.
 
@@ -429,6 +429,8 @@ ctrl: {
 	sub:  [
     {
       user: "usr2il9suCbuko", // string, ID of the user this subscription describes
+	  online: "on", // string, current online status of the user with respect to
+					// the topic, i.e. if the user is listening to messages
       updated: "2015-10-24T10:26:09.716Z", // timestamp of the last change in the
                                            // subscription, present only for
                                            // requester's own subscriptions
@@ -542,7 +544,7 @@ Topic usually have subscribers. One the the subscribers may be designated as top
 
 Topic `me` is automatically created for every user at the account creation time. It serves as means for account updates, receiving presence notification from people and topics of interest, invites to join topics, requests to approve subscription for topics where this user is a manager (has `S` permission). Topic `me` has no owner. The topic cannot be deleted or unsubscribed from. One can leave the topic which will stop all relevant communication and indicate that the user is offline (although the user may still be logged in and may continue to use other topics).
 
-Joining or leaving `me` generates a `{pres}` presence update sent to all users who have peer to peer topics with the given user and `P` permissions set.  
+Joining or leaving `me` generates a `{pres}` presence update sent to all users who have peer to peer topics with the given user and `P` permissions set.
 
 Topic `me` is read-only. `{pub}` messages to `me` are rejected.
 

@@ -176,11 +176,14 @@ func (t *Topic) run(hub *Hub) {
 
 				pud := t.perUser[leave.sess.uid]
 				if pud.lastSeenTag == nil {
-					pud.online--
 					pud.lastSeenTag = map[string]time.Time{}
 				}
 				pud.lastSeenTag[leave.sess.tag] = now
+				pud.online--
 				t.perUser[leave.sess.uid] = pud
+				if t.cat == TopicCat_Grp && pud.online == 0 {
+					t.presPubChange(leave.sess.uid.UserId(), "off")
+				}
 				if err := store.Topics.UpdateLastSeen(t.appid, t.name, leave.sess.uid, leave.sess.tag, now); err != nil {
 					log.Println(err)
 				}
@@ -235,6 +238,7 @@ func (t *Topic) run(hub *Hub) {
 				t.presProcReq(msg.Pres.Src, (msg.Pres.What == "on"), msg.Pres.isReply)
 				if msg.Pres.Topic != t.original {
 					// This is just a request for status, don't forward it to sessions
+					log.Printf("topic[%s].run: skipping {pres topic='%s'}", t.name, msg.Pres.Topic)
 					continue
 				}
 			}
@@ -388,6 +392,13 @@ func (t *Topic) subCommonReply(h *Hub, sess *Session, pkt *MsgClientSub, sendInf
 	pud := t.perUser[sess.uid]
 	pud.online++
 	t.perUser[sess.uid] = pud
+	if t.cat == TopicCat_Grp && pud.online == 1 {
+		// User just joined the topic, announce presence
+		log.Printf("subCommonReply: user %s joined grp topic %s", sess.uid.UserId(), t.name)
+		t.presPubChange(sess.uid.UserId(), "on")
+	} else {
+		log.Printf("subCommonReply: topic %s, online %d", t.name, pud.online)
+	}
 
 	simpleByteSender(sess.send, NoErr(pkt.Id, t.original, now))
 
@@ -930,6 +941,14 @@ func (t *Topic) replyGetSub(sess *Session, id string) error {
 				}
 			} else {
 				mts.User = uid.UserId()
+				if t.cat == TopicCat_Grp {
+					pud := t.perUser[uid]
+					if pud.online > 0 {
+						mts.Online = "on"
+					} else {
+						mts.Online = "off"
+					}
+				}
 			}
 			mts.AcsMode = (sub.ModeGiven & sub.ModeWant).String()
 			mts.Public = sub.GetPublic()
@@ -1046,6 +1065,11 @@ func (t *Topic) evictUser(uid types.Uid, clear bool, ignore *Session) {
 		pud := t.perUser[uid]
 		pud.online = 0
 		t.perUser[uid] = pud
+	}
+
+	// Notify topic subscribers that the user has left the topic
+	if t.cat == TopicCat_Grp {
+		t.presPubChange(uid.UserId(), "off")
 	}
 
 	// Detach all user's sessions
