@@ -9,6 +9,11 @@ import (
 	"log"
 )
 
+type configType struct {
+	Adapter       string          `json:"db_adapter"`
+	AdapterConfig json.RawMessage `json:"adapter_config"`
+}
+
 type Data struct {
 	Users         []map[string]interface{} `json:"users"`
 	Grouptopics   []map[string]interface{} `json:"grouptopics"`
@@ -50,12 +55,17 @@ func main() {
 	}
 
 	if *conffile != "" {
-		conf, err := ioutil.ReadFile(*conffile)
-		if err != nil {
+		var config configType
+		if raw, err := ioutil.ReadFile(*conffile); err != nil {
+			log.Fatal(err)
+		} else if err = json.Unmarshal(raw, &config); err != nil {
 			log.Fatal(err)
 		}
+		if config.Adapter != "rethinkdb" {
+			log.Fatal("Unknown adapter '" + config.Adapter + "'")
+		}
 
-		gen_rethink(*reset, string(conf), &data)
+		gen_rethink(*reset, string(config.AdapterConfig), &data)
 	} else {
 		log.Println("No config provided. Exiting.")
 	}

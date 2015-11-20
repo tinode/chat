@@ -6,7 +6,7 @@ import (
 	rdb "github.com/dancannon/gorethink"
 	"github.com/tinode/chat/server/store"
 	t "github.com/tinode/chat/server/store/types"
-	"log"
+	//	"log"
 	"strings"
 	"time"
 )
@@ -399,7 +399,7 @@ func (a *RethinkDbAdapter) TopicsForUser(appid uint32, uid t.Uid, opts *t.Browse
 		for rows.Next(&top) {
 			sub = join[top.Name]
 			sub.ObjHeader.MergeTimes(&top.ObjHeader)
-			sub.LastMessageAt = top.LastMessageAt
+			sub.SetLastMessageAt(top.LastMessageAt)
 			if strings.HasPrefix(sub.Topic, "grp") {
 				// all done with a grp topic
 				sub.SetPublic(top.Public)
@@ -622,7 +622,7 @@ func (a *RethinkDbAdapter) SubsForTopic(appId uint32, topic string, opts *t.Brow
 			}
 		}
 		subs = append(subs, ss)
-		log.Printf("SubsForTopic: loaded sub %#+v", ss)
+		//log.Printf("SubsForTopic: loaded sub %#+v", ss)
 	}
 	return subs, rows.Err()
 }

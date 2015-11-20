@@ -365,11 +365,11 @@ type MsgInvitation struct {
 
 type MsgServerData struct {
 	Topic string `json:"topic"`
-
-	From      string    `json:"from,omitempty"` // could be empty if sent by system
-	Timestamp time.Time `json:"ts"`
-
-	Content interface{} `json:"content"`
+	// UseId, could be empty if sent by system
+	From      string      `json:"from,omitempty"`
+	Timestamp time.Time   `json:"ts"`
+	SeqId     int         `json:"seq"`
+	Content   interface{} `json:"content"`
 }
 
 type MsgServerPres struct {

@@ -1,0 +1,12 @@
+{
+	"listen": ":8080",
+	"db_adapter": "rethinkdb",
+	"adapter_config": {
+		"worker_id": 1,
+		"uid_key": "$SNOWFLAKE_UID_KEY",
+		"params": {
+			"database": "tinode",
+			"addresses": "$RETHINKDB_PORT_28015_TCP_ADDR:$RETHINKDB_PORT_28015_TCP_PORT"
+		}
+	}
+}

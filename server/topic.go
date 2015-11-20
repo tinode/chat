@@ -928,7 +928,7 @@ func (t *Topic) replyGetSub(sess *Session, id string) error {
 			if t.cat == TopicCat_Me {
 				mts.Topic = sub.Topic
 				mts.With = sub.GetWith()
-				mts.LastMsg = sub.LastMessageAt
+				mts.LastMsg = sub.GetLastMessageAt()
 				mts.UpdatedAt = &sub.UpdatedAt
 				if when, ok := sub.LastSeen[sess.tag]; ok && !when.IsZero() {
 					mts.LastSeenTag = &when

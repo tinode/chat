@@ -580,8 +580,8 @@ func (t *Topic) loadSubscribers() error {
 			t.owner = uid
 		}
 
-		if t.cat == TopicCat_Me && sub.LastMessageAt != nil && !sub.LastMessageAt.IsZero() {
-			t.lastMessage = *sub.LastMessageAt
+		if lm := sub.GetLastMessageAt(); lm != nil && t.cat == TopicCat_Me && !lm.IsZero() {
+			t.lastMessage = *lm
 			log.Printf("hub.loadSubscriptions: topic %s set lastMessage to %s", t.name, t.lastMessage.String())
 		}
 	}

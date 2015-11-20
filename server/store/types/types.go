@@ -233,6 +233,12 @@ type User struct {
 
 	Access DefaultAccess // Default access to user
 
+	// Values for 'me' topic:
+	// Server-issued sequence ID for messages in 'me'
+	SeqId int
+	// Deprecated
+	LastMessageAt *time.Time
+
 	Public interface{}
 }
 
@@ -400,13 +406,12 @@ type Subscription struct {
 
 	LastSeen map[string]time.Time // Last time when the user joined the topic, by device tag
 
-	LastMessageAt *time.Time // 'me' topics only
-
 	Private interface{} // User's private data associated with the subscription to topic
 
 	// Deserialized ephemeral values
-	public interface{} // Deserialized public value from topic or user (depends on context)
-	with   string      // p2p topics only: id of the other user
+	public        interface{} // Deserialized public value from topic or user (depends on context)
+	with          string      // p2p topics only: id of the other user
+	lastMessageAt *time.Time
 }
 
 // SetPublic assigns to public, otherwise not accessible from outside the package
@@ -426,6 +431,14 @@ func (s *Subscription) GetWith() string {
 	return s.with
 }
 
+func (s *Subscription) GetLastMessageAt() *time.Time {
+	return s.lastMessageAt
+}
+
+func (s *Subscription) SetLastMessageAt(lm *time.Time) {
+	s.lastMessageAt = lm
+}
+
 type perUserData struct {
 	//owner   bool
 	private interface{}
@@ -438,11 +451,16 @@ type Topic struct {
 	ObjHeader
 	State int
 	Name  string
-	UseBt bool // use bearer token or use ACL
+	// Use bearer token or use ACL
+	UseBt bool
 
-	Access DefaultAccess // Default access to topic
+	// Default access to topic
+	Access DefaultAccess
 
+	// Deprecated
 	LastMessageAt *time.Time
+	// Server-issued sequential ID
+	SeqId int
 
 	Public interface{}
 
