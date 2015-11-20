@@ -8,13 +8,16 @@ Parameters:
  - `--config=FILENAME`: load configuration from FILENAME. Example config:
  ```js
  {
-	"worker_id": 1,
-	"uid_key": "la6YsO+bNX/+XIkOqc5Svw==",
-	"params": {
-		"database": "tinode",
-		"addresses": "localhost:28015"
+	"db_adapter": "rethinkdb",
+	"adapter_config": {
+		"worker_id": 1,
+		"uid_key": "la6YsO+bNX/+XIkOqc5Svw==",
+		"params": {
+			"database": "tinode",
+			"addresses": "localhost:28015"
+		}
 	}
- }
+}
  ```
  RethinkDB adapter uses [snowflake](http://github.com/tinode/snowflake/) to generate object IDs. The `worker_id` and `uid_key` parameters are used to initialize snowflake and only used when sample data is loaded.
   - `worker_id` is the snowflake ID of the host running this utility, integer in the range 0 - 1023

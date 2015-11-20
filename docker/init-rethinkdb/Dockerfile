@@ -1,7 +1,7 @@
 # Docker file builds an image with a utility which initializes rethinkdb cluster.
 # It needs to be run only once per cluster. Use it as (assuming your running RethinkDB
 # container is named 'rethinkdb'):
-# $ docker run --link rethinkdb --env SNOWFLAKE_UID_KEY=base64+encoded+24+bytes= init-rethinkdb
+# $ docker run --name=init-tinode-db --link rethinkdb --env SNOWFLAKE_UID_KEY=base64+encoded+24+bytes= init-rethinkdb
 
 FROM golang
 

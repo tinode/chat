@@ -365,7 +365,7 @@ type MsgInvitation struct {
 
 type MsgServerData struct {
 	Topic string `json:"topic"`
-	// UseId, could be empty if sent by system
+	// ID of the user who originated the message as {pub}, could be empty if sent by the system
 	From      string      `json:"from,omitempty"`
 	Timestamp time.Time   `json:"ts"`
 	SeqId     int         `json:"seq"`
