@@ -2,7 +2,7 @@
 
 ## Using Docker
 
-Coming soon.
+See [instructions](../docker/README.md)
 
 ## Building from Source
 

@@ -16,7 +16,7 @@ $ docker build --tag=tinode-init-db init-rethinkdb
 
 Run the container to initialize the `tinode` database:
 ```
-$ docker run --name tinode-init --link rethinkdb tinode-init-db
+$ docker run --rm --name tinode-init --link rethinkdb tinode-init-db
 
 ```
 Optionally you may want to provide a UID encryption key as `--env SNOWFLAKE_UID_KEY=base64+encoded+16+bytes=`. The system uses [snowflake](https://github.com/tinode/snowflake) to generate unique IDs for values like user IDs. To make them unpredictable it encrypts them with [XTEA](https://en.wikipedia.org/wiki/XTEA). If you don't provide the key the system will use a default one. As a result the IDs will be easily predictable (but still not sequential).
@@ -30,7 +30,9 @@ $ docker build --tag=tinode-srv tinode-server
 
 Run Tinode server:
 ```
-$ docker run  -p 8080:6060 -d --name tinode-srv --link rethinkdb tinode-srv
+$ docker run  -p 6060:18080 -d --name tinode-srv --link rethinkdb tinode-srv
 
 ```
-The port mapping `-p 8080:6060` tells Docker to map container's port to host's port. That's where the server will be accessible. If you provided a `SNOWFLAKE_UID_KEY` during initialization, you must provide the same key at this step too. Otherwise primary key collisions may happen.
+The port mapping `-p 6060:18080` tells Docker to map container's port 18080 to host's port 6060 making server accessible at http://localhost:6060/. The sample application is located at http://localhost:6060/x/samples/chatdemo.html.
+
+If you provided a `SNOWFLAKE_UID_KEY` during initialization, you must provide the same key at this step too. Otherwise primary key collisions may happen.
