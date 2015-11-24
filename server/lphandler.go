@@ -133,8 +133,9 @@ func serveLongPoll(wrt http.ResponseWriter, req *http.Request) {
 		wrt.WriteHeader(http.StatusCreated)
 		enc.Encode(
 			&ServerComMessage{Ctrl: &MsgServerCtrl{
+				Id:        req.FormValue("id"),
 				Code:      http.StatusCreated,
-				Text:      http.StatusText(http.StatusCreated),
+				Text:      "created",
 				Params:    map[string]interface{}{"sid": sess.sid, "ver": VERSION, "build": buildstamp},
 				Timestamp: time.Now().UTC().Round(time.Millisecond)}})
 

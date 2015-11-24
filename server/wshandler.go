@@ -158,6 +158,7 @@ func serveWebSocket(wrt http.ResponseWriter, req *http.Request) {
 	sess := globals.sessionStore.Create(ws, appid)
 
 	sess.QueueOut(&ServerComMessage{Ctrl: &MsgServerCtrl{
+		Id:        req.FormValue("id"),
 		Code:      http.StatusCreated,
 		Text:      "created",
 		Params:    map[string]interface{}{"ver": VERSION, "build": buildstamp},

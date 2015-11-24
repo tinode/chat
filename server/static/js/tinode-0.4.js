@@ -410,7 +410,8 @@ Tinode.streaming = (
 				// '/v0/channels/lp' vs just '/v0/channels'
 				parser.pathname += "/lp"
 			}
-			parser.search = (parser.search ? parser.search : "?") + "apikey=" + Tinode.apikey
+			parser.search = (parser.search ? parser.search : "?") + "apikey=" + Tinode.apikey +
+				"&id=" + get_message_id()
 			return protocol + '://' + parser.host + parser.pathname + parser.search
 		}
 
