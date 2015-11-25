@@ -540,7 +540,6 @@ func (t *Topic) GetAccess(uid Uid) (mode AccessMode) {
 // Stored {data} message
 type Message struct {
 	ObjHeader
-	SeqId   int
 	Topic   string
 	From    string // UID as string of the user who sent the message, could be empty
 	Content interface{}

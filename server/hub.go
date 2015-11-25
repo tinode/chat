@@ -264,12 +264,6 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 
 		t.cat = TopicCat_Me
 
-		// 'me' has no owner, t.owner = nil
-
-		// Ensure all requests to subscribe are automatically rejected
-		t.accessAuth = types.ModeBanned
-		t.accessAnon = types.ModeBanned
-
 		user, err := store.Users.Get(t.appid, sreg.sess.uid)
 		if err != nil {
 			log.Println("hub: cannot load user object for 'me'='" + t.name + "' (" + err.Error() + ")")
@@ -283,15 +277,18 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 			return
 		}
 
+		// 'me' has no owner
+		// t.owner = nil
+
+		// Ensure all requests to subscribe are automatically rejected
+		t.accessAuth = types.ModeBanned
+		t.accessAnon = types.ModeBanned
+
 		t.public = user.Public
 
 		t.created = user.CreatedAt
 		t.updated = user.UpdatedAt
-
-		if user.LastMessageAt != nil {
-			t.lastMessage = *user.LastMessageAt
-		}
-		t.lastId = user.SeqId
+		//t.lastMessage = time.Time{}
 
 		// Request to create a new p2p topic, then attach to it
 	} else if strings.HasPrefix(t.original, "usr") {
@@ -306,6 +303,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		t.accessAnon = types.ModeBanned
 
 		var userData perUserData
+
 		if sreg.pkt.Init != nil && !isNullValue(sreg.pkt.Init.Private) {
 			// t.public is not used for p2p topics since each user get a different public
 
@@ -374,12 +372,8 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 			return
 		}
 
-		// t.public is not used for p2p topics since each user gets a different public
-
 		t.created = user1.CreatedAt
 		t.updated = user1.UpdatedAt
-
-		// Newly created, t.lastMessage and t.lastId are not set
 
 		userData.public = user2.GetPublic()
 		userData.modeWant = user1.ModeWant
@@ -401,12 +395,6 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		log.Println("hub: existing p2p topic")
 
 		t.cat = TopicCat_P2P
-
-		// t.owner no valid owner for p2p topics, leave blank
-
-		// Ensure that other users are automatically rejected
-		t.accessAuth = types.ModeBanned
-		t.accessAnon = types.ModeBanned
 
 		// Load the topic object
 		stopic, err := store.Topics.Get(sreg.sess.appid, t.name)
@@ -431,15 +419,19 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 			return
 		}
 
+		// t.owner no valid owner for p2p topics, leave blank
+
+		// Ensure that other users are automatically rejected
+		t.accessAuth = types.ModeBanned
+		t.accessAnon = types.ModeBanned
+
 		// t.public is not used for p2p topics since each user gets a different public
 
 		t.created = stopic.CreatedAt
 		t.updated = stopic.UpdatedAt
-
 		if stopic.LastMessageAt != nil {
 			t.lastMessage = *stopic.LastMessageAt
 		}
-		t.lastId = stopic.SeqId
 
 		for i := 0; i < 2; i++ {
 			uid := types.ParseUid(subs[i].User)
@@ -501,8 +493,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 
 		t.created = timestamp
 		t.updated = timestamp
-
-		// t.lastId and t.lastMessage are not set for new topics
+		//t.lastMessage = time.Time{}
 
 		stopic := &types.Topic{
 			ObjHeader: types.ObjHeader{CreatedAt: timestamp},
@@ -551,14 +542,11 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		t.accessAnon = stopic.Access.Anon
 
 		t.public = stopic.Public
-
 		t.created = stopic.CreatedAt
 		t.updated = stopic.UpdatedAt
-
 		if stopic.LastMessageAt != nil {
 			t.lastMessage = *stopic.LastMessageAt
 		}
-		t.lastId = stopic.SeqId
 	}
 
 	log.Println("hub: topic created or loaded: " + t.name)
@@ -572,7 +560,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 	t.reg <- sreg
 }
 
-// loadSubscribers loads topic subscribers, sets topic owner
+// loadSubscribers loads topic subscribers, sets topic owner & lastMessage
 func (t *Topic) loadSubscribers() error {
 	subs, err := store.Topics.GetSubs(t.appid, t.name, nil)
 	if err != nil {
@@ -590,6 +578,11 @@ func (t *Topic) loadSubscribers() error {
 		if sub.ModeGiven&sub.ModeWant&types.ModeOwner != 0 {
 			log.Printf("hub.loadSubscriptions: %s set owner to %s", t.name, uid.String())
 			t.owner = uid
+		}
+
+		if lm := sub.GetLastMessageAt(); lm != nil && t.cat == TopicCat_Me && !lm.IsZero() {
+			t.lastMessage = *lm
+			log.Printf("hub.loadSubscriptions: topic %s set lastMessage to %s", t.name, t.lastMessage.String())
 		}
 	}
 

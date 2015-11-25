@@ -504,16 +504,16 @@ func (a *RethinkDbAdapter) TopicDelete(appId uint32, userDbId, topic string) err
 	return errors.New("TopicDelete: not implemented")
 }
 
-func (a *RethinkDbAdapter) TopicUpdateOnMessage(appid uint32, topic string, msg *t.Message) error {
+func (a *RethinkDbAdapter) TopicUpdateLastMsgTime(appid uint32, topic string, ts time.Time) error {
 	update := struct {
-		SeqId         int
 		LastMessageAt *time.Time
-	}{msg.SeqId, &msg.CreatedAt}
+	}{&ts}
 
 	// Invite - 'me' topic
 	var err error
 	if strings.HasPrefix(topic, "usr") {
-		_, err = rdb.DB("tinode").Table("users").Get(topic).
+		_, err = rdb.DB("tinode").Table("subscriptions").
+			Get(topic+":"+t.ParseUserId(topic).String()).
 			Update(update, rdb.UpdateOpts{Durability: "soft"}).RunWrite(a.conn)
 
 		// All other messages
@@ -669,7 +669,7 @@ func (a *RethinkDbAdapter) MessageDelete(appId uint32, id t.Uid) error {
 	return errors.New("MessageDelete: not implemented")
 }
 
-func addLimitAndFilter1(q rdb.Term, value string, index string, opts *t.BrowseOpt) rdb.Term {
+func addLimitAndFilter(q rdb.Term, value string, index string, opts *t.BrowseOpt) rdb.Term {
 	var limit uint = 1024 // TODO(gene): pass into adapter as a config param
 	var lower, upper interface{}
 	var order rdb.Term

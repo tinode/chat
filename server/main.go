@@ -52,7 +52,7 @@ const (
 	TOPICTIMEOUT = time.Minute * 5  // Tear down topic after this period of silence.
 
 	// API version
-	VERSION = "0.5"
+	VERSION = "0.4"
 
 	// Lofetime of authentication tokens
 	TOKEN_LIFETIME_DEFAULT = time.Hour * 12     // 12 hours
