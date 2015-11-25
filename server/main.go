@@ -78,9 +78,10 @@ type configType struct {
 }
 
 func main() {
-	var configfile = flag.String("config", "./config", "Path to config file")
+	var configfile = flag.String("config", "./tinode.conf", "Path to config file.")
 	// Path to static content.
-	var staticPath = flag.String("static_data", "", "path to /static data for the server.")
+	var staticPath = flag.String("static_data", "", "Path to /static data for the server.")
+	var listenOn = flag.String("listen", "", "Override tinode.conf address and port to listen on.")
 	flag.Parse()
 
 	log.Printf("Using config from: '%s'", *configfile)
@@ -92,6 +93,10 @@ func main() {
 		log.Fatal(err)
 	} else if err = json.Unmarshal(raw, &config); err != nil {
 		log.Fatal(err)
+	}
+
+	if *listenOn != "" {
+		config.Listen = *listenOn
 	}
 
 	var err = store.Open(config.Adapter, string(config.AdapterConfig))
