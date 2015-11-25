@@ -63,6 +63,9 @@ type Topic struct {
 	// Time of the last message
 	lastMessage time.Time
 
+	// Server-side ID of the last data message
+	lastId int
+
 	// User ID of the topic owner/creator
 	owner types.Uid
 
@@ -219,6 +222,7 @@ func (t *Topic) run(hub *Hub) {
 
 				if err := store.Messages.Save(t.appid, &types.Message{
 					ObjHeader: types.ObjHeader{CreatedAt: msg.Data.Timestamp},
+					SeqId:     t.lastId + 1,
 					Topic:     t.name,
 					From:      from.String(),
 					Content:   msg.Data.Content}); err != nil {
@@ -227,11 +231,16 @@ func (t *Topic) run(hub *Hub) {
 					continue
 				}
 
+				t.lastMessage = msg.timestamp
+				t.lastId++
+				msg.Data.SeqId = t.lastId
+
 				if msg.id != "" {
-					simpleByteSender(msg.akn, NoErrAccepted(msg.id, t.original, msg.timestamp))
+					reply := NoErrAccepted(msg.id, t.original, msg.timestamp)
+					reply.Ctrl.Params = map[string]int{"seq": t.lastId}
+					simpleByteSender(msg.akn, reply)
 				}
 
-				t.lastMessage = msg.timestamp
 				t.presPubMessageSent()
 
 			} else if msg.Pres != nil && (msg.Pres.What == "on" || msg.Pres.What == "off") {

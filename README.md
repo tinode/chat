@@ -1,10 +1,10 @@
 # Tinode Instant Messaging Server
 
-**This documentation covers the next 0.4 release of Tinode. ETA mid-November 2015.**
-
 Instant messaging server. Backend in pure [Go](http://golang.org) ([Affero GPL 3.0](http://www.gnu.org/licenses/agpl-3.0.en.html)), client-side binding in Java for Android and Javascript ([Apache 2.0](http://www.apache.org/licenses/LICENSE-2.0)), persistent storage [RethinkDB](http://rethinkdb.com/), JSON over websocket (long polling is also available). No UI components other than demo apps. Tinode is meant as a replacement for XMPP.
 
 This is alpha-quality software. Bugs should be expected. Version 0.4
+
+A running demo is (usually) available at [http://api.tinode.co/x/samples/chatdemo.html]. Login as one of `alice`, `bob`, `carol`, `dave`, `frank`. Password is `<login>123`, e.g. login for `alice` is `alice123`.
 
 ## Why?
 
