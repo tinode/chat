@@ -339,7 +339,7 @@ func (MessagesObjMapper) Save(appid uint32, msg *types.Message) error {
 	msg.InitTimes()
 
 	// Need a transaction here, RethinkDB does not support transactions
-	if err := adaptr.TopicUpdateLastMsgTime(appid, msg.Topic, msg.CreatedAt); err != nil {
+	if err := adaptr.TopicUpdateOnMessage(appid, msg.Topic, msg); err != nil {
 		return err
 	}
 

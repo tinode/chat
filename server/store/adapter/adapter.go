@@ -40,7 +40,7 @@ type Adapter interface {
 	TopicShare(appid uint32, acl []t.Subscription) (int, error)
 	UpdateLastSeen(appid uint32, topic string, uid t.Uid, tag string, when time.Time) error
 	TopicDelete(appid uint32, userDbId, topic string) error
-	TopicUpdateLastMsgTime(appid uint32, topic string, ts time.Time) error
+	TopicUpdateOnMessage(appid uint32, topic string, msg *t.Message) error
 	TopicUpdate(appid uint32, topic string, update map[string]interface{}) error
 
 	// SubscriptionGet reads a subscription of a user to a topic
