@@ -420,7 +420,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 			return
 		}
 
-		subs, err := store.Topics.GetSubs(t.appid, t.name, nil)
+		subs, err := store.Topics.GetSubs(t.appid, t.name)
 		if err != nil {
 			log.Println("hub: cannot load subscritions for '" + t.name + "' (" + err.Error() + ")")
 			sreg.sess.QueueOut(ErrUnknown(sreg.pkt.Id, t.name, timestamp))
@@ -574,7 +574,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 
 // loadSubscribers loads topic subscribers, sets topic owner
 func (t *Topic) loadSubscribers() error {
-	subs, err := store.Topics.GetSubs(t.appid, t.name, nil)
+	subs, err := store.Topics.GetSubs(t.appid, t.name)
 	if err != nil {
 		return err
 	}

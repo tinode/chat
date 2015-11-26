@@ -130,10 +130,14 @@ func (jd *JsonDuration) UnmarshalJSON(data []byte) (err error) {
 }
 
 type MsgBrowseOpts struct {
-	Ascnd  bool       `json:"ascnd,omitempty"`  // true - sort in scending order by time, otherwise descending (default)
-	Since  *time.Time `json:"since,omitempty"`  // Load/count objects newer than this
-	Before *time.Time `json:"before,omitempty"` // Load/count objects older than this
-	Limit  uint       `json:"limit,omitempty"`  // Limit the number of objects loaded or counted
+	// true - sort in scending order by time, otherwise descending (default)
+	Ascnd bool `json:"ascnd,omitempty"`
+	// Load messages with seq id equal or greater than this
+	Since int `json:"since,omitempty"`
+	// Load messages with seq id lower than this
+	Before int `json:"before,omitempty"`
+	// Limit the number of messages loaded
+	Limit uint `json:"limit,omitempty"`
 }
 
 // Client to Server (C2S) messages
@@ -175,7 +179,7 @@ type MsgClientSub struct {
 	// mirrors get.what: "data", "sub", "info", default: get nothing
 	// space separated list; unknown strings are ignored
 	Get string `json:"get,omitempty"`
-	// parameter of the request data from topic, mirrors get.browse
+	// parameter for requesting data from topic, mirrors get.browse
 	Browse *MsgBrowseOpts `json:"browse,omitempty"`
 }
 
@@ -249,9 +253,11 @@ type MsgClientPub struct {
 
 // Query topic state {get}
 type MsgClientGet struct {
-	Id     string         `json:"id,omitempty"`
-	Topic  string         `json:"topic"`
-	What   string         `json:"what"` // data, sub, info, space separated list; unknown strings are ignored
+	Id    string `json:"id,omitempty"`
+	Topic string `json:"topic"`
+	// "data", "sub" or "info" space separated list; unknown strings are ignored
+	What string `json:"what"`
+	// Parameters for "data" request
 	Browse *MsgBrowseOpts `json:"browse,omitempty"`
 }
 

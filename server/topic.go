@@ -915,10 +915,10 @@ func (t *Topic) replyGetSub(sess *Session, id string) error {
 
 	if t.cat == TopicCat_Me {
 		// Fetch user's subscriptions, with Topic.Public denormalized into subscription
-		subs, err = store.Users.GetTopics(sess.appid, sess.uid, nil)
+		subs, err = store.Users.GetTopics(sess.appid, sess.uid)
 	} else {
 		// Fetch subscriptions, User.Public denormalized into subscription
-		subs, err = store.Topics.GetUsers(sess.appid, t.name, nil)
+		subs, err = store.Topics.GetUsers(sess.appid, t.name)
 	}
 
 	if err != nil {
@@ -1093,18 +1093,14 @@ func (t *Topic) evictUser(uid types.Uid, clear bool, ignore *Session) {
 	}
 }
 
-func msgOpts2storeOpts(req *MsgBrowseOpts, tag string, lastSeen time.Time) *types.BrowseOpt {
+func msgOpts2storeOpts(req *MsgBrowseOpts, tag string, lastSeenId int) *types.BrowseOpt {
 	var opts *types.BrowseOpt
 	if req != nil {
 		opts = &types.BrowseOpt{AscOrder: req.Ascnd, Limit: req.Limit}
-		if req.Since != nil {
-			opts.Since = *req.Since
-		}
-		if req.Before != nil {
-			opts.Before = *req.Before
-		}
-	} else if tag != TAG_UNDEF && !lastSeen.IsZero() {
-		opts = &types.BrowseOpt{Since: lastSeen}
+		opts.Since = req.Since
+		opts.Before = req.Before
+	} else if tag != TAG_UNDEF && lastSeenId > 0 {
+		opts = &types.BrowseOpt{Since: lastSeenId}
 	}
 	return opts
 }

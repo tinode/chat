@@ -36,6 +36,8 @@ type configType struct {
 
 var uGen t.UidGenerator
 
+const MAX_RESULTS = 1024
+
 // Open initializes rethinkdb session
 func (a *RethinkDbAdapter) Open(jsonconfig string, workerId int, uidkey []byte) error {
 	if a.conn != nil {
@@ -127,19 +129,24 @@ func (a *RethinkDbAdapter) CreateDb(reset bool) error {
 	if _, err := rdb.DB("tinode").TableCreate("subscriptions", rdb.TableCreateOpts{PrimaryKey: "Id"}).RunWrite(a.conn); err != nil {
 		return err
 	}
-	if _, err := rdb.DB("tinode").Table("subscriptions").IndexCreateFunc("User_UpdatedAt",
-		func(row rdb.Term) interface{} {
-			return []interface{}{row.Field("User"), row.Field("UpdatedAt")}
-		}).RunWrite(a.conn); err != nil {
+	if _, err := rdb.DB("tinode").Table("subscriptions").IndexCreate("User").RunWrite(a.conn); err != nil {
 		return err
 	}
-
-	if _, err := rdb.DB("tinode").Table("subscriptions").IndexCreateFunc("Topic_UpdatedAt",
-		func(row rdb.Term) interface{} {
-			return []interface{}{row.Field("Topic"), row.Field("UpdatedAt")}
-		}).RunWrite(a.conn); err != nil {
+	if _, err := rdb.DB("tinode").Table("subscriptions").IndexCreate("Topic").RunWrite(a.conn); err != nil {
 		return err
 	}
+	//if _, err := rdb.DB("tinode").Table("subscriptions").IndexCreateFunc("User_UpdatedAt",
+	//	func(row rdb.Term) interface{} {
+	//		return []interface{}{row.Field("User"), row.Field("UpdatedAt")}
+	//	}).RunWrite(a.conn); err != nil {
+	//	return err
+	//}
+	// if _, err := rdb.DB("tinode").Table("subscriptions").IndexCreateFunc("Topic_UpdatedAt",
+	//	func(row rdb.Term) interface{} {
+	//		return []interface{}{row.Field("Topic"), row.Field("UpdatedAt")}
+	//	}).RunWrite(a.conn); err != nil {
+	//	return err
+	// }
 
 	// Topic stored in database
 	if _, err := rdb.DB("tinode").TableCreate("topics", rdb.TableCreateOpts{PrimaryKey: "Id"}).RunWrite(a.conn); err != nil {
@@ -153,9 +160,9 @@ func (a *RethinkDbAdapter) CreateDb(reset bool) error {
 	if _, err := rdb.DB("tinode").TableCreate("messages", rdb.TableCreateOpts{PrimaryKey: "Id"}).RunWrite(a.conn); err != nil {
 		return err
 	}
-	if _, err := rdb.DB("tinode").Table("messages").IndexCreateFunc("Topic_CreatedAt",
+	if _, err := rdb.DB("tinode").Table("messages").IndexCreateFunc("Topic_SeqId",
 		func(row rdb.Term) interface{} {
-			return []interface{}{row.Field("Topic"), row.Field("CreatedAt")}
+			return []interface{}{row.Field("Topic"), row.Field("SeqId")}
 		}).RunWrite(a.conn); err != nil {
 		return err
 	}
@@ -342,12 +349,10 @@ func (a *RethinkDbAdapter) TopicGet(appid uint32, topic string) (*t.Topic, error
 }
 
 // TopicsForUser loads user's topics and contacts
-func (a *RethinkDbAdapter) TopicsForUser(appid uint32, uid t.Uid, opts *t.BrowseOpt) ([]t.Subscription, error) {
+func (a *RethinkDbAdapter) TopicsForUser(appid uint32, uid t.Uid) ([]t.Subscription, error) {
 	// Fetch user's subscriptions
 	// Subscription have Topic.UpdatedAt denormalized into Subscription.UpdatedAt
-	q := rdb.DB(a.dbName).Table("subscriptions")
-	q = addLimitAndFilter(q, uid.String(), "User_UpdatedAt", opts)
-
+	q := rdb.DB(a.dbName).Table("subscriptions").GetAllByIndex("User", uid.String()).Limit(MAX_RESULTS)
 	//log.Printf("RethinkDbAdapter.TopicsForUser q: %+v", q)
 	rows, err := q.Run(a.conn)
 	if err != nil {
@@ -439,12 +444,10 @@ func (a *RethinkDbAdapter) TopicsForUser(appid uint32, uid t.Uid, opts *t.Browse
 }
 
 // UsersForTopic loads users subscribed to the given topic
-func (a *RethinkDbAdapter) UsersForTopic(appid uint32, topic string, opts *t.BrowseOpt) ([]t.Subscription, error) {
+func (a *RethinkDbAdapter) UsersForTopic(appid uint32, topic string) ([]t.Subscription, error) {
 	// Fetch topic subscribers
 	// Fetch all subscribed users. The number of users is not large
-	q := rdb.DB(a.dbName).Table("subscriptions")
-	q = addLimitAndFilter(q, topic, "Topic_UpdatedAt", nil)
-
+	q := rdb.DB(a.dbName).Table("subscriptions").GetAllByIndex("Topic", topic).Limit(MAX_RESULTS)
 	//log.Printf("RethinkDbAdapter.UsersForTopic q: %+v", q)
 	rows, err := q.Run(a.conn)
 	if err != nil {
@@ -564,13 +567,12 @@ func (a *RethinkDbAdapter) SubsLastSeen(appid uint32, topic string, user t.Uid, 
 }
 
 // SubsForUser loads a list of user's subscriptions to topics
-func (a *RethinkDbAdapter) SubsForUser(appid uint32, forUser t.Uid, opts *t.BrowseOpt) ([]t.Subscription, error) {
+func (a *RethinkDbAdapter) SubsForUser(appid uint32, forUser t.Uid) ([]t.Subscription, error) {
 	if forUser.IsZero() {
 		return nil, errors.New("RethinkDb adapter: invalid user ID in TopicGetAll")
 	}
 
-	q := rdb.DB(a.dbName).Table("subscriptions")
-	q = addLimitAndFilter(q, forUser.String(), "User_UpdatedAt", opts)
+	q := rdb.DB(a.dbName).Table("subscriptions").GetAllByIndex("User", forUser.String()).Limit(MAX_RESULTS)
 
 	rows, err := q.Run(a.conn)
 	if err != nil {
@@ -586,7 +588,7 @@ func (a *RethinkDbAdapter) SubsForUser(appid uint32, forUser t.Uid, opts *t.Brow
 }
 
 // SubsForTopic fetches all subsciptions for a topic.
-func (a *RethinkDbAdapter) SubsForTopic(appId uint32, topic string, opts *t.BrowseOpt) ([]t.Subscription, error) {
+func (a *RethinkDbAdapter) SubsForTopic(appId uint32, topic string) ([]t.Subscription, error) {
 	//log.Println("Loading subscriptions for topic ", topic)
 
 	// must load User.Public for p2p topics
@@ -600,8 +602,7 @@ func (a *RethinkDbAdapter) SubsForTopic(appId uint32, topic string, opts *t.Brow
 		}
 	}
 
-	q := rdb.DB(a.dbName).Table("subscriptions")
-	q = addLimitAndFilter(q, topic, "Topic_UpdatedAt", opts)
+	q := rdb.DB(a.dbName).Table("subscriptions").GetAllByIndex("Topic", topic).Limit(MAX_RESULTS)
 	//log.Println("Loading subscription q=", q)
 
 	rows, err := q.Run(a.conn)
@@ -650,7 +651,7 @@ func (a *RethinkDbAdapter) MessageGetAll(appId uint32, topic string, opts *t.Bro
 	//log.Println("Loading messages for topic ", topic)
 
 	q := rdb.DB(a.dbName).Table("messages")
-	q = addLimitAndFilter(q, topic, "Topic_CreatedAt", opts)
+	q = addOptions(q, topic, "Topic_SeqId", opts)
 
 	rows, err := q.Run(a.conn)
 	if err != nil {
@@ -669,19 +670,19 @@ func (a *RethinkDbAdapter) MessageDelete(appId uint32, id t.Uid) error {
 	return errors.New("MessageDelete: not implemented")
 }
 
-func addLimitAndFilter1(q rdb.Term, value string, index string, opts *t.BrowseOpt) rdb.Term {
+func addOptions(q rdb.Term, value string, index string, opts *t.BrowseOpt) rdb.Term {
 	var limit uint = 1024 // TODO(gene): pass into adapter as a config param
 	var lower, upper interface{}
 	var order rdb.Term
 
 	if opts != nil {
-		if !opts.Since.IsZero() {
+		if opts.Since > 0 {
 			lower = opts.Since
 		} else {
 			lower = rdb.MinVal
 		}
 
-		if !opts.Before.IsZero() {
+		if opts.Before > 0 {
 			upper = opts.Before
 		} else {
 			upper = rdb.MaxVal

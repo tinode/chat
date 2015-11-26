@@ -570,7 +570,7 @@ func (a InviteAction) String() string {
 
 type BrowseOpt struct {
 	AscOrder bool // true, if sort in ascending order by time (default - descending)
-	Since    time.Time
-	Before   time.Time
+	Since    int
+	Before   int
 	Limit    uint
 }

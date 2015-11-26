@@ -71,7 +71,7 @@ import (
 // loadContacts initializes topic.perSubs to support presence notifications
 // Case 1.a.i, 1.a.ii
 func (t *Topic) loadContacts(uid types.Uid) error {
-	subs, err := store.Users.GetSubs(t.appid, uid, nil)
+	subs, err := store.Users.GetSubs(t.appid, uid)
 	if err != nil {
 		return err
 	}

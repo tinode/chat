@@ -224,13 +224,13 @@ func (UsersObjMapper) Update(appid uint32, uid types.Uid, update map[string]inte
 }
 
 // GetSubs loads a list of subscriptions for the given user
-func (u UsersObjMapper) GetSubs(appid uint32, id types.Uid, opts *types.BrowseOpt) ([]types.Subscription, error) {
-	return adaptr.SubsForUser(appid, id, opts)
+func (u UsersObjMapper) GetSubs(appid uint32, id types.Uid) ([]types.Subscription, error) {
+	return adaptr.SubsForUser(appid, id)
 }
 
 // GetTopics is exacly the same as Topics.GetForUser
-func (u UsersObjMapper) GetTopics(appid uint32, id types.Uid, opts *types.BrowseOpt) ([]types.Subscription, error) {
-	return adaptr.TopicsForUser(appid, id, opts)
+func (u UsersObjMapper) GetTopics(appid uint32, id types.Uid) ([]types.Subscription, error) {
+	return adaptr.TopicsForUser(appid, id)
 }
 
 // Topics struct to hold methods for persistence mapping for the topic object.
@@ -276,21 +276,13 @@ func (TopicsObjMapper) Get(appid uint32, topic string) (*types.Topic, error) {
 }
 
 // GetUsers loads subscriptions for topic plus loads user.Public
-func (TopicsObjMapper) GetUsers(appid uint32, topic string, opts *types.BrowseOpt) ([]types.Subscription, error) {
-	// Limit the number of subscriptions per topic
-	if opts == nil {
-		opts = &types.BrowseOpt{Limit: MAX_USERS_FOR_TOPIC}
-	}
-	return adaptr.UsersForTopic(appid, topic, opts)
+func (TopicsObjMapper) GetUsers(appid uint32, topic string) ([]types.Subscription, error) {
+	return adaptr.UsersForTopic(appid, topic)
 }
 
 // GetSubs loads a list of subscriptions to the given topic, user.Public is not loaded
-func (TopicsObjMapper) GetSubs(appid uint32, topic string, opts *types.BrowseOpt) ([]types.Subscription, error) {
-	// Limit the number of subscriptions per topic
-	if opts == nil {
-		opts = &types.BrowseOpt{Limit: MAX_USERS_FOR_TOPIC}
-	}
-	return adaptr.SubsForTopic(appid, topic, opts)
+func (TopicsObjMapper) GetSubs(appid uint32, topic string) ([]types.Subscription, error) {
+	return adaptr.SubsForTopic(appid, topic)
 }
 
 func (TopicsObjMapper) UpdateLastSeen(appid uint32, topic string, id types.Uid, tag string, when time.Time) error {

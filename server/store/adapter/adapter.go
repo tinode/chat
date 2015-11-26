@@ -34,8 +34,8 @@ type Adapter interface {
 	TopicCreateP2P(appId uint32, initiator, invited *t.Subscription) error
 	// TopicGet loads a single topic by name, if it exists. If the topic does not exist the call returns (nil, nil)
 	TopicGet(appid uint32, topic string) (*t.Topic, error)
-	TopicsForUser(appid uint32, uid t.Uid, opts *t.BrowseOpt) ([]t.Subscription, error)
-	UsersForTopic(appid uint32, topic string, opts *t.BrowseOpt) ([]t.Subscription, error)
+	TopicsForUser(appid uint32, uid t.Uid) ([]t.Subscription, error)
+	UsersForTopic(appid uint32, topic string) ([]t.Subscription, error)
 	//UsersForP2P(appid uint32, uid1, uid2 t.Uid) ([]t.Subscription, error)
 	TopicShare(appid uint32, acl []t.Subscription) (int, error)
 	UpdateLastSeen(appid uint32, topic string, uid t.Uid, tag string, when time.Time) error
@@ -46,9 +46,9 @@ type Adapter interface {
 	// SubscriptionGet reads a subscription of a user to a topic
 	SubscriptionGet(appid uint32, topic string, user t.Uid) (*t.Subscription, error)
 	// SubsForUser gets a list of topics of interest for a given user
-	SubsForUser(appId uint32, user t.Uid, opts *t.BrowseOpt) ([]t.Subscription, error)
+	SubsForUser(appId uint32, user t.Uid) ([]t.Subscription, error)
 	// SubsForTopic gets a list of subscriptions to a given topic
-	SubsForTopic(appId uint32, topic string, opts *t.BrowseOpt) ([]t.Subscription, error)
+	SubsForTopic(appId uint32, topic string) ([]t.Subscription, error)
 	// SubsUpdate updates pasrt of a subscription object. Pass nil for fields which don't need to be updated
 	SubsUpdate(appid uint32, topic string, user t.Uid, update map[string]interface{}) error
 	// SubsDelete deletes a subscription
