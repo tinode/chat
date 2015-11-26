@@ -1003,7 +1003,7 @@ func (t *Topic) replySetSub(h *Hub, sess *Session, set *MsgClientSet) error {
 func (t *Topic) replyGetData(sess *Session, id string, req *MsgBrowseOpts) error {
 	now := time.Now().UTC().Round(time.Millisecond)
 
-	opts := msgOpts2storeOpts(req, sess.tag, t.perUser[sess.uid].lastSeenTag[sess.tag])
+	opts := msgOpts2storeOpts(req)
 
 	messages, err := store.Messages.GetAll(sess.appid, t.name, opts)
 	if err != nil {
@@ -1093,14 +1093,14 @@ func (t *Topic) evictUser(uid types.Uid, clear bool, ignore *Session) {
 	}
 }
 
-func msgOpts2storeOpts(req *MsgBrowseOpts, tag string, lastSeenId int) *types.BrowseOpt {
+func msgOpts2storeOpts(req *MsgBrowseOpts) *types.BrowseOpt {
 	var opts *types.BrowseOpt
 	if req != nil {
-		opts = &types.BrowseOpt{AscOrder: req.Ascnd, Limit: req.Limit}
-		opts.Since = req.Since
-		opts.Before = req.Before
-	} else if tag != TAG_UNDEF && lastSeenId > 0 {
-		opts = &types.BrowseOpt{Since: lastSeenId}
+		opts = &types.BrowseOpt{
+			AscOrder: req.Ascnd,
+			Limit:    req.Limit,
+			Since:    req.Since,
+			Before:   req.Before}
 	}
 	return opts
 }
