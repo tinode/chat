@@ -202,7 +202,9 @@ func gen_rethink(reset bool, dbsource string, data *Data) {
 	log.Println("Generating messages...")
 
 	rand.Seed(time.Now().UnixNano())
-	seqId := 0
+	seqIds := map[string]int{}
+	// Starting 4 days ago
+	timestamp := time.Now().UTC().Round(time.Millisecond).Add(time.Second * time.Duration(-3600*24*4))
 	for i := 0; i < 80; i++ {
 
 		sub := data.Subscriptions[rand.Intn(len(data.Subscriptions))]
@@ -213,18 +215,21 @@ func gen_rethink(reset bool, dbsource string, data *Data) {
 			topic = uid.P2PName(from)
 		}
 
-		seqId++
+		seqIds[topic]++
+		seqId := seqIds[topic]
 		str := data.Messages[rand.Intn(len(data.Messages))]
-		timestamp := time.Now().UTC().Round(time.Millisecond).Add(time.Second * time.Duration(-1*rand.Intn(3600*24*4))) // spread over the past 4 days
-		if err = store.Messages.Save(0, &types.Message{
+		// Max time between messages is 2 hours, averate - 1 hour, time is increasing as seqId increases
+		timestamp = timestamp.Add(time.Second * time.Duration(rand.Intn(3600*2)))
+		msg := types.Message{
 			ObjHeader: types.ObjHeader{CreatedAt: timestamp},
 			SeqId:     seqId,
 			Topic:     topic,
 			From:      from.String(),
-			Content:   str}); err != nil {
+			Content:   str}
+		if err = store.Messages.Save(0, &msg); err != nil {
 			log.Fatal(err)
 		}
-		log.Printf("Message from '%s' to '%s' (%s) '%s'", from.String(), topic, nameIndex[sub["topic"].(string)], str)
+		log.Printf("Message %d at %v to '%s' '%s'", msg.SeqId, msg.CreatedAt, topic, str)
 	}
 }
 

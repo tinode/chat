@@ -187,12 +187,6 @@ func (UsersObjMapper) GetAll(appid uint32, uid ...types.Uid) ([]types.User, erro
 	return adaptr.UserGetAll(appid, uid...)
 }
 
-/*
-func (u UsersObjMapper) GetLastSeenAndStatus(appid uint32, id types.Uid) (time.Time, interface{}, error) {
-	return adaptr.GetLastSeenAndStatus(appid, id)
-}
-*/
-
 // TODO(gene): implement
 func (UsersObjMapper) Find(appId uint32, params map[string]interface{}) ([]types.User, error) {
 	return nil, errors.New("store: not implemented")
@@ -205,6 +199,10 @@ func (UsersObjMapper) Delete(appId uint32, id types.Uid, soft bool) error {
 
 func (UsersObjMapper) UpdateStatus(appid uint32, id types.Uid, status interface{}) error {
 	return errors.New("store: not implemented")
+}
+
+func (UsersObjMapper) UpdateLastSeen(appid uint32, uid types.Uid, userAgent string, when time.Time) error {
+	return adaptr.UserUpdateLastSeen(appid, uid, userAgent, when)
 }
 
 // ChangePassword changes user's password in "basic" authentication scheme
@@ -283,10 +281,6 @@ func (TopicsObjMapper) GetUsers(appid uint32, topic string) ([]types.Subscriptio
 // GetSubs loads a list of subscriptions to the given topic, user.Public is not loaded
 func (TopicsObjMapper) GetSubs(appid uint32, topic string) ([]types.Subscription, error) {
 	return adaptr.SubsForTopic(appid, topic)
-}
-
-func (TopicsObjMapper) UpdateLastSeen(appid uint32, topic string, id types.Uid, tag string, when time.Time) error {
-	return adaptr.UpdateLastSeen(appid, topic, id, tag, when)
 }
 
 func (TopicsObjMapper) Update(appid uint32, topic string, update map[string]interface{}) error {

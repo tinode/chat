@@ -39,7 +39,7 @@ func main() {
 
 	var reset = flag.Bool("reset", false, "first delete the database if one exists")
 	var datafile = flag.String("data", "", "path to sample data to load")
-	var conffile = flag.String("config", "./config", "config of the database connection")
+	var conffile = flag.String("config", "./tinode.conf", "config of the database connection")
 	flag.Parse()
 
 	var data Data

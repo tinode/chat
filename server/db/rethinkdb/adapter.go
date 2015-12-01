@@ -272,6 +272,18 @@ func (a *RethinkDbAdapter) UserDelete(appId uint32, id t.Uid, soft bool) error {
 	return errors.New("UserDelete: not implemented")
 }
 
+func (a *RethinkDbAdapter) UserUpdateLastSeen(appid uint32, uid t.Uid, userAgent string, when time.Time) error {
+	update := struct {
+		LastSeen  time.Time
+		UserAgent string
+	}{when, userAgent}
+
+	_, err := rdb.DB(a.dbName).Table("users").Get(uid.String()).
+		Update(update, rdb.UpdateOpts{Durability: "soft"}).RunWrite(a.conn)
+
+	return err
+}
+
 func (a *RethinkDbAdapter) UserUpdateStatus(appid uint32, uid t.Uid, status interface{}) error {
 	update := map[string]interface{}{"Status": status}
 
@@ -282,8 +294,7 @@ func (a *RethinkDbAdapter) UserUpdateStatus(appid uint32, uid t.Uid, status inte
 }
 
 func (a *RethinkDbAdapter) ChangePassword(appid uint32, id t.Uid, password string) error {
-
-	return nil
+	return errors.New("ChangePassword: not implemented")
 }
 
 func (a *RethinkDbAdapter) UserUpdate(appid uint32, uid t.Uid, update map[string]interface{}) error {
@@ -404,7 +415,7 @@ func (a *RethinkDbAdapter) TopicsForUser(appid uint32, uid t.Uid) ([]t.Subscript
 		for rows.Next(&top) {
 			sub = join[top.Name]
 			sub.ObjHeader.MergeTimes(&top.ObjHeader)
-			sub.SetLastMessageAt(top.LastMessageAt)
+			sub.SetSeqId(top.SeqId)
 			if strings.HasPrefix(sub.Topic, "grp") {
 				// all done with a grp topic
 				sub.SetPublic(top.Public)
@@ -433,6 +444,7 @@ func (a *RethinkDbAdapter) TopicsForUser(appid uint32, uid t.Uid) ([]t.Subscript
 				sub.ObjHeader.MergeTimes(&usr.ObjHeader)
 				sub.SetWith(uid2.UserId())
 				sub.SetPublic(usr.Public)
+				sub.SetLastSeenAndUA(usr.LastSeen, usr.UserAgent)
 				subs = append(subs, sub)
 			}
 		}
@@ -509,9 +521,8 @@ func (a *RethinkDbAdapter) TopicDelete(appId uint32, userDbId, topic string) err
 
 func (a *RethinkDbAdapter) TopicUpdateOnMessage(appid uint32, topic string, msg *t.Message) error {
 	update := struct {
-		SeqId         int
-		LastMessageAt *time.Time
-	}{msg.SeqId, &msg.CreatedAt}
+		SeqId int
+	}{msg.SeqId}
 
 	// Invite - 'me' topic
 	var err error
@@ -524,18 +535,6 @@ func (a *RethinkDbAdapter) TopicUpdateOnMessage(appid uint32, topic string, msg 
 		_, err = rdb.DB("tinode").Table("topics").GetAllByIndex("Name", topic).
 			Update(update, rdb.UpdateOpts{Durability: "soft"}).RunWrite(a.conn)
 	}
-
-	return err
-}
-
-// UpdateLastSeen records the time when a session with a given device ID detached from a topic
-func (a *RethinkDbAdapter) UpdateLastSeen(appid uint32, topic string, user t.Uid, tag string, when time.Time) error {
-
-	update := struct {
-		LastSeen map[string]time.Time
-	}{map[string]time.Time{tag: when}}
-	_, err := rdb.DB("tinode").Table("subscriptions").Get(topic+":"+user.String()).
-		Update(update, rdb.UpdateOpts{Durability: "soft"}).RunWrite(a.conn)
 
 	return err
 }

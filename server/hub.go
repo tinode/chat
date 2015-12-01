@@ -288,9 +288,6 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		t.created = user.CreatedAt
 		t.updated = user.UpdatedAt
 
-		if user.LastMessageAt != nil {
-			t.lastMessage = *user.LastMessageAt
-		}
 		t.lastId = user.SeqId
 
 		// Request to create a new p2p topic, then attach to it
@@ -379,19 +376,18 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		t.created = user1.CreatedAt
 		t.updated = user1.UpdatedAt
 
-		// Newly created, t.lastMessage and t.lastId are not set
+		// t.lastId is not set (default 0) for new topics
 
 		userData.public = user2.GetPublic()
 		userData.modeWant = user1.ModeWant
 		userData.modeGiven = user1.ModeGiven
-		userData.lastSeenTag = user1.LastSeen
 		t.perUser[userId1] = userData
 
 		t.perUser[userId2] = perUserData{
-			public:      user1.GetPublic(),
-			modeWant:    user2.ModeWant,
-			modeGiven:   user2.ModeGiven,
-			lastSeenTag: user2.LastSeen}
+			public:    user1.GetPublic(),
+			modeWant:  user2.ModeWant,
+			modeGiven: user2.ModeGiven,
+		}
 
 		t.original = t.name
 		sreg.created = true
@@ -436,20 +432,17 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		t.created = stopic.CreatedAt
 		t.updated = stopic.UpdatedAt
 
-		if stopic.LastMessageAt != nil {
-			t.lastMessage = *stopic.LastMessageAt
-		}
 		t.lastId = stopic.SeqId
 
 		for i := 0; i < 2; i++ {
 			uid := types.ParseUid(subs[i].User)
 			t.perUser[uid] = perUserData{
 				// Based on other user
-				public:      subs[(i+1)%2].GetPublic(),
-				private:     subs[i].Private,
-				lastSeenTag: subs[i].LastSeen,
-				modeWant:    subs[i].ModeWant,
-				modeGiven:   subs[i].ModeGiven}
+				public:  subs[(i+1)%2].GetPublic(),
+				private: subs[i].Private,
+				// lastSeenTag: subs[i].LastSeen,
+				modeWant:  subs[i].ModeWant,
+				modeGiven: subs[i].ModeGiven}
 		}
 
 		// Processing request to create a new generic (group) topic:
@@ -502,7 +495,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		t.created = timestamp
 		t.updated = timestamp
 
-		// t.lastId and t.lastMessage are not set for new topics
+		// t.lastId is not set for new topics
 
 		stopic := &types.Topic{
 			ObjHeader: types.ObjHeader{CreatedAt: timestamp},
@@ -555,9 +548,6 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		t.created = stopic.CreatedAt
 		t.updated = stopic.UpdatedAt
 
-		if stopic.LastMessageAt != nil {
-			t.lastMessage = *stopic.LastMessageAt
-		}
 		t.lastId = stopic.SeqId
 	}
 
@@ -582,10 +572,10 @@ func (t *Topic) loadSubscribers() error {
 	for _, sub := range subs {
 		uid := types.ParseUid(sub.User)
 		t.perUser[uid] = perUserData{
-			private:     sub.Private,
-			lastSeenTag: sub.LastSeen, // could be nil
-			modeWant:    sub.ModeWant,
-			modeGiven:   sub.ModeGiven}
+			private: sub.Private,
+			//lastSeenTag: sub.LastSeen, // could be nil
+			modeWant:  sub.ModeWant,
+			modeGiven: sub.ModeGiven}
 
 		if sub.ModeGiven&sub.ModeWant&types.ModeOwner != 0 {
 			log.Printf("hub.loadSubscriptions: %s set owner to %s", t.name, uid.String())
@@ -607,7 +597,6 @@ func replyTopicInfoBasic(sess *Session, topic string, get *MsgClientGet) {
 		if err == nil {
 			info.CreatedAt = &stopic.CreatedAt
 			info.UpdatedAt = &stopic.UpdatedAt
-			info.LastMessage = stopic.LastMessageAt
 			info.Public = stopic.Public
 		} else {
 			simpleByteSender(sess.send, ErrUnknown(get.Id, get.Topic, now))

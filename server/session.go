@@ -50,8 +50,6 @@ const (
 	NONE = iota
 	WEBSOCK
 	LPOLL
-
-	TAG_UNDEF = "-"
 )
 
 /*
@@ -74,14 +72,17 @@ type Session struct {
 	// Application ID
 	appid uint32
 
-	// Client instance tag, a string provived by an authenticated client for managing client-side cache
-	tag string
+	// User agent, a string provived by an authenticated client
+	ua string
 
 	// ID of the current user or 0
 	uid types.Uid
 
-	// Time when the session was last touched
+	// Time when the long polling session was last refreshed
 	lastTouched time.Time
+
+	// Time when the session received any packer from client
+	lastAction time.Time
 
 	// outbound mesages, buffered
 	send chan []byte
@@ -153,6 +154,7 @@ func (s *Session) dispatch(raw []byte) {
 	log.Printf("Session.dispatch got '%s' from '%s'", raw, s.remoteAddr)
 
 	timestamp := time.Now().UTC().Round(time.Millisecond)
+	s.lastAction = timestamp
 	if err := json.Unmarshal(raw, &msg); err != nil {
 		// Malformed message
 		log.Println("Session.dispatch: " + err.Error())
@@ -340,10 +342,7 @@ func (s *Session) login(msg *ClientComMessage) {
 	}
 
 	s.uid = uid
-	s.tag = msg.Login.Tag
-	if s.tag == "" {
-		s.tag = TAG_UNDEF
-	}
+	s.ua = msg.Login.UserAgent
 
 	expireIn := time.Duration(msg.Login.ExpireIn)
 	if expireIn <= 0 || expireIn > TOKEN_LIFETIME_MAX {

@@ -159,11 +159,16 @@ type MsgAuthScheme struct {
 
 // Login {login} message
 type MsgClientLogin struct {
-	Id       string       `json:"id,omitempty"`       // Message Id
-	Scheme   string       `jdon:"scheme,omitempty"`   // Authentication scheme
-	Secret   string       `json:"secret"`             // Shared secret
-	ExpireIn JsonDuration `json:"expireIn,omitempty"` // Login expiration time
-	Tag      string       `json:"tag,omitempty"`      // Device Id
+	// Message Id
+	Id string `json:"id,omitempty"`
+	// User agent
+	UserAgent string `json:"ua,omitempty"`
+	// Authentication scheme
+	Scheme string `jdon:"scheme,omitempty"`
+	// Shared secret
+	Secret string `json:"secret"`
+	// Login expiration time
+	ExpireIn JsonDuration `json:"expireIn,omitempty"`
 }
 
 // Subscription request {sub} message
@@ -301,22 +306,20 @@ type ClientComMessage struct {
 // Server to client messages
 
 type MsgLastSeenInfo struct {
-	When time.Time `json:"when"`          // when the user was last seen
-	Tag  string    `json:"tag,omitempty"` // tag of the device used to access the topic
+	When      *time.Time `json:"when,omitempty"` // when the user was last seen
+	UserAgent string     `json:"ua,omitempty"`   // user agent of the device used to access the topic
 }
 
 // Topic info, S2C in Meta message
 type MsgTopicInfo struct {
-	CreatedAt   *time.Time         `json:"created,omitempty"`
-	UpdatedAt   *time.Time         `json:"updated,omitempty"`
-	Name        string             `json:"name,omitempty"`
-	DefaultAcs  *MsgDefaultAcsMode `json:"defacs,omitempty"`
-	Acs         *MsgAccessMode     `json:"acs,omitempty"`     // Actual access mode
-	LastMessage *time.Time         `json:"lastMsg,omitempty"` // time of the last {data} message in the topic
-	LastSeen    *MsgLastSeenInfo   `json:"seen,omitempty"`    // user's last access to topic
-	LastSeenTag *time.Time         `json:"seenTag,omitempty"` // user's last access to topic with the given tag (device)
-	Public      interface{}        `json:"public,omitempty"`
-	Private     interface{}        `json:"private,omitempty"` // Per-subscription private data
+	CreatedAt  *time.Time         `json:"created,omitempty"`
+	UpdatedAt  *time.Time         `json:"updated,omitempty"`
+	Name       string             `json:"name,omitempty"`
+	DefaultAcs *MsgDefaultAcsMode `json:"defacs,omitempty"`
+	Acs        *MsgAccessMode     `json:"acs,omitempty"` // Actual access mode
+	SeqId      int                `json:"seq,omitempty"`
+	Public     interface{}        `json:"public,omitempty"`
+	Private    interface{}        `json:"private,omitempty"` // Per-subscription private data
 }
 
 type MsgAccessMode struct {
@@ -331,18 +334,20 @@ type MsgTopicSub struct {
 	UpdatedAt *time.Time `json:"updated,omitempty"`
 	Online    string     `json:"online,omitempty"`
 
-	// p2p topics only - id of the other user
-	With string `json:"with,omitempty"`
-
-	// 'me' topic only
-	LastMsg     *time.Time       `json:"lastMsg,omitempty"` // last message in a topic, "me' subs only
-	LastSeen    *MsgLastSeenInfo `json:"seen,omitempty"`    // user's last access to topic, 'me' subs only
-	LastSeenTag *time.Time       `json:"seenTag,omitempty"` // user's last access to topic with the given tag (device)
-
 	// cumulative access mode (mode.Want & mode.Given)
 	AcsMode string      `json:"mode"`
 	Public  interface{} `json:"public,omitempty"`
 	Private interface{} `json:"private,omitempty"`
+
+	// All following makes sence only in context of getting user's subscriptions
+
+	// ID of the last {data} message in a topic
+	SeqId int `json:"seq,omitempty"`
+	// P2P topics only
+	// ID of the other user
+	With string `json:"with,omitempty"`
+	// Other user's last online timestamp & user agent
+	LastSeen *MsgLastSeenInfo `json:"seen,omitempty"`
 }
 
 type MsgServerCtrl struct {
@@ -379,11 +384,10 @@ type MsgServerData struct {
 }
 
 type MsgServerPres struct {
-	Topic string `json:"topic"`
-	Src   string `json:"src"`
-
-	What string `json:"what"`
-
+	Topic     string `json:"topic"`
+	Src       string `json:"src"`
+	What      string `json:"what"`
+	UserAgent string `json:"ua,omitempty"`
 	// unroutable, to break the reply loop
 	isReply bool
 }

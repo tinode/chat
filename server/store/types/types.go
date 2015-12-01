@@ -236,8 +236,10 @@ type User struct {
 	// Values for 'me' topic:
 	// Server-issued sequence ID for messages in 'me'
 	SeqId int
-	// Deprecated
-	LastMessageAt *time.Time
+	// Last time when the user joined 'me' topic, by User Agent
+	LastSeen time.Time
+	// User agent provided when accessing the topic last time
+	UserAgent string
 
 	Public interface{}
 }
@@ -404,14 +406,14 @@ type Subscription struct {
 	ModeGiven AccessMode // Granted access
 	ClearedAt *time.Time // User deleted messages older than this time; TODO(gene): topic owner can hard-delete messages
 
-	LastSeen map[string]time.Time // Last time when the user joined the topic, by device tag
-
 	Private interface{} // User's private data associated with the subscription to topic
 
 	// Deserialized ephemeral values
-	public        interface{} // Deserialized public value from topic or user (depends on context)
-	with          string      // p2p topics only: id of the other user
-	lastMessageAt *time.Time
+	public interface{} // Deserialized public value from topic or user (depends on context)
+	with   string      // p2p topics only: id of the other user
+	seqId  int         // deserialized SeqID from user or topic
+	lastSeen time.Time // timestamp when the user was last online
+	userAgent string // user agent string of the last online access
 }
 
 // SetPublic assigns to public, otherwise not accessible from outside the package
@@ -431,12 +433,25 @@ func (s *Subscription) GetWith() string {
 	return s.with
 }
 
-func (s *Subscription) GetLastMessageAt() *time.Time {
-	return s.lastMessageAt
+func (s *Subscription) GetSeqId() int {
+	return s.seqId
 }
 
-func (s *Subscription) SetLastMessageAt(lm *time.Time) {
-	s.lastMessageAt = lm
+func (s *Subscription) SetSeqId(id int) {
+	s.seqId = id
+}
+
+func (s *Subscription) GetLastSeen() time.Time {
+	return s.lastSeen
+}
+
+func (s *Subscription) GetUserAgent() string {
+	return s.userAgent
+}
+
+func (s *Subscription) SetLastSeenAndUA(when time.Time, ua string) {
+	s.lastSeen = when
+	s.userAgent = ua
 }
 
 type perUserData struct {
@@ -457,8 +472,6 @@ type Topic struct {
 	// Default access to topic
 	Access DefaultAccess
 
-	// Deprecated
-	LastMessageAt *time.Time
 	// Server-issued sequential ID
 	SeqId int
 

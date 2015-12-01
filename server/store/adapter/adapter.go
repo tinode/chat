@@ -20,25 +20,26 @@ type Adapter interface {
 	UserCreate(appid uint32, usr *t.User) (err error, dupeUserName bool)
 	UserGet(appId uint32, id t.Uid) (*t.User, error)
 	UserGetAll(appId uint32, ids ...t.Uid) ([]t.User, error)
-	//GetLastSeenAndStatus(appid uint32, id t.Uid) (time.Time, interface{}, error)
 	UserFind(appId uint32, params map[string]interface{}) ([]t.User, error)
 	UserDelete(appId uint32, id t.Uid, soft bool) error
+	UserUpdateLastSeen(appid uint32, uid t.Uid, userAgent string, when time.Time) error
 	UserUpdateStatus(appid uint32, uid t.Uid, status interface{}) error
 	ChangePassword(appid uint32, id t.Uid, password string) error
 	UserUpdate(appid uint32, uid t.Uid, update map[string]interface{}) error
 
 	// Topic/contact management
+
 	// TopicCreate creates a topic
 	TopicCreate(appid uint32, topic *t.Topic) error
 	// TopicCreateP2P creates a p2p topic
 	TopicCreateP2P(appId uint32, initiator, invited *t.Subscription) error
 	// TopicGet loads a single topic by name, if it exists. If the topic does not exist the call returns (nil, nil)
 	TopicGet(appid uint32, topic string) (*t.Topic, error)
+	// TopicsForUser loads subscriptions for a given user
 	TopicsForUser(appid uint32, uid t.Uid) ([]t.Subscription, error)
+	// UsersForTopic loads users' subscriptions for a given topic
 	UsersForTopic(appid uint32, topic string) ([]t.Subscription, error)
-	//UsersForP2P(appid uint32, uid1, uid2 t.Uid) ([]t.Subscription, error)
 	TopicShare(appid uint32, acl []t.Subscription) (int, error)
-	UpdateLastSeen(appid uint32, topic string, uid t.Uid, tag string, when time.Time) error
 	TopicDelete(appid uint32, userDbId, topic string) error
 	TopicUpdateOnMessage(appid uint32, topic string, msg *t.Message) error
 	TopicUpdate(appid uint32, topic string, update map[string]interface{}) error

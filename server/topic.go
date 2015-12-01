@@ -60,9 +60,6 @@ type Topic struct {
 	// Time when the topic was last updated
 	updated time.Time
 
-	// Time of the last message
-	lastMessage time.Time
-
 	// Server-side ID of the last data message
 	lastId int
 
@@ -112,8 +109,8 @@ const (
 type perUserData struct {
 	online int
 
-	private     interface{}
-	lastSeenTag map[string]time.Time
+	private interface{}
+	// lastSeenTag map[string]time.Time
 	// cleared     time.Time // time, when the topic was cleared by the user
 	modeWant  types.AccessMode
 	modeGiven types.AccessMode
@@ -178,17 +175,15 @@ func (t *Topic) run(hub *Hub) {
 				delete(t.sessions, leave.sess)
 
 				pud := t.perUser[leave.sess.uid]
-				if pud.lastSeenTag == nil {
-					pud.lastSeenTag = map[string]time.Time{}
-				}
-				pud.lastSeenTag[leave.sess.tag] = now
 				pud.online--
 				t.perUser[leave.sess.uid] = pud
-				if t.cat == TopicCat_Grp && pud.online == 0 {
+				if t.cat == TopicCat_Me {
+					// Update user's last online timestamp & user agent
+					if err := store.Users.UpdateLastSeen(t.appid, leave.sess.uid, leave.sess.ua, now); err != nil {
+						log.Println(err)
+					}
+				} else if t.cat == TopicCat_Grp && pud.online == 0 {
 					t.presPubChange(leave.sess.uid.UserId(), "off")
-				}
-				if err := store.Topics.UpdateLastSeen(t.appid, t.name, leave.sess.uid, leave.sess.tag, now); err != nil {
-					log.Println(err)
 				}
 			}
 
@@ -231,7 +226,6 @@ func (t *Topic) run(hub *Hub) {
 					continue
 				}
 
-				t.lastMessage = msg.timestamp
 				t.lastId++
 				msg.Data.SeqId = t.lastId
 
@@ -301,7 +295,7 @@ func (t *Topic) run(hub *Hub) {
 			hub.unreg <- topicUnreg{appid: t.appid, topic: t.name}
 			// FIXME(gene): save lastMessage value;
 			if t.cat == TopicCat_Me {
-				t.presPubMeChange("off")
+				t.presPubMeChange("off", "")
 			} else if t.cat == TopicCat_Grp {
 				t.presPubTopicOnline(false)
 			} // not publishing online/offline to P2P topics
@@ -349,7 +343,7 @@ func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 				log.Printf("hub: failed to load contacts for '%s'", t.name)
 			}
 
-			t.presPubMeChange("on")
+			t.presPubMeChange("on", sreg.sess.ua)
 
 		} else if t.cat == TopicCat_Grp {
 			t.presPubTopicOnline(true)
@@ -461,10 +455,10 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string, inf
 		}
 
 		userData = perUserData{
-			private:     private,
-			modeGiven:   t.accessAuth,
-			modeWant:    modeWant,
-			lastSeenTag: make(map[string]time.Time),
+			private:   private,
+			modeGiven: t.accessAuth,
+			modeWant:  modeWant,
+			//lastSeenTag: make(map[string]time.Time),
 		}
 
 		// Add subscription to database
@@ -473,7 +467,6 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string, inf
 			Topic:     t.name,
 			ModeWant:  userData.modeWant,
 			ModeGiven: userData.modeGiven,
-			LastSeen:  userData.lastSeenTag,
 			Private:   userData.private,
 		}
 
@@ -657,7 +650,6 @@ func (t *Topic) approveSub(h *Hub, sess *Session, target types.Uid, set *MsgClie
 			Topic:     t.name,
 			ModeWant:  types.ModeNone,
 			ModeGiven: modeGiven,
-			LastSeen:  make(map[string]time.Time),
 		}
 
 		if err := store.Subs.Create(t.appid, &sub); err != nil {
@@ -666,10 +658,9 @@ func (t *Topic) approveSub(h *Hub, sess *Session, target types.Uid, set *MsgClie
 		}
 
 		userData = perUserData{
-			modeGiven:   sub.ModeGiven,
-			modeWant:    sub.ModeWant,
-			private:     nil,
-			lastSeenTag: sub.LastSeen,
+			modeGiven: sub.ModeGiven,
+			modeWant:  sub.ModeWant,
+			private:   nil,
 		}
 
 		t.perUser[target] = userData
@@ -743,7 +734,8 @@ func (t *Topic) replyGetInfo(sess *Session, id string, created bool) error {
 		info.Public = pud.public
 	}
 
-	// Request may come from a subscriber or a stranger. Give a stranger a lot less info than a subscriber
+	// Request may come from a subscriber (full == true) or a stranger.
+	// Give subscriber a lot more info than to a stranger
 	if full {
 		if pud.modeGiven&pud.modeWant&types.ModeShare != 0 {
 			info.DefaultAcs = &MsgDefaultAcsMode{
@@ -757,20 +749,7 @@ func (t *Topic) replyGetInfo(sess *Session, id string, created bool) error {
 
 		info.Private = pud.private
 
-		if !t.lastMessage.IsZero() {
-			info.LastMessage = &t.lastMessage
-		}
-
-		if when, ok := pud.lastSeenTag[sess.tag]; ok {
-			info.LastSeenTag = &when
-		}
-
-		if len(pud.lastSeenTag) > 0 {
-			tag, when := mostRecent(pud.lastSeenTag)
-			if !when.IsZero() {
-				info.LastSeen = &MsgLastSeenInfo{When: when, Tag: tag}
-			}
-		}
+		info.SeqId = t.lastId
 
 		// When a topic is first created, its name may change. Report the new name
 		if created {
@@ -936,17 +915,14 @@ func (t *Topic) replyGetSub(sess *Session, id string) error {
 			uid := types.ParseUid(sub.User)
 			if t.cat == TopicCat_Me {
 				mts.Topic = sub.Topic
+				mts.SeqId = sub.GetSeqId()
 				mts.With = sub.GetWith()
-				mts.LastMsg = sub.GetLastMessageAt()
 				mts.UpdatedAt = &sub.UpdatedAt
-				if when, ok := sub.LastSeen[sess.tag]; ok && !when.IsZero() {
-					mts.LastSeenTag = &when
-				}
-				if len(sub.LastSeen) > 0 {
-					tag, when := mostRecent(sub.LastSeen)
-					if !when.IsZero() {
-						mts.LastSeen = &MsgLastSeenInfo{When: when, Tag: tag}
-					}
+				lastSeen := sub.GetLastSeen()
+				if !lastSeen.IsZero() {
+					mts.LastSeen = &MsgLastSeenInfo{
+						When:      &lastSeen,
+						UserAgent: sub.GetUserAgent()}
 				}
 			} else {
 				mts.User = uid.UserId()
@@ -1091,6 +1067,18 @@ func (t *Topic) evictUser(uid types.Uid, clear bool, ignore *Session) {
 			}
 		}
 	}
+}
+
+func (t *Topic) mostRecentSession() *Session {
+	var sess *Session
+	var latest time.Time
+	for s, _ := range t.sessions {
+		if s.lastAction.After(latest) {
+			sess = s
+			latest = s.lastAction
+		}
+	}
+	return sess
 }
 
 func msgOpts2storeOpts(req *MsgBrowseOpts) *types.BrowseOpt {
