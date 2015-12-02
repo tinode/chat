@@ -53,7 +53,7 @@ import (
 2. User went offline (left `me` topic).
 	The message is sent to all users who have P2P topics with the first user. Users receive this event on
 	the `me` topic, `src` field contains user ID `src: "usr2il9suCbuko"`, `what` contains `"off"`:
-	`{pres topic="me" src="<user ID>" what="off"}`.
+	`{pres topic="me" src="<user ID>" what="off" ua="..."}`.
 3. User updates `public` data. The event is sent to all users who have P2P topics with the first user.
 	Users receive `{pres topic="me" src="<user ID>" what="upd"}`.
 4. User joins/leaves a topic. This event is sent to other users who currently joined the topic:
