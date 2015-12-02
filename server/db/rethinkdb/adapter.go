@@ -672,7 +672,6 @@ func (a *RethinkDbAdapter) MessageDelete(appId uint32, id t.Uid) error {
 func addOptions(q rdb.Term, value string, index string, opts *t.BrowseOpt) rdb.Term {
 	var limit uint = 1024 // TODO(gene): pass into adapter as a config param
 	var lower, upper interface{}
-	var order rdb.Term
 
 	if opts != nil {
 		if opts.Since > 0 {
@@ -695,20 +694,13 @@ func addOptions(q rdb.Term, value string, index string, opts *t.BrowseOpt) rdb.T
 		if opts.Limit > 0 && opts.Limit < limit {
 			limit = opts.Limit
 		}
-
-		if opts.AscOrder {
-			order = rdb.Asc(index)
-		} else {
-			order = rdb.Desc(index)
-		}
 	} else {
 		lower = []interface{}{value, rdb.MinVal}
 		upper = []interface{}{value, rdb.MaxVal}
-		order = rdb.Desc(index)
 	}
 
 	return q.Between(lower, upper, rdb.BetweenOpts{Index: index}).
-		OrderBy(rdb.OrderByOpts{Index: order}).Limit(limit)
+		OrderBy(rdb.OrderByOpts{Index: rdb.Desc(index)}).Limit(limit)
 }
 
 /*

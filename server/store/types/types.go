@@ -409,11 +409,11 @@ type Subscription struct {
 	Private interface{} // User's private data associated with the subscription to topic
 
 	// Deserialized ephemeral values
-	public interface{} // Deserialized public value from topic or user (depends on context)
-	with   string      // p2p topics only: id of the other user
-	seqId  int         // deserialized SeqID from user or topic
-	lastSeen time.Time // timestamp when the user was last online
-	userAgent string // user agent string of the last online access
+	public    interface{} // Deserialized public value from topic or user (depends on context)
+	with      string      // p2p topics only: id of the other user
+	seqId     int         // deserialized SeqID from user or topic
+	lastSeen  time.Time   // timestamp when the user was last online
+	userAgent string      // user agent string of the last online access
 }
 
 // SetPublic assigns to public, otherwise not accessible from outside the package
@@ -582,8 +582,7 @@ func (a InviteAction) String() string {
 }
 
 type BrowseOpt struct {
-	AscOrder bool // true, if sort in ascending order by time (default - descending)
-	Since    int
-	Before   int
-	Limit    uint
+	Since  int
+	Before int
+	Limit  uint
 }

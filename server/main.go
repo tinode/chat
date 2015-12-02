@@ -48,8 +48,10 @@ import (
 )
 
 const (
-	IDLETIMEOUT  = time.Second * 55 // Terminate session after this timeout.
-	TOPICTIMEOUT = time.Minute * 5  // Tear down topic after this period of silence.
+	// Terminate session after this timeout.
+	IDLETIMEOUT = time.Second * 55
+	// Keep topic alive after the last session detached.
+	TOPICTIMEOUT = time.Second * 5
 
 	// API version
 	VERSION = "0.5"

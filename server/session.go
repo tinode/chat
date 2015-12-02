@@ -72,8 +72,8 @@ type Session struct {
 	// Application ID
 	appid uint32
 
-	// User agent, a string provived by an authenticated client
-	ua string
+	// User agent, a string provived by an authenticated client in {login} packet
+	userAgent string
 
 	// ID of the current user or 0
 	uid types.Uid
@@ -153,19 +153,18 @@ func (s *Session) dispatch(raw []byte) {
 
 	log.Printf("Session.dispatch got '%s' from '%s'", raw, s.remoteAddr)
 
-	timestamp := time.Now().UTC().Round(time.Millisecond)
-	s.lastAction = timestamp
+	s.lastAction = time.Now().UTC().Round(time.Millisecond)
 	if err := json.Unmarshal(raw, &msg); err != nil {
 		// Malformed message
 		log.Println("Session.dispatch: " + err.Error())
-		s.QueueOut(ErrMalformed("", "", timestamp))
+		s.QueueOut(ErrMalformed("", "", s.lastAction))
 		return
 	}
 
 	msg.from = s.uid.UserId()
-	msg.timestamp = timestamp
+	msg.timestamp = s.lastAction
 
-	// Locking-unlocking is needed for long polling.
+	// Locking-unlocking is needed for long polling: the client may issue multiple requests in parallel.
 	// Should not affect performance
 	s.rw.Lock()
 	defer s.rw.Unlock()
@@ -342,7 +341,7 @@ func (s *Session) login(msg *ClientComMessage) {
 	}
 
 	s.uid = uid
-	s.ua = msg.Login.UserAgent
+	s.userAgent = msg.Login.UserAgent
 
 	expireIn := time.Duration(msg.Login.ExpireIn)
 	if expireIn <= 0 || expireIn > TOKEN_LIFETIME_MAX {

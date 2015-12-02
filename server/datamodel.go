@@ -130,8 +130,6 @@ func (jd *JsonDuration) UnmarshalJSON(data []byte) (err error) {
 }
 
 type MsgBrowseOpts struct {
-	// true - sort in scending order by time, otherwise descending (default)
-	Ascnd bool `json:"ascnd,omitempty"`
 	// Load messages with seq id equal or greater than this
 	Since int `json:"since,omitempty"`
 	// Load messages with seq id lower than this
@@ -388,6 +386,7 @@ type MsgServerPres struct {
 	Src       string `json:"src"`
 	What      string `json:"what"`
 	UserAgent string `json:"ua,omitempty"`
+	SeqId     int    `json:"seq,omitempty"`
 	// unroutable, to break the reply loop
 	isReply bool
 }

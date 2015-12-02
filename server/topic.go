@@ -92,9 +92,6 @@ type Topic struct {
 
 	// Unsubscribe requests from sessions, buffered = 32
 	unreg chan *sessionLeave
-
-	// Presence subscriptions requests -- Request to start/stop receiving presence updates, buffered = ?
-	//pres chan *presSubsReq
 }
 
 type TopicCat int
@@ -127,9 +124,19 @@ func (t *Topic) run(hub *Hub) {
 
 	log.Printf("Topic started: '%s'", t.name)
 
-	keepAlive := time.Second * 5 // TODO(gene): read keepalive value from the command line
+	keepAlive := TOPICTIMEOUT // TODO(gene): read keepalive value from the command line
 	killTimer := time.NewTimer(time.Hour)
 	killTimer.Stop()
+
+	// 'me' only
+	var uaTimer *time.Timer
+	if t.cat == TopicCat_Me {
+		uaTimer = time.NewTimer(time.Minute)
+		uaTimer.Stop()
+	}
+
+	var userAgentPublished string
+	var userAgentCurrent string
 
 	for {
 		select {
@@ -178,8 +185,12 @@ func (t *Topic) run(hub *Hub) {
 				pud.online--
 				t.perUser[leave.sess.uid] = pud
 				if t.cat == TopicCat_Me {
+					mrs := t.mostRecentSession()
+					if mrs == nil {
+						mrs = leave.sess
+					}
 					// Update user's last online timestamp & user agent
-					if err := store.Users.UpdateLastSeen(t.appid, leave.sess.uid, leave.sess.ua, now); err != nil {
+					if err := store.Users.UpdateLastSeen(t.appid, mrs.uid, mrs.userAgent, now); err != nil {
 						log.Println(err)
 					}
 				} else if t.cat == TopicCat_Grp && pud.online == 0 {
@@ -235,7 +246,7 @@ func (t *Topic) run(hub *Hub) {
 					simpleByteSender(msg.akn, reply)
 				}
 
-				t.presPubMessageSent()
+				t.presPubMessageSent(t.lastId)
 
 			} else if msg.Pres != nil && (msg.Pres.What == "on" || msg.Pres.What == "off") {
 				t.presProcReq(msg.Pres.Src, (msg.Pres.What == "on"), msg.Pres.isReply)
@@ -288,14 +299,19 @@ func (t *Topic) run(hub *Hub) {
 					//t.replySetData(meta.sess, meta.pkt.Set)
 				}
 			}
-
+		case <-uaTimer.C:
+			// Publish user agent changes after a delay
+			if userAgentCurrent != userAgentPublished {
+				userAgentPublished = userAgentCurrent
+				t.presPubUAChange(userAgentCurrent)
+			}
 		case <-killTimer.C:
 			log.Println("Topic timeout: ", t.name)
 			// Ensure that the messages are no longer routed to this topic
 			hub.unreg <- topicUnreg{appid: t.appid, topic: t.name}
 			// FIXME(gene): save lastMessage value;
 			if t.cat == TopicCat_Me {
-				t.presPubMeChange("off", "")
+				t.presPubMeChange("off", userAgentCurrent)
 			} else if t.cat == TopicCat_Grp {
 				t.presPubTopicOnline(false)
 			} // not publishing online/offline to P2P topics
@@ -343,7 +359,7 @@ func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 				log.Printf("hub: failed to load contacts for '%s'", t.name)
 			}
 
-			t.presPubMeChange("on", sreg.sess.ua)
+			t.presPubMeChange("on", sreg.sess.userAgent)
 
 		} else if t.cat == TopicCat_Grp {
 			t.presPubTopicOnline(true)
@@ -1085,14 +1101,14 @@ func msgOpts2storeOpts(req *MsgBrowseOpts) *types.BrowseOpt {
 	var opts *types.BrowseOpt
 	if req != nil {
 		opts = &types.BrowseOpt{
-			AscOrder: req.Ascnd,
-			Limit:    req.Limit,
-			Since:    req.Since,
-			Before:   req.Before}
+			Limit:  req.Limit,
+			Since:  req.Since,
+			Before: req.Before}
 	}
 	return opts
 }
 
+/*
 func mostRecent(vals map[string]time.Time) (tag string, max time.Time) {
 	for key, val := range vals {
 		if val.After(max) {
@@ -1102,6 +1118,7 @@ func mostRecent(vals map[string]time.Time) (tag string, max time.Time) {
 	}
 	return
 }
+*/
 
 func isNullValue(i interface{}) bool {
 	// Del control character
