@@ -107,9 +107,9 @@ func (t *Topic) loadContacts(uid types.Uid) error {
 
 // Me topic activated, deactivated or updated, push presence to contacts
 // Case 1.a.iii, 2, 3
-func (t *Topic) presPubMeChange(what string) {
+func (t *Topic) presPubMeChange(what string, ua string) {
 	// Push update to subscriptions
-	update := &MsgServerPres{Topic: "me", What: what, Src: t.name}
+	update := &MsgServerPres{Topic: "me", What: what, Src: t.name, UserAgent: ua}
 	for topic, _ := range t.perSubs {
 		globals.hub.route <- &ServerComMessage{Pres: update, appid: t.appid, rcptto: topic}
 		//log.Printf("Pres 1.a.ii, 2, 3: from '%s' (src: %s) to %s [%s]", t.name, update.Src, topic, what)
@@ -196,6 +196,11 @@ func (t *Topic) presPubMessageSent(seq int) {
 // Me topic activated, deactivated or updated, push presence to contacts
 // Case 1.a.iii, 2, 3
 func (t *Topic) presPubUAChange(ua string) {
+	if ua == "" || ua == t.userAgent {
+		return
+	}
+	t.userAgent = ua
+
 	// Push update to subscriptions
 	update := &MsgServerPres{Topic: "me", What: "ua", Src: t.name, UserAgent: ua}
 	for topic, _ := range t.perSubs {

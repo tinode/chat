@@ -290,6 +290,9 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 
 		t.lastId = user.SeqId
 
+		// Initiate User Agent with the UA of the creating session so we don't report it later
+		t.userAgent = sreg.sess.userAgent
+
 		// Request to create a new p2p topic, then attach to it
 	} else if strings.HasPrefix(t.original, "usr") {
 		log.Println("hub: new p2p topic")

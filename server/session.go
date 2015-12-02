@@ -114,6 +114,9 @@ type Subscription struct {
 
 	// Channel to send {meta} requests, copy of Topic.meta
 	meta chan<- *metaReq
+
+	// Channel to ping topic with session's user agent
+	ping chan<- string
 }
 
 func (s *Session) closeWS() {
@@ -600,4 +603,11 @@ func (s *Session) validateTopicName(msgId, topic string, timestamp time.Time) (s
 	}
 
 	return topic, routeTo, nil
+}
+
+// pingMeTopic tells current user's 'me' topic that this session was active
+func (s *Session) pingMeTopic(ua string) {
+	if sub, ok := s.subs[s.uid.UserId()]; ok {
+		sub.ping <- s.userAgent
+	}
 }

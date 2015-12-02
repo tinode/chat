@@ -63,6 +63,9 @@ type Topic struct {
 	// Server-side ID of the last data message
 	lastId int
 
+	// Last published userAgent ('me' topic only)
+	userAgent string
+
 	// User ID of the topic owner/creator
 	owner types.Uid
 
@@ -92,6 +95,9 @@ type Topic struct {
 
 	// Unsubscribe requests from sessions, buffered = 32
 	unreg chan *sessionLeave
+
+	// Track the most active sessions to report User Agent changes, buffered = 32
+	uaChange chan string
 }
 
 type TopicCat int
@@ -130,13 +136,11 @@ func (t *Topic) run(hub *Hub) {
 
 	// 'me' only
 	var uaTimer *time.Timer
+	var currentUA string
 	if t.cat == TopicCat_Me {
 		uaTimer = time.NewTimer(time.Minute)
 		uaTimer.Stop()
 	}
-
-	var userAgentPublished string
-	var userAgentCurrent string
 
 	for {
 		select {
@@ -150,7 +154,12 @@ func (t *Topic) run(hub *Hub) {
 			if err := t.handleSubscription(hub, sreg); err == nil {
 				// give a broadcast channel to the connection (.read)
 				// give channel to use when shutting down (.done)
-				sreg.sess.subs[t.name] = &Subscription{broadcast: t.broadcast, done: t.unreg, meta: t.meta}
+				sreg.sess.subs[t.name] = &Subscription{
+					broadcast: t.broadcast,
+					done:      t.unreg,
+					meta:      t.meta,
+					ping:      t.uaChange}
+
 				t.sessions[sreg.sess] = true
 
 			} else if len(t.sessions) == 0 {
@@ -187,7 +196,12 @@ func (t *Topic) run(hub *Hub) {
 				if t.cat == TopicCat_Me {
 					mrs := t.mostRecentSession()
 					if mrs == nil {
+						// Last session
 						mrs = leave.sess
+					} else {
+						// Change UA to the most recent live session
+						currentUA = mrs.userAgent
+						uaTimer.Reset(time.Minute)
 					}
 					// Update user's last online timestamp & user agent
 					if err := store.Users.UpdateLastSeen(t.appid, mrs.uid, mrs.userAgent, now); err != nil {
@@ -275,6 +289,7 @@ func (t *Topic) run(hub *Hub) {
 
 		case meta := <-t.meta:
 			log.Printf("topic[%s].run: got meta message '%v'", t.name, meta)
+
 			// Request to get/set topic metadata
 			if meta.pkt.Get != nil {
 				// Get request
@@ -299,19 +314,22 @@ func (t *Topic) run(hub *Hub) {
 					//t.replySetData(meta.sess, meta.pkt.Set)
 				}
 			}
+		case ua := <-t.uaChange:
+			// process an update to user agent from one of the sessions
+			currentUA = ua
+			uaTimer.Reset(time.Minute)
+
 		case <-uaTimer.C:
 			// Publish user agent changes after a delay
-			if userAgentCurrent != userAgentPublished {
-				userAgentPublished = userAgentCurrent
-				t.presPubUAChange(userAgentCurrent)
-			}
+			t.presPubUAChange(currentUA)
+
 		case <-killTimer.C:
 			log.Println("Topic timeout: ", t.name)
 			// Ensure that the messages are no longer routed to this topic
 			hub.unreg <- topicUnreg{appid: t.appid, topic: t.name}
 			// FIXME(gene): save lastMessage value;
 			if t.cat == TopicCat_Me {
-				t.presPubMeChange("off", userAgentCurrent)
+				t.presPubMeChange("off", currentUA)
 			} else if t.cat == TopicCat_Grp {
 				t.presPubTopicOnline(false)
 			} // not publishing online/offline to P2P topics
