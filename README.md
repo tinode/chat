@@ -434,7 +434,7 @@ ctrl: {
     private: { ...} // application-deinfed data that's available to the current
                     // user only
   }, // object, topic description, optional
-	sub:  [
+	sub:  [ // array of objects, topic subscribers or user's subscriptions, optional
     {
       user: "usr2il9suCbuko", // string, ID of the user this subscription
                             // describes, absent when querying 'me'
@@ -448,7 +448,8 @@ ctrl: {
       public: { ... }, // application-defined user's 'public' object
       private: { ... } // application-defined user's 'private' object, present only
                        // for the requester's own subscriptions
-      // The following fields are present only when querying 'me' table
+
+      // The following fields are present only when querying 'me' topic
       topic: "grp1XUtEhjv6HND", // string, topic this subscription describes
       seq: 321, // integer, server-issued id of the last {data} message
       with: "usr2il9suCbuko", // string, if this is a P2P topic, peer's ID, optional
@@ -459,7 +460,7 @@ ctrl: {
       }
     },
     ...
-  ] // array of objects, topic subscribers, optional
+  ]
   ts: "2015-10-06T18:07:30.038Z", // string, timestamp
 }
 ```
@@ -468,25 +469,24 @@ ctrl: {
 
 Tinode uses `{pres}` message to inform users of important events. The following events are tracked by the server and will generate `{pres}` messages provided user has appropriate access permissions:
 
-* A user joins `me`. User receives presence notifications for each of his/her subscriptions: `{pres topic="me" src="<user ID or topic ID>" what="on", params={ua="..."}}`. Only online status is reported.
-* A user came online or went offline. The user triggers this event by joining/leaving the `me` topic. The message is sent to all users who have P2P topics with the first user. Users receive this event on the `me` topic, `src` field contains user ID `src: "usr2il9suCbuko"`, `what` contains `"on"` or `"off"`: `{pres topic="me" src="<user ID>" what="on|off"}`.
+* A user joins `me`. User receives presence notifications for each of his/her subscriptions: `{pres topic="me" src="<user ID or topic ID>" what="on", ua="..."}`. Only online status is reported.
+* A user came online or went offline. The user triggers this event by joining/leaving the `me` topic. The message is sent to all users who have P2P topics with the first user. Users receive this event on the `me` topic, `src` field contains user ID `src: "usr2il9suCbuko"`, `what` contains `"on"` or `"off"`: `{pres topic="me" src="<user ID>" what="on|off" ua="..."}`.
 * User's `public` is updated. The event is sent to all users who have P2P topics with the first user. Users receive `{pres topic="me" src="<user ID>" what="upd"}`.
 * User joins/leaves a topic. This event is sent to other users who currently joined the topic: `{pres topic="<topic name>" src="<user ID>" what="on|off"}`.
 * A group topic is activated/deactivated. Topic becomes active when at least one user joins it. The topic becomes inactive when all users leave it (possibly after some delay). The event is sent to all topic subscribers. They will receive it on their `me` topics: `{pres topic="me" src="<topic name>" what="on|off"}`.
 * Topic's `public` is updated. The event is sent to all topic subscribers. Topic's subscribers receive `{pres topic="me" src="<topic name>" what="upd"}`.
 * A message is sent to the topic. The event is sent to users who have subscribed to the topic but currently not joined `{pres topic="me" src="<topic name>" what="msg"}`.
+* User is has multiple sessions attached to 'me', sessions have different _user agents_. If the current most recently active session has a different _user agent_ than the previous most recent session (the most recently active session is the session which was the last to receive any message from the client) an event is sent to all users who have P2P topics with the first user. Users receive it on the `me` topic, `src` field contains user ID `src: "usr2il9suCbuko"`, `what` contains `"ua"`: `{pres topic="me" src="<user ID>" what="ua" ua="<new user agent>"}`.
 
 ```js
 pres: {
   topic: "grp1XUtEhjv6HND", // string, topic affected by the change, always present
   src: "usr2il9suCbuko", // user or topic affected by the change, always present
   what: "on", // string, what's changed, always present
-  params: {   // object, additional context-dependent information, optional
-    seq: 123, // integer, if "what" is "msg", server-issued ID of the message,
+  seq: 123, // integer, if "what" is "msg", server-issued ID of the message,
               // optional
-    ua: "Tinode/1.0 (Android 2.2)" // string, if "what" is "on", User-Agent string
-        // identifying client software, optional
-  }
+  ua: "Tinode/1.0 (Android 2.2)" // string, if "what" is "on" or "ua", a
+        // User Agent string identifying client software, optional
 }
 ```
 
@@ -580,10 +580,12 @@ The `{data}` message represents invites and requests to confirm a subscription. 
 
 Message `{get what="info"}` to `me` is automatically replied with a `{meta}` message containing `info` section with the topic parameters (see intro to [Topics][] section). The `public` parameter of `me` topic is associated with the user. Changing it changes `public` not just for the `me` topic, but also everywhere where user's public is shown, such as 'public' of all user's peer to peer topics.
 
-Message `{get what="sub"}` to `me` is different from any other topic as it returns the list of topics that the current user is subscribed to as opposite to the user's subscription to `me`. For P2P subscriptions, timestamp of user's last presence and User Agent string are reported:
-* seen:
+Message `{get what="sub"}` to `me` is different from any other topic as it returns the list of topics that the current user is subscribed to as opposite to the expected user's subscription to `me`.
+* seq: server-issued numeric id of the last message in the topic
+* with: for P2P subscriptions, id of the peer
+* seen: for P2P subscriptions, timestamp of user's last presence and User Agent string are reported
  * when: timestamp when the user was last online
- * ua: user agent string of the user's client software used last
+ * ua: user agent string of the user's client software last used
 
 Message `{get what="data"}` to `me` queries the history of invites/notifications. It's handled the same way as to any other topic.
 
@@ -612,8 +614,10 @@ Tinode provides basic support for client-side caching of `{data}` messages in th
 
 ## User Agent and Presence Notifications
 
-A user is reported online when one or more of user's sessions are attached to the `me` topic. Client-side software identifies itself to the server using `ua` (user agent) field of the `{login}` message. The user agent string is published in `{meta}` and `{pres}` messages in the following way:
+A user is reported as being online when one or more of user's sessions are attached to the `me` topic. Client-side software identifies itself to the server using `ua` (user agent) field of the `{login}` message. The _user agent_ is published in `{meta}` and `{pres}` messages in the following way:
 
- * When user's first session attaches to `me`, the user agent from that session is broadcast in the `{pres what="on"}` message
- * When multiple user sessions are attached to `me`, the user agent of the session where the most recent action has happened is reported in `{pres what="ua"}`; the 'action' in this context means any message sent by the client. To avoid potentially excessive traffic, user agent changes are broadcast no more often than once a minute.
- * When user's last session detaches from `me`, the user agent from that session is recorded together with the timestamp; the user agent is broadcast the `{pres what="off"}` message and subsequently reported as the last online timestamp and user agent.
+ * When user's first session attaches to `me`, the _user agent_ from that session is broadcast in the `{pres what="on" ua="..."}` message.
+ * When multiple user sessions are attached to `me`, the _user agent_ of the session where the most recent action has happened is reported in `{pres what="ua" ua="..."}`; the 'action' in this context means any message sent by the client. To avoid potentially excessive traffic, user agent changes are broadcast no more frequently than once a minute.
+ * When user's last session detaches from `me`, the _user agent_ from that session is recorded together with the timestamp; the user agent is broadcast in the `{pres what="off"  ua="..."}` message and subsequently reported as the last online timestamp and user agent.
+
+An empty `ua=""` _user agent_ is not reported. I.e. if user attaches to `me` with non-empry _user agent_ then does so with an empty one, the change is not reported. An empty _user agent_ may be disallowed in the future.
