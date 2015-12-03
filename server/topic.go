@@ -270,13 +270,11 @@ func (t *Topic) run(hub *Hub) {
 
 				t.presPubMessageSent(t.lastId)
 
-			} else if msg.Pres != nil && (msg.Pres.What == "on" || msg.Pres.What == "off") {
-				if topicCat(msg.Pres.Src) == TopicCat_Me {
-					t.presProcReq(msg.Pres.Src, (msg.Pres.What == "on"), msg.Pres.isReply)
-				}
-				if msg.Pres.Topic != t.original {
+			} else if msg.Pres != nil && msg.Pres.wantReply {
+				log.Printf("topic[%s].run: pres.src='%s' what='%s'", t.name, msg.Pres.Src, msg.Pres.What)
+				t.presProcReq(msg.Pres.Src, (msg.Pres.What == "on"))
+				if t.original != msg.Pres.Topic {
 					// This is just a request for status, don't forward it to sessions
-					log.Printf("topic[%s].run: skipping {pres topic='%s'}", t.name, msg.Pres.Topic)
 					continue
 				}
 			}
@@ -293,7 +291,7 @@ func (t *Topic) run(hub *Hub) {
 					select {
 					case sess.send <- packet:
 					default:
-						log.Printf("topic[%s].run: connection stuck, detach it", t.name)
+						log.Printf("topic[%s].run: connection stuck, detaching", t.name)
 						t.unreg <- &sessionLeave{sess: sess, unsub: false}
 					}
 				}

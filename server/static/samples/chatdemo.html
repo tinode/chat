@@ -193,7 +193,7 @@ function append_topic(cont) {
 		</li>'
 		$(html).appendTo(".contacts")
 		$("#" + flag).hide().removeClass("hidden")
-		if (cont.seq > cont.read) {
+		if (typeof cont.read === "undefined" || cont.seq > cont.read) {
 			$("#" + flag).show()
 		}
 	}
