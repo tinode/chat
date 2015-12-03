@@ -190,15 +190,15 @@ func (h *Hub) run() {
 			} else {
 				if msg.Data != nil {
 					// Normally the message is persisted at the topic. If the topic is offline,
-					// persist message here. The only case of sending to offline topics is invites/info  to 'me'
-					// 'me' must receive them, so ignore access sesstings
-					// TODO(gene): save message for later delivery
+					// persist message here. The only case of sending to offline topics is invites/info to 'me'
+					// The 'me' must receive them, so ignore access settings
 
 					if err := store.Messages.Save(msg.appid, &types.Message{
 						ObjHeader: types.ObjHeader{CreatedAt: msg.Data.Timestamp},
 						Topic:     msg.rcptto,
-						From:      types.ParseUserId(msg.Data.From).String(),
-						Content:   msg.Data.Content}); err != nil {
+						// SeqId is assigned by the store.Mesages.Save
+						From:    types.ParseUserId(msg.Data.From).String(),
+						Content: msg.Data.Content}); err != nil {
 
 						simpleByteSender(msg.akn, ErrUnknown(msg.id, msg.Data.Topic, timestamp))
 						return
@@ -575,6 +575,7 @@ func (t *Topic) loadSubscribers() error {
 	for _, sub := range subs {
 		uid := types.ParseUid(sub.User)
 		t.perUser[uid] = perUserData{
+			readId:  sub.ReadSeqId,
 			private: sub.Private,
 			//lastSeenTag: sub.LastSeen, // could be nil
 			modeWant:  sub.ModeWant,

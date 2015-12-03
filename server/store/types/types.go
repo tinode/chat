@@ -115,6 +115,7 @@ func (uid Uid) PrefixId(prefix string) string {
 	return prefix + uid.String()
 }
 
+// ParseUserId parses user ID of the form "usrXXXXXX"
 func ParseUserId(s string) Uid {
 	var uid Uid
 	if strings.HasPrefix(s, "usr") {
@@ -400,13 +401,13 @@ type TopicAccess struct {
 // Subscription to a topic
 type Subscription struct {
 	ObjHeader
-	User      string     // User who has relationship with the topic
-	Topic     string     // Topic subscribed to
-	ModeWant  AccessMode // Access applied for
-	ModeGiven AccessMode // Granted access
-	ClearedAt *time.Time // User deleted messages older than this time; TODO(gene): topic owner can hard-delete messages
-
-	Private interface{} // User's private data associated with the subscription to topic
+	User      string      // User who has relationship with the topic
+	Topic     string      // Topic subscribed to
+	ModeWant  AccessMode  // Access applied for
+	ModeGiven AccessMode  // Granted access
+	ClearedAt *time.Time  // User deleted messages older than this time; TODO(gene): topic owner can hard-delete messages
+	ReadSeqId int         // Last SeqID read by the user
+	Private   interface{} // User's private data associated with the subscription to topic
 
 	// Deserialized ephemeral values
 	public    interface{} // Deserialized public value from topic or user (depends on context)

@@ -203,13 +203,20 @@ func gen_rethink(reset bool, dbsource string, data *Data) {
 
 	rand.Seed(time.Now().UnixNano())
 	seqIds := map[string]int{}
+	var oldFrom, oldTopic string
+	toInsert := 80
 	// Starting 4 days ago
 	timestamp := time.Now().UTC().Round(time.Millisecond).Add(time.Second * time.Duration(-3600*24*4))
-	for i := 0; i < 80; i++ {
+	for i := 0; i < toInsert; i++ {
 
 		sub := data.Subscriptions[rand.Intn(len(data.Subscriptions))]
 		topic := nameIndex[sub["topic"].(string)]
 		from := types.ParseUid(nameIndex[sub["user"].(string)])
+		if topic == oldTopic && from == oldFrom {
+			toInsert++
+			continue
+		}
+		oldTopic, oldFrom = topic, from
 
 		if uid := types.ParseUid(topic); !uid.IsZero() {
 			topic = uid.P2PName(from)

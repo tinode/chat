@@ -112,8 +112,11 @@ const (
 type perUserData struct {
 	online int
 
+	// When the user is offline, the last seqId received by the user
+	// When the user is online, it's ther same as t.lastId
+	readId int
+
 	private interface{}
-	// lastSeenTag map[string]time.Time
 	// cleared     time.Time // time, when the topic was cleared by the user
 	modeWant  types.AccessMode
 	modeGiven types.AccessMode
@@ -137,10 +140,8 @@ func (t *Topic) run(hub *Hub) {
 	// 'me' only
 	var uaTimer *time.Timer
 	var currentUA string
-	if t.cat == TopicCat_Me {
-		uaTimer = time.NewTimer(time.Minute)
-		uaTimer.Stop()
-	}
+	uaTimer = time.NewTimer(time.Minute)
+	uaTimer.Stop()
 
 	for {
 		select {
@@ -192,7 +193,6 @@ func (t *Topic) run(hub *Hub) {
 
 				pud := t.perUser[leave.sess.uid]
 				pud.online--
-				t.perUser[leave.sess.uid] = pud
 				if t.cat == TopicCat_Me {
 					mrs := t.mostRecentSession()
 					if mrs == nil {
@@ -210,6 +210,14 @@ func (t *Topic) run(hub *Hub) {
 				} else if t.cat == TopicCat_Grp && pud.online == 0 {
 					t.presPubChange(leave.sess.uid.UserId(), "off")
 				}
+
+				// If the user is no longer online in the topic, save ID of the last seen message
+				if pud.online == 0 && t.lastId > pud.readId {
+					pud.readId = t.lastId
+					store.Subs.Update(t.appid, t.name, leave.sess.uid,
+						map[string]interface{}{"ReadSeqId": pud.readId})
+				}
+				t.perUser[leave.sess.uid] = pud
 			}
 
 			// If there are no more subscriptions to this topic, start a kill timer
@@ -263,7 +271,9 @@ func (t *Topic) run(hub *Hub) {
 				t.presPubMessageSent(t.lastId)
 
 			} else if msg.Pres != nil && (msg.Pres.What == "on" || msg.Pres.What == "off") {
-				t.presProcReq(msg.Pres.Src, (msg.Pres.What == "on"), msg.Pres.isReply)
+				if topicCat(msg.Pres.Src) == TopicCat_Me {
+					t.presProcReq(msg.Pres.Src, (msg.Pres.What == "on"), msg.Pres.isReply)
+				}
 				if msg.Pres.Topic != t.original {
 					// This is just a request for status, don't forward it to sessions
 					log.Printf("topic[%s].run: skipping {pres topic='%s'}", t.name, msg.Pres.Topic)
@@ -276,6 +286,10 @@ func (t *Topic) run(hub *Hub) {
 			if msg.Data != nil || msg.Pres != nil {
 				var packet, _ = json.Marshal(msg)
 				for sess := range t.sessions {
+					if sess == msg.skipSession {
+						continue
+					}
+
 					select {
 					case sess.send <- packet:
 					default:
@@ -428,14 +442,21 @@ func (t *Topic) subCommonReply(h *Hub, sess *Session, pkt *MsgClientSub, sendInf
 
 	pud := t.perUser[sess.uid]
 	pud.online++
-	t.perUser[sess.uid] = pud
-	if t.cat == TopicCat_Grp && pud.online == 1 {
-		// User just joined the topic, announce presence
-		log.Printf("subCommonReply: user %s joined grp topic %s", sess.uid.UserId(), t.name)
-		t.presPubChange(sess.uid.UserId(), "on")
+	if pud.online == 1 {
+		if t.cat == TopicCat_Grp {
+			// User just joined the topic, announce presence
+			log.Printf("subCommonReply: user %s joined grp topic %s", sess.uid.UserId(), t.name)
+			t.presPubChange(sess.uid.UserId(), "on")
+		}
+
+		if t.lastId > pud.readId {
+			t.presPubAllRead(sess)
+		}
 	} else {
 		log.Printf("subCommonReply: topic %s, online %d", t.name, pud.online)
 	}
+
+	t.perUser[sess.uid] = pud
 
 	simpleByteSender(sess.send, NoErr(pkt.Id, t.original, now))
 
@@ -784,6 +805,11 @@ func (t *Topic) replyGetInfo(sess *Session, id string, created bool) error {
 		info.Private = pud.private
 
 		info.SeqId = t.lastId
+		if pud.online > 0 {
+			info.ReadSeqId = t.lastId
+		} else {
+			info.ReadSeqId = pud.readId
+		}
 
 		// When a topic is first created, its name may change. Report the new name
 		if created {
@@ -950,6 +976,7 @@ func (t *Topic) replyGetSub(sess *Session, id string) error {
 			if t.cat == TopicCat_Me {
 				mts.Topic = sub.Topic
 				mts.SeqId = sub.GetSeqId()
+				mts.ReadSeqId = sub.ReadSeqId
 				mts.With = sub.GetWith()
 				mts.UpdatedAt = &sub.UpdatedAt
 				lastSeen := sub.GetLastSeen()
@@ -1030,6 +1057,7 @@ func (t *Topic) replyGetData(sess *Session, id string, req *MsgBrowseOpts) error
 			from := types.ParseUid(mm.From)
 			msg := &ServerComMessage{Data: &MsgServerData{
 				Topic:     t.original,
+				SeqId:     mm.SeqId,
 				From:      from.UserId(),
 				Timestamp: mm.CreatedAt,
 				Content:   mm.Content}}
@@ -1126,18 +1154,6 @@ func msgOpts2storeOpts(req *MsgBrowseOpts) *types.BrowseOpt {
 	return opts
 }
 
-/*
-func mostRecent(vals map[string]time.Time) (tag string, max time.Time) {
-	for key, val := range vals {
-		if val.After(max) {
-			max = val
-			tag = key
-		}
-	}
-	return
-}
-*/
-
 func isNullValue(i interface{}) bool {
 	// Del control character
 	const CLEAR_VALUE = "\u2421"
@@ -1145,4 +1161,17 @@ func isNullValue(i interface{}) bool {
 		return str == CLEAR_VALUE
 	}
 	return false
+}
+
+func topicCat(name string) TopicCat {
+	switch name[0:3] {
+	case "usr":
+		return TopicCat_Me
+	case "p2p":
+		return TopicCat_P2P
+	case "grp":
+		return TopicCat_Grp
+	default:
+		panic("invalid topic name in topicCat: " + name)
+	}
 }

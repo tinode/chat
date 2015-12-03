@@ -165,8 +165,8 @@ login: {
                                //  scheme, required
   expireIn: "24h", // string, login expiration time in Go's time.ParseDuration
                    //  format, see below, optional
-  ua: "Tinode JS 1.0 (Windows 10)" // string, user agent string identifying client
-                  // software, optional
+  ua: "JS/1.0 (Windows 10)" // string, user agent identifying client software,
+                   // optional
 }
 ```
 Basic authentication scheme expects `secret` to be a string composed of a user name followed by a colon `:` followed by a plan text password.
@@ -285,8 +285,6 @@ get: {
 
   // Optional parameters for {get what="data"}
   browse: {
-    ascnd: true, // boolean, sort in ascending order by time, otherwise
-                 // descending (default), optional
     since: 123, // integer, load messages with server-issued IDs greater or equal
 				 // to this (inclusive/closed), optional
     before: 321, // integer, load messages with server-issed sequential IDs less
@@ -353,8 +351,8 @@ del: {
   what: "msg", // string, either "topic" or "msg" (default); what to delete - the
                // entire topic or just the messages, optional, default: "msg"
   hard: false, // boolean, request to delete messages for all users, default: false
-  before: "2015-10-06T18:07:30.134Z", // datetime as string, delete messages
-              // older than this (exclusive of the value itself), optional
+  before: 123, // integer, delete messages with server-issued ID lower than this
+               // (exclusive of the value itself), optional
 }
 ```
 
@@ -416,6 +414,7 @@ ctrl: {
   id: "1a2b3", // string, client-provided message id, optional
   topic: "grp1XUtEhjv6HND", // string, topic name, if this is a response in
                             // context of a topic, optional
+  ts: "2015-10-06T18:07:30.038Z", // string, timestamp
 	info: {
     created: "2015-10-24T10:26:09.716Z",
     updated: "2015-10-24T10:26:09.716Z",
@@ -429,6 +428,8 @@ ctrl: {
       "given":"RWP" // string, granted access permission
     },
     seq: 123, // integer, server-issued id of the last {data} message
+    read: 120, // integer, ID of the message last received by the user, either
+              // pushed or requested through {get what="data"}
     public: { ... }, // application-defined data that's available to all topic
                      // subscribers
     private: { ...} // application-deinfed data that's available to the current
@@ -452,6 +453,8 @@ ctrl: {
       // The following fields are present only when querying 'me' topic
       topic: "grp1XUtEhjv6HND", // string, topic this subscription describes
       seq: 321, // integer, server-issued id of the last {data} message
+      read: 312, // integer, ID of the message last received by the user, either
+                // pushed or requested through {get what="data"}
       with: "usr2il9suCbuko", // string, if this is a P2P topic, peer's ID, optional
       seen: { // object, if this is a P2P topic, info on when the peer was last
               //online
@@ -461,7 +464,6 @@ ctrl: {
     },
     ...
   ]
-  ts: "2015-10-06T18:07:30.038Z", // string, timestamp
 }
 ```
 

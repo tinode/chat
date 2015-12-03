@@ -116,7 +116,6 @@ package main
 
 import (
 	"net/http"
-	"reflect"
 	"strings"
 	"time"
 )
@@ -316,6 +315,7 @@ type MsgTopicInfo struct {
 	DefaultAcs *MsgDefaultAcsMode `json:"defacs,omitempty"`
 	Acs        *MsgAccessMode     `json:"acs,omitempty"` // Actual access mode
 	SeqId      int                `json:"seq,omitempty"`
+	ReadSeqId  int                `json:"read,omitempty"`
 	Public     interface{}        `json:"public,omitempty"`
 	Private    interface{}        `json:"private,omitempty"` // Per-subscription private data
 }
@@ -341,6 +341,8 @@ type MsgTopicSub struct {
 
 	// ID of the last {data} message in a topic
 	SeqId int `json:"seq,omitempty"`
+	// Greatest ID of the messages fetched from the topic (for read-unread status)
+	ReadSeqId int `json:"read,omitempty"`
 	// P2P topics only
 	// ID of the other user
 	With string `json:"with,omitempty"`
@@ -417,6 +419,8 @@ type ServerComMessage struct {
 	id string
 	// timestamp for consistency of timestamps in {ctrl} messages
 	timestamp time.Time
+	// Should the packet be sent to the original sessions?
+	skipSession *Session
 }
 
 // Combined message
@@ -425,6 +429,7 @@ type ComMessage struct {
 	*ServerComMessage
 }
 
+/*
 func modelGetBoolParam(params map[string]interface{}, name string) bool {
 	var val bool
 	if params != nil {
@@ -456,6 +461,7 @@ func modelGetInt64Param(params map[string]interface{}, name string) int64 {
 
 	return val
 }
+*/
 
 // Generators of error messages
 

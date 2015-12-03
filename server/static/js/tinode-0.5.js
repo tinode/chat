@@ -29,10 +29,11 @@
 var Tinode = (function() {
 	var tinode = {
 		"PROTOVERSION": "0",
-		"VERSION": "0.4",
+		"VERSION": "0.5",
 		"TOPIC_NEW": "new",
 		"TOPIC_ME": "me",
-		"USER_NEW": "new"
+		"USER_NEW": "new",
+		"USER_AGENT": "JS/0.5"
 	}
 
 	var _logging_on = false
@@ -105,7 +106,8 @@ var Tinode = (function() {
 		function pad(n) {
 			return n < 10 ? '0' + n : n
 		}
-		return d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate()) + 'T' + pad(d.getUTCHours()) +
+		return d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate()) +
+			'T' + pad(d.getUTCHours()) +
 			':' + pad(d.getUTCMinutes()) + ':' + pad(d.getUTCSeconds()) + 'Z'
 	}
 
@@ -330,6 +332,7 @@ Tinode.streaming = (
 					return {
 						"login": {
 							"id": get_message_id(),
+							"ua": Tinode.USER_AGENT,
 							"scheme": null,
 							"secret": null,
 							"expireIn": null
@@ -431,7 +434,8 @@ Tinode.streaming = (
 
 			var pkt = JSON.parse(data, function(key, val) {
 				// Convert timestamps with optional milliseconds 2015-09-02T01:45:43[.123]Z
-				if (key === "ts" && typeof val == "string" && val.length >= 20 && val.length <= 24) {
+				if (key === "ts" && typeof val == "string" && val.length >= 20 && val.length <=
+					24) {
 					var date = new Date(val)
 					if (date) {
 						return date
@@ -675,14 +679,16 @@ Tinode.streaming = (
 			var what = []
 
 			if (params) {
-				if ((typeof params.info === "object") && (Object.keys(params.info).length != 0)) {
+				if ((typeof params.info === "object") && (Object.keys(params.info).length !=
+						0)) {
 					what.push("info")
 
 					pkt.set.info.defacs = params.info.acs
 					pkt.set.info.public = params.info.public
 					pkt.set.info.private = params.info.private
 				}
-				if ((typeof params.sub === "object") && (Object.keys(params.sub).length != 0)) {
+				if ((typeof params.sub === "object") && (Object.keys(params.sub).length !=
+						0)) {
 					what.push("sub")
 
 					pkt.set.sub.user = params.sub.user

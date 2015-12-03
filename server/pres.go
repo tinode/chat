@@ -32,6 +32,7 @@
 package main
 
 import (
+	"log"
 	//"log"
 	"strings"
 
@@ -70,6 +71,9 @@ import (
 	the message is sent to all users who have P2P topics with the first user. Users receive this event on
 	the `me` topic, `src` field contains user ID `src: "usr2il9suCbuko"`, `what` contains `"ua"`:
 	`{pres topic="me" src="<user ID>" what="ua" ua="<user agent>"}`.
+9. User's other session joined a topic not previously joined by any of the user's sessions, marking all
+	messages in the topic as read: `{pres topic="me" src="<topic name>" what="read"}`. Sent only to other sessions
+	(not the one that joined), and only if there were unread messages in the topic.
 */
 
 // loadContacts initializes topic.perSubs to support presence notifications
@@ -120,29 +124,34 @@ func (t *Topic) presPubMeChange(what string, ua string) {
 // Return value indicates if the message should be forwarded to topic subscribers
 // Cases 1.a.iv, 1.a.v
 func (t *Topic) presProcReq(fromTopic string, online, isReply bool) {
-
-	//log.Printf("Pres: topic[%s]: req from '%s'", t.name, fromTopic)
+	log.Printf("Pres 1.a.iv, 1.a.v: topic[%s]: req from '%s', isReply: %v", t.name, fromTopic, isReply)
 
 	doReply := true
 	if t.cat == TopicCat_Me {
-		psd := t.perSubs[fromTopic]
-		// If requester's online status has not changed, do not reply, otherwise an endless loop will happen
-		// Introducing isReply to ensure unnecessary {pres} is not sent:
-		// A[online, B:off] to B[online, A:off]: {pres A on}
-		// B[online, A:on] to A[online, B:off]: {pres B on}
-		// A[online, B:on] to B[online, A:on]: {pres A on} <<-- unnecessary, that's why isReply is needed
-		doReply = (psd.online != online)
-		psd.online = online
-		t.perSubs[fromTopic] = psd
+		if psd, ok := t.perSubs[fromTopic]; ok {
+			// If requester's online status has not changed, do not reply, otherwise an endless loop will happen
+			// Introducing isReply to ensure unnecessary {pres} is not sent:
+			// A[online, B:off] to B[online, A:off]: {pres A on}
+			// B[online, A:on] to A[online, B:off]: {pres B on}
+			// A[online, B:on] to B[online, A:on]: {pres A on} <<-- unnecessary, that's why isReply is needed
+			doReply = (psd.online != online)
+			psd.online = online
+			t.perSubs[fromTopic] = psd
+		} else {
+			doReply = false
+		}
 	}
 
 	if online && doReply && !isReply {
+		log.Printf("-- replied")
 		globals.hub.route <- &ServerComMessage{
 			// Topic is 'me' even for group topics; group topics will use 'me' as a signal to drop the message
 			// without forwarding to sessions
 			Pres:   &MsgServerPres{Topic: "me", What: "on", Src: t.name, isReply: true},
 			appid:  t.appid,
 			rcptto: fromTopic}
+	} else {
+		log.Printf("-- skipped")
 	}
 }
 
@@ -173,7 +182,7 @@ func (t *Topic) presPubTopicOnline(online bool) {
 			globals.hub.route <- &ServerComMessage{Pres: update, appid: t.appid,
 				rcptto: uid.UserId()}
 
-			//log.Printf("Pres 5: from '%s' (src %s) to '%s' [%s]", t.name, update.Src, uid.UserId(), what)
+			log.Printf("Pres 5: from '%s' (src %s) to '%s' [%s]", t.name, update.Src, uid.UserId(), what)
 		}
 	}
 }
@@ -206,5 +215,19 @@ func (t *Topic) presPubUAChange(ua string) {
 	for topic, _ := range t.perSubs {
 		globals.hub.route <- &ServerComMessage{Pres: update, appid: t.appid, rcptto: topic}
 		//log.Printf("Pres 1.a.ii, 2, 3: from '%s' (src: %s) to %s [%s]", t.name, update.Src, topic, what)
+	}
+}
+
+// Let other sessions of a given user know that all unread messages are now read
+// Case 9
+func (t *Topic) presPubAllRead(skip *Session) {
+	if pud, ok := t.perUser[skip.uid]; ok {
+		update := &MsgServerPres{Topic: "me", What: "read", Src: t.original}
+
+		if pud.modeGiven&pud.modeWant&types.ModePres != 0 {
+			globals.hub.route <- &ServerComMessage{Pres: update, appid: t.appid,
+				rcptto: skip.uid.UserId(), skipSession: skip}
+
+		}
 	}
 }
