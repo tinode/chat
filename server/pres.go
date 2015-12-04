@@ -119,14 +119,14 @@ func (t *Topic) presPubMeChange(what string, ua string) {
 	for topic, _ := range t.perSubs {
 		globals.hub.route <- &ServerComMessage{Pres: update, appid: t.appid, rcptto: topic}
 
-		log.Printf("Pres 1.a.iii, 2, 3: from '%s' (src: %s) to %s [%s], ua: '%s'", t.name, update.Src, topic, what, ua)
+		//log.Printf("Pres 1.a.iii, 2, 3: from '%s' (src: %s) to %s [%s], ua: '%s'", t.name, update.Src, topic, what, ua)
 	}
 }
 
 // This topic get a request from a 'me' topic to start/stop receiving presence updates from this topic.
 // Cases 1.a.iv, 1.a.v
 func (t *Topic) presProcReq(fromTopic string, online bool) {
-	log.Printf("Pres 1.a.iv, 1.a.v: topic[%s]: req from '%s', isReply: %v", t.name, fromTopic)
+	//log.Printf("Pres 1.a.iv, 1.a.v: topic[%s]: req from '%s', isReply: %v", t.name, fromTopic)
 
 	doReply := true
 	if t.cat == TopicCat_Me {
@@ -145,15 +145,12 @@ func (t *Topic) presProcReq(fromTopic string, online bool) {
 	}
 
 	if online && doReply {
-		log.Printf("-- replied")
 		globals.hub.route <- &ServerComMessage{
 			// Topic is 'me' even for group topics; group topics will use 'me' as a signal to drop the message
 			// without forwarding to sessions
 			Pres:   &MsgServerPres{Topic: "me", What: "on", Src: t.name},
 			appid:  t.appid,
 			rcptto: fromTopic}
-	} else {
-		log.Printf("-- skipped")
 	}
 }
 
@@ -165,7 +162,7 @@ func (t *Topic) presPubChange(src, what string) {
 		Pres:  &MsgServerPres{Topic: t.original, What: what, Src: src},
 		appid: t.appid, rcptto: t.name}
 
-	log.Printf("Pres 4,7: from '%s' (src: %s) [%s]", t.name, src, what)
+	//log.Printf("Pres 4,7: from '%s' (src: %s) [%s]", t.name, src, what)
 }
 
 // Non-'me' topic activated or deactivated, announce topic presence to its subscribers
@@ -185,7 +182,7 @@ func (t *Topic) presPubTopicOnline(online bool) {
 			globals.hub.route <- &ServerComMessage{Pres: update, appid: t.appid,
 				rcptto: uid.UserId()}
 
-			log.Printf("Pres 5: from '%s' (src %s) to '%s' [%s]", t.name, update.Src, uid.UserId(), what)
+			//log.Printf("Pres 5: from '%s' (src %s) to '%s' [%s]", t.name, update.Src, uid.UserId(), what)
 		}
 	}
 }
@@ -200,7 +197,7 @@ func (t *Topic) presPubMessageSent(seq int) {
 			globals.hub.route <- &ServerComMessage{Pres: update, appid: t.appid,
 				rcptto: uid.UserId()}
 
-			log.Printf("Pres 6: from %s (src: %s), to %s [msg=%d]", t.name, update.Src, uid.UserId(), seq)
+			//log.Printf("Pres 6: from %s (src: %s), to %s [msg=%d]", t.name, update.Src, uid.UserId(), seq)
 		}
 	}
 }
@@ -218,7 +215,7 @@ func (t *Topic) presPubUAChange(ua string) {
 	for topic, _ := range t.perSubs {
 		globals.hub.route <- &ServerComMessage{Pres: update, appid: t.appid, rcptto: topic}
 
-		log.Printf("Case 8: from '%s' to %s [%s]", t.name, topic, ua)
+		//log.Printf("Case 8: from '%s' to %s [%s]", t.name, topic, ua)
 	}
 }
 
@@ -232,7 +229,7 @@ func (t *Topic) presPubAllRead(skip *Session) {
 			globals.hub.route <- &ServerComMessage{Pres: update, appid: t.appid,
 				rcptto: skip.uid.UserId(), skipSession: skip}
 
-			log.Printf("Case 9: from '%s' to %s [read]", t.name, skip.uid.UserId())
+			//log.Printf("Case 9: from '%s' to %s [read]", t.name, skip.uid.UserId())
 		}
 	}
 }
