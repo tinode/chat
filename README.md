@@ -163,8 +163,6 @@ login: {
                    // is currently supported
   secret: "username:password", // string, secret for the chosen authentication
                                //  scheme, required
-  expireIn: "24h", // string, login expiration time in Go's time.ParseDuration
-                   //  format, see below, optional
   ua: "JS/1.0 (Windows 10)" // string, user agent identifying client software,
                    // optional
 }
@@ -173,9 +171,9 @@ Basic authentication scheme expects `secret` to be a string composed of a user n
 
 Basic is the only currently supported authentication scheme. _Authentication scheme `none` is planned to support anonymous users in the future._
 
-[time.ParseDuration](https://golang.org/pkg/time/#ParseDuration) is used to parse `expireIn`. The recognized format is a possibly signed sequence of decimal numbers, each with optional fraction and a unit suffix, such as "300ms", "-1.5h" or "2h45m". Valid time units are "ns", "us" (or "µs"), "ms", "s", "m", "h".
+Server responds to a `{login}` packet with a `{ctrl}` message. The `params` of {ctrl} message contains id of the logged in user as `params:{uid:"..."}`.
 
-Server responds to a `{login}` packet with a `{ctrl}` packet.
+The user agent `ua` is expected to follow [RFC 7231 section 5.5.3](http://tools.ietf.org/html/rfc7231#section-5.5.3) recommendation. 
 
 #### `{sub}`
 
