@@ -56,10 +56,6 @@ const (
 	// API version
 	VERSION = "0.5"
 
-	// Lofetime of authentication tokens
-	TOKEN_LIFETIME_DEFAULT = time.Hour * 12     // 12 hours
-	TOKEN_LIFETIME_MAX     = time.Hour * 24 * 7 // 1 week
-
 	DEFAULT_AUTH_ACCESS = types.ModePublic
 	DEFAULT_ANON_ACCESS = types.ModeNone
 )
