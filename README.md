@@ -365,12 +365,16 @@ ping: {
   topic: "grp1XUtEhjv6HND", // string, topic to notify, required
   what: "kp", // string, one of "kp" (key press), "read" (read notification),
               // "rcpt" (received notification), any other string will cause
-              // message to be dropped, required
+              // message to be silently dropped, required
   seq: 123, // integer, ID of the message being acknowledged, required for
             // rcpt & read
 }
 ```
 
+The following actions are currently recognized:
+ * kp: key press, i.e. a typing notification. The client should use it to indicate that the user is composing a new message.
+ * rcpt: a `{data}` message is received by the client software but not yet seen by user.
+ * read: a `{data}` message is seen by the user. It implies `rcpt` too.
 
 ### Server to client messages
 
