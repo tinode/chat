@@ -314,7 +314,6 @@ func (s *Session) publish(msg *ClientComMessage) {
 // Authenticate
 func (s *Session) login(msg *ClientComMessage) {
 	var uid types.Uid
-	var expires time.Time
 	var err error
 
 	if !s.uid.IsZero() {
@@ -333,11 +332,6 @@ func (s *Session) login(msg *ClientComMessage) {
 			s.QueueOut(ErrAuthFailed(msg.Login.Id, "", msg.timestamp))
 			return
 		}
-	} else if msg.Login.Scheme == "token" {
-		if uid, expires = checkSecurityToken(msg.Login.Secret); uid.IsZero() {
-			s.QueueOut(ErrAuthFailed(msg.Login.Id, "", msg.timestamp))
-			return
-		}
 	} else {
 		s.QueueOut(ErrAuthUnknownScheme(msg.Login.Id, "", msg.timestamp))
 		return
@@ -346,26 +340,12 @@ func (s *Session) login(msg *ClientComMessage) {
 	s.uid = uid
 	s.userAgent = msg.Login.UserAgent
 
-	expireIn := time.Duration(msg.Login.ExpireIn)
-	if expireIn <= 0 || expireIn > TOKEN_LIFETIME_MAX {
-		expireIn = TOKEN_LIFETIME_DEFAULT
-	}
-
-	newExpires := time.Now().Add(expireIn).UTC().Round(time.Second)
-	if !expires.IsZero() && expires.Before(newExpires) {
-		newExpires = expires
-	}
-	params := map[string]interface{}{
-		"uid":     uid.UserId(),
-		"expires": newExpires,
-		"token":   makeSecurityToken(uid, expires)}
-
 	s.QueueOut(&ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        msg.Login.Id,
 		Code:      http.StatusOK,
 		Text:      http.StatusText(http.StatusOK),
 		Timestamp: msg.timestamp,
-		Params:    params}})
+		Params:    map[string]interface{}{"uid": uid.UserId()}}})
 
 }
 

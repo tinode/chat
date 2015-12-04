@@ -36,13 +36,9 @@ import (
 	"crypto/hmac"
 	"crypto/md5"
 	"crypto/rand"
-	//	"encoding/base32"
 	"encoding/base64"
 	"encoding/binary"
-	"github.com/tinode/chat/server/store"
-	"github.com/tinode/chat/server/store/types"
 	"log"
-	"time"
 )
 
 // 32 random bytes to be used for signing auth tokens
@@ -124,69 +120,4 @@ func checkApiKey(apikey string) (appid uint32, isRoot bool) {
 	appid = binary.LittleEndian.Uint32(data[APIKEY_VERSION : APIKEY_VERSION+APIKEY_APPID])
 	isRoot = (data[APIKEY_VERSION+APIKEY_APPID+APIKEY_SEQUENCE] == 1)
 	return
-}
-
-// TODO(gene): make UID variable length
-// [2:type][8:UID][4:expires][16:signature] == 30 bytes
-const (
-	SEC_TOKEN_TYPE      = 2 //always zero for now
-	SEC_TOKEN_UID       = 8
-	SEC_TOKEN_EXPIRES   = 4
-	SEC_TOKEN_SIGNATURE = 16
-	SEC_TOKEN_LENGTH    = SEC_TOKEN_TYPE + SEC_TOKEN_UID + SEC_TOKEN_EXPIRES + SEC_TOKEN_SIGNATURE
-)
-
-// Make a temporary token to be used instead of login/password
-func makeSecurityToken(uid types.Uid, expires time.Time) string {
-
-	var buf = make([]byte, SEC_TOKEN_LENGTH)
-	b, _ := uid.MarshalBinary()
-	buf = append(buf[SEC_TOKEN_TYPE:], b...)
-	binary.LittleEndian.PutUint32(buf[SEC_TOKEN_TYPE+SEC_TOKEN_UID:], uint32(expires.Unix()))
-
-	hasher := hmac.New(md5.New, hmac_salt)
-	hasher.Write(buf[:SEC_TOKEN_TYPE+SEC_TOKEN_UID+SEC_TOKEN_EXPIRES])
-
-	return base64.URLEncoding.EncodeToString(hasher.Sum(buf[SEC_TOKEN_TYPE+SEC_TOKEN_UID+SEC_TOKEN_EXPIRES:]))
-}
-
-func checkSecurityToken(token string) (uid types.Uid, expires time.Time) {
-
-	if declen := base64.URLEncoding.DecodedLen(len(token)); declen != SEC_TOKEN_LENGTH {
-		return
-	}
-
-	data, err := base64.URLEncoding.DecodeString(token)
-	if err != nil {
-		log.Println("failed to decode.base64 sectoken ", err)
-		return
-	}
-	hasher := hmac.New(md5.New, hmac_salt)
-	hasher.Write(data[:SEC_TOKEN_TYPE+SEC_TOKEN_UID+SEC_TOKEN_EXPIRES])
-	check := hasher.Sum(nil)
-	if !hmac.Equal(data[SEC_TOKEN_TYPE+SEC_TOKEN_UID+SEC_TOKEN_EXPIRES:], check) {
-		log.Println("invalid sectoken signature")
-		return
-	}
-
-	expires = time.Unix(int64(binary.LittleEndian.Uint32(
-		data[SEC_TOKEN_TYPE+SEC_TOKEN_UID:(SEC_TOKEN_TYPE+SEC_TOKEN_UID+SEC_TOKEN_EXPIRES)])), 0).UTC()
-	if expires.Before(time.Now()) {
-		log.Println("expired sectoken")
-		return
-	}
-
-	return store.UidFromBytes(data[SEC_TOKEN_TYPE:SEC_TOKEN_UID]), expires
-}
-
-// Check API key for origin, and revocation. The key must be valid
-//   origin: browser-provided Origin URL
-//   dbcheck: if true, validate key & origin by calling the database (should do one on the first connection)
-func authClient(appid int32, apikey, origin string) error {
-	// TODO(gene): validate key with database
-	// data, err := base64.URLEncoding.DecodeString(apikey)
-	// var clientid = binary.LittleEndian.Uint16(data[5:7])
-	// var version = binary.LittleEndian.Uint16(data[7:9])
-
-	return nil
 }

@@ -164,8 +164,6 @@ type MsgClientLogin struct {
 	Scheme string `jdon:"scheme,omitempty"`
 	// Shared secret
 	Secret string `json:"secret"`
-	// Login expiration time
-	ExpireIn JsonDuration `json:"expireIn,omitempty"`
 }
 
 // Subscription request {sub} message

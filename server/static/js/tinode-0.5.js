@@ -334,8 +334,7 @@ Tinode.streaming = (
 							"id": get_message_id(),
 							"ua": Tinode.USER_AGENT,
 							"scheme": null,
-							"secret": null,
-							"expireIn": null
+							"secret": null
 						}
 					}
 
@@ -567,7 +566,6 @@ Tinode.streaming = (
 			var pkt = make_packet("login")
 			pkt.login.scheme = scheme
 			pkt.login.secret = secret
-			pkt.login.expireIn = "24h"
 
 			// Setup promise
 			var promise = null
