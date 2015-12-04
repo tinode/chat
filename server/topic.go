@@ -112,8 +112,8 @@ const (
 type perUserData struct {
 	online int
 
-	// When the user is offline, the last seqId received by the user
-	// When the user is online, it's ther same as t.lastId
+	// Last t.lastId reported by user through {pres} as received or read
+	recvId int
 	readId int
 
 	private interface{}
@@ -211,12 +211,6 @@ func (t *Topic) run(hub *Hub) {
 					t.presPubChange(leave.sess.uid.UserId(), "off")
 				}
 
-				// If the user is no longer online in the topic, save ID of the last seen message
-				if pud.online == 0 && t.lastId > pud.readId {
-					pud.readId = t.lastId
-					store.Subs.Update(t.appid, t.name, leave.sess.uid,
-						map[string]interface{}{"ReadSeqId": pud.readId})
-				}
 				t.perUser[leave.sess.uid] = pud
 			}
 
@@ -255,7 +249,9 @@ func (t *Topic) run(hub *Hub) {
 					From:      from.String(),
 					Content:   msg.Data.Content}); err != nil {
 
+					log.Printf("topic[%s].run: failed to save message: %v", t.name, err)
 					simpleByteSender(msg.akn, ErrUnknown(msg.id, t.original, msg.timestamp))
+
 					continue
 				}
 
@@ -271,15 +267,57 @@ func (t *Topic) run(hub *Hub) {
 				t.presPubMessageSent(t.lastId)
 
 			} else if msg.Pres != nil && msg.Pres.wantReply {
-				log.Printf("topic[%s].run: pres.src='%s' what='%s'", t.name, msg.Pres.Src, msg.Pres.What)
+				// log.Printf("topic[%s].run: pres.src='%s' what='%s'", t.name, msg.Pres.Src, msg.Pres.What)
 				t.presProcReq(msg.Pres.Src, (msg.Pres.What == "on"))
 				if t.original != msg.Pres.Topic {
 					// This is just a request for status, don't forward it to sessions
 					continue
 				}
-			} else if msg.Ping != nil && msg.Ping.SeqId > t.lastId {
-				// Skip bogus read notification
-				continue
+			} else if msg.Ping != nil {
+				if msg.Ping.SeqId > t.lastId {
+					// Skip bogus read notification
+					continue
+				}
+
+				if msg.Ping.What == "read" || msg.Ping.What == "recv" {
+					uid := types.ParseUserId(msg.Ping.From)
+					pud := t.perUser[uid]
+					var read, recv int
+					if msg.Ping.What == "read" {
+						if msg.Ping.SeqId > pud.readId {
+							pud.readId = msg.Ping.SeqId
+							read = pud.readId
+						} else {
+							// No need to report stale or bogus read status
+							continue
+						}
+					} else if msg.Ping.What == "recv" {
+						if msg.Ping.SeqId > pud.recvId {
+							pud.recvId = msg.Ping.SeqId
+							recv = pud.recvId
+						} else {
+							continue
+						}
+					}
+
+					if pud.readId > pud.recvId {
+						pud.recvId = pud.readId
+						recv = pud.recvId
+					}
+
+					if err := store.Subs.Update(t.appid, t.name, uid,
+						map[string]interface{}{
+							"RecvSeqId": pud.recvId,
+							"ReadSeqId": pud.readId}); err != nil {
+
+						log.Printf("topic[%s].run: failed to update SeqRead/Recv counter: %v", t.name, err)
+						continue
+					}
+
+					t.presPubAllRead(msg.skipSession, recv, read)
+
+					t.perUser[uid] = pud
+				}
 			}
 
 			// Broadcast the message. Only {data}, {pres}, {ping} are broadcastable.
@@ -448,10 +486,6 @@ func (t *Topic) subCommonReply(h *Hub, sess *Session, pkt *MsgClientSub, sendInf
 			// User just joined the topic, announce presence
 			log.Printf("subCommonReply: user %s joined grp topic %s", sess.uid.UserId(), t.name)
 			t.presPubChange(sess.uid.UserId(), "on")
-		}
-
-		if t.lastId > pud.readId {
-			t.presPubAllRead(sess)
 		}
 	} else {
 		log.Printf("subCommonReply: topic %s, online %d", t.name, pud.online)
@@ -849,11 +883,15 @@ func (t *Topic) replySetInfo(sess *Session, set *MsgClientSet) error {
 		return nil
 	}
 
-	assignPubPriv := func(upd map[string]interface{}, what string, p interface{}) {
+	assignPubPriv := func(upd map[string]interface{}, what string, p interface{}) (changed bool) {
 		if isNullValue(p) {
-			upd[what] = nil
+			if upd[what] != nil {
+				upd[what] = nil
+				changed = true
+			}
 		} else {
 			upd[what] = p
+			changed = true
 		}
 	}
 
@@ -873,6 +911,7 @@ func (t *Topic) replySetInfo(sess *Session, set *MsgClientSet) error {
 	}
 
 	var err error
+	var sendPres bool
 
 	user := make(map[string]interface{})
 	topic := make(map[string]interface{})
@@ -883,7 +922,7 @@ func (t *Topic) replySetInfo(sess *Session, set *MsgClientSet) error {
 			err = assignAccess(user, set.Info.DefaultAcs)
 		}
 		if set.Info.Public != nil {
-			assignPubPriv(user, "Public", set.Info.Public)
+			sendPres = assignPubPriv(user, "Public", set.Info.Public)
 		}
 	} else if t.cat == TopicCat_Grp && t.owner == sess.uid {
 		// Update current topic
@@ -891,7 +930,7 @@ func (t *Topic) replySetInfo(sess *Session, set *MsgClientSet) error {
 			err = assignAccess(topic, set.Info.DefaultAcs)
 		}
 		if set.Info.Public != nil {
-			assignPubPriv(topic, "Public", set.Info.Public)
+			sendPres = assignPubPriv(topic, "Public", set.Info.Public)
 		}
 	}
 
@@ -938,6 +977,10 @@ func (t *Topic) replySetInfo(sess *Session, set *MsgClientSet) error {
 		updateCached(topic)
 	}
 
+	if sendPres {
+		t.presPubChange(sess.uid.UserId(), "upd")
+	}
+
 	simpleByteSender(sess.send, NoErr(set.Id, set.Topic, now))
 
 	// TODO(gene) send pres update
@@ -978,6 +1021,7 @@ func (t *Topic) replyGetSub(sess *Session, id string) error {
 				mts.Topic = sub.Topic
 				mts.SeqId = sub.GetSeqId()
 				mts.ReadSeqId = sub.ReadSeqId
+				mts.RecvSeqId = sub.RecvSeqId
 				mts.With = sub.GetWith()
 				mts.UpdatedAt = &sub.UpdatedAt
 				lastSeen := sub.GetLastSeen()

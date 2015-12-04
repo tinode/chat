@@ -32,8 +32,6 @@
 package main
 
 import (
-	"log"
-	//"log"
 	"strings"
 
 	"github.com/tinode/chat/server/store"
@@ -154,7 +152,7 @@ func (t *Topic) presProcReq(fromTopic string, online bool) {
 	}
 }
 
-// Publish presence announcement to topic
+// Publish announcement to topic
 // Cases 4, 7
 func (t *Topic) presPubChange(src, what string) {
 
@@ -182,7 +180,7 @@ func (t *Topic) presPubTopicOnline(online bool) {
 			globals.hub.route <- &ServerComMessage{Pres: update, appid: t.appid,
 				rcptto: uid.UserId()}
 
-			//log.Printf("Pres 5: from '%s' (src %s) to '%s' [%s]", t.name, update.Src, uid.UserId(), what)
+			// log.Printf("Pres 5: from '%s' (src %s) to '%s' [%s]", t.name, update.Src, uid.UserId(), what)
 		}
 	}
 }
@@ -197,7 +195,7 @@ func (t *Topic) presPubMessageSent(seq int) {
 			globals.hub.route <- &ServerComMessage{Pres: update, appid: t.appid,
 				rcptto: uid.UserId()}
 
-			//log.Printf("Pres 6: from %s (src: %s), to %s [msg=%d]", t.name, update.Src, uid.UserId(), seq)
+			// log.Printf("Pres 6: from %s (src: %s), to %s [msg=%d]", t.name, update.Src, uid.UserId(), seq)
 		}
 	}
 }
@@ -215,21 +213,30 @@ func (t *Topic) presPubUAChange(ua string) {
 	for topic, _ := range t.perSubs {
 		globals.hub.route <- &ServerComMessage{Pres: update, appid: t.appid, rcptto: topic}
 
-		//log.Printf("Case 8: from '%s' to %s [%s]", t.name, topic, ua)
+		// log.Printf("Case 8: from '%s' to %s [%s]", t.name, topic, ua)
 	}
 }
 
 // Let other sessions of a given user know that all unread messages are now read
 // Case 9
-func (t *Topic) presPubAllRead(skip *Session) {
+func (t *Topic) presPubAllRead(skip *Session, recv, read int) {
 	if pud, ok := t.perUser[skip.uid]; ok {
-		update := &MsgServerPres{Topic: "me", What: "read", Src: t.original}
+		var what string
+		var seq int
+		if read > 0 {
+			what = "read"
+			seq = read
+		} else {
+			what = "recv"
+			seq = recv
+		}
+		update := &MsgServerPres{Topic: "me", What: what, Src: t.original, SeqId: seq}
 
 		if pud.modeGiven&pud.modeWant&types.ModePres != 0 {
 			globals.hub.route <- &ServerComMessage{Pres: update, appid: t.appid,
 				rcptto: skip.uid.UserId(), skipSession: skip}
 
-			//log.Printf("Case 9: from '%s' to %s [read]", t.name, skip.uid.UserId())
+			// log.Printf("Case 9: from '%s' to %s [read]", t.name, skip.uid.UserId())
 		}
 	}
 }

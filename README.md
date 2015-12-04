@@ -173,7 +173,7 @@ Basic is the only currently supported authentication scheme. _Authentication sch
 
 Server responds to a `{login}` packet with a `{ctrl}` message. The `params` of {ctrl} message contains id of the logged in user as `params:{uid:"..."}`.
 
-The user agent `ua` is expected to follow [RFC 7231 section 5.5.3](http://tools.ietf.org/html/rfc7231#section-5.5.3) recommendation. 
+The user agent `ua` is expected to follow [RFC 7231 section 5.5.3](http://tools.ietf.org/html/rfc7231#section-5.5.3) recommendation.
 
 #### `{sub}`
 
@@ -229,8 +229,6 @@ sub: {
 
   // Optional parameters for get: "data", see {get what="data"} for details
   browse: {
-    ascnd: true, // boolean, sort in ascending order by time, otherwise
-                 // descending (default), optional
     since: 123, // integer, load messages with server-issued IDs greater or equal
 				 // to this (inclusive/closed), optional
     before: 321, // integer, load messages with server-issed sequential IDs less

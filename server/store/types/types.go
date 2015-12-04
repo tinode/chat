@@ -406,7 +406,8 @@ type Subscription struct {
 	ModeWant  AccessMode  // Access applied for
 	ModeGiven AccessMode  // Granted access
 	ClearedAt *time.Time  // User deleted messages older than this time; TODO(gene): topic owner can hard-delete messages
-	ReadSeqId int         // Last SeqID read by the user
+	RecvSeqId int         // Last SeqId reported by user as received by at least one of his sessions
+	ReadSeqId int         // Last SeqID reported read by the user
 	Private   interface{} // User's private data associated with the subscription to topic
 
 	// Deserialized ephemeral values

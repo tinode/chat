@@ -556,7 +556,7 @@ func (s *Session) ping(msg *ClientComMessage) {
 		if msg.Ping.SeqId != 0 {
 			return
 		}
-	case "read", "rcpt":
+	case "read", "recv":
 		if msg.Ping.SeqId <= 0 {
 			return
 		}

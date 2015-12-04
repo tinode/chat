@@ -199,11 +199,11 @@ type MsgClientDel struct {
 	Hard bool `json:"hard,omitempty"`
 }
 
-// MsgClientPing is a client-generated notification for tpopic subscribers
+// MsgClientPing is a client-generated notification for topic subscribers
 type MsgClientPing struct {
 	// There is no Id -- server will not akn {ping} packets, they are "fire and forget"
 	Topic string `json:"topic"`
-	// what is being reported: "rcpt" - message received, "read" - message read, "kp" - typing notification
+	// what is being reported: "recv" - message received, "read" - message read, "kp" - typing notification
 	What string `json:"what"`
 	// Server-issued message ID being reported
 	SeqId int `json:"seq,omitempty"`
@@ -242,6 +242,7 @@ type MsgTopicInfo struct {
 	Acs        *MsgAccessMode     `json:"acs,omitempty"` // Actual access mode
 	SeqId      int                `json:"seq,omitempty"`
 	ReadSeqId  int                `json:"read,omitempty"`
+	RecvSeqId  int                `json:"recv,omitempty"`
 	Public     interface{}        `json:"public,omitempty"`
 	Private    interface{}        `json:"private,omitempty"` // Per-subscription private data
 }
@@ -267,8 +268,9 @@ type MsgTopicSub struct {
 
 	// ID of the last {data} message in a topic
 	SeqId int `json:"seq,omitempty"`
-	// Greatest ID of the messages fetched from the topic (for read-unread status)
+	// ID of the message reported by the client as read
 	ReadSeqId int `json:"read,omitempty"`
+	RecvSeqId int `json:"recv,omitempty"`
 	// P2P topics only
 	// ID of the other user
 	With string `json:"with,omitempty"`
