@@ -29,89 +29,6 @@ package main
  *
  * Messaging structures
  *
- * ==Client to server messages
- *
- *  login: authenticate user
- *    scheme string // optional, defaults to "basic"
- *      "basic": secret = uname+ ":" + password (not base64 encoded)
- *      "token": secret = token, obtained earlier
- *    secret string // optional, authentication string
- *    expireIn string // optional, string of the form "5m"
- *    tag string // optional, id of an application instance which created this session
- *
- *  sub: subsribe to a topic (subscribe + attach in one):
- *    (a) establish a persistent connection between a user and a topic, user wants to receive all messages form a topic
- *    (b) indicate that the user is ready to receive messages from a topic right now until the user is
- *        disconnected or unsubscribed
- *    topic string; // required, name of the topic, [A-Za-z0-9+/=].
- *    // Special topics:
- *      "!new": create a new topic and subscribe to it
- *      "!me": attach, declare your online presence, start receiving targeted publications
- *      "!pres": attach, topic for presence updates
- *    mode uint; // access mode
- * 	  describe interface{} // optional, topic description, used only when topic = "!new"
- *
- *  unsub: unsubscribe from a topic (detach and unsubscribe in one)
- *	  break the persistent connection between a user and a topic, stop receiving messages
- *    topic string; // required
- *
- *  pub: publish a message to a topic, {pub} is possible for attached topics only
- *    topic string; // name of the topic to publish to
- *    content interface{};   // required, payload, passed unchanged
- *
- *  get: query topic state
- *    topic string; // name of the topic to query
- *    action string; // required, type of data to request, one of
-        "data" - fetch archived messages as {data} packets
-		"sub"  - get subscription info
- *		"info" - get topic info, requires no payload
- *	  browse *struct {
-		asc bool	// optional - sort results in ascending order by time (desc is the default)
- *		since  *time.Time // optional, return messages newer than this
- *		before *time.Time // optional, return messages older than this
- *		limit  uint       // optional, limit the number of results
- *	  }; // optional, payload for "msg" and "sub" requests, get data between [Since] and [Before],
-		// limit count to [Limit], defaulting to all data updated since last login on this device
- *
- * 	set: request to change topic state
- *    topic string; // name of the topic to update
- * 	  action string; // required, type of data to change, one of
-		"del" -- delete messages older than specified time
-		"sub" -- change subscription params
-		"info" -- update topic params
-	  params *struct {
-		mode uint; // optional, change current sub.Want mode
-		public interface{} // optional, public value to update
-		private interface{} // optional, private value to update
-		before *time.Time // optional, delete messages older than this
-	  };
- *
- * ==Server to client messages
- *
- *  ctrl: error or control message
- *    code int; // HTTP Status code
- *    text string; // optional text string
- *    topic string; // optional topic name if the packet is a response in context of a topic
- *    params map[string]; // optional params
- *
- *  data: content, generic data
- *    topic string; // name of the originating topic, could be "!usr:<username>"
- *    origin string: // channel of the person who sent the message, optional
- *    id int; // optional message id
- *    content interface{}; // required, payload, passed unchanged
- *
- *  meta: server response to {get} message
- *    topic string; // name of the topic associated with request
- *  pres: presence/status change notification
- *    topic string; // name of the originating topic, could be "!me" for owner-based notifications
- *    action string; // what happened
- * 		// possible actions:
-		// on, off - user went online/offline
-		// sub, unsub -- user subscriped or unsubscribed
-		// in, out -- user joined/left topic
-		// upd -- user or topic has upadated description
- *    who string; // required, user or topic which changed the state
- *
  *****************************************************************************/
 
 import (
@@ -282,6 +199,16 @@ type MsgClientDel struct {
 	Hard bool `json:"hard,omitempty"`
 }
 
+// MsgClientPing is a client-generated notification for tpopic subscribers
+type MsgClientPing struct {
+	// There is no Id -- server will not akn {ping} packets, they are "fire and forget"
+	Topic string `json:"topic"`
+	// what is being reported: "rcpt" - message received, "read" - message read, "kp" - typing notification
+	What string `json:"what"`
+	// Server-issued message ID being reported
+	SeqId int `json:"seq,omitempty"`
+}
+
 type ClientComMessage struct {
 	Acc   *MsgClientAcc   `json:"acc"`
 	Login *MsgClientLogin `json:"login"`
@@ -291,6 +218,7 @@ type ClientComMessage struct {
 	Get   *MsgClientGet   `json:"get"`
 	Set   *MsgClientSet   `json:"set"`
 	Del   *MsgClientDel   `json:"del"`
+	Ping  *MsgClientPing  `json:"ping"`
 
 	// from: userid as string
 	from      string
@@ -401,11 +329,23 @@ type MsgServerMeta struct {
 	Sub  []MsgTopicSub `json:"sub,omitempty"`  // Subscriptions as an array of objects
 }
 
+// MsgServerPing is the server-side copy of MsgClientPing with From added
+type MsgServerPing struct {
+	Topic string `json:"topic"`
+	// ID of the user who originated the message
+	From string `json:"from"`
+	// what is being reported: "rcpt" - message received, "read" - message read, "kp" - typing notification
+	What string `json:"what"`
+	// Server-issued message ID being reported
+	SeqId int `json:"seq,omitempty"`
+}
+
 type ServerComMessage struct {
 	Ctrl *MsgServerCtrl `json:"ctrl,omitempty"`
 	Data *MsgServerData `json:"data,omitempty"`
 	Meta *MsgServerMeta `json:"meta,omitempty"`
 	Pres *MsgServerPres `json:"pres,omitempty"`
+	Ping *MsgServerPing `json:"ping,omitempty"`
 
 	// to: topic
 	rcptto string

@@ -277,11 +277,14 @@ func (t *Topic) run(hub *Hub) {
 					// This is just a request for status, don't forward it to sessions
 					continue
 				}
+			} else if msg.Ping != nil && msg.Ping.SeqId > t.lastId {
+				// Skip bogus read notification
+				continue
 			}
 
-			// Broadcast the message. Only {data} and {pres} are broadcastable.
+			// Broadcast the message. Only {data}, {pres}, {ping} are broadcastable.
 			// {meta} and {ctrl} are sent to the session only
-			if msg.Data != nil || msg.Pres != nil {
+			if msg.Data != nil || msg.Pres != nil || msg.Ping != nil {
 				var packet, _ = json.Marshal(msg)
 				for sess := range t.sessions {
 					if sess == msg.skipSession {
@@ -1162,6 +1165,7 @@ func isNullValue(i interface{}) bool {
 }
 
 func topicCat(name string) TopicCat {
+
 	switch name[0:3] {
 	case "usr":
 		return TopicCat_Me

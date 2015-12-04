@@ -205,6 +205,10 @@ func (s *Session) dispatch(raw []byte) {
 		s.acc(&msg)
 		log.Println("dispatch: Acc done")
 
+	case msg.Ping != nil:
+		s.ping(&msg)
+		log.Println("dispatch: Ping." + msg.Ping.What + " done")
+
 	default:
 		// Unknown message
 		s.QueueOut(ErrMalformed("", "", msg.timestamp))
@@ -535,6 +539,39 @@ func (s *Session) del(msg *ClientComMessage) {
 	} else {
 		log.Println("s.del: can Del for subscribed topics only")
 		s.QueueOut(ErrPermissionDenied(msg.Del.Id, original, msg.timestamp))
+	}
+}
+
+// Broadcast a transient {ping} message to active topic subscribers
+// Not reporting any errors
+func (s *Session) ping(msg *ClientComMessage) {
+
+	_, routeTo, err := s.validateTopicName("", msg.Ping.Topic, msg.timestamp)
+	if err != nil {
+		return
+	}
+
+	switch msg.Ping.What {
+	case "kp":
+		if msg.Ping.SeqId != 0 {
+			return
+		}
+	case "read", "rcpt":
+		if msg.Ping.SeqId <= 0 {
+			return
+		}
+	default:
+		return
+	}
+
+	if sub, ok := s.subs[routeTo]; ok {
+		// Pings can be sent to subscribed topics only
+		sub.broadcast <- &ServerComMessage{Ping: &MsgServerPing{
+			Topic: msg.Ping.Topic,
+			From:  s.uid.UserId(),
+			What:  msg.Ping.What,
+			SeqId: msg.Ping.SeqId,
+		}, appid: s.appid, rcptto: routeTo, timestamp: msg.timestamp, skipSession: s}
 	}
 }
 

@@ -353,9 +353,24 @@ del: {
                // (exclusive of the value itself), optional
 }
 ```
-
 No special permission is needed to soft-delete messages `hard=false`. Soft-deleting messages hides them from the
 requesting user. `D` permission is needed to hard-delete messages. Only owner can delete a topic.
+
+#### `{ping}`
+
+Client-generated notification for other clients currently attached to the topic. Pings are "fire and forget": not stored to disk and not acknowledged by the server. They are intended for ephemeral notifications, such as typing notifications and delivery receipts.
+
+```js
+ping: {
+  topic: "grp1XUtEhjv6HND", // string, topic to notify, required
+  what: "kp", // string, one of "kp" (key press), "read" (read notification),
+              // "rcpt" (received notification), any other string will cause
+              // message to be dropped, required
+  seq: 123, // integer, ID of the message being acknowledged, required for
+            // rcpt & read
+}
+```
+
 
 ### Server to client messages
 
