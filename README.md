@@ -372,7 +372,7 @@ ping: {
 The following actions are currently recognized:
  * kp: key press, i.e. a typing notification. The client should use it to indicate that the user is composing a new message.
  * rcpt: a `{data}` message is received by the client software but not yet seen by user.
- * read: a `{data}` message is seen by the user. It implies `rcpt` too.
+ * read: a `{data}` message is seen by the user. It implies `rcpt`.
 
 ### Server to client messages
 
@@ -498,7 +498,7 @@ Tinode uses `{pres}` message to inform users of important events. The following 
 ```js
 pres: {
   topic: "grp1XUtEhjv6HND", // string, topic affected by the change, always present
-  src: "usr2il9suCbuko", // user or topic affected by the change, always present
+  src: "usr2il9suCbuko", // string, user or topic affected by the change, always present
   what: "on", // string, what's changed, always present
   seq: 123, // integer, if "what" is "msg", server-issued ID of the message,
               // optional
@@ -510,6 +510,21 @@ pres: {
 The `{pres}` messages are purely transient. No attempt is made to store a `{pres}` message or deliver it later if the target is unavailable.
 
 Timestamp is not present in `{pres}` messages.
+
+#### `{ping}`
+
+Client-generated notification forwarded on behalf of the client.
+
+```js
+ping: {
+  topic: "grp1XUtEhjv6HND", // string, topic affected, always present
+  from: "usr2il9suCbuko", // string, id of the user who published the
+                          // message, always present
+  what: "read", // string, see client-side {ping}, always present
+  seq: 123, // integer, ID of the message that client has acknowledged, present for
+            // rcpt & read
+}
+```
 
 
 ## Users
