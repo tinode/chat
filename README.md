@@ -443,8 +443,9 @@ ctrl: {
       "given":"RWP" // string, granted access permission
     },
     seq: 123, // integer, server-issued id of the last {data} message
-    read: 120, // integer, ID of the message last received by the user, either
-              // pushed or requested through {get what="data"}
+    read: 112, // integer, ID of the message user claims through {ping} message
+              // to have read, optional
+    recv: 115, // integer, like 'read', but received, optional
     public: { ... }, // application-defined data that's available to all topic
                      // subscribers
     private: { ...} // application-deinfed data that's available to the current
@@ -468,8 +469,9 @@ ctrl: {
       // The following fields are present only when querying 'me' topic
       topic: "grp1XUtEhjv6HND", // string, topic this subscription describes
       seq: 321, // integer, server-issued id of the last {data} message
-      read: 312, // integer, ID of the message last received by the user, either
-                // pushed or requested through {get what="data"}
+      read: 112, // integer, ID of the message user claims through {ping} message 
+                // to have read, optional
+      recv: 315, // integer, like 'read', but received, optional
       with: "usr2il9suCbuko", // string, if this is a P2P topic, peer's ID, optional
       seen: { // object, if this is a P2P topic, info on when the peer was last
               //online
