@@ -205,9 +205,9 @@ func (s *Session) dispatch(raw []byte) {
 		s.acc(&msg)
 		log.Println("dispatch: Acc done")
 
-	case msg.Ping != nil:
-		s.ping(&msg)
-		log.Println("dispatch: Ping." + msg.Ping.What + " done")
+	case msg.Note != nil:
+		s.note(&msg)
+		log.Println("dispatch: Ping." + msg.Note.What + " done")
 
 	default:
 		// Unknown message
@@ -544,20 +544,20 @@ func (s *Session) del(msg *ClientComMessage) {
 
 // Broadcast a transient {ping} message to active topic subscribers
 // Not reporting any errors
-func (s *Session) ping(msg *ClientComMessage) {
+func (s *Session) note(msg *ClientComMessage) {
 
-	_, routeTo, err := s.validateTopicName("", msg.Ping.Topic, msg.timestamp)
+	_, routeTo, err := s.validateTopicName("", msg.Note.Topic, msg.timestamp)
 	if err != nil {
 		return
 	}
 
-	switch msg.Ping.What {
+	switch msg.Note.What {
 	case "kp":
-		if msg.Ping.SeqId != 0 {
+		if msg.Note.SeqId != 0 {
 			return
 		}
 	case "read", "recv":
-		if msg.Ping.SeqId <= 0 {
+		if msg.Note.SeqId <= 0 {
 			return
 		}
 	default:
@@ -566,11 +566,11 @@ func (s *Session) ping(msg *ClientComMessage) {
 
 	if sub, ok := s.subs[routeTo]; ok {
 		// Pings can be sent to subscribed topics only
-		sub.broadcast <- &ServerComMessage{Ping: &MsgServerPing{
-			Topic: msg.Ping.Topic,
+		sub.broadcast <- &ServerComMessage{Info: &MsgServerInfo{
+			Topic: msg.Note.Topic,
 			From:  s.uid.UserId(),
-			What:  msg.Ping.What,
-			SeqId: msg.Ping.SeqId,
+			What:  msg.Note.What,
+			SeqId: msg.Note.SeqId,
 		}, appid: s.appid, rcptto: routeTo, timestamp: msg.timestamp, skipSession: s}
 	}
 }

@@ -199,8 +199,8 @@ type MsgClientDel struct {
 	Hard bool `json:"hard,omitempty"`
 }
 
-// MsgClientPing is a client-generated notification for topic subscribers
-type MsgClientPing struct {
+// MsgClientNote is a client-generated notification for topic subscribers
+type MsgClientNote struct {
 	// There is no Id -- server will not akn {ping} packets, they are "fire and forget"
 	Topic string `json:"topic"`
 	// what is being reported: "recv" - message received, "read" - message read, "kp" - typing notification
@@ -218,7 +218,7 @@ type ClientComMessage struct {
 	Get   *MsgClientGet   `json:"get"`
 	Set   *MsgClientSet   `json:"set"`
 	Del   *MsgClientDel   `json:"del"`
-	Ping  *MsgClientPing  `json:"ping"`
+	Note  *MsgClientNote  `json:"note"`
 
 	// from: userid as string
 	from      string
@@ -331,8 +331,8 @@ type MsgServerMeta struct {
 	Sub  []MsgTopicSub `json:"sub,omitempty"`  // Subscriptions as an array of objects
 }
 
-// MsgServerPing is the server-side copy of MsgClientPing with From added
-type MsgServerPing struct {
+// MsgServerInfo is the server-side copy of MsgClientNote with From added
+type MsgServerInfo struct {
 	Topic string `json:"topic"`
 	// ID of the user who originated the message
 	From string `json:"from"`
@@ -347,7 +347,7 @@ type ServerComMessage struct {
 	Data *MsgServerData `json:"data,omitempty"`
 	Meta *MsgServerMeta `json:"meta,omitempty"`
 	Pres *MsgServerPres `json:"pres,omitempty"`
-	Ping *MsgServerPing `json:"ping,omitempty"`
+	Info *MsgServerInfo `json:"info,omitempty"`
 
 	// to: topic
 	rcptto string

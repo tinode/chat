@@ -273,27 +273,27 @@ func (t *Topic) run(hub *Hub) {
 					// This is just a request for status, don't forward it to sessions
 					continue
 				}
-			} else if msg.Ping != nil {
-				if msg.Ping.SeqId > t.lastId {
+			} else if msg.Info != nil {
+				if msg.Info.SeqId > t.lastId {
 					// Skip bogus read notification
 					continue
 				}
 
-				if msg.Ping.What == "read" || msg.Ping.What == "recv" {
-					uid := types.ParseUserId(msg.Ping.From)
+				if msg.Info.What == "read" || msg.Info.What == "recv" {
+					uid := types.ParseUserId(msg.Info.From)
 					pud := t.perUser[uid]
 					var read, recv int
-					if msg.Ping.What == "read" {
-						if msg.Ping.SeqId > pud.readId {
-							pud.readId = msg.Ping.SeqId
+					if msg.Info.What == "read" {
+						if msg.Info.SeqId > pud.readId {
+							pud.readId = msg.Info.SeqId
 							read = pud.readId
 						} else {
 							// No need to report stale or bogus read status
 							continue
 						}
-					} else if msg.Ping.What == "recv" {
-						if msg.Ping.SeqId > pud.recvId {
-							pud.recvId = msg.Ping.SeqId
+					} else if msg.Info.What == "recv" {
+						if msg.Info.SeqId > pud.recvId {
+							pud.recvId = msg.Info.SeqId
 							recv = pud.recvId
 						} else {
 							continue
@@ -322,7 +322,7 @@ func (t *Topic) run(hub *Hub) {
 
 			// Broadcast the message. Only {data}, {pres}, {ping} are broadcastable.
 			// {meta} and {ctrl} are sent to the session only
-			if msg.Data != nil || msg.Pres != nil || msg.Ping != nil {
+			if msg.Data != nil || msg.Pres != nil || msg.Info != nil {
 				var packet, _ = json.Marshal(msg)
 				for sess := range t.sessions {
 					if sess == msg.skipSession {
@@ -893,6 +893,7 @@ func (t *Topic) replySetInfo(sess *Session, set *MsgClientSet) error {
 			upd[what] = p
 			changed = true
 		}
+		return
 	}
 
 	updateCached := func(upd map[string]interface{}) {
