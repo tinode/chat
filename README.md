@@ -73,7 +73,7 @@ When user's `me` topic comes online (i.e. an authenticated session attaches to `
 
 ## General considerations
 
-Timestamps are always represented as RFC 3999-formatted string with precision to milliseconds and timezone always set to UTC, e.g. `"2015-10-06T18:07:29.841Z"`.
+Timestamps are always represented as RFC 3339-formatted string with precision to milliseconds and timezone always set to UTC, e.g. `"2015-10-06T18:07:29.841Z"`.
 
 Whenever base64 encoding is mentioned, it means base64 URL encoding with padding characters stripped, see RFC 4648.
 
