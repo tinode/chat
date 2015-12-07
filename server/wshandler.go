@@ -133,8 +133,7 @@ var upgrader = websocket.Upgrader{
 }
 
 func serveWebSocket(wrt http.ResponseWriter, req *http.Request) {
-	var appid uint32 = 0
-	if appid, _ = checkApiKey(getApiKey(req)); appid == 0 {
+	if isValid, _ := checkApiKey(getApiKey(req)); !isValid {
 		http.Error(wrt, "Missing, invalid or expired API key", http.StatusForbidden)
 		log.Println("ws: Missing, invalid or expired API key")
 		return
@@ -155,7 +154,7 @@ func serveWebSocket(wrt http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	sess := globals.sessionStore.Create(ws, appid)
+	sess := globals.sessionStore.Create(ws)
 
 	sess.QueueOut(&ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        req.FormValue("id"),

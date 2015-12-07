@@ -37,7 +37,6 @@ import (
 	"crypto/md5"
 	"crypto/rand"
 	"encoding/base64"
-	"encoding/binary"
 	"log"
 )
 
@@ -82,7 +81,8 @@ func isValidPass(password string, validMac []byte) bool {
 // All integers are little-endian
 
 const (
-	APIKEY_VERSION   = 1
+	APIKEY_VERSION = 1
+	// APPKEY is deprecated and will be removed in the future
 	APIKEY_APPID     = 4
 	APIKEY_SEQUENCE  = 2
 	APIKEY_WHO       = 1
@@ -93,7 +93,7 @@ const (
 // Client signature validation
 //   key: client's secret key
 // Returns application id, key type
-func checkApiKey(apikey string) (appid uint32, isRoot bool) {
+func checkApiKey(apikey string) (isValid, isRoot bool) {
 
 	if declen := base64.URLEncoding.DecodedLen(len(apikey)); declen != APIKEY_LENGTH {
 		return
@@ -117,7 +117,9 @@ func checkApiKey(apikey string) (appid uint32, isRoot bool) {
 		return
 	}
 
-	appid = binary.LittleEndian.Uint32(data[APIKEY_VERSION : APIKEY_VERSION+APIKEY_APPID])
 	isRoot = (data[APIKEY_VERSION+APIKEY_APPID+APIKEY_SEQUENCE] == 1)
+
+	isValid = true
+
 	return
 }

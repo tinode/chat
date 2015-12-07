@@ -69,9 +69,6 @@ type Session struct {
 	// IP address of the client. For long polling this is the IP of the last poll
 	remoteAddr string
 
-	// Application ID
-	appid uint32
-
 	// User agent, a string provived by an authenticated client in {login} packet
 	userAgent string
 
@@ -295,7 +292,7 @@ func (s *Session) publish(msg *ClientComMessage) {
 		From:      msg.from,
 		Timestamp: msg.timestamp,
 		Content:   msg.Pub.Content},
-		appid: s.appid, rcptto: routeTo, akn: s.send, id: msg.Pub.Id, timestamp: msg.timestamp}
+		rcptto: routeTo, akn: s.send, id: msg.Pub.Id, timestamp: msg.timestamp}
 
 	if sub, ok := s.subs[routeTo]; ok {
 		// This is a post to a subscribed topic. The message is sent to the topic only
@@ -325,7 +322,7 @@ func (s *Session) login(msg *ClientComMessage) {
 		return
 
 	} else if msg.Login.Scheme == "" || msg.Login.Scheme == "basic" {
-		uid, err = store.Users.Login(s.appid, msg.Login.Scheme, msg.Login.Secret)
+		uid, err = store.Users.Login(msg.Login.Scheme, msg.Login.Secret)
 		if err != nil {
 			// DB error
 			log.Println(err)
@@ -384,7 +381,7 @@ func (s *Session) acc(msg *ClientComMessage) {
 					user.Public = msg.Acc.Init.Public
 					private = msg.Acc.Init.Private
 				}
-				_, err := store.Users.Create(s.appid, &user, auth.Scheme, auth.Secret, private)
+				_, err := store.Users.Create(&user, auth.Scheme, auth.Secret, private)
 				if err != nil {
 					if err.Error() == "duplicate credential" {
 						s.QueueOut(ErrDuplicateCredential(msg.Acc.Id, "", msg.timestamp))
@@ -418,7 +415,7 @@ func (s *Session) acc(msg *ClientComMessage) {
 		// Request to change auth of an existing account. Only basic auth is currently supported
 		for _, auth := range msg.Acc.Auth {
 			if auth.Scheme == "basic" {
-				if err := store.Users.ChangeAuthCredential(s.appid, s.uid, auth.Scheme, auth.Secret); err != nil {
+				if err := store.Users.ChangeAuthCredential(s.uid, auth.Scheme, auth.Secret); err != nil {
 					s.QueueOut(ErrUnknown(msg.Acc.Id, "", msg.timestamp))
 					return
 				}
@@ -571,7 +568,7 @@ func (s *Session) note(msg *ClientComMessage) {
 			From:  s.uid.UserId(),
 			What:  msg.Note.What,
 			SeqId: msg.Note.SeqId,
-		}, appid: s.appid, rcptto: routeTo, timestamp: msg.timestamp, skipSession: s}
+		}, rcptto: routeTo, timestamp: msg.timestamp, skipSession: s}
 	}
 }
 

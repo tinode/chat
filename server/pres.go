@@ -77,7 +77,7 @@ import (
 // loadContacts initializes topic.perSubs to support presence notifications
 // Case 1.a.i, 1.a.ii
 func (t *Topic) loadContacts(uid types.Uid) error {
-	subs, err := store.Users.GetSubs(t.appid, uid)
+	subs, err := store.Users.GetSubs(uid)
 	if err != nil {
 		return err
 	}
@@ -115,7 +115,7 @@ func (t *Topic) presPubMeChange(what string, ua string) {
 	update := &MsgServerPres{Topic: "me", What: what, Src: t.name, UserAgent: ua,
 		wantReply: (what == "on" || what == "off")}
 	for topic, _ := range t.perSubs {
-		globals.hub.route <- &ServerComMessage{Pres: update, appid: t.appid, rcptto: topic}
+		globals.hub.route <- &ServerComMessage{Pres: update, rcptto: topic}
 
 		//log.Printf("Pres 1.a.iii, 2, 3: from '%s' (src: %s) to %s [%s], ua: '%s'", t.name, update.Src, topic, what, ua)
 	}
@@ -146,9 +146,7 @@ func (t *Topic) presProcReq(fromTopic string, online bool) {
 		globals.hub.route <- &ServerComMessage{
 			// Topic is 'me' even for group topics; group topics will use 'me' as a signal to drop the message
 			// without forwarding to sessions
-			Pres:   &MsgServerPres{Topic: "me", What: "on", Src: t.name},
-			appid:  t.appid,
-			rcptto: fromTopic}
+			Pres: &MsgServerPres{Topic: "me", What: "on", Src: t.name}, rcptto: fromTopic}
 	}
 }
 
@@ -157,8 +155,7 @@ func (t *Topic) presProcReq(fromTopic string, online bool) {
 func (t *Topic) presPubChange(src, what string) {
 
 	globals.hub.route <- &ServerComMessage{
-		Pres:  &MsgServerPres{Topic: t.original, What: what, Src: src},
-		appid: t.appid, rcptto: t.name}
+		Pres: &MsgServerPres{Topic: t.original, What: what, Src: src}, rcptto: t.name}
 
 	//log.Printf("Pres 4,7: from '%s' (src: %s) [%s]", t.name, src, what)
 }
@@ -177,8 +174,7 @@ func (t *Topic) presPubTopicOnline(online bool) {
 	update := &MsgServerPres{Topic: "me", What: what, Src: t.original}
 	for uid, pud := range t.perUser {
 		if pud.modeGiven&pud.modeWant&types.ModePres != 0 {
-			globals.hub.route <- &ServerComMessage{Pres: update, appid: t.appid,
-				rcptto: uid.UserId()}
+			globals.hub.route <- &ServerComMessage{Pres: update, rcptto: uid.UserId()}
 
 			// log.Printf("Pres 5: from '%s' (src %s) to '%s' [%s]", t.name, update.Src, uid.UserId(), what)
 		}
@@ -192,8 +188,7 @@ func (t *Topic) presPubMessageSent(seq int) {
 
 	for uid, pud := range t.perUser {
 		if pud.online == 0 && pud.modeGiven&pud.modeWant&types.ModePres != 0 {
-			globals.hub.route <- &ServerComMessage{Pres: update, appid: t.appid,
-				rcptto: uid.UserId()}
+			globals.hub.route <- &ServerComMessage{Pres: update, rcptto: uid.UserId()}
 
 			// log.Printf("Pres 6: from %s (src: %s), to %s [msg=%d]", t.name, update.Src, uid.UserId(), seq)
 		}
@@ -211,7 +206,7 @@ func (t *Topic) presPubUAChange(ua string) {
 	// Push update to subscriptions
 	update := &MsgServerPres{Topic: "me", What: "ua", Src: t.name, UserAgent: ua}
 	for topic, _ := range t.perSubs {
-		globals.hub.route <- &ServerComMessage{Pres: update, appid: t.appid, rcptto: topic}
+		globals.hub.route <- &ServerComMessage{Pres: update, rcptto: topic}
 
 		// log.Printf("Case 8: from '%s' to %s [%s]", t.name, topic, ua)
 	}
@@ -233,8 +228,7 @@ func (t *Topic) presPubAllRead(skip *Session, recv, read int) {
 		update := &MsgServerPres{Topic: "me", What: what, Src: t.original, SeqId: seq}
 
 		if pud.modeGiven&pud.modeWant&types.ModePres != 0 {
-			globals.hub.route <- &ServerComMessage{Pres: update, appid: t.appid,
-				rcptto: skip.uid.UserId(), skipSession: skip}
+			globals.hub.route <- &ServerComMessage{Pres: update, rcptto: skip.uid.UserId(), skipSession: skip}
 
 			// log.Printf("Case 9: from '%s' to %s [read]", t.name, skip.uid.UserId())
 		}

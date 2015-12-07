@@ -49,9 +49,6 @@ type Topic struct {
 	// session-specific topic name, such as 'me'
 	original string
 
-	// AppID
-	appid uint32
-
 	// topic category
 	cat TopicCat
 
@@ -176,7 +173,7 @@ func (t *Topic) run(hub *Hub) {
 				// User wants to unsubscribe.
 
 				// Delete user's subscription from the database
-				if err := store.Subs.Delete(t.appid, t.name, leave.sess.uid); err != nil {
+				if err := store.Subs.Delete(t.name, leave.sess.uid); err != nil {
 					if leave.pkt != nil {
 						leave.sess.QueueOut(ErrUnknown(leave.pkt.Leave.Id, leave.pkt.Leave.Topic, now))
 					}
@@ -204,7 +201,7 @@ func (t *Topic) run(hub *Hub) {
 						uaTimer.Reset(time.Minute)
 					}
 					// Update user's last online timestamp & user agent
-					if err := store.Users.UpdateLastSeen(t.appid, mrs.uid, mrs.userAgent, now); err != nil {
+					if err := store.Users.UpdateLastSeen(mrs.uid, mrs.userAgent, now); err != nil {
 						log.Println(err)
 					}
 				} else if t.cat == TopicCat_Grp && pud.online == 0 {
@@ -242,7 +239,7 @@ func (t *Topic) run(hub *Hub) {
 					}
 				}
 
-				if err := store.Messages.Save(t.appid, &types.Message{
+				if err := store.Messages.Save(&types.Message{
 					ObjHeader: types.ObjHeader{CreatedAt: msg.Data.Timestamp},
 					SeqId:     t.lastId + 1,
 					Topic:     t.name,
@@ -305,7 +302,7 @@ func (t *Topic) run(hub *Hub) {
 						recv = pud.recvId
 					}
 
-					if err := store.Subs.Update(t.appid, t.name, uid,
+					if err := store.Subs.Update(t.name, uid,
 						map[string]interface{}{
 							"RecvSeqId": pud.recvId,
 							"ReadSeqId": pud.readId}); err != nil {
@@ -379,7 +376,7 @@ func (t *Topic) run(hub *Hub) {
 		case <-killTimer.C:
 			log.Println("Topic timeout: ", t.name)
 			// Ensure that the messages are no longer routed to this topic
-			hub.unreg <- topicUnreg{appid: t.appid, topic: t.name}
+			hub.unreg <- topicUnreg{topic: t.name}
 			// FIXME(gene): save lastMessage value;
 			if t.cat == TopicCat_Me {
 				t.presPubMeChange("off", currentUA)
@@ -560,7 +557,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string, inf
 			Private:   userData.private,
 		}
 
-		if err := store.Subs.Create(t.appid, &sub); err != nil {
+		if err := store.Subs.Create(&sub); err != nil {
 			log.Println(err.Error())
 			simpleByteSender(sess.send, ErrUnknown(pktId, t.original, now))
 			return err
@@ -635,7 +632,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string, inf
 			if updGiven != nil {
 				update["ModeGiven"] = int(*updGiven)
 			}
-			if err := store.Subs.Update(t.appid, t.name, sess.uid, update); err != nil {
+			if err := store.Subs.Update(t.name, sess.uid, update); err != nil {
 				simpleByteSender(sess.send, ErrUnknown(pktId, t.original, now))
 				return err
 			}
@@ -649,7 +646,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string, inf
 			userData = t.perUser[t.owner]
 			userData.modeGiven = (userData.modeGiven & ^types.ModeOwner)
 			userData.modeWant = (userData.modeWant & ^types.ModeOwner)
-			if err := store.Subs.Update(t.appid, t.name, t.owner,
+			if err := store.Subs.Update(t.name, t.owner,
 				// FIXME(gene): gorethink has a bug which causes ModeXYZ to be saved as a string, converting to int
 				map[string]interface{}{
 					"ModeWant":  int(userData.modeWant),
@@ -742,7 +739,7 @@ func (t *Topic) approveSub(h *Hub, sess *Session, target types.Uid, set *MsgClie
 			ModeGiven: modeGiven,
 		}
 
-		if err := store.Subs.Create(t.appid, &sub); err != nil {
+		if err := store.Subs.Create(&sub); err != nil {
 			simpleByteSender(sess.send, ErrUnknown(set.Id, t.original, now))
 			return err
 		}
@@ -766,7 +763,7 @@ func (t *Topic) approveSub(h *Hub, sess *Session, target types.Uid, set *MsgClie
 			userData.modeGiven = modeGiven
 
 			// Save changed value to database
-			if err := store.Subs.Update(t.appid, t.name, sess.uid,
+			if err := store.Subs.Update(t.name, sess.uid,
 				map[string]interface{}{"ModeGiven": modeGiven}); err != nil {
 				return err
 			}
@@ -946,15 +943,15 @@ func (t *Topic) replySetInfo(sess *Session, set *MsgClientSet) error {
 
 	var change int
 	if len(user) > 0 {
-		err = store.Users.Update(t.appid, sess.uid, user)
+		err = store.Users.Update(sess.uid, user)
 		change++
 	}
 	if err == nil && len(topic) > 0 {
-		err = store.Topics.Update(t.appid, t.name, topic)
+		err = store.Topics.Update(t.name, topic)
 		change++
 	}
 	if err == nil && len(sub) > 0 {
-		err = store.Subs.Update(t.appid, t.name, sess.uid, sub)
+		err = store.Subs.Update(t.name, sess.uid, sub)
 		change++
 	}
 
@@ -999,10 +996,10 @@ func (t *Topic) replyGetSub(sess *Session, id string) error {
 
 	if t.cat == TopicCat_Me {
 		// Fetch user's subscriptions, with Topic.Public denormalized into subscription
-		subs, err = store.Users.GetTopics(sess.appid, sess.uid)
+		subs, err = store.Users.GetTopics(sess.uid)
 	} else {
 		// Fetch subscriptions, User.Public denormalized into subscription
-		subs, err = store.Topics.GetUsers(sess.appid, t.name)
+		subs, err = store.Topics.GetUsers(t.name)
 	}
 
 	if err != nil {
@@ -1021,8 +1018,6 @@ func (t *Topic) replyGetSub(sess *Session, id string) error {
 			if t.cat == TopicCat_Me {
 				mts.Topic = sub.Topic
 				mts.SeqId = sub.GetSeqId()
-				mts.ReadSeqId = sub.ReadSeqId
-				mts.RecvSeqId = sub.RecvSeqId
 				mts.With = sub.GetWith()
 				mts.UpdatedAt = &sub.UpdatedAt
 				lastSeen := sub.GetLastSeen()
@@ -1042,6 +1037,8 @@ func (t *Topic) replyGetSub(sess *Session, id string) error {
 					}
 				}
 			}
+			mts.ReadSeqId = sub.ReadSeqId
+			mts.RecvSeqId = sub.RecvSeqId
 			mts.AcsMode = (sub.ModeGiven & sub.ModeWant).String()
 			mts.Public = sub.GetPublic()
 			if uid == sess.uid {
@@ -1088,7 +1085,7 @@ func (t *Topic) replyGetData(sess *Session, id string, req *MsgBrowseOpts) error
 
 	opts := msgOpts2storeOpts(req)
 
-	messages, err := store.Messages.GetAll(sess.appid, t.name, opts)
+	messages, err := store.Messages.GetAll(t.name, opts)
 	if err != nil {
 		log.Println("topic: error loading topics ", err)
 		reply := ErrUnknown(id, t.original, now)
@@ -1138,9 +1135,7 @@ func (t *Topic) makeInvite(notify, target, from types.Uid, act types.InviteActio
 		Topic:     "me",
 		From:      from.UserId(),
 		Timestamp: time.Now().UTC().Round(time.Millisecond),
-		Content:   converted},
-		rcptto: notify.UserId(),
-		appid:  t.appid}
+		Content:   converted}, rcptto: notify.UserId()}
 	log.Printf("Invite generated: %#+v", msg.Data)
 	return msg
 }

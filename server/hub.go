@@ -35,7 +35,6 @@ import (
 	"encoding/json"
 	"expvar"
 	"log"
-	"strconv"
 	"strings"
 	"time"
 
@@ -69,7 +68,6 @@ type sessionLeave struct {
 
 // Remove topic from hub
 type topicUnreg struct {
-	appid uint32
 	// Name of the topic to drop
 	topic string
 }
@@ -112,20 +110,16 @@ type Hub struct {
 	topicsLive *expvar.Int
 }
 
-func (h *Hub) topicKey(appid uint32, name string) string {
-	return strconv.FormatInt(int64(appid), 32) + "!" + name
+func (h *Hub) topicGet(name string) *Topic {
+	return h.topics[name]
 }
 
-func (h *Hub) topicGet(appid uint32, name string) *Topic {
-	return h.topics[h.topicKey(appid, name)]
+func (h *Hub) topicPut(name string, t *Topic) {
+	h.topics[name] = t
 }
 
-func (h *Hub) topicPut(appid uint32, name string, t *Topic) {
-	h.topics[h.topicKey(appid, name)] = t
-}
-
-func (h *Hub) topicDel(appid uint32, name string) {
-	delete(h.topics, h.topicKey(appid, name))
+func (h *Hub) topicDel(name string) {
+	delete(h.topics, name)
 }
 
 func newHub() *Hub {
@@ -161,7 +155,7 @@ func (h *Hub) run() {
 			// 2. Check access rights and reject, if appropriate
 			// 3. Attach session to the topic
 
-			t := h.topicGet(sreg.sess.appid, sreg.topic) // is the topic already loaded?
+			t := h.topicGet(sreg.topic) // is the topic already loaded?
 			if t == nil {
 				// Topic does not exist or not loaded
 				go topicInit(sreg, h)
@@ -176,7 +170,7 @@ func (h *Hub) run() {
 			// Route incoming message to topic if topic permits such routing
 
 			timestamp := time.Now().UTC().Round(time.Millisecond)
-			if dst := h.topicGet(msg.appid, msg.rcptto); dst != nil {
+			if dst := h.topicGet(msg.rcptto); dst != nil {
 				// Everything is OK, sending packet to known topic
 				//log.Printf("Hub. Sending message to '%s'", dst.name)
 
@@ -193,7 +187,7 @@ func (h *Hub) run() {
 					// persist message here. The only case of sending to offline topics is invites/info to 'me'
 					// The 'me' must receive them, so ignore access settings
 
-					if err := store.Messages.Save(msg.appid, &types.Message{
+					if err := store.Messages.Save(&types.Message{
 						ObjHeader: types.ObjHeader{CreatedAt: msg.Data.Timestamp},
 						Topic:     msg.rcptto,
 						// SeqId is assigned by the store.Mesages.Save
@@ -205,7 +199,7 @@ func (h *Hub) run() {
 					}
 
 					// TODO(gene): validate topic name, discarding invalid topics
-					log.Printf("Hub. Topic '%d.%s' is unknown or offline", msg.appid, msg.rcptto)
+					log.Printf("Hub. Topic[%s] is unknown or offline", msg.rcptto)
 					for tt, _ := range h.topics {
 						log.Printf("Hub contains topic '%s'", tt)
 					}
@@ -216,7 +210,7 @@ func (h *Hub) run() {
 		case meta := <-h.meta:
 			log.Println("hub.meta: got message")
 			// Request for topic info from a user who is not subscribed to the topic
-			if dst := h.topicGet(meta.sess.appid, meta.topic); dst != nil {
+			if dst := h.topicGet(meta.topic); dst != nil {
 				// If topic is already in memory, pass request to topic
 				log.Println("hub.meta: topic already in memory")
 				dst.meta <- meta
@@ -227,8 +221,8 @@ func (h *Hub) run() {
 			}
 
 		case unreg := <-h.unreg:
-			if t := h.topicGet(unreg.appid, unreg.topic); t != nil {
-				h.topicDel(unreg.appid, unreg.topic)
+			if t := h.topicGet(unreg.topic); t != nil {
+				h.topicDel(unreg.topic)
 				h.topicsLive.Add(-1)
 				t.sessions = nil
 				close(t.reg)
@@ -249,7 +243,6 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 
 	t = &Topic{name: sreg.topic,
 		original:  sreg.pkt.Topic,
-		appid:     sreg.sess.appid,
 		sessions:  make(map[*Session]bool),
 		broadcast: make(chan *ServerComMessage, 256),
 		reg:       make(chan *sessionJoin, 32),
@@ -270,7 +263,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		t.accessAuth = types.ModeBanned
 		t.accessAnon = types.ModeBanned
 
-		user, err := store.Users.Get(t.appid, sreg.sess.uid)
+		user, err := store.Users.Get(sreg.sess.uid)
 		if err != nil {
 			log.Println("hub: cannot load user object for 'me'='" + t.name + "' (" + err.Error() + ")")
 			sreg.sess.QueueOut(ErrUnknown(sreg.pkt.Id, t.original, timestamp))
@@ -317,7 +310,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		// Fetch user's public and default access
 		userId1 := sreg.sess.uid
 		userId2 := types.ParseUserId(t.original)
-		users, err := store.Users.GetAll(t.appid, userId1, userId2)
+		users, err := store.Users.GetAll(userId1, userId2)
 		if err != nil {
 			log.Println("hub: failed to load users for '" + t.name + "' (" + err.Error() + ")")
 			sreg.sess.QueueOut(ErrUnknown(sreg.pkt.Id, t.name, timestamp))
@@ -367,7 +360,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 			Private:   nil}
 		user2.SetPublic(users[u2].Public)
 
-		err = store.Topics.CreateP2P(t.appid, user1, user2)
+		err = store.Topics.CreateP2P(user1, user2)
 		if err != nil {
 			log.Println("hub: databse error in creating subscriptions '" + t.name + "' (" + err.Error() + ")")
 			sreg.sess.QueueOut(ErrUnknown(sreg.pkt.Id, t.name, timestamp))
@@ -408,7 +401,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		t.accessAnon = types.ModeBanned
 
 		// Load the topic object
-		stopic, err := store.Topics.Get(sreg.sess.appid, t.name)
+		stopic, err := store.Topics.Get(t.name)
 		if err != nil {
 			log.Println("hub: error while loading topic '" + t.name + "' (" + err.Error() + ")")
 			sreg.sess.QueueOut(ErrUnknown(sreg.pkt.Id, t.original, timestamp))
@@ -419,7 +412,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 			return
 		}
 
-		subs, err := store.Topics.GetSubs(t.appid, t.name)
+		subs, err := store.Topics.GetSubs(t.name)
 		if err != nil {
 			log.Println("hub: cannot load subscritions for '" + t.name + "' (" + err.Error() + ")")
 			sreg.sess.QueueOut(ErrUnknown(sreg.pkt.Id, t.name, timestamp))
@@ -507,7 +500,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 			Public:    t.public}
 		// store.Topics.Create will add a subscription record for the topic creator
 		stopic.GiveAccess(t.owner, userData.modeWant, userData.modeGiven)
-		err := store.Topics.Create(sreg.sess.appid, stopic, t.owner, t.perUser[t.owner].private)
+		err := store.Topics.Create(stopic, t.owner, t.perUser[t.owner].private)
 		if err != nil {
 			log.Println("hub: cannot save new topic '" + t.name + "' (" + err.Error() + ")")
 			// Error sent on "new" topic
@@ -524,7 +517,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		t.cat = TopicCat_Grp
 
 		// TODO(gene): check and validate topic name
-		stopic, err := store.Topics.Get(sreg.sess.appid, t.name)
+		stopic, err := store.Topics.Get(t.name)
 		if err != nil {
 			log.Println("hub: error while loading topic '" + t.name + "' (" + err.Error() + ")")
 			sreg.sess.QueueOut(ErrUnknown(sreg.pkt.Id, t.original, timestamp))
@@ -556,7 +549,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 
 	log.Println("hub: topic created or loaded: " + t.name)
 
-	h.topicPut(t.appid, t.name, t)
+	h.topicPut(t.name, t)
 	h.topicsLive.Add(1)
 	go t.run(h)
 
@@ -567,7 +560,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 
 // loadSubscribers loads topic subscribers, sets topic owner
 func (t *Topic) loadSubscribers() error {
-	subs, err := store.Topics.GetSubs(t.appid, t.name)
+	subs, err := store.Topics.GetSubs(t.name)
 	if err != nil {
 		return err
 	}
@@ -598,7 +591,7 @@ func replyTopicInfoBasic(sess *Session, topic string, get *MsgClientGet) {
 	info := &MsgTopicInfo{}
 
 	if strings.HasPrefix(topic, "grp") {
-		stopic, err := store.Topics.Get(sess.appid, topic)
+		stopic, err := store.Topics.Get(topic)
 		if err == nil {
 			info.CreatedAt = &stopic.CreatedAt
 			info.UpdatedAt = &stopic.UpdatedAt
@@ -628,7 +621,7 @@ func replyTopicInfoBasic(sess *Session, topic string, get *MsgClientGet) {
 			return
 		}
 
-		suser, err := store.Users.Get(sess.appid, uid)
+		suser, err := store.Users.Get(uid)
 		if err == nil {
 			info.CreatedAt = &suser.CreatedAt
 			info.UpdatedAt = &suser.UpdatedAt

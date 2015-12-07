@@ -462,17 +462,23 @@ ctrl: {
                                            // requester's own subscriptions
       mode: "RWPSDO",  // string, user's access permission, equal to bitwise
                        // AND (info.given & info.want)
-      public: { ... }, // application-defined user's 'public' object
+      read: 112, // integer, ID of the message user claims through {note} message
+                 // to have read, optional
+      recv: 315, // integer, like 'read', but received, optional
       private: { ... } // application-defined user's 'private' object, present only
                        // for the requester's own subscriptions
 
       // The following fields are present only when querying 'me' topic
+
       topic: "grp1XUtEhjv6HND", // string, topic this subscription describes
       seq: 321, // integer, server-issued id of the last {data} message
-      read: 112, // integer, ID of the message user claims through {note} message
-                // to have read, optional
-      recv: 315, // integer, like 'read', but received, optional
+
+      // The following fields are present only when querying 'me' topic and the
+      // topic described is a P2P topic
+
       with: "usr2il9suCbuko", // string, if this is a P2P topic, peer's ID, optional
+      public: { ... }, // application-defined user's 'public' object, present for
+                      // P2P topics only
       seen: { // object, if this is a P2P topic, info on when the peer was last
               //online
         when: "2015-10-24T10:26:09.716Z", // timestamp

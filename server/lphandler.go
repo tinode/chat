@@ -91,14 +91,13 @@ func (sess *Session) readOnce(req *http.Request) {
 //   - if payload exists, process it and close
 //  - if sid is not empty but there is no session, report an error
 func serveLongPoll(wrt http.ResponseWriter, req *http.Request) {
-	var appid uint32
 
 	// Use lowest common denominator - this is a legacy handler after all
 	wrt.Header().Set("Content-Type", "text/plain")
 
 	enc := json.NewEncoder(wrt)
 
-	if appid, _ = checkApiKey(getApiKey(req)); appid == 0 {
+	if isValid, _ := checkApiKey(getApiKey(req)); !isValid {
 		wrt.WriteHeader(http.StatusForbidden)
 		enc.Encode(
 			&ServerComMessage{Ctrl: &MsgServerCtrl{
@@ -127,7 +126,7 @@ func serveLongPoll(wrt http.ResponseWriter, req *http.Request) {
 	// Get session id
 	sid := req.FormValue("sid")
 	if sid == "" {
-		sess := globals.sessionStore.Create(wrt, appid)
+		sess := globals.sessionStore.Create(wrt)
 		log.Println("longPoll: new session created, sid=", sess.sid)
 
 		wrt.WriteHeader(http.StatusCreated)

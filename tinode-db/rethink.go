@@ -59,7 +59,7 @@ func gen_rethink(reset bool, dbsource string, data *Data) {
 		user.CreatedAt = getCreatedTime(uu["createdAt"])
 
 		// store.Users.Create will subscribe user to !me topic but won't create a !me topic
-		if _, err := store.Users.Create(0, &user, "basic",
+		if _, err := store.Users.Create(&user, "basic",
 			uu["username"].(string)+":"+uu["passhash"].(string), uu["private"]); err != nil {
 			log.Fatal(err)
 		}
@@ -83,7 +83,7 @@ func gen_rethink(reset bool, dbsource string, data *Data) {
 		}
 		topic.CreatedAt = getCreatedTime(gt["createdAt"])
 
-		if err = store.Topics.Create(0, topic, owner, gt["private"]); err != nil {
+		if err = store.Topics.Create(topic, owner, gt["private"]); err != nil {
 			log.Fatal(err)
 		}
 		log.Printf("Created topic '%s' as %s", gt["name"].(string), name)
@@ -142,7 +142,7 @@ func gen_rethink(reset bool, dbsource string, data *Data) {
 		}
 
 		log.Printf("Processing %s (%s), %s, %s", pair, topic, uid1.String(), uid2.String())
-		err := store.Topics.CreateP2P(0,
+		err := store.Topics.CreateP2P(
 			&types.Subscription{
 				ObjHeader: types.ObjHeader{CreatedAt: created0},
 				User:      uid1.String(),
@@ -187,7 +187,7 @@ func gen_rethink(reset bool, dbsource string, data *Data) {
 
 		log.Printf("Sharing '%s' with '%s'", ss["topic"].(string), ss["user"].(string))
 
-		if err = store.Subs.Create(0, &types.Subscription{
+		if err = store.Subs.Create(&types.Subscription{
 			ObjHeader: types.ObjHeader{CreatedAt: getCreatedTime(ss["createdAt"])},
 			User:      u1,
 			Topic:     name,
@@ -234,7 +234,7 @@ func gen_rethink(reset bool, dbsource string, data *Data) {
 			Topic:     topic,
 			From:      from.String(),
 			Content:   str}
-		if err = store.Messages.Save(0, &msg); err != nil {
+		if err = store.Messages.Save(&msg); err != nil {
 			log.Fatal(err)
 		}
 		log.Printf("Message %d at %v to '%s' '%s'", msg.SeqId, msg.CreatedAt, topic, str)

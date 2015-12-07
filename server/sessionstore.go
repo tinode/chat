@@ -53,7 +53,7 @@ type SessionStore struct {
 	lifeTime time.Duration
 }
 
-func (ss *SessionStore) Create(conn interface{}, appid uint32) *Session {
+func (ss *SessionStore) Create(conn interface{}) *Session {
 	var s Session
 
 	switch conn.(type) {
@@ -74,7 +74,6 @@ func (ss *SessionStore) Create(conn interface{}, appid uint32) *Session {
 		s.detach = make(chan string, 64) // buffered
 	}
 
-	s.appid = appid
 	s.lastTouched = time.Now()
 	s.sid = getRandomString()
 	s.uid = types.ZeroUid

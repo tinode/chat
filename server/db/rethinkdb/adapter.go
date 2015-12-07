@@ -176,7 +176,7 @@ func (a *RethinkDbAdapter) CreateDb(reset bool) error {
 }
 
 // UserCreate creates a new user. Returns error and bool - true if error is due to duplicate user name
-func (a *RethinkDbAdapter) UserCreate(appId uint32, user *t.User) (error, bool) {
+func (a *RethinkDbAdapter) UserCreate(user *t.User) (error, bool) {
 	// FIXME(gene): Rethink has no support for transactions. Prevent other routines from using
 	// the username currently being processed. For instance, keep it in a shared map for the duration of transaction
 
@@ -203,7 +203,7 @@ func (a *RethinkDbAdapter) UserCreate(appId uint32, user *t.User) (error, bool) 
 }
 
 // Users
-func (a *RethinkDbAdapter) GetPasswordHash(appid uint32, uname string) (t.Uid, []byte, error) {
+func (a *RethinkDbAdapter) GetPasswordHash(uname string) (t.Uid, []byte, error) {
 
 	var err error
 
@@ -228,7 +228,7 @@ func (a *RethinkDbAdapter) GetPasswordHash(appid uint32, uname string) (t.Uid, [
 }
 
 // UserGet fetches a single user by user id. If user is not found it returns (nil, nil)
-func (a *RethinkDbAdapter) UserGet(appid uint32, uid t.Uid) (*t.User, error) {
+func (a *RethinkDbAdapter) UserGet(uid t.Uid) (*t.User, error) {
 	if row, err := rdb.DB(a.dbName).Table("users").Get(uid.String()).Run(a.conn); err == nil && !row.IsNil() {
 		var user t.User
 		if err = row.One(&user); err == nil {
@@ -242,7 +242,7 @@ func (a *RethinkDbAdapter) UserGet(appid uint32, uid t.Uid) (*t.User, error) {
 	}
 }
 
-func (a *RethinkDbAdapter) UserGetAll(appId uint32, ids ...t.Uid) ([]t.User, error) {
+func (a *RethinkDbAdapter) UserGetAll(ids ...t.Uid) ([]t.User, error) {
 	uids := []interface{}{}
 	for _, id := range ids {
 		uids = append(uids, id.String())
@@ -264,15 +264,15 @@ func (a *RethinkDbAdapter) UserGetAll(appId uint32, ids ...t.Uid) ([]t.User, err
 	return users, nil
 }
 
-func (a *RethinkDbAdapter) UserFind(appId uint32, params map[string]interface{}) ([]t.User, error) {
+func (a *RethinkDbAdapter) UserFind(params map[string]interface{}) ([]t.User, error) {
 	return nil, errors.New("UserFind: not implemented")
 }
 
-func (a *RethinkDbAdapter) UserDelete(appId uint32, id t.Uid, soft bool) error {
+func (a *RethinkDbAdapter) UserDelete(id t.Uid, soft bool) error {
 	return errors.New("UserDelete: not implemented")
 }
 
-func (a *RethinkDbAdapter) UserUpdateLastSeen(appid uint32, uid t.Uid, userAgent string, when time.Time) error {
+func (a *RethinkDbAdapter) UserUpdateLastSeen(uid t.Uid, userAgent string, when time.Time) error {
 	update := struct {
 		LastSeen  time.Time
 		UserAgent string
@@ -284,7 +284,7 @@ func (a *RethinkDbAdapter) UserUpdateLastSeen(appid uint32, uid t.Uid, userAgent
 	return err
 }
 
-func (a *RethinkDbAdapter) UserUpdateStatus(appid uint32, uid t.Uid, status interface{}) error {
+func (a *RethinkDbAdapter) UserUpdateStatus(uid t.Uid, status interface{}) error {
 	update := map[string]interface{}{"Status": status}
 
 	_, err := rdb.DB(a.dbName).Table("users").Get(uid.String()).
@@ -293,11 +293,11 @@ func (a *RethinkDbAdapter) UserUpdateStatus(appid uint32, uid t.Uid, status inte
 	return err
 }
 
-func (a *RethinkDbAdapter) ChangePassword(appid uint32, id t.Uid, password string) error {
+func (a *RethinkDbAdapter) ChangePassword(id t.Uid, password string) error {
 	return errors.New("ChangePassword: not implemented")
 }
 
-func (a *RethinkDbAdapter) UserUpdate(appid uint32, uid t.Uid, update map[string]interface{}) error {
+func (a *RethinkDbAdapter) UserUpdate(uid t.Uid, update map[string]interface{}) error {
 	_, err := rdb.DB(a.dbName).Table("users").Get(uid.String()).Update(update).RunWrite(a.conn)
 	return err
 }
@@ -305,7 +305,7 @@ func (a *RethinkDbAdapter) UserUpdate(appid uint32, uid t.Uid, update map[string
 // *****************************
 
 // TopicCreate creates a topic from template
-func (a *RethinkDbAdapter) TopicCreate(appId uint32, topic *t.Topic) error {
+func (a *RethinkDbAdapter) TopicCreate(topic *t.Topic) error {
 	// Validated unique username, inserting user now
 	topic.SetUid(uGen.Get())
 	_, err := rdb.DB(a.dbName).Table("topics").Insert(&topic).RunWrite(a.conn)
@@ -313,7 +313,7 @@ func (a *RethinkDbAdapter) TopicCreate(appId uint32, topic *t.Topic) error {
 }
 
 // TopicCreateP2P given two users creates a p2p topic
-func (a *RethinkDbAdapter) TopicCreateP2P(appId uint32, initiator, invited *t.Subscription) error {
+func (a *RethinkDbAdapter) TopicCreateP2P(initiator, invited *t.Subscription) error {
 	initiator.Id = initiator.Topic + ":" + initiator.User
 	// Don't care if the initiator changes own subscription
 	_, err := rdb.DB(a.dbName).Table("subscriptions").Insert(initiator, rdb.InsertOpts{Conflict: "replace"}).
@@ -337,10 +337,10 @@ func (a *RethinkDbAdapter) TopicCreateP2P(appId uint32, initiator, invited *t.Su
 		Name:   initiator.Topic,
 		Access: t.DefaultAccess{Auth: t.ModeBanned, Anon: t.ModeBanned}}
 	topic.ObjHeader.MergeTimes(&initiator.ObjHeader)
-	return a.TopicCreate(appId, topic)
+	return a.TopicCreate(topic)
 }
 
-func (a *RethinkDbAdapter) TopicGet(appid uint32, topic string) (*t.Topic, error) {
+func (a *RethinkDbAdapter) TopicGet(topic string) (*t.Topic, error) {
 	// Fetch topic by name
 	rows, err := rdb.DB(a.dbName).Table("topics").GetAllByIndex("Name", topic).Run(a.conn)
 	if err != nil {
@@ -360,7 +360,7 @@ func (a *RethinkDbAdapter) TopicGet(appid uint32, topic string) (*t.Topic, error
 }
 
 // TopicsForUser loads user's topics and contacts
-func (a *RethinkDbAdapter) TopicsForUser(appid uint32, uid t.Uid) ([]t.Subscription, error) {
+func (a *RethinkDbAdapter) TopicsForUser(uid t.Uid) ([]t.Subscription, error) {
 	// Fetch user's subscriptions
 	// Subscription have Topic.UpdatedAt denormalized into Subscription.UpdatedAt
 	q := rdb.DB(a.dbName).Table("subscriptions").GetAllByIndex("User", uid.String()).Limit(MAX_RESULTS)
@@ -456,7 +456,7 @@ func (a *RethinkDbAdapter) TopicsForUser(appid uint32, uid t.Uid) ([]t.Subscript
 }
 
 // UsersForTopic loads users subscribed to the given topic
-func (a *RethinkDbAdapter) UsersForTopic(appid uint32, topic string) ([]t.Subscription, error) {
+func (a *RethinkDbAdapter) UsersForTopic(topic string) ([]t.Subscription, error) {
 	// Fetch topic subscribers
 	// Fetch all subscribed users. The number of users is not large
 	q := rdb.DB(a.dbName).Table("subscriptions").GetAllByIndex("Topic", topic).Limit(MAX_RESULTS)
@@ -501,7 +501,7 @@ func (a *RethinkDbAdapter) UsersForTopic(appid uint32, topic string) ([]t.Subscr
 	return subs, nil
 }
 
-func (a *RethinkDbAdapter) TopicShare(appid uint32, shares []t.Subscription) (int, error) {
+func (a *RethinkDbAdapter) TopicShare(shares []t.Subscription) (int, error) {
 	// Assign Ids
 	for i := 0; i < len(shares); i++ {
 		shares[i].Id = shares[i].Topic + ":" + shares[i].User
@@ -515,11 +515,11 @@ func (a *RethinkDbAdapter) TopicShare(appid uint32, shares []t.Subscription) (in
 	return resp.Inserted, nil
 }
 
-func (a *RethinkDbAdapter) TopicDelete(appId uint32, userDbId, topic string) error {
+func (a *RethinkDbAdapter) TopicDelete(userDbId, topic string) error {
 	return errors.New("TopicDelete: not implemented")
 }
 
-func (a *RethinkDbAdapter) TopicUpdateOnMessage(appid uint32, topic string, msg *t.Message) error {
+func (a *RethinkDbAdapter) TopicUpdateOnMessage(topic string, msg *t.Message) error {
 	update := struct {
 		SeqId int
 	}{msg.SeqId}
@@ -539,13 +539,13 @@ func (a *RethinkDbAdapter) TopicUpdateOnMessage(appid uint32, topic string, msg 
 	return err
 }
 
-func (a *RethinkDbAdapter) TopicUpdate(appid uint32, topic string, update map[string]interface{}) error {
+func (a *RethinkDbAdapter) TopicUpdate(topic string, update map[string]interface{}) error {
 	_, err := rdb.DB("tinode").Table("topics").GetAllByIndex("Name", topic).Update(update).RunWrite(a.conn)
 	return err
 }
 
 // Get a subscription of a user to a topic
-func (a *RethinkDbAdapter) SubscriptionGet(appid uint32, topic string, user t.Uid) (*t.Subscription, error) {
+func (a *RethinkDbAdapter) SubscriptionGet(topic string, user t.Uid) (*t.Subscription, error) {
 
 	rows, err := rdb.DB(a.dbName).Table("subscriptions").Get(topic + ":" + user.String()).Run(a.conn)
 	if err != nil {
@@ -558,7 +558,7 @@ func (a *RethinkDbAdapter) SubscriptionGet(appid uint32, topic string, user t.Ui
 }
 
 // Update time when the user was last attached to the topic
-func (a *RethinkDbAdapter) SubsLastSeen(appid uint32, topic string, user t.Uid, lastSeen map[string]time.Time) error {
+func (a *RethinkDbAdapter) SubsLastSeen(topic string, user t.Uid, lastSeen map[string]time.Time) error {
 	_, err := rdb.DB(a.dbName).Table("subscriptions").Get(topic+":"+user.String()).
 		Update(map[string]interface{}{"LastSeen": lastSeen}, rdb.UpdateOpts{Durability: "soft"}).RunWrite(a.conn)
 
@@ -566,7 +566,7 @@ func (a *RethinkDbAdapter) SubsLastSeen(appid uint32, topic string, user t.Uid, 
 }
 
 // SubsForUser loads a list of user's subscriptions to topics
-func (a *RethinkDbAdapter) SubsForUser(appid uint32, forUser t.Uid) ([]t.Subscription, error) {
+func (a *RethinkDbAdapter) SubsForUser(forUser t.Uid) ([]t.Subscription, error) {
 	if forUser.IsZero() {
 		return nil, errors.New("RethinkDb adapter: invalid user ID in TopicGetAll")
 	}
@@ -587,14 +587,14 @@ func (a *RethinkDbAdapter) SubsForUser(appid uint32, forUser t.Uid) ([]t.Subscri
 }
 
 // SubsForTopic fetches all subsciptions for a topic.
-func (a *RethinkDbAdapter) SubsForTopic(appId uint32, topic string) ([]t.Subscription, error) {
+func (a *RethinkDbAdapter) SubsForTopic(topic string) ([]t.Subscription, error) {
 	//log.Println("Loading subscriptions for topic ", topic)
 
 	// must load User.Public for p2p topics
 	var p2p []t.User
 	if strings.HasPrefix(topic, "p2p") {
 		uid1, uid2, _ := t.ParseP2P(topic)
-		if p2p, err := a.UserGetAll(appId, uid1, uid2); err != nil {
+		if p2p, err := a.UserGetAll(uid1, uid2); err != nil {
 			return nil, err
 		} else if len(p2p) != 2 {
 			return nil, errors.New("failed to load two p2p users")
@@ -628,25 +628,25 @@ func (a *RethinkDbAdapter) SubsForTopic(appId uint32, topic string) ([]t.Subscri
 }
 
 // Update a single subscription.
-func (a *RethinkDbAdapter) SubsUpdate(appid uint32, topic string, user t.Uid, update map[string]interface{}) error {
+func (a *RethinkDbAdapter) SubsUpdate(topic string, user t.Uid, update map[string]interface{}) error {
 	_, err := rdb.DB(a.dbName).Table("subscriptions").Get(topic + ":" + user.String()).Update(update).RunWrite(a.conn)
 	return err
 }
 
 // Delete a subscription.
-func (a *RethinkDbAdapter) SubsDelete(appid uint32, topic string, user t.Uid) error {
+func (a *RethinkDbAdapter) SubsDelete(topic string, user t.Uid) error {
 	_, err := rdb.DB(a.dbName).Table("subscriptions").Get(topic + ":" + user.String()).Delete().RunWrite(a.conn)
 	return err
 }
 
 // Messages
-func (a *RethinkDbAdapter) MessageSave(appId uint32, msg *t.Message) error {
+func (a *RethinkDbAdapter) MessageSave(msg *t.Message) error {
 	msg.SetUid(uGen.Get())
 	_, err := rdb.DB(a.dbName).Table("messages").Insert(msg).RunWrite(a.conn)
 	return err
 }
 
-func (a *RethinkDbAdapter) MessageGetAll(appId uint32, topic string, opts *t.BrowseOpt) ([]t.Message, error) {
+func (a *RethinkDbAdapter) MessageGetAll(topic string, opts *t.BrowseOpt) ([]t.Message, error) {
 	//log.Println("Loading messages for topic ", topic)
 
 	q := rdb.DB(a.dbName).Table("messages")
@@ -665,7 +665,7 @@ func (a *RethinkDbAdapter) MessageGetAll(appId uint32, topic string, opts *t.Bro
 	return msgs, rows.Err()
 }
 
-func (a *RethinkDbAdapter) MessageDelete(appId uint32, id t.Uid) error {
+func (a *RethinkDbAdapter) MessageDelete(id t.Uid) error {
 	return errors.New("MessageDelete: not implemented")
 }
 

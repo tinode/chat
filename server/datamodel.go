@@ -260,7 +260,12 @@ type MsgTopicSub struct {
 	Online    string     `json:"online,omitempty"`
 
 	// cumulative access mode (mode.Want & mode.Given)
-	AcsMode string      `json:"mode"`
+	AcsMode string `json:"mode"`
+	// ID of the message reported by the client as read
+	ReadSeqId int `json:"read,omitempty"`
+	// ID of the message reported by the client as received
+	RecvSeqId int `json:"recv,omitempty"`
+	// Topic's public data
 	Public  interface{} `json:"public,omitempty"`
 	Private interface{} `json:"private,omitempty"`
 
@@ -268,9 +273,6 @@ type MsgTopicSub struct {
 
 	// ID of the last {data} message in a topic
 	SeqId int `json:"seq,omitempty"`
-	// ID of the message reported by the client as read
-	ReadSeqId int `json:"read,omitempty"`
-	RecvSeqId int `json:"recv,omitempty"`
 	// P2P topics only
 	// ID of the other user
 	With string `json:"with,omitempty"`
@@ -351,8 +353,6 @@ type ServerComMessage struct {
 
 	// to: topic
 	rcptto string
-	// appid, also for routing
-	appid uint32
 	// originating session, copy of Session.send
 	akn chan<- []byte
 	// origin-specific id to use in {ctrl} aknowledgements

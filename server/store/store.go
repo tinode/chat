@@ -1,24 +1,33 @@
-/*****************************************************************************
- * Storage schema
- *****************************************************************************
- * System-accessible tables:
- ***************************
- * 1. Customer (customer of the service)
- *****************************
- * Customer-accessible tables:
- *****************************
- * 2. Application (a customer may have multiple applications)
- * 3. Application keys (an application may have multiple API keys)
- ****************************************
- * Application/end-user-accessible tables
- ****************************************
- * 4. User (end-user)
- * 5. Session (data associated with logged-in user)
- * 6. Topics (aka Inbox; a list of user's threads/conversations, with access rights, indexed by user id and by
-	topic name, neither userId nor topicName are unique)
- * 7. Messages (persistent store of messages)
- * 8. Contacts (a.k.a. ledger, address book)
+/******************************************************************************
+ *
+ *  Copyright (C) 2014-2015 Tinode, All Rights Reserved
+ *
+ *  This program is free software; you can redistribute it and/or modify it
+ *  under the terms of the GNU Affero General Public License as published by
+ *  the Free Software Foundation; either version 3 of the License, or (at your
+ *  option) any later version.
+ *
+ *  This program is distributed in the hope that it will be useful, but
+ *  WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
+ *  or FITNESS FOR A PARTICULAR PURPOSE.
+ *  See the GNU Affero General Public License for more details.
+ *
+ *  You should have received a copy of the GNU Affero General Public License
+ *  along with this program; if not, see <http://www.gnu.org/licenses>.
+ *
+ *  This code is available under licenses for commercial use.
+ *
+ *  File        :  store.go
+ *  Author      :  Gene Sokolov
+ *
+ ******************************************************************************
+ *
+ *  Description :
+ *
+ *  Database abastraction layer
+ *
  *****************************************************************************/
+
 package store
 
 import (
@@ -106,7 +115,7 @@ type UsersObjMapper struct{}
 var Users UsersObjMapper
 
 // CreateUser inserts User object into a database, updates creation time and assigns UID
-func (u UsersObjMapper) Create(appid uint32, user *types.User, scheme, secret string, private interface{}) (*types.User, error) {
+func (u UsersObjMapper) Create(user *types.User, scheme, secret string, private interface{}) (*types.User, error) {
 	if scheme == "basic" {
 		if splitAt := strings.Index(secret, ":"); splitAt > 0 {
 			user.InitTimes()
@@ -119,15 +128,14 @@ func (u UsersObjMapper) Create(appid uint32, user *types.User, scheme, secret st
 			}
 
 			// TODO(gene): maybe have some additional handling of duplicate user name error
-			err, _ = adaptr.UserCreate(appid, user)
+			err, _ = adaptr.UserCreate(user)
 			user.Passhash = nil
 			if err != nil {
 				return nil, err
 			}
 
 			// Create user's subscription to !me. The !me topic is ephemeral, the topic object need not to be inserted.
-			err = Subs.Create(appid,
-				&types.Subscription{
+			err = Subs.Create(&types.Subscription{
 					ObjHeader: types.ObjHeader{CreatedAt: user.CreatedAt},
 					User:      user.Id,
 					Topic:     user.Uid().UserId(),
@@ -149,13 +157,13 @@ func (u UsersObjMapper) Create(appid uint32, user *types.User, scheme, secret st
 }
 
 // Process user login. TODO(gene): abstract out the authentication scheme
-func (UsersObjMapper) Login(appid uint32, scheme, secret string) (types.Uid, error) {
+func (UsersObjMapper) Login(scheme, secret string) (types.Uid, error) {
 	if scheme == "basic" {
 		if splitAt := strings.Index(secret, ":"); splitAt > 0 {
 			uname := secret[:splitAt]
 			password := secret[splitAt+1:]
 
-			uid, hash, err := adaptr.GetPasswordHash(appid, uname)
+			uid, hash, err := adaptr.GetPasswordHash(uname)
 			if err != nil {
 				return types.ZeroUid, err
 			} else if uid.IsZero() {
@@ -178,57 +186,57 @@ func (UsersObjMapper) Login(appid uint32, scheme, secret string) (types.Uid, err
 }
 
 // Get returns a user object for the given user id
-func (UsersObjMapper) Get(appid uint32, uid types.Uid) (*types.User, error) {
-	return adaptr.UserGet(appid, uid)
+func (UsersObjMapper) Get(uid types.Uid) (*types.User, error) {
+	return adaptr.UserGet(uid)
 }
 
 // GetAll returns a slice of user objects for the given user ids
-func (UsersObjMapper) GetAll(appid uint32, uid ...types.Uid) ([]types.User, error) {
-	return adaptr.UserGetAll(appid, uid...)
+func (UsersObjMapper) GetAll(uid ...types.Uid) ([]types.User, error) {
+	return adaptr.UserGetAll(uid...)
 }
 
 // TODO(gene): implement
-func (UsersObjMapper) Find(appId uint32, params map[string]interface{}) ([]types.User, error) {
+func (UsersObjMapper) Find(params map[string]interface{}) ([]types.User, error) {
 	return nil, errors.New("store: not implemented")
 }
 
 // TODO(gene): implement
-func (UsersObjMapper) Delete(appId uint32, id types.Uid, soft bool) error {
+func (UsersObjMapper) Delete(id types.Uid, soft bool) error {
 	return errors.New("store: not implemented")
 }
 
-func (UsersObjMapper) UpdateStatus(appid uint32, id types.Uid, status interface{}) error {
+func (UsersObjMapper) UpdateStatus(id types.Uid, status interface{}) error {
 	return errors.New("store: not implemented")
 }
 
-func (UsersObjMapper) UpdateLastSeen(appid uint32, uid types.Uid, userAgent string, when time.Time) error {
-	return adaptr.UserUpdateLastSeen(appid, uid, userAgent, when)
+func (UsersObjMapper) UpdateLastSeen(uid types.Uid, userAgent string, when time.Time) error {
+	return adaptr.UserUpdateLastSeen(uid, userAgent, when)
 }
 
 // ChangePassword changes user's password in "basic" authentication scheme
-func (UsersObjMapper) ChangeAuthCredential(appid uint32, uid types.Uid, scheme, secret string) error {
+func (UsersObjMapper) ChangeAuthCredential(uid types.Uid, scheme, secret string) error {
 	if scheme == "basic" {
 		if splitAt := strings.Index(secret, ":"); splitAt > 0 {
-			return adaptr.ChangePassword(appid, uid, secret[splitAt+1:])
+			return adaptr.ChangePassword(uid, secret[splitAt+1:])
 		}
 		return errors.New("store: invalid format of secret")
 	}
 	return errors.New("store: unknown authentication scheme '" + scheme + "'")
 }
 
-func (UsersObjMapper) Update(appid uint32, uid types.Uid, update map[string]interface{}) error {
+func (UsersObjMapper) Update(uid types.Uid, update map[string]interface{}) error {
 	update["UpdatedAt"] = types.TimeNow()
-	return adaptr.UserUpdate(appid, uid, update)
+	return adaptr.UserUpdate(uid, update)
 }
 
 // GetSubs loads a list of subscriptions for the given user
-func (u UsersObjMapper) GetSubs(appid uint32, id types.Uid) ([]types.Subscription, error) {
-	return adaptr.SubsForUser(appid, id)
+func (u UsersObjMapper) GetSubs(id types.Uid) ([]types.Subscription, error) {
+	return adaptr.SubsForUser(id)
 }
 
 // GetTopics is exacly the same as Topics.GetForUser
-func (u UsersObjMapper) GetTopics(appid uint32, id types.Uid) ([]types.Subscription, error) {
-	return adaptr.TopicsForUser(appid, id)
+func (u UsersObjMapper) GetTopics(id types.Uid) ([]types.Subscription, error) {
+	return adaptr.TopicsForUser(id)
 }
 
 // Topics struct to hold methods for persistence mapping for the topic object.
@@ -237,18 +245,17 @@ type TopicsObjMapper struct{}
 var Topics TopicsObjMapper
 
 // Create creates a topic and owner's subscription to topic
-func (TopicsObjMapper) Create(appid uint32, topic *types.Topic, owner types.Uid, private interface{}) error {
+func (TopicsObjMapper) Create(topic *types.Topic, owner types.Uid, private interface{}) error {
 
 	topic.InitTimes()
 
-	err := adaptr.TopicCreate(appid, topic)
+	err := adaptr.TopicCreate(topic)
 	if err != nil {
 		return err
 	}
 
 	if !owner.IsZero() {
-		err = Subs.Create(appid,
-			&types.Subscription{
+		err = Subs.Create(&types.Subscription{
 				ObjHeader: types.ObjHeader{CreatedAt: topic.CreatedAt},
 				User:      owner.String(),
 				Topic:     topic.Name,
@@ -261,31 +268,31 @@ func (TopicsObjMapper) Create(appid uint32, topic *types.Topic, owner types.Uid,
 }
 
 // CreateP2P creates a P2P topic by generating two user's subsciptions to each other.
-func (TopicsObjMapper) CreateP2P(appid uint32, initiator, invited *types.Subscription) error {
+func (TopicsObjMapper) CreateP2P(initiator, invited *types.Subscription) error {
 	initiator.InitTimes()
 	invited.InitTimes()
 
-	return adaptr.TopicCreateP2P(appid, initiator, invited)
+	return adaptr.TopicCreateP2P(initiator, invited)
 }
 
 // Get a single topic with a list of relevent users de-normalized into it
-func (TopicsObjMapper) Get(appid uint32, topic string) (*types.Topic, error) {
-	return adaptr.TopicGet(appid, topic)
+func (TopicsObjMapper) Get(topic string) (*types.Topic, error) {
+	return adaptr.TopicGet(topic)
 }
 
 // GetUsers loads subscriptions for topic plus loads user.Public
-func (TopicsObjMapper) GetUsers(appid uint32, topic string) ([]types.Subscription, error) {
-	return adaptr.UsersForTopic(appid, topic)
+func (TopicsObjMapper) GetUsers(topic string) ([]types.Subscription, error) {
+	return adaptr.UsersForTopic(topic)
 }
 
 // GetSubs loads a list of subscriptions to the given topic, user.Public is not loaded
-func (TopicsObjMapper) GetSubs(appid uint32, topic string) ([]types.Subscription, error) {
-	return adaptr.SubsForTopic(appid, topic)
+func (TopicsObjMapper) GetSubs(topic string) ([]types.Subscription, error) {
+	return adaptr.SubsForTopic(topic)
 }
 
-func (TopicsObjMapper) Update(appid uint32, topic string, update map[string]interface{}) error {
+func (TopicsObjMapper) Update(topic string, update map[string]interface{}) error {
 	update["UpdatedAt"] = types.TimeNow()
-	return adaptr.TopicUpdate(appid, topic, update)
+	return adaptr.TopicUpdate(topic, update)
 }
 
 // Topics struct to hold methods for persistence mapping for the topic object.
@@ -293,26 +300,26 @@ type SubsObjMapper struct{}
 
 var Subs SubsObjMapper
 
-func (SubsObjMapper) Create(appid uint32, sub *types.Subscription) error {
+func (SubsObjMapper) Create(sub *types.Subscription) error {
 	sub.InitTimes()
 
-	_, err := adaptr.TopicShare(appid, []types.Subscription{*sub})
+	_, err := adaptr.TopicShare([]types.Subscription{*sub})
 	return err
 }
 
-func (SubsObjMapper) Get(appid uint32, topic string, user types.Uid) (*types.Subscription, error) {
-	return adaptr.SubscriptionGet(appid, topic, user)
+func (SubsObjMapper) Get(topic string, user types.Uid) (*types.Subscription, error) {
+	return adaptr.SubscriptionGet(topic, user)
 }
 
 // Update changes values of user's subscription.
-func (SubsObjMapper) Update(appid uint32, topic string, user types.Uid, update map[string]interface{}) error {
+func (SubsObjMapper) Update(topic string, user types.Uid, update map[string]interface{}) error {
 	update["UpdatedAt"] = types.TimeNow()
-	return adaptr.SubsUpdate(appid, topic, user, update)
+	return adaptr.SubsUpdate(topic, user, update)
 }
 
 // Delete deletes a subscription
-func (SubsObjMapper) Delete(appid uint32, topic string, user types.Uid) error {
-	return adaptr.SubsDelete(appid, topic, user)
+func (SubsObjMapper) Delete(topic string, user types.Uid) error {
+	return adaptr.SubsDelete(topic, user)
 }
 
 // Messages struct to hold methods for persistence mapping for the Message object.
@@ -321,37 +328,37 @@ type MessagesObjMapper struct{}
 var Messages MessagesObjMapper
 
 // Save message
-func (MessagesObjMapper) Save(appid uint32, msg *types.Message) error {
+func (MessagesObjMapper) Save(msg *types.Message) error {
 	msg.InitTimes()
 
 	// Need a transaction here, RethinkDB does not support transactions
 
 	// An invite (message to 'me') may have a zero SeqId if 'me' was inactive at the time of generating the invite
 	if msg.SeqId == 0 {
-		if user, err := adaptr.UserGet(appid, types.ParseUserId(msg.Topic)); err != nil {
+		if user, err := adaptr.UserGet(types.ParseUserId(msg.Topic)); err != nil {
 			return err
 		} else {
 			msg.SeqId = user.SeqId + 1
 		}
 	}
 
-	if err := adaptr.TopicUpdateOnMessage(appid, msg.Topic, msg); err != nil {
+	if err := adaptr.TopicUpdateOnMessage(msg.Topic, msg); err != nil {
 		return err
 	}
 
-	return adaptr.MessageSave(appid, msg)
+	return adaptr.MessageSave(msg)
 }
 
 // Soft-delete semmsages for the current user
-func (MessagesObjMapper) DeleteAll(appId uint32, user types.Uid, topic string) error {
+func (MessagesObjMapper) DeleteAll(user types.Uid, topic string) error {
 	return errors.New("store: not implemented")
 }
 
-func (MessagesObjMapper) GetAll(appid uint32, topic string, opt *types.BrowseOpt) ([]types.Message, error) {
-	return adaptr.MessageGetAll(appid, topic, opt)
+func (MessagesObjMapper) GetAll(topic string, opt *types.BrowseOpt) ([]types.Message, error) {
+	return adaptr.MessageGetAll(topic, opt)
 }
 
-func (MessagesObjMapper) Delete(appId uint32, uid types.Uid) error {
+func (MessagesObjMapper) Delete(uid types.Uid) error {
 	return errors.New("store: not implemented")
 }
 
