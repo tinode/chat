@@ -276,6 +276,7 @@ Query topic for metadata, such as description or a list of subscribers, or query
 
 ```js
 get: {
+  id: "1a2b3", // string, client-provided message id, optional
   what: "sub info data", // string, space-separated list of parameters to query;
                         // unknown strings are ignored; required
 
