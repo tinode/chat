@@ -95,6 +95,9 @@ type Topic struct {
 
 	// Track the most active sessions to report User Agent changes, buffered = 32
 	uaChange chan string
+
+	// Channel to inform topic of server shutdown
+	shutdown chan chan<- bool
 }
 
 type TopicCat int
@@ -383,6 +386,20 @@ func (t *Topic) run(hub *Hub) {
 			} else if t.cat == TopicCat_Grp {
 				t.presPubTopicOnline(false)
 			} // not publishing online/offline to P2P topics
+			return
+
+		case done := <-t.shutdown:
+			var packet, _ = json.Marshal(NoErrShutdown("", t.original, time.Now().UTC().Round(time.Millisecond)))
+			for sess := range t.sessions {
+				sess.send <- packet
+			}
+
+			for sess := range t.sessions {
+				sess.stop <- true
+			}
+
+			done <- true
+
 			return
 		}
 	}

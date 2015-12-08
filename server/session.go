@@ -84,7 +84,7 @@ type Session struct {
 	// outbound mesages, buffered
 	send chan []byte
 
-	// channel for shutting down the session
+	// channel for shutting down the session, buffer 1
 	stop chan bool
 
 	// detach - channel for detaching session from topic, buffered
@@ -137,12 +137,12 @@ func (s *Session) writePkt(pkt *ServerComMessage) error {
 
 // TODO(gene): unify simpleByteSender and QueueOut
 
-// QueueOut attempts to send a SCM to a session; if the send buffer is full, time out is 1 second
+// QueueOut attempts to send a SCM to a session; if the send buffer is full, time out is 1 millisecond
 func (s *Session) QueueOut(msg *ServerComMessage) {
 	data, _ := json.Marshal(msg)
 	select {
 	case s.send <- data:
-	case <-time.After(time.Second):
+	case <-time.After(time.Millisecond):
 		log.Println("session.queueOut: timeout")
 	}
 }

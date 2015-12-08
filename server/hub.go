@@ -106,6 +106,9 @@ type Hub struct {
 	// process get.info requests for topic not subscribed to
 	meta chan *metaReq
 
+	// Request to shutdown
+	shutdown chan chan<- bool
+
 	// Exported counter of live topics
 	topicsLive *expvar.Int
 }
@@ -130,6 +133,7 @@ func newHub() *Hub {
 		join:       make(chan *sessionJoin),
 		unreg:      make(chan topicUnreg),
 		meta:       make(chan *metaReq, 32),
+		shutdown:   make(chan chan<- bool),
 		topicsLive: new(expvar.Int)}
 
 	expvar.Publish("LiveTopics", h.topicsLive)
@@ -230,6 +234,23 @@ func (h *Hub) run() {
 				close(t.broadcast)
 			}
 
+		case hubdone := <-h.shutdown:
+			topicsdone := make(chan bool)
+			for _, topic := range h.topics {
+				topic.shutdown <- topicsdone
+			}
+
+			for i := 0; i < len(h.topics); i++ {
+				<-topicsdone
+			}
+
+			log.Printf("Hub shutdown: terminated %d topics", len(h.topics))
+
+			// let the main goroutine know we are done with the cleanup
+			hubdone <- true
+
+			return
+
 		case <-time.After(IDLETIMEOUT):
 		}
 	}
@@ -249,6 +270,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		unreg:     make(chan *sessionLeave, 32),
 		meta:      make(chan *metaReq, 32),
 		perUser:   make(map[types.Uid]perUserData),
+		shutdown:  make(chan chan<- bool, 1),
 	}
 
 	// Request to load a me topic. The topic must exist

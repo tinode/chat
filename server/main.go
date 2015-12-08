@@ -76,6 +76,8 @@ type configType struct {
 }
 
 func main() {
+	log.Printf("Server pid=%d started with processes: %d", os.Getpid(), runtime.GOMAXPROCS(runtime.NumCPU()))
+
 	var configfile = flag.String("config", "./tinode.conf", "Path to config file.")
 	// Path to static content.
 	var staticPath = flag.String("static_data", "", "Path to /static data for the server.")
@@ -83,8 +85,6 @@ func main() {
 	flag.Parse()
 
 	log.Printf("Using config from: '%s'", *configfile)
-
-	log.Printf("Server started with processes: %d", runtime.GOMAXPROCS(runtime.NumCPU()))
 
 	var config configType
 	if raw, err := ioutil.ReadFile(*configfile); err != nil {
@@ -99,9 +99,13 @@ func main() {
 
 	var err = store.Open(config.Adapter, string(config.AdapterConfig))
 	if err != nil {
-		log.Fatal("failed to connect to DB: ", err)
+		log.Fatal("Failed to connect to DB: ", err)
 	}
-	defer store.Close()
+	defer func() {
+		log.Println("Shutting down the database...")
+		store.Close()
+		log.Println("Done.")
+	}()
 
 	globals.sessionStore = NewSessionStore(2 * time.Hour)
 	globals.hub = newHub()
@@ -125,7 +129,9 @@ func main() {
 	http.HandleFunc("/v0/channels/lp", serveLongPoll)
 
 	log.Printf("Listening on [%s]", config.Listen)
-	log.Fatal(http.ListenAndServe(config.Listen, nil))
+	if err := listenAndServe(config.Listen, signalHandler()); err != nil {
+		log.Fatal(err)
+	}
 }
 
 func getApiKey(req *http.Request) string {

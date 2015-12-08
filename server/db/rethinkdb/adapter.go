@@ -93,7 +93,8 @@ func (a *RethinkDbAdapter) Open(jsonconfig string, workerId int, uidkey []byte) 
 func (a *RethinkDbAdapter) Close() error {
 	var err error
 	if a.conn != nil {
-		err = a.conn.Close(rdb.CloseOpts{NoReplyWait: false})
+		// Close will wait for all outstanding requests to finish
+		err = a.conn.Close()
 		a.conn = nil
 	}
 	return err

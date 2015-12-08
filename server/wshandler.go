@@ -98,12 +98,12 @@ func (sess *Session) writeLoop() {
 				// channel closed
 				return
 			}
-			if err := ws_write(sess.ws, websocket.TextMessage, []byte(msg)); err != nil {
+			if err := ws_write(sess.ws, websocket.TextMessage, msg); err != nil {
 				log.Println("sess.writeLoop: " + err.Error())
 				return
 			}
 		case <-sess.stop:
-			// shutdown requested
+			// Shutdown requested
 			return
 
 		case topic := <-sess.detach:

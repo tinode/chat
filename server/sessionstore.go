@@ -69,8 +69,8 @@ func (ss *SessionStore) Create(conn interface{}) *Session {
 
 	if s.proto != NONE {
 		s.subs = make(map[string]*Subscription)
-		s.send = make(chan []byte, 64) // buffered
-		s.stop = make(chan bool)
+		s.send = make(chan []byte, 64)   // buffered
+		s.stop = make(chan bool, 1)      // Buffered by 1 just to make it non-blocking
 		s.detach = make(chan string, 64) // buffered
 	}
 
@@ -127,6 +127,20 @@ func (ss *SessionStore) Delete(sid string) *Session {
 
 	return nil
 }
+
+// Shutdown closes all outstanding LP sessions
+/*
+func (ss *SessionStore) Shutdown() {
+	ss.rw.Lock()
+	for elem := ss.lru.Back(); elem != nil; elem = ss.lru.Back() {
+		ss.lru.Remove(elem)
+		sse := elem.Value.(*sessionStoreElement)
+		sse.val.stop <- true
+		delete(ss.sessions, sse.key)
+	}
+	ss.rw.Unlock()
+}
+*/
 
 func NewSessionStore(lifetime time.Duration) *SessionStore {
 	store := &SessionStore{
