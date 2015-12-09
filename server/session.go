@@ -508,7 +508,7 @@ func (s *Session) set(msg *ClientComMessage) {
 }
 
 func (s *Session) del(msg *ClientComMessage) {
-	log.Println("s.del: processing 'set." + msg.Del.What + "'")
+	log.Println("s.del: processing 'del." + msg.Del.What + "'")
 
 	// Validate topic name
 	original, expanded, err := s.validateTopicName(msg.Del.Id, msg.Del.Topic, msg.timestamp)

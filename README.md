@@ -346,11 +346,12 @@ Delete messages or topic.
 del: {
   id: "1a2b3", // string, client-provided message id, optional
   topic: "grp1XUtEhjv6HND", // string, topic affect, required
-  what: "msg", // string, either "topic" or "msg" (default); what to delete - the
+  what: "msg", // string, either "topic" or "msg"; what to delete - the
                // entire topic or just the messages, optional, default: "msg"
   hard: false, // boolean, request to delete messages for all users, default: false
   before: 123, // integer, delete messages with server-issued ID lower than this
-               // (exclusive of the value itself), optional
+               // inclusive of the value itself, optional, default: delete
+               // all messages
 }
 ```
 No special permission is needed to soft-delete messages `hard=false`. Soft-deleting messages hides them from the

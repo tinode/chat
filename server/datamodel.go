@@ -194,8 +194,8 @@ type MsgClientDel struct {
 	Topic string `json:"topic"`
 	// what to delete, either "msg" to delete messages (default) or "topic" to delete the topic
 	What string `json:"what"`
-	// Delete messages older than this time stamp (inclusive)
-	Before time.Time `json:"before"`
+	// Delete messages older than this seq ID (inclusive)
+	Before int `json:"before"`
 	// Request to hard-delete messages for all users, if such option is available.
 	Hard bool `json:"hard,omitempty"`
 }
