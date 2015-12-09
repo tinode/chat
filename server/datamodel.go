@@ -161,6 +161,7 @@ type MsgClientLeave struct {
 type MsgClientPub struct {
 	Id      string      `json:"id,omitempty"`
 	Topic   string      `json:"topic"`
+	NoEcho  bool        `json:"noecho,omitempty"`
 	Content interface{} `json:"content"`
 }
 

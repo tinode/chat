@@ -23,7 +23,7 @@ See [instructions](./docker/README.md)
  `$GOPATH/bin/tinode-db -config=$GOPATH/src/github.com/tinode/chat/server/tinode.conf`
  - add `-data=$GOPATH/src/github.com/tinode/chat/tinode-db/data.json` flag if you want sample data to be loaded.
 
- DB intializer needs to be run only once per installation. See [instructions](../tinode-db/README.md) for more options.
+ DB intializer needs to be run only once per installation. See [instructions](tinode-db/README.md) for more options.
 
 - Run server `$GOPATH/bin/server -config=$GOPATH/src/github.com/tinode/chat/server/tinode.conf -static_data=$GOPATH/src/github.com/tinode/chat/server/static`
 

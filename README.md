@@ -2,7 +2,7 @@
 
 Instant messaging server. Backend in pure [Go](http://golang.org) ([Affero GPL 3.0](http://www.gnu.org/licenses/agpl-3.0.en.html)), client-side binding in Java for Android and Javascript ([Apache 2.0](http://www.apache.org/licenses/LICENSE-2.0)), persistent storage [RethinkDB](http://rethinkdb.com/), JSON over websocket (long polling is also available). No UI components other than demo apps. Tinode is meant as a replacement for XMPP.
 
-This is alpha-quality software. Bugs should be expected. Version 0.5. Follow [instructions](INSTALL.md) to install.
+Version 0.5. This is alpha-quality software. Bugs should be expected. Follow [instructions](INSTALL.md) to install and run.
 
 A demo is (usually) available at [http://api.tinode.co/x/samples/chatdemo.html](http://api.tinode.co/x/samples/chatdemo.html). Login as one of `alice`, `bob`, `carol`, `dave`, `frank`. Password is `<login>123`, e.g. login for `alice` is `alice123`.
 
@@ -262,13 +262,14 @@ The message is used to distribute content to topic subscribers.
 ```js
 pub: {
   id: "1a2b3", // string, client-provided message id, optional
-  topic: "grp1XUtEhjv6HND", // topic to publish to, required
+  topic: "grp1XUtEhjv6HND", // string, topic to publish to, required
+  noecho: true, // boolean, suppress echo (see below), optional
   content: { ... }  // object, application-defined content to publish
                // to topic subscribers, required
 }
 ```
 
-Topic subscribers receive the `content` in the `{data}` message.
+Topic subscribers receive the `content` in the `{data}` message. By default the originating session gets a copy of `{data}` like any other session currently attached to the topic. If for some reason the originating session does not want to receive the copy of the data it just published, set `noecho` to `true`.
 
 #### `{get}`
 

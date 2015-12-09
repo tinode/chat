@@ -293,6 +293,9 @@ func (s *Session) publish(msg *ClientComMessage) {
 		Timestamp: msg.timestamp,
 		Content:   msg.Pub.Content},
 		rcptto: routeTo, akn: s.send, id: msg.Pub.Id, timestamp: msg.timestamp}
+	if msg.Pub.NoEcho {
+		data.skipSession = s
+	}
 
 	if sub, ok := s.subs[routeTo]; ok {
 		// This is a post to a subscribed topic. The message is sent to the topic only
@@ -308,7 +311,7 @@ func (s *Session) publish(msg *ClientComMessage) {
 		// sends/receives on the same topic)
 		// Global hub sends a Ctrl.202 response back to sender with topic=[receiver's topic]
 
-		globals.hub.route <- data
+		// globals.hub.route <- data
 	}
 }
 
