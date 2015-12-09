@@ -102,12 +102,12 @@ func main() {
 		log.Fatal("Failed to connect to DB: ", err)
 	}
 	defer func() {
-		log.Println("Shutting down the database...")
 		store.Close()
-		log.Println("Done.")
+		log.Println("Closed database connection(s)")
 	}()
 
-	globals.sessionStore = NewSessionStore(2 * time.Hour)
+	// Keep inactive LP sessions for 70 seconds
+	globals.sessionStore = NewSessionStore(IDLETIMEOUT + 15*time.Second)
 	globals.hub = newHub()
 
 	// Serve static content from the directory in -static_data flag if that's
@@ -132,6 +132,7 @@ func main() {
 	if err := listenAndServe(config.Listen, signalHandler()); err != nil {
 		log.Fatal(err)
 	}
+	log.Println("All done, good bye")
 }
 
 func getApiKey(req *http.Request) string {

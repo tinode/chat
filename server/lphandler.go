@@ -39,11 +39,13 @@ import (
 	"time"
 )
 
+/*
 func lp_writePkt(wrt http.ResponseWriter, pkt *ServerComMessage) error {
 	data, _ := json.Marshal(pkt)
 	_, err := wrt.Write(data)
 	return err
 }
+*/
 
 func (sess *Session) writeOnce() {
 	// Next call may change wrt, save it here
@@ -60,13 +62,20 @@ func (sess *Session) writeOnce() {
 			log.Println("sess.writeOnce: " + err.Error())
 			sess.wrt = nil
 		}
+
 	case <-closed:
 		log.Println("conn.writeOnce: connection closed by peer")
 		sess.wrt = nil
-	case <-sess.stop:
+
+	case msg := <-sess.stop:
+		// Make session unavailable
+		globals.sessionStore.Delete(sess)
 		sess.wrt = nil
+		wrt.Write(msg)
+
 	case topic := <-sess.detach:
 		delete(sess.subs, topic)
+
 	case <-time.After(pingPeriod):
 		// just write an empty packet on timeout
 		if _, err := wrt.Write([]byte{}); err != nil {
@@ -142,7 +151,7 @@ func serveLongPoll(wrt http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	sess := globals.sessionStore.Get(sid)
+	sess := globals.sessionStore.GetLP(sid)
 	if sess == nil {
 		log.Println("longPoll: invalid or expired session id ", sid)
 

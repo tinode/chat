@@ -33,6 +33,8 @@ package main
 
 import (
 	"container/list"
+	"encoding/json"
+	"log"
 	"net/http"
 	"sync"
 	"time"
@@ -47,22 +49,26 @@ type sessionStoreElement struct {
 }
 
 type SessionStore struct {
-	rw       sync.RWMutex
-	sessions map[string]*list.Element
-	lru      *list.List
-	lifeTime time.Duration
+	// Long polling sessions
+	rw         sync.RWMutex
+	lpSessions map[string]*list.Element
+	lru        *list.List
+	lifeTime   time.Duration
+
+	// Websocket sessions
+	wsSessions map[string]*Session
 }
 
 func (ss *SessionStore) Create(conn interface{}) *Session {
 	var s Session
 
-	switch conn.(type) {
+	switch c := conn.(type) {
 	case *websocket.Conn:
 		s.proto = WEBSOCK
-		s.ws, _ = conn.(*websocket.Conn)
+		s.ws = c
 	case http.ResponseWriter:
 		s.proto = LPOLL
-		s.wrt, _ = conn.(http.ResponseWriter)
+		s.wrt = c
 	default:
 		s.proto = NONE
 	}
@@ -70,7 +76,7 @@ func (ss *SessionStore) Create(conn interface{}) *Session {
 	if s.proto != NONE {
 		s.subs = make(map[string]*Subscription)
 		s.send = make(chan []byte, 64)   // buffered
-		s.stop = make(chan bool, 1)      // Buffered by 1 just to make it non-blocking
+		s.stop = make(chan []byte, 1)    // Buffered by 1 just to make it non-blocking
 		s.detach = make(chan string, 64) // buffered
 	}
 
@@ -78,19 +84,23 @@ func (ss *SessionStore) Create(conn interface{}) *Session {
 	s.sid = getRandomString()
 	s.uid = types.ZeroUid
 
-	if s.proto != WEBSOCK {
-		// Websocket connections are not managed by SessionStore
+	// Websocket connections are not managed by SessionStore
+	if s.proto == WEBSOCK {
+		ss.rw.Lock()
+		ss.wsSessions[s.sid] = &s
+		ss.rw.Unlock()
+	} else {
 		ss.rw.Lock()
 
 		elem := ss.lru.PushFront(&sessionStoreElement{s.sid, &s})
-		ss.sessions[s.sid] = elem
+		ss.lpSessions[s.sid] = elem
 
 		// Remove expired sessions
 		expire := s.lastTouched.Add(-ss.lifeTime)
 		for elem = ss.lru.Back(); elem != nil; elem = ss.lru.Back() {
 			if elem.Value.(*sessionStoreElement).val.lastTouched.Before(expire) {
 				ss.lru.Remove(elem)
-				delete(ss.sessions, elem.Value.(*sessionStoreElement).key)
+				delete(ss.lpSessions, elem.Value.(*sessionStoreElement).key)
 			} else {
 				break // don't need to traverse further
 			}
@@ -101,11 +111,11 @@ func (ss *SessionStore) Create(conn interface{}) *Session {
 	return &s
 }
 
-func (ss *SessionStore) Get(sid string) *Session {
+func (ss *SessionStore) GetLP(sid string) *Session {
 	ss.rw.Lock()
 	defer ss.rw.Unlock()
 
-	if elem := ss.sessions[sid]; elem != nil {
+	if elem := ss.lpSessions[sid]; elem != nil {
 		ss.lru.MoveToFront(elem)
 		elem.Value.(*sessionStoreElement).val.lastTouched = time.Now()
 		return elem.Value.(*sessionStoreElement).val
@@ -114,13 +124,23 @@ func (ss *SessionStore) Get(sid string) *Session {
 	return nil
 }
 
-func (ss *SessionStore) Delete(sid string) *Session {
+func (ss *SessionStore) GetWS(sid string) *Session {
 	ss.rw.Lock()
 	defer ss.rw.Unlock()
 
-	if elem := ss.sessions[sid]; elem != nil {
+	return ss.wsSessions[sid]
+}
+
+func (ss *SessionStore) Delete(s *Session) *Session {
+	ss.rw.Lock()
+	defer ss.rw.Unlock()
+
+	if s.proto == WEBSOCK {
+		delete(ss.wsSessions, s.sid)
+
+	} else if elem := ss.lpSessions[s.sid]; elem != nil {
 		ss.lru.Remove(elem)
-		delete(ss.sessions, sid)
+		delete(ss.lpSessions, s.sid)
 
 		return elem.Value.(*sessionStoreElement).val
 	}
@@ -128,25 +148,29 @@ func (ss *SessionStore) Delete(sid string) *Session {
 	return nil
 }
 
-// Shutdown closes all outstanding LP sessions
-/*
 func (ss *SessionStore) Shutdown() {
 	ss.rw.Lock()
-	for elem := ss.lru.Back(); elem != nil; elem = ss.lru.Back() {
-		ss.lru.Remove(elem)
-		sse := elem.Value.(*sessionStoreElement)
-		sse.val.stop <- true
-		delete(ss.sessions, sse.key)
+	defer ss.rw.Unlock()
+
+	shutdown, _ := json.Marshal(NoErrShutdown(time.Now().UTC().Round(time.Millisecond)))
+	for _, s := range ss.wsSessions {
+		s.send <- shutdown
 	}
-	ss.rw.Unlock()
+
+	for _, elem := range ss.lpSessions {
+		elem.Value.(*sessionStoreElement).val.send <- shutdown
+	}
+
+	log.Printf("SessionStore shut down, sessions terminated: %d ws; %d lp", len(ss.wsSessions), len(ss.lpSessions))
 }
-*/
 
 func NewSessionStore(lifetime time.Duration) *SessionStore {
 	store := &SessionStore{
-		sessions: make(map[string]*list.Element),
-		lru:      list.New(),
-		lifeTime: lifetime,
+		lpSessions: make(map[string]*list.Element),
+		lru:        list.New(),
+		lifeTime:   lifetime,
+
+		wsSessions: make(map[string]*Session),
 	}
 
 	return store

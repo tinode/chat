@@ -90,7 +90,10 @@ loop:
 			// Wait for http server to stop Accept()-ing connections
 			<-httpdone
 
-			// Shutdown the hub. The hub will shutdown topics, topics will shgutdown sessions
+			// Terminate all sessions
+			globals.sessionStore.Shutdown()
+
+			// Shutdown the hub. The hub will shutdown topics
 			hubdone := make(chan bool)
 			globals.hub.shutdown <- hubdone
 

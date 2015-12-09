@@ -389,17 +389,8 @@ func (t *Topic) run(hub *Hub) {
 			return
 
 		case done := <-t.shutdown:
-			var packet, _ = json.Marshal(NoErrShutdown("", t.original, time.Now().UTC().Round(time.Millisecond)))
-			for sess := range t.sessions {
-				sess.send <- packet
-			}
-
-			for sess := range t.sessions {
-				sess.stop <- true
-			}
-
+			// Place to do any clean up and databse updates before server shuts down
 			done <- true
-
 			return
 		}
 	}

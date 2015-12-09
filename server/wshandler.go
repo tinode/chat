@@ -56,12 +56,11 @@ func (sess *Session) readLoop() {
 	defer func() {
 		log.Println("serveWebsocket - stop")
 		sess.closeWS()
-		globals.sessionStore.Delete(sess.sid)
+		globals.sessionStore.Delete(sess)
 		for _, sub := range sess.subs {
 			// sub.done is the same as topic.unreg
 			sub.done <- &sessionLeave{sess: sess, unsub: false}
 		}
-		sess.stop <- true
 	}()
 
 	sess.ws.SetReadLimit(maxMessageSize)
@@ -102,8 +101,11 @@ func (sess *Session) writeLoop() {
 				log.Println("sess.writeLoop: " + err.Error())
 				return
 			}
-		case <-sess.stop:
-			// Shutdown requested
+		case msg := <-sess.stop:
+			// Shutdown requested, don't care if the message is delivered
+			if msg != nil {
+				ws_write(sess.ws, websocket.TextMessage, msg)
+			}
 			return
 
 		case topic := <-sess.detach:

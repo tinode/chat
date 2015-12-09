@@ -85,7 +85,7 @@ type Session struct {
 	send chan []byte
 
 	// channel for shutting down the session, buffer 1
-	stop chan bool
+	stop chan []byte
 
 	// detach - channel for detaching session from topic, buffered
 	detach chan string
