@@ -61,17 +61,22 @@ import (
 	inactive when all users leave it (possibly with some delay). The event is sent to all topic subscribers.
 	They will receive it on their `me` topics:
 	`{pres topic="me" src="<topic name>" what="on|off"}`.
-6. A message was sent to the topic. The event is sent to users who have subscribed to the topic but currently
-	not joined `{pres topic="me" src="<topic name>" what="msg" seq=123}`.
+6. A message published in the topic. The event is sent to users who have subscribed to the topic but currently
+	not joined (those who have joined will receive the {data}):
+	`{pres topic="me" src="<topic name>" what="msg" seq=123}`.
 7. Topic's `public` is updated. The event is sent to all topic subscribers.
 	Users receive `{pres topic="me" src="<topic name>" what="upd"}`.
 8. User is has multiple sessions attached to 'me'. Sessions have different User Agents. Notify of UA change:
 	the message is sent to all users who have P2P topics with the first user. Users receive this event on
 	the `me` topic, `src` field contains user ID `src: "usr2il9suCbuko"`, `what` contains `"ua"`:
 	`{pres topic="me" src="<user ID>" what="ua" ua="<user agent>"}`.
-9. User's other session joined a topic not previously joined by any of the user's sessions, marking all
-	messages in the topic as read: `{pres topic="me" src="<topic name>" what="read"}`. Sent only to other sessions
-	(not the one that joined), and only if there were unread messages in the topic.
+9. User sent a {note} packet indicating that some or all of the messages in the topic as received or read, OR sent
+	a {del} message soft-deleting some messages. Sent only to other user's sessions (not the one that sent the request).
+	a. read/received: `{pres topic="me" src="<topic name>" what="recv|read" seq=123}`.
+	b. deleted: `{pres topic="me" src="<topic name>" what="del" seq=123}`
+10. Messages were hard-deleted. The event is sent to all topic subscribers, joined and not joined:
+	a. joined: `{pres topic="<topic name>" src="<user id>" what="del" seq=123}`.
+	b. not joined: `{pres topic="me" src="<topic name>" what="del" seq=123}`.
 */
 
 // loadContacts initializes topic.perSubs to support presence notifications
@@ -182,7 +187,7 @@ func (t *Topic) presPubTopicOnline(online bool) {
 }
 
 // Message sent in the topic, notify topic-offline users
-// Cases 6
+// Case 6
 func (t *Topic) presPubMessageSent(seq int) {
 	update := &MsgServerPres{Topic: "me", What: "msg", Src: t.original, SeqId: seq}
 
@@ -212,9 +217,9 @@ func (t *Topic) presPubUAChange(ua string) {
 	}
 }
 
-// Let other sessions of a given user know that all unread messages are now read
-// Case 9
-func (t *Topic) presPubAllRead(skip *Session, recv, read int) {
+// Let other sessions of a given user know that what messages are now received/read
+// Cases 9.a, 9.b
+func (t *Topic) presPubMessageCount(skip *Session, clear, recv, read int) {
 	if pud, ok := t.perUser[skip.uid]; ok {
 		var what string
 		var seq int
@@ -231,6 +236,26 @@ func (t *Topic) presPubAllRead(skip *Session, recv, read int) {
 			globals.hub.route <- &ServerComMessage{Pres: update, rcptto: skip.uid.UserId(), skipSession: skip}
 
 			// log.Printf("Case 9: from '%s' to %s [read]", t.name, skip.uid.UserId())
+		}
+	}
+}
+
+// Messages deleted in the topic, notify online users and topic-offline users
+// Case 10
+func (t *Topic) presPubMessageDel(sess *Session, clear int) {
+	offline := &MsgServerPres{Topic: "me", What: "del", Src: t.original, SeqId: clear}
+
+	// Broadcast to topic
+	globals.hub.route <- &ServerComMessage{
+		Pres:   &MsgServerPres{Topic: t.original, What: "del", Src: sess.uid.UserId(), SeqId: clear},
+		rcptto: t.name, skipSession: sess}
+
+	// Broadcast to topic-offline users
+	for uid, pud := range t.perUser {
+		if pud.online == 0 && pud.modeGiven&pud.modeWant&types.ModePres != 0 {
+			globals.hub.route <- &ServerComMessage{Pres: offline, rcptto: uid.UserId()}
+
+			// log.Printf("Pres 10: from %s (src: %s), to %s [msg=%d]", t.name, update.Src, uid.UserId(), seq)
 		}
 	}
 }

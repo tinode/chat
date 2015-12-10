@@ -486,9 +486,9 @@ func (s *Session) set(msg *ClientComMessage) {
 		sess:  s,
 		what:  parseMsgClientMeta(msg.Set.What)}
 
-	if meta.what == 0 {
+	if meta.what == 0 || meta.what == constMsgMetaData {
 		s.QueueOut(ErrMalformed(msg.Set.Id, original, msg.timestamp))
-		log.Println("s.set: invalid Set message action '" + msg.Set.What + "'")
+		log.Println("s.set: invalid Set action '" + msg.Set.What + "'")
 	}
 
 	if ok {
@@ -517,26 +517,24 @@ func (s *Session) del(msg *ClientComMessage) {
 		return
 	}
 
-	//var what int
-	if msg.Del.What == "" || msg.Del.What == "msg" {
-		//what = constMsgMetaDelMsg
-	} else if msg.Del.What == "topic" {
-		//what = constMsgMetaDelTopic
-	} else {
+	sub, ok := s.subs[expanded]
+	meta := &metaReq{
+		topic: expanded,
+		pkt:   msg,
+		sess:  s,
+		what:  parseMsgClientDel(msg.Set.What)}
+
+	if meta.what == 0 {
 		s.QueueOut(ErrMalformed(msg.Del.Id, original, msg.timestamp))
-		return
+		log.Println("s.del: invalid Del action '" + msg.Del.What + "'")
 	}
 
-	_, ok := s.subs[expanded]
-	//meta := &metaReq{
-	//	topic: expanded,
-	//	pkt:   msg,
-	//	sess:  s,
-	//	what:  what}
-
 	if ok {
-		s.QueueOut(ErrNotImplemented(msg.Del.Id, original, msg.timestamp))
+		log.Println("s.del: sending to topic")
+		sub.meta <- meta
 	} else {
+		// FIXME(gene): allow topic deletion without joining the topic first
+
 		log.Println("s.del: can Del for subscribed topics only")
 		s.QueueOut(ErrPermissionDenied(msg.Del.Id, original, msg.timestamp))
 	}

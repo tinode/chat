@@ -58,5 +58,5 @@ type Adapter interface {
 	// Messages
 	MessageSave(msg *t.Message) error
 	MessageGetAll(topic string, opts *t.BrowseOpt) ([]t.Message, error)
-	MessageDelete(id t.Uid) error
+	MessageDeleteAll(topic string, before int) error
 }

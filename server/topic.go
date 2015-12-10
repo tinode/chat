@@ -59,6 +59,8 @@ type Topic struct {
 
 	// Server-side ID of the last data message
 	lastId int
+	// If messages were hard-deleted, the ID of the last deleted meassage
+	clearId int
 
 	// Last published userAgent ('me' topic only)
 	userAgent string
@@ -115,6 +117,8 @@ type perUserData struct {
 	// Last t.lastId reported by user through {pres} as received or read
 	recvId int
 	readId int
+	// Greates ID of a soft-deleted message
+	clearId int
 
 	private interface{}
 	// cleared     time.Time // time, when the topic was cleared by the user
@@ -314,7 +318,7 @@ func (t *Topic) run(hub *Hub) {
 						continue
 					}
 
-					t.presPubAllRead(msg.skipSession, recv, read)
+					t.presPubMessageCount(msg.skipSession, 0, recv, read)
 
 					t.perUser[uid] = pud
 				}
@@ -355,16 +359,21 @@ func (t *Topic) run(hub *Hub) {
 				if meta.what&constMsgMetaData != 0 {
 					t.replyGetData(meta.sess, meta.pkt.Get.Id, meta.pkt.Get.Browse)
 				}
-			} else {
+			} else if meta.pkt.Set != nil {
 				// Set request
 				if meta.what&constMsgMetaInfo != 0 {
 					t.replySetInfo(meta.sess, meta.pkt.Set)
 				}
 				if meta.what&constMsgMetaSub != 0 {
-					//t.replySetSub(meta.sess, meta.pkt.Set)
+					t.replySetSub(hub, meta.sess, meta.pkt.Set)
 				}
-				if meta.what&constMsgMetaData != 0 {
-					//t.replySetData(meta.sess, meta.pkt.Set)
+
+			} else if meta.pkt.Del != nil {
+				// Del request
+				if meta.what == constMsgDelMsg {
+					t.replyDelMsg(meta.sess, meta.pkt.Del)
+				} else if meta.what == constMsgDelTopic {
+					t.replyDelTopic(meta.sess, meta.pkt.Del)
 				}
 			}
 		case ua := <-t.uaChange:
@@ -845,11 +854,9 @@ func (t *Topic) replyGetInfo(sess *Session, id string, created bool) error {
 		info.Private = pud.private
 
 		info.SeqId = t.lastId
-		if pud.online > 0 {
-			info.ReadSeqId = t.lastId
-		} else {
-			info.ReadSeqId = pud.readId
-		}
+		info.RecvSeqId = pud.recvId
+		info.ReadSeqId = pud.readId
+		info.ClearId = pud.clearId
 
 		// When a topic is first created, its name may change. Report the new name
 		if created {
@@ -1116,6 +1123,70 @@ func (t *Topic) replyGetData(sess *Session, id string, req *MsgBrowseOpts) error
 		}
 	}
 
+	return nil
+}
+
+// replyDelMsg deletes (soft or hard) messages in response to del.msg packet.
+func (t *Topic) replyDelMsg(sess *Session, del *MsgClientDel) error {
+	now := time.Now().UTC().Round(time.Millisecond)
+
+	if del.Before > t.lastId || del.Before < 0 {
+		simpleByteSender(sess.send, ErrMalformed(del.Id, t.original, now))
+		return errors.New("invalid del.msg parameter 'before'")
+	} else if del.Before == 0 {
+		del.Before = t.lastId
+	}
+
+	pud := t.perUser[sess.uid]
+	if del.Hard && pud.modeGiven&pud.modeWant&types.ModeDelete == 0 {
+		simpleByteSender(sess.send, ErrPermissionDenied(del.Id, t.original, now))
+		return errors.New("no permission to hard-delete messages")
+	}
+
+	// Make sure user has not deleted the messages already
+	if (del.Before <= t.clearId) || (!del.Hard && del.Before <= pud.clearId) {
+		simpleByteSender(sess.send, InfoNoAction(del.Id, t.original, now))
+		return nil
+	}
+
+	var err error
+	if t.cat == TopicCat_Me {
+		err = store.Messages.Delete("", sess.uid, del.Hard, del.Before)
+	} else {
+		err = store.Messages.Delete(t.name, sess.uid, del.Hard, del.Before)
+	}
+
+	if err != nil {
+		simpleByteSender(sess.send, ErrUnknown(del.Id, t.original, now))
+		return err
+	}
+
+	if del.Hard {
+		t.lastId = t.lastId
+		t.clearId = del.Before
+
+		// Broadcast the change
+		t.presPubMessageDel(sess, t.clearId)
+	} else {
+		pud.clearId = del.Before
+		if pud.readId < pud.clearId {
+			pud.readId = pud.clearId
+		}
+		if pud.recvId < pud.readId {
+			pud.recvId = pud.readId
+		}
+		t.perUser[sess.uid] = pud
+
+		// Notify user's other sessions
+		t.presPubMessageCount(sess, pud.clearId, 0, 0)
+	}
+
+	simpleByteSender(sess.send, NoErr(del.Id, t.original, now))
+
+	return nil
+}
+
+func (t *Topic) replyDelTopic(sess *Session, del *MsgClientDel) error {
 	return nil
 }
 

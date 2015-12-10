@@ -237,6 +237,8 @@ type User struct {
 	// Values for 'me' topic:
 	// Server-issued sequence ID for messages in 'me'
 	SeqId int
+	// If messages were hard-deleted in the topic, id of the last deleted message
+	ClearId int
 	// Last time when the user joined 'me' topic, by User Agent
 	LastSeen time.Time
 	// User agent provided when accessing the topic last time
@@ -405,7 +407,7 @@ type Subscription struct {
 	Topic     string      // Topic subscribed to
 	ModeWant  AccessMode  // Access applied for
 	ModeGiven AccessMode  // Granted access
-	ClearedId int         // User soft-deleted messages equal or lower to this seq ID
+	ClearId   int         // User soft-deleted messages equal or lower to this seq ID
 	RecvSeqId int         // Last SeqId reported by user as received by at least one of his sessions
 	ReadSeqId int         // Last SeqID reported read by the user
 	Private   interface{} // User's private data associated with the subscription to topic
@@ -476,6 +478,8 @@ type Topic struct {
 
 	// Server-issued sequential ID
 	SeqId int
+	// If messages were deleted, id of the last deleted message
+	ClearId int
 
 	Public interface{}
 

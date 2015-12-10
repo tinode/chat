@@ -628,13 +628,13 @@ func (a *RethinkDbAdapter) SubsForTopic(topic string) ([]t.Subscription, error) 
 	return subs, rows.Err()
 }
 
-// Update a single subscription.
+// SubsUpdate updates a single subscription.
 func (a *RethinkDbAdapter) SubsUpdate(topic string, user t.Uid, update map[string]interface{}) error {
 	_, err := rdb.DB(a.dbName).Table("subscriptions").Get(topic + ":" + user.String()).Update(update).RunWrite(a.conn)
 	return err
 }
 
-// Delete a subscription.
+// SubsDelete deletes a subscription.
 func (a *RethinkDbAdapter) SubsDelete(topic string, user t.Uid) error {
 	_, err := rdb.DB(a.dbName).Table("subscriptions").Get(topic + ":" + user.String()).Delete().RunWrite(a.conn)
 	return err
@@ -666,8 +666,15 @@ func (a *RethinkDbAdapter) MessageGetAll(topic string, opts *t.BrowseOpt) ([]t.M
 	return msgs, rows.Err()
 }
 
-func (a *RethinkDbAdapter) MessageDelete(id t.Uid) error {
-	return errors.New("MessageDelete: not implemented")
+// MessageDeleteAll hard-deletes messages in the given topic
+func (a *RethinkDbAdapter) MessageDeleteAll(topic string, clear int) error {
+
+	_, err := rdb.DB(a.dbName).Table("messages").
+		Between([]interface{}{topic, 0}, []interface{}{topic, clear},
+		rdb.BetweenOpts{Index: "Topic_SeqId", RightBound: "closed"}).
+		Delete().RunWrite(a.conn)
+
+	return err
 }
 
 func addOptions(q rdb.Term, value string, index string, opts *t.BrowseOpt) rdb.Term {

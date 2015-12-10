@@ -104,8 +104,8 @@ const (
 	constMsgMetaInfo = 1 << iota
 	constMsgMetaSub
 	constMsgMetaData
-	constMsgMetaDelTopic
-	constMsgMetaDelMsg
+	constMsgDelTopic
+	constMsgDelMsg
 )
 
 func parseMsgClientMeta(params string) int {
@@ -122,6 +122,20 @@ func parseMsgClientMeta(params string) int {
 		default:
 			// ignore
 		}
+	}
+	return bits
+}
+
+func parseMsgClientDel(params string) int {
+	var bits int
+
+	switch params {
+	case "", "msg":
+		return constMsgDelMsg
+	case "topic":
+		return constMsgDelTopic
+	default:
+		// ignore
 	}
 	return bits
 }
@@ -240,12 +254,16 @@ type MsgTopicInfo struct {
 	UpdatedAt  *time.Time         `json:"updated,omitempty"`
 	Name       string             `json:"name,omitempty"`
 	DefaultAcs *MsgDefaultAcsMode `json:"defacs,omitempty"`
-	Acs        *MsgAccessMode     `json:"acs,omitempty"` // Actual access mode
-	SeqId      int                `json:"seq,omitempty"`
-	ReadSeqId  int                `json:"read,omitempty"`
-	RecvSeqId  int                `json:"recv,omitempty"`
-	Public     interface{}        `json:"public,omitempty"`
-	Private    interface{}        `json:"private,omitempty"` // Per-subscription private data
+	// Actual access mode
+	Acs *MsgAccessMode `json:"acs,omitempty"`
+	// Max message ID
+	SeqId0    int         `json:"seq,omitempty"`
+	ReadSeqId int         `json:"read,omitempty"`
+	RecvSeqId int         `json:"recv,omitempty"`
+	ClearId   int         `json:"clear,omitempty"`
+	Public    interface{} `json:"public,omitempty"`
+	// Per-subscription private data
+	Private interface{} `json:"private,omitempty"`
 }
 
 type MsgAccessMode struct {
@@ -274,6 +292,8 @@ type MsgTopicSub struct {
 
 	// ID of the last {data} message in a topic
 	SeqId int `json:"seq,omitempty"`
+	// Messages are deleted up to this ID
+	ClearId int `json:"clear,omitempty"`
 	// P2P topics only
 	// ID of the other user
 	With string `json:"with,omitempty"`
@@ -470,6 +490,16 @@ func InfoNotJoined(id, topic string, ts time.Time) *ServerComMessage {
 		Id:        id,
 		Code:      http.StatusNotModified, // 304
 		Text:      "not joined",
+		Topic:     topic,
+		Timestamp: ts}}
+	return msg
+}
+
+func InfoNoAction(id, topic string, ts time.Time) *ServerComMessage {
+	msg := &ServerComMessage{Ctrl: &MsgServerCtrl{
+		Id:        id,
+		Code:      http.StatusNotModified, // 304
+		Text:      "no action",
 		Topic:     topic,
 		Timestamp: ts}}
 	return msg

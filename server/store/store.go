@@ -136,13 +136,13 @@ func (u UsersObjMapper) Create(user *types.User, scheme, secret string, private 
 
 			// Create user's subscription to !me. The !me topic is ephemeral, the topic object need not to be inserted.
 			err = Subs.Create(&types.Subscription{
-					ObjHeader: types.ObjHeader{CreatedAt: user.CreatedAt},
-					User:      user.Id,
-					Topic:     user.Uid().UserId(),
-					ModeWant:  types.ModeSelf,
-					ModeGiven: types.ModeSelf,
-					Private:   private,
-				})
+				ObjHeader: types.ObjHeader{CreatedAt: user.CreatedAt},
+				User:      user.Id,
+				Topic:     user.Uid().UserId(),
+				ModeWant:  types.ModeSelf,
+				ModeGiven: types.ModeSelf,
+				Private:   private,
+			})
 			if err != nil {
 				return nil, err
 			}
@@ -256,12 +256,12 @@ func (TopicsObjMapper) Create(topic *types.Topic, owner types.Uid, private inter
 
 	if !owner.IsZero() {
 		err = Subs.Create(&types.Subscription{
-				ObjHeader: types.ObjHeader{CreatedAt: topic.CreatedAt},
-				User:      owner.String(),
-				Topic:     topic.Name,
-				ModeGiven: types.ModeFull,
-				ModeWant:  topic.GetAccess(owner),
-				Private:   private})
+			ObjHeader: types.ObjHeader{CreatedAt: topic.CreatedAt},
+			User:      owner.String(),
+			Topic:     topic.Name,
+			ModeGiven: types.ModeFull,
+			ModeWant:  topic.GetAccess(owner),
+			Private:   private})
 	}
 
 	return err
@@ -349,25 +349,29 @@ func (MessagesObjMapper) Save(msg *types.Message) error {
 	return adaptr.MessageSave(msg)
 }
 
-// Soft-delete semmsages for the current user
-func (MessagesObjMapper) DeleteAll(user types.Uid, topic string) error {
-	return errors.New("store: not implemented")
+// Delete messages. Hard-delete if hard==tru, otherwise a soft-delete
+// If hard == true:
+// If topic == "", it's a hard delete for 'me' topic of forUser
+// Otherwise it's a hard-delete in 'topic' for all users
+func (MessagesObjMapper) Delete(topic string, forUser types.Uid, hard bool, cleared int) (err error) {
+	if hard {
+		err = adaptr.MessageDeleteAll(topic, cleared)
+		if err != nil {
+			update := map[string]interface{}{"ClearId": cleared}
+			if topic == "" {
+				err = adaptr.UserUpdate(forUser, update)
+			} else {
+				err = adaptr.TopicUpdate(topic, update)
+			}
+		}
+	} else {
+		update := map[string]interface{}{"ClearId": cleared}
+		err = adaptr.SubsUpdate(topic, forUser, update)
+	}
+
+	return
 }
 
 func (MessagesObjMapper) GetAll(topic string, opt *types.BrowseOpt) ([]types.Message, error) {
 	return adaptr.MessageGetAll(topic, opt)
-}
-
-func (MessagesObjMapper) Delete(uid types.Uid) error {
-	return errors.New("store: not implemented")
-}
-
-func ZeroUid() types.Uid {
-	return types.ZeroUid
-}
-
-func UidFromBytes(b []byte) types.Uid {
-	var uid types.Uid
-	(&uid).UnmarshalBinary(b)
-	return uid
 }
