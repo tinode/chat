@@ -304,6 +304,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		t.updated = user.UpdatedAt
 
 		t.lastId = user.SeqId
+		t.clearId = user.ClearId
 
 		// Initiate User Agent with the UA of the creating session so we don't report it later
 		t.userAgent = sreg.sess.userAgent
@@ -395,6 +396,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		t.updated = user1.UpdatedAt
 
 		// t.lastId is not set (default 0) for new topics
+		// t.clearId is not currently used for p2p topics
 
 		userData.public = user2.GetPublic()
 		userData.modeWant = user1.ModeWant
@@ -451,6 +453,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		t.updated = stopic.UpdatedAt
 
 		t.lastId = stopic.SeqId
+		// t.clearId is not used in P2P topics, may change later
 
 		for i := 0; i < 2; i++ {
 			uid := types.ParseUid(subs[i].User)
@@ -513,7 +516,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		t.created = timestamp
 		t.updated = timestamp
 
-		// t.lastId is not set for new topics
+		// t.lastId & t.clearId are not set for new topics
 
 		stopic := &types.Topic{
 			ObjHeader: types.ObjHeader{CreatedAt: timestamp},
@@ -567,6 +570,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		t.updated = stopic.UpdatedAt
 
 		t.lastId = stopic.SeqId
+		t.clearId = stopic.ClearId
 	}
 
 	log.Println("hub: topic created or loaded: " + t.name)
@@ -590,6 +594,7 @@ func (t *Topic) loadSubscribers() error {
 	for _, sub := range subs {
 		uid := types.ParseUid(sub.User)
 		t.perUser[uid] = perUserData{
+			clearId: sub.ClearId,
 			readId:  sub.ReadSeqId,
 			recvId:  sub.RecvSeqId,
 			private: sub.Private,

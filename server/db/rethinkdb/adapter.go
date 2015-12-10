@@ -360,7 +360,7 @@ func (a *RethinkDbAdapter) TopicGet(topic string) (*t.Topic, error) {
 	return tt, rows.Err()
 }
 
-// TopicsForUser loads user's topics and contacts
+// TopicsForUser loads user's contact list: p2p and grp topics, except for 'me' subscription.
 func (a *RethinkDbAdapter) TopicsForUser(uid t.Uid) ([]t.Subscription, error) {
 	// Fetch user's subscriptions
 	// Subscription have Topic.UpdatedAt denormalized into Subscription.UpdatedAt
@@ -371,19 +371,21 @@ func (a *RethinkDbAdapter) TopicsForUser(uid t.Uid) ([]t.Subscription, error) {
 		return nil, err
 	}
 
-	// Fetch subscriptions. Two queries are needed: to users table (me & p2p) and topics table (p2p and grp).
+	// Fetch subscriptions. Two queries are needed: users table (me & p2p) and topics table (p2p and grp).
 	// Prepare a list of Separate subscriptions to users vs topics
 	var sub t.Subscription
 	join := make(map[string]t.Subscription) // Keeping these to make a join with table for .private and .access
 	topq := make([]interface{}, 0, 16)
 	usrq := make([]interface{}, 0, 16)
 	for rows.Next(&sub) {
+		tcat := t.GetTopicCat(sub.Topic)
+
 		// 'me' subscription, skip
-		if strings.HasPrefix(sub.Topic, "usr") {
+		if tcat == t.TopicCat_Me {
 			continue
 
 			// p2p subscription, find the other user to get user.Public
-		} else if strings.HasPrefix(sub.Topic, "p2p") {
+		} else if tcat == t.TopicCat_P2P {
 			uid1, uid2, _ := t.ParseP2P(sub.Topic)
 			if uid1 == uid {
 				usrq = append(usrq, uid2.String())
@@ -417,7 +419,8 @@ func (a *RethinkDbAdapter) TopicsForUser(uid t.Uid) ([]t.Subscription, error) {
 			sub = join[top.Name]
 			sub.ObjHeader.MergeTimes(&top.ObjHeader)
 			sub.SetSeqId(top.SeqId)
-			if strings.HasPrefix(sub.Topic, "grp") {
+			sub.SetHardClearId(top.ClearId)
+			if t.GetTopicCat(sub.Topic) == t.TopicCat_Grp {
 				// all done with a grp topic
 				sub.SetPublic(top.Public)
 				subs = append(subs, sub)
@@ -593,7 +596,8 @@ func (a *RethinkDbAdapter) SubsForTopic(topic string) ([]t.Subscription, error) 
 
 	// must load User.Public for p2p topics
 	var p2p []t.User
-	if strings.HasPrefix(topic, "p2p") {
+
+	if t.GetTopicCat(topic) == t.TopicCat_P2P {
 		uid1, uid2, _ := t.ParseP2P(topic)
 		if p2p, err := a.UserGetAll(uid1, uid2); err != nil {
 			return nil, err
@@ -710,23 +714,6 @@ func addOptions(q rdb.Term, value string, index string, opts *t.BrowseOpt) rdb.T
 	return q.Between(lower, upper, rdb.BetweenOpts{Index: index}).
 		OrderBy(rdb.OrderByOpts{Index: rdb.Desc(index)}).Limit(limit)
 }
-
-/*
-func remapP2PTopic(topic string, user t.Uid) (string, error) {
-	if strings.HasPrefix(topic, "p2p") {
-		uid1, uid2, err := t.ParseP2P(topic)
-		if err != nil {
-			return "", err
-		}
-		if user == uid1 {
-			topic = uid2.UserId()
-		} else {
-			topic = uid1.UserId()
-		}
-	}
-	return topic, nil
-}
-*/
 
 func init() {
 	store.Register("rethinkdb", &RethinkDbAdapter{})

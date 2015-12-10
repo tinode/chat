@@ -1032,9 +1032,14 @@ func (t *Topic) replyGetSub(sess *Session, id string) error {
 		for _, sub := range subs {
 			var mts MsgTopicSub
 			uid := types.ParseUid(sub.User)
+			var clearId int
 			if t.cat == TopicCat_Me {
+				// Reporting user's subscriptions to other topics
 				mts.Topic = sub.Topic
 				mts.SeqId = sub.GetSeqId()
+				// Report whatever is the greatest - soft - or hard- deleted id
+				clearId = max(sub.GetHardClearId(), sub.ClearId)
+				mts.ClearId = clearId
 				mts.With = sub.GetWith()
 				mts.UpdatedAt = &sub.UpdatedAt
 				lastSeen := sub.GetLastSeen()
@@ -1044,7 +1049,13 @@ func (t *Topic) replyGetSub(sess *Session, id string) error {
 						UserAgent: sub.GetUserAgent()}
 				}
 			} else {
+				// Reporting subscribers to a group or a p2p topic
 				mts.User = uid.UserId()
+				clearId = max(t.clearId, sub.ClearId)
+				if uid == sess.uid {
+					// Report deleted messages for own subscriptions only
+					mts.ClearId = clearId
+				}
 				if t.cat == TopicCat_Grp {
 					pud := t.perUser[uid]
 					if pud.online > 0 {
@@ -1054,8 +1065,9 @@ func (t *Topic) replyGetSub(sess *Session, id string) error {
 					}
 				}
 			}
-			mts.ReadSeqId = sub.ReadSeqId
-			mts.RecvSeqId = sub.RecvSeqId
+			// Ensure sanity or ReadId and RecvId:
+			mts.ReadSeqId = max(clearId, sub.ReadSeqId)
+			mts.RecvSeqId = max(clearId, sub.RecvSeqId)
 			mts.AcsMode = (sub.ModeGiven & sub.ModeWant).String()
 			mts.Public = sub.GetPublic()
 			if uid == sess.uid {
@@ -1297,11 +1309,4 @@ func topicCat(name string) TopicCat {
 	default:
 		panic("invalid topic name in topicCat: " + name)
 	}
-}
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }

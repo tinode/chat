@@ -291,7 +291,7 @@ type MsgTopicSub struct {
 	// All following makes sence only in context of getting user's subscriptions
 
 	// ID of the last {data} message in a topic
-	SeqId0 int `json:"seq,omitempty"`
+	SeqId int `json:"seq,omitempty"`
 	// Messages are deleted up to this ID
 	ClearId int `json:"clear,omitempty"`
 	// P2P topics only

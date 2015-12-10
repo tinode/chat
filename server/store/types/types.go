@@ -413,11 +413,12 @@ type Subscription struct {
 	Private   interface{} // User's private data associated with the subscription to topic
 
 	// Deserialized ephemeral values
-	public    interface{} // Deserialized public value from topic or user (depends on context)
-	with      string      // p2p topics only: id of the other user
-	seqId     int         // deserialized SeqID from user or topic
-	lastSeen  time.Time   // timestamp when the user was last online
-	userAgent string      // user agent string of the last online access
+	public      interface{} // Deserialized public value from topic or user (depends on context)
+	with        string      // p2p topics only: id of the other user
+	seqId       int         // deserialized SeqID from user or topic
+	hardClearId int         // Id of the last hard-deleted message deserialized from user or topic
+	lastSeen    time.Time   // timestamp when the user was last online
+	userAgent   string      // user agent string of the last online access
 }
 
 // SetPublic assigns to public, otherwise not accessible from outside the package
@@ -443,6 +444,14 @@ func (s *Subscription) GetSeqId() int {
 
 func (s *Subscription) SetSeqId(id int) {
 	s.seqId = id
+}
+
+func (s *Subscription) GetHardClearId() int {
+	return s.hardClearId
+}
+
+func (s *Subscription) SetHardClearId(id int) {
+	s.hardClearId = id
 }
 
 func (s *Subscription) GetLastSeen() time.Time {
@@ -591,4 +600,25 @@ type BrowseOpt struct {
 	Since  int
 	Before int
 	Limit  uint
+}
+
+type TopicCat int
+
+const (
+	TopicCat_Me TopicCat = iota
+	TopicCat_P2P
+	TopicCat_Grp
+)
+
+func GetTopicCat(name string) TopicCat {
+	switch name[:3] {
+	case "usr":
+		return TopicCat_Me
+	case "p2p":
+		return TopicCat_P2P
+	case "grp":
+		return TopicCat_Grp
+	default:
+		panic("invalid topic type" + name)
+	}
 }
