@@ -257,7 +257,7 @@ type MsgTopicInfo struct {
 	// Actual access mode
 	Acs *MsgAccessMode `json:"acs,omitempty"`
 	// Max message ID
-	SeqId0    int         `json:"seq,omitempty"`
+	SeqId     int         `json:"seq,omitempty"`
 	ReadSeqId int         `json:"read,omitempty"`
 	RecvSeqId int         `json:"recv,omitempty"`
 	ClearId   int         `json:"clear,omitempty"`
@@ -291,7 +291,7 @@ type MsgTopicSub struct {
 	// All following makes sence only in context of getting user's subscriptions
 
 	// ID of the last {data} message in a topic
-	SeqId int `json:"seq,omitempty"`
+	SeqId0 int `json:"seq,omitempty"`
 	// Messages are deleted up to this ID
 	ClearId int `json:"clear,omitempty"`
 	// P2P topics only

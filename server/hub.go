@@ -692,3 +692,10 @@ func simpleByteSender(sendto chan<- []byte, msg *ServerComMessage) {
 		log.Println("simpleByteSender: timeout")
 	}
 }
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}

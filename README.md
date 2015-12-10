@@ -349,13 +349,14 @@ del: {
   what: "msg", // string, either "topic" or "msg"; what to delete - the
                // entire topic or just the messages, optional, default: "msg"
   hard: false, // boolean, request to delete messages for all users, default: false
-  before: 123, // integer, delete messages with server-issued ID lower than this
-               // inclusive of the value itself, optional, default: delete
-               // all messages
+  before: 123, // integer, delete messages with server-issued ID lower or equal
+               // to this (inclusive of the value itself), optional,
+               // default: delete all messages
 }
 ```
-No special permission is needed to soft-delete messages `hard=false`. Soft-deleting messages hides them from the
-requesting user. `D` permission is needed to hard-delete messages. Only owner can delete a topic.
+
+User can soft-delete and hard-delete messages `what="msg"`. Soft-deleting messages hides them from the requesting user but does not delete them from storage. No special permission is needed to soft-delete messages `hard=false`. Hard-deleting messages deletes them from storage affecting all users. `D` permission is needed to hard-delete messages.
+Deleting a topic `what="topic"` deletes the topic including all subscriptions, and all messages. The `hard` parameter has no effect on topic deletion: all topic deletions are hard-deletions. Only the owner can delete a topic.
 
 #### `{note}`
 

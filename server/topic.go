@@ -854,9 +854,11 @@ func (t *Topic) replyGetInfo(sess *Session, id string, created bool) error {
 		info.Private = pud.private
 
 		info.SeqId = t.lastId
-		info.RecvSeqId = pud.recvId
-		info.ReadSeqId = pud.readId
-		info.ClearId = pud.clearId
+		// Make sure reported values are sane:
+		// t.clearId <= pud.clearId <= t.readId <= t.recvId <= t.lastId
+		info.ClearId = max(pud.clearId, t.clearId)
+		info.ReadSeqId = max(pud.readId, info.ClearId)
+		info.RecvSeqId = max(pud.recvId, pud.readId)
 
 		// When a topic is first created, its name may change. Report the new name
 		if created {
@@ -1295,4 +1297,11 @@ func topicCat(name string) TopicCat {
 	default:
 		panic("invalid topic name in topicCat: " + name)
 	}
+}
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }
