@@ -460,7 +460,7 @@ func NoErrEvicted(id, topic string, ts time.Time) *ServerComMessage {
 	msg := &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
 		Code:      http.StatusResetContent, // 205
-		Text:      "evicted from topic",
+		Text:      "evicted",
 		Topic:     topic,
 		Timestamp: ts}}
 	return msg

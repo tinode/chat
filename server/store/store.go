@@ -295,6 +295,20 @@ func (TopicsObjMapper) Update(topic string, update map[string]interface{}) error
 	return adaptr.TopicUpdate(topic, update)
 }
 
+func (TopicsObjMapper) Delete(topic string) error {
+	if err := adaptr.TopicDelete(topic); err != nil {
+		return err
+	}
+
+	// TODO(gene): the following two operations are optional. If they fail, they leave garbage, but don't
+	// affect anything
+	if err := adaptr.SubsDelForTopic(topic); err != nil {
+		return err
+	}
+
+	return adaptr.MessageDeleteAll(topic, -1)
+}
+
 // Topics struct to hold methods for persistence mapping for the topic object.
 type SubsObjMapper struct{}
 

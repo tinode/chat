@@ -98,8 +98,8 @@ type Topic struct {
 	// Track the most active sessions to report User Agent changes, buffered = 32
 	uaChange chan string
 
-	// Channel to inform topic of server shutdown
-	shutdown chan chan<- bool
+	// Channel to inform topic of its deletion or server shutdown
+	shutdown chan *topicClose
 }
 
 type TopicCat int
@@ -131,6 +131,24 @@ type perUserData struct {
 // perSubsData holds user's (on 'me' topic) cache of subscription data
 type perSubsData struct {
 	online bool
+}
+
+// Request to topic to shutdown
+type topicClose struct {
+	// Is topic is being deleted?
+	del bool
+	// Channel to report completion
+	done chan<- bool
+}
+
+// Session wants to leave the topic
+type sessionLeave struct {
+	// Session which initiated the request
+	sess *Session
+	// Leave and unsubscribe
+	unsub bool
+	// Originating request
+	pkt *ClientComMessage
 }
 
 func (t *Topic) run(hub *Hub) {
@@ -397,9 +415,17 @@ func (t *Topic) run(hub *Hub) {
 			} // not publishing online/offline to P2P topics
 			return
 
-		case done := <-t.shutdown:
-			// Place to do any clean up and databse updates before server shuts down
-			done <- true
+		case action := <-t.shutdown:
+			// Do clean up and database updates before server shuts down
+			if action.del {
+				note := NoErrEvicted("", t.original, time.Now().UTC().Round(time.Millisecond))
+				for sess, _ := range t.sessions {
+					delete(t.sessions, sess)
+					sess.detach <- t.name
+					sess.QueueOut(note)
+				}
+			}
+			action.done <- true
 			return
 		}
 	}

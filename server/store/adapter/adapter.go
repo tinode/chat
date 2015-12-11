@@ -40,7 +40,7 @@ type Adapter interface {
 	// UsersForTopic loads users' subscriptions for a given topic
 	UsersForTopic(topic string) ([]t.Subscription, error)
 	TopicShare(acl []t.Subscription) (int, error)
-	TopicDelete(userDbId, topic string) error
+	TopicDelete(topic string) error
 	TopicUpdateOnMessage(topic string, msg *t.Message) error
 	TopicUpdate(topic string, update map[string]interface{}) error
 
@@ -52,8 +52,10 @@ type Adapter interface {
 	SubsForTopic(topic string) ([]t.Subscription, error)
 	// SubsUpdate updates pasrt of a subscription object. Pass nil for fields which don't need to be updated
 	SubsUpdate(topic string, user t.Uid, update map[string]interface{}) error
-	// SubsDelete deletes a subscription
+	// SubsDelete deletes a single subscription
 	SubsDelete(topic string, user t.Uid) error
+	// SubsDelForTopic deletes all subscriptions to the given topic
+	SubsDelForTopic(topic string) error
 
 	// Messages
 	MessageSave(msg *t.Message) error

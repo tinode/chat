@@ -519,8 +519,9 @@ func (a *RethinkDbAdapter) TopicShare(shares []t.Subscription) (int, error) {
 	return resp.Inserted, nil
 }
 
-func (a *RethinkDbAdapter) TopicDelete(userDbId, topic string) error {
-	return errors.New("TopicDelete: not implemented")
+func (a *RethinkDbAdapter) TopicDelete(topic string) error {
+	_, err := rdb.DB(a.dbName).Table("topics").Get(topic).Delete().RunWrite(a.conn)
+	return err
 }
 
 func (a *RethinkDbAdapter) TopicUpdateOnMessage(topic string, msg *t.Message) error {
@@ -644,6 +645,12 @@ func (a *RethinkDbAdapter) SubsDelete(topic string, user t.Uid) error {
 	return err
 }
 
+// SubsDelForTopic deletes all subscriptions to the given topic
+func (a *RethinkDbAdapter) SubsDelForTopic(topic string) error {
+	_, err := rdb.DB(a.dbName).Table("subscriptions").GetAllByIndex("Topic", topic).Delete().RunWrite(a.conn)
+	return err
+}
+
 // Messages
 func (a *RethinkDbAdapter) MessageSave(msg *t.Message) error {
 	msg.SetUid(uGen.Get())
@@ -672,9 +679,12 @@ func (a *RethinkDbAdapter) MessageGetAll(topic string, opts *t.BrowseOpt) ([]t.M
 
 // MessageDeleteAll hard-deletes messages in the given topic
 func (a *RethinkDbAdapter) MessageDeleteAll(topic string, clear int) error {
-
+	var maxval interface{} = clear
+	if clear < 0 {
+		maxval = rdb.MaxVal
+	}
 	_, err := rdb.DB(a.dbName).Table("messages").
-		Between([]interface{}{topic, 0}, []interface{}{topic, clear},
+		Between([]interface{}{topic, 0}, []interface{}{topic, maxval},
 		rdb.BetweenOpts{Index: "Topic_SeqId", RightBound: "closed"}).
 		Delete().RunWrite(a.conn)
 

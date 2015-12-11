@@ -42,13 +42,13 @@ import (
 	"github.com/tinode/chat/server/store/types"
 )
 
-// Subscribe session to topic
+// Request to hub to subscribe session to topic
 type sessionJoin struct {
 	// Routable (expanded) name of the topic to subscribe to
 	topic string
 	// Packet, containing request details
 	pkt *MsgClientSub
-	// Session to subscribe to topic
+	// Session to subscribe
 	sess *Session
 	// If this topic was just created
 	created bool
@@ -56,20 +56,12 @@ type sessionJoin struct {
 	loaded bool
 }
 
-// Session wants to leave the topic to topic
-type sessionLeave struct {
-	// Session which initiated the request
-	sess *Session
-	// Leave and unsubscribe
-	unsub bool
-	// Originating request
-	pkt *ClientComMessage
-}
-
-// Remove topic from hub
+// Request to hub to remove the topic
 type topicUnreg struct {
 	// Name of the topic to drop
 	topic string
+	// Unregister and delete the topic
+	del bool
 }
 
 // Request from !pres to another topic to start/stop receiving presence updates
@@ -237,7 +229,7 @@ func (h *Hub) run() {
 		case hubdone := <-h.shutdown:
 			topicsdone := make(chan bool)
 			for _, topic := range h.topics {
-				topic.shutdown <- topicsdone
+				topic.shutdown <- &topicClose{done: topicsdone}
 			}
 
 			for i := 0; i < len(h.topics); i++ {
@@ -270,7 +262,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		unreg:     make(chan *sessionLeave, 32),
 		meta:      make(chan *metaReq, 32),
 		perUser:   make(map[types.Uid]perUserData),
-		shutdown:  make(chan chan<- bool, 1),
+		shutdown:  make(chan *topicClose, 1),
 	}
 
 	// Request to load a me topic. The topic must exist
