@@ -99,7 +99,7 @@ type Topic struct {
 	uaChange chan string
 
 	// Channel to inform topic of its deletion or server shutdown
-	shutdown chan *topicClose
+	shutdown chan chan<- bool
 }
 
 type TopicCat int
@@ -133,6 +133,7 @@ type perSubsData struct {
 	online bool
 }
 
+/*
 // Request to topic to shutdown
 type topicClose struct {
 	// Is topic is being deleted?
@@ -140,6 +141,7 @@ type topicClose struct {
 	// Channel to report completion
 	done chan<- bool
 }
+*/
 
 // Session wants to leave the topic
 type sessionLeave struct {
@@ -391,7 +393,7 @@ func (t *Topic) run(hub *Hub) {
 				if meta.what == constMsgDelMsg {
 					t.replyDelMsg(meta.sess, meta.pkt.Del)
 				} else if meta.what == constMsgDelTopic {
-					t.replyDelTopic(meta.sess, meta.pkt.Del)
+					t.replyDelTopic(hub, meta.sess, meta.pkt.Del)
 				}
 			}
 		case ua := <-t.uaChange:
@@ -406,7 +408,7 @@ func (t *Topic) run(hub *Hub) {
 		case <-killTimer.C:
 			log.Println("Topic timeout: ", t.name)
 			// Ensure that the messages are no longer routed to this topic
-			hub.unreg <- topicUnreg{topic: t.name}
+			hub.unreg <- &topicUnreg{topic: t.name}
 			// FIXME(gene): save lastMessage value;
 			if t.cat == TopicCat_Me {
 				t.presPubMeChange("off", currentUA)
@@ -415,17 +417,9 @@ func (t *Topic) run(hub *Hub) {
 			} // not publishing online/offline to P2P topics
 			return
 
-		case action := <-t.shutdown:
+		case done := <-t.shutdown:
 			// Do clean up and database updates before server shuts down
-			if action.del {
-				note := NoErrEvicted("", t.original, time.Now().UTC().Round(time.Millisecond))
-				for sess, _ := range t.sessions {
-					delete(t.sessions, sess)
-					sess.detach <- t.name
-					sess.QueueOut(note)
-				}
-			}
-			action.done <- true
+			done <- true
 			return
 		}
 	}
@@ -1226,7 +1220,24 @@ func (t *Topic) replyDelMsg(sess *Session, del *MsgClientDel) error {
 	return nil
 }
 
-func (t *Topic) replyDelTopic(sess *Session, del *MsgClientDel) error {
+// 1 Topic checks if requester is the owner
+// 2 Topic evicts all sessions
+// 3 Topic asks hub to unregister
+// 4 Topic exits the run() loop
+func (t *Topic) replyDelTopic(h *Hub, sess *Session, del *MsgClientDel) error {
+	now := time.Now().UTC().Round(time.Millisecond)
+	if t.owner != sess.uid {
+		simpleByteSender(sess.send, ErrPermissionDenied(del.Id, t.original, now))
+		return errors.New("only the owner can delete a topic")
+	}
+
+	t.evictAll()
+
+	h.unreg <- &topicUnreg{
+		topic: t.name,
+		sess:  sess,
+		del:   true}
+
 	return nil
 }
 
@@ -1259,7 +1270,7 @@ func (t *Topic) makeInvite(notify, target, from types.Uid, act types.InviteActio
 	return msg
 }
 
-// evictUser evicts all user's sessions from the topic and clear's user's cached data, if requested
+// evictUser evicts given user's sessions from the topic and clears user's cached data, if requested
 func (t *Topic) evictUser(uid types.Uid, clear bool, ignore *Session) {
 	now := time.Now().UTC().Round(time.Millisecond)
 	note := NoErrEvicted("", t.original, now)
@@ -1288,6 +1299,16 @@ func (t *Topic) evictUser(uid types.Uid, clear bool, ignore *Session) {
 				sess.QueueOut(note)
 			}
 		}
+	}
+}
+
+// evictAll disconnects all sessions from the topic
+func (t *Topic) evictAll() {
+	note := NoErrEvicted("", t.original, time.Now().UTC().Round(time.Millisecond))
+	for sess, _ := range t.sessions {
+		delete(t.sessions, sess)
+		sess.detach <- t.name
+		sess.QueueOut(note)
 	}
 }
 

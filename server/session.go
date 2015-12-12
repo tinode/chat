@@ -518,25 +518,32 @@ func (s *Session) del(msg *ClientComMessage) {
 	}
 
 	sub, ok := s.subs[expanded]
-	meta := &metaReq{
-		topic: expanded,
-		pkt:   msg,
-		sess:  s,
-		what:  parseMsgClientDel(msg.Set.What)}
-
-	if meta.what == 0 {
+	what := parseMsgClientDel(msg.Del.What)
+	if what == 0 {
 		s.QueueOut(ErrMalformed(msg.Del.Id, original, msg.timestamp))
 		log.Println("s.del: invalid Del action '" + msg.Del.What + "'")
 	}
 
 	if ok {
 		log.Println("s.del: sending to topic")
-		sub.meta <- meta
-	} else {
-		// FIXME(gene): allow topic deletion without joining the topic first
+		sub.meta <- &metaReq{
+			topic: expanded,
+			pkt:   msg,
+			sess:  s,
+			what:  what}
 
-		log.Println("s.del: can Del for subscribed topics only")
-		s.QueueOut(ErrPermissionDenied(msg.Del.Id, original, msg.timestamp))
+	} else if what == constMsgDelTopic {
+		// FIXME(gene): allow topic deletion without joining the topic first
+		globals.hub.unreg <- &topicUnreg{
+			topic:    expanded,
+			msg:      msg,
+			sess:     s,
+			unsubbed: true,
+			del:      true}
+	} else {
+		// Must join the topic first to delete messages
+		s.QueueOut(ErrMalformed(msg.Del.Id, original, msg.timestamp))
+		log.Println("s.del: invalid Del action (unsub) '" + msg.Del.What + "'")
 	}
 }
 
