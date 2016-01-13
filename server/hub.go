@@ -450,12 +450,14 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		for i := 0; i < 2; i++ {
 			uid := types.ParseUid(subs[i].User)
 			t.perUser[uid] = perUserData{
-				// Based on other user
-				public:  subs[(i+1)%2].GetPublic(),
+				// Adapter already swapped the public values
+				public:  subs[i].GetPublic(),
 				private: subs[i].Private,
 				// lastSeenTag: subs[i].LastSeen,
 				modeWant:  subs[i].ModeWant,
 				modeGiven: subs[i].ModeGiven}
+			log.Printf("[%s].perUser public: '%+#v', private: '%+#v'", t.name, t.perUser[uid].public,
+				t.perUser[uid].private)
 		}
 
 		// Processing request to create a new generic (group) topic:

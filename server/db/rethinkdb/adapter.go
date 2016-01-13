@@ -3,12 +3,12 @@ package rethinkdb
 import (
 	"encoding/json"
 	"errors"
+	"strings"
+	"time"
+
 	rdb "github.com/dancannon/gorethink"
 	"github.com/tinode/chat/server/store"
 	t "github.com/tinode/chat/server/store/types"
-	//	"log"
-	"strings"
-	"time"
 )
 
 type RethinkDbAdapter struct {
@@ -597,10 +597,10 @@ func (a *RethinkDbAdapter) SubsForTopic(topic string) ([]t.Subscription, error) 
 
 	// must load User.Public for p2p topics
 	var p2p []t.User
-
+	var err error
 	if t.GetTopicCat(topic) == t.TopicCat_P2P {
 		uid1, uid2, _ := t.ParseP2P(topic)
-		if p2p, err := a.UserGetAll(uid1, uid2); err != nil {
+		if p2p, err = a.UserGetAll(uid1, uid2); err != nil {
 			return nil, err
 		} else if len(p2p) != 2 {
 			return nil, errors.New("failed to load two p2p users")
