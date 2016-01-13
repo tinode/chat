@@ -456,8 +456,6 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 				// lastSeenTag: subs[i].LastSeen,
 				modeWant:  subs[i].ModeWant,
 				modeGiven: subs[i].ModeGiven}
-			log.Printf("[%s].perUser public: '%+#v', private: '%+#v'", t.name, t.perUser[uid].public,
-				t.perUser[uid].private)
 		}
 
 		// Processing request to create a new generic (group) topic:
