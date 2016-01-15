@@ -1143,9 +1143,12 @@ func (t *Topic) replyGetData(sess *Session, id string, req *MsgBrowseOpts) error
 	}
 	log.Println("Loaded messages ", len(messages))
 
-	// Push the list of updated topics to the client as data messages
+	// Push the list of messages to the client as {data}.
+	// Messages are sent in reverse order than fetched from DB to make it easier for
+	// clients to process.
 	if messages != nil {
-		for _, mm := range messages {
+		for i := len(messages) - 1; i >= 0; i-- {
+			mm := messages[i]
 			from := types.ParseUid(mm.From)
 			msg := &ServerComMessage{Data: &MsgServerData{
 				Topic:     t.original,
