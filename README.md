@@ -15,34 +15,33 @@ A demo is (usually) available at [http://api.tinode.co/x/samples/chatdemo.html](
 
 ### Supported
 
-* One on one messaging
-* Group chats:
- * Groups (topics) with up to 32 members where every member's access permissions are managed individually
- * Groups with unlimited number of members with bearer token access control
-* Topic access control with separate permissions for various actions (reading, writing, sharing, etc)
-* Server-generated presence notifications for people and topics
-* Persistent message store
-* Android Java bindings (dependencies: [jackson](https://github.com/FasterXML/jackson), [android-websockets](https://github.com/codebutler/android-websockets))
-* Javascript bindings with no dependencies
-* Websocket & long polling transport
-* JSON wire protocol
-* Server-generated message delivery status
-* Basic support for client-side message caching
-* Blocking users on the server
+* One-on-one messaging.
+* Groups (topics) with up to 32 members where every member's access permissions are managed individually.
+* Topic access control with separate permissions for various actions.
+* Server-generated presence notifications for people, topics.
+* Persistent message store.
+* Javascript bindings with no dependencies.
+* Websocket & long polling transport.
+* JSON wire protocol.
+* Message delivery status: server-generated delivery to server, client-generated received and read notifications.
+* Basic support for client-side message caching.
+* Ability to block unwanted communication on the server.
 
 ### Planned
 
-* iOS client bindings
-* Mobile push notification hooks
-* Clustering
-* Federation
-* Multitenancy
-* Different levels of message persistence (from strict persistence to store until delivered to purely ephemeral messaging)
-* Support for binary wire protocol
-* User search/discovery
-* Anonymous clients
-* Support for other SQL and NoSQL backends
-* Pluggable authentication
+* iOS client bindings.
+* Android Java bindings (Current implementation is incomplete, dependencies: [jackson](https://github.com/FasterXML/jackson), [android-websockets](https://github.com/codebutler/android-websockets))
+* Mobile push notification hooks.
+* Groups (topics) with unlimited number of members with bearer token access control.
+* Clustering.
+* Federation.
+* Different levels of message persistence (from strict persistence to store until delivered to purely ephemeral messaging).
+* Support for binary wire protocol.
+* User search/discovery.
+* Anonymous users.
+* Support for other SQL and NoSQL backends.
+* Pluggable authentication.
+* Plugins.
 
 ## How it works?
 
@@ -360,7 +359,8 @@ Deleting a topic `what="topic"` deletes the topic including all subscriptions, a
 
 #### `{note}`
 
-Client-generated notification for other clients currently attached to the topic. Notes are "fire and forget": not stored to disk and not acknowledged by the server. Messages deemed invalid are silently dropped. They are intended for ephemeral notifications, such as typing notifications and delivery receipts.
+Client-generated ephemeral notification for forwarding to other clients currently attached to the topic, such as typing notifications or delivery receipts. The message is "fire and forget": not stored to disk per se and not acknowledged by the server. Messages deemed invalid are silently dropped. 
+The `{note.recv}` and `{note.read}` do alter persistent state on the server. The value is stored and reported back in the corresponding fields of the `{meta.sub}` message. 
 
 ```js
 note: {
@@ -376,7 +376,7 @@ note: {
 The following actions are currently recognized:
  * kp: key press, i.e. a typing notification. The client should use it to indicate that the user is composing a new message.
  * recv: a `{data}` message is received by the client software but not yet seen by user.
- * read: a `{data}` message is seen by the user. It implies `recv`.
+ * read: a `{data}` message is seen by the user. It implies `recv` as well.
 
 ### Server to client messages
 
@@ -637,6 +637,8 @@ Message `{get what="info"}` to `me` is automatically replied with a `{meta}` mes
 
 Message `{get what="sub"}` to `me` is different from any other topic as it returns the list of topics that the current user is subscribed to as opposite to the expected user's subscription to `me`.
 * seq: server-issued numeric id of the last message in the topic
+* read: seq value self-reported by the current user as received
+* recv: seq value self-reported by the current user as read
 * with: for P2P subscriptions, id of the peer
 * seen: for P2P subscriptions, timestamp of user's last presence and User Agent string are reported
  * when: timestamp when the user was last online
