@@ -443,8 +443,8 @@ meta: {
       anon: "X" // default access for anonymous users
     },
     acs: {  // user's actual access permissions
-      "want":"RWP", // string, requested access permission
-      "given":"RWP" // string, granted access permission
+      want:"RWP", // string, requested access permission
+      given:"RWP" // string, granted access permission
     },
     seq: 123, // integer, server-issued id of the last {data} message
     read: 112, // integer, ID of the message user claims through {note} message
@@ -460,14 +460,12 @@ meta: {
 	sub:  [ // array of objects, topic subscribers or user's subscriptions, optional
     {
       user: "usr2il9suCbuko", // string, ID of the user this subscription
-                            // describes, absent when querying 'me'
-	    online: "on", // string, current online status of the user with respect to
-					// the topic, i.e. if the user is listening to messages
+                            // describes, absent when querying 'me'.
       updated: "2015-10-24T10:26:09.716Z", // timestamp of the last change in the
                                            // subscription, present only for
                                            // requester's own subscriptions
       mode: "RWPSDO",  // string, user's access permission, equal to bitwise
-                       // AND (info.given & info.want)
+                       // (info.given AND info.want)
       read: 112, // integer, ID of the message user claims through {note} message
                  // to have read, optional
       recv: 315, // integer, like 'read', but received, optional
@@ -475,6 +473,14 @@ meta: {
                  // of a deleted message, optional
       private: { ... } // application-defined user's 'private' object, present only
                        // for the requester's own subscriptions
+      online: true, // boolean, current online status of the user; if this is a
+                    // group or a p2p topic, it's user's online status in the topic,
+                    // i.e. if the user is attached and listening to messages; if this
+                    // is a response to a 'me' query, it tells if the topic is
+                    // online; p2p is considered online if the other party is
+                    // online, not necessarily attached to topic; a group topic
+                    // is considered online if it has at least one active
+                    // subscriber.
 
       // The following fields are present only when querying 'me' topic
 

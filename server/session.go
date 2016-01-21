@@ -384,7 +384,7 @@ func (s *Session) acc(msg *ClientComMessage) {
 					user.Public = msg.Acc.Init.Public
 					private = msg.Acc.Init.Private
 				}
-				_, err := store.Users.Create(&user, auth.Scheme, auth.Secret, private)
+				_, err := store.Users.Create(&user, auth.Scheme, string(auth.Secret), private)
 				if err != nil {
 					if err.Error() == "duplicate credential" {
 						s.QueueOut(ErrDuplicateCredential(msg.Acc.Id, "", msg.timestamp))
@@ -418,7 +418,7 @@ func (s *Session) acc(msg *ClientComMessage) {
 		// Request to change auth of an existing account. Only basic auth is currently supported
 		for _, auth := range msg.Acc.Auth {
 			if auth.Scheme == "basic" {
-				if err := store.Users.ChangeAuthCredential(s.uid, auth.Scheme, auth.Secret); err != nil {
+				if err := store.Users.ChangeAuthCredential(s.uid, auth.Scheme, string(auth.Secret)); err != nil {
 					s.QueueOut(ErrUnknown(msg.Acc.Id, "", msg.timestamp))
 					return
 				}

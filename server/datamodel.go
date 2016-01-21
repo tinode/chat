@@ -32,6 +32,7 @@ package main
  *****************************************************************************/
 
 import (
+	"encoding/json"
 	"net/http"
 	"strings"
 	"time"
@@ -58,9 +59,14 @@ type MsgBrowseOpts struct {
 
 // User creation message {acc}
 type MsgClientAcc struct {
-	Id   string          `json:"id,omitempty"` // Message Id
-	User string          `json:"user"`         // "new" to create a new user or UserId to update a user; default: current user
+	// Message Id
+	Id string `json:"id,omitempty"`
+	// "new" to create a new user or UserId to update a user; default: current user
+	User string `json:"user"`
+	// A list of authentication schemes/secrets the account can use
 	Auth []MsgAuthScheme `json:"auth"`
+	// Use this schema to login to the newly created account
+	Login string `json:"login"`
 	// User initialization data when creating a new user, otherwise ignored
 	Init *MsgSetInfo `json:"init,omitempty"`
 }
@@ -68,7 +74,8 @@ type MsgClientAcc struct {
 type MsgAuthScheme struct {
 	// Scheme name
 	Scheme string `json:"scheme"`
-	Secret string `json:"secret"`
+	// Secret as RawMessage to prevent it from being parsed
+	Secret json.RawMessage `json:"secret"`
 }
 
 // Login {login} message
@@ -276,7 +283,7 @@ type MsgTopicSub struct {
 	Topic     string     `json:"topic,omitempty"`
 	User      string     `json:"user,omitempty"`
 	UpdatedAt *time.Time `json:"updated,omitempty"`
-	Online    string     `json:"online,omitempty"`
+	Online    bool       `json:"online,omitempty"`
 
 	// cumulative access mode (mode.Want & mode.Given)
 	AcsMode string `json:"mode"`

@@ -48,7 +48,7 @@ import (
 		v. Other topics reply with their own online status
 	b. if the topic is already loaded, do nothing.
 	c. when the user subscribes (grp or p2p), add new subscription to t.perSub
-	`{pres topic="me" src="<user ID>" what="on"}`
+	`{pres topic="me" src="<user ID>" what="on" ua="<user agent>"}`
 2. User went offline (left `me` topic).
 	The message is sent to all users who have P2P topics with the first user. Users receive this event on
 	the `me` topic, `src` field contains user ID `src: "usr2il9suCbuko"`, `what` contains `"off"`:
@@ -118,7 +118,7 @@ func (t *Topic) presPubMeChange(what string, ua string) {
 	// Push update to subscriptions
 
 	update := &MsgServerPres{Topic: "me", What: what, Src: t.name, UserAgent: ua,
-		wantReply: (what == "on" || what == "off")}
+		wantReply: (what == "on")}
 	for topic, _ := range t.perSubs {
 		globals.hub.route <- &ServerComMessage{Pres: update, rcptto: topic}
 
@@ -126,24 +126,26 @@ func (t *Topic) presPubMeChange(what string, ua string) {
 	}
 }
 
-// This topic get a request from a 'me' topic to start/stop receiving presence updates from this topic.
+// This topic got a request from a 'me' topic to start/stop sending presence updates.
 // Cases 1.a.iv, 1.a.v
-func (t *Topic) presProcReq(fromTopic string, online bool) {
-	//log.Printf("Pres 1.a.iv, 1.a.v: topic[%s]: req from '%s', isReply: %v", t.name, fromTopic)
+func (t *Topic) presProcReq(fromTopic string, online, wantReply bool) {
+	//log.Printf("Pres 1.a.iv, 1.a.v: topic[%s]: req from '%s', online: %v, wantReply: %v",
+	//	t.name, fromTopic, online, wantReply)
 
-	doReply := true
+	doReply := wantReply
 	if t.cat == TopicCat_Me {
 		if psd, ok := t.perSubs[fromTopic]; ok {
 			// If requester's online status has not changed, do not reply, otherwise an endless loop will happen
 			// Introducing isReply to ensure unnecessary {pres} is not sent:
 			// A[online, B:off] to B[online, A:off]: {pres A on}
 			// B[online, A:on] to A[online, B:off]: {pres B on}
-			// A[online, B:on] to B[online, A:on]: {pres A on} <<-- unnecessary, that's why isReply is needed
-			doReply = (psd.online != online)
+			// A[online, B:on] to B[online, A:on]: {pres A on} <<-- unnecessary, that's why wantReply is needed
+			doReply = (doReply && (psd.online != online))
 			psd.online = online
 			t.perSubs[fromTopic] = psd
 		} else {
 			doReply = false
+			//log.Printf("Pres 1.a.iv, 1.a.v: topic[%s]: request from untracked topic %s", t.name, fromTopic)
 		}
 	}
 

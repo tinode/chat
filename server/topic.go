@@ -290,9 +290,9 @@ func (t *Topic) run(hub *Hub) {
 
 				t.presPubMessageSent(t.lastId)
 
-			} else if msg.Pres != nil && msg.Pres.wantReply {
+			} else if msg.Pres != nil {
 				// log.Printf("topic[%s].run: pres.src='%s' what='%s'", t.name, msg.Pres.Src, msg.Pres.What)
-				t.presProcReq(msg.Pres.Src, (msg.Pres.What == "on"))
+				t.presProcReq(msg.Pres.Src, (msg.Pres.What == "on"), msg.Pres.wantReply)
 				if t.original != msg.Pres.Topic {
 					// This is just a request for status, don't forward it to sessions
 					continue
@@ -1061,6 +1061,12 @@ func (t *Topic) replyGetSub(sess *Session, id string) error {
 				clearId = max(sub.GetHardClearId(), sub.ClearId)
 				mts.ClearId = clearId
 				mts.With = sub.GetWith()
+				if mts.With != "" {
+					mts.Online = t.perSubs[mts.With].online
+				} else {
+					mts.Online = t.perSubs[sub.Topic].online
+				}
+
 				mts.UpdatedAt = &sub.UpdatedAt
 				lastSeen := sub.GetLastSeen()
 				if !lastSeen.IsZero() {
@@ -1078,11 +1084,7 @@ func (t *Topic) replyGetSub(sess *Session, id string) error {
 				}
 				if t.cat == TopicCat_Grp {
 					pud := t.perUser[uid]
-					if pud.online > 0 {
-						mts.Online = "on"
-					} else {
-						mts.Online = "off"
-					}
+					mts.Online = pud.online > 0
 				}
 			}
 			// Ensure sanity or ReadId and RecvId:
