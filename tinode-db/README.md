@@ -29,6 +29,8 @@ The `uid_key` and `worker_id` are only used if the sample data is being loaded. 
 
 The default `data.json` file creates five users with user names `alice`, `bob`, `carol`, `dave`, `frank`. Passwords are the same as the user name with 123 appended, e.g. user `alice` has password `alice123`. It will also create three group topics, and multiple peer to peer topics. Users will be subscribed to topics and each other. All topics will be randomly filled with messages.
 
+Avatar photos curtesy of https://www.pexels.com/ under [CC0 license](https://www.pexels.com/photo-license/).
+
 ## Links:
 
 See [database schema](https://github.com/tinode/chat/tree/master/server/dbschema.md)

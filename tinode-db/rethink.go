@@ -1,13 +1,15 @@
 package main
 
 import (
-	_ "github.com/tinode/chat/server/db/rethinkdb"
-	"github.com/tinode/chat/server/store"
-	"github.com/tinode/chat/server/store/types"
+	"io/ioutil"
 	"log"
 	"math/rand"
 	"strings"
 	"time"
+
+	_ "github.com/tinode/chat/server/db/rethinkdb"
+	"github.com/tinode/chat/server/store"
+	"github.com/tinode/chat/server/store/types"
 )
 
 func gen_rethink(reset bool, dbsource string, data *Data) {
@@ -44,9 +46,7 @@ func gen_rethink(reset bool, dbsource string, data *Data) {
 	log.Println("Generating users...")
 
 	for _, uu := range data.Users {
-		if uu["createdAt"] != nil {
 
-		}
 		user := types.User{
 			State:    int(uu["state"].(float64)),
 			Username: uu["username"].(string),
@@ -54,7 +54,7 @@ func gen_rethink(reset bool, dbsource string, data *Data) {
 				Auth: types.ModePublic,
 				Anon: types.ModeNone,
 			},
-			Public: uu["public"],
+			Public: parsePublic(uu["public"]),
 		}
 		user.CreatedAt = getCreatedTime(uu["createdAt"])
 
@@ -75,7 +75,7 @@ func gen_rethink(reset bool, dbsource string, data *Data) {
 		name := genTopicName()
 		nameIndex[gt["name"].(string)] = name
 
-		topic := &types.Topic{Name: name, Public: gt["public"]}
+		topic := &types.Topic{Name: name, Public: parsePublic(gt["public"])}
 		var owner types.Uid
 		if gt["owner"] != nil {
 			owner = types.ParseUid(nameIndex[gt["owner"].(string)])
@@ -251,4 +251,38 @@ func getCreatedTime(v interface{}) time.Time {
 		}
 	}
 	return time.Time{}
+}
+
+type PhotoStruct struct {
+	Type string `gorethink:"type"`
+	Data []byte `gorethink:"data"`
+}
+
+type Vcard struct {
+	Fn    string       `gorethink:"fn"`
+	Photo *PhotoStruct `gorethink:"photo,omitempty"`
+}
+
+// {"vcard": {"fn": "Alice Johnson", "photo": "./alice-128.jpg"}}
+func parsePublic(public interface{}) interface{} {
+	var photo *PhotoStruct
+	var err error
+
+	if public == nil {
+		return nil
+	}
+
+	vcard := public.(map[string]interface{})["vcard"].(map[string]interface{})
+
+	if fname, ok := vcard["photo"]; ok {
+		if fname != nil {
+			photo = &PhotoStruct{Type: vcard["type"].(string)}
+			photo.Data, err = ioutil.ReadFile(fname.(string))
+			if err != nil {
+				log.Fatal(err)
+			}
+		}
+	}
+
+	return map[string]interface{}{"vcard": Vcard{Fn: vcard["fn"].(string), Photo: photo}}
 }
