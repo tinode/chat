@@ -1,4 +1,4 @@
-# Utility to Create "tinode" DB in a local RethinkDB Cluster
+# Utility to Create `tinode` DB in a local RethinkDB Cluster
 
 Compile then run from the command line.
 
