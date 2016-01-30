@@ -6,9 +6,8 @@ Parameters:
  - `--reset`: delete `tinode` database if one exists, then re-create it in a blank state;
  - `--data=FILENAME`: fill `tinode` database with sample data from the provided file
  - `--config=FILENAME`: load configuration from FILENAME. Example config:
- 
- ```js
- {
+```js
+{
 	"db_adapter": "rethinkdb",
 	"adapter_config": {
 		"worker_id": 1,
@@ -20,7 +19,8 @@ Parameters:
 	}
 }
  ```
- RethinkDB adapter uses [snowflake](http://github.com/tinode/snowflake/) to generate object IDs. The `worker_id` and `uid_key` parameters are used to initialize snowflake and only used when sample data is loaded.
+ 
+RethinkDB adapter uses [snowflake](http://github.com/tinode/snowflake/) to generate object IDs. The `worker_id` and `uid_key` parameters are used to initialize snowflake and only used when sample data is loaded.
   - `worker_id` is the snowflake ID of the host running this utility, integer in the range 0 - 1023
   - `uid_key` is a base64-encoded 16 byte XTEA encryption key to (weakly) encrypt snowflake-generated IDs so they don't appear to be sequential.
   - `params.database` is the name of database to generate
