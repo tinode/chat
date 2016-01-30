@@ -6,6 +6,7 @@ Parameters:
  - `--reset`: delete `tinode` database if one exists, then re-create it in a blank state;
  - `--data=FILENAME`: fill `tinode` database with sample data from the provided file
  - `--config=FILENAME`: load configuration from FILENAME. Example config:
+ 
  ```js
  {
 	"db_adapter": "rethinkdb",
