@@ -4,7 +4,7 @@ Instant messaging server. Backend in pure [Go](http://golang.org) ([Affero GPL 3
 
 Version 0.5. This is alpha-quality software. Bugs should be expected. Follow [instructions](INSTALL.md) to install and run.
 
-A demo is (usually) available at http://api.tinode.co/x/example-react-js/. Login as one of `alice`, `bob`, `carol`, `dave`, `frank`. Password is `<login>123`, e.g. login for `alice` is `alice123`.
+A demo is (usually) available at http://api.tinode.co/x/example-react-js/ ([source](https://github.com/tinode/example-react-js/)). Login as one of `alice`, `bob`, `carol`, `dave`, `frank`. Password is `<login>123`, e.g. login for `alice` is `alice123`.
 
 
 ## Why?
