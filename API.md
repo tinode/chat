@@ -209,6 +209,7 @@ leave: {
   topic: "grp1XUtEhjv6HND",   // string, topic to leave, unsubscribe, or
                               // delete, required
   unsub: true // boolean, leave and unsubscribe, optional, default: false
+}
 ```
 
 #### `{pub}`
