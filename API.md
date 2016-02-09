@@ -209,6 +209,7 @@ leave: {
   topic: "grp1XUtEhjv6HND",   // string, topic to leave, unsubscribe, or
                               // delete, required
   unsub: true // boolean, leave and unsubscribe, optional, default: false
+}
 ```
 
 #### `{pub}`
@@ -391,7 +392,7 @@ meta: {
   topic: "grp1XUtEhjv6HND", // string, topic name, if this is a response in
                             // context of a topic, optional
   ts: "2015-10-06T18:07:30.038Z", // string, timestamp
-	info: {
+  info: {
     created: "2015-10-24T10:26:09.716Z",
     updated: "2015-10-24T10:26:09.716Z",
     defacs: { // topic's default access permissions; present only if the current
@@ -414,7 +415,7 @@ meta: {
     private: { ...} // application-deinfed data that's available to the current
                     // user only
   }, // object, topic description, optional
-	sub:  [ // array of objects, topic subscribers or user's subscriptions, optional
+  sub:  [ // array of objects, topic subscribers or user's subscriptions, optional
     {
       user: "usr2il9suCbuko", // string, ID of the user this subscription
                             // describes, absent when querying 'me'.
