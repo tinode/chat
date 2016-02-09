@@ -33,11 +33,12 @@ package store
 import (
 	"encoding/json"
 	"errors"
+	"strings"
+	"time"
+
 	"github.com/tinode/chat/server/store/adapter"
 	"github.com/tinode/chat/server/store/types"
 	"golang.org/x/crypto/bcrypt"
-	"strings"
-	"time"
 )
 
 const (
@@ -160,7 +161,7 @@ func (u UsersObjMapper) Create(user *types.User, scheme, secret string, private 
 func (UsersObjMapper) Login(scheme, secret string) (types.Uid, error) {
 	if scheme == "basic" {
 		if splitAt := strings.Index(secret, ":"); splitAt > 0 {
-			uname := secret[:splitAt]
+			uname := strings.ToLower(secret[:splitAt])
 			password := secret[splitAt+1:]
 
 			uid, hash, err := adaptr.GetPasswordHash(uname)
