@@ -121,7 +121,7 @@ func (u UsersObjMapper) Create(user *types.User, scheme, secret string, private 
 		if splitAt := strings.Index(secret, ":"); splitAt > 0 {
 			user.InitTimes()
 
-			user.Username = secret[:splitAt]
+			user.Username = strings.ToLower(secret[:splitAt])
 			var err error
 			user.Passhash, err = bcrypt.GenerateFromPassword([]byte(secret[splitAt+1:]), bcrypt.DefaultCost)
 			if err != nil {
