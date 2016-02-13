@@ -55,6 +55,47 @@ type MsgBrowseOpts struct {
 	Limit uint `json:"limit,omitempty"`
 }
 
+type MsgGetOpts struct {
+	IfModifiedSince *time.Time `json:"ims,omitempty"`
+	Limit           int        `json:"limit,omitempty"`
+}
+
+type MsgGetQuery struct {
+	What string `json:"what"`
+
+	// Parameters of "desc" request
+	Desc *MsgGetOpts `json:"desc,omitempty"`
+	// Parameters of "sub" request
+	Sub *MsgGetOpts `json:"sub,omitempty"`
+	// Parameters of "data" request
+	Data *MsgBrowseOpts `json:"data,omitempty"`
+}
+
+// MsgSetSub: payload in set.sub request to update current subscription or invite another user, {sub.what} == "sub"
+type MsgSetSub struct {
+	// User affected by this request. Default (empty): current user
+	User string `json:"user,omitempty"`
+
+	// Access mode change, either Given or Want depending on context
+	Mode string `json:"mode,omitempty"`
+	// Free-form payload to pass to the invited user or to topic manager
+	Info interface{} `json:"info,omitempty"`
+}
+
+// MsgSetDesc: C2S in set.what == "desc" and sub.init message
+type MsgSetDesc struct {
+	DefaultAcs *MsgDefaultAcsMode `json:"defacs,omitempty"` // default access mode
+	Public     interface{}        `json:"public,omitempty"`
+	Private    interface{}        `json:"private,omitempty"` // Per-subscription private data
+}
+
+type MsgSetQuery struct {
+	// Topic metadata, new topic & new subscriptions only
+	Desc *MsgSetDesc `json:"desc,omitempty"`
+	// Subscription parameters
+	Sub *MsgSetSub `json:"sub,omitempty"`
+}
+
 // Client to Server (C2S) messages
 
 // User creation message {acc}
@@ -68,7 +109,7 @@ type MsgClientAcc struct {
 	// Use this schema to login to the newly created account
 	Login string `json:"login"`
 	// User initialization data when creating a new user, otherwise ignored
-	Init *MsgSetInfo `json:"init,omitempty"`
+	Desc *MsgSetDesc `json:"desc,omitempty"`
 }
 
 type MsgAuthScheme struct {
@@ -95,20 +136,15 @@ type MsgClientSub struct {
 	Id    string `json:"id,omitempty"`
 	Topic string `json:"topic"`
 
-	// Topic initialization data, !new topic & new subscriptions only, mirrors {set info}
-	Init *MsgSetInfo `json:"init,omitempty"`
-	// Subscription parameters, mirrors {set sub}; sub.User must not be provided
-	Sub *MsgSetSub `json:"sub,omitempty"`
+	// mirrors {set}
+	Set *MsgSetQuery `json:"set,omitempty"`
 
-	// mirrors get.what: "data", "sub", "info", default: get nothing
-	// space separated list; unknown strings are ignored
-	Get string `json:"get,omitempty"`
-	// parameter for requesting data from topic, mirrors get.browse
-	Browse *MsgBrowseOpts `json:"browse,omitempty"`
+	// mirrors {get}
+	Get *MsgGetQuery `json:"get,omitempty"`
 }
 
 const (
-	constMsgMetaInfo = 1 << iota
+	constMsgMetaDesc = 1 << iota
 	constMsgMetaSub
 	constMsgMetaData
 	constMsgDelTopic
@@ -120,8 +156,8 @@ func parseMsgClientMeta(params string) int {
 	parts := strings.SplitN(params, " ", 8)
 	for _, p := range parts {
 		switch p {
-		case "info":
-			bits |= constMsgMetaInfo
+		case "desc":
+			bits |= constMsgMetaDesc
 		case "sub":
 			bits |= constMsgMetaSub
 		case "data":
@@ -147,24 +183,6 @@ func parseMsgClientDel(params string) int {
 	return bits
 }
 
-// MsgSetInfo: C2S in set.what == "info" and sub.init message
-type MsgSetInfo struct {
-	DefaultAcs *MsgDefaultAcsMode `json:"defacs,omitempty"` // Access mode
-	Public     interface{}        `json:"public,omitempty"`
-	Private    interface{}        `json:"private,omitempty"` // Per-subscription private data
-}
-
-// MsgSetSub: payload in set.sub request to update current subscription or invite another user, {sub.what} == "sub"
-type MsgSetSub struct {
-	// User affected by this request. Default (empty): current user
-	User string `json:"user,omitempty"`
-
-	// Access mode change, either Given or Want depending on context
-	Mode string `json:"mode,omitempty"`
-	// Free-form payload to pass to the invited user or to topic manager
-	Info interface{} `json:"info,omitempty"`
-}
-
 // Topic default access mode
 type MsgDefaultAcsMode struct {
 	Auth string `json:"auth,omitempty"`
@@ -186,27 +204,18 @@ type MsgClientPub struct {
 	Content interface{} `json:"content"`
 }
 
-//func (msg *MsgClientPub) GetBoolParam(name string) bool {
-//	return modelGetBoolParam(msg.Params, name)
-//}
-
 // Query topic state {get}
 type MsgClientGet struct {
 	Id    string `json:"id,omitempty"`
 	Topic string `json:"topic"`
-	// "data", "sub" or "info" space separated list; unknown strings are ignored
-	What string `json:"what"`
-	// Parameters for "data" request
-	Browse *MsgBrowseOpts `json:"browse,omitempty"`
+	MsgGetQuery
 }
 
 // Update topic state {set}
 type MsgClientSet struct {
-	Id    string      `json:"id,omitempty"`
-	Topic string      `json:"topic"`
-	What  string      `json:"what"`           // sub, info, space separated list; unknown strings are ignored
-	Info  *MsgSetInfo `json:"info,omitempty"` // Payload for What == "info"
-	Sub   *MsgSetSub  `json:"sub,omitempty"`  // Payload for What == "sub"
+	Id    string `json:"id,omitempty"`
+	Topic string `json:"topic"`
+	MsgSetQuery
 }
 
 // MsgClientDel delete messages or topic
@@ -255,8 +264,8 @@ type MsgLastSeenInfo struct {
 	UserAgent string     `json:"ua,omitempty"`   // user agent of the device used to access the topic
 }
 
-// Topic info, S2C in Meta message
-type MsgTopicInfo struct {
+// Topic description, S2C in Meta message
+type MsgTopicDesc struct {
 	CreatedAt  *time.Time         `json:"created,omitempty"`
 	UpdatedAt  *time.Time         `json:"updated,omitempty"`
 	Name       string             `json:"name,omitempty"`
@@ -357,7 +366,7 @@ type MsgServerMeta struct {
 
 	Timestamp *time.Time `json:"ts,omitempty"`
 
-	Info *MsgTopicInfo `json:"info,omitempty"` // Topic description
+	Desc *MsgTopicDesc `json:"desc,omitempty"` // Topic description
 	Sub  []MsgTopicSub `json:"sub,omitempty"`  // Subscriptions as an array of objects
 }
 
@@ -503,6 +512,16 @@ func InfoNotJoined(id, topic string, ts time.Time) *ServerComMessage {
 }
 
 func InfoNoAction(id, topic string, ts time.Time) *ServerComMessage {
+	msg := &ServerComMessage{Ctrl: &MsgServerCtrl{
+		Id:        id,
+		Code:      http.StatusNotModified, // 304
+		Text:      "no action",
+		Topic:     topic,
+		Timestamp: ts}}
+	return msg
+}
+
+func InfoNotModified(id, topic string, ts time.Time) *ServerComMessage {
 	msg := &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
 		Code:      http.StatusNotModified, // 304

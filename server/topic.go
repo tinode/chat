@@ -370,19 +370,19 @@ func (t *Topic) run(hub *Hub) {
 			// Request to get/set topic metadata
 			if meta.pkt.Get != nil {
 				// Get request
-				if meta.what&constMsgMetaInfo != 0 {
-					t.replyGetInfo(meta.sess, meta.pkt.Get.Id, false)
+				if meta.what&constMsgMetaDesc != 0 {
+					t.replyGetDesc(meta.sess, meta.pkt.Get.Id, false, meta.pkt.Get.Desc)
 				}
 				if meta.what&constMsgMetaSub != 0 {
-					t.replyGetSub(meta.sess, meta.pkt.Get.Id)
+					t.replyGetSub(meta.sess, meta.pkt.Get.Id, meta.pkt.Get.Sub)
 				}
 				if meta.what&constMsgMetaData != 0 {
-					t.replyGetData(meta.sess, meta.pkt.Get.Id, meta.pkt.Get.Browse)
+					t.replyGetData(meta.sess, meta.pkt.Get.Id, meta.pkt.Get.Data)
 				}
 			} else if meta.pkt.Set != nil {
 				// Set request
-				if meta.what&constMsgMetaInfo != 0 {
-					t.replySetInfo(meta.sess, meta.pkt.Set)
+				if meta.what&constMsgMetaDesc != 0 {
+					t.replySetDesc(meta.sess, meta.pkt.Set)
 				}
 				if meta.what&constMsgMetaSub != 0 {
 					t.replySetSub(hub, meta.sess, meta.pkt.Set)
@@ -428,9 +428,12 @@ func (t *Topic) run(hub *Hub) {
 // Session subscribed to a topic, created == true if topic was just created and {pres} needs to be announced
 func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 
-	getWhat := parseMsgClientMeta(sreg.pkt.Get)
+	var getWhat = 0
+	if sreg.pkt.Get != nil {
+		getWhat = parseMsgClientMeta(sreg.pkt.Get.What)
+	}
 
-	if err := t.subCommonReply(h, sreg.sess, sreg.pkt, (getWhat&constMsgMetaInfo != 0), sreg.created); err != nil {
+	if err := t.subCommonReply(h, sreg.sess, sreg.pkt, (getWhat&constMsgMetaDesc != 0), sreg.created); err != nil {
 		return err
 	}
 
@@ -474,18 +477,18 @@ func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 
 	if getWhat&constMsgMetaSub != 0 {
 		// Send get.sub response as a separate {meta} packet
-		t.replyGetSub(sreg.sess, sreg.pkt.Id)
+		t.replyGetSub(sreg.sess, sreg.pkt.Id, sreg.pkt.Get.Sub)
 	}
 
 	if getWhat&constMsgMetaData != 0 {
 		// Send get.data response as {data} packets
-		t.replyGetData(sreg.sess, sreg.pkt.Id, sreg.pkt.Browse)
+		t.replyGetData(sreg.sess, sreg.pkt.Id, sreg.pkt.Get.Data)
 	}
 	return nil
 }
 
 // subCommonReply generates a response to a subscription request
-func (t *Topic) subCommonReply(h *Hub, sess *Session, pkt *MsgClientSub, sendInfo bool, created bool) error {
+func (t *Topic) subCommonReply(h *Hub, sess *Session, pkt *MsgClientSub, sendDesc bool, created bool) error {
 	log.Println("subCommonReply ", t.name)
 	now := time.Now().UTC().Round(time.Millisecond)
 
@@ -494,21 +497,22 @@ func (t *Topic) subCommonReply(h *Hub, sess *Session, pkt *MsgClientSub, sendInf
 	var info, private interface{}
 	var mode string
 
-	if pkt.Sub != nil {
-		if pkt.Sub.User != "" {
-			log.Println("subCommonReply: msg.Sub.Sub.User is ", pkt.Sub.User)
-			simpleByteSender(sess.send, ErrMalformed(pkt.Id, t.original, now))
-			return errors.New("user id must not be specified")
+	if pkt.Set != nil {
+		if pkt.Set.Sub != nil {
+			if pkt.Set.Sub.User != "" {
+				log.Println("subCommonReply: msg.Sub.Sub.User is ", pkt.Set.Sub.User)
+				simpleByteSender(sess.send, ErrMalformed(pkt.Id, t.original, now))
+				return errors.New("user id must not be specified")
+			}
+
+			info = pkt.Set.Sub.Info
+			mode = pkt.Set.Sub.Mode
 		}
 
-		info = pkt.Sub.Info
-		mode = pkt.Sub.Mode
+		if pkt.Set.Desc != nil && !isNullValue(pkt.Set.Desc.Private) {
+			private = pkt.Set.Desc.Private
+		}
 	}
-
-	if pkt.Init != nil && !isNullValue(pkt.Init.Private) {
-		private = pkt.Init.Private
-	}
-
 	if err := t.requestSub(h, sess, pkt.Id, mode, info, private); err != nil {
 		return err
 	}
@@ -529,8 +533,8 @@ func (t *Topic) subCommonReply(h *Hub, sess *Session, pkt *MsgClientSub, sendInf
 
 	simpleByteSender(sess.send, NoErr(pkt.Id, t.original, now))
 
-	if sendInfo {
-		t.replyGetInfo(sess, pkt.Id, created)
+	if sendDesc {
+		t.replyGetDesc(sess, pkt.Id, created, pkt.Get.Desc)
 	}
 
 	return nil
@@ -841,60 +845,66 @@ func (t *Topic) approveSub(h *Hub, sess *Session, target types.Uid, set *MsgClie
 	return nil
 }
 
-// replyGetInfo is a response to a get.info request on a topic, sent to just the session as a {meta} packet
-func (t *Topic) replyGetInfo(sess *Session, id string, created bool) error {
+// replyGetDesc is a response to a get.desc request on a topic, sent to just the session as a {meta} packet
+func (t *Topic) replyGetDesc(sess *Session, id string, created bool, opts *MsgGetOpts) error {
 	now := time.Now().UTC().Round(time.Millisecond)
 
-	pud, full := t.perUser[sess.uid]
+	// Check if user requested modified data
+	if opts != nil && opts.IfModifiedSince != nil && opts.IfModifiedSince.After(t.updated) {
+		simpleByteSender(sess.send, InfoNotModified(id, t.original, now))
+		return nil
+	}
 
-	info := &MsgTopicInfo{
+	desc := &MsgTopicDesc{
 		CreatedAt: &t.created,
 		UpdatedAt: &t.updated}
 
+	pud, full := t.perUser[sess.uid]
+
 	if t.public != nil {
-		info.Public = t.public
+		desc.Public = t.public
 	} else if full {
 		// p2p topic
-		info.Public = pud.public
+		desc.Public = pud.public
 	}
 
 	// Request may come from a subscriber (full == true) or a stranger.
-	// Give subscriber a lot more info than to a stranger
+	// Give subscriber a fuller description than to a stranger
 	if full {
 		if pud.modeGiven&pud.modeWant&types.ModeShare != 0 {
-			info.DefaultAcs = &MsgDefaultAcsMode{
+			desc.DefaultAcs = &MsgDefaultAcsMode{
 				Auth: t.accessAuth.String(),
 				Anon: t.accessAnon.String()}
 		}
 
-		info.Acs = &MsgAccessMode{
+		desc.Acs = &MsgAccessMode{
 			Want:  pud.modeWant.String(),
 			Given: pud.modeGiven.String()}
 
-		info.Private = pud.private
+		desc.Private = pud.private
 
-		info.SeqId = t.lastId
+		desc.SeqId = t.lastId
 		// Make sure reported values are sane:
 		// t.clearId <= pud.clearId <= t.readId <= t.recvId <= t.lastId
-		info.ClearId = max(pud.clearId, t.clearId)
-		info.ReadSeqId = max(pud.readId, info.ClearId)
-		info.RecvSeqId = max(pud.recvId, pud.readId)
+		desc.ClearId = max(pud.clearId, t.clearId)
+		desc.ReadSeqId = max(pud.readId, desc.ClearId)
+		desc.RecvSeqId = max(pud.recvId, pud.readId)
 
 		// When a topic is first created, its name may change. Report the new name
 		if created {
-			info.Name = t.name
+			desc.Name = t.name
 		}
 	}
 
 	simpleByteSender(sess.send, &ServerComMessage{
-		Meta: &MsgServerMeta{Id: id, Topic: t.original, Info: info, Timestamp: &now}})
+		Meta: &MsgServerMeta{Id: id, Topic: t.original, Desc: desc, Timestamp: &now}})
 
 	return nil
 }
 
-// replySetInfo updates topic metadata, saves it to DB,
+// replySetDesc updates topic metadata, saves it to DB,
 // replies to the caller as {ctrl} message, generates {pres} update if necessary
-func (t *Topic) replySetInfo(sess *Session, set *MsgClientSet) error {
+func (t *Topic) replySetDesc(sess *Session, set *MsgClientSet) error {
 	now := time.Now().UTC().Round(time.Millisecond)
 
 	assignAccess := func(upd map[string]interface{}, mode *MsgDefaultAcsMode) error {
@@ -951,31 +961,33 @@ func (t *Topic) replySetInfo(sess *Session, set *MsgClientSet) error {
 	user := make(map[string]interface{})
 	topic := make(map[string]interface{})
 	sub := make(map[string]interface{})
-	if t.cat == TopicCat_Me {
-		// Update current user
-		if set.Info.DefaultAcs != nil {
-			err = assignAccess(user, set.Info.DefaultAcs)
+	if set.Desc != nil {
+		if t.cat == TopicCat_Me {
+			// Update current user
+			if set.Desc.DefaultAcs != nil {
+				err = assignAccess(user, set.Desc.DefaultAcs)
+			}
+			if set.Desc.Public != nil {
+				sendPres = assignPubPriv(user, "Public", set.Desc.Public)
+			}
+		} else if t.cat == TopicCat_Grp && t.owner == sess.uid {
+			// Update current topic
+			if set.Desc.DefaultAcs != nil {
+				err = assignAccess(topic, set.Desc.DefaultAcs)
+			}
+			if set.Desc.Public != nil {
+				sendPres = assignPubPriv(topic, "Public", set.Desc.Public)
+			}
 		}
-		if set.Info.Public != nil {
-			sendPres = assignPubPriv(user, "Public", set.Info.Public)
-		}
-	} else if t.cat == TopicCat_Grp && t.owner == sess.uid {
-		// Update current topic
-		if set.Info.DefaultAcs != nil {
-			err = assignAccess(topic, set.Info.DefaultAcs)
-		}
-		if set.Info.Public != nil {
-			sendPres = assignPubPriv(topic, "Public", set.Info.Public)
-		}
-	}
 
-	if err != nil {
-		simpleByteSender(sess.send, ErrMalformed(set.Id, set.Topic, now))
-		return err
-	}
+		if err != nil {
+			simpleByteSender(sess.send, ErrMalformed(set.Id, set.Topic, now))
+			return err
+		}
 
-	if set.Info.Private != nil {
-		assignPubPriv(sub, "Private", set.Info.Private)
+		if set.Desc.Private != nil {
+			assignPubPriv(sub, "Private", set.Desc.Private)
+		}
 	}
 
 	var change int
@@ -1025,7 +1037,7 @@ func (t *Topic) replySetInfo(sess *Session, set *MsgClientSet) error {
 
 // replyGetSub is a response to a get.sub request on a topic - load a list of subscriptions/subscribers,
 // send it just to the session as a {meta} packet
-func (t *Topic) replyGetSub(sess *Session, id string) error {
+func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 	now := time.Now().UTC().Round(time.Millisecond)
 
 	var subs []types.Subscription
@@ -1046,10 +1058,26 @@ func (t *Topic) replyGetSub(sess *Session, id string) error {
 		return err
 	}
 
+	var ifModified time.Time
+	var limit int
+	if opts != nil && opts.IfModifiedSince != nil {
+		ifModified = *opts.IfModifiedSince
+		limit = opts.Limit
+	} else {
+		limit = 1024
+	}
+
 	meta := &MsgServerMeta{Id: id, Topic: t.original, Timestamp: &now}
 	if len(subs) > 0 {
 		meta.Sub = make([]MsgTopicSub, 0, len(subs))
-		for _, sub := range subs {
+		for idx, sub := range subs {
+			if idx == limit {
+				break
+			}
+			if sub.UpdatedAt.Before(ifModified) {
+				continue
+			}
+
 			var mts MsgTopicSub
 			uid := types.ParseUid(sub.User)
 			var clearId int
@@ -1100,7 +1128,11 @@ func (t *Topic) replyGetSub(sess *Session, id string) error {
 		}
 	}
 
-	simpleByteSender(sess.send, &ServerComMessage{Meta: meta})
+	if len(meta.Sub) > 0 {
+		simpleByteSender(sess.send, &ServerComMessage{Meta: meta})
+	} else {
+		simpleByteSender(sess.send, InfoNotModified(id, t.original, now))
+	}
 
 	return nil
 }

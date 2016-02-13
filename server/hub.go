@@ -217,9 +217,9 @@ func (h *Hub) run() {
 				log.Println("hub.meta: topic already in memory")
 				dst.meta <- meta
 			} else if meta.pkt.Get != nil {
-				// If topic is not in memory, fetch requested info from DB and reply here
+				// If topic is not in memory, fetch requested description from DB and reply here
 				log.Println("hub.meta: topic NOT in memory")
-				go replyTopicInfoBasic(meta.sess, meta.topic, meta.pkt.Get)
+				go replyTopicDescBasic(meta.sess, meta.topic, meta.pkt.Get)
 			}
 
 		case unreg := <-h.unreg:
@@ -314,10 +314,10 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		t.accessAnon = types.ModeBanned
 
 		var userData perUserData
-		if sreg.pkt.Init != nil && !isNullValue(sreg.pkt.Init.Private) {
+		if sreg.pkt.Set != nil && sreg.pkt.Set.Desc != nil && !isNullValue(sreg.pkt.Set.Desc.Private) {
 			// t.public is not used for p2p topics since each user get a different public
 
-			userData.private = sreg.pkt.Init.Private
+			userData.private = sreg.pkt.Set.Desc.Private
 			// Init.DefaultAcs and Init.Public are ignored for p2p topics
 		}
 		// Custom default access levels set in sreg.pkt.Init.DefaultAcs are ignored
@@ -347,9 +347,9 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		}
 
 		// User may set non-default access to topic, just make sure it's no higher than the default
-		if sreg.pkt.Sub != nil && sreg.pkt.Sub.Mode != "" {
-			if err := userData.modeWant.UnmarshalText([]byte(sreg.pkt.Sub.Mode)); err != nil {
-				log.Println("hub: invalid access mode for topic '" + t.name + "': '" + sreg.pkt.Sub.Mode + "'")
+		if sreg.pkt.Set != nil && sreg.pkt.Set.Sub != nil && sreg.pkt.Set.Sub.Mode != "" {
+			if err := userData.modeWant.UnmarshalText([]byte(sreg.pkt.Set.Sub.Mode)); err != nil {
+				log.Println("hub: invalid access mode for topic '" + t.name + "': '" + sreg.pkt.Set.Sub.Mode + "'")
 				userData.modeWant = types.ModeP2P
 			} else {
 				userData.modeWant &= types.ModeP2P
@@ -473,33 +473,35 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		// Owner/creator gets full access to topic
 		userData := perUserData{modeGiven: types.ModeFull}
 
-		// User sent initialization parameters
-		if sreg.pkt.Init != nil {
-			if !isNullValue(sreg.pkt.Init.Public) {
-				t.public = sreg.pkt.Init.Public
-			}
-			if !isNullValue(sreg.pkt.Init.Private) {
-				userData.private = sreg.pkt.Init.Private
-			}
+		if sreg.pkt.Set != nil {
+			// User sent initialization parameters
+			if sreg.pkt.Set.Desc != nil {
+				if !isNullValue(sreg.pkt.Set.Desc.Public) {
+					t.public = sreg.pkt.Set.Desc.Public
+				}
+				if !isNullValue(sreg.pkt.Set.Desc.Private) {
+					userData.private = sreg.pkt.Set.Desc.Private
+				}
 
-			// set default access
-			if sreg.pkt.Init.DefaultAcs != nil {
-				if auth, anon, err := parseTopicAccess(sreg.pkt.Init.DefaultAcs, t.accessAuth, t.accessAnon); err != nil {
-					log.Println("hub: invalid access mode for topic '" + t.name + "': '" + err.Error() + "'")
-				} else if auth&types.ModeOwner != 0 || anon&types.ModeOwner != 0 {
-					log.Println("hub: OWNER default access in topic '" + t.name)
-				} else {
-					t.accessAuth, t.accessAnon = auth, anon
+				// set default access
+				if sreg.pkt.Set.Desc.DefaultAcs != nil {
+					if auth, anon, err := parseTopicAccess(sreg.pkt.Set.Desc.DefaultAcs, t.accessAuth, t.accessAnon); err != nil {
+						log.Println("hub: invalid access mode for topic '" + t.name + "': '" + err.Error() + "'")
+					} else if auth&types.ModeOwner != 0 || anon&types.ModeOwner != 0 {
+						log.Println("hub: OWNER default access in topic '" + t.name)
+					} else {
+						t.accessAuth, t.accessAnon = auth, anon
+					}
 				}
 			}
-		}
 
-		// Owner/creator may restrict own access to topic
-		if sreg.pkt.Sub == nil || sreg.pkt.Sub.Mode == "" {
-			userData.modeWant = types.ModeFull
-		} else {
-			if err := userData.modeWant.UnmarshalText([]byte(sreg.pkt.Sub.Mode)); err != nil {
-				log.Println("hub: invalid access mode for topic '" + t.name + "': '" + sreg.pkt.Sub.Mode + "'")
+			// Owner/creator may restrict own access to topic
+			if sreg.pkt.Set.Sub == nil || sreg.pkt.Set.Sub.Mode == "" {
+				userData.modeWant = types.ModeFull
+			} else {
+				if err := userData.modeWant.UnmarshalText([]byte(sreg.pkt.Set.Sub.Mode)); err != nil {
+					log.Println("hub: invalid access mode for topic '" + t.name + "': '" + sreg.pkt.Set.Sub.Mode + "'")
+				}
 			}
 		}
 
@@ -665,18 +667,18 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, uns
 	}
 }
 
-// replyTopicInfoBasic loads minimal topic Info when the requester is not subscribed to the topic
-func replyTopicInfoBasic(sess *Session, topic string, get *MsgClientGet) {
-	log.Printf("hub.replyTopicInfoBasic: topic %s", topic)
+// replyTopicDescBasic loads minimal topic Desc when the requester is not subscribed to the topic
+func replyTopicDescBasic(sess *Session, topic string, get *MsgClientGet) {
+	log.Printf("hub.replyTopicDescBasic: topic %s", topic)
 	now := time.Now().UTC().Round(time.Millisecond)
-	info := &MsgTopicInfo{}
+	desc := &MsgTopicDesc{}
 
 	if strings.HasPrefix(topic, "grp") {
 		stopic, err := store.Topics.Get(topic)
 		if err == nil {
-			info.CreatedAt = &stopic.CreatedAt
-			info.UpdatedAt = &stopic.UpdatedAt
-			info.Public = stopic.Public
+			desc.CreatedAt = &stopic.CreatedAt
+			desc.UpdatedAt = &stopic.UpdatedAt
+			desc.Public = stopic.Public
 		} else {
 			simpleByteSender(sess.send, ErrUnknown(get.Id, get.Topic, now))
 			return
@@ -704,9 +706,9 @@ func replyTopicInfoBasic(sess *Session, topic string, get *MsgClientGet) {
 
 		suser, err := store.Users.Get(uid)
 		if err == nil {
-			info.CreatedAt = &suser.CreatedAt
-			info.UpdatedAt = &suser.UpdatedAt
-			info.Public = suser.Public
+			desc.CreatedAt = &suser.CreatedAt
+			desc.UpdatedAt = &suser.UpdatedAt
+			desc.Public = suser.Public
 		} else {
 			log.Printf("hub.replyTopicInfoBasic: sending  error 3")
 			simpleByteSender(sess.send, ErrUnknown(get.Id, get.Topic, now))
@@ -714,9 +716,9 @@ func replyTopicInfoBasic(sess *Session, topic string, get *MsgClientGet) {
 		}
 	}
 
-	log.Printf("hub.replyTopicInfoBasic: sending info -- OK")
+	log.Printf("hub.replyTopicDescBasic: sending desc -- OK")
 	simpleByteSender(sess.send, &ServerComMessage{
-		Meta: &MsgServerMeta{Id: get.Id, Topic: get.Topic, Timestamp: &now, Info: info}})
+		Meta: &MsgServerMeta{Id: get.Id, Topic: get.Topic, Timestamp: &now, Desc: desc}})
 }
 
 // Parse topic access parameters

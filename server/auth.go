@@ -123,28 +123,3 @@ func checkApiKey(apikey string) (isValid, isRoot bool) {
 
 	return
 }
-
-// Authenticate user with provided scheme and secret
-func authUser(scheme, secret string) (uid types.Uid, resp *ServerComMessage) {
-	var err error
-
-	switch scheme {
-	case "basic", "token":
-		uid, err = store.Users.Login(msg.Login.Scheme, msg.Login.Secret)
-		if err != nil {
-			// DB error
-			log.Println(err)
-			resp = ErrUnknown(msg.Login.Id, "", msg.timestamp)
-			return
-		} else if uid.IsZero() {
-			// Invalid login or password
-			resp = ErrAuthFailed(msg.Login.Id, "", msg.timestamp)
-			return
-		}
-
-	default:
-		resp = ErrAuthUnknownScheme(msg.Login.Id, "", msg.timestamp)
-	}
-
-	return
-}

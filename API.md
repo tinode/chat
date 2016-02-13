@@ -89,7 +89,7 @@ acc: {
                       // Unicode character "\u2421"; required
     }
   ],
-  init: {  // object, user initialization data closely matching that of table
+  desc: {  // object, user initialization data closely matching that of table
            // initialization; optional
     defacs: {
       auth: "RWS", // string, default access mode for peer to peer conversations
@@ -133,10 +133,11 @@ The user agent `ua` is expected to follow [RFC 7231 section 5.5.3](http://tools.
 
 #### `{sub}`
 
-The `{sub}` packet serves three functions:
+The `{sub}` packet serves the following functions:
  * creating a topic
  * subscribing user to a topic
  * attaching session to a topic
+ * fetching topic data
 
 User creates a new group topic by sending `{sub}` packet with the `topic` field set to `new`. Server will create a topic and respond back to session with the name of the newly created topic.
 
@@ -159,39 +160,58 @@ sub: {
   topic: "me",   // topic to be subscribed or attached to
 
   // Object with topic initialization data, new topics & new
-  // subscriptions only, mirrors {set info}
-  init: {
-    defacs: {
-      auth: "RWS", // string, default access for new authenticated subscribers
-      anon: "X"    // string, default access for new anonymous (un-authenticated)
-                   // subscribers
-    }, // Default access mode for the new topic
-    public: { ... }, // application-defined payload to describe topic
-    private: { ... } // per-user private application-defined content
-  }, // object, optional
+  // subscriptions only, mirrors {set desc}
+  set: {
+    desc: {
+      defacs: {
+        auth: "RWS", // string, default access for new authenticated subscribers
+        anon: "X"    // string, default access for new anonymous (un-authenticated)
+                     // subscribers
+      }, // Default access mode for the new topic
+      public: { ... }, // application-defined payload to describe topic
+      private: { ... } // per-user private application-defined content
+    }, // object, optional
 
-  // Subscription parameters, mirrors {set sub}; sub.user must
-  // not be provided
-  sub: {
-    mode: "RWS", // string, requested access mode, optional;
-                 // default: server-defined
-    info: { ... }  // application-defined payload to pass to the topic manager
-  }, // object, optional
+    // Subscription parameters, mirrors {set sub}; sub.user must
+    // not be provided
+    sub: {
+      mode: "RWS", // string, requested access mode, optional;
+                   // default: server-defined
+      info: { ... }  // application-defined payload to pass to the topic manager
+    } // object, optional
+  },
 
-  // Metadata to request from the topic; space-separated list, valid strings
-  // are "info", "sub", "data"; default: request nothing; unknown strings are
-  // ignored; see {get  what} for details
-  get: "info sub data", // string, optional
+  get: {
+    // Metadata to request from the topic; space-separated list, valid strings
+    // are "info", "sub", "data"; default: request nothing; unknown strings are
+    // ignored; see {get  what} for details
+    what: "desc sub data", // string, optional
 
-  // Optional parameters for get: "data", see {get what="data"} for details
-  browse: {
-    since: 123, // integer, load messages with server-issued IDs greater or equal
-				 // to this (inclusive/closed), optional
-    before: 321, // integer, load messages with server-issed sequential IDs less
-				  // than this (exclusive/open), optional
-    limit: 20, // integer, limit the number of returned objects,
-               // default: 32, optional
-  } // object, optional
+    // Optional parameters for {get what="desc"}
+    desc: {
+      ims: "2015-10-06T18:07:30.038Z" // timestamp, "if modified since" - return
+            // value only if it has been updated after the stated timestamp,
+            // optional
+    },
+
+    // Optional parameters for {get what="sub"}
+    sub: {
+      ims: "2015-10-06T18:07:30.038Z", // timestamp, "if modified since" - return
+            // value only if it has been updated after the stated timestamp,
+            // optional
+      limit: 20 // integer, limit the number of returned objects
+    },
+
+    // Optional parameters for {get what="data"}, see {get what="data"} for details
+    data: {
+      since: 123, // integer, load messages with server-issued IDs greater or equal
+  				 // to this (inclusive/closed), optional
+      before: 321, // integer, load messages with server-issed sequential IDs less
+  				  // than this (exclusive/open), optional
+      limit: 20, // integer, limit the number of returned objects,
+                 // default: 32, optional
+    } // object, optional
+  }
 }
 ```
 
@@ -235,11 +255,27 @@ Query topic for metadata, such as description or a list of subscribers, or query
 ```js
 get: {
   id: "1a2b3", // string, client-provided message id, optional
-  what: "sub info data", // string, space-separated list of parameters to query;
+  topic: "grp1XUtEhjv6HND", // string, name of topic to request data from
+  what: "sub desc data", // string, space-separated list of parameters to query;
                         // unknown strings are ignored; required
 
+  // Optional parameters for {get what="desc"}
+  desc: {
+    ims: "2015-10-06T18:07:30.038Z" // timestamp, "if modified since" - return
+          // value only if it has been updated after the stated timestamp,
+          // optional
+  },
+
+  // Optional parameters for {get what="sub"}
+  sub: {
+    ims: "2015-10-06T18:07:30.038Z", // timestamp, "if modified since" - return
+          // value only if it has been updated after the stated timestamp,
+          // optional
+    limit: 20 // integer, limit the number of returned objects
+  },
+
   // Optional parameters for {get what="data"}
-  browse: {
+  data: {
     since: 123, // integer, load messages with server-issued IDs greater or equal
 				 // to this (inclusive/closed), optional
     before: 321, // integer, load messages with server-issed sequential IDs less
@@ -250,14 +286,16 @@ get: {
 }
 ```
 
-* `{get what="info"}`
+* `{get what="desc"}`
 
 Query topic description. Server responds with a `{meta}` message containing requested data. See `{meta}` for details.
+If `ims` is specified and data has not been updated, responds with a `{ctrl}` "not modified" message.
 
 * `{get what="sub"}`
 
 Get a list of subscribers. Server responds with a `{meta}` message containing a list of subscribers. See `{meta}` for details.
-For `me` topic the request returns a list of user's subscriptions.
+For `me` topic the request returns a list of user's subscriptions. If `ims` is specified and data has not been updated,
+responds with a `{ctrl}` "not modified" message.
 
 * `{get what="data"}`
 
@@ -272,17 +310,19 @@ Update topic metadata, delete messages or topic.
 ```js
 set: {
   id: "1a2b3", // string, client-provided message id, optional
-  topic: "grp1XUtEhjv6HND", // string, topic to publish to, required
-  what: "sub info", // string, space separated list of data to update,
-                        // unknown strings are ignored
-  info: {
+  topic: "grp1XUtEhjv6HND", // string, name of topic to update, required
+
+  // Optional payload to update topic description
+  desc: {
     defacs: { // new default access mode
       auth: "RWP",  // access permissions for authenticated users
       anon: "X" // access permissions for anonymous users
     },
     public: { ... }, // application-defined payload to describe topic
     private: { ... } // per-user private application-defined content
-  }, // object, payload for what == "info"
+  },
+
+  // Optional payload to update subscription
   sub: {
     user: "usr2il9suCbuko", // string, user affected by this request;
                             // default (empty) means current user
@@ -317,8 +357,8 @@ Deleting a topic `what="topic"` deletes the topic including all subscriptions, a
 
 #### `{note}`
 
-Client-generated ephemeral notification for forwarding to other clients currently attached to the topic, such as typing notifications or delivery receipts. The message is "fire and forget": not stored to disk per se and not acknowledged by the server. Messages deemed invalid are silently dropped. 
-The `{note.recv}` and `{note.read}` do alter persistent state on the server. The value is stored and reported back in the corresponding fields of the `{meta.sub}` message. 
+Client-generated ephemeral notification for forwarding to other clients currently attached to the topic, such as typing notifications or delivery receipts. The message is "fire and forget": not stored to disk per se and not acknowledged by the server. Messages deemed invalid are silently dropped.
+The `{note.recv}` and `{note.read}` do alter persistent state on the server. The value is stored and reported back in the corresponding fields of the `{meta.sub}` message.
 
 ```js
 note: {

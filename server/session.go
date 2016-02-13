@@ -192,7 +192,7 @@ func (s *Session) dispatch(raw []byte) {
 
 	case msg.Set != nil:
 		s.set(&msg)
-		log.Println("dispatch: Set." + msg.Set.What + " done")
+		log.Println("dispatch: Set done")
 
 	case msg.Del != nil:
 		s.del(&msg)
@@ -369,20 +369,24 @@ func (s *Session) acc(msg *ClientComMessage) {
 			if auth.Scheme == "basic" {
 				var private interface{}
 				var user types.User
-				if msg.Acc.Init != nil {
+				if msg.Acc.Desc != nil {
 					user.Access.Auth = DEFAULT_AUTH_ACCESS
 					user.Access.Anon = DEFAULT_ANON_ACCESS
 
-					if msg.Acc.Init.DefaultAcs != nil {
-						if msg.Acc.Init.DefaultAcs.Auth != "" {
-							user.Access.Auth.UnmarshalText([]byte(msg.Acc.Init.DefaultAcs.Auth))
+					if msg.Acc.Desc.DefaultAcs != nil {
+						if msg.Acc.Desc.DefaultAcs.Auth != "" {
+							user.Access.Auth.UnmarshalText([]byte(msg.Acc.Desc.DefaultAcs.Auth))
 						}
-						if msg.Acc.Init.DefaultAcs.Anon != "" {
-							user.Access.Anon.UnmarshalText([]byte(msg.Acc.Init.DefaultAcs.Anon))
+						if msg.Acc.Desc.DefaultAcs.Anon != "" {
+							user.Access.Anon.UnmarshalText([]byte(msg.Acc.Desc.DefaultAcs.Anon))
 						}
 					}
-					user.Public = msg.Acc.Init.Public
-					private = msg.Acc.Init.Private
+					if !isNullValue(msg.Acc.Desc.Public) {
+						user.Public = msg.Acc.Desc.Public
+					}
+					if !isNullValue(msg.Acc.Desc.Private) {
+						private = msg.Acc.Desc.Private
+					}
 				}
 				_, err := store.Users.Create(&user, auth.Scheme, string(auth.Secret), private)
 				if err != nil {
@@ -395,7 +399,7 @@ func (s *Session) acc(msg *ClientComMessage) {
 				}
 
 				reply := NoErrCreated(msg.Acc.Id, "", msg.timestamp)
-				info := &MsgTopicInfo{
+				desc := &MsgTopicDesc{
 					CreatedAt: &user.CreatedAt,
 					UpdatedAt: &user.UpdatedAt,
 					DefaultAcs: &MsgDefaultAcsMode{
@@ -406,7 +410,7 @@ func (s *Session) acc(msg *ClientComMessage) {
 
 				reply.Ctrl.Params = map[string]interface{}{
 					"uid":  user.Uid().UserId(),
-					"info": info,
+					"desc": desc,
 				}
 				s.QueueOut(NoErr(msg.Acc.Id, "", msg.timestamp))
 			} else {
@@ -463,14 +467,14 @@ func (s *Session) get(msg *ClientComMessage) {
 			log.Println("s.get: invalid Get message action for hub routing: '" + msg.Get.What + "'")
 			s.QueueOut(ErrPermissionDenied(msg.Get.Id, original, msg.timestamp))
 		} else {
-			// Info on a topic not currently subscribed to. Request info from the hub
+			// Description of a topic not currently subscribed to. Request desc from the hub
 			globals.hub.meta <- meta
 		}
 	}
 }
 
 func (s *Session) set(msg *ClientComMessage) {
-	log.Println("s.set: processing 'set." + msg.Set.What + "'")
+	log.Println("s.set: processing 'set'")
 
 	// Validate topic name
 	original, expanded, err := s.validateTopicName(msg.Set.Id, msg.Set.Topic, msg.timestamp)
@@ -479,28 +483,25 @@ func (s *Session) set(msg *ClientComMessage) {
 		return
 	}
 
-	sub, ok := s.subs[expanded]
-	meta := &metaReq{
-		topic: expanded,
-		pkt:   msg,
-		sess:  s,
-		what:  parseMsgClientMeta(msg.Set.What)}
+	if sub, ok := s.subs[expanded]; ok {
+		meta := &metaReq{
+			topic: expanded,
+			pkt:   msg,
+			sess:  s}
 
-	if meta.what == 0 || meta.what == constMsgMetaData {
-		s.QueueOut(ErrMalformed(msg.Set.Id, original, msg.timestamp))
-		log.Println("s.set: invalid Set action '" + msg.Set.What + "'")
-	}
-
-	if ok {
-		if (meta.what&constMsgMetaInfo != 0 && msg.Set.Info == nil) ||
-			(meta.what&constMsgMetaSub != 0 && msg.Set.Sub == nil) {
-
-			s.QueueOut(ErrMalformed(msg.Set.Id, original, msg.timestamp))
-			log.Println("s.set: payload missing for Set action '" + msg.Set.What + "'")
-		} else {
-			log.Println("s.set: sending to topic")
-			sub.meta <- meta
+		if msg.Set.Desc != nil {
+			meta.what = constMsgMetaDesc
 		}
+		if msg.Set.Sub != nil {
+			meta.what |= constMsgMetaSub
+		}
+		if meta.what == 0 {
+			s.QueueOut(ErrMalformed(msg.Set.Id, original, msg.timestamp))
+			log.Println("s.set: nil Set action")
+		}
+
+		log.Println("s.set: sending to topic")
+		sub.meta <- meta
 	} else {
 		log.Println("s.set: can Set for subscribed topics only")
 		s.QueueOut(ErrPermissionDenied(msg.Set.Id, original, msg.timestamp))
