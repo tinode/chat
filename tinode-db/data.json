@@ -5,7 +5,7 @@
    "email": "alice@example.com",
    "passhash": "alice123",
    "private": "some comment 123",
-   "public": {"vcard": {"fn": "Alice Johnson", "photo": "./alice-64.jpg", "type": "jpg"}},
+   "public": {"fn": "Alice Johnson", "photo": "./alice-64.jpg", "type": "jpg"},
    "state": 1,
    "status": {
     "text": "DND"
@@ -19,7 +19,7 @@
    "private": {
     "comment": "no comments :)"
    },
-   "public": {"vcard": {"fn": "Bob Smith", "photo": "./bob-64.jpg", "type": "jpg"}},
+   "public": {"fn": "Bob Smith", "photo": "./bob-64.jpg", "type": "jpg"},
    "state": 1,
    "status": "stuff",
    "username": "bob"
@@ -29,7 +29,7 @@
    "email": "carol@example.com",
    "passhash": "carol123",
    "private": "more stuff",
-   "public": {"vcard": {"fn": "Carol Xmas", "photo": "./carol-64.jpg", "type": "jpg"}},
+   "public": {"fn": "Carol Xmas", "photo": "./carol-64.jpg", "type": "jpg"},
    "state": 1,
    "status": "ho ho ho",
    "username": "carol"
@@ -39,7 +39,7 @@
    "email": "dave@example.com",
    "passhash": "dave123",
    "private": "stuff 123",
-   "public": {"vcard": {"fn": "Dave Goliathsson", "photo": "./dave-64.jpg", "type": "jpg"}},
+   "public": {"fn": "Dave Goliathsson", "photo": "./dave-64.jpg", "type": "jpg"},
    "state": 1,
    "status": "hiding!",
    "username": "dave"
@@ -49,7 +49,7 @@
    "email": "eve@example.com",
    "passhash": "eve123",
    "private": "apples?",
-   "public": {"vcard": {"fn": "Eve Adams", "photo": "./eve-64.jpg", "type": "jpg"}},
+   "public": {"fn": "Eve Adams", "photo": "./eve-64.jpg", "type": "jpg"},
    "state": 1,
    "username": "eve"
   },
@@ -58,7 +58,7 @@
    "email": "frank@example.com",
    "passhash": "frank123",
    "private": "things, not stuff",
-   "public": {"vcard": {"fn": "Frank Singer"}},
+   "public": {"fn": "Frank Singer"},
    "state": 2,
    "status": "singing!",
    "username": "frank"
@@ -69,18 +69,18 @@
    "createdAt": "-128h",
    "name": "*ABC",
    "owner": "carol",
-   "public": {"vcard": {"fn": "Let's talk about flowers", "photo": "./abc-64.jpg", "type": "jpg"}}
+   "public": {"fn": "Let's talk about flowers", "photo": "./abc-64.jpg", "type": "jpg"}
   },
   {
    "createdAt": "-126h",
    "name": "*ABCDEF",
    "owner": "alice",
-   "public": {"vcard": {"fn": "Travel, travel, travel", "photo": "./abcdef-64.jpg", "type": "jpg"}}
+   "public": {"fn": "Travel, travel, travel", "photo": "./abcdef-64.jpg", "type": "jpg"}
   },
   {
    "createdAt": "-124h",
    "name": "*BF",
-   "public": {"vcard": {"fn": "Sikrit group!", "photo": "./bf-64.jpg", "type": "jpg"}}
+   "public": {"fn": "Sikrit group!", "photo": "./bf-64.jpg", "type": "jpg"}
   }
  ],
  "subscriptions": [
