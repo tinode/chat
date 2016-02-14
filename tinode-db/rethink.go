@@ -263,7 +263,7 @@ type Vcard struct {
 	Photo *PhotoStruct `gorethink:"photo,omitempty"`
 }
 
-// {"vcard": {"fn": "Alice Johnson", "photo": "./alice-128.jpg"}}
+// {"fn": "Alice Johnson", "photo": "./alice-128.jpg"}
 func parsePublic(public interface{}) interface{} {
 	var photo *PhotoStruct
 	var err error
@@ -272,7 +272,7 @@ func parsePublic(public interface{}) interface{} {
 		return nil
 	}
 
-	vcard := public.(map[string]interface{})["vcard"].(map[string]interface{})
+	vcard := public.(map[string]interface{})
 
 	if fname, ok := vcard["photo"]; ok {
 		if fname != nil {
@@ -284,5 +284,5 @@ func parsePublic(public interface{}) interface{} {
 		}
 	}
 
-	return map[string]interface{}{"vcard": Vcard{Fn: vcard["fn"].(string), Photo: photo}}
+	return Vcard{Fn: vcard["fn"].(string), Photo: photo}
 }
