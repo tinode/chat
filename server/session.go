@@ -204,7 +204,7 @@ func (s *Session) dispatch(raw []byte) {
 
 	case msg.Note != nil:
 		s.note(&msg)
-		log.Println("dispatch: Ping." + msg.Note.What + " done")
+		log.Println("dispatch: Note." + msg.Note.What + " done")
 
 	default:
 		// Unknown message

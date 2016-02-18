@@ -304,7 +304,7 @@ type MsgTopicSub struct {
 	Public  interface{} `json:"public,omitempty"`
 	Private interface{} `json:"private,omitempty"`
 
-	// All following makes sence only in context of getting user's subscriptions
+	// All following makes sense only in context of getting user's subscriptions
 
 	// ID of the last {data} message in a topic
 	SeqId int `json:"seq,omitempty"`
