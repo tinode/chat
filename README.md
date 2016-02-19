@@ -45,6 +45,11 @@ A javascript demo is (usually) available at http://api.tinode.co/x/example-react
 
 ## Screenshots
 
+### Web
+
 <img src="js-20160218191843.png" alt="javascript app screenshot" />
+
+### Android
+
 <img src="android-1-20160218191919.png" alt="javascript app screenshot" />
 <img src="android-2-20160218192008.png" alt="javascript app screenshot" />
