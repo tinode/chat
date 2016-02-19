@@ -4,7 +4,7 @@ Instant messaging server. Backend in pure [Go](http://golang.org) ([Affero GPL 3
 
 Version 0.6. This is alpha-quality software. Bugs should be expected. Follow [instructions](INSTALL.md) to install and run. Read [API documentation](API.md).
 
-A demo is (usually) available at http://api.tinode.co/x/example-react-js/ ([source](https://github.com/tinode/example-react-js/)). Login as one of `alice`, `bob`, `carol`, `dave`, `frank`. Password is `<login>123`, e.g. login for `alice` is `alice123`. See screenshots below.
+A javascript demo is (usually) available at http://api.tinode.co/x/example-react-js/ ([source](https://github.com/tinode/example-react-js/)). Login as one of `alice`, `bob`, `carol`, `dave`, `frank`. Password is `<login>123`, e.g. login for `alice` is `alice123`. [Android demo](https://github.com/tinode/android-example) is mostly stable and functional. See screenshots below.
 
 
 ## Why?
@@ -16,21 +16,21 @@ A demo is (usually) available at http://api.tinode.co/x/example-react-js/ ([sour
 ### Supported
 
 * One-on-one messaging.
-* Groups (topics) with up to 32 members where every member's access permissions are managed individually.
+* Groups (topics) with up to 16 members where every member's access permissions are managed individually.
 * Topic access control with separate permissions for various actions.
 * Server-generated presence notifications for people, topics.
-* Persistent message store.
+* Persistent message store, paginated message history.
 * Javascript bindings with no dependencies.
+* Android Java bindings (dependencies: [jackson](https://github.com/FasterXML/jackson), [nv-websocket-client](https://github.com/TakahikoKawasaki/nv-websocket-client))
 * Websocket & long polling transport.
 * JSON wire protocol.
-* Message delivery status: server-generated delivery to server, client-generated received and read notifications.
+* Message delivery status: server-generated delivery to server, client-generated received and read notifications; typing notifications.
 * Basic support for client-side message caching.
-* Ability to block unwanted communication on the server.
+* Ability to block unwanted communication server-side.
 
 ### Planned
 
 * iOS client bindings.
-* Android Java bindings (Current implementation is incomplete, dependencies: [jackson](https://github.com/FasterXML/jackson), [android-websockets](https://github.com/codebutler/android-websockets))
 * Mobile push notification hooks.
 * Groups (topics) with unlimited number of members with bearer token access control.
 * Clustering.
