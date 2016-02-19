@@ -190,15 +190,16 @@ sub: {
     // Optional parameters for {get what="desc"}
     desc: {
       ims: "2015-10-06T18:07:30.038Z" // timestamp, "if modified since" - return
-            // value only if it has been updated after the stated timestamp,
-            // optional
+              // public and private values only if at least one of them has been
+              // updated after the stated timestamp, optional
+
     },
 
     // Optional parameters for {get what="sub"}
     sub: {
       ims: "2015-10-06T18:07:30.038Z", // timestamp, "if modified since" - return
-            // value only if it has been updated after the stated timestamp,
-            // optional
+              // public and private values only if at least one of them has been
+              // updated after the stated timestamp, optional
       limit: 20 // integer, limit the number of returned objects
     },
 
@@ -262,15 +263,15 @@ get: {
   // Optional parameters for {get what="desc"}
   desc: {
     ims: "2015-10-06T18:07:30.038Z" // timestamp, "if modified since" - return
-          // value only if it has been updated after the stated timestamp,
-          // optional
+          // public and private values only if at least one of them has been
+          // updated after the stated timestamp, optional
   },
 
   // Optional parameters for {get what="sub"}
   sub: {
     ims: "2015-10-06T18:07:30.038Z", // timestamp, "if modified since" - return
-          // value only if it has been updated after the stated timestamp,
-          // optional
+          // public and private values only if at least one of them has been
+          // updated after the stated timestamp, optional
     limit: 20 // integer, limit the number of returned objects
   },
 
@@ -289,7 +290,7 @@ get: {
 * `{get what="desc"}`
 
 Query topic description. Server responds with a `{meta}` message containing requested data. See `{meta}` for details.
-If `ims` is specified and data has not been updated, responds with a `{ctrl}` "not modified" message.
+If `ims` is specified and data has not been updated, the message will skip `public` and `private` fields.
 
 * `{get what="sub"}`
 

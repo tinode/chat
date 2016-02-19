@@ -850,10 +850,7 @@ func (t *Topic) replyGetDesc(sess *Session, id string, created bool, opts *MsgGe
 	now := time.Now().UTC().Round(time.Millisecond)
 
 	// Check if user requested modified data
-	if opts != nil && opts.IfModifiedSince != nil && opts.IfModifiedSince.After(t.updated) {
-		simpleByteSender(sess.send, InfoNotModified(id, t.original, now))
-		return nil
-	}
+	updatedOnly := (opts == nil || opts.IfModifiedSince == nil || opts.IfModifiedSince.Before(t.updated))
 
 	desc := &MsgTopicDesc{
 		CreatedAt: &t.created,
@@ -861,11 +858,13 @@ func (t *Topic) replyGetDesc(sess *Session, id string, created bool, opts *MsgGe
 
 	pud, full := t.perUser[sess.uid]
 
-	if t.public != nil {
-		desc.Public = t.public
-	} else if full {
-		// p2p topic
-		desc.Public = pud.public
+	if updatedOnly {
+		if t.public != nil {
+			desc.Public = t.public
+		} else if full {
+			// p2p topic
+			desc.Public = pud.public
+		}
 	}
 
 	// Request may come from a subscriber (full == true) or a stranger.
@@ -881,7 +880,9 @@ func (t *Topic) replyGetDesc(sess *Session, id string, created bool, opts *MsgGe
 			Want:  pud.modeWant.String(),
 			Given: pud.modeGiven.String()}
 
-		desc.Private = pud.private
+		if updatedOnly {
+			desc.Private = pud.private
+		}
 
 		desc.SeqId = t.lastId
 		// Make sure reported values are sane:
@@ -1074,9 +1075,8 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 			if idx == limit {
 				break
 			}
-			if sub.UpdatedAt.Before(ifModified) {
-				continue
-			}
+			// The requester provided cut off date for updated ts of pub & priv fields
+			updatedOnly := sub.UpdatedAt.After(ifModified)
 
 			var mts MsgTopicSub
 			uid := types.ParseUid(sub.User)
@@ -1119,20 +1119,18 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 			mts.ReadSeqId = max(clearId, sub.ReadSeqId)
 			mts.RecvSeqId = max(clearId, sub.RecvSeqId)
 			mts.AcsMode = (sub.ModeGiven & sub.ModeWant).String()
-			mts.Public = sub.GetPublic()
-			if uid == sess.uid {
-				mts.Private = sub.Private
+			if updatedOnly {
+				mts.Public = sub.GetPublic()
+				if uid == sess.uid {
+					mts.Private = sub.Private
+				}
 			}
 
 			meta.Sub = append(meta.Sub, mts)
 		}
 	}
 
-	if len(meta.Sub) > 0 {
-		simpleByteSender(sess.send, &ServerComMessage{Meta: meta})
-	} else {
-		simpleByteSender(sess.send, InfoNotModified(id, t.original, now))
-	}
+	simpleByteSender(sess.send, &ServerComMessage{Meta: meta})
 
 	return nil
 }

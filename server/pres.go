@@ -32,6 +32,7 @@
 package main
 
 import (
+	"log"
 	"strings"
 
 	"github.com/tinode/chat/server/store"
@@ -191,13 +192,18 @@ func (t *Topic) presPubTopicOnline(online bool) {
 // Message sent in the topic, notify topic-offline users
 // Case 6
 func (t *Topic) presPubMessageSent(seq int) {
+	log.Printf("Pres 6: from %s [msg=%d]", t.name, seq)
+
 	update := &MsgServerPres{Topic: "me", What: "msg", Src: t.original, SeqId: seq}
 
 	for uid, pud := range t.perUser {
 		if pud.online == 0 && pud.modeGiven&pud.modeWant&types.ModePres != 0 {
 			globals.hub.route <- &ServerComMessage{Pres: update, rcptto: uid.UserId()}
 
-			// log.Printf("Pres 6: from %s (src: %s), to %s [msg=%d]", t.name, update.Src, uid.UserId(), seq)
+			log.Printf("Pres 6: src: %s to %s", update.Src, uid.UserId())
+		} else {
+			log.Printf("Pres 6: SKIPPED src: %s to %s due to online=%d or mode %v", update.Src, uid.UserId(),
+				pud.online, (pud.modeGiven&pud.modeWant&types.ModePres != 0))
 		}
 	}
 }
