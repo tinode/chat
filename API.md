@@ -39,12 +39,11 @@ Server-issued message IDs are base-10 sequential numbers starting at 1. They gua
 
 Client establishes a connection to the server over HTTP. Server offers two end points:
  * `/v0/channels` for websocket connections
- * `/v0/v0/channels/lp` for long polling
+ * `/v0/channels/lp` for long polling
 
-`v0` denotes API version (currently zero). Every HTTP request must include API key in the request. It may be included in the URL as `...?apikey=<YOUR_API_KEY>`, in the request body, or in an HTTP header `X-Tinode-APIKey`.
+`v0` denotes API version (currently zero). Every HTTP request must include API key in the request. It may be included in the URL as `...?apikey=<YOUR_API_KEY>`, in the request body, or in an HTTP header `X-Tinode-APIKey`. 
 
-Once the connection is opened, the server sends a `{ctrl}` message. The `params` field of response contains server's protocol version:
-`"params":{"ver":"0.5"}`. `params` may include other values.
+Once the connection is opened, the server sends a `{ctrl}` message. The `params` field of response contains server's protocol version: `"params":{"ver":"0.5"}`. `params` may include other values. A client may optionally add `id` to the endpoint URL. The id value is returned in this `{ctrl}` message.
 
 ### Websocket
 
@@ -58,14 +57,14 @@ Server allows connections from all origins, i.e. `Access-Control-Allow-Origin: *
 
 ## Messages
 
-A message is a logically associated set of data. Messages are passed as JSON-formatted text.
+A message is a logically associated set of data. Messages are passed as JSON-formatted UTF-8 text.
 
 All client to server messages may have an optional `id` field. It's set by the client as means to receive an aknowledgement from the server that the message was received and processed. The `id` is expected to be a session-unique string but it can be any string. The server does not attempt to interpret it other than to check JSON validity. It's returned unchanged by the server when it replies to client messages.
 
-For brevity the notation below omits double quotes around field names as well as outer curly brackets.
+Server requires strictly valid JSON, including double quotes around field names. For brevity the notation below omits double quotes around field names as well as outer curly brackets.
 
-For messages that update application-defined data, such as `{set}` `private` or `public` fields, in case server-side
-data needs to be cleared, use a string with a single Unicode DEL character "&#x2421;" `"\u2421"`.
+For messages that update application-defined data, such as `{set}` `private` or `public` fields, when server-side
+data needs to be cleared, use a string with a single Unicode DEL character "&#x2421;" `"\u2421"`. I.e. sending `"public": null` will not clear the field, but sending `"public": "\u2421"` will.
 
 ### Client to server messages
 
