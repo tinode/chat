@@ -108,6 +108,10 @@ func (uid Uid) UserId() string {
 	return uid.PrefixId("usr")
 }
 
+func (uid Uid) FndName() string {
+	return uid.PrefixId("fnd")
+}
+
 func (uid Uid) PrefixId(prefix string) string {
 	if uid.IsZero() {
 		return ""
@@ -228,9 +232,8 @@ func (h *ObjHeader) MergeTimes(h2 *ObjHeader) {
 // Stored user
 type User struct {
 	ObjHeader
-	State    int // Unconfirmed, Active, etc.
-	Username string
-	Passhash []byte
+	// Currently unused: Unconfirmed, Active, etc.
+	State int
 
 	Access DefaultAccess // Default access to user
 
@@ -245,6 +248,9 @@ type User struct {
 	UserAgent string
 
 	Public interface{}
+
+	// Tags used for indexing this user. Stored on the user as well as indexed in 'tagindex'
+	Tags []string
 }
 
 const max_devices = 8
@@ -465,6 +471,15 @@ func (s *Subscription) GetUserAgent() string {
 func (s *Subscription) SetLastSeenAndUA(when time.Time, ua string) {
 	s.lastSeen = when
 	s.userAgent = ua
+}
+
+// Result of a search for connections
+type Contact struct {
+	Id       string
+	MatchOn  []string
+	Access   DefaultAccess
+	LastSeen time.Time
+	Public   interface{}
 }
 
 type perUserData struct {

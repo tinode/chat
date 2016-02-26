@@ -36,9 +36,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tinode/chat/server/auth"
 	"github.com/tinode/chat/server/store/adapter"
 	"github.com/tinode/chat/server/store/types"
-	"golang.org/x/crypto/bcrypt"
 )
 
 const (
@@ -47,13 +47,16 @@ const (
 
 var adaptr adapter.Adapter
 
+// Unique ID generator
+var uGen types.UidGenerator
+
 type configType struct {
 	// The following two values ate used to initialize types.UidGenerator
 	// Snowflake workerId, beteween 0 and 1023
 	WorkerID int `json:"worker_id"`
 	// 16-byte key for XTEA
-	UidKey []byte          `json:"uid_key"`
-	Params json.RawMessage `json:"params"`
+	UidKey        []byte          `json:"uid_key"`
+	AdapterConfig json.RawMessage `json:"adapter_config"`
 }
 
 // Open initializes the persistence system. Adapter holds a connection pool for a single database.
@@ -72,7 +75,12 @@ func Open(name, jsonconf string) error {
 		return errors.New("store: failed to parse config: " + err.Error() + "(" + jsonconf + ")")
 	}
 
-	return adaptr.Open(string(config.Params), config.WorkerID, config.UidKey)
+	// Initialise snowflake
+	if err := uGen.Init(uint(config.WorkerID), config.UidKey); err != nil {
+		return errors.New("store: failed to init snowflake: " + err.Error())
+	}
+
+	return adaptr.Open(string(config.AdapterConfig))
 }
 
 func Close() error {
@@ -109,6 +117,16 @@ func Register(name string, adapter adapter.Adapter) {
 	adaptr = adapter
 }
 
+// Generate unique ID
+func GetUid() types.Uid {
+	return uGen.Get()
+}
+
+// Generate unique ID as string
+func GetUidString() string {
+	return uGen.GetStr()
+}
+
 // Users struct to hold methods for persistence mapping for the User object.
 type UsersObjMapper struct{}
 
@@ -116,74 +134,41 @@ type UsersObjMapper struct{}
 var Users UsersObjMapper
 
 // CreateUser inserts User object into a database, updates creation time and assigns UID
-func (u UsersObjMapper) Create(user *types.User, scheme, secret string, private interface{}) (*types.User, error) {
-	if scheme == "basic" {
-		if splitAt := strings.Index(secret, ":"); splitAt > 0 {
-			user.InitTimes()
+func (u UsersObjMapper) Create(user *types.User, private interface{}) (*types.User, error) {
 
-			user.Username = strings.ToLower(secret[:splitAt])
-			var err error
-			user.Passhash, err = bcrypt.GenerateFromPassword([]byte(secret[splitAt+1:]), bcrypt.DefaultCost)
-			if err != nil {
-				return nil, err
-			}
-
-			// TODO(gene): maybe have some additional handling of duplicate user name error
-			err, _ = adaptr.UserCreate(user)
-			user.Passhash = nil
-			if err != nil {
-				return nil, err
-			}
-
-			// Create user's subscription to !me. The !me topic is ephemeral, the topic object need not to be inserted.
-			err = Subs.Create(&types.Subscription{
-				ObjHeader: types.ObjHeader{CreatedAt: user.CreatedAt},
-				User:      user.Id,
-				Topic:     user.Uid().UserId(),
-				ModeWant:  types.ModeSelf,
-				ModeGiven: types.ModeSelf,
-				Private:   private,
-			})
-			if err != nil {
-				return nil, err
-			}
-
-			return user, nil
-		} else {
-			return nil, errors.New("store: invalid format of secret")
-		}
+	user.SetUid(GetUid())
+	err, _ := adaptr.UserCreate(user)
+	if err != nil {
+		return nil, err
 	}
-	return nil, errors.New("store: unknown authentication scheme '" + scheme + "'")
 
+	// Create user's subscription to 'me'. The 'me' topic is ephemeral, the topic object need not to be inserted.
+	err = Subs.Create(&types.Subscription{
+		ObjHeader: types.ObjHeader{CreatedAt: user.CreatedAt},
+		User:      user.Id,
+		Topic:     user.Uid().UserId(),
+		ModeWant:  types.ModeSelf,
+		ModeGiven: types.ModeSelf,
+		Private:   private,
+	})
+	if err != nil {
+		// Best effort to delete incomplete user record. Orphaned user records are not a problem.
+		// They just take up space.
+		adaptr.UserDelete(user.Uid(), true)
+		return nil, err
+	}
+
+	return user, nil
 }
 
-// Process user login. TODO(gene): abstract out the authentication scheme
-func (UsersObjMapper) Login(scheme, secret string) (types.Uid, error) {
-	if scheme == "basic" {
-		if splitAt := strings.Index(secret, ":"); splitAt > 0 {
-			uname := strings.ToLower(secret[:splitAt])
-			password := secret[splitAt+1:]
+// Given a unique identifier and a authentication scheme name, fetch user ID and authentication secret
+func (UsersObjMapper) GetAuthRecord(scheme, unique string) (types.Uid, []byte, error) {
+	return adaptr.GetAuthRecord(scheme + ":" + unique)
+}
 
-			uid, hash, err := adaptr.GetPasswordHash(uname)
-			if err != nil {
-				return types.ZeroUid, err
-			} else if uid.IsZero() {
-				// Invalid login
-				return types.ZeroUid, nil
-			}
-
-			err = bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
-			if err != nil {
-				// Invalid password
-				return types.ZeroUid, nil
-			}
-			//log.Println("Logged in as", uid, uid.String())
-			return uid, nil
-		} else {
-			return types.ZeroUid, errors.New("store: invalid format of secret")
-		}
-	}
-	return types.ZeroUid, errors.New("store: unknown authentication scheme '" + scheme + "'")
+// Create a new authentication record for user
+func (UsersObjMapper) AddAuthRecord(uid types.Uid, scheme, unique string, secret []byte) (error, bool) {
+	return adaptr.AddAuthRecord(uid, scheme+":"+unique, secret)
 }
 
 // Get returns a user object for the given user id
@@ -194,11 +179,6 @@ func (UsersObjMapper) Get(uid types.Uid) (*types.User, error) {
 // GetAll returns a slice of user objects for the given user ids
 func (UsersObjMapper) GetAll(uid ...types.Uid) ([]types.User, error) {
 	return adaptr.UserGetAll(uid...)
-}
-
-// TODO(gene): implement
-func (UsersObjMapper) Find(params map[string]interface{}) ([]types.User, error) {
-	return nil, errors.New("store: not implemented")
 }
 
 // TODO(gene): implement
@@ -233,6 +213,11 @@ func (UsersObjMapper) Update(uid types.Uid, update map[string]interface{}) error
 // GetSubs loads a list of subscriptions for the given user
 func (u UsersObjMapper) GetSubs(id types.Uid) ([]types.Subscription, error) {
 	return adaptr.SubsForUser(id)
+}
+
+// GetSubs loads a list of subscriptions for the given user
+func (u UsersObjMapper) FindSubs(id types.Uid, query []string) ([]types.Contact, error) {
+	return adaptr.FindSubs(id, query)
 }
 
 // GetTopics is exacly the same as Topics.GetForUser
@@ -389,4 +374,25 @@ func (MessagesObjMapper) Delete(topic string, forUser types.Uid, hard bool, clea
 
 func (MessagesObjMapper) GetAll(topic string, opt *types.BrowseOpt) ([]types.Message, error) {
 	return adaptr.MessageGetAll(topic, opt)
+}
+
+var authHandlers map[string]auth.AuthHandler
+
+// Register an authentication scheme handler
+func RegisterAuthScheme(name string, handler auth.AuthHandler) {
+	if authHandlers == nil {
+		authHandlers = make(map[string]auth.AuthHandler)
+	}
+
+	if handler == nil {
+		panic("RegisterAuthScheme: scheme handler is nil")
+	}
+	if _, dup := authHandlers[name]; dup {
+		panic("RegisterAuthScheme: called twice for scheme " + name)
+	}
+	authHandlers[name] = handler
+}
+
+func GetAuthHandler(name string) auth.AuthHandler {
+	return authHandlers[name]
 }

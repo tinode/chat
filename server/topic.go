@@ -108,6 +108,7 @@ const (
 	TopicCat_Me TopicCat = iota
 	TopicCat_P2P
 	TopicCat_Grp
+	TopicCat_Find
 )
 
 // perUserData holds topic's cache of per-subscriber data
@@ -1388,7 +1389,14 @@ func topicCat(name string) TopicCat {
 		return TopicCat_P2P
 	case "grp":
 		return TopicCat_Grp
+	case "fnd":
+		return TopicCat_Find
 	default:
 		panic("invalid topic name in topicCat: " + name)
 	}
+}
+
+// Generate random string as a name of the group topic
+func genTopicName() string {
+	return "grp" + store.GetUidString()
 }

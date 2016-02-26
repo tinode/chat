@@ -34,12 +34,10 @@ type configType struct {
 	NodeRefreshInterval int         `json:"node_refresh_interval,omitempty"`
 }
 
-var uGen t.UidGenerator
-
 const MAX_RESULTS = 1024
 
 // Open initializes rethinkdb session
-func (a *RethinkDbAdapter) Open(jsonconfig string, workerId int, uidkey []byte) error {
+func (a *RethinkDbAdapter) Open(jsonconfig string) error {
 	if a.conn != nil {
 		return errors.New("adapter rethinkdb is already connected")
 	}
@@ -49,11 +47,6 @@ func (a *RethinkDbAdapter) Open(jsonconfig string, workerId int, uidkey []byte) 
 
 	if err = json.Unmarshal([]byte(jsonconfig), &config); err != nil {
 		return errors.New("adapter rethinkdb failed to parse config: " + err.Error())
-	}
-
-	// Initialise snowflake
-	if err = uGen.Init(uint(workerId), uidkey); err != nil {
-		return errors.New("adapter rethinkdb failed to init snowflake: " + err.Error())
 	}
 
 	var opts rdb.ConnectOpts
@@ -122,7 +115,12 @@ func (a *RethinkDbAdapter) CreateDb(reset bool) error {
 	if _, err := rdb.DB("tinode").TableCreate("users", rdb.TableCreateOpts{PrimaryKey: "Id"}).RunWrite(a.conn); err != nil {
 		return err
 	}
-	if _, err := rdb.DB("tinode").Table("users").IndexCreate("Username").RunWrite(a.conn); err != nil {
+	// User authentication records {unique, userid, secret}
+	if _, err := rdb.DB("tinode").TableCreate("auth", rdb.TableCreateOpts{PrimaryKey: "unique"}).RunWrite(a.conn); err != nil {
+		return err
+	}
+	// Should be able to access user's auth records by user id
+	if _, err := rdb.DB("tinode").Table("auth").IndexCreate("userid").RunWrite(a.conn); err != nil {
 		return err
 	}
 
@@ -136,18 +134,6 @@ func (a *RethinkDbAdapter) CreateDb(reset bool) error {
 	if _, err := rdb.DB("tinode").Table("subscriptions").IndexCreate("Topic").RunWrite(a.conn); err != nil {
 		return err
 	}
-	//if _, err := rdb.DB("tinode").Table("subscriptions").IndexCreateFunc("User_UpdatedAt",
-	//	func(row rdb.Term) interface{} {
-	//		return []interface{}{row.Field("User"), row.Field("UpdatedAt")}
-	//	}).RunWrite(a.conn); err != nil {
-	//	return err
-	//}
-	// if _, err := rdb.DB("tinode").Table("subscriptions").IndexCreateFunc("Topic_UpdatedAt",
-	//	func(row rdb.Term) interface{} {
-	//		return []interface{}{row.Field("Topic"), row.Field("UpdatedAt")}
-	//	}).RunWrite(a.conn); err != nil {
-	//	return err
-	// }
 
 	// Topic stored in database
 	if _, err := rdb.DB("tinode").TableCreate("topics", rdb.TableCreateOpts{PrimaryKey: "Id"}).RunWrite(a.conn); err != nil {
@@ -168,64 +154,112 @@ func (a *RethinkDbAdapter) CreateDb(reset bool) error {
 		return err
 	}
 
-	// Index for unique fields
-	if _, err := rdb.DB("tinode").TableCreate("_uniques").RunWrite(a.conn); err != nil {
+	// Index of user contact information as strings, such as "email:jdoe@example.com" or "tel:18003287448":
+	// {id: <tag>, name: <uid or null>, ts: <timestamp>, notify: [uids of users who searched for this tag]}
+	// Given a list of tags, find users associated with them.
+	if _, err := rdb.DB("tinode").TableCreate("tagindex").RunWrite(a.conn); err != nil {
 		return err
 	}
+
+	// Index for unique fields
+	//if _, err := rdb.DB("tinode").TableCreate("_uniques").RunWrite(a.conn); err != nil {
+	//	return err
+	//}
 
 	return nil
 }
 
-// UserCreate creates a new user. Returns error and bool - true if error is due to duplicate user name
+// UserCreate creates a new user. Returns error and true if error is due to duplicate user name,
+// false for any other error
+// 1. Ensure uniqueness of user name/other auth unique values
+// 2. Ensure uniqueness of tags
+// 3. Create user record
+// 4. Insert tags and login
+// Q: auth in the same table or different? i.e. User.Auth[{"basic": interface{}}, {"fb": interface{}}]
+// Q: one auth table per type, or all auth types in the same table?
+// Q: Tags in the User table, separate table, both, two separate tables?
 func (a *RethinkDbAdapter) UserCreate(user *t.User) (error, bool) {
 	// FIXME(gene): Rethink has no support for transactions. Prevent other routines from using
-	// the username currently being processed. For instance, keep it in a shared map for the duration of transaction
+	// the username currently being processed. For instance, keep it in a cluster-shared map for the duration
+	// of transaction. For now, just clean up whatever object were created
 
-	// Check username for uniqueness (no built-in support for secondary unique indexes in RethinkDB)
-	value := "users!username!" + user.Username // unique value=primary key
-	_, err := rdb.DB(a.dbName).Table("_uniques").Insert(map[string]string{"id": value}).RunWrite(a.conn)
+	_, err := rdb.DB(a.dbName).Table("users").Insert(&user).RunWrite(a.conn)
+	if err != nil {
+		return err, false
+	}
+
+	// This may fail!
+	if user.Tags != nil {
+		type tagRecord struct {
+			id     string
+			name   string
+			ts     time.Time
+			notify []string
+		}
+		tags := make([]tagRecord, 0, len(user.Tags))
+		for _, tag := range user.Tags {
+			tags = append(tags, tagRecord{id: tag, name: user.Id, notify: nil})
+		}
+		rdb.DB(a.dbName).Table("tagindex").Insert(user.Tags).RunWrite(a.conn)
+
+	}
+
+	return nil, false
+}
+
+// Add user's authentication record
+func (a *RethinkDbAdapter) AddAuthRecord(uid t.Uid, unique string, secret []byte) (error, bool) {
+	_, err := rdb.DB(a.dbName).Table("auth").Insert(
+		map[string]interface{}{
+			"unique": unique,
+			"userid": uid.String(),
+			"secret": secret}).RunWrite(a.conn)
 	if err != nil {
 		if strings.Contains(err.Error(), "Duplicate primary key") {
 			return errors.New("duplicate credential"), true
 		}
 		return err, false
 	}
-
-	// Validated unique username, inserting user now
-	user.SetUid(uGen.Get())
-	_, err = rdb.DB(a.dbName).Table("users").Insert(&user).RunWrite(a.conn)
-	if err != nil {
-		// Delete inserted _uniques entries in case of errors
-		rdb.DB(a.dbName).Table("_uniques").Get(value).Delete(rdb.DeleteOpts{Durability: "soft"}).RunWrite(a.conn)
-		return err, false
-	}
-
 	return nil, false
 }
 
-// Users
-func (a *RethinkDbAdapter) GetPasswordHash(uname string) (t.Uid, []byte, error) {
+// Delete user's authentication record
+func (a *RethinkDbAdapter) DelAuthRecord(unique string) (int, error) {
+	res, err := rdb.DB(a.dbName).Table("auth").Get(unique).Delete().RunWrite(a.conn)
+	return res.Deleted, err
+}
 
-	var err error
+// Delete user's all authentication records
+func (a *RethinkDbAdapter) DelAllAuthRecords(uid t.Uid) (int, error) {
+	res, err := rdb.DB(a.dbName).Table("auth").GetAllByIndex("userid", uid.String()).Delete().RunWrite(a.conn)
+	return res.Deleted, err
+}
 
-	rows, err := rdb.DB(a.dbName).Table("users").GetAllByIndex("Username", uname).
-		Pluck("Id", "Passhash").Run(a.conn)
+// Update user's authentication secret
+func (a *RethinkDbAdapter) UpdAuthRecord(unique string, secret []byte) (int, error) {
+	res, err := rdb.DB(a.dbName).Table("auth").Get(unique).Update(map[string][]byte{"secret": secret}).RunWrite(a.conn)
+	return res.Updated, err
+}
+
+// Retrieve user's authentication record
+func (a *RethinkDbAdapter) GetAuthRecord(unique string) (t.Uid, []byte, error) {
+	rows, err := rdb.DB(a.dbName).Table("auth").Get(unique).Pluck("userid", "secret").Run(a.conn)
 	if err != nil {
 		return t.ZeroUid, nil, err
 	}
 
-	var user t.User
-	if rows.Next(&user) {
-		//log.Println("loggin in user Id=", user.Uid(), user.Id)
-		if user.Uid().IsZero() {
-			return t.ZeroUid, nil, errors.New("internal: invalid Uid")
-		}
-	} else {
-		// User not found
-		return t.ZeroUid, nil, nil
+	var record struct {
+		Userid string `gorethink:"userid"`
+		Secret []byte `gorethink:"secret"`
 	}
 
-	return user.Uid(), user.Passhash, nil
+	if !rows.Next(&record) {
+		return t.ZeroUid, nil, rows.Err()
+	}
+	rows.Close()
+
+	//log.Println("loggin in user Id=", user.Uid(), user.Id)
+	return t.ParseUid(record.Userid), record.Secret, nil
 }
 
 // UserGet fetches a single user by user id. If user is not found it returns (nil, nil)
@@ -233,7 +267,6 @@ func (a *RethinkDbAdapter) UserGet(uid t.Uid) (*t.User, error) {
 	if row, err := rdb.DB(a.dbName).Table("users").Get(uid.String()).Run(a.conn); err == nil && !row.IsNil() {
 		var user t.User
 		if err = row.One(&user); err == nil {
-			user.Passhash = nil
 			return &user, nil
 		}
 		return nil, err
@@ -255,7 +288,6 @@ func (a *RethinkDbAdapter) UserGetAll(ids ...t.Uid) ([]t.User, error) {
 	} else {
 		var user t.User
 		for rows.Next(&user) {
-			user.Passhash = nil
 			users = append(users, user)
 		}
 		if err = rows.Err(); err != nil {
@@ -263,10 +295,6 @@ func (a *RethinkDbAdapter) UserGetAll(ids ...t.Uid) ([]t.User, error) {
 		}
 	}
 	return users, nil
-}
-
-func (a *RethinkDbAdapter) UserFind(params map[string]interface{}) ([]t.User, error) {
-	return nil, errors.New("UserFind: not implemented")
 }
 
 func (a *RethinkDbAdapter) UserDelete(id t.Uid, soft bool) error {
@@ -308,7 +336,7 @@ func (a *RethinkDbAdapter) UserUpdate(uid t.Uid, update map[string]interface{}) 
 // TopicCreate creates a topic from template
 func (a *RethinkDbAdapter) TopicCreate(topic *t.Topic) error {
 	// Validated unique username, inserting user now
-	topic.SetUid(uGen.Get())
+	topic.SetUid(store.GetUid())
 	_, err := rdb.DB(a.dbName).Table("topics").Insert(&topic).RunWrite(a.conn)
 	return err
 }
@@ -651,9 +679,68 @@ func (a *RethinkDbAdapter) SubsDelForTopic(topic string) error {
 	return err
 }
 
+// FindSubs returns a list of users who match given tags, such as "email:jdoe@example.com" or "tel:18003287448".
+func (a *RethinkDbAdapter) FindSubs(user t.Uid, query []string) ([]t.Contact, error) {
+	// {id: <tag>, user: <uid or null>, ts: <timestamp>, want: [uids of users who searched for this tag]}
+
+	type tagStruct struct {
+		// Tag
+		id string
+		// Uid
+		name string
+	}
+	uids := make([]interface{}, 0, 16)
+	join := make(map[string][]tagStruct)
+	// Query may contain redundant records. User may be mentioned in multiple tages.
+	// Grouping record by user (multiple mentions of user in tags), then de-duping user groups (due to dups in query).
+	if rows, err := rdb.DB(a.dbName).Table("tagindex").GetAll(query).Pluck("id", "name").
+		Group("user").Distinct().Run(a.conn); err != nil {
+		return nil, err
+	} else {
+		var grouped struct {
+			group     string
+			reduction []tagStruct
+		}
+		for rows.Next(&grouped) {
+			uids = append(uids, grouped.group)
+			join[grouped.group] = grouped.reduction
+		}
+		if err = rows.Err(); err != nil {
+			return nil, err
+		}
+	}
+
+	contacts := make([]t.Contact, 0, 16)
+	if rows, err := rdb.DB(a.dbName).Table("users").GetAll(uids...).Run(a.conn); err != nil {
+		return nil, err
+	} else { // else is needed, otherwise 'rows' is undefined
+		/*
+			type Contact struct {
+				Id     string			//filled here
+				MatchOn  []string
+				Access   DefaultAccess	// filled here
+				LastSeen time.Time		// filled here
+				Public   interface{}	// filled here
+			}
+		*/
+		var cont t.Contact
+		for rows.Next(&cont) {
+			match := join[cont.Id]
+			for _, tag := range match {
+				cont.MatchOn = append(cont.MatchOn, tag.id)
+			}
+			contacts = append(contacts, cont)
+		}
+		if err = rows.Err(); err != nil {
+			return nil, err
+		}
+	}
+	return contacts, nil
+}
+
 // Messages
 func (a *RethinkDbAdapter) MessageSave(msg *t.Message) error {
-	msg.SetUid(uGen.Get())
+	msg.SetUid(store.GetUid())
 	_, err := rdb.DB(a.dbName).Table("messages").Insert(msg).RunWrite(a.conn)
 	return err
 }
@@ -670,10 +757,8 @@ func (a *RethinkDbAdapter) MessageGetAll(topic string, opts *t.BrowseOpt) ([]t.M
 	}
 
 	var msgs []t.Message
-	var mm t.Message
-	for rows.Next(&mm) {
-		msgs = append(msgs, mm)
-	}
+	rows.All(&msgs)
+
 	return msgs, rows.Err()
 }
 

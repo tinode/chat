@@ -42,6 +42,7 @@ import (
 	"runtime"
 	"time"
 
+	_ "github.com/tinode/chat/server/auth_basic"
 	_ "github.com/tinode/chat/server/db/rethinkdb"
 	"github.com/tinode/chat/server/store"
 	"github.com/tinode/chat/server/store/types"
@@ -54,7 +55,7 @@ const (
 	TOPICTIMEOUT = time.Second * 5
 
 	// API version
-	VERSION = "0.5"
+	VERSION = "0.6"
 
 	DEFAULT_AUTH_ACCESS = types.ModePublic
 	DEFAULT_ANON_ACCESS = types.ModeNone
@@ -70,9 +71,9 @@ var globals struct {
 }
 
 type configType struct {
-	Listen        string          `json:"listen"`
-	Adapter       string          `json:"db_adapter"`
-	AdapterConfig json.RawMessage `json:"adapter_config"`
+	Listen      string          `json:"listen"`
+	Adapter     string          `json:"use_adapter"`
+	StoreConfig json.RawMessage `json:"store_config"`
 }
 
 func main() {
@@ -97,7 +98,7 @@ func main() {
 		config.Listen = *listenOn
 	}
 
-	var err = store.Open(config.Adapter, string(config.AdapterConfig))
+	var err = store.Open(config.Adapter, string(config.StoreConfig))
 	if err != nil {
 		log.Fatal("Failed to connect to DB: ", err)
 	}

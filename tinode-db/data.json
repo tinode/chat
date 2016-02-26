@@ -3,6 +3,7 @@
   {
    "createdAt": "-140h",
    "email": "alice@example.com",
+   "tel": "17025550001",
    "passhash": "alice123",
    "private": "some comment 123",
    "public": {"fn": "Alice Johnson", "photo": "./alice-64.jpg", "type": "jpg"},
@@ -15,6 +16,7 @@
   {
    "createdAt": "-138h",
    "email": "bob@example.com",
+   "tel": "17025550002",
    "passhash": "bob123",
    "private": {
     "comment": "no comments :)"
@@ -27,6 +29,7 @@
   {
    "createdAt": "-136h",
    "email": "carol@example.com",
+   "tel": "17025550003",
    "passhash": "carol123",
    "private": "more stuff",
    "public": {"fn": "Carol Xmas", "photo": "./carol-64.jpg", "type": "jpg"},
@@ -37,6 +40,7 @@
   {
    "createdAt": "-134h",
    "email": "dave@example.com",
+   "tel": "17025550004",
    "passhash": "dave123",
    "private": "stuff 123",
    "public": {"fn": "Dave Goliathsson", "photo": "./dave-64.jpg", "type": "jpg"},
@@ -47,6 +51,7 @@
   {
    "createdAt": "-132h",
    "email": "eve@example.com",
+   "tel": "17025550005",
    "passhash": "eve123",
    "private": "apples?",
    "public": {"fn": "Eve Adams", "photo": "./eve-64.jpg", "type": "jpg"},
@@ -56,6 +61,7 @@
   {
    "createdAt": "-131h",
    "email": "frank@example.com",
+   "tel": "17025550006",
    "passhash": "frank123",
    "private": "things, not stuff",
    "public": {"fn": "Frank Singer"},

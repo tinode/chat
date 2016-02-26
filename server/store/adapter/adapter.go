@@ -2,25 +2,29 @@
 package adapter
 
 import (
-	t "github.com/tinode/chat/server/store/types"
 	"time"
+
+	t "github.com/tinode/chat/server/store/types"
 )
 
 // Adapter is the interface that must be implemented by a database
 // adapter. The current schema supports a single connection by database type.
 type Adapter interface {
-	Open(config string, workerId int, uidkey []byte) error
+	Open(config string) error
 	Close() error
 	IsOpen() bool
 
 	CreateDb(reset bool) error
 
 	// User management
-	GetPasswordHash(username string) (t.Uid, []byte, error)
 	UserCreate(usr *t.User) (err error, dupeUserName bool)
+	GetAuthRecord(unique string) (t.Uid, []byte, error)
+	AddAuthRecord(user t.Uid, unique string, secret []byte) (error, bool)
+	DelAuthRecord(unique string) (int, error)
+	DelAllAuthRecords(uid t.Uid) (int, error)
+	UpdAuthRecord(unique string, secret []byte) (int, error)
 	UserGet(id t.Uid) (*t.User, error)
 	UserGetAll(ids ...t.Uid) ([]t.User, error)
-	UserFind(params map[string]interface{}) ([]t.User, error)
 	UserDelete(id t.Uid, soft bool) error
 	UserUpdateLastSeen(uid t.Uid, userAgent string, when time.Time) error
 	UserUpdateStatus(uid t.Uid, status interface{}) error
@@ -56,6 +60,8 @@ type Adapter interface {
 	SubsDelete(topic string, user t.Uid) error
 	// SubsDelForTopic deletes all subscriptions to the given topic
 	SubsDelForTopic(topic string) error
+	// Search for new contacts givel a list of tags
+	FindSubs(user t.Uid, query []string) ([]t.Contact, error)
 
 	// Messages
 	MessageSave(msg *t.Message) error

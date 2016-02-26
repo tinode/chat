@@ -42,6 +42,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/tinode/chat/server/auth"
 	"github.com/tinode/chat/server/store"
 	"github.com/tinode/chat/server/store/types"
 )
@@ -258,8 +259,8 @@ func (s *Session) leave(msg *ClientComMessage) {
 
 	if sub, ok := s.subs[topic]; ok {
 		// Session has joined the topic
-		if msg.Leave.Topic == "me" && msg.Leave.Unsub {
-			// User should not unsubscribe from 'me'. Just leaving is fine
+		if (msg.Leave.Topic == "me" || msg.Leave.Topic == "find") && msg.Leave.Unsub {
+			// User should not unsubscribe from 'me' or 'find'. Just leaving is fine.
 			s.QueueOut(ErrPermissionDenied(msg.Leave.Id, msg.Leave.Topic, msg.timestamp))
 		} else {
 			// Unlink from topic, topic will send a reply.
@@ -279,7 +280,7 @@ func (s *Session) leave(msg *ClientComMessage) {
 // Broadcast a message to all topic subscribers
 func (s *Session) publish(msg *ClientComMessage) {
 
-	// TODo(gene): Check for repeated messages with the same ID
+	// TODO(gene): Check for repeated messages with the same ID
 
 	topic, routeTo, err := s.validateTopicName(msg.Pub.Id, msg.Pub.Topic, msg.timestamp)
 	if err != nil {
@@ -300,44 +301,39 @@ func (s *Session) publish(msg *ClientComMessage) {
 	if sub, ok := s.subs[routeTo]; ok {
 		// This is a post to a subscribed topic. The message is sent to the topic only
 		sub.broadcast <- data
-
-	} else {
-		// FIXME(gene): publishing should not be permitted without subscribing first
-
-		// This is a message to a topic the current session is not subscribed to. The most common case is
-		// a message to a user, possbly self.
-		// The receiving user (rcptto) should see communication on the originator's !usr: topic, the sender on
-		// receiver's (so the p2p conversation can be aggregated by topic by both parties as each user
-		// sends/receives on the same topic)
-		// Global hub sends a Ctrl.202 response back to sender with topic=[receiver's topic]
-
-		// globals.hub.route <- data
 	}
 }
 
 // Authenticate
 func (s *Session) login(msg *ClientComMessage) {
-	var uid types.Uid
-	var err error
 
 	if !s.uid.IsZero() {
 		s.QueueOut(ErrAlreadyAuthenticated(msg.Login.Id, "", msg.timestamp))
 		return
+	}
 
-	} else if msg.Login.Scheme == "" || msg.Login.Scheme == "basic" {
-		uid, err = store.Users.Login(msg.Login.Scheme, msg.Login.Secret)
-		if err != nil {
-			// DB error
-			log.Println(err)
-			s.QueueOut(ErrUnknown(msg.Login.Id, "", msg.timestamp))
-			return
-		} else if uid.IsZero() {
-			// Invalid login or password
-			s.QueueOut(ErrAuthFailed(msg.Login.Id, "", msg.timestamp))
-			return
-		}
-	} else {
+	handler := store.GetAuthHandler(msg.Login.Scheme)
+	if handler == nil {
 		s.QueueOut(ErrAuthUnknownScheme(msg.Login.Id, "", msg.timestamp))
+		return
+	}
+
+	uid, errType, err := handler.Authenticate(msg.Login.Secret)
+	if errType == auth.ErrMalformed {
+		s.QueueOut(ErrMalformed(msg.Login.Id, "", msg.timestamp))
+		return
+	}
+
+	// DB error
+	if errType == auth.ErrInternal {
+		log.Println(err)
+		s.QueueOut(ErrUnknown(msg.Login.Id, "", msg.timestamp))
+		return
+	}
+
+	// Invalid login or password
+	if uid.IsZero() {
+		s.QueueOut(ErrAuthFailed(msg.Login.Id, "", msg.timestamp))
 		return
 	}
 
@@ -388,7 +384,7 @@ func (s *Session) acc(msg *ClientComMessage) {
 						private = msg.Acc.Desc.Private
 					}
 				}
-				_, err := store.Users.Create(&user, auth.Scheme, string(auth.Secret), private)
+				_, err := store.Users.Create(&user, private)
 				if err != nil {
 					if err.Error() == "duplicate credential" {
 						s.QueueOut(ErrDuplicateCredential(msg.Acc.Id, "", msg.timestamp))
@@ -602,6 +598,8 @@ func (s *Session) validateTopicName(msgId, topic string, timestamp time.Time) (s
 
 	if topic == "me" {
 		routeTo = s.uid.UserId()
+	} else if topic == "find" {
+		routeTo = s.uid.FndName()
 	} else if strings.HasPrefix(topic, "usr") {
 		// packet to a specific user
 		uid2 := types.ParseUserId(topic)

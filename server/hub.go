@@ -214,11 +214,9 @@ func (h *Hub) run() {
 			// Request for topic info from a user who is not subscribed to the topic
 			if dst := h.topicGet(meta.topic); dst != nil {
 				// If topic is already in memory, pass request to topic
-				log.Println("hub.meta: topic already in memory")
 				dst.meta <- meta
 			} else if meta.pkt.Get != nil {
 				// If topic is not in memory, fetch requested description from DB and reply here
-				log.Println("hub.meta: topic NOT in memory")
 				go replyTopicDescBasic(meta.sess, meta.topic, meta.pkt.Get)
 			}
 

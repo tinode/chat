@@ -96,6 +96,12 @@ type MsgSetQuery struct {
 	Sub *MsgSetSub `json:"sub,omitempty"`
 }
 
+// fndXXX.private is set to this object.
+type MsgFindQuery struct {
+	// List of tags to query for. Tags of the form "email:jdoe@example.com" or "tel:18005551212"
+	Tags []string `json:"tags"`
+}
+
 // Client to Server (C2S) messages
 
 // User creation message {acc}
@@ -339,6 +345,20 @@ type MsgInvitation struct {
 	Acs MsgAccessMode `json:"acs,omitempty"`
 	// Free-form payload
 	Info interface{} `json:"info,omitempty"`
+}
+
+// Records returned by contact discovery, sent as MsgServerData.Content
+type MsgContact struct {
+	// Topic that user wants to subscribe to or is invited to
+	Topic string `json:"topic"`
+	// User being subscribed
+	User string `json:"user"`
+	// The list of tags this record was matched on.
+	Match []string `json:"match"`
+	// User's or topic's default access mode.
+	DefaultAcs *MsgDefaultAcsMode `json:"defacs,omitempty"`
+	// User's or topic's public data
+	Public interface{} `json:"info,omitempty"`
 }
 
 type MsgServerData struct {

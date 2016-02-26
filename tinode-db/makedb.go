@@ -1,17 +1,18 @@
 package main
 
 import (
-	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
 	"flag"
 	"io/ioutil"
 	"log"
+
+	"github.com/tinode/chat/server/store"
 )
 
 type configType struct {
-	Adapter       string          `json:"db_adapter"`
-	AdapterConfig json.RawMessage `json:"adapter_config"`
+	Adapter     string          `json:"use_adapter"`
+	StoreConfig json.RawMessage `json:"store_config"`
 }
 
 type Data struct {
@@ -21,18 +22,9 @@ type Data struct {
 	Messages      []string                 `json:"messages"`
 }
 
-// Name generator for group topics
-func _getRandomString() string {
-	buf := make([]byte, 9)
-	_, err := rand.Read(buf)
-	if err != nil {
-		panic("getRandomString: failed to generate a random string: " + err.Error())
-	}
-	return base64.URLEncoding.EncodeToString(buf)
-}
-
+// Generate random string as a name of the group topic
 func genTopicName() string {
-	return "grp" + _getRandomString()
+	return "grp" + store.GetUidString()
 }
 
 func main() {
@@ -65,7 +57,7 @@ func main() {
 			log.Fatal("Unknown adapter '" + config.Adapter + "'")
 		}
 
-		gen_rethink(*reset, string(config.AdapterConfig), &data)
+		gen_rethink(*reset, string(config.StoreConfig), &data)
 	} else {
 		log.Println("No config provided. Exiting.")
 	}

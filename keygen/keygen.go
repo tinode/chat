@@ -18,7 +18,7 @@ var hmac_salt = []byte{
 
 // Generate API key
 // Composition:
-//  [1:algorithm version][4:deprecated][2:key sequence][1:isRoot][16:signature] = 24 bytes
+//  [1:algorithm version][4:deprecated (used to be expiration time)][2:key sequence][1:isRoot][16:signature] = 24 bytes
 // convertible to base64 without padding
 // All integers are little-endian
 func main() {

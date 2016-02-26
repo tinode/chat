@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	_ "github.com/tinode/chat/server/auth_basic"
 	_ "github.com/tinode/chat/server/db/rethinkdb"
 	"github.com/tinode/chat/server/store"
 	"github.com/tinode/chat/server/store/types"
@@ -48,8 +49,7 @@ func gen_rethink(reset bool, dbsource string, data *Data) {
 	for _, uu := range data.Users {
 
 		user := types.User{
-			State:    int(uu["state"].(float64)),
-			Username: uu["username"].(string),
+			State: int(uu["state"].(float64)),
 			Access: types.DefaultAccess{
 				Auth: types.ModePublic,
 				Anon: types.ModeNone,
@@ -59,14 +59,17 @@ func gen_rethink(reset bool, dbsource string, data *Data) {
 		user.CreatedAt = getCreatedTime(uu["createdAt"])
 
 		// store.Users.Create will subscribe user to !me topic but won't create a !me topic
-		if _, err := store.Users.Create(&user, "basic",
-			uu["username"].(string)+":"+uu["passhash"].(string), uu["private"]); err != nil {
+		if _, err := store.Users.Create(&user, uu["private"]); err != nil {
 			log.Fatal(err)
 		}
 
-		nameIndex[user.Username] = user.Id
+		auth_handler := store.GetAuthHandler("basic")
+		if _, err = auth_handler.AddRecord(user.Uid(), uu["username"].(string)+":"+uu["passhash"].(string)); err != nil {
+			log.Fatal(err)
+		}
+		nameIndex[uu["username"].(string)] = user.Id
 
-		log.Printf("Created user '%s' as %s (%d)", user.Username, user.Id, user.Uid())
+		log.Printf("Created user '%s' as %s (%d)", uu["username"].(string), user.Id, user.Uid())
 	}
 
 	log.Println("Generating group topics...")
