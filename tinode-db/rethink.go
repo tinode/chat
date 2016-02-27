@@ -58,6 +58,16 @@ func gen_rethink(reset bool, dbsource string, data *Data) {
 		}
 		user.CreatedAt = getCreatedTime(uu["createdAt"])
 
+		if uu["email"] != nil || uu["tel"] != nil {
+			user.Tags = make([]string, 0)
+			if uu["email"] != nil {
+				user.Tags = append(user.Tags, "email:"+uu["email"].(string))
+			}
+			if uu["tel"] != nil {
+				user.Tags = append(user.Tags, "tel:"+uu["tel"].(string))
+			}
+		}
+
 		// store.Users.Create will subscribe user to !me topic but won't create a !me topic
 		if _, err := store.Users.Create(&user, uu["private"]); err != nil {
 			log.Fatal(err)
@@ -190,7 +200,7 @@ func gen_rethink(reset bool, dbsource string, data *Data) {
 
 		log.Printf("Sharing '%s' with '%s'", ss["topic"].(string), ss["user"].(string))
 
-		if err = store.Subs.Create(&types.Subscription{
+		if err = store.Subs.Create(types.Subscription{
 			ObjHeader: types.ObjHeader{CreatedAt: getCreatedTime(ss["createdAt"])},
 			User:      u1,
 			Topic:     name,
@@ -230,7 +240,7 @@ func gen_rethink(reset bool, dbsource string, data *Data) {
 		seqId := seqIds[topic]
 		str := data.Messages[rand.Intn(len(data.Messages))]
 		// Max time between messages is 2 hours, averate - 1 hour, time is increasing as seqId increases
-		timestamp = timestamp.Add(time.Second * time.Duration(rand.Intn(3600*2)))
+		timestamp = timestamp.Add(time.Millisecond * time.Duration(rand.Intn(3600*2*1000)))
 		msg := types.Message{
 			ObjHeader: types.ObjHeader{CreatedAt: timestamp},
 			SeqId:     seqId,

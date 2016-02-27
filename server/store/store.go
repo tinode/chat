@@ -142,15 +142,24 @@ func (u UsersObjMapper) Create(user *types.User, private interface{}) (*types.Us
 		return nil, err
 	}
 
-	// Create user's subscription to 'me'. The 'me' topic is ephemeral, the topic object need not to be inserted.
-	err = Subs.Create(&types.Subscription{
-		ObjHeader: types.ObjHeader{CreatedAt: user.CreatedAt},
-		User:      user.Id,
-		Topic:     user.Uid().UserId(),
-		ModeWant:  types.ModeSelf,
-		ModeGiven: types.ModeSelf,
-		Private:   private,
-	})
+	// Create user's subscription to 'me' && 'find'. Theese topics are ephemeral, the topic object need not to be inserted.
+	err = Subs.Create(
+		types.Subscription{
+			ObjHeader: types.ObjHeader{CreatedAt: user.CreatedAt},
+			User:      user.Id,
+			Topic:     user.Uid().UserId(),
+			ModeWant:  types.ModeSelf,
+			ModeGiven: types.ModeSelf,
+			Private:   private,
+		},
+		types.Subscription{
+			ObjHeader: types.ObjHeader{CreatedAt: user.CreatedAt},
+			User:      user.Id,
+			Topic:     user.Uid().FndName(),
+			ModeWant:  types.ModeSelf,
+			ModeGiven: types.ModeSelf,
+			Private:   nil,
+		})
 	if err != nil {
 		// Best effort to delete incomplete user record. Orphaned user records are not a problem.
 		// They just take up space.
@@ -241,7 +250,7 @@ func (TopicsObjMapper) Create(topic *types.Topic, owner types.Uid, private inter
 	}
 
 	if !owner.IsZero() {
-		err = Subs.Create(&types.Subscription{
+		err = Subs.Create(types.Subscription{
 			ObjHeader: types.ObjHeader{CreatedAt: topic.CreatedAt},
 			User:      owner.String(),
 			Topic:     topic.Name,
@@ -300,10 +309,12 @@ type SubsObjMapper struct{}
 
 var Subs SubsObjMapper
 
-func (SubsObjMapper) Create(sub *types.Subscription) error {
-	sub.InitTimes()
+func (SubsObjMapper) Create(subs ...types.Subscription) error {
+	for _, sub := range subs {
+		sub.InitTimes()
+	}
 
-	_, err := adaptr.TopicShare([]types.Subscription{*sub})
+	_, err := adaptr.TopicShare(subs)
 	return err
 }
 

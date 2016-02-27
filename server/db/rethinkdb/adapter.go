@@ -115,6 +115,10 @@ func (a *RethinkDbAdapter) CreateDb(reset bool) error {
 	if _, err := rdb.DB("tinode").TableCreate("users", rdb.TableCreateOpts{PrimaryKey: "Id"}).RunWrite(a.conn); err != nil {
 		return err
 	}
+	// Create secondary index on User.Tags array so user can be found by tags
+	if _, err := rdb.DB("tinode").Table("users").IndexCreate("Tags", rdb.IndexCreateOpts{Multi: true}).RunWrite(a.conn); err != nil {
+		return err
+	}
 	// User authentication records {unique, userid, secret}
 	if _, err := rdb.DB("tinode").TableCreate("auth", rdb.TableCreateOpts{PrimaryKey: "unique"}).RunWrite(a.conn); err != nil {
 		return err
@@ -154,10 +158,9 @@ func (a *RethinkDbAdapter) CreateDb(reset bool) error {
 		return err
 	}
 
-	// Index of user contact information as strings, such as "email:jdoe@example.com" or "tel:18003287448":
-	// {id: <tag>, name: <uid or null>, ts: <timestamp>, notify: [uids of users who searched for this tag]}
-	// Given a list of tags, find users associated with them.
-	if _, err := rdb.DB("tinode").TableCreate("tagindex").RunWrite(a.conn); err != nil {
+	// Index of unique user contact information as strings, such as "email:jdoe@example.com" or "tel:18003287448":
+	// {Id: <tag>, Source: <uid>} to ensure uniqueness of tags.
+	if _, err := rdb.DB("tinode").TableCreate("tagunique", rdb.TableCreateOpts{PrimaryKey: "Id"}).RunWrite(a.conn); err != nil {
 		return err
 	}
 
@@ -171,37 +174,32 @@ func (a *RethinkDbAdapter) CreateDb(reset bool) error {
 
 // UserCreate creates a new user. Returns error and true if error is due to duplicate user name,
 // false for any other error
-// 1. Ensure uniqueness of user name/other auth unique values
-// 2. Ensure uniqueness of tags
-// 3. Create user record
-// 4. Insert tags and login
-// Q: auth in the same table or different? i.e. User.Auth[{"basic": interface{}}, {"fb": interface{}}]
-// Q: one auth table per type, or all auth types in the same table?
-// Q: Tags in the User table, separate table, both, two separate tables?
 func (a *RethinkDbAdapter) UserCreate(user *t.User) (error, bool) {
-	// FIXME(gene): Rethink has no support for transactions. Prevent other routines from using
-	// the username currently being processed. For instance, keep it in a cluster-shared map for the duration
-	// of transaction. For now, just clean up whatever object were created
+	// Save user's tags to a separate table to ensure uniquness
+	// TODO(gene): add support for non-unique tags
+	if user.Tags != nil {
+		type tag struct {
+			Id     string
+			Source string
+		}
+		tags := make([]tag, 0, len(user.Tags))
+		for _, t := range user.Tags {
+			tags = append(tags, tag{Id: t, Source: user.Id})
+		}
+		res, err := rdb.DB(a.dbName).Table("tagunique").Insert(tags).RunWrite(a.conn)
+		if err != nil || res.Inserted != len(user.Tags) {
+			if res.Inserted > 0 {
+				// Something went wrong, do best effort delete of inserted tags
+				rdb.DB(a.dbName).Table("tagunique").GetAll(user.Tags).
+					Filter(map[string]interface{}{"Source": user.Id}).Delete().RunWrite(a.conn)
+			}
+			return err, false
+		}
+	}
 
 	_, err := rdb.DB(a.dbName).Table("users").Insert(&user).RunWrite(a.conn)
 	if err != nil {
 		return err, false
-	}
-
-	// This may fail!
-	if user.Tags != nil {
-		type tagRecord struct {
-			id     string
-			name   string
-			ts     time.Time
-			notify []string
-		}
-		tags := make([]tagRecord, 0, len(user.Tags))
-		for _, tag := range user.Tags {
-			tags = append(tags, tagRecord{id: tag, name: user.Id, notify: nil})
-		}
-		rdb.DB(a.dbName).Table("tagindex").Insert(user.Tags).RunWrite(a.conn)
-
 	}
 
 	return nil, false

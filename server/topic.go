@@ -599,7 +599,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string, inf
 			Private:   userData.private,
 		}
 
-		if err := store.Subs.Create(&sub); err != nil {
+		if err := store.Subs.Create(sub); err != nil {
 			log.Println(err.Error())
 			simpleByteSender(sess.send, ErrUnknown(pktId, t.original, now))
 			return err
@@ -781,7 +781,7 @@ func (t *Topic) approveSub(h *Hub, sess *Session, target types.Uid, set *MsgClie
 			ModeGiven: modeGiven,
 		}
 
-		if err := store.Subs.Create(&sub); err != nil {
+		if err := store.Subs.Create(sub); err != nil {
 			simpleByteSender(sess.send, ErrUnknown(set.Id, t.original, now))
 			return err
 		}
