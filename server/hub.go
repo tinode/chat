@@ -263,9 +263,9 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		shutdown:  make(chan chan<- bool, 1),
 	}
 
-	// Request to load a me topic. The topic must exist
+	// Request to load a 'me' topic. The topic always axists.
 	if t.original == "me" {
-		log.Println("hub: loading me topic")
+		log.Println("hub: loading 'me' topic")
 
 		t.cat = TopicCat_Me
 
@@ -296,8 +296,35 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		t.lastId = user.SeqId
 		t.clearId = user.ClearId
 
-		// Initiate User Agent with the UA of the creating session so we don't report it later
+		// Initiate User Agent with the UA of the creating session to report it later
 		t.userAgent = sreg.sess.userAgent
+
+		// Request to load a 'find' topic. The topic always exists.
+	} else if t.original == "fnd" {
+		log.Println("hub: loading 'find' topic")
+
+		t.cat = TopicCat_Find
+
+		// 'find' has no owner, t.owner = nil
+
+		// Ensure all requests to subscribe are automatically rejected
+		t.accessAuth = types.ModeBanned
+		t.accessAnon = types.ModeBanned
+
+		if err := t.loadSubscribers(); err != nil {
+			log.Println("hub: cannot load subscribers for '" + t.name + "' (" + err.Error() + ")")
+			sreg.sess.QueueOut(ErrUnknown(sreg.pkt.Id, t.original, timestamp))
+			return
+		}
+
+		// Public is not set.
+		// t.public = nil
+
+		t.created = t.perUser[sreg.sess.uid].created
+		t.updated = t.perUser[sreg.sess.uid].updated
+
+		// Publishing to Find is not supported
+		// t.lastId = 0
 
 		// Request to create a new p2p topic, then attach to it
 	} else if strings.HasPrefix(t.original, "usr") {
@@ -586,11 +613,12 @@ func (t *Topic) loadSubscribers() error {
 	for _, sub := range subs {
 		uid := types.ParseUid(sub.User)
 		t.perUser[uid] = perUserData{
-			clearId: sub.ClearId,
-			readId:  sub.ReadSeqId,
-			recvId:  sub.RecvSeqId,
-			private: sub.Private,
-			//lastSeenTag: sub.LastSeen, // could be nil
+			created:   sub.CreatedAt,
+			updated:   sub.UpdatedAt,
+			clearId:   sub.ClearId,
+			readId:    sub.ReadSeqId,
+			recvId:    sub.RecvSeqId,
+			private:   sub.Private,
 			modeWant:  sub.ModeWant,
 			modeGiven: sub.ModeGiven}
 

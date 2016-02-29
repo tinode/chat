@@ -275,7 +275,7 @@ func (a *RethinkDbAdapter) UserGet(uid t.Uid) (*t.User, error) {
 }
 
 func (a *RethinkDbAdapter) UserGetAll(ids ...t.Uid) ([]t.User, error) {
-	uids := []interface{}{}
+	uids := make([]interface{}, 0, len(ids))
 	for _, id := range ids {
 		uids = append(uids, id.String())
 	}
@@ -678,62 +678,43 @@ func (a *RethinkDbAdapter) SubsDelForTopic(topic string) error {
 }
 
 // FindSubs returns a list of users who match given tags, such as "email:jdoe@example.com" or "tel:18003287448".
-func (a *RethinkDbAdapter) FindSubs(user t.Uid, query []string) ([]t.Contact, error) {
-	// {id: <tag>, user: <uid or null>, ts: <timestamp>, want: [uids of users who searched for this tag]}
-
-	type tagStruct struct {
-		// Tag
-		id string
-		// Uid
-		name string
-	}
-	uids := make([]interface{}, 0, 16)
-	join := make(map[string][]tagStruct)
-	// Query may contain redundant records. User may be mentioned in multiple tages.
-	// Grouping record by user (multiple mentions of user in tags), then de-duping user groups (due to dups in query).
-	if rows, err := rdb.DB(a.dbName).Table("tagindex").GetAll(query).Pluck("id", "name").
-		Group("user").Distinct().Run(a.conn); err != nil {
+// Just search the 'users.Tags' for the given tags using respective index.
+func (a *RethinkDbAdapter) FindSubs(user t.Uid, query []string) ([]t.Subscription, error) {
+	// Query may contain redundant records, i.e. the same email twice.
+	// User could be matched on multiple tags, i.e on email and phone#. Thus the query result may
+	// return duplicate users. Thus need to group by user then get distinct.
+	// Grouping record by user (multiple mentions of user in tags), then de-duping user groups (due to dups in the query).
+	if rows, err := rdb.DB(a.dbName).Table("users").GetAllByIndex("Tags", query).Limit(MAX_RESULTS).
+		Pluck("Id", "Access", "CreatedAt", "UpdatedAt", "Public", "Tags").Distinct().Run(a.conn); err != nil {
 		return nil, err
 	} else {
-		var grouped struct {
-			group     string
-			reduction []tagStruct
+		index := make(map[string]struct{})
+		for _, q := range query {
+			index[q] = struct{}{}
 		}
-		for rows.Next(&grouped) {
-			uids = append(uids, grouped.group)
-			join[grouped.group] = grouped.reduction
+		var user t.User
+		var sub t.Subscription
+		var subs []t.Subscription
+		for rows.Next(&user) {
+			sub.CreatedAt = user.CreatedAt
+			sub.UpdatedAt = user.UpdatedAt
+			sub.User = user.Id
+			sub.ModeWant, sub.ModeGiven = user.Access.Auth, user.Access.Auth
+			sub.SetPublic(user.Public)
+			tags := make([]string, 0, 1)
+			for _, tag := range user.Tags {
+				if _, ok := index[tag]; ok {
+					tags = append(tags, tag)
+				}
+			}
+			sub.Private = tags
+			subs = append(subs, sub)
 		}
 		if err = rows.Err(); err != nil {
 			return nil, err
 		}
+		return subs, nil
 	}
-
-	contacts := make([]t.Contact, 0, 16)
-	if rows, err := rdb.DB(a.dbName).Table("users").GetAll(uids...).Run(a.conn); err != nil {
-		return nil, err
-	} else { // else is needed, otherwise 'rows' is undefined
-		/*
-			type Contact struct {
-				Id     string			//filled here
-				MatchOn  []string
-				Access   DefaultAccess	// filled here
-				LastSeen time.Time		// filled here
-				Public   interface{}	// filled here
-			}
-		*/
-		var cont t.Contact
-		for rows.Next(&cont) {
-			match := join[cont.Id]
-			for _, tag := range match {
-				cont.MatchOn = append(cont.MatchOn, tag.id)
-			}
-			contacts = append(contacts, cont)
-		}
-		if err = rows.Err(); err != nil {
-			return nil, err
-		}
-	}
-	return contacts, nil
 }
 
 // Messages

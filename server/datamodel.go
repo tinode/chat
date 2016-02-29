@@ -265,9 +265,12 @@ type ClientComMessage struct {
 /////////////////////////////////////////////////////////////
 // Server to client messages
 
+// MsgLastSeenInfo contains info on user's appearance online - when & user agent
 type MsgLastSeenInfo struct {
-	When      *time.Time `json:"when,omitempty"` // when the user was last seen
-	UserAgent string     `json:"ua,omitempty"`   // user agent of the device used to access the topic
+	// Timestamp of user's last appearance online.
+	When *time.Time `json:"when,omitempty"`
+	// User agent of the device when the user was last online.
+	UserAgent string `json:"ua,omitempty"`
 }
 
 // Topic description, S2C in Meta message
@@ -345,20 +348,6 @@ type MsgInvitation struct {
 	Acs MsgAccessMode `json:"acs,omitempty"`
 	// Free-form payload
 	Info interface{} `json:"info,omitempty"`
-}
-
-// Records returned by contact discovery, sent as MsgServerData.Content
-type MsgContact struct {
-	// Topic that user wants to subscribe to or is invited to
-	Topic string `json:"topic"`
-	// User being subscribed
-	User string `json:"user"`
-	// The list of tags this record was matched on.
-	Match []string `json:"match"`
-	// User's or topic's default access mode.
-	DefaultAcs *MsgDefaultAcsMode `json:"defacs,omitempty"`
-	// User's or topic's public data
-	Public interface{} `json:"info,omitempty"`
 }
 
 type MsgServerData struct {

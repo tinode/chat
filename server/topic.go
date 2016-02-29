@@ -113,12 +113,16 @@ const (
 
 // perUserData holds topic's cache of per-subscriber data
 type perUserData struct {
+	// Timestamps when the subscription was created and updated
+	created time.Time
+	updated time.Time
+
 	online int
 
 	// Last t.lastId reported by user through {pres} as received or read
 	recvId int
 	readId int
-	// Greates ID of a soft-deleted message
+	// Greatest ID of a soft-deleted message
 	clearId int
 
 	private interface{}
@@ -249,9 +253,9 @@ func (t *Topic) run(hub *Hub) {
 			}
 
 		case msg := <-t.broadcast:
-			// Message intended for broadcasting to recepients
+			// Content message intended for broadcasting to recepients
 
-			//log.Printf("topic[%s].run: got message '%v'", t.name, msg)
+			// log.Printf("topic[%s].run: got message '%v'", t.name, msg)
 
 			// Record last message timestamp
 			if msg.Data != nil {
@@ -1048,6 +1052,13 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 	if t.cat == TopicCat_Me {
 		// Fetch user's subscriptions, with Topic.Public denormalized into subscription
 		subs, err = store.Users.GetTopics(sess.uid)
+	} else if t.cat == TopicCat_Find {
+		// Given a query provided in .private, fetch user's contacts
+		if query, ok := t.perUser[sess.uid].private.([]string); ok {
+			if query != nil && len(query) > 0 {
+				subs, err = store.Users.FindSubs(sess.uid, query)
+			}
+		}
 	} else {
 		// Fetch subscriptions, User.Public denormalized into subscription
 		subs, err = store.Topics.GetUsers(t.name)
@@ -1062,15 +1073,17 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 
 	var ifModified time.Time
 	var limit int
-	if opts != nil && opts.IfModifiedSince != nil {
-		ifModified = *opts.IfModifiedSince
+	if opts != nil {
+		if opts.IfModifiedSince != nil {
+			ifModified = *opts.IfModifiedSince
+		}
 		limit = opts.Limit
 	} else {
 		limit = 1024
 	}
 
 	meta := &MsgServerMeta{Id: id, Topic: t.original, Timestamp: &now}
-	if len(subs) > 0 {
+	if subs != nil && len(subs) > 0 {
 		meta.Sub = make([]MsgTopicSub, 0, len(subs))
 		for idx, sub := range subs {
 			if idx == limit {
@@ -1116,13 +1129,17 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 					mts.Online = pud.online > 0
 				}
 			}
+
 			// Ensure sanity or ReadId and RecvId:
 			mts.ReadSeqId = max(clearId, sub.ReadSeqId)
 			mts.RecvSeqId = max(clearId, sub.RecvSeqId)
 			mts.AcsMode = (sub.ModeGiven & sub.ModeWant).String()
+			// User requested updated records only.
 			if updatedOnly {
 				mts.Public = sub.GetPublic()
-				if uid == sess.uid {
+				// Reporting private only if it's user's own supscription or
+				// a synthetic 'private' in 'find' topic where it's a list of tags matched on.
+				if uid == sess.uid || t.cat == TopicCat_Find {
 					mts.Private = sub.Private
 				}
 			}

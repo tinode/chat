@@ -255,11 +255,13 @@ func (s *Session) leave(msg *ClientComMessage) {
 	topic := msg.Leave.Topic
 	if msg.Leave.Topic == "me" {
 		topic = s.uid.UserId()
+	} else if msg.Leave.Topic == "fnd" {
+		topic = s.uid.FndName()
 	}
 
 	if sub, ok := s.subs[topic]; ok {
 		// Session has joined the topic
-		if (msg.Leave.Topic == "me" || msg.Leave.Topic == "find") && msg.Leave.Unsub {
+		if (msg.Leave.Topic == "me" || msg.Leave.Topic == "fnd") && msg.Leave.Unsub {
 			// User should not unsubscribe from 'me' or 'find'. Just leaving is fine.
 			s.QueueOut(ErrPermissionDenied(msg.Leave.Id, msg.Leave.Topic, msg.timestamp))
 		} else {
@@ -598,7 +600,7 @@ func (s *Session) validateTopicName(msgId, topic string, timestamp time.Time) (s
 
 	if topic == "me" {
 		routeTo = s.uid.UserId()
-	} else if topic == "find" {
+	} else if topic == "fnd" {
 		routeTo = s.uid.FndName()
 	} else if strings.HasPrefix(topic, "usr") {
 		// packet to a specific user

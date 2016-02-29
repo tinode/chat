@@ -225,7 +225,7 @@ func (u UsersObjMapper) GetSubs(id types.Uid) ([]types.Subscription, error) {
 }
 
 // GetSubs loads a list of subscriptions for the given user
-func (u UsersObjMapper) FindSubs(id types.Uid, query []string) ([]types.Contact, error) {
+func (u UsersObjMapper) FindSubs(id types.Uid, query []string) ([]types.Subscription, error) {
 	return adaptr.FindSubs(id, query)
 }
 
