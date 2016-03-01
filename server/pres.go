@@ -134,7 +134,7 @@ func (t *Topic) presProcReq(fromTopic string, online, wantReply bool) {
 	//	t.name, fromTopic, online, wantReply)
 
 	doReply := wantReply
-	if t.cat == TopicCat_Me {
+	if t.cat == types.TopicCat_Me {
 		if psd, ok := t.perSubs[fromTopic]; ok {
 			// If requester's online status has not changed, do not reply, otherwise an endless loop will happen
 			// Introducing isReply to ensure unnecessary {pres} is not sent:

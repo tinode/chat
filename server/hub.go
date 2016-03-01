@@ -267,7 +267,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 	if t.original == "me" {
 		log.Println("hub: loading 'me' topic")
 
-		t.cat = TopicCat_Me
+		t.cat = types.TopicCat_Me
 
 		// 'me' has no owner, t.owner = nil
 
@@ -303,7 +303,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 	} else if t.original == "fnd" {
 		log.Println("hub: loading 'find' topic")
 
-		t.cat = TopicCat_Find
+		t.cat = types.TopicCat_Fnd
 
 		// 'find' has no owner, t.owner = nil
 
@@ -330,7 +330,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 	} else if strings.HasPrefix(t.original, "usr") {
 		log.Println("hub: new p2p topic")
 
-		t.cat = TopicCat_P2P
+		t.cat = types.TopicCat_P2P
 
 		// t.owner is blank for p2p topics
 
@@ -433,7 +433,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 	} else if strings.HasPrefix(t.name, "p2p") {
 		log.Println("hub: existing p2p topic")
 
-		t.cat = TopicCat_P2P
+		t.cat = types.TopicCat_P2P
 
 		// t.owner no valid owner for p2p topics, leave blank
 
@@ -487,7 +487,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 	} else if t.original == "new" {
 		log.Println("hub: new group topic")
 
-		t.cat = TopicCat_Grp
+		t.cat = types.TopicCat_Grp
 
 		// Generic topics have parameters stored in the topic object
 		t.owner = sreg.sess.uid
@@ -558,7 +558,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 	} else {
 		log.Println("hub: existing group topic")
 
-		t.cat = TopicCat_Grp
+		t.cat = types.TopicCat_Grp
 
 		// TODO(gene): check and validate topic name
 		stopic, err := store.Topics.Get(t.name)

@@ -50,7 +50,7 @@ type Topic struct {
 	original string
 
 	// topic category
-	cat TopicCat
+	cat types.TopicCat
 
 	// Time when the topic was first created
 	created time.Time
@@ -101,15 +101,6 @@ type Topic struct {
 	// Channel to inform topic of its deletion or server shutdown
 	shutdown chan chan<- bool
 }
-
-type TopicCat int
-
-const (
-	TopicCat_Me TopicCat = iota
-	TopicCat_P2P
-	TopicCat_Grp
-	TopicCat_Find
-)
 
 // perUserData holds topic's cache of per-subscriber data
 type perUserData struct {
@@ -222,7 +213,7 @@ func (t *Topic) run(hub *Hub) {
 
 				pud := t.perUser[leave.sess.uid]
 				pud.online--
-				if t.cat == TopicCat_Me {
+				if t.cat == types.TopicCat_Me {
 					mrs := t.mostRecentSession()
 					if mrs == nil {
 						// Last session
@@ -236,7 +227,7 @@ func (t *Topic) run(hub *Hub) {
 					if err := store.Users.UpdateLastSeen(mrs.uid, mrs.userAgent, now); err != nil {
 						log.Println(err)
 					}
-				} else if t.cat == TopicCat_Grp && pud.online == 0 {
+				} else if t.cat == types.TopicCat_Grp && pud.online == 0 {
 					t.presPubChange(leave.sess.uid.UserId(), "off")
 				}
 
@@ -415,9 +406,9 @@ func (t *Topic) run(hub *Hub) {
 			// Ensure that the messages are no longer routed to this topic
 			hub.unreg <- &topicUnreg{topic: t.name}
 			// FIXME(gene): save lastMessage value;
-			if t.cat == TopicCat_Me {
+			if t.cat == types.TopicCat_Me {
 				t.presPubMeChange("off", currentUA)
-			} else if t.cat == TopicCat_Grp {
+			} else if t.cat == types.TopicCat_Grp {
 				t.presPubTopicOnline(false)
 			} // not publishing online/offline to P2P topics
 			return
@@ -443,7 +434,7 @@ func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 	}
 
 	// New P2P topic is a special case. It requires an invite/notification for the second person
-	if sreg.created && t.cat == TopicCat_P2P {
+	if sreg.created && t.cat == types.TopicCat_P2P {
 
 		log.Println("about to generate invite for ", t.name)
 		for uid, pud := range t.perUser {
@@ -467,14 +458,14 @@ func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 
 	if sreg.loaded {
 		// Load the list of contacts for presence notifications
-		if t.cat == TopicCat_Me {
+		if t.cat == types.TopicCat_Me {
 			if err := t.loadContacts(sreg.sess.uid); err != nil {
 				log.Printf("hub: failed to load contacts for '%s'", t.name)
 			}
 
 			t.presPubMeChange("on", sreg.sess.userAgent)
 
-		} else if t.cat == TopicCat_Grp {
+		} else if t.cat == types.TopicCat_Grp {
 			t.presPubTopicOnline(true)
 		}
 		// Not sending presence notifications for P2P topics
@@ -525,7 +516,7 @@ func (t *Topic) subCommonReply(h *Hub, sess *Session, pkt *MsgClientSub, sendDes
 	pud := t.perUser[sess.uid]
 	pud.online++
 	if pud.online == 1 {
-		if t.cat == TopicCat_Grp {
+		if t.cat == types.TopicCat_Grp {
 			// User just joined the topic, announce presence
 			log.Printf("subCommonReply: user %s joined grp topic %s", sess.uid.UserId(), t.name)
 			t.presPubChange(sess.uid.UserId(), "on")
@@ -968,7 +959,7 @@ func (t *Topic) replySetDesc(sess *Session, set *MsgClientSet) error {
 	topic := make(map[string]interface{})
 	sub := make(map[string]interface{})
 	if set.Desc != nil {
-		if t.cat == TopicCat_Me {
+		if t.cat == types.TopicCat_Me {
 			// Update current user
 			if set.Desc.DefaultAcs != nil {
 				err = assignAccess(user, set.Desc.DefaultAcs)
@@ -976,7 +967,7 @@ func (t *Topic) replySetDesc(sess *Session, set *MsgClientSet) error {
 			if set.Desc.Public != nil {
 				sendPres = assignPubPriv(user, "Public", set.Desc.Public)
 			}
-		} else if t.cat == TopicCat_Grp && t.owner == sess.uid {
+		} else if t.cat == types.TopicCat_Grp && t.owner == sess.uid {
 			// Update current topic
 			if set.Desc.DefaultAcs != nil {
 				err = assignAccess(topic, set.Desc.DefaultAcs)
@@ -1024,9 +1015,9 @@ func (t *Topic) replySetDesc(sess *Session, set *MsgClientSet) error {
 		pud.private = private
 		t.perUser[sess.uid] = pud
 	}
-	if t.cat == TopicCat_Me {
+	if t.cat == types.TopicCat_Me {
 		updateCached(user)
-	} else if t.cat == TopicCat_Grp && t.owner == sess.uid {
+	} else if t.cat == types.TopicCat_Grp && t.owner == sess.uid {
 		updateCached(topic)
 	}
 
@@ -1049,15 +1040,16 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 	var subs []types.Subscription
 	var err error
 
-	if t.cat == TopicCat_Me {
+	if t.cat == types.TopicCat_Me {
 		// Fetch user's subscriptions, with Topic.Public denormalized into subscription
 		subs, err = store.Users.GetTopics(sess.uid)
-	} else if t.cat == TopicCat_Find {
+	} else if t.cat == types.TopicCat_Fnd {
 		// Given a query provided in .private, fetch user's contacts
-		if query, ok := t.perUser[sess.uid].private.([]string); ok {
+		if query, ok := t.perUser[sess.uid].private.([]interface{}); ok {
 			if query != nil && len(query) > 0 {
 				subs, err = store.Users.FindSubs(sess.uid, query)
 			}
+			log.Printf("find(%s): got subs %v", t.original, subs)
 		}
 	} else {
 		// Fetch subscriptions, User.Public denormalized into subscription
@@ -1089,13 +1081,13 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 			if idx == limit {
 				break
 			}
-			// The requester provided cut off date for updated ts of pub & priv fields
-			updatedOnly := sub.UpdatedAt.After(ifModified)
+			// Check if the requester has provided a cut off date for updated ts of pub & priv fields.
+			sendPubPriv := ifModified.IsZero() || sub.UpdatedAt.After(ifModified)
 
 			var mts MsgTopicSub
 			uid := types.ParseUid(sub.User)
 			var clearId int
-			if t.cat == TopicCat_Me {
+			if t.cat == types.TopicCat_Me {
 				// Reporting user's subscriptions to other topics
 				mts.Topic = sub.Topic
 				mts.SeqId = sub.GetSeqId()
@@ -1124,7 +1116,7 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 					// Report deleted messages for own subscriptions only
 					mts.ClearId = clearId
 				}
-				if t.cat == TopicCat_Grp {
+				if t.cat == types.TopicCat_Grp {
 					pud := t.perUser[uid]
 					mts.Online = pud.online > 0
 				}
@@ -1134,12 +1126,14 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 			mts.ReadSeqId = max(clearId, sub.ReadSeqId)
 			mts.RecvSeqId = max(clearId, sub.RecvSeqId)
 			mts.AcsMode = (sub.ModeGiven & sub.ModeWant).String()
-			// User requested updated records only.
-			if updatedOnly {
+			// Returning public and private only if they have changed since ifModified
+			if sendPubPriv {
+				log.Printf("topic: assigning public")
 				mts.Public = sub.GetPublic()
 				// Reporting private only if it's user's own supscription or
 				// a synthetic 'private' in 'find' topic where it's a list of tags matched on.
-				if uid == sess.uid || t.cat == TopicCat_Find {
+				if uid == sess.uid || t.cat == types.TopicCat_Fnd {
+					log.Printf("topic: assigning private")
 					mts.Private = sub.Private
 				}
 			}
@@ -1237,7 +1231,7 @@ func (t *Topic) replyDelMsg(sess *Session, del *MsgClientDel) error {
 	}
 
 	var err error
-	if t.cat == TopicCat_Me {
+	if t.cat == types.TopicCat_Me {
 		err = store.Messages.Delete("", sess.uid, del.Hard, del.Before)
 	} else {
 		err = store.Messages.Delete(t.name, sess.uid, del.Hard, del.Before)
@@ -1339,7 +1333,7 @@ func (t *Topic) evictUser(uid types.Uid, clear bool, ignore *Session) {
 	}
 
 	// Notify topic subscribers that the user has left the topic
-	if t.cat == TopicCat_Grp {
+	if t.cat == types.TopicCat_Grp {
 		t.presPubChange(uid.UserId(), "off")
 	}
 
@@ -1397,20 +1391,8 @@ func isNullValue(i interface{}) bool {
 	return false
 }
 
-func topicCat(name string) TopicCat {
-
-	switch name[0:3] {
-	case "usr":
-		return TopicCat_Me
-	case "p2p":
-		return TopicCat_P2P
-	case "grp":
-		return TopicCat_Grp
-	case "fnd":
-		return TopicCat_Find
-	default:
-		panic("invalid topic name in topicCat: " + name)
-	}
+func topicCat(name string) types.TopicCat {
+	return types.GetTopicCat(name)
 }
 
 // Generate random string as a name of the group topic

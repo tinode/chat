@@ -407,7 +407,7 @@ func (a *RethinkDbAdapter) TopicsForUser(uid t.Uid) ([]t.Subscription, error) {
 		tcat := t.GetTopicCat(sub.Topic)
 
 		// 'me' subscription, skip
-		if tcat == t.TopicCat_Me {
+		if tcat == t.TopicCat_Me || tcat == t.TopicCat_Fnd {
 			continue
 
 			// p2p subscription, find the other user to get user.Public
@@ -679,18 +679,19 @@ func (a *RethinkDbAdapter) SubsDelForTopic(topic string) error {
 
 // FindSubs returns a list of users who match given tags, such as "email:jdoe@example.com" or "tel:18003287448".
 // Just search the 'users.Tags' for the given tags using respective index.
-func (a *RethinkDbAdapter) FindSubs(user t.Uid, query []string) ([]t.Subscription, error) {
+func (a *RethinkDbAdapter) FindSubs(user t.Uid, query []interface{}) ([]t.Subscription, error) {
 	// Query may contain redundant records, i.e. the same email twice.
-	// User could be matched on multiple tags, i.e on email and phone#. Thus the query result may
-	// return duplicate users. Thus need to group by user then get distinct.
-	// Grouping record by user (multiple mentions of user in tags), then de-duping user groups (due to dups in the query).
-	if rows, err := rdb.DB(a.dbName).Table("users").GetAllByIndex("Tags", query).Limit(MAX_RESULTS).
+	// User could be matched on multiple tags, i.e on email and phone#. Thus the query may
+	// return duplicate users. Thus the need for distinct.
+	if rows, err := rdb.DB(a.dbName).Table("users").GetAllByIndex("Tags", query...).Limit(MAX_RESULTS).
 		Pluck("Id", "Access", "CreatedAt", "UpdatedAt", "Public", "Tags").Distinct().Run(a.conn); err != nil {
 		return nil, err
 	} else {
 		index := make(map[string]struct{})
 		for _, q := range query {
-			index[q] = struct{}{}
+			if tag, ok := q.(string); ok {
+				index[tag] = struct{}{}
+			}
 		}
 		var user t.User
 		var sub t.Subscription

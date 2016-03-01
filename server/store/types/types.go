@@ -621,6 +621,7 @@ type TopicCat int
 
 const (
 	TopicCat_Me TopicCat = iota
+	TopicCat_Fnd
 	TopicCat_P2P
 	TopicCat_Grp
 )
@@ -633,6 +634,8 @@ func GetTopicCat(name string) TopicCat {
 		return TopicCat_P2P
 	case "grp":
 		return TopicCat_Grp
+	case "fnd":
+		return TopicCat_Fnd
 	default:
 		panic("invalid topic type" + name)
 	}
