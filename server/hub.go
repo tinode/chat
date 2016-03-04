@@ -326,7 +326,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		// Publishing to Find is not supported
 		// t.lastId = 0
 
-		// Request to create a new p2p topic, then attach to it
+		// Request to create a new p2p topic, then attach to it. The topic may already exist!
 	} else if strings.HasPrefix(t.original, "usr") {
 		log.Println("hub: new p2p topic")
 
@@ -495,8 +495,10 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		t.accessAuth = DEFAULT_AUTH_ACCESS
 		t.accessAnon = DEFAULT_ANON_ACCESS
 
-		// Owner/creator gets full access to topic
-		userData := perUserData{modeGiven: types.ModeFull}
+		// Owner/creator gets full access to the topic. Owner may change the default modeWant through 'set'.
+		userData := perUserData{
+			modeGiven: types.ModeFull,
+			modeWant:  types.ModeFull}
 
 		if sreg.pkt.Set != nil {
 			// User sent initialization parameters
@@ -538,8 +540,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		// t.lastId & t.clearId are not set for new topics
 
 		stopic := &types.Topic{
-			ObjHeader: types.ObjHeader{CreatedAt: timestamp},
-			Name:      sreg.topic,
+			ObjHeader: types.ObjHeader{Id: sreg.topic, CreatedAt: timestamp},
 			Access:    types.DefaultAccess{Auth: t.accessAuth, Anon: t.accessAnon},
 			Public:    t.public}
 		// store.Topics.Create will add a subscription record for the topic creator

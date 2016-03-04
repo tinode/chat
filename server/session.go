@@ -222,8 +222,8 @@ func (s *Session) subscribe(msg *ClientComMessage) {
 
 	if msg.Sub.Topic == "new" {
 		// Request to create a new named topic
-		topic = msg.Sub.Topic
 		expanded = genTopicName()
+		topic = expanded
 	} else {
 		var err *ServerComMessage
 		topic, expanded, err = s.validateTopicName(msg.Sub.Id, msg.Sub.Topic, msg.timestamp)
@@ -235,11 +235,11 @@ func (s *Session) subscribe(msg *ClientComMessage) {
 
 	if _, ok := s.subs[expanded]; ok {
 		log.Printf("sess.subscribe: already subscribed to '%s'", expanded)
-		s.QueueOut(InfoAlreadySubscribed(msg.Sub.Id, msg.Sub.Topic, msg.timestamp))
+		s.QueueOut(InfoAlreadySubscribed(msg.Sub.Id, topic, msg.timestamp))
 		return
 	}
 
-	log.Printf("Sub to '%s' (%s) from '%s' as '%s' -- OK!", expanded, msg.Sub.Topic, msg.from, topic)
+	//log.Printf("Sub to '%s' (%s) from '%s' as '%s' -- OK!", expanded, msg.Sub.Topic, msg.from, topic)
 	globals.hub.join <- &sessionJoin{topic: expanded, pkt: msg.Sub, sess: s}
 	// Hub will send Ctrl success/failure packets back to session
 }
@@ -603,7 +603,7 @@ func (s *Session) validateTopicName(msgId, topic string, timestamp time.Time) (s
 	} else if topic == "fnd" {
 		routeTo = s.uid.FndName()
 	} else if strings.HasPrefix(topic, "usr") {
-		// packet to a specific user
+		// Initiating a p2p topic
 		uid2 := types.ParseUserId(topic)
 		if uid2.IsZero() {
 			// Ensure the user id is valid
@@ -613,7 +613,7 @@ func (s *Session) validateTopicName(msgId, topic string, timestamp time.Time) (s
 			return "", "", ErrPermissionDenied(msgId, topic, timestamp)
 		}
 		routeTo = s.uid.P2PName(uid2)
-		topic = s.uid.UserId() // but the echo message should come back as uid2.Name()
+		topic = routeTo
 	} else if strings.HasPrefix(topic, "p2p") {
 		uid1, uid2, err := types.ParseP2P(topic)
 		if err != nil || uid1.IsZero() || uid2.IsZero() || uid1 == uid2 {

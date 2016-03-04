@@ -253,7 +253,7 @@ func (TopicsObjMapper) Create(topic *types.Topic, owner types.Uid, private inter
 		err = Subs.Create(types.Subscription{
 			ObjHeader: types.ObjHeader{CreatedAt: topic.CreatedAt},
 			User:      owner.String(),
-			Topic:     topic.Name,
+			Topic:     topic.Id,
 			ModeGiven: types.ModeFull,
 			ModeWant:  topic.GetAccess(owner),
 			Private:   private})

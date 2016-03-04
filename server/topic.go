@@ -486,7 +486,13 @@ func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 // subCommonReply generates a response to a subscription request
 func (t *Topic) subCommonReply(h *Hub, sess *Session, pkt *MsgClientSub, sendDesc bool, created bool) error {
 	log.Println("subCommonReply ", t.name)
-	now := time.Now().UTC().Round(time.Millisecond)
+	var now time.Time
+	// For newly created topics report topic creation time.
+	if created {
+		now = t.updated
+	} else {
+		now = time.Now().UTC().Round(time.Millisecond)
+	}
 
 	// The topic t is already initialized by the Hub
 
@@ -527,7 +533,10 @@ func (t *Topic) subCommonReply(h *Hub, sess *Session, pkt *MsgClientSub, sendDes
 
 	t.perUser[sess.uid] = pud
 
-	simpleByteSender(sess.send, NoErr(pkt.Id, t.original, now))
+	resp := NoErr(pkt.Id, t.original, now)
+	// Report available access mode.
+	resp.Ctrl.Params = map[string]string{"mode": (pud.modeGiven & pud.modeWant).String()}
+	simpleByteSender(sess.send, resp)
 
 	if sendDesc {
 		t.replyGetDesc(sess, pkt.Id, created, pkt.Get.Desc)
@@ -556,8 +565,10 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string, inf
 
 	// Parse the acess mode requested by the user
 	var modeWant types.AccessMode
+	var explicitWant bool
 	if want != "" {
 		modeWant.UnmarshalText([]byte(want))
+		explicitWant = true
 	}
 
 	// If the user wants a self-ban, make sure it's the only change
@@ -575,6 +586,12 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string, inf
 		// User requested default access mode.
 		// modeWant could still be ModeNone if the owner wants to manually approve every request
 		if modeWant == types.ModeNone {
+			if explicitWant {
+				// The operation is invalid - user requested to clear access to topic which makes no sense.
+				simpleByteSender(sess.send, ErrMalformed(pktId, t.original, now))
+				return errors.New("attempt to clear topic access")
+			}
+
 			modeWant = t.accessAuth
 		}
 
@@ -582,7 +599,6 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string, inf
 			private:   private,
 			modeGiven: t.accessAuth,
 			modeWant:  modeWant,
-			//lastSeenTag: make(map[string]time.Time),
 		}
 
 		// Add subscription to database
@@ -602,9 +618,10 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string, inf
 
 	} else {
 		var ownerChange bool
+		// Process update to existing subscription. It could be an incomplete subscription for a new topic.
 
 		// If user did not request a new access mode, copy one from cache
-		if modeWant == types.ModeNone {
+		if !explicitWant && modeWant == types.ModeNone {
 			modeWant = userData.modeWant
 		}
 
@@ -1049,7 +1066,6 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 			if query != nil && len(query) > 0 {
 				subs, err = store.Users.FindSubs(sess.uid, query)
 			}
-			log.Printf("find(%s): got subs %v", t.original, subs)
 		}
 	} else {
 		// Fetch subscriptions, User.Public denormalized into subscription
@@ -1057,7 +1073,6 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 	}
 
 	if err != nil {
-		log.Printf("topic(%s): error loading subscriptions %s\n", t.original, err.Error())
 		reply := ErrUnknown(id, t.original, now)
 		simpleByteSender(sess.send, reply)
 		return err
@@ -1128,12 +1143,10 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 			mts.AcsMode = (sub.ModeGiven & sub.ModeWant).String()
 			// Returning public and private only if they have changed since ifModified
 			if sendPubPriv {
-				log.Printf("topic: assigning public")
 				mts.Public = sub.GetPublic()
 				// Reporting private only if it's user's own supscription or
 				// a synthetic 'private' in 'find' topic where it's a list of tags matched on.
 				if uid == sess.uid || t.cat == types.TopicCat_Fnd {
-					log.Printf("topic: assigning private")
 					mts.Private = sub.Private
 				}
 			}

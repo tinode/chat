@@ -316,21 +316,21 @@ func (m *AccessMode) UnmarshalText(b []byte) error {
 
 	for i := 0; i < len(b); i++ {
 		switch b[i] {
-		case 'R':
+		case 'R', 'r':
 			m0 |= ModeSub
-		case 'W':
+		case 'W', 'w':
 			m0 |= ModePub
-		case 'S':
+		case 'S', 's':
 			m0 |= ModeShare
-		case 'D':
+		case 'D', 'd':
 			m0 |= ModeDelete
-		case 'P':
+		case 'P', 'p':
 			m0 |= ModePres
-		case 'O':
+		case 'O', 'o':
 			m0 |= ModeOwner
-		case 'X':
+		case 'X', 'x':
 			m0 |= ModeBanned
-		case 'N':
+		case 'N', 'n':
 			m0 = 0 // N means explicitly no access, all other bits cleared
 			break
 		default:
@@ -493,7 +493,9 @@ type perUserData struct {
 type Topic struct {
 	ObjHeader
 	State int
-	Name  string
+
+	// Name  string -- topic name is stored in Id
+
 	// Use bearer token or use ACL
 	UseBt bool
 

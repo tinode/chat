@@ -143,9 +143,6 @@ func (a *RethinkDbAdapter) CreateDb(reset bool) error {
 	if _, err := rdb.DB("tinode").TableCreate("topics", rdb.TableCreateOpts{PrimaryKey: "Id"}).RunWrite(a.conn); err != nil {
 		return err
 	}
-	if _, err := rdb.DB("tinode").Table("topics").IndexCreate("Name").RunWrite(a.conn); err != nil {
-		return err
-	}
 
 	// Stored message
 	if _, err := rdb.DB("tinode").TableCreate("messages", rdb.TableCreateOpts{PrimaryKey: "Id"}).RunWrite(a.conn); err != nil {
@@ -333,8 +330,6 @@ func (a *RethinkDbAdapter) UserUpdate(uid t.Uid, update map[string]interface{}) 
 
 // TopicCreate creates a topic from template
 func (a *RethinkDbAdapter) TopicCreate(topic *t.Topic) error {
-	// Validated unique username, inserting user now
-	topic.SetUid(store.GetUid())
 	_, err := rdb.DB(a.dbName).Table("topics").Insert(&topic).RunWrite(a.conn)
 	return err
 }
@@ -361,15 +356,15 @@ func (a *RethinkDbAdapter) TopicCreateP2P(initiator, invited *t.Subscription) er
 	}
 
 	topic := &t.Topic{
-		Name:   initiator.Topic,
-		Access: t.DefaultAccess{Auth: t.ModeBanned, Anon: t.ModeBanned}}
+		ObjHeader: t.ObjHeader{Id: initiator.Topic},
+		Access:    t.DefaultAccess{Auth: t.ModeBanned, Anon: t.ModeBanned}}
 	topic.ObjHeader.MergeTimes(&initiator.ObjHeader)
 	return a.TopicCreate(topic)
 }
 
 func (a *RethinkDbAdapter) TopicGet(topic string) (*t.Topic, error) {
 	// Fetch topic by name
-	rows, err := rdb.DB(a.dbName).Table("topics").GetAllByIndex("Name", topic).Run(a.conn)
+	rows, err := rdb.DB(a.dbName).Table("topics").Get(topic).Run(a.conn)
 	if err != nil {
 		return nil, err
 	}
@@ -435,14 +430,14 @@ func (a *RethinkDbAdapter) TopicsForUser(uid t.Uid) ([]t.Subscription, error) {
 
 	if len(topq) > 0 {
 		// Fetch grp & p2p topics
-		rows, err = rdb.DB(a.dbName).Table("topics").GetAllByIndex("Name", topq...).Run(a.conn)
+		rows, err = rdb.DB(a.dbName).Table("topics").GetAll(topq...).Run(a.conn)
 		if err != nil {
 			return nil, err
 		}
 
 		var top t.Topic
 		for rows.Next(&top) {
-			sub = join[top.Name]
+			sub = join[top.Id]
 			sub.ObjHeader.MergeTimes(&top.ObjHeader)
 			sub.SetSeqId(top.SeqId)
 			sub.SetHardClearId(top.ClearId)
@@ -452,7 +447,7 @@ func (a *RethinkDbAdapter) TopicsForUser(uid t.Uid) ([]t.Subscription, error) {
 				subs = append(subs, sub)
 			} else {
 				// put back the updated value of a p2p subsription, will process further below
-				join[top.Name] = sub
+				join[top.Id] = sub
 			}
 		}
 
@@ -563,7 +558,7 @@ func (a *RethinkDbAdapter) TopicUpdateOnMessage(topic string, msg *t.Message) er
 
 		// All other messages
 	} else {
-		_, err = rdb.DB("tinode").Table("topics").GetAllByIndex("Name", topic).
+		_, err = rdb.DB("tinode").Table("topics").Get(topic).
 			Update(update, rdb.UpdateOpts{Durability: "soft"}).RunWrite(a.conn)
 	}
 
@@ -571,7 +566,7 @@ func (a *RethinkDbAdapter) TopicUpdateOnMessage(topic string, msg *t.Message) er
 }
 
 func (a *RethinkDbAdapter) TopicUpdate(topic string, update map[string]interface{}) error {
-	_, err := rdb.DB("tinode").Table("topics").GetAllByIndex("Name", topic).Update(update).RunWrite(a.conn)
+	_, err := rdb.DB("tinode").Table("topics").Get(topic).Update(update).RunWrite(a.conn)
 	return err
 }
 

@@ -11,7 +11,11 @@
    "status": {
     "text": "DND"
    },
-   "username": "alice"
+   "username": "alice",
+	"addressBook": ["email:bob@example.com", "email:carol@example.com", "email:dave@example.com",
+		"email:eve@example.com","email:frank@example.com","email:george@example.com","email:xena@example.com",
+		"tel:17025550001", "tel:17025550002", "tel:17025550003", "tel:17025550004", "tel:17025550005",
+		"tel:17025550006", "tel:17025550007", "tel:17025550008", "tel:17025550009"]
   },
   {
    "createdAt": "-138h",
@@ -24,7 +28,11 @@
    "public": {"fn": "Bob Smith", "photo": "./bob-64.jpg", "type": "jpg"},
    "state": 1,
    "status": "stuff",
-   "username": "bob"
+   "username": "bob",
+	"addressBook": ["email:alice@example.com", "email:carol@example.com", "email:dave@example.com",
+		"email:eve@example.com", "email:frank@example.com", "email:george@example.com", "email:xena@example.com",
+		"tel:17025550001", "tel:17025550002", "tel:17025550003", "tel:17025550004", "tel:17025550005",
+		"tel:17025550006", "tel:17025550007", "tel:17025550008", "tel:17025550009"]
   },
   {
    "createdAt": "-136h",
@@ -35,7 +43,11 @@
    "public": {"fn": "Carol Xmas", "photo": "./carol-64.jpg", "type": "jpg"},
    "state": 1,
    "status": "ho ho ho",
-   "username": "carol"
+   "username": "carol",
+	"addressBook": ["email:alice@example.com", "email:bob@example.com", "email:dave@example.com",
+		"email:eve@example.com", "email:frank@example.com", "email:george@example.com", "email:xena@example.com",
+		"tel:17025550001", "tel:17025550002", "tel:17025550003", "tel:17025550004", "tel:17025550005",
+		"tel:17025550006", "tel:17025550007", "tel:17025550008", "tel:17025550009"]
   },
   {
    "createdAt": "-134h",
@@ -46,7 +58,11 @@
    "public": {"fn": "Dave Goliathsson", "photo": "./dave-64.jpg", "type": "jpg"},
    "state": 1,
    "status": "hiding!",
-   "username": "dave"
+   "username": "dave",
+	"addressBook": ["email:alice@example.com", "email:bob@example.com", "email:carol@example.com",
+		"email:eve@example.com", "email:frank@example.com", "email:george@example.com", "email:xena@example.com",
+		"tel:17025550001", "tel:17025550002", "tel:17025550003", "tel:17025550004", "tel:17025550005",
+		"tel:17025550006", "tel:17025550007", "tel:17025550008", "tel:17025550009"]
   },
   {
    "createdAt": "-132h",
@@ -56,7 +72,11 @@
    "private": "apples?",
    "public": {"fn": "Eve Adams", "photo": "./eve-64.jpg", "type": "jpg"},
    "state": 1,
-   "username": "eve"
+   "username": "eve",
+	"addressBook": ["email:alice@example.com", "email:bob@example.com", "email:carol@example.com",
+		"email:dave@example.com", "email:george@example.com", "email:xena@example.com",
+		"tel:17025550001", "tel:17025550002", "tel:17025550003", "tel:17025550004", "tel:17025550005",
+		"tel:17025550006", "tel:17025550007", "tel:17025550008", "tel:17025550009"]
   },
   {
    "createdAt": "-131h",
@@ -67,7 +87,11 @@
    "public": {"fn": "Frank Singer"},
    "state": 2,
    "status": "singing!",
-   "username": "frank"
+   "username": "frank",
+	"addressBook": ["email:bob@example.com", "email:carol@example.com", "email:dave@example.com",
+		"email:eve@example.com", "email:george@example.com", "email:xena@example.com",
+		"tel:17025550001", "tel:17025550002", "tel:17025550003", "tel:17025550004", "tel:17025550005",
+		"tel:17025550007", "tel:17025550008", "tel:17025550009"]
   }
  ],
  "grouptopics": [
