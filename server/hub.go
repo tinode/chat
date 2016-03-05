@@ -332,6 +332,17 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 
 		t.cat = types.TopicCat_P2P
 
+		// Reject request if the topic already exists.
+		if stopic, err := store.Topics.Get(t.name); err != nil {
+			log.Println("hub: error while loading topic '" + t.name + "' (" + err.Error() + ")")
+			sreg.sess.QueueOut(ErrUnknown(sreg.pkt.Id, t.name, timestamp))
+			return
+		} else if stopic != nil {
+			log.Println("hub: topic '" + t.name + "' already exists")
+			sreg.sess.QueueOut(ErrAlreadyExists(sreg.pkt.Id, t.name, timestamp))
+			return
+		}
+
 		// t.owner is blank for p2p topics
 
 		// Ensure that other users are automatically rejected

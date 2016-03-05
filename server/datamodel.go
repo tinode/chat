@@ -289,6 +289,9 @@ type MsgTopicDesc struct {
 	Public    interface{} `json:"public,omitempty"`
 	// Per-subscription private data
 	Private interface{} `json:"private,omitempty"`
+
+	// P2P topic only, ID of the other user
+	With string `json:"with,omitempty"`
 }
 
 type MsgAccessMode struct {
@@ -534,7 +537,7 @@ func InfoNotModified(id, topic string, ts time.Time) *ServerComMessage {
 	msg := &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
 		Code:      http.StatusNotModified, // 304
-		Text:      "no action",
+		Text:      "not modified",
 		Topic:     topic,
 		Timestamp: ts}}
 	return msg
@@ -575,7 +578,7 @@ func ErrAuthUnknownScheme(id, topic string, ts time.Time) *ServerComMessage {
 	msg := &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
 		Code:      http.StatusUnauthorized, // 401
-		Text:      "unknown or missing authentication scheme",
+		Text:      "unknown authentication scheme",
 		Topic:     topic,
 		Timestamp: ts}}
 	return msg
@@ -646,6 +649,16 @@ func ErrGone(id, topic string, ts time.Time) *ServerComMessage {
 		Id:        id,
 		Code:      http.StatusGone, // 410
 		Text:      "gone",
+		Topic:     topic,
+		Timestamp: ts}}
+	return msg
+}
+
+func ErrAlreadyExists(id, topic string, ts time.Time) *ServerComMessage {
+	msg := &ServerComMessage{Ctrl: &MsgServerCtrl{
+		Id:        id,
+		Code:      http.StatusConflict, // 409
+		Text:      "already exists",
 		Topic:     topic,
 		Timestamp: ts}}
 	return msg

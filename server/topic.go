@@ -865,9 +865,10 @@ func (t *Topic) replyGetDesc(sess *Session, id string, created bool, opts *MsgGe
 	// Check if user requested modified data
 	updatedOnly := (opts == nil || opts.IfModifiedSince == nil || opts.IfModifiedSince.Before(t.updated))
 
-	desc := &MsgTopicDesc{
-		CreatedAt: &t.created,
-		UpdatedAt: &t.updated}
+	desc := &MsgTopicDesc{CreatedAt: &t.created}
+	if !t.updated.IsZero() {
+		desc.UpdatedAt = &t.updated
+	}
 
 	pud, full := t.perUser[sess.uid]
 
@@ -877,6 +878,15 @@ func (t *Topic) replyGetDesc(sess *Session, id string, created bool, opts *MsgGe
 		} else if full {
 			// p2p topic
 			desc.Public = pud.public
+		}
+	}
+
+	if t.cat == types.TopicCat_P2P {
+		for uid, _ := range t.perUser {
+			if uid.Compare(sess.uid) != 0 {
+				desc.With = uid.UserId()
+				break
+			}
 		}
 	}
 
