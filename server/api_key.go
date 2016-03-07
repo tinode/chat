@@ -35,30 +35,20 @@ import (
 	"bytes"
 	"crypto/hmac"
 	"crypto/md5"
-	"crypto/rand"
 	"encoding/base64"
 	"log"
 )
 
 // 32 random bytes to be used for signing auth tokens
 // FIXME(gene): move it to the database (make it unique per-application)
+// base64 = T713/rYYgW7g4m3vG6zGRh7+FM1t0T8j13koXScOAj4=
+/*
 var hmac_salt = []byte{
 	0x4f, 0xbd, 0x77, 0xfe, 0xb6, 0x18, 0x81, 0x6e,
 	0xe0, 0xe2, 0x6d, 0xef, 0x1b, 0xac, 0xc6, 0x46,
 	0x1e, 0xfe, 0x14, 0xcd, 0x6d, 0xd1, 0x3f, 0x23,
 	0xd7, 0x79, 0x28, 0x5d, 0x27, 0x0e, 0x02, 0x3e}
-
-// TODO(gene):change to use snowflake
-// getRandomString generates 72 bits of randomness, returns 12 char-long random-looking string
-func getRandomString() string {
-	buf := make([]byte, 9)
-	_, err := rand.Read(buf)
-	if err != nil {
-		panic("getRandomString: failed to generate a random string: " + err.Error())
-	}
-	//return base32.StdEncoding.EncodeToString(buf)
-	return base64.URLEncoding.EncodeToString(buf)
-}
+*/
 
 // Singned AppID. Composition:
 //   [1:algorithm version][4:appid][2:key sequence][1:isRoot][16:signature] = 24 bytes

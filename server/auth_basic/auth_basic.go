@@ -4,6 +4,7 @@ import (
 	"errors"
 	"log"
 	"strings"
+	"time"
 
 	"github.com/tinode/chat/server/auth"
 	"github.com/tinode/chat/server/store"
@@ -26,6 +27,10 @@ func parseSecret(secret string) (uname, password string, err int) {
 	password = secret[splitAt+1:]
 
 	return
+}
+
+func (BasicAuth) Init(unused string) error {
+	return nil
 }
 
 func (BasicAuth) AddRecord(uid types.Uid, secret string) (int, error) {
@@ -85,6 +90,10 @@ func (BasicAuth) IsUnique(secret string) (bool, error) {
 	}
 
 	return !uid.IsZero(), nil
+}
+
+func (BasicAuth) GenSecret(uid types.Uid, expires time.Time) (string, error) {
+	return "", errors.New("auth_basic.GenSecret: not supported")
 }
 
 func init() {

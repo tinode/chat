@@ -129,24 +129,18 @@ type perSubsData struct {
 	online bool
 }
 
-/*
-// Request to topic to shutdown
-type topicClose struct {
-	// Is topic is being deleted?
-	del bool
-	// Channel to report completion
-	done chan<- bool
-}
-*/
-
 // Session wants to leave the topic
 type sessionLeave struct {
 	// Session which initiated the request
 	sess *Session
 	// Leave and unsubscribe
 	unsub bool
+	// Topic to report success of failure on
+	topic string
+	// ID of originating request, if any
+	reqId string
 	// Originating request
-	pkt *ClientComMessage
+	//pkt *ClientComMessage
 }
 
 func (t *Topic) run(hub *Hub) {
@@ -193,19 +187,11 @@ func (t *Topic) run(hub *Hub) {
 			now := time.Now().UTC().Round(time.Millisecond)
 
 			if leave.unsub {
-				// User wants to unsubscribe.
-
-				// Delete user's subscription from the database
-				if err := store.Subs.Delete(t.name, leave.sess.uid); err != nil {
-					if leave.pkt != nil {
-						leave.sess.QueueOut(ErrUnknown(leave.pkt.Leave.Id, leave.pkt.Leave.Topic, now))
-					}
-					log.Println(err)
+				// User wants to leave and unsubscribe.
+				if err := t.replyLeaveUnsub(hub, leave.sess, leave.reqId, leave.topic); err != nil {
+					log.Panicln(err)
 					continue
 				}
-
-				// evict all user's sessions and clear cached data
-				t.evictUser(leave.sess.uid, true, leave.sess)
 
 			} else {
 				// Just leaving the topic without unsubscribing
@@ -239,8 +225,8 @@ func (t *Topic) run(hub *Hub) {
 				killTimer.Reset(keepAlive)
 			}
 
-			if leave.pkt != nil {
-				leave.sess.QueueOut(NoErr(leave.pkt.Leave.Id, leave.pkt.Leave.Topic, now))
+			if leave.reqId != "" {
+				leave.sess.QueueOut(NoErr(leave.reqId, leave.topic, now))
 			}
 
 		case msg := <-t.broadcast:
@@ -1290,15 +1276,14 @@ func (t *Topic) replyDelMsg(sess *Session, del *MsgClientDel) error {
 	return nil
 }
 
-// 1 Topic checks if requester is the owner
-// 2 Topic evicts all sessions
-// 3 Topic asks hub to unregister
-// 4 Topic exits the run() loop
+// 1. Checks if the requester is the owner. If so:
+// 1.2 Evict all sessions
+// 1.3 Ask hub to unregister self
+// 1.4 Exit the run() loop
+// 2. If requester is not the owner, treat it like {leave unsub=true}
 func (t *Topic) replyDelTopic(h *Hub, sess *Session, del *MsgClientDel) error {
-	now := time.Now().UTC().Round(time.Millisecond)
 	if t.owner != sess.uid {
-		simpleByteSender(sess.send, ErrPermissionDenied(del.Id, t.original, now))
-		return errors.New("only the owner can delete a topic")
+		return t.replyLeaveUnsub(h, sess, del.Id, t.original)
 	}
 
 	t.evictAll()
@@ -1307,6 +1292,24 @@ func (t *Topic) replyDelTopic(h *Hub, sess *Session, del *MsgClientDel) error {
 		topic: t.name,
 		sess:  sess,
 		del:   true}
+
+	return nil
+}
+
+func (t *Topic) replyLeaveUnsub(h *Hub, sess *Session, id, topic string) error {
+	now := time.Now().UTC().Round(time.Millisecond)
+
+	// Delete user's subscription from the database
+	if err := store.Subs.Delete(t.name, sess.uid); err != nil {
+		if id != "" {
+			sess.QueueOut(ErrUnknown(id, topic, now))
+		}
+
+		return err
+	}
+
+	// Evict all user's sessions and clear cached data
+	t.evictUser(sess.uid, true, sess)
 
 	return nil
 }

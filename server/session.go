@@ -260,17 +260,18 @@ func (s *Session) leave(msg *ClientComMessage) {
 	}
 
 	if sub, ok := s.subs[topic]; ok {
-		// Session has joined the topic
+		// Session is attached to the topic.
 		if (msg.Leave.Topic == "me" || msg.Leave.Topic == "fnd") && msg.Leave.Unsub {
 			// User should not unsubscribe from 'me' or 'find'. Just leaving is fine.
 			s.QueueOut(ErrPermissionDenied(msg.Leave.Id, msg.Leave.Topic, msg.timestamp))
 		} else {
 			// Unlink from topic, topic will send a reply.
 			delete(s.subs, topic)
-			sub.done <- &sessionLeave{sess: s, unsub: msg.Leave.Unsub, pkt: msg}
+			sub.done <- &sessionLeave{
+				sess: s, unsub: msg.Leave.Unsub, topic: msg.Leave.Topic, reqId: msg.Leave.Id}
 		}
 	} else if !msg.Leave.Unsub {
-		// Sessions has not joined the topic, wants to leave - fine, no change
+		// Session is not attached to the topic, wants to leave - fine, no change
 		s.QueueOut(InfoNotJoined(msg.Leave.Id, msg.Leave.Topic, msg.timestamp))
 	} else {
 		// Session wants to unsubscribe from the topic it did not join
@@ -532,17 +533,16 @@ func (s *Session) del(msg *ClientComMessage) {
 			what:  what}
 
 	} else if what == constMsgDelTopic {
-		// FIXME(gene): allow topic deletion without joining the topic first
 		globals.hub.unreg <- &topicUnreg{
-			topic:    expanded,
-			msg:      msg,
-			sess:     s,
-			unsubbed: true,
-			del:      true}
+			topic:       expanded,
+			msg:         msg,
+			sess:        s,
+			fromSession: true,
+			del:         true}
 	} else {
-		// Must join the topic first to delete messages
-		s.QueueOut(ErrMalformed(msg.Del.Id, original, msg.timestamp))
-		log.Println("s.del: invalid Del action (unsub) '" + msg.Del.What + "'")
+		// Must join the topic first to delete messages.
+		s.QueueOut(ErrAttachFirst(msg.Del.Id, original, msg.timestamp))
+		log.Println("s.del: invalid Del action while unsubbed '" + msg.Del.What + "'")
 	}
 }
 

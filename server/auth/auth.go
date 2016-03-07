@@ -1,6 +1,8 @@
 package auth
 
 import (
+	"time"
+
 	"github.com/tinode/chat/server/store/types"
 )
 
@@ -15,10 +17,15 @@ const (
 	ErrFailed
 	// Duplicate credential
 	ErrDuplicate
+	// The operation is unsupported
+	ErrUnsupported
 )
 
 // Interface which auth providers must implement
 type AuthHandler interface {
+	// Initialize the handler
+	Init(jsonconf string) error
+
 	// Add persistent record to database. Returns an error and a bool
 	// to indicate if the error is due to a duplicate (true) or some other error.
 	// store.AddAuthRecord("scheme", "unique", "secret")
@@ -33,4 +40,7 @@ type AuthHandler interface {
 	// E.g. if login is unique.
 	// store.GetAuthRecord(scheme, unique)
 	IsUnique(secret string) (bool, error)
+
+	// Generate a new secret, if appropriate.
+	GenSecret(uid types.Uid, expires time.Time) (string, error)
 }

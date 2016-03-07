@@ -638,17 +638,7 @@ func ErrAttachFirst(id, topic string, ts time.Time) *ServerComMessage {
 	msg := &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
 		Code:      http.StatusConflict, // 409
-		Text:      "must attach to unsubscribe",
-		Topic:     topic,
-		Timestamp: ts}}
-	return msg
-}
-
-func ErrGone(id, topic string, ts time.Time) *ServerComMessage {
-	msg := &ServerComMessage{Ctrl: &MsgServerCtrl{
-		Id:        id,
-		Code:      http.StatusGone, // 410
-		Text:      "gone",
+		Text:      "must attach first",
 		Topic:     topic,
 		Timestamp: ts}}
 	return msg
@@ -659,6 +649,16 @@ func ErrAlreadyExists(id, topic string, ts time.Time) *ServerComMessage {
 		Id:        id,
 		Code:      http.StatusConflict, // 409
 		Text:      "already exists",
+		Topic:     topic,
+		Timestamp: ts}}
+	return msg
+}
+
+func ErrGone(id, topic string, ts time.Time) *ServerComMessage {
+	msg := &ServerComMessage{Ctrl: &MsgServerCtrl{
+		Id:        id,
+		Code:      http.StatusGone, // 410
+		Text:      "gone",
 		Topic:     topic,
 		Timestamp: ts}}
 	return msg
