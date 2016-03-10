@@ -344,7 +344,6 @@ func (m *AccessMode) UnmarshalText(b []byte) error {
 
 	*m = m0
 	return nil
-
 }
 
 func (m AccessMode) String() string {

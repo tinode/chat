@@ -19,6 +19,8 @@ const (
 	ErrDuplicate
 	// The operation is unsupported
 	ErrUnsupported
+	// Secret has expired
+	ErrExpired
 )
 
 // Interface which auth providers must implement
@@ -26,15 +28,15 @@ type AuthHandler interface {
 	// Initialize the handler
 	Init(jsonconf string) error
 
-	// Add persistent record to database. Returns an error and a bool
-	// to indicate if the error is due to a duplicate (true) or some other error.
+	// Add persistent record to database. Returns a numeric error code to indicate
+	// if the error is due to a duplicate or some other error.
 	// store.AddAuthRecord("scheme", "unique", "secret")
-	AddRecord(uid types.Uid, secret string) (int, error)
+	AddRecord(uid types.Uid, secret string, expires time.Time) (int, error)
 
 	// Given a user-provided authentication secret (such as "login:password"
-	// return user ID or error
+	// return user ID, time when the secret expires (zero, if never) or an error code.
 	// store.Users.GetAuthRecord("scheme", "unique")
-	Authenticate(secret string) (types.Uid, int, error)
+	Authenticate(secret string) (types.Uid, time.Time, int)
 
 	// Verify if the provided secret can be considered unique by the auth scheme
 	// E.g. if login is unique.

@@ -239,7 +239,7 @@ func (s *Session) subscribe(msg *ClientComMessage) {
 		return
 	}
 
-	//log.Printf("Sub to '%s' (%s) from '%s' as '%s' -- OK!", expanded, msg.Sub.Topic, msg.from, topic)
+	//log.Printf("Sub to'%s' (%s) from '%s' as '%s' -- OK!", expanded, msg.Sub.Topic, msg.from, topic)
 	globals.hub.join <- &sessionJoin{topic: expanded, pkt: msg.Sub, sess: s}
 	// Hub will send Ctrl success/failure packets back to session
 }
@@ -321,7 +321,7 @@ func (s *Session) login(msg *ClientComMessage) {
 		return
 	}
 
-	uid, errType, err := handler.Authenticate(msg.Login.Secret)
+	uid, expires, errType := handler.Authenticate(msg.Login.Secret)
 	if errType == auth.ErrMalformed {
 		s.QueueOut(ErrMalformed(msg.Login.Id, "", msg.timestamp))
 		return
@@ -329,12 +329,11 @@ func (s *Session) login(msg *ClientComMessage) {
 
 	// DB error
 	if errType == auth.ErrInternal {
-		log.Println(err)
 		s.QueueOut(ErrUnknown(msg.Login.Id, "", msg.timestamp))
 		return
 	}
 
-	// Invalid login or password
+	// All other errors are reported as invalid login or password
 	if uid.IsZero() {
 		s.QueueOut(ErrAuthFailed(msg.Login.Id, "", msg.timestamp))
 		return
@@ -343,12 +342,23 @@ func (s *Session) login(msg *ClientComMessage) {
 	s.uid = uid
 	s.userAgent = msg.Login.UserAgent
 
+	if msg.Login.Scheme != "token" {
+		handler = store.GetAuthHandler("token")
+	}
+
+	tokenExp := msg.timestamp.Add(globals.tokenExpiresIn)
+	if !expires.IsZero() && tokenExp.After(expires) {
+		tokenExp = expires
+	}
+	// Token GenSecret never fails, ignore the error
+	secret, _ := handler.GenSecret(uid, expires)
+
 	s.QueueOut(&ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        msg.Login.Id,
 		Code:      http.StatusOK,
 		Text:      http.StatusText(http.StatusOK),
 		Timestamp: msg.timestamp,
-		Params:    map[string]interface{}{"uid": uid.UserId()}}})
+		Params:    map[string]interface{}{"uid": uid.UserId(), "token": secret, "expires": tokenExp}}})
 
 }
 

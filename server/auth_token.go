@@ -52,40 +52,40 @@ func (TokenAuth) Init(jsonconf string) error {
 	return nil
 }
 
-func (TokenAuth) AddRecord(uid types.Uid, secret string) (int, error) {
+func (TokenAuth) AddRecord(uid types.Uid, secret string, expires time.Time) (int, error) {
 	return auth.ErrUnsupported, nil
 }
 
-func (TokenAuth) Authenticate(token string) (types.Uid, int, error) {
+func (TokenAuth) Authenticate(token string) (types.Uid, time.Time, int) {
+	var zeroTime time.Time
 	// [8:UID][4:expires][32:signature] == 44 bytes
 
 	if declen := base64.URLEncoding.DecodedLen(len(token)); declen != token_len {
-		return types.ZeroUid, auth.ErrMalformed, nil
+		return types.ZeroUid, zeroTime, auth.ErrMalformed
 	}
 
 	data, err := base64.URLEncoding.DecodeString(token)
 	if err != nil {
-		return types.ZeroUid, auth.ErrMalformed, nil
+		return types.ZeroUid, zeroTime, auth.ErrMalformed
 	}
 
 	var uid types.Uid
 	if err := uid.UnmarshalBinary(data[0:8]); err != nil {
-		return types.ZeroUid, auth.ErrMalformed, nil
+		return types.ZeroUid, zeroTime, auth.ErrMalformed
 	}
 
 	hasher := hmac.New(sha256.New, hmac_salt)
 	hasher.Write(data[:12])
 	if !hmac.Equal(data[12:], hasher.Sum(nil)) {
-		return types.ZeroUid, auth.ErrFailed, nil
+		return types.ZeroUid, zeroTime, auth.ErrFailed
 	}
 
 	expires := time.Unix(int64(binary.LittleEndian.Uint32(data[8:12])), 0).UTC()
 	if expires.Before(time.Now()) {
-		return types.ZeroUid, auth.ErrFailed, nil
+		return types.ZeroUid, zeroTime, auth.ErrExpired
 	}
 
-	return uid, auth.NoErr, nil
-
+	return uid, expires, auth.NoErr
 }
 
 func (TokenAuth) GenSecret(uid types.Uid, expires time.Time) (string, error) {

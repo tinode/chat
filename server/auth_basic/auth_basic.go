@@ -33,7 +33,7 @@ func (BasicAuth) Init(unused string) error {
 	return nil
 }
 
-func (BasicAuth) AddRecord(uid types.Uid, secret string) (int, error) {
+func (BasicAuth) AddRecord(uid types.Uid, secret string, expires time.Time) (int, error) {
 	uname, password, fail := parseSecret(secret)
 	if fail != auth.NoErr {
 		return fail, errors.New("basic auth handler: malformed secret")
@@ -43,7 +43,7 @@ func (BasicAuth) AddRecord(uid types.Uid, secret string) (int, error) {
 	if err != nil {
 		return auth.ErrInternal, err
 	}
-	err, dup := store.Users.AddAuthRecord(uid, "basic", uname, passhash)
+	err, dup := store.Users.AddAuthRecord(uid, "basic", uname, passhash, expires)
 	if dup {
 		return auth.ErrDuplicate, err
 	} else if err != nil {
@@ -52,29 +52,32 @@ func (BasicAuth) AddRecord(uid types.Uid, secret string) (int, error) {
 	return auth.NoErr, nil
 }
 
-func (BasicAuth) Authenticate(secret string) (types.Uid, int, error) {
+func (BasicAuth) Authenticate(secret string) (types.Uid, time.Time, int) {
 	uname, password, fail := parseSecret(secret)
 	if fail != auth.NoErr {
-		return types.ZeroUid, fail, nil
+		return types.ZeroUid, time.Time{}, fail
 	}
 
-	uid, passhash, err := store.Users.GetAuthRecord("basic", uname)
+	uid, passhash, expires, err := store.Users.GetAuthRecord("basic", uname)
 	if err != nil {
 		log.Println(err)
-		return types.ZeroUid, auth.ErrInternal, err
+		return types.ZeroUid, time.Time{}, auth.ErrInternal
 	} else if uid.IsZero() {
 		// Invalid login.
-		return types.ZeroUid, auth.ErrFailed, nil
+		return types.ZeroUid, time.Time{}, auth.ErrFailed
+	} else if !expires.IsZero() && expires.Before(time.Now()) {
+		// The record has expired
+		return types.ZeroUid, time.Time{}, auth.ErrExpired
 	}
 
 	err = bcrypt.CompareHashAndPassword([]byte(passhash), []byte(password))
 	if err != nil {
 		log.Println(err)
 		// Invalid password
-		return types.ZeroUid, auth.ErrFailed, nil
+		return types.ZeroUid, time.Time{}, auth.ErrFailed
 	}
 
-	return uid, auth.NoErr, nil
+	return uid, expires, auth.NoErr
 
 }
 
@@ -84,7 +87,7 @@ func (BasicAuth) IsUnique(secret string) (bool, error) {
 		return false, errors.New("auth_basic.IsUnique: malformed secret")
 	}
 
-	uid, _, err := store.Users.GetAuthRecord("basic", uname)
+	uid, _, _, err := store.Users.GetAuthRecord("basic", uname)
 	if err != nil {
 		return false, err
 	}

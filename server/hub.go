@@ -307,7 +307,8 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 
 		// 'fnd' has no owner, t.owner = nil
 
-		// Ensure all requests to subscribe are automatically rejected
+		// The p2p topic cannot be accessed by anyone but the 2 participants. Access is checked at the session level.
+		// Set default access in case user leaves - joins.
 		t.accessAuth = types.ModeBanned
 		t.accessAnon = types.ModeBanned
 
@@ -326,173 +327,212 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		// Publishing to Find is not supported
 		// t.lastId = 0
 
-		// Request to create a new p2p topic, then attach to it. The topic may already exist!
-	} else if strings.HasPrefix(t.original, "usr") {
-		log.Println("hub: new p2p topic")
+		// Request to load an existing or create a new p2p topic, then attach to it.
+	} else if strings.HasPrefix(t.original, "usr") || strings.HasPrefix(t.original, "p2p") {
+		log.Println("hub: loading or creating p2p topic")
+
+		// Handle the following cases:
+		// 1. Neither topic nor subscriptions exist: create a new p2p topic & subscriptions.
+		// 2. Topic exists, one of the subscriptions is missing:
+		// 2.1 Requester's subscription is missing, recreate it.
+		// 2.2 Other user's subscription is missing, treat like a new request for user 2.
+		// 3. Topic exists, both subscriptions are missing: should not happen, fail.
+		// 4. Topic and both subscriptions exist: attach to topic
 
 		t.cat = types.TopicCat_P2P
 
-		// Reject request if the topic already exists.
-		if stopic, err := store.Topics.Get(t.name); err != nil {
+		// Check if the topic already exists
+		stopic, err := store.Topics.Get(t.name)
+		if err != nil {
 			log.Println("hub: error while loading topic '" + t.name + "' (" + err.Error() + ")")
 			sreg.sess.QueueOut(ErrUnknown(sreg.pkt.Id, t.name, timestamp))
 			return
-		} else if stopic != nil {
-			log.Println("hub: topic '" + t.name + "' already exists")
-			sreg.sess.QueueOut(ErrAlreadyExists(sreg.pkt.Id, t.name, timestamp))
-			return
+		}
+
+		// If topic exists, load subscriptions
+		var subs []types.Subscription
+		if stopic != nil {
+			// Subs already have Public swapped
+			if subs, err = store.Topics.GetSubs(t.name); err != nil {
+				log.Println("hub: cannot load subscritions for '" + t.name + "' (" + err.Error() + ")")
+				sreg.sess.QueueOut(ErrUnknown(sreg.pkt.Id, t.name, timestamp))
+				return
+			}
+
+			// Case 3, fail
+			if len(subs) == 0 {
+				log.Println("hub: missing both subscriptions for '" + t.name + "' (SHOULD NEVER HAPPEN!)")
+				sreg.sess.QueueOut(ErrUnknown(sreg.pkt.Id, t.name, timestamp))
+				return
+			}
+
+			t.created = stopic.CreatedAt
+			t.updated = stopic.UpdatedAt
+
+			t.lastId = stopic.SeqId
 		}
 
 		// t.owner is blank for p2p topics
 
 		// Ensure that other users are automatically rejected
-		t.accessAuth = types.ModeBanned
+		t.accessAuth = types.ModeP2P
 		t.accessAnon = types.ModeBanned
 
-		var userData perUserData
-		if sreg.pkt.Set != nil && sreg.pkt.Set.Desc != nil && !isNullValue(sreg.pkt.Set.Desc.Private) {
-			// t.public is not used for p2p topics since each user get a different public
+		// t.public is not used for p2p topics since each user get a different public
 
-			userData.private = sreg.pkt.Set.Desc.Private
-			// Init.DefaultAcs and Init.Public are ignored for p2p topics
-		}
 		// Custom default access levels set in sreg.pkt.Init.DefaultAcs are ignored
 
-		// Fetch user's public and default access
-		userId1 := sreg.sess.uid
-		userId2 := types.ParseUserId(t.original)
-		users, err := store.Users.GetAll(userId1, userId2)
-		if err != nil {
-			log.Println("hub: failed to load users for '" + t.name + "' (" + err.Error() + ")")
-			sreg.sess.QueueOut(ErrUnknown(sreg.pkt.Id, t.name, timestamp))
-			return
-		} else if len(users) != 2 {
-			// invited user does not exist
-			log.Println("hub: missing user for '" + t.name + "'")
-			sreg.sess.QueueOut(ErrUserNotFound(sreg.pkt.Id, t.name, timestamp))
-			return
-		}
+		if stopic != nil && len(subs) == 2 {
+			// Case 4.
 
-		var u1, u2 int
-		if users[0].Uid() == userId1 {
-			u1 = 0
-			u2 = 1
-		} else {
-			u1 = 1
-			u2 = 0
-		}
+			log.Println("hub: existing p2p topic")
 
-		// User may set non-default access to topic, just make sure it's no higher than the default
-		if sreg.pkt.Set != nil && sreg.pkt.Set.Sub != nil && sreg.pkt.Set.Sub.Mode != "" {
-			if err := userData.modeWant.UnmarshalText([]byte(sreg.pkt.Set.Sub.Mode)); err != nil {
-				log.Println("hub: invalid access mode for topic '" + t.name + "': '" + sreg.pkt.Set.Sub.Mode + "'")
-				userData.modeWant = types.ModeP2P
-			} else {
-				userData.modeWant &= types.ModeP2P
+			// t.clearId is not used in P2P topics, may change later
+
+			for i := 0; i < 2; i++ {
+				uid := types.ParseUid(subs[i].User)
+				t.perUser[uid] = perUserData{
+					// Adapter already swapped the public values
+					public:  subs[i].GetPublic(),
+					private: subs[i].Private,
+					// lastSeenTag: subs[i].LastSeen,
+					modeWant:  subs[i].ModeWant,
+					modeGiven: subs[i].ModeGiven}
 			}
-		} else if users[u1].Access.Auth != types.ModeNone {
-			userData.modeWant = users[u1].Access.Auth
+
 		} else {
-			userData.modeWant = types.ModeP2P
-		}
+			// Cases 1, 2
 
-		user1 := &types.Subscription{
-			User:      userId1.String(),
-			Topic:     t.name,
-			ModeWant:  userData.modeWant,
-			ModeGiven: types.ModeP2P,
-			Private:   userData.private}
-		user1.SetPublic(users[u1].Public)
-		user2 := &types.Subscription{
-			User:      userId2.String(),
-			Topic:     t.name,
-			ModeWant:  users[u2].Access.Auth,
-			ModeGiven: types.ModeP2P,
-			Private:   nil}
-		user2.SetPublic(users[u2].Public)
+			log.Println("hub: p2p new topic or one of the subs missing")
 
-		err = store.Topics.CreateP2P(user1, user2)
-		if err != nil {
-			log.Println("hub: databse error in creating subscriptions '" + t.name + "' (" + err.Error() + ")")
-			sreg.sess.QueueOut(ErrUnknown(sreg.pkt.Id, t.name, timestamp))
-			return
-		}
+			var userData perUserData
 
-		// t.public is not used for p2p topics since each user gets a different public
+			// Fetching records for both users.
+			// Requester.
+			userId1 := sreg.sess.uid
+			// The other user.
+			userId2 := types.ParseUserId(t.original)
+			var u1, u2 int
+			users, err := store.Users.GetAll(userId1, userId2)
+			if err != nil {
+				log.Println("hub: failed to load users for '" + t.name + "' (" + err.Error() + ")")
+				sreg.sess.QueueOut(ErrUnknown(sreg.pkt.Id, t.name, timestamp))
+				return
+			} else if len(users) != 2 {
+				// Invited user does not exist
+				log.Println("hub: missing user for '" + t.name + "'")
+				sreg.sess.QueueOut(ErrUserNotFound(sreg.pkt.Id, t.name, timestamp))
+				return
+			} else {
+				// User records are unsorted, make sure we know who is who.
+				if users[0].Uid() == userId1 {
+					u1, u2 = 0, 1
+				} else {
+					u1, u2 = 1, 0
+				}
+			}
+			// Figure out which subscriptions are missing: User1's, User2's or both.
+			var sub1, sub2 *types.Subscription
+			// Set to true if only requester's subscription was created
+			var user1only bool
+			if len(subs) == 1 {
+				// User1's subscription is missing
+				if subs[0].Uid() == userId1 {
+					sub1 = &subs[0]
+				} else {
+					sub2 = &subs[0]
+					user1only = true
+				}
+			}
 
-		t.created = user1.CreatedAt
-		t.updated = user1.UpdatedAt
+			if sub1 == nil {
+				if sreg.pkt.Set != nil && sreg.pkt.Set.Desc != nil && !isNullValue(sreg.pkt.Set.Desc.Private) {
+					userData.private = sreg.pkt.Set.Desc.Private
+					// Init.DefaultAcs and Init.Public are ignored for p2p topics
+				}
 
-		// t.lastId is not set (default 0) for new topics
-		// t.clearId is not currently used for p2p topics
+				// User may set non-default access to topic, just make sure it's no higher than the default
+				if sreg.pkt.Set != nil && sreg.pkt.Set.Sub != nil && sreg.pkt.Set.Sub.Mode != "" {
+					if err := userData.modeWant.UnmarshalText([]byte(sreg.pkt.Set.Sub.Mode)); err != nil {
+						log.Println("hub: invalid access mode for topic '" + t.name + "': '" + sreg.pkt.Set.Sub.Mode + "'")
+						userData.modeWant = types.ModeP2P
+					} else {
+						// FIXME(gene): check for Mode.Banned
+						userData.modeWant &= types.ModeP2P
+					}
+				} else if users[u1].Access.Auth != types.ModeNone {
+					userData.modeWant = users[u1].Access.Auth
+				} else {
+					userData.modeWant = types.ModeP2P
+				}
 
-		userData.public = user2.GetPublic()
-		userData.modeWant = user1.ModeWant
-		userData.modeGiven = user1.ModeGiven
-		t.perUser[userId1] = userData
+				sub1 = &types.Subscription{
+					User:      userId1.String(),
+					Topic:     t.name,
+					ModeWant:  userData.modeWant,
+					ModeGiven: types.ModeP2P,
+					Private:   userData.private}
+				// Swap Public to match swapped Public in subs returned from store.Topics.GetSubs
+				sub1.SetPublic(users[u2].Public)
+			}
 
-		t.perUser[userId2] = perUserData{
-			public:    user1.GetPublic(),
-			modeWant:  user2.ModeWant,
-			modeGiven: user2.ModeGiven,
+			if sub2 == nil {
+				sub2 = &types.Subscription{
+					User:      userId2.String(),
+					Topic:     t.name,
+					ModeWant:  users[u2].Access.Auth,
+					ModeGiven: types.ModeP2P,
+					Private:   nil}
+				// Swap Public to match swapped Public in subs returned from store.Topics.GetSubs
+				sub2.SetPublic(users[u1].Public)
+			}
+
+			// Create everything
+			if stopic == nil {
+				if err = store.Topics.CreateP2P(sub1, sub2); err != nil {
+					log.Println("hub: databse error in creating subscriptions '" + t.name + "' (" + err.Error() + ")")
+					sreg.sess.QueueOut(ErrUnknown(sreg.pkt.Id, t.name, timestamp))
+					return
+				}
+
+				t.created = sub1.CreatedAt
+				t.updated = sub1.UpdatedAt
+
+				// t.lastId is not set (default 0) for new topics
+
+			} else {
+				// Recreate one of the subscriptions
+				var subToMake *types.Subscription
+				if user1only {
+					subToMake = sub1
+				} else {
+					subToMake = sub2
+				}
+				if err = store.Subs.Create(subToMake); err != nil {
+					log.Println("hub: databse error in re-subscribing user '" + t.name + "' (" + err.Error() + ")")
+					sreg.sess.QueueOut(ErrUnknown(sreg.pkt.Id, t.name, timestamp))
+					return
+				}
+			}
+
+			// t.clearId is not currently used for p2p topics
+
+			// Publics is already swapped
+			userData.public = sub1.GetPublic()
+			userData.modeWant = sub1.ModeWant
+			userData.modeGiven = sub1.ModeGiven
+			t.perUser[userId1] = userData
+
+			t.perUser[userId2] = perUserData{
+				public:    sub2.GetPublic(),
+				modeWant:  sub2.ModeWant,
+				modeGiven: sub2.ModeGiven,
+			}
+
+			sreg.created = !user1only
 		}
 
 		t.original = t.name
-		sreg.created = true
-
-		// Load an existing p2p topic
-	} else if strings.HasPrefix(t.name, "p2p") {
-		log.Println("hub: existing p2p topic")
-
-		t.cat = types.TopicCat_P2P
-
-		// t.owner no valid owner for p2p topics, leave blank
-
-		// Ensure that other users are automatically rejected
-		t.accessAuth = types.ModeBanned
-		t.accessAnon = types.ModeBanned
-
-		// Load the topic object
-		stopic, err := store.Topics.Get(t.name)
-		if err != nil {
-			log.Println("hub: error while loading topic '" + t.name + "' (" + err.Error() + ")")
-			sreg.sess.QueueOut(ErrUnknown(sreg.pkt.Id, t.original, timestamp))
-			return
-		} else if stopic == nil {
-			log.Println("hub: topic '" + t.name + "' does not exist")
-			sreg.sess.QueueOut(ErrTopicNotFound(sreg.pkt.Id, t.original, timestamp))
-			return
-		}
-
-		subs, err := store.Topics.GetSubs(t.name)
-		if err != nil {
-			log.Println("hub: cannot load subscritions for '" + t.name + "' (" + err.Error() + ")")
-			sreg.sess.QueueOut(ErrUnknown(sreg.pkt.Id, t.name, timestamp))
-			return
-		} else if len(subs) != 2 {
-			log.Println("hub: invalid number of subscriptions for '" + t.name + "'")
-			sreg.sess.QueueOut(ErrTopicNotFound(sreg.pkt.Id, t.name, timestamp))
-			return
-		}
-
-		// t.public is not used for p2p topics since each user gets a different public
-
-		t.created = stopic.CreatedAt
-		t.updated = stopic.UpdatedAt
-
-		t.lastId = stopic.SeqId
-		// t.clearId is not used in P2P topics, may change later
-
-		for i := 0; i < 2; i++ {
-			uid := types.ParseUid(subs[i].User)
-			t.perUser[uid] = perUserData{
-				// Adapter already swapped the public values
-				public:  subs[i].GetPublic(),
-				private: subs[i].Private,
-				// lastSeenTag: subs[i].LastSeen,
-				modeWant:  subs[i].ModeWant,
-				modeGiven: subs[i].ModeGiven}
-		}
 
 		// Processing request to create a new generic (group) topic:
 	} else if t.original == "new" {
@@ -687,7 +727,6 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, fro
 		h.topicsLive.Add(-1)
 		t.sessions = nil
 		close(t.reg)
-		close(t.unreg)
 		close(t.broadcast)
 
 	} else if del {
@@ -710,9 +749,13 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, fro
 		// Cases 1.1.6, 1.1.7, 3.1.2, 3.1.3
 		if err := store.Topics.Delete(topic); err != nil {
 			simpleByteSender(sess.send, ErrUnknown(msg.Del.Id, msg.Del.Topic, now))
-		} else {
-			simpleByteSender(sess.send, NoErr(msg.Del.Id, msg.Del.Topic, now))
+			return
 		}
+	}
+
+	// sess && msg could be nil if the topic is being killed by timer
+	if sess != nil {
+		simpleByteSender(sess.send, NoErr(msg.Del.Id, msg.Del.Topic, now))
 	}
 }
 

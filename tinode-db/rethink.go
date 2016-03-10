@@ -75,7 +75,7 @@ func gen_rethink(reset bool, dbsource string, data *Data) {
 
 		// Add authentication record
 		auth_handler := store.GetAuthHandler("basic")
-		if _, err = auth_handler.AddRecord(user.Uid(), uu["username"].(string)+":"+uu["passhash"].(string)); err != nil {
+		if _, err = auth_handler.AddRecord(user.Uid(), uu["username"].(string)+":"+uu["passhash"].(string), time.Time{}); err != nil {
 			log.Fatal(err)
 		}
 		nameIndex[uu["username"].(string)] = user.Id
@@ -211,7 +211,7 @@ func gen_rethink(reset bool, dbsource string, data *Data) {
 
 		log.Printf("Sharing '%s' with '%s'", ss["topic"].(string), ss["user"].(string))
 
-		if err = store.Subs.Create(types.Subscription{
+		if err = store.Subs.Create(&types.Subscription{
 			ObjHeader: types.ObjHeader{CreatedAt: getCreatedTime(ss["createdAt"])},
 			User:      u1,
 			Topic:     name,

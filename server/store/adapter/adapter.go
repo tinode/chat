@@ -18,8 +18,8 @@ type Adapter interface {
 
 	// User management
 	UserCreate(usr *t.User) (err error, dupeUserName bool)
-	GetAuthRecord(unique string) (t.Uid, []byte, error)
-	AddAuthRecord(user t.Uid, unique string, secret []byte) (error, bool)
+	GetAuthRecord(unique string) (t.Uid, []byte, time.Time, error)
+	AddAuthRecord(user t.Uid, unique string, secret []byte, expires time.Time) (error, bool)
 	DelAuthRecord(unique string) (int, error)
 	DelAllAuthRecords(uid t.Uid) (int, error)
 	UpdAuthRecord(unique string, secret []byte) (int, error)
@@ -43,7 +43,7 @@ type Adapter interface {
 	TopicsForUser(uid t.Uid) ([]t.Subscription, error)
 	// UsersForTopic loads users' subscriptions for a given topic
 	UsersForTopic(topic string) ([]t.Subscription, error)
-	TopicShare(acl []t.Subscription) (int, error)
+	TopicShare(subs []*t.Subscription) (int, error)
 	TopicDelete(topic string) error
 	TopicUpdateOnMessage(topic string, msg *t.Message) error
 	TopicUpdate(topic string, update map[string]interface{}) error

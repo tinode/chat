@@ -84,7 +84,7 @@ func checkApiKey(apikey string) (isValid, isRoot bool) {
 		return
 	}
 
-	hasher := hmac.New(md5.New, hmac_salt)
+	hasher := hmac.New(md5.New, globals.apiKeySalt)
 	hasher.Write(data[:APIKEY_VERSION+APIKEY_APPID+APIKEY_SEQUENCE+APIKEY_WHO])
 	check := hasher.Sum(nil)
 	if !bytes.Equal(data[APIKEY_VERSION+APIKEY_APPID+APIKEY_SEQUENCE+APIKEY_WHO:], check) {

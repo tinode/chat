@@ -184,8 +184,6 @@ func (t *Topic) run(hub *Hub) {
 		case leave := <-t.unreg:
 			// Remove connection from topic; session may continue to function
 
-			now := time.Now().UTC().Round(time.Millisecond)
-
 			if leave.unsub {
 				// User wants to leave and unsubscribe.
 				if err := t.replyLeaveUnsub(hub, leave.sess, leave.reqId, leave.topic); err != nil {
@@ -194,6 +192,8 @@ func (t *Topic) run(hub *Hub) {
 				}
 
 			} else {
+				now := time.Now().UTC().Round(time.Millisecond)
+
 				// Just leaving the topic without unsubscribing
 				delete(t.sessions, leave.sess)
 
@@ -218,15 +218,15 @@ func (t *Topic) run(hub *Hub) {
 				}
 
 				t.perUser[leave.sess.uid] = pud
+
+				if leave.reqId != "" {
+					leave.sess.QueueOut(NoErr(leave.reqId, leave.topic, now))
+				}
 			}
 
 			// If there are no more subscriptions to this topic, start a kill timer
 			if len(t.sessions) == 0 {
 				killTimer.Reset(keepAlive)
-			}
-
-			if leave.reqId != "" {
-				leave.sess.QueueOut(NoErr(leave.reqId, leave.topic, now))
 			}
 
 		case msg := <-t.broadcast:
@@ -502,6 +502,7 @@ func (t *Topic) subCommonReply(h *Hub, sess *Session, pkt *MsgClientSub, sendDes
 		}
 	}
 	if err := t.requestSub(h, sess, pkt.Id, mode, info, private); err != nil {
+		log.Println("requestSub failed: ", err.Error())
 		return err
 	}
 
@@ -553,6 +554,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string, inf
 	var modeWant types.AccessMode
 	var explicitWant bool
 	if want != "" {
+		log.Println("mode want explicit: ", want)
 		modeWant.UnmarshalText([]byte(want))
 		explicitWant = true
 	}
@@ -588,7 +590,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string, inf
 		}
 
 		// Add subscription to database
-		sub := types.Subscription{
+		sub := &types.Subscription{
 			User:      sess.uid.String(),
 			Topic:     t.name,
 			ModeWant:  userData.modeWant,
@@ -703,6 +705,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string, inf
 	// If the user is (self)banned from topic, no further action is needed
 	if modeWant.IsBanned() {
 		t.evictUser(sess.uid, false, sess)
+		// FIXME(gene): need to send a reply to user
 		return errors.New("self-banned access to topic")
 	} else if userData.modeGiven.IsBanned() {
 		simpleByteSender(sess.send, ErrPermissionDenied(pktId, t.original, now))
@@ -772,7 +775,7 @@ func (t *Topic) approveSub(h *Hub, sess *Session, target types.Uid, set *MsgClie
 		}
 
 		// Add subscription to database
-		sub := types.Subscription{
+		sub := &types.Subscription{
 			User:      target.String(),
 			Topic:     t.name,
 			ModeWant:  types.ModeNone,
@@ -1280,14 +1283,24 @@ func (t *Topic) replyDelMsg(sess *Session, del *MsgClientDel) error {
 // 1.2 Evict all sessions
 // 1.3 Ask hub to unregister self
 // 1.4 Exit the run() loop
-// 2. If requester is not the owner, treat it like {leave unsub=true}
+// 2. If requester is not the owner:
+// 2.1 If this is a p2p topic:
+// 2.1.1 Check if the other sbscription still exists, if so, treat request as {leave unreg=true}
+// 2.1.2 If the other subscription does not exist, delete topic
+// 2.2 If this is not a p2p topic, treat it as {leave unreg=true}
 func (t *Topic) replyDelTopic(h *Hub, sess *Session, del *MsgClientDel) error {
 	if t.owner != sess.uid {
-		return t.replyLeaveUnsub(h, sess, del.Id, t.original)
+		// Cases 2.1.1 and 2.2
+		if t.cat != types.TopicCat_P2P || len(t.perUser) > 1 {
+			log.Println("delTopic: not owner, just unsubscribing")
+			return t.replyLeaveUnsub(h, sess, del.Id, t.original)
+		}
 	}
 
+	log.Println("delTopic: owner or last p2p subscription, evicting all sessions")
 	t.evictAll()
 
+	log.Println("delTopic: owner, requesting topic removal from hub")
 	h.unreg <- &topicUnreg{
 		topic: t.name,
 		sess:  sess,
@@ -1310,6 +1323,10 @@ func (t *Topic) replyLeaveUnsub(h *Hub, sess *Session, id, topic string) error {
 
 	// Evict all user's sessions and clear cached data
 	t.evictUser(sess.uid, true, sess)
+
+	if id != "" {
+		sess.QueueOut(NoErr(id, topic, now))
+	}
 
 	return nil
 }

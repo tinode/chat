@@ -203,12 +203,13 @@ func (a *RethinkDbAdapter) UserCreate(user *t.User) (error, bool) {
 }
 
 // Add user's authentication record
-func (a *RethinkDbAdapter) AddAuthRecord(uid t.Uid, unique string, secret []byte) (error, bool) {
+func (a *RethinkDbAdapter) AddAuthRecord(uid t.Uid, unique string, secret []byte, expires time.Time) (error, bool) {
 	_, err := rdb.DB(a.dbName).Table("auth").Insert(
 		map[string]interface{}{
-			"unique": unique,
-			"userid": uid.String(),
-			"secret": secret}).RunWrite(a.conn)
+			"unique":  unique,
+			"userid":  uid.String(),
+			"secret":  secret,
+			"expires": expires}).RunWrite(a.conn)
 	if err != nil {
 		if strings.Contains(err.Error(), "Duplicate primary key") {
 			return errors.New("duplicate credential"), true
@@ -237,24 +238,25 @@ func (a *RethinkDbAdapter) UpdAuthRecord(unique string, secret []byte) (int, err
 }
 
 // Retrieve user's authentication record
-func (a *RethinkDbAdapter) GetAuthRecord(unique string) (t.Uid, []byte, error) {
-	rows, err := rdb.DB(a.dbName).Table("auth").Get(unique).Pluck("userid", "secret").Run(a.conn)
+func (a *RethinkDbAdapter) GetAuthRecord(unique string) (t.Uid, []byte, time.Time, error) {
+	rows, err := rdb.DB(a.dbName).Table("auth").Get(unique).Pluck("userid", "secret", "expires").Run(a.conn)
 	if err != nil {
-		return t.ZeroUid, nil, err
+		return t.ZeroUid, nil, time.Time{}, err
 	}
 
 	var record struct {
-		Userid string `gorethink:"userid"`
-		Secret []byte `gorethink:"secret"`
+		Userid  string    `gorethink:"userid"`
+		Secret  []byte    `gorethink:"secret"`
+		Expires time.Time `gorethink:"expires"`
 	}
 
 	if !rows.Next(&record) {
-		return t.ZeroUid, nil, rows.Err()
+		return t.ZeroUid, nil, time.Time{}, rows.Err()
 	}
 	rows.Close()
 
 	//log.Println("loggin in user Id=", user.Uid(), user.Id)
-	return t.ParseUid(record.Userid), record.Secret, nil
+	return t.ParseUid(record.Userid), record.Secret, record.Expires, nil
 }
 
 // UserGet fetches a single user by user id. If user is not found it returns (nil, nil)
@@ -357,7 +359,7 @@ func (a *RethinkDbAdapter) TopicCreateP2P(initiator, invited *t.Subscription) er
 
 	topic := &t.Topic{
 		ObjHeader: t.ObjHeader{Id: initiator.Topic},
-		Access:    t.DefaultAccess{Auth: t.ModeBanned, Anon: t.ModeBanned}}
+		Access:    t.DefaultAccess{Auth: t.ModeP2P, Anon: t.ModeBanned}}
 	topic.ObjHeader.MergeTimes(&initiator.ObjHeader)
 	return a.TopicCreate(topic)
 }
@@ -526,7 +528,7 @@ func (a *RethinkDbAdapter) UsersForTopic(topic string) ([]t.Subscription, error)
 	return subs, nil
 }
 
-func (a *RethinkDbAdapter) TopicShare(shares []t.Subscription) (int, error) {
+func (a *RethinkDbAdapter) TopicShare(shares []*t.Subscription) (int, error) {
 	// Assign Ids
 	for i := 0; i < len(shares); i++ {
 		shares[i].Id = shares[i].Topic + ":" + shares[i].User

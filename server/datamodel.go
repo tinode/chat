@@ -478,7 +478,7 @@ func NoErrAccepted(id, topic string, ts time.Time) *ServerComMessage {
 	msg := &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
 		Code:      http.StatusAccepted, // 202
-		Text:      "message accepted for delivery",
+		Text:      "accepted",
 		Topic:     topic,
 		Timestamp: ts}}
 	return msg
@@ -548,7 +548,7 @@ func ErrMalformed(id, topic string, ts time.Time) *ServerComMessage {
 	msg := &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
 		Code:      http.StatusBadRequest, // 400
-		Text:      "malformed message",
+		Text:      "malformed",
 		Topic:     topic,
 		Timestamp: ts}}
 	return msg
