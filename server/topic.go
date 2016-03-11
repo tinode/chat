@@ -400,8 +400,11 @@ func (t *Topic) run(hub *Hub) {
 			return
 
 		case done := <-t.shutdown:
-			// Do clean up and database updates before server shuts down
-			done <- true
+			// Do clean up and database updates before server shuts down.
+			// Report completion back to sender, if done is not nil.
+			if done != nil {
+				done <- true
+			}
 			return
 		}
 	}
@@ -587,6 +590,21 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string, inf
 			private:   private,
 			modeGiven: t.accessAuth,
 			modeWant:  modeWant,
+		}
+
+		// If it's a re-subscription to a p2p topic, set public
+		if t.cat == types.TopicCat_P2P {
+			// t.perUser contains just one element - other user
+			for uid2, _ := range t.perUser {
+				if user2, err := store.Users.Get(uid2); err != nil {
+					log.Println(err.Error())
+					simpleByteSender(sess.send, ErrUnknown(pktId, t.original, now))
+					return err
+				} else {
+					userData.public = user2.Public
+				}
+				break
+			}
 		}
 
 		// Add subscription to database
@@ -1304,6 +1322,7 @@ func (t *Topic) replyDelTopic(h *Hub, sess *Session, del *MsgClientDel) error {
 	h.unreg <- &topicUnreg{
 		topic: t.name,
 		sess:  sess,
+		msg:   del,
 		del:   true}
 
 	return nil

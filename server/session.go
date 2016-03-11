@@ -545,7 +545,7 @@ func (s *Session) del(msg *ClientComMessage) {
 	} else if what == constMsgDelTopic {
 		globals.hub.unreg <- &topicUnreg{
 			topic:       expanded,
-			msg:         msg,
+			msg:         msg.Del,
 			sess:        s,
 			fromSession: true,
 			del:         true}
