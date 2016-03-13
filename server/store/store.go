@@ -144,7 +144,7 @@ func (u UsersObjMapper) Create(user *types.User, private interface{}) (*types.Us
 
 	// Create user's subscription to 'me' && 'find'. Theese topics are ephemeral, the topic object need not to be inserted.
 	err = Subs.Create(
-		types.Subscription{
+		&types.Subscription{
 			ObjHeader: types.ObjHeader{CreatedAt: user.CreatedAt},
 			User:      user.Id,
 			Topic:     user.Uid().UserId(),
@@ -152,7 +152,7 @@ func (u UsersObjMapper) Create(user *types.User, private interface{}) (*types.Us
 			ModeGiven: types.ModeSelf,
 			Private:   private,
 		},
-		types.Subscription{
+		&types.Subscription{
 			ObjHeader: types.ObjHeader{CreatedAt: user.CreatedAt},
 			User:      user.Id,
 			Topic:     user.Uid().FndName(),
@@ -171,13 +171,13 @@ func (u UsersObjMapper) Create(user *types.User, private interface{}) (*types.Us
 }
 
 // Given a unique identifier and a authentication scheme name, fetch user ID and authentication secret
-func (UsersObjMapper) GetAuthRecord(scheme, unique string) (types.Uid, []byte, error) {
+func (UsersObjMapper) GetAuthRecord(scheme, unique string) (types.Uid, []byte, time.Time, error) {
 	return adaptr.GetAuthRecord(scheme + ":" + unique)
 }
 
 // Create a new authentication record for user
-func (UsersObjMapper) AddAuthRecord(uid types.Uid, scheme, unique string, secret []byte) (error, bool) {
-	return adaptr.AddAuthRecord(uid, scheme+":"+unique, secret)
+func (UsersObjMapper) AddAuthRecord(uid types.Uid, scheme, unique string, secret []byte, expires time.Time) (error, bool) {
+	return adaptr.AddAuthRecord(uid, scheme+":"+unique, secret, expires)
 }
 
 // Get returns a user object for the given user id
@@ -225,7 +225,7 @@ func (u UsersObjMapper) GetSubs(id types.Uid) ([]types.Subscription, error) {
 }
 
 // GetSubs loads a list of subscriptions for the given user
-func (u UsersObjMapper) FindSubs(id types.Uid, query []string) ([]types.Contact, error) {
+func (u UsersObjMapper) FindSubs(id types.Uid, query []interface{}) ([]types.Subscription, error) {
 	return adaptr.FindSubs(id, query)
 }
 
@@ -250,10 +250,10 @@ func (TopicsObjMapper) Create(topic *types.Topic, owner types.Uid, private inter
 	}
 
 	if !owner.IsZero() {
-		err = Subs.Create(types.Subscription{
+		err = Subs.Create(&types.Subscription{
 			ObjHeader: types.ObjHeader{CreatedAt: topic.CreatedAt},
 			User:      owner.String(),
-			Topic:     topic.Name,
+			Topic:     topic.Id,
 			ModeGiven: types.ModeFull,
 			ModeWant:  topic.GetAccess(owner),
 			Private:   private})
@@ -291,13 +291,11 @@ func (TopicsObjMapper) Update(topic string, update map[string]interface{}) error
 }
 
 func (TopicsObjMapper) Delete(topic string) error {
-	if err := adaptr.TopicDelete(topic); err != nil {
+	if err := adaptr.SubsDelForTopic(topic); err != nil {
 		return err
 	}
 
-	// TODO(gene): the following two operations are optional. If they fail, they leave garbage, but don't
-	// affect anything
-	if err := adaptr.SubsDelForTopic(topic); err != nil {
+	if err := adaptr.TopicDelete(topic); err != nil {
 		return err
 	}
 
@@ -309,7 +307,7 @@ type SubsObjMapper struct{}
 
 var Subs SubsObjMapper
 
-func (SubsObjMapper) Create(subs ...types.Subscription) error {
+func (SubsObjMapper) Create(subs ...*types.Subscription) error {
 	for _, sub := range subs {
 		sub.InitTimes()
 	}

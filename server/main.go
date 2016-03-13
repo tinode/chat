@@ -65,15 +65,19 @@ const (
 var buildstamp = ""
 
 var globals struct {
-	hub *Hub
-
-	sessionStore *SessionStore
+	hub            *Hub
+	sessionStore   *SessionStore
+	apiKeySalt     []byte
+	tokenExpiresIn time.Duration
 }
 
 type configType struct {
-	Listen      string          `json:"listen"`
-	Adapter     string          `json:"use_adapter"`
-	StoreConfig json.RawMessage `json:"store_config"`
+	Listen     string `json:"listen"`
+	Adapter    string `json:"use_adapter"`
+	APIKeySalt []byte `json:"api_key_salt"`
+	// Security token expiration time
+	TokenExpiresIn int             `json:"token_expires_in"`
+	StoreConfig    json.RawMessage `json:"store_config"`
 }
 
 func main() {
@@ -110,6 +114,8 @@ func main() {
 	// Keep inactive LP sessions for 70 seconds
 	globals.sessionStore = NewSessionStore(IDLETIMEOUT + 15*time.Second)
 	globals.hub = newHub()
+	globals.tokenExpiresIn = time.Duration(config.TokenExpiresIn) * time.Second
+	globals.apiKeySalt = config.APIKeySalt
 
 	// Serve static content from the directory in -static_data flag if that's
 	// available, if not assume current dir.

@@ -32,7 +32,7 @@
 package main
 
 import (
-	"log"
+	//"log"
 	"strings"
 
 	"github.com/tinode/chat/server/store"
@@ -143,7 +143,7 @@ func (t *Topic) presProcReq(fromTopic string, online, wantReply bool) {
 	//	t.name, fromTopic, online, wantReply)
 
 	doReply := wantReply
-	if t.cat == TopicCat_Me {
+	if t.cat == types.TopicCat_Me {
 		if psd, ok := t.perSubs[fromTopic]; ok {
 			// If requester's online status has not changed, do not reply, otherwise an endless loop will happen
 			// Introducing isReply to ensure unnecessary {pres} is not sent:
@@ -225,7 +225,7 @@ func (t *Topic) presPubTopicOnline(online bool) {
 // Case 6
 // (announce to topic-offline subscribers on 'me')
 func (t *Topic) presPubMessageSent(seq int) {
-	log.Printf("Pres 6: from %s [msg=%d]", t.name, seq)
+	//log.Printf("Pres 6: from %s [msg=%d]", t.name, seq)
 
 	update := &MsgServerPres{Topic: "me", What: "msg", Src: t.original, SeqId: seq}
 
@@ -233,10 +233,10 @@ func (t *Topic) presPubMessageSent(seq int) {
 		if pud.online == 0 && pud.modeGiven&pud.modeWant&types.ModePres != 0 {
 			globals.hub.route <- &ServerComMessage{Pres: update, rcptto: uid.UserId()}
 
-			log.Printf("Pres 6: src: %s to %s", update.Src, uid.UserId())
+			//log.Printf("Pres 6: src: %s to %s", update.Src, uid.UserId())
 		} else {
-			log.Printf("Pres 6: SKIPPED src: %s to %s due to online=%d or mode %v", update.Src, uid.UserId(),
-				pud.online, (pud.modeGiven&pud.modeWant&types.ModePres != 0))
+			//log.Printf("Pres 6: SKIPPED src: %s to %s due to online=%d or mode %v", update.Src, uid.UserId(),
+			//	pud.online, (pud.modeGiven&pud.modeWant&types.ModePres != 0))
 		}
 	}
 }

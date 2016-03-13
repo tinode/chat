@@ -73,12 +73,21 @@ func gen_rethink(reset bool, dbsource string, data *Data) {
 			log.Fatal(err)
 		}
 
+		// Add authentication record
 		auth_handler := store.GetAuthHandler("basic")
-		if _, err = auth_handler.AddRecord(user.Uid(), uu["username"].(string)+":"+uu["passhash"].(string)); err != nil {
+		if _, err = auth_handler.AddRecord(user.Uid(), uu["username"].(string)+":"+uu["passhash"].(string), time.Time{}); err != nil {
 			log.Fatal(err)
 		}
 		nameIndex[uu["username"].(string)] = user.Id
 
+		// Add address book as fnd.private
+		if uu["addressBook"] != nil {
+			if err := store.Subs.Update(user.Uid().FndName(), user.Uid(),
+				map[string]interface{}{"Private": uu["addressBook"]}); err != nil {
+
+				log.Fatal(err)
+			}
+		}
 		log.Printf("Created user '%s' as %s (%d)", uu["username"].(string), user.Id, user.Uid())
 	}
 
@@ -88,7 +97,9 @@ func gen_rethink(reset bool, dbsource string, data *Data) {
 		name := genTopicName()
 		nameIndex[gt["name"].(string)] = name
 
-		topic := &types.Topic{Name: name, Public: parsePublic(gt["public"])}
+		topic := &types.Topic{
+			ObjHeader: types.ObjHeader{Id: name},
+			Public:    parsePublic(gt["public"])}
 		var owner types.Uid
 		if gt["owner"] != nil {
 			owner = types.ParseUid(nameIndex[gt["owner"].(string)])
@@ -200,7 +211,7 @@ func gen_rethink(reset bool, dbsource string, data *Data) {
 
 		log.Printf("Sharing '%s' with '%s'", ss["topic"].(string), ss["user"].(string))
 
-		if err = store.Subs.Create(types.Subscription{
+		if err = store.Subs.Create(&types.Subscription{
 			ObjHeader: types.ObjHeader{CreatedAt: getCreatedTime(ss["createdAt"])},
 			User:      u1,
 			Topic:     name,

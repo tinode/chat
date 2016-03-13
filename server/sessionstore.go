@@ -33,6 +33,8 @@ package main
 
 import (
 	"container/list"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -81,7 +83,7 @@ func (ss *SessionStore) Create(conn interface{}) *Session {
 	}
 
 	s.lastTouched = time.Now()
-	s.sid = getRandomString()
+	s.sid = genSID()
 	s.uid = types.ZeroUid
 
 	// Websocket connections are not managed by SessionStore
@@ -174,4 +176,13 @@ func NewSessionStore(lifetime time.Duration) *SessionStore {
 	}
 
 	return store
+}
+
+func genSID() string {
+	buf := make([]byte, 9)
+	if _, err := rand.Read(buf); err != nil {
+		panic("genSID: failed to generate a random string: " + err.Error())
+	}
+	//return base32.StdEncoding.EncodeToString(buf)
+	return base64.URLEncoding.EncodeToString(buf)
 }

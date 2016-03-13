@@ -143,9 +143,6 @@ func (a *RethinkDbAdapter) CreateDb(reset bool) error {
 	if _, err := rdb.DB("tinode").TableCreate("topics", rdb.TableCreateOpts{PrimaryKey: "Id"}).RunWrite(a.conn); err != nil {
 		return err
 	}
-	if _, err := rdb.DB("tinode").Table("topics").IndexCreate("Name").RunWrite(a.conn); err != nil {
-		return err
-	}
 
 	// Stored message
 	if _, err := rdb.DB("tinode").TableCreate("messages", rdb.TableCreateOpts{PrimaryKey: "Id"}).RunWrite(a.conn); err != nil {
@@ -206,12 +203,13 @@ func (a *RethinkDbAdapter) UserCreate(user *t.User) (error, bool) {
 }
 
 // Add user's authentication record
-func (a *RethinkDbAdapter) AddAuthRecord(uid t.Uid, unique string, secret []byte) (error, bool) {
+func (a *RethinkDbAdapter) AddAuthRecord(uid t.Uid, unique string, secret []byte, expires time.Time) (error, bool) {
 	_, err := rdb.DB(a.dbName).Table("auth").Insert(
 		map[string]interface{}{
-			"unique": unique,
-			"userid": uid.String(),
-			"secret": secret}).RunWrite(a.conn)
+			"unique":  unique,
+			"userid":  uid.String(),
+			"secret":  secret,
+			"expires": expires}).RunWrite(a.conn)
 	if err != nil {
 		if strings.Contains(err.Error(), "Duplicate primary key") {
 			return errors.New("duplicate credential"), true
@@ -240,24 +238,25 @@ func (a *RethinkDbAdapter) UpdAuthRecord(unique string, secret []byte) (int, err
 }
 
 // Retrieve user's authentication record
-func (a *RethinkDbAdapter) GetAuthRecord(unique string) (t.Uid, []byte, error) {
-	rows, err := rdb.DB(a.dbName).Table("auth").Get(unique).Pluck("userid", "secret").Run(a.conn)
+func (a *RethinkDbAdapter) GetAuthRecord(unique string) (t.Uid, []byte, time.Time, error) {
+	rows, err := rdb.DB(a.dbName).Table("auth").Get(unique).Pluck("userid", "secret", "expires").Run(a.conn)
 	if err != nil {
-		return t.ZeroUid, nil, err
+		return t.ZeroUid, nil, time.Time{}, err
 	}
 
 	var record struct {
-		Userid string `gorethink:"userid"`
-		Secret []byte `gorethink:"secret"`
+		Userid  string    `gorethink:"userid"`
+		Secret  []byte    `gorethink:"secret"`
+		Expires time.Time `gorethink:"expires"`
 	}
 
 	if !rows.Next(&record) {
-		return t.ZeroUid, nil, rows.Err()
+		return t.ZeroUid, nil, time.Time{}, rows.Err()
 	}
 	rows.Close()
 
 	//log.Println("loggin in user Id=", user.Uid(), user.Id)
-	return t.ParseUid(record.Userid), record.Secret, nil
+	return t.ParseUid(record.Userid), record.Secret, record.Expires, nil
 }
 
 // UserGet fetches a single user by user id. If user is not found it returns (nil, nil)
@@ -275,7 +274,7 @@ func (a *RethinkDbAdapter) UserGet(uid t.Uid) (*t.User, error) {
 }
 
 func (a *RethinkDbAdapter) UserGetAll(ids ...t.Uid) ([]t.User, error) {
-	uids := []interface{}{}
+	uids := make([]interface{}, 0, len(ids))
 	for _, id := range ids {
 		uids = append(uids, id.String())
 	}
@@ -333,8 +332,6 @@ func (a *RethinkDbAdapter) UserUpdate(uid t.Uid, update map[string]interface{}) 
 
 // TopicCreate creates a topic from template
 func (a *RethinkDbAdapter) TopicCreate(topic *t.Topic) error {
-	// Validated unique username, inserting user now
-	topic.SetUid(store.GetUid())
 	_, err := rdb.DB(a.dbName).Table("topics").Insert(&topic).RunWrite(a.conn)
 	return err
 }
@@ -361,15 +358,15 @@ func (a *RethinkDbAdapter) TopicCreateP2P(initiator, invited *t.Subscription) er
 	}
 
 	topic := &t.Topic{
-		Name:   initiator.Topic,
-		Access: t.DefaultAccess{Auth: t.ModeBanned, Anon: t.ModeBanned}}
+		ObjHeader: t.ObjHeader{Id: initiator.Topic},
+		Access:    t.DefaultAccess{Auth: t.ModeP2P, Anon: t.ModeBanned}}
 	topic.ObjHeader.MergeTimes(&initiator.ObjHeader)
 	return a.TopicCreate(topic)
 }
 
 func (a *RethinkDbAdapter) TopicGet(topic string) (*t.Topic, error) {
 	// Fetch topic by name
-	rows, err := rdb.DB(a.dbName).Table("topics").GetAllByIndex("Name", topic).Run(a.conn)
+	rows, err := rdb.DB(a.dbName).Table("topics").Get(topic).Run(a.conn)
 	if err != nil {
 		return nil, err
 	}
@@ -407,7 +404,7 @@ func (a *RethinkDbAdapter) TopicsForUser(uid t.Uid) ([]t.Subscription, error) {
 		tcat := t.GetTopicCat(sub.Topic)
 
 		// 'me' subscription, skip
-		if tcat == t.TopicCat_Me {
+		if tcat == t.TopicCat_Me || tcat == t.TopicCat_Fnd {
 			continue
 
 			// p2p subscription, find the other user to get user.Public
@@ -435,14 +432,14 @@ func (a *RethinkDbAdapter) TopicsForUser(uid t.Uid) ([]t.Subscription, error) {
 
 	if len(topq) > 0 {
 		// Fetch grp & p2p topics
-		rows, err = rdb.DB(a.dbName).Table("topics").GetAllByIndex("Name", topq...).Run(a.conn)
+		rows, err = rdb.DB(a.dbName).Table("topics").GetAll(topq...).Run(a.conn)
 		if err != nil {
 			return nil, err
 		}
 
 		var top t.Topic
 		for rows.Next(&top) {
-			sub = join[top.Name]
+			sub = join[top.Id]
 			sub.ObjHeader.MergeTimes(&top.ObjHeader)
 			sub.SetSeqId(top.SeqId)
 			sub.SetHardClearId(top.ClearId)
@@ -452,7 +449,7 @@ func (a *RethinkDbAdapter) TopicsForUser(uid t.Uid) ([]t.Subscription, error) {
 				subs = append(subs, sub)
 			} else {
 				// put back the updated value of a p2p subsription, will process further below
-				join[top.Name] = sub
+				join[top.Id] = sub
 			}
 		}
 
@@ -531,7 +528,7 @@ func (a *RethinkDbAdapter) UsersForTopic(topic string) ([]t.Subscription, error)
 	return subs, nil
 }
 
-func (a *RethinkDbAdapter) TopicShare(shares []t.Subscription) (int, error) {
+func (a *RethinkDbAdapter) TopicShare(shares []*t.Subscription) (int, error) {
 	// Assign Ids
 	for i := 0; i < len(shares); i++ {
 		shares[i].Id = shares[i].Topic + ":" + shares[i].User
@@ -563,7 +560,7 @@ func (a *RethinkDbAdapter) TopicUpdateOnMessage(topic string, msg *t.Message) er
 
 		// All other messages
 	} else {
-		_, err = rdb.DB("tinode").Table("topics").GetAllByIndex("Name", topic).
+		_, err = rdb.DB("tinode").Table("topics").Get(topic).
 			Update(update, rdb.UpdateOpts{Durability: "soft"}).RunWrite(a.conn)
 	}
 
@@ -571,7 +568,7 @@ func (a *RethinkDbAdapter) TopicUpdateOnMessage(topic string, msg *t.Message) er
 }
 
 func (a *RethinkDbAdapter) TopicUpdate(topic string, update map[string]interface{}) error {
-	_, err := rdb.DB("tinode").Table("topics").GetAllByIndex("Name", topic).Update(update).RunWrite(a.conn)
+	_, err := rdb.DB("tinode").Table("topics").Get(topic).Update(update).RunWrite(a.conn)
 	return err
 }
 
@@ -678,62 +675,44 @@ func (a *RethinkDbAdapter) SubsDelForTopic(topic string) error {
 }
 
 // FindSubs returns a list of users who match given tags, such as "email:jdoe@example.com" or "tel:18003287448".
-func (a *RethinkDbAdapter) FindSubs(user t.Uid, query []string) ([]t.Contact, error) {
-	// {id: <tag>, user: <uid or null>, ts: <timestamp>, want: [uids of users who searched for this tag]}
-
-	type tagStruct struct {
-		// Tag
-		id string
-		// Uid
-		name string
-	}
-	uids := make([]interface{}, 0, 16)
-	join := make(map[string][]tagStruct)
-	// Query may contain redundant records. User may be mentioned in multiple tages.
-	// Grouping record by user (multiple mentions of user in tags), then de-duping user groups (due to dups in query).
-	if rows, err := rdb.DB(a.dbName).Table("tagindex").GetAll(query).Pluck("id", "name").
-		Group("user").Distinct().Run(a.conn); err != nil {
+// Just search the 'users.Tags' for the given tags using respective index.
+func (a *RethinkDbAdapter) FindSubs(user t.Uid, query []interface{}) ([]t.Subscription, error) {
+	// Query may contain redundant records, i.e. the same email twice.
+	// User could be matched on multiple tags, i.e on email and phone#. Thus the query may
+	// return duplicate users. Thus the need for distinct.
+	if rows, err := rdb.DB(a.dbName).Table("users").GetAllByIndex("Tags", query...).Limit(MAX_RESULTS).
+		Pluck("Id", "Access", "CreatedAt", "UpdatedAt", "Public", "Tags").Distinct().Run(a.conn); err != nil {
 		return nil, err
 	} else {
-		var grouped struct {
-			group     string
-			reduction []tagStruct
+		index := make(map[string]struct{})
+		for _, q := range query {
+			if tag, ok := q.(string); ok {
+				index[tag] = struct{}{}
+			}
 		}
-		for rows.Next(&grouped) {
-			uids = append(uids, grouped.group)
-			join[grouped.group] = grouped.reduction
+		var user t.User
+		var sub t.Subscription
+		var subs []t.Subscription
+		for rows.Next(&user) {
+			sub.CreatedAt = user.CreatedAt
+			sub.UpdatedAt = user.UpdatedAt
+			sub.User = user.Id
+			sub.ModeWant, sub.ModeGiven = user.Access.Auth, user.Access.Auth
+			sub.SetPublic(user.Public)
+			tags := make([]string, 0, 1)
+			for _, tag := range user.Tags {
+				if _, ok := index[tag]; ok {
+					tags = append(tags, tag)
+				}
+			}
+			sub.Private = tags
+			subs = append(subs, sub)
 		}
 		if err = rows.Err(); err != nil {
 			return nil, err
 		}
+		return subs, nil
 	}
-
-	contacts := make([]t.Contact, 0, 16)
-	if rows, err := rdb.DB(a.dbName).Table("users").GetAll(uids...).Run(a.conn); err != nil {
-		return nil, err
-	} else { // else is needed, otherwise 'rows' is undefined
-		/*
-			type Contact struct {
-				Id     string			//filled here
-				MatchOn  []string
-				Access   DefaultAccess	// filled here
-				LastSeen time.Time		// filled here
-				Public   interface{}	// filled here
-			}
-		*/
-		var cont t.Contact
-		for rows.Next(&cont) {
-			match := join[cont.Id]
-			for _, tag := range match {
-				cont.MatchOn = append(cont.MatchOn, tag.id)
-			}
-			contacts = append(contacts, cont)
-		}
-		if err = rows.Err(); err != nil {
-			return nil, err
-		}
-	}
-	return contacts, nil
 }
 
 // Messages
