@@ -214,7 +214,7 @@ func (t *Topic) run(hub *Hub) {
 						log.Println(err)
 					}
 				} else if t.cat == types.TopicCat_Grp && pud.online == 0 {
-					t.presPubChange(leave.sess.uid.UserId(), "off")
+					t.presPubChange(leave.sess.uid, "off")
 				}
 
 				t.perUser[leave.sess.uid] = pud
@@ -395,13 +395,13 @@ func (t *Topic) run(hub *Hub) {
 			if t.cat == types.TopicCat_Me {
 				t.presPubMeChange("off", currentUA)
 			} else if t.cat == types.TopicCat_Grp {
-				t.presPubTopicOnline(false)
+				t.presPubTopicOnline("off")
 			} // not publishing online/offline to P2P topics
 			return
 
 		case done := <-t.shutdown:
 			// Do clean up and database updates before server shuts down.
-			// Report completion back to sender, if done is not nil.
+			// Report completion back to sender, if 'done' is not nil.
 			if done != nil {
 				done <- true
 			}
@@ -455,7 +455,7 @@ func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 			t.presPubMeChange("on", sreg.sess.userAgent)
 
 		} else if t.cat == types.TopicCat_Grp {
-			t.presPubTopicOnline(true)
+			t.presPubTopicOnline("on")
 		}
 		// Not sending presence notifications for P2P topics
 	}
@@ -515,7 +515,7 @@ func (t *Topic) subCommonReply(h *Hub, sess *Session, pkt *MsgClientSub, sendDes
 		if t.cat == types.TopicCat_Grp {
 			// User just joined the topic, announce presence
 			log.Printf("subCommonReply: user %s joined grp topic %s", sess.uid.UserId(), t.name)
-			t.presPubChange(sess.uid.UserId(), "on")
+			t.presPubChange(sess.uid, "on")
 		}
 	} else {
 		log.Printf("subCommonReply: topic %s, online %d", t.name, pud.online)
@@ -1056,7 +1056,7 @@ func (t *Topic) replySetDesc(sess *Session, set *MsgClientSet) error {
 	}
 
 	if sendPres {
-		t.presPubChange(sess.uid.UserId(), "upd")
+		t.presPubChange(sess.uid, "upd")
 	}
 
 	simpleByteSender(sess.send, NoErr(set.Id, set.Topic, now))
@@ -1397,7 +1397,7 @@ func (t *Topic) evictUser(uid types.Uid, clear bool, ignore *Session) {
 
 	// Notify topic subscribers that the user has left the topic
 	if t.cat == types.TopicCat_Grp {
-		t.presPubChange(uid.UserId(), "off")
+		t.presPubChange(uid, "off")
 	}
 
 	// Detach all user's sessions
