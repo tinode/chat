@@ -1086,6 +1086,7 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 		}
 	} else {
 		// Fetch subscriptions, User.Public denormalized into subscription
+		// FIXME(gene): don't load subs from DB, use perUserData - it already contains subscriptions.
 		subs, err = store.Topics.GetUsers(t.name)
 	}
 

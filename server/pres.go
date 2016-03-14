@@ -78,6 +78,9 @@ import (
 10. Messages were hard-deleted. The event is sent to all topic subscribers, joined and not joined:
 	a. joined: `{pres topic="<topic name>" src="<user id>" what="del" seq=123}`.
 	b. not joined: `{pres topic="me" src="<topic name>" what="del" seq=123}`.
+11. User hard-unsubscribed from topic: the same as 4, what="gone"
+12. A topic was deleted: same as 10, what="gone", 'seq' is not set
+
 */
 
 // loadContacts initializes topic.perSubs to support presence notifications
