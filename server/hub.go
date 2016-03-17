@@ -70,12 +70,6 @@ type topicUnreg struct {
 	del bool
 }
 
-// Request from !pres to another topic to start/stop receiving presence updates
-//type presSubsReq struct {
-//	id        types.Uid
-//	subscribe bool
-//}
-
 type metaReq struct {
 	// Routable name of the topic to get info for
 	topic string
@@ -227,7 +221,7 @@ func (h *Hub) run() {
 		case hubdone := <-h.shutdown:
 			topicsdone := make(chan bool)
 			for _, topic := range h.topics {
-				topic.shutdown <- topicsdone
+				topic.exit <- &shutDown{done: topicsdone}
 			}
 
 			for i := 0; i < len(h.topics); i++ {
@@ -260,7 +254,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		unreg:     make(chan *sessionLeave, 32),
 		meta:      make(chan *metaReq, 32),
 		perUser:   make(map[types.Uid]perUserData),
-		shutdown:  make(chan chan<- bool, 1),
+		exit:      make(chan *shutDown, 1),
 	}
 
 	// Request to load a 'me' topic. The topic always axists.
@@ -436,10 +430,11 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 			// Set to true if only requester's subscription was created
 			var user1only bool
 			if len(subs) == 1 {
-				// User1's subscription is missing
 				if subs[0].Uid() == userId1 {
+					// User2's subscription is missing
 					sub1 = &subs[0]
 				} else {
+					// User1's is missing
 					sub2 = &subs[0]
 					user1only = true
 				}
@@ -725,7 +720,7 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *MsgClientDel, fromSes
 		// Case 1.1.5, 4
 		h.topicDel(topic)
 		h.topicsLive.Add(-1)
-		t.shutdown <- nil
+		t.exit <- &shutDown{del: del}
 
 	} else if del {
 		// Case 3 (topic is offline):

@@ -8,6 +8,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"errors"
+	"log"
 	"time"
 
 	"github.com/tinode/chat/server/auth"
@@ -18,8 +19,8 @@ import (
 type TokenAuth struct{}
 
 const (
-	token_len      = 44
-	min_key_length = 32
+	token_len_decoded = 44
+	min_key_length    = 32
 )
 
 var hmac_salt []byte
@@ -60,12 +61,12 @@ func (TokenAuth) Authenticate(token string) (types.Uid, time.Time, int) {
 	var zeroTime time.Time
 	// [8:UID][4:expires][32:signature] == 44 bytes
 
-	if declen := base64.URLEncoding.DecodedLen(len(token)); declen != token_len {
+	data, err := base64.URLEncoding.DecodeString(token)
+	if err != nil {
 		return types.ZeroUid, zeroTime, auth.ErrMalformed
 	}
 
-	data, err := base64.URLEncoding.DecodeString(token)
-	if err != nil {
+	if len(data) != token_len_decoded {
 		return types.ZeroUid, zeroTime, auth.ErrMalformed
 	}
 

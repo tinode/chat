@@ -211,7 +211,7 @@ func (a *RethinkDbAdapter) AddAuthRecord(uid t.Uid, unique string, secret []byte
 			"secret":  secret,
 			"expires": expires}).RunWrite(a.conn)
 	if err != nil {
-		if strings.Contains(err.Error(), "Duplicate primary key") {
+		if rdb.IsConflictErr(err) {
 			return errors.New("duplicate credential"), true
 		}
 		return err, false
@@ -352,7 +352,7 @@ func (a *RethinkDbAdapter) TopicCreateP2P(initiator, invited *t.Subscription) er
 		RunWrite(a.conn)
 	if err != nil {
 		// Is this a duplicate subscription? If so, ifnore it. Otherwise it's a genuine DB error
-		if !strings.Contains(err.Error(), "Duplicate primary key") {
+		if !rdb.IsConflictErr(err) {
 			return err
 		}
 	}

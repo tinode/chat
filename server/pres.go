@@ -32,6 +32,7 @@
 package main
 
 import (
+	"log"
 	//"log"
 	"strings"
 
@@ -56,13 +57,16 @@ import (
 	`{pres topic="me" src="<user ID>" what="off" ua="..."}`.
 3. User updates `public` data. The event is sent to all users who have P2P topics with the first user.
 	Users receive `{pres topic="me" src="<user ID>" what="upd"}`.
-4. User [joins (first session to join)]/[leaves (last session to leave)]/[leaves and unsubscribes] a topic:
+4.. User [joins (first session to join)]/[leaves (last session to leave)]/[leaves and unsubscribes] a topic:
 	a. to other joined users: `{pres topic="<topic name>" src="<user ID>" what="on|off|unsub"}`.
 	b. to user's own not joined sessions on unsubscribe only: `{pres topic="me" src="<topic name>" what="gone"}`
-+5. Topic is activated/deactivated/deleted. Topic becomes active when at least one user joins it; inactive when
-	all users leave it (possibly with some delay). The event is sent to all topic subscribers.
-	They will receive it on their `me` topics:
+5.. Topic is activated/deactivated/unsubscribed/deleted.
+	a. topic becomes active when at least one user joins it; inactive when all users leave it (possibly with some
+	delay); the event is sent to all topic subscribers who will receive it on their `me`:
 	`{pres topic="me" src="<topic name>" what="on|off|gone"}`.
+	on: activated; off: deactivated; gone: deleted
+	b. topic unsubscribed, unsubscribed user receives it on `me`:
+	`{pres topic="me" src="<topic name>" what="unsub"}`.
 6. A message published in the topic. The event is sent to users who have subscribed to the topic but currently
 	not joined (those who have joined will receive the {data}):
 	`{pres topic="me" src="<topic name>" what="msg" seq=123}`.
@@ -83,9 +87,7 @@ import (
 10. Messages were hard-deleted. The event is sent to all topic subscribers, joined and not joined:
 	a. joined: `{pres topic="<topic name>" src="<user id>" what="del" seq=123}`.
 	b. not joined: `{pres topic="me" src="<topic name>" what="del" seq=123}`.
-+11. Topic is deleted by owner, inform topic users
-	evict all users then send `{pres topic="me" src="<topic name>" what="gone"}`.
-+12. User subscribed to a new topic, inform user's other sessions.
+12.. User subscribed to a new topic, inform user's other sessions.
 	`{pres topic="me" src="<topic name>" what="on"}`.
 */
 
@@ -182,7 +184,7 @@ func (t *Topic) presAnnounceToUser(uid types.Uid, what string, seq int, skip *Se
 		update := &MsgServerPres{Topic: "me", What: what, Src: t.original, SeqId: seq}
 
 		if pud.modeGiven&pud.modeWant&types.ModePres != 0 {
-			globals.hub.route <- &ServerComMessage{Pres: update, rcptto: skip.uid.UserId(), skipSession: skip}
+			globals.hub.route <- &ServerComMessage{Pres: update, rcptto: uid.UserId(), skipSession: skip}
 		}
 	}
 }
@@ -198,28 +200,24 @@ func (t *Topic) presAnnounceToSubscribers(what string, seq int, offlineOnly bool
 }
 
 // Publish announcement to topic
-// Cases 4, 7
+// Cases 4.a, 7
 func (t *Topic) presPubChange(src types.Uid, what string) {
 	// Announce to topic subscribers. 4.a, 7
 	t.presAnnounceToTopic(src.UserId(), what, 0, nil)
 
-	// Announce just to the affected user 4.b
-	if what == "gone" {
-		t.presAnnounceToUser(src, what, 0, nil)
-	}
-	//log.Printf("Pres 4,7: from '%s' (src: %s) [%s]", t.name, src, what)
+	//log.Printf("Pres 4.a,7: from '%s' (src: %s) [%s]", t.name, src, what)
+}
+
+// Announce topic disappearance just to the affected user
+// Case 4.b
+func (t *Topic) presTopicGone(user types.Uid) {
+	t.presAnnounceToUser(user, "gone", 0, nil)
+	log.Printf("Pres 4.b: from '%s' (src: %s) [gone]", t.name, user.UserId())
 }
 
 // Non-'me' topic activated or deactivated, announce topic presence to its subscribers
 // Case 5
 func (t *Topic) presPubTopicOnline(what string) {
-	/*var what string
-	if online {
-		what = "on"
-	} else {
-		what = "off"
-	}
-	*/
 	// Announce to all topic subscribers (not just offline) on 'me'
 	t.presAnnounceToSubscribers(what, 0, true)
 }
@@ -280,4 +278,11 @@ func (t *Topic) presPubMessageDel(sess *Session, clear int) {
 
 	// Broadcast to topic-offline users on 'me'
 	t.presAnnounceToSubscribers("del", clear, true)
+}
+
+// User subscribed to a new topic. Let all user's other sessions know.
+// Case 12
+func (t *Topic) presTopicSubscribed(user types.Uid, skip *Session) {
+	t.presAnnounceToUser(user, "on", 0, skip)
+	log.Printf("Pres 12: from '%s' (src: %s) [subbed/on]", t.name, user.UserId())
 }
