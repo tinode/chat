@@ -1,10 +1,17 @@
 {
 	"listen": ":18080",
-	"db_adapter": "rethinkdb",
-	"adapter_config": {
+	"api_key_salt": "$API_KEY_SALT",
+	"use_adapter": "rethinkdb",
+	"token_expires_in": 1209600,
+	"auth_config": {
+		"token": {
+			"key": "$AUTH_TOKEN_KEY"
+		}
+	},
+	"store_config": {
 		"worker_id": 1,
-		"uid_key": "$SNOWFLAKE_UID_KEY",
-		"params": {
+		"uid_key": "$UID_ENCRYPTION_KEY",
+		"adapter_config": {
 			"database": "tinode",
 			"addresses": "$RETHINKDB_PORT_28015_TCP_ADDR:$RETHINKDB_PORT_28015_TCP_PORT"
 		}

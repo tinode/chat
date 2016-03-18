@@ -4,6 +4,7 @@ import (
 	"io/ioutil"
 	"log"
 	"math/rand"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -54,7 +55,7 @@ func gen_rethink(reset bool, dbsource string, data *Data) {
 				Auth: types.ModePublic,
 				Anon: types.ModeNone,
 			},
-			Public: parsePublic(uu["public"]),
+			Public: parsePublic(uu["public"], data.datapath),
 		}
 		user.CreatedAt = getCreatedTime(uu["createdAt"])
 
@@ -287,8 +288,8 @@ type Vcard struct {
 	Photo *PhotoStruct `gorethink:"photo,omitempty"`
 }
 
-// {"fn": "Alice Johnson", "photo": "./alice-128.jpg"}
-func parsePublic(public interface{}) interface{} {
+// {"fn": "Alice Johnson", "photo": "alice-128.jpg"}
+func parsePublic(public interface{}, path string) interface{} {
 	var photo *PhotoStruct
 	var err error
 
@@ -301,7 +302,11 @@ func parsePublic(public interface{}) interface{} {
 	if fname, ok := vcard["photo"]; ok {
 		if fname != nil {
 			photo = &PhotoStruct{Type: vcard["type"].(string)}
-			photo.Data, err = ioutil.ReadFile(fname.(string))
+			dir, _ := filepath.Split(fname.(string))
+			if dir == "" {
+				dir = path
+			}
+			photo.Data, err = ioutil.ReadFile(filepath.Join(dir, fname.(string)))
 			if err != nil {
 				log.Fatal(err)
 			}

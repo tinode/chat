@@ -5,6 +5,7 @@ import (
 	"flag"
 	"io/ioutil"
 	"log"
+	"path/filepath"
 
 	"github.com/tinode/chat/server/store"
 )
@@ -19,6 +20,7 @@ type Data struct {
 	Grouptopics   []map[string]interface{} `json:"grouptopics"`
 	Subscriptions []map[string]interface{} `json:"subscriptions"`
 	Messages      []string                 `json:"messages"`
+	datapath string
 }
 
 // Generate random string as a name of the group topic
@@ -29,7 +31,7 @@ func genTopicName() string {
 func main() {
 
 	var reset = flag.Bool("reset", false, "first delete the database if one exists")
-	var datafile = flag.String("data", "", "path to sample data to load")
+	var datafile = flag.String("data", "", "name of file with sample data")
 	var conffile = flag.String("config", "./tinode.conf", "config of the database connection")
 	flag.Parse()
 
@@ -44,6 +46,7 @@ func main() {
 			log.Fatal(err)
 		}
 	}
+	data.datapath, _ := filepath.Split(*datafile)
 
 	if *conffile != "" {
 		var config configType

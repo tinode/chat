@@ -8,7 +8,6 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"errors"
-	"log"
 	"time"
 
 	"github.com/tinode/chat/server/auth"
