@@ -33,6 +33,7 @@
 package main
 
 import (
+	"container/list"
 	"encoding/json"
 	"errors"
 	"log"
@@ -51,6 +52,7 @@ const (
 	NONE = iota
 	WEBSOCK
 	LPOLL
+	RPC
 )
 
 /*
@@ -62,10 +64,16 @@ type Session struct {
 	proto int
 
 	// Set only for websockets
+
+	// Websocket
 	ws *websocket.Conn
 
 	// Set only for Long Poll sessions
+
+	// Most recent HTTP writer, could be nil
 	wrt http.ResponseWriter
+	// Pointer to session's record in sessionStore
+	lpTracker *list.Element
 
 	// IP address of the client. For long polling this is the IP of the last poll
 	remoteAddr string
@@ -94,7 +102,7 @@ type Session struct {
 	// Map of topic subscriptions, indexed by topic name
 	subs map[string]*Subscription
 
-	// Session ID for long polling
+	// Session ID
 	sid string
 
 	// Needed for long polling
@@ -131,6 +139,8 @@ func (s *Session) writePkt(pkt *ServerComMessage) error {
 	case LPOLL:
 		_, err := s.wrt.Write(data)
 		return err
+	case RPC:
+		return cluster.ResponseToSession(pkt)
 	default:
 		return errors.New("invalid session")
 	}
@@ -138,7 +148,7 @@ func (s *Session) writePkt(pkt *ServerComMessage) error {
 
 // TODO(gene): unify simpleByteSender and QueueOut
 
-// QueueOut attempts to send a SCM to a session; if the send buffer is full, time out is 1 millisecond
+// QueueOut attempts to send a ServerComMessage to a session; if the send buffer is full, timeout is 1 millisecond
 func (s *Session) QueueOut(msg *ServerComMessage) {
 	data, _ := json.Marshal(msg)
 	select {
@@ -148,19 +158,24 @@ func (s *Session) QueueOut(msg *ServerComMessage) {
 	}
 }
 
-// Message received, dispatch
-func (s *Session) dispatch(raw []byte) {
+// Message received, convert bytes to ClientComMessage and dispatch
+func (s *Session) dispatchRaw(raw []byte) {
 	var msg ClientComMessage
 
 	log.Printf("Session.dispatch got '%s' from '%s'", raw, s.remoteAddr)
 
-	s.lastAction = time.Now().UTC().Round(time.Millisecond)
 	if err := json.Unmarshal(raw, &msg); err != nil {
 		// Malformed message
 		log.Println("Session.dispatch: " + err.Error())
-		s.QueueOut(ErrMalformed("", "", s.lastAction))
+		s.QueueOut(ErrMalformed("", "", time.Now().UTC().Round(time.Millisecond)))
 		return
 	}
+
+	s.dispatch(&msg)
+}
+
+func (s *Session) dispatch(msg *ClientComMessage) {
+	s.lastAction = time.Now().UTC().Round(time.Millisecond)
 
 	msg.from = s.uid.UserId()
 	msg.timestamp = s.lastAction
@@ -172,39 +187,39 @@ func (s *Session) dispatch(raw []byte) {
 
 	switch {
 	case msg.Pub != nil:
-		s.publish(&msg)
+		s.publish(msg)
 		log.Println("dispatch: Pub done")
 
 	case msg.Sub != nil:
-		s.subscribe(&msg)
+		s.subscribe(msg)
 		log.Println("dispatch: Sub done")
 
 	case msg.Leave != nil:
-		s.leave(&msg)
+		s.leave(msg)
 		log.Println("dispatch: Leave done")
 
 	case msg.Login != nil:
-		s.login(&msg)
+		s.login(msg)
 		log.Println("dispatch: Login done")
 
 	case msg.Get != nil:
-		s.get(&msg)
+		s.get(msg)
 		log.Println("dispatch: Get." + msg.Get.What + " done")
 
 	case msg.Set != nil:
-		s.set(&msg)
+		s.set(msg)
 		log.Println("dispatch: Set done")
 
 	case msg.Del != nil:
-		s.del(&msg)
+		s.del(msg)
 		log.Println("dispatch: Del." + msg.Del.What + " done")
 
 	case msg.Acc != nil:
-		s.acc(&msg)
+		s.acc(msg)
 		log.Println("dispatch: Acc done")
 
 	case msg.Note != nil:
-		s.note(&msg)
+		s.note(msg)
 		log.Println("dispatch: Note." + msg.Note.What + " done")
 
 	default:
@@ -296,9 +311,9 @@ func (s *Session) publish(msg *ClientComMessage) {
 		From:      msg.from,
 		Timestamp: msg.timestamp,
 		Content:   msg.Pub.Content},
-		rcptto: routeTo, akn: s.send, id: msg.Pub.Id, timestamp: msg.timestamp}
+		rcptto: routeTo, sessFrom: s, id: msg.Pub.Id, timestamp: msg.timestamp}
 	if msg.Pub.NoEcho {
-		data.skipSession = s
+		data.sessSkip = s
 	}
 
 	if sub, ok := s.subs[routeTo]; ok {
@@ -585,7 +600,7 @@ func (s *Session) note(msg *ClientComMessage) {
 			From:  s.uid.UserId(),
 			What:  msg.Note.What,
 			SeqId: msg.Note.SeqId,
-		}, rcptto: routeTo, timestamp: msg.timestamp, skipSession: s}
+		}, rcptto: routeTo, timestamp: msg.timestamp, sessSkip: s}
 	}
 }
 

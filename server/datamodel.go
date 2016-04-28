@@ -402,14 +402,14 @@ type ServerComMessage struct {
 
 	// to: topic
 	rcptto string
-	// originating session, copy of Session.send
-	akn chan<- []byte
-	// origin-specific id to use in {ctrl} aknowledgements
+	// Originating session to send an aknowledgement to. Used only for {data} messages. Could be nil.
+	sessFrom *Session
+	// MsgServerData has no Id field, copying it here for use in {ctrl} aknowledgements
 	id string
 	// timestamp for consistency of timestamps in {ctrl} messages
 	timestamp time.Time
 	// Should the packet be sent to the original sessions?
-	skipSession *Session
+	sessSkip *Session
 }
 
 // Combined message

@@ -245,12 +245,12 @@ func (t *Topic) run(hub *Hub) {
 			if msg.Data != nil {
 				from := types.ParseUserId(msg.Data.From)
 
-				// msg.akn is not nil when the message originated at the client.
+				// msg.sessFrom is not nil when the message originated at the client.
 				// for internally generated messages, like invites, the akn is nil
-				if msg.akn != nil {
+				if msg.sessFrom != nil {
 					userData := t.perUser[from]
 					if userData.modeWant&userData.modeGiven&types.ModePub == 0 {
-						simpleByteSender(msg.akn, ErrPermissionDenied(msg.id, t.original, msg.timestamp))
+						simpleByteSender(msg.sessFrom, ErrPermissionDenied(msg.id, t.original, msg.timestamp))
 						continue
 					}
 				}
@@ -263,7 +263,7 @@ func (t *Topic) run(hub *Hub) {
 					Content:   msg.Data.Content}); err != nil {
 
 					log.Printf("topic[%s].run: failed to save message: %v", t.name, err)
-					simpleByteSender(msg.akn, ErrUnknown(msg.id, t.original, msg.timestamp))
+					simpleByteSender(msg.sessFrom, ErrUnknown(msg.id, t.original, msg.timestamp))
 
 					continue
 				}
@@ -274,7 +274,7 @@ func (t *Topic) run(hub *Hub) {
 				if msg.id != "" {
 					reply := NoErrAccepted(msg.id, t.original, msg.timestamp)
 					reply.Ctrl.Params = map[string]int{"seq": t.lastId}
-					simpleByteSender(msg.akn, reply)
+					simpleByteSender(msg.sessFrom, reply)
 				}
 
 				t.presPubMessageSent(t.lastId)
@@ -327,7 +327,7 @@ func (t *Topic) run(hub *Hub) {
 						continue
 					}
 
-					t.presPubMessageCount(msg.skipSession, 0, recv, read)
+					t.presPubMessageCount(msg.sessSkip, 0, recv, read)
 
 					t.perUser[uid] = pud
 				}
@@ -338,7 +338,7 @@ func (t *Topic) run(hub *Hub) {
 			if msg.Data != nil || msg.Pres != nil || msg.Info != nil {
 				var packet, _ = json.Marshal(msg)
 				for sess := range t.sessions {
-					if sess == msg.skipSession {
+					if sess == msg.sessSkip {
 						continue
 					}
 
@@ -504,7 +504,7 @@ func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin, sendDesc bool) error {
 		if sreg.pkt.Set.Sub != nil {
 			if sreg.pkt.Set.Sub.User != "" {
 				log.Println("subCommonReply: msg.Sub.Sub.User is ", sreg.pkt.Set.Sub.User)
-				simpleByteSender(sreg.sess.send, ErrMalformed(sreg.pkt.Id, t.original, now))
+				simpleByteSender(sreg.sess, ErrMalformed(sreg.pkt.Id, t.original, now))
 				return errors.New("user id must not be specified")
 			}
 
@@ -538,7 +538,7 @@ func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin, sendDesc bool) error {
 	resp := NoErr(sreg.pkt.Id, t.original, now)
 	// Report available access mode.
 	resp.Ctrl.Params = map[string]string{"mode": (pud.modeGiven & pud.modeWant).String()}
-	simpleByteSender(sreg.sess.send, resp)
+	simpleByteSender(sreg.sess, resp)
 
 	if sendDesc {
 		t.replyGetDesc(sreg.sess, sreg.pkt.Id, sreg.created, sreg.pkt.Get.Desc)
@@ -593,7 +593,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string, inf
 		if modeWant == types.ModeNone {
 			if explicitWant {
 				// The operation is invalid - user requested to clear access to topic which makes no sense.
-				simpleByteSender(sess.send, ErrMalformed(pktId, t.original, now))
+				simpleByteSender(sess, ErrMalformed(pktId, t.original, now))
 				return errors.New("attempt to clear topic access")
 			}
 
@@ -612,7 +612,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string, inf
 			for uid2, _ := range t.perUser {
 				if user2, err := store.Users.Get(uid2); err != nil {
 					log.Println(err.Error())
-					simpleByteSender(sess.send, ErrUnknown(pktId, t.original, now))
+					simpleByteSender(sess, ErrUnknown(pktId, t.original, now))
 					return err
 				} else {
 					userData.public = user2.Public
@@ -632,7 +632,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string, inf
 
 		if err := store.Subs.Create(sub); err != nil {
 			log.Println(err.Error())
-			simpleByteSender(sess.send, ErrUnknown(pktId, t.original, now))
+			simpleByteSender(sess, ErrUnknown(pktId, t.original, now))
 			return err
 		}
 
@@ -654,7 +654,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string, inf
 			// Make sure the current owner cannot unset the owner flag or ban himself
 			if t.owner == sess.uid && (!modeWant.IsOwner() || modeWant.IsBanned()) {
 				log.Println("requestSub: owner attempts to unset the owner flag")
-				simpleByteSender(sess.send, ErrMalformed(pktId, t.original, now))
+				simpleByteSender(sess, ErrMalformed(pktId, t.original, now))
 				return errors.New("cannot unset ownership or ban the owner")
 			}
 
@@ -669,7 +669,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string, inf
 			}
 		} else if modeWant.IsOwner() {
 			// Ownership transfer can only be initiated by the owner
-			simpleByteSender(sess.send, ErrMalformed(pktId, t.original, now))
+			simpleByteSender(sess, ErrMalformed(pktId, t.original, now))
 			return errors.New("non-owner cannot request ownership transfer")
 		} else if userData.modeGiven.IsManager() && modeWant.IsManager() {
 			// The sharer should be able to grant any permissions except ownership
@@ -707,7 +707,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string, inf
 				update["ModeGiven"] = int(*updGiven)
 			}
 			if err := store.Subs.Update(t.name, sess.uid, update); err != nil {
-				simpleByteSender(sess.send, ErrUnknown(pktId, t.original, now))
+				simpleByteSender(sess, ErrUnknown(pktId, t.original, now))
 				return err
 			}
 			//log.Printf("requestSub: topic %s updated SUB: %+#v", t.name, update)
@@ -740,7 +740,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string, inf
 		// FIXME(gene): need to send a reply to user
 		return errors.New("self-banned access to topic")
 	} else if userData.modeGiven.IsBanned() {
-		simpleByteSender(sess.send, ErrPermissionDenied(pktId, t.original, now))
+		simpleByteSender(sess, ErrPermissionDenied(pktId, t.original, now))
 		return errors.New("topic access denied")
 	}
 
@@ -780,7 +780,7 @@ func (t *Topic) approveSub(h *Hub, sess *Session, target types.Uid, set *MsgClie
 
 	// Check if requester actually has permission to manage sharing
 	if userData, ok := t.perUser[sess.uid]; !ok || !userData.modeGiven.IsManager() || !userData.modeWant.IsManager() {
-		simpleByteSender(sess.send, ErrPermissionDenied(set.Id, t.original, now))
+		simpleByteSender(sess, ErrPermissionDenied(set.Id, t.original, now))
 		return errors.New("topic access denied")
 	}
 
@@ -797,7 +797,7 @@ func (t *Topic) approveSub(h *Hub, sess *Session, target types.Uid, set *MsgClie
 
 	// Make sure no one but the owner can do an ownership transfer
 	if modeGiven.IsOwner() && t.owner != sess.uid {
-		simpleByteSender(sess.send, ErrPermissionDenied(set.Id, t.original, now))
+		simpleByteSender(sess, ErrPermissionDenied(set.Id, t.original, now))
 		return errors.New("attempt to transfer ownership by non-owner")
 	}
 
@@ -811,7 +811,7 @@ func (t *Topic) approveSub(h *Hub, sess *Session, target types.Uid, set *MsgClie
 				// Request to use default access mode for the new subscriptions.
 				modeGiven = t.accessAuth
 			} else {
-				simpleByteSender(sess.send, ErrMalformed(set.Id, t.original, now))
+				simpleByteSender(sess, ErrMalformed(set.Id, t.original, now))
 				return errors.New("cannot invite without giving any access rights")
 			}
 		}
@@ -825,7 +825,7 @@ func (t *Topic) approveSub(h *Hub, sess *Session, target types.Uid, set *MsgClie
 		}
 
 		if err := store.Subs.Create(sub); err != nil {
-			simpleByteSender(sess.send, ErrUnknown(set.Id, t.original, now))
+			simpleByteSender(sess, ErrUnknown(set.Id, t.original, now))
 			return err
 		}
 
@@ -859,7 +859,7 @@ func (t *Topic) approveSub(h *Hub, sess *Session, target types.Uid, set *MsgClie
 
 	// The user does not want to be bothered, no further action is needed
 	if userData.modeWant.IsBanned() {
-		simpleByteSender(sess.send, ErrPermissionDenied(set.Id, t.original, now))
+		simpleByteSender(sess, ErrPermissionDenied(set.Id, t.original, now))
 		return errors.New("topic access denied")
 	}
 
@@ -951,7 +951,7 @@ func (t *Topic) replyGetDesc(sess *Session, id string, created bool, opts *MsgGe
 		}
 	}
 
-	simpleByteSender(sess.send, &ServerComMessage{
+	simpleByteSender(sess, &ServerComMessage{
 		Meta: &MsgServerMeta{Id: id, Topic: t.original, Desc: desc, Timestamp: &now}})
 
 	return nil
@@ -1036,7 +1036,7 @@ func (t *Topic) replySetDesc(sess *Session, set *MsgClientSet) error {
 		}
 
 		if err != nil {
-			simpleByteSender(sess.send, ErrMalformed(set.Id, set.Topic, now))
+			simpleByteSender(sess, ErrMalformed(set.Id, set.Topic, now))
 			return err
 		}
 
@@ -1060,10 +1060,10 @@ func (t *Topic) replySetDesc(sess *Session, set *MsgClientSet) error {
 	}
 
 	if err != nil {
-		simpleByteSender(sess.send, ErrUnknown(set.Id, set.Topic, now))
+		simpleByteSender(sess, ErrUnknown(set.Id, set.Topic, now))
 		return err
 	} else if change == 0 {
-		simpleByteSender(sess.send, ErrMalformed(set.Id, set.Topic, now))
+		simpleByteSender(sess, ErrMalformed(set.Id, set.Topic, now))
 		return errors.New("set generated no update to DB")
 	}
 
@@ -1083,7 +1083,7 @@ func (t *Topic) replySetDesc(sess *Session, set *MsgClientSet) error {
 		t.presPubChange(sess.uid, "upd")
 	}
 
-	simpleByteSender(sess.send, NoErr(set.Id, set.Topic, now))
+	simpleByteSender(sess, NoErr(set.Id, set.Topic, now))
 
 	// TODO(gene) send pres update
 
@@ -1115,8 +1115,7 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 	}
 
 	if err != nil {
-		reply := ErrUnknown(id, t.original, now)
-		simpleByteSender(sess.send, reply)
+		simpleByteSender(sess, ErrUnknown(id, t.original, now))
 		return err
 	}
 
@@ -1197,7 +1196,7 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 		}
 	}
 
-	simpleByteSender(sess.send, &ServerComMessage{Meta: meta})
+	simpleByteSender(sess, &ServerComMessage{Meta: meta})
 
 	return nil
 }
@@ -1210,7 +1209,7 @@ func (t *Topic) replySetSub(h *Hub, sess *Session, set *MsgClientSet) error {
 	var uid types.Uid
 	if uid = types.ParseUserId(set.Sub.User); uid.IsZero() && set.Sub.User != "" {
 		// Invalid user ID
-		simpleByteSender(sess.send, ErrMalformed(set.Id, set.Topic, now))
+		simpleByteSender(sess, ErrMalformed(set.Id, set.Topic, now))
 		return errors.New("invalid user id")
 	}
 
@@ -1237,7 +1236,7 @@ func (t *Topic) replyGetData(sess *Session, id string, req *MsgBrowseOpts) error
 	if err != nil {
 		log.Println("topic: error loading topics ", err)
 		reply := ErrUnknown(id, t.original, now)
-		simpleByteSender(sess.send, reply)
+		simpleByteSender(sess, reply)
 		return err
 	}
 	log.Println("Loaded messages ", len(messages))
@@ -1255,7 +1254,7 @@ func (t *Topic) replyGetData(sess *Session, id string, req *MsgBrowseOpts) error
 				From:      from.UserId(),
 				Timestamp: mm.CreatedAt,
 				Content:   mm.Content}}
-			simpleByteSender(sess.send, msg)
+			simpleByteSender(sess, msg)
 		}
 	}
 
@@ -1267,7 +1266,7 @@ func (t *Topic) replyDelMsg(sess *Session, del *MsgClientDel) error {
 	now := time.Now().UTC().Round(time.Millisecond)
 
 	if del.Before > t.lastId || del.Before < 0 {
-		simpleByteSender(sess.send, ErrMalformed(del.Id, t.original, now))
+		simpleByteSender(sess, ErrMalformed(del.Id, t.original, now))
 		return errors.New("invalid del.msg parameter 'before'")
 	} else if del.Before == 0 {
 		del.Before = t.lastId
@@ -1275,13 +1274,13 @@ func (t *Topic) replyDelMsg(sess *Session, del *MsgClientDel) error {
 
 	pud := t.perUser[sess.uid]
 	if del.Hard && pud.modeGiven&pud.modeWant&types.ModeDelete == 0 {
-		simpleByteSender(sess.send, ErrPermissionDenied(del.Id, t.original, now))
+		simpleByteSender(sess, ErrPermissionDenied(del.Id, t.original, now))
 		return errors.New("no permission to hard-delete messages")
 	}
 
 	// Make sure user has not deleted the messages already
 	if (del.Before <= t.clearId) || (!del.Hard && del.Before <= pud.clearId) {
-		simpleByteSender(sess.send, InfoNoAction(del.Id, t.original, now))
+		simpleByteSender(sess, InfoNoAction(del.Id, t.original, now))
 		return nil
 	}
 
@@ -1293,7 +1292,7 @@ func (t *Topic) replyDelMsg(sess *Session, del *MsgClientDel) error {
 	}
 
 	if err != nil {
-		simpleByteSender(sess.send, ErrUnknown(del.Id, t.original, now))
+		simpleByteSender(sess, ErrUnknown(del.Id, t.original, now))
 		return err
 	}
 
@@ -1317,7 +1316,7 @@ func (t *Topic) replyDelMsg(sess *Session, del *MsgClientDel) error {
 		t.presPubMessageCount(sess, pud.clearId, 0, 0)
 	}
 
-	simpleByteSender(sess.send, NoErr(del.Id, t.original, now))
+	simpleByteSender(sess, NoErr(del.Id, t.original, now))
 
 	return nil
 }

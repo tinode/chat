@@ -33,8 +33,6 @@ package main
 
 import (
 	"container/list"
-	"crypto/rand"
-	"encoding/base64"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -42,23 +40,19 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/tinode/chat/server/store/types"
+	"github.com/tinode/chat/server/store"
 )
 
-type sessionStoreElement struct {
-	key string
-	val *Session
-}
-
 type SessionStore struct {
-	// Long polling sessions
-	rw         sync.RWMutex
-	lpSessions map[string]*list.Element
-	lru        *list.List
-	lifeTime   time.Duration
+	rw sync.RWMutex
 
-	// Websocket sessions
-	wsSessions map[string]*Session
+	// Support for long polling sessions: a list of sessions sorted by last access time.
+	// Needed for cleaning abandoned sessions.
+	lru      *list.List
+	lifeTime time.Duration
+
+	// All sessions indexed by session ID
+	sessCache map[string]*Session
 }
 
 func (ss *SessionStore) Create(conn interface{}) *Session {
@@ -71,6 +65,9 @@ func (ss *SessionStore) Create(conn interface{}) *Session {
 	case http.ResponseWriter:
 		s.proto = LPOLL
 		s.wrt = c
+	case string:
+		s.proto = RPC
+		s.sid = c
 	default:
 		s.proto = NONE
 	}
@@ -83,106 +80,87 @@ func (ss *SessionStore) Create(conn interface{}) *Session {
 	}
 
 	s.lastTouched = time.Now()
-	s.sid = genSID()
-	s.uid = types.ZeroUid
+	if s.sid == "" {
+		s.sid = genSID()
+	}
 
-	// Websocket connections are not managed by SessionStore
-	if s.proto == WEBSOCK {
-		ss.rw.Lock()
-		ss.wsSessions[s.sid] = &s
-		ss.rw.Unlock()
-	} else {
-		ss.rw.Lock()
+	ss.rw.Lock()
+	ss.sessCache[s.sid] = &s
 
-		elem := ss.lru.PushFront(&sessionStoreElement{s.sid, &s})
-		ss.lpSessions[s.sid] = elem
+	if s.proto == LPOLL {
+		// Only LP sessions need to be sorted by last active
+		s.lpTracker = ss.lru.PushFront(&s)
 
 		// Remove expired sessions
 		expire := s.lastTouched.Add(-ss.lifeTime)
-		for elem = ss.lru.Back(); elem != nil; elem = ss.lru.Back() {
-			if elem.Value.(*sessionStoreElement).val.lastTouched.Before(expire) {
+		for elem := ss.lru.Back(); elem != nil; elem = ss.lru.Back() {
+			if elem.Value.(*Session).lastTouched.Before(expire) {
 				ss.lru.Remove(elem)
-				delete(ss.lpSessions, elem.Value.(*sessionStoreElement).key)
+				delete(ss.sessCache, elem.Value.(*Session).sid)
 			} else {
 				break // don't need to traverse further
 			}
 		}
-		ss.rw.Unlock()
 	}
+
+	ss.rw.Unlock()
 
 	return &s
 }
 
-func (ss *SessionStore) GetLP(sid string) *Session {
+func (ss *SessionStore) Get(sid string) *Session {
 	ss.rw.Lock()
 	defer ss.rw.Unlock()
 
-	if elem := ss.lpSessions[sid]; elem != nil {
-		ss.lru.MoveToFront(elem)
-		elem.Value.(*sessionStoreElement).val.lastTouched = time.Now()
-		return elem.Value.(*sessionStoreElement).val
+	if sess := ss.sessCache[sid]; sess != nil {
+		if sess.proto == LPOLL {
+			ss.lru.MoveToFront(sess.lpTracker)
+			sess.lastTouched = time.Now()
+		}
+
+		return sess
 	}
 
 	return nil
 }
 
-func (ss *SessionStore) GetWS(sid string) *Session {
+func (ss *SessionStore) Delete(s *Session) {
 	ss.rw.Lock()
 	defer ss.rw.Unlock()
 
-	return ss.wsSessions[sid]
-}
+	delete(ss.sessCache, s.sid)
 
-func (ss *SessionStore) Delete(s *Session) *Session {
-	ss.rw.Lock()
-	defer ss.rw.Unlock()
-
-	if s.proto == WEBSOCK {
-		delete(ss.wsSessions, s.sid)
-
-	} else if elem := ss.lpSessions[s.sid]; elem != nil {
-		ss.lru.Remove(elem)
-		delete(ss.lpSessions, s.sid)
-
-		return elem.Value.(*sessionStoreElement).val
+	if s.proto == LPOLL {
+		ss.lru.Remove(s.lpTracker)
 	}
-
-	return nil
 }
 
+// Shutting down sessionStore. No need to clean up.
 func (ss *SessionStore) Shutdown() {
 	ss.rw.Lock()
 	defer ss.rw.Unlock()
 
 	shutdown, _ := json.Marshal(NoErrShutdown(time.Now().UTC().Round(time.Millisecond)))
-	for _, s := range ss.wsSessions {
-		s.send <- shutdown
+	for _, s := range ss.sessCache {
+		if s.send != nil {
+			s.send <- shutdown
+		}
 	}
 
-	for _, elem := range ss.lpSessions {
-		elem.Value.(*sessionStoreElement).val.send <- shutdown
-	}
-
-	log.Printf("SessionStore shut down, sessions terminated: %d ws; %d lp", len(ss.wsSessions), len(ss.lpSessions))
+	log.Printf("SessionStore shut down, sessions terminated: %d", len(ss.sessCache))
 }
 
 func NewSessionStore(lifetime time.Duration) *SessionStore {
 	store := &SessionStore{
-		lpSessions: make(map[string]*list.Element),
-		lru:        list.New(),
-		lifeTime:   lifetime,
+		lru:      list.New(),
+		lifeTime: lifetime,
 
-		wsSessions: make(map[string]*Session),
+		sessCache: make(map[string]*Session),
 	}
 
 	return store
 }
 
 func genSID() string {
-	buf := make([]byte, 9)
-	if _, err := rand.Read(buf); err != nil {
-		panic("genSID: failed to generate a random string: " + err.Error())
-	}
-	//return base32.StdEncoding.EncodeToString(buf)
-	return base64.URLEncoding.EncodeToString(buf)
+	return store.GetUidString()
 }

@@ -77,6 +77,7 @@ type configType struct {
 	APIKeySalt []byte `json:"api_key_salt"`
 	// Security token expiration time
 	TokenExpiresIn int             `json:"token_expires_in"`
+	ClusterConfig  json.RawMessage `json:"cluster_config"`
 	StoreConfig    json.RawMessage `json:"store_config"`
 }
 

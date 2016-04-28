@@ -86,7 +86,7 @@ func (sess *Session) writeOnce() {
 
 func (sess *Session) readOnce(req *http.Request) {
 	if raw, err := ioutil.ReadAll(req.Body); err == nil {
-		sess.dispatch(raw)
+		sess.dispatchRaw(raw)
 	} else {
 		log.Println("longPoll: " + err.Error())
 	}
@@ -151,7 +151,7 @@ func serveLongPoll(wrt http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	sess := globals.sessionStore.GetLP(sid)
+	sess := globals.sessionStore.Get(sid)
 	if sess == nil {
 		log.Println("longPoll: invalid or expired session id ", sid)
 

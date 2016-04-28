@@ -32,10 +32,11 @@
 package main
 
 import (
-	"github.com/gorilla/websocket"
 	"log"
 	"net/http"
 	"time"
+
+	"github.com/gorilla/websocket"
 )
 
 const (
@@ -77,7 +78,7 @@ func (sess *Session) readLoop() {
 			log.Println("sess.readLoop: " + err.Error())
 			return
 		} else {
-			sess.dispatch(raw)
+			sess.dispatchRaw(raw)
 		}
 	}
 }

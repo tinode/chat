@@ -175,7 +175,7 @@ func (t *Topic) presProcReq(fromTopic string, online, wantReply bool) {
 func (t *Topic) presAnnounceToTopic(src, what string, seq int, skip *Session) {
 	globals.hub.route <- &ServerComMessage{
 		Pres:   &MsgServerPres{Topic: t.original, What: what, Src: src, SeqId: seq},
-		rcptto: t.name, skipSession: skip}
+		rcptto: t.name, sessSkip: skip}
 }
 
 // Announce to a single user on 'me' topic
@@ -184,7 +184,7 @@ func (t *Topic) presAnnounceToUser(uid types.Uid, what string, seq int, skip *Se
 		update := &MsgServerPres{Topic: "me", What: what, Src: t.original, SeqId: seq}
 
 		if pud.modeGiven&pud.modeWant&types.ModePres != 0 {
-			globals.hub.route <- &ServerComMessage{Pres: update, rcptto: uid.UserId(), skipSession: skip}
+			globals.hub.route <- &ServerComMessage{Pres: update, rcptto: uid.UserId(), sessSkip: skip}
 		}
 	}
 }
