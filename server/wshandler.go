@@ -53,6 +53,12 @@ const (
 	maxMessageSize = 1 << 15 // 32K
 )
 
+func (s *Session) closeWS() {
+	if s.proto == WEBSOCK {
+		s.ws.Close()
+	}
+}
+
 func (sess *Session) readLoop() {
 	defer func() {
 		log.Println("serveWebsocket - stop")
@@ -157,9 +163,9 @@ func serveWebSocket(wrt http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	sess := globals.sessionStore.Create(ws)
+	sess := globals.sessionStore.Create(ws, "")
 
-	sess.QueueOut(&ServerComMessage{Ctrl: &MsgServerCtrl{
+	sess.queueOut(&ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        req.FormValue("id"),
 		Code:      http.StatusCreated,
 		Text:      "created",

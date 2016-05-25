@@ -55,8 +55,10 @@ type SessionStore struct {
 	sessCache map[string]*Session
 }
 
-func (ss *SessionStore) Create(conn interface{}) *Session {
+func (ss *SessionStore) Create(conn interface{}, sid string) *Session {
 	var s Session
+
+	s.sid = sid
 
 	switch c := conn.(type) {
 	case *websocket.Conn:
@@ -65,9 +67,9 @@ func (ss *SessionStore) Create(conn interface{}) *Session {
 	case http.ResponseWriter:
 		s.proto = LPOLL
 		s.wrt = c
-	case string:
+	case *ClusterNode:
 		s.proto = RPC
-		s.sid = c
+		s.rpcnode = c
 	default:
 		s.proto = NONE
 	}
@@ -81,7 +83,7 @@ func (ss *SessionStore) Create(conn interface{}) *Session {
 
 	s.lastTouched = time.Now()
 	if s.sid == "" {
-		s.sid = genSID()
+		s.sid = store.GetUidString()
 	}
 
 	ss.rw.Lock()
@@ -159,8 +161,4 @@ func NewSessionStore(lifetime time.Duration) *SessionStore {
 	}
 
 	return store
-}
-
-func genSID() string {
-	return store.GetUidString()
 }

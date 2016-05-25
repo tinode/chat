@@ -32,7 +32,6 @@
 package main
 
 import (
-	"encoding/json"
 	"expvar"
 	"log"
 	"strings"
@@ -190,7 +189,7 @@ func (h *Hub) run() {
 						From:    types.ParseUserId(msg.Data.From).String(),
 						Content: msg.Data.Content}); err != nil {
 
-						simpleByteSender(msg.sessFrom, ErrUnknown(msg.id, msg.Data.Topic, timestamp))
+						msg.sessFrom.queueOut(ErrUnknown(msg.id, msg.Data.Topic, timestamp))
 						return
 					}
 
@@ -199,7 +198,7 @@ func (h *Hub) run() {
 					for tt, _ := range h.topics {
 						log.Printf("Hub contains topic '%s'", tt)
 					}
-					simpleByteSender(msg.sessFrom, NoErrAccepted(msg.id, msg.rcptto, timestamp))
+					msg.sessFrom.queueOut(NoErrAccepted(msg.id, msg.rcptto, timestamp))
 				}
 			}
 
@@ -272,13 +271,13 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		user, err := store.Users.Get(sreg.sess.uid)
 		if err != nil {
 			log.Println("hub: cannot load user object for 'me'='" + t.name + "' (" + err.Error() + ")")
-			sreg.sess.QueueOut(ErrUnknown(sreg.pkt.Id, t.original, timestamp))
+			sreg.sess.queueOut(ErrUnknown(sreg.pkt.Id, t.original, timestamp))
 			return
 		}
 
 		if err = t.loadSubscribers(); err != nil {
 			log.Println("hub: cannot load subscribers for '" + t.name + "' (" + err.Error() + ")")
-			sreg.sess.QueueOut(ErrUnknown(sreg.pkt.Id, t.original, timestamp))
+			sreg.sess.queueOut(ErrUnknown(sreg.pkt.Id, t.original, timestamp))
 			return
 		}
 
@@ -308,7 +307,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 
 		if err := t.loadSubscribers(); err != nil {
 			log.Println("hub: cannot load subscribers for '" + t.name + "' (" + err.Error() + ")")
-			sreg.sess.QueueOut(ErrUnknown(sreg.pkt.Id, t.original, timestamp))
+			sreg.sess.queueOut(ErrUnknown(sreg.pkt.Id, t.original, timestamp))
 			return
 		}
 
@@ -339,7 +338,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		stopic, err := store.Topics.Get(t.name)
 		if err != nil {
 			log.Println("hub: error while loading topic '" + t.name + "' (" + err.Error() + ")")
-			sreg.sess.QueueOut(ErrUnknown(sreg.pkt.Id, t.name, timestamp))
+			sreg.sess.queueOut(ErrUnknown(sreg.pkt.Id, t.name, timestamp))
 			return
 		}
 
@@ -349,14 +348,14 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 			// Subs already have Public swapped
 			if subs, err = store.Topics.GetSubs(t.name); err != nil {
 				log.Println("hub: cannot load subscritions for '" + t.name + "' (" + err.Error() + ")")
-				sreg.sess.QueueOut(ErrUnknown(sreg.pkt.Id, t.name, timestamp))
+				sreg.sess.queueOut(ErrUnknown(sreg.pkt.Id, t.name, timestamp))
 				return
 			}
 
 			// Case 3, fail
 			if len(subs) == 0 {
 				log.Println("hub: missing both subscriptions for '" + t.name + "' (SHOULD NEVER HAPPEN!)")
-				sreg.sess.QueueOut(ErrUnknown(sreg.pkt.Id, t.name, timestamp))
+				sreg.sess.queueOut(ErrUnknown(sreg.pkt.Id, t.name, timestamp))
 				return
 			}
 
@@ -410,12 +409,12 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 			users, err := store.Users.GetAll(userId1, userId2)
 			if err != nil {
 				log.Println("hub: failed to load users for '" + t.name + "' (" + err.Error() + ")")
-				sreg.sess.QueueOut(ErrUnknown(sreg.pkt.Id, t.name, timestamp))
+				sreg.sess.queueOut(ErrUnknown(sreg.pkt.Id, t.name, timestamp))
 				return
 			} else if len(users) != 2 {
 				// Invited user does not exist
 				log.Println("hub: missing user for '" + t.name + "'")
-				sreg.sess.QueueOut(ErrUserNotFound(sreg.pkt.Id, t.name, timestamp))
+				sreg.sess.queueOut(ErrUserNotFound(sreg.pkt.Id, t.name, timestamp))
 				return
 			} else {
 				// User records are unsorted, make sure we know who is who.
@@ -486,7 +485,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 			if stopic == nil {
 				if err = store.Topics.CreateP2P(sub1, sub2); err != nil {
 					log.Println("hub: databse error in creating subscriptions '" + t.name + "' (" + err.Error() + ")")
-					sreg.sess.QueueOut(ErrUnknown(sreg.pkt.Id, t.name, timestamp))
+					sreg.sess.queueOut(ErrUnknown(sreg.pkt.Id, t.name, timestamp))
 					return
 				}
 
@@ -505,7 +504,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 				}
 				if err = store.Subs.Create(subToMake); err != nil {
 					log.Println("hub: databse error in re-subscribing user '" + t.name + "' (" + err.Error() + ")")
-					sreg.sess.QueueOut(ErrUnknown(sreg.pkt.Id, t.name, timestamp))
+					sreg.sess.queueOut(ErrUnknown(sreg.pkt.Id, t.name, timestamp))
 					return
 				}
 			}
@@ -595,7 +594,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		if err != nil {
 			log.Println("hub: cannot save new topic '" + t.name + "' (" + err.Error() + ")")
 			// Error sent on "new" topic
-			sreg.sess.QueueOut(ErrUnknown(sreg.pkt.Id, t.original, timestamp))
+			sreg.sess.queueOut(ErrUnknown(sreg.pkt.Id, t.original, timestamp))
 			return
 		}
 
@@ -611,17 +610,17 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		stopic, err := store.Topics.Get(t.name)
 		if err != nil {
 			log.Println("hub: error while loading topic '" + t.name + "' (" + err.Error() + ")")
-			sreg.sess.QueueOut(ErrUnknown(sreg.pkt.Id, t.original, timestamp))
+			sreg.sess.queueOut(ErrUnknown(sreg.pkt.Id, t.original, timestamp))
 			return
 		} else if stopic == nil {
 			log.Println("hub: topic '" + t.name + "' does not exist")
-			sreg.sess.QueueOut(ErrTopicNotFound(sreg.pkt.Id, t.original, timestamp))
+			sreg.sess.queueOut(ErrTopicNotFound(sreg.pkt.Id, t.original, timestamp))
 			return
 		}
 
 		if err = t.loadSubscribers(); err != nil {
 			log.Println("hub: cannot load subscribers for '" + t.name + "' (" + err.Error() + ")")
-			sreg.sess.QueueOut(ErrUnknown(sreg.pkt.Id, t.original, timestamp))
+			sreg.sess.queueOut(ErrUnknown(sreg.pkt.Id, t.original, timestamp))
 			return
 		}
 
@@ -726,14 +725,14 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *MsgClientDel, fromSes
 		// Case 3 (topic is offline):
 		// Check if user has a subscription
 		if sub, err := store.Subs.Get(topic, sess.uid); err != nil {
-			simpleByteSender(sess, ErrUnknown(msg.Id, msg.Topic, now))
+			sess.queueOut(ErrUnknown(msg.Id, msg.Topic, now))
 			return
 		} else if sub.ModeGiven&sub.ModeWant&types.ModeOwner == 0 {
 			// Case 3.2: delete just the user's subscription.
 			if err := store.Subs.Delete(topic, sess.uid); err != nil {
-				simpleByteSender(sess, ErrUnknown(msg.Id, msg.Topic, now))
+				sess.queueOut(ErrUnknown(msg.Id, msg.Topic, now))
 			}
-			simpleByteSender(sess, NoErr(msg.Id, msg.Topic, now))
+			sess.queueOut(NoErr(msg.Id, msg.Topic, now))
 			return
 		}
 	}
@@ -741,14 +740,14 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *MsgClientDel, fromSes
 	if del {
 		// Cases 1.1.6, 1.1.7, 3.1.2, 3.1.3
 		if err := store.Topics.Delete(topic); err != nil {
-			simpleByteSender(sess, ErrUnknown(msg.Id, msg.Topic, now))
+			sess.queueOut(ErrUnknown(msg.Id, msg.Topic, now))
 			return
 		}
 	}
 
 	// sess && msg could be nil if the topic is being killed by timer
 	if sess != nil && msg != nil {
-		simpleByteSender(sess, NoErr(msg.Id, msg.Topic, now))
+		sess.queueOut(NoErr(msg.Id, msg.Topic, now))
 	}
 }
 
@@ -765,7 +764,7 @@ func replyTopicDescBasic(sess *Session, topic string, get *MsgClientGet) {
 			desc.UpdatedAt = &stopic.UpdatedAt
 			desc.Public = stopic.Public
 		} else {
-			simpleByteSender(sess, ErrUnknown(get.Id, get.Topic, now))
+			sess.queueOut(ErrUnknown(get.Id, get.Topic, now))
 			return
 		}
 	} else {
@@ -785,7 +784,7 @@ func replyTopicDescBasic(sess *Session, topic string, get *MsgClientGet) {
 		}
 
 		if uid.IsZero() {
-			simpleByteSender(sess, ErrMalformed(get.Id, get.Topic, now))
+			sess.queueOut(ErrMalformed(get.Id, get.Topic, now))
 			return
 		}
 
@@ -796,13 +795,13 @@ func replyTopicDescBasic(sess *Session, topic string, get *MsgClientGet) {
 			desc.Public = suser.Public
 		} else {
 			log.Printf("hub.replyTopicInfoBasic: sending  error 3")
-			simpleByteSender(sess, ErrUnknown(get.Id, get.Topic, now))
+			sess.queueOut(ErrUnknown(get.Id, get.Topic, now))
 			return
 		}
 	}
 
 	log.Printf("hub.replyTopicDescBasic: sending desc -- OK")
-	simpleByteSender(sess, &ServerComMessage{
+	sess.queueOut(&ServerComMessage{
 		Meta: &MsgServerMeta{Id: get.Id, Topic: get.Topic, Timestamp: &now, Desc: desc}})
 }
 
@@ -824,19 +823,6 @@ func parseTopicAccess(acs *MsgDefaultAcsMode, defAuth, defAnon types.AccessMode)
 	}
 
 	return
-}
-
-// simpleByteSender attempts to send a JSON to a connection, time out is 1 second
-func simpleByteSender(s *Session, msg *ServerComMessage) {
-	if s == nil {
-		return
-	}
-	data, _ := json.Marshal(msg)
-	select {
-	case s.send <- data:
-	case <-time.After(time.Second):
-		log.Println("simpleByteSender: timeout")
-	}
 }
 
 func max(a, b int) int {

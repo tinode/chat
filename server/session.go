@@ -35,7 +35,6 @@ package main
 import (
 	"container/list"
 	"encoding/json"
-	"errors"
 	"log"
 	"net/http"
 	"strings"
@@ -55,25 +54,27 @@ const (
 	RPC
 )
 
-/*
-  A single WS connection or a long poll session. A user may have multiple
-  connections (control connection, multiple simultaneous group chat)
-*/
+// A single WS connection or a long polling session. A user may have multiple
+// sessions.
 type Session struct {
-	// protocol - NONE (unset) or WEBSOCK, LPOLL
+	// protocol - NONE (unset), WEBSOCK, LPOLL, RPC
 	proto int
 
-	// Set only for websockets
-
+	// -- Set only for websockets
 	// Websocket
 	ws *websocket.Conn
+	// --
 
-	// Set only for Long Poll sessions
-
+	// -- Set only for Long Poll sessions
 	// Most recent HTTP writer, could be nil
 	wrt http.ResponseWriter
 	// Pointer to session's record in sessionStore
 	lpTracker *list.Element
+	// --
+
+	// -- Set only for RPC sessions
+	rpcnode *ClusterNode
+	// --
 
 	// IP address of the client. For long polling this is the IP of the last poll
 	remoteAddr string
@@ -125,12 +126,8 @@ type Subscription struct {
 	ping chan<- string
 }
 
-func (s *Session) closeWS() {
-	if s.proto == WEBSOCK {
-		s.ws.Close()
-	}
-}
-
+/*
+// writePkt sends ServerComMessage to client immediately, no queueing
 func (s *Session) writePkt(pkt *ServerComMessage) error {
 	data, _ := json.Marshal(pkt)
 	switch s.proto {
@@ -140,20 +137,25 @@ func (s *Session) writePkt(pkt *ServerComMessage) error {
 		_, err := s.wrt.Write(data)
 		return err
 	case RPC:
-		return cluster.ResponseToSession(pkt)
+		return nil //s.rpcnode.endpoint.Call()
 	default:
 		return errors.New("invalid session")
 	}
 }
+*/
 
 // TODO(gene): unify simpleByteSender and QueueOut
 
-// QueueOut attempts to send a ServerComMessage to a session; if the send buffer is full, timeout is 1 millisecond
-func (s *Session) QueueOut(msg *ServerComMessage) {
+// QueueOut attempts to send a ServerComMessage to a session; if the send buffer is full, timeout is 10 milliseconds
+func (s *Session) queueOut(msg *ServerComMessage) {
+	if s == nil {
+		return
+	}
+
 	data, _ := json.Marshal(msg)
 	select {
 	case s.send <- data:
-	case <-time.After(time.Millisecond):
+	case <-time.After(time.Millisecond * 10):
 		log.Println("session.queueOut: timeout")
 	}
 }
@@ -167,7 +169,7 @@ func (s *Session) dispatchRaw(raw []byte) {
 	if err := json.Unmarshal(raw, &msg); err != nil {
 		// Malformed message
 		log.Println("Session.dispatch: " + err.Error())
-		s.QueueOut(ErrMalformed("", "", time.Now().UTC().Round(time.Millisecond)))
+		s.queueOut(ErrMalformed("", "", time.Now().UTC().Round(time.Millisecond)))
 		return
 	}
 
@@ -224,7 +226,7 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 
 	default:
 		// Unknown message
-		s.QueueOut(ErrMalformed("", "", msg.timestamp))
+		s.queueOut(ErrMalformed("", "", msg.timestamp))
 		log.Println("Session.dispatch: unknown message")
 	}
 }
@@ -243,14 +245,14 @@ func (s *Session) subscribe(msg *ClientComMessage) {
 		var err *ServerComMessage
 		topic, expanded, err = s.validateTopicName(msg.Sub.Id, msg.Sub.Topic, msg.timestamp)
 		if err != nil {
-			s.QueueOut(err)
+			s.queueOut(err)
 			return
 		}
 	}
 
 	if _, ok := s.subs[expanded]; ok {
 		log.Printf("sess.subscribe: already subscribed to '%s'", expanded)
-		s.QueueOut(InfoAlreadySubscribed(msg.Sub.Id, topic, msg.timestamp))
+		s.queueOut(InfoAlreadySubscribed(msg.Sub.Id, topic, msg.timestamp))
 		return
 	}
 
@@ -263,7 +265,7 @@ func (s *Session) subscribe(msg *ClientComMessage) {
 func (s *Session) leave(msg *ClientComMessage) {
 
 	if msg.Leave.Topic == "" {
-		s.QueueOut(ErrMalformed(msg.Leave.Id, "", msg.timestamp))
+		s.queueOut(ErrMalformed(msg.Leave.Id, "", msg.timestamp))
 		return
 	}
 
@@ -278,7 +280,7 @@ func (s *Session) leave(msg *ClientComMessage) {
 		// Session is attached to the topic.
 		if (msg.Leave.Topic == "me" || msg.Leave.Topic == "fnd") && msg.Leave.Unsub {
 			// User should not unsubscribe from 'me' or 'find'. Just leaving is fine.
-			s.QueueOut(ErrPermissionDenied(msg.Leave.Id, msg.Leave.Topic, msg.timestamp))
+			s.queueOut(ErrPermissionDenied(msg.Leave.Id, msg.Leave.Topic, msg.timestamp))
 		} else {
 			// Unlink from topic, topic will send a reply.
 			delete(s.subs, topic)
@@ -287,11 +289,11 @@ func (s *Session) leave(msg *ClientComMessage) {
 		}
 	} else if !msg.Leave.Unsub {
 		// Session is not attached to the topic, wants to leave - fine, no change
-		s.QueueOut(InfoNotJoined(msg.Leave.Id, msg.Leave.Topic, msg.timestamp))
+		s.queueOut(InfoNotJoined(msg.Leave.Id, msg.Leave.Topic, msg.timestamp))
 	} else {
 		// Session wants to unsubscribe from the topic it did not join
 		// FIXME(gene): allow topic to unsubscribe without joining first; send to hub to unsub
-		s.QueueOut(ErrAttachFirst(msg.Leave.Id, msg.Leave.Topic, msg.timestamp))
+		s.queueOut(ErrAttachFirst(msg.Leave.Id, msg.Leave.Topic, msg.timestamp))
 	}
 }
 
@@ -302,7 +304,7 @@ func (s *Session) publish(msg *ClientComMessage) {
 
 	topic, routeTo, err := s.validateTopicName(msg.Pub.Id, msg.Pub.Topic, msg.timestamp)
 	if err != nil {
-		s.QueueOut(err)
+		s.queueOut(err)
 		return
 	}
 
@@ -326,31 +328,31 @@ func (s *Session) publish(msg *ClientComMessage) {
 func (s *Session) login(msg *ClientComMessage) {
 
 	if !s.uid.IsZero() {
-		s.QueueOut(ErrAlreadyAuthenticated(msg.Login.Id, "", msg.timestamp))
+		s.queueOut(ErrAlreadyAuthenticated(msg.Login.Id, "", msg.timestamp))
 		return
 	}
 
 	handler := store.GetAuthHandler(msg.Login.Scheme)
 	if handler == nil {
-		s.QueueOut(ErrAuthUnknownScheme(msg.Login.Id, "", msg.timestamp))
+		s.queueOut(ErrAuthUnknownScheme(msg.Login.Id, "", msg.timestamp))
 		return
 	}
 
 	uid, expires, errType := handler.Authenticate(msg.Login.Secret)
 	if errType == auth.ErrMalformed {
-		s.QueueOut(ErrMalformed(msg.Login.Id, "", msg.timestamp))
+		s.queueOut(ErrMalformed(msg.Login.Id, "", msg.timestamp))
 		return
 	}
 
 	// DB error
 	if errType == auth.ErrInternal {
-		s.QueueOut(ErrUnknown(msg.Login.Id, "", msg.timestamp))
+		s.queueOut(ErrUnknown(msg.Login.Id, "", msg.timestamp))
 		return
 	}
 
 	// All other errors are reported as invalid login or password
 	if uid.IsZero() {
-		s.QueueOut(ErrAuthFailed(msg.Login.Id, "", msg.timestamp))
+		s.queueOut(ErrAuthFailed(msg.Login.Id, "", msg.timestamp))
 		return
 	}
 
@@ -368,7 +370,7 @@ func (s *Session) login(msg *ClientComMessage) {
 	// Token GenSecret never fails, ignore the error
 	secret, _ := handler.GenSecret(uid, expires)
 
-	s.QueueOut(&ServerComMessage{Ctrl: &MsgServerCtrl{
+	s.queueOut(&ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        msg.Login.Id,
 		Code:      http.StatusOK,
 		Text:      http.StatusText(http.StatusOK),
@@ -380,10 +382,10 @@ func (s *Session) login(msg *ClientComMessage) {
 // Account creation
 func (s *Session) acc(msg *ClientComMessage) {
 	if msg.Acc.Auth == nil {
-		s.QueueOut(ErrMalformed(msg.Acc.Id, "", msg.timestamp))
+		s.queueOut(ErrMalformed(msg.Acc.Id, "", msg.timestamp))
 		return
 	} else if len(msg.Acc.Auth) == 0 {
-		s.QueueOut(ErrAuthUnknownScheme(msg.Acc.Id, "", msg.timestamp))
+		s.queueOut(ErrAuthUnknownScheme(msg.Acc.Id, "", msg.timestamp))
 		return
 	}
 
@@ -415,9 +417,9 @@ func (s *Session) acc(msg *ClientComMessage) {
 				_, err := store.Users.Create(&user, private)
 				if err != nil {
 					if err.Error() == "duplicate credential" {
-						s.QueueOut(ErrDuplicateCredential(msg.Acc.Id, "", msg.timestamp))
+						s.queueOut(ErrDuplicateCredential(msg.Acc.Id, "", msg.timestamp))
 					} else {
-						s.QueueOut(ErrUnknown(msg.Acc.Id, "", msg.timestamp))
+						s.queueOut(ErrUnknown(msg.Acc.Id, "", msg.timestamp))
 					}
 					return
 				}
@@ -436,9 +438,9 @@ func (s *Session) acc(msg *ClientComMessage) {
 					"uid":  user.Uid().UserId(),
 					"desc": desc,
 				}
-				s.QueueOut(NoErr(msg.Acc.Id, "", msg.timestamp))
+				s.queueOut(NoErr(msg.Acc.Id, "", msg.timestamp))
 			} else {
-				s.QueueOut(ErrAuthUnknownScheme(msg.Acc.Id, "", msg.timestamp))
+				s.queueOut(ErrAuthUnknownScheme(msg.Acc.Id, "", msg.timestamp))
 				return
 			}
 		}
@@ -447,19 +449,19 @@ func (s *Session) acc(msg *ClientComMessage) {
 		for _, auth := range msg.Acc.Auth {
 			if auth.Scheme == "basic" {
 				if err := store.Users.ChangeAuthCredential(s.uid, auth.Scheme, string(auth.Secret)); err != nil {
-					s.QueueOut(ErrUnknown(msg.Acc.Id, "", msg.timestamp))
+					s.queueOut(ErrUnknown(msg.Acc.Id, "", msg.timestamp))
 					return
 				}
 
-				s.QueueOut(NoErr(msg.Acc.Id, "", msg.timestamp))
+				s.queueOut(NoErr(msg.Acc.Id, "", msg.timestamp))
 			} else {
-				s.QueueOut(ErrAuthUnknownScheme(msg.Acc.Id, "", msg.timestamp))
+				s.queueOut(ErrAuthUnknownScheme(msg.Acc.Id, "", msg.timestamp))
 				return
 			}
 		}
 	} else {
 		// session is not authenticated and this is not an attempt to create a new account
-		s.QueueOut(ErrPermissionDenied(msg.Acc.Id, "", msg.timestamp))
+		s.queueOut(ErrPermissionDenied(msg.Acc.Id, "", msg.timestamp))
 		return
 	}
 }
@@ -470,7 +472,7 @@ func (s *Session) get(msg *ClientComMessage) {
 	// Validate topic name
 	original, expanded, err := s.validateTopicName(msg.Get.Id, msg.Get.Topic, msg.timestamp)
 	if err != nil {
-		s.QueueOut(err)
+		s.queueOut(err)
 		return
 	}
 
@@ -482,14 +484,14 @@ func (s *Session) get(msg *ClientComMessage) {
 		what:  parseMsgClientMeta(msg.Get.What)}
 
 	if meta.what == 0 {
-		s.QueueOut(ErrMalformed(msg.Get.Id, original, msg.timestamp))
+		s.queueOut(ErrMalformed(msg.Get.Id, original, msg.timestamp))
 		log.Println("s.get: invalid Get message action: '" + msg.Get.What + "'")
 	} else if ok {
 		sub.meta <- meta
 	} else {
 		if (meta.what&constMsgMetaData != 0) || (meta.what&constMsgMetaSub != 0) {
 			log.Println("s.get: invalid Get message action for hub routing: '" + msg.Get.What + "'")
-			s.QueueOut(ErrPermissionDenied(msg.Get.Id, original, msg.timestamp))
+			s.queueOut(ErrPermissionDenied(msg.Get.Id, original, msg.timestamp))
 		} else {
 			// Description of a topic not currently subscribed to. Request desc from the hub
 			globals.hub.meta <- meta
@@ -503,7 +505,7 @@ func (s *Session) set(msg *ClientComMessage) {
 	// Validate topic name
 	original, expanded, err := s.validateTopicName(msg.Set.Id, msg.Set.Topic, msg.timestamp)
 	if err != nil {
-		s.QueueOut(err)
+		s.queueOut(err)
 		return
 	}
 
@@ -520,7 +522,7 @@ func (s *Session) set(msg *ClientComMessage) {
 			meta.what |= constMsgMetaSub
 		}
 		if meta.what == 0 {
-			s.QueueOut(ErrMalformed(msg.Set.Id, original, msg.timestamp))
+			s.queueOut(ErrMalformed(msg.Set.Id, original, msg.timestamp))
 			log.Println("s.set: nil Set action")
 		}
 
@@ -528,7 +530,7 @@ func (s *Session) set(msg *ClientComMessage) {
 		sub.meta <- meta
 	} else {
 		log.Println("s.set: can Set for subscribed topics only")
-		s.QueueOut(ErrPermissionDenied(msg.Set.Id, original, msg.timestamp))
+		s.queueOut(ErrPermissionDenied(msg.Set.Id, original, msg.timestamp))
 	}
 }
 
@@ -538,14 +540,14 @@ func (s *Session) del(msg *ClientComMessage) {
 	// Validate topic name
 	original, expanded, err := s.validateTopicName(msg.Del.Id, msg.Del.Topic, msg.timestamp)
 	if err != nil {
-		s.QueueOut(err)
+		s.queueOut(err)
 		return
 	}
 
 	sub, ok := s.subs[expanded]
 	what := parseMsgClientDel(msg.Del.What)
 	if what == 0 {
-		s.QueueOut(ErrMalformed(msg.Del.Id, original, msg.timestamp))
+		s.queueOut(ErrMalformed(msg.Del.Id, original, msg.timestamp))
 		log.Println("s.del: invalid Del action '" + msg.Del.What + "'")
 	}
 
@@ -566,7 +568,7 @@ func (s *Session) del(msg *ClientComMessage) {
 			del:         true}
 	} else {
 		// Must join the topic first to delete messages.
-		s.QueueOut(ErrAttachFirst(msg.Del.Id, original, msg.timestamp))
+		s.queueOut(ErrAttachFirst(msg.Del.Id, original, msg.timestamp))
 		log.Println("s.del: invalid Del action while unsubbed '" + msg.Del.What + "'")
 	}
 }

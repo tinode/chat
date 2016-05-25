@@ -135,7 +135,7 @@ func serveLongPoll(wrt http.ResponseWriter, req *http.Request) {
 	// Get session id
 	sid := req.FormValue("sid")
 	if sid == "" {
-		sess := globals.sessionStore.Create(wrt)
+		sess := globals.sessionStore.Create(wrt, "")
 		log.Println("longPoll: new session created, sid=", sess.sid)
 
 		wrt.WriteHeader(http.StatusCreated)
