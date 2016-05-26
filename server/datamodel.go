@@ -683,3 +683,13 @@ func ErrNotImplemented(id, topic string, ts time.Time) *ServerComMessage {
 		Timestamp: ts}}
 	return msg
 }
+
+func ErrClusterNodeUnreachable(id, topic string, ts time.Time) *ServerComMessage {
+	msg := &ServerComMessage{Ctrl: &MsgServerCtrl{
+		Id:        id,
+		Code:      http.StatusBadGateway, // 501
+		Text:      "unreachable",
+		Topic:     topic,
+		Timestamp: ts}}
+	return msg
+}

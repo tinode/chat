@@ -93,6 +93,9 @@ loop:
 			// Terminate all sessions
 			globals.sessionStore.Shutdown()
 
+			// Shutdown local cluster node, if it's a part of a cluster.
+			globals.cluster.shutdown()
+
 			// Shutdown the hub. The hub will shutdown topics
 			hubdone := make(chan bool)
 			globals.hub.shutdown <- hubdone

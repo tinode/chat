@@ -103,6 +103,9 @@ type Session struct {
 	// Map of topic subscriptions, indexed by topic name
 	subs map[string]*Subscription
 
+	// Nodes to inform when the session is disconnected
+	nodes map[string]bool
+
 	// Session ID
 	sid string
 
@@ -125,24 +128,6 @@ type Subscription struct {
 	// Channel to ping topic with session's user agent
 	ping chan<- string
 }
-
-/*
-// writePkt sends ServerComMessage to client immediately, no queueing
-func (s *Session) writePkt(pkt *ServerComMessage) error {
-	data, _ := json.Marshal(pkt)
-	switch s.proto {
-	case WEBSOCK:
-		return ws_write(s.ws, websocket.TextMessage, data)
-	case LPOLL:
-		_, err := s.wrt.Write(data)
-		return err
-	case RPC:
-		return nil //s.rpcnode.endpoint.Call()
-	default:
-		return errors.New("invalid session")
-	}
-}
-*/
 
 // TODO(gene): unify simpleByteSender and QueueOut
 
@@ -253,12 +238,16 @@ func (s *Session) subscribe(msg *ClientComMessage) {
 	if _, ok := s.subs[expanded]; ok {
 		log.Printf("sess.subscribe: already subscribed to '%s'", expanded)
 		s.queueOut(InfoAlreadySubscribed(msg.Sub.Id, topic, msg.timestamp))
-		return
+	} else if globals.cluster.isRemoteTopic(expanded) {
+		// The topic is handled by a remote node. Forward message to it.
+		if err := globals.cluster.routeToTopic(msg, expanded, s); err != nil {
+			s.queueOut(ErrClusterNodeUnreachable(msg.Sub.Id, topic, msg.timestamp))
+		}
+	} else {
+		//log.Printf("Sub to'%s' (%s) from '%s' as '%s' -- OK!", expanded, msg.Sub.Topic, msg.from, topic)
+		globals.hub.join <- &sessionJoin{topic: expanded, pkt: msg.Sub, sess: s}
+		// Hub will send Ctrl success/failure packets back to session
 	}
-
-	//log.Printf("Sub to'%s' (%s) from '%s' as '%s' -- OK!", expanded, msg.Sub.Topic, msg.from, topic)
-	globals.hub.join <- &sessionJoin{topic: expanded, pkt: msg.Sub, sess: s}
-	// Hub will send Ctrl success/failure packets back to session
 }
 
 // Leave/Unsubscribe a topic
@@ -286,6 +275,11 @@ func (s *Session) leave(msg *ClientComMessage) {
 			delete(s.subs, topic)
 			sub.done <- &sessionLeave{
 				sess: s, unsub: msg.Leave.Unsub, topic: msg.Leave.Topic, reqId: msg.Leave.Id}
+		}
+	} else if globals.cluster.isRemoteTopic(topic) {
+		// The topic is handled by a remote node. Forward message to it.
+		if err := globals.cluster.routeToTopic(msg, topic, s); err != nil {
+			s.queueOut(ErrClusterNodeUnreachable(msg.Leave.Id, msg.Leave.Topic, msg.timestamp))
 		}
 	} else if !msg.Leave.Unsub {
 		// Session is not attached to the topic, wants to leave - fine, no change
@@ -321,6 +315,11 @@ func (s *Session) publish(msg *ClientComMessage) {
 	if sub, ok := s.subs[routeTo]; ok {
 		// This is a post to a subscribed topic. The message is sent to the topic only
 		sub.broadcast <- data
+	} else if globals.cluster.isRemoteTopic(routeTo) {
+		// The topic is handled by a remote node. Forward message to it.
+		if err := globals.cluster.routeToTopic(msg, routeTo, s); err != nil {
+			s.queueOut(ErrClusterNodeUnreachable(msg.Pub.Id, topic, msg.timestamp))
+		}
 	}
 }
 
@@ -376,7 +375,6 @@ func (s *Session) login(msg *ClientComMessage) {
 		Text:      http.StatusText(http.StatusOK),
 		Timestamp: msg.timestamp,
 		Params:    map[string]interface{}{"uid": uid.UserId(), "token": secret, "expires": tokenExp}}})
-
 }
 
 // Account creation
@@ -488,6 +486,11 @@ func (s *Session) get(msg *ClientComMessage) {
 		log.Println("s.get: invalid Get message action: '" + msg.Get.What + "'")
 	} else if ok {
 		sub.meta <- meta
+	} else if globals.cluster.isRemoteTopic(expanded) {
+		// The topic is handled by a remote node. Forward message to it.
+		if err := globals.cluster.routeToTopic(msg, expanded, s); err != nil {
+			s.queueOut(ErrClusterNodeUnreachable(msg.Get.Id, original, msg.timestamp))
+		}
 	} else {
 		if (meta.what&constMsgMetaData != 0) || (meta.what&constMsgMetaSub != 0) {
 			log.Println("s.get: invalid Get message action for hub routing: '" + msg.Get.What + "'")
@@ -528,6 +531,11 @@ func (s *Session) set(msg *ClientComMessage) {
 
 		log.Println("s.set: sending to topic")
 		sub.meta <- meta
+	} else if globals.cluster.isRemoteTopic(expanded) {
+		// The topic is handled by a remote node. Forward message to it.
+		if err := globals.cluster.routeToTopic(msg, expanded, s); err != nil {
+			s.queueOut(ErrClusterNodeUnreachable(msg.Set.Id, original, msg.timestamp))
+		}
 	} else {
 		log.Println("s.set: can Set for subscribed topics only")
 		s.queueOut(ErrPermissionDenied(msg.Set.Id, original, msg.timestamp))
@@ -559,6 +567,11 @@ func (s *Session) del(msg *ClientComMessage) {
 			sess:  s,
 			what:  what}
 
+	} else if globals.cluster.isRemoteTopic(expanded) {
+		// The topic is handled by a remote node. Forward message to it.
+		if err := globals.cluster.routeToTopic(msg, expanded, s); err != nil {
+			s.queueOut(ErrClusterNodeUnreachable(msg.Del.Id, original, msg.timestamp))
+		}
 	} else if what == constMsgDelTopic {
 		globals.hub.unreg <- &topicUnreg{
 			topic:       expanded,
@@ -603,6 +616,9 @@ func (s *Session) note(msg *ClientComMessage) {
 			What:  msg.Note.What,
 			SeqId: msg.Note.SeqId,
 		}, rcptto: routeTo, timestamp: msg.timestamp, sessSkip: s}
+	} else if globals.cluster.isRemoteTopic(routeTo) {
+		// The topic is handled by a remote node. Forward message to it.
+		globals.cluster.routeToTopic(msg, routeTo, s)
 	}
 }
 

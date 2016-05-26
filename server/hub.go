@@ -135,7 +135,6 @@ func newHub() *Hub {
 }
 
 func (h *Hub) run() {
-	log.Println("Hub started")
 
 	for {
 		select {

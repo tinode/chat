@@ -96,9 +96,11 @@ func (ss *SessionStore) Create(conn interface{}, sid string) *Session {
 		// Remove expired sessions
 		expire := s.lastTouched.Add(-ss.lifeTime)
 		for elem := ss.lru.Back(); elem != nil; elem = ss.lru.Back() {
-			if elem.Value.(*Session).lastTouched.Before(expire) {
+			sess := elem.Value.(*Session)
+			if sess.lastTouched.Before(expire) {
 				ss.lru.Remove(elem)
-				delete(ss.sessCache, elem.Value.(*Session).sid)
+				delete(ss.sessCache, sess.sid)
+				globals.cluster.sessionGone(sess)
 			} else {
 				break // don't need to traverse further
 			}

@@ -67,6 +67,7 @@ var buildstamp = ""
 var globals struct {
 	hub            *Hub
 	sessionStore   *SessionStore
+	cluster        *Cluster
 	apiKeySalt     []byte
 	tokenExpiresIn time.Duration
 }
@@ -112,10 +113,15 @@ func main() {
 		log.Println("Closed database connection(s)")
 	}()
 
-	// Keep inactive LP sessions for 70 seconds
+	// Keep inactive LP sessions for 15 seconds
 	globals.sessionStore = NewSessionStore(IDLETIMEOUT + 15*time.Second)
+	// The hub (the main message router)
 	globals.hub = newHub()
+	// Cluster initialization
+	clusterInit(config.ClusterConfig)
+	// Expiration time of login tokens
 	globals.tokenExpiresIn = time.Duration(config.TokenExpiresIn) * time.Second
+	// API key validation secret
 	globals.apiKeySalt = config.APIKeySalt
 
 	// Serve static content from the directory in -static_data flag if that's
@@ -136,7 +142,7 @@ func main() {
 	// Handle long polling clients
 	http.HandleFunc("/v0/channels/lp", serveLongPoll)
 
-	log.Printf("Listening on [%s]", config.Listen)
+	log.Printf("Listening for client HTTP connections on [%s]", config.Listen)
 	if err := listenAndServe(config.Listen, signalHandler()); err != nil {
 		log.Fatal(err)
 	}
