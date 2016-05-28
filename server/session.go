@@ -169,8 +169,10 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 
 	// Locking-unlocking is needed for long polling: the client may issue multiple requests in parallel.
 	// Should not affect performance
-	s.rw.Lock()
-	defer s.rw.Unlock()
+	if s.proto == LPOLL {
+		s.rw.Lock()
+		defer s.rw.Unlock()
+	}
 
 	switch {
 	case msg.Pub != nil:
