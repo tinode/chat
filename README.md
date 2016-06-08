@@ -17,30 +17,31 @@ A javascript demo is (usually) available at http://api.tinode.co/x/example-react
 
 * One-on-one messaging.
 * Groups (topics) with up to 16 members where every member's access permissions are managed individually.
-* Topic access control with separate permissions for various actions.
+* Topic access control with permissions for various actions.
 * Server-generated presence notifications for people, topics.
+* Basic sharded clustering.
 * Persistent message store, paginated message history.
 * Javascript bindings with no dependencies.
 * Android Java bindings (dependencies: [jackson](https://github.com/FasterXML/jackson), [nv-websocket-client](https://github.com/TakahikoKawasaki/nv-websocket-client))
 * Websocket & long polling transport.
 * JSON wire protocol.
+* User search/discovery.
 * Message delivery status: server-generated delivery to server, client-generated received and read notifications; typing notifications.
 * Basic support for client-side message caching.
 * Ability to block unwanted communication server-side.
+* Compile-time custom authentication support.
 
 ### Planned
 
 * iOS client bindings.
 * Mobile push notification hooks.
 * Groups (topics) with unlimited number of members with bearer token access control.
-* Clustering.
+* Failover/hot standby/replication.
 * Federation.
 * Different levels of message persistence (from strict persistence to store until delivered to purely ephemeral messaging).
 * Support for binary wire protocol.
-* User search/discovery.
 * Anonymous users.
 * Support for other SQL and NoSQL backends.
-* Pluggable authentication.
 * Plugins.
 
 ## Screenshots
