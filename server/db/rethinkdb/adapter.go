@@ -239,7 +239,8 @@ func (a *RethinkDbAdapter) UpdAuthRecord(unique string, secret []byte) (int, err
 
 // Retrieve user's authentication record
 func (a *RethinkDbAdapter) GetAuthRecord(unique string) (t.Uid, []byte, time.Time, error) {
-	rows, err := rdb.DB(a.dbName).Table("auth").Get(unique).Pluck("userid", "secret", "expires").Run(a.conn)
+	// Default() is needed to prevent Pluck from returning an error
+	rows, err := rdb.DB(a.dbName).Table("auth").Get(unique).Pluck("userid", "secret", "expires").Default(nil).Run(a.conn)
 	if err != nil {
 		return t.ZeroUid, nil, time.Time{}, err
 	}

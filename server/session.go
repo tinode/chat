@@ -37,6 +37,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -81,6 +82,9 @@ type Session struct {
 
 	// User agent, a string provived by an authenticated client in {login} packet
 	userAgent string
+
+	// Protocol version of the client: ((major & 0xff) << 8) | (minor & 0xff)
+	ver int
 
 	// ID of the current user or 0
 	uid types.Uid
@@ -187,6 +191,10 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 		s.leave(msg)
 		log.Println("dispatch: Leave done")
 
+	case msg.Hi != nil:
+		s.hello(msg)
+		log.Println("dispatch: Hi done")
+
 	case msg.Login != nil:
 		s.login(msg)
 		log.Println("dispatch: Login done")
@@ -224,6 +232,11 @@ func (s *Session) subscribe(msg *ClientComMessage) {
 
 	var topic, expanded string
 
+	if s.ver == 0 {
+		s.queueOut(ErrCommandOutOfSequence(msg.Sub.Id, msg.Sub.Topic, msg.timestamp))
+		return
+	}
+
 	if msg.Sub.Topic == "new" {
 		// Request to create a new named topic
 		expanded = genTopicName()
@@ -254,6 +267,11 @@ func (s *Session) subscribe(msg *ClientComMessage) {
 
 // Leave/Unsubscribe a topic
 func (s *Session) leave(msg *ClientComMessage) {
+
+	if s.ver == 0 {
+		s.queueOut(ErrCommandOutOfSequence(msg.Leave.Id, msg.Leave.Topic, msg.timestamp))
+		return
+	}
 
 	if msg.Leave.Topic == "" {
 		s.queueOut(ErrMalformed(msg.Leave.Id, "", msg.timestamp))
@@ -296,6 +314,11 @@ func (s *Session) leave(msg *ClientComMessage) {
 // Broadcast a message to all topic subscribers
 func (s *Session) publish(msg *ClientComMessage) {
 
+	if s.ver == 0 {
+		s.queueOut(ErrCommandOutOfSequence(msg.Pub.Id, msg.Pub.Topic, msg.timestamp))
+		return
+	}
+
 	// TODO(gene): Check for repeated messages with the same ID
 
 	topic, routeTo, err := s.validateTopicName(msg.Pub.Id, msg.Pub.Topic, msg.timestamp)
@@ -325,8 +348,61 @@ func (s *Session) publish(msg *ClientComMessage) {
 	}
 }
 
+func parseVersion(vers string) int {
+	dot := strings.Index(vers, ".")
+	if dot < 0 {
+		return 0
+	}
+	major, err := strconv.Atoi(vers[:dot])
+	if err != nil || major < 0 || major >= 0xff {
+		return 0
+	}
+	minor, err := strconv.Atoi(vers[dot+1:])
+	if err != nil || minor < 0 || minor >= 0xff {
+		return 0
+	}
+	return (major << 8) | minor
+}
+
+// Authenticate
+func (s *Session) hello(msg *ClientComMessage) {
+
+	if msg.Hi.Version == "" {
+		s.queueOut(ErrMalformed(msg.Hi.Id, "", msg.timestamp))
+		return
+	}
+
+	if s.ver == 0 {
+		s.ver = parseVersion(msg.Hi.Version)
+		if s.ver == 0 {
+			s.queueOut(ErrMalformed(msg.Hi.Id, "", msg.timestamp))
+		}
+		// TODO(gene): check version compatibility
+	} else {
+		s.queueOut(ErrCommandOutOfSequence(msg.Hi.Id, "", msg.timestamp))
+	}
+
+	s.userAgent = msg.Hi.UserAgent
+
+	params := map[string]interface{}{"ver": VERSION, "build": buildstamp}
+	if s.proto == LPOLL {
+		params["sid"] = s.sid
+	}
+	s.queueOut(&ServerComMessage{Ctrl: &MsgServerCtrl{
+		Id:        msg.Hi.Id,
+		Code:      http.StatusCreated,
+		Text:      "created",
+		Params:    params,
+		Timestamp: msg.timestamp}})
+}
+
 // Authenticate
 func (s *Session) login(msg *ClientComMessage) {
+
+	if s.ver == 0 {
+		s.queueOut(ErrCommandOutOfSequence(msg.Login.Id, "", msg.timestamp))
+		return
+	}
 
 	if !s.uid.IsZero() {
 		s.queueOut(ErrAlreadyAuthenticated(msg.Login.Id, "", msg.timestamp))
@@ -358,7 +434,6 @@ func (s *Session) login(msg *ClientComMessage) {
 	}
 
 	s.uid = uid
-	s.userAgent = msg.Login.UserAgent
 
 	if msg.Login.Scheme != "token" {
 		handler = store.GetAuthHandler("token")
@@ -381,6 +456,12 @@ func (s *Session) login(msg *ClientComMessage) {
 
 // Account creation
 func (s *Session) acc(msg *ClientComMessage) {
+
+	if s.ver == 0 {
+		s.queueOut(ErrCommandOutOfSequence(msg.Acc.Id, "", msg.timestamp))
+		return
+	}
+
 	if msg.Acc.Auth == nil {
 		s.queueOut(ErrMalformed(msg.Acc.Id, "", msg.timestamp))
 		return
@@ -469,6 +550,11 @@ func (s *Session) acc(msg *ClientComMessage) {
 func (s *Session) get(msg *ClientComMessage) {
 	log.Println("s.get: processing 'get." + msg.Get.What + "'")
 
+	if s.ver == 0 {
+		s.queueOut(ErrCommandOutOfSequence(msg.Get.Id, msg.Get.Topic, msg.timestamp))
+		return
+	}
+
 	// Validate topic name
 	original, expanded, err := s.validateTopicName(msg.Get.Id, msg.Get.Topic, msg.timestamp)
 	if err != nil {
@@ -506,6 +592,11 @@ func (s *Session) get(msg *ClientComMessage) {
 
 func (s *Session) set(msg *ClientComMessage) {
 	log.Println("s.set: processing 'set'")
+
+	if s.ver == 0 {
+		s.queueOut(ErrCommandOutOfSequence(msg.Set.Id, msg.Set.Topic, msg.timestamp))
+		return
+	}
 
 	// Validate topic name
 	original, expanded, err := s.validateTopicName(msg.Set.Id, msg.Set.Topic, msg.timestamp)
@@ -546,6 +637,11 @@ func (s *Session) set(msg *ClientComMessage) {
 
 func (s *Session) del(msg *ClientComMessage) {
 	log.Println("s.del: processing 'del." + msg.Del.What + "'")
+
+	if s.ver == 0 {
+		s.queueOut(ErrCommandOutOfSequence(msg.Del.Id, msg.Del.Topic, msg.timestamp))
+		return
+	}
 
 	// Validate topic name
 	original, expanded, err := s.validateTopicName(msg.Del.Id, msg.Del.Topic, msg.timestamp)
@@ -591,6 +687,10 @@ func (s *Session) del(msg *ClientComMessage) {
 // Broadcast a transient {ping} message to active topic subscribers
 // Not reporting any errors
 func (s *Session) note(msg *ClientComMessage) {
+
+	if s.ver == 0 {
+		return
+	}
 
 	_, routeTo, err := s.validateTopicName("", msg.Note.Topic, msg.timestamp)
 	if err != nil {

@@ -104,15 +104,25 @@ type MsgFindQuery struct {
 
 // Client to Server (C2S) messages
 
+// Handshake {hi} message
+type MsgClientHi struct {
+	// Message Id
+	Id string `json:"id,omitempty"`
+	// User agent
+	UserAgent string `json:"ua,omitempty"`
+	// Authentication scheme
+	Version string `json:"ver,omitempty"`
+}
+
 // User creation message {acc}
 type MsgClientAcc struct {
 	// Message Id
 	Id string `json:"id,omitempty"`
 	// "new" to create a new user or UserId to update a user; default: current user
-	User string `json:"user"`
+	User string `json:"user,omitempty"`
 	// A list of authentication schemes/secrets the account can use
 	Auth []MsgAuthScheme `json:"auth"`
-	// Use this schema to login to the newly created account
+	// The name of the schema to use to authenticate the current session to the newly created account
 	Login string `json:"login"`
 	// User initialization data when creating a new user, otherwise ignored
 	Desc *MsgSetDesc `json:"desc,omitempty"`
@@ -129,10 +139,8 @@ type MsgAuthScheme struct {
 type MsgClientLogin struct {
 	// Message Id
 	Id string `json:"id,omitempty"`
-	// User agent
-	UserAgent string `json:"ua,omitempty"`
 	// Authentication scheme
-	Scheme string `jdon:"scheme,omitempty"`
+	Scheme string `json:"scheme,omitempty"`
 	// Shared secret
 	Secret string `json:"secret"`
 }
@@ -247,6 +255,7 @@ type MsgClientNote struct {
 }
 
 type ClientComMessage struct {
+	Hi    *MsgClientHi    `json:"hi"`
 	Acc   *MsgClientAcc   `json:"acc"`
 	Login *MsgClientLogin `json:"login"`
 	Sub   *MsgClientSub   `json:"sub"`
@@ -654,6 +663,15 @@ func ErrAlreadyExists(id, topic string, ts time.Time) *ServerComMessage {
 	return msg
 }
 
+func ErrCommandOutOfSequence(id, unused string, ts time.Time) *ServerComMessage {
+	msg := &ServerComMessage{Ctrl: &MsgServerCtrl{
+		Id:        id,
+		Code:      http.StatusConflict, // 409
+		Text:      "command out of sequence",
+		Timestamp: ts}}
+	return msg
+}
+
 func ErrGone(id, topic string, ts time.Time) *ServerComMessage {
 	msg := &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
@@ -689,6 +707,16 @@ func ErrClusterNodeUnreachable(id, topic string, ts time.Time) *ServerComMessage
 		Id:        id,
 		Code:      http.StatusBadGateway, // 501
 		Text:      "unreachable",
+		Topic:     topic,
+		Timestamp: ts}}
+	return msg
+}
+
+func ErrVersionNotSupported(id, topic string, ts time.Time) *ServerComMessage {
+	msg := &ServerComMessage{Ctrl: &MsgServerCtrl{
+		Id:        id,
+		Code:      http.StatusHTTPVersionNotSupported, // 505
+		Text:      "version not supported",
 		Topic:     topic,
 		Timestamp: ts}}
 	return msg

@@ -57,10 +57,10 @@ import (
 	`{pres topic="me" src="<user ID>" what="off" ua="..."}`.
 3. User updates `public` data. The event is sent to all users who have P2P topics with the first user.
 	Users receive `{pres topic="me" src="<user ID>" what="upd"}`.
-4.. User [joins (first session to join)]/[leaves (last session to leave)]/[leaves and unsubscribes] a topic:
+4. User [joins (first session to join)]/[leaves (last session to leave)]/[leaves and unsubscribes] a topic:
 	a. to other joined users: `{pres topic="<topic name>" src="<user ID>" what="on|off|unsub"}`.
 	b. to user's own not joined sessions on unsubscribe only: `{pres topic="me" src="<topic name>" what="gone"}`
-5.. Topic is activated/deactivated/unsubscribed/deleted.
+5. Topic is activated/deactivated/unsubscribed/deleted.
 	a. topic becomes active when at least one user joins it; inactive when all users leave it (possibly with some
 	delay); the event is sent to all topic subscribers who will receive it on their `me`:
 	`{pres topic="me" src="<topic name>" what="on|off|gone"}`.
@@ -76,18 +76,18 @@ import (
 	the message is sent to all users who have P2P topics with the first user. Users receive this event on
 	the `me` topic, `src` field contains user ID `src: "usr2il9suCbuko"`, `what` contains `"ua"`:
 	`{pres topic="me" src="<user ID>" what="ua" ua="<user agent>"}`.
-+9. User sent a {note} packet indicating that some or all of the messages in the topic as received or read,
+9. User sent a {note} packet indicating that some or all of the messages in the topic as received or read,
 	OR sent a {del} message soft-deleting some messages. Sent only to other user's sessions (not the one
 	that sent the request).
 	a. read/received to not joined sessions only (informing joined makes no sense but can't skip it now):
 	`{pres topic="me" src="<topic name>" what="recv|read" seq=123}`.
 	b. msg deleted, not joined sessions: `{pres topic="me" src="<topic name>" what="del" seq=123}`
-	c. msg deleted, joined sessions: {pres topic="<topic name>" src="<user id>" what="del" seq=123}
+	c. msg deleted, joined sessions: `{pres topic="<topic name>" src="<user id>" what="del" seq=123}`
 	-- cannot address just one user in a topic
 10. Messages were hard-deleted. The event is sent to all topic subscribers, joined and not joined:
 	a. joined: `{pres topic="<topic name>" src="<user id>" what="del" seq=123}`.
 	b. not joined: `{pres topic="me" src="<topic name>" what="del" seq=123}`.
-12.. User subscribed to a new topic, inform user's other sessions.
+11. User subscribed to a new topic, inform user's other sessions.
 	`{pres topic="me" src="<topic name>" what="on"}`.
 */
 
@@ -281,8 +281,8 @@ func (t *Topic) presPubMessageDel(sess *Session, clear int) {
 }
 
 // User subscribed to a new topic. Let all user's other sessions know.
-// Case 12
+// Case 11
 func (t *Topic) presTopicSubscribed(user types.Uid, skip *Session) {
 	t.presAnnounceToUser(user, "on", 0, skip)
-	log.Printf("Pres 12: from '%s' (src: %s) [subbed/on]", t.name, user.UserId())
+	log.Printf("Pres 11: from '%s' (src: %s) [subbed/on]", t.name, user.UserId())
 }

@@ -84,11 +84,13 @@ func (sess *Session) writeOnce() {
 	}
 }
 
-func (sess *Session) readOnce(req *http.Request) {
+func (sess *Session) readOnce(req *http.Request) bool {
 	if raw, err := ioutil.ReadAll(req.Body); err == nil {
 		sess.dispatchRaw(raw)
+		return true
 	} else {
 		log.Println("longPoll: " + err.Error())
+		return false
 	}
 }
 
@@ -101,7 +103,7 @@ func (sess *Session) readOnce(req *http.Request) {
 //  - if sid is not empty but there is no session, report an error
 func serveLongPoll(wrt http.ResponseWriter, req *http.Request) {
 
-	// Use lowest common denominator - this is a legacy handler after all
+	// Use lowest common denominator - this is a legacy handler after all (otherwise would use application/json)
 	wrt.Header().Set("Content-Type", "text/plain")
 
 	enc := json.NewEncoder(wrt)
@@ -111,7 +113,7 @@ func serveLongPoll(wrt http.ResponseWriter, req *http.Request) {
 		enc.Encode(
 			&ServerComMessage{Ctrl: &MsgServerCtrl{
 				Code: http.StatusForbidden,
-				Text: "Valid API key is required"}})
+				Text: "valid API key is required"}})
 		return
 	}
 
@@ -134,43 +136,37 @@ func serveLongPoll(wrt http.ResponseWriter, req *http.Request) {
 
 	// Get session id
 	sid := req.FormValue("sid")
+	var sess *Session
 	if sid == "" {
-		sess := globals.sessionStore.Create(wrt, "")
+		// New session
+		sess = globals.sessionStore.Create(wrt, "")
 		log.Println("longPoll: new session created, sid=", sess.sid)
 
-		wrt.WriteHeader(http.StatusCreated)
-		enc.Encode(
-			&ServerComMessage{Ctrl: &MsgServerCtrl{
-				Id:        req.FormValue("id"),
-				Code:      http.StatusCreated,
-				Text:      "created",
-				Params:    map[string]interface{}{"sid": sess.sid, "ver": VERSION, "build": buildstamp},
-				Timestamp: time.Now().UTC().Round(time.Millisecond)}})
+	} else {
+		// Existing session
+		sess = globals.sessionStore.Get(sid)
+		if sess == nil {
+			log.Println("longPoll: invalid or expired session id ", sid)
 
-		// Any payload is ignored
-		return
-	}
+			wrt.WriteHeader(http.StatusForbidden)
+			enc.Encode(
+				&ServerComMessage{Ctrl: &MsgServerCtrl{
+					Code: http.StatusForbidden,
+					Text: "invalid or expired session id"}})
 
-	sess := globals.sessionStore.Get(sid)
-	if sess == nil {
-		log.Println("longPoll: invalid or expired session id ", sid)
-
-		wrt.WriteHeader(http.StatusForbidden)
-		enc.Encode(
-			&ServerComMessage{Ctrl: &MsgServerCtrl{
-				Code: http.StatusForbidden,
-				Text: "Invalid or expired session id"}})
-
-		return
+			return
+		}
 	}
 
 	sess.wrt = wrt
 	sess.remoteAddr = req.RemoteAddr
 
 	if req.ContentLength > 0 {
-		// Got payload. Process it and return right away
-		sess.readOnce(req)
-		return
+		// Read payload and send it for processing.
+		if !sess.readOnce(req) {
+			// Failed to red, stop
+			return
+		}
 	}
 
 	// Wait for data, write it to the connection or timeout

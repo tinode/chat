@@ -8,7 +8,7 @@ Server connects sessions, users, and topics. Session is a network connection bet
 
 Users and topics are assigned unique IDs. User ID is a string with 'usr' prefix followed by base64-URL-encoded pseudo-random 64-bit number, e.g. `usr2il9suCbuko`. Topic IDs are described below.
 
-Clients such as mobile or web applications create sessions by connecting to the server over a websocket or through long polling. Client authentication is optional (*anonymous clients are technically supported but may not fully work as expected yet*). Client authenticates the session by sending a `{login}` packet. Only basic authentication with user name and password is currently supported. Multiple simultaneous sessions may be established by the same user. Logging out is not supported.
+Clients such as mobile or web applications create sessions by connecting to the server over a websocket or through long polling. Client authentication is optional (*anonymous clients are technically supported but may not fully work as expected yet*). Client authenticates the session by sending a `{login}` packet. Only basic authentication with user name and password is currently supported for initial authentication. Once authenticated with login and password, the client may use token authentication later. Multiple simultaneous sessions may be established by the same user. Logging out is not supported.
 
 Once the session is established, the user can start interacting with other users through topics. The following
 topic types are available:
@@ -41,9 +41,9 @@ Client establishes a connection to the server over HTTP. Server offers two end p
  * `/v0/channels` for websocket connections
  * `/v0/channels/lp` for long polling
 
-`v0` denotes API version (currently zero). Every HTTP request must include API key in the request. It may be included in the URL as `...?apikey=<YOUR_API_KEY>`, in the request body, or in an HTTP header `X-Tinode-APIKey`. 
+`v0` denotes API version (currently zero). Every HTTP request must include the API key. It may be included in the URL as `...?apikey=<YOUR_API_KEY>`, in the request body as `apikey=<YOUR_API_KEY>`, or in the HTTP header `X-Tinode-APIKey: <YOUR_API_KEY>`.
 
-Once the connection is opened, the server sends a `{ctrl}` message. The `params` field of response contains server's protocol version: `"params":{"ver":"0.5"}`. `params` may include other values. A client may optionally add `id` to the endpoint URL. The id value is returned in this `{ctrl}` message.
+Once the connection is opened, the client must issue a `{hi}` message to the server. Server responds with a `{ctrl}` message which maybe an error message. The `params` field of the response contains server's protocol version: `"params":{"ver":"0.7"}`. `params` may include other values.
 
 ### Websocket
 
@@ -67,6 +67,21 @@ For messages that update application-defined data, such as `{set}` `private` or 
 data needs to be cleared, use a string with a single Unicode DEL character "&#x2421;" `"\u2421"`. I.e. sending `"public": null` will not clear the field, but sending `"public": "\u2421"` will.
 
 ### Client to server messages
+
+#### `{hi}`
+
+Handshake message client uses to inform the server of its version and user agent. This message must be the first that
+the client sends to the server. Server responds with a `{ctrl}` which contains server build `build`, wire protocol version `ver`, and
+session ID `sid` in case of long polling, all in `ctrl.params`.
+
+```js
+hi: {
+  id: "1a2b3",     // string, client-provided message id, optional
+  ver: "0.7",   // string, version of the wire protocol supported by the client.
+  ua: "JS/1.0 (Windows 10)" // string, user agent identifying client software,
+                   // optional
+}
+```
 
 #### `{acc}`
 
@@ -118,8 +133,6 @@ login: {
                    // is currently supported
   secret: "username:password", // string, secret for the chosen authentication
                                //  scheme, required
-  ua: "JS/1.0 (Windows 10)" // string, user agent identifying client software,
-                   // optional
 }
 ```
 Basic authentication scheme expects `secret` to be a string composed of a user name followed by a colon `:` followed by a plan text password.
@@ -509,16 +522,16 @@ Tinode uses `{pres}` message to inform users of important events. The following 
 1. A user joins `me`. User receives presence notifications for each of his/her subscriptions: `{pres topic="me" src="<user ID or topic ID>" what="on", ua="..."}`. Only online status is reported.
 2. A user came online or went offline. The user triggers this event by joining/leaving the `me` topic. The message is sent to all users who have P2P topics with the first user. Users receive this event on the `me` topic, `src` field contains user ID `src: "usr2il9suCbuko"`, `what` contains `"on"` or `"off"`: `{pres topic="me" src="<user ID>" what="on|off" ua="..."}`.
 3. User's `public` is updated. The event is sent to all users who have P2P topics with the first user. Users receive `{pres topic="me" src="<user ID>" what="upd"}`.
-4. User joins/leaves a topic. This event is sent to other users who currently joined the topic: `{pres topic="<topic name>" src="<user ID>" what="on|off"}`.
-5. A group topic is activated/deactivated. Topic becomes active when at least one user joins it. The topic becomes inactive when all users leave it (possibly after some delay). The event is sent to all topic subscribers. They will receive it on their `me` topics: `{pres topic="me" src="<topic name>" what="on|off"}`.
+4. User joins/leaves (and possibly unsubscribes) a topic. This event is sent to other users who currently joined the topic: `{pres topic="<topic name>" src="<user ID>" what="on|off|unsub"}`. If the user also unsubscribes from the topic, user's other sessions will receive an event `{pres topic="me" src="<topic name>" what="gone"}`.
+5. A group topic is activated/deactivated/unsubscribed/deleted. Topic becomes active when the first user joins it. The topic becomes inactive when all users leave it (possibly after some delay). The event is sent to all topic subscribers. They will receive it on their `me` topics: `{pres topic="me" src="<topic name>" what="on|off|gone"}` (on - activated, off - deactivated, gone - deleted). If a user is unsubscribed, the user receives the event: `{pres topic="me" src="<topic name>" what="unsub"}`
 6. A message is published in a topic. The event is sent to users who have subscribed to the topic but currently not joined `{pres topic="me" src="<topic name>" what="msg"}`.
 7. Topic's `public` is updated. The event is sent to all topic subscribers. Topic's subscribers receive `{pres topic="me" src="<topic name>" what="upd"}`.
 8. User is has multiple sessions attached to 'me', sessions have different _user agents_. If the current most recently active session has a different _user agent_ than the previous most recent session (the most recently active session is the session which was the last to receive any message from the client) an event is sent to all users who have P2P topics with the first user. Users receive it on the `me` topic, `src` field contains user ID `src: "usr2il9suCbuko"`, `what` contains `"ua"`: `{pres topic="me" src="<user ID>" what="ua" ua="<new user agent>"}`.
-9. User sent a `{note}` message indicating that some or all of the messages in the topic have been received or read. The event is sent to user's other sessions (not the one that originated the `{note}` message): `{pres topic="me" src="<topic name>" what="recv|read" seq=123}`.
-10. User sent a `{del hard=false}` message soft-deleting some messages. Like above, the event is sent to user's other sessions: `{pres topic="me" src="<topic name>" what="del" seq=123}`.
-11. Some or all messages in the topic were hard-deleted by the topic manager. The event is sent to all topic subscribers, joined (excluding the originating session) and not joined:
+9. User sent a `{note}` indicating that some or all of the data messages in the topic have been received or read, OR sent a `{del}` soft-deleting some data messages. In case or read/recv receipt the event is sent to user's other sessions (not the one that originated the `{note}`): `{pres topic="me" src="<topic name>" what="recv|read" seq=123}`. In case of the soft-deleting data messages the event is sent to user's not joined sessions: `{pres topic="me" src="<topic name>" what="del" seq=123}` and to joined sessions: `{pres topic="<topic name>" src="<user id>" what="del" seq=123}`.
+10. Some or all data messages in the topic were hard-deleted by the topic manager using `{del hard=true}`. The event is sent to all topic subscribers, joined (excluding the originating session) and not joined:
  a. joined: `{pres topic="<topic name>" src="<user id>" what="del" seq=123}`.
  b. not joined: `{pres topic="me" src="<topic name>" what="del" seq=123}`.
+11. User subscribed to a new topic. User's other sessions receive an event `{pres topic="me" src="<topic name>" what="on"}`.
 
 ```js
 pres: {

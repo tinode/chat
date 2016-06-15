@@ -55,7 +55,7 @@ const (
 	TOPICTIMEOUT = time.Second * 5
 
 	// API version
-	VERSION = "0.6"
+	VERSION = "0.7"
 
 	DEFAULT_AUTH_ACCESS = types.ModePublic
 	DEFAULT_ANON_ACCESS = types.ModeNone
