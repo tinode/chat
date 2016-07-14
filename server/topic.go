@@ -42,6 +42,8 @@ import (
 	"github.com/tinode/chat/server/store/types"
 )
 
+var UA_TIMER_DELAY = time.Second * 15
+
 // Topic: an isolated communication channel
 type Topic struct {
 	// expanded name of the topic
@@ -222,7 +224,7 @@ func (t *Topic) run(hub *Hub) {
 					} else {
 						// Change UA to the most recent live session
 						currentUA = mrs.userAgent
-						uaTimer.Reset(time.Minute)
+						uaTimer.Reset(UA_TIMER_DELAY)
 					}
 					// Update user's last online timestamp & user agent
 					if err := store.Users.UpdateLastSeen(mrs.uid, mrs.userAgent, now); err != nil {
@@ -396,19 +398,23 @@ func (t *Topic) run(hub *Hub) {
 		case ua := <-t.uaChange:
 			// process an update to user agent from one of the sessions
 			currentUA = ua
-			uaTimer.Reset(time.Minute)
+			uaTimer.Reset(UA_TIMER_DELAY)
 
 		case <-uaTimer.C:
 			// Publish user agent changes after a delay
 			t.presPubUAChange(currentUA)
 
 		case <-killTimer.C:
+			// Topic timeout
 			log.Println("Topic timeout: ", t.name)
 			hub.unreg <- &topicUnreg{topic: t.name}
+			if t.cat == types.TopicCat_Me {
+				t.presPubMeChange("off", currentUA)
+			}
 			return
 
 		case sd := <-t.exit:
-			// Do clean up and database updates before server shuts down.
+			// Perform cleanup and database updates before server shuts down.
 			// FIXME(gene): save lastMessage value;
 			if t.cat == types.TopicCat_Me {
 				t.presPubMeChange("off", currentUA)

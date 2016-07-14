@@ -625,6 +625,7 @@ const (
 	TopicCat_Fnd
 	TopicCat_P2P
 	TopicCat_Grp
+	TopicCat_Fh
 )
 
 func GetTopicCat(name string) TopicCat {
@@ -637,6 +638,8 @@ func GetTopicCat(name string) TopicCat {
 		return TopicCat_Grp
 	case "fnd":
 		return TopicCat_Fnd
+	case "fh":
+		return TopicCat_Fh
 	default:
 		panic("invalid topic type" + name)
 	}

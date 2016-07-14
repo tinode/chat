@@ -293,7 +293,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 
 		// Request to load a 'find' topic. The topic always exists.
 	} else if t.original == "fnd" {
-		log.Println("hub: loading 'find' topic")
+		log.Println("hub: loading 'fnd' topic")
 
 		t.cat = types.TopicCat_Fnd
 
@@ -317,6 +317,26 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		t.updated = t.perUser[sreg.sess.uid].updated
 
 		// Publishing to Find is not supported
+		// t.lastId = 0
+
+		// Request to attach to a firehause topic. Must be root.
+	} else if t.original == "fh" {
+		log.Println("hub: loading 'fh' topic")
+
+		t.cat = types.TopicCat_Fh
+
+		// 'fh' has no owner, t.owner = nil
+
+		// The fh can be accessed by anyone with root access
+		// t.accessAuth = types.ModeBanned
+		// t.accessAnon = types.ModeBanned
+
+		// Subscriptions are ephemeral, no need to load subscribers.
+
+		// TODO(gene): handle public more intelligently
+		// t.public = nil
+
+		// Publishing to Fh is not supported, history is not supported.
 		// t.lastId = 0
 
 		// Request to load an existing or create a new p2p topic, then attach to it.
