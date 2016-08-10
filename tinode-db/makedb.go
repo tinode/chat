@@ -20,7 +20,7 @@ type Data struct {
 	Grouptopics   []map[string]interface{} `json:"grouptopics"`
 	Subscriptions []map[string]interface{} `json:"subscriptions"`
 	Messages      []string                 `json:"messages"`
-	datapath string
+	datapath      string
 }
 
 // Generate random string as a name of the group topic
@@ -46,7 +46,7 @@ func main() {
 			log.Fatal(err)
 		}
 	}
-	data.datapath, _ := filepath.Split(*datafile)
+	data.datapath, _ = filepath.Split(*datafile)
 
 	if *conffile != "" {
 		var config configType

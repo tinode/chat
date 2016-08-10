@@ -100,7 +100,7 @@ func gen_rethink(reset bool, dbsource string, data *Data) {
 
 		topic := &types.Topic{
 			ObjHeader: types.ObjHeader{Id: name},
-			Public:    parsePublic(gt["public"])}
+			Public:    parsePublic(gt["public"], data.datapath)}
 		var owner types.Uid
 		if gt["owner"] != nil {
 			owner = types.ParseUid(nameIndex[gt["owner"].(string)])
