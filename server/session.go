@@ -86,6 +86,9 @@ type Session struct {
 	// Protocol version of the client: ((major & 0xff) << 8) | (minor & 0xff)
 	ver int
 
+	// Device ID of the client
+	deviceId string
+
 	// ID of the current user or 0
 	uid types.Uid
 
@@ -383,6 +386,7 @@ func (s *Session) hello(msg *ClientComMessage) {
 	}
 
 	s.userAgent = msg.Hi.UserAgent
+	s.deviceId = msg.Hi.DeviceID
 
 	params := map[string]interface{}{"ver": VERSION, "build": buildstamp}
 	if s.proto == LPOLL {

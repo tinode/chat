@@ -38,6 +38,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/tinode/chat/server/push"
 	"github.com/tinode/chat/server/store"
 	"github.com/tinode/chat/server/store/types"
 )
@@ -160,6 +161,11 @@ type shutDown struct {
 	del bool
 }
 
+type pushReceipt struct {
+	rcpt   *push.Receipt
+	uidMap map[types.Uid]int
+}
+
 func (t *Topic) run(hub *Hub) {
 
 	log.Printf("Topic started: '%s'", t.name)
@@ -249,9 +255,8 @@ func (t *Topic) run(hub *Hub) {
 		case msg := <-t.broadcast:
 			// Content message intended for broadcasting to recepients
 
-			// log.Printf("topic[%s].run: got message '%v'", t.name, msg)
+			var pushRcpt *pushReceipt
 
-			// Record last message timestamp
 			if msg.Data != nil {
 				from := types.ParseUserId(msg.Data.From)
 
@@ -286,6 +291,8 @@ func (t *Topic) run(hub *Hub) {
 					reply.Ctrl.Params = map[string]int{"seq": t.lastId}
 					msg.sessFrom.queueOut(reply)
 				}
+
+				pushRcpt = t.makePushReceipt(msg.Data)
 
 				t.presPubMessageSent(t.lastId)
 
@@ -346,6 +353,7 @@ func (t *Topic) run(hub *Hub) {
 			// Broadcast the message. Only {data}, {pres}, {ping} are broadcastable.
 			// {meta} and {ctrl} are sent to the session only
 			if msg.Data != nil || msg.Pres != nil || msg.Info != nil {
+
 				var packet, _ = json.Marshal(msg)
 				for sess := range t.sessions {
 					if sess == msg.sessSkip {
@@ -354,13 +362,19 @@ func (t *Topic) run(hub *Hub) {
 
 					select {
 					case sess.send <- packet:
+						i, ok := pushRcpt.uidMap[sess.uid]
+						if ok {
+							pushRcpt.rcpt.To[i].Delieved++
+							pushRcpt.rcpt.To[i].Devices = append(pushRcpt.rcpt.To[i].Devices, "")
+						}
 					default:
 						log.Printf("topic[%s].run: connection stuck, detaching", t.name)
 						t.unreg <- &sessionLeave{sess: sess, unsub: false}
 					}
 				}
 			} else {
-				log.Printf("topic[%s].run: wrong message type for broadcasting", t.name)
+				// TODO(gene): remove this
+				log.Panic("topic[%s].run: wrong message type for broadcasting", t.name)
 			}
 
 		case meta := <-t.meta:
@@ -1458,6 +1472,26 @@ func (t *Topic) evictUser(uid types.Uid, unsub bool, ignore *Session) {
 			}
 		}
 	}
+}
+
+func (t *Topic) makePushReceipt(data *MsgServerData) *pushReceipt {
+	idx := make(map[types.Uid]int, len(t.perUser))
+	receipt := push.Receipt{
+		Topic:     data.Topic,
+		From:      data.From,
+		Timestamp: data.Timestamp,
+		SeqId:     data.SeqId,
+		To:        make([]push.PushTo, len(t.perUser)),
+		Data:      data.Content}
+
+	i := 0
+	for uid, _ := range t.perUser {
+		receipt.To[i].Uid = uid.UserId()
+		idx[uid] = i
+		i++
+	}
+
+	return &pushReceipt{rcpt: &receipt, uidMap: idx}
 }
 
 // evictAll disconnects all sessions from the topic

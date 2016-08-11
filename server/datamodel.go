@@ -112,6 +112,8 @@ type MsgClientHi struct {
 	UserAgent string `json:"ua,omitempty"`
 	// Authentication scheme
 	Version string `json:"ver,omitempty"`
+	// Client's unique device ID
+	DeviceID string `json:"dev,omitempty"`
 }
 
 // User creation message {acc}
@@ -420,46 +422,6 @@ type ServerComMessage struct {
 	// Should the packet be sent to the original sessions?
 	sessSkip *Session
 }
-
-// Combined message
-type ComMessage struct {
-	*ClientComMessage
-	*ServerComMessage
-}
-
-/*
-func modelGetBoolParam(params map[string]interface{}, name string) bool {
-	var val bool
-	if params != nil {
-		if param, ok := params[name]; ok {
-			switch param.(type) {
-			case bool:
-				val = param.(bool)
-			case float64:
-				val = (param.(float64) != 0.0)
-			}
-		}
-	}
-
-	return val
-}
-
-func modelGetInt64Param(params map[string]interface{}, name string) int64 {
-	var val int64
-	if params != nil {
-		if param, ok := params[name]; ok {
-			switch param.(type) {
-			case int8, int16, int32, int64, int:
-				val = reflect.ValueOf(param).Int()
-			case float32, float64:
-				val = int64(reflect.ValueOf(param).Float())
-			}
-		}
-	}
-
-	return val
-}
-*/
 
 // Generators of error messages
 

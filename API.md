@@ -78,8 +78,11 @@ session ID `sid` in case of long polling, all in `ctrl.params`.
 hi: {
   id: "1a2b3",     // string, client-provided message id, optional
   ver: "0.7",   // string, version of the wire protocol supported by the client.
-  ua: "JS/1.0 (Windows 10)" // string, user agent identifying client software,
+  ua: "JS/1.0 (Windows 10)", // string, user agent identifying client software,
                    // optional
+  dev: "L1iC2dNtk2" // string, unique value which identifies this specific
+				   // connected device; not interpreted by the server;
+				   // see [Push notifications support][]; optional
 }
 ```
 
@@ -695,3 +698,7 @@ A user is reported as being online when one or more of user's sessions are attac
  * When user's last session detaches from `me`, the _user agent_ from that session is recorded together with the timestamp; the user agent is broadcast in the `{pres what="off"  ua="..."}` message and subsequently reported as the last online timestamp and user agent.
 
 An empty `ua=""` _user agent_ is not reported. I.e. if user attaches to `me` with non-empry _user agent_ then does so with an empty one, the change is not reported. An empty _user agent_ may be disallowed in the future.
+
+## Push notifications support
+
+Tinode supports mobile push notifications though a compile-time plugins. The channel published by the plugin recives a copy of every data message which was attempted to be delivered.

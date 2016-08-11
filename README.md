@@ -30,11 +30,11 @@ A javascript demo is (usually) available at http://api.tinode.co/x/example-react
 * Basic support for client-side message caching.
 * Ability to block unwanted communication server-side.
 * Compile-time custom authentication support.
+* Mobile push notification hooks.
 
 ### Planned
 
 * iOS client bindings.
-* Mobile push notification hooks.
 * Support for long polling (currently exists but broken).
 * Groups (topics) with unlimited number of members with bearer token access control.
 * Failover/hot standby/replication.

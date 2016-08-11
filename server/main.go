@@ -44,6 +44,7 @@ import (
 
 	_ "github.com/tinode/chat/server/auth_basic"
 	_ "github.com/tinode/chat/server/db/rethinkdb"
+	_ "github.com/tinode/chat/server/push"
 	"github.com/tinode/chat/server/store"
 	"github.com/tinode/chat/server/store/types"
 )
