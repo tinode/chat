@@ -28,15 +28,16 @@ type Receipt struct {
 	Data interface{} `json:"data,omitempty"`
 }
 
+// PushHandler is an interface which must be implemented by handlers.
 type PushHandler interface {
 	// Initialize the handler
 	Init(jsonconf string) error
 
-	// Check if the handler was initialized
+	// Check if the handler is initialized
 	IsReady() bool
 
-	// Push return a channel that the server will use to send messages to.
-	// If the adapter blocks, the message will be dropped.
+	// Push returns a channel that the server will use to send messages to.
+	// The message will be dropped if the channel blocks.
 	Push() chan<- *Receipt
 
 	// Stop operations

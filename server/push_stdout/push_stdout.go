@@ -1,6 +1,8 @@
 package push_stdout
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 
@@ -9,7 +11,7 @@ import (
 
 var handler StdoutPush
 
-const DEFAULT_BUFFER	32
+const DEFAULT_BUFFER = 32
 
 type StdoutPush struct {
 	input chan *push.Receipt
@@ -26,7 +28,7 @@ func (StdoutPush) Init(jsonconf string) error {
 
 	var config configType
 
-	if err := json.Unmarshal([]byte(jsconfig), &config); err != nil {
+	if err := json.Unmarshal([]byte(jsonconf), &config); err != nil {
 		return errors.New("failed to parse config: " + err.Error())
 	}
 
