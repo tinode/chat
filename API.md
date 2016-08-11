@@ -701,4 +701,4 @@ An empty `ua=""` _user agent_ is not reported. I.e. if user attaches to `me` wit
 
 ## Push notifications support
 
-Tinode supports mobile push notifications though a compile-time plugins. The channel published by the plugin recives a copy of every data message which was attempted to be delivered.
+Tinode supports mobile push notifications though compile-time plugins. The channel published by the plugin recives a copy of every data message which was attempted to be delivered.
