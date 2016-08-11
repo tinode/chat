@@ -44,7 +44,8 @@ import (
 
 	_ "github.com/tinode/chat/server/auth_basic"
 	_ "github.com/tinode/chat/server/db/rethinkdb"
-	_ "github.com/tinode/chat/server/push"
+	"github.com/tinode/chat/server/push"
+	_ "github.com/tinode/chat/server/push_stdout"
 	"github.com/tinode/chat/server/store"
 	"github.com/tinode/chat/server/store/types"
 )
@@ -81,6 +82,7 @@ type configType struct {
 	TokenExpiresIn int             `json:"token_expires_in"`
 	ClusterConfig  json.RawMessage `json:"cluster_config"`
 	StoreConfig    json.RawMessage `json:"store_config"`
+	PushConfig     json.RawMessage `json:"push"`
 }
 
 func main() {
@@ -112,6 +114,15 @@ func main() {
 	defer func() {
 		store.Close()
 		log.Println("Closed database connection(s)")
+	}()
+
+	err = push.Init(string(config.PushConfig))
+	if err != nil {
+		log.Fatal("Failed to initialize push notifications: ", err)
+	}
+	defer func() {
+		push.Stop()
+		log.Println("Stopped push notifications")
 	}()
 
 	// Keep inactive LP sessions for 15 seconds

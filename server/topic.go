@@ -362,16 +362,26 @@ func (t *Topic) run(hub *Hub) {
 
 					select {
 					case sess.send <- packet:
-						i, ok := pushRcpt.uidMap[sess.uid]
-						if ok {
-							pushRcpt.rcpt.To[i].Delieved++
-							pushRcpt.rcpt.To[i].Devices = append(pushRcpt.rcpt.To[i].Devices, "")
+						if pushRcpt != nil {
+							i, ok := pushRcpt.uidMap[sess.uid]
+							if ok {
+								pushRcpt.rcpt.To[i].Delieved++
+								if sess.deviceId != "" {
+									pushRcpt.rcpt.To[i].Devices = append(pushRcpt.rcpt.To[i].Devices, sess.deviceId)
+								}
+							} else {
+								log.Printf("data message sent to user who is not subscribed to topic")
+							}
 						}
 					default:
 						log.Printf("topic[%s].run: connection stuck, detaching", t.name)
 						t.unreg <- &sessionLeave{sess: sess, unsub: false}
 					}
 				}
+				if pushRcpt != nil {
+					push.Push(pushRcpt.rcpt)
+				}
+
 			} else {
 				// TODO(gene): remove this
 				log.Panic("topic[%s].run: wrong message type for broadcasting", t.name)

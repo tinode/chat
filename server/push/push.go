@@ -3,6 +3,8 @@ package push
 // Interfaces for push notifications
 
 import (
+	"encoding/json"
+	"errors"
 	"time"
 )
 
@@ -30,12 +32,20 @@ type PushHandler interface {
 	// Initialize the handler
 	Init(jsonconf string) error
 
+	// Check if the handler was initialized
+	IsReady() bool
+
 	// Push return a channel that the server will use to send messages to.
 	// If the adapter blocks, the message will be dropped.
 	Push() chan<- *Receipt
 
 	// Stop operations
 	Stop()
+}
+
+type configType struct {
+	Name   string          `json:"name"`
+	Config json.RawMessage `json:"config"`
 }
 
 var handlers map[string]PushHandler
@@ -55,12 +65,36 @@ func Register(name string, hnd PushHandler) {
 	handlers[name] = hnd
 }
 
+// Initialize registered handlers
+func Init(jsconfig string) error {
+	var config []configType
+
+	if err := json.Unmarshal([]byte(jsconfig), &config); err != nil {
+		return errors.New("failed to parse config: " + err.Error())
+	}
+
+	for _, cc := range config {
+		if hnd := handlers[cc.Name]; hnd != nil {
+			if err := hnd.Init(string(cc.Config)); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+// Push a single message
 func Push(msg *Receipt) {
 	if handlers == nil {
 		return
 	}
 
 	for _, hnd := range handlers {
+		if !hnd.IsReady() {
+			continue
+		}
+
 		// Push without delay or skip
 		select {
 		case hnd.Push() <- msg:
@@ -69,12 +103,16 @@ func Push(msg *Receipt) {
 	}
 }
 
+// Stop all pushes
 func Stop() {
 	if handlers == nil {
 		return
 	}
 
 	for _, hnd := range handlers {
-		hnd.Stop()
+		if hnd.IsReady() {
+			// Will potentially block
+			hnd.Stop()
+		}
 	}
 }
