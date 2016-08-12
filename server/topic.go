@@ -43,7 +43,7 @@ import (
 	"github.com/tinode/chat/server/store/types"
 )
 
-var UA_TIMER_DELAY = time.Second * 15
+var UA_TIMER_DELAY = time.Second * 5
 
 // Topic: an isolated communication channel
 type Topic struct {
@@ -150,8 +150,6 @@ type sessionLeave struct {
 	topic string
 	// ID of originating request, if any
 	reqId string
-	// Originating request
-	//pkt *ClientComMessage
 }
 
 type shutDown struct {
@@ -196,7 +194,7 @@ func (t *Topic) run(hub *Hub) {
 					broadcast: t.broadcast,
 					done:      t.unreg,
 					meta:      t.meta,
-					ping:      t.uaChange}
+					uaChange:  t.uaChange}
 
 				t.sessions[sreg.sess] = true
 
@@ -228,9 +226,11 @@ func (t *Topic) run(hub *Hub) {
 						// Last session
 						mrs = leave.sess
 					} else {
-						// Change UA to the most recent live session
-						currentUA = mrs.userAgent
-						uaTimer.Reset(UA_TIMER_DELAY)
+						// Change UA to the most recent live session and announce it. Don't block.
+						select {
+						case t.uaChange <- mrs.userAgent:
+						default:
+						}
 					}
 					// Update user's last online timestamp & user agent
 					if err := store.Users.UpdateLastSeen(mrs.uid, mrs.userAgent, now); err != nil {
@@ -433,6 +433,7 @@ func (t *Topic) run(hub *Hub) {
 			log.Println("Topic timeout: ", t.name)
 			hub.unreg <- &topicUnreg{topic: t.name}
 			if t.cat == types.TopicCat_Me {
+				uaTimer.Stop()
 				t.presPubMeChange("off", currentUA)
 			}
 			return

@@ -290,6 +290,8 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 
 		// Initiate User Agent with the UA of the creating session to report it later
 		t.userAgent = sreg.sess.userAgent
+		// Initialize channel for receiving user agent updates
+		t.uaChange = make(chan string, 32)
 
 		// Request to load a 'find' topic. The topic always exists.
 	} else if t.original == "fnd" {

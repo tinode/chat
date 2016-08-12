@@ -133,7 +133,7 @@ type Subscription struct {
 	meta chan<- *metaReq
 
 	// Channel to ping topic with session's user agent
-	ping chan<- string
+	uaChange chan<- string
 }
 
 // TODO(gene): unify simpleByteSender and QueueOut
@@ -226,6 +226,14 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 		// Unknown message
 		s.queueOut(ErrMalformed("", "", msg.timestamp))
 		log.Println("Session.dispatch: unknown message")
+	}
+
+	// Notify 'me' topic that this session is currently active
+	if msg.Leave == nil && (msg.Del == nil || msg.Del.What != "topic") {
+		if sub, ok := s.subs[s.uid.UserId()]; ok {
+			// The chan is buffered. If the buffer is exhaused, the session will wait for 'me' to become available
+			sub.uaChange <- s.userAgent
+		}
 	}
 }
 
@@ -775,11 +783,4 @@ func (s *Session) validateTopicName(msgId, topic string, timestamp time.Time) (s
 	}
 
 	return topic, routeTo, nil
-}
-
-// pingMeTopic tells current user's 'me' topic that this session was active
-func (s *Session) pingMeTopic(ua string) {
-	if sub, ok := s.subs[s.uid.UserId()]; ok {
-		sub.ping <- s.userAgent
-	}
 }
