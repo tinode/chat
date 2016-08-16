@@ -1269,7 +1269,7 @@ func (t *Topic) replySetSub(h *Hub, sess *Session, set *MsgClientSet) error {
 func (t *Topic) replyGetData(sess *Session, id string, req *MsgBrowseOpts) error {
 	now := time.Now().UTC().Round(time.Millisecond)
 
-	opts := msgOpts2storeOpts(req)
+	opts := msgOpts2storeOpts(req, t.perUser[sess.uid].clearId)
 
 	messages, err := store.Messages.GetAll(t.name, opts)
 	if err != nil {
@@ -1277,7 +1277,6 @@ func (t *Topic) replyGetData(sess *Session, id string, req *MsgBrowseOpts) error
 		sess.queueOut(ErrUnknown(id, t.original, now))
 		return err
 	}
-	log.Println("Loaded messages ", len(messages))
 
 	// Push the list of messages to the client as {data}.
 	// Messages are sent in reverse order than fetched from DB to make it easier for
@@ -1527,13 +1526,21 @@ func (t *Topic) mostRecentSession() *Session {
 	return sess
 }
 
-func msgOpts2storeOpts(req *MsgBrowseOpts) *types.BrowseOpt {
+// Takes get.data parameters and ClearID, returns database query parameters
+func msgOpts2storeOpts(req *MsgBrowseOpts, clearId int) *types.BrowseOpt {
 	var opts *types.BrowseOpt
-	if req != nil {
-		opts = &types.BrowseOpt{
-			Limit:  req.Limit,
-			Since:  req.Since,
-			Before: req.Before}
+	if req != nil || clearId > 0 {
+		opts = &types.BrowseOpt{}
+		if req != nil {
+			opts.Limit = req.Limit
+			opts.Since = req.Since
+			opts.Before = req.Before
+		}
+		if clearId > opts.Since {
+			// ClearId deletes mesages upto and including the value itself. Since shows message starting
+			// with the value itself, thus must add 1 to make sure the last deleted message is not shown.
+			opts.Since = clearId + 1
+		}
 	}
 	return opts
 }

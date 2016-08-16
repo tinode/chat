@@ -384,6 +384,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 			t.updated = stopic.UpdatedAt
 
 			t.lastId = stopic.SeqId
+			t.clearId = stopic.ClearId
 		}
 
 		// t.owner is blank for p2p topics
@@ -401,8 +402,6 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 
 			log.Println("hub: existing p2p topic")
 
-			// t.clearId is not used in P2P topics, may change later
-
 			for i := 0; i < 2; i++ {
 				uid := types.ParseUid(subs[i].User)
 				t.perUser[uid] = perUserData{
@@ -411,7 +410,8 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 					private: subs[i].Private,
 					// lastSeenTag: subs[i].LastSeen,
 					modeWant:  subs[i].ModeWant,
-					modeGiven: subs[i].ModeGiven}
+					modeGiven: subs[i].ModeGiven,
+					clearId:   subs[i].ClearId}
 			}
 
 		} else {
@@ -536,13 +536,14 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 			userData.public = sub1.GetPublic()
 			userData.modeWant = sub1.ModeWant
 			userData.modeGiven = sub1.ModeGiven
+			userData.clearId = sub2.ClearId
 			t.perUser[userId1] = userData
 
 			t.perUser[userId2] = perUserData{
 				public:    sub2.GetPublic(),
 				modeWant:  sub2.ModeWant,
 				modeGiven: sub2.ModeGiven,
-			}
+				clearId:   sub2.ClearId}
 
 			sreg.created = !user1only
 		}

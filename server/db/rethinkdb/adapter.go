@@ -724,7 +724,7 @@ func (a *RethinkDbAdapter) MessageSave(msg *t.Message) error {
 }
 
 func (a *RethinkDbAdapter) MessageGetAll(topic string, opts *t.BrowseOpt) ([]t.Message, error) {
-	//log.Println("Loading messages for topic ", topic)
+	//log.Println("Loading messages for topic ", topic, opts)
 
 	q := rdb.DB(a.dbName).Table("messages")
 	q = addOptions(q, topic, "Topic_SeqId", opts)
@@ -748,7 +748,7 @@ func (a *RethinkDbAdapter) MessageDeleteAll(topic string, clear int) error {
 	}
 	_, err := rdb.DB(a.dbName).Table("messages").
 		Between([]interface{}{topic, 0}, []interface{}{topic, maxval},
-		rdb.BetweenOpts{Index: "Topic_SeqId", RightBound: "closed"}).
+			rdb.BetweenOpts{Index: "Topic_SeqId", RightBound: "closed"}).
 		Delete().RunWrite(a.conn)
 
 	return err
