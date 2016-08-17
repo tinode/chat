@@ -219,7 +219,7 @@ func (t *Topic) presTopicGone(user types.Uid) {
 // Case 5
 func (t *Topic) presPubTopicOnline(what string) {
 	// Announce to all topic subscribers (not just offline) on 'me'
-	t.presAnnounceToSubscribers(what, 0, true)
+	t.presAnnounceToSubscribers(what, 0, false)
 }
 
 // Message sent in the topic, notify topic-offline users

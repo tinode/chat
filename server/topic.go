@@ -106,10 +106,10 @@ type Topic struct {
 	// Unsubscribe requests from sessions, buffered = 32
 	unreg chan *sessionLeave
 
-	// Track the most active sessions to report User Agent changes, buffered = 32
+	// Track the most active sessions to report User Agent changes. Buffered = 32
 	uaChange chan string
 
-	// Channel to terminate topic.
+	// Channel to terminate topic  -- either the topic is deleted or system is being shut down. Buffered = 1.
 	exit chan *shutDown
 }
 
@@ -155,7 +155,7 @@ type sessionLeave struct {
 type shutDown struct {
 	// Channel to report back completion of topic shutdown. Could be nil
 	done chan<- bool
-	// Topic is being deleted
+	// Topic is being deleted as opposite to total system shutdown
 	del bool
 }
 
@@ -435,21 +435,20 @@ func (t *Topic) run(hub *Hub) {
 			if t.cat == types.TopicCat_Me {
 				uaTimer.Stop()
 				t.presPubMeChange("off", currentUA)
+			} else if t.cat == types.TopicCat_Grp {
+				t.presPubTopicOnline("off")
 			}
 			return
 
 		case sd := <-t.exit:
-			// Perform cleanup and database updates before server shuts down.
+			// Handle two cases: topic is being deleted (del==true) or system shutdown (del==false, done!=nil).
 			// FIXME(gene): save lastMessage value;
-			if t.cat == types.TopicCat_Me {
-				t.presPubMeChange("off", currentUA)
-			} else if t.cat == types.TopicCat_Grp {
-				if sd.del {
-					t.presPubTopicOnline("gone")
-				} else {
-					t.presPubTopicOnline("off")
-				}
-			} // not publishing online/offline to P2P topics
+			if t.cat == types.TopicCat_Grp && sd.del {
+				t.presPubTopicOnline("gone")
+			}
+			// Not publishing online/offline to deleted P2P topics
+
+			// In case of a system shutdown don't bother with notifications.
 
 			// Report completion back to sender, if 'done' is not nil.
 			if sd.done != nil {
