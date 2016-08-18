@@ -388,7 +388,7 @@ func (t *Topic) run(hub *Hub) {
 			}
 
 		case meta := <-t.meta:
-			log.Printf("topic[%s].run: got meta message '%v'", t.name, meta)
+			log.Printf("topic[%s].run: got meta message '%+#v' %x", t.name, meta, meta.what)
 
 			// Request to get/set topic metadata
 			if meta.pkt.Get != nil {
@@ -567,8 +567,6 @@ func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin, sendDesc bool) error {
 			log.Printf("subCommonReply: user %s joined grp topic %s", sreg.sess.uid.UserId(), t.name)
 			t.presPubChange(sreg.sess.uid, "on")
 		}
-	} else {
-		log.Printf("subCommonReply: topic %s, online %d", t.name, pud.online)
 	}
 
 	t.perUser[sreg.sess.uid] = pud
@@ -601,7 +599,7 @@ func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin, sendDesc bool) error {
 func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string, info,
 	private interface{}, loaded bool) error {
 
-	log.Println("requestSub", t.name)
+	log.Println("topic.requestSub", t.name)
 
 	now := time.Now().UTC().Round(time.Millisecond)
 
@@ -1252,13 +1250,15 @@ func (t *Topic) replySetSub(h *Hub, sess *Session, set *MsgClientSet) error {
 	}
 
 	// if set.User is not set, request is for the current user
-	if !uid.IsZero() {
+	if uid.IsZero() {
 		uid = sess.uid
 	}
 
 	if uid == sess.uid {
+		// Request to modify current subscription
 		return t.requestSub(h, sess, set.Id, set.Sub.Mode, set.Sub.Info, nil, false)
 	} else {
+		// Request to approve a subscription
 		return t.approveSub(h, sess, uid, set)
 	}
 }
