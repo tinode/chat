@@ -33,7 +33,6 @@ package store
 import (
 	"encoding/json"
 	"errors"
-	"strings"
 	"time"
 
 	"github.com/tinode/chat/server/auth"
@@ -137,6 +136,8 @@ var Users UsersObjMapper
 func (u UsersObjMapper) Create(user *types.User, private interface{}) (*types.User, error) {
 
 	user.SetUid(GetUid())
+	user.InitTimes()
+
 	err, _ := adaptr.UserCreate(user)
 	if err != nil {
 		return nil, err
@@ -180,6 +181,11 @@ func (UsersObjMapper) AddAuthRecord(uid types.Uid, scheme, unique string, secret
 	return adaptr.AddAuthRecord(uid, scheme+":"+unique, secret, expires)
 }
 
+// Update authentication record with a new secret and expiration time
+func (UsersObjMapper) UpdateAuthRecord(uid types.Uid, scheme, unique string, secret []byte, expires time.Time) (int, error) {
+	return adaptr.UpdAuthRecord(scheme+":"+unique, secret, expires)
+}
+
 // Get returns a user object for the given user id
 func (UsersObjMapper) Get(uid types.Uid) (*types.User, error) {
 	return adaptr.UserGet(uid)
@@ -201,17 +207,6 @@ func (UsersObjMapper) UpdateStatus(id types.Uid, status interface{}) error {
 
 func (UsersObjMapper) UpdateLastSeen(uid types.Uid, userAgent string, when time.Time) error {
 	return adaptr.UserUpdateLastSeen(uid, userAgent, when)
-}
-
-// ChangePassword changes user's password in "basic" authentication scheme
-func (UsersObjMapper) ChangeAuthCredential(uid types.Uid, scheme, secret string) error {
-	if scheme == "basic" {
-		if splitAt := strings.Index(secret, ":"); splitAt > 0 {
-			return adaptr.ChangePassword(uid, secret[splitAt+1:])
-		}
-		return errors.New("store: invalid format of secret")
-	}
-	return errors.New("store: unknown authentication scheme '" + scheme + "'")
 }
 
 func (UsersObjMapper) Update(uid types.Uid, update map[string]interface{}) error {

@@ -31,18 +31,23 @@ type AuthHandler interface {
 	// Add persistent record to database. Returns a numeric error code to indicate
 	// if the error is due to a duplicate or some other error.
 	// store.AddAuthRecord("scheme", "unique", "secret")
-	AddRecord(uid types.Uid, secret string, expires time.Time) (int, error)
+	AddRecord(uid types.Uid, secret []byte, expires time.Time) (int, error)
+
+	// Update existing record with new credentials. Returns a numeric error code to indicate
+	// if the error is due to a duplicate or some other error.
+	// store.UpdateAuthRecord("scheme", "unique", "secret")
+	UpdateRecord(uid types.Uid, secret []byte, expires time.Time) (int, error)
 
 	// Given a user-provided authentication secret (such as "login:password"
 	// return user ID, time when the secret expires (zero, if never) or an error code.
 	// store.Users.GetAuthRecord("scheme", "unique")
-	Authenticate(secret string) (types.Uid, time.Time, int)
+	Authenticate(secret []byte) (types.Uid, time.Time, int)
 
 	// Verify if the provided secret can be considered unique by the auth scheme
 	// E.g. if login is unique.
 	// store.GetAuthRecord(scheme, unique)
-	IsUnique(secret string) (bool, error)
+	IsUnique(secret []byte) (bool, error)
 
 	// Generate a new secret, if appropriate.
-	GenSecret(uid types.Uid, expires time.Time) (string, error)
+	GenSecret(uid types.Uid, expires time.Time) ([]byte, error)
 }

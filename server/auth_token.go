@@ -52,20 +52,20 @@ func (TokenAuth) Init(jsonconf string) error {
 	return nil
 }
 
-func (TokenAuth) AddRecord(uid types.Uid, secret string, expires time.Time) (int, error) {
+func (TokenAuth) AddRecord(uid types.Uid, secret []byte, expires time.Time) (int, error) {
 	return auth.ErrUnsupported, nil
 }
 
-func (TokenAuth) Authenticate(token string) (types.Uid, time.Time, int) {
+func (TokenAuth) UpdateRecord(uid types.Uid, secret []byte, expires time.Time) (int, error) {
+	return auth.ErrUnsupported, nil
+}
+
+func (TokenAuth) Authenticate(token []byte) (types.Uid, time.Time, int) {
 	var zeroTime time.Time
 	// [8:UID][4:expires][32:signature] == 44 bytes
 
-	data, err := base64.URLEncoding.DecodeString(token)
-	if err != nil {
-		return types.ZeroUid, zeroTime, auth.ErrMalformed
-	}
-
-	if len(data) != token_len_decoded {
+	data := make([]byte, base64.URLEncoding.DecodedLen(len(token)))
+	if declen, err := base64.URLEncoding.Decode(data, token); err != nil || declen != token_len_decoded {
 		return types.ZeroUid, zeroTime, auth.ErrMalformed
 	}
 
@@ -88,7 +88,7 @@ func (TokenAuth) Authenticate(token string) (types.Uid, time.Time, int) {
 	return uid, expires, auth.NoErr
 }
 
-func (TokenAuth) GenSecret(uid types.Uid, expires time.Time) (string, error) {
+func (TokenAuth) GenSecret(uid types.Uid, expires time.Time) ([]byte, error) {
 	// [8:UID][4:expires][32:signature] == 44 bytes
 
 	buf := new(bytes.Buffer)
@@ -99,10 +99,13 @@ func (TokenAuth) GenSecret(uid types.Uid, expires time.Time) (string, error) {
 	hasher.Write(buf.Bytes())
 	binary.Write(buf, binary.LittleEndian, hasher.Sum(nil))
 
-	return base64.URLEncoding.EncodeToString(buf.Bytes()), nil
+	token := make([]byte, base64.URLEncoding.EncodedLen(buf.Len()))
+	base64.URLEncoding.Encode(token, buf.Bytes())
+
+	return token, nil
 }
 
-func (TokenAuth) IsUnique(secret string) (bool, error) {
+func (TokenAuth) IsUnique(token []byte) (bool, error) {
 	return false, errors.New("auth_token: unsupported")
 }
 

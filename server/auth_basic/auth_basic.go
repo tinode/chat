@@ -33,8 +33,8 @@ func (BasicAuth) Init(unused string) error {
 	return nil
 }
 
-func (BasicAuth) AddRecord(uid types.Uid, secret string, expires time.Time) (int, error) {
-	uname, password, fail := parseSecret(secret)
+func (BasicAuth) AddRecord(uid types.Uid, secret []byte, expires time.Time) (int, error) {
+	uname, password, fail := parseSecret(string(secret))
 	if fail != auth.NoErr {
 		return fail, errors.New("basic auth handler: malformed secret")
 	}
@@ -52,8 +52,35 @@ func (BasicAuth) AddRecord(uid types.Uid, secret string, expires time.Time) (int
 	return auth.NoErr, nil
 }
 
-func (BasicAuth) Authenticate(secret string) (types.Uid, time.Time, int) {
-	uname, password, fail := parseSecret(secret)
+func (BasicAuth) UpdateRecord(uid types.Uid, secret []byte, expires time.Time) (int, error) {
+	uname, password, fail := parseSecret(string(secret))
+	if fail != auth.NoErr {
+		return fail, errors.New("basic auth handler: malformed secret")
+	}
+
+	storedUid, _, _, err := store.Users.GetAuthRecord("basic", uname)
+	if err != nil {
+		return auth.ErrInternal, err
+	}
+	if storedUid != uid {
+		return auth.ErrFailed, nil
+	}
+	passhash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return auth.ErrInternal, errors.New("basic auth handler: login cannot be changed")
+	}
+	count, err := store.Users.UpdateAuthRecord(uid, "basic", uname, passhash, expires)
+	if count == 0 {
+		return auth.ErrInternal, errors.New("basic auth handler: record is missing")
+	}
+	if err != nil {
+		return auth.ErrInternal, err
+	}
+	return auth.NoErr, nil
+}
+
+func (BasicAuth) Authenticate(secret []byte) (types.Uid, time.Time, int) {
+	uname, password, fail := parseSecret(string(secret))
 	if fail != auth.NoErr {
 		return types.ZeroUid, time.Time{}, fail
 	}
@@ -81,8 +108,8 @@ func (BasicAuth) Authenticate(secret string) (types.Uid, time.Time, int) {
 
 }
 
-func (BasicAuth) IsUnique(secret string) (bool, error) {
-	uname, _, fail := parseSecret(secret)
+func (BasicAuth) IsUnique(secret []byte) (bool, error) {
+	uname, _, fail := parseSecret(string(secret))
 	if fail != auth.NoErr {
 		return false, errors.New("auth_basic.IsUnique: malformed secret")
 	}
@@ -92,11 +119,11 @@ func (BasicAuth) IsUnique(secret string) (bool, error) {
 		return false, err
 	}
 
-	return !uid.IsZero(), nil
+	return uid.IsZero(), nil
 }
 
-func (BasicAuth) GenSecret(uid types.Uid, expires time.Time) (string, error) {
-	return "", errors.New("auth_basic.GenSecret: not supported")
+func (BasicAuth) GenSecret(uid types.Uid, expires time.Time) ([]byte, error) {
+	return nil, errors.New("auth_basic.GenSecret: not supported")
 }
 
 func init() {

@@ -122,20 +122,24 @@ type MsgClientAcc struct {
 	Id string `json:"id,omitempty"`
 	// "new" to create a new user or UserId to update a user; default: current user
 	User string `json:"user,omitempty"`
-	// A list of authentication schemes/secrets the account can use
-	Auth []MsgAuthScheme `json:"auth"`
-	// The name of the schema to use to authenticate the current session to the newly created account
-	Login string `json:"login"`
+	// The initial authentication scheme the account can use
+	Scheme string `json:"scheme,omitempty"`
+	// Shared secret
+	Secret json.RawMessage `json:"secret"`
+	// Authenticate session with the newly created account
+	Login bool `json:"login"`
 	// User initialization data when creating a new user, otherwise ignored
 	Desc *MsgSetDesc `json:"desc,omitempty"`
 }
 
+/*
 type MsgAuthScheme struct {
 	// Scheme name
 	Scheme string `json:"scheme"`
 	// Secret as RawMessage to prevent it from being parsed
 	Secret json.RawMessage `json:"secret"`
 }
+*/
 
 // Login {login} message
 type MsgClientLogin struct {
@@ -144,7 +148,7 @@ type MsgClientLogin struct {
 	// Authentication scheme
 	Scheme string `json:"scheme,omitempty"`
 	// Shared secret
-	Secret string `json:"secret"`
+	Secret json.RawMessage `json:"secret"`
 }
 
 // Subscription request {sub} message

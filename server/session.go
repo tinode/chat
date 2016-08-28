@@ -474,84 +474,81 @@ func (s *Session) acc(msg *ClientComMessage) {
 		return
 	}
 
-	if msg.Acc.Auth == nil {
+	authhdl := store.GetAuthHandler(msg.Acc.Scheme)
+	if authhdl == nil {
 		s.queueOut(ErrMalformed(msg.Acc.Id, "", msg.timestamp))
-		return
-	} else if len(msg.Acc.Auth) == 0 {
-		s.queueOut(ErrAuthUnknownScheme(msg.Acc.Id, "", msg.timestamp))
 		return
 	}
 
 	if msg.Acc.User == "new" {
 		// Request to create a new account
-		for _, auth := range msg.Acc.Auth {
-			if auth.Scheme == "basic" {
-				var private interface{}
-				var user types.User
-				if msg.Acc.Desc != nil {
-					user.Access.Auth = DEFAULT_AUTH_ACCESS
-					user.Access.Anon = DEFAULT_ANON_ACCESS
-
-					if msg.Acc.Desc.DefaultAcs != nil {
-						if msg.Acc.Desc.DefaultAcs.Auth != "" {
-							user.Access.Auth.UnmarshalText([]byte(msg.Acc.Desc.DefaultAcs.Auth))
-						}
-						if msg.Acc.Desc.DefaultAcs.Anon != "" {
-							user.Access.Anon.UnmarshalText([]byte(msg.Acc.Desc.DefaultAcs.Anon))
-						}
-					}
-					if !isNullValue(msg.Acc.Desc.Public) {
-						user.Public = msg.Acc.Desc.Public
-					}
-					if !isNullValue(msg.Acc.Desc.Private) {
-						private = msg.Acc.Desc.Private
-					}
-				}
-				_, err := store.Users.Create(&user, private)
-				if err != nil {
-					if err.Error() == "duplicate credential" {
-						s.queueOut(ErrDuplicateCredential(msg.Acc.Id, "", msg.timestamp))
-					} else {
-						s.queueOut(ErrUnknown(msg.Acc.Id, "", msg.timestamp))
-					}
-					return
-				}
-
-				reply := NoErrCreated(msg.Acc.Id, "", msg.timestamp)
-				desc := &MsgTopicDesc{
-					CreatedAt: &user.CreatedAt,
-					UpdatedAt: &user.UpdatedAt,
-					DefaultAcs: &MsgDefaultAcsMode{
-						Auth: user.Access.Auth.String(),
-						Anon: user.Access.Anon.String()},
-					Public:  user.Public,
-					Private: private}
-
-				reply.Ctrl.Params = map[string]interface{}{
-					"uid":  user.Uid().UserId(),
-					"desc": desc,
-				}
-				s.queueOut(NoErr(msg.Acc.Id, "", msg.timestamp))
+		if ok, err := authhdl.IsUnique(msg.Acc.Secret); !ok {
+			log.Println("Not unique: ", err)
+			if err == nil {
+				s.queueOut(ErrDuplicateCredential(msg.Acc.Id, "", msg.timestamp))
 			} else {
-				s.queueOut(ErrAuthUnknownScheme(msg.Acc.Id, "", msg.timestamp))
-				return
+				s.queueOut(ErrUnknown(msg.Acc.Id, "", msg.timestamp))
+			}
+			return
+		}
+
+		var user types.User
+		var private interface{}
+		if msg.Acc.Desc != nil {
+			user.Access.Auth = DEFAULT_AUTH_ACCESS
+			user.Access.Anon = DEFAULT_ANON_ACCESS
+
+			if msg.Acc.Desc.DefaultAcs != nil {
+				if msg.Acc.Desc.DefaultAcs.Auth != "" {
+					user.Access.Auth.UnmarshalText([]byte(msg.Acc.Desc.DefaultAcs.Auth))
+				}
+				if msg.Acc.Desc.DefaultAcs.Anon != "" {
+					user.Access.Anon.UnmarshalText([]byte(msg.Acc.Desc.DefaultAcs.Anon))
+				}
+			}
+			if !isNullValue(msg.Acc.Desc.Public) {
+				user.Public = msg.Acc.Desc.Public
+			}
+			if !isNullValue(msg.Acc.Desc.Private) {
+				private = msg.Acc.Desc.Private
 			}
 		}
+
+		if _, err := store.Users.Create(&user, private); err != nil {
+			s.queueOut(ErrUnknown(msg.Acc.Id, "", msg.timestamp))
+			return
+		}
+
+		if _, err := authhdl.AddRecord(user.Uid(), msg.Acc.Secret, time.Time{}); err != nil {
+			// FIXME(gene): delete incomplete user record
+			s.queueOut(ErrUnknown(msg.Acc.Id, "", msg.timestamp))
+			return
+		}
+
+		reply := NoErrCreated(msg.Acc.Id, "", msg.timestamp)
+		desc := &MsgTopicDesc{
+			CreatedAt: &user.CreatedAt,
+			UpdatedAt: &user.UpdatedAt,
+			DefaultAcs: &MsgDefaultAcsMode{
+				Auth: user.Access.Auth.String(),
+				Anon: user.Access.Anon.String()},
+			Public:  user.Public,
+			Private: private}
+
+		reply.Ctrl.Params = map[string]interface{}{
+			"uid":  user.Uid().UserId(),
+			"desc": desc,
+		}
+		s.queueOut(reply)
+
 	} else if !s.uid.IsZero() {
-		// Request to change auth of an existing account. Only basic auth is currently supported
-		for _, auth := range msg.Acc.Auth {
-			if auth.Scheme == "basic" {
-				if err := store.Users.ChangeAuthCredential(s.uid, auth.Scheme, string(auth.Secret)); err != nil {
-					s.queueOut(ErrUnknown(msg.Acc.Id, "", msg.timestamp))
-					return
-				}
-
-				s.queueOut(NoErr(msg.Acc.Id, "", msg.timestamp))
-			} else {
-				s.queueOut(ErrAuthUnknownScheme(msg.Acc.Id, "", msg.timestamp))
-				return
-			}
+		// Request to update auth of an existing account. Only basic auth is currently supported
+		// TODO(gene): support adding new auth schemes
+		if _, err := authhdl.UpdateRecord(s.uid, msg.Acc.Secret, time.Time{}); err != nil {
+			s.queueOut(ErrDuplicateCredential(msg.Acc.Id, "", msg.timestamp))
 		}
+		s.queueOut(NoErr(msg.Acc.Id, "", msg.timestamp))
+
 	} else {
 		// session is not authenticated and this is not an attempt to create a new account
 		s.queueOut(ErrPermissionDenied(msg.Acc.Id, "", msg.timestamp))

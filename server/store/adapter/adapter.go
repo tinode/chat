@@ -22,7 +22,7 @@ type Adapter interface {
 	AddAuthRecord(user t.Uid, unique string, secret []byte, expires time.Time) (error, bool)
 	DelAuthRecord(unique string) (int, error)
 	DelAllAuthRecords(uid t.Uid) (int, error)
-	UpdAuthRecord(unique string, secret []byte) (int, error)
+	UpdAuthRecord(unique string, secret []byte, expires time.Time) (int, error)
 	UserGet(id t.Uid) (*t.User, error)
 	UserGetAll(ids ...t.Uid) ([]t.User, error)
 	UserDelete(id t.Uid, soft bool) error
