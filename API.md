@@ -77,7 +77,7 @@ session ID `sid` in case of long polling, all in `ctrl.params`.
 ```js
 hi: {
   id: "1a2b3",     // string, client-provided message id, optional
-  ver: "0.7",   // string, version of the wire protocol supported by the client.
+  ver: "0.8",   // string, version of the wire protocol supported by the client.
   ua: "JS/1.0 (Windows 10)", // string, user agent identifying client software,
                    // optional
   dev: "L1iC2dNtk2" // string, unique value which identifies this specific
@@ -96,16 +96,13 @@ To update credentials leave `acc.user` unset.
 acc: {
   id: "1a2b3", // string, client-provided message id, optional
   user: "new", // string, "new" to create a new user, default: current user, optional
-  auth: [   // array of authentication schemes to add, update or delete
-    {
-      scheme: "basic", // requested authentication scheme for this account, required;
-                       // only "basic" (default) is currently supported. The current
-                       // basic scheme does not allow changes to username.
-      secret: "username:password" // string, secret for the chosen authentication
-                      // scheme; to delete a scheme use string with a single DEL
-                      // Unicode character "\u2421"; required
-    }
-  ],
+  scheme: "basic", // authentication scheme for this account, required;
+               // only "basic" (default) is currently supported. The current
+               // implementation of the basic scheme does not allow changes to username.
+  secret: btoa("username:password"), // string, base64 encoded secret for the chosen
+              // authentication scheme; to delete a scheme use string with a single DEL
+              // Unicode character "\u2421"; required
+
   desc: {  // object, user initialization data closely matching that of table
            // initialization; optional
     defacs: {
@@ -134,8 +131,8 @@ login: {
   id: "1a2b3",     // string, client-provided message id, optional
   scheme: "basic", // string, authentication scheme, optional; only "basic" (default)
                    // is currently supported
-  secret: "username:password", // string, secret for the chosen authentication
-                               //  scheme, required
+  secret: btoa("username:password"), // string, base64-encoded secret for the chosen
+                  // authentication scheme, required
 }
 ```
 Basic authentication scheme expects `secret` to be a string composed of a user name followed by a colon `:` followed by a plan text password.

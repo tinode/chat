@@ -32,7 +32,6 @@ package main
  *****************************************************************************/
 
 import (
-	"encoding/json"
 	"net/http"
 	"strings"
 	"time"
@@ -125,7 +124,7 @@ type MsgClientAcc struct {
 	// The initial authentication scheme the account can use
 	Scheme string `json:"scheme,omitempty"`
 	// Shared secret
-	Secret json.RawMessage `json:"secret"`
+	Secret []byte `json:"secret"`
 	// Authenticate session with the newly created account
 	Login bool `json:"login"`
 	// User initialization data when creating a new user, otherwise ignored
@@ -148,7 +147,7 @@ type MsgClientLogin struct {
 	// Authentication scheme
 	Scheme string `json:"scheme,omitempty"`
 	// Shared secret
-	Secret json.RawMessage `json:"secret"`
+	Secret []byte `json:"secret"`
 }
 
 // Subscription request {sub} message

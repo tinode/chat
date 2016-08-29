@@ -85,15 +85,19 @@ func (BasicAuth) Authenticate(secret []byte) (types.Uid, time.Time, int) {
 		return types.ZeroUid, time.Time{}, fail
 	}
 
+	log.Printf("parsed secret: '%s', '%s'", uname, password)
+
 	uid, passhash, expires, err := store.Users.GetAuthRecord("basic", uname)
 	if err != nil {
 		log.Println(err)
 		return types.ZeroUid, time.Time{}, auth.ErrInternal
 	} else if uid.IsZero() {
 		// Invalid login.
+		log.Println("invalid login")
 		return types.ZeroUid, time.Time{}, auth.ErrFailed
 	} else if !expires.IsZero() && expires.Before(time.Now()) {
 		// The record has expired
+		log.Printf("expired secret")
 		return types.ZeroUid, time.Time{}, auth.ErrExpired
 	}
 
@@ -101,9 +105,10 @@ func (BasicAuth) Authenticate(secret []byte) (types.Uid, time.Time, int) {
 	if err != nil {
 		log.Println(err)
 		// Invalid password
+		log.Printf("invalid password")
 		return types.ZeroUid, time.Time{}, auth.ErrFailed
 	}
-
+	log.Printf("everyting is fine")
 	return uid, expires, auth.NoErr
 
 }

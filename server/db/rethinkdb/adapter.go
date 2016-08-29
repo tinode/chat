@@ -3,6 +3,7 @@ package rethinkdb
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"strings"
 	"time"
 
@@ -243,10 +244,13 @@ func (a *RethinkDbAdapter) UpdAuthRecord(unique string, secret []byte, expires t
 // Retrieve user's authentication record
 func (a *RethinkDbAdapter) GetAuthRecord(unique string) (t.Uid, []byte, time.Time, error) {
 	// Default() is needed to prevent Pluck from returning an error
-	rows, err := rdb.DB(a.dbName).Table("auth").Get(unique).Pluck("userid", "secret", "expires").Default(nil).Run(a.conn)
+	rows, err := rdb.DB(a.dbName).Table("auth").Get(unique).Pluck(
+		"userid", "secret", "expires").Default(nil).Run(a.conn)
 	if err != nil {
 		return t.ZeroUid, nil, time.Time{}, err
 	}
+
+	log.Println("Fetched for unique", unique)
 
 	var record struct {
 		Userid  string    `gorethink:"userid"`
@@ -678,7 +682,7 @@ func (a *RethinkDbAdapter) SubsDelForTopic(topic string) error {
 	return err
 }
 
-// FindSubs returns a list of users who match given tags, such as "email:jdoe@example.com" or "tel:18003287448".
+// returns a list of users who match given tags, such as "email:jdoe@example.com" or "tel:18003287448".
 // Just search the 'users.Tags' for the given tags using respective index.
 func (a *RethinkDbAdapter) FindSubs(user t.Uid, query []interface{}) ([]t.Subscription, error) {
 	// Query may contain redundant records, i.e. the same email twice.
