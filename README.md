@@ -53,5 +53,5 @@ A javascript demo is (usually) available at http://api.tinode.co/x/example-react
 
 ### Android
 
-<img src="android-1-20160218191919.png" alt="javascript app screenshot" />
-<img src="android-2-20160218192008.png" alt="javascript app screenshot" />
+<img src="android-contacts.png" alt="android screenshot" width=270 />
+<img src="android-messages.png" alt="javascript app screenshot" width=270 />
