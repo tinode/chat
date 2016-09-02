@@ -49,7 +49,7 @@ A javascript demo is (usually) available at http://api.tinode.co/x/example-react
 
 ### Web
 
-<img src="js-20160218191843.png" alt="javascript app screenshot" />
+<img src="web-topic.png" alt="javascript app screenshot" width=900/>
 
 ### Android
 
