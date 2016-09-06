@@ -474,6 +474,7 @@ func (s *Session) acc(msg *ClientComMessage) {
 		return
 	}
 
+	// FIXME(gene): it should be possible to change Tags without stating the auth scheme
 	authhdl := store.GetAuthHandler(msg.Acc.Scheme)
 	if authhdl == nil {
 		s.queueOut(ErrMalformed(msg.Acc.Id, "", msg.timestamp))
@@ -513,7 +514,12 @@ func (s *Session) acc(msg *ClientComMessage) {
 				private = msg.Acc.Desc.Private
 			}
 		}
-
+		if msg.Acc.Tags != nil && len(msg.Acc.Tags) > 0 {
+			tags := make([]string, 0, len(msg.Acc.Tags))
+			if filterTags(tags, msg.Acc.Tags) > 0 {
+				user.Tags = tags
+			}
+		}
 		if _, err := store.Users.Create(&user, private); err != nil {
 			s.queueOut(ErrUnknown(msg.Acc.Id, "", msg.timestamp))
 			return
@@ -547,6 +553,7 @@ func (s *Session) acc(msg *ClientComMessage) {
 		if _, err := authhdl.UpdateRecord(s.uid, msg.Acc.Secret, time.Time{}); err != nil {
 			s.queueOut(ErrDuplicateCredential(msg.Acc.Id, "", msg.timestamp))
 		}
+		// TODO(gene): handle tags
 		s.queueOut(NoErr(msg.Acc.Id, "", msg.timestamp))
 
 	} else {
@@ -780,4 +787,27 @@ func (s *Session) validateTopicName(msgId, topic string, timestamp time.Time) (s
 	}
 
 	return topic, routeTo, nil
+}
+
+func filterTags(dst, src []string) int {
+	if globals.indexableTags == nil || len(globals.indexableTags) == 0 {
+		return 0
+	}
+
+	for _, s := range src {
+		parts := strings.SplitN(s, ":", 2)
+		if len(parts) < 2 {
+			continue
+		}
+		if parts[1] = strings.Trim(parts[1], " "); parts[1] == "" {
+			continue
+		}
+		parts[0] = strings.ToLower(parts[0])
+		for _, tag := range globals.indexableTags {
+			if parts[0] == tag {
+				dst = append(dst, parts[1])
+			}
+		}
+	}
+	return len(dst)
 }

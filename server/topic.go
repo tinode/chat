@@ -1061,6 +1061,18 @@ func (t *Topic) replySetDesc(sess *Session, set *MsgClientSet) error {
 			if set.Desc.Public != nil {
 				sendPres = assignPubPriv(user, "Public", set.Desc.Public)
 			}
+		} else if t.cat == types.TopicCat_Fnd {
+			// Assign tags as user.Tags
+			if set.Desc.Public != nil {
+				if src, ok := set.Desc.Public.([]string); ok && len(src) > 0 {
+					tags := make([]string, 0, len(src))
+					if filterTags(tags, src) > 0 {
+						// No need to send presence update
+						assignPubPriv(user, "Tags", tags)
+						t.public = tags
+					}
+				}
+			}
 		} else if t.cat == types.TopicCat_Grp && t.owner == sess.uid {
 			// Update current topic
 			if set.Desc.DefaultAcs != nil {

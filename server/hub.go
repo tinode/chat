@@ -301,44 +301,29 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 
 		// 'fnd' has no owner, t.owner = nil
 
-		// The p2p topic cannot be accessed by anyone but the 2 participants. Access is checked at the session level.
-		// Set default access in case user leaves - joins.
+		// Make sure no one can join the topic.
 		t.accessAuth = types.ModeBanned
 		t.accessAnon = types.ModeBanned
 
-		if err := t.loadSubscribers(); err != nil {
+		user, err := store.Users.Get(sreg.sess.uid)
+		if err != nil {
+			log.Println("hub: cannot load user object for 'fnd'='" + t.name + "' (" + err.Error() + ")")
+			sreg.sess.queueOut(ErrUnknown(sreg.pkt.Id, t.original, timestamp))
+			return
+		}
+
+		if err = t.loadSubscribers(); err != nil {
 			log.Println("hub: cannot load subscribers for '" + t.name + "' (" + err.Error() + ")")
 			sreg.sess.queueOut(ErrUnknown(sreg.pkt.Id, t.original, timestamp))
 			return
 		}
 
-		// Public is not set.
-		// t.public = nil
+		t.public = user.Tags
 
-		t.created = t.perUser[sreg.sess.uid].created
-		t.updated = t.perUser[sreg.sess.uid].updated
+		t.created = user.CreatedAt
+		t.updated = user.UpdatedAt
 
-		// Publishing to Find is not supported
-		// t.lastId = 0
-
-		// Request to attach to a firehause topic. Must be root.
-	} else if t.original == "fh" {
-		log.Println("hub: loading 'fh' topic")
-
-		t.cat = types.TopicCat_Fh
-
-		// 'fh' has no owner, t.owner = nil
-
-		// The fh can be accessed by anyone with root access
-		// t.accessAuth = types.ModeBanned
-		// t.accessAnon = types.ModeBanned
-
-		// Subscriptions are ephemeral, no need to load subscribers.
-
-		// TODO(gene): handle public more intelligently
-		// t.public = nil
-
-		// Publishing to Fh is not supported, history is not supported.
+		// Publishing to fnd is not supported
 		// t.lastId = 0
 
 		// Request to load an existing or create a new p2p topic, then attach to it.

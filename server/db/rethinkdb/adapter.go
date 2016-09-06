@@ -318,6 +318,7 @@ func (a *RethinkDbAdapter) UserUpdateLastSeen(uid t.Uid, userAgent string, when 
 	return err
 }
 
+/*
 func (a *RethinkDbAdapter) UserUpdateStatus(uid t.Uid, status interface{}) error {
 	update := map[string]interface{}{"Status": status}
 
@@ -326,12 +327,14 @@ func (a *RethinkDbAdapter) UserUpdateStatus(uid t.Uid, status interface{}) error
 
 	return err
 }
+*/
 
 func (a *RethinkDbAdapter) ChangePassword(id t.Uid, password string) error {
 	return errors.New("ChangePassword: not implemented")
 }
 
 func (a *RethinkDbAdapter) UserUpdate(uid t.Uid, update map[string]interface{}) error {
+	// FIXME(gene): add Tag re-indexing
 	_, err := rdb.DB(a.dbName).Table("users").Get(uid.String()).Update(update).RunWrite(a.conn)
 	return err
 }

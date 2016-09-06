@@ -100,9 +100,11 @@ acc: {
                // only "basic" (default) is currently supported. The current
                // implementation of the basic scheme does not allow changes to username.
   secret: btoa("username:password"), // string, base64 encoded secret for the chosen
-              // authentication scheme; to delete a scheme use string with a single DEL
+              // authentication scheme; to delete a scheme use a string with a single DEL
               // Unicode character "\u2421"; required
-
+  tags: [ ... ], // array of indexed tags for user discovery; see `fnd` topic for
+              // details, optional (if missing, user will not be discoverable other than
+              // by login)      
   desc: {  // object, user initialization data closely matching that of table
            // initialization; optional
     defacs: {
@@ -135,7 +137,7 @@ login: {
                   // authentication scheme, required
 }
 ```
-Basic authentication scheme expects `secret` to be a string composed of a user name followed by a colon `:` followed by a plan text password.
+The basic authentication scheme expects `secret` to be a base64-encoded string of a string composed of a user name followed by a colon `:` followed by a plan text password.
 
 Basic is the only currently supported authentication scheme. _Authentication scheme `none` is planned to support anonymous users in the future._
 
@@ -219,7 +221,7 @@ sub: {
     data: {
       since: 123, // integer, load messages with server-issued IDs greater or equal
   				 // to this (inclusive/closed), optional
-      before: 321, // integer, load messages with server-issed sequential IDs less
+      before: 321, // integer, load messages with server-issued sequential IDs less
   				  // than this (exclusive/open), optional
       limit: 20, // integer, limit the number of returned objects,
                  // default: 32, optional
@@ -578,7 +580,7 @@ Each user is assigned a unique ID. The IDs are composed as `usr` followed by bas
 * created: timestamp when the user record was created
 * updated: timestamp of when user's `public` was last updated
 * username: unique string used in `basic` authentication; username is not accessible to other users
-* defacs: object describing user's default access mode for peer to peer conversations with authenticated and anonymous users; see [Access control][] for details
+* defacs: object describing user's default access mode for peer to peer conversations with authenticated and anonymous users; see [Access control](#access-control) for details
  * auth: default access mode for authenticated users
  * anon: default access for anonymous users
 * public: an application-defined object that describes the user. Anyone who can query user for `public` data.
@@ -618,14 +620,14 @@ Topic is a named communication channel for one or more people. Topics have persi
 Topic properties independent of the user making the query:
 * created: timestamp of topic creation time
 * updated: timestamp of when topic's `public` or `private` was last updated
-* defacs: object describing topic's default access mode for authenticated and anonymous users; see [Access control][] for details
+* defacs: object describing topic's default access mode for authenticated and anonymous users; see [Access control](#access control) for details
  * auth: default access mode for authenticated users
  * anon: default access for anonymous users
 * seq: integer server-issued sequential ID of the latest `{data}` message sent through the topic
 * public: an application-defined object that describes the topic. Anyone who can subscribe to topic can receive topic's `public` data.
 
 User-dependent topic properties:
-* acs: object describing given user's current access permissions; see [Access control][] for details
+* acs: object describing given user's current access permissions; see [Access control](#access-control) for details
  * want: access permission requested by this user
  * given: access permissions given to this user
 * private: an application-defined object that is unique to the current user.
@@ -647,10 +649,10 @@ The `{data}` message represents invites and requests to confirm a subscription. 
  * "appr" is a request to approve a subscription
 * topic: the name of the topic, in case of an invite the current user is invited to this topic; in case of a request to approve, another user wants to subscribe to this topic where the current user is a manager (has `S` permission)
 * user: user ID as a string of the user who is the target of this request. In case of an invite this is the ID of the current user; in case of an approval request this is the ID of the user who is being subscribed.
-* acs: object describing access permissions of the subscription, see [Access control][] for details
+* acs: object describing access permissions of the subscription, see [Access control](#access-control) for details
 * info: object with a free-form payload. It's passed unchanged from the originating `{sub}` or `{set}` message.
 
-Message `{get what="info"}` to `me` is automatically replied with a `{meta}` message containing `info` section with the topic parameters (see intro to [Topics][] section). The `public` parameter of `me` topic is associated with the user. Changing it changes `public` not just for the `me` topic, but also everywhere where user's public is shown, such as 'public' of all user's peer to peer topics.
+Message `{get what="info"}` to `me` is automatically replied with a `{meta}` message containing `info` section with the topic parameters (see intro to [Topics](#topics) section). The `public` parameter of `me` topic is data that the user wants to show to his/her connections. Changing it changes `public` not just for the `me` topic, but also everywhere where user's public is shown, such as 'public' of all user's peer to peer topics.
 
 Message `{get what="sub"}` to `me` is different from any other topic as it returns the list of topics that the current user is subscribed to as opposite to the expected user's subscription to `me`.
 * seq: server-issued numeric id of the last message in the topic
@@ -662,6 +664,16 @@ Message `{get what="sub"}` to `me` is different from any other topic as it retur
  * ua: user agent string of the user's client software last used
 
 Message `{get what="data"}` to `me` queries the history of invites/notifications. It's handled the same way as to any other topic.
+
+### `fnd` topic: contacts discovery
+
+Topic `fnd` is automatically created for every user at the account creation time. It serves as an endpoint for discovering other users. Users registered in the system are indexed by tags. A tag is an identifier string such as a phone number or an email prepended with a descriptor, ex. `tel:14155551212` or `email:alice@example.com`. To search for contacts a user sets `private` parameter of the `fnd` topic to an array of tags then issues a `{get what="sub"}` request. The system responds with a `{meta}` message with the `sub` section listing details of the found contacts.
+
+The `public` parameter holds the list of tags this user can be discovered by. The `private` holds tags that this user wants to discover. These parameters can be manipulated in the same manner as with any other topic.
+
+Topic `fnd` is read-only. `{pub}` messages to `fnd` are rejected.
+
+(The following functionality is not implemented yet) When a new user registers with tags matching the given query, the `fnd` topic will receive `{pres}` notification for the new user.
 
 ### Peer to Peer Topics
 
@@ -694,8 +706,8 @@ A user is reported as being online when one or more of user's sessions are attac
  * When multiple user sessions are attached to `me`, the _user agent_ of the session where the most recent action has happened is reported in `{pres what="ua" ua="..."}`; the 'action' in this context means any message sent by the client. To avoid potentially excessive traffic, user agent changes are broadcast no more frequently than once a minute.
  * When user's last session detaches from `me`, the _user agent_ from that session is recorded together with the timestamp; the user agent is broadcast in the `{pres what="off"  ua="..."}` message and subsequently reported as the last online timestamp and user agent.
 
-An empty `ua=""` _user agent_ is not reported. I.e. if user attaches to `me` with non-empry _user agent_ then does so with an empty one, the change is not reported. An empty _user agent_ may be disallowed in the future.
+An empty `ua=""` _user agent_ is not reported. I.e. if user attaches to `me` with non-empty _user agent_ then does so with an empty one, the change is not reported. An empty _user agent_ may be disallowed in the future.
 
 ## Push notifications support
 
-Tinode supports mobile push notifications though compile-time plugins. The channel published by the plugin recives a copy of every data message which was attempted to be delivered.
+Tinode supports mobile push notifications though compile-time plugins. The channel published by the plugin receives a copy of every data message which was attempted to be delivered.

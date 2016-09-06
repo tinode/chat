@@ -27,7 +27,7 @@ type Adapter interface {
 	UserGetAll(ids ...t.Uid) ([]t.User, error)
 	UserDelete(id t.Uid, soft bool) error
 	UserUpdateLastSeen(uid t.Uid, userAgent string, when time.Time) error
-	UserUpdateStatus(uid t.Uid, status interface{}) error
+	//UserUpdateStatus(uid t.Uid, status interface{}) error
 	ChangePassword(id t.Uid, password string) error
 	UserUpdate(uid t.Uid, update map[string]interface{}) error
 

@@ -72,6 +72,7 @@ var globals struct {
 	cluster        *Cluster
 	apiKeySalt     []byte
 	tokenExpiresIn time.Duration
+	indexableTags  []string
 }
 
 type configType struct {
@@ -79,10 +80,12 @@ type configType struct {
 	Adapter    string `json:"use_adapter"`
 	APIKeySalt []byte `json:"api_key_salt"`
 	// Security token expiration time
-	TokenExpiresIn int             `json:"token_expires_in"`
-	ClusterConfig  json.RawMessage `json:"cluster_config"`
-	StoreConfig    json.RawMessage `json:"store_config"`
-	PushConfig     json.RawMessage `json:"push"`
+	TokenExpiresIn int `json:"token_expires_in"`
+	// Tags allowed in index (user discovery)
+	IndexableTags []string        `json:"indexable_tags"`
+	ClusterConfig json.RawMessage `json:"cluster_config"`
+	StoreConfig   json.RawMessage `json:"store_config"`
+	PushConfig    json.RawMessage `json:"push"`
 }
 
 func main() {
@@ -135,6 +138,8 @@ func main() {
 	globals.tokenExpiresIn = time.Duration(config.TokenExpiresIn) * time.Second
 	// API key validation secret
 	globals.apiKeySalt = config.APIKeySalt
+	// Indexable tags for user discovery
+	globals.indexableTags = config.IndexableTags
 
 	// Serve static content from the directory in -static_data flag if that's
 	// available, if not assume current dir.

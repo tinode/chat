@@ -249,7 +249,8 @@ type User struct {
 
 	Public interface{}
 
-	// Tags used for indexing this user. Stored on the user as well as indexed in 'tagindex'
+	// Unique indexed tags (email, phone) for finding this user. Stored on the
+	// 'users' as well as indexed in 'tagunique'
 	Tags []string
 }
 
@@ -625,7 +626,6 @@ const (
 	TopicCat_Fnd
 	TopicCat_P2P
 	TopicCat_Grp
-	TopicCat_Fh
 )
 
 func GetTopicCat(name string) TopicCat {
@@ -638,8 +638,6 @@ func GetTopicCat(name string) TopicCat {
 		return TopicCat_Grp
 	case "fnd":
 		return TopicCat_Fnd
-	case "fh":
-		return TopicCat_Fh
 	default:
 		panic("invalid topic type" + name)
 	}

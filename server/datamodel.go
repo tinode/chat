@@ -127,6 +127,8 @@ type MsgClientAcc struct {
 	Secret []byte `json:"secret"`
 	// Authenticate session with the newly created account
 	Login bool `json:"login"`
+	// Indexable tags for user discovery
+	Tags []string `json:"tags"`
 	// User initialization data when creating a new user, otherwise ignored
 	Desc *MsgSetDesc `json:"desc,omitempty"`
 }
