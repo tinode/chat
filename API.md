@@ -620,7 +620,7 @@ Topic is a named communication channel for one or more people. Topics have persi
 Topic properties independent of the user making the query:
 * created: timestamp of topic creation time
 * updated: timestamp of when topic's `public` or `private` was last updated
-* defacs: object describing topic's default access mode for authenticated and anonymous users; see [Access control](#access control) for details
+* defacs: object describing topic's default access mode for authenticated and anonymous users; see [Access control](#access-control) for details
  * auth: default access mode for authenticated users
  * anon: default access for anonymous users
 * seq: integer server-issued sequential ID of the latest `{data}` message sent through the topic
