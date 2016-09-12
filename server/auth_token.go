@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"crypto/hmac"
 	"crypto/sha256"
-	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
@@ -64,23 +63,22 @@ func (TokenAuth) Authenticate(token []byte) (types.Uid, time.Time, int) {
 	var zeroTime time.Time
 	// [8:UID][4:expires][32:signature] == 44 bytes
 
-	data := make([]byte, base64.URLEncoding.DecodedLen(len(token)))
-	if declen, err := base64.URLEncoding.Decode(data, token); err != nil || declen != token_len_decoded {
+	if len(token) < token_len_decoded {
 		return types.ZeroUid, zeroTime, auth.ErrMalformed
 	}
 
 	var uid types.Uid
-	if err := uid.UnmarshalBinary(data[0:8]); err != nil {
+	if err := uid.UnmarshalBinary(token[0:8]); err != nil {
 		return types.ZeroUid, zeroTime, auth.ErrMalformed
 	}
 
 	hasher := hmac.New(sha256.New, hmac_salt)
-	hasher.Write(data[:12])
-	if !hmac.Equal(data[12:], hasher.Sum(nil)) {
+	hasher.Write(token[:12])
+	if !hmac.Equal(token[12:], hasher.Sum(nil)) {
 		return types.ZeroUid, zeroTime, auth.ErrFailed
 	}
 
-	expires := time.Unix(int64(binary.LittleEndian.Uint32(data[8:12])), 0).UTC()
+	expires := time.Unix(int64(binary.LittleEndian.Uint32(token[8:12])), 0).UTC()
 	if expires.Before(time.Now()) {
 		return types.ZeroUid, zeroTime, auth.ErrExpired
 	}
@@ -99,10 +97,7 @@ func (TokenAuth) GenSecret(uid types.Uid, expires time.Time) ([]byte, error) {
 	hasher.Write(buf.Bytes())
 	binary.Write(buf, binary.LittleEndian, hasher.Sum(nil))
 
-	token := make([]byte, base64.URLEncoding.EncodedLen(buf.Len()))
-	base64.URLEncoding.Encode(token, buf.Bytes())
-
-	return token, nil
+	return buf.Bytes(), nil
 }
 
 func (TokenAuth) IsUnique(token []byte) (bool, error) {
