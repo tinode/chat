@@ -35,6 +35,7 @@ A javascript demo is (usually) available at http://api.tinode.co/x/example-react
 ### Planned
 
 * iOS client bindings.
+* Security: [TLS](https://en.wikipedia.org/wiki/Transport_Layer_Security) for all communications plus [OTR](https://en.wikipedia.org/wiki/Off-the-Record_Messaging) for p2p topics and undecided method for group topics.
 * Support for long polling (currently exists but broken).
 * Groups (topics) with unlimited number of members with bearer token access control.
 * Failover/hot standby/replication.
