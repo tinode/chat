@@ -82,9 +82,11 @@ hi: {
                    // optional
   dev: "L1iC2dNtk2" // string, unique value which identifies this specific
 				   // connected device; not interpreted by the server;
-				   // see [Push notifications support][]; optional
+				   // see [Push notifications support](#push-notifications-support); optional
 }
 ```
+The user agent `ua` is expected to follow [RFC 7231 section 5.5.3](http://tools.ietf.org/html/rfc7231#section-5.5.3) recommendation.
+
 
 #### `{acc}`
 
@@ -97,11 +99,12 @@ acc: {
   id: "1a2b3", // string, client-provided message id, optional
   user: "new", // string, "new" to create a new user, default: current user, optional
   scheme: "basic", // authentication scheme for this account, required;
-               // only "basic" (default) is currently supported. The current
+               // "basic" and "token" are currently supported. The current
                // implementation of the basic scheme does not allow changes to username.
   secret: btoa("username:password"), // string, base64 encoded secret for the chosen
               // authentication scheme; to delete a scheme use a string with a single DEL
-              // Unicode character "\u2421"; required
+              // Unicode character "\u2421"; "token" and "basic" cannot be deleted;
+              // required
   tags: [ ... ], // array of indexed tags for user discovery; see `fnd` topic for
               // details, optional (if missing, user will not be discoverable other than
               // by login)      
@@ -131,19 +134,17 @@ Login is used to authenticate the current session.
 ```js
 login: {
   id: "1a2b3",     // string, client-provided message id, optional
-  scheme: "basic", // string, authentication scheme, optional; only "basic" (default)
-                   // is currently supported
+  scheme: "basic", // string, authentication scheme, optional; "basic" and "token"
+                   // are currently supported
   secret: btoa("username:password"), // string, base64-encoded secret for the chosen
                   // authentication scheme, required
 }
 ```
-The basic authentication scheme expects `secret` to be a base64-encoded string of a string composed of a user name followed by a colon `:` followed by a plan text password.
+The `basic` authentication scheme expects `secret` to be a base64-encoded string of a string composed of a user name followed by a colon `:` followed by a plan text password. The `token` expects secret to be a previously obtained security token.
 
-Basic is the only currently supported authentication scheme. _Authentication scheme `none` is planned to support anonymous users in the future._
+The only supported authentication schemes are `basic` and `token`. _Authentication scheme `none` is planned to support anonymous users in the future._
 
-Server responds to a `{login}` packet with a `{ctrl}` message. The `params` of {ctrl} message contains id of the logged in user as `params:{uid:"..."}`.
-
-The user agent `ua` is expected to follow [RFC 7231 section 5.5.3](http://tools.ietf.org/html/rfc7231#section-5.5.3) recommendation.
+Server responds to a `{login}` packet with a `{ctrl}` message. The `params` of the message contains the id of the logged in user as `uid`. The `token` contains an encrypted string which can be used for authentication. Expiration time of the token is passed as `expires`.
 
 #### `{sub}`
 
@@ -592,7 +593,7 @@ Logging out is not supported by design. If an application needs to change the us
 
 ## Access control
 
-Access control manages user's access to topics through access control lists (ACLs) or bearer tokens (_bearer tokens are not implemented as of version 0.4_).
+Access control manages user's access to topics through access control lists (ACLs) or bearer tokens (_bearer tokens are not implemented as of version 0.8_).
 
 Access control is mostly usable for group topics. Its usability for `me` and P2P topics is limited to managing presence notifications and banning uses from initiating or continuing P2P conversations.
 
