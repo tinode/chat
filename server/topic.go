@@ -18,8 +18,6 @@
  *  This code is available under licenses for commercial use.
  *
  *  File        :  topic.go
- *  Author      :  Gene Sokolov
- *  Created     :  18-May-2014
  *
  ******************************************************************************
  *

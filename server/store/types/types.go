@@ -409,13 +409,19 @@ type TopicAccess struct {
 // Subscription to a topic
 type Subscription struct {
 	ObjHeader
-	User      string      // User who has relationship with the topic
-	Topic     string      // Topic subscribed to
+	User  string // User who has relationship with the topic
+	Topic string // Topic subscribed to
+
+	State int // Subscription state, currently unused
+
+	// Values persisted through subscription deletion
+	ClearId   int // User soft-deleted messages equal or lower to this seq ID
+	RecvSeqId int // Last SeqId reported by user as received by at least one of his sessions
+	ReadSeqId int // Last SeqID reported read by the user
+
+	//
 	ModeWant  AccessMode  // Access applied for
 	ModeGiven AccessMode  // Granted access
-	ClearId   int         // User soft-deleted messages equal or lower to this seq ID
-	RecvSeqId int         // Last SeqId reported by user as received by at least one of his sessions
-	ReadSeqId int         // Last SeqID reported read by the user
 	Private   interface{} // User's private data associated with the subscription to topic
 
 	// Deserialized ephemeral values
