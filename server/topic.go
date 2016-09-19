@@ -1172,7 +1172,8 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 			ifModified = *opts.IfModifiedSince
 		}
 		limit = opts.Limit
-	} else {
+	}
+	if limit <= 0 {
 		limit = 1024
 	}
 
