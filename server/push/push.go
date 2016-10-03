@@ -18,14 +18,19 @@ type PushTo struct {
 }
 
 type Receipt struct {
+	// List of recepients, including those who did not receive the message
+	To []PushTo `json:"to"`
+	// Actual content to be delivered to the client
+	Payload Payload `json:"payload"`
+}
+
+type Payload struct {
 	Topic     string    `json:"topic"`
 	From      string    `json:"from"`
 	Timestamp time.Time `json:"ts"`
 	SeqId     int       `json:"seq"`
-	// List of recepients, including those who did not receive the message
-	To []PushTo `json:"to"`
 	// Actual Data.Content of the message, if requested
-	Data interface{} `json:"data,omitempty"`
+	Content interface{} `json:"content,omitempty"`
 }
 
 // PushHandler is an interface which must be implemented by handlers.

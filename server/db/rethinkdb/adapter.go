@@ -3,7 +3,9 @@ package rethinkdb
 import (
 	"encoding/json"
 	"errors"
+	"hash/fnv"
 	"log"
+	"strconv"
 	"strings"
 	"time"
 
@@ -162,10 +164,13 @@ func (a *RethinkDbAdapter) CreateDb(reset bool) error {
 		return err
 	}
 
-	// Index for unique fields
-	//if _, err := rdb.DB("tinode").TableCreate("_uniques").RunWrite(a.conn); err != nil {
-	//	return err
-	//}
+	// Device IDs for mobile push notifications
+	if _, err := rdb.DB("tinode").TableCreate("devices", rdb.TableCreateOpts{PrimaryKey: "id"}).RunWrite(a.conn); err != nil {
+		return err
+	}
+	if _, err := rdb.DB("tinode").Table("devices").IndexCreate("user").RunWrite(a.conn); err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -796,6 +801,36 @@ func addOptions(q rdb.Term, value string, index string, opts *t.BrowseOpt) rdb.T
 
 	return q.Between(lower, upper, rdb.BetweenOpts{Index: index}).
 		OrderBy(rdb.OrderByOpts{Index: rdb.Desc(index)}).Limit(limit)
+}
+
+// Device management for push notifications
+func (a *RethinkDbAdapter) DeviceUpsert(user t.Uid, deviceId string, updated time.Time) error {
+	// Generate custom primary key as [user id] + [64-bit hash of device id] to ensure predictable
+	// length of the key
+	hasher := fnv.New64()
+	hasher.Write([]byte(deviceId))
+	record := map[string]interface{}{
+		"id":        user.String() + strconv.FormatUint(uint64(hasher.Sum64()), 16),
+		"user":      user.String(),
+		"deviceId":  deviceId,
+		"timestamp": updated,
+	}
+	_, err := rdb.DB(a.dbName).Table("devices").Insert(record,
+		rdb.InsertOpts{Conflict: "replace"}).RunWrite(a.conn)
+	return err
+}
+
+func (a *RethinkDbAdapter) DeviceGetAll(user t.Uid) ([]string, error) {
+	rows, err := rdb.DB(a.dbName).Table("devices").GetAllByIndex("user", user.String()).Pluck(
+		"deviceId").Default(nil).Limit(MAX_RESULTS).Run(a.conn)
+	if err != nil {
+		return nil, err
+	}
+
+	var devices []string
+	rows.All(&devices)
+
+	return devices, rows.Err()
 }
 
 func init() {

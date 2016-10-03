@@ -18,8 +18,6 @@
  *  This code is available under licenses for commercial use.
  *
  *  File        :  session.go
- *  Author      :  Gene Sokolov
- *  Created     :  18-May-2014
  *
  ******************************************************************************
  *
@@ -457,6 +455,11 @@ func (s *Session) login(msg *ClientComMessage) {
 	}
 	// Token GenSecret never fails, ignore the error
 	secret, _ := handler.GenSecret(uid, expires)
+
+	// Record deviceId used in this session
+	if s.deviceId != "" {
+		store.Devices.Update(uid, s.deviceId, msg.timestamp)
+	}
 
 	s.queueOut(&ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        msg.Login.Id,
