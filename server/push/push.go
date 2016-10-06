@@ -6,14 +6,16 @@ import (
 	"encoding/json"
 	"errors"
 	"time"
+
+	t "github.com/tinode/chat/server/store/types"
 )
 
 type PushTo struct {
 	// Addresse
-	Uid string `json:"uid"`
+	User t.Uid `json:"user"`
 	// Count of user's connections that were live when the packet was dispatched from the server
 	Delieved int `json:"delivered"`
-	// List of user's devices that the packet was delivered to (if known)
+	// List of user's devices that the packet was delivered to (if known). Len(Devices) >= Delivered
 	Devices []string `json:"devices,omitempty"`
 }
 
@@ -25,8 +27,9 @@ type Receipt struct {
 }
 
 type Payload struct {
-	Topic     string    `json:"topic"`
-	From      string    `json:"from"`
+	Topic string `json:"topic"`
+	// Google is retarded. "from" is a reserved keyword in FCM
+	From      string    `json:"xfrom"`
 	Timestamp time.Time `json:"ts"`
 	SeqId     int       `json:"seq"`
 	// Actual Data.Content of the message, if requested

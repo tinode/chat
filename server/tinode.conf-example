@@ -19,7 +19,7 @@
 			"addresses": "localhost:28015"
 		}
 	},
-	
+
 	"push": [
 		{
 			"name":"stdout",
@@ -30,7 +30,13 @@
 		{
 			"name":"fcm",
 			"config": {
-				"disabled": true
+				"disabled": true,
+				"buffer": 1024,
+				"api_key": "Get your own at https://console.firebase.google.com/",
+				"time_to_live": 3600,
+				"collapse_key": "",
+				"icon": "",
+				"icon_color": ""
 			}
 		}
 	]

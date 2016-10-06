@@ -405,10 +405,14 @@ type DeviceMapper struct{}
 
 var Devices DeviceMapper
 
-func (DeviceMapper) Update(user types.Uid, deviceId string, ts time.Time) error {
-	return adaptr.DeviceUpsert(user, deviceId, ts)
+func (DeviceMapper) Update(uid types.Uid, dev *types.DeviceDef) error {
+	return adaptr.DeviceUpsert(uid, dev)
 }
 
-func (DeviceMapper) GetAll(user types.Uid) ([]string, error) {
-	return adaptr.DeviceGetAll(user)
+func (DeviceMapper) GetAll(uid ...types.Uid) (map[types.Uid][]types.DeviceDef, int, error) {
+	return adaptr.DeviceGetAll(uid...)
+}
+
+func (DeviceMapper) Delete(uid types.Uid, deviceId string) error {
+	return adaptr.DeviceDelete(uid, deviceId)
 }

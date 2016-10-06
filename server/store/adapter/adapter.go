@@ -69,6 +69,7 @@ type Adapter interface {
 	MessageDeleteAll(topic string, before int) error
 
 	// Devices (for push notifications)
-	DeviceUpsert(user t.Uid, deviceId string, updated time.Time) error
-	DeviceGetAll(user t.Uid) ([]string, error)
+	DeviceUpsert(uid t.Uid, dev *t.DeviceDef) error
+	DeviceGetAll(uid ...t.Uid) (map[t.Uid][]t.DeviceDef, int, error)
+	DeviceDelete(uid t.Uid, deviceId string) error
 }

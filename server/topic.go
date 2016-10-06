@@ -1507,7 +1507,7 @@ func (t *Topic) makePushReceipt(data *MsgServerData) *pushReceipt {
 
 	i := 0
 	for uid, _ := range t.perUser {
-		receipt.To[i].Uid = uid.UserId()
+		receipt.To[i].User = uid
 		idx[uid] = i
 		i++
 	}

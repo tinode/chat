@@ -111,6 +111,8 @@ type MsgClientHi struct {
 	Version string `json:"ver,omitempty"`
 	// Client's unique device ID
 	DeviceID string `json:"dev,omitempty"`
+	// Human language of the connected device
+	Lang string `json:"lang,omitempty"`
 }
 
 // User creation message {acc}
