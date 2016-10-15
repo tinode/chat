@@ -35,8 +35,8 @@
 				"api_key": "Get your own at https://console.firebase.google.com/",
 				"time_to_live": 3600,
 				"collapse_key": "",
-				"icon": "",
-				"icon_color": ""
+				"icon": "ic_logo_push",
+				"icon_color": "#3949AB"
 			}
 		}
 	]

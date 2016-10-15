@@ -119,7 +119,6 @@ func sendNotification(rcpt *push.Receipt, config *configType) {
 
 	resp, err := handler.client.SendHttp(msg)
 	if err != nil {
-		log.Print("push failed: " + err.Error())
 		return
 	}
 
@@ -140,8 +139,8 @@ func sendNotification(rcpt *push.Receipt, config *configType) {
 				fcm.ErrorMismatchSenderId:
 				if uid, ok := devIds[sendTo[i]]; ok {
 					store.Devices.Delete(uid, sendTo[i])
+					log.Printf("FCM push: %s; token removed: %s", fail.Error, sendTo[i])
 				}
-				log.Print("push failed: '" + fail.Error + "' [" + sendTo[i] + "]")
 			}
 			i++
 		}
