@@ -6,26 +6,34 @@ import (
 	"encoding/json"
 	"errors"
 	"time"
+
+	t "github.com/tinode/chat/server/store/types"
 )
 
 type PushTo struct {
 	// Addresse
-	Uid string `json:"uid"`
+	User t.Uid `json:"user"`
 	// Count of user's connections that were live when the packet was dispatched from the server
 	Delieved int `json:"delivered"`
-	// List of user's devices that the packet was delivered to (if known)
+	// List of user's devices that the packet was delivered to (if known). Len(Devices) >= Delivered
 	Devices []string `json:"devices,omitempty"`
 }
 
 type Receipt struct {
-	Topic     string    `json:"topic"`
-	From      string    `json:"from"`
-	Timestamp time.Time `json:"ts"`
-	SeqId     int       `json:"seq"`
 	// List of recepients, including those who did not receive the message
 	To []PushTo `json:"to"`
+	// Actual content to be delivered to the client
+	Payload Payload `json:"payload"`
+}
+
+type Payload struct {
+	Topic string `json:"topic"`
+	// Google is retarded. "from" is a reserved keyword in FCM
+	From      string    `json:"xfrom"`
+	Timestamp time.Time `json:"ts"`
+	SeqId     int       `json:"seq"`
 	// Actual Data.Content of the message, if requested
-	Data interface{} `json:"data,omitempty"`
+	Content interface{} `json:"content,omitempty"`
 }
 
 // PushHandler is an interface which must be implemented by handlers.

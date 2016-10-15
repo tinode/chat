@@ -3,7 +3,9 @@ package rethinkdb
 import (
 	"encoding/json"
 	"errors"
+	"hash/fnv"
 	"log"
+	"strconv"
 	"strings"
 	"time"
 
@@ -162,10 +164,15 @@ func (a *RethinkDbAdapter) CreateDb(reset bool) error {
 		return err
 	}
 
-	// Index for unique fields
-	//if _, err := rdb.DB("tinode").TableCreate("_uniques").RunWrite(a.conn); err != nil {
-	//	return err
-	//}
+	/*
+		// Device IDs for mobile push notifications
+		if _, err := rdb.DB("tinode").TableCreate("devices", rdb.TableCreateOpts{PrimaryKey: "id"}).RunWrite(a.conn); err != nil {
+			return err
+		}
+		if _, err := rdb.DB("tinode").Table("devices").IndexCreate("user").RunWrite(a.conn); err != nil {
+			return err
+		}
+	*/
 
 	return nil
 }
@@ -282,9 +289,9 @@ func (a *RethinkDbAdapter) UserGet(uid t.Uid) (*t.User, error) {
 }
 
 func (a *RethinkDbAdapter) UserGetAll(ids ...t.Uid) ([]t.User, error) {
-	uids := make([]interface{}, 0, len(ids))
-	for _, id := range ids {
-		uids = append(uids, id.String())
+	uids := make([]interface{}, len(ids))
+	for i, id := range ids {
+		uids[i] = id.String()
 	}
 
 	users := []t.User{}
@@ -758,7 +765,7 @@ func (a *RethinkDbAdapter) MessageDeleteAll(topic string, clear int) error {
 	}
 	_, err := rdb.DB(a.dbName).Table("messages").
 		Between([]interface{}{topic, 0}, []interface{}{topic, maxval},
-		rdb.BetweenOpts{Index: "Topic_SeqId", RightBound: "closed"}).
+			rdb.BetweenOpts{Index: "Topic_SeqId", RightBound: "closed"}).
 		Delete().RunWrite(a.conn)
 
 	return err
@@ -796,6 +803,76 @@ func addOptions(q rdb.Term, value string, index string, opts *t.BrowseOpt) rdb.T
 
 	return q.Between(lower, upper, rdb.BetweenOpts{Index: index}).
 		OrderBy(rdb.OrderByOpts{Index: rdb.Desc(index)}).Limit(limit)
+}
+
+func deviceHasher(deviceId string) string {
+	// Generate custom key as [64-bit hash of device id] to ensure predictable
+	// length of the key
+	hasher := fnv.New64()
+	hasher.Write([]byte(deviceId))
+	return strconv.FormatUint(uint64(hasher.Sum64()), 16)
+}
+
+// Device management for push notifications
+func (a *RethinkDbAdapter) DeviceUpsert(user t.Uid, def *t.DeviceDef) error {
+	hash := deviceHasher(def.DeviceId)
+	_, err := rdb.DB(a.dbName).Table("users").Get(user.String()).
+		Update(map[string]interface{}{
+			"Devices": map[string]*t.DeviceDef{
+				hash: def,
+			}}).RunWrite(a.conn)
+	return err
+}
+
+func (a *RethinkDbAdapter) DeviceGetAll(uids ...t.Uid) (map[t.Uid][]t.DeviceDef, int, error) {
+	ids := make([]interface{}, len(uids))
+	for i, id := range uids {
+		ids[i] = id.String()
+	}
+
+	// {Id: "userid", Devices: {"hash1": {..def1..}, "hash2": {..def2..}}
+	rows, err := rdb.DB(a.dbName).Table("users").GetAll(ids...).Pluck("Id", "Devices").
+		Default(nil).Limit(MAX_RESULTS).Run(a.conn)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	var row struct {
+		Id      string
+		Devices map[string]*t.DeviceDef
+	}
+
+	result := make(map[t.Uid][]t.DeviceDef)
+	count := 0
+	var uid t.Uid
+	for rows.Next(&row) {
+		if row.Devices != nil && len(row.Devices) > 0 {
+			if err := uid.UnmarshalText([]byte(row.Id)); err != nil {
+				log.Print(err.Error())
+				continue
+			}
+
+			result[uid] = make([]t.DeviceDef, len(row.Devices))
+			i := 0
+			for _, def := range row.Devices {
+				if def != nil {
+					result[uid][i] = *def
+					i++
+					count++
+				}
+			}
+		}
+	}
+
+	return result, count, rows.Err()
+}
+
+func (a *RethinkDbAdapter) DeviceDelete(uid t.Uid, deviceId string) error {
+	q := rdb.DB(a.dbName).Table("users").Get(uid.String()).Replace(rdb.Row.Without(
+		map[string]string{"Devices": deviceHasher(deviceId)}))
+	_, err := q.RunWrite(a.conn)
+	log.Print(q, err)
+	return err
 }
 
 func init() {

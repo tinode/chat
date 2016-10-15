@@ -252,6 +252,8 @@ type User struct {
 	// Unique indexed tags (email, phone) for finding this user. Stored on the
 	// 'users' as well as indexed in 'tagunique'
 	Tags []string
+
+	Devices map[string]*DeviceDef
 }
 
 const max_devices = 8
@@ -647,4 +649,17 @@ func GetTopicCat(name string) TopicCat {
 	default:
 		panic("invalid topic type" + name)
 	}
+}
+
+// Data provided by connected device. Used primarily for
+// push notifications
+type DeviceDef struct {
+	// Device registration ID
+	DeviceId string
+	// Device platform (iOS, Android, Web)
+	Platform string
+	// Last logged in
+	LastSeen time.Time
+	// Device language, ISO code
+	Lang string
 }

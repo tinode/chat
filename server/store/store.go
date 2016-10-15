@@ -399,3 +399,20 @@ func RegisterAuthScheme(name string, handler auth.AuthHandler) {
 func GetAuthHandler(name string) auth.AuthHandler {
 	return authHandlers[name]
 }
+
+// Storage for device IDs, used to generate push notifications
+type DeviceMapper struct{}
+
+var Devices DeviceMapper
+
+func (DeviceMapper) Update(uid types.Uid, dev *types.DeviceDef) error {
+	return adaptr.DeviceUpsert(uid, dev)
+}
+
+func (DeviceMapper) GetAll(uid ...types.Uid) (map[types.Uid][]types.DeviceDef, int, error) {
+	return adaptr.DeviceGetAll(uid...)
+}
+
+func (DeviceMapper) Delete(uid types.Uid, deviceId string) error {
+	return adaptr.DeviceDelete(uid, deviceId)
+}

@@ -14,8 +14,9 @@ var handler StdoutPush
 const DEFAULT_BUFFER = 32
 
 type StdoutPush struct {
-	input chan *push.Receipt
-	stop  chan bool
+	initialized bool
+	input       chan *push.Receipt
+	stop        chan bool
 }
 
 type configType struct {
@@ -26,11 +27,17 @@ type configType struct {
 // Initialize the handler
 func (StdoutPush) Init(jsonconf string) error {
 
-	var config configType
+	// Check if the handler is already initialized
+	if handler.initialized {
+		return errors.New("already initialized")
+	}
 
+	var config configType
 	if err := json.Unmarshal([]byte(jsonconf), &config); err != nil {
 		return errors.New("failed to parse config: " + err.Error())
 	}
+
+	handler.initialized = true
 
 	if config.Disabled {
 		return nil
@@ -57,7 +64,7 @@ func (StdoutPush) Init(jsonconf string) error {
 	return nil
 }
 
-// Initialize the handler
+// Check if the handler is ready
 func (StdoutPush) IsReady() bool {
 	return handler.input != nil
 }

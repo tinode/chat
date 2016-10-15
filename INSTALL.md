@@ -31,6 +31,10 @@ See [instructions](./docker/README.md)
 
 - Unpack JS client to a directory, for instance $HOME/tinode/example-react-js/ by first unzipping https://github.com/tinode/example-react-js/archive/master.zip then extract tinode.js from https://github.com/tinode/tinode-js/archive/master.zip to the same directory.
 
+- Rename tinode.conf-example to tinode.conf.
+
 - Run server `$GOPATH/bin/server -config=$GOPATH/src/github.com/tinode/chat/server/tinode.conf -static_data=$HOME/tinode/example-react-js/`
 
 - Test your installation by pointing your browser to http://localhost:6060/x/example-react-js/
+
+-  If you want to use an [Android client](https://github.com/tinode/android-example) and want push notification to work, find the section `"push"` in `tinode.conf`, item `"name": "fcm"`, then change `"disabled"` to `false`. Go to https://console.firebase.google.com/ and get a server key. Paste the key to the `"api_key"` field. See more at [https://github.com/tinode/android-example].

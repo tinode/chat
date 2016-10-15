@@ -20,14 +20,12 @@ package main
  *  This code is available under licenses for commercial use.
  *
  *  File        :  datamodel.go
- *  Author      :  Gene Sokolov
- *  Created     :  18-May-2014
  *
  ******************************************************************************
  *
  *  Description :
  *
- * Messaging structures
+ *    Wire protocol structures
  *
  *****************************************************************************/
 
@@ -113,6 +111,8 @@ type MsgClientHi struct {
 	Version string `json:"ver,omitempty"`
 	// Client's unique device ID
 	DeviceID string `json:"dev,omitempty"`
+	// Human language of the connected device
+	Lang string `json:"lang,omitempty"`
 }
 
 // User creation message {acc}
@@ -132,15 +132,6 @@ type MsgClientAcc struct {
 	// User initialization data when creating a new user, otherwise ignored
 	Desc *MsgSetDesc `json:"desc,omitempty"`
 }
-
-/*
-type MsgAuthScheme struct {
-	// Scheme name
-	Scheme string `json:"scheme"`
-	// Secret as RawMessage to prevent it from being parsed
-	Secret json.RawMessage `json:"secret"`
-}
-*/
 
 // Login {login} message
 type MsgClientLogin struct {

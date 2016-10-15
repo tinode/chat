@@ -30,7 +30,7 @@ A javascript demo is (usually) available at http://api.tinode.co/x/example-react
 * Basic support for client-side message caching.
 * Ability to block unwanted communication server-side.
 * Compile-time custom authentication support.
-* Mobile push notification hooks.
+* Mobile push notifications using FCM.
 
 ### Planned
 

@@ -67,4 +67,9 @@ type Adapter interface {
 	MessageSave(msg *t.Message) error
 	MessageGetAll(topic string, opts *t.BrowseOpt) ([]t.Message, error)
 	MessageDeleteAll(topic string, before int) error
+
+	// Devices (for push notifications)
+	DeviceUpsert(uid t.Uid, dev *t.DeviceDef) error
+	DeviceGetAll(uid ...t.Uid) (map[t.Uid][]t.DeviceDef, int, error)
+	DeviceDelete(uid t.Uid, deviceId string) error
 }

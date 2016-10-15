@@ -15,16 +15,15 @@
  *  You should have received a copy of the GNU Affero General Public License
  *  along with this program; if not, see <http://www.gnu.org/licenses>.
  *
- *  This code is available under licenses for commercial use.
+ *  This code is available under other licenses for commercial use.
  *
  *  File        :  topic.go
  *
  ******************************************************************************
  *
  *  Description :
- *    An isolated communication channel (chat room, 1:1 conversation, control
- *    connection) for usualy multiple users. There is no communication across topics
- *
+ *    An isolated communication channel (chat room, 1:1 conversation) for
+ *    usualy multiple users. There is no communication across topics.
  *
  *****************************************************************************/
 
@@ -348,7 +347,7 @@ func (t *Topic) run(hub *Hub) {
 				}
 			}
 
-			// Broadcast the message. Only {data}, {pres}, {ping} are broadcastable.
+			// Broadcast the message. Only {data}, {pres}, {info} are broadcastable.
 			// {meta} and {ctrl} are sent to the session only
 			if msg.Data != nil || msg.Pres != nil || msg.Info != nil {
 
@@ -360,6 +359,7 @@ func (t *Topic) run(hub *Hub) {
 
 					select {
 					case sess.send <- packet:
+						// Update device map with the device ID which
 						if pushRcpt != nil {
 							i, ok := pushRcpt.uidMap[sess.uid]
 							if ok {
@@ -1060,7 +1060,7 @@ func (t *Topic) replySetDesc(sess *Session, set *MsgClientSet) error {
 				sendPres = assignPubPriv(user, "Public", set.Desc.Public)
 			}
 		} else if t.cat == types.TopicCat_Fnd {
-			// Assign tags as user.Tags
+			// User's own tags are sent as fnd.public. Assign them to user.Tags
 			if set.Desc.Public != nil {
 				if src, ok := set.Desc.Public.([]string); ok && len(src) > 0 {
 					tags := make([]string, 0, len(src))
@@ -1497,16 +1497,17 @@ func (t *Topic) evictUser(uid types.Uid, unsub bool, ignore *Session) {
 func (t *Topic) makePushReceipt(data *MsgServerData) *pushReceipt {
 	idx := make(map[types.Uid]int, len(t.perUser))
 	receipt := push.Receipt{
-		Topic:     data.Topic,
-		From:      data.From,
-		Timestamp: data.Timestamp,
-		SeqId:     data.SeqId,
-		To:        make([]push.PushTo, len(t.perUser)),
-		Data:      data.Content}
+		To: make([]push.PushTo, len(t.perUser)),
+		Payload: push.Payload{
+			Topic:     data.Topic,
+			From:      data.From,
+			Timestamp: data.Timestamp,
+			SeqId:     data.SeqId,
+			Content:   data.Content}}
 
 	i := 0
 	for uid, _ := range t.perUser {
-		receipt.To[i].Uid = uid.UserId()
+		receipt.To[i].User = uid
 		idx[uid] = i
 		i++
 	}

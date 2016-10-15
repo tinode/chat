@@ -18,8 +18,6 @@
  *  This code is available under licenses for commercial use.
  *
  *  File        :  session.go
- *  Author      :  Gene Sokolov
- *  Created     :  18-May-2014
  *
  ******************************************************************************
  *
@@ -88,6 +86,8 @@ type Session struct {
 
 	// Device ID of the client
 	deviceId string
+	// Human language of the client
+	lang string
 
 	// ID of the current user or 0
 	uid types.Uid
@@ -395,6 +395,7 @@ func (s *Session) hello(msg *ClientComMessage) {
 
 	s.userAgent = msg.Hi.UserAgent
 	s.deviceId = msg.Hi.DeviceID
+	s.lang = msg.Hi.Lang
 
 	params := map[string]interface{}{"ver": VERSION, "build": buildstamp}
 	if s.proto == LPOLL {
@@ -457,6 +458,16 @@ func (s *Session) login(msg *ClientComMessage) {
 	}
 	// Token GenSecret never fails, ignore the error
 	secret, _ := handler.GenSecret(uid, expires)
+
+	// Record deviceId used in this session
+	if s.deviceId != "" {
+		store.Devices.Update(uid, &types.DeviceDef{
+			DeviceId: s.deviceId,
+			Platform: "",
+			LastSeen: msg.timestamp,
+			Lang:     s.lang,
+		})
+	}
 
 	s.queueOut(&ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        msg.Login.Id,
