@@ -32,7 +32,7 @@
 			"config": {
 				"disabled": true,
 				"buffer": 1024,
-				"api_key": "Get your own at https://console.firebase.google.com/",
+				"api_key": "Get your own at https://console.firebase.google.com/project/**NAME-OF-YOUR-PROJECT**/settings/cloudmessaging",
 				"time_to_live": 3600,
 				"collapse_key": "",
 				"icon": "ic_logo_push",
