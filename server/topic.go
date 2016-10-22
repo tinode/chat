@@ -272,6 +272,7 @@ func (t *Topic) run(hub *Hub) {
 					SeqId:     t.lastId + 1,
 					Topic:     t.name,
 					From:      from.String(),
+					Head:      msg.Data.Head,
 					Content:   msg.Data.Content}); err != nil {
 
 					log.Printf("topic[%s].run: failed to save message: %v", t.name, err)

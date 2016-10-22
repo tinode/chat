@@ -210,10 +210,11 @@ type MsgClientLeave struct {
 
 // MsgClientPub is client's request to publish data to topic subscribers {pub}
 type MsgClientPub struct {
-	Id      string      `json:"id,omitempty"`
-	Topic   string      `json:"topic"`
-	NoEcho  bool        `json:"noecho,omitempty"`
-	Content interface{} `json:"content"`
+	Id      string            `json:"id,omitempty"`
+	Topic   string            `json:"topic"`
+	NoEcho  bool              `json:"noecho,omitempty"`
+	Head    map[string]string `json:"head,omitempty"`
+	Content interface{}       `json:"content"`
 }
 
 // Query topic state {get}

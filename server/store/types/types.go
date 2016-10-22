@@ -596,6 +596,7 @@ type Message struct {
 	SeqId   int
 	Topic   string
 	From    string // UID as string of the user who sent the message, could be empty
+	Head    map[string]string
 	Content interface{}
 }
 

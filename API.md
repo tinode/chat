@@ -107,7 +107,7 @@ acc: {
               // required
   tags: [ ... ], // array of indexed tags for user discovery; see `fnd` topic for
               // details, optional (if missing, user will not be discoverable other than
-              // by login)      
+              // by login)
   desc: {  // object, user initialization data closely matching that of table
            // initialization; optional
     defacs: {
@@ -256,7 +256,8 @@ The message is used to distribute content to topic subscribers.
 pub: {
   id: "1a2b3", // string, client-provided message id, optional
   topic: "grp1XUtEhjv6HND", // string, topic to publish to, required
-  noecho: true, // boolean, suppress echo (see below), optional
+  noecho: false, // boolean, suppress echo (see below), optional
+  head: { key: "value", ... }, // set of string key-value pairs, passed unchanged, optional
   content: { ... }  // object, application-defined content to publish
                // to topic subscribers, required
 }
