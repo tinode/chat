@@ -305,6 +305,7 @@ type MsgTopicDesc struct {
 type MsgAccessMode struct {
 	Want  string `json:"want,omitempty"`
 	Given string `json:"given,omitempty"`
+	Mode  string `json:"mode,omitempty"`
 }
 
 // MsgTopicSub: topic subscription details, sent in Meta message

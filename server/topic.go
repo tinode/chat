@@ -967,7 +967,8 @@ func (t *Topic) replyGetDesc(sess *Session, id string, created bool, opts *MsgGe
 
 		desc.Acs = &MsgAccessMode{
 			Want:  pud.modeWant.String(),
-			Given: pud.modeGiven.String()}
+			Given: pud.modeGiven.String(),
+			Mode:  (pud.modeGiven & pud.modeWant).String()}
 
 		if updatedOnly {
 			desc.Private = pud.private
@@ -987,7 +988,11 @@ func (t *Topic) replyGetDesc(sess *Session, id string, created bool, opts *MsgGe
 	}
 
 	sess.queueOut(&ServerComMessage{
-		Meta: &MsgServerMeta{Id: id, Topic: t.original, Desc: desc, Timestamp: &now}})
+		Meta: &MsgServerMeta{
+			Id:        id,
+			Topic:     t.original,
+			Desc:      desc,
+			Timestamp: &now}})
 
 	return nil
 }
