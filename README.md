@@ -29,8 +29,8 @@ A javascript demo is (usually) available at http://api.tinode.co/x/example-react
 * Message delivery status: server-generated delivery to server, client-generated received and read notifications; typing notifications.
 * Basic support for client-side message caching.
 * Ability to block unwanted communication server-side.
-* Compile-time custom authentication support.
-* Mobile push notifications using FCM.
+* Authentication support customizable at compile-time.
+* Mobile push notifications using [FCM](https://firebase.google.com/docs/cloud-messaging/).
 
 ### Planned
 
