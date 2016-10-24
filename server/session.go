@@ -342,6 +342,7 @@ func (s *Session) publish(msg *ClientComMessage) {
 		Topic:     topic,
 		From:      msg.from,
 		Timestamp: msg.timestamp,
+		Head:      msg.Pub.Head,
 		Content:   msg.Pub.Content},
 		rcptto: routeTo, sessFrom: s, id: msg.Pub.Id, timestamp: msg.timestamp}
 	if msg.Pub.NoEcho {

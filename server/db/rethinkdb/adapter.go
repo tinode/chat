@@ -765,7 +765,7 @@ func (a *RethinkDbAdapter) MessageDeleteAll(topic string, clear int) error {
 	}
 	_, err := rdb.DB(a.dbName).Table("messages").
 		Between([]interface{}{topic, 0}, []interface{}{topic, maxval},
-			rdb.BetweenOpts{Index: "Topic_SeqId", RightBound: "closed"}).
+		rdb.BetweenOpts{Index: "Topic_SeqId", RightBound: "closed"}).
 		Delete().RunWrite(a.conn)
 
 	return err
@@ -818,9 +818,9 @@ func (a *RethinkDbAdapter) DeviceUpsert(user t.Uid, def *t.DeviceDef) error {
 	hash := deviceHasher(def.DeviceId)
 	_, err := rdb.DB(a.dbName).Table("users").Get(user.String()).
 		Update(map[string]interface{}{
-			"Devices": map[string]*t.DeviceDef{
-				hash: def,
-			}}).RunWrite(a.conn)
+		"Devices": map[string]*t.DeviceDef{
+			hash: def,
+		}}).RunWrite(a.conn)
 	return err
 }
 
@@ -868,10 +868,8 @@ func (a *RethinkDbAdapter) DeviceGetAll(uids ...t.Uid) (map[t.Uid][]t.DeviceDef,
 }
 
 func (a *RethinkDbAdapter) DeviceDelete(uid t.Uid, deviceId string) error {
-	q := rdb.DB(a.dbName).Table("users").Get(uid.String()).Replace(rdb.Row.Without(
-		map[string]string{"Devices": deviceHasher(deviceId)}))
-	_, err := q.RunWrite(a.conn)
-	log.Print(q, err)
+	_, err := rdb.DB(a.dbName).Table("users").Get(uid.String()).Replace(rdb.Row.Without(
+		map[string]string{"Devices": deviceHasher(deviceId)})).RunWrite(a.conn)
 	return err
 }
 
