@@ -1,26 +1,5 @@
 /******************************************************************************
  *
- *  Copyright (C) 2014 Tinode, All Rights Reserved
- *
- *  This program is free software; you can redistribute it and/or modify it
- *  under the terms of the GNU Affero General Public License as published by
- *  the Free Software Foundation; either version 3 of the License, or (at your
- *  option) any later version.
- *
- *  This program is distributed in the hope that it will be useful, but
- *  WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- *  or FITNESS FOR A PARTICULAR PURPOSE.
- *  See the GNU Affero General Public License for more details.
- *
- *  You should have received a copy of the GNU Affero General Public License
- *  along with this program; if not, see <http://www.gnu.org/licenses>.
- *
- *  This code is available under other licenses for commercial use.
- *
- *  File        :  topic.go
- *
- ******************************************************************************
- *
  *  Description :
  *    An isolated communication channel (chat room, 1:1 conversation) for
  *    usualy multiple users. There is no communication across topics.
@@ -44,15 +23,16 @@ var UA_TIMER_DELAY = time.Second * 5
 
 // Topic: an isolated communication channel
 type Topic struct {
-	// expanded name of the topic
+	// Еxpanded/unique name of the topic.
 	name string
-	// For single-user topics, session-specific topic name, such as 'me'
+	// For single-user topics session-specific topic name, such as 'me', otherwise the same as 'name'.
 	original string
 
-	// topic category
+	// Topic category
 	cat types.TopicCat
 
-	// if isProxy == true, the actual topic is hosted by another cluster member.
+	// TODO(gene): currenctly unused
+	// If isProxy == true, the actual topic is hosted by another cluster member.
 	// The topic should:
 	// 1. forward all messages to master
 	// 2. route replies from the master to sessions.
@@ -73,7 +53,7 @@ type Topic struct {
 	// Last published userAgent ('me' topic only)
 	userAgent string
 
-	// User ID of the topic owner/creator
+	// User ID of the topic owner/creator. Could be zero.
 	owner types.Uid
 
 	// Default access mode
@@ -85,7 +65,8 @@ type Topic struct {
 
 	// Topic's per-subscriber data
 	perUser map[types.Uid]perUserData
-	// User's contact list ('me' topic only)
+	// User's contact list (not nil for 'me' topic only).
+	// The map keys are UserIds for P2P topics and grpXXX for group topics.
 	perSubs map[string]perSubsData
 
 	// Sessions attached to this topic
@@ -135,6 +116,8 @@ type perUserData struct {
 // perSubsData holds user's (on 'me' topic) cache of subscription data
 type perSubsData struct {
 	online bool
+	// Uid of the other user for P2P topics, otherwise 0
+	with types.Uid
 }
 
 // Session wants to leave the topic
@@ -296,7 +279,7 @@ func (t *Topic) run(hub *Hub) {
 
 			} else if msg.Pres != nil {
 				// log.Printf("topic[%s].run: pres.src='%s' what='%s'", t.name, msg.Pres.Src, msg.Pres.What)
-				t.presProcReq(msg.Pres.Src, (msg.Pres.What == "on"), msg.Pres.wantReply)
+				t.presProcReq(msg.Pres.Src, msg.Pres.With, (msg.Pres.What == "on"), msg.Pres.wantReply)
 				if t.original != msg.Pres.Topic {
 					// This is just a request for status, don't forward it to sessions
 					continue
@@ -1430,13 +1413,17 @@ func (t *Topic) replyLeaveUnsub(h *Hub, sess *Session, id, topic string) error {
 func (t *Topic) makeInvite(notify, target, from types.Uid, act types.InviteAction, modeWant,
 	modeGiven types.AccessMode, info interface{}) *ServerComMessage {
 
-	// FIXME(gene): this is a workaround for gorethink's broken way of marshalling json
+	// FIXME(gene): this is a workaround for gorethink's broken way of marshalling json.
+	// The data message will be saved to DB.
 	inv, err := json.Marshal(MsgInvitation{
 		Topic:  t.name,
 		User:   target.UserId(),
 		Action: act.String(),
-		Acs:    MsgAccessMode{modeWant.String(), modeGiven.String()},
-		Info:   info})
+		Acs: MsgAccessMode{
+			Want:  modeWant.String(),
+			Given: modeGiven.String(),
+			Mode:  (modeWant & modeGiven).String()},
+		Info: info})
 	if err != nil {
 		log.Println(err)
 	}

@@ -128,19 +128,18 @@ func ParseUserId(s string) Uid {
 	return uid
 }
 
-//func (uid Uid) P2PTopic(u2 Uid) string {
+// Given two UIDs generate a P2P topic name
 func (uid Uid) P2PName(u2 Uid) string {
-	var b1, b2 []byte
-
-	b1, _ = uid.MarshalBinary()
-	if !u2.IsZero() {
-		b2, _ = u2.MarshalBinary()
+	if !uid.IsZero() && !u2.IsZero() {
+		b1, _ := uid.MarshalBinary()
+		b2, _ := u2.MarshalBinary()
 
 		if uid < u2 {
 			b1 = append(b1, b2...)
 		} else if uid > u2 {
 			b1 = append(b2, b1...)
 		} else {
+			// Explicitly disable P2P with self
 			return ""
 		}
 

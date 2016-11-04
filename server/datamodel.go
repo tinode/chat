@@ -376,6 +376,7 @@ type MsgServerPres struct {
 	Topic     string `json:"topic"`
 	Src       string `json:"src"`
 	What      string `json:"what"`
+	With      string `json:"with,omitempty"`
 	UserAgent string `json:"ua,omitempty"`
 	SeqId     int    `json:"seq,omitempty"`
 	// unroutable, to break the reply loop
