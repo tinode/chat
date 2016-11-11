@@ -278,7 +278,7 @@ func (t *Topic) run(hub *Hub) {
 				t.presPubMessageSent(t.lastId)
 
 			} else if msg.Pres != nil {
-				// log.Printf("topic[%s].run: pres.src='%s' what='%s'", t.name, msg.Pres.Src, msg.Pres.What)
+				log.Printf("topic[%s].run: pres.src='%s' pres.with='%s' what='%s'", t.name, msg.Pres.Src, msg.Pres.With, msg.Pres.What)
 				t.presProcReq(msg.Pres.Src, msg.Pres.With, (msg.Pres.What == "on"), msg.Pres.wantReply)
 				if t.original != msg.Pres.Topic {
 					// This is just a request for status, don't forward it to sessions

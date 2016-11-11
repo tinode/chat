@@ -128,12 +128,14 @@ func (t *Topic) presPubMeChange(what string, ua string) {
 // This topic got a request from a 'me' topic to start/stop sending presence updates.
 // Cases 1.a.iv, 1.a.v
 func (t *Topic) presProcReq(fromTopic string, fromUser string, online, wantReply bool) {
-	//log.Printf("Pres 1.a.iv, 1.a.v: topic[%s]: req from '%s', online: %v, wantReply: %v",
-	//	t.name, fromTopic, online, wantReply)
+	log.Printf("Pres 1.a.iv, 1.a.v: topic[%s]: req from '%s' (user: '%s'), online: %v, wantReply: %v",
+		t.name, fromTopic, fromUser, online, wantReply)
 
 	doReply := wantReply
 	src := t.name
 	with := ""
+	// In case of a group topic reply to topic, in case of a P2P topic reply to originating 'me'.
+	replyTo := fromTopic
 	if t.cat == types.TopicCat_Me {
 		if psd, ok := t.perSubs[fromUser]; ok {
 			// If requester's online status has not changed, do not reply, otherwise an endless loop will happen.
@@ -144,9 +146,13 @@ func (t *Topic) presProcReq(fromTopic string, fromUser string, online, wantReply
 			doReply = (doReply && (psd.online != online))
 			psd.online = online
 			t.perSubs[fromUser] = psd
+
+			log.Printf("Topic[%s]: set user %s online to %v", t.name, fromUser, online)
+
 			// p2p name is identical for the given users
 			src = fromTopic
 			with = t.name
+			replyTo = fromUser
 		} else {
 			doReply = false
 			//log.Printf("Pres 1.a.iv, 1.a.v: topic[%s]: request from untracked topic %s", t.name, fromTopic)
@@ -158,7 +164,7 @@ func (t *Topic) presProcReq(fromTopic string, fromUser string, online, wantReply
 			// Topic is 'me' even for group topics; group topics will use 'me' as a signal to drop the message
 			// without forwarding to sessions
 			Pres:   &MsgServerPres{Topic: "me", What: "on", Src: src, With: with},
-			rcptto: fromTopic}
+			rcptto: replyTo}
 	}
 }
 
