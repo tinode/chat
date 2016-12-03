@@ -289,28 +289,39 @@ type MsgAccessMode struct {
 
 // MsgTopicSub: topic subscription details, sent in Meta message
 type MsgTopicSub struct {
-	Topic     string     `json:"topic,omitempty"`
-	User      string     `json:"user,omitempty"`
+	// Fields common to all subscriptions
+
 	UpdatedAt *time.Time `json:"updated,omitempty"`
 	Online    bool       `json:"online,omitempty"`
 
-	// cumulative access mode (mode.Want & mode.Given)
+	// Cumulative access mode (mode.Want & mode.Given)
 	AcsMode string `json:"mode"`
-	// ID of the message reported by the client as read
+	// ID of the message reported by the given user as read
 	ReadSeqId int `json:"read,omitempty"`
-	// ID of the message reported by the client as received
+	// ID of the message reported by the given user as received
 	RecvSeqId int `json:"recv,omitempty"`
 	// Topic's public data
-	Public  interface{} `json:"public,omitempty"`
+	Public interface{} `json:"public,omitempty"`
+	// User's own private data per topic
 	Private interface{} `json:"private,omitempty"`
 
-	// All following makes sense only in context of getting user's subscriptions
+	// Response to non-'me' topic
 
+	// Uid of the subscribed user
+	User string `json:"user,omitempty"`
+
+	// The following sections maks sense only in context of getting
+	// user's own subscriptions ('me' topic response)
+
+	// Topic name of this subscription
+	Topic string `json:"topic,omitempty"`
 	// ID of the last {data} message in a topic
 	SeqId int `json:"seq,omitempty"`
 	// Messages are deleted up to this ID
 	ClearId int `json:"clear,omitempty"`
-	// P2P topics only
+
+	// In addition to the above these are provided for P2P topics only
+
 	// ID of the other user
 	With string `json:"with,omitempty"`
 	// Other user's last online timestamp & user agent
