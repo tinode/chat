@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	rdb "github.com/dancannon/gorethink"
 	"github.com/tinode/chat/server/store"
 	t "github.com/tinode/chat/server/store/types"
+	rdb "gopkg.in/gorethink/gorethink.v2"
 )
 
 type RethinkDbAdapter struct {
@@ -765,7 +765,7 @@ func (a *RethinkDbAdapter) MessageDeleteAll(topic string, clear int) error {
 	}
 	_, err := rdb.DB(a.dbName).Table("messages").
 		Between([]interface{}{topic, 0}, []interface{}{topic, maxval},
-		rdb.BetweenOpts{Index: "Topic_SeqId", RightBound: "closed"}).
+			rdb.BetweenOpts{Index: "Topic_SeqId", RightBound: "closed"}).
 		Delete().RunWrite(a.conn)
 
 	return err
@@ -818,9 +818,9 @@ func (a *RethinkDbAdapter) DeviceUpsert(user t.Uid, def *t.DeviceDef) error {
 	hash := deviceHasher(def.DeviceId)
 	_, err := rdb.DB(a.dbName).Table("users").Get(user.String()).
 		Update(map[string]interface{}{
-		"Devices": map[string]*t.DeviceDef{
-			hash: def,
-		}}).RunWrite(a.conn)
+			"Devices": map[string]*t.DeviceDef{
+				hash: def,
+			}}).RunWrite(a.conn)
 	return err
 }
 

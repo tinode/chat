@@ -344,6 +344,8 @@ type MsgInvitation struct {
 	Topic string `json:"topic"`
 	// User being subscribed
 	User string `json:"user"`
+	// User's public data
+	Public interface{} `json:"public,omitempty"`
 	// Type of this invite - InvJoin, InvAppr
 	Action string `json:"act"`
 	// Current state of the access mode

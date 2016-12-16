@@ -470,7 +470,8 @@ func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 					action = types.InvInfo
 				}
 				log.Println("sending invite to ", uid.UserId())
-				h.route <- t.makeInvite(uid, uid, sreg.sess.uid, action, pud.modeWant, pud.modeGiven, nil /* Public */)
+				h.route <- t.makeInvite(uid, uid, sreg.sess.uid, pud.public, action,
+					pud.modeWant, pud.modeGiven, nil)
 				break
 			}
 		}
@@ -777,12 +778,13 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string, inf
 		// Send req to approve to topic managers
 		for uid, pud := range t.perUser {
 			if pud.modeGiven&pud.modeWant&types.ModeShare != 0 {
-				h.route <- t.makeInvite(uid, sess.uid, sess.uid, types.InvAppr,
-					modeWant, userData.modeGiven, info)
+				h.route <- t.makeInvite(uid, sess.uid, sess.uid, userData.public,
+					types.InvAppr, modeWant, userData.modeGiven, info)
 			}
 		}
 		// Send info to requester
-		h.route <- t.makeInvite(sess.uid, sess.uid, sess.uid, types.InvInfo, modeWant, userData.modeGiven, t.public)
+		h.route <- t.makeInvite(sess.uid, sess.uid, sess.uid, nil,
+			types.InvInfo, modeWant, userData.modeGiven, t.public)
 	}
 
 	return nil
@@ -888,11 +890,11 @@ func (t *Topic) approveSub(h *Hub, sess *Session, target types.Uid, set *MsgClie
 	if !modeGiven.IsBanned() {
 		if userData.modeWant == types.ModeNone {
 			// (re-)Send the invite to target
-			h.route <- t.makeInvite(target, target, sess.uid, types.InvJoin, userData.modeWant, modeGiven,
+			h.route <- t.makeInvite(target, target, sess.uid, nil, types.InvJoin, userData.modeWant, modeGiven,
 				set.Sub.Info)
 		} else if givenBefore != modeGiven {
 			// Inform target that the access has changed
-			h.route <- t.makeInvite(target, target, sess.uid, types.InvInfo, userData.modeWant, modeGiven,
+			h.route <- t.makeInvite(target, target, sess.uid, nil, types.InvInfo, userData.modeWant, modeGiven,
 				set.Sub.Info)
 		}
 	}
@@ -900,7 +902,7 @@ func (t *Topic) approveSub(h *Hub, sess *Session, target types.Uid, set *MsgClie
 	// Has anything actually changed?
 	if givenBefore != modeGiven {
 		// inform requester of the change made
-		h.route <- t.makeInvite(sess.uid, target, sess.uid, types.InvInfo, userData.modeWant, modeGiven,
+		h.route <- t.makeInvite(sess.uid, target, sess.uid, nil, types.InvInfo, userData.modeWant, modeGiven,
 			map[string]string{"before": givenBefore.String()})
 	}
 
@@ -1410,7 +1412,13 @@ func (t *Topic) replyLeaveUnsub(h *Hub, sess *Session, id, topic string) error {
 	return nil
 }
 
-func (t *Topic) makeInvite(notify, target, from types.Uid, act types.InviteAction, modeWant,
+// Create a data message with an invite:
+// notify - user whio will receive the message
+// target - user who access rights are being changed
+// from  - user who sent the request
+// act - what's being done - request or an approval or a request
+// mpodeWant, modeGiven - requested or granted access permissions
+func (t *Topic) makeInvite(notify, target, from types.Uid, public interface{}, act types.InviteAction, modeWant,
 	modeGiven types.AccessMode, info interface{}) *ServerComMessage {
 
 	// FIXME(gene): this is a workaround for gorethink's broken way of marshalling json.
@@ -1418,6 +1426,7 @@ func (t *Topic) makeInvite(notify, target, from types.Uid, act types.InviteActio
 	inv, err := json.Marshal(MsgInvitation{
 		Topic:  t.name,
 		User:   target.UserId(),
+		Public: public,
 		Action: act.String(),
 		Acs: MsgAccessMode{
 			Want:  modeWant.String(),
