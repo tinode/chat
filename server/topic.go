@@ -1303,30 +1303,30 @@ func (t *Topic) replyGetData(sess *Session, id string, req *MsgBrowseOpts) error
 func (t *Topic) replyDelMsg(sess *Session, del *MsgClientDel) error {
 	now := time.Now().UTC().Round(time.Millisecond)
 
-	if del.Before > t.lastId || del.Before < 0 {
+	if del.Before > t.lastId || (del.Before <= 0 && del.List == nil) {
 		sess.queueOut(ErrMalformed(del.Id, t.original, now))
 		return errors.New("invalid del.msg parameter 'before'")
-	} else if del.Before == 0 {
-		del.Before = t.lastId
 	}
 
 	pud := t.perUser[sess.uid]
-	if del.Hard && pud.modeGiven&pud.modeWant&types.ModeDelete == 0 {
-		sess.queueOut(ErrPermissionDenied(del.Id, t.original, now))
-		return errors.New("no permission to hard-delete messages")
-	}
-
-	// Make sure user has not deleted the messages already
-	if (del.Before <= t.clearId) || (!del.Hard && del.Before <= pud.clearId) {
-		sess.queueOut(InfoNoAction(del.Id, t.original, now))
-		return nil
+	if pud.modeGiven&pud.modeWant&types.ModeDelete == 0 {
+		// User cannot hard-delete messages, silently switching to soft-deleting
+		del.Hard = false
 	}
 
 	var err error
-	if t.cat == types.TopicCat_Me {
-		err = store.Messages.Delete("", sess.uid, del.Hard, del.Before)
-	} else {
-		err = store.Messages.Delete(t.name, sess.uid, del.Hard, del.Before)
+	if del.Before > 0 {
+		// Make sure user has not deleted the messages already
+		if (del.Before <= t.clearId) || (!del.Hard && del.Before <= pud.clearId) {
+			sess.queueOut(InfoNoAction(del.Id, t.original, now))
+			return nil
+		}
+
+		if t.cat == types.TopicCat_Me {
+			err = store.Messages.Delete("", sess.uid, del.Hard, del.Before)
+		} else {
+			err = store.Messages.Delete(t.name, sess.uid, del.Hard, del.Before)
+		}
 	}
 
 	if err != nil {

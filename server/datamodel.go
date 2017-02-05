@@ -217,7 +217,9 @@ type MsgClientDel struct {
 	// what to delete, either "msg" to delete messages (default) or "topic" to delete the topic
 	What string `json:"what"`
 	// Delete messages older than this seq ID (inclusive)
-	Before int `json:"before"`
+	Before int `json:"before,omitempty"`
+	// Delete messages with seq IDs in the list
+	List []int `json:"list,omitempty"`
 	// Request to hard-delete messages for all users, if such option is available.
 	Hard bool `json:"hard,omitempty"`
 }
