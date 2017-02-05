@@ -592,9 +592,12 @@ func (t *Topic) GetAccess(uid Uid) (mode AccessMode) {
 // Stored {data} message
 type Message struct {
 	ObjHeader
-	SeqId   int
-	Topic   string
-	From    string // UID as string of the user who sent the message, could be empty
+	// List of Uids who have marked this message as soft-deleted
+	DeletedFor []Uid
+	SeqId      int
+	Topic      string
+	// UID as string of the user who sent the message, could be empty
+	From    string
 	Head    map[string]string
 	Content interface{}
 }

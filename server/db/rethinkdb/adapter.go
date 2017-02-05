@@ -38,6 +38,7 @@ type configType struct {
 }
 
 const MAX_RESULTS = 1024
+const MAX_DELETE_MESSAGES = 128
 
 // Open initializes rethinkdb session
 func (a *RethinkDbAdapter) Open(jsonconfig string) error {
@@ -769,6 +770,11 @@ func (a *RethinkDbAdapter) MessageDeleteAll(topic string, clear int) error {
 		Delete().RunWrite(a.conn)
 
 	return err
+}
+
+// MessageDeleteList deletes messages according to the given list
+func (a *RethinkDbAdapter) MessageDeleteList(topic string, list []int, hard bool) error {
+
 }
 
 func addOptions(q rdb.Term, value string, index string, opts *t.BrowseOpt) rdb.Term {
