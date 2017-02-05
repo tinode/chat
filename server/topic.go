@@ -1327,6 +1327,8 @@ func (t *Topic) replyDelMsg(sess *Session, del *MsgClientDel) error {
 		} else {
 			err = store.Messages.Delete(t.name, sess.uid, del.Hard, del.Before)
 		}
+	} else {
+		// del.List != null
 	}
 
 	if err != nil {
