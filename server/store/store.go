@@ -3,16 +3,16 @@
  *  Copyright (C) 2014-2016 Tinode, All Rights Reserved
  *
  *  This program is free software; you can redistribute it and/or modify it
- *  under the terms of the GNU Affero General Public License as published by
+ *  under the terms of the GNU General Public License as published by
  *  the Free Software Foundation; either version 3 of the License, or (at your
  *  option) any later version.
  *
  *  This program is distributed in the hope that it will be useful, but
  *  WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
  *  or FITNESS FOR A PARTICULAR PURPOSE.
- *  See the GNU Affero General Public License for more details.
+ *  See the GNU General Public License for more details.
  *
- *  You should have received a copy of the GNU Affero General Public License
+ *  You should have received a copy of the GNU General Public License
  *  along with this program; if not, see <http://www.gnu.org/licenses>.
  *
  *  This code is available under licenses for commercial use.
@@ -352,16 +352,13 @@ func (MessagesObjMapper) Save(msg *types.Message) error {
 	return adaptr.MessageSave(msg)
 }
 
-// Delete messages. Hard-delete if hard==tru, otherwise a soft-delete
-// If hard == true:
-// If topic == "", it's a hard delete for 'me' topic of forUser
-// Otherwise it's a hard-delete in 'topic' for all users
+// Delete messages. Hard-delete if hard == tru, otherwise a soft-delete
 func (MessagesObjMapper) Delete(topic string, forUser types.Uid, hard bool, cleared int) (err error) {
 	if hard {
 		err = adaptr.MessageDeleteAll(topic, cleared)
 		if err != nil {
 			update := map[string]interface{}{"ClearId": cleared}
-			if topic == "" {
+			if topic == forUser.UserId() {
 				err = adaptr.UserUpdate(forUser, update)
 			} else {
 				err = adaptr.TopicUpdate(topic, update)
@@ -371,6 +368,12 @@ func (MessagesObjMapper) Delete(topic string, forUser types.Uid, hard bool, clea
 		update := map[string]interface{}{"ClearId": cleared}
 		err = adaptr.SubsUpdate(topic, forUser, update)
 	}
+
+	return
+}
+
+func (MessagesObjMapper) DeleteList(topic string, forUser types.Uid, hard bool, list []int) (err error) {
+	err = adaptr.MessageDeleteList(topic, forUser, hard, list)
 
 	return
 }

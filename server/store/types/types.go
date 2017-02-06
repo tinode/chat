@@ -593,7 +593,7 @@ func (t *Topic) GetAccess(uid Uid) (mode AccessMode) {
 type Message struct {
 	ObjHeader
 	// List of Uids who have marked this message as soft-deleted
-	DeletedFor []Uid
+	DeletedFor []string
 	SeqId      int
 	Topic      string
 	// UID as string of the user who sent the message, could be empty

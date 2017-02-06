@@ -772,9 +772,23 @@ func (a *RethinkDbAdapter) MessageDeleteAll(topic string, clear int) error {
 	return err
 }
 
-// MessageDeleteList deletes messages according to the given list
-func (a *RethinkDbAdapter) MessageDeleteList(topic string, list []int, hard bool) error {
+// MessageDeleteList deletes messages in the given topic with seqIds from the list
+func (a *RethinkDbAdapter) MessageDeleteList(topic string, forUser t.Uid, hard bool, list []int) (err error) {
+	var indexVals []interface{}
+	for _, seq := range list {
+		indexVals = append(indexVals, []interface{}{topic, seq})
+	}
+	if hard {
+		_, err = rdb.DB(a.dbName).Table("messages").GetAllByIndex("Topic_SeqId", indexVals...).
+			Update(map[string]interface{}{"DeletedAt": time.Now().UTC().Round(time.Millisecond),
+				"Content": nil}).RunWrite(a.conn)
+	} else {
+		_, err = rdb.DB(a.dbName).Table("messages").GetAllByIndex("Topic_SeqId", indexVals...).
+			Update(map[string]interface{}{"DeletedFor": rdb.Row.Field("DeletedFor").Append(forUser.String())}).
+			RunWrite(a.conn)
+	}
 
+	return err
 }
 
 func addOptions(q rdb.Term, value string, index string, opts *t.BrowseOpt) rdb.Term {

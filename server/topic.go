@@ -1303,7 +1303,7 @@ func (t *Topic) replyGetData(sess *Session, id string, req *MsgBrowseOpts) error
 func (t *Topic) replyDelMsg(sess *Session, del *MsgClientDel) error {
 	now := time.Now().UTC().Round(time.Millisecond)
 
-	if del.Before > t.lastId || (del.Before <= 0 && del.List == nil) {
+	if del.Before > t.lastId || del.Before < 0 || (del.Before == 0 && (del.List == nil || len(del.List) == 0)) {
 		sess.queueOut(ErrMalformed(del.Id, t.original, now))
 		return errors.New("invalid del.msg parameter 'before'")
 	}
@@ -1322,13 +1322,10 @@ func (t *Topic) replyDelMsg(sess *Session, del *MsgClientDel) error {
 			return nil
 		}
 
-		if t.cat == types.TopicCat_Me {
-			err = store.Messages.Delete("", sess.uid, del.Hard, del.Before)
-		} else {
-			err = store.Messages.Delete(t.name, sess.uid, del.Hard, del.Before)
-		}
+		err = store.Messages.Delete(t.name, sess.uid, del.Hard, del.Before)
 	} else {
-		// del.List != null
+		// del.List != nil
+		err = store.Messages.DeleteList(t.name, sess.uid, del.Hard, del.List)
 	}
 
 	if err != nil {
