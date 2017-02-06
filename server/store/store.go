@@ -375,7 +375,7 @@ func (MessagesObjMapper) Delete(topic string, forUser types.Uid, hard bool, clea
 func (MessagesObjMapper) DeleteList(topic string, forUser types.Uid, hard bool, list []int) (err error) {
 	err = adaptr.MessageDeleteList(topic, forUser, hard, list)
 
-	return
+	return err
 }
 
 func (MessagesObjMapper) GetAll(topic string, opt *types.BrowseOpt) ([]types.Message, error) {
