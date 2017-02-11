@@ -741,7 +741,7 @@ func (a *RethinkDbAdapter) MessageSave(msg *t.Message) error {
 	return err
 }
 
-func (a *RethinkDbAdapter) MessageGetAll(topic string, opts *t.BrowseOpt) ([]t.Message, error) {
+func (a *RethinkDbAdapter) MessageGetAll(topic string, forUser t.Uid, opts *t.BrowseOpt) ([]t.Message, error) {
 	//log.Println("Loading messages for topic ", topic, opts)
 
 	q := rdb.DB(a.dbName).Table("messages")
@@ -754,6 +754,18 @@ func (a *RethinkDbAdapter) MessageGetAll(topic string, opts *t.BrowseOpt) ([]t.M
 
 	var msgs []t.Message
 	rows.All(&msgs)
+
+	requester := forUser.String()
+
+	for i := 0; i < len(msgs); i++ {
+		if msgs[i].DeletedFor != nil {
+			for j := 0; j < len(msgs[i].DeletedFor); j++ {
+				if msgs[i].DeletedFor[j].User == requester {
+					msgs[i].DeletedAt = &msgs[i].DeletedFor[j].Timestamp
+				}
+			}
+		}
+	}
 
 	return msgs, rows.Err()
 }
@@ -780,11 +792,13 @@ func (a *RethinkDbAdapter) MessageDeleteList(topic string, forUser t.Uid, hard b
 	}
 	if hard {
 		_, err = rdb.DB(a.dbName).Table("messages").GetAllByIndex("Topic_SeqId", indexVals...).
-			Update(map[string]interface{}{"DeletedAt": time.Now().UTC().Round(time.Millisecond),
+			Update(map[string]interface{}{"DeletedAt": t.TimeNow(),
 				"Content": nil}).RunWrite(a.conn)
 	} else {
 		_, err = rdb.DB(a.dbName).Table("messages").GetAllByIndex("Topic_SeqId", indexVals...).
-			Update(map[string]interface{}{"DeletedFor": rdb.Row.Field("DeletedFor").Append(forUser.String())}).
+			Update(map[string]interface{}{"DeletedFor": rdb.Row.Field("DeletedFor").Append(&t.SoftDelete{
+				User:      forUser.String(),
+				Timestamp: t.TimeNow()})}).
 			RunWrite(a.conn)
 	}
 

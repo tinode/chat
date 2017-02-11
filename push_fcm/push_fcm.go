@@ -3,7 +3,7 @@ package push_fcm
 import (
 	"encoding/json"
 	"errors"
-	"log"
+	// "log"
 
 	"github.com/tinode/chat/server/push"
 	"github.com/tinode/chat/server/store"
@@ -139,7 +139,7 @@ func sendNotification(rcpt *push.Receipt, config *configType) {
 				fcm.ErrorMismatchSenderId:
 				if uid, ok := devIds[sendTo[i]]; ok {
 					store.Devices.Delete(uid, sendTo[i])
-					log.Printf("FCM push: %s; token removed: %s", fail.Error, sendTo[i])
+					// log.Printf("FCM push: %s; token removed: %s", fail.Error, sendTo[i])
 				}
 			}
 			i++

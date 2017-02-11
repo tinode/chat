@@ -178,7 +178,7 @@ func (t *Topic) presAnnounceToTopic(src, what string, seq int, skip *Session) {
 }
 
 // Announce to a single user on 'me' topic
-func (t *Topic) presAnnounceToUser(uid types.Uid, what string, seq int, skip *Session) {
+func (t *Topic) presAnnounceToUser(uid types.Uid, what string, seq int, list []int, skip *Session) {
 	if pud, ok := t.perUser[uid]; ok {
 		var with string
 		if t.cat == types.TopicCat_P2P {
@@ -190,7 +190,7 @@ func (t *Topic) presAnnounceToUser(uid types.Uid, what string, seq int, skip *Se
 			}
 		}
 
-		update := &MsgServerPres{Topic: "me", What: what, Src: t.original, With: with, SeqId: seq}
+		update := &MsgServerPres{Topic: "me", What: what, Src: t.original, With: with, SeqId: seq, SeqList: list}
 
 		if pud.modeGiven&pud.modeWant&types.ModePres != 0 {
 			globals.hub.route <- &ServerComMessage{Pres: update, rcptto: uid.UserId(), sessSkip: skip}
@@ -220,7 +220,7 @@ func (t *Topic) presPubChange(src types.Uid, what string) {
 // Announce topic disappearance just to the affected user
 // Case 4.b
 func (t *Topic) presTopicGone(user types.Uid) {
-	t.presAnnounceToUser(user, "gone", 0, nil)
+	t.presAnnounceToUser(user, "gone", 0, nil, nil)
 	log.Printf("Pres 4.b: from '%s' (src: %s) [gone]", t.name, user.UserId())
 }
 
@@ -271,7 +271,7 @@ func (t *Topic) presPubUAChange(ua string) {
 
 // Let other sessions of a given user know that what messages are now received/read
 // Cases 9.a, 9.b
-func (t *Topic) presPubMessageCount(skip *Session, clear, recv, read int) {
+func (t *Topic) presPubMessageCount(skip *Session, list []int, clear, recv, read int) {
 	var what string
 	var seq int
 	if read > 0 {
@@ -280,13 +280,26 @@ func (t *Topic) presPubMessageCount(skip *Session, clear, recv, read int) {
 	} else if recv > 0 {
 		what = "recv"
 		seq = recv
-	} else {
+	} else if seq > 0 {
 		what = "del"
 		seq = clear
+	} else if list != nil {
+		if len(list) == 1 {
+			if list[0] > 0 {
+				what = "del"
+				seq = list[0]
+			}
+		} else {
+			what = "del"
+		}
 	}
 
-	// Announce to user's other sessions on 'me' regardless of being attached to this topic.
-	t.presAnnounceToUser(skip.uid, what, seq, skip)
+	if what != "" {
+		// Announce to user's other sessions on 'me' regardless of being attached to this topic.
+		t.presAnnounceToUser(skip.uid, what, seq, list, skip)
+	} else {
+		log.Printf("Case 9: topic[%s] invalid request - missing payload", t.name)
+	}
 }
 
 // Messages deleted in the topic, notify online users and topic-offline users
@@ -303,6 +316,6 @@ func (t *Topic) presPubMessageDel(sess *Session, clear int) {
 // User subscribed to a new topic. Let all user's other sessions know.
 // Case 11
 func (t *Topic) presTopicSubscribed(user types.Uid, skip *Session) {
-	t.presAnnounceToUser(user, "on", 0, skip)
+	t.presAnnounceToUser(user, "on", 0, nil, skip)
 	log.Printf("Pres 11: from '%s' (src: %s) [subbed/on]", t.name, user.UserId())
 }

@@ -116,60 +116,60 @@
  "subscriptions": [
   {
    "createdAt": "-120h",
-   "modeHave": "RWPD",
-   "modeWant": "RWPD",
+   "modeHave": "RWP",
+   "modeWant": "RWP",
    "topic": "bob",
    "user": "alice"
   },
   {
    "createdAt": "-119h",
-   "modeHave": "RWPD",
-   "modeWant": "RWPD",
+   "modeHave": "RWP",
+   "modeWant": "RWP",
    "topic": "carol",
    "user": "alice"
   },
   {
    "createdAt": "-118h",
-   "modeHave": "RWPD",
-   "modeWant": "RWPD",
+   "modeHave": "RWP",
+   "modeWant": "RWP",
    "topic": "dave",
    "user": "alice"
   },
   {
    "createdAt": "-117h",
-   "modeHave": "RWPD",
-   "modeWant": "RWPD",
+   "modeHave": "RWP",
+   "modeWant": "RWP",
    "private": "apples to oranges",
    "topic": "eve",
    "user": "alice"
   },
   {
    "createdAt": "-116h",
-   "modeHave": "RWPD",
-   "modeWant": "RWPD",
+   "modeHave": "RWP",
+   "modeWant": "RWP",
    "private": "Frank Frank Frank a-\u003ef",
    "topic": "frank",
    "user": "alice"
   },
   {
    "createdAt": "-115h",
-   "modeHave": "RWPD",
-   "modeWant": "RWPD",
+   "modeHave": "RWP",
+   "modeWant": "RWP",
    "private": "Alice Jo",
    "topic": "alice",
    "user": "bob"
   },
   {
    "createdAt": "-114h",
-   "modeHave": "RWPD",
-   "modeWant": "RWPD",
+   "modeHave": "RWP",
+   "modeWant": "RWP",
    "private": "Dave ?",
    "topic": "dave",
    "user": "bob"
   },
   {
    "createdAt": "-113.5h",
-   "modeHave": "RWPD",
+   "modeHave": "RWP",
    "modeWant": "RWP",
    "private": "Eve Adamsson",
    "topic": "eve",
@@ -177,15 +177,15 @@
   },
   {
    "createdAt": "-113.4h",
-   "modeHave": "RWPD",
-   "modeWant": "RW",
+   "modeHave": "RWP",
+   "modeWant": "RWP",
    "private": "Alice Joha",
    "topic": "alice",
    "user": "carol"
   },
   {
    "createdAt": "-113h",
-   "modeHave": "RWPD",
+   "modeHave": "RWP",
    "modeWant": "RWP",
    "private": "Alice Johnson",
    "topic": "alice",
@@ -193,32 +193,32 @@
   },
   {
    "createdAt": "-112.8h",
-   "modeHave": "RWPD",
-   "modeWant": "RWPD",
+   "modeHave": "RWP",
+   "modeWant": "RWP",
    "private": "some private info here",
    "topic": "bob",
    "user": "dave"
   },
   {
    "createdAt": "-112.6h",
-   "modeHave": "RWPD",
-   "modeWant": "RWPD",
+   "modeHave": "RWP",
+   "modeWant": "RWP",
    "private": "Alice Johnson",
    "topic": "alice",
    "user": "eve"
   },
   {
    "createdAt": "-112.4h",
-   "modeHave": "RWPD",
-   "modeWant": "RWPD",
+   "modeHave": "RWP",
+   "modeWant": "RWP",
    "private": "123",
    "topic": "bob",
    "user": "eve"
   },
   {
    "createdAt": "-112.2h",
-   "modeHave": "RWPD",
-   "modeWant": "RWPD",
+   "modeHave": "RWP",
+   "modeWant": "RWP",
    "private": "Johnson f-\u003ea",
    "topic": "alice",
    "user": "frank"

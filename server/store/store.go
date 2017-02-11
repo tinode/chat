@@ -349,8 +349,8 @@ func (MessagesObjMapper) DeleteList(topic string, forUser types.Uid, hard bool, 
 	return err
 }
 
-func (MessagesObjMapper) GetAll(topic string, opt *types.BrowseOpt) ([]types.Message, error) {
-	return adaptr.MessageGetAll(topic, opt)
+func (MessagesObjMapper) GetAll(topic string, forUser types.Uid, opt *types.BrowseOpt) ([]types.Message, error) {
+	return adaptr.MessageGetAll(topic, forUser, opt)
 }
 
 var authHandlers map[string]auth.AuthHandler

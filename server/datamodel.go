@@ -219,7 +219,7 @@ type MsgClientDel struct {
 	// Delete messages older than this seq ID (inclusive)
 	Before int `json:"before,omitempty"`
 	// List of seq Ids to delete/mark as deleted
-	List []int `json:"list,omitempty"`
+	SeqList []int `json:"list,omitempty"`
 	// Request to hard-delete messages for all users, if such option is available.
 	Hard bool `json:"hard,omitempty"`
 }
@@ -373,6 +373,7 @@ type MsgServerPres struct {
 	With      string `json:"with,omitempty"`
 	UserAgent string `json:"ua,omitempty"`
 	SeqId     int    `json:"seq,omitempty"`
+	SeqList   []int  `json:"list,omitempty"`
 	// unroutable, to break the reply loop
 	wantReply bool
 }

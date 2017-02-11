@@ -265,7 +265,7 @@ const (
 	ModePub                           // user can Write, i.e. {pub} (W)
 	ModePres                          // user can receive presence updates (P)
 	ModeShare                         // user can invite other people to join (S)
-	ModeDelete                        // user can hard-delete messages (D), only owner can completely delete
+	ModeDelete                        // user can hard-delete messages (D)
 	ModeOwner                         // user is the owner (O) - full access
 	ModeBanned                        // user has no access, requests to share/gain access/{sub} are ignored (X)
 
@@ -281,7 +281,7 @@ const (
 	// manager of the topic - everything but being the owner
 	ModeManager AccessMode = ModeSub | ModePub | ModePres | ModeShare | ModeDelete
 	// Default P2P access mode
-	ModeP2P AccessMode = ModeSub | ModePub | ModePres | ModeDelete
+	ModeP2P AccessMode = ModeSub | ModePub | ModePres
 
 	// Invalid mode to indicate an error
 	ModeInvalid AccessMode = 0x100000
@@ -589,11 +589,16 @@ func (t *Topic) GetAccess(uid Uid) (mode AccessMode) {
 	return
 }
 
+type SoftDelete struct {
+	User      string
+	Timestamp time.Time
+}
+
 // Stored {data} message
 type Message struct {
 	ObjHeader
-	// List of Uids who have marked this message as soft-deleted
-	DeletedFor []string
+	// List of users who have marked this message as soft-deleted
+	DeletedFor []SoftDelete
 	SeqId      int
 	Topic      string
 	// UID as string of the user who sent the message, could be empty

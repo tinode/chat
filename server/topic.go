@@ -19,7 +19,10 @@ import (
 	"github.com/tinode/chat/server/store/types"
 )
 
-var UA_TIMER_DELAY = time.Second * 5
+const UA_TIMER_DELAY = time.Second * 5
+
+// Maximum number of SeqIds to pass in a list
+const MAX_SEQ_COUNT = 128
 
 // Topic: an isolated communication channel
 type Topic struct {
@@ -325,7 +328,7 @@ func (t *Topic) run(hub *Hub) {
 						continue
 					}
 
-					t.presPubMessageCount(msg.sessSkip, 0, recv, read)
+					t.presPubMessageCount(msg.sessSkip, nil, 0, recv, read)
 
 					t.perUser[uid] = pud
 				}
@@ -1272,7 +1275,7 @@ func (t *Topic) replyGetData(sess *Session, id string, req *MsgBrowseOpts) error
 
 	opts := msgOpts2storeOpts(req, t.perUser[sess.uid].clearId)
 
-	messages, err := store.Messages.GetAll(t.name, opts)
+	messages, err := store.Messages.GetAll(t.name, sess.uid, opts)
 	if err != nil {
 		log.Println("topic: error loading topics ", err)
 		sess.queueOut(ErrUnknown(id, t.original, now))
@@ -1285,6 +1288,11 @@ func (t *Topic) replyGetData(sess *Session, id string, req *MsgBrowseOpts) error
 	if messages != nil {
 		for i := len(messages) - 1; i >= 0; i-- {
 			mm := messages[i]
+			// Check if the message was soft-deleted for the current user
+			if mm.DeletedAt != nil {
+				continue
+			}
+
 			from := types.ParseUid(mm.From)
 			msg := &ServerComMessage{Data: &MsgServerData{
 				Topic:     t.original,
@@ -1293,6 +1301,7 @@ func (t *Topic) replyGetData(sess *Session, id string, req *MsgBrowseOpts) error
 				Timestamp: mm.CreatedAt,
 				Content:   mm.Content}}
 			sess.queueOut(msg)
+
 		}
 	}
 
@@ -1303,9 +1312,38 @@ func (t *Topic) replyGetData(sess *Session, id string, req *MsgBrowseOpts) error
 func (t *Topic) replyDelMsg(sess *Session, del *MsgClientDel) error {
 	now := time.Now().UTC().Round(time.Millisecond)
 
-	if del.Before > t.lastId || del.Before < 0 || (del.Before == 0 && (del.List == nil || len(del.List) == 0)) {
+	var err error
+	var filteredList []int
+	if del.Before > t.lastId || del.Before < 0 {
+		err = errors.New("del.msg: invalid parameter 'before'")
+	} else if del.Before == 0 {
+		if del.SeqList == nil || len(del.SeqList) == 0 {
+			err = errors.New("del.msg without parameters")
+		} else {
+			for _, seq := range del.SeqList {
+				if seq > t.lastId && seq < 0 {
+					err = errors.New("del.msg: invalid entry in list")
+					break
+				}
+				if seq == 0 {
+					continue
+				}
+
+				filteredList = append(filteredList, seq)
+				if len(filteredList) == MAX_SEQ_COUNT {
+					break
+				}
+			}
+
+			if len(filteredList) == 0 {
+				err = errors.New("del.msg: no valid entries in list")
+			}
+		}
+	}
+
+	if err != nil {
 		sess.queueOut(ErrMalformed(del.Id, t.original, now))
-		return errors.New("invalid del.msg parameter 'before'")
+		return err
 	}
 
 	pud := t.perUser[sess.uid]
@@ -1314,7 +1352,6 @@ func (t *Topic) replyDelMsg(sess *Session, del *MsgClientDel) error {
 		del.Hard = false
 	}
 
-	var err error
 	if del.Before > 0 {
 		// Make sure user has not deleted the messages already
 		if (del.Before <= t.clearId) || (!del.Hard && del.Before <= pud.clearId) {
@@ -1325,7 +1362,8 @@ func (t *Topic) replyDelMsg(sess *Session, del *MsgClientDel) error {
 		err = store.Messages.Delete(t.name, sess.uid, del.Hard, del.Before)
 	} else {
 		// del.List != nil
-		err = store.Messages.DeleteList(t.name, sess.uid, del.Hard, del.List)
+
+		err = store.Messages.DeleteList(t.name, sess.uid, del.Hard, filteredList)
 	}
 
 	if err != nil {
@@ -1333,24 +1371,28 @@ func (t *Topic) replyDelMsg(sess *Session, del *MsgClientDel) error {
 		return err
 	}
 
-	if del.Hard {
-		t.lastId = t.lastId
-		t.clearId = del.Before
+	if del.Before > 0 {
+		if del.Hard {
+			t.lastId = t.lastId
+			t.clearId = del.Before
 
-		// Broadcast the change
-		t.presPubMessageDel(sess, t.clearId)
-	} else {
-		pud.clearId = del.Before
-		if pud.readId < pud.clearId {
-			pud.readId = pud.clearId
+			// Broadcast the change
+			t.presPubMessageDel(sess, t.clearId)
+		} else {
+			pud.clearId = del.Before
+			if pud.readId < pud.clearId {
+				pud.readId = pud.clearId
+			}
+			if pud.recvId < pud.readId {
+				pud.recvId = pud.readId
+			}
+			t.perUser[sess.uid] = pud
 		}
-		if pud.recvId < pud.readId {
-			pud.recvId = pud.readId
-		}
-		t.perUser[sess.uid] = pud
 
 		// Notify user's other sessions
-		t.presPubMessageCount(sess, pud.clearId, 0, 0)
+		t.presPubMessageCount(sess, nil, pud.clearId, 0, 0)
+	} else {
+		t.presPubMessageCount(sess, filteredList, 0, 0, 0)
 	}
 
 	sess.queueOut(NoErr(del.Id, t.original, now))
