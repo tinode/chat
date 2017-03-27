@@ -513,7 +513,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		t.original = t.name
 
 		// Processing request to create a new generic (group) topic:
-	} else if t.original == "new" {
+	} else if strings.HasPrefix(t.original, "new") {
 		log.Println("hub: new group topic")
 
 		t.cat = types.TopicCat_Grp
@@ -577,7 +577,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		err := store.Topics.Create(stopic, t.owner, t.perUser[t.owner].private)
 		if err != nil {
 			log.Println("hub: cannot save new topic '" + t.name + "' (" + err.Error() + ")")
-			// Error sent on "new" topic
+			// Error sent on "newWHATEVER" topic
 			sreg.sess.queueOut(ErrUnknown(sreg.pkt.Id, t.original, timestamp))
 			return
 		}
@@ -585,7 +585,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		t.original = t.name // keeping 'new' as original has no value to the client
 		sreg.created = true
 
-	} else {
+	} else if strings.HasPrefix(t.original, "grp") {
 		log.Println("hub: existing group topic")
 
 		t.cat = types.TopicCat_Grp
@@ -620,6 +620,11 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 
 		t.lastId = stopic.SeqId
 		t.clearId = stopic.ClearId
+
+	} else {
+		// Unrecognized topic name
+		sreg.sess.queueOut(ErrTopicNotFound(sreg.pkt.Id, t.original, timestamp))
+		return
 	}
 
 	log.Println("hub: topic created or loaded: " + t.name)

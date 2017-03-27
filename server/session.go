@@ -227,7 +227,7 @@ func (s *Session) subscribe(msg *ClientComMessage) {
 		return
 	}
 
-	if msg.Sub.Topic == "new" {
+	if strings.HasPrefix(msg.Sub.Topic, "new") {
 		// Request to create a new named topic
 		expanded = genTopicName()
 		topic = expanded
@@ -472,7 +472,7 @@ func (s *Session) acc(msg *ClientComMessage) {
 		return
 	}
 
-	if msg.Acc.User == "new" {
+	if strings.HasPrefix(msg.Acc.User, "new") {
 		// Request to create a new account
 		if ok, err := authhdl.IsUnique(msg.Acc.Secret); !ok {
 			log.Println("Not unique: ", err)

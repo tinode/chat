@@ -90,9 +90,7 @@ The user agent `ua` is expected to follow [RFC 7231 section 5.5.3](http://tools.
 
 #### `{acc}`
 
-Message `{acc}` is used for creating users or updating authentication credentials. To create a new user set
-`acc.user` to string "new". Either authenticated or anonymous session can send an `{acc}` message to create a new user.
-To update credentials leave `acc.user` unset.
+Message `{acc}` is used for creating users or updating authentication credentials. To create a new user set `acc.user` to string `new` optionally followed by any character sequence. Either authenticated or anonymous session can send an `{acc}` message to create a new user. To update credentials of the current user leave `acc.user` unset.
 
 ```js
 acc: {
@@ -696,7 +694,7 @@ The 'private' parameter of a P2P topic is defined by each participant individual
 
 Group topics represent communication channels between multiple users. The name of a group topic is `grp` followed by a string of characters from base64 URL-encoding set. No other assumptions can be made about internal structure or length of the group name.
 
-A group topic is created by sending a `{sub}` message with the topic field set to "new". Tinode will respond with a `{ctrl}` message with the name of the newly created topic, i.e. `{sub topic="new"}` is replied with `{ctrl topic="grpmiKBkQVXnm3P"}`. The user who created the topic becomes topic owner. Ownership can be transferred to another user with a `{set}` message but at least one user must remain the topic owner.
+A group topic is created by sending a `{sub}` message with the topic field set to string `new` optionally followed by any characters, e.g. `new` or `newAbC123` are equivalent. Tinode will respond with a `{ctrl}` message with the name of the newly created topic, i.e. `{sub topic="new"}` is replied with `{ctrl topic="grpmiKBkQVXnm3P"}`. If topic creation fails, the error is reported on the original topic name, i.e. `new` or `newAbC123`. The user who created the topic becomes topic owner. Ownership can be transferred to another user with a `{set}` message but at least one user must remain the owner.
 
 A user joining or leaving the topic generates a `{pres}` message to all other users who are currently in the joined state with the topic.
 

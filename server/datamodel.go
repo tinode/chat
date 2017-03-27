@@ -98,7 +98,7 @@ type MsgClientHi struct {
 type MsgClientAcc struct {
 	// Message Id
 	Id string `json:"id,omitempty"`
-	// "new" to create a new user or UserId to update a user; default: current user
+	// "newXYZ" to create a new user or UserId to update a user; default: current user
 	User string `json:"user,omitempty"`
 	// The initial authentication scheme the account can use
 	Scheme string `json:"scheme,omitempty"`
