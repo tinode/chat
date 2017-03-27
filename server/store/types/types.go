@@ -655,7 +655,7 @@ func GetTopicCat(name string) TopicCat {
 	case "fnd":
 		return TopicCat_Fnd
 	default:
-		panic("invalid topic type" + name)
+		panic("invalid topic type for name '" + name + "'")
 	}
 }
 
