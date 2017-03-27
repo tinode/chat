@@ -158,9 +158,9 @@ User creates a new group topic by sending `{sub}` packet with the `topic` field 
 
 User creates a new peer to peer topic by sending `{sub}` packet with `topic` set to peer's user ID.
 
-The user is always subscribed to and the sessions is attached to the newly created topic.
+The user is always subscribed to and the session is attached to the newly created topic.
 
-If the user had no relationship with the topic, sending `{sub}` packet creates it. Subscribing means to establish a relationship between session's user and the topic when no relationship existed in the past.
+If the user had no relationship with the topic, sending `{sub}` packet creates it. Subscribing means to establish a relationship between session's user and the topic where no relationship existed in the past.
 
 Joining (attaching to) a topic means for the session to start consuming content from the topic. Server automatically differentiates between subscribing and joining/attaching based on context: if the user had no prior relationship with the topic, the server subscribes the user then attaches the current session to the topic. If relationship existed, the server only attaches the session to the topic. When subscribing, the server checks user's access permissions against topic's access control list. It may grant immediate access, deny access, may generate a request for approval from topic managers.
 
@@ -187,8 +187,8 @@ sub: {
       private: { ... } // per-user private application-defined content
     }, // object, optional
 
-    // Subscription parameters, mirrors {set sub}; sub.user must
-    // not be provided
+    // Subscription parameters, mirrors {set sub}. The data without sub.user is
+    // assumed to be for the calling user.
     sub: {
       mode: "RWS", // string, requested access mode, optional;
                    // default: server-defined
@@ -340,7 +340,7 @@ set: {
     private: { ... } // per-user private application-defined content
   },
 
-  // Optional payload to update subscription
+  // Optional payload to update subscription(s)
   sub: {
     user: "usr2il9suCbuko", // string, user affected by this request;
                             // default (empty) means current user
