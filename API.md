@@ -481,8 +481,12 @@ meta: {
       updated: "2015-10-24T10:26:09.716Z", // timestamp of the last change in the
                                            // subscription, present only for
                                            // requester's own subscriptions
-      mode: "RWPSDO",  // string, user's access permission, equal to bitwise
-                       // (info.given AND info.want)
+      acs: {  // user's access permissions
+        want: "RWP", // string, requested access permission, present for user's own
+					 // subscriptions and when the requester is topic's manager or owner
+        given: "RWP", // string, granted access permission, optional exactly as 'want'
+	    mode: "RWP" // string, combination of want and given
+      },
       read: 112, // integer, ID of the message user claims through {note} message
                  // to have read, optional
       recv: 315, // integer, like 'read', but received, optional
