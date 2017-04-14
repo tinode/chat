@@ -540,6 +540,7 @@ func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin, sendDesc bool) error {
 			private = sreg.pkt.Set.Desc.Private
 		}
 	}
+	// Create new subscription or modify an existing one.
 	if err := t.requestSub(h, sreg.sess, sreg.pkt.Id, mode, info, private, sreg.loaded); err != nil {
 		log.Println("requestSub failed: ", err.Error())
 		return err
@@ -1137,10 +1138,12 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 
 	var subs []types.Subscription
 	var err error
+	var isManager bool
 
 	if t.cat == types.TopicCat_Me {
 		// Fetch user's subscriptions, with Topic.Public denormalized into subscription
 		subs, err = store.Users.GetTopics(sess.uid)
+		isManager = true
 	} else if t.cat == types.TopicCat_Fnd {
 		// Given a query provided in .private, fetch user's contacts
 		if query, ok := t.perUser[sess.uid].private.([]interface{}); ok {
@@ -1151,6 +1154,8 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 	} else {
 		// FIXME(gene): don't load subs from DB, use perUserData - it already contains subscriptions.
 		subs, err = store.Topics.GetUsers(t.name)
+		userData := t.perUser[sess.uid]
+		isManager = userData.modeGiven.IsManager() && userData.modeWant.IsManager()
 	}
 
 	if err != nil {
@@ -1222,7 +1227,12 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 			// Ensure sanity or ReadId and RecvId:
 			mts.ReadSeqId = max(clearId, sub.ReadSeqId)
 			mts.RecvSeqId = max(clearId, sub.RecvSeqId)
-			mts.AcsMode = (sub.ModeGiven & sub.ModeWant).String()
+			mts.Acs.Mode = (sub.ModeGiven & sub.ModeWant).String()
+			if isManager {
+				mts.Acs.Want = sub.ModeWant.String()
+				mts.Acs.Given = sub.ModeGiven.String()
+			}
+
 			// Returning public and private only if they have changed since ifModified
 			if sendPubPriv {
 				mts.Public = sub.GetPublic()
@@ -1260,7 +1270,7 @@ func (t *Topic) replySetSub(h *Hub, sess *Session, set *MsgClientSet) error {
 	}
 
 	if uid == sess.uid {
-		// Request to modify current subscription
+		// Request new subscription or modify current subscription
 		return t.requestSub(h, sess, set.Id, set.Sub.Mode, set.Sub.Info, nil, false)
 	} else {
 		// Request to approve a subscription

@@ -262,6 +262,15 @@ type MsgLastSeenInfo struct {
 	UserAgent string `json:"ua,omitempty"`
 }
 
+type MsgAccessMode struct {
+	// Access mode requested by the user
+	Want string `json:"want,omitempty"`
+	// Access mode granted to the user by the admin
+	Given string `json:"given,omitempty"`
+	// Cumulative access mode want & given
+	Mode string `json:"mode,omitempty"`
+}
+
 // Topic description, S2C in Meta message
 type MsgTopicDesc struct {
 	CreatedAt  *time.Time         `json:"created,omitempty"`
@@ -283,12 +292,6 @@ type MsgTopicDesc struct {
 	With string `json:"with,omitempty"`
 }
 
-type MsgAccessMode struct {
-	Want  string `json:"want,omitempty"`
-	Given string `json:"given,omitempty"`
-	Mode  string `json:"mode,omitempty"`
-}
-
 // MsgTopicSub: topic subscription details, sent in Meta message
 type MsgTopicSub struct {
 	// Fields common to all subscriptions
@@ -296,8 +299,9 @@ type MsgTopicSub struct {
 	UpdatedAt *time.Time `json:"updated,omitempty"`
 	Online    bool       `json:"online,omitempty"`
 
-	// Cumulative access mode (mode.Want & mode.Given)
-	AcsMode string `json:"mode"`
+	// Access mode. Topic admins receive the full info, non-admins receive just the cumulative mode
+	// Acs.Mode = want & given. The field is not a pointer because at least one value is always assigned.
+	Acs MsgAccessMode `json:"acs"`
 	// ID of the message reported by the given user as read
 	ReadSeqId int `json:"read,omitempty"`
 	// ID of the message reported by the given user as received

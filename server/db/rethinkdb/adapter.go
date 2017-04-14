@@ -422,7 +422,7 @@ func (a *RethinkDbAdapter) TopicsForUser(uid t.Uid) ([]t.Subscription, error) {
 	for rows.Next(&sub) {
 		tcat := t.GetTopicCat(sub.Topic)
 
-		// 'me' subscription, skip
+		// 'me' or 'fnd' subscription, skip
 		if tcat == t.TopicCat_Me || tcat == t.TopicCat_Fnd {
 			continue
 
