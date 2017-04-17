@@ -342,8 +342,8 @@ set: {
   sub: {
     user: "usr2il9suCbuko", // string, user affected by this request;
                             // default (empty) means current user
-    mode: "RWP", // string, access mode change, either given or requested
-                 // depending on context
+    mode: "RWP", // string, access mode change, either given ('user' 
+				  // is defined) or requested ('user' undefined)
     info: { ... } // object, application-defined payload to pass to
                   // the invited user or to the topic manager in {data}
                   // message on 'me' topic

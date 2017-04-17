@@ -559,8 +559,11 @@ func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin, sendDesc bool) error {
 	t.perUser[sreg.sess.uid] = pud
 
 	resp := NoErr(sreg.pkt.Id, t.original, now)
-	// Report available access mode.
-	resp.Ctrl.Params = map[string]string{"mode": (pud.modeGiven & pud.modeWant).String()}
+	// Report access mode.
+	resp.Ctrl.Params = map[string]MsgAccessMode{"acs": {
+		Given: pud.modeGiven.String(),
+		Want:  pud.modeWant.String(),
+		Mode:  (pud.modeGiven & pud.modeWant).String()}}
 	sreg.sess.queueOut(resp)
 
 	if sendDesc {
@@ -1260,7 +1263,7 @@ func (t *Topic) replySetSub(h *Hub, sess *Session, set *MsgClientSet) error {
 	var uid types.Uid
 	if uid = types.ParseUserId(set.Sub.User); uid.IsZero() && set.Sub.User != "" {
 		// Invalid user ID
-		sess.queueOut(ErrMalformed(set.Id, set.Topic, now))
+		sess.queueOut(ErrMalformed(set.Id, t.original, now))
 		return errors.New("invalid user id")
 	}
 
@@ -1269,13 +1272,28 @@ func (t *Topic) replySetSub(h *Hub, sess *Session, set *MsgClientSet) error {
 		uid = sess.uid
 	}
 
+	var err error
 	if uid == sess.uid {
 		// Request new subscription or modify current subscription
-		return t.requestSub(h, sess, set.Id, set.Sub.Mode, set.Sub.Info, nil, false)
+		err = t.requestSub(h, sess, set.Id, set.Sub.Mode, set.Sub.Info, nil, false)
 	} else {
 		// Request to approve a subscription
-		return t.approveSub(h, sess, uid, set)
+		err = t.approveSub(h, sess, uid, set)
 	}
+	if err != nil {
+		return err
+	}
+
+	resp := NoErr(set.Id, t.original, now)
+	// Report resulting access mode.
+	pud := t.perUser[uid]
+	resp.Ctrl.Params = map[string]MsgAccessMode{"acs": {
+		Given: pud.modeGiven.String(),
+		Want:  pud.modeWant.String(),
+		Mode:  (pud.modeGiven & pud.modeWant).String()}}
+	sess.queueOut(resp)
+
+	return nil
 }
 
 // replyGetData is a response to a get.data request - load a list of stored messages, send them to session as {data}
