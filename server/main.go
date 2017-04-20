@@ -67,7 +67,8 @@ type configType struct {
 }
 
 func main() {
-	log.Printf("Server pid=%d started with processes: %d", os.Getpid(), runtime.GOMAXPROCS(runtime.NumCPU()))
+	log.Printf("Server v%s:%s pid=%d started with processes: %d", VERSION, buildstamp, os.Getpid(),
+		runtime.GOMAXPROCS(runtime.NumCPU()))
 
 	var configfile = flag.String("config", "./tinode.conf", "Path to config file.")
 	// Path to static content.
