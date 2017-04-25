@@ -13,4 +13,4 @@ while IFS='' read -r line || [[ -n $line ]] ; do
     echo "$line" >> /config
 done < /config.template
 
-/go/bin/server --config=/config --static_data=/go/src/github.com/tinode/chat/server/static
+/go/bin/server --config=/config --static_data=/go/example-react-js 2> log.txt
