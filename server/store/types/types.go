@@ -612,19 +612,26 @@ type Message struct {
 type InviteAction int
 
 const (
-	InvJoin InviteAction = iota // an invitation to subscribe
-	InvAppr                     // a request to aprove a subscription
-	InvInfo                     // info only (request approved or subscribed by a third party), no action required
+	// An invitation to subscribe
+	InvReq InviteAction = iota
+	// A request to aprove a subscription
+	InvAppr
+	// Request approved or subscribed by a third party, no action required
+	InvUpd
+	// Unsubscribe succeeded or unsubscribed by a third party or topic deleted
+	InvDel
 )
 
 func (a InviteAction) String() string {
 	switch a {
-	case InvJoin:
-		return "join"
+	case InvReq:
+		return "req"
 	case InvAppr:
 		return "appr"
-	case InvInfo:
-		return "info"
+	case InvUpd:
+		return "upd"
+	case InvDel:
+		return "del"
 	}
 	return ""
 }
