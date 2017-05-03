@@ -33,6 +33,6 @@ Run Tinode server:
 $ docker run  -p 6060:18080 -d --name tinode-srv --link rethinkdb tinode-srv
 
 ```
-The port mapping `-p 6060:18080` tells Docker to map container's port 18080 to host's port 6060 making server accessible at http://localhost:6060/. The sample application is located at http://localhost:6060/x/example-react-js/index.html.
+The port mapping `-p 6060:18080` tells Docker to map container's port 18080 to host's port 6060 making server accessible at http://localhost:6060/. The sample application is located at http://localhost:6060/x/.
 
 If you provided a `SNOWFLAKE_UID_KEY` during initialization, you must provide the same key at this step too. Otherwise primary key collisions may happen.
