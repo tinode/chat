@@ -35,7 +35,7 @@ const (
 	TOPICTIMEOUT = time.Second * 5
 
 	// API version
-	VERSION = "0.9"
+	VERSION = "0.10"
 
 	DEFAULT_AUTH_ACCESS = types.ModePublic
 	DEFAULT_ANON_ACCESS = types.ModeNone
@@ -67,7 +67,8 @@ type configType struct {
 }
 
 func main() {
-	log.Printf("Server pid=%d started with processes: %d", os.Getpid(), runtime.GOMAXPROCS(runtime.NumCPU()))
+	log.Printf("Server v%s:%s pid=%d started with processes: %d", VERSION, buildstamp, os.Getpid(),
+		runtime.GOMAXPROCS(runtime.NumCPU()))
 
 	var configfile = flag.String("config", "./tinode.conf", "Path to config file.")
 	// Path to static content.

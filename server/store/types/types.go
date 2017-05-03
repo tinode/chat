@@ -399,6 +399,11 @@ func (a AccessMode) CanPub() bool {
 	return a&ModePub != 0
 }
 
+// Check if not set
+func (a AccessMode) IsZero() bool {
+	return a == 0
+}
+
 // Relationship between users & topics, stored in database as Subscription
 type TopicAccess struct {
 	User  string
