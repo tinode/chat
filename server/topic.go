@@ -1186,7 +1186,13 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 			if idx == limit {
 				break
 			}
-			// Check if the requester has provided a cut off date for updated ts of pub & priv fields.
+
+			// Skip subscriptions that the user does not care about
+			if sub.ModeWant.IsZero() || sub.ModeWant.IsBanned() {
+				continue
+			}
+
+			// Check if the requester has provided a cut off date for ts of pub & priv updates.
 			sendPubPriv := ifModified.IsZero() || sub.UpdatedAt.After(ifModified)
 
 			var mts MsgTopicSub
