@@ -1182,14 +1182,10 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 	meta := &MsgServerMeta{Id: id, Topic: t.original, Timestamp: &now}
 	if subs != nil && len(subs) > 0 {
 		meta.Sub = make([]MsgTopicSub, 0, len(subs))
-		for idx, sub := range subs {
+		idx := 0
+		for _, sub := range subs {
 			if idx == limit {
 				break
-			}
-
-			// Skip subscriptions that the user does not care about
-			if sub.ModeWant.IsZero() || sub.ModeWant.IsBanned() {
-				continue
 			}
 
 			// Check if the requester has provided a cut off date for ts of pub & priv updates.
@@ -1199,6 +1195,11 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 			uid := types.ParseUid(sub.User)
 			var clearId int
 			if t.cat == types.TopicCat_Me {
+				// Skip subscriptions that the user does not care about
+				if sub.ModeWant.IsZero() || sub.ModeWant.IsBanned() {
+					continue
+				}
+
 				// Reporting user's subscriptions to other topics
 				mts.Topic = sub.Topic
 				mts.SeqId = sub.GetSeqId()
@@ -1220,6 +1221,11 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 						UserAgent: sub.GetUserAgent()}
 				}
 			} else {
+				// Skip subscriptions that the user does not care about
+				if t.cat == types.TopicCat_Grp && !isManager && (sub.ModeWant.IsZero() || sub.ModeWant.IsBanned()) {
+					continue
+				}
+
 				// Reporting subscribers to a group or a p2p topic
 				mts.User = uid.UserId()
 				clearId = max(t.clearId, sub.ClearId)
@@ -1253,6 +1259,7 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 			}
 
 			meta.Sub = append(meta.Sub, mts)
+			idx++
 		}
 	}
 
