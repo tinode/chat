@@ -296,8 +296,10 @@ type MsgTopicDesc struct {
 type MsgTopicSub struct {
 	// Fields common to all subscriptions
 
+	// Timestamp when the subscription was last updated
 	UpdatedAt *time.Time `json:"updated,omitempty"`
-	Online    bool       `json:"online,omitempty"`
+	// If the subscriber/topic is online
+	Online bool `json:"online,omitempty"`
 
 	// Access mode. Topic admins receive the full info, non-admins receive just the cumulative mode
 	// Acs.Mode = want & given. The field is not a pointer because at least one value is always assigned.

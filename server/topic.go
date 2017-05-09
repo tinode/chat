@@ -468,7 +468,7 @@ func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 
 				var action types.InviteAction
 				if pud.modeWant == types.ModeNone {
-					action = types.InvJoin
+					action = types.InvInvite
 				} else {
 					action = types.InvInfo
 				}
@@ -905,7 +905,7 @@ func (t *Topic) approveSub(h *Hub, sess *Session, target types.Uid, set *MsgClie
 	if !modeGiven.IsBanned() {
 		if userData.modeWant == types.ModeNone {
 			// (re-)Send the invite to target
-			h.route <- t.makeInvite(target, target, sess.uid, nil, types.InvJoin, userData.modeWant, modeGiven,
+			h.route <- t.makeInvite(target, target, sess.uid, nil, types.InvInvite, userData.modeWant, modeGiven,
 				set.Sub.Info)
 		} else if givenBefore != modeGiven {
 			// Inform target that the access has changed
