@@ -454,7 +454,7 @@ func (s *Session) login(msg *ClientComMessage) {
 		Code:      http.StatusOK,
 		Text:      http.StatusText(http.StatusOK),
 		Timestamp: msg.timestamp,
-		Params:    map[string]interface{}{"uid": uid.UserId(), "token": secret, "expires": tokenExp}}})
+		Params:    map[string]interface{}{"user": uid.UserId(), "token": secret, "expires": tokenExp}}})
 }
 
 // Account creation
@@ -533,7 +533,7 @@ func (s *Session) acc(msg *ClientComMessage) {
 			Private: private}
 
 		reply.Ctrl.Params = map[string]interface{}{
-			"uid":  user.Uid().UserId(),
+			"user": user.Uid().UserId(),
 			"desc": desc,
 		}
 		s.queueOut(reply)

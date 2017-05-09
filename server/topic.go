@@ -373,7 +373,7 @@ func (t *Topic) run(hub *Hub) {
 			}
 
 		case meta := <-t.meta:
-			log.Printf("topic[%s].run: got meta message '%+#v' %x", t.name, meta, meta.what)
+			log.Printf("topic[%s].run: got meta message '%#+v' %x", t.name, meta, meta.what)
 
 			// Request to get/set topic metadata
 			if meta.pkt.Get != nil {
@@ -805,6 +805,8 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string, inf
 func (t *Topic) approveSub(h *Hub, sess *Session, target types.Uid, set *MsgClientSet) error {
 	now := time.Now().UTC().Round(time.Millisecond)
 
+	log.Print("approveSub, session uid=%s, target uid=%s", sess.uid.String(), target.String())
+
 	// Check if requester actually has permission to manage sharing
 	if userData, ok := t.perUser[sess.uid]; !ok || !userData.modeGiven.IsManager() || !userData.modeWant.IsManager() {
 		sess.queueOut(ErrPermissionDenied(set.Id, t.original, now))
@@ -812,9 +814,11 @@ func (t *Topic) approveSub(h *Hub, sess *Session, target types.Uid, set *MsgClie
 	}
 
 	// Parse the access mode granted
+	var explicitGiven bool
 	var modeGiven types.AccessMode
 	if set.Sub.Mode != "" {
 		modeGiven.UnmarshalText([]byte(set.Sub.Mode))
+		explicitGiven = true
 	}
 
 	// If the user is banned from topic, make sute it's the only change
@@ -833,6 +837,8 @@ func (t *Topic) approveSub(h *Hub, sess *Session, target types.Uid, set *MsgClie
 	// Saved subscription does not mean the user is allowed to post/read
 	userData, ok := t.perUser[target]
 	if !ok {
+		log.Print("approveSub: new request")
+
 		if modeGiven == types.ModeNone {
 			if t.accessAuth != types.ModeNone {
 				// Request to use default access mode for the new subscriptions.
@@ -865,11 +871,13 @@ func (t *Topic) approveSub(h *Hub, sess *Session, target types.Uid, set *MsgClie
 		t.perUser[target] = userData
 
 	} else {
+		log.Print("approveSub: modifying existing sub")
+
 		// Action on an existing subscription (re-invite or confirm/decline)
 		givenBefore = userData.modeGiven
 
 		// Request to re-send invite without changing the access mode
-		if modeGiven == types.ModeNone {
+		if modeGiven == types.ModeNone && !explicitGiven {
 			modeGiven = userData.modeGiven
 		} else if modeGiven != userData.modeGiven {
 			userData.modeGiven = modeGiven
@@ -1287,10 +1295,12 @@ func (t *Topic) replySetSub(h *Hub, sess *Session, set *MsgClientSet) error {
 
 	var err error
 	if uid == sess.uid {
-		// Request new subscription or modify current subscription
+		// Request new subscription or modify own subscription
+		log.Println("requestSub")
 		err = t.requestSub(h, sess, set.Id, set.Sub.Mode, set.Sub.Info, nil, false)
 	} else {
-		// Request to approve a subscription
+		// Request to approve/change someone's subscription
+		log.Println("approveSub")
 		err = t.approveSub(h, sess, uid, set)
 	}
 	if err != nil {
