@@ -140,6 +140,7 @@ const (
 	constMsgMetaData
 	constMsgDelTopic
 	constMsgDelMsg
+	constMsgDelSub
 )
 
 func parseMsgClientMeta(params string) int {
@@ -168,6 +169,8 @@ func parseMsgClientDel(params string) int {
 		return constMsgDelMsg
 	case "topic":
 		return constMsgDelTopic
+	case "sub":
+		return constMsgDelSub
 	default:
 		// ignore
 	}
@@ -218,8 +221,10 @@ type MsgClientDel struct {
 	What string `json:"what"`
 	// Delete messages older than this seq ID (inclusive)
 	Before int `json:"before,omitempty"`
-	// List of seq Ids to delete/mark as deleted
+	// List of Seq Ids to delete/mark as deleted
 	SeqList []int `json:"list,omitempty"`
+	// User ID of the subscription to delete
+	User string `json:"user,omitempty"`
 	// Request to hard-delete messages for all users, if such option is available.
 	Hard bool `json:"hard,omitempty"`
 }
@@ -560,7 +565,7 @@ func ErrPermissionDenied(id, topic string, ts time.Time) *ServerComMessage {
 	msg := &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
 		Code:      http.StatusForbidden, // 403
-		Text:      "access denied",
+		Text:      "permission denied",
 		Topic:     topic,
 		Timestamp: ts}}
 	return msg

@@ -316,6 +316,7 @@ func (MessagesObjMapper) Save(msg *types.Message) error {
 		}
 	}
 
+	// Increment topic's or user's SeqId
 	if err := adaptr.TopicUpdateOnMessage(msg.Topic, msg); err != nil {
 		return err
 	}

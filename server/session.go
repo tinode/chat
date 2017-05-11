@@ -685,7 +685,7 @@ func (s *Session) del(msg *ClientComMessage) {
 			fromSession: true,
 			del:         true}
 	} else {
-		// Must join the topic to delete messages.
+		// Must join the topic to delete messages or subscriptions.
 		s.queueOut(ErrAttachFirst(msg.Del.Id, original, msg.timestamp))
 		log.Println("s.del: invalid Del action while unsubbed '" + msg.Del.What + "'")
 	}

@@ -98,6 +98,7 @@ func (uid Uid) String() string {
 	return string(buf)
 }
 
+// Parse UID parses string NOT prefixed with anything
 func ParseUid(s string) Uid {
 	var uid Uid
 	uid.UnmarshalText([]byte(s))
@@ -252,6 +253,7 @@ type User struct {
 	// 'users' as well as indexed in 'tagunique'
 	Tags []string
 
+	// Info on known devices, used for push notifications
 	Devices map[string]*DeviceDef
 }
 
@@ -264,7 +266,7 @@ const (
 	ModeSub    AccessMode = 1 << iota // user can Read, i.e. {sub} (R)
 	ModePub                           // user can Write, i.e. {pub} (W)
 	ModePres                          // user can receive presence updates (P)
-	ModeShare                         // user can invite other people to join (S)
+	ModeShare                         // user can invite/evict/approve applications (S)
 	ModeDelete                        // user can hard-delete messages (D)
 	ModeOwner                         // user is the owner (O) - full access
 	ModeBanned                        // user has no access, requests to share/gain access/{sub} are ignored (X)
@@ -279,7 +281,7 @@ const (
 	// owner's subscription to a generic topic
 	ModeFull AccessMode = ModeSub | ModePub | ModePres | ModeShare | ModeDelete | ModeOwner
 	// manager of the topic - everything but being the owner
-	ModeManager AccessMode = ModeSub | ModePub | ModePres | ModeShare | ModeDelete
+	ModeAdmin AccessMode = ModeSub | ModePub | ModePres | ModeShare | ModeDelete
 	// Default P2P access mode
 	ModeP2P AccessMode = ModeSub | ModePub | ModePres
 
@@ -618,10 +620,10 @@ type InviteAction int
 
 const (
 	// An invitation to subscribe
-	InvReq InviteAction = iota
-	// A request to aprove a subscription
+	InvInv InviteAction = iota
+	// A topic admin is asked to aprove a subscription
 	InvAppr
-	// Request approved or subscribed by a third party, no action required
+	// Change notification: request approved or subscribed by a third party or some such, no action required
 	InvUpd
 	// Unsubscribe succeeded or unsubscribed by a third party or topic deleted
 	InvDel
@@ -629,8 +631,8 @@ const (
 
 func (a InviteAction) String() string {
 	switch a {
-	case InvReq:
-		return "req"
+	case InvInv:
+		return "inv"
 	case InvAppr:
 		return "appr"
 	case InvUpd:

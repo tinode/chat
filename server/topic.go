@@ -398,9 +398,12 @@ func (t *Topic) run(hub *Hub) {
 
 			} else if meta.pkt.Del != nil {
 				// Del request
-				if meta.what == constMsgDelMsg {
+				switch meta.what {
+				case constMsgDelMsg:
 					t.replyDelMsg(meta.sess, meta.pkt.Del)
-				} else if meta.what == constMsgDelTopic {
+				case constMsgDelSub:
+					t.replyDelSub(hub, meta.sess, meta.pkt.Del)
+				case constMsgDelTopic:
 					t.replyDelTopic(hub, meta.sess, meta.pkt.Del)
 				}
 			}
@@ -468,9 +471,9 @@ func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 
 				var action types.InviteAction
 				if pud.modeWant == types.ModeNone {
-					action = types.InvInvite
+					action = types.InvInv
 				} else {
-					action = types.InvInfo
+					action = types.InvUpd
 				}
 				log.Println("sending invite to ", uid.UserId())
 				h.route <- t.makeInvite(uid, uid, sreg.sess.uid, pud.public, action,
@@ -602,11 +605,6 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string, inf
 		explicitWant = true
 	}
 
-	// If the user wants a self-ban, make sure it's the only change
-	if modeWant.IsBanned() {
-		modeWant = types.ModeBanned
-	}
-
 	// Vars for saving changes to access mode
 	var updWant *types.AccessMode
 	var updGiven *types.AccessMode
@@ -680,7 +678,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string, inf
 			// Make sure the current owner cannot unset the owner flag or ban himself
 			if t.owner == sess.uid && (!modeWant.IsOwner() || modeWant.IsBanned()) {
 				log.Println("requestSub: owner attempts to unset the owner flag")
-				sess.queueOut(ErrMalformed(pktId, t.original, now))
+				sess.queueOut(ErrPermissionDenied(pktId, t.original, now))
 				return errors.New("cannot unset ownership or ban the owner")
 			}
 
@@ -695,7 +693,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string, inf
 			}
 		} else if modeWant.IsOwner() {
 			// Ownership transfer can only be initiated by the owner
-			sess.queueOut(ErrMalformed(pktId, t.original, now))
+			sess.queueOut(ErrPermissionDenied(pktId, t.original, now))
 			return errors.New("non-owner cannot request ownership transfer")
 		} else if userData.modeGiven.IsManager() && modeWant.IsManager() {
 			// The sharer should be able to grant any permissions except ownership
@@ -791,7 +789,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string, inf
 		}
 		// Send info to requester
 		h.route <- t.makeInvite(sess.uid, sess.uid, sess.uid, nil,
-			types.InvInfo, modeWant, userData.modeGiven, t.public)
+			types.InvUpd, modeWant, userData.modeGiven, t.public)
 	}
 
 	return nil
@@ -805,10 +803,10 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string, inf
 func (t *Topic) approveSub(h *Hub, sess *Session, target types.Uid, set *MsgClientSet) error {
 	now := time.Now().UTC().Round(time.Millisecond)
 
-	log.Print("approveSub, session uid=%s, target uid=%s", sess.uid.String(), target.String())
+	log.Printf("approveSub, session uid=%s, target uid=%s", sess.uid.String(), target.String())
 
 	// Check if requester actually has permission to manage sharing
-	if userData, ok := t.perUser[sess.uid]; !ok || !userData.modeGiven.IsManager() || !userData.modeWant.IsManager() {
+	if userData, ok := t.perUser[sess.uid]; !ok || !(userData.modeGiven & userData.modeWant).IsManager() {
 		sess.queueOut(ErrPermissionDenied(set.Id, t.original, now))
 		return errors.New("topic access denied")
 	}
@@ -819,11 +817,6 @@ func (t *Topic) approveSub(h *Hub, sess *Session, target types.Uid, set *MsgClie
 	if set.Sub.Mode != "" {
 		modeGiven.UnmarshalText([]byte(set.Sub.Mode))
 		explicitGiven = true
-	}
-
-	// If the user is banned from topic, make sute it's the only change
-	if modeGiven.IsBanned() {
-		modeGiven = types.ModeBanned
 	}
 
 	// Make sure no one but the owner can do an ownership transfer
@@ -895,29 +888,33 @@ func (t *Topic) approveSub(h *Hub, sess *Session, target types.Uid, set *MsgClie
 	// The user does not want to be bothered, no further action is needed
 	if userData.modeWant.IsBanned() {
 		sess.queueOut(ErrPermissionDenied(set.Id, t.original, now))
-		return errors.New("topic access denied")
+		return errors.New("used banned -- topic access denied")
 	}
 
 	// Handle the following cases:
-	// * a ban of the user, modeGive.IsBanned = true (if user is banned no need to invite anyone)
+	// * a ban of the user, modeGive.IsBanned = true,
+	//	 let the user know that the access is gone
 	// * regular invite: modeWant = "N", modeGiven > 0
 	// * access rights update: old modeGiven != new modeGiven
-	if !modeGiven.IsBanned() {
-		if userData.modeWant == types.ModeNone {
-			// (re-)Send the invite to target
-			h.route <- t.makeInvite(target, target, sess.uid, nil, types.InvInvite, userData.modeWant, modeGiven,
-				set.Sub.Info)
-		} else if givenBefore != modeGiven {
-			// Inform target that the access has changed
-			h.route <- t.makeInvite(target, target, sess.uid, nil, types.InvInfo, userData.modeWant, modeGiven,
+	if modeGiven.IsBanned() {
+		if givenBefore != modeGiven {
+			h.route <- t.makeInvite(target, target, sess.uid, nil, types.InvDel, userData.modeWant, modeGiven,
 				set.Sub.Info)
 		}
+	} else if userData.modeWant == types.ModeNone {
+		// (re-)Send the invite to target
+		h.route <- t.makeInvite(target, target, sess.uid, nil, types.InvInv, userData.modeWant, modeGiven,
+			set.Sub.Info)
+	} else if givenBefore != modeGiven {
+		// Inform target that the access has changed
+		h.route <- t.makeInvite(target, target, sess.uid, nil, types.InvUpd, userData.modeWant, modeGiven,
+			set.Sub.Info)
 	}
 
 	// Has anything actually changed?
 	if givenBefore != modeGiven {
 		// inform requester of the change made
-		h.route <- t.makeInvite(sess.uid, target, sess.uid, nil, types.InvInfo, userData.modeWant, modeGiven,
+		h.route <- t.makeInvite(sess.uid, target, sess.uid, nil, types.InvUpd, userData.modeWant, modeGiven,
 			map[string]string{"before": givenBefore.String()})
 	}
 
@@ -1204,7 +1201,7 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 			var clearId int
 			if t.cat == types.TopicCat_Me {
 				// Skip subscriptions that the user does not care about
-				if sub.ModeWant.IsZero() || sub.ModeWant.IsBanned() {
+				if sub.ModeWant.IsZero() || sub.ModeWant.IsBanned() || sub.ModeGiven.IsBanned() {
 					continue
 				}
 
@@ -1230,7 +1227,8 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 				}
 			} else {
 				// Skip subscriptions that the user does not care about
-				if t.cat == types.TopicCat_Grp && !isManager && (sub.ModeWant.IsZero() || sub.ModeWant.IsBanned()) {
+				if t.cat == types.TopicCat_Grp && !isManager &&
+					(sub.ModeWant.IsZero() || sub.ModeWant.IsBanned() || sub.ModeGiven.IsBanned()) {
 					continue
 				}
 
@@ -1478,6 +1476,58 @@ func (t *Topic) replyDelTopic(h *Hub, sess *Session, del *MsgClientDel) error {
 		sess:  sess,
 		msg:   del,
 		del:   true}
+
+	return nil
+}
+
+func (t *Topic) replyDelSub(h *Hub, sess *Session, del *MsgClientDel) error {
+	now := time.Now().UTC().Round(time.Millisecond)
+	var err error
+
+	uid := types.ParseUserId(del.User)
+
+	pud := t.perUser[sess.uid]
+	if !(pud.modeGiven & pud.modeWant).IsManager() {
+		err = errors.New("del.sub: permission denied")
+	} else if uid.IsZero() || uid == sess.uid {
+		err = errors.New("del.sub: cannot delete self-subscription")
+	}
+
+	if err != nil {
+		sess.queueOut(ErrPermissionDenied(del.Id, t.original, now))
+		return err
+	}
+
+	pud, ok := t.perUser[uid]
+	if !ok {
+		sess.queueOut(ErrUserNotFound(del.Id, t.original, now))
+		return errors.New("del.sub: user not found")
+	}
+
+	// Check if the user being ejected is the owner.
+	if (pud.modeGiven & pud.modeWant).IsOwner() {
+		err = errors.New("del.sub: cannot evict topic owner")
+	} else if pud.modeWant.IsBanned() {
+		// If the user banned the topic, subscription should not be deleted. Otherwise user may be re-invited
+		// which defeats the purpose of banning.
+		err = errors.New("del.sub: cannot delete banned subscription")
+	}
+
+	if err != nil {
+		sess.queueOut(ErrPermissionDenied(del.Id, t.original, now))
+		return err
+	}
+
+	// Delete user's subscription from the database
+	if err := store.Subs.Delete(t.name, uid); err != nil {
+		sess.queueOut(ErrUnknown(del.Id, t.original, now))
+
+		return err
+	}
+
+	t.evictUser(uid, true, nil)
+
+	// TODO(gene): generate an invite with info that the user was unsubscribed
 
 	return nil
 }
