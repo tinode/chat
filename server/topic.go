@@ -1527,7 +1527,8 @@ func (t *Topic) replyDelSub(h *Hub, sess *Session, del *MsgClientDel) error {
 
 	t.evictUser(uid, true, nil)
 
-	// TODO(gene): generate an invite with info that the user was unsubscribed
+	// Announce to the user that the subscription was terminated
+	h.route <- t.makeInvite(uid, uid, sess.uid, nil, types.InvDel, types.ModeNone, types.ModeNone, nil)
 
 	return nil
 }
