@@ -454,7 +454,7 @@ func (s *Session) login(msg *ClientComMessage) {
 		Code:      http.StatusOK,
 		Text:      http.StatusText(http.StatusOK),
 		Timestamp: msg.timestamp,
-		Params:    map[string]interface{}{"uid": uid.UserId(), "token": secret, "expires": tokenExp}}})
+		Params:    map[string]interface{}{"user": uid.UserId(), "token": secret, "expires": tokenExp}}})
 }
 
 // Account creation
@@ -533,7 +533,7 @@ func (s *Session) acc(msg *ClientComMessage) {
 			Private: private}
 
 		reply.Ctrl.Params = map[string]interface{}{
-			"uid":  user.Uid().UserId(),
+			"user": user.Uid().UserId(),
 			"desc": desc,
 		}
 		s.queueOut(reply)
@@ -685,7 +685,7 @@ func (s *Session) del(msg *ClientComMessage) {
 			fromSession: true,
 			del:         true}
 	} else {
-		// Must join the topic to delete messages.
+		// Must join the topic to delete messages or subscriptions.
 		s.queueOut(ErrAttachFirst(msg.Del.Id, original, msg.timestamp))
 		log.Println("s.del: invalid Del action while unsubbed '" + msg.Del.What + "'")
 	}

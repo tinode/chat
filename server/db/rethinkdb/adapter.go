@@ -567,6 +567,7 @@ func (a *RethinkDbAdapter) TopicDelete(topic string) error {
 }
 
 func (a *RethinkDbAdapter) TopicUpdateOnMessage(topic string, msg *t.Message) error {
+
 	update := struct {
 		SeqId int
 	}{msg.SeqId}
@@ -574,7 +575,9 @@ func (a *RethinkDbAdapter) TopicUpdateOnMessage(topic string, msg *t.Message) er
 	// Invite - 'me' topic
 	var err error
 	if strings.HasPrefix(topic, "usr") {
-		_, err = rdb.DB("tinode").Table("users").Get(topic).
+		// Topic is passed as usrABCD, but the 'users' table expectes Id without the 'usr' prefix.
+		user := t.ParseUserId(topic).String()
+		_, err = rdb.DB("tinode").Table("users").Get(user).
 			Update(update, rdb.UpdateOpts{Durability: "soft"}).RunWrite(a.conn)
 
 		// All other messages

@@ -45,6 +45,7 @@ type Adapter interface {
 	UsersForTopic(topic string) ([]t.Subscription, error)
 	TopicShare(subs []*t.Subscription) (int, error)
 	TopicDelete(topic string) error
+	// Increment Topic's or User's SeqId value
 	TopicUpdateOnMessage(topic string, msg *t.Message) error
 	TopicUpdate(topic string, update map[string]interface{}) error
 

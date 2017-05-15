@@ -142,7 +142,7 @@ The `basic` authentication scheme expects `secret` to be a base64-encoded string
 
 The only supported authentication schemes are `basic` and `token`. _Authentication scheme `none` is planned to support anonymous users in the future._
 
-Server responds to a `{login}` packet with a `{ctrl}` message. The `params` of the message contains the id of the logged in user as `uid`. The `token` contains an encrypted string which can be used for authentication. Expiration time of the token is passed as `expires`.
+Server responds to a `{login}` packet with a `{ctrl}` message. The `params` of the message contains the id of the logged in user as `user`. The `token` contains an encrypted string which can be used for authentication. Expiration time of the token is passed as `expires`.
 
 #### `{sub}`
 
@@ -342,7 +342,7 @@ set: {
   sub: {
     user: "usr2il9suCbuko", // string, user affected by this request;
                             // default (empty) means current user
-    mode: "RWP", // string, access mode change, either given ('user' 
+    mode: "RWP", // string, access mode change, either given ('user'
 				  // is defined) or requested ('user' undefined)
     info: { ... } // object, application-defined payload to pass to
                   // the invited user or to the topic manager in {data}
