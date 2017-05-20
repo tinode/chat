@@ -469,14 +469,14 @@ func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 					break
 				}
 
-				var action types.InviteAction
+				var action types.AnnounceAction
 				if pud.modeWant == types.ModeNone {
-					action = types.InvInv
+					action = types.AnnInv
 				} else {
-					action = types.InvUpd
+					action = types.AnnUpd
 				}
 				log.Println("sending invite to ", uid.UserId())
-				h.route <- t.makeInvite(uid, uid, sreg.sess.uid, pud.public, action,
+				h.route <- t.makeAnnouncement(uid, uid, sreg.sess.uid, action,
 					pud.modeWant, pud.modeGiven, nil)
 				break
 			}
@@ -783,13 +783,14 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string, inf
 		// Send req to approve to topic managers
 		for uid, pud := range t.perUser {
 			if pud.modeGiven&pud.modeWant&types.ModeShare != 0 {
-				h.route <- t.makeInvite(uid, sess.uid, sess.uid, userData.public,
-					types.InvAppr, modeWant, userData.modeGiven, info)
+				h.route <- t.makeAnnouncement(uid, sess.uid, sess.uid,
+					types.AnnAppr, modeWant, userData.modeGiven, info)
 			}
 		}
+
 		// Send info to requester
-		h.route <- t.makeInvite(sess.uid, sess.uid, sess.uid, nil,
-			types.InvUpd, modeWant, userData.modeGiven, t.public)
+		h.route <- t.makeAnnouncement(sess.uid, sess.uid, sess.uid,
+			types.AnnUpd, modeWant, userData.modeGiven, t.public)
 	}
 
 	return nil
@@ -898,24 +899,24 @@ func (t *Topic) approveSub(h *Hub, sess *Session, target types.Uid, set *MsgClie
 	// * access rights update: old modeGiven != new modeGiven
 	if modeGiven.IsBanned() {
 		if givenBefore != modeGiven {
-			h.route <- t.makeInvite(target, target, sess.uid, nil, types.InvDel, userData.modeWant, modeGiven,
-				set.Sub.Info)
+			h.route <- t.makeAnnouncement(target, target, sess.uid, types.AnnDel,
+				userData.modeWant, modeGiven, set.Sub.Info)
 		}
 	} else if userData.modeWant == types.ModeNone {
 		// (re-)Send the invite to target
-		h.route <- t.makeInvite(target, target, sess.uid, nil, types.InvInv, userData.modeWant, modeGiven,
-			set.Sub.Info)
+		h.route <- t.makeAnnouncement(target, target, sess.uid, types.AnnInv,
+			userData.modeWant, modeGiven, set.Sub.Info)
 	} else if givenBefore != modeGiven {
 		// Inform target that the access has changed
-		h.route <- t.makeInvite(target, target, sess.uid, nil, types.InvUpd, userData.modeWant, modeGiven,
-			set.Sub.Info)
+		h.route <- t.makeAnnouncement(target, target, sess.uid, types.AnnUpd,
+			userData.modeWant, modeGiven, set.Sub.Info)
 	}
 
 	// Has anything actually changed?
 	if givenBefore != modeGiven {
 		// inform requester of the change made
-		h.route <- t.makeInvite(sess.uid, target, sess.uid, nil, types.InvUpd, userData.modeWant, modeGiven,
-			map[string]string{"before": givenBefore.String()})
+		h.route <- t.makeAnnouncement(sess.uid, target, sess.uid, types.AnnUpd,
+			userData.modeWant, modeGiven, nil)
 	}
 
 	return nil
@@ -1468,7 +1469,7 @@ func (t *Topic) replyDelTopic(h *Hub, sess *Session, del *MsgClientDel) error {
 	}
 
 	log.Println("delTopic: owner or last p2p subscription, evicting all sessions")
-	t.evictAll()
+	t.evictAll(del.Id, sess)
 
 	log.Println("delTopic: owner, requesting topic removal from hub")
 	h.unreg <- &topicUnreg{
@@ -1528,7 +1529,10 @@ func (t *Topic) replyDelSub(h *Hub, sess *Session, del *MsgClientDel) error {
 	t.evictUser(uid, true, nil)
 
 	// Announce to the user that the subscription was terminated
-	h.route <- t.makeInvite(uid, uid, sess.uid, nil, types.InvDel, types.ModeNone, types.ModeNone, nil)
+	h.route <- t.makeAnnouncement(uid, uid, sess.uid, types.AnnDel,
+		types.ModeNone, types.ModeNone, nil)
+
+	sess.queueOut(NoErr(del.Id, t.original, now))
 
 	return nil
 }
@@ -1555,34 +1559,43 @@ func (t *Topic) replyLeaveUnsub(h *Hub, sess *Session, id, topic string) error {
 	return nil
 }
 
-// Create a data message with an invite:
-// notify - user whio will receive the message
-// target - user who access rights are being changed
-// from  - user who sent the request
-// act - what's being done - request or an approval or a request
-// mpodeWant, modeGiven - requested or granted access permissions
-func (t *Topic) makeInvite(notify, target, from types.Uid, public interface{}, act types.InviteAction, modeWant,
-	modeGiven types.AccessMode, info interface{}) *ServerComMessage {
+// Create a {data} message with an announcement:
+//   notify - user who'll receiving this message
+//   target - user whose access rights are being changed
+//   from  - user who initiated the request
+//   topic	- topic's public
+//	 user - user's public
+//   act - what's being done - request/invitation/approval/removal
+//   modeWant, modeGiven - new access parameters
+//   info - free-form user data
+func (t *Topic) makeAnnouncement(notify, target, from types.Uid, act types.AnnounceAction,
+	modeWant, modeGiven types.AccessMode, info SubInfo) *ServerComMessage {
 
 	// FIXME(gene): this is a workaround for gorethink's broken way of marshalling json.
-	// The data message will be saved to DB.
-	inv, err := json.Marshal(MsgInvitation{
+	// The data message has to be saved to DB with MsgAnnouncement field names converted
+	// to lowercase. Gorethink cannot do that, thus using stock marshaler-unmarshaler for
+	// conversion.
+	converted := map[string]interface{}{}
+	original := MsgAnnounce{
 		Topic:  t.name,
 		User:   target.UserId(),
-		Public: public,
 		Action: act.String(),
-		Acs: MsgAccessMode{
+		Info:   info}
+
+	if !modeWant.IsZero() || !modeGiven.IsZero() {
+		original.Acs = &MsgAccessMode{
 			Want:  modeWant.String(),
 			Given: modeGiven.String(),
-			Mode:  (modeWant & modeGiven).String()},
-		Info: info})
-	if err != nil {
-		log.Println(err)
+			Mode:  (modeWant & modeGiven).String()}
 	}
-	converted := map[string]interface{}{}
-	err = json.Unmarshal(inv, &converted)
+
+	ann, err := json.Marshal(original)
 	if err != nil {
-		log.Println(err)
+		log.Fatal(err)
+	}
+	err = json.Unmarshal(ann, &converted)
+	if err != nil {
+		log.Fatal(err)
 	}
 	// endof workaround
 
@@ -1591,7 +1604,9 @@ func (t *Topic) makeInvite(notify, target, from types.Uid, public interface{}, a
 		From:      from.UserId(),
 		Timestamp: time.Now().UTC().Round(time.Millisecond),
 		Content:   converted}, rcptto: notify.UserId()}
+
 	log.Printf("Invite generated: %#+v", msg.Data)
+
 	return msg
 }
 
@@ -1661,12 +1676,19 @@ func (t *Topic) makePushReceipt(data *MsgServerData) *pushReceipt {
 }
 
 // evictAll disconnects all sessions from the topic
-func (t *Topic) evictAll() {
-	note := NoErrEvicted("", t.original, time.Now().UTC().Round(time.Millisecond))
-	for sess, _ := range t.sessions {
-		delete(t.sessions, sess)
-		sess.detach <- t.name
-		sess.queueOut(note)
+func (t *Topic) evictAll(id string, sess *Session) {
+	now := time.Now().UTC().Round(time.Millisecond)
+
+	note := NoErrEvicted("", t.original, now)
+
+	for s, _ := range t.sessions {
+		delete(t.sessions, s)
+		s.detach <- t.name
+		if sess == s {
+			s.queueOut(NoErrEvicted(id, t.original, now))
+		} else {
+			s.queueOut(note)
+		}
 	}
 }
 

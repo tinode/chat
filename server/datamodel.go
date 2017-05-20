@@ -47,6 +47,9 @@ type MsgGetQuery struct {
 	Data *MsgBrowseOpts `json:"data,omitempty"`
 }
 
+// Free-form content from the client. Used in subscription management.
+type SubInfo interface{}
+
 // MsgSetSub: payload in set.sub request to update current subscription or invite another user, {sub.what} == "sub"
 type MsgSetSub struct {
 	// User affected by this request. Default (empty): current user
@@ -55,7 +58,7 @@ type MsgSetSub struct {
 	// Access mode change, either Given or Want depending on context
 	Mode string `json:"mode,omitempty"`
 	// Free-form payload to pass to the invited user or to topic manager
-	Info interface{} `json:"info,omitempty"`
+	Info SubInfo `json:"info,omitempty"`
 }
 
 // MsgSetDesc: C2S in set.what == "desc" and sub.init message
@@ -351,20 +354,20 @@ type MsgServerCtrl struct {
 	Timestamp time.Time `json:"ts"`
 }
 
-// Invitation to a topic, sent as MsgServerData.Content
-type MsgInvitation struct {
+// Action announcement: invitation to a join, approval of a request to join, access change,
+// subscription gone: topic deleted/unsubscribed.
+// Sent as MsgServerData.Content
+type MsgAnnounce struct {
 	// Topic that user wants to subscribe to or is invited to
 	Topic string `json:"topic"`
 	// User being subscribed
 	User string `json:"user"`
-	// User's public data
-	Public interface{} `json:"public,omitempty"`
-	// Type of this invite - InvJoin, InvAppr
+	// Type of this invite - AnnInv, AnnAppr, AnnUpd, AnnDel (defined in store/types/)
 	Action string `json:"act"`
 	// Current state of the access mode
-	Acs MsgAccessMode `json:"acs,omitempty"`
-	// Free-form payload
-	Info interface{} `json:"info,omitempty"`
+	Acs *MsgAccessMode `json:"acs,omitempty"`
+	// Free-form info passed unchanged from the client
+	Info SubInfo `json:"info,omitempty"`
 }
 
 type MsgServerData struct {

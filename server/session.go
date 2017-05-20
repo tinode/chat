@@ -32,6 +32,8 @@ const (
 	RPC
 )
 
+var MIN_SUPPORTED_VERSION_VAL = parseVersion(MIN_SUPPORTED_VERSION)
+
 // A single WS connection or a long polling session. A user may have multiple
 // sessions.
 type Session struct {
@@ -367,10 +369,16 @@ func (s *Session) hello(msg *ClientComMessage) {
 		s.ver = parseVersion(msg.Hi.Version)
 		if s.ver == 0 {
 			s.queueOut(ErrMalformed(msg.Hi.Id, "", msg.timestamp))
+			return
 		}
-		// TODO(gene): check version compatibility
+		// Check version compatibility
+		if MIN_SUPPORTED_VERSION_VAL > s.ver {
+			s.queueOut(ErrVersionNotSupported(msg.Hi.Id, "", msg.timestamp))
+			return
+		}
 	} else {
 		s.queueOut(ErrCommandOutOfSequence(msg.Hi.Id, "", msg.timestamp))
+		return
 	}
 
 	s.userAgent = msg.Hi.UserAgent

@@ -34,8 +34,10 @@ const (
 	// Keep topic alive after the last session detached.
 	TOPICTIMEOUT = time.Second * 5
 
-	// API version
+	// Current API version
 	VERSION = "0.11"
+	// Minimum supported API version
+	MIN_SUPPORTED_VERSION = "0.11"
 
 	DEFAULT_AUTH_ACCESS = types.ModePublic
 	DEFAULT_ANON_ACCESS = types.ModeNone

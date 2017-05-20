@@ -614,30 +614,30 @@ type Message struct {
 	Content interface{}
 }
 
-// Invites
+// Announcements/Invites
 
-type InviteAction int
+type AnnounceAction int
 
 const (
 	// An invitation to subscribe
-	InvInv InviteAction = iota
+	AnnInv AnnounceAction = iota
 	// A topic admin is asked to aprove a subscription
-	InvAppr
+	AnnAppr
 	// Change notification: request approved or subscribed by a third party or some such, no action required
-	InvUpd
+	AnnUpd
 	// Unsubscribe succeeded or unsubscribed by a third party or topic deleted
-	InvDel
+	AnnDel
 )
 
-func (a InviteAction) String() string {
+func (a AnnounceAction) String() string {
 	switch a {
-	case InvInv:
+	case AnnInv:
 		return "inv"
-	case InvAppr:
+	case AnnAppr:
 		return "appr"
-	case InvUpd:
+	case AnnUpd:
 		return "upd"
-	case InvDel:
+	case AnnDel:
 		return "del"
 	}
 	return ""
