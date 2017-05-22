@@ -210,9 +210,9 @@ func (t *Topic) presAnnounceToSubscribers(what string, seq int, offlineOnly bool
 
 // Publish announcement to topic
 // Cases 4.a, 7
-func (t *Topic) presPubChange(src types.Uid, what string) {
+func (t *Topic) presPubChange(src types.Uid, what string, skip *Session) {
 	// Announce to topic subscribers. 4.a, 7
-	t.presAnnounceToTopic(src.UserId(), what, 0, nil)
+	t.presAnnounceToTopic(src.UserId(), what, 0, skip)
 
 	//log.Printf("Pres 4.a,7: from '%s' (src: %s) [%s]", t.name, src, what)
 }

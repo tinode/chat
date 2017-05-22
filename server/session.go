@@ -373,6 +373,7 @@ func (s *Session) hello(msg *ClientComMessage) {
 		}
 		// Check version compatibility
 		if MIN_SUPPORTED_VERSION_VAL > s.ver {
+			s.ver = 0
 			s.queueOut(ErrVersionNotSupported(msg.Hi.Id, "", msg.timestamp))
 			return
 		}
