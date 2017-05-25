@@ -1004,7 +1004,7 @@ func (t *Topic) replySetDesc(sess *Session, set *MsgClientSet) error {
 		if auth, anon, err := parseTopicAccess(mode, types.ModeInvalid, types.ModeInvalid); err != nil {
 			return err
 		} else if auth&types.ModeOwner != 0 || anon&types.ModeOwner != 0 {
-			return errors.New("default 'O' access is not permitted")
+			return errors.New("default 'owner' access is not permitted")
 		} else {
 			access := make(map[string]interface{})
 			if auth != types.ModeInvalid {
@@ -1020,13 +1020,15 @@ func (t *Topic) replySetDesc(sess *Session, set *MsgClientSet) error {
 		return nil
 	}
 
-	assignPubPriv := func(upd map[string]interface{}, what string, p interface{}) (changed bool) {
+	assignGenericValues := func(upd map[string]interface{}, what string, p interface{}) (changed bool) {
 		if isNullValue(p) {
+			// Request to clear the value
 			if upd[what] != nil {
 				upd[what] = nil
 				changed = true
 			}
-		} else {
+		} else if p != nil {
+			// A new non-nil value
 			upd[what] = p
 			changed = true
 		}
@@ -1037,10 +1039,14 @@ func (t *Topic) replySetDesc(sess *Session, set *MsgClientSet) error {
 		if tmp, ok := upd["Access"]; ok {
 			access := tmp.(map[string]interface{})
 			if auth, ok := access["Auth"]; ok {
-				t.accessAuth = auth.(types.AccessMode)
+				if auth != types.ModeInvalid {
+					t.accessAuth = auth.(types.AccessMode)
+				}
 			}
 			if anon, ok := access["Anon"]; ok {
-				t.accessAnon = anon.(types.AccessMode)
+				if anon != types.ModeInvalid {
+					t.accessAnon = anon.(types.AccessMode)
+				}
 			}
 		}
 		if public, ok := upd["Public"]; ok {
@@ -1061,7 +1067,7 @@ func (t *Topic) replySetDesc(sess *Session, set *MsgClientSet) error {
 				err = assignAccess(user, set.Desc.DefaultAcs)
 			}
 			if set.Desc.Public != nil {
-				sendPres = assignPubPriv(user, "Public", set.Desc.Public)
+				sendPres = assignGenericValues(user, "Public", set.Desc.Public)
 			}
 		} else if t.cat == types.TopicCat_Fnd {
 			// User's own tags are sent as fnd.public. Assign them to user.Tags
@@ -1070,7 +1076,7 @@ func (t *Topic) replySetDesc(sess *Session, set *MsgClientSet) error {
 					tags := make([]string, 0, len(src))
 					if filterTags(tags, src) > 0 {
 						// No need to send presence update
-						assignPubPriv(user, "Tags", tags)
+						assignGenericValues(user, "Tags", tags)
 						t.public = tags
 					}
 				}
@@ -1081,7 +1087,7 @@ func (t *Topic) replySetDesc(sess *Session, set *MsgClientSet) error {
 				err = assignAccess(topic, set.Desc.DefaultAcs)
 			}
 			if set.Desc.Public != nil {
-				sendPres = assignPubPriv(topic, "Public", set.Desc.Public)
+				sendPres = assignGenericValues(topic, "Public", set.Desc.Public)
 			}
 		}
 
@@ -1091,7 +1097,7 @@ func (t *Topic) replySetDesc(sess *Session, set *MsgClientSet) error {
 		}
 
 		if set.Desc.Private != nil {
-			assignPubPriv(sub, "Private", set.Desc.Private)
+			assignGenericValues(sub, "Private", set.Desc.Private)
 		}
 	}
 
@@ -1113,8 +1119,8 @@ func (t *Topic) replySetDesc(sess *Session, set *MsgClientSet) error {
 		sess.queueOut(ErrUnknown(set.Id, set.Topic, now))
 		return err
 	} else if change == 0 {
-		sess.queueOut(ErrMalformed(set.Id, set.Topic, now))
-		return errors.New("set generated no update to DB")
+		sess.queueOut(InfoNotModified(set.Id, set.Topic, now))
+		return errors.New("{set} generated no update to DB")
 	}
 
 	// Update values cached in the topic object
@@ -1134,8 +1140,6 @@ func (t *Topic) replySetDesc(sess *Session, set *MsgClientSet) error {
 	}
 
 	sess.queueOut(NoErr(set.Id, set.Topic, now))
-
-	// TODO(gene) send pres update
 
 	return nil
 }

@@ -795,7 +795,8 @@ func replyTopicDescBasic(sess *Session, topic string, get *MsgClientGet) {
 }
 
 // Parse topic access parameters
-func parseTopicAccess(acs *MsgDefaultAcsMode, defAuth, defAnon types.AccessMode) (auth, anon types.AccessMode, err error) {
+func parseTopicAccess(acs *MsgDefaultAcsMode, defAuth, defAnon types.AccessMode) (auth, anon types.AccessMode,
+	err error) {
 
 	auth, anon = defAuth, defAnon
 
