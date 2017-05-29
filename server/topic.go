@@ -601,7 +601,11 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string, inf
 	var explicitWant bool
 	if want != "" {
 		log.Println("mode want explicit: ", want)
-		modeWant.UnmarshalText([]byte(want))
+		if err := modeWant.UnmarshalText([]byte(want)); err != nil {
+			log.Println(err.Error())
+			sess.queueOut(ErrMalformed(pktId, t.original, now))
+			return err
+		}
 		explicitWant = true
 	}
 
@@ -816,7 +820,10 @@ func (t *Topic) approveSub(h *Hub, sess *Session, target types.Uid, set *MsgClie
 	var explicitGiven bool
 	var modeGiven types.AccessMode
 	if set.Sub.Mode != "" {
-		modeGiven.UnmarshalText([]byte(set.Sub.Mode))
+		if err := modeGiven.UnmarshalText([]byte(set.Sub.Mode)); err != nil {
+			sess.queueOut(ErrMalformed(set.Id, t.original, now))
+			return err
+		}
 		explicitGiven = true
 	}
 

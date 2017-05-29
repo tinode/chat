@@ -338,6 +338,7 @@ func (m *AccessMode) UnmarshalText(b []byte) error {
 			m0 = 0 // N means explicitly no access, all other bits cleared
 			break
 		default:
+			*m = ModeInvalid
 			return errors.New("AccessMode: invalid character '" + string(b[i]) + "'")
 		}
 	}

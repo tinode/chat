@@ -16,7 +16,8 @@ A javascript demo is (usually) available at http://api.tinode.co/x/example-react
 ### Supported
 
 * One-on-one messaging.
-* Groups (topics) with up to 16 members where every member's access permissions are managed individually.
+* Group messaging with currently unlimited number of members where every member's access permissions are managed 
+individually. The maximum number of members will be limited to a reasonably high value in the future (256? configurable?).
 * Topic access control with permissions for various actions.
 * Server-generated presence notifications for people, topics.
 * Basic sharded clustering.
@@ -26,18 +27,18 @@ A javascript demo is (usually) available at http://api.tinode.co/x/example-react
 * Websocket transport.
 * JSON wire protocol.
 * User search/discovery.
-* Message delivery status: server-generated delivery to server, client-generated received and read notifications; typing notifications.
-* Basic support for client-side message caching.
+* Message status notifications: message delivery to server; received and read notifications; typing notifications.
+* Support for client-side caching.
 * Ability to block unwanted communication server-side.
-* Authentication support customizable at compile-time.
+* Authentication support customizable at compile time.
 * Mobile push notifications using [FCM](https://firebase.google.com/docs/cloud-messaging/).
 
 ### Planned
 
 * iOS client bindings.
-* Security: [TLS](https://en.wikipedia.org/wiki/Transport_Layer_Security) for all communications plus [OTR](https://en.wikipedia.org/wiki/Off-the-Record_Messaging) for p2p topics and undecided method for group topics.
+* Security: [TLS](https://en.wikipedia.org/wiki/Transport_Layer_Security) for all communications plus [OTR](https://en.wikipedia.org/wiki/Off-the-Record_Messaging) for one-on-one messaging and undecided method for group mesaging.
 * Support for long polling (currently exists but broken).
-* Groups (topics) with unlimited number of members with bearer token access control.
+* Group messaging with unlimited number of members with bearer token access control.
 * Failover/hot standby/replication.
 * Federation.
 * Different levels of message persistence (from strict persistence to store until delivered to purely ephemeral messaging).
