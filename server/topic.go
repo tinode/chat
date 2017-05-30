@@ -281,7 +281,7 @@ func (t *Topic) run(hub *Hub) {
 				t.presPubMessageSent(t.lastId)
 
 			} else if msg.Pres != nil {
-				log.Printf("topic[%s].run: pres.src='%s' pres.with='%s' what='%s'", t.name, msg.Pres.Src, msg.Pres.With, msg.Pres.What)
+				// log.Printf("topic[%s].run: pres.src='%s' pres.with='%s' what='%s'", t.name, msg.Pres.Src, msg.Pres.With, msg.Pres.What)
 				t.presProcReq(msg.Pres.Src, msg.Pres.With, (msg.Pres.What == "on"), msg.Pres.wantReply)
 				if t.original != msg.Pres.Topic {
 					// This is just a request for status, don't forward it to sessions
@@ -680,7 +680,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string, inf
 			// 3. Acceptance or rejection of the ownership transfer
 
 			// Make sure the current owner cannot unset the owner flag or ban himself
-			if t.owner == sess.uid && (!modeWant.IsOwner() || modeWant.IsBanned()) {
+			if t.owner == sess.uid && !modeWant.IsOwner() {
 				log.Println("requestSub: owner attempts to unset the owner flag")
 				sess.queueOut(ErrPermissionDenied(pktId, t.original, now))
 				return errors.New("cannot unset ownership or ban the owner")
@@ -700,7 +700,8 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string, inf
 			sess.queueOut(ErrPermissionDenied(pktId, t.original, now))
 			return errors.New("non-owner cannot request ownership transfer")
 		} else if userData.modeGiven.IsManager() && modeWant.IsManager() {
-			// The sharer should be able to grant any permissions except ownership
+			// The sharer should be able to grant any permissions except ownership (checked previously)
+			// Don't self-ban the manager.
 			if !userData.modeGiven.Check(modeWant & ^types.ModeBanned) {
 				userData.modeGiven |= (modeWant & ^types.ModeBanned)
 				updGiven = &userData.modeGiven
@@ -764,8 +765,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string, inf
 
 	// If the user is (self)banned from topic, no further action is needed
 	if modeWant.IsBanned() {
-		t.evictUser(sess.uid, false, sess)
-		// FIXME(gene): need to send a reply to user
+		t.evictUser(sess.uid, false, nil)
 		return errors.New("self-banned access to topic")
 	} else if userData.modeGiven.IsBanned() {
 		sess.queueOut(ErrPermissionDenied(pktId, t.original, now))
@@ -1489,7 +1489,10 @@ func (t *Topic) replyDelTopic(h *Hub, sess *Session, del *MsgClientDel) error {
 		msg:   del,
 		del:   true}
 
-	return nil
+	// Return non-nil to prevent '200 OK' from being sent to the requesting user.
+	// The user was already notified with '205 evicted'.
+
+	return errors.New("OK: topic deleted")
 }
 
 func (t *Topic) replyDelSub(h *Hub, sess *Session, del *MsgClientDel) error {
@@ -1665,6 +1668,23 @@ func (t *Topic) evictUser(uid types.Uid, unsub bool, ignore *Session) {
 	}
 }
 
+// evictAll disconnects all sessions from the topic
+func (t *Topic) evictAll(id string, sess *Session) {
+	now := time.Now().UTC().Round(time.Millisecond)
+
+	note := NoErrEvicted("", t.original, now)
+
+	for s, _ := range t.sessions {
+		delete(t.sessions, s)
+		s.detach <- t.name
+		if sess == s {
+			s.queueOut(NoErrEvicted(id, t.original, now))
+		} else {
+			s.queueOut(note)
+		}
+	}
+}
+
 func (t *Topic) makePushReceipt(data *MsgServerData) *pushReceipt {
 	idx := make(map[types.Uid]int, len(t.perUser))
 	receipt := push.Receipt{
@@ -1684,23 +1704,6 @@ func (t *Topic) makePushReceipt(data *MsgServerData) *pushReceipt {
 	}
 
 	return &pushReceipt{rcpt: &receipt, uidMap: idx}
-}
-
-// evictAll disconnects all sessions from the topic
-func (t *Topic) evictAll(id string, sess *Session) {
-	now := time.Now().UTC().Round(time.Millisecond)
-
-	note := NoErrEvicted("", t.original, now)
-
-	for s, _ := range t.sessions {
-		delete(t.sessions, s)
-		s.detach <- t.name
-		if sess == s {
-			s.queueOut(NoErrEvicted(id, t.original, now))
-		} else {
-			s.queueOut(note)
-		}
-	}
 }
 
 func (t *Topic) mostRecentSession() *Session {
