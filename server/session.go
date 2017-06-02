@@ -777,15 +777,6 @@ func (s *Session) validateTopicName(msgId, topic string, timestamp time.Time) (s
 		}
 		routeTo = s.uid.P2PName(uid2)
 		topic = routeTo
-	} else if strings.HasPrefix(topic, "p2p") {
-		uid1, uid2, err := types.ParseP2P(topic)
-		if err != nil || uid1.IsZero() || uid2.IsZero() || uid1 == uid2 {
-			// Ensure the user ids are valid
-			return "", "", ErrMalformed(msgId, topic, timestamp)
-		} else if uid1 != s.uid && uid2 != s.uid {
-			// One can't access someone else's p2p topic
-			return "", "", ErrPermissionDenied(msgId, topic, timestamp)
-		}
 	}
 
 	return topic, routeTo, nil
