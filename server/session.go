@@ -673,7 +673,8 @@ func (s *Session) del(msg *ClientComMessage) {
 		log.Println("s.del: invalid Del action '" + msg.Del.What + "'")
 	}
 
-	if ok {
+	if ok && what != constMsgDelTopic {
+		// Session is attached, deleting subscription or messages. Send to topic.
 		log.Println("s.del: sending to topic")
 		sub.meta <- &metaReq{
 			topic: expanded,
@@ -681,18 +682,19 @@ func (s *Session) del(msg *ClientComMessage) {
 			sess:  s,
 			what:  what}
 
-	} else if globals.cluster.isRemoteTopic(expanded) {
+	} else if !ok && globals.cluster.isRemoteTopic(expanded) {
 		// The topic is handled by a remote node. Forward message to it.
 		if err := globals.cluster.routeToTopic(msg, expanded, s); err != nil {
 			s.queueOut(ErrClusterNodeUnreachable(msg.Del.Id, original, msg.timestamp))
 		}
 	} else if what == constMsgDelTopic {
+		// Deleting topic: for sessions attached or not attached, send request to hub first.
+		// Hub will forward to topic, if appropriate.
 		globals.hub.unreg <- &topicUnreg{
-			topic:       expanded,
-			msg:         msg.Del,
-			sess:        s,
-			fromSession: true,
-			del:         true}
+			topic: expanded,
+			msg:   msg.Del,
+			sess:  s,
+			del:   true}
 	} else {
 		// Must join the topic to delete messages or subscriptions.
 		s.queueOut(ErrAttachFirst(msg.Del.Id, original, msg.timestamp))

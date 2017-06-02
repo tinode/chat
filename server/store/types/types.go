@@ -25,6 +25,7 @@ func (uid Uid) IsZero() bool {
 	return uid == 0
 }
 
+// Compare returns 0 if uid is equal to u2, 1 if u2 is greater than uid, -1 if u2 is smaller
 func (uid Uid) Compare(u2 Uid) int {
 	if uid < u2 {
 		return -1
@@ -263,27 +264,25 @@ type AccessMode uint
 
 // User access to topic
 const (
-	ModeSub    AccessMode = 1 << iota // user can Read, i.e. {sub} (R)
-	ModePub                           // user can Write, i.e. {pub} (W)
-	ModePres                          // user can receive presence updates (P)
-	ModeShare                         // user can invite/evict/approve applications (S)
-	ModeDelete                        // user can hard-delete messages (D)
-	ModeOwner                         // user is the owner (O) - full access
-	ModeBanned                        // user has no access, requests to share/gain access/{sub} are ignored (X)
+	ModeJoin    AccessMode = 1 << iota // user can join, i.e. {sub} (J)
+	ModeRead                           // user can receive broadcasts ({data}, {info}) (R)
+	ModeWrite                          // user can Write, i.e. {pub} (W)
+	ModePres                           // user can receive presence updates (P)
+	ModeApprove                        // user can approve new members or evict existing members (A)
+	ModeShare                          // user can invite new members (S)
+	ModeDelete                         // user can hard-delete messages (D)
+	ModeOwner                          // user is the owner (O) - full access
 
 	ModeNone AccessMode = 0 // No access, requests to gain access are processed normally (N)
-	// Read & write
-	ModePubSub AccessMode = ModeSub | ModePub
-	// normal user's access to a topic
-	ModePublic AccessMode = ModeSub | ModePub | ModePres
-	// self-subscription to !me - user can only read and delete incoming invites
-	ModeSelf AccessMode = ModeSub | ModeDelete | ModePres
-	// owner's subscription to a generic topic
-	ModeFull AccessMode = ModeSub | ModePub | ModePres | ModeShare | ModeDelete | ModeOwner
-	// manager of the topic - everything but being the owner
-	ModeAdmin AccessMode = ModeSub | ModePub | ModePres | ModeShare | ModeDelete
+
+	// Normal user's access to a topic
+	ModeCPublic AccessMode = ModeJoin | ModeRead | ModeWrite | ModePres | ModeShare
+	// User's subscription to 'me' and 'fnd' - user can only read and delete incoming invites
+	ModeCSelf AccessMode = ModeJoin | ModeRead | ModeDelete | ModePres
+	// Owner's subscription to a generic topic
+	ModeCFull AccessMode = ModeJoin | ModeRead | ModeWrite | ModePres | ModeApprove | ModeShare | ModeDelete | ModeOwner
 	// Default P2P access mode
-	ModeP2P AccessMode = ModeSub | ModePub | ModePres
+	ModeCP2P AccessMode = ModeJoin | ModeRead | ModeWrite | ModePres
 
 	// Invalid mode to indicate an error
 	ModeInvalid AccessMode = 0x100000
@@ -291,7 +290,7 @@ const (
 
 func (m AccessMode) MarshalText() ([]byte, error) {
 
-	// Need to distinguish between "not set" and "no access"
+	// TODO: Need to distinguish between "not set" and "no access"
 	if m == 0 {
 		return []byte{'N'}, nil
 	}
@@ -300,13 +299,8 @@ func (m AccessMode) MarshalText() ([]byte, error) {
 		return nil, errors.New("AccessMode invalid")
 	}
 
-	// Banned mode superseeds all other modes
-	if m&ModeBanned != 0 {
-		return []byte{'X'}, nil
-	}
-
 	var res = []byte{}
-	var modes = []byte{'R', 'W', 'P', 'S', 'D', 'O'}
+	var modes = []byte{'J', 'R', 'W', 'P', 'A', 'S', 'D', 'O'}
 	for i, chr := range modes {
 		if (m & (1 << uint(i))) != 0 {
 			res = append(res, chr)
@@ -320,10 +314,14 @@ func (m *AccessMode) UnmarshalText(b []byte) error {
 
 	for i := 0; i < len(b); i++ {
 		switch b[i] {
+		case 'J', 'j':
+			m0 |= ModeJoin
 		case 'R', 'r':
-			m0 |= ModeSub
+			m0 |= ModeRead
 		case 'W', 'w':
-			m0 |= ModePub
+			m0 |= ModeWrite
+		case 'A', 'a':
+			m0 |= ModeApprove
 		case 'S', 's':
 			m0 |= ModeShare
 		case 'D', 'd':
@@ -332,19 +330,13 @@ func (m *AccessMode) UnmarshalText(b []byte) error {
 			m0 |= ModePres
 		case 'O', 'o':
 			m0 |= ModeOwner
-		case 'X', 'x':
-			m0 |= ModeBanned
 		case 'N', 'n':
-			m0 = 0 // N means explicitly no access, all other bits cleared
+			m0 = 0 // N means explicitly no access, all bits cleared
 			break
 		default:
 			*m = ModeInvalid
 			return errors.New("AccessMode: invalid character '" + string(b[i]) + "'")
 		}
-	}
-
-	if m0&ModeBanned != 0 {
-		m0 = ModeBanned // clear all other bits
 	}
 
 	*m = m0
@@ -382,9 +374,9 @@ func (grant AccessMode) Check(want AccessMode) bool {
 	return grant&want == want
 }
 
-// Check if banned
-func (a AccessMode) IsBanned() bool {
-	return a&ModeBanned != 0
+// Check if Join flag is set
+func (a AccessMode) IsJoiner() bool {
+	return a&ModeJoin != 0
 }
 
 // Check if owner
@@ -392,19 +384,44 @@ func (a AccessMode) IsOwner() bool {
 	return a&ModeOwner != 0
 }
 
-// Check if owner or sharer
-func (a AccessMode) IsManager() bool {
-	return a.IsOwner() || (a&ModeShare != 0)
+// Check if approver
+func (a AccessMode) IsApprover() bool {
+	return a&ModeApprove != 0
+}
+
+// Check if owner or approver
+func (a AccessMode) IsAdmin() bool {
+	return a.IsOwner() || (a&ModeApprove != 0)
+}
+
+// Approver or sharer or owner
+func (a AccessMode) IsSharer() bool {
+	return a.IsAdmin() || (a&ModeShare != 0)
 }
 
 // Check if allowed to publish
-func (a AccessMode) CanPub() bool {
-	return a&ModePub != 0
+func (a AccessMode) IsWriter() bool {
+	return a&ModeWrite != 0
+}
+
+// Check if allowed to publish
+func (a AccessMode) IsReader() bool {
+	return a&ModeRead != 0
+}
+
+// Check if user recieves presence updates
+func (a AccessMode) IsPresencer() bool {
+	return a&ModePres != 0
 }
 
 // Check if not set
 func (a AccessMode) IsZero() bool {
 	return a == 0
+}
+
+// Check if mode is invalid
+func (a AccessMode) IsInvalid() bool {
+	return a == ModeInvalid
 }
 
 // Relationship between users & topics, stored in database as Subscription
@@ -498,7 +515,6 @@ type Contact struct {
 }
 
 type perUserData struct {
-	//owner   bool
 	private interface{}
 	want    AccessMode
 	given   AccessMode

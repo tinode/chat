@@ -113,22 +113,23 @@ func (u UsersObjMapper) Create(user *types.User, private interface{}) (*types.Us
 		return nil, err
 	}
 
-	// Create user's subscription to 'me' && 'find'. Theese topics are ephemeral, the topic object need not to be inserted.
+	// Create user's subscription to 'me' && 'find'. Theese topics are ephemeral, the topic object need not to be
+	// inserted.
 	err = Subs.Create(
 		&types.Subscription{
 			ObjHeader: types.ObjHeader{CreatedAt: user.CreatedAt},
 			User:      user.Id,
 			Topic:     user.Uid().UserId(),
-			ModeWant:  types.ModeSelf,
-			ModeGiven: types.ModeSelf,
+			ModeWant:  types.ModeCSelf,
+			ModeGiven: types.ModeCSelf,
 			Private:   private,
 		},
 		&types.Subscription{
 			ObjHeader: types.ObjHeader{CreatedAt: user.CreatedAt},
 			User:      user.Id,
 			Topic:     user.Uid().FndName(),
-			ModeWant:  types.ModeSelf,
-			ModeGiven: types.ModeSelf,
+			ModeWant:  types.ModeCSelf,
+			ModeGiven: types.ModeCSelf,
 			Private:   nil,
 		})
 	if err != nil {
@@ -204,7 +205,7 @@ type TopicsObjMapper struct{}
 
 var Topics TopicsObjMapper
 
-// Create creates a topic and owner's subscription to topic
+// Creates a topic and owner's subscription to it
 func (TopicsObjMapper) Create(topic *types.Topic, owner types.Uid, private interface{}) error {
 
 	topic.InitTimes()
@@ -219,7 +220,7 @@ func (TopicsObjMapper) Create(topic *types.Topic, owner types.Uid, private inter
 			ObjHeader: types.ObjHeader{CreatedAt: topic.CreatedAt},
 			User:      owner.String(),
 			Topic:     topic.Id,
-			ModeGiven: types.ModeFull,
+			ModeGiven: types.ModeCFull,
 			ModeWant:  topic.GetAccess(owner),
 			Private:   private})
 	}
@@ -259,12 +260,11 @@ func (TopicsObjMapper) Delete(topic string) error {
 	if err := adaptr.SubsDelForTopic(topic); err != nil {
 		return err
 	}
-
-	if err := adaptr.TopicDelete(topic); err != nil {
+	if err := adaptr.MessageDeleteAll(topic, -1); err != nil {
 		return err
 	}
 
-	return adaptr.MessageDeleteAll(topic, -1)
+	return adaptr.TopicDelete(topic)
 }
 
 // Topics struct to hold methods for persistence mapping for the topic object.

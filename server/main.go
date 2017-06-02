@@ -35,11 +35,12 @@ const (
 	TOPICTIMEOUT = time.Second * 5
 
 	// Current API version
-	VERSION = "0.11"
+	VERSION = "0.13"
 	// Minimum supported API version
-	MIN_SUPPORTED_VERSION = "0.11"
+	MIN_SUPPORTED_VERSION = "0.13"
 
-	DEFAULT_AUTH_ACCESS = types.ModePublic
+	// TODO: Move to config
+	DEFAULT_AUTH_ACCESS = types.ModeCPublic
 	DEFAULT_ANON_ACCESS = types.ModeNone
 )
 

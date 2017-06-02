@@ -378,7 +378,7 @@ func (a *RethinkDbAdapter) TopicCreateP2P(initiator, invited *t.Subscription) er
 
 	topic := &t.Topic{
 		ObjHeader: t.ObjHeader{Id: initiator.Topic},
-		Access:    t.DefaultAccess{Auth: t.ModeP2P, Anon: t.ModeBanned}}
+		Access:    t.DefaultAccess{Auth: t.ModeNone, Anon: t.ModeNone}}
 	topic.ObjHeader.MergeTimes(&initiator.ObjHeader)
 	return a.TopicCreate(topic)
 }
@@ -600,6 +600,10 @@ func (a *RethinkDbAdapter) SubscriptionGet(topic string, user t.Uid) (*t.Subscri
 	rows, err := rdb.DB(a.dbName).Table("subscriptions").Get(topic + ":" + user.String()).Run(a.conn)
 	if err != nil {
 		return nil, err
+	}
+
+	if rows.IsNil() {
+		return nil, nil
 	}
 
 	var sub t.Subscription

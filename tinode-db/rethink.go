@@ -52,7 +52,7 @@ func gen_rethink(reset bool, dbsource string, data *Data) {
 		user := types.User{
 			State: int(uu["state"].(float64)),
 			Access: types.DefaultAccess{
-				Auth: types.ModePublic,
+				Auth: types.ModeCPublic,
 				Anon: types.ModeNone,
 			},
 			Public: parsePublic(uu["public"], data.datapath),
@@ -106,7 +106,7 @@ func gen_rethink(reset bool, dbsource string, data *Data) {
 		var owner types.Uid
 		if gt["owner"] != nil {
 			owner = types.ParseUid(nameIndex[gt["owner"].(string)])
-			topic.GiveAccess(owner, types.ModeFull, types.ModeFull)
+			topic.GiveAccess(owner, types.ModeCFull, types.ModeCFull)
 		}
 		topic.CreatedAt = getCreatedTime(gt["createdAt"])
 

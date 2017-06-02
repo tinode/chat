@@ -295,9 +295,6 @@ type MsgTopicDesc struct {
 	Public    interface{} `json:"public,omitempty"`
 	// Per-subscription private data
 	Private interface{} `json:"private,omitempty"`
-
-	// P2P topic only, ID of the other user
-	With string `json:"with,omitempty"`
 }
 
 // MsgTopicSub: topic subscription details, sent in Meta message
@@ -336,10 +333,8 @@ type MsgTopicSub struct {
 	// Messages are deleted up to this ID
 	ClearId int `json:"clear,omitempty"`
 
-	// In addition to the above these are provided for P2P topics only
+	// P2P topics only:
 
-	// ID of the other user
-	With string `json:"with,omitempty"`
 	// Other user's last online timestamp & user agent
 	LastSeen *MsgLastSeenInfo `json:"seen,omitempty"`
 }
@@ -384,7 +379,6 @@ type MsgServerPres struct {
 	Topic     string `json:"topic"`
 	Src       string `json:"src"`
 	What      string `json:"what"`
-	With      string `json:"with,omitempty"`
 	UserAgent string `json:"ua,omitempty"`
 	SeqId     int    `json:"seq,omitempty"`
 	SeqList   []int  `json:"list,omitempty"`
@@ -653,6 +647,16 @@ func ErrGone(id, topic string, ts time.Time) *ServerComMessage {
 	return msg
 }
 
+func ErrLocked(id, topic string, ts time.Time) *ServerComMessage {
+	msg := &ServerComMessage{Ctrl: &MsgServerCtrl{
+		Id:        id,
+		Code:      http.StatusLocked, // 423
+		Text:      "locked",
+		Topic:     topic,
+		Timestamp: ts}}
+	return msg
+}
+
 func ErrUnknown(id, topic string, ts time.Time) *ServerComMessage {
 	msg := &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
@@ -676,7 +680,7 @@ func ErrNotImplemented(id, topic string, ts time.Time) *ServerComMessage {
 func ErrClusterNodeUnreachable(id, topic string, ts time.Time) *ServerComMessage {
 	msg := &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
-		Code:      http.StatusBadGateway, // 501
+		Code:      http.StatusBadGateway, // 502
 		Text:      "unreachable",
 		Topic:     topic,
 		Timestamp: ts}}

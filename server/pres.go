@@ -107,18 +107,12 @@ func (t *Topic) loadContacts(uid types.Uid) error {
 // Me topic activated, deactivated or updated, push presence to contacts
 // Case 1.a.iii, 2, 3
 func (t *Topic) presPubMeChange(what string, ua string) {
-	me := types.ParseUserId(t.name)
 
 	// Push update to subscriptions
-	for topic, psd := range t.perSubs {
-		// Generate an individual P2P name. Zero UID in psd.with will produce an empty P2P name.
-		src := t.name
-		if !psd.with.IsZero() {
-			src = me.P2PName(psd.with)
-		}
+	for topic, _ := range t.perSubs {
 		globals.hub.route <- &ServerComMessage{
 			Pres: &MsgServerPres{
-				Topic: "me", What: what, Src: src, With: t.name, UserAgent: ua, wantReply: (what == "on")},
+				Topic: "me", What: what, Src: t.name, UserAgent: ua, wantReply: (what == "on")},
 			rcptto: topic}
 
 		//log.Printf("Pres 1.a.iii, 2, 3: from '%s' (src: %s) to %s [%s], ua: '%s'", t.name, update.Src, topic, what, ua)
@@ -127,17 +121,13 @@ func (t *Topic) presPubMeChange(what string, ua string) {
 
 // This topic got a request from a 'me' topic to start/stop sending presence updates.
 // Cases 1.a.iv, 1.a.v
-func (t *Topic) presProcReq(fromTopic string, fromUser string, online, wantReply bool) {
-	log.Printf("Pres 1.a.iv, 1.a.v: topic[%s]: req from '%s' (user: '%s'), online: %v, wantReply: %v",
-		t.name, fromTopic, fromUser, online, wantReply)
+func (t *Topic) presProcReq(fromUserId string, online, wantReply bool) {
+	log.Printf("Pres 1.a.iv, 1.a.v: topic[%s]: req from '%s', online: %v, wantReply: %v", t.name,
+		fromUserId, online, wantReply)
 
 	doReply := wantReply
-	src := t.name
-	with := ""
-	// In case of a group topic reply to topic, in case of a P2P topic reply to originating 'me'.
-	replyTo := fromTopic
 	if t.cat == types.TopicCat_Me {
-		if psd, ok := t.perSubs[fromUser]; ok {
+		if psd, ok := t.perSubs[fromUserId]; ok {
 			// If requester's online status has not changed, do not reply, otherwise an endless loop will happen.
 			// wantReply is needed to ensure unnecessary {pres} is not sent:
 			// A[online, B:off] to B[online, A:off]: {pres A on}
@@ -145,14 +135,10 @@ func (t *Topic) presProcReq(fromTopic string, fromUser string, online, wantReply
 			// A[online, B:on] to B[online, A:on]: {pres A on} <<-- unnecessary, that's why wantReply is needed
 			doReply = (doReply && (psd.online != online))
 			psd.online = online
-			t.perSubs[fromUser] = psd
+			t.perSubs[fromUserId] = psd
 
-			log.Printf("Topic[%s]: set user %s online to %v", t.name, fromUser, online)
+			log.Printf("Topic[%s]: set user %s online to %v", t.name, fromUserId, online)
 
-			// p2p name is identical for the given users
-			src = fromTopic
-			with = t.name
-			replyTo = fromUser
 		} else {
 			doReply = false
 			//log.Printf("Pres 1.a.iv, 1.a.v: topic[%s]: request from untracked topic %s", t.name, fromTopic)
@@ -163,8 +149,8 @@ func (t *Topic) presProcReq(fromTopic string, fromUser string, online, wantReply
 		globals.hub.route <- &ServerComMessage{
 			// Topic is 'me' even for group topics; group topics will use 'me' as a signal to drop the message
 			// without forwarding to sessions
-			Pres:   &MsgServerPres{Topic: "me", What: "on", Src: src, With: with},
-			rcptto: replyTo}
+			Pres:   &MsgServerPres{Topic: "me", What: "on", Src: t.name},
+			rcptto: fromUserId}
 	}
 }
 
@@ -173,26 +159,16 @@ func (t *Topic) presProcReq(fromTopic string, fromUser string, online, wantReply
 // Announce to subscribers currently online in the topic
 func (t *Topic) presAnnounceToTopic(src, what string, seq int, skip *Session) {
 	globals.hub.route <- &ServerComMessage{
-		Pres:   &MsgServerPres{Topic: t.original, What: what, Src: src, SeqId: seq},
+		Pres:   &MsgServerPres{Topic: t.x_original, What: what, Src: src, SeqId: seq},
 		rcptto: t.name, sessSkip: skip}
 }
 
 // Announce to a single user on 'me' topic
 func (t *Topic) presAnnounceToUser(uid types.Uid, what string, seq int, list []int, skip *Session) {
 	if pud, ok := t.perUser[uid]; ok {
-		var with string
-		if t.cat == types.TopicCat_P2P {
-			for uid2, _ := range t.perUser {
-				if uid2 != uid {
-					with = uid2.UserId()
-					break
-				}
-			}
-		}
+		update := &MsgServerPres{Topic: "me", What: what, Src: t.original(uid), SeqId: seq, SeqList: list}
 
-		update := &MsgServerPres{Topic: "me", What: what, Src: t.original, With: with, SeqId: seq, SeqList: list}
-
-		if pud.modeGiven&pud.modeWant&types.ModePres != 0 {
+		if (pud.modeGiven & pud.modeWant).IsPresencer() {
 			globals.hub.route <- &ServerComMessage{Pres: update, rcptto: uid.UserId(), sessSkip: skip}
 		}
 	}
@@ -200,7 +176,7 @@ func (t *Topic) presAnnounceToUser(uid types.Uid, what string, seq int, list []i
 
 // Announce to all/offline only subscribers on 'me' topic
 func (t *Topic) presAnnounceToSubscribers(what string, seq int, offlineOnly bool) {
-	update := &MsgServerPres{Topic: "me", What: what, Src: t.original, SeqId: seq}
+	update := &MsgServerPres{Topic: "me", What: what, Src: t.x_original, SeqId: seq}
 	for uid, pud := range t.perUser {
 		if pud.modeGiven&pud.modeWant&types.ModePres != 0 && (!offlineOnly || pud.online == 0) {
 			globals.hub.route <- &ServerComMessage{Pres: update, rcptto: uid.UserId()}
@@ -244,25 +220,18 @@ func (t *Topic) presPubMessageSent(seq int) {
 // Case 8
 // (announce to topic subscribers on 'me', same as 5)
 func (t *Topic) presPubUAChange(ua string) {
+	// Check if the change is meaningful
 	if ua == "" || ua == t.userAgent {
 		return
 	}
 	t.userAgent = ua
 
-	me := types.ParseUserId(t.name)
-
 	// Push update to subscriptions
-	for topic, psd := range t.perSubs {
-		// Zero psd.with will generate an empty 'with'
-		src := t.name
-		with := ""
-		if !psd.with.IsZero() {
-			src = me.P2PName(psd.with)
-			with = t.name
-		}
+	for topic, _ := range t.perSubs {
+
 		globals.hub.route <- &ServerComMessage{
 			Pres: &MsgServerPres{
-				Topic: "me", What: "ua", Src: src, With: with, UserAgent: ua},
+				Topic: "me", What: "ua", Src: t.name, UserAgent: ua},
 			rcptto: topic}
 
 		// log.Printf("Case 8: from '%s' to %s [%s]", t.name, topic, ua)
