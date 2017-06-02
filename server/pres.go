@@ -178,7 +178,7 @@ func (t *Topic) presAnnounceToUser(uid types.Uid, what string, seq int, list []i
 func (t *Topic) presAnnounceToSubscribers(what string, seq int, offlineOnly bool) {
 	update := &MsgServerPres{Topic: "me", What: what, Src: t.x_original, SeqId: seq}
 	for uid, pud := range t.perUser {
-		if pud.modeGiven&pud.modeWant&types.ModePres != 0 && (!offlineOnly || pud.online == 0) {
+		if (pud.modeGiven & pud.modeWant).IsPresencer() && (!offlineOnly || pud.online == 0) {
 			globals.hub.route <- &ServerComMessage{Pres: update, rcptto: uid.UserId()}
 		}
 	}

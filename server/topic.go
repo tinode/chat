@@ -1027,7 +1027,7 @@ func (t *Topic) replyGetDesc(sess *Session, id string, created bool, opts *MsgGe
 	// Request may come from a subscriber (full == true) or a stranger.
 	// Give subscriber a fuller description than to a stranger
 	if full {
-		if pud.modeGiven&pud.modeWant&types.ModeShare != 0 {
+		if (pud.modeGiven & pud.modeWant).IsSharer() {
 			desc.DefaultAcs = &MsgDefaultAcsMode{
 				Auth: t.accessAuth.String(),
 				Anon: t.accessAnon.String()}
@@ -1073,7 +1073,7 @@ func (t *Topic) replySetDesc(sess *Session, set *MsgClientSet) error {
 	assignAccess := func(upd map[string]interface{}, mode *MsgDefaultAcsMode) error {
 		if auth, anon, err := parseTopicAccess(mode, types.ModeInvalid, types.ModeInvalid); err != nil {
 			return err
-		} else if auth&types.ModeOwner != 0 || anon&types.ModeOwner != 0 {
+		} else if auth.IsOwner() || anon.IsOwner() {
 			return errors.New("default 'owner' access is not permitted")
 		} else {
 			access := make(map[string]interface{})
@@ -1479,7 +1479,7 @@ func (t *Topic) replyDelMsg(sess *Session, del *MsgClientDel) error {
 	}
 
 	pud := t.perUser[sess.uid]
-	if pud.modeGiven&pud.modeWant&types.ModeDelete == 0 {
+	if !(pud.modeGiven & pud.modeWant).IsDeleter() {
 		// User cannot hard-delete messages, silently switching to soft-deleting
 		del.Hard = false
 	}

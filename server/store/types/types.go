@@ -414,6 +414,11 @@ func (a AccessMode) IsPresencer() bool {
 	return a&ModePres != 0
 }
 
+// Check if user can hard-delete messages
+func (a AccessMode) IsDeleter() bool {
+	return a&ModeDelete != 0
+}
+
 // Check if not set
 func (a AccessMode) IsZero() bool {
 	return a == 0

@@ -13,8 +13,8 @@ Clients such as mobile or web applications create sessions by connecting to the 
 Once the session is established, the user can start interacting with other users through topics. The following
 topic types are available:
 
-* `me` is a topic for managing one's profile, receiving invites and requests for approval; 'me' topic exists for every user.
-* Peer to peer topic is a communication channel strictly between two users. It's named as a 'p2p' prefix followed by a base64-URL-encoded numeric part of user IDs concatenated in ascending order, e.g. `p2p2il9suCbukqm4P2KFOv9-w`. Peer to peer topics must be explicitly created.
+* `me` is a topic for managing one's profile, receiving invites and requests for approval; `me` topic exists for every user.
+* Peer to peer topic is a communication channel strictly between two users. Each participant sees topic name as the ID of the other participant: 'usr' prefix followed by a base64-URL-encoded numeric part of user ID, e.g. `usr2il9suCbuko`.
 * Group topic is a channel for multi-user communication. It's named as 'grp' followed by 12 pseudo-random characters, i.e. `grp1XUtEhjv6HND`. Group topics must be explicitly created.
 
 Session joins a topic by sending a `{sub}` packet. Packet `{sub}` serves three functions: creating a new topic, subscribing user to a topic, and attaching session to a topic. See {sub} section below for details.
@@ -103,7 +103,7 @@ acc: {
               // authentication scheme; to delete a scheme use a string with a single DEL
               // Unicode character "\u2421"; "token" and "basic" cannot be deleted;
               // required
-  tags: [ ... ], // array of indexed tags for user discovery; see `fnd` topic for
+  tags: [ ... ], // array of tags for user discovery; see `fnd` topic for
               // details, optional (if missing, user will not be discoverable other than
               // by login)
   desc: {  // object, user initialization data closely matching that of table
@@ -122,7 +122,7 @@ acc: {
 }
 ```
 
-Server responds with a `{ctrl}` message with `ctrl.params` containing details of the new user. If `init.acs` is missing,
+Server responds with a `{ctrl}` message with `ctrl.params` containing details of the new user. If `desc.defacs` is missing,
 server will assign server-default access values.
 
 #### `{login}`
@@ -511,7 +511,6 @@ meta: {
       // The following fields are present only when querying 'me' topic and the
       // topic described is a P2P topic
 
-      with: "usr2il9suCbuko", // string, if this is a P2P topic, peer's ID, optional
       public: { ... }, // application-defined user's 'public' object, present for
                       // P2P topics only
       seen: { // object, if this is a P2P topic, info on when the peer was last
@@ -529,25 +528,24 @@ meta: {
 
 Tinode uses `{pres}` message to inform users of important events. The following events are tracked by the server and will generate `{pres}` messages provided user has appropriate access permissions:
 
-1. A user joins `me`. User receives presence notifications for each of his/her subscriptions: `{pres topic="me" src="<topic ID>" what="on", ua="..." with="<user ID>"}`. The `with` field is present for P2P topics only.
-2. A user came online or went offline. The user triggers this event by joining/leaving the `me` topic. The message is sent to all users who have P2P topics with the first user. Users receive this event on the `me` topic, `src` field contains P2P topic name, `with` contains user ID `src: "usr2il9suCbuko"`, `what` contains `"on"` or `"off"`: `{pres topic="me" src="<topic name>" with="<user ID>" what="on|off" ua="..."}`.
-3. User's `public` is updated. The event is sent to all users who have P2P topics with the first user. Users receive `{pres topic="me" src="<topic name" with="<user ID>" what="upd"}`.
-4. User joins/leaves (and possibly unsubscribes) a topic. This event is sent to other users who currently joined the topic: `{pres topic="<topic name>" src="<user ID>" what="on|off|unsub"}`. If the user also unsubscribes from the topic, user's other sessions will receive an event `{pres topic="me" src="<topic name>" with="<user ID (P2P only)>" what="gone"}`.
+1. A user joins `me`. User receives presence notifications for each of his/her subscriptions: `{pres topic="me" src="<topic ID>" what="on", ua="..."}`.
+2. A user came online or went offline. The user triggers this event by joining/leaving the `me` topic. The message is sent to all users who have P2P topics with the first user. Users receive this event on the `me` topic, `src` field contains topic name (user ID), `src: "usr2il9suCbuko"`, `what` contains `"on"` or `"off"`: `{pres topic="me" src="<topic name>" what="on|off" ua="..."}`.
+3. User's `public` is updated. The event is sent to all users who have P2P topics with the first user. Users receive `{pres topic="me" src="<topic name" what="upd"}`.
+4. User joins/leaves (and possibly unsubscribes) a topic. This event is sent to other users who currently joined the topic: `{pres topic="<topic name>" src="<user ID>" what="on|off|unsub"}`. If the user also unsubscribes from the topic, user's other sessions will receive an event `{pres topic="me" src="<topic name>" what="gone"}`.
 5. A group topic is activated/deactivated/unsubscribed/deleted. Topic becomes active when the first user joins it. The topic becomes inactive when all users leave it (possibly after some delay). The event is sent to all topic subscribers. They will receive it on their `me` topics: `{pres topic="me" src="<topic name>" what="on|off|gone"}` (on - activated, off - deactivated, gone - deleted). If a user is unsubscribed, the user receives the event: `{pres topic="me" src="<topic name>" what="unsub"}`
 6. A message is published in a topic. The event is sent to users who have subscribed to the topic but currently not joined `{pres topic="me" src="<topic name>" what="msg"}`.
 7. Topic's `public` is updated. The event is sent to all topic subscribers. Topic's subscribers receive `{pres topic="me" src="<topic name>" what="upd"}`.
-8. User is has multiple sessions attached to 'me', sessions have different _user agents_. If the current most recently active session has a different _user agent_ than the previous most recent session (the most recently active session is the session which was the last to receive any message from the client) an event is sent to all users who have P2P topics with the first user. Users receive it on the `me` topic, `src` field contains P2P topic name, `with` contains user ID `with: "usr2il9suCbuko"`, `what` contains `"ua"`: `{pres topic="me" src="<topic name>"" with="<user ID>" what="ua" ua="<new user agent>"}`.
+8. User is has multiple sessions attached to 'me', sessions have different _user agents_. If the current most recently active session has a different _user agent_ than the previous most recent session (the most recently active session is the session which was the last to receive any message from the client) an event is sent to all users who have P2P topics with the first user. Users receive it on the `me` topic, `src` field contains P2P topic name, `what` contains `"ua"`: `{pres topic="me" src="<topic name>" what="ua" ua="<new user agent>"}`.
 9. User sent a `{note}` indicating that some or all of the data messages in the topic have been received or read, OR sent a `{del}` soft-deleting some data messages. In case or read/recv receipt the event is sent to user's other sessions (not the one that originated the `{note}`): `{pres topic="me" src="<topic name>" what="recv|read" seq=123}`. In case of the soft-deleting data messages the event is sent to user's not joined sessions: `{pres topic="me" src="<topic name>" what="del" seq=123}` and to joined sessions: `{pres topic="<topic name>" src="<user id>" what="del" seq=123}`.
 10. Some or all data messages in the topic were hard-deleted by the topic manager using `{del hard=true}`. The event is sent to all topic subscribers, joined (excluding the originating session) and not joined:
  a. joined: `{pres topic="<topic name>" src="<user id>" what="del" seq=123}`.
  b. not joined: `{pres topic="me" src="<topic name>" what="del" seq=123}`.
-11. User subscribed to a new topic. User's other sessions receive an event `{pres topic="me" src="<topic name>" with="<user ID (P2P only)>" what="on"}`.
+11. User subscribed to a new topic. User's other sessions receive an event `{pres topic="me" src="<topic name>" what="on"}`.
 
 ```js
 pres: {
   topic: "me", // string, topic affected by the change, always present
   src: "p2p1XUtEhjv6HND2il9suCbuko", // string, topic which caused the change, always present
-  with: "usr2il9suCbuko", // string, user ID if src contains a p2p topic, optional
   what: "on", // string, what's changed, always present
   seq: 123, // integer, if "what" is "msg", server-issued ID of the message,
               // optional
@@ -608,13 +606,14 @@ Access control is mostly usable for group topics. Its usability for `me` and P2P
 User's access to a topic is defined by two sets of permissions: user's desired permissions "want", and permissions granted to user by topic's manager(s) "given". Each permission is represented by a bit in a bitmap. It can be either present or absent. The actual access is determined as a bitwise AND of wanted and given permissions. The permissions are communicated in messages as a set of ASCII characters, where presence of a character means a set permission bit:
 
 * No access: `N` is not a permission per se but an indicator that permissions are explicitly cleared/not set. It usually indicates that the default permissions should *not* be applied.
-* Read: `R`, permission to subscribe to topic and receive `{data}` packets
+* Join: `J`, permission to subscribe to a topic
+* Read: `R`, permission to receive `{data}` packets
 * Write: `W`, permission to `{pub}` to topic
 * Presence: `P`, permission to receive presence updates `{pres}`
-* Sharing: `S`, permission to invite other people to join the topic and to approve requests to join; a user with such permission is topic's manager
+* Approve: `A`, permission to approve requests to join a topic; a user with such permission is topic's manager
+* Sharing: `S`, permission to invite other people to join the topic
 * Delete: `D`, permission to hard-delete messages; only owners can completely delete topics
-* Owner: `O`, user is the topic owner; topic may have a single owner only
-* Banned: `X`, user has no access, requests to share/gain access are silently ignored
+* Owner: `O`, user is the topic owner; topic may have a single owner only; some topics have no owner
 
 Topic's default access is established at the topic creation time by `{sub.init.defacs}` and can be subsequently modified by `{set}` messages. Default access is defined for two categories of users: authenticated and anonymous. This value is applied as a default "given" permission to all new subscriptions.
 
@@ -667,7 +666,6 @@ Message `{get what="sub"}` to `me` is different from any other topic as it retur
 * seq: server-issued numeric id of the last message in the topic
 * read: seq value self-reported by the current user as received
 * recv: seq value self-reported by the current user as read
-* with: for P2P subscriptions, id of the peer
 * seen: for P2P subscriptions, timestamp of user's last presence and User Agent string are reported
  * when: timestamp when the user was last online
  * ua: user agent string of the user's client software last used
@@ -686,9 +684,9 @@ Topic `fnd` is read-only. `{pub}` messages to `fnd` are rejected.
 
 ### Peer to Peer Topics
 
-Peer to peer (P2P) topics represent communication channels between strictly two users. The name of the topic is `p2p` followed by base64 URL-encoded concatenation of two 8-byte IDs of participating users. Lower user ID comes first. For example `p2pOj0B3-gSBSshT8s5XBE2xw` is a topic for users `usrOj0B3-gSBSs` and `usrIU_LOVwRNsc`. The P2P topic has no owner.
+Peer to peer (P2P) topics represent communication channels between strictly two users. The name of the topic is different for each of the two participants. Each of them sees the name of the topic as the user ID of the other participant: `usr` followed by base64 URL-encoded ID of the user. For example, if two users `usrOj0B3-gSBSs` and `usrIU_LOVwRNsc` start a P2P topic, the first one will see it as `usrIU_LOVwRNsc`, the second as `usrOj0B3-gSBSs`. The P2P topic has no owner.
 
-A P2P topic is created by one user subscribing to topic with the name equal to the ID of the other user. For instance, user `usrOj0B3-gSBSs` can establish a P2P topic with user `usrIU_LOVwRNsc` by sending a `{sub topic="usrIU_LOVwRNsc"}`. Tinode will respond with a `{ctrl}` packet with the name of the newly created topic, `p2pOj0B3-gSBSshT8s5XBE2xw` in this example. The other user will receive a `{data}` message on `me` topic with either a request to confirm the subscription or a notification of a successful subscription, depending on user's default permissions.
+A P2P topic is created by one user subscribing to topic with the name equal to the ID of the other user. For instance, user `usrOj0B3-gSBSs` can establish a P2P topic with user `usrIU_LOVwRNsc` by sending a `{sub topic="usrIU_LOVwRNsc"}`. Tinode will respond with a `{ctrl}` packet with the name of the newly created topic as described above. The other user will receive a `{data}` message on `me` topic with either a request to confirm the subscription or a notification of a successful subscription, depending on user's default permissions.
 
 The 'public' parameter of P2P topics is user-dependent. For instance a P2P topic between users A and B would show user A's 'public' to user B and vice versa. If a user updates 'public', all user's P2P topics will automatically update 'public' too.
 

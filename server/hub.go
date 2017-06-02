@@ -677,7 +677,7 @@ func (t *Topic) loadSubscribers() error {
 			modeWant:  sub.ModeWant,
 			modeGiven: sub.ModeGiven}
 
-		if sub.ModeGiven&sub.ModeWant&types.ModeOwner != 0 {
+		if (sub.ModeGiven & sub.ModeWant).IsOwner() {
 			log.Printf("hub.loadSubscriptions: %s set owner to %s", t.name, uid.String())
 			t.owner = uid
 		}
