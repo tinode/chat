@@ -1217,7 +1217,7 @@ func (t *Topic) replySetDesc(sess *Session, set *MsgClientSet) error {
 // replyGetSub is a response to a get.sub request on a topic - load a list of subscriptions/subscribers,
 // send it just to the session as a {meta} packet
 func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
-	now := time.Now().UTC().Round(time.Millisecond)
+	now := types.TimeNow()
 
 	var subs []types.Subscription
 	var err error

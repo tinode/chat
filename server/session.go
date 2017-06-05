@@ -235,7 +235,7 @@ func (s *Session) subscribe(msg *ClientComMessage) {
 		topic = expanded
 	} else {
 		var err *ServerComMessage
-		topic, expanded, err = s.validateTopicName(msg.Sub.Id, msg.Sub.Topic, msg.timestamp)
+		expanded, err = s.validateTopicName(msg.Sub.Id, msg.Sub.Topic, msg.timestamp)
 		if err != nil {
 			s.queueOut(err)
 			return
@@ -265,32 +265,26 @@ func (s *Session) leave(msg *ClientComMessage) {
 		return
 	}
 
-	if msg.Leave.Topic == "" {
-		s.queueOut(ErrMalformed(msg.Leave.Id, "", msg.timestamp))
+	expanded, err := s.validateTopicName(msg.Leave.Id, msg.Leave.Topic, msg.timestamp)
+	if err != nil {
+		s.queueOut(err)
 		return
 	}
 
-	topic := msg.Leave.Topic
-	if msg.Leave.Topic == "me" {
-		topic = s.uid.UserId()
-	} else if msg.Leave.Topic == "fnd" {
-		topic = s.uid.FndName()
-	}
-
-	if sub, ok := s.subs[topic]; ok {
+	if sub, ok := s.subs[expanded]; ok {
 		// Session is attached to the topic.
 		if (msg.Leave.Topic == "me" || msg.Leave.Topic == "fnd") && msg.Leave.Unsub {
 			// User should not unsubscribe from 'me' or 'find'. Just leaving is fine.
 			s.queueOut(ErrPermissionDenied(msg.Leave.Id, msg.Leave.Topic, msg.timestamp))
 		} else {
 			// Unlink from topic, topic will send a reply.
-			delete(s.subs, topic)
+			delete(s.subs, expanded)
 			sub.done <- &sessionLeave{
 				sess: s, unsub: msg.Leave.Unsub, topic: msg.Leave.Topic, reqId: msg.Leave.Id}
 		}
-	} else if globals.cluster.isRemoteTopic(topic) {
+	} else if globals.cluster.isRemoteTopic(expanded) {
 		// The topic is handled by a remote node. Forward message to it.
-		if err := globals.cluster.routeToTopic(msg, topic, s); err != nil {
+		if err := globals.cluster.routeToTopic(msg, expanded, s); err != nil {
 			s.queueOut(ErrClusterNodeUnreachable(msg.Leave.Id, msg.Leave.Topic, msg.timestamp))
 		}
 	} else if !msg.Leave.Unsub {
@@ -313,30 +307,30 @@ func (s *Session) publish(msg *ClientComMessage) {
 
 	// TODO(gene): Check for repeated messages with the same ID
 
-	topic, routeTo, err := s.validateTopicName(msg.Pub.Id, msg.Pub.Topic, msg.timestamp)
+	expanded, err := s.validateTopicName(msg.Pub.Id, msg.Pub.Topic, msg.timestamp)
 	if err != nil {
 		s.queueOut(err)
 		return
 	}
 
 	data := &ServerComMessage{Data: &MsgServerData{
-		Topic:     topic,
+		Topic:     msg.Pub.Topic,
 		From:      msg.from,
 		Timestamp: msg.timestamp,
 		Head:      msg.Pub.Head,
 		Content:   msg.Pub.Content},
-		rcptto: routeTo, sessFrom: s, id: msg.Pub.Id, timestamp: msg.timestamp}
+		rcptto: expanded, sessFrom: s, id: msg.Pub.Id, timestamp: msg.timestamp}
 	if msg.Pub.NoEcho {
 		data.sessSkip = s
 	}
 
-	if sub, ok := s.subs[routeTo]; ok {
+	if sub, ok := s.subs[expanded]; ok {
 		// This is a post to a subscribed topic. The message is sent to the topic only
 		sub.broadcast <- data
-	} else if globals.cluster.isRemoteTopic(routeTo) {
+	} else if globals.cluster.isRemoteTopic(expanded) {
 		// The topic is handled by a remote node. Forward message to it.
-		if err := globals.cluster.routeToTopic(msg, routeTo, s); err != nil {
-			s.queueOut(ErrClusterNodeUnreachable(msg.Pub.Id, topic, msg.timestamp))
+		if err := globals.cluster.routeToTopic(msg, expanded, s); err != nil {
+			s.queueOut(ErrClusterNodeUnreachable(msg.Pub.Id, msg.Pub.Topic, msg.timestamp))
 		}
 	}
 }
@@ -572,7 +566,7 @@ func (s *Session) get(msg *ClientComMessage) {
 	}
 
 	// Validate topic name
-	original, expanded, err := s.validateTopicName(msg.Get.Id, msg.Get.Topic, msg.timestamp)
+	expanded, err := s.validateTopicName(msg.Get.Id, msg.Get.Topic, msg.timestamp)
 	if err != nil {
 		s.queueOut(err)
 		return
@@ -586,19 +580,19 @@ func (s *Session) get(msg *ClientComMessage) {
 		what:  parseMsgClientMeta(msg.Get.What)}
 
 	if meta.what == 0 {
-		s.queueOut(ErrMalformed(msg.Get.Id, original, msg.timestamp))
+		s.queueOut(ErrMalformed(msg.Get.Id, msg.Get.Topic, msg.timestamp))
 		log.Println("s.get: invalid Get message action: '" + msg.Get.What + "'")
 	} else if ok {
 		sub.meta <- meta
 	} else if globals.cluster.isRemoteTopic(expanded) {
 		// The topic is handled by a remote node. Forward message to it.
 		if err := globals.cluster.routeToTopic(msg, expanded, s); err != nil {
-			s.queueOut(ErrClusterNodeUnreachable(msg.Get.Id, original, msg.timestamp))
+			s.queueOut(ErrClusterNodeUnreachable(msg.Get.Id, msg.Get.Topic, msg.timestamp))
 		}
 	} else {
 		if (meta.what&constMsgMetaData != 0) || (meta.what&constMsgMetaSub != 0) {
 			log.Println("s.get: invalid Get message action for hub routing: '" + msg.Get.What + "'")
-			s.queueOut(ErrPermissionDenied(msg.Get.Id, original, msg.timestamp))
+			s.queueOut(ErrPermissionDenied(msg.Get.Id, msg.Get.Topic, msg.timestamp))
 		} else {
 			// Description of a topic not currently subscribed to. Request desc from the hub
 			globals.hub.meta <- meta
@@ -615,7 +609,7 @@ func (s *Session) set(msg *ClientComMessage) {
 	}
 
 	// Validate topic name
-	original, expanded, err := s.validateTopicName(msg.Set.Id, msg.Set.Topic, msg.timestamp)
+	expanded, err := s.validateTopicName(msg.Set.Id, msg.Set.Topic, msg.timestamp)
 	if err != nil {
 		s.queueOut(err)
 		return
@@ -634,7 +628,7 @@ func (s *Session) set(msg *ClientComMessage) {
 			meta.what |= constMsgMetaSub
 		}
 		if meta.what == 0 {
-			s.queueOut(ErrMalformed(msg.Set.Id, original, msg.timestamp))
+			s.queueOut(ErrMalformed(msg.Set.Id, msg.Set.Topic, msg.timestamp))
 			log.Println("s.set: nil Set action")
 		}
 
@@ -643,11 +637,11 @@ func (s *Session) set(msg *ClientComMessage) {
 	} else if globals.cluster.isRemoteTopic(expanded) {
 		// The topic is handled by a remote node. Forward message to it.
 		if err := globals.cluster.routeToTopic(msg, expanded, s); err != nil {
-			s.queueOut(ErrClusterNodeUnreachable(msg.Set.Id, original, msg.timestamp))
+			s.queueOut(ErrClusterNodeUnreachable(msg.Set.Id, msg.Set.Topic, msg.timestamp))
 		}
 	} else {
 		log.Println("s.set: can Set for subscribed topics only")
-		s.queueOut(ErrPermissionDenied(msg.Set.Id, original, msg.timestamp))
+		s.queueOut(ErrPermissionDenied(msg.Set.Id, msg.Set.Topic, msg.timestamp))
 	}
 }
 
@@ -660,7 +654,7 @@ func (s *Session) del(msg *ClientComMessage) {
 	}
 
 	// Validate topic name
-	original, expanded, err := s.validateTopicName(msg.Del.Id, msg.Del.Topic, msg.timestamp)
+	expanded, err := s.validateTopicName(msg.Del.Id, msg.Del.Topic, msg.timestamp)
 	if err != nil {
 		s.queueOut(err)
 		return
@@ -669,7 +663,7 @@ func (s *Session) del(msg *ClientComMessage) {
 	sub, ok := s.subs[expanded]
 	what := parseMsgClientDel(msg.Del.What)
 	if what == 0 {
-		s.queueOut(ErrMalformed(msg.Del.Id, original, msg.timestamp))
+		s.queueOut(ErrMalformed(msg.Del.Id, msg.Del.Topic, msg.timestamp))
 		log.Println("s.del: invalid Del action '" + msg.Del.What + "'")
 	}
 
@@ -685,7 +679,7 @@ func (s *Session) del(msg *ClientComMessage) {
 	} else if !ok && globals.cluster.isRemoteTopic(expanded) {
 		// The topic is handled by a remote node. Forward message to it.
 		if err := globals.cluster.routeToTopic(msg, expanded, s); err != nil {
-			s.queueOut(ErrClusterNodeUnreachable(msg.Del.Id, original, msg.timestamp))
+			s.queueOut(ErrClusterNodeUnreachable(msg.Del.Id, msg.Del.Topic, msg.timestamp))
 		}
 	} else if what == constMsgDelTopic {
 		// Deleting topic: for sessions attached or not attached, send request to hub first.
@@ -697,7 +691,7 @@ func (s *Session) del(msg *ClientComMessage) {
 			del:   true}
 	} else {
 		// Must join the topic to delete messages or subscriptions.
-		s.queueOut(ErrAttachFirst(msg.Del.Id, original, msg.timestamp))
+		s.queueOut(ErrAttachFirst(msg.Del.Id, msg.Del.Topic, msg.timestamp))
 		log.Println("s.del: invalid Del action while unsubbed '" + msg.Del.What + "'")
 	}
 }
@@ -710,7 +704,7 @@ func (s *Session) note(msg *ClientComMessage) {
 		return
 	}
 
-	_, routeTo, err := s.validateTopicName("", msg.Note.Topic, msg.timestamp)
+	expanded, err := s.validateTopicName("", msg.Note.Topic, msg.timestamp)
 	if err != nil {
 		return
 	}
@@ -728,17 +722,17 @@ func (s *Session) note(msg *ClientComMessage) {
 		return
 	}
 
-	if sub, ok := s.subs[routeTo]; ok {
+	if sub, ok := s.subs[expanded]; ok {
 		// Pings can be sent to subscribed topics only
 		sub.broadcast <- &ServerComMessage{Info: &MsgServerInfo{
 			Topic: msg.Note.Topic,
 			From:  s.uid.UserId(),
 			What:  msg.Note.What,
 			SeqId: msg.Note.SeqId,
-		}, rcptto: routeTo, timestamp: msg.timestamp, sessSkip: s}
-	} else if globals.cluster.isRemoteTopic(routeTo) {
+		}, rcptto: expanded, timestamp: msg.timestamp, sessSkip: s}
+	} else if globals.cluster.isRemoteTopic(expanded) {
 		// The topic is handled by a remote node. Forward message to it.
-		globals.cluster.routeToTopic(msg, routeTo, s)
+		globals.cluster.routeToTopic(msg, expanded, s)
 	}
 }
 
@@ -747,15 +741,15 @@ func (s *Session) note(msg *ClientComMessage) {
 //   topic: session-specific topic name the message recepient should see
 //   routeTo: routable global topic name
 //   err: *ServerComMessage with an error to return to the sender
-func (s *Session) validateTopicName(msgId, topic string, timestamp time.Time) (string, string, *ServerComMessage) {
+func (s *Session) validateTopicName(msgId, topic string, timestamp time.Time) (string, *ServerComMessage) {
 
 	if topic == "" {
-		return "", "", ErrMalformed(msgId, "", timestamp)
+		return "", ErrMalformed(msgId, "", timestamp)
 	}
 
 	if !strings.HasPrefix(topic, "grp") && s.uid.IsZero() {
-		// me and p2p topics require authentication
-		return "", "", ErrAuthRequired(msgId, topic, timestamp)
+		// me, fnd, p2p topics require authentication
+		return "", ErrAuthRequired(msgId, topic, timestamp)
 	}
 
 	// Topic to route to i.e. rcptto: or s.subs[routeTo]
@@ -766,20 +760,19 @@ func (s *Session) validateTopicName(msgId, topic string, timestamp time.Time) (s
 	} else if topic == "fnd" {
 		routeTo = s.uid.FndName()
 	} else if strings.HasPrefix(topic, "usr") {
-		// Initiating a p2p topic
+		// p2p topic
 		uid2 := types.ParseUserId(topic)
 		if uid2.IsZero() {
 			// Ensure the user id is valid
-			return "", "", ErrMalformed(msgId, topic, timestamp)
+			return "", ErrMalformed(msgId, topic, timestamp)
 		} else if uid2 == s.uid {
 			// Use 'me' to access self-topic
-			return "", "", ErrPermissionDenied(msgId, topic, timestamp)
+			return "", ErrPermissionDenied(msgId, topic, timestamp)
 		}
 		routeTo = s.uid.P2PName(uid2)
-		topic = routeTo
 	}
 
-	return topic, routeTo, nil
+	return routeTo, nil
 }
 
 func filterTags(dst, src []string) int {
