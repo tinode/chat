@@ -382,16 +382,13 @@ func (t *Topic) run(hub *Hub) {
 
 					select {
 					case sess.send <- packet:
-						// Update device map with the device ID which
+						// Update device map with the device ID which should recive the notification
 						if pushRcpt != nil {
-							i, ok := pushRcpt.uidMap[sess.uid]
-							if ok {
+							if i, ok := pushRcpt.uidMap[sess.uid]; ok {
 								pushRcpt.rcpt.To[i].Delieved++
 								if sess.deviceId != "" {
 									pushRcpt.rcpt.To[i].Devices = append(pushRcpt.rcpt.To[i].Devices, sess.deviceId)
 								}
-							} else {
-								log.Printf("data message sent to user who is not subscribed to topic")
 							}
 						}
 					default:
@@ -399,6 +396,7 @@ func (t *Topic) run(hub *Hub) {
 						t.unreg <- &sessionLeave{sess: sess, unsub: false}
 					}
 				}
+
 				if pushRcpt != nil {
 					push.Push(pushRcpt.rcpt)
 				}
@@ -1224,8 +1222,9 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 	var isSharer bool
 
 	if t.cat == types.TopicCat_Me {
-		// Fetch user's subscriptions, with Topic.Public denormalized into subscription
-		subs, err = store.Users.GetTopics(sess.uid)
+		// Fetch user's subscriptions, with Topic.Public denormalized into subscription.
+		// Include deleted subscriptions too.
+		subs, err = store.Users.GetTopicsAny(sess.uid)
 		isSharer = true
 	} else if t.cat == types.TopicCat_Fnd {
 		// Given a query provided in .private, fetch user's contacts
@@ -1236,7 +1235,7 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 		}
 	} else {
 		// FIXME(gene): don't load subs from DB, use perUserData - it already contains subscriptions.
-		subs, err = store.Topics.GetUsers(t.name)
+		subs, err = store.Topics.GetUsersAny(t.name)
 		userData := t.perUser[sess.uid]
 		isSharer = (userData.modeGiven & userData.modeWant).IsSharer()
 	}
@@ -1269,15 +1268,37 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 			}
 
 			// Check if the requester has provided a cut off date for ts of pub & priv updates.
-			sendPubPriv := ifModified.IsZero() || sub.UpdatedAt.After(ifModified)
-
+			var sendPubPriv bool
+			var deleted bool
 			var mts MsgTopicSub
+
+			if ifModified.IsZero() {
+				// If IfModifiedSince is not set then the user does not care about managing cache. The user
+				// only wants active subscriptions. Skip all deleted subscriptions regarless of deletion time.
+				if sub.DeletedAt != nil {
+					continue
+				}
+
+				sendPubPriv = true
+			} else {
+				// Skip sending deleted subscriptions if they were deleted before the cut off date.
+				// If they are freshly deleted send minimum info
+				if sub.DeletedAt != nil {
+					if sub.DeletedAt.Before(ifModified) {
+						continue
+					}
+					mts.DeletedAt = sub.DeletedAt
+					deleted = true
+				}
+				sendPubPriv = !deleted && sub.UpdatedAt.After(ifModified)
+			}
+
 			uid := types.ParseUid(sub.User)
 			var clearId int
 			if t.cat == types.TopicCat_Me {
-				// Skip subscriptions that the user does not care about
+				// The subscriptions user does not care about are marked as deleted
 				if !sub.ModeWant.IsJoiner() || !sub.ModeGiven.IsJoiner() {
-					continue
+					deleted = true
 				}
 
 				// Reporting user's subscriptions to other topics. P2P topic name is the
@@ -1285,60 +1306,70 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 				with := sub.GetWith()
 				if with != "" {
 					mts.Topic = with
-					mts.Online = t.perSubs[with].online
+					mts.Online = t.perSubs[with].online && !deleted
 				} else {
 					mts.Topic = sub.Topic
-					mts.Online = t.perSubs[sub.Topic].online
+					mts.Online = t.perSubs[sub.Topic].online && !deleted
 				}
-				mts.SeqId = sub.GetSeqId()
-				// Report whatever is the greatest - soft - or hard- deleted id
-				clearId = max(sub.GetHardClearId(), sub.ClearId)
-				mts.ClearId = clearId
 
-				mts.UpdatedAt = &sub.UpdatedAt
-				lastSeen := sub.GetLastSeen()
-				if !lastSeen.IsZero() {
-					mts.LastSeen = &MsgLastSeenInfo{
-						When:      &lastSeen,
-						UserAgent: sub.GetUserAgent()}
+				if !deleted {
+					mts.SeqId = sub.GetSeqId()
+					// Report whatever is the greatest - soft - or hard- deleted id
+					clearId = max(sub.GetHardClearId(), sub.ClearId)
+					mts.ClearId = clearId
+
+					lastSeen := sub.GetLastSeen()
+					if !lastSeen.IsZero() {
+						mts.LastSeen = &MsgLastSeenInfo{
+							When:      &lastSeen,
+							UserAgent: sub.GetUserAgent()}
+					}
 				}
 			} else {
-				// Skip subscriptions that the user does not care about
+				// Mark subscriptions that the user does not care about as deleted
 				if t.cat == types.TopicCat_Grp && !isSharer &&
 					(!sub.ModeWant.IsJoiner() || !sub.ModeGiven.IsJoiner()) {
-					continue
+					deleted = true
 				}
 
 				// Reporting subscribers to a group or a p2p topic
 				mts.User = uid.UserId()
-				clearId = max(t.clearId, sub.ClearId)
-				if uid == sess.uid {
-					// Report deleted messages for own subscriptions only
-					mts.ClearId = clearId
-				}
-				if t.cat == types.TopicCat_Grp {
-					pud := t.perUser[uid]
-					mts.Online = pud.online > 0
+				if !deleted {
+					clearId = max(t.clearId, sub.ClearId)
+					if uid == sess.uid {
+						// Report deleted messages for own subscriptions only
+						mts.ClearId = clearId
+					}
+					if t.cat == types.TopicCat_Grp {
+						pud := t.perUser[uid]
+						mts.Online = pud.online > 0
+					}
 				}
 			}
 
-			// Ensure sanity or ReadId and RecvId:
-			mts.ReadSeqId = max(clearId, sub.ReadSeqId)
-			mts.RecvSeqId = max(clearId, sub.RecvSeqId)
-			mts.Acs.Mode = (sub.ModeGiven & sub.ModeWant).String()
-			if isSharer {
-				mts.Acs.Want = sub.ModeWant.String()
-				mts.Acs.Given = sub.ModeGiven.String()
-			}
+			if !deleted {
+				mts.UpdatedAt = &sub.UpdatedAt
 
-			// Returning public and private only if they have changed since ifModified
-			if sendPubPriv {
-				mts.Public = sub.GetPublic()
-				// Reporting private only if it's user's own supscription or
-				// a synthetic 'private' in 'find' topic where it's a list of tags matched on.
-				if uid == sess.uid || t.cat == types.TopicCat_Fnd {
-					mts.Private = sub.Private
+				// Ensure sanity or ReadId and RecvId:
+				mts.ReadSeqId = max(clearId, sub.ReadSeqId)
+				mts.RecvSeqId = max(clearId, sub.RecvSeqId)
+				mts.Acs.Mode = (sub.ModeGiven & sub.ModeWant).String()
+				if isSharer {
+					mts.Acs.Want = sub.ModeWant.String()
+					mts.Acs.Given = sub.ModeGiven.String()
 				}
+
+				// Returning public and private only if they have changed since ifModified
+				if sendPubPriv {
+					mts.Public = sub.GetPublic()
+					// Reporting private only if it's user's own supscription or
+					// a synthetic 'private' in 'find' topic where it's a list of tags matched on.
+					if uid == sess.uid || t.cat == types.TopicCat_Fnd {
+						mts.Private = sub.Private
+					}
+				}
+			} else if mts.DeletedAt == nil {
+				mts.DeletedAt = &sub.UpdatedAt
 			}
 
 			meta.Sub = append(meta.Sub, mts)
@@ -1420,18 +1451,23 @@ func (t *Topic) replyGetData(sess *Session, id string, req *MsgBrowseOpts) error
 	if messages != nil {
 		for i := len(messages) - 1; i >= 0; i-- {
 			mm := messages[i]
-			// Check if the message was soft-deleted for the current user
-			if mm.DeletedAt != nil {
-				continue
-			}
 
 			from := types.ParseUid(mm.From)
 			msg := &ServerComMessage{Data: &MsgServerData{
 				Topic:     t.original(sess.uid),
+				Head:      mm.Head,
 				SeqId:     mm.SeqId,
 				From:      from.UserId(),
 				Timestamp: mm.CreatedAt,
 				Content:   mm.Content}}
+
+			// Clear content if the message was soft-deleted for the current user
+			if mm.DeletedAt != nil {
+				msg.Data.Head = nil
+				msg.Data.Content = nil
+				msg.Data.DeletedAt = mm.DeletedAt
+			}
+
 			sess.queueOut(msg)
 
 		}
@@ -1745,6 +1781,7 @@ func (t *Topic) evictAll(id string, sess *Session) {
 	}
 }
 
+// Prepares a payload to be delivered to a mobile device as a push notification.
 func (t *Topic) makePushReceipt(data *MsgServerData) *pushReceipt {
 	idx := make(map[types.Uid]int, len(t.perUser))
 	receipt := push.Receipt{
@@ -1757,10 +1794,13 @@ func (t *Topic) makePushReceipt(data *MsgServerData) *pushReceipt {
 			Content:   data.Content}}
 
 	i := 0
-	for uid, _ := range t.perUser {
-		receipt.To[i].User = uid
-		idx[uid] = i
-		i++
+	for uid, pud := range t.perUser {
+		if (pud.modeWant & pud.modeGiven).IsPresencer() {
+			// Only send to those users who have notifications enabled
+			receipt.To[i].User = uid
+			idx[uid] = i
+			i++
+		}
 	}
 
 	return &pushReceipt{rcpt: &receipt, uidMap: idx}

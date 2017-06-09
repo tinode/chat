@@ -303,6 +303,9 @@ type MsgTopicSub struct {
 
 	// Timestamp when the subscription was last updated
 	UpdatedAt *time.Time `json:"updated,omitempty"`
+	// Timestamp when the subscription was deleted
+	DeletedAt *time.Time `json:"deleted,omitempty"`
+
 	// If the subscriber/topic is online
 	Online bool `json:"online,omitempty"`
 
@@ -370,6 +373,7 @@ type MsgServerData struct {
 	// ID of the user who originated the message as {pub}, could be empty if sent by the system
 	From      string            `json:"from,omitempty"`
 	Timestamp time.Time         `json:"ts"`
+	DeletedAt *time.Time        `json:deleted,omitempty`
 	SeqId     int               `json:"seq"`
 	Head      map[string]string `json:"head,omitempty"`
 	Content   interface{}       `json:"content"`

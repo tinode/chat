@@ -2,7 +2,7 @@
 
 Instant messaging server. Backend in pure [Go](http://golang.org) (license [GPL 3.0](http://www.gnu.org/licenses/gpl-3.0.en.html)), client-side binding in Java for Android and Javascript (license [Apache 2.0](http://www.apache.org/licenses/LICENSE-2.0)), persistent storage [RethinkDB](http://rethinkdb.com/), JSON over websocket (long polling is also available). No UI components other than demo apps. Tinode is meant as a replacement for XMPP.
 
-Version 0.10. This is alpha-quality software. Bugs should be expected. Follow [instructions](INSTALL.md) to install and run. Read [API documentation](API.md).
+Version 0.13. This is beta-quality software: feature-complete but probably with some bugs. Follow [instructions](INSTALL.md) to install and run. Read [API documentation](API.md).
 
 A javascript demo is (usually) available at http://api.tinode.co/x/example-react-js/ ([source](https://github.com/tinode/example-react-js/)). Login as one of `alice`, `bob`, `carol`, `dave`, `frank`. Password is `<login>123`, e.g. login for `alice` is `alice123`. [Android demo](https://github.com/tinode/android-example) is mostly stable and functional. See screenshots below.
 
@@ -15,6 +15,7 @@ A javascript demo is (usually) available at http://api.tinode.co/x/example-react
 
 ### Supported
 
+* [Android](https://github.com/tinode/android-example/) and [web](https://github.com/tinode/example-react-js/) clients.
 * One-on-one messaging.
 * Group messaging with currently unlimited number of members where every member's access permissions are managed 
 individually. The maximum number of members will be limited to a reasonably high value in the future (256? configurable?).
@@ -35,7 +36,7 @@ individually. The maximum number of members will be limited to a reasonably high
 
 ### Planned
 
-* iOS client bindings.
+* iOS client bindings and client.
 * Security: [TLS](https://en.wikipedia.org/wiki/Transport_Layer_Security) for all communications plus [OTR](https://en.wikipedia.org/wiki/Off-the-Record_Messaging) for one-on-one messaging and undecided method for group mesaging.
 * Support for long polling (currently exists but broken).
 * Group messaging with unlimited number of members with bearer token access control.

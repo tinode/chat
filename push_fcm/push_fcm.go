@@ -67,9 +67,16 @@ func (FcmPush) Init(jsonconf string) error {
 }
 
 func sendNotification(rcpt *push.Receipt, config *configType) {
+	// List of UIDs for querying the database
 	uids := make([]t.Uid, len(rcpt.To))
+	skipDevices := make(map[string]bool)
 	for i, to := range rcpt.To {
 		uids[i] = to.User
+
+		// Some devices were online and received the message. Skip them.
+		for _, deviceId := range to.Devices {
+			skipDevices[deviceId] = true
+		}
 	}
 
 	devices, count, err := store.Devices.GetAll(uids...)
@@ -81,8 +88,10 @@ func sendNotification(rcpt *push.Receipt, config *configType) {
 	i := 0
 	for _, devList := range devices {
 		for _, d := range devList {
-			sendTo[i] = d.DeviceId
-			i++
+			if _, ok := skipDevices[d.DeviceId]; !ok {
+				sendTo[i] = d.DeviceId
+				i++
+			}
 		}
 	}
 
@@ -95,7 +104,7 @@ func sendNotification(rcpt *push.Receipt, config *configType) {
 		TimeToLive:       &config.TimeToLive,
 		DryRun:           false,
 		// FIXME(gene): the real plugin must understand the structure of data to
-		// ensure it does not exceed 4KB
+		// ensure it does not exceed 4KB. Messages on "me" are structured and must be converted to text first.
 		Data: rcpt.Payload,
 		Notification: &fcm.Notification{
 			Title:        "X sent a message",

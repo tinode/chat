@@ -21,6 +21,8 @@ const (
 	ErrUnsupported
 	// Secret has expired
 	ErrExpired
+	// Policy violation, e.g. password too weak.
+	ErrPolicy
 )
 
 // Interface which auth providers must implement

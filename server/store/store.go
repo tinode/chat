@@ -187,7 +187,7 @@ func (UsersObjMapper) Update(uid types.Uid, update map[string]interface{}) error
 
 // GetSubs loads a list of subscriptions for the given user
 func (u UsersObjMapper) GetSubs(id types.Uid) ([]types.Subscription, error) {
-	return adaptr.SubsForUser(id)
+	return adaptr.SubsForUser(id, false)
 }
 
 // GetSubs loads a list of subscriptions for the given user
@@ -195,9 +195,15 @@ func (u UsersObjMapper) FindSubs(id types.Uid, query []interface{}) ([]types.Sub
 	return adaptr.FindSubs(id, query)
 }
 
-// GetTopics is exacly the same as Topics.GetForUser
+// GetTopics load a list of user's subscriptions with Public field copied to subscription
 func (u UsersObjMapper) GetTopics(id types.Uid) ([]types.Subscription, error) {
-	return adaptr.TopicsForUser(id)
+	return adaptr.TopicsForUser(id, false)
+}
+
+// GetTopics load a list of user's subscriptions with Public field copied to subscription.
+// Deleted topics are returned too.
+func (u UsersObjMapper) GetTopicsAny(id types.Uid) ([]types.Subscription, error) {
+	return adaptr.TopicsForUser(id, true)
 }
 
 // Topics struct to hold methods for persistence mapping for the topic object.
@@ -243,13 +249,25 @@ func (TopicsObjMapper) Get(topic string) (*types.Topic, error) {
 
 // GetUsers loads subscriptions for topic plus loads user.Public
 func (TopicsObjMapper) GetUsers(topic string) ([]types.Subscription, error) {
-	return adaptr.UsersForTopic(topic)
+	return adaptr.UsersForTopic(topic, false)
 }
 
-// GetSubs loads a list of subscriptions to the given topic, user.Public is not loaded
-func (TopicsObjMapper) GetSubs(topic string) ([]types.Subscription, error) {
-	return adaptr.SubsForTopic(topic)
+// GetUsersAny is the same as GetUsers, except it loads deleted subscriptions too.
+func (TopicsObjMapper) GetUsersAny(topic string) ([]types.Subscription, error) {
+	return adaptr.UsersForTopic(topic, true)
 }
+
+// GetSubs loads a list of subscriptions to the given topic, user.Public and deleted
+// subscriptions are not loaded
+func (TopicsObjMapper) GetSubs(topic string) ([]types.Subscription, error) {
+	return adaptr.SubsForTopic(topic, false)
+}
+
+// GetSubs loads a list of subscriptions to the given topic, including deleted subscriptions.
+// user.Public is not loaded
+// func (TopicsObjMapper) GetSubsAny(topic string) ([]types.Subscription, error) {
+//	return adaptr.SubsForTopic(topic, true)
+// }
 
 func (TopicsObjMapper) Update(topic string, update map[string]interface{}) error {
 	update["UpdatedAt"] = types.TimeNow()
@@ -281,6 +299,7 @@ func (SubsObjMapper) Create(subs ...*types.Subscription) error {
 	return err
 }
 
+// Get given subscription
 func (SubsObjMapper) Get(topic string, user types.Uid) (*types.Subscription, error) {
 	return adaptr.SubscriptionGet(topic, user)
 }

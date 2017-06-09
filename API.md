@@ -138,7 +138,7 @@ login: {
                   // authentication scheme, required
 }
 ```
-The `basic` authentication scheme expects `secret` to be a base64-encoded string of a string composed of a user name followed by a colon `:` followed by a plan text password. The `token` expects secret to be a previously obtained security token.
+The `basic` authentication scheme expects `secret` to be a base64-encoded string of a string composed of a user name followed by a colon `:` followed by a plan text password. User name in the `basic` scheme must not contain colon character ':' (ASCII 0x3A). The `token` expects secret to be a previously obtained security token.
 
 The only supported authentication schemes are `basic` and `token`. _Authentication scheme `none` is planned to support anonymous users in the future._
 

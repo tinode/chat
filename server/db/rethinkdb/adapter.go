@@ -403,10 +403,16 @@ func (a *RethinkDbAdapter) TopicGet(topic string) (*t.Topic, error) {
 }
 
 // TopicsForUser loads user's contact list: p2p and grp topics, except for 'me' subscription.
-func (a *RethinkDbAdapter) TopicsForUser(uid t.Uid) ([]t.Subscription, error) {
+// Reads and denormalizes Public value.
+func (a *RethinkDbAdapter) TopicsForUser(uid t.Uid, keepDeleted bool) ([]t.Subscription, error) {
 	// Fetch user's subscriptions
 	// Subscription have Topic.UpdatedAt denormalized into Subscription.UpdatedAt
-	q := rdb.DB(a.dbName).Table("subscriptions").GetAllByIndex("User", uid.String()).Limit(MAX_RESULTS)
+	q := rdb.DB(a.dbName).Table("subscriptions").GetAllByIndex("User", uid.String())
+	if !keepDeleted {
+		// Filter out rows with defined DeletedAt
+		q = q.Filter(rdb.Row.HasFields("DeletedAt").Not())
+	}
+	q = q.Limit(MAX_RESULTS)
 	//log.Printf("RethinkDbAdapter.TopicsForUser q: %+v", q)
 	rows, err := q.Run(a.conn)
 	if err != nil {
@@ -502,10 +508,15 @@ func (a *RethinkDbAdapter) TopicsForUser(uid t.Uid) ([]t.Subscription, error) {
 }
 
 // UsersForTopic loads users subscribed to the given topic
-func (a *RethinkDbAdapter) UsersForTopic(topic string) ([]t.Subscription, error) {
+func (a *RethinkDbAdapter) UsersForTopic(topic string, keepDeleted bool) ([]t.Subscription, error) {
 	// Fetch topic subscribers
 	// Fetch all subscribed users. The number of users is not large
-	q := rdb.DB(a.dbName).Table("subscriptions").GetAllByIndex("Topic", topic).Limit(MAX_RESULTS)
+	q := rdb.DB(a.dbName).Table("subscriptions").GetAllByIndex("Topic", topic)
+	if !keepDeleted {
+		// Filter out rows with DeletedAt being not null
+		q = q.Filter(rdb.Row.HasFields("DeletedAt").Not())
+	}
+	q = q.Limit(MAX_RESULTS)
 	//log.Printf("RethinkDbAdapter.UsersForTopic q: %+v", q)
 	rows, err := q.Run(a.conn)
 	if err != nil {
@@ -597,7 +608,8 @@ func (a *RethinkDbAdapter) TopicUpdate(topic string, update map[string]interface
 // Get a subscription of a user to a topic
 func (a *RethinkDbAdapter) SubscriptionGet(topic string, user t.Uid) (*t.Subscription, error) {
 
-	rows, err := rdb.DB(a.dbName).Table("subscriptions").Get(topic + ":" + user.String()).Run(a.conn)
+	rows, err := rdb.DB(a.dbName).Table("subscriptions").Get(topic + ":" + user.String()).
+		Filter(rdb.Row.HasFields("DeletedAt").Not()).Run(a.conn)
 	if err != nil {
 		return nil, err
 	}
@@ -619,13 +631,17 @@ func (a *RethinkDbAdapter) SubsLastSeen(topic string, user t.Uid, lastSeen map[s
 	return err
 }
 
-// SubsForUser loads a list of user's subscriptions to topics
-func (a *RethinkDbAdapter) SubsForUser(forUser t.Uid) ([]t.Subscription, error) {
+// SubsForUser loads a list of user's subscriptions to topics. Does NOT read Public value.
+func (a *RethinkDbAdapter) SubsForUser(forUser t.Uid, keepDeleted bool) ([]t.Subscription, error) {
 	if forUser.IsZero() {
 		return nil, errors.New("RethinkDb adapter: invalid user ID in TopicGetAll")
 	}
 
-	q := rdb.DB(a.dbName).Table("subscriptions").GetAllByIndex("User", forUser.String()).Limit(MAX_RESULTS)
+	q := rdb.DB(a.dbName).Table("subscriptions").GetAllByIndex("User", forUser.String())
+	if !keepDeleted {
+		q = q.Filter(rdb.Row.HasFields("DeletedAt").Not())
+	}
+	q = q.Limit(MAX_RESULTS)
 
 	rows, err := q.Run(a.conn)
 	if err != nil {
@@ -641,7 +657,7 @@ func (a *RethinkDbAdapter) SubsForUser(forUser t.Uid) ([]t.Subscription, error) 
 }
 
 // SubsForTopic fetches all subsciptions for a topic.
-func (a *RethinkDbAdapter) SubsForTopic(topic string) ([]t.Subscription, error) {
+func (a *RethinkDbAdapter) SubsForTopic(topic string, keepDeleted bool) ([]t.Subscription, error) {
 	//log.Println("Loading subscriptions for topic ", topic)
 
 	// must load User.Public for p2p topics
@@ -656,7 +672,12 @@ func (a *RethinkDbAdapter) SubsForTopic(topic string) ([]t.Subscription, error) 
 		}
 	}
 
-	q := rdb.DB(a.dbName).Table("subscriptions").GetAllByIndex("Topic", topic).Limit(MAX_RESULTS)
+	q := rdb.DB(a.dbName).Table("subscriptions").GetAllByIndex("Topic", topic)
+	if !keepDeleted {
+		// Filter out rows where DeletedAt is defined
+		q = q.Filter(rdb.Row.HasFields("DeletedAt").Not())
+	}
+	q = q.Limit(MAX_RESULTS)
 	//log.Println("Loading subscription q=", q)
 
 	rows, err := q.Run(a.conn)
@@ -684,19 +705,32 @@ func (a *RethinkDbAdapter) SubsForTopic(topic string) ([]t.Subscription, error) 
 
 // SubsUpdate updates a single subscription.
 func (a *RethinkDbAdapter) SubsUpdate(topic string, user t.Uid, update map[string]interface{}) error {
-	_, err := rdb.DB(a.dbName).Table("subscriptions").Get(topic + ":" + user.String()).Update(update).RunWrite(a.conn)
+	_, err := rdb.DB(a.dbName).Table("subscriptions").
+		Get(topic + ":" + user.String()).Update(update).RunWrite(a.conn)
 	return err
 }
 
-// SubsDelete deletes a subscription.
+// SubsDelete marks subscription as deleted.
 func (a *RethinkDbAdapter) SubsDelete(topic string, user t.Uid) error {
-	_, err := rdb.DB(a.dbName).Table("subscriptions").Get(topic + ":" + user.String()).Delete().RunWrite(a.conn)
+	now := t.TimeNow()
+	_, err := rdb.DB(a.dbName).Table("subscriptions").
+		Get(topic + ":" + user.String()).Update(map[string]interface{}{
+		"UpdatedAt": now,
+		"DeletedAt": now,
+	}).RunWrite(a.conn)
+	// _, err := rdb.DB(a.dbName).Table("subscriptions").Get(topic + ":" + user.String()).Delete().RunWrite(a.conn)
 	return err
 }
 
-// SubsDelForTopic deletes all subscriptions to the given topic
+// SubsDelForTopic markes all subscriptions to the given topic as deleted
 func (a *RethinkDbAdapter) SubsDelForTopic(topic string) error {
-	_, err := rdb.DB(a.dbName).Table("subscriptions").GetAllByIndex("Topic", topic).Delete().RunWrite(a.conn)
+	now := t.TimeNow()
+	update := map[string]interface{}{
+		"UpdatedAt": now,
+		"DeletedAt": now,
+	}
+	_, err := rdb.DB(a.dbName).Table("subscriptions").GetAllByIndex("Topic", topic).
+		Update(update).RunWrite(a.conn)
 	return err
 }
 

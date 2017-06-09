@@ -440,7 +440,7 @@ func (s *Session) login(msg *ClientComMessage) {
 		tokenExp = expires
 	}
 	// Token GenSecret never fails, ignore the error
-	secret, _ := handler.GenSecret(uid, expires)
+	secret, _ := handler.GenSecret(uid, tokenExp)
 
 	// Record deviceId used in this session
 	if s.deviceId != "" {
@@ -476,6 +476,12 @@ func (s *Session) acc(msg *ClientComMessage) {
 	}
 
 	if strings.HasPrefix(msg.Acc.User, "new") {
+		// User cannot authenticate with the new acocunt because the user is already authenticated
+		if msg.Acc.Login && !s.uid.IsZero() {
+			s.queueOut(ErrAlreadyAuthenticated(msg.Acc.Id, "", msg.timestamp))
+			return
+		}
+
 		// Request to create a new account
 		if ok, err := authhdl.IsUnique(msg.Acc.Secret); !ok {
 			log.Println("Not unique: ", err)
@@ -508,19 +514,22 @@ func (s *Session) acc(msg *ClientComMessage) {
 				private = msg.Acc.Desc.Private
 			}
 		}
+
 		if msg.Acc.Tags != nil && len(msg.Acc.Tags) > 0 {
 			tags := make([]string, 0, len(msg.Acc.Tags))
 			if filterTags(tags, msg.Acc.Tags) > 0 {
 				user.Tags = tags
 			}
 		}
+
 		if _, err := store.Users.Create(&user, private); err != nil {
 			s.queueOut(ErrUnknown(msg.Acc.Id, "", msg.timestamp))
 			return
 		}
 
 		if _, err := authhdl.AddRecord(user.Uid(), msg.Acc.Secret, time.Time{}); err != nil {
-			// FIXME(gene): delete incomplete user record
+			// Attempt to delete incomplete user record
+			store.Users.Delete(user.Uid(), false)
 			s.queueOut(ErrUnknown(msg.Acc.Id, "", msg.timestamp))
 			return
 		}
@@ -539,11 +548,32 @@ func (s *Session) acc(msg *ClientComMessage) {
 			"user": user.Uid().UserId(),
 			"desc": desc,
 		}
+
+		if msg.Acc.Login {
+			// User wants to use the new account for authentication. Generate token and resord session.
+
+			s.uid = user.Uid()
+			expires := msg.timestamp.Add(globals.tokenExpiresIn)
+			reply.Ctrl.Params["token"] = store.GetAuthHandler("token").GenSecret(s.uid, expires)
+			reply.Ctrl.Params["expires"] = expires
+
+			// Record session
+			if s.deviceId != "" {
+				store.Devices.Update(s.uid, &types.DeviceDef{
+					DeviceId: s.deviceId,
+					Platform: "",
+					LastSeen: msg.timestamp,
+					Lang:     s.lang,
+				})
+			}
+		}
+
 		s.queueOut(reply)
 
 	} else if !s.uid.IsZero() {
 		// Request to update auth of an existing account. Only basic auth is currently supported
 		// TODO(gene): support adding new auth schemes
+		// TODO(gene): support the case when msg.Acc.User is not equal to the current user
 		if _, err := authhdl.UpdateRecord(s.uid, msg.Acc.Secret, time.Time{}); err != nil {
 			s.queueOut(ErrDuplicateCredential(msg.Acc.Id, "", msg.timestamp))
 		}

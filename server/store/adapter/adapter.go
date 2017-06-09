@@ -39,22 +39,22 @@ type Adapter interface {
 	TopicCreateP2P(initiator, invited *t.Subscription) error
 	// TopicGet loads a single topic by name, if it exists. If the topic does not exist the call returns (nil, nil)
 	TopicGet(topic string) (*t.Topic, error)
-	// TopicsForUser loads subscriptions for a given user
-	TopicsForUser(uid t.Uid) ([]t.Subscription, error)
+	// TopicsForUser loads subscriptions for a given user. Reads public value.
+	TopicsForUser(uid t.Uid, keepDeleted bool) ([]t.Subscription, error)
 	// UsersForTopic loads users' subscriptions for a given topic
-	UsersForTopic(topic string) ([]t.Subscription, error)
+	UsersForTopic(topic string, keepDeleted bool) ([]t.Subscription, error)
 	TopicShare(subs []*t.Subscription) (int, error)
 	TopicDelete(topic string) error
 	// Increment Topic's or User's SeqId value
 	TopicUpdateOnMessage(topic string, msg *t.Message) error
 	TopicUpdate(topic string, update map[string]interface{}) error
 
-	// SubscriptionGet reads a subscription of a user to a topic
+	// SubscriptionGet rads a subscription of a user to a topic
 	SubscriptionGet(topic string, user t.Uid) (*t.Subscription, error)
-	// SubsForUser gets a list of topics of interest for a given user
-	SubsForUser(user t.Uid) ([]t.Subscription, error)
+	// SubsForUser gets a list of topics of interest for a given user. Does NOT read public value.
+	SubsForUser(user t.Uid, keepDeleted bool) ([]t.Subscription, error)
 	// SubsForTopic gets a list of subscriptions to a given topic
-	SubsForTopic(topic string) ([]t.Subscription, error)
+	SubsForTopic(topic string, keepDeleted bool) ([]t.Subscription, error)
 	// SubsUpdate updates pasrt of a subscription object. Pass nil for fields which don't need to be updated
 	SubsUpdate(topic string, user t.Uid, update map[string]interface{}) error
 	// SubsDelete deletes a single subscription
