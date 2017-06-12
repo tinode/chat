@@ -413,7 +413,7 @@ func (t *Topic) run(hub *Hub) {
 			if meta.pkt.Get != nil {
 				// Get request
 				if meta.what&constMsgMetaDesc != 0 {
-					t.replyGetDesc(meta.sess, meta.pkt.Get.Id, false, meta.pkt.Get.Desc)
+					t.replyGetDesc(meta.sess, meta.pkt.Get.Id, "", meta.pkt.Get.Desc)
 				}
 				if meta.what&constMsgMetaSub != 0 {
 					t.replyGetSub(meta.sess, meta.pkt.Get.Id, meta.pkt.Get.Sub)
@@ -607,7 +607,11 @@ func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin, sendDesc bool) error {
 	sreg.sess.queueOut(resp)
 
 	if sendDesc {
-		t.replyGetDesc(sreg.sess, sreg.pkt.Id, sreg.created, sreg.pkt.Get.Desc)
+		var tmpName string
+		if sreg.created {
+			tmpName = sreg.pkt.Topic
+		}
+		t.replyGetDesc(sreg.sess, sreg.pkt.Id, tmpName, sreg.pkt.Get.Desc)
 	}
 
 	return nil
@@ -657,7 +661,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string, inf
 		// Check if the user has permission to join
 		if !t.accessAuth.IsJoiner() {
 			sess.queueOut(ErrPermissionDenied(pktId, t.original(sess.uid), now))
-			return errors.New("unsolicited subscriptions delayed")
+			return errors.New("unsolicited subscription denied")
 		}
 
 		if modeWant == types.ModeNone {
@@ -685,6 +689,9 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string, inf
 					log.Println(err.Error())
 					sess.queueOut(ErrUnknown(pktId, t.original(sess.uid), now))
 					return err
+				} else if user2 == nil {
+					sess.queueOut(ErrUserNotFound(pktId, t.original(sess.uid), now))
+					return errors.New("user not found")
 				} else {
 					userData.public = user2.Public
 				}
@@ -910,6 +917,9 @@ func (t *Topic) approveSub(h *Hub, sess *Session, target types.Uid, set *MsgClie
 		if user, err := store.Users.Get(target); err != nil {
 			sess.queueOut(ErrUnknown(set.Id, t.original(sess.uid), now))
 			return err
+		} else if user == nil {
+			sess.queueOut(ErrUserNotFound(set.Id, t.original(sess.uid), now))
+			return errors.New("user not found")
 		} else {
 			modeWant = user.Access.Auth
 		}
@@ -1000,11 +1010,11 @@ func (t *Topic) approveSub(h *Hub, sess *Session, target types.Uid, set *MsgClie
 }
 
 // replyGetDesc is a response to a get.desc request on a topic, sent to just the session as a {meta} packet
-func (t *Topic) replyGetDesc(sess *Session, id string, created bool, opts *MsgGetOpts) error {
+func (t *Topic) replyGetDesc(sess *Session, id, tempName string, opts *MsgGetOpts) error {
 	now := time.Now().UTC().Round(time.Millisecond)
 
 	// Check if user requested modified data
-	updatedOnly := (opts == nil || opts.IfModifiedSince == nil || opts.IfModifiedSince.Before(t.updated))
+	ifUpdated := (opts == nil || opts.IfModifiedSince == nil || opts.IfModifiedSince.Before(t.updated))
 
 	desc := &MsgTopicDesc{CreatedAt: &t.created}
 	if !t.updated.IsZero() {
@@ -1012,8 +1022,11 @@ func (t *Topic) replyGetDesc(sess *Session, id string, created bool, opts *MsgGe
 	}
 
 	pud, full := t.perUser[sess.uid]
+	if t.cat == types.TopicCat_Me {
+		full = true
+	}
 
-	if updatedOnly {
+	if ifUpdated {
 		if t.public != nil {
 			desc.Public = t.public
 		} else if full {
@@ -1025,18 +1038,20 @@ func (t *Topic) replyGetDesc(sess *Session, id string, created bool, opts *MsgGe
 	// Request may come from a subscriber (full == true) or a stranger.
 	// Give subscriber a fuller description than to a stranger
 	if full {
-		if (pud.modeGiven & pud.modeWant).IsSharer() {
+		if t.cat == types.TopicCat_Me || (pud.modeGiven & pud.modeWant).IsSharer() {
 			desc.DefaultAcs = &MsgDefaultAcsMode{
 				Auth: t.accessAuth.String(),
 				Anon: t.accessAnon.String()}
 		}
 
-		desc.Acs = &MsgAccessMode{
-			Want:  pud.modeWant.String(),
-			Given: pud.modeGiven.String(),
-			Mode:  (pud.modeGiven & pud.modeWant).String()}
+		if t.cat != types.TopicCat_Me {
+			desc.Acs = &MsgAccessMode{
+				Want:  pud.modeWant.String(),
+				Given: pud.modeGiven.String(),
+				Mode:  (pud.modeGiven & pud.modeWant).String()}
+		}
 
-		if updatedOnly {
+		if ifUpdated {
 			desc.Private = pud.private
 		}
 
@@ -1047,9 +1062,10 @@ func (t *Topic) replyGetDesc(sess *Session, id string, created bool, opts *MsgGe
 		desc.ReadSeqId = max(pud.readId, desc.ClearId)
 		desc.RecvSeqId = max(pud.recvId, pud.readId)
 
-		// When a topic is first created, its name may change. Report the new name
-		if created {
-			desc.Name = t.name
+		// When the topic is first created it may have been assigned a temporary name.
+		// Report the temporary name here. It could be empty.
+		if tempName != "" && tempName != t.original(sess.uid) {
+			desc.TempName = tempName
 		}
 	}
 

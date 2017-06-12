@@ -281,9 +281,11 @@ type MsgAccessMode struct {
 
 // Topic description, S2C in Meta message
 type MsgTopicDesc struct {
-	CreatedAt  *time.Time         `json:"created,omitempty"`
-	UpdatedAt  *time.Time         `json:"updated,omitempty"`
-	Name       string             `json:"name,omitempty"`
+	CreatedAt *time.Time `json:"created,omitempty"`
+	UpdatedAt *time.Time `json:"updated,omitempty"`
+	// When a group topic is created, it's given a temporary name by the client.
+	// Then this name changes. Report the original name here.
+	TempName   string             `json:"tmpname,omitempty"`
 	DefaultAcs *MsgDefaultAcsMode `json:"defacs,omitempty"`
 	// Actual access mode
 	Acs *MsgAccessMode `json:"acs,omitempty"`
@@ -373,7 +375,7 @@ type MsgServerData struct {
 	// ID of the user who originated the message as {pub}, could be empty if sent by the system
 	From      string            `json:"from,omitempty"`
 	Timestamp time.Time         `json:"ts"`
-	DeletedAt *time.Time        `json:deleted,omitempty`
+	DeletedAt *time.Time        `json:"deleted,omitempty"`
 	SeqId     int               `json:"seq"`
 	Head      map[string]string `json:"head,omitempty"`
 	Content   interface{}       `json:"content"`

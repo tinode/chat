@@ -238,16 +238,20 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 
 		// 'me' has no owner, t.owner = nil
 
-		// Ensure all requests to subscribe are automatically rejected
-		t.accessAuth = types.ModeNone
-		t.accessAnon = types.ModeNone
-
 		user, err := store.Users.Get(sreg.sess.uid)
 		if err != nil {
 			log.Println("hub: cannot load user object for 'me'='" + t.name + "' (" + err.Error() + ")")
 			sreg.sess.queueOut(ErrUnknown(sreg.pkt.Id, t.x_original, timestamp))
 			return
+		} else if user == nil {
+			log.Println("hub: user's account unexpectedly not found (deleted?)")
+			sreg.sess.queueOut(ErrUserNotFound(sreg.pkt.Id, t.x_original, timestamp))
+			return
 		}
+
+		// User's default access for p2p topics
+		t.accessAuth = user.Access.Auth
+		t.accessAnon = user.Access.Anon
 
 		if err = t.loadSubscribers(); err != nil {
 			log.Println("hub: cannot load subscribers for '" + t.name + "' (" + err.Error() + ")")
@@ -284,6 +288,10 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		if err != nil {
 			log.Println("hub: cannot load user object for 'fnd'='" + t.name + "' (" + err.Error() + ")")
 			sreg.sess.queueOut(ErrUnknown(sreg.pkt.Id, t.x_original, timestamp))
+			return
+		} else if user == nil {
+			log.Println("hub: user's account unexpectedly not found (deleted?)")
+			sreg.sess.queueOut(ErrUserNotFound(sreg.pkt.Id, t.x_original, timestamp))
 			return
 		}
 
@@ -334,7 +342,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 			}
 
 			// Case 3, fail
-			if len(subs) == 0 {
+			if subs == nil || len(subs) == 0 {
 				log.Println("hub: missing both subscriptions for '" + t.name + "' (SHOULD NEVER HAPPEN!)")
 				sreg.sess.queueOut(ErrUnknown(sreg.pkt.Id, t.x_original, timestamp))
 				return
@@ -392,7 +400,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 				log.Println("hub: failed to load users for '" + t.name + "' (" + err.Error() + ")")
 				sreg.sess.queueOut(ErrUnknown(sreg.pkt.Id, t.x_original, timestamp))
 				return
-			} else if len(users) != 2 {
+			} else if users == nil || len(users) != 2 {
 				// Invited user does not exist
 				log.Println("hub: missing user for '" + t.name + "'")
 				sreg.sess.queueOut(ErrUserNotFound(sreg.pkt.Id, t.x_original, timestamp))
@@ -665,6 +673,10 @@ func (t *Topic) loadSubscribers() error {
 		return err
 	}
 
+	if subs == nil {
+		return nil
+	}
+
 	for _, sub := range subs {
 		uid := types.ParseUid(sub.User)
 		t.perUser[uid] = perUserData{
@@ -768,7 +780,7 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *MsgClientDel, del boo
 					if subs, err := store.Topics.GetSubs(topic); err != nil {
 						sess.queueOut(ErrUnknown(msg.Id, msg.Topic, now))
 						return
-					} else if len(subs) < 2 {
+					} else if subs != nil && len(subs) < 2 {
 						// Fewer than 2 subscriptions, delete the entire topic
 						if err := store.Topics.Delete(topic); err != nil {
 							sess.queueOut(ErrUnknown(msg.Id, msg.Topic, now))
@@ -823,13 +835,16 @@ func replyTopicDescBasic(sess *Session, topic string, get *MsgClientGet) {
 
 	if strings.HasPrefix(topic, "grp") {
 		stopic, err := store.Topics.Get(topic)
-		if err == nil {
+		if err != nil {
+			sess.queueOut(ErrUnknown(get.Id, get.Topic, now))
+			return
+		} else if stopic == nil {
+			sess.queueOut(ErrTopicNotFound(get.Id, get.Topic, now))
+			return
+		} else {
 			desc.CreatedAt = &stopic.CreatedAt
 			desc.UpdatedAt = &stopic.UpdatedAt
 			desc.Public = stopic.Public
-		} else {
-			sess.queueOut(ErrUnknown(get.Id, get.Topic, now))
-			return
 		}
 	} else {
 		// 'me' and p2p topics
@@ -853,14 +868,17 @@ func replyTopicDescBasic(sess *Session, topic string, get *MsgClientGet) {
 		}
 
 		suser, err := store.Users.Get(uid)
-		if err == nil {
-			desc.CreatedAt = &suser.CreatedAt
-			desc.UpdatedAt = &suser.UpdatedAt
-			desc.Public = suser.Public
-		} else {
+		if err != nil {
 			log.Printf("hub.replyTopicInfoBasic: sending  error 3")
 			sess.queueOut(ErrUnknown(get.Id, get.Topic, now))
 			return
+		} else if suser == nil {
+			sess.queueOut(ErrUserNotFound(get.Id, get.Topic, now))
+			return
+		} else {
+			desc.CreatedAt = &suser.CreatedAt
+			desc.UpdatedAt = &suser.UpdatedAt
+			desc.Public = suser.Public
 		}
 	}
 

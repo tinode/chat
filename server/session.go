@@ -535,7 +535,11 @@ func (s *Session) acc(msg *ClientComMessage) {
 		}
 
 		reply := NoErrCreated(msg.Acc.Id, "", msg.timestamp)
-		desc := &MsgTopicDesc{
+		params := map[string]interface{}{
+			"user": user.Uid().UserId(),
+		}
+
+		params["desc"] = &MsgTopicDesc{
 			CreatedAt: &user.CreatedAt,
 			UpdatedAt: &user.UpdatedAt,
 			DefaultAcs: &MsgDefaultAcsMode{
@@ -544,18 +548,13 @@ func (s *Session) acc(msg *ClientComMessage) {
 			Public:  user.Public,
 			Private: private}
 
-		reply.Ctrl.Params = map[string]interface{}{
-			"user": user.Uid().UserId(),
-			"desc": desc,
-		}
-
 		if msg.Acc.Login {
 			// User wants to use the new account for authentication. Generate token and resord session.
 
 			s.uid = user.Uid()
 			expires := msg.timestamp.Add(globals.tokenExpiresIn)
-			reply.Ctrl.Params["token"] = store.GetAuthHandler("token").GenSecret(s.uid, expires)
-			reply.Ctrl.Params["expires"] = expires
+			params["token"], _ = store.GetAuthHandler("token").GenSecret(s.uid, expires)
+			params["expires"] = expires
 
 			// Record session
 			if s.deviceId != "" {
@@ -568,6 +567,7 @@ func (s *Session) acc(msg *ClientComMessage) {
 			}
 		}
 
+		reply.Ctrl.Params = params
 		s.queueOut(reply)
 
 	} else if !s.uid.IsZero() {
