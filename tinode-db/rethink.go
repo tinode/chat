@@ -235,9 +235,14 @@ func gen_rethink(reset bool, dbsource string, data *Data) {
 	toInsert := 80
 	// Starting 4 days ago
 	timestamp := time.Now().UTC().Round(time.Millisecond).Add(time.Second * time.Duration(-3600*24*4))
+	subIdx := rand.Intn(len(data.Subscriptions))
 	for i := 0; i < toInsert; i++ {
+		// At least 20% of subsequent messages should come from the same user in the same topic.
+		if rand.Intn(5) > 0 {
+			subIdx = rand.Intn(len(data.Subscriptions))
+		}
 
-		sub := data.Subscriptions[rand.Intn(len(data.Subscriptions))]
+		sub := data.Subscriptions[subIdx]
 		topic := nameIndex[sub["topic"].(string)]
 		from := types.ParseUid(nameIndex[sub["user"].(string)])
 		if topic == oldTopic && from == oldFrom {
