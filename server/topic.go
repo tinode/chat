@@ -1488,6 +1488,8 @@ func (t *Topic) replyGetData(sess *Session, id string, req *MsgBrowseOpts) error
 
 		}
 	}
+	// Inform the requester that all the data has been served.
+	sess.queueOut(NoErr(id, t.original(sess.uid), now))
 
 	return nil
 }
@@ -1692,8 +1694,6 @@ func (t *Topic) replyLeaveUnsub(h *Hub, sess *Session, id string) error {
 //   notify - user who'll receiving this message
 //   target - user whose access rights are being changed
 //   from  - user who initiated the request
-//   topic	- topic's public
-//	 user - user's public
 //   act - what's being done - request/invitation/approval/removal
 //   modeWant, modeGiven - new access parameters
 //   info - free-form user data
