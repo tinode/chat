@@ -50,11 +50,22 @@ individually. The maximum number of members will be limited to a reasonably high
 
 ## Screenshots
 
-### Web
-
-<img src="web-topic.png" alt="javascript app screenshot" width=900/>
-
 ### Android
 
+<p align="center">
 <img src="android-chats.png" alt="android screenshot" width=270 /> 
-<img src="android-messages.png" alt="javascript app screenshot" width=270 />
+<img src="android-messages.png" alt="android screenshot" width=270 />
+</p>
+
+### Desktop Web
+
+<p align="center">
+<img src="web-desktop.png" alt="web desktop app" width=1080 />
+</p>
+
+### Mobile Web
+
+<p align="center">
+  <img src="web-mobile-contacts.png" alt="Mobile web: contacts" width=401 />
+  <img src="web-mobile-chat.png" alt="Mobile web: chat" width=485 />
+</p>
