@@ -65,7 +65,7 @@ individually. The maximum number of members will be limited to a reasonably high
 
 ### Mobile Web
 
-<p align="center">
+<p align="center" nowrap>
   <img src="web-mobile-contacts.png" alt="Mobile web: contacts" width=401 />
   <img src="web-mobile-chat.png" alt="Mobile web: chat" width=485 />
 </p>
