@@ -9,6 +9,8 @@ import (
 const (
 	// No error
 	NoErr = iota
+	// No change
+	InfoNotModified
 	// DB or other internal failure
 	ErrInternal
 	// The secret cannot be parsed or otherwise wrong

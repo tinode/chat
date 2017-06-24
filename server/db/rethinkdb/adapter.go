@@ -242,6 +242,8 @@ func (a *RethinkDbAdapter) DelAllAuthRecords(uid t.Uid) (int, error) {
 
 // Update user's authentication secret
 func (a *RethinkDbAdapter) UpdAuthRecord(unique string, secret []byte, expires time.Time) (int, error) {
+	log.Println("Updating for unique", unique)
+
 	res, err := rdb.DB(a.dbName).Table("auth").Get(unique).Update(
 		map[string]interface{}{
 			"secret":  secret,

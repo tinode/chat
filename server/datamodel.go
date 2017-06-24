@@ -653,6 +653,16 @@ func ErrGone(id, topic string, ts time.Time) *ServerComMessage {
 	return msg
 }
 
+func ErrPolicy(id, topic string, ts time.Time) *ServerComMessage {
+	msg := &ServerComMessage{Ctrl: &MsgServerCtrl{
+		Id:        id,
+		Code:      http.StatusUnprocessableEntity, // 422
+		Text:      "policy violation",
+		Topic:     topic,
+		Timestamp: ts}}
+	return msg
+}
+
 func ErrLocked(id, topic string, ts time.Time) *ServerComMessage {
 	msg := &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,

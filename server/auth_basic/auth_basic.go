@@ -68,10 +68,7 @@ func (BasicAuth) UpdateRecord(uid types.Uid, secret []byte, expires time.Time) (
 	if err != nil {
 		return auth.ErrInternal, errors.New("basic auth handler: login cannot be changed")
 	}
-	count, err := store.Users.UpdateAuthRecord(uid, "basic", uname, passhash, expires)
-	if count == 0 {
-		return auth.ErrInternal, errors.New("basic auth handler: record is missing")
-	}
+	_, err = store.Users.UpdateAuthRecord(uid, "basic", uname, passhash, expires)
 	if err != nil {
 		return auth.ErrInternal, err
 	}

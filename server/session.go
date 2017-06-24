@@ -527,10 +527,10 @@ func (s *Session) acc(msg *ClientComMessage) {
 			return
 		}
 
-		if _, err := authhdl.AddRecord(user.Uid(), msg.Acc.Secret, time.Time{}); err != nil {
+		if code, err := authhdl.AddRecord(user.Uid(), msg.Acc.Secret, time.Time{}); err != nil {
 			// Attempt to delete incomplete user record
 			store.Users.Delete(user.Uid(), false)
-			s.queueOut(ErrUnknown(msg.Acc.Id, "", msg.timestamp))
+			s.queueOut(decodeAuthError(code, msg.Acc.Id, msg.timestamp))
 			return
 		}
 
@@ -574,9 +574,12 @@ func (s *Session) acc(msg *ClientComMessage) {
 		// Request to update auth of an existing account. Only basic auth is currently supported
 		// TODO(gene): support adding new auth schemes
 		// TODO(gene): support the case when msg.Acc.User is not equal to the current user
-		if _, err := authhdl.UpdateRecord(s.uid, msg.Acc.Secret, time.Time{}); err != nil {
-			s.queueOut(ErrDuplicateCredential(msg.Acc.Id, "", msg.timestamp))
+		if code, err := authhdl.UpdateRecord(s.uid, msg.Acc.Secret, time.Time{}); err != nil {
+			log.Println("failed to update credentials", err)
+			s.queueOut(decodeAuthError(code, msg.Acc.Id, msg.timestamp))
+			return
 		}
+
 		// TODO(gene): handle tags
 		s.queueOut(NoErr(msg.Acc.Id, "", msg.timestamp))
 
@@ -826,4 +829,31 @@ func filterTags(dst, src []string) int {
 		}
 	}
 	return len(dst)
+}
+
+func decodeAuthError(code int, id string, timestamp time.Time) *ServerComMessage {
+	var errmsg *ServerComMessage
+	switch code {
+	case auth.NoErr:
+		errmsg = NoErr(id, "", timestamp)
+	case auth.InfoNotModified:
+		errmsg = InfoNotModified(id, "", timestamp)
+	case auth.ErrInternal:
+		errmsg = ErrUnknown(id, "", timestamp)
+	case auth.ErrMalformed:
+		errmsg = ErrMalformed(id, "", timestamp)
+	case auth.ErrFailed:
+		errmsg = ErrAuthFailed(id, "", timestamp)
+	case auth.ErrDuplicate:
+		errmsg = ErrDuplicateCredential(id, "", timestamp)
+	case auth.ErrUnsupported:
+		errmsg = ErrNotImplemented(id, "", timestamp)
+	case auth.ErrExpired:
+		errmsg = ErrAuthFailed(id, "", timestamp)
+	case auth.ErrPolicy:
+		errmsg = ErrPolicy(id, "", timestamp)
+	default:
+		errmsg = ErrUnknown(id, "", timestamp)
+	}
+	return errmsg
 }
