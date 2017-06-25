@@ -53,19 +53,17 @@ individually. The maximum number of members will be limited to a reasonably high
 ### Android
 
 <p align="center">
-<img src="android-chats.png" alt="android screenshot" width=270 /> 
-<img src="android-messages.png" alt="android screenshot" width=270 />
+<img src="android-chats.png" alt="android screenshot" width=270 /> <img src="android-messages.png" alt="android screenshot" width=270 />
 </p>
 
 ### Desktop Web
 
 <p align="center">
-<img src="web-desktop.png" alt="web desktop app" width=1080 />
+  <img src="web-desktop.png" alt="Desktop web: full app" width=866 />
 </p>
 
 ### Mobile Web
 
-<p align="center" nowrap>
-  <img src="web-mobile-contacts.png" alt="Mobile web: contacts" width=401 />
-  <img src="web-mobile-chat.png" alt="Mobile web: chat" width=485 />
+<p align="center">
+  <img src="web-mob-contacts.png" alt="Mobile web: contacts" width=323 /> <img src="web-mob-chat.png" alt="Mobile web: chat" width=323 /> <img src="web-mob-topicinfo.png" alt="Mobile web: topic info" width=323 />
 </p>
