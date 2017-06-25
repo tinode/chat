@@ -59,7 +59,7 @@ individually. The maximum number of members will be limited to a reasonably high
 ### Desktop Web
 
 <p align="center">
-  <img src="web-desktop.png" alt="Desktop web: full app" width=866 />
+  <img src="web-desktop-two.png" alt="Desktop web: full app" width=866 />
 </p>
 
 ### Mobile Web
