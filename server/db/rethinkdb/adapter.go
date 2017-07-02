@@ -165,16 +165,6 @@ func (a *RethinkDbAdapter) CreateDb(reset bool) error {
 		return err
 	}
 
-	/*
-		// Device IDs for mobile push notifications
-		if _, err := rdb.DB("tinode").TableCreate("devices", rdb.TableCreateOpts{PrimaryKey: "id"}).RunWrite(a.conn); err != nil {
-			return err
-		}
-		if _, err := rdb.DB("tinode").Table("devices").IndexCreate("user").RunWrite(a.conn); err != nil {
-			return err
-		}
-	*/
-
 	return nil
 }
 
@@ -286,6 +276,9 @@ func (a *RethinkDbAdapter) UserGet(uid t.Uid) (*t.User, error) {
 		}
 		return nil, err
 	} else {
+		if row != nil {
+			row.Close()
+		}
 		// If user does not exist, it returns nil, nil
 		return nil, err
 	}
@@ -393,6 +386,7 @@ func (a *RethinkDbAdapter) TopicGet(topic string) (*t.Topic, error) {
 	}
 
 	if rows.IsNil() {
+		rows.Close()
 		return nil, nil
 	}
 
@@ -561,17 +555,19 @@ func (a *RethinkDbAdapter) UsersForTopic(topic string, keepDeleted bool) ([]t.Su
 }
 
 func (a *RethinkDbAdapter) TopicShare(shares []*t.Subscription) (int, error) {
-	// Assign Ids
+	// Assign Ids.
 	for i := 0; i < len(shares); i++ {
 		shares[i].Id = shares[i].Topic + ":" + shares[i].User
 	}
-
-	resp, err := rdb.DB(a.dbName).Table("subscriptions").Insert(shares).RunWrite(a.conn)
+	// Subscription could have been marked as deleted (DeletedAt != nil). If it's marked
+	// as deleted, unmark.
+	resp, err := rdb.DB(a.dbName).Table("subscriptions").
+		Insert(shares, rdb.InsertOpts{Conflict: "update"}).RunWrite(a.conn)
 	if err != nil {
-		return resp.Inserted, err
+		return resp.Inserted + resp.Replaced, err
 	}
 
-	return resp.Inserted, nil
+	return resp.Inserted + resp.Replaced, nil
 }
 
 func (a *RethinkDbAdapter) TopicDelete(topic string) error {
@@ -610,18 +606,22 @@ func (a *RethinkDbAdapter) TopicUpdate(topic string, update map[string]interface
 // Get a subscription of a user to a topic
 func (a *RethinkDbAdapter) SubscriptionGet(topic string, user t.Uid) (*t.Subscription, error) {
 
-	rows, err := rdb.DB(a.dbName).Table("subscriptions").Get(topic + ":" + user.String()).
-		Filter(rdb.Row.HasFields("DeletedAt").Not()).Run(a.conn)
+	rows, err := rdb.DB(a.dbName).Table("subscriptions").Get(topic + ":" + user.String()).Run(a.conn)
 	if err != nil {
 		return nil, err
 	}
 
 	if rows.IsNil() {
+		rows.Close()
 		return nil, nil
 	}
 
 	var sub t.Subscription
 	err = rows.One(&sub)
+
+	if sub.DeletedAt != nil {
+		return nil, rows.Err()
+	}
 	return &sub, rows.Err()
 }
 

@@ -82,6 +82,9 @@ func serveLongPoll(wrt http.ResponseWriter, req *http.Request) {
 
 	// Use lowest common denominator - this is a legacy handler after all (otherwise would use application/json)
 	wrt.Header().Set("Content-Type", "text/plain")
+	if globals.tlsStrictMaxAge != "" {
+		wrt.Header().Set("Strict-Transport-Security", "max-age"+globals.tlsStrictMaxAge)
+	}
 
 	enc := json.NewEncoder(wrt)
 

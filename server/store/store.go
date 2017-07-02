@@ -20,6 +20,9 @@ var adaptr adapter.Adapter
 var uGen types.UidGenerator
 
 type configType struct {
+	// Name of the adapter to use.
+	// Currently unused
+	AdapterName string `json:"adapter"`
 	// The following two values ate used to initialize types.UidGenerator
 	// Snowflake workerId, beteween 0 and 1023
 	WorkerID int `json:"worker_id"`
@@ -29,9 +32,8 @@ type configType struct {
 }
 
 // Open initializes the persistence system. Adapter holds a connection pool for a single database.
-//   name - the name of adapter to use
 //   jsonconf - configuration string
-func Open(name, jsonconf string) error {
+func Open(jsonconf string) error {
 	if adaptr == nil {
 		return errors.New("store: attept to Open an adapter before registering")
 	}

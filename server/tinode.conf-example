@@ -1,10 +1,18 @@
 {
 	"listen": ":6060",
 	"api_key_salt": "T713/rYYgW7g4m3vG6zGRh7+FM1t0T8j13koXScOAj4=",
-	"use_adapter": "rethinkdb",
 	"token_expires_in": 1209600,
 	"indexable_tags": ["tel", "email"],
 
+	"tls": {
+		"enabled": false,
+		"autocert": {
+			"cache": "certs",
+			"email": "use.your.own.email-or-remove-this-line@example.com",
+			"domains": ["www.example.com"]
+		}
+	},
+	
 	"auth_config": {
 		"token": {
 			"key": "wfaY2RgF2S1OQI/ZlK+LSrp1KB2jwAdGAIHQ7JZn+Kc="
@@ -14,6 +22,7 @@
 	"store_config": {
 		"worker_id": 1,
 		"uid_key": "la6YsO+bNX/+XIkOqc5Svw==",
+		"adapter": "rethinkdb",
 		"adapter_config": {
 			"database": "tinode",
 			"addresses": "localhost:28015"

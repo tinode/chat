@@ -233,15 +233,15 @@
   },
   {
    "createdAt": "-111.9h",
-   "modeHave": "JRWP",
-   "modeWant": "JRWP",
+   "modeHave": "JRWPS",
+   "modeWant": "JRWPS",
    "private": "Wow",
    "topic": "*ABC",
    "user": "bob"
   },
   {
    "createdAt": "-111.8h",
-   "modeHave": "JRWP",
+   "modeHave": "JRWPS",
    "modeWant": "JRWP",
    "private": "Custom group description by Bob",
    "topic": "*ABCDEF",
@@ -249,16 +249,16 @@
   },
   {
    "createdAt": "-111.7h",
-   "modeHave": "JRWP",
-   "modeWant": "JRWP",
+   "modeHave": "JRWPS",
+   "modeWant": "JRWPS",
    "private": "Kirgudu",
    "topic": "*ABCDEF",
    "user": "carol"
   },
   {
    "createdAt": "-111.6h",
-   "modeHave": "JRWP",
-   "modeWant": "JRWP",
+   "modeHave": "JRWPSA",
+   "modeWant": "JRWPS",
    "topic": "*ABCDEF",
    "user": "dave"
   },
@@ -286,7 +286,7 @@
   },
   {
    "createdAt": "-111.2h",
-   "modeHave": "JRWP",
+   "modeHave": "JRWPSA",
    "modeWant": "JRWP",
    "private": "I'm not the owner either",
    "topic": "*BF",

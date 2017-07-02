@@ -230,7 +230,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		exit:       make(chan *shutDown, 1),
 	}
 
-	// Request to load a 'me' topic. The topic always axists.
+	// Request to load a 'me' topic. The topic always exists.
 	if t.x_original == "me" {
 		log.Println("hub: loading 'me' topic")
 
@@ -241,10 +241,14 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		user, err := store.Users.Get(sreg.sess.uid)
 		if err != nil {
 			log.Println("hub: cannot load user object for 'me'='" + t.name + "' (" + err.Error() + ")")
+			// Log out the session
+			sreg.sess.uid = types.ZeroUid
 			sreg.sess.queueOut(ErrUnknown(sreg.pkt.Id, t.x_original, timestamp))
 			return
 		} else if user == nil {
 			log.Println("hub: user's account unexpectedly not found (deleted?)")
+			// Log out the session
+			sreg.sess.uid = types.ZeroUid
 			sreg.sess.queueOut(ErrUserNotFound(sreg.pkt.Id, t.x_original, timestamp))
 			return
 		}
@@ -281,8 +285,8 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		// 'fnd' has no owner, t.owner = nil
 
 		// Make sure no one can join the topic.
-		t.accessAuth = types.ModeNone
-		t.accessAnon = types.ModeNone
+		t.accessAuth = getDefaultAccess(t.cat, true)
+		t.accessAnon = getDefaultAccess(t.cat, false)
 
 		user, err := store.Users.Get(sreg.sess.uid)
 		if err != nil {
@@ -357,9 +361,10 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 
 		// t.owner is blank for p2p topics
 
-		// Ensure that other users are automatically rejected
-		t.accessAuth = types.ModeNone
-		t.accessAnon = types.ModeNone
+		// Default user access to P2P topics
+		// Other users cannot join the topic because of how topic name is constructed.
+		t.accessAuth = getDefaultAccess(t.cat, true)
+		t.accessAnon = getDefaultAccess(t.cat, false)
 
 		// t.public is not used for p2p topics since each user get a different public
 
@@ -534,8 +539,8 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		// Generic topics have parameters stored in the topic object
 		t.owner = sreg.sess.uid
 
-		t.accessAuth = DEFAULT_AUTH_ACCESS
-		t.accessAnon = DEFAULT_ANON_ACCESS
+		t.accessAuth = getDefaultAccess(t.cat, true)
+		t.accessAnon = getDefaultAccess(t.cat, false)
 
 		// Owner/creator gets full access to the topic. Owner may change the default modeWant through 'set'.
 		userData := perUserData{
@@ -738,6 +743,7 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *MsgClientDel, del boo
 
 				if err := store.Topics.Delete(topic); err != nil {
 					t.resume()
+					log.Println("topicUnreg delete failed (1):", err)
 					sess.queueOut(ErrUnknown(msg.Id, msg.Topic, now))
 					return
 				}
@@ -767,6 +773,7 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *MsgClientDel, del boo
 		} else {
 			// Case 1.2: topic is offline.
 			if sub, err := store.Subs.Get(topic, sess.uid); err != nil {
+				log.Println("topicUnreg failed to load offline topic:", err)
 				sess.queueOut(ErrUnknown(msg.Id, msg.Topic, now))
 				return
 			} else if sub == nil {
@@ -778,11 +785,13 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *MsgClientDel, del boo
 				if topicCat(topic) == types.TopicCat_P2P {
 					// If this is a P2P topic, check how many subscriptions are left
 					if subs, err := store.Topics.GetSubs(topic); err != nil {
+						log.Println("topicUnreg failed to load subscribers:", err)
 						sess.queueOut(ErrUnknown(msg.Id, msg.Topic, now))
 						return
 					} else if subs != nil && len(subs) < 2 {
 						// Fewer than 2 subscriptions, delete the entire topic
 						if err := store.Topics.Delete(topic); err != nil {
+							log.Println("topicUnreg delete failed (2):", err)
 							sess.queueOut(ErrUnknown(msg.Id, msg.Topic, now))
 							return
 						}
@@ -793,6 +802,7 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *MsgClientDel, del boo
 
 				// Not owner or more than one subscription left in a P2P topic
 				if err := store.Subs.Delete(topic, sess.uid); err != nil {
+					log.Println("topicUnreg failed (3):", err)
 					sess.queueOut(ErrUnknown(msg.Id, msg.Topic, now))
 					return
 				}
@@ -800,6 +810,7 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *MsgClientDel, del boo
 			} else {
 				// Case 1.2.1.1: owner, delete the topic from db
 				if err := store.Topics.Delete(topic); err != nil {
+					log.Println("topicUnreg failed (4):", err)
 					sess.queueOut(ErrUnknown(msg.Id, msg.Topic, now))
 					return
 				}

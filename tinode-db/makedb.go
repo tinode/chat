@@ -11,7 +11,6 @@ import (
 )
 
 type configType struct {
-	Adapter     string          `json:"use_adapter"`
 	StoreConfig json.RawMessage `json:"store_config"`
 }
 
@@ -54,9 +53,6 @@ func main() {
 			log.Fatal(err)
 		} else if err = json.Unmarshal(raw, &config); err != nil {
 			log.Fatal(err)
-		}
-		if config.Adapter != "rethinkdb" {
-			log.Fatal("Unknown adapter '" + config.Adapter + "'")
 		}
 
 		gen_rethink(*reset, string(config.StoreConfig), &data)

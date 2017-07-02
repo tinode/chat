@@ -40,8 +40,10 @@ const (
 	MIN_SUPPORTED_VERSION = "0.13"
 
 	// TODO: Move to config
-	DEFAULT_AUTH_ACCESS = types.ModeCPublic
-	DEFAULT_ANON_ACCESS = types.ModeNone
+	DEFAULT_GROUP_AUTH_ACCESS = types.ModeCPublic
+	DEFAULT_P2P_AUTH_ACCESS   = types.ModeCP2P
+	DEFAULT_GROUP_ANON_ACCESS = types.ModeNone
+	DEFAULT_P2P_ANON_ACCESS   = types.ModeNone
 )
 
 // Build timestamp set by the compiler
@@ -54,19 +56,27 @@ var globals struct {
 	apiKeySalt     []byte
 	tokenExpiresIn time.Duration
 	indexableTags  []string
+	// Add Strict-Transport-Security to headers, the value signifies age.
+	// Empty string "" turns it off
+	tlsStrictMaxAge string
 }
 
+// Contentx of the configuration file
 type configType struct {
-	Listen     string `json:"listen"`
-	Adapter    string `json:"use_adapter"`
+	// Default port to listen on. Either numeric or canonical name, e.g. :80 or :https
+	// Could be blank: if TLS is not configured, will use port 80, otherwise 443
+	// Can be overriden from the command line, see option --listen
+	Listen string `json:"listen"`
+	// Salt used in signing API keys
 	APIKeySalt []byte `json:"api_key_salt"`
-	// Security token expiration time
+	// Security token expiration time (authentication by token)
 	TokenExpiresIn int `json:"token_expires_in"`
 	// Tags allowed in index (user discovery)
 	IndexableTags []string        `json:"indexable_tags"`
 	ClusterConfig json.RawMessage `json:"cluster_config"`
 	StoreConfig   json.RawMessage `json:"store_config"`
 	PushConfig    json.RawMessage `json:"push"`
+	TlsConfig     json.RawMessage `json:"tls"`
 }
 
 func main() {
@@ -92,7 +102,7 @@ func main() {
 		config.Listen = *listenOn
 	}
 
-	var err = store.Open(config.Adapter, string(config.StoreConfig))
+	var err = store.Open(string(config.StoreConfig))
 	if err != nil {
 		log.Fatal("Failed to connect to DB: ", err)
 	}
@@ -124,16 +134,17 @@ func main() {
 	globals.indexableTags = config.IndexableTags
 
 	// Serve static content from the directory in -static_data flag if that's
-	// available, if not assume current dir.
-	if *staticPath != "" {
-		http.Handle("/x/", http.StripPrefix("/x/", http.FileServer(http.Dir(*staticPath))))
-	} else {
+	// available, otherwise assume '<current dir>/static'.
+	var staticContent = *staticPath
+	if staticContent == "" {
 		path, err := os.Getwd()
 		if err != nil {
 			log.Fatal(err)
 		}
-		http.Handle("/x/", http.StripPrefix("/x/", http.FileServer(http.Dir(path+"/static"))))
+		staticContent = path + "/static/"
 	}
+	http.Handle("/x/", http.StripPrefix("/x/", hstsHandler(http.FileServer(http.Dir(staticContent)))))
+	log.Printf("Serving static content from '%s'", staticContent)
 
 	// Streaming channels
 	// Handle websocket clients. WS must come up first, so reconnecting clients won't fall back to LP
@@ -141,8 +152,7 @@ func main() {
 	// Handle long polling clients
 	http.HandleFunc("/v0/channels/lp", serveLongPoll)
 
-	log.Printf("Listening for client HTTP connections on [%s]", config.Listen)
-	if err := listenAndServe(config.Listen, signalHandler()); err != nil {
+	if err := listenAndServe(config.Listen, string(config.TlsConfig), signalHandler()); err != nil {
 		log.Fatal(err)
 	}
 	log.Println("All done, good bye")

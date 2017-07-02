@@ -496,8 +496,8 @@ func (s *Session) acc(msg *ClientComMessage) {
 		var user types.User
 		var private interface{}
 		if msg.Acc.Desc != nil {
-			user.Access.Auth = DEFAULT_AUTH_ACCESS
-			user.Access.Anon = DEFAULT_ANON_ACCESS
+			user.Access.Auth = getDefaultAccess(types.TopicCat_Me, true)
+			user.Access.Anon = getDefaultAccess(types.TopicCat_Me, false)
 
 			if msg.Acc.Desc.DefaultAcs != nil {
 				if msg.Acc.Desc.DefaultAcs.Auth != "" {

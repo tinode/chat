@@ -549,7 +549,7 @@ func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 
 // subCommonReply generates a response to a subscription request
 func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin, sendDesc bool) error {
-	log.Println("subCommonReply ", t.name)
+	log.Println("subCommonReply", t.name)
 
 	var now time.Time
 	// For newly created topics report topic creation time.
@@ -617,7 +617,9 @@ func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin, sendDesc bool) error {
 	return nil
 }
 
-// User requests or updates a self-subscription to a topic
+// User requests or updates a self-subscription to a topic. Called as a
+// result of {sub} or {meta set=sub}.
+//
 //	h 		- hub
 //	sess 	- originating session
 //  pktId 	- originating packet Id
@@ -654,36 +656,24 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string, inf
 	var updWant *types.AccessMode
 	var updGiven *types.AccessMode
 
-	// Check if it's an attempt at a new subscription to the topic. If so, save it to database
+	// Check if it's an attempt at a new subscription to the topic.
+	// It could be an actual subscription (IsJoiner() == true) or a ban (IsJoiner() == false)
 	userData, existingSub := t.perUser[sess.uid]
 	if !existingSub {
 
-		// Check if the user has permission to join
-		if !t.accessAuth.IsJoiner() {
-			sess.queueOut(ErrPermissionDenied(pktId, t.original(sess.uid), now))
-			return errors.New("unsolicited subscription denied")
-		}
-
-		if modeWant == types.ModeNone {
-			if explicitWant {
-				// The operation is invalid - user wants to subscribe with no access at all which makes no sense.
-				sess.queueOut(ErrMalformed(pktId, t.original(sess.uid), now))
-				return errors.New("attempt to clear topic access")
-			}
-
-			// User wants default access mode
-			modeWant = t.accessAuth
+		if !explicitWant && modeWant == types.ModeNone {
+			// User wants default access mode.
+			modeWant = getDefaultAccess(t.cat, true)
 		}
 
 		userData = perUserData{
-			private:   private,
-			modeGiven: t.accessAuth,
-			modeWant:  modeWant,
+			private:  private,
+			modeWant: modeWant,
 		}
 
-		// If it's a re-subscription to a p2p topic, set public
+		// If it's a re-subscription to a p2p topic, set public and permissions
 		if t.cat == types.TopicCat_P2P {
-			// t.perUser contains just one element - other user
+			// t.perUser contains just one element - the other user
 			for uid2, _ := range t.perUser {
 				if user2, err := store.Users.Get(uid2); err != nil {
 					log.Println(err.Error())
@@ -693,10 +683,14 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string, inf
 					sess.queueOut(ErrUserNotFound(pktId, t.original(sess.uid), now))
 					return errors.New("user not found")
 				} else {
+					userData.modeGiven = user2.Access.Auth
 					userData.public = user2.Public
 				}
 				break
 			}
+		} else {
+			// For non-p2p2 topics access is given as default access
+			userData.modeGiven = t.accessAuth
 		}
 
 		// Add subscription to database
@@ -713,7 +707,6 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string, inf
 			sess.queueOut(ErrUnknown(pktId, t.original(sess.uid), now))
 			return err
 		}
-
 	} else {
 		var ownerChange bool
 		// Process update to existing subscription. It could be an incomplete subscription for a new topic.
@@ -764,13 +757,15 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string, inf
 		}
 
 		// If user has not requested a new access mode, provide one by default.
-		if !explicitWant && modeWant == types.ModeNone {
-			// New one := old one
-			modeWant = userData.modeWant
+		if !explicitWant {
+			// New one := old one, but check if the user has self-banned before
+			if userData.modeWant.IsJoiner() {
+				modeWant = userData.modeWant
+			}
 
-			// Still nothing? Maybe Given has changed since last attempt
+			// Still nothing? Request default
 			if modeWant == types.ModeNone {
-				modeWant = userData.modeGiven
+				modeWant = getDefaultAccess(t.cat, true)
 			}
 		}
 
@@ -818,11 +813,12 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string, inf
 
 	t.perUser[sess.uid] = userData
 
-	// If the user is self-banned from topic, no further action is needed.
+	// If the user is self-banning himself from the topic, no action is needed.
 	// Re-subscription will unban.
 	if !modeWant.IsJoiner() {
 		t.evictUser(sess.uid, false, nil)
-		return errors.New("self-banned access to topic")
+		// The callee will send NoErrOK
+		return nil
 	} else if !userData.modeGiven.IsJoiner() {
 		// User was banned
 		sess.queueOut(ErrPermissionDenied(pktId, t.original(sess.uid), now))
@@ -841,6 +837,8 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string, inf
 
 	// If requested access mode different from given:
 	if !userData.modeGiven.Check(modeWant) {
+		log.Println("Mode change: given, want", userData.modeGiven.String(), modeWant.String())
+
 		// Send req to approve to topic managers
 		for uid, pud := range t.perUser {
 			if (pud.modeGiven & pud.modeWant).IsApprover() {
@@ -1165,13 +1163,20 @@ func (t *Topic) replySetDesc(sess *Session, set *MsgClientSet) error {
 					}
 				}
 			}
-		} else if t.cat == types.TopicCat_Grp && t.owner == sess.uid {
+		} else {
 			// Update current topic
-			if set.Desc.DefaultAcs != nil {
-				err = assignAccess(topic, set.Desc.DefaultAcs)
-			}
-			if set.Desc.Public != nil {
-				sendPres = assignGenericValues(topic, "Public", set.Desc.Public)
+			if set.Desc.DefaultAcs != nil || set.Desc.Public != nil {
+				if t.owner == sess.uid {
+					if set.Desc.DefaultAcs != nil {
+						err = assignAccess(topic, set.Desc.DefaultAcs)
+					}
+					if set.Desc.Public != nil {
+						sendPres = assignGenericValues(topic, "Public", set.Desc.Public)
+					}
+				} else {
+					sess.queueOut(ErrPermissionDenied(set.Id, set.Topic, now))
+					return errors.New("attempt to change public or permissions by non-owner")
+				}
 			}
 		}
 
@@ -1215,7 +1220,7 @@ func (t *Topic) replySetDesc(sess *Session, set *MsgClientSet) error {
 	}
 	if t.cat == types.TopicCat_Me {
 		updateCached(user)
-	} else if t.cat == types.TopicCat_Grp && t.owner == sess.uid {
+	} else if t.cat == types.TopicCat_Grp {
 		updateCached(topic)
 	}
 
@@ -1671,6 +1676,13 @@ func (t *Topic) replyDelSub(h *Hub, sess *Session, del *MsgClientDel) error {
 func (t *Topic) replyLeaveUnsub(h *Hub, sess *Session, id string) error {
 	now := types.TimeNow()
 
+	if t.owner == sess.uid {
+		if id != "" {
+			sess.queueOut(ErrPermissionDenied(id, t.original(sess.uid), now))
+		}
+		return errors.New("replyLeaveUnsub: owner cannot unsubscribe")
+	}
+
 	// Delete user's subscription from the database
 	if err := store.Subs.Delete(t.name, sess.uid); err != nil {
 		if id != "" {
@@ -1706,7 +1718,7 @@ func (t *Topic) makeAnnouncement(notify, target, from types.Uid, act types.Annou
 	// conversion.
 	converted := map[string]interface{}{}
 	original := MsgAnnounce{
-		Topic:  t.name,
+		Topic:  t.original(notify),
 		User:   target.UserId(),
 		Action: act.String(),
 		Info:   info}
@@ -1741,7 +1753,7 @@ func (t *Topic) makeAnnouncement(notify, target, from types.Uid, act types.Annou
 
 // evictUser evicts given user's sessions from the topic and clears user's cached data, if requested
 func (t *Topic) evictUser(uid types.Uid, unsub bool, ignore *Session) {
-	now := time.Now().UTC().Round(time.Millisecond)
+	now := types.TimeNow()
 
 	// First notify topic subscribers that the user has left the topic
 	if t.cat == types.TopicCat_Grp {
@@ -1846,6 +1858,7 @@ func (t *Topic) isSuspended() bool {
 	return atomic.LoadInt32((*int32)(&t.suspended)) != 0
 }
 
+// Get topic name suitable for the given client
 func (t *Topic) original(uid types.Uid) string {
 	if t.cat == types.TopicCat_P2P {
 		for u2, _ := range t.perUser {
@@ -1856,6 +1869,26 @@ func (t *Topic) original(uid types.Uid) string {
 		log.Fatal("Invalid P2P topic")
 	}
 	return t.x_original
+}
+
+// Get default modeWant for the given topic category
+func getDefaultAccess(cat types.TopicCat, auth bool) types.AccessMode {
+	if !auth {
+		return types.ModeNone
+	}
+
+	switch cat {
+	case types.TopicCat_P2P:
+		return types.ModeCP2P
+	case types.TopicCat_Fnd:
+		return types.ModeNone
+	case types.TopicCat_Grp:
+		return types.ModeCPublic
+	case types.TopicCat_Me:
+		return types.ModeCSelf
+	default:
+		panic("Unknown topic category")
+	}
 }
 
 // Takes get.data parameters and ClearID, returns database query parameters

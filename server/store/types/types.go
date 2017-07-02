@@ -205,7 +205,7 @@ func TimeNow() time.Time {
 	return time.Now().UTC().Round(time.Millisecond)
 }
 
-// InitTimes initializes time.Time variables in the header to current time
+// InitTimes initializes time.Time variables in the header to current time.
 func (h *ObjHeader) InitTimes() {
 	if h.CreatedAt.IsZero() {
 		h.CreatedAt = TimeNow()
@@ -214,7 +214,7 @@ func (h *ObjHeader) InitTimes() {
 	h.DeletedAt = nil
 }
 
-// InitTimes initializes time.Time variables in the header to current time
+// InitTimes intelligently copies time.Time variables from h2 to h.
 func (h *ObjHeader) MergeTimes(h2 *ObjHeader) {
 	// Set the creation time to the earliest value
 	if h.CreatedAt.IsZero() || (!h2.CreatedAt.IsZero() && h2.CreatedAt.Before(h.CreatedAt)) {
@@ -228,6 +228,11 @@ func (h *ObjHeader) MergeTimes(h2 *ObjHeader) {
 	if h2.DeletedAt != nil && (h.DeletedAt == nil || h.DeletedAt.Before(*h2.DeletedAt)) {
 		h.DeletedAt = h2.DeletedAt
 	}
+}
+
+// True if the object is deleted.
+func (h *ObjHeader) IsDeleted() bool {
+	return h.DeletedAt != nil
 }
 
 // Stored user
