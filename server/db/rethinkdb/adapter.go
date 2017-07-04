@@ -736,9 +736,9 @@ func (a *RethinkDbAdapter) SubsDelForTopic(topic string) error {
 	return err
 }
 
-// returns a list of users who match given tags, such as "email:jdoe@example.com" or "tel:18003287448".
+// Returns a list of users who match given tags, such as "email:jdoe@example.com" or "tel:18003287448".
 // Just search the 'users.Tags' for the given tags using respective index.
-func (a *RethinkDbAdapter) FindSubs(user t.Uid, query []interface{}) ([]t.Subscription, error) {
+func (a *RethinkDbAdapter) FindSubs(uid t.Uid, query []interface{}) ([]t.Subscription, error) {
 	// Query may contain redundant records, i.e. the same email twice.
 	// User could be matched on multiple tags, i.e on email and phone#. Thus the query may
 	// return duplicate users. Thus the need for distinct.
@@ -756,6 +756,10 @@ func (a *RethinkDbAdapter) FindSubs(user t.Uid, query []interface{}) ([]t.Subscr
 		var sub t.Subscription
 		var subs []t.Subscription
 		for rows.Next(&user) {
+			if user.Id == uid.String() {
+				// Skip the callee
+				continue
+			}
 			sub.CreatedAt = user.CreatedAt
 			sub.UpdatedAt = user.UpdatedAt
 			sub.User = user.Id
