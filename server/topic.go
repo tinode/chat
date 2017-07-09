@@ -1437,10 +1437,13 @@ func (t *Topic) replySetSub(h *Hub, sess *Session, set *MsgClientSet) error {
 	resp := NoErr(set.Id, t.original(sess.uid), now)
 	// Report resulting access mode.
 	pud := t.perUser[uid]
-	resp.Ctrl.Params = map[string]MsgAccessMode{"acs": {
+	resp.Ctrl.Params = map[string]interface{}{"acs": MsgAccessMode{
 		Given: pud.modeGiven.String(),
 		Want:  pud.modeWant.String(),
 		Mode:  (pud.modeGiven & pud.modeWant).String()}}
+	if uid != sess.uid {
+		resp.Ctrl.Params["user"] = uid.String()
+	}
 	sess.queueOut(resp)
 
 	return nil
