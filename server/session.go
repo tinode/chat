@@ -25,11 +25,20 @@ import (
 	"github.com/tinode/chat/server/store/types"
 )
 
+// Wire transport
 const (
 	NONE = iota
 	WEBSOCK
 	LPOLL
 	RPC
+)
+
+// Authentication levels
+const (
+	NONE = iota
+	ANON
+	AUTH
+	ROOT
 )
 
 var MIN_SUPPORTED_VERSION_VAL = parseVersion(MIN_SUPPORTED_VERSION)
@@ -72,6 +81,9 @@ type Session struct {
 
 	// ID of the current user or 0
 	uid types.Uid
+
+	// Authentication level - NONE (unset), ANON, AUTH, ROOT
+	authLvl int
 
 	// Time when the long polling session was last refreshed
 	lastTouched time.Time
