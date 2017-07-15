@@ -101,8 +101,7 @@ acc: {
                // implementation of the basic scheme does not allow changes to username.
   secret: btoa("username:password"), // string, base64 encoded secret for the chosen
               // authentication scheme; to delete a scheme use a string with a single DEL
-              // Unicode character "\u2421"; "token" and "basic" cannot be deleted;
-              // required
+              // Unicode character "\u2421"; "token" and "basic" cannot be deleted
   tags: [ ... ], // array of tags for user discovery; see `fnd` topic for
               // details, optional (if missing, user will not be discoverable other than
               // by login)
@@ -124,6 +123,9 @@ acc: {
 
 Server responds with a `{ctrl}` message with `ctrl.params` containing details of the new user. If `desc.defacs` is missing,
 server will assign server-default access values.
+
+The only supported authentication schemes for account creation are `basic` and `anonymous`.
+
 
 #### `{login}`
 

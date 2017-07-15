@@ -106,7 +106,7 @@ type MsgClientAcc struct {
 	// The initial authentication scheme the account can use
 	Scheme string `json:"scheme,omitempty"`
 	// Shared secret
-	Secret []byte `json:"secret"`
+	Secret []byte `json:"secret,omitempty"`
 	// Authenticate session with the newly created account
 	Login bool `json:"login"`
 	// Indexable tags for user discovery
