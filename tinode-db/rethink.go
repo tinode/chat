@@ -76,8 +76,8 @@ func gen_rethink(reset bool, dbsource string, data *Data) {
 
 		// Add authentication record
 		auth_handler := store.GetAuthHandler("basic")
-		if _, err = auth_handler.AddRecord(user.Uid(),
-			[]byte(uu["username"].(string)+":"+uu["passhash"].(string)), time.Time{}); err != nil {
+		if _, _, err = auth_handler.AddRecord(user.Uid(),
+			[]byte(uu["username"].(string)+":"+uu["passhash"].(string)), 0); err != nil {
 
 			log.Fatal(err)
 		}
