@@ -97,7 +97,7 @@ acc: {
   id: "1a2b3", // string, client-provided message id, optional
   user: "new", // string, "new" to create a new user, default: current user, optional
   scheme: "basic", // authentication scheme for this account, required;
-               // "basic" and "token" are currently supported. The current
+               // "basic" and "anonymous" are currently supported for account creation. The current
                // implementation of the basic scheme does not allow changes to username.
   secret: btoa("username:password"), // string, base64 encoded secret for the chosen
               // authentication scheme; to delete a scheme use a string with a single DEL
@@ -109,9 +109,9 @@ acc: {
   desc: {  // object, user initialization data closely matching that of table
            // initialization; optional
     defacs: {
-      auth: "RWS", // string, default access mode for peer to peer conversations
+      auth: "JRWS", // string, default access mode for peer to peer conversations
                    // between this user and other authenticated users
-      anon: "X"  // string, default access mode for peer to peer conversations
+      anon: "N"  // string, default access mode for peer to peer conversations
                  // between this user and anonymous (un-authenticated) users
     }, // Default access mode for user's peer to peer topics
     public: { ... }, // application-defined payload to describe user,
@@ -138,9 +138,9 @@ login: {
                   // authentication scheme, required
 }
 ```
-The `basic` authentication scheme expects `secret` to be a base64-encoded string of a string composed of a user name followed by a colon `:` followed by a plan text password. User name in the `basic` scheme must not contain colon character ':' (ASCII 0x3A). The `token` expects secret to be a previously obtained security token.
+The `basic` authentication scheme expects `secret` to be a base64-encoded string of a string composed of a user name followed by a colon `:` followed by a plan text password. User name in the `basic` scheme must not contain colon character ':' (ASCII 0x3A). The `token` expects secret to be a previously obtained security token. 
 
-The only supported authentication schemes are `basic` and `token`. _Authentication scheme `none` is planned to support anonymous users in the future._
+The only supported authentication schemes are `basic` and `token`. Although `anonymous` scheme can be used to create accounts, it cannot be used for logging in.
 
 Server responds to a `{login}` packet with a `{ctrl}` message. The `params` of the message contains the id of the logged in user as `user`. The `token` contains an encrypted string which can be used for authentication. Expiration time of the token is passed as `expires`.
 
@@ -177,8 +177,8 @@ sub: {
   set: {
     desc: {
       defacs: {
-        auth: "RWS", // string, default access for new authenticated subscribers
-        anon: "X"    // string, default access for new anonymous (un-authenticated)
+        auth: "JRWS", // string, default access for new authenticated subscribers
+        anon: "N"    // string, default access for new anonymous (un-authenticated)
                      // subscribers
       }, // Default access mode for the new topic
       public: { ... }, // application-defined payload to describe topic
@@ -188,7 +188,7 @@ sub: {
     // Subscription parameters, mirrors {set sub}. The data without sub.user is
     // assumed to be for the calling user.
     sub: {
-      mode: "RWS", // string, requested access mode, optional;
+      mode: "JRWS", // string, requested access mode, optional;
                    // default: server-defined
       info: { ... }  // application-defined payload to pass to the topic manager
     } // object, optional
@@ -331,8 +331,8 @@ set: {
   // Optional payload to update topic description
   desc: {
     defacs: { // new default access mode
-      auth: "RWP",  // access permissions for authenticated users
-      anon: "X" // access permissions for anonymous users
+      auth: "JRWP",  // access permissions for authenticated users
+      anon: "JRW" // access permissions for anonymous users
     },
     public: { ... }, // application-defined payload to describe topic
     private: { ... } // per-user private application-defined content
@@ -342,7 +342,7 @@ set: {
   sub: {
     user: "usr2il9suCbuko", // string, user affected by this request;
                             // default (empty) means current user
-    mode: "RWP", // string, access mode change, either given ('user'
+    mode: "JRWP", // string, access mode change, either given ('user'
 				  // is defined) or requested ('user' undefined)
     info: { ... } // object, application-defined payload to pass to
                   // the invited user or to the topic manager in {data}
@@ -455,13 +455,13 @@ meta: {
     updated: "2015-10-24T10:26:09.716Z",
     defacs: { // topic's default access permissions; present only if the current
               //user has 'S' permission
-      auth: "RWP", // default access for authenticated users
-      anon: "X" // default access for anonymous users
+      auth: "JRWP", // default access for authenticated users
+      anon: "N" // default access for anonymous users
     },
     acs: {  // user's actual access permissions
-      want: "RWP", // string, requested access permission
-      given: "RWP", // string, granted access permission
-	  mode: "RWP" // string, combination of want and given
+      want: "JRWP", // string, requested access permission
+      given: "JRWP", // string, granted access permission
+	  mode: "JRWP" // string, combination of want and given
     },
     seq: 123, // integer, server-issued id of the last {data} message
     read: 112, // integer, ID of the message user claims through {note} message
@@ -482,10 +482,10 @@ meta: {
                                            // subscription, present only for
                                            // requester's own subscriptions
       acs: {  // user's access permissions
-        want: "RWP", // string, requested access permission, present for user's own
+        want: "JRWP", // string, requested access permission, present for user's own
 					 // subscriptions and when the requester is topic's manager or owner
-        given: "RWP", // string, granted access permission, optional exactly as 'want'
-	    mode: "RWP" // string, combination of want and given
+        given: "JRWP", // string, granted access permission, optional exactly as 'want'
+	    mode: "JRWP" // string, combination of want and given
       },
       read: 112, // integer, ID of the message user claims through {note} message
                  // to have read, optional
