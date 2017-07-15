@@ -20,7 +20,6 @@ import (
 	"time"
 
 	_ "github.com/tinode/chat/push_fcm"
-	_ "github.com/tinode/chat/server/auth_basic"
 	_ "github.com/tinode/chat/server/db/rethinkdb"
 	"github.com/tinode/chat/server/push"
 	_ "github.com/tinode/chat/server/push_stdout"
@@ -50,12 +49,12 @@ const (
 var buildstamp = ""
 
 var globals struct {
-	hub            *Hub
-	sessionStore   *SessionStore
-	cluster        *Cluster
-	apiKeySalt     []byte
-	tokenExpiresIn time.Duration
-	indexableTags  []string
+	hub          *Hub
+	sessionStore *SessionStore
+	cluster      *Cluster
+	apiKeySalt   []byte
+	// tokenExpiresIn time.Duration
+	indexableTags []string
 	// Add Strict-Transport-Security to headers, the value signifies age.
 	// Empty string "" turns it off
 	tlsStrictMaxAge string
@@ -70,7 +69,7 @@ type configType struct {
 	// Salt used in signing API keys
 	APIKeySalt []byte `json:"api_key_salt"`
 	// Security token expiration time (authentication by token)
-	TokenExpiresIn int `json:"token_expires_in"`
+	// TokenExpiresIn int `json:"token_expires_in"`
 	// Tags allowed in index (user discovery)
 	IndexableTags []string        `json:"indexable_tags"`
 	ClusterConfig json.RawMessage `json:"cluster_config"`
@@ -86,7 +85,8 @@ func main() {
 	var configfile = flag.String("config", "./tinode.conf", "Path to config file.")
 	// Path to static content.
 	var staticPath = flag.String("static_data", "", "Path to /static data for the server.")
-	var listenOn = flag.String("listen", "", "Override tinode.conf address and port to listen on.")
+	var listenOn = flag.String("listen", "", "Override TCP address and port to listen on.")
+	var tlsEnabled = flag.Bool("tls_enabled", false, "Override config value for enabling TLS")
 	flag.Parse()
 
 	log.Printf("Using config from: '%s'", *configfile)
@@ -127,7 +127,7 @@ func main() {
 	// Cluster initialization
 	clusterInit(config.ClusterConfig)
 	// Expiration time of login tokens
-	globals.tokenExpiresIn = time.Duration(config.TokenExpiresIn) * time.Second
+	// globals.tokenExpiresIn = time.Duration(config.TokenExpiresIn) * time.Second
 	// API key validation secret
 	globals.apiKeySalt = config.APIKeySalt
 	// Indexable tags for user discovery
@@ -152,7 +152,7 @@ func main() {
 	// Handle long polling clients
 	http.HandleFunc("/v0/channels/lp", serveLongPoll)
 
-	if err := listenAndServe(config.Listen, string(config.TlsConfig), signalHandler()); err != nil {
+	if err := listenAndServe(config.Listen, *tlsEnabled, string(config.TlsConfig), signalHandler()); err != nil {
 		log.Fatal(err)
 	}
 	log.Println("All done, good bye")

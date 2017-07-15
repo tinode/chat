@@ -27,6 +27,18 @@ const (
 	ErrPolicy
 )
 
+// Authentication levels
+const (
+	// Undefined/not authenticated
+	LevelNone = iota * 10
+	// Anonymous user/light authentication
+	LevelAnon
+	// Fully authenticated user
+	LevelAuth
+	// Superuser (currently unused)
+	LevelRoot
+)
+
 // Interface which auth providers must implement
 type AuthHandler interface {
 	// Initialize the handler
@@ -35,17 +47,19 @@ type AuthHandler interface {
 	// Add persistent record to database. Returns a numeric error code to indicate
 	// if the error is due to a duplicate or some other error.
 	// store.AddAuthRecord("scheme", "unique", "secret")
-	AddRecord(uid types.Uid, secret []byte, expires time.Time) (int, error)
+	// Returns: auth level, error code, error
+	AddRecord(uid types.Uid, secret []byte, lifetime time.Duration) (int, int, error)
 
 	// Update existing record with new credentials. Returns a numeric error code to indicate
 	// if the error is due to a duplicate or some other error.
 	// store.UpdateAuthRecord("scheme", "unique", "secret")
-	UpdateRecord(uid types.Uid, secret []byte, expires time.Time) (int, error)
+	UpdateRecord(uid types.Uid, secret []byte, lifetime time.Duration) (int, error)
 
 	// Given a user-provided authentication secret (such as "login:password"
 	// return user ID, time when the secret expires (zero, if never) or an error code.
 	// store.Users.GetAuthRecord("scheme", "unique")
-	Authenticate(secret []byte) (types.Uid, time.Time, int)
+	// Returns: user ID, user auth level, token expiration time, error code.
+	Authenticate(secret []byte) (types.Uid, int, time.Time, int)
 
 	// Verify if the provided secret can be considered unique by the auth scheme
 	// E.g. if login is unique.
@@ -53,5 +67,20 @@ type AuthHandler interface {
 	IsUnique(secret []byte) (bool, error)
 
 	// Generate a new secret, if appropriate.
-	GenSecret(uid types.Uid, expires time.Time) ([]byte, error)
+	GenSecret(uid types.Uid, authLvl int, lifetime time.Duration) ([]byte, time.Time, int)
+}
+
+func AuthLevelName(authLvl int) string {
+	switch authLvl {
+	case LevelNone:
+		return "none"
+	case LevelAnon:
+		return "anon"
+	case LevelAuth:
+		return "auth"
+	case LevelRoot:
+		return "root"
+	default:
+		return "unkn"
+	}
 }

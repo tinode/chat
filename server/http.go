@@ -43,7 +43,7 @@ type TlsAutocertConfig struct {
 	Email string `json:"email"`
 }
 
-func listenAndServe(addr string, tls_config string, stop <-chan bool) error {
+func listenAndServe(addr string, tlsEnabled bool, tls_config string, stop <-chan bool) error {
 	var tlsConfig TlsConfig
 
 	if tls_config != "" {
@@ -57,7 +57,7 @@ func listenAndServe(addr string, tls_config string, stop <-chan bool) error {
 	httpdone := make(chan bool)
 
 	server := &http.Server{Addr: addr}
-	if tlsConfig.Enabled {
+	if tlsEnabled || tlsConfig.Enabled {
 
 		if tlsConfig.StrictMaxAge > 0 {
 			globals.tlsStrictMaxAge = strconv.Itoa(tlsConfig.StrictMaxAge)

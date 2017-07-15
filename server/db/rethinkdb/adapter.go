@@ -202,11 +202,14 @@ func (a *RethinkDbAdapter) UserCreate(user *t.User) (error, bool) {
 }
 
 // Add user's authentication record
-func (a *RethinkDbAdapter) AddAuthRecord(uid t.Uid, unique string, secret []byte, expires time.Time) (error, bool) {
+func (a *RethinkDbAdapter) AddAuthRecord(uid t.Uid, authLvl int, unique string,
+	secret []byte, expires time.Time) (error, bool) {
+
 	_, err := rdb.DB(a.dbName).Table("auth").Insert(
 		map[string]interface{}{
 			"unique":  unique,
 			"userid":  uid.String(),
+			"authLvl": authLvl,
 			"secret":  secret,
 			"expires": expires}).RunWrite(a.conn)
 	if err != nil {
@@ -231,40 +234,42 @@ func (a *RethinkDbAdapter) DelAllAuthRecords(uid t.Uid) (int, error) {
 }
 
 // Update user's authentication secret
-func (a *RethinkDbAdapter) UpdAuthRecord(unique string, secret []byte, expires time.Time) (int, error) {
+func (a *RethinkDbAdapter) UpdAuthRecord(unique string, authLvl int, secret []byte, expires time.Time) (int, error) {
 	log.Println("Updating for unique", unique)
 
 	res, err := rdb.DB(a.dbName).Table("auth").Get(unique).Update(
 		map[string]interface{}{
+			"authLvl": authLvl,
 			"secret":  secret,
 			"expires": expires}).RunWrite(a.conn)
 	return res.Updated, err
 }
 
 // Retrieve user's authentication record
-func (a *RethinkDbAdapter) GetAuthRecord(unique string) (t.Uid, []byte, time.Time, error) {
+func (a *RethinkDbAdapter) GetAuthRecord(unique string) (t.Uid, int, []byte, time.Time, error) {
 	// Default() is needed to prevent Pluck from returning an error
 	rows, err := rdb.DB(a.dbName).Table("auth").Get(unique).Pluck(
 		"userid", "secret", "expires").Default(nil).Run(a.conn)
 	if err != nil {
-		return t.ZeroUid, nil, time.Time{}, err
+		return t.ZeroUid, 0, nil, time.Time{}, err
 	}
 
 	log.Println("Fetched for unique", unique)
 
 	var record struct {
 		Userid  string    `gorethink:"userid"`
+		AuthLvl int       `gorethink:"authLvl"`
 		Secret  []byte    `gorethink:"secret"`
 		Expires time.Time `gorethink:"expires"`
 	}
 
 	if !rows.Next(&record) {
-		return t.ZeroUid, nil, time.Time{}, rows.Err()
+		return t.ZeroUid, 0, nil, time.Time{}, rows.Err()
 	}
 	rows.Close()
 
-	//log.Println("loggin in user Id=", user.Uid(), user.Id)
-	return t.ParseUid(record.Userid), record.Secret, record.Expires, nil
+	// log.Println("loggin in user Id=", user.Uid(), user.Id)
+	return t.ParseUid(record.Userid), record.AuthLvl, record.Secret, record.Expires, nil
 }
 
 // UserGet fetches a single user by user id. If user is not found it returns (nil, nil)

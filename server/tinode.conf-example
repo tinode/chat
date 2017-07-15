@@ -1,7 +1,6 @@
 {
 	"listen": ":6060",
 	"api_key_salt": "T713/rYYgW7g4m3vG6zGRh7+FM1t0T8j13koXScOAj4=",
-	"token_expires_in": 1209600,
 	"indexable_tags": ["tel", "email"],
 
 	"tls": {
@@ -9,12 +8,14 @@
 		"autocert": {
 			"cache": "certs",
 			"email": "use.your.own.email-or-remove-this-line@example.com",
-			"domains": ["www.example.com"]
+			"domains": ["use-you-own-domain.example.com"]
 		}
 	},
 	
 	"auth_config": {
 		"token": {
+			"expire_in": 1209600,
+			"serial_num": 1,
 			"key": "wfaY2RgF2S1OQI/ZlK+LSrp1KB2jwAdGAIHQ7JZn+Kc="
 		}
 	},

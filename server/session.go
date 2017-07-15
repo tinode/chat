@@ -33,14 +33,6 @@ const (
 	RPC
 )
 
-// Authentication levels
-const (
-	NONE = iota
-	ANON
-	AUTH
-	ROOT
-)
-
 var MIN_SUPPORTED_VERSION_VAL = parseVersion(MIN_SUPPORTED_VERSION)
 
 // A single WS connection or a long polling session. A user may have multiple
@@ -423,7 +415,7 @@ func (s *Session) login(msg *ClientComMessage) {
 		return
 	}
 
-	uid, expires, errType := handler.Authenticate(msg.Login.Secret)
+	uid, authLvl, expires, errType := handler.Authenticate(msg.Login.Secret)
 	if errType == auth.ErrMalformed {
 		s.queueOut(ErrMalformed(msg.Login.Id, "", msg.timestamp))
 		return
@@ -442,17 +434,21 @@ func (s *Session) login(msg *ClientComMessage) {
 	}
 
 	s.uid = uid
+	s.authLvl = authLvl
 
 	if msg.Login.Scheme != "token" {
 		handler = store.GetAuthHandler("token")
 	}
 
-	tokenExp := msg.timestamp.Add(globals.tokenExpiresIn)
-	if !expires.IsZero() && tokenExp.After(expires) {
-		tokenExp = expires
+	var tokenLifetime time.Duration
+	if !expires.IsZero() {
+		tokenLifetime = time.Until(expires)
 	}
-	// Token GenSecret never fails, ignore the error
-	secret, _ := handler.GenSecret(uid, tokenExp)
+	secret, expires, err := handler.GenSecret(uid, authLvl, tokenLifetime)
+	if err != auth.NoErr {
+		s.queueOut(ErrAuthFailed(msg.Login.Id, "", msg.timestamp))
+		return
+	}
 
 	// Record deviceId used in this session
 	if s.deviceId != "" {
@@ -469,7 +465,7 @@ func (s *Session) login(msg *ClientComMessage) {
 		Code:      http.StatusOK,
 		Text:      http.StatusText(http.StatusOK),
 		Timestamp: msg.timestamp,
-		Params:    map[string]interface{}{"user": uid.UserId(), "token": secret, "expires": tokenExp}}})
+		Params:    map[string]interface{}{"user": uid.UserId(), "token": secret, "expires": expires}}})
 }
 
 // Account creation
@@ -488,7 +484,7 @@ func (s *Session) acc(msg *ClientComMessage) {
 	}
 
 	if strings.HasPrefix(msg.Acc.User, "new") {
-		// User cannot authenticate with the new acocunt because the user is already authenticated
+		// User cannot authenticate with the new account because the user is already authenticated
 		if msg.Acc.Login && !s.uid.IsZero() {
 			s.queueOut(ErrAlreadyAuthenticated(msg.Acc.Id, "", msg.timestamp))
 			return
@@ -539,11 +535,14 @@ func (s *Session) acc(msg *ClientComMessage) {
 			return
 		}
 
-		if code, err := authhdl.AddRecord(user.Uid(), msg.Acc.Secret, time.Time{}); err != nil {
+		var authLvl int
+		if al, code, err := authhdl.AddRecord(user.Uid(), msg.Acc.Secret, 0); err != nil {
 			// Attempt to delete incomplete user record
 			store.Users.Delete(user.Uid(), false)
 			s.queueOut(decodeAuthError(code, msg.Acc.Id, msg.timestamp))
 			return
+		} else {
+			authLvl = al
 		}
 
 		reply := NoErrCreated(msg.Acc.Id, "", msg.timestamp)
@@ -564,9 +563,10 @@ func (s *Session) acc(msg *ClientComMessage) {
 			// User wants to use the new account for authentication. Generate token and resord session.
 
 			s.uid = user.Uid()
-			expires := msg.timestamp.Add(globals.tokenExpiresIn)
-			params["token"], _ = store.GetAuthHandler("token").GenSecret(s.uid, expires)
-			params["expires"] = expires
+			s.authLvl = authLvl
+
+			params["acslvl"] = auth.AuthLevelName(authLvl)
+			params["token"], params["expires"], _ = store.GetAuthHandler("token").GenSecret(s.uid, s.authLvl, 0)
 
 			// Record session
 			if s.deviceId != "" {
@@ -586,7 +586,7 @@ func (s *Session) acc(msg *ClientComMessage) {
 		// Request to update auth of an existing account. Only basic auth is currently supported
 		// TODO(gene): support adding new auth schemes
 		// TODO(gene): support the case when msg.Acc.User is not equal to the current user
-		if code, err := authhdl.UpdateRecord(s.uid, msg.Acc.Secret, time.Time{}); err != nil {
+		if code, err := authhdl.UpdateRecord(s.uid, msg.Acc.Secret, 0); err != nil {
 			log.Println("failed to update credentials", err)
 			s.queueOut(decodeAuthError(code, msg.Acc.Id, msg.timestamp))
 			return

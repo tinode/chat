@@ -145,18 +145,22 @@ func (u UsersObjMapper) Create(user *types.User, private interface{}) (*types.Us
 }
 
 // Given a unique identifier and a authentication scheme name, fetch user ID and authentication secret
-func (UsersObjMapper) GetAuthRecord(scheme, unique string) (types.Uid, []byte, time.Time, error) {
+func (UsersObjMapper) GetAuthRecord(scheme, unique string) (types.Uid, int, []byte, time.Time, error) {
 	return adaptr.GetAuthRecord(scheme + ":" + unique)
 }
 
 // Create a new authentication record for user
-func (UsersObjMapper) AddAuthRecord(uid types.Uid, scheme, unique string, secret []byte, expires time.Time) (error, bool) {
-	return adaptr.AddAuthRecord(uid, scheme+":"+unique, secret, expires)
+func (UsersObjMapper) AddAuthRecord(uid types.Uid, authLvl int, scheme, unique string, secret []byte,
+	expires time.Time) (error, bool) {
+
+	return adaptr.AddAuthRecord(uid, authLvl, scheme+":"+unique, secret, expires)
 }
 
 // Update authentication record with a new secret and expiration time
-func (UsersObjMapper) UpdateAuthRecord(uid types.Uid, scheme, unique string, secret []byte, expires time.Time) (int, error) {
-	return adaptr.UpdAuthRecord(scheme+":"+unique, secret, expires)
+func (UsersObjMapper) UpdateAuthRecord(uid types.Uid, authLvl int, scheme, unique string,
+	secret []byte, expires time.Time) (int, error) {
+
+	return adaptr.UpdAuthRecord(scheme+":"+unique, authLvl, secret, expires)
 }
 
 // Get returns a user object for the given user id

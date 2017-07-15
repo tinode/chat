@@ -3,6 +3,7 @@ package types
 import (
 	"encoding/base64"
 	"encoding/binary"
+
 	sf "github.com/tinode/snowflake"
 	"golang.org/x/crypto/xtea"
 )
@@ -14,22 +15,22 @@ type UidGenerator struct {
 }
 
 // Init initialises the Uid generator
-func (uid *UidGenerator) Init(workerId uint, key []byte) error {
+func (ug *UidGenerator) Init(workerId uint, key []byte) error {
 	var err error
 
-	if uid.seq == nil {
-		uid.seq, err = sf.NewSnowFlake(uint32(workerId))
+	if ug.seq == nil {
+		ug.seq, err = sf.NewSnowFlake(uint32(workerId))
 	}
-	if uid.cipher == nil {
-		uid.cipher, err = xtea.NewCipher(key)
+	if ug.cipher == nil {
+		ug.cipher, err = xtea.NewCipher(key)
 	}
 
 	return err
 }
 
 // Get generates a unique weakly encryped id it so ids are random-looking.
-func (uid *UidGenerator) Get() Uid {
-	buf, err := getIdBuffer(uid)
+func (ug *UidGenerator) Get() Uid {
+	buf, err := getIdBuffer(ug)
 	if err != nil {
 		return ZeroUid
 	}
@@ -37,8 +38,8 @@ func (uid *UidGenerator) Get() Uid {
 }
 
 // GetStr generates a unique id then returns it as base64-encrypted string.
-func (uid *UidGenerator) GetStr() string {
-	buf, err := getIdBuffer(uid)
+func (ug *UidGenerator) GetStr() string {
+	buf, err := getIdBuffer(ug)
 	if err != nil {
 		return ""
 	}
@@ -46,17 +47,17 @@ func (uid *UidGenerator) GetStr() string {
 }
 
 // getIdBuffer returns a byte array holding the Uid bytes
-func getIdBuffer(uid *UidGenerator) ([]byte, error) {
+func getIdBuffer(ug *UidGenerator) ([]byte, error) {
 	var id uint64
 	var err error
-	if id, err = uid.seq.Next(); err != nil {
+	if id, err = ug.seq.Next(); err != nil {
 		return nil, err
 	}
 
 	var src = make([]byte, 8)
 	var dst = make([]byte, 8)
 	binary.LittleEndian.PutUint64(src, id)
-	uid.cipher.Encrypt(dst, src)
+	ug.cipher.Encrypt(dst, src)
 
 	return dst, nil
 }

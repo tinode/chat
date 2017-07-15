@@ -18,11 +18,6 @@ type Adapter interface {
 
 	// User management
 	UserCreate(usr *t.User) (err error, dupeUserName bool)
-	GetAuthRecord(unique string) (t.Uid, []byte, time.Time, error)
-	AddAuthRecord(user t.Uid, unique string, secret []byte, expires time.Time) (error, bool)
-	DelAuthRecord(unique string) (int, error)
-	DelAllAuthRecords(uid t.Uid) (int, error)
-	UpdAuthRecord(unique string, secret []byte, expires time.Time) (int, error)
 	UserGet(id t.Uid) (*t.User, error)
 	UserGetAll(ids ...t.Uid) ([]t.User, error)
 	UserDelete(id t.Uid, soft bool) error
@@ -30,6 +25,13 @@ type Adapter interface {
 	//UserUpdateStatus(uid t.Uid, status interface{}) error
 	ChangePassword(id t.Uid, password string) error
 	UserUpdate(uid t.Uid, update map[string]interface{}) error
+
+	// Authentication management
+	GetAuthRecord(unique string) (t.Uid, int, []byte, time.Time, error)
+	AddAuthRecord(user t.Uid, authLvl int, unique string, secret []byte, expires time.Time) (error, bool)
+	DelAuthRecord(unique string) (int, error)
+	DelAllAuthRecords(uid t.Uid) (int, error)
+	UpdAuthRecord(unique string, authLvl int, secret []byte, expires time.Time) (int, error)
 
 	// Topic/contact management
 
