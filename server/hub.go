@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tinode/chat/server/auth"
 	"github.com/tinode/chat/server/store"
 	"github.com/tinode/chat/server/store/types"
 )
@@ -399,6 +400,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 			userId1 := sreg.sess.uid
 			// The other user.
 			userId2 := types.ParseUserId(t.x_original)
+			// User index: u1 - requester, u2 - the other user
 			var u1, u2 int
 			users, err := store.Users.GetAll(userId1, userId2)
 			if err != nil {
@@ -443,16 +445,18 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 					if err := userData.modeWant.UnmarshalText([]byte(sreg.pkt.Set.Sub.Mode)); err != nil {
 						log.Println("hub: invalid access mode for topic '" + t.x_original + "': '" + sreg.pkt.Set.Sub.Mode + "'")
 						userData.modeWant = types.ModeCP2P
-					} else {
-						userData.modeWant &= types.ModeCP2P
 					}
-				} else if users[u1].Access.Auth != types.ModeNone {
-					userData.modeWant = users[u1].Access.Auth
 				} else {
 					userData.modeWant = types.ModeCP2P
 				}
 				// Make sure the user can always join
 				userData.modeWant |= types.ModeJoin
+				// Make sure the user is not asking for something unreasonable
+				userData.modeWant &= types.ModeCP2P
+
+				// User is always given the full access to the topic. User should use modeWant
+				// to control how much data gets through.
+				userData.modeGiven = types.ModeCP2P
 
 				if sreg.pkt.Set != nil && sreg.pkt.Set.Desc != nil && !isNullValue(sreg.pkt.Set.Desc.Private) {
 					userData.private = sreg.pkt.Set.Desc.Private
@@ -463,7 +467,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 					User:      userId1.String(),
 					Topic:     t.name,
 					ModeWant:  userData.modeWant,
-					ModeGiven: types.ModeCP2P,
+					ModeGiven: userData.modeGiven,
 					Private:   userData.private}
 				// Swap Public to match swapped Public in subs returned from store.Topics.GetSubs
 				sub1.SetPublic(users[u2].Public)
@@ -474,9 +478,17 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 				sub2 = &types.Subscription{
 					User:      userId2.String(),
 					Topic:     t.name,
-					ModeWant:  users[u2].Access.Auth,
 					ModeGiven: types.ModeCP2P,
 					Private:   nil}
+
+				// modeWant is defined by user's default access
+				if sreg.sess.authLvl == auth.LevelAnon {
+					sub2.ModeWant = users[u2].Access.Anon
+				} else if sreg.sess.authLvl == auth.LevelAuth {
+					sub2.ModeWant = users[u2].Access.Auth
+				} else if sreg.sess.authLvl == auth.LevelRoot {
+					sub2.ModeWant = types.ModeCP2P
+				}
 				// Swap Public to match swapped Public in subs returned from store.Topics.GetSubs
 				sub2.SetPublic(users[u1].Public)
 			}

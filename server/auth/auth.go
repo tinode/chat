@@ -73,7 +73,7 @@ type AuthHandler interface {
 func AuthLevelName(authLvl int) string {
 	switch authLvl {
 	case LevelNone:
-		return "none"
+		return ""
 	case LevelAnon:
 		return "anon"
 	case LevelAuth:

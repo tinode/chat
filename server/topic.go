@@ -15,6 +15,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/tinode/chat/server/auth"
 	"github.com/tinode/chat/server/push"
 	"github.com/tinode/chat/server/store"
 	"github.com/tinode/chat/server/store/types"
@@ -513,7 +514,7 @@ func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 				}
 
 				log.Println("sending invite to ", uid.UserId())
-				h.route <- t.makeAnnouncement(uid, uid, sreg.sess.uid, action,
+				h.route <- t.makeAnnouncement(uid, uid, sreg.sess.uid, action, sreg.sess.authLvl,
 					pud.modeWant, pud.modeGiven, nil)
 				break
 			}
@@ -663,7 +664,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string, inf
 
 		if !explicitWant && modeWant == types.ModeNone {
 			// User wants default access mode.
-			modeWant = getDefaultAccess(t.cat, true)
+			modeWant = t.accessFor(sess.authLvl)
 		}
 
 		userData = perUserData{
@@ -683,14 +684,14 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string, inf
 					sess.queueOut(ErrUserNotFound(pktId, t.original(sess.uid), now))
 					return errors.New("user not found")
 				} else {
-					userData.modeGiven = user2.Access.Auth
+					userData.modeGiven = types.ModeCP2P
 					userData.public = user2.Public
 				}
 				break
 			}
 		} else {
 			// For non-p2p2 topics access is given as default access
-			userData.modeGiven = t.accessAuth
+			userData.modeGiven = t.accessFor(sess.authLvl)
 		}
 
 		// Add subscription to database
@@ -750,10 +751,13 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string, inf
 			}
 		}
 
-		// Check if t.accessAuth is different now than at the last attempt to subscribe
-		if userData.modeGiven == types.ModeNone && t.accessAuth != types.ModeNone {
-			userData.modeGiven = t.accessAuth
-			updGiven = &userData.modeGiven
+		// Check if default access is different now than at the last attempt to subscribe
+		if userData.modeGiven == types.ModeNone {
+			def := t.accessFor(sess.authLvl)
+			if def != types.ModeNone {
+				userData.modeGiven = def
+				updGiven = &userData.modeGiven
+			}
 		}
 
 		// If user has not requested a new access mode, provide one by default.
@@ -765,7 +769,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string, inf
 
 			// Still nothing? Request default
 			if modeWant == types.ModeNone {
-				modeWant = getDefaultAccess(t.cat, true)
+				modeWant = t.accessFor(sess.authLvl)
 			}
 		}
 
@@ -843,13 +847,13 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string, inf
 		for uid, pud := range t.perUser {
 			if (pud.modeGiven & pud.modeWant).IsApprover() {
 				h.route <- t.makeAnnouncement(uid, sess.uid, sess.uid,
-					types.AnnAppr, modeWant, userData.modeGiven, info)
+					types.AnnAppr, sess.authLvl, modeWant, userData.modeGiven, info)
 			}
 		}
 
 		// Send info to requester
 		h.route <- t.makeAnnouncement(sess.uid, sess.uid, sess.uid,
-			types.AnnUpd, modeWant, userData.modeGiven, t.public)
+			types.AnnUpd, auth.LevelNone, modeWant, userData.modeGiven, t.public)
 	}
 
 	return nil
@@ -865,6 +869,7 @@ func (t *Topic) approveSub(h *Hub, sess *Session, target types.Uid, set *MsgClie
 
 	log.Printf("approveSub, session uid=%s, target uid=%s", sess.uid.String(), target.String())
 
+	// Requester's/approver's access mode
 	var hostMode types.AccessMode
 
 	// Check if requester actually has permission to manage sharing
@@ -907,7 +912,8 @@ func (t *Topic) approveSub(h *Hub, sess *Session, target types.Uid, set *MsgClie
 
 		if !explicitGiven {
 			// Request to use default access mode for the new subscriptions.
-			modeGiven = t.accessAuth
+			// Assuming LevelAuth. Approver should use non-default access if that is not suitable.
+			modeGiven = t.accessFor(auth.LevelAuth)
 		}
 
 		// Get user's default access mode to be used as modeWant
@@ -973,7 +979,7 @@ func (t *Topic) approveSub(h *Hub, sess *Session, target types.Uid, set *MsgClie
 	}
 
 	// Handle the following cases:
-	// * a ban of the user, modeGive.IsBanned = true,
+	// * a ban of the user, modeGiven.IsBanned = true,
 	//	 let the user know that the access is gone
 	// * regular invite: modeWant = "N", modeGiven > 0
 	// * access rights update: old modeGiven != new modeGiven
@@ -982,17 +988,17 @@ func (t *Topic) approveSub(h *Hub, sess *Session, target types.Uid, set *MsgClie
 			// Let the user know that he was banned
 			if givenBefore != modeGiven {
 				h.route <- t.makeAnnouncement(target, target, sess.uid, types.AnnDel,
-					userData.modeWant, modeGiven, set.Sub.Info)
+					auth.LevelNone, userData.modeWant, modeGiven, set.Sub.Info)
 			}
 		} else if givenBefore != modeGiven {
 			if givenBefore == types.ModeNone {
 				// Send the invite to target
 				h.route <- t.makeAnnouncement(target, target, sess.uid, types.AnnInv,
-					userData.modeWant, modeGiven, set.Sub.Info)
+					auth.LevelNone, userData.modeWant, modeGiven, set.Sub.Info)
 			} else {
 				// Inform target that the access has changed
 				h.route <- t.makeAnnouncement(target, target, sess.uid, types.AnnUpd,
-					userData.modeWant, modeGiven, set.Sub.Info)
+					auth.LevelNone, userData.modeWant, modeGiven, set.Sub.Info)
 			}
 		}
 	}
@@ -1001,7 +1007,7 @@ func (t *Topic) approveSub(h *Hub, sess *Session, target types.Uid, set *MsgClie
 	if givenBefore != modeGiven {
 		// inform requester of the change made
 		h.route <- t.makeAnnouncement(sess.uid, target, sess.uid, types.AnnUpd,
-			userData.modeWant, modeGiven, nil)
+			auth.LevelNone, userData.modeWant, modeGiven, nil)
 	}
 
 	return nil
@@ -1423,11 +1429,9 @@ func (t *Topic) replySetSub(h *Hub, sess *Session, set *MsgClientSet) error {
 	var err error
 	if uid == sess.uid {
 		// Request new subscription or modify own subscription
-		log.Println("requestSub")
 		err = t.requestSub(h, sess, set.Id, set.Sub.Mode, set.Sub.Info, nil, false)
 	} else {
 		// Request to approve/change someone's subscription
-		log.Println("approveSub")
 		err = t.approveSub(h, sess, uid, set)
 	}
 	if err != nil {
@@ -1670,7 +1674,7 @@ func (t *Topic) replyDelSub(h *Hub, sess *Session, del *MsgClientDel) error {
 
 	// Announce to the user that the subscription was terminated
 	h.route <- t.makeAnnouncement(uid, uid, sess.uid, types.AnnDel,
-		types.ModeNone, types.ModeNone, nil)
+		sess.authLvl, types.ModeNone, types.ModeNone, nil)
 
 	sess.queueOut(NoErr(del.Id, t.original(sess.uid), now))
 
@@ -1714,7 +1718,7 @@ func (t *Topic) replyLeaveUnsub(h *Hub, sess *Session, id string) error {
 //   modeWant, modeGiven - new access parameters
 //   info - free-form user data
 func (t *Topic) makeAnnouncement(notify, target, from types.Uid, act types.AnnounceAction,
-	modeWant, modeGiven types.AccessMode, info SubInfo) *ServerComMessage {
+	authLvl int, modeWant, modeGiven types.AccessMode, info SubInfo) *ServerComMessage {
 
 	// FIXME(gene): this is a workaround for gorethink's broken way of marshalling json.
 	// The data message has to be saved to DB with MsgAnnouncement field names converted
@@ -1722,10 +1726,11 @@ func (t *Topic) makeAnnouncement(notify, target, from types.Uid, act types.Annou
 	// conversion.
 	converted := map[string]interface{}{}
 	original := MsgAnnounce{
-		Topic:  t.original(notify),
-		User:   target.UserId(),
-		Action: act.String(),
-		Info:   info}
+		Topic:     t.original(notify),
+		User:      target.UserId(),
+		Action:    act.String(),
+		AuthLevel: auth.AuthLevelName(authLvl),
+		Info:      info}
 
 	if !modeWant.IsZero() || !modeGiven.IsZero() {
 		original.Acs = &MsgAccessMode{
@@ -1873,6 +1878,21 @@ func (t *Topic) original(uid types.Uid) string {
 		log.Fatal("Invalid P2P topic")
 	}
 	return t.x_original
+}
+
+func (t *Topic) accessFor(authLvl int) types.AccessMode {
+	switch authLvl {
+	case auth.LevelNone:
+		return types.ModeNone
+	case auth.LevelAnon:
+		return t.accessAnon
+	case auth.LevelAuth:
+		return t.accessAuth
+	case auth.LevelRoot:
+		return getDefaultAccess(t.cat, true)
+	default:
+		return types.ModeNone
+	}
 }
 
 // Get default modeWant for the given topic category

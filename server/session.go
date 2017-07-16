@@ -565,7 +565,7 @@ func (s *Session) acc(msg *ClientComMessage) {
 			s.uid = user.Uid()
 			s.authLvl = authLvl
 
-			params["acslvl"] = auth.AuthLevelName(authLvl)
+			params["authlvl"] = auth.AuthLevelName(authLvl)
 			params["token"], params["expires"], _ = store.GetAuthHandler("token").GenSecret(s.uid, s.authLvl, 0)
 
 			// Record session

@@ -366,6 +366,8 @@ type MsgAnnounce struct {
 	Action string `json:"act"`
 	// Current state of the access mode
 	Acs *MsgAccessMode `json:"acs,omitempty"`
+	// Request made at this authentication level
+	AuthLevel string `json:"authlvl,omitempty"`
 	// Free-form info passed unchanged from the client
 	Info SubInfo `json:"info,omitempty"`
 }

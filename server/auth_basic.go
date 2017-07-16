@@ -1,4 +1,4 @@
-package auth_basic
+package main
 
 import (
 	"errors"
