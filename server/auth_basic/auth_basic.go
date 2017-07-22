@@ -1,4 +1,7 @@
-package main
+package auth_basic
+
+// This handler must be kept in a separate package because it's referenced by
+// tinode-db
 
 import (
 	"errors"

@@ -20,6 +20,7 @@ import (
 	"time"
 
 	_ "github.com/tinode/chat/push_fcm"
+	_ "github.com/tinode/chat/server/auth_basic"
 	_ "github.com/tinode/chat/server/db/rethinkdb"
 	"github.com/tinode/chat/server/push"
 	_ "github.com/tinode/chat/server/push_stdout"

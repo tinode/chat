@@ -76,10 +76,10 @@ func gen_rethink(reset bool, dbsource string, data *Data) {
 
 		// Add authentication record
 		auth_handler := store.GetAuthHandler("basic")
-		if _, _, err = auth_handler.AddRecord(user.Uid(),
-			[]byte(uu["username"].(string)+":"+uu["passhash"].(string)), 0); err != nil {
+		if _, authErr := auth_handler.AddRecord(user.Uid(),
+			[]byte(uu["username"].(string)+":"+uu["passhash"].(string)), 0); authErr.IsError() {
 
-			log.Fatal(err)
+			log.Fatal(authErr.Err)
 		}
 		nameIndex[uu["username"].(string)] = user.Id
 
