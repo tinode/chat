@@ -415,14 +415,18 @@ func (s *Session) login(msg *ClientComMessage) {
 		return
 	}
 
-	uid, authLvl, expires, errType := handler.Authenticate(msg.Login.Secret)
-	if errType == auth.ErrMalformed {
+	uid, authLvl, expires, authErr := handler.Authenticate(msg.Login.Secret)
+	if authErr.IsError() {
+		log.Println(authErr.Err)
+	}
+
+	if authErr.Code == auth.ErrMalformed {
 		s.queueOut(ErrMalformed(msg.Login.Id, "", msg.timestamp))
 		return
 	}
 
 	// DB error
-	if errType == auth.ErrInternal {
+	if authErr.Code == auth.ErrInternal {
 		s.queueOut(ErrUnknown(msg.Login.Id, "", msg.timestamp))
 		return
 	}
@@ -444,8 +448,9 @@ func (s *Session) login(msg *ClientComMessage) {
 	if !expires.IsZero() {
 		tokenLifetime = time.Until(expires)
 	}
-	secret, expires, err := handler.GenSecret(uid, authLvl, tokenLifetime)
-	if err != auth.NoErr {
+	secret, expires, authErr := handler.GenSecret(uid, authLvl, tokenLifetime)
+	if authErr.IsError() {
+		log.Println(authErr.Err)
 		s.queueOut(ErrAuthFailed(msg.Login.Id, "", msg.timestamp))
 		return
 	}
@@ -491,9 +496,9 @@ func (s *Session) acc(msg *ClientComMessage) {
 		}
 
 		// Request to create a new account
-		if ok, err := authhdl.IsUnique(msg.Acc.Secret); !ok {
-			log.Println("Not unique: ", err)
-			if err == nil {
+		if ok, authErr := authhdl.IsUnique(msg.Acc.Secret); !ok {
+			log.Println("Not unique: ", authErr.Err)
+			if authErr.Code == auth.ErrDuplicate {
 				s.queueOut(ErrDuplicateCredential(msg.Acc.Id, "", msg.timestamp))
 			} else {
 				s.queueOut(ErrUnknown(msg.Acc.Id, "", msg.timestamp))
@@ -536,10 +541,11 @@ func (s *Session) acc(msg *ClientComMessage) {
 		}
 
 		var authLvl int
-		if al, code, err := authhdl.AddRecord(user.Uid(), msg.Acc.Secret, 0); err != nil {
+		if al, authErr := authhdl.AddRecord(user.Uid(), msg.Acc.Secret, 0); authErr.IsError() {
+			log.Println(authErr.Err)
 			// Attempt to delete incomplete user record
 			store.Users.Delete(user.Uid(), false)
-			s.queueOut(decodeAuthError(code, msg.Acc.Id, msg.timestamp))
+			s.queueOut(decodeAuthError(authErr.Code, msg.Acc.Id, msg.timestamp))
 			return
 		} else {
 			authLvl = al
@@ -586,9 +592,9 @@ func (s *Session) acc(msg *ClientComMessage) {
 		// Request to update auth of an existing account. Only basic auth is currently supported
 		// TODO(gene): support adding new auth schemes
 		// TODO(gene): support the case when msg.Acc.User is not equal to the current user
-		if code, err := authhdl.UpdateRecord(s.uid, msg.Acc.Secret, 0); err != nil {
-			log.Println("failed to update credentials", err)
-			s.queueOut(decodeAuthError(code, msg.Acc.Id, msg.timestamp))
+		if authErr := authhdl.UpdateRecord(s.uid, msg.Acc.Secret, 0); authErr.IsError() {
+			log.Println("failed to update credentials", authErr.Err)
+			s.queueOut(decodeAuthError(authErr.Code, msg.Acc.Id, msg.timestamp))
 			return
 		}
 

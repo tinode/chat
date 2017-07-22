@@ -59,6 +59,9 @@ type ClusterSess struct {
 	// ID of the current user or 0
 	Uid types.Uid
 
+	// Protocol version of the client: ((major & 0xff) << 8) | (minor & 0xff)
+	Ver int
+
 	// Session ID
 	Sid string
 }
@@ -202,6 +205,7 @@ func (Cluster) Master(msg *ClusterReq, unused *bool) error {
 
 		// Update session params which may have changed since the last call.
 		sess.uid = msg.Sess.Uid
+		sess.ver = msg.Sess.Ver
 		sess.userAgent = msg.Sess.UserAgent
 		sess.remoteAddr = msg.Sess.RemoteAddr
 
@@ -263,8 +267,17 @@ func (c *Cluster) routeToTopic(msg *ClientComMessage, topic string, sess *Sessio
 	}
 	sess.nodes[n.name] = true
 
-	return n.forward(&ClusterReq{Node: c.thisNodeName, Msg: msg, RcptTo: topic,
-		Sess: &ClusterSess{Uid: sess.uid, RemoteAddr: sess.remoteAddr, UserAgent: sess.userAgent, Sid: sess.sid}})
+	return n.forward(
+		&ClusterReq{
+			Node:   c.thisNodeName,
+			Msg:    msg,
+			RcptTo: topic,
+			Sess: &ClusterSess{
+				Uid:        sess.uid,
+				RemoteAddr: sess.remoteAddr,
+				UserAgent:  sess.userAgent,
+				Ver:        sess.ver,
+				Sid:        sess.sid}})
 }
 
 // Forward client message to the Master (cluster node which owns the topic)
@@ -277,8 +290,16 @@ func (c *Cluster) sessionGone(sess *Session) error {
 	for name, _ := range sess.nodes {
 		n := c.nodes[name]
 		if n != nil {
-			return n.forward(&ClusterReq{Node: c.thisNodeName, SessGone: true,
-				Sess: &ClusterSess{Uid: sess.uid, RemoteAddr: sess.remoteAddr, UserAgent: sess.userAgent, Sid: sess.sid}})
+			return n.forward(
+				&ClusterReq{
+					Node:     c.thisNodeName,
+					SessGone: true,
+					Sess: &ClusterSess{
+						Uid:        sess.uid,
+						RemoteAddr: sess.remoteAddr,
+						UserAgent:  sess.userAgent,
+						Ver:        sess.ver,
+						Sid:        sess.sid}})
 		}
 	}
 	return nil

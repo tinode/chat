@@ -49,11 +49,10 @@ const (
 var buildstamp = ""
 
 var globals struct {
-	hub          *Hub
-	sessionStore *SessionStore
-	cluster      *Cluster
-	apiKeySalt   []byte
-	// tokenExpiresIn time.Duration
+	hub           *Hub
+	sessionStore  *SessionStore
+	cluster       *Cluster
+	apiKeySalt    []byte
 	indexableTags []string
 	// Add Strict-Transport-Security to headers, the value signifies age.
 	// Empty string "" turns it off
@@ -68,8 +67,6 @@ type configType struct {
 	Listen string `json:"listen"`
 	// Salt used in signing API keys
 	APIKeySalt []byte `json:"api_key_salt"`
-	// Security token expiration time (authentication by token)
-	// TokenExpiresIn int `json:"token_expires_in"`
 	// Tags allowed in index (user discovery)
 	IndexableTags []string        `json:"indexable_tags"`
 	ClusterConfig json.RawMessage `json:"cluster_config"`
@@ -126,8 +123,6 @@ func main() {
 	globals.hub = newHub()
 	// Cluster initialization
 	clusterInit(config.ClusterConfig)
-	// Expiration time of login tokens
-	// globals.tokenExpiresIn = time.Duration(config.TokenExpiresIn) * time.Second
 	// API key validation secret
 	globals.apiKeySalt = config.APIKeySalt
 	// Indexable tags for user discovery

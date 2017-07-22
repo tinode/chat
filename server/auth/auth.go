@@ -39,6 +39,20 @@ const (
 	LevelRoot
 )
 
+// Structure for reporting an error condition
+type AuthErr struct {
+	Code int
+	Err  error
+}
+
+func NewErr(code int, err error) AuthErr {
+	return AuthErr{Code: code, Err: err}
+}
+
+func (a AuthErr) IsError() bool {
+	return a.Code != NoErr
+}
+
 // Interface which auth providers must implement
 type AuthHandler interface {
 	// Initialize the handler
@@ -47,27 +61,27 @@ type AuthHandler interface {
 	// Add persistent record to database. Returns a numeric error code to indicate
 	// if the error is due to a duplicate or some other error.
 	// store.AddAuthRecord("scheme", "unique", "secret")
-	// Returns: auth level, error code, error
-	AddRecord(uid types.Uid, secret []byte, lifetime time.Duration) (int, int, error)
+	// Returns: auth level, error
+	AddRecord(uid types.Uid, secret []byte, lifetime time.Duration) (int, AuthErr)
 
 	// Update existing record with new credentials. Returns a numeric error code to indicate
 	// if the error is due to a duplicate or some other error.
 	// store.UpdateAuthRecord("scheme", "unique", "secret")
-	UpdateRecord(uid types.Uid, secret []byte, lifetime time.Duration) (int, error)
+	UpdateRecord(uid types.Uid, secret []byte, lifetime time.Duration) AuthErr
 
 	// Given a user-provided authentication secret (such as "login:password"
 	// return user ID, time when the secret expires (zero, if never) or an error code.
 	// store.Users.GetAuthRecord("scheme", "unique")
-	// Returns: user ID, user auth level, token expiration time, error code.
-	Authenticate(secret []byte) (types.Uid, int, time.Time, int)
+	// Returns: user ID, user auth level, token expiration time, AuthErr.
+	Authenticate(secret []byte) (types.Uid, int, time.Time, AuthErr)
 
 	// Verify if the provided secret can be considered unique by the auth scheme
 	// E.g. if login is unique.
 	// store.GetAuthRecord(scheme, unique)
-	IsUnique(secret []byte) (bool, error)
+	IsUnique(secret []byte) (bool, AuthErr)
 
 	// Generate a new secret, if appropriate.
-	GenSecret(uid types.Uid, authLvl int, lifetime time.Duration) ([]byte, time.Time, int)
+	GenSecret(uid types.Uid, authLvl int, lifetime time.Duration) ([]byte, time.Time, AuthErr)
 }
 
 func AuthLevelName(authLvl int) string {

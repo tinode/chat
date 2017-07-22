@@ -32,15 +32,15 @@ func (BasicAuth) Init(unused string) error {
 	return nil
 }
 
-func (BasicAuth) AddRecord(uid types.Uid, secret []byte, lifetime time.Duration) (int, int, error) {
+func (BasicAuth) AddRecord(uid types.Uid, secret []byte, lifetime time.Duration) (int, auth.AuthErr) {
 	uname, password, fail := parseSecret(string(secret))
 	if fail != auth.NoErr {
-		return auth.LevelNone, fail, errors.New("basic auth handler: malformed secret")
+		return auth.LevelNone, auth.NewErr(fail, errors.New("basic auth: malformed secret"))
 	}
 
 	passhash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
-		return auth.LevelNone, auth.ErrInternal, err
+		return auth.LevelNone, auth.NewErr(auth.ErrInternal, err)
 	}
 	var expires time.Time
 	if lifetime > 0 {
@@ -48,29 +48,30 @@ func (BasicAuth) AddRecord(uid types.Uid, secret []byte, lifetime time.Duration)
 	}
 	err, dup := store.Users.AddAuthRecord(uid, auth.LevelAuth, "basic", uname, passhash, expires)
 	if dup {
-		return auth.LevelNone, auth.ErrDuplicate, err
+		return auth.LevelNone, auth.NewErr(auth.ErrDuplicate, err)
 	} else if err != nil {
-		return auth.LevelNone, auth.ErrInternal, err
+		return auth.LevelNone, auth.NewErr(auth.ErrInternal, err)
 	}
-	return auth.LevelAuth, auth.NoErr, nil
+	return auth.LevelAuth, auth.NewErr(auth.NoErr, nil)
 }
 
-func (BasicAuth) UpdateRecord(uid types.Uid, secret []byte, lifetime time.Duration) (int, error) {
+func (BasicAuth) UpdateRecord(uid types.Uid, secret []byte, lifetime time.Duration) auth.AuthErr {
 	uname, password, fail := parseSecret(string(secret))
 	if fail != auth.NoErr {
-		return fail, errors.New("basic auth handler: malformed secret")
+		return auth.NewErr(fail, errors.New("basic auth: malformed secret"))
 	}
 
 	storedUid, _, _, _, err := store.Users.GetAuthRecord("basic", uname)
 	if err != nil {
-		return auth.ErrInternal, err
+		return auth.NewErr(auth.ErrInternal, err)
 	}
 	if storedUid != uid {
-		return auth.ErrFailed, nil
+		return auth.NewErr(auth.ErrFailed,
+			errors.New("basic auth: updating some else's credentials is not supported"))
 	}
 	passhash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
-		return auth.ErrInternal, errors.New("basic auth handler: login cannot be changed")
+		return auth.NewErr(auth.ErrInternal, errors.New("basic auth: login cannot be changed"))
 	}
 	var expires time.Time
 	if lifetime > 0 {
@@ -78,52 +79,59 @@ func (BasicAuth) UpdateRecord(uid types.Uid, secret []byte, lifetime time.Durati
 	}
 	_, err = store.Users.UpdateAuthRecord(uid, auth.LevelAuth, "basic", uname, passhash, expires)
 	if err != nil {
-		return auth.ErrInternal, err
+		return auth.NewErr(auth.ErrInternal, err)
 	}
-	return auth.NoErr, nil
+	return auth.NewErr(auth.NoErr, nil)
 }
 
-func (BasicAuth) Authenticate(secret []byte) (types.Uid, int, time.Time, int) {
+func (BasicAuth) Authenticate(secret []byte) (types.Uid, int, time.Time, auth.AuthErr) {
 	uname, password, fail := parseSecret(string(secret))
 	if fail != auth.NoErr {
-		return types.ZeroUid, auth.LevelNone, time.Time{}, fail
+		return types.ZeroUid, auth.LevelNone, time.Time{},
+			auth.NewErr(fail, errors.New("basic auth: malformed secret"))
 	}
 
 	uid, authLvl, passhash, expires, err := store.Users.GetAuthRecord("basic", uname)
 	if err != nil {
-		return types.ZeroUid, auth.LevelNone, time.Time{}, auth.ErrInternal
+		return types.ZeroUid, auth.LevelNone, time.Time{}, auth.NewErr(auth.ErrInternal, err)
 	} else if uid.IsZero() {
 		// Invalid login.
-		return types.ZeroUid, auth.LevelNone, time.Time{}, auth.ErrFailed
+		return types.ZeroUid, auth.LevelNone, time.Time{},
+			auth.NewErr(auth.ErrFailed, errors.New("basic auth: invalid login"))
 	} else if !expires.IsZero() && expires.Before(time.Now()) {
 		// The record has expired
-		return types.ZeroUid, auth.LevelNone, time.Time{}, auth.ErrExpired
+		return types.ZeroUid, auth.LevelNone, time.Time{},
+			auth.NewErr(auth.ErrExpired, errors.New("basic auth: expired record"))
 	}
 
 	err = bcrypt.CompareHashAndPassword([]byte(passhash), []byte(password))
 	if err != nil {
 		// Invalid password
-		return types.ZeroUid, auth.LevelNone, time.Time{}, auth.ErrFailed
+		return types.ZeroUid, auth.LevelNone, time.Time{},
+			auth.NewErr(auth.ErrFailed, errors.New("basic auth: invalid password"))
 	}
-	return uid, authLvl, expires, auth.NoErr
+	return uid, authLvl, expires, auth.NewErr(auth.NoErr, nil)
 }
 
-func (BasicAuth) IsUnique(secret []byte) (bool, error) {
+func (BasicAuth) IsUnique(secret []byte) (bool, auth.AuthErr) {
 	uname, _, fail := parseSecret(string(secret))
 	if fail != auth.NoErr {
-		return false, errors.New("auth_basic.IsUnique: malformed secret")
+		return false, auth.NewErr(fail, errors.New("basic auth: malformed secret"))
 	}
 
 	uid, _, _, _, err := store.Users.GetAuthRecord("basic", uname)
 	if err != nil {
-		return false, err
+		return false, auth.NewErr(auth.ErrInternal, err)
 	}
 
-	return uid.IsZero(), nil
+	if uid.IsZero() {
+		return true, auth.NewErr(auth.NoErr, nil)
+	}
+	return false, auth.NewErr(auth.ErrDuplicate, errors.New("basic auth: duplicate credentials"))
 }
 
-func (BasicAuth) GenSecret(uid types.Uid, authLvl int, lifetime time.Duration) ([]byte, time.Time, int) {
-	return nil, time.Time{}, auth.ErrUnsupported
+func (BasicAuth) GenSecret(uid types.Uid, authLvl int, lifetime time.Duration) ([]byte, time.Time, auth.AuthErr) {
+	return nil, time.Time{}, auth.NewErr(auth.ErrUnsupported, errors.New("basic auth: GenSecret is not supported"))
 }
 
 func init() {
