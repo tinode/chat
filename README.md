@@ -25,7 +25,7 @@ A javascript demo is (usually) available at http://api.tinode.co/x/example-react
 * Persistent message store, paginated message history.
 * Javascript bindings with no dependencies.
 * Android Java bindings (dependencies: [jackson](https://github.com/FasterXML/jackson), [nv-websocket-client](https://github.com/TakahikoKawasaki/nv-websocket-client))
-* Websocket transport.
+* Websocket and long polling transport.
 * JSON wire protocol.
 * User search/discovery.
 * Message status notifications: message delivery to server; received and read notifications; typing notifications.
@@ -39,7 +39,6 @@ A javascript demo is (usually) available at http://api.tinode.co/x/example-react
 
 * iOS client bindings and client.
 * Security: [TLS](https://en.wikipedia.org/wiki/Transport_Layer_Security) for all communications plus [OTR](https://en.wikipedia.org/wiki/Off-the-Record_Messaging) for one-on-one messaging and undecided method for group mesaging.
-* Support for long polling (currently exists but broken).
 * Group messaging with unlimited number of members with bearer token access control.
 * Failover/hot standby/replication.
 * Federation.

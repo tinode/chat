@@ -24,9 +24,7 @@ func lp_writePkt(wrt http.ResponseWriter, pkt *ServerComMessage) error {
 }
 */
 
-func (sess *Session) writeOnce() {
-	// Next call may change wrt, save it here
-	wrt := sess.wrt
+func (sess *Session) writeOnce(wrt http.ResponseWriter) {
 
 	notifier, _ := wrt.(http.CloseNotifier)
 	closed := notifier.CloseNotify()
@@ -37,17 +35,14 @@ func (sess *Session) writeOnce() {
 			log.Println("writeOnce: reading from a closed channel")
 		} else if _, err := wrt.Write(msg); err != nil {
 			log.Println("sess.writeOnce: " + err.Error())
-			sess.wrt = nil
 		}
 
 	case <-closed:
 		log.Println("conn.writeOnce: connection closed by peer")
-		sess.wrt = nil
 
 	case msg := <-sess.stop:
 		// Make session unavailable
 		globals.sessionStore.Delete(sess)
-		sess.wrt = nil
 		wrt.Write(msg)
 
 	case topic := <-sess.detach:
@@ -61,13 +56,12 @@ func (sess *Session) writeOnce() {
 	}
 }
 
-func (sess *Session) readOnce(req *http.Request) bool {
+func (sess *Session) readOnce(req *http.Request) error {
 	if raw, err := ioutil.ReadAll(req.Body); err == nil {
 		sess.dispatchRaw(raw)
-		return true
+		return nil
 	} else {
-		log.Println("longPoll: " + err.Error())
-		return false
+		return err
 	}
 }
 
@@ -79,6 +73,8 @@ func (sess *Session) readOnce(req *http.Request) bool {
 //   - if payload exists, process it and close
 //  - if sid is not empty but there is no session, report an error
 func serveLongPoll(wrt http.ResponseWriter, req *http.Request) {
+
+	now := time.Now().UTC().Round(time.Millisecond)
 
 	// Use lowest common denominator - this is a legacy handler after all (otherwise would use application/json)
 	wrt.Header().Set("Content-Type", "text/plain")
@@ -92,8 +88,9 @@ func serveLongPoll(wrt http.ResponseWriter, req *http.Request) {
 		wrt.WriteHeader(http.StatusForbidden)
 		enc.Encode(
 			&ServerComMessage{Ctrl: &MsgServerCtrl{
-				Code: http.StatusForbidden,
-				Text: "valid API key is required"}})
+				Timestamp: now,
+				Code:      http.StatusForbidden,
+				Text:      "valid API key is required"}})
 		return
 	}
 
@@ -111,8 +108,8 @@ func serveLongPoll(wrt http.ResponseWriter, req *http.Request) {
 
 	// TODO(gene): respond differently to valious HTTP methods
 
-	log.Printf("HTTP %s %s?%s from '%s' %d bytes", req.Method,
-		req.URL.Path, req.URL.RawQuery, req.RemoteAddr, req.ContentLength)
+	// log.Printf("HTTP %s %s?%s from '%s' %d bytes", req.Method,
+	// 	req.URL.Path, req.URL.RawQuery, req.RemoteAddr, req.ContentLength)
 
 	// Get session id
 	sid := req.FormValue("sid")
@@ -121,34 +118,44 @@ func serveLongPoll(wrt http.ResponseWriter, req *http.Request) {
 		// New session
 		sess = globals.sessionStore.Create(wrt, "")
 		log.Println("longPoll: new session created, sid=", sess.sid)
+		wrt.WriteHeader(http.StatusCreated)
+		pkt := NoErrCreated(req.FormValue("id"), "", now)
+		pkt.Ctrl.Params = map[string]string{
+			"sid": sess.sid,
+		}
+		enc.Encode(pkt)
+
+		return
 
 	} else {
 		// Existing session
 		sess = globals.sessionStore.Get(sid)
 		if sess == nil {
-			log.Println("longPoll: invalid or expired session id ", sid)
+			log.Println("longPoll: invalid or expired session id", sid)
 
 			wrt.WriteHeader(http.StatusForbidden)
 			enc.Encode(
 				&ServerComMessage{Ctrl: &MsgServerCtrl{
-					Code: http.StatusForbidden,
-					Text: "invalid or expired session id"}})
+					Timestamp: now,
+					Code:      http.StatusForbidden,
+					Text:      "invalid or expired session id"}})
 
 			return
 		}
 	}
 
-	sess.wrt = wrt
 	sess.remoteAddr = req.RemoteAddr
 
 	if req.ContentLength > 0 {
 		// Read payload and send it for processing.
-		if !sess.readOnce(req) {
-			// Failed to red, stop
-			return
+		if err := sess.readOnce(req); err != nil {
+			log.Println("longPoll: " + err.Error())
+			// Failed to red request, report an error, if possible
+			wrt.WriteHeader(http.StatusBadRequest)
+			enc.Encode(ErrMalformed(req.FormValue("id"), "", now))
 		}
+		return
 	}
 
-	// Wait for data, write it to the connection or timeout
-	sess.writeOnce()
+	sess.writeOnce(wrt)
 }

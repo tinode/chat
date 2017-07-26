@@ -1,4 +1,4 @@
-# Using Docker files to fun Tinode
+# Using Docker files to run Tinode
 
 [Install Docker](http://docs.docker.com/engine/installation/).
 

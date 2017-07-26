@@ -254,8 +254,6 @@ func (a *RethinkDbAdapter) GetAuthRecord(unique string) (t.Uid, int, []byte, tim
 		return t.ZeroUid, 0, nil, time.Time{}, err
 	}
 
-	log.Println("Fetched for unique", unique)
-
 	var record struct {
 		Userid  string    `gorethink:"userid"`
 		AuthLvl int       `gorethink:"authLvl"`

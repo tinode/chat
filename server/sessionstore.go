@@ -43,7 +43,7 @@ func (ss *SessionStore) Create(conn interface{}, sid string) *Session {
 		s.ws = c
 	case http.ResponseWriter:
 		s.proto = LPOLL
-		s.wrt = c
+		// no need to store c for long polling, it changes with every request
 	case *ClusterNode:
 		s.proto = RPC
 		s.rpcnode = c
@@ -53,7 +53,7 @@ func (ss *SessionStore) Create(conn interface{}, sid string) *Session {
 
 	if s.proto != NONE {
 		s.subs = make(map[string]*Subscription)
-		s.send = make(chan []byte, 64)   // buffered
+		s.send = make(chan []byte, 256)  // buffered
 		s.stop = make(chan []byte, 1)    // Buffered by 1 just to make it non-blocking
 		s.detach = make(chan string, 64) // buffered
 	}

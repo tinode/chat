@@ -47,8 +47,6 @@ type Session struct {
 	// --
 
 	// -- Set only for Long Poll sessions
-	// Most recent HTTP writer, could be nil
-	wrt http.ResponseWriter
 	// Pointer to session's record in sessionStore
 	lpTracker *list.Element
 	// --
@@ -385,13 +383,21 @@ func (s *Session) hello(msg *ClientComMessage) {
 	s.lang = msg.Hi.Lang
 
 	params := map[string]interface{}{"ver": VERSION, "build": buildstamp}
+	var httpStatus int
+	var httpStatusText string
 	if s.proto == LPOLL {
-		params["sid"] = s.sid
+		// In case of long polling StatusCreated was reported earlier.
+		httpStatus = http.StatusOK
+		httpStatusText = "ok"
+
+	} else {
+		httpStatus = http.StatusCreated
+		httpStatusText = "created"
 	}
 	s.queueOut(&ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        msg.Hi.Id,
-		Code:      http.StatusCreated,
-		Text:      "created",
+		Code:      httpStatus,
+		Text:      httpStatusText,
 		Params:    params,
 		Timestamp: msg.timestamp}})
 }
