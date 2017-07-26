@@ -147,6 +147,8 @@ func main() {
 	http.HandleFunc("/v0/channels", serveWebSocket)
 	// Handle long polling clients
 	http.HandleFunc("/v0/channels/lp", serveLongPoll)
+	// Serve json-formatted 404 for all other URLs
+	http.HandleFunc("/", serve404)
 
 	if err := listenAndServe(config.Listen, *tlsEnabled, string(config.TlsConfig), signalHandler()); err != nil {
 		log.Fatal(err)

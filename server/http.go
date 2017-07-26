@@ -18,6 +18,7 @@ import (
 	"os/signal"
 	"strconv"
 	"syscall"
+	"time"
 
 	"golang.org/x/crypto/acme/autocert"
 )
@@ -171,4 +172,13 @@ func hstsHandler(handler http.Handler) http.Handler {
 	} else {
 		return handler
 	}
+}
+
+func serve404(wrt http.ResponseWriter, req *http.Request) {
+	wrt.WriteHeader(http.StatusNotFound)
+	json.NewEncoder(wrt).Encode(
+		&ServerComMessage{Ctrl: &MsgServerCtrl{
+			Timestamp: time.Now().UTC().Round(time.Millisecond),
+			Code:      http.StatusNotFound,
+			Text:      "not found"}})
 }
