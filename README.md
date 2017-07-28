@@ -38,6 +38,7 @@ A javascript demo is (usually) available at http://api.tinode.co/x/example-react
 ### Planned
 
 * iOS client bindings and client.
+* Rich formatting of messages and media transfer.
 * Security: [TLS](https://en.wikipedia.org/wiki/Transport_Layer_Security) for all communications plus [OTR](https://en.wikipedia.org/wiki/Off-the-Record_Messaging) for one-on-one messaging and undecided method for group mesaging.
 * Group messaging with unlimited number of members with bearer token access control.
 * Failover/hot standby/replication.
