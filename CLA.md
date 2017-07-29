@@ -29,3 +29,5 @@ Subject to the terms and conditions of this Agreement, You hereby grant to Tinod
 7. Should You wish to submit work that is not Your original creation, You may submit it to Tinode separately from any Contribution, identifying the complete details of its source and of any license or other restriction (including, but not limited to, related patents, trademarks, and license agreements) of which you are personally aware, and conspicuously marking the work as "Submitted on behalf of a third-party: [named here]".
 
 8. You agree to notify Tinode of any facts or circumstances of which you become aware that would make these representations inaccurate in any respect.
+
+[SIGN NOW](https://docs.google.com/forms/d/e/1FAIpQLSfmtJDHzFOJTzIv5jZ-gHRxVU0ysTdIMJakv1xgUUCu_RGeKQ/formResponse)
