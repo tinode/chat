@@ -30,4 +30,6 @@ Subject to the terms and conditions of this Agreement, You hereby grant to Tinod
 
 8. You agree to notify Tinode of any facts or circumstances of which you become aware that would make these representations inaccurate in any respect.
 
-[SIGN NOW](https://docs.google.com/forms/d/e/1FAIpQLSfmtJDHzFOJTzIv5jZ-gHRxVU0ysTdIMJakv1xgUUCu_RGeKQ/formResponse)
+---
+
+## [SIGN NOW](https://docs.google.com/forms/d/e/1FAIpQLSfmtJDHzFOJTzIv5jZ-gHRxVU0ysTdIMJakv1xgUUCu_RGeKQ/formResponse)
