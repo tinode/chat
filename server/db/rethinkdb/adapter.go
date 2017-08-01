@@ -376,7 +376,7 @@ func (a *RethinkDbAdapter) TopicCreateP2P(initiator, invited *t.Subscription) er
 
 	topic := &t.Topic{
 		ObjHeader: t.ObjHeader{Id: initiator.Topic},
-		Access:    t.DefaultAccess{Auth: t.ModeNone, Anon: t.ModeNone}}
+		Access:    t.DefaultAccess{Auth: t.ModeCP2P, Anon: t.ModeNone}}
 	topic.ObjHeader.MergeTimes(&initiator.ObjHeader)
 	return a.TopicCreate(topic)
 }

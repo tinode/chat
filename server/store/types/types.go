@@ -288,6 +288,8 @@ const (
 	ModeCFull AccessMode = ModeJoin | ModeRead | ModeWrite | ModePres | ModeApprove | ModeShare | ModeDelete | ModeOwner
 	// Default P2P access mode
 	ModeCP2P AccessMode = ModeJoin | ModeRead | ModeWrite | ModePres
+	// Read-only access to topic
+	ModeCReadOnly = ModeJoin | ModeRead
 
 	// Invalid mode to indicate an error
 	ModeInvalid AccessMode = 0x100000
