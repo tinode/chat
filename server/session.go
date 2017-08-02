@@ -536,7 +536,7 @@ func (s *Session) acc(msg *ClientComMessage) {
 
 		if msg.Acc.Tags != nil && len(msg.Acc.Tags) > 0 {
 			tags := make([]string, 0, len(msg.Acc.Tags))
-			if filterTags(tags, msg.Acc.Tags) > 0 {
+			if filterTags(&tags, msg.Acc.Tags) > 0 {
 				user.Tags = tags
 			}
 		}
@@ -832,7 +832,7 @@ func (s *Session) validateTopicName(msgId, topic string, timestamp time.Time) (s
 	return routeTo, nil
 }
 
-func filterTags(dst, src []string) int {
+func filterTags(dst *[]string, src []string) int {
 	if globals.indexableTags == nil || len(globals.indexableTags) == 0 {
 		return 0
 	}
@@ -848,11 +848,11 @@ func filterTags(dst, src []string) int {
 		parts[0] = strings.ToLower(parts[0])
 		for _, tag := range globals.indexableTags {
 			if parts[0] == tag {
-				dst = append(dst, parts[1])
+				*dst = append(*dst, s)
 			}
 		}
 	}
-	return len(dst)
+	return len(*dst)
 }
 
 func decodeAuthError(code int, id string, timestamp time.Time) *ServerComMessage {
