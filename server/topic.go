@@ -1162,7 +1162,7 @@ func (t *Topic) replySetDesc(sess *Session, set *MsgClientSet) error {
 			if set.Desc.Public != nil {
 				if src, ok := set.Desc.Public.([]string); ok && len(src) > 0 {
 					tags := make([]string, 0, len(src))
-					if filterTags(tags, src) > 0 {
+					if filterTags(&tags, src) > 0 {
 						// No need to send presence update
 						assignGenericValues(user, "Tags", tags)
 						t.public = tags
