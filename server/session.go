@@ -514,9 +514,12 @@ func (s *Session) acc(msg *ClientComMessage) {
 
 		var user types.User
 		var private interface{}
+
+		// Assign default access values in case the acc creator has not provided them
+		user.Access.Auth = getDefaultAccess(types.TopicCat_P2P, true)
+		user.Access.Anon = getDefaultAccess(types.TopicCat_P2P, false)
+
 		if msg.Acc.Desc != nil {
-			user.Access.Auth = getDefaultAccess(types.TopicCat_P2P, true)
-			user.Access.Anon = getDefaultAccess(types.TopicCat_P2P, false)
 
 			if msg.Acc.Desc.DefaultAcs != nil {
 				if msg.Acc.Desc.DefaultAcs.Auth != "" {
