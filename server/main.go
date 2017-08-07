@@ -69,11 +69,12 @@ type configType struct {
 	// Salt used in signing API keys
 	APIKeySalt []byte `json:"api_key_salt"`
 	// Tags allowed in index (user discovery)
-	IndexableTags []string        `json:"indexable_tags"`
-	ClusterConfig json.RawMessage `json:"cluster_config"`
-	StoreConfig   json.RawMessage `json:"store_config"`
-	PushConfig    json.RawMessage `json:"push"`
-	TlsConfig     json.RawMessage `json:"tls"`
+	IndexableTags []string                   `json:"indexable_tags"`
+	ClusterConfig json.RawMessage            `json:"cluster_config"`
+	StoreConfig   json.RawMessage            `json:"store_config"`
+	PushConfig    json.RawMessage            `json:"push"`
+	TlsConfig     json.RawMessage            `json:"tls"`
+	AuthConfig    map[string]json.RawMessage `json:"auth_config"`
 }
 
 func main() {
@@ -108,6 +109,14 @@ func main() {
 		store.Close()
 		log.Println("Closed database connection(s)")
 	}()
+
+	for name, jsconf := range config.AuthConfig {
+		if authhdl := store.GetAuthHandler(name); authhdl == nil {
+			panic("Config provided for unknown authentication scheme '" + name + "'")
+		} else if err := authhdl.Init(string(jsconf)); err != nil {
+			panic(err)
+		}
+	}
 
 	err = push.Init(string(config.PushConfig))
 	if err != nil {

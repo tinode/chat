@@ -47,7 +47,7 @@ func (BasicAuth) AddRecord(uid types.Uid, secret []byte, lifetime time.Duration)
 	}
 	var expires time.Time
 	if lifetime > 0 {
-		expires = time.Now().Add(lifetime)
+		expires = time.Now().Add(lifetime).UTC().Round(time.Millisecond)
 	}
 	err, dup := store.Users.AddAuthRecord(uid, auth.LevelAuth, "basic", uname, passhash, expires)
 	if dup {

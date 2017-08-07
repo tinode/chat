@@ -70,6 +70,7 @@ func (TokenAuth) Init(jsonconf string) error {
 
 	hmac_salt = config.Key
 	token_timeout = time.Duration(config.ExpireIn) * time.Second
+
 	serial_number = config.SerialNum
 
 	return nil
@@ -134,7 +135,7 @@ func (TokenAuth) GenSecret(uid types.Uid, authLvl int, lifetime time.Duration) (
 	} else if lifetime < 0 {
 		return nil, time.Time{}, auth.NewErr(auth.ErrExpired, errors.New("token auth: negative lifetime"))
 	}
-	expires := time.Now().Add(lifetime)
+	expires := time.Now().Add(lifetime).UTC().Round(time.Millisecond)
 	binary.Write(buf, binary.LittleEndian, uint32(expires.Unix()))
 	binary.Write(buf, binary.LittleEndian, uint16(authLvl))
 	binary.Write(buf, binary.LittleEndian, uint16(serial_number))
