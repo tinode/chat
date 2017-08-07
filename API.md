@@ -175,8 +175,9 @@ sub: {
   topic: "me",   // topic to be subscribed or attached to
 
   // Object with topic initialization data, new topics & new
-  // subscriptions only, mirrors {set desc}
+  // subscriptions only, mirrors {set} message
   set: {
+	// New topic parameters, mirrors {set desc}
     desc: {
       defacs: {
         auth: "JRWS", // string, default access for new authenticated subscribers
@@ -187,8 +188,7 @@ sub: {
       private: { ... } // per-user private application-defined content
     }, // object, optional
 
-    // Subscription parameters, mirrors {set sub}. The data without sub.user is
-    // assumed to be for the calling user.
+    // Subscription parameters, mirrors {set sub}. 'sub.user' must be blank
     sub: {
       mode: "JRWS", // string, requested access mode, optional;
                    // default: server-defined

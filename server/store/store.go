@@ -175,6 +175,11 @@ func (UsersObjMapper) GetAll(uid ...types.Uid) ([]types.User, error) {
 
 // TODO(gene): implement
 func (UsersObjMapper) Delete(id types.Uid, soft bool) error {
+	// Maybe delete topics where the user is the owner and all subscriptions to those topics, and messages
+	// Delete user's subscriptions
+	// Delete user's authentication records
+	// Delete user's tags
+	// Delete user object
 	return errors.New("store: not implemented")
 }
 

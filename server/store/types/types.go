@@ -241,7 +241,8 @@ type User struct {
 	// Currently unused: Unconfirmed, Active, etc.
 	State int
 
-	Access DefaultAccess // Default access to user
+	// Default access to user for P2P topics (used as default modeGiven)
+	Access DefaultAccess
 
 	// Values for 'me' topic:
 	// Server-issued sequence ID for messages in 'me'
@@ -277,6 +278,8 @@ const (
 	ModeShare                          // user can invite new members (S)
 	ModeDelete                         // user can hard-delete messages (D)
 	ModeOwner                          // user is the owner (O) - full access
+	ModeUnset                          // Non-zero value to indicate unknown or undefined mode,
+	// to make it different from ModeNone
 
 	ModeNone AccessMode = 0 // No access, requests to gain access are processed normally (N)
 

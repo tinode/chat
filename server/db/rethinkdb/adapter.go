@@ -308,8 +308,16 @@ func (a *RethinkDbAdapter) UserGetAll(ids ...t.Uid) ([]t.User, error) {
 	return users, nil
 }
 
-func (a *RethinkDbAdapter) UserDelete(id t.Uid, soft bool) error {
-	return errors.New("UserDelete: not implemented")
+func (a *RethinkDbAdapter) UserDelete(uid t.Uid, soft bool) error {
+	var err error
+	q := rdb.DB(a.dbName).Table("users").Get(uid.String())
+	if soft {
+		now := t.TimeNow()
+		_, err = q.Update(map[string]interface{}{"DeletedAt": now, "UpdatedAt": now}).RunWrite(a.conn)
+	} else {
+		_, err = q.Delete().Run(a.conn)
+	}
+	return err
 }
 
 func (a *RethinkDbAdapter) UserUpdateLastSeen(uid t.Uid, userAgent string, when time.Time) error {
@@ -374,9 +382,7 @@ func (a *RethinkDbAdapter) TopicCreateP2P(initiator, invited *t.Subscription) er
 		}
 	}
 
-	topic := &t.Topic{
-		ObjHeader: t.ObjHeader{Id: initiator.Topic},
-		Access:    t.DefaultAccess{Auth: t.ModeCP2P, Anon: t.ModeNone}}
+	topic := &t.Topic{ObjHeader: t.ObjHeader{Id: initiator.Topic}}
 	topic.ObjHeader.MergeTimes(&initiator.ObjHeader)
 	return a.TopicCreate(topic)
 }
@@ -639,7 +645,7 @@ func (a *RethinkDbAdapter) SubsLastSeen(topic string, user t.Uid, lastSeen map[s
 // SubsForUser loads a list of user's subscriptions to topics. Does NOT read Public value.
 func (a *RethinkDbAdapter) SubsForUser(forUser t.Uid, keepDeleted bool) ([]t.Subscription, error) {
 	if forUser.IsZero() {
-		return nil, errors.New("RethinkDb adapter: invalid user ID in TopicGetAll")
+		return nil, errors.New("RethinkDb adapter: invalid user ID in SubsForUser")
 	}
 
 	q := rdb.DB(a.dbName).Table("subscriptions").GetAllByIndex("User", forUser.String())

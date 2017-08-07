@@ -362,14 +362,13 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 
 		// t.owner is blank for p2p topics
 
-		// Default user access to P2P topics
+		// Default user access to P2P topics is not set because it's unused.
 		// Other users cannot join the topic because of how topic name is constructed.
-		t.accessAuth = getDefaultAccess(t.cat, true)
-		t.accessAnon = getDefaultAccess(t.cat, false)
+		// The two participants set each other's access.
+		// t.accessAuth = getDefaultAccess(t.cat, true)
+		// t.accessAnon = getDefaultAccess(t.cat, false)
 
 		// t.public is not used for p2p topics since each user get a different public
-
-		// Custom default access levels set in sreg.pkt.Init.DefaultAcs are ignored
 
 		if stopic != nil && len(subs) == 2 {
 			// Case 4.
@@ -389,7 +388,8 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 			}
 
 		} else {
-			// Cases 1, 2
+			// Cases 1 (new topic), 2 (one of the two subscriptions is missing: either it's a new request
+			// or the subscription was deleted)
 
 			log.Println("hub: p2p new topic or one of the subs is missing")
 
@@ -427,40 +427,114 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 			var user1only bool
 			if len(subs) == 1 {
 				if subs[0].Uid() == userId1 {
-					// User2's subscription is missing
+					// User2's subscription is missing, user1's exists
 					sub1 = &subs[0]
 				} else {
-					// User1's is missing
+					// User1's is missing, user2's exists
 					sub2 = &subs[0]
 					user1only = true
 				}
+			}
+
+			// Helper function to parse access mode proveded as string
+			parseMode := func(str string, def types.AccessMode) types.AccessMode {
+				var mode types.AccessMode
+				if str == "" {
+					mode = def
+				} else if err := mode.UnmarshalText([]byte(str)); err != nil {
+					log.Println("hub: invalid access mode for topic[" + t.x_original + "]: '" + str + "'")
+					mode = def
+				}
+				// Make sure the user is not doing something unreasonable
+				return mode & types.ModeCP2P
+			}
+
+			// Helper function to select access mode for the given auth level
+			selectMode := func(authLvl int, anonMode, authLMode, rootMode types.AccessMode) types.AccessMode {
+				switch authLvl {
+				case auth.LevelAnon:
+					return anonMode
+				case auth.LevelAuth:
+					return authLMode
+				case auth.LevelRoot:
+					return rootMode
+				default:
+					return types.ModeNone
+				}
+			}
+
+			// Other user's subscription is missing
+			if sub2 == nil {
+				sub2 = &types.Subscription{
+					User:    userId2.String(),
+					Topic:   t.name,
+					Private: nil}
+
+				// Assign user2's ModeGiven based on what user1 has provided
+				if sreg.pkt.Set != nil && sreg.pkt.Set.Desc != nil && sreg.pkt.Set.Desc.DefaultAcs != nil {
+					// Use provided DefaultAcs as non-default modeGiven for the other user.
+					// The other user is assumed to have auth level "Auth".
+					sub2.ModeGiven = parseMode(sreg.pkt.Set.Desc.DefaultAcs.Auth, users[u1].Access.Auth)
+				} else {
+					// Use user1.Auth as modeGiven for the other user
+					sub2.ModeGiven = users[u1].Access.Auth
+				}
+
+				// Swap Public to match swapped Public in subs returned from store.Topics.GetSubs
+				sub2.SetPublic(users[u1].Public)
 			}
 
 			// Requester's subscription is missing:
 			// a. requester is starting a new topic
 			// b. requester's subscription is missing: deleted or creation failed
 			if sub1 == nil {
-				// User may set non-default access to topic, just make sure it's no higher than the default
-				if sreg.pkt.Set != nil && sreg.pkt.Set.Sub != nil && sreg.pkt.Set.Sub.Mode != "" {
-					if err := userData.modeWant.UnmarshalText([]byte(sreg.pkt.Set.Sub.Mode)); err != nil {
-						log.Println("hub: invalid access mode for topic '" + t.x_original + "': '" + sreg.pkt.Set.Sub.Mode + "'")
-						userData.modeWant = types.ModeCP2P
+				// Set user1's ModeGiven from user2's default values
+				userData.modeGiven = selectMode(sreg.sess.authLvl,
+					users[u2].Access.Anon,
+					users[u2].Access.Auth,
+					types.ModeCP2P)
+
+				// By default assign the same mode that user1 gave to user2 (could be changed below)
+				userData.modeWant = sub2.ModeGiven
+
+				if sreg.pkt.Set != nil {
+					if sreg.pkt.Set.Sub != nil {
+						uid := sreg.sess.uid
+						if sreg.pkt.Set.Sub.User != "" {
+							uid = types.ParseUserId(sreg.pkt.Set.Sub.User)
+						}
+
+						if uid != sreg.sess.uid {
+							// Report the error and ignore the value
+							log.Println("hub: setting mode for another user is not supported '" + t.name + "'")
+						} else {
+							// user1 is setting non-default modeWant
+							userData.modeWant = parseMode(sreg.pkt.Set.Sub.Mode, userData.modeWant)
+						}
+
+						// Since user1 issued a {sub} request, make sure the user can join
+						userData.modeWant |= types.ModeJoin
 					}
-				} else {
-					userData.modeWant = types.ModeCP2P
-				}
-				// Make sure the user can always join
-				userData.modeWant |= types.ModeJoin
-				// Make sure the user is not asking for something unreasonable
-				userData.modeWant &= types.ModeCP2P
 
-				// User is always given the full access to the topic. User should use modeWant
-				// to control how much data gets through.
-				userData.modeGiven = types.ModeCP2P
+					// user1 sets non-default Private
+					if sreg.pkt.Set.Desc != nil {
+						if !isNullValue(sreg.pkt.Set.Desc.Private) {
+							userData.private = sreg.pkt.Set.Desc.Private
+						}
 
-				if sreg.pkt.Set != nil && sreg.pkt.Set.Desc != nil && !isNullValue(sreg.pkt.Set.Desc.Private) {
-					userData.private = sreg.pkt.Set.Desc.Private
-					// Init.DefaultAcs and Init.Public are ignored for p2p topics
+						// Ignoring Set.Desc.Public for now.
+						// TODO(gene): use provided Set.Desc.Public for user2 instead of the default one
+						/*
+							// The following code won't work because the new Public value is not saved to DB
+							if sreg.pkt.Set.Desc.Public != nil {
+								if isNullValue(sreg.pkt.Set.Desc.Public) {
+									sub2.SetPublic(nil)
+								} else {
+									sub2.SetPublic(sreg.pkt.Set.Desc.Public)
+								}
+							}
+						*/
+					}
 				}
 
 				sub1 = &types.Subscription{
@@ -473,24 +547,12 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 				sub1.SetPublic(users[u2].Public)
 			}
 
-			// Other user's subscription is missing (start of a new topic)
-			if sub2 == nil {
-				sub2 = &types.Subscription{
-					User:      userId2.String(),
-					Topic:     t.name,
-					ModeGiven: types.ModeCP2P,
-					Private:   nil}
-
-				// modeWant is defined by user's default access
-				if sreg.sess.authLvl == auth.LevelAnon {
-					sub2.ModeWant = users[u2].Access.Anon
-				} else if sreg.sess.authLvl == auth.LevelAuth {
-					sub2.ModeWant = users[u2].Access.Auth
-				} else if sreg.sess.authLvl == auth.LevelRoot {
-					sub2.ModeWant = types.ModeCP2P
-				}
-				// Swap Public to match swapped Public in subs returned from store.Topics.GetSubs
-				sub2.SetPublic(users[u1].Public)
+			if !user1only {
+				// sub2 is being created, assign sub2.modeWant to what user2 gave to user1 (sub1.modeGiven)
+				sub2.ModeWant = selectMode(sreg.sess.authLvl,
+					users[u2].Access.Anon,
+					users[u2].Access.Auth,
+					types.ModeCP2P)
 			}
 
 			// Create everything
@@ -507,6 +569,8 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 				// t.lastId is not set (default 0) for new topics
 
 			} else {
+				// TODO possibly update subscription, if changed
+
 				// Recreate one of the subscriptions
 				var subToMake *types.Subscription
 				if user1only {
@@ -594,15 +658,13 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 			}
 
 			// Owner/creator may restrict own access to topic
-			if sreg.pkt.Set.Sub == nil || sreg.pkt.Set.Sub.Mode == "" {
-				userData.modeWant = types.ModeCFull
-			} else {
+			if sreg.pkt.Set.Sub != nil && sreg.pkt.Set.Sub.Mode != "" {
 				if err := userData.modeWant.UnmarshalText([]byte(sreg.pkt.Set.Sub.Mode)); err != nil {
 					log.Println("hub: invalid access mode for topic '" + t.name + "': '" + sreg.pkt.Set.Sub.Mode + "'")
 					userData.modeWant = types.ModeCFull
 				}
-				// User should not unset ModeJoin
-				userData.modeWant |= types.ModeJoin
+				// User must not unset ModeJoin or the owner flags
+				userData.modeWant |= types.ModeJoin | types.ModeOwner
 			}
 		}
 
