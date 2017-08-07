@@ -115,10 +115,11 @@ type perUserData struct {
 	clearId int
 
 	private interface{}
-	// cleared     time.Time // time, when the topic was cleared by the user
+
 	modeWant  types.AccessMode
 	modeGiven types.AccessMode
-	// P2p only:
+
+	// P2P only:
 	public interface{}
 }
 
@@ -638,19 +639,16 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string, inf
 
 	log.Println("topic.requestSub", t.name)
 
-	now := time.Now().UTC().Round(time.Millisecond)
+	now := types.TimeNow()
 
-	// Parse the acess mode requested by the user
-	var modeWant types.AccessMode
-	var explicitWant bool
+	// Parse access mode requested by the user
+	modeWant := types.ModeUnset
 	if want != "" {
-		log.Println("mode want explicit: ", want)
 		if err := modeWant.UnmarshalText([]byte(want)); err != nil {
 			log.Println(err.Error())
 			sess.queueOut(ErrMalformed(pktId, t.original(sess.uid), now))
 			return err
 		}
-		explicitWant = true
 	}
 
 	// Vars for saving changes to access mode
@@ -662,18 +660,20 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string, inf
 	userData, existingSub := t.perUser[sess.uid]
 	if !existingSub {
 
-		if !explicitWant && modeWant == types.ModeNone {
+		if modeWant == types.ModeUnset {
 			// User wants default access mode.
 			modeWant = t.accessFor(sess.authLvl)
 		}
 
-		userData = perUserData{
-			private:  private,
-			modeWant: modeWant,
-		}
+		userData.private = private
+		userData.modeWant = modeWant
 
-		// If it's a re-subscription to a p2p topic, set public and permissions
 		if t.cat == types.TopicCat_P2P {
+			// If it's a re-subscription to a p2p topic, set public and permissions
+
+			// Make sure the user is not asking for unreasonable permissions
+			userData.modeWant &= types.ModeCP2P
+
 			// t.perUser contains just one element - the other user
 			for uid2, _ := range t.perUser {
 				if user2, err := store.Users.Get(uid2); err != nil {
@@ -684,8 +684,9 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string, inf
 					sess.queueOut(ErrUserNotFound(pktId, t.original(sess.uid), now))
 					return errors.New("user not found")
 				} else {
-					userData.modeGiven = types.ModeCP2P
 					userData.public = user2.Public
+					userData.modeGiven = selectAccessMode(sess.authLvl,
+						user2.Access.Anon, user2.Access.Auth, types.ModeCP2P)
 				}
 				break
 			}
@@ -712,9 +713,10 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string, inf
 		var ownerChange bool
 		// Process update to existing subscription. It could be an incomplete subscription for a new topic.
 
-		if explicitWant {
-			// Sanity checks
+		if modeWant != types.ModeUnset {
+			// Explicit modeWant is provided
 
+			// Perform sanity checks
 			if userData.modeGiven.IsOwner() {
 				// Check for possible ownership transfer. Handle the following cases:
 				// 1. Owner joining the topic without any changes
@@ -741,8 +743,11 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string, inf
 				// Ownership transfer can only be initiated by the owner
 				sess.queueOut(ErrPermissionDenied(pktId, t.original(sess.uid), now))
 				return errors.New("non-owner cannot request ownership transfer")
+			} else if t.cat == types.TopicCat_P2P {
+				// For P2P topics ignore requests for 'D'. Otherwise it will generate a useless announcement
+				modeWant &= types.ModeCP2P
 			} else if userData.modeGiven.IsAdmin() && modeWant.IsAdmin() {
-				// The sharer should be able to grant any permissions except ownership (checked previously) &
+				// The Admin should be able to grant any permissions except ownership (checked previously) &
 				// hard-deleting messages.
 				if !userData.modeGiven.Check(modeWant & ^types.ModeDelete) {
 					userData.modeGiven |= (modeWant & ^types.ModeDelete)
@@ -751,29 +756,21 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string, inf
 			}
 		}
 
-		// Check if default access is different now than at the last attempt to subscribe
-		if userData.modeGiven == types.ModeNone {
-			def := t.accessFor(sess.authLvl)
-			if def != types.ModeNone {
-				userData.modeGiven = def
-				updGiven = &userData.modeGiven
-			}
-		}
-
 		// If user has not requested a new access mode, provide one by default.
-		if !explicitWant {
-			// New one := old one, but check if the user has self-banned before
+		if modeWant == types.ModeUnset {
+			// If the user has not self-banned, use the old access mode
 			if userData.modeWant.IsJoiner() {
 				modeWant = userData.modeWant
 			}
 
-			// Still nothing? Request default
-			if modeWant == types.ModeNone {
+			// User has self-banned before, but wants to subscribe. Un-self-ban.
+			// No need to check for ownership. Owner could not slef-ban in the first place.
+			if modeWant == types.ModeUnset {
 				modeWant = t.accessFor(sess.authLvl)
 			}
 		}
 
-		// Access actually changed
+		// Has access actually changed?
 		if userData.modeWant != modeWant {
 			userData.modeWant = modeWant
 			updWant = &modeWant
@@ -800,17 +797,17 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string, inf
 		if ownerChange {
 			//log.Printf("requestSub: topic %s owner change", t.name)
 
-			ownerData := t.perUser[t.owner]
-			ownerData.modeGiven = (ownerData.modeGiven & ^types.ModeOwner)
-			ownerData.modeWant = (ownerData.modeWant & ^types.ModeOwner)
+			oldOwnerData := t.perUser[t.owner]
+			oldOwnerData.modeGiven = (oldOwnerData.modeGiven & ^types.ModeOwner)
+			oldOwnerData.modeWant = (oldOwnerData.modeWant & ^types.ModeOwner)
 			if err := store.Subs.Update(t.name, t.owner,
 				// FIXME(gene): gorethink has a bug which causes ModeXYZ to be saved as a string, converting to int
 				map[string]interface{}{
-					"ModeWant":  int(ownerData.modeWant),
-					"ModeGiven": int(ownerData.modeGiven)}); err != nil {
+					"ModeWant":  int(oldOwnerData.modeWant),
+					"ModeGiven": int(oldOwnerData.modeGiven)}); err != nil {
 				return err
 			}
-			t.perUser[t.owner] = ownerData
+			t.perUser[t.owner] = oldOwnerData
 			t.owner = sess.uid
 		}
 	}
@@ -834,7 +831,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string, inf
 	if !existingSub && (t.cat == types.TopicCat_P2P || !loaded) {
 		t.presTopicSubscribed(sess.uid, sess)
 	} else if existingSub {
-		log.Println("pres not published: existing sub")
+		log.Println("pres not published: existing subscription")
 	} else {
 		log.Println("pres not published: topic just loaded")
 	}
@@ -843,9 +840,9 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string, inf
 	if !userData.modeGiven.Check(modeWant) {
 		log.Println("Mode change: given, want", userData.modeGiven.String(), modeWant.String())
 
-		// Send req to approve to topic managers
+		// Send req to approve to topic managers. Exclude self.
 		for uid, pud := range t.perUser {
-			if (pud.modeGiven & pud.modeWant).IsApprover() {
+			if uid != sess.uid && (pud.modeGiven & pud.modeWant).IsApprover() {
 				h.route <- t.makeAnnouncement(uid, sess.uid, sess.uid,
 					types.AnnAppr, sess.authLvl, modeWant, userData.modeGiven, info)
 			}
@@ -865,7 +862,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string, inf
 // B. Sharer or Approver is re-inviting another user (adjusting modeGiven, modeWant is still "N")
 // C. Approver is changing modeGiven for another user, modeWant != "N"
 func (t *Topic) approveSub(h *Hub, sess *Session, target types.Uid, set *MsgClientSet) error {
-	now := time.Now().UTC().Round(time.Millisecond)
+	now := types.TimeNow()
 
 	log.Printf("approveSub, session uid=%s, target uid=%s", sess.uid.String(), target.String())
 
@@ -881,18 +878,16 @@ func (t *Topic) approveSub(h *Hub, sess *Session, target types.Uid, set *MsgClie
 	}
 
 	// Parse the access mode granted
-	var explicitGiven bool
-	var modeGiven types.AccessMode
+	modeGiven := types.ModeUnset
 	if set.Sub.Mode != "" {
 		if err := modeGiven.UnmarshalText([]byte(set.Sub.Mode)); err != nil {
 			sess.queueOut(ErrMalformed(set.Id, t.original(sess.uid), now))
 			return err
 		}
-		explicitGiven = true
 	}
 
 	// Make sure only the owner & approvers can set non-default access mode
-	if explicitGiven && !hostMode.IsAdmin() {
+	if modeGiven != types.ModeUnset && !hostMode.IsAdmin() {
 		sess.queueOut(ErrPermissionDenied(set.Id, t.original(sess.uid), now))
 		return errors.New("sharer cannot set explicit modeGiven")
 	}
@@ -910,7 +905,7 @@ func (t *Topic) approveSub(h *Hub, sess *Session, target types.Uid, set *MsgClie
 	if !ok {
 		log.Print("approveSub: new request")
 
-		if !explicitGiven {
+		if modeGiven == types.ModeUnset {
 			// Request to use default access mode for the new subscriptions.
 			// Assuming LevelAuth. Approver should use non-default access if that is not suitable.
 			modeGiven = t.accessFor(auth.LevelAuth)
@@ -955,7 +950,7 @@ func (t *Topic) approveSub(h *Hub, sess *Session, target types.Uid, set *MsgClie
 		// Action on an existing subscription (re-invite or confirm/decline request)
 		givenBefore = userData.modeGiven
 
-		if !explicitGiven {
+		if modeGiven == types.ModeUnset {
 			// Request to re-send invite without changing the access mode
 			modeGiven = userData.modeGiven
 		} else if modeGiven != userData.modeGiven {
@@ -1042,7 +1037,10 @@ func (t *Topic) replyGetDesc(sess *Session, id, tempName string, opts *MsgGetOpt
 	// Request may come from a subscriber (full == true) or a stranger.
 	// Give subscriber a fuller description than to a stranger
 	if full {
-		if t.cat == types.TopicCat_Me || (pud.modeGiven & pud.modeWant).IsSharer() {
+		if t.cat == types.TopicCat_P2P {
+			// For p2p topics default access mode makes no sense.
+			// Don't report it.
+		} else if t.cat == types.TopicCat_Me || (pud.modeGiven & pud.modeWant).IsSharer() {
 			desc.DefaultAcs = &MsgDefaultAcsMode{
 				Auth: t.accessAuth.String(),
 				Anon: t.accessAnon.String()}
@@ -1169,8 +1167,12 @@ func (t *Topic) replySetDesc(sess *Session, set *MsgClientSet) error {
 					}
 				}
 			}
+		} else if t.cat == types.TopicCat_P2P {
+			// Reject direct changes to P2P topics.
+			sess.queueOut(ErrPermissionDenied(set.Id, set.Topic, now))
+			return errors.New("attempt to change metadata of a p2p topic")
 		} else {
-			// Update current topic
+			// Update group topic
 			if set.Desc.DefaultAcs != nil || set.Desc.Public != nil {
 				if t.owner == sess.uid {
 					if set.Desc.DefaultAcs != nil {
@@ -1180,6 +1182,7 @@ func (t *Topic) replySetDesc(sess *Session, set *MsgClientSet) error {
 						sendPres = assignGenericValues(topic, "Public", set.Desc.Public)
 					}
 				} else {
+					// This is a request from non-owner
 					sess.queueOut(ErrPermissionDenied(set.Id, set.Topic, now))
 					return errors.New("attempt to change public or permissions by non-owner")
 				}
@@ -1380,10 +1383,13 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 				// Ensure sanity or ReadId and RecvId:
 				mts.ReadSeqId = max(clearId, sub.ReadSeqId)
 				mts.RecvSeqId = max(clearId, sub.RecvSeqId)
-				mts.Acs.Mode = (sub.ModeGiven & sub.ModeWant).String()
-				if isSharer {
-					mts.Acs.Want = sub.ModeWant.String()
-					mts.Acs.Given = sub.ModeGiven.String()
+
+				if t.cat != types.TopicCat_Fnd {
+					mts.Acs.Mode = (sub.ModeGiven & sub.ModeWant).String()
+					if isSharer {
+						mts.Acs.Want = sub.ModeWant.String()
+						mts.Acs.Given = sub.ModeGiven.String()
+					}
 				}
 
 				// Returning public and private only if they have changed since ifModified
@@ -1410,9 +1416,9 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 }
 
 // replySetSub is a response to new subscription request or an update to a subscription {set.sub}:
-// update topic metadata cache, save/update subs, reply to the caller as {ctrl} message, generate an invite
+// update topic metadata cache, save/update subs, reply to the caller as {ctrl} message, generate an announcement.
 func (t *Topic) replySetSub(h *Hub, sess *Session, set *MsgClientSet) error {
-	now := time.Now().UTC().Round(time.Millisecond)
+	now := types.TimeNow()
 
 	var uid types.Uid
 	if uid = types.ParseUserId(set.Sub.User); uid.IsZero() && set.Sub.User != "" {
@@ -1881,15 +1887,20 @@ func (t *Topic) original(uid types.Uid) string {
 }
 
 func (t *Topic) accessFor(authLvl int) types.AccessMode {
+	return selectAccessMode(authLvl, t.accessAnon, t.accessAuth, getDefaultAccess(t.cat, true))
+}
+
+// Helper function to select access mode for the given auth level
+func selectAccessMode(authLvl int, anonMode, authLMode, rootMode types.AccessMode) types.AccessMode {
 	switch authLvl {
 	case auth.LevelNone:
 		return types.ModeNone
 	case auth.LevelAnon:
-		return t.accessAnon
+		return anonMode
 	case auth.LevelAuth:
-		return t.accessAuth
+		return authLMode
 	case auth.LevelRoot:
-		return getDefaultAccess(t.cat, true)
+		return rootMode
 	default:
 		return types.ModeNone
 	}

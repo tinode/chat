@@ -116,178 +116,134 @@
  "subscriptions": [
   {
    "createdAt": "-120h",
-   "modeHave": "JRWP",
-   "modeWant": "JRWP",
    "topic": "bob",
    "user": "alice"
   },
   {
    "createdAt": "-119h",
-   "modeHave": "JRWP",
-   "modeWant": "JRWP",
    "topic": "carol",
    "user": "alice"
   },
   {
    "createdAt": "-118h",
-   "modeHave": "JRWP",
-   "modeWant": "JRWP",
    "topic": "dave",
    "user": "alice"
   },
   {
    "createdAt": "-117h",
-   "modeHave": "JRWP",
-   "modeWant": "JRWP",
    "private": "apples to oranges",
    "topic": "eve",
    "user": "alice"
   },
   {
    "createdAt": "-116h",
-   "modeHave": "JRWP",
-   "modeWant": "JRWP",
    "private": "Frank Frank Frank a-\u003ef",
    "topic": "frank",
    "user": "alice"
   },
   {
    "createdAt": "-115h",
-   "modeHave": "JRWP",
-   "modeWant": "JRWP",
    "private": "Alice Jo",
    "topic": "alice",
    "user": "bob"
   },
   {
    "createdAt": "-114h",
-   "modeHave": "JRWP",
-   "modeWant": "JRWP",
-   "private": "Dave ?",
+   "modeHave": "N",
+   "private": "user is banned!",
    "topic": "dave",
    "user": "bob"
   },
   {
    "createdAt": "-113.5h",
-   "modeHave": "JRWP",
-   "modeWant": "JRWP",
    "private": "Eve Adamsson",
    "topic": "eve",
    "user": "bob"
   },
   {
    "createdAt": "-113.4h",
-   "modeHave": "JRWP",
-   "modeWant": "JRWP",
    "private": "Alice Joha",
    "topic": "alice",
    "user": "carol"
   },
   {
    "createdAt": "-113h",
-   "modeHave": "JRWP",
-   "modeWant": "JRWP",
    "private": "Alice Johnson",
    "topic": "alice",
    "user": "dave"
   },
   {
    "createdAt": "-112.8h",
-   "modeHave": "JRWP",
-   "modeWant": "JRWP",
-   "private": "some private info here",
+   "modeWant": "N",
+   "private": "user is banned!",
    "topic": "bob",
    "user": "dave"
   },
   {
    "createdAt": "-112.6h",
-   "modeHave": "JRWP",
-   "modeWant": "JRWP",
    "private": "Alice Johnson",
    "topic": "alice",
    "user": "eve"
   },
   {
    "createdAt": "-112.4h",
-   "modeHave": "JRWP",
-   "modeWant": "JRWP",
    "private": "123",
    "topic": "bob",
    "user": "eve"
   },
   {
    "createdAt": "-112.2h",
-   "modeHave": "JRWP",
-   "modeWant": "JRWP",
    "private": "Johnson f-\u003ea",
    "topic": "alice",
    "user": "frank"
   },
   {
    "createdAt": "-112h",
-   "modeHave": "JRWP",
-   "modeWant": "JRWP",
    "private": "My super cool group topic",
    "topic": "*ABC",
    "user": "alice"
   },
   {
    "createdAt": "-111.9h",
-   "modeHave": "JRWPS",
-   "modeWant": "JRWPS",
    "private": "Wow",
    "topic": "*ABC",
    "user": "bob"
   },
   {
    "createdAt": "-111.8h",
-   "modeHave": "JRWPS",
-   "modeWant": "JRWP",
    "private": "Custom group description by Bob",
    "topic": "*ABCDEF",
    "user": "bob"
   },
   {
    "createdAt": "-111.7h",
-   "modeHave": "JRWPS",
-   "modeWant": "JRWPS",
    "private": "Kirgudu",
    "topic": "*ABCDEF",
    "user": "carol"
   },
   {
    "createdAt": "-111.6h",
-   "modeHave": "JRWPSA",
-   "modeWant": "JRWPS",
    "topic": "*ABCDEF",
    "user": "dave"
   },
   {
    "createdAt": "-111.5h",
-   "modeHave": "JRWP",
-   "modeWant": "JRWP",
    "topic": "*ABCDEF",
    "user": "eve"
   },
   {
    "createdAt": "-111.4h",
-   "modeHave": "JRWP",
-   "modeWant": "JRWP",
    "topic": "*ABCDEF",
    "user": "frank"
   },
   {
    "createdAt": "-111.3h",
-   "modeHave": "JRWP",
-   "modeWant": "JRWP",
    "private": "I'm not the owner",
    "topic": "*BF",
    "user": "bob"
   },
   {
    "createdAt": "-111.2h",
-   "modeHave": "JRWPSA",
-   "modeWant": "JRWP",
    "private": "I'm not the owner either",
    "topic": "*BF",
    "user": "frank"
