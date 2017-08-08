@@ -175,8 +175,8 @@ func (t *Topic) presAnnounceToUser(uid types.Uid, what string, seq int, list []i
 }
 
 // Announce to all/offline only subscribers on 'me' topic
-func (t *Topic) presAnnounceToSubscribers(what string, seq int, offlineOnly bool) {
-	update := &MsgServerPres{Topic: "me", What: what, Src: t.x_original, SeqId: seq}
+func (t *Topic) presAnnounceToSubscribers(src, what string, seq int, offlineOnly bool) {
+	update := &MsgServerPres{Topic: "me", What: what, Src: src, SeqId: seq}
 	for uid, pud := range t.perUser {
 		if (pud.modeGiven & pud.modeWant).IsPresencer() && (!offlineOnly || pud.online == 0) {
 			globals.hub.route <- &ServerComMessage{Pres: update, rcptto: uid.UserId()}
@@ -204,16 +204,16 @@ func (t *Topic) presTopicGone(user types.Uid) {
 // Case 5
 func (t *Topic) presPubTopicOnline(what string) {
 	// Announce to all topic subscribers (not just offline) on 'me'
-	t.presAnnounceToSubscribers(what, 0, false)
+	t.presAnnounceToSubscribers(t.x_original, what, 0, false)
 }
 
 // Message sent in the topic, notify topic-offline users
 // Case 6
-func (t *Topic) presPubMessageSent(seq int) {
+func (t *Topic) presPubMessageSent(seq int, src string) {
 	//log.Printf("Pres 6: from %s [msg=%d]", t.name, seq)
 
 	// Announce to topic-offline subscribers on 'me'
-	t.presAnnounceToSubscribers("msg", seq, true)
+	t.presAnnounceToSubscribers(src, "msg", seq, true)
 }
 
 // User Agent has changed
@@ -279,7 +279,7 @@ func (t *Topic) presPubMessageDel(sess *Session, clear int) {
 	t.presAnnounceToTopic(sess.uid.UserId(), "del", clear, sess)
 
 	// Broadcast to topic-offline users on 'me'
-	t.presAnnounceToSubscribers("del", clear, true)
+	t.presAnnounceToSubscribers(t.x_original, "del", clear, true)
 }
 
 // User subscribed to a new topic. Let all user's other sessions know.
