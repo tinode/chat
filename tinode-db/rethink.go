@@ -52,7 +52,7 @@ func gen_rethink(reset bool, dbsource string, data *Data) {
 		user := types.User{
 			State: int(uu["state"].(float64)),
 			Access: types.DefaultAccess{
-				Auth: types.ModeCPublic,
+				Auth: types.ModeCP2P,
 				Anon: types.ModeNone,
 			},
 			Public: parsePublic(uu["public"], data.datapath),
