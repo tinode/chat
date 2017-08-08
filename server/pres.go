@@ -166,20 +166,21 @@ func (t *Topic) presAnnounceToTopic(src, what string, seq int, skip *Session) {
 // Announce to a single user on 'me' topic
 func (t *Topic) presAnnounceToUser(uid types.Uid, what string, seq int, list []int, skip *Session) {
 	if pud, ok := t.perUser[uid]; ok {
-		update := &MsgServerPres{Topic: "me", What: what, Src: t.original(uid), SeqId: seq, SeqList: list}
-
 		if (pud.modeGiven & pud.modeWant).IsPresencer() {
-			globals.hub.route <- &ServerComMessage{Pres: update, rcptto: uid.UserId(), sessSkip: skip}
+			globals.hub.route <- &ServerComMessage{
+				Pres:   &MsgServerPres{Topic: "me", What: what, Src: t.original(uid), SeqId: seq, SeqList: list},
+				rcptto: uid.UserId(), sessSkip: skip}
 		}
 	}
 }
 
 // Announce to all/offline only subscribers on 'me' topic
 func (t *Topic) presAnnounceToSubscribers(what string, seq int, offlineOnly bool) {
-	update := &MsgServerPres{Topic: "me", What: what, Src: t.x_original, SeqId: seq}
 	for uid, pud := range t.perUser {
 		if (pud.modeGiven & pud.modeWant).IsPresencer() && (!offlineOnly || pud.online == 0) {
-			globals.hub.route <- &ServerComMessage{Pres: update, rcptto: uid.UserId()}
+			globals.hub.route <- &ServerComMessage{
+				Pres:   &MsgServerPres{Topic: "me", What: what, Src: t.original(uid), SeqId: seq},
+				rcptto: uid.UserId()}
 		}
 	}
 }
