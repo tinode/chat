@@ -299,7 +299,11 @@ func (t *Topic) run(hub *Hub) {
 
 				pushRcpt = t.makePushReceipt(msg.Data)
 
-				t.presPubMessageSent(t.lastId)
+				var src = t.x_original
+				if t.cat == types.TopicCat_P2P {
+					src = msg.Data.From
+				}
+				t.presPubMessageSent(t.lastId, src)
 
 			} else if msg.Pres != nil {
 				// log.Printf("topic[%s].run: pres.src='%s' what='%s'", t.name, msg.Pres.Src, msg.Pres.With, msg.Pres.What)
