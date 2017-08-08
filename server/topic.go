@@ -662,11 +662,12 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string, inf
 
 		if modeWant == types.ModeUnset {
 			// User wants default access mode.
-			modeWant = t.accessFor(sess.authLvl)
+			userData.modeWant = t.accessFor(sess.authLvl)
+		} else {
+			userData.modeWant = modeWant
 		}
 
 		userData.private = private
-		userData.modeWant = modeWant
 
 		if t.cat == types.TopicCat_P2P {
 			// If it's a re-subscription to a p2p topic, set public and permissions
@@ -758,22 +759,15 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string, inf
 
 		// If user has not requested a new access mode, provide one by default.
 		if modeWant == types.ModeUnset {
-			// If the user has not self-banned, use the old access mode
-			if userData.modeWant.IsJoiner() {
-				modeWant = userData.modeWant
+			// If the user has self-banned before, un-self-ban. Otherwise do not make a change.
+			if !userData.modeWant.IsJoiner() {
+				userData.modeWant = t.accessFor(sess.authLvl)
+				updWant = &userData.modeWant
 			}
-
-			// User has self-banned before, but wants to subscribe. Un-self-ban.
-			// No need to check for ownership. Owner could not slef-ban in the first place.
-			if modeWant == types.ModeUnset {
-				modeWant = t.accessFor(sess.authLvl)
-			}
-		}
-
-		// Has access actually changed?
-		if userData.modeWant != modeWant {
+		} else if userData.modeWant != modeWant {
+			// The user has provided a new modeWant and it' different from the one before
 			userData.modeWant = modeWant
-			updWant = &modeWant
+			updWant = &userData.modeWant
 		}
 
 		// Save changes to DB
@@ -816,7 +810,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string, inf
 
 	// If the user is self-banning himself from the topic, no action is needed.
 	// Re-subscription will unban.
-	if !modeWant.IsJoiner() {
+	if !userData.modeWant.IsJoiner() {
 		t.evictUser(sess.uid, false, nil)
 		// The callee will send NoErrOK
 		return nil
@@ -836,21 +830,21 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string, inf
 		log.Println("pres not published: topic just loaded")
 	}
 
-	// If requested access mode different from given:
-	if !userData.modeGiven.Check(modeWant) {
-		log.Println("Mode change: given, want", userData.modeGiven.String(), modeWant.String())
+	// If something has changed and the requested access mode is different from the given:
+	if !userData.modeGiven.Check(userData.modeWant) && (updWant != nil || updGiven != nil) {
+		log.Println("Mode change: given, want", userData.modeGiven.String(), userData.modeWant.String())
 
 		// Send req to approve to topic managers. Exclude self.
 		for uid, pud := range t.perUser {
 			if uid != sess.uid && (pud.modeGiven & pud.modeWant).IsApprover() {
 				h.route <- t.makeAnnouncement(uid, sess.uid, sess.uid,
-					types.AnnAppr, sess.authLvl, modeWant, userData.modeGiven, info)
+					types.AnnAppr, sess.authLvl, userData.modeWant, userData.modeGiven, info)
 			}
 		}
 
 		// Send info to requester
 		h.route <- t.makeAnnouncement(sess.uid, sess.uid, sess.uid,
-			types.AnnUpd, auth.LevelNone, modeWant, userData.modeGiven, t.public)
+			types.AnnUpd, auth.LevelNone, userData.modeWant, userData.modeGiven, t.public)
 	}
 
 	return nil
@@ -866,10 +860,10 @@ func (t *Topic) approveSub(h *Hub, sess *Session, target types.Uid, set *MsgClie
 
 	log.Printf("approveSub, session uid=%s, target uid=%s", sess.uid.String(), target.String())
 
-	// Requester's/approver's access mode
+	// Access mode of the person who is executing this approval process
 	var hostMode types.AccessMode
 
-	// Check if requester actually has permission to manage sharing
+	// Check if approver actually has permission to manage sharing
 	if userData, ok := t.perUser[sess.uid]; !ok || !(userData.modeGiven & userData.modeWant).IsSharer() {
 		sess.queueOut(ErrPermissionDenied(set.Id, t.original(sess.uid), now))
 		return errors.New("topic access denied")
@@ -1000,6 +994,8 @@ func (t *Topic) approveSub(h *Hub, sess *Session, target types.Uid, set *MsgClie
 
 	// Has anything actually changed?
 	if givenBefore != modeGiven {
+		log.Println("Given has changed", givenBefore.String(), modeGiven.String())
+
 		// inform requester of the change made
 		h.route <- t.makeAnnouncement(sess.uid, target, sess.uid, types.AnnUpd,
 			auth.LevelNone, userData.modeWant, modeGiven, nil)
