@@ -673,7 +673,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string, inf
 			// If it's a re-subscription to a p2p topic, set public and permissions
 
 			// Make sure the user is not asking for unreasonable permissions
-			userData.modeWant &= types.ModeCP2P
+			userData.modeWant = (userData.modeWant & types.ModeCP2P) | types.ModeApprove
 
 			// t.perUser contains just one element - the other user
 			for uid2, _ := range t.perUser {
@@ -746,7 +746,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string, inf
 				return errors.New("non-owner cannot request ownership transfer")
 			} else if t.cat == types.TopicCat_P2P {
 				// For P2P topics ignore requests for 'D'. Otherwise it will generate a useless announcement
-				modeWant &= types.ModeCP2P
+				modeWant = (modeWant & types.ModeCP2P) | types.ModeApprove
 			} else if userData.modeGiven.IsAdmin() && modeWant.IsAdmin() {
 				// The Admin should be able to grant any permissions except ownership (checked previously) &
 				// hard-deleting messages.
@@ -853,8 +853,8 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string, inf
 // approveSub processes a request to initiate an invite or approve a subscription request from another user:
 // Handle these cases:
 // A. Sharer or Approver is inviting another user for the first time (no prior subscription)
-// B. Sharer or Approver is re-inviting another user (adjusting modeGiven, modeWant is still "N")
-// C. Approver is changing modeGiven for another user, modeWant != "N"
+// B. Sharer or Approver is re-inviting another user (adjusting modeGiven, modeWant is still Unset)
+// C. Approver is changing modeGiven for another user, modeWant != Unset
 func (t *Topic) approveSub(h *Hub, sess *Session, target types.Uid, set *MsgClientSet) error {
 	now := types.TimeNow()
 
@@ -877,6 +877,11 @@ func (t *Topic) approveSub(h *Hub, sess *Session, target types.Uid, set *MsgClie
 		if err := modeGiven.UnmarshalText([]byte(set.Sub.Mode)); err != nil {
 			sess.queueOut(ErrMalformed(set.Id, t.original(sess.uid), now))
 			return err
+		}
+
+		// Make sure the new permissions are reasonable in P2P topics
+		if t.cat == types.TopicCat_P2P {
+			modeGiven = (modeGiven & types.ModeCP2P) | types.ModeApprove
 		}
 	}
 
@@ -952,7 +957,7 @@ func (t *Topic) approveSub(h *Hub, sess *Session, target types.Uid, set *MsgClie
 			userData.modeGiven = modeGiven
 
 			// Save changed value to database
-			if err := store.Subs.Update(t.name, sess.uid,
+			if err := store.Subs.Update(t.name, target,
 				map[string]interface{}{"ModeGiven": modeGiven}); err != nil {
 				return err
 			}
@@ -964,7 +969,7 @@ func (t *Topic) approveSub(h *Hub, sess *Session, target types.Uid, set *MsgClie
 	// The user does not want to be bothered, no further action is needed
 	if !userData.modeWant.IsJoiner() {
 		sess.queueOut(ErrPermissionDenied(set.Id, t.original(sess.uid), now))
-		return errors.New("used banned the topic")
+		return errors.New("user banned the topic")
 	}
 
 	// Handle the following cases:

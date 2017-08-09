@@ -169,9 +169,7 @@ func (h *Hub) run() {
 
 					// TODO(gene): validate topic name, discarding invalid topics
 					log.Printf("Hub. Topic[%s] is unknown or offline", msg.rcptto)
-					for tt, _ := range h.topics {
-						log.Printf("Hub contains topic '%s'", tt)
-					}
+
 					msg.sessFrom.queueOut(NoErrAccepted(msg.id, msg.rcptto, timestamp))
 				}
 			}
