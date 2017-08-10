@@ -881,7 +881,10 @@ func (t *Topic) approveSub(h *Hub, sess *Session, target types.Uid, set *MsgClie
 
 		// Make sure the new permissions are reasonable in P2P topics
 		if t.cat == types.TopicCat_P2P {
-			modeGiven = (modeGiven & types.ModeCP2P) | types.ModeApprove
+			modeGiven &= types.ModeCP2P
+			if modeGiven != types.ModeNone {
+				modeGiven |= types.ModeApprove
+			}
 		}
 	}
 
@@ -1095,9 +1098,23 @@ func (t *Topic) replySetDesc(sess *Session, set *MsgClientSet) error {
 		} else {
 			access := make(map[string]interface{})
 			if auth != types.ModeInvalid {
+				if t.cat == types.TopicCat_Me {
+					auth &= types.ModeCP2P
+					if auth != types.ModeNone {
+						// This is the default access mode for P2P topics.
+						// It must be either an N or must include an A permission
+						auth |= types.ModeApprove
+					}
+				}
 				access["Auth"] = auth
 			}
 			if anon != types.ModeInvalid {
+				if t.cat == types.TopicCat_Me {
+					anon &= types.ModeCP2P
+					if anon != types.ModeNone {
+						anon |= types.ModeApprove
+					}
+				}
 				access["Anon"] = anon
 			}
 			if len(access) > 0 {
