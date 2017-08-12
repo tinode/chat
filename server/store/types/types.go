@@ -241,7 +241,8 @@ type User struct {
 	// Currently unused: Unconfirmed, Active, etc.
 	State int
 
-	Access DefaultAccess // Default access to user
+	// Default access to user for P2P topics (used as default modeGiven)
+	Access DefaultAccess
 
 	// Values for 'me' topic:
 	// Server-issued sequence ID for messages in 'me'
@@ -263,20 +264,20 @@ type User struct {
 	Devices map[string]*DeviceDef
 }
 
-const max_devices = 8
-
 type AccessMode uint
 
 // User access to topic
 const (
-	ModeJoin    AccessMode = 1 << iota // user can join, i.e. {sub} (J)
-	ModeRead                           // user can receive broadcasts ({data}, {info}) (R)
-	ModeWrite                          // user can Write, i.e. {pub} (W)
-	ModePres                           // user can receive presence updates (P)
-	ModeApprove                        // user can approve new members or evict existing members (A)
-	ModeShare                          // user can invite new members (S)
-	ModeDelete                         // user can hard-delete messages (D)
-	ModeOwner                          // user is the owner (O) - full access
+	ModeJoin    AccessMode = 1 << iota // user can join, i.e. {sub} (J:1)
+	ModeRead                           // user can receive broadcasts ({data}, {info}) (R:2)
+	ModeWrite                          // user can Write, i.e. {pub} (W:4)
+	ModePres                           // user can receive presence updates (P:8)
+	ModeApprove                        // user can approve new members or evict existing members (A:0x10)
+	ModeShare                          // user can invite new members (S:0x20)
+	ModeDelete                         // user can hard-delete messages (D:0x40)
+	ModeOwner                          // user is the owner (O:0x80) - full access
+	ModeUnset                          // Non-zero value to indicate unknown or undefined mode (:0x100),
+	// to make it different from ModeNone
 
 	ModeNone AccessMode = 0 // No access, requests to gain access are processed normally (N)
 
@@ -287,7 +288,7 @@ const (
 	// Owner's subscription to a generic topic
 	ModeCFull AccessMode = ModeJoin | ModeRead | ModeWrite | ModePres | ModeApprove | ModeShare | ModeDelete | ModeOwner
 	// Default P2P access mode
-	ModeCP2P AccessMode = ModeJoin | ModeRead | ModeWrite | ModePres
+	ModeCP2P AccessMode = ModeJoin | ModeRead | ModeWrite | ModePres | ModeApprove
 	// Read-only access to topic
 	ModeCReadOnly = ModeJoin | ModeRead
 
@@ -316,8 +317,9 @@ func (m AccessMode) MarshalText() ([]byte, error) {
 	return res, nil
 }
 
+// Parse access mode string. Do not change the mode if the string is empty or invalid.
 func (m *AccessMode) UnmarshalText(b []byte) error {
-	var m0 AccessMode
+	m0 := ModeUnset
 
 	for i := 0; i < len(b); i++ {
 		switch b[i] {
@@ -341,12 +343,13 @@ func (m *AccessMode) UnmarshalText(b []byte) error {
 			m0 = 0 // N means explicitly no access, all bits cleared
 			break
 		default:
-			*m = ModeInvalid
 			return errors.New("AccessMode: invalid character '" + string(b[i]) + "'")
 		}
 	}
 
-	*m = m0
+	if m0 != ModeUnset {
+		*m = m0
+	}
 	return nil
 }
 
@@ -444,31 +447,57 @@ type TopicAccess struct {
 	Given AccessMode
 }
 
+// Per-topic default access modes
+type DefaultAccess struct {
+	Auth AccessMode
+	Anon AccessMode
+}
+
 // Subscription to a topic
 type Subscription struct {
 	ObjHeader
-	User  string // User who has relationship with the topic
-	Topic string // Topic subscribed to
+	// User who has relationship with the topic
+	User string
+	// Topic subscribed to
+	Topic string
 
-	State int // Subscription state, currently unused
+	// Subscription state, currently unused
+	State int
 
-	// Values persisted through subscription deletion
-	ClearId   int // User soft-deleted messages equal or lower to this seq ID
-	RecvSeqId int // Last SeqId reported by user as received by at least one of his sessions
-	ReadSeqId int // Last SeqID reported read by the user
+	// Values persisted through subscription soft-deletion
 
-	//
-	ModeWant  AccessMode  // Access applied for
-	ModeGiven AccessMode  // Granted access
-	Private   interface{} // User's private data associated with the subscription to topic
+	// User soft-deleted messages equal or lower to this seq ID
+	ClearId int
+	// Last SeqId reported by user as received by at least one of his sessions
+	RecvSeqId int
+	// Last SeqID reported read by the user
+	ReadSeqId int
+
+	// Access mode requested by this user
+	ModeWant AccessMode
+	// Access mode granted to this user
+	ModeGiven AccessMode
+	// User's private data associated with the subscription to topic
+	Private interface{}
 
 	// Deserialized ephemeral values
-	public      interface{} // Deserialized public value from topic or user (depends on context)
-	with        string      // p2p topics only: id of the other user
-	seqId       int         // deserialized SeqID from user or topic
-	hardClearId int         // Id of the last hard-deleted message deserialized from user or topic
-	lastSeen    time.Time   // timestamp when the user was last online
-	userAgent   string      // user agent string of the last online access
+
+	// Deserialized public value from topic or user (depends on context)
+	// In case of P2P topics this is the Public value of the other user.
+	public interface{}
+	// deserialized SeqID from user or topic
+	seqId int
+	// Id of the last hard-deleted message deserialized from user or topic
+	hardClearId int
+	// timestamp when the user was last online
+	lastSeen time.Time
+	// user agent string of the last online access
+	userAgent string
+
+	// P2P only. ID of the other user
+	with string
+	// P2P only. Default access: this is the mode given by the other user to this user
+	modeDefault *DefaultAccess
 }
 
 // SetPublic assigns to public, otherwise not accessible from outside the package
@@ -517,6 +546,14 @@ func (s *Subscription) SetLastSeenAndUA(when time.Time, ua string) {
 	s.userAgent = ua
 }
 
+func (s *Subscription) SetDefaultAccess(auth, anon AccessMode) {
+	s.modeDefault = &DefaultAccess{auth, anon}
+}
+
+func (s *Subscription) GetDefaultAccess() *DefaultAccess {
+	return s.modeDefault
+}
+
 // Result of a search for connections
 type Contact struct {
 	Id       string
@@ -555,11 +592,6 @@ type Topic struct {
 	// Deserialized ephemeral params
 	owner   Uid                  // first assigned owner
 	perUser map[Uid]*perUserData // deserialized from Subscription
-}
-
-type DefaultAccess struct {
-	Auth AccessMode
-	Anon AccessMode
 }
 
 //func (t *Topic) GetAccessList() []TopicAccess {

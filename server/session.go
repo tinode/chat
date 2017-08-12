@@ -524,9 +524,17 @@ func (s *Session) acc(msg *ClientComMessage) {
 			if msg.Acc.Desc.DefaultAcs != nil {
 				if msg.Acc.Desc.DefaultAcs.Auth != "" {
 					user.Access.Auth.UnmarshalText([]byte(msg.Acc.Desc.DefaultAcs.Auth))
+					user.Access.Auth &= types.ModeCP2P
+					if user.Access.Auth != types.ModeNone {
+						user.Access.Auth |= types.ModeApprove
+					}
 				}
 				if msg.Acc.Desc.DefaultAcs.Anon != "" {
 					user.Access.Anon.UnmarshalText([]byte(msg.Acc.Desc.DefaultAcs.Anon))
+					user.Access.Anon &= types.ModeCP2P
+					if user.Access.Anon != types.ModeNone {
+						user.Access.Anon |= types.ModeApprove
+					}
 				}
 			}
 			if !isNullValue(msg.Acc.Desc.Public) {

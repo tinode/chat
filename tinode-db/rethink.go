@@ -52,7 +52,7 @@ func gen_rethink(reset bool, dbsource string, data *Data) {
 		user := types.User{
 			State: int(uu["state"].(float64)),
 			Access: types.DefaultAccess{
-				Auth: types.ModeCPublic,
+				Auth: types.ModeCP2P,
 				Anon: types.ModeNone,
 			},
 			Public: parsePublic(uu["public"], data.datapath),
@@ -157,19 +157,33 @@ func gen_rethink(reset bool, dbsource string, data *Data) {
 		topic := uid1.P2PName(uid2)
 		created0 := getCreatedTime(subs[0]["createdAt"])
 		created1 := getCreatedTime(subs[1]["createdAt"])
-		var s0want, s0given, s1want, s1given types.AccessMode
-		if err := s0want.UnmarshalText([]byte(subs[0]["modeWant"].(string))); err != nil {
-			log.Fatal(err)
-		}
-		if err := s0given.UnmarshalText([]byte(subs[0]["modeHave"].(string))); err != nil {
-			log.Fatal(err)
-		}
 
-		if err := s1want.UnmarshalText([]byte(subs[1]["modeWant"].(string))); err != nil {
-			log.Fatal(err)
+		// Assign default access mode
+		s0want := types.ModeCP2P
+		s0given := types.ModeCP2P
+		s1want := types.ModeCP2P
+		s1given := types.ModeCP2P
+
+		// Check of non-default access mode was provided
+		if subs[0]["modeWant"] != nil {
+			if err := s0want.UnmarshalText([]byte(subs[0]["modeWant"].(string))); err != nil {
+				log.Fatal(err)
+			}
 		}
-		if err := s1given.UnmarshalText([]byte(subs[1]["modeHave"].(string))); err != nil {
-			log.Fatal(err)
+		if subs[0]["modeHave"] != nil {
+			if err := s0given.UnmarshalText([]byte(subs[0]["modeHave"].(string))); err != nil {
+				log.Fatal(err)
+			}
+		}
+		if subs[1]["modeWant"] != nil {
+			if err := s1want.UnmarshalText([]byte(subs[1]["modeWant"].(string))); err != nil {
+				log.Fatal(err)
+			}
+		}
+		if subs[1]["modeHave"] != nil {
+			if err := s1given.UnmarshalText([]byte(subs[1]["modeHave"].(string))); err != nil {
+				log.Fatal(err)
+			}
 		}
 
 		log.Printf("Processing %s (%s), %s, %s", pair, topic, uid1.String(), uid2.String())
@@ -201,14 +215,18 @@ func gen_rethink(reset bool, dbsource string, data *Data) {
 		u1 := nameIndex[ss["user"].(string)]
 		u2 := nameIndex[ss["topic"].(string)]
 
-		var want, given types.AccessMode
-		if err := want.UnmarshalText([]byte(ss["modeWant"].(string))); err != nil {
-			log.Fatal(err)
+		want := types.ModeCPublic
+		given := types.ModeCPublic
+		if ss["modeWant"] != nil {
+			if err := want.UnmarshalText([]byte(ss["modeWant"].(string))); err != nil {
+				log.Fatal(err)
+			}
 		}
-		if err := given.UnmarshalText([]byte(ss["modeHave"].(string))); err != nil {
-			log.Fatal(err)
+		if ss["modeHave"] != nil {
+			if err := given.UnmarshalText([]byte(ss["modeHave"].(string))); err != nil {
+				log.Fatal(err)
+			}
 		}
-
 		// Define topic name
 		name := u2
 		if !types.ParseUid(u2).IsZero() {
