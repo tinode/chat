@@ -524,6 +524,18 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 					users[u2].Access.Auth,
 					types.ModeCP2P)
 			}
+            
+            // Make sure modeWant & modeGiven for both subscribers have 'A' permission on it
+            subs := []*types.Subscription{sub1, sub2}
+            for _, sub := range subs {
+                modes := []*types.AccessMode{&sub.ModeWant, &sub.ModeGiven}
+                for _, mode := range modes {
+                    (*mode) &= types.ModeCP2P
+                    if (*mode) != types.ModeNone {
+                        (*mode) |= types.ModeApprove
+                    }
+                }
+            }
 
 			// Create everything
 			if stopic == nil {
