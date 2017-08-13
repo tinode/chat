@@ -572,6 +572,37 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 
 			sreg.created = !user1only
 		}
+        
+        // make sure modeWant & modeGiven always have 'A' permission for both subscribers whether in existing or new P2P topic
+        for uid, userData := range t.perUser {
+            shouldUpdateSubscription := false
+            modes := []*types.AccessMode{&userData.modeWant, &userData.modeGiven}
+            for _, mode := range modes {
+                (*mode) &= types.ModeCP2P
+                
+                // check if resulted permission not contain 'A' permission unless it's 'N'
+                if *mode != types.ModeNone && (*mode & types.ModeApprove == types.ModeNone) {
+                    shouldUpdateSubscription = true
+                    *mode |= types.ModeApprove
+                }
+            }
+            
+            if shouldUpdateSubscription {
+                // save update to db
+                update := map[string]interface{}{
+                    "ModeGiven": int(userData.modeGiven),
+                    "ModeWant": int(userData.modeWant),
+                }
+                if err = store.Subs.Update(t.name, uid, update); err != nil {
+                    log.Println("hub: databse error in updating user subscription '" + t.name + "' (" + err.Error() + ")")
+                    sreg.sess.queueOut(ErrUnknown(sreg.pkt.Id, t.x_original, timestamp))
+                    return
+                }
+                
+                // modify current mode
+                t.perUser[uid] = userData
+            }
+        }
 
 		// Clear original topic name.
 		t.x_original = ""
