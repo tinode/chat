@@ -524,18 +524,6 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 					users[u2].Access.Auth,
 					types.ModeCP2P)
 			}
-            
-            // Make sure modeWant & modeGiven for both subscribers have 'A' permission on it
-            subs := []*types.Subscription{sub1, sub2}
-            for _, sub := range subs {
-                modes := []*types.AccessMode{&sub.ModeWant, &sub.ModeGiven}
-                for _, mode := range modes {
-                    (*mode) &= types.ModeCP2P
-                    if (*mode) != types.ModeNone {
-                        (*mode) |= types.ModeApprove
-                    }
-                }
-            }
 
 			// Create everything
 			if stopic == nil {
@@ -584,6 +572,33 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 
 			sreg.created = !user1only
 		}
+        
+        // make sure modeWant & modeGiven always have 'A' permission on each subscribers
+        for uid, userData := range t.perUser {
+            shouldUpdateSubscription := false
+            modes := []*types.AccessMode{&userData.modeWant, &userData.modeGiven}
+            for _, mode := range modes {
+                (*mode) &= types.ModeCP2P
+                
+                // check if resulted permission not contain 'A' permission unless it's 'N'
+                if *mode != types.ModeNone && (*mode & types.ModeApprove == types.ModeNone) {
+                    shouldUpdateSubscription = true
+                    *mode |= types.ModeApprove
+                }
+            }
+            
+            if shouldUpdateSubscription {
+                // save update to db
+                update := map[string]interface{}{
+                    "ModeGiven": int(userData.modeGiven),
+                    "ModeWant": int(userData.modeWant),
+                }
+                store.Subs.Update(t.name, uid, update)
+                
+                // modify current mode
+                t.perUser[uid] = userData
+            }
+        }
 
 		// Clear original topic name.
 		t.x_original = ""
