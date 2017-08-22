@@ -47,7 +47,7 @@ import (
 6. A message published in the topic. The event is sent to users who have subscribed to the topic but currently
 	not joined (those who have joined will receive the {data}):
 	`{pres topic="me" src="<topic name>" what="msg" seq=123}`.
-7. Group topic's `public` is updated. The event is sent to all topic subscribers.
+7. Group topic's `public` is updated. The event is sent to all topic subscribers:
 	Users receive `{pres topic="me" src="<topic name>" what="upd"}`.
 8. User is has multiple sessions attached to 'me'. Sessions have different User Agents. Notify of UA change:
 	the message is sent to all users who have P2P topics with the first user. Users receive this event on
@@ -105,7 +105,7 @@ func (t *Topic) loadContacts(uid types.Uid) error {
 }
 
 // Me topic activated, deactivated or updated, push presence to contacts
-// Case 1.a.iii, 2, 3
+// Case 1.a.iii, 2, 3 - called indirectly.
 func (t *Topic) presPubMeChange(what string, ua string) {
 
 	// Push update to subscriptions
@@ -185,13 +185,13 @@ func (t *Topic) presAnnounceToSubscribers(what string, seq int, offlineOnly bool
 	}
 }
 
-// Publish announcement to topic
-// Cases 4.a, 7
-func (t *Topic) presPubChange(src types.Uid, what string, skip *Session) {
-	// Announce to topic subscribers. 4.a, 7
+// Announce change in user subscrition status
+// Case 4.a
+func (t *Topic) presSubChange(src types.Uid, what string, skip *Session) {
+	// Announce to topic subscribers who are currently attached to topic.
 	t.presAnnounceToTopic(src.UserId(), what, 0, skip)
 
-	//log.Printf("Pres 4.a,7: from '%s' (src: %s) [%s]", t.name, src, what)
+	//log.Printf("Pres 4.a: from '%s' (src: %s) [%s]", t.name, src, what)
 }
 
 // Announce topic disappearance just to the affected user
@@ -215,6 +215,21 @@ func (t *Topic) presPubMessageSent(seq int) {
 
 	// Announce to topic-offline subscribers on 'me'
 	t.presAnnounceToSubscribers("msg", seq, true)
+}
+
+// 'Public' updated, publish announcement to topic subscribers on 'me'.
+// Cases 3, 7
+func (t *Topic) presPubChange(skip *Session) {
+	if t.cat == types.TopicCat_Me {
+		t.presPubMeChange("upd", "")
+	} else {
+		// Announce to all subscribers on 'me' topic.
+		t.presAnnounceToSubscribers("upd", 0, false)
+
+		// TODO: maybe also publish on topic itself?
+	}
+
+	//log.Printf("Pres 7: from '%s' (src: %s) [%s]", t.name, src, what)
 }
 
 // User Agent has changed
