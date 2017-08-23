@@ -363,13 +363,13 @@ del: {
   topic: "grp1XUtEhjv6HND", // string, topic affect, required
   what: "msg", // string, either "topic" or "sub" or "msg"; what to delete - the
                // entire topic or subscription or just the messages; 
-				// optional, default: "msg"
+               // optional, default: "msg"
   hard: false, // boolean, request to delete messages for all users, default: false
   before: 123, // integer, delete messages with server-issued ID lower or equal
                // to this value (inclusive of the value itself), optional
   list: [123, 125], // Array of integer message IDs to delete, optional
   user: "usr2il9suCbuko" // string, user whose subscription is being deleted 
-				// (what="sub"), optional
+               // (what="sub"), optional
 }
 ```
 
