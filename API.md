@@ -361,16 +361,20 @@ Delete messages or topic.
 del: {
   id: "1a2b3", // string, client-provided message id, optional
   topic: "grp1XUtEhjv6HND", // string, topic affect, required
-  what: "msg", // string, either "topic" or "msg"; what to delete - the
-               // entire topic or just the messages, optional, default: "msg"
+  what: "msg", // string, either "topic" or "sub" or "msg"; what to delete - the
+               // entire topic or subscription or just the messages; 
+				// optional, default: "msg"
   hard: false, // boolean, request to delete messages for all users, default: false
   before: 123, // integer, delete messages with server-issued ID lower or equal
-               // to this value (inclusive of the value itself), optional,
-               // default: delete all messages
+               // to this value (inclusive of the value itself), optional
+  list: [123, 125], // Array of integer message IDs to delete, optional
+  user: "usr2il9suCbuko" // string, user whose subscription is being deleted 
+				// (what="sub"), optional
 }
 ```
 
-User can soft-delete and hard-delete messages `what="msg"`. Soft-deleting messages hides them from the requesting user but does not delete them from storage. No special permission is needed to soft-delete messages `hard=false`. Hard-deleting messages deletes them from storage affecting all users. `D` permission is needed to hard-delete messages.
+User can soft-delete and hard-delete messages `what="msg"`. Soft-deleting messages hides them from the requesting user but does not delete them from storage. No special permission is needed to soft-delete messages `hard=false` (default). Messages can be either deleted in bulk by setting the `before` parameter or deleted by a list of message IDs by setting the `list` parameter. Setting `before` will delete all messages with IDs below or equal to it. Either `before` or `list` must be provided. Hard-deleting messages deletes them from storage affecting all users. The `D` permission is needed to hard-delete messages.
+Deleting a subscription `what="sub"` removes specified user from topic subscribers. It requires an `A` permission. A user cannot delete own subscription. A `{leave}` should be used instead.
 Deleting a topic `what="topic"` deletes the topic including all subscriptions, and all messages. The `hard` parameter has no effect on topic deletion: all topic deletions are hard-deletions. Only the owner can delete a topic. The greatest deleted ID is reported back in the `clear` of the `{meta}` message.
 
 #### `{note}`
