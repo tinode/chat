@@ -234,7 +234,7 @@ func (t *Topic) run(hub *Hub) {
 						log.Println(err)
 					}
 				} else if t.cat == types.TopicCat_Grp && pud.online == 0 {
-					t.presPubChange(leave.sess.uid, "off", nil)
+					t.presSubChange(leave.sess.uid, "off", nil)
 				}
 
 				t.perUser[leave.sess.uid] = pud
@@ -594,7 +594,7 @@ func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin, sendDesc bool) error {
 		if t.cat == types.TopicCat_Grp {
 			// User just joined the topic, announce presence
 			log.Printf("subCommonReply: user %s joined grp topic %s", sreg.sess.uid.UserId(), t.name)
-			t.presPubChange(sreg.sess.uid, "on", nil)
+			t.presSubChange(sreg.sess.uid, "on", nil)
 		}
 	}
 
@@ -1252,7 +1252,7 @@ func (t *Topic) replySetDesc(sess *Session, set *MsgClientSet) error {
 	}
 
 	if sendPres {
-		t.presPubChange(sess.uid, "upd", sess)
+		t.presPubChange(sess)
 	}
 
 	sess.queueOut(NoErr(set.Id, set.Topic, now))
@@ -1792,10 +1792,10 @@ func (t *Topic) evictUser(uid types.Uid, unsub bool, ignore *Session) {
 	if t.cat == types.TopicCat_Grp {
 		log.Println("del: announcing GRP")
 		if unsub {
-			t.presPubChange(uid, "unsub", ignore)
+			t.presSubChange(uid, "unsub", ignore)
 			t.presTopicGone(uid)
 		} else {
-			t.presPubChange(uid, "off", ignore)
+			t.presSubChange(uid, "off", ignore)
 		}
 	} else if t.cat == types.TopicCat_P2P && unsub {
 		log.Println("del: announcing P2P")

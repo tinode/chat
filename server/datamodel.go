@@ -220,7 +220,8 @@ type MsgClientSet struct {
 type MsgClientDel struct {
 	Id    string `json:"id,omitempty"`
 	Topic string `json:"topic"`
-	// what to delete, either "msg" to delete messages (default) or "topic" to delete the topic
+	// What to delete, either "msg" to delete messages (default) or "topic" to delete the topic or "sub"
+	// to delete a subscription to topic.
 	What string `json:"what"`
 	// Delete messages older than this seq ID (inclusive)
 	Before int `json:"before,omitempty"`
