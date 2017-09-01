@@ -177,8 +177,7 @@ func (t *Topic) run(hub *Hub) {
 			// Request to add a conection to this topic
 
 			if t.isSuspended() {
-				sreg.sess.queueOut(ErrLocked(sreg.pkt.Id, t.original(sreg.sess.uid),
-					time.Now().UTC().Round(time.Millisecond)))
+				sreg.sess.queueOut(ErrLocked(sreg.pkt.Id, t.original(sreg.sess.uid), types.TimeNow()))
 			} else {
 				// The topic is alive, so stop the kill timer, if it's ticking. We don't want the topic to die
 				// while processing the call
@@ -380,6 +379,11 @@ func (t *Topic) run(hub *Hub) {
 					}
 
 					if msg.Pres != nil {
+						// Skip notifying - already notified on topic.
+						if msg.Pres.skipTopic != "" && sess.subs[msg.Pres.skipTopic] != nil {
+							continue
+						}
+
 						// Check presence filters
 						pud, _ := t.perUser[sess.uid]
 						if !(pud.modeGiven & pud.modeWant).IsPresencer() ||
@@ -591,7 +595,7 @@ func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin, sendDesc bool) error {
 
 	// User just joined. Notify other group members
 	if t.cat == types.TopicCat_Grp && pud.online == 1 {
-		t.presSubsOnline("on", sreg.sess.uid.UserId(), nilPresParams, "", types.ModeRead, 0)
+		t.presSubsOnline("on", sreg.sess.uid.UserId(), nilPresParams, "", types.ModeRead, 0, sreg.sess.sid)
 	}
 
 	resp := NoErr(sreg.pkt.Id, t.original(sreg.sess.uid), now)
@@ -1234,6 +1238,7 @@ func (t *Topic) replySetDesc(sess *Session, set *MsgClientSet) error {
 		// t.Public has changed, make an announcement
 		if t.cat == types.TopicCat_Me {
 			t.presUsersOfInterest("upd", "")
+			t.presSingleUserOffline(sess.uid, "upd", nilPresParams, sess.sid)
 		} else {
 			t.presSubsOffline("upd", nilPresParams, 0, 0)
 		}

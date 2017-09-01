@@ -411,6 +411,8 @@ type MsgServerPres struct {
 	filterPos int
 	// Send to just one user
 	singleUser string
+	// When sending to 'me', skip sessions subscribed to this topic
+	skipTopic string
 }
 
 type MsgServerMeta struct {
