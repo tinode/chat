@@ -373,7 +373,7 @@ del: {
 }
 ```
 
-User can soft-delete or hard-delete messages `what="msg"`. Soft-deleting messages hides them from the requesting user but does not delete them from storage. No special permission is needed to soft-delete messages `hard=false` (default). Messages can be either deleted in bulk by setting the `before` parameter or deleted by a list of message IDs by setting the `list` parameter. Setting `before` will delete all messages with IDs below or equal to it. Either `before` or `list` must be provided. Hard-deleting messages deletes them from storage affecting all users. The `D` permission is needed to hard-delete messages.
+User can soft-delete or hard-delete messages `what="msg"`. Soft-deleting messages hides them from the requesting user but does not delete them from storage. An `R` permission is required to soft-delete messages `hard=false` (default). Messages can be either deleted in bulk by setting the `before` parameter or deleted by a list of message IDs by setting the `list` parameter. Setting `before` will delete all messages with IDs below or equal to it. Either `before` or `list` must be provided. Hard-deleting messages deletes them from storage affecting all users. The `D` permission is needed to hard-delete messages.
 
 Deleting a subscription `what="sub"` removes specified user from topic subscribers. It requires an `A` permission. A user cannot delete own subscription. A `{leave}` should be used instead.
 
@@ -539,7 +539,7 @@ Tinode uses `{pres}` message to inform users of important events. The following 
 1. A user joins `me`. User receives presence notifications for each of his/her subscriptions: `{pres topic="me" src="<topic ID>" what="on", ua="..."}`.
 2. A user came online or went offline. The user triggers this event by joining/leaving the `me` topic. The message is sent to all users who have P2P topics with the first user. Users receive this event on the `me` topic, `src` field contains topic name (user ID), `src: "usr2il9suCbuko"`, `what` contains `"on"` or `"off"`: `{pres topic="me" src="<topic name>" what="on|off" ua="..."}`.
 3. User's `public` is updated. The event is sent to all users who have P2P topics with the first user. Users receive `{pres topic="me" src="<topic name" what="upd"}`.
-4. User joins/leaves (and possibly unsubscribes) a topic. This event is sent to other users who currently joined the topic: `{pres topic="<topic name>" src="<user ID>" what="on|off|unsub"}`. If the user also unsubscribes from the topic, user's other sessions will receive an event `{pres topic="me" src="<topic name>" what="gone"}`.
+4. User subscribes/joins/leaves (and possibly unsubscribes) a topic. This event is sent to other users who currently joined the topic: `{pres topic="<topic name>" src="<user ID>" what="on|off|unsub"}`. If this is a new subscription, user's other sessions receive an event `{pres topic="me" src="<topic name>" what="sub"}`. If the user unsubscribes from the topic, user's other sessions will receive an event `{pres topic="me" src="<topic name>" what="gone"}`. 
 5. A group topic is activated/deactivated/unsubscribed/deleted. Topic becomes active when the first user joins it. The topic becomes inactive when all users leave it (possibly after some delay). The event is sent to all topic subscribers. They will receive it on their `me` topics: `{pres topic="me" src="<topic name>" what="on|off|gone"}` (on - activated, off - deactivated, gone - deleted). If a user is unsubscribed, the user receives the event: `{pres topic="me" src="<topic name>" what="unsub"}`
 6. A message is published in a topic. The event is sent to users who have subscribed to the topic but currently not joined `{pres topic="me" src="<topic name>" what="msg"}`.
 7. Topic's `public` is updated. The event is sent to all topic subscribers. Topic's subscribers receive `{pres topic="me" src="<topic name>" what="upd"}`.
@@ -548,7 +548,6 @@ Tinode uses `{pres}` message to inform users of important events. The following 
 10. Some or all data messages in the topic were hard-deleted by the topic manager using `{del hard=true}`. The event is sent to all topic subscribers, joined (excluding the originating session) and not joined:
  a. joined: `{pres topic="<topic name>" src="<user id>" what="del" seq=123}`.
  b. not joined: `{pres topic="me" src="<topic name>" what="del" seq=123}`.
-11. User subscribed to a new topic. User's other sessions receive an event `{pres topic="me" src="<topic name>" what="on"}`.
 
 ```js
 pres: {

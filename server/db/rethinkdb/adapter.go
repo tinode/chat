@@ -158,6 +158,12 @@ func (a *RethinkDbAdapter) CreateDb(reset bool) error {
 		}).RunWrite(a.conn); err != nil {
 		return err
 	}
+	if _, err := rdb.DB("tinode").Table("messages").IndexCreateFunc("Topic_UpdatedAt",
+		func(row rdb.Term) interface{} {
+			return []interface{}{row.Field("Topic"), row.Field("UpdatedAt")}
+		}).RunWrite(a.conn); err != nil {
+		return err
+	}
 
 	// Index of unique user contact information as strings, such as "email:jdoe@example.com" or "tel:18003287448":
 	// {Id: <tag>, Source: <uid>} to ensure uniqueness of tags.
@@ -807,10 +813,47 @@ func (a *RethinkDbAdapter) MessageSave(msg *t.Message) error {
 func (a *RethinkDbAdapter) MessageGetAll(topic string, forUser t.Uid, opts *t.BrowseOpt) ([]t.Message, error) {
 	//log.Println("Loading messages for topic ", topic, opts)
 
-	q := rdb.DB(a.dbName).Table("messages")
-	q = addOptions(q, topic, "Topic_SeqId", opts)
+	var limit uint = 1024 // TODO(gene): pass into adapter as a config param
+	var lower, upper interface{}
 
-	rows, err := q.Run(a.conn)
+	// Default index
+	useIndex := "Topic_SeqId"
+
+	upper = rdb.MaxVal
+	lower = rdb.MinVal
+
+	if opts != nil {
+		if opts.ByTime {
+			useIndex = "Topic_UpdatedAt"
+
+			if !opts.After.IsZero() {
+				lower = opts.After
+			}
+			if !opts.Until.IsZero() {
+				upper = opts.Until
+			}
+		} else {
+			useIndex = "Topic_SeqId"
+
+			if opts.Since > 0 {
+				lower = opts.Since
+			}
+			if opts.Before > 0 {
+				upper = opts.Before
+			}
+		}
+
+		if opts.Limit > 0 && opts.Limit < limit {
+			limit = opts.Limit
+		}
+	}
+
+	lower = []interface{}{topic, lower}
+	upper = []interface{}{topic, upper}
+
+	rows, err := rdb.DB(a.dbName).Table("messages").Between(lower, upper, rdb.BetweenOpts{Index: useIndex}).
+		OrderBy(rdb.OrderByOpts{Index: rdb.Desc("Topic_SeqId")}).Limit(limit).Run(a.conn)
+
 	if err != nil {
 		return nil, err
 	}
@@ -868,6 +911,7 @@ func (a *RethinkDbAdapter) MessageDeleteList(topic string, forUser t.Uid, hard b
 	return err
 }
 
+/*
 func addOptions(q rdb.Term, value string, index string, opts *t.BrowseOpt) rdb.Term {
 	var limit uint = 1024 // TODO(gene): pass into adapter as a config param
 	var lower, upper interface{}
@@ -901,6 +945,7 @@ func addOptions(q rdb.Term, value string, index string, opts *t.BrowseOpt) rdb.T
 	return q.Between(lower, upper, rdb.BetweenOpts{Index: index}).
 		OrderBy(rdb.OrderByOpts{Index: rdb.Desc(index)}).Limit(limit)
 }
+*/
 
 func deviceHasher(deviceId string) string {
 	// Generate custom key as [64-bit hash of device id] to ensure predictable

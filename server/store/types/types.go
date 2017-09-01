@@ -266,7 +266,7 @@ type User struct {
 
 type AccessMode uint
 
-// User access to topic
+// Various access mode constants
 const (
 	ModeJoin    AccessMode = 1 << iota // user can join, i.e. {sub} (J:1)
 	ModeRead                           // user can receive broadcasts ({data}, {info}) (R:2)
@@ -291,6 +291,11 @@ const (
 	ModeCP2P AccessMode = ModeJoin | ModeRead | ModeWrite | ModePres | ModeApprove
 	// Read-only access to topic
 	ModeCReadOnly = ModeJoin | ModeRead
+
+	// Admin: user who can modify access mode
+	ModeCAdmin = ModeOwner | ModeApprove
+	// Sharer: flags which define user who can be notified of access mode changes
+	ModeCSharer = ModeCAdmin | ModeShare
 
 	// Invalid mode to indicate an error
 	ModeInvalid AccessMode = 0x100000
@@ -384,6 +389,32 @@ func (grant AccessMode) Check(want AccessMode) bool {
 	return grant&want == want
 }
 
+// Delta between two modes as a string old.Delta(new). JRPAS -> JRWS: "+W-PA"
+// Zero delta is an empty string ""
+func (o AccessMode) Delta(n AccessMode) string {
+
+	// Removed bits, bits present in 'old' but missing in 'new' -> '-'
+	o2n := o &^ n
+	var removed string
+	if o2n > 0 {
+		removed = o2n.String()
+		if removed != "" {
+			removed = "-" + removed
+		}
+	}
+
+	// Added bits, bits present in 'n' but missing in 'o' -> '+'
+	n2o := n &^ o
+	var added string
+	if n2o > 0 {
+		added = n2o.String()
+		if added != "" {
+			added = "+" + added
+		}
+	}
+	return added + removed
+}
+
 // Check if Join flag is set
 func (a AccessMode) IsJoiner() bool {
 	return a&ModeJoin != 0
@@ -401,7 +432,7 @@ func (a AccessMode) IsApprover() bool {
 
 // Check if owner or approver
 func (a AccessMode) IsAdmin() bool {
-	return a.IsOwner() || (a&ModeApprove != 0)
+	return a.IsOwner() || a.IsApprover()
 }
 
 // Approver or sharer or owner
@@ -676,7 +707,7 @@ type Message struct {
 }
 
 // Announcements/Invites
-
+/*
 type AnnounceAction int
 
 const (
@@ -703,10 +734,14 @@ func (a AnnounceAction) String() string {
 	}
 	return ""
 }
+*/
 
 type BrowseOpt struct {
 	Since  int
+	After  *time.Time
 	Before int
+	Until  *time.Time
+	ByTime bool
 	Limit  uint
 }
 

@@ -323,7 +323,7 @@ func (s *Session) publish(msg *ClientComMessage) {
 		Content:   msg.Pub.Content},
 		rcptto: expanded, sessFrom: s, id: msg.Pub.Id, timestamp: msg.timestamp}
 	if msg.Pub.NoEcho {
-		data.sessSkip = s
+		data.skipSid = s.sid
 	}
 
 	if sub, ok := s.subs[expanded]; ok {
@@ -797,7 +797,7 @@ func (s *Session) note(msg *ClientComMessage) {
 			From:  s.uid.UserId(),
 			What:  msg.Note.What,
 			SeqId: msg.Note.SeqId,
-		}, rcptto: expanded, timestamp: msg.timestamp, sessSkip: s}
+		}, rcptto: expanded, timestamp: msg.timestamp, skipSid: s.sid}
 	} else if globals.cluster.isRemoteTopic(expanded) {
 		// The topic is handled by a remote node. Forward message to it.
 		globals.cluster.routeToTopic(msg, expanded, s)

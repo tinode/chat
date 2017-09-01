@@ -24,9 +24,13 @@ func (jd *JsonDuration) UnmarshalJSON(data []byte) (err error) {
 
 type MsgBrowseOpts struct {
 	// Load messages with seq id equal or greater than this
-	Since int `json:"since,omitempty"`
+	SinceId int `json:"since,omitempty"`
+	// Load messages with UpdatedAt equal or grater than this
+	SinceTs *time.Time `json:"after,omitempty"`
 	// Load messages with seq id lower than this
-	Before int `json:"before,omitempty"`
+	BeforeId int `json:"before,omitempty"`
+	// Load messages with UpdatedAt lower than this
+	BeforeTs *time.Time `json:"until,omitempty"`
 	// Limit the number of messages loaded
 	Limit uint `json:"limit,omitempty"`
 }
@@ -57,8 +61,6 @@ type MsgSetSub struct {
 
 	// Access mode change, either Given or Want depending on context
 	Mode string `json:"mode,omitempty"`
-	// Free-form payload to pass to the invited user or to topic manager
-	Info SubInfo `json:"info,omitempty"`
 }
 
 // MsgSetDesc: C2S in set.what == "desc" and sub.init message
@@ -355,6 +357,7 @@ type MsgServerCtrl struct {
 	Timestamp time.Time `json:"ts"`
 }
 
+/*
 // Action announcement: invitation to a join, approval of a request to join, access change,
 // subscription gone: topic deleted/unsubscribed.
 // Sent as MsgServerData.Content
@@ -372,6 +375,7 @@ type MsgAnnounce struct {
 	// Free-form info passed unchanged from the client
 	Info SubInfo `json:"info,omitempty"`
 }
+*/
 
 type MsgServerData struct {
 	Topic string `json:"topic"`
@@ -385,14 +389,28 @@ type MsgServerData struct {
 }
 
 type MsgServerPres struct {
-	Topic     string `json:"topic"`
-	Src       string `json:"src"`
-	What      string `json:"what"`
-	UserAgent string `json:"ua,omitempty"`
-	SeqId     int    `json:"seq,omitempty"`
-	SeqList   []int  `json:"list,omitempty"`
-	// unroutable, to break the reply loop
+	Topic     string         `json:"topic"`
+	Src       string         `json:"src"`
+	What      string         `json:"what"`
+	UserAgent string         `json:"ua,omitempty"`
+	SeqId     int            `json:"seq,omitempty"`
+	SeqList   []int          `json:"list,omitempty"`
+	Who       string         `json:"who,omitempty"`
+	Acs       *MsgAccessMode `json:"acs,omitempty"`
+
+	// UNroutable params
+
+	// Flag to break the reply loop
 	wantReply bool
+
+	// Additional permissions filters:
+
+	// Negative: drop message if (filterNeg&perm != 0)
+	filterNeg int
+	// Positive: drop message if (filterPos != 0 && filterPos&perm == 0)
+	filterPos int
+	// Send to just one user
+	singleUser string
 }
 
 type MsgServerMeta struct {
@@ -431,8 +449,8 @@ type ServerComMessage struct {
 	id string
 	// timestamp for consistency of timestamps in {ctrl} messages
 	timestamp time.Time
-	// Should the packet be sent to the original sessions?
-	sessSkip *Session
+	// Should the packet be sent to the original sessions? SessionIDs to skip.
+	skipSid string
 }
 
 // Generators of error messages

@@ -196,9 +196,9 @@ The table stores `{data}` messages
 Fields:
 * `Id` currently unused, primary key
 * `CreatedAt` timestamp when the message was created
-* `UpdatedAt` unused, created for consistency
+* `UpdatedAt` initially equal to CreatedAt, for deleted messages equal to DeletedAt
 * `DeletedAt` timestamp when the message was deleted for all users
-* `DeletedFor` IDs of the users who have deleted the message
+* `DeletedFor` IDs of the users who have soft-deleted the message
 * `From` ID of the user who generated this message
 * `Topic` which received this message
 * `SeqId` id of the message
