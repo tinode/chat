@@ -199,9 +199,10 @@ func (t *Topic) run(hub *Hub) {
 					killTimer.Reset(keepAlive)
 				}
 			}
+
 		case leave := <-t.unreg:
 			// Remove connection from topic; session may continue to function
-			now := time.Now().UTC().Round(time.Millisecond)
+			now := types.TimeNow()
 
 			if t.isSuspended() {
 				leave.sess.queueOut(ErrLocked(leave.reqId, t.original(leave.sess.uid), now))
@@ -309,6 +310,7 @@ func (t *Topic) run(hub *Hub) {
 				t.presSubsOffline("msg", &PresParams{seqId: t.lastId}, types.ModeRead, 0)
 
 			} else if msg.Pres != nil {
+
 				t.presProcReq(msg.Pres.Src, (msg.Pres.What == "on"), msg.Pres.wantReply)
 				if t.x_original != msg.Pres.Topic {
 					// This is just a request for status, don't forward it to sessions
@@ -373,6 +375,7 @@ func (t *Topic) run(hub *Hub) {
 
 				for sess := range t.sessions {
 					if sess.sid == msg.skipSid {
+						log.Println("Drop pres - skip", sess.uid.UserId())
 						continue
 					}
 
@@ -384,6 +387,7 @@ func (t *Topic) run(hub *Hub) {
 							(msg.Pres.filterPos != 0 && int(pud.modeGiven&pud.modeWant)&msg.Pres.filterPos == 0) ||
 							(int(pud.modeGiven&pud.modeWant)&msg.Pres.filterNeg != 0) {
 
+							log.Println("Drop pres filter", sess.uid.UserId())
 							continue
 						}
 					}
@@ -469,14 +473,13 @@ func (t *Topic) run(hub *Hub) {
 		case <-uaTimer.C:
 			// Publish user agent changes after a delay
 			if currentUA == "" || currentUA == t.userAgent {
-				return
+				continue
 			}
 			t.userAgent = currentUA
 			t.presUsersOfInterest("ua", t.userAgent)
 
 		case <-killTimer.C:
 			// Topic timeout
-			log.Println("Topic timeout: ", t.name)
 			hub.unreg <- &topicUnreg{topic: t.name}
 			if t.cat == types.TopicCat_Me {
 				uaTimer.Stop()
@@ -547,14 +550,12 @@ func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 
 // subCommonReply generates a response to a subscription request
 func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin, sendDesc bool) error {
-	log.Println("subCommonReply", t.name)
-
 	var now time.Time
 	// For newly created topics report topic creation time.
 	if sreg.created {
 		now = t.updated
 	} else {
-		now = time.Now().UTC().Round(time.Millisecond)
+		now = types.TimeNow()
 	}
 
 	// The topic is already initialized by the Hub
@@ -587,6 +588,11 @@ func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin, sendDesc bool) error {
 	pud := t.perUser[sreg.sess.uid]
 	pud.online++
 	t.perUser[sreg.sess.uid] = pud
+
+	// User just joined. Notify other group members
+	if t.cat == types.TopicCat_Grp && pud.online == 1 {
+		t.presSubsOnline("on", sreg.sess.uid.UserId(), nilPresParams, "", types.ModeRead, 0)
+	}
 
 	resp := NoErr(sreg.pkt.Id, t.original(sreg.sess.uid), now)
 	// Report access mode.

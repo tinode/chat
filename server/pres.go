@@ -159,7 +159,7 @@ func (t *Topic) presSubsOffline(what string, params *PresParams, filterPos, filt
 				filterPos: int(filterPos), filterNeg: int(filterNeg)},
 			rcptto: uid.UserId()}
 	}
-	// log.Printf("Pres E, F, G, H: topic'%s' what='%s', who='%s'", t.name, what, actor)
+	// log.Printf("presSubsOffline: topic'%s' what='%s', who='%s'", t.name, what, params.who)
 }
 
 // Announce to a single user on 'me' topic

@@ -141,7 +141,7 @@ func (h *Hub) run() {
 			timestamp := time.Now().UTC().Round(time.Millisecond)
 			if dst := h.topicGet(msg.rcptto); dst != nil {
 				// Everything is OK, sending packet to known topic
-				//log.Printf("Hub. Sending message to '%s'", dst.name)
+				// log.Println("Hub sending to", dst.name)
 
 				if dst.broadcast != nil {
 					select {
@@ -150,6 +150,7 @@ func (h *Hub) run() {
 						log.Printf("hub: topic's broadcast queue is full '%s'", dst.name)
 					}
 				}
+				log.Println("Hub sent to", dst.name)
 			} else {
 				if msg.Data != nil {
 					// Normally the message is persisted at the topic. If the topic is offline,
