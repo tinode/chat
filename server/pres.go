@@ -150,10 +150,10 @@ func (t *Topic) presSubsOnline(what, src string, params *PresParams,
 // Case L.4: Admin altered GIVEN, "acs" to admins
 // Case T: message sent, "msg" to all with 'R'
 // Case W.1: messages hard-deleted, "del" to all with 'R'
-func (t *Topic) presSubsOffline(what string, params *PresParams, filterPos, filterNeg types.AccessMode, skipOnline bool) {
-	var skip string
-	if skipOnline {
-		skip = t.name
+func (t *Topic) presSubsOffline(what string, params *PresParams, filterPos, filterNeg types.AccessMode, offlineOnly bool) {
+	var skipTopic string
+	if offlineOnly {
+		skipTopic = t.name
 	}
 
 	for uid, _ := range t.perUser {
@@ -161,7 +161,7 @@ func (t *Topic) presSubsOffline(what string, params *PresParams, filterPos, filt
 			Pres: &MsgServerPres{Topic: "me", What: what, Src: t.original(uid),
 				Acs: params.packAcs(), Who: params.who,
 				SeqId: params.seqId, SeqList: params.seqList,
-				filterPos: int(filterPos), filterNeg: int(filterNeg), skipTopic: skip},
+				filterPos: int(filterPos), filterNeg: int(filterNeg), skipTopic: skipTopic},
 			rcptto: uid.UserId()}
 	}
 	// log.Printf("presSubsOffline: topic'%s' what='%s', who='%s'", t.name, what, params.who)
@@ -173,13 +173,18 @@ func (t *Topic) presSubsOffline(what string, params *PresParams, filterPos, filt
 // Case L.2: Sharer altered GIVEN (inludes invite, eviction)
 // Case U: read/recv notification
 // Case V.1: messages soft-deleted
-func (t *Topic) presSingleUserOffline(uid types.Uid, what string, params *PresParams, skip string) {
+func (t *Topic) presSingleUserOffline(uid types.Uid, what string, params *PresParams, skipSid string, offlineOnly bool) {
+	var skipTopic string
+	if offlineOnly {
+		skipTopic = t.name
+	}
+
 	if _, ok := t.perUser[uid]; ok {
 		globals.hub.route <- &ServerComMessage{
 			Pres: &MsgServerPres{Topic: "me", What: what,
 				Src: t.original(uid), SeqId: params.seqId, SeqList: params.seqList,
-				Who: params.who, Acs: params.packAcs()},
-			rcptto: uid.UserId(), skipSid: skip}
+				Who: params.who, Acs: params.packAcs(), skipTopic: skipTopic},
+			rcptto: uid.UserId(), skipSid: skipSid}
 	}
 
 	// log.Printf("Pres J.1, K, M.1, N: topic'%s' what='%s', who='%s'", t.name, what, who.UserId())
@@ -212,8 +217,9 @@ func (t *Topic) presPubMessageCount(uid types.Uid, list []int, clear, recv, read
 	}
 
 	if what != "" {
-		// Announce to user's other sessions on 'me' regardless of being attached to this topic.
-		t.presSingleUserOffline(uid, what, &PresParams{seqId: seq, seqList: list}, skip)
+		// Announce to user's other sessions on 'me' only if they are not attached to this topic.
+		// Attached topics will receive an {info}
+		t.presSingleUserOffline(uid, what, &PresParams{seqId: seq, seqList: list}, skip, true)
 	} else {
 		log.Printf("Case U, V1: topic[%s] invalid request - missing payload", t.name)
 	}

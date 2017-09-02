@@ -268,11 +268,11 @@ func (t *Topic) run(hub *Hub) {
 				}
 
 				from := types.ParseUserId(msg.Data.From)
+				userData := t.perUser[from]
 
 				// msg.sessFrom is not nil when the message originated at the client.
-				// for internally generated messages, like invites, the akn is nil
+				// for internally generated messages the akn is nil
 				if msg.sessFrom != nil {
-					userData := t.perUser[from]
 					if !(userData.modeWant & userData.modeGiven).IsWriter() {
 						msg.sessFrom.queueOut(ErrPermissionDenied(msg.id, t.original(msg.sessFrom.uid),
 							msg.timestamp))
@@ -326,9 +326,20 @@ func (t *Topic) run(hub *Hub) {
 					continue
 				}
 
+				uid := types.ParseUserId(msg.Info.From)
+				pud := t.perUser[uid]
+
+				// Filter out "kp" from users with no 'W' permission
+				if msg.Info.What == "kp" && !(pud.modeGiven & pud.modeWant).IsWriter() {
+					continue
+				}
+
 				if msg.Info.What == "read" || msg.Info.What == "recv" {
-					uid := types.ParseUserId(msg.Info.From)
-					pud := t.perUser[uid]
+					// Filter out "read/recv" from users with no 'R' permission
+					if !(pud.modeGiven & pud.modeWant).IsReader() {
+						continue
+					}
+
 					var read, recv int
 					if msg.Info.What == "read" {
 						if msg.Info.SeqId > pud.readId {
@@ -539,6 +550,15 @@ func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 			// User online: notify users of interest
 			t.presUsersOfInterest("on", sreg.sess.userAgent)
 		} else if t.cat == types.TopicCat_Grp {
+			if sreg.created {
+				// Notify creator's other sessions that the topic was created.
+				t.presSingleUserOffline(sreg.sess.uid, "acs",
+					&PresParams{
+						dWant:  types.ModeNone.Delta(pud.modeWant),
+						dGiven: types.ModeNone.Delta(pud.modeGiven),
+						who:    "me"},
+					sreg.sess.sid, false)
+			}
 			// Topic online: notify subscribers on 'me'
 			t.presSubsOffline("on", nilPresParams, 0, 0, false)
 		}
@@ -825,8 +845,11 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string,
 		return errors.New("topic access denied")
 	}
 
-	// If something has changed and the requested access mode is different from the given:
+	// If something has changed and the requested access mode is different from the given.
+	// This will not send a notification for a newly created topic because Hub sets the same values for
+	// the old want/given.
 	if userData.modeWant != oldWant || userData.modeGiven != oldGiven {
+
 		log.Println("Mode change: given, want", userData.modeGiven.String(), userData.modeWant.String())
 
 		// Announce access change to topic admins on 'me'
@@ -841,7 +864,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string,
 			&PresParams{
 				dWant:  oldWant.Delta(userData.modeWant),
 				dGiven: oldGiven.Delta(userData.modeGiven)},
-			sess.sid)
+			sess.sid, false)
 	}
 
 	return nil
@@ -985,7 +1008,7 @@ func (t *Topic) approveSub(h *Hub, sess *Session, target types.Uid, set *MsgClie
 				who:    sess.uid.UserId(),
 				dWant:  oldWant.Delta(userData.modeWant),
 				dGiven: oldGiven.Delta(userData.modeGiven)},
-			sess.sid)
+			sess.sid, false)
 
 		// Inform topic admins of the change
 		t.presSubsOnline("acs", target.UserId(),
@@ -1243,7 +1266,7 @@ func (t *Topic) replySetDesc(sess *Session, set *MsgClientSet) error {
 		// t.Public has changed, make an announcement
 		if t.cat == types.TopicCat_Me {
 			t.presUsersOfInterest("upd", "")
-			t.presSingleUserOffline(sess.uid, "upd", nilPresParams, sess.sid)
+			t.presSingleUserOffline(sess.uid, "upd", nilPresParams, sess.sid, false)
 		} else {
 			t.presSubsOffline("upd", nilPresParams, 0, 0, false)
 		}
@@ -1760,14 +1783,14 @@ func (t *Topic) evictUser(uid types.Uid, unsub bool, skip string) {
 					dGiven: pud.modeGiven.Delta(types.ModeNone)},
 				types.ModeCAdmin, 0, skip)
 			// Let affected user know
-			t.presSingleUserOffline(uid, "gone", nilPresParams, "")
+			t.presSingleUserOffline(uid, "gone", nilPresParams, "", false)
 		} else {
 			// Let all 'R' users know
 			t.presSubsOnline("off", uid.UserId(), nilPresParams, types.ModeRead, 0, skip)
 		}
 	} else if t.cat == types.TopicCat_P2P && unsub {
 		log.Println("del: announcing P2P")
-		t.presSingleUserOffline(uid, "gone", nilPresParams, "")
+		t.presSingleUserOffline(uid, "gone", nilPresParams, "", false)
 	} else {
 		log.Println("del: not announcing", t.cat, unsub)
 	}
