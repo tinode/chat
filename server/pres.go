@@ -121,7 +121,7 @@ func (t *Topic) presUsersOfInterest(what string, ua string) {
 // Case V.2: Messages soft deleted, "del" to one user only
 // Case W.2: Messages hard-deleted, "del"
 func (t *Topic) presSubsOnline(what, src string, params *PresParams,
-	user string, filterPos, filterNeg types.AccessMode, skip string) {
+	filterPos, filterNeg types.AccessMode, skip string) {
 
 	// If affected user is the same as the user making the change, clear 'who'
 	if params.who == src {
@@ -132,7 +132,7 @@ func (t *Topic) presSubsOnline(what, src string, params *PresParams,
 		Pres: &MsgServerPres{Topic: t.x_original, What: what, Src: src,
 			Acs: params.packAcs(), Who: params.who,
 			SeqId: params.seqId, SeqList: params.seqList,
-			filterPos: int(filterPos), filterNeg: int(filterNeg), singleUser: user},
+			filterPos: int(filterPos), filterNeg: int(filterNeg)},
 		rcptto: t.name, skipSid: skip}
 
 	// log.Printf("Pres K.2, L.3, W.2: topic'%s' what='%s', who='%s', acs='w:%s/g:%s'", t.name, what,
@@ -150,14 +150,18 @@ func (t *Topic) presSubsOnline(what, src string, params *PresParams,
 // Case L.4: Admin altered GIVEN, "acs" to admins
 // Case T: message sent, "msg" to all with 'R'
 // Case W.1: messages hard-deleted, "del" to all with 'R'
-func (t *Topic) presSubsOffline(what string, params *PresParams, filterPos, filterNeg types.AccessMode) {
+func (t *Topic) presSubsOffline(what string, params *PresParams, filterPos, filterNeg types.AccessMode, skipOnline bool) {
+	var skip string
+	if skipOnline {
+		skip = t.name
+	}
 
 	for uid, _ := range t.perUser {
 		globals.hub.route <- &ServerComMessage{
 			Pres: &MsgServerPres{Topic: "me", What: what, Src: t.original(uid),
 				Acs: params.packAcs(), Who: params.who,
 				SeqId: params.seqId, SeqList: params.seqList,
-				filterPos: int(filterPos), filterNeg: int(filterNeg), skipTopic: t.name},
+				filterPos: int(filterPos), filterNeg: int(filterNeg), skipTopic: skip},
 			rcptto: uid.UserId()}
 	}
 	// log.Printf("presSubsOffline: topic'%s' what='%s', who='%s'", t.name, what, params.who)

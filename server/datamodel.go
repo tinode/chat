@@ -409,8 +409,6 @@ type MsgServerPres struct {
 	filterNeg int
 	// Positive: drop message if (filterPos != 0 && filterPos&perm == 0)
 	filterPos int
-	// Send to just one user
-	singleUser string
 	// When sending to 'me', skip sessions subscribed to this topic
 	skipTopic string
 }
