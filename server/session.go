@@ -728,13 +728,13 @@ func (s *Session) del(msg *ClientComMessage) {
 		return
 	}
 
-	sub, ok := s.subs[expanded]
 	what := parseMsgClientDel(msg.Del.What)
 	if what == 0 {
 		s.queueOut(ErrMalformed(msg.Del.Id, msg.Del.Topic, msg.timestamp))
 		log.Println("s.del: invalid Del action '" + msg.Del.What + "'")
 	}
 
+	sub, ok := s.subs[expanded]
 	if ok && what != constMsgDelTopic {
 		// Session is attached, deleting subscription or messages. Send to topic.
 		log.Println("s.del: sending to topic")

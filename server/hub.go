@@ -764,6 +764,7 @@ func (t *Topic) loadSubscribers() error {
 // 1.2.2 If not the owner
 // 1.2.2.1 Delete subscription from DB
 // 1.2.3 Hub informs the origin of success or failure
+// 1.2.4 Send notification to subscribers that the topic was deleted
 
 // 2. Topic is just being unregistered (topic is going offline)
 // 2.1 Unregister it with no further action
@@ -774,6 +775,7 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *MsgClientDel, del boo
 	if del {
 		// Case 1 (unregister and delete)
 		if t := h.topicGet(topic); t != nil {
+			log.Println("topicUnreg -- ONline")
 			// Case 1.1: topic is online
 			if t.owner == sess.uid || (t.cat == types.TopicCat_P2P && len(t.perUser) < 2) {
 				// Case 1.1.1: requester is the owner or last sub in a p2p topic
@@ -811,52 +813,71 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *MsgClientDel, del boo
 
 		} else {
 			// Case 1.2: topic is offline.
-			if sub, err := store.Subs.Get(topic, sess.uid); err != nil {
-				log.Println("topicUnreg failed to load offline topic:", err)
+			log.Println("topicUnreg -- offline")
+
+			// Get all subscribers: we have to notify them all.
+			if subs, err := store.Topics.GetSubs(topic); err != nil {
+				log.Println("topicUnreg failed to load subscribers:", err)
 				sess.queueOut(ErrUnknown(msg.Id, msg.Topic, now))
 				return
-			} else if sub == nil {
-				// If user has no subscription, tell him all is fine
-				sess.queueOut(InfoNoAction(msg.Id, msg.Topic, now))
-				return
-			} else if !(sub.ModeGiven & sub.ModeWant).IsOwner() {
-				// Case 1.2.2.1 Not the owner, but possibly last subscription in a P2P topic:
-				if topicCat(topic) == types.TopicCat_P2P {
-					// If this is a P2P topic, check how many subscriptions are left
-					if subs, err := store.Topics.GetSubs(topic); err != nil {
-						log.Println("topicUnreg failed to load subscribers:", err)
-						sess.queueOut(ErrUnknown(msg.Id, msg.Topic, now))
-						return
-					} else if subs != nil && len(subs) < 2 {
-						// Fewer than 2 subscriptions, delete the entire topic
+			} else {
+				tcat := topicCat(topic)
+
+				var sub *types.Subscription
+				for i := 0; i < len(subs); i++ {
+					if subs[i].User == sess.uid.String() {
+						sub = &subs[i]
+						break
+					}
+				}
+
+				if sub == nil {
+					// If user has no subscription, tell him all is fine
+					sess.queueOut(InfoNoAction(msg.Id, msg.Topic, now))
+					return
+				} else if !(sub.ModeGiven & sub.ModeWant).IsOwner() {
+					// Case 1.2.2.1 Not the owner, but possibly last subscription in a P2P topic.
+
+					if tcat == types.TopicCat_P2P && subs != nil && len(subs) < 2 {
+						// This is a P2P topic and fewer than 2 subscriptions, delete the entire topic
 						if err := store.Topics.Delete(topic); err != nil {
 							log.Println("topicUnreg delete failed (2):", err)
 							sess.queueOut(ErrUnknown(msg.Id, msg.Topic, now))
 							return
 						}
-						sess.queueOut(NoErr(msg.Id, msg.Topic, now))
+					} else {
+						// Not P2P or more than 1 subscription left.
+						// Delete user's own subscription only
+						if err := store.Subs.Delete(topic, sess.uid); err != nil {
+							log.Println("topicUnreg failed (3):", err)
+							sess.queueOut(ErrUnknown(msg.Id, msg.Topic, now))
+							return
+						}
+					}
+
+					// Notify user's other sessions that the subscription is gone
+					log.Println("Notifying single user - sub deleted")
+					presSingleUserOfflineOffline(sess.uid, msg.Topic, "acs",
+						&PresParams{
+							dWant:  sub.ModeWant.Delta(types.ModeNone),
+							dGiven: sub.ModeGiven.Delta(types.ModeNone),
+						}, sess.sid)
+				} else {
+					// Case 1.2.1.1: owner, delete the topic from db
+					if err := store.Topics.Delete(topic); err != nil {
+						log.Println("topicUnreg failed (4):", err)
+						sess.queueOut(ErrUnknown(msg.Id, msg.Topic, now))
 						return
 					}
+
+					// Notify subscribers that the topic is gone
+					log.Println("Notifying all subscribers - topic deleted")
+					presSubsOfflineOffline(msg.Topic, tcat, subs, "gone", &PresParams{}, sess.sid)
 				}
 
-				// Not owner or more than one subscription left in a P2P topic
-				if err := store.Subs.Delete(topic, sess.uid); err != nil {
-					log.Println("topicUnreg failed (3):", err)
-					sess.queueOut(ErrUnknown(msg.Id, msg.Topic, now))
-					return
+				if sess != nil && msg != nil {
+					sess.queueOut(NoErr(msg.Id, msg.Topic, now))
 				}
-
-			} else {
-				// Case 1.2.1.1: owner, delete the topic from db
-				if err := store.Topics.Delete(topic); err != nil {
-					log.Println("topicUnreg failed (4):", err)
-					sess.queueOut(ErrUnknown(msg.Id, msg.Topic, now))
-					return
-				}
-			}
-
-			if sess != nil && msg != nil {
-				sess.queueOut(NoErr(msg.Id, msg.Topic, now))
 			}
 		}
 

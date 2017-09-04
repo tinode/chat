@@ -62,8 +62,8 @@ func (t *Topic) loadContacts(uid types.Uid) error {
 
 // This topic got a request from a 'me' topic to start/stop sending presence updates.
 func (t *Topic) presProcReq(fromUserId string, online, wantReply bool) {
-	log.Printf("presProcReq: topic[%s]: req from '%s', online: %v, wantReply: %v", t.name,
-		fromUserId, online, wantReply)
+	//log.Printf("presProcReq: topic[%s]: req from '%s', online: %v, wantReply: %v", t.name,
+	//	fromUserId, online, wantReply)
 
 	doReply := wantReply
 	if t.cat == types.TopicCat_Me {
@@ -77,7 +77,7 @@ func (t *Topic) presProcReq(fromUserId string, online, wantReply bool) {
 			psd.online = online
 			t.perSubs[fromUserId] = psd
 
-			log.Printf("presProcReq: topic[%s]: set user %s online to %v", t.name, fromUserId, online)
+			//log.Printf("presProcReq: topic[%s]: set user %s online to %v", t.name, fromUserId, online)
 
 		} else {
 			doReply = false
@@ -167,6 +167,26 @@ func (t *Topic) presSubsOffline(what string, params *PresParams, filterPos, filt
 	// log.Printf("presSubsOffline: topic'%s' what='%s', who='%s'", t.name, what, params.who)
 }
 
+// Same as presSubsOffline, but the topic has not been loaded/initialized first: offline topic, offline subscribers
+func presSubsOfflineOffline(topic string, cat types.TopicCat, subs []types.Subscription, what string,
+	params *PresParams, skipSid string) {
+
+	var count = 0
+	original := topic
+	for _, sub := range subs {
+		if cat == types.TopicCat_P2P {
+			original = types.ParseUid(subs[(count+1)%2].User).UserId()
+			count++
+		}
+
+		globals.hub.route <- &ServerComMessage{
+			Pres: &MsgServerPres{Topic: "me", What: what, Src: original,
+				Acs: params.packAcs(), Who: params.who,
+				SeqId: params.seqId, SeqList: params.seqList},
+			rcptto: types.ParseUid(sub.User).UserId(), skipSid: skipSid}
+	}
+}
+
 // Announce to a single user on 'me' topic
 //
 // Case K.1: User altered WANT (includes new subscription, deleted subscription)
@@ -188,6 +208,15 @@ func (t *Topic) presSingleUserOffline(uid types.Uid, what string, params *PresPa
 	}
 
 	// log.Printf("Pres J.1, K, M.1, N: topic'%s' what='%s', who='%s'", t.name, what, who.UserId())
+}
+
+// Same as above, but the topic is offline (not loaded from the DB)
+func presSingleUserOfflineOffline(uid types.Uid, original string, what string, params *PresParams, skipSid string) {
+	globals.hub.route <- &ServerComMessage{
+		Pres: &MsgServerPres{Topic: "me", What: what,
+			Src: original, SeqId: params.seqId, SeqList: params.seqList,
+			Who: params.who, Acs: params.packAcs()},
+		rcptto: uid.UserId(), skipSid: skipSid}
 }
 
 // Let other sessions of a given user know that what messages are now received/read/deleted

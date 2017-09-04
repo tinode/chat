@@ -37,8 +37,11 @@ type configType struct {
 	NodeRefreshInterval int         `json:"node_refresh_interval,omitempty"`
 }
 
-const MAX_RESULTS = 1024
-const MAX_DELETE_MESSAGES = 128
+const (
+	MAX_RESULTS         = 1024
+	MAX_SUBSCRIBERS     = 128
+	MAX_DELETE_MESSAGES = 128
+)
 
 // Open initializes rethinkdb session
 func (a *RethinkDbAdapter) Open(jsonconfig string) error {
@@ -528,7 +531,7 @@ func (a *RethinkDbAdapter) UsersForTopic(topic string, keepDeleted bool) ([]t.Su
 		// Filter out rows with DeletedAt being not null
 		q = q.Filter(rdb.Row.HasFields("DeletedAt").Not())
 	}
-	q = q.Limit(MAX_RESULTS)
+	q = q.Limit(MAX_SUBSCRIBERS)
 	//log.Printf("RethinkDbAdapter.UsersForTopic q: %+v", q)
 	rows, err := q.Run(a.conn)
 	if err != nil {
@@ -695,7 +698,7 @@ func (a *RethinkDbAdapter) SubsForTopic(topic string, keepDeleted bool) ([]t.Sub
 		// Filter out rows where DeletedAt is defined
 		q = q.Filter(rdb.Row.HasFields("DeletedAt").Not())
 	}
-	q = q.Limit(MAX_RESULTS)
+	q = q.Limit(MAX_SUBSCRIBERS)
 	//log.Println("Loading subscription q=", q)
 
 	rows, err := q.Run(a.conn)
