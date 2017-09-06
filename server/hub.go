@@ -238,7 +238,6 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 
 	// Request to load a 'me' topic. The topic always exists.
 	if t.x_original == "me" {
-		log.Println("hub: loading 'me' topic")
 
 		t.cat = types.TopicCat_Me
 
@@ -284,7 +283,6 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 
 		// Request to load a 'find' topic. The topic always exists.
 	} else if t.x_original == "fnd" {
-		log.Println("hub: loading 'fnd' topic")
 
 		t.cat = types.TopicCat_Fnd
 
@@ -321,7 +319,6 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 
 		// Request to load an existing or create a new p2p topic, then attach to it.
 	} else if strings.HasPrefix(t.x_original, "usr") || strings.HasPrefix(t.x_original, "p2p") {
-		log.Println("hub: loading or creating p2p topic")
 
 		// Handle the following cases:
 		// 1. Neither topic nor subscriptions exist: create a new p2p topic & subscriptions.
@@ -395,8 +392,6 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		} else {
 			// Cases 1 (new topic), 2 (one of the two subscriptions is missing: either it's a new request
 			// or the subscription was deleted)
-
-			log.Println("hub: p2p new topic or one of the subs is missing")
 
 			var userData perUserData
 
@@ -576,7 +571,6 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 
 		// Processing request to create a new generic (group) topic:
 	} else if strings.HasPrefix(t.x_original, "new") {
-		log.Println("hub: new group topic")
 
 		t.cat = types.TopicCat_Grp
 
@@ -658,8 +652,6 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		sreg.created = true
 
 	} else if strings.HasPrefix(t.x_original, "grp") {
-		log.Println("hub: existing group topic")
-
 		t.cat = types.TopicCat_Grp
 
 		// TODO(gene): check and validate topic name
@@ -858,6 +850,7 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *MsgClientDel, del boo
 					// Notify user's other sessions that the subscription is gone
 					log.Println("Notifying single user - sub deleted")
 					presSingleUserOfflineOffline(sess.uid, msg.Topic, "acs",
+						sub.ModeGiven&sub.ModeWant,
 						&PresParams{
 							dWant:  sub.ModeWant.Delta(types.ModeNone),
 							dGiven: sub.ModeGiven.Delta(types.ModeNone),

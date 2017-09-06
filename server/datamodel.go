@@ -403,12 +403,9 @@ type MsgServerPres struct {
 	// Flag to break the reply loop
 	wantReply bool
 
-	// Additional permissions filters:
+	// Additional access mode filter when senting to topic's online members
+	filter int
 
-	// Negative: drop message if (filterNeg&perm != 0)
-	filterNeg int
-	// Positive: drop message if (filterPos != 0 && filterPos&perm == 0)
-	filterPos int
 	// When sending to 'me', skip sessions subscribed to this topic
 	skipTopic string
 }

@@ -120,8 +120,7 @@ func (t *Topic) presUsersOfInterest(what string, ua string) {
 // Case L.3: Admin altered GIVEN (and maybe got assigned default WANT), "acs" to admins
 // Case V.2: Messages soft deleted, "del" to one user only
 // Case W.2: Messages hard-deleted, "del"
-func (t *Topic) presSubsOnline(what, src string, params *PresParams,
-	filterPos, filterNeg types.AccessMode, skip string) {
+func (t *Topic) presSubsOnline(what, src string, params *PresParams, filter types.AccessMode, skip string) {
 
 	// If affected user is the same as the user making the change, clear 'who'
 	if params.who == src {
@@ -131,8 +130,7 @@ func (t *Topic) presSubsOnline(what, src string, params *PresParams,
 	globals.hub.route <- &ServerComMessage{
 		Pres: &MsgServerPres{Topic: t.x_original, What: what, Src: src,
 			Acs: params.packAcs(), Who: params.who,
-			SeqId: params.seqId, SeqList: params.seqList,
-			filterPos: int(filterPos), filterNeg: int(filterNeg)},
+			SeqId: params.seqId, SeqList: params.seqList, filter: int(filter)},
 		rcptto: t.name, skipSid: skip}
 
 	// log.Printf("Pres K.2, L.3, W.2: topic'%s' what='%s', who='%s', acs='w:%s/g:%s'", t.name, what,
@@ -150,18 +148,23 @@ func (t *Topic) presSubsOnline(what, src string, params *PresParams,
 // Case L.4: Admin altered GIVEN, "acs" to admins
 // Case T: message sent, "msg" to all with 'R'
 // Case W.1: messages hard-deleted, "del" to all with 'R'
-func (t *Topic) presSubsOffline(what string, params *PresParams, filterPos, filterNeg types.AccessMode, offlineOnly bool) {
+func (t *Topic) presSubsOffline(what string, params *PresParams, filter types.AccessMode, offlineOnly bool) {
+
 	var skipTopic string
 	if offlineOnly {
 		skipTopic = t.name
 	}
 
-	for uid, _ := range t.perUser {
+	for uid, pud := range t.perUser {
+		if !presOfflineFilter(pud.modeGiven&pud.modeWant, filter) {
+			continue
+		}
+
 		globals.hub.route <- &ServerComMessage{
 			Pres: &MsgServerPres{Topic: "me", What: what, Src: t.original(uid),
 				Acs: params.packAcs(), Who: params.who,
 				SeqId: params.seqId, SeqList: params.seqList,
-				filterPos: int(filterPos), filterNeg: int(filterNeg), skipTopic: skipTopic},
+				skipTopic: skipTopic},
 			rcptto: uid.UserId()}
 	}
 	// log.Printf("presSubsOffline: topic'%s' what='%s', who='%s'", t.name, what, params.who)
@@ -174,6 +177,10 @@ func presSubsOfflineOffline(topic string, cat types.TopicCat, subs []types.Subsc
 	var count = 0
 	original := topic
 	for _, sub := range subs {
+		if !presOfflineFilter(sub.ModeWant&sub.ModeGiven, types.ModeNone) {
+			continue
+		}
+
 		if cat == types.TopicCat_P2P {
 			original = types.ParseUid(subs[(count+1)%2].User).UserId()
 			count++
@@ -199,7 +206,8 @@ func (t *Topic) presSingleUserOffline(uid types.Uid, what string, params *PresPa
 		skipTopic = t.name
 	}
 
-	if _, ok := t.perUser[uid]; ok {
+	if pud, ok := t.perUser[uid]; ok && presOfflineFilter(pud.modeGiven&pud.modeWant, types.ModeNone) {
+
 		globals.hub.route <- &ServerComMessage{
 			Pres: &MsgServerPres{Topic: "me", What: what,
 				Src: t.original(uid), SeqId: params.seqId, SeqList: params.seqList,
@@ -211,7 +219,9 @@ func (t *Topic) presSingleUserOffline(uid types.Uid, what string, params *PresPa
 }
 
 // Same as above, but the topic is offline (not loaded from the DB)
-func presSingleUserOfflineOffline(uid types.Uid, original string, what string, params *PresParams, skipSid string) {
+func presSingleUserOfflineOffline(uid types.Uid, original string, what string,
+	mode types.AccessMode, params *PresParams, skipSid string) {
+
 	globals.hub.route <- &ServerComMessage{
 		Pres: &MsgServerPres{Topic: "me", What: what,
 			Src: original, SeqId: params.seqId, SeqList: params.seqList,
@@ -252,4 +262,11 @@ func (t *Topic) presPubMessageCount(uid types.Uid, list []int, clear, recv, read
 	} else {
 		log.Printf("Case U, V1: topic[%s] invalid request - missing payload", t.name)
 	}
+}
+
+// Must apply filter here. When sending offline to 'me' topic, 'me' does not have access to
+// original topic's access parameters
+func presOfflineFilter(mode, filter types.AccessMode) bool {
+	return mode.IsPresencer() &&
+		(filter == types.ModeNone || mode&filter != 0)
 }

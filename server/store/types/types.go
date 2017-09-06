@@ -289,12 +289,12 @@ const (
 	ModeCFull AccessMode = ModeJoin | ModeRead | ModeWrite | ModePres | ModeApprove | ModeShare | ModeDelete | ModeOwner
 	// Default P2P access mode
 	ModeCP2P AccessMode = ModeJoin | ModeRead | ModeWrite | ModePres | ModeApprove
-	// Read-only access to topic
+	// Read-only access to topic (0x3)
 	ModeCReadOnly = ModeJoin | ModeRead
 
-	// Admin: user who can modify access mode
+	// Admin: user who can modify access mode (hex: 0x90, dec: 144)
 	ModeCAdmin = ModeOwner | ModeApprove
-	// Sharer: flags which define user who can be notified of access mode changes
+	// Sharer: flags which define user who can be notified of access mode changes (dec: 176, hex: 0xB0)
 	ModeCSharer = ModeCAdmin | ModeShare
 
 	// Invalid mode to indicate an error
