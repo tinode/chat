@@ -385,7 +385,7 @@ func (m *AccessMode) UnmarshalJSON(b []byte) error {
 }
 
 // Check if grant mode allows all that was requested in want mode
-func (grant AccessMode) Check(want AccessMode) bool {
+func (grant AccessMode) BetterEqual(want AccessMode) bool {
 	return grant&want == want
 }
 

@@ -395,7 +395,8 @@ type MsgServerPres struct {
 	UserAgent string         `json:"ua,omitempty"`
 	SeqId     int            `json:"seq,omitempty"`
 	SeqList   []int          `json:"list,omitempty"`
-	Who       string         `json:"who,omitempty"`
+	AcsTarget string         `json:"tgt,omitempty"`
+	AcsActor  string         `json:"act,omitempty"`
 	Acs       *MsgAccessMode `json:"acs,omitempty"`
 
 	// UNroutable params

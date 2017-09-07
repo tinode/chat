@@ -9,12 +9,16 @@ import (
 )
 
 type PresParams struct {
-	who       string
 	userAgent string
 	seqId     int
 	seqList   []int
-	dWant     string
-	dGiven    string
+
+	// Uid who performed the action
+	actor string
+	// Subject of the action
+	target string
+	dWant  string
+	dGiven string
 }
 
 func (p PresParams) packAcs() *MsgAccessMode {
@@ -24,7 +28,32 @@ func (p PresParams) packAcs() *MsgAccessMode {
 	return nil
 }
 
-// loadContacts initializes topic.perSubs to support presence notifications
+func (t *Topic) addToPerSubs(uid types.Uid, topic string) {
+	var with types.Uid
+	if strings.HasPrefix(topic, "p2p") {
+		if uid1, uid2, err := types.ParseP2P(topic); err == nil {
+			if uid1 == uid {
+				topic = uid2.UserId()
+				with = uid2
+			} else {
+				topic = uid1.UserId()
+				with = uid1
+			}
+		} else {
+			return
+		}
+	} else if topic == t.name {
+		// No need to push updates to self
+		return
+	}
+
+	//log.Printf("Pres loadContacts: topic[%s]: caching as '%s'", t.name, topic)
+	t.perSubs[topic] = perSubsData{with: with}
+}
+
+// loadContacts initializes topic.perSubs to support presence notifications.
+// perSubs contains (a) topics that the user wants to notify of his presence and
+// (b) those which want to receive notifications from this user.
 func (t *Topic) loadContacts(uid types.Uid) error {
 	subs, err := store.Users.GetSubs(uid)
 	if err != nil {
@@ -34,36 +63,30 @@ func (t *Topic) loadContacts(uid types.Uid) error {
 	t.perSubs = make(map[string]perSubsData, len(subs))
 	for _, sub := range subs {
 		//log.Printf("Pres loadContacts: topic[%s]: processing sub '%s'", t.name, sub.Topic)
-		topic := sub.Topic
-		var with types.Uid
-		if strings.HasPrefix(topic, "p2p") {
-			if uid1, uid2, err := types.ParseP2P(topic); err == nil {
-				if uid1 == uid {
-					topic = uid2.UserId()
-					with = uid2
-				} else {
-					topic = uid1.UserId()
-					with = uid1
-				}
-			} else {
-				continue
-			}
-		} else if topic == t.name {
-			// No need to push updates to self
-			continue
-		}
-
-		//log.Printf("Pres loadContacts: topic[%s]: caching as '%s'", t.name, topic)
-		t.perSubs[topic] = perSubsData{with: with}
+		t.addToPerSubs(uid, sub.Topic)
 	}
 	//log.Printf("Pres loadContacts: topic[%s]: total cached %d", t.name, len(t.perSubs))
 	return nil
 }
 
-// This topic got a request from a 'me' topic to start/stop sending presence updates.
-func (t *Topic) presProcReq(fromUserId string, online, wantReply bool) {
-	//log.Printf("presProcReq: topic[%s]: req from '%s', online: %v, wantReply: %v", t.name,
-	//	fromUserId, online, wantReply)
+// This topic got a request from a 'me' topic to start/stop sending presence updates. The
+// originating topic reports its own status as "on", "off" or "?unkn".
+func (t *Topic) presProcReq(fromUserId string, what string, wantReply bool) {
+
+	var online, unknown bool
+
+	switch what {
+	case "on":
+		online = true
+	case "off":
+	case "?unkn":
+		unknown = true
+	default:
+		return
+	}
+
+	log.Printf("presProcReq: topic[%s]: req from '%s', online: %s, wantReply: %v", t.name,
+		fromUserId, what, wantReply)
 
 	doReply := wantReply
 	if t.cat == types.TopicCat_Me {
@@ -73,24 +96,30 @@ func (t *Topic) presProcReq(fromUserId string, online, wantReply bool) {
 			// A[online, B:off] to B[online, A:off]: {pres A on}
 			// B[online, A:on] to A[online, B:off]: {pres B on}
 			// A[online, B:on] to B[online, A:on]: {pres A on} <<-- unnecessary, that's why wantReply is needed
-			doReply = (doReply && (psd.online != online))
+			doReply = (doReply && ((psd.online != online) || unknown))
 			psd.online = online
 			t.perSubs[fromUserId] = psd
 
-			//log.Printf("presProcReq: topic[%s]: set user %s online to %v", t.name, fromUserId, online)
+			log.Printf("presProcReq: topic[%s]: set user %s online to %v", t.name, fromUserId, online)
 
 		} else {
-			doReply = false
-			//log.Printf("presProcReq: topic[%s]: request from untracked topic %s", t.name, fromTopic)
+			// doReply is unchanged
+
+			// Got request from a new topic. This must be a new subscription. Record it.
+			t.perSubs[fromUserId] = perSubsData{online: online, with: types.ParseUserId(fromUserId)}
+
+			log.Printf("presProcReq: topic[%s]: request from previously untracked topic %s", t.name, fromUserId)
 		}
 	}
 
-	if online && doReply {
+	if (online || unknown) && doReply {
 		globals.hub.route <- &ServerComMessage{
 			// Topic is 'me' even for group topics; group topics will use 'me' as a signal to drop the message
 			// without forwarding to sessions
-			Pres:   &MsgServerPres{Topic: "me", What: "on", Src: t.name},
+			Pres:   &MsgServerPres{Topic: "me", What: "on", Src: t.name, wantReply: unknown},
 			rcptto: fromUserId}
+
+		log.Printf("presProcReq: topic[%s]: replying to %s with own status '%s', wantReply", t.name, fromUserId, "on", unknown)
 	}
 }
 
@@ -120,18 +149,24 @@ func (t *Topic) presUsersOfInterest(what string, ua string) {
 // Case L.3: Admin altered GIVEN (and maybe got assigned default WANT), "acs" to admins
 // Case V.2: Messages soft deleted, "del" to one user only
 // Case W.2: Messages hard-deleted, "del"
-func (t *Topic) presSubsOnline(what, src string, params *PresParams, filter types.AccessMode, skip string) {
+func (t *Topic) presSubsOnline(what, src string, params *PresParams, filter types.AccessMode, skipSid string) {
 
 	// If affected user is the same as the user making the change, clear 'who'
-	if params.who == src {
-		params.who = ""
+	actor := params.actor
+	target := params.target
+	if actor == src {
+		actor = ""
+	}
+
+	if target == src {
+		target = ""
 	}
 
 	globals.hub.route <- &ServerComMessage{
 		Pres: &MsgServerPres{Topic: t.x_original, What: what, Src: src,
-			Acs: params.packAcs(), Who: params.who,
+			Acs: params.packAcs(), AcsActor: actor, AcsTarget: target,
 			SeqId: params.seqId, SeqList: params.seqList, filter: int(filter)},
-		rcptto: t.name, skipSid: skip}
+		rcptto: t.name, skipSid: skipSid}
 
 	// log.Printf("Pres K.2, L.3, W.2: topic'%s' what='%s', who='%s', acs='w:%s/g:%s'", t.name, what,
 	// 	params.who, params.dWant, params.dGiven)
@@ -148,7 +183,8 @@ func (t *Topic) presSubsOnline(what, src string, params *PresParams, filter type
 // Case L.4: Admin altered GIVEN, "acs" to admins
 // Case T: message sent, "msg" to all with 'R'
 // Case W.1: messages hard-deleted, "del" to all with 'R'
-func (t *Topic) presSubsOffline(what string, params *PresParams, filter types.AccessMode, offlineOnly bool) {
+func (t *Topic) presSubsOffline(what string, params *PresParams, filter types.AccessMode,
+	skipSid string, offlineOnly bool) {
 
 	var skipTopic string
 	if offlineOnly {
@@ -160,12 +196,23 @@ func (t *Topic) presSubsOffline(what string, params *PresParams, filter types.Ac
 			continue
 		}
 
+		user := uid.UserId()
+		actor := params.actor
+		target := params.target
+		if actor == user {
+			actor = ""
+		}
+
+		if target == user {
+			target = ""
+		}
+
 		globals.hub.route <- &ServerComMessage{
 			Pres: &MsgServerPres{Topic: "me", What: what, Src: t.original(uid),
-				Acs: params.packAcs(), Who: params.who,
+				Acs: params.packAcs(), AcsActor: actor, AcsTarget: target,
 				SeqId: params.seqId, SeqList: params.seqList,
 				skipTopic: skipTopic},
-			rcptto: uid.UserId()}
+			rcptto: user, skipSid: skipSid}
 	}
 	// log.Printf("presSubsOffline: topic'%s' what='%s', who='%s'", t.name, what, params.who)
 }
@@ -186,11 +233,22 @@ func presSubsOfflineOffline(topic string, cat types.TopicCat, subs []types.Subsc
 			count++
 		}
 
+		user := types.ParseUid(sub.User).UserId()
+		actor := params.actor
+		target := params.target
+		if actor == user {
+			actor = ""
+		}
+
+		if target == user {
+			target = ""
+		}
+
 		globals.hub.route <- &ServerComMessage{
 			Pres: &MsgServerPres{Topic: "me", What: what, Src: original,
-				Acs: params.packAcs(), Who: params.who,
+				Acs: params.packAcs(), AcsActor: actor, AcsTarget: target,
 				SeqId: params.seqId, SeqList: params.seqList},
-			rcptto: types.ParseUid(sub.User).UserId(), skipSid: skipSid}
+			rcptto: user, skipSid: skipSid}
 	}
 }
 
@@ -207,12 +265,23 @@ func (t *Topic) presSingleUserOffline(uid types.Uid, what string, params *PresPa
 	}
 
 	if pud, ok := t.perUser[uid]; ok && presOfflineFilter(pud.modeGiven&pud.modeWant, types.ModeNone) {
+		user := uid.UserId()
+		actor := params.actor
+		target := params.target
+		if actor == user {
+			actor = ""
+		}
+
+		if target == user {
+			target = ""
+		}
 
 		globals.hub.route <- &ServerComMessage{
 			Pres: &MsgServerPres{Topic: "me", What: what,
 				Src: t.original(uid), SeqId: params.seqId, SeqList: params.seqList,
-				Who: params.who, Acs: params.packAcs(), skipTopic: skipTopic},
-			rcptto: uid.UserId(), skipSid: skipSid}
+				Acs: params.packAcs(), AcsActor: actor, AcsTarget: target, UserAgent: params.userAgent,
+				wantReply: (what == "?unkn"), skipTopic: skipTopic},
+			rcptto: user, skipSid: skipSid}
 	}
 
 	// log.Printf("Pres J.1, K, M.1, N: topic'%s' what='%s', who='%s'", t.name, what, who.UserId())
@@ -222,10 +291,21 @@ func (t *Topic) presSingleUserOffline(uid types.Uid, what string, params *PresPa
 func presSingleUserOfflineOffline(uid types.Uid, original string, what string,
 	mode types.AccessMode, params *PresParams, skipSid string) {
 
+	user := uid.UserId()
+	actor := params.actor
+	target := params.target
+	if actor == user {
+		actor = ""
+	}
+
+	if target == user {
+		target = ""
+	}
+
 	globals.hub.route <- &ServerComMessage{
 		Pres: &MsgServerPres{Topic: "me", What: what,
 			Src: original, SeqId: params.seqId, SeqList: params.seqList,
-			Who: params.who, Acs: params.packAcs()},
+			Acs: params.packAcs(), AcsActor: actor, AcsTarget: target},
 		rcptto: uid.UserId(), skipSid: skipSid}
 }
 

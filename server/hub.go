@@ -393,6 +393,8 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 			// Cases 1 (new topic), 2 (one of the two subscriptions is missing: either it's a new request
 			// or the subscription was deleted)
 
+			log.Println("hub: creating new p2p topic")
+
 			var userData perUserData
 
 			// Fetching records for both users.
@@ -426,6 +428,8 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 			// Set to true if only requester's subscription has to be created.
 			var user1only bool
 			if len(subs) == 1 {
+				log.Println("hub: one subscription already exists")
+
 				if subs[0].Uid() == userId1 {
 					// User2's subscription is missing, user1's exists
 					sub1 = &subs[0]
@@ -456,6 +460,8 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 
 				// Swap Public to match swapped Public in subs returned from store.Topics.GetSubs
 				sub2.SetPublic(users[u1].Public)
+
+				log.Println("hub: created second subscripton")
 			}
 
 			// Requester's subscription is missing:
@@ -508,6 +514,8 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 					Private:   userData.private}
 				// Swap Public to match swapped Public in subs returned from store.Topics.GetSubs
 				sub1.SetPublic(users[u2].Public)
+
+				log.Println("hub: created first subscription")
 			}
 
 			if !user1only {
@@ -563,7 +571,8 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 				modeGiven: sub2.ModeGiven,
 				clearId:   sub2.ClearId}
 
-			sreg.created = !user1only
+			log.Println("hub: marking request as 'topic created'")
+			sreg.created = true
 		}
 
 		// Clear original topic name.
