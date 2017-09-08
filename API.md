@@ -534,36 +534,30 @@ meta: {
 
 #### `{pres}`
 
-Tinode uses `{pres}` message to inform users of important events. The following events are tracked by the server and will generate `{pres}` messages provided user has appropriate access permissions:
-
-1. A user joins `me`. User receives presence notifications for each of his/her subscriptions: `{pres topic="me" src="<topic ID>" what="on", ua="..."}`.
-2. A user came online or went offline. The user triggers this event by joining/leaving the `me` topic. The message is sent to all users who have P2P topics with the first user. Users receive this event on the `me` topic, `src` field contains topic name (user ID), `src: "usr2il9suCbuko"`, `what` contains `"on"` or `"off"`: `{pres topic="me" src="<topic name>" what="on|off" ua="..."}`.
-3. User's `public` is updated. The event is sent to all users who have P2P topics with the first user. Users receive `{pres topic="me" src="<topic name" what="upd"}`.
-4. User subscribes/joins/leaves (and possibly unsubscribes) a topic. This event is sent to other users who currently joined the topic: `{pres topic="<topic name>" src="<user ID>" what="on|off|unsub"}`. If this is a new subscription, user's other sessions receive an event `{pres topic="me" src="<topic name>" what="sub"}`. If the user unsubscribes from the topic, user's other sessions will receive an event `{pres topic="me" src="<topic name>" what="gone"}`. 
-5. A group topic is activated/deactivated/unsubscribed/deleted. Topic becomes active when the first user joins it. The topic becomes inactive when all users leave it (possibly after some delay). The event is sent to all topic subscribers. They will receive it on their `me` topics: `{pres topic="me" src="<topic name>" what="on|off|gone"}` (on - activated, off - deactivated, gone - deleted). If a user is unsubscribed, the user receives the event: `{pres topic="me" src="<topic name>" what="unsub"}`
-6. A message is published in a topic. The event is sent to users who have subscribed to the topic but currently not joined `{pres topic="me" src="<topic name>" what="msg"}`.
-7. Topic's `public` is updated. The event is sent to all topic subscribers. Topic's subscribers receive `{pres topic="me" src="<topic name>" what="upd"}`.
-8. User is has multiple sessions attached to 'me', sessions have different _user agents_. If the current most recently active session has a different _user agent_ than the previous most recent session (the most recently active session is the session which was the last to receive any message from the client) an event is sent to all users who have P2P topics with the first user. Users receive it on the `me` topic, `src` field contains P2P topic name, `what` contains `"ua"`: `{pres topic="me" src="<topic name>" what="ua" ua="<new user agent>"}`.
-9. User sent a `{note}` indicating that some or all of the data messages in the topic have been received or read, OR sent a `{del}` soft-deleting some data messages. In case or read/recv receipt the event is sent to user's other sessions (not the one that originated the `{note}`): `{pres topic="me" src="<topic name>" what="recv|read" seq=123}`. In case of the soft-deleting data messages the event is sent to user's not joined sessions: `{pres topic="me" src="<topic name>" what="del" seq=123}` and to joined sessions: `{pres topic="<topic name>" src="<user id>" what="del" seq=123}`.
-10. Some or all data messages in the topic were hard-deleted by the topic manager using `{del hard=true}`. The event is sent to all topic subscribers, joined (excluding the originating session) and not joined:
- a. joined: `{pres topic="<topic name>" src="<user id>" what="del" seq=123}`.
- b. not joined: `{pres topic="me" src="<topic name>" what="del" seq=123}`.
+Tinode uses `{pres}` message to inform clients of important events. A separate [document](https://docs.google.com/spreadsheets/d/e/2PACX-1vStUDHb7DPrD8tF5eANLu4YIjRkqta8KOhLvcj2precsjqR40eDHvJnnuuS3bw-NcWsP1QKc7GSTYuX/pubhtml?gid=1959642482&single=true) explains all possible use cases.
 
 ```js
 pres: {
-  topic: "me", // string, topic affected by the change, always present
-  src: "p2p1XUtEhjv6HND2il9suCbuko", // string, topic which caused the change, always present
+  topic: "me", // string, topic which receives the notification, always present
+  src: "grp1XUtEhjv6HND", // string, topic or user affected by the change, always present
   what: "on", // string, what's changed, always present
-  seq: 123, // integer, if "what" is "msg", server-issued ID of the message,
-              // optional
-  ua: "Tinode/1.0 (Android 2.2)" // string, if "what" is "on" or "ua", a
-        // User Agent string identifying client software, optional
+  seq: 123, // integer, "what" is "msg" or "del", a server-issued ID of the message,
+           // optional
+  list: [123, 124], // array of integers, "what" is "del", list of deleted message IDs,
+			// optional 
+  ua: "Tinode/1.0 (Android 2.2)", // string, a User Agent string identifying client 
+						// software if "what" is "on" or "ua", optional
+  act: "usr2il9suCbuko",	// string, user who performed the action, optional
+  tgt: "usrRkDVe0PYDOo", 	// string, user affected by the action, optional
+  acs: {want: "+AS-D", given: "+S"} // object, changes to access mode, "what" is "acs", 
+			// optional 
 }
 ```
 
-The `{pres}` messages are purely transient. No attempt is made to store a `{pres}` message or deliver it later if the destination is unavailable.
+The `{pres}` messages are purely transient: they are not stored and no attempt is made to deliver them later if the destination is temporarily unavailable.
 
 Timestamp is not present in `{pres}` messages.
+
 
 #### `{info}`
 
