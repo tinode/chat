@@ -85,8 +85,8 @@ func (t *Topic) presProcReq(fromUserId string, what string, wantReply bool) {
 		return
 	}
 
-	log.Printf("presProcReq: topic[%s]: req from '%s', online: %s, wantReply: %v", t.name,
-		fromUserId, what, wantReply)
+	// log.Printf("presProcReq: topic[%s]: req from '%s', online: %s, wantReply: %v", t.name,
+	//	fromUserId, what, wantReply)
 
 	doReply := wantReply
 	if t.cat == types.TopicCat_Me {
@@ -100,7 +100,7 @@ func (t *Topic) presProcReq(fromUserId string, what string, wantReply bool) {
 			psd.online = online
 			t.perSubs[fromUserId] = psd
 
-			log.Printf("presProcReq: topic[%s]: set user %s online to %v", t.name, fromUserId, online)
+			// log.Printf("presProcReq: topic[%s]: set user %s online to %v", t.name, fromUserId, online)
 
 		} else {
 			// doReply is unchanged
@@ -108,7 +108,7 @@ func (t *Topic) presProcReq(fromUserId string, what string, wantReply bool) {
 			// Got request from a new topic. This must be a new subscription. Record it.
 			t.perSubs[fromUserId] = perSubsData{online: online, with: types.ParseUserId(fromUserId)}
 
-			log.Printf("presProcReq: topic[%s]: request from previously untracked topic %s", t.name, fromUserId)
+			// log.Printf("presProcReq: topic[%s]: request from previously untracked topic %s", t.name, fromUserId)
 		}
 	}
 
@@ -119,7 +119,7 @@ func (t *Topic) presProcReq(fromUserId string, what string, wantReply bool) {
 			Pres:   &MsgServerPres{Topic: "me", What: "on", Src: t.name, wantReply: unknown},
 			rcptto: fromUserId}
 
-		log.Printf("presProcReq: topic[%s]: replying to %s with own status '%s', wantReply", t.name, fromUserId, "on", unknown)
+		// log.Printf("presProcReq: topic[%s]: replying to %s with own status '%s', wantReply", t.name, fromUserId, "on", unknown)
 	}
 }
 

@@ -1369,7 +1369,7 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 				// Skip sending deleted subscriptions if they were deleted before the cut off date.
 				// If they are freshly deleted send minimum info
 				if sub.DeletedAt != nil {
-					if sub.DeletedAt.Before(ifModified) {
+					if !sub.DeletedAt.After(ifModified) {
 						continue
 					}
 					mts.DeletedAt = sub.DeletedAt
