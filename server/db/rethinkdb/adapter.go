@@ -829,10 +829,10 @@ func (a *RethinkDbAdapter) MessageGetAll(topic string, forUser t.Uid, opts *t.Br
 		if opts.ByTime {
 			useIndex = "Topic_UpdatedAt"
 
-			if !opts.After.IsZero() {
+			if opts.After != nil && !opts.After.IsZero() {
 				lower = opts.After
 			}
-			if !opts.Until.IsZero() {
+			if opts.Until != nil && !opts.Until.IsZero() {
 				upper = opts.Until
 			}
 		} else {

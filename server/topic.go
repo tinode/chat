@@ -1959,7 +1959,7 @@ func msgOpts2storeOpts(req *MsgBrowseOpts, clearId int) *types.BrowseOpt {
 			if req.SinceId != 0 || req.BeforeId != 0 {
 				opts.Since = req.SinceId
 				opts.Before = req.BeforeId
-			} else {
+			} else if req.SinceTs != nil || req.BeforeTs != nil {
 				opts.ByTime = true
 				opts.After = req.SinceTs
 				opts.Until = req.BeforeTs
