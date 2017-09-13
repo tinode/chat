@@ -4,7 +4,7 @@ Instant messaging server. Backend in pure [Go](http://golang.org) (license [GPL 
 
 Version 0.13. This is beta-quality software: feature-complete but probably with a few bugs. Follow [instructions](INSTALL.md) to install and run. Read [API documentation](API.md).
 
-A javascript demo is (usually) available at http://api.tinode.co/x/example-react-js/ ([source](https://github.com/tinode/example-react-js/)). Login as one of `alice`, `bob`, `carol`, `dave`, `frank`. Password is `<login>123`, e.g. login for `alice` is `alice123`. You can discover other users by email or phone by prefixing them with `email:` or `tel:` respectively. Emails are `<login>@example.com`, e.g. `alice@example.com`, phones are `17025550001` through `17025550009`. The demo server is reset (all data wiped) every night at 3:15 am Pacific time. 
+A javascript demo is (usually) available at http://api.tinode.co/x/example-react-js/ ([source](https://github.com/tinode/example-react-js/)). Login as one of `alice`, `bob`, `carol`, `dave`, `frank`. Password is `<login>123`, e.g. login for `alice` is `alice123`. You can discover other users by email or phone by prefixing them with `email:` or `tel:` respectively. Emails are `<login>@example.com`, e.g. `alice@example.com`, phones are `17025550001` through `17025550009`. The demo server is reset (all data wiped) every night at 3:15 am Pacific time.
 [Android demo](https://github.com/tinode/android-example) is mostly stable and functional. See screenshots below.  
 
 
@@ -59,11 +59,11 @@ A javascript demo is (usually) available at http://api.tinode.co/x/example-react
 ### Desktop Web
 
 <p align="center">
-  <img src="web-desktop-two.png" alt="Desktop web: full app" width=866 />
+  <img src="web-desktop-1.png" alt="Desktop web: full app" width=866 />
 </p>
 
 ### Mobile Web
 
 <p align="center">
-  <img src="web-mob-contacts.png" alt="Mobile web: contacts" width=323 /> <img src="web-mob-chat.png" alt="Mobile web: chat" width=323 /> <img src="web-mob-topicinfo.png" alt="Mobile web: topic info" width=323 />
+  <kbd><img src="web-mob-contacts-1.png" alt="Mobile web: contacts" width=323 /></kbd> <kbd><img src="web-mob-chat-1.png" alt="Mobile web: chat" width=323 /></kbd> <kbd><img src="web-mob-info-1.png" alt="Mobile web: topic info" width=323 /></kbd> <kbd><img src="web-mob-new-chat-1.png" alt="Mobile web: start new 1:1 chat" width=323 /></kbd>
 </p>
