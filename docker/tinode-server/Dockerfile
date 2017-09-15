@@ -11,7 +11,7 @@
 
 FROM golang
 
-MAINTAINER Gene Sokolov <or.else@gmail.com>
+MAINTAINER Gene Sokolov <gene@tinode.co>
 
 RUN go get github.com/tinode/chat/server \
 	&& go install github.com/tinode/chat/server

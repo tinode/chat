@@ -2,7 +2,7 @@
  *
  *  Description :
  *
- *  Graceful shutdown of the server
+ *  Web server initialization and shutdown.
  *
  *****************************************************************************/
 
@@ -92,7 +92,7 @@ func listenAndServe(addr string, tlsEnabled bool, tls_config string, stop <-chan
 
 	go func() {
 		var err error
-		if tlsConfig.Enabled {
+		if tlsEnabled || tlsConfig.Enabled {
 			log.Printf("Listening for client HTTPS connections on [%s]", server.Addr)
 			err = server.ListenAndServeTLS(tlsConfig.CertFile, tlsConfig.KeyFile)
 		} else {
