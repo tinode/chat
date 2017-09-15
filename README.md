@@ -28,7 +28,7 @@ A javascript demo is (usually) available at http://api.tinode.co/x/example-react
 * Websocket and long polling transport.
 * JSON wire protocol.
 * User search/discovery.
-* Rich formatting of messages, markdown-style: \*style\* &rarr; *style*.
+* Rich formatting of messages, markdown-style: \*style\* &rarr; **style**.
 * Message status notifications: message delivery to server; received and read notifications; typing notifications.
 * Support for client-side caching.
 * Ability to block unwanted communication server-side.
