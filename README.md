@@ -20,14 +20,15 @@ A javascript demo is (usually) available at http://api.tinode.co/x/example-react
 * One-on-one messaging.
 * Group messaging with currently unlimited number of members where every member's access permissions are managed individually. The maximum number of members will be limited to a reasonably high value in the future (256? configurable?).
 * Topic access control with permissions for various actions.
-* Server-generated presence notifications for people, topics.
+* Server-generated presence notifications for people, topics. 
 * Basic sharded clustering.
 * Persistent message store, paginated message history.
 * Javascript bindings with no dependencies.
-* Android Java bindings (dependencies: [jackson](https://github.com/FasterXML/jackson), [nv-websocket-client](https://github.com/TakahikoKawasaki/nv-websocket-client))
+* Java bindings (dependencies: [jackson](https://github.com/FasterXML/jackson), [nv-websocket-client](https://github.com/TakahikoKawasaki/nv-websocket-client)). Suitable for Android but with no Android SDK dependencies.
 * Websocket and long polling transport.
 * JSON wire protocol.
 * User search/discovery.
+* Rich formatting of messages, markdown-style: \*style\* &rarr; *style*.
 * Message status notifications: message delivery to server; received and read notifications; typing notifications.
 * Support for client-side caching.
 * Ability to block unwanted communication server-side.
@@ -38,7 +39,7 @@ A javascript demo is (usually) available at http://api.tinode.co/x/example-react
 ### Planned
 
 * iOS client bindings and client.
-* Rich formatting of messages and media transfer.
+* Images, video and other media transfer.
 * Security: [TLS](https://en.wikipedia.org/wiki/Transport_Layer_Security) for all communications plus [OTR](https://en.wikipedia.org/wiki/Off-the-Record_Messaging) for one-on-one messaging and undecided method for group mesaging.
 * Group messaging with unlimited number of members with bearer token access control.
 * Failover/hot standby/replication.
