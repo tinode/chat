@@ -406,6 +406,12 @@ func (t *Topic) run(hub *Hub) {
 							(msg.Pres.filter != 0 && int(pud.modeGiven&pud.modeWant)&msg.Pres.filter == 0) {
 							continue
 						}
+					} else if msg.Data != nil {
+						// Check if the user has Read permission
+						pud, _ := t.perUser[sess.uid]
+						if !(pud.modeGiven & pud.modeWant).IsReader() {
+							continue
+						}
 					}
 
 					if t.cat == types.TopicCat_P2P {
