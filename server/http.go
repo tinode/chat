@@ -17,6 +17,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -26,6 +27,8 @@ import (
 type TlsConfig struct {
 	// Flag enabling TLS
 	Enabled bool `json:"enabled"`
+	// Listen on port 80 and redirect plain HTTP to HTTPS
+	RedirectHttp string `json:"http_redirect"`
 	// Enable Strict-Transport-Security by setting max_age > 0
 	StrictMaxAge int `json:"strict_max_age"`
 	// ACME autocert config, e.g. letsencrypt.org
@@ -38,7 +41,7 @@ type TlsConfig struct {
 type TlsAutocertConfig struct {
 	// Domains to support by autocert
 	Domains []string `json:"domains"`
-	// Name of directory where auto-certificates are cached
+	// Name of directory where auto-certificates are cached, e.g. /etc/letsencrypt/live/your-domain-here
 	CertCache string `json:"cache"`
 	// Contact email for letsencrypt
 	Email string `json:"email"`
@@ -93,6 +96,12 @@ func listenAndServe(addr string, tlsEnabled bool, tls_config string, stop <-chan
 	go func() {
 		var err error
 		if tlsEnabled || tlsConfig.Enabled {
+			if tlsConfig.RedirectHttp != "" {
+				log.Printf("Redirecting connections from HTTP at [%s] to HTTPS at [%s]",
+					tlsConfig.RedirectHttp, server.Addr)
+				go http.ListenAndServe(tlsConfig.RedirectHttp, tlsRedirect(addr))
+			}
+
 			log.Printf("Listening for client HTTPS connections on [%s]", server.Addr)
 			err = server.ListenAndServeTLS(tlsConfig.CertFile, tlsConfig.KeyFile)
 		} else {
@@ -181,4 +190,18 @@ func serve404(wrt http.ResponseWriter, req *http.Request) {
 			Timestamp: time.Now().UTC().Round(time.Millisecond),
 			Code:      http.StatusNotFound,
 			Text:      "not found"}})
+}
+
+// Redirect HTTP requests to HTTPS
+func tlsRedirect(toPort string) http.HandlerFunc {
+	if toPort == ":443" || toPort == ":https" {
+		toPort = ""
+	}
+	return func(wrt http.ResponseWriter, req *http.Request) {
+		target := "https://" + strings.Split(req.Host, ":")[0] + toPort + req.URL.Path
+		if req.URL.RawQuery != "" {
+			target += "?" + req.URL.RawQuery
+		}
+		http.Redirect(wrt, req, target, http.StatusTemporaryRedirect)
+	}
 }
