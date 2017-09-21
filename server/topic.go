@@ -406,7 +406,7 @@ func (t *Topic) run(hub *Hub) {
 							(msg.Pres.filter != 0 && int(pud.modeGiven&pud.modeWant)&msg.Pres.filter == 0) {
 							continue
 						}
-					} else if msg.Data != nil {
+					} else {
 						// Check if the user has Read permission
 						pud, _ := t.perUser[sess.uid]
 						if !(pud.modeGiven & pud.modeWant).IsReader() {
@@ -1097,12 +1097,15 @@ func (t *Topic) replyGetDesc(sess *Session, id, tempName string, opts *MsgGetOpt
 			desc.Private = pud.private
 		}
 
-		desc.SeqId = t.lastId
-		// Make sure reported values are sane:
-		// t.clearId <= pud.clearId <= t.readId <= t.recvId <= t.lastId
-		desc.ClearId = max(pud.clearId, t.clearId)
-		desc.ReadSeqId = max(pud.readId, desc.ClearId)
-		desc.RecvSeqId = max(pud.recvId, pud.readId)
+		// Don't report message IDs to users without Read access.
+		if (pud.modeGiven & pud.modeWant).IsReader() {
+			desc.SeqId = t.lastId
+			// Make sure reported values are sane:
+			// t.clearId <= pud.clearId <= t.readId <= t.recvId <= t.lastId
+			desc.ClearId = max(pud.clearId, t.clearId)
+			desc.ReadSeqId = max(pud.readId, desc.ClearId)
+			desc.RecvSeqId = max(pud.recvId, pud.readId)
+		}
 
 		// When the topic is first created it may have been assigned a temporary name.
 		// Report the temporary name here. It could be empty.
@@ -1385,6 +1388,7 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 			}
 
 			uid := types.ParseUid(sub.User)
+			isReader := sub.ModeGiven.IsReader() && sub.ModeWant.IsReader()
 			var clearId int
 			if t.cat == types.TopicCat_Me {
 				// The subscriptions user does not care about are marked as deleted
@@ -1404,10 +1408,12 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 				}
 
 				if !deleted {
-					mts.SeqId = sub.GetSeqId()
-					// Report whatever is the greatest - soft - or hard- deleted id
-					clearId = max(sub.GetHardClearId(), sub.ClearId)
-					mts.ClearId = clearId
+					if isReader {
+						mts.SeqId = sub.GetSeqId()
+						// Report whatever is the greatest - soft - or hard- deleted id
+						clearId = max(sub.GetHardClearId(), sub.ClearId)
+						mts.ClearId = clearId
+					}
 
 					lastSeen := sub.GetLastSeen()
 					if !lastSeen.IsZero() {
@@ -1427,10 +1433,11 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 				mts.User = uid.UserId()
 				if !deleted {
 					clearId = max(t.clearId, sub.ClearId)
-					if uid == sess.uid {
+					if uid == sess.uid && isReader {
 						// Report deleted messages for own subscriptions only
 						mts.ClearId = clearId
 					}
+
 					if t.cat == types.TopicCat_Grp {
 						pud := t.perUser[uid]
 						mts.Online = pud.online > 0
@@ -1441,9 +1448,11 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 			if !deleted {
 				mts.UpdatedAt = &sub.UpdatedAt
 
-				// Ensure sanity or ReadId and RecvId:
-				mts.ReadSeqId = max(clearId, sub.ReadSeqId)
-				mts.RecvSeqId = max(clearId, sub.RecvSeqId)
+				if isReader {
+					// Ensure sanity or ReadId and RecvId:
+					mts.ReadSeqId = max(clearId, sub.ReadSeqId)
+					mts.RecvSeqId = max(clearId, sub.RecvSeqId)
+				}
 
 				if t.cat != types.TopicCat_Fnd {
 					mts.Acs.Mode = (sub.ModeGiven & sub.ModeWant).String()
