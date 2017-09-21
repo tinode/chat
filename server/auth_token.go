@@ -105,7 +105,7 @@ func (TokenAuth) Authenticate(token []byte) (types.Uid, int, time.Time, auth.Aut
 
 	if snum := int(binary.LittleEndian.Uint16(token[SERIAL_START:SERIAL_END])); snum != serial_number {
 		return types.ZeroUid, auth.LevelNone, time.Time{},
-			auth.NewErr(auth.ErrMalformed, errors.New("token auth: invalid serial number"))
+			auth.NewErr(auth.ErrMalformed, errors.New("token auth: serial number does not match"))
 	}
 
 	hasher := hmac.New(sha256.New, hmac_salt)

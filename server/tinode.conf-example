@@ -6,6 +6,7 @@
 	"tls": {
 		"enabled": false,
 		"http_redirect": ":80",
+		"strict_max_age": 604800,
 		"autocert": {
 			"cache": "/etc/letsencrypt/live/your.domain.here",
 			"email": "use.your.own.email-or-remove-this-line@example.com",

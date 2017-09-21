@@ -63,8 +63,8 @@ var globals struct {
 // Contentx of the configuration file
 type configType struct {
 	// Default port to listen on. Either numeric or canonical name, e.g. :80 or :https
-	// Could be blank: if TLS is not configured, will use port 80, otherwise 443
-	// Can be overriden from the command line, see option --listen
+	// Could be blank: if TLS is not configured, will use port 80, otherwise 443.
+	// Can be overriden from the command line, see option --listen.
 	Listen string `json:"listen"`
 	// Salt used in signing API keys
 	APIKeySalt []byte `json:"api_key_salt"`
