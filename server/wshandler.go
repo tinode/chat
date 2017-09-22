@@ -25,9 +25,6 @@ const (
 
 	// Send pings to peer with this period. Must be less than pongWait.
 	pingPeriod = (pongWait * 9) / 10
-
-	// Maximum message size allowed from peer.
-	maxMessageSize = 1 << 18 // 256K
 )
 
 func (s *Session) closeWS() {
@@ -48,7 +45,7 @@ func (sess *Session) readLoop() {
 		}
 	}()
 
-	sess.ws.SetReadLimit(maxMessageSize)
+	sess.ws.SetReadLimit(globals.maxMessageSize)
 	sess.ws.SetReadDeadline(time.Now().Add(pongWait))
 	sess.ws.SetPongHandler(func(string) error {
 		sess.ws.SetReadDeadline(time.Now().Add(pongWait))

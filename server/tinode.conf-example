@@ -1,8 +1,9 @@
 {
 	"listen": ":6060",
 	"api_key_salt": "T713/rYYgW7g4m3vG6zGRh7+FM1t0T8j13koXScOAj4=",
+	"max_message_size": 262144,
 	"indexable_tags": ["tel", "email"],
-
+	
 	"tls": {
 		"enabled": false,
 		"http_redirect": ":80",

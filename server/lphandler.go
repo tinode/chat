@@ -10,19 +10,12 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"time"
 )
-
-/*
-func lp_writePkt(wrt http.ResponseWriter, pkt *ServerComMessage) error {
-	data, _ := json.Marshal(pkt)
-	_, err := wrt.Write(data)
-	return err
-}
-*/
 
 func (sess *Session) writeOnce(wrt http.ResponseWriter) {
 
@@ -56,12 +49,17 @@ func (sess *Session) writeOnce(wrt http.ResponseWriter) {
 	}
 }
 
-func (sess *Session) readOnce(req *http.Request) error {
+func (sess *Session) readOnce(wrt http.ResponseWriter, req *http.Request) (error, int) {
+	if req.ContentLength > globals.maxMessageSize {
+		return errors.New("request too large"), http.StatusExpectationFailed
+	}
+
+	req.Body = http.MaxBytesReader(wrt, req.Body, globals.maxMessageSize)
 	if raw, err := ioutil.ReadAll(req.Body); err == nil {
 		sess.dispatchRaw(raw)
-		return nil
+		return nil, 0
 	} else {
-		return err
+		return err, 0
 	}
 }
 
@@ -148,10 +146,14 @@ func serveLongPoll(wrt http.ResponseWriter, req *http.Request) {
 
 	if req.ContentLength > 0 {
 		// Read payload and send it for processing.
-		if err := sess.readOnce(req); err != nil {
+		if err, code := sess.readOnce(wrt, req); err != nil {
 			log.Println("longPoll: " + err.Error())
-			// Failed to red request, report an error, if possible
-			wrt.WriteHeader(http.StatusBadRequest)
+			// Failed to read request, report an error, if possible
+			if code != 0 {
+				wrt.WriteHeader(code)
+			} else {
+				wrt.WriteHeader(http.StatusBadRequest)
+			}
 			enc.Encode(ErrMalformed(req.FormValue("id"), "", now))
 		}
 		return

@@ -39,6 +39,9 @@ const (
 	// Minimum supported API version
 	MIN_SUPPORTED_VERSION = "0.13"
 
+	// Default maximum message size
+	MAX_MESSAGE_SIZE = 1 << 19 // 512K
+
 	// TODO: Move to config
 	DEFAULT_GROUP_AUTH_ACCESS = types.ModeCPublic
 	DEFAULT_P2P_AUTH_ACCESS   = types.ModeCP2P
@@ -58,6 +61,8 @@ var globals struct {
 	// Add Strict-Transport-Security to headers, the value signifies age.
 	// Empty string "" turns it off
 	tlsStrictMaxAge string
+	// Maximum message size allowed from peer.
+	maxMessageSize int64
 }
 
 // Contentx of the configuration file
@@ -68,6 +73,9 @@ type configType struct {
 	Listen string `json:"listen"`
 	// Salt used in signing API keys
 	APIKeySalt []byte `json:"api_key_salt"`
+	// Maximum message size allowed from client. Intended to prevent malicious client from sending
+	// very large files.
+	MaxMessageSize int `json:"max_message_size"`
 	// Tags allowed in index (user discovery)
 	IndexableTags []string                   `json:"indexable_tags"`
 	ClusterConfig json.RawMessage            `json:"cluster_config"`
@@ -137,6 +145,11 @@ func main() {
 	globals.apiKeySalt = config.APIKeySalt
 	// Indexable tags for user discovery
 	globals.indexableTags = config.IndexableTags
+	// Maximum message size
+	globals.maxMessageSize = int64(config.MaxMessageSize)
+	if globals.maxMessageSize <= 0 {
+		globals.maxMessageSize = MAX_MESSAGE_SIZE
+	}
 
 	// Serve static content from the directory in -static_data flag if that's
 	// available, otherwise assume '<current dir>/static'.
