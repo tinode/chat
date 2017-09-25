@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/gob"
 	"encoding/json"
 	"errors"
 	"log"
@@ -178,7 +179,7 @@ type Cluster struct {
 // dispatch the message to it like it came from a normal session.
 // Called by a remote node.
 func (Cluster) Master(msg *ClusterReq, unused *bool) error {
-	log.Printf("cluster: Master request received from %s node", msg.Node)
+	log.Printf("cluster: Master request received from node '%s'", msg.Node)
 
 	// Find the local session associated with the given remote session.
 	sess := globals.sessionStore.Get(msg.Sess.Sid)
@@ -320,6 +321,8 @@ func clusterInit(configString json.RawMessage) {
 	if err := json.Unmarshal(configString, &config); err != nil {
 		log.Fatal(err)
 	}
+
+	gob.Register([]interface{}{})
 
 	globals.cluster = &Cluster{
 		thisNodeName: config.ThisName,

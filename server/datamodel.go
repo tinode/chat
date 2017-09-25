@@ -51,9 +51,6 @@ type MsgGetQuery struct {
 	Data *MsgBrowseOpts `json:"data,omitempty"`
 }
 
-// Free-form content from the client. Used in subscription management.
-type SubInfo interface{}
-
 // MsgSetSub: payload in set.sub request to update current subscription or invite another user, {sub.what} == "sub"
 type MsgSetSub struct {
 	// User affected by this request. Default (empty): current user
