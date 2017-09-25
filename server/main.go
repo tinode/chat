@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"os"
 	"runtime"
+	"strings"
 	"time"
 
 	_ "github.com/tinode/chat/push_fcm"
@@ -71,6 +72,8 @@ type configType struct {
 	// Could be blank: if TLS is not configured, will use port 80, otherwise 443.
 	// Can be overriden from the command line, see option --listen.
 	Listen string `json:"listen"`
+	// Path for mounting the directory with static files.
+	StaticMount string `json:"static_mount"`
 	// Salt used in signing API keys
 	APIKeySalt []byte `json:"api_key_salt"`
 	// Maximum message size allowed from client. Intended to prevent malicious client from sending
@@ -152,7 +155,9 @@ func main() {
 	}
 
 	// Serve static content from the directory in -static_data flag if that's
-	// available, otherwise assume '<current dir>/static'.
+	// available, otherwise assume '<current dir>/static'. The content is served at
+	// the path pointed by 'static_mount' in the config. If that is missing then it's
+	// served at '/x/'.
 	var staticContent = *staticPath
 	if staticContent == "" {
 		path, err := os.Getwd()
@@ -161,8 +166,19 @@ func main() {
 		}
 		staticContent = path + "/static/"
 	}
-	http.Handle("/x/", http.StripPrefix("/x/", hstsHandler(http.FileServer(http.Dir(staticContent)))))
-	log.Printf("Serving static content from '%s'", staticContent)
+	static_mount := config.StaticMount
+	if static_mount == "" {
+		static_mount = "/x/"
+	} else {
+		if !strings.HasPrefix(static_mount, "/") {
+			static_mount = "/" + static_mount
+		}
+		if !strings.HasSuffix(static_mount, "/") {
+			static_mount = static_mount + "/"
+		}
+	}
+	http.Handle(static_mount, http.StripPrefix(static_mount, hstsHandler(http.FileServer(http.Dir(staticContent)))))
+	log.Printf("Serving static content from '%s' at '%s'", staticContent, static_mount)
 
 	// Streaming channels
 	// Handle websocket clients. WS must come up first, so reconnecting clients won't fall back to LP

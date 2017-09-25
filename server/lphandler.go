@@ -144,7 +144,7 @@ func serveLongPoll(wrt http.ResponseWriter, req *http.Request) {
 
 	sess.remoteAddr = req.RemoteAddr
 
-	if req.ContentLength > 0 {
+	if req.ContentLength != 0 {
 		// Read payload and send it for processing.
 		if err, code := sess.readOnce(wrt, req); err != nil {
 			log.Println("longPoll: " + err.Error())
