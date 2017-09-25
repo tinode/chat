@@ -323,6 +323,7 @@ func clusterInit(configString json.RawMessage) {
 	}
 
 	gob.Register([]interface{}{})
+	gob.Register(map[string]interface{}{})
 
 	globals.cluster = &Cluster{
 		thisNodeName: config.ThisName,
