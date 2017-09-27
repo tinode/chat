@@ -1,4 +1,4 @@
-// +build !rethinkdb
+// +build rethinkdb
 
 package rethinkdb
 
