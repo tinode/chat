@@ -11,8 +11,8 @@ See [instructions](./docker/README.md)
 - Install [RethinkDB](https://www.rethinkdb.com/docs/install/)
 
 - Fetch, build tinode server and tinode-db database initializer:
- - `go get github.com/tinode/chat/server && go install github.com/tinode/chat/server`
- - `go get github.com/tinode/chat/tinode-db && go install github.com/tinode/chat/tinode-db`
+ - `go get github.com/tinode/chat/server && go install -tags rethinkdb github.com/tinode/chat/server`
+ - `go get github.com/tinode/chat/tinode-db && go install -tags rethinkdb github.com/tinode/chat/tinode-db`
 
 - Download javascript client for testing:
  - https://github.com/tinode/example-react-js/archive/master.zip

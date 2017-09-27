@@ -1,17 +1,20 @@
 {
 	"listen": ":18080",
 	"api_key_salt": "$API_KEY_SALT",
+	"max_message_size": 4194304,
 	"indexable_tags": ["tel", "email"],
 
 	"tls": {
 		"enabled": false,
+		"http_redirect": ":80",
+		"strict_max_age": 604800,
 		"autocert": {
-			"cache": "certs",
+			"cache": "/etc/letsencrypt/live/your.domain.name.here",
 			"email": "noreply@example.com",
 			"domains": ["example.com"]
 		}
 	},
-	
+
 	"auth_config": {
 		"token": {
 			"expire_in": 1209600,
@@ -29,7 +32,7 @@
 			"addresses": "$RETHINKDB_PORT_28015_TCP_ADDR:$RETHINKDB_PORT_28015_TCP_PORT"
 		}
 	},
-	
+
 	"push": [
 		{
 			"name":"stdout",

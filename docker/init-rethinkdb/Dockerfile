@@ -8,7 +8,7 @@ FROM golang
 MAINTAINER Gene Sokolov <or.else@gmail.com>
 
 RUN go get github.com/tinode/chat/tinode-db \
-	&& go install github.com/tinode/chat/tinode-db
+	&& go install -tags rethinkdb github.com/tinode/chat/tinode-db
 
 # Key to initialize UID generator. Replace with your own
 # for production
@@ -19,4 +19,3 @@ COPY entrypoint.sh /
 RUN chmod +x /entrypoint.sh
 
 ENTRYPOINT ["/entrypoint.sh"]
-

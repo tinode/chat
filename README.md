@@ -30,6 +30,7 @@ A javascript demo is (usually) available at https://api.tinode.co/x/example-reac
 * [TLS](https://en.wikipedia.org/wiki/Transport_Layer_Security) with [Letsenrypt](https://letsencrypt.org/) or conventional certificates.
 * User search/discovery.
 * Rich formatting of messages, markdown-style: \*style\* &rarr; **style**.
+* Inline images and file attachments.
 * Message status notifications: message delivery to server; received and read notifications; typing notifications.
 * Support for client-side caching.
 * Ability to block unwanted communication server-side.
@@ -40,7 +41,7 @@ A javascript demo is (usually) available at https://api.tinode.co/x/example-reac
 ### Planned
 
 * iOS client bindings and client.
-* Images, video and other media transfer.
+* Video and other media transfer.
 * End to end encryption with [OTR](https://en.wikipedia.org/wiki/Off-the-Record_Messaging) for one-on-one messaging and undecided method for group mesaging.
 * Group messaging with unlimited number of members with bearer token access control.
 * Failover/hot standby/replication.
