@@ -38,3 +38,16 @@ See [instructions](./docker/README.md)
 - Test your installation by pointing your browser to http://localhost:6060/x/. Keep in mind that by default the static files from the `-static_data` path are served at `/x/`. You can change this by editing the line `static_mount` in the config file.
 
 -  If you want to use an [Android client](https://github.com/tinode/android-example) and want push notification to work, find the section `"push"` in `tinode.conf`, item `"name": "fcm"`, then change `"disabled"` to `false`. Go to https://console.firebase.google.com/ (https://console.firebase.google.com/project/**NAME-OF-YOUR-PROJECT**/settings/cloudmessaging) and get a server key. Paste the key to the `"api_key"` field. See more at [https://github.com/tinode/android-example].
+
+## Running Server on Background via SSH [Linux]
+
+There are many ways to create background process on Linux. But in this case, we will use `nohup` to run our server in background.
+
+```
+> nohup $GOPATH/bin/server -config=$GOPATH/src/github.com/tinode/chat/server/tinode.conf -static_data=$HOME/tinode/example-react-js/ &
+> exit
+```
+
+Notice that it is essential to run `exit` command right after `nohup` command to prevent `HUP` signal being received by our background process when broken connection event occurred (indicated by message `Connection to XXX.XXX.XXX.XXX port 22: Broken pipe`), otherwise our Tinode process will receive the signal then interpret it as shutdown command even though its already running as background process.
+
+For more details, please refer to this issue: https://github.com/tinode/chat/issues/25.
