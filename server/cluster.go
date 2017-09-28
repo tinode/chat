@@ -31,6 +31,7 @@ type ClusterConfig struct {
 	ListenOn string `json:"listen"`
 }
 
+// Client connection to another node
 type ClusterNode struct {
 	lock sync.Mutex
 
@@ -45,7 +46,7 @@ type ClusterNode struct {
 	// Name of the node
 	name string
 
-	// signals to shut down the runner; buffered, 1
+	// Channel for shutting down the runner; buffered, 1
 	done chan bool
 }
 
@@ -59,6 +60,9 @@ type ClusterSess struct {
 
 	// ID of the current user or 0
 	Uid types.Uid
+
+	// User's authentication level
+	AuthLvl int
 
 	// Protocol version of the client: ((major & 0xff) << 8) | (minor & 0xff)
 	Ver int
@@ -89,7 +93,8 @@ type ClusterResp struct {
 }
 
 // Handle outbound node communication: read messages from the channel, forward to remote nodes.
-// FIXME(gene): this will drain the outbound queue in case of a failure. Maybe it's a good thing, maybe not.
+// FIXME(gene): this will drain the outbound queue in case of a failure: all unprocessed messages will be dropped.
+// Maybe it's a good thing, maybe not.
 func (n *ClusterNode) reconnect() {
 	var reconnTicker *time.Ticker
 
@@ -206,6 +211,7 @@ func (Cluster) Master(msg *ClusterReq, unused *bool) error {
 
 		// Update session params which may have changed since the last call.
 		sess.uid = msg.Sess.Uid
+		sess.authLvl = msg.Sess.AuthLvl
 		sess.ver = msg.Sess.Ver
 		sess.userAgent = msg.Sess.UserAgent
 		sess.remoteAddr = msg.Sess.RemoteAddr
