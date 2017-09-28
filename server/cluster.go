@@ -73,8 +73,13 @@ type ClusterSess struct {
 
 // Proxy to Master request message
 type ClusterReq struct {
-	// Name of the node which sent the request
+	// Name of the node sending this request
 	Node string
+
+	// Ring hash signature of the node sending this request
+	// Signature must match the signature of the receiver, otherwise the
+	// Cluster is desynchronized.
+	Signature string
 
 	Msg *ClientComMessage
 	// Expanded (routable) topic name
@@ -276,9 +281,10 @@ func (c *Cluster) routeToTopic(msg *ClientComMessage, topic string, sess *Sessio
 
 	return n.forward(
 		&ClusterReq{
-			Node:   c.thisNodeName,
-			Msg:    msg,
-			RcptTo: topic,
+			Node:      c.thisNodeName,
+			Signature: c.ring.Signature(),
+			Msg:       msg,
+			RcptTo:    topic,
 			Sess: &ClusterSess{
 				Uid:        sess.uid,
 				RemoteAddr: sess.remoteAddr,
@@ -441,4 +447,8 @@ func (c *Cluster) shutdown() {
 	globals.cluster = nil
 
 	log.Println("cluster shut down")
+}
+
+func (c *Cluster) rehash() {
+
 }

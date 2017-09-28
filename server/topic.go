@@ -453,7 +453,7 @@ func (t *Topic) run(hub *Hub) {
 			}
 
 		case meta := <-t.meta:
-			log.Printf("topic[%s]: got meta message '%#+v' %x", t.name, meta, meta.what)
+			// log.Printf("topic[%s]: got meta message '%#+v' %x", t.name, meta, meta.what)
 
 			// Request to get/set topic metadata
 			if meta.pkt.Get != nil {

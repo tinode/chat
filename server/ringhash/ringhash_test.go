@@ -2,13 +2,14 @@ package ringhash
 
 import (
 	"fmt"
+	"hash/crc32"
 	"testing"
 )
 
 func TestHashing(t *testing.T) {
 
 	// Ring with 3 elements hashed by crc32.ChecksumIEEE
-	ring := New(3, nil)
+	ring := New(3, crc32.ChecksumIEEE)
 	ring.Add("A", "B", "C")
 
 	// The ring contains:
@@ -64,8 +65,8 @@ func TestHashing(t *testing.T) {
 }
 
 func TestConsistency(t *testing.T) {
-	ring1 := New(1, nil)
-	ring2 := New(1, nil)
+	ring1 := New(3, nil)
+	ring2 := New(3, nil)
 
 	ring1.Add("owl", "crow", "sparrow")
 	ring2.Add("sparrow", "owl", "crow")
@@ -88,8 +89,8 @@ func TestConsistency(t *testing.T) {
 	// 0VXGN 0BGABAK
 	// 0VXGI 0BGABAL
 
-	ring1 = New(1, nil)
-	ring2 = New(1, nil)
+	ring1 = New(1, crc32.ChecksumIEEE)
+	ring2 = New(1, crc32.ChecksumIEEE)
 
 	ring1.Add("VXGD", "BGABAA", "VXGG", "BGABAB", "VXGF", "BGABAC")
 	ring2.Add("BGABAA", "VXGD", "BGABAB", "VXGG", "BGABAC", "VXGF")
@@ -107,17 +108,59 @@ func TestConsistency(t *testing.T) {
 	}
 }
 
+func TestSignature(t *testing.T) {
+	ring1 := New(4, nil)
+	ring2 := New(4, nil)
+
+	ring1.Add("owl", "crow", "sparrow")
+	ring2.Add("sparrow", "owl", "crow")
+
+	if ring1.Signature() != ring2.Signature() {
+		t.Errorf("Signatures must be identical")
+	}
+
+	ring1 = New(4, nil)
+	ring2 = New(5, nil)
+
+	ring1.Add("owl", "crow", "sparrow")
+	ring2.Add("owl", "crow", "sparrow")
+
+	if ring1.Signature() == ring2.Signature() {
+		t.Errorf("Signatures must be different - different count of replicas")
+	}
+
+	ring1 = New(4, nil)
+	ring2 = New(4, nil)
+
+	ring1.Add("owl", "crow", "sparrow")
+	ring2.Add("owl", "crow", "sparrow", "crane")
+
+	if ring1.Signature() == ring2.Signature() {
+		t.Errorf("Signatures must be different - different keys")
+	}
+
+	ring1 = New(4, nil)
+	ring2 = New(4, crc32.ChecksumIEEE)
+
+	ring1.Add("owl", "crow", "sparrow")
+	ring2.Add("owl", "crow", "sparrow")
+
+	if ring1.Signature() == ring2.Signature() {
+		t.Errorf("Signatures must be different - different hash functions")
+	}
+}
+
 func BenchmarkGet8(b *testing.B)   { benchmarkGet(b, 8) }
 func BenchmarkGet32(b *testing.B)  { benchmarkGet(b, 32) }
 func BenchmarkGet128(b *testing.B) { benchmarkGet(b, 128) }
 func BenchmarkGet512(b *testing.B) { benchmarkGet(b, 512) }
 
-func benchmarkGet(b *testing.B, buckets int) {
+func benchmarkGet(b *testing.B, keycount int) {
 
 	ring := New(53, nil)
 
 	var ids []string
-	for i := 0; i < buckets; i++ {
+	for i := 0; i < keycount; i++ {
 		ids = append(ids, fmt.Sprintf("id=%d", i))
 	}
 
@@ -126,6 +169,6 @@ func benchmarkGet(b *testing.B, buckets int) {
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		ring.Get(ids[i&(buckets-1)])
+		ring.Get(ids[i&(keycount-1)])
 	}
 }
