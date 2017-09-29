@@ -27,8 +27,8 @@ type ClusterConfig struct {
 	Nodes []ClusterNodeConfig `json:"nodes"`
 	// Name of this cluster node
 	ThisName string `json:"self"`
-	// Address:Port to listen on for incoming requests
-	ListenOn string `json:"listen"`
+	// Failover configuration
+	Failover *ClusterFailoverConfig
 }
 
 // Client connection to another node
@@ -45,6 +45,9 @@ type ClusterNode struct {
 	address string
 	// Name of the node
 	name string
+
+	// A number of times this node has failed in a row
+	failCount int
 
 	// Channel for shutting down the runner; buffered, 1
 	done chan bool
@@ -174,14 +177,20 @@ func (n *ClusterNode) respond(msg *ClusterResp) error {
 }
 
 type Cluster struct {
-	// List of RPC endpoints
+	lock sync.Mutex
+
+	// Cluster nodes with RPC endpoints
 	nodes map[string]*ClusterNode
+	// Name of the local node
+	thisNodeName string
+
 	// Socket for inbound connections
 	inbound *net.TCPListener
 	// Ring hash for mapping topic names to nodes
 	ring *rh.Ring
-	// Name of the local node
-	thisNodeName string
+
+	// Failover parameters. Could be nil if failover is not enabled
+	fo *ClusterFailover
 }
 
 // Cluster.Master at topic's master node receives C2S messages from topic's proxy nodes.
@@ -341,18 +350,22 @@ func clusterInit(configString json.RawMessage) {
 		thisNodeName: config.ThisName,
 		ring:         rh.New(CLUSTER_HASH_REPLICAS, nil),
 		nodes:        make(map[string]*ClusterNode)}
-	ringKeys := make([]string, 0, len(config.Nodes))
 
+	ringKeys := make([]string, 0, len(config.Nodes))
+	listenOn := ""
 	for _, host := range config.Nodes {
 		ringKeys = append(ringKeys, host.Name)
 
 		if host.Name == globals.cluster.thisNodeName {
+			listenOn = host.Addr
 			// Don't create a cluster member for this local instance
 			continue
 		}
 
-		n := ClusterNode{address: host.Addr, name: host.Name}
-		n.done = make(chan bool, 1)
+		n := ClusterNode{
+			address: host.Addr,
+			name:    host.Name,
+			done:    make(chan bool, 1)}
 		go n.reconnect()
 
 		globals.cluster.nodes[host.Name] = &n
@@ -361,10 +374,11 @@ func clusterInit(configString json.RawMessage) {
 	if len(globals.cluster.nodes) == 0 {
 		log.Fatal("Invalid cluster size: 0")
 	}
-
 	globals.cluster.ring.Add(ringKeys...)
 
-	addr, err := net.ResolveTCPAddr("tcp", config.ListenOn)
+	globals.cluster.failoverInit(config.Failover)
+
+	addr, err := net.ResolveTCPAddr("tcp", listenOn)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -378,7 +392,7 @@ func clusterInit(configString json.RawMessage) {
 	go rpc.Accept(globals.cluster.inbound)
 
 	log.Printf("Cluster of %d nodes initialized, node '%s' listening on [%s]", len(globals.cluster.nodes)+1,
-		globals.cluster.thisNodeName, config.ListenOn)
+		globals.cluster.thisNodeName, listenOn)
 }
 
 // This is a session handler at a master node: forward messages from the master to the session origin.
@@ -439,16 +453,43 @@ func (c *Cluster) shutdown() {
 	if globals.cluster == nil {
 		return
 	}
+	globals.cluster = nil
 
-	globals.cluster.inbound.Close()
-	for _, n := range globals.cluster.nodes {
+	c.inbound.Close()
+
+	if c.fo != nil {
+		c.fo.done <- true
+	}
+
+	for _, n := range c.nodes {
 		n.done <- true
 	}
-	globals.cluster = nil
 
 	log.Println("cluster shut down")
 }
 
-func (c *Cluster) rehash() {
+// Recalculate the ring hash using provided list of nodes or only nodes in a non-failed state.
+// Returns the list of nodes used for ring hash.
+func (c *Cluster) rehash(nodes []string) []string {
+	ring := rh.New(CLUSTER_HASH_REPLICAS, nil)
 
+	var ringKeys []string
+
+	if nodes == nil {
+		for _, node := range c.nodes {
+			if node.failCount < c.fo.nodeFailCountLimit {
+				ringKeys = append(ringKeys, node.name)
+			}
+		}
+		ringKeys = append(ringKeys, c.thisNodeName)
+	} else {
+		for _, name := range nodes {
+			ringKeys = append(ringKeys, name)
+		}
+	}
+	ring.Add(ringKeys...)
+
+	c.ring = ring
+
+	return ringKeys
 }
