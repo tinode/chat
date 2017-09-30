@@ -97,6 +97,7 @@ func main() {
 	var staticPath = flag.String("static_data", "", "Path to /static data for the server.")
 	var listenOn = flag.String("listen", "", "Override TCP address and port to listen on.")
 	var tlsEnabled = flag.Bool("tls_enabled", false, "Override config value for enabling TLS")
+	var clusterSelf = flag.String("cluster_self", "", "Override the name of the current cluster node")
 	flag.Parse()
 
 	log.Printf("Using config from: '%s'", *configfile)
@@ -143,7 +144,7 @@ func main() {
 	// The hub (the main message router)
 	globals.hub = newHub()
 	// Cluster initialization
-	clusterInit(config.ClusterConfig)
+	clusterInit(config.ClusterConfig, clusterSelf)
 	// API key validation secret
 	globals.apiKeySalt = config.APIKeySalt
 	// Indexable tags for user discovery

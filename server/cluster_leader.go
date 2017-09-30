@@ -69,9 +69,9 @@ type ClusterVote struct {
 	resp chan bool
 }
 
-func (c *Cluster) failoverInit(config *ClusterFailoverConfig) {
-	if config == nil || !config.Enabled {
-		return
+func (c *Cluster) failoverInit(config *ClusterFailoverConfig) bool {
+	if config == nil || !config.Enabled || len(c.nodes) < 3 {
+		return false
 	}
 	c.fo = &ClusterFailover{
 		heartBeat:          time.Duration(config.Heartbeat) * time.Millisecond,
@@ -82,6 +82,10 @@ func (c *Cluster) failoverInit(config *ClusterFailoverConfig) {
 		done:               make(chan bool, 1)}
 
 	go c.run()
+
+	log.Println("cluster: running in failover mode")
+
+	return true
 }
 
 // Leader node calls this method to assert leadership and check status
@@ -112,7 +116,7 @@ func (c *Cluster) sendPings() {
 	var rehash bool
 
 	for _, node := range c.nodes {
-		err := node.endpoint.Call("Cluster.Ping", &ClusterPing{
+		err := node.call("Cluster.Ping", &ClusterPing{
 			Leader:    c.thisNodeName,
 			Term:      c.fo.term,
 			Signature: c.ring.Signature(),
@@ -214,6 +218,7 @@ func (c *Cluster) run() {
 			if ping.Term > c.fo.term {
 				c.fo.term = ping.Term
 				c.fo.leader = ping.Leader
+				log.Printf("cluster: new leader elected '%s'", c.fo.leader)
 			} else if ping.Leader != c.fo.leader {
 				// Wrong leader. It's a bug, should never happen!
 				log.Printf("cluster: wrong leader '%s' while expecting '%s'; term %d",
@@ -224,6 +229,7 @@ func (c *Cluster) run() {
 			missed = 0
 			if ping.Signature != c.ring.Signature() {
 				log.Println("cluster: leader requested rehashing")
+
 			}
 		case vreq := <-c.fo.electionVote:
 			if c.fo.term < vreq.req.Term {

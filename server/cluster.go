@@ -109,6 +109,11 @@ func (n *ClusterNode) reconnect() {
 	var count = 0
 	var err error
 	for {
+		if n.connected {
+			// Avoid parallel reconnection threads
+			return
+		}
+
 		// Attempt to reconnect right away
 		if n.endpoint, err = rpc.Dial("tcp", n.address); err == nil {
 			if reconnTicker != nil {
@@ -140,13 +145,12 @@ func (n *ClusterNode) reconnect() {
 	}
 }
 
-func (n *ClusterNode) call(proc string, msg interface{}) error {
+func (n *ClusterNode) call(proc string, msg interface{}, resp interface{}) error {
 	if !n.connected {
-		return errors.New("cluster node not connected")
+		return errors.New("cluster: node not connected")
 	}
 
-	var unused bool
-	if err := n.endpoint.Call(proc, msg, &unused); err != nil {
+	if err := n.endpoint.Call(proc, msg, resp); err != nil {
 		log.Printf("cluster: call failed to '%s' [%s]", n.name, err)
 
 		n.lock.Lock()
@@ -159,7 +163,6 @@ func (n *ClusterNode) call(proc string, msg interface{}) error {
 		return err
 	}
 
-	log.Printf("cluster: Cluster.Master to '%s' successful", n.name)
 	return nil
 }
 
@@ -167,18 +170,18 @@ func (n *ClusterNode) call(proc string, msg interface{}) error {
 func (n *ClusterNode) forward(msg *ClusterReq) error {
 	log.Printf("cluster: forwarding request to node '%s'", n.name)
 	msg.Node = globals.cluster.thisNodeName
-	return n.call("Cluster.Master", msg)
+	unused := false
+	return n.call("Cluster.Master", msg, &unused)
 }
 
 // Master responds to proxy
 func (n *ClusterNode) respond(msg *ClusterResp) error {
 	log.Printf("cluster: replying to node '%s'", n.name)
-	return n.call("Cluster.Proxy", msg)
+	unused := false
+	return n.call("Cluster.Proxy", msg, &unused)
 }
 
 type Cluster struct {
-	lock sync.Mutex
-
 	// Cluster nodes with RPC endpoints
 	nodes map[string]*ClusterNode
 	// Name of the local node
@@ -327,7 +330,7 @@ func (c *Cluster) sessionGone(sess *Session) error {
 	return nil
 }
 
-func clusterInit(configString json.RawMessage) {
+func clusterInit(configString json.RawMessage, self *string) {
 	if globals.cluster != nil {
 		log.Fatal("Cluster already initialized")
 	}
@@ -346,8 +349,12 @@ func clusterInit(configString json.RawMessage) {
 	gob.Register([]interface{}{})
 	gob.Register(map[string]interface{}{})
 
+	thisName := *self
+	if thisName == "" {
+		thisName = config.ThisName
+	}
 	globals.cluster = &Cluster{
-		thisNodeName: config.ThisName,
+		thisNodeName: thisName,
 		ring:         rh.New(CLUSTER_HASH_REPLICAS, nil),
 		nodes:        make(map[string]*ClusterNode)}
 
@@ -374,9 +381,10 @@ func clusterInit(configString json.RawMessage) {
 	if len(globals.cluster.nodes) == 0 {
 		log.Fatal("Invalid cluster size: 0")
 	}
-	globals.cluster.ring.Add(ringKeys...)
 
-	globals.cluster.failoverInit(config.Failover)
+	if !globals.cluster.failoverInit(config.Failover) {
+		globals.cluster.ring.Add(ringKeys...)
+	}
 
 	addr, err := net.ResolveTCPAddr("tcp", listenOn)
 	if err != nil {
