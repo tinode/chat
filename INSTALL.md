@@ -41,9 +41,9 @@ See [instructions](./docker/README.md)
 
 ### Note on running the server in background
 
-There is [no clean way](https://github.com/golang/go/issues/227) to daemonize a Go server internally. One must use external tools such as shell's `&` operator, `systemd`, `launchd`, `SMF`, `daemon tools`, `runit`, etc. to run the process in the background. 
+There is [no clean way](https://github.com/golang/go/issues/227) to daemonize a Go process internally. One must use external tools such as shell `&` operator, `systemd`, `launchd`, `SMF`, `daemon tools`, `runit`, etc. to run the process in the background. 
 
-Specific note for `nohup` users: an `exit` must be issued immediately after `nohup` call to close the foreground session cleanly:
+Specific note for [nohup](https://en.wikipedia.org/wiki/Nohup) users: an `exit` must be issued immediately after `nohup` call to close the foreground session cleanly:
 
 ```
 > nohup $GOPATH/bin/server -config=$GOPATH/src/github.com/tinode/chat/server/tinode.conf -static_data=$HOME/tinode/example-react-js/ &
