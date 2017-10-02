@@ -14,6 +14,12 @@ See [instructions](./docker/README.md)
  - `go get github.com/tinode/chat/server && go install -tags rethinkdb github.com/tinode/chat/server`
  - `go get github.com/tinode/chat/tinode-db && go install -tags rethinkdb github.com/tinode/chat/tinode-db`
 
+Note the required `-tags rethinkdb` build option. You may also optionally define `main.buildstamp` for the server by adding a build option
+```
+-X main.buildstamp=`date -u '+%Y%m%dT%H:%M:%SZ'`
+```
+This build timestamp will be sent by the server to the clients.
+
 - Download javascript client for testing:
  - https://github.com/tinode/example-react-js/archive/master.zip
  - https://github.com/tinode/tinode-js/archive/master.zip
@@ -41,7 +47,7 @@ See [instructions](./docker/README.md)
 
 ### Note on running the server in background
 
-There is [no clean way](https://github.com/golang/go/issues/227) to daemonize a Go process internally. One must use external tools such as shell `&` operator, `systemd`, `launchd`, `SMF`, `daemon tools`, `runit`, etc. to run the process in the background. 
+There is [no clean way](https://github.com/golang/go/issues/227) to daemonize a Go process internally. One must use external tools such as shell `&` operator, `systemd`, `launchd`, `SMF`, `daemon tools`, `runit`, etc. to run the process in the background.
 
 Specific note for [nohup](https://en.wikipedia.org/wiki/Nohup) users: an `exit` must be issued immediately after `nohup` call to close the foreground session cleanly:
 
