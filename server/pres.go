@@ -147,6 +147,7 @@ func (t *Topic) presUsersOfInterest(what string, ua string) {
 // Case K.2: User altered WANT (and maybe got default Given), "acs"
 // Case L.1: Admin altered GIVEN, "acs" to affected user
 // Case L.3: Admin altered GIVEN (and maybe got assigned default WANT), "acs" to admins
+// Case M: Topic unaccessible (cluster failure), "left" to everyone currently online
 // Case V.2: Messages soft deleted, "del" to one user only
 // Case W.2: Messages hard-deleted, "del"
 func (t *Topic) presSubsOnline(what, src string, params *PresParams, filter types.AccessMode, skipSid string) {

@@ -137,7 +137,9 @@ func (n *ClusterNode) reconnect() {
 			// Shutting down
 			log.Printf("cluster: node '%s' shutdown started", n.name)
 			reconnTicker.Stop()
-			n.endpoint.Close()
+			if n.endpoint != nil {
+				n.endpoint.Close()
+			}
 			n.connected = false
 			log.Printf("cluster: node '%s' shut down completed", n.name)
 			return
@@ -379,7 +381,8 @@ func clusterInit(configString json.RawMessage, self *string) {
 	}
 
 	if len(globals.cluster.nodes) == 0 {
-		log.Fatal("Invalid cluster size: 0")
+		// Cluster needs at least two nodes.
+		log.Fatal("Invalid cluster size: 1")
 	}
 
 	if !globals.cluster.failoverInit(config.Failover) {
@@ -420,7 +423,7 @@ func (sess *Session) rpcWriteLoop() {
 	for {
 		select {
 		case msg, ok := <-sess.send:
-			if !ok {
+			if !ok || sess.rpcnode.endpoint == nil {
 				// channel closed
 				return
 			}
@@ -485,9 +488,7 @@ func (c *Cluster) rehash(nodes []string) []string {
 
 	if nodes == nil {
 		for _, node := range c.nodes {
-			if node.failCount < c.fo.nodeFailCountLimit {
-				ringKeys = append(ringKeys, node.name)
-			}
+			ringKeys = append(ringKeys, node.name)
 		}
 		ringKeys = append(ringKeys, c.thisNodeName)
 	} else {

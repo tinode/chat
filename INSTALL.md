@@ -45,6 +45,37 @@ This build timestamp will be sent by the server to the clients.
 
 -  If you want to use an [Android client](https://github.com/tinode/android-example) and want push notification to work, find the section `"push"` in `tinode.conf`, item `"name": "fcm"`, then change `"disabled"` to `false`. Go to https://console.firebase.google.com/ (https://console.firebase.google.com/project/**NAME-OF-YOUR-PROJECT**/settings/cloudmessaging) and get a server key. Paste the key to the `"api_key"` field. See more at [https://github.com/tinode/android-example].
 
+## Running a cluster
+
+- Install and run RethinkDB, run DB initializer, unpack JS files as described in the previous section. 
+
+- Cluster expects at least two nodes. A minimum of three nodes is recommended. A sample cluster config file is provided as `cluster.conf`. The following section configures the cluster.
+
+```
+	"cluster_config": {
+		"nodes": [
+			{"name": "one", "addr":"localhost:12001"}, 
+			{"name": "two", "addr":"localhost:12002"},
+			{"name": "three", "addr":"localhost:12003"}
+		],
+		"self": "one",
+		"failover": {
+			"enabled": true,
+			"heartbeat": 100,
+			"vote_after": 5
+		}
+	}
+```
+* `nodes` defines individual cluster nodes. The sample defines three nodes named `one`, `two`, and `tree` running at the localhost at the specified cluster communication ports. Cluster addresses don't need to be exposed to the clients.
+* `self` is the name of the current node. Generally it's more convenient to specify the name of the current node at the command line using `cluster_self` option. Command line value overrides the config file value.
+* `failover` is an experimental feature currently in development.
+
+If you are testing the cluster with all nodes running on the same host, you also must override the `listen` port. Here is an example for launching two cluster nodes from the same host using the same config file:
+```
+./server -config=./cluster.conf -static_data=./example-react-js/ -listen=:6060 -cluster_self=one &
+./server -config=./cluster.conf -static_data=./example-react-js/ -listen=:6061 -cluster_self=two &
+```
+
 ### Note on running the server in background
 
 There is [no clean way](https://github.com/golang/go/issues/227) to daemonize a Go process internally. One must use external tools such as shell `&` operator, `systemd`, `launchd`, `SMF`, `daemon tools`, `runit`, etc. to run the process in the background.
