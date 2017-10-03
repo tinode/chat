@@ -54,7 +54,7 @@ This build timestamp will be sent by the server to the clients.
 ```
 	"cluster_config": {
 		"nodes": [
-			{"name": "one", "addr":"localhost:12001"}, 
+			{"name": "one", "addr":"localhost:12001"},
 			{"name": "two", "addr":"localhost:12002"},
 			{"name": "three", "addr":"localhost:12003"}
 		],
@@ -70,10 +70,10 @@ This build timestamp will be sent by the server to the clients.
 * `nodes` defines individual cluster nodes. The sample defines three nodes named `one`, `two`, and `tree` running at the localhost at the specified cluster communication ports. Cluster addresses don't need to be exposed to the clients.
 * `self` is the name of the current node. Generally it's more convenient to specify the name of the current node at the command line using `cluster_self` option. Command line value overrides the config file value.
 * `failover` is an experimental feature which migrates topics from failed cluster nodes keeping them accessible:
- * `enabled` turns on failover mode; failover mode requires at least three nodes in the cluster.
- * `heartbeat` interval in milliseconds between heartbeats sent by the leader node to follower nodes to ensure they are accessible.
- * `vote_after` number of failed heartbeats before a new leader node is elected.
- * `node_fail_after` number of heartbeats that a follower node misses before it's cosidered to be down.
+  * `enabled` turns on failover mode; failover mode requires at least three nodes in the cluster.
+  * `heartbeat` interval in milliseconds between heartbeats sent by the leader node to follower nodes to ensure they are accessible.
+  * `vote_after` number of failed heartbeats before a new leader node is elected.
+  * `node_fail_after` number of heartbeats that a follower node misses before it's cosidered to be down.
 
 If you are testing the cluster with all nodes running on the same host, you also must override the `listen` port. Here is an example for launching two cluster nodes from the same host using the same config file:
 ```
