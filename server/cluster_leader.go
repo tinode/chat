@@ -153,7 +153,6 @@ func (c *Cluster) sendPings() {
 	if rehash {
 		var activeNodes []string
 		for _, node := range c.nodes {
-			log.Printf("node %s failed %d times", node.name, node.failCount)
 			if node.failCount < c.fo.nodeFailCountLimit {
 				activeNodes = append(activeNodes, node.name)
 			}
@@ -163,7 +162,8 @@ func (c *Cluster) sendPings() {
 		c.fo.activeNodes = activeNodes
 		c.rehash(activeNodes)
 
-		log.Println("cluster: failover rehash for", activeNodes)
+		log.Println("cluster: initiating failover rehash for nodes", activeNodes)
+		globals.hub.rehash <- true
 	}
 }
 
@@ -253,6 +253,7 @@ func (c *Cluster) run() {
 					// Elect the leader
 					log.Println("cluster: initiating election after failed pings:", missed)
 					c.electLeader()
+					missed = 0
 				}
 			}
 		case ping := <-c.fo.leaderPing:
@@ -266,7 +267,7 @@ func (c *Cluster) run() {
 			if ping.Term > c.fo.term {
 				c.fo.term = ping.Term
 				c.fo.leader = ping.Leader
-				log.Printf("cluster: new leader elected '%s'", c.fo.leader)
+				log.Printf("cluster: leader set to '%s'", c.fo.leader)
 			} else if ping.Leader != c.fo.leader && c.fo.leader != "" {
 				// Wrong leader. It's a bug, should never happen!
 				log.Printf("cluster: wrong leader '%s' while expecting '%s'; term %d",
@@ -280,6 +281,8 @@ func (c *Cluster) run() {
 					log.Println("cluster: rehashing at request of a leader", ping.Leader, ping.Nodes)
 					c.rehash(ping.Nodes)
 					rehashSkipped = false
+
+					globals.hub.rehash <- true
 				} else {
 					rehashSkipped = true
 				}

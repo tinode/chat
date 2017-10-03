@@ -60,19 +60,22 @@ type Hub struct {
 	// Topics must be indexed by appid!name
 	topics map[string]*Topic
 
-	// Channel for routing messages between topics, buffered at 2048
+	// Channel for routing messages between topics, buffered at 4096
 	route chan *ServerComMessage
 
-	// subscribe session to topic, possibly creating a new topic
+	// subscribe session to topic, possibly creating a new topic, unbuffered
 	join chan *sessionJoin
 
-	// Remove topic from hub, possibly deleting it afterwards
+	// Remove topic from hub, possibly deleting it afterwards, unbuffered
 	unreg chan *topicUnreg
 
-	// process get.info requests for topic not subscribed to
+	// Cluster request to rehash topics, unbuffered
+	rehash chan bool
+
+	// process get.info requests for topic not subscribed to, buffered 128
 	meta chan *metaReq
 
-	// Request to shutdown
+	// Request to shutdown, unbuffered
 	shutdown chan chan<- bool
 
 	// Exported counter of live topics
@@ -95,10 +98,11 @@ func newHub() *Hub {
 	var h = &Hub{
 		topics: make(map[string]*Topic),
 		// this needs to be buffered - hub generates invites and adds them to this queue
-		route:      make(chan *ServerComMessage, 2048),
+		route:      make(chan *ServerComMessage, 4096),
 		join:       make(chan *sessionJoin),
 		unreg:      make(chan *topicUnreg),
-		meta:       make(chan *metaReq, 32),
+		rehash:     make(chan bool),
+		meta:       make(chan *metaReq, 128),
 		shutdown:   make(chan chan<- bool),
 		topicsLive: new(expvar.Int)}
 
@@ -185,7 +189,18 @@ func (h *Hub) run() {
 
 		case unreg := <-h.unreg:
 			// The topic is being garbage collected or deleted.
-			h.topicUnreg(unreg.sess, unreg.topic, unreg.msg, unreg.del)
+			reason := StopNone
+			if unreg.del {
+				reason = StopDeleted
+			}
+			h.topicUnreg(unreg.sess, unreg.topic, unreg.msg, reason)
+
+		case <-h.rehash:
+			for _, topic := range h.topics {
+				if globals.cluster.isRemoteTopic(topic.name) {
+					h.topicUnreg(nil, topic.name, nil, StopRehashing)
+				}
+			}
 
 		case hubdone := <-h.shutdown:
 			topicsdone := make(chan bool)
@@ -770,10 +785,10 @@ func (t *Topic) loadSubscribers() error {
 // 2. Topic is just being unregistered (topic is going offline)
 // 2.1 Unregister it with no further action
 //
-func (h *Hub) topicUnreg(sess *Session, topic string, msg *MsgClientDel, del bool) {
+func (h *Hub) topicUnreg(sess *Session, topic string, msg *MsgClientDel, reason int) {
 	now := time.Now().UTC().Round(time.Millisecond)
 
-	if del {
+	if reason == StopDeleted {
 		// Case 1 (unregister and delete)
 		if t := h.topicGet(topic); t != nil {
 			log.Println("topicUnreg -- ONline")
@@ -801,7 +816,7 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *MsgClientDel, del boo
 				}
 
 				h.topicDel(topic)
-				t.exit <- &shutDown{del: true}
+				t.exit <- &shutDown{reason: StopDeleted}
 				h.topicsLive.Add(-1)
 			} else {
 				// Case 1.1.2: requester is NOT the owner
@@ -889,7 +904,7 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *MsgClientDel, del boo
 		if t := h.topicGet(topic); t != nil {
 			t.suspend()
 			h.topicDel(topic)
-			t.exit <- &shutDown{del: false}
+			t.exit <- &shutDown{reason: reason}
 			h.topicsLive.Add(-1)
 		}
 

@@ -200,10 +200,14 @@ type Cluster struct {
 
 // Cluster.Master at topic's master node receives C2S messages from topic's proxy nodes.
 // The message is treated like it came from a session: find or create a session locally,
-// dispatch the message to it like it came from a normal session.
+// dispatch the message to it like it came from a normal ws/lp connection.
 // Called by a remote node.
-func (Cluster) Master(msg *ClusterReq, unused *bool) error {
+func (c *Cluster) Master(msg *ClusterReq, unused *bool) error {
 	log.Printf("cluster: Master request received from node '%s'", msg.Node)
+
+	if msg.Signature != c.ring.Signature() {
+		// TODO Reject request: wrong signature, cluster out of sync
+	}
 
 	// Find the local session associated with the given remote session.
 	sess := globals.sessionStore.Get(msg.Sess.Sid)
@@ -235,7 +239,7 @@ func (Cluster) Master(msg *ClusterReq, unused *bool) error {
 		sess.userAgent = msg.Sess.UserAgent
 		sess.remoteAddr = msg.Sess.RemoteAddr
 
-		// Dispatch remote message to local session.
+		// Dispatch remote message to a local session.
 		sess.dispatch(msg.Msg)
 	}
 
@@ -245,7 +249,7 @@ func (Cluster) Master(msg *ClusterReq, unused *bool) error {
 // Proxy recieves messages from the master node addressed to a specific local session.
 // Called by Session.writeRPC
 func (Cluster) Proxy(msg *ClusterResp, unused *bool) error {
-	log.Printf("cluster: Proxy response received for session %s", msg.FromSID)
+	log.Println("cluster: response from Master for session", msg.FromSID)
 
 	// This cluster member received a response from topic owner to be forwarded to a session
 	// Find appropriate session, send the message to it
@@ -255,6 +259,8 @@ func (Cluster) Proxy(msg *ClusterResp, unused *bool) error {
 		case <-time.After(time.Millisecond * 10):
 			log.Println("cluster.Proxy: timeout")
 		}
+	} else {
+		log.Println("cluster: master response for unknown session", msg.FromSID)
 	}
 
 	return nil
@@ -264,10 +270,15 @@ func (Cluster) Proxy(msg *ClusterResp, unused *bool) error {
 func (c *Cluster) nodeForTopic(topic string) *ClusterNode {
 	key := c.ring.Get(topic)
 	if key == c.thisNodeName {
+		log.Println("cluster: request to route to self")
 		// Do not route to self
 		return nil
 	} else {
-		return globals.cluster.nodes[key]
+		node := globals.cluster.nodes[key]
+		if node == nil {
+			log.Println("cluster: node has disconnected")
+		}
+		return node
 	}
 }
 
@@ -284,7 +295,7 @@ func (c *Cluster) routeToTopic(msg *ClientComMessage, topic string, sess *Sessio
 	// Find the cluster node which owns the topic, then forward to it.
 	n := c.nodeForTopic(topic)
 	if n == nil {
-		log.Fatal("attempt to route to non-existent node")
+		return errors.New("attempt to route to non-existent node")
 	}
 
 	// Save node name: it's need in order to inform relevant nodes when the session is disconnected
@@ -307,7 +318,7 @@ func (c *Cluster) routeToTopic(msg *ClientComMessage, topic string, sess *Sessio
 				Sid:        sess.sid}})
 }
 
-// Forward client message to the Master (cluster node which owns the topic)
+// Session terminated at origin. Inform remote Master nodes that the session is gone.
 func (c *Cluster) sessionGone(sess *Session) error {
 	if c == nil {
 		return nil
@@ -455,8 +466,7 @@ func (sess *Session) rpcWriteLoop() {
 // Proxied session is being closed at the Master node
 func (s *Session) closeRPC() {
 	if s.proto == RPC {
-		// Tell proxy node to shut down the proxied session
-		//s.rpcnode.respond()
+		log.Println("cluster: session closed at master")
 	}
 }
 
@@ -476,7 +486,7 @@ func (c *Cluster) shutdown() {
 		n.done <- true
 	}
 
-	log.Println("cluster shut down")
+	log.Println("Cluster shut down")
 }
 
 // Recalculate the ring hash using provided list of nodes or only nodes in a non-failed state.

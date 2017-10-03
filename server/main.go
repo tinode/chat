@@ -120,6 +120,7 @@ func main() {
 	defer func() {
 		store.Close()
 		log.Println("Closed database connection(s)")
+		log.Println("All done, good bye")
 	}()
 
 	for name, jsconf := range config.AuthConfig {
@@ -192,7 +193,6 @@ func main() {
 	if err := listenAndServe(config.Listen, *tlsEnabled, string(config.TlsConfig), signalHandler()); err != nil {
 		log.Fatal(err)
 	}
-	log.Println("All done, good bye")
 }
 
 func getApiKey(req *http.Request) string {

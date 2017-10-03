@@ -52,6 +52,7 @@ type Session struct {
 	// --
 
 	// -- Set only for RPC sessions
+	// reference to the cluster node where the session has originated
 	rpcnode *ClusterNode
 	// --
 
@@ -334,6 +335,9 @@ func (s *Session) publish(msg *ClientComMessage) {
 		if err := globals.cluster.routeToTopic(msg, expanded, s); err != nil {
 			s.queueOut(ErrClusterNodeUnreachable(msg.Pub.Id, msg.Pub.Topic, msg.timestamp))
 		}
+	} else {
+		// Publish request received without attaching to topic first.
+		s.queueOut(ErrAttachFirst(msg.Pub.Id, msg.Pub.Topic, msg.timestamp))
 	}
 }
 

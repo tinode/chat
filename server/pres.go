@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"log"
 	"strings"
 
@@ -172,6 +173,35 @@ func (t *Topic) presSubsOnline(what, src string, params *PresParams, filter type
 	// log.Printf("Pres K.2, L.3, W.2: topic'%s' what='%s', who='%s', acs='w:%s/g:%s'", t.name, what,
 	// 	params.who, params.dWant, params.dGiven)
 
+}
+
+// Send presence notification to attached sessions directly, without routing though topic.
+func (t *Topic) presSubsOnlineDirect(what string) {
+	msg := &ServerComMessage{Pres: &MsgServerPres{Topic: t.x_original, What: what}}
+
+	var packet []byte
+	if t.cat != types.TopicCat_P2P {
+		packet, _ = json.Marshal(msg)
+	}
+
+	for sess := range t.sessions {
+		// Check presence filters
+		pud, _ := t.perUser[sess.uid]
+		if !(pud.modeGiven & pud.modeWant).IsPresencer() {
+			continue
+		}
+
+		if t.cat == types.TopicCat_P2P {
+			// For p2p topics topic name is dependent on receiver
+			msg.Pres.Topic = t.original(sess.uid)
+			packet, _ = json.Marshal(msg)
+		}
+
+		select {
+		case sess.send <- packet:
+		default:
+		}
+	}
 }
 
 // Publish to topic subscribers's sessions currently offline in the topic, on their 'me'

@@ -117,13 +117,14 @@ func (ss *SessionStore) Delete(s *Session) {
 }
 
 // Shutting down sessionStore. No need to clean up.
+// Don't send to clustered sessions, their servers are not being shut down.
 func (ss *SessionStore) Shutdown() {
 	ss.rw.Lock()
 	defer ss.rw.Unlock()
 
 	shutdown, _ := json.Marshal(NoErrShutdown(time.Now().UTC().Round(time.Millisecond)))
 	for _, s := range ss.sessCache {
-		if s.send != nil {
+		if s.send != nil && s.proto != RPC {
 			s.send <- shutdown
 		}
 	}

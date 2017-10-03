@@ -144,11 +144,19 @@ type sessionLeave struct {
 	reqId string
 }
 
+const (
+	StopNone = iota
+	StopShutdown
+	StopDeleted
+	StopRehashing
+)
+
+// Topic shutdown
 type shutDown struct {
 	// Channel to report back completion of topic shutdown. Could be nil
 	done chan<- bool
 	// Topic is being deleted as opposite to total system shutdown
-	del bool
+	reason int
 }
 
 type pushReceipt struct {
@@ -512,13 +520,21 @@ func (t *Topic) run(hub *Hub) {
 			return
 
 		case sd := <-t.exit:
-			// Handle two cases: topic is being deleted (del==true) or system shutdown (del==false, done!=nil).
+			// Handle four cases:
+			// 1. Topic is shutting down by timer due to inactivity (reason == StopNone)
+			// 2. Topic is being deleted (reason == StopDeleted)
+			// 3. System shutdown (reason == StopShutdown, done != nil).
+			// 4. Cluster rehashing (reason == StopRehashing)
 			// FIXME(gene): save lastMessage value;
 
-			if t.cat == types.TopicCat_Grp && sd.del {
+			if t.cat == types.TopicCat_Grp && sd.reason == StopDeleted {
 				t.presSubsOffline("gone", nilPresParams, 0, "", false)
+				// Not publishing online/offline to deleted P2P topics
+			} else if sd.reason == StopRehashing {
+				// Must send individual messages to sessions because normal sending through the topic's
+				// broadcast channel won't work - it will be shut down too soon.
+				t.presSubsOnlineDirect("term")
 			}
-			// Not publishing online/offline to deleted P2P topics
 
 			// In case of a system shutdown don't bother with notifications. They won't be delivered anyway.
 
