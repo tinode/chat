@@ -24,7 +24,7 @@ This build timestamp will be sent by the server to the clients.
  - https://github.com/tinode/example-react-js/archive/master.zip
  - https://github.com/tinode/tinode-js/archive/master.zip
 
-## Running
+## Running standalone server
 
 - Run RethinkDB:
   `rethinkdb --bind all --daemon`
@@ -47,7 +47,7 @@ This build timestamp will be sent by the server to the clients.
 
 ## Running a cluster
 
-- Install and run RethinkDB, run DB initializer, unpack JS files as described in the previous section. 
+- Install RethinkDB, run it stanalone or in [cluster mode](https://www.rethinkdb.com/docs/start-a-server/#a-rethinkdb-cluster-using-multiple-machines). Run DB initializer, unpack JS files as described in the previous section.
 
 - Cluster expects at least two nodes. A minimum of three nodes is recommended. A sample cluster config file is provided as `cluster.conf`. The following section configures the cluster.
 
@@ -62,13 +62,18 @@ This build timestamp will be sent by the server to the clients.
 		"failover": {
 			"enabled": true,
 			"heartbeat": 100,
-			"vote_after": 5
+			"vote_after": 8,
+			"node_fail_after": 16
 		}
 	}
 ```
 * `nodes` defines individual cluster nodes. The sample defines three nodes named `one`, `two`, and `tree` running at the localhost at the specified cluster communication ports. Cluster addresses don't need to be exposed to the clients.
 * `self` is the name of the current node. Generally it's more convenient to specify the name of the current node at the command line using `cluster_self` option. Command line value overrides the config file value.
-* `failover` is an experimental feature currently in development.
+* `failover` is an experimental feature which migrates topics from failed cluster nodes keeping them accessible:
+ * `enabled` turns on failover mode; failover mode requires at least three nodes in the cluster.
+ * `heartbeat` interval in milliseconds between heartbeats sent by the leader node to follower nodes to ensure they are accessible.
+ * `vote_after` number of failed heartbeats before a new leader node is elected.
+ * `node_fail_after` number of heartbeats that a follower node misses before it's cosidered to be down.
 
 If you are testing the cluster with all nodes running on the same host, you also must override the `listen` port. Here is an example for launching two cluster nodes from the same host using the same config file:
 ```
