@@ -20,8 +20,8 @@ A javascript demo is (usually) available at https://api.tinode.co/x/example-reac
 * One-on-one messaging.
 * Group messaging with currently unlimited number of members where every member's access permissions are managed individually. The maximum number of members will be limited to a reasonably high value in the future (256? configurable?).
 * Topic access control with permissions for various actions.
-* Server-generated presence notifications for people, topics. 
-* Basic sharded clustering.
+* Server-generated presence notifications for people, topics.
+* Sharded clustering with failover.
 * Persistent message store, paginated message history.
 * Javascript bindings with no dependencies.
 * Java bindings (dependencies: [jackson](https://github.com/FasterXML/jackson), [nv-websocket-client](https://github.com/TakahikoKawasaki/nv-websocket-client)). Suitable for Android but with no Android SDK dependencies.
@@ -42,9 +42,9 @@ A javascript demo is (usually) available at https://api.tinode.co/x/example-reac
 
 * iOS client bindings and client.
 * Video and other media transfer.
-* End to end encryption with [OTR](https://en.wikipedia.org/wiki/Off-the-Record_Messaging) for one-on-one messaging and undecided method for group mesaging.
+* End to end encryption with [OTR](https://en.wikipedia.org/wiki/Off-the-Record_Messaging) for one-on-one messaging and undecided method for group messaging.
 * Group messaging with unlimited number of members with bearer token access control.
-* Failover/hot standby/replication.
+* Hot standby.
 * Federation.
 * Different levels of message persistence (from strict persistence to "store until delivered" to purely ephemeral messaging).
 * Support for binary wire protocol.
