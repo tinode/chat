@@ -172,8 +172,12 @@ func (n *ClusterNode) call(proc string, msg interface{}, resp interface{}) error
 func (n *ClusterNode) forward(msg *ClusterReq) error {
 	log.Printf("cluster: forwarding request to node '%s'", n.name)
 	msg.Node = globals.cluster.thisNodeName
-	unused := false
-	return n.call("Cluster.Master", msg, &unused)
+	rejected := false
+	err := n.call("Cluster.Master", msg, &rejected)
+	if err == nil && rejected {
+		err = errors.New("cluster: master node out of sync")
+	}
+	return err
 }
 
 // Master responds to proxy
@@ -202,12 +206,8 @@ type Cluster struct {
 // The message is treated like it came from a session: find or create a session locally,
 // dispatch the message to it like it came from a normal ws/lp connection.
 // Called by a remote node.
-func (c *Cluster) Master(msg *ClusterReq, unused *bool) error {
+func (c *Cluster) Master(msg *ClusterReq, rejected *bool) error {
 	log.Printf("cluster: Master request received from node '%s'", msg.Node)
-
-	if msg.Signature != c.ring.Signature() {
-		// TODO Reject request: wrong signature, cluster out of sync
-	}
 
 	// Find the local session associated with the given remote session.
 	sess := globals.sessionStore.Get(msg.Sess.Sid)
@@ -217,7 +217,7 @@ func (c *Cluster) Master(msg *ClusterReq, unused *bool) error {
 		if sess != nil {
 			sess.stop <- nil
 		}
-	} else {
+	} else if msg.Signature == c.ring.Signature() {
 		// This cluster member received a request for a topic it owns.
 
 		if sess == nil {
@@ -241,6 +241,9 @@ func (c *Cluster) Master(msg *ClusterReq, unused *bool) error {
 
 		// Dispatch remote message to a local session.
 		sess.dispatch(msg.Msg)
+	} else {
+		// Reject the request: wrong signature, cluster is out of sync.
+		*rejected = true
 	}
 
 	return nil
