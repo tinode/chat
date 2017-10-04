@@ -62,7 +62,7 @@ A javascript demo is (usually) available at https://api.tinode.co/x/example-reac
 ### Desktop Web
 
 <p align="center">
-  <img src="web-desktop-1.png" alt="Desktop web: full app" width=866 />
+  <img src="web-desktop-2.png" alt="Desktop web: full app" width=866 />
 </p>
 
 ### Mobile Web
