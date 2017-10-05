@@ -14,7 +14,7 @@ import (
 	"github.com/tinode/chat/server/store/types"
 )
 
-const DEFAULT_CLUSTER_RECONNECT = 1000 * time.Millisecond
+const DEFAULT_CLUSTER_RECONNECT = 200 * time.Millisecond
 const CLUSTER_HASH_REPLICAS = 20
 
 type ClusterNodeConfig struct {
@@ -37,10 +37,10 @@ type ClusterNode struct {
 
 	// RPC endpoint
 	endpoint *rpc.Client
-	// true if the endpoint is believed to be connected
+	// True if the endpoint is believed to be connected
 	connected bool
-	// Error returned by the last call, could be nil
-	lastError error
+	// True if a go routine is trying to reconnect the node
+	reconnecting bool
 	// TCP address in the form host:port
 	address string
 	// Name of the node
@@ -106,14 +106,18 @@ type ClusterResp struct {
 func (n *ClusterNode) reconnect() {
 	var reconnTicker *time.Ticker
 
+	// Avoid parallel reconnection threads
+	n.lock.Lock()
+	if n.reconnecting {
+		n.lock.Unlock()
+		return
+	}
+	n.reconnecting = true
+	n.lock.Unlock()
+
 	var count = 0
 	var err error
 	for {
-		if n.connected {
-			// Avoid parallel reconnection threads
-			return
-		}
-
 		// Attempt to reconnect right away
 		if n.endpoint, err = rpc.Dial("tcp", n.address); err == nil {
 			if reconnTicker != nil {
@@ -121,6 +125,7 @@ func (n *ClusterNode) reconnect() {
 			}
 			n.lock.Lock()
 			n.connected = true
+			n.reconnecting = false
 			n.lock.Unlock()
 			log.Printf("cluster: connection to '%s' established", n.name)
 			return
@@ -140,7 +145,10 @@ func (n *ClusterNode) reconnect() {
 			if n.endpoint != nil {
 				n.endpoint.Close()
 			}
+			n.lock.Lock()
 			n.connected = false
+			n.reconnecting = false
+			n.lock.Unlock()
 			log.Printf("cluster: node '%s' shut down completed", n.name)
 			return
 		}
@@ -149,7 +157,7 @@ func (n *ClusterNode) reconnect() {
 
 func (n *ClusterNode) call(proc string, msg interface{}, resp interface{}) error {
 	if !n.connected {
-		return errors.New("cluster: node not connected")
+		return errors.New("cluster: node '" + n.name + "' not connected")
 	}
 
 	if err := n.endpoint.Call(proc, msg, resp); err != nil {
@@ -166,6 +174,51 @@ func (n *ClusterNode) call(proc string, msg interface{}, resp interface{}) error
 	}
 
 	return nil
+}
+
+func (n *ClusterNode) callAsync(proc string, msg interface{}, resp interface{}, done chan *rpc.Call) *rpc.Call {
+	if done != nil && cap(done) == 0 {
+		log.Panic("cluster: RPC done channel is unbuffered")
+	}
+
+	if !n.connected {
+		call := &rpc.Call{
+			ServiceMethod: proc,
+			Args:          msg,
+			Reply:         resp,
+			Error:         errors.New("cluster: node '" + n.name + "' not connected"),
+			Done:          done,
+		}
+		if done != nil {
+			done <- call
+		}
+		return call
+	}
+
+	myDone := make(chan *rpc.Call, 1)
+	go func() {
+		select {
+		case call := <-myDone:
+			if call.Error != nil {
+				n.lock.Lock()
+				if n.connected {
+					n.endpoint.Close()
+					n.connected = false
+					go n.reconnect()
+				}
+				n.lock.Unlock()
+			}
+
+			if done != nil {
+				done <- call
+			}
+		}
+	}()
+
+	call := n.endpoint.Go(proc, msg, resp, myDone)
+	call.Done = done
+
+	return call
 }
 
 // Proxy forwards message to master
@@ -279,7 +332,7 @@ func (c *Cluster) nodeForTopic(topic string) *ClusterNode {
 	} else {
 		node := globals.cluster.nodes[key]
 		if node == nil {
-			log.Println("cluster: node has disconnected")
+			log.Println("cluster: no node for topic", topic, key)
 		}
 		return node
 	}
@@ -371,14 +424,10 @@ func clusterInit(configString json.RawMessage, self *string) {
 	}
 	globals.cluster = &Cluster{
 		thisNodeName: thisName,
-		ring:         rh.New(CLUSTER_HASH_REPLICAS, nil),
 		nodes:        make(map[string]*ClusterNode)}
 
-	ringKeys := make([]string, 0, len(config.Nodes))
 	listenOn := ""
 	for _, host := range config.Nodes {
-		ringKeys = append(ringKeys, host.Name)
-
 		if host.Name == globals.cluster.thisNodeName {
 			listenOn = host.Addr
 			// Don't create a cluster member for this local instance
@@ -400,7 +449,7 @@ func clusterInit(configString json.RawMessage, self *string) {
 	}
 
 	if !globals.cluster.failoverInit(config.Failover) {
-		globals.cluster.ring.Add(ringKeys...)
+		globals.cluster.rehash(nil)
 	}
 
 	addr, err := net.ResolveTCPAddr("tcp", listenOn)
@@ -443,7 +492,7 @@ func (sess *Session) rpcWriteLoop() {
 			}
 			// The error is returned if the remote node is down. Which means the remote
 			// session is also disconnected.
-			if err := sess.rpcnode.endpoint.Call("Cluster.Proxy",
+			if err := sess.rpcnode.call("Cluster.Proxy",
 				&ClusterResp{Msg: msg, FromSID: sess.sid}, &unused); err != nil {
 
 				log.Println("sess.writeRPC: " + err.Error())
@@ -452,7 +501,7 @@ func (sess *Session) rpcWriteLoop() {
 		case msg := <-sess.stop:
 			// Shutdown is requested, don't care if the message is delivered
 			if msg != nil {
-				sess.rpcnode.endpoint.Call("Cluster.Proxy", &ClusterResp{Msg: msg, FromSID: sess.sid},
+				sess.rpcnode.call("Cluster.Proxy", &ClusterResp{Msg: msg, FromSID: sess.sid},
 					&unused)
 			}
 			return
