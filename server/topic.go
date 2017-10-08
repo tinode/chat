@@ -703,6 +703,8 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string,
 	oldWant := types.ModeNone
 	oldGiven := types.ModeNone
 
+	log.Println("requestSub", t.name, "'", want, "'")
+
 	// Parse access mode requested by the user
 	modeWant := types.ModeUnset
 	if want != "" {
@@ -717,23 +719,14 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string,
 	// It could be an actual subscription (IsJoiner() == true) or a ban (IsJoiner() == false)
 	userData, existingSub := t.perUser[sess.uid]
 	if !existingSub {
-		if modeWant == types.ModeUnset {
-			// User wants default access mode.
-			userData.modeWant = t.accessFor(sess.authLvl)
-		} else {
-			userData.modeWant = modeWant
-		}
 
 		userData.private = private
 
 		if t.cat == types.TopicCat_P2P {
 			// If it's a re-subscription to a p2p topic, set public and permissions
 
-			// Make sure the user is not asking for unreasonable permissions
-			userData.modeWant = (userData.modeWant & types.ModeCP2P) | types.ModeApprove
-
 			// t.perUser contains just one element - the other user
-			for uid2, _ := range t.perUser {
+			for uid2, user2Data := range t.perUser {
 				if user2, err := store.Users.Get(uid2); err != nil {
 					log.Println(err.Error())
 					sess.queueOut(ErrUnknown(pktId, t.original(sess.uid), now))
@@ -745,12 +738,29 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string,
 					userData.public = user2.Public
 					userData.modeGiven = selectAccessMode(sess.authLvl,
 						user2.Access.Anon, user2.Access.Auth, types.ModeCP2P)
+					if modeWant == types.ModeUnset {
+						// By default give user1 the same thing user1 gave to user2.
+						userData.modeWant = user2Data.modeGiven
+					} else {
+						userData.modeWant = modeWant
+					}
 				}
 				break
 			}
+
+			// Make sure the user is not asking for unreasonable permissions
+			userData.modeWant = (userData.modeWant & types.ModeCP2P) | types.ModeApprove
+			log.Println("New sub P2P", userData.modeWant.String())
 		} else {
 			// For non-p2p2 topics access is given as default access
 			userData.modeGiven = t.accessFor(sess.authLvl)
+
+			if modeWant == types.ModeUnset {
+				// User wants default access mode.
+				userData.modeWant = t.accessFor(sess.authLvl)
+			} else {
+				userData.modeWant = modeWant
+			}
 		}
 
 		// Add subscription to database
@@ -776,6 +786,8 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string,
 
 		oldWant = userData.modeWant
 		oldGiven = userData.modeGiven
+
+		log.Println("Existing sub", userData.modeWant.String())
 
 		if modeWant != types.ModeUnset {
 			// Explicit modeWant is provided
@@ -1839,8 +1851,6 @@ func (t *Topic) evictUser(uid types.Uid, unsub bool, skip string) {
 		}
 	} else if t.cat == types.TopicCat_P2P && unsub {
 		t.presSingleUserOffline(uid, "gone", nilPresParams, "", false)
-	} else {
-		log.Println("del: not announcing", t.cat, unsub)
 	}
 
 	// Second - detach user from topic
