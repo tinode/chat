@@ -122,14 +122,13 @@ type perUserData struct {
 	modeGiven types.AccessMode
 
 	// P2P only:
-	public interface{}
+	public    interface{}
+	topicName string
 }
 
 // perSubsData holds user's (on 'me' topic) cache of subscription data
 type perSubsData struct {
 	online bool
-	// Uid of the other user for P2P topics, otherwise 0
-	with types.Uid
 }
 
 // Session wants to leave the topic
@@ -736,6 +735,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string,
 					return errors.New("user not found")
 				} else {
 					userData.public = user2.Public
+					userData.topicName = uid2.UserId()
 					userData.modeGiven = selectAccessMode(sess.authLvl,
 						user2.Access.Anon, user2.Access.Auth, types.ModeCP2P)
 					if modeWant == types.ModeUnset {
@@ -750,7 +750,6 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string,
 
 			// Make sure the user is not asking for unreasonable permissions
 			userData.modeWant = (userData.modeWant & types.ModeCP2P) | types.ModeApprove
-			log.Println("New sub P2P", userData.modeWant.String())
 		} else {
 			// For non-p2p2 topics access is given as default access
 			userData.modeGiven = t.accessFor(sess.authLvl)
@@ -786,8 +785,6 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string,
 
 		oldWant = userData.modeWant
 		oldGiven = userData.modeGiven
-
-		log.Println("Existing sub", userData.modeWant.String())
 
 		if modeWant != types.ModeUnset {
 			// Explicit modeWant is provided
@@ -1021,7 +1018,6 @@ func (t *Topic) approveSub(h *Hub, sess *Session, target types.Uid, set *MsgClie
 			modeWant:  sub.ModeWant,
 			private:   nil,
 		}
-
 		t.perUser[target] = userData
 
 	} else {
@@ -1749,13 +1745,18 @@ func (t *Topic) replyDelSub(h *Hub, sess *Session, del *MsgClientDel) error {
 
 	var err error
 
+	// Get ID of the affected user
 	uid := types.ParseUserId(del.User)
 
 	pud := t.perUser[sess.uid]
 	if !(pud.modeGiven & pud.modeWant).IsAdmin() {
 		err = errors.New("del.sub: permission denied")
 	} else if uid.IsZero() || uid == sess.uid {
+		// Cannot delete self-subscription. User [leave unsub] or [delete topic]
 		err = errors.New("del.sub: cannot delete self-subscription")
+	} else if t.cat == types.TopicCat_P2P {
+		// Don't try to delete the other P2P user
+		err = errors.New("del.sub: cannot apply to a P2P topic")
 	}
 
 	if err != nil {
@@ -1773,7 +1774,7 @@ func (t *Topic) replyDelSub(h *Hub, sess *Session, del *MsgClientDel) error {
 	if (pud.modeGiven & pud.modeWant).IsOwner() {
 		err = errors.New("del.sub: cannot evict topic owner")
 	} else if !pud.modeWant.IsJoiner() {
-		// If the user banned the topic, subscription should not be deleted. Otherwise user may be re-invited
+		// If the user has banned the topic, subscription should not be deleted. Otherwise user may be re-invited
 		// which defeats the purpose of banning.
 		err = errors.New("del.sub: cannot delete banned subscription")
 	}
@@ -1790,9 +1791,9 @@ func (t *Topic) replyDelSub(h *Hub, sess *Session, del *MsgClientDel) error {
 		return err
 	}
 
-	t.evictUser(uid, true, "")
-
 	sess.queueOut(NoErr(del.Id, t.original(sess.uid), now))
+
+	t.evictUser(uid, true, "")
 
 	return nil
 }
@@ -1816,12 +1817,12 @@ func (t *Topic) replyLeaveUnsub(h *Hub, sess *Session, id string) error {
 		return err
 	}
 
-	// Evict all user's sessions and clear cached data
-	t.evictUser(sess.uid, true, sess.sid)
-
 	if id != "" {
 		sess.queueOut(NoErr(id, t.original(sess.uid), now))
 	}
+
+	// Evict all user's sessions and clear cached data
+	t.evictUser(sess.uid, true, sess.sid)
 
 	return nil
 }
@@ -1850,8 +1851,14 @@ func (t *Topic) evictUser(uid types.Uid, unsub bool, skip string) {
 			t.presSubsOnline("off", uid.UserId(), nilPresParams, types.ModeRead, skip)
 		}
 	} else if t.cat == types.TopicCat_P2P && unsub {
+		// Notify user's own sessions.
 		t.presSingleUserOffline(uid, "gone", nilPresParams, "", false)
+		// TODO: send notification to user1's 'me' to remove user2 from perSubs and
+		// send an "off" notification to user2
 	}
+
+	// Save topic name. It won't be available later
+	original := t.original(uid)
 
 	// Second - detach user from topic
 	if unsub {
@@ -1869,7 +1876,7 @@ func (t *Topic) evictUser(uid types.Uid, unsub bool, skip string) {
 			delete(t.sessions, sess)
 			sess.detach <- t.name
 			if sess.sid != skip {
-				sess.queueOut(NoErrEvicted("", t.original(sess.uid), now))
+				sess.queueOut(NoErrEvicted("", original, now))
 			}
 		}
 	}
@@ -1926,15 +1933,15 @@ func (t *Topic) isSuspended() bool {
 
 // Get topic name suitable for the given client
 func (t *Topic) original(uid types.Uid) string {
-	if t.cat == types.TopicCat_P2P {
-		for u2, _ := range t.perUser {
-			if u2.Compare(uid) != 0 {
-				return u2.UserId()
-			}
-		}
-		log.Fatal("Invalid P2P topic")
+	if t.cat != types.TopicCat_P2P {
+		return t.x_original
 	}
-	return t.x_original
+
+	if pud, ok := t.perUser[uid]; ok {
+		return pud.topicName
+	}
+
+	panic("Invalid P2P topic")
 }
 
 // Get topic name suitable for the given client

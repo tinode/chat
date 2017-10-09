@@ -396,9 +396,10 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 				uid := types.ParseUid(subs[i].User)
 				t.perUser[uid] = perUserData{
 					// Adapter already swapped the public values
-					public:  subs[i].GetPublic(),
-					private: subs[i].Private,
-					// lastSeenTag: subs[i].LastSeen,
+					public:    subs[i].GetPublic(),
+					topicName: types.ParseUid(subs[(i+1)%2].User).UserId(),
+
+					private:   subs[i].Private,
 					modeWant:  subs[i].ModeWant,
 					modeGiven: subs[i].ModeGiven,
 					clearId:   subs[i].ClearId}
@@ -407,9 +408,6 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		} else {
 			// Cases 1 (new topic), 2 (one of the two subscriptions is missing: either it's a new request
 			// or the subscription was deleted)
-
-			log.Println("hub: creating new p2p topic")
-
 			var userData perUserData
 
 			// Fetching records for both users.
@@ -418,6 +416,9 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 			// The other user.
 			userId2 := types.ParseUserId(t.x_original)
 			// User index: u1 - requester, u2 - the other user
+
+			log.Println("hub: creating new p2p topic", userId1.String(), userId2.String())
+
 			var u1, u2 int
 			users, err := store.Users.GetAll(userId1, userId2)
 			if err != nil {
@@ -443,9 +444,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 			// Set to true if only requester's subscription has to be created.
 			var user1only bool
 			if len(subs) == 1 {
-				log.Println("hub: one subscription already exists")
-
-				if subs[0].Uid() == userId1 {
+				if subs[0].User == userId1.String() {
 					// User2's subscription is missing, user1's exists
 					sub1 = &subs[0]
 				} else {
@@ -453,6 +452,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 					sub2 = &subs[0]
 					user1only = true
 				}
+				log.Println("hub: one subscription already exists", subs[0].User, user1only)
 			}
 
 			// Other user's subscription is missing
@@ -575,6 +575,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 
 			// Publics is already swapped
 			userData.public = sub1.GetPublic()
+			userData.topicName = userId2.UserId()
 			userData.modeWant = sub1.ModeWant
 			userData.modeGiven = sub1.ModeGiven
 			userData.clearId = sub2.ClearId
@@ -582,6 +583,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 
 			t.perUser[userId2] = perUserData{
 				public:    sub2.GetPublic(),
+				topicName: userId1.UserId(),
 				modeWant:  sub2.ModeWant,
 				modeGiven: sub2.ModeGiven,
 				clearId:   sub2.ClearId}
@@ -791,7 +793,6 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *MsgClientDel, reason 
 	if reason == StopDeleted {
 		// Case 1 (unregister and delete)
 		if t := h.topicGet(topic); t != nil {
-			log.Println("topicUnreg -- ONline")
 			// Case 1.1: topic is online
 			if t.owner == sess.uid || (t.cat == types.TopicCat_P2P && len(t.perUser) < 2) {
 				// Case 1.1.1: requester is the owner or last sub in a p2p topic
@@ -800,7 +801,7 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *MsgClientDel, reason 
 
 				if err := store.Topics.Delete(topic); err != nil {
 					t.resume()
-					log.Println("topicUnreg delete failed (1):", err)
+					log.Println("topicUnreg failed to delete online topic:", err)
 					sess.queueOut(ErrUnknown(msg.Id, msg.Topic, now))
 					return
 				}
@@ -829,7 +830,6 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *MsgClientDel, reason 
 
 		} else {
 			// Case 1.2: topic is offline.
-			log.Println("topicUnreg -- offline")
 
 			// Get all subscribers: we have to notify them all.
 			if subs, err := store.Topics.GetSubs(topic); err != nil {
@@ -857,7 +857,7 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *MsgClientDel, reason 
 					if tcat == types.TopicCat_P2P && subs != nil && len(subs) < 2 {
 						// This is a P2P topic and fewer than 2 subscriptions, delete the entire topic
 						if err := store.Topics.Delete(topic); err != nil {
-							log.Println("topicUnreg delete failed (2):", err)
+							log.Println("topicUnreg failed to delete offline topic:", err)
 							sess.queueOut(ErrUnknown(msg.Id, msg.Topic, now))
 							return
 						}

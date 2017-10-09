@@ -106,6 +106,7 @@ func ParseUid(s string) Uid {
 	return uid
 }
 
+// User ID prefixed with 'usr', like usrXXXXX
 func (uid Uid) UserId() string {
 	return uid.PrefixId("usr")
 }

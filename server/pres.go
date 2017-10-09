@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"log"
-	"strings"
 
 	"github.com/tinode/chat/server/store"
 	"github.com/tinode/chat/server/store/types"
@@ -29,27 +28,20 @@ func (p PresParams) packAcs() *MsgAccessMode {
 	return nil
 }
 
-func (t *Topic) addToPerSubs(uid types.Uid, topic string) {
-	var with types.Uid
-	if strings.HasPrefix(topic, "p2p") {
-		if uid1, uid2, err := types.ParseP2P(topic); err == nil {
-			if uid1 == uid {
-				topic = uid2.UserId()
-				with = uid2
-			} else {
-				topic = uid1.UserId()
-				with = uid1
-			}
+func (t *Topic) addToPerSubs(topic string, online bool) {
+	if uid1, uid2, err := types.ParseP2P(topic); err == nil {
+		// If this is a P2P topic, index it by second user's ID
+		if uid1.UserId() == t.name {
+			topic = uid2.UserId()
 		} else {
-			return
+			topic = uid1.UserId()
 		}
 	} else if topic == t.name {
 		// No need to push updates to self
 		return
 	}
 
-	//log.Printf("Pres loadContacts: topic[%s]: caching as '%s'", t.name, topic)
-	t.perSubs[topic] = perSubsData{with: with}
+	t.perSubs[topic] = perSubsData{online: online}
 }
 
 // loadContacts initializes topic.perSubs to support presence notifications.
@@ -64,14 +56,17 @@ func (t *Topic) loadContacts(uid types.Uid) error {
 	t.perSubs = make(map[string]perSubsData, len(subs))
 	for _, sub := range subs {
 		//log.Printf("Pres loadContacts: topic[%s]: processing sub '%s'", t.name, sub.Topic)
-		t.addToPerSubs(uid, sub.Topic)
+		t.addToPerSubs(sub.Topic, false)
 	}
 	//log.Printf("Pres loadContacts: topic[%s]: total cached %d", t.name, len(t.perSubs))
 	return nil
 }
 
 // This topic got a request from a 'me' topic to start/stop sending presence updates. The
-// originating topic reports its own status as "on", "off" or "?unkn".
+// originating topic reports its own status as "on", "off", "?unkn", or "?gone".
+// 	"on" - requester came online
+// 	"off" - requester is offline now
+//	"?unkn" - requester wants to initiate online status exchange but it's own status is unknown yet
 func (t *Topic) presProcReq(fromUserId string, what string, wantReply bool) {
 
 	var online, unknown bool
@@ -107,9 +102,7 @@ func (t *Topic) presProcReq(fromUserId string, what string, wantReply bool) {
 			// doReply is unchanged
 
 			// Got request from a new topic. This must be a new subscription. Record it.
-			t.perSubs[fromUserId] = perSubsData{online: online, with: types.ParseUserId(fromUserId)}
-
-			// log.Printf("presProcReq: topic[%s]: request from previously untracked topic %s", t.name, fromUserId)
+			t.addToPerSubs(fromUserId, online)
 		}
 	}
 
