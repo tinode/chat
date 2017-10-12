@@ -247,7 +247,7 @@ func (t *Topic) run(hub *Hub) {
 				} else if t.cat == types.TopicCat_Grp && pud.online == 0 {
 					// User is going offline: notify online subscribers on 'me'
 					t.presSubsOnline("off", leave.sess.uid.UserId(), nilPresParams,
-						types.ModeRead, "")
+						types.ModeRead, "", "")
 				}
 
 				t.perUser[leave.sess.uid] = pud
@@ -381,7 +381,7 @@ func (t *Topic) run(hub *Hub) {
 					}
 
 					// Read/recv updated: notify user's other sessions of the change
-					t.presPubMessageCount(uid, nil, 0, recv, read, msg.skipSid)
+					t.presPubMessageCount(uid, recv, read, msg.skipSid)
 
 					t.perUser[uid] = pud
 				}
@@ -404,6 +404,11 @@ func (t *Topic) run(hub *Hub) {
 					if msg.Pres != nil {
 						// Skip notifying - already notified on topic.
 						if msg.Pres.skipTopic != "" && sess.subs[msg.Pres.skipTopic] != nil {
+							continue
+						}
+
+						// Notification addressed to a single user only
+						if msg.Pres.singleUser != "" && sess.uid.UserId() != msg.Pres.singleUser {
 							continue
 						}
 
@@ -603,7 +608,7 @@ func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 		}
 	} else if t.cat == types.TopicCat_Grp && pud.online == 1 {
 		// User just joined. Notify other group members
-		t.presSubsOnline("on", sreg.sess.uid.UserId(), nilPresParams, types.ModeRead, sreg.sess.sid)
+		t.presSubsOnline("on", sreg.sess.uid.UserId(), nilPresParams, types.ModeRead, sreg.sess.sid, "")
 	}
 
 	if getWhat&constMsgMetaSub != 0 {
@@ -898,7 +903,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string,
 			dGiven: oldGiven.Delta(userData.modeGiven)}
 
 		// Announce to the admins who are online in the topic.
-		t.presSubsOnline("acs", sess.uid.UserId(), params, types.ModeCSharer, sess.sid)
+		t.presSubsOnline("acs", sess.uid.UserId(), params, types.ModeCSharer, sess.sid, "")
 
 		// If it's a new subscription or if the user asked for permissions in excess of what was granted,
 		// announce the request to topic admins on 'me' as well.
@@ -1698,12 +1703,14 @@ func (t *Topic) replyDelMsg(sess *Session, del *MsgClientDel) error {
 	}
 
 	if del.Hard {
+		log.Println("hard delete")
 		// Broadcast the change to all, online and offline, exclude the session making the change.
-		t.presSubsOnline("del", "", params, types.ModeRead, sess.sid)
+		t.presSubsOnline("del", "", params, types.ModeRead, sess.sid, "")
 		t.presSubsOffline("del", params, types.ModeRead, sess.sid, true)
 	} else {
+		log.Println("soft delete")
 		// Notify user's other sessions
-		t.presPubMessageCount(sess.uid, filteredList, del.Before, 0, 0, sess.sid)
+		t.presPubMessageDelete(sess.uid, filteredList, del.Before, sess.sid)
 	}
 
 	sess.queueOut(NoErr(del.Id, t.original(sess.uid), now))
@@ -1843,12 +1850,12 @@ func (t *Topic) evictUser(uid types.Uid, unsub bool, skip string) {
 					target: uid.UserId(),
 					dWant:  pud.modeWant.Delta(types.ModeNone),
 					dGiven: pud.modeGiven.Delta(types.ModeNone)},
-				types.ModeCAdmin, skip)
+				types.ModeCAdmin, skip, "")
 			// Let affected user know
 			t.presSingleUserOffline(uid, "gone", nilPresParams, "", false)
 		} else {
 			// Let all 'R' users know
-			t.presSubsOnline("off", uid.UserId(), nilPresParams, types.ModeRead, skip)
+			t.presSubsOnline("off", uid.UserId(), nilPresParams, types.ModeRead, skip, "")
 		}
 	} else if t.cat == types.TopicCat_P2P && unsub {
 		// Notify user's own sessions.

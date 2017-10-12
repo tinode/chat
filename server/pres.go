@@ -144,7 +144,8 @@ func (t *Topic) presUsersOfInterest(what string, ua string) {
 // Case M: Topic unaccessible (cluster failure), "left" to everyone currently online
 // Case V.2: Messages soft deleted, "del" to one user only
 // Case W.2: Messages hard-deleted, "del"
-func (t *Topic) presSubsOnline(what, src string, params *PresParams, filter types.AccessMode, skipSid string) {
+func (t *Topic) presSubsOnline(what, src string, params *PresParams,
+	filter types.AccessMode, skipSid string, singleUser string) {
 
 	// If affected user is the same as the user making the change, clear 'who'
 	actor := params.actor
@@ -160,7 +161,7 @@ func (t *Topic) presSubsOnline(what, src string, params *PresParams, filter type
 	globals.hub.route <- &ServerComMessage{
 		Pres: &MsgServerPres{Topic: t.x_original, What: what, Src: src,
 			Acs: params.packAcs(), AcsActor: actor, AcsTarget: target,
-			SeqId: params.seqId, SeqList: params.seqList, filter: int(filter)},
+			SeqId: params.seqId, SeqList: params.seqList, filter: int(filter), singleUser: singleUser},
 		rcptto: t.name, skipSid: skipSid}
 
 	// log.Printf("Pres K.2, L.3, W.2: topic'%s' what='%s', who='%s', acs='w:%s/g:%s'", t.name, what,
@@ -333,9 +334,9 @@ func presSingleUserOfflineOffline(uid types.Uid, original string, what string,
 		rcptto: uid.UserId(), skipSid: skipSid}
 }
 
-// Let other sessions of a given user know that what messages are now received/read/deleted
-// Cases U, V.1
-func (t *Topic) presPubMessageCount(uid types.Uid, list []int, clear, recv, read int, skip string) {
+// Let other sessions of a given user know that what messages are now received/read
+// Cases U
+func (t *Topic) presPubMessageCount(uid types.Uid, recv, read int, skip string) {
 	var what string
 	var seq int
 	if read > 0 {
@@ -344,27 +345,37 @@ func (t *Topic) presPubMessageCount(uid types.Uid, list []int, clear, recv, read
 	} else if recv > 0 {
 		what = "recv"
 		seq = recv
-	} else if seq > 0 {
-		what = "del"
-		seq = clear
-	} else if list != nil {
-		if len(list) == 1 {
-			if list[0] > 0 {
-				what = "del"
-				seq = list[0]
-				list = nil
-			}
-		} else {
-			what = "del"
-		}
 	}
 
 	if what != "" {
 		// Announce to user's other sessions on 'me' only if they are not attached to this topic.
 		// Attached topics will receive an {info}
-		t.presSingleUserOffline(uid, what, &PresParams{seqId: seq, seqList: list}, skip, true)
+		t.presSingleUserOffline(uid, what, &PresParams{seqId: seq}, skip, true)
 	} else {
-		log.Printf("Case U, V1: topic[%s] invalid request - missing payload", t.name)
+		log.Printf("Case U: topic[%s] invalid request - missing payload", t.name)
+	}
+}
+
+// Let other sessions of a given user know that what messages are now deleted
+// Cases V.1, V.2
+func (t *Topic) presPubMessageDelete(uid types.Uid, list []int, clear int, skip string) {
+	if clear > 0 || (len(list) > 0 && list[0] > 0) {
+		// This check is only needed for V.1, but it does not hurt V.2. Let's do it here for both.
+		pud, _ := t.perUser[uid]
+		if !(pud.modeGiven & pud.modeWant).IsPresencer() {
+			return
+		}
+
+		params := &PresParams{seqId: clear, seqList: list}
+
+		// Case V.2
+		user := uid.UserId()
+		t.presSubsOnline("del", user, params, 0, skip, user)
+
+		// Case V.1
+		t.presSingleUserOffline(uid, "del", params, skip, true)
+	} else {
+		log.Printf("Case V.1, V.2: topic[%s] invalid request - missing payload", t.name)
 	}
 }
 

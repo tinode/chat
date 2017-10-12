@@ -406,6 +406,9 @@ type MsgServerPres struct {
 
 	// When sending to 'me', skip sessions subscribed to this topic
 	skipTopic string
+
+	// Send to sessions of a single user only
+	singleUser string
 }
 
 type MsgServerMeta struct {
