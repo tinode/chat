@@ -1,0 +1,211 @@
+syntax = "proto3";
+package model;
+
+// Context messages
+
+message Session {
+	string session_id = 1;
+	string user_id = 2;
+	enum AuthLevel {
+		NONE = 0;
+		ANON = 10;
+		AUTH = 20;
+		ROOT = 30;
+  	}
+	AuthLevel auth_level = 3;
+	string remote_addr = 4;
+	string user_agent = 5;
+	string device_id = 6;
+	string language = 7;	
+}
+
+message Topic {	
+	string name = 1;
+	string access_auth = 2;
+	string access_anon = 3;
+	bytes public = 4;
+	bytes private = 5;
+}
+
+message User {	
+	string id = 1;
+	string mode_want = 2;
+	string mode_given = 3;
+	bytes public = 4;
+}
+
+// Client messages
+
+// Topic default access mode
+message DefaultAcsMode {
+	string auth = 1;
+	string anon = 2;
+}
+
+// SetSub: payload in set.sub request to update current subscription or invite another user, {sub.what} == "sub"
+message SetSub {
+	// User affected by this request. Default (empty): current user
+	string user_id = 1;
+
+	// Access mode change, either Given or Want depending on context
+	string mode = 2;
+}
+
+// SetDesc: C2S in set.what == "desc" and sub.init message
+message SetDesc {
+	DefaultAcsMode default_acs = 1;
+	bytes public = 2;
+	bytes private = 3;
+}
+
+message GetOpts {
+	int64 if_modified_since = 1; // timestamp in milliseconds since epoch 01/01/1970
+	int32 limit = 2;
+}
+
+message BrowseOpts {
+	// Load messages with seq id equal or greater than this
+	int32 since_id = 1;
+	// Load messages with UpdatedAt equal or grater than this
+	int64 since_ts = 2; 
+	// Load messages with seq id lower than this
+	int32 before_id = 3;
+	// Load messages with UpdatedAt lower than this
+	int64 before_ts = 4;
+	// Limit the number of messages loaded
+	int32 limit = 5;
+}
+
+message GetQuery {
+	string what = 1;
+
+	// Parameters of "desc" request
+	GetOpts desc = 2;
+	// Parameters of "sub" request
+	GetOpts sub = 3;
+	// Parameters of "data" request
+	BrowseOpts data = 4;
+}
+
+message SetQuery {
+	// Topic metadata, new topic & new subscriptions only
+	SetDesc desc = 1;
+	// Subscription parameters
+	SetSub sub = 2;
+}
+
+// Client handshake
+message ClientHi {
+	string user_agent = 1;
+	int32 ver = 2;
+	string device_id = 3;
+	string lang = 4;
+}
+
+// User creation message {acc}
+message ClientAcc {
+	oneof user {
+		bool is_new = 1;
+		string user_id = 2;
+	}
+	// The initial authentication scheme the account can use
+	string scheme = 3;
+	// Shared secret
+	bytes secret = 4;
+	// Authenticate session with the newly created account
+	bool login = 5;
+	// Indexable tags for user discovery
+	repeated string tags = 6;
+	// User initialization data when creating a new user, otherwise ignored
+	SetDesc desc = 7;
+}
+
+// Login {login} message
+message ClientLogin  {
+	// Authentication scheme
+	string scheme  = 1;
+	// Shared secret
+	bytes secret = 2;
+}
+
+// Subscription request {sub} message
+message ClientSub {
+	string topic  = 1;
+
+	// mirrors {set}
+	SetQuery set = 2;
+
+	// mirrors {get}
+	GetQuery get = 3;
+}
+
+// Unsubscribe {leave} request message
+message ClientLeave {
+	string topic  = 1;
+	bool unsub = 2;
+}
+
+// ClientPub is client's request to publish data to topic subscribers {pub}
+message ClientPub {
+	string topic = 1;
+	bool no_echo = 2;
+	map<string, string> head = 3;
+	bytes content = 4;
+}
+
+// Query topic state {get}
+message ClientGet {
+	string topic = 1;
+	GetQuery query = 2;
+}
+
+// Update topic state {set}
+message ClientSet {
+	string topic = 1;
+	SetQuery query = 2;
+}
+
+// ClientDel delete messages or topic
+message ClientDel {
+	string topic = 1;
+	// What to delete, either "msg" to delete messages (default) or "topic" to delete the topic or "sub"
+	// to delete a subscription to topic.
+	enum DelWhat {
+		MSG = 0;
+		TOPIC = 1;
+		SUB = 2;
+	}
+	DelWhat what = 2;
+	// Delete messages older than this seq ID (inclusive)
+	int32 before = 3;
+	// List of Seq Ids to delete/mark as deleted
+	repeated int32 seq_list = 4;
+	// User ID of the subscription to delete
+	string user_id = 5;
+	// Request to hard-delete messages for all users, if such option is available.
+	bool hard = 6;
+}
+
+enum InfoNote {
+	READ = 0;
+	RECV = 1;
+	KP = 2;
+}
+	
+// ClientNote is a client-generated notification for topic subscribers
+message ClientNote {
+	string topic = 1;
+	// what is being reported: "recv" - message received, "read" - message read, "kp" - typing notification
+	InfoNote what = 2;
+	// Server-issued message ID being reported
+	int32 seq_id = 3;
+}
+
+
+// Server response messages
+
+message CtrlResponse {
+	int32 code = 1;
+	string text = 2;
+	map<string, bytes> params = 3;
+}

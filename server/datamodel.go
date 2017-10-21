@@ -88,11 +88,11 @@ type MsgClientHi struct {
 	Id string `json:"id,omitempty"`
 	// User agent
 	UserAgent string `json:"ua,omitempty"`
-	// Authentication scheme
+	// Protocol version, i.e. "0.13"
 	Version string `json:"ver,omitempty"`
 	// Client's unique device ID
 	DeviceID string `json:"dev,omitempty"`
-	// Human language of the connected device
+	// ISO 639-1 human language of the connected device
 	Lang string `json:"lang,omitempty"`
 }
 
