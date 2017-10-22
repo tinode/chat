@@ -1,6 +1,25 @@
 syntax = "proto3";
 package model;
 
+
+// Interface exported by the server.
+service TinodePlugin {
+  // Sends a client message, obtains either a server message to use as a response, or a .
+  rpc HandleMessage(ClientMsg) returns (ServerCtrl) {}
+
+  // A server-to-client streaming RPC.
+  //
+  // Obtains the Features available within the given Rectangle.  Results are
+  // streamed rather than returned at once (e.g. in a response message with a
+  // repeated field), as the rectangle may cover a large area and contain a
+  // huge number of features.
+  rpc FilterMessage(ServerMsg) returns (ServerMsg) {}
+
+  // Tinode server uses this method to ask plugin to inject client-side messages.
+  rpc RequestMessages(None) returns (stream ClientMsg) {}
+}
+
+
 // Context messages
 
 message Session {
@@ -34,12 +53,24 @@ message User {
 	bytes public = 4;
 }
 
+message None {
+	bool none = 1;
+}
+
 // Client messages
 
 // Topic default access mode
 message DefaultAcsMode {
 	string auth = 1;
 	string anon = 2;
+}
+
+// Actual access mode
+message AccessMode {
+	// Access mode requested by the user
+	string want = 1;
+	// Access mode granted to the user by the admin
+	string given = 2;
 }
 
 // SetSub: payload in set.sub request to update current subscription or invite another user, {sub.what} == "sub"
@@ -170,12 +201,12 @@ message ClientDel {
 	string topic = 1;
 	// What to delete, either "msg" to delete messages (default) or "topic" to delete the topic or "sub"
 	// to delete a subscription to topic.
-	enum DelWhat {
+	enum What {
 		MSG = 0;
 		TOPIC = 1;
 		SUB = 2;
 	}
-	DelWhat what = 2;
+	What what = 2;
 	// Delete messages older than this seq ID (inclusive)
 	int32 before = 3;
 	// List of Seq Ids to delete/mark as deleted
@@ -201,44 +232,116 @@ message ClientNote {
 	int32 seq_id = 3;
 }
 
-
+message ClientMsg {
+	oneof Message {
+		ClientHi hi = 1;
+		ClientAcc acc = 2;
+		ClientLogin login = 3;
+		ClientSub sub = 4;
+		ClientLeave leave = 5;
+		ClientPub pub = 6;
+		ClientGet get = 7;
+		ClientSet set = 8;
+		ClientDel del = 9;
+		ClientNote note = 10;
+	}
+}
 // Server response messages
 
+// Topic description, S2C in Meta message
+message TopicDesc {
+	int64 created_at = 1;
+	int64 updated_at = 2;
+	DefaultAcsMode defacs = 4;
+	AccessMode acs = 5;
+	int32 seq_id = 6;
+	int32 read_id = 7;
+	int32 recv_id = 8;
+	int32 clear_id = 9;
+	bytes public = 10;
+	bytes private = 11;
+}
+
+// MsgTopicSub: topic subscription details, sent in Meta message
+message TopicSub {
+	int64 updated_at = 1;
+	int64 deleted_at = 2;
+
+	bool online = 3;
+
+	AccessMode acs = 4;
+	int32 read_id = 5;
+	int32 recv_id = 6;
+	bytes public  = 7;
+	bytes private = 8;
+
+	// Response to non-'me' topic
+
+	// Uid of the subscribed user
+	string user_id = 9;
+
+	// 'me' topic only
+	
+	// Topic name of this subscription
+	string topic = 10;
+	// ID of the last {data} message in a topic
+	int32 seq_id = 11;
+	// Messages are deleted up to this ID
+	int32 clear_id = 12;
+
+	// P2P topics only:
+
+	// Other user's last online timestamp & user agent
+	int64 last_seen_time = 13;
+	string last_seen_user_agent = 14;
+}
+
+// {ctrl} message
 message ServerCtrl {
 	int32 code = 1;
 	string text = 2;
 	map<string, bytes> params = 3;
 }
 
+// {data} message
 message ServerData {
 	string topic = 1;
 	// ID of the user who originated the message as {pub}, could be empty if sent by the system
 	string from_user_id = 2;
-	// Timestamp when the message was deleted or 0. MIlliseconds since the epoch 01/01/1970
+	// Timestamp when the message was deleted or 0. Milliseconds since the epoch 01/01/1970
 	int64 deleted_at = 3;
 	int32 seq_id = 4;
 	map<string, string> head = 5;
 	bytes content = 6;
 }
 
-
+// {pres} message
 message ServerPres {
 	string topic = 1;
 	string src = 2;
 	enum What {
-		
+		ON = 0;
+		OFF = 1;
+		UA = 3;
+		UPD = 4;
+		GONE = 5;
+		ACS = 6;
+		TERM = 7;
+		MSG = 8;
+		READ = 9;
+		RECV = 10;
+		DEL = 11;
 	}
 	What what = 3;
 	string user_agent = 4;
-	oneof Seq {
-		int32 seq_id = 5;
-		repeated int32 seq_list = 6;
-	}
-	AcsTarget string         `json:"tgt,omitempty"`
-	AcsActor  string         `json:"act,omitempty"`
-	Acs       *MsgAccessMode `json:"acs,omitempty"`
+	int32 seq_id = 5;
+	repeated int32 seq_list = 6;
+	string target_user_id = 7;
+	string actor_user_id = 8;
+	AccessMode acs = 9;
 }
 
+// {meta} message
 message ServerMeta {
 	string topic = 1;
 
@@ -246,10 +349,21 @@ message ServerMeta {
 	repeated TopicSub sub = 3;
 }
 
-// MsgServerInfo is the server-side copy of MsgClientNote with From added
+// {info} message: server-side copy of ClientNote with From added
 message ServerInfo {
 	string topic = 1;
 	string from_user_id = 2;
 	InfoNote what = 3;
 	int32 seq_id = 4;
+}
+
+// Cumulative message
+message ServerMsg {
+	oneof Message {
+		ServerCtrl ctrl = 1;
+		ServerData data = 2;
+		ServerPres pres = 3;
+		ServerMeta meta = 4;
+		ServerInfo info = 5;
+	}
 }

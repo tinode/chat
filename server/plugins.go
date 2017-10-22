@@ -76,6 +76,7 @@ func pluginsInit(configString json.RawMessage) {
 		log.Fatal(err)
 	}
 
+	nameIndex := make(map[string]bool)
 	plugins = make([]Plugin, len(config))
 	count := 0
 	for _, conf := range config {
@@ -83,27 +84,35 @@ func pluginsInit(configString json.RawMessage) {
 			continue
 		}
 
-		names := plgFilterNames
+		if nameIndex[conf.Name] {
+			log.Fatalf("plugins: duplicate name '%s'", conf.Name)
+		}
+
+		var names []string
+		var mask uint32
+		if conf.Type == "filter" {
+			names = plgFilterNames
+			mask = plgFilterMask
+		} else {
+			names = plgHandlerNames
+			mask = plgHandlerMask
+		}
 
 		var msgFilter uint32
 		if conf.MessageFilter == nil || (len(conf.MessageFilter) == 1 && conf.MessageFilter[0] == "*") {
-			msgFilter = plgFilterMask
+			msgFilter = mask
 		} else {
 			for _, msg := range conf.MessageFilter {
 				idx := findInSlice(msg, names)
 				if idx < 0 {
-					log.Fatal("plugins: unknown message name", msg)
+					log.Fatalf("plugins: unknown message name '%s'", msg)
 				}
 				msgFilter |= (1 << uint(idx))
 			}
 		}
 
-		var network, addr string
-		if parts := strings.SplitN(conf.ServiceAddr, "://", 2); len(parts) < 2 {
-			log.Fatal("plugins: invalid server address format")
-		} else {
-			network = parts[0]
-			addr = parts[1]
+		if msgFilter == 0 {
+			continue
 		}
 
 		plugins[count] = Plugin{
@@ -113,14 +122,31 @@ func pluginsInit(configString json.RawMessage) {
 			onFailure: conf.OnFailure,
 			messages:  msgFilter,
 			topics:    conf.TopicFilter,
-			network:   network,
-			addr:      addr,
 		}
 
-		log.Println("Plugin defined:", conf.Name)
+		var network, addr string
+		if parts := strings.SplitN(conf.ServiceAddr, "://", 2); len(parts) < 2 {
+			log.Fatal("plugins: invalid server address format", conf.ServiceAddr)
+		} else {
+			plugins[count].network = parts[0]
+			plugins[count].addr = parts[1]
+		}
+
+		nameIndex[conf.Name] = true
+		count++
 	}
 
 	plugins = plugins[:count]
+	if len(plugins) == 0 {
+		log.Fatal("plugins: no active plugins found")
+	}
+
+	var names []string
+	for _, plg := range plugins {
+		names = append(names, plg.name)
+	}
+
+	log.Println("plugins: active", "'"+strings.Join(names, "', '")+"'")
 }
 
 func plugnHandler(sess *Session, msg *ClientComMessage) *ServerComMessage {
