@@ -133,10 +133,10 @@ message ClientSub {
 	string topic  = 1;
 
 	// mirrors {set}
-	SetQuery set = 2;
+	SetQuery set_query = 2;
 
 	// mirrors {get}
-	GetQuery get = 3;
+	GetQuery get_query = 3;
 }
 
 // Unsubscribe {leave} request message
@@ -204,8 +204,67 @@ message ClientNote {
 
 // Server response messages
 
-message CtrlResponse {
+message ServerCtrl {
 	int32 code = 1;
 	string text = 2;
 	map<string, bytes> params = 3;
+}
+
+message ServerData {
+	string topic = 1;
+	// ID of the user who originated the message as {pub}, could be empty if sent by the system
+	string from_user_id = 2;
+	// Timestamp when the message was deleted or 0. MIlliseconds since the epoch 01/01/1970
+	int64 deleted_at = 3;
+	int32 seq_id = 4;
+	map<string, string> head = 5;
+	bytes content = 6;
+}
+
+
+message ServerPres {
+	Topic     string         `json:"topic"`
+	Src       string         `json:"src"`
+	What      string         `json:"what"`
+	UserAgent string         `json:"ua,omitempty"`
+	SeqId     int            `json:"seq,omitempty"`
+	SeqList   []int          `json:"list,omitempty"`
+	AcsTarget string         `json:"tgt,omitempty"`
+	AcsActor  string         `json:"act,omitempty"`
+	Acs       *MsgAccessMode `json:"acs,omitempty"`
+
+	// UNroutable params
+
+	// Flag to break the reply loop
+	wantReply bool
+
+	// Additional access mode filter when senting to topic's online members
+	filter int
+
+	// When sending to 'me', skip sessions subscribed to this topic
+	skipTopic string
+
+	// Send to sessions of a single user only
+	singleUser string
+}
+
+message ServerMeta struct {
+	Id    string `json:"id,omitempty"`
+	Topic string `json:"topic"`
+
+	Timestamp *time.Time `json:"ts,omitempty"`
+
+	Desc *MsgTopicDesc `json:"desc,omitempty"` // Topic description
+	Sub  []MsgTopicSub `json:"sub,omitempty"`  // Subscriptions as an array of objects
+}
+
+// MsgServerInfo is the server-side copy of MsgClientNote with From added
+type ServerInfo struct {
+	Topic string `json:"topic"`
+	// ID of the user who originated the message
+	From string `json:"from"`
+	// what is being reported: "rcpt" - message received, "read" - message read, "kp" - typing notification
+	What string `json:"what"`
+	// Server-issued message ID being reported
+	SeqId int `json:"seq,omitempty"`
 }

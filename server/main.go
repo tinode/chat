@@ -82,6 +82,7 @@ type configType struct {
 	// Tags allowed in index (user discovery)
 	IndexableTags []string                   `json:"indexable_tags"`
 	ClusterConfig json.RawMessage            `json:"cluster_config"`
+	PluginConfig  json.RawMessage            `json:"plugins"`
 	StoreConfig   json.RawMessage            `json:"store_config"`
 	PushConfig    json.RawMessage            `json:"push"`
 	TlsConfig     json.RawMessage            `json:"tls"`
@@ -146,6 +147,8 @@ func main() {
 	globals.hub = newHub()
 	// Cluster initialization
 	clusterInit(config.ClusterConfig, clusterSelf)
+	// Intialize plugins
+	pluginsInit(config.PluginConfig)
 	// API key validation secret
 	globals.apiKeySalt = config.APIKeySalt
 	// Indexable tags for user discovery
