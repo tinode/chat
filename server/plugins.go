@@ -4,6 +4,7 @@ package main
 import (
 	"encoding/json"
 	"log"
+	"strings"
 	"time"
 )
 
@@ -19,15 +20,16 @@ const (
 	plgDel
 	plgNote
 
-	plgCtrl
-	plgData
+	plgData = 1 << iota
 	plgMeta
 	plgPres
 	plgInfo
 
 	plgHandlerMask = plgHi | plgAcc | plgLogin | plgSub | plgLeave | plgPub | plgGet | plgSet | plgDel | plgNote
 	plgFilterMask  = plgData | plgMeta | plgPres | plgInfo
+)
 
+var (
 	plgHandlerNames = []string{"hi", "acc", "login", "sub", "leave", "pub", "get", "set", "del", "note"}
 	plgFilterNames  = []string{"data", "meta", "pres", "info"}
 )
@@ -83,24 +85,36 @@ func pluginsInit(configString json.RawMessage) {
 
 		names := plgFilterNames
 
-		var msgFilter int32
-		for _, msg := range conf.MessageFilter {
-			idx := findInSlice(msg, names)
-			if idx < 0 {
-				log.Fatal("plugins: unknown message name", msg)
+		var msgFilter uint32
+		if conf.MessageFilter == nil || (len(conf.MessageFilter) == 1 && conf.MessageFilter[0] == "*") {
+			msgFilter = plgFilterMask
+		} else {
+			for _, msg := range conf.MessageFilter {
+				idx := findInSlice(msg, names)
+				if idx < 0 {
+					log.Fatal("plugins: unknown message name", msg)
+				}
+				msgFilter |= (1 << uint(idx))
 			}
-			msgFilter |= 1 << idx
+		}
+
+		var network, addr string
+		if parts := strings.SplitN(conf.ServiceAddr, "://", 2); len(parts) < 2 {
+			log.Fatal("plugins: invalid server address format")
+		} else {
+			network = parts[0]
+			addr = parts[1]
 		}
 
 		plugins[count] = Plugin{
 			name:      conf.Name,
-			timeout:   time.Duration(conf.Timeout * time.Microsecond),
+			timeout:   time.Duration(conf.Timeout) * time.Microsecond,
 			isFilter:  conf.Type == "filter",
 			onFailure: conf.OnFailure,
 			messages:  msgFilter,
 			topics:    conf.TopicFilter,
-			network:   "",
-			addr:      "",
+			network:   network,
+			addr:      addr,
 		}
 
 		log.Println("Plugin defined:", conf.Name)
@@ -118,8 +132,8 @@ func plugnHandler(sess *Session, msg *ClientComMessage) *ServerComMessage {
 		if p.isFilter {
 			continue
 		}
-		if resp, err := p.Call(); res != nil {
-			return res
+		if resp, err := p.Call(); resp != nil {
+			return resp
 		} else if err != nil {
 			// Do something here
 		}
@@ -129,7 +143,7 @@ func plugnHandler(sess *Session, msg *ClientComMessage) *ServerComMessage {
 }
 
 func pluginFilter(msg *ServerComMessage) *ServerComMessage {
-
+	return nil
 }
 
 func findInSlice(needle string, haystack []string) int {

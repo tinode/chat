@@ -223,48 +223,33 @@ message ServerData {
 
 
 message ServerPres {
-	Topic     string         `json:"topic"`
-	Src       string         `json:"src"`
-	What      string         `json:"what"`
-	UserAgent string         `json:"ua,omitempty"`
-	SeqId     int            `json:"seq,omitempty"`
-	SeqList   []int          `json:"list,omitempty"`
+	string topic = 1;
+	string src = 2;
+	enum What {
+		
+	}
+	What what = 3;
+	string user_agent = 4;
+	oneof Seq {
+		int32 seq_id = 5;
+		repeated int32 seq_list = 6;
+	}
 	AcsTarget string         `json:"tgt,omitempty"`
 	AcsActor  string         `json:"act,omitempty"`
 	Acs       *MsgAccessMode `json:"acs,omitempty"`
-
-	// UNroutable params
-
-	// Flag to break the reply loop
-	wantReply bool
-
-	// Additional access mode filter when senting to topic's online members
-	filter int
-
-	// When sending to 'me', skip sessions subscribed to this topic
-	skipTopic string
-
-	// Send to sessions of a single user only
-	singleUser string
 }
 
-message ServerMeta struct {
-	Id    string `json:"id,omitempty"`
-	Topic string `json:"topic"`
+message ServerMeta {
+	string topic = 1;
 
-	Timestamp *time.Time `json:"ts,omitempty"`
-
-	Desc *MsgTopicDesc `json:"desc,omitempty"` // Topic description
-	Sub  []MsgTopicSub `json:"sub,omitempty"`  // Subscriptions as an array of objects
+	TopicDesc desc = 2;
+	repeated TopicSub sub = 3;
 }
 
 // MsgServerInfo is the server-side copy of MsgClientNote with From added
-type ServerInfo struct {
-	Topic string `json:"topic"`
-	// ID of the user who originated the message
-	From string `json:"from"`
-	// what is being reported: "rcpt" - message received, "read" - message read, "kp" - typing notification
-	What string `json:"what"`
-	// Server-issued message ID being reported
-	SeqId int `json:"seq,omitempty"`
+message ServerInfo {
+	string topic = 1;
+	string from_user_id = 2;
+	InfoNote what = 3;
+	int32 seq_id = 4;
 }
