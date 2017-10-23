@@ -1,22 +1,20 @@
 syntax = "proto3";
-package model;
-
+package plugin;
 
 // Interface exported by the server.
-service TinodePlugin {
-  // Sends a client message, obtains either a server message to use as a response, or a .
-  rpc HandleMessage(ClientMsg) returns (ServerCtrl) {}
+service Plugin {
+	// This method is called for every message received from the client. The method returns
+  	// a ServerCtrl message. ServerCtrl.code is not 0 indicates that no further processing is needed. Server
+	// will generate a {ctrl} message from ServerCtrl and forward it to the client session. 
+	// If ServerCtrl.code is 0, the server should continue with default processing of the message.
+  	rpc HandleMessage(Session, ClientMsg) returns (ServerCtrl) {}
 
-  // A server-to-client streaming RPC.
-  //
-  // Obtains the Features available within the given Rectangle.  Results are
-  // streamed rather than returned at once (e.g. in a response message with a
-  // repeated field), as the rectangle may cover a large area and contain a
-  // huge number of features.
-  rpc FilterMessage(ServerMsg) returns (ServerMsg) {}
+	// This method is called immmediately before a server message is broadcasted to topic subscribers.
+	// The filter may alter the server message or may request to drop it.
+  	rpc FilterMessage(ServerMsg) returns (ServerMsg) {}
 
-  // Tinode server uses this method to ask plugin to inject client-side messages.
-  rpc RequestMessages(None) returns (stream ClientMsg) {}
+  	// Tinode server uses this method to ask plugin to inject client-side messages.
+  	rpc RequestMessages(None) returns (stream ClientMsg) {}
 }
 
 

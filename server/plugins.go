@@ -6,7 +6,13 @@ import (
 	"log"
 	"strings"
 	"time"
+
+	pb "github.com/tinode/chat/plugin"
+	"golang.org/x/net/context"
+	"google.golang.org/grpc"
 )
+
+//go:generate protoc -I ../plugin --go_out=plugins=grpc:../plugin ../plugin/model.proto
 
 const (
 	plgHi = 1 << iota
@@ -61,6 +67,9 @@ type Plugin struct {
 	onFailure int
 	network   string
 	addr      string
+
+	conn   *grpc.ClientConn
+	client pb.PluginClient
 }
 
 var plugins []Plugin
@@ -124,13 +133,20 @@ func pluginsInit(configString json.RawMessage) {
 			topics:    conf.TopicFilter,
 		}
 
-		var network, addr string
 		if parts := strings.SplitN(conf.ServiceAddr, "://", 2); len(parts) < 2 {
 			log.Fatal("plugins: invalid server address format", conf.ServiceAddr)
 		} else {
 			plugins[count].network = parts[0]
 			plugins[count].addr = parts[1]
 		}
+
+		var err error
+		plugins[count].conn, err = grpc.Dial(plugins[count].addr, grpc.WithInsecure())
+		if err != nil {
+			log.Fatalf("plugins: connection failure %v", err)
+		}
+
+		plugins[count].client = pb.NewPluginClient(plugins[count].conn)
 
 		nameIndex[conf.Name] = true
 		count++
@@ -149,17 +165,42 @@ func pluginsInit(configString json.RawMessage) {
 	log.Println("plugins: active", "'"+strings.Join(names, "', '")+"'")
 }
 
+func pluginsShutdown() {
+	if plugins == nil {
+		return
+	}
+
+	for _, p := range plugins {
+		p.conn.Close()
+	}
+}
+
 func plugnHandler(sess *Session, msg *ClientComMessage) *ServerComMessage {
 	if plugins == nil {
 		return nil
 	}
 
+	req := pb.ClientMsg{}
+	var id string
+	var topic string
+	ts := time.Now().UTC().Round(time.Millisecond)
 	for _, p := range plugins {
 		if p.isFilter {
 			continue
 		}
-		if resp, err := p.Call(); resp != nil {
-			return resp
+
+		if resp, err := p.client.HandleMessage(context.Background(), &req); err == nil {
+			// Response code 0 means default processing
+			if resp.GetCode() == 0 {
+				return nil
+			}
+
+			return &ServerComMessage{Ctrl: &MsgServerCtrl{
+				Id:        id,
+				Code:      int(resp.GetCode()),
+				Text:      resp.GetText(),
+				Topic:     topic,
+				Timestamp: ts}}
 		} else if err != nil {
 			// Do something here
 		}
