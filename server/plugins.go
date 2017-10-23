@@ -1,6 +1,8 @@
 // External services contacted through RPC
 package main
 
+//go:generate protoc -I ../plugin --go_out=plugins=grpc:../plugin ../plugin/model.proto
+
 import (
 	"encoding/json"
 	"log"
@@ -11,8 +13,6 @@ import (
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 )
-
-//go:generate protoc -I ../plugin --go_out=plugins=grpc:../plugin ../plugin/model.proto
 
 const (
 	plgHi = 1 << iota
@@ -53,20 +53,23 @@ type PluginConfig struct {
 	// List of topics this plugin triggers on
 	TopicFilter []string `json:"topic_filter"`
 	// What should the server do if plugin failed: HTTP error code
-	OnFailure int `json:"on_failure"`
+	FailureCode int `json:"failure_code"`
+	// HTTP Error message to go with the code
+	FailureMessage string `json:"failure_text"`
 	// Address of plugin server of the form "tcp://localhost:123" or "unix://path_to_socket_file"
 	ServiceAddr string `json:"service_addr"`
 }
 
 type Plugin struct {
-	name      string
-	timeout   time.Duration
-	isFilter  bool
-	messages  uint32
-	topics    []string
-	onFailure int
-	network   string
-	addr      string
+	name        string
+	timeout     time.Duration
+	isFilter    bool
+	messages    uint32
+	topics      []string
+	failureCode int
+	failureText string
+	network     string
+	addr        string
 
 	conn   *grpc.ClientConn
 	client pb.PluginClient
@@ -125,12 +128,13 @@ func pluginsInit(configString json.RawMessage) {
 		}
 
 		plugins[count] = Plugin{
-			name:      conf.Name,
-			timeout:   time.Duration(conf.Timeout) * time.Microsecond,
-			isFilter:  conf.Type == "filter",
-			onFailure: conf.OnFailure,
-			messages:  msgFilter,
-			topics:    conf.TopicFilter,
+			name:        conf.Name,
+			timeout:     time.Duration(conf.Timeout) * time.Microsecond,
+			isFilter:    conf.Type == "filter",
+			failureCode: conf.FailureCode,
+			failureText: conf.FailureMessage,
+			messages:    msgFilter,
+			topics:      conf.TopicFilter,
 		}
 
 		if parts := strings.SplitN(conf.ServiceAddr, "://", 2); len(parts) < 2 {
@@ -180,7 +184,99 @@ func plugnHandler(sess *Session, msg *ClientComMessage) *ServerComMessage {
 		return nil
 	}
 
-	req := pb.ClientMsg{}
+	req := pb.ClientReq{}
+	// Convert ClientComMessage to a protobuf message
+	if msg.Hi != nil {
+		req.Message = &pb.ClientReq_Hi{Hi: &pb.ClientHi{
+			UserAgent: msg.Hi.UserAgent,
+			Ver:       int32(parseVersion(msg.Hi.Version)),
+			DeviceId:  msg.Hi.DeviceID,
+			Lang:      msg.Hi.Lang}}
+	} else if msg.Acc != nil {
+		acc := &pb.ClientAcc{
+			Scheme: msg.Acc.Scheme,
+			Secret: msg.Acc.Secret,
+			Login:  msg.Acc.Login,
+			Tags:   msg.Acc.Tags}
+		if strings.HasPrefix(msg.Acc.User, "new") {
+			acc.User = &pb.ClientAcc_IsNew{IsNew: true}
+		} else {
+			acc.User = &pb.ClientAcc_UserId{UserId: msg.Acc.User}
+		}
+		acc.Desc = pbSetDesc(msg.Acc.Desc)
+		req.Message = &pb.ClientReq_Acc{Acc: acc}
+	} else if msg.Login != nil {
+		req.Message = &pb.ClientReq_Login{Login: &pb.ClientLogin{
+			Scheme: msg.Login.Scheme,
+			Secret: msg.Login.Secret}}
+	} else if msg.Sub != nil {
+		req.Message = &pb.ClientReq_Sub{Sub: &pb.ClientSub{
+			Topic:    msg.Sub.Topic,
+			SetQuery: pbSetQuery(msg.Sub.Set),
+			GetQuery: pbGetQuery(msg.Sub.Get)}}
+	} else if msg.Leave != nil {
+		req.Message = &pb.ClientReq_Leave{Leave: &pb.ClientLeave{
+			Topic: msg.Leave.Topic,
+			Unsub: msg.Leave.Unsub}}
+	} else if msg.Pub != nil {
+		content, _ := json.Marshal(msg.Pub.Content)
+		req.Message = &pb.ClientReq_Pub{Pub: &pb.ClientPub{
+			Topic:   msg.Pub.Topic,
+			NoEcho:  msg.Pub.NoEcho,
+			Head:    msg.Pub.Head,
+			Content: content}}
+	} else if msg.Get != nil {
+		req.Message = &pb.ClientReq_Get{Get: &pb.ClientGet{
+			Topic: msg.Get.Topic,
+			Query: pbGetQuery(&msg.Get.MsgGetQuery)}}
+	} else if msg.Set != nil {
+		req.Message = &pb.ClientReq_Set{Set: &pb.ClientSet{
+			Topic: msg.Set.Topic,
+			Query: pbSetQuery(&msg.Set.MsgSetQuery)}}
+	} else if msg.Del != nil {
+		var what pb.ClientDel_What
+		switch msg.Del.What {
+		case "msg":
+			what = pb.ClientDel_MSG
+		case "topic":
+			what = pb.ClientDel_TOPIC
+		case "sub":
+			what = pb.ClientDel_SUB
+		}
+		req.Message = &pb.ClientReq_Del{Del: &pb.ClientDel{
+			Topic:   msg.Del.Topic,
+			What:    what,
+			Before:  int32(msg.Del.Before),
+			SeqList: intSliceToInt32(msg.Del.SeqList),
+			UserId:  msg.Del.User,
+			Hard:    msg.Del.Hard}}
+	} else if msg.Note != nil {
+		var what pb.InfoNote
+		switch msg.Note.What {
+		case "kp":
+			what = pb.InfoNote_KP
+		case "read":
+			what = pb.InfoNote_READ
+		case "recv":
+			what = pb.InfoNote_RECV
+		}
+		req.Message = &pb.ClientReq_Note{Note: &pb.ClientNote{
+			Topic: msg.Note.Topic,
+			What:  what,
+			SeqId: int32(msg.Note.SeqId)}}
+	}
+
+	// Add session as context
+	req.Sess = &pb.Session{
+		SessionId:  sess.sid,
+		UserId:     sess.uid.UserId(),
+		AuthLevel:  pb.Session_AuthLevel(sess.authLvl),
+		UserAgent:  sess.userAgent,
+		RemoteAddr: sess.remoteAddr,
+		DeviceId:   sess.deviceId,
+		Language:   sess.lang,
+	}
+
 	var id string
 	var topic string
 	ts := time.Now().UTC().Round(time.Millisecond)
@@ -192,17 +288,24 @@ func plugnHandler(sess *Session, msg *ClientComMessage) *ServerComMessage {
 		if resp, err := p.client.HandleMessage(context.Background(), &req); err == nil {
 			// Response code 0 means default processing
 			if resp.GetCode() == 0 {
-				return nil
+				continue
 			}
 
+			// This plugin returned non-zero. Subsequent plugins wil not be called.
 			return &ServerComMessage{Ctrl: &MsgServerCtrl{
 				Id:        id,
 				Code:      int(resp.GetCode()),
 				Text:      resp.GetText(),
 				Topic:     topic,
 				Timestamp: ts}}
-		} else if err != nil {
-			// Do something here
+		} else if p.failureCode != 0 {
+			// Plugin failed and it's configured to stop futher processing.
+			return &ServerComMessage{Ctrl: &MsgServerCtrl{
+				Id:        id,
+				Code:      p.failureCode,
+				Text:      p.failureText,
+				Topic:     topic,
+				Timestamp: ts}}
 		}
 	}
 
@@ -220,4 +323,88 @@ func findInSlice(needle string, haystack []string) int {
 		}
 	}
 	return -1
+}
+
+func intSliceToInt32(in []int) []int32 {
+	out := make([]int32, len(in))
+	for i, v := range in {
+		out[i] = int32(v)
+	}
+	return out
+}
+
+func pbGetQuery(in *MsgGetQuery) *pb.GetQuery {
+	if in == nil {
+		return nil
+	}
+
+	out := &pb.GetQuery{
+		What: in.What,
+	}
+
+	convertTimeStamp := func(IfModifiedSince *time.Time) int64 {
+		var ims int64
+		if IfModifiedSince != nil {
+			ims = IfModifiedSince.UnixNano() / 1000000
+		}
+		return ims
+	}
+
+	if in.Desc != nil {
+		out.Desc = &pb.GetOpts{
+			IfModifiedSince: convertTimeStamp(in.Desc.IfModifiedSince),
+			Limit:           int32(in.Desc.Limit)}
+	}
+	if in.Sub != nil {
+		out.Sub = &pb.GetOpts{
+			IfModifiedSince: convertTimeStamp(in.Sub.IfModifiedSince),
+			Limit:           int32(in.Sub.Limit)}
+	}
+	if in.Data != nil {
+		out.Data = &pb.BrowseOpts{
+			BeforeId: int32(in.Data.BeforeId),
+			BeforeTs: convertTimeStamp(in.Data.BeforeTs),
+			SinceId:  int32(in.Data.SinceId),
+			SinceTs:  convertTimeStamp(in.Data.SinceTs),
+			Limit:    int32(in.Data.Limit)}
+	}
+	return out
+}
+
+func pbSetDesc(in *MsgSetDesc) *pb.SetDesc {
+	if in == nil {
+		return nil
+	}
+
+	out := &pb.SetDesc{}
+	if in.DefaultAcs != nil {
+		out.DefaultAcs = &pb.DefaultAcsMode{
+			Auth: in.DefaultAcs.Auth,
+			Anon: in.DefaultAcs.Anon}
+	}
+	if in.Public != nil {
+		out.Public, _ = json.Marshal(in.Public)
+	}
+	if in.Private != nil {
+		out.Private, _ = json.Marshal(in.Private)
+	}
+	return out
+}
+
+func pbSetQuery(in *MsgSetQuery) *pb.SetQuery {
+	if in == nil {
+		return nil
+	}
+
+	out := &pb.SetQuery{
+		Desc: pbSetDesc(in.Desc),
+	}
+
+	if in.Sub != nil {
+		out.Sub = &pb.SetSub{
+			UserId: in.Sub.User,
+			Mode:   in.Sub.Mode,
+		}
+	}
+	return out
 }
