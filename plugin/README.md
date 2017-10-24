@@ -6,12 +6,13 @@ Plugins are generally executed as separate processes. Tinode server communicates
 
 Plugins have to define three methods:
 
- * This method is called for every message received from the client. The method returns a ServerCtrl message. If ServerCtrl.code is not 0 indicates that no further processing is needed. Server will generate a {ctrl} message from ServerCtrl and forward it to client session. If ServerCtrl.code is 0, the server should continue with default processing of the message. 	
-	`rpc HandleMessage(Session, ClientMsg) returns (ServerCtrl) {}`
+ * `HandleMessage(ClientReq) returns (ServerCtrl)` <br>
+This method is called for every message received from the client. ClientReq contains serialized client message and sessions data. The method returns a ServerCtrl message. If ServerCtrl.Code is 0, the server will continue with the default processing of the message. A non-zero ServerCtrl.Code indicates that no further processing is needed. Server will generate a {ctrl} message from the ServerCtrl and forward it to the client session. 	
 
- * This method is called immmediately before a server message is broadcasted to topic subscribers. The filter may alter the server message or may request to drop it.
-  	`rpc FilterMessage(ServerMsg) returns (ServerMsg) {}`
+ * `FilterMessage(ServerMsg) returns (ServerMsg)` <br>
+This method is called immmediately before a server message is broadcasted to topic subscribers. The filter may alter the server message or may request to drop it.
 
- * The method returns a stream of messages which are treated as if coming from a client.
-  	`rpc RequestMessages(None) returns (stream ClientMsg) {}`
+ * `RequestMessages(None) returns (stream ClientMsg)` <br>
+The method returns a stream of messages which are treated as if coming from a client.
+
  
