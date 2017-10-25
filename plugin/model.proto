@@ -14,7 +14,7 @@ service Plugin {
   	rpc FilterMessage(ServerMsg) returns (ServerMsg) {}
 
   	// Tinode server uses this method to ask plugin to inject client-side messages.
-  	rpc RequestMessages(None) returns (stream ClientReq) {}
+  	rpc RequestMessages(Unused) returns (stream ClientReq) {}
 }
 
 
@@ -51,8 +51,8 @@ message User {
 	bytes public = 4;
 }
 
-message None {
-	bool none = 1;
+message Unused {
+	bool unused = 1;
 }
 
 // Client messages

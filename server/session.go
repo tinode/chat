@@ -165,6 +165,11 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 		defer s.rw.Unlock()
 	}
 
+	if resp := pluginHandler(s, msg); resp != nil {
+		s.queueOut(resp)
+		return
+	}
+
 	switch {
 	case msg.Pub != nil:
 		s.publish(msg)

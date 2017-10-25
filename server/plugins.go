@@ -163,7 +163,7 @@ func pluginsInit(configString json.RawMessage) {
 
 	var names []string
 	for _, plg := range plugins {
-		names = append(names, plg.name)
+		names = append(names, plg.name+"("+plg.addr+")")
 	}
 
 	log.Println("plugins: active", "'"+strings.Join(names, "', '")+"'")
@@ -179,11 +179,7 @@ func pluginsShutdown() {
 	}
 }
 
-func plugnHandler(sess *Session, msg *ClientComMessage) *ServerComMessage {
-	if plugins == nil {
-		return nil
-	}
-
+func pluginGenerateClientReq(sess *Session, msg *ClientComMessage) *pb.ClientReq {
 	req := pb.ClientReq{}
 	// Convert ClientComMessage to a protobuf message
 	if msg.Hi != nil {
@@ -277,6 +273,16 @@ func plugnHandler(sess *Session, msg *ClientComMessage) *ServerComMessage {
 		Language:   sess.lang,
 	}
 
+	return &req
+}
+
+func pluginHandler(sess *Session, msg *ClientComMessage) *ServerComMessage {
+	if plugins == nil {
+		return nil
+	}
+
+	var req *pb.ClientReq
+
 	var id string
 	var topic string
 	ts := time.Now().UTC().Round(time.Millisecond)
@@ -285,7 +291,20 @@ func plugnHandler(sess *Session, msg *ClientComMessage) *ServerComMessage {
 			continue
 		}
 
-		if resp, err := p.client.HandleMessage(context.Background(), &req); err == nil {
+		if req == nil {
+			// Generate request only if needed
+			req = pluginGenerateClientReq(sess, msg)
+		}
+
+		var ctx context.Context
+		var cancel context.CancelFunc
+		if p.timeout > 0 {
+			ctx, cancel = context.WithTimeout(context.Background(), p.timeout)
+			defer cancel()
+		} else {
+			ctx = context.Background()
+		}
+		if resp, err := p.client.HandleMessage(ctx, req); err == nil {
 			// Response code 0 means default processing
 			if resp.GetCode() == 0 {
 				continue
@@ -300,12 +319,16 @@ func plugnHandler(sess *Session, msg *ClientComMessage) *ServerComMessage {
 				Timestamp: ts}}
 		} else if p.failureCode != 0 {
 			// Plugin failed and it's configured to stop futher processing.
+			log.Println("plugin: failed,", p.name, err)
 			return &ServerComMessage{Ctrl: &MsgServerCtrl{
 				Id:        id,
 				Code:      p.failureCode,
 				Text:      p.failureText,
 				Topic:     topic,
 				Timestamp: ts}}
+		} else {
+			// Plugin failed but configured to ignore failure.
+			log.Println("plugin: failure ignored,", err)
 		}
 	}
 

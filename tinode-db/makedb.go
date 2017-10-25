@@ -5,7 +5,9 @@ import (
 	"flag"
 	"io/ioutil"
 	"log"
+	"math/rand"
 	"path/filepath"
+	"time"
 
 	"github.com/tinode/chat/server/store"
 )
@@ -14,17 +16,119 @@ type configType struct {
 	StoreConfig json.RawMessage `json:"store_config"`
 }
 
+type VCardy struct {
+	Fn    string `json:"fn"`
+	Photo string `json:"photo"`
+	Type  string `json:"type"`
+}
+
+/*
+   "createdAt": "-140h",
+   "email": "alice@example.com",
+   "tel": "17025550001",
+   "passhash": "alice123",
+   "private": "some comment 123",
+   "public": {"fn": "Alice Johnson", "photo": "alice-64.jpg", "type": "jpg"},
+   "state": 1,
+   "status": {
+    "text": "DND"
+   },
+   "username": "alice",
+	"addressBook": ["email:bob@example.com", "email:carol@example.com", "email:dave@example.com",
+		"email:eve@example.com","email:frank@example.com","email:george@example.com","email:tob@example.com",
+		"tel:17025550001", "tel:17025550002", "tel:17025550003", "tel:17025550004", "tel:17025550005",
+		"tel:17025550006", "tel:17025550007", "tel:17025550008", "tel:17025550009"]
+  }
+*/
+type User struct {
+	CreatedAt   string      `json:"createdAt"`
+	Email       string      `json:"email"`
+	Tel         string      `json:"tel"`
+	Username    string      `json:"username"`
+	Password    string      `json:"passhash"`
+	Private     interface{} `json:"private"`
+	Public      VCardy      `json:"public"`
+	State       int         `json:"state"`
+	Status      interface{} `json:"status"`
+	AddressBook []string    `json:"addressBook"`
+}
+
+/*
+   "createdAt": "-128h",
+   "name": "*ABC",
+   "owner": "carol",
+   "public": {"fn": "Let's talk about flowers", "photo": "abc-64.jpg", "type": "jpg"}
+*/
+type GroupTopic struct {
+	CreatedAt    string      `json:"createdAt"`
+	Name         string      `json:"name"`
+	Owner        string      `json:"owner"`
+	Public       VCardy      `json:"public"`
+	OwnerPrivate interface{} `json:"ownerPrivate"`
+}
+
+/*
+ "createdAt": "-112h",
+ "private": "My super cool group topic",
+ "topic": "*ABC",
+ "user": "alice"
+ "want": "JRWPSA",
+ "have": "JRWP"
+*/
+type GroupSub struct {
+	CreatedAt string      `json:"createdAt"`
+	Private   interface{} `json:"private"`
+	Topic     string      `json:"topic"`
+	User      string      `json:"user"`
+	Want      string      `json:"want"`
+	Have      string      `json:"have"`
+}
+
+/*
+"createdAt": "-117h",
+"users": [
+  {"name": "eve", "private": "ho ho", "want": "JRWP", "have": "N"},
+  {"name": "alice", "private": "ha ha"}
+]
+*/
+
+type P2PUser struct {
+	Name    string      `json:"name"`
+	Private interface{} `json:"private"`
+	Want    string      `json:"want"`
+	Have    string      `json:"have"`
+}
+
+type P2PSub struct {
+	CreatedAt string    `json:"createdAt"`
+	Users     []P2PUser `json:"users"`
+	// Cached value 'user1:user2' as a surrogare topic name
+	pair string
+}
+
 type Data struct {
-	Users         []map[string]interface{} `json:"users"`
-	Grouptopics   []map[string]interface{} `json:"grouptopics"`
-	Subscriptions []map[string]interface{} `json:"subscriptions"`
-	Messages      []string                 `json:"messages"`
-	datapath      string
+	Users       []User       `json:"users"`
+	Grouptopics []GroupTopic `json:"grouptopics"`
+	Groupsubs   []GroupSub   `json:"groupsubs"`
+	P2psubs     []P2PSub     `json:"p2psubs"`
+	Messages    []string     `json:"messages"`
+	datapath    string
 }
 
 // Generate random string as a name of the group topic
 func genTopicName() string {
 	return "grp" + store.GetUidString()
+}
+
+// Generates password of length n
+func getPassword(n int) string {
+	const letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-/.+?=&"
+
+	b := make([]byte, n)
+	for i := range b {
+		b[i] = letters[rand.Intn(len(letters))]
+	}
+	return string(b)
 }
 
 func main() {
@@ -48,6 +152,8 @@ func main() {
 	data.datapath, _ = filepath.Split(*datafile)
 
 	if *conffile != "" {
+		rand.Seed(time.Now().UnixNano())
+
 		var config configType
 		if raw, err := ioutil.ReadFile(*conffile); err != nil {
 			log.Fatal(err)
