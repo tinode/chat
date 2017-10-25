@@ -12,7 +12,6 @@ import (
 	"encoding/json"
 	"errors"
 	"log"
-	"strings"
 	"sync/atomic"
 	"time"
 
@@ -318,11 +317,13 @@ func (t *Topic) run(hub *Hub) {
 
 			} else if msg.Pres != nil {
 
-				t.presProcReq(msg.Pres.Src, msg.Pres.What, msg.Pres.wantReply)
-				if t.x_original != msg.Pres.Topic || strings.HasPrefix(msg.Pres.What, "?") {
+				what := t.presProcReq(msg.Pres.Src, msg.Pres.What, msg.Pres.wantReply)
+				if t.x_original != msg.Pres.Topic || what == "" {
 					// This is just a request for status, don't forward it to sessions
 					continue
 				}
+				// "what" may have changed - "+command" removed
+				msg.Pres.What = what
 			} else if msg.Info != nil {
 				if t.isSuspended() {
 					// Ignore info messages - topic is being deleted
@@ -531,9 +532,12 @@ func (t *Topic) run(hub *Hub) {
 			// 4. Cluster rehashing (reason == StopRehashing)
 			// FIXME(gene): save lastMessage value;
 
-			if t.cat == types.TopicCat_Grp && sd.reason == StopDeleted {
-				t.presSubsOffline("gone", nilPresParams, 0, "", false)
-				// Not publishing online/offline to deleted P2P topics
+			if sd.reason == StopDeleted {
+				if t.cat == types.TopicCat_Grp {
+					t.presSubsOffline("gone", nilPresParams, 0, "", false)
+				}
+				// P2P users get "off+remove" earlier in the process
+
 			} else if sd.reason == StopRehashing {
 				// Must send individual messages to sessions because normal sending through the topic's
 				// broadcast channel won't work - it will be shut down too soon.
@@ -597,7 +601,7 @@ func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 					// We don't know if the current user is online in the 'me' topic,
 					// so sending an '?unkn' status to user2. His 'me' topic
 					// will report user2's status and request an actual status from user1.
-					t.presSingleUserOffline(user2, "?unkn", nilPresParams, "", false)
+					t.presSingleUserOffline(user2, "?unkn+add", nilPresParams, "", false)
 				}
 			}
 
@@ -706,8 +710,6 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string,
 	// Access mode values as they were before this request was processed.
 	oldWant := types.ModeNone
 	oldGiven := types.ModeNone
-
-	log.Println("requestSub", t.name, "'", want, "'")
 
 	// Parse access mode requested by the user
 	modeWant := types.ModeUnset
@@ -1858,10 +1860,14 @@ func (t *Topic) evictUser(uid types.Uid, unsub bool, skip string) {
 			t.presSubsOnline("off", uid.UserId(), nilPresParams, types.ModeRead, skip, "")
 		}
 	} else if t.cat == types.TopicCat_P2P && unsub {
-		// Notify user's own sessions.
-		t.presSingleUserOffline(uid, "gone", nilPresParams, "", false)
-		// TODO: send notification to user1's 'me' to remove user2 from perSubs and
-		// send an "off" notification to user2
+		// Notify user's own sessions that the topic is gone and remove the other user from
+		// perSubs.
+		t.presSingleUserOffline(uid, "gone", nilPresParams, skip, false)
+
+		if len(t.perUser) == 2 {
+			// Send an "off" notification to the user2 and ask it to stop sending updates to user1
+			presSingleUserOfflineOffline(t.p2pOtherUser(uid), uid.UserId(), "off+remove", 0, nilPresParams, "")
+		}
 	}
 
 	// Save topic name. It won't be available later
