@@ -836,6 +836,9 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *MsgClientDel, reason 
 				log.Println("topicUnreg failed to load subscribers:", err)
 				sess.queueOut(ErrUnknown(msg.Id, msg.Topic, now))
 				return
+			} else if subs == nil || len(subs) == 0 {
+				sess.queueOut(InfoNoAction(msg.Id, msg.Topic, now))
+				return
 			} else {
 				tcat := topicCat(topic)
 
@@ -854,13 +857,15 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *MsgClientDel, reason 
 				} else if !(sub.ModeGiven & sub.ModeWant).IsOwner() {
 					// Case 1.2.2.1 Not the owner, but possibly last subscription in a P2P topic.
 
-					if tcat == types.TopicCat_P2P && subs != nil && len(subs) < 2 {
+					if tcat == types.TopicCat_P2P && len(subs) < 2 {
 						// This is a P2P topic and fewer than 2 subscriptions, delete the entire topic
 						if err := store.Topics.Delete(topic); err != nil {
 							log.Println("topicUnreg failed to delete offline topic:", err)
 							sess.queueOut(ErrUnknown(msg.Id, msg.Topic, now))
 							return
 						}
+						// Notify second user that the current user is now offline and stop sending
+						// updates
 					} else {
 						// Not P2P or more than 1 subscription left.
 						// Delete user's own subscription only
@@ -872,13 +877,13 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *MsgClientDel, reason 
 					}
 
 					// Notify user's other sessions that the subscription is gone
-					log.Println("Notifying single user - sub deleted")
-					presSingleUserOfflineOffline(sess.uid, msg.Topic, "acs",
-						sub.ModeGiven&sub.ModeWant,
-						&PresParams{
-							dWant:  sub.ModeWant.Delta(types.ModeNone),
-							dGiven: sub.ModeGiven.Delta(types.ModeNone),
-						}, sess.sid)
+					presSingleUserOfflineOffline(sess.uid, msg.Topic, "gone", 0, nilPresParams, sess.sid)
+					if tcat == types.TopicCat_P2P && len(subs) == 2 {
+						// Notify user2 that the current user is offline and stop notification exchange
+						presSingleUserOfflineOffline(types.ParseUserId(msg.Topic),
+							sess.uid.UserId(), "off+remove", 0, nilPresParams, "")
+					}
+
 				} else {
 					// Case 1.2.1.1: owner, delete the topic from db
 					if err := store.Topics.Delete(topic); err != nil {
@@ -888,7 +893,6 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *MsgClientDel, reason 
 					}
 
 					// Notify subscribers that the topic is gone
-					log.Println("Notifying all subscribers - topic deleted")
 					presSubsOfflineOffline(msg.Topic, tcat, subs, "gone", &PresParams{}, sess.sid)
 				}
 

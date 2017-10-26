@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"log"
+	"strings"
 
 	"github.com/tinode/chat/server/store"
 	"github.com/tinode/chat/server/store/types"
@@ -28,6 +29,7 @@ func (p PresParams) packAcs() *MsgAccessMode {
 	return nil
 }
 
+// Presence: Add another user to the list of contacts to notify of presence and other changes
 func (t *Topic) addToPerSubs(topic string, online bool) {
 	if uid1, uid2, err := types.ParseP2P(topic); err == nil {
 		// If this is a P2P topic, index it by second user's ID
@@ -56,53 +58,90 @@ func (t *Topic) loadContacts(uid types.Uid) error {
 	t.perSubs = make(map[string]perSubsData, len(subs))
 	for _, sub := range subs {
 		//log.Printf("Pres loadContacts: topic[%s]: processing sub '%s'", t.name, sub.Topic)
-		t.addToPerSubs(sub.Topic, false)
+
+		// Add only those subscriptions where the user can be notified.
+		if (sub.ModeGiven & sub.ModeWant).IsPresencer() {
+			t.addToPerSubs(sub.Topic, false)
+		}
 	}
 	//log.Printf("Pres loadContacts: topic[%s]: total cached %d", t.name, len(t.perSubs))
 	return nil
 }
 
 // This topic got a request from a 'me' topic to start/stop sending presence updates. The
-// originating topic reports its own status as "on", "off", "?unkn", or "?gone".
+// originating topic reports its own status in 'what' as "on", "off", "gone" or "?unkn".
 // 	"on" - requester came online
 // 	"off" - requester is offline now
-//	"?unkn" - requester wants to initiate online status exchange but it's own status is unknown yet
-func (t *Topic) presProcReq(fromUserId string, what string, wantReply bool) {
+//  "gone" - topic deleted or otherwise gone - equivalent of "off+remove"
+//	"?unkn" - requester wants to initiate online status exchange but it's own status is unknown yet. This
+//  notifications will not be forwarded to users.
+//
+// If status is followed by command "+add" or "+remove", the origin is added to or removed from the
+// list of contacts to notify. The command itself is stripped from the notification.
+func (t *Topic) presProcReq(fromUserId string, what string, wantReply bool) string {
 
-	var online, unknown bool
+	var online, unknown, add, remove bool
+
+	// log.Printf("presProcReq: topic[%s]: req from='%s', whant=%s, wantReply=%v",
+	// 	t.name, fromUserId, what, wantReply)
 
 	switch what {
+	case "on+add":
+		add = true
+		what = "on"
+		fallthrough
 	case "on":
 		online = true
+
+	case "off+remove":
+		what = "off"
+		fallthrough
+	case "gone":
+		remove = true
 	case "off":
+
+	case "?unkn+add":
+		add = true
+		fallthrough
 	case "?unkn":
 		unknown = true
-	default:
-		return
-	}
+		what = ""
 
-	// log.Printf("presProcReq: topic[%s]: req from '%s', online: %s, wantReply: %v", t.name,
-	//	fromUserId, what, wantReply)
+	default:
+		// All other notifications are not processed here
+		return what
+	}
 
 	doReply := wantReply
 	if t.cat == types.TopicCat_Me {
 		if psd, ok := t.perSubs[fromUserId]; ok {
-			// If requester's online status has not changed, do not reply, otherwise an endless loop will happen.
-			// wantReply is needed to ensure unnecessary {pres} is not sent:
-			// A[online, B:off] to B[online, A:off]: {pres A on}
-			// B[online, A:on] to A[online, B:off]: {pres B on}
-			// A[online, B:on] to B[online, A:on]: {pres A on} <<-- unnecessary, that's why wantReply is needed
-			doReply = (doReply && ((psd.online != online) || unknown))
-			psd.online = online
-			t.perSubs[fromUserId] = psd
+			if remove {
+				// Don't want to reply if connection is being removed
+				doReply = false
 
-			// log.Printf("presProcReq: topic[%s]: set user %s online to %v", t.name, fromUserId, online)
+				delete(t.perSubs, fromUserId)
 
-		} else {
+			} else {
+				// If requester's online status has not changed, do not reply, otherwise an endless loop will happen.
+				// wantReply is needed to ensure unnecessary {pres} is not sent:
+				// A[online, B:off] to B[online, A:off]: {pres A on}
+				// B[online, A:on] to A[online, B:off]: {pres B on}
+				// A[online, B:on] to B[online, A:on]: {pres A on} <<-- unnecessary, that's why wantReply is needed
+				doReply = (doReply && ((psd.online != online) || unknown))
+
+				psd.online = online
+				t.perSubs[fromUserId] = psd
+			}
+
+		} else if add {
 			// doReply is unchanged
 
 			// Got request from a new topic. This must be a new subscription. Record it.
+			// If it's unknown, recording it as offline.
 			t.addToPerSubs(fromUserId, online)
+		} else {
+			// Not replying if the origin is not in our list
+			doReply = false
 		}
 	}
 
@@ -110,11 +149,14 @@ func (t *Topic) presProcReq(fromUserId string, what string, wantReply bool) {
 		globals.hub.route <- &ServerComMessage{
 			// Topic is 'me' even for group topics; group topics will use 'me' as a signal to drop the message
 			// without forwarding to sessions
-			Pres:   &MsgServerPres{Topic: "me", What: "on", Src: t.name, wantReply: unknown},
+			Pres:   &MsgServerPres{Topic: "me", What: "on+add", Src: t.name, wantReply: unknown},
 			rcptto: fromUserId}
 
-		// log.Printf("presProcReq: topic[%s]: replying to %s with own status '%s', wantReply", t.name, fromUserId, "on", unknown)
+		// log.Printf("presProcReq: topic[%s]: replying to %s with own status '%s', wantReply",
+		// 	t.name, fromUserId, "on", unknown)
 	}
+
+	return what
 }
 
 // Publish user's update to his/her users of interest on their 'me' topic
@@ -305,7 +347,7 @@ func (t *Topic) presSingleUserOffline(uid types.Uid, what string, params *PresPa
 			Pres: &MsgServerPres{Topic: "me", What: what,
 				Src: t.original(uid), SeqId: params.seqId, SeqList: params.seqList,
 				Acs: params.packAcs(), AcsActor: actor, AcsTarget: target, UserAgent: params.userAgent,
-				wantReply: (what == "?unkn"), skipTopic: skipTopic},
+				wantReply: strings.HasPrefix(what, "?unkn"), skipTopic: skipTopic},
 			rcptto: user, skipSid: skipSid}
 	}
 

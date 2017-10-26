@@ -173,43 +173,33 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 	switch {
 	case msg.Pub != nil:
 		s.publish(msg)
-		log.Println("dispatch: Pub done")
 
 	case msg.Sub != nil:
 		s.subscribe(msg)
-		log.Println("dispatch: Sub done")
 
 	case msg.Leave != nil:
 		s.leave(msg)
-		log.Println("dispatch: Leave done")
 
 	case msg.Hi != nil:
 		s.hello(msg)
-		log.Println("dispatch: Hi done")
 
 	case msg.Login != nil:
 		s.login(msg)
-		log.Println("dispatch: Login done")
 
 	case msg.Get != nil:
 		s.get(msg)
-		log.Println("dispatch: Get." + msg.Get.What + " done")
 
 	case msg.Set != nil:
 		s.set(msg)
-		log.Println("dispatch: Set done")
 
 	case msg.Del != nil:
 		s.del(msg)
-		log.Println("dispatch: Del." + msg.Del.What + " done")
 
 	case msg.Acc != nil:
 		s.acc(msg)
-		log.Println("dispatch: Acc done")
 
 	case msg.Note != nil:
 		s.note(msg)
-		log.Println("dispatch: Note." + msg.Note.What + " done")
 
 	default:
 		// Unknown message
