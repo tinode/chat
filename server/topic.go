@@ -1257,8 +1257,10 @@ func (t *Topic) replySetDesc(sess *Session, set *MsgClientSet) error {
 			}
 		} else if t.cat == types.TopicCat_P2P {
 			// Reject direct changes to P2P topics.
-			sess.queueOut(ErrPermissionDenied(set.Id, set.Topic, now))
-			return errors.New("attempt to change metadata of a p2p topic")
+			if set.Desc.Public != nil || set.Desc.DefaultAcs != nil {
+				sess.queueOut(ErrPermissionDenied(set.Id, set.Topic, now))
+				return errors.New("incorrect attempt to change metadata of a p2p topic")
+			}
 		} else {
 			// Update group topic
 			if set.Desc.DefaultAcs != nil || set.Desc.Public != nil {
