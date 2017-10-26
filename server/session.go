@@ -30,7 +30,7 @@ const (
 	NONE = iota
 	WEBSOCK
 	LPOLL
-	RPC
+	CLUSTER
 )
 
 var MIN_SUPPORTED_VERSION_VAL = parseVersion(MIN_SUPPORTED_VERSION)

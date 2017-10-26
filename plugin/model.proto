@@ -125,78 +125,87 @@ message SetQuery {
 
 // Client handshake
 message ClientHi {
-	string user_agent = 1;
-	int32 ver = 2;
-	string device_id = 3;
-	string lang = 4;
+	string id = 1;
+	string user_agent = 2;
+	int32 ver = 3;
+	string device_id = 4;
+	string lang = 5;
 }
 
 // User creation message {acc}
 message ClientAcc {
+	string id = 1;
 	oneof user {
-		bool is_new = 1;
-		string user_id = 2;
+		bool is_new = 2;
+		string user_id = 3;
 	}
 	// The initial authentication scheme the account can use
-	string scheme = 3;
+	string scheme = 4;
 	// Shared secret
-	bytes secret = 4;
+	bytes secret = 5;
 	// Authenticate session with the newly created account
-	bool login = 5;
+	bool login = 6;
 	// Indexable tags for user discovery
-	repeated string tags = 6;
+	repeated string tags = 7;
 	// User initialization data when creating a new user, otherwise ignored
-	SetDesc desc = 7;
+	SetDesc desc = 8;
 }
 
 // Login {login} message
 message ClientLogin  {
+	string id = 1;
 	// Authentication scheme
-	string scheme  = 1;
+	string scheme  = 2;
 	// Shared secret
-	bytes secret = 2;
+	bytes secret = 3;
 }
 
 // Subscription request {sub} message
 message ClientSub {
-	string topic  = 1;
+	string id = 1;
+	string topic  = 2;
 
 	// mirrors {set}
-	SetQuery set_query = 2;
+	SetQuery set_query = 3;
 
 	// mirrors {get}
-	GetQuery get_query = 3;
+	GetQuery get_query = 4;
 }
 
 // Unsubscribe {leave} request message
 message ClientLeave {
-	string topic  = 1;
-	bool unsub = 2;
+	string id = 1;
+	string topic  = 2;
+	bool unsub = 3;
 }
 
 // ClientPub is client's request to publish data to topic subscribers {pub}
 message ClientPub {
-	string topic = 1;
-	bool no_echo = 2;
-	map<string, string> head = 3;
-	bytes content = 4;
+	string id = 1;
+	string topic = 2;
+	bool no_echo = 3;
+	map<string, string> head = 4;
+	bytes content = 5;
 }
 
 // Query topic state {get}
 message ClientGet {
-	string topic = 1;
-	GetQuery query = 2;
+	string id = 1;
+	string topic = 2;
+	GetQuery query = 3;
 }
 
 // Update topic state {set}
 message ClientSet {
-	string topic = 1;
-	SetQuery query = 2;
+	string id = 1;
+	string topic = 2;
+	SetQuery query = 3;
 }
 
 // ClientDel delete messages or topic
 message ClientDel {
-	string topic = 1;
+	string id = 1;
+	string topic = 2;
 	// What to delete, either "msg" to delete messages (default) or "topic" to delete the topic or "sub"
 	// to delete a subscription to topic.
 	enum What {
@@ -204,15 +213,15 @@ message ClientDel {
 		TOPIC = 1;
 		SUB = 2;
 	}
-	What what = 2;
+	What what = 3;
 	// Delete messages older than this seq ID (inclusive)
-	int32 before = 3;
+	int32 before = 4;
 	// List of Seq Ids to delete/mark as deleted
-	repeated int32 seq_list = 4;
+	repeated int32 seq_list = 5;
 	// User ID of the subscription to delete
-	string user_id = 5;
+	string user_id = 6;
 	// Request to hard-delete messages for all users, if such option is available.
-	bool hard = 6;
+	bool hard = 7;
 }
 
 enum InfoNote {
@@ -297,9 +306,10 @@ message TopicSub {
 
 // {ctrl} message
 message ServerCtrl {
-	int32 code = 1;
-	string text = 2;
-	map<string, bytes> params = 3;
+	string id = 1;
+	int32 code = 2;
+	string text = 3;
+	map<string, bytes> params = 4;
 }
 
 // {data} message
@@ -342,10 +352,11 @@ message ServerPres {
 
 // {meta} message
 message ServerMeta {
-	string topic = 1;
+	string id = 1;
+	string topic = 2;
 
-	TopicDesc desc = 2;
-	repeated TopicSub sub = 3;
+	TopicDesc desc = 3;
+	repeated TopicSub sub = 4;
 }
 
 // {info} message: server-side copy of ClientNote with From added

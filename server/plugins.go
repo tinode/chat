@@ -5,6 +5,7 @@ package main
 
 import (
 	"encoding/json"
+	"io"
 	"log"
 	"strings"
 	"time"
@@ -184,12 +185,14 @@ func pluginGenerateClientReq(sess *Session, msg *ClientComMessage) *pb.ClientReq
 	// Convert ClientComMessage to a protobuf message
 	if msg.Hi != nil {
 		req.Message = &pb.ClientReq_Hi{Hi: &pb.ClientHi{
+			Id:        msg.Hi.Id,
 			UserAgent: msg.Hi.UserAgent,
 			Ver:       int32(parseVersion(msg.Hi.Version)),
 			DeviceId:  msg.Hi.DeviceID,
 			Lang:      msg.Hi.Lang}}
 	} else if msg.Acc != nil {
 		acc := &pb.ClientAcc{
+			Id:     msg.Acc.Id,
 			Scheme: msg.Acc.Scheme,
 			Secret: msg.Acc.Secret,
 			Login:  msg.Acc.Login,
@@ -203,30 +206,36 @@ func pluginGenerateClientReq(sess *Session, msg *ClientComMessage) *pb.ClientReq
 		req.Message = &pb.ClientReq_Acc{Acc: acc}
 	} else if msg.Login != nil {
 		req.Message = &pb.ClientReq_Login{Login: &pb.ClientLogin{
+			Id:     msg.Login.Id,
 			Scheme: msg.Login.Scheme,
 			Secret: msg.Login.Secret}}
 	} else if msg.Sub != nil {
 		req.Message = &pb.ClientReq_Sub{Sub: &pb.ClientSub{
+			Id:       msg.Sub.Id,
 			Topic:    msg.Sub.Topic,
 			SetQuery: pbSetQuery(msg.Sub.Set),
 			GetQuery: pbGetQuery(msg.Sub.Get)}}
 	} else if msg.Leave != nil {
 		req.Message = &pb.ClientReq_Leave{Leave: &pb.ClientLeave{
+			Id:    msg.Leave.Id,
 			Topic: msg.Leave.Topic,
 			Unsub: msg.Leave.Unsub}}
 	} else if msg.Pub != nil {
 		content, _ := json.Marshal(msg.Pub.Content)
 		req.Message = &pb.ClientReq_Pub{Pub: &pb.ClientPub{
+			Id:      msg.Pub.Id,
 			Topic:   msg.Pub.Topic,
 			NoEcho:  msg.Pub.NoEcho,
 			Head:    msg.Pub.Head,
 			Content: content}}
 	} else if msg.Get != nil {
 		req.Message = &pb.ClientReq_Get{Get: &pb.ClientGet{
+			Id:    msg.Get.Id,
 			Topic: msg.Get.Topic,
 			Query: pbGetQuery(&msg.Get.MsgGetQuery)}}
 	} else if msg.Set != nil {
 		req.Message = &pb.ClientReq_Set{Set: &pb.ClientSet{
+			Id:    msg.Set.Id,
 			Topic: msg.Set.Topic,
 			Query: pbSetQuery(&msg.Set.MsgSetQuery)}}
 	} else if msg.Del != nil {
@@ -240,6 +249,7 @@ func pluginGenerateClientReq(sess *Session, msg *ClientComMessage) *pb.ClientReq
 			what = pb.ClientDel_SUB
 		}
 		req.Message = &pb.ClientReq_Del{Del: &pb.ClientDel{
+			Id:      msg.Del.Id,
 			Topic:   msg.Del.Topic,
 			What:    what,
 			Before:  int32(msg.Del.Before),
@@ -328,7 +338,7 @@ func pluginHandler(sess *Session, msg *ClientComMessage) *ServerComMessage {
 				Timestamp: ts}}
 		} else {
 			// Plugin failed but configured to ignore failure.
-			log.Println("plugin: failure ignored,", err)
+			log.Println("plugin: failure ignored,", p.name, err)
 		}
 	}
 
@@ -337,6 +347,24 @@ func pluginHandler(sess *Session, msg *ClientComMessage) *ServerComMessage {
 
 func pluginFilter(msg *ServerComMessage) *ServerComMessage {
 	return nil
+}
+
+func pluginRequestMessages(p *Plugin) {
+	stream, err := p.client.RequestMessages(context.Background(), &pb.Unused{})
+	if err != nil {
+		log.Fatalf("plugin: failed to request messages", p.name, err)
+	}
+	for {
+		creq, err := stream.Recv()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			log.Println("plugins: stream error", p.name, err)
+		} else {
+			log.Println(creq.GetMessage())
+		}
+	}
 }
 
 func findInSlice(needle string, haystack []string) int {

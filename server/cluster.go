@@ -528,7 +528,7 @@ func (sess *Session) rpcWriteLoop() {
 
 // Proxied session is being closed at the Master node
 func (s *Session) closeRPC() {
-	if s.proto == RPC {
+	if s.proto == CLUSTER {
 		log.Println("cluster: session closed at master")
 	}
 }

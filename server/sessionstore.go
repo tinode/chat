@@ -45,7 +45,7 @@ func (ss *SessionStore) Create(conn interface{}, sid string) *Session {
 		s.proto = LPOLL
 		// no need to store c for long polling, it changes with every request
 	case *ClusterNode:
-		s.proto = RPC
+		s.proto = CLUSTER
 		s.rpcnode = c
 	default:
 		s.proto = NONE
@@ -124,7 +124,7 @@ func (ss *SessionStore) Shutdown() {
 
 	shutdown, _ := json.Marshal(NoErrShutdown(time.Now().UTC().Round(time.Millisecond)))
 	for _, s := range ss.sessCache {
-		if s.send != nil && s.proto != RPC {
+		if s.send != nil && s.proto != CLUSTER {
 			s.send <- shutdown
 		}
 	}
