@@ -46,7 +46,8 @@ func (ss *SessionStore) Create(conn interface{}, sid string) *Session {
 		// no need to store c for long polling, it changes with every request
 	case *ClusterNode:
 		s.proto = CLUSTER
-		s.rpcnode = c
+		s.clnode = c
+		case *
 	default:
 		s.proto = NONE
 	}

@@ -497,13 +497,13 @@ func (sess *Session) rpcWriteLoop() {
 	for {
 		select {
 		case msg, ok := <-sess.send:
-			if !ok || sess.rpcnode.endpoint == nil {
+			if !ok || sess.clnode.endpoint == nil {
 				// channel closed
 				return
 			}
 			// The error is returned if the remote node is down. Which means the remote
 			// session is also disconnected.
-			if err := sess.rpcnode.call("Cluster.Proxy",
+			if err := sess.clnode.call("Cluster.Proxy",
 				&ClusterResp{Msg: msg, FromSID: sess.sid}, &unused); err != nil {
 
 				log.Println("sess.writeRPC: " + err.Error())
@@ -512,7 +512,7 @@ func (sess *Session) rpcWriteLoop() {
 		case msg := <-sess.stop:
 			// Shutdown is requested, don't care if the message is delivered
 			if msg != nil {
-				sess.rpcnode.call("Cluster.Proxy", &ClusterResp{Msg: msg, FromSID: sess.sid},
+				sess.clnode.call("Cluster.Proxy", &ClusterResp{Msg: msg, FromSID: sess.sid},
 					&unused)
 			}
 			return

@@ -23,6 +23,7 @@ import (
 	"github.com/tinode/chat/server/auth"
 	"github.com/tinode/chat/server/store"
 	"github.com/tinode/chat/server/store/types"
+	"google.golang.org/grpc"
 )
 
 // Wire transport
@@ -30,6 +31,7 @@ const (
 	NONE = iota
 	WEBSOCK
 	LPOLL
+	GRPC
 	CLUSTER
 )
 
@@ -38,23 +40,20 @@ var MIN_SUPPORTED_VERSION_VAL = parseVersion(MIN_SUPPORTED_VERSION)
 // A single WS connection or a long polling session. A user may have multiple
 // sessions.
 type Session struct {
-	// protocol - NONE (unset), WEBSOCK, LPOLL, RPC
+	// protocol - NONE (unset), WEBSOCK, LPOLL, CLUSTER, GRPC
 	proto int
 
-	// -- Set only for websockets
-	// Websocket
+	// Websocket. Set only for websocket sessions
 	ws *websocket.Conn
-	// --
 
-	// -- Set only for Long Poll sessions
-	// Pointer to session's record in sessionStore
+	// Pointer to session's record in sessionStore. Set only for Long Poll sessions
 	lpTracker *list.Element
-	// --
 
-	// -- Set only for RPC sessions
-	// reference to the cluster node where the session has originated
-	rpcnode *ClusterNode
-	// --
+	// gRPC ??. Set only for gRPC clients
+	grpcnode *grpc.Peer()
+
+	// Reference to the cluster node where the session has originated. Set only for cluster RPC sessions
+	clnode *ClusterNode
 
 	// IP address of the client. For long polling this is the IP of the last poll
 	remoteAddr string
