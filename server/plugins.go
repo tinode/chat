@@ -1,7 +1,7 @@
 // External services contacted through RPC
 package main
 
-//go:generate protoc -I ../plugin --go_out=plugins=grpc:../plugin ../plugin/model.proto
+//go:generate protoc -I ../grpc --go_out=plugins=grpc:../grpc ../grpc/plugin.proto
 
 import (
 	"encoding/json"

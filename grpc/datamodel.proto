@@ -1,59 +1,5 @@
 syntax = "proto3";
-package plugin;
-
-// Interface exported by the server.
-service Plugin {
-	// This method is called for every message received from the client. The method returns
-  	// a ServerCtrl message. ServerCtrl.code is not 0 indicates that no further processing is needed. Server
-	// will generate a {ctrl} message from ServerCtrl and forward it to the client session. 
-	// If ServerCtrl.code is 0, the server should continue with default processing of the message.
-  	rpc HandleMessage(ClientReq) returns (ServerCtrl) {}
-
-	// This method is called immmediately before a server message is broadcasted to topic subscribers.
-	// The filter may alter the server message or may request to drop it.
-  	rpc FilterMessage(ServerMsg) returns (ServerMsg) {}
-
-  	// Tinode server uses this method to ask plugin to inject client-side messages.
-  	rpc RequestMessages(Unused) returns (stream ClientReq) {}
-}
-
-
-// Context messages
-
-message Session {
-	string session_id = 1;
-	string user_id = 2;
-	enum AuthLevel {
-		NONE = 0;
-		ANON = 10;
-		AUTH = 20;
-		ROOT = 30;
-  	}
-	AuthLevel auth_level = 3;
-	string remote_addr = 4;
-	string user_agent = 5;
-	string device_id = 6;
-	string language = 7;	
-}
-
-message Topic {	
-	string name = 1;
-	string access_auth = 2;
-	string access_anon = 3;
-	bytes public = 4;
-	bytes private = 5;
-}
-
-message User {	
-	string id = 1;
-	string mode_want = 2;
-	string mode_given = 3;
-	bytes public = 4;
-}
-
-message Unused {
-	bool unused = 1;
-}
+package dm;
 
 // Client messages
 
@@ -239,7 +185,7 @@ message ClientNote {
 	int32 seq_id = 3;
 }
 
-message ClientReq {
+message ClientMsg {
 	oneof Message {
 		ClientHi hi = 1;
 		ClientAcc acc = 2;
@@ -252,8 +198,9 @@ message ClientReq {
 		ClientDel del = 9;
 		ClientNote note = 10;
 	}
-	Session sess = 11;
 }
+
+// ************************
 // Server response messages
 
 // Topic description, S2C in Meta message
