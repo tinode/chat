@@ -14,9 +14,6 @@ service Plugin {
 	// This method is called immmediately before a server message is broadcasted to topic subscribers.
 	// The filter may alter the server message or may request to drop it.
   	rpc FilterMessage(dm.ServerMsg) returns (dm.ServerMsg) {}
-
-  	// Tinode server uses this method to ask plugin to inject client-side messages.
-  	rpc RequestMessages(Unused) returns (stream ClientReq) {}
 }
 
 
@@ -53,11 +50,7 @@ message User {
 	bytes public = 4;
 }
 
-message Unused {
-	bool unused = 1;
-}
-
 message ClientReq {
 	dm.ClientMsg msg = 1;
-	Session sess = 11;
+	Session sess = 2;
 }
