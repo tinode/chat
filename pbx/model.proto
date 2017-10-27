@@ -1,0 +1,384 @@
+syntax = "proto3";
+package pbx;
+
+// This is the single method that needs to be implemented by a gRPC client.
+service Node {
+	// Client sends a stream of ClientMsg, server responds with a stream of ServerMsg
+  	rpc MessageLoop(stream ClientMsg) returns (stream ServerMsg) {}
+}
+
+// Plugin interface.
+service Plugin {
+	// This plugin method is called for every message received from the client. The method returns
+  	// a ServerCtrl message. ServerCtrl.code is not 0 indicates that no further processing is needed. Server
+	// will generate a {ctrl} message from ServerCtrl and forward it to the client session. 
+	// If ServerCtrl.code is 0, the server should continue with default processing of the message.
+  	rpc ClientMessage(ClientReq) returns (ServerCtrl) {}
+
+	// This method is called immmediately before a server message is broadcasted to topic subscribers.
+	// The filter may alter the server message or may request to drop it.
+  	rpc ServerMessage(ServerMsg) returns (ServerMsg) {}
+}
+
+
+// Client messages
+
+// Topic default access mode
+message DefaultAcsMode {
+	string auth = 1;
+	string anon = 2;
+}
+
+// Actual access mode
+message AccessMode {
+	// Access mode requested by the user
+	string want = 1;
+	// Access mode granted to the user by the admin
+	string given = 2;
+}
+
+// SetSub: payload in set.sub request to update current subscription or invite another user, {sub.what} == "sub"
+message SetSub {
+	// User affected by this request. Default (empty): current user
+	string user_id = 1;
+
+	// Access mode change, either Given or Want depending on context
+	string mode = 2;
+}
+
+// SetDesc: C2S in set.what == "desc" and sub.init message
+message SetDesc {
+	DefaultAcsMode default_acs = 1;
+	bytes public = 2;
+	bytes private = 3;
+}
+
+message GetOpts {
+	int64 if_modified_since = 1; // timestamp in milliseconds since epoch 01/01/1970
+	int32 limit = 2;
+}
+
+message BrowseOpts {
+	// Load messages with seq id equal or greater than this
+	int32 since_id = 1;
+	// Load messages with UpdatedAt equal or grater than this
+	int64 since_ts = 2; 
+	// Load messages with seq id lower than this
+	int32 before_id = 3;
+	// Load messages with UpdatedAt lower than this
+	int64 before_ts = 4;
+	// Limit the number of messages loaded
+	int32 limit = 5;
+}
+
+message GetQuery {
+	string what = 1;
+
+	// Parameters of "desc" request
+	GetOpts desc = 2;
+	// Parameters of "sub" request
+	GetOpts sub = 3;
+	// Parameters of "data" request
+	BrowseOpts data = 4;
+}
+
+message SetQuery {
+	// Topic metadata, new topic & new subscriptions only
+	SetDesc desc = 1;
+	// Subscription parameters
+	SetSub sub = 2;
+}
+
+// Client handshake
+message ClientHi {
+	string id = 1;
+	string user_agent = 2;
+	int32 ver = 3;
+	string device_id = 4;
+	string lang = 5;
+}
+
+// User creation message {acc}
+message ClientAcc {
+	string id = 1;
+	oneof user {
+		bool is_new = 2;
+		string user_id = 3;
+	}
+	// The initial authentication scheme the account can use
+	string scheme = 4;
+	// Shared secret
+	bytes secret = 5;
+	// Authenticate session with the newly created account
+	bool login = 6;
+	// Indexable tags for user discovery
+	repeated string tags = 7;
+	// User initialization data when creating a new user, otherwise ignored
+	SetDesc desc = 8;
+}
+
+// Login {login} message
+message ClientLogin  {
+	string id = 1;
+	// Authentication scheme
+	string scheme  = 2;
+	// Shared secret
+	bytes secret = 3;
+}
+
+// Subscription request {sub} message
+message ClientSub {
+	string id = 1;
+	string topic  = 2;
+
+	// mirrors {set}
+	SetQuery set_query = 3;
+
+	// mirrors {get}
+	GetQuery get_query = 4;
+}
+
+// Unsubscribe {leave} request message
+message ClientLeave {
+	string id = 1;
+	string topic  = 2;
+	bool unsub = 3;
+}
+
+// ClientPub is client's request to publish data to topic subscribers {pub}
+message ClientPub {
+	string id = 1;
+	string topic = 2;
+	bool no_echo = 3;
+	map<string, string> head = 4;
+	bytes content = 5;
+}
+
+// Query topic state {get}
+message ClientGet {
+	string id = 1;
+	string topic = 2;
+	GetQuery query = 3;
+}
+
+// Update topic state {set}
+message ClientSet {
+	string id = 1;
+	string topic = 2;
+	SetQuery query = 3;
+}
+
+// ClientDel delete messages or topic
+message ClientDel {
+	string id = 1;
+	string topic = 2;
+	// What to delete, either "msg" to delete messages (default) or "topic" to delete the topic or "sub"
+	// to delete a subscription to topic.
+	enum What {
+		MSG = 0;
+		TOPIC = 1;
+		SUB = 2;
+	}
+	What what = 3;
+	// Delete messages older than this seq ID (inclusive)
+	int32 before = 4;
+	// List of Seq Ids to delete/mark as deleted
+	repeated int32 seq_list = 5;
+	// User ID of the subscription to delete
+	string user_id = 6;
+	// Request to hard-delete messages for all users, if such option is available.
+	bool hard = 7;
+}
+
+enum InfoNote {
+	READ = 0;
+	RECV = 1;
+	KP = 2;
+}
+	
+// ClientNote is a client-generated notification for topic subscribers
+message ClientNote {
+	string topic = 1;
+	// what is being reported: "recv" - message received, "read" - message read, "kp" - typing notification
+	InfoNote what = 2;
+	// Server-issued message ID being reported
+	int32 seq_id = 3;
+}
+
+message ClientMsg {
+	oneof Message {
+		ClientHi hi = 1;
+		ClientAcc acc = 2;
+		ClientLogin login = 3;
+		ClientSub sub = 4;
+		ClientLeave leave = 5;
+		ClientPub pub = 6;
+		ClientGet get = 7;
+		ClientSet set = 8;
+		ClientDel del = 9;
+		ClientNote note = 10;
+	}
+}
+
+// ************************
+// Server response messages
+
+// Topic description, S2C in Meta message
+message TopicDesc {
+	int64 created_at = 1;
+	int64 updated_at = 2;
+	DefaultAcsMode defacs = 4;
+	AccessMode acs = 5;
+	int32 seq_id = 6;
+	int32 read_id = 7;
+	int32 recv_id = 8;
+	int32 clear_id = 9;
+	bytes public = 10;
+	bytes private = 11;
+}
+
+// MsgTopicSub: topic subscription details, sent in Meta message
+message TopicSub {
+	int64 updated_at = 1;
+	int64 deleted_at = 2;
+
+	bool online = 3;
+
+	AccessMode acs = 4;
+	int32 read_id = 5;
+	int32 recv_id = 6;
+	bytes public  = 7;
+	bytes private = 8;
+
+	// Response to non-'me' topic
+
+	// Uid of the subscribed user
+	string user_id = 9;
+
+	// 'me' topic only
+	
+	// Topic name of this subscription
+	string topic = 10;
+	// ID of the last {data} message in a topic
+	int32 seq_id = 11;
+	// Messages are deleted up to this ID
+	int32 clear_id = 12;
+
+	// P2P topics only:
+
+	// Other user's last online timestamp & user agent
+	int64 last_seen_time = 13;
+	string last_seen_user_agent = 14;
+}
+
+// {ctrl} message
+message ServerCtrl {
+	string id = 1;
+	int32 code = 2;
+	string text = 3;
+	map<string, bytes> params = 4;
+}
+
+// {data} message
+message ServerData {
+	string topic = 1;
+	// ID of the user who originated the message as {pub}, could be empty if sent by the system
+	string from_user_id = 2;
+	// Timestamp when the message was deleted or 0. Milliseconds since the epoch 01/01/1970
+	int64 deleted_at = 3;
+	int32 seq_id = 4;
+	map<string, string> head = 5;
+	bytes content = 6;
+}
+
+// {pres} message
+message ServerPres {
+	string topic = 1;
+	string src = 2;
+	enum What {
+		ON = 0;
+		OFF = 1;
+		UA = 3;
+		UPD = 4;
+		GONE = 5;
+		ACS = 6;
+		TERM = 7;
+		MSG = 8;
+		READ = 9;
+		RECV = 10;
+		DEL = 11;
+	}
+	What what = 3;
+	string user_agent = 4;
+	int32 seq_id = 5;
+	repeated int32 seq_list = 6;
+	string target_user_id = 7;
+	string actor_user_id = 8;
+	AccessMode acs = 9;
+}
+
+// {meta} message
+message ServerMeta {
+	string id = 1;
+	string topic = 2;
+
+	TopicDesc desc = 3;
+	repeated TopicSub sub = 4;
+}
+
+// {info} message: server-side copy of ClientNote with From added
+message ServerInfo {
+	string topic = 1;
+	string from_user_id = 2;
+	InfoNote what = 3;
+	int32 seq_id = 4;
+}
+
+// Cumulative message
+message ServerMsg {
+	oneof Message {
+		ServerCtrl ctrl = 1;
+		ServerData data = 2;
+		ServerPres pres = 3;
+		ServerMeta meta = 4;
+		ServerInfo info = 5;
+	}
+}
+
+// Context messages
+
+message Session {
+	string session_id = 1;
+	string user_id = 2;
+	enum AuthLevel {
+		NONE = 0;
+		ANON = 10;
+		AUTH = 20;
+		ROOT = 30;
+  	}
+	AuthLevel auth_level = 3;
+	string remote_addr = 4;
+	string user_agent = 5;
+	string device_id = 6;
+	string language = 7;	
+}
+
+message Topic {	
+	string name = 1;
+	string access_auth = 2;
+	string access_anon = 3;
+	bytes public = 4;
+	bytes private = 5;
+}
+
+message User {	
+	string id = 1;
+	string mode_want = 2;
+	string mode_given = 3;
+	bytes public = 4;
+}
+
+message ClientReq {
+	ClientMsg msg = 1;
+	Session sess = 2;
+}
