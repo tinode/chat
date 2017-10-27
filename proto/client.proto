@@ -1,0 +1,11 @@
+syntax = "proto3";
+package client;
+
+import "datamodel.proto";
+
+// This is the single method that needs to be implemented for the client-server exchange of messges over
+// gRPC.
+service Session {
+	// Client sends a stream odm.ClientMsg, server responds with a stream of dm.ServerMsg
+  	rpc MessageLoop(stream dm.ClientMsg) returns (stream dm.ServerMsg) {}
+}
