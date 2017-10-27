@@ -23,7 +23,7 @@ import (
 	"github.com/tinode/chat/server/auth"
 	"github.com/tinode/chat/server/store"
 	"github.com/tinode/chat/server/store/types"
-	"google.golang.org/grpc"
+	_ "google.golang.org/grpc"
 )
 
 // Wire transport
@@ -50,7 +50,7 @@ type Session struct {
 	lpTracker *list.Element
 
 	// gRPC ??. Set only for gRPC clients
-	grpcnode *grpc.Peer()
+	// grpcnode *grpc.Peer()
 
 	// Reference to the cluster node where the session has originated. Set only for cluster RPC sessions
 	clnode *ClusterNode

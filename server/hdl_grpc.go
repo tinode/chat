@@ -10,9 +10,12 @@
 package main
 
 import (
+	"log"
 	"time"
 
-	"google.golang.org/grpc"
+	_ "github.com/tinode/chat/pbx"
+	_ "golang.org/x/net/context"
+	_ "google.golang.org/grpc"
 )
 
 func (sess *Session) closeGrpc() {
@@ -88,13 +91,4 @@ func (sess *Session) writeGrpcLoop() {
 			}
 		}
 	}
-}
-
-// Writes a message with the given message type (mt) and payload.
-func grpc_write(ws *websocket.Conn, mt int, payload []byte) error {
-	ws.SetWriteDeadline(time.Now().Add(writeWait))
-	return ws.WriteMessage(mt, payload)
-}
-
-func serveGRpc(wrt http.ResponseWriter, req *http.Request) {
 }

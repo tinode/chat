@@ -1,16 +1,13 @@
 // External services contacted through RPC
 package main
 
-//go:generate protoc -I ../grpc --go_out=plugins=grpc:../grpc ../grpc/plugin.proto
-
 import (
 	"encoding/json"
-	"io"
 	"log"
 	"strings"
 	"time"
 
-	pb "github.com/tinode/chat/plugin"
+	"github.com/tinode/chat/pbx"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 )
@@ -73,7 +70,7 @@ type Plugin struct {
 	addr        string
 
 	conn   *grpc.ClientConn
-	client pb.PluginClient
+	client pbx.PluginClient
 }
 
 var plugins []Plugin
@@ -151,7 +148,7 @@ func pluginsInit(configString json.RawMessage) {
 			log.Fatalf("plugins: connection failure %v", err)
 		}
 
-		plugins[count].client = pb.NewPluginClient(plugins[count].conn)
+		plugins[count].client = pbx.NewPluginClient(plugins[count].conn)
 
 		nameIndex[conf.Name] = true
 		count++
@@ -180,103 +177,103 @@ func pluginsShutdown() {
 	}
 }
 
-func pluginGenerateClientReq(sess *Session, msg *ClientComMessage) *pb.ClientReq {
-	req := pb.ClientReq{}
+func pluginGenerateClientReq(sess *Session, msg *ClientComMessage) *pbx.ClientReq {
+	req := pbx.ClientReq{}
 	// Convert ClientComMessage to a protobuf message
 	if msg.Hi != nil {
-		req.Message = &pb.ClientReq_Hi{Hi: &pb.ClientHi{
+		req.Msg = &pbx.ClientMsg{&pbx.ClientMsg_Hi{Hi: &pbx.ClientHi{
 			Id:        msg.Hi.Id,
 			UserAgent: msg.Hi.UserAgent,
 			Ver:       int32(parseVersion(msg.Hi.Version)),
 			DeviceId:  msg.Hi.DeviceID,
-			Lang:      msg.Hi.Lang}}
+			Lang:      msg.Hi.Lang}}}
 	} else if msg.Acc != nil {
-		acc := &pb.ClientAcc{
+		acc := &pbx.ClientAcc{
 			Id:     msg.Acc.Id,
 			Scheme: msg.Acc.Scheme,
 			Secret: msg.Acc.Secret,
 			Login:  msg.Acc.Login,
 			Tags:   msg.Acc.Tags}
 		if strings.HasPrefix(msg.Acc.User, "new") {
-			acc.User = &pb.ClientAcc_IsNew{IsNew: true}
+			acc.User = &pbx.ClientAcc_IsNew{IsNew: true}
 		} else {
-			acc.User = &pb.ClientAcc_UserId{UserId: msg.Acc.User}
+			acc.User = &pbx.ClientAcc_UserId{UserId: msg.Acc.User}
 		}
 		acc.Desc = pbSetDesc(msg.Acc.Desc)
-		req.Message = &pb.ClientReq_Acc{Acc: acc}
+		req.Msg = &pbx.ClientMsg{&pbx.ClientMsg_Acc{Acc: acc}}
 	} else if msg.Login != nil {
-		req.Message = &pb.ClientReq_Login{Login: &pb.ClientLogin{
+		req.Msg = &pbx.ClientMsg{&pbx.ClientMsg_Login{Login: &pbx.ClientLogin{
 			Id:     msg.Login.Id,
 			Scheme: msg.Login.Scheme,
-			Secret: msg.Login.Secret}}
+			Secret: msg.Login.Secret}}}
 	} else if msg.Sub != nil {
-		req.Message = &pb.ClientReq_Sub{Sub: &pb.ClientSub{
+		req.Msg = &pbx.ClientMsg{&pbx.ClientMsg_Sub{Sub: &pbx.ClientSub{
 			Id:       msg.Sub.Id,
 			Topic:    msg.Sub.Topic,
 			SetQuery: pbSetQuery(msg.Sub.Set),
-			GetQuery: pbGetQuery(msg.Sub.Get)}}
+			GetQuery: pbGetQuery(msg.Sub.Get)}}}
 	} else if msg.Leave != nil {
-		req.Message = &pb.ClientReq_Leave{Leave: &pb.ClientLeave{
+		req.Msg = &pbx.ClientMsg{&pbx.ClientMsg_Leave{Leave: &pbx.ClientLeave{
 			Id:    msg.Leave.Id,
 			Topic: msg.Leave.Topic,
-			Unsub: msg.Leave.Unsub}}
+			Unsub: msg.Leave.Unsub}}}
 	} else if msg.Pub != nil {
 		content, _ := json.Marshal(msg.Pub.Content)
-		req.Message = &pb.ClientReq_Pub{Pub: &pb.ClientPub{
+		req.Msg = &pbx.ClientMsg{&pbx.ClientMsg_Pub{Pub: &pbx.ClientPub{
 			Id:      msg.Pub.Id,
 			Topic:   msg.Pub.Topic,
 			NoEcho:  msg.Pub.NoEcho,
 			Head:    msg.Pub.Head,
-			Content: content}}
+			Content: content}}}
 	} else if msg.Get != nil {
-		req.Message = &pb.ClientReq_Get{Get: &pb.ClientGet{
+		req.Msg = &pbx.ClientMsg{&pbx.ClientMsg_Get{Get: &pbx.ClientGet{
 			Id:    msg.Get.Id,
 			Topic: msg.Get.Topic,
-			Query: pbGetQuery(&msg.Get.MsgGetQuery)}}
+			Query: pbGetQuery(&msg.Get.MsgGetQuery)}}}
 	} else if msg.Set != nil {
-		req.Message = &pb.ClientReq_Set{Set: &pb.ClientSet{
+		req.Msg = &pbx.ClientMsg{&pbx.ClientMsg_Set{Set: &pbx.ClientSet{
 			Id:    msg.Set.Id,
 			Topic: msg.Set.Topic,
-			Query: pbSetQuery(&msg.Set.MsgSetQuery)}}
+			Query: pbSetQuery(&msg.Set.MsgSetQuery)}}}
 	} else if msg.Del != nil {
-		var what pb.ClientDel_What
+		var what pbx.ClientDel_What
 		switch msg.Del.What {
 		case "msg":
-			what = pb.ClientDel_MSG
+			what = pbx.ClientDel_MSG
 		case "topic":
-			what = pb.ClientDel_TOPIC
+			what = pbx.ClientDel_TOPIC
 		case "sub":
-			what = pb.ClientDel_SUB
+			what = pbx.ClientDel_SUB
 		}
-		req.Message = &pb.ClientReq_Del{Del: &pb.ClientDel{
+		req.Msg = &pbx.ClientMsg{&pbx.ClientMsg_Del{Del: &pbx.ClientDel{
 			Id:      msg.Del.Id,
 			Topic:   msg.Del.Topic,
 			What:    what,
 			Before:  int32(msg.Del.Before),
 			SeqList: intSliceToInt32(msg.Del.SeqList),
 			UserId:  msg.Del.User,
-			Hard:    msg.Del.Hard}}
+			Hard:    msg.Del.Hard}}}
 	} else if msg.Note != nil {
-		var what pb.InfoNote
+		var what pbx.InfoNote
 		switch msg.Note.What {
 		case "kp":
-			what = pb.InfoNote_KP
+			what = pbx.InfoNote_KP
 		case "read":
-			what = pb.InfoNote_READ
+			what = pbx.InfoNote_READ
 		case "recv":
-			what = pb.InfoNote_RECV
+			what = pbx.InfoNote_RECV
 		}
-		req.Message = &pb.ClientReq_Note{Note: &pb.ClientNote{
+		req.Msg = &pbx.ClientMsg{&pbx.ClientMsg_Note{Note: &pbx.ClientNote{
 			Topic: msg.Note.Topic,
 			What:  what,
-			SeqId: int32(msg.Note.SeqId)}}
+			SeqId: int32(msg.Note.SeqId)}}}
 	}
 
 	// Add session as context
-	req.Sess = &pb.Session{
+	req.Sess = &pbx.Session{
 		SessionId:  sess.sid,
 		UserId:     sess.uid.UserId(),
-		AuthLevel:  pb.Session_AuthLevel(sess.authLvl),
+		AuthLevel:  pbx.Session_AuthLevel(sess.authLvl),
 		UserAgent:  sess.userAgent,
 		RemoteAddr: sess.remoteAddr,
 		DeviceId:   sess.deviceId,
@@ -291,7 +288,7 @@ func pluginHandler(sess *Session, msg *ClientComMessage) *ServerComMessage {
 		return nil
 	}
 
-	var req *pb.ClientReq
+	var req *pbx.ClientReq
 
 	var id string
 	var topic string
@@ -314,7 +311,7 @@ func pluginHandler(sess *Session, msg *ClientComMessage) *ServerComMessage {
 		} else {
 			ctx = context.Background()
 		}
-		if resp, err := p.client.HandleMessage(ctx, req); err == nil {
+		if resp, err := p.client.ClientMessage(ctx, req); err == nil {
 			// Response code 0 means default processing
 			if resp.GetCode() == 0 {
 				continue
@@ -349,24 +346,6 @@ func pluginFilter(msg *ServerComMessage) *ServerComMessage {
 	return nil
 }
 
-func pluginRequestMessages(p *Plugin) {
-	stream, err := p.client.RequestMessages(context.Background(), &pb.Unused{})
-	if err != nil {
-		log.Fatalf("plugin: failed to request messages", p.name, err)
-	}
-	for {
-		creq, err := stream.Recv()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			log.Println("plugins: stream error", p.name, err)
-		} else {
-			log.Println(creq.GetMessage())
-		}
-	}
-}
-
 func findInSlice(needle string, haystack []string) int {
 	for i, val := range haystack {
 		if val == needle {
@@ -384,12 +363,12 @@ func intSliceToInt32(in []int) []int32 {
 	return out
 }
 
-func pbGetQuery(in *MsgGetQuery) *pb.GetQuery {
+func pbGetQuery(in *MsgGetQuery) *pbx.GetQuery {
 	if in == nil {
 		return nil
 	}
 
-	out := &pb.GetQuery{
+	out := &pbx.GetQuery{
 		What: in.What,
 	}
 
@@ -402,17 +381,17 @@ func pbGetQuery(in *MsgGetQuery) *pb.GetQuery {
 	}
 
 	if in.Desc != nil {
-		out.Desc = &pb.GetOpts{
+		out.Desc = &pbx.GetOpts{
 			IfModifiedSince: convertTimeStamp(in.Desc.IfModifiedSince),
 			Limit:           int32(in.Desc.Limit)}
 	}
 	if in.Sub != nil {
-		out.Sub = &pb.GetOpts{
+		out.Sub = &pbx.GetOpts{
 			IfModifiedSince: convertTimeStamp(in.Sub.IfModifiedSince),
 			Limit:           int32(in.Sub.Limit)}
 	}
 	if in.Data != nil {
-		out.Data = &pb.BrowseOpts{
+		out.Data = &pbx.BrowseOpts{
 			BeforeId: int32(in.Data.BeforeId),
 			BeforeTs: convertTimeStamp(in.Data.BeforeTs),
 			SinceId:  int32(in.Data.SinceId),
@@ -422,14 +401,14 @@ func pbGetQuery(in *MsgGetQuery) *pb.GetQuery {
 	return out
 }
 
-func pbSetDesc(in *MsgSetDesc) *pb.SetDesc {
+func pbSetDesc(in *MsgSetDesc) *pbx.SetDesc {
 	if in == nil {
 		return nil
 	}
 
-	out := &pb.SetDesc{}
+	out := &pbx.SetDesc{}
 	if in.DefaultAcs != nil {
-		out.DefaultAcs = &pb.DefaultAcsMode{
+		out.DefaultAcs = &pbx.DefaultAcsMode{
 			Auth: in.DefaultAcs.Auth,
 			Anon: in.DefaultAcs.Anon}
 	}
@@ -442,17 +421,17 @@ func pbSetDesc(in *MsgSetDesc) *pb.SetDesc {
 	return out
 }
 
-func pbSetQuery(in *MsgSetQuery) *pb.SetQuery {
+func pbSetQuery(in *MsgSetQuery) *pbx.SetQuery {
 	if in == nil {
 		return nil
 	}
 
-	out := &pb.SetQuery{
+	out := &pbx.SetQuery{
 		Desc: pbSetDesc(in.Desc),
 	}
 
 	if in.Sub != nil {
-		out.Sub = &pb.SetSub{
+		out.Sub = &pbx.SetSub{
 			UserId: in.Sub.User,
 			Mode:   in.Sub.Mode,
 		}

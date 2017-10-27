@@ -47,7 +47,8 @@ func (ss *SessionStore) Create(conn interface{}, sid string) *Session {
 	case *ClusterNode:
 		s.proto = CLUSTER
 		s.clnode = c
-		case *
+		// case *GrpcNode:
+
 	default:
 		s.proto = NONE
 	}
