@@ -20,10 +20,10 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/tinode/chat/pbx"
 	"github.com/tinode/chat/server/auth"
 	"github.com/tinode/chat/server/store"
 	"github.com/tinode/chat/server/store/types"
-	_ "google.golang.org/grpc"
 )
 
 // Wire transport
@@ -49,8 +49,8 @@ type Session struct {
 	// Pointer to session's record in sessionStore. Set only for Long Poll sessions
 	lpTracker *list.Element
 
-	// gRPC ??. Set only for gRPC clients
-	// grpcnode *grpc.Peer()
+	// gRPC handle. Set only for gRPC clients
+	grpcnode pbx.Node_MessageLoopServer
 
 	// Reference to the cluster node where the session has originated. Set only for cluster RPC sessions
 	clnode *ClusterNode
@@ -132,6 +132,17 @@ func (s *Session) queueOut(msg *ServerComMessage) {
 	case s.send <- data:
 	case <-time.After(time.Millisecond * 10):
 		log.Println("session.queueOut: timeout")
+	}
+}
+
+func (s *Session) cleanUp() {
+	if s.proto != LPOLL {
+		globals.sessionStore.Delete(s)
+	}
+	globals.cluster.sessionGone(s)
+	for _, sub := range s.subs {
+		// sub.done is the same as topic.unreg
+		sub.done <- &sessionLeave{sess: s, unsub: false}
 	}
 }
 
@@ -349,6 +360,10 @@ func parseVersion(vers string) int {
 		return 0
 	}
 	return (major << 8) | minor
+}
+
+func versionToString(vers int) string {
+	return strconv.Itoa((vers>>8)&0xff) + "." + strconv.Itoa(vers&0xff)
 }
 
 // Authenticate

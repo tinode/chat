@@ -1,6 +1,8 @@
 # Tinode Instant Messaging Server
 
-Instant messaging server. Backend in pure [Go](http://golang.org) (license [GPL 3.0](http://www.gnu.org/licenses/gpl-3.0.en.html)), custom client-side binding in Java including Android and Javascript (license [Apache 2.0](http://www.apache.org/licenses/LICENSE-2.0)), as well as [gRPC](https://grpc.io/) client support for C++, C#, Go, Java, Node, PHP, Python, Ruby, Objective-C. Persistent storage [RethinkDB](http://rethinkdb.com/), JSON over websocket or gRPC over plain TCP (long polling is also available). Tinode is meant as a replacement for XMPP. Overall it's a lot like open source WhatsApp or Telegram.
+Instant messaging server. Backend in pure [Go](http://golang.org) (license [GPL 3.0](http://www.gnu.org/licenses/gpl-3.0.en.html)), custom client-side binding in Java including Android and Javascript (license [Apache 2.0](http://www.apache.org/licenses/LICENSE-2.0)), as well as [gRPC](https://grpc.io/) client support for C++, C#, Go, Java, Node, PHP, Python, Ruby, Objective-C. Wire transport is JSON over websocket or gRPC over plain TCP (long polling is also available). Persistent storage [RethinkDB](http://rethinkdb.com/).
+
+Tinode is meant as a replacement for XMPP. Overall it's a lot like open source WhatsApp or Telegram.
 
 Version 0.13. This is beta-quality software: feature-complete but probably with a few bugs. Follow [instructions](INSTALL.md) to install and run. Read [API documentation](API.md).
 

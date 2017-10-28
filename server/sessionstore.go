@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/tinode/chat/pbx"
 	"github.com/tinode/chat/server/store"
 )
 
@@ -48,7 +49,9 @@ func (ss *SessionStore) Create(conn interface{}, sid string) *Session {
 		s.proto = CLUSTER
 		s.clnode = c
 		// case *GrpcNode:
-
+	case pbx.Node_MessageLoopServer:
+		s.proto = GRPC
+		s.grpcnode = c
 	default:
 		s.proto = NONE
 	}
@@ -79,7 +82,7 @@ func (ss *SessionStore) Create(conn interface{}, sid string) *Session {
 			if sess.lastTouched.Before(expire) {
 				ss.lru.Remove(elem)
 				delete(ss.sessCache, sess.sid)
-				globals.cluster.sessionGone(sess)
+				sess.cleanUp()
 			} else {
 				break // don't need to traverse further
 			}

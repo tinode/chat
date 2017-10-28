@@ -38,12 +38,7 @@ func (sess *Session) readLoop() {
 	defer func() {
 		log.Println("serveWebsocket - stop")
 		sess.closeWS()
-		globals.sessionStore.Delete(sess)
-		globals.cluster.sessionGone(sess)
-		for _, sub := range sess.subs {
-			// sub.done is the same as topic.unreg
-			sub.done <- &sessionLeave{sess: sess, unsub: false}
-		}
+		sess.cleanUp()
 	}()
 
 	sess.ws.SetReadLimit(globals.maxMessageSize)

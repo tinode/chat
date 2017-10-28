@@ -178,109 +178,16 @@ func pluginsShutdown() {
 }
 
 func pluginGenerateClientReq(sess *Session, msg *ClientComMessage) *pbx.ClientReq {
-	req := pbx.ClientReq{}
-	// Convert ClientComMessage to a protobuf message
-	if msg.Hi != nil {
-		req.Msg = &pbx.ClientMsg{&pbx.ClientMsg_Hi{Hi: &pbx.ClientHi{
-			Id:        msg.Hi.Id,
-			UserAgent: msg.Hi.UserAgent,
-			Ver:       int32(parseVersion(msg.Hi.Version)),
-			DeviceId:  msg.Hi.DeviceID,
-			Lang:      msg.Hi.Lang}}}
-	} else if msg.Acc != nil {
-		acc := &pbx.ClientAcc{
-			Id:     msg.Acc.Id,
-			Scheme: msg.Acc.Scheme,
-			Secret: msg.Acc.Secret,
-			Login:  msg.Acc.Login,
-			Tags:   msg.Acc.Tags}
-		if strings.HasPrefix(msg.Acc.User, "new") {
-			acc.User = &pbx.ClientAcc_IsNew{IsNew: true}
-		} else {
-			acc.User = &pbx.ClientAcc_UserId{UserId: msg.Acc.User}
-		}
-		acc.Desc = pbSetDesc(msg.Acc.Desc)
-		req.Msg = &pbx.ClientMsg{&pbx.ClientMsg_Acc{Acc: acc}}
-	} else if msg.Login != nil {
-		req.Msg = &pbx.ClientMsg{&pbx.ClientMsg_Login{Login: &pbx.ClientLogin{
-			Id:     msg.Login.Id,
-			Scheme: msg.Login.Scheme,
-			Secret: msg.Login.Secret}}}
-	} else if msg.Sub != nil {
-		req.Msg = &pbx.ClientMsg{&pbx.ClientMsg_Sub{Sub: &pbx.ClientSub{
-			Id:       msg.Sub.Id,
-			Topic:    msg.Sub.Topic,
-			SetQuery: pbSetQuery(msg.Sub.Set),
-			GetQuery: pbGetQuery(msg.Sub.Get)}}}
-	} else if msg.Leave != nil {
-		req.Msg = &pbx.ClientMsg{&pbx.ClientMsg_Leave{Leave: &pbx.ClientLeave{
-			Id:    msg.Leave.Id,
-			Topic: msg.Leave.Topic,
-			Unsub: msg.Leave.Unsub}}}
-	} else if msg.Pub != nil {
-		content, _ := json.Marshal(msg.Pub.Content)
-		req.Msg = &pbx.ClientMsg{&pbx.ClientMsg_Pub{Pub: &pbx.ClientPub{
-			Id:      msg.Pub.Id,
-			Topic:   msg.Pub.Topic,
-			NoEcho:  msg.Pub.NoEcho,
-			Head:    msg.Pub.Head,
-			Content: content}}}
-	} else if msg.Get != nil {
-		req.Msg = &pbx.ClientMsg{&pbx.ClientMsg_Get{Get: &pbx.ClientGet{
-			Id:    msg.Get.Id,
-			Topic: msg.Get.Topic,
-			Query: pbGetQuery(&msg.Get.MsgGetQuery)}}}
-	} else if msg.Set != nil {
-		req.Msg = &pbx.ClientMsg{&pbx.ClientMsg_Set{Set: &pbx.ClientSet{
-			Id:    msg.Set.Id,
-			Topic: msg.Set.Topic,
-			Query: pbSetQuery(&msg.Set.MsgSetQuery)}}}
-	} else if msg.Del != nil {
-		var what pbx.ClientDel_What
-		switch msg.Del.What {
-		case "msg":
-			what = pbx.ClientDel_MSG
-		case "topic":
-			what = pbx.ClientDel_TOPIC
-		case "sub":
-			what = pbx.ClientDel_SUB
-		}
-		req.Msg = &pbx.ClientMsg{&pbx.ClientMsg_Del{Del: &pbx.ClientDel{
-			Id:      msg.Del.Id,
-			Topic:   msg.Del.Topic,
-			What:    what,
-			Before:  int32(msg.Del.Before),
-			SeqList: intSliceToInt32(msg.Del.SeqList),
-			UserId:  msg.Del.User,
-			Hard:    msg.Del.Hard}}}
-	} else if msg.Note != nil {
-		var what pbx.InfoNote
-		switch msg.Note.What {
-		case "kp":
-			what = pbx.InfoNote_KP
-		case "read":
-			what = pbx.InfoNote_READ
-		case "recv":
-			what = pbx.InfoNote_RECV
-		}
-		req.Msg = &pbx.ClientMsg{&pbx.ClientMsg_Note{Note: &pbx.ClientNote{
-			Topic: msg.Note.Topic,
-			What:  what,
-			SeqId: int32(msg.Note.SeqId)}}}
-	}
-
-	// Add session as context
-	req.Sess = &pbx.Session{
-		SessionId:  sess.sid,
-		UserId:     sess.uid.UserId(),
-		AuthLevel:  pbx.Session_AuthLevel(sess.authLvl),
-		UserAgent:  sess.userAgent,
-		RemoteAddr: sess.remoteAddr,
-		DeviceId:   sess.deviceId,
-		Language:   sess.lang,
-	}
-
-	return &req
+	return &pbx.ClientReq{
+		Msg: pb_cli_serialize(msg),
+		Sess: &pbx.Session{
+			SessionId:  sess.sid,
+			UserId:     sess.uid.UserId(),
+			AuthLevel:  pbx.Session_AuthLevel(sess.authLvl),
+			UserAgent:  sess.userAgent,
+			RemoteAddr: sess.remoteAddr,
+			DeviceId:   sess.deviceId,
+			Language:   sess.lang}}
 }
 
 func pluginHandler(sess *Session, msg *ClientComMessage) *ServerComMessage {
@@ -353,88 +260,4 @@ func findInSlice(needle string, haystack []string) int {
 		}
 	}
 	return -1
-}
-
-func intSliceToInt32(in []int) []int32 {
-	out := make([]int32, len(in))
-	for i, v := range in {
-		out[i] = int32(v)
-	}
-	return out
-}
-
-func pbGetQuery(in *MsgGetQuery) *pbx.GetQuery {
-	if in == nil {
-		return nil
-	}
-
-	out := &pbx.GetQuery{
-		What: in.What,
-	}
-
-	convertTimeStamp := func(IfModifiedSince *time.Time) int64 {
-		var ims int64
-		if IfModifiedSince != nil {
-			ims = IfModifiedSince.UnixNano() / 1000000
-		}
-		return ims
-	}
-
-	if in.Desc != nil {
-		out.Desc = &pbx.GetOpts{
-			IfModifiedSince: convertTimeStamp(in.Desc.IfModifiedSince),
-			Limit:           int32(in.Desc.Limit)}
-	}
-	if in.Sub != nil {
-		out.Sub = &pbx.GetOpts{
-			IfModifiedSince: convertTimeStamp(in.Sub.IfModifiedSince),
-			Limit:           int32(in.Sub.Limit)}
-	}
-	if in.Data != nil {
-		out.Data = &pbx.BrowseOpts{
-			BeforeId: int32(in.Data.BeforeId),
-			BeforeTs: convertTimeStamp(in.Data.BeforeTs),
-			SinceId:  int32(in.Data.SinceId),
-			SinceTs:  convertTimeStamp(in.Data.SinceTs),
-			Limit:    int32(in.Data.Limit)}
-	}
-	return out
-}
-
-func pbSetDesc(in *MsgSetDesc) *pbx.SetDesc {
-	if in == nil {
-		return nil
-	}
-
-	out := &pbx.SetDesc{}
-	if in.DefaultAcs != nil {
-		out.DefaultAcs = &pbx.DefaultAcsMode{
-			Auth: in.DefaultAcs.Auth,
-			Anon: in.DefaultAcs.Anon}
-	}
-	if in.Public != nil {
-		out.Public, _ = json.Marshal(in.Public)
-	}
-	if in.Private != nil {
-		out.Private, _ = json.Marshal(in.Private)
-	}
-	return out
-}
-
-func pbSetQuery(in *MsgSetQuery) *pbx.SetQuery {
-	if in == nil {
-		return nil
-	}
-
-	out := &pbx.SetQuery{
-		Desc: pbSetDesc(in.Desc),
-	}
-
-	if in.Sub != nil {
-		out.Sub = &pbx.SetSub{
-			UserId: in.Sub.User,
-			Mode:   in.Sub.Mode,
-		}
-	}
-	return out
 }

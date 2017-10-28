@@ -10,57 +10,52 @@
 package main
 
 import (
+	"io"
 	"log"
-	"time"
+	"net"
 
-	_ "github.com/tinode/chat/pbx"
-	_ "golang.org/x/net/context"
-	_ "google.golang.org/grpc"
+	"github.com/tinode/chat/pbx"
+	"google.golang.org/grpc"
 )
+
+type GrpcNodeServer struct {
+}
 
 func (sess *Session) closeGrpc() {
 	if sess.proto == GRPC {
-		sess.grpcnode.Close()
+		sess.grpcnode = nil
 	}
 }
 
-func (sess *Session) readGrpcLoop() {
+// Equivalent of starting a new session and a read loop in one
+func (*GrpcNodeServer) MessageLoop(stream pbx.Node_MessageLoopServer) error {
+	sess := globals.sessionStore.Create(stream, "")
+
 	defer func() {
-		log.Println("serveGrpc - stop")
+		log.Println("grpc.MessageLoop - stop")
 		sess.closeGrpc()
-		globals.sessionStore.Delete(sess)
-		globals.cluster.sessionGone(sess)
-		for _, sub := range sess.subs {
-			// sub.done is the same as topic.unreg
-			sub.done <- &sessionLeave{sess: sess, unsub: false}
-		}
+		sess.cleanUp()
 	}()
 
-	sess.ws.SetReadLimit(globals.maxMessageSize)
-	sess.ws.SetReadDeadline(time.Now().Add(pongWait))
-	sess.ws.SetPongHandler(func(string) error {
-		sess.ws.SetReadDeadline(time.Now().Add(pongWait))
-		return nil
-	})
-	sess.remoteAddr = sess.ws.RemoteAddr().String()
-
-	for {
-		// Read a ClientComMessage
-		if _, raw, err := sess.ws.ReadMessage(); err != nil {
-			log.Println("sess.readLoop: " + err.Error())
-			return
-		} else {
-			sess.dispatchRaw(raw)
+	for sess.grpcnode != nil {
+		in, err := stream.Recv()
+		if err == io.EOF {
+			return nil
 		}
+		if err != nil {
+			return err
+		}
+
+		sess.dispatch(pb_cli_deserialize(in))
 	}
+
+	return nil
 }
 
 func (sess *Session) writeGrpcLoop() {
-	ticker := time.NewTicker(pingPeriod)
 
 	defer func() {
-		ticker.Stop()
-		sess.closeGrpc() // break readLoop
+		sess.closeGrpc() // exit MessageLoop
 	}()
 
 	for {
@@ -70,25 +65,41 @@ func (sess *Session) writeGrpcLoop() {
 				// channel closed
 				return
 			}
-			if err := ws_write(sess.ws, websocket.TextMessage, msg); err != nil {
+			if err := sess.grpcnode.Send(msg); err != nil {
 				log.Println("sess.writeLoop: " + err.Error())
 				return
 			}
 		case msg := <-sess.stop:
 			// Shutdown requested, don't care if the message is delivered
 			if msg != nil {
-				ws_write(sess.ws, websocket.TextMessage, msg)
+				sess.grpcnode.Send(msg)
 			}
 			return
 
 		case topic := <-sess.detach:
 			delete(sess.subs, topic)
-
-		case <-ticker.C:
-			if err := ws_write(sess.ws, websocket.PingMessage, []byte{}); err != nil {
-				log.Println("sess.writeLoop: ping/" + err.Error())
-				return
-			}
 		}
 	}
+}
+
+func serveGrpc(addr string) (*grpc.Server, error) {
+	if addr == "" {
+		return nil, nil
+	}
+
+	lis, err := net.Listen("tcp", addr)
+	if err != nil {
+		return nil, err
+	}
+
+	srv := grpc.NewServer()
+	pbx.RegisterNodeServer(srv, &GrpcNodeServer{})
+
+	go func() {
+		if err := srv.Serve(lis); err != nil {
+			log.Println("gRPC server failed:", err)
+		}
+	}()
+
+	return srv, nil
 }

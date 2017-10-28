@@ -101,20 +101,18 @@ message ClientHi {
 // User creation message {acc}
 message ClientAcc {
 	string id = 1;
-	oneof user {
-		bool is_new = 2;
-		string user_id = 3;
-	}
+	// User being created or updated
+	string user_id = 2;
 	// The initial authentication scheme the account can use
-	string scheme = 4;
+	string scheme = 3;
 	// Shared secret
-	bytes secret = 5;
+	bytes secret = 4;
 	// Authenticate session with the newly created account
-	bool login = 6;
+	bool login = 5;
 	// Indexable tags for user discovery
-	repeated string tags = 7;
+	repeated string tags = 6;
 	// User initialization data when creating a new user, otherwise ignored
-	SetDesc desc = 8;
+	SetDesc desc = 7;
 }
 
 // Login {login} message
