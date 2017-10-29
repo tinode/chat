@@ -402,7 +402,10 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 					private:   subs[i].Private,
 					modeWant:  subs[i].ModeWant,
 					modeGiven: subs[i].ModeGiven,
-					clearId:   subs[i].ClearId}
+					clearId:   subs[i].ClearId,
+					recvId:    subs[i].RecvSeqId,
+					readId:    subs[i].ReadSeqId,
+				}
 			}
 
 		} else {
