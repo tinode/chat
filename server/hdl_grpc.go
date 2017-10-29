@@ -82,10 +82,11 @@ func (sess *Session) writeGrpcLoop() {
 	}
 }
 
-func grpc_write(sess *Session, msg *ServerComMessage) error {
+func grpc_write(sess *Session, msg interface{}) error {
 	out := sess.grpcnode
 	if out != nil {
-		return out.Send(pb_serv_serialize(msg))
+		// Will panic if format is wrong. This is an intentional panic.
+		return out.Send(msg.(*pbx.ServerMsg))
 	}
 	return nil
 }

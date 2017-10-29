@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"log"
 	"strings"
 
@@ -222,18 +221,13 @@ func (t *Topic) presSubsOnlineDirect(what string) {
 			continue
 		}
 
-		packet := msg
 		if t.cat == types.TopicCat_P2P {
-			// For p2p topics topic name is dependent on receiver
-			p2p := *msg
-			p2p.Pres.Topic = t.original(sess.uid)
-			packet = &p2p
+			// For p2p topics topic name is dependent on receiver.
+			// It's OK to change the pointer here because the message will be serialized in queueOut
+			// before being placed into channel.
+			msg.Pres.Topic = t.original(sess.uid)
 		}
-
-		select {
-		case sess.send <- packet:
-		default:
-		}
+		sess.queueOut(msg)
 	}
 }
 

@@ -391,12 +391,6 @@ func (t *Topic) run(hub *Hub) {
 			// Broadcast the message. Only {data}, {pres}, {info} are broadcastable.
 			// {meta} and {ctrl} are sent to the session only
 			if msg.Data != nil || msg.Pres != nil || msg.Info != nil {
-
-				//var packet []byte
-				//if t.cat != types.TopicCat_P2P {
-				//	packet, _ = json.Marshal(msg)
-				//}
-
 				for sess := range t.sessions {
 					if sess.sid == msg.skipSid {
 						continue
@@ -436,11 +430,9 @@ func (t *Topic) run(hub *Hub) {
 						} else if msg.Info != nil {
 							msg.Info.Topic = t.original(sess.uid)
 						}
-						//packet, _ = json.Marshal(msg)
 					}
 
-					select {
-					case sess.send <- msg:
+					if sess.queueOut(msg) {
 						// Update device map with the device ID which should recive the notification
 						if pushRcpt != nil {
 							if i, ok := pushRcpt.uidMap[sess.uid]; ok {
@@ -450,7 +442,7 @@ func (t *Topic) run(hub *Hub) {
 								}
 							}
 						}
-					default:
+					} else {
 						log.Printf("topic[%s]: connection stuck, detaching", t.name)
 						t.unreg <- &sessionLeave{sess: sess, unsub: false}
 					}

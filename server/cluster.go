@@ -318,9 +318,7 @@ func (Cluster) Proxy(msg *ClusterResp, unused *bool) error {
 	// This cluster member received a response from topic owner to be forwarded to a session
 	// Find appropriate session, send the message to it
 	if sess := globals.sessionStore.Get(msg.FromSID); sess != nil {
-		select {
-		case sess.send <- msg.Msg:
-		case <-time.After(time.Millisecond * 10):
+		if !sess.queueOutBytes(msg.Msg) {
 			log.Println("cluster.Proxy: timeout")
 		}
 	} else {
@@ -504,7 +502,7 @@ func (sess *Session) rpcWriteLoop() {
 			// The error is returned if the remote node is down. Which means the remote
 			// session is also disconnected.
 			if err := sess.clnode.call("Cluster.Proxy",
-				&ClusterResp{Msg: msg, FromSID: sess.sid}, &unused); err != nil {
+				&ClusterResp{Msg: msg.([]byte), FromSID: sess.sid}, &unused); err != nil {
 
 				log.Println("sess.writeRPC: " + err.Error())
 				return
@@ -512,7 +510,7 @@ func (sess *Session) rpcWriteLoop() {
 		case msg := <-sess.stop:
 			// Shutdown is requested, don't care if the message is delivered
 			if msg != nil {
-				sess.clnode.call("Cluster.Proxy", &ClusterResp{Msg: msg, FromSID: sess.sid},
+				sess.clnode.call("Cluster.Proxy", &ClusterResp{Msg: msg.([]byte), FromSID: sess.sid},
 					&unused)
 			}
 			return

@@ -10,7 +10,6 @@
 package main
 
 import (
-	"encoding/json"
 	"log"
 	"net/http"
 	"time"
@@ -100,10 +99,10 @@ func (sess *Session) writeLoop() {
 }
 
 // Writes a message with the given message type (mt) and payload.
-func ws_write(ws *websocket.Conn, mt int, msg *ServerComMessage) error {
+func ws_write(ws *websocket.Conn, mt int, msg interface{}) error {
 	var bits []byte
 	if msg != nil {
-		bits, _ = json.Marshal(msg)
+		bits = msg.([]byte)
 	} else {
 		bits = []byte{}
 	}

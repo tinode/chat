@@ -27,10 +27,11 @@ func (sess *Session) writeOnce(wrt http.ResponseWriter) {
 	case msg, ok := <-sess.send:
 		if !ok {
 			log.Println("writeOnce: reading from a closed channel")
-		} else if err := lp_write(wrt, msg); err != nil {
-			log.Println("sess.writeOnce: " + err.Error())
+		} else {
+			if err := lp_write(wrt, msg); err != nil {
+				log.Println("sess.writeOnce: " + err.Error())
+			}
 		}
-
 	case <-closed:
 		log.Println("conn.writeOnce: connection closed by peer")
 
@@ -50,9 +51,9 @@ func (sess *Session) writeOnce(wrt http.ResponseWriter) {
 	}
 }
 
-func lp_write(wrt http.ResponseWriter, msg *ServerComMessage) error {
-	bits, _ := json.Marshal(msg)
-	wrt.Write(bits)
+func lp_write(wrt http.ResponseWriter, msg interface{}) error {
+	// This will panic if msg is not []byte. This is intentional.
+	wrt.Write(msg.([]byte))
 	return nil
 }
 

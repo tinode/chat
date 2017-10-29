@@ -81,11 +81,13 @@ type Session struct {
 	// Time when the session received any packer from client
 	lastAction time.Time
 
-	// outbound mesages, buffered
-	send chan *ServerComMessage
+	// Outbound mesages, buffered.
+	// The content must be serialized in format suitable for the session.
+	send chan interface{}
 
-	// channel for shutting down the session, buffer 1
-	stop chan *ServerComMessage
+	// Channel for shutting down the session, buffer 1.
+	// Content in the same format as for 'send'
+	stop chan interface{}
 
 	// detach - channel for detaching session from topic, buffered
 	detach chan string
@@ -119,20 +121,37 @@ type Subscription struct {
 	uaChange chan<- string
 }
 
-// TODO(gene): unify simpleByteSender and QueueOut
-
-// QueueOut attempts to send a ServerComMessage to a session; if the send buffer is full, timeout is 10 milliseconds
-func (s *Session) queueOut(msg *ServerComMessage) {
+// queueOut attempts to send a ServerComMessage to a session; if the send buffer is full, timeout is 50 usec
+func (s *Session) queueOut(msg *ServerComMessage) bool {
 	if s == nil {
-		return
+		return true
 	}
 
-	// data, _ := json.Marshal(msg)
+	data, _ := s.serialize(msg)
+
 	select {
-	case s.send <- msg:
-	case <-time.After(time.Millisecond * 10):
+	case s.send <- data:
+	case <-time.After(time.Microsecond * 50):
 		log.Println("session.queueOut: timeout")
+		return false
 	}
+	return true
+}
+
+// queueOutBytes attempts to send a ServerComMessage already serialized to []byte.
+// If the send buffer is full, timeout is 50 usec
+func (s *Session) queueOutBytes(data []byte) bool {
+	if s == nil {
+		return true
+	}
+
+	select {
+	case s.send <- data:
+	case <-time.After(time.Microsecond * 50):
+		log.Println("session.queueOut: timeout")
+		return false
+	}
+	return true
 }
 
 func (s *Session) cleanUp() {
