@@ -58,9 +58,9 @@ func (ss *SessionStore) Create(conn interface{}, sid string) *Session {
 
 	if s.proto != NONE {
 		s.subs = make(map[string]*Subscription)
-		s.send = make(chan []byte, 256)  // buffered
-		s.stop = make(chan []byte, 1)    // Buffered by 1 just to make it non-blocking
-		s.detach = make(chan string, 64) // buffered
+		s.send = make(chan *ServerComMessage, 256) // buffered
+		s.stop = make(chan *ServerComMessage, 1)   // Buffered by 1 just to make it non-blocking
+		s.detach = make(chan string, 64)           // buffered
 	}
 
 	s.lastTouched = time.Now()

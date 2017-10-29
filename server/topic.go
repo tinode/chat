@@ -9,7 +9,7 @@
 package main
 
 import (
-	"encoding/json"
+	//	"encoding/json"
 	"errors"
 	"log"
 	"sync/atomic"
@@ -392,10 +392,10 @@ func (t *Topic) run(hub *Hub) {
 			// {meta} and {ctrl} are sent to the session only
 			if msg.Data != nil || msg.Pres != nil || msg.Info != nil {
 
-				var packet []byte
-				if t.cat != types.TopicCat_P2P {
-					packet, _ = json.Marshal(msg)
-				}
+				//var packet []byte
+				//if t.cat != types.TopicCat_P2P {
+				//	packet, _ = json.Marshal(msg)
+				//}
 
 				for sess := range t.sessions {
 					if sess.sid == msg.skipSid {
@@ -436,11 +436,11 @@ func (t *Topic) run(hub *Hub) {
 						} else if msg.Info != nil {
 							msg.Info.Topic = t.original(sess.uid)
 						}
-						packet, _ = json.Marshal(msg)
+						//packet, _ = json.Marshal(msg)
 					}
 
 					select {
-					case sess.send <- packet:
+					case sess.send <- msg:
 						// Update device map with the device ID which should recive the notification
 						if pushRcpt != nil {
 							if i, ok := pushRcpt.uidMap[sess.uid]; ok {

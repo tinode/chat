@@ -125,20 +125,7 @@ func pb_cli_deserialize(pkt *pbx.ClientMsg) *ClientComMessage {
 			Secret: acc.GetSecret(),
 			Login:  acc.GetLogin(),
 			Tags:   acc.GetTags(),
-		}
-		if desc := acc.GetDesc(); desc != nil {
-			msg.Acc.Desc = &MsgSetDesc{
-				// FIXME: public & private assignments are broken.
-				// they should be assumed to be JSON and unmarshalled.
-				Public:  desc.GetPublic(),
-				Private: desc.GetPrivate(),
-			}
-			if acs := desc.GetDefaultAcs(); acs != nil {
-				msg.Acc.Desc.DefaultAcs = &MsgDefaultAcsMode{
-					Auth: acs.GetAuth(),
-					Anon: acs.GetAnon(),
-				}
-			}
+			Desc:   pb_SetDesc_deserialize(acc.GetDesc()),
 		}
 	} else if login := pkt.GetLogin(); login != nil {
 		msg.Login = &MsgClientLogin{
@@ -150,19 +137,8 @@ func pb_cli_deserialize(pkt *pbx.ClientMsg) *ClientComMessage {
 		msg.Sub = &MsgClientSub{
 			Id:    sub.GetId(),
 			Topic: sub.GetTopic(),
-		}
-
-		if set := sub.GetSetQuery(); set != nil {
-			msg.Sub.Set = &MsgSetQuery{}
-			if desc := set.GetDesc(); desc != nil {
-				msg.Sub.Set.Desc = &MsgSetDesc{}
-			}
-			if sub := set.GetSub(); sub != nil {
-				msg.Sub.Set.Sub = &MsgSetSub{}
-			}
-		}
-		if get := sub.GetGetQuery(); get != nil {
-			msg.Sub.Get = &MsgGetQuery{}
+			Get:   pb_GetQuery_deserialize(sub.GetGetQuery()),
+			Set:   pb_SetQuery_deserialize(sub.GetSetQuery()),
 		}
 	} else if leave := pkt.GetLeave(); leave != nil {
 		msg.Leave = &MsgClientLeave{
@@ -176,25 +152,20 @@ func pb_cli_deserialize(pkt *pbx.ClientMsg) *ClientComMessage {
 			Topic:  pub.GetTopic(),
 			NoEcho: pub.GetNoEcho(),
 			Head:   pub.GetHead(),
-			// FIXME: assume JSON, convert to map.
-			Content: pub.GetContent(),
 		}
+		json.Unmarshal(pub.GetContent(), &msg.Pub.Content)
+
 	} else if get := pkt.GetGet(); get != nil {
 		msg.Get = &MsgClientGet{
-			Id:    get.GetId(),
-			Topic: get.GetTopic(),
-		}
-		if gq := get.GetQuery(); gq != nil {
-			msg.Get.MsgGetQuery = MsgGetQuery{
-				What: gq.GetWhat(),
-				Desc: gq.GetDesc(),
-				Sub:  gq.GetSub(),
-				Data: gq.GetData(),
-			}
+			Id:          get.GetId(),
+			Topic:       get.GetTopic(),
+			MsgGetQuery: *pb_GetQuery_deserialize(get.GetQuery()),
 		}
 	} else if set := pkt.GetSet(); set != nil {
 		msg.Set = &MsgClientSet{
-			Id: set.GetId(),
+			Id:          set.GetId(),
+			Topic:       set.GetTopic(),
+			MsgSetQuery: *pb_SetQuery_deserialize(set.GetQuery()),
 		}
 	} else if del := pkt.GetDel(); del != nil {
 		msg.Del = &MsgClientDel{
@@ -253,7 +224,7 @@ func timeToInt64(ts *time.Time) int64 {
 	return 0
 }
 
-func in64ToTime(ts int64) *time.Time {
+func int64ToTime(ts int64) *time.Time {
 	if ts > 0 {
 		res := time.Unix(ts/1000, ts%1000).UTC()
 		return &res
@@ -270,33 +241,55 @@ func pb_GetQuery_serialize(in *MsgGetQuery) *pbx.GetQuery {
 		What: in.What,
 	}
 
-	convertTimeStamp := func(IfModifiedSince *time.Time) int64 {
-		var ims int64
-		if IfModifiedSince != nil {
-			ims = IfModifiedSince.UnixNano() / 1000000
-		}
-		return ims
-	}
-
 	if in.Desc != nil {
 		out.Desc = &pbx.GetOpts{
-			IfModifiedSince: convertTimeStamp(in.Desc.IfModifiedSince),
+			IfModifiedSince: timeToInt64(in.Desc.IfModifiedSince),
 			Limit:           int32(in.Desc.Limit)}
 	}
 	if in.Sub != nil {
 		out.Sub = &pbx.GetOpts{
-			IfModifiedSince: convertTimeStamp(in.Sub.IfModifiedSince),
+			IfModifiedSince: timeToInt64(in.Sub.IfModifiedSince),
 			Limit:           int32(in.Sub.Limit)}
 	}
 	if in.Data != nil {
 		out.Data = &pbx.BrowseOpts{
 			BeforeId: int32(in.Data.BeforeId),
-			BeforeTs: convertTimeStamp(in.Data.BeforeTs),
+			BeforeTs: timeToInt64(in.Data.BeforeTs),
 			SinceId:  int32(in.Data.SinceId),
-			SinceTs:  convertTimeStamp(in.Data.SinceTs),
+			SinceTs:  timeToInt64(in.Data.SinceTs),
 			Limit:    int32(in.Data.Limit)}
 	}
 	return out
+}
+
+func pb_GetQuery_deserialize(in *pbx.GetQuery) *MsgGetQuery {
+	msg := MsgGetQuery{}
+
+	if in != nil {
+		if desc := in.GetDesc(); desc != nil {
+			msg.Desc = &MsgGetOpts{
+				IfModifiedSince: int64ToTime(desc.GetIfModifiedSince()),
+				Limit:           int(desc.GetLimit()),
+			}
+		}
+		if sub := in.GetSub(); sub != nil {
+			msg.Desc = &MsgGetOpts{
+				IfModifiedSince: int64ToTime(sub.GetIfModifiedSince()),
+				Limit:           int(sub.GetLimit()),
+			}
+		}
+		if data := in.GetData(); data != nil {
+			msg.Data = &MsgBrowseOpts{
+				BeforeId: int(data.GetBeforeId()),
+				BeforeTs: int64ToTime(data.GetBeforeTs()),
+				SinceId:  int(data.GetSinceId()),
+				SinceTs:  int64ToTime(data.GetSinceTs()),
+				Limit:    int(data.GetLimit()),
+			}
+		}
+	}
+
+	return &msg
 }
 
 func pb_SetDesc_serialize(in *MsgSetDesc) *pbx.SetDesc {
@@ -319,6 +312,24 @@ func pb_SetDesc_serialize(in *MsgSetDesc) *pbx.SetDesc {
 	return out
 }
 
+func pb_SetDesc_deserialize(in *pbx.SetDesc) *MsgSetDesc {
+	if in == nil {
+		return nil
+	}
+
+	msg := MsgSetDesc{}
+	if defacs := in.GetDefaultAcs(); defacs != nil {
+		msg.DefaultAcs = &MsgDefaultAcsMode{
+			Auth: defacs.GetAuth(),
+			Anon: defacs.GetAnon(),
+		}
+	}
+	json.Unmarshal(in.GetPublic(), &msg.Public)
+	json.Unmarshal(in.GetPrivate(), &msg.Private)
+
+	return &msg
+}
+
 func pb_SetQuery_serialize(in *MsgSetQuery) *pbx.SetQuery {
 	if in == nil {
 		return nil
@@ -335,4 +346,22 @@ func pb_SetQuery_serialize(in *MsgSetQuery) *pbx.SetQuery {
 		}
 	}
 	return out
+}
+
+func pb_SetQuery_deserialize(in *pbx.SetQuery) *MsgSetQuery {
+	msg := MsgSetQuery{}
+
+	if in != nil {
+		if desc := in.GetDesc(); desc != nil {
+			msg.Desc = pb_SetDesc_deserialize(desc)
+		}
+		if sub := in.GetSub(); sub != nil {
+			msg.Sub = &MsgSetSub{
+				User: sub.GetUserId(),
+				Mode: sub.GetMode(),
+			}
+		}
+	}
+
+	return &msg
 }

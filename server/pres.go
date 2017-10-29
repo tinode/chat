@@ -215,11 +215,6 @@ func (t *Topic) presSubsOnline(what, src string, params *PresParams,
 func (t *Topic) presSubsOnlineDirect(what string) {
 	msg := &ServerComMessage{Pres: &MsgServerPres{Topic: t.x_original, What: what}}
 
-	var packet []byte
-	if t.cat != types.TopicCat_P2P {
-		packet, _ = json.Marshal(msg)
-	}
-
 	for sess := range t.sessions {
 		// Check presence filters
 		pud, _ := t.perUser[sess.uid]
@@ -227,10 +222,12 @@ func (t *Topic) presSubsOnlineDirect(what string) {
 			continue
 		}
 
+		packet := msg
 		if t.cat == types.TopicCat_P2P {
 			// For p2p topics topic name is dependent on receiver
-			msg.Pres.Topic = t.original(sess.uid)
-			packet, _ = json.Marshal(msg)
+			p2p := *msg
+			p2p.Pres.Topic = t.original(sess.uid)
+			packet = &p2p
 		}
 
 		select {

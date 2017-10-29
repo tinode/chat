@@ -65,14 +65,14 @@ func (sess *Session) writeGrpcLoop() {
 				// channel closed
 				return
 			}
-			if err := sess.grpcnode.Send(msg); err != nil {
+			if err := grpc_write(sess, msg); err != nil {
 				log.Println("sess.writeLoop: " + err.Error())
 				return
 			}
 		case msg := <-sess.stop:
 			// Shutdown requested, don't care if the message is delivered
 			if msg != nil {
-				sess.grpcnode.Send(msg)
+				grpc_write(sess, msg)
 			}
 			return
 
@@ -80,6 +80,14 @@ func (sess *Session) writeGrpcLoop() {
 			delete(sess.subs, topic)
 		}
 	}
+}
+
+func grpc_write(sess *Session, msg *ServerComMessage) error {
+	out := sess.grpcnode
+	if out != nil {
+		return out.Send(pb_serv_serialize(msg))
+	}
+	return nil
 }
 
 func serveGrpc(addr string) (*grpc.Server, error) {

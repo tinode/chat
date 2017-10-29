@@ -27,7 +27,7 @@ func (sess *Session) writeOnce(wrt http.ResponseWriter) {
 	case msg, ok := <-sess.send:
 		if !ok {
 			log.Println("writeOnce: reading from a closed channel")
-		} else if _, err := wrt.Write(msg); err != nil {
+		} else if err := lp_write(wrt, msg); err != nil {
 			log.Println("sess.writeOnce: " + err.Error())
 		}
 
@@ -37,7 +37,7 @@ func (sess *Session) writeOnce(wrt http.ResponseWriter) {
 	case msg := <-sess.stop:
 		// Make session unavailable
 		globals.sessionStore.Delete(sess)
-		wrt.Write(msg)
+		lp_write(wrt, msg)
 
 	case topic := <-sess.detach:
 		delete(sess.subs, topic)
@@ -48,6 +48,12 @@ func (sess *Session) writeOnce(wrt http.ResponseWriter) {
 			log.Println("sess.writeOnce: timout/" + err.Error())
 		}
 	}
+}
+
+func lp_write(wrt http.ResponseWriter, msg *ServerComMessage) error {
+	bits, _ := json.Marshal(msg)
+	wrt.Write(bits)
+	return nil
 }
 
 func (sess *Session) readOnce(wrt http.ResponseWriter, req *http.Request) (error, int) {

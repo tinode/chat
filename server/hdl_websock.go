@@ -10,6 +10,7 @@
 package main
 
 import (
+	"encoding/json"
 	"log"
 	"net/http"
 	"time"
@@ -90,7 +91,7 @@ func (sess *Session) writeLoop() {
 			delete(sess.subs, topic)
 
 		case <-ticker.C:
-			if err := ws_write(sess.ws, websocket.PingMessage, []byte{}); err != nil {
+			if err := ws_write(sess.ws, websocket.PingMessage, nil); err != nil {
 				log.Println("sess.writeLoop: ping/" + err.Error())
 				return
 			}
@@ -99,9 +100,15 @@ func (sess *Session) writeLoop() {
 }
 
 // Writes a message with the given message type (mt) and payload.
-func ws_write(ws *websocket.Conn, mt int, payload []byte) error {
+func ws_write(ws *websocket.Conn, mt int, msg *ServerComMessage) error {
+	var bits []byte
+	if msg != nil {
+		bits, _ = json.Marshal(msg)
+	} else {
+		bits = []byte{}
+	}
 	ws.SetWriteDeadline(time.Now().Add(writeWait))
-	return ws.WriteMessage(mt, payload)
+	return ws.WriteMessage(mt, bits)
 }
 
 // Handles websocket requests from peers

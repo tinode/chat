@@ -818,7 +818,7 @@ func (a *RethinkDbAdapter) MessageSave(msg *t.Message) error {
 func (a *RethinkDbAdapter) MessageGetAll(topic string, forUser t.Uid, opts *t.BrowseOpt) ([]t.Message, error) {
 	//log.Println("Loading messages for topic ", topic, opts)
 
-	var limit uint = 1024 // TODO(gene): pass into adapter as a config param
+	var limit int = 1024 // TODO(gene): pass into adapter as a config param
 	var lower, upper interface{}
 
 	// Default index

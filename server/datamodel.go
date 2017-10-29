@@ -32,7 +32,7 @@ type MsgBrowseOpts struct {
 	// Load messages with UpdatedAt lower than this
 	BeforeTs *time.Time `json:"until,omitempty"`
 	// Limit the number of messages loaded
-	Limit uint `json:"limit,omitempty"`
+	Limit int `json:"limit,omitempty"`
 }
 
 type MsgGetOpts struct {

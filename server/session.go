@@ -82,10 +82,10 @@ type Session struct {
 	lastAction time.Time
 
 	// outbound mesages, buffered
-	send chan []byte
+	send chan *ServerComMessage
 
 	// channel for shutting down the session, buffer 1
-	stop chan []byte
+	stop chan *ServerComMessage
 
 	// detach - channel for detaching session from topic, buffered
 	detach chan string
@@ -127,9 +127,9 @@ func (s *Session) queueOut(msg *ServerComMessage) {
 		return
 	}
 
-	data, _ := json.Marshal(msg)
+	// data, _ := json.Marshal(msg)
 	select {
-	case s.send <- data:
+	case s.send <- msg:
 	case <-time.After(time.Millisecond * 10):
 		log.Println("session.queueOut: timeout")
 	}
@@ -854,6 +854,29 @@ func (s *Session) validateTopicName(msgId, topic string, timestamp time.Time) (s
 	}
 
 	return routeTo, nil
+}
+
+type SerialFormat int
+
+const (
+	FmtNONE SerialFormat = iota
+	FmtJSON
+	FmtPROTO
+)
+
+func (s *Session) getSerialFormat() SerialFormat {
+	if s.proto == GRPC {
+		return FmtPROTO
+	}
+	return FmtJSON
+}
+
+func (s *Session) serialize(msg *ServerComMessage) (interface{}, SerialFormat) {
+	if s.proto == GRPC {
+		return pb_serv_serialize(msg), FmtPROTO
+	}
+	out, _ := json.Marshal(msg)
+	return out, FmtJSON
 }
 
 func filterTags(dst *[]string, src []string) int {
