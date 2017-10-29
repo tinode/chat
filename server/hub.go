@@ -581,7 +581,9 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 			userData.topicName = userId2.UserId()
 			userData.modeWant = sub1.ModeWant
 			userData.modeGiven = sub1.ModeGiven
-			userData.clearId = sub2.ClearId
+			userData.clearId = sub1.ClearId
+			userData.readId = sub1.ReadSeqId
+			userData.recvId = sub1.RecvSeqId
 			t.perUser[userId1] = userData
 
 			t.perUser[userId2] = perUserData{
@@ -589,7 +591,10 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 				topicName: userId1.UserId(),
 				modeWant:  sub2.ModeWant,
 				modeGiven: sub2.ModeGiven,
-				clearId:   sub2.ClearId}
+				clearId:   sub2.ClearId,
+				readId:    sub2.ReadSeqId,
+				recvId:    sub2.RecvSeqId,
+			}
 
 			log.Println("hub: marking request as 'topic created'")
 			sreg.created = true
