@@ -1,5 +1,6 @@
 """The Python implementation of the gRPC Tinode client."""
 
+import sys
 import grpc
 
 import model_pb2
@@ -7,15 +8,17 @@ import model_pb2_grpc
 
 def gen_message():
     while True:
-        cmd = input("\ntn> ")
+        cmd = raw_input("tn> ")
+        if cmd == "":
+            continue
         if cmd == "exit" or cmd == "quit":
-            quit()
+            return
         else:
             yield cmd
 
 
 def main_loop(stub):
-    stream= stub.MessageLoop(gen_message())
+    stream = stub.MessageLoop(gen_message())
     try:
         for r in stream:
             print(r)
@@ -30,5 +33,5 @@ def run(addr):
 
 
 if __name__ == '__main__':
-    from sys import argv
-    run(argv[1] if (len(argv) > 1 and argv[1]) else 'localhost:6061')
+    print("Tinode command line client. Version 0.13")
+    run(sys.argv[1] if (len(sys.argv) > 1 and sys.argv[1]) else 'localhost:6061')
