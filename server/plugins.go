@@ -156,15 +156,16 @@ func pluginsInit(configString json.RawMessage) {
 
 	plugins = plugins[:count]
 	if len(plugins) == 0 {
-		log.Fatal("plugins: no active plugins found")
-	}
+		log.Println("plugins: no active plugins found")
+		plugins = nil
+	} else {
+		var names []string
+		for _, plg := range plugins {
+			names = append(names, plg.name+"("+plg.addr+")")
+		}
 
-	var names []string
-	for _, plg := range plugins {
-		names = append(names, plg.name+"("+plg.addr+")")
+		log.Println("plugins: active", "'"+strings.Join(names, "', '")+"'")
 	}
-
-	log.Println("plugins: active", "'"+strings.Join(names, "', '")+"'")
 }
 
 func pluginsShutdown() {

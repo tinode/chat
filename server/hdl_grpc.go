@@ -37,6 +37,8 @@ func (*GrpcNodeServer) MessageLoop(stream pbx.Node_MessageLoopServer) error {
 		sess.cleanUp()
 	}()
 
+	go sess.writeGrpcLoop()
+
 	for sess.grpcnode != nil {
 		in, err := stream.Recv()
 		if err == io.EOF {
@@ -45,7 +47,7 @@ func (*GrpcNodeServer) MessageLoop(stream pbx.Node_MessageLoopServer) error {
 		if err != nil {
 			return err
 		}
-
+		log.Println(in.String())
 		sess.dispatch(pb_cli_deserialize(in))
 	}
 
@@ -86,6 +88,7 @@ func grpc_write(sess *Session, msg interface{}) error {
 	out := sess.grpcnode
 	if out != nil {
 		// Will panic if format is wrong. This is an intentional panic.
+		log.Println("grpc: writing message to stream")
 		return out.Send(msg.(*pbx.ServerMsg))
 	}
 	return nil

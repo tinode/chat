@@ -2,12 +2,19 @@
 
 import sys
 import grpc
+import random
 
 import model_pb2
 import model_pb2_grpc
 
+VERSION = 13
+
 def gen_message():
+    random.seed()
+    id = random.randint(10000,99999)
+    yield model_pb2.ClientMsg(hi=model_pb2.ClientHi(id=str(id), user_agent="tn-cli/0.13 python gRPC", ver=VERSION, lang="EN"))
     while True:
+        id+=1
         cmd = raw_input("tn> ")
         if cmd == "":
             continue
