@@ -1,6 +1,5 @@
 """The Python implementation of the gRPC Tinode client."""
 
-import base64
 import grpc
 import json
 import random
@@ -18,7 +17,6 @@ def parse_command(string, id):
         print("Not implemented: " + parts[0])
         return None
     elif parts[0] == "login":
-        print(base64.b64encode(parts[1]))
         return pb.ClientMsg(login=pb.ClientLogin(id=str(id),
             scheme=("basic", "token")[parts[1].find(":") == -1],
             secret=parts[1]))

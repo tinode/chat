@@ -6,3 +6,15 @@ Files generated from [protobuf](../pbx/model.proto) are provided for convenience
 ```
 python -m grpc_tools.protoc -I../pbx --python_out=. --grpc_python_out=. ../pbx/model.proto
 ```
+
+The client takes optional parameters:
+```
+tn-cli --host=localhost:6061 --login-basic=alice:alice123 --login-token=your_saved_token --login-cookie
+```
+
+ * `host` is the address of the server to connect to.
+ * `login-basic` is the login:password to be authenticated with.
+ * `login-token` is the token to be authenticated with.
+ * `login-cookie` direct the client to read the token from the cookie file.
+
+ If multiple `login-_X_` are provided, `login-cookie` is used first, then `login-token` then `login-basic`. Authentication with token is much faster than with username-password pair.
