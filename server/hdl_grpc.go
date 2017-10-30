@@ -88,7 +88,7 @@ func grpc_write(sess *Session, msg interface{}) error {
 	out := sess.grpcnode
 	if out != nil {
 		// Will panic if format is wrong. This is an intentional panic.
-		log.Println("grpc: writing message to stream")
+		log.Println("grpc: writing message to stream", msg)
 		return out.Send(msg.(*pbx.ServerMsg))
 	}
 	return nil
