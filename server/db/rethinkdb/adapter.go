@@ -13,7 +13,7 @@ import (
 
 	"github.com/tinode/chat/server/store"
 	t "github.com/tinode/chat/server/store/types"
-	rdb "gopkg.in/gorethink/gorethink.v2"
+	rdb "gopkg.in/gorethink/gorethink.v3"
 )
 
 type RethinkDbAdapter struct {
