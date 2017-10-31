@@ -9,11 +9,11 @@
 #	--env AUTH_TOKEN_KEY=base64+encoded+32+bytes \
 #	tinode-server
 
-FROM golang
+FROM golang:latest
 
 MAINTAINER Gene Sokolov <gene@tinode.co>
 
-RUN go get github.com/tinode/chat/server \
+RUN go get -tags rethinkdb github.com/tinode/chat/server \
 	&& go install -tags rethinkdb github.com/tinode/chat/server
 
 # Download the demo app and the js bindings
