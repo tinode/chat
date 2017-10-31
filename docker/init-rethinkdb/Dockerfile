@@ -5,7 +5,7 @@
 
 FROM golang:latest
 
-MAINTAINER Gene Sokolov <or.else@gmail.com>
+MAINTAINER Gene Sokolov <gene@tinode.co>
 
 RUN go get -tags rethinkdb github.com/tinode/chat/tinode-db \
 	&& go install -tags rethinkdb github.com/tinode/chat/tinode-db

@@ -9,7 +9,7 @@
 #	--env AUTH_TOKEN_KEY=base64+encoded+32+bytes \
 #	tinode-server
 
-FROM golang
+FROM golang:latest
 
 MAINTAINER Gene Sokolov <gene@tinode.co>
 
