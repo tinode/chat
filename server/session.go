@@ -127,10 +127,8 @@ func (s *Session) queueOut(msg *ServerComMessage) bool {
 		return true
 	}
 
-	data, _ := s.serialize(msg)
-
 	select {
-	case s.send <- data:
+	case s.send <- s.serialize(msg):
 	case <-time.After(time.Microsecond * 50):
 		log.Println("session.queueOut: timeout")
 		return false
@@ -890,12 +888,12 @@ func (s *Session) getSerialFormat() SerialFormat {
 	return FmtJSON
 }
 
-func (s *Session) serialize(msg *ServerComMessage) (interface{}, SerialFormat) {
+func (s *Session) serialize(msg *ServerComMessage) interface{} {
 	if s.proto == GRPC {
-		return pb_serv_serialize(msg), FmtPROTO
+		return pb_serv_serialize(msg)
 	}
 	out, _ := json.Marshal(msg)
-	return out, FmtJSON
+	return out
 }
 
 func filterTags(dst *[]string, src []string) int {

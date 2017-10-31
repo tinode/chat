@@ -10,7 +10,6 @@ package main
 
 import (
 	"container/list"
-	"encoding/json"
 	"log"
 	"net/http"
 	"sync"
@@ -127,10 +126,10 @@ func (ss *SessionStore) Shutdown() {
 	ss.rw.Lock()
 	defer ss.rw.Unlock()
 
-	shutdown, _ := json.Marshal(NoErrShutdown(time.Now().UTC().Round(time.Millisecond)))
+	shutdown := NoErrShutdown(time.Now().UTC().Round(time.Millisecond))
 	for _, s := range ss.sessCache {
 		if s.send != nil && s.proto != CLUSTER {
-			s.send <- shutdown
+			s.send <- s.serialize(shutdown)
 		}
 	}
 

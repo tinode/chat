@@ -15,6 +15,6 @@ tn-cli --host=localhost:6061 --login-basic=alice:alice123 --login-token=your_sav
  * `host` is the address of the server to connect to.
  * `login-basic` is the login:password to be authenticated with.
  * `login-token` is the token to be authenticated with.
- * `login-cookie` direct the client to read the token from the cookie file.
+ * `login-cookie` direct the client to read the token from the cookie file (default).
 
- If multiple `login-_X_` are provided, `login-cookie` is used first, then `login-token` then `login-basic`. Authentication with token is much faster than with username-password pair.
+ If multiple `login-XYZ` are provided, `login-cookie` is used first, then `login-token` then `login-basic`. Authentication with token is much faster than with username-password pair.
