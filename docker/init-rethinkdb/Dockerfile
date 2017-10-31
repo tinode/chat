@@ -3,11 +3,11 @@
 # container is named 'rethinkdb'):
 # $ docker run --name=init-tinode-db --link rethinkdb --env UID_ENCRYPTION_KEY=base64+encoded+16+bytes init-rethinkdb
 
-FROM golang
+FROM golang:latest
 
 MAINTAINER Gene Sokolov <or.else@gmail.com>
 
-RUN go get github.com/tinode/chat/tinode-db \
+RUN go get -tags rethinkdb github.com/tinode/chat/tinode-db \
 	&& go install -tags rethinkdb github.com/tinode/chat/tinode-db
 
 # Key to initialize UID generator. Replace with your own
