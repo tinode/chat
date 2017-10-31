@@ -2,7 +2,7 @@ import argparse
 import shlex
 
 def parse_command(cmd):
-    """Parses command line input into a ClientMsg"""
+    """Parses command line input into a dictionary"""
     parts = shlex.split(cmd)
     parser = None
     if parts[0] == "acc":
@@ -30,6 +30,12 @@ def parse_command(cmd):
         parser = argparse.ArgumentParser(prog=parts[0], description='Subscribe to topic')
         parser.add_argument('topic', nargs='?', default=argparse.SUPPRESS, help='topic to subscribe to')
         parser.add_argument('--topic', dest='topic', default=None, help='topic to subscribe to')
+        parser.add_argument('--fn', default=None, help='topic\'s user-visible name')
+        parser.add_argument('--photo', default=None, help='avatar file name')
+        parser.add_argument('--private', default=None, help='topic\'s private info')
+        parser.add_argument('--auth', default=None, help='default access mode for authenticated users')
+        parser.add_argument('--anon', default=None, help='default access mode for anonymous users')
+        parser.add_argument('--get-query', default=None, help='query for topic metadata or messages')
     elif parts[0] == "leave":
         parser = argparse.ArgumentParser(prog=parts[0], description='Detach or unsubscribe from topic')
         parser.add_argument('topic', nargs='?', default=argparse.SUPPRESS, help='topic to detach from')
@@ -43,21 +49,40 @@ def parse_command(cmd):
         parser.add_argument('--content', dest='content', help='message to send')
     elif parts[0] == "get":
         parser = argparse.ArgumentParser(prog=parts[0], description='Query topic for messages or metadata')
-        print("Not implemented: " + parts[0])
-        return None
+        parser.add_argument('topic', nargs='?', default=argparse.SUPPRESS, help='topic to update')
+        parser.add_argument('--topic', dest='topic', default=None, help='topic to update')
+        parser.add_argument('--desc', action='store_true', help='query topic description')
+        parser.add_argument('--sub', action='store_true', help='query topic subscriptions')
+        parser.add_argument('--data', action='store_true', help='query topic messages')
     elif parts[0] == "set":
         parser = argparse.ArgumentParser(prog=parts[0], description='Update topic metadata')
-        print("Not implemented: " + parts[0])
-        return None
+        parser.add_argument('topic', nargs='?', default=argparse.SUPPRESS, help='topic to update')
+        parser.add_argument('--topic', dest='topic', default=None, help='topic to update')
+        parser.add_argument('--fn', default=None, help='topic\'s name')
+        parser.add_argument('--photo', default=None, help='avatar file name')
+        parser.add_argument('--private', default=None, help='topic\'s private info')
+        parser.add_argument('--auth', default=None, help='default access mode for authenticated users')
+        parser.add_argument('--anon', default=None, help='default access mode for anonymous users')
+        parser.add_argument('--user', default=None, help='ID of the account to update')
+        parser.add_argument('--mode', default=None, help='new value of access mode')
     elif parts[0] == "del":
         parser = argparse.ArgumentParser(prog=parts[0], description='Delete message(s), subscription or topic')
-        print("Not implemented: " + parts[0])
-        return None
+        parser.add_argument('topic', nargs='?', default=argparse.SUPPRESS, help='topic being affected')
+        parser.add_argument('--topic', dest='topic', default=None, help='topic being affected')
+        parser.add_argument('what', choices=('msg', 'sub', 'topic'), nargs='?', help='what to delete')
+        parser.add_argument('--what', choices=('msg', 'sub', 'topic'), help='what to delete')
+        parser.add_argument('param', help='list of message IDs or a user ID of subscription to delete')
+        group = parser.add_mutually_exclusive_group()
+        group.add_argument('--before', dest='param', help='delete messages with id below or equal to this value')
+        group.add_argument('--user', dest='param', help='delete subscription with the given user id')
+        group.add_argument('--list', dest='param', help='comma separated list of message IDs to delete')
+        parser.add_argument('--hard', help='hard-delete messages')
     elif parts[0] == "note":
-        parser = argparse.ArgumentParser(prog=parts[0], description='Send notification to topic')
+        parser = argparse.ArgumentParser(prog=parts[0], description='Send notification to topic, ex "note kp"')
         parser.add_argument('topic', nargs='?', default=argparse.SUPPRESS, help='topic to notify')
         parser.add_argument('--topic', dest='topic', default=None, help='topic to notify')
-        parser.add_argument('--what', help='notification type')
+        parser.add_argument('what', nargs='?', choices=('kp', 'read', 'recv'), help='notification type')
+        parser.add_argument('--what', dest='what', choices=('kp', 'read', 'recv'), help='notification type')
         parser.add_argument('--seq', help='value being reported')
     else:
         print "Unrecognized:", parts[0]
