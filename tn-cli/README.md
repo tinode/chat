@@ -9,12 +9,12 @@ python -m grpc_tools.protoc -I../pbx --python_out=. --grpc_python_out=. ../pbx/m
 
 The client takes optional parameters:
 ```
-tn-cli --host=localhost:6061 --login-basic=alice:alice123 --login-token=your_saved_token --login-cookie
+tn-cli --host=localhost:6061 --login-cookie
 ```
 
- * `host` is the address of the server to connect to.
- * `login-basic` is the login:password to be authenticated with.
- * `login-token` is the token to be authenticated with.
- * `login-cookie` direct the client to read the token from the cookie file (default).
+ * `--host` is the address of the server to connect to.
+ * `--login-basic` is the login:password to be authenticated with.
+ * `--login-token` is the token to be authenticated with.
+ * `--login-cookie` direct the client to read the token from the cookie file.
 
- If multiple `login-XYZ` are provided, `login-cookie` is used first, then `login-token` then `login-basic`. Authentication with token is much faster than with username-password pair.
+ If multiple `login-XYZ` are provided, `login-cookie` is considered first, then `login-token` then `login-basic`. Authentication with token (and cookie) is much faster than with the username-password pair.

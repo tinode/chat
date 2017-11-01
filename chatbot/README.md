@@ -1,4 +1,4 @@
-# Tinode chatbot example
+# Tinode Chatbot Example
 
 This is a rudimentary chatbot for Tinode using [gRPC API](../pbx/). It's written in Python as a demonstration
 that the API is language-independent.

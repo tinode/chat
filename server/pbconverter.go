@@ -346,6 +346,8 @@ func pb_GetQuery_deserialize(in *pbx.GetQuery) *MsgGetQuery {
 	msg := MsgGetQuery{}
 
 	if in != nil {
+		msg.What = in.GetWhat()
+
 		if desc := in.GetDesc(); desc != nil {
 			msg.Desc = &MsgGetOpts{
 				IfModifiedSince: int64ToTime(desc.GetIfModifiedSince()),
