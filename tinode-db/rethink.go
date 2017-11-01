@@ -97,7 +97,7 @@ func gen_rethink(reset bool, dbsource string, data *Data) {
 				log.Fatal(err)
 			}
 		}
-		fmt.Println(uu.Username, " -> ", user.Uid().UserId())
+		fmt.Println("usr;" + uu.Username + ";" + user.Uid().UserId() + ";" + passwd)
 	}
 
 	log.Println("Generating group topics...")
@@ -126,7 +126,7 @@ func gen_rethink(reset bool, dbsource string, data *Data) {
 		if err = store.Topics.Create(topic, owner, gt.OwnerPrivate); err != nil {
 			log.Fatal(err)
 		}
-		fmt.Println(gt.Name, " -> ", name)
+		fmt.Println("grp;" + gt.Name + ";" + name)
 	}
 
 	log.Println("Generating P2P subscriptions...")
@@ -193,7 +193,7 @@ func gen_rethink(reset bool, dbsource string, data *Data) {
 
 		data.P2psubs[i].pair = ss.pair
 		nameIndex[ss.pair] = topic
-		fmt.Println(ss.pair, " -> ", topic)
+		fmt.Println("p2p;" + ss.pair + ";" + topic)
 	}
 
 	log.Println("Generating group subscriptions...")
@@ -267,7 +267,7 @@ func gen_rethink(reset bool, dbsource string, data *Data) {
 			log.Fatal(err)
 		}
 
-		log.Printf("Msg.seq=%d at %v, topic='%s' from='%s'", msg.SeqId, msg.CreatedAt, topic, from.UserId())
+		// log.Printf("Msg.seq=%d at %v, topic='%s' from='%s'", msg.SeqId, msg.CreatedAt, topic, from.UserId())
 	}
 }
 

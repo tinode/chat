@@ -34,7 +34,7 @@ RethinkDB adapter uses [snowflake](http://github.com/tinode/snowflake/) to gener
 
 The `uid_key` and `worker_id` are only used if the sample data is being loaded. In such a case they should match those of a production server (and uid_key should be kept private), otherwise uniqueness of object keys is not guaranteed.
 
-The default `data.json` file creates six users with user names `alice`, `bob`, `carol`, `dave`, `frank` and `tob` (used as a chat bot example). Passwords are the same as the user names with 123 appended, e.g. user `alice` gets password `alice123`; `tob` gets a randomly generated password. It also creates three group topics, and multiple peer to peer topics. Users will be subscribed to topics and each other. All topics will be randomly filled with messages.
+The default `data.json` file creates six users with user names `alice`, `bob`, `carol`, `dave`, `frank` and `tino` (used as a chat bot example). Passwords are the same as the user names with 123 appended, e.g. user `alice` gets password `alice123`; `tino` gets a randomly generated password. It also creates three group topics, and multiple peer to peer topics. Users will be subscribed to topics and each other. All topics will be randomly filled with messages.
 
 Avatar photos curtesy of https://www.pexels.com/ under [CC0 license](https://www.pexels.com/photo-license/).
 
