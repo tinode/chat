@@ -362,7 +362,7 @@ def save_cookie(params):
     print "Authenticated as", nice.get('user')
 
     try:
-        cookie = open('.tn-cli-cookie', 'w')
+        cookie = open('.tn-cookie', 'w')
         json.dump(nice, cookie)
         cookie.close()
     except Exception as err:
@@ -402,7 +402,7 @@ if __name__ == '__main__':
 
     if schema == None and args.login_basic != None:
         """Use username:password"""
-        schema = basic
+        schema = 'basic'
         secret = args.login_basic
 
     run(args.host, schema, secret)

@@ -9,17 +9,31 @@ service Node {
 
 // Plugin interface.
 service Plugin {
-	// This plugin method is called for every message received from the client. The method returns
-  	// a ServerCtrl message. ServerCtrl.code is not 0 indicates that no further processing is needed. Server
-	// will generate a {ctrl} message from ServerCtrl and forward it to the client session. 
-	// If ServerCtrl.code is 0, the server should continue with default processing of the message.
-  	rpc ClientMessage(ClientReq) returns (ServerCtrl) {}
+	// This plugin method is called by Tinode server for every message received from the clients. The 
+	// method returns a ServerCtrl message. ServerCtrl.code is *not* 0 indicates that no further 
+	// processing is needed. The Tinode server will generate a {ctrl} message from the returned ServerCtrl 
+	// and forward it to the client session. 
+	// If ServerCtrl.code is 0, the server should continue with default processing of the client message.
+  	rpc FireHose(ClientReq) returns (ServerResp) {}
 
-	// This method is called immmediately before a server message is broadcasted to topic subscribers.
-	// The filter may alter the server message or may request to drop it.
-  	rpc ServerMessage(ServerMsg) returns (ServerMsg) {}
+	// The following methods are for the Tinode server to report individual events.
+	
+	// Account created, updated or deleted
+	rpc Account(AccountEvent) returns (Unused) {}
+	
+	// Topic created, updated [or deleted -- not supported yet]
+	rpc Topic(TopicEvent) returns (Unused) {}
+	
+	// Subscription created, updated or deleted
+	rpc Subscription(SubscriptionEvent) returns (Unused) {}
+	
+	// Message published or deleted
+	rpc Message(MessageEvent) returns (Unused) {}
 }
 
+// Dummy placeholder message
+message Unused {
+}
 
 // Client messages
 
@@ -343,8 +357,26 @@ message ServerMsg {
 	}
 }
 
-// Context messages
 
+message ServerResp {
+	// Plugin response codes
+	enum RespCode {
+		// Instruct Tinode server to continue with default processing of the client message.
+		CONTINUE = 0;
+		// Drop the message as if the client did not send it
+		DROP = 1;
+		// Respond to client with the provided srvmsg
+		RESPOND = 2;
+		// Replace client's original message with the provided clmsg then continue with 
+		// processing.
+		REPLACE = 3;
+  	}
+	RespCode status = 1;
+	ServerMsg srvmsg = 2;
+	ClientMsg clmsg = 3;
+}
+
+// Context message
 message Session {
 	string session_id = 1;
 	string user_id = 2;
@@ -361,22 +393,52 @@ message Session {
 	string language = 7;	
 }
 
-message Topic {	
-	string name = 1;
-	string access_auth = 2;
-	string access_anon = 3;
-	bytes public = 4;
-	bytes private = 5;
-}
-
-message User {	
-	string id = 1;
-	string mode_want = 2;
-	string mode_given = 3;
-	bytes public = 4;
-}
-
 message ClientReq {
 	ClientMsg msg = 1;
 	Session sess = 2;
+}
+
+// CRUD event messages
+
+enum Crud {
+	CREATE = 0;
+	UPDATE = 1;
+	DELETE = 2;
+}
+
+message TopicEvent {
+	Crud action = 1;
+	string name = 2;
+	TopicDesc desc = 3;
+}
+
+message AccountEvent {
+	Crud action = 1;	
+	string user_id = 2;
+
+	DefaultAcsMode default_acs = 3;
+	bytes public = 4;
+	bytes private = 5;
+	
+	int64 last_seen = 6;
+	string user_agent = 7;
+
+	message AuthScheme {
+		string scheme = 1;
+		bytes secret = 2;		
+	}
+	repeated AuthScheme auth_schemes = 8;
+
+	// Indexable tags for user discovery
+	repeated string tags = 9;
+}
+
+message SubscriptionEvent {
+	Crud action = 1;
+	string sub_id = 2;
+	TopicSub sub = 3;
+}
+
+message MessageEvent {
+	Crud action = 1;
 }

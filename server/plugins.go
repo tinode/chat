@@ -38,18 +38,28 @@ var (
 	plgFilterNames  = []string{"data", "meta", "pres", "info"}
 )
 
+// Actual filter by action (C.UD - no R), topic or user name (*, me, fnd, new, usr, grp, exact_name), 
+// and packet (FireHose only)
+type PluginActionFilterConfig {
+}
+
+// Filters for individual RPC calls
+type PluginRPCFilterConfig struct {
+	FireHose     *string // Filter by topic type, exact name, packet type.
+	Account      *string // Filter by CUD, exact user name, maybe AuthLevel? 
+	Topic        *string // Filter by CUD, topic type, exact name
+	Subscription *string // Filter by CUD, topic type, exact topic name, exact user name
+	Message      *string // Filter by C.D, topic type, exact topic name, exact user name
+}
+
 type PluginConfig struct {
 	Enabled bool `json:"enabled"`
 	// Unique service name
 	Name string `json:"name"`
 	// Microseconds to wait before timeout
 	Timeout int64 `json:"timeout"`
-	// Plugin type: filter or handler
-	Type string `json:"type"`
-	// List of message names this plugin triggers on
-	MessageFilter []string `json:"message_filter"`
-	// List of topics this plugin triggers on
-	TopicFilter []string `json:"topic_filter"`
+	// Filters for RPC calls: when to call vs when to skip the call
+	Filters PluginEventFilterConfig `json:"filters"`
 	// What should the server do if plugin failed: HTTP error code
 	FailureCode int `json:"failure_code"`
 	// HTTP Error message to go with the code
