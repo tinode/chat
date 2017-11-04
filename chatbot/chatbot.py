@@ -3,6 +3,7 @@
 import argparse
 import base64
 from concurrent import futures
+import json
 from Queue import Queue
 import random
 import time
@@ -14,19 +15,27 @@ import model_pb2_grpc as pbx
 
 _ONE_DAY_IN_SECONDS = 60 * 60 * 24
 
+APP_NAME = "Tino-chatbot"
+VERSION = "0.13"
+
+def parse_version(vers):
+    parts = vers.split('.')
+    return (int(parts[0]) << 8) + int(parts[1])
+
 # Dictionary wich contains lambdas to be executed when server response is received
 onCompletion = {}
 # Add bundle for future execution
-def add_future(id, bundle):
-    onCompletion[id] = bundle
+def add_future(tid, bundle):
+    onCompletion[tid] = bundle
 
 # Resolve or reject the future
-def exec_future(id, code):
-    bundle = onCompletion.get(id)
+def exec_future(tid, code, params):
+    bundle = onCompletion.get(tid)
     if bundle != None:
-        del onCompletion[id]
+        del onCompletion[tid]
         if code >= 200 and code < 400:
-            bundle.action(bundle.arg)
+            arg = bundle.get('arg')
+            bundle.get('action')(arg, params)
 
 # List of active subscriptions
 subscriptions = {}
@@ -40,9 +49,9 @@ def del_subscription(topic):
 quotes = []
 
 def next_id():
-    next_id.id += 1
-    return str(next_id.id)
-next_id.id = 100
+    next_id.tid += 1
+    return str(next_id.tid)
+next_id.tid = 100
 
 def next_quote():
     idx = random.randrange(0, len(quotes))
@@ -77,25 +86,38 @@ def client_generate():
 def client_post(msg):
     queue_out.put(msg)
 
-def subscribe(topic):
-    id = next_id()
-    onCompletion[id] = {
-        arg: topic,
-        action: lambda x: add_subscription(x)
+def hello():
+    tid = next_id()
+    return pb.ClientMsg(hi=pb.ClientHi(id=tid, user_agent=APP_NAME + "/" + VERSION + " gRPC-python",
+        ver=parse_version(VERSION), lang="EN"))
+
+def login(cookie_file_name, scheme, secret):
+    tid = next_id()
+    onCompletion[tid] = {
+        'arg': cookie_file_name,
+        'action': lambda fname, params: save_auth_cookie(fname, params),
     }
-    return pb.ClientMsg(sub=pb.ClientSub(id=id, topic=topic))
+    return pb.ClientMsg(login=pb.ClientLogin(id=tid, scheme=scheme, secret=secret))
+
+def subscribe(topic):
+    tid = next_id()
+    onCompletion[tid] = {
+        'arg': topic,
+        'action': lambda topicName, unused: add_subscription(topicName),
+    }
+    return pb.ClientMsg(sub=pb.ClientSub(id=tid, topic=topic))
 
 def leave(topic):
-    id = next_id()
-    onCompletion[id] = {
-        arg: topic,
-        action: lambda x: del_subscription(x)
+    tid = next_id()
+    onCompletion[tid] = {
+        'arg': topic,
+        'action': lambda topicName, unused: del_subscription(topicName)
     }
-    return pb.ClientMsg(leave=pb.ClientLeave(id=id, topic=topic))
+    return pb.ClientMsg(leave=pb.ClientLeave(id=tid, topic=topic))
 
 def publish(topic, text):
-    id = next_id()
-    return pb.ClientMsg(pub=pb.ClientPub(id=id, topic=topic, no_echo=True, content=json.dumps(text)))
+    tid = next_id()
+    return pb.ClientMsg(pub=pb.ClientPub(id=tid, topic=topic, no_echo=True, content=json.dumps(text)))
 
 def client(addr, schema, secret, server, cookie_file_name):
     channel = grpc.insecure_channel(addr)
@@ -103,14 +125,17 @@ def client(addr, schema, secret, server, cookie_file_name):
     # Call the server
     stream = stub.MessageLoop(client_generate())
 
-    # Send: {hi}, {login}, {sub topic='me'}
+    # Session initialization sequence: {hi}, {login}, {sub topic='me'}
+    client_post(hello())
+    client_post(login(cookie_file_name, schema, secret))
+    client_post(subscribe('me'))
 
     try:
         # Read server responses
         for msg in stream:
             if msg.HasField("ctrl"):
                 # Run code on command completion
-                exec_future(msg.ctrl.id, msg.ctrl.code)
+                exec_future(msg.ctrl.id, msg.ctrl.code, msg.ctrl.params)
                 print str(msg.ctrl.code) + " " + msg.ctrl.text
 
             elif msg.HasField("data"):

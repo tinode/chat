@@ -501,12 +501,9 @@ func (s *Session) login(msg *ClientComMessage) {
 		})
 	}
 
-	s.queueOut(&ServerComMessage{Ctrl: &MsgServerCtrl{
-		Id:        msg.Login.Id,
-		Code:      http.StatusOK,
-		Text:      http.StatusText(http.StatusOK),
-		Timestamp: msg.timestamp,
-		Params:    map[string]interface{}{"user": uid.UserId(), "token": secret, "expires": expires}}})
+	resp := NoErr(msg.Login.Id, "", msg.timestamp)
+	resp.Ctrl.Params = map[string]interface{}{"user": uid.UserId(), "token": secret, "expires": expires}
+	s.queueOut(resp)
 }
 
 // Account creation
