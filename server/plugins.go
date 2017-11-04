@@ -29,24 +29,35 @@ const (
 	plgPres
 	plgInfo
 
-	plgHandlerMask = plgHi | plgAcc | plgLogin | plgSub | plgLeave | plgPub | plgGet | plgSet | plgDel | plgNote
-	plgFilterMask  = plgData | plgMeta | plgPres | plgInfo
+	plgClientMask = plgHi | plgAcc | plgLogin | plgSub | plgLeave | plgPub | plgGet | plgSet | plgDel | plgNote
+	plgServerMask = plgData | plgMeta | plgPres | plgInfo
+)
+
+const (
+	plgActCreate = 1 << iota
+	plgActUpd
+	plgActDel
 )
 
 var (
-	plgHandlerNames = []string{"hi", "acc", "login", "sub", "leave", "pub", "get", "set", "del", "note"}
-	plgFilterNames  = []string{"data", "meta", "pres", "info"}
+	plgClientNames = []string{"hi", "acc", "login", "sub", "leave", "pub", "get", "set", "del", "note"}
+	plgServerNames = []string{"data", "meta", "pres", "info"}
 )
 
-// Actual filter by action (C.UD - no R), topic or user name (*, me, fnd, new, usr, grp, exact_name), 
-// and packet (FireHose only)
-type PluginActionFilterConfig {
+type PluginFilter struct {
+	packet int
+	topic  []string
+	action int
 }
 
-// Filters for individual RPC calls
+// Filters for individual RPC call. Filter strings are formatted as follows:
+// <comma separated list of packet names> : <list of comma separated topics or topic types> : [CUD]
+// For instance:
+// "acc,login::CU" - grab packets {acc} or {login}, any topic (no filtering), Create or Update action
+// "pub
 type PluginRPCFilterConfig struct {
 	FireHose     *string // Filter by topic type, exact name, packet type.
-	Account      *string // Filter by CUD, exact user name, maybe AuthLevel? 
+	Account      *string // Filter by CUD, exact user name, maybe AuthLevel?
 	Topic        *string // Filter by CUD, topic type, exact name
 	Subscription *string // Filter by CUD, topic type, exact topic name, exact user name
 	Message      *string // Filter by C.D, topic type, exact topic name, exact user name
