@@ -3,6 +3,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"log"
 	"strings"
 	"time"
@@ -23,44 +24,163 @@ const (
 	plgSet
 	plgDel
 	plgNote
-
-	plgData = 1 << iota
+	plgData
 	plgMeta
 	plgPres
 	plgInfo
 
 	plgClientMask = plgHi | plgAcc | plgLogin | plgSub | plgLeave | plgPub | plgGet | plgSet | plgDel | plgNote
 	plgServerMask = plgData | plgMeta | plgPres | plgInfo
-)
 
-const (
 	plgActCreate = 1 << iota
 	plgActUpd
 	plgActDel
+
+	plgActMask = plgActCreate | plgActUpd | plgActDel
+
+	plgTopicMe = 1 << iota
+	plgTopicFnd
+	plgTopicP2P
+	plgTopicGrp
+	plgTopicNew
+
+	plgTopicCatMask = plgTopicMe | plgTopicFnd | plgTopicP2P | plgTopicGrp
+
+	plgFilterByTopicType = 1 << iota
+	plgFilterByPacket
+	plgFilterByAction
 )
 
 var (
-	plgClientNames = []string{"hi", "acc", "login", "sub", "leave", "pub", "get", "set", "del", "note"}
-	plgServerNames = []string{"data", "meta", "pres", "info"}
+	plgPacketNames = []string{
+		"hi", "acc", "login", "sub", "leave", "pub", "get", "set", "del", "note",
+		"data", "meta", "pres", "info",
+	}
+
+	plgTopicCatNames = []string{"me", "fnd", "p2p", "grp", "new"}
 )
 
 type PluginFilter struct {
-	packet int
-	topic  []string
-	action int
+	byPacket    int
+	byTopicType int
+	byAction    int
 }
 
-// Filters for individual RPC call. Filter strings are formatted as follows:
-// <comma separated list of packet names> : <list of comma separated topics or topic types> : [CUD]
+func ParsePluginFilter(s *string, filterBy int) (*PluginFilter, error) {
+	if s == nil {
+		return nil, nil
+	}
+
+	parseByName := func(parts []string, options []string, def int) (int, error) {
+		var result int
+
+		// Iterate over filter parts
+		for _, inp := range parts {
+			if inp != "" {
+				inp = strings.ToLower(inp)
+				// Split string like "hi,login,pres" or "me,p2p,fnd"
+				values := strings.Split(inp, ",")
+				// For each value in the input string, try to find it in the options set
+				for _, val := range values {
+					i := 0
+					// Iterate over the options, i.e find "hi" in the slice of packet names
+					for i = range options {
+						if options[i] == val {
+							result |= 1 << uint(i)
+							break
+						}
+					}
+
+					if result != 0 && i == len(options) {
+						// Mix of known and unknown options in the input
+						return 0, errors.New("plugin: unknown value in filter " + val)
+					}
+				}
+
+				if result != 0 {
+					// Found and parsed the right part
+					break
+				}
+			}
+		}
+
+		// If the filter value is not defined, use default.
+		if result == 0 {
+			result = def
+		}
+
+		return result, nil
+	}
+
+	parseAction := func(parts []string) int {
+		var result int
+		for _, inp := range parts {
+
+			for _, char := range inp {
+				switch char {
+				case 'c', 'C':
+					result |= plgActCreate
+				case 'u', 'U':
+					result |= plgActUpd
+				case 'd', 'D':
+					result |= plgActDel
+				default:
+					// Unknown symbol means this is not an action string.
+					result = 0
+					break
+				}
+			}
+
+			if result != 0 {
+				// Found and parsed actions.
+				break
+			}
+		}
+		if result == 0 {
+			result = plgActMask
+		}
+		return result
+	}
+
+	filter := PluginFilter{}
+	parts := strings.Split(*s, ";")
+	var err error
+
+	if filterBy&plgFilterByPacket != 0 {
+		if filter.byPacket, err = parseByName(parts, plgPacketNames, plgClientMask|plgServerMask); err != nil {
+			return nil, err
+		}
+	}
+
+	if filterBy&plgFilterByTopicType != 0 {
+		if filter.byTopicType, err = parseByName(parts, plgTopicCatNames, plgTopicCatMask); err != nil {
+			return nil, err
+		}
+	}
+
+	if filterBy&plgFilterByAction != 0 {
+		filter.byAction = parseAction(parts)
+	}
+
+	return &filter, nil
+}
+
+// Filters for an individual RPC call. Filter strings are formatted as follows:
+// <comma separated list of packet names> : <comma separated list of topics or topic types> : <actions (combination of C U D)>
 // For instance:
-// "acc,login::CU" - grab packets {acc} or {login}, any topic (no filtering), Create or Update action
-// "pub
+// "acc,login::CU" - grab packets {acc} or {login}; no filtering by topic, Create or Update action
+// "pub,pres:me,p2p:"
 type PluginRPCFilterConfig struct {
-	FireHose     *string // Filter by topic type, exact name, packet type.
-	Account      *string // Filter by CUD, exact user name, maybe AuthLevel?
-	Topic        *string // Filter by CUD, topic type, exact name
-	Subscription *string // Filter by CUD, topic type, exact topic name, exact user name
-	Message      *string // Filter by C.D, topic type, exact topic name, exact user name
+	// Filter by packet name, topic type [or exact name - not supported yet]. 2D: "pub,pres;p2p,me"
+	FireHose *string `json:"fire_hose"`
+	// Filter by CUD, [exact user name - not supported yet]. 1D: "C"
+	Account *string `json:"account"`
+	// Filter by CUD, topic type[, exact name]: "p2p;CU"
+	Topic *string `json:"topic"`
+	// Filter by CUD, topic type[, exact topic name, exact user name]: "CU"
+	Subscription *string `json:"subscription"`
+	// Filter by C.D, topic type[, exact topic name, exact user name]: "grp;CD"
+	Message *string `json:"message"`
 }
 
 type PluginConfig struct {
@@ -70,7 +190,7 @@ type PluginConfig struct {
 	// Microseconds to wait before timeout
 	Timeout int64 `json:"timeout"`
 	// Filters for RPC calls: when to call vs when to skip the call
-	Filters PluginEventFilterConfig `json:"filters"`
+	Filters PluginRPCFilterConfig `json:"filters"`
 	// What should the server do if plugin failed: HTTP error code
 	FailureCode int `json:"failure_code"`
 	// HTTP Error message to go with the code
@@ -80,15 +200,18 @@ type PluginConfig struct {
 }
 
 type Plugin struct {
-	name        string
-	timeout     time.Duration
-	isFilter    bool
-	messages    uint32
-	topics      []string
-	failureCode int
-	failureText string
-	network     string
-	addr        string
+	name    string
+	timeout time.Duration
+	// Filters for individual methods
+	filterFireHose     *PluginFilter
+	filterAccount      *PluginFilter
+	filterTopic        *PluginFilter
+	filterSubscription *PluginFilter
+	filterMessage      *PluginFilter
+	failureCode        int
+	failureText        string
+	network            string
+	addr               string
 
 	conn   *grpc.ClientConn
 	client pbx.PluginClient
@@ -119,41 +242,32 @@ func pluginsInit(configString json.RawMessage) {
 			log.Fatalf("plugins: duplicate name '%s'", conf.Name)
 		}
 
-		var names []string
-		var mask uint32
-		if conf.Type == "filter" {
-			names = plgFilterNames
-			mask = plgFilterMask
-		} else {
-			names = plgHandlerNames
-			mask = plgHandlerMask
-		}
-
-		var msgFilter uint32
-		if conf.MessageFilter == nil || (len(conf.MessageFilter) == 1 && conf.MessageFilter[0] == "*") {
-			msgFilter = mask
-		} else {
-			for _, msg := range conf.MessageFilter {
-				idx := findInSlice(msg, names)
-				if idx < 0 {
-					log.Fatalf("plugins: unknown message name '%s'", msg)
-				}
-				msgFilter |= (1 << uint(idx))
-			}
-		}
-
-		if msgFilter == 0 {
-			continue
-		}
-
 		plugins[count] = Plugin{
 			name:        conf.Name,
 			timeout:     time.Duration(conf.Timeout) * time.Microsecond,
-			isFilter:    conf.Type == "filter",
 			failureCode: conf.FailureCode,
 			failureText: conf.FailureMessage,
-			messages:    msgFilter,
-			topics:      conf.TopicFilter,
+		}
+		var err error
+		if plugins[count].filterFireHose, err =
+			ParsePluginFilter(conf.Filters.FireHose, plgFilterByTopicType|plgFilterByPacket); err != nil {
+			log.Fatal("plugins: bad FireHose filter", err)
+		}
+		if plugins[count].filterAccount, err =
+			ParsePluginFilter(conf.Filters.Account, plgFilterByAction); err != nil {
+			log.Fatal("plugins: bad Account filter", err)
+		}
+		if plugins[count].filterTopic, err =
+			ParsePluginFilter(conf.Filters.Topic, plgFilterByTopicType|plgFilterByAction); err != nil {
+			log.Fatal("plugins: bad FireHose filter", err)
+		}
+		if plugins[count].filterSubscription, err =
+			ParsePluginFilter(conf.Filters.Subscription, plgFilterByTopicType|plgFilterByAction); err != nil {
+			log.Fatal("plugins: bad Subscription filter", err)
+		}
+		if plugins[count].filterMessage, err =
+			ParsePluginFilter(conf.Filters.Message, plgFilterByTopicType|plgFilterByAction); err != nil {
+			log.Fatal("plugins: bad Message filter", err)
 		}
 
 		if parts := strings.SplitN(conf.ServiceAddr, "://", 2); len(parts) < 2 {
@@ -163,7 +277,6 @@ func pluginsInit(configString json.RawMessage) {
 			plugins[count].addr = parts[1]
 		}
 
-		var err error
 		plugins[count].conn, err = grpc.Dial(plugins[count].addr, grpc.WithInsecure())
 		if err != nil {
 			log.Fatalf("plugins: connection failure %v", err)
@@ -212,9 +325,9 @@ func pluginGenerateClientReq(sess *Session, msg *ClientComMessage) *pbx.ClientRe
 			Language:   sess.lang}}
 }
 
-func pluginHandler(sess *Session, msg *ClientComMessage) *ServerComMessage {
+func pluginFireHose(sess *Session, msg *ClientComMessage) (*ClientComMessage, *ServerComMessage) {
 	if plugins == nil {
-		return nil
+		return nil, nil
 	}
 
 	var req *pbx.ClientReq
@@ -223,7 +336,7 @@ func pluginHandler(sess *Session, msg *ClientComMessage) *ServerComMessage {
 	var topic string
 	ts := time.Now().UTC().Round(time.Millisecond)
 	for _, p := range plugins {
-		if p.isFilter {
+		if p.filterFireHose == nil {
 			continue
 		}
 
@@ -240,14 +353,14 @@ func pluginHandler(sess *Session, msg *ClientComMessage) *ServerComMessage {
 		} else {
 			ctx = context.Background()
 		}
-		if resp, err := p.client.ClientMessage(ctx, req); err == nil {
-			// Response code 0 means default processing
-			if resp.GetCode() == 0 {
+		if resp, err := p.client.FireHose(ctx, req); err == nil {
+			// Response code CONTINUE means default processing
+			if resp.GetStatus() == pbx.ServerResp_CONTINUE {
 				continue
 			}
 
-			// This plugin returned non-zero. Subsequent plugins wil not be called.
-			return &ServerComMessage{Ctrl: &MsgServerCtrl{
+			// This plugin returned non-zero.
+			return nil, &ServerComMessage{Ctrl: &MsgServerCtrl{
 				Id:        id,
 				Code:      int(resp.GetCode()),
 				Text:      resp.GetText(),
@@ -256,7 +369,7 @@ func pluginHandler(sess *Session, msg *ClientComMessage) *ServerComMessage {
 		} else if p.failureCode != 0 {
 			// Plugin failed and it's configured to stop futher processing.
 			log.Println("plugin: failed,", p.name, err)
-			return &ServerComMessage{Ctrl: &MsgServerCtrl{
+			return nil, &ServerComMessage{Ctrl: &MsgServerCtrl{
 				Id:        id,
 				Code:      p.failureCode,
 				Text:      p.failureText,
@@ -268,18 +381,21 @@ func pluginHandler(sess *Session, msg *ClientComMessage) *ServerComMessage {
 		}
 	}
 
+	return nil, nil
+}
+
+func pluginAccount(msg *ServerComMessage) *ServerComMessage {
 	return nil
 }
 
-func pluginFilter(msg *ServerComMessage) *ServerComMessage {
+func pluginTopic(msg *ServerComMessage) *ServerComMessage {
 	return nil
 }
 
-func findInSlice(needle string, haystack []string) int {
-	for i, val := range haystack {
-		if val == needle {
-			return i
-		}
-	}
-	return -1
+func pluginSubscription(msg *ServerComMessage) *ServerComMessage {
+	return nil
+}
+
+func pluginMessage(msg *ServerComMessage) *ServerComMessage {
+	return nil
 }

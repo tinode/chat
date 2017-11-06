@@ -6,14 +6,14 @@ from concurrent import futures
 import json
 from Queue import Queue
 import random
+import signal
+import sys
 import time
 
 import grpc
 
 import model_pb2 as pb
 import model_pb2_grpc as pbx
-
-_ONE_DAY_IN_SECONDS = 60 * 60 * 24
 
 APP_NAME = "Tino-chatbot"
 VERSION = "0.13"
@@ -60,6 +60,7 @@ def next_quote():
     next_quote.idx = idx
     return quotes[idx]
 
+# This is the class for the server-side gRPC endpoints
 class Plugin(pbx.PluginServicer):
     def Account(self, acc_event, context):
         action = None
@@ -146,7 +147,8 @@ def client(addr, schema, secret, server, cookie_file_name):
             elif msg.HasField("pres"):
                 # Wait for peers to appear online and subscribe to their topics
                 if msg.pres.topic == 'me':
-                    if msg.pres.what == pb.ServerPres.ON and subscriptions.get(msg.pres.src) == None:
+                    if (msg.pres.what == pb.ServerPres.ON or msg.pres.what == pb.ServerPres.MSG) \
+                            and subscriptions.get(msg.pres.src) == None:
                         client_post(subscribe(msg.pres.src))
                     elif msg.pres.what == pb.ServerPres.OFF and subscriptions.get(msg.pres.src) != None:
                         client_post(leave(msg.pres.src))
@@ -163,7 +165,7 @@ def client(addr, schema, secret, server, cookie_file_name):
 
 
 def server(listen):
-    # Launch plugin: acception connection(s) from the Tinode server.
+    # Launch plugin server: acception connection(s) from the Tinode server.
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=16))
     pbx.add_PluginServicer_to_server(Plugin(), server)
     server.add_insecure_port(listen)
@@ -207,6 +209,10 @@ def load_quotes(file_name):
 
     return len(quotes)
 
+def exit_gracefully(signo, stack_frame):
+    print "Terminated with signal", signo
+    sys.exit(0)
+
 if __name__ == '__main__':
     """Parse command-line arguments. Extract server host name, listen address, authentication scheme"""
     random.seed()
@@ -242,6 +248,10 @@ if __name__ == '__main__':
     if schema != None:
         # Load random quotes from file
         print "Loaded {} quotes".format(load_quotes(args.quotes))
+
+        # Add signal handlers
+        signal.signal(signal.SIGINT, exit_gracefully)
+        signal.signal(signal.SIGTERM, exit_gracefully)
 
         # Start Plugin server
         server(args.listen)

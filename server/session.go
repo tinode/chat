@@ -192,8 +192,12 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 		defer s.rw.Unlock()
 	}
 
-	if resp := pluginHandler(s, msg); resp != nil {
+	if msg, resp := pluginFireHose(s, msg); resp != nil {
+		// Plugin provided a response. No further processing is needed.
 		s.queueOut(resp)
+		return
+	} else if msg == nil {
+		// Plugin requested to silently drop the request.
 		return
 	}
 
