@@ -147,7 +147,7 @@ func ParsePluginFilter(s *string, filterBy int) (*PluginFilter, error) {
 	var err error
 
 	if filterBy&plgFilterByPacket != 0 {
-		if filter.byPacket, err = parseByName(parts, plgPacketNames, plgClientMask|plgServerMask); err != nil {
+		if filter.byPacket, err = parseByName(parts, plgPacketNames, plgClientMask); err != nil {
 			return nil, err
 		}
 	}
@@ -327,7 +327,8 @@ func pluginGenerateClientReq(sess *Session, msg *ClientComMessage) *pbx.ClientRe
 
 func pluginFireHose(sess *Session, msg *ClientComMessage) (*ClientComMessage, *ServerComMessage) {
 	if plugins == nil {
-		return nil, nil
+		// Return the original message to continue processing without changes
+		return msg, nil
 	}
 
 	var req *pbx.ClientReq
@@ -336,7 +337,8 @@ func pluginFireHose(sess *Session, msg *ClientComMessage) (*ClientComMessage, *S
 	var topic string
 	ts := time.Now().UTC().Round(time.Millisecond)
 	for _, p := range plugins {
-		if p.filterFireHose == nil {
+		if !pluginDoFiltering(p.filterFireHose, msg) {
+			// Plugin is not interested in FireHose
 			continue
 		}
 
@@ -354,18 +356,22 @@ func pluginFireHose(sess *Session, msg *ClientComMessage) (*ClientComMessage, *S
 			ctx = context.Background()
 		}
 		if resp, err := p.client.FireHose(ctx, req); err == nil {
-			// Response code CONTINUE means default processing
-			if resp.GetStatus() == pbx.ServerResp_CONTINUE {
+			respStatus := resp.GetStatus()
+			// CONTINUE means default processing
+			if respStatus == pbx.ServerResp_CONTINUE {
 				continue
 			}
+			// DROP means stop processing of the message
+			if respStatus == pbx.ServerResp_DROP {
+				return nil, nil
+			}
+			// REPLACE: ClientMsg was updated by the plugin. Use the new one for further processing.
+			if respStatus == pbx.ServerResp_REPLACE {
+				return pb_cli_deserialize(resp.GetClmsg()), nil
+			}
+			// RESPOND: Plugin provided an alternative response message. Use it
+			return nil, pb_serv_deserialize(resp.GetSrvmsg())
 
-			// This plugin returned non-zero.
-			return nil, &ServerComMessage{Ctrl: &MsgServerCtrl{
-				Id:        id,
-				Code:      int(resp.GetCode()),
-				Text:      resp.GetText(),
-				Topic:     topic,
-				Timestamp: ts}}
 		} else if p.failureCode != 0 {
 			// Plugin failed and it's configured to stop futher processing.
 			log.Println("plugin: failed,", p.name, err)
@@ -381,7 +387,7 @@ func pluginFireHose(sess *Session, msg *ClientComMessage) (*ClientComMessage, *S
 		}
 	}
 
-	return nil, nil
+	return msg, nil
 }
 
 func pluginAccount(msg *ServerComMessage) *ServerComMessage {
@@ -398,4 +404,67 @@ func pluginSubscription(msg *ServerComMessage) *ServerComMessage {
 
 func pluginMessage(msg *ServerComMessage) *ServerComMessage {
 	return nil
+}
+
+// Returns false to skip, true to process
+func pluginDoFiltering(filter *PluginFilter, msg *ClientComMessage) bool {
+	filterByTopic := func(topic string, flt int) bool {
+		if topic == "" || flt == plgTopicCatMask {
+			return true
+		}
+		switch topic[:3] {
+		case "me":
+			return flt&plgTopicMe != 0
+		case "fnd":
+			return flt&plgTopicFnd != 0
+		case "usr":
+			return flt&plgTopicP2P != 0
+		case "grp":
+			return flt&plgTopicGrp != 0
+		case "new":
+			return flt&plgTopicNew != 0
+		}
+		return false
+	}
+
+	// Check if plugin has any filters for this call
+	if filter == nil || filter.byPacket == 0 {
+		return false
+	}
+	// Check if plugin wants all the messages
+	if filter.byPacket == plgClientMask && filter.byTopicType == plgTopicCatMask {
+		return true
+	}
+	// Check individual bits
+	if msg.Hi != nil {
+		return filter.byPacket&plgHi != 0
+	}
+	if msg.Acc != nil {
+		return filter.byPacket&plgAcc != 0
+	}
+	if msg.Login != nil {
+		return filter.byPacket&plgLogin != 0
+	}
+	if msg.Sub != nil {
+		return filter.byPacket&plgSub != 0 && filterByTopic(msg.Sub.Topic, filter.byTopicType)
+	}
+	if msg.Leave != nil {
+		return filter.byPacket&plgLeave != 0 && filterByTopic(msg.Leave.Topic, filter.byTopicType)
+	}
+	if msg.Pub != nil {
+		return filter.byPacket&plgPub != 0 && filterByTopic(msg.Pub.Topic, filter.byTopicType)
+	}
+	if msg.Get != nil {
+		return filter.byPacket&plgGet != 0 && filterByTopic(msg.Get.Topic, filter.byTopicType)
+	}
+	if msg.Set != nil {
+		return filter.byPacket&plgSet != 0 && filterByTopic(msg.Set.Topic, filter.byTopicType)
+	}
+	if msg.Del != nil {
+		return filter.byPacket&plgDel != 0 && filterByTopic(msg.Del.Topic, filter.byTopicType)
+	}
+	if msg.Note != nil {
+		return filter.byPacket&plgNote != 0 && filterByTopic(msg.Note.Topic, filter.byTopicType)
+	}
+	return false
 }

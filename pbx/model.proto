@@ -239,14 +239,14 @@ message ClientMsg {
 message TopicDesc {
 	int64 created_at = 1;
 	int64 updated_at = 2;
-	DefaultAcsMode defacs = 4;
-	AccessMode acs = 5;
-	int32 seq_id = 6;
-	int32 read_id = 7;
-	int32 recv_id = 8;
-	int32 clear_id = 9;
-	bytes public = 10;
-	bytes private = 11;
+	DefaultAcsMode defacs = 3;
+	AccessMode acs = 4;
+	int32 seq_id = 5;
+	int32 read_id = 6;
+	int32 recv_id = 7;
+	int32 clear_id = 8;
+	bytes public = 9;
+	bytes private = 10;
 }
 
 // MsgTopicSub: topic subscription details, sent in Meta message
@@ -286,9 +286,10 @@ message TopicSub {
 // {ctrl} message
 message ServerCtrl {
 	string id = 1;
-	int32 code = 2;
-	string text = 3;
-	map<string, bytes> params = 4;
+	string topic = 2;
+	int32 code = 3;
+	string text = 4;
+	map<string, bytes> params = 5;
 }
 
 // {data} message

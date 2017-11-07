@@ -23,6 +23,7 @@ func pb_serv_serialize(msg *ServerComMessage) *pbx.ServerMsg {
 		}
 		pkt.Message = &pbx.ServerMsg_Ctrl{Ctrl: &pbx.ServerCtrl{
 			Id:     msg.Ctrl.Id,
+			Topic:  msg.Ctrl.Topic,
 			Code:   int32(msg.Ctrl.Code),
 			Text:   msg.Ctrl.Text,
 			Params: params}}
@@ -89,6 +90,80 @@ func pb_serv_serialize(msg *ServerComMessage) *pbx.ServerMsg {
 	}
 
 	return &pkt
+}
+
+func pb_serv_deserialize(pkt *pbx.ServerMsg) *ServerComMessage {
+	var msg ServerComMessage
+	if ctrl := pkt.GetCtrl(); ctrl != nil {
+		msg.Ctrl = &MsgServerCtrl{
+			Id:     ctrl.GetId(),
+			Topic:  ctrl.GetTopic(),
+			Code:   int(ctrl.GetCode()),
+			Text:   ctrl.GetText(),
+			Params: byteMapToInterfaceMap(ctrl.GetParams()),
+		}
+	} else if data := pkt.GetData(); data != nil {
+		msg.Data = &MsgServerData{
+			Topic:     data.GetTopic(),
+			From:      data.GetFromUserId(),
+			DeletedAt: int64ToTime(data.GetDeletedAt()),
+			SeqId:     int(data.GetSeqId()),
+			Head:      data.GetHead(),
+			Content:   data.GetContent(),
+		}
+	} else if pres := pkt.GetPres(); pres != nil {
+		var what string
+		switch pres.GetWhat() {
+		case pbx.ServerPres_ON:
+			what = "on"
+		case pbx.ServerPres_OFF:
+			what = "off"
+		case pbx.ServerPres_UA:
+			what = "ua"
+		case pbx.ServerPres_UPD:
+			what = "upd"
+		case pbx.ServerPres_GONE:
+			what = "gone"
+		case pbx.ServerPres_ACS:
+			what = "acs"
+		case pbx.ServerPres_TERM:
+			what = "term"
+		case pbx.ServerPres_MSG:
+			what = "msg"
+		case pbx.ServerPres_READ:
+			what = "read"
+		case pbx.ServerPres_RECV:
+			what = "recv"
+		case pbx.ServerPres_DEL:
+			what = "del"
+		}
+		msg.Pres = &MsgServerPres{
+			Topic:     pres.GetTopic(),
+			Src:       pres.GetSrc(),
+			What:      what,
+			UserAgent: pres.GetUserAgent(),
+			SeqId:     int(pres.GetSeqId()),
+			SeqList:   int32SliceToInt(pres.GetSeqList()),
+			AcsTarget: pres.GetTargetUserId(),
+			AcsActor:  pres.GetActorUserId(),
+			Acs:       pb_AccessMode_deserialize(pres.GetAcs()),
+		}
+	} else if info := pkt.GetInfo(); info != nil {
+		msg.Info = &MsgServerInfo{
+			Topic: info.GetTopic(),
+			From:  info.GetFromUserId(),
+			What:  pb_InfoNoteWhat_deserialize(info.GetWhat()),
+			SeqId: int(info.GetSeqId()),
+		}
+	} else if meta := pkt.GetMeta(); meta != nil {
+		msg.Meta = &MsgServerMeta{
+			Id:    meta.GetId(),
+			Topic: meta.GetTopic(),
+			Desc:  pb_TopicDesc_deserialize(meta.GetDesc()),
+			Sub:   pb_TopicSubSlice_deserialize(meta.GetSub()),
+		}
+	}
+	return &msg
 }
 
 // Convert ClientComMessage to pbx.ClientMsg
@@ -215,13 +290,12 @@ func pb_cli_deserialize(pkt *pbx.ClientMsg) *ClientComMessage {
 		}
 	} else if pub := pkt.GetPub(); pub != nil {
 		msg.Pub = &MsgClientPub{
-			Id:     pub.GetId(),
-			Topic:  pub.GetTopic(),
-			NoEcho: pub.GetNoEcho(),
-			Head:   pub.GetHead(),
+			Id:      pub.GetId(),
+			Topic:   pub.GetTopic(),
+			NoEcho:  pub.GetNoEcho(),
+			Head:    pub.GetHead(),
+			Content: bytesToInterface(pub.GetContent()),
 		}
-		json.Unmarshal(pub.GetContent(), &msg.Pub.Content)
-
 	} else if get := pkt.GetGet(); get != nil {
 		msg.Get = &MsgClientGet{
 			Id:          get.GetId(),
@@ -276,8 +350,24 @@ func interfaceMapToByteMap(in map[string]interface{}) map[string][]byte {
 	return out
 }
 
+func byteMapToInterfaceMap(in map[string][]byte) map[string]interface{} {
+	out := make(map[string]interface{}, len(in))
+	for key, val := range in {
+		var iface interface{}
+		json.Unmarshal(val, &iface)
+		out[key] = iface
+	}
+	return out
+}
+
 func interfaceToBytes(in interface{}) []byte {
 	out, _ := json.Marshal(in)
+	return out
+}
+
+func bytesToInterface(in []byte) interface{} {
+	var out interface{}
+	json.Unmarshal(in, &out)
 	return out
 }
 
@@ -379,12 +469,11 @@ func pb_SetDesc_serialize(in *MsgSetDesc) *pbx.SetDesc {
 		return nil
 	}
 
-	out := &pbx.SetDesc{}
-
-	out.DefaultAcs = pb_DefaultAcs_serialize(in.DefaultAcs)
-	out.Public = interfaceToBytes(in.Public)
-	out.Private = interfaceToBytes(in.Private)
-	return out
+	return &pbx.SetDesc{
+		DefaultAcs: pb_DefaultAcs_serialize(in.DefaultAcs),
+		Public:     interfaceToBytes(in.Public),
+		Private:    interfaceToBytes(in.Private),
+	}
 }
 
 func pb_SetDesc_deserialize(in *pbx.SetDesc) *MsgSetDesc {
@@ -392,17 +481,11 @@ func pb_SetDesc_deserialize(in *pbx.SetDesc) *MsgSetDesc {
 		return nil
 	}
 
-	msg := MsgSetDesc{}
-	if defacs := in.GetDefaultAcs(); defacs != nil {
-		msg.DefaultAcs = &MsgDefaultAcsMode{
-			Auth: defacs.GetAuth(),
-			Anon: defacs.GetAnon(),
-		}
+	return &MsgSetDesc{
+		DefaultAcs: pb_DefaultAcs_deserialize(in.GetDefaultAcs()),
+		Public:     bytesToInterface(in.GetPublic()),
+		Private:    bytesToInterface(in.GetPrivate()),
 	}
-	json.Unmarshal(in.GetPublic(), &msg.Public)
-	json.Unmarshal(in.GetPrivate(), &msg.Private)
-
-	return &msg
 }
 
 func pb_SetQuery_serialize(in *MsgSetQuery) *pbx.SetQuery {
@@ -456,6 +539,21 @@ func pb_InfoNoteWhat_serialize(what string) pbx.InfoNote {
 	return out
 }
 
+func pb_InfoNoteWhat_deserialize(what pbx.InfoNote) string {
+	var out string
+	switch what {
+	case pbx.InfoNote_KP:
+		out = "kp"
+	case pbx.InfoNote_READ:
+		out = "read"
+	case pbx.InfoNote_RECV:
+		out = "recv"
+	default:
+		log.Fatal("unknown info-note.what", what)
+	}
+	return out
+}
+
 func pb_AccessMode_serialize(acs *MsgAccessMode) *pbx.AccessMode {
 	if acs == nil {
 		return nil
@@ -466,6 +564,18 @@ func pb_AccessMode_serialize(acs *MsgAccessMode) *pbx.AccessMode {
 		Given: acs.Given,
 	}
 }
+
+func pb_AccessMode_deserialize(acs *pbx.AccessMode) *MsgAccessMode {
+	if acs == nil {
+		return nil
+	}
+
+	return &MsgAccessMode{
+		Want:  acs.Want,
+		Given: acs.Given,
+	}
+}
+
 func pb_DefaultAcs_serialize(defacs *MsgDefaultAcsMode) *pbx.DefaultAcsMode {
 	if defacs == nil {
 		return nil
@@ -474,6 +584,17 @@ func pb_DefaultAcs_serialize(defacs *MsgDefaultAcsMode) *pbx.DefaultAcsMode {
 	return &pbx.DefaultAcsMode{
 		Auth: defacs.Auth,
 		Anon: defacs.Anon}
+}
+
+func pb_DefaultAcs_deserialize(defacs *pbx.DefaultAcsMode) *MsgDefaultAcsMode {
+	if defacs == nil {
+		return nil
+	}
+
+	return &MsgDefaultAcsMode{
+		Auth: defacs.GetAuth(),
+		Anon: defacs.GetAnon(),
+	}
 }
 
 func pb_TopicDesc_serialize(desc *MsgTopicDesc) *pbx.TopicDesc {
@@ -494,6 +615,24 @@ func pb_TopicDesc_serialize(desc *MsgTopicDesc) *pbx.TopicDesc {
 	}
 }
 
+func pb_TopicDesc_deserialize(desc *pbx.TopicDesc) *MsgTopicDesc {
+	if desc == nil {
+		return nil
+	}
+	return &MsgTopicDesc{
+		CreatedAt:  int64ToTime(desc.GetCreatedAt()),
+		UpdatedAt:  int64ToTime(desc.GetUpdatedAt()),
+		DefaultAcs: pb_DefaultAcs_deserialize(desc.GetDefacs()),
+		Acs:        pb_AccessMode_deserialize(desc.GetAcs()),
+		SeqId:      int(desc.SeqId),
+		ReadSeqId:  int(desc.ReadId),
+		RecvSeqId:  int(desc.RecvId),
+		ClearId:    int(desc.ClearId),
+		Public:     bytesToInterface(desc.Public),
+		Private:    bytesToInterface(desc.Private),
+	}
+}
+
 func pb_TopicSubSlice_serialize(subs []MsgTopicSub) []*pbx.TopicSub {
 	if subs == nil || len(subs) == 0 {
 		return nil
@@ -503,7 +642,7 @@ func pb_TopicSubSlice_serialize(subs []MsgTopicSub) []*pbx.TopicSub {
 	for i := 0; i < len(subs); i++ {
 		out[i] = &pbx.TopicSub{
 			UpdatedAt: timeToInt64(subs[i].UpdatedAt),
-			DeletedAt: timeToInt64(subs[i].UpdatedAt),
+			DeletedAt: timeToInt64(subs[i].DeletedAt),
 			Online:    subs[i].Online,
 			Acs:       pb_AccessMode_serialize(&subs[i].Acs),
 			ReadId:    int32(subs[i].ReadSeqId),
@@ -518,6 +657,39 @@ func pb_TopicSubSlice_serialize(subs []MsgTopicSub) []*pbx.TopicSub {
 		if subs[i].LastSeen != nil {
 			out[i].LastSeenTime = timeToInt64(subs[i].LastSeen.When)
 			out[i].LastSeenUserAgent = subs[i].LastSeen.UserAgent
+		}
+	}
+	return out
+}
+
+func pb_TopicSubSlice_deserialize(subs []*pbx.TopicSub) []MsgTopicSub {
+	if subs == nil || len(subs) == 0 {
+		return nil
+	}
+
+	out := make([]MsgTopicSub, len(subs))
+	for i := 0; i < len(subs); i++ {
+		out[i] = MsgTopicSub{
+			UpdatedAt: int64ToTime(subs[i].GetUpdatedAt()),
+			DeletedAt: int64ToTime(subs[i].GetDeletedAt()),
+			Online:    subs[i].GetOnline(),
+			ReadSeqId: int(subs[i].GetReadId()),
+			RecvSeqId: int(subs[i].GetRecvId()),
+			Public:    bytesToInterface(subs[i].GetPublic()),
+			Private:   bytesToInterface(subs[i].GetPrivate()),
+			User:      subs[i].GetUserId(),
+			Topic:     subs[i].GetTopic(),
+			SeqId:     int(subs[i].GetSeqId()),
+			ClearId:   int(subs[i].GetClearId()),
+		}
+		if acs := subs[i].GetAcs(); acs != nil {
+			out[i].Acs = *pb_AccessMode_deserialize(acs)
+		}
+		if subs[i].GetLastSeenTime() > 0 {
+			out[i].LastSeen = &MsgLastSeenInfo{
+				When:      int64ToTime(subs[i].GetLastSeenTime()),
+				UserAgent: subs[i].GetLastSeenUserAgent(),
+			}
 		}
 	}
 	return out

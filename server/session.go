@@ -183,7 +183,6 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 	s.lastAction = time.Now().UTC().Round(time.Millisecond)
 
 	msg.from = s.uid.UserId()
-	msg.timestamp = s.lastAction
 
 	// Locking-unlocking is needed for long polling: the client may issue multiple requests in parallel.
 	// Should not affect performance
@@ -192,7 +191,8 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 		defer s.rw.Unlock()
 	}
 
-	if msg, resp := pluginFireHose(s, msg); resp != nil {
+	var resp *ServerComMessage
+	if msg, resp = pluginFireHose(s, msg); resp != nil {
 		// Plugin provided a response. No further processing is needed.
 		s.queueOut(resp)
 		return
@@ -200,6 +200,8 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 		// Plugin requested to silently drop the request.
 		return
 	}
+
+	msg.timestamp = time.Now().UTC().Round(time.Millisecond)
 
 	switch {
 	case msg.Pub != nil:
