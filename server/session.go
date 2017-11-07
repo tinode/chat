@@ -638,6 +638,8 @@ func (s *Session) acc(msg *ClientComMessage) {
 		reply.Ctrl.Params = params
 		s.queueOut(reply)
 
+		pluginAccount(&user, plgActCreate)
+
 	} else if !s.uid.IsZero() {
 		// Request to update auth of an existing account. Only basic auth is currently supported
 		// TODO(gene): support adding new auth schemes

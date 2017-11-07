@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/tinode/chat/pbx"
+	"github.com/tinode/chat/server/store/types"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 )
@@ -390,8 +391,42 @@ func pluginFireHose(sess *Session, msg *ClientComMessage) (*ClientComMessage, *S
 	return msg, nil
 }
 
-func pluginAccount(msg *ServerComMessage) *ServerComMessage {
-	return nil
+func pluginAccount(user *types.User, action int) {
+	if plugins == nil {
+		return
+	}
+
+	var event *pbx.AccountEvent
+	for _, p := range plugins {
+		if p.filterAccount == nil || p.filterAccount.byAction&action == 0 {
+			// Plugin is not interested in Account actions
+			continue
+		}
+
+		if event == nil {
+			event = &pbx.AccountEvent{
+				Action: pluginActionToCrud(action),
+				UserId: user.Uid().UserId(),
+				DefaultAcs: pb_DefaultAcs_serialize(&MsgDefaultAcsMode{
+					Auth: user.Access.Auth.String(),
+					Anon: user.Access.Anon.String()}),
+				Public: interfaceToBytes(user.Public),
+				Tags:   user.Tags,
+			}
+		}
+
+		var ctx context.Context
+		var cancel context.CancelFunc
+		if p.timeout > 0 {
+			ctx, cancel = context.WithTimeout(context.Background(), p.timeout)
+			defer cancel()
+		} else {
+			ctx = context.Background()
+		}
+		if _, err := p.client.Account(ctx, event); err != nil {
+			log.Println("plugins: Account call failed", p.name, err)
+		}
+	}
 }
 
 func pluginTopic(msg *ServerComMessage) *ServerComMessage {
@@ -467,4 +502,16 @@ func pluginDoFiltering(filter *PluginFilter, msg *ClientComMessage) bool {
 		return filter.byPacket&plgNote != 0 && filterByTopic(msg.Note.Topic, filter.byTopicType)
 	}
 	return false
+}
+
+func pluginActionToCrud(action int) pbx.Crud {
+	switch action {
+	case plgActCreate:
+		return pbx.Crud_CREATE
+	case plgActUpd:
+		return pbx.Crud_UPDATE
+	case plgActDel:
+		return pbx.Crud_DELETE
+	}
+	panic("plugin: unknown action")
 }

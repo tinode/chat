@@ -55,10 +55,12 @@ next_id.tid = 100
 
 def next_quote():
     idx = random.randrange(0, len(quotes))
+    # Make sure quotes and not repeated
     while idx == next_quote.idx:
         idx = random.randrange(0, len(quotes))
     next_quote.idx = idx
     return quotes[idx]
+next_quote.idx = 0
 
 # This is the class for the server-side gRPC endpoints
 class Plugin(pbx.PluginServicer):
@@ -120,17 +122,31 @@ def publish(topic, text):
     tid = next_id()
     return pb.ClientMsg(pub=pb.ClientPub(id=tid, topic=topic, no_echo=True, content=json.dumps(text)))
 
-def client(addr, schema, secret, server, cookie_file_name):
+def note_read(topic, seq):
+    return pb.ClientMsg(note=pb.ClientNote(topic=topic, what=pb.READ, seq_id=seq))
+
+def init_server(listen):
+    # Launch plugin server: acception connection(s) from the Tinode server.
+    server = grpc.server(futures.ThreadPoolExecutor(max_workers=16))
+    pbx.add_PluginServicer_to_server(Plugin(), server)
+    server.add_insecure_port(listen)
+    server.start()
+
+    return server
+
+def init_client(addr, schema, secret, cookie_file_name):
     channel = grpc.insecure_channel(addr)
     stub = pbx.NodeStub(channel)
     # Call the server
     stream = stub.MessageLoop(client_generate())
-
     # Session initialization sequence: {hi}, {login}, {sub topic='me'}
     client_post(hello())
     client_post(login(cookie_file_name, schema, secret))
     client_post(subscribe('me'))
 
+    return stream
+
+def client_message_loop(stream):
     try:
         # Read server responses
         for msg in stream:
@@ -142,6 +158,9 @@ def client(addr, schema, secret, server, cookie_file_name):
             elif msg.HasField("data"):
                 # Respond to message.
                 print "\nFrom: " + msg.data.from_user_id + ":\n"
+                # Mark received message as read
+                client_post(note_read(msg.data.topic, msg.data.seq_id))
+                # Respond with a witty quote
                 client_post(publish(msg.data.topic, next_quote()))
 
             elif msg.HasField("pres"):
@@ -159,17 +178,6 @@ def client(addr, schema, secret, server, cookie_file_name):
 
     except grpc._channel._Rendezvous as err:
         print err
-    except KeyboardInterrupt:
-        queue_out.put(None)
-        server.stop(0)
-
-
-def server(listen):
-    # Launch plugin server: acception connection(s) from the Tinode server.
-    server = grpc.server(futures.ThreadPoolExecutor(max_workers=16))
-    pbx.add_PluginServicer_to_server(Plugin(), server)
-    server.add_insecure_port(listen)
-    server.start()
 
 def read_auth_cookie(cookie_file_name):
     """Read authentication token from a file"""
@@ -209,10 +217,6 @@ def load_quotes(file_name):
 
     return len(quotes)
 
-def exit_gracefully(signo, stack_frame):
-    print "Terminated with signal", signo
-    sys.exit(0)
-
 if __name__ == '__main__':
     """Parse command-line arguments. Extract server host name, listen address, authentication scheme"""
     random.seed()
@@ -249,13 +253,26 @@ if __name__ == '__main__':
         # Load random quotes from file
         print "Loaded {} quotes".format(load_quotes(args.quotes))
 
+        # Start Plugin server
+        server = init_server(args.listen)
+        # Initialize and launch client
+        client = init_client(args.host, schema, secret, args.login_cookie)
+
+        # Setup closure for graceful termination
+        def exit_gracefully(signo, stack_frame):
+            print "Terminated with signal", signo
+            server.stop(None)
+            client.cancel()
+            sys.exit(0)
+
         # Add signal handlers
         signal.signal(signal.SIGINT, exit_gracefully)
         signal.signal(signal.SIGTERM, exit_gracefully)
 
-        # Start Plugin server
-        server(args.listen)
-        # Initialize and launch client
-        client(args.host, schema, secret, server, args.login_cookie)
+        # Run blocking message loop
+        client_message_loop(client)
+        client.cancel()
+        server.stop()
+
     else:
         print "Error: unknown authentication scheme"

@@ -419,19 +419,9 @@ message AccountEvent {
 
 	DefaultAcsMode default_acs = 3;
 	bytes public = 4;
-	bytes private = 5;
-	
-	int64 last_seen = 6;
-	string user_agent = 7;
-
-	message AuthScheme {
-		string scheme = 1;
-		bytes secret = 2;		
-	}
-	repeated AuthScheme auth_schemes = 8;
 
 	// Indexable tags for user discovery
-	repeated string tags = 9;
+	repeated string tags = 8;
 }
 
 message SubscriptionEvent {
