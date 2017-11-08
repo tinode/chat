@@ -4,6 +4,7 @@ import argparse
 import base64
 from concurrent import futures
 import json
+import os
 from Queue import Queue
 import random
 import signal
@@ -185,13 +186,19 @@ def read_auth_cookie(cookie_file_name):
         cookie = open(cookie_file_name, 'r')
         params = json.load(cookie)
         cookie.close()
-        if params.get("token") == None:
-            return None
-        return base64.b64decode(params.get('token').encode('ascii'))
+        schema = params.get("schema")
+        secret = None
+        if schema == None:
+            return None, None
+        if schema == 'token':
+            secret = base64.b64decode(params.get('secret').encode('ascii'))
+        else:
+            secret = params.get('secret').encode('ascii')
+        return schema, secret
 
     except Exception as err:
         print "Failed to read authentication cookie", err
-        return None
+        return None, None
 
 def save_auth_cookie(cookie_file_name, params):
     """Save authentication token to file"""
@@ -199,9 +206,13 @@ def save_auth_cookie(cookie_file_name, params):
         return
 
     # Protobuf map 'params' is not a python object or dictionary. Convert it.
-    nice = {}
-    for p in params:
-        nice[p] = json.loads(params[p])
+    nice = {'schema': 'token'}
+    for key_in in params:
+        if key_in == 'token':
+            key_out = 'secret'
+        else:
+            key_out = key_in
+        nice[key_out] = json.loads(params[key_in])
 
     try:
         cookie = open(cookie_file_name, 'w')
@@ -228,7 +239,8 @@ if __name__ == '__main__':
     parser.add_argument('--listen', default='localhost:40051', help='address to listen for incoming Plugin API calls')
     parser.add_argument('--login-basic', help='login using basic authentication username:password')
     parser.add_argument('--login-token', help='login using token authentication')
-    parser.add_argument('--login-cookie', default='.tn-cookie', help='read token from the cookie file and use it for authentication')
+    parser.add_argument('--login-env', help='login using data from environment variables BOTSCHEMA and BOTSECRET')
+    parser.add_argument('--login-cookie', default='.tn-cookie', help='read credentials from the provided cookie file')
     parser.add_argument('--quotes', default='quotes.txt', help='file with messages for the chatbot to use, one message per line')
     args = parser.parse_args()
 
@@ -245,9 +257,7 @@ if __name__ == '__main__':
         secret = args.login_basic
     else:
         """Try reading the cookie file"""
-        secret = read_auth_cookie(args.login_cookie)
-        if secret != None:
-            schema = 'token'
+        schema, secret = read_auth_cookie(args.login_cookie)
 
     if schema != None:
         # Load random quotes from file
@@ -271,8 +281,8 @@ if __name__ == '__main__':
 
         # Run blocking message loop
         client_message_loop(client)
+        server.stop(None)
         client.cancel()
-        server.stop()
 
     else:
         print "Error: unknown authentication scheme"
