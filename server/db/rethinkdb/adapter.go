@@ -890,7 +890,8 @@ func (a *RethinkDbAdapter) MessageDeleteAll(topic string, clear int) error {
 	_, err := rdb.DB(a.dbName).Table("messages").
 		Between([]interface{}{topic, 0}, []interface{}{topic, maxval},
 			rdb.BetweenOpts{Index: "Topic_SeqId", RightBound: "closed"}).
-		Delete().RunWrite(a.conn)
+		Update(map[string]interface{}{"DeletedAt": t.TimeNow(), "From": nil, "DeletedFor": nil,
+			"Head": nil, "Content": nil}).Filter(rdb.Row.HasFields("DeletedAt").Not()).RunWrite(a.conn)
 
 	return err
 }
@@ -903,8 +904,8 @@ func (a *RethinkDbAdapter) MessageDeleteList(topic string, forUser t.Uid, hard b
 	}
 	if hard {
 		_, err = rdb.DB(a.dbName).Table("messages").GetAllByIndex("Topic_SeqId", indexVals...).
-			Update(map[string]interface{}{"DeletedAt": t.TimeNow(),
-				"Content": nil}).RunWrite(a.conn)
+			Update(map[string]interface{}{"DeletedAt": t.TimeNow(), "From": nil, "DeletedFor": nil,
+				"Head": nil, "Content": nil}).Filter(rdb.Row.HasFields("DeletedAt").Not()).RunWrite(a.conn)
 	} else {
 		_, err = rdb.DB(a.dbName).Table("messages").GetAllByIndex("Topic_SeqId", indexVals...).
 			Update(map[string]interface{}{"DeletedFor": rdb.Row.Field("DeletedFor").Append(&t.SoftDelete{
@@ -915,42 +916,6 @@ func (a *RethinkDbAdapter) MessageDeleteList(topic string, forUser t.Uid, hard b
 
 	return err
 }
-
-/*
-func addOptions(q rdb.Term, value string, index string, opts *t.BrowseOpt) rdb.Term {
-	var limit uint = 1024 // TODO(gene): pass into adapter as a config param
-	var lower, upper interface{}
-
-	if opts != nil {
-		if opts.Since > 0 {
-			lower = opts.Since
-		} else {
-			lower = rdb.MinVal
-		}
-
-		if opts.Before > 0 {
-			upper = opts.Before
-		} else {
-			upper = rdb.MaxVal
-		}
-
-		if value != "" {
-			lower = []interface{}{value, lower}
-			upper = []interface{}{value, upper}
-		}
-
-		if opts.Limit > 0 && opts.Limit < limit {
-			limit = opts.Limit
-		}
-	} else {
-		lower = []interface{}{value, rdb.MinVal}
-		upper = []interface{}{value, rdb.MaxVal}
-	}
-
-	return q.Between(lower, upper, rdb.BetweenOpts{Index: index}).
-		OrderBy(rdb.OrderByOpts{Index: rdb.Desc(index)}).Limit(limit)
-}
-*/
 
 func deviceHasher(deviceId string) string {
 	// Generate custom key as [64-bit hash of device id] to ensure predictable
