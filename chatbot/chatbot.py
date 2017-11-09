@@ -3,7 +3,6 @@
 import argparse
 import base64
 from concurrent import futures
-import daemon
 import json
 import os
 from Queue import Queue
@@ -267,7 +266,7 @@ def run(args):
 
         # Run blocking message loop
         client_message_loop(client)
-        
+
         # Close connections gracefully before exiting
         server.stop(None)
         client.cancel()
@@ -280,11 +279,10 @@ if __name__ == '__main__':
     """Parse command-line arguments. Extract server host name, listen address, authentication scheme"""
     random.seed()
 
-    purpose = "Tino, Tinode's dumb chatbot."
+    purpose = "Tino, Tinode's chatbot."
     print purpose
     parser = argparse.ArgumentParser(description=purpose)
     parser.add_argument('--host', default='localhost:6061', help='address of Tinode server')
-    parser.add_argument('--daemon', action='store_true', help='run as a daemon')
     parser.add_argument('--listen', default='localhost:40051', help='address to listen for incoming Plugin API calls')
     parser.add_argument('--login-basic', help='login using basic authentication username:password')
     parser.add_argument('--login-token', help='login using token authentication')
@@ -292,8 +290,4 @@ if __name__ == '__main__':
     parser.add_argument('--quotes', default='quotes.txt', help='file with messages for the chatbot to use, one message per line')
     args = parser.parse_args()
 
-    if args.daemon:
-        with daemon.DaemonContext():
-            run(args)
-    else:
-        run(args)
+    run(args)
