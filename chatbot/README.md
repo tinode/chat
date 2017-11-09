@@ -3,7 +3,7 @@
 This is a rudimentary chatbot for Tinode using [gRPC API](../pbx/). It's written in Python as a demonstration
 that the API is language-independent.
 
-The chat bot subscribes to events stream using Plugin API and logs in as 'Tino the Chatbot' user. The event stream API is used to listen for new accounts. When a new account is created, the bot initiates a p2p topic with the new user. Then it listens for messages sent to the topic and responds to each with a random quote.
+The chat bot subscribes to events stream using Plugin API and logs in as 'Tino the Chatbot' user. The event stream API is used to listen for new accounts. When a new account is created, the bot initiates a p2p topic with the new user. Then it listens for messages sent to the topic and responds to each with a random quote from `quotes.txt` file.
 
 Generated files are provided for convenience. You may re-generate them if needed:
 ```
@@ -21,7 +21,7 @@ Install `python-daemon`:
 pip install python-daemon
 ```
 
-Follow instructions to [install grpc](https://grpc.io/docs/quickstart/python.html#install-grpc). The package is called `grpcio`:
+Follow instructions to [install grpc](https://grpc.io/docs/quickstart/python.html#install-grpc). The package is called `grpcio` (*not* `grpc`!):
 ```
 pip install grpcio
 ```
@@ -34,13 +34,11 @@ Alternatively it can be daemonized as
 ```
 nohup python chatbot.py --login-basic=alice:alice123 &
 ```
-Run for more instructions:
-```
-python chatbot.py -h
-```
+Run `python chatbot.py -h` for more options.
 
-You can use cookie file to store credentials. Sample cookie files are provided as `basic-cookie.sample` and `token-cookie.sample`. Once authenticated the bot will attempt to store token in the provided cookie file, `.tn-cookie` by default. If you have a cookie file with the default name, you can run the bot with no parameters:
-
+You can use cookie file to store credentials. Sample cookie files are provided as `basic-cookie.sample` and `token-cookie.sample`. Once authenticated the bot will attempt to store the token in the cookie file, `.tn-cookie` by default. If you have a cookie file with the default name, you can run the bot with no parameters:
 ```
 python chatbot.py
 ```
+
+Quotes are read from `quotes.txt` by default. The file is plain text with one quote per line.
