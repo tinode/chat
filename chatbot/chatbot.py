@@ -3,6 +3,7 @@
 import argparse
 import base64
 from concurrent import futures
+import daemon
 import json
 import os
 from Queue import Queue
@@ -228,22 +229,7 @@ def load_quotes(file_name):
 
     return len(quotes)
 
-if __name__ == '__main__':
-    """Parse command-line arguments. Extract server host name, listen address, authentication scheme"""
-    random.seed()
-
-    purpose = "Tino, Tinode's dumb chatbot."
-    print purpose
-    parser = argparse.ArgumentParser(description=purpose)
-    parser.add_argument('--host', default='localhost:6061', help='address of Tinode server')
-    parser.add_argument('--listen', default='localhost:40051', help='address to listen for incoming Plugin API calls')
-    parser.add_argument('--login-basic', help='login using basic authentication username:password')
-    parser.add_argument('--login-token', help='login using token authentication')
-    parser.add_argument('--login-env', help='login using data from environment variables BOTSCHEMA and BOTSECRET')
-    parser.add_argument('--login-cookie', default='.tn-cookie', help='read credentials from the provided cookie file')
-    parser.add_argument('--quotes', default='quotes.txt', help='file with messages for the chatbot to use, one message per line')
-    args = parser.parse_args()
-
+def run(args):
     schema = None
     secret = None
 
@@ -281,8 +267,33 @@ if __name__ == '__main__':
 
         # Run blocking message loop
         client_message_loop(client)
+        
+        # Close connections gracefully before exiting
         server.stop(None)
         client.cancel()
 
     else:
         print "Error: unknown authentication scheme"
+
+
+if __name__ == '__main__':
+    """Parse command-line arguments. Extract server host name, listen address, authentication scheme"""
+    random.seed()
+
+    purpose = "Tino, Tinode's dumb chatbot."
+    print purpose
+    parser = argparse.ArgumentParser(description=purpose)
+    parser.add_argument('--host', default='localhost:6061', help='address of Tinode server')
+    parser.add_argument('--daemon', action='store_true', help='run as a daemon')
+    parser.add_argument('--listen', default='localhost:40051', help='address to listen for incoming Plugin API calls')
+    parser.add_argument('--login-basic', help='login using basic authentication username:password')
+    parser.add_argument('--login-token', help='login using token authentication')
+    parser.add_argument('--login-cookie', default='.tn-cookie', help='read credentials from the provided cookie file')
+    parser.add_argument('--quotes', default='quotes.txt', help='file with messages for the chatbot to use, one message per line')
+    args = parser.parse_args()
+
+    if args.daemon:
+        with daemon.DaemonContext():
+            run(args)
+    else:
+        run(args)

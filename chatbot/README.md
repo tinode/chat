@@ -16,14 +16,27 @@ Make sure [python](https://www.python.org/) 2.7 or 3.4 or higher is installed. M
 ```
 pip install futures
 ```
+Install `python-daemon`:
+```
+pip install python-daemon
+```
+
 Follow instructions to [install grpc](https://grpc.io/docs/quickstart/python.html#install-grpc). The package is called `grpcio`:
 ```
 pip install grpcio
 ```
 
-Start the [tinode server](../server/) first. Then start the chatbot under the user you want to act as your bot, `alice` in this example:
+Start the [tinode server](../INSTALL.md) first. Then start the chatbot with credentials of the user you want to be your bot, `alice` in this example (skip `--daemon` if you want output printed to `stdout`):
 ```
-python chatbot.py --login-basic=alice:alice123
+python chatbot.py --login-basic=alice:alice123 --daemon
+```
+Alternatively it can be daemonized as
+```
+nohup python chatbot.py --login-basic=alice:alice123 &
+```
+Run for more instructions:
+```
+python chatbot.py -h
 ```
 
 You can use cookie file to store credentials. Sample cookie files are provided as `basic-cookie.sample` and `token-cookie.sample`. Once authenticated the bot will attempt to store token in the provided cookie file, `.tn-cookie` by default. If you have a cookie file with the default name, you can run the bot with no parameters:
