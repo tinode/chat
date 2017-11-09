@@ -743,7 +743,7 @@ type BrowseOpt struct {
 	Before int
 	Until  *time.Time
 	ByTime bool
-	Limit  uint
+	Limit  int
 }
 
 type TopicCat int

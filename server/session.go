@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/tinode/chat/pbx"
 	"github.com/tinode/chat/server/auth"
 	"github.com/tinode/chat/server/store"
 	"github.com/tinode/chat/server/store/types"
@@ -30,7 +31,8 @@ const (
 	NONE = iota
 	WEBSOCK
 	LPOLL
-	RPC
+	GRPC
+	CLUSTER
 )
 
 var MIN_SUPPORTED_VERSION_VAL = parseVersion(MIN_SUPPORTED_VERSION)
@@ -38,23 +40,20 @@ var MIN_SUPPORTED_VERSION_VAL = parseVersion(MIN_SUPPORTED_VERSION)
 // A single WS connection or a long polling session. A user may have multiple
 // sessions.
 type Session struct {
-	// protocol - NONE (unset), WEBSOCK, LPOLL, RPC
+	// protocol - NONE (unset), WEBSOCK, LPOLL, CLUSTER, GRPC
 	proto int
 
-	// -- Set only for websockets
-	// Websocket
+	// Websocket. Set only for websocket sessions
 	ws *websocket.Conn
-	// --
 
-	// -- Set only for Long Poll sessions
-	// Pointer to session's record in sessionStore
+	// Pointer to session's record in sessionStore. Set only for Long Poll sessions
 	lpTracker *list.Element
-	// --
 
-	// -- Set only for RPC sessions
-	// reference to the cluster node where the session has originated
-	rpcnode *ClusterNode
-	// --
+	// gRPC handle. Set only for gRPC clients
+	grpcnode pbx.Node_MessageLoopServer
+
+	// Reference to the cluster node where the session has originated. Set only for cluster RPC sessions
+	clnode *ClusterNode
 
 	// IP address of the client. For long polling this is the IP of the last poll
 	remoteAddr string
@@ -82,11 +81,13 @@ type Session struct {
 	// Time when the session received any packer from client
 	lastAction time.Time
 
-	// outbound mesages, buffered
-	send chan []byte
+	// Outbound mesages, buffered.
+	// The content must be serialized in format suitable for the session.
+	send chan interface{}
 
-	// channel for shutting down the session, buffer 1
-	stop chan []byte
+	// Channel for shutting down the session, buffer 1.
+	// Content in the same format as for 'send'
+	stop chan interface{}
 
 	// detach - channel for detaching session from topic, buffered
 	detach chan string
@@ -120,19 +121,45 @@ type Subscription struct {
 	uaChange chan<- string
 }
 
-// TODO(gene): unify simpleByteSender and QueueOut
-
-// QueueOut attempts to send a ServerComMessage to a session; if the send buffer is full, timeout is 10 milliseconds
-func (s *Session) queueOut(msg *ServerComMessage) {
+// queueOut attempts to send a ServerComMessage to a session; if the send buffer is full, timeout is 50 usec
+func (s *Session) queueOut(msg *ServerComMessage) bool {
 	if s == nil {
-		return
+		return true
 	}
 
-	data, _ := json.Marshal(msg)
+	select {
+	case s.send <- s.serialize(msg):
+	case <-time.After(time.Microsecond * 50):
+		log.Println("session.queueOut: timeout")
+		return false
+	}
+	return true
+}
+
+// queueOutBytes attempts to send a ServerComMessage already serialized to []byte.
+// If the send buffer is full, timeout is 50 usec
+func (s *Session) queueOutBytes(data []byte) bool {
+	if s == nil {
+		return true
+	}
+
 	select {
 	case s.send <- data:
-	case <-time.After(time.Millisecond * 10):
+	case <-time.After(time.Microsecond * 50):
 		log.Println("session.queueOut: timeout")
+		return false
+	}
+	return true
+}
+
+func (s *Session) cleanUp() {
+	if s.proto != LPOLL {
+		globals.sessionStore.Delete(s)
+	}
+	globals.cluster.sessionGone(s)
+	for _, sub := range s.subs {
+		// sub.done is the same as topic.unreg
+		sub.done <- &sessionLeave{sess: s, unsub: false}
 	}
 }
 
@@ -156,7 +183,6 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 	s.lastAction = time.Now().UTC().Round(time.Millisecond)
 
 	msg.from = s.uid.UserId()
-	msg.timestamp = s.lastAction
 
 	// Locking-unlocking is needed for long polling: the client may issue multiple requests in parallel.
 	// Should not affect performance
@@ -164,6 +190,18 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 		s.rw.Lock()
 		defer s.rw.Unlock()
 	}
+
+	var resp *ServerComMessage
+	if msg, resp = pluginFireHose(s, msg); resp != nil {
+		// Plugin provided a response. No further processing is needed.
+		s.queueOut(resp)
+		return
+	} else if msg == nil {
+		// Plugin requested to silently drop the request.
+		return
+	}
+
+	msg.timestamp = time.Now().UTC().Round(time.Millisecond)
 
 	switch {
 	case msg.Pub != nil:
@@ -347,6 +385,10 @@ func parseVersion(vers string) int {
 	return (major << 8) | minor
 }
 
+func versionToString(vers int) string {
+	return strconv.Itoa((vers>>8)&0xff) + "." + strconv.Itoa(vers&0xff)
+}
+
 // Authenticate
 func (s *Session) hello(msg *ClientComMessage) {
 
@@ -465,12 +507,9 @@ func (s *Session) login(msg *ClientComMessage) {
 		})
 	}
 
-	s.queueOut(&ServerComMessage{Ctrl: &MsgServerCtrl{
-		Id:        msg.Login.Id,
-		Code:      http.StatusOK,
-		Text:      http.StatusText(http.StatusOK),
-		Timestamp: msg.timestamp,
-		Params:    map[string]interface{}{"user": uid.UserId(), "token": secret, "expires": expires}}})
+	resp := NoErr(msg.Login.Id, "", msg.timestamp)
+	resp.Ctrl.Params = map[string]interface{}{"user": uid.UserId(), "token": secret, "expires": expires}
+	s.queueOut(resp)
 }
 
 // Account creation
@@ -598,6 +637,8 @@ func (s *Session) acc(msg *ClientComMessage) {
 
 		reply.Ctrl.Params = params
 		s.queueOut(reply)
+
+		pluginAccount(&user, plgActCreate)
 
 	} else if !s.uid.IsZero() {
 		// Request to update auth of an existing account. Only basic auth is currently supported
@@ -835,6 +876,29 @@ func (s *Session) validateTopicName(msgId, topic string, timestamp time.Time) (s
 	}
 
 	return routeTo, nil
+}
+
+type SerialFormat int
+
+const (
+	FmtNONE SerialFormat = iota
+	FmtJSON
+	FmtPROTO
+)
+
+func (s *Session) getSerialFormat() SerialFormat {
+	if s.proto == GRPC {
+		return FmtPROTO
+	}
+	return FmtJSON
+}
+
+func (s *Session) serialize(msg *ServerComMessage) interface{} {
+	if s.proto == GRPC {
+		return pb_serv_serialize(msg)
+	}
+	out, _ := json.Marshal(msg)
+	return out
 }
 
 func filterTags(dst *[]string, src []string) int {

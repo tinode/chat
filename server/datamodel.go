@@ -32,7 +32,7 @@ type MsgBrowseOpts struct {
 	// Load messages with UpdatedAt lower than this
 	BeforeTs *time.Time `json:"until,omitempty"`
 	// Limit the number of messages loaded
-	Limit uint `json:"limit,omitempty"`
+	Limit int `json:"limit,omitempty"`
 }
 
 type MsgGetOpts struct {
@@ -88,11 +88,11 @@ type MsgClientHi struct {
 	Id string `json:"id,omitempty"`
 	// User agent
 	UserAgent string `json:"ua,omitempty"`
-	// Authentication scheme
+	// Protocol version, i.e. "0.13"
 	Version string `json:"ver,omitempty"`
 	// Client's unique device ID
 	DeviceID string `json:"dev,omitempty"`
-	// Human language of the connected device
+	// ISO 639-1 human language of the connected device
 	Lang string `json:"lang,omitempty"`
 }
 
@@ -454,280 +454,252 @@ type ServerComMessage struct {
 // Generators of error messages
 
 func NoErr(id, topic string, ts time.Time) *ServerComMessage {
-	msg := &ServerComMessage{Ctrl: &MsgServerCtrl{
+	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
 		Code:      http.StatusOK, // 200
 		Text:      "ok",
 		Topic:     topic,
 		Timestamp: ts}}
-	return msg
 }
 
 func NoErrCreated(id, topic string, ts time.Time) *ServerComMessage {
-	msg := &ServerComMessage{Ctrl: &MsgServerCtrl{
+	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
 		Code:      http.StatusCreated, // 201
 		Text:      "created",
 		Topic:     topic,
 		Timestamp: ts}}
-	return msg
 }
 
 func NoErrAccepted(id, topic string, ts time.Time) *ServerComMessage {
-	msg := &ServerComMessage{Ctrl: &MsgServerCtrl{
+	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
 		Code:      http.StatusAccepted, // 202
 		Text:      "accepted",
 		Topic:     topic,
 		Timestamp: ts}}
-	return msg
 }
 
 func NoErrEvicted(id, topic string, ts time.Time) *ServerComMessage {
-	msg := &ServerComMessage{Ctrl: &MsgServerCtrl{
+	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
 		Code:      http.StatusResetContent, // 205
 		Text:      "evicted",
 		Topic:     topic,
 		Timestamp: ts}}
-	return msg
 }
 
 func NoErrShutdown(ts time.Time) *ServerComMessage {
-	msg := &ServerComMessage{Ctrl: &MsgServerCtrl{
+	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Code:      http.StatusResetContent, // 205
 		Text:      "server shutdown",
 		Timestamp: ts}}
-	return msg
 }
 
 // 3xx
 func InfoAlreadySubscribed(id, topic string, ts time.Time) *ServerComMessage {
-	msg := &ServerComMessage{Ctrl: &MsgServerCtrl{
+	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
 		Code:      http.StatusNotModified, // 304
 		Text:      "already subscribed",
 		Topic:     topic,
 		Timestamp: ts}}
-	return msg
 }
 
 func InfoNotJoined(id, topic string, ts time.Time) *ServerComMessage {
-	msg := &ServerComMessage{Ctrl: &MsgServerCtrl{
+	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
 		Code:      http.StatusNotModified, // 304
 		Text:      "not joined",
 		Topic:     topic,
 		Timestamp: ts}}
-	return msg
 }
 
 func InfoNoAction(id, topic string, ts time.Time) *ServerComMessage {
-	msg := &ServerComMessage{Ctrl: &MsgServerCtrl{
+	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
 		Code:      http.StatusNotModified, // 304
 		Text:      "no action",
 		Topic:     topic,
 		Timestamp: ts}}
-	return msg
 }
 
 func InfoNotModified(id, topic string, ts time.Time) *ServerComMessage {
-	msg := &ServerComMessage{Ctrl: &MsgServerCtrl{
+	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
 		Code:      http.StatusNotModified, // 304
 		Text:      "not modified",
 		Topic:     topic,
 		Timestamp: ts}}
-	return msg
 }
 
 // 4xx Errors
 func ErrMalformed(id, topic string, ts time.Time) *ServerComMessage {
-	msg := &ServerComMessage{Ctrl: &MsgServerCtrl{
+	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
 		Code:      http.StatusBadRequest, // 400
 		Text:      "malformed",
 		Topic:     topic,
 		Timestamp: ts}}
-	return msg
 }
 
 func ErrAuthRequired(id, topic string, ts time.Time) *ServerComMessage {
-	msg := &ServerComMessage{Ctrl: &MsgServerCtrl{
+	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
 		Code:      http.StatusUnauthorized, // 401
 		Text:      "authentication required",
 		Topic:     topic,
 		Timestamp: ts}}
-	return msg
 }
 
 func ErrAuthFailed(id, topic string, ts time.Time) *ServerComMessage {
-	msg := &ServerComMessage{Ctrl: &MsgServerCtrl{
+	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
 		Code:      http.StatusUnauthorized, // 401
 		Text:      "authentication failed",
 		Topic:     topic,
 		Timestamp: ts}}
-	return msg
 }
 
 func ErrAuthUnknownScheme(id, topic string, ts time.Time) *ServerComMessage {
-	msg := &ServerComMessage{Ctrl: &MsgServerCtrl{
+	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
 		Code:      http.StatusUnauthorized, // 401
 		Text:      "unknown authentication scheme",
 		Topic:     topic,
 		Timestamp: ts}}
-	return msg
 }
 
 func ErrPermissionDenied(id, topic string, ts time.Time) *ServerComMessage {
-	msg := &ServerComMessage{Ctrl: &MsgServerCtrl{
+	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
 		Code:      http.StatusForbidden, // 403
 		Text:      "permission denied",
 		Topic:     topic,
 		Timestamp: ts}}
-	return msg
 }
 
 func ErrTopicNotFound(id, topic string, ts time.Time) *ServerComMessage {
-	msg := &ServerComMessage{Ctrl: &MsgServerCtrl{
+	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
 		Code:      http.StatusNotFound,
 		Text:      "topic not found", // 404
 		Topic:     topic,
 		Timestamp: ts}}
-	return msg
 }
 
 func ErrUserNotFound(id, topic string, ts time.Time) *ServerComMessage {
-	msg := &ServerComMessage{Ctrl: &MsgServerCtrl{
+	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
 		Code:      http.StatusNotFound, // 404
 		Text:      "user not found or offline",
 		Topic:     topic,
 		Timestamp: ts}}
-	return msg
 }
 
 func ErrAlreadyAuthenticated(id, topic string, ts time.Time) *ServerComMessage {
-	msg := &ServerComMessage{Ctrl: &MsgServerCtrl{
+	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
 		Code:      http.StatusConflict, // 409
 		Text:      "already authenticated",
 		Topic:     topic,
 		Timestamp: ts}}
-	return msg
 }
 
 func ErrDuplicateCredential(id, topic string, ts time.Time) *ServerComMessage {
-	msg := &ServerComMessage{Ctrl: &MsgServerCtrl{
+	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
 		Code:      http.StatusConflict, // 409
 		Text:      "duplicate credential",
 		Topic:     topic,
 		Timestamp: ts}}
-	return msg
 }
 
 func ErrAttachFirst(id, topic string, ts time.Time) *ServerComMessage {
-	msg := &ServerComMessage{Ctrl: &MsgServerCtrl{
+	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
 		Code:      http.StatusConflict, // 409
 		Text:      "must attach first",
 		Topic:     topic,
 		Timestamp: ts}}
-	return msg
 }
 
 func ErrAlreadyExists(id, topic string, ts time.Time) *ServerComMessage {
-	msg := &ServerComMessage{Ctrl: &MsgServerCtrl{
+	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
 		Code:      http.StatusConflict, // 409
 		Text:      "already exists",
 		Topic:     topic,
 		Timestamp: ts}}
-	return msg
 }
 
 func ErrCommandOutOfSequence(id, unused string, ts time.Time) *ServerComMessage {
-	msg := &ServerComMessage{Ctrl: &MsgServerCtrl{
+	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
 		Code:      http.StatusConflict, // 409
 		Text:      "command out of sequence",
 		Timestamp: ts}}
-	return msg
 }
 
 func ErrGone(id, topic string, ts time.Time) *ServerComMessage {
-	msg := &ServerComMessage{Ctrl: &MsgServerCtrl{
+	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
 		Code:      http.StatusGone, // 410
 		Text:      "gone",
 		Topic:     topic,
 		Timestamp: ts}}
-	return msg
 }
 
 func ErrPolicy(id, topic string, ts time.Time) *ServerComMessage {
-	msg := &ServerComMessage{Ctrl: &MsgServerCtrl{
+	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
 		Code:      http.StatusUnprocessableEntity, // 422
 		Text:      "policy violation",
 		Topic:     topic,
 		Timestamp: ts}}
-	return msg
 }
 
 func ErrLocked(id, topic string, ts time.Time) *ServerComMessage {
-	msg := &ServerComMessage{Ctrl: &MsgServerCtrl{
+	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
 		Code:      http.StatusLocked, // 423
 		Text:      "locked",
 		Topic:     topic,
 		Timestamp: ts}}
-	return msg
 }
 
 func ErrUnknown(id, topic string, ts time.Time) *ServerComMessage {
-	msg := &ServerComMessage{Ctrl: &MsgServerCtrl{
+	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
 		Code:      http.StatusInternalServerError, // 500
 		Text:      "internal error",
 		Topic:     topic,
 		Timestamp: ts}}
-	return msg
 }
 
 func ErrNotImplemented(id, topic string, ts time.Time) *ServerComMessage {
-	msg := &ServerComMessage{Ctrl: &MsgServerCtrl{
+	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
 		Code:      http.StatusNotImplemented, // 501
 		Text:      "not implemented",
 		Topic:     topic,
 		Timestamp: ts}}
-	return msg
 }
 
 func ErrClusterNodeUnreachable(id, topic string, ts time.Time) *ServerComMessage {
-	msg := &ServerComMessage{Ctrl: &MsgServerCtrl{
+	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
 		Code:      http.StatusBadGateway, // 502
 		Text:      "unreachable",
 		Topic:     topic,
 		Timestamp: ts}}
-	return msg
 }
 
 func ErrVersionNotSupported(id, topic string, ts time.Time) *ServerComMessage {
-	msg := &ServerComMessage{Ctrl: &MsgServerCtrl{
+	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
 		Code:      http.StatusHTTPVersionNotSupported, // 505
 		Text:      "version not supported",
 		Topic:     topic,
 		Timestamp: ts}}
-	return msg
 }

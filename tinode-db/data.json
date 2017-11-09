@@ -13,7 +13,7 @@
    },
    "username": "alice",
 	"addressBook": ["email:bob@example.com", "email:carol@example.com", "email:dave@example.com",
-		"email:eve@example.com","email:frank@example.com","email:george@example.com","email:xena@example.com",
+		"email:eve@example.com","email:frank@example.com","email:george@example.com","email:tino@example.com",
 		"tel:17025550001", "tel:17025550002", "tel:17025550003", "tel:17025550004", "tel:17025550005",
 		"tel:17025550006", "tel:17025550007", "tel:17025550008", "tel:17025550009"]
   },
@@ -30,7 +30,7 @@
    "status": "stuff",
    "username": "bob",
 	"addressBook": ["email:alice@example.com", "email:carol@example.com", "email:dave@example.com",
-		"email:eve@example.com", "email:frank@example.com", "email:george@example.com", "email:xena@example.com",
+		"email:eve@example.com", "email:frank@example.com", "email:george@example.com", "email:tino@example.com",
 		"tel:17025550001", "tel:17025550002", "tel:17025550003", "tel:17025550004", "tel:17025550005",
 		"tel:17025550006", "tel:17025550007", "tel:17025550008", "tel:17025550009"]
   },
@@ -45,7 +45,7 @@
    "status": "ho ho ho",
    "username": "carol",
 	"addressBook": ["email:alice@example.com", "email:bob@example.com", "email:dave@example.com",
-		"email:eve@example.com", "email:frank@example.com", "email:george@example.com", "email:xena@example.com",
+		"email:eve@example.com", "email:frank@example.com", "email:george@example.com", "email:tino@example.com",
 		"tel:17025550001", "tel:17025550002", "tel:17025550003", "tel:17025550004", "tel:17025550005",
 		"tel:17025550006", "tel:17025550007", "tel:17025550008", "tel:17025550009"]
   },
@@ -60,7 +60,7 @@
    "status": "hiding!",
    "username": "dave",
 	"addressBook": ["email:alice@example.com", "email:bob@example.com", "email:carol@example.com",
-		"email:eve@example.com", "email:frank@example.com", "email:george@example.com", "email:xena@example.com",
+		"email:eve@example.com", "email:frank@example.com", "email:george@example.com", "email:tino@example.com",
 		"tel:17025550001", "tel:17025550002", "tel:17025550003", "tel:17025550004", "tel:17025550005",
 		"tel:17025550006", "tel:17025550007", "tel:17025550008", "tel:17025550009"]
   },
@@ -74,7 +74,7 @@
    "state": 1,
    "username": "eve",
 	"addressBook": ["email:alice@example.com", "email:bob@example.com", "email:carol@example.com",
-		"email:dave@example.com", "email:george@example.com", "email:xena@example.com",
+		"email:dave@example.com", "email:george@example.com", "email:tino@example.com",
 		"tel:17025550001", "tel:17025550002", "tel:17025550003", "tel:17025550004", "tel:17025550005",
 		"tel:17025550006", "tel:17025550007", "tel:17025550008", "tel:17025550009"]
   },
@@ -89,11 +89,24 @@
    "status": "singing!",
    "username": "frank",
 	"addressBook": ["email:bob@example.com", "email:carol@example.com", "email:dave@example.com",
-		"email:eve@example.com", "email:george@example.com", "email:xena@example.com",
+		"email:eve@example.com", "email:george@example.com", "email:tino@example.com",
 		"tel:17025550001", "tel:17025550002", "tel:17025550003", "tel:17025550004", "tel:17025550005",
 		"tel:17025550007", "tel:17025550008", "tel:17025550009"]
+  },
+  {
+   "createdAt": "-130h",
+   "email": "tino@example.com",
+   "tel": "17025550010",
+   "passhash": "(random)",
+   "private": "I'm a chatbot short and stout",
+   "public": {"fn": "Tino the Chatbot", "photo": "tino-64.jpg", "type": "jpg"},
+   "state": 1,
+   "status": "Chatting nonsensically",
+   "username": "tino",
+   "addressBook": []
   }
  ],
+
  "grouptopics": [
   {
    "createdAt": "-128h",
@@ -113,91 +126,66 @@
    "public": {"fn": "Sikrit group!", "photo": "bf-64.jpg", "type": "jpg"}
   }
  ],
- "subscriptions": [
+ "p2psubs": [
   {
    "createdAt": "-120h",
-   "topic": "bob",
-   "user": "alice"
+   "users": [{"name": "alice"}, {"name": "bob", "private": "Alice Jo"}]
   },
   {
    "createdAt": "-119h",
-   "topic": "carol",
-   "user": "alice"
+	"users": [{"name": "alice"}, {"name": "carol", "private": "Alice Joha"}]
   },
   {
    "createdAt": "-118h",
-   "topic": "dave",
-   "user": "alice"
+   "users": [{"name": "alice"}, {"name": "dave", "private": "Alice not in Wunderland"}]
   },
   {
    "createdAt": "-117h",
    "private": "apples to oranges",
-   "topic": "eve",
-   "user": "alice"
+   "users": [{"name": "alice", "private": "Apples"}, 
+             {"name": "eve", "private": "Alice is not what she seems"}]
   },
   {
    "createdAt": "-116h",
-   "private": "Frank Frank Frank a-\u003ef",
-   "topic": "frank",
-   "user": "alice"
+   "users": [{"name": "alice", "private": "Frank Frank Frank a-\u003ef"}, 
+             {"name": "frank", "private": "Johnson f-\u003ea"}]
   },
   {
-   "createdAt": "-115h",
-   "private": "Alice Jo",
-   "topic": "alice",
-   "user": "bob"
+   "createdAt": "-115.5h",
+   "users": [{"name": "alice", "private": "Python chatbot, short and stout"}, {"name": "tino"}]
   },
   {
    "createdAt": "-114h",
-   "modeHave": "N",
-   "private": "user is banned!",
-   "topic": "dave",
-   "user": "bob"
+   "users": [{"name": "bob", "private": "I'm banned by Dave!", "have": "A"}, 
+             {"name": "dave", "private": "I banned Bob.", "want": "N"}]
   },
   {
    "createdAt": "-113.5h",
-   "private": "Eve Adamsson",
-   "topic": "eve",
-   "user": "bob"
+   "users": [{"name": "bob", "private": "Eve nee Ng"}, {"name": "eve"}]
   },
   {
-   "createdAt": "-113.4h",
-   "private": "Alice Joha",
-   "topic": "alice",
-   "user": "carol"
+   "createdAt": "-113.45h",
+   "users": [{"name": "bob", "private": "Python chatbot, short and stout"}, {"name": "tino"}]
   },
   {
-   "createdAt": "-113h",
-   "private": "Alice Johnson",
-   "topic": "alice",
-   "user": "dave"
+   "createdAt": "-113.3h",
+   "users": [{"name": "carol", "private": "Python chatbot, short and stout"}, {"name": "tino"}]
   },
   {
-   "createdAt": "-112.8h",
-   "modeWant": "N",
-   "private": "user is banned!",
-   "topic": "bob",
-   "user": "dave"
+   "createdAt": "-112.7h",
+   "private": "Python chatbot short and stout",
+   "users": [{"name": "dave", "private": "Python chatbot, short and stout"}, {"name": "tino"}]
   },
   {
-   "createdAt": "-112.6h",
-   "private": "Alice Johnson",
-   "topic": "alice",
-   "user": "eve"
+   "createdAt": "-112.3h",
+   "users": [{"name": "eve", "private": "Python chatbot, short and stout"}, {"name": "tino"}]
   },
   {
-   "createdAt": "-112.4h",
-   "private": "123",
-   "topic": "bob",
-   "user": "eve"
-  },
-  {
-   "createdAt": "-112.2h",
-   "private": "Johnson f-\u003ea",
-   "topic": "alice",
-   "user": "frank"
-  },
-  {
+   "createdAt": "-112.1h",
+   "users": [{"name": "frank", "private": "Python chatbot, short and stout"}, {"name": "tino"}]
+  }
+ ],
+ "groupsubs": [{
    "createdAt": "-112h",
    "private": "My super cool group topic",
    "topic": "*ABC",
@@ -295,6 +283,8 @@
   "Most likely",
   "Outlook good",
   "Yes",
+  "No",
+  "No! No, no, no! No!!",
   "Signs point to yes",
   "Reply hazy try again",
   "Ask again later",
@@ -305,6 +295,7 @@
   "My reply is no",
   "My sources say no",
   "Outlook not so good",
-  "Very doubtful"
+  "Very doubtful",
+  "All your base are belong to us"
  ]
 }

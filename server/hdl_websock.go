@@ -2,7 +2,8 @@
  *
  *  Description :
  *
- *    Handler of websocket connections. See also lphandler.go for long polling.
+ *    Handler of websocket connections. See also hdl_longpoll.go for long polling
+ *    and hdl_grpc.go for gRPC.
  *
  *****************************************************************************/
 
@@ -37,12 +38,7 @@ func (sess *Session) readLoop() {
 	defer func() {
 		log.Println("serveWebsocket - stop")
 		sess.closeWS()
-		globals.sessionStore.Delete(sess)
-		globals.cluster.sessionGone(sess)
-		for _, sub := range sess.subs {
-			// sub.done is the same as topic.unreg
-			sub.done <- &sessionLeave{sess: sess, unsub: false}
-		}
+		sess.cleanUp()
 	}()
 
 	sess.ws.SetReadLimit(globals.maxMessageSize)
@@ -94,7 +90,7 @@ func (sess *Session) writeLoop() {
 			delete(sess.subs, topic)
 
 		case <-ticker.C:
-			if err := ws_write(sess.ws, websocket.PingMessage, []byte{}); err != nil {
+			if err := ws_write(sess.ws, websocket.PingMessage, nil); err != nil {
 				log.Println("sess.writeLoop: ping/" + err.Error())
 				return
 			}
@@ -103,9 +99,15 @@ func (sess *Session) writeLoop() {
 }
 
 // Writes a message with the given message type (mt) and payload.
-func ws_write(ws *websocket.Conn, mt int, payload []byte) error {
+func ws_write(ws *websocket.Conn, mt int, msg interface{}) error {
+	var bits []byte
+	if msg != nil {
+		bits = msg.([]byte)
+	} else {
+		bits = []byte{}
+	}
 	ws.SetWriteDeadline(time.Now().Add(writeWait))
-	return ws.WriteMessage(mt, payload)
+	return ws.WriteMessage(mt, bits)
 }
 
 // Handles websocket requests from peers

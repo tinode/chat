@@ -8,6 +8,8 @@
 
 package main
 
+//go:generate protoc --proto_path=../pbx --go_out=plugins=grpc:../pbx ../pbx/model.proto
+
 import (
 	"encoding/json"
 	_ "expvar"
@@ -27,6 +29,7 @@ import (
 	_ "github.com/tinode/chat/server/push_stdout"
 	"github.com/tinode/chat/server/store"
 	"github.com/tinode/chat/server/store/types"
+	"google.golang.org/grpc"
 )
 
 const (
@@ -57,6 +60,7 @@ var globals struct {
 	hub           *Hub
 	sessionStore  *SessionStore
 	cluster       *Cluster
+	grpcServer    *grpc.Server
 	apiKeySalt    []byte
 	indexableTags []string
 	// Add Strict-Transport-Security to headers, the value signifies age.
@@ -68,10 +72,15 @@ var globals struct {
 
 // Contentx of the configuration file
 type configType struct {
-	// Default port to listen on. Either numeric or canonical name, e.g. :80 or :https
+	// Default HTTP(S) address:port to listen on for websocket and long polling client. Either a
+	// numeric or canonical name, e.g. ":80" or ":https". Could include a host name, e.g.
+	// "localhost:80".
 	// Could be blank: if TLS is not configured, will use port 80, otherwise 443.
 	// Can be overriden from the command line, see option --listen.
 	Listen string `json:"listen"`
+	// Address:port to listen for gRPC clients. If blank gRPC support will not be initialized.
+	// Could be overriden from the command line with --grpc_listen.
+	GrpcListen string `json:"grpc_listen"`
 	// Path for mounting the directory with static files.
 	StaticMount string `json:"static_mount"`
 	// Salt used in signing API keys
@@ -82,6 +91,7 @@ type configType struct {
 	// Tags allowed in index (user discovery)
 	IndexableTags []string                   `json:"indexable_tags"`
 	ClusterConfig json.RawMessage            `json:"cluster_config"`
+	PluginConfig  json.RawMessage            `json:"plugins"`
 	StoreConfig   json.RawMessage            `json:"store_config"`
 	PushConfig    json.RawMessage            `json:"push"`
 	TlsConfig     json.RawMessage            `json:"tls"`
@@ -95,7 +105,8 @@ func main() {
 	var configfile = flag.String("config", "./tinode.conf", "Path to config file.")
 	// Path to static content.
 	var staticPath = flag.String("static_data", "", "Path to /static data for the server.")
-	var listenOn = flag.String("listen", "", "Override TCP address and port to listen on.")
+	var listenOn = flag.String("listen", "", "Override address and port to listen on for HTTP(S) clients.")
+	var listenGrpc = flag.String("grpc_listen", "", "Override address and port to listen on for gRPC clients.")
 	var tlsEnabled = flag.Bool("tls_enabled", false, "Override config value for enabling TLS")
 	var clusterSelf = flag.String("cluster_self", "", "Override the name of the current cluster node")
 	flag.Parse()
@@ -146,6 +157,8 @@ func main() {
 	globals.hub = newHub()
 	// Cluster initialization
 	clusterInit(config.ClusterConfig, clusterSelf)
+	// Intialize plugins
+	pluginsInit(config.PluginConfig)
 	// API key validation secret
 	globals.apiKeySalt = config.APIKeySalt
 	// Indexable tags for user discovery
@@ -182,13 +195,23 @@ func main() {
 	http.Handle(static_mount, http.StripPrefix(static_mount, hstsHandler(http.FileServer(http.Dir(staticContent)))))
 	log.Printf("Serving static content from '%s' at '%s'", staticContent, static_mount)
 
-	// Streaming channels
-	// Handle websocket clients. WS must come up first, so reconnecting clients won't fall back to LP
+	// Configure HTTP channels
+	// Handle websocket clients.
 	http.HandleFunc("/v0/channels", serveWebSocket)
-	// Handle long polling clients
+	// Handle long polling clients.
 	http.HandleFunc("/v0/channels/lp", serveLongPoll)
 	// Serve json-formatted 404 for all other URLs
 	http.HandleFunc("/", serve404)
+
+	// Set up gRPC server, if one is configured
+	if *listenGrpc == "" {
+		*listenGrpc = config.GrpcListen
+	}
+	if srv, err := serveGrpc(*listenGrpc); err != nil {
+		log.Fatal(err)
+	} else {
+		globals.grpcServer = srv
+	}
 
 	if err := listenAndServe(config.Listen, *tlsEnabled, string(config.TlsConfig), signalHandler()); err != nil {
 		log.Fatal(err)

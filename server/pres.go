@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"log"
 	"strings"
 
@@ -215,11 +214,6 @@ func (t *Topic) presSubsOnline(what, src string, params *PresParams,
 func (t *Topic) presSubsOnlineDirect(what string) {
 	msg := &ServerComMessage{Pres: &MsgServerPres{Topic: t.x_original, What: what}}
 
-	var packet []byte
-	if t.cat != types.TopicCat_P2P {
-		packet, _ = json.Marshal(msg)
-	}
-
 	for sess := range t.sessions {
 		// Check presence filters
 		pud, _ := t.perUser[sess.uid]
@@ -228,15 +222,12 @@ func (t *Topic) presSubsOnlineDirect(what string) {
 		}
 
 		if t.cat == types.TopicCat_P2P {
-			// For p2p topics topic name is dependent on receiver
+			// For p2p topics topic name is dependent on receiver.
+			// It's OK to change the pointer here because the message will be serialized in queueOut
+			// before being placed into channel.
 			msg.Pres.Topic = t.original(sess.uid)
-			packet, _ = json.Marshal(msg)
 		}
-
-		select {
-		case sess.send <- packet:
-		default:
-		}
+		sess.queueOut(msg)
 	}
 }
 

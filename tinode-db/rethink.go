@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"io/ioutil"
 	"log"
 	"math/rand"
@@ -50,55 +51,60 @@ func gen_rethink(reset bool, dbsource string, data *Data) {
 	for _, uu := range data.Users {
 
 		user := types.User{
-			State: int(uu["state"].(float64)),
+			State: uu.State,
 			Access: types.DefaultAccess{
 				Auth: types.ModeCP2P,
 				Anon: types.ModeNone,
 			},
-			Public: parsePublic(uu["public"], data.datapath),
+			Public: parsePublic(&uu.Public, data.datapath),
 		}
-		user.CreatedAt = getCreatedTime(uu["createdAt"])
+		user.CreatedAt = getCreatedTime(uu.CreatedAt)
 
-		if uu["email"] != nil || uu["tel"] != nil {
+		if uu.Email != "" || uu.Tel != "" {
 			user.Tags = make([]string, 0)
-			if uu["email"] != nil {
-				user.Tags = append(user.Tags, "email:"+uu["email"].(string))
+			if uu.Email != "" {
+				user.Tags = append(user.Tags, "email:"+uu.Email)
 			}
-			if uu["tel"] != nil {
-				user.Tags = append(user.Tags, "tel:"+uu["tel"].(string))
+			if uu.Tel != "" {
+				user.Tags = append(user.Tags, "tel:"+uu.Tel)
 			}
 		}
 
 		// store.Users.Create will subscribe user to !me topic but won't create a !me topic
-		if _, err := store.Users.Create(&user, uu["private"]); err != nil {
+		if _, err := store.Users.Create(&user, uu.Private); err != nil {
 			log.Fatal(err)
 		}
 
 		// Add authentication record
 		auth_handler := store.GetAuthHandler("basic")
+		passwd := uu.Password
+		if passwd == "(random)" {
+			// Generate random password
+			passwd = getPassword(8)
+		}
 		if _, authErr := auth_handler.AddRecord(user.Uid(),
-			[]byte(uu["username"].(string)+":"+uu["passhash"].(string)), 0); authErr.IsError() {
+			[]byte(uu.Username+":"+passwd), 0); authErr.IsError() {
 
 			log.Fatal(authErr.Err)
 		}
-		nameIndex[uu["username"].(string)] = user.Id
+		nameIndex[uu.Username] = user.Id
 
 		// Add address book as fnd.private
-		if uu["addressBook"] != nil {
+		if uu.AddressBook != nil && len(uu.AddressBook) > 0 {
 			if err := store.Subs.Update(user.Uid().FndName(), user.Uid(),
-				map[string]interface{}{"Private": uu["addressBook"]}); err != nil {
+				map[string]interface{}{"Private": uu.AddressBook}); err != nil {
 
 				log.Fatal(err)
 			}
 		}
-		log.Printf("Created user '%s' as %s (%d)", uu["username"].(string), user.Id, user.Uid())
+		fmt.Println("usr;" + uu.Username + ";" + user.Uid().UserId() + ";" + passwd)
 	}
 
 	log.Println("Generating group topics...")
 
 	for _, gt := range data.Grouptopics {
 		name := genTopicName()
-		nameIndex[gt["name"].(string)] = name
+		nameIndex[gt.Name] = name
 
 		topic := &types.Topic{
 			ObjHeader: types.ObjHeader{Id: name},
@@ -106,57 +112,36 @@ func gen_rethink(reset bool, dbsource string, data *Data) {
 				Auth: types.ModeCPublic,
 				Anon: types.ModeCReadOnly,
 			},
-			Public: parsePublic(gt["public"], data.datapath)}
+			Public: parsePublic(&gt.Public, data.datapath)}
 		var owner types.Uid
-		if gt["owner"] != nil {
-			owner = types.ParseUid(nameIndex[gt["owner"].(string)])
+		if gt.Owner != "" {
+			owner = types.ParseUid(nameIndex[gt.Owner])
+			if owner.IsZero() {
+				log.Fatal("Invalid owner", gt.Owner, "for topic", gt.Name)
+			}
 			topic.GiveAccess(owner, types.ModeCFull, types.ModeCFull)
 		}
-		topic.CreatedAt = getCreatedTime(gt["createdAt"])
+		topic.CreatedAt = getCreatedTime(gt.CreatedAt)
 
-		if err = store.Topics.Create(topic, owner, gt["private"]); err != nil {
+		if err = store.Topics.Create(topic, owner, gt.OwnerPrivate); err != nil {
 			log.Fatal(err)
 		}
-		log.Printf("Created topic '%s' as %s", gt["name"].(string), name)
+		fmt.Println("grp;" + gt.Name + ";" + name)
 	}
 
 	log.Println("Generating P2P subscriptions...")
 
-	p2pIndex := map[string][]map[string]interface{}{}
-
-	for _, ss := range data.Subscriptions {
-		u1 := ss["user"].(string)
-		u2 := ss["topic"].(string)
-
-		if u2[0] == '*' {
-			// skip group topics
-			continue
-		}
-
-		var pair string
-		var idx int
-		if u1 < u2 {
-			pair = u1 + ":" + u2
-			idx = 0
+	for i, ss := range data.P2psubs {
+		if ss.Users[0].Name < ss.Users[1].Name {
+			ss.pair = ss.Users[0].Name + ":" + ss.Users[1].Name
 		} else {
-			pair = u2 + ":" + u1
-			idx = 1
-		}
-		if _, ok := p2pIndex[pair]; !ok {
-			p2pIndex[pair] = make([]map[string]interface{}, 2)
+			ss.pair = ss.Users[1].Name + ":" + ss.Users[0].Name
 		}
 
-		p2pIndex[pair][idx] = ss
-	}
-
-	log.Printf("Collected p2p pairs: %d\n", len(p2pIndex))
-
-	for pair, subs := range p2pIndex {
-		uid1 := types.ParseUid(nameIndex[subs[0]["user"].(string)])
-		uid2 := types.ParseUid(nameIndex[subs[1]["user"].(string)])
+		uid1 := types.ParseUid(nameIndex[ss.Users[0].Name])
+		uid2 := types.ParseUid(nameIndex[ss.Users[1].Name])
 		topic := uid1.P2PName(uid2)
-		created0 := getCreatedTime(subs[0]["createdAt"])
-		created1 := getCreatedTime(subs[1]["createdAt"])
+		created := getCreatedTime(ss.CreatedAt)
 
 		// Assign default access mode
 		s0want := types.ModeCP2P
@@ -165,84 +150,76 @@ func gen_rethink(reset bool, dbsource string, data *Data) {
 		s1given := types.ModeCP2P
 
 		// Check of non-default access mode was provided
-		if subs[0]["modeWant"] != nil {
-			if err := s0want.UnmarshalText([]byte(subs[0]["modeWant"].(string))); err != nil {
+		if ss.Users[0].Want != "" {
+			if err := s0want.UnmarshalText([]byte(ss.Users[0].Want)); err != nil {
 				log.Fatal(err)
 			}
 		}
-		if subs[0]["modeHave"] != nil {
-			if err := s0given.UnmarshalText([]byte(subs[0]["modeHave"].(string))); err != nil {
+		if ss.Users[0].Have != "" {
+			if err := s0given.UnmarshalText([]byte(ss.Users[0].Have)); err != nil {
 				log.Fatal(err)
 			}
 		}
-		if subs[1]["modeWant"] != nil {
-			if err := s1want.UnmarshalText([]byte(subs[1]["modeWant"].(string))); err != nil {
+		if ss.Users[1].Want != "" {
+			if err := s1want.UnmarshalText([]byte(ss.Users[1].Want)); err != nil {
 				log.Fatal(err)
 			}
 		}
-		if subs[1]["modeHave"] != nil {
-			if err := s1given.UnmarshalText([]byte(subs[1]["modeHave"].(string))); err != nil {
+		if ss.Users[1].Have != "" {
+			if err := s1given.UnmarshalText([]byte(ss.Users[1].Have)); err != nil {
 				log.Fatal(err)
 			}
 		}
 
-		log.Printf("Processing %s (%s), %s, %s", pair, topic, uid1.String(), uid2.String())
 		err := store.Topics.CreateP2P(
 			&types.Subscription{
-				ObjHeader: types.ObjHeader{CreatedAt: created0},
+				ObjHeader: types.ObjHeader{CreatedAt: created},
 				User:      uid1.String(),
 				Topic:     topic,
 				ModeWant:  s0want,
 				ModeGiven: s0given,
-				Private:   subs[0]["private"]},
+				Private:   ss.Users[0].Private},
 			&types.Subscription{
-				ObjHeader: types.ObjHeader{CreatedAt: created1},
+				ObjHeader: types.ObjHeader{CreatedAt: created},
 				User:      uid2.String(),
 				Topic:     topic,
 				ModeWant:  s1want,
 				ModeGiven: s1given,
-				Private:   subs[1]["private"]})
+				Private:   ss.Users[1].Private})
 
 		if err != nil {
 			log.Fatal(err)
 		}
+
+		data.P2psubs[i].pair = ss.pair
+		nameIndex[ss.pair] = topic
+		fmt.Println("p2p;" + ss.pair + ";" + topic)
 	}
 
 	log.Println("Generating group subscriptions...")
 
-	for _, ss := range data.Subscriptions {
-
-		u1 := nameIndex[ss["user"].(string)]
-		u2 := nameIndex[ss["topic"].(string)]
+	for _, ss := range data.Groupsubs {
 
 		want := types.ModeCPublic
 		given := types.ModeCPublic
-		if ss["modeWant"] != nil {
-			if err := want.UnmarshalText([]byte(ss["modeWant"].(string))); err != nil {
+		if ss.Want != "" {
+			if err := want.UnmarshalText([]byte(ss.Want)); err != nil {
 				log.Fatal(err)
 			}
 		}
-		if ss["modeHave"] != nil {
-			if err := given.UnmarshalText([]byte(ss["modeHave"].(string))); err != nil {
+		if ss.Have != "" {
+			if err := given.UnmarshalText([]byte(ss.Have)); err != nil {
 				log.Fatal(err)
 			}
 		}
-		// Define topic name
-		name := u2
-		if !types.ParseUid(u2).IsZero() {
-			// skip p2p subscriptions
-			continue
-		}
-
-		log.Printf("Sharing '%s' with '%s'", ss["topic"].(string), ss["user"].(string))
 
 		if err = store.Subs.Create(&types.Subscription{
-			ObjHeader: types.ObjHeader{CreatedAt: getCreatedTime(ss["createdAt"])},
-			User:      u1,
-			Topic:     name,
+			ObjHeader: types.ObjHeader{CreatedAt: getCreatedTime(ss.CreatedAt)},
+			User:      nameIndex[ss.User],
+			Topic:     nameIndex[ss.Topic],
 			ModeWant:  want,
 			ModeGiven: given,
-			Private:   ss["private"]}); err != nil {
+			Private:   ss.Private}); err != nil {
 
 			log.Fatal(err)
 		}
@@ -250,31 +227,29 @@ func gen_rethink(reset bool, dbsource string, data *Data) {
 
 	log.Println("Generating messages...")
 
-	rand.Seed(time.Now().UnixNano())
 	seqIds := map[string]int{}
-	var oldFrom types.Uid
-	var oldTopic string
-	toInsert := 80
+
 	// Starting 4 days ago
 	timestamp := time.Now().UTC().Round(time.Millisecond).Add(time.Second * time.Duration(-3600*24*4))
-	subIdx := rand.Intn(len(data.Subscriptions))
+	toInsert := 96 // 96 is the maximum, otherwise messages may appear in the future
+	subIdx := rand.Intn(len(data.Groupsubs) + len(data.P2psubs)*2)
 	for i := 0; i < toInsert; i++ {
 		// At least 20% of subsequent messages should come from the same user in the same topic.
 		if rand.Intn(5) > 0 {
-			subIdx = rand.Intn(len(data.Subscriptions))
+			subIdx = rand.Intn(len(data.Groupsubs) + len(data.P2psubs)*2)
 		}
 
-		sub := data.Subscriptions[subIdx]
-		topic := nameIndex[sub["topic"].(string)]
-		from := types.ParseUid(nameIndex[sub["user"].(string)])
-		if topic == oldTopic && from == oldFrom {
-			toInsert++
-			continue
-		}
-		oldTopic, oldFrom = topic, from
-
-		if uid := types.ParseUid(topic); !uid.IsZero() {
-			topic = uid.P2PName(from)
+		var topic string
+		var from types.Uid
+		if subIdx < len(data.Groupsubs) {
+			topic = nameIndex[data.Groupsubs[subIdx].Topic]
+			from = types.ParseUid(nameIndex[data.Groupsubs[subIdx].User])
+		} else {
+			idx := (subIdx - len(data.Groupsubs)) / 2
+			usr := (subIdx - len(data.Groupsubs)) % 2
+			sub := data.P2psubs[idx]
+			topic = nameIndex[sub.pair]
+			from = types.ParseUid(nameIndex[sub.Users[usr].Name])
 		}
 
 		seqIds[topic]++
@@ -291,19 +266,19 @@ func gen_rethink(reset bool, dbsource string, data *Data) {
 		if err = store.Messages.Save(&msg); err != nil {
 			log.Fatal(err)
 		}
-		log.Printf("Message %d at %v to '%s' '%s'", msg.SeqId, msg.CreatedAt, topic, str)
+
+		// log.Printf("Msg.seq=%d at %v, topic='%s' from='%s'", msg.SeqId, msg.CreatedAt, topic, from.UserId())
 	}
 }
 
-func getCreatedTime(v interface{}) time.Time {
-	if v != nil {
-		dd, err := time.ParseDuration(v.(string))
-		if err == nil {
-			return time.Now().UTC().Round(time.Millisecond).Add(dd)
-		} else {
-			log.Fatal(err)
-		}
+// Go json cannot unmarshal Duration from a sring, thus this hask.
+func getCreatedTime(delta string) time.Time {
+	if dd, err := time.ParseDuration(delta); err != nil && delta != "" {
+		log.Fatal("Invalid duration string", delta)
+	} else {
+		return time.Now().UTC().Round(time.Millisecond).Add(dd)
 	}
+	// Useless return: Go refuses to compile witout it
 	return time.Time{}
 }
 
@@ -318,29 +293,26 @@ type Vcard struct {
 }
 
 // {"fn": "Alice Johnson", "photo": "alice-128.jpg"}
-func parsePublic(public interface{}, path string) interface{} {
+func parsePublic(public *VCardy, path string) *Vcard {
 	var photo *PhotoStruct
 	var err error
 
-	if public == nil {
+	if public.Fn == "" && public.Photo == "" {
 		return nil
 	}
 
-	vcard := public.(map[string]interface{})
-
-	if fname, ok := vcard["photo"]; ok {
-		if fname != nil {
-			photo = &PhotoStruct{Type: vcard["type"].(string)}
-			dir, _ := filepath.Split(fname.(string))
-			if dir == "" {
-				dir = path
-			}
-			photo.Data, err = ioutil.ReadFile(filepath.Join(dir, fname.(string)))
-			if err != nil {
-				log.Fatal(err)
-			}
+	fname := public.Photo
+	if fname != "" {
+		photo = &PhotoStruct{Type: public.Type}
+		dir, _ := filepath.Split(fname)
+		if dir == "" {
+			dir = path
+		}
+		photo.Data, err = ioutil.ReadFile(filepath.Join(dir, fname))
+		if err != nil {
+			log.Fatal(err)
 		}
 	}
 
-	return Vcard{Fn: vcard["fn"].(string), Photo: photo}
+	return &Vcard{Fn: public.Fn, Photo: photo}
 }

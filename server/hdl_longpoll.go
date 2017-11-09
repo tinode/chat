@@ -2,7 +2,8 @@
  *
  *  Description :
  *
- *  Handler of long polling clients (see also wshandler for web sockets)
+ *    Handler of long polling clients. See also hdl_websock.go for web sockets and
+ *    hdl_grpc.go for gRPC
  *
  *****************************************************************************/
 
@@ -26,17 +27,18 @@ func (sess *Session) writeOnce(wrt http.ResponseWriter) {
 	case msg, ok := <-sess.send:
 		if !ok {
 			log.Println("writeOnce: reading from a closed channel")
-		} else if _, err := wrt.Write(msg); err != nil {
-			log.Println("sess.writeOnce: " + err.Error())
+		} else {
+			if err := lp_write(wrt, msg); err != nil {
+				log.Println("sess.writeOnce: " + err.Error())
+			}
 		}
-
 	case <-closed:
 		log.Println("conn.writeOnce: connection closed by peer")
 
 	case msg := <-sess.stop:
 		// Make session unavailable
 		globals.sessionStore.Delete(sess)
-		wrt.Write(msg)
+		lp_write(wrt, msg)
 
 	case topic := <-sess.detach:
 		delete(sess.subs, topic)
@@ -47,6 +49,12 @@ func (sess *Session) writeOnce(wrt http.ResponseWriter) {
 			log.Println("sess.writeOnce: timout/" + err.Error())
 		}
 	}
+}
+
+func lp_write(wrt http.ResponseWriter, msg interface{}) error {
+	// This will panic if msg is not []byte. This is intentional.
+	wrt.Write(msg.([]byte))
+	return nil
 }
 
 func (sess *Session) readOnce(wrt http.ResponseWriter, req *http.Request) (error, int) {

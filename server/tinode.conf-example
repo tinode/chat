@@ -52,5 +52,19 @@
 				"icon_color": "#3949AB"
 			}
 		}
+	],
+	
+	"plugins": [
+		{
+			"enabled": false,
+			"name": "python_chat_bot",
+			"timeout": 20000,
+			"filters": {
+				"account": "C"
+			},
+			"failure_code": 0,
+			"failure_text": null,
+			"service_addr": "tcp://localhost:40051"
+		}
 	]
 }

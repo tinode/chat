@@ -10,13 +10,13 @@ package main
 
 import (
 	"container/list"
-	"encoding/json"
 	"log"
 	"net/http"
 	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/tinode/chat/pbx"
 	"github.com/tinode/chat/server/store"
 )
 
@@ -45,17 +45,21 @@ func (ss *SessionStore) Create(conn interface{}, sid string) *Session {
 		s.proto = LPOLL
 		// no need to store c for long polling, it changes with every request
 	case *ClusterNode:
-		s.proto = RPC
-		s.rpcnode = c
+		s.proto = CLUSTER
+		s.clnode = c
+		// case *GrpcNode:
+	case pbx.Node_MessageLoopServer:
+		s.proto = GRPC
+		s.grpcnode = c
 	default:
 		s.proto = NONE
 	}
 
 	if s.proto != NONE {
 		s.subs = make(map[string]*Subscription)
-		s.send = make(chan []byte, 256)  // buffered
-		s.stop = make(chan []byte, 1)    // Buffered by 1 just to make it non-blocking
-		s.detach = make(chan string, 64) // buffered
+		s.send = make(chan interface{}, 256) // buffered
+		s.stop = make(chan interface{}, 1)   // Buffered by 1 just to make it non-blocking
+		s.detach = make(chan string, 64)     // buffered
 	}
 
 	s.lastTouched = time.Now()
@@ -77,7 +81,7 @@ func (ss *SessionStore) Create(conn interface{}, sid string) *Session {
 			if sess.lastTouched.Before(expire) {
 				ss.lru.Remove(elem)
 				delete(ss.sessCache, sess.sid)
-				globals.cluster.sessionGone(sess)
+				sess.cleanUp()
 			} else {
 				break // don't need to traverse further
 			}
@@ -122,10 +126,10 @@ func (ss *SessionStore) Shutdown() {
 	ss.rw.Lock()
 	defer ss.rw.Unlock()
 
-	shutdown, _ := json.Marshal(NoErrShutdown(time.Now().UTC().Round(time.Millisecond)))
+	shutdown := NoErrShutdown(time.Now().UTC().Round(time.Millisecond))
 	for _, s := range ss.sessCache {
-		if s.send != nil && s.proto != RPC {
-			s.send <- shutdown
+		if s.send != nil && s.proto != CLUSTER {
+			s.send <- s.serialize(shutdown)
 		}
 	}
 
