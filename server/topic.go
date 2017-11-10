@@ -53,8 +53,8 @@ type Topic struct {
 
 	// Server-side ID of the last data message
 	lastId int
-	// If messages were hard-deleted, the ID of the last deleted meassage
-	clearId int
+	// ID of the deletion operation. Not an ID of the message.
+	delId int
 
 	// Last published userAgent ('me' topic only)
 	userAgent string

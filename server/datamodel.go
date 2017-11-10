@@ -23,14 +23,10 @@ func (jd *JsonDuration) UnmarshalJSON(data []byte) (err error) {
 }
 
 type MsgBrowseOpts struct {
-	// Load messages with seq id equal or greater than this
+	// Load messages/ranges with IDs equal or greater than this
 	SinceId int `json:"since,omitempty"`
-	// Load messages with UpdatedAt equal or grater than this
-	SinceTs *time.Time `json:"after,omitempty"`
-	// Load messages with seq id lower than this
+	// Load messages/ranges with IDs lower than this
 	BeforeId int `json:"before,omitempty"`
-	// Load messages with UpdatedAt lower than this
-	BeforeTs *time.Time `json:"until,omitempty"`
 	// Limit the number of messages loaded
 	Limit int `json:"limit,omitempty"`
 }
@@ -49,6 +45,8 @@ type MsgGetQuery struct {
 	Sub *MsgGetOpts `json:"sub,omitempty"`
 	// Parameters of "data" request
 	Data *MsgBrowseOpts `json:"data,omitempty"`
+	// Parameters of "del" request
+	Del *MsgBrowseOpts `json:"del,omitempty"`
 }
 
 // MsgSetSub: payload in set.sub request to update current subscription or invite another user, {sub.what} == "sub"
@@ -78,6 +76,18 @@ type MsgSetQuery struct {
 type MsgFindQuery struct {
 	// List of tags to query for. Tags of the form "email:jdoe@example.com" or "tel:18005551212"
 	Tags []string `json:"tags"`
+}
+
+// Range of ids from low to hi inclusive
+type MsgSeqRange struct {
+	Low int `json:"low,omitempty"`
+	Hi  int `json:"hi,omitempty"`
+}
+
+// Either an individual ID or a randge of deleted IDs
+type MsgTopicDel struct {
+	SeqId int          `json:"id,omitempty"`
+	Range *MsgSeqRange `json:"range,omitempty"`
 }
 
 // Client to Server (C2S) messages
@@ -140,6 +150,7 @@ const (
 	constMsgMetaDesc = 1 << iota
 	constMsgMetaSub
 	constMsgMetaData
+	constMsgMetaDel
 	constMsgDelTopic
 	constMsgDelMsg
 	constMsgDelSub
@@ -156,6 +167,8 @@ func parseMsgClientMeta(params string) int {
 			bits |= constMsgMetaSub
 		case "data":
 			bits |= constMsgMetaData
+		case "del":
+			bits |= constMsgMetaDel
 		default:
 			// ignore
 		}
@@ -222,10 +235,8 @@ type MsgClientDel struct {
 	// What to delete, either "msg" to delete messages (default) or "topic" to delete the topic or "sub"
 	// to delete a subscription to topic.
 	What string `json:"what"`
-	// Delete messages older than this seq ID (inclusive)
-	Before int `json:"before,omitempty"`
-	// List of Seq Ids to delete/mark as deleted
-	SeqList []int `json:"list,omitempty"`
+	// Delete messages with these IDs (either one by one or a set of ranges)
+	DelSeq []MsgTopicDel `json:"delseq,omitempty"`
 	// User ID of the subscription to delete
 	User string `json:"user,omitempty"`
 	// Request to hard-delete messages for all users, if such option is available.
@@ -417,8 +428,12 @@ type MsgServerMeta struct {
 
 	Timestamp *time.Time `json:"ts,omitempty"`
 
-	Desc *MsgTopicDesc `json:"desc,omitempty"` // Topic description
-	Sub  []MsgTopicSub `json:"sub,omitempty"`  // Subscriptions as an array of objects
+	// Topic description
+	Desc *MsgTopicDesc `json:"desc,omitempty"`
+	// Subscriptions as an array of objects
+	Sub []MsgTopicSub `json:"sub,omitempty"`
+	// List of IDs of deleted messages
+	Del []MsgTopicDel `json:"del,omitempty"`
 }
 
 // MsgServerInfo is the server-side copy of MsgClientNote with From added

@@ -616,8 +616,8 @@ type Topic struct {
 
 	// Server-issued sequential ID
 	SeqId int
-	// If messages were deleted, id of the last deleted message
-	ClearId int
+	// If messages were deleted, sequential id of the last operation to delete them
+	DelId int
 
 	Public interface{}
 
