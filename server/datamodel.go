@@ -85,7 +85,7 @@ type MsgSeqRange struct {
 }
 
 // Either an individual ID or a randge of deleted IDs
-type MsgTopicDel struct {
+type MsgDelQuery struct {
 	SeqId int          `json:"id,omitempty"`
 	Range *MsgSeqRange `json:"range,omitempty"`
 }
@@ -236,7 +236,7 @@ type MsgClientDel struct {
 	// to delete a subscription to topic.
 	What string `json:"what"`
 	// Delete messages with these IDs (either one by one or a set of ranges)
-	DelSeq []MsgTopicDel `json:"delseq,omitempty"`
+	DelSeq []MsgDelQuery `json:"delseq,omitempty"`
 	// User ID of the subscription to delete
 	User string `json:"user,omitempty"`
 	// Request to hard-delete messages for all users, if such option is available.
@@ -434,7 +434,7 @@ type MsgServerMeta struct {
 	// Subscriptions as an array of objects
 	Sub []MsgTopicSub `json:"sub,omitempty"`
 	// List of IDs of deleted messages
-	Del []MsgTopicDel `json:"del,omitempty"`
+	Del []MsgDelQuery `json:"del,omitempty"`
 }
 
 // MsgServerInfo is the server-side copy of MsgClientNote with From added
