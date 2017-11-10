@@ -5,7 +5,7 @@ import base64
 from concurrent import futures
 import json
 import os
-from Queue import Queue
+import Queue
 import random
 import signal
 import sys
@@ -78,17 +78,26 @@ class Plugin(pbx.PluginServicer):
         return pb.Unused()
 
 
-queue_out = Queue()
+queue_out = Queue.Queue()
 
 def client_generate():
     while True:
         msg = queue_out.get()
         if msg == None:
             return
+        print "out:", msg
         yield msg
 
 def client_post(msg):
     queue_out.put(msg)
+
+def client_reset():
+    # Drain the queue
+    try:
+        while queue_out.get(False) != None:
+            pass
+    except Queue.Empty:
+        pass
 
 def hello():
     tid = next_id()
@@ -151,6 +160,7 @@ def client_message_loop(stream):
     try:
         # Read server responses
         for msg in stream:
+            # print "in:", msg
             if msg.HasField("ctrl"):
                 # Run code on command completion
                 exec_future(msg.ctrl.id, msg.ctrl.code, msg.ctrl.params)
@@ -158,13 +168,14 @@ def client_message_loop(stream):
 
             elif msg.HasField("data"):
                 # Respond to message.
-                print "\nFrom: " + msg.data.from_user_id + ":\n"
+                # print "message from:", msg.data.from_user_id
                 # Mark received message as read
                 client_post(note_read(msg.data.topic, msg.data.seq_id))
                 # Respond with a witty quote
                 client_post(publish(msg.data.topic, next_quote()))
 
             elif msg.HasField("pres"):
+                # print "presence:", msg.pres.topic, msg.pres.what
                 # Wait for peers to appear online and subscribe to their topics
                 if msg.pres.topic == 'me':
                     if (msg.pres.what == pb.ServerPres.ON or msg.pres.what == pb.ServerPres.MSG) \
@@ -178,7 +189,7 @@ def client_message_loop(stream):
                 pass
 
     except grpc._channel._Rendezvous as err:
-        print err
+        print "Disconnected:", err
 
 def read_auth_cookie(cookie_file_name):
     """Read authentication token from a file"""
@@ -250,6 +261,7 @@ def run(args):
 
         # Start Plugin server
         server = init_server(args.listen)
+
         # Initialize and launch client
         client = init_client(args.host, schema, secret, args.login_cookie)
 
@@ -264,8 +276,13 @@ def run(args):
         signal.signal(signal.SIGINT, exit_gracefully)
         signal.signal(signal.SIGTERM, exit_gracefully)
 
-        # Run blocking message loop
-        client_message_loop(client)
+        # Run blocking message loop in a cycle to handle
+        # server being down.
+        while True:
+            client_message_loop(client)
+            time.sleep(3)
+            client_reset()
+            client = init_client(args.host, schema, secret, args.login_cookie)
 
         # Close connections gracefully before exiting
         server.stop(None)
