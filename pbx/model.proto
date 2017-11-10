@@ -244,7 +244,7 @@ message TopicDesc {
 	int32 seq_id = 5;
 	int32 read_id = 6;
 	int32 recv_id = 7;
-	int32 clear_id = 8;
+	int32 del_id = 8;
 	bytes public = 9;
 	bytes private = 10;
 }
@@ -274,7 +274,7 @@ message TopicSub {
 	// ID of the last {data} message in a topic
 	int32 seq_id = 11;
 	// Messages are deleted up to this ID
-	int32 clear_id = 12;
+	int32 del_id = 12;
 
 	// P2P topics only:
 

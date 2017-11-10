@@ -483,7 +483,7 @@ func (a *RethinkDbAdapter) TopicsForUser(uid t.Uid, keepDeleted bool) ([]t.Subsc
 			sub = join[top.Id]
 			sub.ObjHeader.MergeTimes(&top.ObjHeader)
 			sub.SetSeqId(top.SeqId)
-			sub.SetHardClearId(top.ClearId)
+			sub.SetDelId(top.DelId)
 			if t.GetTopicCat(sub.Topic) == t.TopicCat_Grp {
 				// all done with a grp topic
 				sub.SetPublic(top.Public)

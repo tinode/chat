@@ -112,8 +112,8 @@ type perUserData struct {
 	// Last t.lastId reported by user through {pres} as received or read
 	recvId int
 	readId int
-	// Greatest ID of a soft-deleted message
-	clearId int
+	// ID of the latest Delete operation
+	delId int
 
 	private interface{}
 
@@ -1125,7 +1125,7 @@ func (t *Topic) replyGetDesc(sess *Session, id, tempName string, opts *MsgGetOpt
 			desc.SeqId = t.lastId
 			// Make sure reported values are sane:
 			// t.clearId <= pud.clearId <= t.readId <= t.recvId <= t.lastId
-			desc.ClearId = max(pud.clearId, t.clearId)
+			desc.DelId = max(pud.delId, t.delId)
 			desc.ReadSeqId = max(pud.readId, desc.ClearId)
 			desc.RecvSeqId = max(pud.recvId, pud.readId)
 		}

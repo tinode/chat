@@ -248,8 +248,8 @@ type User struct {
 	// Values for 'me' topic:
 	// Server-issued sequence ID for messages in 'me'
 	SeqId int
-	// If messages were hard-deleted in the topic, id of the last deleted message
-	ClearId int
+	// If messages were deleted in the topic, id of the last delete operation
+	DelId int
 	// Last time when the user joined 'me' topic, by User Agent
 	LastSeen time.Time
 	// User agent provided when accessing the topic last time
@@ -498,8 +498,8 @@ type Subscription struct {
 
 	// Values persisted through subscription soft-deletion
 
-	// User soft-deleted messages equal or lower to this seq ID
-	ClearId int
+	// ID of the latest Soft-delete operation
+	DelId int
 	// Last SeqId reported by user as received by at least one of his sessions
 	RecvSeqId int
 	// Last SeqID reported read by the user
@@ -519,8 +519,8 @@ type Subscription struct {
 	public interface{}
 	// deserialized SeqID from user or topic
 	seqId int
-	// Id of the last hard-deleted message deserialized from user or topic
-	hardClearId int
+	// Id of the last delete operation deserialized from user or topic
+	delId int
 	// timestamp when the user was last online
 	lastSeen time.Time
 	// user agent string of the last online access
@@ -557,12 +557,12 @@ func (s *Subscription) SetSeqId(id int) {
 	s.seqId = id
 }
 
-func (s *Subscription) GetHardClearId() int {
-	return s.hardClearId
+func (s *Subscription) GetDelId() int {
+	return s.delId
 }
 
-func (s *Subscription) SetHardClearId(id int) {
-	s.hardClearId = id
+func (s *Subscription) SetDelId(id int) {
+	s.delId = id
 }
 
 func (s *Subscription) GetLastSeen() time.Time {

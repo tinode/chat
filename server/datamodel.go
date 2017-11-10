@@ -301,11 +301,12 @@ type MsgTopicDesc struct {
 	// Actual access mode
 	Acs *MsgAccessMode `json:"acs,omitempty"`
 	// Max message ID
-	SeqId     int         `json:"seq,omitempty"`
-	ReadSeqId int         `json:"read,omitempty"`
-	RecvSeqId int         `json:"recv,omitempty"`
-	ClearId   int         `json:"clear,omitempty"`
-	Public    interface{} `json:"public,omitempty"`
+	SeqId     int `json:"seq,omitempty"`
+	ReadSeqId int `json:"read,omitempty"`
+	RecvSeqId int `json:"recv,omitempty"`
+	// Id if the last delete operation
+	DelId  int         `json:"del,omitempty"`
+	Public interface{} `json:"public,omitempty"`
 	// Per-subscription private data
 	Private interface{} `json:"private,omitempty"`
 }
@@ -346,8 +347,8 @@ type MsgTopicSub struct {
 	Topic string `json:"topic,omitempty"`
 	// ID of the last {data} message in a topic
 	SeqId int `json:"seq,omitempty"`
-	// Messages are deleted up to this ID
-	ClearId int `json:"clear,omitempty"`
+	// Id of the latest Delete operation
+	DelId int `json:"clear,omitempty"`
 
 	// P2P topics only:
 
