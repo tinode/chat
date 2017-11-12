@@ -67,16 +67,17 @@ next_quote.idx = 0
 class Plugin(pbx.PluginServicer):
     def Account(self, acc_event, context):
         action = None
-        if acc_event.action == pb.CREATED:
+        if acc_event.action == pb.Crud.CREATE:
             action = "created"
-        elif acc_event.action == pb.UPDATED:
+        elif acc_event.action == pb.Crud.UPDATE:
             action = "updated"
-        else:
+        elif acc_event.action == pb.Crud.DELETE:
             action = "deleted"
+        else:
+            action = "unknown"
 
-        print "New acount", action, ":", acc_event.user_id, acc_event.public
+        print "Account", action, ":", acc_event.user_id, acc_event.public
         return pb.Unused()
-
 
 queue_out = Queue.Queue()
 
@@ -85,7 +86,7 @@ def client_generate():
         msg = queue_out.get()
         if msg == None:
             return
-        print "out:", msg
+        # print "out:", msg
         yield msg
 
 def client_post(msg):
@@ -164,7 +165,7 @@ def client_message_loop(stream):
             if msg.HasField("ctrl"):
                 # Run code on command completion
                 exec_future(msg.ctrl.id, msg.ctrl.code, msg.ctrl.params)
-                print str(msg.ctrl.code) + " " + msg.ctrl.text
+                # print str(msg.ctrl.code) + " " + msg.ctrl.text
 
             elif msg.HasField("data"):
                 # Respond to message.
