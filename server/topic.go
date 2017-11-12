@@ -1124,9 +1124,9 @@ func (t *Topic) replyGetDesc(sess *Session, id, tempName string, opts *MsgGetOpt
 		if (pud.modeGiven & pud.modeWant).IsReader() {
 			desc.SeqId = t.lastId
 			// Make sure reported values are sane:
-			// t.clearId <= pud.clearId <= t.readId <= t.recvId <= t.lastId
+			// t.clearId <= pud.clearId; t.readId <= t.recvId <= t.lastId
 			desc.DelId = max(pud.delId, t.delId)
-			desc.ReadSeqId = max(pud.readId, desc.ClearId)
+			desc.ReadSeqId = pud.readId
 			desc.RecvSeqId = max(pud.recvId, pud.readId)
 		}
 
@@ -1436,7 +1436,7 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 					if isReader {
 						mts.SeqId = sub.GetSeqId()
 						// Report whatever is the greatest - soft - or hard- deleted id
-						clearId = max(sub.GetHardClearId(), sub.ClearId)
+						clearId = max(sub.GetDelId(), sub.ClearId)
 						mts.ClearId = clearId
 					}
 
@@ -1614,30 +1614,39 @@ func (t *Topic) replyDelMsg(sess *Session, del *MsgClientDel) error {
 
 	var err error
 	var filteredList []int
-	if del.Before > t.lastId || del.Before < 0 {
-		err = errors.New("del.msg: invalid parameter 'before'")
-	} else if del.Before == 0 {
-		if del.SeqList == nil || len(del.SeqList) == 0 {
-			err = errors.New("del.msg without parameters")
-		} else {
-			for _, seq := range del.SeqList {
-				if seq > t.lastId && seq < 0 {
-					err = errors.New("del.msg: invalid entry in list")
-					break
-				}
-				if seq == 0 {
-					continue
-				}
+	if del.DelSeq == nil || len(del.DelSeq) == 0 {
+		err = error.New("del.msg: not IDs to delete")
+	} else {
+		remains := MAX_SEQ_COUNT
+		for _, dq := range del.DelSeq {
+			if dq.SeqId > t.lastId || dq.SeqId < 0 ||
+				dq.LowId > t.lastId || dq.LowId < 0 ||
+				dq.HiId > t.lastId || dq.HiId < 0 ||
+				dq.HiId < dq.LowId ||
+				(dq.SeqId > 0 && (dq.HiId > 0 || dq.LowId > 0)) ||
+				(dq.HiId != 0 || dq.HiId == dq.LowId) {
+				err = errors.New("del.msg: invalid entry in list")
+				break
+			}
 
-				filteredList = append(filteredList, seq)
-				if len(filteredList) == MAX_SEQ_COUNT {
-					break
+			if dq.SeqId != 0 && remains > 0 {
+				filteredList = append(filteredList, dq.SeqId)
+				remains--
+			} else {
+				// Expand the range into individial IDs
+				for i := dq.LowId; i <= dq.HiId && remains > 0; i++ {
+					filteredList = append(filteredList, i)
+					remains--
 				}
 			}
 
-			if len(filteredList) == 0 {
-				err = errors.New("del.msg: no valid entries in list")
+			if remains <= 0 {
+				break
 			}
+		}
+
+		if len(filteredList) == 0 {
+			err = errors.New("del.msg: no valid entries in list")
 		}
 	}
 

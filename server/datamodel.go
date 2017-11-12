@@ -86,8 +86,9 @@ type MsgSeqRange struct {
 
 // Either an individual ID or a randge of deleted IDs
 type MsgDelQuery struct {
-	SeqId int          `json:"id,omitempty"`
-	Range *MsgSeqRange `json:"range,omitempty"`
+	SeqId int `json:"seq,omitempty"`
+	LowId int `json:"low,omitempty"`
+	HiId  int `json:"hi,omitempty"`
 }
 
 // Client to Server (C2S) messages

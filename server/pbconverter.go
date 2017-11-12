@@ -701,8 +701,7 @@ func pb_DelQuery_serialize(in []MsgDelQuery) []*pbx.DelQuery {
 			out[i].DelId = &pbx.DelQuery_SeqId{SeqId: int32(dq.SeqId)}
 		} else {
 			out[i].DelId = &pbx.DelQuery_Range{
-				Range: &pbx.SeqRange{
-					Low: int32(dq.Range.Low), Hi: int32(dq.Range.Hi)}}
+				Range: &pbx.SeqRange{Low: int32(dq.LowId), Hi: int32(dq.HiId)}}
 		}
 	}
 
@@ -717,10 +716,8 @@ func pb_DelQuery_deserialize(in []*pbx.DelQuery) []MsgDelQuery {
 	out := make([]MsgDelQuery, len(in))
 	for i, dq := range in {
 		if r := dq.GetRange(); r != nil {
-			out[i].Range = &MsgSeqRange{
-				Low: int(r.GetLow()),
-				Hi:  int(r.GetHi()),
-			}
+			out[i].LowId = int(r.GetLow())
+			out[i].HiId = int(r.GetHi())
 		} else {
 			out[i].SeqId = int(dq.GetSeqId())
 		}
