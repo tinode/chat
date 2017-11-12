@@ -12,6 +12,7 @@ import (
 	//	"encoding/json"
 	"errors"
 	"log"
+	"sort"
 	"sync/atomic"
 	"time"
 
@@ -24,7 +25,7 @@ import (
 const UA_TIMER_DELAY = time.Second * 5
 
 // Maximum number of SeqIds to pass in a list
-const MAX_SEQ_COUNT = 128
+const MAX_SEQ_COUNT = 256
 
 // Topic: an isolated communication channel
 type Topic struct {
@@ -1615,7 +1616,7 @@ func (t *Topic) replyDelMsg(sess *Session, del *MsgClientDel) error {
 	var err error
 	var filteredList []int
 	if del.DelSeq == nil || len(del.DelSeq) == 0 {
-		err = error.New("del.msg: not IDs to delete")
+		err = errors.New("del.msg: not IDs to delete")
 	} else {
 		remains := MAX_SEQ_COUNT
 		for _, dq := range del.DelSeq {
@@ -1645,6 +1646,31 @@ func (t *Topic) replyDelMsg(sess *Session, del *MsgClientDel) error {
 			}
 		}
 
+		sort.Ints(filteredList)
+		ll := len(filteredList)
+		if ll > 1 {
+			p := 0
+			// Remove zeros
+			for i := 0; i < ll && filteredList[i] == 0; i++ {
+				p++
+			}
+			if p > 0 {
+				filteredList = filteredList[p:]
+				p = 0
+			}
+			// Remove duplicates
+			for i := 1; i < ll; i++ {
+				if filteredList[p] == filteredList[i] {
+					continue
+				}
+				p++
+				if p < i {
+					filteredList[p] = filteredList[i]
+				}
+			}
+			filteredList = filteredList[:p+1]
+		}
+
 		if len(filteredList) == 0 {
 			err = errors.New("del.msg: no valid entries in list")
 		}
@@ -1669,53 +1695,51 @@ func (t *Topic) replyDelMsg(sess *Session, del *MsgClientDel) error {
 		del.Hard = false
 	}
 
-	if del.Before > 0 {
-		// Make sure user has not deleted the messages already
-		if (del.Before <= t.clearId) || (!del.Hard && del.Before <= pud.clearId) {
-			sess.queueOut(InfoNoAction(del.Id, t.original(sess.uid), now))
-			return nil
-		}
-
-		err = store.Messages.Delete(t.name, sess.uid, del.Hard, del.Before)
-	} else {
-		// del.List != nil
-
-		err = store.Messages.DeleteList(t.name, sess.uid, del.Hard, filteredList)
-	}
-
+	err = store.Messages.DeleteList(t.name, t.delId+1, sess.uid, del.Hard, filteredList)
 	if err != nil {
 		sess.queueOut(ErrUnknown(del.Id, t.original(sess.uid), now))
 		return err
 	}
 
-	var params *PresParams
-	if del.Before > 0 {
-		if del.Hard {
-			t.clearId = del.Before
-			params = &PresParams{seqId: del.Before, actor: sess.uid.UserId()}
+	// Increment Delete transaction ID
+	t.delId++
+
+	// Convert a list of IDs into IDs and ranges
+	ranges := []MsgDelQuery{{SeqId: filteredList[0]}}
+	for r, i := 0, 1; i < len(filteredList); i++ {
+		if ranges[r].SeqId+1 == filteredList[i] {
+			// Convert single ID into a range of IDs
+			ranges[r].LowId = ranges[r].SeqId
+			ranges[r].SeqId = 0
+			ranges[r].HiId = filteredList[i]
+		} else if ranges[r].HiId+1 == filteredList[i] {
+			// Extend current range
+			ranges[r].HiId++
 		} else {
-			pud.clearId = del.Before
-			if pud.readId < pud.clearId {
-				pud.readId = pud.clearId
-			}
-			if pud.recvId < pud.readId {
-				pud.recvId = pud.readId
-			}
-			t.perUser[sess.uid] = pud
+			// Start new range
+			r++
+			ranges = append(ranges, MsgDelQuery{SeqId: filteredList[i]})
 		}
-	} else if del.Hard {
-		params = &PresParams{seqList: filteredList, actor: sess.uid.UserId()}
 	}
 
 	if del.Hard {
 		log.Println("hard delete")
+		for uid, pud := range t.perUser {
+			pud.delId = t.delId
+			t.perUser[uid] = pud
+		}
 		// Broadcast the change to all, online and offline, exclude the session making the change.
+		params := &PresParams{delSeq: ranges, actor: sess.uid.UserId()}
 		t.presSubsOnline("del", "", params, types.ModeRead, sess.sid, "")
 		t.presSubsOffline("del", params, types.ModeRead, sess.sid, true)
 	} else {
 		log.Println("soft delete")
+		pud := t.perUser[sess.uid]
+		pud.delId = t.delId
+		t.perUser[sess.uid] = pud
+
 		// Notify user's other sessions
-		t.presPubMessageDelete(sess.uid, filteredList, del.Before, sess.sid)
+		t.presPubMessageDelete(sess.uid, ranges, sess.sid)
 	}
 
 	sess.queueOut(NoErr(del.Id, t.original(sess.uid), now))
@@ -2014,7 +2038,7 @@ func getDefaultAccess(cat types.TopicCat, auth bool) types.AccessMode {
 }
 
 // Takes get.data parameters and ClearID, returns database query parameters
-func msgOpts2storeOpts(req *MsgBrowseOpts, clearId int) *types.BrowseOpt {
+func msgOpts2storeOpts(req *MsgBrowseOpts, delId int) *types.BrowseOpt {
 	var opts *types.BrowseOpt
 	if req != nil || clearId > 0 {
 		opts = &types.BrowseOpt{}
@@ -2023,10 +2047,6 @@ func msgOpts2storeOpts(req *MsgBrowseOpts, clearId int) *types.BrowseOpt {
 			if req.SinceId != 0 || req.BeforeId != 0 {
 				opts.Since = req.SinceId
 				opts.Before = req.BeforeId
-			} else if req.SinceTs != nil || req.BeforeTs != nil {
-				opts.ByTime = true
-				opts.After = req.SinceTs
-				opts.Until = req.BeforeTs
 			}
 		}
 		if clearId > opts.Since {

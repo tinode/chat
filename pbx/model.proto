@@ -330,7 +330,7 @@ message ServerPres {
 	What what = 3;
 	string user_agent = 4;
 	int32 seq_id = 5;
-	repeated int32 seq_list = 6;
+	repeated DelQuery del_seq = 6;
 	string target_user_id = 7;
 	string actor_user_id = 8;
 	AccessMode acs = 9;

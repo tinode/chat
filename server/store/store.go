@@ -289,7 +289,7 @@ func (TopicsObjMapper) Delete(topic string) error {
 	if err := adaptr.SubsDelForTopic(topic); err != nil {
 		return err
 	}
-	if err := adaptr.MessageDeleteAll(topic, -1); err != nil {
+	if err := adaptr.MessageDeleteList(topic, types.ZeroUid, true, nil); err != nil {
 		return err
 	}
 
@@ -354,8 +354,9 @@ func (MessagesObjMapper) Save(msg *types.Message) error {
 	return adaptr.MessageSave(msg)
 }
 
-// Delete messages. Hard-delete if hard == tru, otherwise a soft-delete
-func (MessagesObjMapper) Delete(topic string, forUser types.Uid, hard bool, cleared int) (err error) {
+func (MessagesObjMapper) DeleteList(topic string, delId int, forUser types.Uid, hard bool, list []int) (err error) {
+	err = adaptr.MessageDeleteList(topic, forUser, hard, list)
+
 	if hard {
 		err = adaptr.MessageDeleteAll(topic, cleared)
 		if err != nil {
@@ -370,13 +371,6 @@ func (MessagesObjMapper) Delete(topic string, forUser types.Uid, hard bool, clea
 		update := map[string]interface{}{"ClearId": cleared}
 		err = adaptr.SubsUpdate(topic, forUser, update)
 	}
-
-	return
-}
-
-func (MessagesObjMapper) DeleteList(topic string, forUser types.Uid, hard bool, list []int) (err error) {
-	err = adaptr.MessageDeleteList(topic, forUser, hard, list)
-
 	return err
 }
 

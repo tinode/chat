@@ -78,12 +78,6 @@ type MsgFindQuery struct {
 	Tags []string `json:"tags"`
 }
 
-// Range of ids from low to hi inclusive
-type MsgSeqRange struct {
-	Low int `json:"low,omitempty"`
-	Hi  int `json:"hi,omitempty"`
-}
-
 // Either an individual ID or a randge of deleted IDs
 type MsgDelQuery struct {
 	SeqId int `json:"seq,omitempty"`
@@ -404,7 +398,7 @@ type MsgServerPres struct {
 	What      string         `json:"what"`
 	UserAgent string         `json:"ua,omitempty"`
 	SeqId     int            `json:"seq,omitempty"`
-	SeqList   []int          `json:"list,omitempty"`
+	DelSeq    []MsgDelQuery  `json:"delseq,omitempty"`
 	AcsTarget string         `json:"tgt,omitempty"`
 	AcsActor  string         `json:"act,omitempty"`
 	Acs       *MsgAccessMode `json:"acs,omitempty"`

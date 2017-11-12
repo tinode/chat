@@ -11,7 +11,7 @@ import (
 type PresParams struct {
 	userAgent string
 	seqId     int
-	seqList   []int
+	delSeq    []MsgDelQuery
 
 	// Uid who performed the action
 	actor string
@@ -202,7 +202,7 @@ func (t *Topic) presSubsOnline(what, src string, params *PresParams,
 	globals.hub.route <- &ServerComMessage{
 		Pres: &MsgServerPres{Topic: t.x_original, What: what, Src: src,
 			Acs: params.packAcs(), AcsActor: actor, AcsTarget: target,
-			SeqId: params.seqId, SeqList: params.seqList, filter: int(filter), singleUser: singleUser},
+			SeqId: params.seqId, DelSeq: params.delSeq, filter: int(filter), singleUser: singleUser},
 		rcptto: t.name, skipSid: skipSid}
 
 	// log.Printf("Pres K.2, L.3, W.2: topic'%s' what='%s', who='%s', acs='w:%s/g:%s'", t.name, what,
@@ -268,7 +268,7 @@ func (t *Topic) presSubsOffline(what string, params *PresParams, filter types.Ac
 		globals.hub.route <- &ServerComMessage{
 			Pres: &MsgServerPres{Topic: "me", What: what, Src: t.original(uid),
 				Acs: params.packAcs(), AcsActor: actor, AcsTarget: target,
-				SeqId: params.seqId, SeqList: params.seqList,
+				SeqId: params.seqId, DelSeq: params.delSeq,
 				skipTopic: skipTopic},
 			rcptto: user, skipSid: skipSid}
 	}
@@ -305,7 +305,7 @@ func presSubsOfflineOffline(topic string, cat types.TopicCat, subs []types.Subsc
 		globals.hub.route <- &ServerComMessage{
 			Pres: &MsgServerPres{Topic: "me", What: what, Src: original,
 				Acs: params.packAcs(), AcsActor: actor, AcsTarget: target,
-				SeqId: params.seqId, SeqList: params.seqList},
+				SeqId: params.seqId, DelSeq: params.delSeq},
 			rcptto: user, skipSid: skipSid}
 	}
 }
@@ -336,7 +336,7 @@ func (t *Topic) presSingleUserOffline(uid types.Uid, what string, params *PresPa
 
 		globals.hub.route <- &ServerComMessage{
 			Pres: &MsgServerPres{Topic: "me", What: what,
-				Src: t.original(uid), SeqId: params.seqId, SeqList: params.seqList,
+				Src: t.original(uid), SeqId: params.seqId, DelSeq: params.delSeq,
 				Acs: params.packAcs(), AcsActor: actor, AcsTarget: target, UserAgent: params.userAgent,
 				wantReply: strings.HasPrefix(what, "?unkn"), skipTopic: skipTopic},
 			rcptto: user, skipSid: skipSid}
@@ -362,7 +362,7 @@ func presSingleUserOfflineOffline(uid types.Uid, original string, what string,
 
 	globals.hub.route <- &ServerComMessage{
 		Pres: &MsgServerPres{Topic: "me", What: what,
-			Src: original, SeqId: params.seqId, SeqList: params.seqList,
+			Src: original, SeqId: params.seqId, DelSeq: params.delSeq,
 			Acs: params.packAcs(), AcsActor: actor, AcsTarget: target},
 		rcptto: uid.UserId(), skipSid: skipSid}
 }
@@ -391,15 +391,15 @@ func (t *Topic) presPubMessageCount(uid types.Uid, recv, read int, skip string) 
 
 // Let other sessions of a given user know that what messages are now deleted
 // Cases V.1, V.2
-func (t *Topic) presPubMessageDelete(uid types.Uid, list []int, clear int, skip string) {
-	if clear > 0 || (len(list) > 0 && list[0] > 0) {
+func (t *Topic) presPubMessageDelete(uid types.Uid, list []MsgDelQuery, skip string) {
+	if len(list) > 0 {
 		// This check is only needed for V.1, but it does not hurt V.2. Let's do it here for both.
 		pud, _ := t.perUser[uid]
 		if !(pud.modeGiven & pud.modeWant).IsPresencer() {
 			return
 		}
 
-		params := &PresParams{seqId: clear, seqList: list}
+		params := &PresParams{delSeq: list}
 
 		// Case V.2
 		user := uid.UserId()

@@ -69,7 +69,7 @@ func pb_serv_serialize(msg *ServerComMessage) *pbx.ServerMsg {
 			What:         what,
 			UserAgent:    msg.Pres.UserAgent,
 			SeqId:        int32(msg.Pres.SeqId),
-			SeqList:      intSliceToInt32(msg.Pres.SeqList),
+			DelSeq:       pb_DelQuery_serialize(msg.Pres.DelSeq),
 			TargetUserId: msg.Pres.AcsTarget,
 			ActorUserId:  msg.Pres.AcsActor,
 			Acs:          pb_AccessMode_serialize(msg.Pres.Acs)}}
@@ -143,7 +143,7 @@ func pb_serv_deserialize(pkt *pbx.ServerMsg) *ServerComMessage {
 			What:      what,
 			UserAgent: pres.GetUserAgent(),
 			SeqId:     int(pres.GetSeqId()),
-			SeqList:   int32SliceToInt(pres.GetSeqList()),
+			DelSeq:    pb_DelQuery_deserialize(pres.GetDelSeq()),
 			AcsTarget: pres.GetTargetUserId(),
 			AcsActor:  pres.GetActorUserId(),
 			Acs:       pb_AccessMode_deserialize(pres.GetAcs()),
