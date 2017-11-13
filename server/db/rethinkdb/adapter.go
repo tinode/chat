@@ -163,10 +163,14 @@ func (a *RethinkDbAdapter) CreateDb(reset bool) error {
 		}).RunWrite(a.conn); err != nil {
 		return err
 	}
-	if _, err := rdb.DB("tinode").Table("messages").IndexCreateFunc("Topic_UpdatedAt",
+	// Compound multi-index of deletions: each message gets multiple compound index entries like
+	// [[Topic, User1, DelId1], [Topic, User2, DelId2],...]
+	if _, err := rdb.DB("tinode").Table("messages").IndexCreateFunc("Topic_DeletedFor",
 		func(row rdb.Term) interface{} {
-			return []interface{}{row.Field("Topic"), row.Field("UpdatedAt")}
-		}).RunWrite(a.conn); err != nil {
+			return row.Field("DeletedFor").Map(func(df rdb.Term) interface{} {
+				return []interface{}{row.Field("Topic"), df.Field("User"), df.Field("DeletedFor")}
+			})
+		}, rdb.IndexCreateOpts{Multi: true}).RunWrite(a.conn); err != nil {
 		return err
 	}
 
