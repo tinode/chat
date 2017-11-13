@@ -1562,7 +1562,7 @@ func (t *Topic) replyGetData(sess *Session, id string, req *MsgBrowseOpts) error
 		return nil
 	}
 
-	opts := msgOpts2storeOpts(req, t.perUser[sess.uid].clearId)
+	opts := msgOpts2storeOpts(req)
 
 	messages, err := store.Messages.GetAll(t.name, sess.uid, opts)
 	if err != nil {
@@ -2036,22 +2036,14 @@ func getDefaultAccess(cat types.TopicCat, auth bool) types.AccessMode {
 	}
 }
 
-// Takes get.data parameters and ClearID, returns database query parameters
-func msgOpts2storeOpts(req *MsgBrowseOpts, delId int) *types.BrowseOpt {
+// Takes get.data or get.del parameters, returns database query parameters
+func msgOpts2storeOpts(req *MsgBrowseOpts) *types.BrowseOpt {
 	var opts *types.BrowseOpt
-	if req != nil || clearId > 0 {
-		opts = &types.BrowseOpt{}
-		if req != nil {
-			opts.Limit = req.Limit
-			if req.SinceId != 0 || req.BeforeId != 0 {
-				opts.Since = req.SinceId
-				opts.Before = req.BeforeId
-			}
-		}
-		if clearId > opts.Since {
-			// ClearId deletes mesages upto and including the value itself. Since shows message starting
-			// with the value itself, thus must add 1 to make sure the last deleted message is not shown.
-			opts.Since = clearId + 1
+	if req != nil {
+		opts = &types.BrowseOpt{
+			Limit:  req.Limit,
+			Since:  req.SinceId,
+			Before: req.BeforeId,
 		}
 	}
 	return opts
