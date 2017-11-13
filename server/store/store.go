@@ -335,17 +335,6 @@ var Messages MessagesObjMapper
 func (MessagesObjMapper) Save(msg *types.Message) error {
 	msg.InitTimes()
 
-	// Need a transaction here, RethinkDB does not support transactions
-
-	// An invite (message to 'me') may have a zero SeqId if 'me' was inactive at the time of generating the invite
-	if msg.SeqId == 0 {
-		if user, err := adaptr.UserGet(types.ParseUserId(msg.Topic)); err != nil {
-			return err
-		} else {
-			msg.SeqId = user.SeqId + 1
-		}
-	}
-
 	// Increment topic's or user's SeqId
 	if err := adaptr.TopicUpdateOnMessage(msg.Topic, msg); err != nil {
 		return err

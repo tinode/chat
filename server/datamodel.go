@@ -299,7 +299,7 @@ type MsgTopicDesc struct {
 	SeqId     int `json:"seq,omitempty"`
 	ReadSeqId int `json:"read,omitempty"`
 	RecvSeqId int `json:"recv,omitempty"`
-	// Id if the last delete operation
+	// Id of the last delete operation as seen by the requesting user
 	DelId  int         `json:"del,omitempty"`
 	Public interface{} `json:"public,omitempty"`
 	// Per-subscription private data

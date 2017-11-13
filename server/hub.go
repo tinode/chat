@@ -288,8 +288,8 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		t.created = user.CreatedAt
 		t.updated = user.UpdatedAt
 
-		t.lastId = user.SeqId
-		t.delId = user.DelId
+		// t.lastId = user.SeqId
+		// t.delId = user.DelId
 
 		// Initiate User Agent with the UA of the creating session to report it later
 		t.userAgent = sreg.sess.userAgent

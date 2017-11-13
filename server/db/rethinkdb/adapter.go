@@ -487,7 +487,7 @@ func (a *RethinkDbAdapter) TopicsForUser(uid t.Uid, keepDeleted bool) ([]t.Subsc
 			sub = join[top.Id]
 			sub.ObjHeader.MergeTimes(&top.ObjHeader)
 			sub.SetSeqId(top.SeqId)
-			sub.SetDelId(top.DelId)
+			// sub.SetDelId(top.DelId)
 			if t.GetTopicCat(sub.Topic) == t.TopicCat_Grp {
 				// all done with a grp topic
 				sub.SetPublic(top.Public)
@@ -839,24 +839,14 @@ func (a *RethinkDbAdapter) MessageGetAll(topic string, forUser t.Uid, opts *t.Br
 	lower = rdb.MinVal
 
 	if opts != nil {
-		if opts.ByTime {
-			useIndex = "Topic_UpdatedAt"
 
-			if opts.After != nil && !opts.After.IsZero() {
-				lower = opts.After
-			}
-			if opts.Until != nil && !opts.Until.IsZero() {
-				upper = opts.Until
-			}
-		} else {
-			useIndex = "Topic_SeqId"
+		useIndex = "Topic_SeqId"
 
-			if opts.Since > 0 {
-				lower = opts.Since
-			}
-			if opts.Before > 0 {
-				upper = opts.Before
-			}
+		if opts.Since > 0 {
+			lower = opts.Since
+		}
+		if opts.Before > 0 {
+			upper = opts.Before
 		}
 
 		if opts.Limit > 0 && opts.Limit < limit {

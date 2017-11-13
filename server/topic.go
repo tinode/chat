@@ -1415,7 +1415,6 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 
 			uid := types.ParseUid(sub.User)
 			isReader := sub.ModeGiven.IsReader() && sub.ModeWant.IsReader()
-			var clearId int
 			if t.cat == types.TopicCat_Me {
 				// The subscriptions user does not care about are marked as deleted
 				if !sub.ModeWant.IsJoiner() || !sub.ModeGiven.IsJoiner() {
@@ -1436,9 +1435,7 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 				if !deleted {
 					if isReader {
 						mts.SeqId = sub.GetSeqId()
-						// Report whatever is the greatest - soft - or hard- deleted id
-						clearId = max(sub.GetDelId(), sub.ClearId)
-						mts.ClearId = clearId
+						mts.DelId = sub.DelId
 					}
 
 					lastSeen := sub.GetLastSeen()
@@ -1458,10 +1455,9 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 				// Reporting subscribers to a group or a p2p topic
 				mts.User = uid.UserId()
 				if !deleted {
-					clearId = max(t.clearId, sub.ClearId)
 					if uid == sess.uid && isReader {
 						// Report deleted messages for own subscriptions only
-						mts.ClearId = clearId
+						mts.DelId = sub.DelId
 					}
 
 					if t.cat == types.TopicCat_Grp {
@@ -1475,9 +1471,8 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 				mts.UpdatedAt = &sub.UpdatedAt
 
 				if isReader {
-					// Ensure sanity or ReadId and RecvId:
-					mts.ReadSeqId = max(clearId, sub.ReadSeqId)
-					mts.RecvSeqId = max(clearId, sub.RecvSeqId)
+					mts.ReadSeqId = sub.ReadSeqId
+					mts.RecvSeqId = sub.RecvSeqId
 				}
 
 				if t.cat != types.TopicCat_Fnd {
@@ -1696,7 +1691,7 @@ func (t *Topic) replyDelMsg(sess *Session, del *MsgClientDel) error {
 	}
 
 	forUser := sess.uid
-	if hard {
+	if del.Hard {
 		forUser = types.ZeroUid
 	}
 	err = store.Messages.DeleteList(t.name, t.delId+1, forUser, filteredList)
