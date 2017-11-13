@@ -731,8 +731,15 @@ func (a *RethinkDbAdapter) SubsForTopic(topic string, keepDeleted bool) ([]t.Sub
 
 // SubsUpdate updates a single subscription.
 func (a *RethinkDbAdapter) SubsUpdate(topic string, user t.Uid, update map[string]interface{}) error {
-	_, err := rdb.DB(a.dbName).Table("subscriptions").
-		Get(topic + ":" + user.String()).Update(update).RunWrite(a.conn)
+	q := rdb.DB(a.dbName).Table("subscriptions")
+	if !user.IsZero() {
+		// Update one topic subscription
+		q = q.Get(topic + ":" + user.String())
+	} else {
+		// Update all topic subscriptions
+		q = q.GetAllByIndex("Topic", topic)
+	}
+	_, err := q.Update(update).RunWrite(a.conn)
 	return err
 }
 
@@ -898,17 +905,19 @@ func (a *RethinkDbAdapter) MessageDeleteAll(topic string, clear int) error {
 }
 
 // MessageDeleteList deletes messages in the given topic with seqIds from the list
-func (a *RethinkDbAdapter) MessageDeleteList(topic string, forUser t.Uid, hard bool, list []int) (err error) {
+func (a *RethinkDbAdapter) MessageDeleteList(topic string, forUser t.Uid, list []int) (err error) {
 	var indexVals []interface{}
 	for _, seq := range list {
 		indexVals = append(indexVals, []interface{}{topic, seq})
 	}
-	if hard {
+	if forUser.IsZero() {
+		// TODO(gene): add DelId
 		_, err = rdb.DB(a.dbName).Table("messages").GetAllByIndex("Topic_SeqId", indexVals...).
 			Filter(rdb.Row.HasFields("DeletedAt").Not()).
 			Update(map[string]interface{}{"DeletedAt": t.TimeNow(), "From": nil, "DeletedFor": nil,
 				"Head": nil, "Content": nil}).RunWrite(a.conn)
 	} else {
+		// TODO(gene): add DelId to DeletedFor
 		_, err = rdb.DB(a.dbName).Table("messages").GetAllByIndex("Topic_SeqId", indexVals...).
 			Update(map[string]interface{}{"DeletedFor": rdb.Row.Field("DeletedFor").Append(&t.SoftDelete{
 				User:      forUser.String(),

@@ -69,7 +69,8 @@ type Adapter interface {
 	// Messages
 	MessageSave(msg *t.Message) error
 	MessageGetAll(topic string, forUser t.Uid, opts *t.BrowseOpt) ([]t.Message, error)
-	MessageDeleteList(topic string, forUser t.Uid, hard bool, list []int) error
+	// Mark messages as deleted. Soft- or Hard- is defined by forUser value: forUSer.IsZero == true is hard.
+	MessageDeleteList(topic string, forUser t.Uid, list []int) error
 
 	// Devices (for push notifications)
 	DeviceUpsert(uid t.Uid, dev *t.DeviceDef) error

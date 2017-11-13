@@ -1695,7 +1695,11 @@ func (t *Topic) replyDelMsg(sess *Session, del *MsgClientDel) error {
 		del.Hard = false
 	}
 
-	err = store.Messages.DeleteList(t.name, t.delId+1, sess.uid, del.Hard, filteredList)
+	forUser := sess.uid
+	if hard {
+		forUser = types.ZeroUid
+	}
+	err = store.Messages.DeleteList(t.name, t.delId+1, forUser, filteredList)
 	if err != nil {
 		sess.queueOut(ErrUnknown(del.Id, t.original(sess.uid), now))
 		return err

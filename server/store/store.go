@@ -289,7 +289,7 @@ func (TopicsObjMapper) Delete(topic string) error {
 	if err := adaptr.SubsDelForTopic(topic); err != nil {
 		return err
 	}
-	if err := adaptr.MessageDeleteList(topic, types.ZeroUid, true, nil); err != nil {
+	if err := adaptr.MessageDeleteList(topic, types.ZeroUid, nil); err != nil {
 		return err
 	}
 
@@ -315,7 +315,7 @@ func (SubsObjMapper) Get(topic string, user types.Uid) (*types.Subscription, err
 	return adaptr.SubscriptionGet(topic, user)
 }
 
-// Update changes values of user's subscription.
+// Update values of user's subscription.
 func (SubsObjMapper) Update(topic string, user types.Uid, update map[string]interface{}) error {
 	update["UpdatedAt"] = types.TimeNow()
 	return adaptr.SubsUpdate(topic, user, update)
@@ -354,23 +354,22 @@ func (MessagesObjMapper) Save(msg *types.Message) error {
 	return adaptr.MessageSave(msg)
 }
 
-func (MessagesObjMapper) DeleteList(topic string, delId int, forUser types.Uid, hard bool, list []int) (err error) {
-	err = adaptr.MessageDeleteList(topic, forUser, hard, list)
-
-	if hard {
-		err = adaptr.MessageDeleteAll(topic, cleared)
-		if err != nil {
-			update := map[string]interface{}{"ClearId": cleared}
-			if topic == forUser.UserId() {
-				err = adaptr.UserUpdate(forUser, update)
-			} else {
-				err = adaptr.TopicUpdate(topic, update)
-			}
-		}
-	} else {
-		update := map[string]interface{}{"ClearId": cleared}
-		err = adaptr.SubsUpdate(topic, forUser, update)
+func (MessagesObjMapper) DeleteList(topic string, delId int, forUser types.Uid, list []int) error {
+	err := adaptr.MessageDeleteList(topic, forUser, list)
+	if err != nil {
+		return err
 	}
+
+	// Record ID of the delete transaction
+	err = adaptr.TopicUpdate(topic, map[string]interface{}{"DelId": delId})
+	if err != nil {
+		return err
+	}
+
+	// Soft-deleting will update one subscription, hard-deleting will ipdate all.
+	// Soft- or hard- is defined by the forUSer being defined.
+	return adaptr.SubsUpdate(topic, forUser, map[string]interface{}{"DelId": delId})
+
 	return err
 }
 
