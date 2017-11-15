@@ -88,6 +88,8 @@ func (a *RethinkDbAdapter) Open(jsonconfig string) error {
 
 	a.conn, err = rdb.Connect(opts)
 
+	rdb.SetTags("json")
+
 	return err
 }
 
@@ -168,7 +170,7 @@ func (a *RethinkDbAdapter) CreateDb(reset bool) error {
 	if _, err := rdb.DB("tinode").Table("messages").IndexCreateFunc("Topic_DeletedFor",
 		func(row rdb.Term) interface{} {
 			return row.Field("DeletedFor").Map(func(df rdb.Term) interface{} {
-				return []interface{}{row.Field("Topic"), df.Field("User"), df.Field("DeletedFor")}
+				return []interface{}{row.Field("Topic"), df.Field("User"), df.Field("DelId")}
 			})
 		}, rdb.IndexCreateOpts{Multi: true}).RunWrite(a.conn); err != nil {
 		return err
@@ -832,16 +834,10 @@ func (a *RethinkDbAdapter) MessageGetAll(topic string, forUser t.Uid, opts *t.Br
 	var limit int = 1024 // TODO(gene): pass into adapter as a config param
 	var lower, upper interface{}
 
-	// Default index
-	useIndex := "Topic_SeqId"
-
 	upper = rdb.MaxVal
 	lower = rdb.MinVal
 
 	if opts != nil {
-
-		useIndex = "Topic_SeqId"
-
 		if opts.Since > 0 {
 			lower = opts.Since
 		}
@@ -857,32 +853,33 @@ func (a *RethinkDbAdapter) MessageGetAll(topic string, forUser t.Uid, opts *t.Br
 	lower = []interface{}{topic, lower}
 	upper = []interface{}{topic, upper}
 
-	rows, err := rdb.DB(a.dbName).Table("messages").Between(lower, upper, rdb.BetweenOpts{Index: useIndex}).
-		OrderBy(rdb.OrderByOpts{Index: rdb.Desc("Topic_SeqId")}).Limit(limit).Run(a.conn)
+	requester := forUser.String()
+	rows, err := rdb.DB(a.dbName).Table("messages").Between(lower, upper, rdb.BetweenOpts{Index: "Topic_SeqId"}).
+		// Ordering by index must come before filtering
+		OrderBy(rdb.OrderByOpts{Index: rdb.Desc("Topic_SeqId")}).
+		// Skip hard-deleted messages
+		Filter(rdb.Row.HasFields("DelId").Not()).
+		// Skip messages soft-deleted for the current user
+		Filter(func(row rdb.Term) interface{} {
+			return rdb.Not(row.Field("DeletedFor").Contains(func(df rdb.Term) interface{} {
+				return df.Field("User").Eq(requester)
+			}))
+		}).Limit(limit).Run(a.conn)
 
 	if err != nil {
 		return nil, err
 	}
 
 	var msgs []t.Message
-	rows.All(&msgs)
-
-	requester := forUser.String()
-
-	for i := 0; i < len(msgs); i++ {
-		if msgs[i].DeletedFor != nil {
-			for j := 0; j < len(msgs[i].DeletedFor); j++ {
-				if msgs[i].DeletedFor[j].User == requester {
-					msgs[i].DeletedAt = &msgs[i].DeletedFor[j].Timestamp
-				}
-			}
-		}
+	if err = rows.All(&msgs); err != nil {
+		return nil, err
 	}
 
-	return msgs, rows.Err()
+	return msgs, nil
 }
 
 // MessageDeleteAll hard-deletes messages in the given topic
+/*
 func (a *RethinkDbAdapter) MessageDeleteAll(topic string, clear int) error {
 	var maxval interface{} = clear
 	if clear < 0 {
@@ -897,25 +894,35 @@ func (a *RethinkDbAdapter) MessageDeleteAll(topic string, clear int) error {
 
 	return err
 }
+*/
 
 // MessageDeleteList deletes messages in the given topic with seqIds from the list
-func (a *RethinkDbAdapter) MessageDeleteList(topic string, forUser t.Uid, list []int) (err error) {
+func (a *RethinkDbAdapter) MessageDeleteList(topic string, delId int, forUser t.Uid, list []int) (err error) {
 	var indexVals []interface{}
 	for _, seq := range list {
 		indexVals = append(indexVals, []interface{}{topic, seq})
 	}
 	if forUser.IsZero() {
-		// TODO(gene): add DelId
-		_, err = rdb.DB(a.dbName).Table("messages").GetAllByIndex("Topic_SeqId", indexVals...).
-			Filter(rdb.Row.HasFields("DeletedAt").Not()).
-			Update(map[string]interface{}{"DeletedAt": t.TimeNow(), "From": nil, "DeletedFor": nil,
-				"Head": nil, "Content": nil}).RunWrite(a.conn)
+		if delId <= 0 {
+			// Topic is being deleted. Just delete all messages.
+			_, err = rdb.DB(a.dbName).Table("messages").Between(
+				[]interface{}{topic, rdb.MinVal},
+				[]interface{}{topic, rdb.MaxVal},
+				rdb.BetweenOpts{Index: "Topic_SeqId"}).Delete().RunWrite(a.conn)
+		} else {
+			// Mark some messages as deleted
+			_, err = rdb.DB(a.dbName).Table("messages").GetAllByIndex("Topic_SeqId", indexVals...).
+				Filter(rdb.Row.HasFields("DelId").Not()).
+				Update(map[string]interface{}{"DeletedAt": t.TimeNow(), "DelId": delId, "From": nil,
+					"Head": nil, "Content": nil}).RunWrite(a.conn)
+		}
 	} else {
 		// TODO(gene): add DelId to DeletedFor
 		_, err = rdb.DB(a.dbName).Table("messages").GetAllByIndex("Topic_SeqId", indexVals...).
-			Update(map[string]interface{}{"DeletedFor": rdb.Row.Field("DeletedFor").Append(&t.SoftDelete{
-				User:      forUser.String(),
-				Timestamp: t.TimeNow()})}).
+			Update(map[string]interface{}{"DeletedFor": rdb.Row.Field("DeletedFor").Default([]interface{}{}).Append(
+				&t.SoftDelete{
+					User:  forUser.String(),
+					DelId: delId})}).
 			RunWrite(a.conn)
 	}
 

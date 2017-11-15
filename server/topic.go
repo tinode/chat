@@ -1609,9 +1609,16 @@ func (t *Topic) replyDelMsg(sess *Session, del *MsgClientDel) error {
 	now := time.Now().UTC().Round(time.Millisecond)
 
 	var err error
+
+	defer func() {
+		if err != nil {
+			log.Println("failed to delete message(s):", err)
+		}
+	}()
+
 	var filteredList []int
 	if del.DelSeq == nil || len(del.DelSeq) == 0 {
-		err = errors.New("del.msg: not IDs to delete")
+		err = errors.New("del.msg: no IDs to delete")
 	} else {
 		remains := MAX_SEQ_COUNT
 		for _, dq := range del.DelSeq {
@@ -1619,8 +1626,7 @@ func (t *Topic) replyDelMsg(sess *Session, del *MsgClientDel) error {
 				dq.LowId > t.lastId || dq.LowId < 0 ||
 				dq.HiId > t.lastId || dq.HiId < 0 ||
 				dq.HiId < dq.LowId ||
-				(dq.SeqId > 0 && (dq.HiId > 0 || dq.LowId > 0)) ||
-				(dq.HiId != 0 || dq.HiId == dq.LowId) {
+				(dq.SeqId != 0 && (dq.HiId > 0 || dq.LowId > 0)) {
 				err = errors.New("del.msg: invalid entry in list")
 				break
 			}
@@ -1641,33 +1647,35 @@ func (t *Topic) replyDelMsg(sess *Session, del *MsgClientDel) error {
 			}
 		}
 
-		sort.Ints(filteredList)
-		ll := len(filteredList)
-		if ll > 1 {
-			p := 0
-			// Remove zeros
-			for i := 0; i < ll && filteredList[i] == 0; i++ {
-				p++
-			}
-			if p > 0 {
-				filteredList = filteredList[p:]
-				p = 0
-			}
-			// Remove duplicates
-			for i := 1; i < ll; i++ {
-				if filteredList[p] == filteredList[i] {
-					continue
+		if err == nil {
+			sort.Ints(filteredList)
+			ll := len(filteredList)
+			if ll > 1 {
+				p := 0
+				// Remove zeros
+				for i := 0; i < ll && filteredList[i] == 0; i++ {
+					p++
 				}
-				p++
-				if p < i {
-					filteredList[p] = filteredList[i]
+				if p > 0 {
+					filteredList = filteredList[p:]
+					p = 0
 				}
+				// Remove duplicates
+				for i := 1; i < ll; i++ {
+					if filteredList[p] == filteredList[i] {
+						continue
+					}
+					p++
+					if p < i {
+						filteredList[p] = filteredList[i]
+					}
+				}
+				filteredList = filteredList[:p+1]
 			}
-			filteredList = filteredList[:p+1]
-		}
 
-		if len(filteredList) == 0 {
-			err = errors.New("del.msg: no valid entries in list")
+			if len(filteredList) == 0 {
+				err = errors.New("del.msg: no valid entries in list")
+			}
 		}
 	}
 
@@ -1694,8 +1702,8 @@ func (t *Topic) replyDelMsg(sess *Session, del *MsgClientDel) error {
 	if del.Hard {
 		forUser = types.ZeroUid
 	}
-	err = store.Messages.DeleteList(t.name, t.delId+1, forUser, filteredList)
-	if err != nil {
+
+	if err = store.Messages.DeleteList(t.name, t.delId+1, forUser, filteredList); err != nil {
 		sess.queueOut(ErrUnknown(del.Id, t.original(sess.uid), now))
 		return err
 	}
@@ -1722,7 +1730,6 @@ func (t *Topic) replyDelMsg(sess *Session, del *MsgClientDel) error {
 	}
 
 	if del.Hard {
-		log.Println("hard delete")
 		for uid, pud := range t.perUser {
 			pud.delId = t.delId
 			t.perUser[uid] = pud
@@ -1732,7 +1739,6 @@ func (t *Topic) replyDelMsg(sess *Session, del *MsgClientDel) error {
 		t.presSubsOnline("del", "", params, types.ModeRead, sess.sid, "")
 		t.presSubsOffline("del", params, types.ModeRead, sess.sid, true)
 	} else {
-		log.Println("soft delete")
 		pud := t.perUser[sess.uid]
 		pud.delId = t.delId
 		t.perUser[sess.uid] = pud

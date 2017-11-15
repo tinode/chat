@@ -11,6 +11,7 @@ import (
 type PresParams struct {
 	userAgent string
 	seqId     int
+	delId     int
 	delSeq    []MsgDelQuery
 
 	// Uid who performed the action

@@ -187,7 +187,7 @@ type ObjHeader struct {
 	id        Uid
 	CreatedAt time.Time
 	UpdatedAt time.Time
-	DeletedAt *time.Time
+	DeletedAt *time.Time `json:"DeletedAt,omitempty"`
 }
 
 func (h *ObjHeader) Uid() Uid {
@@ -692,20 +692,22 @@ func (t *Topic) GetAccess(uid Uid) (mode AccessMode) {
 }
 
 type SoftDelete struct {
-	User      string
-	Timestamp time.Time
+	User  string
+	DelId int
 }
 
 // Stored {data} message
 type Message struct {
 	ObjHeader
+	// ID of the hard-delete operation
+	DelId int `json:"DelId,omitempty"`
 	// List of users who have marked this message as soft-deleted
-	DeletedFor []SoftDelete
+	DeletedFor []SoftDelete `json:"DeletedFor,omitempty"`
 	SeqId      int
 	Topic      string
 	// UID as string of the user who sent the message, could be empty
 	From    string
-	Head    map[string]string
+	Head    map[string]string `json:"Head,omitempty"`
 	Content interface{}
 }
 
