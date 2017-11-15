@@ -861,9 +861,10 @@ func (a *RethinkDbAdapter) MessageGetAll(topic string, forUser t.Uid, opts *t.Br
 		Filter(rdb.Row.HasFields("DelId").Not()).
 		// Skip messages soft-deleted for the current user
 		Filter(func(row rdb.Term) interface{} {
-			return rdb.Not(row.Field("DeletedFor").Contains(func(df rdb.Term) interface{} {
-				return df.Field("User").Eq(requester)
-			}))
+			return rdb.Not(row.Field("DeletedFor").Default([]interface{}{}).Contains(
+				func(df rdb.Term) interface{} {
+					return df.Field("User").Eq(requester)
+				}))
 		}).Limit(limit).Run(a.conn)
 
 	if err != nil {
