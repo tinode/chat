@@ -131,6 +131,11 @@ func (h *Hub) run() {
 			// 2. Check access rights and reject, if appropriate
 			// 3. Attach session to the topic
 
+			if h.isShutdownInProgress {
+				// Ignore request to join when shutdown is in progress
+				continue
+			}
+
 			t := h.topicGet(sreg.topic) // is the topic already loaded?
 			if t == nil {
 				// Topic does not exist or not loaded
@@ -732,18 +737,16 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		return
 	}
 
-	// only execute topic if shutdown is not in progress
-	if !h.isShutdownInProgress {
-		log.Println("hub: topic created or loaded: " + t.name)
+	log.Println("hub: topic created or loaded: " + t.name)
 
-		h.topicPut(t.name, t)
-		h.topicsLive.Add(1)
-		go t.run(h)
+	h.topicPut(t.name, t)
+	h.topicsLive.Add(1)
+	go t.run(h)
 
-		sreg.loaded = true
-		// Topic will check access rights, send invite to p2p user, send {ctrl} message to the initiator session
-		t.reg <- sreg
-	}
+	sreg.loaded = true
+	// Topic will check access rights, send invite to p2p user, send {ctrl} message to the initiator session
+	t.reg <- sreg
+
 }
 
 // loadSubscribers loads topic subscribers, sets topic owner
