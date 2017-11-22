@@ -12,6 +12,7 @@ import (
 	"expvar"
 	"log"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/tinode/chat/server/store"
@@ -80,18 +81,27 @@ type Hub struct {
 
 	// Exported counter of live topics
 	topicsLive *expvar.Int
+
+	// mutex for read & write topics into hub
+	topicMutex sync.RWMutex
 }
 
 func (h *Hub) topicGet(name string) *Topic {
+	h.topicMutex.RLock()
+	defer h.topicMutex.RUnlock()
 	return h.topics[name]
 }
 
 func (h *Hub) topicPut(name string, t *Topic) {
+	h.topicMutex.Lock()
 	h.topics[name] = t
+	h.topicMutex.Unlock()
 }
 
 func (h *Hub) topicDel(name string) {
+	h.topicMutex.Lock()
 	delete(h.topics, name)
+	h.topicMutex.Unlock()
 }
 
 func newHub() *Hub {
