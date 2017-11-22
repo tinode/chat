@@ -58,8 +58,8 @@ type metaReq struct {
 
 type Hub struct {
 
-	// Topics must be indexed by appid!name
-	topics map[string]*Topic
+	// Topics must be indexed by name
+	topics *sync.Map
 
 	// Channel for routing messages between topics, buffered at 4096
 	route chan *ServerComMessage
@@ -73,43 +73,37 @@ type Hub struct {
 	// Cluster request to rehash topics, unbuffered
 	rehash chan bool
 
-	// process get.info requests for topic not subscribed to, buffered 128
+	// Process get.info requests for topic not subscribed to, buffered 128
 	meta chan *metaReq
 
 	// Request to shutdown, unbuffered
 	shutdown chan chan<- bool
 
-	// Flag for marking system shutdown is in progress
+	// Flag for indicating that system shutdown is in progress
 	isShutdownInProgress bool
 
 	// Exported counter of live topics
 	topicsLive *expvar.Int
-
-	// mutex for read & write topics into hub
-	topicMutex sync.RWMutex
 }
 
 func (h *Hub) topicGet(name string) *Topic {
-	h.topicMutex.RLock()
-	defer h.topicMutex.RUnlock()
-	return h.topics[name]
+	if t, ok := h.topics.Load(name); ok {
+		return t.(*Topic)
+	}
+	return nil
 }
 
 func (h *Hub) topicPut(name string, t *Topic) {
-	h.topicMutex.Lock()
-	h.topics[name] = t
-	h.topicMutex.Unlock()
+	h.topics.Store(name, t)
 }
 
 func (h *Hub) topicDel(name string) {
-	h.topicMutex.Lock()
-	delete(h.topics, name)
-	h.topicMutex.Unlock()
+	h.topics.Delete(name)
 }
 
 func newHub() *Hub {
 	var h = &Hub{
-		topics: make(map[string]*Topic),
+		topics: &sync.Map{}, //make(map[string]*Topic),
 		// this needs to be buffered - hub generates invites and adds them to this queue
 		route:      make(chan *ServerComMessage, 4096),
 		join:       make(chan *sessionJoin),
@@ -214,11 +208,13 @@ func (h *Hub) run() {
 			h.topicUnreg(unreg.sess, unreg.topic, unreg.msg, reason)
 
 		case <-h.rehash:
-			for _, topic := range h.topics {
+			h.topics.Range(func(_, t interface{}) bool {
+				topic := t.(*Topic)
 				if globals.cluster.isRemoteTopic(topic.name) {
 					h.topicUnreg(nil, topic.name, nil, StopRehashing)
 				}
-			}
+				return true
+			})
 
 		case hubdone := <-h.shutdown:
 			// mark immediately to prevent more topics being added to hub.topics
@@ -226,15 +222,24 @@ func (h *Hub) run() {
 
 			// start cleanup process
 			topicsdone := make(chan bool)
-			for _, topic := range h.topics {
-				topic.exit <- &shutDown{done: topicsdone}
-			}
+			topicCount := 0
+			h.topics.Range(func(_, topic interface{}) bool {
+				topic.(*Topic).exit <- &shutDown{done: topicsdone}
+				topicCount++
+				return true
+			})
+			/*
+				for _, topic := range h.topics {
+					topic.exit <- &shutDown{done: topicsdone}
+					topicCount++
+				}
+			*/
 
-			for i := 0; i < len(h.topics); i++ {
+			for i := 0; i < topicCount; i++ {
 				<-topicsdone
 			}
 
-			log.Printf("Hub shutdown: terminated %d topics", len(h.topics))
+			log.Printf("Hub shutdown completed with %d topics", topicCount)
 
 			// let the main goroutine know we are done with the cleanup
 			hubdone <- true
@@ -756,7 +761,6 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 	sreg.loaded = true
 	// Topic will check access rights, send invite to p2p user, send {ctrl} message to the initiator session
 	t.reg <- sreg
-
 }
 
 // loadSubscribers loads topic subscribers, sets topic owner
