@@ -78,6 +78,9 @@ type Hub struct {
 	// Request to shutdown, unbuffered
 	shutdown chan chan<- bool
 
+	// Flag for marking system shutdown is in progress
+	isShutdownInProgress bool
+
 	// Exported counter of live topics
 	topicsLive *expvar.Int
 }
@@ -203,6 +206,10 @@ func (h *Hub) run() {
 			}
 
 		case hubdone := <-h.shutdown:
+			// mark immediately to prevent more topics being added to hub.topics
+			h.isShutdownInProgress = true
+
+			// start cleanup process
 			topicsdone := make(chan bool)
 			for _, topic := range h.topics {
 				topic.exit <- &shutDown{done: topicsdone}
@@ -725,15 +732,18 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		return
 	}
 
-	log.Println("hub: topic created or loaded: " + t.name)
+	// only execute topic if shutdown is not in progress
+	if !h.isShutdownInProgress {
+		log.Println("hub: topic created or loaded: " + t.name)
 
-	h.topicPut(t.name, t)
-	h.topicsLive.Add(1)
-	go t.run(h)
+		h.topicPut(t.name, t)
+		h.topicsLive.Add(1)
+		go t.run(h)
 
-	sreg.loaded = true
-	// Topic will check access rights, send invite to p2p user, send {ctrl} message to the initiator session
-	t.reg <- sreg
+		sreg.loaded = true
+		// Topic will check access rights, send invite to p2p user, send {ctrl} message to the initiator session
+		t.reg <- sreg
+	}
 }
 
 // loadSubscribers loads topic subscribers, sets topic owner
