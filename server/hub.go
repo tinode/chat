@@ -751,6 +751,11 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		return
 	}
 
+	// prevent newly initialized topics to live while shutdown in progress
+	if h.isShutdownInProgress {
+		return
+	}
+
 	log.Println("hub: topic created or loaded: " + t.name)
 
 	h.topicPut(t.name, t)
