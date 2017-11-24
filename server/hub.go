@@ -12,7 +12,6 @@ import (
 	"expvar"
 	"log"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/tinode/chat/server/store"
@@ -59,7 +58,7 @@ type metaReq struct {
 type Hub struct {
 
 	// Topics must be indexed by name
-	topics *sync.Map
+	topics map[string]*Topic //*sync.Map
 
 	// Channel for routing messages between topics, buffered at 4096
 	route chan *ServerComMessage
@@ -79,31 +78,25 @@ type Hub struct {
 	// Request to shutdown, unbuffered
 	shutdown chan chan<- bool
 
-	// Flag for indicating that system shutdown is in progress
-	isShutdownInProgress bool
-
 	// Exported counter of live topics
 	topicsLive *expvar.Int
 }
 
 func (h *Hub) topicGet(name string) *Topic {
-	if t, ok := h.topics.Load(name); ok {
-		return t.(*Topic)
-	}
-	return nil
+	return h.topics[name]
 }
 
 func (h *Hub) topicPut(name string, t *Topic) {
-	h.topics.Store(name, t)
+	h.topics[name] = t
 }
 
 func (h *Hub) topicDel(name string) {
-	h.topics.Delete(name)
+	delete(h.topics, name)
 }
 
 func newHub() *Hub {
 	var h = &Hub{
-		topics: &sync.Map{}, //make(map[string]*Topic),
+		topics: make(map[string]*Topic),
 		// this needs to be buffered - hub generates invites and adds them to this queue
 		route:      make(chan *ServerComMessage, 4096),
 		join:       make(chan *sessionJoin),
@@ -135,15 +128,10 @@ func (h *Hub) run() {
 			// 2. Check access rights and reject, if appropriate
 			// 3. Attach session to the topic
 
-			if h.isShutdownInProgress {
-				// Ignore request to join when shutdown is in progress
-				continue
-			}
-
 			t := h.topicGet(sreg.topic) // is the topic already loaded?
 			if t == nil {
 				// Topic does not exist or not loaded
-				go topicInit(sreg, h)
+				topicInit(sreg, h)
 			} else {
 				// Topic found.
 				// Topic will check access rights and send appropriate {ctrl}
@@ -208,32 +196,20 @@ func (h *Hub) run() {
 			h.topicUnreg(unreg.sess, unreg.topic, unreg.msg, reason)
 
 		case <-h.rehash:
-			h.topics.Range(func(_, t interface{}) bool {
-				topic := t.(*Topic)
+			for _, topic := range h.topics {
 				if globals.cluster.isRemoteTopic(topic.name) {
 					h.topicUnreg(nil, topic.name, nil, StopRehashing)
 				}
-				return true
-			})
+			}
 
 		case hubdone := <-h.shutdown:
-			// mark immediately to prevent more topics being added to hub.topics
-			h.isShutdownInProgress = true
-
 			// start cleanup process
 			topicsdone := make(chan bool)
 			topicCount := 0
-			h.topics.Range(func(_, topic interface{}) bool {
-				topic.(*Topic).exit <- &shutDown{done: topicsdone}
+			for _, topic := range h.topics {
+				topic.exit <- &shutDown{done: topicsdone}
 				topicCount++
-				return true
-			})
-			/*
-				for _, topic := range h.topics {
-					topic.exit <- &shutDown{done: topicsdone}
-					topicCount++
-				}
-			*/
+			}
 
 			for i := 0; i < topicCount; i++ {
 				<-topicsdone
@@ -749,11 +725,6 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 	} else {
 		// Unrecognized topic name
 		sreg.sess.queueOut(ErrTopicNotFound(sreg.pkt.Id, t.x_original, timestamp))
-		return
-	}
-
-	// prevent newly initialized topics to live while shutdown in progress
-	if h.isShutdownInProgress {
 		return
 	}
 
