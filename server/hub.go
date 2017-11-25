@@ -58,7 +58,7 @@ type metaReq struct {
 type Hub struct {
 
 	// Topics must be indexed by name
-	topics map[string]*Topic //*sync.Map
+	topics map[string]*Topic
 
 	// Channel for routing messages between topics, buffered at 4096
 	route chan *ServerComMessage

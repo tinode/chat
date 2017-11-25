@@ -14,7 +14,6 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -369,26 +368,6 @@ func (s *Session) publish(msg *ClientComMessage) {
 	}
 }
 
-func parseVersion(vers string) int {
-	dot := strings.Index(vers, ".")
-	if dot < 0 {
-		return 0
-	}
-	major, err := strconv.Atoi(vers[:dot])
-	if err != nil || major < 0 || major >= 0xff {
-		return 0
-	}
-	minor, err := strconv.Atoi(vers[dot+1:])
-	if err != nil || minor < 0 || minor >= 0xff {
-		return 0
-	}
-	return (major << 8) | minor
-}
-
-func versionToString(vers int) string {
-	return strconv.Itoa((vers>>8)&0xff) + "." + strconv.Itoa(vers&0xff)
-}
-
 // Authenticate
 func (s *Session) hello(msg *ClientComMessage) {
 
@@ -693,8 +672,8 @@ func (s *Session) get(msg *ClientComMessage) {
 			s.queueOut(ErrClusterNodeUnreachable(msg.Get.Id, msg.Get.Topic, msg.timestamp))
 		}
 	} else {
-		if (meta.what&constMsgMetaData != 0) || (meta.what&constMsgMetaSub != 0) {
-			log.Println("s.get: invalid Get message action for hub routing: '" + msg.Get.What + "'")
+		if meta.what&(constMsgMetaData|constMsgMetaSub|constMsgMetaDel) != 0 {
+			log.Println("s.get: invalid Get message action: '" + msg.Get.What + "'")
 			s.queueOut(ErrPermissionDenied(msg.Get.Id, msg.Get.Topic, msg.timestamp))
 		} else {
 			// Description of a topic not currently subscribed to. Request desc from the hub

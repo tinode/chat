@@ -366,6 +366,10 @@ func (MessagesObjMapper) GetAll(topic string, forUser types.Uid, opt *types.Brow
 	return adaptr.MessageGetAll(topic, forUser, opt)
 }
 
+func (MessagesObjMapper) GetDeleted(topic string, forUser types.Uid, opt *types.BrowseOpt) ([]int, error) {
+	return adaptr.MessageGetDeleted(topic, forUser, opt)
+}
+
 var authHandlers map[string]auth.AuthHandler
 
 // Register an authentication scheme handler

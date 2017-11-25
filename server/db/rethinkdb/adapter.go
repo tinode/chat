@@ -879,23 +879,48 @@ func (a *RethinkDbAdapter) MessageGetAll(topic string, forUser t.Uid, opts *t.Br
 	return msgs, nil
 }
 
-// MessageDeleteAll hard-deletes messages in the given topic
-/*
-func (a *RethinkDbAdapter) MessageDeleteAll(topic string, clear int) error {
-	var maxval interface{} = clear
-	if clear < 0 {
-		maxval = rdb.MaxVal
-	}
-	_, err := rdb.DB(a.dbName).Table("messages").
-		Between([]interface{}{topic, 0}, []interface{}{topic, maxval},
-			rdb.BetweenOpts{Index: "Topic_SeqId", RightBound: "closed"}).
-		Filter(rdb.Row.HasFields("DeletedAt").Not()).
-		Update(map[string]interface{}{"DeletedAt": t.TimeNow(), "From": nil, "DeletedFor": nil,
-			"Head": nil, "Content": nil}).RunWrite(a.conn)
+func (a *RethinkDbAdapter) MessageGetDeleted(topic string, forUser t.Uid, opts *t.BrowseOpt) ([]int, error) {
+	log.Println("Loading ids of deleted messages for topic", topic, opts)
 
-	return err
+	var limit int = 1024 // TODO(gene): pass into adapter as a config param
+	var lower, upper interface{}
+
+	upper = rdb.MaxVal
+	lower = rdb.MinVal
+
+	if opts != nil {
+		if opts.Since > 0 {
+			lower = opts.Since
+		}
+		if opts.Before > 0 {
+			upper = opts.Before
+		}
+
+		if opts.Limit > 0 && opts.Limit < limit {
+			limit = opts.Limit
+		}
+	}
+
+	requester := forUser.String()
+	lower = []interface{}{topic, requester, lower}
+	upper = []interface{}{topic, requester, upper}
+
+	rows, err := rdb.DB(a.dbName).Table("messages").
+		Between(lower, upper, rdb.BetweenOpts{Index: "Topic_DeletedFor"}).
+		OrderBy(rdb.OrderByOpts{Index: rdb.Desc("Topic_DeletedFor")}).Pluck("SeqId").
+		Limit(limit).Run(a.conn)
+
+	if err != nil {
+		return nil, err
+	}
+
+	var delIds []int
+	if err = rows.All(&delIds); err != nil {
+		return nil, err
+	}
+
+	return delIds, nil
 }
-*/
 
 // MessageDeleteList deletes messages in the given topic with seqIds from the list
 func (a *RethinkDbAdapter) MessageDeleteList(topic string, delId int, forUser t.Uid, list []int) (err error) {
@@ -904,6 +929,7 @@ func (a *RethinkDbAdapter) MessageDeleteList(topic string, delId int, forUser t.
 		indexVals = append(indexVals, []interface{}{topic, seq})
 	}
 	if forUser.IsZero() {
+		// Hard-deleting for all users
 		if delId <= 0 {
 			// Topic is being deleted. Just delete all messages.
 			_, err = rdb.DB(a.dbName).Table("messages").Between(
@@ -911,20 +937,29 @@ func (a *RethinkDbAdapter) MessageDeleteList(topic string, delId int, forUser t.
 				[]interface{}{topic, rdb.MaxVal},
 				rdb.BetweenOpts{Index: "Topic_SeqId"}).Delete().RunWrite(a.conn)
 		} else {
-			// Mark some messages as deleted
+			// Hard-delete of individual messages. Mark some messages as deleted.
 			_, err = rdb.DB(a.dbName).Table("messages").GetAllByIndex("Topic_SeqId", indexVals...).
 				Filter(rdb.Row.HasFields("DelId").Not()).
 				Update(map[string]interface{}{"DeletedAt": t.TimeNow(), "DelId": delId, "From": nil,
 					"Head": nil, "Content": nil}).RunWrite(a.conn)
 		}
 	} else {
-		// TODO(gene): add DelId to DeletedFor
+		// Soft-deleting: adding DelId to DeletedFor
+		requester := forUser.String()
 		_, err = rdb.DB(a.dbName).Table("messages").GetAllByIndex("Topic_SeqId", indexVals...).
-			Update(map[string]interface{}{"DeletedFor": rdb.Row.Field("DeletedFor").Default([]interface{}{}).Append(
-				&t.SoftDelete{
-					User:  forUser.String(),
-					DelId: delId})}).
-			RunWrite(a.conn)
+			// Skip hard-deleted messages
+			Filter(rdb.Row.HasFields("DelId").Not()).
+			// Skip messages already soft-deleted for the current user
+			Filter(func(row rdb.Term) interface{} {
+				return rdb.Not(row.Field("DeletedFor").Default([]interface{}{}).Contains(
+					func(df rdb.Term) interface{} {
+						return df.Field("User").Eq(requester)
+					}))
+			}).Update(map[string]interface{}{"DeletedFor": rdb.Row.Field("DeletedFor").
+			Default([]interface{}{}).Append(
+			&t.SoftDelete{
+				User:  forUser.String(),
+				DelId: delId})}).RunWrite(a.conn)
 	}
 
 	return err

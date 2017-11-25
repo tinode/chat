@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"os"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -39,9 +40,9 @@ const (
 	TOPICTIMEOUT = time.Second * 5
 
 	// Current API version
-	VERSION = "0.13"
+	VERSION = "0.14"
 	// Minimum supported API version
-	MIN_SUPPORTED_VERSION = "0.13"
+	MIN_SUPPORTED_VERSION = "0.14"
 
 	// Default maximum message size
 	MAX_MESSAGE_SIZE = 1 << 19 // 512K
@@ -72,10 +73,10 @@ var globals struct {
 
 // Contentx of the configuration file
 type configType struct {
-	// Default HTTP(S) address:port to listen on for websocket and long polling client. Either a
-	// numeric or canonical name, e.g. ":80" or ":https". Could include a host name, e.g.
+	// Default HTTP(S) address:port to listen on for websocket and long polling clients. Either a
+	// numeric or a canonical name, e.g. ":80" or ":https". Could include a host name, e.g.
 	// "localhost:80".
-	// Could be blank: if TLS is not configured, will use port 80, otherwise 443.
+	// Could be blank: if TLS is not configured, will use ":80", otherwise ":443".
 	// Can be overriden from the command line, see option --listen.
 	Listen string `json:"listen"`
 	// Address:port to listen for gRPC clients. If blank gRPC support will not be initialized.
@@ -224,4 +225,24 @@ func getApiKey(req *http.Request) string {
 		apikey = req.Header.Get("X-Tinode-APIKey")
 	}
 	return apikey
+}
+
+func parseVersion(vers string) int {
+	dot := strings.Index(vers, ".")
+	if dot < 0 {
+		return 0
+	}
+	major, err := strconv.Atoi(vers[:dot])
+	if err != nil || major < 0 || major >= 0xff {
+		return 0
+	}
+	minor, err := strconv.Atoi(vers[dot+1:])
+	if err != nil || minor < 0 || minor >= 0xff {
+		return 0
+	}
+	return (major << 8) | minor
+}
+
+func versionToString(vers int) string {
+	return strconv.Itoa((vers>>8)&0xff) + "." + strconv.Itoa(vers&0xff)
 }
