@@ -7,6 +7,7 @@ import (
 	"errors"
 	"hash/fnv"
 	"log"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -165,7 +166,14 @@ func (a *RethinkDbAdapter) CreateDb(reset bool) error {
 		}).RunWrite(a.conn); err != nil {
 		return err
 	}
-	// Compound multi-index of deletions: each message gets multiple compound index entries like
+	// Compound index of hard-deleted messages
+	if _, err := rdb.DB("tinode").Table("messages").IndexCreateFunc("Topic_DelId",
+		func(row rdb.Term) interface{} {
+			return []interface{}{row.Field("Topic"), row.Field("DelId")}
+		}).RunWrite(a.conn); err != nil {
+		return err
+	}
+	// Compound multi-index of soft-deleted messages: each message gets multiple compound index entries like
 	// [[Topic, User1, DelId1], [Topic, User2, DelId2],...]
 	if _, err := rdb.DB("tinode").Table("messages").IndexCreateFunc("Topic_DeletedFor",
 		func(row rdb.Term) interface{} {
@@ -901,14 +909,18 @@ func (a *RethinkDbAdapter) MessageGetDeleted(topic string, forUser t.Uid, opts *
 		}
 	}
 
-	requester := forUser.String()
-	lower = []interface{}{topic, requester, lower}
-	upper = []interface{}{topic, requester, upper}
+	// Converter of sequence [{SeqId: val}, ...] to a slice of [val, ...]
+	toSlice := func(seq rdb.Term) interface{} {
+		return []interface{}{seq.Field("SeqId")}
+	}
 
+	// Fetch soft-deleted messages
+
+	requester := forUser.String()
 	rows, err := rdb.DB(a.dbName).Table("messages").
-		Between(lower, upper, rdb.BetweenOpts{Index: "Topic_DeletedFor"}).
-		OrderBy(rdb.OrderByOpts{Index: rdb.Desc("Topic_DeletedFor")}).Pluck("SeqId").
-		Limit(limit).Run(a.conn)
+		Between([]interface{}{topic, requester, lower}, []interface{}{topic, requester, upper},
+			rdb.BetweenOpts{Index: "Topic_DeletedFor"}).Pluck("SeqId").
+		Limit(limit).ConcatMap(toSlice).Run(a.conn)
 
 	if err != nil {
 		return nil, err
@@ -917,6 +929,42 @@ func (a *RethinkDbAdapter) MessageGetDeleted(topic string, forUser t.Uid, opts *
 	var delIds []int
 	if err = rows.All(&delIds); err != nil {
 		return nil, err
+	}
+
+	// Now fetch hard-deleted messages
+
+	rows, err = rdb.DB(a.dbName).Table("messages").
+		Between([]interface{}{topic, lower}, []interface{}{topic, upper},
+			rdb.BetweenOpts{Index: "Topic_DelId"}).Pluck("SeqId").
+		Limit(limit).ConcatMap(toSlice).Run(a.conn)
+
+	if err != nil {
+		return nil, err
+	}
+
+	var hardDelIds []int
+	if err = rows.All(&hardDelIds); err != nil {
+		return nil, err
+	}
+
+	// Merge the hard- and soft-deleted lists then sort.
+
+	delIds = append(delIds, hardDelIds...)
+	sort.Ints(delIds)
+	// Remove duplicate entries: message could be first soft- then hard- deleted.
+	ll := len(delIds)
+	if ll > 1 {
+		p := 0
+		for i := 1; i < ll; i++ {
+			if delIds[p] == delIds[i] {
+				continue
+			}
+			p++
+			if p < i {
+				delIds[p] = delIds[i]
+			}
+		}
+		delIds = delIds[:p+1]
 	}
 
 	return delIds, nil

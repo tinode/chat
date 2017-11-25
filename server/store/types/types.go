@@ -711,36 +711,6 @@ type Message struct {
 	Content interface{}
 }
 
-// Announcements/Invites
-/*
-type AnnounceAction int
-
-const (
-	// An invitation to subscribe
-	AnnInv AnnounceAction = iota
-	// A topic admin is asked to aprove a subscription
-	AnnAppr
-	// Change notification: request approved or subscribed by a third party or some such, no action required
-	AnnUpd
-	// Unsubscribe succeeded or unsubscribed by a third party or topic deleted
-	AnnDel
-)
-
-func (a AnnounceAction) String() string {
-	switch a {
-	case AnnInv:
-		return "inv"
-	case AnnAppr:
-		return "appr"
-	case AnnUpd:
-		return "upd"
-	case AnnDel:
-		return "del"
-	}
-	return ""
-}
-*/
-
 type BrowseOpt struct {
 	Since  int
 	Before int

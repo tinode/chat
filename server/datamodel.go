@@ -300,7 +300,7 @@ type MsgTopicDesc struct {
 	ReadSeqId int `json:"read,omitempty"`
 	RecvSeqId int `json:"recv,omitempty"`
 	// Id of the last delete operation as seen by the requesting user
-	DelId  int         `json:"del,omitempty"`
+	DelId  int         `json:"clear,omitempty"`
 	Public interface{} `json:"public,omitempty"`
 	// Per-subscription private data
 	Private interface{} `json:"private,omitempty"`
@@ -351,6 +351,11 @@ type MsgTopicSub struct {
 	LastSeen *MsgLastSeenInfo `json:"seen,omitempty"`
 }
 
+type MsgDelValues struct {
+	DelId  int           `json:"clear,omitempty"`
+	DelSeq []MsgDelQuery `json:"delseq,omitempty"`
+}
+
 type MsgServerCtrl struct {
 	Id     string      `json:"id,omitempty"`
 	Topic  string      `json:"topic,omitempty"`
@@ -398,6 +403,7 @@ type MsgServerPres struct {
 	What      string         `json:"what"`
 	UserAgent string         `json:"ua,omitempty"`
 	SeqId     int            `json:"seq,omitempty"`
+	DelId     int            `json:"clear,omitempty"`
 	DelSeq    []MsgDelQuery  `json:"delseq,omitempty"`
 	AcsTarget string         `json:"tgt,omitempty"`
 	AcsActor  string         `json:"act,omitempty"`
@@ -428,8 +434,8 @@ type MsgServerMeta struct {
 	Desc *MsgTopicDesc `json:"desc,omitempty"`
 	// Subscriptions as an array of objects
 	Sub []MsgTopicSub `json:"sub,omitempty"`
-	// List of IDs of deleted messages
-	Del []MsgDelQuery `json:"del,omitempty"`
+	// Delete ID and the ranges of IDs of deleted messages
+	Del *MsgDelValues `json:"del,omitempty"`
 }
 
 // MsgServerInfo is the server-side copy of MsgClientNote with From added

@@ -1628,9 +1628,11 @@ func (t *Topic) replyGetDel(sess *Session, id string, req *MsgBrowseOpts) error 
 		return err
 	}
 	if len(delIds) > 0 {
-		meta := &MsgServerMeta{Id: id, Topic: t.original(sess.uid), Timestamp: &now}
-		meta.Del = listToDelQuery(delIds)
-		sess.queueOut(&ServerComMessage{Meta: meta})
+		sess.queueOut(&ServerComMessage{Meta: &MsgServerMeta{
+			Id:        id,
+			Topic:     t.original(sess.uid),
+			Del:       &MsgDelValues{DelId: t.delId, DelSeq: listToDelQuery(delIds)},
+			Timestamp: &now}})
 	} else {
 		reply := NoErr(id, t.original(sess.uid), now)
 		reply.Ctrl.Params = map[string]string{"what": "del"}
@@ -1652,7 +1654,7 @@ func (t *Topic) replyDelMsg(sess *Session, del *MsgClientDel) error {
 	}()
 
 	var filteredList []int
-	if del.DelSeq == nil || len(del.DelSeq) == 0 {
+	if len(del.DelSeq) == 0 {
 		err = errors.New("del.msg: no IDs to delete")
 	} else {
 		remains := MAX_SEQ_COUNT
@@ -1763,7 +1765,7 @@ func (t *Topic) replyDelMsg(sess *Session, del *MsgClientDel) error {
 		t.perUser[sess.uid] = pud
 
 		// Notify user's other sessions
-		t.presPubMessageDelete(sess.uid, ranges, sess.sid)
+		t.presPubMessageDelete(sess.uid, t.delId, ranges, sess.sid)
 	}
 
 	reply := NoErr(del.Id, t.original(sess.uid), now)
