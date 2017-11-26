@@ -1610,34 +1610,31 @@ func (t *Topic) replyGetData(sess *Session, id string, req *MsgBrowseOpts) error
 // a session as {meta}
 // response goes to a single session rather than all sessions in a topic
 func (t *Topic) replyGetDel(sess *Session, id string, req *MsgBrowseOpts) error {
-	if req == nil {
-		// Request for deleted message ids makes no sense without parameters. It's a client bug.
-		// Just ignore it.
-		// TODO(gene): maybe reject the request instead of ignoring
-
-		return nil
-	}
-
-	log.Println("replyGetDel", t.name, req.SinceId, req.BeforeId, req.Limit)
 	now := types.TimeNow()
 
-	delIds, err := store.Messages.GetDeleted(t.name, sess.uid, msgOpts2storeOpts(req))
-	if err != nil {
-		log.Println("topic: error loading deleted message ids", err)
-		sess.queueOut(ErrUnknown(id, t.original(sess.uid), now))
-		return err
+	if req != nil {
+		delIds, err := store.Messages.GetDeleted(t.name, sess.uid, msgOpts2storeOpts(req))
+		if err != nil {
+			log.Println("topic: error loading deleted message ids", err)
+			sess.queueOut(ErrUnknown(id, t.original(sess.uid), now))
+			return err
+		}
+		if len(delIds) > 0 {
+			sess.queueOut(&ServerComMessage{Meta: &MsgServerMeta{
+				Id:    id,
+				Topic: t.original(sess.uid),
+				Del: &MsgDelValues{
+					DelId:  t.delId, // TODO: decide what ID to report here, if any
+					DelSeq: listToDelQuery(delIds)},
+				Timestamp: &now}})
+			return
+		}
 	}
-	if len(delIds) > 0 {
-		sess.queueOut(&ServerComMessage{Meta: &MsgServerMeta{
-			Id:        id,
-			Topic:     t.original(sess.uid),
-			Del:       &MsgDelValues{DelId: t.delId, DelSeq: listToDelQuery(delIds)},
-			Timestamp: &now}})
-	} else {
-		reply := NoErr(id, t.original(sess.uid), now)
-		reply.Ctrl.Params = map[string]string{"what": "del"}
-		sess.queueOut(reply)
-	}
+
+	reply := NoErr(id, t.original(sess.uid), now)
+	reply.Ctrl.Params = map[string]string{"what": "del"}
+	sess.queueOut(reply)
+
 	return nil
 }
 
