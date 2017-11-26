@@ -69,6 +69,7 @@ func pb_serv_serialize(msg *ServerComMessage) *pbx.ServerMsg {
 			What:         what,
 			UserAgent:    msg.Pres.UserAgent,
 			SeqId:        int32(msg.Pres.SeqId),
+			DelId:        int32(msg.Pres.DelId),
 			DelSeq:       pb_DelQuery_serialize(msg.Pres.DelSeq),
 			TargetUserId: msg.Pres.AcsTarget,
 			ActorUserId:  msg.Pres.AcsActor,
@@ -86,6 +87,7 @@ func pb_serv_serialize(msg *ServerComMessage) *pbx.ServerMsg {
 			Topic: msg.Meta.Topic,
 			Desc:  pb_TopicDesc_serialize(msg.Meta.Desc),
 			Sub:   pb_TopicSubSlice_serialize(msg.Meta.Sub),
+			Del:   pb_DelValues_serialize(msg.Meta.Del),
 		}}
 	}
 
@@ -143,6 +145,7 @@ func pb_serv_deserialize(pkt *pbx.ServerMsg) *ServerComMessage {
 			What:      what,
 			UserAgent: pres.GetUserAgent(),
 			SeqId:     int(pres.GetSeqId()),
+			DelId:     int(pres.GetDelId()),
 			DelSeq:    pb_DelQuery_deserialize(pres.GetDelSeq()),
 			AcsTarget: pres.GetTargetUserId(),
 			AcsActor:  pres.GetActorUserId(),
@@ -161,6 +164,7 @@ func pb_serv_deserialize(pkt *pbx.ServerMsg) *ServerComMessage {
 			Topic: meta.GetTopic(),
 			Desc:  pb_TopicDesc_deserialize(meta.GetDesc()),
 			Sub:   pb_TopicSubSlice_deserialize(meta.GetSub()),
+			Del:   pb_DelValues_deserialize(meta.GetDel()),
 		}
 	}
 	return &msg
@@ -724,4 +728,26 @@ func pb_DelQuery_deserialize(in []*pbx.DelQuery) []MsgDelQuery {
 	}
 
 	return out
+}
+
+func pb_DelValues_serialize(in *MsgDelValues) *pbx.DelValues {
+	if in == nil {
+		return nil
+	}
+
+	return &pbx.DelValues{
+		DelId:  int32(in.DelId),
+		DelSeq: pb_DelQuery_serialize(in.DelSeq),
+	}
+}
+
+func pb_DelValues_deserialize(in *pbx.DelValues) *MsgDelValues {
+	if in == nil {
+		return nil
+	}
+
+	return &MsgDelValues{
+		DelId:  int(in.GetDelId()),
+		DelSeq: pb_DelQuery_deserialize(in.GetDelSeq()),
+	}
 }

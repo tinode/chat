@@ -289,6 +289,12 @@ message TopicSub {
 	string last_seen_user_agent = 14;
 }
 
+message DelValues {
+	int32 del_id = 1;
+	repeated DelQuery del_seq = 2;
+}
+
+
 // {ctrl} message
 message ServerCtrl {
 	string id = 1;
@@ -330,10 +336,11 @@ message ServerPres {
 	What what = 3;
 	string user_agent = 4;
 	int32 seq_id = 5;
-	repeated DelQuery del_seq = 6;
-	string target_user_id = 7;
-	string actor_user_id = 8;
-	AccessMode acs = 9;
+	int32 del_id = 6;
+	repeated DelQuery del_seq = 7;
+	string target_user_id = 8;
+	string actor_user_id = 9;
+	AccessMode acs = 10;
 }
 
 // {meta} message
@@ -343,7 +350,7 @@ message ServerMeta {
 
 	TopicDesc desc = 3;
 	repeated TopicSub sub = 4;
-	repeated DelQuery del = 5;
+	DelValues del = 5;
 }
 
 // {info} message: server-side copy of ClientNote with From added

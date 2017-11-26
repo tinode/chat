@@ -154,7 +154,6 @@ func (h *Hub) run() {
 			// This is a message from a connection not subscribed to topic
 			// Route incoming message to topic if topic permits such routing
 
-			timestamp := time.Now().UTC().Round(time.Millisecond)
 			if dst := h.topicGet(msg.rcptto); dst != nil {
 				// Everything is OK, sending packet to known topic
 				if dst.broadcast != nil {
@@ -166,6 +165,8 @@ func (h *Hub) run() {
 				}
 			} else {
 				if msg.Data != nil {
+					timestamp := types.TimeNow()
+
 					// Normally the message is persisted at the topic. If the topic is offline,
 					// persist message here. The only case of sending to offline topics is invites/info to 'me'
 					// The 'me' must receive them, so ignore access settings
