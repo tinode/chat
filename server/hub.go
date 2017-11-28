@@ -135,11 +135,6 @@ func (h *Hub) run() {
 			// 2. Check access rights and reject, if appropriate
 			// 3. Attach session to the topic
 
-			if h.isShutdownInProgress {
-				// Ignore request to join when shutdown is in progress
-				continue
-			}
-
 			t := h.topicGet(sreg.topic) // is the topic already loaded?
 			if t == nil {
 				// Topic does not exist or not loaded
@@ -228,12 +223,6 @@ func (h *Hub) run() {
 				topicCount++
 				return true
 			})
-			/*
-				for _, topic := range h.topics {
-					topic.exit <- &shutDown{done: topicsdone}
-					topicCount++
-				}
-			*/
 
 			for i := 0; i < topicCount; i++ {
 				<-topicsdone
