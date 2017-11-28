@@ -1619,15 +1619,16 @@ func (t *Topic) replyGetDel(sess *Session, id string, req *MsgBrowseOpts) error 
 			sess.queueOut(ErrUnknown(id, t.original(sess.uid), now))
 			return err
 		}
+
 		if len(delIds) > 0 {
 			sess.queueOut(&ServerComMessage{Meta: &MsgServerMeta{
 				Id:    id,
 				Topic: t.original(sess.uid),
 				Del: &MsgDelValues{
-					DelId:  t.delId, // TODO: decide what ID to report here, if any
+					DelId:  t.delId, // TODO: this should be the maximum DelId among reported.
 					DelSeq: listToDelQuery(delIds)},
 				Timestamp: &now}})
-			return
+			return nil
 		}
 	}
 
@@ -1653,18 +1654,23 @@ func (t *Topic) replyDelMsg(sess *Session, del *MsgClientDel) error {
 	var filteredList []int
 	if len(del.DelSeq) == 0 {
 		err = errors.New("del.msg: no IDs to delete")
-	} else {
+
+		// Exclude a special case when the user wants to delete all messages.
+	} else if len(del.DelSeq) != 1 || del.DelSeq[0].LowId > 1 || del.DelSeq[0].HiId < t.lastId {
 		remains := MAX_SEQ_COUNT
 		for _, dq := range del.DelSeq {
-			if dq.SeqId > t.lastId || dq.SeqId < 0 ||
-				dq.LowId > t.lastId || dq.LowId < 0 ||
-				dq.HiId > t.lastId || dq.HiId < 0 ||
-				dq.HiId < dq.LowId ||
+			if dq.SeqId < 0 || dq.LowId > t.lastId ||
+				dq.LowId < 0 || dq.HiId < 0 || dq.HiId < dq.LowId ||
 				(dq.SeqId != 0 && (dq.HiId > 0 || dq.LowId > 0)) {
 				err = errors.New("del.msg: invalid entry in list")
 				break
 			}
-
+			if dq.SeqId > t.lastId {
+				dq.SeqId = t.lastId
+			}
+			if dq.HiId > t.lastId {
+				dq.HiId = t.lastId
+			}
 			if dq.SeqId != 0 && remains > 0 {
 				filteredList = append(filteredList, dq.SeqId)
 				remains--

@@ -115,7 +115,7 @@ message DelQuery {
 message ClientHi {
 	string id = 1;
 	string user_agent = 2;
-	int32 ver = 3;
+	string ver = 3;
 	string device_id = 4;
 	string lang = 5;
 }

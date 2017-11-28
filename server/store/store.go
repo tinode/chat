@@ -349,17 +349,19 @@ func (MessagesObjMapper) DeleteList(topic string, delId int, forUser types.Uid, 
 		return err
 	}
 
-	// Record ID of the delete transaction
-	err = adaptr.TopicUpdate(topic, map[string]interface{}{"DelId": delId})
-	if err != nil {
-		return err
+	if delId > 0 {
+		// Record ID of the delete transaction
+		err = adaptr.TopicUpdate(topic, map[string]interface{}{"DelId": delId})
+		if err != nil {
+			return err
+		}
+
+		// Soft-deleting will update one subscription, hard-deleting will ipdate all.
+		// Soft- or hard- is defined by the forUSer being defined.
+		return adaptr.SubsUpdate(topic, forUser, map[string]interface{}{"DelId": delId})
 	}
 
-	// Soft-deleting will update one subscription, hard-deleting will ipdate all.
-	// Soft- or hard- is defined by the forUSer being defined.
-	return adaptr.SubsUpdate(topic, forUser, map[string]interface{}{"DelId": delId})
-
-	return err
+	return nil
 }
 
 func (MessagesObjMapper) GetAll(topic string, forUser types.Uid, opt *types.BrowseOpt) ([]types.Message, error) {

@@ -973,28 +973,42 @@ func (a *RethinkDbAdapter) MessageGetDeleted(topic string, forUser t.Uid, opts *
 // MessageDeleteList deletes messages in the given topic with seqIds from the list
 func (a *RethinkDbAdapter) MessageDeleteList(topic string, delId int, forUser t.Uid, list []int) (err error) {
 	var indexVals []interface{}
-	for _, seq := range list {
-		indexVals = append(indexVals, []interface{}{topic, seq})
+
+	// list could be nil: that's a request to delete all messages.
+	// delId <= 0 means the whole topic is being deleted, thus also deleting all messages
+	if list != nil && delId > 0 {
+		for _, seq := range list {
+			indexVals = append(indexVals, []interface{}{topic, seq})
+		}
 	}
+
+	query := rdb.DB(a.dbName).Table("messages")
+	if indexVals != nil {
+		// Select individual messages
+		query = query.GetAllByIndex("Topic_SeqId", indexVals...)
+	} else {
+		// Select all messages
+		query = query.Between(
+			[]interface{}{topic, rdb.MinVal},
+			[]interface{}{topic, rdb.MaxVal},
+			rdb.BetweenOpts{Index: "Topic_SeqId"})
+	}
+
 	if forUser.IsZero() {
 		// Hard-deleting for all users
 		if delId <= 0 {
 			// Topic is being deleted. Just delete all messages.
-			_, err = rdb.DB(a.dbName).Table("messages").Between(
-				[]interface{}{topic, rdb.MinVal},
-				[]interface{}{topic, rdb.MaxVal},
-				rdb.BetweenOpts{Index: "Topic_SeqId"}).Delete().RunWrite(a.conn)
+			_, err = query.Delete().RunWrite(a.conn)
 		} else {
 			// Hard-delete of individual messages. Mark some messages as deleted.
-			_, err = rdb.DB(a.dbName).Table("messages").GetAllByIndex("Topic_SeqId", indexVals...).
-				Filter(rdb.Row.HasFields("DelId").Not()).
+			_, err = query.Filter(rdb.Row.HasFields("DelId").Not()).
 				Update(map[string]interface{}{"DeletedAt": t.TimeNow(), "DelId": delId, "From": nil,
 					"Head": nil, "Content": nil}).RunWrite(a.conn)
 		}
 	} else {
 		// Soft-deleting: adding DelId to DeletedFor
 		requester := forUser.String()
-		_, err = rdb.DB(a.dbName).Table("messages").GetAllByIndex("Topic_SeqId", indexVals...).
+		_, err = query.
 			// Skip hard-deleted messages
 			Filter(rdb.Row.HasFields("DelId").Not()).
 			// Skip messages already soft-deleted for the current user

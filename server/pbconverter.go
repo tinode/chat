@@ -178,7 +178,7 @@ func pb_cli_serialize(msg *ClientComMessage) *pbx.ClientMsg {
 		pkt.Message = &pbx.ClientMsg_Hi{Hi: &pbx.ClientHi{
 			Id:        msg.Hi.Id,
 			UserAgent: msg.Hi.UserAgent,
-			Ver:       int32(parseVersion(msg.Hi.Version)),
+			Ver:       msg.Hi.Version,
 			DeviceId:  msg.Hi.DeviceID,
 			Lang:      msg.Hi.Lang}}
 	} else if msg.Acc != nil {
@@ -258,7 +258,7 @@ func pb_cli_deserialize(pkt *pbx.ClientMsg) *ClientComMessage {
 		msg.Hi = &MsgClientHi{
 			Id:        hi.GetId(),
 			UserAgent: hi.GetUserAgent(),
-			Version:   versionToString(int(hi.GetVer())),
+			Version:   hi.GetVer(),
 			DeviceID:  hi.GetDeviceId(),
 			Lang:      hi.GetLang(),
 		}

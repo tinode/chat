@@ -227,22 +227,51 @@ func getApiKey(req *http.Request) string {
 	return apikey
 }
 
+// Parses version of format 0.13.xx or 0.13-xx or 0.13
+// The major and minor parts must be valid, the last part is ignored if missing or unparceable.
 func parseVersion(vers string) int {
+	var major, minor, trailer int
+	var err error
+
 	dot := strings.Index(vers, ".")
-	if dot < 0 {
+	if dot >= 0 {
+		major, err = strconv.Atoi(vers[:dot])
+	} else {
+		major, err = strconv.Atoi(vers)
+	}
+	if err != nil {
 		return 0
 	}
-	major, err := strconv.Atoi(vers[:dot])
-	if err != nil || major < 0 || major >= 0xff {
+
+	dot2 := strings.IndexAny(vers[dot+1:], ".-")
+	if dot2 > 0 {
+		minor, err = strconv.Atoi(vers[dot+1 : dot2])
+		// Ignoring the error here
+		trailer, _ = strconv.Atoi(vers[dot2+1:])
+	} else {
+		minor, err = strconv.Atoi(vers[dot+1:])
+	}
+	if err != nil {
 		return 0
 	}
-	minor, err := strconv.Atoi(vers[dot+1:])
-	if err != nil || minor < 0 || minor >= 0xff {
+
+	if major < 0 || minor < 0 || trailer < 0 || minor >= 0xff || trailer >= 0xff {
 		return 0
 	}
-	return (major << 8) | minor
+
+	return (major << 16) | (minor << 8) | trailer
 }
 
 func versionToString(vers int) string {
-	return strconv.Itoa((vers>>8)&0xff) + "." + strconv.Itoa(vers&0xff)
+	str := strconv.Itoa(vers>>16) + "." + strconv.Itoa((vers>>8)&0xff)
+	if vers&0xff != 0 {
+		str += "-" + strconv.Itoa(vers&0xff)
+	}
+	return str
+}
+
+// Returns > 0 if v1 > v2; zero if equal; < 0 if v1 < v2
+// Only Major and Minor parts are compared, the trailer is ignored.
+func versionCompare(v1, v2 int) int {
+	return (v1 - v2) & 0xFFFF00
 }

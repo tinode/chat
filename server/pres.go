@@ -394,7 +394,7 @@ func (t *Topic) presPubMessageCount(uid types.Uid, recv, read int, skip string) 
 // Let other sessions of a given user know that messages are now deleted
 // Cases V.1, V.2
 func (t *Topic) presPubMessageDelete(uid types.Uid, delId int, list []MsgDelQuery, skip string) {
-	if len(list) > 0 {
+	if len(list) > 0 || delId > 0 {
 		// This check is only needed for V.1, but it does not hurt V.2. Let's do it here for both.
 		pud, _ := t.perUser[uid]
 		if !(pud.modeGiven & pud.modeWant).IsPresencer() {
