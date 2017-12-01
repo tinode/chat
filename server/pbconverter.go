@@ -693,14 +693,14 @@ func pb_TopicSubSlice_deserialize(subs []*pbx.TopicSub) []MsgTopicSub {
 	return out
 }
 
-func pb_DelQuery_serialize(in []MsgDelQuery) []*pbx.DelQuery {
+func pb_DelQuery_serialize(in []MsgDelRange) []*pbx.SeqRange {
 	if in == nil {
 		return nil
 	}
 
-	out := make([]*pbx.DelQuery, len(in))
+	out := make([]*pbx.SeqRange, len(in))
 	for i, dq := range in {
-		out[i] = &pbx.DelQuery{}
+		out[i] = &pbx.SeqRange{}
 		if dq.SeqId > 0 {
 			out[i].DelId = &pbx.DelQuery_SeqId{SeqId: int32(dq.SeqId)}
 		} else {
@@ -712,12 +712,12 @@ func pb_DelQuery_serialize(in []MsgDelQuery) []*pbx.DelQuery {
 	return out
 }
 
-func pb_DelQuery_deserialize(in []*pbx.DelQuery) []MsgDelQuery {
+func pb_DelQuery_deserialize(in []*pbx.SeqRange) []MsgDelRange {
 	if in == nil {
 		return nil
 	}
 
-	out := make([]MsgDelQuery, len(in))
+	out := make([]MsgDelRange, len(in))
 	for i, dq := range in {
 		if r := dq.GetRange(); r != nil {
 			out[i].LowId = int(r.GetLow())

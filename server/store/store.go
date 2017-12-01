@@ -289,7 +289,7 @@ func (TopicsObjMapper) Delete(topic string) error {
 	if err := adaptr.SubsDelForTopic(topic); err != nil {
 		return err
 	}
-	if err := adaptr.MessageDeleteList(topic, -1, types.ZeroUid, nil); err != nil {
+	if err := adaptr.MessageDeleteList(topic, nil); err != nil {
 		return err
 	}
 
@@ -343,8 +343,17 @@ func (MessagesObjMapper) Save(msg *types.Message) error {
 	return adaptr.MessageSave(msg)
 }
 
-func (MessagesObjMapper) DeleteList(topic string, delId int, forUser types.Uid, list []int) error {
-	err := adaptr.MessageDeleteList(topic, delId, forUser, list)
+func (MessagesObjMapper) DeleteList(topic string, delId int, forUser types.Uid, ranges []types.Range) error {
+	var toDel *types.DelMessage
+	if delId > 0 {
+		toDel.InitTimes()
+		toDel = &types.DelMessage{
+			DelId:       delId,
+			DeletedFor:  forUser.String(),
+			SeqIdRanges: ranges}
+	}
+
+	err := adaptr.MessageDeleteList(topic, toDel)
 	if err != nil {
 		return err
 	}

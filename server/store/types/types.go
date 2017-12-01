@@ -711,6 +711,22 @@ type Message struct {
 	Content interface{}
 }
 
+// A range of message SeqIDs. If one ID in range, Hi is set to 0 or unset
+type Range struct {
+	Low int
+	Hi  int `json:"Hi,omitempty"`
+}
+
+// Log entry of a deleted message range
+type DelMessage struct {
+	ObjHeader
+	Topic       string
+	DeletedFor  string
+	DelId       int
+	SeqIdRanges []Range
+}
+
+// Id-based query, [since, before) - low end inclusive (closed), high-end exclusive (open)
 type BrowseOpt struct {
 	Since  int
 	Before int

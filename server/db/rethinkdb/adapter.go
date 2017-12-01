@@ -183,6 +183,16 @@ func (a *RethinkDbAdapter) CreateDb(reset bool) error {
 		}, rdb.IndexCreateOpts{Multi: true}).RunWrite(a.conn); err != nil {
 		return err
 	}
+	// Log of deleted messages
+	if _, err := rdb.DB("tinode").TableCreate("dellog", rdb.TableCreateOpts{PrimaryKey: "Id"}).RunWrite(a.conn); err != nil {
+		return err
+	}
+	if _, err := rdb.DB("tinode").Table("dellog").IndexCreateFunc("Topic_DelId",
+		func(row rdb.Term) interface{} {
+			return []interface{}{row.Field("Topic"), row.Field("DelId")}
+		}).RunWrite(a.conn); err != nil {
+		return err
+	}
 
 	// Index of unique user contact information as strings, such as "email:jdoe@example.com" or "tel:18003287448":
 	// {Id: <tag>, Source: <uid>} to ensure uniqueness of tags.
@@ -971,17 +981,23 @@ func (a *RethinkDbAdapter) MessageGetDeleted(topic string, forUser t.Uid, opts *
 }
 
 // MessageDeleteList deletes messages in the given topic with seqIds from the list
-func (a *RethinkDbAdapter) MessageDeleteList(topic string, delId int, forUser t.Uid, list []int) (err error) {
+func (a *RethinkDbAdapter) MessageDeleteList(topic string, toDel *t.DelMessage) (err error) {
 	var indexVals []interface{}
 
-	// list could be nil: that's a request to delete all messages.
-	// delId <= 0 means the whole topic is being deleted, thus also deleting all messages
-	if list != nil && delId > 0 {
-		for _, seq := range list {
+	// toDel == nil means the whole topic is being deleted, thus also deleting all messages
+	if toDel != nil {
+		toDel.SetUid(store.GetUid())
+		_, err := rdb.DB(a.dbName).Table("dellog").Insert(toDel).RunWrite(a.conn)
+		if err != nil {
+			return err
+		}
+
+		for _, seq := range toDel.SeqIdRanges {
 			indexVals = append(indexVals, []interface{}{topic, seq})
 		}
 	}
 
+	//requester := forUser.String()
 	query := rdb.DB(a.dbName).Table("messages")
 	if indexVals != nil {
 		// Select individual messages
@@ -994,20 +1010,17 @@ func (a *RethinkDbAdapter) MessageDeleteList(topic string, delId int, forUser t.
 			rdb.BetweenOpts{Index: "Topic_SeqId"})
 	}
 
-	if forUser.IsZero() {
-		// Hard-deleting for all users
-		if delId <= 0 {
-			// Topic is being deleted. Just delete all messages.
-			_, err = query.Delete().RunWrite(a.conn)
-		} else {
-			// Hard-delete of individual messages. Mark some messages as deleted.
-			_, err = query.Filter(rdb.Row.HasFields("DelId").Not()).
-				Update(map[string]interface{}{"DeletedAt": t.TimeNow(), "DelId": delId, "From": nil,
-					"Head": nil, "Content": nil}).RunWrite(a.conn)
-		}
+	if toDel == nil {
+		// Topic is being deleted. Just delete all messages.
+		_, err = query.Delete().RunWrite(a.conn)
+	} else if toDel.DeletedFor == "" {
+		// Hard-deleting for all users{
+		// Hard-delete of individual messages. Mark some messages as deleted.
+		_, err = query.Filter(rdb.Row.HasFields("DelId").Not()).
+			Update(map[string]interface{}{"DeletedAt": t.TimeNow(), "DelId": toDel.DelId, "From": nil,
+				"Head": nil, "Content": nil}).RunWrite(a.conn)
 	} else {
 		// Soft-deleting: adding DelId to DeletedFor
-		requester := forUser.String()
 		_, err = query.
 			// Skip hard-deleted messages
 			Filter(rdb.Row.HasFields("DelId").Not()).
@@ -1015,13 +1028,18 @@ func (a *RethinkDbAdapter) MessageDeleteList(topic string, delId int, forUser t.
 			Filter(func(row rdb.Term) interface{} {
 				return rdb.Not(row.Field("DeletedFor").Default([]interface{}{}).Contains(
 					func(df rdb.Term) interface{} {
-						return df.Field("User").Eq(requester)
+						return df.Field("User").Eq(toDel.DeletedFor)
 					}))
 			}).Update(map[string]interface{}{"DeletedFor": rdb.Row.Field("DeletedFor").
 			Default([]interface{}{}).Append(
 			&t.SoftDelete{
-				User:  forUser.String(),
-				DelId: delId})}).RunWrite(a.conn)
+				User:  toDel.DeletedFor,
+				DelId: toDel.DelId})}).RunWrite(a.conn)
+	}
+
+	if err != nil && toDel != nil {
+		rdb.DB(a.dbName).Table("dellog").Get(toDel.Id).
+			Delete(rdb.DeleteOpts{Durability: "soft", ReturnChanges: false}).RunWrite(a.conn)
 	}
 
 	return err

@@ -104,13 +104,6 @@ message SeqRange {
 	int32 hi = 2;
 }
 
-message DelQuery {
-	oneof DelId {
-		int32 seq_id = 1;
-		SeqRange range = 2;
-	}
-}
-
 // Client handshake
 message ClientHi {
 	string id = 1;
@@ -201,7 +194,7 @@ message ClientDel {
 	}
 	What what = 3;
 	// Delete messages by id or range of ids
-	repeated DelQuery del_seq = 4;
+	repeated SeqRange del_seq = 4;
 	// User ID of the subscription to delete
 	string user_id = 5;
 	// Request to hard-delete messages for all users, if such option is available.
@@ -291,7 +284,7 @@ message TopicSub {
 
 message DelValues {
 	int32 del_id = 1;
-	repeated DelQuery del_seq = 2;
+	repeated SeqRange del_seq = 2;
 }
 
 
@@ -337,7 +330,7 @@ message ServerPres {
 	string user_agent = 4;
 	int32 seq_id = 5;
 	int32 del_id = 6;
-	repeated DelQuery del_seq = 7;
+	repeated SeqRange del_seq = 7;
 	string target_user_id = 8;
 	string actor_user_id = 9;
 	AccessMode acs = 10;

@@ -1626,7 +1626,7 @@ func (t *Topic) replyGetDel(sess *Session, id string, req *MsgBrowseOpts) error 
 				Topic: t.original(sess.uid),
 				Del: &MsgDelValues{
 					DelId:  t.delId, // TODO: this should be the maximum DelId among reported.
-					DelSeq: listToDelQuery(delIds)},
+					DelSeq: listToDelRanges(delIds)},
 				Timestamp: &now}})
 			return nil
 		}
@@ -2099,8 +2099,8 @@ func genTopicName() string {
 	return "grp" + store.GetUidString()
 }
 
-// Convert a list of IDs into IDs and ranges
-func listToDelQuery(list []int) []MsgDelQuery {
+// Convert a list of IDs into ranges
+func listToDelRanges(list []int) []MsgDelRange {
 	if list == nil || len(list) == 0 {
 		return nil
 	}
