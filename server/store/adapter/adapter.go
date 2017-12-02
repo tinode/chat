@@ -72,7 +72,7 @@ type Adapter interface {
 	// Mark messages as deleted. Soft- or Hard- is defined by forUser value: forUSer.IsZero == true is hard.
 	MessageDeleteList(topic string, toDel *t.DelMessage) error
 	// Get a list of deleted message Ids
-	MessageGetDeleted(topic string, forUser t.Uid, opts *t.BrowseOpt) ([]int, error)
+	MessageGetDeleted(topic string, forUser t.Uid, opts *t.BrowseOpt) ([]t.DelMessage, error)
 
 	// Devices (for push notifications)
 	DeviceUpsert(uid t.Uid, dev *t.DeviceDef) error

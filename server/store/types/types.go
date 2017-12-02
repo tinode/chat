@@ -717,6 +717,51 @@ type Range struct {
 	Hi  int `json:"Hi,omitempty"`
 }
 
+type RangeSorter []Range
+
+func (rs RangeSorter) Len() int {
+	return len(rs)
+}
+func (rs RangeSorter) Swap(i, j int) {
+	rs[i], rs[j] = rs[j], rs[i]
+}
+
+// Sort by Low ascending, then sort by Hi descending
+func (rs RangeSorter) Less(i, j int) bool {
+	if rs[i].Low < rs[j].Low {
+		return true
+	} else if rs[i].Low == rs[j].Low {
+		return rs[i].Hi > rs[j].Hi
+	}
+	return false
+}
+
+// Normalize ranges - remove overlaps. The range is expected to be sorted.
+func (rs RangeSorter) Normalize() {
+	ll := rs.Len()
+	if ll > 1 {
+		p := 0
+		for i := 1; i < ll; i++ {
+			if rs[p].Low == rs[i].Low {
+				// Earlier range is guaranteed to be wider than the later range,
+				// so collapse (by doing nothing)
+				continue
+			}
+			// Check for full or partial overlap
+			if rs[p].Hi > 0 && rs[p].Hi >= rs[i].Low {
+				// Partial overlap
+				if rs[p].Hi < rs[i].Hi {
+					rs[p].Hi = rs[i].Hi
+				}
+				continue
+			}
+			// No overlap
+			p++
+		}
+		rs = rs[:p+1]
+	}
+}
+
 // Log entry of a deleted message range
 type DelMessage struct {
 	ObjHeader

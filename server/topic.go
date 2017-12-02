@@ -1565,39 +1565,37 @@ func (t *Topic) replySetSub(h *Hub, sess *Session, set *MsgClientSet) error {
 func (t *Topic) replyGetData(sess *Session, id string, req *MsgBrowseOpts) error {
 	now := time.Now().UTC().Round(time.Millisecond)
 
-	// Check if the user has permission to read the topic
-	if userData := t.perUser[sess.uid]; !(userData.modeGiven & userData.modeWant).IsReader() {
-		sess.queueOut(NoErr(id, t.original(sess.uid), now))
-		return nil
-	}
+	// Check if the user has permission to read the topic data
+	if userData := t.perUser[sess.uid]; (userData.modeGiven & userData.modeWant).IsReader() {
+		// Read messages from DB
+		messages, err := store.Messages.GetAll(t.name, sess.uid, msgOpts2storeOpts(req))
+		if err != nil {
+			log.Println("topic: error loading topics ", err)
+			sess.queueOut(ErrUnknown(id, t.original(sess.uid), now))
+			return err
+		}
 
-	messages, err := store.Messages.GetAll(t.name, sess.uid, msgOpts2storeOpts(req))
-	if err != nil {
-		log.Println("topic: error loading topics ", err)
-		sess.queueOut(ErrUnknown(id, t.original(sess.uid), now))
-		return err
-	}
+		// Push the list of messages to the client as {data}.
+		// Messages are sent in reverse order than fetched from DB to make it easier for
+		// clients to process.
+		if messages != nil {
+			for i := len(messages) - 1; i >= 0; i-- {
+				mm := messages[i]
 
-	// Push the list of messages to the client as {data}.
-	// Messages are sent in reverse order than fetched from DB to make it easier for
-	// clients to process.
-	if messages != nil {
-		for i := len(messages) - 1; i >= 0; i-- {
-			mm := messages[i]
+				from := types.ParseUid(mm.From)
+				msg := &ServerComMessage{Data: &MsgServerData{
+					Topic:     t.original(sess.uid),
+					Head:      mm.Head,
+					SeqId:     mm.SeqId,
+					From:      from.UserId(),
+					Timestamp: mm.CreatedAt,
+					Content:   mm.Content}}
 
-			from := types.ParseUid(mm.From)
-			msg := &ServerComMessage{Data: &MsgServerData{
-				Topic:     t.original(sess.uid),
-				Head:      mm.Head,
-				SeqId:     mm.SeqId,
-				From:      from.UserId(),
-				Timestamp: mm.CreatedAt,
-				Content:   mm.Content}}
-
-			sess.queueOut(msg)
-
+				sess.queueOut(msg)
+			}
 		}
 	}
+
 	// Inform the requester that all the data has been served.
 	reply := NoErr(id, t.original(sess.uid), now)
 	reply.Ctrl.Params = map[string]string{"what": "data"}
@@ -1612,21 +1610,22 @@ func (t *Topic) replyGetData(sess *Session, id string, req *MsgBrowseOpts) error
 func (t *Topic) replyGetDel(sess *Session, id string, req *MsgBrowseOpts) error {
 	now := types.TimeNow()
 
-	if req != nil {
-		delIds, err := store.Messages.GetDeleted(t.name, sess.uid, msgOpts2storeOpts(req))
+	// Check if the user has permission to read the topic data and the request is valid
+	if userData := t.perUser[sess.uid]; (userData.modeGiven & userData.modeWant).IsReader() && req != nil {
+		ranges, delId, err := store.Messages.GetDeleted(t.name, sess.uid, msgOpts2storeOpts(req))
 		if err != nil {
 			log.Println("topic: error loading deleted message ids", err)
 			sess.queueOut(ErrUnknown(id, t.original(sess.uid), now))
 			return err
 		}
 
-		if len(delIds) > 0 {
+		if len(ranges) > 0 {
 			sess.queueOut(&ServerComMessage{Meta: &MsgServerMeta{
 				Id:    id,
 				Topic: t.original(sess.uid),
 				Del: &MsgDelValues{
-					DelId:  t.delId, // TODO: this should be the maximum DelId among reported.
-					DelSeq: listToDelRanges(delIds)},
+					DelId:  delId,
+					DelSeq: delrange_deserialize(ranges)},
 				Timestamp: &now}})
 			return nil
 		}
@@ -1651,71 +1650,28 @@ func (t *Topic) replyDelMsg(sess *Session, del *MsgClientDel) error {
 		}
 	}()
 
-	var filteredList []int
+	var ranges []types.Range
 	if len(del.DelSeq) == 0 {
 		err = errors.New("del.msg: no IDs to delete")
-
-		// Exclude a special case when the user wants to delete all messages.
-	} else if len(del.DelSeq) != 1 || del.DelSeq[0].LowId > 1 || del.DelSeq[0].HiId < t.lastId {
-		remains := MAX_SEQ_COUNT
+	} else {
 		for _, dq := range del.DelSeq {
-			if dq.SeqId < 0 || dq.LowId > t.lastId ||
-				dq.LowId < 0 || dq.HiId < 0 || dq.HiId < dq.LowId ||
-				(dq.SeqId != 0 && (dq.HiId > 0 || dq.LowId > 0)) {
+			if dq.LowId > t.lastId || dq.LowId < 0 || dq.HiId < 0 ||
+				(dq.HiId > 0 && dq.LowId >= dq.HiId) ||
+				(dq.LowId == 0 && dq.HiId == 0) {
 				err = errors.New("del.msg: invalid entry in list")
 				break
 			}
-			if dq.SeqId > t.lastId {
-				dq.SeqId = t.lastId
-			}
 			if dq.HiId > t.lastId {
-				dq.HiId = t.lastId
+				dq.HiId = t.lastId + 1
 			}
-			if dq.SeqId != 0 && remains > 0 {
-				filteredList = append(filteredList, dq.SeqId)
-				remains--
-			} else {
-				// Expand the range into individial IDs
-				for i := dq.LowId; i <= dq.HiId && remains > 0; i++ {
-					filteredList = append(filteredList, i)
-					remains--
-				}
-			}
-
-			if remains <= 0 {
-				break
-			}
+			ranges = append(ranges, types.Range{Low: dq.LowId, Hi: dq.HiId})
 		}
 
 		if err == nil {
-			sort.Ints(filteredList)
-			ll := len(filteredList)
-			if ll > 1 {
-				p := 0
-				// Remove zeros
-				for i := 0; i < ll && filteredList[i] == 0; i++ {
-					p++
-				}
-				if p > 0 {
-					filteredList = filteredList[p:]
-					p = 0
-				}
-				// Remove duplicates
-				for i := 1; i < ll; i++ {
-					if filteredList[p] == filteredList[i] {
-						continue
-					}
-					p++
-					if p < i {
-						filteredList[p] = filteredList[i]
-					}
-				}
-				filteredList = filteredList[:p+1]
-			}
-
-			if len(filteredList) == 0 {
-				err = errors.New("del.msg: no valid entries in list")
-			}
+			// Sort by Low ascending then by Hi descending.
+			sort.Sort(types.RangeSorter(ranges))
+			// Collapse overlapping ranges
+			types.RangeSorter(ranges).Normalize()
 		}
 	}
 
@@ -1743,23 +1699,21 @@ func (t *Topic) replyDelMsg(sess *Session, del *MsgClientDel) error {
 		forUser = types.ZeroUid
 	}
 
-	if err = store.Messages.DeleteList(t.name, t.delId+1, forUser, filteredList); err != nil {
+	if err = store.Messages.DeleteList(t.name, t.delId+1, forUser, ranges); err != nil {
 		sess.queueOut(ErrUnknown(del.Id, t.original(sess.uid), now))
 		return err
 	}
 
 	// Increment Delete transaction ID
 	t.delId++
-
-	// Convert a list of IDs into IDs and ranges
-	ranges := listToDelQuery(filteredList)
+	dr := delrange_deserialize(ranges)
 	if del.Hard {
 		for uid, pud := range t.perUser {
 			pud.delId = t.delId
 			t.perUser[uid] = pud
 		}
 		// Broadcast the change to all, online and offline, exclude the session making the change.
-		params := &PresParams{delSeq: ranges, actor: sess.uid.UserId()}
+		params := &PresParams{delSeq: dr, actor: sess.uid.UserId()}
 		t.presSubsOnline("del", "", params, types.ModeRead, sess.sid, "")
 		t.presSubsOffline("del", params, types.ModeRead, sess.sid, true)
 	} else {
@@ -1768,7 +1722,7 @@ func (t *Topic) replyDelMsg(sess *Session, del *MsgClientDel) error {
 		t.perUser[sess.uid] = pud
 
 		// Notify user's other sessions
-		t.presPubMessageDelete(sess.uid, t.delId, ranges, sess.sid)
+		t.presPubMessageDelete(sess.uid, t.delId, dr, sess.sid)
 	}
 
 	reply := NoErr(del.Id, t.original(sess.uid), now)
@@ -2100,27 +2054,28 @@ func genTopicName() string {
 }
 
 // Convert a list of IDs into ranges
-func listToDelRanges(list []int) []MsgDelRange {
-	if list == nil || len(list) == 0 {
+func delrange_deserialize(in []types.Range) []MsgDelRange {
+	if len(in) == 0 {
 		return nil
 	}
 
-	ranges := []MsgDelQuery{{SeqId: list[0]}}
-	for r, i := 0, 1; i < len(list); i++ {
-		if ranges[r].SeqId+1 == list[i] {
-			// Convert single ID into a range of IDs
-			ranges[r].LowId = ranges[r].SeqId
-			ranges[r].SeqId = 0
-			ranges[r].HiId = list[i]
-		} else if ranges[r].HiId+1 == list[i] {
-			// Extend current range
-			ranges[r].HiId++
-		} else {
-			// Start new range
-			r++
-			ranges = append(ranges, MsgDelQuery{SeqId: list[i]})
-		}
+	var out []MsgDelRange
+	for _, r := range in {
+		out = append(out, MsgDelRange{LowId: r.Low, HiId: r.Hi})
 	}
 
-	return ranges
+	return out
+}
+
+func delrange_serialize(in []MsgDelRange) []types.Range {
+	if len(in) == 0 {
+		return nil
+	}
+
+	var out []types.Range
+	for _, r := range in {
+		out = append(out, types.Range{Low: r.LowId, Hi: r.HiId})
+	}
+
+	return out
 }

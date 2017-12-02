@@ -3,6 +3,7 @@ package store
 import (
 	"encoding/json"
 	"errors"
+	"sort"
 	"time"
 
 	"github.com/tinode/chat/server/auth"
@@ -377,8 +378,26 @@ func (MessagesObjMapper) GetAll(topic string, forUser types.Uid, opt *types.Brow
 	return adaptr.MessageGetAll(topic, forUser, opt)
 }
 
-func (MessagesObjMapper) GetDeleted(topic string, forUser types.Uid, opt *types.BrowseOpt) ([]int, error) {
-	return adaptr.MessageGetDeleted(topic, forUser, opt)
+// Returns the ranges of deleted messages and the largesr DelId reported in the list
+func (MessagesObjMapper) GetDeleted(topic string, forUser types.Uid, opt *types.BrowseOpt) ([]types.Range, int, error) {
+	dmsgs, err := adaptr.MessageGetDeleted(topic, forUser, opt)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	var ranges []types.Range
+	var maxId int
+	// Flatten out the ranges
+	for _, dm := range dmsgs {
+		if dm.DelId > maxId {
+			maxId = dm.DelId
+		}
+		ranges = append(ranges, dm.SeqIdRanges...)
+	}
+	sort.Sort(types.RangeSorter(ranges))
+	types.RangeSorter(ranges).Normalize()
+
+	return ranges, maxId, nil
 }
 
 var authHandlers map[string]auth.AuthHandler

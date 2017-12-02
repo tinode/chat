@@ -7,7 +7,6 @@ import (
 	"errors"
 	"hash/fnv"
 	"log"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -897,7 +896,8 @@ func (a *RethinkDbAdapter) MessageGetAll(topic string, forUser t.Uid, opts *t.Br
 	return msgs, nil
 }
 
-func (a *RethinkDbAdapter) MessageGetDeleted(topic string, forUser t.Uid, opts *t.BrowseOpt) ([]int, error) {
+// Get ranges of deleted messages
+func (a *RethinkDbAdapter) MessageGetDeleted(topic string, forUser t.Uid, opts *t.BrowseOpt) ([]t.DelMessage, error) {
 	log.Println("Loading ids of deleted messages for topic", topic, opts)
 
 	var limit int = 1024 // TODO(gene): pass into adapter as a config param
@@ -919,65 +919,28 @@ func (a *RethinkDbAdapter) MessageGetDeleted(topic string, forUser t.Uid, opts *
 		}
 	}
 
-	// Converter of sequence [{SeqId: val}, ...] to a slice of [val, ...]
-	toSlice := func(seq rdb.Term) interface{} {
-		return []interface{}{seq.Field("SeqId")}
-	}
-
-	// Fetch soft-deleted messages
-
-	requester := forUser.String()
-	rows, err := rdb.DB(a.dbName).Table("messages").
-		Between([]interface{}{topic, requester, lower}, []interface{}{topic, requester, upper},
-			rdb.BetweenOpts{Index: "Topic_DeletedFor"}).Pluck("SeqId").
-		Limit(limit).ConcatMap(toSlice).Run(a.conn)
-
-	if err != nil {
-		return nil, err
-	}
-
-	var delIds []int
-	if err = rows.All(&delIds); err != nil {
-		return nil, err
-	}
-
-	// Now fetch hard-deleted messages
-
-	rows, err = rdb.DB(a.dbName).Table("messages").
-		Between([]interface{}{topic, lower}, []interface{}{topic, upper},
-			rdb.BetweenOpts{Index: "Topic_DelId"}).Pluck("SeqId").
-		Limit(limit).ConcatMap(toSlice).Run(a.conn)
+	// Fetch log of deletions
+	rows, err := rdb.DB(a.dbName).Table("dellog").
+		// Select log entries for the given table and DelId values between two limits
+		Between([]interface{}{topic, lower}, []interface{}{topic, upper}, rdb.BetweenOpts{Index: "Topic_DelId"}).
+		// Sort from low DelIds to high
+		OrderBy(rdb.OrderByOpts{Index: "Topic_DelId"}).
+		// Keep entries soft-deleted for the current user and all hard-deleted entries.
+		Filter(func(row rdb.Term) interface{} {
+			return row.Field("DeletedFor").Eq(forUser.String()).Or(row.Field("DeletedFor").Eq(""))
+		}).
+		Limit(limit).Run(a.conn)
 
 	if err != nil {
 		return nil, err
 	}
 
-	var hardDelIds []int
-	if err = rows.All(&hardDelIds); err != nil {
+	var dmsgs []t.DelMessage
+	if err = rows.All(&dmsgs); err != nil {
 		return nil, err
 	}
 
-	// Merge the hard- and soft-deleted lists then sort.
-
-	delIds = append(delIds, hardDelIds...)
-	sort.Ints(delIds)
-	// Remove duplicate entries: message could be first soft- then hard- deleted.
-	ll := len(delIds)
-	if ll > 1 {
-		p := 0
-		for i := 1; i < ll; i++ {
-			if delIds[p] == delIds[i] {
-				continue
-			}
-			p++
-			if p < i {
-				delIds[p] = delIds[i]
-			}
-		}
-		delIds = delIds[:p+1]
-	}
-
-	return delIds, nil
+	return dmsgs, nil
 }
 
 // MessageDeleteList deletes messages in the given topic with seqIds from the list
