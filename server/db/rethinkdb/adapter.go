@@ -947,57 +947,65 @@ func (a *RethinkDbAdapter) MessageGetDeleted(topic string, forUser t.Uid, opts *
 func (a *RethinkDbAdapter) MessageDeleteList(topic string, toDel *t.DelMessage) (err error) {
 	var indexVals []interface{}
 
-	// toDel == nil means the whole topic is being deleted, thus also deleting all messages
-	if toDel != nil {
+	query := rdb.DB(a.dbName).Table("messages")
+	if toDel == nil {
+		// Whole topic is being deleted, thus also deleting all messages
+		_, err = query.Between(
+			[]interface{}{topic, rdb.MinVal},
+			[]interface{}{topic, rdb.MaxVal},
+			rdb.BetweenOpts{Index: "Topic_SeqId"}).Delete().RunWrite(a.conn)
+	} else {
+		// Only some messages are being deleted
 		toDel.SetUid(store.GetUid())
+
+		// Start with making a log entry
 		_, err := rdb.DB(a.dbName).Table("dellog").Insert(toDel).RunWrite(a.conn)
 		if err != nil {
 			return err
 		}
 
-		for _, seq := range toDel.SeqIdRanges {
-			indexVals = append(indexVals, []interface{}{topic, seq})
+		if len(toDel.SeqIdRanges) > 1 {
+			for _, rng := range toDel.SeqIdRanges {
+				if rng.Hi == 0 {
+					indexVals = append(indexVals, []interface{}{topic, rng.Low})
+				} else {
+					for i := rng.Low; i < rng.Hi; i++ {
+						indexVals = append(indexVals, []interface{}{topic, i})
+					}
+				}
+			}
+			query = query.GetAllByIndex("Topic_SeqId", indexVals...)
+		} else {
+			// Optimizing for a special case of single range low..hi
+			query = query.Between(
+				[]interface{}{topic, toDel.SeqIdRanges[0].Low},
+				[]interface{}{topic, toDel.SeqIdRanges[0].Hi},
+				rdb.BetweenOpts{Index: "Topic_SeqId"})
 		}
-	}
 
-	//requester := forUser.String()
-	query := rdb.DB(a.dbName).Table("messages")
-	if indexVals != nil {
-		// Select individual messages
-		query = query.GetAllByIndex("Topic_SeqId", indexVals...)
-	} else {
-		// Select all messages
-		query = query.Between(
-			[]interface{}{topic, rdb.MinVal},
-			[]interface{}{topic, rdb.MaxVal},
-			rdb.BetweenOpts{Index: "Topic_SeqId"})
-	}
-
-	if toDel == nil {
-		// Topic is being deleted. Just delete all messages.
-		_, err = query.Delete().RunWrite(a.conn)
-	} else if toDel.DeletedFor == "" {
-		// Hard-deleting for all users{
-		// Hard-delete of individual messages. Mark some messages as deleted.
-		_, err = query.Filter(rdb.Row.HasFields("DelId").Not()).
-			Update(map[string]interface{}{"DeletedAt": t.TimeNow(), "DelId": toDel.DelId, "From": nil,
-				"Head": nil, "Content": nil}).RunWrite(a.conn)
-	} else {
-		// Soft-deleting: adding DelId to DeletedFor
-		_, err = query.
-			// Skip hard-deleted messages
-			Filter(rdb.Row.HasFields("DelId").Not()).
-			// Skip messages already soft-deleted for the current user
-			Filter(func(row rdb.Term) interface{} {
-				return rdb.Not(row.Field("DeletedFor").Default([]interface{}{}).Contains(
-					func(df rdb.Term) interface{} {
-						return df.Field("User").Eq(toDel.DeletedFor)
-					}))
-			}).Update(map[string]interface{}{"DeletedFor": rdb.Row.Field("DeletedFor").
-			Default([]interface{}{}).Append(
-			&t.SoftDelete{
-				User:  toDel.DeletedFor,
-				DelId: toDel.DelId})}).RunWrite(a.conn)
+		if toDel.DeletedFor == "" {
+			// Hard-deleting for all users{
+			// Hard-delete of individual messages. Mark some messages as deleted.
+			_, err = query.Filter(rdb.Row.HasFields("DelId").Not()).
+				Update(map[string]interface{}{"DeletedAt": t.TimeNow(), "DelId": toDel.DelId, "From": nil,
+					"Head": nil, "Content": nil}).RunWrite(a.conn)
+		} else {
+			// Soft-deleting: adding DelId to DeletedFor
+			_, err = query.
+				// Skip hard-deleted messages
+				Filter(rdb.Row.HasFields("DelId").Not()).
+				// Skip messages already soft-deleted for the current user
+				Filter(func(row rdb.Term) interface{} {
+					return rdb.Not(row.Field("DeletedFor").Default([]interface{}{}).Contains(
+						func(df rdb.Term) interface{} {
+							return df.Field("User").Eq(toDel.DeletedFor)
+						}))
+				}).Update(map[string]interface{}{"DeletedFor": rdb.Row.Field("DeletedFor").
+				Default([]interface{}{}).Append(
+				&t.SoftDelete{
+					User:  toDel.DeletedFor,
+					DelId: toDel.DelId})}).RunWrite(a.conn)
+		}
 	}
 
 	if err != nil && toDel != nil {

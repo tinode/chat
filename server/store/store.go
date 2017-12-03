@@ -347,11 +347,11 @@ func (MessagesObjMapper) Save(msg *types.Message) error {
 func (MessagesObjMapper) DeleteList(topic string, delId int, forUser types.Uid, ranges []types.Range) error {
 	var toDel *types.DelMessage
 	if delId > 0 {
-		toDel.InitTimes()
 		toDel = &types.DelMessage{
 			DelId:       delId,
 			DeletedFor:  forUser.String(),
 			SeqIdRanges: ranges}
+		toDel.InitTimes()
 	}
 
 	err := adaptr.MessageDeleteList(topic, toDel)

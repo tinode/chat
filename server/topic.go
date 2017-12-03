@@ -24,8 +24,8 @@ import (
 
 const UA_TIMER_DELAY = time.Second * 5
 
-// Maximum number of SeqIds to pass in a list
-const MAX_SEQ_COUNT = 256
+// Maximum number of messages to delete
+const MAX_DELETE_COUNT = 1024
 
 // Topic: an isolated communication channel
 type Topic struct {
@@ -1654,6 +1654,7 @@ func (t *Topic) replyDelMsg(sess *Session, del *MsgClientDel) error {
 	if len(del.DelSeq) == 0 {
 		err = errors.New("del.msg: no IDs to delete")
 	} else {
+		count := 0
 		for _, dq := range del.DelSeq {
 			if dq.LowId > t.lastId || dq.LowId < 0 || dq.HiId < 0 ||
 				(dq.HiId > 0 && dq.LowId >= dq.HiId) ||
@@ -1664,6 +1665,12 @@ func (t *Topic) replyDelMsg(sess *Session, del *MsgClientDel) error {
 			if dq.HiId > t.lastId {
 				dq.HiId = t.lastId + 1
 			}
+			if dq.HiId == 0 {
+				count++
+			} else {
+				count += dq.HiId - dq.LowId
+			}
+
 			ranges = append(ranges, types.Range{Low: dq.LowId, Hi: dq.HiId})
 		}
 
@@ -1672,6 +1679,10 @@ func (t *Topic) replyDelMsg(sess *Session, del *MsgClientDel) error {
 			sort.Sort(types.RangeSorter(ranges))
 			// Collapse overlapping ranges
 			types.RangeSorter(ranges).Normalize()
+		}
+
+		if count > MAX_DELETE_COUNT && len(ranges) > 1 {
+			err = errors.New("del.msg: too many messages to delete")
 		}
 	}
 
