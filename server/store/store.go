@@ -348,6 +348,7 @@ func (MessagesObjMapper) DeleteList(topic string, delId int, forUser types.Uid, 
 	var toDel *types.DelMessage
 	if delId > 0 {
 		toDel = &types.DelMessage{
+			Topic:       topic,
 			DelId:       delId,
 			DeletedFor:  forUser.String(),
 			SeqIdRanges: ranges}

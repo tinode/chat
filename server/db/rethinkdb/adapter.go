@@ -964,7 +964,7 @@ func (a *RethinkDbAdapter) MessageDeleteList(topic string, toDel *t.DelMessage) 
 			return err
 		}
 
-		if len(toDel.SeqIdRanges) > 1 {
+		if len(toDel.SeqIdRanges) > 1 || toDel.SeqIdRanges[0].Hi <= toDel.SeqIdRanges[0].Low+1 {
 			for _, rng := range toDel.SeqIdRanges {
 				if rng.Hi == 0 {
 					indexVals = append(indexVals, []interface{}{topic, rng.Low})
