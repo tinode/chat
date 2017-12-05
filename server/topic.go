@@ -1724,8 +1724,8 @@ func (t *Topic) replyDelMsg(sess *Session, del *MsgClientDel) error {
 			t.perUser[uid] = pud
 		}
 		// Broadcast the change to all, online and offline, exclude the session making the change.
-		params := &PresParams{delSeq: dr, actor: sess.uid.UserId()}
-		t.presSubsOnline("del", "", params, types.ModeRead, sess.sid, "")
+		params := &PresParams{delId: t.delId, delSeq: dr, actor: sess.uid.UserId()}
+		t.presSubsOnline("del", params.actor, params, types.ModeRead, sess.sid, "")
 		t.presSubsOffline("del", params, types.ModeRead, sess.sid, true)
 	} else {
 		pud := t.perUser[sess.uid]
