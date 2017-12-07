@@ -75,12 +75,8 @@ message GetOpts {
 message BrowseOpts {
 	// Load messages with seq id equal or greater than this
 	int32 since_id = 1;
-	// Load messages with UpdatedAt equal or grater than this
-	int64 since_ts = 2; 
 	// Load messages with seq id lower than this
 	int32 before_id = 3;
-	// Load messages with UpdatedAt lower than this
-	int64 before_ts = 4;
 	// Limit the number of messages loaded
 	int32 limit = 5;
 }
@@ -103,11 +99,16 @@ message SetQuery {
 	SetSub sub = 2;
 }
 
+message SeqRange {
+	int32 low = 1;
+	int32 hi = 2;
+}
+
 // Client handshake
 message ClientHi {
 	string id = 1;
 	string user_agent = 2;
-	int32 ver = 3;
+	string ver = 3;
 	string device_id = 4;
 	string lang = 5;
 }
@@ -192,14 +193,12 @@ message ClientDel {
 		SUB = 2;
 	}
 	What what = 3;
-	// Delete messages older than this seq ID (inclusive)
-	int32 before = 4;
-	// List of Seq Ids to delete/mark as deleted
-	repeated int32 seq_list = 5;
+	// Delete messages by id or range of ids
+	repeated SeqRange del_seq = 4;
 	// User ID of the subscription to delete
-	string user_id = 6;
+	string user_id = 5;
 	// Request to hard-delete messages for all users, if such option is available.
-	bool hard = 7;
+	bool hard = 6;
 }
 
 enum InfoNote {
@@ -244,7 +243,7 @@ message TopicDesc {
 	int32 seq_id = 5;
 	int32 read_id = 6;
 	int32 recv_id = 7;
-	int32 clear_id = 8;
+	int32 del_id = 8;
 	bytes public = 9;
 	bytes private = 10;
 }
@@ -274,7 +273,7 @@ message TopicSub {
 	// ID of the last {data} message in a topic
 	int32 seq_id = 11;
 	// Messages are deleted up to this ID
-	int32 clear_id = 12;
+	int32 del_id = 12;
 
 	// P2P topics only:
 
@@ -282,6 +281,12 @@ message TopicSub {
 	int64 last_seen_time = 13;
 	string last_seen_user_agent = 14;
 }
+
+message DelValues {
+	int32 del_id = 1;
+	repeated SeqRange del_seq = 2;
+}
+
 
 // {ctrl} message
 message ServerCtrl {
@@ -324,10 +329,11 @@ message ServerPres {
 	What what = 3;
 	string user_agent = 4;
 	int32 seq_id = 5;
-	repeated int32 seq_list = 6;
-	string target_user_id = 7;
-	string actor_user_id = 8;
-	AccessMode acs = 9;
+	int32 del_id = 6;
+	repeated SeqRange del_seq = 7;
+	string target_user_id = 8;
+	string actor_user_id = 9;
+	AccessMode acs = 10;
 }
 
 // {meta} message
@@ -337,6 +343,7 @@ message ServerMeta {
 
 	TopicDesc desc = 3;
 	repeated TopicSub sub = 4;
+	DelValues del = 5;
 }
 
 // {info} message: server-side copy of ClientNote with From added

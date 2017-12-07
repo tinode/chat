@@ -14,18 +14,13 @@ import model_pb2 as pb
 import model_pb2_grpc as pbx
 
 APP_NAME = "tn-cli"
-VERSION = "0.13"
+VERSION = "0.14"
 
 # Dictionary wich contains lambdas to be executed when server response is received
 onCompletion = {}
 
 # Saved topic: default topic name to make keyboard input easier
 SavedTopic = None
-
-# Parse string representation of a version into an integer
-def parse_version(vers):
-    parts = vers.split('.')
-    return (int(parts[0]) << 8) + int(parts[1])
 
 # Pack user's name and avatar into a vcard represented as json.
 def make_vcard(fn, photofile):
@@ -56,7 +51,7 @@ def make_vcard(fn, photofile):
 def hiMsg(id):
     onCompletion[str(id)] = lambda params: print_server_params(params)
     return pb.ClientMsg(hi=pb.ClientHi(id=str(id), user_agent=APP_NAME + "/" + VERSION + " gRPC-python",
-        ver=parse_version(VERSION), lang="EN"))
+        ver=VERSION, lang="EN"))
 
 def accMsg(id, user, scheme, secret, uname, password, do_login, tags, fn, photo, private, auth, anon):
     if secret == None and uname != None:
@@ -93,23 +88,24 @@ def setMsg(id, topic, user, fn, photo, private, auth, anon, mode):
         public=make_vcard(fn, photo), private=private),
         sub=pb.SetSub(user_id=user, mode=mode))))
 
-def delMsg(id, topic, what, param, del_before, hard):
+def delMsg(id, topic, what, param, hard):
     if topic == None and param != None:
         topic = param
         param = None
 
-    print id, topic, what, param, del_before, hard
+    print id, topic, what, param, hard
     enum_what = None
     before = None
     seq_list = None
     user = None
     if what == 'msg':
         enum_what = pb.ClientDel.MSG
-        before = del_before
-        if param != None:
-            seq_list = [int(x.strip()) for x in param.split(',')]
-        elif del_before != None:
-            before = int(del_before)
+        if param == 'all':
+            seq_list = [pb.DelQuery(range=pb.SeqRange(low=1, hi=0x8FFFFFF))]
+        elif param != None:
+            seq_list = [pb.DelQuery(seq_id=int(x.strip())) for x in param.split(',')]
+        print seq_list
+
     elif what == 'sub':
         enum_what = pb.ClientDel.SUB
         user = param
@@ -121,7 +117,7 @@ def delMsg(id, topic, what, param, del_before, hard):
     xdel = getattr(msg, 'del')
     """
     setattr(msg, 'del', pb.ClientDel(id=str(id), topic=topic, what=enum_what, hard=hard,
-        seq_list=seq_list, before=before, user_id=user))
+        del_seq=seq_list, user_id=user))
     """
     xdel.id = str(id)
     xdel.topic = topic
@@ -129,9 +125,7 @@ def delMsg(id, topic, what, param, del_before, hard):
     if hard != None:
         xdel.hard = hard
     if seq_list != None:
-        xdel.seq_list.extend(seq_list)
-    if before != None:
-        xdel.before = before
+        xdel.del_seq.extend(seq_list)
     if user != None:
         xdel.user_id = user
     return msg
@@ -218,12 +212,10 @@ def parse_cmd(cmd):
         parser.add_argument('--topic', dest='topic', default=None, help='topic being affected')
         parser.add_argument('what', default='msg', choices=('msg', 'sub', 'topic'),
             help='what to delete')
-        parser.add_argument('param', help='list of message IDs or a user ID of subscription to delete')
         group = parser.add_mutually_exclusive_group()
-        group.add_argument('--before', dest='before', help='delete messages with id below or equal to this value')
         group.add_argument('--user', dest='param', help='delete subscription with the given user id')
         group.add_argument('--list', dest='param', help='comma separated list of message IDs to delete')
-        parser.add_argument('--hard', help='hard-delete messages')
+        parser.add_argument('--hard', action='store_true', help='hard-delete messages')
     elif parts[0] == "note":
         parser = argparse.ArgumentParser(prog=parts[0], description='Send notification to topic, ex "note kp"')
         parser.add_argument('topic', help='topic to notify')
@@ -278,7 +270,7 @@ def serialize_cmd(string, id):
     elif cmd.cmd == "set":
         return setMsg(id, cmd.topic, cmd.user, cmd.fn, cmd.photo, cmd.private, cmd.auth, cmd.anon, cmd.mode)
     elif cmd.cmd == "del":
-        return delMsg(id, cmd.topic, cmd.what, cmd.param, cmd.before, cmd.hard)
+        return delMsg(id, cmd.topic, cmd.what, cmd.param, cmd.hard)
     elif cmd.cmd == "note":
         return noteMsg(id, cmd.topic, cmd.what, cmd.seq)
     else:
@@ -375,7 +367,7 @@ def print_server_params(params):
 
 if __name__ == '__main__':
     """Parse command-line arguments. Extract host name and authentication scheme, if one is provided"""
-    purpose = "Tinode command line client. Version 0.13."
+    purpose = "Tinode command line client. Version " + VERSION + "."
     print purpose
     parser = argparse.ArgumentParser(description=purpose)
     parser.add_argument('--host', default='localhost:6061', help='address of Tinode server')

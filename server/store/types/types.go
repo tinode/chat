@@ -187,7 +187,7 @@ type ObjHeader struct {
 	id        Uid
 	CreatedAt time.Time
 	UpdatedAt time.Time
-	DeletedAt *time.Time
+	DeletedAt *time.Time `json:"DeletedAt,omitempty"`
 }
 
 func (h *ObjHeader) Uid() Uid {
@@ -247,9 +247,9 @@ type User struct {
 
 	// Values for 'me' topic:
 	// Server-issued sequence ID for messages in 'me'
-	SeqId int
-	// If messages were hard-deleted in the topic, id of the last deleted message
-	ClearId int
+	// SeqId int
+	// If messages were deleted in the topic, id of the last delete operation
+	//DelId int
 	// Last time when the user joined 'me' topic, by User Agent
 	LastSeen time.Time
 	// User agent provided when accessing the topic last time
@@ -498,8 +498,8 @@ type Subscription struct {
 
 	// Values persisted through subscription soft-deletion
 
-	// User soft-deleted messages equal or lower to this seq ID
-	ClearId int
+	// ID of the latest Soft-delete operation
+	DelId int
 	// Last SeqId reported by user as received by at least one of his sessions
 	RecvSeqId int
 	// Last SeqID reported read by the user
@@ -519,8 +519,8 @@ type Subscription struct {
 	public interface{}
 	// deserialized SeqID from user or topic
 	seqId int
-	// Id of the last hard-deleted message deserialized from user or topic
-	hardClearId int
+	// Id of the last delete operation deserialized from user or topic
+	// delId int
 	// timestamp when the user was last online
 	lastSeen time.Time
 	// user agent string of the last online access
@@ -557,13 +557,15 @@ func (s *Subscription) SetSeqId(id int) {
 	s.seqId = id
 }
 
-func (s *Subscription) GetHardClearId() int {
-	return s.hardClearId
+/*
+func (s *Subscription) GetDelId() int {
+	return s.delId
 }
 
-func (s *Subscription) SetHardClearId(id int) {
-	s.hardClearId = id
+func (s *Subscription) SetDelId(id int) {
+	s.delId = id
 }
+*/
 
 func (s *Subscription) GetLastSeen() time.Time {
 	return s.lastSeen
@@ -616,8 +618,8 @@ type Topic struct {
 
 	// Server-issued sequential ID
 	SeqId int
-	// If messages were deleted, id of the last deleted message
-	ClearId int
+	// If messages were deleted, sequential id of the last operation to delete them
+	DelId int
 
 	Public interface{}
 
@@ -690,59 +692,89 @@ func (t *Topic) GetAccess(uid Uid) (mode AccessMode) {
 }
 
 type SoftDelete struct {
-	User      string
-	Timestamp time.Time
+	User  string
+	DelId int
 }
 
 // Stored {data} message
 type Message struct {
 	ObjHeader
+	// ID of the hard-delete operation
+	DelId int `json:"DelId,omitempty"`
 	// List of users who have marked this message as soft-deleted
-	DeletedFor []SoftDelete
+	DeletedFor []SoftDelete `json:"DeletedFor,omitempty"`
 	SeqId      int
 	Topic      string
 	// UID as string of the user who sent the message, could be empty
 	From    string
-	Head    map[string]string
+	Head    map[string]string `json:"Head,omitempty"`
 	Content interface{}
 }
 
-// Announcements/Invites
-/*
-type AnnounceAction int
-
-const (
-	// An invitation to subscribe
-	AnnInv AnnounceAction = iota
-	// A topic admin is asked to aprove a subscription
-	AnnAppr
-	// Change notification: request approved or subscribed by a third party or some such, no action required
-	AnnUpd
-	// Unsubscribe succeeded or unsubscribed by a third party or topic deleted
-	AnnDel
-)
-
-func (a AnnounceAction) String() string {
-	switch a {
-	case AnnInv:
-		return "inv"
-	case AnnAppr:
-		return "appr"
-	case AnnUpd:
-		return "upd"
-	case AnnDel:
-		return "del"
-	}
-	return ""
+// A range of message SeqIDs. If one ID in range, Hi is set to 0 or unset
+type Range struct {
+	Low int
+	Hi  int `json:"Hi,omitempty"`
 }
-*/
 
+type RangeSorter []Range
+
+func (rs RangeSorter) Len() int {
+	return len(rs)
+}
+func (rs RangeSorter) Swap(i, j int) {
+	rs[i], rs[j] = rs[j], rs[i]
+}
+
+// Sort by Low ascending, then sort by Hi descending
+func (rs RangeSorter) Less(i, j int) bool {
+	if rs[i].Low < rs[j].Low {
+		return true
+	} else if rs[i].Low == rs[j].Low {
+		return rs[i].Hi > rs[j].Hi
+	}
+	return false
+}
+
+// Normalize ranges - remove overlaps. The range is expected to be sorted.
+func (rs RangeSorter) Normalize() {
+	ll := rs.Len()
+	if ll > 1 {
+		p := 0
+		for i := 1; i < ll; i++ {
+			if rs[p].Low == rs[i].Low {
+				// Earlier range is guaranteed to be wider than the later range,
+				// so collapse (by doing nothing)
+				continue
+			}
+			// Check for full or partial overlap
+			if rs[p].Hi > 0 && rs[p].Hi >= rs[i].Low {
+				// Partial overlap
+				if rs[p].Hi < rs[i].Hi {
+					rs[p].Hi = rs[i].Hi
+				}
+				continue
+			}
+			// No overlap
+			p++
+		}
+		rs = rs[:p+1]
+	}
+}
+
+// Log entry of a deleted message range
+type DelMessage struct {
+	ObjHeader
+	Topic       string
+	DeletedFor  string
+	DelId       int
+	SeqIdRanges []Range
+}
+
+// Id-based query, [since, before) - low end inclusive (closed), high-end exclusive (open)
 type BrowseOpt struct {
 	Since  int
-	After  *time.Time
 	Before int
-	Until  *time.Time
-	ByTime bool
 	Limit  int
 }
 

@@ -149,7 +149,6 @@ func (h *Hub) run() {
 			// This is a message from a connection not subscribed to topic
 			// Route incoming message to topic if topic permits such routing
 
-			timestamp := time.Now().UTC().Round(time.Millisecond)
 			if dst := h.topicGet(msg.rcptto); dst != nil {
 				// Everything is OK, sending packet to known topic
 				if dst.broadcast != nil {
@@ -161,6 +160,8 @@ func (h *Hub) run() {
 				}
 			} else {
 				if msg.Data != nil {
+					timestamp := types.TimeNow()
+
 					// Normally the message is persisted at the topic. If the topic is offline,
 					// persist message here. The only case of sending to offline topics is invites/info to 'me'
 					// The 'me' must receive them, so ignore access settings
@@ -304,8 +305,8 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		t.created = user.CreatedAt
 		t.updated = user.UpdatedAt
 
-		t.lastId = user.SeqId
-		t.clearId = user.ClearId
+		// t.lastId = user.SeqId
+		// t.delId = user.DelId
 
 		// Initiate User Agent with the UA of the creating session to report it later
 		t.userAgent = sreg.sess.userAgent
@@ -390,7 +391,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 			t.updated = stopic.UpdatedAt
 
 			t.lastId = stopic.SeqId
-			t.clearId = stopic.ClearId
+			t.delId = stopic.DelId
 		}
 
 		// t.owner is blank for p2p topics
@@ -418,7 +419,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 					private:   subs[i].Private,
 					modeWant:  subs[i].ModeWant,
 					modeGiven: subs[i].ModeGiven,
-					clearId:   subs[i].ClearId,
+					delId:     subs[i].DelId,
 					recvId:    subs[i].RecvSeqId,
 					readId:    subs[i].ReadSeqId,
 				}
@@ -597,7 +598,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 			userData.topicName = userId2.UserId()
 			userData.modeWant = sub1.ModeWant
 			userData.modeGiven = sub1.ModeGiven
-			userData.clearId = sub1.ClearId
+			userData.delId = sub1.DelId
 			userData.readId = sub1.ReadSeqId
 			userData.recvId = sub1.RecvSeqId
 			t.perUser[userId1] = userData
@@ -607,7 +608,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 				topicName: userId1.UserId(),
 				modeWant:  sub2.ModeWant,
 				modeGiven: sub2.ModeGiven,
-				clearId:   sub2.ClearId,
+				delId:     sub2.DelId,
 				readId:    sub2.ReadSeqId,
 				recvId:    sub2.RecvSeqId,
 			}
@@ -733,7 +734,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		t.updated = stopic.UpdatedAt
 
 		t.lastId = stopic.SeqId
-		t.clearId = stopic.ClearId
+		t.delId = stopic.DelId
 
 	} else {
 		// Unrecognized topic name
@@ -773,7 +774,7 @@ func (t *Topic) loadSubscribers() error {
 		t.perUser[uid] = perUserData{
 			created:   sub.CreatedAt,
 			updated:   sub.UpdatedAt,
-			clearId:   sub.ClearId,
+			delId:     sub.DelId,
 			readId:    sub.ReadSeqId,
 			recvId:    sub.RecvSeqId,
 			private:   sub.Private,

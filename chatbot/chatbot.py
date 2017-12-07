@@ -17,11 +17,7 @@ import model_pb2 as pb
 import model_pb2_grpc as pbx
 
 APP_NAME = "Tino-chatbot"
-VERSION = "0.13"
-
-def parse_version(vers):
-    parts = vers.split('.')
-    return (int(parts[0]) << 8) + int(parts[1])
+VERSION = "0.14"
 
 # Dictionary wich contains lambdas to be executed when server response is received
 onCompletion = {}
@@ -103,7 +99,7 @@ def client_reset():
 def hello():
     tid = next_id()
     return pb.ClientMsg(hi=pb.ClientHi(id=tid, user_agent=APP_NAME + "/" + VERSION + " gRPC-python",
-        ver=parse_version(VERSION), lang="EN"))
+        ver=VERSION, lang="EN"))
 
 def login(cookie_file_name, scheme, secret):
     tid = next_id()

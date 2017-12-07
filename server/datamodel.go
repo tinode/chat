@@ -23,14 +23,10 @@ func (jd *JsonDuration) UnmarshalJSON(data []byte) (err error) {
 }
 
 type MsgBrowseOpts struct {
-	// Load messages with seq id equal or greater than this
+	// Load messages/ranges with IDs equal or greater than this (inclusive or closed)
 	SinceId int `json:"since,omitempty"`
-	// Load messages with UpdatedAt equal or grater than this
-	SinceTs *time.Time `json:"after,omitempty"`
-	// Load messages with seq id lower than this
+	// Load messages/ranges with IDs lower than this (exclusive or open)
 	BeforeId int `json:"before,omitempty"`
-	// Load messages with UpdatedAt lower than this
-	BeforeTs *time.Time `json:"until,omitempty"`
 	// Limit the number of messages loaded
 	Limit int `json:"limit,omitempty"`
 }
@@ -49,6 +45,8 @@ type MsgGetQuery struct {
 	Sub *MsgGetOpts `json:"sub,omitempty"`
 	// Parameters of "data" request
 	Data *MsgBrowseOpts `json:"data,omitempty"`
+	// Parameters of "del" request
+	Del *MsgBrowseOpts `json:"del,omitempty"`
 }
 
 // MsgSetSub: payload in set.sub request to update current subscription or invite another user, {sub.what} == "sub"
@@ -78,6 +76,13 @@ type MsgSetQuery struct {
 type MsgFindQuery struct {
 	// List of tags to query for. Tags of the form "email:jdoe@example.com" or "tel:18005551212"
 	Tags []string `json:"tags"`
+}
+
+// Either an individual ID (HiId=0) or a randge of deleted IDs, low end inclusive (closed), high-end exclusive
+// (open): [LowId .. HiId), e.g. 1..5 -> 1, 2, 3, 4
+type MsgDelRange struct {
+	LowId int `json:"low,omitempty"`
+	HiId  int `json:"hi,omitempty"`
 }
 
 // Client to Server (C2S) messages
@@ -140,6 +145,7 @@ const (
 	constMsgMetaDesc = 1 << iota
 	constMsgMetaSub
 	constMsgMetaData
+	constMsgMetaDel
 	constMsgDelTopic
 	constMsgDelMsg
 	constMsgDelSub
@@ -156,8 +162,10 @@ func parseMsgClientMeta(params string) int {
 			bits |= constMsgMetaSub
 		case "data":
 			bits |= constMsgMetaData
+		case "del":
+			bits |= constMsgMetaDel
 		default:
-			// ignore
+			// ignore unknown
 		}
 	}
 	return bits
@@ -222,10 +230,8 @@ type MsgClientDel struct {
 	// What to delete, either "msg" to delete messages (default) or "topic" to delete the topic or "sub"
 	// to delete a subscription to topic.
 	What string `json:"what"`
-	// Delete messages older than this seq ID (inclusive)
-	Before int `json:"before,omitempty"`
-	// List of Seq Ids to delete/mark as deleted
-	SeqList []int `json:"list,omitempty"`
+	// Delete messages with these IDs (either one by one or a set of ranges)
+	DelSeq []MsgDelRange `json:"delseq,omitempty"`
 	// User ID of the subscription to delete
 	User string `json:"user,omitempty"`
 	// Request to hard-delete messages for all users, if such option is available.
@@ -290,11 +296,12 @@ type MsgTopicDesc struct {
 	// Actual access mode
 	Acs *MsgAccessMode `json:"acs,omitempty"`
 	// Max message ID
-	SeqId     int         `json:"seq,omitempty"`
-	ReadSeqId int         `json:"read,omitempty"`
-	RecvSeqId int         `json:"recv,omitempty"`
-	ClearId   int         `json:"clear,omitempty"`
-	Public    interface{} `json:"public,omitempty"`
+	SeqId     int `json:"seq,omitempty"`
+	ReadSeqId int `json:"read,omitempty"`
+	RecvSeqId int `json:"recv,omitempty"`
+	// Id of the last delete operation as seen by the requesting user
+	DelId  int         `json:"clear,omitempty"`
+	Public interface{} `json:"public,omitempty"`
 	// Per-subscription private data
 	Private interface{} `json:"private,omitempty"`
 }
@@ -335,13 +342,18 @@ type MsgTopicSub struct {
 	Topic string `json:"topic,omitempty"`
 	// ID of the last {data} message in a topic
 	SeqId int `json:"seq,omitempty"`
-	// Messages are deleted up to this ID
-	ClearId int `json:"clear,omitempty"`
+	// Id of the latest Delete operation
+	DelId int `json:"clear,omitempty"`
 
 	// P2P topics only:
 
 	// Other user's last online timestamp & user agent
 	LastSeen *MsgLastSeenInfo `json:"seen,omitempty"`
+}
+
+type MsgDelValues struct {
+	DelId  int           `json:"clear,omitempty"`
+	DelSeq []MsgDelRange `json:"delseq,omitempty"`
 }
 
 type MsgServerCtrl struct {
@@ -353,26 +365,6 @@ type MsgServerCtrl struct {
 	Text      string    `json:"text,omitempty"`
 	Timestamp time.Time `json:"ts"`
 }
-
-/*
-// Action announcement: invitation to a join, approval of a request to join, access change,
-// subscription gone: topic deleted/unsubscribed.
-// Sent as MsgServerData.Content
-type MsgAnnounce struct {
-	// Topic that user wants to subscribe to or is invited to
-	Topic string `json:"topic"`
-	// User being subscribed
-	User string `json:"user"`
-	// Type of this invite - AnnInv, AnnAppr, AnnUpd, AnnDel (defined in store/types/)
-	Action string `json:"act"`
-	// Current state of the access mode
-	Acs *MsgAccessMode `json:"acs,omitempty"`
-	// Request made at this authentication level
-	AuthLevel string `json:"authlvl,omitempty"`
-	// Free-form info passed unchanged from the client
-	Info SubInfo `json:"info,omitempty"`
-}
-*/
 
 type MsgServerData struct {
 	Topic string `json:"topic"`
@@ -391,7 +383,8 @@ type MsgServerPres struct {
 	What      string         `json:"what"`
 	UserAgent string         `json:"ua,omitempty"`
 	SeqId     int            `json:"seq,omitempty"`
-	SeqList   []int          `json:"list,omitempty"`
+	DelId     int            `json:"clear,omitempty"`
+	DelSeq    []MsgDelRange  `json:"delseq,omitempty"`
 	AcsTarget string         `json:"tgt,omitempty"`
 	AcsActor  string         `json:"act,omitempty"`
 	Acs       *MsgAccessMode `json:"acs,omitempty"`
@@ -417,8 +410,12 @@ type MsgServerMeta struct {
 
 	Timestamp *time.Time `json:"ts,omitempty"`
 
-	Desc *MsgTopicDesc `json:"desc,omitempty"` // Topic description
-	Sub  []MsgTopicSub `json:"sub,omitempty"`  // Subscriptions as an array of objects
+	// Topic description
+	Desc *MsgTopicDesc `json:"desc,omitempty"`
+	// Subscriptions as an array of objects
+	Sub []MsgTopicSub `json:"sub,omitempty"`
+	// Delete ID and the ranges of IDs of deleted messages
+	Del *MsgDelValues `json:"del,omitempty"`
 }
 
 // MsgServerInfo is the server-side copy of MsgClientNote with From added

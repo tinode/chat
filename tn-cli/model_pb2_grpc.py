@@ -56,15 +56,30 @@ class PluginStub(object):
     Args:
       channel: A grpc.Channel.
     """
-    self.ClientMessage = channel.unary_unary(
-        '/pbx.Plugin/ClientMessage',
+    self.FireHose = channel.unary_unary(
+        '/pbx.Plugin/FireHose',
         request_serializer=model__pb2.ClientReq.SerializeToString,
-        response_deserializer=model__pb2.ServerCtrl.FromString,
+        response_deserializer=model__pb2.ServerResp.FromString,
         )
-    self.ServerMessage = channel.unary_unary(
-        '/pbx.Plugin/ServerMessage',
-        request_serializer=model__pb2.ServerMsg.SerializeToString,
-        response_deserializer=model__pb2.ServerMsg.FromString,
+    self.Account = channel.unary_unary(
+        '/pbx.Plugin/Account',
+        request_serializer=model__pb2.AccountEvent.SerializeToString,
+        response_deserializer=model__pb2.Unused.FromString,
+        )
+    self.Topic = channel.unary_unary(
+        '/pbx.Plugin/Topic',
+        request_serializer=model__pb2.TopicEvent.SerializeToString,
+        response_deserializer=model__pb2.Unused.FromString,
+        )
+    self.Subscription = channel.unary_unary(
+        '/pbx.Plugin/Subscription',
+        request_serializer=model__pb2.SubscriptionEvent.SerializeToString,
+        response_deserializer=model__pb2.Unused.FromString,
+        )
+    self.Message = channel.unary_unary(
+        '/pbx.Plugin/Message',
+        request_serializer=model__pb2.MessageEvent.SerializeToString,
+        response_deserializer=model__pb2.Unused.FromString,
         )
 
 
@@ -72,19 +87,42 @@ class PluginServicer(object):
   """Plugin interface.
   """
 
-  def ClientMessage(self, request, context):
-    """This plugin method is called for every message received from the client. The method returns
-    a ServerCtrl message. ServerCtrl.code is not 0 indicates that no further processing is needed. Server
-    will generate a {ctrl} message from ServerCtrl and forward it to the client session. 
-    If ServerCtrl.code is 0, the server should continue with default processing of the message.
+  def FireHose(self, request, context):
+    """This plugin method is called by Tinode server for every message received from the clients. The 
+    method returns a ServerCtrl message. ServerCtrl.code is *not* 0 indicates that no further 
+    processing is needed. The Tinode server will generate a {ctrl} message from the returned ServerCtrl 
+    and forward it to the client session. 
+    If ServerCtrl.code is 0, the server should continue with default processing of the client message.
     """
     context.set_code(grpc.StatusCode.UNIMPLEMENTED)
     context.set_details('Method not implemented!')
     raise NotImplementedError('Method not implemented!')
 
-  def ServerMessage(self, request, context):
-    """This method is called immmediately before a server message is broadcasted to topic subscribers.
-    The filter may alter the server message or may request to drop it.
+  def Account(self, request, context):
+    """The following methods are for the Tinode server to report individual events.
+
+    Account created, updated or deleted
+    """
+    context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+    context.set_details('Method not implemented!')
+    raise NotImplementedError('Method not implemented!')
+
+  def Topic(self, request, context):
+    """Topic created, updated [or deleted -- not supported yet]
+    """
+    context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+    context.set_details('Method not implemented!')
+    raise NotImplementedError('Method not implemented!')
+
+  def Subscription(self, request, context):
+    """Subscription created, updated or deleted
+    """
+    context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+    context.set_details('Method not implemented!')
+    raise NotImplementedError('Method not implemented!')
+
+  def Message(self, request, context):
+    """Message published or deleted
     """
     context.set_code(grpc.StatusCode.UNIMPLEMENTED)
     context.set_details('Method not implemented!')
@@ -93,15 +131,30 @@ class PluginServicer(object):
 
 def add_PluginServicer_to_server(servicer, server):
   rpc_method_handlers = {
-      'ClientMessage': grpc.unary_unary_rpc_method_handler(
-          servicer.ClientMessage,
+      'FireHose': grpc.unary_unary_rpc_method_handler(
+          servicer.FireHose,
           request_deserializer=model__pb2.ClientReq.FromString,
-          response_serializer=model__pb2.ServerCtrl.SerializeToString,
+          response_serializer=model__pb2.ServerResp.SerializeToString,
       ),
-      'ServerMessage': grpc.unary_unary_rpc_method_handler(
-          servicer.ServerMessage,
-          request_deserializer=model__pb2.ServerMsg.FromString,
-          response_serializer=model__pb2.ServerMsg.SerializeToString,
+      'Account': grpc.unary_unary_rpc_method_handler(
+          servicer.Account,
+          request_deserializer=model__pb2.AccountEvent.FromString,
+          response_serializer=model__pb2.Unused.SerializeToString,
+      ),
+      'Topic': grpc.unary_unary_rpc_method_handler(
+          servicer.Topic,
+          request_deserializer=model__pb2.TopicEvent.FromString,
+          response_serializer=model__pb2.Unused.SerializeToString,
+      ),
+      'Subscription': grpc.unary_unary_rpc_method_handler(
+          servicer.Subscription,
+          request_deserializer=model__pb2.SubscriptionEvent.FromString,
+          response_serializer=model__pb2.Unused.SerializeToString,
+      ),
+      'Message': grpc.unary_unary_rpc_method_handler(
+          servicer.Message,
+          request_deserializer=model__pb2.MessageEvent.FromString,
+          response_serializer=model__pb2.Unused.SerializeToString,
       ),
   }
   generic_handler = grpc.method_handlers_generic_handler(

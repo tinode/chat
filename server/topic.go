@@ -12,6 +12,7 @@ import (
 	//	"encoding/json"
 	"errors"
 	"log"
+	"sort"
 	"sync/atomic"
 	"time"
 
@@ -23,8 +24,8 @@ import (
 
 const UA_TIMER_DELAY = time.Second * 5
 
-// Maximum number of SeqIds to pass in a list
-const MAX_SEQ_COUNT = 128
+// Maximum number of messages to delete
+const MAX_DELETE_COUNT = 1024
 
 // Topic: an isolated communication channel
 type Topic struct {
@@ -53,8 +54,8 @@ type Topic struct {
 
 	// Server-side ID of the last data message
 	lastId int
-	// If messages were hard-deleted, the ID of the last deleted meassage
-	clearId int
+	// ID of the deletion operation. Not an ID of the message.
+	delId int
 
 	// Last published userAgent ('me' topic only)
 	userAgent string
@@ -112,8 +113,8 @@ type perUserData struct {
 	// Last t.lastId reported by user through {pres} as received or read
 	recvId int
 	readId int
-	// Greatest ID of a soft-deleted message
-	clearId int
+	// ID of the latest Delete operation
+	delId int
 
 	private interface{}
 
@@ -472,6 +473,10 @@ func (t *Topic) run(hub *Hub) {
 				if meta.what&constMsgMetaData != 0 {
 					t.replyGetData(meta.sess, meta.pkt.Get.Id, meta.pkt.Get.Data)
 				}
+				if meta.what&constMsgMetaDel != 0 {
+					t.replyGetDel(meta.sess, meta.pkt.Get.Id, meta.pkt.Get.Del)
+				}
+
 			} else if meta.pkt.Set != nil {
 				// Set request
 				if meta.what&constMsgMetaDesc != 0 {
@@ -615,6 +620,11 @@ func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 	if getWhat&constMsgMetaData != 0 {
 		// Send get.data response as {data} packets
 		t.replyGetData(sreg.sess, sreg.pkt.Id, sreg.pkt.Get.Data)
+	}
+
+	if getWhat&constMsgMetaDel != 0 {
+		// Send get.del response as a separate {meta} packet
+		t.replyGetDel(sreg.sess, sreg.pkt.Id, sreg.pkt.Get.Del)
 	}
 	return nil
 }
@@ -1124,9 +1134,9 @@ func (t *Topic) replyGetDesc(sess *Session, id, tempName string, opts *MsgGetOpt
 		if (pud.modeGiven & pud.modeWant).IsReader() {
 			desc.SeqId = t.lastId
 			// Make sure reported values are sane:
-			// t.clearId <= pud.clearId <= t.readId <= t.recvId <= t.lastId
-			desc.ClearId = max(pud.clearId, t.clearId)
-			desc.ReadSeqId = max(pud.readId, desc.ClearId)
+			// t.clearId <= pud.clearId; t.readId <= t.recvId <= t.lastId
+			desc.DelId = max(pud.delId, t.delId)
+			desc.ReadSeqId = pud.readId
 			desc.RecvSeqId = max(pud.recvId, pud.readId)
 		}
 
@@ -1414,7 +1424,6 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 
 			uid := types.ParseUid(sub.User)
 			isReader := sub.ModeGiven.IsReader() && sub.ModeWant.IsReader()
-			var clearId int
 			if t.cat == types.TopicCat_Me {
 				// The subscriptions user does not care about are marked as deleted
 				if !sub.ModeWant.IsJoiner() || !sub.ModeGiven.IsJoiner() {
@@ -1435,9 +1444,7 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 				if !deleted {
 					if isReader {
 						mts.SeqId = sub.GetSeqId()
-						// Report whatever is the greatest - soft - or hard- deleted id
-						clearId = max(sub.GetHardClearId(), sub.ClearId)
-						mts.ClearId = clearId
+						mts.DelId = sub.DelId
 					}
 
 					lastSeen := sub.GetLastSeen()
@@ -1457,10 +1464,9 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 				// Reporting subscribers to a group or a p2p topic
 				mts.User = uid.UserId()
 				if !deleted {
-					clearId = max(t.clearId, sub.ClearId)
 					if uid == sess.uid && isReader {
 						// Report deleted messages for own subscriptions only
-						mts.ClearId = clearId
+						mts.DelId = sub.DelId
 					}
 
 					if t.cat == types.TopicCat_Grp {
@@ -1474,9 +1480,8 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 				mts.UpdatedAt = &sub.UpdatedAt
 
 				if isReader {
-					// Ensure sanity or ReadId and RecvId:
-					mts.ReadSeqId = max(clearId, sub.ReadSeqId)
-					mts.RecvSeqId = max(clearId, sub.RecvSeqId)
+					mts.ReadSeqId = sub.ReadSeqId
+					mts.RecvSeqId = sub.RecvSeqId
 				}
 
 				if t.cat != types.TopicCat_Fnd {
@@ -1560,50 +1565,75 @@ func (t *Topic) replySetSub(h *Hub, sess *Session, set *MsgClientSet) error {
 func (t *Topic) replyGetData(sess *Session, id string, req *MsgBrowseOpts) error {
 	now := time.Now().UTC().Round(time.Millisecond)
 
-	// Check if the user has permission to read the topic
-	if userData := t.perUser[sess.uid]; !(userData.modeGiven & userData.modeWant).IsReader() {
-		sess.queueOut(NoErr(id, t.original(sess.uid), now))
-		return nil
-	}
+	// Check if the user has permission to read the topic data
+	if userData := t.perUser[sess.uid]; (userData.modeGiven & userData.modeWant).IsReader() {
+		// Read messages from DB
+		messages, err := store.Messages.GetAll(t.name, sess.uid, msgOpts2storeOpts(req))
+		if err != nil {
+			log.Println("topic: error loading topics ", err)
+			sess.queueOut(ErrUnknown(id, t.original(sess.uid), now))
+			return err
+		}
 
-	opts := msgOpts2storeOpts(req, t.perUser[sess.uid].clearId)
+		// Push the list of messages to the client as {data}.
+		// Messages are sent in reverse order than fetched from DB to make it easier for
+		// clients to process.
+		if messages != nil {
+			for i := len(messages) - 1; i >= 0; i-- {
+				mm := messages[i]
 
-	messages, err := store.Messages.GetAll(t.name, sess.uid, opts)
-	if err != nil {
-		log.Println("topic: error loading topics ", err)
-		sess.queueOut(ErrUnknown(id, t.original(sess.uid), now))
-		return err
-	}
+				from := types.ParseUid(mm.From)
+				msg := &ServerComMessage{Data: &MsgServerData{
+					Topic:     t.original(sess.uid),
+					Head:      mm.Head,
+					SeqId:     mm.SeqId,
+					From:      from.UserId(),
+					Timestamp: mm.CreatedAt,
+					Content:   mm.Content}}
 
-	// Push the list of messages to the client as {data}.
-	// Messages are sent in reverse order than fetched from DB to make it easier for
-	// clients to process.
-	if messages != nil {
-		for i := len(messages) - 1; i >= 0; i-- {
-			mm := messages[i]
-
-			from := types.ParseUid(mm.From)
-			msg := &ServerComMessage{Data: &MsgServerData{
-				Topic:     t.original(sess.uid),
-				Head:      mm.Head,
-				SeqId:     mm.SeqId,
-				From:      from.UserId(),
-				Timestamp: mm.CreatedAt,
-				Content:   mm.Content}}
-
-			// Clear content if the message was soft-deleted for the current user
-			if mm.DeletedAt != nil {
-				msg.Data.Head = nil
-				msg.Data.Content = nil
-				msg.Data.DeletedAt = mm.DeletedAt
+				sess.queueOut(msg)
 			}
-
-			sess.queueOut(msg)
-
 		}
 	}
+
 	// Inform the requester that all the data has been served.
-	sess.queueOut(NoErr(id, t.original(sess.uid), now))
+	reply := NoErr(id, t.original(sess.uid), now)
+	reply.Ctrl.Params = map[string]string{"what": "data"}
+	sess.queueOut(reply)
+
+	return nil
+}
+
+// replyGetDel is a response to a get[what=del] request: load a list of deleted message ids, send them to
+// a session as {meta}
+// response goes to a single session rather than all sessions in a topic
+func (t *Topic) replyGetDel(sess *Session, id string, req *MsgBrowseOpts) error {
+	now := types.TimeNow()
+
+	// Check if the user has permission to read the topic data and the request is valid
+	if userData := t.perUser[sess.uid]; (userData.modeGiven & userData.modeWant).IsReader() && req != nil {
+		ranges, delId, err := store.Messages.GetDeleted(t.name, sess.uid, msgOpts2storeOpts(req))
+		if err != nil {
+			log.Println("topic: error loading deleted message ids", err)
+			sess.queueOut(ErrUnknown(id, t.original(sess.uid), now))
+			return err
+		}
+
+		if len(ranges) > 0 {
+			sess.queueOut(&ServerComMessage{Meta: &MsgServerMeta{
+				Id:    id,
+				Topic: t.original(sess.uid),
+				Del: &MsgDelValues{
+					DelId:  delId,
+					DelSeq: delrange_deserialize(ranges)},
+				Timestamp: &now}})
+			return nil
+		}
+	}
+
+	reply := NoErr(id, t.original(sess.uid), now)
+	reply.Ctrl.Params = map[string]string{"what": "del"}
+	sess.queueOut(reply)
 
 	return nil
 }
@@ -1613,31 +1643,46 @@ func (t *Topic) replyDelMsg(sess *Session, del *MsgClientDel) error {
 	now := time.Now().UTC().Round(time.Millisecond)
 
 	var err error
-	var filteredList []int
-	if del.Before > t.lastId || del.Before < 0 {
-		err = errors.New("del.msg: invalid parameter 'before'")
-	} else if del.Before == 0 {
-		if del.SeqList == nil || len(del.SeqList) == 0 {
-			err = errors.New("del.msg without parameters")
-		} else {
-			for _, seq := range del.SeqList {
-				if seq > t.lastId && seq < 0 {
-					err = errors.New("del.msg: invalid entry in list")
-					break
-				}
-				if seq == 0 {
-					continue
-				}
 
-				filteredList = append(filteredList, seq)
-				if len(filteredList) == MAX_SEQ_COUNT {
-					break
-				}
+	defer func() {
+		if err != nil {
+			log.Println("failed to delete message(s):", err)
+		}
+	}()
+
+	var ranges []types.Range
+	if len(del.DelSeq) == 0 {
+		err = errors.New("del.msg: no IDs to delete")
+	} else {
+		count := 0
+		for _, dq := range del.DelSeq {
+			if dq.LowId > t.lastId || dq.LowId < 0 || dq.HiId < 0 ||
+				(dq.HiId > 0 && dq.LowId >= dq.HiId) ||
+				(dq.LowId == 0 && dq.HiId == 0) {
+				err = errors.New("del.msg: invalid entry in list")
+				break
+			}
+			if dq.HiId > t.lastId {
+				dq.HiId = t.lastId + 1
+			}
+			if dq.HiId == 0 {
+				count++
+			} else {
+				count += dq.HiId - dq.LowId
 			}
 
-			if len(filteredList) == 0 {
-				err = errors.New("del.msg: no valid entries in list")
-			}
+			ranges = append(ranges, types.Range{Low: dq.LowId, Hi: dq.HiId})
+		}
+
+		if err == nil {
+			// Sort by Low ascending then by Hi descending.
+			sort.Sort(types.RangeSorter(ranges))
+			// Collapse overlapping ranges
+			types.RangeSorter(ranges).Normalize()
+		}
+
+		if count > MAX_DELETE_COUNT && len(ranges) > 1 {
+			err = errors.New("del.msg: too many messages to delete")
 		}
 	}
 
@@ -1660,56 +1705,40 @@ func (t *Topic) replyDelMsg(sess *Session, del *MsgClientDel) error {
 		del.Hard = false
 	}
 
-	if del.Before > 0 {
-		// Make sure user has not deleted the messages already
-		if (del.Before <= t.clearId) || (!del.Hard && del.Before <= pud.clearId) {
-			sess.queueOut(InfoNoAction(del.Id, t.original(sess.uid), now))
-			return nil
-		}
-
-		err = store.Messages.Delete(t.name, sess.uid, del.Hard, del.Before)
-	} else {
-		// del.List != nil
-
-		err = store.Messages.DeleteList(t.name, sess.uid, del.Hard, filteredList)
+	forUser := sess.uid
+	if del.Hard {
+		forUser = types.ZeroUid
 	}
 
-	if err != nil {
+	if err = store.Messages.DeleteList(t.name, t.delId+1, forUser, ranges); err != nil {
 		sess.queueOut(ErrUnknown(del.Id, t.original(sess.uid), now))
 		return err
 	}
 
-	var params *PresParams
-	if del.Before > 0 {
-		if del.Hard {
-			t.clearId = del.Before
-			params = &PresParams{seqId: del.Before, actor: sess.uid.UserId()}
-		} else {
-			pud.clearId = del.Before
-			if pud.readId < pud.clearId {
-				pud.readId = pud.clearId
-			}
-			if pud.recvId < pud.readId {
-				pud.recvId = pud.readId
-			}
-			t.perUser[sess.uid] = pud
-		}
-	} else if del.Hard {
-		params = &PresParams{seqList: filteredList, actor: sess.uid.UserId()}
-	}
-
+	// Increment Delete transaction ID
+	t.delId++
+	dr := delrange_deserialize(ranges)
 	if del.Hard {
-		log.Println("hard delete")
+		for uid, pud := range t.perUser {
+			pud.delId = t.delId
+			t.perUser[uid] = pud
+		}
 		// Broadcast the change to all, online and offline, exclude the session making the change.
-		t.presSubsOnline("del", "", params, types.ModeRead, sess.sid, "")
+		params := &PresParams{delId: t.delId, delSeq: dr, actor: sess.uid.UserId()}
+		t.presSubsOnline("del", params.actor, params, types.ModeRead, sess.sid, "")
 		t.presSubsOffline("del", params, types.ModeRead, sess.sid, true)
 	} else {
-		log.Println("soft delete")
+		pud := t.perUser[sess.uid]
+		pud.delId = t.delId
+		t.perUser[sess.uid] = pud
+
 		// Notify user's other sessions
-		t.presPubMessageDelete(sess.uid, filteredList, del.Before, sess.sid)
+		t.presPubMessageDelete(sess.uid, t.delId, dr, sess.sid)
 	}
 
-	sess.queueOut(NoErr(del.Id, t.original(sess.uid), now))
+	reply := NoErr(del.Id, t.original(sess.uid), now)
+	reply.Ctrl.Params = map[string]int{"del": t.delId}
+	sess.queueOut(reply)
 
 	return nil
 }
@@ -2004,26 +2033,14 @@ func getDefaultAccess(cat types.TopicCat, auth bool) types.AccessMode {
 	}
 }
 
-// Takes get.data parameters and ClearID, returns database query parameters
-func msgOpts2storeOpts(req *MsgBrowseOpts, clearId int) *types.BrowseOpt {
+// Takes get.data or get.del parameters, returns database query parameters
+func msgOpts2storeOpts(req *MsgBrowseOpts) *types.BrowseOpt {
 	var opts *types.BrowseOpt
-	if req != nil || clearId > 0 {
-		opts = &types.BrowseOpt{}
-		if req != nil {
-			opts.Limit = req.Limit
-			if req.SinceId != 0 || req.BeforeId != 0 {
-				opts.Since = req.SinceId
-				opts.Before = req.BeforeId
-			} else if req.SinceTs != nil || req.BeforeTs != nil {
-				opts.ByTime = true
-				opts.After = req.SinceTs
-				opts.Until = req.BeforeTs
-			}
-		}
-		if clearId > opts.Since {
-			// ClearId deletes mesages upto and including the value itself. Since shows message starting
-			// with the value itself, thus must add 1 to make sure the last deleted message is not shown.
-			opts.Since = clearId + 1
+	if req != nil {
+		opts = &types.BrowseOpt{
+			Limit:  req.Limit,
+			Since:  req.SinceId,
+			Before: req.BeforeId,
 		}
 	}
 	return opts
@@ -2045,4 +2062,31 @@ func topicCat(name string) types.TopicCat {
 // Generate random string as a name of the group topic
 func genTopicName() string {
 	return "grp" + store.GetUidString()
+}
+
+// Convert a list of IDs into ranges
+func delrange_deserialize(in []types.Range) []MsgDelRange {
+	if len(in) == 0 {
+		return nil
+	}
+
+	var out []MsgDelRange
+	for _, r := range in {
+		out = append(out, MsgDelRange{LowId: r.Low, HiId: r.Hi})
+	}
+
+	return out
+}
+
+func delrange_serialize(in []MsgDelRange) []types.Range {
+	if len(in) == 0 {
+		return nil
+	}
+
+	var out []types.Range
+	for _, r := range in {
+		out = append(out, types.Range{Low: r.LowId, Hi: r.HiId})
+	}
+
+	return out
 }

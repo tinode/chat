@@ -3,6 +3,7 @@ package store
 import (
 	"encoding/json"
 	"errors"
+	"sort"
 	"time"
 
 	"github.com/tinode/chat/server/auth"
@@ -289,7 +290,7 @@ func (TopicsObjMapper) Delete(topic string) error {
 	if err := adaptr.SubsDelForTopic(topic); err != nil {
 		return err
 	}
-	if err := adaptr.MessageDeleteAll(topic, -1); err != nil {
+	if err := adaptr.MessageDeleteList(topic, nil); err != nil {
 		return err
 	}
 
@@ -315,7 +316,7 @@ func (SubsObjMapper) Get(topic string, user types.Uid) (*types.Subscription, err
 	return adaptr.SubscriptionGet(topic, user)
 }
 
-// Update changes values of user's subscription.
+// Update values of user's subscription.
 func (SubsObjMapper) Update(topic string, user types.Uid, update map[string]interface{}) error {
 	update["UpdatedAt"] = types.TimeNow()
 	return adaptr.SubsUpdate(topic, user, update)
@@ -335,17 +336,6 @@ var Messages MessagesObjMapper
 func (MessagesObjMapper) Save(msg *types.Message) error {
 	msg.InitTimes()
 
-	// Need a transaction here, RethinkDB does not support transactions
-
-	// An invite (message to 'me') may have a zero SeqId if 'me' was inactive at the time of generating the invite
-	if msg.SeqId == 0 {
-		if user, err := adaptr.UserGet(types.ParseUserId(msg.Topic)); err != nil {
-			return err
-		} else {
-			msg.SeqId = user.SeqId + 1
-		}
-	}
-
 	// Increment topic's or user's SeqId
 	if err := adaptr.TopicUpdateOnMessage(msg.Topic, msg); err != nil {
 		return err
@@ -354,34 +344,61 @@ func (MessagesObjMapper) Save(msg *types.Message) error {
 	return adaptr.MessageSave(msg)
 }
 
-// Delete messages. Hard-delete if hard == tru, otherwise a soft-delete
-func (MessagesObjMapper) Delete(topic string, forUser types.Uid, hard bool, cleared int) (err error) {
-	if hard {
-		err = adaptr.MessageDeleteAll(topic, cleared)
-		if err != nil {
-			update := map[string]interface{}{"ClearId": cleared}
-			if topic == forUser.UserId() {
-				err = adaptr.UserUpdate(forUser, update)
-			} else {
-				err = adaptr.TopicUpdate(topic, update)
-			}
-		}
-	} else {
-		update := map[string]interface{}{"ClearId": cleared}
-		err = adaptr.SubsUpdate(topic, forUser, update)
+func (MessagesObjMapper) DeleteList(topic string, delId int, forUser types.Uid, ranges []types.Range) error {
+	var toDel *types.DelMessage
+	if delId > 0 {
+		toDel = &types.DelMessage{
+			Topic:       topic,
+			DelId:       delId,
+			DeletedFor:  forUser.String(),
+			SeqIdRanges: ranges}
+		toDel.InitTimes()
 	}
 
-	return
-}
+	err := adaptr.MessageDeleteList(topic, toDel)
+	if err != nil {
+		return err
+	}
 
-func (MessagesObjMapper) DeleteList(topic string, forUser types.Uid, hard bool, list []int) (err error) {
-	err = adaptr.MessageDeleteList(topic, forUser, hard, list)
+	if delId > 0 {
+		// Record ID of the delete transaction
+		err = adaptr.TopicUpdate(topic, map[string]interface{}{"DelId": delId})
+		if err != nil {
+			return err
+		}
 
-	return err
+		// Soft-deleting will update one subscription, hard-deleting will ipdate all.
+		// Soft- or hard- is defined by the forUSer being defined.
+		return adaptr.SubsUpdate(topic, forUser, map[string]interface{}{"DelId": delId})
+	}
+
+	return nil
 }
 
 func (MessagesObjMapper) GetAll(topic string, forUser types.Uid, opt *types.BrowseOpt) ([]types.Message, error) {
 	return adaptr.MessageGetAll(topic, forUser, opt)
+}
+
+// Returns the ranges of deleted messages and the largesr DelId reported in the list
+func (MessagesObjMapper) GetDeleted(topic string, forUser types.Uid, opt *types.BrowseOpt) ([]types.Range, int, error) {
+	dmsgs, err := adaptr.MessageGetDeleted(topic, forUser, opt)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	var ranges []types.Range
+	var maxId int
+	// Flatten out the ranges
+	for _, dm := range dmsgs {
+		if dm.DelId > maxId {
+			maxId = dm.DelId
+		}
+		ranges = append(ranges, dm.SeqIdRanges...)
+	}
+	sort.Sort(types.RangeSorter(ranges))
+	types.RangeSorter(ranges).Normalize()
+
+	return ranges, maxId, nil
 }
 
 var authHandlers map[string]auth.AuthHandler
