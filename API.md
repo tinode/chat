@@ -102,7 +102,7 @@ acc: {
   secret: btoa("username:password"), // string, base64 encoded secret for the chosen
               // authentication scheme; to delete a scheme use a string with a single DEL
               // Unicode character "\u2421"; "token" and "basic" cannot be deleted
-  tags: [ ... ], // array of tags for user discovery; see `fnd` topic for
+  tags: [ ... ], // array of tags for user discovery; see 'fnd' topic for
               // details, optional (if missing, user will not be discoverable other than
               // by login)
   desc: {  // object, user initialization data closely matching that of table
@@ -274,7 +274,7 @@ Query topic for metadata, such as description or a list of subscribers, or query
 get: {
   id: "1a2b3", // string, client-provided message id, optional
   topic: "grp1XUtEhjv6HND", // string, name of topic to request data from
-  what: "sub desc data", // string, space-separated list of parameters to query;
+  what: "sub desc data del", // string, space-separated list of parameters to query;
                         // unknown strings are ignored; required
 
   // Optional parameters for {get what="desc"}
@@ -300,7 +300,17 @@ get: {
 				  // than this (exclusive/open), optional
     limit: 20, // integer, limit the number of returned objects, default: 32,
                // optional
-  } // object, what=data query parameters
+  },
+
+  // Optional parameters for {get what="del"}
+  data: {
+    since: 5, // integer, load deleted ranges with the delete transaction IDs greater or equal
+				 // to this (inclusive/closed), optional
+    before: 12, // integer, load deleted ranges with the delete transaction IDs less
+				  // than this (exclusive/open), optional
+    limit: 25, // integer, limit the number of returned objects, default: 32,
+               // optional
+  }
 }
 ```
 
@@ -319,6 +329,10 @@ responds with a `{ctrl}` "not modified" message.
 
 Query message history. Server sends `{data}` messages matching parameters provided in the `browse` field of the query.
 The `id` field of the data messages is not provided as it's common for data messages.
+
+* `{get what="del"}`
+
+Query message deletion history. Server responds with a `{meta}` message containing a list of deleted message ranges.
 
 
 #### `{set}`
@@ -367,7 +381,8 @@ del: {
   hard: false, // boolean, request to delete messages for all users, default: false
   before: 123, // integer, delete messages with server-issued ID lower or equal
                // to this value (inclusive), optional
-  list: [123, 125], // Array of integer message IDs to delete, optional
+  delseq: [{low: 123, hi: 125}, {low: 156}], // array of ranges of message IDs 
+				// to delete, optional
   user: "usr2il9suCbuko" // string, user whose subscription is being deleted 
                // (what="sub"), optional
 }
@@ -528,7 +543,11 @@ meta: {
       }
     },
     ...
-  ]
+  ],
+  del: {
+	clear: 3, // ID of the latest applicable 'delete' transaction
+	delseq: [{low: 15}, {low: 22, hi: 28}, ...], // ranges of IDs of deleted messages 
+  }
 }
 ```
 
@@ -541,10 +560,11 @@ pres: {
   topic: "me", // string, topic which receives the notification, always present
   src: "grp1XUtEhjv6HND", // string, topic or user affected by the change, always present
   what: "on", // string, what's changed, always present
-  seq: 123, // integer, "what" is "msg" or "del", a server-issued ID of the message,
+  seq: 123, // integer, "what" is "msg", a server-issued ID of the message,
            // optional
-  list: [123, 124], // array of integers, "what" is "del", list of deleted message IDs,
-			// optional 
+  clear: 15, // integer, "what" is "del", an update to the delete transaction ID.
+  delseq: [{low: 123}, {low: 126, hi: 136}], // array of ranges, "what" is "del", 
+			// ranges of IDs of deleted messages, optional 
   ua: "Tinode/1.0 (Android 2.2)", // string, a User Agent string identifying client 
 						// software if "what" is "on" or "ua", optional
   act: "usr2il9suCbuko",	// string, user who performed the action, optional
