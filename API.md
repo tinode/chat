@@ -307,7 +307,7 @@ get: {
     since: 5, // integer, load deleted ranges with the delete transaction IDs greater 
 				// or equal to this (inclusive/closed), optional
     before: 12, // integer, load deleted ranges with the delete transaction IDs less
-				  // or equal to this (inclusive/closed), optional
+				  // than this (exclusive/open), optional
     limit: 25, // integer, limit the number of returned objects, default: 32,
                // optional
   }
