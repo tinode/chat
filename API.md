@@ -303,9 +303,9 @@ get: {
   },
 
   // Optional parameters for {get what="del"}
-  data: {
-    since: 5, // integer, load deleted ranges with the delete transaction IDs greater or equal
-				 // to this (inclusive/closed), optional
+  del: {
+    since: 5, // integer, load deleted ranges with the delete transaction IDs greater 
+				// or equal to this (inclusive/closed), optional
     before: 12, // integer, load deleted ranges with the delete transaction IDs less
 				  // than this (exclusive/open), optional
     limit: 25, // integer, limit the number of returned objects, default: 32,

@@ -1657,18 +1657,22 @@ func (t *Topic) replyDelMsg(sess *Session, del *MsgClientDel) error {
 		count := 0
 		for _, dq := range del.DelSeq {
 			if dq.LowId > t.lastId || dq.LowId < 0 || dq.HiId < 0 ||
-				(dq.HiId > 0 && dq.LowId >= dq.HiId) ||
+				(dq.HiId > 0 && dq.LowId > dq.HiId) ||
 				(dq.LowId == 0 && dq.HiId == 0) {
 				err = errors.New("del.msg: invalid entry in list")
 				break
 			}
+
 			if dq.HiId > t.lastId {
-				dq.HiId = t.lastId + 1
+				dq.HiId = t.lastId
+			} else if dq.LowId == dq.HiId {
+				dq.HiId = 0
 			}
+
 			if dq.HiId == 0 {
 				count++
 			} else {
-				count += dq.HiId - dq.LowId
+				count += dq.HiId - dq.LowId + 1
 			}
 
 			ranges = append(ranges, types.Range{Low: dq.LowId, Hi: dq.HiId})
