@@ -872,7 +872,7 @@ func (a *RethinkDbAdapter) MessageGetAll(topic string, forUser t.Uid, opts *t.Br
 
 	requester := forUser.String()
 	rows, err := rdb.DB(a.dbName).Table("messages").
-		Between(lower, upper, rdb.BetweenOpts{Index: "Topic_SeqId", RightBound: "closed"}).
+		Between(lower, upper, rdb.BetweenOpts{Index: "Topic_SeqId"}).
 		// Ordering by index must come before filtering
 		OrderBy(rdb.OrderByOpts{Index: rdb.Desc("Topic_SeqId")}).
 		// Skip hard-deleted messages
@@ -924,7 +924,7 @@ func (a *RethinkDbAdapter) MessageGetDeleted(topic string, forUser t.Uid, opts *
 	rows, err := rdb.DB(a.dbName).Table("dellog").
 		// Select log entries for the given table and DelId values between two limits
 		Between([]interface{}{topic, lower}, []interface{}{topic, upper},
-			rdb.BetweenOpts{Index: "Topic_DelId", RightBound: "closed"}).
+			rdb.BetweenOpts{Index: "Topic_DelId"}).
 		// Sort from low DelIds to high
 		OrderBy(rdb.OrderByOpts{Index: "Topic_DelId"}).
 		// Keep entries soft-deleted for the current user and all hard-deleted entries.
