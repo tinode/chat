@@ -731,34 +731,37 @@ func (rs RangeSorter) Less(i, j int) bool {
 	if rs[i].Low < rs[j].Low {
 		return true
 	} else if rs[i].Low == rs[j].Low {
-		return rs[i].Hi > rs[j].Hi
+		return rs[i].Hi >= rs[j].Hi
 	}
 	return false
 }
 
-// Normalize ranges - remove overlaps. The range is expected to be sorted.
+// Normalize ranges - remove overlaps: [1..4],[2..4],[5..7] -> [1..7].
+// The ranges are expected to be sorted.
+// Ranges are inclusive-inclusive, i.e. [1..3] -> 1, 2, 3.
 func (rs RangeSorter) Normalize() {
 	ll := rs.Len()
 	if ll > 1 {
-		p := 0
+		prev := 0
 		for i := 1; i < ll; i++ {
-			if rs[p].Low == rs[i].Low {
-				// Earlier range is guaranteed to be wider than the later range,
-				// so collapse (by doing nothing)
+			if rs[prev].Low == rs[i].Low {
+				// Earlier range is guaranteed to be wider or equal to the later range,
+				// collapse two ranges into one (by doing nothing)
 				continue
 			}
 			// Check for full or partial overlap
-			if rs[p].Hi > 0 && rs[p].Hi >= rs[i].Low {
+			if rs[prev].Hi > 0 && rs[prev].Hi+1 >= rs[i].Low {
 				// Partial overlap
-				if rs[p].Hi < rs[i].Hi {
-					rs[p].Hi = rs[i].Hi
+				if rs[prev].Hi < rs[i].Hi {
+					rs[prev].Hi = rs[i].Hi
 				}
+				// Otherwise the next range is fully within the previous range, consume it by doing nothing.
 				continue
 			}
 			// No overlap
-			p++
+			prev++
 		}
-		rs = rs[:p+1]
+		rs = rs[:prev+1]
 	}
 }
 
@@ -771,7 +774,7 @@ type DelMessage struct {
 	SeqIdRanges []Range
 }
 
-// Id-based query, [since, before) - low end inclusive (closed), high-end exclusive (open)
+// Id-based query, [since, before] - both ends inclusive (closed)
 type BrowseOpt struct {
 	Since  int
 	Before int

@@ -871,7 +871,8 @@ func (a *RethinkDbAdapter) MessageGetAll(topic string, forUser t.Uid, opts *t.Br
 	upper = []interface{}{topic, upper}
 
 	requester := forUser.String()
-	rows, err := rdb.DB(a.dbName).Table("messages").Between(lower, upper, rdb.BetweenOpts{Index: "Topic_SeqId"}).
+	rows, err := rdb.DB(a.dbName).Table("messages").
+		Between(lower, upper, rdb.BetweenOpts{Index: "Topic_SeqId", RightBound: "closed"}).
 		// Ordering by index must come before filtering
 		OrderBy(rdb.OrderByOpts{Index: rdb.Desc("Topic_SeqId")}).
 		// Skip hard-deleted messages
@@ -922,7 +923,8 @@ func (a *RethinkDbAdapter) MessageGetDeleted(topic string, forUser t.Uid, opts *
 	// Fetch log of deletions
 	rows, err := rdb.DB(a.dbName).Table("dellog").
 		// Select log entries for the given table and DelId values between two limits
-		Between([]interface{}{topic, lower}, []interface{}{topic, upper}, rdb.BetweenOpts{Index: "Topic_DelId"}).
+		Between([]interface{}{topic, lower}, []interface{}{topic, upper},
+			rdb.BetweenOpts{Index: "Topic_DelId", RightBound: "closed"}).
 		// Sort from low DelIds to high
 		OrderBy(rdb.OrderByOpts{Index: "Topic_DelId"}).
 		// Keep entries soft-deleted for the current user and all hard-deleted entries.
@@ -964,12 +966,12 @@ func (a *RethinkDbAdapter) MessageDeleteList(topic string, toDel *t.DelMessage) 
 			return err
 		}
 
-		if len(toDel.SeqIdRanges) > 1 || toDel.SeqIdRanges[0].Hi <= toDel.SeqIdRanges[0].Low+1 {
+		if len(toDel.SeqIdRanges) > 1 || toDel.SeqIdRanges[0].Hi <= toDel.SeqIdRanges[0].Low {
 			for _, rng := range toDel.SeqIdRanges {
 				if rng.Hi == 0 {
 					indexVals = append(indexVals, []interface{}{topic, rng.Low})
 				} else {
-					for i := rng.Low; i < rng.Hi; i++ {
+					for i := rng.Low; i <= rng.Hi; i++ {
 						indexVals = append(indexVals, []interface{}{topic, i})
 					}
 				}
@@ -980,7 +982,7 @@ func (a *RethinkDbAdapter) MessageDeleteList(topic string, toDel *t.DelMessage) 
 			query = query.Between(
 				[]interface{}{topic, toDel.SeqIdRanges[0].Low},
 				[]interface{}{topic, toDel.SeqIdRanges[0].Hi},
-				rdb.BetweenOpts{Index: "Topic_SeqId"})
+				rdb.BetweenOpts{Index: "Topic_SeqId", RightBound: "closed"})
 		}
 
 		if toDel.DeletedFor == "" {
