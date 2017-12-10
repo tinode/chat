@@ -223,7 +223,7 @@ sub: {
       since: 123, // integer, load messages with server-issued IDs greater or equal
   				 // to this (inclusive/closed), optional
       before: 321, // integer, load messages with server-issued sequential IDs less
-  				  // or equal to this (inclusive/closed), optional
+  				  // than this (exclusive/open), optional
       limit: 20, // integer, limit the number of returned objects,
                  // default: 32, optional
     } // object, optional
@@ -297,7 +297,7 @@ get: {
     since: 123, // integer, load messages with server-issued IDs greater or equal
 				 // to this (inclusive/closed), optional
     before: 321, // integer, load messages with server-issed sequential IDs less
-				  // or equal to this (inclusive/closed), optional
+				  // than this (exclusive/open), optional
     limit: 20, // integer, limit the number of returned objects, default: 32,
                // optional
   },
