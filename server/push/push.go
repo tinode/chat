@@ -14,7 +14,7 @@ type PushTo struct {
 	// Addresse
 	User t.Uid `json:"user"`
 	// Count of user's connections that were live when the packet was dispatched from the server
-	Delieved int `json:"delivered"`
+	Delivered int `json:"delivered"`
 	// List of user's devices that the packet was delivered to (if known). Len(Devices) >= Delivered
 	Devices []string `json:"devices,omitempty"`
 }
