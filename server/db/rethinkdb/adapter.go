@@ -130,6 +130,17 @@ func (a *RethinkDbAdapter) CreateDb(reset bool) error {
 	if _, err := rdb.DB("tinode").Table("users").IndexCreate("Tags", rdb.IndexCreateOpts{Multi: true}).RunWrite(a.conn); err != nil {
 		return err
 	}
+	// Create secondary index for User.Devices.<hash>.DeviceId to ensure ID uniqueness across users
+	if _, err := rdb.DB("tinode").Table("users").IndexCreateFunc("DeviceIds",
+		func(row rdb.Term) interface{} {
+			devices := row.Field("Devices")
+			return devices.Keys().Map(func(key rdb.Term) interface{} {
+				return devices.Field(key).Field("DeviceId")
+			})
+		}, rdb.IndexCreateOpts{Multi: true}).RunWrite(a.conn); err != nil {
+		return err
+	}
+
 	// User authentication records {unique, userid, secret}
 	if _, err := rdb.DB("tinode").TableCreate("auth", rdb.TableCreateOpts{PrimaryKey: "unique"}).RunWrite(a.conn); err != nil {
 		return err
@@ -1027,9 +1038,36 @@ func deviceHasher(deviceId string) string {
 }
 
 // Device management for push notifications
-func (a *RethinkDbAdapter) DeviceUpsert(user t.Uid, def *t.DeviceDef) error {
+func (a *RethinkDbAdapter) DeviceUpsert(uid t.Uid, def *t.DeviceDef) error {
 	hash := deviceHasher(def.DeviceId)
-	_, err := rdb.DB(a.dbName).Table("users").Get(user.String()).
+	user := uid.String()
+
+	// Ensure uniqueness of the device ID
+	var others []interface{}
+	// Find users who already use this device ID, ignore current user.
+	if resp, err := rdb.DB(a.dbName).Table("users").GetAllByIndex("DeviceIds", def.DeviceId).
+		// We only care about user Ids
+		Pluck("Id").
+		// Make sure we filter out the current user who may legitimately use this device ID
+		Filter(rdb.Not(rdb.Row.Field("Id").Eq(user))).
+		// Convert slice of objects to a slice of strings
+		ConcatMap(func(row rdb.Term) interface{} { return []interface{}{row.Field("Id")} }).
+		// Execute
+		Run(a.conn); err != nil {
+		return err
+	} else if err = resp.All(&others); err != nil {
+		return err
+	} else if len(others) > 0 {
+		// Delete device ID for the other users.
+		_, err := rdb.DB(a.dbName).Table("users").GetAll(others...).Replace(rdb.Row.Without(
+			map[string]string{"Devices": hash})).RunWrite(a.conn)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Actually add/update DeviceId for the new user
+	_, err := rdb.DB(a.dbName).Table("users").Get(user).
 		Update(map[string]interface{}{
 			"Devices": map[string]*t.DeviceDef{
 				hash: def,
