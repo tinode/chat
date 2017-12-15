@@ -7,7 +7,8 @@ Tinode is meant as a replacement for XMPP. Overall it's a lot like open source W
 Version 0.13. This is beta-quality software: feature-complete but probably with a few bugs. Follow [instructions](INSTALL.md) to install and run. Read [API documentation](API.md).
 
 A javascript demo is (usually) available at https://api.tinode.co/x/example-react-js/ ([source](https://github.com/tinode/example-react-js/)). Login as one of `alice`, `bob`, `carol`, `dave`, `frank`. Password is `<login>123`, e.g. login for `alice` is `alice123`. You can discover other users by email or phone by prefixing them with `email:` or `tel:` respectively. Emails are `<login>@example.com`, e.g. `alice@example.com`, phones are `17025550001` through `17025550009`. The demo server is reset (all data wiped) every night at 3:15 am Pacific time.
-[Android demo](https://github.com/tinode/android-example) is mostly stable and functional. See screenshots below.  
+[Android demo](https://github.com/tinode/android-example) is mostly stable and functional. See screenshots below. 
+User `Tino` is a [basic chatbot](https://github.com/tinode/chat/tree/master/chatbot) which responds with a quote to any message.
 
 
 ## Why?
@@ -39,6 +40,7 @@ A javascript demo is (usually) available at https://api.tinode.co/x/example-reac
 * Authentication support customizable at compile time.
 * Anonymous users (important for use cases related to tech support over chat).
 * Mobile push notifications using [FCM](https://firebase.google.com/docs/cloud-messaging/).
+* Plugins to enable chat bots.
 
 ### Planned
 
@@ -50,7 +52,6 @@ A javascript demo is (usually) available at https://api.tinode.co/x/example-reac
 * Federation.
 * Different levels of message persistence (from strict persistence to "store until delivered" to purely ephemeral messaging).
 * Support for other SQL and NoSQL backends.
-* Plugins to enable chat bots.
 
 ## Screenshots
 
