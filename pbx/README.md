@@ -9,7 +9,8 @@ For a partial plugin implementation see [chatbot](../chatbot/).
 
 If you want to make changes, you have to install protobuffers tool chain and gRPC. To generate `Go` bindings add the following line to your code and run `go generate` (your actual path to `/pbx` may be different):
 
-```//go:generate protoc --proto_path=../pbx --go_out=plugins=grpc:../pbx ../pbx/model.proto
+```
+//go:generate protoc --proto_path=../pbx --go_out=plugins=grpc:../pbx ../pbx/model.proto
 ```
 
 To generate `Python` bindings:
