@@ -427,8 +427,19 @@ type DeviceMapper struct{}
 
 var Devices DeviceMapper
 
-func (DeviceMapper) Update(uid types.Uid, dev *types.DeviceDef) error {
-	return adaptr.DeviceUpsert(uid, dev)
+func (DeviceMapper) Update(uid types.Uid, oldDeviceId string, dev *types.DeviceDef) error {
+	// If the old device Id is specified and it's different from the new ID, delete the old id
+	if oldDeviceId != "" && (dev == nil || dev.DeviceId != oldDeviceId) {
+		if err := adaptr.DeviceDelete(uid, oldDeviceId); err != nil {
+			return err
+		}
+	}
+
+	// Insert or update the new DeviceId if one is given.
+	if dev != nil && dev.DeviceId != "" {
+		return adaptr.DeviceUpsert(uid, dev)
+	}
+	return nil
 }
 
 func (DeviceMapper) GetAll(uid ...types.Uid) (map[types.Uid][]types.DeviceDef, int, error) {

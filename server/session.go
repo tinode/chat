@@ -478,7 +478,7 @@ func (s *Session) login(msg *ClientComMessage) {
 
 	// Record deviceId used in this session
 	if s.deviceId != "" {
-		store.Devices.Update(uid, &types.DeviceDef{
+		store.Devices.Update(uid, "", &types.DeviceDef{
 			DeviceId: s.deviceId,
 			Platform: "",
 			LastSeen: msg.timestamp,
@@ -605,7 +605,7 @@ func (s *Session) acc(msg *ClientComMessage) {
 
 			// Record session
 			if s.deviceId != "" {
-				store.Devices.Update(s.uid, &types.DeviceDef{
+				store.Devices.Update(s.uid, "", &types.DeviceDef{
 					DeviceId: s.deviceId,
 					Platform: "",
 					LastSeen: msg.timestamp,
