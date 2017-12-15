@@ -393,6 +393,7 @@ func (s *Session) hello(msg *ClientComMessage) {
 		params = map[string]interface{}{"ver": VERSION, "build": buildstamp}
 
 	} else if msg.Hi.Version == "" || parseVersion(msg.Hi.Version) == s.ver {
+		// Save changed device ID or Lang.
 		if !s.uid.IsZero() {
 			if err := store.Devices.Update(s.uid, s.deviceId, &types.DeviceDef{
 				DeviceId: msg.Hi.DeviceID,
@@ -403,7 +404,6 @@ func (s *Session) hello(msg *ClientComMessage) {
 				s.queueOut(ErrUnknown(msg.Hi.Id, "", msg.timestamp))
 				return
 			}
-
 		}
 	} else {
 		// Version cannot be changed mid-session.
