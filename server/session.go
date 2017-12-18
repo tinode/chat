@@ -427,6 +427,7 @@ func (s *Session) hello(msg *ClientComMessage) {
 		httpStatusText = "created"
 	}
 
+	// fix null printed value in params
 	ctrl := &MsgServerCtrl{Id: msg.Hi.Id, Code: httpStatus, Text: httpStatusText, Timestamp: msg.timestamp}
 	if len(params) > 0 {
 		ctrl.Params = params
