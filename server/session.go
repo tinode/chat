@@ -426,12 +426,12 @@ func (s *Session) hello(msg *ClientComMessage) {
 		httpStatus = http.StatusCreated
 		httpStatusText = "created"
 	}
-	s.queueOut(&ServerComMessage{Ctrl: &MsgServerCtrl{
-		Id:        msg.Hi.Id,
-		Code:      httpStatus,
-		Text:      httpStatusText,
-		Params:    params,
-		Timestamp: msg.timestamp}})
+
+	ctrl := &MsgServerCtrl{Id: msg.Hi.Id, Code: httpStatus, Text: httpStatusText, Timestamp: msg.timestamp}
+	if len(params) > 0 {
+		ctrl.Params = params
+	}
+	s.queueOut(&ServerComMessage{Ctrl: ctrl})
 }
 
 // Authenticate
