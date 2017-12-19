@@ -376,6 +376,8 @@ func (s *Session) hello(msg *ClientComMessage) {
 		return
 	}
 
+	var params map[string]interface{}
+
 	if s.ver == 0 {
 		s.ver = parseVersion(msg.Hi.Version)
 		if s.ver == 0 {
@@ -388,7 +390,23 @@ func (s *Session) hello(msg *ClientComMessage) {
 			s.queueOut(ErrVersionNotSupported(msg.Hi.Id, "", msg.timestamp))
 			return
 		}
+		params = map[string]interface{}{"ver": VERSION, "build": buildstamp}
+
+	} else if msg.Hi.Version == "" || parseVersion(msg.Hi.Version) == s.ver {
+		// Save changed device ID or Lang.
+		if !s.uid.IsZero() {
+			if err := store.Devices.Update(s.uid, s.deviceId, &types.DeviceDef{
+				DeviceId: msg.Hi.DeviceID,
+				Platform: "",
+				LastSeen: msg.timestamp,
+				Lang:     msg.Hi.Lang,
+			}); err != nil {
+				s.queueOut(ErrUnknown(msg.Hi.Id, "", msg.timestamp))
+				return
+			}
+		}
 	} else {
+		// Version cannot be changed mid-session.
 		s.queueOut(ErrCommandOutOfSequence(msg.Hi.Id, "", msg.timestamp))
 		return
 	}
@@ -397,7 +415,6 @@ func (s *Session) hello(msg *ClientComMessage) {
 	s.deviceId = msg.Hi.DeviceID
 	s.lang = msg.Hi.Lang
 
-	params := map[string]interface{}{"ver": VERSION, "build": buildstamp}
 	var httpStatus int
 	var httpStatusText string
 	if s.proto == LPOLL {
@@ -409,12 +426,13 @@ func (s *Session) hello(msg *ClientComMessage) {
 		httpStatus = http.StatusCreated
 		httpStatusText = "created"
 	}
-	s.queueOut(&ServerComMessage{Ctrl: &MsgServerCtrl{
-		Id:        msg.Hi.Id,
-		Code:      httpStatus,
-		Text:      httpStatusText,
-		Params:    params,
-		Timestamp: msg.timestamp}})
+
+	// fix null printed value in params
+	ctrl := &MsgServerCtrl{Id: msg.Hi.Id, Code: httpStatus, Text: httpStatusText, Timestamp: msg.timestamp}
+	if len(params) > 0 {
+		ctrl.Params = params
+	}
+	s.queueOut(&ServerComMessage{Ctrl: ctrl})
 }
 
 // Authenticate
@@ -478,7 +496,7 @@ func (s *Session) login(msg *ClientComMessage) {
 
 	// Record deviceId used in this session
 	if s.deviceId != "" {
-		store.Devices.Update(uid, &types.DeviceDef{
+		store.Devices.Update(uid, "", &types.DeviceDef{
 			DeviceId: s.deviceId,
 			Platform: "",
 			LastSeen: msg.timestamp,
@@ -605,7 +623,7 @@ func (s *Session) acc(msg *ClientComMessage) {
 
 			// Record session
 			if s.deviceId != "" {
-				store.Devices.Update(s.uid, &types.DeviceDef{
+				store.Devices.Update(s.uid, "", &types.DeviceDef{
 					DeviceId: s.deviceId,
 					Platform: "",
 					LastSeen: msg.timestamp,

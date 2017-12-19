@@ -77,15 +77,17 @@ session ID `sid` in case of long polling, all in `ctrl.params`.
 ```js
 hi: {
   id: "1a2b3",     // string, client-provided message id, optional
-  ver: "0.8",   // string, version of the wire protocol supported by the client.
+  ver: "0.14",   // string, version of the wire protocol supported by the client, required
   ua: "JS/1.0 (Windows 10)", // string, user agent identifying client software,
                    // optional
-  dev: "L1iC2dNtk2" // string, unique value which identifies this specific
-				   // connected device; not interpreted by the server;
+  dev: "L1iC2dNtk2", // string, unique value which identifies this specific
+				   // connected device for the purpose of push notifications; not 
+				   // interpreted by the server; optional
 				   // see [Push notifications support](#push-notifications-support); optional
+  lang: "EN" 	   // human language of the client device; optional
 }
 ```
-The user agent `ua` is expected to follow [RFC 7231 section 5.5.3](http://tools.ietf.org/html/rfc7231#section-5.5.3) recommendation.
+The user agent `ua` is expected to follow [RFC 7231 section 5.5.3](http://tools.ietf.org/html/rfc7231#section-5.5.3) recommendation but the format is not enforced. Can be sent more than once to update `ua`, `dev` and `lang` values. If sent more than once, the `ver` field must be either unchanged or not set.
 
 
 #### `{acc}`
