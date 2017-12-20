@@ -583,7 +583,13 @@ func (s *Session) acc(msg *ClientComMessage) {
 		}
 
 		if _, err := store.Users.Create(&user, private); err != nil {
-			s.queueOut(ErrUnknown(msg.Acc.Id, "", msg.timestamp))
+			// Separate bad user input from DB error
+			if strings.Contains(err.Error(), "duplicate ") {
+				s.queueOut(ErrDuplicateCredential(msg.Acc.Id, "", msg.timestamp))
+			} else {
+				log.Println("Failed to create user", err)
+				s.queueOut(ErrUnknown(msg.Acc.Id, "", msg.timestamp))
+			}
 			return
 		}
 
@@ -899,7 +905,7 @@ func (s *Session) serialize(msg *ServerComMessage) interface{} {
 }
 
 func filterTags(dst *[]string, src []string) int {
-	if globals.indexableTags == nil || len(globals.indexableTags) == 0 {
+	if len(globals.indexableTags) == 0 {
 		return 0
 	}
 

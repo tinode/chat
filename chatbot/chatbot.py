@@ -63,16 +63,19 @@ next_quote.idx = 0
 class Plugin(pbx.PluginServicer):
     def Account(self, acc_event, context):
         action = None
-        if acc_event.action == pb.Crud.CREATE:
+        if acc_event.action == pb.CREATE:
             action = "created"
-        elif acc_event.action == pb.Crud.UPDATE:
+        elif acc_event.action == pb.UPDATE:
             action = "updated"
-        elif acc_event.action == pb.Crud.DELETE:
+        elif acc_event.action == pb.DELETE:
             action = "deleted"
         else:
             action = "unknown"
 
         print "Account", action, ":", acc_event.user_id, acc_event.public
+
+        # TODO: subscribe to the new user.
+
         return pb.Unused()
 
 queue_out = Queue.Queue()

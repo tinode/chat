@@ -17,7 +17,7 @@ type Adapter interface {
 	CreateDb(reset bool) error
 
 	// User management
-	UserCreate(usr *t.User) (err error, dupeUserName bool)
+	UserCreate(usr *t.User) error
 	UserGet(id t.Uid) (*t.User, error)
 	UserGetAll(ids ...t.Uid) ([]t.User, error)
 	UserDelete(id t.Uid, soft bool) error

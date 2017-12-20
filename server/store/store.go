@@ -111,7 +111,7 @@ func (u UsersObjMapper) Create(user *types.User, private interface{}) (*types.Us
 	user.SetUid(GetUid())
 	user.InitTimes()
 
-	err, _ := adaptr.UserCreate(user)
+	err := adaptr.UserCreate(user)
 	if err != nil {
 		return nil, err
 	}

@@ -215,7 +215,7 @@ func (a *RethinkDbAdapter) CreateDb(reset bool) error {
 
 // UserCreate creates a new user. Returns error and true if error is due to duplicate user name,
 // false for any other error
-func (a *RethinkDbAdapter) UserCreate(user *t.User) (error, bool) {
+func (a *RethinkDbAdapter) UserCreate(user *t.User) error {
 	// Save user's tags to a separate table to ensure uniquness
 	// TODO(gene): add support for non-unique tags
 	if user.Tags != nil {
@@ -228,22 +228,26 @@ func (a *RethinkDbAdapter) UserCreate(user *t.User) (error, bool) {
 			tags = append(tags, tag{Id: t, Source: user.Id})
 		}
 		res, err := rdb.DB(a.dbName).Table("tagunique").Insert(tags).RunWrite(a.conn)
-		if err != nil || res.Inserted != len(user.Tags) {
+		if err != nil {
 			if res.Inserted > 0 {
-				// Something went wrong, do best effort delete of inserted tags
+				// Something went wrong, do best effort deletion of inserted tags
 				rdb.DB(a.dbName).Table("tagunique").GetAll(user.Tags).
 					Filter(map[string]interface{}{"Source": user.Id}).Delete().RunWrite(a.conn)
 			}
-			return err, false
+
+			if rdb.IsConflictErr(err) {
+				return errors.New("duplicate tag(s)")
+			}
+			return err
 		}
 	}
 
 	_, err := rdb.DB(a.dbName).Table("users").Insert(&user).RunWrite(a.conn)
 	if err != nil {
-		return err, false
+		return err
 	}
 
-	return nil, false
+	return nil
 }
 
 // Add user's authentication record
