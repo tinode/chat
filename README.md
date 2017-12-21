@@ -19,7 +19,7 @@ User `Tino` is a [basic chatbot](https://github.com/tinode/chat/tree/master/chat
 
 ### Supported
 
-* [Android](https://github.com/tinode/android-example/), [web](https://github.com/tinode/example-react-js/), and [command line](https://github.com/tinode/chat/tree/master/tn-cli) clients.
+* [Android](https://github.com/tinode/android-example/), [web](https://github.com/tinode/example-react-js/), and [command line](tn-cli/) clients.
 * One-on-one messaging.
 * Group messaging with currently unlimited number of members where every member's access permissions are managed individually. The maximum number of members will be limited to a reasonably high value in the future (256? configurable?).
 * Topic access control with permissions for various actions.
