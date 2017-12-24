@@ -434,11 +434,13 @@ func (t *Topic) run(hub *Hub) {
 					}
 
 					if sess.queueOut(msg) {
-						// Update device map with the device ID which should recive the notification
+						// Update device map with the device ID which should NOT receive the notification.
 						if pushRcpt != nil {
 							if i, ok := pushRcpt.uidMap[sess.uid]; ok {
 								pushRcpt.rcpt.To[i].Delivered++
 								if sess.deviceId != "" {
+									// List of device IDs which already received the message. Push should
+									// skip them.
 									pushRcpt.rcpt.To[i].Devices = append(pushRcpt.rcpt.To[i].Devices, sess.deviceId)
 								}
 							}

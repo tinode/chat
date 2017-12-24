@@ -261,7 +261,7 @@ Sample:
   "SeqIdRanges": [
     {
       "Low": 20,
-	  "Hi": 25,
+      "Hi": 25,
     }
   ] ,
   "Topic":  "grpGx7fpjQwVC0" ,
