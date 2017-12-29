@@ -517,14 +517,14 @@ func (s *Session) acc(msg *ClientComMessage) {
 		return
 	}
 
-	// FIXME(gene): it should be possible to change Tags without stating the auth scheme
 	authhdl := store.GetAuthHandler(msg.Acc.Scheme)
-	if authhdl == nil {
-		s.queueOut(ErrMalformed(msg.Acc.Id, "", msg.timestamp))
-		return
-	}
-
 	if strings.HasPrefix(msg.Acc.User, "new") {
+		if authhdl == nil {
+			// New accounts must have an authentication scheme
+			s.queueOut(ErrMalformed(msg.Acc.Id, "", msg.timestamp))
+			return
+		}
+
 		// User cannot authenticate with the new account because the user is already authenticated
 		if msg.Acc.Login && !s.uid.IsZero() {
 			s.queueOut(ErrAlreadyAuthenticated(msg.Acc.Id, "", msg.timestamp))
@@ -533,7 +533,7 @@ func (s *Session) acc(msg *ClientComMessage) {
 
 		// Request to create a new account
 		if ok, authErr := authhdl.IsUnique(msg.Acc.Secret); !ok {
-			log.Println("Not unique: ", authErr.Err)
+			log.Println("Check unique: ", authErr.Err)
 			if authErr.Code == auth.ErrDuplicate {
 				s.queueOut(ErrDuplicateCredential(msg.Acc.Id, "", msg.timestamp))
 			} else {
@@ -575,9 +575,9 @@ func (s *Session) acc(msg *ClientComMessage) {
 			}
 		}
 
-		if msg.Acc.Tags != nil && len(msg.Acc.Tags) > 0 {
-			tags := make([]string, 0, len(msg.Acc.Tags))
-			if filterTags(&tags, msg.Acc.Tags) > 0 {
+		if len(msg.Acc.Tags) > 0 {
+			var tags []string
+			if tags = filterTags(tags, msg.Acc.Tags); len(tags) > 0 {
 				user.Tags = tags
 			}
 		}
@@ -644,16 +644,34 @@ func (s *Session) acc(msg *ClientComMessage) {
 		pluginAccount(&user, plgActCreate)
 
 	} else if !s.uid.IsZero() {
-		// Request to update auth of an existing account. Only basic auth is currently supported
-		// TODO(gene): support adding new auth schemes
-		// TODO(gene): support the case when msg.Acc.User is not equal to the current user
-		if authErr := authhdl.UpdateRecord(s.uid, msg.Acc.Secret, 0); authErr.IsError() {
-			log.Println("failed to update credentials", authErr.Err)
-			s.queueOut(decodeAuthError(authErr.Code, msg.Acc.Id, msg.timestamp))
+		if authhdl != nil {
+			// Request to update auth of an existing account. Only basic auth is currently supported
+			// TODO(gene): support adding new auth schemes
+			// TODO(gene): support the case when msg.Acc.User is not equal to the current user
+			if authErr := authhdl.UpdateRecord(s.uid, msg.Acc.Secret, 0); authErr.IsError() {
+				log.Println("Failed to update credentials", authErr.Err)
+				s.queueOut(decodeAuthError(authErr.Code, msg.Acc.Id, msg.timestamp))
+				return
+			}
+		} else if msg.Acc.Scheme != "" {
+			// Invalid or unknown auth scheme
+			log.Println("Unknown auth scheme", msg.Acc.Scheme)
+			s.queueOut(ErrMalformed(msg.Acc.Id, "", msg.timestamp))
 			return
 		}
 
-		// TODO(gene): handle tags
+		// Tags updated
+		if len(msg.Acc.Tags) > 0 {
+			var tags []string
+			if tags = filterTags(tags, msg.Acc.Tags); len(tags) > 0 {
+				if err := store.Users.Update(s.uid, map[string]interface{}{"Tags": tags}); err != nil {
+					log.Println("Failed to update tags", err)
+					s.queueOut(ErrUnknown(msg.Acc.Id, "", msg.timestamp))
+					return
+				}
+			}
+		}
+
 		s.queueOut(NoErr(msg.Acc.Id, "", msg.timestamp))
 
 	} else {
@@ -904,9 +922,9 @@ func (s *Session) serialize(msg *ServerComMessage) interface{} {
 	return out
 }
 
-func filterTags(dst *[]string, src []string) int {
+func filterTags(dst []string, src []string) []string {
 	if len(globals.indexableTags) == 0 {
-		return 0
+		return dst
 	}
 
 	for _, s := range src {
@@ -920,11 +938,11 @@ func filterTags(dst *[]string, src []string) int {
 		parts[0] = strings.ToLower(parts[0])
 		for _, tag := range globals.indexableTags {
 			if parts[0] == tag {
-				*dst = append(*dst, s)
+				dst = append(dst, tag+":"+parts[1])
 			}
 		}
 	}
-	return len(*dst)
+	return dst
 }
 
 func decodeAuthError(code int, id string, timestamp time.Time) *ServerComMessage {

@@ -1251,8 +1251,8 @@ func (t *Topic) replySetDesc(sess *Session, set *MsgClientSet) error {
 			// User's own tags are sent as fnd.public. Assign them to user.Tags
 			if set.Desc.Public != nil {
 				if src, ok := set.Desc.Public.([]string); ok && len(src) > 0 {
-					tags := make([]string, 0, len(src))
-					if filterTags(&tags, src) > 0 {
+					var tags []string
+					if tags = filterTags(tags, src); len(tags) > 0 {
 						// No need to send presence update
 						assignGenericValues(user, "Tags", tags)
 						t.public = tags
