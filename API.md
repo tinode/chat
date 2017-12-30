@@ -87,12 +87,11 @@ hi: {
   lang: "EN" 	   // human language of the client device; optional
 }
 ```
-The user agent `ua` is expected to follow [RFC 7231 section 5.5.3](http://tools.ietf.org/html/rfc7231#section-5.5.3) recommendation but the format is not enforced. Can be sent more than once to update `ua`, `dev` and `lang` values. If sent more than once, the `ver` field must be either unchanged or not set.
-
+The user agent `ua` is expected to follow [RFC 7231 section 5.5.3](http://tools.ietf.org/html/rfc7231#section-5.5.3) recommendation but the format is not enforced. The message can be sent more than once to update `ua`, `dev` and `lang` values. If sent more than once, the `ver` field of the second and subsequent messages must be either unchanged or not set.
 
 #### `{acc}`
 
-Message `{acc}` is used for creating users or updating authentication credentials. To create a new user set `acc.user` to string `new` optionally followed by any character sequence. Either authenticated or anonymous session can send an `{acc}` message to create a new user. To update credentials of the current user leave `acc.user` unset.
+Message `{acc}` creats users or updates `tags` or authentication credentials `scheme` and `secret` of exiting users. To create a new user set `user` to the string `new` optionally followed by any character sequence, e.g. `newr15gsr`. Either authenticated or anonymous session can send an `{acc}` message to create a new user. To update tags or authentication credentials of the current user leave `user` unset.
 
 ```js
 acc: {
@@ -123,11 +122,10 @@ acc: {
 }
 ```
 
-Server responds with a `{ctrl}` message with `ctrl.params` containing details of the new user. If `desc.defacs` is missing,
+Server responds with a `{ctrl}` message with `params` containing details of the new user. If `desc.defacs` is missing,
 server will assign server-default access values.
 
 The only supported authentication schemes for account creation are `basic` and `anonymous`.
-
 
 #### `{login}`
 
