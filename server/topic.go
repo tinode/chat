@@ -191,6 +191,11 @@ func (t *Topic) run(hub *Hub) {
 				// while processing the call
 				killTimer.Stop()
 				if err := t.handleSubscription(hub, sreg); err == nil {
+					if sreg.created {
+						// Call plugins with the new topic
+						pluginTopic(t, plgActCreate)
+					}
+
 					// give a broadcast channel to the connection (.read)
 					// give channel to use when shutting down (.done)
 					sreg.sess.subs[t.name] = &Subscription{
@@ -315,6 +320,9 @@ func (t *Topic) run(hub *Hub) {
 
 				// Message sent: notify offline 'R' subscrbers on 'me'
 				t.presSubsOffline("msg", &PresParams{seqId: t.lastId}, types.ModeRead, "", true)
+
+				// Tell the plugins that a message was accepted for delivery
+				pluginMessage(msg.Data, plgActCreate)
 
 			} else if msg.Pres != nil {
 
@@ -467,36 +475,56 @@ func (t *Topic) run(hub *Hub) {
 			if meta.pkt.Get != nil {
 				// Get request
 				if meta.what&constMsgMetaDesc != 0 {
-					t.replyGetDesc(meta.sess, meta.pkt.Get.Id, "", meta.pkt.Get.Desc)
+					if err := t.replyGetDesc(meta.sess, meta.pkt.Get.Id, "", meta.pkt.Get.Desc); err != nil {
+						log.Printf("topic[%s] meta.Get.Desc failed: %v", t.name, err)
+					}
 				}
 				if meta.what&constMsgMetaSub != 0 {
-					t.replyGetSub(meta.sess, meta.pkt.Get.Id, meta.pkt.Get.Sub)
+					if err := t.replyGetSub(meta.sess, meta.pkt.Get.Id, meta.pkt.Get.Sub); err != nil {
+						log.Printf("topic[%s] meta.Get.Sub failed: %v", t.name, err)
+					}
 				}
 				if meta.what&constMsgMetaData != 0 {
-					t.replyGetData(meta.sess, meta.pkt.Get.Id, meta.pkt.Get.Data)
+					if err := t.replyGetData(meta.sess, meta.pkt.Get.Id, meta.pkt.Get.Data); err != nil {
+						log.Printf("topic[%s] meta.Get.Data failed: %v", t.name, err)
+					}
 				}
 				if meta.what&constMsgMetaDel != 0 {
-					t.replyGetDel(meta.sess, meta.pkt.Get.Id, meta.pkt.Get.Del)
+					if err := t.replyGetDel(meta.sess, meta.pkt.Get.Id, meta.pkt.Get.Del); err != nil {
+						log.Printf("topic[%s] meta.Get.Del failed: %v", t.name, err)
+					}
 				}
 
 			} else if meta.pkt.Set != nil {
 				// Set request
 				if meta.what&constMsgMetaDesc != 0 {
-					t.replySetDesc(meta.sess, meta.pkt.Set)
+					if err := t.replySetDesc(meta.sess, meta.pkt.Set); err == nil {
+						// Notify plugins of the update
+						pluginTopic(t, plgActUpd)
+					} else {
+						log.Printf("topic[%s] meta.Set.Desc failed: %v", t.name, err)
+					}
 				}
 				if meta.what&constMsgMetaSub != 0 {
-					t.replySetSub(hub, meta.sess, meta.pkt.Set)
+					if err := t.replySetSub(hub, meta.sess, meta.pkt.Set); err != nil {
+						log.Printf("topic[%s] meta.Set.Sub failed: %v", t.name, err)
+					}
 				}
 
 			} else if meta.pkt.Del != nil {
 				// Del request
+				var err error
 				switch meta.what {
 				case constMsgDelMsg:
-					t.replyDelMsg(meta.sess, meta.pkt.Del)
+					err = t.replyDelMsg(meta.sess, meta.pkt.Del)
 				case constMsgDelSub:
-					t.replyDelSub(hub, meta.sess, meta.pkt.Del)
+					err = t.replyDelSub(hub, meta.sess, meta.pkt.Del)
 				case constMsgDelTopic:
-					t.replyDelTopic(hub, meta.sess, meta.pkt.Del)
+					err = t.replyDelTopic(hub, meta.sess, meta.pkt.Del)
+				}
+
+				if err != nil {
+					log.Printf("topic[%s] meta.Del failed: %v", t.name, err)
 				}
 			}
 		case ua := <-t.uaChange:
@@ -536,6 +564,9 @@ func (t *Topic) run(hub *Hub) {
 					t.presSubsOffline("gone", nilPresParams, 0, "", false)
 				}
 				// P2P users get "off+remove" earlier in the process
+
+				// Inform plugins that the topic is deleted
+				pluginTopic(t, plgActDel)
 
 			} else if sd.reason == StopRehashing {
 				// Must send individual messages to sessions because normal sending through the topic's

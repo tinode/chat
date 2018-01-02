@@ -91,15 +91,16 @@ The user agent `ua` is expected to follow [RFC 7231 section 5.5.3](http://tools.
 
 #### `{acc}`
 
-Message `{acc}` creats users or updates `tags` or authentication credentials `scheme` and `secret` of exiting users. To create a new user set `user` to the string `new` optionally followed by any character sequence, e.g. `newr15gsr`. Either authenticated or anonymous session can send an `{acc}` message to create a new user. To update tags or authentication credentials of the current user leave `user` unset.
+Message `{acc}` creates users or updates `tags` or authentication credentials `scheme` and `secret` of exiting users. To create a new user set `user` to the string `new` optionally followed by any character sequence, e.g. `newr15gsr`. Either authenticated or anonymous session can send an `{acc}` message to create a new user. To update tags or authentication credentials of the current user leave `user` unset.
 
 ```js
 acc: {
   id: "1a2b3", // string, client-provided message id, optional
   user: "new", // string, "new" to create a new user, default: current user, optional
   scheme: "basic", // authentication scheme for this account, required;
-               // "basic" and "anonymous" are currently supported for account creation. The current
-               // implementation of the basic scheme does not allow changes to username.
+               // "basic" and "anonymous" are currently supported for account creation. The 
+				// current implementation of the basic scheme does not allow changes to 
+				// username.
   secret: btoa("username:password"), // string, base64 encoded secret for the chosen
               // authentication scheme; to delete a scheme use a string with a single DEL
               // Unicode character "\u2421"; "token" and "basic" cannot be deleted

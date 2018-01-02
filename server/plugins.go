@@ -334,8 +334,7 @@ func pluginFireHose(sess *Session, msg *ClientComMessage) (*ClientComMessage, *S
 
 	var req *pbx.ClientReq
 
-	var id string
-	var topic string
+	id, topic := pluginIdAndTopic(msg)
 	ts := time.Now().UTC().Round(time.Millisecond)
 	for _, p := range plugins {
 		if !pluginDoFiltering(p.filterFireHose, msg) {
@@ -429,16 +428,77 @@ func pluginAccount(user *types.User, action int) {
 	}
 }
 
-func pluginTopic(msg *ServerComMessage) *ServerComMessage {
-	return nil
+func pluginTopic(topic *Topic, action int) {
+	if plugins == nil {
+		return
+	}
+
+	var event *pbx.TopicEvent
+	for _, p := range plugins {
+		if p.filterTopic == nil || p.filterTopic.byAction&action == 0 {
+			// Plugin is not interested in Message actions
+			continue
+		}
+
+		if event == nil {
+			event = &pbx.TopicEvent{
+				Action: pluginActionToCrud(action),
+				Name:   topic.name,
+				Desc:   pb_Topic_serialize(topic),
+			}
+		}
+
+		var ctx context.Context
+		var cancel context.CancelFunc
+		if p.timeout > 0 {
+			ctx, cancel = context.WithTimeout(context.Background(), p.timeout)
+			defer cancel()
+		} else {
+			ctx = context.Background()
+		}
+		if _, err := p.client.Topic(ctx, event); err != nil {
+			log.Println("plugins: Topic call failed", p.name, err)
+		}
+	}
+
+	return
 }
 
 func pluginSubscription(msg *ServerComMessage) *ServerComMessage {
 	return nil
 }
 
-func pluginMessage(msg *ServerComMessage) *ServerComMessage {
-	return nil
+func pluginMessage(data *MsgServerData, action int) {
+	if plugins == nil || action != plgActCreate {
+		return
+	}
+
+	var event *pbx.MessageEvent
+	for _, p := range plugins {
+		if p.filterMessage == nil || p.filterMessage.byAction&action == 0 {
+			// Plugin is not interested in Message actions
+			continue
+		}
+
+		if event == nil {
+			event = &pbx.MessageEvent{
+				Action: pluginActionToCrud(action),
+				Msg:    pb_serv_data_serialize(data).Data,
+			}
+		}
+
+		var ctx context.Context
+		var cancel context.CancelFunc
+		if p.timeout > 0 {
+			ctx, cancel = context.WithTimeout(context.Background(), p.timeout)
+			defer cancel()
+		} else {
+			ctx = context.Background()
+		}
+		if _, err := p.client.Message(ctx, event); err != nil {
+			log.Println("plugins: Message call failed", p.name, err)
+		}
+	}
 }
 
 // Returns false to skip, true to process
@@ -514,4 +574,38 @@ func pluginActionToCrud(action int) pbx.Crud {
 		return pbx.Crud_DELETE
 	}
 	panic("plugin: unknown action")
+}
+
+func pluginIdAndTopic(msg *ClientComMessage) (string, string) {
+	if msg.Hi != nil {
+		return msg.Hi.Id, ""
+	}
+	if msg.Acc != nil {
+		return msg.Acc.Id, ""
+	}
+	if msg.Login != nil {
+		return msg.Login.Id, ""
+	}
+	if msg.Sub != nil {
+		return msg.Sub.Id, msg.Sub.Topic
+	}
+	if msg.Leave != nil {
+		return msg.Leave.Id, msg.Leave.Topic
+	}
+	if msg.Pub != nil {
+		return msg.Pub.Id, msg.Pub.Topic
+	}
+	if msg.Get != nil {
+		return msg.Get.Id, msg.Get.Topic
+	}
+	if msg.Set != nil {
+		return msg.Set.Id, msg.Set.Topic
+	}
+	if msg.Del != nil {
+		return msg.Del.Id, msg.Del.Topic
+	}
+	if msg.Note != nil {
+		return "", msg.Note.Topic
+	}
+	panic("plugin: unknown message")
 }

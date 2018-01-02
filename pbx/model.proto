@@ -10,10 +10,10 @@ service Node {
 // Plugin interface.
 service Plugin {
 	// This plugin method is called by Tinode server for every message received from the clients. The 
-	// method returns a ServerCtrl message. ServerCtrl.code is *not* 0 indicates that no further 
+	// method returns a ServerCtrl message. Non-zero ServerCtrl.code indicates that no further 
 	// processing is needed. The Tinode server will generate a {ctrl} message from the returned ServerCtrl 
 	// and forward it to the client session. 
-	// If ServerCtrl.code is 0, the server should continue with default processing of the client message.
+	// ServerCtrl.code equals to 0 instructs the server to continue with default processing of the client message.
   	rpc FireHose(ClientReq) returns (ServerResp) {}
 
 	// The following methods are for the Tinode server to report individual events.
@@ -439,4 +439,5 @@ message SubscriptionEvent {
 
 message MessageEvent {
 	Crud action = 1;
+	ServerData msg = 2;
 }

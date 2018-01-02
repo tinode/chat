@@ -10,85 +10,106 @@ import (
 	"github.com/tinode/chat/pbx"
 )
 
+func pb_serv_ctrl_serialize(ctrl *MsgServerCtrl) *pbx.ServerMsg_Ctrl {
+	var params map[string][]byte
+	if ctrl.Params != nil {
+		if in, ok := ctrl.Params.(map[string]interface{}); ok {
+			params = interfaceMapToByteMap(in)
+		}
+	}
+
+	return &pbx.ServerMsg_Ctrl{Ctrl: &pbx.ServerCtrl{
+		Id:     ctrl.Id,
+		Topic:  ctrl.Topic,
+		Code:   int32(ctrl.Code),
+		Text:   ctrl.Text,
+		Params: params}}
+}
+
+func pb_serv_data_serialize(data *MsgServerData) *pbx.ServerMsg_Data {
+	return &pbx.ServerMsg_Data{Data: &pbx.ServerData{
+		Topic:      data.Topic,
+		FromUserId: data.From,
+		DeletedAt:  timeToInt64(data.DeletedAt),
+		SeqId:      int32(data.SeqId),
+		Head:       data.Head,
+		Content:    interfaceToBytes(data.Content)}}
+}
+
+func pb_serv_pres_serialize(pres *MsgServerPres) *pbx.ServerMsg_Pres {
+	var what pbx.ServerPres_What
+	switch pres.What {
+	case "on":
+		what = pbx.ServerPres_ON
+	case "off":
+		what = pbx.ServerPres_OFF
+	case "ua":
+		what = pbx.ServerPres_UA
+	case "upd":
+		what = pbx.ServerPres_UPD
+	case "gone":
+		what = pbx.ServerPres_GONE
+	case "acs":
+		what = pbx.ServerPres_ACS
+	case "term":
+		what = pbx.ServerPres_TERM
+	case "msg":
+		what = pbx.ServerPres_MSG
+	case "read":
+		what = pbx.ServerPres_READ
+	case "recv":
+		what = pbx.ServerPres_RECV
+	case "del":
+		what = pbx.ServerPres_DEL
+	default:
+		log.Fatal("Unknown pres.what value", pres.What)
+	}
+	return &pbx.ServerMsg_Pres{Pres: &pbx.ServerPres{
+		Topic:        pres.Topic,
+		Src:          pres.Src,
+		What:         what,
+		UserAgent:    pres.UserAgent,
+		SeqId:        int32(pres.SeqId),
+		DelId:        int32(pres.DelId),
+		DelSeq:       pb_DelQuery_serialize(pres.DelSeq),
+		TargetUserId: pres.AcsTarget,
+		ActorUserId:  pres.AcsActor,
+		Acs:          pb_AccessMode_serialize(pres.Acs)}}
+}
+
+func pb_serv_info_serialize(info *MsgServerInfo) *pbx.ServerMsg_Info {
+	return &pbx.ServerMsg_Info{Info: &pbx.ServerInfo{
+		Topic:      info.Topic,
+		FromUserId: info.From,
+		What:       pb_InfoNoteWhat_serialize(info.What),
+		SeqId:      int32(info.SeqId),
+	}}
+}
+
+func pb_serv_meta_serialize(meta *MsgServerMeta) *pbx.ServerMsg_Meta {
+	return &pbx.ServerMsg_Meta{Meta: &pbx.ServerMeta{
+		Id:    meta.Id,
+		Topic: meta.Topic,
+		Desc:  pb_TopicDesc_serialize(meta.Desc),
+		Sub:   pb_TopicSubSlice_serialize(meta.Sub),
+		Del:   pb_DelValues_serialize(meta.Del),
+	}}
+}
+
 // Convert ServerComMessage to pbx.ServerMsg
 func pb_serv_serialize(msg *ServerComMessage) *pbx.ServerMsg {
 	var pkt pbx.ServerMsg
 
 	if msg.Ctrl != nil {
-		var params map[string][]byte
-		if msg.Ctrl.Params != nil {
-			if in, ok := msg.Ctrl.Params.(map[string]interface{}); ok {
-				params = interfaceMapToByteMap(in)
-			}
-		}
-		pkt.Message = &pbx.ServerMsg_Ctrl{Ctrl: &pbx.ServerCtrl{
-			Id:     msg.Ctrl.Id,
-			Topic:  msg.Ctrl.Topic,
-			Code:   int32(msg.Ctrl.Code),
-			Text:   msg.Ctrl.Text,
-			Params: params}}
+		pkt.Message = pb_serv_ctrl_serialize(msg.Ctrl)
 	} else if msg.Data != nil {
-		pkt.Message = &pbx.ServerMsg_Data{Data: &pbx.ServerData{
-			Topic:      msg.Data.Topic,
-			FromUserId: msg.Data.From,
-			DeletedAt:  timeToInt64(msg.Data.DeletedAt),
-			SeqId:      int32(msg.Data.SeqId),
-			Head:       msg.Data.Head,
-			Content:    interfaceToBytes(msg.Data.Content)}}
+		pkt.Message = pb_serv_data_serialize(msg.Data)
 	} else if msg.Pres != nil {
-		var what pbx.ServerPres_What
-		switch msg.Pres.What {
-		case "on":
-			what = pbx.ServerPres_ON
-		case "off":
-			what = pbx.ServerPres_OFF
-		case "ua":
-			what = pbx.ServerPres_UA
-		case "upd":
-			what = pbx.ServerPres_UPD
-		case "gone":
-			what = pbx.ServerPres_GONE
-		case "acs":
-			what = pbx.ServerPres_ACS
-		case "term":
-			what = pbx.ServerPres_TERM
-		case "msg":
-			what = pbx.ServerPres_MSG
-		case "read":
-			what = pbx.ServerPres_READ
-		case "recv":
-			what = pbx.ServerPres_RECV
-		case "del":
-			what = pbx.ServerPres_DEL
-		default:
-			log.Fatal("Unknown pres.what value", msg.Pres.What)
-		}
-		pkt.Message = &pbx.ServerMsg_Pres{Pres: &pbx.ServerPres{
-			Topic:        msg.Pres.Topic,
-			Src:          msg.Pres.Src,
-			What:         what,
-			UserAgent:    msg.Pres.UserAgent,
-			SeqId:        int32(msg.Pres.SeqId),
-			DelId:        int32(msg.Pres.DelId),
-			DelSeq:       pb_DelQuery_serialize(msg.Pres.DelSeq),
-			TargetUserId: msg.Pres.AcsTarget,
-			ActorUserId:  msg.Pres.AcsActor,
-			Acs:          pb_AccessMode_serialize(msg.Pres.Acs)}}
+		pkt.Message = pb_serv_pres_serialize(msg.Pres)
 	} else if msg.Info != nil {
-		pkt.Message = &pbx.ServerMsg_Info{Info: &pbx.ServerInfo{
-			Topic:      msg.Info.Topic,
-			FromUserId: msg.Info.From,
-			What:       pb_InfoNoteWhat_serialize(msg.Info.What),
-			SeqId:      int32(msg.Info.SeqId),
-		}}
+		pkt.Message = pb_serv_info_serialize(msg.Info)
 	} else if msg.Meta != nil {
-		pkt.Message = &pbx.ServerMsg_Meta{Meta: &pbx.ServerMeta{
-			Id:    msg.Meta.Id,
-			Topic: msg.Meta.Topic,
-			Desc:  pb_TopicDesc_serialize(msg.Meta.Desc),
-			Sub:   pb_TopicSubSlice_serialize(msg.Meta.Sub),
-			Del:   pb_DelValues_serialize(msg.Meta.Del),
-		}}
+		pkt.Message = pb_serv_meta_serialize(msg.Meta)
 	}
 
 	return &pkt
@@ -628,6 +649,22 @@ func pb_TopicDesc_deserialize(desc *pbx.TopicDesc) *MsgTopicDesc {
 		DelId:      int(desc.DelId),
 		Public:     bytesToInterface(desc.Public),
 		Private:    bytesToInterface(desc.Private),
+	}
+}
+
+func pb_Topic_serialize(topic *Topic) *pbx.TopicDesc {
+	if topic == nil {
+		return nil
+	}
+	return &pbx.TopicDesc{
+		CreatedAt: timeToInt64(&topic.created),
+		UpdatedAt: timeToInt64(&topic.updated),
+		Defacs: &pbx.DefaultAcsMode{
+			Auth: topic.accessAuth.String(),
+			Anon: topic.accessAnon.String()},
+		SeqId:  int32(topic.lastId),
+		DelId:  int32(topic.delId),
+		Public: interfaceToBytes(topic.public),
 	}
 }
 

@@ -674,6 +674,8 @@ func (s *Session) acc(msg *ClientComMessage) {
 
 		s.queueOut(NoErr(msg.Acc.Id, "", msg.timestamp))
 
+		// pluginAccount(&user, plgActCreate)
+
 	} else {
 		// session is not authenticated and this is not an attempt to create a new account
 		s.queueOut(ErrPermissionDenied(msg.Acc.Id, "", msg.timestamp))
