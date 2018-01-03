@@ -433,8 +433,16 @@ message AccountEvent {
 
 message SubscriptionEvent {
 	Crud action = 1;
-	string sub_id = 2;
-	TopicSub sub = 3;
+	string topic = 2;
+	string user_id = 3;
+	
+	int32 del_id = 4;
+	int32 read_id = 5;
+	int32 recv_id = 6;
+
+	AccessMode mode = 7;
+	
+	bytes private = 8;
 }
 
 message MessageEvent {

@@ -675,24 +675,29 @@ func pb_TopicSubSlice_serialize(subs []MsgTopicSub) []*pbx.TopicSub {
 
 	out := make([]*pbx.TopicSub, len(subs))
 	for i := 0; i < len(subs); i++ {
-		out[i] = &pbx.TopicSub{
-			UpdatedAt: timeToInt64(subs[i].UpdatedAt),
-			DeletedAt: timeToInt64(subs[i].DeletedAt),
-			Online:    subs[i].Online,
-			Acs:       pb_AccessMode_serialize(&subs[i].Acs),
-			ReadId:    int32(subs[i].ReadSeqId),
-			RecvId:    int32(subs[i].RecvSeqId),
-			Public:    interfaceToBytes(subs[i].Public),
-			Private:   interfaceToBytes(subs[i].Private),
-			UserId:    subs[i].User,
-			Topic:     subs[i].Topic,
-			SeqId:     int32(subs[i].SeqId),
-			DelId:     int32(subs[i].DelId),
-		}
-		if subs[i].LastSeen != nil {
-			out[i].LastSeenTime = timeToInt64(subs[i].LastSeen.When)
-			out[i].LastSeenUserAgent = subs[i].LastSeen.UserAgent
-		}
+		out[i] = pb_TopicSub_serialize(&subs[i])
+	}
+	return out
+}
+
+func pb_TopicSub_serialize(sub *MsgTopicSub) *pbx.TopicSub {
+	out := &pbx.TopicSub{
+		UpdatedAt: timeToInt64(sub.UpdatedAt),
+		DeletedAt: timeToInt64(sub.DeletedAt),
+		Online:    sub.Online,
+		Acs:       pb_AccessMode_serialize(&sub.Acs),
+		ReadId:    int32(sub.ReadSeqId),
+		RecvId:    int32(sub.RecvSeqId),
+		Public:    interfaceToBytes(sub.Public),
+		Private:   interfaceToBytes(sub.Private),
+		UserId:    sub.User,
+		Topic:     sub.Topic,
+		SeqId:     int32(sub.SeqId),
+		DelId:     int32(sub.DelId),
+	}
+	if sub.LastSeen != nil {
+		out.LastSeenTime = timeToInt64(sub.LastSeen.When)
+		out.LastSeenUserAgent = sub.LastSeen.UserAgent
 	}
 	return out
 }

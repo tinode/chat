@@ -12,6 +12,8 @@ User `Tino` is a [basic chatbot](./chatbot) which responds with a [random quote]
 
 [Android demo](https://github.com/tinode/android-example) is mostly stable and functional. See screenshots below. 
 
+A text-only [command line client](./tn-cli) implements every possible command.
+
 The demo server is configured to use [ACME](https://letsencrypt.org/) TLS [implementation](https://godoc.org/golang.org/x/crypto/acme) with hard-coded requirement for [SNI](https://en.wikipedia.org/wiki/Server_Name_Indication). If you are unable to connect then the most likely reason is your TLS client's missing support for SNI. Use a different client. 
 
 

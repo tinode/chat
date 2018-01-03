@@ -89,10 +89,10 @@ class PluginServicer(object):
 
   def FireHose(self, request, context):
     """This plugin method is called by Tinode server for every message received from the clients. The 
-    method returns a ServerCtrl message. ServerCtrl.code is *not* 0 indicates that no further 
+    method returns a ServerCtrl message. Non-zero ServerCtrl.code indicates that no further 
     processing is needed. The Tinode server will generate a {ctrl} message from the returned ServerCtrl 
     and forward it to the client session. 
-    If ServerCtrl.code is 0, the server should continue with default processing of the client message.
+    ServerCtrl.code equals to 0 instructs the server to continue with default processing of the client message.
     """
     context.set_code(grpc.StatusCode.UNIMPLEMENTED)
     context.set_details('Method not implemented!')

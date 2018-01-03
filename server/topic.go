@@ -206,9 +206,12 @@ func (t *Topic) run(hub *Hub) {
 
 					t.sessions[sreg.sess] = true
 
-				} else if len(t.sessions) == 0 {
-					// Failed to subscribe, the topic is still inactive
-					killTimer.Reset(keepAlive)
+				} else {
+					if len(t.sessions) == 0 {
+						// Failed to subscribe, the topic is still inactive
+						killTimer.Reset(keepAlive)
+					}
+					log.Printf("topic[%s] subscription failed %v", t.name, err)
 				}
 			}
 
@@ -331,7 +334,8 @@ func (t *Topic) run(hub *Hub) {
 					// This is just a request for status, don't forward it to sessions
 					continue
 				}
-				// "what" may have changed - "+command" removed
+
+				// "what" may have changed - "+command" removed ("on+add" -> "on")
 				msg.Pres.What = what
 			} else if msg.Info != nil {
 				if t.isSuspended() {
@@ -680,7 +684,6 @@ func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin, sendDesc bool) error {
 	if sreg.pkt.Set != nil {
 		if sreg.pkt.Set.Sub != nil {
 			if sreg.pkt.Set.Sub.User != "" {
-				log.Println("subCommonReply: UID in request, msg.Sub.Sub.User=", sreg.pkt.Set.Sub.User)
 				sreg.sess.queueOut(ErrMalformed(sreg.pkt.Id, t.original(sreg.sess.uid), now))
 				return errors.New("user id must not be specified")
 			}
@@ -695,7 +698,6 @@ func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin, sendDesc bool) error {
 
 	// Create new subscription or modify an existing one.
 	if err := t.requestSub(h, sreg.sess, sreg.pkt.Id, mode, private); err != nil {
-		log.Println("requestSub failed: ", err.Error())
 		return err
 	}
 
@@ -750,7 +752,6 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string,
 	modeWant := types.ModeUnset
 	if want != "" {
 		if err := modeWant.UnmarshalText([]byte(want)); err != nil {
-			log.Println(err.Error())
 			sess.queueOut(ErrMalformed(pktId, t.original(sess.uid), now))
 			return err
 		}
@@ -769,7 +770,6 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string,
 			// t.perUser contains just one element - the other user
 			for uid2, user2Data := range t.perUser {
 				if user2, err := store.Users.Get(uid2); err != nil {
-					log.Println(err.Error())
 					sess.queueOut(ErrUnknown(pktId, t.original(sess.uid), now))
 					return err
 				} else if user2 == nil {
@@ -814,10 +814,13 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string,
 		}
 
 		if err := store.Subs.Create(sub); err != nil {
-			log.Println(err.Error())
 			sess.queueOut(ErrUnknown(pktId, t.original(sess.uid), now))
 			return err
 		}
+
+		// Notify plugins of a new subscription
+		pluginSubscription(sub, plgActCreate)
+
 	} else {
 		// Process update to existing subscription. It could be an incomplete subscription for a new topic.
 
@@ -840,7 +843,6 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string,
 
 				// Make sure the current owner cannot unset the owner flag or ban himself
 				if t.owner == sess.uid && !modeWant.IsOwner() {
-					log.Println("requestSub: owner attempts to unset the owner flag")
 					sess.queueOut(ErrPermissionDenied(pktId, t.original(sess.uid), now))
 					return errors.New("cannot unset ownership")
 				}
@@ -924,10 +926,8 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string,
 		return nil
 	} else if !userData.modeGiven.IsJoiner() {
 		// User was banned
-		log.Println("User is banned", t.name, sess.uid.UserId(), userData.modeGiven.String(), oldGiven.String())
-
 		sess.queueOut(ErrPermissionDenied(pktId, t.original(sess.uid), now))
-		return errors.New("topic access denied")
+		return errors.New("topic access denied; user is banned")
 	}
 
 	// If something has changed and the requested access mode is different from the given.
@@ -985,7 +985,7 @@ func (t *Topic) approveSub(h *Hub, sess *Session, target types.Uid, set *MsgClie
 	// Check if approver actually has permission to manage sharing
 	if userData, ok := t.perUser[sess.uid]; !ok || !(userData.modeGiven & userData.modeWant).IsSharer() {
 		sess.queueOut(ErrPermissionDenied(set.Id, t.original(sess.uid), now))
-		return errors.New("topic access denied")
+		return errors.New("topic access denied; approver has no permission")
 	} else {
 		hostMode = userData.modeGiven & userData.modeWant
 	}
@@ -1603,7 +1603,6 @@ func (t *Topic) replyGetData(sess *Session, id string, req *MsgBrowseOpts) error
 		// Read messages from DB
 		messages, err := store.Messages.GetAll(t.name, sess.uid, msgOpts2storeOpts(req))
 		if err != nil {
-			log.Println("topic: error loading topics ", err)
 			sess.queueOut(ErrUnknown(id, t.original(sess.uid), now))
 			return err
 		}
@@ -1647,7 +1646,6 @@ func (t *Topic) replyGetDel(sess *Session, id string, req *MsgBrowseOpts) error 
 	if userData := t.perUser[sess.uid]; (userData.modeGiven & userData.modeWant).IsReader() && req != nil {
 		ranges, delId, err := store.Messages.GetDeleted(t.name, sess.uid, msgOpts2storeOpts(req))
 		if err != nil {
-			log.Println("topic: error loading deleted message ids", err)
 			sess.queueOut(ErrUnknown(id, t.original(sess.uid), now))
 			return err
 		}
@@ -1673,7 +1671,7 @@ func (t *Topic) replyGetDel(sess *Session, id string, req *MsgBrowseOpts) error 
 
 // replyDelMsg deletes (soft or hard) messages in response to del.msg packet.
 func (t *Topic) replyDelMsg(sess *Session, del *MsgClientDel) error {
-	now := time.Now().UTC().Round(time.Millisecond)
+	now := types.TimeNow()
 
 	var err error
 

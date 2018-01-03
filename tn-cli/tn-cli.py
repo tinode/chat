@@ -10,6 +10,8 @@ import sys
 
 from google.protobuf import json_format
 
+# Import generated modules from ../pbx/
+sys.path.append('../pbx')
 import model_pb2 as pb
 import model_pb2_grpc as pbx
 

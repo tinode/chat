@@ -464,10 +464,54 @@ func pluginTopic(topic *Topic, action int) {
 	return
 }
 
-func pluginSubscription(msg *ServerComMessage) *ServerComMessage {
-	return nil
+func pluginSubscription(sub *types.Subscription, action int) {
+	if plugins == nil {
+		return
+	}
+
+	var event *pbx.SubscriptionEvent
+	for _, p := range plugins {
+		if p.filterSubscription == nil || p.filterSubscription.byAction&action == 0 {
+			// Plugin is not interested in Message actions
+			continue
+		}
+
+		if event == nil {
+			event = &pbx.SubscriptionEvent{
+				Action: pluginActionToCrud(action),
+				Topic:  sub.Topic,
+				UserId: sub.User,
+
+				DelId:  int32(sub.DelId),
+				ReadId: int32(sub.ReadSeqId),
+				RecvId: int32(sub.RecvSeqId),
+
+				Mode: &pbx.AccessMode{
+					Want:  sub.ModeWant.String(),
+					Given: sub.ModeGiven.String(),
+				},
+
+				Private: interfaceToBytes(sub.Private),
+			}
+		}
+
+		var ctx context.Context
+		var cancel context.CancelFunc
+		if p.timeout > 0 {
+			ctx, cancel = context.WithTimeout(context.Background(), p.timeout)
+			defer cancel()
+		} else {
+			ctx = context.Background()
+		}
+		if _, err := p.client.Subscription(ctx, event); err != nil {
+			log.Println("plugins: Subscription call failed", p.name, err)
+		}
+	}
+
+	return
 }
 
+// Message accepted for delivery
 func pluginMessage(data *MsgServerData, action int) {
 	if plugins == nil || action != plgActCreate {
 		return

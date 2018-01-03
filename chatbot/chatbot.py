@@ -13,6 +13,7 @@ import time
 
 import grpc
 
+sys.path.append('../pbx')
 import model_pb2 as pb
 import model_pb2_grpc as pbx
 
