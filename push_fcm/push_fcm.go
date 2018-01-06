@@ -3,7 +3,6 @@ package push_fcm
 import (
 	"encoding/json"
 	"errors"
-	// "log"
 
 	"github.com/tinode/chat/server/push"
 	"github.com/tinode/chat/server/store"
@@ -15,6 +14,7 @@ var handler FcmPush
 
 const DEFAULT_BUFFER = 32
 
+// FcmPush represents the push handler; implements push.PushHandler interface.
 type FcmPush struct {
 	input  chan *push.Receipt
 	stop   chan bool
@@ -31,7 +31,7 @@ type configType struct {
 	IconColor   string `json:"icon_color,omitempty"`
 }
 
-// Initialize the handler
+// Init initializes the push handler
 func (FcmPush) Init(jsonconf string) error {
 
 	var config configType
@@ -157,7 +157,7 @@ func sendNotification(rcpt *push.Receipt, config *configType) {
 
 }
 
-// Initialize the handler
+// IsReady checks if the push handler has been initialized.
 func (FcmPush) IsReady() bool {
 	return handler.input != nil
 }
@@ -168,6 +168,7 @@ func (FcmPush) Push() chan<- *push.Receipt {
 	return handler.input
 }
 
+// Stop shuts down the handler
 func (FcmPush) Stop() {
 	handler.stop <- true
 }

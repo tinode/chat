@@ -10,7 +10,7 @@ import (
 	"fmt"
 )
 
-var hmac_salt = []byte{
+var hmacSalt = []byte{
 	0x4f, 0xbd, 0x77, 0xfe, 0xb6, 0x18, 0x81, 0x6e,
 	0xe0, 0xe2, 0x6d, 0xef, 0x1b, 0xac, 0xc6, 0x46,
 	0x1e, 0xfe, 0x14, 0xcd, 0x6d, 0xd1, 0x3f, 0x23,
@@ -36,13 +36,18 @@ func main() {
 }
 
 const (
+	// APIKEY_VERSION is algorithm version
 	APIKEY_VERSION = 1
-	// Deprecated
-	APIKEY_APPID     = 4
-	APIKEY_SEQUENCE  = 2
-	APIKEY_WHO       = 1
+	// APIKEY_APPID is deprecated
+	APIKEY_APPID = 4
+	// APIKEY_SEQUENCE key serial number
+	APIKEY_SEQUENCE = 2
+	// APIKEY_WHO is a Root user designator
+	APIKEY_WHO = 1
+	// APIKEY_SIGNATURE is cryptographic signature
 	APIKEY_SIGNATURE = 16
-	APIKEY_LENGTH    = APIKEY_VERSION + APIKEY_APPID + APIKEY_SEQUENCE + APIKEY_WHO + APIKEY_SIGNATURE
+	// APIKEY_LENGTH is total length of the key
+	APIKEY_LENGTH = APIKEY_VERSION + APIKEY_APPID + APIKEY_SEQUENCE + APIKEY_WHO + APIKEY_SIGNATURE
 )
 
 func generate(sequence, isRoot int) {
@@ -56,7 +61,7 @@ func generate(sequence, isRoot int) {
 	binary.LittleEndian.PutUint16(data[APIKEY_VERSION+APIKEY_APPID:], uint16(sequence))
 	data[APIKEY_VERSION+APIKEY_APPID+APIKEY_SEQUENCE] = uint8(isRoot)
 
-	hasher := hmac.New(md5.New, hmac_salt)
+	hasher := hmac.New(md5.New, hmacSalt)
 	hasher.Write(data[:APIKEY_VERSION+APIKEY_APPID+APIKEY_SEQUENCE+APIKEY_WHO])
 	signature := hasher.Sum(nil)
 
@@ -100,7 +105,7 @@ func validate(apikey string) {
 		return
 	}
 
-	hasher := hmac.New(md5.New, hmac_salt)
+	hasher := hmac.New(md5.New, hmacSalt)
 	hasher.Write(data[:APIKEY_VERSION+APIKEY_APPID+APIKEY_SEQUENCE+APIKEY_WHO])
 	signature := hasher.Sum(nil)
 

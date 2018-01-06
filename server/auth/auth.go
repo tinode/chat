@@ -7,53 +7,55 @@ import (
 )
 
 const (
-	// No error
+	// NoErr means successful completion
 	NoErr = iota
-	// No change
+	// InfoNotModified means no changes were made
 	InfoNotModified
-	// DB or other internal failure
+	// ErrInternal means DB or other internal failure
 	ErrInternal
-	// The secret cannot be parsed or otherwise wrong
+	// ErrMalformed means the secret cannot be parsed or otherwise wrong
 	ErrMalformed
-	// Authentication failed (wrong password)
+	// ErrFailed means authentication failed (wrong login or password, etc)
 	ErrFailed
-	// Duplicate credential
+	// ErrDuplicate means duplicate credential, i.e. non-unique login
 	ErrDuplicate
-	// The operation is unsupported
+	// ErrUnsupported means an operation is not supported
 	ErrUnsupported
-	// Secret has expired
+	// ErrExpired means the secret has expired
 	ErrExpired
-	// Policy violation, e.g. password too weak.
+	// ErrPolicy means policy violation, e.g. password too weak.
 	ErrPolicy
 )
 
-// Authentication levels
+// Authentication levels.
 const (
-	// Undefined/not authenticated
+	// LevelNone is undefined/not authenticated
 	LevelNone = iota * 10
-	// Anonymous user/light authentication
+	// LevelAnon is anonymous user/light authentication
 	LevelAnon
-	// Fully authenticated user
+	// LevelAuth is fully authenticated user
 	LevelAuth
-	// Superuser (currently unused)
+	// LevelRoot is a superuser (currently unused)
 	LevelRoot
 )
 
-// Structure for reporting an error condition
+// AuthErr is a structure for reporting an error condition.
 type AuthErr struct {
 	Code int
 	Err  error
 }
 
+// NewErr creates a new AuthErr instance from components.
 func NewErr(code int, err error) AuthErr {
 	return AuthErr{Code: code, Err: err}
 }
 
+// IsError checks if the venue represents an actual error.
 func (a AuthErr) IsError() bool {
-	return a.Code != NoErr
+	return a.Code <= InfoNotModified
 }
 
-// Interface which auth providers must implement
+// AuthHandler is the interface which auth providers must implement.
 type AuthHandler interface {
 	// Initialize the handler
 	Init(jsonconf string) error
@@ -84,6 +86,7 @@ type AuthHandler interface {
 	GenSecret(uid types.Uid, authLvl int, lifetime time.Duration) ([]byte, time.Time, AuthErr)
 }
 
+// AuthLevelName gets human-readable name for a numeric uauthentication level.
 func AuthLevelName(authLvl int) string {
 	switch authLvl {
 	case LevelNone:
