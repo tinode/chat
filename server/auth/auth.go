@@ -86,7 +86,7 @@ type AuthHandler interface {
 	GenSecret(uid types.Uid, authLvl int, lifetime time.Duration) ([]byte, time.Time, AuthErr)
 }
 
-// AuthLevelName gets human-readable name for a numeric uauthentication level.
+// AuthLevelName gets human-readable name for a numeric authentication level.
 func AuthLevelName(authLvl int) string {
 	switch authLvl {
 	case LevelNone:
