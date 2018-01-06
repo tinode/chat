@@ -27,7 +27,7 @@ const UA_TIMER_DELAY = time.Second * 5
 // Maximum number of messages to delete
 const MAX_DELETE_COUNT = 1024
 
-// Topic: an isolated communication channel
+// Topic is an isolated communication channel
 type Topic struct {
 	// Еxpanded/unique name of the topic.
 	name string
@@ -469,7 +469,7 @@ func (t *Topic) run(hub *Hub) {
 
 			} else {
 				// TODO(gene): remove this
-				log.Panic("topic[%s]: wrong message type for broadcasting", t.name)
+				log.Panic("topic: wrong message type for broadcasting", t.name)
 			}
 
 		case meta := <-t.meta:
@@ -1799,7 +1799,7 @@ func (t *Topic) replyDelTopic(h *Hub, sess *Session, del *MsgClientDel) error {
 
 	// Notifications are sent from the topic loop.
 
-	for s, _ := range t.sessions {
+	for s := range t.sessions {
 		delete(t.sessions, s)
 		s.detach <- t.name
 	}
@@ -1942,7 +1942,7 @@ func (t *Topic) evictUser(uid types.Uid, unsub bool, skip string) {
 	}
 
 	// Detach all user's sessions
-	for sess, _ := range t.sessions {
+	for sess := range t.sessions {
 		if sess.uid == uid {
 			delete(t.sessions, sess)
 			sess.detach <- t.name
@@ -1981,7 +1981,7 @@ func (t *Topic) makePushReceipt(data *MsgServerData) *pushReceipt {
 func (t *Topic) mostRecentSession() *Session {
 	var sess *Session
 	var latest time.Time
-	for s, _ := range t.sessions {
+	for s := range t.sessions {
 		if s.lastAction.After(latest) {
 			sess = s
 			latest = s.lastAction
@@ -2018,7 +2018,7 @@ func (t *Topic) original(uid types.Uid) string {
 // Get topic name suitable for the given client
 func (t *Topic) p2pOtherUser(uid types.Uid) types.Uid {
 	if t.cat == types.TopicCat_P2P {
-		for u2, _ := range t.perUser {
+		for u2 := range t.perUser {
 			if u2.Compare(uid) != 0 {
 				return u2
 			}

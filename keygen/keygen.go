@@ -82,7 +82,7 @@ func validate(apikey string) {
 	var strIsRoot string
 
 	if declen := base64.URLEncoding.DecodedLen(len(apikey)); declen != APIKEY_LENGTH {
-		fmt.Println("invalid key length %d, expecting %d", declen, APIKEY_LENGTH)
+		fmt.Printf("invalid key length %d, expecting %d", declen, APIKEY_LENGTH)
 		return
 	}
 

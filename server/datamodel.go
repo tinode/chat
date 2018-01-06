@@ -197,7 +197,7 @@ type MsgDefaultAcsMode struct {
 type MsgClientLeave struct {
 	Id    string `json:"id,omitempty"`
 	Topic string `json:"topic"`
-	Unsub bool   `json:unsub,omitempty`
+	Unsub bool   `json:"unsub,omitempty"`
 }
 
 // MsgClientPub is client's request to publish data to topic subscribers {pub}
