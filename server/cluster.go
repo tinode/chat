@@ -390,7 +390,7 @@ func (c *Cluster) sessionGone(sess *Session) error {
 	}
 
 	// Save node name: it's need in order to inform relevant nodes when the session is disconnected
-	for name, _ := range sess.nodes {
+	for name := range sess.nodes {
 		n := c.nodes[name]
 		if n != nil {
 			return n.forward(

@@ -166,7 +166,7 @@ func (t *Topic) presProcReq(fromUserId string, what string, wantReply bool) stri
 // Case D: User updated 'public', "upd"
 func (t *Topic) presUsersOfInterest(what string, ua string) {
 	// Push update to subscriptions
-	for topic, _ := range t.perSubs {
+	for topic := range t.perSubs {
 		globals.hub.route <- &ServerComMessage{
 			Pres: &MsgServerPres{
 				Topic: "me", What: what, Src: t.name, UserAgent: ua, wantReply: (what == "on")},
