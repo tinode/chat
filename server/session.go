@@ -864,7 +864,7 @@ func (s *Session) note(msg *ClientComMessage) {
 
 // validateTopicName expands session specific topic name to global name
 // Returns
-//   topic: session-specific topic name the message recepient should see
+//   topic: session-specific topic name the message recipient should see
 //   routeTo: routable global topic name
 //   err: *ServerComMessage with an error to return to the sender
 func (s *Session) validateTopicName(msgId, topic string, timestamp time.Time) (string, *ServerComMessage) {

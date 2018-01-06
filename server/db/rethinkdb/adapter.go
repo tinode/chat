@@ -643,7 +643,7 @@ func (a *RethinkDbAdapter) TopicUpdateOnMessage(topic string, msg *t.Message) er
 	// Invite - 'me' topic
 	var err error
 	if strings.HasPrefix(topic, "usr") {
-		// Topic is passed as usrABCD, but the 'users' table expectes Id without the 'usr' prefix.
+		// Topic is passed as usrABCD, but the 'users' table expects Id without the 'usr' prefix.
 		user := t.ParseUserId(topic).String()
 		_, err = rdb.DB("tinode").Table("users").Get(user).
 			Update(update, rdb.UpdateOpts{Durability: "soft"}).RunWrite(a.conn)
@@ -793,7 +793,7 @@ func (a *RethinkDbAdapter) SubsDelete(topic string, user t.Uid) error {
 	return err
 }
 
-// SubsDelForTopic markes all subscriptions to the given topic as deleted
+// SubsDelForTopic marks all subscriptions to the given topic as deleted
 func (a *RethinkDbAdapter) SubsDelForTopic(topic string) error {
 	now := t.TimeNow()
 	update := map[string]interface{}{

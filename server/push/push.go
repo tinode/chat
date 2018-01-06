@@ -20,7 +20,7 @@ type PushTo struct {
 }
 
 type Receipt struct {
-	// List of recepients, including those who did not receive the message
+	// List of recipients, including those who did not receive the message
 	To []PushTo `json:"to"`
 	// Actual content to be delivered to the client
 	Payload Payload `json:"payload"`

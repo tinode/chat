@@ -373,7 +373,7 @@ func pluginFireHose(sess *Session, msg *ClientComMessage) (*ClientComMessage, *S
 			return nil, pb_serv_deserialize(resp.GetSrvmsg())
 
 		} else if p.failureCode != 0 {
-			// Plugin failed and it's configured to stop futher processing.
+			// Plugin failed and it's configured to stop further processing.
 			log.Println("plugin: failed,", p.name, err)
 			return nil, &ServerComMessage{Ctrl: &MsgServerCtrl{
 				Id:        id,

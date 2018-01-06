@@ -310,7 +310,7 @@ func (c *Cluster) Master(msg *ClusterReq, rejected *bool) error {
 	return nil
 }
 
-// Proxy recieves messages from the master node addressed to a specific local session.
+// Proxy receives messages from the master node addressed to a specific local session.
 // Called by Session.writeRPC
 func (Cluster) Proxy(msg *ClusterResp, unused *bool) error {
 	log.Println("cluster: response from Master for session", msg.FromSID)

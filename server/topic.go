@@ -2,7 +2,7 @@
  *
  *  Description :
  *    An isolated communication channel (chat room, 1:1 conversation) for
- *    usualy multiple users. There is no communication across topics.
+ *    usually multiple users. There is no communication across topics.
  *
  *****************************************************************************/
 
@@ -182,7 +182,7 @@ func (t *Topic) run(hub *Hub) {
 	for {
 		select {
 		case sreg := <-t.reg:
-			// Request to add a conection to this topic
+			// Request to add a connection to this topic
 
 			if t.isSuspended() {
 				sreg.sess.queueOut(ErrLocked(sreg.pkt.Id, t.original(sreg.sess.uid), types.TimeNow()))
@@ -271,7 +271,7 @@ func (t *Topic) run(hub *Hub) {
 			}
 
 		case msg := <-t.broadcast:
-			// Content message intended for broadcasting to recepients
+			// Content message intended for broadcasting to recipients
 
 			var pushRcpt *pushReceipt
 
@@ -736,7 +736,7 @@ func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin, sendDesc bool) error {
 // Handle these cases:
 // A. User is trying to subscribe for the first time (no subscription)
 // B. User is already subscribed, just joining without changing anything
-// C. User is responsing to an earlier invite (modeWant was "N" in subscription)
+// C. User is responding to an earlier invite (modeWant was "N" in subscription)
 // D. User is already subscribed, changing modeWant
 // E. User is accepting ownership transfer (requesting ownership transfer is not permitted)
 func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string,
@@ -1528,7 +1528,7 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 				// Returning public and private only if they have changed since ifModified
 				if sendPubPriv {
 					mts.Public = sub.GetPublic()
-					// Reporting private only if it's user's own supscription or
+					// Reporting private only if it's user's own subscription or
 					// a synthetic 'private' in 'find' topic where it's a list of tags matched on.
 					if uid == sess.uid || t.cat == types.TopicCat_Fnd {
 						mts.Private = sub.Private

@@ -116,7 +116,7 @@ func (u UsersObjMapper) Create(user *types.User, private interface{}) (*types.Us
 		return nil, err
 	}
 
-	// Create user's subscription to 'me' && 'find'. Theese topics are ephemeral, the topic object need not to be
+	// Create user's subscription to 'me' && 'find'. These topics are ephemeral, the topic object need not to be
 	// inserted.
 	err = Subs.Create(
 		&types.Subscription{
@@ -254,7 +254,7 @@ func (TopicsObjMapper) CreateP2P(initiator, invited *types.Subscription) error {
 	return adaptr.TopicCreateP2P(initiator, invited)
 }
 
-// Get a single topic with a list of relevent users de-normalized into it
+// Get a single topic with a list of relevant users de-normalized into it
 func (TopicsObjMapper) Get(topic string) (*types.Topic, error) {
 	return adaptr.TopicGet(topic)
 }

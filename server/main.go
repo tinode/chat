@@ -77,10 +77,10 @@ type configType struct {
 	// numeric or a canonical name, e.g. ":80" or ":https". Could include a host name, e.g.
 	// "localhost:80".
 	// Could be blank: if TLS is not configured, will use ":80", otherwise ":443".
-	// Can be overriden from the command line, see option --listen.
+	// Can be overridden from the command line, see option --listen.
 	Listen string `json:"listen"`
 	// Address:port to listen for gRPC clients. If blank gRPC support will not be initialized.
-	// Could be overriden from the command line with --grpc_listen.
+	// Could be overridden from the command line with --grpc_listen.
 	GrpcListen string `json:"grpc_listen"`
 	// Path for mounting the directory with static files.
 	StaticMount string `json:"static_mount"`

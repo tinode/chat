@@ -496,7 +496,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 				// Swap Public to match swapped Public in subs returned from store.Topics.GetSubs
 				sub2.SetPublic(users[u1].Public)
 
-				log.Println("hub: created second subscripton")
+				log.Println("hub: created second subscription")
 			}
 
 			// Requester's subscription is missing:

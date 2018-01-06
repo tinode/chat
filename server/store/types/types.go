@@ -451,7 +451,7 @@ func (a AccessMode) IsReader() bool {
 	return a&ModeRead != 0
 }
 
-// Check if user recieves presence updates
+// Check if user receives presence updates
 func (a AccessMode) IsPresencer() bool {
 	return a&ModePres != 0
 }

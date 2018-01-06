@@ -82,7 +82,7 @@ func (t *Topic) presProcReq(fromUserId string, what string, wantReply bool) stri
 
 	var online, unknown, add, remove bool
 
-	// log.Printf("presProcReq: topic[%s]: req from='%s', whant=%s, wantReply=%v",
+	// log.Printf("presProcReq: topic[%s]: req from='%s', want=%s, wantReply=%v",
 	// 	t.name, fromUserId, what, wantReply)
 
 	switch what {
