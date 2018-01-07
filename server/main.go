@@ -34,12 +34,12 @@ import (
 )
 
 const (
-	// Terminate session after this timeout.
+	// IDLETIMEOUT defines duration of being idle before terminating a session.
 	IDLETIMEOUT = time.Second * 55
-	// Keep topic alive after the last session detached.
+	// TOPICTIMEOUT defines now long to keep topic alive after the last session detached.
 	TOPICTIMEOUT = time.Second * 5
 
-	// Current API version
+	// VERSION is the current API version
 	VERSION = "0.14"
 	// Minimum supported API version
 	MIN_SUPPORTED_VERSION = "0.14"
@@ -95,7 +95,7 @@ type configType struct {
 	PluginConfig  json.RawMessage            `json:"plugins"`
 	StoreConfig   json.RawMessage            `json:"store_config"`
 	PushConfig    json.RawMessage            `json:"push"`
-	TlsConfig     json.RawMessage            `json:"tls"`
+	TLSConfig     json.RawMessage            `json:"tls"`
 	AuthConfig    map[string]json.RawMessage `json:"auth_config"`
 }
 
@@ -182,19 +182,20 @@ func main() {
 		}
 		staticContent = path + "/static/"
 	}
-	static_mount := config.StaticMount
-	if static_mount == "" {
-		static_mount = "/x/"
+	staticMountPoint := config.StaticMount
+	if staticMountPoint == "" {
+		staticMountPoint = "/x/"
 	} else {
-		if !strings.HasPrefix(static_mount, "/") {
-			static_mount = "/" + static_mount
+		if !strings.HasPrefix(staticMountPoint, "/") {
+			staticMountPoint = "/" + staticMountPoint
 		}
-		if !strings.HasSuffix(static_mount, "/") {
-			static_mount = static_mount + "/"
+		if !strings.HasSuffix(staticMountPoint, "/") {
+			staticMountPoint = staticMountPoint + "/"
 		}
 	}
-	http.Handle(static_mount, http.StripPrefix(static_mount, hstsHandler(http.FileServer(http.Dir(staticContent)))))
-	log.Printf("Serving static content from '%s' at '%s'", staticContent, static_mount)
+	http.Handle(staticMountPoint, http.StripPrefix(staticMountPoint,
+		hstsHandler(http.FileServer(http.Dir(staticContent)))))
+	log.Printf("Serving static content from '%s' at '%s'", staticContent, staticMountPoint)
 
 	// Configure HTTP channels
 	// Handle websocket clients.
@@ -214,7 +215,7 @@ func main() {
 		globals.grpcServer = srv
 	}
 
-	if err := listenAndServe(config.Listen, *tlsEnabled, string(config.TlsConfig), signalHandler()); err != nil {
+	if err := listenAndServe(config.Listen, *tlsEnabled, string(config.TLSConfig), signalHandler()); err != nil {
 		log.Fatal(err)
 	}
 }

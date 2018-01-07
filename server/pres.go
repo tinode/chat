@@ -8,10 +8,11 @@ import (
 	"github.com/tinode/chat/server/store/types"
 )
 
+// PresParams defines parameters for creating a presence notification.
 type PresParams struct {
 	userAgent string
-	seqId     int
-	delId     int
+	seqID     int
+	delID     int
 	delSeq    []MsgDelRange
 
 	// Uid who performed the action
@@ -78,7 +79,7 @@ func (t *Topic) loadContacts(uid types.Uid) error {
 //
 // If status is followed by command "+add" or "+remove", the origin is added to or removed from the
 // list of contacts to notify. The command itself is stripped from the notification.
-func (t *Topic) presProcReq(fromUserId string, what string, wantReply bool) string {
+func (t *Topic) presProcReq(fromUserID string, what string, wantReply bool) string {
 
 	var online, unknown, add, remove bool
 
@@ -114,12 +115,12 @@ func (t *Topic) presProcReq(fromUserId string, what string, wantReply bool) stri
 
 	doReply := wantReply
 	if t.cat == types.TopicCat_Me {
-		if psd, ok := t.perSubs[fromUserId]; ok {
+		if psd, ok := t.perSubs[fromUserID]; ok {
 			if remove {
 				// Don't want to reply if connection is being removed
 				doReply = false
 
-				delete(t.perSubs, fromUserId)
+				delete(t.perSubs, fromUserID)
 
 			} else {
 				// If requester's online status has not changed, do not reply, otherwise an endless loop will happen.
@@ -130,7 +131,7 @@ func (t *Topic) presProcReq(fromUserId string, what string, wantReply bool) stri
 				doReply = (doReply && ((psd.online != online) || unknown))
 
 				psd.online = online
-				t.perSubs[fromUserId] = psd
+				t.perSubs[fromUserID] = psd
 			}
 
 		} else if add {
@@ -138,7 +139,7 @@ func (t *Topic) presProcReq(fromUserId string, what string, wantReply bool) stri
 
 			// Got request from a new topic. This must be a new subscription. Record it.
 			// If it's unknown, recording it as offline.
-			t.addToPerSubs(fromUserId, online)
+			t.addToPerSubs(fromUserID, online)
 		} else {
 			// Not replying if the origin is not in our list
 			doReply = false
@@ -150,7 +151,7 @@ func (t *Topic) presProcReq(fromUserId string, what string, wantReply bool) stri
 			// Topic is 'me' even for group topics; group topics will use 'me' as a signal to drop the message
 			// without forwarding to sessions
 			Pres:   &MsgServerPres{Topic: "me", What: "on+add", Src: t.name, wantReply: unknown},
-			rcptto: fromUserId}
+			rcptto: fromUserID}
 
 		// log.Printf("presProcReq: topic[%s]: replying to %s with own status '%s', wantReply",
 		// 	t.name, fromUserId, "on", unknown)
@@ -203,7 +204,7 @@ func (t *Topic) presSubsOnline(what, src string, params *PresParams,
 	globals.hub.route <- &ServerComMessage{
 		Pres: &MsgServerPres{Topic: t.x_original, What: what, Src: src,
 			Acs: params.packAcs(), AcsActor: actor, AcsTarget: target,
-			SeqId: params.seqId, DelId: params.delId, DelSeq: params.delSeq,
+			SeqId: params.seqID, DelId: params.delID, DelSeq: params.delSeq,
 			filter: int(filter), singleUser: singleUser},
 		rcptto: t.name, skipSid: skipSid}
 
@@ -270,7 +271,7 @@ func (t *Topic) presSubsOffline(what string, params *PresParams, filter types.Ac
 		globals.hub.route <- &ServerComMessage{
 			Pres: &MsgServerPres{Topic: "me", What: what, Src: t.original(uid),
 				Acs: params.packAcs(), AcsActor: actor, AcsTarget: target,
-				SeqId: params.seqId, DelId: params.delId,
+				SeqId: params.seqID, DelId: params.delID,
 				skipTopic: skipTopic},
 			rcptto: user, skipSid: skipSid}
 	}
@@ -307,7 +308,7 @@ func presSubsOfflineOffline(topic string, cat types.TopicCat, subs []types.Subsc
 		globals.hub.route <- &ServerComMessage{
 			Pres: &MsgServerPres{Topic: "me", What: what, Src: original,
 				Acs: params.packAcs(), AcsActor: actor, AcsTarget: target,
-				SeqId: params.seqId, DelId: params.delId},
+				SeqId: params.seqID, DelId: params.delID},
 			rcptto: user, skipSid: skipSid}
 	}
 }
@@ -338,7 +339,7 @@ func (t *Topic) presSingleUserOffline(uid types.Uid, what string, params *PresPa
 
 		globals.hub.route <- &ServerComMessage{
 			Pres: &MsgServerPres{Topic: "me", What: what,
-				Src: t.original(uid), SeqId: params.seqId, DelId: params.delId,
+				Src: t.original(uid), SeqId: params.seqID, DelId: params.delID,
 				Acs: params.packAcs(), AcsActor: actor, AcsTarget: target, UserAgent: params.userAgent,
 				wantReply: strings.HasPrefix(what, "?unkn"), skipTopic: skipTopic},
 			rcptto: user, skipSid: skipSid}
@@ -364,7 +365,7 @@ func presSingleUserOfflineOffline(uid types.Uid, original string, what string,
 
 	globals.hub.route <- &ServerComMessage{
 		Pres: &MsgServerPres{Topic: "me", What: what,
-			Src: original, SeqId: params.seqId, DelId: params.delId,
+			Src: original, SeqId: params.seqID, DelId: params.delID,
 			Acs: params.packAcs(), AcsActor: actor, AcsTarget: target},
 		rcptto: uid.UserId(), skipSid: skipSid}
 }
@@ -385,7 +386,7 @@ func (t *Topic) presPubMessageCount(uid types.Uid, recv, read int, skip string) 
 	if what != "" {
 		// Announce to user's other sessions on 'me' only if they are not attached to this topic.
 		// Attached topics will receive an {info}
-		t.presSingleUserOffline(uid, what, &PresParams{seqId: seq}, skip, true)
+		t.presSingleUserOffline(uid, what, &PresParams{seqID: seq}, skip, true)
 	} else {
 		log.Printf("Case U: topic[%s] invalid request - missing payload", t.name)
 	}
@@ -393,15 +394,15 @@ func (t *Topic) presPubMessageCount(uid types.Uid, recv, read int, skip string) 
 
 // Let other sessions of a given user know that messages are now deleted
 // Cases V.1, V.2
-func (t *Topic) presPubMessageDelete(uid types.Uid, delId int, list []MsgDelRange, skip string) {
-	if len(list) > 0 || delId > 0 {
+func (t *Topic) presPubMessageDelete(uid types.Uid, delID int, list []MsgDelRange, skip string) {
+	if len(list) > 0 || delID > 0 {
 		// This check is only needed for V.1, but it does not hurt V.2. Let's do it here for both.
 		pud, _ := t.perUser[uid]
 		if !(pud.modeGiven & pud.modeWant).IsPresencer() {
 			return
 		}
 
-		params := &PresParams{delId: delId, delSeq: list}
+		params := &PresParams{delID: delID, delSeq: list}
 
 		// Case V.2
 		user := uid.UserId()

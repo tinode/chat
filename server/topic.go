@@ -322,7 +322,7 @@ func (t *Topic) run(hub *Hub) {
 				pushRcpt = t.makePushReceipt(msg.Data)
 
 				// Message sent: notify offline 'R' subscrbers on 'me'
-				t.presSubsOffline("msg", &PresParams{seqId: t.lastId}, types.ModeRead, "", true)
+				t.presSubsOffline("msg", &PresParams{seqID: t.lastId}, types.ModeRead, "", true)
 
 				// Tell the plugins that a message was accepted for delivery
 				pluginMessage(msg.Data, plgActCreate)
@@ -1759,7 +1759,7 @@ func (t *Topic) replyDelMsg(sess *Session, del *MsgClientDel) error {
 			t.perUser[uid] = pud
 		}
 		// Broadcast the change to all, online and offline, exclude the session making the change.
-		params := &PresParams{delId: t.delId, delSeq: dr, actor: sess.uid.UserId()}
+		params := &PresParams{delID: t.delId, delSeq: dr, actor: sess.uid.UserId()}
 		t.presSubsOnline("del", params.actor, params, types.ModeRead, sess.sid, "")
 		t.presSubsOffline("del", params, types.ModeRead, sess.sid, true)
 	} else {
