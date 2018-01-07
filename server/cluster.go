@@ -74,7 +74,7 @@ type ClusterSess struct {
 	Lang string
 
 	// Device ID
-	DeviceId string
+	DeviceID string
 
 	// Session ID
 	Sid string
@@ -299,7 +299,7 @@ func (c *Cluster) Master(msg *ClusterReq, rejected *bool) error {
 		sess.userAgent = msg.Sess.UserAgent
 		sess.remoteAddr = msg.Sess.RemoteAddr
 		sess.lang = msg.Sess.Lang
-		sess.deviceId = msg.Sess.DeviceId
+		sess.deviceID = msg.Sess.DeviceID
 
 		// Dispatch remote message to a local session.
 		sess.dispatch(msg.Msg)
@@ -380,7 +380,7 @@ func (c *Cluster) routeToTopic(msg *ClientComMessage, topic string, sess *Sessio
 				UserAgent:  sess.userAgent,
 				Ver:        sess.ver,
 				Lang:       sess.lang,
-				DeviceId:   sess.deviceId,
+				DeviceID:   sess.deviceID,
 				Sid:        sess.sid}})
 }
 

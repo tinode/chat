@@ -28,7 +28,7 @@ func (sess *Session) writeOnce(wrt http.ResponseWriter) {
 		if !ok {
 			log.Println("writeOnce: reading from a closed channel")
 		} else {
-			if err := lp_write(wrt, msg); err != nil {
+			if err := lpWrite(wrt, msg); err != nil {
 				log.Println("sess.writeOnce: " + err.Error())
 			}
 		}
@@ -38,7 +38,7 @@ func (sess *Session) writeOnce(wrt http.ResponseWriter) {
 	case msg := <-sess.stop:
 		// Make session unavailable
 		globals.sessionStore.Delete(sess)
-		lp_write(wrt, msg)
+		lpWrite(wrt, msg)
 
 	case topic := <-sess.detach:
 		delete(sess.subs, topic)
@@ -51,23 +51,23 @@ func (sess *Session) writeOnce(wrt http.ResponseWriter) {
 	}
 }
 
-func lp_write(wrt http.ResponseWriter, msg interface{}) error {
+func lpWrite(wrt http.ResponseWriter, msg interface{}) error {
 	// This will panic if msg is not []byte. This is intentional.
 	wrt.Write(msg.([]byte))
 	return nil
 }
 
-func (sess *Session) readOnce(wrt http.ResponseWriter, req *http.Request) (error, int) {
+func (sess *Session) readOnce(wrt http.ResponseWriter, req *http.Request) (int, error) {
 	if req.ContentLength > globals.maxMessageSize {
-		return errors.New("request too large"), http.StatusExpectationFailed
+		return http.StatusExpectationFailed, errors.New("request too large")
 	}
 
 	req.Body = http.MaxBytesReader(wrt, req.Body, globals.maxMessageSize)
 	if raw, err := ioutil.ReadAll(req.Body); err == nil {
 		sess.dispatchRaw(raw)
-		return nil, 0
+		return 0, nil
 	} else {
-		return err, 0
+		return 0, err
 	}
 }
 
@@ -133,28 +133,28 @@ func serveLongPoll(wrt http.ResponseWriter, req *http.Request) {
 
 		return
 
-	} else {
-		// Existing session
-		sess = globals.sessionStore.Get(sid)
-		if sess == nil {
-			log.Println("longPoll: invalid or expired session id", sid)
+	}
 
-			wrt.WriteHeader(http.StatusForbidden)
-			enc.Encode(
-				&ServerComMessage{Ctrl: &MsgServerCtrl{
-					Timestamp: now,
-					Code:      http.StatusForbidden,
-					Text:      "invalid or expired session id"}})
+	// Existing session
+	sess = globals.sessionStore.Get(sid)
+	if sess == nil {
+		log.Println("longPoll: invalid or expired session id", sid)
 
-			return
-		}
+		wrt.WriteHeader(http.StatusForbidden)
+		enc.Encode(
+			&ServerComMessage{Ctrl: &MsgServerCtrl{
+				Timestamp: now,
+				Code:      http.StatusForbidden,
+				Text:      "invalid or expired session id"}})
+
+		return
 	}
 
 	sess.remoteAddr = req.RemoteAddr
 
 	if req.ContentLength != 0 {
 		// Read payload and send it for processing.
-		if err, code := sess.readOnce(wrt, req); err != nil {
+		if code, err := sess.readOnce(wrt, req); err != nil {
 			log.Println("longPoll: " + err.Error())
 			// Failed to read request, report an error, if possible
 			if code != 0 {

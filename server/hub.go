@@ -390,8 +390,8 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 			t.created = stopic.CreatedAt
 			t.updated = stopic.UpdatedAt
 
-			t.lastId = stopic.SeqId
-			t.delId = stopic.DelId
+			t.lastID = stopic.SeqId
+			t.delID = stopic.DelId
 		}
 
 		// t.owner is blank for p2p topics
@@ -419,9 +419,9 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 					private:   subs[i].Private,
 					modeWant:  subs[i].ModeWant,
 					modeGiven: subs[i].ModeGiven,
-					delId:     subs[i].DelId,
-					recvId:    subs[i].RecvSeqId,
-					readId:    subs[i].ReadSeqId,
+					delID:     subs[i].DelId,
+					recvID:    subs[i].RecvSeqId,
+					readID:    subs[i].ReadSeqId,
 				}
 			}
 
@@ -432,15 +432,15 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 
 			// Fetching records for both users.
 			// Requester.
-			userId1 := sreg.sess.uid
+			userID1 := sreg.sess.uid
 			// The other user.
-			userId2 := types.ParseUserId(t.x_original)
+			userID2 := types.ParseUserId(t.x_original)
 			// User index: u1 - requester, u2 - the other user
 
-			log.Println("hub: creating new p2p topic", userId1.String(), userId2.String())
+			log.Println("hub: creating new p2p topic", userID1.String(), userID2.String())
 
 			var u1, u2 int
-			users, err := store.Users.GetAll(userId1, userId2)
+			users, err := store.Users.GetAll(userID1, userID2)
 			if err != nil {
 				log.Println("hub: failed to load users for '" + t.name + "' (" + err.Error() + ")")
 				sreg.sess.queueOut(ErrUnknown(sreg.pkt.Id, t.x_original, timestamp))
@@ -452,7 +452,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 				return
 			} else {
 				// User records are unsorted, make sure we know who is who.
-				if users[0].Uid() == userId1 {
+				if users[0].Uid() == userID1 {
 					u1, u2 = 0, 1
 				} else {
 					u1, u2 = 1, 0
@@ -464,7 +464,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 			// Set to true if only requester's subscription has to be created.
 			var user1only bool
 			if len(subs) == 1 {
-				if subs[0].User == userId1.String() {
+				if subs[0].User == userID1.String() {
 					// User2's subscription is missing, user1's exists
 					sub1 = &subs[0]
 				} else {
@@ -478,7 +478,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 			// Other user's subscription is missing
 			if sub2 == nil {
 				sub2 = &types.Subscription{
-					User:    userId2.String(),
+					User:    userID2.String(),
 					Topic:   t.name,
 					Private: nil}
 
@@ -542,7 +542,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 				}
 
 				sub1 = &types.Subscription{
-					User:      userId1.String(),
+					User:      userID1.String(),
 					Topic:     t.name,
 					ModeWant:  userData.modeWant,
 					ModeGiven: userData.modeGiven,
@@ -595,22 +595,22 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 
 			// Publics is already swapped
 			userData.public = sub1.GetPublic()
-			userData.topicName = userId2.UserId()
+			userData.topicName = userID2.UserId()
 			userData.modeWant = sub1.ModeWant
 			userData.modeGiven = sub1.ModeGiven
-			userData.delId = sub1.DelId
-			userData.readId = sub1.ReadSeqId
-			userData.recvId = sub1.RecvSeqId
-			t.perUser[userId1] = userData
+			userData.delID = sub1.DelId
+			userData.readID = sub1.ReadSeqId
+			userData.recvID = sub1.RecvSeqId
+			t.perUser[userID1] = userData
 
-			t.perUser[userId2] = perUserData{
+			t.perUser[userID2] = perUserData{
 				public:    sub2.GetPublic(),
-				topicName: userId1.UserId(),
+				topicName: userID1.UserId(),
 				modeWant:  sub2.ModeWant,
 				modeGiven: sub2.ModeGiven,
-				delId:     sub2.DelId,
-				readId:    sub2.ReadSeqId,
-				recvId:    sub2.RecvSeqId,
+				delID:     sub2.DelId,
+				readID:    sub2.ReadSeqId,
+				recvID:    sub2.RecvSeqId,
 			}
 
 			log.Println("hub: marking request as 'topic created'")
@@ -733,8 +733,8 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		t.created = stopic.CreatedAt
 		t.updated = stopic.UpdatedAt
 
-		t.lastId = stopic.SeqId
-		t.delId = stopic.DelId
+		t.lastID = stopic.SeqId
+		t.delID = stopic.DelId
 
 	} else {
 		// Unrecognized topic name
@@ -774,9 +774,9 @@ func (t *Topic) loadSubscribers() error {
 		t.perUser[uid] = perUserData{
 			created:   sub.CreatedAt,
 			updated:   sub.UpdatedAt,
-			delId:     sub.DelId,
-			readId:    sub.ReadSeqId,
-			recvId:    sub.RecvSeqId,
+			delID:     sub.DelId,
+			readID:    sub.ReadSeqId,
+			recvID:    sub.RecvSeqId,
 			private:   sub.Private,
 			modeWant:  sub.ModeWant,
 			modeGiven: sub.ModeGiven}

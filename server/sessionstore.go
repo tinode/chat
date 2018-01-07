@@ -20,6 +20,8 @@ import (
 	"github.com/tinode/chat/server/store"
 )
 
+// SessionStore holds live sessions. Long polling sessions are stored in a linked list with
+// most recent sessions on top. In addition all sessions are stored in a map indexed by session ID.
 type SessionStore struct {
 	rw sync.RWMutex
 
@@ -32,6 +34,7 @@ type SessionStore struct {
 	sessCache map[string]*Session
 }
 
+// Create creates a new session and adds it to store.
 func (ss *SessionStore) Create(conn interface{}, sid string) *Session {
 	var s Session
 
@@ -93,6 +96,7 @@ func (ss *SessionStore) Create(conn interface{}, sid string) *Session {
 	return &s
 }
 
+// Get fetches a session from store by session ID.
 func (ss *SessionStore) Get(sid string) *Session {
 	ss.rw.Lock()
 	defer ss.rw.Unlock()
@@ -109,6 +113,7 @@ func (ss *SessionStore) Get(sid string) *Session {
 	return nil
 }
 
+// Delete removes session from store.
 func (ss *SessionStore) Delete(s *Session) {
 	ss.rw.Lock()
 	defer ss.rw.Unlock()
@@ -120,7 +125,7 @@ func (ss *SessionStore) Delete(s *Session) {
 	}
 }
 
-// Shutting down sessionStore. No need to clean up.
+// Shutdown terminates sessionStore. No need to clean up.
 // Don't send to clustered sessions, their servers are not being shut down.
 func (ss *SessionStore) Shutdown() {
 	ss.rw.Lock()
@@ -136,6 +141,7 @@ func (ss *SessionStore) Shutdown() {
 	log.Printf("SessionStore shut down, sessions terminated: %d", len(ss.sessCache))
 }
 
+// NewSessionStore initializes a session store.
 func NewSessionStore(lifetime time.Duration) *SessionStore {
 	store := &SessionStore{
 		lru:      list.New(),

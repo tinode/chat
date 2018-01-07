@@ -36,7 +36,7 @@ const (
 
 var MIN_SUPPORTED_VERSION_VAL = parseVersion(MIN_SUPPORTED_VERSION)
 
-// A single WS connection or a long polling session. A user may have multiple
+// Session represents a single WS connection or a long polling session. A user may have multiple
 // sessions.
 type Session struct {
 	// protocol - NONE (unset), WEBSOCK, LPOLL, CLUSTER, GRPC
@@ -64,7 +64,7 @@ type Session struct {
 	ver int
 
 	// Device ID of the client
-	deviceId string
+	deviceID string
 	// Human language of the client
 	lang string
 
@@ -104,7 +104,7 @@ type Session struct {
 	rw sync.RWMutex
 }
 
-// Mapper of sessions to topics
+// Subscription is a mapper of sessions to topics.
 type Subscription struct {
 	// Channel to communicate with the topic, copy of Topic.broadcast
 	broadcast chan<- *ServerComMessage
@@ -310,7 +310,7 @@ func (s *Session) leave(msg *ClientComMessage) {
 			// Unlink from topic, topic will send a reply.
 			delete(s.subs, expanded)
 			sub.done <- &sessionLeave{
-				sess: s, unsub: msg.Leave.Unsub, topic: msg.Leave.Topic, reqId: msg.Leave.Id}
+				sess: s, unsub: msg.Leave.Unsub, topic: msg.Leave.Topic, reqID: msg.Leave.Id}
 		}
 	} else if globals.cluster.isRemoteTopic(expanded) {
 		// The topic is handled by a remote node. Forward message to it.
@@ -395,7 +395,7 @@ func (s *Session) hello(msg *ClientComMessage) {
 	} else if msg.Hi.Version == "" || parseVersion(msg.Hi.Version) == s.ver {
 		// Save changed device ID or Lang.
 		if !s.uid.IsZero() {
-			if err := store.Devices.Update(s.uid, s.deviceId, &types.DeviceDef{
+			if err := store.Devices.Update(s.uid, s.deviceID, &types.DeviceDef{
 				DeviceId: msg.Hi.DeviceID,
 				Platform: "",
 				LastSeen: msg.timestamp,
@@ -412,7 +412,7 @@ func (s *Session) hello(msg *ClientComMessage) {
 	}
 
 	s.userAgent = msg.Hi.UserAgent
-	s.deviceId = msg.Hi.DeviceID
+	s.deviceID = msg.Hi.DeviceID
 	s.lang = msg.Hi.Lang
 
 	var httpStatus int
@@ -495,9 +495,9 @@ func (s *Session) login(msg *ClientComMessage) {
 	}
 
 	// Record deviceId used in this session
-	if s.deviceId != "" {
+	if s.deviceID != "" {
 		store.Devices.Update(uid, "", &types.DeviceDef{
-			DeviceId: s.deviceId,
+			DeviceId: s.deviceID,
 			Platform: "",
 			LastSeen: msg.timestamp,
 			Lang:     s.lang,
@@ -629,9 +629,9 @@ func (s *Session) acc(msg *ClientComMessage) {
 			params["token"], params["expires"], _ = store.GetAuthHandler("token").GenSecret(s.uid, s.authLvl, 0)
 
 			// Record session
-			if s.deviceId != "" {
+			if s.deviceID != "" {
 				store.Devices.Update(s.uid, "", &types.DeviceDef{
-					DeviceId: s.deviceId,
+					DeviceId: s.deviceID,
 					Platform: "",
 					LastSeen: msg.timestamp,
 					Lang:     s.lang,
@@ -868,15 +868,15 @@ func (s *Session) note(msg *ClientComMessage) {
 //   topic: session-specific topic name the message recipient should see
 //   routeTo: routable global topic name
 //   err: *ServerComMessage with an error to return to the sender
-func (s *Session) validateTopicName(msgId, topic string, timestamp time.Time) (string, *ServerComMessage) {
+func (s *Session) validateTopicName(msgID, topic string, timestamp time.Time) (string, *ServerComMessage) {
 
 	if topic == "" {
-		return "", ErrMalformed(msgId, "", timestamp)
+		return "", ErrMalformed(msgID, "", timestamp)
 	}
 
 	if !strings.HasPrefix(topic, "grp") && s.uid.IsZero() {
 		// me, fnd, p2p topics require authentication
-		return "", ErrAuthRequired(msgId, topic, timestamp)
+		return "", ErrAuthRequired(msgID, topic, timestamp)
 	}
 
 	// Topic to route to i.e. rcptto: or s.subs[routeTo]
@@ -891,10 +891,10 @@ func (s *Session) validateTopicName(msgId, topic string, timestamp time.Time) (s
 		uid2 := types.ParseUserId(topic)
 		if uid2.IsZero() {
 			// Ensure the user id is valid
-			return "", ErrMalformed(msgId, topic, timestamp)
+			return "", ErrMalformed(msgID, topic, timestamp)
 		} else if uid2 == s.uid {
 			// Use 'me' to access self-topic
-			return "", ErrPermissionDenied(msgId, topic, timestamp)
+			return "", ErrPermissionDenied(msgID, topic, timestamp)
 		}
 		routeTo = s.uid.P2PName(uid2)
 	}
@@ -902,11 +902,15 @@ func (s *Session) validateTopicName(msgId, topic string, timestamp time.Time) (s
 	return routeTo, nil
 }
 
+// SerialFormat is an enum of possible serialization formats.
 type SerialFormat int
 
 const (
+	// FmtNONE undefined format
 	FmtNONE SerialFormat = iota
+	// FmtJSON JSON format
 	FmtJSON
+	// FmtPROTO Protobuffer format
 	FmtPROTO
 )
 

@@ -18,7 +18,7 @@ import (
 	"google.golang.org/grpc"
 )
 
-type GrpcNodeServer struct {
+type grpcNodeServer struct {
 }
 
 func (sess *Session) closeGrpc() {
@@ -28,7 +28,7 @@ func (sess *Session) closeGrpc() {
 }
 
 // Equivalent of starting a new session and a read loop in one
-func (*GrpcNodeServer) MessageLoop(stream pbx.Node_MessageLoopServer) error {
+func (*grpcNodeServer) MessageLoop(stream pbx.Node_MessageLoopServer) error {
 	sess := globals.sessionStore.Create(stream, "")
 
 	defer func() {
@@ -67,14 +67,14 @@ func (sess *Session) writeGrpcLoop() {
 				// channel closed
 				return
 			}
-			if err := grpc_write(sess, msg); err != nil {
+			if err := grpcWrite(sess, msg); err != nil {
 				log.Println("sess.writeLoop: " + err.Error())
 				return
 			}
 		case msg := <-sess.stop:
 			// Shutdown requested, don't care if the message is delivered
 			if msg != nil {
-				grpc_write(sess, msg)
+				grpcWrite(sess, msg)
 			}
 			return
 
@@ -84,7 +84,7 @@ func (sess *Session) writeGrpcLoop() {
 	}
 }
 
-func grpc_write(sess *Session, msg interface{}) error {
+func grpcWrite(sess *Session, msg interface{}) error {
 	out := sess.grpcnode
 	if out != nil {
 		// Will panic if format is wrong. This is an intentional panic.
@@ -105,7 +105,7 @@ func serveGrpc(addr string) (*grpc.Server, error) {
 	}
 
 	srv := grpc.NewServer()
-	pbx.RegisterNodeServer(srv, &GrpcNodeServer{})
+	pbx.RegisterNodeServer(srv, &grpcNodeServer{})
 
 	go func() {
 		if err := srv.Serve(lis); err != nil {

@@ -28,9 +28,9 @@ const (
 	pingPeriod = (pongWait * 9) / 10
 )
 
-func (s *Session) closeWS() {
-	if s.proto == WEBSOCK {
-		s.ws.Close()
+func (sess *Session) closeWS() {
+	if sess.proto == WEBSOCK {
+		sess.ws.Close()
 	}
 }
 
@@ -75,14 +75,14 @@ func (sess *Session) writeLoop() {
 				// channel closed
 				return
 			}
-			if err := ws_write(sess.ws, websocket.TextMessage, msg); err != nil {
+			if err := wsWrite(sess.ws, websocket.TextMessage, msg); err != nil {
 				log.Println("sess.writeLoop: " + err.Error())
 				return
 			}
 		case msg := <-sess.stop:
 			// Shutdown requested, don't care if the message is delivered
 			if msg != nil {
-				ws_write(sess.ws, websocket.TextMessage, msg)
+				wsWrite(sess.ws, websocket.TextMessage, msg)
 			}
 			return
 
@@ -90,7 +90,7 @@ func (sess *Session) writeLoop() {
 			delete(sess.subs, topic)
 
 		case <-ticker.C:
-			if err := ws_write(sess.ws, websocket.PingMessage, nil); err != nil {
+			if err := wsWrite(sess.ws, websocket.PingMessage, nil); err != nil {
 				log.Println("sess.writeLoop: ping/" + err.Error())
 				return
 			}
@@ -99,7 +99,7 @@ func (sess *Session) writeLoop() {
 }
 
 // Writes a message with the given message type (mt) and payload.
-func ws_write(ws *websocket.Conn, mt int, msg interface{}) error {
+func wsWrite(ws *websocket.Conn, mt int, msg interface{}) error {
 	var bits []byte
 	if msg != nil {
 		bits = msg.([]byte)

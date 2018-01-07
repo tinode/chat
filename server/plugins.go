@@ -61,12 +61,14 @@ var (
 	plgTopicCatNames = []string{"me", "fnd", "p2p", "grp", "new"}
 )
 
+// PluginFilter is a enum which defines filtering types.
 type PluginFilter struct {
 	byPacket    int
 	byTopicType int
 	byAction    int
 }
 
+// ParsePluginFilter parses filter config string.
 func ParsePluginFilter(s *string, filterBy int) (*PluginFilter, error) {
 	if s == nil {
 		return nil, nil
@@ -166,12 +168,12 @@ func ParsePluginFilter(s *string, filterBy int) (*PluginFilter, error) {
 	return &filter, nil
 }
 
-// Filters for an individual RPC call. Filter strings are formatted as follows:
+// PluginRPCFilterConfig filters for an individual RPC call. Filter strings are formatted as follows:
 // <comma separated list of packet names> : <comma separated list of topics or topic types> : <actions (combination of C U D)>
 // For instance:
 // "acc,login::CU" - grab packets {acc} or {login}; no filtering by topic, Create or Update action
 // "pub,pres:me,p2p:"
-type PluginRPCFilterConfig struct {
+type pluginRPCFilterConfig struct {
 	// Filter by packet name, topic type [or exact name - not supported yet]. 2D: "pub,pres;p2p,me"
 	FireHose *string `json:"fire_hose"`
 	// Filter by CUD, [exact user name - not supported yet]. 1D: "C"
@@ -184,14 +186,14 @@ type PluginRPCFilterConfig struct {
 	Message *string `json:"message"`
 }
 
-type PluginConfig struct {
+type pluginConfig struct {
 	Enabled bool `json:"enabled"`
 	// Unique service name
 	Name string `json:"name"`
 	// Microseconds to wait before timeout
 	Timeout int64 `json:"timeout"`
 	// Filters for RPC calls: when to call vs when to skip the call
-	Filters PluginRPCFilterConfig `json:"filters"`
+	Filters pluginRPCFilterConfig `json:"filters"`
 	// What should the server do if plugin failed: HTTP error code
 	FailureCode int `json:"failure_code"`
 	// HTTP Error message to go with the code
@@ -200,6 +202,7 @@ type PluginConfig struct {
 	ServiceAddr string `json:"service_addr"`
 }
 
+// Plugin defines client-side parameters of a gRPC plugin.
 type Plugin struct {
 	name    string
 	timeout time.Duration
@@ -226,7 +229,7 @@ func pluginsInit(configString json.RawMessage) {
 		return
 	}
 
-	var config []PluginConfig
+	var config []pluginConfig
 	if err := json.Unmarshal(configString, &config); err != nil {
 		log.Fatal(err)
 	}
@@ -322,7 +325,7 @@ func pluginGenerateClientReq(sess *Session, msg *ClientComMessage) *pbx.ClientRe
 			AuthLevel:  pbx.Session_AuthLevel(sess.authLvl),
 			UserAgent:  sess.userAgent,
 			RemoteAddr: sess.remoteAddr,
-			DeviceId:   sess.deviceId,
+			DeviceId:   sess.deviceID,
 			Language:   sess.lang}}
 }
 
@@ -334,7 +337,7 @@ func pluginFireHose(sess *Session, msg *ClientComMessage) (*ClientComMessage, *S
 
 	var req *pbx.ClientReq
 
-	id, topic := pluginIdAndTopic(msg)
+	id, topic := pluginIDAndTopic(msg)
 	ts := time.Now().UTC().Round(time.Millisecond)
 	for _, p := range plugins {
 		if !pluginDoFiltering(p.filterFireHose, msg) {
@@ -620,7 +623,7 @@ func pluginActionToCrud(action int) pbx.Crud {
 	panic("plugin: unknown action")
 }
 
-func pluginIdAndTopic(msg *ClientComMessage) (string, string) {
+func pluginIDAndTopic(msg *ClientComMessage) (string, string) {
 	if msg.Hi != nil {
 		return msg.Hi.Id, ""
 	}

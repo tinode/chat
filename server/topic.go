@@ -9,7 +9,6 @@
 package main
 
 import (
-	//	"encoding/json"
 	"errors"
 	"log"
 	"sort"
@@ -24,7 +23,7 @@ import (
 
 const UA_TIMER_DELAY = time.Second * 5
 
-// Maximum number of messages to delete
+// MAX_DELETE_COUNT is the maximum allowed number of messages to delete in one call.
 const MAX_DELETE_COUNT = 1024
 
 // Topic is an isolated communication channel
@@ -53,9 +52,9 @@ type Topic struct {
 	updated time.Time
 
 	// Server-side ID of the last data message
-	lastId int
+	lastID int
 	// ID of the deletion operation. Not an ID of the message.
-	delId int
+	delID int
 
 	// Last published userAgent ('me' topic only)
 	userAgent string
@@ -111,10 +110,10 @@ type perUserData struct {
 	online int
 
 	// Last t.lastId reported by user through {pres} as received or read
-	recvId int
-	readId int
+	recvID int
+	readID int
 	// ID of the latest Delete operation
-	delId int
+	delID int
 
 	private interface{}
 
@@ -140,13 +139,18 @@ type sessionLeave struct {
 	// Topic to report success of failure on
 	topic string
 	// ID of originating request, if any
-	reqId string
+	reqID string
 }
 
+// Reasons why topic is being shut down.
 const (
+	// StopNone no reason given/default.
 	StopNone = iota
+	// StopShutdown terminated due to system shutdown.
 	StopShutdown
+	// StopDeleted terminated due to being deleted.
 	StopDeleted
+	// StopRehashing terminated due to cluster rehashing (moved to a different node).
 	StopRehashing
 )
 
@@ -220,12 +224,12 @@ func (t *Topic) run(hub *Hub) {
 			now := types.TimeNow()
 
 			if t.isSuspended() {
-				leave.sess.queueOut(ErrLocked(leave.reqId, t.original(leave.sess.uid), now))
+				leave.sess.queueOut(ErrLocked(leave.reqID, t.original(leave.sess.uid), now))
 				continue
 
 			} else if leave.unsub {
 				// User wants to leave and unsubscribe.
-				if err := t.replyLeaveUnsub(hub, leave.sess, leave.reqId); err != nil {
+				if err := t.replyLeaveUnsub(hub, leave.sess, leave.reqID); err != nil {
 					log.Println("failed to unsub", err)
 					continue
 				}
@@ -260,8 +264,8 @@ func (t *Topic) run(hub *Hub) {
 
 				t.perUser[leave.sess.uid] = pud
 
-				if leave.reqId != "" {
-					leave.sess.queueOut(NoErr(leave.reqId, t.original(leave.sess.uid), now))
+				if leave.reqID != "" {
+					leave.sess.queueOut(NoErr(leave.reqID, t.original(leave.sess.uid), now))
 				}
 			}
 
@@ -298,7 +302,7 @@ func (t *Topic) run(hub *Hub) {
 
 				if err := store.Messages.Save(&types.Message{
 					ObjHeader: types.ObjHeader{CreatedAt: msg.Data.Timestamp},
-					SeqId:     t.lastId + 1,
+					SeqId:     t.lastID + 1,
 					Topic:     t.name,
 					From:      from.String(),
 					Head:      msg.Data.Head,
@@ -310,19 +314,19 @@ func (t *Topic) run(hub *Hub) {
 					continue
 				}
 
-				t.lastId++
-				msg.Data.SeqId = t.lastId
+				t.lastID++
+				msg.Data.SeqId = t.lastID
 
 				if msg.id != "" {
 					reply := NoErrAccepted(msg.id, t.original(msg.sessFrom.uid), msg.timestamp)
-					reply.Ctrl.Params = map[string]int{"seq": t.lastId}
+					reply.Ctrl.Params = map[string]int{"seq": t.lastID}
 					msg.sessFrom.queueOut(reply)
 				}
 
 				pushRcpt = t.makePushReceipt(msg.Data)
 
 				// Message sent: notify offline 'R' subscrbers on 'me'
-				t.presSubsOffline("msg", &PresParams{seqID: t.lastId}, types.ModeRead, "", true)
+				t.presSubsOffline("msg", &PresParams{seqID: t.lastID}, types.ModeRead, "", true)
 
 				// Tell the plugins that a message was accepted for delivery
 				pluginMessage(msg.Data, plgActCreate)
@@ -343,7 +347,7 @@ func (t *Topic) run(hub *Hub) {
 					continue
 				}
 
-				if msg.Info.SeqId > t.lastId {
+				if msg.Info.SeqId > t.lastID {
 					// Drop bogus read notification
 					continue
 				}
@@ -364,31 +368,31 @@ func (t *Topic) run(hub *Hub) {
 
 					var read, recv int
 					if msg.Info.What == "read" {
-						if msg.Info.SeqId > pud.readId {
-							pud.readId = msg.Info.SeqId
-							read = pud.readId
+						if msg.Info.SeqId > pud.readID {
+							pud.readID = msg.Info.SeqId
+							read = pud.readID
 						} else {
 							// No need to report stale or bogus read status
 							continue
 						}
 					} else if msg.Info.What == "recv" {
-						if msg.Info.SeqId > pud.recvId {
-							pud.recvId = msg.Info.SeqId
-							recv = pud.recvId
+						if msg.Info.SeqId > pud.recvID {
+							pud.recvID = msg.Info.SeqId
+							recv = pud.recvID
 						} else {
 							continue
 						}
 					}
 
-					if pud.readId > pud.recvId {
-						pud.recvId = pud.readId
-						recv = pud.recvId
+					if pud.readID > pud.recvID {
+						pud.recvID = pud.readID
+						recv = pud.recvID
 					}
 
 					if err := store.Subs.Update(t.name, uid,
 						map[string]interface{}{
-							"RecvSeqId": pud.recvId,
-							"ReadSeqId": pud.readId}); err != nil {
+							"RecvSeqId": pud.recvID,
+							"ReadSeqId": pud.readID}); err != nil {
 
 						log.Printf("topic[%s]: failed to update SeqRead/Recv counter: %v", t.name, err)
 						continue
@@ -450,10 +454,10 @@ func (t *Topic) run(hub *Hub) {
 						if pushRcpt != nil {
 							if i, ok := pushRcpt.uidMap[sess.uid]; ok {
 								pushRcpt.rcpt.To[i].Delivered++
-								if sess.deviceId != "" {
+								if sess.deviceID != "" {
 									// List of device IDs which already received the message. Push should
 									// skip them.
-									pushRcpt.rcpt.To[i].Devices = append(pushRcpt.rcpt.To[i].Devices, sess.deviceId)
+									pushRcpt.rcpt.To[i].Devices = append(pushRcpt.rcpt.To[i].Devices, sess.deviceID)
 								}
 							}
 						}
@@ -739,7 +743,7 @@ func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin, sendDesc bool) error {
 // C. User is responding to an earlier invite (modeWant was "N" in subscription)
 // D. User is already subscribed, changing modeWant
 // E. User is accepting ownership transfer (requesting ownership transfer is not permitted)
-func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string,
+func (t *Topic) requestSub(h *Hub, sess *Session, pktID string, want string,
 	private interface{}) error {
 
 	now := types.TimeNow()
@@ -752,7 +756,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string,
 	modeWant := types.ModeUnset
 	if want != "" {
 		if err := modeWant.UnmarshalText([]byte(want)); err != nil {
-			sess.queueOut(ErrMalformed(pktId, t.original(sess.uid), now))
+			sess.queueOut(ErrMalformed(pktID, t.original(sess.uid), now))
 			return err
 		}
 	}
@@ -770,10 +774,10 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string,
 			// t.perUser contains just one element - the other user
 			for uid2, user2Data := range t.perUser {
 				if user2, err := store.Users.Get(uid2); err != nil {
-					sess.queueOut(ErrUnknown(pktId, t.original(sess.uid), now))
+					sess.queueOut(ErrUnknown(pktID, t.original(sess.uid), now))
 					return err
 				} else if user2 == nil {
-					sess.queueOut(ErrUserNotFound(pktId, t.original(sess.uid), now))
+					sess.queueOut(ErrUserNotFound(pktID, t.original(sess.uid), now))
 					return errors.New("user not found")
 				} else {
 					userData.public = user2.Public
@@ -814,7 +818,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string,
 		}
 
 		if err := store.Subs.Create(sub); err != nil {
-			sess.queueOut(ErrUnknown(pktId, t.original(sess.uid), now))
+			sess.queueOut(ErrUnknown(pktID, t.original(sess.uid), now))
 			return err
 		}
 
@@ -843,7 +847,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string,
 
 				// Make sure the current owner cannot unset the owner flag or ban himself
 				if t.owner == sess.uid && !modeWant.IsOwner() {
-					sess.queueOut(ErrPermissionDenied(pktId, t.original(sess.uid), now))
+					sess.queueOut(ErrPermissionDenied(pktID, t.original(sess.uid), now))
 					return errors.New("cannot unset ownership")
 				}
 
@@ -857,7 +861,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string,
 				}
 			} else if modeWant.IsOwner() {
 				// Ownership transfer can only be initiated by the owner
-				sess.queueOut(ErrPermissionDenied(pktId, t.original(sess.uid), now))
+				sess.queueOut(ErrPermissionDenied(pktID, t.original(sess.uid), now))
 				return errors.New("non-owner cannot request ownership transfer")
 			} else if t.cat == types.TopicCat_P2P {
 				// For P2P topics ignore requests for 'D'. Otherwise it will generate a useless announcement
@@ -893,7 +897,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string,
 				update["ModeGiven"] = int(userData.modeGiven)
 			}
 			if err := store.Subs.Update(t.name, sess.uid, update); err != nil {
-				sess.queueOut(ErrUnknown(pktId, t.original(sess.uid), now))
+				sess.queueOut(ErrUnknown(pktID, t.original(sess.uid), now))
 				return err
 			}
 		}
@@ -926,7 +930,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktId string, want string,
 		return nil
 	} else if !userData.modeGiven.IsJoiner() {
 		// User was banned
-		sess.queueOut(ErrPermissionDenied(pktId, t.original(sess.uid), now))
+		sess.queueOut(ErrPermissionDenied(pktID, t.original(sess.uid), now))
 		return errors.New("topic access denied; user is banned")
 	}
 
@@ -1165,12 +1169,12 @@ func (t *Topic) replyGetDesc(sess *Session, id, tempName string, opts *MsgGetOpt
 
 		// Don't report message IDs to users without Read access.
 		if (pud.modeGiven & pud.modeWant).IsReader() {
-			desc.SeqId = t.lastId
+			desc.SeqId = t.lastID
 			// Make sure reported values are sane:
-			// t.clearId <= pud.clearId; t.readId <= t.recvId <= t.lastId
-			desc.DelId = max(pud.delId, t.delId)
-			desc.ReadSeqId = pud.readId
-			desc.RecvSeqId = max(pud.recvId, pud.readId)
+			// t.delID <= pud.delID; t.readID <= t.recvID <= t.lastID
+			desc.DelId = max(pud.delID, t.delID)
+			desc.ReadSeqId = pud.readID
+			desc.RecvSeqId = max(pud.recvID, pud.readID)
 		}
 
 		// When the topic is first created it may have been assigned a temporary name.
@@ -1644,7 +1648,7 @@ func (t *Topic) replyGetDel(sess *Session, id string, req *MsgBrowseOpts) error 
 
 	// Check if the user has permission to read the topic data and the request is valid
 	if userData := t.perUser[sess.uid]; (userData.modeGiven & userData.modeWant).IsReader() && req != nil {
-		ranges, delId, err := store.Messages.GetDeleted(t.name, sess.uid, msgOpts2storeOpts(req))
+		ranges, delID, err := store.Messages.GetDeleted(t.name, sess.uid, msgOpts2storeOpts(req))
 		if err != nil {
 			sess.queueOut(ErrUnknown(id, t.original(sess.uid), now))
 			return err
@@ -1655,8 +1659,8 @@ func (t *Topic) replyGetDel(sess *Session, id string, req *MsgBrowseOpts) error 
 				Id:    id,
 				Topic: t.original(sess.uid),
 				Del: &MsgDelValues{
-					DelId:  delId,
-					DelSeq: delrange_deserialize(ranges)},
+					DelId:  delID,
+					DelSeq: delrangeDeserialize(ranges)},
 				Timestamp: &now}})
 			return nil
 		}
@@ -1687,15 +1691,15 @@ func (t *Topic) replyDelMsg(sess *Session, del *MsgClientDel) error {
 	} else {
 		count := 0
 		for _, dq := range del.DelSeq {
-			if dq.LowId > t.lastId || dq.LowId < 0 || dq.HiId < 0 ||
+			if dq.LowId > t.lastID || dq.LowId < 0 || dq.HiId < 0 ||
 				(dq.HiId > 0 && dq.LowId > dq.HiId) ||
 				(dq.LowId == 0 && dq.HiId == 0) {
 				err = errors.New("del.msg: invalid entry in list")
 				break
 			}
 
-			if dq.HiId > t.lastId {
-				dq.HiId = t.lastId
+			if dq.HiId > t.lastID {
+				dq.HiId = t.lastID
 			} else if dq.LowId == dq.HiId {
 				dq.HiId = 0
 			}
@@ -1745,34 +1749,34 @@ func (t *Topic) replyDelMsg(sess *Session, del *MsgClientDel) error {
 		forUser = types.ZeroUid
 	}
 
-	if err = store.Messages.DeleteList(t.name, t.delId+1, forUser, ranges); err != nil {
+	if err = store.Messages.DeleteList(t.name, t.delID+1, forUser, ranges); err != nil {
 		sess.queueOut(ErrUnknown(del.Id, t.original(sess.uid), now))
 		return err
 	}
 
 	// Increment Delete transaction ID
-	t.delId++
-	dr := delrange_deserialize(ranges)
+	t.delID++
+	dr := delrangeDeserialize(ranges)
 	if del.Hard {
 		for uid, pud := range t.perUser {
-			pud.delId = t.delId
+			pud.delID = t.delID
 			t.perUser[uid] = pud
 		}
 		// Broadcast the change to all, online and offline, exclude the session making the change.
-		params := &PresParams{delID: t.delId, delSeq: dr, actor: sess.uid.UserId()}
+		params := &PresParams{delID: t.delID, delSeq: dr, actor: sess.uid.UserId()}
 		t.presSubsOnline("del", params.actor, params, types.ModeRead, sess.sid, "")
 		t.presSubsOffline("del", params, types.ModeRead, sess.sid, true)
 	} else {
 		pud := t.perUser[sess.uid]
-		pud.delId = t.delId
+		pud.delID = t.delID
 		t.perUser[sess.uid] = pud
 
 		// Notify user's other sessions
-		t.presPubMessageDelete(sess.uid, t.delId, dr, sess.sid)
+		t.presPubMessageDelete(sess.uid, t.delID, dr, sess.sid)
 	}
 
 	reply := NoErr(del.Id, t.original(sess.uid), now)
-	reply.Ctrl.Params = map[string]int{"del": t.delId}
+	reply.Ctrl.Params = map[string]int{"del": t.delID}
 	sess.queueOut(reply)
 
 	return nil
@@ -2100,7 +2104,7 @@ func genTopicName() string {
 }
 
 // Convert a list of IDs into ranges
-func delrange_deserialize(in []types.Range) []MsgDelRange {
+func delrangeDeserialize(in []types.Range) []MsgDelRange {
 	if len(in) == 0 {
 		return nil
 	}
@@ -2113,7 +2117,7 @@ func delrange_deserialize(in []types.Range) []MsgDelRange {
 	return out
 }
 
-func delrange_serialize(in []MsgDelRange) []types.Range {
+func delrangeSerialize(in []MsgDelRange) []types.Range {
 	if len(in) == 0 {
 		return nil
 	}

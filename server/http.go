@@ -24,21 +24,21 @@ import (
 	"golang.org/x/crypto/acme/autocert"
 )
 
-type TlsConfig struct {
+type tlsConfig struct {
 	// Flag enabling TLS
 	Enabled bool `json:"enabled"`
 	// Listen on port 80 and redirect plain HTTP to HTTPS
-	RedirectHttp string `json:"http_redirect"`
+	RedirectHTTP string `json:"http_redirect"`
 	// Enable Strict-Transport-Security by setting max_age > 0
 	StrictMaxAge int `json:"strict_max_age"`
 	// ACME autocert config, e.g. letsencrypt.org
-	Autocert *TlsAutocertConfig `json:"autocert"`
+	Autocert *tlsAutocertConfig `json:"autocert"`
 	// If Autocert is not defined, provide file names of static certificate and key
 	CertFile string `json:"cert_file"`
 	KeyFile  string `json:"key_file"`
 }
 
-type TlsAutocertConfig struct {
+type tlsAutocertConfig struct {
 	// Domains to support by autocert
 	Domains []string `json:"domains"`
 	// Name of directory where auto-certificates are cached, e.g. /etc/letsencrypt/live/your-domain-here
@@ -48,7 +48,7 @@ type TlsAutocertConfig struct {
 }
 
 func listenAndServe(addr string, tlsEnabled bool, tls_config string, stop <-chan bool) error {
-	var tlsConfig TlsConfig
+	var tlsConfig tlsConfig
 
 	if tls_config != "" {
 		if err := json.Unmarshal([]byte(tls_config), &tlsConfig); err != nil {
@@ -96,10 +96,10 @@ func listenAndServe(addr string, tlsEnabled bool, tls_config string, stop <-chan
 	go func() {
 		var err error
 		if tlsEnabled || tlsConfig.Enabled {
-			if tlsConfig.RedirectHttp != "" {
+			if tlsConfig.RedirectHTTP != "" {
 				log.Printf("Redirecting connections from HTTP at [%s] to HTTPS at [%s]",
-					tlsConfig.RedirectHttp, server.Addr)
-				go http.ListenAndServe(tlsConfig.RedirectHttp, tlsRedirect(addr))
+					tlsConfig.RedirectHTTP, server.Addr)
+				go http.ListenAndServe(tlsConfig.RedirectHTTP, tlsRedirect(addr))
 			}
 
 			log.Printf("Listening for client HTTPS connections on [%s]", server.Addr)
@@ -186,9 +186,8 @@ func hstsHandler(handler http.Handler) http.Handler {
 			w.Header().Set("Strict-Transport-Security", "max-age="+globals.tlsStrictMaxAge)
 			handler.ServeHTTP(w, r)
 		})
-	} else {
-		return handler
 	}
+	return handler
 }
 
 func serve404(wrt http.ResponseWriter, req *http.Request) {

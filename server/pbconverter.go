@@ -662,8 +662,8 @@ func pb_Topic_serialize(topic *Topic) *pbx.TopicDesc {
 		Defacs: &pbx.DefaultAcsMode{
 			Auth: topic.accessAuth.String(),
 			Anon: topic.accessAnon.String()},
-		SeqId:  int32(topic.lastId),
-		DelId:  int32(topic.delId),
+		SeqId:  int32(topic.lastID),
+		DelId:  int32(topic.delID),
 		Public: interfaceToBytes(topic.public),
 	}
 }

@@ -24,7 +24,7 @@ type FcmPush struct {
 type configType struct {
 	Disabled    bool   `json:"disabled"`
 	Buffer      int    `json:"buffer"`
-	ApiKey      string `json:"api_key"`
+	APIKey      string `json:"api_key"`
 	TimeToLive  uint   `json:"time_to_live,omitempty"`
 	CollapseKey string `json:"collapse_key,omitempty"`
 	Icon        string `json:"icon,omitempty"`
@@ -43,7 +43,7 @@ func (FcmPush) Init(jsonconf string) error {
 		return nil
 	}
 
-	handler.client = fcm.NewClient(config.ApiKey)
+	handler.client = fcm.NewClient(config.APIKey)
 
 	if config.Buffer <= 0 {
 		config.Buffer = DEFAULT_BUFFER
@@ -74,8 +74,8 @@ func sendNotification(rcpt *push.Receipt, config *configType) {
 		uids[i] = to.User
 
 		// Some devices were online and received the message. Skip them.
-		for _, deviceId := range to.Devices {
-			skipDevices[deviceId] = true
+		for _, deviceID := range to.Devices {
+			skipDevices[deviceID] = true
 		}
 	}
 
