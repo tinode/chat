@@ -17,21 +17,21 @@ import (
 const DEFAULT_CLUSTER_RECONNECT = 200 * time.Millisecond
 const CLUSTER_HASH_REPLICAS = 20
 
-type ClusterNodeConfig struct {
+type clusterNodeConfig struct {
 	Name string `json:"name"`
 	Addr string `json:"addr"`
 }
 
-type ClusterConfig struct {
+type clusterConfig struct {
 	// List of all members of the cluster, including this member
-	Nodes []ClusterNodeConfig `json:"nodes"`
+	Nodes []clusterNodeConfig `json:"nodes"`
 	// Name of this cluster node
 	ThisName string `json:"self"`
 	// Failover configuration
-	Failover *ClusterFailoverConfig
+	Failover *clusterFailoverConfig
 }
 
-// Client connection to another node
+// ClusterNode is a client's connection to another node.
 type ClusterNode struct {
 	lock sync.Mutex
 
@@ -53,7 +53,7 @@ type ClusterNode struct {
 	done chan bool
 }
 
-// Basic info on a remote session where the message was created
+// ClusterSess is a basic info on a remote session where the message was created.
 type ClusterSess struct {
 	// IP address of the client. For long polling this is the IP of the last poll
 	RemoteAddr string
@@ -80,7 +80,7 @@ type ClusterSess struct {
 	Sid string
 }
 
-// Proxy to Master request message
+// ClusterReq is a Proxy to Master request message.
 type ClusterReq struct {
 	// Name of the node sending this request
 	Node string
@@ -99,7 +99,7 @@ type ClusterReq struct {
 	SessGone bool
 }
 
-// Master to Proxy response message
+// ClusterResp is a Master to Proxy response message.
 type ClusterResp struct {
 	Msg []byte
 	// Session ID to forward message to, if any.
@@ -246,6 +246,7 @@ func (n *ClusterNode) respond(msg *ClusterResp) error {
 	return n.call("Cluster.Proxy", msg, &unused)
 }
 
+// Cluster is the representation of the cluster.
 type Cluster struct {
 	// Cluster nodes with RPC endpoints
 	nodes map[string]*ClusterNode
@@ -258,10 +259,10 @@ type Cluster struct {
 	ring *rh.Ring
 
 	// Failover parameters. Could be nil if failover is not enabled
-	fo *ClusterFailover
+	fo *clusterFailover
 }
 
-// Cluster.Master at topic's master node receives C2S messages from topic's proxy nodes.
+// Master at topic's master node receives C2S messages from topic's proxy nodes.
 // The message is treated like it came from a session: find or create a session locally,
 // dispatch the message to it like it came from a normal ws/lp connection.
 // Called by a remote node.
@@ -335,13 +336,13 @@ func (c *Cluster) nodeForTopic(topic string) *ClusterNode {
 		log.Println("cluster: request to route to self")
 		// Do not route to self
 		return nil
-	} else {
-		node := globals.cluster.nodes[key]
-		if node == nil {
-			log.Println("cluster: no node for topic", topic, key)
-		}
-		return node
 	}
+
+	node := globals.cluster.nodes[key]
+	if node == nil {
+		log.Println("cluster: no node for topic", topic, key)
+	}
+	return node
 }
 
 func (c *Cluster) isRemoteTopic(topic string) bool {
@@ -419,7 +420,7 @@ func clusterInit(configString json.RawMessage, self *string) {
 		return
 	}
 
-	var config ClusterConfig
+	var config clusterConfig
 	if err := json.Unmarshal(configString, &config); err != nil {
 		log.Fatal(err)
 	}
@@ -525,8 +526,8 @@ func (sess *Session) rpcWriteLoop() {
 }
 
 // Proxied session is being closed at the Master node
-func (s *Session) closeRPC() {
-	if s.proto == CLUSTER {
+func (sess *Session) closeRPC() {
+	if sess.proto == CLUSTER {
 		log.Println("cluster: session closed at master")
 	}
 }

@@ -14,7 +14,7 @@ import (
 // rehashing using the new list. When the dead node is revived, rehashing happens again.
 
 // Failover config
-type ClusterFailover struct {
+type clusterFailover struct {
 	// Current leader
 	leader string
 	// Current election term
@@ -37,7 +37,7 @@ type ClusterFailover struct {
 	done chan bool
 }
 
-type ClusterFailoverConfig struct {
+type clusterFailoverConfig struct {
 	// Failover is enabled
 	Enabled bool `json:"enabled"`
 	// Time in milliseconds between heartbeats
@@ -48,7 +48,7 @@ type ClusterFailoverConfig struct {
 	NodeFailAfter int `json:"node_fail_after"`
 }
 
-// Content of a leader node ping to a follower node
+// ClusterPing is content of a leader node ping to a follower node.
 type ClusterPing struct {
 	// Name of the leader node
 	Leader string
@@ -60,6 +60,7 @@ type ClusterPing struct {
 	Nodes []string
 }
 
+// ClusterVoteRequest is a request from a leader candidate to a node to vote for the candidate.
 type ClusterVoteRequest struct {
 	// Candidate node which issued this request
 	Node string
@@ -67,6 +68,7 @@ type ClusterVoteRequest struct {
 	Term int
 }
 
+// ClusterVoteResponse is a vote from a node.
 type ClusterVoteResponse struct {
 	// Actual vote
 	Result bool
@@ -74,12 +76,13 @@ type ClusterVoteResponse struct {
 	Term int
 }
 
+// ClusterVote is a vote request and a response in leader election.
 type ClusterVote struct {
 	req  *ClusterVoteRequest
 	resp chan ClusterVoteResponse
 }
 
-func (c *Cluster) failoverInit(config *ClusterFailoverConfig) bool {
+func (c *Cluster) failoverInit(config *clusterFailoverConfig) bool {
 	if config == nil || !config.Enabled {
 		return false
 	}
@@ -102,7 +105,7 @@ func (c *Cluster) failoverInit(config *ClusterFailoverConfig) bool {
 	hb := time.Duration(config.Heartbeat) * time.Millisecond
 	hb = (hb >> 1) + (hb >> 2) + time.Duration(rand.Intn(int(hb>>1)))
 
-	c.fo = &ClusterFailover{
+	c.fo = &clusterFailover{
 		activeNodes:        activeNodes,
 		heartBeat:          hb,
 		voteTimeout:        config.VoteAfter,
@@ -118,7 +121,7 @@ func (c *Cluster) failoverInit(config *ClusterFailoverConfig) bool {
 	return true
 }
 
-// Leader node calls this method to assert leadership and check status
+// Ping is called by the leader node to assert leadership and check status
 // of the followers.
 func (c *Cluster) Ping(ping *ClusterPing, unused *bool) error {
 	select {
@@ -128,7 +131,7 @@ func (c *Cluster) Ping(ping *ClusterPing, unused *bool) error {
 	return nil
 }
 
-// Process request for a vote from a candidate.
+// Vote processes request for a vote from a candidate.
 func (c *Cluster) Vote(vreq *ClusterVoteRequest, response *ClusterVoteResponse) error {
 	respChan := make(chan ClusterVoteResponse, 1)
 

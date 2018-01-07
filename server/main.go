@@ -220,7 +220,7 @@ func main() {
 	}
 }
 
-func getApiKey(req *http.Request) string {
+func getAPIKey(req *http.Request) string {
 	apikey := req.FormValue("apikey")
 	if apikey == "" {
 		apikey = req.Header.Get("X-Tinode-APIKey")

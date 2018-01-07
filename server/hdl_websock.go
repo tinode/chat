@@ -119,7 +119,7 @@ var upgrader = websocket.Upgrader{
 }
 
 func serveWebSocket(wrt http.ResponseWriter, req *http.Request) {
-	if isValid, _ := checkApiKey(getApiKey(req)); !isValid {
+	if isValid, _ := checkAPIKey(getAPIKey(req)); !isValid {
 		http.Error(wrt, "Missing, invalid or expired API key", http.StatusForbidden)
 		log.Println("ws: Missing, invalid or expired API key")
 		return
