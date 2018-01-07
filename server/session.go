@@ -368,7 +368,7 @@ func (s *Session) publish(msg *ClientComMessage) {
 	}
 }
 
-// Authenticate
+// Client metadata
 func (s *Session) hello(msg *ClientComMessage) {
 
 	if msg.Hi.Version == "" {
@@ -455,6 +455,8 @@ func (s *Session) login(msg *ClientComMessage) {
 	}
 
 	uid, authLvl, expires, authErr := handler.Authenticate(msg.Login.Secret)
+	log.Println("Login result:", authErr.Code, authErr.Err)
+
 	if authErr.IsError() {
 		log.Println(authErr.Err)
 	}
@@ -472,6 +474,7 @@ func (s *Session) login(msg *ClientComMessage) {
 
 	// All other errors are reported as invalid login or password
 	if uid.IsZero() {
+		log.Println("Zero UID")
 		s.queueOut(ErrAuthFailed(msg.Login.Id, "", msg.timestamp))
 		return
 	}
@@ -489,7 +492,7 @@ func (s *Session) login(msg *ClientComMessage) {
 	}
 	secret, expires, authErr := handler.GenSecret(uid, authLvl, tokenLifetime)
 	if authErr.IsError() {
-		log.Println(authErr.Err)
+		log.Println("auth basic: failed to generate token", authErr.Code, authErr.Err)
 		s.queueOut(ErrAuthFailed(msg.Login.Id, "", msg.timestamp))
 		return
 	}
@@ -519,6 +522,8 @@ func (s *Session) acc(msg *ClientComMessage) {
 
 	authhdl := store.GetAuthHandler(msg.Acc.Scheme)
 	if strings.HasPrefix(msg.Acc.User, "new") {
+		log.Println("Creating new account")
+
 		if authhdl == nil {
 			// New accounts must have an authentication scheme
 			s.queueOut(ErrMalformed(msg.Acc.Id, "", msg.timestamp))
@@ -607,16 +612,15 @@ func (s *Session) acc(msg *ClientComMessage) {
 		reply := NoErrCreated(msg.Acc.Id, "", msg.timestamp)
 		params := map[string]interface{}{
 			"user": user.Uid().UserId(),
+			"desc": &MsgTopicDesc{
+				CreatedAt: &user.CreatedAt,
+				UpdatedAt: &user.UpdatedAt,
+				DefaultAcs: &MsgDefaultAcsMode{
+					Auth: user.Access.Auth.String(),
+					Anon: user.Access.Anon.String()},
+				Public:  user.Public,
+				Private: private},
 		}
-
-		params["desc"] = &MsgTopicDesc{
-			CreatedAt: &user.CreatedAt,
-			UpdatedAt: &user.UpdatedAt,
-			DefaultAcs: &MsgDefaultAcsMode{
-				Auth: user.Access.Auth.String(),
-				Anon: user.Access.Anon.String()},
-			Public:  user.Public,
-			Private: private}
 
 		if msg.Acc.Login {
 			// User wants to use the new account for authentication. Generate token and resord session.
@@ -639,6 +643,7 @@ func (s *Session) acc(msg *ClientComMessage) {
 		}
 
 		reply.Ctrl.Params = params
+		log.Println("Account params", params)
 		s.queueOut(reply)
 
 		pluginAccount(&user, plgActCreate)

@@ -52,7 +52,7 @@ func NewErr(code int, err error) AuthErr {
 
 // IsError checks if the venue represents an actual error.
 func (a AuthErr) IsError() bool {
-	return a.Code <= InfoNotModified
+	return a.Code > InfoNotModified
 }
 
 // AuthHandler is the interface which auth providers must implement.
