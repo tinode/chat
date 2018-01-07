@@ -456,7 +456,7 @@ func (s *Session) login(msg *ClientComMessage) {
 
 	uid, authLvl, expires, authErr := handler.Authenticate(msg.Login.Secret)
 	if authErr.IsError() {
-		log.Println(authErr.Err)
+		log.Println("auth result", authErr.Err)
 	}
 
 	if authErr.Code == auth.ErrMalformed {
@@ -640,7 +640,6 @@ func (s *Session) acc(msg *ClientComMessage) {
 		}
 
 		reply.Ctrl.Params = params
-		log.Println("Account params", params)
 		s.queueOut(reply)
 
 		pluginAccount(&user, plgActCreate)
