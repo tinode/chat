@@ -455,8 +455,6 @@ func (s *Session) login(msg *ClientComMessage) {
 	}
 
 	uid, authLvl, expires, authErr := handler.Authenticate(msg.Login.Secret)
-	log.Println("Login result:", authErr.Code, authErr.Err)
-
 	if authErr.IsError() {
 		log.Println(authErr.Err)
 	}
@@ -474,7 +472,6 @@ func (s *Session) login(msg *ClientComMessage) {
 
 	// All other errors are reported as invalid login or password
 	if uid.IsZero() {
-		log.Println("Zero UID")
 		s.queueOut(ErrAuthFailed(msg.Login.Id, "", msg.timestamp))
 		return
 	}
@@ -492,7 +489,7 @@ func (s *Session) login(msg *ClientComMessage) {
 	}
 	secret, expires, authErr := handler.GenSecret(uid, authLvl, tokenLifetime)
 	if authErr.IsError() {
-		log.Println("auth basic: failed to generate token", authErr.Code, authErr.Err)
+		log.Println("auth failed to generate token", authErr.Code, authErr.Err)
 		s.queueOut(ErrAuthFailed(msg.Login.Id, "", msg.timestamp))
 		return
 	}
