@@ -11,7 +11,8 @@ import (
 // Uid is a database-specific record id, suitable to be used as a primary key.
 type Uid uint64
 
-var ZeroUid Uid = 0
+// ZeroUid is a constant representing uninitialized Uid.
+const ZeroUid Uid = 0
 
 const (
 	uid_BASE64_UNPADDED = 11
@@ -21,11 +22,12 @@ const (
 	p2p_BASE64_PADDED   = 24
 )
 
+// IsZero checks if Uid is uninitialized.
 func (uid Uid) IsZero() bool {
 	return uid == 0
 }
 
-// Compare returns 0 if uid is equal to u2, 1 if u2 is greater than uid, -1 if u2 is smaller
+// Compare returns 0 if uid is equal to u2, 1 if u2 is greater than uid, -1 if u2 is smaller.
 func (uid Uid) Compare(u2 Uid) int {
 	if uid < u2 {
 		return -1
@@ -35,12 +37,14 @@ func (uid Uid) Compare(u2 Uid) int {
 	return 0
 }
 
+// MarshalBinary converts Uid to byte slice.
 func (uid *Uid) MarshalBinary() ([]byte, error) {
 	dst := make([]byte, 8)
 	binary.LittleEndian.PutUint64(dst, uint64(*uid))
 	return dst, nil
 }
 
+// UnmarshalBinary reads Uid from byte slice.
 func (uid *Uid) UnmarshalBinary(b []byte) error {
 	if len(b) < 8 {
 		return errors.New("Uid.UnmarshalBinary: invalid length")
@@ -49,6 +53,7 @@ func (uid *Uid) UnmarshalBinary(b []byte) error {
 	return nil
 }
 
+// UnmarshalText reads Uid from string represented as byte slice.
 func (uid *Uid) UnmarshalText(src []byte) error {
 	if len(src) != uid_BASE64_UNPADDED {
 		return errors.New("Uid.UnmarshalText: invalid length")
@@ -68,6 +73,7 @@ func (uid *Uid) UnmarshalText(src []byte) error {
 	return nil
 }
 
+// MarshalText converts Uid to string represented as byte slice.
 func (uid *Uid) MarshalText() ([]byte, error) {
 	if *uid == 0 {
 		return []byte{}, nil
@@ -79,11 +85,13 @@ func (uid *Uid) MarshalText() ([]byte, error) {
 	return dst[0:uid_BASE64_UNPADDED], nil
 }
 
+// MarshalJSON converts Uid to double quoted ("ajjj") string.
 func (uid *Uid) MarshalJSON() ([]byte, error) {
 	dst, _ := uid.MarshalText()
 	return append(append([]byte{'"'}, dst...), '"'), nil
 }
 
+// UnmarshalJSON reads Uid from a double quoted string.
 func (uid *Uid) UnmarshalJSON(b []byte) error {
 	size := len(b)
 	if size != (uid_BASE64_UNPADDED + 2) {
@@ -94,27 +102,30 @@ func (uid *Uid) UnmarshalJSON(b []byte) error {
 	return uid.UnmarshalText(b[1 : size-1])
 }
 
+// String converts Uid to string
 func (uid Uid) String() string {
 	buf, _ := uid.MarshalText()
 	return string(buf)
 }
 
-// Parse UID parses string NOT prefixed with anything
+// ParseUid parses string NOT prefixed with anything
 func ParseUid(s string) Uid {
 	var uid Uid
 	uid.UnmarshalText([]byte(s))
 	return uid
 }
 
-// User ID prefixed with 'usr', like usrXXXXX
+// UserId converts Uid to string prefixed with 'usr', like usrXXXXX
 func (uid Uid) UserId() string {
 	return uid.PrefixId("usr")
 }
 
+// FndName generates 'fnd' topic name for the given Uid.
 func (uid Uid) FndName() string {
 	return uid.PrefixId("fnd")
 }
 
+// PrefixId converts Uid to string prefixed with the given prefix.
 func (uid Uid) PrefixId(prefix string) string {
 	if uid.IsZero() {
 		return ""
@@ -131,7 +142,7 @@ func ParseUserId(s string) Uid {
 	return uid
 }
 
-// Given two UIDs generate a P2P topic name
+// P2PName takes two Uids and generates a P2P topic name
 func (uid Uid) P2PName(u2 Uid) string {
 	if !uid.IsZero() && !u2.IsZero() {
 		b1, _ := uid.MarshalBinary()
@@ -152,7 +163,7 @@ func (uid Uid) P2PName(u2 Uid) string {
 	return ""
 }
 
-// ParseP2P extracts uids from the name of a p2p topic
+// ParseP2P extracts uids from the name of a p2p topic.
 func ParseP2P(p2p string) (uid1, uid2 Uid, err error) {
 	if strings.HasPrefix(p2p, "p2p") {
 		src := []byte(p2p)[3:]
@@ -181,7 +192,7 @@ func ParseP2P(p2p string) (uid1, uid2 Uid, err error) {
 	return
 }
 
-// Header shared by all stored objects
+// ObjHeader is the header shared by all stored objects.
 type ObjHeader struct {
 	Id        string // using string to get around rethinkdb's problems with unit64
 	id        Uid
@@ -190,6 +201,7 @@ type ObjHeader struct {
 	DeletedAt *time.Time `json:"DeletedAt,omitempty"`
 }
 
+// Uid assigns Uid header field.
 func (h *ObjHeader) Uid() Uid {
 	if h.id.IsZero() && h.Id != "" {
 		h.id.UnmarshalText([]byte(h.Id))
@@ -197,11 +209,13 @@ func (h *ObjHeader) Uid() Uid {
 	return h.id
 }
 
+// SetUid assigns given Uid to appropriate header fields.
 func (h *ObjHeader) SetUid(uid Uid) {
 	h.id = uid
 	h.Id = uid.String()
 }
 
+// TimeNow returns current wall time in UTC rounded to milliseconds.
 func TimeNow() time.Time {
 	return time.Now().UTC().Round(time.Millisecond)
 }
@@ -215,7 +229,7 @@ func (h *ObjHeader) InitTimes() {
 	h.DeletedAt = nil
 }
 
-// InitTimes intelligently copies time.Time variables from h2 to h.
+// MergeTimes intelligently copies time.Time variables from h2 to h.
 func (h *ObjHeader) MergeTimes(h2 *ObjHeader) {
 	// Set the creation time to the earliest value
 	if h.CreatedAt.IsZero() || (!h2.CreatedAt.IsZero() && h2.CreatedAt.Before(h.CreatedAt)) {
@@ -231,12 +245,12 @@ func (h *ObjHeader) MergeTimes(h2 *ObjHeader) {
 	}
 }
 
-// True if the object is deleted.
+// IsDeleted returns true if the object is deleted.
 func (h *ObjHeader) IsDeleted() bool {
 	return h.DeletedAt != nil
 }
 
-// Stored user
+// User is a representation of a DB-stored user record.
 type User struct {
 	ObjHeader
 	// Currently unused: Unconfirmed, Active, etc.
@@ -265,6 +279,7 @@ type User struct {
 	Devices map[string]*DeviceDef
 }
 
+// AccessMode is a definition of access mode bits.
 type AccessMode uint
 
 // Various access mode constants
@@ -302,6 +317,7 @@ const (
 	ModeInvalid AccessMode = 0x100000
 )
 
+// MarshalText converts AccessMode to string as byte slice.
 func (m AccessMode) MarshalText() ([]byte, error) {
 
 	// TODO: Need to distinguish between "not set" and "no access"
@@ -323,7 +339,8 @@ func (m AccessMode) MarshalText() ([]byte, error) {
 	return res, nil
 }
 
-// Parse access mode string. Do not change the mode if the string is empty or invalid.
+// UnmarshalText parses access mode string as byte slice.
+// Does not change the mode if the string is empty or invalid.
 func (m *AccessMode) UnmarshalText(b []byte) error {
 	m0 := ModeUnset
 
@@ -359,6 +376,7 @@ func (m *AccessMode) UnmarshalText(b []byte) error {
 	return nil
 }
 
+// String returns string representation of AccessMode.
 func (m AccessMode) String() string {
 	res, err := m.MarshalText()
 	if err != nil {
@@ -367,6 +385,7 @@ func (m AccessMode) String() string {
 	return string(res)
 }
 
+// MarshalJSON converts AccessMOde to quoted string.
 func (m AccessMode) MarshalJSON() ([]byte, error) {
 	res, err := m.MarshalText()
 	if err != nil {
@@ -377,6 +396,7 @@ func (m AccessMode) MarshalJSON() ([]byte, error) {
 	return append(res, '"'), nil
 }
 
+// UnmarshalJSON reads AccessMode from a quoted string.
 func (m *AccessMode) UnmarshalJSON(b []byte) error {
 	if b[0] != '"' || b[len(b)-1] != '"' {
 		return errors.New("syntax error")
@@ -385,7 +405,7 @@ func (m *AccessMode) UnmarshalJSON(b []byte) error {
 	return m.UnmarshalText(b[1 : len(b)-1])
 }
 
-// Check if grant mode allows all that was requested in want mode
+// BetterEqual checks if grant mode allows all permissions requested in want mode.
 func (grant AccessMode) BetterEqual(want AccessMode) bool {
 	return grant&want == want
 }
@@ -416,62 +436,62 @@ func (o AccessMode) Delta(n AccessMode) string {
 	return added + removed
 }
 
-// Check if Join flag is set
+// IsJoiner checks if joiner flag J is set.
 func (a AccessMode) IsJoiner() bool {
 	return a&ModeJoin != 0
 }
 
-// Check if owner
+// IsOwner checks if owner bit O is set.
 func (a AccessMode) IsOwner() bool {
 	return a&ModeOwner != 0
 }
 
-// Check if approver
+// IsApprover checks if approver A bit is set.
 func (a AccessMode) IsApprover() bool {
 	return a&ModeApprove != 0
 }
 
-// Check if owner or approver
+// IsAdmin check if owner O or approver A flag is set.
 func (a AccessMode) IsAdmin() bool {
 	return a.IsOwner() || a.IsApprover()
 }
 
-// Approver or sharer or owner
+// IsSharer checks if approver A or sharer S or owner O flag is set.
 func (a AccessMode) IsSharer() bool {
 	return a.IsAdmin() || (a&ModeShare != 0)
 }
 
-// Check if allowed to publish
+// IsWriter checks if allowed to publish (writer flag W is set).
 func (a AccessMode) IsWriter() bool {
 	return a&ModeWrite != 0
 }
 
-// Check if allowed to publish
+// IsReader checks if reader flag R is set.
 func (a AccessMode) IsReader() bool {
 	return a&ModeRead != 0
 }
 
-// Check if user receives presence updates
+// IsPresencer checks if user receives presence updates (P flag set).
 func (a AccessMode) IsPresencer() bool {
 	return a&ModePres != 0
 }
 
-// Check if user can hard-delete messages
+// IsDeleter checks if user can hard-delete messages (D flag is set).
 func (a AccessMode) IsDeleter() bool {
 	return a&ModeDelete != 0
 }
 
-// Check if not set
+// IsZero checks if no flags are set.
 func (a AccessMode) IsZero() bool {
 	return a == 0
 }
 
-// Check if mode is invalid
+// IsInvalid checks if mode is invalid.
 func (a AccessMode) IsInvalid() bool {
 	return a == ModeInvalid
 }
 
-// Relationship between users & topics, stored in database as Subscription
+// TopicAccess is a relationship between users & topics, stored in database as Subscription.
 type TopicAccess struct {
 	User  string
 	Topic string
@@ -479,7 +499,7 @@ type TopicAccess struct {
 	Given AccessMode
 }
 
-// Per-topic default access modes
+// DefaultAccess is a per-topic default access modes
 type DefaultAccess struct {
 	Auth AccessMode
 	Anon AccessMode
@@ -532,63 +552,63 @@ type Subscription struct {
 	modeDefault *DefaultAccess
 }
 
-// SetPublic assigns to public, otherwise not accessible from outside the package
+// SetPublic assigns to public, otherwise not accessible from outside the package.
 func (s *Subscription) SetPublic(pub interface{}) {
 	s.public = pub
 }
 
+// GetPublic reads value of public.
 func (s *Subscription) GetPublic() interface{} {
 	return s.public
 }
 
+// SetWith sets other user for P2P subscriptions.
 func (s *Subscription) SetWith(with string) {
 	s.with = with
 }
 
+// GetWith returns the other user for P2P subscriptions.
 func (s *Subscription) GetWith() string {
 	return s.with
 }
 
+// GetSeqId returns seqId.
 func (s *Subscription) GetSeqId() int {
 	return s.seqId
 }
 
+// SetSeqId sets seqId field.
 func (s *Subscription) SetSeqId(id int) {
 	s.seqId = id
 }
 
-/*
-func (s *Subscription) GetDelId() int {
-	return s.delId
-}
-
-func (s *Subscription) SetDelId(id int) {
-	s.delId = id
-}
-*/
-
+// GetLastSeen returns lastSeen.
 func (s *Subscription) GetLastSeen() time.Time {
 	return s.lastSeen
 }
 
+// GetUserAgent returns userAgent.
 func (s *Subscription) GetUserAgent() string {
 	return s.userAgent
 }
 
+// SetLastSeenAndUA updates lastSeen time and userAgent.
 func (s *Subscription) SetLastSeenAndUA(when time.Time, ua string) {
 	s.lastSeen = when
 	s.userAgent = ua
 }
 
+// SetDefaultAccess updates default access values.
 func (s *Subscription) SetDefaultAccess(auth, anon AccessMode) {
 	s.modeDefault = &DefaultAccess{auth, anon}
 }
 
+// GetDefaultAccess returns default access.
 func (s *Subscription) GetDefaultAccess() *DefaultAccess {
 	return s.modeDefault
 }
 
-// Result of a search for connections
+// Contact is a result of a search for connections
 type Contact struct {
 	Id       string
 	MatchOn  []string
@@ -628,10 +648,7 @@ type Topic struct {
 	perUser map[Uid]*perUserData // deserialized from Subscription
 }
 
-//func (t *Topic) GetAccessList() []TopicAccess {
-//	return t.users
-//}
-
+// GiveAccess updates access mode for the given user.
 func (t *Topic) GiveAccess(uid Uid, want AccessMode, given AccessMode) {
 	if t.perUser == nil {
 		t.perUser = make(map[Uid]*perUserData, 1)
@@ -651,6 +668,7 @@ func (t *Topic) GiveAccess(uid Uid, want AccessMode, given AccessMode) {
 	}
 }
 
+// SetPrivate updates private value for the given user.
 func (t *Topic) SetPrivate(uid Uid, private interface{}) {
 	if t.perUser == nil {
 		t.perUser = make(map[Uid]*perUserData, 1)
@@ -663,10 +681,12 @@ func (t *Topic) SetPrivate(uid Uid, private interface{}) {
 	t.perUser[uid] = pud
 }
 
+// GetOwner returns topic's owner.
 func (t *Topic) GetOwner() Uid {
 	return t.owner
 }
 
+// GetPrivate returns given user's private value.
 func (t *Topic) GetPrivate(uid Uid) (private interface{}) {
 	if t.perUser == nil {
 		return
@@ -679,6 +699,7 @@ func (t *Topic) GetPrivate(uid Uid) (private interface{}) {
 	return
 }
 
+// GetAccess returns given user's access mode.
 func (t *Topic) GetAccess(uid Uid) (mode AccessMode) {
 	if t.perUser == nil {
 		return
@@ -691,12 +712,13 @@ func (t *Topic) GetAccess(uid Uid) (mode AccessMode) {
 	return
 }
 
+// SoftDelete is a single DB record of soft-deletetion.
 type SoftDelete struct {
 	User  string
 	DelId int
 }
 
-// Stored {data} message
+// Message is a stored {data} message
 type Message struct {
 	ObjHeader
 	// ID of the hard-delete operation
@@ -711,22 +733,26 @@ type Message struct {
 	Content interface{}
 }
 
-// A range of message SeqIDs. If one ID in range, Hi is set to 0 or unset
+// Range is a range of message SeqIDs. If one ID in range, Hi is set to 0 or unset
 type Range struct {
 	Low int
 	Hi  int `json:"Hi,omitempty"`
 }
 
+// RangeSorter is a helper type required by 'sort' package.
 type RangeSorter []Range
 
+// Len is the length of range.
 func (rs RangeSorter) Len() int {
 	return len(rs)
 }
+
+// Swap swaps two items in a slice.
 func (rs RangeSorter) Swap(i, j int) {
 	rs[i], rs[j] = rs[j], rs[i]
 }
 
-// Sort by Low ascending, then sort by Hi descending
+// Less is a comparator. Sort by Low ascending, then sort by Hi descending
 func (rs RangeSorter) Less(i, j int) bool {
 	if rs[i].Low < rs[j].Low {
 		return true
@@ -765,7 +791,7 @@ func (rs RangeSorter) Normalize() {
 	}
 }
 
-// Log entry of a deleted message range
+// DelMessage is a log entry of a deleted message range.
 type DelMessage struct {
 	ObjHeader
 	Topic       string
@@ -774,22 +800,28 @@ type DelMessage struct {
 	SeqIdRanges []Range
 }
 
-// Id-based query, [since, before] - both ends inclusive (closed)
+// BrowseOpt is an ID-based query, [since, before] - both ends inclusive (closed)
 type BrowseOpt struct {
 	Since  int
 	Before int
 	Limit  int
 }
 
+// TopicCat is an enum of topic categories.
 type TopicCat int
 
 const (
+	// TopicCat_Me is 'me' topic.
 	TopicCat_Me TopicCat = iota
+	// TopicCat_Fnd is 'fnd' topic.
 	TopicCat_Fnd
+	// TopicCat_P2P is a 'p2p topic.
 	TopicCat_P2P
+	// TopicCat_Grp is a group topic.
 	TopicCat_Grp
 )
 
+// GetTopicCat given topic name retuns topic category.
 func GetTopicCat(name string) TopicCat {
 	switch name[:3] {
 	case "usr":
@@ -805,8 +837,8 @@ func GetTopicCat(name string) TopicCat {
 	}
 }
 
-// Data provided by connected device. Used primarily for
-// push notifications
+// DeviceDef is the data provided by connected device. Used primarily for
+// push notifications.
 type DeviceDef struct {
 	// Device registration ID
 	DeviceId string

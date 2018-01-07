@@ -55,22 +55,26 @@ func Open(jsonconf string) error {
 	return adaptr.Open(string(config.AdapterConfig))
 }
 
+// Close terminates connection to persistent storage.
 func Close() error {
 	if adaptr.IsOpen() {
 		return adaptr.Close()
-	} else {
-		return errors.New("store: connection already closed")
 	}
+
+	return errors.New("store: connection already closed")
 }
 
+// IsOpen checks if persistent storage connection has been initialized.
 func IsOpen() bool {
 	if adaptr != nil {
 		return adaptr.IsOpen()
-	} else {
-		return false
 	}
+
+	return false
 }
 
+// InitDb creates a new database instance. If 'reset' is true it will first attempt to drop
+// existing database.
 func InitDb(reset bool) error {
 	return adaptr.CreateDb(reset)
 }
@@ -89,23 +93,23 @@ func Register(name string, adapter adapter.Adapter) {
 	adaptr = adapter
 }
 
-// Generate unique ID
+// GetUid generates a unique ID suitable for use as a primary key.
 func GetUid() types.Uid {
 	return uGen.Get()
 }
 
-// Generate unique ID as string
+// GetUidString generate unique ID as string
 func GetUidString() string {
 	return uGen.GetStr()
 }
 
-// Users struct to hold methods for persistence mapping for the User object.
+// UsersObjMapper is a users struct to hold methods for persistence mapping for the User object.
 type UsersObjMapper struct{}
 
 // Users is the ancor for storing/retrieving User objects
 var Users UsersObjMapper
 
-// CreateUser inserts User object into a database, updates creation time and assigns UID
+// Create inserts User object into a database, updates creation time and assigns UID
 func (u UsersObjMapper) Create(user *types.User, private interface{}) (*types.User, error) {
 
 	user.SetUid(GetUid())
@@ -145,19 +149,20 @@ func (u UsersObjMapper) Create(user *types.User, private interface{}) (*types.Us
 	return user, nil
 }
 
-// Given a unique identifier and a authentication scheme name, fetch user ID and authentication secret
+// GetAuthRecord takes a unique identifier and a authentication scheme name, fetches user ID and
+// authentication secret.
 func (UsersObjMapper) GetAuthRecord(scheme, unique string) (types.Uid, int, []byte, time.Time, error) {
 	return adaptr.GetAuthRecord(scheme + ":" + unique)
 }
 
-// Create a new authentication record for user
+// AddAuthRecord creates a new authentication record for the given user.
 func (UsersObjMapper) AddAuthRecord(uid types.Uid, authLvl int, scheme, unique string, secret []byte,
 	expires time.Time) (error, bool) {
 
 	return adaptr.AddAuthRecord(uid, authLvl, scheme+":"+unique, secret, expires)
 }
 
-// Update authentication record with a new secret and expiration time
+// UpdateAuthRecord updates authentication record with a new secret and expiration time.
 func (UsersObjMapper) UpdateAuthRecord(uid types.Uid, authLvl int, scheme, unique string,
 	secret []byte, expires time.Time) (int, error) {
 
@@ -174,6 +179,7 @@ func (UsersObjMapper) GetAll(uid ...types.Uid) ([]types.User, error) {
 	return adaptr.UserGetAll(uid...)
 }
 
+// Delete deletes a user record (not implemented).
 // TODO(gene): implement
 func (UsersObjMapper) Delete(id types.Uid, soft bool) error {
 	// Maybe delete topics where the user is the owner and all subscriptions to those topics, and messages
@@ -184,14 +190,18 @@ func (UsersObjMapper) Delete(id types.Uid, soft bool) error {
 	return errors.New("store: not implemented")
 }
 
+// UpdateStatus updates user status (not implemented).
+// TODO(gene): implement
 func (UsersObjMapper) UpdateStatus(id types.Uid, status interface{}) error {
 	return errors.New("store: not implemented")
 }
 
+// UpdateLastSeen updates LastSeen and UserAgent.
 func (UsersObjMapper) UpdateLastSeen(uid types.Uid, userAgent string, when time.Time) error {
 	return adaptr.UserUpdateLastSeen(uid, userAgent, when)
 }
 
+// Update is a generic user data update.
 func (UsersObjMapper) Update(uid types.Uid, update map[string]interface{}) error {
 	update["UpdatedAt"] = types.TimeNow()
 	return adaptr.UserUpdate(uid, update)
@@ -202,7 +212,7 @@ func (u UsersObjMapper) GetSubs(id types.Uid) ([]types.Subscription, error) {
 	return adaptr.SubsForUser(id, false)
 }
 
-// GetSubs loads a list of subscriptions for the given user
+// FindSubs loads a list of users for the given tags.
 func (u UsersObjMapper) FindSubs(id types.Uid, query []interface{}) ([]types.Subscription, error) {
 	return adaptr.FindSubs(id, query)
 }
@@ -212,18 +222,19 @@ func (u UsersObjMapper) GetTopics(id types.Uid) ([]types.Subscription, error) {
 	return adaptr.TopicsForUser(id, false)
 }
 
-// GetTopics load a list of user's subscriptions with Public field copied to subscription.
+// GetTopicsAny load a list of user's subscriptions with Public field copied to subscription.
 // Deleted topics are returned too.
 func (u UsersObjMapper) GetTopicsAny(id types.Uid) ([]types.Subscription, error) {
 	return adaptr.TopicsForUser(id, true)
 }
 
-// Topics struct to hold methods for persistence mapping for the topic object.
+// TopicsObjMapper is a struct to hold methods for persistence mapping for the topic object.
 type TopicsObjMapper struct{}
 
+// Topics is an instance of TopicsObjMapper to map methods to.
 var Topics TopicsObjMapper
 
-// Creates a topic and owner's subscription to it
+// Create creates a topic and owner's subscription to it.
 func (TopicsObjMapper) Create(topic *types.Topic, owner types.Uid, private interface{}) error {
 
 	topic.InitTimes()
@@ -275,17 +286,13 @@ func (TopicsObjMapper) GetSubs(topic string) ([]types.Subscription, error) {
 	return adaptr.SubsForTopic(topic, false)
 }
 
-// GetSubs loads a list of subscriptions to the given topic, including deleted subscriptions.
-// user.Public is not loaded
-// func (TopicsObjMapper) GetSubsAny(topic string) ([]types.Subscription, error) {
-//	return adaptr.SubsForTopic(topic, true)
-// }
-
+// Update is a generic topic update.
 func (TopicsObjMapper) Update(topic string, update map[string]interface{}) error {
 	update["UpdatedAt"] = types.TimeNow()
 	return adaptr.TopicUpdate(topic, update)
 }
 
+// Delete deletes topic, messages and subscriptions.
 func (TopicsObjMapper) Delete(topic string) error {
 	if err := adaptr.SubsDelForTopic(topic); err != nil {
 		return err
@@ -297,11 +304,13 @@ func (TopicsObjMapper) Delete(topic string) error {
 	return adaptr.TopicDelete(topic)
 }
 
-// Topics struct to hold methods for persistence mapping for the topic object.
+// SubsObjMapper is A struct to hold methods for persistence mapping for the Subscription object.
 type SubsObjMapper struct{}
 
+// Subs is an instance of SubsObjMapper to map methods to.
 var Subs SubsObjMapper
 
+// Create creates multiple subscriptions
 func (SubsObjMapper) Create(subs ...*types.Subscription) error {
 	for _, sub := range subs {
 		sub.InitTimes()
@@ -327,9 +336,10 @@ func (SubsObjMapper) Delete(topic string, user types.Uid) error {
 	return adaptr.SubsDelete(topic, user)
 }
 
-// Messages struct to hold methods for persistence mapping for the Message object.
+// MessagesObjMapper is a struct to hold methods for persistence mapping for the Message object.
 type MessagesObjMapper struct{}
 
+// Messages is an instance of MessagesObjMapper to map methods to.
 var Messages MessagesObjMapper
 
 // Save message
@@ -344,12 +354,13 @@ func (MessagesObjMapper) Save(msg *types.Message) error {
 	return adaptr.MessageSave(msg)
 }
 
-func (MessagesObjMapper) DeleteList(topic string, delId int, forUser types.Uid, ranges []types.Range) error {
+// DeleteList deletes multiple messages defined by a list of ranges.
+func (MessagesObjMapper) DeleteList(topic string, delID int, forUser types.Uid, ranges []types.Range) error {
 	var toDel *types.DelMessage
-	if delId > 0 {
+	if delID > 0 {
 		toDel = &types.DelMessage{
 			Topic:       topic,
-			DelId:       delId,
+			DelId:       delID,
 			DeletedFor:  forUser.String(),
 			SeqIdRanges: ranges}
 		toDel.InitTimes()
@@ -360,26 +371,27 @@ func (MessagesObjMapper) DeleteList(topic string, delId int, forUser types.Uid, 
 		return err
 	}
 
-	if delId > 0 {
+	if delID > 0 {
 		// Record ID of the delete transaction
-		err = adaptr.TopicUpdate(topic, map[string]interface{}{"DelId": delId})
+		err = adaptr.TopicUpdate(topic, map[string]interface{}{"DelId": delID})
 		if err != nil {
 			return err
 		}
 
 		// Soft-deleting will update one subscription, hard-deleting will ipdate all.
 		// Soft- or hard- is defined by the forUSer being defined.
-		return adaptr.SubsUpdate(topic, forUser, map[string]interface{}{"DelId": delId})
+		return adaptr.SubsUpdate(topic, forUser, map[string]interface{}{"DelId": delID})
 	}
 
 	return nil
 }
 
+// GetAll returns multiple messages.
 func (MessagesObjMapper) GetAll(topic string, forUser types.Uid, opt *types.BrowseOpt) ([]types.Message, error) {
 	return adaptr.MessageGetAll(topic, forUser, opt)
 }
 
-// Returns the ranges of deleted messages and the largesr DelId reported in the list
+// GetDeleted returns the ranges of deleted messages and the largesr DelId reported in the list.
 func (MessagesObjMapper) GetDeleted(topic string, forUser types.Uid, opt *types.BrowseOpt) ([]types.Range, int, error) {
 	dmsgs, err := adaptr.MessageGetDeleted(topic, forUser, opt)
 	if err != nil {
@@ -387,23 +399,24 @@ func (MessagesObjMapper) GetDeleted(topic string, forUser types.Uid, opt *types.
 	}
 
 	var ranges []types.Range
-	var maxId int
+	var maxID int
 	// Flatten out the ranges
 	for _, dm := range dmsgs {
-		if dm.DelId > maxId {
-			maxId = dm.DelId
+		if dm.DelId > maxID {
+			maxID = dm.DelId
 		}
 		ranges = append(ranges, dm.SeqIdRanges...)
 	}
 	sort.Sort(types.RangeSorter(ranges))
 	types.RangeSorter(ranges).Normalize()
 
-	return ranges, maxId, nil
+	return ranges, maxID, nil
 }
 
+// Registered authentication handlers.
 var authHandlers map[string]auth.AuthHandler
 
-// Register an authentication scheme handler
+// RegisterAuthScheme registers an authentication scheme handler.
 func RegisterAuthScheme(name string, handler auth.AuthHandler) {
 	if authHandlers == nil {
 		authHandlers = make(map[string]auth.AuthHandler)
@@ -418,19 +431,22 @@ func RegisterAuthScheme(name string, handler auth.AuthHandler) {
 	authHandlers[name] = handler
 }
 
+// GetAuthHandler returns an auth handler by name.
 func GetAuthHandler(name string) auth.AuthHandler {
 	return authHandlers[name]
 }
 
-// Storage for device IDs, used to generate push notifications
+// DeviceMapper is a struct to map methods used for handling device IDs, used to generate push notifications.
 type DeviceMapper struct{}
 
+// Devices is an instance of DeviceMapper to map methods to.
 var Devices DeviceMapper
 
-func (DeviceMapper) Update(uid types.Uid, oldDeviceId string, dev *types.DeviceDef) error {
+// Update updates a device record.
+func (DeviceMapper) Update(uid types.Uid, oldDeviceID string, dev *types.DeviceDef) error {
 	// If the old device Id is specified and it's different from the new ID, delete the old id
-	if oldDeviceId != "" && (dev == nil || dev.DeviceId != oldDeviceId) {
-		if err := adaptr.DeviceDelete(uid, oldDeviceId); err != nil {
+	if oldDeviceID != "" && (dev == nil || dev.DeviceId != oldDeviceID) {
+		if err := adaptr.DeviceDelete(uid, oldDeviceID); err != nil {
 			return err
 		}
 	}
@@ -442,10 +458,12 @@ func (DeviceMapper) Update(uid types.Uid, oldDeviceId string, dev *types.DeviceD
 	return nil
 }
 
+// GetAll returns all known device IDS for a given list of user IDs.
 func (DeviceMapper) GetAll(uid ...types.Uid) (map[types.Uid][]types.DeviceDef, int, error) {
 	return adaptr.DeviceGetAll(uid...)
 }
 
-func (DeviceMapper) Delete(uid types.Uid, deviceId string) error {
-	return adaptr.DeviceDelete(uid, deviceId)
+// Delete deletes device record for a given user.
+func (DeviceMapper) Delete(uid types.Uid, deviceID string) error {
+	return adaptr.DeviceDelete(uid, deviceID)
 }
