@@ -821,7 +821,7 @@ const (
 	TopicCat_Grp
 )
 
-// GetTopicCat given topic name retuns topic category.
+// GetTopicCat given topic name returns topic category.
 func GetTopicCat(name string) TopicCat {
 	switch name[:3] {
 	case "usr":

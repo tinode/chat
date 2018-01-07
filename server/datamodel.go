@@ -14,14 +14,17 @@ import (
 	"time"
 )
 
+// JsonDuration is a basic time.Duration with defined UnmarshalJSON (deprecated).
 type JsonDuration time.Duration
 
+// UnmarshalJSON reads Duration from the JSON string.
 func (jd *JsonDuration) UnmarshalJSON(data []byte) (err error) {
 	d, err := time.ParseDuration(strings.Trim(string(data), "\""))
 	*jd = JsonDuration(d)
 	return err
 }
 
+// MsgBrowseOpts defines parameters for queries by massage IDs.
 type MsgBrowseOpts struct {
 	// Load messages/ranges with IDs equal or greater than this (inclusive or closed)
 	SinceId int `json:"since,omitempty"`
@@ -31,11 +34,13 @@ type MsgBrowseOpts struct {
 	Limit int `json:"limit,omitempty"`
 }
 
+// MsgGetOpts defines parameters for queries by last modified time.
 type MsgGetOpts struct {
 	IfModifiedSince *time.Time `json:"ims,omitempty"`
 	Limit           int        `json:"limit,omitempty"`
 }
 
+// MsgGetQuery is a topic metadata or data query.
 type MsgGetQuery struct {
 	What string `json:"what"`
 
@@ -49,7 +54,7 @@ type MsgGetQuery struct {
 	Del *MsgBrowseOpts `json:"del,omitempty"`
 }
 
-// MsgSetSub: payload in set.sub request to update current subscription or invite another user, {sub.what} == "sub"
+// MsgSetSub is a payload in set.sub request to update current subscription or invite another user, {sub.what} == "sub"
 type MsgSetSub struct {
 	// User affected by this request. Default (empty): current user
 	User string `json:"user,omitempty"`
@@ -58,13 +63,14 @@ type MsgSetSub struct {
 	Mode string `json:"mode,omitempty"`
 }
 
-// MsgSetDesc: C2S in set.what == "desc" and sub.init message
+// MsgSetDesc is a C2S in set.what == "desc" and sub.init message
 type MsgSetDesc struct {
 	DefaultAcs *MsgDefaultAcsMode `json:"defacs,omitempty"` // default access mode
 	Public     interface{}        `json:"public,omitempty"`
 	Private    interface{}        `json:"private,omitempty"` // Per-subscription private data
 }
 
+// MsgSetQuery is an update to topic metadata Desc or subscriptions.
 type MsgSetQuery struct {
 	// Topic metadata, new topic & new subscriptions only
 	Desc *MsgSetDesc `json:"desc,omitempty"`
@@ -72,14 +78,14 @@ type MsgSetQuery struct {
 	Sub *MsgSetSub `json:"sub,omitempty"`
 }
 
-// fndXXX.private is set to this object.
+// MsgFindQuery is a format of fndXXX.private.
 type MsgFindQuery struct {
 	// List of tags to query for. Tags of the form "email:jdoe@example.com" or "tel:18005551212"
 	Tags []string `json:"tags"`
 }
 
-// Either an individual ID (HiId=0) or a randge of deleted IDs, low end inclusive (closed), high-end exclusive
-// (open): [LowId .. HiId), e.g. 1..5 -> 1, 2, 3, 4
+// MsgDelRange is aither an individual ID (HiId=0) or a randge of deleted IDs, low end inclusive (closed),
+// high-end exclusive (open): [LowId .. HiId), e.g. 1..5 -> 1, 2, 3, 4
 type MsgDelRange struct {
 	LowId int `json:"low,omitempty"`
 	HiId  int `json:"hi,omitempty"`
@@ -87,7 +93,7 @@ type MsgDelRange struct {
 
 // Client to Server (C2S) messages
 
-// Handshake {hi} message
+// MsgClientHi is a handshake {hi} message.
 type MsgClientHi struct {
 	// Message Id
 	Id string `json:"id,omitempty"`
@@ -101,7 +107,7 @@ type MsgClientHi struct {
 	Lang string `json:"lang,omitempty"`
 }
 
-// User creation message {acc}
+// MsgClientAcc is a user creation message {acc}.
 type MsgClientAcc struct {
 	// Message Id
 	Id string `json:"id,omitempty"`
@@ -119,7 +125,7 @@ type MsgClientAcc struct {
 	Desc *MsgSetDesc `json:"desc,omitempty"`
 }
 
-// Login {login} message
+// MsgClientLogin is a login {login} message.
 type MsgClientLogin struct {
 	// Message Id
 	Id string `json:"id,omitempty"`
@@ -129,7 +135,7 @@ type MsgClientLogin struct {
 	Secret []byte `json:"secret"`
 }
 
-// Subscription request {sub} message
+// MsgClientSub is a subscription request {sub} message.
 type MsgClientSub struct {
 	Id    string `json:"id,omitempty"`
 	Topic string `json:"topic"`
@@ -187,13 +193,13 @@ func parseMsgClientDel(params string) int {
 	return bits
 }
 
-// Topic default access mode
+// MsgDefaultAcsMode is a topic default access mode.
 type MsgDefaultAcsMode struct {
 	Auth string `json:"auth,omitempty"`
 	Anon string `json:"anon,omitempty"`
 }
 
-// Unsubscribe {leave} request message
+// MsgClientLeave is an unsubscribe {leave} request message.
 type MsgClientLeave struct {
 	Id    string `json:"id,omitempty"`
 	Topic string `json:"topic"`
@@ -209,21 +215,21 @@ type MsgClientPub struct {
 	Content interface{}       `json:"content"`
 }
 
-// Query topic state {get}
+// MsgClientGet is a query of topic state {get}.
 type MsgClientGet struct {
 	Id    string `json:"id,omitempty"`
 	Topic string `json:"topic"`
 	MsgGetQuery
 }
 
-// Update topic state {set}
+// MsgClientSet is an update of topic state {set}
 type MsgClientSet struct {
 	Id    string `json:"id,omitempty"`
 	Topic string `json:"topic"`
 	MsgSetQuery
 }
 
-// MsgClientDel delete messages or topic
+// MsgClientDel delete messages or topic {del}.
 type MsgClientDel struct {
 	Id    string `json:"id,omitempty"`
 	Topic string `json:"topic"`
@@ -238,7 +244,7 @@ type MsgClientDel struct {
 	Hard bool `json:"hard,omitempty"`
 }
 
-// MsgClientNote is a client-generated notification for topic subscribers
+// MsgClientNote is a client-generated notification for topic subscribers {note}.
 type MsgClientNote struct {
 	// There is no Id -- server will not akn {ping} packets, they are "fire and forget"
 	Topic string `json:"topic"`
@@ -248,6 +254,7 @@ type MsgClientNote struct {
 	SeqId int `json:"seq,omitempty"`
 }
 
+// ClientComMessage is a wrapper for client messages.
 type ClientComMessage struct {
 	Hi    *MsgClientHi    `json:"hi"`
 	Acc   *MsgClientAcc   `json:"acc"`
@@ -276,6 +283,7 @@ type MsgLastSeenInfo struct {
 	UserAgent string `json:"ua,omitempty"`
 }
 
+// MsgAccessMode is a definition of access mode.
 type MsgAccessMode struct {
 	// Access mode requested by the user
 	Want string `json:"want,omitempty"`
@@ -285,7 +293,7 @@ type MsgAccessMode struct {
 	Mode string `json:"mode,omitempty"`
 }
 
-// Topic description, S2C in Meta message
+// MsgTopicDesc is a topic description, S2C in Meta message.
 type MsgTopicDesc struct {
 	CreatedAt *time.Time `json:"created,omitempty"`
 	UpdatedAt *time.Time `json:"updated,omitempty"`
@@ -306,7 +314,7 @@ type MsgTopicDesc struct {
 	Private interface{} `json:"private,omitempty"`
 }
 
-// MsgTopicSub: topic subscription details, sent in Meta message
+// MsgTopicSub is topic subscription details, sent in Meta message.
 type MsgTopicSub struct {
 	// Fields common to all subscriptions
 
@@ -351,11 +359,13 @@ type MsgTopicSub struct {
 	LastSeen *MsgLastSeenInfo `json:"seen,omitempty"`
 }
 
+// MsgDelValues describes request to delete messages.
 type MsgDelValues struct {
 	DelId  int           `json:"clear,omitempty"`
 	DelSeq []MsgDelRange `json:"delseq,omitempty"`
 }
 
+// MsgServerCtrl is a server control message {ctrl}.
 type MsgServerCtrl struct {
 	Id     string      `json:"id,omitempty"`
 	Topic  string      `json:"topic,omitempty"`
@@ -366,6 +376,7 @@ type MsgServerCtrl struct {
 	Timestamp time.Time `json:"ts"`
 }
 
+// MsgServerData is a server {data} message.
 type MsgServerData struct {
 	Topic string `json:"topic"`
 	// ID of the user who originated the message as {pub}, could be empty if sent by the system
@@ -377,6 +388,7 @@ type MsgServerData struct {
 	Content   interface{}       `json:"content"`
 }
 
+// MsgServerPres is presence notification {pres} (authoritative update).
 type MsgServerPres struct {
 	Topic     string         `json:"topic"`
 	Src       string         `json:"src"`
@@ -404,6 +416,7 @@ type MsgServerPres struct {
 	singleUser string
 }
 
+// MsgServerMeta is a topic metadata {meta} update.
 type MsgServerMeta struct {
 	Id    string `json:"id,omitempty"`
 	Topic string `json:"topic"`
@@ -418,7 +431,7 @@ type MsgServerMeta struct {
 	Del *MsgDelValues `json:"del,omitempty"`
 }
 
-// MsgServerInfo is the server-side copy of MsgClientNote with From added
+// MsgServerInfo is the server-side copy of MsgClientNote with From added (non-authoritative).
 type MsgServerInfo struct {
 	Topic string `json:"topic"`
 	// ID of the user who originated the message
@@ -429,6 +442,7 @@ type MsgServerInfo struct {
 	SeqId int `json:"seq,omitempty"`
 }
 
+// ServerComMessage is a wrapper for server-side messages.
 type ServerComMessage struct {
 	Ctrl *MsgServerCtrl `json:"ctrl,omitempty"`
 	Data *MsgServerData `json:"data,omitempty"`
@@ -448,8 +462,9 @@ type ServerComMessage struct {
 	skipSid string
 }
 
-// Generators of error messages
+// Generators of server-side error messages {ctrl}.
 
+// NoErr indicates successful completion.
 func NoErr(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
@@ -459,6 +474,7 @@ func NoErr(id, topic string, ts time.Time) *ServerComMessage {
 		Timestamp: ts}}
 }
 
+// NoErrCreated indicated successful creation of an object.
 func NoErrCreated(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
@@ -468,6 +484,7 @@ func NoErrCreated(id, topic string, ts time.Time) *ServerComMessage {
 		Timestamp: ts}}
 }
 
+// NoErrAccepted indicates request was accepted but not perocessed yet.
 func NoErrAccepted(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
@@ -477,6 +494,7 @@ func NoErrAccepted(id, topic string, ts time.Time) *ServerComMessage {
 		Timestamp: ts}}
 }
 
+// NoErrEvicted indicates that the user was disconnected from topic for no fault of the user.
 func NoErrEvicted(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
@@ -486,6 +504,7 @@ func NoErrEvicted(id, topic string, ts time.Time) *ServerComMessage {
 		Timestamp: ts}}
 }
 
+// NoErrShutdown means user was disconnected from topic because system shutdown is in progress.
 func NoErrShutdown(ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Code:      http.StatusResetContent, // 205
@@ -494,6 +513,8 @@ func NoErrShutdown(ts time.Time) *ServerComMessage {
 }
 
 // 3xx
+
+// InfoAlreadySubscribed request to subscribe was ignored because user is already subscribed.
 func InfoAlreadySubscribed(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
@@ -503,6 +524,7 @@ func InfoAlreadySubscribed(id, topic string, ts time.Time) *ServerComMessage {
 		Timestamp: ts}}
 }
 
+// InfoNotJoined request to leave was ignored because user is not subscribed.
 func InfoNotJoined(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
@@ -512,6 +534,7 @@ func InfoNotJoined(id, topic string, ts time.Time) *ServerComMessage {
 		Timestamp: ts}}
 }
 
+// InfoNoAction request ignored bacause the object is already in the desired state.
 func InfoNoAction(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
@@ -521,6 +544,7 @@ func InfoNoAction(id, topic string, ts time.Time) *ServerComMessage {
 		Timestamp: ts}}
 }
 
+// InfoNotModified update request is a noop.
 func InfoNotModified(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
@@ -531,6 +555,8 @@ func InfoNotModified(id, topic string, ts time.Time) *ServerComMessage {
 }
 
 // 4xx Errors
+
+// ErrMalformed request malformed.
 func ErrMalformed(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
@@ -540,6 +566,7 @@ func ErrMalformed(id, topic string, ts time.Time) *ServerComMessage {
 		Timestamp: ts}}
 }
 
+// ErrAuthRequired authentication required  - user must authenticate first.
 func ErrAuthRequired(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
@@ -549,6 +576,7 @@ func ErrAuthRequired(id, topic string, ts time.Time) *ServerComMessage {
 		Timestamp: ts}}
 }
 
+// ErrAuthFailed authentication failed.
 func ErrAuthFailed(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
@@ -558,6 +586,7 @@ func ErrAuthFailed(id, topic string, ts time.Time) *ServerComMessage {
 		Timestamp: ts}}
 }
 
+// ErrAuthUnknownScheme authentication scheme is unrecognized or invalid.
 func ErrAuthUnknownScheme(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
@@ -567,6 +596,7 @@ func ErrAuthUnknownScheme(id, topic string, ts time.Time) *ServerComMessage {
 		Timestamp: ts}}
 }
 
+// ErrPermissionDenied user is authenticated but operation is not permitted.
 func ErrPermissionDenied(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
@@ -576,6 +606,7 @@ func ErrPermissionDenied(id, topic string, ts time.Time) *ServerComMessage {
 		Timestamp: ts}}
 }
 
+// ErrTopicNotFound topic is not found.
 func ErrTopicNotFound(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
@@ -585,6 +616,7 @@ func ErrTopicNotFound(id, topic string, ts time.Time) *ServerComMessage {
 		Timestamp: ts}}
 }
 
+// ErrUserNotFound user is not found.
 func ErrUserNotFound(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
@@ -594,6 +626,8 @@ func ErrUserNotFound(id, topic string, ts time.Time) *ServerComMessage {
 		Timestamp: ts}}
 }
 
+// ErrAlreadyAuthenticated invalid attempt to authenticate an already authenticated session
+// Switching users is not supported.
 func ErrAlreadyAuthenticated(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
@@ -603,6 +637,7 @@ func ErrAlreadyAuthenticated(id, topic string, ts time.Time) *ServerComMessage {
 		Timestamp: ts}}
 }
 
+// ErrDuplicateCredential attempt to create a duplicate credential.
 func ErrDuplicateCredential(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
@@ -612,6 +647,7 @@ func ErrDuplicateCredential(id, topic string, ts time.Time) *ServerComMessage {
 		Timestamp: ts}}
 }
 
+// ErrAttachFirst must attach to topic first.
 func ErrAttachFirst(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
@@ -621,6 +657,7 @@ func ErrAttachFirst(id, topic string, ts time.Time) *ServerComMessage {
 		Timestamp: ts}}
 }
 
+// ErrAlreadyExists the object already exists.
 func ErrAlreadyExists(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
@@ -630,6 +667,7 @@ func ErrAlreadyExists(id, topic string, ts time.Time) *ServerComMessage {
 		Timestamp: ts}}
 }
 
+// ErrCommandOutOfSequence invalid sequence of comments, i.e. attempt to {sub} before {hi}.
 func ErrCommandOutOfSequence(id, unused string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
@@ -638,6 +676,7 @@ func ErrCommandOutOfSequence(id, unused string, ts time.Time) *ServerComMessage 
 		Timestamp: ts}}
 }
 
+// ErrGone topic deleted or user banned.
 func ErrGone(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
@@ -647,6 +686,7 @@ func ErrGone(id, topic string, ts time.Time) *ServerComMessage {
 		Timestamp: ts}}
 }
 
+// ErrPolicy request violates a policy (i.e. password is too weak).
 func ErrPolicy(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
@@ -656,6 +696,7 @@ func ErrPolicy(id, topic string, ts time.Time) *ServerComMessage {
 		Timestamp: ts}}
 }
 
+// ErrLocked ???
 func ErrLocked(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
@@ -665,6 +706,7 @@ func ErrLocked(id, topic string, ts time.Time) *ServerComMessage {
 		Timestamp: ts}}
 }
 
+// ErrUnknown database error
 func ErrUnknown(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
@@ -674,6 +716,7 @@ func ErrUnknown(id, topic string, ts time.Time) *ServerComMessage {
 		Timestamp: ts}}
 }
 
+// ErrNotImplemented feature not implemented.
 func ErrNotImplemented(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
@@ -683,6 +726,7 @@ func ErrNotImplemented(id, topic string, ts time.Time) *ServerComMessage {
 		Timestamp: ts}}
 }
 
+// ErrClusterNodeUnreachable topic is handled by another cluster node and than node is unreachable.
 func ErrClusterNodeUnreachable(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
@@ -692,6 +736,7 @@ func ErrClusterNodeUnreachable(id, topic string, ts time.Time) *ServerComMessage
 		Timestamp: ts}}
 }
 
+// ErrVersionNotSupported invalid (too low) protocol version.
 func ErrVersionNotSupported(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
