@@ -77,5 +77,5 @@ type Adapter interface {
 	// Devices (for push notifications)
 	DeviceUpsert(uid t.Uid, dev *t.DeviceDef) error
 	DeviceGetAll(uid ...t.Uid) (map[t.Uid][]t.DeviceDef, int, error)
-	DeviceDelete(uid t.Uid, deviceId string) error
+	DeviceDelete(uid t.Uid, deviceID string) error
 }

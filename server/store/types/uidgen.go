@@ -8,6 +8,7 @@ import (
 	"golang.org/x/crypto/xtea"
 )
 
+// UidGenerator holds snowflake and encryption paramenets.
 // RethinkDB generates UUIDs as primary keys. Using snowflake-generated uint64 instead.
 type UidGenerator struct {
 	seq    *sf.SnowFlake
@@ -15,11 +16,11 @@ type UidGenerator struct {
 }
 
 // Init initialises the Uid generator
-func (ug *UidGenerator) Init(workerId uint, key []byte) error {
+func (ug *UidGenerator) Init(workerID uint, key []byte) error {
 	var err error
 
 	if ug.seq == nil {
-		ug.seq, err = sf.NewSnowFlake(uint32(workerId))
+		ug.seq, err = sf.NewSnowFlake(uint32(workerID))
 	}
 	if ug.cipher == nil {
 		ug.cipher, err = xtea.NewCipher(key)
@@ -30,7 +31,7 @@ func (ug *UidGenerator) Init(workerId uint, key []byte) error {
 
 // Get generates a unique weakly encryped id it so ids are random-looking.
 func (ug *UidGenerator) Get() Uid {
-	buf, err := getIdBuffer(ug)
+	buf, err := getIDBuffer(ug)
 	if err != nil {
 		return ZeroUid
 	}
@@ -39,7 +40,7 @@ func (ug *UidGenerator) Get() Uid {
 
 // GetStr generates a unique id then returns it as base64-encrypted string.
 func (ug *UidGenerator) GetStr() string {
-	buf, err := getIdBuffer(ug)
+	buf, err := getIDBuffer(ug)
 	if err != nil {
 		return ""
 	}
@@ -47,7 +48,7 @@ func (ug *UidGenerator) GetStr() string {
 }
 
 // getIdBuffer returns a byte array holding the Uid bytes
-func getIdBuffer(ug *UidGenerator) ([]byte, error) {
+func getIDBuffer(ug *UidGenerator) ([]byte, error) {
 	var id uint64
 	var err error
 	if id, err = ug.seq.Next(); err != nil {

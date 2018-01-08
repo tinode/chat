@@ -15,6 +15,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+// BasicAuth is the type to map authentication methods to.
 type BasicAuth struct{}
 
 func parseSecret(secret string) (uname, password string, err int) {
@@ -31,10 +32,12 @@ func parseSecret(secret string) (uname, password string, err int) {
 	return
 }
 
+// Init initializes the basic authenticator.
 func (BasicAuth) Init(unused string) error {
 	return nil
 }
 
+// AddRecord adds a basic authentication record to DB.
 func (BasicAuth) AddRecord(uid types.Uid, secret []byte, lifetime time.Duration) (int, auth.AuthErr) {
 	uname, password, fail := parseSecret(string(secret))
 	if fail != auth.NoErr {
@@ -58,17 +61,18 @@ func (BasicAuth) AddRecord(uid types.Uid, secret []byte, lifetime time.Duration)
 	return auth.LevelAuth, auth.NewErr(auth.NoErr, nil)
 }
 
+// UpdateRecord updates password for basic authentication.
 func (BasicAuth) UpdateRecord(uid types.Uid, secret []byte, lifetime time.Duration) auth.AuthErr {
 	uname, password, fail := parseSecret(string(secret))
 	if fail != auth.NoErr {
 		return auth.NewErr(fail, errors.New("basic auth: malformed secret"))
 	}
 
-	storedUid, _, _, _, err := store.Users.GetAuthRecord("basic", uname)
+	storedUID, _, _, _, err := store.Users.GetAuthRecord("basic", uname)
 	if err != nil {
 		return auth.NewErr(auth.ErrInternal, err)
 	}
-	if storedUid != uid {
+	if storedUID != uid {
 		return auth.NewErr(auth.ErrFailed,
 			errors.New("basic auth: updating some else's credentials is not supported"))
 	}
@@ -87,6 +91,7 @@ func (BasicAuth) UpdateRecord(uid types.Uid, secret []byte, lifetime time.Durati
 	return auth.NewErr(auth.NoErr, nil)
 }
 
+// Authenticate checks login and password.
 func (BasicAuth) Authenticate(secret []byte) (types.Uid, int, time.Time, auth.AuthErr) {
 	uname, password, fail := parseSecret(string(secret))
 	if fail != auth.NoErr {
@@ -116,6 +121,7 @@ func (BasicAuth) Authenticate(secret []byte) (types.Uid, int, time.Time, auth.Au
 	return uid, authLvl, expires, auth.NewErr(auth.NoErr, nil)
 }
 
+// IsUnique checks login uniqueness.
 func (BasicAuth) IsUnique(secret []byte) (bool, auth.AuthErr) {
 	uname, _, fail := parseSecret(string(secret))
 	if fail != auth.NoErr {
@@ -133,6 +139,7 @@ func (BasicAuth) IsUnique(secret []byte) (bool, auth.AuthErr) {
 	return false, auth.NewErr(auth.ErrDuplicate, errors.New("basic auth: duplicate credentials"))
 }
 
+// GenSecret is not supported, generates an error.
 func (BasicAuth) GenSecret(uid types.Uid, authLvl int, lifetime time.Duration) ([]byte, time.Time, auth.AuthErr) {
 	return nil, time.Time{}, auth.NewErr(auth.ErrUnsupported, errors.New("basic auth: GenSecret is not supported"))
 }

@@ -1,4 +1,4 @@
-// Implementation of a consistent ring hash:
+// Package ringhash implementats a consistent ring hash:
 // https://en.wikipedia.org/wiki/Consistent_hashing
 package ringhash
 
@@ -10,6 +10,7 @@ import (
 	"strconv"
 )
 
+// Hash is a signature of a hash function used by the package.
 type Hash func(data []byte) uint32
 
 type elem struct {
@@ -32,6 +33,7 @@ func (k sortable) Less(i, j int) bool {
 	}
 }
 
+// Ring is the definition of the ringhash.
 type Ring struct {
 	keys []elem // Sorted list of keys.
 
@@ -40,6 +42,8 @@ type Ring struct {
 	hashfunc  Hash
 }
 
+// New initializes an empty ringhash with the given number of replicas and a hash function.
+// If the hash function is nil, fnv.New32a() is used.
 func New(replicas int, fn Hash) *Ring {
 	ring := &Ring{
 		replicas: replicas,
@@ -55,12 +59,12 @@ func New(replicas int, fn Hash) *Ring {
 	return ring
 }
 
-// Returns the number of keys in the ring.
+// Len returns the number of keys in the ring.
 func (ring *Ring) Len() int {
 	return len(ring.keys)
 }
 
-// Adds keys to the ring.
+// Add adds keys to the ring.
 func (ring *Ring) Add(keys ...string) {
 	for _, key := range keys {
 		for i := 0; i < ring.replicas; i++ {
@@ -113,7 +117,7 @@ func (ring *Ring) Get(key string) string {
 	return ring.keys[idx].key
 }
 
-// Get a ring hash signature. Two identical ring hashes
+// Signature returns the ring's hash signature. Two identical ringhashes
 // will have the same signature. Two hashes with different
 // number of keys or replicas or hash functions will have different
 // signatures.

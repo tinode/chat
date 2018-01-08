@@ -437,58 +437,58 @@ func (o AccessMode) Delta(n AccessMode) string {
 }
 
 // IsJoiner checks if joiner flag J is set.
-func (a AccessMode) IsJoiner() bool {
-	return a&ModeJoin != 0
+func (m AccessMode) IsJoiner() bool {
+	return m&ModeJoin != 0
 }
 
 // IsOwner checks if owner bit O is set.
-func (a AccessMode) IsOwner() bool {
-	return a&ModeOwner != 0
+func (m AccessMode) IsOwner() bool {
+	return m&ModeOwner != 0
 }
 
 // IsApprover checks if approver A bit is set.
-func (a AccessMode) IsApprover() bool {
-	return a&ModeApprove != 0
+func (m AccessMode) IsApprover() bool {
+	return m&ModeApprove != 0
 }
 
 // IsAdmin check if owner O or approver A flag is set.
-func (a AccessMode) IsAdmin() bool {
-	return a.IsOwner() || a.IsApprover()
+func (m AccessMode) IsAdmin() bool {
+	return m.IsOwner() || m.IsApprover()
 }
 
 // IsSharer checks if approver A or sharer S or owner O flag is set.
-func (a AccessMode) IsSharer() bool {
-	return a.IsAdmin() || (a&ModeShare != 0)
+func (m AccessMode) IsSharer() bool {
+	return m.IsAdmin() || (m&ModeShare != 0)
 }
 
 // IsWriter checks if allowed to publish (writer flag W is set).
-func (a AccessMode) IsWriter() bool {
-	return a&ModeWrite != 0
+func (m AccessMode) IsWriter() bool {
+	return m&ModeWrite != 0
 }
 
 // IsReader checks if reader flag R is set.
-func (a AccessMode) IsReader() bool {
-	return a&ModeRead != 0
+func (m AccessMode) IsReader() bool {
+	return m&ModeRead != 0
 }
 
 // IsPresencer checks if user receives presence updates (P flag set).
-func (a AccessMode) IsPresencer() bool {
-	return a&ModePres != 0
+func (m AccessMode) IsPresencer() bool {
+	return m&ModePres != 0
 }
 
 // IsDeleter checks if user can hard-delete messages (D flag is set).
-func (a AccessMode) IsDeleter() bool {
-	return a&ModeDelete != 0
+func (m AccessMode) IsDeleter() bool {
+	return m&ModeDelete != 0
 }
 
 // IsZero checks if no flags are set.
-func (a AccessMode) IsZero() bool {
-	return a == 0
+func (m AccessMode) IsZero() bool {
+	return m == 0
 }
 
 // IsInvalid checks if mode is invalid.
-func (a AccessMode) IsInvalid() bool {
-	return a == ModeInvalid
+func (m AccessMode) IsInvalid() bool {
+	return m == ModeInvalid
 }
 
 // TopicAccess is a relationship between users & topics, stored in database as Subscription.

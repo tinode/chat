@@ -1961,7 +1961,7 @@ func (t *Topic) evictUser(uid types.Uid, unsub bool, skip string) {
 func (t *Topic) makePushReceipt(data *MsgServerData) *pushReceipt {
 	idx := make(map[types.Uid]int, len(t.perUser))
 	receipt := push.Receipt{
-		To: make([]push.PushTo, len(t.perUser)),
+		To: make([]push.Recipient, len(t.perUser)),
 		Payload: push.Payload{
 			Topic:     data.Topic,
 			From:      data.From,
