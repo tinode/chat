@@ -14,8 +14,12 @@ import (
 	"github.com/tinode/chat/server/store/types"
 )
 
-const DEFAULT_CLUSTER_RECONNECT = 200 * time.Millisecond
-const CLUSTER_HASH_REPLICAS = 20
+const (
+	// Default timeout before attempting to reconnect to a node
+	defaultClusterReconnect = 200 * time.Millisecond
+	// Number of replicas in ringhash
+	clusterHashReplicas = 20
+)
 
 type clusterNodeConfig struct {
 	Name string `json:"name"`
@@ -136,7 +140,7 @@ func (n *ClusterNode) reconnect() {
 			log.Printf("cluster: connection to '%s' established", n.name)
 			return
 		} else if count == 0 {
-			reconnTicker = time.NewTicker(DEFAULT_CLUSTER_RECONNECT)
+			reconnTicker = time.NewTicker(defaultClusterReconnect)
 		}
 
 		count++
@@ -554,7 +558,7 @@ func (c *Cluster) shutdown() {
 // Recalculate the ring hash using provided list of nodes or only nodes in a non-failed state.
 // Returns the list of nodes used for ring hash.
 func (c *Cluster) rehash(nodes []string) []string {
-	ring := rh.New(CLUSTER_HASH_REPLICAS, nil)
+	ring := rh.New(clusterHashReplicas, nil)
 
 	var ringKeys []string
 

@@ -29,29 +29,28 @@ import (
 	"github.com/tinode/chat/server/push"
 	_ "github.com/tinode/chat/server/push_stdout"
 	"github.com/tinode/chat/server/store"
-	"github.com/tinode/chat/server/store/types"
 	"google.golang.org/grpc"
 )
 
 const (
-	// IDLETIMEOUT defines duration of being idle before terminating a session.
-	IDLETIMEOUT = time.Second * 55
-	// TOPICTIMEOUT defines now long to keep topic alive after the last session detached.
-	TOPICTIMEOUT = time.Second * 5
+	// idleSessionTimeout defines duration of being idle before terminating a session.
+	idleSessionTimeout = time.Second * 55
+	// idleTopicTimeout defines now long to keep topic alive after the last session detached.
+	idleTopicTimeout = time.Second * 5
 
-	// VERSION is the current API version
-	VERSION = "0.14"
-	// Minimum supported API version
-	MIN_SUPPORTED_VERSION = "0.14"
+	// currentVersion is the current API version
+	currentVersion = "0.14"
+	// minSupportedVersion is the minimum supported API version
+	minSupportedVersion = "0.14"
 
-	// Default maximum message size
-	MAX_MESSAGE_SIZE = 1 << 19 // 512K
+	// maxMessageSize is the default maximum message size
+	maxMessageSize = 1 << 19 // 512K
 
-	// TODO: Move to config
-	DEFAULT_GROUP_AUTH_ACCESS = types.ModeCPublic
-	DEFAULT_P2P_AUTH_ACCESS   = types.ModeCP2P
-	DEFAULT_GROUP_ANON_ACCESS = types.ModeNone
-	DEFAULT_P2P_ANON_ACCESS   = types.ModeNone
+	// Delay before updating a User Agent
+	uaTimerDelay = time.Second * 5
+
+	// maxDeleteCount is the maximum allowed number of messages to delete in one call.
+	maxDeleteCount = 1024
 )
 
 // Build timestamp set by the compiler
@@ -100,7 +99,7 @@ type configType struct {
 }
 
 func main() {
-	log.Printf("Server v%s:%s pid=%d started with processes: %d", VERSION, buildstamp, os.Getpid(),
+	log.Printf("Server v%s:%s pid=%d started with processes: %d", currentVersion, buildstamp, os.Getpid(),
 		runtime.GOMAXPROCS(runtime.NumCPU()))
 
 	var configfile = flag.String("config", "./tinode.conf", "Path to config file.")
@@ -153,7 +152,7 @@ func main() {
 	}()
 
 	// Keep inactive LP sessions for 15 seconds
-	globals.sessionStore = NewSessionStore(IDLETIMEOUT + 15*time.Second)
+	globals.sessionStore = NewSessionStore(idleSessionTimeout + 15*time.Second)
 	// The hub (the main message router)
 	globals.hub = newHub()
 	// Cluster initialization
@@ -167,7 +166,7 @@ func main() {
 	// Maximum message size
 	globals.maxMessageSize = int64(config.MaxMessageSize)
 	if globals.maxMessageSize <= 0 {
-		globals.maxMessageSize = MAX_MESSAGE_SIZE
+		globals.maxMessageSize = maxMessageSize
 	}
 
 	// Serve static content from the directory in -static_data flag if that's

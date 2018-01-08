@@ -14,16 +14,6 @@ import (
 	"time"
 )
 
-// JsonDuration is a basic time.Duration with defined UnmarshalJSON (deprecated).
-type JsonDuration time.Duration
-
-// UnmarshalJSON reads Duration from the JSON string.
-func (jd *JsonDuration) UnmarshalJSON(data []byte) (err error) {
-	d, err := time.ParseDuration(strings.Trim(string(data), "\""))
-	*jd = JsonDuration(d)
-	return err
-}
-
 // MsgBrowseOpts defines parameters for queries by massage IDs.
 type MsgBrowseOpts struct {
 	// Load messages/ranges with IDs equal or greater than this (inclusive or closed)

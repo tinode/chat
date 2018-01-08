@@ -56,6 +56,7 @@ type metaReq struct {
 	what int
 }
 
+// Hub is the core structure which holds topics.
 type Hub struct {
 
 	// Topics must be indexed by name
@@ -236,7 +237,7 @@ func (h *Hub) run() {
 
 			return
 
-		case <-time.After(IDLETIMEOUT):
+		case <-time.After(idleSessionTimeout):
 		}
 	}
 }

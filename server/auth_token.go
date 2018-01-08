@@ -20,19 +20,19 @@ type TokenAuth struct{}
 // Token composition: [8:UID][4:expires][2:authLevel][2:serial-number][32:signature] == 48 bytes
 // Token markers
 const (
-	UID_START = 0
-	UID_END   = 8
+	tokenUIDStart = 0
+	tokenUIDEnd   = 8
 
-	EXPIRES_START = 8
-	EXPIRES_END   = 12
+	tokenExpiresStart = 8
+	tokenExpiresEnd   = 12
 
-	AUTHLVL_START = 12
-	AUTHLVL_END   = 14
+	tokenAuthLvlStart = 12
+	tokenAuthLvlEnd   = 14
 
-	SERIAL_START = 14
-	SERIAL_END   = 16
+	tokenSerialStart = 14
+	tokenSerialEnd   = 16
 
-	SIGN_START = 16
+	tokenSignatureStart = 16
 )
 
 const (
@@ -98,29 +98,29 @@ func (TokenAuth) Authenticate(token []byte) (types.Uid, int, time.Time, auth.Aut
 	}
 
 	var uid types.Uid
-	if err := uid.UnmarshalBinary(token[UID_START:UID_END]); err != nil {
+	if err := uid.UnmarshalBinary(token[tokenUIDStart:tokenUIDEnd]); err != nil {
 		return types.ZeroUid, auth.LevelNone, time.Time{},
 			auth.NewErr(auth.ErrMalformed, err)
 	}
 	var authLvl int
-	if authLvl = int(binary.LittleEndian.Uint16(token[AUTHLVL_START:AUTHLVL_END])); authLvl < 0 || authLvl > auth.LevelRoot {
+	if authLvl = int(binary.LittleEndian.Uint16(token[tokenAuthLvlStart:tokenAuthLvlEnd])); authLvl < 0 || authLvl > auth.LevelRoot {
 		return types.ZeroUid, auth.LevelNone, time.Time{},
 			auth.NewErr(auth.ErrMalformed, errors.New("token auth: invalid auth level"))
 	}
 
-	if snum := int(binary.LittleEndian.Uint16(token[SERIAL_START:SERIAL_END])); snum != tokenSerialNumber {
+	if snum := int(binary.LittleEndian.Uint16(token[tokenSerialStart:tokenSerialEnd])); snum != tokenSerialNumber {
 		return types.ZeroUid, auth.LevelNone, time.Time{},
 			auth.NewErr(auth.ErrMalformed, errors.New("token auth: serial number does not match"))
 	}
 
 	hasher := hmac.New(sha256.New, tokenHmacSalt)
-	hasher.Write(token[:SIGN_START])
-	if !hmac.Equal(token[SIGN_START:], hasher.Sum(nil)) {
+	hasher.Write(token[:tokenSignatureStart])
+	if !hmac.Equal(token[tokenSignatureStart:], hasher.Sum(nil)) {
 		return types.ZeroUid, auth.LevelNone, time.Time{},
 			auth.NewErr(auth.ErrFailed, errors.New("token auth: invalid signature"))
 	}
 
-	expires := time.Unix(int64(binary.LittleEndian.Uint32(token[EXPIRES_START:EXPIRES_END])), 0).UTC()
+	expires := time.Unix(int64(binary.LittleEndian.Uint32(token[tokenExpiresStart:tokenExpiresEnd])), 0).UTC()
 	if expires.Before(time.Now().Add(1 * time.Second)) {
 		return types.ZeroUid, auth.LevelNone, time.Time{},
 			auth.NewErr(auth.ErrExpired, errors.New("token auth: expired token"))

@@ -21,11 +21,6 @@ import (
 	"github.com/tinode/chat/server/store/types"
 )
 
-const UA_TIMER_DELAY = time.Second * 5
-
-// MAX_DELETE_COUNT is the maximum allowed number of messages to delete in one call.
-const MAX_DELETE_COUNT = 1024
-
 // Topic is an isolated communication channel
 type Topic struct {
 	// Еxpanded/unique name of the topic.
@@ -173,7 +168,8 @@ func (t *Topic) run(hub *Hub) {
 
 	log.Printf("Topic started: '%s'", t.name)
 
-	keepAlive := TOPICTIMEOUT // TODO(gene): read keepalive value from the command line
+	// TODO(gene): read keepalive value from the command line
+	keepAlive := idleTopicTimeout
 	killTimer := time.NewTimer(time.Hour)
 	killTimer.Stop()
 
@@ -538,7 +534,7 @@ func (t *Topic) run(hub *Hub) {
 		case ua := <-t.uaChange:
 			// process an update to user agent from one of the sessions
 			currentUA = ua
-			uaTimer.Reset(UA_TIMER_DELAY)
+			uaTimer.Reset(uaTimerDelay)
 
 		case <-uaTimer.C:
 			// Publish user agent changes after a delay
@@ -1720,7 +1716,7 @@ func (t *Topic) replyDelMsg(sess *Session, del *MsgClientDel) error {
 			types.RangeSorter(ranges).Normalize()
 		}
 
-		if count > MAX_DELETE_COUNT && len(ranges) > 1 {
+		if count > maxDeleteCount && len(ranges) > 1 {
 			err = errors.New("del.msg: too many messages to delete")
 		}
 	}
@@ -2087,9 +2083,9 @@ func msgOpts2storeOpts(req *MsgBrowseOpts) *types.BrowseOpt {
 
 func isNullValue(i interface{}) bool {
 	// Del control character
-	const CLEAR_VALUE = "\u2421"
+	const clearValue = "\u2421"
 	if str, ok := i.(string); ok {
-		return str == CLEAR_VALUE
+		return str == clearValue
 	}
 	return false
 }

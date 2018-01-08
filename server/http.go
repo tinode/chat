@@ -47,12 +47,12 @@ type tlsAutocertConfig struct {
 	Email string `json:"email"`
 }
 
-func listenAndServe(addr string, tlsEnabled bool, tls_config string, stop <-chan bool) error {
+func listenAndServe(addr string, tlsEnabled bool, jsconfig string, stop <-chan bool) error {
 	var tlsConfig tlsConfig
 
-	if tls_config != "" {
-		if err := json.Unmarshal([]byte(tls_config), &tlsConfig); err != nil {
-			return errors.New("http: failed to parse tls_config: " + err.Error() + "(" + tls_config + ")")
+	if jsconfig != "" {
+		if err := json.Unmarshal([]byte(jsconfig), &tlsConfig); err != nil {
+			return errors.New("http: failed to parse tls_config: " + err.Error() + "(" + jsconfig + ")")
 		}
 	}
 

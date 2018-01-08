@@ -318,7 +318,7 @@ func pluginsShutdown() {
 
 func pluginGenerateClientReq(sess *Session, msg *ClientComMessage) *pbx.ClientReq {
 	return &pbx.ClientReq{
-		Msg: pb_cli_serialize(msg),
+		Msg: pbCliSerialize(msg),
 		Sess: &pbx.Session{
 			SessionId:  sess.sid,
 			UserId:     sess.uid.UserId(),
@@ -370,10 +370,10 @@ func pluginFireHose(sess *Session, msg *ClientComMessage) (*ClientComMessage, *S
 			}
 			// REPLACE: ClientMsg was updated by the plugin. Use the new one for further processing.
 			if respStatus == pbx.ServerResp_REPLACE {
-				return pb_cli_deserialize(resp.GetClmsg()), nil
+				return pbCliDeserialize(resp.GetClmsg()), nil
 			}
 			// RESPOND: Plugin provided an alternative response message. Use it
-			return nil, pb_serv_deserialize(resp.GetSrvmsg())
+			return nil, pbServDeserialize(resp.GetSrvmsg())
 
 		} else if p.failureCode != 0 {
 			// Plugin failed and it's configured to stop further processing.
@@ -409,7 +409,7 @@ func pluginAccount(user *types.User, action int) {
 			event = &pbx.AccountEvent{
 				Action: pluginActionToCrud(action),
 				UserId: user.Uid().UserId(),
-				DefaultAcs: pb_DefaultAcs_serialize(&MsgDefaultAcsMode{
+				DefaultAcs: pbDefaultAcsSerialize(&MsgDefaultAcsMode{
 					Auth: user.Access.Auth.String(),
 					Anon: user.Access.Anon.String()}),
 				Public: interfaceToBytes(user.Public),
@@ -447,7 +447,7 @@ func pluginTopic(topic *Topic, action int) {
 			event = &pbx.TopicEvent{
 				Action: pluginActionToCrud(action),
 				Name:   topic.name,
-				Desc:   pb_Topic_serialize(topic),
+				Desc:   pbTopicSerialize(topic),
 			}
 		}
 
@@ -530,7 +530,7 @@ func pluginMessage(data *MsgServerData, action int) {
 		if event == nil {
 			event = &pbx.MessageEvent{
 				Action: pluginActionToCrud(action),
-				Msg:    pb_serv_data_serialize(data).Data,
+				Msg:    pbServDataSerialize(data).Data,
 			}
 		}
 

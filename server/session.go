@@ -34,7 +34,7 @@ const (
 	CLUSTER
 )
 
-var MIN_SUPPORTED_VERSION_VAL = parseVersion(MIN_SUPPORTED_VERSION)
+var minSupportedVersionValue = parseVersion(minSupportedVersion)
 
 // Session represents a single WS connection or a long polling session. A user may have multiple
 // sessions.
@@ -385,12 +385,12 @@ func (s *Session) hello(msg *ClientComMessage) {
 			return
 		}
 		// Check version compatibility
-		if versionCompare(s.ver, MIN_SUPPORTED_VERSION_VAL) < 0 {
+		if versionCompare(s.ver, minSupportedVersionValue) < 0 {
 			s.ver = 0
 			s.queueOut(ErrVersionNotSupported(msg.Hi.Id, "", msg.timestamp))
 			return
 		}
-		params = map[string]interface{}{"ver": VERSION, "build": buildstamp}
+		params = map[string]interface{}{"ver": currentVersion, "build": buildstamp}
 
 	} else if msg.Hi.Version == "" || parseVersion(msg.Hi.Version) == s.ver {
 		// Save changed device ID or Lang.
@@ -923,7 +923,7 @@ func (s *Session) getSerialFormat() SerialFormat {
 
 func (s *Session) serialize(msg *ServerComMessage) interface{} {
 	if s.proto == GRPC {
-		return pb_serv_serialize(msg)
+		return pbServSerialize(msg)
 	}
 	out, _ := json.Marshal(msg)
 	return out

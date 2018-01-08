@@ -21,18 +21,18 @@ import (
 // convertible to base64 without padding. All integers are little-endian.
 // Definitions for byte lengths of key's parts.
 const (
-	// APIKEY_VERSION is the version of this API scheme.
-	APIKEY_VERSION = 1
-	// APIKEY_APPID is deprecated and will be removed in the future.
-	APIKEY_APPID = 4
-	// APIKEY_SEQUENCE is the serial number of the key.
-	APIKEY_SEQUENCE = 2
-	// APIKEY_WHO indicates if the key grants root privileges
-	APIKEY_WHO = 1
-	// APIKEY_SIGNATURE is key's cryptographic (HMAC) signature
-	APIKEY_SIGNATURE = 16
-	// APIKEY_LENGTH is the length of the key in bytes
-	APIKEY_LENGTH = APIKEY_VERSION + APIKEY_APPID + APIKEY_SEQUENCE + APIKEY_WHO + APIKEY_SIGNATURE
+	// apikeyVersion is the version of this API scheme.
+	apikeyVersion = 1
+	// apikeyAppID is deprecated and will be removed in the future.
+	apikeyAppID = 4
+	// apikeySequence is the serial number of the key.
+	apikeySequence = 2
+	// apikeyWho indicates if the key grants root privileges
+	apikeyWho = 1
+	// apikeySignature is key's cryptographic (HMAC) signature
+	apikeySignature = 16
+	// apikeyLength is the length of the key in bytes
+	apikeyLength = apikeyVersion + apikeyAppID + apikeySequence + apikeyWho + apikeySignature
 )
 
 // Client signature validation
@@ -40,7 +40,7 @@ const (
 // Returns application id, key type
 func checkAPIKey(apikey string) (isValid, isRoot bool) {
 
-	if declen := base64.URLEncoding.DecodedLen(len(apikey)); declen != APIKEY_LENGTH {
+	if declen := base64.URLEncoding.DecodedLen(len(apikey)); declen != apikeyLength {
 		return
 	}
 
@@ -55,14 +55,14 @@ func checkAPIKey(apikey string) (isValid, isRoot bool) {
 	}
 
 	hasher := hmac.New(md5.New, globals.apiKeySalt)
-	hasher.Write(data[:APIKEY_VERSION+APIKEY_APPID+APIKEY_SEQUENCE+APIKEY_WHO])
+	hasher.Write(data[:apikeyVersion+apikeyAppID+apikeySequence+apikeyWho])
 	check := hasher.Sum(nil)
-	if !bytes.Equal(data[APIKEY_VERSION+APIKEY_APPID+APIKEY_SEQUENCE+APIKEY_WHO:], check) {
+	if !bytes.Equal(data[apikeyVersion+apikeyAppID+apikeySequence+apikeyWho:], check) {
 		log.Println("invalid apikey signature")
 		return
 	}
 
-	isRoot = (data[APIKEY_VERSION+APIKEY_APPID+APIKEY_SEQUENCE] == 1)
+	isRoot = (data[apikeyVersion+apikeyAppID+apikeySequence] == 1)
 
 	isValid = true
 
