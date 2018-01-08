@@ -15,7 +15,7 @@ import (
 	"github.com/tinode/chat/server/store/types"
 )
 
-func gen_rethink(reset bool, dbsource string, data *Data) {
+func genRethink(reset bool, dbsource string, data *Data) {
 	var err error
 
 	log.Println("Opening DB...")
@@ -76,13 +76,13 @@ func gen_rethink(reset bool, dbsource string, data *Data) {
 		}
 
 		// Add authentication record
-		auth_handler := store.GetAuthHandler("basic")
+		authHandler := store.GetAuthHandler("basic")
 		passwd := uu.Password
 		if passwd == "(random)" {
 			// Generate random password
 			passwd = getPassword(8)
 		}
-		if _, authErr := auth_handler.AddRecord(user.Uid(),
+		if _, authErr := authHandler.AddRecord(user.Uid(),
 			[]byte(uu.Username+":"+passwd), 0); authErr.IsError() {
 
 			log.Fatal(authErr.Err)
@@ -282,19 +282,19 @@ func getCreatedTime(delta string) time.Time {
 	return time.Time{}
 }
 
-type PhotoStruct struct {
+type photoStruct struct {
 	Type string `gorethink:"type"`
 	Data []byte `gorethink:"data"`
 }
 
-type Vcard struct {
+type vcard struct {
 	Fn    string       `gorethink:"fn"`
-	Photo *PhotoStruct `gorethink:"photo,omitempty"`
+	Photo *photoStruct `gorethink:"photo,omitempty"`
 }
 
 // {"fn": "Alice Johnson", "photo": "alice-128.jpg"}
-func parsePublic(public *VCardy, path string) *Vcard {
-	var photo *PhotoStruct
+func parsePublic(public *vCardy, path string) *vcard {
+	var photo *photoStruct
 	var err error
 
 	if public.Fn == "" && public.Photo == "" {
@@ -303,7 +303,7 @@ func parsePublic(public *VCardy, path string) *Vcard {
 
 	fname := public.Photo
 	if fname != "" {
-		photo = &PhotoStruct{Type: public.Type}
+		photo = &photoStruct{Type: public.Type}
 		dir, _ := filepath.Split(fname)
 		if dir == "" {
 			dir = path
@@ -314,5 +314,5 @@ func parsePublic(public *VCardy, path string) *Vcard {
 		}
 	}
 
-	return &Vcard{Fn: public.Fn, Photo: photo}
+	return &vcard{Fn: public.Fn, Photo: photo}
 }
