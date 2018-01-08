@@ -44,7 +44,7 @@ func (ug *UidGenerator) GetStr() string {
 	if err != nil {
 		return ""
 	}
-	return base64.URLEncoding.EncodeToString(buf)[:uid_BASE64_UNPADDED]
+	return base64.URLEncoding.EncodeToString(buf)[:uidBase64Unpadded]
 }
 
 // getIdBuffer returns a byte array holding the Uid bytes

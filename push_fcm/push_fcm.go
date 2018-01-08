@@ -12,7 +12,8 @@ import (
 
 var handler FcmPush
 
-const DEFAULT_BUFFER = 32
+// Size of the input channel buffer.
+const defaultBuffer = 32
 
 // FcmPush represents the push handler; implements push.PushHandler interface.
 type FcmPush struct {
@@ -46,7 +47,7 @@ func (FcmPush) Init(jsonconf string) error {
 	handler.client = fcm.NewClient(config.APIKey)
 
 	if config.Buffer <= 0 {
-		config.Buffer = DEFAULT_BUFFER
+		config.Buffer = defaultBuffer
 	}
 
 	handler.input = make(chan *push.Receipt, config.Buffer)

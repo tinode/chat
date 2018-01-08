@@ -14,12 +14,13 @@ type Uid uint64
 // ZeroUid is a constant representing uninitialized Uid.
 const ZeroUid Uid = 0
 
+// Lengths of various Uid representations
 const (
-	uid_BASE64_UNPADDED = 11
-	uid_BASE64_PADDED   = 12
+	uidBase64Unpadded = 11
+	uidBase64Padded   = 12
 
-	p2p_BASE64_UNPADDED = 22
-	p2p_BASE64_PADDED   = 24
+	p2pBase64Unpadded = 22
+	p2pBase64Padded   = 24
 )
 
 // IsZero checks if Uid is uninitialized.
@@ -55,11 +56,11 @@ func (uid *Uid) UnmarshalBinary(b []byte) error {
 
 // UnmarshalText reads Uid from string represented as byte slice.
 func (uid *Uid) UnmarshalText(src []byte) error {
-	if len(src) != uid_BASE64_UNPADDED {
+	if len(src) != uidBase64Unpadded {
 		return errors.New("Uid.UnmarshalText: invalid length")
 	}
-	dec := make([]byte, base64.URLEncoding.DecodedLen(uid_BASE64_PADDED))
-	for len(src) < uid_BASE64_PADDED {
+	dec := make([]byte, base64.URLEncoding.DecodedLen(uidBase64Padded))
+	for len(src) < uidBase64Padded {
 		src = append(src, '=')
 	}
 	count, err := base64.URLEncoding.Decode(dec, src)
@@ -82,7 +83,7 @@ func (uid *Uid) MarshalText() ([]byte, error) {
 	dst := make([]byte, base64.URLEncoding.EncodedLen(8))
 	binary.LittleEndian.PutUint64(src, uint64(*uid))
 	base64.URLEncoding.Encode(dst, src)
-	return dst[0:uid_BASE64_UNPADDED], nil
+	return dst[0:uidBase64Unpadded], nil
 }
 
 // MarshalJSON converts Uid to double quoted ("ajjj") string.
@@ -94,7 +95,7 @@ func (uid *Uid) MarshalJSON() ([]byte, error) {
 // UnmarshalJSON reads Uid from a double quoted string.
 func (uid *Uid) UnmarshalJSON(b []byte) error {
 	size := len(b)
-	if size != (uid_BASE64_UNPADDED + 2) {
+	if size != (uidBase64Unpadded + 2) {
 		return errors.New("Uid.UnmarshalJSON: invalid length")
 	} else if b[0] != '"' || b[size-1] != '"' {
 		return errors.New("Uid.UnmarshalJSON: unrecognized")
@@ -157,7 +158,7 @@ func (uid Uid) P2PName(u2 Uid) string {
 			return ""
 		}
 
-		return "p2p" + base64.URLEncoding.EncodeToString(b1)[:p2p_BASE64_UNPADDED]
+		return "p2p" + base64.URLEncoding.EncodeToString(b1)[:p2pBase64Unpadded]
 	}
 
 	return ""
@@ -167,12 +168,12 @@ func (uid Uid) P2PName(u2 Uid) string {
 func ParseP2P(p2p string) (uid1, uid2 Uid, err error) {
 	if strings.HasPrefix(p2p, "p2p") {
 		src := []byte(p2p)[3:]
-		if len(src) != p2p_BASE64_UNPADDED {
+		if len(src) != p2pBase64Unpadded {
 			err = errors.New("ParseP2P: invalid length")
 			return
 		}
-		dec := make([]byte, base64.URLEncoding.DecodedLen(p2p_BASE64_PADDED))
-		for len(src) < p2p_BASE64_PADDED {
+		dec := make([]byte, base64.URLEncoding.DecodedLen(p2pBase64Padded))
+		for len(src) < p2pBase64Padded {
 			src = append(src, '=')
 		}
 		var count int
