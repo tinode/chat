@@ -5,7 +5,6 @@ package auth_basic
 
 import (
 	"errors"
-	"log"
 	"strings"
 	"time"
 
@@ -90,33 +89,26 @@ func (BasicAuth) UpdateRecord(uid types.Uid, secret []byte, lifetime time.Durati
 
 func (BasicAuth) Authenticate(secret []byte) (types.Uid, int, time.Time, auth.AuthErr) {
 	uname, password, fail := parseSecret(string(secret))
-	log.Println("basic auth:", uname, password, fail)
-
 	if fail != auth.NoErr {
 		return types.ZeroUid, auth.LevelNone, time.Time{},
 			auth.NewErr(fail, errors.New("basic auth: malformed secret"))
 	}
 
 	uid, authLvl, passhash, expires, err := store.Users.GetAuthRecord("basic", uname)
-	log.Println("basic auth:", uid, authLvl, passhash, expires, err)
 	if err != nil {
-		log.Println("basic auth error reading record", err)
 		return types.ZeroUid, auth.LevelNone, time.Time{}, auth.NewErr(auth.ErrInternal, err)
 	} else if uid.IsZero() {
 		// Invalid login.
-		log.Println("basic auth invalid login")
 		return types.ZeroUid, auth.LevelNone, time.Time{},
 			auth.NewErr(auth.ErrFailed, errors.New("basic auth: invalid login"))
 	} else if !expires.IsZero() && expires.Before(time.Now()) {
 		// The record has expired
-		log.Println("basic auth expired record")
 		return types.ZeroUid, auth.LevelNone, time.Time{},
 			auth.NewErr(auth.ErrExpired, errors.New("basic auth: expired record"))
 	}
 
 	err = bcrypt.CompareHashAndPassword([]byte(passhash), []byte(password))
 	if err != nil {
-		log.Println("basic auth bcrypt does not match", err)
 		// Invalid password
 		return types.ZeroUid, auth.LevelNone, time.Time{},
 			auth.NewErr(auth.ErrFailed, errors.New("basic auth: invalid password"))
