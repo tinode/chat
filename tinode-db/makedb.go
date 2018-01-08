@@ -16,13 +16,14 @@ type configType struct {
 	StoreConfig json.RawMessage `json:"store_config"`
 }
 
-type VCardy struct {
+type vCardy struct {
 	Fn    string `json:"fn"`
 	Photo string `json:"photo"`
 	Type  string `json:"type"`
 }
 
 /*
+User object in data.json
    "createdAt": "-140h",
    "email": "alice@example.com",
    "tel": "17025550001",
@@ -47,13 +48,15 @@ type User struct {
 	Username    string      `json:"username"`
 	Password    string      `json:"passhash"`
 	Private     interface{} `json:"private"`
-	Public      VCardy      `json:"public"`
+	Public      vCardy      `json:"public"`
 	State       int         `json:"state"`
 	Status      interface{} `json:"status"`
 	AddressBook []string    `json:"addressBook"`
 }
 
 /*
+GroupTopic object in data.json
+
    "createdAt": "-128h",
    "name": "*ABC",
    "owner": "carol",
@@ -63,11 +66,13 @@ type GroupTopic struct {
 	CreatedAt    string      `json:"createdAt"`
 	Name         string      `json:"name"`
 	Owner        string      `json:"owner"`
-	Public       VCardy      `json:"public"`
+	Public       vCardy      `json:"public"`
 	OwnerPrivate interface{} `json:"ownerPrivate"`
 }
 
 /*
+GroupSub object in data.json
+
  "createdAt": "-112h",
  "private": "My super cool group topic",
  "topic": "*ABC",
@@ -85,13 +90,14 @@ type GroupSub struct {
 }
 
 /*
+P2PUser topic in data.json
+
 "createdAt": "-117h",
 "users": [
   {"name": "eve", "private": "ho ho", "want": "JRWP", "have": "N"},
   {"name": "alice", "private": "ha ha"}
 ]
 */
-
 type P2PUser struct {
 	Name    string      `json:"name"`
 	Private interface{} `json:"private"`
@@ -99,6 +105,7 @@ type P2PUser struct {
 	Have    string      `json:"have"`
 }
 
+// P2PSub is a p2p subscription in data.json
 type P2PSub struct {
 	CreatedAt string    `json:"createdAt"`
 	Users     []P2PUser `json:"users"`
@@ -106,6 +113,7 @@ type P2PSub struct {
 	pair string
 }
 
+// Data is a message in data.json.
 type Data struct {
 	Users       []User       `json:"users"`
 	Grouptopics []GroupTopic `json:"grouptopics"`
@@ -161,7 +169,7 @@ func main() {
 			log.Fatal(err)
 		}
 
-		gen_rethink(*reset, string(config.StoreConfig), &data)
+		genRethink(*reset, string(config.StoreConfig), &data)
 	} else {
 		log.Println("No config provided. Exiting.")
 	}
