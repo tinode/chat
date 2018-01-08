@@ -875,7 +875,8 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktID string, want string,
 		if modeWant == types.ModeUnset {
 			// If the user has self-banned before, un-self-ban. Otherwise do not make a change.
 			if !userData.modeWant.IsJoiner() {
-				userData.modeWant = t.accessFor(sess.authLvl)
+				// Set permissions NO WORSE than default, but possibly better (admin or owner banned himself).
+				userData.modeWant = userData.modeGiven | t.accessFor(sess.authLvl)
 			}
 		} else if userData.modeWant != modeWant {
 			// The user has provided a new modeWant and it' different from the one before
@@ -916,6 +917,12 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktID string, want string,
 		}
 	}
 
+	// If topic is being muted, notify before applying the new permissions.
+	if (oldWant & oldGiven).IsPresencer() && !(userData.modeWant & userData.modeGiven).IsPresencer() {
+		t.presSingleUserOffline(sess.uid, "off+remove", nilPresParams, "", false)
+	}
+
+	// Apply changes.
 	t.perUser[sess.uid] = userData
 
 	// If the user is self-banning himself from the topic, no action is needed.
@@ -930,7 +937,14 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktID string, want string,
 		return errors.New("topic access denied; user is banned")
 	}
 
-	// If something has changed and the requested access mode is different from the given.
+	// If this is a new subscription or the topic is being un-muted, notify after applying the changes.
+	if !existingSub ||
+		(!(oldWant & oldGiven).IsPresencer() && (userData.modeWant & userData.modeGiven).IsPresencer()) {
+		// Notify new subscriber of topic's online status.
+		t.presSingleUserOffline(sess.uid, "on+add", nilPresParams, "", false)
+	}
+
+	// If something has changed and the requested access mode is different from the given, notify topic admins.
 	// This will not send a notification for a newly created topic because Hub sets the same values for
 	// the old want/given.
 	if userData.modeWant != oldWant || userData.modeGiven != oldGiven {
@@ -954,11 +968,6 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktID string, want string,
 			// Notify requester's other sessions.
 			// Don't notify if already notified as an admin in the step above.
 			t.presSingleUserOffline(sess.uid, "acs", params, sess.sid, false)
-		}
-
-		// Notify new subscriber of topic's online status
-		if !existingSub {
-			t.presSingleUserOffline(sess.uid, "on", nilPresParams, "", false)
 		}
 	}
 
@@ -1549,7 +1558,8 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 }
 
 // replySetSub is a response to new subscription request or an update to a subscription {set.sub}:
-// update topic metadata cache, save/update subs, reply to the caller as {ctrl} message, generate an announcement.
+// update topic metadata cache, save/update subs, reply to the caller as {ctrl} message,
+// generate a presence notification, if appropriate.
 func (t *Topic) replySetSub(h *Hub, sess *Session, set *MsgClientSet) error {
 	now := types.TimeNow()
 
