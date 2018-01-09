@@ -919,7 +919,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktID string, want string,
 
 	// If topic is being muted, notify before applying the new permissions.
 	if (oldWant & oldGiven).IsPresencer() && !(userData.modeWant & userData.modeGiven).IsPresencer() {
-		t.presSingleUserOffline(sess.uid, "off+remove", nilPresParams, "", false)
+		t.presSingleUserOffline(sess.uid, "off", nilPresParams, "", false)
 	}
 
 	// Apply changes.
@@ -941,7 +941,8 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktID string, want string,
 	if !existingSub ||
 		(!(oldWant & oldGiven).IsPresencer() && (userData.modeWant & userData.modeGiven).IsPresencer()) {
 		// Notify new subscriber of topic's online status.
-		t.presSingleUserOffline(sess.uid, "on+add", nilPresParams, "", false)
+		log.Printf("topic[%s] sending ?unkn+add to me[%s]", t.name, sess.uid.String())
+		t.presSingleUserOffline(sess.uid, "?unkn+add", nilPresParams, "", false)
 	}
 
 	// If something has changed and the requested access mode is different from the given, notify topic admins.

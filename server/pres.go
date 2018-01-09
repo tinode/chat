@@ -83,8 +83,8 @@ func (t *Topic) presProcReq(fromUserID string, what string, wantReply bool) stri
 
 	var online, unknown, add, remove bool
 
-	// log.Printf("presProcReq: topic[%s]: req from='%s', want=%s, wantReply=%v",
-	// 	t.name, fromUserId, what, wantReply)
+	//log.Printf("presProcReq: topic[%s]: req from='%s', want=%s, wantReply=%v",
+	//	t.name, fromUserID, what, wantReply)
 
 	switch what {
 	case "on+add":
@@ -116,6 +116,13 @@ func (t *Topic) presProcReq(fromUserID string, what string, wantReply bool) stri
 	doReply := wantReply
 	if t.cat == types.TopicCat_Me {
 		if psd, ok := t.perSubs[fromUserID]; ok {
+
+			if (!psd.online && what == "off") || (psd.online && what == "on") {
+				// If the topic is already in the desired state, don't send another useless notification.
+				//log.Printf("presProcReq: topic[%s]: removed useless what=%s", t.name, what)
+				what = ""
+			}
+
 			if remove {
 				// Don't want to reply if connection is being removed
 				doReply = false
@@ -128,7 +135,7 @@ func (t *Topic) presProcReq(fromUserID string, what string, wantReply bool) stri
 				// A[online, B:off] to B[online, A:off]: {pres A on}
 				// B[online, A:on] to A[online, B:off]: {pres B on}
 				// A[online, B:on] to B[online, A:on]: {pres A on} <<-- unnecessary, that's why wantReply is needed
-				doReply = (doReply && ((psd.online != online) || unknown))
+				// doReply = doReply && ((psd.online != online) || unknown)
 
 				psd.online = online
 				t.perSubs[fromUserID] = psd
@@ -153,8 +160,8 @@ func (t *Topic) presProcReq(fromUserID string, what string, wantReply bool) stri
 			Pres:   &MsgServerPres{Topic: "me", What: "on+add", Src: t.name, wantReply: unknown},
 			rcptto: fromUserID}
 
-		// log.Printf("presProcReq: topic[%s]: replying to %s with own status '%s', wantReply",
-		// 	t.name, fromUserId, "on", unknown)
+		//log.Printf("presProcReq: topic[%s]: replying to %s with own status='%s', wantReply=%v",
+		//	t.name, fromUserID, "on+add", unknown)
 	}
 
 	return what
@@ -370,7 +377,7 @@ func presSingleUserOfflineOffline(uid types.Uid, original string, what string,
 		rcptto: uid.UserId(), skipSid: skipSid}
 }
 
-// Let other sessions of a given user know that what messages are now received/read
+// Let other sessions of a given user know what messages are now received/read
 // Cases U
 func (t *Topic) presPubMessageCount(uid types.Uid, recv, read int, skip string) {
 	var what string
