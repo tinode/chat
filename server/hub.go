@@ -249,28 +249,28 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 	timestamp := time.Now().UTC().Round(time.Millisecond)
 
 	t = &Topic{name: sreg.topic,
-		x_original: sreg.pkt.Topic,
-		sessions:   make(map[*Session]bool),
-		broadcast:  make(chan *ServerComMessage, 256),
-		reg:        make(chan *sessionJoin, 32),
-		unreg:      make(chan *sessionLeave, 32),
-		meta:       make(chan *metaReq, 32),
-		perUser:    make(map[types.Uid]perUserData),
-		exit:       make(chan *shutDown, 1),
+		xoriginal: sreg.pkt.Topic,
+		sessions:  make(map[*Session]bool),
+		broadcast: make(chan *ServerComMessage, 256),
+		reg:       make(chan *sessionJoin, 32),
+		unreg:     make(chan *sessionLeave, 32),
+		meta:      make(chan *metaReq, 32),
+		perUser:   make(map[types.Uid]perUserData),
+		exit:      make(chan *shutDown, 1),
 	}
 
 	// Helper function to parse access mode from string, handling errors and setting default value
 	parseMode := func(modeString string, defaultMode types.AccessMode) types.AccessMode {
 		mode := defaultMode
 		if err := mode.UnmarshalText([]byte(modeString)); err != nil {
-			log.Println("hub: invalid access mode for topic[" + t.x_original + "]: '" + modeString + "'")
+			log.Println("hub: invalid access mode for topic[" + t.xoriginal + "]: '" + modeString + "'")
 		}
 
 		return mode
 	}
 
 	// Request to load a 'me' topic. The topic always exists.
-	if t.x_original == "me" {
+	if t.xoriginal == "me" {
 
 		t.cat = types.TopicCatMe
 
@@ -281,13 +281,13 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 			log.Println("hub: cannot load user object for 'me'='" + t.name + "' (" + err.Error() + ")")
 			// Log out the session
 			sreg.sess.uid = types.ZeroUid
-			sreg.sess.queueOut(ErrUnknown(sreg.pkt.Id, t.x_original, timestamp))
+			sreg.sess.queueOut(ErrUnknown(sreg.pkt.Id, t.xoriginal, timestamp))
 			return
 		} else if user == nil {
 			log.Println("hub: user's account unexpectedly not found (deleted?)")
 			// Log out the session
 			sreg.sess.uid = types.ZeroUid
-			sreg.sess.queueOut(ErrUserNotFound(sreg.pkt.Id, t.x_original, timestamp))
+			sreg.sess.queueOut(ErrUserNotFound(sreg.pkt.Id, t.xoriginal, timestamp))
 			return
 		}
 
@@ -297,7 +297,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 
 		if err = t.loadSubscribers(); err != nil {
 			log.Println("hub: cannot load subscribers for '" + t.name + "' (" + err.Error() + ")")
-			sreg.sess.queueOut(ErrUnknown(sreg.pkt.Id, t.x_original, timestamp))
+			sreg.sess.queueOut(ErrUnknown(sreg.pkt.Id, t.xoriginal, timestamp))
 			return
 		}
 
@@ -315,7 +315,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		t.uaChange = make(chan string, 32)
 
 		// Request to load a 'find' topic. The topic always exists.
-	} else if t.x_original == "fnd" {
+	} else if t.xoriginal == "fnd" {
 
 		t.cat = types.TopicCatFnd
 
@@ -328,17 +328,17 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		user, err := store.Users.Get(sreg.sess.uid)
 		if err != nil {
 			log.Println("hub: cannot load user object for 'fnd'='" + t.name + "' (" + err.Error() + ")")
-			sreg.sess.queueOut(ErrUnknown(sreg.pkt.Id, t.x_original, timestamp))
+			sreg.sess.queueOut(ErrUnknown(sreg.pkt.Id, t.xoriginal, timestamp))
 			return
 		} else if user == nil {
 			log.Println("hub: user's account unexpectedly not found (deleted?)")
-			sreg.sess.queueOut(ErrUserNotFound(sreg.pkt.Id, t.x_original, timestamp))
+			sreg.sess.queueOut(ErrUserNotFound(sreg.pkt.Id, t.xoriginal, timestamp))
 			return
 		}
 
 		if err = t.loadSubscribers(); err != nil {
 			log.Println("hub: cannot load subscribers for '" + t.name + "' (" + err.Error() + ")")
-			sreg.sess.queueOut(ErrUnknown(sreg.pkt.Id, t.x_original, timestamp))
+			sreg.sess.queueOut(ErrUnknown(sreg.pkt.Id, t.xoriginal, timestamp))
 			return
 		}
 
@@ -351,7 +351,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		// t.lastId = 0
 
 		// Request to load an existing or create a new p2p topic, then attach to it.
-	} else if strings.HasPrefix(t.x_original, "usr") || strings.HasPrefix(t.x_original, "p2p") {
+	} else if strings.HasPrefix(t.xoriginal, "usr") || strings.HasPrefix(t.xoriginal, "p2p") {
 
 		// Handle the following cases:
 		// 1. Neither topic nor subscriptions exist: create a new p2p topic & subscriptions.
@@ -367,7 +367,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		stopic, err := store.Topics.Get(t.name)
 		if err != nil {
 			log.Println("hub: error while loading topic '" + t.name + "' (" + err.Error() + ")")
-			sreg.sess.queueOut(ErrUnknown(sreg.pkt.Id, t.x_original, timestamp))
+			sreg.sess.queueOut(ErrUnknown(sreg.pkt.Id, t.xoriginal, timestamp))
 			return
 		}
 
@@ -377,14 +377,14 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 			// Subs already have Public swapped
 			if subs, err = store.Topics.GetSubs(t.name); err != nil {
 				log.Println("hub: cannot load subscritions for '" + t.name + "' (" + err.Error() + ")")
-				sreg.sess.queueOut(ErrUnknown(sreg.pkt.Id, t.x_original, timestamp))
+				sreg.sess.queueOut(ErrUnknown(sreg.pkt.Id, t.xoriginal, timestamp))
 				return
 			}
 
 			// Case 3, fail
 			if subs == nil || len(subs) == 0 {
 				log.Println("hub: missing both subscriptions for '" + t.name + "' (SHOULD NEVER HAPPEN!)")
-				sreg.sess.queueOut(ErrUnknown(sreg.pkt.Id, t.x_original, timestamp))
+				sreg.sess.queueOut(ErrUnknown(sreg.pkt.Id, t.xoriginal, timestamp))
 				return
 			}
 
@@ -435,7 +435,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 			// Requester.
 			userID1 := sreg.sess.uid
 			// The other user.
-			userID2 := types.ParseUserId(t.x_original)
+			userID2 := types.ParseUserId(t.xoriginal)
 			// User index: u1 - requester, u2 - the other user
 
 			log.Println("hub: creating new p2p topic", userID1.String(), userID2.String())
@@ -444,12 +444,12 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 			users, err := store.Users.GetAll(userID1, userID2)
 			if err != nil {
 				log.Println("hub: failed to load users for '" + t.name + "' (" + err.Error() + ")")
-				sreg.sess.queueOut(ErrUnknown(sreg.pkt.Id, t.x_original, timestamp))
+				sreg.sess.queueOut(ErrUnknown(sreg.pkt.Id, t.xoriginal, timestamp))
 				return
 			} else if users == nil || len(users) != 2 {
 				// Invited user does not exist
 				log.Println("hub: missing user for '" + t.name + "'")
-				sreg.sess.queueOut(ErrUserNotFound(sreg.pkt.Id, t.x_original, timestamp))
+				sreg.sess.queueOut(ErrUserNotFound(sreg.pkt.Id, t.xoriginal, timestamp))
 				return
 			} else {
 				// User records are unsorted, make sure we know who is who.
@@ -566,7 +566,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 			if stopic == nil {
 				if err = store.Topics.CreateP2P(sub1, sub2); err != nil {
 					log.Println("hub: databse error in creating subscriptions '" + t.name + "' (" + err.Error() + ")")
-					sreg.sess.queueOut(ErrUnknown(sreg.pkt.Id, t.x_original, timestamp))
+					sreg.sess.queueOut(ErrUnknown(sreg.pkt.Id, t.xoriginal, timestamp))
 					return
 				}
 
@@ -587,7 +587,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 				}
 				if err = store.Subs.Create(subToMake); err != nil {
 					log.Println("hub: databse error in re-subscribing user '" + t.name + "' (" + err.Error() + ")")
-					sreg.sess.queueOut(ErrUnknown(sreg.pkt.Id, t.x_original, timestamp))
+					sreg.sess.queueOut(ErrUnknown(sreg.pkt.Id, t.xoriginal, timestamp))
 					return
 				}
 			}
@@ -619,10 +619,10 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		}
 
 		// Clear original topic name.
-		t.x_original = ""
+		t.xoriginal = ""
 
 		// Processing request to create a new generic (group) topic:
-	} else if strings.HasPrefix(t.x_original, "new") {
+	} else if strings.HasPrefix(t.xoriginal, "new") {
 
 		t.cat = types.TopicCatGrp
 
@@ -696,31 +696,31 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		if err != nil {
 			log.Println("hub: cannot save new topic '" + t.name + "' (" + err.Error() + ")")
 			// Error sent on "newWHATEVER" topic
-			sreg.sess.queueOut(ErrUnknown(sreg.pkt.Id, t.x_original, timestamp))
+			sreg.sess.queueOut(ErrUnknown(sreg.pkt.Id, t.xoriginal, timestamp))
 			return
 		}
 
-		t.x_original = t.name // keeping 'new' as original has no value to the client
+		t.xoriginal = t.name // keeping 'new' as original has no value to the client
 		sreg.created = true
 
-	} else if strings.HasPrefix(t.x_original, "grp") {
+	} else if strings.HasPrefix(t.xoriginal, "grp") {
 		t.cat = types.TopicCatGrp
 
 		// TODO(gene): check and validate topic name
 		stopic, err := store.Topics.Get(t.name)
 		if err != nil {
 			log.Println("hub: error while loading topic '" + t.name + "' (" + err.Error() + ")")
-			sreg.sess.queueOut(ErrUnknown(sreg.pkt.Id, t.x_original, timestamp))
+			sreg.sess.queueOut(ErrUnknown(sreg.pkt.Id, t.xoriginal, timestamp))
 			return
 		} else if stopic == nil {
 			log.Println("hub: topic '" + t.name + "' does not exist")
-			sreg.sess.queueOut(ErrTopicNotFound(sreg.pkt.Id, t.x_original, timestamp))
+			sreg.sess.queueOut(ErrTopicNotFound(sreg.pkt.Id, t.xoriginal, timestamp))
 			return
 		}
 
 		if err = t.loadSubscribers(); err != nil {
 			log.Println("hub: cannot load subscribers for '" + t.name + "' (" + err.Error() + ")")
-			sreg.sess.queueOut(ErrUnknown(sreg.pkt.Id, t.x_original, timestamp))
+			sreg.sess.queueOut(ErrUnknown(sreg.pkt.Id, t.xoriginal, timestamp))
 			return
 		}
 
@@ -739,7 +739,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 
 	} else {
 		// Unrecognized topic name
-		sreg.sess.queueOut(ErrTopicNotFound(sreg.pkt.Id, t.x_original, timestamp))
+		sreg.sess.queueOut(ErrTopicNotFound(sreg.pkt.Id, t.xoriginal, timestamp))
 		return
 	}
 

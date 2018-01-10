@@ -202,7 +202,7 @@ func (t *Topic) presSubsOnline(what, src string, params *PresParams,
 	}
 
 	globals.hub.route <- &ServerComMessage{
-		Pres: &MsgServerPres{Topic: t.x_original, What: what, Src: src,
+		Pres: &MsgServerPres{Topic: t.xoriginal, What: what, Src: src,
 			Acs: params.packAcs(), AcsActor: actor, AcsTarget: target,
 			SeqId: params.seqID, DelId: params.delID, DelSeq: params.delSeq,
 			filter: int(filter), singleUser: singleUser},
@@ -215,7 +215,7 @@ func (t *Topic) presSubsOnline(what, src string, params *PresParams,
 
 // Send presence notification to attached sessions directly, without routing though topic.
 func (t *Topic) presSubsOnlineDirect(what string) {
-	msg := &ServerComMessage{Pres: &MsgServerPres{Topic: t.x_original, What: what}}
+	msg := &ServerComMessage{Pres: &MsgServerPres{Topic: t.xoriginal, What: what}}
 
 	for sess := range t.sessions {
 		// Check presence filters

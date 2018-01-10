@@ -27,7 +27,7 @@ type Topic struct {
 	name string
 	// For single-user topics session-specific topic name, such as 'me',
 	// otherwise the same as 'name'.
-	x_original string
+	xoriginal string
 
 	// Topic category
 	cat types.TopicCat
@@ -333,7 +333,7 @@ func (t *Topic) run(hub *Hub) {
 			} else if msg.Pres != nil {
 
 				what := t.presProcReq(msg.Pres.Src, msg.Pres.What, msg.Pres.wantReply)
-				if t.x_original != msg.Pres.Topic || what == "" {
+				if t.xoriginal != msg.Pres.Topic || what == "" {
 					// This is just a request for status, don't forward it to sessions
 					continue
 				}
@@ -2020,7 +2020,7 @@ func (t *Topic) isSuspended() bool {
 // Get topic name suitable for the given client
 func (t *Topic) original(uid types.Uid) string {
 	if t.cat != types.TopicCatP2P {
-		return t.x_original
+		return t.xoriginal
 	}
 
 	if pud, ok := t.perUser[uid]; ok {
