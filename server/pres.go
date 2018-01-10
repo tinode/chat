@@ -217,8 +217,9 @@ func (t *Topic) presProcReq(fromUserID string, what string, wantReply bool) stri
 	log.Printf("presProcReq: topic[%s]: req from='%s', what-now=%s, enable=%v, remove=%v, online=%v, unknown=%v",
 		t.name, fromUserID, what, enable, remove, online, unknown)
 
-	if t.cat == types.TopicCat_Me {
-		// Find of the contact is listed
+	if t.cat == types.TopicCatMe {
+		// Find if the contact is listed.
+
 		if psd, ok := t.perSubs[fromUserID]; ok {
 			log.Printf("presProcReq: topic[%s]: requester %s in list", t.name, fromUserID)
 
@@ -322,7 +323,7 @@ func (t *Topic) presSubsOnline(what, src string, params *PresParams,
 	}
 
 	globals.hub.route <- &ServerComMessage{
-		Pres: &MsgServerPres{Topic: t.x_original, What: what, Src: src,
+		Pres: &MsgServerPres{Topic: t.xoriginal, What: what, Src: src,
 			Acs: params.packAcs(), AcsActor: actor, AcsTarget: target,
 			SeqId: params.seqID, DelId: params.delID, DelSeq: params.delSeq,
 			filter: int(filter), singleUser: singleUser},
@@ -335,7 +336,7 @@ func (t *Topic) presSubsOnline(what, src string, params *PresParams,
 
 // Send presence notification to attached sessions directly, without routing though topic.
 func (t *Topic) presSubsOnlineDirect(what string) {
-	msg := &ServerComMessage{Pres: &MsgServerPres{Topic: t.x_original, What: what}}
+	msg := &ServerComMessage{Pres: &MsgServerPres{Topic: t.xoriginal, What: what}}
 
 	for sess := range t.sessions {
 		// Check presence filters
@@ -344,7 +345,7 @@ func (t *Topic) presSubsOnlineDirect(what string) {
 			continue
 		}
 
-		if t.cat == types.TopicCat_P2P {
+		if t.cat == types.TopicCatP2P {
 			// For p2p topics topic name is dependent on receiver.
 			// It's OK to change the pointer here because the message will be serialized in queueOut
 			// before being placed into channel.
@@ -409,7 +410,7 @@ func presSubsOfflineOffline(topic string, cat types.TopicCat, subs []types.Subsc
 			continue
 		}
 
-		if cat == types.TopicCat_P2P {
+		if cat == types.TopicCatP2P {
 			original = types.ParseUid(subs[(count+1)%2].User).UserId()
 			count++
 		}

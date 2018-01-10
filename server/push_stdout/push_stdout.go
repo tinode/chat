@@ -9,11 +9,12 @@ import (
 	"github.com/tinode/chat/server/push"
 )
 
-var handler StdoutPush
+var handler stdoutPush
 
-const DEFAULT_BUFFER = 32
+// How much to buffer the input channel.
+const defaultBuffer = 32
 
-type StdoutPush struct {
+type stdoutPush struct {
 	initialized bool
 	input       chan *push.Receipt
 	stop        chan bool
@@ -24,8 +25,8 @@ type configType struct {
 	Buffer   int  `json:"buffer"`
 }
 
-// Initialize the handler
-func (StdoutPush) Init(jsonconf string) error {
+// Init initializes the handler
+func (stdoutPush) Init(jsonconf string) error {
 
 	// Check if the handler is already initialized
 	if handler.initialized {
@@ -44,7 +45,7 @@ func (StdoutPush) Init(jsonconf string) error {
 	}
 
 	if config.Buffer <= 0 {
-		config.Buffer = DEFAULT_BUFFER
+		config.Buffer = defaultBuffer
 	}
 
 	handler.input = make(chan *push.Receipt, config.Buffer)
@@ -64,18 +65,19 @@ func (StdoutPush) Init(jsonconf string) error {
 	return nil
 }
 
-// Check if the handler is ready
-func (StdoutPush) IsReady() bool {
+// IsReady checks if the handler is initialized.
+func (stdoutPush) IsReady() bool {
 	return handler.input != nil
 }
 
 // Push return a channel that the server will use to send messages to.
 // If the adapter blocks, the message will be dropped.
-func (StdoutPush) Push() chan<- *push.Receipt {
+func (stdoutPush) Push() chan<- *push.Receipt {
 	return handler.input
 }
 
-func (StdoutPush) Stop() {
+// Stop terminates the handler's worker and stops sending pushes.
+func (stdoutPush) Stop() {
 	handler.stop <- true
 }
 

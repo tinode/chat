@@ -51,12 +51,13 @@ func (sess *Session) readLoop() {
 
 	for {
 		// Read a ClientComMessage
-		if _, raw, err := sess.ws.ReadMessage(); err != nil {
+		_, raw, err := sess.ws.ReadMessage()
+		if err != nil {
 			log.Println("sess.readLoop: " + err.Error())
 			return
-		} else {
-			sess.dispatchRaw(raw)
 		}
+
+		sess.dispatchRaw(raw)
 	}
 }
 

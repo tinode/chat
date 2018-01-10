@@ -63,12 +63,13 @@ func (sess *Session) readOnce(wrt http.ResponseWriter, req *http.Request) (int, 
 	}
 
 	req.Body = http.MaxBytesReader(wrt, req.Body, globals.maxMessageSize)
-	if raw, err := ioutil.ReadAll(req.Body); err == nil {
+	raw, err := ioutil.ReadAll(req.Body)
+	if err == nil {
 		sess.dispatchRaw(raw)
 		return 0, nil
-	} else {
-		return 0, err
 	}
+
+	return 0, err
 }
 
 // serveLongPoll handles long poll connections when WebSocket is not available

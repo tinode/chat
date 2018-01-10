@@ -812,27 +812,27 @@ type BrowseOpt struct {
 type TopicCat int
 
 const (
-	// TopicCat_Me is 'me' topic.
-	TopicCat_Me TopicCat = iota
-	// TopicCat_Fnd is 'fnd' topic.
-	TopicCat_Fnd
-	// TopicCat_P2P is a 'p2p topic.
-	TopicCat_P2P
-	// TopicCat_Grp is a group topic.
-	TopicCat_Grp
+	// TopicCatMe is a value denoting 'me' topic.
+	TopicCatMe TopicCat = iota
+	// TopicCatFnd is a value denoting 'fnd' topic.
+	TopicCatFnd
+	// TopicCatP2P is a a value denoting 'p2p topic.
+	TopicCatP2P
+	// TopicCatGrp is a a value denoting group topic.
+	TopicCatGrp
 )
 
 // GetTopicCat given topic name returns topic category.
 func GetTopicCat(name string) TopicCat {
 	switch name[:3] {
 	case "usr":
-		return TopicCat_Me
+		return TopicCatMe
 	case "p2p":
-		return TopicCat_P2P
+		return TopicCatP2P
 	case "grp":
-		return TopicCat_Grp
+		return TopicCatGrp
 	case "fnd":
-		return TopicCat_Fnd
+		return TopicCatFnd
 	default:
 		panic("invalid topic type for name '" + name + "'")
 	}

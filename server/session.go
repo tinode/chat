@@ -548,8 +548,8 @@ func (s *Session) acc(msg *ClientComMessage) {
 		var private interface{}
 
 		// Assign default access values in case the acc creator has not provided them
-		user.Access.Auth = getDefaultAccess(types.TopicCat_P2P, true)
-		user.Access.Anon = getDefaultAccess(types.TopicCat_P2P, false)
+		user.Access.Auth = getDefaultAccess(types.TopicCatP2P, true)
+		user.Access.Anon = getDefaultAccess(types.TopicCatP2P, false)
 
 		if msg.Acc.Desc != nil {
 
@@ -595,15 +595,13 @@ func (s *Session) acc(msg *ClientComMessage) {
 			return
 		}
 
-		var authLvl int
-		if al, authErr := authhdl.AddRecord(user.Uid(), msg.Acc.Secret, 0); authErr.IsError() {
+		authLvl, authErr := authhdl.AddRecord(user.Uid(), msg.Acc.Secret, 0)
+		if authErr.IsError() {
 			log.Println(authErr.Err)
 			// Attempt to delete incomplete user record
 			store.Users.Delete(user.Uid(), false)
 			s.queueOut(decodeAuthError(authErr.Code, msg.Acc.Id, msg.timestamp))
 			return
-		} else {
-			authLvl = al
 		}
 
 		reply := NoErrCreated(msg.Acc.Id, "", msg.timestamp)

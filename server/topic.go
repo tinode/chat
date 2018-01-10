@@ -27,7 +27,7 @@ type Topic struct {
 	name string
 	// For single-user topics session-specific topic name, such as 'me',
 	// otherwise the same as 'name'.
-	x_original string
+	xoriginal string
 
 	// Topic category
 	cat types.TopicCat
@@ -239,7 +239,7 @@ func (t *Topic) run(hub *Hub) {
 
 				pud := t.perUser[leave.sess.uid]
 				pud.online--
-				if t.cat == types.TopicCat_Me {
+				if t.cat == types.TopicCatMe {
 					mrs := t.mostRecentSession()
 					if mrs == nil {
 						// Last session
@@ -255,7 +255,7 @@ func (t *Topic) run(hub *Hub) {
 					if err := store.Users.UpdateLastSeen(mrs.uid, mrs.userAgent, now); err != nil {
 						log.Println(err)
 					}
-				} else if t.cat == types.TopicCat_Grp && pud.online == 0 {
+				} else if t.cat == types.TopicCatGrp && pud.online == 0 {
 					// User is going offline: notify online subscribers on 'me'
 					t.presSubsOnline("off", leave.sess.uid.UserId(), nilPresParams,
 						types.ModeRead, "", "")
@@ -333,7 +333,7 @@ func (t *Topic) run(hub *Hub) {
 			} else if msg.Pres != nil {
 
 				what := t.presProcReq(msg.Pres.Src, msg.Pres.What, msg.Pres.wantReply)
-				if t.x_original != msg.Pres.Topic || what == "" {
+				if t.xoriginal != msg.Pres.Topic || what == "" {
 					// This is just a request for status, don't forward it to sessions
 					continue
 				}
@@ -437,7 +437,7 @@ func (t *Topic) run(hub *Hub) {
 						}
 					}
 
-					if t.cat == types.TopicCat_P2P {
+					if t.cat == types.TopicCatP2P {
 						// For p2p topics topic name is dependent on receiver
 						if msg.Data != nil {
 							msg.Data.Topic = t.original(sess.uid)
@@ -550,10 +550,10 @@ func (t *Topic) run(hub *Hub) {
 		case <-killTimer.C:
 			// Topic timeout
 			hub.unreg <- &topicUnreg{topic: t.name}
-			if t.cat == types.TopicCat_Me {
+			if t.cat == types.TopicCatMe {
 				uaTimer.Stop()
 				t.presUsersOfInterest("off", currentUA)
-			} else if t.cat == types.TopicCat_Grp {
+			} else if t.cat == types.TopicCatGrp {
 				t.presSubsOffline("off", nilPresParams, 0, "", false)
 			}
 			return
@@ -567,7 +567,7 @@ func (t *Topic) run(hub *Hub) {
 			// FIXME(gene): save lastMessage value;
 
 			if sd.reason == StopDeleted {
-				if t.cat == types.TopicCat_Grp {
+				if t.cat == types.TopicCatGrp {
 					t.presSubsOffline("gone", nilPresParams, 0, "", false)
 				}
 				// P2P users get "off+remove" earlier in the process
@@ -606,13 +606,13 @@ func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 	pud := t.perUser[sreg.sess.uid]
 	if sreg.loaded {
 		// Notify user's contact that the given user is online now.
-		if t.cat == types.TopicCat_Me {
+		if t.cat == types.TopicCatMe {
 			if err := t.loadContacts(sreg.sess.uid); err != nil {
 				log.Println("topic: failed to load contacts", t.name, err.Error())
 			}
 			// User online: notify users of interest
 			t.presUsersOfInterest("on", sreg.sess.userAgent)
-		} else if t.cat == types.TopicCat_Grp || t.cat == types.TopicCat_P2P {
+		} else if t.cat == types.TopicCatGrp || t.cat == types.TopicCatP2P {
 			if sreg.created {
 				// Notify creator's other sessions that the topic was created.
 				t.presSingleUserOffline(sreg.sess.uid, "acs",
@@ -624,7 +624,7 @@ func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 
 				// Special handling of a P2P topic - notifying the other
 				// participant.
-				if t.cat == types.TopicCat_P2P {
+				if t.cat == types.TopicCatP2P {
 					user2 := t.p2pOtherUser(sreg.sess.uid)
 					pud2 := t.perUser[user2]
 
@@ -642,12 +642,12 @@ func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 				}
 			}
 
-			if t.cat == types.TopicCat_Grp {
+			if t.cat == types.TopicCatGrp {
 				// Notify topic subscribers that the topic is online now.
 				t.presSubsOffline("on", nilPresParams, 0, "", false)
 			}
 		}
-	} else if t.cat == types.TopicCat_Grp && pud.online == 1 {
+	} else if t.cat == types.TopicCatGrp && pud.online == 1 {
 		// User just joined. Notify other group members
 		t.presSubsOnline("on", sreg.sess.uid.UserId(), nilPresParams, types.ModeRead, sreg.sess.sid, "")
 	}
@@ -767,7 +767,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktID string, want string,
 
 		userData.private = private
 
-		if t.cat == types.TopicCat_P2P {
+		if t.cat == types.TopicCatP2P {
 			// If it's a re-subscription to a p2p topic, set public and permissions
 
 			// t.perUser contains just one element - the other user
@@ -862,7 +862,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktID string, want string,
 				// Ownership transfer can only be initiated by the owner
 				sess.queueOut(ErrPermissionDenied(pktID, t.original(sess.uid), now))
 				return errors.New("non-owner cannot request ownership transfer")
-			} else if t.cat == types.TopicCat_P2P {
+			} else if t.cat == types.TopicCatP2P {
 				// For P2P topics ignore requests for 'D'. Otherwise it will generate a useless announcement
 				modeWant = (modeWant & types.ModeCP2P) | types.ModeApprove
 			} else if userData.modeGiven.IsAdmin() && modeWant.IsAdmin() {
@@ -996,12 +996,13 @@ func (t *Topic) approveSub(h *Hub, sess *Session, target types.Uid, set *MsgClie
 	var hostMode types.AccessMode
 
 	// Check if approver actually has permission to manage sharing
-	if userData, ok := t.perUser[sess.uid]; !ok || !(userData.modeGiven & userData.modeWant).IsSharer() {
+	userData, ok := t.perUser[sess.uid]
+	if !ok || !(userData.modeGiven & userData.modeWant).IsSharer() {
 		sess.queueOut(ErrPermissionDenied(set.Id, t.original(sess.uid), now))
 		return errors.New("topic access denied; approver has no permission")
-	} else {
-		hostMode = userData.modeGiven & userData.modeWant
 	}
+
+	hostMode = userData.modeGiven & userData.modeWant
 
 	// Parse the access mode granted
 	modeGiven := types.ModeUnset
@@ -1012,7 +1013,7 @@ func (t *Topic) approveSub(h *Hub, sess *Session, target types.Uid, set *MsgClie
 		}
 
 		// Make sure the new permissions are reasonable in P2P topics
-		if t.cat == types.TopicCat_P2P {
+		if t.cat == types.TopicCatP2P {
 			modeGiven &= types.ModeCP2P
 			if modeGiven != types.ModeNone {
 				modeGiven |= types.ModeApprove
@@ -1140,7 +1141,7 @@ func (t *Topic) replyGetDesc(sess *Session, id, tempName string, opts *MsgGetOpt
 	}
 
 	pud, full := t.perUser[sess.uid]
-	if t.cat == types.TopicCat_Me {
+	if t.cat == types.TopicCatMe {
 		full = true
 	}
 
@@ -1156,16 +1157,16 @@ func (t *Topic) replyGetDesc(sess *Session, id, tempName string, opts *MsgGetOpt
 	// Request may come from a subscriber (full == true) or a stranger.
 	// Give subscriber a fuller description than to a stranger
 	if full {
-		if t.cat == types.TopicCat_P2P {
+		if t.cat == types.TopicCatP2P {
 			// For p2p topics default access mode makes no sense.
 			// Don't report it.
-		} else if t.cat == types.TopicCat_Me || (pud.modeGiven & pud.modeWant).IsSharer() {
+		} else if t.cat == types.TopicCatMe || (pud.modeGiven & pud.modeWant).IsSharer() {
 			desc.DefaultAcs = &MsgDefaultAcsMode{
 				Auth: t.accessAuth.String(),
 				Anon: t.accessAnon.String()}
 		}
 
-		if t.cat != types.TopicCat_Me {
+		if t.cat != types.TopicCatMe {
 			desc.Acs = &MsgAccessMode{
 				Want:  pud.modeWant.String(),
 				Given: pud.modeGiven.String(),
@@ -1216,7 +1217,7 @@ func (t *Topic) replySetDesc(sess *Session, set *MsgClientSet) error {
 		} else {
 			access := make(map[string]interface{})
 			if auth != types.ModeInvalid {
-				if t.cat == types.TopicCat_Me {
+				if t.cat == types.TopicCatMe {
 					auth &= types.ModeCP2P
 					if auth != types.ModeNone {
 						// This is the default access mode for P2P topics.
@@ -1227,7 +1228,7 @@ func (t *Topic) replySetDesc(sess *Session, set *MsgClientSet) error {
 				access["Auth"] = auth
 			}
 			if anon != types.ModeInvalid {
-				if t.cat == types.TopicCat_Me {
+				if t.cat == types.TopicCatMe {
 					anon &= types.ModeCP2P
 					if anon != types.ModeNone {
 						anon |= types.ModeApprove
@@ -1283,7 +1284,7 @@ func (t *Topic) replySetDesc(sess *Session, set *MsgClientSet) error {
 	topic := make(map[string]interface{})
 	sub := make(map[string]interface{})
 	if set.Desc != nil {
-		if t.cat == types.TopicCat_Me {
+		if t.cat == types.TopicCatMe {
 			// Update current user
 			if set.Desc.DefaultAcs != nil {
 				err = assignAccess(user, set.Desc.DefaultAcs)
@@ -1291,7 +1292,7 @@ func (t *Topic) replySetDesc(sess *Session, set *MsgClientSet) error {
 			if set.Desc.Public != nil {
 				sendPres = assignGenericValues(user, "Public", set.Desc.Public)
 			}
-		} else if t.cat == types.TopicCat_Fnd {
+		} else if t.cat == types.TopicCatFnd {
 			// User's own tags are sent as fnd.public. Assign them to user.Tags
 			if set.Desc.Public != nil {
 				if src, ok := set.Desc.Public.([]string); ok && len(src) > 0 {
@@ -1303,7 +1304,7 @@ func (t *Topic) replySetDesc(sess *Session, set *MsgClientSet) error {
 					}
 				}
 			}
-		} else if t.cat == types.TopicCat_P2P {
+		} else if t.cat == types.TopicCatP2P {
 			// Reject direct changes to P2P topics.
 			if set.Desc.Public != nil || set.Desc.DefaultAcs != nil {
 				sess.queueOut(ErrPermissionDenied(set.Id, set.Topic, now))
@@ -1365,15 +1366,15 @@ func (t *Topic) replySetDesc(sess *Session, set *MsgClientSet) error {
 		pud.private = private
 		t.perUser[sess.uid] = pud
 	}
-	if t.cat == types.TopicCat_Me {
+	if t.cat == types.TopicCatMe {
 		updateCached(user)
-	} else if t.cat == types.TopicCat_Grp {
+	} else if t.cat == types.TopicCatGrp {
 		updateCached(topic)
 	}
 
 	if sendPres {
 		// t.Public has changed, make an announcement
-		if t.cat == types.TopicCat_Me {
+		if t.cat == types.TopicCatMe {
 			t.presUsersOfInterest("upd", "")
 			t.presSingleUserOffline(sess.uid, "upd", nilPresParams, sess.sid, false)
 		} else {
@@ -1396,12 +1397,12 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 	var err error
 	var isSharer bool
 
-	if t.cat == types.TopicCat_Me {
+	if t.cat == types.TopicCatMe {
 		// Fetch user's subscriptions, with Topic.Public denormalized into subscription.
 		// Include deleted subscriptions too.
 		subs, err = store.Users.GetTopicsAny(sess.uid)
 		isSharer = true
-	} else if t.cat == types.TopicCat_Fnd {
+	} else if t.cat == types.TopicCatFnd {
 		// Given a query provided in .private, fetch user's contacts
 		if query, ok := t.perUser[sess.uid].private.([]interface{}); ok {
 			if query != nil && len(query) > 0 {
@@ -1470,7 +1471,7 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 
 			uid := types.ParseUid(sub.User)
 			isReader := sub.ModeGiven.IsReader() && sub.ModeWant.IsReader()
-			if t.cat == types.TopicCat_Me {
+			if t.cat == types.TopicCatMe {
 				// The subscriptions user does not care about are marked as deleted
 				if !sub.ModeWant.IsJoiner() || !sub.ModeGiven.IsJoiner() {
 					deleted = true
@@ -1502,7 +1503,7 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 				}
 			} else {
 				// Mark subscriptions that the user does not care about as deleted
-				if t.cat == types.TopicCat_Grp && !isSharer &&
+				if t.cat == types.TopicCatGrp && !isSharer &&
 					(!sub.ModeWant.IsJoiner() || !sub.ModeGiven.IsJoiner()) {
 					deleted = true
 				}
@@ -1515,7 +1516,7 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 						mts.DelId = sub.DelId
 					}
 
-					if t.cat == types.TopicCat_Grp {
+					if t.cat == types.TopicCatGrp {
 						pud := t.perUser[uid]
 						mts.Online = pud.online > 0
 					}
@@ -1530,7 +1531,7 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 					mts.RecvSeqId = sub.RecvSeqId
 				}
 
-				if t.cat != types.TopicCat_Fnd {
+				if t.cat != types.TopicCatFnd {
 					mts.Acs.Mode = (sub.ModeGiven & sub.ModeWant).String()
 					if isSharer {
 						mts.Acs.Want = sub.ModeWant.String()
@@ -1543,7 +1544,7 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 					mts.Public = sub.GetPublic()
 					// Reporting private only if it's user's own subscription or
 					// a synthetic 'private' in 'find' topic where it's a list of tags matched on.
-					if uid == sess.uid || t.cat == types.TopicCat_Fnd {
+					if uid == sess.uid || t.cat == types.TopicCatFnd {
 						mts.Private = sub.Private
 					}
 				}
@@ -1806,7 +1807,7 @@ func (t *Topic) replyDelMsg(sess *Session, del *MsgClientDel) error {
 func (t *Topic) replyDelTopic(h *Hub, sess *Session, del *MsgClientDel) error {
 	if t.owner != sess.uid {
 		// Cases 2.1.1 and 2.2
-		if t.cat != types.TopicCat_P2P || len(t.perUser) > 1 {
+		if t.cat != types.TopicCatP2P || len(t.perUser) > 1 {
 			return t.replyLeaveUnsub(h, sess, del.Id)
 		}
 	}
@@ -1835,7 +1836,7 @@ func (t *Topic) replyDelSub(h *Hub, sess *Session, del *MsgClientDel) error {
 	} else if uid.IsZero() || uid == sess.uid {
 		// Cannot delete self-subscription. User [leave unsub] or [delete topic]
 		err = errors.New("del.sub: cannot delete self-subscription")
-	} else if t.cat == types.TopicCat_P2P {
+	} else if t.cat == types.TopicCatP2P {
 		// Don't try to delete the other P2P user
 		err = errors.New("del.sub: cannot apply to a P2P topic")
 	}
@@ -1915,7 +1916,7 @@ func (t *Topic) evictUser(uid types.Uid, unsub bool, skip string) {
 	pud := t.perUser[uid]
 
 	// First notify topic subscribers that the user has left the topic
-	if t.cat == types.TopicCat_Grp {
+	if t.cat == types.TopicCatGrp {
 		if unsub {
 			// Let admins know
 			t.presSubsOnline("acs", uid.UserId(),
@@ -1931,7 +1932,7 @@ func (t *Topic) evictUser(uid types.Uid, unsub bool, skip string) {
 			// Let all 'R' users know
 			t.presSubsOnline("off", uid.UserId(), nilPresParams, types.ModeRead, skip, "")
 		}
-	} else if t.cat == types.TopicCat_P2P && unsub {
+	} else if t.cat == types.TopicCatP2P && unsub {
 		// Notify user's own sessions that the topic is gone and remove the other user from
 		// perSubs.
 		t.presSingleUserOffline(uid, "gone", nilPresParams, skip, false)
@@ -2018,8 +2019,8 @@ func (t *Topic) isSuspended() bool {
 
 // Get topic name suitable for the given client
 func (t *Topic) original(uid types.Uid) string {
-	if t.cat != types.TopicCat_P2P {
-		return t.x_original
+	if t.cat != types.TopicCatP2P {
+		return t.xoriginal
 	}
 
 	if pud, ok := t.perUser[uid]; ok {
@@ -2031,7 +2032,7 @@ func (t *Topic) original(uid types.Uid) string {
 
 // Get topic name suitable for the given client
 func (t *Topic) p2pOtherUser(uid types.Uid) types.Uid {
-	if t.cat == types.TopicCat_P2P {
+	if t.cat == types.TopicCatP2P {
 		for u2 := range t.perUser {
 			if u2.Compare(uid) != 0 {
 				return u2
@@ -2069,13 +2070,13 @@ func getDefaultAccess(cat types.TopicCat, auth bool) types.AccessMode {
 	}
 
 	switch cat {
-	case types.TopicCat_P2P:
+	case types.TopicCatP2P:
 		return types.ModeCP2P
-	case types.TopicCat_Fnd:
+	case types.TopicCatFnd:
 		return types.ModeNone
-	case types.TopicCat_Grp:
+	case types.TopicCatGrp:
 		return types.ModeCPublic
-	case types.TopicCat_Me:
+	case types.TopicCatMe:
 		return types.ModeCSelf
 	default:
 		panic("Unknown topic category")
