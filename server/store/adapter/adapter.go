@@ -28,7 +28,7 @@ type Adapter interface {
 
 	// Authentication management
 	GetAuthRecord(unique string) (t.Uid, int, []byte, time.Time, error)
-	AddAuthRecord(user t.Uid, authLvl int, unique string, secret []byte, expires time.Time) (error, bool)
+	AddAuthRecord(user t.Uid, authLvl int, unique string, secret []byte, expires time.Time) (bool, error)
 	DelAuthRecord(unique string) (int, error)
 	DelAllAuthRecords(uid t.Uid) (int, error)
 	UpdAuthRecord(unique string, authLvl int, secret []byte, expires time.Time) (int, error)

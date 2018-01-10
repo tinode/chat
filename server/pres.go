@@ -114,7 +114,7 @@ func (t *Topic) presProcReq(fromUserID string, what string, wantReply bool) stri
 	}
 
 	doReply := wantReply
-	if t.cat == types.TopicCat_Me {
+	if t.cat == types.TopicCatMe {
 		if psd, ok := t.perSubs[fromUserID]; ok {
 			if remove {
 				// Don't want to reply if connection is being removed
@@ -224,7 +224,7 @@ func (t *Topic) presSubsOnlineDirect(what string) {
 			continue
 		}
 
-		if t.cat == types.TopicCat_P2P {
+		if t.cat == types.TopicCatP2P {
 			// For p2p topics topic name is dependent on receiver.
 			// It's OK to change the pointer here because the message will be serialized in queueOut
 			// before being placed into channel.
@@ -289,7 +289,7 @@ func presSubsOfflineOffline(topic string, cat types.TopicCat, subs []types.Subsc
 			continue
 		}
 
-		if cat == types.TopicCat_P2P {
+		if cat == types.TopicCatP2P {
 			original = types.ParseUid(subs[(count+1)%2].User).UserId()
 			count++
 		}

@@ -272,7 +272,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 	// Request to load a 'me' topic. The topic always exists.
 	if t.x_original == "me" {
 
-		t.cat = types.TopicCat_Me
+		t.cat = types.TopicCatMe
 
 		// 'me' has no owner, t.owner = nil
 
@@ -317,7 +317,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		// Request to load a 'find' topic. The topic always exists.
 	} else if t.x_original == "fnd" {
 
-		t.cat = types.TopicCat_Fnd
+		t.cat = types.TopicCatFnd
 
 		// 'fnd' has no owner, t.owner = nil
 
@@ -361,7 +361,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		// 3. Topic exists, both subscriptions are missing: should not happen, fail.
 		// 4. Topic and both subscriptions exist: attach to topic
 
-		t.cat = types.TopicCat_P2P
+		t.cat = types.TopicCatP2P
 
 		// Check if the topic already exists
 		stopic, err := store.Topics.Get(t.name)
@@ -624,7 +624,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		// Processing request to create a new generic (group) topic:
 	} else if strings.HasPrefix(t.x_original, "new") {
 
-		t.cat = types.TopicCat_Grp
+		t.cat = types.TopicCatGrp
 
 		// Generic topics have parameters stored in the topic object
 		t.owner = sreg.sess.uid
@@ -704,7 +704,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		sreg.created = true
 
 	} else if strings.HasPrefix(t.x_original, "grp") {
-		t.cat = types.TopicCat_Grp
+		t.cat = types.TopicCatGrp
 
 		// TODO(gene): check and validate topic name
 		stopic, err := store.Topics.Get(t.name)
@@ -825,7 +825,7 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *MsgClientDel, reason 
 		// Case 1 (unregister and delete)
 		if t := h.topicGet(topic); t != nil {
 			// Case 1.1: topic is online
-			if t.owner == sess.uid || (t.cat == types.TopicCat_P2P && len(t.perUser) < 2) {
+			if t.owner == sess.uid || (t.cat == types.TopicCatP2P && len(t.perUser) < 2) {
 				// Case 1.1.1: requester is the owner or last sub in a p2p topic
 
 				t.suspend()
@@ -888,7 +888,7 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *MsgClientDel, reason 
 				} else if !(sub.ModeGiven & sub.ModeWant).IsOwner() {
 					// Case 1.2.2.1 Not the owner, but possibly last subscription in a P2P topic.
 
-					if tcat == types.TopicCat_P2P && len(subs) < 2 {
+					if tcat == types.TopicCatP2P && len(subs) < 2 {
 						// This is a P2P topic and fewer than 2 subscriptions, delete the entire topic
 						if err := store.Topics.Delete(topic); err != nil {
 							log.Println("topicUnreg failed to delete offline topic:", err)
@@ -909,10 +909,10 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *MsgClientDel, reason 
 
 					// Notify user's other sessions that the subscription is gone
 					presSingleUserOfflineOffline(sess.uid, msg.Topic, "gone", 0, nilPresParams, sess.sid)
-					if tcat == types.TopicCat_P2P && len(subs) == 2 {
+					if tcat == types.TopicCatP2P && len(subs) == 2 {
 						// Notify user2 that the current user is offline and stop notification exchange
 						presSingleUserOfflineOffline(types.ParseUserId(msg.Topic),
-							sess.uid.UserId(), "off+remove", 0, nilPresParams, "")
+							sess.uid.UserId(), "off+rem", 0, nilPresParams, "")
 					}
 
 				} else {

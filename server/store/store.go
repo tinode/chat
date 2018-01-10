@@ -11,10 +11,6 @@ import (
 	"github.com/tinode/chat/server/store/types"
 )
 
-const (
-	MAX_USERS_FOR_TOPIC = 32
-)
-
 var adaptr adapter.Adapter
 
 // Unique ID generator
@@ -157,7 +153,7 @@ func (UsersObjMapper) GetAuthRecord(scheme, unique string) (types.Uid, int, []by
 
 // AddAuthRecord creates a new authentication record for the given user.
 func (UsersObjMapper) AddAuthRecord(uid types.Uid, authLvl int, scheme, unique string, secret []byte,
-	expires time.Time) (error, bool) {
+	expires time.Time) (bool, error) {
 
 	return adaptr.AddAuthRecord(uid, authLvl, scheme+":"+unique, secret, expires)
 }
