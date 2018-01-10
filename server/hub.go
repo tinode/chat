@@ -912,7 +912,7 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *MsgClientDel, reason 
 					if tcat == types.TopicCat_P2P && len(subs) == 2 {
 						// Notify user2 that the current user is offline and stop notification exchange
 						presSingleUserOfflineOffline(types.ParseUserId(msg.Topic),
-							sess.uid.UserId(), "off+remove", 0, nilPresParams, "")
+							sess.uid.UserId(), "off+rem", 0, nilPresParams, "")
 					}
 
 				} else {

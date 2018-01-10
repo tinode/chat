@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	MAX_USERS_FOR_TOPIC = 32
+	maxUsersForTopic = 32
 )
 
 var adaptr adapter.Adapter

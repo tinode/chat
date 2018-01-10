@@ -122,7 +122,10 @@ type perUserData struct {
 
 // perSubsData holds user's (on 'me' topic) cache of subscription data
 type perSubsData struct {
+	// The other user is online.
 	online bool
+	// True if we care about the updates from the other user. False otherwise.
+	enabled bool
 }
 
 // Session wants to leave the topic
