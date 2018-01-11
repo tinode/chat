@@ -23,13 +23,13 @@ import (
 	"strings"
 	"time"
 
-	_ "github.com/tinode/chat/push_fcm"
 	_ "github.com/tinode/chat/server/auth/anon"
 	_ "github.com/tinode/chat/server/auth/basic"
 	_ "github.com/tinode/chat/server/auth/token"
 	_ "github.com/tinode/chat/server/db/rethinkdb"
 	"github.com/tinode/chat/server/push"
-	_ "github.com/tinode/chat/server/push_stdout"
+	_ "github.com/tinode/chat/server/push/fcm"
+	_ "github.com/tinode/chat/server/push/stdout"
 	"github.com/tinode/chat/server/store"
 	"google.golang.org/grpc"
 )

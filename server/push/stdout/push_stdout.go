@@ -1,4 +1,4 @@
-package push_stdout
+package stdout
 
 import (
 	"encoding/json"

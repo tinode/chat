@@ -1,4 +1,4 @@
-package push_fcm
+package fcm
 
 import (
 	"encoding/json"
