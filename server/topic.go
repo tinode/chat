@@ -338,7 +338,7 @@ func (t *Topic) run(hub *Hub) {
 					continue
 				}
 
-				// "what" may have changed - "+command" removed ("on+add" -> "on")
+				// "what" may have changed, i.e. unset or "+command" removed ("on+en" -> "on")
 				msg.Pres.What = what
 			} else if msg.Info != nil {
 				if t.isSuspended() {
@@ -638,7 +638,12 @@ func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 					// We don't know if the current user is online in the 'me' topic,
 					// so sending an '?unkn' status to user2. His 'me' topic
 					// will report user2's status and request an actual status from user1.
-					t.presSingleUserOffline(user2, "?unkn+add", nilPresParams, "", false)
+					var enable string
+					if (pud2.modeGiven & pud2.modeWant).IsPresencer() {
+						// If user2 should receive notifications, enable it.
+						enable = "+en"
+					}
+					t.presSingleUserOffline(user2, "?unkn"+enable, nilPresParams, "", false)
 				}
 			}
 
@@ -920,9 +925,10 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktID string, want string,
 		}
 	}
 
-	// If topic is being muted, notify before applying the new permissions.
+	// If topic is being muted, send "off" notification and disable updates.
+	// DO it before applying the new permissions.
 	if (oldWant & oldGiven).IsPresencer() && !(userData.modeWant & userData.modeGiven).IsPresencer() {
-		t.presSingleUserOffline(sess.uid, "off", nilPresParams, "", false)
+		t.presSingleUserOffline(sess.uid, "off+dis", nilPresParams, "", false)
 	}
 
 	// Apply changes.
@@ -941,11 +947,11 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktID string, want string,
 	}
 
 	// If this is a new subscription or the topic is being un-muted, notify after applying the changes.
-	if !existingSub ||
-		(!(oldWant & oldGiven).IsPresencer() && (userData.modeWant & userData.modeGiven).IsPresencer()) {
-		// Notify new subscriber of topic's online status.
-		log.Printf("topic[%s] sending ?unkn+add to me[%s]", t.name, sess.uid.String())
-		t.presSingleUserOffline(sess.uid, "?unkn+add", nilPresParams, "", false)
+	if (userData.modeWant & userData.modeGiven).IsPresencer() &&
+		(!existingSub || !(oldWant & oldGiven).IsPresencer()) {
+		// Notify subscriber of topic's online status.
+		log.Printf("topic[%s] sending ?unkn to me[%s]", t.name, sess.uid.String())
+		t.presSingleUserOffline(sess.uid, "?unkn+en", nilPresParams, "", false)
 	}
 
 	// If something has changed and the requested access mode is different from the given, notify topic admins.
@@ -1939,7 +1945,7 @@ func (t *Topic) evictUser(uid types.Uid, unsub bool, skip string) {
 
 		if len(t.perUser) == 2 {
 			// Send an "off" notification to the user2 and ask it to stop sending updates to user1
-			presSingleUserOfflineOffline(t.p2pOtherUser(uid), uid.UserId(), "off+remove", 0, nilPresParams, "")
+			presSingleUserOfflineOffline(t.p2pOtherUser(uid), uid.UserId(), "off+rem", 0, nilPresParams, "")
 		}
 	}
 

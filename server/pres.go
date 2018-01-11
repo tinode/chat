@@ -76,146 +76,40 @@ func (t *Topic) loadContacts(uid types.Uid) error {
 //	"?unkn" - requester wants to initiate online status exchange but it's own status is unknown yet. This
 //  notifications is not forwarded to users.
 //
-// If status is followed by command "+add" then it wants to start receiving updates from this topic;
-// "+remove" means the origin is no longer interested in receiving updates from this topic.
-// The "+add/remove" command itself is stripped from the notification.
-//
-// Actions:
-//   Add to list and disable, add to list and enable.
-//	 Remove from list
-//   enable or disable
-//   set online or offline
-//
-/*
+// If status is followed by command "+en" then the current user should accept incoming notifications
+// from the user2. "+rem" means the subscription is removed.
+// The "+en/rem" command itself is stripped from the notification.
 func (t *Topic) presProcReq(fromUserID string, what string, wantReply bool) string {
 
-	var online, unknown, enable, disable bool
-
-	log.Printf("presProcReq: topic[%s]: req from='%s', what=%s, wantReply=%v",
-		t.name, fromUserID, what, wantReply)
-
-	parts := strings.Split(what, "+")
-
-	switch what {
-	case "on+en":
-		enable = true
-		what = "on"
-		fallthrough
-	case "on":
-		online = true
-
-	case "off+rem":
-		what = "off"
-		fallthrough
-	case "gone":
-		disable = true
-	case "off":
-
-	case "?unkn+en":
-		enable = true
-		fallthrough
-	case "?unkn":
-		unknown = true
-		what = ""
-
-	default:
-		// All other notifications are not processed here
-		return what
-	}
-
-	log.Printf("presProcReq: topic[%s]: req from='%s', what-now=%s, enable=%v, disable=%v, online=%v, unknown=%v",
-		t.name, fromUserID, what, enable, disable, online, unknown)
-
-	if t.cat == types.TopicCat_Me {
-		if psd, ok := t.perSubs[fromUserID]; ok {
-			log.Printf("presProcReq: topic[%s]: requester %s in list", t.name, fromUserID)
-			if !psd.enabled || (!psd.online && what == "off") || (psd.online && what == "on") {
-				// If the topic is muted or the topic is already in the desired state,
-				// don't send another useless notification.
-				log.Printf("presProcReq: topic[%s]: removed useless what=%s", t.name, what)
-				what = ""
-			}
-
-			if disable {
-				psd.online = false
-				psd.enabled = false
-				t.perSubs[fromUserID] = psd
-
-			} else {
-				// If requester's online status has not changed, do not reply, otherwise an endless loop will happen.
-				// wantReply is needed to ensure unnecessary {pres} is not sent:
-				// A[online, B:off] to B[online, A:off]: {pres A on}
-				// B[online, A:on] to A[online, B:off]: {pres B on}
-				// A[online, B:on] to B[online, A:on]: {pres A on} <<-- unnecessary, that's why wantReply is needed
-				// doReply = doReply && ((psd.online != online) || unknown)
-
-				psd.online = online
-				t.perSubs[fromUserID] = psd
-			}
-
-		} else {
-			log.Printf("presProcReq: topic[%s]: requester %s NOT in list, adding", t.name, fromUserID)
-			// doReply is unchanged
-
-			// Got request from a new topic. This must be a new subscription. Record it.
-			// If it's unknown, recording it as offline.
-			t.addToPerSubs(fromUserID, online, enable)
-		}
-	}
-
-	if (online || unknown) && wantReply {
-		globals.hub.route <- &ServerComMessage{
-			// Topic is 'me' even for group topics; group topics will use 'me' as a signal to drop the message
-			// without forwarding to sessions
-			Pres:   &MsgServerPres{Topic: "me", What: "on+add", Src: t.name, wantReply: unknown},
-			rcptto: fromUserID}
-
-		log.Printf("presProcReq: topic[%s]: replying to %s with own status='%s', wantReply=%v",
-			t.name, fromUserID, "on", unknown)
-	}
-
-	return what
-}
-*/
-
-func (t *Topic) presProcReq(fromUserID string, what string, wantReply bool) string {
-
-	var online, unknown, enable, remove bool
+	var reqReply, online bool
 	replyAs := "on"
 
 	log.Printf("presProcReq: topic[%s]: req from='%s', what=%s, wantReply=%v",
 		t.name, fromUserID, what, wantReply)
 
+	parts := strings.Split(what, "+")
+	what = parts[0]
+	cmd := ""
+	if len(parts) > 1 {
+		cmd = parts[1]
+	}
+
 	switch what {
-	case "on+en":
-		enable = true
-		what = "on"
-		fallthrough
 	case "on":
 		online = true
-
-	case "off+rem":
-		what = "off"
-		fallthrough
-	case "gone":
-		remove = true
 	case "off":
-
-	case "?unkn+en":
-		enable = true
-		fallthrough
+	case "gone":
 	case "?unkn":
-		unknown = true
+		reqReply = true
 		what = ""
-
 	default:
 		// All other notifications are not processed here
 		log.Println("done processing what=", what)
 		return what
 	}
 
-	log.Printf("presProcReq: topic[%s]: req from='%s', what-now=%s, enable=%v, remove=%v, online=%v, unknown=%v",
-		t.name, fromUserID, what, enable, remove, online, unknown)
+	log.Printf("presProcReq: topic[%s]: req from='%s', what-now=%s, cmd=%s, reqReply(?unkn)=%v",
+		t.name, fromUserID, what, cmd, reqReply)
 
 	if t.cat == types.TopicCatMe {
 		// Find if the contact is listed.
@@ -223,7 +117,7 @@ func (t *Topic) presProcReq(fromUserID string, what string, wantReply bool) stri
 		if psd, ok := t.perSubs[fromUserID]; ok {
 			log.Printf("presProcReq: topic[%s]: requester %s in list", t.name, fromUserID)
 
-			if remove {
+			if cmd == "rem" {
 				replyAs = "off+rem"
 				delete(t.perSubs, fromUserID)
 
@@ -236,8 +130,10 @@ func (t *Topic) presProcReq(fromUserID string, what string, wantReply bool) stri
 				// doReply = doReply && ((psd.online != online) || unknown)
 
 				psd.online = online
-				if !psd.enabled {
-					psd.enabled = enable
+				if cmd == "en" {
+					psd.enabled = true
+				} else if cmd == "dis" {
+					psd.enabled = false
 				}
 				t.perSubs[fromUserID] = psd
 
@@ -247,15 +143,15 @@ func (t *Topic) presProcReq(fromUserID string, what string, wantReply bool) stri
 				}
 			}
 
-		} else if !remove {
+		} else if cmd != "rem" {
 			log.Printf("presProcReq: topic[%s]: requester %s NOT in list, adding", t.name, fromUserID)
 			// doReply is unchanged
 
 			// Got request from a new topic. This must be a new subscription. Record it.
 			// If it's unknown, recording it as offline.
-			t.addToPerSubs(fromUserID, online, enable)
+			t.addToPerSubs(fromUserID, online, cmd == "en")
 
-			if !enable {
+			if cmd != "en" {
 				// If the connection is not enabled, ignore the update
 				what = ""
 			}
@@ -266,15 +162,15 @@ func (t *Topic) presProcReq(fromUserID string, what string, wantReply bool) stri
 		}
 	}
 
-	if (online || unknown) && wantReply {
+	if (online || reqReply) && wantReply {
 		globals.hub.route <- &ServerComMessage{
 			// Topic is 'me' even for group topics; group topics will use 'me' as a signal to drop the message
 			// without forwarding to sessions
-			Pres:   &MsgServerPres{Topic: "me", What: replyAs, Src: t.name, wantReply: unknown},
+			Pres:   &MsgServerPres{Topic: "me", What: replyAs, Src: t.name, wantReply: reqReply},
 			rcptto: fromUserID}
 
 		log.Printf("presProcReq: topic[%s]: replying to %s with own status='%s', wantReply=%v",
-			t.name, fromUserID, replyAs, unknown)
+			t.name, fromUserID, replyAs, reqReply)
 	}
 
 	return what
@@ -295,6 +191,11 @@ func (t *Topic) presUsersOfInterest(what string, ua string) {
 
 		// log.Printf("Pres A, B, C, D: User'%s' to '%s' what='%s', ua='%s'", t.name, topic, what, ua)
 
+	}
+}
+
+func (t *Topic) presEnableUser() {
+	if t.cat == types.TopicCatP2P {
 	}
 }
 
