@@ -1,4 +1,4 @@
-package main
+package anon
 
 // Anonymous authentication is used only at account creation time.
 
@@ -46,6 +46,5 @@ func (AnonAuth) GenSecret(uid types.Uid, authLvl int, lifetime time.Duration) ([
 }
 
 func init() {
-	var auth AnonAuth
-	store.RegisterAuthScheme("anonymous", auth)
+	store.RegisterAuthScheme("anonymous", AnonAuth{})
 }

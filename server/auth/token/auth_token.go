@@ -1,4 +1,4 @@
-package main
+package token
 
 import (
 	"bytes"
@@ -159,6 +159,5 @@ func (TokenAuth) IsUnique(token []byte) (bool, auth.AuthErr) {
 }
 
 func init() {
-	var auth TokenAuth
-	store.RegisterAuthScheme("token", auth)
+	store.RegisterAuthScheme("token", TokenAuth{})
 }
