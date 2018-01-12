@@ -84,8 +84,8 @@ func (t *Topic) presProcReq(fromUserID string, what string, wantReply bool) stri
 	var reqReply, online bool
 	replyAs := "on"
 
-	log.Printf("presProcReq: topic[%s]: req from='%s', what=%s, wantReply=%v",
-		t.name, fromUserID, what, wantReply)
+	//log.Printf("presProcReq: topic[%s]: req from='%s', what=%s, wantReply=%v",
+	//	t.name, fromUserID, what, wantReply)
 
 	parts := strings.Split(what, "+")
 	what = parts[0]
@@ -99,69 +99,89 @@ func (t *Topic) presProcReq(fromUserID string, what string, wantReply bool) stri
 		online = true
 	case "off":
 	case "gone":
+		cmd = "rem"
 	case "?unkn":
 		reqReply = true
 		what = ""
 	default:
 		// All other notifications are not processed here
-		log.Println("done processing what=", what)
+		// log.Println("done processing what=", what)
 		return what
 	}
 
-	log.Printf("presProcReq: topic[%s]: req from='%s', what-now=%s, cmd=%s, reqReply(?unkn)=%v",
-		t.name, fromUserID, what, cmd, reqReply)
+	//log.Printf("presProcReq: topic[%s]: req from='%s', what-now=%s, cmd=%s, reqReply(?unkn)=%v",
+	//	t.name, fromUserID, what, cmd, reqReply)
 
 	if t.cat == types.TopicCatMe {
 		// Find if the contact is listed.
 
 		if psd, ok := t.perSubs[fromUserID]; ok {
-			log.Printf("presProcReq: topic[%s]: requester %s in list", t.name, fromUserID)
+			//log.Printf("presProcReq: topic[%s]: requester %s in list; enabled=%v, online=%v",
+			//	t.name, fromUserID, psd.enabled, psd.online)
 
 			if cmd == "rem" {
 				replyAs = "off+rem"
+				if !psd.enabled {
+					// If it was disabled before, don't send a redundunt update.
+					what = ""
+				}
 				delete(t.perSubs, fromUserID)
 
 			} else {
-				// If requester's online status has not changed, do not reply, otherwise an endless loop will happen.
-				// wantReply is needed to ensure unnecessary {pres} is not sent:
-				// A[online, B:off] to B[online, A:off]: {pres A on}
-				// B[online, A:on] to A[online, B:off]: {pres B on}
-				// A[online, B:on] to B[online, A:on]: {pres A on} <<-- unnecessary, that's why wantReply is needed
-				// doReply = doReply && ((psd.online != online) || unknown)
+				if cmd == "" {
+					// No change in being enabled or disabled and not being added or removed.
+					if psd.online == online || !psd.enabled {
+						// Not enabled or no change in online status - remove unnecessary notification.
+						what = ""
+					}
+				} else if cmd == "en" {
+					if !psd.enabled {
+						psd.enabled = true
+					} else if psd.online == online {
+						// Was active and online before: skip unnecessary update.
+						what = ""
+					}
+				} else if cmd == "dis" {
+					if psd.enabled {
+						psd.enabled = false
+						if !psd.online {
+							what = ""
+						}
+					} else {
+						// Was disabled and consequently offline before, still offline - skip the update.
+						what = ""
+					}
+				} else {
+					panic("presProcReq: unknown command '" + cmd + "'")
+				}
 
 				psd.online = online
-				if cmd == "en" {
-					psd.enabled = true
-				} else if cmd == "dis" {
-					psd.enabled = false
-				}
 				t.perSubs[fromUserID] = psd
-
-				if !psd.enabled {
-					// If the connection is not enabled, ignore the update
-					what = ""
-				}
 			}
 
 		} else if cmd != "rem" {
-			log.Printf("presProcReq: topic[%s]: requester %s NOT in list, adding", t.name, fromUserID)
-			// doReply is unchanged
+			// log.Printf("presProcReq: topic[%s]: requester %s NOT in list, adding", t.name, fromUserID)
 
 			// Got request from a new topic. This must be a new subscription. Record it.
 			// If it's unknown, recording it as offline.
 			t.addToPerSubs(fromUserID, online, cmd == "en")
 
 			if cmd != "en" {
-				// If the connection is not enabled, ignore the update
+				// If the connection is not enabled, ignore the update.
 				what = ""
 			}
 
 		} else {
-			// Not in list and not asked to add to the list - ignore
+			// Not in list and asked to be removed from the list - ignore
 			what = ""
 		}
 	}
 
+	// If requester's online status has not changed, do not reply, otherwise an endless loop will happen.
+	// wantReply is needed to ensure unnecessary {pres} is not sent:
+	// A[online, B:off] to B[online, A:off]: {pres A on}
+	// B[online, A:on] to A[online, B:off]: {pres B on}
+	// A[online, B:on] to B[online, A:on]: {pres A on} <<-- unnecessary, that's why wantReply is needed
 	if (online || reqReply) && wantReply {
 		globals.hub.route <- &ServerComMessage{
 			// Topic is 'me' even for group topics; group topics will use 'me' as a signal to drop the message
@@ -169,8 +189,8 @@ func (t *Topic) presProcReq(fromUserID string, what string, wantReply bool) stri
 			Pres:   &MsgServerPres{Topic: "me", What: replyAs, Src: t.name, wantReply: reqReply},
 			rcptto: fromUserID}
 
-		log.Printf("presProcReq: topic[%s]: replying to %s with own status='%s', wantReply=%v",
-			t.name, fromUserID, replyAs, reqReply)
+		// log.Printf("presProcReq: topic[%s]: replying to %s with own status='%s', wantReply=%v",
+		// 	t.name, fromUserID, replyAs, reqReply)
 	}
 
 	return what

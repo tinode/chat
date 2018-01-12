@@ -950,7 +950,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktID string, want string,
 	if (userData.modeWant & userData.modeGiven).IsPresencer() &&
 		(!existingSub || !(oldWant & oldGiven).IsPresencer()) {
 		// Notify subscriber of topic's online status.
-		log.Printf("topic[%s] sending ?unkn to me[%s]", t.name, sess.uid.String())
+		// log.Printf("topic[%s] sending ?unkn+en to me[%s]", t.name, sess.uid.String())
 		t.presSingleUserOffline(sess.uid, "?unkn+en", nilPresParams, "", false)
 	}
 

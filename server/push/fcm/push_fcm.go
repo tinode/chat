@@ -10,13 +10,13 @@ import (
 	"github.com/tinode/fcm"
 )
 
-var handler FcmPush
+var handler Handler
 
 // Size of the input channel buffer.
 const defaultBuffer = 32
 
-// FcmPush represents the push handler; implements push.PushHandler interface.
-type FcmPush struct {
+// Handler represents the push handler; implements push.PushHandler interface.
+type Handler struct {
 	input  chan *push.Receipt
 	stop   chan bool
 	client *fcm.Client
@@ -33,7 +33,7 @@ type configType struct {
 }
 
 // Init initializes the push handler
-func (FcmPush) Init(jsonconf string) error {
+func (Handler) Init(jsonconf string) error {
 
 	var config configType
 	if err := json.Unmarshal([]byte(jsonconf), &config); err != nil {
@@ -159,18 +159,18 @@ func sendNotification(rcpt *push.Receipt, config *configType) {
 }
 
 // IsReady checks if the push handler has been initialized.
-func (FcmPush) IsReady() bool {
+func (Handler) IsReady() bool {
 	return handler.input != nil
 }
 
 // Push return a channel that the server will use to send messages to.
 // If the adapter blocks, the message will be dropped.
-func (FcmPush) Push() chan<- *push.Receipt {
+func (Handler) Push() chan<- *push.Receipt {
 	return handler.input
 }
 
 // Stop shuts down the handler
-func (FcmPush) Stop() {
+func (Handler) Stop() {
 	handler.stop <- true
 }
 

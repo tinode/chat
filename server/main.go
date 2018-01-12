@@ -55,8 +55,10 @@ const (
 	maxDeleteCount = 1024
 )
 
-// Build timestamp set by the compiler
-var buildstamp = ""
+// Build timestamp defined by the compiler.
+// To define buildstamp as a timestamp of when the server was built add a flag to compiler command line:
+// 	-ldflags "-X main.buildstamp=`date -u '+%Y%m%dT%H:%M:%SZ'`"
+var buildstamp = "buildstamp-undefined"
 
 var globals struct {
 	hub           *Hub
@@ -101,7 +103,7 @@ type configType struct {
 }
 
 func main() {
-	log.Printf("Server v%s:%s pid=%d started with processes: %d", currentVersion, buildstamp, os.Getpid(),
+	log.Printf("Server 'v%s:%s'; pid %d; started with %d process(es)", currentVersion, buildstamp, os.Getpid(),
 		runtime.GOMAXPROCS(runtime.NumCPU()))
 
 	var configfile = flag.String("config", "./tinode.conf", "Path to config file.")
@@ -113,7 +115,7 @@ func main() {
 	var clusterSelf = flag.String("cluster_self", "", "Override the name of the current cluster node")
 	flag.Parse()
 
-	log.Printf("Using config from: '%s'", *configfile)
+	log.Printf("Using config from '%s'", *configfile)
 
 	var config configType
 	if raw, err := ioutil.ReadFile(*configfile); err != nil {

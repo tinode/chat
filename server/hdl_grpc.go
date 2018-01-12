@@ -106,6 +106,7 @@ func serveGrpc(addr string) (*grpc.Server, error) {
 
 	srv := grpc.NewServer()
 	pbx.RegisterNodeServer(srv, &grpcNodeServer{})
+	log.Printf("gRPC server is registered at [%s]", addr)
 
 	go func() {
 		if err := srv.Serve(lis); err != nil {
