@@ -6,7 +6,7 @@ See [instructions](./docker/README.md)
 
 ## Building from Source
 
-- Install [Go environment](https://golang.org/doc/install)
+- Install [Go environment](https://golang.org/doc/install). Make sure Go version is at least 1.9. Building with Go 1.8 or below **will fail**!
 
 - Install [RethinkDB](https://www.rethinkdb.com/docs/install/)
 
