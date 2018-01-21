@@ -79,7 +79,7 @@ func (ug *UidGenerator) DecodeUid(uid Uid) int64 {
 	return int64(binary.LittleEndian.Uint64(dst))
 }
 
-// EncodeUint64 takes a positive int64 and encrypts it into a Uid.
+// EncodeInt64 takes a positive int64 and encrypts it into a Uid.
 // This is needed for go/sql compatibility where uint64 with high bit
 // set is unsupported  and possibly for other uses such as MySQL's recommendation
 // for non-random primary keys.
