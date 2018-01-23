@@ -45,14 +45,18 @@ const (
 	// minSupportedVersion is the minimum supported API version
 	minSupportedVersion = "0.14"
 
-	// maxMessageSize is the default maximum message size
-	maxMessageSize = 1 << 19 // 512K
+	// defaultMaxMessageSize is the default maximum message size
+	defaultMaxMessageSize = 1 << 19 // 512K
+
+	// defaultMaxSubscriberCount is the default maximum number of group topic subscribers.
+	// Also set in adapter.
+	defaultMaxSubscriberCount = 256
 
 	// Delay before updating a User Agent
 	uaTimerDelay = time.Second * 5
 
 	// maxDeleteCount is the maximum allowed number of messages to delete in one call.
-	maxDeleteCount = 1024
+	defaultMaxDeleteCount = 1024
 )
 
 // Build timestamp defined by the compiler.
@@ -72,6 +76,8 @@ var globals struct {
 	tlsStrictMaxAge string
 	// Maximum message size allowed from peer.
 	maxMessageSize int64
+	// Maximum number of group topic subscribers.
+	maxSubscriberCount int
 }
 
 // Contentx of the configuration file
@@ -92,6 +98,8 @@ type configType struct {
 	// Maximum message size allowed from client. Intended to prevent malicious client from sending
 	// very large files.
 	MaxMessageSize int `json:"max_message_size"`
+	// Maximum number of group topic subscribers.
+	MaxSubscriberCount int `json:"max_subscriber_count"`
 	// Tags allowed in index (user discovery)
 	IndexableTags []string                   `json:"indexable_tags"`
 	ClusterConfig json.RawMessage            `json:"cluster_config"`
@@ -170,7 +178,12 @@ func main() {
 	// Maximum message size
 	globals.maxMessageSize = int64(config.MaxMessageSize)
 	if globals.maxMessageSize <= 0 {
-		globals.maxMessageSize = maxMessageSize
+		globals.maxMessageSize = defaultMaxMessageSize
+	}
+	// Maximum number of group topic subscribers
+	globals.maxSubscriberCount = config.MaxSubscriberCount
+	if globals.maxSubscriberCount <= 1 {
+		globals.maxSubscriberCount = defaultMaxSubscriberCount
 	}
 
 	// Serve static content from the directory in -static_data flag if that's

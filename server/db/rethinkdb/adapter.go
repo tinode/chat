@@ -44,7 +44,7 @@ const (
 	// Maximum number of records to return
 	maxResults = 1024
 	// Maximum number of topic subscribers to return
-	maxSubscribers = 128
+	maxSubscribers = 256
 )
 
 // Open initializes rethinkdb session

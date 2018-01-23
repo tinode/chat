@@ -70,7 +70,7 @@ func getIDBuffer(ug *UidGenerator) ([]byte, error) {
 // DecodeUid takes an encrypted Uid and decrypts it into a non-negative int64.
 // This is needed for go/sql compatibility where uint64 with high bit
 // set is unsupported and possibly for other uses such as MySQL's recommendation
-// for non-random primary keys.
+// for sequential primary keys.
 func (ug *UidGenerator) DecodeUid(uid Uid) int64 {
 	var src = make([]byte, 8)
 	var dst = make([]byte, 8)
@@ -82,7 +82,7 @@ func (ug *UidGenerator) DecodeUid(uid Uid) int64 {
 // EncodeInt64 takes a positive int64 and encrypts it into a Uid.
 // This is needed for go/sql compatibility where uint64 with high bit
 // set is unsupported  and possibly for other uses such as MySQL's recommendation
-// for non-random primary keys.
+// for sequential primary keys.
 func (ug *UidGenerator) EncodeInt64(val int64) Uid {
 	var src = make([]byte, 8)
 	var dst = make([]byte, 8)

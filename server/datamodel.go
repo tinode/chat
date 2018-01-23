@@ -676,7 +676,7 @@ func ErrGone(id, topic string, ts time.Time) *ServerComMessage {
 		Timestamp: ts}}
 }
 
-// ErrPolicy request violates a policy (i.e. password is too weak).
+// ErrPolicy request violates a policy (e.g. password is too weak or too many subscribers).
 func ErrPolicy(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,

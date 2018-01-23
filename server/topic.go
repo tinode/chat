@@ -770,6 +770,12 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktID string, want string,
 	userData, existingSub := t.perUser[sess.uid]
 	if !existingSub {
 
+		// Check if the max number of subscriptions is already reached.
+		if t.cat == types.TopicCatGrp && len(t.perUser) >= globals.maxSubscriberCount {
+			sess.queueOut(ErrPolicy(pktID, t.original(sess.uid), now))
+			return errors.New("max subscription count exceeded")
+		}
+
 		userData.private = private
 
 		if t.cat == types.TopicCatP2P {
@@ -1043,6 +1049,12 @@ func (t *Topic) approveSub(h *Hub, sess *Session, target types.Uid, set *MsgClie
 	// Saved subscription does not mean the user is allowed to post/read
 	userData, existingSub := t.perUser[target]
 	if !existingSub {
+
+		// Check if the max number of subscriptions is already reached.
+		if t.cat == types.TopicCatGrp && len(t.perUser) >= globals.maxSubscriberCount {
+			sess.queueOut(ErrPolicy(set.Id, t.original(sess.uid), now))
+			return errors.New("max subscription count exceeded")
+		}
 
 		if modeGiven == types.ModeUnset {
 			// Request to use default access mode for the new subscriptions.
@@ -1737,7 +1749,7 @@ func (t *Topic) replyDelMsg(sess *Session, del *MsgClientDel) error {
 			types.RangeSorter(ranges).Normalize()
 		}
 
-		if count > maxDeleteCount && len(ranges) > 1 {
+		if count > defaultMaxDeleteCount && len(ranges) > 1 {
 			err = errors.New("del.msg: too many messages to delete")
 		}
 	}
