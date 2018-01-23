@@ -60,12 +60,14 @@ type MsgSetDesc struct {
 	Private    interface{}        `json:"private,omitempty"` // Per-subscription private data
 }
 
-// MsgSetQuery is an update to topic metadata Desc or subscriptions.
+// MsgSetQuery is an update to topic metadata: Desc, subscriptions, or tags.
 type MsgSetQuery struct {
 	// Topic metadata, new topic & new subscriptions only
 	Desc *MsgSetDesc `json:"desc,omitempty"`
 	// Subscription parameters
 	Sub *MsgSetSub `json:"sub,omitempty"`
+	// Indexable tags for user discovery
+	Tags []string `json:"tags"`
 }
 
 // MsgFindQuery is a format of fndXXX.private.
@@ -141,6 +143,7 @@ const (
 	constMsgMetaDesc = 1 << iota
 	constMsgMetaSub
 	constMsgMetaData
+	constMsgMetaTags
 	constMsgMetaDel
 	constMsgDelTopic
 	constMsgDelMsg
@@ -158,6 +161,8 @@ func parseMsgClientMeta(params string) int {
 			bits |= constMsgMetaSub
 		case "data":
 			bits |= constMsgMetaData
+		case "tags":
+			bits |= constMsgMetaTags
 		case "del":
 			bits |= constMsgMetaDel
 		default:
@@ -612,6 +617,16 @@ func ErrUserNotFound(id, topic string, ts time.Time) *ServerComMessage {
 		Id:        id,
 		Code:      http.StatusNotFound, // 404
 		Text:      "user not found or offline",
+		Topic:     topic,
+		Timestamp: ts}}
+}
+
+// ErrOperationNotAllowed a valid operation is not permitted in this context.
+func ErrOperationNotAllowed(id, topic string, ts time.Time) *ServerComMessage {
+	return &ServerComMessage{Ctrl: &MsgServerCtrl{
+		Id:        id,
+		Code:      http.StatusMethodNotAllowed, // 405
+		Text:      "operation not allowed",
 		Topic:     topic,
 		Timestamp: ts}}
 }

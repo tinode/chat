@@ -326,6 +326,11 @@ Get a list of subscribers. Server responds with a `{meta}` message containing a 
 For `me` topic the request returns a list of user's subscriptions. If `ims` is specified and data has not been updated,
 responds with a `{ctrl}` "not modified" message.
 
+* `{get what="tags"}`
+
+Query indexed tags. Server responds with a `{meta}` message containing an array of string tags. See `{meta}` and `fnd` topic for details.
+Supported only for `me` and group topics.
+
 * `{get what="data"}`
 
 Query message history. Server sends `{data}` messages matching parameters provided in the `browse` field of the query.
@@ -364,7 +369,12 @@ set: {
     info: { ... } // object, application-defined payload to pass to
                   // the invited user or to the topic manager in {data}
                   // message on 'me' topic
-  } // object, payload for what == "sub"
+  }, // object, payload for what == "sub"
+
+  // Optional update to tags (see fnd topic description)
+  tags: [ // array of strings
+    "email:alice@example.com", "tel:1234567890"
+  ]
 }
 ```
 
@@ -545,6 +555,9 @@ meta: {
     },
     ...
   ],
+  tags: [ // array of tags that the topic or user (in case of "me" topic) is indexed by
+	"email:alice@example.com", "tel:1234567890"
+  ],
   del: {
 	clear: 3, // ID of the latest applicable 'delete' transaction
 	delseq: [{low: 15}, {low: 22, hi: 28}, ...], // ranges of IDs of deleted messages 
@@ -602,7 +615,7 @@ info: {
 
 User is meant to represent a person, an end-user: producer and consumer of messages.
 
-There are two types of users: authenticated and anonymous. When a connection is first established, the client application can only send either an `{acc}` or a `{login}` message. Sending a `{login}` message will authenticate user or allow him to continue as an anonymous. _Anonymous users are not supported as of the time of this writing._
+There are two types of users: authenticated and anonymous. When a connection is first established, the client application can only send either an `{acc}` or a `{login}` message. Sending a `{login}` message will authenticate user or allow him to continue as an anonymous. 
 
 Each user is assigned a unique ID. The IDs are composed as `usr` followed by base64-encoded 64-bit numeric value, e.g. `usr2il9suCbuko`. Users also have the following properties:
 
@@ -621,7 +634,7 @@ Logging out is not supported by design. If an application needs to change the us
 
 ## Access control
 
-Access control manages user's access to topics through access control lists (ACLs) or bearer tokens (_bearer tokens are not implemented as of version 0.8_).
+Access control manages user's access to topics through access control lists (ACLs) or bearer tokens (_bearer tokens are not implemented as of version 0.14_).
 
 Access control is mostly usable for group topics. Its usability for `me` and P2P topics is limited to managing presence notifications and banning uses from initiating or continuing P2P conversations.
 
@@ -696,9 +709,11 @@ Message `{get what="data"}` to `me` queries the history of invites/notifications
 
 ### `fnd` topic: contacts discovery
 
-Topic `fnd` is automatically created for every user at the account creation time. It serves as an endpoint for discovering other users. Users registered in the system are indexed by tags. A tag is an identifier string such as a phone number or an email prepended with a descriptor, ex. `tel:14155551212` or `email:alice@example.com`. To search for contacts a user sets `private` parameter of the `fnd` topic to an array of tags then issues a `{get what="sub"}` request. The system responds with a `{meta}` message with the `sub` section listing details of the found contacts.
+Topic `fnd` is automatically created for every user at the account creation time. It serves as an endpoint for discovering other users and group topics. 
 
-The `public` parameter holds the list of tags this user can be discovered by. The `private` holds tags that this user wants to discover. These parameters can be manipulated in the same manner as with any other topic.
+Users and group topics are indexed by optional tags. A tag is a string composed of a category followed by colon `:` then by the actual value, ex. `tel:14155551212` or `email:alice@example.com`. Tags can are assigned at creation time then can be updated by using `{set what="tags"}` against a `me` or a group topic. A list of possible tag categories is defined in the config as `"indexable_tags": ["tel", "email"]`.
+
+To search for contacts a user sets `private` parameter of the `fnd` topic to an array of tags then issues a `{get what="sub"}` request. The system responds with a `{meta}` message with the `sub` section listing details of the found contacts.
 
 Topic `fnd` is read-only. `{pub}` messages to `fnd` are rejected.
 

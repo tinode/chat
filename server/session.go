@@ -659,18 +659,6 @@ func (s *Session) acc(msg *ClientComMessage) {
 			return
 		}
 
-		// Tags updated
-		if len(msg.Acc.Tags) > 0 {
-			var tags []string
-			if tags = filterTags(tags, msg.Acc.Tags); len(tags) > 0 {
-				if err := store.Users.Update(s.uid, map[string]interface{}{"Tags": tags}); err != nil {
-					log.Println("Failed to update tags", err)
-					s.queueOut(ErrUnknown(msg.Acc.Id, "", msg.timestamp))
-					return
-				}
-			}
-		}
-
 		s.queueOut(NoErr(msg.Acc.Id, "", msg.timestamp))
 
 		// pluginAccount(&user, plgActCreate)
@@ -751,6 +739,9 @@ func (s *Session) set(msg *ClientComMessage) {
 		}
 		if msg.Set.Sub != nil {
 			meta.what |= constMsgMetaSub
+		}
+		if msg.Set.Tags != nil {
+			meta.what |= constMsgMetaTags
 		}
 		if meta.what == 0 {
 			s.queueOut(ErrMalformed(msg.Set.Id, msg.Set.Topic, msg.timestamp))
@@ -928,7 +919,7 @@ func (s *Session) serialize(msg *ServerComMessage) interface{} {
 }
 
 func filterTags(dst []string, src []string) []string {
-	if len(globals.indexableTags) == 0 {
+	if len(globals.indexableTags) == 0 || len(src) == 0 {
 		return dst
 	}
 

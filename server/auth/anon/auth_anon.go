@@ -46,5 +46,5 @@ func (AnonAuth) GenSecret(uid types.Uid, authLvl int, lifetime time.Duration) ([
 }
 
 func init() {
-	store.RegisterAuthScheme("anonymous", AnonAuth{})
+	store.RegisterAuthScheme("anonymous", &AnonAuth{})
 }

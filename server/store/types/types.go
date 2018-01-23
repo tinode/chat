@@ -261,10 +261,7 @@ type User struct {
 	Access DefaultAccess
 
 	// Values for 'me' topic:
-	// Server-issued sequence ID for messages in 'me'
-	// SeqId int
-	// If messages were deleted in the topic, id of the last delete operation
-	//DelId int
+
 	// Last time when the user joined 'me' topic, by User Agent
 	LastSeen time.Time
 	// User agent provided when accessing the topic last time

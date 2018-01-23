@@ -662,6 +662,11 @@ func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 		t.replyGetSub(sreg.sess, sreg.pkt.Id, sreg.pkt.Get.Sub)
 	}
 
+	if getWhat&constMsgMetaTags != 0 {
+		// Send get.tags response as a separate {meta} packet
+		t.replyGetTags(sreg.sess, sreg.pkt.Id)
+	}
+
 	if getWhat&constMsgMetaData != 0 {
 		// Send get.data response as {data} packets
 		t.replyGetData(sreg.sess, sreg.pkt.Id, sreg.pkt.Get.Data)
@@ -1310,25 +1315,13 @@ func (t *Topic) replySetDesc(sess *Session, set *MsgClientSet) error {
 			if set.Desc.Public != nil {
 				sendPres = assignGenericValues(user, "Public", set.Desc.Public)
 			}
-		} else if t.cat == types.TopicCatFnd {
-			// User's own tags are sent as fnd.public. Assign them to user.Tags
-			if set.Desc.Public != nil {
-				if src, ok := set.Desc.Public.([]string); ok && len(src) > 0 {
-					var tags []string
-					if tags = filterTags(tags, src); len(tags) > 0 {
-						// No need to send presence update
-						assignGenericValues(user, "Tags", tags)
-						t.public = tags
-					}
-				}
-			}
 		} else if t.cat == types.TopicCatP2P {
 			// Reject direct changes to P2P topics.
 			if set.Desc.Public != nil || set.Desc.DefaultAcs != nil {
 				sess.queueOut(ErrPermissionDenied(set.Id, set.Topic, now))
 				return errors.New("incorrect attempt to change metadata of a p2p topic")
 			}
-		} else {
+		} else if t.cat == types.TopicCatGrp {
 			// Update group topic
 			if set.Desc.DefaultAcs != nil || set.Desc.Public != nil {
 				if t.owner == sess.uid {
@@ -1345,6 +1338,7 @@ func (t *Topic) replySetDesc(sess *Session, set *MsgClientSet) error {
 				}
 			}
 		}
+		// else fnd: update ignored
 
 		if err != nil {
 			sess.queueOut(ErrMalformed(set.Id, set.Topic, now))
@@ -1629,7 +1623,7 @@ func (t *Topic) replySetSub(h *Hub, sess *Session, set *MsgClientSet) error {
 // replyGetData is a response to a get.data request - load a list of stored messages, send them to session as {data}
 // response goes to a single session rather than all sessions in a topic
 func (t *Topic) replyGetData(sess *Session, id string, req *MsgBrowseOpts) error {
-	now := time.Now().UTC().Round(time.Millisecond)
+	now := types.TimeNow()
 
 	// Check if the user has permission to read the topic data
 	if userData := t.perUser[sess.uid]; (userData.modeGiven & userData.modeWant).IsReader() {
@@ -1665,6 +1659,43 @@ func (t *Topic) replyGetData(sess *Session, id string, req *MsgBrowseOpts) error
 	reply := NoErr(id, t.original(sess.uid), now)
 	reply.Ctrl.Params = map[string]string{"what": "data"}
 	sess.queueOut(reply)
+
+	return nil
+}
+
+// replyGetTags returns topic's tags - tokens used for discovery.
+func (t *Topic) replyGetTags(sess *Session, id string) error {
+	return nil
+}
+
+// replySetTags updates topic's tags - tokens used for discovery.
+func (t *Topic) replySetTags(sess *Session, id string, set *MsgClientSet) error {
+	if len(set.Tags) == 0 {
+		return nil
+	}
+
+	now := types.TimeNow()
+	if t.cat != types.TopicCatMe && t.cat != types.TopicCatGrp {
+		sess.queueOut(ErrOperationNotAllowed(id, "", now))
+		return errors.New("invalid topic category assign tags")
+	}
+
+	var tags []string
+	if tags = filterTags(tags, set.Tags); len(tags) > 0 {
+		update := map[string]interface{}{"Tags": tags}
+		var err error
+		if t.cat == types.TopicCatMe {
+			err = store.Users.Update(sess.uid, update)
+		} else if t.cat == types.TopicCatGrp {
+			err = store.Topics.Update(t.name, update)
+		}
+
+		if err != nil {
+			log.Println("Failed to update tags", err)
+			sess.queueOut(ErrUnknown(id, "", now))
+			return err
+		}
+	}
 
 	return nil
 }

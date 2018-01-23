@@ -145,6 +145,5 @@ func (BasicAuth) GenSecret(uid types.Uid, authLvl int, lifetime time.Duration) (
 }
 
 func init() {
-	var auth BasicAuth
-	store.RegisterAuthScheme("basic", auth)
+	store.RegisterAuthScheme("basic", &BasicAuth{})
 }
