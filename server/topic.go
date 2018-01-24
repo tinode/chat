@@ -1416,10 +1416,8 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 		isSharer = true
 	} else if t.cat == types.TopicCatFnd {
 		// Given a query provided in .private, fetch user's contacts
-		if query, ok := t.perUser[sess.uid].private.([]interface{}); ok {
-			if query != nil && len(query) > 0 {
-				subs, err = store.Users.FindSubs(sess.uid, query)
-			}
+		if query, ok := t.perUser[sess.uid].private.([]string); ok && len(query) > 0 {
+			subs, err = store.Users.FindSubs(sess.uid, query)
 		}
 	} else {
 		// TODO(gene): don't load subs from DB, use perUserData - it already contains subscriptions.
@@ -1682,20 +1680,26 @@ func (t *Topic) replySetTags(sess *Session, id string, set *MsgClientSet) error 
 
 	var tags []string
 	if tags = filterTags(tags, set.Tags); len(tags) > 0 {
-		update := map[string]interface{}{"Tags": tags}
+		if len(tags) > globals.maxTagCount {
+			// If user sent too many tags, silently discard excessive tags.
+			tags = tags[:globals.maxTagCount]
+		}
+
 		var err error
 		if t.cat == types.TopicCatMe {
-			err = store.Users.Update(sess.uid, update)
+			err = store.Users.UpdateTags(sess.uid, tags)
 		} else if t.cat == types.TopicCatGrp {
-			err = store.Topics.Update(t.name, update)
+			err = store.Topics.UpdateTags(t.name, tags)
 		}
 
 		if err != nil {
 			log.Println("Failed to update tags", err)
-			sess.queueOut(ErrUnknown(id, "", now))
+			sess.queueOut(ErrUnknown(id, t.original(sess.uid), now))
 			return err
 		}
 	}
+
+	sess.queueOut(NoErr(id, t.original(sess.uid), now))
 
 	return nil
 }

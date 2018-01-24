@@ -3,6 +3,7 @@
 	"api_key_salt": "T713/rYYgW7g4m3vG6zGRh7+FM1t0T8j13koXScOAj4=",
 	"max_message_size": 262144,
 	"max_subscriber_count": 128,
+	"max_tag_count": 16,
 	"indexable_tags": ["tel", "email"],
 	
 	"tls": {

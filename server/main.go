@@ -52,6 +52,9 @@ const (
 	// Also set in adapter.
 	defaultMaxSubscriberCount = 256
 
+	// defaultMaxTagCount is the default maximum number of indexable tags
+	defaultMaxTagCount = 16
+
 	// Delay before updating a User Agent
 	uaTimerDelay = time.Second * 5
 
@@ -78,6 +81,8 @@ var globals struct {
 	maxMessageSize int64
 	// Maximum number of group topic subscribers.
 	maxSubscriberCount int
+	// Maximum number of indexable tags.
+	maxTagCount int
 }
 
 // Contentx of the configuration file
@@ -100,6 +105,8 @@ type configType struct {
 	MaxMessageSize int `json:"max_message_size"`
 	// Maximum number of group topic subscribers.
 	MaxSubscriberCount int `json:"max_subscriber_count"`
+	// Maximum number of indexable tags
+	MaxTagCount int `json:"max_tag_count"`
 	// Tags allowed in index (user discovery)
 	IndexableTags []string                   `json:"indexable_tags"`
 	ClusterConfig json.RawMessage            `json:"cluster_config"`
@@ -184,6 +191,11 @@ func main() {
 	globals.maxSubscriberCount = config.MaxSubscriberCount
 	if globals.maxSubscriberCount <= 1 {
 		globals.maxSubscriberCount = defaultMaxSubscriberCount
+	}
+	// Maximum number of indexable tags per user or topics
+	globals.maxTagCount = config.MaxTagCount
+	if globals.maxTagCount <= 0 {
+		globals.maxTagCount = defaultMaxTagCount
 	}
 
 	// Serve static content from the directory in -static_data flag if that's

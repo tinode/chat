@@ -7,6 +7,7 @@ import (
 	"errors"
 	"hash/fnv"
 	"log"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -167,6 +168,11 @@ func (a *adapter) CreateDb(reset bool) error {
 	if _, err := rdb.DB("tinode").TableCreate("topics", rdb.TableCreateOpts{PrimaryKey: "Id"}).RunWrite(a.conn); err != nil {
 		return err
 	}
+	// Create secondary index on Topic.Tags array so topics can be found by tags
+	// These tags are not unique as opposite to User.Tags.
+	if _, err := rdb.DB("tinode").Table("topics").IndexCreate("Tags", rdb.IndexCreateOpts{Multi: true}).RunWrite(a.conn); err != nil {
+		return err
+	}
 
 	// Stored message
 	if _, err := rdb.DB("tinode").TableCreate("messages", rdb.TableCreateOpts{PrimaryKey: "Id"}).RunWrite(a.conn); err != nil {
@@ -215,19 +221,21 @@ func (a *adapter) CreateDb(reset bool) error {
 	return nil
 }
 
+// Indexable tag as stored in 'tagunique'
+type storedTag struct {
+	Id     string
+	Source string
+}
+
 // UserCreate creates a new user. Returns error and true if error is due to duplicate user name,
 // false for any other error
 func (a *adapter) UserCreate(user *t.User) error {
 	// Save user's tags to a separate table to ensure uniquness
 	// TODO(gene): add support for non-unique tags
-	if user.Tags != nil {
-		type tag struct {
-			Id     string
-			Source string
-		}
-		tags := make([]tag, 0, len(user.Tags))
+	if len(user.Tags) > 0 {
+		tags := make([]storedTag, 0, len(user.Tags))
 		for _, t := range user.Tags {
-			tags = append(tags, tag{Id: t, Source: user.Id})
+			tags = append(tags, storedTag{Id: t, Source: user.Id})
 		}
 		res, err := rdb.DB(a.dbName).Table("tagunique").Insert(tags).RunWrite(a.conn)
 		if err != nil {
@@ -814,22 +822,23 @@ func (a *adapter) SubsDelForTopic(topic string) error {
 
 // Returns a list of users who match given tags, such as "email:jdoe@example.com" or "tel:18003287448".
 // Just search the 'users.Tags' for the given tags using respective index.
-func (a *adapter) FindSubs(uid t.Uid, query []interface{}) ([]t.Subscription, error) {
+func (a *adapter) FindSubs(uid t.Uid, tags []string) ([]t.Subscription, error) {
 	// Query may contain redundant records, i.e. the same email twice.
 	// User could be matched on multiple tags, i.e on email and phone#. Thus the query may
 	// return duplicate users. Thus the need for distinct.
+	index := make(map[string]struct{})
+	var query []interface{}
+	for _, tag := range tags {
+		query = append(query, tag)
+		index[tag] = struct{}{}
+	}
+
 	rows, err := rdb.DB(a.dbName).Table("users").GetAllByIndex("Tags", query...).Limit(maxResults).
 		Pluck("Id", "Access", "CreatedAt", "UpdatedAt", "Public", "Tags").Distinct().Run(a.conn)
 	if err != nil {
 		return nil, err
 	}
 
-	index := make(map[string]struct{})
-	for _, q := range query {
-		if tag, ok := q.(string); ok {
-			index[tag] = struct{}{}
-		}
-	}
 	var user t.User
 	var sub t.Subscription
 	var subs []t.Subscription
@@ -861,6 +870,47 @@ func (a *adapter) FindSubs(uid t.Uid, query []interface{}) ([]t.Subscription, er
 	}
 	return subs, nil
 
+}
+
+func (a *adapter) UserTagsUpdate(uid t.Uid, tags []string) error {
+	user, err := a.UserGet(uid)
+	if err != nil {
+		return err
+	}
+
+	added, removed := tagsDelta(user.Tags, tags)
+	if len(removed) > 0 {
+
+	}
+
+	if len(added) > 0 {
+		toAdd := make([]storedTag, 0, len(tags))
+		for _, t := range tags {
+			toAdd = append(toAdd, storedTag{Id: t, Source: uid})
+		}
+		res, err := rdb.DB(a.dbName).Table("tagunique").Insert(toAdd).RunWrite(a.conn)
+	}
+	return nil
+}
+
+func (a *adapter) TopicTagsUpdate(name string, tags []string) error {
+	topic, err := a.TopicGet(name)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func tagsDelta(oldTags, newTags []string) (added, removed []string) {
+	if oldTags == nil {
+		return newTags, nil
+	}
+	if newTags == nil {
+		return nil, oldTags
+	}
+
+	sort.Strings(oldTags)
+	sort.Strings(newTags)
 }
 
 // Messages

@@ -63,8 +63,11 @@ type Adapter interface {
 	SubsDelete(topic string, user t.Uid) error
 	// SubsDelForTopic deletes all subscriptions to the given topic
 	SubsDelForTopic(topic string) error
+
 	// Search for new contacts given a list of tags
-	FindSubs(user t.Uid, query []interface{}) ([]t.Subscription, error)
+	FindSubs(user t.Uid, tags []string) ([]t.Subscription, error)
+	UserTagsUpdate(user t.Uid, tags []string) error
+	TopicTagsUpdate(topic string, tags []string) error
 
 	// Messages
 	MessageSave(msg *t.Message) error
