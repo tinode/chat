@@ -405,12 +405,8 @@ func (a *RethinkDbAdapter) UserUpdateStatus(uid t.Uid, status interface{}) error
 }
 */
 
-func (a *adapter) ChangePassword(id t.Uid, password string) error {
-	return errors.New("ChangePassword: not implemented")
-}
-
+// UserUpdate updates user object. Use UserTagsUpdate when updating Tags.
 func (a *adapter) UserUpdate(uid t.Uid, update map[string]interface{}) error {
-	// FIXME(gene): add Tag re-indexing
 	_, err := rdb.DB(a.dbName).Table("users").Get(uid.String()).Update(update).RunWrite(a.conn)
 	return err
 }
@@ -878,19 +874,37 @@ func (a *adapter) UserTagsUpdate(uid t.Uid, tags []string) error {
 		return err
 	}
 
-	added, removed := tagsDelta(user.Tags, tags)
-	if len(removed) > 0 {
-
-	}
+	added, removed := tagsUniqueDelta(user.Tags, tags)
 
 	if len(added) > 0 {
 		toAdd := make([]storedTag, 0, len(tags))
 		for _, t := range tags {
-			toAdd = append(toAdd, storedTag{Id: t, Source: uid})
+			toAdd = append(toAdd, storedTag{Id: t, Source: user.Id})
 		}
 		res, err := rdb.DB(a.dbName).Table("tagunique").Insert(toAdd).RunWrite(a.conn)
+		if err != nil {
+			if res.Inserted > 0 {
+				// Something went wrong, do best effort deletion of inserted tags
+				rdb.DB(a.dbName).Table("tagunique").GetAll(added).
+					Filter(map[string]interface{}{"Source": user.Id}).Delete().RunWrite(a.conn)
+			}
+
+			if rdb.IsConflictErr(err) {
+				return errors.New("duplicate tag(s)")
+			}
+			return err
+		}
 	}
-	return nil
+
+	if len(removed) > 0 {
+		_, err := rdb.DB(a.dbName).Table("tagunique").GetAll(removed).
+			Filter(map[string]interface{}{"Source": user.Id}).Delete().RunWrite(a.conn)
+		if err != nil {
+			return err
+		}
+	}
+
+	return a.UserUpdate(uid, map[string]interface{}{"Tags": tags})
 }
 
 func (a *adapter) TopicTagsUpdate(name string, tags []string) error {
@@ -898,10 +912,22 @@ func (a *adapter) TopicTagsUpdate(name string, tags []string) error {
 	if err != nil {
 		return err
 	}
+
+	added, removed := tagsUniqueDelta(topic.Tags, tags)
+
+	if len(removed) > 0 {
+		// If it failed here, not much we can do. Ignore the possible error.
+		rdb.DB(a.dbName).Table("tagunique").GetAll(removed).
+			Filter(map[string]interface{}{"Source": name}).Delete().RunWrite(a.conn)
+	}
+
 	return nil
 }
 
-func tagsDelta(oldTags, newTags []string) (added, removed []string) {
+// tagsUniqueDelta extracts the lists of added unique tags and removed unique tags:
+//   added :=  newTags - (oldTags & newTags) -- present in new but missing in old
+//   removed := oldTags - (newTags & oldTags) -- present in old but missing in new
+func tagsUniqueDelta(oldTags, newTags []string) (added, removed []string) {
 	if oldTags == nil {
 		return newTags, nil
 	}
@@ -909,8 +935,39 @@ func tagsDelta(oldTags, newTags []string) (added, removed []string) {
 		return nil, oldTags
 	}
 
+	// Match old tags against the new tags and separate removed tags from added.
 	sort.Strings(oldTags)
 	sort.Strings(newTags)
+
+	iold, inew := 0, 0
+	lold, lnew := len(oldTags), len(newTags)
+	for iold < lold || inew < lnew {
+		if (iold == lold && inew < lnew) || oldTags[iold] > newTags[inew] {
+			// Present in new, missing in old: added
+			added = append(added, newTags[inew])
+			inew++
+
+		} else if (inew == lnew && iold < lold) || oldTags[iold] < newTags[inew] {
+			// Present in old, missing in new: removed
+			removed = append(removed, oldTags[iold])
+
+			iold++
+
+		} else {
+			// present in both
+			if iold < lold {
+				iold++
+			}
+			if inew < lnew {
+				inew++
+			}
+		}
+	}
+	return
+}
+
+func filterUniqueTags(tags []string) []string {
+	return nil
 }
 
 // Messages

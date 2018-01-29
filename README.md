@@ -51,7 +51,7 @@ The demo server is configured to use [ACME](https://letsencrypt.org/) TLS [imple
 ### Planned
 
 * iOS client bindings and client.
-* Video and other media transfer.
+* Options for transfer of large objects like video.
 * End to end encryption with [OTR](https://en.wikipedia.org/wiki/Off-the-Record_Messaging) for one-on-one messaging and undecided method for group messaging.
 * Group messaging with unlimited number of members with bearer token access control.
 * Hot standby.

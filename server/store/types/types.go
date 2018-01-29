@@ -641,6 +641,9 @@ type Topic struct {
 
 	Public interface{}
 
+	// Indexed tags for finding this topic.
+	Tags []string
+
 	// Deserialized ephemeral params
 	owner   Uid                  // first assigned owner
 	perUser map[Uid]*perUserData // deserialized from Subscription

@@ -23,7 +23,7 @@ type Handler struct {
 }
 
 type configType struct {
-	Disabled    bool   `json:"disabled"`
+	Enabled     bool   `json:"enabled"`
 	Buffer      int    `json:"buffer"`
 	APIKey      string `json:"api_key"`
 	TimeToLive  uint   `json:"time_to_live,omitempty"`
@@ -40,7 +40,7 @@ func (Handler) Init(jsonconf string) error {
 		return errors.New("failed to parse config: " + err.Error())
 	}
 
-	if config.Disabled {
+	if !config.Enabled {
 		return nil
 	}
 

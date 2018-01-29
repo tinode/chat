@@ -107,8 +107,11 @@ type configType struct {
 	MaxSubscriberCount int `json:"max_subscriber_count"`
 	// Maximum number of indexable tags
 	MaxTagCount int `json:"max_tag_count"`
-	// Tags allowed in index (user discovery)
-	IndexableTags []string                   `json:"indexable_tags"`
+	// Tags which must be unique, all other tags will be just
+	// indexed without uniqueness enforcement (user discovery)
+	UniqueTags []string `json:"unique_tags"`
+
+	// Configs for subsystems
 	ClusterConfig json.RawMessage            `json:"cluster_config"`
 	PluginConfig  json.RawMessage            `json:"plugins"`
 	StoreConfig   json.RawMessage            `json:"store_config"`

@@ -21,8 +21,8 @@ type stdoutPush struct {
 }
 
 type configType struct {
-	Disabled bool `json:"disabled"`
-	Buffer   int  `json:"buffer"`
+	Enabled bool `json:"enabled"`
+	Buffer  int  `json:"buffer"`
 }
 
 // Init initializes the handler
@@ -40,7 +40,7 @@ func (stdoutPush) Init(jsonconf string) error {
 
 	handler.initialized = true
 
-	if config.Disabled {
+	if !config.Enabled {
 		return nil
 	}
 

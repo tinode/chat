@@ -4,7 +4,7 @@
 	"max_message_size": 262144,
 	"max_subscriber_count": 128,
 	"max_tag_count": 16,
-	"indexable_tags": ["tel", "email"],
+	"unique_tags": ["tel", "email"],
 	
 	"tls": {
 		"enabled": false,
@@ -39,13 +39,13 @@
 		{
 			"name":"stdout",
 			"config": {
-				"disabled": true
+				"enabled": false
 			}
 		},
 		{
 			"name":"fcm",
 			"config": {
-				"disabled": true,
+				"enabled": false,
 				"buffer": 1024,
 				"api_key": "Get your own at https://console.firebase.google.com/project/**NAME-OF-YOUR-PROJECT**/settings/cloudmessaging",
 				"time_to_live": 3600,
