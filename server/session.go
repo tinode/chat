@@ -579,7 +579,7 @@ func (s *Session) acc(msg *ClientComMessage) {
 
 		if len(msg.Acc.Tags) > 0 {
 			var tags []string
-			if tags = filterTags(tags, msg.Acc.Tags); len(tags) > 0 {
+			if tags = normalizeTags(tags, msg.Acc.Tags); len(tags) > 0 {
 				user.Tags = tags
 			}
 		}
@@ -916,66 +916,6 @@ func (s *Session) serialize(msg *ServerComMessage) interface{} {
 	}
 	out, _ := json.Marshal(msg)
 	return out
-}
-
-func filterTags(dst []string, src []string) []string {
-	if len(globals.indexableTags) == 0 || len(src) == 0 {
-		return dst
-	}
-
-	// Make sure the number of tags does not exceed the maximum.
-	if len(src) > globals.maxTagCount {
-		src := src[:globals.maxTagCount]
-	}
-
-	// Trim whitespace
-	for i := 0; i < len(src); i++ {
-		src[i] = strings.Trim(src[i], " \t\n")
-	}
-
-	// Sort tags
-	sort.Strings(src)
-
-	// Remove empty tags and de-dupe keeping the order. It may result in fewer tags than could have
-	// been if length was enforced later, but that's client's fault.
-	var prev string
-	for i := 0; i < len(src); {
-		curr := src[i]
-		if curr == "" || curr == prev {
-			// Re-slicing is not efficient but the slice is short so we don't care.
-			src = append(src[:i], src[i+1:]...)
-			continue
-		}
-		prev = curr
-		i++
-	}
-
-	// Ensure only known unique prefixes are used.
-	for i := 0; i < len(src); i++ {
-		parts := strings.SplitN(src[i], ":", 2)
-		if len(parts) < 2 {
-			// Not in "tag:value" format
-			dst = append(dst, src[i])
-			continue
-		}
-
-		if parts[1] = strings.Trim(parts[1], " \t\n"); parts[1] == "" {
-			// Skip invalid strings of the form "tag:"
-			continue
-		}
-
-		// Normalize tag part
-		parts[0] = strings.ToLower(parts[0])
-
-		// Find if the tag is listed as unique.
-		for _, tag := range globals.indexableTags {
-			if parts[0] == tag {
-				dst = append(dst, tag+":"+parts[1])
-				continue
-			}
-		}
-	}
-	return dst
 }
 
 func decodeAuthError(code int, id string, timestamp time.Time) *ServerComMessage {

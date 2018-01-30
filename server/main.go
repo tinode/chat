@@ -68,12 +68,13 @@ const (
 var buildstamp = "buildstamp-undefined"
 
 var globals struct {
-	hub           *Hub
-	sessionStore  *SessionStore
-	cluster       *Cluster
-	grpcServer    *grpc.Server
-	apiKeySalt    []byte
-	indexableTags []string
+	hub          *Hub
+	sessionStore *SessionStore
+	cluster      *Cluster
+	grpcServer   *grpc.Server
+	apiKeySalt   []byte
+	// Tags which are indexed as unique.
+	uniqueTags []string
 	// Add Strict-Transport-Security to headers, the value signifies age.
 	// Empty string "" turns it off
 	tlsStrictMaxAge string
@@ -183,8 +184,8 @@ func main() {
 	pluginsInit(config.PluginConfig)
 	// API key validation secret
 	globals.apiKeySalt = config.APIKeySalt
-	// Indexable tags for user discovery
-	globals.indexableTags = config.IndexableTags
+	// List of indexable tags for user discovery treated as globally unique.
+	globals.uniqueTags = config.UniqueTags
 	// Maximum message size
 	globals.maxMessageSize = int64(config.MaxMessageSize)
 	if globals.maxMessageSize <= 0 {

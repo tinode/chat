@@ -65,8 +65,8 @@ type Adapter interface {
 
 	// Search for new contacts given a list of tags
 	FindSubs(user t.Uid, tags []string) ([]t.Subscription, error)
-	UserTagsUpdate(user t.Uid, tags []string) error
-	TopicTagsUpdate(topic string, tags []string) error
+	UserTagsUpdate(user t.Uid, unique, tags []string) error
+	TopicTagsUpdate(topic string, unique, tags []string) error
 
 	// Messages
 	MessageSave(msg *t.Message) error

@@ -817,11 +817,8 @@ func (a *adapter) SubsDelForTopic(topic string) error {
 }
 
 // Returns a list of users who match given tags, such as "email:jdoe@example.com" or "tel:18003287448".
-// Just search the 'users.Tags' for the given tags using respective index.
+// Searching the 'users.Tags' for the given tags using respective index.
 func (a *adapter) FindSubs(uid t.Uid, tags []string) ([]t.Subscription, error) {
-	// Query may contain redundant records, i.e. the same email twice.
-	// User could be matched on multiple tags, i.e on email and phone#. Thus the query may
-	// return duplicate users. Thus the need for distinct.
 	index := make(map[string]struct{})
 	var query []interface{}
 	for _, tag := range tags {
@@ -829,9 +826,28 @@ func (a *adapter) FindSubs(uid t.Uid, tags []string) ([]t.Subscription, error) {
 		index[tag] = struct{}{}
 	}
 
-	rows, err := rdb.DB(a.dbName).Table("users").GetAllByIndex("Tags", query...).Limit(maxResults).
-		Pluck("Id", "Access", "CreatedAt", "UpdatedAt", "Public", "Tags").Distinct().Run(a.conn)
+	log.Println("searching for tags", tags)
+
+	// Get users matched by tags, sort by number of matches from high to low.
+	rows, err := rdb.DB(a.dbName).
+		Table("users").
+		GetAllByIndex("Tags", query...).
+		Pluck("Id", "Access", "CreatedAt", "UpdatedAt", "Public", "Tags").
+		Group("Id").
+		Ungroup().
+		Map(func(row rdb.Term) rdb.Term {
+			return row.Field("reduction").
+				Nth(0).
+				Merge(map[string]interface{}{"MatchedTagsCount": row.Field("reduction").Count()})
+		}).
+		// Query may contain redundant records, i.e. the same tag twice.
+		// User could be matched on multiple tags, i.e on email and phone#. Thus the query may
+		// return duplicate users. Thus the need for distinct.
+		OrderBy(rdb.Desc("MatchedTagsCount")).
+		Limit(maxResults).
+		Run(a.conn)
 	if err != nil {
+		log.Println("error", err)
 		return nil, err
 	}
 
@@ -846,8 +862,6 @@ func (a *adapter) FindSubs(uid t.Uid, tags []string) ([]t.Subscription, error) {
 		sub.CreatedAt = user.CreatedAt
 		sub.UpdatedAt = user.UpdatedAt
 		sub.User = user.Id
-		// TODO(gene): maybe remove it
-		// sub.ModeWant, sub.ModeGiven = user.Access.Auth, user.Access.Auth
 		sub.SetPublic(user.Public)
 		// TODO: maybe report default access to user
 		// sub.SetDefaultAccess(user.Access.Auth, user.Access.Anon)
@@ -868,25 +882,123 @@ func (a *adapter) FindSubs(uid t.Uid, tags []string) ([]t.Subscription, error) {
 
 }
 
-func (a *adapter) UserTagsUpdate(uid t.Uid, tags []string) error {
+// Returns a list of topics with matching tags.
+// Searching the 'topics.Tags' for the given tags using respective index.
+func (a *adapter) FindTopics(tags []string) ([]t.Subscription, error) {
+	index := make(map[string]struct{})
+	var query []interface{}
+	for _, tag := range tags {
+		query = append(query, tag)
+		index[tag] = struct{}{}
+	}
+
+	/*
+	   Javascript query we are replicating here in Go:
+	   r.db('tinode').table('users')
+	   	.getAll("email:alice@example.com", "email:bob@example.com", "tel:17025550002", {index: 'Tags'})
+	   	.group("Id")
+	   	.ungroup()
+	   	.map(function(row) {
+	   		return row.getField('reduction')
+	   			.nth(0)
+	   			.merge({
+	   				merge_count: row.getField('reduction').count()
+	   			})
+	   	})
+	   	.orderBy(r.desc("merge_count"))
+	*/
+
+	rows, err := rdb.DB(a.dbName).
+		Table("topics").
+		GetAllByIndex("Tags", query...).
+		Pluck("Id", "Access", "CreatedAt", "UpdatedAt", "Public", "Tags").
+		Group("Id").
+		Ungroup().
+		Map(func(row rdb.Term) rdb.Term {
+			return row.Field("reduction").
+				Nth(0).
+				Merge(map[string]interface{}{"MatchedTagsCount": row.Field("reduction").Count()})
+		}).
+		OrderBy(rdb.Desc("MatchedTagsCount")).
+		Limit(maxResults).
+		Run(a.conn)
+	if err != nil {
+		return nil, err
+	}
+
+	var topic t.Topic
+	var sub t.Subscription
+	var subs []t.Subscription
+	for rows.Next(&topic) {
+		sub.CreatedAt = topic.CreatedAt
+		sub.UpdatedAt = topic.UpdatedAt
+		sub.Topic = topic.Id
+		sub.SetPublic(topic.Public)
+		// TODO: maybe report default access to user
+		// sub.SetDefaultAccess(user.Access.Auth, user.Access.Anon)
+		tags := make([]string, 0, 1)
+		for _, tag := range topic.Tags {
+			if _, ok := index[tag]; ok {
+				tags = append(tags, tag)
+			}
+		}
+		sub.Private = tags
+		subs = append(subs, sub)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+	return subs, nil
+
+}
+
+// UserTagsUpdate updates user's Tags. 'unique' contains the prefixes of tags which are
+// treated as unique, i.e. 'email' or 'tel'.
+func (a *adapter) UserTagsUpdate(uid t.Uid, unique, tags []string) error {
 	user, err := a.UserGet(uid)
 	if err != nil {
 		return err
 	}
 
-	added, removed := tagsUniqueDelta(user.Tags, tags)
+	added, removed := tagsUniqueDelta(unique, user.Tags, tags)
+	if err := a.updateUniqueTags(user.Id, added, removed); err != nil {
+		return err
+	}
 
-	if len(added) > 0 {
-		toAdd := make([]storedTag, 0, len(tags))
-		for _, t := range tags {
-			toAdd = append(toAdd, storedTag{Id: t, Source: user.Id})
+	return a.UserUpdate(uid, map[string]interface{}{"Tags": tags})
+}
+
+// TopicTagsUpdate updates topic's tags.
+// - name is the name of the topic to update
+// - unique is the list of prefixes to treat as unique.
+// - tags are the new tags.
+func (a *adapter) TopicTagsUpdate(name string, unique, tags []string) error {
+	topic, err := a.TopicGet(name)
+	if err != nil {
+		return err
+	}
+
+	added, removed := tagsUniqueDelta(unique, topic.Tags, tags)
+	if err := a.updateUniqueTags(name, added, removed); err != nil {
+		return err
+	}
+
+	return a.TopicUpdate(name, map[string]interface{}{"Tags": tags})
+}
+
+func (a *adapter) updateUniqueTags(source string, added, removed []string) error {
+	if added != nil && len(added) > 0 {
+		toAdd := make([]storedTag, 0, len(added))
+		for _, tag := range added {
+			toAdd = append(toAdd, storedTag{Id: tag, Source: source})
 		}
 		res, err := rdb.DB(a.dbName).Table("tagunique").Insert(toAdd).RunWrite(a.conn)
 		if err != nil {
 			if res.Inserted > 0 {
 				// Something went wrong, do best effort deletion of inserted tags
 				rdb.DB(a.dbName).Table("tagunique").GetAll(added).
-					Filter(map[string]interface{}{"Source": user.Id}).Delete().RunWrite(a.conn)
+					Filter(map[string]interface{}{"Source": source}).Delete().RunWrite(a.conn)
 			}
 
 			if rdb.IsConflictErr(err) {
@@ -896,29 +1008,12 @@ func (a *adapter) UserTagsUpdate(uid t.Uid, tags []string) error {
 		}
 	}
 
-	if len(removed) > 0 {
+	if removed != nil && len(removed) > 0 {
 		_, err := rdb.DB(a.dbName).Table("tagunique").GetAll(removed).
-			Filter(map[string]interface{}{"Source": user.Id}).Delete().RunWrite(a.conn)
+			Filter(map[string]interface{}{"Source": source}).Delete().RunWrite(a.conn)
 		if err != nil {
 			return err
 		}
-	}
-
-	return a.UserUpdate(uid, map[string]interface{}{"Tags": tags})
-}
-
-func (a *adapter) TopicTagsUpdate(name string, tags []string) error {
-	topic, err := a.TopicGet(name)
-	if err != nil {
-		return err
-	}
-
-	added, removed := tagsUniqueDelta(topic.Tags, tags)
-
-	if len(removed) > 0 {
-		// If it failed here, not much we can do. Ignore the possible error.
-		rdb.DB(a.dbName).Table("tagunique").GetAll(removed).
-			Filter(map[string]interface{}{"Source": name}).Delete().RunWrite(a.conn)
 	}
 
 	return nil
@@ -927,18 +1022,18 @@ func (a *adapter) TopicTagsUpdate(name string, tags []string) error {
 // tagsUniqueDelta extracts the lists of added unique tags and removed unique tags:
 //   added :=  newTags - (oldTags & newTags) -- present in new but missing in old
 //   removed := oldTags - (newTags & oldTags) -- present in old but missing in new
-func tagsUniqueDelta(oldTags, newTags []string) (added, removed []string) {
+func tagsUniqueDelta(unique, oldTags, newTags []string) (added, removed []string) {
 	if oldTags == nil {
-		return newTags, nil
+		return filterUniqueTags(unique, newTags), nil
 	}
 	if newTags == nil {
-		return nil, oldTags
+		return nil, filterUniqueTags(unique, oldTags)
 	}
 
-	// Match old tags against the new tags and separate removed tags from added.
 	sort.Strings(oldTags)
 	sort.Strings(newTags)
 
+	// Match old tags against the new tags and separate removed tags from added.
 	iold, inew := 0, 0
 	lold, lnew := len(oldTags), len(newTags)
 	for iold < lold || inew < lnew {
@@ -963,11 +1058,27 @@ func tagsUniqueDelta(oldTags, newTags []string) (added, removed []string) {
 			}
 		}
 	}
-	return
+	return filterUniqueTags(unique, added), filterUniqueTags(unique, removed)
 }
 
-func filterUniqueTags(tags []string) []string {
-	return nil
+func filterUniqueTags(unique, tags []string) []string {
+	var out []string
+	if unique != nil && len(unique) > 0 && tags != nil {
+		for _, s := range tags {
+			parts := strings.SplitN(s, ":", 2)
+
+			if len(parts) < 2 {
+				continue
+			}
+
+			for _, u := range unique {
+				if parts[0] == u {
+					out = append(out, s)
+				}
+			}
+		}
+	}
+	return out
 }
 
 // Messages

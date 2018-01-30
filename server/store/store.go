@@ -214,8 +214,8 @@ func (u UsersObjMapper) FindSubs(id types.Uid, query []string) ([]types.Subscrip
 }
 
 // UpdateTags updates indexable tags for the given user.
-func (u UsersObjMapper) UpdateTags(id types.Uid, newTags []string) error {
-	return adaptr.UserTagsUpdate(id, newTags)
+func (u UsersObjMapper) UpdateTags(id types.Uid, unique, newTags []string) error {
+	return adaptr.UserTagsUpdate(id, unique, newTags)
 }
 
 // GetTopics load a list of user's subscriptions with Public field copied to subscription
@@ -306,8 +306,8 @@ func (TopicsObjMapper) Delete(topic string) error {
 }
 
 // UpdateTags updates indexable tags for the given topic.
-func (u TopicsObjMapper) UpdateTags(topic string, tags []string) error {
-	return adaptr.TopicTagsUpdate(topic, tags)
+func (u TopicsObjMapper) UpdateTags(topic string, unique, tags []string) error {
+	return adaptr.TopicTagsUpdate(topic, unique, tags)
 }
 
 // SubsObjMapper is A struct to hold methods for persistence mapping for the Subscription object.

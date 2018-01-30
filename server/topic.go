@@ -12,6 +12,7 @@ import (
 	"errors"
 	"log"
 	"sort"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -1415,9 +1416,20 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 		subs, err = store.Users.GetTopicsAny(sess.uid)
 		isSharer = true
 	} else if t.cat == types.TopicCatFnd {
-		// Given a query provided in .private, fetch user's contacts
-		if query, ok := t.perUser[sess.uid].private.([]string); ok && len(query) > 0 {
-			subs, err = store.Users.FindSubs(sess.uid, query)
+		// Given a query provided in .private, fetch user's contacts. Private contains a slice of interfaces.
+		if ifquery, ok := t.perUser[sess.uid].private.([]interface{}); ok && len(ifquery) > 0 {
+			// Convert slice of interfaces to a slice of strings.
+			var query []string
+			for _, ifq := range ifquery {
+				switch str := ifq.(type) {
+				case string:
+					query = append(query, str)
+				default:
+				}
+			}
+			if len(query) > 0 {
+				subs, err = store.Users.FindSubs(sess.uid, query)
+			}
 		}
 	} else {
 		// TODO(gene): don't load subs from DB, use perUserData - it already contains subscriptions.
@@ -1679,7 +1691,7 @@ func (t *Topic) replySetTags(sess *Session, id string, set *MsgClientSet) error 
 	}
 
 	var tags []string
-	if tags = filterTags(tags, set.Tags); len(tags) > 0 {
+	if tags = normalizeTags(tags, set.Tags); len(tags) > 0 {
 		if len(tags) > globals.maxTagCount {
 			// If user sent too many tags, silently discard excessive tags.
 			tags = tags[:globals.maxTagCount]
@@ -1687,9 +1699,9 @@ func (t *Topic) replySetTags(sess *Session, id string, set *MsgClientSet) error 
 
 		var err error
 		if t.cat == types.TopicCatMe {
-			err = store.Users.UpdateTags(sess.uid, tags)
+			err = store.Users.UpdateTags(sess.uid, globals.uniqueTags, tags)
 		} else if t.cat == types.TopicCatGrp {
-			err = store.Topics.UpdateTags(t.name, tags)
+			err = store.Topics.UpdateTags(t.name, globals.uniqueTags, tags)
 		}
 
 		if err != nil {
@@ -2192,4 +2204,63 @@ func delrangeSerialize(in []MsgDelRange) []types.Range {
 	}
 
 	return out
+}
+
+// Trim whitespace, remove empty tags and duplicates, ensure proper format of prefixes.
+func normalizeTags(dst []string, src []string) []string {
+	if len(src) == 0 {
+		return dst
+	}
+
+	// Make sure the number of tags does not exceed the maximum.
+	// Technically it may result in fewer tags than the maximum due to empty tags and
+	// duplicates, but that's user's fault.
+	if len(src) > globals.maxTagCount {
+		src = src[:globals.maxTagCount]
+	}
+
+	// Trim whitespace
+	for i := 0; i < len(src); i++ {
+		src[i] = strings.TrimSpace(src[i])
+	}
+
+	// Sort tags
+	sort.Strings(src)
+
+	// Remove empty tags and de-dupe keeping the order. It may result in fewer tags than could have
+	// been if length were enforced later, but that's client's fault.
+	var prev string
+	for i := 0; i < len(src); {
+		curr := src[i]
+		if curr == "" || curr == prev {
+			// Re-slicing is not efficient but the slice is short so we don't care.
+			src = append(src[:i], src[i+1:]...)
+			continue
+		}
+		prev = curr
+		i++
+	}
+
+	// If prefixes are used, check their format.
+	// Copy to destination slice.
+	for i := 0; i < len(src); i++ {
+		parts := strings.SplitN(src[i], ":", 2)
+		if len(parts) < 2 {
+			// Not in "tag:value" format
+			dst = append(dst, src[i])
+			continue
+		}
+
+		// Skip invalid strings of the form "tag:" or ":value" or ":"
+		if parts[0], parts[1] = strings.TrimSpace(parts[0]),
+			strings.TrimSpace(parts[1]); parts[0] == "" || parts[1] == "" {
+			continue
+		}
+
+		// Force prefix to loawercase and add tag to output.
+		dst = append(dst, strings.ToLower(parts[0])+":"+parts[1])
+	}
+
+	// Because prefixes were forced to lowercase, the tags may be unsorted now.
+	return dst
 }
