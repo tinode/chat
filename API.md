@@ -711,7 +711,9 @@ Message `{get what="data"}` to `me` queries the history of invites/notifications
 
 Topic `fnd` is automatically created for every user at the account creation time. It serves as an endpoint for discovering other users and group topics. 
 
-Users and group topics are indexed by optional tags. A tag is a string composed of a category followed by colon `:` then by the actual value, ex. `tel:14155551212` or `email:alice@example.com`. Tags can are assigned at creation time then can be updated by using `{set what="tags"}` against a `me` or a group topic. A list of possible tag categories is defined in the config as `"indexable_tags": ["tel", "email"]`.
+Users and group topics can be discovered by optional tags. A tag is an arbitrary string. Tags may have a prefix which serves as a namespace. The prefix is a lowercase string followed by a colon `:`, ex. prefixed phone tag `tel:14155551212` or prefixed email tag `email:alice@example.com`. Some prefixed tags can be enforced to be unique. It's done by listing them in the config as `"unique_tags": ["tel", "email"]`. Only one user or topic may use such unique tag.
+
+Tags can are assigned at creation time then can be updated by using `{set what="tags"}` against a `me` or a group topic. 
 
 To search for contacts a user sets `private` parameter of the `fnd` topic to an array of tags then issues a `{get what="sub"}` request. The system responds with a `{meta}` message with the `sub` section listing details of the found contacts.
 
