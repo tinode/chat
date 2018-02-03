@@ -28,9 +28,7 @@ type configType struct {
 	AdapterConfig json.RawMessage `json:"adapter_config"`
 }
 
-// Open initializes the persistence system. Adapter holds a connection pool for a single database.
-//   jsonconf - configuration string
-func Open(jsonconf string) error {
+func openAdapter(jsonconf string) error {
 	if adaptr == nil {
 		return errors.New("store: attept to Open an adapter before registering")
 	}
@@ -49,6 +47,18 @@ func Open(jsonconf string) error {
 	}
 
 	return adaptr.Open(string(config.AdapterConfig))
+}
+
+// Open initializes the persistence system. Adapter holds a connection pool for a database instance.
+//   jsonconf - configuration string
+func Open(jsonconf string) error {
+	if err := openAdapter(jsonconf); err != nil {
+		return err
+	}
+	if err := adaptr.CheckDbVersion(); err != nil {
+		return err
+	}
+	return nil
 }
 
 // Close terminates connection to persistent storage.
@@ -70,8 +80,14 @@ func IsOpen() bool {
 }
 
 // InitDb creates a new database instance. If 'reset' is true it will first attempt to drop
-// existing database.
-func InitDb(reset bool) error {
+// existing database. If jsconf is nil it will assume that the connection is already open.
+// If it's non-nil, it will use the config string to open the DB connection first.
+func InitDb(jsonconf string, reset bool) error {
+	if !IsOpen() {
+		if err := openAdapter(jsonconf); err != nil {
+			return err
+		}
+	}
 	return adaptr.CreateDb(reset)
 }
 
@@ -210,7 +226,15 @@ func (u UsersObjMapper) GetSubs(id types.Uid) ([]types.Subscription, error) {
 
 // FindSubs loads a list of users for the given tags.
 func (u UsersObjMapper) FindSubs(id types.Uid, query []string) ([]types.Subscription, error) {
-	return adaptr.FindSubs(id, query)
+	usubs, err := adaptr.FindUsers(id, query)
+	if err != nil {
+		return nil, err
+	}
+	tsubs, err := adaptr.FindTopics(query)
+	if err != nil {
+		return nil, err
+	}
+	return append(usubs, tsubs...), nil
 }
 
 // UpdateTags updates indexable tags for the given user.

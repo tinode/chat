@@ -2219,20 +2219,20 @@ func normalizeTags(dst []string, src []string) []string {
 		src = src[:globals.maxTagCount]
 	}
 
-	// Trim whitespace
+	// Trim whitespace and force to lowercase.
 	for i := 0; i < len(src); i++ {
-		src[i] = strings.TrimSpace(src[i])
+		src[i] = strings.ToLower(strings.TrimSpace(src[i]))
 	}
 
 	// Sort tags
 	sort.Strings(src)
 
-	// Remove empty tags and de-dupe keeping the order. It may result in fewer tags than could have
+	// Remove short tags and de-dupe keeping the order. It may result in fewer tags than could have
 	// been if length were enforced later, but that's client's fault.
 	var prev string
 	for i := 0; i < len(src); {
 		curr := src[i]
-		if curr == "" || curr == prev {
+		if len(curr) < minTagLength || curr == prev {
 			// Re-slicing is not efficient but the slice is short so we don't care.
 			src = append(src[:i], src[i+1:]...)
 			continue
@@ -2257,8 +2257,8 @@ func normalizeTags(dst []string, src []string) []string {
 			continue
 		}
 
-		// Force prefix to loawercase and add tag to output.
-		dst = append(dst, strings.ToLower(parts[0])+":"+parts[1])
+		// Add tag to output.
+		dst = append(dst, parts[0]+":"+parts[1])
 	}
 
 	// Because prefixes were forced to lowercase, the tags may be unsorted now.

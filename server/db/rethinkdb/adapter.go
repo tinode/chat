@@ -19,13 +19,16 @@ import (
 
 // adapter hold RethinkDb connection data.
 type adapter struct {
-	conn   *rdb.Session
-	dbName string
+	conn    *rdb.Session
+	dbName  string
+	version int
 }
 
 const (
 	defaultHost     = "localhost:28015"
 	defaultDatabase = "tinode"
+
+	dbVersion = 100
 )
 
 type configType struct {
@@ -90,10 +93,14 @@ func (a *adapter) Open(jsonconfig string) error {
 	opts.NodeRefreshInterval = time.Duration(config.NodeRefreshInterval) * time.Second
 
 	a.conn, err = rdb.Connect(opts)
+	if err != nil {
+		return err
+	}
 
 	rdb.SetTags("json")
+	a.version = -1
 
-	return err
+	return nil
 }
 
 // Close closes the underlying database connection
@@ -103,6 +110,7 @@ func (a *adapter) Close() error {
 		// Close will wait for all outstanding requests to finish
 		err = a.conn.Close()
 		a.conn = nil
+		a.version = -1
 	}
 	return err
 }
@@ -111,6 +119,36 @@ func (a *adapter) Close() error {
 // connection is actually live.
 func (a *adapter) IsOpen() bool {
 	return a.conn != nil
+}
+
+// Read current database version
+func (a *adapter) getDbVersion() (int, error) {
+	resp, err := rdb.DB(a.dbName).Table("kvmeta").Get("version").Run(a.conn)
+	if err != nil {
+		return -1, err
+	}
+
+	var vers int
+	if err = resp.One(&vers); err != nil {
+		return -1, err
+	}
+
+	a.version = vers
+
+	return vers, nil
+}
+
+func (a *adapter) CheckDbVersion() error {
+	if a.version <= 0 {
+		a.getDbVersion()
+	}
+
+	if a.version != dbVersion {
+		return errors.New("Invalid database version " + strconv.Itoa(a.version) +
+			". Expected " + strconv.Itoa(dbVersion))
+	}
+
+	return nil
 }
 
 // CreateDb initializes the storage. If reset is true, the database is first deleted losing all the data.
@@ -122,6 +160,17 @@ func (a *adapter) CreateDb(reset bool) error {
 	}
 
 	if _, err := rdb.DBCreate("tinode").RunWrite(a.conn); err != nil {
+		return err
+	}
+
+	// Table with metadata key-value pairs.
+	if _, err := rdb.DB("tinode").TableCreate("kvmeta", rdb.TableCreateOpts{PrimaryKey: "key"}).RunWrite(a.conn); err != nil {
+		return err
+	}
+
+	// Record current DB version.
+	if _, err := rdb.DB("tinode").Table("kvmeta").Insert(
+		map[string]interface{}{"key": "version", "value": dbVersion}).RunWrite(a.conn); err != nil {
 		return err
 	}
 
@@ -818,7 +867,7 @@ func (a *adapter) SubsDelForTopic(topic string) error {
 
 // Returns a list of users who match given tags, such as "email:jdoe@example.com" or "tel:18003287448".
 // Searching the 'users.Tags' for the given tags using respective index.
-func (a *adapter) FindSubs(uid t.Uid, tags []string) ([]t.Subscription, error) {
+func (a *adapter) FindUsers(uid t.Uid, tags []string) ([]t.Subscription, error) {
 	index := make(map[string]struct{})
 	var query []interface{}
 	for _, tag := range tags {

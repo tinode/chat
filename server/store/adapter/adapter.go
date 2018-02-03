@@ -13,6 +13,7 @@ type Adapter interface {
 	Open(config string) error
 	Close() error
 	IsOpen() bool
+	CheckDbVersion() error
 
 	CreateDb(reset bool) error
 
@@ -63,8 +64,10 @@ type Adapter interface {
 	// SubsDelForTopic deletes all subscriptions to the given topic
 	SubsDelForTopic(topic string) error
 
-	// Search for new contacts given a list of tags
-	FindSubs(user t.Uid, tags []string) ([]t.Subscription, error)
+	// FindUsers searches for new contacts given a list of tags
+	FindUsers(user t.Uid, tags []string) ([]t.Subscription, error)
+	// FindTopics searches for group topics given a list of tags
+	FindTopics(tags []string) ([]t.Subscription, error)
 	UserTagsUpdate(user t.Uid, unique, tags []string) error
 	TopicTagsUpdate(topic string, unique, tags []string) error
 

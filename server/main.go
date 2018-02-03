@@ -55,6 +55,9 @@ const (
 	// defaultMaxTagCount is the default maximum number of indexable tags
 	defaultMaxTagCount = 16
 
+	// minTagLength is the shortest acceptable length of a tag
+	minTagLength = 4
+
 	// Delay before updating a User Agent
 	uaTimerDelay = time.Second * 5
 

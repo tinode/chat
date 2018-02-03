@@ -18,17 +18,11 @@ import (
 func genRethink(reset bool, dbsource string, data *Data) {
 	var err error
 
-	log.Println("Opening DB...")
-
-	err = store.Open(dbsource)
-	if err != nil {
-		log.Fatal("Failed to connect to DB: ", err)
-	}
 	defer store.Close()
 
 	log.Println("Initializing DB...")
 
-	err = store.InitDb(reset)
+	err = store.InitDb(dbsource, reset)
 	if err != nil {
 		if strings.Contains(err.Error(), " already exists") {
 			log.Println("DB already exists, NOT reinitializing")
