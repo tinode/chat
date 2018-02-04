@@ -715,7 +715,7 @@ Users and group topics can be discovered by optional tags. A tag is an arbitrary
 
 Tags can are assigned at creation time then can be updated by using `{set what="tags"}` against a `me` or a group topic. 
 
-To search a user sets `private` parameter of the `fnd` topic to an array of tags then issues a `{get what="sub"}` request. The system responds with a `{meta}` message with the `sub` section listing details of the found users or topics formatted as subscriptions.
+In order to find users or topics, a user sets `private` parameter of the `fnd` topic to an array of tags then issues a `{get topic="fnd" what="sub"}` request. The system responds with a `{meta}` message with the `sub` section listing details of the found users or topics formatted as subscriptions.
 
 Topic `fnd` is read-only. `{pub}` messages to `fnd` are rejected.
 
