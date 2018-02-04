@@ -123,21 +123,21 @@ func (a *adapter) IsOpen() bool {
 
 // Read current database version
 func (a *adapter) getDbVersion() (int, error) {
-	resp, err := rdb.DB(a.dbName).Table("kvmeta").Get("version").Run(a.conn)
+	resp, err := rdb.DB(a.dbName).Table("kvmeta").Get("version").Pluck("value").Run(a.conn)
 	if err != nil {
 		return -1, err
 	}
 
-	var vers int
+	var vers map[string]int
 	if err = resp.One(&vers); err != nil {
 		return -1, err
 	}
+	a.version = vers["value"]
 
-	a.version = vers
-
-	return vers, nil
+	return a.version, nil
 }
 
+// CheckDbVersion checks whether the actual DB version matches the expected version of this adapter.
 func (a *adapter) CheckDbVersion() error {
 	if a.version <= 0 {
 		a.getDbVersion()
