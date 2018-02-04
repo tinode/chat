@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"hash/fnv"
-	"log"
 	"sort"
 	"strconv"
 	"strings"
@@ -343,8 +342,6 @@ func (a *adapter) DelAllAuthRecords(uid t.Uid) (int, error) {
 
 // Update user's authentication secret
 func (a *adapter) UpdAuthRecord(unique string, authLvl int, secret []byte, expires time.Time) (int, error) {
-	log.Println("Updating for unique", unique)
-
 	res, err := rdb.DB(a.dbName).Table("auth").Get(unique).Update(
 		map[string]interface{}{
 			"authLvl": authLvl,
@@ -875,8 +872,6 @@ func (a *adapter) FindUsers(uid t.Uid, tags []string) ([]t.Subscription, error) 
 		index[tag] = struct{}{}
 	}
 
-	log.Println("searching for tags", tags)
-
 	// Get users matched by tags, sort by number of matches from high to low.
 	rows, err := rdb.DB(a.dbName).
 		Table("users").
@@ -896,7 +891,6 @@ func (a *adapter) FindUsers(uid t.Uid, tags []string) ([]t.Subscription, error) 
 		Limit(maxResults).
 		Run(a.conn)
 	if err != nil {
-		log.Println("error", err)
 		return nil, err
 	}
 
@@ -1191,8 +1185,6 @@ func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.BrowseOpt) 
 
 // Get ranges of deleted messages
 func (a *adapter) MessageGetDeleted(topic string, forUser t.Uid, opts *t.BrowseOpt) ([]t.DelMessage, error) {
-	log.Println("Loading ids of deleted messages for topic", topic, opts)
-
 	var limit = 1024 // TODO(gene): pass into adapter as a config param
 	var lower, upper interface{}
 
@@ -1380,7 +1372,6 @@ func (a *adapter) DeviceGetAll(uids ...t.Uid) (map[t.Uid][]t.DeviceDef, int, err
 	for rows.Next(&row) {
 		if row.Devices != nil && len(row.Devices) > 0 {
 			if err := uid.UnmarshalText([]byte(row.Id)); err != nil {
-				log.Print(err.Error())
 				continue
 			}
 

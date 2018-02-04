@@ -1429,6 +1429,7 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 			}
 			if len(query) > 0 {
 				subs, err = store.Users.FindSubs(sess.uid, query)
+				log.Println("searching for", query, "got results", len(subs))
 			}
 		}
 	} else {
@@ -1457,7 +1458,7 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 	}
 
 	meta := &MsgServerMeta{Id: id, Topic: t.original(sess.uid), Timestamp: &now}
-	if subs != nil && len(subs) > 0 {
+	if len(subs) > 0 {
 		meta.Sub = make([]MsgTopicSub, 0, len(subs))
 		idx := 0
 		for _, sub := range subs {
@@ -1530,11 +1531,11 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 					deleted = true
 				}
 
-				// Reporting subscribers to a group or a p2p topic
+				// Reporting subscribers to fnd, a group or a p2p topic
 				mts.User = uid.UserId()
 				if !deleted {
 					if uid == sess.uid && isReader {
-						// Report deleted messages for own subscriptions only
+						// Report deleted ID for own subscriptions only
 						mts.DelId = sub.DelId
 					}
 
@@ -1573,7 +1574,6 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 			} else if mts.DeletedAt == nil {
 				mts.DeletedAt = &sub.UpdatedAt
 			}
-
 			meta.Sub = append(meta.Sub, mts)
 			idx++
 		}
