@@ -234,7 +234,7 @@ func main() {
 		gzip.CompressHandler(
 			// Remove mount point prefix
 			http.StripPrefix(staticMountPoint,
-				// Redirect non-https content
+				// Optionally add Strict-Transport_security to the response
 				hstsHandler(http.FileServer(http.Dir(staticContent))))))
 	log.Printf("Serving static content from '%s' at '%s'", staticContent, staticMountPoint)
 
