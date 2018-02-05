@@ -1429,7 +1429,6 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 			}
 			if len(query) > 0 {
 				subs, err = store.Users.FindSubs(sess.uid, query)
-				log.Println("searching for", query, "got results", len(subs))
 			}
 		}
 	} else {
@@ -1533,6 +1532,9 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 
 				// Reporting subscribers to fnd, a group or a p2p topic
 				mts.User = uid.UserId()
+				if t.cat == types.TopicCatFnd {
+					mts.Topic = sub.Topic
+				}
 				if !deleted {
 					if uid == sess.uid && isReader {
 						// Report deleted ID for own subscriptions only
