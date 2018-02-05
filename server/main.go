@@ -23,6 +23,7 @@ import (
 	"strings"
 	"time"
 
+	gzip "github.com/gorilla/handlers"
 	_ "github.com/tinode/chat/server/auth/anon"
 	_ "github.com/tinode/chat/server/auth/basic"
 	_ "github.com/tinode/chat/server/auth/token"
@@ -228,15 +229,20 @@ func main() {
 			staticMountPoint = staticMountPoint + "/"
 		}
 	}
-	http.Handle(staticMountPoint, http.StripPrefix(staticMountPoint,
-		hstsHandler(http.FileServer(http.Dir(staticContent)))))
+	http.Handle(staticMountPoint,
+		// Add gzip compression
+		gzip.CompressHandler(
+			// Remove mount point prefix
+			http.StripPrefix(staticMountPoint,
+				// Redirect non-https content
+				hstsHandler(http.FileServer(http.Dir(staticContent))))))
 	log.Printf("Serving static content from '%s' at '%s'", staticContent, staticMountPoint)
 
 	// Configure HTTP channels
 	// Handle websocket clients.
 	http.HandleFunc("/v0/channels", serveWebSocket)
-	// Handle long polling clients.
-	http.HandleFunc("/v0/channels/lp", serveLongPoll)
+	// Handle long polling clients. Enable compression.
+	http.Handle("/v0/channels/lp", gzip.CompressHandler(http.HandlerFunc(serveLongPoll)))
 	// Serve json-formatted 404 for all other URLs
 	http.HandleFunc("/", serve404)
 
