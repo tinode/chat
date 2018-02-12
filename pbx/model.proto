@@ -15,14 +15,13 @@ service Plugin {
 	// and forward it to the client session. 
 	// ServerCtrl.code equals to 0 instructs the server to continue with default processing of the client message.
   	rpc FireHose(ClientReq) returns (ServerResp) {}
-
-	// The following methods are for the Tinode server to report individual events.
 	
-	// A search request issued on a 'fnd' topic. 
-	// The first parameter is the ID of the user who issued the request. 
-	// The second parameter is the search query: an array of string search terms.
+	// An alteranative user and topic discovery mechanism. 
+	// A search request issued on a 'fnd' topic. This method is called to generate an alternative result set.
 	rpc Find(SearchQuery) returns (SearchFound) {}
 	
+	// The following methods are for the Tinode server to report individual events.
+		
 	// Account created, updated or deleted
 	rpc Account(AccountEvent) returns (Unused) {}
 	
@@ -36,7 +35,7 @@ service Plugin {
 	rpc Message(MessageEvent) returns (Unused) {}
 }
 
-// Dummy placeholder message
+// Dummy placeholder message.
 message Unused {
 }
 
