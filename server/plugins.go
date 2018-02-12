@@ -176,6 +176,7 @@ func ParsePluginFilter(s *string, filterBy int) (*PluginFilter, error) {
 type pluginRPCFilterConfig struct {
 	// Filter by packet name, topic type [or exact name - not supported yet]. 2D: "pub,pres;p2p,me"
 	FireHose *string `json:"fire_hose"`
+
 	// Filter by CUD, [exact user name - not supported yet]. 1D: "C"
 	Account *string `json:"account"`
 	// Filter by CUD, topic type[, exact name]: "p2p;CU"
@@ -184,6 +185,9 @@ type pluginRPCFilterConfig struct {
 	Subscription *string `json:"subscription"`
 	// Filter by C.D, topic type[, exact topic name, exact user name]: "grp;CD"
 	Message *string `json:"message"`
+
+	// Call Find service, true or false
+	Find bool
 }
 
 type pluginConfig struct {
@@ -212,6 +216,7 @@ type Plugin struct {
 	filterTopic        *PluginFilter
 	filterSubscription *PluginFilter
 	filterMessage      *PluginFilter
+	filterFind         bool
 	failureCode        int
 	failureText        string
 	network            string
@@ -273,6 +278,8 @@ func pluginsInit(configString json.RawMessage) {
 			ParsePluginFilter(conf.Filters.Message, plgFilterByTopicType|plgFilterByAction); err != nil {
 			log.Fatal("plugins: bad Message filter", err)
 		}
+
+		plugins[count].filterFind = conf.Filters.Find
 
 		if parts := strings.SplitN(conf.ServiceAddr, "://", 2); len(parts) < 2 {
 			log.Fatal("plugins: invalid server address format", conf.ServiceAddr)
@@ -361,15 +368,15 @@ func pluginFireHose(sess *Session, msg *ClientComMessage) (*ClientComMessage, *S
 		if resp, err := p.client.FireHose(ctx, req); err == nil {
 			respStatus := resp.GetStatus()
 			// CONTINUE means default processing
-			if respStatus == pbx.ServerResp_CONTINUE {
+			if respStatus == pbx.RespCode_CONTINUE {
 				continue
 			}
 			// DROP means stop processing of the message
-			if respStatus == pbx.ServerResp_DROP {
+			if respStatus == pbx.RespCode_DROP {
 				return nil, nil
 			}
 			// REPLACE: ClientMsg was updated by the plugin. Use the new one for further processing.
-			if respStatus == pbx.ServerResp_REPLACE {
+			if respStatus == pbx.RespCode_REPLACE {
 				return pbCliDeserialize(resp.GetClmsg()), nil
 			}
 			// RESPOND: Plugin provided an alternative response message. Use it
@@ -391,6 +398,55 @@ func pluginFireHose(sess *Session, msg *ClientComMessage) (*ClientComMessage, *S
 	}
 
 	return msg, nil
+}
+
+// Ask plugin to perform search.
+func pluginFind(user types.Uid, query []string) ([]string, []types.Subscription, error) {
+	if plugins == nil {
+		return query, nil, nil
+	}
+
+	find := &pbx.SearchQuery{
+		UserId: user.UserId(),
+		Terms:  query,
+	}
+	for _, p := range plugins {
+		if !p.filterFind {
+			// Plugin cannot cervice Find requests
+			continue
+		}
+
+		var ctx context.Context
+		var cancel context.CancelFunc
+		if p.timeout > 0 {
+			ctx, cancel = context.WithTimeout(context.Background(), p.timeout)
+			defer cancel()
+		} else {
+			ctx = context.Background()
+		}
+		if resp, err := p.client.Find(ctx, find); err == nil {
+			respStatus := resp.GetStatus()
+			// CONTINUE means default processing
+			if respStatus == pbx.RespCode_CONTINUE {
+				continue
+			}
+			// DROP means stop processing the request
+			if respStatus == pbx.RespCode_DROP {
+				return nil, nil, nil
+			}
+			// REPLACE: query string was changed. Use the new one for further processing.
+			if respStatus == pbx.RespCode_REPLACE {
+				return resp.GetTerms(), nil, nil
+			}
+			// RESPOND: Plugin provided a specific response. Use it
+			return nil, pbSubSliceDeserialize(resp.GetResult()), nil
+		} else {
+			log.Println("plugins: Find call failed", p.name, err)
+			return nil, nil, err
+		}
+	}
+
+	return query, nil, nil
 }
 
 func pluginAccount(user *types.User, action int) {

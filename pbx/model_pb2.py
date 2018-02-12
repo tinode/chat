@@ -20,7 +20,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   name='model.proto',
   package='pbx',
   syntax='proto3',
-  serialized_pb=_b('\n\x0bmodel.proto\x12\x03pbx\"\x08\n\x06Unused\",\n\x0e\x44\x65\x66\x61ultAcsMode\x12\x0c\n\x04\x61uth\x18\x01 \x01(\t\x12\x0c\n\x04\x61non\x18\x02 \x01(\t\")\n\nAccessMode\x12\x0c\n\x04want\x18\x01 \x01(\t\x12\r\n\x05given\x18\x02 \x01(\t\"\'\n\x06SetSub\x12\x0f\n\x07user_id\x18\x01 \x01(\t\x12\x0c\n\x04mode\x18\x02 \x01(\t\"T\n\x07SetDesc\x12(\n\x0b\x64\x65\x66\x61ult_acs\x18\x01 \x01(\x0b\x32\x13.pbx.DefaultAcsMode\x12\x0e\n\x06public\x18\x02 \x01(\x0c\x12\x0f\n\x07private\x18\x03 \x01(\x0c\"3\n\x07GetOpts\x12\x19\n\x11if_modified_since\x18\x01 \x01(\x03\x12\r\n\x05limit\x18\x02 \x01(\x05\"@\n\nBrowseOpts\x12\x10\n\x08since_id\x18\x01 \x01(\x05\x12\x11\n\tbefore_id\x18\x03 \x01(\x05\x12\r\n\x05limit\x18\x05 \x01(\x05\"n\n\x08GetQuery\x12\x0c\n\x04what\x18\x01 \x01(\t\x12\x1a\n\x04\x64\x65sc\x18\x02 \x01(\x0b\x32\x0c.pbx.GetOpts\x12\x19\n\x03sub\x18\x03 \x01(\x0b\x32\x0c.pbx.GetOpts\x12\x1d\n\x04\x64\x61ta\x18\x04 \x01(\x0b\x32\x0f.pbx.BrowseOpts\"@\n\x08SetQuery\x12\x1a\n\x04\x64\x65sc\x18\x01 \x01(\x0b\x32\x0c.pbx.SetDesc\x12\x18\n\x03sub\x18\x02 \x01(\x0b\x32\x0b.pbx.SetSub\"#\n\x08SeqRange\x12\x0b\n\x03low\x18\x01 \x01(\x05\x12\n\n\x02hi\x18\x02 \x01(\x05\"X\n\x08\x43lientHi\x12\n\n\x02id\x18\x01 \x01(\t\x12\x12\n\nuser_agent\x18\x02 \x01(\t\x12\x0b\n\x03ver\x18\x03 \x01(\t\x12\x11\n\tdevice_id\x18\x04 \x01(\t\x12\x0c\n\x04lang\x18\x05 \x01(\t\"\x81\x01\n\tClientAcc\x12\n\n\x02id\x18\x01 \x01(\t\x12\x0f\n\x07user_id\x18\x02 \x01(\t\x12\x0e\n\x06scheme\x18\x03 \x01(\t\x12\x0e\n\x06secret\x18\x04 \x01(\x0c\x12\r\n\x05login\x18\x05 \x01(\x08\x12\x0c\n\x04tags\x18\x06 \x03(\t\x12\x1a\n\x04\x64\x65sc\x18\x07 \x01(\x0b\x32\x0c.pbx.SetDesc\"9\n\x0b\x43lientLogin\x12\n\n\x02id\x18\x01 \x01(\t\x12\x0e\n\x06scheme\x18\x02 \x01(\t\x12\x0e\n\x06secret\x18\x03 \x01(\x0c\"j\n\tClientSub\x12\n\n\x02id\x18\x01 \x01(\t\x12\r\n\x05topic\x18\x02 \x01(\t\x12 \n\tset_query\x18\x03 \x01(\x0b\x32\r.pbx.SetQuery\x12 \n\tget_query\x18\x04 \x01(\x0b\x32\r.pbx.GetQuery\"7\n\x0b\x43lientLeave\x12\n\n\x02id\x18\x01 \x01(\t\x12\r\n\x05topic\x18\x02 \x01(\t\x12\r\n\x05unsub\x18\x03 \x01(\x08\"\x9d\x01\n\tClientPub\x12\n\n\x02id\x18\x01 \x01(\t\x12\r\n\x05topic\x18\x02 \x01(\t\x12\x0f\n\x07no_echo\x18\x03 \x01(\x08\x12&\n\x04head\x18\x04 \x03(\x0b\x32\x18.pbx.ClientPub.HeadEntry\x12\x0f\n\x07\x63ontent\x18\x05 \x01(\x0c\x1a+\n\tHeadEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"D\n\tClientGet\x12\n\n\x02id\x18\x01 \x01(\t\x12\r\n\x05topic\x18\x02 \x01(\t\x12\x1c\n\x05query\x18\x03 \x01(\x0b\x32\r.pbx.GetQuery\"D\n\tClientSet\x12\n\n\x02id\x18\x01 \x01(\t\x12\r\n\x05topic\x18\x02 \x01(\t\x12\x1c\n\x05query\x18\x03 \x01(\x0b\x32\r.pbx.SetQuery\"\xad\x01\n\tClientDel\x12\n\n\x02id\x18\x01 \x01(\t\x12\r\n\x05topic\x18\x02 \x01(\t\x12!\n\x04what\x18\x03 \x01(\x0e\x32\x13.pbx.ClientDel.What\x12\x1e\n\x07\x64\x65l_seq\x18\x04 \x03(\x0b\x32\r.pbx.SeqRange\x12\x0f\n\x07user_id\x18\x05 \x01(\t\x12\x0c\n\x04hard\x18\x06 \x01(\x08\"#\n\x04What\x12\x07\n\x03MSG\x10\x00\x12\t\n\x05TOPIC\x10\x01\x12\x07\n\x03SUB\x10\x02\"H\n\nClientNote\x12\r\n\x05topic\x18\x01 \x01(\t\x12\x1b\n\x04what\x18\x02 \x01(\x0e\x32\r.pbx.InfoNote\x12\x0e\n\x06seq_id\x18\x03 \x01(\x05\"\xd4\x02\n\tClientMsg\x12\x1b\n\x02hi\x18\x01 \x01(\x0b\x32\r.pbx.ClientHiH\x00\x12\x1d\n\x03\x61\x63\x63\x18\x02 \x01(\x0b\x32\x0e.pbx.ClientAccH\x00\x12!\n\x05login\x18\x03 \x01(\x0b\x32\x10.pbx.ClientLoginH\x00\x12\x1d\n\x03sub\x18\x04 \x01(\x0b\x32\x0e.pbx.ClientSubH\x00\x12!\n\x05leave\x18\x05 \x01(\x0b\x32\x10.pbx.ClientLeaveH\x00\x12\x1d\n\x03pub\x18\x06 \x01(\x0b\x32\x0e.pbx.ClientPubH\x00\x12\x1d\n\x03get\x18\x07 \x01(\x0b\x32\x0e.pbx.ClientGetH\x00\x12\x1d\n\x03set\x18\x08 \x01(\x0b\x32\x0e.pbx.ClientSetH\x00\x12\x1d\n\x03\x64\x65l\x18\t \x01(\x0b\x32\x0e.pbx.ClientDelH\x00\x12\x1f\n\x04note\x18\n \x01(\x0b\x32\x0f.pbx.ClientNoteH\x00\x42\t\n\x07Message\"\xd9\x01\n\tTopicDesc\x12\x12\n\ncreated_at\x18\x01 \x01(\x03\x12\x12\n\nupdated_at\x18\x02 \x01(\x03\x12#\n\x06\x64\x65\x66\x61\x63s\x18\x03 \x01(\x0b\x32\x13.pbx.DefaultAcsMode\x12\x1c\n\x03\x61\x63s\x18\x04 \x01(\x0b\x32\x0f.pbx.AccessMode\x12\x0e\n\x06seq_id\x18\x05 \x01(\x05\x12\x0f\n\x07read_id\x18\x06 \x01(\x05\x12\x0f\n\x07recv_id\x18\x07 \x01(\x05\x12\x0e\n\x06\x64\x65l_id\x18\x08 \x01(\x05\x12\x0e\n\x06public\x18\t \x01(\x0c\x12\x0f\n\x07private\x18\n \x01(\x0c\"\x99\x02\n\x08TopicSub\x12\x12\n\nupdated_at\x18\x01 \x01(\x03\x12\x12\n\ndeleted_at\x18\x02 \x01(\x03\x12\x0e\n\x06online\x18\x03 \x01(\x08\x12\x1c\n\x03\x61\x63s\x18\x04 \x01(\x0b\x32\x0f.pbx.AccessMode\x12\x0f\n\x07read_id\x18\x05 \x01(\x05\x12\x0f\n\x07recv_id\x18\x06 \x01(\x05\x12\x0e\n\x06public\x18\x07 \x01(\x0c\x12\x0f\n\x07private\x18\x08 \x01(\x0c\x12\x0f\n\x07user_id\x18\t \x01(\t\x12\r\n\x05topic\x18\n \x01(\t\x12\x0e\n\x06seq_id\x18\x0b \x01(\x05\x12\x0e\n\x06\x64\x65l_id\x18\x0c \x01(\x05\x12\x16\n\x0elast_seen_time\x18\r \x01(\x03\x12\x1c\n\x14last_seen_user_agent\x18\x0e \x01(\t\";\n\tDelValues\x12\x0e\n\x06\x64\x65l_id\x18\x01 \x01(\x05\x12\x1e\n\x07\x64\x65l_seq\x18\x02 \x03(\x0b\x32\r.pbx.SeqRange\"\x9f\x01\n\nServerCtrl\x12\n\n\x02id\x18\x01 \x01(\t\x12\r\n\x05topic\x18\x02 \x01(\t\x12\x0c\n\x04\x63ode\x18\x03 \x01(\x05\x12\x0c\n\x04text\x18\x04 \x01(\t\x12+\n\x06params\x18\x05 \x03(\x0b\x32\x1b.pbx.ServerCtrl.ParamsEntry\x1a-\n\x0bParamsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\x0c:\x02\x38\x01\"\xbc\x01\n\nServerData\x12\r\n\x05topic\x18\x01 \x01(\t\x12\x14\n\x0c\x66rom_user_id\x18\x02 \x01(\t\x12\x12\n\ndeleted_at\x18\x03 \x01(\x03\x12\x0e\n\x06seq_id\x18\x04 \x01(\x05\x12\'\n\x04head\x18\x05 \x03(\x0b\x32\x19.pbx.ServerData.HeadEntry\x12\x0f\n\x07\x63ontent\x18\x06 \x01(\x0c\x1a+\n\tHeadEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"\xda\x02\n\nServerPres\x12\r\n\x05topic\x18\x01 \x01(\t\x12\x0b\n\x03src\x18\x02 \x01(\t\x12\"\n\x04what\x18\x03 \x01(\x0e\x32\x14.pbx.ServerPres.What\x12\x12\n\nuser_agent\x18\x04 \x01(\t\x12\x0e\n\x06seq_id\x18\x05 \x01(\x05\x12\x0e\n\x06\x64\x65l_id\x18\x06 \x01(\x05\x12\x1e\n\x07\x64\x65l_seq\x18\x07 \x03(\x0b\x32\r.pbx.SeqRange\x12\x16\n\x0etarget_user_id\x18\x08 \x01(\t\x12\x15\n\ractor_user_id\x18\t \x01(\t\x12\x1c\n\x03\x61\x63s\x18\n \x01(\x0b\x32\x0f.pbx.AccessMode\"k\n\x04What\x12\x06\n\x02ON\x10\x00\x12\x07\n\x03OFF\x10\x01\x12\x06\n\x02UA\x10\x03\x12\x07\n\x03UPD\x10\x04\x12\x08\n\x04GONE\x10\x05\x12\x07\n\x03\x41\x43S\x10\x06\x12\x08\n\x04TERM\x10\x07\x12\x07\n\x03MSG\x10\x08\x12\x08\n\x04READ\x10\t\x12\x08\n\x04RECV\x10\n\x12\x07\n\x03\x44\x45L\x10\x0b\"~\n\nServerMeta\x12\n\n\x02id\x18\x01 \x01(\t\x12\r\n\x05topic\x18\x02 \x01(\t\x12\x1c\n\x04\x64\x65sc\x18\x03 \x01(\x0b\x32\x0e.pbx.TopicDesc\x12\x1a\n\x03sub\x18\x04 \x03(\x0b\x32\r.pbx.TopicSub\x12\x1b\n\x03\x64\x65l\x18\x05 \x01(\x0b\x32\x0e.pbx.DelValues\"^\n\nServerInfo\x12\r\n\x05topic\x18\x01 \x01(\t\x12\x14\n\x0c\x66rom_user_id\x18\x02 \x01(\t\x12\x1b\n\x04what\x18\x03 \x01(\x0e\x32\r.pbx.InfoNote\x12\x0e\n\x06seq_id\x18\x04 \x01(\x05\"\xbb\x01\n\tServerMsg\x12\x1f\n\x04\x63trl\x18\x01 \x01(\x0b\x32\x0f.pbx.ServerCtrlH\x00\x12\x1f\n\x04\x64\x61ta\x18\x02 \x01(\x0b\x32\x0f.pbx.ServerDataH\x00\x12\x1f\n\x04pres\x18\x03 \x01(\x0b\x32\x0f.pbx.ServerPresH\x00\x12\x1f\n\x04meta\x18\x04 \x01(\x0b\x32\x0f.pbx.ServerMetaH\x00\x12\x1f\n\x04info\x18\x05 \x01(\x0b\x32\x0f.pbx.ServerInfoH\x00\x42\t\n\x07Message\"\xb3\x01\n\nServerResp\x12(\n\x06status\x18\x01 \x01(\x0e\x32\x18.pbx.ServerResp.RespCode\x12\x1e\n\x06srvmsg\x18\x02 \x01(\x0b\x32\x0e.pbx.ServerMsg\x12\x1d\n\x05\x63lmsg\x18\x03 \x01(\x0b\x32\x0e.pbx.ClientMsg\"<\n\x08RespCode\x12\x0c\n\x08\x43ONTINUE\x10\x00\x12\x08\n\x04\x44ROP\x10\x01\x12\x0b\n\x07RESPOND\x10\x02\x12\x0b\n\x07REPLACE\x10\x03\"\xdd\x01\n\x07Session\x12\x12\n\nsession_id\x18\x01 \x01(\t\x12\x0f\n\x07user_id\x18\x02 \x01(\t\x12*\n\nauth_level\x18\x03 \x01(\x0e\x32\x16.pbx.Session.AuthLevel\x12\x13\n\x0bremote_addr\x18\x04 \x01(\t\x12\x12\n\nuser_agent\x18\x05 \x01(\t\x12\x11\n\tdevice_id\x18\x06 \x01(\t\x12\x10\n\x08language\x18\x07 \x01(\t\"3\n\tAuthLevel\x12\x08\n\x04NONE\x10\x00\x12\x08\n\x04\x41NON\x10\n\x12\x08\n\x04\x41UTH\x10\x14\x12\x08\n\x04ROOT\x10\x1e\"D\n\tClientReq\x12\x1b\n\x03msg\x18\x01 \x01(\x0b\x32\x0e.pbx.ClientMsg\x12\x1a\n\x04sess\x18\x02 \x01(\x0b\x32\x0c.pbx.Session\"S\n\nTopicEvent\x12\x19\n\x06\x61\x63tion\x18\x01 \x01(\x0e\x32\t.pbx.Crud\x12\x0c\n\x04name\x18\x02 \x01(\t\x12\x1c\n\x04\x64\x65sc\x18\x03 \x01(\x0b\x32\x0e.pbx.TopicDesc\"\x82\x01\n\x0c\x41\x63\x63ountEvent\x12\x19\n\x06\x61\x63tion\x18\x01 \x01(\x0e\x32\t.pbx.Crud\x12\x0f\n\x07user_id\x18\x02 \x01(\t\x12(\n\x0b\x64\x65\x66\x61ult_acs\x18\x03 \x01(\x0b\x32\x13.pbx.DefaultAcsMode\x12\x0e\n\x06public\x18\x04 \x01(\x0c\x12\x0c\n\x04tags\x18\x08 \x03(\t\"\xb0\x01\n\x11SubscriptionEvent\x12\x19\n\x06\x61\x63tion\x18\x01 \x01(\x0e\x32\t.pbx.Crud\x12\r\n\x05topic\x18\x02 \x01(\t\x12\x0f\n\x07user_id\x18\x03 \x01(\t\x12\x0e\n\x06\x64\x65l_id\x18\x04 \x01(\x05\x12\x0f\n\x07read_id\x18\x05 \x01(\x05\x12\x0f\n\x07recv_id\x18\x06 \x01(\x05\x12\x1d\n\x04mode\x18\x07 \x01(\x0b\x32\x0f.pbx.AccessMode\x12\x0f\n\x07private\x18\x08 \x01(\x0c\"G\n\x0cMessageEvent\x12\x19\n\x06\x61\x63tion\x18\x01 \x01(\x0e\x32\t.pbx.Crud\x12\x1c\n\x03msg\x18\x02 \x01(\x0b\x32\x0f.pbx.ServerData*&\n\x08InfoNote\x12\x08\n\x04READ\x10\x00\x12\x08\n\x04RECV\x10\x01\x12\x06\n\x02KP\x10\x02**\n\x04\x43rud\x12\n\n\x06\x43REATE\x10\x00\x12\n\n\x06UPDATE\x10\x01\x12\n\n\x06\x44\x45LETE\x10\x02\x32;\n\x04Node\x12\x33\n\x0bMessageLoop\x12\x0e.pbx.ClientMsg\x1a\x0e.pbx.ServerMsg\"\x00(\x01\x30\x01\x32\xf1\x01\n\x06Plugin\x12-\n\x08\x46ireHose\x12\x0e.pbx.ClientReq\x1a\x0f.pbx.ServerResp\"\x00\x12+\n\x07\x41\x63\x63ount\x12\x11.pbx.AccountEvent\x1a\x0b.pbx.Unused\"\x00\x12\'\n\x05Topic\x12\x0f.pbx.TopicEvent\x1a\x0b.pbx.Unused\"\x00\x12\x35\n\x0cSubscription\x12\x16.pbx.SubscriptionEvent\x1a\x0b.pbx.Unused\"\x00\x12+\n\x07Message\x12\x11.pbx.MessageEvent\x1a\x0b.pbx.Unused\"\x00\x62\x06proto3')
+  serialized_pb=_b('\n\x0bmodel.proto\x12\x03pbx\"\x08\n\x06Unused\",\n\x0e\x44\x65\x66\x61ultAcsMode\x12\x0c\n\x04\x61uth\x18\x01 \x01(\t\x12\x0c\n\x04\x61non\x18\x02 \x01(\t\")\n\nAccessMode\x12\x0c\n\x04want\x18\x01 \x01(\t\x12\r\n\x05given\x18\x02 \x01(\t\"\'\n\x06SetSub\x12\x0f\n\x07user_id\x18\x01 \x01(\t\x12\x0c\n\x04mode\x18\x02 \x01(\t\"T\n\x07SetDesc\x12(\n\x0b\x64\x65\x66\x61ult_acs\x18\x01 \x01(\x0b\x32\x13.pbx.DefaultAcsMode\x12\x0e\n\x06public\x18\x02 \x01(\x0c\x12\x0f\n\x07private\x18\x03 \x01(\x0c\"3\n\x07GetOpts\x12\x19\n\x11if_modified_since\x18\x01 \x01(\x03\x12\r\n\x05limit\x18\x02 \x01(\x05\"@\n\nBrowseOpts\x12\x10\n\x08since_id\x18\x01 \x01(\x05\x12\x11\n\tbefore_id\x18\x03 \x01(\x05\x12\r\n\x05limit\x18\x05 \x01(\x05\"n\n\x08GetQuery\x12\x0c\n\x04what\x18\x01 \x01(\t\x12\x1a\n\x04\x64\x65sc\x18\x02 \x01(\x0b\x32\x0c.pbx.GetOpts\x12\x19\n\x03sub\x18\x03 \x01(\x0b\x32\x0c.pbx.GetOpts\x12\x1d\n\x04\x64\x61ta\x18\x04 \x01(\x0b\x32\x0f.pbx.BrowseOpts\"@\n\x08SetQuery\x12\x1a\n\x04\x64\x65sc\x18\x01 \x01(\x0b\x32\x0c.pbx.SetDesc\x12\x18\n\x03sub\x18\x02 \x01(\x0b\x32\x0b.pbx.SetSub\"#\n\x08SeqRange\x12\x0b\n\x03low\x18\x01 \x01(\x05\x12\n\n\x02hi\x18\x02 \x01(\x05\"X\n\x08\x43lientHi\x12\n\n\x02id\x18\x01 \x01(\t\x12\x12\n\nuser_agent\x18\x02 \x01(\t\x12\x0b\n\x03ver\x18\x03 \x01(\t\x12\x11\n\tdevice_id\x18\x04 \x01(\t\x12\x0c\n\x04lang\x18\x05 \x01(\t\"\x81\x01\n\tClientAcc\x12\n\n\x02id\x18\x01 \x01(\t\x12\x0f\n\x07user_id\x18\x02 \x01(\t\x12\x0e\n\x06scheme\x18\x03 \x01(\t\x12\x0e\n\x06secret\x18\x04 \x01(\x0c\x12\r\n\x05login\x18\x05 \x01(\x08\x12\x0c\n\x04tags\x18\x06 \x03(\t\x12\x1a\n\x04\x64\x65sc\x18\x07 \x01(\x0b\x32\x0c.pbx.SetDesc\"9\n\x0b\x43lientLogin\x12\n\n\x02id\x18\x01 \x01(\t\x12\x0e\n\x06scheme\x18\x02 \x01(\t\x12\x0e\n\x06secret\x18\x03 \x01(\x0c\"j\n\tClientSub\x12\n\n\x02id\x18\x01 \x01(\t\x12\r\n\x05topic\x18\x02 \x01(\t\x12 \n\tset_query\x18\x03 \x01(\x0b\x32\r.pbx.SetQuery\x12 \n\tget_query\x18\x04 \x01(\x0b\x32\r.pbx.GetQuery\"7\n\x0b\x43lientLeave\x12\n\n\x02id\x18\x01 \x01(\t\x12\r\n\x05topic\x18\x02 \x01(\t\x12\r\n\x05unsub\x18\x03 \x01(\x08\"\x9d\x01\n\tClientPub\x12\n\n\x02id\x18\x01 \x01(\t\x12\r\n\x05topic\x18\x02 \x01(\t\x12\x0f\n\x07no_echo\x18\x03 \x01(\x08\x12&\n\x04head\x18\x04 \x03(\x0b\x32\x18.pbx.ClientPub.HeadEntry\x12\x0f\n\x07\x63ontent\x18\x05 \x01(\x0c\x1a+\n\tHeadEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"D\n\tClientGet\x12\n\n\x02id\x18\x01 \x01(\t\x12\r\n\x05topic\x18\x02 \x01(\t\x12\x1c\n\x05query\x18\x03 \x01(\x0b\x32\r.pbx.GetQuery\"D\n\tClientSet\x12\n\n\x02id\x18\x01 \x01(\t\x12\r\n\x05topic\x18\x02 \x01(\t\x12\x1c\n\x05query\x18\x03 \x01(\x0b\x32\r.pbx.SetQuery\"\xad\x01\n\tClientDel\x12\n\n\x02id\x18\x01 \x01(\t\x12\r\n\x05topic\x18\x02 \x01(\t\x12!\n\x04what\x18\x03 \x01(\x0e\x32\x13.pbx.ClientDel.What\x12\x1e\n\x07\x64\x65l_seq\x18\x04 \x03(\x0b\x32\r.pbx.SeqRange\x12\x0f\n\x07user_id\x18\x05 \x01(\t\x12\x0c\n\x04hard\x18\x06 \x01(\x08\"#\n\x04What\x12\x07\n\x03MSG\x10\x00\x12\t\n\x05TOPIC\x10\x01\x12\x07\n\x03SUB\x10\x02\"H\n\nClientNote\x12\r\n\x05topic\x18\x01 \x01(\t\x12\x1b\n\x04what\x18\x02 \x01(\x0e\x32\r.pbx.InfoNote\x12\x0e\n\x06seq_id\x18\x03 \x01(\x05\"\xd4\x02\n\tClientMsg\x12\x1b\n\x02hi\x18\x01 \x01(\x0b\x32\r.pbx.ClientHiH\x00\x12\x1d\n\x03\x61\x63\x63\x18\x02 \x01(\x0b\x32\x0e.pbx.ClientAccH\x00\x12!\n\x05login\x18\x03 \x01(\x0b\x32\x10.pbx.ClientLoginH\x00\x12\x1d\n\x03sub\x18\x04 \x01(\x0b\x32\x0e.pbx.ClientSubH\x00\x12!\n\x05leave\x18\x05 \x01(\x0b\x32\x10.pbx.ClientLeaveH\x00\x12\x1d\n\x03pub\x18\x06 \x01(\x0b\x32\x0e.pbx.ClientPubH\x00\x12\x1d\n\x03get\x18\x07 \x01(\x0b\x32\x0e.pbx.ClientGetH\x00\x12\x1d\n\x03set\x18\x08 \x01(\x0b\x32\x0e.pbx.ClientSetH\x00\x12\x1d\n\x03\x64\x65l\x18\t \x01(\x0b\x32\x0e.pbx.ClientDelH\x00\x12\x1f\n\x04note\x18\n \x01(\x0b\x32\x0f.pbx.ClientNoteH\x00\x42\t\n\x07Message\"\xd9\x01\n\tTopicDesc\x12\x12\n\ncreated_at\x18\x01 \x01(\x03\x12\x12\n\nupdated_at\x18\x02 \x01(\x03\x12#\n\x06\x64\x65\x66\x61\x63s\x18\x03 \x01(\x0b\x32\x13.pbx.DefaultAcsMode\x12\x1c\n\x03\x61\x63s\x18\x04 \x01(\x0b\x32\x0f.pbx.AccessMode\x12\x0e\n\x06seq_id\x18\x05 \x01(\x05\x12\x0f\n\x07read_id\x18\x06 \x01(\x05\x12\x0f\n\x07recv_id\x18\x07 \x01(\x05\x12\x0e\n\x06\x64\x65l_id\x18\x08 \x01(\x05\x12\x0e\n\x06public\x18\t \x01(\x0c\x12\x0f\n\x07private\x18\n \x01(\x0c\"\x99\x02\n\x08TopicSub\x12\x12\n\nupdated_at\x18\x01 \x01(\x03\x12\x12\n\ndeleted_at\x18\x02 \x01(\x03\x12\x0e\n\x06online\x18\x03 \x01(\x08\x12\x1c\n\x03\x61\x63s\x18\x04 \x01(\x0b\x32\x0f.pbx.AccessMode\x12\x0f\n\x07read_id\x18\x05 \x01(\x05\x12\x0f\n\x07recv_id\x18\x06 \x01(\x05\x12\x0e\n\x06public\x18\x07 \x01(\x0c\x12\x0f\n\x07private\x18\x08 \x01(\x0c\x12\x0f\n\x07user_id\x18\t \x01(\t\x12\r\n\x05topic\x18\n \x01(\t\x12\x0e\n\x06seq_id\x18\x0b \x01(\x05\x12\x0e\n\x06\x64\x65l_id\x18\x0c \x01(\x05\x12\x16\n\x0elast_seen_time\x18\r \x01(\x03\x12\x1c\n\x14last_seen_user_agent\x18\x0e \x01(\t\";\n\tDelValues\x12\x0e\n\x06\x64\x65l_id\x18\x01 \x01(\x05\x12\x1e\n\x07\x64\x65l_seq\x18\x02 \x03(\x0b\x32\r.pbx.SeqRange\"\x9f\x01\n\nServerCtrl\x12\n\n\x02id\x18\x01 \x01(\t\x12\r\n\x05topic\x18\x02 \x01(\t\x12\x0c\n\x04\x63ode\x18\x03 \x01(\x05\x12\x0c\n\x04text\x18\x04 \x01(\t\x12+\n\x06params\x18\x05 \x03(\x0b\x32\x1b.pbx.ServerCtrl.ParamsEntry\x1a-\n\x0bParamsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\x0c:\x02\x38\x01\"\xbc\x01\n\nServerData\x12\r\n\x05topic\x18\x01 \x01(\t\x12\x14\n\x0c\x66rom_user_id\x18\x02 \x01(\t\x12\x12\n\ndeleted_at\x18\x03 \x01(\x03\x12\x0e\n\x06seq_id\x18\x04 \x01(\x05\x12\'\n\x04head\x18\x05 \x03(\x0b\x32\x19.pbx.ServerData.HeadEntry\x12\x0f\n\x07\x63ontent\x18\x06 \x01(\x0c\x1a+\n\tHeadEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"\xda\x02\n\nServerPres\x12\r\n\x05topic\x18\x01 \x01(\t\x12\x0b\n\x03src\x18\x02 \x01(\t\x12\"\n\x04what\x18\x03 \x01(\x0e\x32\x14.pbx.ServerPres.What\x12\x12\n\nuser_agent\x18\x04 \x01(\t\x12\x0e\n\x06seq_id\x18\x05 \x01(\x05\x12\x0e\n\x06\x64\x65l_id\x18\x06 \x01(\x05\x12\x1e\n\x07\x64\x65l_seq\x18\x07 \x03(\x0b\x32\r.pbx.SeqRange\x12\x16\n\x0etarget_user_id\x18\x08 \x01(\t\x12\x15\n\ractor_user_id\x18\t \x01(\t\x12\x1c\n\x03\x61\x63s\x18\n \x01(\x0b\x32\x0f.pbx.AccessMode\"k\n\x04What\x12\x06\n\x02ON\x10\x00\x12\x07\n\x03OFF\x10\x01\x12\x06\n\x02UA\x10\x03\x12\x07\n\x03UPD\x10\x04\x12\x08\n\x04GONE\x10\x05\x12\x07\n\x03\x41\x43S\x10\x06\x12\x08\n\x04TERM\x10\x07\x12\x07\n\x03MSG\x10\x08\x12\x08\n\x04READ\x10\t\x12\x08\n\x04RECV\x10\n\x12\x07\n\x03\x44\x45L\x10\x0b\"~\n\nServerMeta\x12\n\n\x02id\x18\x01 \x01(\t\x12\r\n\x05topic\x18\x02 \x01(\t\x12\x1c\n\x04\x64\x65sc\x18\x03 \x01(\x0b\x32\x0e.pbx.TopicDesc\x12\x1a\n\x03sub\x18\x04 \x03(\x0b\x32\r.pbx.TopicSub\x12\x1b\n\x03\x64\x65l\x18\x05 \x01(\x0b\x32\x0e.pbx.DelValues\"^\n\nServerInfo\x12\r\n\x05topic\x18\x01 \x01(\t\x12\x14\n\x0c\x66rom_user_id\x18\x02 \x01(\t\x12\x1b\n\x04what\x18\x03 \x01(\x0e\x32\r.pbx.InfoNote\x12\x0e\n\x06seq_id\x18\x04 \x01(\x05\"\xbb\x01\n\tServerMsg\x12\x1f\n\x04\x63trl\x18\x01 \x01(\x0b\x32\x0f.pbx.ServerCtrlH\x00\x12\x1f\n\x04\x64\x61ta\x18\x02 \x01(\x0b\x32\x0f.pbx.ServerDataH\x00\x12\x1f\n\x04pres\x18\x03 \x01(\x0b\x32\x0f.pbx.ServerPresH\x00\x12\x1f\n\x04meta\x18\x04 \x01(\x0b\x32\x0f.pbx.ServerMetaH\x00\x12\x1f\n\x04info\x18\x05 \x01(\x0b\x32\x0f.pbx.ServerInfoH\x00\x42\t\n\x07Message\"j\n\nServerResp\x12\x1d\n\x06status\x18\x01 \x01(\x0e\x32\r.pbx.RespCode\x12\x1e\n\x06srvmsg\x18\x02 \x01(\x0b\x32\x0e.pbx.ServerMsg\x12\x1d\n\x05\x63lmsg\x18\x03 \x01(\x0b\x32\x0e.pbx.ClientMsg\"\xdd\x01\n\x07Session\x12\x12\n\nsession_id\x18\x01 \x01(\t\x12\x0f\n\x07user_id\x18\x02 \x01(\t\x12*\n\nauth_level\x18\x03 \x01(\x0e\x32\x16.pbx.Session.AuthLevel\x12\x13\n\x0bremote_addr\x18\x04 \x01(\t\x12\x12\n\nuser_agent\x18\x05 \x01(\t\x12\x11\n\tdevice_id\x18\x06 \x01(\t\x12\x10\n\x08language\x18\x07 \x01(\t\"3\n\tAuthLevel\x12\x08\n\x04NONE\x10\x00\x12\x08\n\x04\x41NON\x10\n\x12\x08\n\x04\x41UTH\x10\x14\x12\x08\n\x04ROOT\x10\x1e\"D\n\tClientReq\x12\x1b\n\x03msg\x18\x01 \x01(\x0b\x32\x0e.pbx.ClientMsg\x12\x1a\n\x04sess\x18\x02 \x01(\x0b\x32\x0c.pbx.Session\"-\n\x0bSearchQuery\x12\x0f\n\x07user_id\x18\x01 \x01(\t\x12\r\n\x05terms\x18\x02 \x03(\t\"Z\n\x0bSearchFound\x12\x1d\n\x06status\x18\x01 \x01(\x0e\x32\r.pbx.RespCode\x12\r\n\x05terms\x18\x02 \x03(\t\x12\x1d\n\x06result\x18\x03 \x03(\x0b\x32\r.pbx.TopicSub\"S\n\nTopicEvent\x12\x19\n\x06\x61\x63tion\x18\x01 \x01(\x0e\x32\t.pbx.Crud\x12\x0c\n\x04name\x18\x02 \x01(\t\x12\x1c\n\x04\x64\x65sc\x18\x03 \x01(\x0b\x32\x0e.pbx.TopicDesc\"\x82\x01\n\x0c\x41\x63\x63ountEvent\x12\x19\n\x06\x61\x63tion\x18\x01 \x01(\x0e\x32\t.pbx.Crud\x12\x0f\n\x07user_id\x18\x02 \x01(\t\x12(\n\x0b\x64\x65\x66\x61ult_acs\x18\x03 \x01(\x0b\x32\x13.pbx.DefaultAcsMode\x12\x0e\n\x06public\x18\x04 \x01(\x0c\x12\x0c\n\x04tags\x18\x08 \x03(\t\"\xb0\x01\n\x11SubscriptionEvent\x12\x19\n\x06\x61\x63tion\x18\x01 \x01(\x0e\x32\t.pbx.Crud\x12\r\n\x05topic\x18\x02 \x01(\t\x12\x0f\n\x07user_id\x18\x03 \x01(\t\x12\x0e\n\x06\x64\x65l_id\x18\x04 \x01(\x05\x12\x0f\n\x07read_id\x18\x05 \x01(\x05\x12\x0f\n\x07recv_id\x18\x06 \x01(\x05\x12\x1d\n\x04mode\x18\x07 \x01(\x0b\x32\x0f.pbx.AccessMode\x12\x0f\n\x07private\x18\x08 \x01(\x0c\"G\n\x0cMessageEvent\x12\x19\n\x06\x61\x63tion\x18\x01 \x01(\x0e\x32\t.pbx.Crud\x12\x1c\n\x03msg\x18\x02 \x01(\x0b\x32\x0f.pbx.ServerData*&\n\x08InfoNote\x12\x08\n\x04READ\x10\x00\x12\x08\n\x04RECV\x10\x01\x12\x06\n\x02KP\x10\x02*<\n\x08RespCode\x12\x0c\n\x08\x43ONTINUE\x10\x00\x12\x08\n\x04\x44ROP\x10\x01\x12\x0b\n\x07RESPOND\x10\x02\x12\x0b\n\x07REPLACE\x10\x03**\n\x04\x43rud\x12\n\n\x06\x43REATE\x10\x00\x12\n\n\x06UPDATE\x10\x01\x12\n\n\x06\x44\x45LETE\x10\x02\x32;\n\x04Node\x12\x33\n\x0bMessageLoop\x12\x0e.pbx.ClientMsg\x1a\x0e.pbx.ServerMsg\"\x00(\x01\x30\x01\x32\x9f\x02\n\x06Plugin\x12-\n\x08\x46ireHose\x12\x0e.pbx.ClientReq\x1a\x0f.pbx.ServerResp\"\x00\x12,\n\x04\x46ind\x12\x10.pbx.SearchQuery\x1a\x10.pbx.SearchFound\"\x00\x12+\n\x07\x41\x63\x63ount\x12\x11.pbx.AccountEvent\x1a\x0b.pbx.Unused\"\x00\x12\'\n\x05Topic\x12\x0f.pbx.TopicEvent\x1a\x0b.pbx.Unused\"\x00\x12\x35\n\x0cSubscription\x12\x16.pbx.SubscriptionEvent\x1a\x0b.pbx.Unused\"\x00\x12+\n\x07Message\x12\x11.pbx.MessageEvent\x1a\x0b.pbx.Unused\"\x00\x62\x06proto3')
 )
 
 _INFONOTE = _descriptor.EnumDescriptor(
@@ -44,12 +44,43 @@ _INFONOTE = _descriptor.EnumDescriptor(
   ],
   containing_type=None,
   options=None,
-  serialized_start=4546,
-  serialized_end=4584,
+  serialized_start=4611,
+  serialized_end=4649,
 )
 _sym_db.RegisterEnumDescriptor(_INFONOTE)
 
 InfoNote = enum_type_wrapper.EnumTypeWrapper(_INFONOTE)
+_RESPCODE = _descriptor.EnumDescriptor(
+  name='RespCode',
+  full_name='pbx.RespCode',
+  filename=None,
+  file=DESCRIPTOR,
+  values=[
+    _descriptor.EnumValueDescriptor(
+      name='CONTINUE', index=0, number=0,
+      options=None,
+      type=None),
+    _descriptor.EnumValueDescriptor(
+      name='DROP', index=1, number=1,
+      options=None,
+      type=None),
+    _descriptor.EnumValueDescriptor(
+      name='RESPOND', index=2, number=2,
+      options=None,
+      type=None),
+    _descriptor.EnumValueDescriptor(
+      name='REPLACE', index=3, number=3,
+      options=None,
+      type=None),
+  ],
+  containing_type=None,
+  options=None,
+  serialized_start=4651,
+  serialized_end=4711,
+)
+_sym_db.RegisterEnumDescriptor(_RESPCODE)
+
+RespCode = enum_type_wrapper.EnumTypeWrapper(_RESPCODE)
 _CRUD = _descriptor.EnumDescriptor(
   name='Crud',
   full_name='pbx.Crud',
@@ -71,8 +102,8 @@ _CRUD = _descriptor.EnumDescriptor(
   ],
   containing_type=None,
   options=None,
-  serialized_start=4586,
-  serialized_end=4628,
+  serialized_start=4713,
+  serialized_end=4755,
 )
 _sym_db.RegisterEnumDescriptor(_CRUD)
 
@@ -80,6 +111,10 @@ Crud = enum_type_wrapper.EnumTypeWrapper(_CRUD)
 READ = 0
 RECV = 1
 KP = 2
+CONTINUE = 0
+DROP = 1
+RESPOND = 2
+REPLACE = 3
 CREATE = 0
 UPDATE = 1
 DELETE = 2
@@ -169,36 +204,6 @@ _SERVERPRES_WHAT = _descriptor.EnumDescriptor(
 )
 _sym_db.RegisterEnumDescriptor(_SERVERPRES_WHAT)
 
-_SERVERRESP_RESPCODE = _descriptor.EnumDescriptor(
-  name='RespCode',
-  full_name='pbx.ServerResp.RespCode',
-  filename=None,
-  file=DESCRIPTOR,
-  values=[
-    _descriptor.EnumValueDescriptor(
-      name='CONTINUE', index=0, number=0,
-      options=None,
-      type=None),
-    _descriptor.EnumValueDescriptor(
-      name='DROP', index=1, number=1,
-      options=None,
-      type=None),
-    _descriptor.EnumValueDescriptor(
-      name='RESPOND', index=2, number=2,
-      options=None,
-      type=None),
-    _descriptor.EnumValueDescriptor(
-      name='REPLACE', index=3, number=3,
-      options=None,
-      type=None),
-  ],
-  containing_type=None,
-  options=None,
-  serialized_start=3720,
-  serialized_end=3780,
-)
-_sym_db.RegisterEnumDescriptor(_SERVERRESP_RESPCODE)
-
 _SESSION_AUTHLEVEL = _descriptor.EnumDescriptor(
   name='AuthLevel',
   full_name='pbx.Session.AuthLevel',
@@ -224,8 +229,8 @@ _SESSION_AUTHLEVEL = _descriptor.EnumDescriptor(
   ],
   containing_type=None,
   options=None,
-  serialized_start=3953,
-  serialized_end=4004,
+  serialized_start=3879,
+  serialized_end=3930,
 )
 _sym_db.RegisterEnumDescriptor(_SESSION_AUTHLEVEL)
 
@@ -2047,7 +2052,6 @@ _SERVERRESP = _descriptor.Descriptor(
   ],
   nested_types=[],
   enum_types=[
-    _SERVERRESP_RESPCODE,
   ],
   options=None,
   is_extendable=False,
@@ -2055,8 +2059,8 @@ _SERVERRESP = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=3601,
-  serialized_end=3780,
+  serialized_start=3600,
+  serialized_end=3706,
 )
 
 
@@ -2129,8 +2133,8 @@ _SESSION = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=3783,
-  serialized_end=4004,
+  serialized_start=3709,
+  serialized_end=3930,
 )
 
 
@@ -2167,8 +2171,91 @@ _CLIENTREQ = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=4006,
-  serialized_end=4074,
+  serialized_start=3932,
+  serialized_end=4000,
+)
+
+
+_SEARCHQUERY = _descriptor.Descriptor(
+  name='SearchQuery',
+  full_name='pbx.SearchQuery',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='user_id', full_name='pbx.SearchQuery.user_id', index=0,
+      number=1, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=_b("").decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None),
+    _descriptor.FieldDescriptor(
+      name='terms', full_name='pbx.SearchQuery.terms', index=1,
+      number=2, type=9, cpp_type=9, label=3,
+      has_default_value=False, default_value=[],
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=4002,
+  serialized_end=4047,
+)
+
+
+_SEARCHFOUND = _descriptor.Descriptor(
+  name='SearchFound',
+  full_name='pbx.SearchFound',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='status', full_name='pbx.SearchFound.status', index=0,
+      number=1, type=14, cpp_type=8, label=1,
+      has_default_value=False, default_value=0,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None),
+    _descriptor.FieldDescriptor(
+      name='terms', full_name='pbx.SearchFound.terms', index=1,
+      number=2, type=9, cpp_type=9, label=3,
+      has_default_value=False, default_value=[],
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None),
+    _descriptor.FieldDescriptor(
+      name='result', full_name='pbx.SearchFound.result', index=2,
+      number=3, type=11, cpp_type=10, label=3,
+      has_default_value=False, default_value=[],
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=4049,
+  serialized_end=4139,
 )
 
 
@@ -2212,8 +2299,8 @@ _TOPICEVENT = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=4076,
-  serialized_end=4159,
+  serialized_start=4141,
+  serialized_end=4224,
 )
 
 
@@ -2271,8 +2358,8 @@ _ACCOUNTEVENT = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=4162,
-  serialized_end=4292,
+  serialized_start=4227,
+  serialized_end=4357,
 )
 
 
@@ -2351,8 +2438,8 @@ _SUBSCRIPTIONEVENT = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=4295,
-  serialized_end=4471,
+  serialized_start=4360,
+  serialized_end=4536,
 )
 
 
@@ -2389,8 +2476,8 @@ _MESSAGEEVENT = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=4473,
-  serialized_end=4544,
+  serialized_start=4538,
+  serialized_end=4609,
 )
 
 _SETDESC.fields_by_name['default_acs'].message_type = _DEFAULTACSMODE
@@ -2486,14 +2573,15 @@ _SERVERMSG.fields_by_name['meta'].containing_oneof = _SERVERMSG.oneofs_by_name['
 _SERVERMSG.oneofs_by_name['Message'].fields.append(
   _SERVERMSG.fields_by_name['info'])
 _SERVERMSG.fields_by_name['info'].containing_oneof = _SERVERMSG.oneofs_by_name['Message']
-_SERVERRESP.fields_by_name['status'].enum_type = _SERVERRESP_RESPCODE
+_SERVERRESP.fields_by_name['status'].enum_type = _RESPCODE
 _SERVERRESP.fields_by_name['srvmsg'].message_type = _SERVERMSG
 _SERVERRESP.fields_by_name['clmsg'].message_type = _CLIENTMSG
-_SERVERRESP_RESPCODE.containing_type = _SERVERRESP
 _SESSION.fields_by_name['auth_level'].enum_type = _SESSION_AUTHLEVEL
 _SESSION_AUTHLEVEL.containing_type = _SESSION
 _CLIENTREQ.fields_by_name['msg'].message_type = _CLIENTMSG
 _CLIENTREQ.fields_by_name['sess'].message_type = _SESSION
+_SEARCHFOUND.fields_by_name['status'].enum_type = _RESPCODE
+_SEARCHFOUND.fields_by_name['result'].message_type = _TOPICSUB
 _TOPICEVENT.fields_by_name['action'].enum_type = _CRUD
 _TOPICEVENT.fields_by_name['desc'].message_type = _TOPICDESC
 _ACCOUNTEVENT.fields_by_name['action'].enum_type = _CRUD
@@ -2535,11 +2623,14 @@ DESCRIPTOR.message_types_by_name['ServerMsg'] = _SERVERMSG
 DESCRIPTOR.message_types_by_name['ServerResp'] = _SERVERRESP
 DESCRIPTOR.message_types_by_name['Session'] = _SESSION
 DESCRIPTOR.message_types_by_name['ClientReq'] = _CLIENTREQ
+DESCRIPTOR.message_types_by_name['SearchQuery'] = _SEARCHQUERY
+DESCRIPTOR.message_types_by_name['SearchFound'] = _SEARCHFOUND
 DESCRIPTOR.message_types_by_name['TopicEvent'] = _TOPICEVENT
 DESCRIPTOR.message_types_by_name['AccountEvent'] = _ACCOUNTEVENT
 DESCRIPTOR.message_types_by_name['SubscriptionEvent'] = _SUBSCRIPTIONEVENT
 DESCRIPTOR.message_types_by_name['MessageEvent'] = _MESSAGEEVENT
 DESCRIPTOR.enum_types_by_name['InfoNote'] = _INFONOTE
+DESCRIPTOR.enum_types_by_name['RespCode'] = _RESPCODE
 DESCRIPTOR.enum_types_by_name['Crud'] = _CRUD
 _sym_db.RegisterFileDescriptor(DESCRIPTOR)
 
@@ -2798,6 +2889,20 @@ ClientReq = _reflection.GeneratedProtocolMessageType('ClientReq', (_message.Mess
   ))
 _sym_db.RegisterMessage(ClientReq)
 
+SearchQuery = _reflection.GeneratedProtocolMessageType('SearchQuery', (_message.Message,), dict(
+  DESCRIPTOR = _SEARCHQUERY,
+  __module__ = 'model_pb2'
+  # @@protoc_insertion_point(class_scope:pbx.SearchQuery)
+  ))
+_sym_db.RegisterMessage(SearchQuery)
+
+SearchFound = _reflection.GeneratedProtocolMessageType('SearchFound', (_message.Message,), dict(
+  DESCRIPTOR = _SEARCHFOUND,
+  __module__ = 'model_pb2'
+  # @@protoc_insertion_point(class_scope:pbx.SearchFound)
+  ))
+_sym_db.RegisterMessage(SearchFound)
+
 TopicEvent = _reflection.GeneratedProtocolMessageType('TopicEvent', (_message.Message,), dict(
   DESCRIPTOR = _TOPICEVENT,
   __module__ = 'model_pb2'
@@ -2840,8 +2945,8 @@ _NODE = _descriptor.ServiceDescriptor(
   file=DESCRIPTOR,
   index=0,
   options=None,
-  serialized_start=4630,
-  serialized_end=4689,
+  serialized_start=4757,
+  serialized_end=4816,
   methods=[
   _descriptor.MethodDescriptor(
     name='MessageLoop',
@@ -2864,8 +2969,8 @@ _PLUGIN = _descriptor.ServiceDescriptor(
   file=DESCRIPTOR,
   index=1,
   options=None,
-  serialized_start=4692,
-  serialized_end=4933,
+  serialized_start=4819,
+  serialized_end=5106,
   methods=[
   _descriptor.MethodDescriptor(
     name='FireHose',
@@ -2877,9 +2982,18 @@ _PLUGIN = _descriptor.ServiceDescriptor(
     options=None,
   ),
   _descriptor.MethodDescriptor(
+    name='Find',
+    full_name='pbx.Plugin.Find',
+    index=1,
+    containing_service=None,
+    input_type=_SEARCHQUERY,
+    output_type=_SEARCHFOUND,
+    options=None,
+  ),
+  _descriptor.MethodDescriptor(
     name='Account',
     full_name='pbx.Plugin.Account',
-    index=1,
+    index=2,
     containing_service=None,
     input_type=_ACCOUNTEVENT,
     output_type=_UNUSED,
@@ -2888,7 +3002,7 @@ _PLUGIN = _descriptor.ServiceDescriptor(
   _descriptor.MethodDescriptor(
     name='Topic',
     full_name='pbx.Plugin.Topic',
-    index=2,
+    index=3,
     containing_service=None,
     input_type=_TOPICEVENT,
     output_type=_UNUSED,
@@ -2897,7 +3011,7 @@ _PLUGIN = _descriptor.ServiceDescriptor(
   _descriptor.MethodDescriptor(
     name='Subscription',
     full_name='pbx.Plugin.Subscription',
-    index=3,
+    index=4,
     containing_service=None,
     input_type=_SUBSCRIPTIONEVENT,
     output_type=_UNUSED,
@@ -2906,7 +3020,7 @@ _PLUGIN = _descriptor.ServiceDescriptor(
   _descriptor.MethodDescriptor(
     name='Message',
     full_name='pbx.Plugin.Message',
-    index=4,
+    index=5,
     containing_service=None,
     input_type=_MESSAGEEVENT,
     output_type=_UNUSED,
@@ -2984,6 +3098,11 @@ try:
           request_serializer=ClientReq.SerializeToString,
           response_deserializer=ServerResp.FromString,
           )
+      self.Find = channel.unary_unary(
+          '/pbx.Plugin/Find',
+          request_serializer=SearchQuery.SerializeToString,
+          response_deserializer=SearchFound.FromString,
+          )
       self.Account = channel.unary_unary(
           '/pbx.Plugin/Account',
           request_serializer=AccountEvent.SerializeToString,
@@ -3021,10 +3140,19 @@ try:
       context.set_details('Method not implemented!')
       raise NotImplementedError('Method not implemented!')
 
-    def Account(self, request, context):
+    def Find(self, request, context):
       """The following methods are for the Tinode server to report individual events.
 
-      Account created, updated or deleted
+      A search request issued on a 'fnd' topic. 
+      The first parameter is the ID of the user who issued the request. 
+      The second parameter is the search query: an array of string search terms.
+      """
+      context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+      context.set_details('Method not implemented!')
+      raise NotImplementedError('Method not implemented!')
+
+    def Account(self, request, context):
+      """Account created, updated or deleted
       """
       context.set_code(grpc.StatusCode.UNIMPLEMENTED)
       context.set_details('Method not implemented!')
@@ -3058,6 +3186,11 @@ try:
             servicer.FireHose,
             request_deserializer=ClientReq.FromString,
             response_serializer=ServerResp.SerializeToString,
+        ),
+        'Find': grpc.unary_unary_rpc_method_handler(
+            servicer.Find,
+            request_deserializer=SearchQuery.FromString,
+            response_serializer=SearchFound.SerializeToString,
         ),
         'Account': grpc.unary_unary_rpc_method_handler(
             servicer.Account,
@@ -3167,10 +3300,16 @@ try:
       ServerCtrl.code equals to 0 instructs the server to continue with default processing of the client message.
       """
       context.code(beta_interfaces.StatusCode.UNIMPLEMENTED)
-    def Account(self, request, context):
+    def Find(self, request, context):
       """The following methods are for the Tinode server to report individual events.
 
-      Account created, updated or deleted
+      A search request issued on a 'fnd' topic. 
+      The first parameter is the ID of the user who issued the request. 
+      The second parameter is the search query: an array of string search terms.
+      """
+      context.code(beta_interfaces.StatusCode.UNIMPLEMENTED)
+    def Account(self, request, context):
+      """Account created, updated or deleted
       """
       context.code(beta_interfaces.StatusCode.UNIMPLEMENTED)
     def Topic(self, request, context):
@@ -3204,10 +3343,17 @@ try:
       """
       raise NotImplementedError()
     FireHose.future = None
-    def Account(self, request, timeout, metadata=None, with_call=False, protocol_options=None):
+    def Find(self, request, timeout, metadata=None, with_call=False, protocol_options=None):
       """The following methods are for the Tinode server to report individual events.
 
-      Account created, updated or deleted
+      A search request issued on a 'fnd' topic. 
+      The first parameter is the ID of the user who issued the request. 
+      The second parameter is the search query: an array of string search terms.
+      """
+      raise NotImplementedError()
+    Find.future = None
+    def Account(self, request, timeout, metadata=None, with_call=False, protocol_options=None):
+      """Account created, updated or deleted
       """
       raise NotImplementedError()
     Account.future = None
@@ -3236,6 +3382,7 @@ try:
     generated only to ease transition from grpcio<0.15.0 to grpcio>=0.15.0"""
     request_deserializers = {
       ('pbx.Plugin', 'Account'): AccountEvent.FromString,
+      ('pbx.Plugin', 'Find'): SearchQuery.FromString,
       ('pbx.Plugin', 'FireHose'): ClientReq.FromString,
       ('pbx.Plugin', 'Message'): MessageEvent.FromString,
       ('pbx.Plugin', 'Subscription'): SubscriptionEvent.FromString,
@@ -3243,6 +3390,7 @@ try:
     }
     response_serializers = {
       ('pbx.Plugin', 'Account'): Unused.SerializeToString,
+      ('pbx.Plugin', 'Find'): SearchFound.SerializeToString,
       ('pbx.Plugin', 'FireHose'): ServerResp.SerializeToString,
       ('pbx.Plugin', 'Message'): Unused.SerializeToString,
       ('pbx.Plugin', 'Subscription'): Unused.SerializeToString,
@@ -3250,6 +3398,7 @@ try:
     }
     method_implementations = {
       ('pbx.Plugin', 'Account'): face_utilities.unary_unary_inline(servicer.Account),
+      ('pbx.Plugin', 'Find'): face_utilities.unary_unary_inline(servicer.Find),
       ('pbx.Plugin', 'FireHose'): face_utilities.unary_unary_inline(servicer.FireHose),
       ('pbx.Plugin', 'Message'): face_utilities.unary_unary_inline(servicer.Message),
       ('pbx.Plugin', 'Subscription'): face_utilities.unary_unary_inline(servicer.Subscription),
@@ -3267,6 +3416,7 @@ try:
     generated only to ease transition from grpcio<0.15.0 to grpcio>=0.15.0"""
     request_serializers = {
       ('pbx.Plugin', 'Account'): AccountEvent.SerializeToString,
+      ('pbx.Plugin', 'Find'): SearchQuery.SerializeToString,
       ('pbx.Plugin', 'FireHose'): ClientReq.SerializeToString,
       ('pbx.Plugin', 'Message'): MessageEvent.SerializeToString,
       ('pbx.Plugin', 'Subscription'): SubscriptionEvent.SerializeToString,
@@ -3274,6 +3424,7 @@ try:
     }
     response_deserializers = {
       ('pbx.Plugin', 'Account'): Unused.FromString,
+      ('pbx.Plugin', 'Find'): SearchFound.FromString,
       ('pbx.Plugin', 'FireHose'): ServerResp.FromString,
       ('pbx.Plugin', 'Message'): Unused.FromString,
       ('pbx.Plugin', 'Subscription'): Unused.FromString,
@@ -3281,6 +3432,7 @@ try:
     }
     cardinalities = {
       'Account': cardinality.Cardinality.UNARY_UNARY,
+      'Find': cardinality.Cardinality.UNARY_UNARY,
       'FireHose': cardinality.Cardinality.UNARY_UNARY,
       'Message': cardinality.Cardinality.UNARY_UNARY,
       'Subscription': cardinality.Cardinality.UNARY_UNARY,

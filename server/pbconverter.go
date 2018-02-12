@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/tinode/chat/pbx"
+	"github.com/tinode/chat/server/store/types"
 )
 
 func pbServCtrlSerialize(ctrl *MsgServerCtrl) *pbx.ServerMsg_Ctrl {
@@ -730,6 +731,81 @@ func pbTopicSubSliceDeserialize(subs []*pbx.TopicSub) []MsgTopicSub {
 				When:      int64ToTime(subs[i].GetLastSeenTime()),
 				UserAgent: subs[i].GetLastSeenUserAgent(),
 			}
+		}
+	}
+	return out
+}
+
+func pbSubSliceDeserialize(subs []*pbx.TopicSub) []types.Subscription {
+	if subs == nil || len(subs) == 0 {
+		return nil
+	}
+	/*
+		ObjHeader
+		// User who has relationship with the topic
+		User string
+		// Topic subscribed to
+		Topic string
+
+		// Subscription state, currently unused
+		State int
+
+		// Values persisted through subscription soft-deletion
+
+		// ID of the latest Soft-delete operation
+		DelId int
+		// Last SeqId reported by user as received by at least one of his sessions
+		RecvSeqId int
+		// Last SeqID reported read by the user
+		ReadSeqId int
+
+		// Access mode requested by this user
+		ModeWant AccessMode
+		// Access mode granted to this user
+		ModeGiven AccessMode
+		// User's private data associated with the subscription to topic
+		Private interface{}
+
+		// Deserialized ephemeral values
+
+		// Deserialized public value from topic or user (depends on context)
+		// In case of P2P topics this is the Public value of the other user.
+		public interface{}
+		// deserialized SeqID from user or topic
+		seqId int
+		// Id of the last delete operation deserialized from user or topic
+		// delId int
+		// timestamp when the user was last online
+		lastSeen time.Time
+		// user agent string of the last online access
+		userAgent string
+
+		// P2P only. ID of the other user
+		with string
+		// P2P only. Default access: this is the mode given by the other user to this user
+		modeDefault *DefaultAccess
+
+	*/
+	out := make([]types.Subscription, len(subs))
+	for i := 0; i < len(subs); i++ {
+		out[i] = types.Subscription{
+			ObjHeader: types.ObjHeader{
+				UpdatedAt: *int64ToTime(subs[i].GetUpdatedAt()),
+				DeletedAt: int64ToTime(subs[i].GetDeletedAt()),
+			},
+			User:    subs[i].GetUserId(),
+			Topic:   subs[i].GetTopic(),
+			DelId:   int(subs[i].GetDelId()),
+			Private: bytesToInterface(subs[i].GetPrivate()),
+		}
+		out[i].SetPublic(bytesToInterface(subs[i].GetPublic()))
+		if acs := subs[i].GetAcs(); acs != nil {
+			out[i].ModeGiven.UnmarshalText([]byte(acs.GetGiven()))
+			out[i].ModeWant.UnmarshalText([]byte(acs.GetWant()))
+		}
+		if subs[i].GetLastSeenTime() > 0 {
+			out[i].SetLastSeenAndUA(*int64ToTime(subs[i].GetLastSeenTime()),
+				subs[i].GetLastSeenUserAgent())
 		}
 	}
 	return out

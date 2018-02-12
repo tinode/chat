@@ -18,6 +18,11 @@ service Plugin {
 
 	// The following methods are for the Tinode server to report individual events.
 	
+	// A search request issued on a 'fnd' topic. 
+	// The first parameter is the ID of the user who issued the request. 
+	// The second parameter is the search query: an array of string search terms.
+	rpc Find(SearchQuery) returns (SearchFound) {}
+	
 	// Account created, updated or deleted
 	rpc Account(AccountEvent) returns (Unused) {}
 	
@@ -365,20 +370,20 @@ message ServerMsg {
 	}
 }
 
+// Plugin response codes
+enum RespCode {
+	// Instruct Tinode server to continue with default processing of the client request.
+	CONTINUE = 0;
+	// Drop the request as if the client did not send it
+	DROP = 1;
+	// Send the the provided response to the client.
+	RESPOND = 2;
+	// Replace client's original request with the provided request then continue with 
+	// processing.
+	REPLACE = 3;
+}
 
 message ServerResp {
-	// Plugin response codes
-	enum RespCode {
-		// Instruct Tinode server to continue with default processing of the client message.
-		CONTINUE = 0;
-		// Drop the message as if the client did not send it
-		DROP = 1;
-		// Respond to client with the provided srvmsg
-		RESPOND = 2;
-		// Replace client's original message with the provided clmsg then continue with 
-		// processing.
-		REPLACE = 3;
-  	}
 	RespCode status = 1;
 	ServerMsg srvmsg = 2;
 	ClientMsg clmsg = 3;
@@ -404,6 +409,21 @@ message Session {
 message ClientReq {
 	ClientMsg msg = 1;
 	Session sess = 2;
+}
+
+// Search
+
+message SearchQuery {
+	string user_id = 1;
+	repeated string terms = 2;
+}
+
+message SearchFound {
+	RespCode status = 1;
+	// New search terms If status == REPLACE, otherwise unset.
+	repeated string terms = 2;
+	// Search results.
+	repeated TopicSub result = 3;
 }
 
 // CRUD event messages

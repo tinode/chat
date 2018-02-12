@@ -1428,7 +1428,10 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 				}
 			}
 			if len(query) > 0 {
-				subs, err = store.Users.FindSubs(sess.uid, query)
+				query, subs, err = pluginFind(sess.uid, query)
+				if err == nil && subs == nil && query != nil {
+					subs, err = store.Users.FindSubs(sess.uid, query)
+				}
 			}
 		}
 	} else {

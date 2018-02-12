@@ -1,6 +1,6 @@
 # Using Docker files to run Tinode
 
-[Install Docker](http://docs.docker.com/engine/installation/).
+[Install Docker](https://docs.docker.com/install/).
 
 Run the official RethinkDB Docker container:
 

@@ -61,6 +61,11 @@ class PluginStub(object):
         request_serializer=model__pb2.ClientReq.SerializeToString,
         response_deserializer=model__pb2.ServerResp.FromString,
         )
+    self.Find = channel.unary_unary(
+        '/pbx.Plugin/Find',
+        request_serializer=model__pb2.SearchQuery.SerializeToString,
+        response_deserializer=model__pb2.SearchFound.FromString,
+        )
     self.Account = channel.unary_unary(
         '/pbx.Plugin/Account',
         request_serializer=model__pb2.AccountEvent.SerializeToString,
@@ -98,10 +103,19 @@ class PluginServicer(object):
     context.set_details('Method not implemented!')
     raise NotImplementedError('Method not implemented!')
 
-  def Account(self, request, context):
+  def Find(self, request, context):
     """The following methods are for the Tinode server to report individual events.
 
-    Account created, updated or deleted
+    A search request issued on a 'fnd' topic. 
+    The first parameter is the ID of the user who issued the request. 
+    The second parameter is the search query: an array of string search terms.
+    """
+    context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+    context.set_details('Method not implemented!')
+    raise NotImplementedError('Method not implemented!')
+
+  def Account(self, request, context):
+    """Account created, updated or deleted
     """
     context.set_code(grpc.StatusCode.UNIMPLEMENTED)
     context.set_details('Method not implemented!')
@@ -135,6 +149,11 @@ def add_PluginServicer_to_server(servicer, server):
           servicer.FireHose,
           request_deserializer=model__pb2.ClientReq.FromString,
           response_serializer=model__pb2.ServerResp.SerializeToString,
+      ),
+      'Find': grpc.unary_unary_rpc_method_handler(
+          servicer.Find,
+          request_deserializer=model__pb2.SearchQuery.FromString,
+          response_serializer=model__pb2.SearchFound.SerializeToString,
       ),
       'Account': grpc.unary_unary_rpc_method_handler(
           servicer.Account,
