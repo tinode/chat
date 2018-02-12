@@ -707,7 +707,7 @@ Message `{get what="sub"}` to `me` is different from any other topic as it retur
 
 Message `{get what="data"}` to `me` queries the history of invites/notifications. It's handled the same way as to any other topic.
 
-### `fnd` topic: contacts discovery
+### `fnd`: Contacts and Topics Discovery
 
 Topic `fnd` is automatically created for every user at the account creation time. It serves as an endpoint for discovering other users and group topics. 
 
@@ -720,6 +720,9 @@ In order to find users or topics, a user sets `private` parameter of the `fnd` t
 Topic `fnd` is read-only. `{pub}` messages to `fnd` are rejected.
 
 (The following functionality is not implemented yet) When a new user registers with tags matching the given query, the `fnd` topic will receive `{pres}` notification for the new user.
+
+[Plugins](../pbx/) support `Find` service which can be used to replace default search with a custom one.
+
 
 ### Peer to Peer Topics
 
