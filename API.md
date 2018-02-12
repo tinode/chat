@@ -721,7 +721,7 @@ Topic `fnd` is read-only. `{pub}` messages to `fnd` are rejected.
 
 (The following functionality is not implemented yet) When a new user registers with tags matching the given query, the `fnd` topic will receive `{pres}` notification for the new user.
 
-[Plugins](../pbx/) support `Find` service which can be used to replace default search with a custom one.
+[Plugins](./pbx) support `Find` service which can be used to replace default search with a custom one.
 
 
 ### Peer to Peer Topics
