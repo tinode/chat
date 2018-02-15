@@ -637,6 +637,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 			modeGiven: types.ModeCFull,
 			modeWant:  types.ModeCFull}
 
+		var tags []string
 		if sreg.pkt.Set != nil {
 			// User sent initialization parameters
 			if sreg.pkt.Set.Desc != nil {
@@ -677,6 +678,12 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 				// User must not unset ModeJoin or the owner flags
 				userData.modeWant |= types.ModeJoin | types.ModeOwner
 			}
+
+			tags = normalizeTags(tags, sreg.pkt.Set.Tags)
+			if len(tags) > globals.maxTagCount {
+				// If user sent too many tags, silently discard excessive tags.
+				tags = tags[:globals.maxTagCount]
+			}
 		}
 
 		t.perUser[t.owner] = userData
@@ -689,13 +696,15 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		stopic := &types.Topic{
 			ObjHeader: types.ObjHeader{Id: sreg.topic, CreatedAt: timestamp},
 			Access:    types.DefaultAccess{Auth: t.accessAuth, Anon: t.accessAnon},
+			Tags:      tags,
 			Public:    t.public}
+
 		// store.Topics.Create will add a subscription record for the topic creator
 		stopic.GiveAccess(t.owner, userData.modeWant, userData.modeGiven)
 		err := store.Topics.Create(stopic, t.owner, t.perUser[t.owner].private)
 		if err != nil {
 			log.Println("hub: cannot save new topic '" + t.name + "' (" + err.Error() + ")")
-			// Error sent on "newWHATEVER" topic
+			// Send the error on the original "newWHATEVER" topic.
 			sreg.sess.queueOut(ErrUnknown(sreg.pkt.Id, t.xoriginal, timestamp))
 			return
 		}
