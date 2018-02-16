@@ -3,6 +3,7 @@
 package mysql
 
 import (
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"hash/fnv"
@@ -11,35 +12,27 @@ import (
 	"strings"
 	"time"
 
+	_ "github.com/go-sql-driver/mysql"
 	"github.com/tinode/chat/server/store"
 	t "github.com/tinode/chat/server/store/types"
 )
 
 // adapter holds RethinkDb connection data.
 type adapter struct {
-	conn    *rdb.Session
+	db      *sql.DB
 	dbName  string
 	version int
 }
 
 const (
-	defaultHost     = "localhost:28015"
+	defaultDSN      = "root:@tcp(localhost:3306)/tinode"
 	defaultDatabase = "tinode"
 
 	dbVersion = 100
 )
 
 type configType struct {
-	Database            string      `json:"database,omitempty"`
-	Addresses           interface{} `json:"addresses,omitempty"`
-	AuthKey             string      `json:"authkey,omitempty"`
-	Timeout             int         `json:"timeout,omitempty"`
-	WriteTimeout        int         `json:"write_timeout,omitempty"`
-	ReadTimeout         int         `json:"read_timeout,omitempty"`
-	MaxIdle             int         `json:"max_idle,omitempty"`
-	MaxOpen             int         `json:"max_open,omitempty"`
-	DiscoverHosts       bool        `json:"discover_hosts,omitempty"`
-	NodeRefreshInterval int         `json:"node_refresh_interval,omitempty"`
+	DSN string `json:"dsn,omitempty"`
 }
 
 const (
@@ -51,51 +44,33 @@ const (
 
 // Open initializes rethinkdb session
 func (a *adapter) Open(jsonconfig string) error {
-	if a.conn != nil {
-		return errors.New("adapter rethinkdb is already connected")
+	if a.db != nil {
+		return errors.New("mysql adapter is already connected")
 	}
 
 	var err error
 	var config configType
 
 	if err = json.Unmarshal([]byte(jsonconfig), &config); err != nil {
-		return errors.New("adapter rethinkdb failed to parse config: " + err.Error())
+		return errors.New("mysql adapter failed to parse config: " + err.Error())
 	}
 
-	var opts rdb.ConnectOpts
-
-	if config.Addresses == nil {
-		opts.Address = defaultHost
-	} else if host, ok := config.Addresses.(string); ok {
-		opts.Address = host
-	} else if hosts, ok := config.Addresses.([]string); ok {
-		opts.Addresses = hosts
-	} else {
-		return errors.New("adapter rethinkdb failed to parse config.Addresses")
+	dsn := config.DSN
+	if dsn == "" {
+		dsn = defaultDSN
 	}
-
-	if config.Database == "" {
-		a.dbName = defaultDatabase
-	} else {
-		a.dbName = config.Database
-	}
-
-	opts.Database = a.dbName
-	opts.AuthKey = config.AuthKey
-	opts.Timeout = time.Duration(config.Timeout) * time.Second
-	opts.WriteTimeout = time.Duration(config.WriteTimeout) * time.Second
-	opts.ReadTimeout = time.Duration(config.ReadTimeout) * time.Second
-	opts.MaxIdle = config.MaxIdle
-	opts.MaxOpen = config.MaxOpen
-	opts.DiscoverHosts = config.DiscoverHosts
-	opts.NodeRefreshInterval = time.Duration(config.NodeRefreshInterval) * time.Second
-
-	a.conn, err = rdb.Connect(opts)
+	a.db, err = sql.Open("mysql", dsn)
 	if err != nil {
 		return err
 	}
 
-	rdb.SetTags("json")
+	// sql.Open does not open the network connection.
+	// Force network connection here.
+	err = a.db.Ping()
+	if err != nil {
+		return err
+	}
+
 	a.version = -1
 
 	return nil
@@ -104,10 +79,9 @@ func (a *adapter) Open(jsonconfig string) error {
 // Close closes the underlying database connection
 func (a *adapter) Close() error {
 	var err error
-	if a.conn != nil {
-		// Close will wait for all outstanding requests to finish
-		err = a.conn.Close()
-		a.conn = nil
+	if a.db != nil {
+		err = a.db.Close()
+		a.db = nil
 		a.version = -1
 	}
 	return err
@@ -116,18 +90,15 @@ func (a *adapter) Close() error {
 // IsOpen returns true if connection to database has been established. It does not check if
 // connection is actually live.
 func (a *adapter) IsOpen() bool {
-	return a.conn != nil
+	return a.db != nil
 }
 
 // Read current database version
 func (a *adapter) getDbVersion() (int, error) {
-	resp, err := rdb.DB(a.dbName).Table("kvmeta").Get("version").Pluck("value").Run(a.conn)
-	if err != nil {
-		return -1, err
-	}
+	resp := a.db.QueryRow("SELECT `value` FROM kvmeta WHERE `key`='version'")
 
 	var vers map[string]int
-	if err = resp.One(&vers); err != nil {
+	if err := resp.Scan(&vers); err != nil {
 		return -1, err
 	}
 	a.version = vers["value"]
@@ -151,121 +122,7 @@ func (a *adapter) CheckDbVersion() error {
 
 // CreateDb initializes the storage. If reset is true, the database is first deleted losing all the data.
 func (a *adapter) CreateDb(reset bool) error {
-
-	// Drop database if exists, ignore error if it does not.
-	if reset {
-		rdb.DBDrop("tinode").RunWrite(a.conn)
-	}
-
-	if _, err := rdb.DBCreate("tinode").RunWrite(a.conn); err != nil {
-		return err
-	}
-
-	// Table with metadata key-value pairs.
-	if _, err := rdb.DB("tinode").TableCreate("kvmeta", rdb.TableCreateOpts{PrimaryKey: "key"}).RunWrite(a.conn); err != nil {
-		return err
-	}
-
-	// Record current DB version.
-	if _, err := rdb.DB("tinode").Table("kvmeta").Insert(
-		map[string]interface{}{"key": "version", "value": dbVersion}).RunWrite(a.conn); err != nil {
-		return err
-	}
-
-	// Users
-	if _, err := rdb.DB("tinode").TableCreate("users", rdb.TableCreateOpts{PrimaryKey: "Id"}).RunWrite(a.conn); err != nil {
-		return err
-	}
-	// Create secondary index on User.Tags array so user can be found by tags
-	if _, err := rdb.DB("tinode").Table("users").IndexCreate("Tags", rdb.IndexCreateOpts{Multi: true}).RunWrite(a.conn); err != nil {
-		return err
-	}
-	// Create secondary index for User.Devices.<hash>.DeviceId to ensure ID uniqueness across users
-	if _, err := rdb.DB("tinode").Table("users").IndexCreateFunc("DeviceIds",
-		func(row rdb.Term) interface{} {
-			devices := row.Field("Devices")
-			return devices.Keys().Map(func(key rdb.Term) interface{} {
-				return devices.Field(key).Field("DeviceId")
-			})
-		}, rdb.IndexCreateOpts{Multi: true}).RunWrite(a.conn); err != nil {
-		return err
-	}
-
-	// User authentication records {unique, userid, secret}
-	if _, err := rdb.DB("tinode").TableCreate("auth", rdb.TableCreateOpts{PrimaryKey: "unique"}).RunWrite(a.conn); err != nil {
-		return err
-	}
-	// Should be able to access user's auth records by user id
-	if _, err := rdb.DB("tinode").Table("auth").IndexCreate("userid").RunWrite(a.conn); err != nil {
-		return err
-	}
-
-	// Subscription to a topic. The primary key is a Topic:User string
-	if _, err := rdb.DB("tinode").TableCreate("subscriptions", rdb.TableCreateOpts{PrimaryKey: "Id"}).RunWrite(a.conn); err != nil {
-		return err
-	}
-	if _, err := rdb.DB("tinode").Table("subscriptions").IndexCreate("User").RunWrite(a.conn); err != nil {
-		return err
-	}
-	if _, err := rdb.DB("tinode").Table("subscriptions").IndexCreate("Topic").RunWrite(a.conn); err != nil {
-		return err
-	}
-
-	// Topic stored in database
-	if _, err := rdb.DB("tinode").TableCreate("topics", rdb.TableCreateOpts{PrimaryKey: "Id"}).RunWrite(a.conn); err != nil {
-		return err
-	}
-	// Create secondary index on Topic.Tags array so topics can be found by tags
-	// These tags are not unique as opposite to User.Tags.
-	if _, err := rdb.DB("tinode").Table("topics").IndexCreate("Tags", rdb.IndexCreateOpts{Multi: true}).RunWrite(a.conn); err != nil {
-		return err
-	}
-
-	// Stored message
-	if _, err := rdb.DB("tinode").TableCreate("messages", rdb.TableCreateOpts{PrimaryKey: "Id"}).RunWrite(a.conn); err != nil {
-		return err
-	}
-	if _, err := rdb.DB("tinode").Table("messages").IndexCreateFunc("Topic_SeqId",
-		func(row rdb.Term) interface{} {
-			return []interface{}{row.Field("Topic"), row.Field("SeqId")}
-		}).RunWrite(a.conn); err != nil {
-		return err
-	}
-	// Compound index of hard-deleted messages
-	if _, err := rdb.DB("tinode").Table("messages").IndexCreateFunc("Topic_DelId",
-		func(row rdb.Term) interface{} {
-			return []interface{}{row.Field("Topic"), row.Field("DelId")}
-		}).RunWrite(a.conn); err != nil {
-		return err
-	}
-	// Compound multi-index of soft-deleted messages: each message gets multiple compound index entries like
-	// [[Topic, User1, DelId1], [Topic, User2, DelId2],...]
-	if _, err := rdb.DB("tinode").Table("messages").IndexCreateFunc("Topic_DeletedFor",
-		func(row rdb.Term) interface{} {
-			return row.Field("DeletedFor").Map(func(df rdb.Term) interface{} {
-				return []interface{}{row.Field("Topic"), df.Field("User"), df.Field("DelId")}
-			})
-		}, rdb.IndexCreateOpts{Multi: true}).RunWrite(a.conn); err != nil {
-		return err
-	}
-	// Log of deleted messages
-	if _, err := rdb.DB("tinode").TableCreate("dellog", rdb.TableCreateOpts{PrimaryKey: "Id"}).RunWrite(a.conn); err != nil {
-		return err
-	}
-	if _, err := rdb.DB("tinode").Table("dellog").IndexCreateFunc("Topic_DelId",
-		func(row rdb.Term) interface{} {
-			return []interface{}{row.Field("Topic"), row.Field("DelId")}
-		}).RunWrite(a.conn); err != nil {
-		return err
-	}
-
-	// Index of unique user contact information as strings, such as "email:jdoe@example.com" or "tel:18003287448":
-	// {Id: <tag>, Source: <uid>} to ensure uniqueness of tags.
-	if _, err := rdb.DB("tinode").TableCreate("tagunique", rdb.TableCreateOpts{PrimaryKey: "Id"}).RunWrite(a.conn); err != nil {
-		return err
-	}
-
-	return nil
+	return errors.New("unsupported: use schema.sql to create database")
 }
 
 // Indexable tag as stored in 'tagunique'
@@ -1396,5 +1253,5 @@ func (a *adapter) DeviceDelete(uid t.Uid, deviceID string) error {
 }
 
 func init() {
-	store.Register("rethinkdb", &adapter{})
+	store.Register("mysql", &adapter{})
 }

@@ -155,34 +155,34 @@ func (a *adapter) CreateDb(reset bool) error {
 
 	// Drop database if exists, ignore error if it does not.
 	if reset {
-		rdb.DBDrop("tinode").RunWrite(a.conn)
+		rdb.DBDrop(a.dbName).RunWrite(a.conn)
 	}
 
-	if _, err := rdb.DBCreate("tinode").RunWrite(a.conn); err != nil {
+	if _, err := rdb.DBCreate(a.dbName).RunWrite(a.conn); err != nil {
 		return err
 	}
 
 	// Table with metadata key-value pairs.
-	if _, err := rdb.DB("tinode").TableCreate("kvmeta", rdb.TableCreateOpts{PrimaryKey: "key"}).RunWrite(a.conn); err != nil {
+	if _, err := rdb.DB(a.dbName).TableCreate("kvmeta", rdb.TableCreateOpts{PrimaryKey: "key"}).RunWrite(a.conn); err != nil {
 		return err
 	}
 
 	// Record current DB version.
-	if _, err := rdb.DB("tinode").Table("kvmeta").Insert(
+	if _, err := rdb.DB(a.dbName).Table("kvmeta").Insert(
 		map[string]interface{}{"key": "version", "value": dbVersion}).RunWrite(a.conn); err != nil {
 		return err
 	}
 
 	// Users
-	if _, err := rdb.DB("tinode").TableCreate("users", rdb.TableCreateOpts{PrimaryKey: "Id"}).RunWrite(a.conn); err != nil {
+	if _, err := rdb.DB(a.dbName).TableCreate("users", rdb.TableCreateOpts{PrimaryKey: "Id"}).RunWrite(a.conn); err != nil {
 		return err
 	}
 	// Create secondary index on User.Tags array so user can be found by tags
-	if _, err := rdb.DB("tinode").Table("users").IndexCreate("Tags", rdb.IndexCreateOpts{Multi: true}).RunWrite(a.conn); err != nil {
+	if _, err := rdb.DB(a.dbName).Table("users").IndexCreate("Tags", rdb.IndexCreateOpts{Multi: true}).RunWrite(a.conn); err != nil {
 		return err
 	}
 	// Create secondary index for User.Devices.<hash>.DeviceId to ensure ID uniqueness across users
-	if _, err := rdb.DB("tinode").Table("users").IndexCreateFunc("DeviceIds",
+	if _, err := rdb.DB(a.dbName).Table("users").IndexCreateFunc("DeviceIds",
 		func(row rdb.Term) interface{} {
 			devices := row.Field("Devices")
 			return devices.Keys().Map(func(key rdb.Term) interface{} {
@@ -193,47 +193,47 @@ func (a *adapter) CreateDb(reset bool) error {
 	}
 
 	// User authentication records {unique, userid, secret}
-	if _, err := rdb.DB("tinode").TableCreate("auth", rdb.TableCreateOpts{PrimaryKey: "unique"}).RunWrite(a.conn); err != nil {
+	if _, err := rdb.DB(a.dbName).TableCreate("auth", rdb.TableCreateOpts{PrimaryKey: "unique"}).RunWrite(a.conn); err != nil {
 		return err
 	}
 	// Should be able to access user's auth records by user id
-	if _, err := rdb.DB("tinode").Table("auth").IndexCreate("userid").RunWrite(a.conn); err != nil {
+	if _, err := rdb.DB(a.dbName).Table("auth").IndexCreate("userid").RunWrite(a.conn); err != nil {
 		return err
 	}
 
 	// Subscription to a topic. The primary key is a Topic:User string
-	if _, err := rdb.DB("tinode").TableCreate("subscriptions", rdb.TableCreateOpts{PrimaryKey: "Id"}).RunWrite(a.conn); err != nil {
+	if _, err := rdb.DB(a.dbName).TableCreate("subscriptions", rdb.TableCreateOpts{PrimaryKey: "Id"}).RunWrite(a.conn); err != nil {
 		return err
 	}
-	if _, err := rdb.DB("tinode").Table("subscriptions").IndexCreate("User").RunWrite(a.conn); err != nil {
+	if _, err := rdb.DB(a.dbName).Table("subscriptions").IndexCreate("User").RunWrite(a.conn); err != nil {
 		return err
 	}
-	if _, err := rdb.DB("tinode").Table("subscriptions").IndexCreate("Topic").RunWrite(a.conn); err != nil {
+	if _, err := rdb.DB(a.dbName).Table("subscriptions").IndexCreate("Topic").RunWrite(a.conn); err != nil {
 		return err
 	}
 
 	// Topic stored in database
-	if _, err := rdb.DB("tinode").TableCreate("topics", rdb.TableCreateOpts{PrimaryKey: "Id"}).RunWrite(a.conn); err != nil {
+	if _, err := rdb.DB(a.dbName).TableCreate("topics", rdb.TableCreateOpts{PrimaryKey: "Id"}).RunWrite(a.conn); err != nil {
 		return err
 	}
 	// Create secondary index on Topic.Tags array so topics can be found by tags
 	// These tags are not unique as opposite to User.Tags.
-	if _, err := rdb.DB("tinode").Table("topics").IndexCreate("Tags", rdb.IndexCreateOpts{Multi: true}).RunWrite(a.conn); err != nil {
+	if _, err := rdb.DB(a.dbName).Table("topics").IndexCreate("Tags", rdb.IndexCreateOpts{Multi: true}).RunWrite(a.conn); err != nil {
 		return err
 	}
 
 	// Stored message
-	if _, err := rdb.DB("tinode").TableCreate("messages", rdb.TableCreateOpts{PrimaryKey: "Id"}).RunWrite(a.conn); err != nil {
+	if _, err := rdb.DB(a.dbName).TableCreate("messages", rdb.TableCreateOpts{PrimaryKey: "Id"}).RunWrite(a.conn); err != nil {
 		return err
 	}
-	if _, err := rdb.DB("tinode").Table("messages").IndexCreateFunc("Topic_SeqId",
+	if _, err := rdb.DB(a.dbName).Table("messages").IndexCreateFunc("Topic_SeqId",
 		func(row rdb.Term) interface{} {
 			return []interface{}{row.Field("Topic"), row.Field("SeqId")}
 		}).RunWrite(a.conn); err != nil {
 		return err
 	}
 	// Compound index of hard-deleted messages
-	if _, err := rdb.DB("tinode").Table("messages").IndexCreateFunc("Topic_DelId",
+	if _, err := rdb.DB(a.dbName).Table("messages").IndexCreateFunc("Topic_DelId",
 		func(row rdb.Term) interface{} {
 			return []interface{}{row.Field("Topic"), row.Field("DelId")}
 		}).RunWrite(a.conn); err != nil {
@@ -241,7 +241,7 @@ func (a *adapter) CreateDb(reset bool) error {
 	}
 	// Compound multi-index of soft-deleted messages: each message gets multiple compound index entries like
 	// [[Topic, User1, DelId1], [Topic, User2, DelId2],...]
-	if _, err := rdb.DB("tinode").Table("messages").IndexCreateFunc("Topic_DeletedFor",
+	if _, err := rdb.DB(a.dbName).Table("messages").IndexCreateFunc("Topic_DeletedFor",
 		func(row rdb.Term) interface{} {
 			return row.Field("DeletedFor").Map(func(df rdb.Term) interface{} {
 				return []interface{}{row.Field("Topic"), df.Field("User"), df.Field("DelId")}
@@ -250,10 +250,10 @@ func (a *adapter) CreateDb(reset bool) error {
 		return err
 	}
 	// Log of deleted messages
-	if _, err := rdb.DB("tinode").TableCreate("dellog", rdb.TableCreateOpts{PrimaryKey: "Id"}).RunWrite(a.conn); err != nil {
+	if _, err := rdb.DB(a.dbName).TableCreate("dellog", rdb.TableCreateOpts{PrimaryKey: "Id"}).RunWrite(a.conn); err != nil {
 		return err
 	}
-	if _, err := rdb.DB("tinode").Table("dellog").IndexCreateFunc("Topic_DelId",
+	if _, err := rdb.DB(a.dbName).Table("dellog").IndexCreateFunc("Topic_DelId",
 		func(row rdb.Term) interface{} {
 			return []interface{}{row.Field("Topic"), row.Field("DelId")}
 		}).RunWrite(a.conn); err != nil {
@@ -262,7 +262,7 @@ func (a *adapter) CreateDb(reset bool) error {
 
 	// Index of unique user contact information as strings, such as "email:jdoe@example.com" or "tel:18003287448":
 	// {Id: <tag>, Source: <uid>} to ensure uniqueness of tags.
-	if _, err := rdb.DB("tinode").TableCreate("tagunique", rdb.TableCreateOpts{PrimaryKey: "Id"}).RunWrite(a.conn); err != nil {
+	if _, err := rdb.DB(a.dbName).TableCreate("tagunique", rdb.TableCreateOpts{PrimaryKey: "Id"}).RunWrite(a.conn); err != nil {
 		return err
 	}
 
@@ -439,17 +439,6 @@ func (a *adapter) UserUpdateLastSeen(uid t.Uid, userAgent string, when time.Time
 
 	return err
 }
-
-/*
-func (a *RethinkDbAdapter) UserUpdateStatus(uid t.Uid, status interface{}) error {
-	update := map[string]interface{}{"Status": status}
-
-	_, err := rdb.DB(a.dbName).Table("users").Get(uid.String()).
-		Update(update, rdb.UpdateOpts{Durability: "soft"}).RunWrite(a.conn)
-
-	return err
-}
-*/
 
 // UserUpdate updates user object. Use UserTagsUpdate when updating Tags.
 func (a *adapter) UserUpdate(uid t.Uid, update map[string]interface{}) error {
@@ -700,12 +689,12 @@ func (a *adapter) TopicUpdateOnMessage(topic string, msg *t.Message) error {
 	if strings.HasPrefix(topic, "usr") {
 		// Topic is passed as usrABCD, but the 'users' table expects Id without the 'usr' prefix.
 		user := t.ParseUserId(topic).String()
-		_, err = rdb.DB("tinode").Table("users").Get(user).
+		_, err = rdb.DB(a.dbName).Table("users").Get(user).
 			Update(update, rdb.UpdateOpts{Durability: "soft"}).RunWrite(a.conn)
 
 		// All other messages
 	} else {
-		_, err = rdb.DB("tinode").Table("topics").Get(topic).
+		_, err = rdb.DB(a.dbName).Table("topics").Get(topic).
 			Update(update, rdb.UpdateOpts{Durability: "soft"}).RunWrite(a.conn)
 	}
 
@@ -713,7 +702,7 @@ func (a *adapter) TopicUpdateOnMessage(topic string, msg *t.Message) error {
 }
 
 func (a *adapter) TopicUpdate(topic string, update map[string]interface{}) error {
-	_, err := rdb.DB("tinode").Table("topics").Get(topic).Update(update).RunWrite(a.conn)
+	_, err := rdb.DB(a.dbName).Table("topics").Get(topic).Update(update).RunWrite(a.conn)
 	return err
 }
 
