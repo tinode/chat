@@ -1,6 +1,6 @@
-// +build rethinkdb
+// +build mysql
 
-package rethinkdb
+package mysql
 
 import (
 	"encoding/json"
@@ -13,7 +13,6 @@ import (
 
 	"github.com/tinode/chat/server/store"
 	t "github.com/tinode/chat/server/store/types"
-	rdb "gopkg.in/gorethink/gorethink.v3"
 )
 
 // adapter holds RethinkDb connection data.
