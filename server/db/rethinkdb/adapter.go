@@ -13,7 +13,7 @@ import (
 
 	"github.com/tinode/chat/server/store"
 	t "github.com/tinode/chat/server/store/types"
-	rdb "gopkg.in/gorethink/gorethink.v3"
+	rdb "gopkg.in/gorethink/gorethink.v4"
 )
 
 // adapter holds RethinkDb connection data.
@@ -353,7 +353,7 @@ func (a *adapter) UpdAuthRecord(unique string, authLvl int, secret []byte, expir
 // Retrieve user's authentication record
 func (a *adapter) GetAuthRecord(unique string) (t.Uid, int, []byte, time.Time, error) {
 	// Default() is needed to prevent Pluck from returning an error
-	rows, err := rdb.DB(a.dbName).Table("auth").Get(unique).Pluck(
+	row, err := rdb.DB(a.dbName).Table("auth").Get(unique).Pluck(
 		"userid", "secret", "expires", "authLvl").Default(nil).Run(a.conn)
 	if err != nil {
 		return t.ZeroUid, 0, nil, time.Time{}, err
@@ -366,10 +366,9 @@ func (a *adapter) GetAuthRecord(unique string) (t.Uid, int, []byte, time.Time, e
 		Expires time.Time `gorethink:"expires"`
 	}
 
-	if !rows.Next(&record) {
-		return t.ZeroUid, 0, nil, time.Time{}, rows.Err()
+	if err = row.One(&record); err != nil {
+		return t.ZeroUid, 0, nil, time.Time{}, err
 	}
-	rows.Close()
 
 	// log.Println("loggin in user Id=", user.Uid(), user.Id)
 	return t.ParseUid(record.Userid), record.AuthLvl, record.Secret, record.Expires, nil
@@ -423,7 +422,7 @@ func (a *adapter) UserDelete(uid t.Uid, soft bool) error {
 		now := t.TimeNow()
 		_, err = q.Update(map[string]interface{}{"DeletedAt": now, "UpdatedAt": now}).RunWrite(a.conn)
 	} else {
-		_, err = q.Delete().Run(a.conn)
+		_, err = q.Delete().RunWrite(a.conn)
 	}
 	return err
 }
@@ -482,22 +481,17 @@ func (a *adapter) TopicCreateP2P(initiator, invited *t.Subscription) error {
 
 func (a *adapter) TopicGet(topic string) (*t.Topic, error) {
 	// Fetch topic by name
-	rows, err := rdb.DB(a.dbName).Table("topics").Get(topic).Run(a.conn)
+	row, err := rdb.DB(a.dbName).Table("topics").Get(topic).Run(a.conn)
 	if err != nil {
 		return nil, err
 	}
 
-	if rows.IsNil() {
-		rows.Close()
-		return nil, nil
-	}
-
 	var tt = new(t.Topic)
-	if err = rows.One(tt); err != nil {
+	if err = row.One(tt); err != nil {
 		return nil, err
 	}
 
-	return tt, rows.Err()
+	return tt, row.Err()
 }
 
 // TopicsForUser loads user's contact list: p2p and grp topics, except for 'me' subscription.
@@ -650,7 +644,6 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool) ([]t.Subscriptio
 				subs = append(subs, sub)
 			}
 		}
-
 		//log.Printf("RethinkDbAdapter.UsersForTopic users: %+v", subs)
 	}
 
@@ -714,11 +707,6 @@ func (a *adapter) SubscriptionGet(topic string, user t.Uid) (*t.Subscription, er
 		return nil, err
 	}
 
-	if rows.IsNil() {
-		rows.Close()
-		return nil, nil
-	}
-
 	var sub t.Subscription
 	if err = rows.One(&sub); err != nil {
 		return nil, err
@@ -760,6 +748,7 @@ func (a *adapter) SubsForUser(forUser t.Uid, keepDeleted bool) ([]t.Subscription
 	for rows.Next(&ss) {
 		subs = append(subs, ss)
 	}
+
 	return subs, rows.Err()
 }
 
@@ -810,6 +799,7 @@ func (a *adapter) SubsForTopic(topic string, keepDeleted bool) ([]t.Subscription
 		subs = append(subs, ss)
 		//log.Printf("SubsForTopic: loaded sub %#+v", ss)
 	}
+
 	return subs, rows.Err()
 }
 

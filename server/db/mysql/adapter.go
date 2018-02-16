@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	_ "github.com/go-sql-driver/mysql"
+	ms "github.com/go-sql-driver/mysql"
 	"github.com/tinode/chat/server/store"
 	t "github.com/tinode/chat/server/store/types"
 )
@@ -59,6 +59,7 @@ func (a *adapter) Open(jsonconfig string) error {
 	if dsn == "" {
 		dsn = defaultDSN
 	}
+
 	a.db, err = sql.Open("mysql", dsn)
 	if err != nil {
 		return err
@@ -120,7 +121,7 @@ func (a *adapter) CheckDbVersion() error {
 	return nil
 }
 
-// CreateDb initializes the storage. If reset is true, the database is first deleted losing all the data.
+// CreateDb initializes the storage. Unsupported in the adapter: use external script schema.sql
 func (a *adapter) CreateDb(reset bool) error {
 	return errors.New("unsupported: use schema.sql to create database")
 }
@@ -134,8 +135,19 @@ type storedTag struct {
 // UserCreate creates a new user. Returns error and true if error is due to duplicate user name,
 // false for any other error
 func (a *adapter) UserCreate(user *t.User) error {
+	tx, err := a.db.Begin()
+	if err != nil {
+		return err
+	}
+
+	defer func() {
+		if err != nil {
+			tx.Rollback()
+			return
+		}
+	}()
+
 	// Save user's tags to a separate table to ensure uniquness
-	// TODO(gene): add support for non-unique tags
 	if len(user.Tags) > 0 {
 		tags := make([]storedTag, 0, len(user.Tags))
 		for _, t := range user.Tags {
@@ -156,27 +168,22 @@ func (a *adapter) UserCreate(user *t.User) error {
 		}
 	}
 
-	_, err := rdb.DB(a.dbName).Table("users").Insert(&user).RunWrite(a.conn)
+	_, err = a.db.Exec("INSERT INTO users() VALUES()")
 	if err != nil {
 		return err
 	}
 
-	return nil
+	return tx.Commit()
 }
 
 // Add user's authentication record
 func (a *adapter) AddAuthRecord(uid t.Uid, authLvl int, unique string,
 	secret []byte, expires time.Time) (bool, error) {
 
-	_, err := rdb.DB(a.dbName).Table("auth").Insert(
-		map[string]interface{}{
-			"unique":  unique,
-			"userid":  uid.String(),
-			"authLvl": authLvl,
-			"secret":  secret,
-			"expires": expires}).RunWrite(a.conn)
+	_, err := a.db.Exec("INSERT INTO auth(`unique`,userid,authLvl,secret,expires) VALUES(?,?,?,?,?)",
+		unique, uid.String(), authLvl, secret)
 	if err != nil {
-		if rdb.IsConflictErr(err) {
+		if myerr, ok := err.(*ms.MySQLError); ok && myerr.Number == 1062 {
 			return true, errors.New("duplicate credential")
 		}
 		return false, err
@@ -186,46 +193,53 @@ func (a *adapter) AddAuthRecord(uid t.Uid, authLvl int, unique string,
 
 // Delete user's authentication record
 func (a *adapter) DelAuthRecord(unique string) (int, error) {
-	res, err := rdb.DB(a.dbName).Table("auth").Get(unique).Delete().RunWrite(a.conn)
-	return res.Deleted, err
+	res, err := a.db.Exec("DELETE FROM auth WHERE `unique`=?", unique)
+	if err != nil {
+		return 0, err
+	}
+	count, _ := res.RowsAffected()
+
+	return int(count), nil
 }
 
 // Delete user's all authentication records
 func (a *adapter) DelAllAuthRecords(uid t.Uid) (int, error) {
-	res, err := rdb.DB(a.dbName).Table("auth").GetAllByIndex("userid", uid.String()).Delete().RunWrite(a.conn)
-	return res.Deleted, err
+	res, err := a.db.Exec("DELETE FROM auth WHERE userid=?", uid)
+	if err != nil {
+		return 0, err
+	}
+	count, _ := res.RowsAffected()
+
+	return int(count), nil
 }
 
 // Update user's authentication secret
 func (a *adapter) UpdAuthRecord(unique string, authLvl int, secret []byte, expires time.Time) (int, error) {
-	res, err := rdb.DB(a.dbName).Table("auth").Get(unique).Update(
-		map[string]interface{}{
-			"authLvl": authLvl,
-			"secret":  secret,
-			"expires": expires}).RunWrite(a.conn)
-	return res.Updated, err
+	res, err := a.db.Exec("UPDATE auth SET authLvl=?,secret=?,expires=? WHERE `unique`=?",
+		authLvl, secret, expires, unique)
+
+	if err != nil {
+		return 0, err
+	}
+
+	count, _ := res.RowsAffected()
+	return int(count), nil
 }
 
 // Retrieve user's authentication record
 func (a *adapter) GetAuthRecord(unique string) (t.Uid, int, []byte, time.Time, error) {
-	// Default() is needed to prevent Pluck from returning an error
-	rows, err := rdb.DB(a.dbName).Table("auth").Get(unique).Pluck(
-		"userid", "secret", "expires", "authLvl").Default(nil).Run(a.conn)
-	if err != nil {
-		return t.ZeroUid, 0, nil, time.Time{}, err
-	}
+	res := a.db.QueryRow("SELECT userid, secret, expires, authLvl FROM auth WHERE `unique`=?", unique)
 
 	var record struct {
-		Userid  string    `gorethink:"userid"`
-		AuthLvl int       `gorethink:"authLvl"`
-		Secret  []byte    `gorethink:"secret"`
-		Expires time.Time `gorethink:"expires"`
+		Userid  string
+		AuthLvl int
+		Secret  []byte
+		Expires time.Time
 	}
 
-	if !rows.Next(&record) {
-		return t.ZeroUid, 0, nil, time.Time{}, rows.Err()
+	if err := res.Scan(&record); err != nil {
+		return t.ZeroUid, 0, nil, time.Time{}, err
 	}
-	rows.Close()
 
 	// log.Println("loggin in user Id=", user.Uid(), user.Id)
 	return t.ParseUid(record.Userid), record.AuthLvl, record.Secret, record.Expires, nil
@@ -233,17 +247,14 @@ func (a *adapter) GetAuthRecord(unique string) (t.Uid, int, []byte, time.Time, e
 
 // UserGet fetches a single user by user id. If user is not found it returns (nil, nil)
 func (a *adapter) UserGet(uid t.Uid) (*t.User, error) {
-	row, err := rdb.DB(a.dbName).Table("users").Get(uid.String()).Run(a.conn)
-	if err == nil && !row.IsNil() {
-		var user t.User
-		if err = row.One(&user); err == nil {
-			return &user, nil
-		}
-		return nil, err
-	}
-
-	if row != nil {
-		row.Close()
+	res := a.db.QueryRow("SELECT * FROM users WHERE id=?", uid)
+	var user t.User
+	var err error
+	if err = res.Scan(&user); err == nil {
+		return &user, nil
+	} else if err == sql.ErrNoRows {
+		// Clear the error if user does not exist
+		err = nil
 	}
 
 	// If user does not exist, it returns nil, nil
@@ -257,59 +268,45 @@ func (a *adapter) UserGetAll(ids ...t.Uid) ([]t.User, error) {
 	}
 
 	users := []t.User{}
-	if rows, err := rdb.DB(a.dbName).Table("users").GetAll(uids...).Run(a.conn); err == nil {
+	if rows, err := a.db.Query("SELECT * FROM users WHERE id IN (?)", uids); err == nil {
+		defer rows.Close()
+
 		var user t.User
-		for rows.Next(&user) {
+		for err = rows.Scan(&user); err == nil; {
 			users = append(users, user)
 		}
 
-		if err = rows.Err(); err != nil {
+		if err != nil {
 			return nil, err
 		}
+
 	} else {
 		return nil, err
 	}
+
 	return users, nil
 }
 
 func (a *adapter) UserDelete(uid t.Uid, soft bool) error {
 	var err error
-	q := rdb.DB(a.dbName).Table("users").Get(uid.String())
 	if soft {
 		now := t.TimeNow()
-		_, err = q.Update(map[string]interface{}{"DeletedAt": now, "UpdatedAt": now}).RunWrite(a.conn)
+		_, err = a.db.Exec("UPDATE users set updatedAt=?, deletedAt=? WHERE id=?", now, now, uid)
 	} else {
-		_, err = q.Delete().Run(a.conn)
+		_, err = a.db.Exec("DELETE FROM users WHERE id=?", uid)
 	}
 	return err
 }
 
 func (a *adapter) UserUpdateLastSeen(uid t.Uid, userAgent string, when time.Time) error {
-	update := struct {
-		LastSeen  time.Time
-		UserAgent string
-	}{when, userAgent}
-
-	_, err := rdb.DB(a.dbName).Table("users").Get(uid.String()).
-		Update(update, rdb.UpdateOpts{Durability: "soft"}).RunWrite(a.conn)
+	_, err := a.db.Exec("UPDATE users SET lastseen=?, useragent=? WHERE id=?", when, userAgent, uid)
 
 	return err
 }
-
-/*
-func (a *RethinkDbAdapter) UserUpdateStatus(uid t.Uid, status interface{}) error {
-	update := map[string]interface{}{"Status": status}
-
-	_, err := rdb.DB(a.dbName).Table("users").Get(uid.String()).
-		Update(update, rdb.UpdateOpts{Durability: "soft"}).RunWrite(a.conn)
-
-	return err
-}
-*/
 
 // UserUpdate updates user object. Use UserTagsUpdate when updating Tags.
 func (a *adapter) UserUpdate(uid t.Uid, update map[string]interface{}) error {
-	_, err := rdb.DB(a.dbName).Table("users").Get(uid.String()).Update(update).RunWrite(a.conn)
+	_, err := a.db.Exec("UPDATE users SET var=? WHERE id=?", update, uid)
 	return err
 }
 
@@ -317,7 +314,7 @@ func (a *adapter) UserUpdate(uid t.Uid, update map[string]interface{}) error {
 
 // TopicCreate creates a topic from template
 func (a *adapter) TopicCreate(topic *t.Topic) error {
-	_, err := rdb.DB(a.dbName).Table("topics").Insert(&topic).RunWrite(a.conn)
+	_, err := a.db.Exec("INSERT INTO topics(columns) VALUES(values)", topic)
 	return err
 }
 
@@ -349,18 +346,13 @@ func (a *adapter) TopicCreateP2P(initiator, invited *t.Subscription) error {
 
 func (a *adapter) TopicGet(topic string) (*t.Topic, error) {
 	// Fetch topic by name
-	rows, err := rdb.DB(a.dbName).Table("topics").Get(topic).Run(a.conn)
+	row, err := a.db.QueryRow("SELECT * FROM topics WHERE name=?", topic)
 	if err != nil {
 		return nil, err
 	}
 
-	if rows.IsNil() {
-		rows.Close()
-		return nil, nil
-	}
-
 	var tt = new(t.Topic)
-	if err = rows.One(tt); err != nil {
+	if err = row.Scan(tt); err != nil {
 		return nil, err
 	}
 
