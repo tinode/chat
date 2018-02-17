@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"time"
 
+	_ "github.com/tinode/chat/server/db/mysql"
+	_ "github.com/tinode/chat/server/db/rethinkdb"
 	"github.com/tinode/chat/server/store"
 )
 
@@ -169,7 +171,7 @@ func main() {
 			log.Fatal(err)
 		}
 
-		genRethink(*reset, string(config.StoreConfig), &data)
+		genDb(*reset, string(config.StoreConfig), &data)
 	} else {
 		log.Println("No config provided. Exiting.")
 	}

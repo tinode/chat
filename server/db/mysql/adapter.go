@@ -7,19 +7,21 @@ import (
 	"encoding/json"
 	"errors"
 	"hash/fnv"
+	"log"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	ms "github.com/go-sql-driver/mysql"
+	"github.com/jmoiron/sqlx"
 	"github.com/tinode/chat/server/store"
 	t "github.com/tinode/chat/server/store/types"
 )
 
 // adapter holds RethinkDb connection data.
 type adapter struct {
-	db      *sql.DB
+	db      *sqlx.DB
 	dbName  string
 	version int
 }
@@ -32,7 +34,8 @@ const (
 )
 
 type configType struct {
-	DSN string `json:"dsn,omitempty"`
+	DSN    string `json:"dsn,omitempty"`
+	DBName string `json:database,omitempty"`
 }
 
 const (
@@ -60,7 +63,12 @@ func (a *adapter) Open(jsonconfig string) error {
 		dsn = defaultDSN
 	}
 
-	a.db, err = sql.Open("mysql", dsn)
+	a.dbName = config.DBName
+	if a.dbName == "" {
+		a.dbName = defaultDatabase
+	}
+
+	a.db, err = sqlx.Open("mysql", dsn)
 	if err != nil {
 		return err
 	}
@@ -98,11 +106,11 @@ func (a *adapter) IsOpen() bool {
 func (a *adapter) getDbVersion() (int, error) {
 	resp := a.db.QueryRow("SELECT `value` FROM kvmeta WHERE `key`='version'")
 
-	var vers map[string]int
+	var vers int
 	if err := resp.Scan(&vers); err != nil {
 		return -1, err
 	}
-	a.version = vers["value"]
+	a.version = vers
 
 	return a.version, nil
 }
@@ -121,9 +129,20 @@ func (a *adapter) CheckDbVersion() error {
 	return nil
 }
 
-// CreateDb initializes the storage. Unsupported in the adapter: use external script schema.sql
+// CreateDb initializes the storage.
 func (a *adapter) CreateDb(reset bool) error {
-	return errors.New("unsupported: use schema.sql to create database")
+	// Checks if database exists.
+	log.Println(a.dbName)
+	row := a.db.QueryRow("SHOW DATABASES LIKE '" + a.dbName + "'")
+	var db interface{}
+	err := row.Scan(&db)
+	if err == nil {
+		return nil
+	}
+	if err == sql.ErrNoRows {
+		return errors.New("unsupported: use schema.sql to create database")
+	}
+	return err
 }
 
 // Indexable tag as stored in 'tagunique'
@@ -135,35 +154,48 @@ type storedTag struct {
 // UserCreate creates a new user. Returns error and true if error is due to duplicate user name,
 // false for any other error
 func (a *adapter) UserCreate(user *t.User) error {
-	tx, err := a.db.Begin()
+	tx, err := a.db.Beginx()
 	if err != nil {
 		return err
 	}
 
 	defer func() {
 		if err != nil {
+			log.Println("transaction failed", err)
 			tx.Rollback()
 		}
 	}()
 
-	// Save user's tags to a separate table to ensure uniquness
-	if len(user.Tags) > 0 {
-		tags := make([]storedTag, 0, len(user.Tags))
-		for _, t := range user.Tags {
-			tags = append(tags, storedTag{Id: t, Source: user.Id})
-		}
-		_, err = a.db.Exec("INSERT INTO tagunique() VALUES()", tags)
-		if err != nil {
-			if isDupe(err) {
-				err = errors.New("duplicate tag(s)")
-			}
-			return err
-		}
-	}
+	decoded_uid := store.DecodeUid(user.Uid())
+	_, err = tx.Exec("INSERT INTO users(id,createdAt,updatedAt,access,public,tags) VALUES(?,?,?,?,?,?)",
+		decoded_uid,
+		user.CreatedAt, user.UpdatedAt,
+		toJSON(user.Access),
+		toJSON(user.Public), toJSON(user.Tags))
 
-	_, err = a.db.Exec("INSERT INTO users() VALUES()")
 	if err != nil {
 		return err
+	}
+
+	// Save user's tags to a separate table to ensure uniquness
+	if len(user.Tags) > 0 {
+		var insert *sql.Stmt
+		insert, err = tx.Prepare("INSERT INTO usertags(userid, tag) VALUES(?,?)")
+		if err != nil {
+			return err
+		}
+
+		for _, t := range user.Tags {
+			_, err = insert.Exec(decoded_uid, t)
+
+			if err != nil {
+				if isDupe(err) {
+					err = errors.New("duplicate tag(s)")
+				}
+				log.Println("tag insertion failed", err)
+				return err
+			}
+		}
 	}
 
 	return tx.Commit()
@@ -231,6 +263,10 @@ func (a *adapter) GetAuthRecord(unique string) (t.Uid, int, []byte, time.Time, e
 	}
 
 	if err := res.Scan(&record); err != nil {
+		if err == sql.ErrNoRows {
+			// Nothing found - clear the error
+			err = nil
+		}
 		return t.ZeroUid, 0, nil, time.Time{}, err
 	}
 
@@ -734,21 +770,13 @@ func (a *adapter) FindTopics(tags []string) ([]t.Subscription, error) {
 		query = append(query, tag)
 		index[tag] = struct{}{}
 	}
+	rows, err := a.db.Query(
+		"SELECT t.id, t.access, t.createdAt, t.updatedAt, t.public, t.tags, count(*) AS matchcount "+
+			"FROM topics AS t, topictags AS tt "+
+			"WHERE tt.tag IN (?) AND t.name=tt.topic "+
+			"GROUP BY t.id, t.access, t.createdAt, t.updatedAt, t.public, t.tags "+
+			"ORDER BY matchcount DESC LIMIT ?", query, maxResults)
 
-	rows, err := rdb.DB(a.dbName).
-		Table("topics").
-		GetAllByIndex("Tags", query...).
-		Pluck("Id", "Access", "CreatedAt", "UpdatedAt", "Public", "Tags").
-		Group("Id").
-		Ungroup().
-		Map(func(row rdb.Term) rdb.Term {
-			return row.Field("reduction").
-				Nth(0).
-				Merge(map[string]interface{}{"MatchedTagsCount": row.Field("reduction").Count()})
-		}).
-		OrderBy(rdb.Desc("MatchedTagsCount")).
-		Limit(maxResults).
-		Run(a.conn)
 	if err != nil {
 		return nil, err
 	}
@@ -756,7 +784,7 @@ func (a *adapter) FindTopics(tags []string) ([]t.Subscription, error) {
 	var topic t.Topic
 	var sub t.Subscription
 	var subs []t.Subscription
-	for rows.Next(&topic) {
+	for err = rows.Scan(&topic); err != nil; {
 		sub.CreatedAt = topic.CreatedAt
 		sub.UpdatedAt = topic.UpdatedAt
 		sub.Topic = topic.Id
@@ -772,8 +800,9 @@ func (a *adapter) FindTopics(tags []string) ([]t.Subscription, error) {
 		sub.Private = tags
 		subs = append(subs, sub)
 	}
+	rows.Close()
 
-	if err = rows.Err(); err != nil {
+	if err != nil {
 		return nil, err
 	}
 	return subs, nil
@@ -1016,49 +1045,35 @@ func (a *adapter) MessageDeleteList(topic string, toDel *t.DelMessage) (err erro
 		if err != nil {
 			return err
 		}
-
-		if len(toDel.SeqIdRanges) > 1 || toDel.SeqIdRanges[0].Hi <= toDel.SeqIdRanges[0].Low {
-			for _, rng := range toDel.SeqIdRanges {
-				if rng.Hi == 0 {
-					indexVals = append(indexVals, []interface{}{topic, rng.Low})
-				} else {
-					for i := rng.Low; i <= rng.Hi; i++ {
-						indexVals = append(indexVals, []interface{}{topic, i})
+		/*
+			where := ""
+			if len(toDel.SeqIdRanges) > 1 || toDel.SeqIdRanges[0].Hi <= toDel.SeqIdRanges[0].Low {
+				var indexVals []int
+				for _, rng := range toDel.SeqIdRanges {
+					if rng.Hi == 0 {
+						indexVals = append(indexVals, rng.Low)
+					} else {
+						for i := rng.Low; i <= rng.Hi; i++ {
+							indexVals = append(indexVals, i)
+						}
 					}
 				}
+				where = "topic=? AND seqId IN (?)"
+			} else {
+				// Optimizing for a special case of single range low..hi
+				where = "topic=? AND seqId BETWEEN ? AND ?", toDel.SeqIdRanges[0].Low, toDel.SeqIdRanges[0].Hi
 			}
-			query = query.GetAllByIndex("Topic_SeqId", indexVals...)
-		} else {
-			// Optimizing for a special case of single range low..hi
-			query = query.Between(
-				[]interface{}{topic, toDel.SeqIdRanges[0].Low},
-				[]interface{}{topic, toDel.SeqIdRanges[0].Hi},
-				rdb.BetweenOpts{Index: "Topic_SeqId", RightBound: "closed"})
-		}
 
-		if toDel.DeletedFor == "" {
-			// Hard-deleting for all users{
-			// Hard-delete of individual messages. Mark some messages as deleted.
-			_, err = query.Filter(rdb.Row.HasFields("DelId").Not()).
-				Update(map[string]interface{}{"DeletedAt": t.TimeNow(), "DelId": toDel.DelId, "From": nil,
-					"Head": nil, "Content": nil}).RunWrite(a.conn)
-		} else {
-			// Soft-deleting: adding DelId to DeletedFor
-			_, err = query.
-				// Skip hard-deleted messages
-				Filter(rdb.Row.HasFields("DelId").Not()).
-				// Skip messages already soft-deleted for the current user
-				Filter(func(row rdb.Term) interface{} {
-					return rdb.Not(row.Field("DeletedFor").Default([]interface{}{}).Contains(
-						func(df rdb.Term) interface{} {
-							return df.Field("User").Eq(toDel.DeletedFor)
-						}))
-				}).Update(map[string]interface{}{"DeletedFor": rdb.Row.Field("DeletedFor").
-				Default([]interface{}{}).Append(
-				&t.SoftDelete{
-					User:  toDel.DeletedFor,
-					DelId: toDel.DelId})}).RunWrite(a.conn)
-		}
+			if toDel.DeletedFor == "" {
+				// Hard-deleting for all users
+				// Hard-delete of individual messages. Mark some messages as deleted.
+				_, err = a.db.Exec("UPDATE messages SET deletedAt=?, delId=? head=NULL, content=NULL WHERE "+
+					where+
+					" AND deletedAt IS NULL", t.TimeNow(), toDel.DelId)
+			} else {
+				// Handle Soft-deleting messages
+			}
+		*/
 	}
 
 	if err != nil {
@@ -1079,39 +1094,30 @@ func deviceHasher(deviceID string) string {
 // Device management for push notifications
 func (a *adapter) DeviceUpsert(uid t.Uid, def *t.DeviceDef) error {
 	hash := deviceHasher(def.DeviceId)
-	user := uid.String()
 
-	// Ensure uniqueness of the device ID
-	var others []interface{}
-	// Find users who already use this device ID, ignore current user.
-	if resp, err := rdb.DB(a.dbName).Table("users").GetAllByIndex("DeviceIds", def.DeviceId).
-		// We only care about user Ids
-		Pluck("Id").
-		// Make sure we filter out the current user who may legitimately use this device ID
-		Filter(rdb.Not(rdb.Row.Field("Id").Eq(user))).
-		// Convert slice of objects to a slice of strings
-		ConcatMap(func(row rdb.Term) interface{} { return []interface{}{row.Field("Id")} }).
-		// Execute
-		Run(a.conn); err != nil {
+	tx, err := a.db.Begin()
+	if err != nil {
 		return err
-	} else if err = resp.All(&others); err != nil {
-		return err
-	} else if len(others) > 0 {
-		// Delete device ID for the other users.
-		_, err := rdb.DB(a.dbName).Table("users").GetAll(others...).Replace(rdb.Row.Without(
-			map[string]string{"Devices": hash})).RunWrite(a.conn)
+	}
+	defer func() {
 		if err != nil {
-			return err
+			tx.Rollback()
 		}
+	}()
+
+	// Ensure uniqueness of the device ID: delete all records of the device ID
+	_, err = a.db.Exec("DELETE FROM devices WHERE hash=?", hash)
+	if err != nil {
+		return err
 	}
 
 	// Actually add/update DeviceId for the new user
-	_, err := rdb.DB(a.dbName).Table("users").Get(user).
-		Update(map[string]interface{}{
-			"Devices": map[string]*t.DeviceDef{
-				hash: def,
-			}}).RunWrite(a.conn)
-	return err
+	_, err = a.db.Exec("INSERT INTO devices(userid, hash, deviceId) VALUES(?,?,?)", uid, hash, def.DeviceId)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit()
 }
 
 func (a *adapter) DeviceGetAll(uids ...t.Uid) (map[t.Uid][]t.DeviceDef, int, error) {
@@ -1158,6 +1164,15 @@ func (a *adapter) DeviceDelete(uid t.Uid, deviceID string) error {
 func isDupe(err error) bool {
 	myerr, ok := err.(*ms.MySQLError)
 	return ok && myerr.Number == 1062
+}
+
+func toJSON(val interface{}) []byte {
+	if val == nil {
+		return nil
+	}
+
+	jval, _ := json.Marshal(val)
+	return jval
 }
 
 func init() {

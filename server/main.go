@@ -27,6 +27,7 @@ import (
 	_ "github.com/tinode/chat/server/auth/anon"
 	_ "github.com/tinode/chat/server/auth/basic"
 	_ "github.com/tinode/chat/server/auth/token"
+	_ "github.com/tinode/chat/server/db/mysql"
 	_ "github.com/tinode/chat/server/db/rethinkdb"
 	"github.com/tinode/chat/server/push"
 	_ "github.com/tinode/chat/server/push/fcm"
@@ -142,9 +143,9 @@ func main() {
 
 	var config configType
 	if raw, err := ioutil.ReadFile(*configfile); err != nil {
-		log.Fatal(err)
+		log.Fatal("Failed to read config file:", err)
 	} else if err = json.Unmarshal(raw, &config); err != nil {
-		log.Fatal(err)
+		log.Fatal("Failed to parse config file:", err)
 	}
 
 	if *listenOn != "" {
@@ -153,7 +154,7 @@ func main() {
 
 	var err = store.Open(string(config.StoreConfig))
 	if err != nil {
-		log.Fatal("Failed to connect to DB: ", err)
+		log.Fatal("Failed to connect to DB:", err)
 	}
 	defer func() {
 		store.Close()

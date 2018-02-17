@@ -624,7 +624,6 @@ type perUserData struct {
 // Topic stored in database
 type Topic struct {
 	ObjHeader
-	State int
 
 	// Name  string -- topic name is stored in Id
 

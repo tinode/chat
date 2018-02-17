@@ -3,6 +3,7 @@ package store
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"sort"
 	"time"
 
@@ -92,8 +93,7 @@ func InitDb(jsonconf string, reset bool) error {
 }
 
 // Register makes a persistence adapter available by the provided name.
-// If Register is called twice with the same name or if the adapter is nil,
-// it panics.
+// If Register is called twice or if the adapter is nil, it panics.
 // Name is currently unused, i.e. only a single adapter can be registered
 func Register(name string, adapter adapter.Adapter) {
 	if adapter == nil {
@@ -102,6 +102,8 @@ func Register(name string, adapter adapter.Adapter) {
 	if adaptr != nil {
 		panic("store: Adapter already registered")
 	}
+
+	log.Println("store: Using adapter", name)
 	adaptr = adapter
 }
 
@@ -113,6 +115,14 @@ func GetUid() types.Uid {
 // GetUidString generate unique ID as string
 func GetUidString() string {
 	return uGen.GetStr()
+}
+
+func DecodeUid(uid types.Uid) int64 {
+	return uGen.DecodeUid(uid)
+}
+
+func EncodeUid(id int64) types.Uid {
+	return uGen.EncodeInt64(id)
 }
 
 // UsersObjMapper is a users struct to hold methods for persistence mapping for the User object.

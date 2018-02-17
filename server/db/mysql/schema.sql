@@ -51,26 +51,23 @@ CREATE TABLE users(
 	lastSeen 	DATETIME,
 	userAgent 	VARCHAR(255),
 	public 		JSON,
+	tags		JSON, -- Denormalized array of tags
 	
 	PRIMARY KEY(id)
 );
 
-# Indexed tags
-CREATE TABLE tags(
+# Indexed user tags.
+CREATE TABLE usertags(
 	id 		INT NOT NULL AUTO_INCREMENT,
 	userid 	BIGINT NOT NULL,
-	name 	CHAR(24) NOT NULL,
 	tag 	VARCHAR(255) NOT NULL,
-	cat 	INT NOT NULL, -- Category: 0 = user, 1 = topic
 	
 	PRIMARY KEY(id),
-	FOREIGN KEY(userid) REFERENCES users(id)
+	FOREIGN KEY(userid) REFERENCES users(id),
+	INDEX(tag)
 );
 
-CREATE INDEX tags_name_cat ON tags(name, cat);
-CREATE INDEX tags_tag ON tags(tag);
-
-# Indexed devices
+# Indexed devices. Normalized into a separate table.
 CREATE TABLE devices(
 	id 			INT NOT NULL AUTO_INCREMENT,
 	userid 		BIGINT NOT NULL,
@@ -78,13 +75,14 @@ CREATE TABLE devices(
 	deviceid 	TEXT NOT NULL,
 	
 	PRIMARY KEY(id),
-	FOREIGN KEY(userid) REFERENCES users(id)
+	FOREIGN KEY(userid) REFERENCES users(id),
+	UNIQUE INDEX(hash)
 );
 
-# Authentication records
+# Authentication records for the basic authentication scheme.
 CREATE TABLE auth(
 	id 			INT NOT NULL AUTO_INCREMENT,
-	`unique` 	VARCHAR(255) NOT NULL,
+	login	 	VARCHAR(255) NOT NULL,
 	userid 		BIGINT NOT NULL,
 	authLvl 	INT NOT NULL,
 	secret 		VARCHAR(255) NOT NULL,
@@ -92,23 +90,66 @@ CREATE TABLE auth(
 	
 	PRIMARY KEY(id),
 	FOREIGN KEY(userid) REFERENCES users(id),
-	UNIQUE INDEX(`unique`)
+	UNIQUE INDEX(login)
 );
 
 
 # Topics
+/*
+type Topic struct {
+	ObjHeader
+	State int
+
+	// Name  string -- topic name is stored in Id
+
+	// Use bearer token or use ACL
+	UseBt bool
+
+	// Default access to topic
+	Access DefaultAccess
+
+	// Server-issued sequential ID
+	SeqId int
+	// If messages were deleted, sequential id of the last operation to delete them
+	DelId int
+
+	Public interface{}
+
+	// Indexed tags for finding this topic.
+	Tags []string
+
+	// Deserialized ephemeral params
+	owner   Uid                  // first assigned owner
+	perUser map[Uid]*perUserData // deserialized from Subscription
+}
+*/
 CREATE TABLE topics(
 	id 			INT NOT NULL AUTO_INCREMENT,
 	createdAt 	DATETIME NOT NULL,
 	updatedAt 	DATETIME NOT NULL,
 	deletedAt 	DATETIME,
 	name 		CHAR(24) NOT NULL,
+	useBt 		INT,
+	access 		JSON,
+	seqid 		INT NOT NULL DEFAULT 0,
+	delid 		INT,
 	public 		JSON,
+	tags		JSON, -- Denormalized array of tags
 	
 	PRIMARY KEY(id),
 	UNIQUE INDEX(name)
 );
 
+# Indexed topic tags.
+CREATE TABLE topictags(
+	id 		INT NOT NULL AUTO_INCREMENT,
+	topic 	CHAR(24) NOT NULL,
+	tag 	VARCHAR(255) NOT NULL,
+	
+	PRIMARY KEY(id),
+	FOREIGN KEY(topic) REFERENCES topics(name),
+	INDEX(tag)
+);
 
 # Subscriptions
 CREATE TABLE subscriptions(
