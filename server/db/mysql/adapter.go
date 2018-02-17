@@ -143,7 +143,6 @@ func (a *adapter) UserCreate(user *t.User) error {
 	defer func() {
 		if err != nil {
 			tx.Rollback()
-			return
 		}
 	}()
 
@@ -688,23 +687,11 @@ func (a *adapter) FindUsers(uid t.Uid, tags []string) ([]t.Subscription, error) 
 	}
 
 	// Get users matched by tags, sort by number of matches from high to low.
-	rows, err := rdb.DB(a.dbName).
-		Table("users").
-		GetAllByIndex("Tags", query...).
-		Pluck("Id", "Access", "CreatedAt", "UpdatedAt", "Public", "Tags").
-		Group("Id").
-		Ungroup().
-		Map(func(row rdb.Term) rdb.Term {
-			return row.Field("reduction").
-				Nth(0).
-				Merge(map[string]interface{}{"MatchedTagsCount": row.Field("reduction").Count()})
-		}).
-		// Query may contain redundant records, i.e. the same tag twice.
-		// User could be matched on multiple tags, i.e on email and phone#. Thus the query may
-		// return duplicate users. Thus the need for distinct.
-		OrderBy(rdb.Desc("MatchedTagsCount")).
-		Limit(maxResults).
-		Run(a.conn)
+	// Use JOIN users  -> tags
+	rows, err := a.db.Query("SELECT id, access, createdAt, updatedAt, public, tags "+
+		"FROM users WHERE tags IN (?) GROUP BY id ORDER BY matchCount LIMIT ?",
+		query, maxResults)
+
 	if err != nil {
 		return nil, err
 	}
@@ -712,7 +699,7 @@ func (a *adapter) FindUsers(uid t.Uid, tags []string) ([]t.Subscription, error) 
 	var user t.User
 	var sub t.Subscription
 	var subs []t.Subscription
-	for rows.Next(&user) {
+	for err = rows.Scan(&user); err == nil; {
 		if user.Id == uid.String() {
 			// Skip the callee
 			continue
@@ -732,11 +719,9 @@ func (a *adapter) FindUsers(uid t.Uid, tags []string) ([]t.Subscription, error) 
 		sub.Private = tags
 		subs = append(subs, sub)
 	}
+	rows.Close()
 
-	if err = rows.Err(); err != nil {
-		return nil, err
-	}
-	return subs, nil
+	return subs, err
 
 }
 
@@ -749,22 +734,6 @@ func (a *adapter) FindTopics(tags []string) ([]t.Subscription, error) {
 		query = append(query, tag)
 		index[tag] = struct{}{}
 	}
-
-	/*
-	   Javascript query we are replicating here in Go:
-	   r.db('tinode').table('users')
-	   	.getAll("email:alice@example.com", "email:bob@example.com", "tel:17025550002", {index: 'Tags'})
-	   	.group("Id")
-	   	.ungroup()
-	   	.map(function(row) {
-	   		return row.getField('reduction')
-	   			.nth(0)
-	   			.merge({
-	   				merge_count: row.getField('reduction').count()
-	   			})
-	   	})
-	   	.orderBy(r.desc("merge_count"))
-	*/
 
 	rows, err := rdb.DB(a.dbName).
 		Table("topics").
@@ -846,20 +815,26 @@ func (a *adapter) TopicTagsUpdate(name string, unique, tags []string) error {
 }
 
 func (a *adapter) updateUniqueTags(source string, added, removed []string) error {
+	tx, err := a.db.Begin()
+	if err != nil {
+		return err
+	}
+
+	defer func() {
+		if err != nil {
+			tx.Rollback()
+		}
+	}()
+
 	if added != nil && len(added) > 0 {
 		toAdd := make([]storedTag, 0, len(added))
 		for _, tag := range added {
 			toAdd = append(toAdd, storedTag{Id: tag, Source: source})
 		}
-		res, err := rdb.DB(a.dbName).Table("tagunique").Insert(toAdd).RunWrite(a.conn)
-		if err != nil {
-			if res.Inserted > 0 {
-				// Something went wrong, do best effort deletion of inserted tags
-				rdb.DB(a.dbName).Table("tagunique").GetAll(added).
-					Filter(map[string]interface{}{"Source": source}).Delete().RunWrite(a.conn)
-			}
 
-			if rdb.IsConflictErr(err) {
+		_, err = tx.Exec("INSERT INTO tagunique() VALUES(?)", toAdd)
+		if err != nil {
+			if isDupe(err) {
 				return errors.New("duplicate tag(s)")
 			}
 			return err
@@ -867,14 +842,13 @@ func (a *adapter) updateUniqueTags(source string, added, removed []string) error
 	}
 
 	if removed != nil && len(removed) > 0 {
-		_, err := rdb.DB(a.dbName).Table("tagunique").GetAll(removed).
-			Filter(map[string]interface{}{"Source": source}).Delete().RunWrite(a.conn)
+		_, err = a.db.Exec("DELETE FROM tagunique WHERE tag IN (?) AND source=?", removed, source)
 		if err != nil {
 			return err
 		}
 	}
 
-	return nil
+	return tx.Commit()
 }
 
 // tagsUniqueDelta extracts the lists of added unique tags and removed unique tags:
@@ -949,11 +923,9 @@ func (a *adapter) MessageSave(msg *t.Message) error {
 func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.BrowseOpt) ([]t.Message, error) {
 	//log.Println("Loading messages for topic ", topic, opts)
 
-	var limit = 1024 // TODO(gene): pass into adapter as a config param
-	var lower, upper interface{}
-
-	upper = rdb.MaxVal
-	lower = rdb.MinVal
+	var limit = maxResults // TODO(gene): pass into adapter as a config param
+	var lower = 0
+	var upper = 1 << 31
 
 	if opts != nil {
 		if opts.Since > 0 {
@@ -968,30 +940,16 @@ func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.BrowseOpt) 
 		}
 	}
 
-	lower = []interface{}{topic, lower}
-	upper = []interface{}{topic, upper}
-
-	requester := forUser.String()
-	rows, err := rdb.DB(a.dbName).Table("messages").
-		Between(lower, upper, rdb.BetweenOpts{Index: "Topic_SeqId"}).
-		// Ordering by index must come before filtering
-		OrderBy(rdb.OrderByOpts{Index: rdb.Desc("Topic_SeqId")}).
-		// Skip hard-deleted messages
-		Filter(rdb.Row.HasFields("DelId").Not()).
-		// Skip messages soft-deleted for the current user
-		Filter(func(row rdb.Term) interface{} {
-			return rdb.Not(row.Field("DeletedFor").Default([]interface{}{}).Contains(
-				func(df rdb.Term) interface{} {
-					return df.Field("User").Eq(requester)
-				}))
-		}).Limit(limit).Run(a.conn)
+	rows, err := a.db.Query("SELECT * FROM messages WHERE topic=? AND seqid BETWEEN ? AND ? "+
+		"AND delid IS NULL AND filter-soft-deleted-for-current-user "+
+		"ORDER BY seqid DESC LIMIT ?", topic, lower, upper, forUser, limit)
 
 	if err != nil {
 		return nil, err
 	}
 
 	var msgs []t.Message
-	if err = rows.All(&msgs); err != nil {
+	if err = rows.Scan(&msgs); err != nil {
 		return nil, err
 	}
 
@@ -1000,11 +958,9 @@ func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.BrowseOpt) 
 
 // Get ranges of deleted messages
 func (a *adapter) MessageGetDeleted(topic string, forUser t.Uid, opts *t.BrowseOpt) ([]t.DelMessage, error) {
-	var limit = 1024 // TODO(gene): pass into adapter as a config param
-	var lower, upper interface{}
-
-	upper = rdb.MaxVal
-	lower = rdb.MinVal
+	var limit = maxResults
+	var lower = 0
+	var upper = 1 << 31
 
 	if opts != nil {
 		if opts.Since > 0 {
@@ -1020,24 +976,15 @@ func (a *adapter) MessageGetDeleted(topic string, forUser t.Uid, opts *t.BrowseO
 	}
 
 	// Fetch log of deletions
-	rows, err := rdb.DB(a.dbName).Table("dellog").
-		// Select log entries for the given table and DelId values between two limits
-		Between([]interface{}{topic, lower}, []interface{}{topic, upper},
-			rdb.BetweenOpts{Index: "Topic_DelId"}).
-		// Sort from low DelIds to high
-		OrderBy(rdb.OrderByOpts{Index: "Topic_DelId"}).
-		// Keep entries soft-deleted for the current user and all hard-deleted entries.
-		Filter(func(row rdb.Term) interface{} {
-			return row.Field("DeletedFor").Eq(forUser.String()).Or(row.Field("DeletedFor").Eq(""))
-		}).
-		Limit(limit).Run(a.conn)
-
+	rows, err := a.db.Query("SELECT * FROM dellog WHERE topic=? AND delid BETWEEN ? and ? "+
+		"AND (deletedFor IS NULL OR deletedFor=?)"+
+		"ORDER BY delid LIMIT ?", topic, lower, upper, forUser, limit)
 	if err != nil {
 		return nil, err
 	}
 
 	var dmsgs []t.DelMessage
-	if err = rows.All(&dmsgs); err != nil {
+	if err = rows.Scan(&dmsgs); err != nil {
 		return nil, err
 	}
 
@@ -1046,21 +993,26 @@ func (a *adapter) MessageGetDeleted(topic string, forUser t.Uid, opts *t.BrowseO
 
 // MessageDeleteList deletes messages in the given topic with seqIds from the list
 func (a *adapter) MessageDeleteList(topic string, toDel *t.DelMessage) (err error) {
-	var indexVals []interface{}
+	tx, err := a.db.Begin()
+	if err != nil {
+		return err
+	}
 
-	query := rdb.DB(a.dbName).Table("messages")
+	defer func() {
+		if err != nil {
+			tx.Rollback()
+		}
+	}()
+
 	if toDel == nil {
 		// Whole topic is being deleted, thus also deleting all messages
-		_, err = query.Between(
-			[]interface{}{topic, rdb.MinVal},
-			[]interface{}{topic, rdb.MaxVal},
-			rdb.BetweenOpts{Index: "Topic_SeqId"}).Delete().RunWrite(a.conn)
+		_, err = a.db.Exec("DELETE FROM messages WHERE topic=?", topic)
 	} else {
 		// Only some messages are being deleted
 		toDel.SetUid(store.GetUid())
 
 		// Start with making a log entry
-		_, err := rdb.DB(a.dbName).Table("dellog").Insert(toDel).RunWrite(a.conn)
+		_, err = a.db.Exec("INSERT INTO dellog() VALUES(?)", toDel)
 		if err != nil {
 			return err
 		}
@@ -1109,12 +1061,11 @@ func (a *adapter) MessageDeleteList(topic string, toDel *t.DelMessage) (err erro
 		}
 	}
 
-	if err != nil && toDel != nil {
-		rdb.DB(a.dbName).Table("dellog").Get(toDel.Id).
-			Delete(rdb.DeleteOpts{Durability: "soft", ReturnChanges: false}).RunWrite(a.conn)
+	if err != nil {
+		return err
 	}
 
-	return err
+	return tx.Commit()
 }
 
 func deviceHasher(deviceID string) string {

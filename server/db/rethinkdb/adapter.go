@@ -1113,7 +1113,7 @@ func (a *adapter) MessageSave(msg *t.Message) error {
 func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.BrowseOpt) ([]t.Message, error) {
 	//log.Println("Loading messages for topic ", topic, opts)
 
-	var limit = 1024 // TODO(gene): pass into adapter as a config param
+	var limit = maxResults
 	var lower, upper interface{}
 
 	upper = rdb.MaxVal
