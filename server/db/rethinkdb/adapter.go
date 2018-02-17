@@ -677,7 +677,7 @@ func (a *adapter) TopicUpdateOnMessage(topic string, msg *t.Message) error {
 		SeqId int
 	}{msg.SeqId}
 
-	// Invite - 'me' topic
+	// FIXME(gene): remove 'me' update; no longer relevant
 	var err error
 	if strings.HasPrefix(topic, "usr") {
 		// Topic is passed as usrABCD, but the 'users' table expects Id without the 'usr' prefix.

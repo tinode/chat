@@ -37,6 +37,7 @@ CREATE INDEX tags_tag ON tags(tag);
 CREATE TABLE devices(
 	id INT NOT NULL AUTO_INCREMENT,
 	userID BIGINT NOT NULL,
+	hash CHAR() NOT NULL,
 	deviceID TEXT NOT NULL,
 	PRIMARY KEY(id)
 );

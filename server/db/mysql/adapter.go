@@ -153,16 +153,10 @@ func (a *adapter) UserCreate(user *t.User) error {
 		for _, t := range user.Tags {
 			tags = append(tags, storedTag{Id: t, Source: user.Id})
 		}
-		res, err := rdb.DB(a.dbName).Table("tagunique").Insert(tags).RunWrite(a.conn)
+		_, err = a.db.Exec("INSERT INTO tagunique() VALUES()", tags)
 		if err != nil {
-			if res.Inserted > 0 {
-				// Something went wrong, do best effort deletion of inserted tags
-				rdb.DB(a.dbName).Table("tagunique").GetAll(user.Tags).
-					Filter(map[string]interface{}{"Source": user.Id}).Delete().RunWrite(a.conn)
-			}
-
-			if rdb.IsConflictErr(err) {
-				return errors.New("duplicate tag(s)")
+			if isDupe(err) {
+				err = errors.New("duplicate tag(s)")
 			}
 			return err
 		}
@@ -183,7 +177,7 @@ func (a *adapter) AddAuthRecord(uid t.Uid, authLvl int, unique string,
 	_, err := a.db.Exec("INSERT INTO auth(`unique`,userid,authLvl,secret,expires) VALUES(?,?,?,?,?)",
 		unique, uid.String(), authLvl, secret)
 	if err != nil {
-		if myerr, ok := err.(*ms.MySQLError); ok && myerr.Number == 1062 {
+		if isDupe(err) {
 			return true, errors.New("duplicate credential")
 		}
 		return false, err
@@ -322,19 +316,18 @@ func (a *adapter) TopicCreate(topic *t.Topic) error {
 func (a *adapter) TopicCreateP2P(initiator, invited *t.Subscription) error {
 	initiator.Id = initiator.Topic + ":" + initiator.User
 	// Don't care if the initiator changes own subscription
-	_, err := rdb.DB(a.dbName).Table("subscriptions").Insert(initiator, rdb.InsertOpts{Conflict: "replace"}).
-		RunWrite(a.conn)
+	_, err := a.db.Exec("INSERT INTO subscriptions(id) VALUES(?) "+
+		"ON DUPLICATE KEY UPDATE ", initiator)
 	if err != nil {
 		return err
 	}
 
 	// Ensure this is a new subscription. If one already exist, don't overwrite it
 	invited.Id = invited.Topic + ":" + invited.User
-	_, err = rdb.DB(a.dbName).Table("subscriptions").Insert(invited, rdb.InsertOpts{Conflict: "error"}).
-		RunWrite(a.conn)
+	_, err = a.db.Exec("INSERT INTO subscriptions(id) VALUES(?)", invited)
 	if err != nil {
 		// Is this a duplicate subscription? If so, ifnore it. Otherwise it's a genuine DB error
-		if !rdb.IsConflictErr(err) {
+		if isDupe(err) {
 			return err
 		}
 	}
@@ -346,17 +339,14 @@ func (a *adapter) TopicCreateP2P(initiator, invited *t.Subscription) error {
 
 func (a *adapter) TopicGet(topic string) (*t.Topic, error) {
 	// Fetch topic by name
-	row, err := a.db.QueryRow("SELECT * FROM topics WHERE name=?", topic)
-	if err != nil {
-		return nil, err
-	}
+	row := a.db.QueryRow("SELECT * FROM topics WHERE name=?", topic)
 
 	var tt = new(t.Topic)
-	if err = row.Scan(tt); err != nil {
+	if err := row.Scan(tt); err != nil {
 		return nil, err
 	}
 
-	return tt, rows.Err()
+	return tt, nil
 }
 
 // TopicsForUser loads user's contact list: p2p and grp topics, except for 'me' subscription.
@@ -364,14 +354,17 @@ func (a *adapter) TopicGet(topic string) (*t.Topic, error) {
 func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool) ([]t.Subscription, error) {
 	// Fetch user's subscriptions
 	// Subscription have Topic.UpdatedAt denormalized into Subscription.UpdatedAt
-	q := rdb.DB(a.dbName).Table("subscriptions").GetAllByIndex("User", uid.String())
+	q := "SELECT * FROM subscriptions WHERE userid=?"
+
 	if !keepDeleted {
 		// Filter out rows with defined DeletedAt
-		q = q.Filter(rdb.Row.HasFields("DeletedAt").Not())
+		q += " AND deletedAt IS NULL"
 	}
-	q = q.Limit(maxResults)
+	q += "LIMIT ?"
+
 	//log.Printf("RethinkDbAdapter.TopicsForUser q: %+v", q)
-	rows, err := q.Run(a.conn)
+
+	rows, err := a.db.Query(q, uid, maxResults)
 	if err != nil {
 		return nil, err
 	}
@@ -382,7 +375,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool) ([]t.Subscription, 
 	join := make(map[string]t.Subscription) // Keeping these to make a join with table for .private and .access
 	topq := make([]interface{}, 0, 16)
 	usrq := make([]interface{}, 0, 16)
-	for rows.Next(&sub) {
+	for err = rows.Scan(&sub); err == nil; {
 		tcat := t.GetTopicCat(sub.Topic)
 
 		// 'me' or 'fnd' subscription, skip
@@ -405,6 +398,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool) ([]t.Subscription, 
 		}
 		join[sub.Topic] = sub
 	}
+	rows.Close()
 
 	//log.Printf("RethinkDbAdapter.TopicsForUser topq, usrq: %+v, %+v", topq, usrq)
 	var subs []t.Subscription
@@ -414,13 +408,13 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool) ([]t.Subscription, 
 
 	if len(topq) > 0 {
 		// Fetch grp & p2p topics
-		rows, err = rdb.DB(a.dbName).Table("topics").GetAll(topq...).Run(a.conn)
+		rows, err = a.db.Query("SELECT * FROM topics WHERE name IN(?)", topq...)
 		if err != nil {
 			return nil, err
 		}
 
 		var top t.Topic
-		for rows.Next(&top) {
+		for err = rows.Scan(&top); err == nil; {
 			sub = join[top.Id]
 			sub.ObjHeader.MergeTimes(&top.ObjHeader)
 			sub.SetSeqId(top.SeqId)
@@ -434,19 +428,19 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool) ([]t.Subscription, 
 				join[top.Id] = sub
 			}
 		}
-
+		rows.Close()
 		//log.Printf("RethinkDbAdapter.TopicsForUser 1: %#+v", subs)
 	}
 
 	// Fetch p2p users and join to p2p tables
 	if len(usrq) > 0 {
-		rows, err = rdb.DB(a.dbName).Table("users").GetAll(usrq...).Run(a.conn)
+		rows, err = a.db.Query("SELECT * FROM users WHERE id IN (?)", usrq...)
 		if err != nil {
 			return nil, err
 		}
 
 		var usr t.User
-		for rows.Next(&usr) {
+		for err = rows.Scan(&usr); err == nil; {
 			uid2 := t.ParseUid(usr.Id)
 			topic := uid.P2PName(uid2)
 			if sub, ok := join[topic]; ok {
@@ -458,6 +452,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool) ([]t.Subscription, 
 				subs = append(subs, sub)
 			}
 		}
+		rows.Close()
 
 		//log.Printf("RethinkDbAdapter.TopicsForUser 2: %#+v", subs)
 	}
@@ -467,16 +462,15 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool) ([]t.Subscription, 
 
 // UsersForTopic loads users subscribed to the given topic
 func (a *adapter) UsersForTopic(topic string, keepDeleted bool) ([]t.Subscription, error) {
-	// Fetch topic subscribers
 	// Fetch all subscribed users. The number of users is not large
-	q := rdb.DB(a.dbName).Table("subscriptions").GetAllByIndex("Topic", topic)
+	q := "SELECT * FROM subscriptions WHERE topic=?"
 	if !keepDeleted {
 		// Filter out rows with DeletedAt being not null
-		q = q.Filter(rdb.Row.HasFields("DeletedAt").Not())
+		q += " AND deletedAt IS NULL"
 	}
-	q = q.Limit(maxSubscribers)
+	q += " LIMIT ?"
 	//log.Printf("RethinkDbAdapter.UsersForTopic q: %+v", q)
-	rows, err := q.Run(a.conn)
+	rows, err := a.db.Query(q, topic, maxSubscribers)
 	if err != nil {
 		return nil, err
 	}
@@ -486,29 +480,31 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool) ([]t.Subscriptio
 	var subs []t.Subscription
 	join := make(map[string]t.Subscription)
 	usrq := make([]interface{}, 0, 16)
-	for rows.Next(&sub) {
+	for err = rows.Scan(&sub); err == nil; {
 		join[sub.User] = sub
 		usrq = append(usrq, sub.User)
 	}
+	rows.Close()
 
 	//log.Printf("RethinkDbAdapter.UsersForTopic usrq: %+v, usrq)
 	if len(usrq) > 0 {
 		subs = make([]t.Subscription, 0, len(usrq))
 
 		// Fetch users by a list of subscriptions
-		rows, err = rdb.DB(a.dbName).Table("users").GetAll(usrq...).Run(a.conn)
+		rows, err = a.db.Query("SELECT * FROM users WHERE id IN (?)", usrq...)
 		if err != nil {
 			return nil, err
 		}
 
 		var usr t.User
-		for rows.Next(&usr) {
+		for rows.Next(); err == nil; err = rows.Scan(&usr) {
 			if sub, ok := join[usr.Id]; ok {
 				sub.ObjHeader.MergeTimes(&usr.ObjHeader)
 				sub.SetPublic(usr.Public)
 				subs = append(subs, sub)
 			}
 		}
+		rows.Close()
 
 		//log.Printf("RethinkDbAdapter.UsersForTopic users: %+v", subs)
 	}
@@ -523,76 +519,51 @@ func (a *adapter) TopicShare(shares []*t.Subscription) (int, error) {
 	}
 	// Subscription could have been marked as deleted (DeletedAt != nil). If it's marked
 	// as deleted, unmark.
-	resp, err := rdb.DB(a.dbName).Table("subscriptions").
-		Insert(shares, rdb.InsertOpts{Conflict: "update"}).RunWrite(a.conn)
+	resp, err := a.db.Exec("INSERT INTO subscriptions() VALUES() ON DUPLICATE KEY UPDATE", shares)
+
 	if err != nil {
-		return resp.Inserted + resp.Replaced, err
+		return 0, err
 	}
 
-	return resp.Inserted + resp.Replaced, nil
+	count, err := resp.RowsAffected()
+	return int(count), err
 }
 
 func (a *adapter) TopicDelete(topic string) error {
-	_, err := rdb.DB(a.dbName).Table("topics").Get(topic).Delete().RunWrite(a.conn)
+	_, err := a.db.Exec("DELETE FROM topics WHERE name=?", topic)
 	return err
 }
 
 func (a *adapter) TopicUpdateOnMessage(topic string, msg *t.Message) error {
-
-	update := struct {
-		SeqId int
-	}{msg.SeqId}
-
-	// Invite - 'me' topic
-	var err error
-	if strings.HasPrefix(topic, "usr") {
-		// Topic is passed as usrABCD, but the 'users' table expects Id without the 'usr' prefix.
-		user := t.ParseUserId(topic).String()
-		_, err = rdb.DB("tinode").Table("users").Get(user).
-			Update(update, rdb.UpdateOpts{Durability: "soft"}).RunWrite(a.conn)
-
-		// All other messages
-	} else {
-		_, err = rdb.DB("tinode").Table("topics").Get(topic).
-			Update(update, rdb.UpdateOpts{Durability: "soft"}).RunWrite(a.conn)
-	}
+	_, err := a.db.Exec("UPDATE topics SET seqID=? WHERE name=?", msg.SeqId, topic)
 
 	return err
 }
 
 func (a *adapter) TopicUpdate(topic string, update map[string]interface{}) error {
-	_, err := rdb.DB("tinode").Table("topics").Get(topic).Update(update).RunWrite(a.conn)
+	_, err := a.db.Exec("UPDATE topics SET ? WHERE name=?", update, topic)
 	return err
 }
 
 // Get a subscription of a user to a topic
 func (a *adapter) SubscriptionGet(topic string, user t.Uid) (*t.Subscription, error) {
 
-	rows, err := rdb.DB(a.dbName).Table("subscriptions").Get(topic + ":" + user.String()).Run(a.conn)
-	if err != nil {
-		return nil, err
-	}
-
-	if rows.IsNil() {
-		rows.Close()
-		return nil, nil
-	}
+	row := a.db.QueryRow("SELECT * FROM subscriptions WHERE id=?", topic+":"+user.String())
 
 	var sub t.Subscription
-	if err = rows.One(&sub); err != nil {
+	if err := row.Scan(&sub); err != nil {
 		return nil, err
 	}
 
 	if sub.DeletedAt != nil {
-		return nil, rows.Err()
+		return nil, nil
 	}
-	return &sub, rows.Err()
+	return &sub, nil
 }
 
 // Update time when the user was last attached to the topic
 func (a *adapter) SubsLastSeen(topic string, user t.Uid, lastSeen map[string]time.Time) error {
-	_, err := rdb.DB(a.dbName).Table("subscriptions").Get(topic+":"+user.String()).
-		Update(map[string]interface{}{"LastSeen": lastSeen}, rdb.UpdateOpts{Durability: "soft"}).RunWrite(a.conn)
+	_, err := a.db.Exec("UPDATE subscriptions SET lastseen=? WHERE id=?", lastSeen, topic+":"+user.String())
 
 	return err
 }
@@ -600,23 +571,23 @@ func (a *adapter) SubsLastSeen(topic string, user t.Uid, lastSeen map[string]tim
 // SubsForUser loads a list of user's subscriptions to topics. Does NOT read Public value.
 func (a *adapter) SubsForUser(forUser t.Uid, keepDeleted bool) ([]t.Subscription, error) {
 	if forUser.IsZero() {
-		return nil, errors.New("RethinkDb adapter: invalid user ID in SubsForUser")
+		return nil, errors.New("mysql adapter: invalid user ID in SubsForUser")
 	}
 
-	q := rdb.DB(a.dbName).Table("subscriptions").GetAllByIndex("User", forUser.String())
+	q := "SELECT * FROM subscriptions WHERE user=?"
 	if !keepDeleted {
-		q = q.Filter(rdb.Row.HasFields("DeletedAt").Not())
+		q += " AND deletedAt IS NULL"
 	}
-	q = q.Limit(maxResults)
+	q += " LIMIT ?"
 
-	rows, err := q.Run(a.conn)
+	rows, err := a.db.Query(q, forUser, maxResults)
 	if err != nil {
 		return nil, err
 	}
 
 	var subs []t.Subscription
 	var ss t.Subscription
-	for rows.Next(&ss) {
+	for err = rows.Scan(&ss); err == nil; {
 		subs = append(subs, ss)
 	}
 	return subs, rows.Err()
@@ -638,22 +609,22 @@ func (a *adapter) SubsForTopic(topic string, keepDeleted bool) ([]t.Subscription
 		}
 	}
 
-	q := rdb.DB(a.dbName).Table("subscriptions").GetAllByIndex("Topic", topic)
+	q := "SELECT * FROM subscriptions WHERE topic=?"
 	if !keepDeleted {
 		// Filter out rows where DeletedAt is defined
-		q = q.Filter(rdb.Row.HasFields("DeletedAt").Not())
+		q += " AND deletedAt IS NULL"
 	}
-	q = q.Limit(maxSubscribers)
+	q += " LIMIT ?"
 	//log.Println("Loading subscription q=", q)
 
-	rows, err := q.Run(a.conn)
+	rows, err := a.db.Query(q, topic, maxSubscribers)
 	if err != nil {
 		return nil, err
 	}
 
 	var subs []t.Subscription
 	var ss t.Subscription
-	for rows.Next(&ss) {
+	for err = rows.Scan(&ss); err == nil; {
 		if p2p != nil {
 			// Assigning values provided by the other user
 			if p2p[0].Id == ss.User {
@@ -669,44 +640,40 @@ func (a *adapter) SubsForTopic(topic string, keepDeleted bool) ([]t.Subscription
 		subs = append(subs, ss)
 		//log.Printf("SubsForTopic: loaded sub %#+v", ss)
 	}
-	return subs, rows.Err()
+	rows.Close()
+
+	return subs, err
 }
 
 // SubsUpdate updates a single subscription.
 func (a *adapter) SubsUpdate(topic string, user t.Uid, update map[string]interface{}) error {
-	q := rdb.DB(a.dbName).Table("subscriptions")
+	q := "UPDATE subscriptions SET ? WHERE "
+	var param interface{}
 	if !user.IsZero() {
 		// Update one topic subscription
-		q = q.Get(topic + ":" + user.String())
+		q += "user=?"
+		param = user
 	} else {
 		// Update all topic subscriptions
-		q = q.GetAllByIndex("Topic", topic)
+		q += "topic=?"
+		param = topic
 	}
-	_, err := q.Update(update).RunWrite(a.conn)
+	_, err := a.db.Exec(q, update, param)
 	return err
 }
 
 // SubsDelete marks subscription as deleted.
 func (a *adapter) SubsDelete(topic string, user t.Uid) error {
 	now := t.TimeNow()
-	_, err := rdb.DB(a.dbName).Table("subscriptions").
-		Get(topic + ":" + user.String()).Update(map[string]interface{}{
-		"UpdatedAt": now,
-		"DeletedAt": now,
-	}).RunWrite(a.conn)
-	// _, err := rdb.DB(a.dbName).Table("subscriptions").Get(topic + ":" + user.String()).Delete().RunWrite(a.conn)
+	_, err := a.db.Exec("UPDATE subscriptions SET updatedAt=?, deletedAT=? WHERE id=?",
+		now, now, topic+":"+user.String())
 	return err
 }
 
 // SubsDelForTopic marks all subscriptions to the given topic as deleted
 func (a *adapter) SubsDelForTopic(topic string) error {
 	now := t.TimeNow()
-	update := map[string]interface{}{
-		"UpdatedAt": now,
-		"DeletedAt": now,
-	}
-	_, err := rdb.DB(a.dbName).Table("subscriptions").GetAllByIndex("Topic", topic).
-		Update(update).RunWrite(a.conn)
+	_, err := a.db.Exec("UPDATE subscriptions SET updatedAt=?, deletedAt=? WHERE topic=?", now, now, topic)
 	return err
 }
 
@@ -975,7 +942,7 @@ func filterUniqueTags(unique, tags []string) []string {
 // Messages
 func (a *adapter) MessageSave(msg *t.Message) error {
 	msg.SetUid(store.GetUid())
-	_, err := rdb.DB(a.dbName).Table("messages").Insert(msg).RunWrite(a.conn)
+	_, err := a.db.Exec("INSERT INTO messages() VALUES(?)", msg)
 	return err
 }
 
@@ -1197,14 +1164,8 @@ func (a *adapter) DeviceUpsert(uid t.Uid, def *t.DeviceDef) error {
 }
 
 func (a *adapter) DeviceGetAll(uids ...t.Uid) (map[t.Uid][]t.DeviceDef, int, error) {
-	ids := make([]interface{}, len(uids))
-	for i, id := range uids {
-		ids[i] = id.String()
-	}
 
-	// {Id: "userid", Devices: {"hash1": {..def1..}, "hash2": {..def2..}}
-	rows, err := rdb.DB(a.dbName).Table("users").GetAll(ids...).Pluck("Id", "Devices").
-		Default(nil).Limit(maxResults).Run(a.conn)
+	rows, err := a.db.Query("SELECT userid, deviceID FROM devices WHERE userid=?", uids)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -1217,7 +1178,7 @@ func (a *adapter) DeviceGetAll(uids ...t.Uid) (map[t.Uid][]t.DeviceDef, int, err
 	result := make(map[t.Uid][]t.DeviceDef)
 	count := 0
 	var uid t.Uid
-	for rows.Next(&row) {
+	for err = rows.Scan(&row); err == nil; {
 		if row.Devices != nil && len(row.Devices) > 0 {
 			if err := uid.UnmarshalText([]byte(row.Id)); err != nil {
 				continue
@@ -1239,9 +1200,13 @@ func (a *adapter) DeviceGetAll(uids ...t.Uid) (map[t.Uid][]t.DeviceDef, int, err
 }
 
 func (a *adapter) DeviceDelete(uid t.Uid, deviceID string) error {
-	_, err := rdb.DB(a.dbName).Table("users").Get(uid.String()).Replace(rdb.Row.Without(
-		map[string]string{"Devices": deviceHasher(deviceID)})).RunWrite(a.conn)
+	_, err := a.db.Exec("DELETE FROM devices WHERE userid=? AND hash=?", uid, deviceHasher(deviceID))
 	return err
+}
+
+func isDupe(err error) bool {
+	myerr, ok := err.(*ms.MySQLError)
+	return ok && myerr.Number == 1062
 }
 
 func init() {
