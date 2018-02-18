@@ -345,35 +345,83 @@ func (a *adapter) UserUpdate(uid t.Uid, update map[string]interface{}) error {
 
 // *****************************
 
-// TopicCreate creates a topic from template
+func (a *adapter) topicCreate(tx *sqlx.Tx, topic *t.Topic) error {
+	var err error
+	q := "INSERT INTO topics(createdAt,updatedAt,name,access,public,tags) VALUES(?,?,?,?,?,?)"
+	if tx == nil {
+		_, err = a.db.Exec(q, topic.CreatedAt, topic.UpdatedAt, topic.Id,
+			toJSON(topic.Access), toJSON(topic.Public), toJSON(topic.Tags))
+	} else {
+		_, err = tx.Exec(q, topic.CreatedAt, topic.UpdatedAt, topic.Id,
+			toJSON(topic.Access), toJSON(topic.Public), toJSON(topic.Tags))
+	}
+
+	// FIXME(gene): handle tags
+
+	return err
+}
+
+// TopicCreate saves topic object to database.
 func (a *adapter) TopicCreate(topic *t.Topic) error {
-	_, err := a.db.Exec("INSERT INTO topics(columns) VALUES(values)", topic)
+	return a.topicCreate(nil, topic)
+}
+
+// If upsert = true - update subscription on duplicate key, otherwise ignore the duplicate.
+func createSubscription(tx *sqlx.Tx, sub *t.Subscription, upsert bool) error {
+
+	jpriv := toJSON(sub.Private)
+	_, err := tx.Exec(
+		"INSERT INTO subscriptions(createdAt,updatedAt,deletedAt,userid,topic,modeWant,modeGiven,private) "+
+			"VALUES(?,?,NULL,?,?,?,?,?)",
+		sub.CreatedAt, sub.UpdatedAt,
+		store.DecodeUid(t.ParseUid(sub.User)), sub.Topic,
+		sub.ModeWant.String(), sub.ModeGiven.String(),
+		jpriv)
+
+	if err != nil && isDupe(err) {
+		if upsert {
+			_, err = tx.Exec(
+				"UPDATE subscriptions SET createdAt=?,updatedAt=?,deletedAt=NULL,modeWant=?,modeGiven=?,private=?",
+				sub.CreatedAt, sub.UpdatedAt,
+				sub.ModeWant.String(), sub.ModeGiven.String(),
+				jpriv)
+		} else {
+			err = nil
+		}
+	}
 	return err
 }
 
 // TopicCreateP2P given two users creates a p2p topic
 func (a *adapter) TopicCreateP2P(initiator, invited *t.Subscription) error {
-	initiator.Id = initiator.Topic + ":" + initiator.User
-	// Don't care if the initiator changes own subscription
-	_, err := a.db.Exec("INSERT INTO subscriptions(id) VALUES(?) "+
-		"ON DUPLICATE KEY UPDATE ", initiator)
+	tx, err := a.db.Beginx()
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err != nil {
+			tx.Rollback()
+		}
+	}()
+
+	err = createSubscription(tx, initiator, true)
 	if err != nil {
 		return err
 	}
 
-	// Ensure this is a new subscription. If one already exist, don't overwrite it
-	invited.Id = invited.Topic + ":" + invited.User
-	_, err = a.db.Exec("INSERT INTO subscriptions(id) VALUES(?)", invited)
+	err = createSubscription(tx, invited, false)
 	if err != nil {
-		// Is this a duplicate subscription? If so, ifnore it. Otherwise it's a genuine DB error
-		if isDupe(err) {
-			return err
-		}
+		return err
 	}
 
 	topic := &t.Topic{ObjHeader: t.ObjHeader{Id: initiator.Topic}}
 	topic.ObjHeader.MergeTimes(&initiator.ObjHeader)
-	return a.TopicCreate(topic)
+	err = a.topicCreate(tx, topic)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit()
 }
 
 func (a *adapter) TopicGet(topic string) (*t.Topic, error) {
@@ -562,36 +610,11 @@ func (a *adapter) TopicShare(shares []*t.Subscription) (int, error) {
 		}
 	}()
 
-	var insert, update *sql.Stmt
-	insert, err = tx.Prepare(
-		"INSERT INTO subscriptions(createdAt,updatedAt,deletedAt,userid,topic,modeWant,modeGiven,private) " +
-			"VALUES(?,?,NULL,?,?,?,?,?)")
-	if err != nil {
-		return 0, err
-	}
-	update, err = tx.Prepare(
-		"UPDATE subscriptions SET createdAt=?,updatedAt=?,deletedAt=NULL,modeWant=?,modeGiven=?,private=?")
-	if err != nil {
-		return 0, err
-	}
-
 	for _, sub := range shares {
-		jpriv := toJSON(sub.Private)
-		_, err = insert.Exec(sub.CreatedAt, sub.UpdatedAt,
-			store.DecodeUid(t.ParseUid(sub.User)), sub.Topic,
-			sub.ModeWant.String(), sub.ModeGiven.String(),
-			jpriv)
-		if err != nil && isDupe(err) {
-			_, err = update.Exec(sub.CreatedAt, sub.UpdatedAt,
-				sub.ModeWant.String(), sub.ModeGiven.String(),
-				jpriv)
-		}
+		err = createSubscription(tx, sub, true)
 		if err != nil {
-			break
+			return 0, err
 		}
-	}
-	if err != nil {
-		return 0, err
 	}
 
 	return len(shares), tx.Commit()
@@ -991,8 +1014,11 @@ func filterUniqueTags(unique, tags []string) []string {
 
 // Messages
 func (a *adapter) MessageSave(msg *t.Message) error {
-	msg.SetUid(store.GetUid())
-	_, err := a.db.Exec("INSERT INTO messages() VALUES(?)", msg)
+	_, err := a.db.Exec(
+		"INSERT INTO messages(createdAt,updatedAt,seqid,topic,`from`,head,content) VALUES(?,?,?,?,?,?,?)",
+		msg.CreatedAt, msg.UpdatedAt,
+		msg.SeqId, msg.Topic,
+		store.DecodeUid(t.ParseUid(msg.From)), toJSON(msg.Head), toJSON(msg.Content))
 	return err
 }
 
