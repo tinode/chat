@@ -8,6 +8,7 @@ import (
 	"errors"
 	"hash/fnv"
 	"log"
+	"reflect"
 	"sort"
 	"strconv"
 	"strings"
@@ -192,7 +193,6 @@ func (a *adapter) UserCreate(user *t.User) error {
 				if isDupe(err) {
 					err = errors.New("duplicate tag(s)")
 				}
-				log.Println("tag insertion failed", err)
 				return err
 			}
 		}
@@ -205,8 +205,12 @@ func (a *adapter) UserCreate(user *t.User) error {
 func (a *adapter) AddAuthRecord(uid t.Uid, authLvl int, unique string,
 	secret []byte, expires time.Time) (bool, error) {
 
-	_, err := a.db.Exec("INSERT INTO auth(`unique`,userid,authLvl,secret,expires) VALUES(?,?,?,?,?)",
-		unique, uid.String(), authLvl, secret)
+	var exp *time.Time
+	if !expires.IsZero() {
+		exp = &expires
+	}
+	_, err := a.db.Exec("INSERT INTO basicauth(login,userid,authLvl,secret,expires) VALUES(?,?,?,?,?)",
+		unique, store.DecodeUid(uid), authLvl, secret, exp)
 	if err != nil {
 		if isDupe(err) {
 			return true, errors.New("duplicate credential")
@@ -548,20 +552,49 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool) ([]t.Subscriptio
 }
 
 func (a *adapter) TopicShare(shares []*t.Subscription) (int, error) {
-	// Assign Ids.
-	for i := 0; i < len(shares); i++ {
-		shares[i].Id = shares[i].Topic + ":" + shares[i].User
+	tx, err := a.db.Beginx()
+	if err != nil {
+		return 0, err
 	}
-	// Subscription could have been marked as deleted (DeletedAt != nil). If it's marked
-	// as deleted, unmark.
-	resp, err := a.db.Exec("INSERT INTO subscriptions() VALUES() ON DUPLICATE KEY UPDATE", shares)
+	defer func() {
+		if err != nil {
+			tx.Rollback()
+		}
+	}()
 
+	var insert, update *sql.Stmt
+	insert, err = tx.Prepare(
+		"INSERT INTO subscriptions(createdAt,updatedAt,deletedAt,userid,topic,modeWant,modeGiven,private) " +
+			"VALUES(?,?,NULL,?,?,?,?,?)")
+	if err != nil {
+		return 0, err
+	}
+	update, err = tx.Prepare(
+		"UPDATE subscriptions SET createdAt=?,updatedAt=?,deletedAt=NULL,modeWant=?,modeGiven=?,private=?")
 	if err != nil {
 		return 0, err
 	}
 
-	count, err := resp.RowsAffected()
-	return int(count), err
+	for _, sub := range shares {
+		jpriv := toJSON(sub.Private)
+		_, err = insert.Exec(sub.CreatedAt, sub.UpdatedAt,
+			store.DecodeUid(t.ParseUid(sub.User)), sub.Topic,
+			sub.ModeWant.String(), sub.ModeGiven.String(),
+			jpriv)
+		if err != nil && isDupe(err) {
+			_, err = update.Exec(sub.CreatedAt, sub.UpdatedAt,
+				sub.ModeWant.String(), sub.ModeGiven.String(),
+				jpriv)
+		}
+		if err != nil {
+			break
+		}
+	}
+	if err != nil {
+		return 0, err
+	}
+
+	return len(shares), tx.Commit()
 }
 
 func (a *adapter) TopicDelete(topic string) error {
@@ -682,26 +715,40 @@ func (a *adapter) SubsForTopic(topic string, keepDeleted bool) ([]t.Subscription
 
 // SubsUpdate updates a single subscription.
 func (a *adapter) SubsUpdate(topic string, user t.Uid, update map[string]interface{}) error {
-	q := "UPDATE subscriptions SET ? WHERE "
-	var param interface{}
+	var args []interface{}
+	var cols []string
+	for col, arg := range update {
+		cols = append(cols, col+"=?")
+		// Maps, slices and structs (except time.Time) should be converted to JSON.
+		if _, ok := arg.(time.Time); !ok {
+			switch reflect.ValueOf(arg).Kind() {
+			case reflect.Map, reflect.Struct, reflect.Slice:
+				arg = toJSON(arg)
+			}
+		}
+		args = append(args, arg)
+	}
+	q := "UPDATE subscriptions SET " + strings.Join(cols, ",") + " WHERE "
 	if !user.IsZero() {
 		// Update one topic subscription
-		q += "user=?"
-		param = user
+		q += "userid=?"
+		args = append(args, store.DecodeUid(user))
 	} else {
 		// Update all topic subscriptions
 		q += "topic=?"
-		param = topic
+		args = append(args, topic)
 	}
-	_, err := a.db.Exec(q, update, param)
+
+	_, err := a.db.Exec(q, args...)
+
 	return err
 }
 
 // SubsDelete marks subscription as deleted.
 func (a *adapter) SubsDelete(topic string, user t.Uid) error {
 	now := t.TimeNow()
-	_, err := a.db.Exec("UPDATE subscriptions SET updatedAt=?, deletedAT=? WHERE id=?",
-		now, now, topic+":"+user.String())
+	_, err := a.db.Exec("UPDATE subscriptions SET updatedAt=?, deletedAt=? WHERE topic=? AND userid=?",
+		now, now, topic, store.DecodeUid(user))
 	return err
 }
 

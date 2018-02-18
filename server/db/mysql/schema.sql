@@ -80,7 +80,7 @@ CREATE TABLE devices(
 );
 
 # Authentication records for the basic authentication scheme.
-CREATE TABLE auth(
+CREATE TABLE basicauth(
 	id 			INT NOT NULL AUTO_INCREMENT,
 	login	 	VARCHAR(255) NOT NULL,
 	userid 		BIGINT NOT NULL,
@@ -95,34 +95,6 @@ CREATE TABLE auth(
 
 
 # Topics
-/*
-type Topic struct {
-	ObjHeader
-	State int
-
-	// Name  string -- topic name is stored in Id
-
-	// Use bearer token or use ACL
-	UseBt bool
-
-	// Default access to topic
-	Access DefaultAccess
-
-	// Server-issued sequential ID
-	SeqId int
-	// If messages were deleted, sequential id of the last operation to delete them
-	DelId int
-
-	Public interface{}
-
-	// Indexed tags for finding this topic.
-	Tags []string
-
-	// Deserialized ephemeral params
-	owner   Uid                  // first assigned owner
-	perUser map[Uid]*perUserData // deserialized from Subscription
-}
-*/
 CREATE TABLE topics(
 	id 			INT NOT NULL AUTO_INCREMENT,
 	createdAt 	DATETIME NOT NULL,
@@ -159,11 +131,17 @@ CREATE TABLE subscriptions(
 	deletedAt 	DATETIME,
 	userid 		BIGINT NOT NULL,
 	topic 		CHAR(24) NOT NULL,
+	delId      INT,
+	recvSeqId  INT,
+	readSeqId  INT,
+	modeWant	CHAR(8),
+	modeGiven  	CHAR(8),
+	private 	JSON,
 	
 	PRIMARY KEY(id)	,
 	FOREIGN KEY(userid) REFERENCES users(id),
-	FOREIGN KEY(topic) REFERENCES topics(name),
-	UNIQUE INDEX(topic, userid)
+	UNIQUE INDEX(topic, userid),
+	INDEX(topic)
 );
 
 # Messages
