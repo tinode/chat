@@ -84,7 +84,7 @@ CREATE TABLE basicauth(
 	id 			INT NOT NULL AUTO_INCREMENT,
 	login	 	VARCHAR(255) NOT NULL,
 	userid 		BIGINT NOT NULL,
-	authLvl 	INT NOT NULL,
+	authlvl 	INT NOT NULL,
 	secret 		VARCHAR(255) NOT NULL,
 	expires 	DATETIME,
 	

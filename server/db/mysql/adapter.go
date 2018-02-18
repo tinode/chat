@@ -244,7 +244,7 @@ func (a *adapter) DelAllAuthRecords(uid t.Uid) (int, error) {
 
 // Update user's authentication secret
 func (a *adapter) UpdAuthRecord(unique string, authLvl int, secret []byte, expires time.Time) (int, error) {
-	res, err := a.db.Exec("UPDATE auth SET authLvl=?,secret=?,expires=? WHERE `unique`=?",
+	res, err := a.db.Exec("UPDATE auth SET authLvl=?,secret=?,expires=? WHERE login=?",
 		authLvl, secret, expires, unique)
 
 	if err != nil {
@@ -257,25 +257,30 @@ func (a *adapter) UpdAuthRecord(unique string, authLvl int, secret []byte, expir
 
 // Retrieve user's authentication record
 func (a *adapter) GetAuthRecord(unique string) (t.Uid, int, []byte, time.Time, error) {
-	res := a.db.QueryRow("SELECT userid, secret, expires, authLvl FROM auth WHERE `unique`=?", unique)
+	var expires time.Time
 
 	var record struct {
-		Userid  string
-		AuthLvl int
+		Userid  int64
+		Authlvl int
 		Secret  []byte
-		Expires time.Time
+		Expires *time.Time
 	}
 
-	if err := res.Scan(&record); err != nil {
+	err := a.db.Get(&record, "SELECT userid, secret, expires, authlvl FROM basicauth WHERE login=?", unique)
+	if err != nil {
 		if err == sql.ErrNoRows {
 			// Nothing found - clear the error
 			err = nil
 		}
-		return t.ZeroUid, 0, nil, time.Time{}, err
+		return t.ZeroUid, 0, nil, expires, err
+	}
+
+	if record.Expires != nil {
+		expires = *record.Expires
 	}
 
 	// log.Println("loggin in user Id=", user.Uid(), user.Id)
-	return t.ParseUid(record.Userid), record.AuthLvl, record.Secret, record.Expires, nil
+	return store.EncodeUid(record.Userid), record.Authlvl, record.Secret, expires, nil
 }
 
 // UserGet fetches a single user by user id. If user is not found it returns (nil, nil)
