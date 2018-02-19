@@ -28,7 +28,7 @@ type adapter struct {
 }
 
 const (
-	defaultDSN      = "root:@tcp(localhost:3306)/tinode"
+	defaultDSN      = "root:@tcp(localhost:3306)/tinode?parseTime=true"
 	defaultDatabase = "tinode"
 
 	dbVersion = 100
@@ -105,10 +105,9 @@ func (a *adapter) IsOpen() bool {
 
 // Read current database version
 func (a *adapter) getDbVersion() (int, error) {
-	resp := a.db.QueryRow("SELECT `value` FROM kvmeta WHERE `key`='version'")
-
 	var vers int
-	if err := resp.Scan(&vers); err != nil {
+	err := a.db.Get(&vers, "SELECT `value` FROM kvmeta WHERE `key`='version'")
+	if err != nil {
 		return -1, err
 	}
 	a.version = vers
@@ -133,13 +132,8 @@ func (a *adapter) CheckDbVersion() error {
 // CreateDb initializes the storage.
 func (a *adapter) CreateDb(reset bool) error {
 	// Checks if database exists.
-	log.Println(a.dbName)
-	row := a.db.QueryRow("SHOW DATABASES LIKE '" + a.dbName + "'")
 	var db interface{}
-	err := row.Scan(&db)
-	if err == nil {
-		return nil
-	}
+	err := a.db.Get(&db, "SHOW DATABASES LIKE '"+a.dbName+"'")
 	if err == sql.ErrNoRows {
 		return errors.New("unsupported: use schema.sql to create database")
 	}
@@ -285,12 +279,15 @@ func (a *adapter) GetAuthRecord(unique string) (t.Uid, int, []byte, time.Time, e
 
 // UserGet fetches a single user by user id. If user is not found it returns (nil, nil)
 func (a *adapter) UserGet(uid t.Uid) (*t.User, error) {
-	res := a.db.QueryRow("SELECT * FROM users WHERE id=?", uid)
 	var user t.User
-	var err error
-	if err = res.Scan(&user); err == nil {
+	err := a.db.Get(&user, "SELECT * FROM users WHERE id=?", store.DecodeUid(uid))
+	if err == nil {
+		user.SetUid(uid)
+		user.Public = fromJSON(user.Public)
 		return &user, nil
-	} else if err == sql.ErrNoRows {
+	}
+
+	if err == sql.ErrNoRows {
 		// Clear the error if user does not exist
 		err = nil
 	}
@@ -452,9 +449,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool) ([]t.Subscription, 
 		// Filter out rows with defined DeletedAt
 		q += " AND deletedAt IS NULL"
 	}
-	q += "LIMIT ?"
-
-	//log.Printf("RethinkDbAdapter.TopicsForUser q: %+v", q)
+	q += " LIMIT ?"
 
 	rows, err := a.db.Query(q, uid, maxResults)
 	if err != nil {
@@ -670,28 +665,36 @@ func (a *adapter) SubsForUser(forUser t.Uid, keepDeleted bool) ([]t.Subscription
 		return nil, errors.New("mysql adapter: invalid user ID in SubsForUser")
 	}
 
-	q := "SELECT * FROM subscriptions WHERE user=?"
+	q := `SELECT createdat,updatedat,deletedat,userid AS user,topic,delid,recvseqid,
+		readseqid,modewant,modegiven,private FROM subscriptions WHERE userid=?`
 	if !keepDeleted {
 		q += " AND deletedAt IS NULL"
 	}
 	q += " LIMIT ?"
 
-	rows, err := a.db.Query(q, forUser, maxResults)
+	rows, err := a.db.Queryx(q, store.DecodeUid(forUser), maxResults)
 	if err != nil {
 		return nil, err
 	}
 
 	var subs []t.Subscription
 	var ss t.Subscription
-	for err = rows.Scan(&ss); err == nil; {
+	for rows.Next() {
+		err = rows.StructScan(&ss)
+		if err != nil {
+			break
+		}
+		ss.User = forUser.String()
 		subs = append(subs, ss)
 	}
-	return subs, rows.Err()
+	rows.Close()
+
+	return subs, err
 }
 
 // SubsForTopic fetches all subsciptions for a topic.
 func (a *adapter) SubsForTopic(topic string, keepDeleted bool) ([]t.Subscription, error) {
-	//log.Println("Loading subscriptions for topic ", topic)
+	log.Println("Loading subscriptions for topic ", topic)
 
 	// must load User.Public for p2p topics
 	var p2p []t.User
@@ -705,22 +708,31 @@ func (a *adapter) SubsForTopic(topic string, keepDeleted bool) ([]t.Subscription
 		}
 	}
 
-	q := "SELECT * FROM subscriptions WHERE topic=?"
+	q := `SELECT createdat,updatedat,deletedat,userid AS user,topic,delid,recvseqid,
+		readseqid,modewant,modegiven,private FROM subscriptions WHERE topic=?`
 	if !keepDeleted {
 		// Filter out rows where DeletedAt is defined
 		q += " AND deletedAt IS NULL"
 	}
 	q += " LIMIT ?"
-	//log.Println("Loading subscription q=", q)
+	log.Println("Loading subscription q=", q)
 
-	rows, err := a.db.Query(q, topic, maxSubscribers)
+	rows, err := a.db.Queryx(q, topic, maxSubscribers)
 	if err != nil {
 		return nil, err
 	}
 
 	var subs []t.Subscription
 	var ss t.Subscription
-	for err = rows.Scan(&ss); err == nil; {
+	for rows.Next() {
+		err = rows.StructScan(&ss)
+		if err != nil {
+			break
+		}
+
+		unum, _ := strconv.ParseInt(ss.User, 10, 64)
+		ss.User = store.EncodeUid(unum).String()
+		ss.Private = fromJSON(ss.Private)
 		if p2p != nil {
 			// Assigning values provided by the other user
 			if p2p[0].Id == ss.User {
@@ -734,7 +746,7 @@ func (a *adapter) SubsForTopic(topic string, keepDeleted bool) ([]t.Subscription
 			}
 		}
 		subs = append(subs, ss)
-		//log.Printf("SubsForTopic: loaded sub %#+v", ss)
+		log.Printf("SubsForTopic: loaded sub %#+v", ss)
 	}
 	rows.Close()
 
@@ -1244,13 +1256,25 @@ func isDupe(err error) bool {
 	return ok && myerr.Number == 1062
 }
 
-func toJSON(val interface{}) []byte {
-	if val == nil {
+func toJSON(src interface{}) []byte {
+	if src == nil {
 		return nil
 	}
 
-	jval, _ := json.Marshal(val)
+	jval, _ := json.Marshal(src)
 	return jval
+}
+
+func fromJSON(src interface{}) interface{} {
+	if src == nil {
+		return nil
+	}
+	if bb, ok := src.([]byte); ok {
+		var out interface{}
+		json.Unmarshal(bb, &out)
+		return out
+	}
+	return nil
 }
 
 func init() {

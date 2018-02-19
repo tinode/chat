@@ -3,6 +3,7 @@ package types
 import (
 	"encoding/base64"
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"strings"
 	"time"
@@ -251,6 +252,13 @@ func (h *ObjHeader) IsDeleted() bool {
 	return h.DeletedAt != nil
 }
 
+// StringSlice is defined so Scanner and Valuer can be attached to it.
+type StringSlice []string
+
+func (ss *StringSlice) Scan(val interface{}) error {
+	return json.Unmarshal(val.([]byte), ss)
+}
+
 // User is a representation of a DB-stored user record.
 type User struct {
 	ObjHeader
@@ -263,7 +271,7 @@ type User struct {
 	// Values for 'me' topic:
 
 	// Last time when the user joined 'me' topic, by User Agent
-	LastSeen time.Time
+	LastSeen *time.Time
 	// User agent provided when accessing the topic last time
 	UserAgent string
 
@@ -271,7 +279,7 @@ type User struct {
 
 	// Unique indexed tags (email, phone) for finding this user. Stored on the
 	// 'users' as well as indexed in 'tagunique'
-	Tags []string
+	Tags StringSlice
 
 	// Info on known devices, used for push notifications
 	Devices map[string]*DeviceDef
@@ -403,6 +411,15 @@ func (m *AccessMode) UnmarshalJSON(b []byte) error {
 	return m.UnmarshalText(b[1 : len(b)-1])
 }
 
+// Scan is an implementation of sql.Scanner interface. It expects the
+// value to be string
+func (m *AccessMode) Scan(val interface{}) error {
+	if bb, ok := val.([]byte); ok {
+		return m.UnmarshalText(bb)
+	}
+	return errors.New("scan failed: data is not a byte slice")
+}
+
 // BetterEqual checks if grant mode allows all permissions requested in want mode.
 func (grant AccessMode) BetterEqual(want AccessMode) bool {
 	return grant&want == want
@@ -489,6 +506,7 @@ func (m AccessMode) IsInvalid() bool {
 	return m == ModeInvalid
 }
 
+/*
 // TopicAccess is a relationship between users & topics, stored in database as Subscription.
 type TopicAccess struct {
 	User  string
@@ -496,11 +514,18 @@ type TopicAccess struct {
 	Want  AccessMode
 	Given AccessMode
 }
+*/
 
 // DefaultAccess is a per-topic default access modes
 type DefaultAccess struct {
 	Auth AccessMode
 	Anon AccessMode
+}
+
+// Scan is an implementation of Scanner interface so the value can be read from SQL DBs
+// It assumes the value is serialized and stored as JSON
+func (da *DefaultAccess) Scan(val interface{}) error {
+	return json.Unmarshal(val.([]byte), da)
 }
 
 // Subscription to a topic
@@ -591,8 +616,10 @@ func (s *Subscription) GetUserAgent() string {
 }
 
 // SetLastSeenAndUA updates lastSeen time and userAgent.
-func (s *Subscription) SetLastSeenAndUA(when time.Time, ua string) {
-	s.lastSeen = when
+func (s *Subscription) SetLastSeenAndUA(when *time.Time, ua string) {
+	if when != nil {
+		s.lastSeen = *when
+	}
 	s.userAgent = ua
 }
 
@@ -641,7 +668,7 @@ type Topic struct {
 	Public interface{}
 
 	// Indexed tags for finding this topic.
-	Tags []string
+	Tags StringSlice
 
 	// Deserialized ephemeral params
 	owner   Uid                  // first assigned owner

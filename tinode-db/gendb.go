@@ -276,13 +276,13 @@ func getCreatedTime(delta string) time.Time {
 }
 
 type photoStruct struct {
-	Type string `gorethink:"type"`
-	Data []byte `gorethink:"data"`
+	Type string `json:"type" db:"type"`
+	Data []byte `json:"data" db:"data"`
 }
 
 type vcard struct {
-	Fn    string       `gorethink:"fn"`
-	Photo *photoStruct `gorethink:"photo,omitempty"`
+	Fn    string       `json:"fn" db:"fn"`
+	Photo *photoStruct `json:"photo,omitempty" db:"photo"`
 }
 
 // {"fn": "Alice Johnson", "photo": "alice-128.jpg"}

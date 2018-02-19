@@ -759,7 +759,7 @@ func pbSubSliceDeserialize(subs []*pbx.TopicSub) []types.Subscription {
 			out[i].ModeWant.UnmarshalText([]byte(acs.GetWant()))
 		}
 		if subs[i].GetLastSeenTime() > 0 {
-			out[i].SetLastSeenAndUA(*int64ToTime(subs[i].GetLastSeenTime()),
+			out[i].SetLastSeenAndUA(int64ToTime(subs[i].GetLastSeenTime()),
 				subs[i].GetLastSeenUserAgent())
 		}
 	}

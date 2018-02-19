@@ -14,42 +14,15 @@ CREATE TABLE kvmeta(
 
 INSERT INTO kvmeta(`key`, `value`) VALUES("version", "100");
 
-/*
-type User struct {
-	ObjHeader
-	// Currently unused: Unconfirmed, Active, etc.
-	State int
-
-	// Default access to user for P2P topics (used as default modeGiven)
-	Access DefaultAccess
-
-	// Values for 'me' topic:
-
-	// Last time when the user joined 'me' topic, by User Agent
-	LastSeen time.Time
-	// User agent provided when accessing the topic last time
-	UserAgent string
-
-	Public interface{}
-
-	// Unique indexed tags (email, phone) for finding this user. Stored on the
-	// 'users' as well as indexed in 'tagunique'
-	Tags []string
-
-	// Info on known devices, used for push notifications
-	Devices map[string]*DeviceDef
-}
-*/
-
 CREATE TABLE users(
 	id 			BIGINT NOT NULL,
-	createdAt 	DATETIME NOT NULL,
-	updatedAt 	DATETIME NOT NULL,
-	deletedAt 	DATETIME,
-	state 		INT,
+	createdat 	DATETIME NOT NULL,
+	updatedat 	DATETIME NOT NULL,
+	deletedat 	DATETIME,
+	state 		INT DEFAULT 0,
 	access 		JSON,
-	lastSeen 	DATETIME,
-	userAgent 	VARCHAR(255),
+	lastseen 	DATETIME,
+	useragent 	VARCHAR(255) DEFAULT '',
 	public 		JSON,
 	tags		JSON, -- Denormalized array of tags
 	
@@ -97,14 +70,14 @@ CREATE TABLE basicauth(
 # Topics
 CREATE TABLE topics(
 	id 			INT NOT NULL AUTO_INCREMENT,
-	createdAt 	DATETIME NOT NULL,
-	updatedAt 	DATETIME NOT NULL,
-	deletedAt 	DATETIME,
+	createdat 	DATETIME NOT NULL,
+	updatedat 	DATETIME NOT NULL,
+	deletedat 	DATETIME,
 	name 		CHAR(25) NOT NULL,
-	useBt 		INT,
+	usebt 		INT DEFAULT 0,
 	access 		JSON,
 	seqid 		INT NOT NULL DEFAULT 0,
-	delid 		INT,
+	delid 		INT DEFAULT 0,
 	public 		JSON,
 	tags		JSON, -- Denormalized array of tags
 	
@@ -126,16 +99,16 @@ CREATE TABLE topictags(
 # Subscriptions
 CREATE TABLE subscriptions(
 	id 			INT NOT NULL AUTO_INCREMENT,
-	createdAt 	DATETIME NOT NULL,
-	updatedAt 	DATETIME NOT NULL,
-	deletedAt 	DATETIME,
+	createdat 	DATETIME NOT NULL,
+	updatedat 	DATETIME NOT NULL,
+	deletedat 	DATETIME,
 	userid 		BIGINT NOT NULL,
 	topic 		CHAR(25) NOT NULL,
-	delId      INT,
-	recvSeqId  INT,
-	readSeqId  INT,
-	modeWant	CHAR(8),
-	modeGiven  	CHAR(8),
+	delid      INT DEFAULT 0,
+	recvseqid  INT DEFAULT 0,
+	readseqid  INT DEFAULT 0,
+	modewant	CHAR(8),
+	modegiven  	CHAR(8),
 	private 	JSON,
 	
 	PRIMARY KEY(id)	,
@@ -147,10 +120,10 @@ CREATE TABLE subscriptions(
 # Messages
 CREATE TABLE messages(
 	id 			INT NOT NULL AUTO_INCREMENT,
-	createdAt 	DATETIME NOT NULL,
-	updatedAt 	DATETIME NOT NULL,
-	deletedAt 	DATETIME,
-	delid 		INT,
+	createdat 	DATETIME NOT NULL,
+	updatedat 	DATETIME NOT NULL,
+	deletedat 	DATETIME,
+	delid 		INT DEFAULT 0,
 	seqid 		INT NOT NULL,
 	topic 		CHAR(25) NOT NULL,
 	`from` 		BIGINT NOT NULL,
@@ -167,9 +140,9 @@ CREATE TABLE messages(
 CREATE TABLE softdel(
 	id 			INT NOT NULL AUTO_INCREMENT,
 	topic 		VARCHAR(32) NOT NULL,
-	seqId 		INT NOT NULL,
-	deletedFor 	BIGINT NOT NULL,
-	delId 		INT NOT NULL,
+	seqid 		INT NOT NULL,
+	deletedfor 	BIGINT NOT NULL,
+	delid 		INT NOT NULL,
 	
 	PRIMARY KEY(id),
 	FOREIGN KEY(topic) REFERENCES topics(name),
