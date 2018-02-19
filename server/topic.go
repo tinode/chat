@@ -1494,6 +1494,7 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 				sendPubPriv = !deleted && sub.UpdatedAt.After(ifModified)
 			}
 
+			log.Println("sub.User", sub.User)
 			uid := types.ParseUid(sub.User)
 			isReader := sub.ModeGiven.IsReader() && sub.ModeWant.IsReader()
 			if t.cat == types.TopicCatMe {
@@ -1572,6 +1573,7 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 					mts.Public = sub.GetPublic()
 					// Reporting private only if it's user's own subscription or
 					// a synthetic 'private' in 'find' topic where it's a list of tags matched on.
+					log.Println("uid == sess.uid", uid, sess.uid)
 					if uid == sess.uid || t.cat == types.TopicCatFnd {
 						mts.Private = sub.Private
 					}

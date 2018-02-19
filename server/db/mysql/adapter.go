@@ -428,10 +428,12 @@ func (a *adapter) TopicCreateP2P(initiator, invited *t.Subscription) error {
 
 func (a *adapter) TopicGet(topic string) (*t.Topic, error) {
 	// Fetch topic by name
-	row := a.db.QueryRow("SELECT * FROM topics WHERE name=?", topic)
-
 	var tt = new(t.Topic)
-	if err := row.Scan(tt); err != nil {
+	err := a.db.Get(tt,
+		"SELECT createdat,updatedat,deletedat,name AS id,access,seqid,delid,public,tags FROM topics WHERE name=?",
+		topic)
+
+	if err != nil {
 		return nil, err
 	}
 
@@ -442,16 +444,15 @@ func (a *adapter) TopicGet(topic string) (*t.Topic, error) {
 // Reads and denormalizes Public value.
 func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool) ([]t.Subscription, error) {
 	// Fetch user's subscriptions
-	// Subscription have Topic.UpdatedAt denormalized into Subscription.UpdatedAt
-	q := "SELECT * FROM subscriptions WHERE userid=?"
-
+	q := `SELECT createdat,updatedat,deletedat,topic,delid,recvseqid,
+		readseqid,modewant,modegiven,private FROM subscriptions WHERE userid=?`
 	if !keepDeleted {
 		// Filter out rows with defined DeletedAt
 		q += " AND deletedAt IS NULL"
 	}
 	q += " LIMIT ?"
 
-	rows, err := a.db.Query(q, uid, maxResults)
+	rows, err := a.db.Queryx(q, store.DecodeUid(uid), maxResults)
 	if err != nil {
 		return nil, err
 	}
@@ -462,7 +463,12 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool) ([]t.Subscription, 
 	join := make(map[string]t.Subscription) // Keeping these to make a join with table for .private and .access
 	topq := make([]interface{}, 0, 16)
 	usrq := make([]interface{}, 0, 16)
-	for err = rows.Scan(&sub); err == nil; {
+	for rows.Next() {
+		if err = rows.StructScan(&sub); err != nil {
+			break
+		}
+
+		sub.User = uid.String()
 		tcat := t.GetTopicCat(sub.Topic)
 
 		// 'me' or 'fnd' subscription, skip
@@ -473,9 +479,9 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool) ([]t.Subscription, 
 		} else if tcat == t.TopicCatP2P {
 			uid1, uid2, _ := t.ParseP2P(sub.Topic)
 			if uid1 == uid {
-				usrq = append(usrq, uid2.String())
+				usrq = append(usrq, store.DecodeUid(uid2))
 			} else {
-				usrq = append(usrq, uid1.String())
+				usrq = append(usrq, store.DecodeUid(uid1))
 			}
 			topq = append(topq, sub.Topic)
 
@@ -483,11 +489,17 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool) ([]t.Subscription, 
 		} else {
 			topq = append(topq, sub.Topic)
 		}
+		sub.Private = fromJSON(sub.Private)
 		join[sub.Topic] = sub
 	}
 	rows.Close()
 
-	//log.Printf("RethinkDbAdapter.TopicsForUser topq, usrq: %+v, %+v", topq, usrq)
+	if err != nil {
+		return nil, err
+	}
+
+	//log.Printf("TopicsForUser topq, usrq: %+v, %+v", topq, usrq)
+
 	var subs []t.Subscription
 	if len(topq) > 0 || len(usrq) > 0 {
 		subs = make([]t.Subscription, 0, len(join))
@@ -495,20 +507,27 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool) ([]t.Subscription, 
 
 	if len(topq) > 0 {
 		// Fetch grp & p2p topics
-		rows, err = a.db.Query("SELECT * FROM topics WHERE name IN(?)", topq...)
+		q, _, _ := sqlx.In(
+			"SELECT createdat,updatedat,deletedat,name AS id,access,seqid,delid,public,tags "+
+				"FROM topics WHERE name IN (?)", topq)
+		rows, err = a.db.Queryx(q, topq...)
 		if err != nil {
 			return nil, err
 		}
 
 		var top t.Topic
-		for err = rows.Scan(&top); err == nil; {
+		for rows.Next() {
+			if err = rows.StructScan(&top); err != nil {
+				break
+			}
+
 			sub = join[top.Id]
 			sub.ObjHeader.MergeTimes(&top.ObjHeader)
 			sub.SetSeqId(top.SeqId)
 			// sub.SetDelId(top.DelId)
 			if t.GetTopicCat(sub.Topic) == t.TopicCatGrp {
 				// all done with a grp topic
-				sub.SetPublic(top.Public)
+				sub.SetPublic(fromJSON(top.Public))
 				subs = append(subs, sub)
 			} else {
 				// put back the updated value of a p2p subsription, will process further below
@@ -516,23 +535,28 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool) ([]t.Subscription, 
 			}
 		}
 		rows.Close()
-		//log.Printf("RethinkDbAdapter.TopicsForUser 1: %#+v", subs)
 	}
 
 	// Fetch p2p users and join to p2p tables
-	if len(usrq) > 0 {
-		rows, err = a.db.Query("SELECT * FROM users WHERE id IN (?)", usrq...)
+	if err == nil && len(usrq) > 0 {
+		q, _, _ := sqlx.In("SELECT * FROM users WHERE id IN (?)", usrq)
+		rows, err = a.db.Queryx(q, usrq...)
 		if err != nil {
+			log.Println("TopicsForUser 2.1", err)
 			return nil, err
 		}
 
 		var usr t.User
-		for err = rows.Scan(&usr); err == nil; {
-			uid2 := t.ParseUid(usr.Id)
+		for rows.Next() {
+			if err = rows.StructScan(&usr); err != nil {
+				break
+			}
+			unum, _ := strconv.ParseInt(usr.Id, 10, 64)
+			uid2 := store.EncodeUid(unum)
 			topic := uid.P2PName(uid2)
 			if sub, ok := join[topic]; ok {
 				sub.ObjHeader.MergeTimes(&usr.ObjHeader)
-				sub.SetPublic(usr.Public)
+				sub.SetPublic(fromJSON(usr.Public))
 				sub.SetWith(uid2.UserId())
 				sub.SetDefaultAccess(usr.Access.Auth, usr.Access.Anon)
 				sub.SetLastSeenAndUA(usr.LastSeen, usr.UserAgent)
@@ -540,11 +564,8 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool) ([]t.Subscription, 
 			}
 		}
 		rows.Close()
-
-		//log.Printf("RethinkDbAdapter.TopicsForUser 2: %#+v", subs)
 	}
-
-	return subs, nil
+	return subs, err
 }
 
 // UsersForTopic loads users subscribed to the given topic
@@ -578,13 +599,18 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool) ([]t.Subscriptio
 		subs = make([]t.Subscription, 0, len(usrq))
 
 		// Fetch users by a list of subscriptions
-		rows, err = a.db.Query("SELECT * FROM users WHERE id IN (?)", usrq...)
+		q, _, _ := sqlx.In("SELECT * FROM users WHERE id IN (?)", usrq)
+		rows, err = a.db.Query(q, usrq)
 		if err != nil {
 			return nil, err
 		}
 
 		var usr t.User
-		for rows.Next(); err == nil; err = rows.Scan(&usr) {
+		for rows.Next() {
+			if err = rows.Scan(&usr); err != nil {
+				break
+			}
+
 			if sub, ok := join[usr.Id]; ok {
 				sub.ObjHeader.MergeTimes(&usr.ObjHeader)
 				sub.SetPublic(usr.Public)
@@ -593,10 +619,9 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool) ([]t.Subscriptio
 		}
 		rows.Close()
 
-		//log.Printf("RethinkDbAdapter.UsersForTopic users: %+v", subs)
 	}
 
-	return subs, nil
+	return subs, err
 }
 
 func (a *adapter) TopicShare(shares []*t.Subscription) (int, error) {
@@ -680,8 +705,7 @@ func (a *adapter) SubsForUser(forUser t.Uid, keepDeleted bool) ([]t.Subscription
 	var subs []t.Subscription
 	var ss t.Subscription
 	for rows.Next() {
-		err = rows.StructScan(&ss)
-		if err != nil {
+		if err = rows.StructScan(&ss); err != nil {
 			break
 		}
 		ss.User = forUser.String()
@@ -694,7 +718,7 @@ func (a *adapter) SubsForUser(forUser t.Uid, keepDeleted bool) ([]t.Subscription
 
 // SubsForTopic fetches all subsciptions for a topic.
 func (a *adapter) SubsForTopic(topic string, keepDeleted bool) ([]t.Subscription, error) {
-	log.Println("Loading subscriptions for topic ", topic)
+	// log.Println("Loading subscriptions for topic ", topic)
 
 	// must load User.Public for p2p topics
 	var p2p []t.User
@@ -715,7 +739,6 @@ func (a *adapter) SubsForTopic(topic string, keepDeleted bool) ([]t.Subscription
 		q += " AND deletedAt IS NULL"
 	}
 	q += " LIMIT ?"
-	log.Println("Loading subscription q=", q)
 
 	rows, err := a.db.Queryx(q, topic, maxSubscribers)
 	if err != nil {
@@ -725,8 +748,7 @@ func (a *adapter) SubsForTopic(topic string, keepDeleted bool) ([]t.Subscription
 	var subs []t.Subscription
 	var ss t.Subscription
 	for rows.Next() {
-		err = rows.StructScan(&ss)
-		if err != nil {
+		if err = rows.StructScan(&ss); err != nil {
 			break
 		}
 
@@ -746,7 +768,7 @@ func (a *adapter) SubsForTopic(topic string, keepDeleted bool) ([]t.Subscription
 			}
 		}
 		subs = append(subs, ss)
-		log.Printf("SubsForTopic: loaded sub %#+v", ss)
+		// log.Printf("SubsForTopic: loaded sub %#+v", ss)
 	}
 	rows.Close()
 
@@ -1212,7 +1234,7 @@ func (a *adapter) DeviceUpsert(uid t.Uid, def *t.DeviceDef) error {
 
 func (a *adapter) DeviceGetAll(uids ...t.Uid) (map[t.Uid][]t.DeviceDef, int, error) {
 
-	rows, err := a.db.Query("SELECT userid, deviceID FROM devices WHERE userid=?", uids)
+	rows, err := a.db.Query("SELECT userid, deviceID FROM devices WHERE userid IN (?)", uids)
 	if err != nil {
 		return nil, 0, err
 	}

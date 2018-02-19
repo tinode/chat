@@ -110,6 +110,13 @@ func (uid Uid) String() string {
 	return string(buf)
 }
 
+/*
+// Scan implements sql.Scanner interface
+func (uid *Uid) Scan(i interface{}) error {
+	return nil
+}
+*/
+
 // ParseUid parses string NOT prefixed with anything
 func ParseUid(s string) Uid {
 	var uid Uid
