@@ -14,6 +14,7 @@ type Adapter interface {
 	Close() error
 	IsOpen() bool
 	CheckDbVersion() error
+	GetName() string
 
 	CreateDb(reset bool) error
 

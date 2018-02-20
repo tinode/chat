@@ -758,6 +758,12 @@ type SoftDelete struct {
 	DelId int
 }
 
+type MessageHeaders map[string]string
+
+func (mh *MessageHeaders) Scan(val interface{}) error {
+	return json.Unmarshal(val.([]byte), mh)
+}
+
 // Message is a stored {data} message
 type Message struct {
 	ObjHeader
@@ -769,7 +775,7 @@ type Message struct {
 	Topic      string
 	// UID as string of the user who sent the message, could be empty
 	From    string
-	Head    map[string]string `json:"Head,omitempty"`
+	Head    MessageHeaders `json:"Head,omitempty"`
 	Content interface{}
 }
 

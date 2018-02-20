@@ -32,6 +32,8 @@ const (
 	defaultDatabase = "tinode"
 
 	dbVersion = 100
+
+	adapterName = "mysql"
 )
 
 type configType struct {
@@ -127,6 +129,11 @@ func (a *adapter) CheckDbVersion() error {
 	}
 
 	return nil
+}
+
+// GetName returns string that adapter uses to register itself with store.
+func (a *adapter) GetName() string {
+	return adapterName
 }
 
 // CreateDb initializes the storage.
@@ -552,8 +559,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool) ([]t.Subscription, 
 			if err = rows.StructScan(&usr); err != nil {
 				break
 			}
-			unum, _ := strconv.ParseInt(usr.Id, 10, 64)
-			uid2 := store.EncodeUid(unum)
+			uid2 := encodeString(usr.Id)
 			topic := uid.P2PName(uid2)
 			if sub, ok := join[topic]; ok {
 				sub.ObjHeader.MergeTimes(&usr.ObjHeader)
@@ -598,8 +604,7 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool) ([]t.Subscriptio
 			&public, &sub.Private); err != nil {
 			break
 		}
-		unum, _ := strconv.ParseInt(sub.User, 10, 64)
-		sub.User = store.EncodeUid(unum).String()
+		sub.User = encodeString(sub.User).String()
 		sub.Private = fromJSON(sub.Private)
 		sub.SetPublic(fromJSON(public))
 		subs = append(subs, sub)
@@ -736,8 +741,7 @@ func (a *adapter) SubsForTopic(topic string, keepDeleted bool) ([]t.Subscription
 			break
 		}
 
-		unum, _ := strconv.ParseInt(ss.User, 10, 64)
-		ss.User = store.EncodeUid(unum).String()
+		ss.User = sub.User(ss.User).String()
 		ss.Private = fromJSON(ss.Private)
 		if p2p != nil {
 			// Assigning values provided by the other user
@@ -1041,13 +1045,12 @@ func (a *adapter) MessageSave(msg *t.Message) error {
 		"INSERT INTO messages(createdAt,updatedAt,seqid,topic,`from`,head,content) VALUES(?,?,?,?,?,?,?)",
 		msg.CreatedAt, msg.UpdatedAt,
 		msg.SeqId, msg.Topic,
-		store.DecodeUid(t.ParseUid(msg.From)), toJSON(msg.Head), toJSON(msg.Content))
+		store.DecodeUid(t.ParseUid(msg.From)),
+		toJSON(msg.Head), toJSON(msg.Content))
 	return err
 }
 
 func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.BrowseOpt) ([]t.Message, error) {
-	//log.Println("Loading messages for topic ", topic, opts)
-
 	var limit = maxResults // TODO(gene): pass into adapter as a config param
 	var lower = 0
 	var upper = 1 << 31
@@ -1065,20 +1068,28 @@ func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.BrowseOpt) 
 		}
 	}
 
-	rows, err := a.db.Query("SELECT * FROM messages WHERE topic=? AND seqid BETWEEN ? AND ? "+
-		"AND delid IS NULL AND filter-soft-deleted-for-current-user "+
-		"ORDER BY seqid DESC LIMIT ?", topic, lower, upper, forUser, limit)
+	// FIXME(gene): filter out soft-deleted messages
+	rows, err := a.db.Queryx("SELECT * FROM messages WHERE topic=? AND seqid BETWEEN ? AND ? "+
+		"AND delid=0 ORDER BY seqid DESC LIMIT ?",
+		topic, lower, upper, limit)
 
 	if err != nil {
 		return nil, err
 	}
 
 	var msgs []t.Message
-	if err = rows.Scan(&msgs); err != nil {
-		return nil, err
+	var msg t.Message
+	for rows.Next() {
+		if err = rows.StructScan(&msg); err != nil {
+			break
+		}
+		msg.From = encodeString(msg.From).String()
+		msg.Content = fromJSON(msg.Content)
+		msgs = append(msgs, msg)
 	}
+	rows.Close()
 
-	return msgs, nil
+	return msgs, err
 }
 
 // Get ranges of deleted messages
@@ -1103,7 +1114,7 @@ func (a *adapter) MessageGetDeleted(topic string, forUser t.Uid, opts *t.BrowseO
 	// Fetch log of deletions
 	rows, err := a.db.Query("SELECT * FROM dellog WHERE topic=? AND delid BETWEEN ? and ? "+
 		"AND (deletedFor IS NULL OR deletedFor=?)"+
-		"ORDER BY delid LIMIT ?", topic, lower, upper, forUser, limit)
+		"ORDER BY delid LIMIT ?", topic, lower, upper, store.DecodeUid(forUser), limit)
 	if err != nil {
 		return nil, err
 	}
@@ -1217,39 +1228,48 @@ func (a *adapter) DeviceUpsert(uid t.Uid, def *t.DeviceDef) error {
 }
 
 func (a *adapter) DeviceGetAll(uids ...t.Uid) (map[t.Uid][]t.DeviceDef, int, error) {
+	var unums []interface{}
+	for _, uid := range uids {
+		unums = append(unums, store.DecodeUid(uid))
+	}
 
-	rows, err := a.db.Query("SELECT userid, deviceID FROM devices WHERE userid IN (?)", uids)
+	q, _, _ := sqlx.In("SELECT userid,deviceid,platform,lastseen,lang FROM devices WHERE userid IN (?)", unums)
+	rows, err := a.db.Queryx(q, unums...)
 	if err != nil {
 		return nil, 0, err
 	}
 
-	var row struct {
-		Id      string
-		Devices map[string]*t.DeviceDef
+	var device struct {
+		Userid   int64
+		Deviceid string
+		Platform string
+		Lastseen time.Time
+		Lang     string
 	}
 
 	result := make(map[t.Uid][]t.DeviceDef)
 	count := 0
-	var uid t.Uid
-	for err = rows.Scan(&row); err == nil; {
-		if row.Devices != nil && len(row.Devices) > 0 {
-			if err := uid.UnmarshalText([]byte(row.Id)); err != nil {
-				continue
-			}
-
-			result[uid] = make([]t.DeviceDef, len(row.Devices))
-			i := 0
-			for _, def := range row.Devices {
-				if def != nil {
-					result[uid][i] = *def
-					i++
-					count++
-				}
-			}
+	for rows.Next() {
+		if err = rows.StructScan(&device); err != nil {
+			break
 		}
+		uid := store.EncodeUid(device.Userid)
+		udev := result[uid]
+		if udev == nil {
+			udev = []t.DeviceDef{}
+		}
+		udev = append(udev, t.DeviceDef{
+			DeviceId: device.Deviceid,
+			Platform: device.Platform,
+			LastSeen: device.Lastseen,
+			Lang:     device.Lang,
+		})
+		result[uid] = udev
+		count++
 	}
+	rows.Close()
 
-	return result, count, rows.Err()
+	return result, count, err
 }
 
 func (a *adapter) DeviceDelete(uid t.Uid, deviceID string) error {
@@ -1283,6 +1303,11 @@ func fromJSON(src interface{}) interface{} {
 	return nil
 }
 
+func encodeString(str string) t.Uid {
+	unum, _ := strconv.ParseInt(str, 10, 64)
+	return store.EncodeUid(unum)
+}
+
 func init() {
-	store.Register("mysql", &adapter{})
+	store.Register(adapterName, &adapter{})
 }

@@ -45,6 +45,9 @@ CREATE TABLE devices(
 	userid 		BIGINT NOT NULL,
 	hash 		CHAR(16) NOT NULL,
 	deviceid 	TEXT NOT NULL,
+	platform	VARCHAR(32),
+	lastseen 	DATETIME NOT NULL,
+	lang 		VARCHAR(8),
 	
 	PRIMARY KEY(id),
 	FOREIGN KEY(userid) REFERENCES users(id),
@@ -145,12 +148,13 @@ CREATE TABLE softdel(
 	
 	PRIMARY KEY(id),
 	FOREIGN KEY(topic) REFERENCES topics(name),
-	FOREIGN KEY(deletedFor) REFERENCES users(id),
-	UNIQUE INDEX(topic, deletedFor, delId)
+	FOREIGN KEY(deletedfor) REFERENCES users(id),
+	UNIQUE INDEX(topic, deletedfor, seqid)
 );
 
 # Deletion log
 CREATE TABLE dellog(
 	id INT NOT NULL,
+	topic VARCHAR(25) NOT NULL,
 	PRIMARY KEY(id)
 );

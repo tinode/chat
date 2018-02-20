@@ -3,7 +3,6 @@ package store
 import (
 	"encoding/json"
 	"errors"
-	"log"
 	"sort"
 	"time"
 
@@ -19,20 +18,20 @@ var uGen types.UidGenerator
 
 type configType struct {
 	// Name of the adapter to use.
-	// Currently unused
-	AdapterName string `json:"adapter"`
+	UseAdapter string `json:"use_adapter"`
 	// The following two values ate used to initialize types.UidGenerator
 	// Snowflake workerId, beteween 0 and 1023
 	WorkerID int `json:"worker_id"`
 	// 16-byte key for XTEA
-	UidKey        []byte          `json:"uid_key"`
-	AdapterConfig json.RawMessage `json:"adapter_config"`
+	UidKey   []byte                     `json:"uid_key"`
+	Adapters map[string]json.RawMessage `json:"adapters"`
 }
 
 func openAdapter(jsonconf string) error {
 	if adaptr == nil {
 		return errors.New("store: attept to Open an adapter before registering")
 	}
+
 	if adaptr.IsOpen() {
 		return errors.New("store: connection is already opened")
 	}
@@ -42,15 +41,26 @@ func openAdapter(jsonconf string) error {
 		return errors.New("store: failed to parse config: " + err.Error() + "(" + jsonconf + ")")
 	}
 
+	if adaptr.GetName() != config.UseAdapter {
+		return errors.New("store: adapter " + adaptr.GetName() +
+			" initialized while expecting " + config.UseAdapter)
+	}
+
 	// Initialise snowflake
 	if err := uGen.Init(uint(config.WorkerID), config.UidKey); err != nil {
 		return errors.New("store: failed to init snowflake: " + err.Error())
 	}
 
-	return adaptr.Open(string(config.AdapterConfig))
+	var adapter_config string
+	if config.Adapters != nil {
+		adapter_config = string(config.Adapters[config.UseAdapter])
+	}
+
+	return adaptr.Open(adapter_config)
 }
 
 // Open initializes the persistence system. Adapter holds a connection pool for a database instance.
+// 	 name - name of the adapter rquested in the config file
 //   jsonconf - configuration string
 func Open(jsonconf string) error {
 	if err := openAdapter(jsonconf); err != nil {
@@ -102,8 +112,6 @@ func Register(name string, adapter adapter.Adapter) {
 	if adaptr != nil {
 		panic("store: Adapter already registered")
 	}
-
-	log.Println("store: Using adapter", name)
 	adaptr = adapter
 }
 

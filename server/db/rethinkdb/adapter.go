@@ -28,6 +28,8 @@ const (
 	defaultDatabase = "tinode"
 
 	dbVersion = 100
+
+	adapterName = "rethinkdb"
 )
 
 type configType struct {
@@ -148,6 +150,11 @@ func (a *adapter) CheckDbVersion() error {
 	}
 
 	return nil
+}
+
+// GetName returns string that adapter uses to register itself with store.
+func (a *adapter) GetName() string {
+	return adapterName
 }
 
 // CreateDb initializes the storage. If reset is true, the database is first deleted losing all the data.
@@ -1376,5 +1383,5 @@ func (a *adapter) DeviceDelete(uid t.Uid, deviceID string) error {
 }
 
 func init() {
-	store.Register("rethinkdb", &adapter{})
+	store.Register(adapterName, &adapter{})
 }
