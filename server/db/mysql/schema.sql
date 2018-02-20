@@ -1,7 +1,6 @@
 DROP DATABASE IF EXISTS tinode;
 
-CREATE DATABASE tinode 
-	CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE DATABASE tinode CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 USE tinode;
 
@@ -88,7 +87,7 @@ CREATE TABLE topics(
 # Indexed topic tags.
 CREATE TABLE topictags(
 	id 		INT NOT NULL AUTO_INCREMENT,
-	topic 	CHAR(24) NOT NULL,
+	topic 	CHAR(25) NOT NULL,
 	tag 	VARCHAR(255) NOT NULL,
 	
 	PRIMARY KEY(id),
@@ -139,7 +138,7 @@ CREATE TABLE messages(
 # Create soft deletion table: topics name X userID x delId
 CREATE TABLE softdel(
 	id 			INT NOT NULL AUTO_INCREMENT,
-	topic 		VARCHAR(32) NOT NULL,
+	topic 		VARCHAR(25) NOT NULL,
 	seqid 		INT NOT NULL,
 	deletedfor 	BIGINT NOT NULL,
 	delid 		INT NOT NULL,

@@ -437,6 +437,8 @@ func (a *adapter) TopicGet(topic string) (*t.Topic, error) {
 		return nil, err
 	}
 
+	tt.Public = fromJSON(tt.Public)
+
 	return tt, nil
 }
 
@@ -542,7 +544,6 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool) ([]t.Subscription, 
 		q, _, _ := sqlx.In("SELECT * FROM users WHERE id IN (?)", usrq)
 		rows, err = a.db.Queryx(q, usrq...)
 		if err != nil {
-			log.Println("TopicsForUser 2.1", err)
 			return nil, err
 		}
 
@@ -571,14 +572,16 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool) ([]t.Subscription, 
 // UsersForTopic loads users subscribed to the given topic
 func (a *adapter) UsersForTopic(topic string, keepDeleted bool) ([]t.Subscription, error) {
 	// Fetch all subscribed users. The number of users is not large
-	q := "SELECT * FROM subscriptions WHERE topic=?"
+	q := `SELECT s.createdat,s.updatedat,s.deletedat,s.userid,s.topic,s.delid,s.recvseqid,
+		s.readseqid,s.modewant,s.modegiven,u.public,s.private
+		FROM subscriptions AS s JOIN users AS u ON s.userid=u.id 
+		WHERE s.topic=?`
 	if !keepDeleted {
 		// Filter out rows with DeletedAt being not null
-		q += " AND deletedAt IS NULL"
+		q += " AND s.deletedAt IS NULL"
 	}
 	q += " LIMIT ?"
-	//log.Printf("RethinkDbAdapter.UsersForTopic q: %+v", q)
-	rows, err := a.db.Query(q, topic, maxSubscribers)
+	rows, err := a.db.Queryx(q, topic, maxSubscribers)
 	if err != nil {
 		return nil, err
 	}
@@ -586,41 +589,24 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool) ([]t.Subscriptio
 	// Fetch subscriptions
 	var sub t.Subscription
 	var subs []t.Subscription
-	join := make(map[string]t.Subscription)
-	usrq := make([]interface{}, 0, 16)
-	for err = rows.Scan(&sub); err == nil; {
-		join[sub.User] = sub
-		usrq = append(usrq, sub.User)
+	var public interface{}
+	for rows.Next() {
+		if err = rows.Scan(
+			&sub.CreatedAt, &sub.UpdatedAt, &sub.DeletedAt,
+			&sub.User, &sub.Topic, &sub.DelId, &sub.RecvSeqId,
+			&sub.ReadSeqId, &sub.ModeWant, &sub.ModeGiven,
+			&public, &sub.Private); err != nil {
+			break
+		}
+		unum, _ := strconv.ParseInt(sub.User, 10, 64)
+		sub.User = store.EncodeUid(unum).String()
+		sub.Private = fromJSON(sub.Private)
+		sub.SetPublic(fromJSON(public))
+		subs = append(subs, sub)
 	}
 	rows.Close()
 
-	//log.Printf("RethinkDbAdapter.UsersForTopic usrq: %+v, usrq)
-	if len(usrq) > 0 {
-		subs = make([]t.Subscription, 0, len(usrq))
-
-		// Fetch users by a list of subscriptions
-		q, _, _ := sqlx.In("SELECT * FROM users WHERE id IN (?)", usrq)
-		rows, err = a.db.Query(q, usrq)
-		if err != nil {
-			return nil, err
-		}
-
-		var usr t.User
-		for rows.Next() {
-			if err = rows.Scan(&usr); err != nil {
-				break
-			}
-
-			if sub, ok := join[usr.Id]; ok {
-				sub.ObjHeader.MergeTimes(&usr.ObjHeader)
-				sub.SetPublic(usr.Public)
-				subs = append(subs, sub)
-			}
-		}
-		rows.Close()
-
-	}
-
+	log.Println("UsersForTopic 3", err, len(subs))
 	return subs, err
 }
 
@@ -651,7 +637,7 @@ func (a *adapter) TopicDelete(topic string) error {
 }
 
 func (a *adapter) TopicUpdateOnMessage(topic string, msg *t.Message) error {
-	_, err := a.db.Exec("UPDATE topics SET seqID=? WHERE name=?", msg.SeqId, topic)
+	_, err := a.db.Exec("UPDATE topics SET seqid=? WHERE name=?", msg.SeqId, topic)
 
 	return err
 }
@@ -663,11 +649,9 @@ func (a *adapter) TopicUpdate(topic string, update map[string]interface{}) error
 
 // Get a subscription of a user to a topic
 func (a *adapter) SubscriptionGet(topic string, user t.Uid) (*t.Subscription, error) {
-
-	row := a.db.QueryRow("SELECT * FROM subscriptions WHERE id=?", topic+":"+user.String())
-
 	var sub t.Subscription
-	if err := row.Scan(&sub); err != nil {
+	err := a.db.Get(&sub, "SELECT * FROM subscriptions WHERE topic=? AND userid=", topic, store.DecodeUid(user))
+	if err != nil {
 		return nil, err
 	}
 

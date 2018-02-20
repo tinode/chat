@@ -660,22 +660,30 @@ func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 
 	if getWhat&constMsgMetaSub != 0 {
 		// Send get.sub response as a separate {meta} packet
-		t.replyGetSub(sreg.sess, sreg.pkt.Id, sreg.pkt.Get.Sub)
+		if err := t.replyGetSub(sreg.sess, sreg.pkt.Id, sreg.pkt.Get.Sub); err != nil {
+			log.Printf("topic[%s] handleSubscription Get.Sub failed: %v", t.name, err)
+		}
 	}
 
 	if getWhat&constMsgMetaTags != 0 {
 		// Send get.tags response as a separate {meta} packet
-		t.replyGetTags(sreg.sess, sreg.pkt.Id)
+		if err := t.replyGetTags(sreg.sess, sreg.pkt.Id); err != nil {
+			log.Printf("topic[%s] handleSubscription Get.Tags failed: %v", t.name, err)
+		}
 	}
 
 	if getWhat&constMsgMetaData != 0 {
 		// Send get.data response as {data} packets
-		t.replyGetData(sreg.sess, sreg.pkt.Id, sreg.pkt.Get.Data)
+		if err := t.replyGetData(sreg.sess, sreg.pkt.Id, sreg.pkt.Get.Data); err != nil {
+			log.Printf("topic[%s] handleSubscription Get.Data failed: %v", t.name, err)
+		}
 	}
 
 	if getWhat&constMsgMetaDel != 0 {
 		// Send get.del response as a separate {meta} packet
-		t.replyGetDel(sreg.sess, sreg.pkt.Id, sreg.pkt.Get.Del)
+		if err := t.replyGetDel(sreg.sess, sreg.pkt.Id, sreg.pkt.Get.Del); err != nil {
+			log.Printf("topic[%s] handleSubscription Get.Del failed: %v", t.name, err)
+		}
 	}
 	return nil
 }
@@ -732,7 +740,9 @@ func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin, sendDesc bool) error {
 		if sreg.created {
 			tmpName = sreg.pkt.Topic
 		}
-		t.replyGetDesc(sreg.sess, sreg.pkt.Id, tmpName, sreg.pkt.Get.Desc)
+		if err := t.replyGetDesc(sreg.sess, sreg.pkt.Id, tmpName, sreg.pkt.Get.Desc); err != nil {
+			log.Printf("topic[%s] subCommonReply Get.Desc failed: %v", t.name, err)
+		}
 	}
 
 	return nil
@@ -1154,7 +1164,7 @@ func (t *Topic) approveSub(h *Hub, sess *Session, target types.Uid, set *MsgClie
 
 // replyGetDesc is a response to a get.desc request on a topic, sent to just the session as a {meta} packet
 func (t *Topic) replyGetDesc(sess *Session, id, tempName string, opts *MsgGetOpts) error {
-	now := time.Now().UTC().Round(time.Millisecond)
+	now := types.TimeNow()
 
 	// Check if user requested modified data
 	ifUpdated := (opts == nil || opts.IfModifiedSince == nil || opts.IfModifiedSince.Before(t.updated))
@@ -1231,7 +1241,7 @@ func (t *Topic) replyGetDesc(sess *Session, id, tempName string, opts *MsgGetOpt
 // replySetDesc updates topic metadata, saves it to DB,
 // replies to the caller as {ctrl} message, generates {pres} update if necessary
 func (t *Topic) replySetDesc(sess *Session, set *MsgClientSet) error {
-	now := time.Now().UTC().Round(time.Millisecond)
+	now := types.TimeNow()
 
 	assignAccess := func(upd map[string]interface{}, mode *MsgDefaultAcsMode) error {
 		if auth, anon, err := parseTopicAccess(mode, types.ModeInvalid, types.ModeInvalid); err != nil {
@@ -1494,7 +1504,6 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 				sendPubPriv = !deleted && sub.UpdatedAt.After(ifModified)
 			}
 
-			log.Println("sub.User", sub.User)
 			uid := types.ParseUid(sub.User)
 			isReader := sub.ModeGiven.IsReader() && sub.ModeWant.IsReader()
 			if t.cat == types.TopicCatMe {
@@ -1573,7 +1582,6 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 					mts.Public = sub.GetPublic()
 					// Reporting private only if it's user's own subscription or
 					// a synthetic 'private' in 'find' topic where it's a list of tags matched on.
-					log.Println("uid == sess.uid", uid, sess.uid)
 					if uid == sess.uid || t.cat == types.TopicCatFnd {
 						mts.Private = sub.Private
 					}

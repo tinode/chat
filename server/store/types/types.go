@@ -266,6 +266,12 @@ func (ss *StringSlice) Scan(val interface{}) error {
 	return json.Unmarshal(val.([]byte), ss)
 }
 
+type GenericMap map[string]interface{}
+
+func (gc *GenericMap) Scan(val interface{}) error {
+	return json.Unmarshal(val.([]byte), gc)
+}
+
 // User is a representation of a DB-stored user record.
 type User struct {
 	ObjHeader
