@@ -306,34 +306,37 @@ func (a *adapter) UserGet(uid t.Uid) (*t.User, error) {
 func (a *adapter) UserGetAll(ids ...t.Uid) ([]t.User, error) {
 	uids := make([]interface{}, len(ids))
 	for i, id := range ids {
-		uids[i] = id.String()
+		uids[i] = store.DecodeUid(id)
 	}
 
 	users := []t.User{}
-	if rows, err := a.db.Query("SELECT * FROM users WHERE id IN (?)", uids); err == nil {
-		defer rows.Close()
-
-		var user t.User
-		for err = rows.Scan(&user); err == nil; {
-			users = append(users, user)
-		}
-
-		if err != nil {
-			return nil, err
-		}
-
-	} else {
+	q, _, _ := sqlx.In("SELECT * FROM users WHERE id IN (?)", uids)
+	rows, err := a.db.Queryx(q, uids...)
+	if err != nil {
 		return nil, err
 	}
 
-	return users, nil
+	var user t.User
+	for rows.Next() {
+		if err = rows.StructScan(&user); err != nil {
+			users = nil
+			break
+		}
+		user.SetUid(encodeString(user.Id))
+		user.Public = fromJSON(user.Public)
+
+		users = append(users, user)
+	}
+	rows.Close()
+
+	return users, err
 }
 
 func (a *adapter) UserDelete(uid t.Uid, soft bool) error {
 	var err error
 	if soft {
 		now := t.TimeNow()
-		_, err = a.db.Exec("UPDATE users set updatedAt=?, deletedAt=? WHERE id=?", now, now, uid)
+		_, err = a.db.Exec("UPDATE users SET updatedAt=?, deletedAt=? WHERE id=?", now, now, uid)
 	} else {
 		_, err = a.db.Exec("DELETE FROM users WHERE id=?", uid)
 	}
@@ -611,7 +614,6 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool) ([]t.Subscriptio
 	}
 	rows.Close()
 
-	log.Println("UsersForTopic 3", err, len(subs))
 	return subs, err
 }
 
@@ -715,6 +717,7 @@ func (a *adapter) SubsForTopic(topic string, keepDeleted bool) ([]t.Subscription
 	if t.GetTopicCat(topic) == t.TopicCatP2P {
 		uid1, uid2, _ := t.ParseP2P(topic)
 		if p2p, err = a.UserGetAll(uid1, uid2); err != nil {
+			log.Println("SubsForTopic", "UserGetAll", err)
 			return nil, err
 		} else if len(p2p) != 2 {
 			return nil, errors.New("failed to load two p2p users")
@@ -738,10 +741,11 @@ func (a *adapter) SubsForTopic(topic string, keepDeleted bool) ([]t.Subscription
 	var ss t.Subscription
 	for rows.Next() {
 		if err = rows.StructScan(&ss); err != nil {
+			log.Println("SubsForTopic", "StructScan", err)
 			break
 		}
 
-		ss.User = sub.User(ss.User).String()
+		ss.User = encodeString(ss.User).String()
 		ss.Private = fromJSON(ss.Private)
 		if p2p != nil {
 			// Assigning values provided by the other user
@@ -1112,19 +1116,48 @@ func (a *adapter) MessageGetDeleted(topic string, forUser t.Uid, opts *t.BrowseO
 	}
 
 	// Fetch log of deletions
-	rows, err := a.db.Query("SELECT * FROM dellog WHERE topic=? AND delid BETWEEN ? and ? "+
-		"AND (deletedFor IS NULL OR deletedFor=?)"+
-		"ORDER BY delid LIMIT ?", topic, lower, upper, store.DecodeUid(forUser), limit)
+	rows, err := a.db.Queryx("SELECT * FROM dellog WHERE topic=? AND delid BETWEEN ? and ?"+
+		" AND (deletedFor=0 OR deletedFor=?)"+
+		" ORDER BY delid LIMIT ?", topic, lower, upper, store.DecodeUid(forUser), limit)
 	if err != nil {
 		return nil, err
 	}
 
 	var dmsgs []t.DelMessage
-	if err = rows.Scan(&dmsgs); err != nil {
-		return nil, err
+	var deleted struct {
+		Topic      string
+		Deletedfor int64
+		Delid      int
+		Low        int
+		Hi         int
 	}
+	var dmsg t.DelMessage
+	for rows.Next() {
+		if err = rows.StructScan(&deleted); err != nil {
+			dmsgs = nil
+			break
+		}
+		if deleted.Delid != dmsg.DelId {
+			if dmsg.DelId > 0 {
+				dmsgs = append(dmsgs, dmsg)
+			}
+			dmsg.DelId = deleted.Delid
+			dmsg.Topic = deleted.Topic
+			if deleted.Deletedfor > 0 {
+				dmsg.DeletedFor = store.EncodeUid(deleted.Deletedfor).String()
+			}
+			if dmsg.SeqIdRanges == nil {
+				dmsg.SeqIdRanges = []t.Range{}
+			}
+		}
+		dmsg.SeqIdRanges = append(dmsg.SeqIdRanges, t.Range{deleted.Low, deleted.Hi})
+	}
+	if dmsg.DelId > 0 {
+		dmsgs = append(dmsgs, dmsg)
+	}
+	rows.Close()
 
-	return dmsgs, nil
+	return dmsgs, err
 }
 
 // MessageDeleteList deletes messages in the given topic with seqIds from the list

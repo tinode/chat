@@ -439,7 +439,7 @@ func (MessagesObjMapper) GetAll(topic string, forUser types.Uid, opt *types.Brow
 	return adaptr.MessageGetAll(topic, forUser, opt)
 }
 
-// GetDeleted returns the ranges of deleted messages and the largesr DelId reported in the list.
+// GetDeleted returns the ranges of deleted messages and the largest DelId reported in the list.
 func (MessagesObjMapper) GetDeleted(topic string, forUser types.Uid, opt *types.BrowseOpt) ([]types.Range, int, error) {
 	dmsgs, err := adaptr.MessageGetDeleted(topic, forUser, opt)
 	if err != nil {

@@ -149,12 +149,20 @@ CREATE TABLE softdel(
 	PRIMARY KEY(id),
 	FOREIGN KEY(topic) REFERENCES topics(name),
 	FOREIGN KEY(deletedfor) REFERENCES users(id),
-	UNIQUE INDEX(topic, deletedfor, seqid)
+	UNIQUE INDEX(topic,deletedfor,seqid),
+	INDEX(topic,delid,deletedfor)
 );
 
 # Deletion log
 CREATE TABLE dellog(
 	id INT NOT NULL,
-	topic VARCHAR(25) NOT NULL,
-	PRIMARY KEY(id)
+	topic 		VARCHAR(25) NOT NULL,
+	deletedfor 	BIGINT NOT NULL DEFAULT 0,
+	delid 		INT NOT NULL,
+	low			INT NOT NULL,
+	hi			INT NOT NULL DEFAULT 0,
+	
+	PRIMARY KEY(id),
+	UNIQUE INDEX(topic,delid),
+	INDEX(deletedfor)
 );
