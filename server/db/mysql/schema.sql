@@ -36,7 +36,7 @@ CREATE TABLE usertags(
 	
 	PRIMARY KEY(id),
 	FOREIGN KEY(userid) REFERENCES users(id),
-	INDEX(tag)
+	INDEX usertags_tag (tag)
 );
 
 # Indexed devices. Normalized into a separate table.
@@ -51,7 +51,7 @@ CREATE TABLE devices(
 	
 	PRIMARY KEY(id),
 	FOREIGN KEY(userid) REFERENCES users(id),
-	UNIQUE INDEX(hash)
+	UNIQUE INDEX devices_hash (hash)
 );
 
 # Authentication records for the basic authentication scheme.
@@ -65,7 +65,7 @@ CREATE TABLE basicauth(
 	
 	PRIMARY KEY(id),
 	FOREIGN KEY(userid) REFERENCES users(id),
-	UNIQUE INDEX(login)
+	UNIQUE INDEX basicauth_login (login)
 );
 
 
@@ -84,7 +84,7 @@ CREATE TABLE topics(
 	tags		JSON, -- Denormalized array of tags
 	
 	PRIMARY KEY(id),
-	UNIQUE INDEX(name)
+	UNIQUE INDEX topics_name (name)
 );
 
 # Indexed topic tags.
@@ -95,7 +95,7 @@ CREATE TABLE topictags(
 	
 	PRIMARY KEY(id),
 	FOREIGN KEY(topic) REFERENCES topics(name),
-	INDEX(tag)
+	INDEX topictags_tag (tag)
 );
 
 # Subscriptions
@@ -115,8 +115,8 @@ CREATE TABLE subscriptions(
 	
 	PRIMARY KEY(id)	,
 	FOREIGN KEY(userid) REFERENCES users(id),
-	UNIQUE INDEX(topic, userid),
-	INDEX(topic)
+	UNIQUE INDEX subscriptions_topic_userid (topic, userid),
+	INDEX subscriptions_topic (topic)
 );
 
 # Messages
@@ -135,7 +135,7 @@ CREATE TABLE messages(
 	PRIMARY KEY(id),
 	FOREIGN KEY(`from`) REFERENCES users(id),
 	FOREIGN KEY(topic) REFERENCES topics(name),
-	UNIQUE INDEX(topic, seqid)
+	UNIQUE INDEX messages_topic_seqid (topic, seqid)
 );
 
 # Create soft deletion table: topics name X userID x delId
@@ -149,13 +149,13 @@ CREATE TABLE softdel(
 	PRIMARY KEY(id),
 	FOREIGN KEY(topic) REFERENCES topics(name),
 	FOREIGN KEY(deletedfor) REFERENCES users(id),
-	UNIQUE INDEX(topic,deletedfor,seqid),
-	INDEX(topic,delid,deletedfor)
+	UNIQUE INDEX softdel_topic_deletedfor_seqid (topic,deletedfor,seqid),
+	INDEX softdel_topic_delid_deletedfor (topic,delid,deletedfor)
 );
 
 # Deletion log
 CREATE TABLE dellog(
-	id INT NOT NULL,
+	id INT NOT NULL AUTO_INCREMENT,
 	topic 		VARCHAR(25) NOT NULL,
 	deletedfor 	BIGINT NOT NULL DEFAULT 0,
 	delid 		INT NOT NULL,
@@ -163,6 +163,7 @@ CREATE TABLE dellog(
 	hi			INT NOT NULL DEFAULT 0,
 	
 	PRIMARY KEY(id),
-	UNIQUE INDEX(topic,delid),
-	INDEX(deletedfor)
+	FOREIGN KEY(topic) REFERENCES topics(name),
+	UNIQUE INDEX dellog_topic_delid (topic,delid),
+	INDEX dellog_deletedfor (deletedfor)
 );

@@ -126,10 +126,16 @@ func GetUidString() string {
 }
 
 func DecodeUid(uid types.Uid) int64 {
+	if uid.IsZero() {
+		return 0
+	}
 	return uGen.DecodeUid(uid)
 }
 
 func EncodeUid(id int64) types.Uid {
+	if id == 0 {
+		return types.ZeroUid
+	}
 	return uGen.EncodeInt64(id)
 }
 

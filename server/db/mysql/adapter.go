@@ -351,7 +351,9 @@ func (a *adapter) UserUpdateLastSeen(uid t.Uid, userAgent string, when time.Time
 
 // UserUpdate updates user object. Use UserTagsUpdate when updating Tags.
 func (a *adapter) UserUpdate(uid t.Uid, update map[string]interface{}) error {
-	_, err := a.db.Exec("UPDATE users SET var=? WHERE id=?", update, uid)
+	cols, args := updateByMap(update)
+	args = append(args, store.DecodeUid(uid))
+	_, err := a.db.Exec("UPDATE users SET "+strings.Join(cols, ",")+" WHERE id=?", args...)
 	return err
 }
 
@@ -650,7 +652,9 @@ func (a *adapter) TopicUpdateOnMessage(topic string, msg *t.Message) error {
 }
 
 func (a *adapter) TopicUpdate(topic string, update map[string]interface{}) error {
-	_, err := a.db.Exec("UPDATE topics SET ? WHERE name=?", update, topic)
+	cols, args := updateByMap(update)
+	args = append(args, topic)
+	_, err := a.db.Exec("UPDATE topics SET "+strings.Join(cols, ",")+" WHERE name=?", args...)
 	return err
 }
 
@@ -670,7 +674,8 @@ func (a *adapter) SubscriptionGet(topic string, user t.Uid) (*t.Subscription, er
 
 // Update time when the user was last attached to the topic
 func (a *adapter) SubsLastSeen(topic string, user t.Uid, lastSeen map[string]time.Time) error {
-	_, err := a.db.Exec("UPDATE subscriptions SET lastseen=? WHERE id=?", lastSeen, topic+":"+user.String())
+	_, err := a.db.Exec("UPDATE subscriptions SET lastseen=?,useragent=? WHERE topic=? AND userid=?",
+		lastSeen["LastSeen"], lastSeen["UserAgent"], topic, store.DecodeUid(user))
 
 	return err
 }
@@ -769,28 +774,13 @@ func (a *adapter) SubsForTopic(topic string, keepDeleted bool) ([]t.Subscription
 
 // SubsUpdate updates a single subscription.
 func (a *adapter) SubsUpdate(topic string, user t.Uid, update map[string]interface{}) error {
-	var args []interface{}
-	var cols []string
-	for col, arg := range update {
-		cols = append(cols, col+"=?")
-		// Maps, slices and structs (except time.Time) should be converted to JSON.
-		if _, ok := arg.(time.Time); !ok {
-			switch reflect.ValueOf(arg).Kind() {
-			case reflect.Map, reflect.Struct, reflect.Slice:
-				arg = toJSON(arg)
-			}
-		}
-		args = append(args, arg)
-	}
-	q := "UPDATE subscriptions SET " + strings.Join(cols, ",") + " WHERE "
+	cols, args := updateByMap(update)
+	q := "UPDATE subscriptions SET " + strings.Join(cols, ",") + " WHERE topic=?"
+	args = append(args, topic)
 	if !user.IsZero() {
-		// Update one topic subscription
-		q += "userid=?"
+		// Update just one topic subscription
+		q += " AND userid=?"
 		args = append(args, store.DecodeUid(user))
-	} else {
-		// Update all topic subscriptions
-		q += "topic=?"
-		args = append(args, topic)
 	}
 
 	_, err := a.db.Exec(q, args...)
@@ -1096,6 +1086,14 @@ func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.BrowseOpt) 
 	return msgs, err
 }
 
+var dellog struct {
+	Topic      string
+	Deletedfor int64
+	Delid      int
+	Low        int
+	Hi         int
+}
+
 // Get ranges of deleted messages
 func (a *adapter) MessageGetDeleted(topic string, forUser t.Uid, opts *t.BrowseOpt) ([]t.DelMessage, error) {
 	var limit = maxResults
@@ -1124,33 +1122,26 @@ func (a *adapter) MessageGetDeleted(topic string, forUser t.Uid, opts *t.BrowseO
 	}
 
 	var dmsgs []t.DelMessage
-	var deleted struct {
-		Topic      string
-		Deletedfor int64
-		Delid      int
-		Low        int
-		Hi         int
-	}
 	var dmsg t.DelMessage
 	for rows.Next() {
-		if err = rows.StructScan(&deleted); err != nil {
+		if err = rows.StructScan(&dellog); err != nil {
 			dmsgs = nil
 			break
 		}
-		if deleted.Delid != dmsg.DelId {
+		if dellog.Delid != dmsg.DelId {
 			if dmsg.DelId > 0 {
 				dmsgs = append(dmsgs, dmsg)
 			}
-			dmsg.DelId = deleted.Delid
-			dmsg.Topic = deleted.Topic
-			if deleted.Deletedfor > 0 {
-				dmsg.DeletedFor = store.EncodeUid(deleted.Deletedfor).String()
+			dmsg.DelId = dellog.Delid
+			dmsg.Topic = dellog.Topic
+			if dellog.Deletedfor > 0 {
+				dmsg.DeletedFor = store.EncodeUid(dellog.Deletedfor).String()
 			}
 			if dmsg.SeqIdRanges == nil {
 				dmsg.SeqIdRanges = []t.Range{}
 			}
 		}
-		dmsg.SeqIdRanges = append(dmsg.SeqIdRanges, t.Range{deleted.Low, deleted.Hi})
+		dmsg.SeqIdRanges = append(dmsg.SeqIdRanges, t.Range{dellog.Low, dellog.Hi})
 	}
 	if dmsg.DelId > 0 {
 		dmsgs = append(dmsgs, dmsg)
@@ -1162,6 +1153,8 @@ func (a *adapter) MessageGetDeleted(topic string, forUser t.Uid, opts *t.BrowseO
 
 // MessageDeleteList deletes messages in the given topic with seqIds from the list
 func (a *adapter) MessageDeleteList(topic string, toDel *t.DelMessage) (err error) {
+	log.Println("MessageDeleteList", topic, toDel)
+
 	tx, err := a.db.Begin()
 	if err != nil {
 		return err
@@ -1174,49 +1167,76 @@ func (a *adapter) MessageDeleteList(topic string, toDel *t.DelMessage) (err erro
 	}()
 
 	if toDel == nil {
-		// Whole topic is being deleted, thus also deleting all messages
+		// Whole topic is being deleted, thus also deleting all messages.
+		_, err = a.db.Exec("DELETE FROM softdel WHERE topic=?", topic)
+		_, err = a.db.Exec("DELETE FROM dellog WHERE topic=?", topic)
 		_, err = a.db.Exec("DELETE FROM messages WHERE topic=?", topic)
+		log.Println("MessageDeleteList", 1, err)
 	} else {
 		// Only some messages are being deleted
-		toDel.SetUid(store.GetUid())
-
-		// Start with making a log entry
-		_, err = a.db.Exec("INSERT INTO dellog() VALUES(?)", toDel)
+		// Start with making a log entries
+		forUser := decodeString(toDel.DeletedFor)
+		for _, rng := range toDel.SeqIdRanges {
+			if _, err = a.db.Exec("INSERT INTO dellog(topic,deletedfor,delid,low,hi) VALUES(?,?,?,?,?)",
+				topic, forUser, toDel.DelId, rng.Low, rng.Hi); err != nil {
+				break
+			}
+		}
 		if err != nil {
+			log.Println("MessageDeleteList", 2, err)
 			return err
 		}
-		/*
-			where := ""
-			if len(toDel.SeqIdRanges) > 1 || toDel.SeqIdRanges[0].Hi <= toDel.SeqIdRanges[0].Low {
-				var indexVals []int
-				for _, rng := range toDel.SeqIdRanges {
-					if rng.Hi == 0 {
-						indexVals = append(indexVals, rng.Low)
-					} else {
-						for i := rng.Low; i <= rng.Hi; i++ {
-							indexVals = append(indexVals, i)
-						}
+
+		where := "topic=?"
+		var args []interface{}
+		args = append(args, topic)
+		var seqIds []int
+		if len(toDel.SeqIdRanges) > 1 || toDel.SeqIdRanges[0].Hi <= toDel.SeqIdRanges[0].Low {
+			for _, rng := range toDel.SeqIdRanges {
+				if rng.Hi == 0 {
+					seqIds = append(seqIds, rng.Low)
+					args = append(args, rng.Low)
+				} else {
+					for i := rng.Low; i <= rng.Hi; i++ {
+						seqIds = append(seqIds, i)
+						args = append(args, i)
 					}
 				}
-				where = "topic=? AND seqId IN (?)"
-			} else {
-				// Optimizing for a special case of single range low..hi
-				where = "topic=? AND seqId BETWEEN ? AND ?", toDel.SeqIdRanges[0].Low, toDel.SeqIdRanges[0].Hi
 			}
 
-			if toDel.DeletedFor == "" {
-				// Hard-deleting for all users
-				// Hard-delete of individual messages. Mark some messages as deleted.
-				_, err = a.db.Exec("UPDATE messages SET deletedAt=?, delId=? head=NULL, content=NULL WHERE "+
-					where+
-					" AND deletedAt IS NULL", t.TimeNow(), toDel.DelId)
-			} else {
-				// Handle Soft-deleting messages
+			where += " AND seqid IN (?" + strings.Repeat(",?", len(seqIds)-1) + ")"
+		} else {
+			// Optimizing for a special case of single range low..hi
+			where = " AND seqid BETWEEN ? AND ?"
+			args = append(args, toDel.SeqIdRanges[0].Low)
+			args = append(args, toDel.SeqIdRanges[0].Hi)
+		}
+
+		if toDel.DeletedFor == "" {
+			// Hard-delete of individual messages for all users. Messages are marked as deleted.
+			_, err = a.db.Exec("UPDATE messages SET deletedAt=?, delId=? head=NULL, content=NULL WHERE "+
+				where+
+				" AND deletedAt IS NULL", append([]interface{}{t.TimeNow(), toDel.DelId}, args...)...)
+			log.Println("MessageDeleteList", 3, err)
+		} else {
+			var stmt *sqlx.Stmt
+			if stmt, err = a.db.Preparex(
+				"INSERT INTO softdel(topic,seqid,deletedfor,delid) VALUES(?,?,?,?)"); err != nil {
+				return err
 			}
-		*/
+			// Handle Soft-deleting messages: insert records into softdel
+			for _, seqId := range seqIds {
+				_, err = stmt.Exec(topic, seqId, forUser, toDel.DelId)
+				if err != nil {
+					log.Println("MessageDeleteList", 4, err)
+					return err
+				}
+			}
+		}
 	}
 
 	if err != nil {
+		log.Println("MessageDeleteList", 5, err)
 		return err
 	}
 
@@ -1339,6 +1359,26 @@ func fromJSON(src interface{}) interface{} {
 func encodeString(str string) t.Uid {
 	unum, _ := strconv.ParseInt(str, 10, 64)
 	return store.EncodeUid(unum)
+}
+
+func decodeString(str string) int64 {
+	uid := t.ParseUid(str)
+	return store.DecodeUid(uid)
+}
+
+func updateByMap(update map[string]interface{}) (cols []string, args []interface{}) {
+	for col, arg := range update {
+		cols = append(cols, col+"=?")
+		// Maps, slices and structs (except time.Time) should be converted to JSON.
+		if _, ok := arg.(time.Time); !ok {
+			switch reflect.ValueOf(arg).Kind() {
+			case reflect.Map, reflect.Struct, reflect.Slice:
+				arg = toJSON(arg)
+			}
+		}
+		args = append(args, arg)
+	}
+	return
 }
 
 func init() {
