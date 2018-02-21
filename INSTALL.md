@@ -14,7 +14,9 @@ See [instructions](./docker/README.md)
  - `go get -tags rethinkdb github.com/tinode/chat/server && go install -tags rethinkdb github.com/tinode/chat/server`
  - `go get -tags rethinkdb github.com/tinode/chat/tinode-db && go install -tags rethinkdb github.com/tinode/chat/tinode-db`
 
-Note the required `-tags rethinkdb` build option. You may also optionally define `main.buildstamp` for the server by adding a build option
+Note the required `-tags rethinkdb` build option. 
+
+You may also optionally define `main.buildstamp` for the server by adding a build option
 ```
 -X main.buildstamp=`date -u '+%Y%m%dT%H:%M:%SZ'`
 ```
@@ -26,24 +28,23 @@ This build timestamp will be sent by the server to the clients.
 
 ## Running standalone server
 
-- Run RethinkDB:
+1. Run RethinkDB:
   `rethinkdb --bind all --daemon`
 
-- Run DB initializer
+2. Rename `tinode.conf-example` to `tinode.conf`.
+
+3. Run DB initializer
  `$GOPATH/bin/tinode-db -config=$GOPATH/src/github.com/tinode/chat/server/tinode.conf`
- - add `-data=$GOPATH/src/github.com/tinode/chat/tinode-db/data.json` flag if you want sample data to be loaded.
+ - add `-data=$GOPATH/src/github.com/tinode/chat/tinode-db/data.json` flag if you want sample data to be loaded. 
+ - DB intializer needs to be run only once per installation. See [instructions](tinode-db/README.md) for more options.
 
- DB intializer needs to be run only once per installation. See [instructions](tinode-db/README.md) for more options.
+4. Unpack JS client to a directory, for instance $HOME/tinode/example-react-js/ by first unzipping https://github.com/tinode/example-react-js/archive/master.zip then extract tinode.js from https://github.com/tinode/tinode-js/archive/master.zip to the same directory.
 
-- Unpack JS client to a directory, for instance $HOME/tinode/example-react-js/ by first unzipping https://github.com/tinode/example-react-js/archive/master.zip then extract tinode.js from https://github.com/tinode/tinode-js/archive/master.zip to the same directory.
+5. Run server `$GOPATH/bin/server -config=$GOPATH/src/github.com/tinode/chat/server/tinode.conf -static_data=$HOME/tinode/example-react-js/`
 
-- Rename tinode.conf-example to tinode.conf.
+6. Test your installation by pointing your browser to http://localhost:6060/x/. Keep in mind that by default the static files from the `-static_data` path are served at `/x/`. You can change this by editing the line `static_mount` in the config file.
 
-- Run server `$GOPATH/bin/server -config=$GOPATH/src/github.com/tinode/chat/server/tinode.conf -static_data=$HOME/tinode/example-react-js/`
-
-- Test your installation by pointing your browser to http://localhost:6060/x/. Keep in mind that by default the static files from the `-static_data` path are served at `/x/`. You can change this by editing the line `static_mount` in the config file.
-
--  If you want to use an [Android client](https://github.com/tinode/android-example) and want push notification to work, find the section `"push"` in `tinode.conf`, item `"name": "fcm"`, then change `"disabled"` to `false`. Go to https://console.firebase.google.com/ (https://console.firebase.google.com/project/**NAME-OF-YOUR-PROJECT**/settings/cloudmessaging) and get a server key. Paste the key to the `"api_key"` field. See more at [https://github.com/tinode/android-example].
+7.  If you want to use an [Android client](https://github.com/tinode/android-example) and want push notification to work, find the section `"push"` in `tinode.conf`, item `"name": "fcm"`, then change `"disabled"` to `false`. Go to https://console.firebase.google.com/ (https://console.firebase.google.com/project/**NAME-OF-YOUR-PROJECT**/settings/cloudmessaging) and get a server key. Paste the key to the `"api_key"` field. See more at [https://github.com/tinode/android-example].
 
 ## Running a cluster
 
@@ -95,3 +96,21 @@ Specific note for [nohup](https://en.wikipedia.org/wiki/Nohup) users: an `exit` 
 Otherwise `SIGHUP` may be received by the server if the shell connection is broken before the ssh session has terminated (indicated by `Connection to XXX.XXX.XXX.XXX port 22: Broken pipe`). In such a case the server will shutdown because `SIGHUP` is intercepted by the server and interpreted as a shutdown request.
 
 For more details see https://github.com/tinode/chat/issues/25.
+
+# Using MySQL Storage (experimental)
+
+1. Follow instructions for building from sources replacing all occurences of `-tags rethinkdb` with `-tags mysql`.
+
+2. Make sure MySQL (or MariaDB or Percona) is installed and running. The code has been tested with MySQL 5.7 but it should work with earlier versions as well.
+
+3. Rename `tinode.conf-example` to `tinode.conf`
+
+4. Open `tinode.conf`. In the section `"store_config"` find `"use_adapter": "rethinkdb"` and replace it with `"use_adapter": "mysql"`. Check that the [DSN](https://github.com/go-sql-driver/mysql#dsn-data-source-name) in `"mysql"` section is appropriate for your MySQL installation. Option `parseTime=true` is required. 
+```js
+	"mysql": {
+		"dsn": "root@tcp(localhost)/tinode?parseTime=true",
+		"database": "tinode"
+	},
+```
+
+5. Follow the instructions for running as a standalone server from step 3.

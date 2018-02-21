@@ -28,7 +28,7 @@
 	"store_config": {
 		"worker_id": 1,
 		"uid_key": "la6YsO+bNX/+XIkOqc5Svw==",
-		"use_adapter": "mysql",
+		"use_adapter": "rethinkdb",
 		"adapters": {
 			"mysql": {
 				"dsn": "root@tcp(localhost)/tinode?parseTime=true",
