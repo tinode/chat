@@ -1054,7 +1054,8 @@ func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.BrowseOpt) 
 			lower = opts.Since
 		}
 		if opts.Before > 0 {
-			upper = opts.Before
+			// MySQL BETWEEN is inclusive-inclusive, Tinode API requires inclusive-exclusive, thus -1
+			upper = opts.Before - 1
 		}
 
 		if opts.Limit > 0 && opts.Limit < limit {
@@ -1062,10 +1063,14 @@ func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.BrowseOpt) 
 		}
 	}
 
-	// FIXME(gene): filter out soft-deleted messages
-	rows, err := a.db.Queryx("SELECT * FROM messages WHERE topic=? AND seqid BETWEEN ? AND ? "+
-		"AND delid=0 ORDER BY seqid DESC LIMIT ?",
-		topic, lower, upper, limit)
+	unum := store.DecodeUid(forUser)
+	rows, err := a.db.Queryx(
+		"SELECT m.createdat,m.updatedat,m.deletedat,m.delid,m.seqid,m.topic,m.`from`,m.head,m.content"+
+			" FROM messages AS m LEFT JOIN softdel AS s"+
+			" ON s.topic=m.topic AND s.seqid=m.seqid AND s.deletedfor=?"+
+			" WHERE m.delid=0 AND m.topic=? AND m.seqid BETWEEN ? AND ? AND s.deletedfor IS NULL"+
+			" ORDER BY m.seqid DESC LIMIT ?",
+		unum, topic, lower, upper, limit)
 
 	if err != nil {
 		return nil, err
