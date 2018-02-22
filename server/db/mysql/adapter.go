@@ -1214,7 +1214,7 @@ func (a *adapter) MessageDeleteList(topic string, toDel *t.DelMessage) (err erro
 
 		if toDel.DeletedFor == "" {
 			// Hard-delete of individual messages for all users. Messages are marked as deleted.
-			_, err = a.db.Exec("UPDATE messages SET deletedAt=?, delId=? head=NULL, content=NULL WHERE "+
+			_, err = a.db.Exec("UPDATE messages SET deletedAt=?,delId=?,head=NULL,content=NULL WHERE "+
 				where+
 				" AND deletedAt IS NULL", append([]interface{}{t.TimeNow(), toDel.DelId}, args...)...)
 			log.Println("MessageDeleteList", 3, err)
@@ -1368,7 +1368,7 @@ func decodeString(str string) int64 {
 
 func updateByMap(update map[string]interface{}) (cols []string, args []interface{}) {
 	for col, arg := range update {
-		cols = append(cols, col+"=?")
+		cols = append(cols, strings.ToLower(col)+"=?")
 		// Maps, slices and structs (except time.Time) should be converted to JSON.
 		if _, ok := arg.(time.Time); !ok {
 			switch reflect.ValueOf(arg).Kind() {
