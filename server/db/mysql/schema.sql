@@ -138,21 +138,6 @@ CREATE TABLE messages(
 	UNIQUE INDEX messages_topic_seqid (topic, seqid)
 );
 
-# Create soft deletion table: topics name X userID x delId
-CREATE TABLE softdel(
-	id 			INT NOT NULL AUTO_INCREMENT,
-	topic 		VARCHAR(25) NOT NULL,
-	seqid 		INT NOT NULL,
-	deletedfor 	BIGINT NOT NULL,
-	delid 		INT NOT NULL,
-	
-	PRIMARY KEY(id),
-	FOREIGN KEY(topic) REFERENCES topics(name),
-	FOREIGN KEY(deletedfor) REFERENCES users(id),
-	UNIQUE INDEX softdel_topic_deletedfor_seqid (topic,deletedfor,seqid),
-	INDEX softdel_topic_delid_deletedfor (topic,delid,deletedfor)
-);
-
 # Deletion log
 CREATE TABLE dellog(
 	id INT NOT NULL AUTO_INCREMENT,
@@ -160,10 +145,14 @@ CREATE TABLE dellog(
 	deletedfor 	BIGINT NOT NULL DEFAULT 0,
 	delid 		INT NOT NULL,
 	low			INT NOT NULL,
-	hi			INT NOT NULL DEFAULT 0,
+	hi			INT NOT NULL,
 	
 	PRIMARY KEY(id),
 	FOREIGN KEY(topic) REFERENCES topics(name),
-	UNIQUE INDEX dellog_topic_delid (topic,delid),
+	# For getting the list of deleted message ranges
+	UNIQUE INDEX dellog_topic_delid_deletedfor (topic,delid,deletedfor),
+	# Used when getting not-yet-deleted messages (messages LEFT JOIN dellog)
+	INDEX dellog_topic_deletedfor_low_hi (topic,deletedfor,low,hi), 
+	# Used when deleting a user
 	INDEX dellog_deletedfor (deletedfor)
 );
