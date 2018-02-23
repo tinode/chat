@@ -1066,9 +1066,9 @@ func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.BrowseOpt) 
 	unum := store.DecodeUid(forUser)
 	rows, err := a.db.Queryx(
 		"SELECT m.createdat,m.updatedat,m.deletedat,m.delid,m.seqid,m.topic,m.`from`,m.head,m.content"+
-			" FROM messages AS m LEFT JOIN softdel AS s"+
-			" ON s.topic=m.topic AND s.seqid=m.seqid AND s.deletedfor=?"+
-			" WHERE m.delid=0 AND m.topic=? AND m.seqid BETWEEN ? AND ? AND s.deletedfor IS NULL"+
+			" FROM messages AS m LEFT JOIN dellog AS d"+
+			" ON d.topic=m.topic AND m.seqid BETWEEN d.low AND d.hi AND d.deletedfor=?"+
+			" WHERE m.delid=0 AND m.topic=? AND m.seqid BETWEEN ? AND ? AND d.deletedfor IS NULL"+
 			" ORDER BY m.seqid DESC LIMIT ?",
 		unum, topic, lower, upper, limit)
 
