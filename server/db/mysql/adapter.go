@@ -1146,6 +1146,9 @@ func (a *adapter) MessageGetDeleted(topic string, forUser t.Uid, opts *t.BrowseO
 				dmsg.SeqIdRanges = []t.Range{}
 			}
 		}
+		if dellog.Hi == dellog.Low {
+			dellog.Hi = 0
+		}
 		dmsg.SeqIdRanges = append(dmsg.SeqIdRanges, t.Range{dellog.Low, dellog.Hi})
 	}
 	if dmsg.DelId > 0 {
@@ -1173,70 +1176,60 @@ func (a *adapter) MessageDeleteList(topic string, toDel *t.DelMessage) (err erro
 
 	if toDel == nil {
 		// Whole topic is being deleted, thus also deleting all messages.
-		_, err = a.db.Exec("DELETE FROM softdel WHERE topic=?", topic)
 		_, err = a.db.Exec("DELETE FROM dellog WHERE topic=?", topic)
 		_, err = a.db.Exec("DELETE FROM messages WHERE topic=?", topic)
 		log.Println("MessageDeleteList", 1, err)
 	} else {
 		// Only some messages are being deleted
-		// Start with making a log entries
+		// Start with making log entries
 		forUser := decodeString(toDel.DeletedFor)
-		for _, rng := range toDel.SeqIdRanges {
-			if _, err = a.db.Exec("INSERT INTO dellog(topic,deletedfor,delid,low,hi) VALUES(?,?,?,?,?)",
-				topic, forUser, toDel.DelId, rng.Low, rng.Hi); err != nil {
-				break
-			}
-		}
-		if err != nil {
+		var stmt *sqlx.Stmt
+		if stmt, err = a.db.Preparex(
+			"INSERT INTO dellog(topic,deletedfor,delid,low,hi) VALUES(?,?,?,?,?)"); err != nil {
 			log.Println("MessageDeleteList", 2, err)
 			return err
 		}
 
-		where := "topic=?"
-		var args []interface{}
-		args = append(args, topic)
-		var seqIds []int
-		if len(toDel.SeqIdRanges) > 1 || toDel.SeqIdRanges[0].Hi <= toDel.SeqIdRanges[0].Low {
-			for _, rng := range toDel.SeqIdRanges {
-				if rng.Hi == 0 {
-					seqIds = append(seqIds, rng.Low)
-					args = append(args, rng.Low)
-				} else {
-					for i := rng.Low; i <= rng.Hi; i++ {
-						seqIds = append(seqIds, i)
-						args = append(args, i)
-					}
-				}
+		// Counter of deleted messages
+		seqCount := 0
+		for _, rng := range toDel.SeqIdRanges {
+			if rng.Hi == 0 {
+				rng.Hi = rng.Low
 			}
-
-			where += " AND seqid IN (?" + strings.Repeat(",?", len(seqIds)-1) + ")"
-		} else {
-			// Optimizing for a special case of single range low..hi
-			where = " AND seqid BETWEEN ? AND ?"
-			args = append(args, toDel.SeqIdRanges[0].Low)
-			args = append(args, toDel.SeqIdRanges[0].Hi)
+			seqCount += rng.Hi - rng.Low + 1
+			if _, err = stmt.Exec(topic, forUser, toDel.DelId, rng.Low, rng.Hi); err != nil {
+				break
+			}
 		}
 
-		if toDel.DeletedFor == "" {
-			// Hard-delete of individual messages for all users. Messages are marked as deleted.
+		if err == nil && toDel.DeletedFor == "" {
+			// Hard-deleting messages requires updates to the messages table
+			where := "topic=? AND "
+			args := []interface{}{topic}
+			if len(toDel.SeqIdRanges) > 1 || toDel.SeqIdRanges[0].Hi <= toDel.SeqIdRanges[0].Low {
+				for _, rng := range toDel.SeqIdRanges {
+					if rng.Hi == 0 {
+						args = append(args, rng.Low)
+					} else {
+						for i := rng.Low; i <= rng.Hi; i++ {
+							args = append(args, i)
+						}
+					}
+				}
+
+				where += "seqid IN (?" + strings.Repeat(",?", seqCount-1) + ")"
+			} else {
+				// Optimizing for a special case of single range low..hi
+				where += "seqid BETWEEN ? AND ?"
+				args = append(args, toDel.SeqIdRanges[0].Low)
+				args = append(args, toDel.SeqIdRanges[0].Hi)
+			}
+
 			_, err = a.db.Exec("UPDATE messages SET deletedAt=?,delId=?,head=NULL,content=NULL WHERE "+
 				where+
-				" AND deletedAt IS NULL", append([]interface{}{t.TimeNow(), toDel.DelId}, args...)...)
+				" AND deletedAt IS NULL",
+				append([]interface{}{t.TimeNow(), toDel.DelId}, args...)...)
 			log.Println("MessageDeleteList", 3, err)
-		} else {
-			var stmt *sqlx.Stmt
-			if stmt, err = a.db.Preparex(
-				"INSERT INTO softdel(topic,seqid,deletedfor,delid) VALUES(?,?,?,?)"); err != nil {
-				return err
-			}
-			// Handle Soft-deleting messages: insert records into softdel
-			for _, seqId := range seqIds {
-				_, err = stmt.Exec(topic, seqId, forUser, toDel.DelId)
-				if err != nil {
-					log.Println("MessageDeleteList", 4, err)
-					return err
-				}
-			}
 		}
 	}
 
