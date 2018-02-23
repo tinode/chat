@@ -223,7 +223,7 @@ func (a *adapter) AddAuthRecord(uid t.Uid, authLvl int, unique string,
 
 // Delete user's authentication record
 func (a *adapter) DelAuthRecord(unique string) (int, error) {
-	res, err := a.db.Exec("DELETE FROM auth WHERE `unique`=?", unique)
+	res, err := a.db.Exec("DELETE FROM basicauth WHERE `unique`=?", unique)
 	if err != nil {
 		return 0, err
 	}
@@ -234,7 +234,7 @@ func (a *adapter) DelAuthRecord(unique string) (int, error) {
 
 // Delete user's all authentication records
 func (a *adapter) DelAllAuthRecords(uid t.Uid) (int, error) {
-	res, err := a.db.Exec("DELETE FROM auth WHERE userid=?", uid)
+	res, err := a.db.Exec("DELETE FROM basicauth WHERE userid=?", uid)
 	if err != nil {
 		return 0, err
 	}
@@ -245,7 +245,7 @@ func (a *adapter) DelAllAuthRecords(uid t.Uid) (int, error) {
 
 // Update user's authentication secret
 func (a *adapter) UpdAuthRecord(unique string, authLvl int, secret []byte, expires time.Time) (int, error) {
-	res, err := a.db.Exec("UPDATE auth SET authLvl=?,secret=?,expires=? WHERE login=?",
+	res, err := a.db.Exec("UPDATE basicauth SET authLvl=?,secret=?,expires=? WHERE login=?",
 		authLvl, secret, expires, unique)
 
 	if err != nil {
