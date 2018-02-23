@@ -97,7 +97,7 @@ Otherwise `SIGHUP` may be received by the server if the shell connection is brok
 
 For more details see https://github.com/tinode/chat/issues/25.
 
-# Using MySQL Storage (experimental)
+## Using MySQL Storage (experimental)
 
 1. Follow instructions for building from sources replacing all occurences of `-tags rethinkdb` with `-tags mysql`.
 

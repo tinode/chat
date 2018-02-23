@@ -27,12 +27,12 @@ The demo server is configured to use [ACME](https://letsencrypt.org/) TLS [imple
 
 * [Android](https://github.com/tinode/android-example/), [web](https://github.com/tinode/example-react-js/), and [command line](tn-cli/) clients.
 * One-on-one messaging.
-* Group messaging with currently unlimited number of members where every member's access permissions are managed individually. The maximum number of members will be limited to a reasonably high value in the future (256? configurable?).
+* Group messaging with every member's access permissions managed individually. The maximum number of members is configurable (128 by default).
 * Topic access control with permissions for various actions.
 * Server-generated presence notifications for people, topics.
 * Sharded clustering with failover.
 * Persistent message store, paginated message history.
-* Javascript bindings with no dependencies.
+* Javascript bindings with no external dependencies.
 * Java bindings (dependencies: [jackson](https://github.com/FasterXML/jackson), [nv-websocket-client](https://github.com/TakahikoKawasaki/nv-websocket-client)). Suitable for Android but with no Android SDK dependencies.
 * Websocket, long polling, and [gRPC](https://grpc.io/) over TCP transports.
 * JSON or [protobuf version 3](https://developers.google.com/protocol-buffers/) wire protocols.
@@ -57,7 +57,6 @@ The demo server is configured to use [ACME](https://letsencrypt.org/) TLS [imple
 * Hot standby.
 * Federation.
 * Different levels of message persistence (from strict persistence to "store until delivered" to purely ephemeral messaging).
-* Support for other SQL and NoSQL backends.
 
 ## Screenshots
 
