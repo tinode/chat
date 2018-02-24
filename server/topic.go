@@ -916,12 +916,11 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktID string, want string,
 		// Save changes to DB
 		if userData.modeWant != oldWant || userData.modeGiven != oldGiven {
 			update := map[string]interface{}{}
-			// FIXME(gene): gorethink has a bug which causes ModeXYZ to be saved as a string, converting to int
 			if userData.modeWant != oldWant {
-				update["ModeWant"] = int(userData.modeWant)
+				update["ModeWant"] = userData.modeWant
 			}
 			if userData.modeGiven != oldGiven {
-				update["ModeGiven"] = int(userData.modeGiven)
+				update["ModeGiven"] = userData.modeGiven
 			}
 			if err := store.Subs.Update(t.name, sess.uid, update); err != nil {
 				sess.queueOut(ErrUnknown(pktID, t.original(sess.uid), now))
@@ -936,10 +935,9 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktID string, want string,
 			oldOwnerData.modeGiven = (oldOwnerData.modeGiven & ^types.ModeOwner)
 			oldOwnerData.modeWant = (oldOwnerData.modeWant & ^types.ModeOwner)
 			if err := store.Subs.Update(t.name, t.owner,
-				// FIXME(gene): gorethink has a bug which causes ModeXYZ to be saved as a string, converting to int
 				map[string]interface{}{
-					"ModeWant":  int(oldOwnerData.modeWant),
-					"ModeGiven": int(oldOwnerData.modeGiven)}); err != nil {
+					"ModeWant":  oldOwnerData.modeWant,
+					"ModeGiven": oldOwnerData.modeGiven}); err != nil {
 				return err
 			}
 			t.perUser[t.owner] = oldOwnerData

@@ -8,7 +8,6 @@ import (
 	"errors"
 	"hash/fnv"
 	"log"
-	"reflect"
 	"sort"
 	"strconv"
 	"strings"
@@ -172,8 +171,7 @@ func (a *adapter) UserCreate(user *t.User) error {
 	_, err = tx.Exec("INSERT INTO users(id,createdAt,updatedAt,access,public,tags) VALUES(?,?,?,?,?,?)",
 		decoded_uid,
 		user.CreatedAt, user.UpdatedAt,
-		toJSON(user.Access),
-		toJSON(user.Public), toJSON(user.Tags))
+		user.Access, toJSON(user.Public), user.Tags)
 
 	if err != nil {
 		return err
@@ -364,10 +362,10 @@ func (a *adapter) topicCreate(tx *sqlx.Tx, topic *t.Topic) error {
 	q := "INSERT INTO topics(createdAt,updatedAt,name,access,public,tags) VALUES(?,?,?,?,?,?)"
 	if tx == nil {
 		_, err = a.db.Exec(q, topic.CreatedAt, topic.UpdatedAt, topic.Id,
-			toJSON(topic.Access), toJSON(topic.Public), toJSON(topic.Tags))
+			topic.Access, toJSON(topic.Public), topic.Tags)
 	} else {
 		_, err = tx.Exec(q, topic.CreatedAt, topic.UpdatedAt, topic.Id,
-			toJSON(topic.Access), toJSON(topic.Public), toJSON(topic.Tags))
+			topic.Access, toJSON(topic.Public), topic.Tags)
 	}
 
 	// FIXME(gene): handle tags
@@ -807,43 +805,52 @@ func (a *adapter) SubsDelForTopic(topic string) error {
 // Searching the 'users.Tags' for the given tags using respective index.
 func (a *adapter) FindUsers(uid t.Uid, tags []string) ([]t.Subscription, error) {
 	index := make(map[string]struct{})
-	var query []interface{}
+	var args []interface{}
 	for _, tag := range tags {
-		query = append(query, tag)
+		args = append(args, tag)
 		index[tag] = struct{}{}
 	}
 
 	// Get users matched by tags, sort by number of matches from high to low.
-	// Use JOIN users  -> tags
-	rows, err := a.db.Query("SELECT id, access, createdAt, updatedAt, public, tags "+
-		"FROM users WHERE tags IN (?) GROUP BY id ORDER BY matchCount LIMIT ?",
-		query, maxResults)
+	rows, err := a.db.Queryx(
+		"SELECT u.id,u.createdat,u.updatedat,u.public,u.tags,COUNT(*) AS matches "+
+			"FROM users AS u LEFT JOIN usertags as t ON t.userid=u.id "+
+			"WHERE t.tag IN (?"+strings.Repeat(",?", len(tags)-1)+") "+
+			"GROUP BY u.id,u.createdat,u.updatedat,u.public,u.tags ORDER BY matches DESC LIMIT ?",
+		append(args, maxResults)...)
 
 	if err != nil {
 		return nil, err
 	}
 
-	var user t.User
+	var userId int64
+	var public interface{}
+	var userTags t.StringSlice
+	var ignored int
 	var sub t.Subscription
 	var subs []t.Subscription
-	for err = rows.Scan(&user); err == nil; {
-		if user.Id == uid.String() {
+	thisUser := store.DecodeUid(uid)
+	for rows.Next() {
+		if err = rows.Scan(&userId, &sub.CreatedAt, &sub.UpdatedAt, &public, &userTags, &ignored); err != nil {
+			subs = nil
+			break
+		}
+
+		if userId == thisUser {
 			// Skip the callee
 			continue
 		}
-		sub.CreatedAt = user.CreatedAt
-		sub.UpdatedAt = user.UpdatedAt
-		sub.User = user.Id
-		sub.SetPublic(user.Public)
+		sub.User = store.EncodeUid(userId).String()
+		sub.SetPublic(fromJSON(public))
 		// TODO: maybe report default access to user
 		// sub.SetDefaultAccess(user.Access.Auth, user.Access.Anon)
-		tags := make([]string, 0, 1)
-		for _, tag := range user.Tags {
+		foundTags := make([]string, 0, 1)
+		for _, tag := range userTags {
 			if _, ok := index[tag]; ok {
-				tags = append(tags, tag)
+				foundTags = append(foundTags, tag)
 			}
 		}
-		sub.Private = tags
+		sub.Private = foundTags
 		subs = append(subs, sub)
 	}
 	rows.Close()
@@ -856,39 +863,44 @@ func (a *adapter) FindUsers(uid t.Uid, tags []string) ([]t.Subscription, error) 
 // Searching the 'topics.Tags' for the given tags using respective index.
 func (a *adapter) FindTopics(tags []string) ([]t.Subscription, error) {
 	index := make(map[string]struct{})
-	var query []interface{}
+	var args []interface{}
 	for _, tag := range tags {
-		query = append(query, tag)
+		args = append(args, tag)
 		index[tag] = struct{}{}
 	}
-	rows, err := a.db.Query(
-		"SELECT t.id, t.access, t.createdAt, t.updatedAt, t.public, t.tags, count(*) AS matchcount "+
-			"FROM topics AS t, topictags AS tt "+
-			"WHERE tt.tag IN (?) AND t.name=tt.topic "+
-			"GROUP BY t.id, t.access, t.createdAt, t.updatedAt, t.public, t.tags "+
-			"ORDER BY matchcount DESC LIMIT ?", query, maxResults)
+
+	rows, err := a.db.Queryx(
+		"SELECT t.id,t.createdat,t.updatedat,t.public,t.tags,COUNT(*) AS matches "+
+			"FROM topics AS t LEFT JOIN topictags AS tt ON t.name=tt.topic "+
+			"WHERE tt.tag IN (?"+strings.Repeat(",?", len(tags)-1)+") "+
+			"GROUP BY t.id,t.createdat,t.updatedat,t.public,t.tags "+
+			"ORDER BY matches DESC LIMIT ?", append(args, maxResults)...)
 
 	if err != nil {
 		return nil, err
 	}
 
-	var topic t.Topic
+	var public interface{}
+	var topicTags t.StringSlice
+	var ignored int
 	var sub t.Subscription
 	var subs []t.Subscription
-	for err = rows.Scan(&topic); err != nil; {
-		sub.CreatedAt = topic.CreatedAt
-		sub.UpdatedAt = topic.UpdatedAt
-		sub.Topic = topic.Id
-		sub.SetPublic(topic.Public)
+	for rows.Next() {
+		if err = rows.Scan(&sub.Topic, &sub.CreatedAt, &sub.UpdatedAt, &public, &topicTags, &ignored); err != nil {
+			subs = nil
+			break
+		}
+
+		sub.SetPublic(fromJSON(public))
 		// TODO: maybe report default access to user
 		// sub.SetDefaultAccess(user.Access.Auth, user.Access.Anon)
-		tags := make([]string, 0, 1)
-		for _, tag := range topic.Tags {
+		foundTags := make([]string, 0, 1)
+		for _, tag := range topicTags {
 			if _, ok := index[tag]; ok {
-				tags = append(tags, tag)
+				foundTags = append(foundTags, tag)
 			}
 		}
-		sub.Private = tags
+		sub.Private = foundTags
 		subs = append(subs, sub)
 	}
 	rows.Close()
@@ -902,7 +914,7 @@ func (a *adapter) FindTopics(tags []string) ([]t.Subscription, error) {
 
 // UserTagsUpdate updates user's Tags. 'unique' contains the prefixes of tags which are
 // treated as unique, i.e. 'email' or 'tel'.
-func (a *adapter) UserTagsUpdate(uid t.Uid, unique, tags []string) error {
+func (a *adapter) UserTagsUpdate(uid t.Uid, unique, tags t.StringSlice) error {
 	user, err := a.UserGet(uid)
 	if err != nil {
 		return err
@@ -920,7 +932,7 @@ func (a *adapter) UserTagsUpdate(uid t.Uid, unique, tags []string) error {
 // - name is the name of the topic to update
 // - unique is the list of prefixes to treat as unique.
 // - tags are the new tags.
-func (a *adapter) TopicTagsUpdate(name string, unique, tags []string) error {
+func (a *adapter) TopicTagsUpdate(name string, unique, tags t.StringSlice) error {
 	topic, err := a.TopicGet(name)
 	if err != nil {
 		return err
@@ -1037,10 +1049,8 @@ func filterUniqueTags(unique, tags []string) []string {
 func (a *adapter) MessageSave(msg *t.Message) error {
 	_, err := a.db.Exec(
 		"INSERT INTO messages(createdAt,updatedAt,seqid,topic,`from`,head,content) VALUES(?,?,?,?,?,?,?)",
-		msg.CreatedAt, msg.UpdatedAt,
-		msg.SeqId, msg.Topic,
-		store.DecodeUid(t.ParseUid(msg.From)),
-		toJSON(msg.Head), toJSON(msg.Content))
+		msg.CreatedAt, msg.UpdatedAt, msg.SeqId, msg.Topic,
+		store.DecodeUid(t.ParseUid(msg.From)), msg.Head, toJSON(msg.Content))
 	return err
 }
 
@@ -1328,11 +1338,15 @@ func (a *adapter) DeviceDelete(uid t.Uid, deviceID string) error {
 	return err
 }
 
+// Helper functions
+
+// Check if MySQL error is a Error Code: 1062. Duplicate entry ... for key ...
 func isDupe(err error) bool {
 	myerr, ok := err.(*ms.MySQLError)
 	return ok && myerr.Number == 1062
 }
 
+// Convert to JSON before storing to JSON field.
 func toJSON(src interface{}) []byte {
 	if src == nil {
 		return nil
@@ -1342,6 +1356,7 @@ func toJSON(src interface{}) []byte {
 	return jval
 }
 
+// Deserialize JSON data from DB.
 func fromJSON(src interface{}) interface{} {
 	if src == nil {
 		return nil
@@ -1354,6 +1369,7 @@ func fromJSON(src interface{}) interface{} {
 	return nil
 }
 
+// UIDs are stored as decoded int64 values. Take decoded string representation of int64, produce UID.
 func encodeString(str string) t.Uid {
 	unum, _ := strconv.ParseInt(str, 10, 64)
 	return store.EncodeUid(unum)
@@ -1364,15 +1380,13 @@ func decodeString(str string) int64 {
 	return store.DecodeUid(uid)
 }
 
+// FIXME: just handle Public and Private. Everything else has Scanner and Valuer defined.
 func updateByMap(update map[string]interface{}) (cols []string, args []interface{}) {
 	for col, arg := range update {
-		cols = append(cols, strings.ToLower(col)+"=?")
-		// Maps, slices and structs (except time.Time) should be converted to JSON.
-		if _, ok := arg.(time.Time); !ok {
-			switch reflect.ValueOf(arg).Kind() {
-			case reflect.Map, reflect.Struct, reflect.Slice:
-				arg = toJSON(arg)
-			}
+		col = strings.ToLower(col)
+		cols = append(cols, col+"=?")
+		if col == "public" || col == "private" {
+			arg = toJSON(arg)
 		}
 		args = append(args, arg)
 	}

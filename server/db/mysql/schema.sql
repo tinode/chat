@@ -15,9 +15,9 @@ INSERT INTO kvmeta(`key`, `value`) VALUES("version", "100");
 
 CREATE TABLE users(
 	id 			BIGINT NOT NULL,
-	createdat 	DATETIME NOT NULL,
-	updatedat 	DATETIME NOT NULL,
-	deletedat 	DATETIME,
+	createdat 	DATETIME(3) NOT NULL,
+	updatedat 	DATETIME(3) NOT NULL,
+	deletedat 	DATETIME(3),
 	state 		INT DEFAULT 0,
 	access 		JSON,
 	lastseen 	DATETIME,
@@ -72,9 +72,9 @@ CREATE TABLE basicauth(
 # Topics
 CREATE TABLE topics(
 	id 			INT NOT NULL AUTO_INCREMENT,
-	createdat 	DATETIME NOT NULL,
-	updatedat 	DATETIME NOT NULL,
-	deletedat 	DATETIME,
+	createdat 	DATETIME(3) NOT NULL,
+	updatedat 	DATETIME(3) NOT NULL,
+	deletedat 	DATETIME(3),
 	name 		CHAR(25) NOT NULL,
 	usebt 		INT DEFAULT 0,
 	access 		JSON,
@@ -101,9 +101,9 @@ CREATE TABLE topictags(
 # Subscriptions
 CREATE TABLE subscriptions(
 	id 			INT NOT NULL AUTO_INCREMENT,
-	createdat 	DATETIME NOT NULL,
-	updatedat 	DATETIME NOT NULL,
-	deletedat 	DATETIME,
+	createdat 	DATETIME(3) NOT NULL,
+	updatedat 	DATETIME(3) NOT NULL,
+	deletedat 	DATETIME(3),
 	userid 		BIGINT NOT NULL,
 	topic 		CHAR(25) NOT NULL,
 	delid      INT DEFAULT 0,
@@ -122,9 +122,9 @@ CREATE TABLE subscriptions(
 # Messages
 CREATE TABLE messages(
 	id 			INT NOT NULL AUTO_INCREMENT,
-	createdat 	DATETIME NOT NULL,
-	updatedat 	DATETIME NOT NULL,
-	deletedat 	DATETIME,
+	createdat 	DATETIME(3) NOT NULL,
+	updatedat 	DATETIME(3) NOT NULL,
+	deletedat 	DATETIME(3),
 	delid 		INT DEFAULT 0,
 	seqid 		INT NOT NULL,
 	topic 		CHAR(25) NOT NULL,

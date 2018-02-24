@@ -69,8 +69,8 @@ type Adapter interface {
 	FindUsers(user t.Uid, tags []string) ([]t.Subscription, error)
 	// FindTopics searches for group topics given a list of tags
 	FindTopics(tags []string) ([]t.Subscription, error)
-	UserTagsUpdate(user t.Uid, unique, tags []string) error
-	TopicTagsUpdate(topic string, unique, tags []string) error
+	UserTagsUpdate(user t.Uid, unique, tags t.StringSlice) error
+	TopicTagsUpdate(topic string, unique, tags t.StringSlice) error
 
 	// Messages
 	MessageSave(msg *t.Message) error
