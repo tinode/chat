@@ -1242,13 +1242,13 @@ func (t *Topic) replySetDesc(sess *Session, set *MsgClientSet) error {
 	now := types.TimeNow()
 
 	assignAccess := func(upd map[string]interface{}, mode *MsgDefaultAcsMode) error {
-		if auth, anon, err := parseTopicAccess(mode, types.ModeInvalid, types.ModeInvalid); err != nil {
+		if auth, anon, err := parseTopicAccess(mode, types.ModeUnset, types.ModeUnset); err != nil {
 			return err
 		} else if auth.IsOwner() || anon.IsOwner() {
 			return errors.New("default 'owner' access is not permitted")
 		} else {
-			access := make(map[string]interface{})
-			if auth != types.ModeInvalid {
+			access := types.DefaultAccess{Auth: t.accessAuth, Anon: t.accessAnon}
+			if auth != types.ModeUnset {
 				if t.cat == types.TopicCatMe {
 					auth &= types.ModeCP2P
 					if auth != types.ModeNone {
@@ -1257,18 +1257,18 @@ func (t *Topic) replySetDesc(sess *Session, set *MsgClientSet) error {
 						auth |= types.ModeApprove
 					}
 				}
-				access["Auth"] = auth
+				access.Auth = auth
 			}
-			if anon != types.ModeInvalid {
+			if anon != types.ModeUnset {
 				if t.cat == types.TopicCatMe {
 					anon &= types.ModeCP2P
 					if anon != types.ModeNone {
 						anon |= types.ModeApprove
 					}
 				}
-				access["Anon"] = anon
+				access.Anon = anon
 			}
-			if len(access) > 0 {
+			if access.Auth != t.accessAuth || access.Anon != t.accessAnon {
 				upd["Access"] = access
 			}
 		}
@@ -1292,17 +1292,9 @@ func (t *Topic) replySetDesc(sess *Session, set *MsgClientSet) error {
 
 	updateCached := func(upd map[string]interface{}) {
 		if tmp, ok := upd["Access"]; ok {
-			access := tmp.(map[string]interface{})
-			if auth, ok := access["Auth"]; ok {
-				if auth != types.ModeInvalid {
-					t.accessAuth = auth.(types.AccessMode)
-				}
-			}
-			if anon, ok := access["Anon"]; ok {
-				if anon != types.ModeInvalid {
-					t.accessAnon = anon.(types.AccessMode)
-				}
-			}
+			access := tmp.(types.DefaultAccess)
+			t.accessAuth = access.Auth
+			t.accessAnon = access.Anon
 		}
 		if public, ok := upd["Public"]; ok {
 			t.public = public

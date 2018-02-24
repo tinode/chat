@@ -369,10 +369,8 @@ const (
 	ModeInvalid AccessMode = 0x100000
 )
 
-// MarshalText converts AccessMode to string as byte slice.
+// MarshalText converts AccessMode to ASCII byte slice.
 func (m AccessMode) MarshalText() ([]byte, error) {
-
-	// TODO: Need to distinguish between "not set" and "no access"
 	if m == 0 {
 		return []byte{'N'}, nil
 	}
@@ -437,7 +435,7 @@ func (m AccessMode) String() string {
 	return string(res)
 }
 
-// MarshalJSON converts AccessMOde to quoted string.
+// MarshalJSON converts AccessMode to a quoted string.
 func (m AccessMode) MarshalJSON() ([]byte, error) {
 	res, err := m.MarshalText()
 	if err != nil {
