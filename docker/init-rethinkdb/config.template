@@ -1,11 +1,17 @@
 {
 	"store_config": {
-		"adapter": "rethinkdb",
 		"worker_id": 1,
 		"uid_key": "$UID_ENCRYPTION_KEY",
-		"adapter_config": {
-			"database": "tinode",
-			"addresses": "$RETHINKDB_PORT_28015_TCP_ADDR:$RETHINKDB_PORT_28015_TCP_PORT"
+		"use_adapter": "rethinkdb",
+		"adapters": {
+			"mysql": {
+				"database": "tinode"
+				"dsn": "root@tcp($MYSQL_TCP_ADDR:$MYSQL_TCP_PORT)/tinode?parseTime=true",
+			},
+			"rethinkdb": {
+				"database": "tinode",
+				"addresses": "$RETHINKDB_PORT_28015_TCP_ADDR:$RETHINKDB_PORT_28015_TCP_PORT"			
+			}
 		}
 	}
 }

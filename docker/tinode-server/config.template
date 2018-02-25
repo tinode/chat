@@ -1,8 +1,11 @@
 {
 	"listen": ":18080",
+	"grpc_listen": ":16061",
 	"api_key_salt": "$API_KEY_SALT",
 	"max_message_size": 4194304,
-	"indexable_tags": ["tel", "email"],
+	"max_subscriber_count": 32,
+	"max_tag_count": 16,
+	"unique_tags": ["tel", "email"],
 
 	"tls": {
 		"enabled": false,
@@ -10,8 +13,8 @@
 		"strict_max_age": 604800,
 		"autocert": {
 			"cache": "/etc/letsencrypt/live/your.domain.name.here",
-			"email": "noreply@example.com",
-			"domains": ["example.com"]
+			"email": "your-email-here@your-email-hoster-here.com",
+			"domains": ["-your.domain.name.here-"]
 		}
 	},
 
@@ -26,10 +29,16 @@
 	"store_config": {
 		"worker_id": 1,
 		"uid_key": "$UID_ENCRYPTION_KEY",
-		"adapter": "rethinkdb",
-		"adapter_config": {
-			"database": "tinode",
-			"addresses": "$RETHINKDB_PORT_28015_TCP_ADDR:$RETHINKDB_PORT_28015_TCP_PORT"
+		"use_adapter": "rethinkdb",
+		"adapters": {
+			"mysql": {
+				"dsn": "root@tcp($MYSQL_TCP_ADDR:$MYSQL_TCP_PORT)/tinode?parseTime=true",
+				"database": "tinode"
+			},
+			"rethinkdb": {
+				"database": "tinode",
+				"addresses": "$RETHINKDB_PORT_28015_TCP_ADDR:$RETHINKDB_PORT_28015_TCP_PORT"
+			}
 		}
 	},
 
