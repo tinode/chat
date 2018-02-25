@@ -984,7 +984,7 @@ func (a *adapter) FindTopics(tags []string) ([]t.Subscription, error) {
 
 // UserTagsUpdate updates user's Tags. 'unique' contains the prefixes of tags which are
 // treated as unique, i.e. 'email' or 'tel'.
-func (a *adapter) UserTagsUpdate(uid t.Uid, unique, tags []string) error {
+func (a *adapter) UserTagsUpdate(uid t.Uid, unique, tags t.StringSlice) error {
 	user, err := a.UserGet(uid)
 	if err != nil {
 		return err
@@ -1002,7 +1002,7 @@ func (a *adapter) UserTagsUpdate(uid t.Uid, unique, tags []string) error {
 // - name is the name of the topic to update
 // - unique is the list of prefixes to treat as unique.
 // - tags are the new tags.
-func (a *adapter) TopicTagsUpdate(name string, unique, tags []string) error {
+func (a *adapter) TopicTagsUpdate(name string, unique, tags t.StringSlice) error {
 	topic, err := a.TopicGet(name)
 	if err != nil {
 		return err
