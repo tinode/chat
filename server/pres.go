@@ -294,7 +294,7 @@ func (t *Topic) presSubsOffline(what string, params *PresParams, filter types.Ac
 		skipTopic = t.name
 	}
 
-	log.Printf("presSubsOffline: topic'%s' what='%s', who='%v'", t.name, what, params)
+	//log.Printf("presSubsOffline: topic'%s' what='%s', who='%v'", t.name, what, params)
 
 	for uid, pud := range t.perUser {
 		if !presOfflineFilter(pud.modeGiven&pud.modeWant, filter) {
