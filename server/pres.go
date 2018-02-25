@@ -294,6 +294,8 @@ func (t *Topic) presSubsOffline(what string, params *PresParams, filter types.Ac
 		skipTopic = t.name
 	}
 
+	log.Printf("presSubsOffline: topic'%s' what='%s', who='%v'", t.name, what, params)
+
 	for uid, pud := range t.perUser {
 		if !presOfflineFilter(pud.modeGiven&pud.modeWant, filter) {
 			continue
@@ -317,7 +319,6 @@ func (t *Topic) presSubsOffline(what string, params *PresParams, filter types.Ac
 				skipTopic: skipTopic},
 			rcptto: user, skipSid: skipSid}
 	}
-	// log.Printf("presSubsOffline: topic'%s' what='%s', who='%s'", t.name, what, params.who)
 }
 
 // Same as presSubsOffline, but the topic has not been loaded/initialized first: offline topic, offline subscribers

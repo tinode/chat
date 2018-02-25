@@ -614,6 +614,7 @@ func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 			// User online: notify users of interest
 			t.presUsersOfInterest("on", sreg.sess.userAgent)
 		} else if t.cat == types.TopicCatGrp || t.cat == types.TopicCatP2P {
+			var enable string
 			if sreg.created {
 				// Notify creator's other sessions that the topic was created.
 				t.presSingleUserOffline(sreg.sess.uid, "acs",
@@ -639,18 +640,22 @@ func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 					// We don't know if the current user is online in the 'me' topic,
 					// so sending an '?unkn' status to user2. His 'me' topic
 					// will report user2's status and request an actual status from user1.
-					var enable string
 					if (pud2.modeGiven & pud2.modeWant).IsPresencer() {
 						// If user2 should receive notifications, enable it.
 						enable = "+en"
 					}
 					t.presSingleUserOffline(user2, "?unkn"+enable, nilPresParams, "", false)
+				} else if t.cat == types.TopicCatGrp {
+					// Enable notifications for a new topic, if appropriate
+					if (pud.modeGiven & pud.modeWant).IsPresencer() {
+						enable = "+en"
+					}
 				}
 			}
 
 			if t.cat == types.TopicCatGrp {
 				// Notify topic subscribers that the topic is online now.
-				t.presSubsOffline("on", nilPresParams, 0, "", false)
+				t.presSubsOffline("on"+enable, nilPresParams, 0, "", false)
 			}
 		}
 	} else if t.cat == types.TopicCatGrp && pud.online == 1 {
