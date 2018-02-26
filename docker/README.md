@@ -1,8 +1,8 @@
 # Using Docker files to run Tinode
 
-1. [Install Docker](https://docs.docker.com/install/) 1.9 or above. The provided dockerfiles are dependent on [Docker networking](https://docs.docker.com/network/) which may may not work with the older Docker. 
+1. [Install Docker](https://docs.docker.com/install/) 1.8 or above. The provided dockerfiles are dependent on [Docker networking](https://docs.docker.com/network/) which may may not work with the older Docker. 
 
-2. Choose which database backend you want to use: RethinDB (default) or MySQL (experimental). Run the selected database container:
+2. Select which database backend you want to use: RethinDB (default) or MySQL (experimental). Run the selected database container:
 
 	1. **RethinkDB**: If you've decided to use RethinDB backend, run the official RethinkDB Docker container:
 	```
@@ -20,26 +20,36 @@
 
 
 3. Build the initializer image from the Dockerfile provided:
+	1. **RethinkDB**
 	```
 	$ docker build --tag=tinode-init-db init-db
 	```
-
+	2. **MySQL**
+	```
+	$ docker build --tag=tinode-init-db --build-arg TARGET_DB=mysql init-db
+	```
+	
 4. Run the container to initialize the `tinode` database:
 	```
-	$ docker run --rm --name tinode-init --link rethinkdb tinode-init-db
+	$ docker run --rm --name tinode-init tinode-init-db
 	```
 	Optionally you may want to provide a UID encryption key as `--env SNOWFLAKE_UID_KEY=base64+encoded+16+bytes=`. The system uses [snowflake](https://github.com/tinode/snowflake) to generate unique IDs for values like user IDs. To make them unpredictable it encrypts them with [XTEA](https://en.wikipedia.org/wiki/XTEA). If you don't provide the key, a default one will be used. As a result the IDs will be easily predictable (but still not sequential).
 
-	At this point the database is initialized and loaded with test data. No need to do this again unless you need to resent the data or delete/recreated the RethinkDB container.
+	At this point the database is initialized and loaded with test data. No need to do this again unless you need to reset the data or delete/recreated the DB container.
 
 5. Build the Tinode server image from the Dockerfile:
+	1. **RethinkDB**
 	```
 	$ docker build --tag=tinode-srv tinode-server
+	```
+	2. **MySQL**
+	```
+	$ docker build --tag=tinode-srv --build-arg TARGET_DB=mysql tinode-server
 	```
 
 6. Run Tinode server:
 	```
-	$ docker run  -p 6060:18080 -d --name tinode-srv --link rethinkdb tinode-srv
+	$ docker run -p 6060:18080 -d --name tinode-srv tinode-srv
 	```
 	The port mapping `-p 6060:18080` tells Docker to map container's port 18080 to host's port 6060 making server accessible at http://localhost:6060/. If you provided a `SNOWFLAKE_UID_KEY` at step 4, you must provide the same key at this step too. Otherwise primary key collisions may happen.
 

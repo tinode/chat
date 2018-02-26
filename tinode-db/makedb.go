@@ -142,7 +142,6 @@ func getPassword(n int) string {
 }
 
 func main() {
-
 	var reset = flag.Bool("reset", false, "first delete the database if one exists")
 	var datafile = flag.String("data", "", "name of file with sample data")
 	var conffile = flag.String("config", "./tinode.conf", "config of the database connection")
@@ -160,7 +159,6 @@ func main() {
 		}
 	}
 	data.datapath, _ = filepath.Split(*datafile)
-
 	if *conffile != "" {
 		rand.Seed(time.Now().UnixNano())
 
