@@ -4,17 +4,17 @@
 
 2. Choose which database backend you want to use: RethinDB (default) or MySQL (experimental). Run either one or the other database container:
 
- 1. If you decided to use RethinDB backend, run the official RethinkDB Docker container:
+	1. If you decided to use RethinDB backend, run the official RethinkDB Docker container:
 
-```
-$ docker run --name rethinkdb -d rethinkdb
-```
+	```
+	$ docker run --name rethinkdb -d rethinkdb
+	```
 
- 2. If you decided to use MySQL backend, run the official MySQL Docker container:
+	2. If you decided to use MySQL backend, run the official MySQL Docker container:
 
-```
-$ docker run --name mysql -d mysql
-```
+	```
+	$ docker run --name mysql -d mysql
+	```
 
  The name `rethinkdb` or `mysql` in the name assignment `--name` is important. It's used later to get database's host address and port numbers.
 
