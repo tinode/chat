@@ -20,28 +20,28 @@
 
 
 3. Build the initializer image from the Dockerfile provided:
-```
-$ docker build --tag=tinode-init-db init-rethinkdb
-```
+	```
+	$ docker build --tag=tinode-init-db init-rethinkdb
+	```
 
 4. Run the container to initialize the `tinode` database:
-```
-$ docker run --rm --name tinode-init --link rethinkdb tinode-init-db
-```
-Optionally you may want to provide a UID encryption key as `--env SNOWFLAKE_UID_KEY=base64+encoded+16+bytes=`. The system uses [snowflake](https://github.com/tinode/snowflake) to generate unique IDs for values like user IDs. To make them unpredictable it encrypts them with [XTEA](https://en.wikipedia.org/wiki/XTEA). If you don't provide the key, a default one will be used. As a result the IDs will be easily predictable (but still not sequential).
+	```
+	$ docker run --rm --name tinode-init --link rethinkdb tinode-init-db
+	```
+	Optionally you may want to provide a UID encryption key as `--env SNOWFLAKE_UID_KEY=base64+encoded+16+bytes=`. The system uses [snowflake](https://github.com/tinode/snowflake) to generate unique IDs for values like user IDs. To make them unpredictable it encrypts them with [XTEA](https://en.wikipedia.org/wiki/XTEA). If you don't provide the key, a default one will be used. As a result the IDs will be easily predictable (but still not sequential).
 
-At this point the database is initialized and loaded with test data. No need to do this again unless you need to resent the data or delete/recreated the RethinkDB container.
+	At this point the database is initialized and loaded with test data. No need to do this again unless you need to resent the data or delete/recreated the RethinkDB container.
 
 5. Build the Tinode server image from the Dockerfile:
-```
-$ docker build --tag=tinode-srv tinode-server
-```
+	```
+	$ docker build --tag=tinode-srv tinode-server
+	```
 
 6. Run Tinode server:
-```
-$ docker run  -p 6060:18080 -d --name tinode-srv --link rethinkdb tinode-srv
-```
-The port mapping `-p 6060:18080` tells Docker to map container's port 18080 to host's port 6060 making server accessible at http://localhost:6060/. If you provided a `SNOWFLAKE_UID_KEY` at step 4, you must provide the same key at this step too. Otherwise primary key collisions may happen.
+	```
+	$ docker run  -p 6060:18080 -d --name tinode-srv --link rethinkdb tinode-srv
+	```
+	The port mapping `-p 6060:18080` tells Docker to map container's port 18080 to host's port 6060 making server accessible at http://localhost:6060/. If you provided a `SNOWFLAKE_UID_KEY` at step 4, you must provide the same key at this step too. Otherwise primary key collisions may happen.
 
 7. Test the installation by pointing your browser to [http://localhost:6060/x/](http://localhost:6060/x/).
 
