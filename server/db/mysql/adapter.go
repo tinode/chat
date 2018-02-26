@@ -137,13 +137,204 @@ func (a *adapter) GetName() string {
 
 // CreateDb initializes the storage.
 func (a *adapter) CreateDb(reset bool) error {
-	// Checks if database exists.
-	var db interface{}
-	err := a.db.Get(&db, "SHOW DATABASES LIKE '"+a.dbName+"'")
-	if err == sql.ErrNoRows {
-		return errors.New("unsupported: use schema.sql to create database")
+	var err error
+	var tx *sql.Tx
+
+	if tx, err = a.db.Begin(); err != nil {
+		return err
 	}
-	return err
+
+	defer func() {
+		if err != nil {
+			tx.Rollback()
+		}
+	}()
+
+	if reset {
+		if _, err = tx.Exec("DROP DATABASE IF EXISTS tinode"); err != nil {
+			return err
+		}
+	}
+
+	if _, err = tx.Exec("CREATE DATABASE tinode CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"); err != nil {
+		return err
+	}
+
+	if _, err = tx.Exec("USE tinode"); err != nil {
+		return err
+	}
+
+	if _, err = tx.Exec(
+		`CREATE TABLE kvmeta(` +
+			"`key` CHAR(32)," +
+			"`value` TEXT," +
+			"PRIMARY KEY(`key`)" +
+			`)`); err != nil {
+		return err
+	}
+	if _, err = tx.Exec("INSERT INTO kvmeta(`key`, `value`) VALUES('version', '100')"); err != nil {
+		return err
+	}
+
+	if _, err = tx.Exec(
+		`CREATE TABLE users(
+			id 			BIGINT NOT NULL,
+			createdat 	DATETIME(3) NOT NULL,
+			updatedat 	DATETIME(3) NOT NULL,
+			deletedat 	DATETIME(3),
+			state 		INT DEFAULT 0,
+			access 		JSON,
+			lastseen 	DATETIME,
+			useragent 	VARCHAR(255) DEFAULT '',
+			public 		JSON,
+			tags		JSON,
+			PRIMARY KEY(id)
+		)`); err != nil {
+		return err
+	}
+
+	// Indexed user tags.
+	if _, err = tx.Exec(
+		`CREATE TABLE usertags(
+			id 		INT NOT NULL AUTO_INCREMENT,
+			userid 	BIGINT NOT NULL,
+			tag 	VARCHAR(255) NOT NULL,
+			PRIMARY KEY(id),
+			FOREIGN KEY(userid) REFERENCES users(id),
+			INDEX usertags_tag (tag)
+		)`); err != nil {
+		return err
+	}
+
+	// Indexed devices. Normalized into a separate table.
+	if _, err = tx.Exec(
+		`CREATE TABLE devices(
+			id 			INT NOT NULL AUTO_INCREMENT,
+			userid 		BIGINT NOT NULL,
+			hash 		CHAR(16) NOT NULL,
+			deviceid 	TEXT NOT NULL,
+			platform	VARCHAR(32),
+			lastseen 	DATETIME NOT NULL,
+			lang 		VARCHAR(8),
+			PRIMARY KEY(id),
+			FOREIGN KEY(userid) REFERENCES users(id),
+			UNIQUE INDEX devices_hash (hash)
+		)`); err != nil {
+		return err
+	}
+
+	// Authentication records for the basic authentication scheme.
+	if _, err = tx.Exec(
+		`CREATE TABLE basicauth(
+			id 			INT NOT NULL AUTO_INCREMENT,
+			login	 	VARCHAR(255) NOT NULL,
+			userid 		BIGINT NOT NULL,
+			authlvl 	INT NOT NULL,
+			secret 		VARCHAR(255) NOT NULL,
+			expires 	DATETIME,
+			PRIMARY KEY(id),
+			FOREIGN KEY(userid) REFERENCES users(id),
+			UNIQUE INDEX basicauth_login (login)
+		)`); err != nil {
+		return err
+	}
+
+	// Topics
+	if _, err = tx.Exec(
+		`CREATE TABLE topics(\
+			id 			INT NOT NULL AUTO_INCREMENT,
+			createdat 	DATETIME(3) NOT NULL,
+			updatedat 	DATETIME(3) NOT NULL,
+			deletedat 	DATETIME(3),
+			name 		CHAR(25) NOT NULL,
+			usebt 		INT DEFAULT 0,
+			access 		JSON,
+			seqid 		INT NOT NULL DEFAULT 0,
+			delid 		INT DEFAULT 0,
+			public 		JSON,
+			tags		JSON,
+			PRIMARY KEY(id),
+			UNIQUE INDEX topics_name (name)
+		)`); err != nil {
+		return err
+	}
+
+	// Indexed topic tags.
+	if _, err = tx.Exec(
+		`CREATE TABLE topictags(
+			id 		INT NOT NULL AUTO_INCREMENT,
+			topic 	CHAR(25) NOT NULL,
+			tag 	VARCHAR(255) NOT NULL,
+			PRIMARY KEY(id),
+			FOREIGN KEY(topic) REFERENCES topics(name),
+			INDEX topictags_tag (tag)
+		)`); err != nil {
+		return err
+	}
+
+	// Subscriptions
+	if _, err = tx.Exec(
+		`CREATE TABLE subscriptions(
+			id 			INT NOT NULL AUTO_INCREMENT,
+			createdat 	DATETIME(3) NOT NULL,
+			updatedat 	DATETIME(3) NOT NULL,
+			deletedat 	DATETIME(3),
+			userid 		BIGINT NOT NULL,
+			topic 		CHAR(25) NOT NULL,
+			delid      INT DEFAULT 0,
+			recvseqid  INT DEFAULT 0,
+			readseqid  INT DEFAULT 0,
+			modewant	CHAR(8),
+			modegiven  	CHAR(8),
+			private 	JSON,
+			PRIMARY KEY(id)	,
+			FOREIGN KEY(userid) REFERENCES users(id),
+			UNIQUE INDEX subscriptions_topic_userid (topic, userid),
+			INDEX subscriptions_topic (topic)
+		)`); err != nil {
+		return err
+	}
+
+	// Messages
+	if _, err = tx.Exec(
+		`CREATE TABLE messages(
+			id 			INT NOT NULL AUTO_INCREMENT,
+			createdat 	DATETIME(3) NOT NULL,
+			updatedat 	DATETIME(3) NOT NULL,
+			deletedat 	DATETIME(3),
+			delid 		INT DEFAULT 0,
+			seqid 		INT NOT NULL,
+			topic 		CHAR(25) NOT NULL,` +
+			"`from` 	BIGINT NOT NULL," +
+			`head 		JSON,
+			content 	JSON,
+			PRIMARY KEY(id),` +
+			"FOREIGN KEY(`from`) REFERENCES users(id)," +
+			`FOREIGN KEY(topic) REFERENCES topics(name),
+			UNIQUE INDEX messages_topic_seqid (topic, seqid)
+		);`); err != nil {
+		return err
+	}
+
+	// Deletion log
+	if _, err = tx.Exec(
+		`CREATE TABLE dellog(
+			id INT NOT NULL AUTO_INCREMENT,
+			topic 		VARCHAR(25) NOT NULL,
+			deletedfor 	BIGINT NOT NULL DEFAULT 0,
+			delid 		INT NOT NULL,
+			low			INT NOT NULL,
+			hi			INT NOT NULL,
+			PRIMARY KEY(id),
+			FOREIGN KEY(topic) REFERENCES topics(name),
+			UNIQUE INDEX dellog_topic_delid_deletedfor (topic,delid,deletedfor),
+			INDEX dellog_topic_deletedfor_low_hi (topic,deletedfor,low,hi),
+			INDEX dellog_deletedfor (deletedfor)
+		);`); err != nil {
+		return err
+	}
+
+	return tx.Commit()
 }
 
 // Indexable tag as stored in 'tagunique'
@@ -1394,5 +1585,5 @@ func updateByMap(update map[string]interface{}) (cols []string, args []interface
 }
 
 func init() {
-	store.Register(adapterName, &adapter{})
+	store.RegisterAdapter(adapterName, &adapter{})
 }

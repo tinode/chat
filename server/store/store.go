@@ -102,17 +102,29 @@ func InitDb(jsonconf string, reset bool) error {
 	return adaptr.CreateDb(reset)
 }
 
+// Registered database adapters.
+var dbAdapters map[string]adapter.Adapter
+
 // Register makes a persistence adapter available by the provided name.
 // If Register is called twice or if the adapter is nil, it panics.
 // Name is currently unused, i.e. only a single adapter can be registered
-func Register(name string, adapter adapter.Adapter) {
-	if adapter == nil {
+func RegisterAdapter(name string, a adapter.Adapter) {
+	if dbAdapters == nil {
+		dbAdapters = make(map[string]adapter.Adapter)
+	}
+	if a == nil {
 		panic("store: Register adapter is nil")
 	}
+
+	if _, dup := dbAdapters[name]; dup {
+		panic("store: duplicate registration of adapter " + name)
+	}
+
 	if adaptr != nil {
 		panic("store: Adapter already registered")
 	}
-	adaptr = adapter
+
+	dbAdapters[name] = a
 }
 
 // GetUid generates a unique ID suitable for use as a primary key.

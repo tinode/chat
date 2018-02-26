@@ -1383,5 +1383,5 @@ func (a *adapter) DeviceDelete(uid t.Uid, deviceID string) error {
 }
 
 func init() {
-	store.Register(adapterName, &adapter{})
+	store.RegisterAdapter(adapterName, &adapter{})
 }

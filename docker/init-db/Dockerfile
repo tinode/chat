@@ -5,7 +5,9 @@
 
 FROM golang:latest
 
-MAINTAINER Gene Sokolov <gene@tinode.co>
+LABEL maintainer="Gene Sokolov <gene@tinode.co>"
+LABEL name="TinodeDBInitializer"
+LABEL version="0.14"
 
 # Compiles for RethinkDB by default. Alternatively use `--env TARGET_DB=mysql` to build for MySQL.
 ENV TARGET_DB rethinkdb

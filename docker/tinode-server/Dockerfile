@@ -11,7 +11,9 @@
 
 FROM golang:latest
 
-MAINTAINER Gene Sokolov <gene@tinode.co>
+LABEL maintainer="Gene Sokolov <gene@tinode.co>"
+LABEL name="TinodeChatServer"
+LABEL version="0.14.1"
 
 # Compiles for RethinkDB by default. Alternatively use `--env TARGET_DB=mysql` to build for MySQL.
 ENV TARGET_DB rethinkdb
@@ -24,7 +26,7 @@ RUN go get -tags $TARGET_DB github.com/tinode/chat/server \
 RUN git clone --depth 1 https://github.com/tinode/example-react-js.git
 RUN git clone --depth 1 https://github.com/tinode/tinode-js.git
 
-# The demo app expects tinode.js to be in the same dir as the app, so create the link
+# The demo app expects tinode.js to be in the same dir as the app, so create the link.
 RUN ln tinode-js/tinode.js example-react-js/
 
 # Various encryption and salt keys. Replace with your own in production.
