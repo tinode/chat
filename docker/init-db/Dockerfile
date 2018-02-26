@@ -13,9 +13,9 @@ LABEL version="0.14"
 ARG TARGET_DB=rethinkdb
 ENV TARGET_DB=$TARGET_DB
 
-# Build the utility.
-RUN go get -tags $TARGET_DB gopkg.in/tinode/chat.v0/tinode-db \
-	&& go install -tags $TARGET_DB gopkg.in/tinode/chat.v0/tinode-db
+# Build the utility. 
+RUN go get -tags $TARGET_DB github.com/tinode/chat/tinode-db \
+	&& go install -tags $TARGET_DB github.com/tinode/chat/tinode-db
 
 # Key to initialize UID generator. Replace with your own
 # for production
