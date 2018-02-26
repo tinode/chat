@@ -32,7 +32,7 @@
 		"use_adapter": "rethinkdb",
 		"adapters": {
 			"mysql": {
-				"dsn": "root@tcp($MYSQL_TCP_ADDR:$MYSQL_TCP_PORT)/tinode?parseTime=true",
+				"dsn": "root@tcp($MYSQL_PORT_3306_TCP_ADDR:$MYSQL_PORT_3306_TCP_PORT)/tinode?parseTime=true",
 				"database": "tinode"
 			},
 			"rethinkdb": {

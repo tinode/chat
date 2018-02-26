@@ -1,21 +1,21 @@
 # Using Docker files to run Tinode
 
-1. [Install Docker](https://docs.docker.com/install/) 1.9 or above. The dockerfiles are dependent on networking features added in 1.9 and will not work with older Docker. 
+1. [Install Docker](https://docs.docker.com/install/) 1.9 or above. The provided dockerfiles are dependent on [Docker networking](https://docs.docker.com/network/) which may may not work with the older Docker. 
 
-2. Choose which database backend you want to use: RethinDB (default) or MySQL (experimental). Run either one or the other database container:
+2. Choose which database backend you want to use: RethinDB (default) or MySQL (experimental). Run the selected database container:
 
-	1. If you decided to use RethinDB backend, run the official RethinkDB Docker container:
-
+	1. **RethinkDB**: If you've decided to use RethinDB backend, run the official RethinkDB Docker container:
 	```
-	$ docker run --name rethinkdb -d rethinkdb
+	$ docker run --name rethinkdb -d rethinkdb:2.3
 	```
-
-	2. If you decided to use MySQL backend, run the official MySQL Docker container:
-
+	See [instructions](https://hub.docker.com/_/rethinkdb/) for more options.
+	
+	2. **MySQL**: If you've decided to use MySQL backend, run the official MySQL Docker container:
 	```
-	$ docker run --name mysql -d mysql
+	$ docker run --name mysql -d mysql:5.7
 	```
-
+	See [instructions](https://hub.docker.com/_/mysql/) for more options.
+	
 	The name `rethinkdb` or `mysql` in the name assignment `--name` is important. It's used later to get database's host address and port numbers.
 
 
