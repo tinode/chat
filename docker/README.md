@@ -21,7 +21,7 @@
 
 3. Build the initializer image from the Dockerfile provided:
 	```
-	$ docker build --tag=tinode-init-db init-rethinkdb
+	$ docker build --tag=tinode-init-db init-db
 	```
 
 4. Run the container to initialize the `tinode` database:
