@@ -24,7 +24,7 @@
 	The name `rethinkdb` or `mysql` in the `--name` assignment is important. It's used by other containers as a database's host name.
 
 
-4. Build the initializer image from the Dockerfile provided:
+4. Build the initializer image for the selected database:
 	1. **RethinkDB**
 	```
 	$ docker build --tag=tinode-init-db init-db
