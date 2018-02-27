@@ -7,9 +7,9 @@
 	$ docker network create tinode-net
 	```
 	
-3. Select which database backend you want to use: RethinDB (default) or MySQL (experimental). Run the selected database container, attaching it to `tinode-net` network:
+3. Select which database backend you want to use: RethinkDB (default) or MySQL (experimental). Run the selected database container, attaching it to `tinode-net` network:
 
-	1. **RethinkDB**: If you've decided to use RethinDB backend, run the official RethinkDB Docker container:
+	1. **RethinkDB**: If you've decided to use RethinkDB backend, run the official RethinkDB Docker container:
 	```
 	$ docker run --name rethinkdb --network tinode-net -d rethinkdb:2.3
 	```
@@ -38,7 +38,8 @@
 	```
 	$ docker run --rm --name tinode-init-db --network tinode-net tinode-init-db
 	```
-	Optionally you may want to provide a UID encryption key as `--env SNOWFLAKE_UID_KEY=base64+encoded+16+bytes=`. The system uses [snowflake](https://github.com/tinode/snowflake) to generate unique IDs for values like user IDs. To make them unpredictable it encrypts them with [XTEA](https://en.wikipedia.org/wiki/XTEA). If you don't provide the key, a default one (`la6YsO+bNX/+XIkOqc5Svw==`) will be used. As a result the IDs will be easily guessable (but still not sequential).
+	Optionally you may want to provide a UID encryption key as `--env SNOWFLAKE_UID_KEY=base64+encoded+16+bytes=`. On most Unix-like systems you can generate such a unique key by executing something like `base64 <(head -c 16 /dev/random)`. 
+	The system uses [snowflake](https://github.com/tinode/snowflake) to generate unique IDs for values like user IDs. To make them unpredictable it encrypts them with [XTEA](https://en.wikipedia.org/wiki/XTEA). If you don't provide the key, a default one (`la6YsO+bNX/+XIkOqc5Svw==`) will be used. As a result the IDs will be easily guessable (but still not sequential). 
 
 	At this point the database is initialized and loaded with test data. No need to do this again unless you want to reset the data or delete/recreated the DB container.
 
@@ -60,7 +61,7 @@
 
 8. Test the installation by pointing your browser to [http://localhost:6060/x/](http://localhost:6060/x/).
 
-If you want to reset data, shut down the server container
+If you want to reset the data in the database, shut down the server container
 ```
 $ docker stop tinode-srv
 ```
