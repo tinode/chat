@@ -58,15 +58,17 @@
 
 7. Run Tinode server:
 	```
-	$ docker run -p 16060:18080 -d --name tinode-srv --network tinode-net tinode-srv
+	$ docker run -p 6060:18080 -d --name tinode-srv --network tinode-net tinode-srv
 	```
-	The port mapping `-p 16060:18080` tells Docker to map container's port 18080 to host's port 16060 making server accessible at http://localhost:16060/. If you provided a `SNOWFLAKE_UID_KEY` at step 5, you must provide the same key at this step too.
+	The port mapping `-p 6060:18080` tells Docker to map container's port 18080 to host's port 6060 making server accessible at http://localhost:16060/. If you provided a `SNOWFLAKE_UID_KEY` at step 5, you must provide the same key at this step too.
 
-8. Test the installation by pointing your browser to [http://localhost:16060/x/](http://localhost:16060/x/).
+8. Test the installation by pointing your browser to [http://localhost:6060/x/](http://localhost:6060/x/).
 
 If you want to reset the data in the database, shut down the server container
 ```
 $ docker stop tinode-srv
 ```
-then repeat steps 5 and 7.
-
+then repeat step 5 then restart the server
+```
+$ docker start tinode-srv
+```
