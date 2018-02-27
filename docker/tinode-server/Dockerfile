@@ -21,7 +21,8 @@ ENV TARGET_DB=$TARGET_DB
 
 # Build the binary.
 RUN go get -tags $TARGET_DB github.com/tinode/chat/server \
-	&& go install -tags $TARGET_DB github.com/tinode/chat/server
+	&& go install -tags $TARGET_DB -ldflags "-X main.buildstamp=${TARGET_DB}-`date -u '+%Y%m%dT%H:%M:%SZ'`" \
+		github.com/tinode/chat/server
 
 # Download the demo app and the js bindings
 RUN git clone --depth 1 https://github.com/tinode/example-react-js.git

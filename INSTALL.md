@@ -16,11 +16,11 @@ See [instructions](./docker/README.md)
 
 Note the required `-tags rethinkdb` build option. 
 
-You may also optionally define `main.buildstamp` for the server by adding a build option
+You may also optionally define `main.buildstamp` for the server by adding a build option, for instance, with a timestamp:
 ```
--X main.buildstamp=`date -u '+%Y%m%dT%H:%M:%SZ'`
+-ldflags "-X main.buildstamp=`date -u '+%Y%m%dT%H:%M:%SZ'`"
 ```
-This build timestamp will be sent by the server to the clients.
+The value of `buildstamp` will be sent by the server to the clients.
 
 - Download javascript client for testing:
  - https://github.com/tinode/example-react-js/archive/master.zip
