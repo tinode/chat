@@ -29,22 +29,31 @@ This build timestamp will be sent by the server to the clients.
 ## Running a Standalone Server
 
 1. Run RethinkDB:
-  `rethinkdb --bind all --daemon`
+	```
+	rethinkdb --bind all --daemon
+	```
 
-2. Rename `tinode.conf-example` to `tinode.conf`.
+2. Run DB initializer
+	```
+	$GOPATH/bin/tinode-db -config=$GOPATH/src/github.com/tinode/chat/tinode-db/tinode.conf
+	```
+	- add `-data=$GOPATH/src/github.com/tinode/chat/tinode-db/data.json` flag if you want sample data to be loaded:
+	```
+	$GOPATH/bin/tinode-db -config=$GOPATH/src/github.com/tinode/chat/tinode-db/tinode.conf -data=$GOPATH/src/github.com/tinode/chat/tinode-db/data.json
+	```
+	
+	DB intializer needs to be run only once per installation. See [instructions](tinode-db/README.md) for more options.
 
-3. Run DB initializer
- `$GOPATH/bin/tinode-db -config=$GOPATH/src/github.com/tinode/chat/server/tinode.conf`
- - add `-data=$GOPATH/src/github.com/tinode/chat/tinode-db/data.json` flag if you want sample data to be loaded. 
- - DB intializer needs to be run only once per installation. See [instructions](tinode-db/README.md) for more options.
+3. Unpack JS client to a directory, for instance `$HOME/tinode/example-react-js/` by first unzipping `https://github.com/tinode/example-react-js/archive/master.zip` then extract `tinode.js` from `https://github.com/tinode/tinode-js/archive/master.zip` to the same directory.
 
-4. Unpack JS client to a directory, for instance $HOME/tinode/example-react-js/ by first unzipping https://github.com/tinode/example-react-js/archive/master.zip then extract tinode.js from https://github.com/tinode/tinode-js/archive/master.zip to the same directory.
+4. Run server 
+	```
+	$GOPATH/bin/server -config=$GOPATH/src/github.com/tinode/chat/server/tinode.conf-example -static_data=$HOME/tinode/example-react-js/
+	```
 
-5. Run server `$GOPATH/bin/server -config=$GOPATH/src/github.com/tinode/chat/server/tinode.conf -static_data=$HOME/tinode/example-react-js/`
+5. Test your installation by pointing your browser to [http://localhost:6060/x/](http://localhost:6060/x/). Keep in mind that by default the static files from the `-static_data` path are served at `/x/`. You can change this by editing the line `static_mount` in the config file.
 
-6. Test your installation by pointing your browser to http://localhost:6060/x/. Keep in mind that by default the static files from the `-static_data` path are served at `/x/`. You can change this by editing the line `static_mount` in the config file.
-
-7.  If you want to use the [Android client](https://github.com/tinode/android-example) and want push notification to work, find the section `"push"` in `tinode.conf`, item `"name": "fcm"`, then change `"enabled"` to `true`. Go to https://console.firebase.google.com/ (https://console.firebase.google.com/project/**NAME-OF-YOUR-PROJECT**/settings/cloudmessaging) and get a server key. Paste the key to the `"api_key"` field. See more at [https://github.com/tinode/android-example].
+6.  If you want to use the [Android client](https://github.com/tinode/android-example) and want push notification to work, find the section `"push"` in `tinode.conf`, item `"name": "fcm"`, then change `"enabled"` to `true`. Go to [https://console.firebase.google.com/](https://console.firebase.google.com/) (https://console.firebase.google.com/project/**NAME-OF-YOUR-PROJECT**/settings/cloudmessaging) and get a server key. Paste the key to the `"api_key"` field. See more at [https://github.com/tinode/android-example](https://github.com/tinode/android-example).
 
 ## Running a Cluster
 
