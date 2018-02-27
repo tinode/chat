@@ -8,7 +8,7 @@ See [instructions](./docker/README.md)
 
 - Install [Go environment](https://golang.org/doc/install). Make sure Go version is at least 1.9. Building with Go 1.8 or below **will fail**!
 
-- Install [RethinkDB](https://www.rethinkdb.com/docs/install/)
+- Install [RethinkDB](https://www.rethinkdb.com/docs/install/) (or see MySQL instructions below)
 
 - Fetch, build tinode server and tinode-db database initializer:
  - `go get -tags rethinkdb github.com/tinode/chat/server && go install -tags rethinkdb github.com/tinode/chat/server`

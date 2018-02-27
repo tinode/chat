@@ -58,7 +58,7 @@
 	```
 	$ docker run -p 16060:18080 -d --name tinode-srv --network tinode-net tinode-srv
 	```
-	The port mapping `-p 16060:18080` tells Docker to map container's port 18080 to host's port 16060 making server accessible at http://localhost:16060/. If you provided a `SNOWFLAKE_UID_KEY` at step 4, you must provide the same key at this step too.
+	The port mapping `-p 16060:18080` tells Docker to map container's port 18080 to host's port 16060 making server accessible at http://localhost:16060/. If you provided a `SNOWFLAKE_UID_KEY` at step 5, you must provide the same key at this step too.
 
 8. Test the installation by pointing your browser to [http://localhost:16060/x/](http://localhost:16060/x/).
 
