@@ -7,7 +7,7 @@ FROM golang:latest
 
 LABEL maintainer="Gene Sokolov <gene@tinode.co>"
 LABEL name="TinodeDBInitializer"
-LABEL version="0.14"
+LABEL version="0.14.1"
 
 # Compiles for RethinkDB by default. Alternatively use `--build-arg TARGET_DB=mysql` to build for MySQL.
 ARG TARGET_DB=rethinkdb

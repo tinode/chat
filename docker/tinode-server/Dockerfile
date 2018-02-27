@@ -15,8 +15,9 @@ LABEL maintainer="Gene Sokolov <gene@tinode.co>"
 LABEL name="TinodeChatServer"
 LABEL version="0.14.1"
 
-# Compiles for RethinkDB by default. Alternatively use `--env TARGET_DB=mysql` to build for MySQL.
-ENV TARGET_DB rethinkdb
+# Compiles for RethinkDB by default. Alternatively use `--build-arg TARGET_DB=mysql` to build for MySQL.
+ARG TARGET_DB=rethinkdb
+ENV TARGET_DB=$TARGET_DB
 
 # Build the binary.
 RUN go get -tags $TARGET_DB github.com/tinode/chat/server \

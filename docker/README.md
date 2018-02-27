@@ -38,8 +38,9 @@
 	```
 	$ docker run --rm --name tinode-init-db --network tinode-net tinode-init-db
 	```
-	Optionally you may want to provide a UID encryption key as `--env SNOWFLAKE_UID_KEY=base64+encoded+16+bytes=`. On most Unix-like systems you can generate such a unique key by executing something like `base64 <(head -c 16 /dev/random)`. 
-	The system uses [snowflake](https://github.com/tinode/snowflake) to generate unique IDs for values like user IDs. To make them unpredictable it encrypts them with [XTEA](https://en.wikipedia.org/wiki/XTEA). If you don't provide the key, a default one (`la6YsO+bNX/+XIkOqc5Svw==`) will be used. As a result the IDs will be easily guessable (but still not sequential). 
+	Optionally you may want to provide a UID encryption key as `--env SNOWFLAKE_UID_KEY=base64+encoded+16+bytes=`. On most Unix-like systems you can generate such a unique key by executing something like `base64 <(head -c 16 /dev/random)`.
+	 
+	The system uses [snowflake](https://github.com/tinode/snowflake) to generate unique IDs for values like user IDs and topic names. To make them unpredictable it encrypts them with [XTEA](https://en.wikipedia.org/wiki/XTEA). If you don't provide the key, a default one (`la6YsO+bNX/+XIkOqc5Svw==`) will be used. As a result the IDs will be easily guessable (but still not sequential). 
 
 	At this point the database is initialized and loaded with test data. No need to do this again unless you want to reset the data or delete/recreated the DB container.
 
@@ -55,11 +56,11 @@
 
 7. Run Tinode server:
 	```
-	$ docker run -p 6060:18080 -d --name tinode-srv --network tinode-net tinode-srv
+	$ docker run -p 16060:18080 -d --name tinode-srv --network tinode-net tinode-srv
 	```
-	The port mapping `-p 6060:18080` tells Docker to map container's port 18080 to host's port 6060 making server accessible at http://localhost:6060/. If you provided a `SNOWFLAKE_UID_KEY` at step 4, you must provide the same key at this step too. Otherwise primary key collisions may happen.
+	The port mapping `-p 16060:18080` tells Docker to map container's port 18080 to host's port 16060 making server accessible at http://localhost:16060/. If you provided a `SNOWFLAKE_UID_KEY` at step 4, you must provide the same key at this step too.
 
-8. Test the installation by pointing your browser to [http://localhost:6060/x/](http://localhost:6060/x/).
+8. Test the installation by pointing your browser to [http://localhost:16060/x/](http://localhost:16060/x/).
 
 If you want to reset the data in the database, shut down the server container
 ```
