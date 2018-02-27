@@ -122,4 +122,4 @@ For more details see https://github.com/tinode/chat/issues/25.
 	},
 ```
 
-5. Follow the instructions for running as a standalone server from step 3.
+5. Follow the instructions for running as a standalone server from step 2.
