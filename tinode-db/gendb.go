@@ -17,8 +17,6 @@ import (
 func genDb(reset bool, dbsource string, data *Data) {
 	var err error
 
-	log.Println(dbsource)
-
 	defer store.Close()
 
 	log.Println("Initializing DB...")
