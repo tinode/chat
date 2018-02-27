@@ -1,6 +1,6 @@
 # THIS IS BROKEN as of February 27th. Come back again in a day or two.
 
-# Using Docker files to run Tinode
+# Using Docker to run Tinode
 
 1. [Install Docker](https://docs.docker.com/install/) 1.8 or above. The provided dockerfiles are dependent on [Docker networking](https://docs.docker.com/network/) which may may not work with the older Docker. 
 
@@ -46,7 +46,7 @@
 
 	At this point the database is initialized and loaded with test data. No need to do this again unless you want to reset the data or delete/recreated the DB container.
 
-6. Build the Tinode server image from the Dockerfile:
+6. Build the Tinode server image. This image also includes the [web app](https://github.com/tinode/example-react-js/):
 	1. **RethinkDB**
 	```
 	$ docker build --tag=tinode-srv tinode-server
