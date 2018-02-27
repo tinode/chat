@@ -21,7 +21,7 @@
 	```
 	See [instructions](https://hub.docker.com/_/mysql/) for more options.
 	
-	The name `rethinkdb` or `mysql` in the name assignment `--name` is important. It's used later as a database's host name.
+	The name `rethinkdb` or `mysql` in the `--name` assignment is important. It's used by other containers as a database's host name.
 
 
 4. Build the initializer image from the Dockerfile provided:
