@@ -6,7 +6,7 @@
 		"adapters": {
 			"mysql": {
 				"database": "tinode",
-				"dsn": "root@tcp(mysql)/tinode?parseTime=true"
+				"dsn": "root@tcp(mysql)/?parseTime=true"
 			},
 			"rethinkdb": {
 				"database": "tinode",

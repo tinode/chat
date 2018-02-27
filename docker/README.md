@@ -19,7 +19,7 @@
 	
 	2. **MySQL**: If you've decided to use MySQL backend, run the official MySQL Docker container:
 	```
-	$ docker run --name mysql --network tinode-net -d mysql:5.7
+	$ docker run --name mysql --network tinode-net --env MYSQL_ALLOW_EMPTY_PASSWORD=yes -d mysql:5.7
 	```
 	See [instructions](https://hub.docker.com/_/mysql/) for more options.
 	
