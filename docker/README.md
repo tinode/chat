@@ -1,3 +1,5 @@
+# THIS IS BROKEN as of February 27th. Come back again in a day or two.
+
 # Using Docker files to run Tinode
 
 1. [Install Docker](https://docs.docker.com/install/) 1.8 or above. The provided dockerfiles are dependent on [Docker networking](https://docs.docker.com/network/) which may may not work with the older Docker. 
