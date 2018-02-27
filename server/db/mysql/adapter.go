@@ -241,7 +241,7 @@ func (a *adapter) CreateDb(reset bool) error {
 
 	// Topics
 	if _, err = tx.Exec(
-		`CREATE TABLE topics(\
+		`CREATE TABLE topics(
 			id 			INT NOT NULL AUTO_INCREMENT,
 			createdat 	DATETIME(3) NOT NULL,
 			updatedat 	DATETIME(3) NOT NULL,
