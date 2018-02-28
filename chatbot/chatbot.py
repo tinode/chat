@@ -249,13 +249,18 @@ def run(args):
         """Use token to login"""
         schema = 'token'
         secret = args.login_token
+		print "Logging in with token"
+		
     elif args.login_basic != None:
         """Use username:password"""
         schema = 'basic'
         secret = args.login_basic
+		print "Logging in with login:password"
+		
     else:
         """Try reading the cookie file"""
         schema, secret = read_auth_cookie(args.login_cookie)
+		print "Logging in with cookie file", schema, secret
 
     if schema != None:
         # Load random quotes from file
@@ -301,8 +306,8 @@ if __name__ == '__main__':
     purpose = "Tino, Tinode's chatbot."
     print purpose
     parser = argparse.ArgumentParser(description=purpose)
-    parser.add_argument('--host', default='localhost:6061', help='address of Tinode server gRPC')
-    parser.add_argument('--listen', default='0.0.0.0:40051', help='address to listen for incoming Plugin API calls')
+    parser.add_argument('--host', default='localhost:6061', help='address of Tinode server gRPC endpoint')
+    parser.add_argument('--listen', default='0.0.0.0:40051', help='address to listen on for incoming Plugin API calls')
     parser.add_argument('--login-basic', help='login using basic authentication username:password')
     parser.add_argument('--login-token', help='login using token authentication')
     parser.add_argument('--login-cookie', default='.tn-cookie', help='read credentials from the provided cookie file')
