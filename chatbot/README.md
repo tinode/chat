@@ -21,15 +21,14 @@ python -m grpc_tools.protoc -I../pbx --python_out=. --grpc_python_out=. ../pbx/m
 	docker run --rm --name tinode-init-db --network tinode-net --volume botdata:/botdata tinode-init-db
 	```
 
-3. In the _step 6_ add the following parameter to the command line: `--env PLUGIN_PYTHON_CHAT_BOT_ENABLED=true`. For instance, for MySQL the buld command will like like this:
+3. Follow _step 6_ to build the Tinode server. 
+	
+4. Run the server adding `--env PLUGIN_PYTHON_CHAT_BOT_ENABLED=true` to the command line:
 	```
-	$ docker build --tag=tinode-srv --build-arg TARGET_DB=mysql --env PLUGIN_PYTHON_CHAT_BOT_ENABLED=true tinode-server
+	$ docker run -p 6060:18080 -d --name tinode-srv --env PLUGIN_PYTHON_CHAT_BOT_ENABLED=true --network tinode-net tinode-srv
 	```
 	
-4. Run the Tinode server according to _step 7_.
-
-	
-5. If this folder is `chat/chatbot`, then the Dockerfile is located in `chat/docker/chatbot` folder; `cd ../docker` and build the chat bot image
+5. If current folder is `chat/chatbot`, then the Dockerfile is located in `chat/docker/chatbot` folder; `cd ../docker` and build the chat bot image
 	```
 	$ docker build --tag=tinode-bot chatbot
 	```
