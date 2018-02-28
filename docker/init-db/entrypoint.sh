@@ -17,5 +17,5 @@ done < /config.template
 /go/bin/tinode-db --reset --config=/config --data=/go/src/github.com/tinode/chat/tinode-db/data.json | grep "usr;tino;" > /botdata/tino-password
 
 # Convert Tino's authentication credentials into a cookie file. 
-/credentials.sh < /botdata/tino-password > /botdata/.tn-cookie
+/go/src/github.com/tinode/chat/tinode-db/credentials.sh < /botdata/tino-password > /botdata/.tn-cookie
 

@@ -62,6 +62,10 @@
 
 8. Test the installation by pointing your browser to [http://localhost:6060/x/](http://localhost:6060/x/).
 
+## Optional
+
+### Resetting the data
+
 If you want to reset the data in the database, shut down the server container
 ```
 $ docker stop tinode-srv
@@ -70,3 +74,8 @@ then repeat step 5 then restart the server
 ```
 $ docker start tinode-srv
 ```
+
+### Running the chatbot
+
+See [instructions](../chatbot/).
+
