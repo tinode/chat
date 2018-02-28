@@ -14,8 +14,26 @@ python -m grpc_tools.protoc -I../pbx --python_out=. --grpc_python_out=. ../pbx/m
 
 ### Using Docker
 
-Follow [instructions](../INSTALL.md) to install and run Tinode chat server.
+1. Follow [instructions](../docker/README.md) to build and run dockerized Tinode chat server up to an including step 6. 
 
+2. Run Tinode server with the following command:
+	```
+	$ docker run -p 6060:18080 -d --name tinode-srv --network tinode-net --env PLUGIN_PYTHON_CHAT_BOT_ENABLED=true tinode-srv
+	```
+	
+3. If this folder is `chat/chatbot`, then the Dockerfile is located in `chat/docker/chatbot` folder; `cd ../docker` and build the chat bot image
+	```
+	$ docker build --tag=tinode-bot chatbot
+	```
+	
+4. Run the chatbot
+	```
+	$ docker run -d --name tinode-bot --network tinode-net tinode-bot
+	```
+	
+5. Test that the bot is functional by pointing your browser to [http://localhost:6060/x/](http://localhost:6060/x/), log in with ... credentials and talk to user ... The user should respond to every message with a random quote.
+
+	
 ### Building from Source
 
 Make sure [python](https://www.python.org/) 2.7 or 3.4 or higher is installed. Make sure [pip](https://pip.pypa.io/en/stable/installing/) 9.0.1 or higher is installed. If you are using python 2.7 install `futures`:
