@@ -8,6 +8,7 @@ RUN mkdir -p /usr/src/bot
 WORKDIR /usr/src/bot
 
 ADD https://raw.githubusercontent.com/tinode/chat/master/chatbot/chatbot.py 	/usr/src/bot
+# ADD https://raw.githubusercontent.com/tinode/chat/devel/chatbot/chatbot.py 	/usr/src/bot
 ADD https://raw.githubusercontent.com/tinode/chat/master/chatbot/quotes.txt 	/usr/src/bot
 ADD https://raw.githubusercontent.com/tinode/chat/master/pbx/model_pb2.py 		/usr/src/bot
 ADD https://raw.githubusercontent.com/tinode/chat/master/pbx/model_pb2_grpc.py 	/usr/src/bot
