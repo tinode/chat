@@ -13,5 +13,9 @@ while IFS='' read -r line || [[ -n $line ]] ; do
     echo "$line" >> /config
 done < /config.template
 
-# Run the generator
-/go/bin/tinode-db --reset --config=/config --data=/go/src/github.com/tinode/chat/tinode-db/data.json
+# Run the generator. Save stdout to to a file to extract Tino's password. 
+/go/bin/tinode-db --reset --config=/config --data=/go/src/github.com/tinode/chat/tinode-db/data.json | grep "usr;tino;" > /botdata/tino-password
+
+# Convert Tino's authentication credentials into a cookie file. 
+/credentials.sh < /botdata/tino-password > /botdata/.tn-cookie
+

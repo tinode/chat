@@ -23,6 +23,13 @@ RUN go get -tags $TARGET_DB github.com/tinode/chat/tinode-db \
 
 COPY config.template /
 COPY entrypoint.sh /
+COPY credentials.sh /
+
 RUN chmod +x /entrypoint.sh
+RUN chmod +x /credentials.sh
+
+RUN mkdir /botdata
 
 ENTRYPOINT ["/entrypoint.sh"]
+
+VOLUME /botdata

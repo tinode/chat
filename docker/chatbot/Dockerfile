@@ -13,9 +13,9 @@ ADD https://raw.githubusercontent.com/tinode/chat/master/chatbot/quotes.txt 	/us
 ADD https://raw.githubusercontent.com/tinode/chat/master/pbx/model_pb2.py 		/usr/src/bot
 ADD https://raw.githubusercontent.com/tinode/chat/master/pbx/model_pb2_grpc.py 	/usr/src/bot
 
-ENV LOGIN_AS=alice:alice123
+# Use command line parameter `-e LOGIN_AS=user:password` to login as someone other than Tino.
 
-ENTRYPOINT python chatbot.py --login-basic=${LOGIN_AS} --host=tinode-srv:16061
+ENTRYPOINT python chatbot.py --login-basic=${LOGIN_AS} --login-cookie=/botdata/.tn-cookie --host=tinode-srv:16061
 
 # Plugin port
 EXPOSE 40051

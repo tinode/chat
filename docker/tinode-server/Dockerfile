@@ -55,3 +55,4 @@ ENTRYPOINT ["/entrypoint.sh"]
 
 # HTTP and gRPC ports
 EXPOSE 18080 16061
+
