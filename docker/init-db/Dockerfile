@@ -15,7 +15,7 @@ ENV TARGET_DB=$TARGET_DB
 
 # Key to initialize UID generator. Replace with your own
 # for production
-ENV UID_ENCRYPTION_KEY la6YsO+bNX/+XIkOqc5Svw==
+ENV UID_ENCRYPTION_KEY=la6YsO+bNX/+XIkOqc5Svw==
 
 # Build the utility from the master branch on Github.
 RUN go get -tags $TARGET_DB github.com/tinode/chat/tinode-db \
