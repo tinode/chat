@@ -23,7 +23,7 @@ python -m grpc_tools.protoc -I../pbx --python_out=. --grpc_python_out=. ../pbx/m
 
 3. In the _step 6_ add the following parameter to the command line: `--env PLUGIN_PYTHON_CHAT_BOT_ENABLED=true`. For instance, for MySQL the buld command will like like this:
 	```
-	$ docker build --tag=tinode-srv --build-arg TARGET_DB=mysql tinode-server
+	$ docker build --tag=tinode-srv --build-arg TARGET_DB=mysql --env PLUGIN_PYTHON_CHAT_BOT_ENABLED=true tinode-server
 	```
 	
 4. Run the Tinode server according to _step 7_.
