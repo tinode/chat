@@ -12,6 +12,12 @@ python -m grpc_tools.protoc -I../pbx --python_out=. --grpc_python_out=. ../pbx/m
 
 ## Installing and running
 
+### Using Docker
+
+Follow [instructions](../INSTALL.md) to install and run Tinode chat server.
+
+### Building from Source
+
 Make sure [python](https://www.python.org/) 2.7 or 3.4 or higher is installed. Make sure [pip](https://pip.pypa.io/en/stable/installing/) 9.0.1 or higher is installed. If you are using python 2.7 install `futures`:
 ```
 pip install futures
