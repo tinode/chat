@@ -249,18 +249,18 @@ def run(args):
         """Use token to login"""
         schema = 'token'
         secret = args.login_token
-		print "Logging in with token"
+        print "Logging in with token"
 		
     elif args.login_basic != None:
         """Use username:password"""
         schema = 'basic'
         secret = args.login_basic
-		print "Logging in with login:password"
+        print "Logging in with login:password"
 		
     else:
         """Try reading the cookie file"""
         schema, secret = read_auth_cookie(args.login_cookie)
-		print "Logging in with cookie file", schema, secret
+        print "Logging in with cookie file", schema, secret
 
     if schema != None:
         # Load random quotes from file
