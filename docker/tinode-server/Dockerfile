@@ -50,4 +50,5 @@ RUN chmod +x /entrypoint.sh
 # Generate config from template and run the server.
 ENTRYPOINT ["/entrypoint.sh"]
 
-EXPOSE 18080
+# HTTP and gRPC ports
+EXPOSE 18080 16061

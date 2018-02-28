@@ -301,7 +301,7 @@ if __name__ == '__main__':
     purpose = "Tino, Tinode's chatbot."
     print purpose
     parser = argparse.ArgumentParser(description=purpose)
-    parser.add_argument('--host', default='localhost:6061', help='address of Tinode server')
+    parser.add_argument('--host', default='0.0.0.0:6061', help='address of Tinode server gRPC')
     parser.add_argument('--listen', default='localhost:40051', help='address to listen for incoming Plugin API calls')
     parser.add_argument('--login-basic', help='login using basic authentication username:password')
     parser.add_argument('--login-token', help='login using token authentication')
