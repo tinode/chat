@@ -5,7 +5,10 @@ import base64
 from concurrent import futures
 import json
 import os
-import Queue
+try:
+    import Queue as queue
+except ImportError:
+    import queue
 import random
 import signal
 import sys
@@ -80,7 +83,7 @@ class Plugin(pbx.PluginServicer):
 
         return pb.Unused()
 
-queue_out = Queue.Queue()
+queue_out = queue.Queue()
 
 def client_generate():
     while True:
@@ -98,7 +101,7 @@ def client_reset():
     try:
         while queue_out.get(False) != None:
             pass
-    except Queue.Empty:
+    except queue.Empty:
         pass
 
 def hello():
