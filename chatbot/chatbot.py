@@ -249,13 +249,13 @@ def run(args):
     schema = None
     secret = None
 
-    if args.login_token != None:
+    if args.login_token:
         """Use token to login"""
         schema = 'token'
         secret = args.login_token
         print("Logging in with token", args.login_token)
 
-    elif args.login_basic != None:
+    elif args.login_basic:
         """Use username:password"""
         schema = 'basic'
         secret = args.login_basic
@@ -266,7 +266,7 @@ def run(args):
         schema, secret = read_auth_cookie(args.login_cookie)
         print("Logging in with cookie file", args.login_cookie)
 
-    if schema != None:
+    if schema:
         # Load random quotes from file
         print("Loaded {} quotes".format(load_quotes(args.quotes)))
 
