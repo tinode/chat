@@ -74,7 +74,7 @@ class Plugin(pbx.PluginServicer):
         else:
             action = "unknown"
 
-        print "Account", action, ":", acc_event.user_id, acc_event.public
+        print("Account", action, ":", acc_event.user_id, acc_event.public)
 
         # TODO: subscribe to the new user.
 
@@ -87,7 +87,7 @@ def client_generate():
         msg = queue_out.get()
         if msg == None:
             return
-        # print "out:", msg
+        # print("out:", msg)
         yield msg
 
 def client_post(msg):
@@ -162,22 +162,22 @@ def client_message_loop(stream):
     try:
         # Read server responses
         for msg in stream:
-            # print "in:", msg
+            # print("in:", msg)
             if msg.HasField("ctrl"):
                 # Run code on command completion
                 exec_future(msg.ctrl.id, msg.ctrl.code, msg.ctrl.params)
-                # print str(msg.ctrl.code) + " " + msg.ctrl.text
+                # print(str(msg.ctrl.code) + " " + msg.ctrl.text)
 
             elif msg.HasField("data"):
                 # Respond to message.
-                # print "message from:", msg.data.from_user_id
+                # print("message from:", msg.data.from_user_id)
                 # Mark received message as read
                 client_post(note_read(msg.data.topic, msg.data.seq_id))
                 # Respond with a witty quote
                 client_post(publish(msg.data.topic, next_quote()))
 
             elif msg.HasField("pres"):
-                # print "presence:", msg.pres.topic, msg.pres.what
+                # print("presence:", msg.pres.topic, msg.pres.what)
                 # Wait for peers to appear online and subscribe to their topics
                 if msg.pres.topic == 'me':
                     if (msg.pres.what == pb.ServerPres.ON or msg.pres.what == pb.ServerPres.MSG) \
@@ -191,7 +191,7 @@ def client_message_loop(stream):
                 pass
 
     except grpc._channel._Rendezvous as err:
-        print "Disconnected:", err
+        print("Disconnected:", err)
 
 def read_auth_cookie(cookie_file_name):
     """Read authentication token from a file"""
@@ -210,7 +210,7 @@ def read_auth_cookie(cookie_file_name):
         return schema, secret
 
     except Exception as err:
-        print "Failed to read authentication cookie", err
+        print("Failed to read authentication cookie", err)
         return None, None
 
 def save_auth_cookie(cookie_file_name, params):
@@ -232,7 +232,7 @@ def save_auth_cookie(cookie_file_name, params):
         json.dump(nice, cookie)
         cookie.close()
     except Exception as err:
-        print "Failed to save authentication cookie", err
+        print("Failed to save authentication cookie", err)
 
 def load_quotes(file_name):
     with open(file_name) as f:
@@ -242,7 +242,7 @@ def load_quotes(file_name):
     return len(quotes)
 
 def run(args):
-    print "In run()"
+    print("In run()")
     schema = None
     secret = None
 
@@ -250,22 +250,22 @@ def run(args):
         """Use token to login"""
         schema = 'token'
         secret = args.login_token
-        print "Logging in with token", args.login_token
+        print("Logging in with token", args.login_token)
 
     elif args.login_basic != None:
         """Use username:password"""
         schema = 'basic'
         secret = args.login_basic
-        print "Logging in with login:password", args.login_basic
+        print("Logging in with login:password", args.login_basic)
 
     else:
         """Try reading the cookie file"""
         schema, secret = read_auth_cookie(args.login_cookie)
-        print "Logging in with cookie file", args.login_cookie
+        print("Logging in with cookie file", args.login_cookie)
 
     if schema != None:
         # Load random quotes from file
-        print "Loaded {} quotes".format(load_quotes(args.quotes))
+        print("Loaded {} quotes".format(load_quotes(args.quotes)))
 
         # Start Plugin server
         server = init_server(args.listen)
@@ -275,7 +275,7 @@ def run(args):
 
         # Setup closure for graceful termination
         def exit_gracefully(signo, stack_frame):
-            print "Terminated with signal", signo
+            print("Terminated with signal", signo)
             server.stop(None)
             client.cancel()
             sys.exit(0)
@@ -297,7 +297,7 @@ def run(args):
         client.cancel()
 
     else:
-        print "Error: unknown authentication scheme"
+        print("Error: unknown authentication scheme")
 
 
 if __name__ == '__main__':
@@ -305,7 +305,7 @@ if __name__ == '__main__':
     random.seed()
 
     purpose = "Tino, Tinode's chatbot."
-    print purpose
+    print(purpose)
     parser = argparse.ArgumentParser(description=purpose)
     parser.add_argument('--host', default='localhost:6061', help='address of Tinode server gRPC endpoint')
     parser.add_argument('--listen', default='0.0.0.0:40051', help='address to listen on for incoming Plugin API calls')
