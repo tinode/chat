@@ -125,7 +125,7 @@ func (a *adapter) IsOpen() bool {
 // Read current database version
 func (a *adapter) getDbVersion() (int, error) {
 	resp, err := rdb.DB(a.dbName).Table("kvmeta").Get("version").Pluck("value").Run(a.conn)
-	if err != nil {
+	if err != nil || resp.IsNil() {
 		return -1, err
 	}
 
@@ -362,12 +362,8 @@ func (a *adapter) GetAuthRecord(unique string) (t.Uid, int, []byte, time.Time, e
 	// Default() is needed to prevent Pluck from returning an error
 	row, err := rdb.DB(a.dbName).Table("auth").Get(unique).Pluck(
 		"userid", "secret", "expires", "authLvl").Default(nil).Run(a.conn)
-	if err != nil {
+	if err != nil || row.IsNil() {
 		return t.ZeroUid, 0, nil, time.Time{}, err
-	}
-
-	if row.IsNil() {
-		return t.ZeroUid, 0, nil, time.Time{}, nil
 	}
 
 	var record struct {
@@ -388,20 +384,15 @@ func (a *adapter) GetAuthRecord(unique string) (t.Uid, int, []byte, time.Time, e
 // UserGet fetches a single user by user id. If user is not found it returns (nil, nil)
 func (a *adapter) UserGet(uid t.Uid) (*t.User, error) {
 	row, err := rdb.DB(a.dbName).Table("users").Get(uid.String()).Run(a.conn)
-	if err == nil && !row.IsNil() {
-		var user t.User
-		if err = row.One(&user); err == nil {
-			return &user, nil
-		}
+	if err != nil || row.IsNil() {
 		return nil, err
 	}
 
-	if row != nil {
-		row.Close()
+	var user t.User
+	if err = row.One(&user); err != nil {
+		return nil, err
 	}
-
-	// If user does not exist, it returns nil, nil
-	return nil, err
+	return &user, nil
 }
 
 func (a *adapter) UserGetAll(ids ...t.Uid) ([]t.User, error) {
@@ -493,7 +484,7 @@ func (a *adapter) TopicCreateP2P(initiator, invited *t.Subscription) error {
 func (a *adapter) TopicGet(topic string) (*t.Topic, error) {
 	// Fetch topic by name
 	row, err := rdb.DB(a.dbName).Table("topics").Get(topic).Run(a.conn)
-	if err != nil {
+	if err != nil || row.IsNil() {
 		return nil, err
 	}
 
@@ -502,7 +493,7 @@ func (a *adapter) TopicGet(topic string) (*t.Topic, error) {
 		return nil, err
 	}
 
-	return tt, row.Err()
+	return tt, nil
 }
 
 // TopicsForUser loads user's contact list: p2p and grp topics, except for 'me' subscription.
@@ -713,20 +704,21 @@ func (a *adapter) TopicUpdate(topic string, update map[string]interface{}) error
 // Get a subscription of a user to a topic
 func (a *adapter) SubscriptionGet(topic string, user t.Uid) (*t.Subscription, error) {
 
-	rows, err := rdb.DB(a.dbName).Table("subscriptions").Get(topic + ":" + user.String()).Run(a.conn)
-	if err != nil {
+	row, err := rdb.DB(a.dbName).Table("subscriptions").Get(topic + ":" + user.String()).Run(a.conn)
+	if err != nil || row.IsNil() {
 		return nil, err
 	}
 
 	var sub t.Subscription
-	if err = rows.One(&sub); err != nil {
+	if err = row.One(&sub); err != nil {
 		return nil, err
 	}
 
 	if sub.DeletedAt != nil {
-		return nil, rows.Err()
+		return nil, nil
 	}
-	return &sub, rows.Err()
+
+	return &sub, nil
 }
 
 // Update time when the user was last attached to the topic
