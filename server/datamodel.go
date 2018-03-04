@@ -424,6 +424,8 @@ type MsgServerMeta struct {
 	Sub []MsgTopicSub `json:"sub,omitempty"`
 	// Delete ID and the ranges of IDs of deleted messages
 	Del *MsgDelValues `json:"del,omitempty"`
+	// User discovery tags
+	Tags []string `json:"tags,omitempty"`
 }
 
 // MsgServerInfo is the server-side copy of MsgClientNote with From added (non-authoritative).

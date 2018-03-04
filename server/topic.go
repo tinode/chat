@@ -62,6 +62,9 @@ type Topic struct {
 	accessAuth types.AccessMode
 	accessAnon types.AccessMode
 
+	// Topic discovery tags
+	tags []string
+
 	// Topic's public data
 	public interface{}
 
@@ -1685,6 +1688,23 @@ func (t *Topic) replyGetData(sess *Session, id string, req *MsgBrowseOpts) error
 
 // replyGetTags returns topic's tags - tokens used for discovery.
 func (t *Topic) replyGetTags(sess *Session, id string) error {
+	now := types.TimeNow()
+	if t.cat != types.TopicCatMe && t.cat != types.TopicCatGrp {
+		sess.queueOut(ErrOperationNotAllowed(id, t.original(sess.uid), now))
+		return errors.New("invalid topic category for getting tags")
+	}
+
+	if len(t.tags) > 0 {
+		sess.queueOut(&ServerComMessage{
+			Meta: &MsgServerMeta{Id: id, Topic: t.original(sess.uid), Timestamp: &now, Tags: t.tags}})
+		return nil
+	}
+
+	// Inform the requester that there are no tags.
+	reply := NoErr(id, t.original(sess.uid), now)
+	reply.Ctrl.Params = map[string]string{"what": "tags"}
+	sess.queueOut(reply)
+
 	return nil
 }
 
@@ -1696,8 +1716,11 @@ func (t *Topic) replySetTags(sess *Session, id string, set *MsgClientSet) error 
 
 	now := types.TimeNow()
 	if t.cat != types.TopicCatMe && t.cat != types.TopicCatGrp {
-		sess.queueOut(ErrOperationNotAllowed(id, "", now))
+		sess.queueOut(ErrOperationNotAllowed(id, t.original(sess.uid), now))
 		return errors.New("invalid topic category assign tags")
+	} else if t.cat == types.TopicCatGrp && t.owner != sess.uid {
+		sess.queueOut(ErrPermissionDenied(id, t.original(sess.uid), now))
+		return errors.New("tags update by non-owner")
 	}
 
 	var tags []string

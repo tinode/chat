@@ -49,5 +49,20 @@
 				"disabled": true
 			}
 		}
+	],
+	
+	"plugins": [
+		{
+			"enabled": $PLUGIN_PYTHON_CHAT_BOT_ENABLED,
+			"name": "python_chat_bot",
+			"timeout": 20000,
+			"filters": {
+				"account": "C"
+			},
+			"failure_code": 0,
+			"failure_text": null,
+			"service_addr": "tcp://localhost:40051"
+		}
 	]
+	
 }

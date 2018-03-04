@@ -295,6 +295,9 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		t.accessAuth = user.Access.Auth
 		t.accessAnon = user.Access.Anon
 
+		// Assign tags
+		t.tags = user.Tags
+
 		if err = t.loadSubscribers(); err != nil {
 			log.Println("hub: cannot load subscribers for '" + t.name + "' (" + err.Error() + ")")
 			sreg.sess.queueOut(ErrUnknown(sreg.pkt.Id, t.xoriginal, timestamp))
@@ -691,6 +694,9 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		t.created = timestamp
 		t.updated = timestamp
 
+		// Assign tags
+		t.tags = tags
+
 		// t.lastId & t.clearId are not set for new topics
 
 		stopic := &types.Topic{
@@ -737,6 +743,9 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 
 		t.accessAuth = stopic.Access.Auth
 		t.accessAnon = stopic.Access.Anon
+
+		// Assign tags
+		t.tags = stopic.Tags
 
 		t.public = stopic.Public
 
