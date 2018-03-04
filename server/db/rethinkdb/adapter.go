@@ -366,6 +366,10 @@ func (a *adapter) GetAuthRecord(unique string) (t.Uid, int, []byte, time.Time, e
 		return t.ZeroUid, 0, nil, time.Time{}, err
 	}
 
+	if row.IsNil() {
+		return t.ZeroUid, 0, nil, time.Time{}, nil
+	}
+
 	var record struct {
 		Userid  string    `gorethink:"userid"`
 		AuthLvl int       `gorethink:"authLvl"`
