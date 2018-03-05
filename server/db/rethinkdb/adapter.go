@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"hash/fnv"
-	"log"
 	"sort"
 	"strconv"
 	"strings"
@@ -297,7 +296,11 @@ func (a *adapter) UserCreate(user *t.User) error {
 		if err != nil {
 			if res.Inserted > 0 {
 				// Something went wrong, do best effort deletion of inserted tags
-				rdb.DB(a.dbName).Table("tagunique").GetAll(user.Tags).
+				keys := make([]interface{}, 0, len(user.Tags))
+				for _, k := range user.Tags {
+					keys = append(keys, k)
+				}
+				rdb.DB(a.dbName).Table("tagunique").GetAll(keys...).
 					Filter(map[string]interface{}{"Source": user.Id}).Delete().RunWrite(a.conn)
 			}
 
@@ -1014,7 +1017,7 @@ func (a *adapter) TopicTagsUpdate(name string, unique, tags t.StringSlice) error
 }
 
 func (a *adapter) updateUniqueTags(source string, added, removed []string) error {
-	if added != nil && len(added) > 0 {
+	if len(added) > 0 {
 		toAdd := make([]storedTag, 0, len(added))
 		for _, tag := range added {
 			toAdd = append(toAdd, storedTag{Id: tag, Source: source})
@@ -1023,7 +1026,11 @@ func (a *adapter) updateUniqueTags(source string, added, removed []string) error
 		if err != nil {
 			if res.Inserted > 0 {
 				// Something went wrong, do best effort deletion of inserted tags
-				rdb.DB(a.dbName).Table("tagunique").GetAll(added).
+				keys := make([]interface{}, 0, len(added))
+				for _, k := range added {
+					keys = append(keys, k)
+				}
+				rdb.DB(a.dbName).Table("tagunique").GetAll(keys...).
 					Filter(map[string]interface{}{"Source": source}).Delete().RunWrite(a.conn)
 			}
 
@@ -1034,8 +1041,12 @@ func (a *adapter) updateUniqueTags(source string, added, removed []string) error
 		}
 	}
 
-	if removed != nil && len(removed) > 0 {
-		_, err := rdb.DB(a.dbName).Table("tagunique").GetAll(removed).
+	if len(removed) > 0 {
+		keys := make([]interface{}, 0, len(removed))
+		for _, k := range removed {
+			keys = append(keys, k)
+		}
+		_, err := rdb.DB(a.dbName).Table("tagunique").GetAll(keys...).
 			Filter(map[string]interface{}{"Source": source}).Delete().RunWrite(a.conn)
 		if err != nil {
 			return err
@@ -1114,7 +1125,6 @@ func (a *adapter) MessageSave(msg *t.Message) error {
 }
 
 func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.BrowseOpt) ([]t.Message, error) {
-	//log.Println("Loading messages for topic ", topic, opts)
 
 	var limit = maxResults
 	var lower, upper interface{}

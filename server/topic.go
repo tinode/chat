@@ -2200,7 +2200,7 @@ func msgOpts2storeOpts(req *MsgBrowseOpts) *types.BrowseOpt {
 }
 
 func isNullValue(i interface{}) bool {
-	// Del control character
+	// Unicode Del control character
 	const clearValue = "\u2421"
 	if str, ok := i.(string); ok {
 		return str == clearValue
@@ -2270,7 +2270,7 @@ func normalizeTags(dst []string, src []string) []string {
 	var prev string
 	for i := 0; i < len(src); {
 		curr := src[i]
-		if len(curr) < minTagLength || curr == prev {
+		if len(curr) < minTagLength || curr == prev || isNullValue(curr) {
 			// Re-slicing is not efficient but the slice is short so we don't care.
 			src = append(src[:i], src[i+1:]...)
 			continue
