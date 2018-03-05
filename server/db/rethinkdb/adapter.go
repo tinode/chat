@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"hash/fnv"
+	"log"
 	"sort"
 	"strconv"
 	"strings"
@@ -1048,10 +1049,10 @@ func (a *adapter) updateUniqueTags(source string, added, removed []string) error
 //   added :=  newTags - (oldTags & newTags) -- present in new but missing in old
 //   removed := oldTags - (newTags & oldTags) -- present in old but missing in new
 func tagsUniqueDelta(unique, oldTags, newTags []string) (added, removed []string) {
-	if oldTags == nil {
+	if len(oldTags) == 0 {
 		return filterUniqueTags(unique, newTags), nil
 	}
-	if newTags == nil {
+	if len(newTags) == 0 {
 		return nil, filterUniqueTags(unique, oldTags)
 	}
 
@@ -1062,15 +1063,14 @@ func tagsUniqueDelta(unique, oldTags, newTags []string) (added, removed []string
 	iold, inew := 0, 0
 	lold, lnew := len(oldTags), len(newTags)
 	for iold < lold || inew < lnew {
-		if (iold == lold && inew < lnew) || oldTags[iold] > newTags[inew] {
+		if iold == lold || (inew < lnew && oldTags[iold] > newTags[inew]) {
 			// Present in new, missing in old: added
 			added = append(added, newTags[inew])
 			inew++
 
-		} else if (inew == lnew && iold < lold) || oldTags[iold] < newTags[inew] {
+		} else if inew == lnew || oldTags[iold] < newTags[inew] {
 			// Present in old, missing in new: removed
 			removed = append(removed, oldTags[iold])
-
 			iold++
 
 		} else {
@@ -1088,7 +1088,7 @@ func tagsUniqueDelta(unique, oldTags, newTags []string) (added, removed []string
 
 func filterUniqueTags(unique, tags []string) []string {
 	var out []string
-	if unique != nil && len(unique) > 0 && tags != nil {
+	if len(unique) > 0 && len(tags) > 0 {
 		for _, s := range tags {
 			parts := strings.SplitN(s, ":", 2)
 

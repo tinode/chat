@@ -67,7 +67,7 @@ type MsgSetQuery struct {
 	// Subscription parameters
 	Sub *MsgSetSub `json:"sub,omitempty"`
 	// Indexable tags for user discovery
-	Tags []string `json:"tags"`
+	Tags []string `json:"tags,omitempty"`
 }
 
 // MsgFindQuery is a format of fndXXX.private.
