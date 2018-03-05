@@ -521,6 +521,11 @@ func (t *Topic) run(hub *Hub) {
 						log.Printf("topic[%s] meta.Set.Sub failed: %v", t.name, err)
 					}
 				}
+				if meta.what&constMsgMetaTags != 0 {
+					if err := t.replySetTags(meta.sess, meta.pkt.Set); err != nil {
+						log.Printf("topic[%s] meta.Set.Tags failed: %v", t.name, err)
+					}
+				}
 
 			} else if meta.pkt.Del != nil {
 				// Del request
@@ -1709,17 +1714,15 @@ func (t *Topic) replyGetTags(sess *Session, id string) error {
 }
 
 // replySetTags updates topic's tags - tokens used for discovery.
-func (t *Topic) replySetTags(sess *Session, id string, set *MsgClientSet) error {
-	if len(set.Tags) == 0 {
-		return nil
-	}
+func (t *Topic) replySetTags(sess *Session, set *MsgClientSet) error {
+	log.Println("Set tags", set.Tags)
 
 	now := types.TimeNow()
 	if t.cat != types.TopicCatMe && t.cat != types.TopicCatGrp {
-		sess.queueOut(ErrOperationNotAllowed(id, t.original(sess.uid), now))
-		return errors.New("invalid topic category assign tags")
+		sess.queueOut(ErrOperationNotAllowed(set.Id, t.original(sess.uid), now))
+		return errors.New("invalid topic category to assign tags")
 	} else if t.cat == types.TopicCatGrp && t.owner != sess.uid {
-		sess.queueOut(ErrPermissionDenied(id, t.original(sess.uid), now))
+		sess.queueOut(ErrPermissionDenied(set.Id, t.original(sess.uid), now))
 		return errors.New("tags update by non-owner")
 	}
 
@@ -1732,19 +1735,21 @@ func (t *Topic) replySetTags(sess *Session, id string, set *MsgClientSet) error 
 
 		var err error
 		if t.cat == types.TopicCatMe {
+			log.Println("Set tags - User", tags)
 			err = store.Users.UpdateTags(sess.uid, globals.uniqueTags, tags)
 		} else if t.cat == types.TopicCatGrp {
+			log.Println("Set tags - Topic", tags)
 			err = store.Topics.UpdateTags(t.name, globals.uniqueTags, tags)
 		}
 
 		if err != nil {
 			log.Println("Failed to update tags", err)
-			sess.queueOut(ErrUnknown(id, t.original(sess.uid), now))
+			sess.queueOut(ErrUnknown(set.Id, t.original(sess.uid), now))
 			return err
 		}
 	}
 
-	sess.queueOut(NoErr(id, t.original(sess.uid), now))
+	sess.queueOut(NoErr(set.Id, t.original(sess.uid), now))
 
 	return nil
 }
