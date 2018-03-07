@@ -284,33 +284,13 @@ type storedTag struct {
 
 // UserCreate creates a new user. Returns error and true if error is due to duplicate user name,
 // false for any other error
-func (a *adapter) UserCreate(user *t.User) error {
+func (a *adapter) UserCreate(user *t.User, unique []string) error {
 	// Save user's tags to a separate table to ensure uniquness
-	// TODO(gene): add support for non-unique tags
 	if len(user.Tags) > 0 {
-		tags := make([]storedTag, 0, len(user.Tags))
-		for _, t := range user.Tags {
-			tags = append(tags, storedTag{Id: t, Source: user.Id})
-		}
-		res, err := rdb.DB(a.dbName).Table("tagunique").Insert(tags).RunWrite(a.conn)
-		if err != nil {
-			if res.Inserted > 0 {
-				// Something went wrong, do best effort deletion of inserted tags
-				keys := make([]interface{}, 0, len(user.Tags))
-				for _, k := range user.Tags {
-					keys = append(keys, k)
-				}
-				rdb.DB(a.dbName).Table("tagunique").GetAll(keys...).
-					Filter(map[string]interface{}{"Source": user.Id}).Delete().RunWrite(a.conn)
-			}
-
-			if rdb.IsConflictErr(err) {
-				return errors.New("duplicate tag(s)")
-			}
+		if err := a.updateUniqueTags(user.Id, filterUniqueTags(unique, user.Tags), nil); err != nil {
 			return err
 		}
 	}
-
 	_, err := rdb.DB(a.dbName).Table("users").Insert(&user).RunWrite(a.conn)
 	if err != nil {
 		return err
@@ -332,7 +312,7 @@ func (a *adapter) AddAuthRecord(uid t.Uid, authLvl int, unique string,
 			"expires": expires}).RunWrite(a.conn)
 	if err != nil {
 		if rdb.IsConflictErr(err) {
-			return true, errors.New("duplicate credential")
+			return true, t.ErrDuplicate
 		}
 		return false, err
 	}
@@ -984,7 +964,7 @@ func (a *adapter) FindTopics(tags []string) ([]t.Subscription, error) {
 
 // UserTagsUpdate updates user's Tags. 'unique' contains the prefixes of tags which are
 // treated as unique, i.e. 'email' or 'tel'.
-func (a *adapter) UserTagsUpdate(uid t.Uid, unique, tags t.StringSlice) error {
+func (a *adapter) UserTagsUpdate(uid t.Uid, tags t.TagSlice) error {
 	user, err := a.UserGet(uid)
 	if err != nil {
 		return err
@@ -1002,7 +982,7 @@ func (a *adapter) UserTagsUpdate(uid t.Uid, unique, tags t.StringSlice) error {
 // - name is the name of the topic to update
 // - unique is the list of prefixes to treat as unique.
 // - tags are the new tags.
-func (a *adapter) TopicTagsUpdate(name string, unique, tags t.StringSlice) error {
+func (a *adapter) TopicTagsUpdate(name string, tags t.TagSlice) error {
 	topic, err := a.TopicGet(name)
 	if err != nil {
 		return err
@@ -1035,7 +1015,7 @@ func (a *adapter) updateUniqueTags(source string, added, removed []string) error
 			}
 
 			if rdb.IsConflictErr(err) {
-				return errors.New("duplicate tag(s)")
+				return t.ErrDuplicate
 			}
 			return err
 		}

@@ -79,7 +79,7 @@ var globals struct {
 	grpcServer   *grpc.Server
 	apiKeySalt   []byte
 	// Tags which are indexed as unique.
-	uniqueTags []string
+	uniqueTags map[string]bool
 	// Add Strict-Transport-Security to headers, the value signifies age.
 	// Empty string "" turns it off
 	tlsStrictMaxAge string

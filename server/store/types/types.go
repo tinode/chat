@@ -10,6 +10,14 @@ import (
 	"time"
 )
 
+type StoreError string
+
+func (s StoreError) Error() string {
+	return string(s)
+}
+
+const ErrDuplicate = StoreError("duplicate key(s)")
+
 // Uid is a database-specific record id, suitable to be used as a primary key.
 type Uid uint64
 
@@ -260,49 +268,22 @@ func (h *ObjHeader) IsDeleted() bool {
 	return h.DeletedAt != nil
 }
 
-// StringSlice is defined so Scanner and Valuer can be attached to it.
-type StringSlice []string
+type Tag struct {
+	Val    string
+	Unique bool
+}
+
+// TagSlice is defined so Scanner and Valuer can be attached to it.
+type TagSlice []Tag
 
 // Scan implements sql.Scanner interface.
-func (ss *StringSlice) Scan(val interface{}) error {
+func (ss *TagSlice) Scan(val interface{}) error {
 	return json.Unmarshal(val.([]byte), ss)
 }
 
 // Value implements sql/driver.Valuer interface.
-func (ss StringSlice) Value() (driver.Value, error) {
+func (ss TagSlice) Value() (driver.Value, error) {
 	return json.Marshal(ss)
-}
-
-// GenericData is wrapper for Public/Private fields. MySQL JSON field requires a valid
-// JSON object, but public/private could contain basic types, like a string. Must wrap it in an object.
-type GenericData struct {
-	R interface{}
-}
-
-// Scan implements sql.Scanner interface.
-func (gd *GenericData) Scan(val interface{}) error {
-	return json.Unmarshal(val.([]byte), gd)
-}
-
-// Value implements sql/driver.Valuer interface.
-func (gd GenericData) Value() (driver.Value, error) {
-	return json.Marshal(gd)
-}
-
-func (gd *GenericData) UnmarshalJSON(data []byte) error {
-	if gd == nil {
-		gd = &GenericData{}
-	}
-	// Unmarshalling into the inner object
-	return json.Unmarshal(data, &gd.R)
-}
-
-func (gd *GenericData) MarshalJSON() ([]byte, error) {
-	if gd == nil {
-		return nil, nil
-	}
-	// Marshalling the inner object only
-	return json.Marshal(gd.R)
 }
 
 // User is a representation of a DB-stored user record.
@@ -325,7 +306,7 @@ type User struct {
 
 	// Unique indexed tags (email, phone) for finding this user. Stored on the
 	// 'users' as well as indexed in 'tagunique'
-	Tags StringSlice
+	Tags TagSlice
 
 	// Info on known devices, used for push notifications
 	Devices map[string]*DeviceDef
@@ -716,7 +697,7 @@ type Topic struct {
 	Public interface{}
 
 	// Indexed tags for finding this topic.
-	Tags StringSlice
+	Tags TagSlice
 
 	// Deserialized ephemeral params
 	owner   Uid                  // first assigned owner

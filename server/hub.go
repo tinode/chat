@@ -1047,10 +1047,3 @@ func parseTopicAccess(acs *MsgDefaultAcsMode, defAuth, defAnon types.AccessMode)
 
 	return
 }
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}

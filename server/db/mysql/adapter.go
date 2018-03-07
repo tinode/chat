@@ -193,6 +193,22 @@ func (a *adapter) CreateDb(reset bool) error {
 		return err
 	}
 
+	// Enforcement of tag uniqueness
+	if _, err = tx.Exec(
+		`CREATE TABLE tagunique(
+			id 		INT NOT NULL AUTO_INCREMENT,
+			tag 	VARCHAR(255) NOT NULL,
+			userid 	BIGINT,
+			topic 	CHAR(25),
+		
+			PRIMARY KEY(id),
+			UNIQUE tagunique_tag (tag),
+			INDEX tagunique_userid(userid),
+			INDEX tagunique_topic(topic)
+		)`); err != nil {
+		return err
+	}
+
 	// Indexed user tags.
 	if _, err = tx.Exec(
 		`CREATE TABLE usertags(
@@ -345,7 +361,7 @@ type storedTag struct {
 
 // UserCreate creates a new user. Returns error and true if error is due to duplicate user name,
 // false for any other error
-func (a *adapter) UserCreate(user *t.User) error {
+func (a *adapter) UserCreate(user *t.User, uniquetags []string) error {
 	tx, err := a.db.Beginx()
 	if err != nil {
 		return err

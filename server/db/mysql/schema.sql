@@ -39,6 +39,19 @@ CREATE TABLE usertags(
 	INDEX usertags_tag (tag)
 );
 
+# Enforcement of tag uniqueness
+CREATE TABLE tagunique(
+	id 		INT NOT NULL AUTO_INCREMENT,
+	tag 	VARCHAR(255) NOT NULL,
+	userid 	BIGINT,
+	topic 	CHAR(25),
+		
+	PRIMARY KEY(id),
+	UNIQUE tagunique_tag (tag),
+	INDEX tagunique_userid(userid),
+	INDEX tagunique_topic(topic)
+);
+
 # Indexed devices. Normalized into a separate table.
 CREATE TABLE devices(
 	id 			INT NOT NULL AUTO_INCREMENT,

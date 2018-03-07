@@ -584,7 +584,7 @@ func (s *Session) acc(msg *ClientComMessage) {
 			}
 		}
 
-		if _, err := store.Users.Create(&user, private); err != nil {
+		if _, err := store.Users.Create(&user, private, globals.uniqueTags); err != nil {
 			// Separate bad user input from DB error
 			if strings.Contains(err.Error(), "duplicate ") {
 				s.queueOut(ErrDuplicateCredential(msg.Acc.Id, "", msg.timestamp))
@@ -916,31 +916,4 @@ func (s *Session) serialize(msg *ServerComMessage) interface{} {
 	}
 	out, _ := json.Marshal(msg)
 	return out
-}
-
-func decodeAuthError(code int, id string, timestamp time.Time) *ServerComMessage {
-	var errmsg *ServerComMessage
-	switch code {
-	case auth.NoErr:
-		errmsg = NoErr(id, "", timestamp)
-	case auth.InfoNotModified:
-		errmsg = InfoNotModified(id, "", timestamp)
-	case auth.ErrInternal:
-		errmsg = ErrUnknown(id, "", timestamp)
-	case auth.ErrMalformed:
-		errmsg = ErrMalformed(id, "", timestamp)
-	case auth.ErrFailed:
-		errmsg = ErrAuthFailed(id, "", timestamp)
-	case auth.ErrDuplicate:
-		errmsg = ErrDuplicateCredential(id, "", timestamp)
-	case auth.ErrUnsupported:
-		errmsg = ErrNotImplemented(id, "", timestamp)
-	case auth.ErrExpired:
-		errmsg = ErrAuthFailed(id, "", timestamp)
-	case auth.ErrPolicy:
-		errmsg = ErrPolicy(id, "", timestamp)
-	default:
-		errmsg = ErrUnknown(id, "", timestamp)
-	}
-	return errmsg
 }
