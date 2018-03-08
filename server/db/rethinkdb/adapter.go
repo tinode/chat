@@ -267,30 +267,34 @@ func (a *adapter) CreateDb(reset bool) error {
 		return err
 	}
 
-	// Index of unique user contact information as strings, such as "email:jdoe@example.com" or "tel:18003287448":
-	// {Id: <tag>, Source: <uid>} to ensure uniqueness of tags.
-	if _, err := rdb.DB(a.dbName).TableCreate("tagunique", rdb.TableCreateOpts{PrimaryKey: "Id"}).RunWrite(a.conn); err != nil {
-		return err
-	}
+	/*
+		// Index of unique user contact information as strings, such as "email:jdoe@example.com" or "tel:18003287448":
+		// {Id: <tag>, Source: <uid>} to ensure uniqueness of tags.
+		if _, err := rdb.DB(a.dbName).TableCreate("tagunique", rdb.TableCreateOpts{PrimaryKey: "Id"}).RunWrite(a.conn); err != nil {
+			return err
+		}
+	*/
 
 	return nil
 }
 
+/*
 // Indexable tag as stored in 'tagunique'
 type storedTag struct {
 	Id     string
 	Source string
 }
+*/
 
 // UserCreate creates a new user. Returns error and true if error is due to duplicate user name,
 // false for any other error
-func (a *adapter) UserCreate(user *t.User, unique []string) error {
+func (a *adapter) UserCreate(user *t.User) error {
 	// Save user's tags to a separate table to ensure uniquness
-	if len(user.Tags) > 0 {
-		if err := a.updateUniqueTags(user.Id, filterUniqueTags(unique, user.Tags), nil); err != nil {
-			return err
-		}
-	}
+	//if len(user.Tags) > 0 {
+	//	if err := a.updateUniqueTags(user.Id, filterUniqueTags(unique, user.Tags), nil); err != nil {
+	//		return err
+	//	}
+	//}
 	_, err := rdb.DB(a.dbName).Table("users").Insert(&user).RunWrite(a.conn)
 	if err != nil {
 		return err
@@ -964,16 +968,16 @@ func (a *adapter) FindTopics(tags []string) ([]t.Subscription, error) {
 
 // UserTagsUpdate updates user's Tags. 'unique' contains the prefixes of tags which are
 // treated as unique, i.e. 'email' or 'tel'.
-func (a *adapter) UserTagsUpdate(uid t.Uid, tags t.TagSlice) error {
-	user, err := a.UserGet(uid)
-	if err != nil {
-		return err
-	}
+func (a *adapter) UserTagsUpdate(uid t.Uid, tags t.StringSlice) error {
+	//user, err := a.UserGet(uid)
+	//if err != nil {
+	//	return err
+	//}
 
-	added, removed := tagsUniqueDelta(unique, user.Tags, tags)
-	if err := a.updateUniqueTags(user.Id, added, removed); err != nil {
-		return err
-	}
+	//added, removed := tagsUniqueDelta(unique, user.Tags, tags)
+	//if err := a.updateUniqueTags(user.Id, added, removed); err != nil {
+	//	return err
+	//}
 
 	return a.UserUpdate(uid, map[string]interface{}{"Tags": tags})
 }
@@ -982,20 +986,21 @@ func (a *adapter) UserTagsUpdate(uid t.Uid, tags t.TagSlice) error {
 // - name is the name of the topic to update
 // - unique is the list of prefixes to treat as unique.
 // - tags are the new tags.
-func (a *adapter) TopicTagsUpdate(name string, tags t.TagSlice) error {
-	topic, err := a.TopicGet(name)
-	if err != nil {
-		return err
-	}
+func (a *adapter) TopicTagsUpdate(name string, tags t.StringSlice) error {
+	//topic, err := a.TopicGet(name)
+	//if err != nil {
+	//	return err
+	//}
 
-	added, removed := tagsUniqueDelta(unique, topic.Tags, tags)
-	if err := a.updateUniqueTags(name, added, removed); err != nil {
-		return err
-	}
+	//added, removed := tagsUniqueDelta(unique, topic.Tags, tags)
+	//if err := a.updateUniqueTags(name, added, removed); err != nil {
+	//	return err
+	//}
 
 	return a.TopicUpdate(name, map[string]interface{}{"Tags": tags})
 }
 
+/*
 func (a *adapter) updateUniqueTags(source string, added, removed []string) error {
 	if len(added) > 0 {
 		toAdd := make([]storedTag, 0, len(added))
@@ -1035,6 +1040,7 @@ func (a *adapter) updateUniqueTags(source string, added, removed []string) error
 
 	return nil
 }
+*/
 
 // tagsUniqueDelta extracts the lists of added unique tags and removed unique tags:
 //   added :=  newTags - (oldTags & newTags) -- present in new but missing in old

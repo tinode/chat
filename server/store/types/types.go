@@ -268,21 +268,16 @@ func (h *ObjHeader) IsDeleted() bool {
 	return h.DeletedAt != nil
 }
 
-type Tag struct {
-	Val    string
-	Unique bool
-}
-
 // TagSlice is defined so Scanner and Valuer can be attached to it.
-type TagSlice []Tag
+type StringSlice []string
 
 // Scan implements sql.Scanner interface.
-func (ss *TagSlice) Scan(val interface{}) error {
+func (ss *StringSlice) Scan(val interface{}) error {
 	return json.Unmarshal(val.([]byte), ss)
 }
 
 // Value implements sql/driver.Valuer interface.
-func (ss TagSlice) Value() (driver.Value, error) {
+func (ss StringSlice) Value() (driver.Value, error) {
 	return json.Marshal(ss)
 }
 
@@ -306,7 +301,7 @@ type User struct {
 
 	// Unique indexed tags (email, phone) for finding this user. Stored on the
 	// 'users' as well as indexed in 'tagunique'
-	Tags TagSlice
+	Tags StringSlice
 
 	// Info on known devices, used for push notifications
 	Devices map[string]*DeviceDef
@@ -697,7 +692,7 @@ type Topic struct {
 	Public interface{}
 
 	// Indexed tags for finding this topic.
-	Tags TagSlice
+	Tags StringSlice
 
 	// Deserialized ephemeral params
 	owner   Uid                  // first assigned owner

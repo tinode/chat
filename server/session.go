@@ -580,13 +580,18 @@ func (s *Session) acc(msg *ClientComMessage) {
 		if len(msg.Acc.Tags) > 0 {
 			var tags []string
 			if tags = normalizeTags(tags, msg.Acc.Tags); len(tags) > 0 {
+				if !restrictedTags(tags, nil) {
+					log.Println("Attempt to directly assign restricted tags")
+					s.queueOut(ErrPermissionDenied(msg.Acc.Id, "", msg.timestamp))
+					return
+				}
 				user.Tags = tags
 			}
 		}
 
-		if _, err := store.Users.Create(&user, private, globals.uniqueTags); err != nil {
+		if _, err := store.Users.Create(&user, private); err != nil {
 			// Separate bad user input from DB error
-			if strings.Contains(err.Error(), "duplicate ") {
+			if err == types.ErrDuplicate {
 				s.queueOut(ErrDuplicateCredential(msg.Acc.Id, "", msg.timestamp))
 			} else {
 				log.Println("Failed to create user", err)

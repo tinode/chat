@@ -683,9 +683,10 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 			}
 
 			tags = normalizeTags(tags, sreg.pkt.Set.Tags)
-			if len(tags) > globals.maxTagCount {
-				// If user sent too many tags, silently discard excessive tags.
-				tags = tags[:globals.maxTagCount]
+			if !restrictedTags(tags, nil) {
+				log.Println("hub: attempt to directly set restricted tags")
+				sreg.sess.queueOut(ErrPermissionDenied(sreg.pkt.Id, t.xoriginal, timestamp))
+				return
 			}
 		}
 

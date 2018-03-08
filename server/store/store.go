@@ -266,7 +266,7 @@ func (u UsersObjMapper) FindSubs(id types.Uid, query []string) ([]types.Subscrip
 }
 
 // UpdateTags updates indexable tags for the given user.
-func (u UsersObjMapper) UpdateTags(id types.Uid, newTags types.TagSlice) error {
+func (u UsersObjMapper) UpdateTags(id types.Uid, newTags types.StringSlice) error {
 	return adp.UserTagsUpdate(id, newTags)
 }
 
@@ -358,7 +358,7 @@ func (TopicsObjMapper) Delete(topic string) error {
 }
 
 // UpdateTags updates indexable tags for the given topic.
-func (u TopicsObjMapper) UpdateTags(topic string, tags types.TagSlice) error {
+func (u TopicsObjMapper) UpdateTags(topic string, tags types.StringSlice) error {
 	return adp.TopicTagsUpdate(topic, tags)
 }
 

@@ -2,6 +2,18 @@
 
 package main
 
+import (
+	"regexp"
+	"sort"
+	"strings"
+	"time"
+
+	"github.com/tinode/chat/server/auth"
+	"github.com/tinode/chat/server/store/types"
+)
+
+var tagPrefixRegexp = regexp.MustCompile(`^([a-z]\w{0,5}):\S`)
+
 // Convert a list of IDs into ranges
 func delrangeDeserialize(in []types.Range) []MsgDelRange {
 	if len(in) == 0 {
@@ -29,20 +41,9 @@ func delrangeSerialize(in []MsgDelRange) []types.Range {
 	return out
 }
 
-// Convert a slice of strings into a slice of tags.
-func toTagSlice(tags []string, uniqueTags map[string]bool) TagSlice {
-	var out TagSlice
-	if len(uniqueTags) > 0 && len(tags) > 0 {
-		for _, s := range tags {
-			parts := strings.SplitN(s, ":", 2)
-			out = append(out, t.Tag{Val: s, Unique: en(parts) == 2 && uniqueTags[parts[0]]})
-		}
-	}
-	return out
-}
-
-// Trim whitespace, remove empty tags and duplicates, ensure proper format of prefixes.
-func normalizeTags(dst []string, src []string) []string {
+// Trim whitespace, remove empty tags and duplicates, ensure proper format of prefixes,
+// compare new to old to make sure restricted tags are not removed.
+func normalizeTags(dst, src []string) []string {
 	if len(src) == 0 {
 		return dst
 	}
@@ -65,55 +66,99 @@ func normalizeTags(dst []string, src []string) []string {
 	// Remove short tags and de-dupe keeping the order. It may result in fewer tags than could have
 	// been if length were enforced later, but that's client's fault.
 	var prev string
-	for i := 0; i < len(src); {
-		curr := src[i]
+	for _, curr := range src {
 		if len(curr) < minTagLength || curr == prev || isNullValue(curr) {
-			// Re-slicing is not efficient but the slice is short so we don't care.
-			src = append(src[:i], src[i+1:]...)
 			continue
 		}
+		dst = append(dst, curr)
 		prev = curr
-		i++
 	}
 
-	// If prefixes are used, check their format.
-	// Copy to destination slice.
-	for i := 0; i < len(src); i++ {
-		parts := strings.SplitN(src[i], ":", 2)
-		if len(parts) < 2 {
-			// Not in "tag:value" format
-			dst = append(dst, src[i])
-			continue
-		}
-
-		// Skip invalid strings of the form "tag:" or ":value" or ":"
-		if parts[0], parts[1] = strings.TrimSpace(parts[0]),
-			strings.TrimSpace(parts[1]); parts[0] == "" || parts[1] == "" {
-			continue
-		}
-
-		// Add tag to output.
-		dst = append(dst, parts[0]+":"+parts[1])
-	}
-
-	// Because prefixes were forced to lowercase, the tags may be unsorted now.
 	return dst
 }
 
-func filterUniqueTags(unique, tags []string) []string {
+// restrictedTagsDelta extracts the lists of added and removed restricted tags:
+//   added :=  newTags - (oldTags & newTags) -- present in new but missing in old
+//   removed := oldTags - (newTags & oldTags) -- present in old but missing in new
+func restrictedTagsDelta(oldTags, newTags []string) (added, removed []string) {
+	rold := filterRestrictedTags(oldTags)
+	rnew := filterRestrictedTags(newTags)
+
+	if len(rold) == 0 && len(rnew) == 0 {
+		return nil, nil
+	}
+	if len(rold) == 0 {
+		return rnew, nil
+	}
+	if len(rnew) == 0 {
+		return nil, rold
+	}
+
+	sort.Strings(rold)
+	sort.Strings(rnew)
+
+	// Match old tags against the new tags and separate removed tags from added.
+	o, n := 0, 0
+	lold, lnew := len(rold), len(rnew)
+	for o < lold || n < lnew {
+		if o == lold || (n < lnew && rold[o] > rnew[n]) {
+			// Present in new, missing in old: added
+			added = append(added, rnew[n])
+			n++
+
+		} else if n == lnew || rold[o] < rnew[n] {
+			// Present in old, missing in new: removed
+			removed = append(removed, rold[o])
+			o++
+
+		} else {
+			// present in both
+			if o < lold {
+				o++
+			}
+			if n < lnew {
+				n++
+			}
+		}
+	}
+	return added, removed
+}
+
+// restrictedTags checks if two sets of tags contain the same set of restricted tags
+func restrictedTags(oldTags, newTags []string) bool {
+	rold := filterRestrictedTags(oldTags)
+	rnew := filterRestrictedTags(newTags)
+
+	if len(rold) != len(rnew) {
+		return false
+	}
+
+	sort.Strings(rold)
+	sort.Strings(rnew)
+
+	// Match old tags against the new tags.
+	for i := 0; i < len(rnew); i++ {
+		if rold[i] != rnew[i] {
+			return false
+		}
+	}
+
+	return true
+}
+
+// Take a slice of tags, return a slice of restricted tags contained in the input.
+func filterRestrictedTags(tags []string) []string {
 	var out []string
-	if len(unique) > 0 && len(tags) > 0 {
+	if len(globals.restrictedTags) > 0 && len(tags) > 0 {
 		for _, s := range tags {
-			parts := strings.SplitN(s, ":", 2)
+			parts := tagPrefixRegexp.FindStringSubmatch(s)
 
 			if len(parts) < 2 {
 				continue
 			}
 
-			for _, u := range unique {
-				if parts[0] == u {
-					out = append(out, s)
-				}
+			if globals.restrictedTags[parts[1]] {
+				out = append(out, s)
 			}
 		}
 	}
@@ -133,8 +178,8 @@ func msgOpts2storeOpts(req *MsgBrowseOpts) *types.BrowseOpt {
 	return opts
 }
 
+// Check if the interface contains a string with a single Unicode Del control character.
 func isNullValue(i interface{}) bool {
-	// Unicode Del control character
 	const clearValue = "\u2421"
 	if str, ok := i.(string); ok {
 		return str == clearValue

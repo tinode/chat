@@ -193,22 +193,6 @@ func (a *adapter) CreateDb(reset bool) error {
 		return err
 	}
 
-	// Enforcement of tag uniqueness
-	if _, err = tx.Exec(
-		`CREATE TABLE tagunique(
-			id 		INT NOT NULL AUTO_INCREMENT,
-			tag 	VARCHAR(255) NOT NULL,
-			userid 	BIGINT,
-			topic 	CHAR(25),
-		
-			PRIMARY KEY(id),
-			UNIQUE tagunique_tag (tag),
-			INDEX tagunique_userid(userid),
-			INDEX tagunique_topic(topic)
-		)`); err != nil {
-		return err
-	}
-
 	// Indexed user tags.
 	if _, err = tx.Exec(
 		`CREATE TABLE usertags(
@@ -353,15 +337,9 @@ func (a *adapter) CreateDb(reset bool) error {
 	return tx.Commit()
 }
 
-// Indexable tag as stored in 'tagunique'
-type storedTag struct {
-	Id     string
-	Source string
-}
-
 // UserCreate creates a new user. Returns error and true if error is due to duplicate user name,
 // false for any other error
-func (a *adapter) UserCreate(user *t.User, uniquetags []string) error {
+func (a *adapter) UserCreate(user *t.User) error {
 	tx, err := a.db.Beginx()
 	if err != nil {
 		return err
@@ -1139,55 +1117,20 @@ func (a *adapter) UserTagsUpdate(uid t.Uid, unique, tags t.StringSlice) error {
 // - name is the name of the topic to update
 // - unique is the list of prefixes to treat as unique.
 // - tags are the new tags.
-func (a *adapter) TopicTagsUpdate(name string, unique, tags t.StringSlice) error {
-	topic, err := a.TopicGet(name)
-	if err != nil {
-		return err
-	}
+func (a *adapter) TopicTagsUpdate(name string, tags t.StringSlice) error {
+	/*
+		topic, err := a.TopicGet(name)
+		if err != nil {
+			return err
+		}
 
-	added, removed := tagsUniqueDelta(unique, topic.Tags, tags)
-	if err := a.updateUniqueTags(name, added, removed); err != nil {
-		return err
-	}
+		added, removed := tagsUniqueDelta(unique, topic.Tags, tags)
+		if err := a.updateUniqueTags(name, added, removed); err != nil {
+			return err
+		}
+	*/
 
 	return a.TopicUpdate(name, map[string]interface{}{"Tags": tags})
-}
-
-func (a *adapter) updateUniqueTags(source string, added, removed []string) error {
-	tx, err := a.db.Begin()
-	if err != nil {
-		return err
-	}
-
-	defer func() {
-		if err != nil {
-			tx.Rollback()
-		}
-	}()
-
-	if added != nil && len(added) > 0 {
-		toAdd := make([]storedTag, 0, len(added))
-		for _, tag := range added {
-			toAdd = append(toAdd, storedTag{Id: tag, Source: source})
-		}
-
-		_, err = tx.Exec("INSERT INTO tagunique() VALUES(?)", toAdd)
-		if err != nil {
-			if isDupe(err) {
-				return errors.New("duplicate tag(s)")
-			}
-			return err
-		}
-	}
-
-	if removed != nil && len(removed) > 0 {
-		_, err = a.db.Exec("DELETE FROM tagunique WHERE tag IN (?) AND source=?", removed, source)
-		if err != nil {
-			return err
-		}
-	}
-
-	return tx.Commit()
 }
 
 // tagsUniqueDelta extracts the lists of added unique tags and removed unique tags:

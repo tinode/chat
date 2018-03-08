@@ -78,8 +78,8 @@ var globals struct {
 	cluster      *Cluster
 	grpcServer   *grpc.Server
 	apiKeySalt   []byte
-	// Tags which are indexed as unique.
-	uniqueTags map[string]bool
+	// Tags which are immutable to the client.
+	restrictedTags map[string]bool
 	// Add Strict-Transport-Security to headers, the value signifies age.
 	// Empty string "" turns it off
 	tlsStrictMaxAge string
@@ -113,9 +113,8 @@ type configType struct {
 	MaxSubscriberCount int `json:"max_subscriber_count"`
 	// Maximum number of indexable tags
 	MaxTagCount int `json:"max_tag_count"`
-	// Tags which must be unique, all other tags will be just
-	// indexed without uniqueness enforcement (user discovery)
-	UniqueTags []string `json:"unique_tags"`
+	// Tags which chich cannot be manipulated by the user directly.
+	RestrictedTags []string `json:"restricted_tags"`
 
 	// Configs for subsystems
 	ClusterConfig json.RawMessage            `json:"cluster_config"`
@@ -189,8 +188,11 @@ func main() {
 	pluginsInit(config.PluginConfig)
 	// API key validation secret
 	globals.apiKeySalt = config.APIKeySalt
-	// List of indexable tags for user discovery treated as globally unique.
-	globals.uniqueTags = config.UniqueTags
+	// List of tags for user discovery which cannot be changed directly by the client.
+	globals.restrictedTags = make(map[string]bool, len(config.RestrictedTags))
+	for _, tag := range config.RestrictedTags {
+		globals.restrictedTags[tag] = true
+	}
 	// Maximum message size
 	globals.maxMessageSize = int64(config.MaxMessageSize)
 	if globals.maxMessageSize <= 0 {
