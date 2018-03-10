@@ -267,6 +267,12 @@ func (a *adapter) CreateDb(reset bool) error {
 		return err
 	}
 
+	// User credentials - contact information such as "email:jdoe@example.com" or "tel:18003287448":
+	// {Id: <tag>, Source: <uid>, Status: <int>}.
+	if _, err := rdb.DB(a.dbName).TableCreate("credentials", rdb.TableCreateOpts{PrimaryKey: "Id"}).RunWrite(a.conn); err != nil {
+		return err
+	}
+
 	/*
 		// Index of unique user contact information as strings, such as "email:jdoe@example.com" or "tel:18003287448":
 		// {Id: <tag>, Source: <uid>} to ensure uniqueness of tags.
@@ -304,7 +310,7 @@ func (a *adapter) UserCreate(user *t.User) error {
 }
 
 // Add user's authentication record
-func (a *adapter) AddAuthRecord(uid t.Uid, authLvl int, unique string,
+func (a *adapter) AuthAddRecord(uid t.Uid, authLvl int, unique string,
 	secret []byte, expires time.Time) (bool, error) {
 
 	_, err := rdb.DB(a.dbName).Table("auth").Insert(
@@ -323,20 +329,20 @@ func (a *adapter) AddAuthRecord(uid t.Uid, authLvl int, unique string,
 	return false, nil
 }
 
-// Delete user's authentication record
-func (a *adapter) DelAuthRecord(unique string) (int, error) {
-	res, err := rdb.DB(a.dbName).Table("auth").Get(unique).Delete().RunWrite(a.conn)
-	return res.Deleted, err
+// Delete user's authentication record.
+func (a *adapter) AuthDelRecord(uid t.Uid, ignored string) error {
+	_, err := rdb.DB(a.dbName).Table("auth").GetAllByIndex("userid", uid.String()).Delete().RunWrite(a.conn)
+	return err
 }
 
 // Delete user's all authentication records
-func (a *adapter) DelAllAuthRecords(uid t.Uid) (int, error) {
+func (a *adapter) AuthDelAllRecords(uid t.Uid) (int, error) {
 	res, err := rdb.DB(a.dbName).Table("auth").GetAllByIndex("userid", uid.String()).Delete().RunWrite(a.conn)
 	return res.Deleted, err
 }
 
 // Update user's authentication secret
-func (a *adapter) UpdAuthRecord(unique string, authLvl int, secret []byte, expires time.Time) (int, error) {
+func (a *adapter) AuthUpdRecord(unique string, authLvl int, secret []byte, expires time.Time) (int, error) {
 	res, err := rdb.DB(a.dbName).Table("auth").Get(unique).Update(
 		map[string]interface{}{
 			"authLvl": authLvl,
@@ -346,7 +352,7 @@ func (a *adapter) UpdAuthRecord(unique string, authLvl int, secret []byte, expir
 }
 
 // Retrieve user's authentication record
-func (a *adapter) GetAuthRecord(unique string) (t.Uid, int, []byte, time.Time, error) {
+func (a *adapter) AuthGetRecord(unique string) (t.Uid, int, []byte, time.Time, error) {
 	// Default() is needed to prevent Pluck from returning an error
 	row, err := rdb.DB(a.dbName).Table("auth").Get(unique).Pluck(
 		"userid", "secret", "expires", "authLvl").Default(nil).Run(a.conn)
@@ -1372,6 +1378,23 @@ func (a *adapter) DeviceDelete(uid t.Uid, deviceID string) error {
 	_, err := rdb.DB(a.dbName).Table("users").Get(uid.String()).Replace(rdb.Row.Without(
 		map[string]string{"Devices": deviceHasher(deviceID)})).RunWrite(a.conn)
 	return err
+}
+
+// Credential management
+func (a *adapter) CredAdd(uid t.Uid, cred string, status int, params interface{}) error {
+	return nil
+}
+
+func (a *adapter) CredIsConfirmed(uid t.Uid, cred string) (bool, error) {
+	return true, nil
+}
+
+func (a *adapter) CredDel(uid t.Uid, cred string) error {
+	return nil
+}
+
+func (a *adapter) CredConfirm(uid t.Uid, cred string) error {
+	return nil
 }
 
 func init() {

@@ -27,12 +27,18 @@ type Adapter interface {
 	//UserUpdateStatus(uid t.Uid, status interface{}) error
 	UserUpdate(uid t.Uid, update map[string]interface{}) error
 
-	// Authentication management
-	GetAuthRecord(unique string) (t.Uid, int, []byte, time.Time, error)
-	AddAuthRecord(user t.Uid, authLvl int, unique string, secret []byte, expires time.Time) (bool, error)
-	DelAuthRecord(unique string) (int, error)
-	DelAllAuthRecords(uid t.Uid) (int, error)
-	UpdAuthRecord(unique string, authLvl int, secret []byte, expires time.Time) (int, error)
+	// Credential management
+	CredAdd(uid t.Uid, cred string, status int, params interface{}) error
+	CredIsConfirmed(uid t.Uid, cred string) (bool, error)
+	CredDel(uid t.Uid, cred string) error
+	CredConfirm(uid t.Uid, cred string) error
+
+	// Authentication management for the basic authentication scheme
+	AuthGetRecord(unique string) (t.Uid, int, []byte, time.Time, error)
+	AuthAddRecord(user t.Uid, authLvl int, unique string, secret []byte, expires time.Time) (bool, error)
+	AuthDelRecord(user t.Uid, unique string) error
+	AuthDelAllRecords(uid t.Uid) (int, error)
+	AuthUpdRecord(unique string, authLvl int, secret []byte, expires time.Time) (int, error)
 
 	// Topic/contact management
 

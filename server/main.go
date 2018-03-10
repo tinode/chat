@@ -24,15 +24,26 @@ import (
 	"time"
 
 	gzip "github.com/gorilla/handlers"
+
+	// Authenticators
 	_ "github.com/tinode/chat/server/auth/anon"
 	_ "github.com/tinode/chat/server/auth/basic"
 	_ "github.com/tinode/chat/server/auth/token"
+
+	// Database backends
 	_ "github.com/tinode/chat/server/db/mysql"
 	_ "github.com/tinode/chat/server/db/rethinkdb"
+
+	// Push notifications
 	"github.com/tinode/chat/server/push"
 	_ "github.com/tinode/chat/server/push/fcm"
 	_ "github.com/tinode/chat/server/push/stdout"
+
 	"github.com/tinode/chat/server/store"
+
+	// Credential validators
+	_ "github.com/tinode/chat/server/validate/email"
+	_ "github.com/tinode/chat/server/validate/tel"
 	"google.golang.org/grpc"
 )
 
@@ -113,16 +124,16 @@ type configType struct {
 	MaxSubscriberCount int `json:"max_subscriber_count"`
 	// Maximum number of indexable tags
 	MaxTagCount int `json:"max_tag_count"`
-	// Tags which chich cannot be manipulated by the user directly.
-	RestrictedTags []string `json:"restricted_tags"`
 
 	// Configs for subsystems
-	ClusterConfig json.RawMessage            `json:"cluster_config"`
-	PluginConfig  json.RawMessage            `json:"plugins"`
-	StoreConfig   json.RawMessage            `json:"store_config"`
-	PushConfig    json.RawMessage            `json:"push"`
-	TLSConfig     json.RawMessage            `json:"tls"`
-	AuthConfig    map[string]json.RawMessage `json:"auth_config"`
+	ClusterConfig json.RawMessage `json:"cluster_config"`
+
+	PluginConfig    json.RawMessage            `json:"plugins"`
+	StoreConfig     json.RawMessage            `json:"store_config"`
+	PushConfig      json.RawMessage            `json:"push"`
+	TLSConfig       json.RawMessage            `json:"tls"`
+	AuthConfig      map[string]json.RawMessage `json:"auth_config"`
+	ValidatorConfig map[string]json.RawMessage `json:"acc_validation"`
 }
 
 func main() {
@@ -186,11 +197,14 @@ func main() {
 	clusterInit(config.ClusterConfig, clusterSelf)
 	// Intialize plugins
 	pluginsInit(config.PluginConfig)
-	// API key validation secret
+	// API key signing secret
 	globals.apiKeySalt = config.APIKeySalt
 	// List of tags for user discovery which cannot be changed directly by the client.
-	globals.restrictedTags = make(map[string]bool, len(config.RestrictedTags))
-	for _, tag := range config.RestrictedTags {
+	globals.restrictedTags = make(map[string]bool, len(config.ValidatorConfig))
+	for tag, _ := range config.ValidatorConfig {
+		if strings.Index(tag, ":") >= 0 {
+			panic("acc_validation names should not contain character ':'")
+		}
 		globals.restrictedTags[tag] = true
 	}
 	// Maximum message size

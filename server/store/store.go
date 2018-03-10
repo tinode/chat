@@ -9,6 +9,7 @@ import (
 	"github.com/tinode/chat/server/auth"
 	"github.com/tinode/chat/server/store/adapter"
 	"github.com/tinode/chat/server/store/types"
+	"github.com/tinode/chat/server/validate"
 )
 
 var adp adapter.Adapter
@@ -150,7 +151,7 @@ type UsersObjMapper struct{}
 var Users UsersObjMapper
 
 // Create inserts User object into a database, updates creation time and assigns UID
-func (u UsersObjMapper) Create(user *types.User, private interface{}) (*types.User, error) {
+func (UsersObjMapper) Create(user *types.User, private interface{}) (*types.User, error) {
 
 	user.SetUid(GetUid())
 	user.InitTimes()
@@ -182,7 +183,7 @@ func (u UsersObjMapper) Create(user *types.User, private interface{}) (*types.Us
 	if err != nil {
 		// Best effort to delete incomplete user record. Orphaned user records are not a problem.
 		// They just take up space.
-		adp.UserDelete(user.Uid(), true)
+		adp.UserDelete(user.Uid(), false)
 		return nil, err
 	}
 
@@ -192,21 +193,26 @@ func (u UsersObjMapper) Create(user *types.User, private interface{}) (*types.Us
 // GetAuthRecord takes a unique identifier and a authentication scheme name, fetches user ID and
 // authentication secret.
 func (UsersObjMapper) GetAuthRecord(scheme, unique string) (types.Uid, int, []byte, time.Time, error) {
-	return adp.GetAuthRecord(scheme + ":" + unique)
+	return adp.AuthGetRecord(scheme + ":" + unique)
 }
 
 // AddAuthRecord creates a new authentication record for the given user.
 func (UsersObjMapper) AddAuthRecord(uid types.Uid, authLvl int, scheme, unique string, secret []byte,
 	expires time.Time) (bool, error) {
 
-	return adp.AddAuthRecord(uid, authLvl, scheme+":"+unique, secret, expires)
+	return adp.AuthAddRecord(uid, authLvl, scheme+":"+unique, secret, expires)
 }
 
 // UpdateAuthRecord updates authentication record with a new secret and expiration time.
 func (UsersObjMapper) UpdateAuthRecord(uid types.Uid, authLvl int, scheme, unique string,
 	secret []byte, expires time.Time) (int, error) {
 
-	return adp.UpdAuthRecord(scheme+":"+unique, authLvl, secret, expires)
+	return adp.AuthUpdRecord(scheme+":"+unique, authLvl, secret, expires)
+}
+
+// DelAuthRecord deletes user's all auth records of the givel scheme.
+func (UsersObjMapper) DelAuthRecords(uid types.Uid, scheme string) error {
+	return adp.AuthDelRecord(uid, scheme)
 }
 
 // Get returns a user object for the given user id
@@ -224,9 +230,9 @@ func (UsersObjMapper) GetAll(uid ...types.Uid) ([]types.User, error) {
 func (UsersObjMapper) Delete(id types.Uid, soft bool) error {
 	// Maybe delete topics where the user is the owner and all subscriptions to those topics, and messages
 	// Delete user's subscriptions
-	// Delete user's authentication records
-	// Delete user's tags
-	// Delete user object
+	// Delete user's authentication records: adp.AuthDelAllRecords(id)
+	// Delete user's cerdentials (emails, phones)
+	// Delete user object: adp.UserDelete(user.Uid(), false)
 	return errors.New("store: not implemented")
 }
 
@@ -248,12 +254,12 @@ func (UsersObjMapper) Update(uid types.Uid, update map[string]interface{}) error
 }
 
 // GetSubs loads a list of subscriptions for the given user
-func (u UsersObjMapper) GetSubs(id types.Uid) ([]types.Subscription, error) {
+func (UsersObjMapper) GetSubs(id types.Uid) ([]types.Subscription, error) {
 	return adp.SubsForUser(id, false)
 }
 
 // FindSubs loads a list of users for the given tags.
-func (u UsersObjMapper) FindSubs(id types.Uid, query []string) ([]types.Subscription, error) {
+func (UsersObjMapper) FindSubs(id types.Uid, query []string) ([]types.Subscription, error) {
 	usubs, err := adp.FindUsers(id, query)
 	if err != nil {
 		return nil, err
@@ -266,19 +272,23 @@ func (u UsersObjMapper) FindSubs(id types.Uid, query []string) ([]types.Subscrip
 }
 
 // UpdateTags updates indexable tags for the given user.
-func (u UsersObjMapper) UpdateTags(id types.Uid, newTags types.StringSlice) error {
+func (UsersObjMapper) UpdateTags(id types.Uid, newTags types.StringSlice) error {
 	return adp.UserTagsUpdate(id, newTags)
 }
 
 // GetTopics load a list of user's subscriptions with Public field copied to subscription
-func (u UsersObjMapper) GetTopics(id types.Uid) ([]types.Subscription, error) {
+func (UsersObjMapper) GetTopics(id types.Uid) ([]types.Subscription, error) {
 	return adp.TopicsForUser(id, false)
 }
 
 // GetTopicsAny load a list of user's subscriptions with Public field copied to subscription.
 // Deleted topics are returned too.
-func (u UsersObjMapper) GetTopicsAny(id types.Uid) ([]types.Subscription, error) {
+func (UsersObjMapper) GetTopicsAny(id types.Uid) ([]types.Subscription, error) {
 	return adp.TopicsForUser(id, true)
+}
+
+func (UsersObjMapper) RequestCred(id types.Uid, ctype, value string, params interface{}) error {
+	return adp.CredAdd(id, ctype+":"+value, 0, params)
 }
 
 // TopicsObjMapper is a struct to hold methods for persistence mapping for the topic object.
@@ -492,6 +502,27 @@ func RegisterAuthScheme(name string, handler auth.AuthHandler) {
 // GetAuthHandler returns an auth handler by name.
 func GetAuthHandler(name string) auth.AuthHandler {
 	return authHandlers[name]
+}
+
+// Registered authentication handlers.
+var validators map[string]validate.Validator
+
+func RegisterValidator(name string, v validate.Validator) {
+	if validators == nil {
+		validators = make(map[string]validate.Validator)
+	}
+
+	if v == nil {
+		panic("RegisterValidator: validator is nil")
+	}
+	if _, dup := validators[name]; dup {
+		panic("RegisterValidator: called twice for validator " + name)
+	}
+	validators[name] = v
+}
+
+func GetValidator(name string) validate.Validator {
+	return validators[name]
 }
 
 // DeviceMapper is a struct to map methods used for handling device IDs, used to generate push notifications.

@@ -386,7 +386,7 @@ func (a *adapter) UserCreate(user *t.User) error {
 }
 
 // Add user's authentication record
-func (a *adapter) AddAuthRecord(uid t.Uid, authLvl int, unique string,
+func (a *adapter) AuthAddRecord(uid t.Uid, authLvl int, unique string,
 	secret []byte, expires time.Time) (bool, error) {
 
 	var exp *time.Time
@@ -405,7 +405,7 @@ func (a *adapter) AddAuthRecord(uid t.Uid, authLvl int, unique string,
 }
 
 // Delete user's authentication record
-func (a *adapter) DelAuthRecord(unique string) (int, error) {
+func (a *adapter) AuthDelRecord(unique string) (int, error) {
 	res, err := a.db.Exec("DELETE FROM basicauth WHERE `unique`=?", unique)
 	if err != nil {
 		return 0, err
@@ -416,7 +416,7 @@ func (a *adapter) DelAuthRecord(unique string) (int, error) {
 }
 
 // Delete user's all authentication records
-func (a *adapter) DelAllAuthRecords(uid t.Uid) (int, error) {
+func (a *adapter) AuthDelAllRecords(uid t.Uid) (int, error) {
 	res, err := a.db.Exec("DELETE FROM basicauth WHERE userid=?", uid)
 	if err != nil {
 		return 0, err
@@ -427,7 +427,7 @@ func (a *adapter) DelAllAuthRecords(uid t.Uid) (int, error) {
 }
 
 // Update user's authentication secret
-func (a *adapter) UpdAuthRecord(unique string, authLvl int, secret []byte, expires time.Time) (int, error) {
+func (a *adapter) AuthUpdRecord(unique string, authLvl int, secret []byte, expires time.Time) (int, error) {
 	res, err := a.db.Exec("UPDATE basicauth SET authLvl=?,secret=?,expires=? WHERE login=?",
 		authLvl, secret, expires, unique)
 
@@ -440,7 +440,7 @@ func (a *adapter) UpdAuthRecord(unique string, authLvl int, secret []byte, expir
 }
 
 // Retrieve user's authentication record
-func (a *adapter) GetAuthRecord(unique string) (t.Uid, int, []byte, time.Time, error) {
+func (a *adapter) AuthGetRecord(unique string) (t.Uid, int, []byte, time.Time, error) {
 	var expires time.Time
 
 	var record struct {

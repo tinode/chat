@@ -187,13 +187,20 @@ func isNullValue(i interface{}) bool {
 	return false
 }
 
-func decodeAuthError(code int, id string, timestamp time.Time) *ServerComMessage {
+func decodeAuthError(err error, id string, timestamp time.Time) *ServerComMessage {
+
+	if err == nil {
+		return NoErr(id, "", timestamp)
+	}
+
+	authErr, ok := err.(auth.AuthErr)
+	if !ok {
+		return ErrUnknown(id, "", timestamp)
+	}
+
 	var errmsg *ServerComMessage
-	switch code {
-	case auth.NoErr:
-		errmsg = NoErr(id, "", timestamp)
-	case auth.InfoNotModified:
-		errmsg = InfoNotModified(id, "", timestamp)
+
+	switch authErr {
 	case auth.ErrInternal:
 		errmsg = ErrUnknown(id, "", timestamp)
 	case auth.ErrMalformed:
@@ -211,6 +218,7 @@ func decodeAuthError(code int, id string, timestamp time.Time) *ServerComMessage
 	default:
 		errmsg = ErrUnknown(id, "", timestamp)
 	}
+
 	return errmsg
 }
 

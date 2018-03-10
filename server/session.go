@@ -454,18 +454,18 @@ func (s *Session) login(msg *ClientComMessage) {
 		return
 	}
 
-	uid, authLvl, expires, authErr := handler.Authenticate(msg.Login.Secret)
-	if authErr.IsError() {
-		log.Println("auth result", authErr.Err)
+	uid, authLvl, expires, err := handler.Authenticate(msg.Login.Secret)
+	if err != nil {
+		log.Println("auth result", err)
 	}
 
-	if authErr.Code == auth.ErrMalformed {
+	if err == auth.ErrMalformed {
 		s.queueOut(ErrMalformed(msg.Login.Id, "", msg.timestamp))
 		return
 	}
 
 	// DB error
-	if authErr.Code == auth.ErrInternal {
+	if err == auth.ErrInternal {
 		s.queueOut(ErrUnknown(msg.Login.Id, "", msg.timestamp))
 		return
 	}
@@ -487,9 +487,9 @@ func (s *Session) login(msg *ClientComMessage) {
 	if !expires.IsZero() {
 		tokenLifetime = time.Until(expires)
 	}
-	secret, expires, authErr := handler.GenSecret(uid, authLvl, tokenLifetime)
-	if authErr.IsError() {
-		log.Println("auth failed to generate token", authErr.Code, authErr.Err)
+	secret, expires, err := handler.GenSecret(uid, authLvl, tokenLifetime)
+	if err != nil {
+		log.Println("auth failed to generate token", err)
 		s.queueOut(ErrAuthFailed(msg.Login.Id, "", msg.timestamp))
 		return
 	}
@@ -519,7 +519,11 @@ func (s *Session) acc(msg *ClientComMessage) {
 
 	authhdl := store.GetAuthHandler(msg.Acc.Scheme)
 	if strings.HasPrefix(msg.Acc.User, "new") {
-		log.Println("Creating new account")
+		// User cannot authenticate with the new account because the user is already authenticated
+		if msg.Acc.Login && !s.uid.IsZero() {
+			s.queueOut(ErrAlreadyAuthenticated(msg.Acc.Id, "", msg.timestamp))
+			return
+		}
 
 		if authhdl == nil {
 			// New accounts must have an authentication scheme
@@ -527,21 +531,29 @@ func (s *Session) acc(msg *ClientComMessage) {
 			return
 		}
 
-		// User cannot authenticate with the new account because the user is already authenticated
-		if msg.Acc.Login && !s.uid.IsZero() {
-			s.queueOut(ErrAlreadyAuthenticated(msg.Acc.Id, "", msg.timestamp))
-			return
-		}
-
-		// Request to create a new account
-		if ok, authErr := authhdl.IsUnique(msg.Acc.Secret); !ok {
-			log.Println("Check unique: ", authErr.Err)
-			if authErr.Code == auth.ErrDuplicate {
+		// Check if login is unique.
+		if ok, err := authhdl.IsUnique(msg.Acc.Secret); !ok {
+			log.Println("Check unique: ", err)
+			if err == auth.ErrDuplicate {
 				s.queueOut(ErrDuplicateCredential(msg.Acc.Id, "", msg.timestamp))
 			} else {
 				s.queueOut(ErrUnknown(msg.Acc.Id, "", msg.timestamp))
 			}
 			return
+		}
+
+		// Pre-check credentials for validity
+		for _, cred := range msg.Acc.Cred {
+			log.Println("pre-checking credential", cred)
+
+			if vld := store.GetValidator(cred.Type); vld != nil {
+				err := vld.PreCheck(cred.Value, cred.Params)
+				if err == types.ErrDuplicate {
+					s.queueOut(ErrDuplicateCredential(msg.Acc.Id, "", msg.timestamp))
+				} else {
+					s.queueOut(ErrMalformed(msg.Acc.Id, "", msg.timestamp))
+				}
+			}
 		}
 
 		var user types.User
@@ -550,6 +562,18 @@ func (s *Session) acc(msg *ClientComMessage) {
 		// Assign default access values in case the acc creator has not provided them
 		user.Access.Auth = getDefaultAccess(types.TopicCatP2P, true)
 		user.Access.Anon = getDefaultAccess(types.TopicCatP2P, false)
+
+		if len(msg.Acc.Tags) > 0 {
+			var tags []string
+			if tags = normalizeTags(tags, msg.Acc.Tags); len(tags) > 0 {
+				if !restrictedTags(tags, nil) {
+					log.Println("Attempt to directly assign restricted tags")
+					s.queueOut(ErrPermissionDenied(msg.Acc.Id, "", msg.timestamp))
+					return
+				}
+				user.Tags = tags
+			}
+		}
 
 		if msg.Acc.Desc != nil {
 
@@ -577,36 +601,42 @@ func (s *Session) acc(msg *ClientComMessage) {
 			}
 		}
 
-		if len(msg.Acc.Tags) > 0 {
-			var tags []string
-			if tags = normalizeTags(tags, msg.Acc.Tags); len(tags) > 0 {
-				if !restrictedTags(tags, nil) {
-					log.Println("Attempt to directly assign restricted tags")
-					s.queueOut(ErrPermissionDenied(msg.Acc.Id, "", msg.timestamp))
-					return
-				}
-				user.Tags = tags
-			}
-		}
-
 		if _, err := store.Users.Create(&user, private); err != nil {
-			// Separate bad user input from DB error
-			if err == types.ErrDuplicate {
-				s.queueOut(ErrDuplicateCredential(msg.Acc.Id, "", msg.timestamp))
-			} else {
-				log.Println("Failed to create user", err)
-				s.queueOut(ErrUnknown(msg.Acc.Id, "", msg.timestamp))
-			}
+			log.Println("Failed to create user", err)
+			s.queueOut(ErrUnknown(msg.Acc.Id, "", msg.timestamp))
 			return
 		}
 
-		authLvl, authErr := authhdl.AddRecord(user.Uid(), msg.Acc.Secret, 0)
-		if authErr.IsError() {
-			log.Println(authErr.Err)
+		authLvl, err := authhdl.AddRecord(user.Uid(), msg.Acc.Secret, 0)
+		if err != nil {
+			log.Println("auth: add record failed", err)
 			// Attempt to delete incomplete user record
 			store.Users.Delete(user.Uid(), false)
-			s.queueOut(decodeAuthError(authErr.Code, msg.Acc.Id, msg.timestamp))
+			s.queueOut(decodeAuthError(err, msg.Acc.Id, msg.timestamp))
 			return
+		}
+
+		for _, cred := range msg.Acc.Cred {
+			log.Println("processing credential", cred)
+
+			vld := store.GetValidator(cred.Type)
+			if vld == nil {
+				log.Println("unknown validatyon type", cred.Type)
+				// Ignore unknown validation type.
+				continue
+			}
+			err := vld.Request(user.Uid(), cred.Value, s.lang, cred.Params, cred.Response)
+			if err != nil {
+				if err == types.ErrDuplicate {
+					s.queueOut(ErrDuplicateCredential(msg.Acc.Id, "", msg.timestamp))
+				} else {
+					s.queueOut(ErrUnknown(msg.Acc.Id, "", msg.timestamp))
+				}
+				log.Println("Failed to validate credential", err)
+				// Attempt to delete incomplete user record
+				store.Users.Delete(user.Uid(), false)
+				return
+			}
 		}
 
 		reply := NoErrCreated(msg.Acc.Id, "", msg.timestamp)
@@ -652,14 +682,14 @@ func (s *Session) acc(msg *ClientComMessage) {
 			// Request to update auth of an existing account. Only basic auth is currently supported
 			// TODO(gene): support adding new auth schemes
 			// TODO(gene): support the case when msg.Acc.User is not equal to the current user
-			if authErr := authhdl.UpdateRecord(s.uid, msg.Acc.Secret, 0); authErr.IsError() {
-				log.Println("Failed to update credentials", authErr.Err)
-				s.queueOut(decodeAuthError(authErr.Code, msg.Acc.Id, msg.timestamp))
+			if err := authhdl.UpdateRecord(s.uid, msg.Acc.Secret, 0); err != nil {
+				log.Println("auth: Failed to update credentials", err)
+				s.queueOut(decodeAuthError(err, msg.Acc.Id, msg.timestamp))
 				return
 			}
 		} else if msg.Acc.Scheme != "" {
 			// Invalid or unknown auth scheme
-			log.Println("Unknown auth scheme", msg.Acc.Scheme)
+			log.Println("auth: Unknown auth scheme", msg.Acc.Scheme)
 			s.queueOut(ErrMalformed(msg.Acc.Id, "", msg.timestamp))
 			return
 		}

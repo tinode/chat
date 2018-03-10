@@ -99,6 +99,18 @@ type MsgClientHi struct {
 	Lang string `json:"lang,omitempty"`
 }
 
+// MsgAccCred is an account credential, provided or verified.
+type MsgAccCred struct {
+	// Credential type, i.e. `email` or `tel`.
+	Type string `json:"type,omitempty"`
+	// Value to verify, i.e. `user@example.com` or `+18003287448`
+	Value string `json:"val,omitempty"`
+	// Verification response
+	Response string `json:"resp,omitempty"`
+	// Request parameters, such as preferences. Not interoreted by the server.
+	Params interface{} `json:"params,omitempty"`
+}
+
 // MsgClientAcc is a user creation message {acc}.
 type MsgClientAcc struct {
 	// Message Id
@@ -110,11 +122,13 @@ type MsgClientAcc struct {
 	// Shared secret
 	Secret []byte `json:"secret,omitempty"`
 	// Authenticate session with the newly created account
-	Login bool `json:"login"`
+	Login bool `json:"login,omitempty"`
 	// Indexable tags for user discovery
-	Tags []string `json:"tags"`
+	Tags []string `json:"tags,omitempty"`
 	// User initialization data when creating a new user, otherwise ignored
 	Desc *MsgSetDesc `json:"desc,omitempty"`
+	// Credntials to verify (email or phone)
+	Cred []MsgAccCred `json:"cred,omitempty"`
 }
 
 // MsgClientLogin is a login {login} message.

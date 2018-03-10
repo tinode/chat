@@ -281,11 +281,23 @@ func (ss StringSlice) Value() (driver.Value, error) {
 	return json.Marshal(ss)
 }
 
+// State is a status of a user registration: active, suspended, etc.
+type UserState int
+
+const (
+	// StateUnconfirmed is the state of the user when it's registered but not fully activated.
+	StateUnconfirmed UserState = iota
+	// StateActive - normal state.
+	StateActive
+	// StateSuspended means the user is administratively suspended.
+	StateSuspended
+)
+
 // User is a representation of a DB-stored user record.
 type User struct {
 	ObjHeader
-	// Currently unused: Unconfirmed, Active, etc.
-	State int
+
+	State UserState
 
 	// Default access to user for P2P topics (used as default modeGiven)
 	Access DefaultAccess
@@ -559,9 +571,6 @@ type Subscription struct {
 	User string
 	// Topic subscribed to
 	Topic string
-
-	// Subscription state, currently unused
-	State int
 
 	// Values persisted through subscription soft-deletion
 
