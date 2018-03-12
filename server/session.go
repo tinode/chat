@@ -459,13 +459,13 @@ func (s *Session) login(msg *ClientComMessage) {
 		log.Println("auth result", err)
 	}
 
-	if err == auth.ErrMalformed {
+	if err == types.ErrMalformed {
 		s.queueOut(ErrMalformed(msg.Login.Id, "", msg.timestamp))
 		return
 	}
 
 	// DB error
-	if err == auth.ErrInternal {
+	if err != nil {
 		s.queueOut(ErrUnknown(msg.Login.Id, "", msg.timestamp))
 		return
 	}
@@ -534,26 +534,12 @@ func (s *Session) acc(msg *ClientComMessage) {
 		// Check if login is unique.
 		if ok, err := authhdl.IsUnique(msg.Acc.Secret); !ok {
 			log.Println("Check unique: ", err)
-			if err == auth.ErrDuplicate {
+			if err == types.ErrDuplicate {
 				s.queueOut(ErrDuplicateCredential(msg.Acc.Id, "", msg.timestamp))
 			} else {
 				s.queueOut(ErrUnknown(msg.Acc.Id, "", msg.timestamp))
 			}
 			return
-		}
-
-		// Pre-check credentials for validity
-		for _, cred := range msg.Acc.Cred {
-			log.Println("pre-checking credential", cred)
-
-			if vld := store.GetValidator(cred.Type); vld != nil {
-				err := vld.PreCheck(cred.Value, cred.Params)
-				if err == types.ErrDuplicate {
-					s.queueOut(ErrDuplicateCredential(msg.Acc.Id, "", msg.timestamp))
-				} else {
-					s.queueOut(ErrMalformed(msg.Acc.Id, "", msg.timestamp))
-				}
-			}
 		}
 
 		var user types.User
@@ -575,8 +561,27 @@ func (s *Session) acc(msg *ClientComMessage) {
 			}
 		}
 
-		if msg.Acc.Desc != nil {
+		// Pre-check credentials for validity
+		for _, cred := range msg.Acc.Cred {
+			log.Println("pre-checking credential", cred)
 
+			if vld := store.GetValidator(cred.Type); vld != nil {
+				if err := vld.PreCheck(cred.Value, cred.Params); err != nil {
+					if err == types.ErrDuplicate {
+						s.queueOut(ErrDuplicateCredential(msg.Acc.Id, "", msg.timestamp))
+					} else {
+						s.queueOut(ErrMalformed(msg.Acc.Id, "", msg.timestamp))
+					}
+					return
+				}
+
+				if globals.validators[cred.Type].addToTags {
+					user.Tags = append(user.Tags, cred.Type+":"+cred.Value)
+				}
+			}
+		}
+
+		if msg.Acc.Desc != nil {
 			if msg.Acc.Desc.DefaultAcs != nil {
 				if msg.Acc.Desc.DefaultAcs.Auth != "" {
 					user.Access.Auth.UnmarshalText([]byte(msg.Acc.Desc.DefaultAcs.Auth))

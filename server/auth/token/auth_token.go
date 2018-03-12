@@ -79,12 +79,12 @@ func (ta *TokenAuth) Init(jsonconf string) error {
 
 // AddRecord is not supprted, will produce an error.
 func (TokenAuth) AddRecord(uid types.Uid, secret []byte, lifetime time.Duration) (int, error) {
-	return auth.LevelNone, auth.ErrUnsupported
+	return auth.LevelNone, types.ErrUnsupported
 }
 
 // UpdateRecord is not supported, will produce an error.
 func (TokenAuth) UpdateRecord(uid types.Uid, secret []byte, lifetime time.Duration) error {
-	return auth.ErrUnsupported
+	return types.ErrUnsupported
 }
 
 // Authenticate checks validity of provided token.
@@ -92,31 +92,31 @@ func (ta *TokenAuth) Authenticate(token []byte) (types.Uid, int, time.Time, erro
 	// [8:UID][4:expires][2:authLevel][2:serial-number][32:signature] == 48 bytes
 
 	if len(token) < tokenLengthDecoded {
-		return types.ZeroUid, auth.LevelNone, time.Time{}, auth.ErrMalformed
+		return types.ZeroUid, auth.LevelNone, time.Time{}, types.ErrMalformed
 	}
 
 	var uid types.Uid
 	if err := uid.UnmarshalBinary(token[tokenUIDStart:tokenUIDEnd]); err != nil {
-		return types.ZeroUid, auth.LevelNone, time.Time{}, auth.ErrMalformed
+		return types.ZeroUid, auth.LevelNone, time.Time{}, types.ErrMalformed
 	}
 	var authLvl int
 	if authLvl = int(binary.LittleEndian.Uint16(token[tokenAuthLvlStart:tokenAuthLvlEnd])); authLvl < 0 || authLvl > auth.LevelRoot {
-		return types.ZeroUid, auth.LevelNone, time.Time{}, auth.ErrMalformed
+		return types.ZeroUid, auth.LevelNone, time.Time{}, types.ErrMalformed
 	}
 
 	if snum := int(binary.LittleEndian.Uint16(token[tokenSerialStart:tokenSerialEnd])); snum != ta.tokenSerialNumber {
-		return types.ZeroUid, auth.LevelNone, time.Time{}, auth.ErrMalformed
+		return types.ZeroUid, auth.LevelNone, time.Time{}, types.ErrMalformed
 	}
 
 	hasher := hmac.New(sha256.New, ta.tokenHmacSalt)
 	hasher.Write(token[:tokenSignatureStart])
 	if !hmac.Equal(token[tokenSignatureStart:], hasher.Sum(nil)) {
-		return types.ZeroUid, auth.LevelNone, time.Time{}, auth.ErrFailed
+		return types.ZeroUid, auth.LevelNone, time.Time{}, types.ErrFailed
 	}
 
 	expires := time.Unix(int64(binary.LittleEndian.Uint32(token[tokenExpiresStart:tokenExpiresEnd])), 0).UTC()
 	if expires.Before(time.Now().Add(1 * time.Second)) {
-		return types.ZeroUid, auth.LevelNone, time.Time{}, auth.ErrExpired
+		return types.ZeroUid, auth.LevelNone, time.Time{}, types.ErrExpired
 	}
 
 	return uid, authLvl, expires, nil
@@ -132,7 +132,7 @@ func (ta *TokenAuth) GenSecret(uid types.Uid, authLvl int, lifetime time.Duratio
 	if lifetime == 0 {
 		lifetime = ta.tokenTimeout
 	} else if lifetime < 0 {
-		return nil, time.Time{}, auth.ErrExpired
+		return nil, time.Time{}, types.ErrExpired
 	}
 	expires := time.Now().Add(lifetime).UTC().Round(time.Millisecond)
 	binary.Write(buf, binary.LittleEndian, uint32(expires.Unix()))
@@ -148,7 +148,7 @@ func (ta *TokenAuth) GenSecret(uid types.Uid, authLvl int, lifetime time.Duratio
 
 // IsUnique is not supported, will produce an error.
 func (TokenAuth) IsUnique(token []byte) (bool, error) {
-	return false, auth.ErrUnsupported
+	return false, types.ErrUnsupported
 }
 
 // DelRecords is a noop which always succeeds.

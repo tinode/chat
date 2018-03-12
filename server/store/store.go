@@ -236,10 +236,9 @@ func (UsersObjMapper) Delete(id types.Uid, soft bool) error {
 	return errors.New("store: not implemented")
 }
 
-// UpdateStatus updates user status (not implemented).
-// TODO(gene): implement
-func (UsersObjMapper) UpdateStatus(id types.Uid, status interface{}) error {
-	return errors.New("store: not implemented")
+// UpdateState updates user state.
+func (u UsersObjMapper) UpdateState(id types.Uid, state types.UserState) error {
+	return u.Update(id, map[string]interface{}{"State": state})
 }
 
 // UpdateLastSeen updates LastSeen and UserAgent.
@@ -289,6 +288,10 @@ func (UsersObjMapper) GetTopicsAny(id types.Uid) ([]types.Subscription, error) {
 
 func (UsersObjMapper) RequestCred(id types.Uid, ctype, value string, params interface{}) error {
 	return adp.CredAdd(id, ctype+":"+value, 0, params)
+}
+
+func (UsersObjMapper) ConfirmCred(id types.Uid, ctype, value string) error {
+	return adp.CredConfirm(id, ctype+":"+value)
 }
 
 // TopicsObjMapper is a struct to hold methods for persistence mapping for the topic object.

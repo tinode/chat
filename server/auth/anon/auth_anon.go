@@ -30,7 +30,7 @@ func (AnonAuth) UpdateRecord(uid types.Uid, secret []byte, lifetime time.Duratio
 
 // Authenticate is not supported. It's used only at account creation time.
 func (AnonAuth) Authenticate(secret []byte) (types.Uid, int, time.Time, error) {
-	return types.ZeroUid, auth.LevelNone, time.Time{}, auth.ErrUnsupported
+	return types.ZeroUid, auth.LevelNone, time.Time{}, types.ErrUnsupported
 }
 
 // IsUnique for a noop. Anonymous login does not use secret, any secret is fine.
@@ -40,7 +40,7 @@ func (AnonAuth) IsUnique(secret []byte) (bool, error) {
 
 // GenSecret always fails.
 func (AnonAuth) GenSecret(uid types.Uid, authLvl int, lifetime time.Duration) ([]byte, time.Time, error) {
-	return nil, time.Time{}, auth.ErrUnsupported
+	return nil, time.Time{}, types.ErrUnsupported
 }
 
 // DelRecords is a noop which always succeeds.

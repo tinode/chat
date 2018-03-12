@@ -16,7 +16,22 @@ func (s StoreError) Error() string {
 	return string(s)
 }
 
-const ErrDuplicate = StoreError("duplicate key(s)")
+const (
+	// ErrInternal means DB or other internal failure
+	ErrInternal = StoreError("internal")
+	// ErrMalformed means the secret cannot be parsed or otherwise wrong
+	ErrMalformed = StoreError("malformed")
+	// ErrFailed means authentication failed (wrong login or password, etc)
+	ErrFailed = StoreError("failed")
+	// ErrDuplicate means duplicate credential, i.e. non-unique login
+	ErrDuplicate = StoreError("duplicate value")
+	// ErrUnsupported means an operation is not supported
+	ErrUnsupported = StoreError("unsupported")
+	// ErrExpired means the secret has expired
+	ErrExpired = StoreError("expired")
+	// ErrPolicy means policy violation, e.g. password too weak.
+	ErrPolicy = StoreError("policy")
+)
 
 // Uid is a database-specific record id, suitable to be used as a primary key.
 type Uid uint64
@@ -286,12 +301,25 @@ type UserState int
 
 const (
 	// StateUnconfirmed is the state of the user when it's registered but not fully activated.
-	StateUnconfirmed UserState = iota
+	StateUnconfirmed UserState = iota + 1
 	// StateActive - normal state.
 	StateActive
 	// StateSuspended means the user is administratively suspended.
 	StateSuspended
 )
+
+func ParseState(st string) UserState {
+	switch st {
+	case "uncof":
+		return StateUnconfirmed
+	case "susp":
+		return StateSuspended
+	case "active":
+		return StateActive
+	default:
+		return UserState(0)
+	}
+}
 
 // User is a representation of a DB-stored user record.
 type User struct {

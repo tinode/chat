@@ -226,8 +226,6 @@ type Plugin struct {
 	client pbx.PluginClient
 }
 
-var plugins []Plugin
-
 func pluginsInit(configString json.RawMessage) {
 	// Check if any plugins are defined
 	if configString == nil || len(configString) == 0 {
@@ -240,7 +238,7 @@ func pluginsInit(configString json.RawMessage) {
 	}
 
 	nameIndex := make(map[string]bool)
-	plugins = make([]Plugin, len(config))
+	globals.plugins = make([]Plugin, len(config))
 	count := 0
 	for _, conf := range config {
 		if !conf.Enabled {
@@ -251,61 +249,61 @@ func pluginsInit(configString json.RawMessage) {
 			log.Fatalf("plugins: duplicate name '%s'", conf.Name)
 		}
 
-		plugins[count] = Plugin{
+		globals.plugins[count] = Plugin{
 			name:        conf.Name,
 			timeout:     time.Duration(conf.Timeout) * time.Microsecond,
 			failureCode: conf.FailureCode,
 			failureText: conf.FailureMessage,
 		}
 		var err error
-		if plugins[count].filterFireHose, err =
+		if globals.plugins[count].filterFireHose, err =
 			ParsePluginFilter(conf.Filters.FireHose, plgFilterByTopicType|plgFilterByPacket); err != nil {
 			log.Fatal("plugins: bad FireHose filter", err)
 		}
-		if plugins[count].filterAccount, err =
+		if globals.plugins[count].filterAccount, err =
 			ParsePluginFilter(conf.Filters.Account, plgFilterByAction); err != nil {
 			log.Fatal("plugins: bad Account filter", err)
 		}
-		if plugins[count].filterTopic, err =
+		if globals.plugins[count].filterTopic, err =
 			ParsePluginFilter(conf.Filters.Topic, plgFilterByTopicType|plgFilterByAction); err != nil {
 			log.Fatal("plugins: bad FireHose filter", err)
 		}
-		if plugins[count].filterSubscription, err =
+		if globals.plugins[count].filterSubscription, err =
 			ParsePluginFilter(conf.Filters.Subscription, plgFilterByTopicType|plgFilterByAction); err != nil {
 			log.Fatal("plugins: bad Subscription filter", err)
 		}
-		if plugins[count].filterMessage, err =
+		if globals.plugins[count].filterMessage, err =
 			ParsePluginFilter(conf.Filters.Message, plgFilterByTopicType|plgFilterByAction); err != nil {
 			log.Fatal("plugins: bad Message filter", err)
 		}
 
-		plugins[count].filterFind = conf.Filters.Find
+		globals.plugins[count].filterFind = conf.Filters.Find
 
 		if parts := strings.SplitN(conf.ServiceAddr, "://", 2); len(parts) < 2 {
 			log.Fatal("plugins: invalid server address format", conf.ServiceAddr)
 		} else {
-			plugins[count].network = parts[0]
-			plugins[count].addr = parts[1]
+			globals.plugins[count].network = parts[0]
+			globals.plugins[count].addr = parts[1]
 		}
 
-		plugins[count].conn, err = grpc.Dial(plugins[count].addr, grpc.WithInsecure())
+		globals.plugins[count].conn, err = grpc.Dial(globals.plugins[count].addr, grpc.WithInsecure())
 		if err != nil {
 			log.Fatalf("plugins: connection failure %v", err)
 		}
 
-		plugins[count].client = pbx.NewPluginClient(plugins[count].conn)
+		globals.plugins[count].client = pbx.NewPluginClient(globals.plugins[count].conn)
 
 		nameIndex[conf.Name] = true
 		count++
 	}
 
-	plugins = plugins[:count]
-	if len(plugins) == 0 {
+	globals.plugins = globals.plugins[:count]
+	if len(globals.plugins) == 0 {
 		log.Println("plugins: no active plugins found")
-		plugins = nil
+		globals.plugins = nil
 	} else {
 		var names []string
-		for _, plg := range plugins {
+		for _, plg := range globals.plugins {
 			names = append(names, plg.name+"("+plg.addr+")")
 		}
 
@@ -314,11 +312,11 @@ func pluginsInit(configString json.RawMessage) {
 }
 
 func pluginsShutdown() {
-	if plugins == nil {
+	if globals.plugins == nil {
 		return
 	}
 
-	for _, p := range plugins {
+	for _, p := range globals.plugins {
 		p.conn.Close()
 	}
 }
@@ -337,7 +335,7 @@ func pluginGenerateClientReq(sess *Session, msg *ClientComMessage) *pbx.ClientRe
 }
 
 func pluginFireHose(sess *Session, msg *ClientComMessage) (*ClientComMessage, *ServerComMessage) {
-	if plugins == nil {
+	if globals.plugins == nil {
 		// Return the original message to continue processing without changes
 		return msg, nil
 	}
@@ -346,7 +344,7 @@ func pluginFireHose(sess *Session, msg *ClientComMessage) (*ClientComMessage, *S
 
 	id, topic := pluginIDAndTopic(msg)
 	ts := time.Now().UTC().Round(time.Millisecond)
-	for _, p := range plugins {
+	for _, p := range globals.plugins {
 		if !pluginDoFiltering(p.filterFireHose, msg) {
 			// Plugin is not interested in FireHose
 			continue
@@ -402,7 +400,7 @@ func pluginFireHose(sess *Session, msg *ClientComMessage) (*ClientComMessage, *S
 
 // Ask plugin to perform search.
 func pluginFind(user types.Uid, query []string) ([]string, []types.Subscription, error) {
-	if plugins == nil {
+	if globals.plugins == nil {
 		return query, nil, nil
 	}
 
@@ -410,7 +408,7 @@ func pluginFind(user types.Uid, query []string) ([]string, []types.Subscription,
 		UserId: user.UserId(),
 		Terms:  query,
 	}
-	for _, p := range plugins {
+	for _, p := range globals.plugins {
 		if !p.filterFind {
 			// Plugin cannot cervice Find requests
 			continue
@@ -450,12 +448,12 @@ func pluginFind(user types.Uid, query []string) ([]string, []types.Subscription,
 }
 
 func pluginAccount(user *types.User, action int) {
-	if plugins == nil {
+	if globals.plugins == nil {
 		return
 	}
 
 	var event *pbx.AccountEvent
-	for _, p := range plugins {
+	for _, p := range globals.plugins {
 		if p.filterAccount == nil || p.filterAccount.byAction&action == 0 {
 			// Plugin is not interested in Account actions
 			continue
@@ -488,12 +486,12 @@ func pluginAccount(user *types.User, action int) {
 }
 
 func pluginTopic(topic *Topic, action int) {
-	if plugins == nil {
+	if globals.plugins == nil {
 		return
 	}
 
 	var event *pbx.TopicEvent
-	for _, p := range plugins {
+	for _, p := range globals.plugins {
 		if p.filterTopic == nil || p.filterTopic.byAction&action == 0 {
 			// Plugin is not interested in Message actions
 			continue
@@ -524,12 +522,12 @@ func pluginTopic(topic *Topic, action int) {
 }
 
 func pluginSubscription(sub *types.Subscription, action int) {
-	if plugins == nil {
+	if globals.plugins == nil {
 		return
 	}
 
 	var event *pbx.SubscriptionEvent
-	for _, p := range plugins {
+	for _, p := range globals.plugins {
 		if p.filterSubscription == nil || p.filterSubscription.byAction&action == 0 {
 			// Plugin is not interested in Message actions
 			continue
@@ -572,12 +570,12 @@ func pluginSubscription(sub *types.Subscription, action int) {
 
 // Message accepted for delivery
 func pluginMessage(data *MsgServerData, action int) {
-	if plugins == nil || action != plgActCreate {
+	if globals.plugins == nil || action != plgActCreate {
 		return
 	}
 
 	var event *pbx.MessageEvent
-	for _, p := range plugins {
+	for _, p := range globals.plugins {
 		if p.filterMessage == nil || p.filterMessage.byAction&action == 0 {
 			// Plugin is not interested in Message actions
 			continue

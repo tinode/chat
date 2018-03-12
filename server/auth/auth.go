@@ -6,30 +6,6 @@ import (
 	"github.com/tinode/chat/server/store/types"
 )
 
-// AuthErr is a structure for reporting an error condition.
-type AuthErr string
-
-func (e AuthErr) Error() string {
-	return string(e)
-}
-
-const (
-	// ErrInternal means DB or other internal failure
-	ErrInternal = AuthErr("internal")
-	// ErrMalformed means the secret cannot be parsed or otherwise wrong
-	ErrMalformed = AuthErr("malformed")
-	// ErrFailed means authentication failed (wrong login or password, etc)
-	ErrFailed = AuthErr("failed")
-	// ErrDuplicate means duplicate credential, i.e. non-unique login
-	ErrDuplicate = AuthErr("duplicate")
-	// ErrUnsupported means an operation is not supported
-	ErrUnsupported = AuthErr("unsupported")
-	// ErrExpired means the secret has expired
-	ErrExpired = AuthErr("expired")
-	// ErrPolicy means policy violation, e.g. password too weak.
-	ErrPolicy = AuthErr("policy")
-)
-
 // Authentication levels.
 const (
 	// LevelNone is undefined/not authenticated
@@ -55,6 +31,19 @@ func AuthLevelName(authLvl int) string {
 		return "root"
 	default:
 		return "unkn"
+	}
+}
+
+func ParseAuthLevel(name string) int {
+	switch name {
+	case "anon":
+		return LevelAnon
+	case "auth":
+		return LevelAuth
+	case "root":
+		return LevelRoot
+	default:
+		return LevelNone
 	}
 }
 

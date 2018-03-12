@@ -26,6 +26,7 @@ import (
 	gzip "github.com/gorilla/handlers"
 
 	// Authenticators
+	"github.com/tinode/chat/server/auth"
 	_ "github.com/tinode/chat/server/auth/anon"
 	_ "github.com/tinode/chat/server/auth/basic"
 	_ "github.com/tinode/chat/server/auth/token"
@@ -40,6 +41,7 @@ import (
 	_ "github.com/tinode/chat/server/push/stdout"
 
 	"github.com/tinode/chat/server/store"
+	"github.com/tinode/chat/server/store/types"
 
 	// Credential validators
 	_ "github.com/tinode/chat/server/validate/email"
@@ -83,11 +85,21 @@ const (
 // 	-ldflags "-X main.buildstamp=`date -u '+%Y%m%dT%H:%M:%SZ'`"
 var buildstamp = "buildstamp-undefined"
 
+// CredValidator holds additional config params for a credential validator.
+type credValidator struct {
+	// AuthLevel which requires this validator.
+	requiredAuthLvl int
+	setState        types.UserState
+	addToTags       bool
+}
+
 var globals struct {
 	hub          *Hub
 	sessionStore *SessionStore
 	cluster      *Cluster
 	grpcServer   *grpc.Server
+	plugins      []Plugin
+	validators   map[string]credValidator
 	apiKeySalt   []byte
 	// Tags which are immutable to the client.
 	restrictedTags map[string]bool
@@ -100,6 +112,17 @@ var globals struct {
 	maxSubscriberCount int
 	// Maximum number of indexable tags.
 	maxTagCount int
+}
+
+type validatorConfig struct {
+	// TRUE or FALSE to set
+	AddToTags bool `json:"add_to_tags"`
+	//  Authentication level which triggers this validator: "auth", "anon"... or ""
+	Required string `json:"required"`
+	// State to assign on success
+	State string `json:"state"`
+	// Validator params passed to validator unchanged.
+	Config json.RawMessage `json:"config"`
 }
 
 // Contentx of the configuration file
@@ -126,14 +149,14 @@ type configType struct {
 	MaxTagCount int `json:"max_tag_count"`
 
 	// Configs for subsystems
-	ClusterConfig json.RawMessage `json:"cluster_config"`
+	Cluster json.RawMessage `json:"cluster_config"`
 
-	PluginConfig    json.RawMessage            `json:"plugins"`
-	StoreConfig     json.RawMessage            `json:"store_config"`
-	PushConfig      json.RawMessage            `json:"push"`
-	TLSConfig       json.RawMessage            `json:"tls"`
-	AuthConfig      map[string]json.RawMessage `json:"auth_config"`
-	ValidatorConfig map[string]json.RawMessage `json:"acc_validation"`
+	Plugin    json.RawMessage             `json:"plugins"`
+	Store     json.RawMessage             `json:"store_config"`
+	Push      json.RawMessage             `json:"push"`
+	TLS       json.RawMessage             `json:"tls"`
+	Auth      map[string]json.RawMessage  `json:"auth_config"`
+	Validator map[string]*validatorConfig `json:"acc_validation"`
 }
 
 func main() {
@@ -162,7 +185,7 @@ func main() {
 		config.Listen = *listenOn
 	}
 
-	var err = store.Open(string(config.StoreConfig))
+	var err = store.Open(string(config.Store))
 	if err != nil {
 		log.Fatal("Failed to connect to DB:", err)
 	}
@@ -172,7 +195,7 @@ func main() {
 		log.Println("All done, good bye")
 	}()
 
-	for name, jsconf := range config.AuthConfig {
+	for name, jsconf := range config.Auth {
 		if authhdl := store.GetAuthHandler(name); authhdl == nil {
 			panic("Config provided for unknown authentication scheme '" + name + "'")
 		} else if err := authhdl.Init(string(jsconf)); err != nil {
@@ -180,7 +203,28 @@ func main() {
 		}
 	}
 
-	err = push.Init(string(config.PushConfig))
+	for name, vconf := range config.Validator {
+		req := auth.ParseAuthLevel(vconf.Required)
+		state := types.ParseState(vconf.State)
+		if req == auth.LevelNone || state == 0 {
+			// Skip disabled validator.
+			continue
+		}
+		if val := store.GetValidator(name); val == nil {
+			panic("Config provided for unknown validator '" + name + "'")
+		} else if err := val.Init(string(vconf.Config)); err != nil {
+			panic(err)
+		}
+		if globals.validators == nil {
+			globals.validators = make(map[string]credValidator)
+		}
+		globals.validators[name] = credValidator{
+			requiredAuthLvl: req,
+			setState:        state,
+			addToTags:       vconf.AddToTags}
+	}
+
+	err = push.Init(string(config.Push))
 	if err != nil {
 		log.Fatal("Failed to initialize push notifications: ", err)
 	}
@@ -194,14 +238,14 @@ func main() {
 	// The hub (the main message router)
 	globals.hub = newHub()
 	// Cluster initialization
-	clusterInit(config.ClusterConfig, clusterSelf)
+	clusterInit(config.Cluster, clusterSelf)
 	// Intialize plugins
-	pluginsInit(config.PluginConfig)
+	pluginsInit(config.Plugin)
 	// API key signing secret
 	globals.apiKeySalt = config.APIKeySalt
 	// List of tags for user discovery which cannot be changed directly by the client.
-	globals.restrictedTags = make(map[string]bool, len(config.ValidatorConfig))
-	for tag, _ := range config.ValidatorConfig {
+	globals.restrictedTags = make(map[string]bool, len(config.Validator))
+	for tag, _ := range config.Validator {
 		if strings.Index(tag, ":") >= 0 {
 			panic("acc_validation names should not contain character ':'")
 		}
@@ -273,7 +317,7 @@ func main() {
 		globals.grpcServer = srv
 	}
 
-	if err := listenAndServe(config.Listen, *tlsEnabled, string(config.TLSConfig), signalHandler()); err != nil {
+	if err := listenAndServe(config.Listen, *tlsEnabled, string(config.TLS), signalHandler()); err != nil {
 		log.Fatal(err)
 	}
 }

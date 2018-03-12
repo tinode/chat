@@ -20,7 +20,7 @@ type BasicAuth struct{}
 func parseSecret(secret string) (uname, password string, err error) {
 	splitAt := strings.Index(secret, ":")
 	if splitAt < 1 {
-		err = auth.ErrMalformed
+		err = types.ErrMalformed
 		return
 	}
 
@@ -52,7 +52,7 @@ func (BasicAuth) AddRecord(uid types.Uid, secret []byte, lifetime time.Duration)
 	}
 	dup, err := store.Users.AddAuthRecord(uid, auth.LevelAuth, "basic", uname, passhash, expires)
 	if dup {
-		return auth.LevelNone, auth.ErrDuplicate
+		return auth.LevelNone, types.ErrDuplicate
 	} else if err != nil {
 		return auth.LevelNone, err
 	}
@@ -71,11 +71,11 @@ func (BasicAuth) UpdateRecord(uid types.Uid, secret []byte, lifetime time.Durati
 		return err
 	}
 	if storedUID != uid {
-		return auth.ErrFailed
+		return types.ErrFailed
 	}
 	passhash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
-		return auth.ErrInternal
+		return types.ErrInternal
 	}
 	var expires time.Time
 	if lifetime > 0 {
@@ -100,16 +100,16 @@ func (BasicAuth) Authenticate(secret []byte) (types.Uid, int, time.Time, error) 
 		return types.ZeroUid, auth.LevelNone, time.Time{}, err
 	} else if uid.IsZero() {
 		// Invalid login.
-		return types.ZeroUid, auth.LevelNone, time.Time{}, auth.ErrFailed
+		return types.ZeroUid, auth.LevelNone, time.Time{}, types.ErrFailed
 	} else if !expires.IsZero() && expires.Before(time.Now()) {
 		// The record has expired
-		return types.ZeroUid, auth.LevelNone, time.Time{}, auth.ErrExpired
+		return types.ZeroUid, auth.LevelNone, time.Time{}, types.ErrExpired
 	}
 
 	err = bcrypt.CompareHashAndPassword([]byte(passhash), []byte(password))
 	if err != nil {
 		// Invalid password
-		return types.ZeroUid, auth.LevelNone, time.Time{}, auth.ErrFailed
+		return types.ZeroUid, auth.LevelNone, time.Time{}, types.ErrFailed
 	}
 	return uid, authLvl, expires, nil
 }
@@ -129,12 +129,12 @@ func (BasicAuth) IsUnique(secret []byte) (bool, error) {
 	if uid.IsZero() {
 		return true, nil
 	}
-	return false, auth.ErrDuplicate
+	return false, types.ErrDuplicate
 }
 
 // GenSecret is not supported, generates an error.
 func (BasicAuth) GenSecret(uid types.Uid, authLvl int, lifetime time.Duration) ([]byte, time.Time, error) {
-	return nil, time.Time{}, auth.ErrUnsupported
+	return nil, time.Time{}, types.ErrUnsupported
 }
 
 func (BasicAuth) DelRecords(uid types.Uid) error {

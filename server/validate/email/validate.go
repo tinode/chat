@@ -17,9 +17,9 @@ func (validator) Init(jsonconf string) error {
 
 // PreCheck validates the credential and parameters without sending an email.
 func (validator) PreCheck(cred string, params interface{}) error {
-	parts, err := mail.ParseAddress(cred)
+	_, err := mail.ParseAddress(cred)
 	if err != nil {
-		return err
+		return t.ErrMalformed
 	}
 	// TODO: Check email uniqueness
 	return nil

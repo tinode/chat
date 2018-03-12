@@ -1746,7 +1746,6 @@ func (t *Topic) replySetTags(sess *Session, set *MsgClientSet) error {
 		}
 
 		if err != nil {
-			log.Println("Failed to update tags", err)
 			sess.queueOut(resp)
 			return err
 		}

@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tinode/chat/server/auth"
 	"github.com/tinode/chat/server/store/types"
 )
 
@@ -193,27 +192,27 @@ func decodeAuthError(err error, id string, timestamp time.Time) *ServerComMessag
 		return NoErr(id, "", timestamp)
 	}
 
-	authErr, ok := err.(auth.AuthErr)
+	storeErr, ok := err.(types.StoreError)
 	if !ok {
 		return ErrUnknown(id, "", timestamp)
 	}
 
 	var errmsg *ServerComMessage
 
-	switch authErr {
-	case auth.ErrInternal:
+	switch storeErr {
+	case types.ErrInternal:
 		errmsg = ErrUnknown(id, "", timestamp)
-	case auth.ErrMalformed:
+	case types.ErrMalformed:
 		errmsg = ErrMalformed(id, "", timestamp)
-	case auth.ErrFailed:
+	case types.ErrFailed:
 		errmsg = ErrAuthFailed(id, "", timestamp)
-	case auth.ErrDuplicate:
+	case types.ErrDuplicate:
 		errmsg = ErrDuplicateCredential(id, "", timestamp)
-	case auth.ErrUnsupported:
+	case types.ErrUnsupported:
 		errmsg = ErrNotImplemented(id, "", timestamp)
-	case auth.ErrExpired:
+	case types.ErrExpired:
 		errmsg = ErrAuthFailed(id, "", timestamp)
-	case auth.ErrPolicy:
+	case types.ErrPolicy:
 		errmsg = ErrPolicy(id, "", timestamp)
 	default:
 		errmsg = ErrUnknown(id, "", timestamp)
