@@ -91,7 +91,7 @@ The user agent `ua` is expected to follow [RFC 7231 section 5.5.3](http://tools.
 
 #### `{acc}`
 
-Message `{acc}` creates users or updates `tags` or authentication credentials `scheme` and `secret` of exiting users. To create a new user set `user` to the string `new` optionally followed by any character sequence, e.g. `newr15gsr`. Either authenticated or anonymous session can send an `{acc}` message to create a new user. To update tags or authentication credentials of the current user leave `user` unset.
+Message `{acc}` creates users or updates `tags` or authentication credentials `scheme` and `secret` of exiting users. To create a new user set `user` to the string `new` optionally followed by any character sequence, e.g. `newr15gsr`. Either authenticated or anonymous session can send an `{acc}` message to create a new user. To authentication data or validate a credential of the current user leave `user` unset.
 
 ```js
 acc: {
@@ -104,9 +104,19 @@ acc: {
   secret: btoa("username:password"), // string, base64 encoded secret for the chosen
               // authentication scheme; to delete a scheme use a string with a single DEL
               // Unicode character "\u2421"; "token" and "basic" cannot be deleted
-  tags: [ ... ], // array of tags for user discovery; see 'fnd' topic for
+  tags: ["alice johnson",... ], // array of tags for user discovery; see 'fnd' topic for
               // details, optional (if missing, user will not be discoverable other than
               // by login)
+  cred: [
+	{
+	  type: "email", // string, credential type, e.g. "email", "tel", "recaptcha", etc.
+	  val: "alice@example.com", // string, credential to verify such as email or phone
+	  resp: "178307", // string, verification response, optional
+	  params: { ... } // parameters, specific to the verification method, optional
+	},
+	...
+  ],   // account credentials which require verifiction, such as email.
+
   desc: {  // object, user initialization data closely matching that of table
            // initialization; optional
     defacs: {

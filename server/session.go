@@ -642,6 +642,11 @@ func (s *Session) acc(msg *ClientComMessage) {
 				store.Users.Delete(user.Uid(), false)
 				return
 			}
+
+			// Response is provide, update account immediately.
+			if cred.Response != "" {
+
+			}
 		}
 
 		reply := NoErrCreated(msg.Acc.Id, "", msg.timestamp)
@@ -701,7 +706,7 @@ func (s *Session) acc(msg *ClientComMessage) {
 
 		s.queueOut(NoErr(msg.Acc.Id, "", msg.timestamp))
 
-		// pluginAccount(&user, plgActCreate)
+		// pluginAccount(&user, plgActUpdate)
 
 	} else {
 		// session is not authenticated and this is not an attempt to create a new account
