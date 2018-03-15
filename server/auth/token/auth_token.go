@@ -78,7 +78,7 @@ func (ta *TokenAuth) Init(jsonconf string) error {
 }
 
 // AddRecord is not supprted, will produce an error.
-func (TokenAuth) AddRecord(uid types.Uid, secret []byte, lifetime time.Duration) (int, error) {
+func (TokenAuth) AddRecord(uid types.Uid, secret []byte, lifetime time.Duration) (auth.Level, error) {
 	return auth.LevelNone, types.ErrUnsupported
 }
 
@@ -88,7 +88,7 @@ func (TokenAuth) UpdateRecord(uid types.Uid, secret []byte, lifetime time.Durati
 }
 
 // Authenticate checks validity of provided token.
-func (ta *TokenAuth) Authenticate(token []byte) (types.Uid, int, time.Time, error) {
+func (ta *TokenAuth) Authenticate(token []byte) (types.Uid, auth.Level, time.Time, error) {
 	// [8:UID][4:expires][2:authLevel][2:serial-number][32:signature] == 48 bytes
 
 	if len(token) < tokenLengthDecoded {
@@ -99,8 +99,8 @@ func (ta *TokenAuth) Authenticate(token []byte) (types.Uid, int, time.Time, erro
 	if err := uid.UnmarshalBinary(token[tokenUIDStart:tokenUIDEnd]); err != nil {
 		return types.ZeroUid, auth.LevelNone, time.Time{}, types.ErrMalformed
 	}
-	var authLvl int
-	if authLvl = int(binary.LittleEndian.Uint16(token[tokenAuthLvlStart:tokenAuthLvlEnd])); authLvl < 0 || authLvl > auth.LevelRoot {
+	var authLvl auth.Level
+	if authLvl = auth.Level(binary.LittleEndian.Uint16(token[tokenAuthLvlStart:tokenAuthLvlEnd])); authLvl < 0 || authLvl > auth.LevelRoot {
 		return types.ZeroUid, auth.LevelNone, time.Time{}, types.ErrMalformed
 	}
 
@@ -123,7 +123,7 @@ func (ta *TokenAuth) Authenticate(token []byte) (types.Uid, int, time.Time, erro
 }
 
 // GenSecret generates a new token.
-func (ta *TokenAuth) GenSecret(uid types.Uid, authLvl int, lifetime time.Duration) ([]byte, time.Time, error) {
+func (ta *TokenAuth) GenSecret(uid types.Uid, authLvl auth.Level, lifetime time.Duration) ([]byte, time.Time, error) {
 	// [8:UID][4:expires][2:authLevel][2:serial-number][32:signature] == 48 bytes
 
 	buf := new(bytes.Buffer)

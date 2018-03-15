@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tinode/chat/server/auth"
 	"github.com/tinode/chat/server/store/types"
 )
 
@@ -76,12 +77,10 @@ func normalizeTags(dst, src []string) []string {
 	return dst
 }
 
-// restrictedTagsDelta extracts the lists of added and removed restricted tags:
-//   added :=  newTags - (oldTags & newTags) -- present in new but missing in old
-//   removed := oldTags - (newTags & oldTags) -- present in old but missing in new
-func restrictedTagsDelta(oldTags, newTags []string) (added, removed []string) {
-	rold := filterRestrictedTags(oldTags)
-	rnew := filterRestrictedTags(newTags)
+// stringDelta extracts the slices of added and removed strings from two slices:
+//   added :=  newSlice - (oldSlice & newSlice) -- present in new but missing in old
+//   removed := oldSlice - (oldSlice & newSlice) -- present in old but missing in new
+func stringSliceDelta(rold, rnew []string) (added, removed []string) {
 
 	if len(rold) == 0 && len(rnew) == 0 {
 		return nil, nil
@@ -96,7 +95,7 @@ func restrictedTagsDelta(oldTags, newTags []string) (added, removed []string) {
 	sort.Strings(rold)
 	sort.Strings(rnew)
 
-	// Match old tags against the new tags and separate removed tags from added.
+	// Match old slice against the new slice and separate removed strings from added.
 	o, n := 0, 0
 	lold, lnew := len(rold), len(rnew)
 	for o < lold || n < lnew {
@@ -186,7 +185,7 @@ func isNullValue(i interface{}) bool {
 	return false
 }
 
-func decodeAuthError(err error, id string, timestamp time.Time) *ServerComMessage {
+func decodeStoreError(err error, id string, timestamp time.Time) *ServerComMessage {
 
 	if err == nil {
 		return NoErr(id, "", timestamp)
@@ -214,11 +213,49 @@ func decodeAuthError(err error, id string, timestamp time.Time) *ServerComMessag
 		errmsg = ErrAuthFailed(id, "", timestamp)
 	case types.ErrPolicy:
 		errmsg = ErrPolicy(id, "", timestamp)
+	case types.ErrCredentials:
+		errmsg = InfoValidateCredentials(id, timestamp)
 	default:
 		errmsg = ErrUnknown(id, "", timestamp)
 	}
 
 	return errmsg
+}
+
+// Helper function to select access mode for the given auth level
+func selectAccessMode(authLvl auth.Level, anonMode, authMode, rootMode types.AccessMode) types.AccessMode {
+	switch authLvl {
+	case auth.LevelNone:
+		return types.ModeNone
+	case auth.LevelAnon:
+		return anonMode
+	case auth.LevelAuth:
+		return authMode
+	case auth.LevelRoot:
+		return rootMode
+	default:
+		return types.ModeNone
+	}
+}
+
+// Get default modeWant for the given topic category
+func getDefaultAccess(cat types.TopicCat, auth bool) types.AccessMode {
+	if !auth {
+		return types.ModeNone
+	}
+
+	switch cat {
+	case types.TopicCatP2P:
+		return types.ModeCP2P
+	case types.TopicCatFnd:
+		return types.ModeNone
+	case types.TopicCatGrp:
+		return types.ModeCPublic
+	case types.TopicCatMe:
+		return types.ModeCSelf
+	default:
+		panic("Unknown topic category")
+	}
 }
 
 func max(a, b int) int {

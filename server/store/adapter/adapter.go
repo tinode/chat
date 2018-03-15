@@ -4,6 +4,7 @@ package adapter
 import (
 	"time"
 
+	"github.com/tinode/chat/server/auth"
 	t "github.com/tinode/chat/server/store/types"
 )
 
@@ -32,13 +33,14 @@ type Adapter interface {
 	CredIsConfirmed(uid t.Uid, cred string) (bool, error)
 	CredDel(uid t.Uid, cred string) error
 	CredConfirm(uid t.Uid, cred string) error
+	CredGetAll(uid t.Uid) ([]string, error)
 
 	// Authentication management for the basic authentication scheme
-	AuthGetRecord(unique string) (t.Uid, int, []byte, time.Time, error)
-	AuthAddRecord(user t.Uid, authLvl int, unique string, secret []byte, expires time.Time) (bool, error)
+	AuthGetRecord(unique string) (t.Uid, auth.Level, []byte, time.Time, error)
+	AuthAddRecord(user t.Uid, authLvl auth.Level, unique string, secret []byte, expires time.Time) (bool, error)
 	AuthDelRecord(user t.Uid, unique string) error
 	AuthDelAllRecords(uid t.Uid) (int, error)
-	AuthUpdRecord(unique string, authLvl int, secret []byte, expires time.Time) (int, error)
+	AuthUpdRecord(unique string, authLvl auth.Level, secret []byte, expires time.Time) (int, error)
 
 	// Topic/contact management
 

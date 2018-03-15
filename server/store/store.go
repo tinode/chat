@@ -192,19 +192,19 @@ func (UsersObjMapper) Create(user *types.User, private interface{}) (*types.User
 
 // GetAuthRecord takes a unique identifier and a authentication scheme name, fetches user ID and
 // authentication secret.
-func (UsersObjMapper) GetAuthRecord(scheme, unique string) (types.Uid, int, []byte, time.Time, error) {
+func (UsersObjMapper) GetAuthRecord(scheme, unique string) (types.Uid, auth.Level, []byte, time.Time, error) {
 	return adp.AuthGetRecord(scheme + ":" + unique)
 }
 
 // AddAuthRecord creates a new authentication record for the given user.
-func (UsersObjMapper) AddAuthRecord(uid types.Uid, authLvl int, scheme, unique string, secret []byte,
+func (UsersObjMapper) AddAuthRecord(uid types.Uid, authLvl auth.Level, scheme, unique string, secret []byte,
 	expires time.Time) (bool, error) {
 
 	return adp.AuthAddRecord(uid, authLvl, scheme+":"+unique, secret, expires)
 }
 
 // UpdateAuthRecord updates authentication record with a new secret and expiration time.
-func (UsersObjMapper) UpdateAuthRecord(uid types.Uid, authLvl int, scheme, unique string,
+func (UsersObjMapper) UpdateAuthRecord(uid types.Uid, authLvl auth.Level, scheme, unique string,
 	secret []byte, expires time.Time) (int, error) {
 
 	return adp.AuthUpdRecord(scheme+":"+unique, authLvl, secret, expires)
@@ -234,11 +234,6 @@ func (UsersObjMapper) Delete(id types.Uid, soft bool) error {
 	// Delete user's cerdentials (emails, phones)
 	// Delete user object: adp.UserDelete(user.Uid(), false)
 	return errors.New("store: not implemented")
-}
-
-// UpdateState updates user state.
-func (u UsersObjMapper) UpdateState(id types.Uid, state types.UserState) error {
-	return u.Update(id, map[string]interface{}{"State": state})
 }
 
 // UpdateLastSeen updates LastSeen and UserAgent.
@@ -286,12 +281,19 @@ func (UsersObjMapper) GetTopicsAny(id types.Uid) ([]types.Subscription, error) {
 	return adp.TopicsForUser(id, true)
 }
 
-func (UsersObjMapper) RequestCred(id types.Uid, ctype, value string, params interface{}) error {
+// SaveCred saves a credential validation request.
+func (UsersObjMapper) SaveCred(id types.Uid, ctype, value string, params interface{}) error {
 	return adp.CredAdd(id, ctype+":"+value, 0, params)
 }
 
+// ConfirmCred markes credential as confirmed.
 func (UsersObjMapper) ConfirmCred(id types.Uid, ctype, value string) error {
 	return adp.CredConfirm(id, ctype+":"+value)
+}
+
+// GetAllCred gets a list of confirmed credentials.
+func (UsersObjMapper) GetAllCred(id types.Uid) ([]string, error) {
+	return adp.CredGetAll(id)
 }
 
 // TopicsObjMapper is a struct to hold methods for persistence mapping for the topic object.

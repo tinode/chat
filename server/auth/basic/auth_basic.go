@@ -36,7 +36,7 @@ func (BasicAuth) Init(unused string) error {
 }
 
 // AddRecord adds a basic authentication record to DB.
-func (BasicAuth) AddRecord(uid types.Uid, secret []byte, lifetime time.Duration) (int, error) {
+func (BasicAuth) AddRecord(uid types.Uid, secret []byte, lifetime time.Duration) (auth.Level, error) {
 	uname, password, fail := parseSecret(string(secret))
 	if fail != nil {
 		return auth.LevelNone, fail
@@ -89,7 +89,7 @@ func (BasicAuth) UpdateRecord(uid types.Uid, secret []byte, lifetime time.Durati
 }
 
 // Authenticate checks login and password.
-func (BasicAuth) Authenticate(secret []byte) (types.Uid, int, time.Time, error) {
+func (BasicAuth) Authenticate(secret []byte) (types.Uid, auth.Level, time.Time, error) {
 	uname, password, fail := parseSecret(string(secret))
 	if fail != nil {
 		return types.ZeroUid, auth.LevelNone, time.Time{}, fail
@@ -133,7 +133,7 @@ func (BasicAuth) IsUnique(secret []byte) (bool, error) {
 }
 
 // GenSecret is not supported, generates an error.
-func (BasicAuth) GenSecret(uid types.Uid, authLvl int, lifetime time.Duration) ([]byte, time.Time, error) {
+func (BasicAuth) GenSecret(uid types.Uid, authLvl auth.Level, lifetime time.Duration) ([]byte, time.Time, error) {
 	return nil, time.Time{}, types.ErrUnsupported
 }
 

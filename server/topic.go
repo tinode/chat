@@ -2148,44 +2148,8 @@ func (t *Topic) p2pOtherUser(uid types.Uid) types.Uid {
 	panic("Not P2P topic")
 }
 
-func (t *Topic) accessFor(authLvl int) types.AccessMode {
+func (t *Topic) accessFor(authLvl auth.Level) types.AccessMode {
 	return selectAccessMode(authLvl, t.accessAnon, t.accessAuth, getDefaultAccess(t.cat, true))
-}
-
-// Helper function to select access mode for the given auth level
-func selectAccessMode(authLvl int, anonMode, authLMode, rootMode types.AccessMode) types.AccessMode {
-	switch authLvl {
-	case auth.LevelNone:
-		return types.ModeNone
-	case auth.LevelAnon:
-		return anonMode
-	case auth.LevelAuth:
-		return authLMode
-	case auth.LevelRoot:
-		return rootMode
-	default:
-		return types.ModeNone
-	}
-}
-
-// Get default modeWant for the given topic category
-func getDefaultAccess(cat types.TopicCat, auth bool) types.AccessMode {
-	if !auth {
-		return types.ModeNone
-	}
-
-	switch cat {
-	case types.TopicCatP2P:
-		return types.ModeCP2P
-	case types.TopicCatFnd:
-		return types.ModeNone
-	case types.TopicCatGrp:
-		return types.ModeCPublic
-	case types.TopicCatMe:
-		return types.ModeCSelf
-	default:
-		panic("Unknown topic category")
-	}
 }
 
 func topicCat(name string) types.TopicCat {

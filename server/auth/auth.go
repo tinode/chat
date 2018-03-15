@@ -6,10 +6,12 @@ import (
 	"github.com/tinode/chat/server/store/types"
 )
 
+type Level int
+
 // Authentication levels.
 const (
 	// LevelNone is undefined/not authenticated
-	LevelNone = iota * 10
+	LevelNone Level = iota * 10
 	// LevelAnon is anonymous user/light authentication
 	LevelAnon
 	// LevelAuth is fully authenticated user
@@ -18,9 +20,9 @@ const (
 	LevelRoot
 )
 
-// AuthLevelName gets human-readable name for a numeric authentication level.
-func AuthLevelName(authLvl int) string {
-	switch authLvl {
+// String implements Stringer interface: gets human-readable name for a numeric authentication level.
+func (a Level) String() string {
+	switch a {
 	case LevelNone:
 		return ""
 	case LevelAnon:
@@ -34,7 +36,7 @@ func AuthLevelName(authLvl int) string {
 	}
 }
 
-func ParseAuthLevel(name string) int {
+func ParseAuthLevel(name string) Level {
 	switch name {
 	case "anon":
 		return LevelAnon
@@ -52,11 +54,10 @@ type AuthHandler interface {
 	// Init initialize the handler.
 	Init(jsonconf string) error
 
-	// AddRecord adds persistent record to database. Returns a numeric error code to indicate
-	// if the error is due to a duplicate or some other error.
-	// store.AddAuthRecord("scheme", "unique", "secret")
+	// AddRecord adds persistent record to database.
+	// Calls store.Users.AddAuthRecord("user", "auth.Level", "scheme", "unique", "passhash", "expiration")
 	// Returns: auth level, error
-	AddRecord(uid types.Uid, secret []byte, lifetime time.Duration) (int, error)
+	AddRecord(uid types.Uid, secret []byte, lifetime time.Duration) (Level, error)
 
 	// UpdateRecord updates existing record with new credentials. Returns a numeric error code to indicate
 	// if the error is due to a duplicate or some other error.
@@ -66,8 +67,8 @@ type AuthHandler interface {
 	// Authenticate: given a user-provided authentication secret (such as "login:password"
 	// return user ID, time when the secret expires (zero, if never) or an error code.
 	// store.Users.GetAuthRecord("scheme", "unique")
-	// Returns: user ID, user auth level, token expiration time, AuthErr.
-	Authenticate(secret []byte) (types.Uid, int, time.Time, error)
+	// Returns: user ID, user auth level, token expiration time, error.
+	Authenticate(secret []byte) (types.Uid, Level, time.Time, error)
 
 	// IsUnique verifies if the provided secret can be considered unique by the auth scheme
 	// E.g. if login is unique.
@@ -75,7 +76,7 @@ type AuthHandler interface {
 	IsUnique(secret []byte) (bool, error)
 
 	// GenSecret generates a new secret, if appropriate.
-	GenSecret(uid types.Uid, authLvl int, lifetime time.Duration) ([]byte, time.Time, error)
+	GenSecret(uid types.Uid, authLvl Level, lifetime time.Duration) ([]byte, time.Time, error)
 
 	// DelRecords deletes all authentication records for the given user.
 	DelRecords(uid types.Uid) error

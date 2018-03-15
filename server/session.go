@@ -72,7 +72,7 @@ type Session struct {
 	uid types.Uid
 
 	// Authentication level - NONE (unset), ANON, AUTH, ROOT
-	authLvl int
+	authLvl auth.Level
 
 	// Time when the long polling session was last refreshed
 	lastTouched time.Time
@@ -435,80 +435,6 @@ func (s *Session) hello(msg *ClientComMessage) {
 	s.queueOut(&ServerComMessage{Ctrl: ctrl})
 }
 
-// Authenticate
-func (s *Session) login(msg *ClientComMessage) {
-
-	if s.ver == 0 {
-		s.queueOut(ErrCommandOutOfSequence(msg.Login.Id, "", msg.timestamp))
-		return
-	}
-
-	if !s.uid.IsZero() {
-		s.queueOut(ErrAlreadyAuthenticated(msg.Login.Id, "", msg.timestamp))
-		return
-	}
-
-	handler := store.GetAuthHandler(msg.Login.Scheme)
-	if handler == nil {
-		s.queueOut(ErrAuthUnknownScheme(msg.Login.Id, "", msg.timestamp))
-		return
-	}
-
-	uid, authLvl, expires, err := handler.Authenticate(msg.Login.Secret)
-	if err != nil {
-		log.Println("auth result", err)
-	}
-
-	if err == types.ErrMalformed {
-		s.queueOut(ErrMalformed(msg.Login.Id, "", msg.timestamp))
-		return
-	}
-
-	// DB error
-	if err != nil {
-		s.queueOut(ErrUnknown(msg.Login.Id, "", msg.timestamp))
-		return
-	}
-
-	// All other errors are reported as invalid login or password
-	if uid.IsZero() {
-		s.queueOut(ErrAuthFailed(msg.Login.Id, "", msg.timestamp))
-		return
-	}
-
-	s.uid = uid
-	s.authLvl = authLvl
-
-	if msg.Login.Scheme != "token" {
-		handler = store.GetAuthHandler("token")
-	}
-
-	var tokenLifetime time.Duration
-	if !expires.IsZero() {
-		tokenLifetime = time.Until(expires)
-	}
-	secret, expires, err := handler.GenSecret(uid, authLvl, tokenLifetime)
-	if err != nil {
-		log.Println("auth failed to generate token", err)
-		s.queueOut(ErrAuthFailed(msg.Login.Id, "", msg.timestamp))
-		return
-	}
-
-	// Record deviceId used in this session
-	if s.deviceID != "" {
-		store.Devices.Update(uid, "", &types.DeviceDef{
-			DeviceId: s.deviceID,
-			Platform: "",
-			LastSeen: msg.timestamp,
-			Lang:     s.lang,
-		})
-	}
-
-	resp := NoErr(msg.Login.Id, "", msg.timestamp)
-	resp.Ctrl.Params = map[string]interface{}{"user": uid.UserId(), "token": secret, "expires": expires}
-	s.queueOut(resp)
-}
-
 // Account creation
 func (s *Session) acc(msg *ClientComMessage) {
 
@@ -563,15 +489,10 @@ func (s *Session) acc(msg *ClientComMessage) {
 
 		// Pre-check credentials for validity
 		for _, cred := range msg.Acc.Cred {
-			log.Println("pre-checking credential", cred)
-
 			if vld := store.GetValidator(cred.Type); vld != nil {
 				if err := vld.PreCheck(cred.Value, cred.Params); err != nil {
-					if err == types.ErrDuplicate {
-						s.queueOut(ErrDuplicateCredential(msg.Acc.Id, "", msg.timestamp))
-					} else {
-						s.queueOut(ErrMalformed(msg.Acc.Id, "", msg.timestamp))
-					}
+					log.Println("failed credential pre-check", cred, err)
+					s.queueOut(decodeStoreError(err, msg.Acc.Id, msg.timestamp))
 					return
 				}
 
@@ -617,72 +538,52 @@ func (s *Session) acc(msg *ClientComMessage) {
 			log.Println("auth: add record failed", err)
 			// Attempt to delete incomplete user record
 			store.Users.Delete(user.Uid(), false)
-			s.queueOut(decodeAuthError(err, msg.Acc.Id, msg.timestamp))
+			s.queueOut(decodeStoreError(err, msg.Acc.Id, msg.timestamp))
 			return
 		}
 
+		var validated []string
 		for _, cred := range msg.Acc.Cred {
 			log.Println("processing credential", cred)
 
 			vld := store.GetValidator(cred.Type)
 			if vld == nil {
-				log.Println("unknown validatyon type", cred.Type)
 				// Ignore unknown validation type.
+				log.Println("unknown validation type", cred.Type)
 				continue
 			}
-			err := vld.Request(user.Uid(), cred.Value, s.lang, cred.Params, cred.Response)
-			if err != nil {
-				if err == types.ErrDuplicate {
-					s.queueOut(ErrDuplicateCredential(msg.Acc.Id, "", msg.timestamp))
-				} else {
-					s.queueOut(ErrUnknown(msg.Acc.Id, "", msg.timestamp))
-				}
-				log.Println("Failed to validate credential", err)
-				// Attempt to delete incomplete user record
-				store.Users.Delete(user.Uid(), false)
+			if err := vld.Request(user.Uid(), cred.Value, s.lang, cred.Params, cred.Response); err != nil {
+				s.queueOut(decodeStoreError(err, msg.Acc.Id, msg.timestamp))
+				log.Println("Failed to save or validate credential", err)
+				// Not deleting incomplete user record: the user may retry.
 				return
 			}
 
-			// Response is provide, update account immediately.
 			if cred.Response != "" {
-
+				// If response is provided and Request did not return an error, the request was
+				// successfully validated.
+				validated = append(validated, cred.Type)
 			}
 		}
 
-		reply := NoErrCreated(msg.Acc.Id, "", msg.timestamp)
-		params := map[string]interface{}{
-			"user": user.Uid().UserId(),
-			"desc": &MsgTopicDesc{
-				CreatedAt: &user.CreatedAt,
-				UpdatedAt: &user.UpdatedAt,
-				DefaultAcs: &MsgDefaultAcsMode{
-					Auth: user.Access.Auth.String(),
-					Anon: user.Access.Anon.String()},
-				Public:  user.Public,
-				Private: private},
-		}
-
+		var reply *ServerComMessage
 		if msg.Acc.Login {
-			// User wants to use the new account for authentication. Generate token and resord session.
-
-			s.uid = user.Uid()
-			s.authLvl = authLvl
-
-			params["authlvl"] = auth.AuthLevelName(authLvl)
-			params["token"], params["expires"], _ = store.GetAuthHandler("token").GenSecret(s.uid, s.authLvl, 0)
-
-			// Record session
-			if s.deviceID != "" {
-				store.Devices.Update(s.uid, "", &types.DeviceDef{
-					DeviceId: s.deviceID,
-					Platform: "",
-					LastSeen: msg.timestamp,
-					Lang:     s.lang,
-				})
-			}
+			// Process user's login request.
+			reply = s.onLogin(msg.Acc.Id, msg.timestamp, user.Uid(), authLvl, time.Time{}, validated)
+		} else {
+			reply = NoErrCreated(msg.Acc.Id, "", msg.timestamp)
+			reply.Ctrl.Params = map[string]interface{}{"user": user.Uid().UserId()}
 		}
+		params := reply.Ctrl.Params.(map[string]interface{})
+		params["desc"] = &MsgTopicDesc{
+			CreatedAt: &user.CreatedAt,
+			UpdatedAt: &user.UpdatedAt,
+			DefaultAcs: &MsgDefaultAcsMode{
+				Auth: user.Access.Auth.String(),
+				Anon: user.Access.Anon.String()},
+			Public:  user.Public,
+			Private: private}
 
-		reply.Ctrl.Params = params
 		s.queueOut(reply)
 
 		pluginAccount(&user, plgActCreate)
@@ -694,7 +595,7 @@ func (s *Session) acc(msg *ClientComMessage) {
 			// TODO(gene): support the case when msg.Acc.User is not equal to the current user
 			if err := authhdl.UpdateRecord(s.uid, msg.Acc.Secret, 0); err != nil {
 				log.Println("auth: Failed to update credentials", err)
-				s.queueOut(decodeAuthError(err, msg.Acc.Id, msg.timestamp))
+				s.queueOut(decodeStoreError(err, msg.Acc.Id, msg.timestamp))
 				return
 			}
 		} else if msg.Acc.Scheme != "" {
@@ -702,6 +603,16 @@ func (s *Session) acc(msg *ClientComMessage) {
 			log.Println("auth: Unknown auth scheme", msg.Acc.Scheme)
 			s.queueOut(ErrMalformed(msg.Acc.Id, "", msg.timestamp))
 			return
+		} else if len(msg.Acc.Cred) > 0 {
+			// Check if the message contains credential confirmation.
+			for _, cred := range msg.Acc.Cred {
+				if cred.Response != "" {
+					if err := store.Users.ConfirmCred(s.uid, cred.Type, cred.Response); err != nil {
+						s.queueOut(decodeStoreError(err, msg.Acc.Id, msg.timestamp))
+						return
+					}
+				}
+			}
 		}
 
 		s.queueOut(NoErr(msg.Acc.Id, "", msg.timestamp))
@@ -713,6 +624,102 @@ func (s *Session) acc(msg *ClientComMessage) {
 		s.queueOut(ErrPermissionDenied(msg.Acc.Id, "", msg.timestamp))
 		return
 	}
+}
+
+// Authenticate
+func (s *Session) login(msg *ClientComMessage) {
+
+	if s.ver == 0 {
+		s.queueOut(ErrCommandOutOfSequence(msg.Login.Id, "", msg.timestamp))
+		return
+	}
+
+	if !s.uid.IsZero() {
+		s.queueOut(ErrAlreadyAuthenticated(msg.Login.Id, "", msg.timestamp))
+		return
+	}
+
+	handler := store.GetAuthHandler(msg.Login.Scheme)
+	if handler == nil {
+		s.queueOut(ErrAuthUnknownScheme(msg.Login.Id, "", msg.timestamp))
+		return
+	}
+
+	uid, authLvl, expires, err := handler.Authenticate(msg.Login.Secret)
+	if err != nil {
+		log.Println("auth result", err)
+	}
+
+	if err == types.ErrMalformed {
+		s.queueOut(ErrMalformed(msg.Login.Id, "", msg.timestamp))
+		return
+	}
+
+	// DB error
+	if err != nil {
+		s.queueOut(ErrUnknown(msg.Login.Id, "", msg.timestamp))
+		return
+	}
+
+	// All other errors are reported as invalid login or password
+	if uid.IsZero() {
+		s.queueOut(ErrAuthFailed(msg.Login.Id, "", msg.timestamp))
+		return
+	}
+
+	s.queueOut(s.onLogin(msg.Login.Id, msg.timestamp, uid, authLvl, expires, nil))
+}
+
+// onLogin performs steps after successful authentication.
+func (s *Session) onLogin(msgId string, timestamp time.Time, uid types.Uid, authLvl auth.Level,
+	expires time.Time, validated []string) *ServerComMessage {
+
+	var reply *ServerComMessage
+	var params map[string]interface{}
+
+	_, missing := stringSliceDelta(globals.authValidators[authLvl], validated)
+	if len(missing) > 0 {
+		// Some credentials are not validated yet. Respond with request for validation.
+		reply = InfoValidateCredentials(msgId, timestamp)
+
+		params = map[string]interface{}{
+			"cred": missing}
+	} else {
+		reply = NoErr(msgId, "", timestamp)
+
+		// Authenticate the session.
+		s.uid = uid
+		s.authLvl = authLvl
+
+		// Record deviceId used in this session
+		if s.deviceID != "" {
+			store.Devices.Update(uid, "", &types.DeviceDef{
+				DeviceId: s.deviceID,
+				Platform: "",
+				LastSeen: timestamp,
+				Lang:     s.lang,
+			})
+		}
+
+		var tokenLifetime time.Duration
+		if !expires.IsZero() {
+			tokenLifetime = time.Until(expires)
+		}
+
+		// GenSecret fails only if tokenLifetime is < 0. It can't be < 0 here,
+		// otherwise login would have failed earlier.
+		secret, expires, _ := store.GetAuthHandler("token").GenSecret(uid, authLvl, tokenLifetime)
+
+		params = map[string]interface{}{
+			"token":   secret,
+			"expires": expires}
+	}
+
+	params["user"] = uid.UserId()
+	params["authlvl"] = authLvl.String()
+
+	reply.Ctrl.Params = params
+	return reply
 }
 
 func (s *Session) get(msg *ClientComMessage) {

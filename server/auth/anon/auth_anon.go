@@ -19,7 +19,7 @@ func (AnonAuth) Init(unused string) error {
 }
 
 // AddRecord is a noop. Just report success.
-func (AnonAuth) AddRecord(uid types.Uid, secret []byte, lifetime time.Duration) (int, error) {
+func (AnonAuth) AddRecord(uid types.Uid, secret []byte, lifetime time.Duration) (auth.Level, error) {
 	return auth.LevelAnon, nil
 }
 
@@ -29,7 +29,7 @@ func (AnonAuth) UpdateRecord(uid types.Uid, secret []byte, lifetime time.Duratio
 }
 
 // Authenticate is not supported. It's used only at account creation time.
-func (AnonAuth) Authenticate(secret []byte) (types.Uid, int, time.Time, error) {
+func (AnonAuth) Authenticate(secret []byte) (types.Uid, auth.Level, time.Time, error) {
 	return types.ZeroUid, auth.LevelNone, time.Time{}, types.ErrUnsupported
 }
 
@@ -39,7 +39,7 @@ func (AnonAuth) IsUnique(secret []byte) (bool, error) {
 }
 
 // GenSecret always fails.
-func (AnonAuth) GenSecret(uid types.Uid, authLvl int, lifetime time.Duration) ([]byte, time.Time, error) {
+func (AnonAuth) GenSecret(uid types.Uid, authLvl auth.Level, lifetime time.Duration) ([]byte, time.Time, error) {
 	return nil, time.Time{}, types.ErrUnsupported
 }
 

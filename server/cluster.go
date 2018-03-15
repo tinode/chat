@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/tinode/chat/server/auth"
 	rh "github.com/tinode/chat/server/ringhash"
 	"github.com/tinode/chat/server/store/types"
 )
@@ -69,7 +70,7 @@ type ClusterSess struct {
 	Uid types.Uid
 
 	// User's authentication level
-	AuthLvl int
+	AuthLvl auth.Level
 
 	// Protocol version of the client: ((major & 0xff) << 8) | (minor & 0xff)
 	Ver int

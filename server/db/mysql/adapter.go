@@ -375,7 +375,7 @@ func (a *adapter) UserCreate(user *t.User) error {
 
 			if err != nil {
 				if isDupe(err) {
-					err = errors.New("duplicate tag(s)")
+					err = t.ErrDuplicate
 				}
 				return err
 			}
@@ -397,7 +397,7 @@ func (a *adapter) AuthAddRecord(uid t.Uid, authLvl int, unique string,
 		unique, store.DecodeUid(uid), authLvl, secret, exp)
 	if err != nil {
 		if isDupe(err) {
-			return true, errors.New("duplicate credential")
+			return true, t.ErrDuplicate
 		}
 		return false, err
 	}
@@ -866,7 +866,7 @@ func (a *adapter) SubsLastSeen(topic string, user t.Uid, lastSeen map[string]tim
 // SubsForUser loads a list of user's subscriptions to topics. Does NOT read Public value.
 func (a *adapter) SubsForUser(forUser t.Uid, keepDeleted bool) ([]t.Subscription, error) {
 	if forUser.IsZero() {
-		return nil, errors.New("mysql adapter: invalid user ID in SubsForUser")
+		return nil, t.ErrMalformed
 	}
 
 	q := `SELECT createdat,updatedat,deletedat,userid AS user,topic,delid,recvseqid,
@@ -1486,6 +1486,27 @@ func (a *adapter) DeviceGetAll(uids ...t.Uid) (map[t.Uid][]t.DeviceDef, int, err
 func (a *adapter) DeviceDelete(uid t.Uid, deviceID string) error {
 	_, err := a.db.Exec("DELETE FROM devices WHERE userid=? AND hash=?", uid, deviceHasher(deviceID))
 	return err
+}
+
+// Credential management
+func (a *adapter) CredAdd(uid t.Uid, cred string, status int, params interface{}) error {
+	return nil
+}
+
+func (a *adapter) CredIsConfirmed(uid t.Uid, cred string) (bool, error) {
+	return true, nil
+}
+
+func (a *adapter) CredDel(uid t.Uid, cred string) error {
+	return nil
+}
+
+func (a *adapter) CredConfirm(uid t.Uid, cred string) error {
+	return nil
+}
+
+func (a *adapter) CredGetAll(uid t.Uid) ([]string, error) {
+	return nil, nil
 }
 
 // Helper functions

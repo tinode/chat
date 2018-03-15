@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tinode/chat/server/auth"
 	"github.com/tinode/chat/server/store"
 	t "github.com/tinode/chat/server/store/types"
 	rdb "gopkg.in/gorethink/gorethink.v4"
@@ -310,7 +311,7 @@ func (a *adapter) UserCreate(user *t.User) error {
 }
 
 // Add user's authentication record
-func (a *adapter) AuthAddRecord(uid t.Uid, authLvl int, unique string,
+func (a *adapter) AuthAddRecord(uid t.Uid, authLvl auth.Level, unique string,
 	secret []byte, expires time.Time) (bool, error) {
 
 	_, err := rdb.DB(a.dbName).Table("auth").Insert(
@@ -342,7 +343,7 @@ func (a *adapter) AuthDelAllRecords(uid t.Uid) (int, error) {
 }
 
 // Update user's authentication secret
-func (a *adapter) AuthUpdRecord(unique string, authLvl int, secret []byte, expires time.Time) (int, error) {
+func (a *adapter) AuthUpdRecord(unique string, authLvl auth.Level, secret []byte, expires time.Time) (int, error) {
 	res, err := rdb.DB(a.dbName).Table("auth").Get(unique).Update(
 		map[string]interface{}{
 			"authLvl": authLvl,
@@ -352,7 +353,7 @@ func (a *adapter) AuthUpdRecord(unique string, authLvl int, secret []byte, expir
 }
 
 // Retrieve user's authentication record
-func (a *adapter) AuthGetRecord(unique string) (t.Uid, int, []byte, time.Time, error) {
+func (a *adapter) AuthGetRecord(unique string) (t.Uid, auth.Level, []byte, time.Time, error) {
 	// Default() is needed to prevent Pluck from returning an error
 	row, err := rdb.DB(a.dbName).Table("auth").Get(unique).Pluck(
 		"userid", "secret", "expires", "authLvl").Default(nil).Run(a.conn)
@@ -361,10 +362,10 @@ func (a *adapter) AuthGetRecord(unique string) (t.Uid, int, []byte, time.Time, e
 	}
 
 	var record struct {
-		Userid  string    `gorethink:"userid"`
-		AuthLvl int       `gorethink:"authLvl"`
-		Secret  []byte    `gorethink:"secret"`
-		Expires time.Time `gorethink:"expires"`
+		Userid  string     `gorethink:"userid"`
+		AuthLvl auth.Level `gorethink:"authLvl"`
+		Secret  []byte     `gorethink:"secret"`
+		Expires time.Time  `gorethink:"expires"`
 	}
 
 	if err = row.One(&record); err != nil {
@@ -726,7 +727,7 @@ func (a *adapter) SubsLastSeen(topic string, user t.Uid, lastSeen map[string]tim
 // SubsForUser loads a list of user's subscriptions to topics. Does NOT read Public value.
 func (a *adapter) SubsForUser(forUser t.Uid, keepDeleted bool) ([]t.Subscription, error) {
 	if forUser.IsZero() {
-		return nil, errors.New("RethinkDb adapter: invalid user ID in SubsForUser")
+		return nil, t.ErrMalformed
 	}
 
 	q := rdb.DB(a.dbName).Table("subscriptions").GetAllByIndex("User", forUser.String())
@@ -1395,6 +1396,10 @@ func (a *adapter) CredDel(uid t.Uid, cred string) error {
 
 func (a *adapter) CredConfirm(uid t.Uid, cred string) error {
 	return nil
+}
+
+func (a *adapter) CredGetAll(uid t.Uid) ([]string, error) {
+	return nil, nil
 }
 
 func init() {

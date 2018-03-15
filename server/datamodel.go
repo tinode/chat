@@ -525,6 +525,15 @@ func NoErrShutdown(ts time.Time) *ServerComMessage {
 
 // 3xx
 
+// InfoValidateCredentials requires user to confirm credentials before going forward.
+func InfoValidateCredentials(id string, ts time.Time) *ServerComMessage {
+	return &ServerComMessage{Ctrl: &MsgServerCtrl{
+		Id:        id,
+		Code:      http.StatusMultipleChoices, // 300
+		Text:      "validate credentials",
+		Timestamp: ts}}
+}
+
 // InfoAlreadySubscribed request to subscribe was ignored because user is already subscribed.
 func InfoAlreadySubscribed(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{

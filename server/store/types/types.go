@@ -31,6 +31,8 @@ const (
 	ErrExpired = StoreError("expired")
 	// ErrPolicy means policy violation, e.g. password too weak.
 	ErrPolicy = StoreError("policy")
+	// ErrCredentials means credentials like email or captcha must be validated
+	ErrCredentials = StoreError("credentials")
 )
 
 // Uid is a database-specific record id, suitable to be used as a primary key.
@@ -296,36 +298,11 @@ func (ss StringSlice) Value() (driver.Value, error) {
 	return json.Marshal(ss)
 }
 
-// State is a status of a user registration: active, suspended, etc.
-type UserState int
-
-const (
-	// StateUnconfirmed is the state of the user when it's registered but not fully activated.
-	StateUnconfirmed UserState = iota + 1
-	// StateActive - normal state.
-	StateActive
-	// StateSuspended means the user is administratively suspended.
-	StateSuspended
-)
-
-func ParseState(st string) UserState {
-	switch st {
-	case "uncof":
-		return StateUnconfirmed
-	case "susp":
-		return StateSuspended
-	case "active":
-		return StateActive
-	default:
-		return UserState(0)
-	}
-}
-
 // User is a representation of a DB-stored user record.
 type User struct {
 	ObjHeader
 
-	State UserState
+	State int
 
 	// Default access to user for P2P topics (used as default modeGiven)
 	Access DefaultAccess

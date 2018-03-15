@@ -41,7 +41,6 @@ import (
 	_ "github.com/tinode/chat/server/push/stdout"
 
 	"github.com/tinode/chat/server/store"
-	"github.com/tinode/chat/server/store/types"
 
 	// Credential validators
 	_ "github.com/tinode/chat/server/validate/email"
@@ -87,9 +86,8 @@ var buildstamp = "buildstamp-undefined"
 
 // CredValidator holds additional config params for a credential validator.
 type credValidator struct {
-	// AuthLevel which requires this validator.
-	requiredAuthLvl int
-	setState        types.UserState
+	// AuthLevel(s) which require this validator.
+	requiredAuthLvl []auth.Level
 	addToTags       bool
 }
 
@@ -99,8 +97,12 @@ var globals struct {
 	cluster      *Cluster
 	grpcServer   *grpc.Server
 	plugins      []Plugin
-	validators   map[string]credValidator
-	apiKeySalt   []byte
+	// Credential validators.
+	validators map[string]credValidator
+	// Validators required for each auth level.
+	authValidators map[auth.Level][]string
+
+	apiKeySalt []byte
 	// Tags which are immutable to the client.
 	restrictedTags map[string]bool
 	// Add Strict-Transport-Security to headers, the value signifies age.
@@ -118,9 +120,7 @@ type validatorConfig struct {
 	// TRUE or FALSE to set
 	AddToTags bool `json:"add_to_tags"`
 	//  Authentication level which triggers this validator: "auth", "anon"... or ""
-	Required string `json:"required"`
-	// State to assign on success
-	State string `json:"state"`
+	Required []string `json:"required"`
 	// Validator params passed to validator unchanged.
 	Config json.RawMessage `json:"config"`
 }
@@ -204,12 +204,24 @@ func main() {
 	}
 
 	for name, vconf := range config.Validator {
-		req := auth.ParseAuthLevel(vconf.Required)
-		state := types.ParseState(vconf.State)
-		if req == auth.LevelNone || state == 0 {
+		if len(vconf.Required) == 0 {
 			// Skip disabled validator.
 			continue
 		}
+		var reqLevels []auth.Level
+		for _, req := range vconf.Required {
+			lvl := auth.ParseAuthLevel(req)
+			if lvl == auth.LevelNone {
+				// Skip disabled validator.
+				continue
+			}
+			reqLevels = append(reqLevels, lvl)
+			if globals.authValidators == nil {
+				globals.authValidators = make(map[auth.Level][]string)
+			}
+			globals.authValidators[lvl] = append(globals.authValidators[lvl], name)
+		}
+
 		if val := store.GetValidator(name); val == nil {
 			panic("Config provided for unknown validator '" + name + "'")
 		} else if err := val.Init(string(vconf.Config)); err != nil {
@@ -219,8 +231,7 @@ func main() {
 			globals.validators = make(map[string]credValidator)
 		}
 		globals.validators[name] = credValidator{
-			requiredAuthLvl: req,
-			setState:        state,
+			requiredAuthLvl: reqLevels,
 			addToTags:       vconf.AddToTags}
 	}
 

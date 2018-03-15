@@ -29,7 +29,7 @@ func (validator) PreCheck(cred string, params interface{}) error {
 // a response.
 func (validator) Request(user t.Uid, cred, lang string, params interface{}, resp string) error {
 	// TODO: send email to the user.
-	return store.Users.RequestCred(user, "email", cred, params)
+	return store.Users.SaveCred(user, "email", cred, params)
 }
 
 // Find if user exists in the database, and if so return OK. Any response is accepted.
