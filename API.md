@@ -108,12 +108,12 @@ acc: {
               // details, optional (if missing, user will not be discoverable other than
               // by login)
   cred: [
-	{
-	  type: "email", // string, credential type, e.g. "email", "tel", "recaptcha", etc.
-	  val: "alice@example.com", // string, credential to verify such as email or phone
-	  resp: "178307", // string, verification response, optional
-	  params: { ... } // parameters, specific to the verification method, optional
-	},
+    {
+      type: "email", // string, credential type, e.g. "email", "tel", "recaptcha", etc.
+      val: "alice@example.com", // string, credential to verify such as email or phone
+      resp: "178307", // string, verification response, optional
+      params: { ... } // parameters, specific to the verification method, optional
+    },
 	...
   ],   // account credentials which require verifiction, such as email.
 
@@ -149,6 +149,14 @@ login: {
                    // are currently supported
   secret: btoa("username:password"), // string, base64-encoded secret for the chosen
                   // authentication scheme, required
+  cred: [
+    {
+      type: "email", // string, credential type, e.g. "email", "tel", "recaptcha", etc, 
+                     // required
+      resp: "178307" // string, verification response, required
+    },
+	...
+  ],   // response to a request for credential verification, optional
 }
 ```
 The `basic` authentication scheme expects `secret` to be a base64-encoded string of a string composed of a user name followed by a colon `:` followed by a plan text password. User name in the `basic` scheme must not contain colon character ':' (ASCII 0x3A). The `token` expects secret to be a previously obtained security token. 
