@@ -109,7 +109,7 @@ acc: {
               // by login)
   cred: [
     {
-      type: "email", // string, credential type, e.g. "email", "tel", "recaptcha", etc.
+      meth: "email", // string, verification method, e.g. "email", "tel", "recaptcha", etc.
       val: "alice@example.com", // string, credential to verify such as email or phone
       resp: "178307", // string, verification response, optional
       params: { ... } // parameters, specific to the verification method, optional
@@ -151,8 +151,7 @@ login: {
                   // authentication scheme, required
   cred: [
     {
-      type: "email", // string, credential type, e.g. "email", "tel", "recaptcha", etc, 
-                     // required
+      meth: "email", // string, verification method, e.g. "email", "tel", "captcha", etc, required
       resp: "178307" // string, verification response, required
     },
 	...

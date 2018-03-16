@@ -269,29 +269,17 @@ func (a *adapter) CreateDb(reset bool) error {
 	}
 
 	// User credentials - contact information such as "email:jdoe@example.com" or "tel:18003287448":
-	// {Id: <tag>, Source: <uid>, Status: <int>}.
+	// Id: "method:credential" like "email:jdoe@example.com". See types.Credential.
 	if _, err := rdb.DB(a.dbName).TableCreate("credentials", rdb.TableCreateOpts{PrimaryKey: "Id"}).RunWrite(a.conn); err != nil {
 		return err
 	}
-
-	/*
-		// Index of unique user contact information as strings, such as "email:jdoe@example.com" or "tel:18003287448":
-		// {Id: <tag>, Source: <uid>} to ensure uniqueness of tags.
-		if _, err := rdb.DB(a.dbName).TableCreate("tagunique", rdb.TableCreateOpts{PrimaryKey: "Id"}).RunWrite(a.conn); err != nil {
-			return err
-		}
-	*/
+	// Create secondary index on credentials.User to be able to query credentials by user id.
+	if _, err := rdb.DB(a.dbName).Table("credentials").IndexCreate("User").RunWrite(a.conn); err != nil {
+		return err
+	}
 
 	return nil
 }
-
-/*
-// Indexable tag as stored in 'tagunique'
-type storedTag struct {
-	Id     string
-	Source string
-}
-*/
 
 // UserCreate creates a new user. Returns error and true if error is due to duplicate user name,
 // false for any other error

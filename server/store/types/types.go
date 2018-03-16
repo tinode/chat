@@ -564,10 +564,7 @@ func (da DefaultAccess) Value() (driver.Value, error) {
 
 // Credential
 type Credential struct {
-	// Timestamp when the request was created
-	CreatedAt time.Time
-	// Timestamp when the user last attempted to confirm the credential
-	UpdatedAt time.Time
+	ObjHeader
 	// Credential owner
 	User string
 	// Verification method (email, tel, captcha, etc)
@@ -579,7 +576,7 @@ type Credential struct {
 	// If credential was successfully confirmed
 	Done bool
 	// Retry count
-	Reties int
+	Retries int
 }
 
 // Subscription to a topic
