@@ -136,13 +136,6 @@ func (uid Uid) String() string {
 	return string(buf)
 }
 
-/*
-// Scan implements sql.Scanner interface
-func (uid *Uid) Scan(i interface{}) error {
-	return nil
-}
-*/
-
 // ParseUid parses string NOT prefixed with anything
 func ParseUid(s string) Uid {
 	var uid Uid
@@ -567,6 +560,26 @@ func (da *DefaultAccess) Scan(val interface{}) error {
 // Value implements sql's driver.Valuer interface.
 func (da DefaultAccess) Value() (driver.Value, error) {
 	return json.Marshal(da)
+}
+
+// Credential
+type Credential struct {
+	// Timestamp when the request was created
+	CreatedAt time.Time
+	// Timestamp when the user last attempted to confirm the credential
+	UpdatedAt time.Time
+	// Credential owner
+	User string
+	// Verification method (email, tel, captcha, etc)
+	Method string
+	// Credential value - `jdoe@example.com` or `+12345678901`
+	Value string
+	// Expected response
+	Resp string
+	// If credential was successfully confirmed
+	Done bool
+	// Retry count
+	Reties int
 }
 
 // Subscription to a topic

@@ -102,7 +102,7 @@ type MsgClientHi struct {
 // MsgAccCred is an account credential, provided or verified.
 type MsgAccCred struct {
 	// Credential type, i.e. `email` or `tel`.
-	Type string `json:"type,omitempty"`
+	Method string `json:"meth,omitempty"`
 	// Value to verify, i.e. `user@example.com` or `+18003287448`
 	Value string `json:"val,omitempty"`
 	// Verification response
@@ -139,6 +139,8 @@ type MsgClientLogin struct {
 	Scheme string `json:"scheme,omitempty"`
 	// Shared secret
 	Secret []byte `json:"secret"`
+	// Credntials to verify (email or phone)
+	Cred []MsgAccCred `json:"cred,omitempty"`
 }
 
 // MsgClientSub is a subscription request {sub} message.

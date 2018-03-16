@@ -489,15 +489,15 @@ func (s *Session) acc(msg *ClientComMessage) {
 
 		// Pre-check credentials for validity
 		for _, cred := range msg.Acc.Cred {
-			if vld := store.GetValidator(cred.Type); vld != nil {
+			if vld := store.GetValidator(cred.Method); vld != nil {
 				if err := vld.PreCheck(cred.Value, cred.Params); err != nil {
 					log.Println("failed credential pre-check", cred, err)
 					s.queueOut(decodeStoreError(err, msg.Acc.Id, msg.timestamp))
 					return
 				}
 
-				if globals.validators[cred.Type].addToTags {
-					user.Tags = append(user.Tags, cred.Type+":"+cred.Value)
+				if globals.validators[cred.Method].addToTags {
+					user.Tags = append(user.Tags, cred.Method+":"+cred.Value)
 				}
 			}
 		}
@@ -546,10 +546,10 @@ func (s *Session) acc(msg *ClientComMessage) {
 		for _, cred := range msg.Acc.Cred {
 			log.Println("processing credential", cred)
 
-			vld := store.GetValidator(cred.Type)
+			vld := store.GetValidator(cred.Method)
 			if vld == nil {
 				// Ignore unknown validation type.
-				log.Println("unknown validation type", cred.Type)
+				log.Println("unknown validation type", cred.Method)
 				continue
 			}
 			if err := vld.Request(user.Uid(), cred.Value, s.lang, cred.Params, cred.Response); err != nil {
@@ -562,7 +562,7 @@ func (s *Session) acc(msg *ClientComMessage) {
 			if cred.Response != "" {
 				// If response is provided and Request did not return an error, the request was
 				// successfully validated.
-				validated = append(validated, cred.Type)
+				validated = append(validated, cred.Method)
 			}
 		}
 
@@ -607,7 +607,7 @@ func (s *Session) acc(msg *ClientComMessage) {
 			// Check if the message contains credential confirmation.
 			for _, cred := range msg.Acc.Cred {
 				if cred.Response != "" {
-					if err := store.Users.ConfirmCred(s.uid, cred.Type, cred.Response); err != nil {
+					if err := store.Users.ConfirmCred(s.uid, cred.Method, cred.Response); err != nil {
 						s.queueOut(decodeStoreError(err, msg.Acc.Id, msg.timestamp))
 						return
 					}
@@ -648,23 +648,32 @@ func (s *Session) login(msg *ClientComMessage) {
 	uid, authLvl, expires, err := handler.Authenticate(msg.Login.Secret)
 	if err != nil {
 		log.Println("auth result", err)
-	}
-
-	if err == types.ErrMalformed {
-		s.queueOut(ErrMalformed(msg.Login.Id, "", msg.timestamp))
+		s.queueOut(decodeStoreError(err, msg.Login.Id, msg.timestamp))
 		return
 	}
 
-	// DB error
-	if err != nil {
-		s.queueOut(ErrUnknown(msg.Login.Id, "", msg.timestamp))
-		return
-	}
+	var validated []string
+	for _, cred := range msg.Login.Cred {
+		log.Println("processing credential confirmation", cred)
 
-	// All other errors are reported as invalid login or password
-	if uid.IsZero() {
-		s.queueOut(ErrAuthFailed(msg.Login.Id, "", msg.timestamp))
-		return
+		vld := store.GetValidator(cred.Method)
+		if vld == nil {
+			// Ignore unknown validation type.
+			log.Println("unknown validation type", cred.Method)
+			continue
+		}
+		if err := vld.Confirm(user.Uid(), cred.Response); err != nil {
+			s.queueOut(decodeStoreError(err, msg.Acc.Id, msg.timestamp))
+			log.Println("Failed to save or validate credential", err)
+			// Not deleting incomplete user record: the user may retry.
+			return
+		}
+
+		if cred.Response != "" {
+			// If response is provided and Request did not return an error, the request was
+			// successfully validated.
+			validated = append(validated, cred.Method)
+		}
 	}
 
 	s.queueOut(s.onLogin(msg.Login.Id, msg.timestamp, uid, authLvl, expires, nil))
@@ -677,14 +686,29 @@ func (s *Session) onLogin(msgId string, timestamp time.Time, uid types.Uid, auth
 	var reply *ServerComMessage
 	var params map[string]interface{}
 
+	var tokenLifetime time.Duration
+	if !expires.IsZero() {
+		tokenLifetime = time.Until(expires)
+	}
+
+	// GenSecret fails only if tokenLifetime is < 0. It can't be < 0 here,
+	// otherwise login would have failed earlier.
+	secret, expires, _ := store.GetAuthHandler("token").GenSecret(uid, authLvl, tokenLifetime)
+	params = map[string]interface{}{
+		"user":    uid.UserId(),
+		"authlvl": authLvl.String(),
+		"token":   secret,
+		"expires": expires}
+
 	_, missing := stringSliceDelta(globals.authValidators[authLvl], validated)
 	if len(missing) > 0 {
 		// Some credentials are not validated yet. Respond with request for validation.
 		reply = InfoValidateCredentials(msgId, timestamp)
 
-		params = map[string]interface{}{
-			"cred": missing}
+		params["cred"] = missing
 	} else {
+		// Everything is fine, authenticate the session.
+
 		reply = NoErr(msgId, "", timestamp)
 
 		// Authenticate the session.
@@ -700,23 +724,7 @@ func (s *Session) onLogin(msgId string, timestamp time.Time, uid types.Uid, auth
 				Lang:     s.lang,
 			})
 		}
-
-		var tokenLifetime time.Duration
-		if !expires.IsZero() {
-			tokenLifetime = time.Until(expires)
-		}
-
-		// GenSecret fails only if tokenLifetime is < 0. It can't be < 0 here,
-		// otherwise login would have failed earlier.
-		secret, expires, _ := store.GetAuthHandler("token").GenSecret(uid, authLvl, tokenLifetime)
-
-		params = map[string]interface{}{
-			"token":   secret,
-			"expires": expires}
 	}
-
-	params["user"] = uid.UserId()
-	params["authlvl"] = authLvl.String()
 
 	reply.Ctrl.Params = params
 	return reply

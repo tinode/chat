@@ -282,18 +282,18 @@ func (UsersObjMapper) GetTopicsAny(id types.Uid) ([]types.Subscription, error) {
 }
 
 // SaveCred saves a credential validation request.
-func (UsersObjMapper) SaveCred(id types.Uid, ctype, value string, params interface{}) error {
-	return adp.CredAdd(id, ctype+":"+value, 0, params)
+func (UsersObjMapper) SaveCred(cred *types.Credential) error {
+	return adp.CredAdd(cred.User, cred.Method, cred.Value)
 }
 
 // ConfirmCred markes credential as confirmed.
-func (UsersObjMapper) ConfirmCred(id types.Uid, ctype, value string) error {
-	return adp.CredConfirm(id, ctype+":"+value)
+func (UsersObjMapper) ConfirmCred(id types.Uid, method, value string) error {
+	return adp.CredConfirm(id, method, value)
 }
 
 // GetAllCred gets a list of confirmed credentials.
-func (UsersObjMapper) GetAllCred(id types.Uid) ([]string, error) {
-	return adp.CredGetAll(id)
+func (UsersObjMapper) GetCred(id types.Uid, method string) ([]string, error) {
+	return adp.CredGet(id, method)
 }
 
 // TopicsObjMapper is a struct to hold methods for persistence mapping for the topic object.
