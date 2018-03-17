@@ -1725,10 +1725,11 @@ func (t *Topic) replySetTags(sess *Session, set *MsgClientSet) error {
 		return errors.New("tags update by non-owner")
 	}
 
-	var tags []string
-	if tags = normalizeTags(tags, set.Tags); len(tags) > 0 {
+	if tags := normalizeTags(set.Tags); tags != nil {
 		var err error
 		var resp *ServerComMessage
+
+		log.Println("changing tags (old, normalized, original)", t.tags, tags, set.Tags)
 
 		if !restrictedTags(t.tags, tags) {
 			err = errors.New("attempt to mutate restricted tags")

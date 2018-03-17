@@ -43,9 +43,9 @@ func delrangeSerialize(in []MsgDelRange) []types.Range {
 
 // Trim whitespace, remove empty tags and duplicates, ensure proper format of prefixes,
 // compare new to old to make sure restricted tags are not removed.
-func normalizeTags(dst, src []string) []string {
+func normalizeTags(src []string) []string {
 	if len(src) == 0 {
-		return dst
+		return nil
 	}
 
 	// Make sure the number of tags does not exceed the maximum.
@@ -66,10 +66,17 @@ func normalizeTags(dst, src []string) []string {
 	// Remove short tags and de-dupe keeping the order. It may result in fewer tags than could have
 	// been if length were enforced later, but that's client's fault.
 	var prev string
+	var dst []string
 	for _, curr := range src {
-		if len(curr) < minTagLength || curr == prev || isNullValue(curr) {
+		if isNullValue(curr) {
+			// Return non-nil empty array
+			return make([]string, 0, 1)
+		}
+
+		if len(curr) < minTagLength || curr == prev {
 			continue
 		}
+
 		dst = append(dst, curr)
 		prev = curr
 	}
@@ -122,7 +129,8 @@ func stringSliceDelta(rold, rnew []string) (added, removed []string) {
 	return added, removed
 }
 
-// restrictedTags checks if two sets of tags contain the same set of restricted tags
+// restrictedTags checks if two sets of tags contain the same set of restricted tags:
+// true - same, false - different.
 func restrictedTags(oldTags, newTags []string) bool {
 	rold := filterRestrictedTags(oldTags)
 	rnew := filterRestrictedTags(newTags)

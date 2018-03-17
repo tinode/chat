@@ -682,7 +682,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 				userData.modeWant |= types.ModeJoin | types.ModeOwner
 			}
 
-			tags = normalizeTags(tags, sreg.pkt.Set.Tags)
+			tags = normalizeTags(sreg.pkt.Set.Tags)
 			if !restrictedTags(tags, nil) {
 				log.Println("hub: attempt to directly set restricted tags")
 				sreg.sess.queueOut(ErrPermissionDenied(sreg.pkt.Id, t.xoriginal, timestamp))

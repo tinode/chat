@@ -476,8 +476,7 @@ func (s *Session) acc(msg *ClientComMessage) {
 		user.Access.Anon = getDefaultAccess(types.TopicCatP2P, false)
 
 		if len(msg.Acc.Tags) > 0 {
-			var tags []string
-			if tags = normalizeTags(tags, msg.Acc.Tags); len(tags) > 0 {
+			if tags := normalizeTags(msg.Acc.Tags); tags != nil {
 				if !restrictedTags(tags, nil) {
 					log.Println("Attempt to directly assign restricted tags")
 					s.queueOut(ErrPermissionDenied(msg.Acc.Id, "", msg.timestamp))
