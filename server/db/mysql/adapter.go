@@ -8,13 +8,13 @@ import (
 	"errors"
 	"hash/fnv"
 	"log"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	ms "github.com/go-sql-driver/mysql"
 	"github.com/jmoiron/sqlx"
+	"github.com/tinode/chat/server/auth"
 	"github.com/tinode/chat/server/store"
 	t "github.com/tinode/chat/server/store/types"
 )
@@ -390,12 +390,12 @@ func (a *adapter) UserCreate(user *t.User) error {
 			return err
 		}
 
-		for _, t := range user.Tags {
-			_, err = insert.Exec(decoded_uid, t)
+		for _, tag := range user.Tags {
+			_, err = insert.Exec(decoded_uid, tag)
 
 			if err != nil {
 				if isDupe(err) {
-					err = t.ErrDuplicate
+					return t.ErrDuplicate
 				}
 				return err
 			}
@@ -406,7 +406,7 @@ func (a *adapter) UserCreate(user *t.User) error {
 }
 
 // Add user's authentication record
-func (a *adapter) AuthAddRecord(uid t.Uid, authLvl int, unique string,
+func (a *adapter) AuthAddRecord(uid t.Uid, authLvl auth.Level, unique string,
 	secret []byte, expires time.Time) (bool, error) {
 
 	var exp *time.Time
@@ -425,14 +425,9 @@ func (a *adapter) AuthAddRecord(uid t.Uid, authLvl int, unique string,
 }
 
 // Delete user's authentication record
-func (a *adapter) AuthDelRecord(unique string) (int, error) {
-	res, err := a.db.Exec("DELETE FROM basicauth WHERE `unique`=?", unique)
-	if err != nil {
-		return 0, err
-	}
-	count, _ := res.RowsAffected()
-
-	return int(count), nil
+func (a *adapter) AuthDelRecord(user t.Uid, unique string) error {
+	_, err := a.db.Exec("DELETE FROM basicauth WHERE userid=? AND login=?", store.DecodeUid(user), unique)
+	return err
 }
 
 // Delete user's all authentication records
@@ -447,7 +442,7 @@ func (a *adapter) AuthDelAllRecords(uid t.Uid) (int, error) {
 }
 
 // Update user's authentication secret
-func (a *adapter) AuthUpdRecord(unique string, authLvl int, secret []byte, expires time.Time) (int, error) {
+func (a *adapter) AuthUpdRecord(unique string, authLvl auth.Level, secret []byte, expires time.Time) (int, error) {
 	res, err := a.db.Exec("UPDATE basicauth SET authLvl=?,secret=?,expires=? WHERE login=?",
 		authLvl, secret, expires, unique)
 
@@ -460,12 +455,12 @@ func (a *adapter) AuthUpdRecord(unique string, authLvl int, secret []byte, expir
 }
 
 // Retrieve user's authentication record
-func (a *adapter) AuthGetRecord(unique string) (t.Uid, int, []byte, time.Time, error) {
+func (a *adapter) AuthGetRecord(unique string) (t.Uid, auth.Level, []byte, time.Time, error) {
 	var expires time.Time
 
 	var record struct {
 		Userid  int64
-		Authlvl int
+		Authlvl auth.Level
 		Secret  []byte
 		Expires *time.Time
 	}
@@ -1117,104 +1112,6 @@ func (a *adapter) FindTopics(tags []string) ([]t.Subscription, error) {
 
 }
 
-// UserTagsUpdate updates user's Tags. 'unique' contains the prefixes of tags which are
-// treated as unique, i.e. 'email' or 'tel'.
-func (a *adapter) UserTagsUpdate(uid t.Uid, unique, tags t.StringSlice) error {
-	user, err := a.UserGet(uid)
-	if err != nil {
-		return err
-	}
-
-	added, removed := tagsUniqueDelta(unique, user.Tags, tags)
-	if err := a.updateUniqueTags(user.Id, added, removed); err != nil {
-		return err
-	}
-
-	return a.UserUpdate(uid, map[string]interface{}{"Tags": tags})
-}
-
-// TopicTagsUpdate updates topic's tags.
-// - name is the name of the topic to update
-// - unique is the list of prefixes to treat as unique.
-// - tags are the new tags.
-func (a *adapter) TopicTagsUpdate(name string, tags t.StringSlice) error {
-	/*
-		topic, err := a.TopicGet(name)
-		if err != nil {
-			return err
-		}
-
-		added, removed := tagsUniqueDelta(unique, topic.Tags, tags)
-		if err := a.updateUniqueTags(name, added, removed); err != nil {
-			return err
-		}
-	*/
-
-	return a.TopicUpdate(name, map[string]interface{}{"Tags": tags})
-}
-
-// tagsUniqueDelta extracts the lists of added unique tags and removed unique tags:
-//   added :=  newTags - (oldTags & newTags) -- present in new but missing in old
-//   removed := oldTags - (newTags & oldTags) -- present in old but missing in new
-func tagsUniqueDelta(unique, oldTags, newTags []string) (added, removed []string) {
-	if oldTags == nil {
-		return filterUniqueTags(unique, newTags), nil
-	}
-	if newTags == nil {
-		return nil, filterUniqueTags(unique, oldTags)
-	}
-
-	sort.Strings(oldTags)
-	sort.Strings(newTags)
-
-	// Match old tags against the new tags and separate removed tags from added.
-	iold, inew := 0, 0
-	lold, lnew := len(oldTags), len(newTags)
-	for iold < lold || inew < lnew {
-		if (iold == lold && inew < lnew) || oldTags[iold] > newTags[inew] {
-			// Present in new, missing in old: added
-			added = append(added, newTags[inew])
-			inew++
-
-		} else if (inew == lnew && iold < lold) || oldTags[iold] < newTags[inew] {
-			// Present in old, missing in new: removed
-			removed = append(removed, oldTags[iold])
-
-			iold++
-
-		} else {
-			// present in both
-			if iold < lold {
-				iold++
-			}
-			if inew < lnew {
-				inew++
-			}
-		}
-	}
-	return filterUniqueTags(unique, added), filterUniqueTags(unique, removed)
-}
-
-func filterUniqueTags(unique, tags []string) []string {
-	var out []string
-	if unique != nil && len(unique) > 0 && tags != nil {
-		for _, s := range tags {
-			parts := strings.SplitN(s, ":", 2)
-
-			if len(parts) < 2 {
-				continue
-			}
-
-			for _, u := range unique {
-				if parts[0] == u {
-					out = append(out, s)
-				}
-			}
-		}
-	}
-	return out
-}
-
 // Messages
 func (a *adapter) MessageSave(msg *t.Message) error {
 	_, err := a.db.Exec(
@@ -1450,7 +1347,8 @@ func (a *adapter) DeviceUpsert(uid t.Uid, def *t.DeviceDef) error {
 	}
 
 	// Actually add/update DeviceId for the new user
-	_, err = a.db.Exec("INSERT INTO devices(userid, hash, deviceId) VALUES(?,?,?)", uid, hash, def.DeviceId)
+	_, err = a.db.Exec("INSERT INTO devices(userid, hash, deviceId) VALUES(?,?,?)",
+		store.DecodeUid(uid), hash, def.DeviceId)
 	if err != nil {
 		return err
 	}
@@ -1509,30 +1407,80 @@ func (a *adapter) DeviceDelete(uid t.Uid, deviceID string) error {
 }
 
 // Credential management
-func (a *adapter) CredAdd(uid t.Uid, cred string, status int, params interface{}) error {
-	return nil
+func (a *adapter) CredAdd(cred *t.Credential) error {
+	_, err := a.db.Exec("INSERT INTO credentials(createdat,updatedat,method,value,userid,response,done) "+
+		"VALUES(?,?,?,?,?,?,?)",
+		cred.CreatedAt, cred.UpdatedAt, cred.Method, cred.Value, decodeString(cred.User), cred.Resp, cred.Done)
+	if isDupe(err) {
+		return t.ErrDuplicate
+	}
+	return err
 }
 
-func (a *adapter) CredIsConfirmed(uid t.Uid, cred string) (bool, error) {
-	return true, nil
+func (a *adapter) CredIsConfirmed(uid t.Uid, method string) (bool, error) {
+	var done int
+	err := a.db.Get(&done, "SELECT done FROM credentials WHERE userid=? AND method=?",
+		store.DecodeUid(uid), method)
+	return done > 0, err
 }
 
-func (a *adapter) CredDel(uid t.Uid, cred string) error {
-	return nil
+func (a *adapter) CredDel(uid t.Uid, method string) error {
+	query := "DELETE FROM credentials WHERE userid=?"
+	args := []interface{}{store.DecodeUid(uid)}
+	if method != "" {
+		query += " AND method=?"
+		args = append(args, method)
+	}
+	_, err := a.db.Exec(query, args...)
+	return err
 }
 
-func (a *adapter) CredConfirm(uid t.Uid, cred string) error {
-	return nil
+func (a *adapter) CredConfirm(uid t.Uid, method string) error {
+	_, err := a.db.Exec("UPDATE credentials SET done=1 WHERE userid=? AND method=?",
+		store.DecodeUid(uid), method)
+	return err
 }
 
-func (a *adapter) CredGetAll(uid t.Uid) ([]string, error) {
-	return nil, nil
+func (a *adapter) CredFail(uid t.Uid, method string) error {
+	_, err := a.db.Exec("UPDATE credentials SET retries=retries+1 WHERE userid=? AND method=?",
+		store.DecodeUid(uid), method)
+	return err
+}
+
+func (a *adapter) CredGet(uid t.Uid, method string) ([]*t.Credential, error) {
+	query := "SELECT createdat,updatedat,method,value,userid AS user,response,done,retries FROM credentials WHERE userid=?"
+	args := []interface{}{store.DecodeUid(uid)}
+	if method != "" {
+		query += " AND method=?"
+		args = append(args, method)
+	}
+	rows, err := a.db.Queryx(query, args...)
+	if err != nil {
+		return nil, err
+	}
+
+	var result []*t.Credential
+	for rows.Next() {
+		var cred *t.Credential
+		if err = rows.StructScan(cred); err != nil {
+			break
+		}
+		cred.User = encodeString(cred.User).String()
+		result = append(result, cred)
+	}
+	rows.Close()
+
+	return result, err
 }
 
 // Helper functions
 
 // Check if MySQL error is a Error Code: 1062. Duplicate entry ... for key ...
 func isDupe(err error) bool {
+	if err == nil {
+		return false
+	}
+
 	myerr, ok := err.(*ms.MySQLError)
 	return ok && myerr.Number == 1062
 }

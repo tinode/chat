@@ -606,8 +606,9 @@ func (s *Session) acc(msg *ClientComMessage) {
 		} else if len(msg.Acc.Cred) > 0 {
 			// Check if the message contains credential confirmation.
 			for _, cred := range msg.Acc.Cred {
-				if cred.Response != "" {
-					if err := store.Users.ConfirmCred(s.uid, cred.Method, cred.Response); err != nil {
+				vld := store.GetValidator(cred.Method)
+				if cred.Response != "" && vld != nil {
+					if err := vld.Check(s.uid, cred.Response); err != nil {
 						s.queueOut(decodeStoreError(err, msg.Acc.Id, msg.timestamp))
 						return
 					}
@@ -652,31 +653,44 @@ func (s *Session) login(msg *ClientComMessage) {
 		return
 	}
 
+	// Check if credential validation is required.
 	var validated []string
-	for _, cred := range msg.Login.Cred {
-		log.Println("processing credential confirmation", cred)
-
-		vld := store.GetValidator(cred.Method)
-		if vld == nil {
-			// Ignore unknown validation type.
-			log.Println("unknown validation type", cred.Method)
-			continue
-		}
-		if err := vld.Confirm(user.Uid(), cred.Response); err != nil {
-			s.queueOut(decodeStoreError(err, msg.Acc.Id, msg.timestamp))
-			log.Println("Failed to save or validate credential", err)
-			// Not deleting incomplete user record: the user may retry.
-			return
+	if len(globals.authValidators[authLvl]) > 0 {
+		allCred, err := store.Users.GetAllCred(uid, "")
+		if err != nil {
+			log.Println("failed to read credentials:", err)
+			s.queueOut(decodeStoreError(err, msg.Login.Id, msg.timestamp))
 		}
 
-		if cred.Response != "" {
-			// If response is provided and Request did not return an error, the request was
-			// successfully validated.
+		// Compile a list of validated credentials.
+		for _, cred := range allCred {
+			if cred.Done {
+				validated = append(validated, cred.Method)
+			}
+		}
+
+		// Add credential which are validated in this call.
+		for _, cred := range msg.Login.Cred {
+			log.Println("processing credential confirmation", cred)
+
+			vld := store.GetValidator(cred.Method)
+			if vld == nil || cred.Response == "" {
+				// Ignore unknown validation type or empty response.
+				log.Println("unknown validation type or empty response", cred.Method, cred.Response)
+				continue
+			}
+			if err := vld.Check(uid, cred.Response); err != nil {
+				s.queueOut(decodeStoreError(err, msg.Login.Id, msg.timestamp))
+				log.Println("Failed to save or validate credential:", err)
+				// Not deleting incomplete user record: the user may retry.
+				return
+			}
+			// Check did not return an error: the request was successfully validated.
 			validated = append(validated, cred.Method)
 		}
 	}
 
-	s.queueOut(s.onLogin(msg.Login.Id, msg.timestamp, uid, authLvl, expires, nil))
+	s.queueOut(s.onLogin(msg.Login.Id, msg.timestamp, uid, authLvl, expires, validated))
 }
 
 // onLogin performs steps after successful authentication.

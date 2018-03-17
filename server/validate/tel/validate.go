@@ -27,7 +27,7 @@ func (validator) Request(user t.Uid, cred, lang string, params interface{}, resp
 }
 
 // Find if user exists in the database, and if so return OK. Any response is accepted.
-func (validator) Confirm(user t.Uid, resp string) error {
+func (validator) Check(user t.Uid, resp string) error {
 	// TODO: check response against a database.
 	return nil
 }

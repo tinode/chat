@@ -1,6 +1,7 @@
 package email
 
 import (
+	"encoding/json"
 	"math/rand"
 	"net/mail"
 	"strconv"
@@ -11,18 +12,35 @@ import (
 	t "github.com/tinode/chat/server/store/types"
 )
 
-// Empty placeholder struct.
-type validator struct{}
+// Validator configuration.
+type validator struct {
+	TemplateFile  string `json:"template"`
+	SendFrom      string `json:"sender"`
+	DebugResponse string `json:"debug_response"`
+	MaxRetries    int    `json:"max_retries"`
+}
+
+const (
+	maxRetries = 4
+)
 
 // Init: initialize validator.
-func (validator) Init(jsonconf string) error {
+func (v *validator) Init(jsonconf string) error {
+	if err := json.Unmarshal([]byte(jsonconf), v); err != nil {
+		return err
+	}
+
 	// Initialize random number generator.
 	rand.Seed(time.Now().UnixNano())
+
+	if v.MaxRetries == 0 {
+		v.MaxRetries = maxRetries
+	}
 	return nil
 }
 
 // PreCheck validates the credential and parameters without sending an email.
-func (validator) PreCheck(cred string, params interface{}) error {
+func (v *validator) PreCheck(cred string, params interface{}) error {
 	_, err := mail.ParseAddress(cred)
 	if err != nil {
 		return t.ErrMalformed
@@ -32,7 +50,7 @@ func (validator) PreCheck(cred string, params interface{}) error {
 }
 
 // Send a request for confirmation to the user: makes a record in DB  and nothing else.
-func (validator) Request(user t.Uid, cred, lang string, params interface{}, resp string) error {
+func (v *validator) Request(user t.Uid, cred, lang string, params interface{}, resp string) error {
 
 	// Email validator cannot accept an immmediate response.
 	if resp != "" {
@@ -51,32 +69,50 @@ func (validator) Request(user t.Uid, cred, lang string, params interface{}, resp
 	// Here are instructions for Google cloud:
 	// https://cloud.google.com/appengine/docs/standard/go/mail/sending-receiving-with-mail-api
 
-	ts := t.TimeNow()
 	return store.Users.SaveCred(&t.Credential{
-		CreatedAt: ts,
-		UpdatedAt: ts,
-		User:      user.String(),
-		Method:    email,
-		Value:     cred,
-		Resp:      resp,
+		User:   user.String(),
+		Method: "email",
+		Value:  cred,
+		Resp:   resp,
 	})
 }
 
-// Find if user exists in the database, and if so return OK. Any response is accepted.
-func (validator) Confirm(user t.Uid, resp string) error {
+// Find if user exists in the database, and if so return OK.
+func (v *validator) Check(user t.Uid, resp string) error {
 	cred, err := store.Users.GetCred(user, "email")
 	if err != nil {
 		return err
 	}
 
-	return store.Users.ConfirmCred(user, "email", resp)
+	if cred == nil {
+		// Request to validate non-existent credential.
+		return t.ErrNotFound
+	}
+
+	if cred.Retries > v.MaxRetries {
+		return t.ErrPolicy
+	}
+	if resp == "" {
+		return t.ErrFailed
+	}
+
+	// Comparing with dummy response too.
+	if cred.Resp == resp || v.DebugResponse == resp {
+		// Valid response, save confirmation.
+		return store.Users.ConfirmCred(user, "email")
+	}
+
+	// Invalid response, increment fail counter.
+	store.Users.FailCred(user, "email")
+
+	return t.ErrFailed
 }
 
 // Delete deletes user's records.
-func (validator) Delete(user t.Uid) error {
+func (v *validator) Delete(user t.Uid) error {
 	return nil
 }
 
 func init() {
-	store.RegisterValidator("email", validator{})
+	store.RegisterValidator("email", &validator{})
 }

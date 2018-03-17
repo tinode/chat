@@ -68,6 +68,28 @@ func genDb(reset bool, dbsource string, data *Data) {
 			log.Fatal(err)
 		}
 
+		// Save credentials: email and phone number as if they were confirmed.
+		if uu.Email != "" {
+			if err := store.Users.SaveCred(&types.Credential{
+				User:   user.Id,
+				Method: "email",
+				Value:  uu.Email,
+				Done:   true,
+			}); err != nil {
+				log.Fatal(err)
+			}
+		}
+		if uu.Tel != "" {
+			if err := store.Users.SaveCred(&types.Credential{
+				User:   user.Id,
+				Method: "tel",
+				Value:  uu.Tel,
+				Done:   true,
+			}); err != nil {
+				log.Fatal(err)
+			}
+		}
+
 		// Add authentication record
 		authHandler := store.GetAuthHandler("basic")
 		passwd := uu.Password
@@ -75,10 +97,10 @@ func genDb(reset bool, dbsource string, data *Data) {
 			// Generate random password
 			passwd = getPassword(8)
 		}
-		if _, authErr := authHandler.AddRecord(user.Uid(),
-			[]byte(uu.Username+":"+passwd), 0); authErr.IsError() {
+		if _, err := authHandler.AddRecord(user.Uid(),
+			[]byte(uu.Username+":"+passwd), 0); err != nil {
 
-			log.Fatal(authErr.Err)
+			log.Fatal(err)
 		}
 		nameIndex[uu.Username] = user.Id
 
@@ -90,6 +112,7 @@ func genDb(reset bool, dbsource string, data *Data) {
 				log.Fatal(err)
 			}
 		}
+
 		fmt.Println("usr;" + uu.Username + ";" + user.Uid().UserId() + ";" + passwd)
 	}
 

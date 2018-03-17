@@ -33,6 +33,8 @@ const (
 	ErrPolicy = StoreError("policy")
 	// ErrCredentials means credentials like email or captcha must be validated
 	ErrCredentials = StoreError("credentials")
+	// ErrNotFound means the objevy was not found
+	ErrNotFound = StoreError("not found")
 )
 
 // Uid is a database-specific record id, suitable to be used as a primary key.

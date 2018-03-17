@@ -1734,10 +1734,12 @@ func (t *Topic) replySetTags(sess *Session, set *MsgClientSet) error {
 			err = errors.New("attempt to mutate restricted tags")
 			resp = ErrPermissionDenied(set.Id, t.original(sess.uid), now)
 		} else {
+			update := map[string]interface{}{"Tags": tags}
+
 			if t.cat == types.TopicCatMe {
-				err = store.Users.UpdateTags(sess.uid, tags)
+				err = store.Users.Update(sess.uid, update)
 			} else if t.cat == types.TopicCatGrp {
-				err = store.Topics.UpdateTags(t.name, tags)
+				err = store.Topics.Update(t.name, update)
 			}
 
 			if err != nil {

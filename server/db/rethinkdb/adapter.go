@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"hash/fnv"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -319,8 +318,11 @@ func (a *adapter) AuthAddRecord(uid t.Uid, authLvl auth.Level, unique string,
 }
 
 // Delete user's authentication record.
-func (a *adapter) AuthDelRecord(uid t.Uid, ignored string) error {
-	_, err := rdb.DB(a.dbName).Table("auth").GetAllByIndex("userid", uid.String()).Delete().RunWrite(a.conn)
+func (a *adapter) AuthDelRecord(uid t.Uid, unique string) error {
+	_, err := rdb.DB(a.dbName).Table("auth").
+		GetAllByIndex("userid", uid.String()).
+		Filter(map[string]interface{}{"unique": unique}).
+		Delete().RunWrite(a.conn)
 	return err
 }
 
@@ -424,7 +426,7 @@ func (a *adapter) UserUpdateLastSeen(uid t.Uid, userAgent string, when time.Time
 	return err
 }
 
-// UserUpdate updates user object. Use UserTagsUpdate when updating Tags.
+// UserUpdate updates user object.
 func (a *adapter) UserUpdate(uid t.Uid, update map[string]interface{}) error {
 	_, err := rdb.DB(a.dbName).Table("users").Get(uid.String()).Update(update).RunWrite(a.conn)
 	return err
@@ -961,143 +963,6 @@ func (a *adapter) FindTopics(tags []string) ([]t.Subscription, error) {
 
 }
 
-// UserTagsUpdate updates user's Tags. 'unique' contains the prefixes of tags which are
-// treated as unique, i.e. 'email' or 'tel'.
-func (a *adapter) UserTagsUpdate(uid t.Uid, tags t.StringSlice) error {
-	//user, err := a.UserGet(uid)
-	//if err != nil {
-	//	return err
-	//}
-
-	//added, removed := tagsUniqueDelta(unique, user.Tags, tags)
-	//if err := a.updateUniqueTags(user.Id, added, removed); err != nil {
-	//	return err
-	//}
-
-	return a.UserUpdate(uid, map[string]interface{}{"Tags": tags})
-}
-
-// TopicTagsUpdate updates topic's tags.
-// - name is the name of the topic to update
-// - unique is the list of prefixes to treat as unique.
-// - tags are the new tags.
-func (a *adapter) TopicTagsUpdate(name string, tags t.StringSlice) error {
-	//topic, err := a.TopicGet(name)
-	//if err != nil {
-	//	return err
-	//}
-
-	//added, removed := tagsUniqueDelta(unique, topic.Tags, tags)
-	//if err := a.updateUniqueTags(name, added, removed); err != nil {
-	//	return err
-	//}
-
-	return a.TopicUpdate(name, map[string]interface{}{"Tags": tags})
-}
-
-/*
-func (a *adapter) updateUniqueTags(source string, added, removed []string) error {
-	if len(added) > 0 {
-		toAdd := make([]storedTag, 0, len(added))
-		for _, tag := range added {
-			toAdd = append(toAdd, storedTag{Id: tag, Source: source})
-		}
-		res, err := rdb.DB(a.dbName).Table("tagunique").Insert(toAdd).RunWrite(a.conn)
-		if err != nil {
-			if res.Inserted > 0 {
-				// Something went wrong, do best effort deletion of inserted tags
-				keys := make([]interface{}, 0, len(added))
-				for _, k := range added {
-					keys = append(keys, k)
-				}
-				rdb.DB(a.dbName).Table("tagunique").GetAll(keys...).
-					Filter(map[string]interface{}{"Source": source}).Delete().RunWrite(a.conn)
-			}
-
-			if rdb.IsConflictErr(err) {
-				return t.ErrDuplicate
-			}
-			return err
-		}
-	}
-
-	if len(removed) > 0 {
-		keys := make([]interface{}, 0, len(removed))
-		for _, k := range removed {
-			keys = append(keys, k)
-		}
-		_, err := rdb.DB(a.dbName).Table("tagunique").GetAll(keys...).
-			Filter(map[string]interface{}{"Source": source}).Delete().RunWrite(a.conn)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-*/
-
-// tagsUniqueDelta extracts the lists of added unique tags and removed unique tags:
-//   added :=  newTags - (oldTags & newTags) -- present in new but missing in old
-//   removed := oldTags - (newTags & oldTags) -- present in old but missing in new
-func tagsUniqueDelta(unique, oldTags, newTags []string) (added, removed []string) {
-	if len(oldTags) == 0 {
-		return filterUniqueTags(unique, newTags), nil
-	}
-	if len(newTags) == 0 {
-		return nil, filterUniqueTags(unique, oldTags)
-	}
-
-	sort.Strings(oldTags)
-	sort.Strings(newTags)
-
-	// Match old tags against the new tags and separate removed tags from added.
-	iold, inew := 0, 0
-	lold, lnew := len(oldTags), len(newTags)
-	for iold < lold || inew < lnew {
-		if iold == lold || (inew < lnew && oldTags[iold] > newTags[inew]) {
-			// Present in new, missing in old: added
-			added = append(added, newTags[inew])
-			inew++
-
-		} else if inew == lnew || oldTags[iold] < newTags[inew] {
-			// Present in old, missing in new: removed
-			removed = append(removed, oldTags[iold])
-			iold++
-
-		} else {
-			// present in both
-			if iold < lold {
-				iold++
-			}
-			if inew < lnew {
-				inew++
-			}
-		}
-	}
-	return filterUniqueTags(unique, added), filterUniqueTags(unique, removed)
-}
-
-func filterUniqueTags(unique, tags []string) []string {
-	var out []string
-	if len(unique) > 0 && len(tags) > 0 {
-		for _, s := range tags {
-			parts := strings.SplitN(s, ":", 2)
-
-			if len(parts) < 2 {
-				continue
-			}
-
-			for _, u := range unique {
-				if parts[0] == u {
-					out = append(out, s)
-				}
-			}
-		}
-	}
-	return out
-}
-
 // Messages
 func (a *adapter) MessageSave(msg *t.Message) error {
 	msg.SetUid(store.GetUid())
@@ -1370,24 +1235,74 @@ func (a *adapter) DeviceDelete(uid t.Uid, deviceID string) error {
 }
 
 // Credential management
-func (a *adapter) CredAdd(uid t.Uid, cred string, status int, params interface{}) error {
-	return nil
+func (a *adapter) CredAdd(cred *t.Credential) error {
+	cred.Id = cred.Method + ":" + cred.Value
+	_, err := rdb.DB(a.dbName).Table("credentials").Insert(cred).RunWrite(a.conn)
+	if rdb.IsConflictErr(err) {
+		return t.ErrDuplicate
+	}
+	return err
 }
 
-func (a *adapter) CredIsConfirmed(uid t.Uid, cred string) (bool, error) {
-	return true, nil
+func (a *adapter) CredIsConfirmed(uid t.Uid, method string) (bool, error) {
+	creds, err := a.CredGet(uid, method)
+	if err != nil {
+		return false, err
+	}
+
+	if len(creds) > 0 {
+		return creds[0].Done, nil
+	}
+	return false, nil
 }
 
-func (a *adapter) CredDel(uid t.Uid, cred string) error {
-	return nil
+func (a *adapter) CredDel(uid t.Uid, method string) error {
+	q := rdb.DB(a.dbName).Table("credentials").
+		GetAllByIndex("User", uid.String())
+	if method != "" {
+		q = q.Filter(map[string]interface{}{"Method": method})
+	}
+	_, err := q.Delete().RunWrite(a.conn)
+	return err
 }
 
-func (a *adapter) CredConfirm(uid t.Uid, cred string) error {
-	return nil
+func (a *adapter) CredConfirm(uid t.Uid, method string) error {
+	_, err := rdb.DB(a.dbName).Table("credentials").
+		GetAllByIndex("User", uid.String()).
+		Filter(map[string]interface{}{"Method": method}).
+		Update(map[string]interface{}{
+			"Done": true,
+		}).RunWrite(a.conn)
+	return err
 }
 
-func (a *adapter) CredGetAll(uid t.Uid) ([]string, error) {
-	return nil, nil
+func (a *adapter) CredFail(uid t.Uid, method string) error {
+	_, err := rdb.DB(a.dbName).Table("credentials").
+		GetAllByIndex("User", uid.String()).
+		Filter(map[string]interface{}{"Method": method}).
+		Update(map[string]interface{}{
+			"Retries": rdb.Row.Field("Retries").Add(1).Default(0),
+		}).RunWrite(a.conn)
+	return err
+}
+
+func (a *adapter) CredGet(uid t.Uid, method string) ([]*t.Credential, error) {
+	q := rdb.DB(a.dbName).Table("credentials").
+		GetAllByIndex("User", uid.String())
+	if method != "" {
+		q = q.Filter(map[string]interface{}{"Method": method})
+	}
+	rows, err := q.Run(a.conn)
+	if err != nil || rows.IsNil() {
+		return nil, err
+	}
+
+	var result []*t.Credential
+	if err = rows.All(&result); err != nil {
+		return nil, err
+	}
+
+	return result, nil
 }
 
 func init() {

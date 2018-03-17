@@ -22,8 +22,8 @@ type Validator interface {
 	//  resp: optional response if user already has it (i.e. captcha/recaptcha).
 	Request(user t.Uid, cred, lang string, params interface{}, resp string) error
 
-	// Confirm checks validity of user response.
-	Confirm(user t.Uid, resp string) error
+	// Check checks validity of user response.
+	Check(user t.Uid, resp string) error
 
 	// Delete deletes user's records.
 	Delete(user t.Uid) error

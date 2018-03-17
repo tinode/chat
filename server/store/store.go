@@ -265,11 +265,6 @@ func (UsersObjMapper) FindSubs(id types.Uid, query []string) ([]types.Subscripti
 	return append(usubs, tsubs...), nil
 }
 
-// UpdateTags updates indexable tags for the given user.
-func (UsersObjMapper) UpdateTags(id types.Uid, newTags types.StringSlice) error {
-	return adp.UserTagsUpdate(id, newTags)
-}
-
 // GetTopics load a list of user's subscriptions with Public field copied to subscription
 func (UsersObjMapper) GetTopics(id types.Uid) ([]types.Subscription, error) {
 	return adp.TopicsForUser(id, false)
@@ -283,17 +278,37 @@ func (UsersObjMapper) GetTopicsAny(id types.Uid) ([]types.Subscription, error) {
 
 // SaveCred saves a credential validation request.
 func (UsersObjMapper) SaveCred(cred *types.Credential) error {
-	return adp.CredAdd(cred.User, cred.Method, cred.Value)
+	cred.InitTimes()
+	return adp.CredAdd(cred)
 }
 
 // ConfirmCred markes credential as confirmed.
-func (UsersObjMapper) ConfirmCred(id types.Uid, method, value string) error {
-	return adp.CredConfirm(id, method, value)
+func (UsersObjMapper) ConfirmCred(id types.Uid, method string) error {
+	return adp.CredConfirm(id, method)
+}
+
+// FailCred increments fail count.
+func (UsersObjMapper) FailCred(id types.Uid, method string) error {
+	return adp.CredFail(id, method)
 }
 
 // GetAllCred gets a list of confirmed credentials.
-func (UsersObjMapper) GetCred(id types.Uid, method string) ([]string, error) {
-	return adp.CredGet(id, method)
+func (UsersObjMapper) GetCred(id types.Uid, method string) (*types.Credential, error) {
+	var creds []*types.Credential
+	var err error
+	if creds, err = adp.CredGet(id, method); err == nil {
+		if len(creds) > 0 {
+			return creds[0], nil
+		}
+		return nil, nil
+	}
+	return nil, err
+
+}
+
+//
+func (UsersObjMapper) GetAllCred(id types.Uid, method string) ([]*types.Credential, error) {
+	return adp.CredGet(id, "")
 }
 
 // TopicsObjMapper is a struct to hold methods for persistence mapping for the topic object.
@@ -370,11 +385,6 @@ func (TopicsObjMapper) Delete(topic string) error {
 	}
 
 	return adp.TopicDelete(topic)
-}
-
-// UpdateTags updates indexable tags for the given topic.
-func (u TopicsObjMapper) UpdateTags(topic string, tags types.StringSlice) error {
-	return adp.TopicTagsUpdate(topic, tags)
 }
 
 // SubsObjMapper is A struct to hold methods for persistence mapping for the Subscription object.

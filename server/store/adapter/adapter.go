@@ -25,15 +25,15 @@ type Adapter interface {
 	UserGetAll(ids ...t.Uid) ([]t.User, error)
 	UserDelete(id t.Uid, soft bool) error
 	UserUpdateLastSeen(uid t.Uid, userAgent string, when time.Time) error
-	//UserUpdateStatus(uid t.Uid, status interface{}) error
 	UserUpdate(uid t.Uid, update map[string]interface{}) error
 
 	// Credential management
-	CredAdd(uid t.Uid, cred string, status int, params interface{}) error
-	CredIsConfirmed(uid t.Uid, cred string) (bool, error)
-	CredDel(uid t.Uid, cred string) error
-	CredConfirm(uid t.Uid, cred string) error
-	CredGetAll(uid t.Uid) ([]string, error)
+	CredAdd(cred *t.Credential) error
+	CredIsConfirmed(uid t.Uid, metod string) (bool, error)
+	CredDel(uid t.Uid, method string) error
+	CredConfirm(uid t.Uid, method string) error
+	CredFail(uid t.Uid, method string) error
+	CredGet(uid t.Uid, method string) ([]*t.Credential, error)
 
 	// Authentication management for the basic authentication scheme
 	AuthGetRecord(unique string) (t.Uid, auth.Level, []byte, time.Time, error)
@@ -77,8 +77,6 @@ type Adapter interface {
 	FindUsers(user t.Uid, tags []string) ([]t.Subscription, error)
 	// FindTopics searches for group topics given a list of tags
 	FindTopics(tags []string) ([]t.Subscription, error)
-	UserTagsUpdate(user t.Uid, tags t.StringSlice) error
-	TopicTagsUpdate(topic string, tags t.StringSlice) error
 
 	// Messages
 	MessageSave(msg *t.Message) error
