@@ -10,7 +10,7 @@ Version 0.14. This is beta-quality software: feature-complete but probably with 
 
 ### Web 
 
-A javascript demo is usually available at https://api.tinode.co/x/example-react-js/ ([source](https://github.com/tinode/example-react-js/)). Login as one of `alice`, `bob`, `carol`, `dave`, `frank`. Password is `<login>123`, e.g. login for `alice` is `alice123`. You can discover other users by email or phone by prefixing them with `email:` or `tel:` respectively. Emails are `<login>@example.com`, e.g. `alice@example.com`, phones are `17025550001` through `17025550009`. The demo server is reset (all data wiped) every night at 3:15 am Pacific time. If you see an error message `User not found or offline`, it means the server was reset while you were connected. If yu see it just reload and relogin.
+A javascript demo is usually available at https://api.tinode.co/x/example-react-js/ ([source](https://github.com/tinode/example-react-js/)). Login as one of `alice`, `bob`, `carol`, `dave`, `frank`. Password is `<login>123`, e.g. login for `alice` is `alice123`. You can discover other users by email or phone by prefixing them with `email:` or `tel:` respectively. Emails are `<login>@example.com`, e.g. `alice@example.com`, phones are `17025550001` through `17025550009`. 
 
 ### Android
 
@@ -22,9 +22,11 @@ A text-only [command line client](./tn-cli) implements every possible command.
 
 ### Notes
 
+* The demo server is reset (all data wiped) every night at 3:15 am Pacific time. An error message `User not found or offline` means the server was reset while you were connected. If you see it on the web, reload and relogin; on Android delete the app then reinstall.
+
 * User `Tino` is a [basic chatbot](./chatbot) which responds with a [random quote](http://fortunes.cat-v.org/) to any message.
 
-* When you register a new account you are asked for an email. In general the email is expected be verified by sending a message with a code but the demo server is configured not to send anything to the given email. It will accept `123456` as a verification code instead. 
+* When you register a new account you are asked for an email. Usually the email is expected be verified by sending a message with a code but the demo server is configured not to send anything to the given email. It will accept `123456` as a verification code instead. 
 
 * The demo server is configured to use [ACME](https://letsencrypt.org/) TLS [implementation](https://godoc.org/golang.org/x/crypto/acme) with hard-coded requirement for [SNI](https://en.wikipedia.org/wiki/Server_Name_Indication). If you are unable to connect then the most likely reason is your TLS client's missing support for SNI. Use a different client. 
 
