@@ -648,6 +648,16 @@ func ErrUserNotFound(id, topic string, ts time.Time) *ServerComMessage {
 		Timestamp: ts}}
 }
 
+// ErrNotFound is an error for missing objects other than user or topic.
+func ErrNotFound(id, topic string, ts time.Time) *ServerComMessage {
+	return &ServerComMessage{Ctrl: &MsgServerCtrl{
+		Id:        id,
+		Code:      http.StatusNotFound, // 404
+		Text:      "not found",
+		Topic:     topic,
+		Timestamp: ts}}
+}
+
 // ErrOperationNotAllowed a valid operation is not permitted in this context.
 func ErrOperationNotAllowed(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{

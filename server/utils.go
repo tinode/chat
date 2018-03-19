@@ -223,6 +223,8 @@ func decodeStoreError(err error, id string, timestamp time.Time) *ServerComMessa
 		errmsg = ErrPolicy(id, "", timestamp)
 	case types.ErrCredentials:
 		errmsg = InfoValidateCredentials(id, timestamp)
+	case types.ErrNotFound:
+		errmsg = ErrNotFound(id, "", timestamp)
 	default:
 		errmsg = ErrUnknown(id, "", timestamp)
 	}
