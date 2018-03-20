@@ -41,8 +41,8 @@ func delrangeSerialize(in []MsgDelRange) []types.Range {
 	return out
 }
 
-// Trim whitespace, remove empty tags and duplicates, ensure proper format of prefixes,
-// compare new to old to make sure restricted tags are not removed.
+// Trim whitespace, remove short/empty tags and duplicates, convert to lowercase, ensure
+// the number of tags does not exceed the maximum.
 func normalizeTags(src []string) []string {
 	if len(src) == 0 {
 		return nil
@@ -150,6 +150,25 @@ func restrictedTags(oldTags, newTags []string) bool {
 	}
 
 	return true
+}
+
+// Process credentials for correctness: remove duplicates and unknown methods.
+func normalizeCredentials(creds []MsgAccCred) []MsgAccCred {
+	if len(creds) == 0 {
+		return nil
+	}
+
+	index := make(map[string]*MsgAccCred)
+	for _, c := range creds {
+		if _, ok := globals.validators[c.Method]; ok {
+			index[c.Method] = &c
+		}
+	}
+	creds = make([]MsgAccCred, 0, len(index))
+	for _, c := range index {
+		creds = append(creds, *index[c.Method])
+	}
+	return creds
 }
 
 // Take a slice of tags, return a slice of restricted tags contained in the input.

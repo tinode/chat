@@ -212,7 +212,7 @@ func main() {
 		for _, req := range vconf.Required {
 			lvl := auth.ParseAuthLevel(req)
 			if lvl == auth.LevelNone {
-				// Skip disabled validator.
+				// Skip unknown authentication level.
 				continue
 			}
 			reqLevels = append(reqLevels, lvl)
@@ -223,7 +223,7 @@ func main() {
 		}
 
 		if val := store.GetValidator(name); val == nil {
-			panic("Config provided for unknown validator '" + name + "'")
+			panic("Config provided for an unknown validator '" + name + "'")
 		} else if err := val.Init(string(vconf.Config)); err != nil {
 			panic(err)
 		}

@@ -14,11 +14,11 @@ import (
 	"github.com/tinode/chat/server/store/types"
 )
 
-// TokenAuth is a singleton instance of the authenticator.
-type TokenAuth struct {
-	tokenHmacSalt     []byte
-	tokenTimeout      time.Duration
-	tokenSerialNumber int
+// authenticator is a singleton instance of the authenticator.
+type authenticator struct {
+	hmacSalt     []byte
+	timeout      time.Duration
+	serialNumber int
 }
 
 // Token composition: [8:UID][4:expires][2:authLevel][2:serial-number][32:signature] == 48 bytes
@@ -44,8 +44,8 @@ const (
 )
 
 // Init initializes the authenticator: parses the config and sets salt, serial number and lifetime.
-func (ta *TokenAuth) Init(jsonconf string) error {
-	if ta.tokenHmacSalt != nil {
+func (ta *authenticator) Init(jsonconf string) error {
+	if ta.hmacSalt != nil {
 		return errors.New("auth_token: already initialized")
 	}
 
@@ -69,26 +69,26 @@ func (ta *TokenAuth) Init(jsonconf string) error {
 		return errors.New("auth_token: invalid expiration value")
 	}
 
-	ta.tokenHmacSalt = config.Key
-	ta.tokenTimeout = time.Duration(config.ExpireIn) * time.Second
+	ta.hmacSalt = config.Key
+	ta.timeout = time.Duration(config.ExpireIn) * time.Second
 
-	ta.tokenSerialNumber = config.SerialNum
+	ta.serialNumber = config.SerialNum
 
 	return nil
 }
 
 // AddRecord is not supprted, will produce an error.
-func (TokenAuth) AddRecord(uid types.Uid, secret []byte, lifetime time.Duration) (auth.Level, error) {
+func (authenticator) AddRecord(uid types.Uid, secret []byte, lifetime time.Duration) (auth.Level, error) {
 	return auth.LevelNone, types.ErrUnsupported
 }
 
 // UpdateRecord is not supported, will produce an error.
-func (TokenAuth) UpdateRecord(uid types.Uid, secret []byte, lifetime time.Duration) error {
+func (authenticator) UpdateRecord(uid types.Uid, secret []byte, lifetime time.Duration) error {
 	return types.ErrUnsupported
 }
 
 // Authenticate checks validity of provided token.
-func (ta *TokenAuth) Authenticate(token []byte) (types.Uid, auth.Level, time.Time, error) {
+func (ta *authenticator) Authenticate(token []byte) (types.Uid, auth.Level, time.Time, error) {
 	// [8:UID][4:expires][2:authLevel][2:serial-number][32:signature] == 48 bytes
 
 	if len(token) < tokenLengthDecoded {
@@ -104,11 +104,11 @@ func (ta *TokenAuth) Authenticate(token []byte) (types.Uid, auth.Level, time.Tim
 		return types.ZeroUid, auth.LevelNone, time.Time{}, types.ErrMalformed
 	}
 
-	if snum := int(binary.LittleEndian.Uint16(token[tokenSerialStart:tokenSerialEnd])); snum != ta.tokenSerialNumber {
+	if snum := int(binary.LittleEndian.Uint16(token[tokenSerialStart:tokenSerialEnd])); snum != ta.serialNumber {
 		return types.ZeroUid, auth.LevelNone, time.Time{}, types.ErrMalformed
 	}
 
-	hasher := hmac.New(sha256.New, ta.tokenHmacSalt)
+	hasher := hmac.New(sha256.New, ta.hmacSalt)
 	hasher.Write(token[:tokenSignatureStart])
 	if !hmac.Equal(token[tokenSignatureStart:], hasher.Sum(nil)) {
 		return types.ZeroUid, auth.LevelNone, time.Time{}, types.ErrFailed
@@ -123,23 +123,23 @@ func (ta *TokenAuth) Authenticate(token []byte) (types.Uid, auth.Level, time.Tim
 }
 
 // GenSecret generates a new token.
-func (ta *TokenAuth) GenSecret(uid types.Uid, authLvl auth.Level, lifetime time.Duration) ([]byte, time.Time, error) {
+func (ta *authenticator) GenSecret(uid types.Uid, authLvl auth.Level, lifetime time.Duration) ([]byte, time.Time, error) {
 	// [8:UID][4:expires][2:authLevel][2:serial-number][32:signature] == 48 bytes
 
 	buf := new(bytes.Buffer)
 	uidbits, _ := uid.MarshalBinary()
 	binary.Write(buf, binary.LittleEndian, uidbits)
 	if lifetime == 0 {
-		lifetime = ta.tokenTimeout
+		lifetime = ta.timeout
 	} else if lifetime < 0 {
 		return nil, time.Time{}, types.ErrExpired
 	}
 	expires := time.Now().Add(lifetime).UTC().Round(time.Millisecond)
 	binary.Write(buf, binary.LittleEndian, uint32(expires.Unix()))
 	binary.Write(buf, binary.LittleEndian, uint16(authLvl))
-	binary.Write(buf, binary.LittleEndian, uint16(ta.tokenSerialNumber))
+	binary.Write(buf, binary.LittleEndian, uint16(ta.serialNumber))
 
-	hasher := hmac.New(sha256.New, ta.tokenHmacSalt)
+	hasher := hmac.New(sha256.New, ta.hmacSalt)
 	hasher.Write(buf.Bytes())
 	binary.Write(buf, binary.LittleEndian, hasher.Sum(nil))
 
@@ -147,15 +147,15 @@ func (ta *TokenAuth) GenSecret(uid types.Uid, authLvl auth.Level, lifetime time.
 }
 
 // IsUnique is not supported, will produce an error.
-func (TokenAuth) IsUnique(token []byte) (bool, error) {
+func (authenticator) IsUnique(token []byte) (bool, error) {
 	return false, types.ErrUnsupported
 }
 
 // DelRecords is a noop which always succeeds.
-func (TokenAuth) DelRecords(uid types.Uid) error {
+func (authenticator) DelRecords(uid types.Uid) error {
 	return nil
 }
 
 func init() {
-	store.RegisterAuthScheme("token", &TokenAuth{})
+	store.RegisterAuthScheme("token", &authenticator{})
 }

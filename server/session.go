@@ -475,28 +475,28 @@ func (s *Session) acc(msg *ClientComMessage) {
 		user.Access.Auth = getDefaultAccess(types.TopicCatP2P, true)
 		user.Access.Anon = getDefaultAccess(types.TopicCatP2P, false)
 
-		if len(msg.Acc.Tags) > 0 {
-			if tags := normalizeTags(msg.Acc.Tags); tags != nil {
-				if !restrictedTags(tags, nil) {
-					log.Println("Attempt to directly assign restricted tags")
-					s.queueOut(ErrPermissionDenied(msg.Acc.Id, "", msg.timestamp))
-					return
-				}
-				user.Tags = tags
+		if tags := normalizeTags(msg.Acc.Tags); tags != nil {
+			if !restrictedTags(tags, nil) {
+				log.Println("Attempt to directly assign restricted tags")
+				s.queueOut(ErrPermissionDenied(msg.Acc.Id, "", msg.timestamp))
+				return
 			}
+			user.Tags = tags
 		}
 
-		// Pre-check credentials for validity
-		for _, cred := range msg.Acc.Cred {
-			if vld := store.GetValidator(cred.Method); vld != nil {
-				if err := vld.PreCheck(cred.Value, cred.Params); err != nil {
-					log.Println("failed credential pre-check", cred, err)
+		// Pre-check credentials for validity. We don't kknow user's access level
+		// consequently cannot check presence of required credentials. Must do that later.
+		creds := normalizeCredentials(msg.Acc.Cred)
+		for _, cr := range creds {
+			if vld := store.GetValidator(cr.Method); vld != nil {
+				if err := vld.PreCheck(cr.Value, cr.Params); err != nil {
+					log.Println("failed credential pre-check", cr, err)
 					s.queueOut(decodeStoreError(err, msg.Acc.Id, msg.timestamp))
 					return
 				}
 
-				if globals.validators[cred.Method].addToTags {
-					user.Tags = append(user.Tags, cred.Method+":"+cred.Value)
+				if globals.validators[cr.Method].addToTags {
+					user.Tags = append(user.Tags, cr.Method+":"+cr.Value)
 				}
 			}
 		}
@@ -541,27 +541,34 @@ func (s *Session) acc(msg *ClientComMessage) {
 			return
 		}
 
-		var validated []string
-		for _, cred := range msg.Acc.Cred {
-			log.Println("processing credential", cred)
+		// Check if user has provided all required credentials.
+		if len(creds) < len(globals.authValidators[authLvl]) {
+			log.Println("missing credentials; have:", creds, "want:", globals.authValidators[authLvl])
+			// Attempt to delete incomplete user record
+			store.Users.Delete(user.Uid(), false)
+			s.queueOut(decodeStoreError(types.ErrPolicy, msg.Acc.Id, msg.timestamp))
+			return
+		}
 
-			vld := store.GetValidator(cred.Method)
+		var validated []string
+		for _, cr := range creds {
+			vld := store.GetValidator(cr.Method)
 			if vld == nil {
 				// Ignore unknown validation type.
-				log.Println("unknown validation type", cred.Method)
+				log.Println("unknown validation type", cr.Method)
 				continue
 			}
-			if err := vld.Request(user.Uid(), cred.Value, s.lang, cred.Params, cred.Response); err != nil {
+			if err := vld.Request(user.Uid(), cr.Value, s.lang, cr.Params, cr.Response); err != nil {
 				s.queueOut(decodeStoreError(err, msg.Acc.Id, msg.timestamp))
 				log.Println("Failed to save or validate credential", err)
 				// Not deleting incomplete user record: the user may retry.
 				return
 			}
 
-			if cred.Response != "" {
+			if cr.Response != "" {
 				// If response is provided and Request did not return an error, the request was
 				// successfully validated.
-				validated = append(validated, cred.Method)
+				validated = append(validated, cr.Method)
 			}
 		}
 
