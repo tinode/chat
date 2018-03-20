@@ -104,18 +104,17 @@ class PluginServicer(object):
     raise NotImplementedError('Method not implemented!')
 
   def Find(self, request, context):
-    """The following methods are for the Tinode server to report individual events.
-
-    A search request issued on a 'fnd' topic. 
-    The first parameter is the ID of the user who issued the request. 
-    The second parameter is the search query: an array of string search terms.
+    """An alteranative user and topic discovery mechanism. 
+    A search request issued on a 'fnd' topic. This method is called to generate an alternative result set.
     """
     context.set_code(grpc.StatusCode.UNIMPLEMENTED)
     context.set_details('Method not implemented!')
     raise NotImplementedError('Method not implemented!')
 
   def Account(self, request, context):
-    """Account created, updated or deleted
+    """The following methods are for the Tinode server to report individual events.
+
+    Account created, updated or deleted
     """
     context.set_code(grpc.StatusCode.UNIMPLEMENTED)
     context.set_details('Method not implemented!')

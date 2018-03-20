@@ -595,34 +595,38 @@ func (s *Session) acc(msg *ClientComMessage) {
 		pluginAccount(&user, plgActCreate)
 
 	} else if !s.uid.IsZero() {
+		var params map[string]interface{}
 		if authhdl != nil {
 			// Request to update auth of an existing account. Only basic auth is currently supported
 			// TODO(gene): support adding new auth schemes
 			// TODO(gene): support the case when msg.Acc.User is not equal to the current user
 			if err := authhdl.UpdateRecord(s.uid, msg.Acc.Secret, 0); err != nil {
-				log.Println("auth: Failed to update credentials", err)
+				log.Println("auth: failed to update secret", err)
 				s.queueOut(decodeStoreError(err, msg.Acc.Id, msg.timestamp))
 				return
 			}
 		} else if msg.Acc.Scheme != "" {
 			// Invalid or unknown auth scheme
-			log.Println("auth: Unknown auth scheme", msg.Acc.Scheme)
+			log.Println("auth: unknown auth scheme", msg.Acc.Scheme)
 			s.queueOut(ErrMalformed(msg.Acc.Id, "", msg.timestamp))
 			return
 		} else if len(msg.Acc.Cred) > 0 {
-			// Check if the message contains credential confirmation.
-			for _, cred := range msg.Acc.Cred {
-				vld := store.GetValidator(cred.Method)
-				if cred.Response != "" && vld != nil {
-					if err := vld.Check(s.uid, cred.Response); err != nil {
-						s.queueOut(decodeStoreError(err, msg.Acc.Id, msg.timestamp))
-						return
-					}
-				}
+			// Use provided credentials for validation.
+			validated, err := s.getValidatedGred(s.uid, s.authLvl, msg.Acc.Cred)
+			if err != nil {
+				log.Println("failed to validate credentials", err)
+				s.queueOut(decodeStoreError(err, msg.Acc.Id, msg.timestamp))
+				return
+			}
+			_, missing := stringSliceDelta(globals.authValidators[s.authLvl], validated)
+			if len(missing) > 0 {
+				params = map[string]interface{}{"cred": missing}
 			}
 		}
 
-		s.queueOut(NoErr(msg.Acc.Id, "", msg.timestamp))
+		resp := NoErr(msg.Acc.Id, "", msg.timestamp)
+		resp.Ctrl.Params = params
+		s.queueOut(resp)
 
 		// pluginAccount(&user, plgActUpdate)
 
@@ -654,53 +658,22 @@ func (s *Session) login(msg *ClientComMessage) {
 
 	uid, authLvl, expires, err := handler.Authenticate(msg.Login.Secret)
 	if err != nil {
-		log.Println("auth result", err)
+		log.Println("auth failed", err)
 		s.queueOut(decodeStoreError(err, msg.Login.Id, msg.timestamp))
 		return
 	}
 
-	// Check if credential validation is required.
-	var validated []string
-	if len(globals.authValidators[authLvl]) > 0 {
-		allCred, err := store.Users.GetAllCred(uid, "")
-		if err != nil {
-			log.Println("failed to read credentials:", err)
-			s.queueOut(decodeStoreError(err, msg.Login.Id, msg.timestamp))
-		}
-
-		// Compile a list of validated credentials.
-		for _, cred := range allCred {
-			if cred.Done {
-				validated = append(validated, cred.Method)
-			}
-		}
-
-		// Add credential which are validated in this call.
-		for _, cred := range msg.Login.Cred {
-			log.Println("processing credential confirmation", cred)
-
-			vld := store.GetValidator(cred.Method)
-			if vld == nil || cred.Response == "" {
-				// Ignore unknown validation type or empty response.
-				log.Println("unknown validation type or empty response", cred.Method, cred.Response)
-				continue
-			}
-			if err := vld.Check(uid, cred.Response); err != nil {
-				s.queueOut(decodeStoreError(err, msg.Login.Id, msg.timestamp))
-				log.Println("Failed to save or validate credential:", err)
-				// Not deleting incomplete user record: the user may retry.
-				return
-			}
-			// Check did not return an error: the request was successfully validated.
-			validated = append(validated, cred.Method)
-		}
+	validated, err := s.getValidatedGred(uid, authLvl, msg.Login.Cred)
+	if err != nil {
+		log.Println("failed to validate credentials", err)
+		s.queueOut(decodeStoreError(err, msg.Login.Id, msg.timestamp))
+	} else {
+		s.queueOut(s.onLogin(msg.Login.Id, msg.timestamp, uid, authLvl, expires, validated))
 	}
-
-	s.queueOut(s.onLogin(msg.Login.Id, msg.timestamp, uid, authLvl, expires, validated))
 }
 
 // onLogin performs steps after successful authentication.
-func (s *Session) onLogin(msgId string, timestamp time.Time, uid types.Uid, authLvl auth.Level,
+func (s *Session) onLogin(msgID string, timestamp time.Time, uid types.Uid, authLvl auth.Level,
 	expires time.Time, validated []string) *ServerComMessage {
 
 	var reply *ServerComMessage
@@ -723,13 +696,13 @@ func (s *Session) onLogin(msgId string, timestamp time.Time, uid types.Uid, auth
 	_, missing := stringSliceDelta(globals.authValidators[authLvl], validated)
 	if len(missing) > 0 {
 		// Some credentials are not validated yet. Respond with request for validation.
-		reply = InfoValidateCredentials(msgId, timestamp)
+		reply = InfoValidateCredentials(msgID, timestamp)
 
 		params["cred"] = missing
 	} else {
 		// Everything is fine, authenticate the session.
 
-		reply = NoErr(msgId, "", timestamp)
+		reply = NoErr(msgID, "", timestamp)
 
 		// Authenticate the session.
 		s.uid = uid
@@ -748,6 +721,44 @@ func (s *Session) onLogin(msgId string, timestamp time.Time, uid types.Uid, auth
 
 	reply.Ctrl.Params = params
 	return reply
+}
+
+func (s *Session) getValidatedGred(uid types.Uid, authLvl auth.Level, creds []MsgAccCred) ([]string, error) {
+
+	var validated []string
+	// Check if credential validation is required.
+	if len(globals.authValidators[authLvl]) > 0 {
+		allCred, err := store.Users.GetAllCred(uid, "")
+		if err != nil {
+			return nil, err
+		}
+
+		// Compile a list of validated credentials.
+		for _, cr := range allCred {
+			if cr.Done {
+				validated = append(validated, cr.Method)
+			}
+		}
+
+		// Add credential which are validated in this call.
+		creds = normalizeCredentials(creds)
+		for _, cr := range creds {
+			log.Println("processing credential confirmation", cr)
+
+			vld := store.GetValidator(cr.Method)
+			if vld == nil || cr.Response == "" {
+				// Ignore unknown validation type or empty response.
+				continue
+			}
+			if err := vld.Check(uid, cr.Response); err != nil {
+				return nil, err
+			}
+			// Check did not return an error: the request was successfully validated.
+			validated = append(validated, cr.Method)
+		}
+	}
+
+	return validated, nil
 }
 
 func (s *Session) get(msg *ClientComMessage) {

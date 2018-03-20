@@ -107,7 +107,7 @@ type MsgAccCred struct {
 	Value string `json:"val,omitempty"`
 	// Verification response
 	Response string `json:"resp,omitempty"`
-	// Request parameters, such as preferences. Not interoreted by the server.
+	// Request parameters, such as preferences. Passed to valiator without interpretation.
 	Params interface{} `json:"params,omitempty"`
 }
 

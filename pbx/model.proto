@@ -108,6 +108,17 @@ message SeqRange {
 	int32 hi = 2;
 }
 
+message Credential {
+	// Credential type, i.e. `email` or `tel`.
+	string method = 1;
+	// Value to verify, i.e. `user@example.com` or `+18003287448`
+	string value = 2;
+	// Verification response
+	string response = 3;
+	// Request parameters, such as preferences.
+	bytes params = 4;
+}
+
 // Client handshake
 message ClientHi {
 	string id = 1;
@@ -132,6 +143,8 @@ message ClientAcc {
 	repeated string tags = 6;
 	// User initialization data when creating a new user, otherwise ignored
 	SetDesc desc = 7;
+	// Credentials for verification.
+	repeated Credential cred = 8;
 }
 
 // Login {login} message
@@ -141,6 +154,8 @@ message ClientLogin  {
 	string scheme  = 2;
 	// Shared secret
 	bytes secret = 3;
+	// Credentials for verification.
+	repeated Credential cred = 4;
 }
 
 // Subscription request {sub} message

@@ -204,20 +204,21 @@ func pbCliSerialize(msg *ClientComMessage) *pbx.ClientMsg {
 			DeviceId:  msg.Hi.DeviceID,
 			Lang:      msg.Hi.Lang}}
 	} else if msg.Acc != nil {
-		acc := &pbx.ClientAcc{
+		pkt.Message = &pbx.ClientMsg_Acc{Acc: &pbx.ClientAcc{
 			Id:     msg.Acc.Id,
 			UserId: msg.Acc.User,
 			Scheme: msg.Acc.Scheme,
 			Secret: msg.Acc.Secret,
 			Login:  msg.Acc.Login,
-			Tags:   msg.Acc.Tags}
-		acc.Desc = pbSetDescSerialize(msg.Acc.Desc)
-		pkt.Message = &pbx.ClientMsg_Acc{Acc: acc}
+			Tags:   msg.Acc.Tags,
+			Cred:   pbCredentialsSerialize(msg.Acc.Cred),
+			Desc:   pbSetDescSerialize(msg.Acc.Desc)}}
 	} else if msg.Login != nil {
 		pkt.Message = &pbx.ClientMsg_Login{Login: &pbx.ClientLogin{
 			Id:     msg.Login.Id,
 			Scheme: msg.Login.Scheme,
-			Secret: msg.Login.Secret}}
+			Secret: msg.Login.Secret,
+			Cred:   pbCredentialsSerialize(msg.Login.Cred)}}
 	} else if msg.Sub != nil {
 		pkt.Message = &pbx.ClientMsg_Sub{Sub: &pbx.ClientSub{
 			Id:       msg.Sub.Id,
@@ -293,12 +294,14 @@ func pbCliDeserialize(pkt *pbx.ClientMsg) *ClientComMessage {
 			Login:  acc.GetLogin(),
 			Tags:   acc.GetTags(),
 			Desc:   pbSetDescDeserialize(acc.GetDesc()),
+			Cred:   pbCredentialsDeserialize(acc.GetCred()),
 		}
 	} else if login := pkt.GetLogin(); login != nil {
 		msg.Login = &MsgClientLogin{
 			Id:     login.GetId(),
 			Scheme: login.GetScheme(),
 			Secret: login.GetSecret(),
+			Cred:   pbCredentialsDeserialize(login.GetCred()),
 		}
 	} else if sub := pkt.GetSub(); sub != nil {
 		msg.Sub = &MsgClientSub{
@@ -813,4 +816,37 @@ func pbDelValuesDeserialize(in *pbx.DelValues) *MsgDelValues {
 		DelId:  int(in.GetDelId()),
 		DelSeq: pbDelQueryDeserialize(in.GetDelSeq()),
 	}
+}
+
+func pbCredentialsSerialize(in []MsgAccCred) []*pbx.Credential {
+	if in == nil {
+		return nil
+	}
+
+	out := make([]*pbx.Credential, len(in))
+	for i, cr := range in {
+		out[i] = &pbx.Credential{
+			Method:   cr.Method,
+			Value:    cr.Value,
+			Response: cr.Response,
+			Params:   interfaceToBytes(cr.Params)}
+	}
+
+	return out
+}
+
+func pbCredentialsDeserialize(in []*pbx.Credential) []MsgAccCred {
+	if in == nil {
+		return nil
+	}
+
+	out := make([]MsgAccCred, len(in))
+	for i, cr := range in {
+		out[i].Method = cr.GetMethod()
+		out[i].Value = cr.GetValue()
+		out[i].Response = cr.GetResponse()
+		out[i].Params = bytesToInterface(cr.GetParams())
+	}
+
+	return out
 }
