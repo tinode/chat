@@ -153,14 +153,15 @@ func restrictedTags(oldTags, newTags []string) bool {
 }
 
 // Process credentials for correctness: remove duplicates and unknown methods.
-func normalizeCredentials(creds []MsgAccCred) []MsgAccCred {
+// If valueRequired is true, keep only those where Value is non-empty.
+func normalizeCredentials(creds []MsgAccCred, valueRequired bool) []MsgAccCred {
 	if len(creds) == 0 {
 		return nil
 	}
 
 	index := make(map[string]*MsgAccCred)
 	for _, c := range creds {
-		if _, ok := globals.validators[c.Method]; ok {
+		if _, ok := globals.validators[c.Method]; ok && (!valueRequired || c.Value != "") {
 			index[c.Method] = &c
 		}
 	}
@@ -169,6 +170,15 @@ func normalizeCredentials(creds []MsgAccCred) []MsgAccCred {
 		creds = append(creds, *index[c.Method])
 	}
 	return creds
+}
+
+// Get a string slice with methods of credentials.
+func credentialMethods(creds []MsgAccCred) []string {
+	var out []string
+	for _, c := range creds {
+		out = append(out, c.Method)
+	}
+	return out
 }
 
 // Take a slice of tags, return a slice of restricted tags contained in the input.

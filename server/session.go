@@ -484,20 +484,19 @@ func (s *Session) acc(msg *ClientComMessage) {
 			user.Tags = tags
 		}
 
-		// Pre-check credentials for validity. We don't kknow user's access level
+		// Pre-check credentials for validity. We don't know user's access level
 		// consequently cannot check presence of required credentials. Must do that later.
-		creds := normalizeCredentials(msg.Acc.Cred)
+		creds := normalizeCredentials(msg.Acc.Cred, true)
 		for _, cr := range creds {
-			if vld := store.GetValidator(cr.Method); vld != nil {
-				if err := vld.PreCheck(cr.Value, cr.Params); err != nil {
-					log.Println("failed credential pre-check", cr, err)
-					s.queueOut(decodeStoreError(err, msg.Acc.Id, msg.timestamp))
-					return
-				}
+			vld := store.GetValidator(cr.Method)
+			if err := vld.PreCheck(cr.Value, cr.Params); err != nil {
+				log.Println("failed credential pre-check", cr, err)
+				s.queueOut(decodeStoreError(err, msg.Acc.Id, msg.timestamp))
+				return
+			}
 
-				if globals.validators[cr.Method].addToTags {
-					user.Tags = append(user.Tags, cr.Method+":"+cr.Value)
-				}
+			if globals.validators[cr.Method].addToTags {
+				user.Tags = append(user.Tags, cr.Method+":"+cr.Value)
 			}
 		}
 
@@ -541,23 +540,22 @@ func (s *Session) acc(msg *ClientComMessage) {
 			return
 		}
 
-		// Check if user has provided all required credentials.
+		// When creating an account, the user must provide all required credentials.
+		// If any are missing, reject the request.
 		if len(creds) < len(globals.authValidators[authLvl]) {
 			log.Println("missing credentials; have:", creds, "want:", globals.authValidators[authLvl])
 			// Attempt to delete incomplete user record
 			store.Users.Delete(user.Uid(), false)
-			s.queueOut(decodeStoreError(types.ErrPolicy, msg.Acc.Id, msg.timestamp))
+			_, missing := stringSliceDelta(globals.authValidators[s.authLvl], credentialMethods(creds))
+			reply := decodeStoreError(types.ErrPolicy, msg.Acc.Id, msg.timestamp)
+			reply.Ctrl.Params = map[string]interface{}{"creds": missing}
+			s.queueOut(reply)
 			return
 		}
 
 		var validated []string
 		for _, cr := range creds {
 			vld := store.GetValidator(cr.Method)
-			if vld == nil {
-				// Ignore unknown validation type.
-				log.Println("unknown validation type", cr.Method)
-				continue
-			}
 			if err := vld.Request(user.Uid(), cr.Value, s.lang, cr.Params, cr.Response); err != nil {
 				s.queueOut(decodeStoreError(err, msg.Acc.Id, msg.timestamp))
 				log.Println("Failed to save or validate credential", err)
@@ -614,7 +612,7 @@ func (s *Session) acc(msg *ClientComMessage) {
 			// Use provided credentials for validation.
 			validated, err := s.getValidatedGred(s.uid, s.authLvl, msg.Acc.Cred)
 			if err != nil {
-				log.Println("failed to validate credentials", err)
+				log.Println("failed to get validated credentials", err)
 				s.queueOut(decodeStoreError(err, msg.Acc.Id, msg.timestamp))
 				return
 			}
@@ -723,39 +721,41 @@ func (s *Session) onLogin(msgID string, timestamp time.Time, uid types.Uid, auth
 	return reply
 }
 
+// Get a list of all validated credentials.
 func (s *Session) getValidatedGred(uid types.Uid, authLvl auth.Level, creds []MsgAccCred) ([]string, error) {
 
-	var validated []string
 	// Check if credential validation is required.
-	if len(globals.authValidators[authLvl]) > 0 {
-		allCred, err := store.Users.GetAllCred(uid, "")
-		if err != nil {
-			return nil, err
-		}
+	if len(globals.authValidators[authLvl]) == 0 {
+		return nil, nil
+	}
 
-		// Compile a list of validated credentials.
-		for _, cr := range allCred {
-			if cr.Done {
-				validated = append(validated, cr.Method)
-			}
-		}
+	allCred, err := store.Users.GetAllCred(uid, "")
+	if err != nil {
+		return nil, err
+	}
 
-		// Add credential which are validated in this call.
-		creds = normalizeCredentials(creds)
-		for _, cr := range creds {
-			log.Println("processing credential confirmation", cr)
-
-			vld := store.GetValidator(cr.Method)
-			if vld == nil || cr.Response == "" {
-				// Ignore unknown validation type or empty response.
-				continue
-			}
-			if err := vld.Check(uid, cr.Response); err != nil {
-				return nil, err
-			}
-			// Check did not return an error: the request was successfully validated.
+	// Compile a list of validated credentials.
+	var validated []string
+	for _, cr := range allCred {
+		if cr.Done {
 			validated = append(validated, cr.Method)
 		}
+	}
+
+	// Add credential which are validated in this call.
+	creds = normalizeCredentials(creds, false)
+	for _, cr := range creds {
+		log.Println("processing credential confirmation", cr)
+		if cr.Response == "" {
+			// Ignore unknown validation type or empty response.
+			continue
+		}
+		vld := store.GetValidator(cr.Method)
+		if err := vld.Check(uid, cr.Response); err != nil {
+			return nil, err
+		}
+		// Check did not return an error: the request was successfully validated.
+		validated = append(validated, cr.Method)
 	}
 
 	return validated, nil
