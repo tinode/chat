@@ -222,41 +222,41 @@ func isNullValue(i interface{}) bool {
 	return false
 }
 
-func decodeStoreError(err error, id string, timestamp time.Time) *ServerComMessage {
-
-	if err == nil {
-		return NoErr(id, "", timestamp)
-	}
-
-	storeErr, ok := err.(types.StoreError)
-	if !ok {
-		return ErrUnknown(id, "", timestamp)
-	}
+func decodeStoreError(err error, id string, timestamp time.Time, params map[string]interface{}) *ServerComMessage {
 
 	var errmsg *ServerComMessage
 
-	switch storeErr {
-	case types.ErrInternal:
-		errmsg = ErrUnknown(id, "", timestamp)
-	case types.ErrMalformed:
-		errmsg = ErrMalformed(id, "", timestamp)
-	case types.ErrFailed:
-		errmsg = ErrAuthFailed(id, "", timestamp)
-	case types.ErrDuplicate:
-		errmsg = ErrDuplicateCredential(id, "", timestamp)
-	case types.ErrUnsupported:
-		errmsg = ErrNotImplemented(id, "", timestamp)
-	case types.ErrExpired:
-		errmsg = ErrAuthFailed(id, "", timestamp)
-	case types.ErrPolicy:
-		errmsg = ErrPolicy(id, "", timestamp)
-	case types.ErrCredentials:
-		errmsg = InfoValidateCredentials(id, timestamp)
-	case types.ErrNotFound:
-		errmsg = ErrNotFound(id, "", timestamp)
-	default:
-		errmsg = ErrUnknown(id, "", timestamp)
+	if err == nil {
+		errmsg = NoErr(id, "", timestamp)
 	}
+
+	if storeErr, ok := err.(types.StoreError); !ok {
+		errmsg = ErrUnknown(id, "", timestamp)
+	} else {
+		switch storeErr {
+		case types.ErrInternal:
+			errmsg = ErrUnknown(id, "", timestamp)
+		case types.ErrMalformed:
+			errmsg = ErrMalformed(id, "", timestamp)
+		case types.ErrFailed:
+			errmsg = ErrAuthFailed(id, "", timestamp)
+		case types.ErrDuplicate:
+			errmsg = ErrDuplicateCredential(id, "", timestamp)
+		case types.ErrUnsupported:
+			errmsg = ErrNotImplemented(id, "", timestamp)
+		case types.ErrExpired:
+			errmsg = ErrAuthFailed(id, "", timestamp)
+		case types.ErrPolicy:
+			errmsg = ErrPolicy(id, "", timestamp)
+		case types.ErrCredentials:
+			errmsg = InfoValidateCredentials(id, timestamp)
+		case types.ErrNotFound:
+			errmsg = ErrNotFound(id, "", timestamp)
+		default:
+			errmsg = ErrUnknown(id, "", timestamp)
+		}
+	}
+	errmsg.Ctrl.Params = params
 
 	return errmsg
 }

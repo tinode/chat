@@ -77,6 +77,12 @@ const (
 
 	// maxDeleteCount is the maximum allowed number of messages to delete in one call.
 	defaultMaxDeleteCount = 1024
+
+	// Mount point where static content is served, http://host-name/<defaultStaticMount>
+	defaultStaticMount = "/x/"
+
+	// Local path to static content
+	defaultStaticPath = "/static/"
 )
 
 // Build timestamp defined by the compiler.
@@ -136,8 +142,10 @@ type configType struct {
 	// Address:port to listen for gRPC clients. If blank gRPC support will not be initialized.
 	// Could be overridden from the command line with --grpc_listen.
 	GrpcListen string `json:"grpc_listen"`
-	// Path for mounting the directory with static files.
+	// URL path for mounting the directory with static files.
 	StaticMount string `json:"static_mount"`
+	// Local path to static files. All files in this path are made accessible by HTTP.
+	StaticData string `json:"static_data"`
 	// Salt used in signing API keys
 	APIKeySalt []byte `json:"api_key_salt"`
 	// Maximum message size allowed from client. Intended to prevent malicious client from sending
@@ -288,11 +296,11 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		staticContent = path + "/static/"
+		staticContent = path + defaultStaticPath
 	}
 	staticMountPoint := config.StaticMount
 	if staticMountPoint == "" {
-		staticMountPoint = "/x/"
+		staticMountPoint = defaultStaticMount
 	} else {
 		if !strings.HasPrefix(staticMountPoint, "/") {
 			staticMountPoint = "/" + staticMountPoint

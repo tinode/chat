@@ -1,9 +1,14 @@
+// This email validator can send email through an SMTP server
+
 package email
 
 import (
+	"bytes"
 	"encoding/json"
+	ht "html/template"
 	"math/rand"
 	"net/mail"
+	"net/smtp"
 	"strconv"
 	"strings"
 	"time"
@@ -14,10 +19,15 @@ import (
 
 // Validator configuration.
 type validator struct {
-	TemplateFile  string `json:"template"`
-	SendFrom      string `json:"sender"`
-	DebugResponse string `json:"debug_response"`
-	MaxRetries    int    `json:"max_retries"`
+	TemplateFile   string `json:"msg_body_templ"`
+	Subject        string `json:"msg_subject"`
+	SendFrom       string `json:"sender"`
+	SenderPassword string `json:"sender_password"`
+	DebugResponse  string `json:"debug_response"`
+	MaxRetries     int    `json:"max_retries"`
+	SMTPAddr       string `json:"smtp_server"`
+	htmlTempl      *ht.Template
+	auth           smtp.Auth
 }
 
 const (
@@ -26,7 +36,15 @@ const (
 
 // Init: initialize validator.
 func (v *validator) Init(jsonconf string) error {
-	if err := json.Unmarshal([]byte(jsonconf), v); err != nil {
+	var err error
+	if err = json.Unmarshal([]byte(jsonconf), v); err != nil {
+		return err
+	}
+
+	v.auth = smtp.PlainAuth("", v.SendFrom, v.SenderPassword, v.SMTPAddr)
+
+	v.htmlTempl, err = ht.New("email").ParseFiles(v.TemplateFile)
+	if err != nil {
 		return err
 	}
 
@@ -36,6 +54,7 @@ func (v *validator) Init(jsonconf string) error {
 	if v.MaxRetries == 0 {
 		v.MaxRetries = maxRetries
 	}
+
 	return nil
 }
 
@@ -50,7 +69,7 @@ func (v *validator) PreCheck(cred string, params interface{}) error {
 }
 
 // Send a request for confirmation to the user: makes a record in DB  and nothing else.
-func (v *validator) Request(user t.Uid, cred, lang string, params interface{}, resp string) error {
+func (v *validator) Request(user t.Uid, email, lang string, params interface{}, resp string) error {
 
 	// Email validator cannot accept an immmediate response.
 	if resp != "" {
@@ -61,18 +80,19 @@ func (v *validator) Request(user t.Uid, cred, lang string, params interface{}, r
 	resp = strconv.FormatInt(int64(rand.Intn(1000000)), 10)
 	resp = strings.Repeat("0", 6-len(resp)) + resp
 
-	// TODO: send email to the user with `resp`.
+	body := new(bytes.Buffer)
+	if err := v.htmlTempl.Execute(body, map[string]interface{}{"Code": resp}); err != nil {
+		return err
+	}
 
-	// For instance, see here how to send email from Amazon SES:
-	// https://docs.aws.amazon.com/sdk-for-go/api/service/ses/#example_SES_SendEmail_shared00
-
-	// Here are instructions for Google cloud:
-	// https://cloud.google.com/appengine/docs/standard/go/mail/sending-receiving-with-mail-api
+	if err := v.send(email, "Confirm email", string(body.Bytes())); err != nil {
+		return err
+	}
 
 	return store.Users.SaveCred(&t.Credential{
 		User:   user.String(),
 		Method: "email",
-		Value:  cred,
+		Value:  email,
 		Resp:   resp,
 	})
 }
@@ -110,6 +130,24 @@ func (v *validator) Check(user t.Uid, resp string) error {
 
 // Delete deletes user's records.
 func (v *validator) Delete(user t.Uid) error {
+	return nil
+}
+
+// This is a basic SMTP sender which connectes to Gmail.
+// -
+// See here how to send email from Amazon SES:
+// https://docs.aws.amazon.com/sdk-for-go/api/service/ses/#example_SES_SendEmail_shared00
+// -
+// Here are instructions for Google cloud:
+// https://cloud.google.com/appengine/docs/standard/go/mail/sending-receiving-with-mail-api
+func (v *validator) send(to string, subj string, body string) error {
+	mime := "MIME-version: 1.0;\nContent-Type: text/html; charset=\"UTF-8\";\n\n"
+	subj = "Subject: " + subj + "\n"
+	msg := []byte(subj + mime + "\n" + body)
+
+	if err := smtp.SendMail(v.SMTPAddr, v.auth, v.SendFrom, []string{to}, msg); err != nil {
+		return err
+	}
 	return nil
 }
 
