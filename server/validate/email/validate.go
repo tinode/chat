@@ -43,7 +43,7 @@ func (v *validator) Init(jsonconf string) error {
 
 	v.auth = smtp.PlainAuth("", v.SendFrom, v.SenderPassword, v.SMTPAddr)
 
-	v.htmlTempl, err = ht.New("email").ParseFiles(v.TemplateFile)
+	v.htmlTempl, err = ht.ParseFiles(v.TemplateFile)
 	if err != nil {
 		return err
 	}
@@ -85,9 +85,8 @@ func (v *validator) Request(user t.Uid, email, lang string, params interface{}, 
 		return err
 	}
 
-	if err := v.send(email, "Confirm email", string(body.Bytes())); err != nil {
-		return err
-	}
+	// Send email without blocking. Email sending may take long time.
+	go v.send(email, "Confirm email", string(body.Bytes()))
 
 	return store.Users.SaveCred(&t.Credential{
 		User:   user.String(),
@@ -141,11 +140,12 @@ func (v *validator) Delete(user t.Uid) error {
 // Here are instructions for Google cloud:
 // https://cloud.google.com/appengine/docs/standard/go/mail/sending-receiving-with-mail-api
 func (v *validator) send(to string, subj string, body string) error {
-	mime := "MIME-version: 1.0;\nContent-Type: text/html; charset=\"UTF-8\";\n\n"
-	subj = "Subject: " + subj + "\n"
-	msg := []byte(subj + mime + "\n" + body)
-
-	if err := smtp.SendMail(v.SMTPAddr, v.auth, v.SendFrom, []string{to}, msg); err != nil {
+	if err := smtp.SendMail(v.SMTPAddr+":587", v.auth, v.SendFrom, []string{to},
+		[]byte("To: "+to+
+			"\nSubject: "+
+			subj+
+			"\nMIME-version: 1.0;\nContent-Type: text/html; charset=\"UTF-8\";\n\n"+
+			body)); err != nil {
 		return err
 	}
 	return nil

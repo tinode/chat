@@ -228,11 +228,16 @@ func (UsersObjMapper) GetAll(uid ...types.Uid) ([]types.User, error) {
 // Delete deletes a user record (not implemented).
 // TODO(gene): implement
 func (UsersObjMapper) Delete(id types.Uid, soft bool) error {
-	// Maybe delete topics where the user is the owner and all subscriptions to those topics, and messages
-	// Delete user's subscriptions
-	// Delete user's authentication records: adp.AuthDelAllRecords(id)
-	// Delete user's cerdentials (emails, phones)
-	// Delete user object: adp.UserDelete(user.Uid(), false)
+	if !soft {
+		adp.SubsDelForUser(id)
+		// TODO: Maybe delete topics where the user is the owner and all subscriptions to those topics,
+		// and messages
+		adp.AuthDelAllRecords(id)
+		adp.CredDel(id, "")
+	}
+
+	adp.UserDelete(id, soft)
+
 	return errors.New("store: not implemented")
 }
 

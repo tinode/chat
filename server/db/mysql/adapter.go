@@ -234,7 +234,7 @@ func (a *adapter) CreateDb(reset bool) error {
 			expires 	DATETIME,
 			PRIMARY KEY(id),
 			FOREIGN KEY(userid) REFERENCES users(id),
-			UNIQUE INDEX basicauth_login (login)
+			UNIQUE INDEX basicauth_login(login)
 		)`); err != nil {
 		return err
 	}
@@ -254,7 +254,7 @@ func (a *adapter) CreateDb(reset bool) error {
 			public 		JSON,
 			tags		JSON,
 			PRIMARY KEY(id),
-			UNIQUE INDEX topics_name (name)
+			UNIQUE INDEX topics_name(name)
 		)`); err != nil {
 		return err
 	}
@@ -267,7 +267,7 @@ func (a *adapter) CreateDb(reset bool) error {
 			tag 	VARCHAR(255) NOT NULL,
 			PRIMARY KEY(id),
 			FOREIGN KEY(topic) REFERENCES topics(name),
-			INDEX topictags_tag (tag)
+			INDEX topictags_tag(tag)
 		)`); err != nil {
 		return err
 	}
@@ -289,8 +289,8 @@ func (a *adapter) CreateDb(reset bool) error {
 			private 	JSON,
 			PRIMARY KEY(id)	,
 			FOREIGN KEY(userid) REFERENCES users(id),
-			UNIQUE INDEX subscriptions_topic_userid (topic, userid),
-			INDEX subscriptions_topic (topic)
+			UNIQUE INDEX subscriptions_topic_userid(topic, userid),
+			INDEX subscriptions_topic(topic)
 		)`); err != nil {
 		return err
 	}
@@ -311,7 +311,7 @@ func (a *adapter) CreateDb(reset bool) error {
 			PRIMARY KEY(id),` +
 			"FOREIGN KEY(`from`) REFERENCES users(id)," +
 			`FOREIGN KEY(topic) REFERENCES topics(name),
-			UNIQUE INDEX messages_topic_seqid (topic, seqid)
+			UNIQUE INDEX messages_topic_seqid(topic, seqid)
 		);`); err != nil {
 		return err
 	}
@@ -327,9 +327,9 @@ func (a *adapter) CreateDb(reset bool) error {
 			hi			INT NOT NULL,
 			PRIMARY KEY(id),
 			FOREIGN KEY(topic) REFERENCES topics(name),
-			UNIQUE INDEX dellog_topic_delid_deletedfor (topic,delid,deletedfor),
-			INDEX dellog_topic_deletedfor_low_hi (topic,deletedfor,low,hi),
-			INDEX dellog_deletedfor (deletedfor)
+			UNIQUE INDEX dellog_topic_delid_deletedfor(topic,delid,deletedfor),
+			INDEX dellog_topic_deletedfor_low_hi(topic,deletedfor,low,hi),
+			INDEX dellog_deletedfor(deletedfor)
 		);`); err != nil {
 		return err
 	}
@@ -341,14 +341,15 @@ func (a *adapter) CreateDb(reset bool) error {
 			createdat 	DATETIME(3) NOT NULL,
 			updatedat 	DATETIME(3) NOT NULL,	
 			method 		VARCHAR(16) NOT NULL,
-			value		VARCHAR(255) NOT NULL,
+			value		VARCHAR(128) NOT NULL,
+			synthetic	VARCHAR(255) NOT NULL,
 			userid 		BIGINT NOT NULL,
 			response	VARCHAR(255) NOT NULL,
 			done		TINYINT NOT NULL DEFAULT 0,
 			retries		INT NOT NULL DEFAULT 0,
 				
 			PRIMARY KEY(id),
-			UNIQUE credentials_method_value (method, value),
+			UNIQUE credentials_uniqueness(synthetic),
 			FOREIGN KEY(userid) REFERENCES users(id),
 		);`); err != nil {
 		return err
@@ -989,7 +990,7 @@ func (a *adapter) SubsUpdate(topic string, user t.Uid, update map[string]interfa
 // SubsDelete marks subscription as deleted.
 func (a *adapter) SubsDelete(topic string, user t.Uid) error {
 	now := t.TimeNow()
-	_, err := a.db.Exec("UPDATE subscriptions SET updatedAt=?, deletedAt=? WHERE topic=? AND userid=?",
+	_, err := a.db.Exec("UPDATE subscriptions SET updatedat=?, deletedat=? WHERE topic=? AND userid=?",
 		now, now, topic, store.DecodeUid(user))
 	return err
 }
@@ -997,7 +998,15 @@ func (a *adapter) SubsDelete(topic string, user t.Uid) error {
 // SubsDelForTopic marks all subscriptions to the given topic as deleted
 func (a *adapter) SubsDelForTopic(topic string) error {
 	now := t.TimeNow()
-	_, err := a.db.Exec("UPDATE subscriptions SET updatedAt=?, deletedAt=? WHERE topic=?", now, now, topic)
+	_, err := a.db.Exec("UPDATE subscriptions SET updatedat=?, deletedat=? WHERE topic=?", now, now, topic)
+	return err
+}
+
+// SubsDelForTopic marks user's subscriptions as deleted
+func (a *adapter) SubsDelForUser(user t.Uid) error {
+	now := t.TimeNow()
+	_, err := a.db.Exec("UPDATE subscriptions SET updatedat=?, deletedat=? WHERE userid=?",
+		now, now, store.DecodeUid(user))
 	return err
 }
 
@@ -1408,9 +1417,16 @@ func (a *adapter) DeviceDelete(uid t.Uid, deviceID string) error {
 
 // Credential management
 func (a *adapter) CredAdd(cred *t.Credential) error {
-	_, err := a.db.Exec("INSERT INTO credentials(createdat,updatedat,method,value,userid,response,done) "+
+	// Enforece uniqueness: if credential is confirmed, "method:value" must be unique.
+	// if credential is not yet confirmed, "userid:method:value" is unique.
+	synth := cred.Method + ":" + cred.Value
+	if !cred.Done {
+		synch = cred.User + ":" + synth
+	}
+	_, err := a.db.Exec("INSERT INTO credentials(createdat,updatedat,method,value,synthetic,userid,response,done) "+
 		"VALUES(?,?,?,?,?,?,?)",
-		cred.CreatedAt, cred.UpdatedAt, cred.Method, cred.Value, decodeString(cred.User), cred.Resp, cred.Done)
+		cred.CreatedAt, cred.UpdatedAt, cred.Method, cred.Value, synth,
+		decodeString(cred.User), cred.Resp, cred.Done)
 	if isDupe(err) {
 		return t.ErrDuplicate
 	}
@@ -1436,8 +1452,12 @@ func (a *adapter) CredDel(uid t.Uid, method string) error {
 }
 
 func (a *adapter) CredConfirm(uid t.Uid, method string) error {
-	_, err := a.db.Exec("UPDATE credentials SET done=1 WHERE userid=? AND method=?",
+	_, err := a.db.Exec(
+		"UPDATE credentials SET done=1,synthetic=CONCAT(method,':',value) WHERE userid=? AND method=?",
 		store.DecodeUid(uid), method)
+	if isDupe(err) {
+		return t.ErrDuplicate
+	}
 	return err
 }
 
@@ -1448,7 +1468,8 @@ func (a *adapter) CredFail(uid t.Uid, method string) error {
 }
 
 func (a *adapter) CredGet(uid t.Uid, method string) ([]*t.Credential, error) {
-	query := "SELECT createdat,updatedat,method,value,userid AS user,response,done,retries FROM credentials WHERE userid=?"
+	query := "SELECT createdat,updatedat,method,value,response,done,retries " +
+		"FROM credentials WHERE userid=?"
 	args := []interface{}{store.DecodeUid(uid)}
 	if method != "" {
 		query += " AND method=?"
@@ -1465,7 +1486,7 @@ func (a *adapter) CredGet(uid t.Uid, method string) ([]*t.Credential, error) {
 		if err = rows.StructScan(cred); err != nil {
 			break
 		}
-		cred.User = encodeString(cred.User).String()
+		cred.User = uid.String()
 		result = append(result, cred)
 	}
 	rows.Close()

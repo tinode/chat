@@ -5,11 +5,18 @@
 </head>
 
 <body>
-<p>
-    Hello {{.Name}}
-	<a href="{{.URL}}">Click</a> to confirm or enter the code {{.Code}}.
-</p>
-    
+
+<p>Hello.</p>
+
+<p>You're receiving this message because someone used your email to register at Tinode.</p> 
+
+<p><a href="https://api.tinode.co/x/example-react-js/#validate/email/code={{.Code}}">Click</a> to confirm 
+or enter the following code</p>
+<blockquote><tt>{{.Code}}</tt><blockquote>
+<p>at <a href="https://api.tinode.co/x/example-react-js/#validate/email">https://api.tinode.co/x/example-react-js/#validate/email</a>.</p> 
+
+<p>If you did not register at Tinode just ignore this message.</p>
+
 </body>
 
 </html>

@@ -829,6 +829,18 @@ func (a *adapter) SubsDelForTopic(topic string) error {
 	return err
 }
 
+// SubsDelForUser marks all subscriptions of a given user as deleted
+func (a *adapter) SubsDelForUser(user t.Uid) error {
+	now := t.TimeNow()
+	update := map[string]interface{}{
+		"UpdatedAt": now,
+		"DeletedAt": now,
+	}
+	_, err := rdb.DB(a.dbName).Table("subscriptions").GetAllByIndex("User", user.String()).
+		Update(update).RunWrite(a.conn)
+	return err
+}
+
 // Returns a list of users who match given tags, such as "email:jdoe@example.com" or "tel:18003287448".
 // Searching the 'users.Tags' for the given tags using respective index.
 func (a *adapter) FindUsers(uid t.Uid, tags []string) ([]t.Subscription, error) {
@@ -1237,6 +1249,12 @@ func (a *adapter) DeviceDelete(uid t.Uid, deviceID string) error {
 // Credential management
 func (a *adapter) CredAdd(cred *t.Credential) error {
 	cred.Id = cred.Method + ":" + cred.Value
+	if !cred.Done {
+		// If credential is not confirmed, it should not block others
+		// from attempting to validate it.
+		cred.Id = cred.Uid().String() + ":" + cred.Id
+	}
+
 	_, err := rdb.DB(a.dbName).Table("credentials").Insert(cred).RunWrite(a.conn)
 	if rdb.IsConflictErr(err) {
 		return t.ErrDuplicate
@@ -1267,12 +1285,34 @@ func (a *adapter) CredDel(uid t.Uid, method string) error {
 }
 
 func (a *adapter) CredConfirm(uid t.Uid, method string) error {
-	_, err := rdb.DB(a.dbName).Table("credentials").
-		GetAllByIndex("User", uid.String()).
-		Filter(map[string]interface{}{"Method": method}).
-		Update(map[string]interface{}{
-			"Done": true,
-		}).RunWrite(a.conn)
+	// RethinkDb does not allow primary key to be changed (userid:method:value -> method:value)
+	// We have to delete and re-insert with a different primary key.
+	cred, err := a.CredGet(uid, method)
+	if err != nil {
+		return err
+	}
+	if cred.Done {
+		// Already confirmed
+		return nil
+	}
+	cred.Done = true
+	if err = a.CredAdd(cred); err != nil {
+		if rdb.IsConflictErr(err) {
+			return t.ErrDuplicate
+		}
+		return err
+	}
+	cred.Id = cred.Method + ":" + cred.Value
+	if !cred.Done {
+		// If credential is not confirmed, it should not block others
+		// from attempting to validate it.
+		cred.Id = cred.Uid().String() + ":" + cred.Id
+	}
+	_, err := rdb.DB(a.dbName).
+		Table("credentials").
+		Get(uid.String() + ":" + cred.Method + ":" + cred.Value).
+		Delete(rdb.DeleteOpts{Durability: "soft", ReturnChanges: false}).
+		RunWrite(a.conn)
 	return err
 }
 
