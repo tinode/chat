@@ -1287,33 +1287,33 @@ func (a *adapter) CredDel(uid t.Uid, method string) error {
 func (a *adapter) CredConfirm(uid t.Uid, method string) error {
 	// RethinkDb does not allow primary key to be changed (userid:method:value -> method:value)
 	// We have to delete and re-insert with a different primary key.
-	cred, err := a.CredGet(uid, method)
+	creds, err := a.CredGet(uid, method)
 	if err != nil {
 		return err
 	}
-	if cred.Done {
+	if len(creds) == 0 {
+		return t.ErrNotFound
+	}
+	if creds[0].Done {
 		// Already confirmed
 		return nil
 	}
-	cred.Done = true
-	if err = a.CredAdd(cred); err != nil {
+
+	creds[0].Done = true
+	if err = a.CredAdd(creds[0]); err != nil {
 		if rdb.IsConflictErr(err) {
 			return t.ErrDuplicate
 		}
 		return err
 	}
-	cred.Id = cred.Method + ":" + cred.Value
-	if !cred.Done {
-		// If credential is not confirmed, it should not block others
-		// from attempting to validate it.
-		cred.Id = cred.Uid().String() + ":" + cred.Id
-	}
-	_, err := rdb.DB(a.dbName).
+
+	rdb.DB(a.dbName).
 		Table("credentials").
-		Get(uid.String() + ":" + cred.Method + ":" + cred.Value).
+		Get(uid.String() + ":" + creds[0].Method + ":" + creds[0].Value).
 		Delete(rdb.DeleteOpts{Durability: "soft", ReturnChanges: false}).
 		RunWrite(a.conn)
-	return err
+
+	return nil
 }
 
 func (a *adapter) CredFail(uid t.Uid, method string) error {

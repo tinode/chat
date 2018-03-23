@@ -225,8 +225,7 @@ func (UsersObjMapper) GetAll(uid ...types.Uid) ([]types.User, error) {
 	return adp.UserGetAll(uid...)
 }
 
-// Delete deletes a user record (not implemented).
-// TODO(gene): implement
+// Delete deletes user records.
 func (UsersObjMapper) Delete(id types.Uid, soft bool) error {
 	if !soft {
 		adp.SubsDelForUser(id)

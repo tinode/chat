@@ -42,6 +42,31 @@
 		}
 	},
 
+	"acc_validation": {
+		"email": {
+			"add_to_tags": true,
+			"required": ["auth"],
+			"config": {
+				"smtp_server": "smtp.example.com",
+				"sender": "noreply@example.com",
+				"sender_password": "super-sikrit-password",
+				"msg_body_templ": "./templ/email-validation-body.templ",
+				"msg_subject": "Tinode chat: confirm email",
+				"headers": [],
+				"max_retries": 4,
+				"debug_response": "123456"
+			}
+		},
+		"tel": {
+			"add_to_tags": true,
+			"config": {
+				"template": "./templ/sms-validation.templ",
+				"max_retries": 4,
+				"debug_response": "123456"
+			}
+		}		
+	},
+
 	"push": [
 		{
 			"name":"stdout",

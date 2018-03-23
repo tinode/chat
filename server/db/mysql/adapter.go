@@ -1421,7 +1421,7 @@ func (a *adapter) CredAdd(cred *t.Credential) error {
 	// if credential is not yet confirmed, "userid:method:value" is unique.
 	synth := cred.Method + ":" + cred.Value
 	if !cred.Done {
-		synch = cred.User + ":" + synth
+		synth = cred.User + ":" + synth
 	}
 	_, err := a.db.Exec("INSERT INTO credentials(createdat,updatedat,method,value,synthetic,userid,response,done) "+
 		"VALUES(?,?,?,?,?,?,?)",
@@ -1452,13 +1452,19 @@ func (a *adapter) CredDel(uid t.Uid, method string) error {
 }
 
 func (a *adapter) CredConfirm(uid t.Uid, method string) error {
-	_, err := a.db.Exec(
+	res, err := a.db.Exec(
 		"UPDATE credentials SET done=1,synthetic=CONCAT(method,':',value) WHERE userid=? AND method=?",
 		store.DecodeUid(uid), method)
-	if isDupe(err) {
-		return t.ErrDuplicate
+	if err != nil {
+		if isDupe(err) {
+			return t.ErrDuplicate
+		}
+		return err
 	}
-	return err
+	if numrows, _ := res.RowsAffected(); numrows < 1 {
+		return t.ErrNotFound
+	}
+	return nil
 }
 
 func (a *adapter) CredFail(uid t.Uid, method string) error {
