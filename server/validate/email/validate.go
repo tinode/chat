@@ -26,12 +26,14 @@ type validator struct {
 	DebugResponse  string `json:"debug_response"`
 	MaxRetries     int    `json:"max_retries"`
 	SMTPAddr       string `json:"smtp_server"`
+	SMTPPort       string `json:"smtp_port"`
 	htmlTempl      *ht.Template
 	auth           smtp.Auth
 }
 
 const (
-	maxRetries = 4
+	maxRetries  = 4
+	defaultPort = "25"
 )
 
 // Init: initialize validator.
@@ -53,6 +55,9 @@ func (v *validator) Init(jsonconf string) error {
 
 	if v.MaxRetries == 0 {
 		v.MaxRetries = maxRetries
+	}
+	if v.SMTPPort == "" {
+		v.SMTPPort = defaultPort
 	}
 
 	return nil
@@ -140,7 +145,7 @@ func (v *validator) Delete(user t.Uid) error {
 // Here are instructions for Google cloud:
 // https://cloud.google.com/appengine/docs/standard/go/mail/sending-receiving-with-mail-api
 func (v *validator) send(to string, subj string, body string) error {
-	if err := smtp.SendMail(v.SMTPAddr+":587", v.auth, v.SendFrom, []string{to},
+	if err := smtp.SendMail(v.SMTPAddr+":"+v.SMTPPort, v.auth, v.SendFrom, []string{to},
 		[]byte("To: "+to+
 			"\nSubject: "+
 			subj+

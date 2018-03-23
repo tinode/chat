@@ -112,17 +112,20 @@
    "createdAt": "-128h",
    "name": "*ABC",
    "owner": "carol",
+   "tags": ["flower", "flowers", "flora"],
    "public": {"fn": "Let's talk about flowers", "photo": "abc-64.jpg", "type": "jpg"}
   },
   {
    "createdAt": "-126h",
    "name": "*ABCDEF",
    "owner": "alice",
+   "tags": ["travel"],
    "public": {"fn": "Travel, travel, travel", "photo": "abcdef-64.jpg", "type": "jpg"}
   },
   {
    "createdAt": "-124h",
    "name": "*BF",
+   "tags": ["sikrit", "secret"],
    "public": {"fn": "Sikrit group!", "photo": "bf-64.jpg", "type": "jpg"}
   }
  ],

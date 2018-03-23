@@ -1248,11 +1248,13 @@ func (a *adapter) DeviceDelete(uid t.Uid, deviceID string) error {
 
 // Credential management
 func (a *adapter) CredAdd(cred *t.Credential) error {
+	// log.Println("saving credential", cred)
+
 	cred.Id = cred.Method + ":" + cred.Value
 	if !cred.Done {
 		// If credential is not confirmed, it should not block others
 		// from attempting to validate it.
-		cred.Id = cred.Uid().String() + ":" + cred.Id
+		cred.Id = cred.User + ":" + cred.Id
 	}
 
 	_, err := rdb.DB(a.dbName).Table("credentials").Insert(cred).RunWrite(a.conn)

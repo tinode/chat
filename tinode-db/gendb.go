@@ -128,6 +128,7 @@ func genDb(reset bool, dbsource string, data *Data) {
 				Auth: types.ModeCPublic,
 				Anon: types.ModeCReadOnly,
 			},
+			Tags:   gt.Tags,
 			Public: parsePublic(&gt.Public, data.datapath)}
 		var owner types.Uid
 		if gt.Owner != "" {

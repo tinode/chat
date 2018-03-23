@@ -69,6 +69,7 @@ type GroupTopic struct {
 	Name         string      `json:"name"`
 	Owner        string      `json:"owner"`
 	Public       vCardy      `json:"public"`
+	Tags         []string    `json:"tags"`
 	OwnerPrivate interface{} `json:"ownerPrivate"`
 }
 
@@ -80,7 +81,8 @@ GroupSub object in data.json
  "topic": "*ABC",
  "user": "alice"
  "want": "JRWPSA",
- "have": "JRWP"
+ "have": "JRWP",
+ "tags": ["super cool", "super", "cool"],
 */
 type GroupSub struct {
 	CreatedAt string      `json:"createdAt"`

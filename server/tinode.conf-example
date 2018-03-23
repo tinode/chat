@@ -48,6 +48,7 @@
 			"required": ["auth"],
 			"config": {
 				"smtp_server": "smtp.example.com",
+				"smtp_port": "25",
 				"sender": "noreply@example.com",
 				"sender_password": "super-sikrit-password",
 				"msg_body_templ": "./templ/email-validation-body.templ",
