@@ -546,7 +546,7 @@ func (s *Session) acc(msg *ClientComMessage) {
 			log.Println("missing credentials; have:", creds, "want:", globals.authValidators[authLvl])
 			// Attempt to delete incomplete user record
 			store.Users.Delete(user.Uid(), false)
-			_, missing := stringSliceDelta(globals.authValidators[s.authLvl], credentialMethods(creds))
+			_, missing := stringSliceDelta(globals.authValidators[authLvl], credentialMethods(creds))
 			s.queueOut(decodeStoreError(types.ErrPolicy, msg.Acc.Id, msg.timestamp,
 				map[string]interface{}{"creds": missing}))
 			return

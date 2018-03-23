@@ -88,7 +88,6 @@ func normalizeTags(src []string) []string {
 //   added :=  newSlice - (oldSlice & newSlice) -- present in new but missing in old
 //   removed := oldSlice - (oldSlice & newSlice) -- present in old but missing in new
 func stringSliceDelta(rold, rnew []string) (added, removed []string) {
-
 	if len(rold) == 0 && len(rnew) == 0 {
 		return nil, nil
 	}
