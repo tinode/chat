@@ -344,13 +344,12 @@ func (a *adapter) CreateDb(reset bool) error {
 			value		VARCHAR(128) NOT NULL,
 			synthetic	VARCHAR(255) NOT NULL,
 			userid 		BIGINT NOT NULL,
-			response	VARCHAR(255) NOT NULL,
+			resp		VARCHAR(255),
 			done		TINYINT NOT NULL DEFAULT 0,
-			retries		INT NOT NULL DEFAULT 0,
-				
+			retries		INT NOT NULL DEFAULT 0,		
 			PRIMARY KEY(id),
 			UNIQUE credentials_uniqueness(synthetic),
-			FOREIGN KEY(userid) REFERENCES users(id),
+			FOREIGN KEY(userid) REFERENCES users(id)
 		);`); err != nil {
 		return err
 	}
@@ -374,7 +373,7 @@ func (a *adapter) UserCreate(user *t.User) error {
 	}()
 
 	decoded_uid := store.DecodeUid(user.Uid())
-	_, err = tx.Exec("INSERT INTO users(id,createdAt,updatedAt,access,public,tags) VALUES(?,?,?,?,?,?)",
+	_, err = tx.Exec("INSERT INTO users(id,createdat,updatedat,access,public,tags) VALUES(?,?,?,?,?,?)",
 		decoded_uid,
 		user.CreatedAt, user.UpdatedAt,
 		user.Access, toJSON(user.Public), user.Tags)
@@ -1393,9 +1392,6 @@ func (a *adapter) DeviceGetAll(uids ...t.Uid) (map[t.Uid][]t.DeviceDef, int, err
 		}
 		uid := store.EncodeUid(device.Userid)
 		udev := result[uid]
-		if udev == nil {
-			udev = []t.DeviceDef{}
-		}
 		udev = append(udev, t.DeviceDef{
 			DeviceId: device.Deviceid,
 			Platform: device.Platform,
@@ -1423,8 +1419,8 @@ func (a *adapter) CredAdd(cred *t.Credential) error {
 	if !cred.Done {
 		synth = cred.User + ":" + synth
 	}
-	_, err := a.db.Exec("INSERT INTO credentials(createdat,updatedat,method,value,synthetic,userid,response,done) "+
-		"VALUES(?,?,?,?,?,?,?)",
+	_, err := a.db.Exec("INSERT INTO credentials(createdat,updatedat,method,value,synthetic,userid,resp,done) "+
+		"VALUES(?,?,?,?,?,?,?,?)",
 		cred.CreatedAt, cred.UpdatedAt, cred.Method, cred.Value, synth,
 		decodeString(cred.User), cred.Resp, cred.Done)
 	if isDupe(err) {
@@ -1474,7 +1470,7 @@ func (a *adapter) CredFail(uid t.Uid, method string) error {
 }
 
 func (a *adapter) CredGet(uid t.Uid, method string) ([]*t.Credential, error) {
-	query := "SELECT createdat,updatedat,method,value,response,done,retries " +
+	query := "SELECT createdat,updatedat,method,value,resp,done,retries " +
 		"FROM credentials WHERE userid=?"
 	args := []interface{}{store.DecodeUid(uid)}
 	if method != "" {
@@ -1488,12 +1484,12 @@ func (a *adapter) CredGet(uid t.Uid, method string) ([]*t.Credential, error) {
 
 	var result []*t.Credential
 	for rows.Next() {
-		var cred *t.Credential
-		if err = rows.StructScan(cred); err != nil {
+		var cred t.Credential
+		if err = rows.StructScan(&cred); err != nil {
 			break
 		}
 		cred.User = uid.String()
-		result = append(result, cred)
+		result = append(result, &cred)
 	}
 	rows.Close()
 
