@@ -432,7 +432,7 @@ func (a *adapter) AuthDelRecord(user t.Uid, unique string) error {
 
 // Delete user's all authentication records
 func (a *adapter) AuthDelAllRecords(uid t.Uid) (int, error) {
-	res, err := a.db.Exec("DELETE FROM basicauth WHERE userid=?", uid)
+	res, err := a.db.Exec("DELETE FROM basicauth WHERE userid=?", store.DecodeUid(uid))
 	if err != nil {
 		return 0, err
 	}
