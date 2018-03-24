@@ -28,6 +28,7 @@ The value of `buildstamp` will be sent by the server to the clients.
 
 ## Running a Standalone Server
 
+
 1. Run RethinkDB:
 	```
 	rethinkdb --bind all --daemon
@@ -48,7 +49,7 @@ The value of `buildstamp` will be sent by the server to the clients.
 
 4. Run server 
 	```
-	$GOPATH/bin/server -config=$GOPATH/src/github.com/tinode/chat/server/tinode.conf-example -static_data=$HOME/tinode/example-react-js/
+	$GOPATH/bin/server -config=$GOPATH/src/github.com/tinode/chat/server/tinode.conf -static_data=$HOME/tinode/example-react-js/
 	```
 
 5. Test your installation by pointing your browser to [http://localhost:6060/x/](http://localhost:6060/x/). Keep in mind that by default the static files from the `-static_data` path are served at `/x/`. You can change this by editing the line `static_mount` in the config file.
@@ -59,16 +60,18 @@ The value of `buildstamp` will be sent by the server to the clients.
 
 - Install RethinkDB, run it stanalone or in [cluster mode](https://www.rethinkdb.com/docs/start-a-server/#a-rethinkdb-cluster-using-multiple-machines). Run DB initializer, unpack JS files as described in the previous section.
 
-- Cluster expects at least two nodes. A minimum of three nodes is recommended. A sample cluster config file is provided as `cluster.conf`. The following section configures the cluster.
+- Cluster expects at least two nodes. A minimum of three nodes is recommended. 
+
+- The following section configures the cluster.
 
 ```
 	"cluster_config": {
+		"self": "",
 		"nodes": [
 			{"name": "one", "addr":"localhost:12001"},
 			{"name": "two", "addr":"localhost:12002"},
 			{"name": "three", "addr":"localhost:12003"}
 		],
-		"self": "one",
 		"failover": {
 			"enabled": true,
 			"heartbeat": 100,
@@ -77,8 +80,8 @@ The value of `buildstamp` will be sent by the server to the clients.
 		}
 	}
 ```
+* `self` is the name of the current node. Generally it's more convenient to specify the name of the current node at the command line using `cluster_self` option. Command line value overrides the config file value. If the value is not provided either in the config file or through the command line, the clustering is disabled. 
 * `nodes` defines individual cluster nodes. The sample defines three nodes named `one`, `two`, and `tree` running at the localhost at the specified cluster communication ports. Cluster addresses don't need to be exposed to the outside world.
-* `self` is the name of the current node. Generally it's more convenient to specify the name of the current node at the command line using `cluster_self` option. Command line value overrides the config file value.
 * `failover` is an experimental feature which migrates topics from failed cluster nodes keeping them accessible:
   * `enabled` turns on failover mode; failover mode requires at least three nodes in the cluster.
   * `heartbeat` interval in milliseconds between heartbeats sent by the leader node to follower nodes to ensure they are accessible.
@@ -87,8 +90,8 @@ The value of `buildstamp` will be sent by the server to the clients.
 
 If you are testing the cluster with all nodes running on the same host, you also must override the `listen` port. Here is an example for launching two cluster nodes from the same host using the same config file:
 ```
-./server -config=./cluster.conf -static_data=./example-react-js/ -listen=:6060 -cluster_self=one &
-./server -config=./cluster.conf -static_data=./example-react-js/ -listen=:6061 -cluster_self=two &
+./server -config=./tinode.conf -static_data=./example-react-js/ -listen=:6060 -cluster_self=one &
+./server -config=./tinode.conf -static_data=./example-react-js/ -listen=:6061 -cluster_self=two &
 ```
 
 ### Note on Running the Server in Background
@@ -112,9 +115,7 @@ For more details see https://github.com/tinode/chat/issues/25.
 
 2. Make sure MySQL (or MariaDB or Percona) is installed and running. The code has been tested with MySQL 5.7 but should work with earlier versions as well.
 
-3. Rename `tinode.conf-example` to `tinode.conf`
-
-4. Open `tinode.conf`. In the section `"store_config"` find `"use_adapter": "rethinkdb"` and replace it with `"use_adapter": "mysql"`. Check that the [DSN](https://github.com/go-sql-driver/mysql#dsn-data-source-name) in `"mysql"` section is appropriate for your MySQL installation. Option `parseTime=true` is required. 
+3. Open `tinode.conf`. In the section `"store_config"` find `"use_adapter": "rethinkdb"` and replace it with `"use_adapter": "mysql"`. Check that the [DSN](https://github.com/go-sql-driver/mysql#dsn-data-source-name) in `"mysql"` section is appropriate for your MySQL installation. Option `parseTime=true` is required. 
 ```js
 	"mysql": {
 		"dsn": "root@tcp(localhost)/tinode?parseTime=true",
@@ -122,4 +123,4 @@ For more details see https://github.com/tinode/chat/issues/25.
 	},
 ```
 
-5. Follow the instructions for running as a standalone server from step 2.
+4. Follow the instructions for running as a standalone server from step 2.

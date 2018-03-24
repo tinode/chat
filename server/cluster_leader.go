@@ -87,7 +87,7 @@ func (c *Cluster) failoverInit(config *clusterFailoverConfig) bool {
 		return false
 	}
 	if len(c.nodes) < 2 {
-		log.Printf("cluster: failover disabled; need at least 3 nodes, got %d only", len(c.nodes)+1)
+		log.Printf("cluster: failover disabled; need at least 3 nodes, got %d", len(c.nodes)+1)
 		return false
 	}
 
@@ -113,8 +113,6 @@ func (c *Cluster) failoverInit(config *clusterFailoverConfig) bool {
 		leaderPing:         make(chan *ClusterPing, config.VoteAfter),
 		electionVote:       make(chan *ClusterVote, len(c.nodes)),
 		done:               make(chan bool, 1)}
-
-	go c.run()
 
 	log.Println("cluster: failover mode enabled")
 

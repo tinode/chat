@@ -5,6 +5,7 @@ package main
 import (
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -294,6 +295,55 @@ func getDefaultAccess(cat types.TopicCat, auth bool) types.AccessMode {
 	default:
 		panic("Unknown topic category")
 	}
+}
+
+// Parses version of format 0.13.xx or 0.13-xx or 0.13
+// The major and minor parts must be valid, the last part is ignored if missing or unparceable.
+func parseVersion(vers string) int {
+	var major, minor, trailer int
+	var err error
+
+	dot := strings.Index(vers, ".")
+	if dot >= 0 {
+		major, err = strconv.Atoi(vers[:dot])
+	} else {
+		major, err = strconv.Atoi(vers)
+	}
+	if err != nil {
+		return 0
+	}
+
+	dot2 := strings.IndexAny(vers[dot+1:], ".-")
+	if dot2 > 0 {
+		minor, err = strconv.Atoi(vers[dot+1 : dot2])
+		// Ignoring the error here
+		trailer, _ = strconv.Atoi(vers[dot2+1:])
+	} else {
+		minor, err = strconv.Atoi(vers[dot+1:])
+	}
+	if err != nil {
+		return 0
+	}
+
+	if major < 0 || minor < 0 || trailer < 0 || minor >= 0xff || trailer >= 0xff {
+		return 0
+	}
+
+	return (major << 16) | (minor << 8) | trailer
+}
+
+func versionToString(vers int) string {
+	str := strconv.Itoa(vers>>16) + "." + strconv.Itoa((vers>>8)&0xff)
+	if vers&0xff != 0 {
+		str += "-" + strconv.Itoa(vers&0xff)
+	}
+	return str
+}
+
+// Returns > 0 if v1 > v2; zero if equal; < 0 if v1 < v2
+// Only Major and Minor parts are compared, the trailer is ignored.
+func versionCompare(v1, v2 int) int {
+	return (v1 >> 8) - (v2 >> 8)
 }
 
 func max(a, b int) int {

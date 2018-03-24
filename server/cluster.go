@@ -7,6 +7,7 @@ import (
 	"log"
 	"net"
 	"net/rpc"
+	"sort"
 	"sync"
 	"time"
 
@@ -258,6 +259,9 @@ type Cluster struct {
 	// Name of the local node
 	thisNodeName string
 
+	// Resolved address to listed on
+	listenOn string
+
 	// Socket for inbound connections
 	inbound *net.TCPListener
 	// Ring hash for mapping topic names to nodes
@@ -414,15 +418,16 @@ func (c *Cluster) sessionGone(sess *Session) error {
 	return nil
 }
 
-func clusterInit(configString json.RawMessage, self *string) {
+// Returns snowflake worker id
+func clusterInit(configString json.RawMessage, self *string) int {
 	if globals.cluster != nil {
-		log.Fatal("Cluster already initialized")
+		log.Fatal("Cluster already initialized.")
 	}
 
 	// This is a standalone server, not initializing
-	if configString == nil || len(configString) == 0 {
+	if len(configString) == 0 {
 		log.Println("Running as a standalone server.")
-		return
+		return 1
 	}
 
 	var config clusterConfig
@@ -430,21 +435,30 @@ func clusterInit(configString json.RawMessage, self *string) {
 		log.Fatal(err)
 	}
 
-	gob.Register([]interface{}{})
-	gob.Register(map[string]interface{}{})
-
 	thisName := *self
 	if thisName == "" {
 		thisName = config.ThisName
 	}
+
+	// Name of the current node is not specified - disable clustering
+	if thisName == "" {
+		log.Println("Running as a standalone server.")
+		return 1
+	}
+
+	gob.Register([]interface{}{})
+	gob.Register(map[string]interface{}{})
+
 	globals.cluster = &Cluster{
 		thisNodeName: thisName,
 		nodes:        make(map[string]*ClusterNode)}
 
-	listenOn := ""
+	var nodeNames []string
 	for _, host := range config.Nodes {
-		if host.Name == globals.cluster.thisNodeName {
-			listenOn = host.Addr
+		nodeNames = append(nodeNames, host.Name)
+
+		if host.Name == thisName {
+			globals.cluster.listenOn = host.Addr
 			// Don't create a cluster member for this local instance
 			continue
 		}
@@ -453,7 +467,6 @@ func clusterInit(configString json.RawMessage, self *string) {
 			address: host.Addr,
 			name:    host.Name,
 			done:    make(chan bool, 1)}
-		go n.reconnect()
 
 		globals.cluster.nodes[host.Name] = &n
 	}
@@ -467,21 +480,10 @@ func clusterInit(configString json.RawMessage, self *string) {
 		globals.cluster.rehash(nil)
 	}
 
-	addr, err := net.ResolveTCPAddr("tcp", listenOn)
-	if err != nil {
-		log.Fatal(err)
-	}
+	sort.Strings(nodeNames)
+	workerId := sort.SearchStrings(nodeNames, thisName) + 1
 
-	globals.cluster.inbound, err = net.ListenTCP("tcp", addr)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	rpc.Register(globals.cluster)
-	go rpc.Accept(globals.cluster.inbound)
-
-	log.Printf("Cluster of %d nodes initialized, node '%s' listening on [%s]", len(globals.cluster.nodes)+1,
-		globals.cluster.thisNodeName, listenOn)
+	return workerId
 }
 
 // This is a session handler at a master node: forward messages from the master to the session origin.
@@ -535,6 +537,38 @@ func (sess *Session) closeRPC() {
 	if sess.proto == CLUSTER {
 		log.Println("cluster: session closed at master")
 	}
+}
+
+// Start accepting connections.
+func (c *Cluster) start() {
+	addr, err := net.ResolveTCPAddr("tcp", c.listenOn)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	c.inbound, err = net.ListenTCP("tcp", addr)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	for _, n := range c.nodes {
+		go n.reconnect()
+	}
+
+	if c.fo != nil {
+		go c.run()
+	}
+
+	err = rpc.Register(c)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	go rpc.Accept(c.inbound)
+
+	log.Printf("Cluster of %d nodes initialized, node '%s' listening on [%s]", len(globals.cluster.nodes)+1,
+		globals.cluster.thisNodeName, c.listenOn)
 }
 
 func (c *Cluster) shutdown() {

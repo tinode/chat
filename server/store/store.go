@@ -20,15 +20,13 @@ var uGen types.UidGenerator
 type configType struct {
 	// Name of the adapter to use.
 	UseAdapter string `json:"use_adapter"`
-	// The following two values ate used to initialize types.UidGenerator
-	// Snowflake workerId, beteween 0 and 1023
-	WorkerID int `json:"worker_id"`
-	// 16-byte key for XTEA
-	UidKey   []byte                     `json:"uid_key"`
+	// 16-byte key for XTEA. Used to initialize types.UidGenerator
+	UidKey []byte `json:"uid_key"`
+	// Configurations for individual adapters.
 	Adapters map[string]json.RawMessage `json:"adapters"`
 }
 
-func openAdapter(jsonconf string) error {
+func openAdapter(workerId int, jsonconf string) error {
 	var config configType
 	if err := json.Unmarshal([]byte(jsonconf), &config); err != nil {
 		return errors.New("store: failed to parse config: " + err.Error() + "(" + jsonconf + ")")
@@ -44,7 +42,11 @@ func openAdapter(jsonconf string) error {
 	}
 
 	// Initialise snowflake
-	if err := uGen.Init(uint(config.WorkerID), config.UidKey); err != nil {
+	if workerId < 0 || workerId > 1023 {
+		return errors.New("store: invalid worker ID")
+	}
+
+	if err := uGen.Init(uint(workerId), config.UidKey); err != nil {
 		return errors.New("store: failed to init snowflake: " + err.Error())
 	}
 
@@ -59,8 +61,8 @@ func openAdapter(jsonconf string) error {
 // Open initializes the persistence system. Adapter holds a connection pool for a database instance.
 // 	 name - name of the adapter rquested in the config file
 //   jsonconf - configuration string
-func Open(jsonconf string) error {
-	if err := openAdapter(jsonconf); err != nil {
+func Open(workerId int, jsonconf string) error {
+	if err := openAdapter(workerId, jsonconf); err != nil {
 		return err
 	}
 	if err := adp.CheckDbVersion(); err != nil {
@@ -92,7 +94,7 @@ func IsOpen() bool {
 // If it's non-nil, it will use the config string to open the DB connection first.
 func InitDb(jsonconf string, reset bool) error {
 	if !IsOpen() {
-		if err := openAdapter(jsonconf); err != nil {
+		if err := openAdapter(1, jsonconf); err != nil {
 			return err
 		}
 	}

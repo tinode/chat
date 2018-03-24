@@ -341,7 +341,7 @@ func (a *adapter) CreateDb(reset bool) error {
 			createdat 	DATETIME(3) NOT NULL,
 			updatedat 	DATETIME(3) NOT NULL,	
 			method 		VARCHAR(16) NOT NULL,
-			value		VARCHAR(128) NOT NULL,
+			value		VARCHAR(192) NOT NULL,
 			synthetic	VARCHAR(255) NOT NULL,
 			userid 		BIGINT NOT NULL,
 			resp		VARCHAR(255),

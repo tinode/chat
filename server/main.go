@@ -14,15 +14,15 @@ import (
 	"encoding/json"
 	_ "expvar"
 	"flag"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
 	"runtime"
-	"strconv"
 	"strings"
 	"time"
 
+	// For stripping comments from JSON config
+	jcr "github.com/DisposaBoy/JsonConfigReader"
 	gzip "github.com/gorilla/handlers"
 
 	// Authenticators
@@ -183,9 +183,9 @@ func main() {
 	log.Printf("Using config from '%s'", *configfile)
 
 	var config configType
-	if raw, err := ioutil.ReadFile(*configfile); err != nil {
+	if file, err := os.Open(*configfile); err != nil {
 		log.Fatal("Failed to read config file:", err)
-	} else if err = json.Unmarshal(raw, &config); err != nil {
+	} else if err = json.NewDecoder(jcr.New(file)).Decode(&config); err != nil {
 		log.Fatal("Failed to parse config file:", err)
 	}
 
@@ -193,7 +193,11 @@ func main() {
 		config.Listen = *listenOn
 	}
 
-	var err = store.Open(string(config.Store))
+	// Initialize cluster and receive calculated workerId.
+	// Cluster won't be started here yet.
+	workerId := clusterInit(config.Cluster, clusterSelf)
+
+	var err = store.Open(workerId, string(config.Store))
 	if err != nil {
 		log.Fatal("Failed to connect to DB:", err)
 	}
@@ -202,6 +206,9 @@ func main() {
 		log.Println("Closed database connection(s)")
 		log.Println("All done, good bye")
 	}()
+
+	// API key signing secret
+	globals.apiKeySalt = config.APIKeySalt
 
 	for name, jsconf := range config.Auth {
 		if authhdl := store.GetAuthHandler(name); authhdl == nil {
@@ -243,25 +250,6 @@ func main() {
 			addToTags:       vconf.AddToTags}
 	}
 
-	err = push.Init(string(config.Push))
-	if err != nil {
-		log.Fatal("Failed to initialize push notifications: ", err)
-	}
-	defer func() {
-		push.Stop()
-		log.Println("Stopped push notifications")
-	}()
-
-	// Keep inactive LP sessions for 15 seconds
-	globals.sessionStore = NewSessionStore(idleSessionTimeout + 15*time.Second)
-	// The hub (the main message router)
-	globals.hub = newHub()
-	// Cluster initialization
-	clusterInit(config.Cluster, clusterSelf)
-	// Intialize plugins
-	pluginsInit(config.Plugin)
-	// API key signing secret
-	globals.apiKeySalt = config.APIKeySalt
 	// List of tags for user discovery which cannot be changed directly by the client.
 	globals.restrictedTags = make(map[string]bool, len(config.Validator))
 	for tag, _ := range config.Validator {
@@ -285,6 +273,28 @@ func main() {
 	if globals.maxTagCount <= 0 {
 		globals.maxTagCount = defaultMaxTagCount
 	}
+
+	err = push.Init(string(config.Push))
+	if err != nil {
+		log.Fatal("Failed to initialize push notifications: ", err)
+	}
+	defer func() {
+		push.Stop()
+		log.Println("Stopped push notifications")
+	}()
+
+	// Keep inactive LP sessions for 15 seconds
+	globals.sessionStore = NewSessionStore(idleSessionTimeout + 15*time.Second)
+	// The hub (the main message router)
+	globals.hub = newHub()
+
+	// Start accepting cluster traffic.
+	if globals.cluster != nil {
+		globals.cluster.start()
+	}
+
+	// Intialize plugins
+	pluginsInit(config.Plugin)
 
 	// Serve static content from the directory in -static_data flag if that's
 	// available, otherwise assume '<current dir>/static'. The content is served at
@@ -347,53 +357,4 @@ func getAPIKey(req *http.Request) string {
 		apikey = req.Header.Get("X-Tinode-APIKey")
 	}
 	return apikey
-}
-
-// Parses version of format 0.13.xx or 0.13-xx or 0.13
-// The major and minor parts must be valid, the last part is ignored if missing or unparceable.
-func parseVersion(vers string) int {
-	var major, minor, trailer int
-	var err error
-
-	dot := strings.Index(vers, ".")
-	if dot >= 0 {
-		major, err = strconv.Atoi(vers[:dot])
-	} else {
-		major, err = strconv.Atoi(vers)
-	}
-	if err != nil {
-		return 0
-	}
-
-	dot2 := strings.IndexAny(vers[dot+1:], ".-")
-	if dot2 > 0 {
-		minor, err = strconv.Atoi(vers[dot+1 : dot2])
-		// Ignoring the error here
-		trailer, _ = strconv.Atoi(vers[dot2+1:])
-	} else {
-		minor, err = strconv.Atoi(vers[dot+1:])
-	}
-	if err != nil {
-		return 0
-	}
-
-	if major < 0 || minor < 0 || trailer < 0 || minor >= 0xff || trailer >= 0xff {
-		return 0
-	}
-
-	return (major << 16) | (minor << 8) | trailer
-}
-
-func versionToString(vers int) string {
-	str := strconv.Itoa(vers>>16) + "." + strconv.Itoa((vers>>8)&0xff)
-	if vers&0xff != 0 {
-		str += "-" + strconv.Itoa(vers&0xff)
-	}
-	return str
-}
-
-// Returns > 0 if v1 > v2; zero if equal; < 0 if v1 < v2
-// Only Major and Minor parts are compared, the trailer is ignored.
-func versionCompare(v1, v2 int) int {
-	return (v1 >> 8) - (v2 >> 8)
 }

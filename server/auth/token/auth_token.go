@@ -62,7 +62,7 @@ func (ta *authenticator) Init(jsonconf string) error {
 		return errors.New("auth_token: failed to parse config: " + err.Error() + "(" + jsonconf + ")")
 	}
 
-	if config.Key == nil || len(config.Key) < tokenMinHmacLength {
+	if len(config.Key) < tokenMinHmacLength {
 		return errors.New("auth_token: the key is missing or too short")
 	}
 	if config.ExpireIn <= 0 {
