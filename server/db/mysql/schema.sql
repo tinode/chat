@@ -150,11 +150,11 @@ CREATE TABLE dellog(
 	PRIMARY KEY(id),
 	FOREIGN KEY(topic) REFERENCES topics(name),
 	# For getting the list of deleted message ranges
-	UNIQUE INDEX dellog_topic_delid_deletedfor (topic,delid,deletedfor),
-	# Used when getting not-yet-deleted messages (messages LEFT JOIN dellog)
-	INDEX dellog_topic_deletedfor_low_hi (topic,deletedfor,low,hi), 
+	UNIQUE INDEX dellog_topic_delid_deletedfor(topic,delid,deletedfor),
+	# Used when getting not-yet-deleted messages(messages LEFT JOIN dellog)
+	INDEX dellog_topic_deletedfor_low_hi(topic,deletedfor,low,hi), 
 	# Used when deleting a user
-	INDEX dellog_deletedfor (deletedfor)
+	INDEX dellog_deletedfor(deletedfor)
 );
 
 # User credentials
@@ -163,13 +163,14 @@ CREATE TABLE credentials(
 	createdat 	DATETIME(3) NOT NULL,
 	updatedat 	DATETIME(3) NOT NULL,	
 	method 		VARCHAR(16) NOT NULL,
-	value		VARCHAR(255) NOT NULL,
+	value		VARCHAR(192) NOT NULL,
+	synthetic	VARCHAR(255) NOT NULL,
 	userid 		BIGINT NOT NULL,
-	response	VARCHAR(255) NOT NULL,
+	resp		VARCHAR(255) NOT NULL,
 	done		TINYINT NOT NULL DEFAULT 0,
 	retries		INT NOT NULL DEFAULT 0,
 		
 	PRIMARY KEY(id),
-	UNIQUE credentials_method_value (method, value),
+	UNIQUE credentials_uniqueness(synthetic),
 	FOREIGN KEY(userid) REFERENCES users(id),
 );
