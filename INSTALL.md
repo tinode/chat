@@ -66,12 +66,15 @@ The value of `buildstamp` will be sent by the server to the clients.
 
 ```
 	"cluster_config": {
+		// Name of the current node.
 		"self": "",
+		// List of all cluster nodes, including the current one.
 		"nodes": [
 			{"name": "one", "addr":"localhost:12001"},
 			{"name": "two", "addr":"localhost:12002"},
 			{"name": "three", "addr":"localhost:12003"}
 		],
+		// Configuration of failover feature. Don't change.
 		"failover": {
 			"enabled": true,
 			"heartbeat": 100,
