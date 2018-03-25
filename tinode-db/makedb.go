@@ -6,9 +6,11 @@ import (
 	"io/ioutil"
 	"log"
 	"math/rand"
+	"os"
 	"path/filepath"
 	"time"
 
+	jcr "github.com/DisposaBoy/JsonConfigReader"
 	_ "github.com/tinode/chat/server/db/mysql"
 	_ "github.com/tinode/chat/server/db/rethinkdb"
 	"github.com/tinode/chat/server/store"
@@ -160,19 +162,16 @@ func main() {
 			log.Fatal(err)
 		}
 	}
+
+	rand.Seed(time.Now().UnixNano())
 	data.datapath, _ = filepath.Split(*datafile)
-	if *conffile != "" {
-		rand.Seed(time.Now().UnixNano())
 
-		var config configType
-		if raw, err := ioutil.ReadFile(*conffile); err != nil {
-			log.Fatal(err)
-		} else if err = json.Unmarshal(raw, &config); err != nil {
-			log.Fatal(err)
-		}
-
-		genDb(*reset, string(config.StoreConfig), &data)
-	} else {
-		log.Println("No config provided. Exiting.")
+	var config configType
+	if file, err := os.Open(*conffile); err != nil {
+		log.Fatal("Failed to read config file:", err)
+	} else if err = json.NewDecoder(jcr.New(file)).Decode(&config); err != nil {
+		log.Fatal("Failed to parse config file:", err)
 	}
+
+	genDb(*reset, string(config.StoreConfig), &data)
 }
