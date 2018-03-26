@@ -643,15 +643,19 @@ func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 						dGiven: types.ModeNone.Delta(pud2.modeGiven),
 						actor:  sreg.sess.uid.UserId()}, "", false)
 
+					// Notify current user's 'me' topic to accept notifications from user2
+					t.presSingleUserOffline(sreg.sess.uid, "?none+en", nilPresParams, "", false)
+
 					// Initiate exchange of 'online' status with the other user.
 					// We don't know if the current user is online in the 'me' topic,
 					// so sending an '?unkn' status to user2. His 'me' topic
-					// will report user2's status and request an actual status from user1.
+					// will reply with user2's status and request an actual status from user1.
 					if (pud2.modeGiven & pud2.modeWant).IsPresencer() {
 						// If user2 should receive notifications, enable it.
 						enable = "+en"
 					}
 					t.presSingleUserOffline(user2, "?unkn"+enable, nilPresParams, "", false)
+
 				} else if t.cat == types.TopicCatGrp {
 					// Enable notifications for a new topic, if appropriate
 					if (pud.modeGiven & pud.modeWant).IsPresencer() {

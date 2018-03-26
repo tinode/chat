@@ -72,6 +72,7 @@ func (t *Topic) loadContacts(uid types.Uid) error {
 // The originating topic reports its own status in 'what' as "on", "off", "gone" or "?unkn".
 // 	"on" - requester came online
 // 	"off" - requester is offline now
+//  "?none" - requester status is unknown, but don't request a response and don't forward to clients.
 //  "gone" - topic deleted or otherwise gone - equivalent of "off+remove"
 //	"?unkn" - requester wants to initiate online status exchange but it's own status is unknown yet. This
 //  notifications is not forwarded to users.
@@ -98,6 +99,8 @@ func (t *Topic) presProcReq(fromUserID string, what string, wantReply bool) stri
 	case "on":
 		online = true
 	case "off":
+	case "?none":
+		what = ""
 	case "gone":
 		cmd = "rem"
 	case "?unkn":
@@ -113,8 +116,8 @@ func (t *Topic) presProcReq(fromUserID string, what string, wantReply bool) stri
 	//	t.name, fromUserID, what, cmd, reqReply)
 
 	if t.cat == types.TopicCatMe {
-		// Find if the contact is listed.
 
+		// Find if the contact is listed.
 		if psd, ok := t.perSubs[fromUserID]; ok {
 			//log.Printf("presProcReq: topic[%s]: requester %s in list; enabled=%v, online=%v",
 			//	t.name, fromUserID, psd.enabled, psd.online)
@@ -141,16 +144,6 @@ func (t *Topic) presProcReq(fromUserID string, what string, wantReply bool) stri
 						// Was active and online before: skip unnecessary update.
 						what = ""
 					}
-				} else if cmd == "dis" {
-					if psd.enabled {
-						psd.enabled = false
-						if !psd.online {
-							what = ""
-						}
-					} else {
-						// Was disabled and consequently offline before, still offline - skip the update.
-						what = ""
-					}
 				} else {
 					panic("presProcReq: unknown command '" + cmd + "'")
 				}
@@ -160,7 +153,8 @@ func (t *Topic) presProcReq(fromUserID string, what string, wantReply bool) stri
 			}
 
 		} else if cmd != "rem" {
-			// log.Printf("presProcReq: topic[%s]: requester %s NOT in list, adding", t.name, fromUserID)
+			//log.Printf("presProcReq: topic[%s]: requester %s NOT in list, adding, online=%v, cmd='%s'",
+			//	t.name, fromUserID, online, cmd)
 
 			// Got request from a new topic. This must be a new subscription. Record it.
 			// If it's unknown, recording it as offline.
@@ -192,6 +186,7 @@ func (t *Topic) presProcReq(fromUserID string, what string, wantReply bool) stri
 		// log.Printf("presProcReq: topic[%s]: replying to %s with own status='%s', wantReply=%v",
 		// 	t.name, fromUserID, replyAs, reqReply)
 	}
+	//log.Println("what is '", what, "'")
 
 	return what
 }
