@@ -78,8 +78,8 @@ func (t *Topic) loadContacts(uid types.Uid) error {
 //  notifications is not forwarded to users.
 //
 // If status is followed by command "+en" then the current user should accept incoming notifications
-// from the user2. "+rem" means the subscription is removed.
-// The "+en/rem" command itself is stripped from the notification.
+// from the user2; "+rem" means the subscription is removed. "+dis" is the opposite of "en".
+// The "+en/rem/dis" command itself is stripped from the notification.
 func (t *Topic) presProcReq(fromUserID string, what string, wantReply bool) string {
 
 	var reqReply, online bool
@@ -142,6 +142,16 @@ func (t *Topic) presProcReq(fromUserID string, what string, wantReply bool) stri
 						psd.enabled = true
 					} else if psd.online == online {
 						// Was active and online before: skip unnecessary update.
+						what = ""
+					}
+				} else if cmd == "dis" {
+					if psd.enabled {
+						psd.enabled = false
+						if !psd.online {
+							what = ""
+						}
+					} else {
+						// Was disabled and consequently offline before, still offline - skip the update.
 						what = ""
 					}
 				} else {
