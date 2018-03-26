@@ -579,7 +579,7 @@ func (a *adapter) TopicCreate(topic *t.Topic) error {
 }
 
 // If upsert = true - update subscription on duplicate key, otherwise ignore the duplicate.
-func createSubscription(tx *sqlx.Tx, sub *t.Subscription, upsert bool) error {
+func createSubscription(tx *sqlx.Tx, sub *t.Subscription) error {
 
 	jpriv := toJSON(sub.Private)
 	_, err := tx.Exec(
@@ -591,15 +591,11 @@ func createSubscription(tx *sqlx.Tx, sub *t.Subscription, upsert bool) error {
 		jpriv)
 
 	if err != nil && isDupe(err) {
-		if upsert {
-			_, err = tx.Exec(
-				"UPDATE subscriptions SET createdAt=?,updatedAt=?,deletedAt=NULL,modeWant=?,modeGiven=?,private=?",
-				sub.CreatedAt, sub.UpdatedAt,
-				sub.ModeWant.String(), sub.ModeGiven.String(),
-				jpriv)
-		} else {
-			err = nil
-		}
+		_, err = tx.Exec(
+			"UPDATE subscriptions SET createdAt=?,updatedAt=?,deletedAt=NULL,modeWant=?,modeGiven=?,private=?",
+			sub.CreatedAt, sub.UpdatedAt,
+			sub.ModeWant.String(), sub.ModeGiven.String(),
+			jpriv)
 	}
 	return err
 }
@@ -616,12 +612,12 @@ func (a *adapter) TopicCreateP2P(initiator, invited *t.Subscription) error {
 		}
 	}()
 
-	err = createSubscription(tx, initiator, true)
+	err = createSubscription(tx, initiator)
 	if err != nil {
 		return err
 	}
 
-	err = createSubscription(tx, invited, false)
+	err = createSubscription(tx, invited)
 	if err != nil {
 		return err
 	}
@@ -829,7 +825,7 @@ func (a *adapter) TopicShare(shares []*t.Subscription) (int, error) {
 	}()
 
 	for _, sub := range shares {
-		err = createSubscription(tx, sub, true)
+		err = createSubscription(tx, sub)
 		if err != nil {
 			return 0, err
 		}

@@ -442,23 +442,9 @@ func (a *adapter) TopicCreate(topic *t.Topic) error {
 
 // TopicCreateP2P given two users creates a p2p topic
 func (a *adapter) TopicCreateP2P(initiator, invited *t.Subscription) error {
-	initiator.Id = initiator.Topic + ":" + initiator.User
-	// Don't care if the initiator changes own subscription
-	_, err := rdb.DB(a.dbName).Table("subscriptions").Insert(initiator, rdb.InsertOpts{Conflict: "replace"}).
-		RunWrite(a.conn)
+	_, err := a.TopicShare([]*t.Subscription{initiator, invited})
 	if err != nil {
 		return err
-	}
-
-	// Ensure this is a new subscription. If one already exist, don't overwrite it
-	invited.Id = invited.Topic + ":" + invited.User
-	_, err = rdb.DB(a.dbName).Table("subscriptions").Insert(invited, rdb.InsertOpts{Conflict: "error"}).
-		RunWrite(a.conn)
-	if err != nil {
-		// Is this a duplicate subscription? If so, ifnore it. Otherwise it's a genuine DB error
-		if !rdb.IsConflictErr(err) {
-			return err
-		}
 	}
 
 	topic := &t.Topic{ObjHeader: t.ObjHeader{Id: initiator.Topic}}
@@ -643,9 +629,9 @@ func (a *adapter) TopicShare(shares []*t.Subscription) (int, error) {
 		shares[i].Id = shares[i].Topic + ":" + shares[i].User
 	}
 	// Subscription could have been marked as deleted (DeletedAt != nil). If it's marked
-	// as deleted, unmark.
+	// as deleted, unmark by replacing the old subscription with the new one.
 	resp, err := rdb.DB(a.dbName).Table("subscriptions").
-		Insert(shares, rdb.InsertOpts{Conflict: "update"}).RunWrite(a.conn)
+		Insert(shares, rdb.InsertOpts{Conflict: "replace"}).RunWrite(a.conn)
 	if err != nil {
 		return resp.Inserted + resp.Replaced, err
 	}

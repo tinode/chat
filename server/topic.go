@@ -1416,7 +1416,7 @@ func (t *Topic) replySetDesc(sess *Session, set *MsgClientSet) error {
 	return nil
 }
 
-// replyGetSub is a response to a get.sub request on a topic - load a list of subscriptions/subscribers,
+// ub is a response to a get.sub request on a topic - load a list of subscriptions/subscribers,
 // send it just to the session as a {meta} packet
 // FIXME(gene): reject request if the user does not have the R permission
 func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
@@ -1451,7 +1451,7 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 			}
 		}
 	} else {
-		// TODO(gene): don't load subs from DB, use perUserData - it already contains subscriptions.
+		// FIXME(gene): don't load subs from DB, use perUserData - it already contains subscriptions.
 		subs, err = store.Topics.GetUsersAny(t.name)
 		userData := t.perUser[sess.uid]
 		isSharer = (userData.modeGiven & userData.modeWant).IsSharer()

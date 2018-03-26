@@ -9,6 +9,8 @@ import (
 	"math/rand"
 	"net/mail"
 	"net/smtp"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -44,6 +46,15 @@ func (v *validator) Init(jsonconf string) error {
 	}
 
 	v.auth = smtp.PlainAuth("", v.SendFrom, v.SenderPassword, v.SMTPAddr)
+
+	// If a relative path is provided, try to resolve it relative to the exec file location,
+	// not whatever directory the user is in.
+	if !filepath.IsAbs(v.TemplateFile) {
+		basepath, err := os.Executable()
+		if err != nil {
+			v.TemplateFile = filepath.Join(filepath.Dir(basepath), v.TemplateFile)
+		}
+	}
 
 	v.htmlTempl, err = ht.ParseFiles(v.TemplateFile)
 	if err != nil {
