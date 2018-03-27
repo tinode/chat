@@ -434,9 +434,8 @@ func (t *Topic) presPubMessageCount(uid types.Uid, recv, read int, skip string) 
 	if what != "" {
 		// Announce to user's other sessions on 'me' only if they are not attached to this topic.
 		// Attached topics will receive an {info}
+
 		t.presSingleUserOffline(uid, what, &PresParams{seqID: seq}, skip, true)
-	} else {
-		log.Printf("Case U: topic[%s] invalid request - missing payload", t.name)
 	}
 }
 
