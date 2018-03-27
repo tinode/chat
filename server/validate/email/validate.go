@@ -51,7 +51,7 @@ func (v *validator) Init(jsonconf string) error {
 	// not whatever directory the user is in.
 	if !filepath.IsAbs(v.TemplateFile) {
 		basepath, err := os.Executable()
-		if err != nil {
+		if err == nil {
 			v.TemplateFile = filepath.Join(filepath.Dir(basepath), v.TemplateFile)
 		}
 	}
