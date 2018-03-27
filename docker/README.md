@@ -1,13 +1,15 @@
 # Using Docker to run Tinode
 
-1. [Install Docker](https://docs.docker.com/install/) 1.8 or above. The provided dockerfiles are dependent on [Docker networking](https://docs.docker.com/network/) which may may not work with the older Docker. 
+1. [Install Docker](https://docs.docker.com/install/) 1.8 or above. The provided dockerfiles are dependent on [Docker networking](https://docs.docker.com/network/) which may not work with the older Docker.
 
-2. Create a bridge network. It's used to connect application containers with the database container. 
+2. `cd` to the docker directory. The following instructions assume that your current directory is `tinode_root_directory/docker`, where `tinode_root_directory` is the directory where you cloned the https://github.com/tinode/chat depository.
+
+3. Create a bridge network. It's used to connect application containers with the database container. 
 	```
 	$ docker network create tinode-net
 	```
 	
-3. Select which database backend you want to use: RethinkDB (default) or MySQL (experimental). Run the selected database container, attaching it to `tinode-net` network:
+4. Decide which database backend you want to use: RethinkDB (default) or MySQL (experimental). Run the selected database container, attaching it to `tinode-net` network:
 
 	1. **RethinkDB**: If you've decided to use RethinkDB backend, run the official RethinkDB Docker container:
 	```
@@ -24,7 +26,7 @@
 	The name `rethinkdb` or `mysql` in the `--name` assignment is important. It's used by other containers as a database's host name.
 
 
-4. Build the initializer image for the selected database:
+5. Build the initializer image for the selected database:
 	1. **RethinkDB**
 	```
 	$ docker build --tag=tinode-init-db init-db
@@ -34,7 +36,7 @@
 	$ docker build --tag=tinode-init-db --build-arg TARGET_DB=mysql init-db
 	```
 	
-5. Run the container to initialize the `tinode` database:
+6. Run the container to initialize the `tinode` database:
 	```
 	$ docker run --rm --name tinode-init-db --network tinode-net tinode-init-db
 	```
@@ -44,7 +46,7 @@
 
 	At this point the database is initialized and loaded with test data. No need to do this again unless you want to reset the data or delete/recreated the DB container.
 
-6. Build the Tinode server image. This image also includes the [web app](https://github.com/tinode/example-react-js/):
+7. Build the Tinode server image. This image also includes the [web app](https://github.com/tinode/example-react-js/):
 	1. **RethinkDB**
 	```
 	$ docker build --tag=tinode-srv tinode-server
@@ -54,13 +56,13 @@
 	$ docker build --tag=tinode-srv --build-arg TARGET_DB=mysql tinode-server
 	```
 
-7. Run Tinode server:
+8. Run Tinode server:
 	```
 	$ docker run -p 6060:18080 -d --name tinode-srv --network tinode-net tinode-srv
 	```
 	The port mapping `-p 6060:18080` tells Docker to map container's port 18080 to host's port 6060 making server accessible at http://localhost:6060/. If you provided a `SNOWFLAKE_UID_KEY` at step 5, you must provide the same key at this step too.
 
-8. Test the installation by pointing your browser to [http://localhost:6060/x/](http://localhost:6060/x/).
+9. Test the installation by pointing your browser to [http://localhost:6060/x/](http://localhost:6060/x/).
 
 ## Optional
 
@@ -70,7 +72,7 @@ If you want to reset the data in the database, shut down the server container
 ```
 $ docker stop tinode-srv
 ```
-then repeat step 5 then restart the server
+then repeat step 6 then restart the server
 ```
 $ docker start tinode-srv
 ```
