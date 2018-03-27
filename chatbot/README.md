@@ -16,12 +16,12 @@ python -m grpc_tools.protoc -I../pbx --python_out=. --grpc_python_out=. ../pbx/m
 
 1. Follow [instructions](../docker/README.md) to build and run dockerized Tinode chat server up to an including _step 4_. 
 
-2. In the _step 5_ add the following parameter to the command line: `--volume botdata:/botdata`. It will create and mount a volume `botdata` where Tino's (chatbot's) credentials are stored.
+2. In the _step 6_ add the following parameter to the command line: `--volume botdata:/botdata`. It will create and mount a volume `botdata` where Tino's (chatbot's) credentials are stored.
 	```
 	docker run --rm --name tinode-init-db --network tinode-net --volume botdata:/botdata tinode-init-db
 	```
 
-3. Follow _step 6_ to build the Tinode server. 
+3. Follow _step 7_ to build the Tinode server. 
 	
 4. Run the server adding `--env PLUGIN_PYTHON_CHAT_BOT_ENABLED=true` to the command line:
 	```
