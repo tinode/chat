@@ -1169,8 +1169,9 @@ func (t *Topic) approveSub(h *Hub, sess *Session, target types.Uid, set *MsgClie
 	}
 
 	if !existingSub && len(t.sessions) > 0 {
-		// Notify the new subscriber that the topic is online
-		t.presSingleUserOffline(target, "on", nilPresParams, "", false)
+		// Notify the new subscriber that the topic is online, tell him to
+		// track the new topic.
+		t.presSingleUserOffline(target, "on+en", nilPresParams, "", false)
 	}
 
 	return nil
