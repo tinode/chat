@@ -337,20 +337,20 @@ const (
 
 	ModeNone AccessMode = 0 // No access, requests to gain access are processed normally (N)
 
-	// Normal user's access to a topic
+	// Normal user's access to a topic ("JRWPS")
 	ModeCPublic AccessMode = ModeJoin | ModeRead | ModeWrite | ModePres | ModeShare
-	// User's subscription to 'me' and 'fnd' - user can only read and delete incoming invites
-	ModeCSelf AccessMode = ModeJoin | ModeRead | ModeDelete | ModePres
-	// Owner's subscription to a generic topic
+	// User's subscription to 'me' and 'fnd' ("JP")
+	ModeCSelf AccessMode = ModeJoin | ModePres
+	// Owner's subscription to a generic topic ("JRWPASDO")
 	ModeCFull AccessMode = ModeJoin | ModeRead | ModeWrite | ModePres | ModeApprove | ModeShare | ModeDelete | ModeOwner
-	// Default P2P access mode
+	// Default P2P access mode ("JRWPA")
 	ModeCP2P AccessMode = ModeJoin | ModeRead | ModeWrite | ModePres | ModeApprove
-	// Read-only access to topic (0x3)
+	// Read-only access to topic ("JR", 0x3)
 	ModeCReadOnly = ModeJoin | ModeRead
 
-	// Admin: user who can modify access mode (hex: 0x90, dec: 144)
+	// Admin: user who can modify access mode ("OA", hex: 0x90, dec: 144)
 	ModeCAdmin = ModeOwner | ModeApprove
-	// Sharer: flags which define user who can be notified of access mode changes (dec: 176, hex: 0xB0)
+	// Sharer: flags which define user who can be notified of access mode changes ("OAS", dec: 176, hex: 0xB0)
 	ModeCSharer = ModeCAdmin | ModeShare
 
 	// Invalid mode to indicate an error

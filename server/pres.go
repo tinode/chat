@@ -313,7 +313,7 @@ func (t *Topic) presSubsOffline(what string, params *PresParams, filter types.Ac
 	//log.Printf("presSubsOffline: topic'%s' what='%s', who='%v'", t.name, what, params)
 
 	for uid, pud := range t.perUser {
-		if !presOfflineFilter(pud.modeGiven&pud.modeWant, filter) {
+		if what != "acs" && !presOfflineFilter(pud.modeGiven&pud.modeWant, filter) {
 			continue
 		}
 
@@ -344,7 +344,7 @@ func presSubsOfflineOffline(topic string, cat types.TopicCat, subs []types.Subsc
 	var count = 0
 	original := topic
 	for _, sub := range subs {
-		if !presOfflineFilter(sub.ModeWant&sub.ModeGiven, types.ModeNone) {
+		if what != "acs" && !presOfflineFilter(sub.ModeWant&sub.ModeGiven, types.ModeNone) {
 			continue
 		}
 
@@ -384,7 +384,10 @@ func (t *Topic) presSingleUserOffline(uid types.Uid, what string, params *PresPa
 		skipTopic = t.name
 	}
 
-	if pud, ok := t.perUser[uid]; ok && presOfflineFilter(pud.modeGiven&pud.modeWant, types.ModeNone) {
+	if pud, ok := t.perUser[uid]; ok &&
+		// Send access change notification regardless of P permission.
+		(what == "acs" || presOfflineFilter(pud.modeGiven&pud.modeWant, types.ModeNone)) {
+
 		user := uid.UserId()
 		actor := params.actor
 		target := params.target
@@ -473,8 +476,10 @@ func (t *Topic) presPubMessageDelete(uid types.Uid, delID int, list []MsgDelRang
 	}
 }
 
-// Must apply filter here. When sending offline to 'me' topic, 'me' does not have access to
-// original topic's access parameters
+// Filter by permissions: mode.IsPresencer() AND mode has at least some
+// bits specified in 'filter' (or filter is ModeNone).
+//
+// Filtering must happen here because receiving 'me' has no access to sender's permissions.
 func presOfflineFilter(mode, filter types.AccessMode) bool {
 	return mode.IsPresencer() &&
 		(filter == types.ModeNone || mode&filter != 0)

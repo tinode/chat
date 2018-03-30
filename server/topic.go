@@ -572,7 +572,7 @@ func (t *Topic) run(hub *Hub) {
 			// 2. Topic is being deleted (reason == StopDeleted)
 			// 3. System shutdown (reason == StopShutdown, done != nil).
 			// 4. Cluster rehashing (reason == StopRehashing)
-			// FIXME(gene): save lastMessage value;
+			// TODO(gene): save lastMessage value;
 
 			if sd.reason == StopDeleted {
 				if t.cat == types.TopicCatGrp {
@@ -1054,12 +1054,11 @@ func (t *Topic) approveSub(h *Hub, sess *Session, target types.Uid, set *MsgClie
 			return err
 		}
 
-		// Make sure the new permissions are reasonable in P2P topics
+		// Make sure the new permissions are reasonable in P2P topics: permissions no greater than default,
+		// approver permission cannot be removed.
 		if t.cat == types.TopicCatP2P {
 			modeGiven &= types.ModeCP2P
-			if modeGiven != types.ModeNone {
-				modeGiven |= types.ModeApprove
-			}
+			modeGiven |= types.ModeApprove
 		}
 	}
 
@@ -1161,11 +1160,13 @@ func (t *Topic) approveSub(h *Hub, sess *Session, target types.Uid, set *MsgClie
 			dWant:  oldWant.Delta(userData.modeWant),
 			dGiven: oldGiven.Delta(userData.modeGiven)}
 
-		// Inform the target user.
-		t.presSingleUserOffline(target, "acs", params, sess.sid, false)
-
-		// Inform topic admins too
+		// Inform topic sharers.
 		t.presSubsOffline("acs", params, types.ModeCSharer, sess.sid, false)
+
+		// If tagret user is not a sharer, inform the target user separately.
+		if !(userData.modeGiven & userData.modeWant).IsSharer() {
+			t.presSingleUserOffline(target, "acs", params, sess.sid, false)
+		}
 	}
 
 	if !existingSub && len(t.sessions) > 0 {
