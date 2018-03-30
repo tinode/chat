@@ -6,6 +6,14 @@ Tinode is meant as a replacement for XMPP. On the surface it's a lot like open s
 
 Version 0.14. This is beta-quality software: feature-complete but probably with a few bugs. Follow [instructions](INSTALL.md) to install and run. Read [API documentation](API.md).
 
+
+## Why?
+
+The promise of [XMPP](http://xmpp.org/) was to deliver federated instant messaging: anyone would be able to spin up an IM server capable of exchange messages with any other XMPP server in the world. Unfortunately XMPP never delivered on this promse. Instant messengers are still a bunch of incompatible walled gardens, similar to what AoL of the late 1990s was to the open Internet. 
+
+The goal of this project is to actually deliver on XMPP's original vision: create a modern open platform for federated instant messaging with emphasis on mobile communication. A secondary goal is to create a decentralized IM platform which is much harder to track and block by the governments.
+
+
 ## Demo
 
 ### Web 
@@ -29,10 +37,6 @@ A text-only [command line client](./tn-cli) implements every possible command.
 * As generally accepted, when you register a new account you are asked for an email address. The server will send an email with a verification code to that address and you can use it to validate the account. To make things easier for testing, the server will also accept `123456` as a verification code. Remove line `"debug_response": "123456"` from `tinode.conf` to disable this option. 
 
 * The demo server is configured to use [ACME](https://letsencrypt.org/) TLS [implementation](https://godoc.org/golang.org/x/crypto/acme) with hard-coded requirement for [SNI](https://en.wikipedia.org/wiki/Server_Name_Indication). If you are unable to connect then the most likely reason is your TLS client's missing support for SNI. Use a different client. 
-
-## Why?
-
-[XMPP](http://xmpp.org/) is a mature specification with support for a very broad spectrum of use cases developed long before mobile became important. As a result most (all?) known XMPP servers are difficult to adapt for the most common use case of a few people messaging each other from mobile devices. Tinode is an attempt to build a modern replacement for XMPP/Jabber focused on a narrow use case of instant messaging between humans with emphasis on mobile communication.
 
 ## Features
 
@@ -64,11 +68,11 @@ A text-only [command line client](./tn-cli) implements every possible command.
 ### Planned
 
 * iOS client bindings and client.
+* Federation.
 * Options for transfer of large objects like video.
 * End to end encryption with [OTR](https://en.wikipedia.org/wiki/Off-the-Record_Messaging) for one-on-one messaging and undecided method for group messaging.
 * Group messaging with unlimited number of members with bearer token access control.
 * Hot standby.
-* Federation.
 * Different levels of message persistence (from strict persistence to "store until delivered" to purely ephemeral messaging).
 
 ## Screenshots

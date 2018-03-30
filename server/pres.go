@@ -82,7 +82,9 @@ func (t *Topic) loadContacts(uid types.Uid) error {
 // The "+en/rem/dis" command itself is stripped from the notification.
 func (t *Topic) presProcReq(fromUserID string, what string, wantReply bool) string {
 
-	var reqReply, online bool
+	var reqReply, onlineUpdate bool
+
+	online := &onlineUpdate
 	replyAs := "on"
 
 	//log.Printf("presProcReq: topic[%s]: req from='%s', what=%s, wantReply=%v",
@@ -97,13 +99,19 @@ func (t *Topic) presProcReq(fromUserID string, what string, wantReply bool) stri
 
 	switch what {
 	case "on":
-		online = true
+		// online
+		*online = true
 	case "off":
+		// offline
 	case "?none":
+		// no change to online status
+		online = nil
 		what = ""
 	case "gone":
+		// offline
 		cmd = "rem"
 	case "?unkn":
+		// offline
 		reqReply = true
 		what = ""
 	default:
@@ -133,15 +141,15 @@ func (t *Topic) presProcReq(fromUserID string, what string, wantReply bool) stri
 			} else {
 				if cmd == "" {
 					// No change in being enabled or disabled and not being added or removed.
-					if psd.online == online || !psd.enabled {
+					if !psd.enabled || online == nil || psd.online == *online {
 						// Not enabled or no change in online status - remove unnecessary notification.
 						what = ""
 					}
 				} else if cmd == "en" {
 					if !psd.enabled {
 						psd.enabled = true
-					} else if psd.online == online {
-						// Was active and online before: skip unnecessary update.
+					} else if online == nil || psd.online == *online {
+						// Was active and no change or online before: skip unnecessary update.
 						what = ""
 					}
 				} else if cmd == "dis" {
@@ -158,7 +166,9 @@ func (t *Topic) presProcReq(fromUserID string, what string, wantReply bool) stri
 					panic("presProcReq: unknown command '" + cmd + "'")
 				}
 
-				psd.online = online
+				if online != nil {
+					psd.online = *online
+				}
 				t.perSubs[fromUserID] = psd
 			}
 
@@ -168,7 +178,7 @@ func (t *Topic) presProcReq(fromUserID string, what string, wantReply bool) stri
 
 			// Got request from a new topic. This must be a new subscription. Record it.
 			// If it's unknown, recording it as offline.
-			t.addToPerSubs(fromUserID, online, cmd == "en")
+			t.addToPerSubs(fromUserID, onlineUpdate, cmd == "en")
 
 			if cmd != "en" {
 				// If the connection is not enabled, ignore the update.
@@ -186,7 +196,7 @@ func (t *Topic) presProcReq(fromUserID string, what string, wantReply bool) stri
 	// A[online, B:off] to B[online, A:off]: {pres A on}
 	// B[online, A:on] to A[online, B:off]: {pres B on}
 	// A[online, B:on] to B[online, A:on]: {pres A on} <<-- unnecessary, that's why wantReply is needed
-	if (online || reqReply) && wantReply {
+	if (onlineUpdate || reqReply) && wantReply {
 		globals.hub.route <- &ServerComMessage{
 			// Topic is 'me' even for group topics; group topics will use 'me' as a signal to drop the message
 			// without forwarding to sessions
@@ -194,8 +204,9 @@ func (t *Topic) presProcReq(fromUserID string, what string, wantReply bool) stri
 			rcptto: fromUserID}
 
 		// log.Printf("presProcReq: topic[%s]: replying to %s with own status='%s', wantReply=%v",
-		// 	t.name, fromUserID, replyAs, reqReply)
+		//	t.name, fromUserID, replyAs, reqReply)
 	}
+
 	//log.Println("what is '", what, "'")
 
 	return what

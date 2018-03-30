@@ -283,12 +283,6 @@ func (a *adapter) CreateDb(reset bool) error {
 // UserCreate creates a new user. Returns error and true if error is due to duplicate user name,
 // false for any other error
 func (a *adapter) UserCreate(user *t.User) error {
-	// Save user's tags to a separate table to ensure uniquness
-	//if len(user.Tags) > 0 {
-	//	if err := a.updateUniqueTags(user.Id, filterUniqueTags(unique, user.Tags), nil); err != nil {
-	//		return err
-	//	}
-	//}
 	_, err := rdb.DB(a.dbName).Table("users").Insert(&user).RunWrite(a.conn)
 	if err != nil {
 		return err
@@ -442,9 +436,37 @@ func (a *adapter) TopicCreate(topic *t.Topic) error {
 
 // TopicCreateP2P given two users creates a p2p topic
 func (a *adapter) TopicCreateP2P(initiator, invited *t.Subscription) error {
-	_, err := a.TopicShare([]*t.Subscription{initiator, invited})
+	initiator.Id = initiator.Topic + ":" + initiator.User
+	// Don't care if the initiator changes own subscription
+	_, err := rdb.DB(a.dbName).Table("subscriptions").Insert(initiator, rdb.InsertOpts{Conflict: "replace"}).
+		RunWrite(a.conn)
 	if err != nil {
 		return err
+	}
+
+	// If the second subscription exists, don't overwrite it. Just make sure it's not deleted.
+	invited.Id = invited.Topic + ":" + invited.User
+	_, err = rdb.DB(a.dbName).Table("subscriptions").Insert(invited, rdb.InsertOpts{Conflict: "error"}).
+		RunWrite(a.conn)
+	if err != nil {
+		// Is this a duplicate subscription?
+		if !rdb.IsConflictErr(err) {
+			// It's a genuine DB error
+			return err
+		}
+		// Undelete the second subsription if it exists: remove DeletedAt, update CreatedAt and UpdatedAt,
+		// update ModeGiven.
+		_, err = rdb.DB(a.dbName).Table("subscriptions").
+			Get(invited.Id).Replace(
+			rdb.Row.Without("DeletedAt").
+				Merge(map[string]interface{}{
+					"CreatedAt": invited.CreatedAt,
+					"UpdatedAt": invited.UpdatedAt,
+					"ModeGive":  invited.ModeGiven})).
+			RunWrite(a.conn)
+		if err != nil {
+			return err
+		}
 	}
 
 	topic := &t.Topic{ObjHeader: t.ObjHeader{Id: initiator.Topic}}

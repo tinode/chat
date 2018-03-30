@@ -2051,8 +2051,8 @@ func (t *Topic) evictUser(uid types.Uid, unsub bool, skip string) {
 		t.presSingleUserOffline(uid, "gone", nilPresParams, skip, false)
 
 		if len(t.perUser) == 2 {
-			// Send an "off" notification to the user2 and ask it to stop sending updates to user1
-			presSingleUserOfflineOffline(t.p2pOtherUser(uid), uid.UserId(), "off+rem", 0, nilPresParams, "")
+			// Tell user2 to stop sending updates to user1
+			presSingleUserOfflineOffline(t.p2pOtherUser(uid), uid.UserId(), "?none+rem", 0, nilPresParams, "")
 		}
 	}
 
