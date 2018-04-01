@@ -136,7 +136,7 @@ def leave(topic):
 def publish(topic, text):
     tid = next_id()
     return pb.ClientMsg(pub=pb.ClientPub(id=tid, topic=topic, no_echo=True, 
-		content=json.dumps(text, ensure_ascii=False).encode('utf-8')))
+		content=json.dumps(text).encode('utf-8')))
 
 def note_read(topic, seq):
     return pb.ClientMsg(note=pb.ClientNote(topic=topic, what=pb.READ, seq_id=seq))

@@ -1418,7 +1418,7 @@ func (t *Topic) replySetDesc(sess *Session, set *MsgClientSet) error {
 	return nil
 }
 
-// ub is a response to a get.sub request on a topic - load a list of subscriptions/subscribers,
+// replyGetSub is a response to a get.sub request on a topic - load a list of subscriptions/subscribers,
 // send it just to the session as a {meta} packet
 // FIXME(gene): reject request if the user does not have the R permission
 func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
@@ -1488,7 +1488,7 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 
 			// Check if the requester has provided a cut off date for ts of pub & priv updates.
 			var sendPubPriv bool
-			var deleted bool
+			var deleted, banned bool
 			var mts MsgTopicSub
 
 			if ifModified.IsZero() {
@@ -1515,9 +1515,9 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 			uid := types.ParseUid(sub.User)
 			isReader := sub.ModeGiven.IsReader() && sub.ModeWant.IsReader()
 			if t.cat == types.TopicCatMe {
-				// The subscriptions user does not care about are marked as deleted
+				// Mark subscriptions that the user does not care about.
 				if !sub.ModeWant.IsJoiner() || !sub.ModeGiven.IsJoiner() {
-					deleted = true
+					banned = true
 				}
 
 				// Reporting user's subscriptions to other topics. P2P topic name is the
@@ -1525,13 +1525,13 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 				with := sub.GetWith()
 				if with != "" {
 					mts.Topic = with
-					mts.Online = t.perSubs[with].online && !deleted
+					mts.Online = t.perSubs[with].online && !deleted && !banned
 				} else {
 					mts.Topic = sub.Topic
-					mts.Online = t.perSubs[sub.Topic].online && !deleted
+					mts.Online = t.perSubs[sub.Topic].online && !deleted && !banned
 				}
 
-				if !deleted {
+				if !deleted && !banned {
 					if isReader {
 						mts.SeqId = sub.GetSeqId()
 						mts.DelId = sub.DelId
@@ -1545,10 +1545,10 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 					}
 				}
 			} else {
-				// Mark subscriptions that the user does not care about as deleted
+				// Mark subscriptions that the user does not care about.
 				if t.cat == types.TopicCatGrp && !isSharer &&
 					(!sub.ModeWant.IsJoiner() || !sub.ModeGiven.IsJoiner()) {
-					deleted = true
+					banned = true
 				}
 
 				// Reporting subscribers to fnd, a group or a p2p topic
@@ -1556,6 +1556,7 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 				if t.cat == types.TopicCatFnd {
 					mts.Topic = sub.Topic
 				}
+
 				if !deleted {
 					if uid == sess.uid && isReader {
 						// Report deleted ID for own subscriptions only
@@ -1572,7 +1573,7 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 			if !deleted {
 				mts.UpdatedAt = &sub.UpdatedAt
 
-				if isReader {
+				if isReader && !banned {
 					mts.ReadSeqId = sub.ReadSeqId
 					mts.RecvSeqId = sub.RecvSeqId
 				}
@@ -1594,9 +1595,8 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 						mts.Private = sub.Private
 					}
 				}
-			} else if mts.DeletedAt == nil {
-				mts.DeletedAt = &sub.UpdatedAt
 			}
+
 			meta.Sub = append(meta.Sub, mts)
 			idx++
 		}
