@@ -459,12 +459,8 @@ func (s *Session) acc(msg *ClientComMessage) {
 
 		// Check if login is unique.
 		if ok, err := authhdl.IsUnique(msg.Acc.Secret); !ok {
-			log.Println("Check unique: ", err)
-			if err == types.ErrDuplicate {
-				s.queueOut(ErrDuplicateCredential(msg.Acc.Id, "", msg.timestamp))
-			} else {
-				s.queueOut(ErrUnknown(msg.Acc.Id, "", msg.timestamp))
-			}
+			log.Println("Check unique:", err)
+			s.queueOut(decodeStoreError(err, msg.Acc.Id, msg.timestamp, nil))
 			return
 		}
 
@@ -630,6 +626,7 @@ func (s *Session) acc(msg *ClientComMessage) {
 
 	} else {
 		// session is not authenticated and this is not an attempt to create a new account
+		log.Println("acc failed: not a new account and no valid UID")
 		s.queueOut(ErrPermissionDenied(msg.Acc.Id, "", msg.timestamp))
 		return
 	}
