@@ -24,6 +24,10 @@ onCompletion = {}
 # Saved topic: default topic name to make keyboard input easier
 SavedTopic = None
 
+# In python 3 has input(), python 2 has raw_input. Make input() work in python 2.x.
+try: input = raw_input
+except NameError: pass
+
 # Pack user's name and avatar into a vcard represented as json.
 def make_vcard(fn, photofile):
     card = None
@@ -43,7 +47,7 @@ def make_vcard(fn, photofile):
                 # TODO: use mimetype.guess_type(ext) instead
                 card.photo.type = os.path.splitext(photofile)[1]
             except IOError as err:
-                print "Error opening '" + photofile + "'", err
+                print("Error opening '" + photofile + "'", err)
 
         card = json.dumps(card)
 
@@ -95,7 +99,7 @@ def delMsg(id, topic, what, param, hard):
         topic = param
         param = None
 
-    print id, topic, what, param, hard
+    print(id, topic, what, param, hard)
     enum_what = None
     before = None
     seq_list = None
@@ -106,7 +110,7 @@ def delMsg(id, topic, what, param, hard):
             seq_list = [pb.DelQuery(range=pb.SeqRange(low=1, hi=0x8FFFFFF))]
         elif param != None:
             seq_list = [pb.DelQuery(seq_id=int(x.strip())) for x in param.split(',')]
-        print seq_list
+        print(seq_list)
 
     elif what == 'sub':
         enum_what = pb.ClientDel.SUB
@@ -151,8 +155,8 @@ def parse_cmd(cmd):
     parser = None
     if parts[0] == "acc":
         parser = argparse.ArgumentParser(prog=parts[0], description='Create or alter an account')
-        parser.add_argument('--user', default=None, help='ID of the account to update')
-        parser.add_argument('--scheme', default="basic", help='authentication scheme, default=basic')
+        parser.add_argument('--user', default='new', help='ID of the account to update')
+        parser.add_argument('--scheme', default='basic', help='authentication scheme, default=basic')
         parser.add_argument('--secret', default=None, help='secret for authentication')
         parser.add_argument('--uname', default=None, help='user name for basic authentication')
         parser.add_argument('--password', default=None, help='password for basic authentication')
@@ -165,7 +169,7 @@ def parse_cmd(cmd):
         parser.add_argument('--anon', default=None, help='default access mode for anonymous users')
     elif parts[0] == "login":
         parser = argparse.ArgumentParser(prog=parts[0], description='Authenticate current session')
-        parser.add_argument('--scheme', default="basic")
+        parser.add_argument('--scheme', default='basic')
         parser.add_argument('secret', nargs='?', default=argparse.SUPPRESS)
         parser.add_argument('--secret', dest='secret', default=None)
         parser.add_argument('--uname', default=None)
@@ -225,18 +229,18 @@ def parse_cmd(cmd):
             help='notification type')
         parser.add_argument('--seq', help='value being reported')
     else:
-        print "Unrecognized:", parts[0]
-        print "Possible commands:"
-        print "\tacc\t- create account"
-        print "\tlogin\t- authenticate"
-        print "\tsub\t- subscribe to topic"
-        print "\tleave\t- detach or unsubscribe from topic"
-        print "\tpub\t- post message to topic"
-        print "\tget\t- query topic for metadata or messages"
-        print "\tset\t- update topic metadata"
-        print "\tdel\t- delete message(s), topic or subscription"
-        print "\tnote\t- send notification"
-        print "\n\tType <command> -h for help"
+        print("Unrecognized:", parts[0])
+        print("Possible commands:")
+        print("\tacc\t- create account")
+        print("\tlogin\t- authenticate")
+        print("\tsub\t- subscribe to topic")
+        print("\tleave\t- detach or unsubscribe from topic")
+        print("\tpub\t- post message to topic")
+        print("\tget\t- query topic for metadata or messages")
+        print("\tset\t- update topic metadata")
+        print("\tdel\t- delete message(s), topic or subscription")
+        print("\tnote\t- send notification")
+        print("\n\tType <command> -h for help")
         return None
 
     try:
@@ -294,7 +298,7 @@ def gen_message(schema, secret):
 
     while True:
         id += 1
-        inp = raw_input("tn> ")
+        inp = input("tn> ")
         if inp == "":
             continue
         if inp == "exit" or inp == "quit":
@@ -319,17 +323,17 @@ def run(addr, schema, secret):
                     del onCompletion[msg.ctrl.id]
                     if msg.ctrl.code >= 200 and msg.ctrl.code < 400:
                         func(msg.ctrl.params)
-                print str(msg.ctrl.code) + " " + msg.ctrl.text
+                print(str(msg.ctrl.code) + " " + msg.ctrl.text)
             elif msg.HasField("data"):
-                print "\nFrom: " + msg.data.from_user_id + ":\n"
-                print json.loads(msg.data.content) + "\n"
+                print("\nFrom: " + msg.data.from_user_id + ":\n")
+                print(json.loads(msg.data.content) + "\n")
             elif msg.HasField("pres"):
                 pass
             else:
-                print "Message type not handled", msg
+                print("Message type not handled", msg)
 
     except grpc._channel._Rendezvous as err:
-        print err
+        print(err)
 
 def read_cookie():
     try:
@@ -341,7 +345,7 @@ def read_cookie():
         return params
 
     except Exception as err:
-        print "Missing or invalid cookie file '.tn-cli-cookie'", err
+        print("Missing or invalid cookie file '.tn-cli-cookie'", err)
         return None
 
 def save_cookie(params):
@@ -353,24 +357,24 @@ def save_cookie(params):
     for p in params:
         nice[p] = json.loads(params[p])
 
-    print "Authenticated as", nice.get('user')
+    print("Authenticated as", nice.get('user'))
 
     try:
         cookie = open('.tn-cookie', 'w')
         json.dump(nice, cookie)
         cookie.close()
     except Exception as err:
-        print "Failed to save authentication cookie", err
+        print("Failed to save authentication cookie", err)
 
 def print_server_params(params):
-    print "Connected to server:"
+    print("Connected to server:")
     for p in params:
-         print "\t" + p + ": " + json.loads(params[p])
+         print("\t" + p + ": " + json.loads(params[p]))
 
 if __name__ == '__main__':
     """Parse command-line arguments. Extract host name and authentication scheme, if one is provided"""
     purpose = "Tinode command line client. Version " + VERSION + "."
-    print purpose
+    print(purpose)
     parser = argparse.ArgumentParser(description=purpose)
     parser.add_argument('--host', default='localhost:6061', help='address of Tinode server')
     parser.add_argument('--login-basic', help='login using basic authentication username:password')
@@ -378,7 +382,7 @@ if __name__ == '__main__':
     parser.add_argument('--login-cookie', action='store_true', help='read token from cookie file and use it for authentication')
     args = parser.parse_args()
 
-    print "Server '" + args.host + "'"
+    print("Server '" + args.host + "'")
 
     schema = None
     secret = None
