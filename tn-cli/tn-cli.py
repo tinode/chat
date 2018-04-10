@@ -64,8 +64,10 @@ def accMsg(id, user, scheme, secret, uname, password, do_login, tags, fn, photo,
         if password == None:
             password = ''
         secret = str(uname) + ":" + str(password)
+    if secret != None:
+        secret=secret.encode('utf-8')
     return pb.ClientMsg(acc=pb.ClientAcc(id=str(id), user_id=user,
-        scheme=scheme, secret=secret.encode('utf-8'), login=do_login, tags=tags.split(",") if tags else None,
+        scheme=scheme, secret=secret, login=do_login, tags=tags.split(",") if tags else None,
         desc=pb.SetDesc(default_acs=pb.DefaultAcsMode(auth=auth, anon=anon),
         public=make_vcard(fn, photo), private=private)))
 
