@@ -24,7 +24,7 @@ onCompletion = {}
 # Saved topic: default topic name to make keyboard input easier
 SavedTopic = None
 
-# In python 3 has input(), python 2 has raw_input. Make input() work in python 2.x.
+# Python 3 has input(), Python 2 has raw_input. Make input() work in Python 2.x.
 try: input = raw_input
 except NameError: pass
 
@@ -65,7 +65,7 @@ def accMsg(id, user, scheme, secret, uname, password, do_login, tags, fn, photo,
             password = ''
         secret = str(uname) + ":" + str(password)
     return pb.ClientMsg(acc=pb.ClientAcc(id=str(id), user_id=user,
-        scheme=scheme, secret=secret, login=do_login, tags=tags.split(",") if tags else None,
+        scheme=scheme, secret=secret.encode('utf-8'), login=do_login, tags=tags.split(",") if tags else None,
         desc=pb.SetDesc(default_acs=pb.DefaultAcsMode(auth=auth, anon=anon),
         public=make_vcard(fn, photo), private=private)))
 
