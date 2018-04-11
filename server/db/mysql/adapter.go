@@ -494,7 +494,7 @@ func (a *adapter) UserGet(uid t.Uid) (*t.User, error) {
 
 	if err == sql.ErrNoRows {
 		// Clear the error if user does not exist
-		err = nil
+		return nil, nil
 	}
 
 	// If user does not exist, it returns nil, nil
@@ -640,6 +640,10 @@ func (a *adapter) TopicGet(topic string) (*t.Topic, error) {
 		topic)
 
 	if err != nil {
+		if err == sql.ErrNoRows {
+			// Nothing found - clear the error
+			err = nil
+		}
 		return nil, err
 	}
 
@@ -857,6 +861,10 @@ func (a *adapter) SubscriptionGet(topic string, user t.Uid) (*t.Subscription, er
 	var sub t.Subscription
 	err := a.db.Get(&sub, "SELECT * FROM subscriptions WHERE topic=? AND userid=", topic, store.DecodeUid(user))
 	if err != nil {
+		if err == sql.ErrNoRows {
+			// Nothing found - clear the error
+			err = nil
+		}
 		return nil, err
 	}
 
@@ -1429,6 +1437,11 @@ func (a *adapter) CredIsConfirmed(uid t.Uid, method string) (bool, error) {
 	var done int
 	err := a.db.Get(&done, "SELECT done FROM credentials WHERE userid=? AND method=?",
 		store.DecodeUid(uid), method)
+	if err == sql.ErrNoRows {
+		// Nothing found, clear the error, otherwise it will be reported as internal error.
+		err = nil
+	}
+
 	return done > 0, err
 }
 
