@@ -904,12 +904,14 @@ func (s *Session) del(msg *ClientComMessage) {
 // Not reporting any errors
 func (s *Session) note(msg *ClientComMessage) {
 
-	if s.ver == 0 {
+	if s.ver == 0 || s.uid.IsZero() {
+		// Silently ignoring the message: have not received {hi} or don't know who sent the message.
 		return
 	}
 
 	expanded, err := s.validateTopicName("", msg.Note.Topic, msg.timestamp)
 	if err != nil {
+		// Silently ignoring the message
 		return
 	}
 

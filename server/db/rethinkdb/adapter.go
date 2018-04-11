@@ -650,15 +650,19 @@ func (a *adapter) TopicShare(shares []*t.Subscription) (int, error) {
 	for i := 0; i < len(shares); i++ {
 		shares[i].Id = shares[i].Topic + ":" + shares[i].User
 	}
-	// Subscription could have been marked as deleted (DeletedAt != nil). If it's marked
-	// as deleted, unmark by replacing the old subscription with the new one.
-	resp, err := rdb.DB(a.dbName).Table("subscriptions").
-		Insert(shares, rdb.InsertOpts{Conflict: "replace"}).RunWrite(a.conn)
-	if err != nil {
-		return resp.Inserted + resp.Replaced, err
-	}
 
-	return resp.Inserted + resp.Replaced, nil
+	// Subscription could have been marked as deleted (DeletedAt != nil). If it's marked
+	// as deleted, unmark by clearing the DeletedAt field of the old subscription and
+	// updating times and ModeGiven.
+	resp, err := rdb.DB(a.dbName).Table("subscriptions").
+		Insert(shares, rdb.InsertOpts{Conflict: func(id, oldsub, newsub rdb.Term) interface{} {
+			return oldsub.Without("DeletedAt").Merge(map[string]interface{}{
+				"CreatedAt": newsub.CreatedAt,
+				"UpdatedAt": newsub.UpdatedAt,
+				"ModeGive":  newsub.ModeGiven})
+		}}).RunWrite(a.conn)
+
+	return resp.Inserted + resp.Replaced, err
 }
 
 func (a *adapter) TopicDelete(topic string) error {

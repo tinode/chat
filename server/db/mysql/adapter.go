@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"hash/fnv"
-	"log"
 	"strconv"
 	"strings"
 	"time"
@@ -367,7 +366,6 @@ func (a *adapter) UserCreate(user *t.User) error {
 
 	defer func() {
 		if err != nil {
-			log.Println("transaction failed", err)
 			tx.Rollback()
 		}
 	}()
@@ -582,23 +580,25 @@ func (a *adapter) TopicCreate(topic *t.Topic) error {
 func createSubscription(tx *sqlx.Tx, sub *t.Subscription, undelete bool) error {
 
 	jpriv := toJSON(sub.Private)
+	user := store.DecodeUid(t.ParseUid(sub.User))
 	_, err := tx.Exec(
 		"INSERT INTO subscriptions(createdAt,updatedAt,deletedAt,userid,topic,modeWant,modeGiven,private) "+
 			"VALUES(?,?,NULL,?,?,?,?,?)",
-		sub.CreatedAt, sub.UpdatedAt,
-		store.DecodeUid(t.ParseUid(sub.User)), sub.Topic,
+		sub.CreatedAt, sub.UpdatedAt, user, sub.Topic,
 		sub.ModeWant.String(), sub.ModeGiven.String(),
 		jpriv)
 
 	if err != nil && isDupe(err) {
 		if undelete {
-			_, err = tx.Exec("UPDATE subscriptions SET createdAt=?,updatedAt=?,deletedAt=NULL,modeGiven=?",
-				sub.CreatedAt, sub.UpdatedAt, sub.ModeGiven.String())
+			_, err = tx.Exec("UPDATE subscriptions SET createdAt=?,updatedAt=?,deletedAt=NULL,modeGiven=? "+
+				"WHERE topic=? AND userid=?",
+				sub.CreatedAt, sub.UpdatedAt, sub.ModeGiven.String(), sub.Topic, user)
 
 		} else {
 			_, err = tx.Exec(
-				"UPDATE subscriptions SET createdAt=?,updatedAt=?,deletedAt=NULL,modeWant=?,modeGiven=?,private=?",
-				sub.CreatedAt, sub.UpdatedAt, sub.ModeWant.String(), sub.ModeGiven.String(), jpriv)
+				"UPDATE subscriptions SET createdAt=?,updatedAt=?,deletedAt=NULL,modeWant=?,modeGiven=?,private=? "+
+					"WHERE topic=? AND userid=?",
+				sub.CreatedAt, sub.UpdatedAt, sub.ModeWant.String(), sub.ModeGiven.String(), jpriv, sub.Topic, user)
 		}
 	}
 	return err
@@ -811,6 +811,7 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool) ([]t.Subscriptio
 			&public, &sub.Private); err != nil {
 			break
 		}
+
 		sub.User = encodeString(sub.User).String()
 		sub.Private = fromJSON(sub.Private)
 		sub.SetPublic(fromJSON(public))
@@ -928,7 +929,7 @@ func (a *adapter) SubsForTopic(topic string, keepDeleted bool) ([]t.Subscription
 	if t.GetTopicCat(topic) == t.TopicCatP2P {
 		uid1, uid2, _ := t.ParseP2P(topic)
 		if p2p, err = a.UserGetAll(uid1, uid2); err != nil {
-			log.Println("SubsForTopic", "UserGetAll", err)
+			// log.Println("SubsForTopic", "UserGetAll", err)
 			return nil, err
 		} else if len(p2p) != 2 {
 			return nil, errors.New("failed to load two p2p users")
@@ -952,7 +953,7 @@ func (a *adapter) SubsForTopic(topic string, keepDeleted bool) ([]t.Subscription
 	var ss t.Subscription
 	for rows.Next() {
 		if err = rows.StructScan(&ss); err != nil {
-			log.Println("SubsForTopic", "StructScan", err)
+			// log.Println("SubsForTopic", "StructScan", err)
 			break
 		}
 
@@ -978,7 +979,7 @@ func (a *adapter) SubsForTopic(topic string, keepDeleted bool) ([]t.Subscription
 	return subs, err
 }
 
-// SubsUpdate updates a single subscription.
+// SubsUpdate updates subscriptions of a topic.
 func (a *adapter) SubsUpdate(topic string, user t.Uid, update map[string]interface{}) error {
 	cols, args := updateByMap(update)
 	q := "UPDATE subscriptions SET " + strings.Join(cols, ",") + " WHERE topic=?"
@@ -1254,7 +1255,7 @@ func (a *adapter) MessageGetDeleted(topic string, forUser t.Uid, opts *t.BrowseO
 
 // MessageDeleteList deletes messages in the given topic with seqIds from the list
 func (a *adapter) MessageDeleteList(topic string, toDel *t.DelMessage) (err error) {
-	log.Println("MessageDeleteList", topic, toDel)
+	// log.Println("MessageDeleteList", topic, toDel)
 
 	tx, err := a.db.Begin()
 	if err != nil {
@@ -1271,7 +1272,6 @@ func (a *adapter) MessageDeleteList(topic string, toDel *t.DelMessage) (err erro
 		// Whole topic is being deleted, thus also deleting all messages.
 		_, err = a.db.Exec("DELETE FROM dellog WHERE topic=?", topic)
 		_, err = a.db.Exec("DELETE FROM messages WHERE topic=?", topic)
-		log.Println("MessageDeleteList", 1, err)
 	} else {
 		// Only some messages are being deleted
 		// Start with making log entries
@@ -1279,7 +1279,6 @@ func (a *adapter) MessageDeleteList(topic string, toDel *t.DelMessage) (err erro
 		var stmt *sqlx.Stmt
 		if stmt, err = a.db.Preparex(
 			"INSERT INTO dellog(topic,deletedfor,delid,low,hi) VALUES(?,?,?,?,?)"); err != nil {
-			log.Println("MessageDeleteList", 2, err)
 			return err
 		}
 
@@ -1322,12 +1321,10 @@ func (a *adapter) MessageDeleteList(topic string, toDel *t.DelMessage) (err erro
 				where+
 				" AND deletedAt IS NULL",
 				append([]interface{}{t.TimeNow(), toDel.DelId}, args...)...)
-			log.Println("MessageDeleteList", 3, err)
 		}
 	}
 
 	if err != nil {
-		log.Println("MessageDeleteList", 5, err)
 		return err
 	}
 

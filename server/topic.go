@@ -357,13 +357,13 @@ func (t *Topic) run(hub *Hub) {
 				uid := types.ParseUserId(msg.Info.From)
 				pud := t.perUser[uid]
 
-				// Filter out "kp" from users with no 'W' permission
+				// Filter out "kp" from users with no 'W' permission (or people without a subscription)
 				if msg.Info.What == "kp" && !(pud.modeGiven & pud.modeWant).IsWriter() {
 					continue
 				}
 
 				if msg.Info.What == "read" || msg.Info.What == "recv" {
-					// Filter out "read/recv" from users with no 'R' permission
+					// Filter out "read/recv" from users with no 'R' permission (or people without a subscription)
 					if !(pud.modeGiven & pud.modeWant).IsReader() {
 						continue
 					}
@@ -394,7 +394,8 @@ func (t *Topic) run(hub *Hub) {
 					if err := store.Subs.Update(t.name, uid,
 						map[string]interface{}{
 							"RecvSeqId": pud.recvID,
-							"ReadSeqId": pud.readID}); err != nil {
+							"ReadSeqId": pud.readID},
+						false); err != nil {
 
 						log.Printf("topic[%s]: failed to update SeqRead/Recv counter: %v", t.name, err)
 						continue
@@ -626,8 +627,8 @@ func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 				// Notify creator's other sessions that the topic was created.
 				t.presSingleUserOffline(sreg.sess.uid, "acs",
 					&PresParams{
-						dWant:  types.ModeNone.Delta(pud.modeWant),
-						dGiven: types.ModeNone.Delta(pud.modeGiven),
+						dWant:  pud.modeWant.String(),
+						dGiven: pud.modeGiven.String(),
 						actor:  "me"},
 					sreg.sess.sid, false)
 
@@ -639,8 +640,8 @@ func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 
 					// Inform the other user that the topic was just created
 					t.presSingleUserOffline(user2, "acs", &PresParams{
-						dWant:  types.ModeNone.Delta(pud2.modeWant),
-						dGiven: types.ModeNone.Delta(pud2.modeGiven),
+						dWant:  pud2.modeWant.String(),
+						dGiven: pud2.modeGiven.String(),
 						actor:  sreg.sess.uid.UserId()}, "", false)
 
 					// Notify current user's 'me' topic to accept notifications from user2
@@ -938,7 +939,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktID string, want string,
 			if userData.modeGiven != oldGiven {
 				update["ModeGiven"] = userData.modeGiven
 			}
-			if err := store.Subs.Update(t.name, sess.uid, update); err != nil {
+			if err := store.Subs.Update(t.name, sess.uid, update, true); err != nil {
 				sess.queueOut(ErrUnknown(pktID, t.original(sess.uid), now))
 				return err
 			}
@@ -953,7 +954,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktID string, want string,
 			if err := store.Subs.Update(t.name, t.owner,
 				map[string]interface{}{
 					"ModeWant":  oldOwnerData.modeWant,
-					"ModeGiven": oldOwnerData.modeGiven}); err != nil {
+					"ModeGiven": oldOwnerData.modeGiven}, true); err != nil {
 				return err
 			}
 			t.perUser[t.owner] = oldOwnerData
@@ -1138,7 +1139,7 @@ func (t *Topic) approveSub(h *Hub, sess *Session, target types.Uid, set *MsgClie
 
 			// Save changed value to database
 			if err := store.Subs.Update(t.name, target,
-				map[string]interface{}{"ModeGiven": modeGiven}); err != nil {
+				map[string]interface{}{"ModeGiven": modeGiven}, true); err != nil {
 				return err
 			}
 
@@ -1379,7 +1380,7 @@ func (t *Topic) replySetDesc(sess *Session, set *MsgClientSet) error {
 		change++
 	}
 	if err == nil && len(sub) > 0 {
-		err = store.Subs.Update(t.name, sess.uid, sub)
+		err = store.Subs.Update(t.name, sess.uid, sub, true)
 		change++
 	}
 
@@ -1485,7 +1486,6 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 			if idx == limit {
 				break
 			}
-
 			// Check if the requester has provided a cut off date for ts of pub & priv updates.
 			var sendPubPriv bool
 			var deleted, banned bool
@@ -1734,8 +1734,6 @@ func (t *Topic) replySetTags(sess *Session, set *MsgClientSet) error {
 	if tags := normalizeTags(set.Tags); tags != nil {
 		var err error
 		var resp *ServerComMessage
-
-		log.Println("changing tags (old, normalized, original)", t.tags, tags, set.Tags)
 
 		if !restrictedTags(t.tags, tags) {
 			err = errors.New("attempt to mutate restricted tags")
@@ -2037,8 +2035,8 @@ func (t *Topic) evictUser(uid types.Uid, unsub bool, skip string) {
 				&PresParams{
 					actor:  skip,
 					target: uid.UserId(),
-					dWant:  pud.modeWant.Delta(types.ModeNone),
-					dGiven: pud.modeGiven.Delta(types.ModeNone)},
+					dWant:  types.ModeNone.String(),
+					dGiven: types.ModeNone.String()},
 				types.ModeCAdmin, skip, "")
 			// Let affected user know
 			t.presSingleUserOffline(uid, "gone", nilPresParams, "", false)

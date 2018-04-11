@@ -469,7 +469,6 @@ func (grant AccessMode) BetterEqual(want AccessMode) bool {
 // Delta between two modes as a string old.Delta(new). JRPAS -> JRWS: "+W-PA"
 // Zero delta is an empty string ""
 func (o AccessMode) Delta(n AccessMode) string {
-
 	// Removed bits, bits present in 'old' but missing in 'new' -> '-'
 	o2n := o &^ n
 	var removed string
