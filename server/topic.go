@@ -168,7 +168,8 @@ type pushReceipt struct {
 	uidMap map[types.Uid]int
 }
 
-var nilPresParams = &PresParams{}
+var nilPresParams = &presParams{}
+var nilPresFilters = &presFilters{}
 
 func (t *Topic) run(hub *Hub) {
 
@@ -261,7 +262,7 @@ func (t *Topic) run(hub *Hub) {
 				} else if t.cat == types.TopicCatGrp && pud.online == 0 {
 					// User is going offline: notify online subscribers on 'me'
 					t.presSubsOnline("off", leave.sess.uid.UserId(), nilPresParams,
-						types.ModeRead, "", "")
+						&presFilters{filterIn: types.ModeRead}, "")
 				}
 
 				t.perUser[leave.sess.uid] = pud
@@ -328,7 +329,8 @@ func (t *Topic) run(hub *Hub) {
 				pushRcpt = t.makePushReceipt(msg.Data)
 
 				// Message sent: notify offline 'R' subscrbers on 'me'
-				t.presSubsOffline("msg", &PresParams{seqID: t.lastID}, types.ModeRead, "", true)
+				t.presSubsOffline("msg", &presParams{seqID: t.lastID},
+					&presFilters{filterIn: types.ModeRead}, "", true)
 
 				// Tell the plugins that a message was accepted for delivery
 				pluginMessage(msg.Data, plgActCreate)
@@ -430,7 +432,8 @@ func (t *Topic) run(hub *Hub) {
 						// Check presence filters
 						pud, _ := t.perUser[sess.uid]
 						if !(pud.modeGiven & pud.modeWant).IsPresencer() ||
-							(msg.Pres.filter != 0 && int(pud.modeGiven&pud.modeWant)&msg.Pres.filter == 0) {
+							(msg.Pres.filterIn != 0 && int(pud.modeGiven&pud.modeWant)&msg.Pres.filterIn == 0) ||
+							(msg.Pres.filterOut != 0 && int(pud.modeGiven&pud.modeWant)&msg.Pres.filterOut != 0) {
 							continue
 						}
 					} else {
@@ -563,7 +566,7 @@ func (t *Topic) run(hub *Hub) {
 				uaTimer.Stop()
 				t.presUsersOfInterest("off", currentUA)
 			} else if t.cat == types.TopicCatGrp {
-				t.presSubsOffline("off", nilPresParams, 0, "", false)
+				t.presSubsOffline("off", nilPresParams, nilPresFilters, "", false)
 			}
 			return
 
@@ -577,7 +580,7 @@ func (t *Topic) run(hub *Hub) {
 
 			if sd.reason == StopDeleted {
 				if t.cat == types.TopicCatGrp {
-					t.presSubsOffline("gone", nilPresParams, 0, "", false)
+					t.presSubsOffline("gone", nilPresParams, nilPresFilters, "", false)
 				}
 				// P2P users get "off+remove" earlier in the process
 
@@ -626,7 +629,7 @@ func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 			if sreg.created {
 				// Notify creator's other sessions that the topic was created.
 				t.presSingleUserOffline(sreg.sess.uid, "acs",
-					&PresParams{
+					&presParams{
 						dWant:  pud.modeWant.String(),
 						dGiven: pud.modeGiven.String(),
 						actor:  "me"},
@@ -639,7 +642,7 @@ func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 					pud2 := t.perUser[user2]
 
 					// Inform the other user that the topic was just created
-					t.presSingleUserOffline(user2, "acs", &PresParams{
+					t.presSingleUserOffline(user2, "acs", &presParams{
 						dWant:  pud2.modeWant.String(),
 						dGiven: pud2.modeGiven.String(),
 						actor:  sreg.sess.uid.UserId()}, "", false)
@@ -667,12 +670,13 @@ func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 
 			if t.cat == types.TopicCatGrp {
 				// Notify topic subscribers that the topic is online now.
-				t.presSubsOffline("on"+enable, nilPresParams, 0, "", false)
+				t.presSubsOffline("on"+enable, nilPresParams, nilPresFilters, "", false)
 			}
 		}
 	} else if t.cat == types.TopicCatGrp && pud.online == 1 {
 		// User just joined. Notify other group members
-		t.presSubsOnline("on", sreg.sess.uid.UserId(), nilPresParams, types.ModeRead, sreg.sess.sid, "")
+		t.presSubsOnline("on", sreg.sess.uid.UserId(), nilPresParams,
+			&presFilters{filterIn: types.ModeRead}, sreg.sess.sid)
 	}
 
 	if getWhat&constMsgMetaSub != 0 {
@@ -995,19 +999,19 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktID string, want string,
 	// This will not send a notification for a newly created topic because Hub sets the same values for
 	// the old want/given.
 	if userData.modeWant != oldWant || userData.modeGiven != oldGiven {
-		params := &PresParams{
+		params := &presParams{
 			actor:  sess.uid.UserId(),
 			dWant:  oldWant.Delta(userData.modeWant),
 			dGiven: oldGiven.Delta(userData.modeGiven)}
 
 		// Announce to the admins who are online in the topic.
-		t.presSubsOnline("acs", sess.uid.UserId(), params, types.ModeCSharer, sess.sid, "")
+		t.presSubsOnline("acs", sess.uid.UserId(), params, &presFilters{filterIn: types.ModeCSharer}, sess.sid)
 
 		// If it's a new subscription or if the user asked for permissions in excess of what was granted,
 		// announce the request to topic admins on 'me' as well.
 		var adminsNotified bool
 		if !userData.modeGiven.BetterEqual(userData.modeWant) || !existingSub {
-			t.presSubsOffline("acs", params, types.ModeCSharer, sess.sid, true)
+			t.presSubsOffline("acs", params, &presFilters{filterIn: types.ModeCSharer}, sess.sid, true)
 			adminsNotified = true
 		}
 
@@ -1155,14 +1159,14 @@ func (t *Topic) approveSub(h *Hub, sess *Session, target types.Uid, set *MsgClie
 
 	// Access mode has changed.
 	if oldGiven != userData.modeGiven {
-		params := &PresParams{
+		params := &presParams{
 			actor:  sess.uid.UserId(),
 			target: target.UserId(),
 			dWant:  oldWant.Delta(userData.modeWant),
 			dGiven: oldGiven.Delta(userData.modeGiven)}
 
 		// Inform topic sharers.
-		t.presSubsOffline("acs", params, types.ModeCSharer, sess.sid, false)
+		t.presSubsOffline("acs", params, &presFilters{filterIn: types.ModeCSharer}, sess.sid, false)
 
 		// If tagret user is not a sharer, inform the target user separately.
 		if !(userData.modeGiven & userData.modeWant).IsSharer() {
@@ -1410,7 +1414,7 @@ func (t *Topic) replySetDesc(sess *Session, set *MsgClientSet) error {
 			t.presUsersOfInterest("upd", "")
 			t.presSingleUserOffline(sess.uid, "upd", nilPresParams, sess.sid, false)
 		} else {
-			t.presSubsOffline("upd", nilPresParams, 0, sess.sid, false)
+			t.presSubsOffline("upd", nilPresParams, nilPresFilters, sess.sid, false)
 		}
 	}
 
@@ -1886,9 +1890,10 @@ func (t *Topic) replyDelMsg(sess *Session, del *MsgClientDel) error {
 			t.perUser[uid] = pud
 		}
 		// Broadcast the change to all, online and offline, exclude the session making the change.
-		params := &PresParams{delID: t.delID, delSeq: dr, actor: sess.uid.UserId()}
-		t.presSubsOnline("del", params.actor, params, types.ModeRead, sess.sid, "")
-		t.presSubsOffline("del", params, types.ModeRead, sess.sid, true)
+		params := &presParams{delID: t.delID, delSeq: dr, actor: sess.uid.UserId()}
+		filters := &presFilters{filterIn: types.ModeRead}
+		t.presSubsOnline("del", params.actor, params, filters, sess.sid)
+		t.presSubsOffline("del", params, filters, sess.sid, true)
 	} else {
 		pud := t.perUser[sess.uid]
 		pud.delID = t.delID
@@ -2030,20 +2035,30 @@ func (t *Topic) evictUser(uid types.Uid, unsub bool, skip string) {
 	// First notify topic subscribers that the user has left the topic
 	if t.cat == types.TopicCatGrp {
 		if unsub {
-			// Let admins know
+			// Let admins know, exclude the user himself
+			log.Println("evictUser presSubsOnline, presSingleUserOffline")
 			t.presSubsOnline("acs", uid.UserId(),
-				&PresParams{
+				&presParams{
 					actor:  skip,
 					target: uid.UserId(),
 					dWant:  types.ModeNone.String(),
 					dGiven: types.ModeNone.String()},
-				types.ModeCAdmin, skip, "")
+				&presFilters{
+					filterIn:    types.ModeCSharer,
+					excludeUser: uid.UserId()},
+				skip)
+
 			// Let affected user know
 			t.presSingleUserOffline(uid, "gone", nilPresParams, "", false)
-		} else {
-			// Let all 'R' users know
-			t.presSubsOnline("off", uid.UserId(), nilPresParams, types.ModeRead, skip, "")
 		}
+
+		// Let all 'R' subscribers know that the user is gone.
+		t.presSubsOnline("off", uid.UserId(), nilPresParams,
+			&presFilters{
+				filterIn:    types.ModeRead,
+				excludeUser: uid.UserId()},
+			skip)
+
 	} else if t.cat == types.TopicCatP2P && unsub {
 		// Notify user's own sessions that the topic is gone and remove the other user from
 		// perSubs.
@@ -2051,7 +2066,7 @@ func (t *Topic) evictUser(uid types.Uid, unsub bool, skip string) {
 
 		if len(t.perUser) == 2 {
 			// Tell user2 to stop sending updates to user1
-			presSingleUserOfflineOffline(t.p2pOtherUser(uid), uid.UserId(), "?none+rem", 0, nilPresParams, "")
+			presSingleUserOfflineOffline(t.p2pOtherUser(uid), uid.UserId(), "?none+rem", nilPresParams, "")
 		}
 	}
 

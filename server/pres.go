@@ -8,8 +8,8 @@ import (
 	"github.com/tinode/chat/server/store/types"
 )
 
-// PresParams defines parameters for creating a presence notification.
-type PresParams struct {
+// presParams defines parameters for creating a presence notification.
+type presParams struct {
 	userAgent string
 	seqID     int
 	delID     int
@@ -23,7 +23,18 @@ type PresParams struct {
 	dGiven string
 }
 
-func (p PresParams) packAcs() *MsgAccessMode {
+type presFilters struct {
+	// Send messages only to users with this access mode being non-zero.
+	filterIn types.AccessMode
+	// Exclude users with this access mode being non-zero.
+	filterOut types.AccessMode
+	// Send messages to the sessions of this single user defined by ID as a string 'usrABC'.
+	singleUser string
+	// Do not send messages to sessions of this user defined by ID as a string 'usrABC'.
+	excludeUser string
+}
+
+func (p presParams) packAcs() *MsgAccessMode {
 	if p.dWant != "" || p.dGiven != "" {
 		return &MsgAccessMode{Want: p.dWant, Given: p.dGiven}
 	}
@@ -245,8 +256,8 @@ func (t *Topic) presEnableUser() {
 // Case M: Topic unaccessible (cluster failure), "left" to everyone currently online
 // Case V.2: Messages soft deleted, "del" to one user only
 // Case W.2: Messages hard-deleted, "del"
-func (t *Topic) presSubsOnline(what, src string, params *PresParams,
-	filter types.AccessMode, skipSid string, singleUser string) {
+func (t *Topic) presSubsOnline(what, src string, params *presParams,
+	pf *presFilters, skipSid string) {
 
 	// If affected user is the same as the user making the change, clear 'who'
 	actor := params.actor
@@ -263,7 +274,8 @@ func (t *Topic) presSubsOnline(what, src string, params *PresParams,
 		Pres: &MsgServerPres{Topic: t.xoriginal, What: what, Src: src,
 			Acs: params.packAcs(), AcsActor: actor, AcsTarget: target,
 			SeqId: params.seqID, DelId: params.delID, DelSeq: params.delSeq,
-			filter: int(filter), singleUser: singleUser},
+			filterIn: int(pf.filterIn), filterOut: int(pf.filterOut),
+			singleUser: pf.singleUser, excludeUser: pf.excludeUser},
 		rcptto: t.name, skipSid: skipSid}
 
 	// log.Printf("Pres K.2, L.3, W.2: topic'%s' what='%s', who='%s', acs='w:%s/g:%s'", t.name, what,
@@ -302,7 +314,7 @@ func (t *Topic) presSubsOnlineDirect(what string) {
 // Case L.4: Admin altered GIVEN, "acs" to admins
 // Case T: message sent, "msg" to all with 'R'
 // Case W.1: messages hard-deleted, "del" to all with 'R'
-func (t *Topic) presSubsOffline(what string, params *PresParams, filter types.AccessMode,
+func (t *Topic) presSubsOffline(what string, params *presParams, filter *presFilters,
 	skipSid string, offlineOnly bool) {
 
 	var skipTopic string
@@ -339,12 +351,12 @@ func (t *Topic) presSubsOffline(what string, params *PresParams, filter types.Ac
 
 // Same as presSubsOffline, but the topic has not been loaded/initialized first: offline topic, offline subscribers
 func presSubsOfflineOffline(topic string, cat types.TopicCat, subs []types.Subscription, what string,
-	params *PresParams, skipSid string) {
+	params *presParams, skipSid string) {
 
 	var count = 0
 	original := topic
 	for _, sub := range subs {
-		if what != "acs" && !presOfflineFilter(sub.ModeWant&sub.ModeGiven, types.ModeNone) {
+		if what != "acs" && !presOfflineFilter(sub.ModeWant&sub.ModeGiven, nil) {
 			continue
 		}
 
@@ -378,7 +390,7 @@ func presSubsOfflineOffline(topic string, cat types.TopicCat, subs []types.Subsc
 // Case L.2: Sharer altered GIVEN (inludes invite, eviction)
 // Case U: read/recv notification
 // Case V.1: messages soft-deleted
-func (t *Topic) presSingleUserOffline(uid types.Uid, what string, params *PresParams, skipSid string, offlineOnly bool) {
+func (t *Topic) presSingleUserOffline(uid types.Uid, what string, params *presParams, skipSid string, offlineOnly bool) {
 	var skipTopic string
 	if offlineOnly {
 		skipTopic = t.name
@@ -386,7 +398,7 @@ func (t *Topic) presSingleUserOffline(uid types.Uid, what string, params *PresPa
 
 	if pud, ok := t.perUser[uid]; ok &&
 		// Send access change notification regardless of P permission.
-		(what == "acs" || presOfflineFilter(pud.modeGiven&pud.modeWant, types.ModeNone)) {
+		(what == "acs" || presOfflineFilter(pud.modeGiven&pud.modeWant, nil)) {
 
 		user := uid.UserId()
 		actor := params.actor
@@ -412,7 +424,7 @@ func (t *Topic) presSingleUserOffline(uid types.Uid, what string, params *PresPa
 
 // Same as above, but the topic is offline (not loaded from the DB)
 func presSingleUserOfflineOffline(uid types.Uid, original string, what string,
-	mode types.AccessMode, params *PresParams, skipSid string) {
+	params *presParams, skipSid string) {
 
 	user := uid.UserId()
 	actor := params.actor
@@ -449,7 +461,7 @@ func (t *Topic) presPubMessageCount(uid types.Uid, recv, read int, skip string) 
 		// Announce to user's other sessions on 'me' only if they are not attached to this topic.
 		// Attached topics will receive an {info}
 
-		t.presSingleUserOffline(uid, what, &PresParams{seqID: seq}, skip, true)
+		t.presSingleUserOffline(uid, what, &presParams{seqID: seq}, skip, true)
 	}
 }
 
@@ -463,11 +475,11 @@ func (t *Topic) presPubMessageDelete(uid types.Uid, delID int, list []MsgDelRang
 			return
 		}
 
-		params := &PresParams{delID: delID, delSeq: list}
+		params := &presParams{delID: delID, delSeq: list}
 
 		// Case V.2
 		user := uid.UserId()
-		t.presSubsOnline("del", user, params, 0, skip, user)
+		t.presSubsOnline("del", user, params, &presFilters{singleUser: user}, skip)
 
 		// Case V.1
 		t.presSingleUserOffline(uid, "del", params, skip, true)
@@ -480,7 +492,9 @@ func (t *Topic) presPubMessageDelete(uid types.Uid, delID int, list []MsgDelRang
 // bits specified in 'filter' (or filter is ModeNone).
 //
 // Filtering must happen here because receiving 'me' has no access to sender's permissions.
-func presOfflineFilter(mode, filter types.AccessMode) bool {
+func presOfflineFilter(mode types.AccessMode, pf *presFilters) bool {
 	return mode.IsPresencer() &&
-		(filter == types.ModeNone || mode&filter != 0)
+		(pf == nil ||
+			((pf.filterIn == 0 || mode&pf.filterIn != 0) &&
+				(pf.filterOut == 0 || mode&pf.filterOut == 0)))
 }

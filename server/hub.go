@@ -926,11 +926,11 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *MsgClientDel, reason 
 					}
 
 					// Notify user's other sessions that the subscription is gone
-					presSingleUserOfflineOffline(sess.uid, msg.Topic, "gone", 0, nilPresParams, sess.sid)
+					presSingleUserOfflineOffline(sess.uid, msg.Topic, "gone", nilPresParams, sess.sid)
 					if tcat == types.TopicCatP2P && len(subs) == 2 {
 						// Notify user2 that the current user is offline and stop notification exchange
 						presSingleUserOfflineOffline(types.ParseUserId(msg.Topic),
-							sess.uid.UserId(), "off+rem", 0, nilPresParams, "")
+							sess.uid.UserId(), "off+rem", nilPresParams, "")
 					}
 
 				} else {
@@ -942,7 +942,7 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *MsgClientDel, reason 
 					}
 
 					// Notify subscribers that the topic is gone
-					presSubsOfflineOffline(msg.Topic, tcat, subs, "gone", &PresParams{}, sess.sid)
+					presSubsOfflineOffline(msg.Topic, tcat, subs, "gone", &presParams{}, sess.sid)
 				}
 
 				if sess != nil && msg != nil {

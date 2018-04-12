@@ -417,14 +417,20 @@ type MsgServerPres struct {
 	// Flag to break the reply loop
 	wantReply bool
 
-	// Additional access mode filter when senting to topic's online members
-	filter int
+	// Additional access mode filters when senting to topic's online members. Both filter conditions must be true.
+	// send only to those who have this access mode.
+	filterIn int
+	// skip those who have this access mode.
+	filterOut int
 
 	// When sending to 'me', skip sessions subscribed to this topic
 	skipTopic string
 
 	// Send to sessions of a single user only
 	singleUser string
+
+	// Exclude sessions of a single user
+	excludeUser string
 }
 
 // MsgServerMeta is a topic metadata {meta} update.
