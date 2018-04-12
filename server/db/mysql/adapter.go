@@ -357,17 +357,17 @@ func (a *adapter) CreateDb(reset bool) error {
 	return tx.Commit()
 }
 
-func (a *adapter) addUserTags(tx *sqlx.Tx, decoded_uid int64, tags []string) error {
+func (a *adapter) addTags(tx *sqlx.Tx, table, keyName string, keyVal interface{}, tags []string) error {
 	if len(tags) > 0 {
 		var insert *sql.Stmt
 		var err error
-		insert, err = tx.Prepare("INSERT INTO usertags(userid, tag) VALUES(?,?)")
+		insert, err = tx.Prepare("INSERT INTO " + table + "(" + keyName + ",tag) VALUES(?,?)")
 		if err != nil {
 			return err
 		}
 
 		for _, tag := range tags {
-			_, err = insert.Exec(decoded_uid, tag)
+			_, err = insert.Exec(keyVal, tag)
 
 			if err != nil {
 				if isDupe(err) {
@@ -405,8 +405,8 @@ func (a *adapter) UserCreate(user *t.User) error {
 		return err
 	}
 
-	// Save user's tags to a separate table to ensure uniquness
-	err = a.addUserTags(tx, decoded_uid, user.Tags)
+	// Save user's tags to a separate table to make user findable.
+	err = a.addTags(tx, "usertags", "userid", decoded_uid, user.Tags)
 	if err != nil {
 		return err
 	}
@@ -565,7 +565,6 @@ func (a *adapter) UserUpdate(uid t.Uid, update map[string]interface{}) error {
 
 	defer func() {
 		if err != nil {
-			log.Println("transaction failed", err)
 			tx.Rollback()
 		}
 	}()
@@ -587,7 +586,7 @@ func (a *adapter) UserUpdate(uid t.Uid, update map[string]interface{}) error {
 			return err
 		}
 		// Now insert new tags
-		err = a.addUserTags(tx, decoded_uid, tags)
+		err = a.addTags(tx, "usertags", "userid", decoded_uid, tags)
 		if err != nil {
 			return err
 		}
@@ -599,24 +598,33 @@ func (a *adapter) UserUpdate(uid t.Uid, update map[string]interface{}) error {
 // *****************************
 
 func (a *adapter) topicCreate(tx *sqlx.Tx, topic *t.Topic) error {
-	var err error
-	q := "INSERT INTO topics(createdAt,updatedAt,name,access,public,tags) VALUES(?,?,?,?,?,?)"
-	if tx == nil {
-		_, err = a.db.Exec(q, topic.CreatedAt, topic.UpdatedAt, topic.Id,
-			topic.Access, toJSON(topic.Public), topic.Tags)
-	} else {
-		_, err = tx.Exec(q, topic.CreatedAt, topic.UpdatedAt, topic.Id,
-			topic.Access, toJSON(topic.Public), topic.Tags)
+	_, err := tx.Exec("INSERT INTO topics(createdAt,updatedAt,name,access,public,tags) VALUES(?,?,?,?,?,?)",
+		topic.CreatedAt, topic.UpdatedAt, topic.Id, topic.Access, toJSON(topic.Public), topic.Tags)
+	if err != nil {
+		return err
 	}
 
-	// FIXME(gene): handle tags
-
-	return err
+	// Save topic's tags to a separate table to make topic findable.
+	return a.addTags(tx, "topictags", "topic", topic.Id, topic.Tags)
 }
 
 // TopicCreate saves topic object to database.
 func (a *adapter) TopicCreate(topic *t.Topic) error {
-	return a.topicCreate(nil, topic)
+	tx, err := a.db.Beginx()
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err != nil {
+			tx.Rollback()
+		}
+	}()
+
+	err = a.topicCreate(tx, topic)
+	if err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // If upsert = true - update subscription on duplicate key, otherwise ignore the duplicate.
@@ -891,10 +899,39 @@ func (a *adapter) TopicUpdateOnMessage(topic string, msg *t.Message) error {
 }
 
 func (a *adapter) TopicUpdate(topic string, update map[string]interface{}) error {
+	tx, err := a.db.Beginx()
+	if err != nil {
+		return err
+	}
+
+	defer func() {
+		if err != nil {
+			tx.Rollback()
+		}
+	}()
+
 	cols, args := updateByMap(update)
 	args = append(args, topic)
-	_, err := a.db.Exec("UPDATE topics SET "+strings.Join(cols, ",")+" WHERE name=?", args...)
-	return err
+	_, err = tx.Exec("UPDATE topics SET "+strings.Join(cols, ",")+" WHERE name=?", args...)
+	if err != nil {
+		return err
+	}
+
+	// Tags are also stored in a separate table
+	if tags := extractTags(update); tags != nil {
+		// First delete all user tags
+		_, err = tx.Exec("DELETE FROM topictags WHERE topic=?", topic)
+		if err != nil {
+			return err
+		}
+		// Now insert new tags
+		err = a.addTags(tx, "topictags", "topic", topic, tags)
+		if err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
 }
 
 // Get a subscription of a user to a topic
