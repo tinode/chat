@@ -356,6 +356,29 @@ func (a *adapter) CreateDb(reset bool) error {
 	return tx.Commit()
 }
 
+func (a *adapter) addUserTags(tx *sqlx.Tx, decoded_uid int64, tags []string) error {
+	if len(tags) > 0 {
+		var insert *sql.Stmt
+		var err error
+		insert, err = tx.Prepare("INSERT INTO usertags(userid, tag) VALUES(?,?)")
+		if err != nil {
+			return err
+		}
+
+		for _, tag := range tags {
+			_, err = insert.Exec(decoded_uid, tag)
+
+			if err != nil {
+				if isDupe(err) {
+					return t.ErrDuplicate
+				}
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 // UserCreate creates a new user. Returns error and true if error is due to duplicate user name,
 // false for any other error
 func (a *adapter) UserCreate(user *t.User) error {
@@ -381,23 +404,9 @@ func (a *adapter) UserCreate(user *t.User) error {
 	}
 
 	// Save user's tags to a separate table to ensure uniquness
-	if len(user.Tags) > 0 {
-		var insert *sql.Stmt
-		insert, err = tx.Prepare("INSERT INTO usertags(userid, tag) VALUES(?,?)")
-		if err != nil {
-			return err
-		}
-
-		for _, tag := range user.Tags {
-			_, err = insert.Exec(decoded_uid, tag)
-
-			if err != nil {
-				if isDupe(err) {
-					return t.ErrDuplicate
-				}
-				return err
-			}
-		}
+	err = a.addUserTags(tx, decoded_uid, user.Tags)
+	if err != nil {
+		return err
 	}
 
 	return tx.Commit()
@@ -547,10 +556,42 @@ func (a *adapter) UserUpdateLastSeen(uid t.Uid, userAgent string, when time.Time
 
 // UserUpdate updates user object. Use UserTagsUpdate when updating Tags.
 func (a *adapter) UserUpdate(uid t.Uid, update map[string]interface{}) error {
+	tx, err := a.db.Beginx()
+	if err != nil {
+		return err
+	}
+
+	defer func() {
+		if err != nil {
+			log.Println("transaction failed", err)
+			tx.Rollback()
+		}
+	}()
+
 	cols, args := updateByMap(update)
-	args = append(args, store.DecodeUid(uid))
-	_, err := a.db.Exec("UPDATE users SET "+strings.Join(cols, ",")+" WHERE id=?", args...)
-	return err
+	decoded_uid := store.DecodeUid(uid)
+	args = append(args, decoded_uid)
+
+	_, err = tx.Exec("UPDATE users SET "+strings.Join(cols, ",")+" WHERE id=?", args...)
+	if err != nil {
+		return err
+	}
+
+	// Tags are also stored in a separate table
+	if tags := extractTags(update); tags != nil {
+		// First delete all user tags
+		_, err = tx.Exec("DELETE FROM usertags WHERE userid=?", decoded_uid)
+		if err != nil {
+			return err
+		}
+		// Now insert new tags
+		err = a.addUserTags(tx, decoded_uid, tags)
+		if err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
 }
 
 // *****************************
@@ -1552,17 +1593,29 @@ func decodeString(str string) int64 {
 	return store.DecodeUid(uid)
 }
 
-// FIXME: just handle Public and Private. Everything else has Scanner and Valuer defined.
+// Convert update to a list of columns and arguments.
 func updateByMap(update map[string]interface{}) (cols []string, args []interface{}) {
 	for col, arg := range update {
 		col = strings.ToLower(col)
-		cols = append(cols, col+"=?")
 		if col == "public" || col == "private" {
 			arg = toJSON(arg)
 		}
+		cols = append(cols, col+"=?")
 		args = append(args, arg)
 	}
 	return
+}
+
+// If Tags field is updated, get the tags so tags table cab be updated too.
+func extractTags(update map[string]interface{}) []string {
+	var tags []string
+
+	val := update["Tags"]
+	if val != nil {
+		tags, _ = val.(t.StringSlice)
+	}
+
+	return []string(tags)
 }
 
 func init() {
