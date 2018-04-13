@@ -892,8 +892,9 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *MsgClientDel, reason 
 				tcat := topicCat(topic)
 
 				var sub *types.Subscription
+				user := sess.uid.String()
 				for i := 0; i < len(subs); i++ {
-					if subs[i].User == sess.uid.String() {
+					if subs[i].User == user {
 						sub = &subs[i]
 						break
 					}
@@ -913,8 +914,7 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *MsgClientDel, reason 
 							sess.queueOut(ErrUnknown(msg.Id, msg.Topic, now))
 							return
 						}
-						// Notify second user that the current user is now offline and stop sending
-						// updates
+
 					} else {
 						// Not P2P or more than 1 subscription left.
 						// Delete user's own subscription only

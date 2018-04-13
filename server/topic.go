@@ -2028,6 +2028,8 @@ func (t *Topic) replyLeaveUnsub(h *Hub, sess *Session, id string) error {
 
 // evictUser evicts given user's sessions from the topic and clears user's cached data, if requested
 func (t *Topic) evictUser(uid types.Uid, unsub bool, skip string) {
+	log.Println("evictUser", uid, unsub, skip)
+
 	now := types.TimeNow()
 
 	pud := t.perUser[uid]
@@ -2036,7 +2038,6 @@ func (t *Topic) evictUser(uid types.Uid, unsub bool, skip string) {
 	if t.cat == types.TopicCatGrp {
 		if unsub {
 			// Let admins know, exclude the user himself
-			log.Println("evictUser presSubsOnline, presSingleUserOffline")
 			t.presSubsOnline("acs", uid.UserId(),
 				&presParams{
 					actor:  skip,
@@ -2049,15 +2050,17 @@ func (t *Topic) evictUser(uid types.Uid, unsub bool, skip string) {
 				skip)
 
 			// Let affected user know
-			t.presSingleUserOffline(uid, "gone", nilPresParams, "", false)
+			t.presSingleUserOffline(uid, "gone", nilPresParams, skip, false)
 		}
 
-		// Let all 'R' subscribers know that the user is gone.
-		t.presSubsOnline("off", uid.UserId(), nilPresParams,
-			&presFilters{
-				filterIn:    types.ModeRead,
-				excludeUser: uid.UserId()},
-			skip)
+		if pud.online > 0 {
+			// Let all 'R' subscribers know that the user is gone.
+			t.presSubsOnline("off", uid.UserId(), nilPresParams,
+				&presFilters{
+					filterIn:    types.ModeRead,
+					excludeUser: uid.UserId()},
+				skip)
+		}
 
 	} else if t.cat == types.TopicCatP2P && unsub {
 		// Notify user's own sessions that the topic is gone and remove the other user from
