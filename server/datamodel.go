@@ -401,16 +401,18 @@ type MsgServerData struct {
 
 // MsgServerPres is presence notification {pres} (authoritative update).
 type MsgServerPres struct {
-	Topic     string         `json:"topic"`
-	Src       string         `json:"src"`
-	What      string         `json:"what"`
-	UserAgent string         `json:"ua,omitempty"`
-	SeqId     int            `json:"seq,omitempty"`
-	DelId     int            `json:"clear,omitempty"`
-	DelSeq    []MsgDelRange  `json:"delseq,omitempty"`
-	AcsTarget string         `json:"tgt,omitempty"`
-	AcsActor  string         `json:"act,omitempty"`
-	Acs       *MsgAccessMode `json:"acs,omitempty"`
+	Topic     string        `json:"topic"`
+	Src       string        `json:"src"`
+	What      string        `json:"what"`
+	UserAgent string        `json:"ua,omitempty"`
+	SeqId     int           `json:"seq,omitempty"`
+	DelId     int           `json:"clear,omitempty"`
+	DelSeq    []MsgDelRange `json:"delseq,omitempty"`
+	AcsTarget string        `json:"tgt,omitempty"`
+	AcsActor  string        `json:"act,omitempty"`
+	// Acs or a delta Acs. Need to marshal it to json under a name different than 'acs'
+	// to allow different handling on the client
+	Acs *MsgAccessMode `json:"dacs,omitempty"`
 
 	// UNroutable params
 
