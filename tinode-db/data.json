@@ -125,6 +125,7 @@
   {
    "createdAt": "-124h",
    "name": "*BF",
+   "owner": "frank",
    "tags": ["sikrit", "secret"],
    "public": {"fn": "Sikrit group!", "photo": "bf-64.jpg", "type": "jpg"}
   }
@@ -229,15 +230,9 @@
   },
   {
    "createdAt": "-111.3h",
-   "private": "I'm not the owner",
+   "private": "I'm not the owner, Frank is",
    "topic": "*BF",
    "user": "bob"
-  },
-  {
-   "createdAt": "-111.2h",
-   "private": "I'm not the owner either",
-   "topic": "*BF",
-   "user": "frank"
   }
  ],
  "messages": [

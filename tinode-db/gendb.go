@@ -107,7 +107,7 @@ func genDb(reset bool, dbsource string, data *Data) {
 		// Add address book as fnd.private
 		if uu.AddressBook != nil && len(uu.AddressBook) > 0 {
 			if err := store.Subs.Update(user.Uid().FndName(), user.Uid(),
-				map[string]interface{}{"Private": uu.AddressBook}); err != nil {
+				map[string]interface{}{"Private": uu.AddressBook}, true); err != nil {
 
 				log.Fatal(err)
 			}
