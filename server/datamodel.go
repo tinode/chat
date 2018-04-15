@@ -636,6 +636,13 @@ func ErrPermissionDenied(id, topic string, ts time.Time) *ServerComMessage {
 		Timestamp: ts}}
 }
 
+func ErrAPIKeyRequired(ts time.Time) *ServerComMessage {
+	return &ServerComMessage{Ctrl: &MsgServerCtrl{
+		Code:      http.StatusForbidden,
+		Text:      "valid API key required",
+		Timestamp: ts}}
+}
+
 // ErrTopicNotFound topic is not found.
 func ErrTopicNotFound(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
@@ -671,7 +678,7 @@ func ErrOperationNotAllowed(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
 		Code:      http.StatusMethodNotAllowed, // 405
-		Text:      "operation not allowed",
+		Text:      "operation or method not allowed",
 		Topic:     topic,
 		Timestamp: ts}}
 }

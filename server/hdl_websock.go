@@ -10,6 +10,7 @@
 package main
 
 import (
+	"encoding/json"
 	"log"
 	"net/http"
 	"time"
@@ -120,15 +121,19 @@ var upgrader = websocket.Upgrader{
 }
 
 func serveWebSocket(wrt http.ResponseWriter, req *http.Request) {
+	now := time.Now().UTC().Round(time.Millisecond)
+
 	if isValid, _ := checkAPIKey(getAPIKey(req)); !isValid {
-		http.Error(wrt, "Missing, invalid or expired API key", http.StatusForbidden)
+		wrt.WriteHeader(http.StatusForbidden)
+		json.NewEncoder(wrt).Encode(ErrAPIKeyRequired(now))
 		log.Println("ws: Missing, invalid or expired API key")
 		return
 	}
 
 	if req.Method != "GET" {
-		http.Error(wrt, "Method not allowed", http.StatusMethodNotAllowed)
-		log.Println("ws: Invalid HTTP method")
+		wrt.WriteHeader(http.StatusMethodNotAllowed)
+		json.NewEncoder(wrt).Encode(ErrOperationNotAllowed("", "", now))
+		log.Println("ws: Invalid HTTP method", req.Method)
 		return
 	}
 

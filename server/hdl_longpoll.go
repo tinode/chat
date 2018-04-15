@@ -93,11 +93,7 @@ func serveLongPoll(wrt http.ResponseWriter, req *http.Request) {
 
 	if isValid, _ := checkAPIKey(getAPIKey(req)); !isValid {
 		wrt.WriteHeader(http.StatusForbidden)
-		enc.Encode(
-			&ServerComMessage{Ctrl: &MsgServerCtrl{
-				Timestamp: now,
-				Code:      http.StatusForbidden,
-				Text:      "valid API key is required"}})
+		enc.Encode(ErrAPIKeyRequired(now))
 		return
 	}
 
