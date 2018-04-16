@@ -49,6 +49,19 @@ func ParseAuthLevel(name string) Level {
 	}
 }
 
+type Feature uint16
+
+const (
+	Validated Feature = 1 << iota
+)
+
+type Rec struct {
+	Uid       types.Uid
+	AuthLevel Level
+	Lifetime  time.Duration
+	Features  Feature
+}
+
 // AuthHandler is the interface which auth providers must implement.
 type AuthHandler interface {
 	// Init initialize the handler.
@@ -57,18 +70,18 @@ type AuthHandler interface {
 	// AddRecord adds persistent record to database.
 	// Calls store.Users.AddAuthRecord("user", "auth.Level", "scheme", "unique", "passhash", "expiration")
 	// Returns: auth level, error
-	AddRecord(uid types.Uid, secret []byte, lifetime time.Duration) (Level, error)
+	AddRecord(rec *Rec, secret []byte) (Level, error)
 
 	// UpdateRecord updates existing record with new credentials. Returns a numeric error code to indicate
 	// if the error is due to a duplicate or some other error.
 	// store.UpdateAuthRecord("scheme", "unique", "secret")
-	UpdateRecord(uid types.Uid, secret []byte, lifetime time.Duration) error
+	UpdateRecord(rec *Rec, secret []byte) error
 
 	// Authenticate: given a user-provided authentication secret (such as "login:password"
 	// return user ID, time when the secret expires (zero, if never) or an error code.
 	// store.Users.GetAuthRecord("scheme", "unique")
-	// Returns: user ID, user auth level, token expiration time, error.
-	Authenticate(secret []byte) (types.Uid, Level, time.Time, error)
+	// Returns: user ID, user auth level, login expiration time, error.
+	Authenticate(secret []byte) (*Rec, error)
 
 	// IsUnique verifies if the provided secret can be considered unique by the auth scheme
 	// E.g. if login is unique.
@@ -76,7 +89,7 @@ type AuthHandler interface {
 	IsUnique(secret []byte) (bool, error)
 
 	// GenSecret generates a new secret, if appropriate.
-	GenSecret(uid types.Uid, authLvl Level, lifetime time.Duration) ([]byte, time.Time, error)
+	GenSecret(rec *Rec) ([]byte, time.Time, error)
 
 	// DelRecords deletes all authentication records for the given user.
 	DelRecords(uid types.Uid) error

@@ -527,7 +527,7 @@ func (s *Session) acc(msg *ClientComMessage) {
 			return
 		}
 
-		authLvl, err := authhdl.AddRecord(user.Uid(), msg.Acc.Secret, 0)
+		authLvl, err := authhdl.AddRecord(&auth.Rec{Uid: user.Uid()}, msg.Acc.Secret)
 		if err != nil {
 			log.Println("auth: add record failed", err)
 			// Attempt to delete incomplete user record
@@ -569,8 +569,10 @@ func (s *Session) acc(msg *ClientComMessage) {
 		var reply *ServerComMessage
 		if msg.Acc.Login {
 			// Process user's login request.
-			reply = s.onLogin(msg.Acc.Id, msg.timestamp, user.Uid(), authLvl, time.Time{}, validated)
+			_, missing := stringSliceDelta(globals.authValidators[authLvl], validated)
+			reply = s.onLogin(msg.Acc.Id, msg.timestamp, user.Uid(), authLvl, 0, missing)
 		} else {
+			// User is not using the new account for logging in.
 			reply = NoErrCreated(msg.Acc.Id, "", msg.timestamp)
 			reply.Ctrl.Params = map[string]interface{}{"user": user.Uid().UserId()}
 		}
@@ -594,7 +596,7 @@ func (s *Session) acc(msg *ClientComMessage) {
 			// Request to update auth of an existing account. Only basic auth is currently supported
 			// TODO(gene): support adding new auth schemes
 			// TODO(gene): support the case when msg.Acc.User is not equal to the current user
-			if err := authhdl.UpdateRecord(s.uid, msg.Acc.Secret, 0); err != nil {
+			if err := authhdl.UpdateRecord(&auth.Rec{Uid: s.uid}, msg.Acc.Secret); err != nil {
 				log.Println("auth: failed to update secret", err)
 				s.queueOut(decodeStoreError(err, msg.Acc.Id, msg.timestamp, nil))
 				return
@@ -651,44 +653,39 @@ func (s *Session) login(msg *ClientComMessage) {
 		return
 	}
 
-	uid, authLvl, expires, err := handler.Authenticate(msg.Login.Secret)
+	rec, err := handler.Authenticate(msg.Login.Secret)
 	if err != nil {
 		log.Println("auth failed", err)
 		s.queueOut(decodeStoreError(err, msg.Login.Id, msg.timestamp, nil))
 		return
 	}
 
-	validated, err := s.getValidatedGred(uid, authLvl, msg.Login.Cred)
+	var missing []string
+	if rec.Features&auth.Validated == 0 {
+		missing, err = s.getValidatedGred(rec.Uid, rec.AuthLevel, msg.Login.Cred)
+		if err == nil {
+			_, missing = stringSliceDelta(globals.authValidators[rec.AuthLevel], missing)
+		}
+	}
 	if err != nil {
 		log.Println("failed to validate credentials", err)
 		s.queueOut(decodeStoreError(err, msg.Login.Id, msg.timestamp, nil))
 	} else {
-		s.queueOut(s.onLogin(msg.Login.Id, msg.timestamp, uid, authLvl, expires, validated))
+		s.queueOut(s.onLogin(msg.Login.Id, msg.timestamp, rec.Uid, rec.AuthLevel, rec.Lifetime, missing))
 	}
 }
 
 // onLogin performs steps after successful authentication.
 func (s *Session) onLogin(msgID string, timestamp time.Time, uid types.Uid, authLvl auth.Level,
-	expires time.Time, validated []string) *ServerComMessage {
+	lifetime time.Duration, missing []string) *ServerComMessage {
 
 	var reply *ServerComMessage
 	var params map[string]interface{}
+	var features auth.Feature
 
-	var tokenLifetime time.Duration
-	if !expires.IsZero() {
-		tokenLifetime = time.Until(expires)
-	}
-
-	// GenSecret fails only if tokenLifetime is < 0. It can't be < 0 here,
-	// otherwise login would have failed earlier.
-	secret, expires, _ := store.GetAuthHandler("token").GenSecret(uid, authLvl, tokenLifetime)
 	params = map[string]interface{}{
 		"user":    uid.UserId(),
-		"authlvl": authLvl.String(),
-		"token":   secret,
-		"expires": expires}
-
-	_, missing := stringSliceDelta(globals.authValidators[authLvl], validated)
+		"authlvl": authLvl.String()}
 	if len(missing) > 0 {
 		// Some credentials are not validated yet. Respond with request for validation.
 		reply = InfoValidateCredentials(msgID, timestamp)
@@ -702,6 +699,7 @@ func (s *Session) onLogin(msgID string, timestamp time.Time, uid types.Uid, auth
 		// Authenticate the session.
 		s.uid = uid
 		s.authLvl = authLvl
+		features = auth.Validated
 
 		// Record deviceId used in this session
 		if s.deviceID != "" {
@@ -713,6 +711,10 @@ func (s *Session) onLogin(msgID string, timestamp time.Time, uid types.Uid, auth
 			})
 		}
 	}
+	// GenSecret fails only if tokenLifetime is < 0. It can't be < 0 here,
+	// otherwise login would have failed earlier.
+	params["token"], params["expires"], _ = store.GetAuthHandler("token").GenSecret(
+		&auth.Rec{Uid: uid, AuthLevel: authLvl, Lifetime: lifetime, Features: features})
 
 	reply.Ctrl.Params = params
 	return reply

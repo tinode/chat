@@ -19,18 +19,18 @@ func (AnonAuth) Init(unused string) error {
 }
 
 // AddRecord is a noop. Just report success.
-func (AnonAuth) AddRecord(uid types.Uid, secret []byte, lifetime time.Duration) (auth.Level, error) {
+func (AnonAuth) AddRecord(rec *auth.Rec, secret []byte) (auth.Level, error) {
 	return auth.LevelAnon, nil
 }
 
 // UpdateRecord is a noop. Just report success.
-func (AnonAuth) UpdateRecord(uid types.Uid, secret []byte, lifetime time.Duration) error {
+func (AnonAuth) UpdateRecord(rec *auth.Rec, secret []byte) error {
 	return nil
 }
 
 // Authenticate is not supported. It's used only at account creation time.
-func (AnonAuth) Authenticate(secret []byte) (types.Uid, auth.Level, time.Time, error) {
-	return types.ZeroUid, auth.LevelNone, time.Time{}, types.ErrUnsupported
+func (AnonAuth) Authenticate(secret []byte) (*auth.Rec, error) {
+	return nil, types.ErrUnsupported
 }
 
 // IsUnique for a noop. Anonymous login does not use secret, any secret is fine.
@@ -39,7 +39,7 @@ func (AnonAuth) IsUnique(secret []byte) (bool, error) {
 }
 
 // GenSecret always fails.
-func (AnonAuth) GenSecret(uid types.Uid, authLvl auth.Level, lifetime time.Duration) ([]byte, time.Time, error) {
+func (AnonAuth) GenSecret(rec *auth.Rec) ([]byte, time.Time, error) {
 	return nil, time.Time{}, types.ErrUnsupported
 }
 

@@ -36,7 +36,7 @@ func (BasicAuth) Init(unused string) error {
 }
 
 // AddRecord adds a basic authentication record to DB.
-func (BasicAuth) AddRecord(uid types.Uid, secret []byte, lifetime time.Duration) (auth.Level, error) {
+func (BasicAuth) AddRecord(rec *auth.Rec, secret []byte) (auth.Level, error) {
 	uname, password, fail := parseSecret(string(secret))
 	if fail != nil {
 		return auth.LevelNone, fail
@@ -47,10 +47,10 @@ func (BasicAuth) AddRecord(uid types.Uid, secret []byte, lifetime time.Duration)
 		return auth.LevelNone, err
 	}
 	var expires time.Time
-	if lifetime > 0 {
-		expires = time.Now().Add(lifetime).UTC().Round(time.Millisecond)
+	if rec.Lifetime > 0 {
+		expires = time.Now().Add(rec.Lifetime).UTC().Round(time.Millisecond)
 	}
-	dup, err := store.Users.AddAuthRecord(uid, auth.LevelAuth, "basic", uname, passhash, expires)
+	dup, err := store.Users.AddAuthRecord(rec.Uid, auth.LevelAuth, "basic", uname, passhash, expires)
 	if dup {
 		return auth.LevelNone, types.ErrDuplicate
 	} else if err != nil {
@@ -60,7 +60,7 @@ func (BasicAuth) AddRecord(uid types.Uid, secret []byte, lifetime time.Duration)
 }
 
 // UpdateRecord updates password for basic authentication.
-func (BasicAuth) UpdateRecord(uid types.Uid, secret []byte, lifetime time.Duration) error {
+func (BasicAuth) UpdateRecord(rec *auth.Rec, secret []byte) error {
 	uname, password, fail := parseSecret(string(secret))
 	if fail != nil {
 		return fail
@@ -70,7 +70,7 @@ func (BasicAuth) UpdateRecord(uid types.Uid, secret []byte, lifetime time.Durati
 	if err != nil {
 		return err
 	}
-	if storedUID != uid {
+	if storedUID != rec.Uid {
 		return types.ErrFailed
 	}
 	passhash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
@@ -78,10 +78,10 @@ func (BasicAuth) UpdateRecord(uid types.Uid, secret []byte, lifetime time.Durati
 		return types.ErrInternal
 	}
 	var expires time.Time
-	if lifetime > 0 {
-		expires = time.Now().Add(lifetime)
+	if rec.Lifetime > 0 {
+		expires = time.Now().Add(rec.Lifetime)
 	}
-	_, err = store.Users.UpdateAuthRecord(uid, auth.LevelAuth, "basic", uname, passhash, expires)
+	_, err = store.Users.UpdateAuthRecord(rec.Uid, auth.LevelAuth, "basic", uname, passhash, expires)
 	if err != nil {
 		return err
 	}
@@ -89,29 +89,38 @@ func (BasicAuth) UpdateRecord(uid types.Uid, secret []byte, lifetime time.Durati
 }
 
 // Authenticate checks login and password.
-func (BasicAuth) Authenticate(secret []byte) (types.Uid, auth.Level, time.Time, error) {
+func (BasicAuth) Authenticate(secret []byte) (*auth.Rec, error) {
 	uname, password, fail := parseSecret(string(secret))
 	if fail != nil {
-		return types.ZeroUid, auth.LevelNone, time.Time{}, fail
+		return nil, fail
 	}
 
 	uid, authLvl, passhash, expires, err := store.Users.GetAuthRecord("basic", uname)
 	if err != nil {
-		return types.ZeroUid, auth.LevelNone, time.Time{}, err
+		return nil, err
 	} else if uid.IsZero() {
 		// Invalid login.
-		return types.ZeroUid, auth.LevelNone, time.Time{}, types.ErrFailed
+		return nil, types.ErrFailed
 	} else if !expires.IsZero() && expires.Before(time.Now()) {
 		// The record has expired
-		return types.ZeroUid, auth.LevelNone, time.Time{}, types.ErrExpired
+		return nil, types.ErrExpired
 	}
 
 	err = bcrypt.CompareHashAndPassword([]byte(passhash), []byte(password))
 	if err != nil {
 		// Invalid password
-		return types.ZeroUid, auth.LevelNone, time.Time{}, types.ErrFailed
+		return nil, types.ErrFailed
 	}
-	return uid, authLvl, expires, nil
+
+	var lifetime time.Duration
+	if !expires.IsZero() {
+		lifetime = time.Until(expires)
+	}
+	return &auth.Rec{
+		Uid:       uid,
+		AuthLevel: authLvl,
+		Lifetime:  lifetime,
+		Features:  0}, nil
 }
 
 // IsUnique checks login uniqueness.
@@ -133,7 +142,7 @@ func (BasicAuth) IsUnique(secret []byte) (bool, error) {
 }
 
 // GenSecret is not supported, generates an error.
-func (BasicAuth) GenSecret(uid types.Uid, authLvl auth.Level, lifetime time.Duration) ([]byte, time.Time, error) {
+func (BasicAuth) GenSecret(rec *auth.Rec) ([]byte, time.Time, error) {
 	return nil, time.Time{}, types.ErrUnsupported
 }
 

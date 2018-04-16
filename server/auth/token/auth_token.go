@@ -76,22 +76,22 @@ func (ta *authenticator) Init(jsonconf string) error {
 }
 
 // AddRecord is not supprted, will produce an error.
-func (authenticator) AddRecord(uid types.Uid, secret []byte, lifetime time.Duration) (auth.Level, error) {
+func (authenticator) AddRecord(rec *auth.Rec, secret []byte) (auth.Level, error) {
 	return auth.LevelNone, types.ErrUnsupported
 }
 
 // UpdateRecord is not supported, will produce an error.
-func (authenticator) UpdateRecord(uid types.Uid, secret []byte, lifetime time.Duration) error {
+func (authenticator) UpdateRecord(rec *auth.Rec, secret []byte) error {
 	return types.ErrUnsupported
 }
 
 // Authenticate checks validity of provided token.
-func (ta *authenticator) Authenticate(token []byte) (types.Uid, auth.Level, time.Time, error) {
+func (ta *authenticator) Authenticate(token []byte) (*auth.Rec, error) {
 	var tl tokenLayout
 	buf := bytes.NewBuffer(token)
 	err := binary.Read(buf, binary.LittleEndian, &tl)
 	if err != nil {
-		return types.ZeroUid, auth.LevelNone, time.Time{}, types.ErrMalformed
+		return nil, types.ErrMalformed
 	}
 
 	hbuf := new(bytes.Buffer)
@@ -100,39 +100,43 @@ func (ta *authenticator) Authenticate(token []byte) (types.Uid, auth.Level, time
 	hasher := hmac.New(sha256.New, ta.hmacSalt)
 	hasher.Write(hbuf.Bytes())
 	if !hmac.Equal(token[len(token)-buf.Len():], hasher.Sum(nil)) {
-		return types.ZeroUid, auth.LevelNone, time.Time{}, types.ErrFailed
+		return nil, types.ErrFailed
 	}
 
 	if tl.AuthLevel < 0 || auth.Level(tl.AuthLevel) > auth.LevelRoot {
-		return types.ZeroUid, auth.LevelNone, time.Time{}, types.ErrMalformed
+		return nil, types.ErrMalformed
 	}
 
 	if int(tl.SerialNumber) != ta.serialNumber {
-		return types.ZeroUid, auth.LevelNone, time.Time{}, types.ErrMalformed
+		return nil, types.ErrMalformed
 	}
 
 	expires := time.Unix(int64(tl.Expires), 0).UTC()
 	if expires.Before(time.Now().Add(1 * time.Second)) {
-		return types.ZeroUid, auth.LevelNone, time.Time{}, types.ErrExpired
+		return nil, types.ErrExpired
 	}
 
-	return types.Uid(tl.Uid), auth.Level(tl.AuthLevel), expires, nil
+	return &auth.Rec{
+		Uid:       types.Uid(tl.Uid),
+		AuthLevel: auth.Level(tl.AuthLevel),
+		Lifetime:  time.Until(expires),
+		Features:  auth.Feature(tl.Features)}, nil
 }
 
 // GenSecret generates a new token.
-func (ta *authenticator) GenSecret(uid types.Uid, authLvl auth.Level, lifetime time.Duration) ([]byte, time.Time, error) {
+func (ta *authenticator) GenSecret(rec *auth.Rec) ([]byte, time.Time, error) {
 
-	if lifetime == 0 {
-		lifetime = ta.lifetime
-	} else if lifetime < 0 {
+	if rec.Lifetime == 0 {
+		rec.Lifetime = ta.lifetime
+	} else if rec.Lifetime < 0 {
 		return nil, time.Time{}, types.ErrExpired
 	}
-	expires := time.Now().Add(lifetime).UTC().Round(time.Millisecond)
+	expires := time.Now().Add(rec.Lifetime).UTC().Round(time.Millisecond)
 
 	tl := tokenLayout{
-		Uid:          uint64(uid),
+		Uid:          uint64(rec.Uid),
 		Expires:      uint32(expires.Unix()),
-		AuthLevel:    uint16(authLvl),
+		AuthLevel:    uint16(rec.AuthLevel),
 		SerialNumber: uint16(ta.serialNumber),
 		Features:     0,
 	}
