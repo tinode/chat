@@ -14,34 +14,32 @@ import (
 	"github.com/tinode/chat/server/store/types"
 )
 
+const (
+	// Minimum length of HMAC salt in bytes.
+	tokenMinHmacLength = 32
+)
+
 // authenticator is a singleton instance of the authenticator.
 type authenticator struct {
 	hmacSalt     []byte
-	timeout      time.Duration
+	lifetime     time.Duration
 	serialNumber int
 }
 
-// Token composition: [8:UID][4:expires][2:authLevel][2:serial-number][32:signature] == 48 bytes
-// Token markers
-const (
-	tokenUIDStart = 0
-	tokenUIDEnd   = 8
-
-	tokenExpiresStart = 8
-	tokenExpiresEnd   = 12
-
-	tokenAuthLvlStart = 12
-	tokenAuthLvlEnd   = 14
-
-	tokenSerialStart = 14
-	tokenSerialEnd   = 16
-
-	tokenSignatureStart = 16
-
-	tokenLengthDecoded = 48
-
-	tokenMinHmacLength = 32
-)
+// tokenLayout defines positioning of various bytes in token.
+// [8:UID][4:expires][2:authLevel][2:serial-number][4:feature-bits][32:signature]
+type tokenLayout struct {
+	// User ID.
+	Uid uint64
+	// Token expiration time.
+	Expires uint32
+	// User's authentication level.
+	AuthLevel uint16
+	// Serial number - to invalidate all tokens if needed.
+	SerialNumber uint16
+	// Bitmap with feature bits.
+	Features uint16
+}
 
 // Init initializes the authenticator: parses the config and sets salt, serial number and lifetime.
 func (ta *authenticator) Init(jsonconf string) error {
@@ -70,7 +68,7 @@ func (ta *authenticator) Init(jsonconf string) error {
 	}
 
 	ta.hmacSalt = config.Key
-	ta.timeout = time.Duration(config.ExpireIn) * time.Second
+	ta.lifetime = time.Duration(config.ExpireIn) * time.Second
 
 	ta.serialNumber = config.SerialNum
 
@@ -89,56 +87,57 @@ func (authenticator) UpdateRecord(uid types.Uid, secret []byte, lifetime time.Du
 
 // Authenticate checks validity of provided token.
 func (ta *authenticator) Authenticate(token []byte) (types.Uid, auth.Level, time.Time, error) {
-	// [8:UID][4:expires][2:authLevel][2:serial-number][32:signature] == 48 bytes
-
-	if len(token) < tokenLengthDecoded {
+	var tl tokenLayout
+	buf := bytes.NewBuffer(token)
+	err := binary.Read(buf, binary.LittleEndian, &tl)
+	if err != nil {
 		return types.ZeroUid, auth.LevelNone, time.Time{}, types.ErrMalformed
 	}
 
-	var uid types.Uid
-	if err := uid.UnmarshalBinary(token[tokenUIDStart:tokenUIDEnd]); err != nil {
-		return types.ZeroUid, auth.LevelNone, time.Time{}, types.ErrMalformed
-	}
-	var authLvl auth.Level
-	if authLvl = auth.Level(binary.LittleEndian.Uint16(token[tokenAuthLvlStart:tokenAuthLvlEnd])); authLvl < 0 || authLvl > auth.LevelRoot {
-		return types.ZeroUid, auth.LevelNone, time.Time{}, types.ErrMalformed
-	}
-
-	if snum := int(binary.LittleEndian.Uint16(token[tokenSerialStart:tokenSerialEnd])); snum != ta.serialNumber {
-		return types.ZeroUid, auth.LevelNone, time.Time{}, types.ErrMalformed
-	}
+	hbuf := new(bytes.Buffer)
+	binary.Write(hbuf, binary.LittleEndian, &tl)
 
 	hasher := hmac.New(sha256.New, ta.hmacSalt)
-	hasher.Write(token[:tokenSignatureStart])
-	if !hmac.Equal(token[tokenSignatureStart:], hasher.Sum(nil)) {
+	hasher.Write(hbuf.Bytes())
+	if !hmac.Equal(token[len(token)-buf.Len():], hasher.Sum(nil)) {
 		return types.ZeroUid, auth.LevelNone, time.Time{}, types.ErrFailed
 	}
 
-	expires := time.Unix(int64(binary.LittleEndian.Uint32(token[tokenExpiresStart:tokenExpiresEnd])), 0).UTC()
+	if tl.AuthLevel < 0 || auth.Level(tl.AuthLevel) > auth.LevelRoot {
+		return types.ZeroUid, auth.LevelNone, time.Time{}, types.ErrMalformed
+	}
+
+	if int(tl.SerialNumber) != ta.serialNumber {
+		return types.ZeroUid, auth.LevelNone, time.Time{}, types.ErrMalformed
+	}
+
+	expires := time.Unix(int64(tl.Expires), 0).UTC()
 	if expires.Before(time.Now().Add(1 * time.Second)) {
 		return types.ZeroUid, auth.LevelNone, time.Time{}, types.ErrExpired
 	}
 
-	return uid, authLvl, expires, nil
+	return types.Uid(tl.Uid), auth.Level(tl.AuthLevel), expires, nil
 }
 
 // GenSecret generates a new token.
 func (ta *authenticator) GenSecret(uid types.Uid, authLvl auth.Level, lifetime time.Duration) ([]byte, time.Time, error) {
-	// [8:UID][4:expires][2:authLevel][2:serial-number][32:signature] == 48 bytes
 
-	buf := new(bytes.Buffer)
-	uidbits, _ := uid.MarshalBinary()
-	binary.Write(buf, binary.LittleEndian, uidbits)
 	if lifetime == 0 {
-		lifetime = ta.timeout
+		lifetime = ta.lifetime
 	} else if lifetime < 0 {
 		return nil, time.Time{}, types.ErrExpired
 	}
 	expires := time.Now().Add(lifetime).UTC().Round(time.Millisecond)
-	binary.Write(buf, binary.LittleEndian, uint32(expires.Unix()))
-	binary.Write(buf, binary.LittleEndian, uint16(authLvl))
-	binary.Write(buf, binary.LittleEndian, uint16(ta.serialNumber))
 
+	tl := tokenLayout{
+		Uid:          uint64(uid),
+		Expires:      uint32(expires.Unix()),
+		AuthLevel:    uint16(authLvl),
+		SerialNumber: uint16(ta.serialNumber),
+		Features:     0,
+	}
+	buf := new(bytes.Buffer)
+	binary.Write(buf, binary.LittleEndian, &tl)
 	hasher := hmac.New(sha256.New, ta.hmacSalt)
 	hasher.Write(buf.Bytes())
 	binary.Write(buf, binary.LittleEndian, hasher.Sum(nil))
