@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tinode/chat/server/auth"
 	_ "github.com/tinode/chat/server/auth/basic"
 	"github.com/tinode/chat/server/store"
 	"github.com/tinode/chat/server/store/types"
@@ -97,8 +98,8 @@ func genDb(reset bool, dbsource string, data *Data) {
 			// Generate random password
 			passwd = getPassword(8)
 		}
-		if _, err := authHandler.AddRecord(user.Uid(),
-			[]byte(uu.Username+":"+passwd), 0); err != nil {
+		if _, err := authHandler.AddRecord(&auth.Rec{Uid: user.Uid()},
+			[]byte(uu.Username+":"+passwd)); err != nil {
 
 			log.Fatal(err)
 		}
