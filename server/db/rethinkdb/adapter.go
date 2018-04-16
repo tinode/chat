@@ -657,9 +657,9 @@ func (a *adapter) TopicShare(shares []*t.Subscription) (int, error) {
 	resp, err := rdb.DB(a.dbName).Table("subscriptions").
 		Insert(shares, rdb.InsertOpts{Conflict: func(id, oldsub, newsub rdb.Term) interface{} {
 			return oldsub.Without("DeletedAt").Merge(map[string]interface{}{
-				"CreatedAt": newsub.CreatedAt,
-				"UpdatedAt": newsub.UpdatedAt,
-				"ModeGive":  newsub.ModeGiven})
+				"CreatedAt": newsub.Field("CreatedAt"),
+				"UpdatedAt": newsub.Field("UpdatedAt"),
+				"ModeGive":  newsub.Field("ModeGiven")})
 		}}).RunWrite(a.conn)
 
 	return resp.Inserted + resp.Replaced, err
