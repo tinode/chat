@@ -13,7 +13,7 @@ FROM golang:latest
 
 LABEL maintainer="Gene Sokolov <gene@tinode.co>"
 LABEL name="TinodeChatServer"
-LABEL version="0.14.1"
+LABEL version="0.14.4"
 
 # Compiles for RethinkDB by default. Alternatively use `--build-arg TARGET_DB=mysql` to build for MySQL.
 ARG TARGET_DB=rethinkdb
@@ -47,11 +47,12 @@ RUN wget -q -O example-react-js.tar.gz https://github.com/tinode/example-react-j
 	&& mkdir example-react-js \
 	&& tar -xzf example-react-js.tar.gz -C example-react-js/ --strip-components=1 \
 	&& rm example-react-js.tar.gz
+
 RUN wget -q -O tinode-js.tar.gz https://github.com/tinode/tinode-js/archive/master.tar.gz \
 	&& mkdir tinode-js \
 	&& tar -xzf tinode-js.tar.gz -C tinode-js/ --strip-components=1 \
 	&& rm tinode-js.tar.gz
-	
+
 # The demo app expects tinode.js to be in the same dir as the app, so create the link.
 RUN ln tinode-js/tinode.js example-react-js/
 

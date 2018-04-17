@@ -41,7 +41,7 @@
 	The system uses [snowflake](https://github.com/tinode/snowflake) to generate unique IDs for values like user IDs and topic names. To make them unpredictable it encrypts them with [XTEA](https://en.wikipedia.org/wiki/XTEA). If you don't provide the key, a default one (`la6YsO+bNX/+XIkOqc5Svw==`) will be used. As a result the IDs will be easily guessable (but still not sequential). 
 
 
-6. Run Tinode server:
+6. Run the Tinode server:
 	```
 	$ docker run -p 6060:18080 -d --name tinode-srv --network tinode-net tinode-srv
 	```
@@ -53,14 +53,11 @@
 
 ### Resetting the data
 
-If you want to reset the data in the database, shut down the server container
+If you want to reset the data in the database, shut down the server container and remove it:
 ```
-$ docker stop tinode-srv
+$ docker stop tinode-srv && docker rm tinode-srv
 ```
-then repeat step 6 then restart the server
-```
-$ docker start tinode-srv --reset
-```
+then repeat step 6 to create and run it again.
 
 ### Running the chatbot
 

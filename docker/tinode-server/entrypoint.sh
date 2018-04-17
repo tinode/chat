@@ -16,7 +16,6 @@ done < /config.template
 
 # Check if user requested to reset database.
 if [[ "$1" = "-r" || "$1" = "--reset_db" ]]; then
-	echo "Resetting database now"
 	rm -f /botdata/.tn-cookie
 fi
 
