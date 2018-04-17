@@ -19,18 +19,6 @@ LABEL version="0.14.1"
 ARG TARGET_DB=rethinkdb
 ENV TARGET_DB=$TARGET_DB
 
-# Build the binary.
-RUN go get -tags $TARGET_DB github.com/tinode/chat/server \
-	&& go install -tags $TARGET_DB -ldflags "-X main.buildstamp=${TARGET_DB}-`date -u '+%Y%m%dT%H:%M:%SZ'`" \
-		github.com/tinode/chat/server
-
-# Download the demo app and the js bindings
-RUN git clone --depth 1 https://github.com/tinode/example-react-js.git
-RUN git clone --depth 1 https://github.com/tinode/tinode-js.git
-
-# The demo app expects tinode.js to be in the same dir as the app, so create the link.
-RUN ln tinode-js/tinode.js example-react-js/
-
 # Various encryption and salt keys. Replace with your own in production.
 
 # Key to initialize UID generator
@@ -45,13 +33,41 @@ ENV AUTH_TOKEN_KEY=wfaY2RgF2S1OQI/ZlK+LSrp1KB2jwAdGAIHQ7JZn+Kc=
 # Disable chatbot plugin by default. 
 ENV PLUGIN_PYTHON_CHAT_BOT_ENABLED=false
 
+# Build the database initialization utility.
+RUN go get -tags $TARGET_DB github.com/tinode/chat/tinode-db \
+	&& go install -tags $TARGET_DB github.com/tinode/chat/tinode-db
+
+# Build the server binary from the master.
+RUN go get -tags $TARGET_DB github.com/tinode/chat/server \
+	&& go install -tags $TARGET_DB -ldflags "-X main.buildstamp=${TARGET_DB}-`date -u '+%Y%m%dT%H:%M:%SZ'`" \
+		github.com/tinode/chat/server
+
+# Download the demo app and the js bindings. Using wget to avoid problems with 'git clone' on Windows.
+RUN wget -q -O example-react-js.tar.gz https://github.com/tinode/example-react-js/archive/master.tar.gz \
+	&& mkdir example-react-js \
+	&& tar -xzf example-react-js.tar.gz -C example-react-js/ --strip-components=1 \
+	&& rm example-react-js.tar.gz
+RUN wget -q -O tinode-js.tar.gz https://github.com/tinode/tinode-js/archive/master.tar.gz \
+	&& mkdir tinode-js \
+	&& tar -xzf tinode-js.tar.gz -C tinode-js/ --strip-components=1 \
+	&& rm tinode-js.tar.gz
+	
+# The demo app expects tinode.js to be in the same dir as the app, so create the link.
+RUN ln tinode-js/tinode.js example-react-js/
+
 # Copy config template to the container.
 COPY config.template /
 COPY entrypoint.sh /
+
+# Directory for chatbot data
+RUN mkdir /botdata
+
+# Make scripts runnable
 RUN chmod +x /entrypoint.sh
+RUN chmod +x /go/src/github.com/tinode/chat/tinode-db/credentials.sh
 
 # Generate config from template and run the server.
-ENTRYPOINT ["/entrypoint.sh"]
+ENTRYPOINT /entrypoint.sh
 
 # HTTP and gRPC ports
 EXPOSE 18080 16061
