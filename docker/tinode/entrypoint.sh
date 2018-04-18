@@ -25,4 +25,4 @@ if [ ! -f /botdata/.tn-cookie ]; then
 fi
 
 # Run the tinode server.
-./tinode --config=working.config --static_data=example-react-js 2> /var/log/tinode.log
+./tinode --config=working.config --static_data=static 2> /var/log/tinode.log
