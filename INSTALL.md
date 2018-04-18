@@ -1,8 +1,25 @@
 # Installing Tinode
 
-## Using Docker
+## Installing from Binaries
+
+Visit the [Releases page](https://github.com/tinode/chat/releases/), choose the latest or otherwise the most suitable release. From the list of binaries download the one for your database and platform. Once the binary is downloaded, unpack it to a directory of your choosing, `cd` to that directory. 
+
+Make sure your database is running. Make sure it's configured to accept connections from `localhost`. In case of MySQL Tinode will try to connect as `root` without the password.
+
+First run the database initializer `init-db`:
+```
+./init-db -data=data.json
+```
+
+Then run the `tinode` server. It will work without any parameters.
+```
+./tinode
+```
+
+## Docker
 
 See [instructions](./docker/README.md)
+
 
 ## Building from Source
 
