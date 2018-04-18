@@ -138,7 +138,7 @@ func (ta *authenticator) GenSecret(rec *auth.Rec) ([]byte, time.Time, error) {
 		Expires:      uint32(expires.Unix()),
 		AuthLevel:    uint16(rec.AuthLevel),
 		SerialNumber: uint16(ta.serialNumber),
-		Features:     0,
+		Features:     uint16(rec.Features),
 	}
 	buf := new(bytes.Buffer)
 	binary.Write(buf, binary.LittleEndian, &tl)

@@ -16,6 +16,10 @@ pushd ${GOHOME}chat > /dev/null
 version=`git tag | tail -1`
 version=${version#?}
 
+# Prepare directory for the new release
+rm -fR ./releases/${version}
+mkdir ./releases/${version}
+
 for plat in "${goplat[@]}"
 do
   for arc in "${goarc[@]}"
@@ -64,10 +68,10 @@ do
         cp $GOPATH/bin/keygen.exe ./releases/tmp
 
         # Remove possibly existing archive.
-        rm -f ./releases/tinode-${dbtag}."${version}.${plat}-${arc}".zip
+        rm -f ./releases/${version}/tinode-${dbtag}."${plat}-${arc}".zip
         # Generate a new one
         pushd ./releases/tmp > /dev/null
-        zip -q -r ../tinode-${dbtag}."${version}.${plat}-${arc}".zip ./*
+        zip -q -r ../${version}/tinode-${dbtag}."${plat}-${arc}".zip ./*
         popd > /dev/null
       else
         # Copy binaries
@@ -76,12 +80,15 @@ do
         cp $GOPATH/bin/keygen ./releases/tmp
 
         # Remove possibly existing archive.
-        rm -f ./releases/tinode-${dbtag}."${version}.${plat}-${arc}".tar.gz
+        rm -f ./releases/${version}/tinode-${dbtag}."${plat}-${arc}".tar.gz
         # Generate a new one
-        tar -C ${GOHOME}chat/releases/tmp -zcf ./releases/tinode-${dbtag}."${version}.${plat}-${arc}".tar.gz .
+        tar -C ${GOHOME}chat/releases/tmp -zcf ./releases/${version}/tinode-${dbtag}."${plat}-${arc}".tar.gz .
       fi
     done
   done
 done
+
+# Clean up temporary files
+rm -fR ./releases/tmp
 
 popd > /dev/null
