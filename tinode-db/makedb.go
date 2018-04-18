@@ -145,10 +145,13 @@ func getPassword(n int) string {
 	return string(b)
 }
 
+// Database adapter that this binary was built for. Defined at compile time.
+var builtfordb = ""
+
 func main() {
 	var reset = flag.Bool("reset", false, "first delete the database if one exists")
 	var datafile = flag.String("data", "", "name of file with sample data")
-	var useAdapter = flag.String("store_use_adapter", "", "override default database adapter")
+	var useAdapter = flag.String("store_use_adapter", builtfordb, "override default database adapter")
 	var conffile = flag.String("config", "./tinode.conf", "config of the database connection")
 	flag.Parse()
 

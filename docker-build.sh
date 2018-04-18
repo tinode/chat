@@ -13,7 +13,16 @@ if [ -z "$tag" ]; then
     exit 1
 fi
 
-ver=( ${tag//./ } )                 # replace points, split into array
+# Convert tag into a version
+ver=( ${tag//./ } )
+
+# Remove earlier builds
+docker rmi tinode/tinode-rethinkdb:latest
+docker rmi tinode/tinode-rethinkdb:"${ver[0]}.${ver[1]}.${ver[2]}"
+docker rmi tinode/tinode-rethinkdb:"${ver[0]}.${ver[1]}"
+docker rmi tinode/tinode-mysql:latest
+docker rmi tinode/tinode-mysql:"${ver[0]}.${ver[1]}.${ver[2]}"
+docker rmi tinode/tinode-mysql:"${ver[0]}.${ver[1]}"
 
 # Build a docker image
 docker build --build-arg TARGET_DB=rethinkdb --tag tinode-rethinkdb \

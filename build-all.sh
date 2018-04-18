@@ -41,7 +41,9 @@ do
       ~/go/bin/gox -osarch="${plat}/${arc}" \
         -ldflags "-X main.buildstamp=`date -u '+%Y%m%dT%H:%M:%SZ'` -X main.builtfordb=${dbtag}" \
         -tags ${dbtag} -output $GOPATH/bin/tinode ./server > /dev/null
-      ~/go/bin/gox -osarch="${plat}/${arc}" -tags ${dbtag} -output $GOPATH/bin/init-db ./tinode-db > /dev/null
+      ~/go/bin/gox -osarch="${plat}/${arc}" \
+        -ldflags "-X main.builtfordb=${dbtag}" \
+        -tags ${dbtag} -output $GOPATH/bin/init-db ./tinode-db > /dev/null
       # Tar on Mac is inflexible about directories. Let's just copy release files to
       # one directory.
       rm -fR ./releases/tmp
