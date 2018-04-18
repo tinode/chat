@@ -91,7 +91,7 @@ const (
 var buildstamp = "undefined"
 
 // Database adapter that this binary was built for. Defined at compile time.
-var builtfordb = "undefined"
+var builtfordb = ""
 
 // CredValidator holds additional config params for a credential validator.
 type credValidator struct {
