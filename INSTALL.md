@@ -2,19 +2,22 @@
 
 ## Installing from Binaries
 
-Visit the [Releases page](https://github.com/tinode/chat/releases/), choose the latest or otherwise the most suitable release. From the list of binaries download the one for your database and platform. Once the binary is downloaded, unpack it to a directory of your choosing, `cd` to that directory. 
+1. Visit the [Releases page](https://github.com/tinode/chat/releases/), choose the latest or otherwise the most suitable release. From the list of binaries download the one for your database and platform. Once the binary is downloaded, unpack it to a directory of your choosing, `cd` to that directory. 
 
-Make sure your database is running. Make sure it's configured to accept connections from `localhost`. In case of MySQL Tinode will try to connect as `root` without the password.
+2. Make sure your database is running. Make sure it's configured to accept connections from `localhost`. In case of MySQL, Tinode will try to connect as `root` without the password.
 
-First run the database initializer `init-db`:
-```
-./init-db -data=data.json
-```
+3. Run the database initializer `init-db` (or `init-db.exe` on Windows):
+	```
+	./init-db -data=data.json
+	```
 
-Then run the `tinode` server. It will work without any parameters.
-```
-./tinode
-```
+4. Run the `tinode` (or `tinode.exe` on Windows) server. It will work without any parameters.
+	```
+	./tinode
+	```
+
+5. Test your installation by pointing your browser to http://localhost:6060/x/
+
 
 ## Docker
 
