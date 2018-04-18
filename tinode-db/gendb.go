@@ -15,14 +15,14 @@ import (
 	"github.com/tinode/chat/server/store/types"
 )
 
-func genDb(reset bool, dbsource string, data *Data) {
+func genDb(reset bool, useAdapter, dbSource string, data *Data) {
 	var err error
 
 	defer store.Close()
 
 	log.Println("Initializing DB...")
 
-	err = store.InitDb(dbsource, reset)
+	err = store.InitDb(useAdapter, dbSource, reset)
 	if err != nil {
 		if strings.Contains(err.Error(), " already exists") {
 			log.Println("DB already exists, NOT reinitializing")

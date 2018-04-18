@@ -26,15 +26,18 @@ type configType struct {
 	Adapters map[string]json.RawMessage `json:"adapters"`
 }
 
-func openAdapter(workerId int, jsonconf string) error {
+func openAdapter(workerId int, useAdapter, jsonconf string) error {
 	var config configType
 	if err := json.Unmarshal([]byte(jsonconf), &config); err != nil {
 		return errors.New("store: failed to parse config: " + err.Error() + "(" + jsonconf + ")")
 	}
 
-	adp = dbAdapters[config.UseAdapter]
+	if useAdapter == "" {
+		useAdapter = config.UseAdapter
+	}
+	adp = dbAdapters[useAdapter]
 	if adp == nil {
-		return errors.New("store: attept to Open an unknown adapter '" + config.UseAdapter + "'")
+		return errors.New("store: attept to Open an unknown adapter '" + useAdapter + "'")
 	}
 
 	if adp.IsOpen() {
@@ -52,7 +55,7 @@ func openAdapter(workerId int, jsonconf string) error {
 
 	var adapter_config string
 	if config.Adapters != nil {
-		adapter_config = string(config.Adapters[config.UseAdapter])
+		adapter_config = string(config.Adapters[useAdapter])
 	}
 
 	return adp.Open(adapter_config)
@@ -61,8 +64,8 @@ func openAdapter(workerId int, jsonconf string) error {
 // Open initializes the persistence system. Adapter holds a connection pool for a database instance.
 // 	 name - name of the adapter rquested in the config file
 //   jsonconf - configuration string
-func Open(workerId int, jsonconf string) error {
-	if err := openAdapter(workerId, jsonconf); err != nil {
+func Open(workerId int, useAdapter, jsonconf string) error {
+	if err := openAdapter(workerId, useAdapter, jsonconf); err != nil {
 		return err
 	}
 	if err := adp.CheckDbVersion(); err != nil {
@@ -92,9 +95,9 @@ func IsOpen() bool {
 // InitDb creates a new database instance. If 'reset' is true it will first attempt to drop
 // existing database. If jsconf is nil it will assume that the connection is already open.
 // If it's non-nil, it will use the config string to open the DB connection first.
-func InitDb(jsonconf string, reset bool) error {
+func InitDb(useAdapter, jsonconf string, reset bool) error {
 	if !IsOpen() {
-		if err := openAdapter(1, jsonconf); err != nil {
+		if err := openAdapter(1, useAdapter, jsonconf); err != nil {
 			return err
 		}
 	}

@@ -14,11 +14,6 @@ while IFS='' read -r line || [[ -n $line ]] ; do
 done < /config.template
 
 
-# Check if user requested to reset database.
-if [[ "$1" = "-r" || "$1" = "--reset_db" ]]; then
-	rm -f /botdata/.tn-cookie
-fi
-
 # Initialize the database if it has not been initialized yet
 if [ ! -f /botdata/.tn-cookie ]; then
 	# Run the generator. Save stdout to to a file to extract Tino's password for possible later use.

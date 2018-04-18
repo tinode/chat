@@ -148,6 +148,7 @@ func getPassword(n int) string {
 func main() {
 	var reset = flag.Bool("reset", false, "first delete the database if one exists")
 	var datafile = flag.String("data", "", "name of file with sample data")
+	var useAdapter = flag.String("store_use_adapter", "", "override default database adapter")
 	var conffile = flag.String("config", "./tinode.conf", "config of the database connection")
 	flag.Parse()
 
@@ -173,5 +174,5 @@ func main() {
 		log.Fatal("Failed to parse config file:", err)
 	}
 
-	genDb(*reset, string(config.StoreConfig), &data)
+	genDb(*reset, *useAdapter, string(config.StoreConfig), &data)
 }
