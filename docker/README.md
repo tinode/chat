@@ -1,5 +1,7 @@
 # Using Docker to run Tinode
 
+All images are available at https://hub.docker.com/r/tinode/
+
 1. [Install Docker](https://docs.docker.com/install/) 1.8 or above. The provided dockerfiles are dependent on [Docker networking](https://docs.docker.com/network/) which may not work with the older Docker.
 
 2. Create a bridge network. It's used to connect Tinode container with the database container. 

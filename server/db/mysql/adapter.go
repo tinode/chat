@@ -18,7 +18,7 @@ import (
 	t "github.com/tinode/chat/server/store/types"
 )
 
-// adapter holds RethinkDb connection data.
+// adapter holds MySQL connection data.
 type adapter struct {
 	db      *sqlx.DB
 	dbName  string
@@ -26,7 +26,7 @@ type adapter struct {
 }
 
 const (
-	defaultDSN      = "root:@tcp(localhost:3306)/tinode?parseTime=true"
+	defaultDSN      = "root:@tcp(localhost:3306)/?parseTime=true"
 	defaultDatabase = "tinode"
 
 	dbVersion = 100
@@ -46,7 +46,7 @@ const (
 	maxSubscribers = 256
 )
 
-// Open initializes rethinkdb session
+// Open initializes database session
 func (a *adapter) Open(jsonconfig string) error {
 	if a.db != nil {
 		return errors.New("mysql adapter is already connected")
@@ -69,21 +69,24 @@ func (a *adapter) Open(jsonconfig string) error {
 		a.dbName = defaultDatabase
 	}
 
+	// This just initializes the driver but does not open the network connection.
 	a.db, err = sqlx.Open("mysql", dsn)
 	if err != nil {
 		return err
 	}
 
-	// sql.Open does not open the network connection.
-	// Force network connection here.
-	err = a.db.Ping()
-	if err != nil {
-		return err
+	// Select appropriate database if one exists. Also checks that the connection is OK.
+	var exists string
+	err = a.db.Get(&exists, "SHOW DATABASES LIKE '"+a.dbName+"'")
+	if err == nil {
+		_, err = a.db.Exec("USE " + a.dbName)
+	} else if err == sql.ErrNoRows {
+		// Database does not exist, clear the error.
+		// DB may be legitimately missing if we are initializging the database.
+		err = nil
 	}
 
-	a.version = -1
-
-	return nil
+	return err
 }
 
 // Close closes the underlying database connection
