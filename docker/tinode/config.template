@@ -1,11 +1,11 @@
 {
 	"listen": ":18080",
+	"static_mount": "/x/",
 	"grpc_listen": ":16061",
 	"api_key_salt": "$API_KEY_SALT",
 	"max_message_size": 4194304,
 	"max_subscriber_count": 32,
 	"max_tag_count": 16,
-	"unique_tags": ["tel", "email"],
 
 	"tls": {
 		"enabled": false,
@@ -33,7 +33,7 @@
 		"adapters": {
 			"mysql": {
 				"database": "tinode",
-				"dsn": "root@tcp(mysql)/?parseTime=true"
+				"dsn": "root@tcp(mysql)/tinode?parseTime=true"
 			},
 			"rethinkdb": {
 				"database": "tinode",

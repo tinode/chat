@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"hash/fnv"
+	"log"
 	"strconv"
 	"strings"
 	"time"
@@ -21,12 +22,13 @@ import (
 // adapter holds MySQL connection data.
 type adapter struct {
 	db      *sqlx.DB
+	dsn     string
 	dbName  string
 	version int
 }
 
 const (
-	defaultDSN      = "root:@tcp(localhost:3306)/?parseTime=true"
+	defaultDSN      = "root:@tcp(localhost:3306)/tinode?parseTime=true"
 	defaultDatabase = "tinode"
 
 	dbVersion = 100
@@ -59,9 +61,9 @@ func (a *adapter) Open(jsonconfig string) error {
 		return errors.New("mysql adapter failed to parse config: " + err.Error())
 	}
 
-	dsn := config.DSN
-	if dsn == "" {
-		dsn = defaultDSN
+	a.dsn = config.DSN
+	if a.dsn == "" {
+		a.dsn = defaultDSN
 	}
 
 	a.dbName = config.DBName
@@ -70,19 +72,16 @@ func (a *adapter) Open(jsonconfig string) error {
 	}
 
 	// This just initializes the driver but does not open the network connection.
-	a.db, err = sqlx.Open("mysql", dsn)
+	a.db, err = sqlx.Open("mysql", a.dsn)
 	if err != nil {
 		return err
 	}
 
-	// Select appropriate database if one exists. Also checks that the connection is OK.
-	var exists string
-	err = a.db.Get(&exists, "SHOW DATABASES LIKE '"+a.dbName+"'")
-	if err == nil {
-		_, err = a.db.Exec("USE " + a.dbName)
-	} else if err == sql.ErrNoRows {
-		// Database does not exist, clear the error.
-		// DB may be legitimately missing if we are initializging the database.
+	// Actually opening the network connection.
+	err = a.db.Ping()
+	if isMissingDb(err) {
+		// Ignore missing database here. If we are initializing the database
+		// missing DB is OK.
 		err = nil
 	}
 
@@ -111,6 +110,9 @@ func (a *adapter) getDbVersion() (int, error) {
 	var vers int
 	err := a.db.Get(&vers, "SELECT `value` FROM kvmeta WHERE `key`='version'")
 	if err != nil {
+		if err == sql.ErrNoRows {
+			err = errors.New("Database not initialized")
+		}
 		return -1, err
 	}
 	a.version = vers
@@ -121,7 +123,10 @@ func (a *adapter) getDbVersion() (int, error) {
 // CheckDbVersion checks whether the actual DB version matches the expected version of this adapter.
 func (a *adapter) CheckDbVersion() error {
 	if a.version <= 0 {
-		a.getDbVersion()
+		_, err := a.getDbVersion()
+		if err != nil {
+			return err
+		}
 	}
 
 	if a.version != dbVersion {
@@ -142,6 +147,20 @@ func (a *adapter) CreateDb(reset bool) error {
 	var err error
 	var tx *sql.Tx
 
+	// Can't use an existing connection because it's configured with a database name which may not exist.
+	// Don't care if it does not close cleanly.
+	a.db.Close()
+
+	// This DSN has been parsed before and produced no error, not checking for errors here.
+	cfg, _ := ms.ParseDSN(a.dsn)
+	// Clear database name
+	cfg.DBName = ""
+
+	a.db, err = sqlx.Open("mysql", cfg.FormatDSN())
+	if err != nil {
+		return err
+	}
+
 	if tx, err = a.db.Begin(); err != nil {
 		return err
 	}
@@ -153,16 +172,16 @@ func (a *adapter) CreateDb(reset bool) error {
 	}()
 
 	if reset {
-		if _, err = tx.Exec("DROP DATABASE IF EXISTS tinode"); err != nil {
+		if _, err = tx.Exec("DROP DATABASE IF EXISTS " + a.dbName); err != nil {
 			return err
 		}
 	}
 
-	if _, err = tx.Exec("CREATE DATABASE tinode CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"); err != nil {
+	if _, err = tx.Exec("CREATE DATABASE " + a.dbName + " CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"); err != nil {
 		return err
 	}
 
-	if _, err = tx.Exec("USE tinode"); err != nil {
+	if _, err = tx.Exec("USE " + a.dbName); err != nil {
 		return err
 	}
 
@@ -174,7 +193,7 @@ func (a *adapter) CreateDb(reset bool) error {
 			`)`); err != nil {
 		return err
 	}
-	if _, err = tx.Exec("INSERT INTO kvmeta(`key`, `value`) VALUES('version', '100')"); err != nil {
+	if _, err = tx.Exec("INSERT INTO kvmeta(`key`, `value`) VALUES('version', ?)", dbVersion); err != nil {
 		return err
 	}
 
@@ -1597,6 +1616,15 @@ func isDupe(err error) bool {
 
 	myerr, ok := err.(*ms.MySQLError)
 	return ok && myerr.Number == 1062
+}
+
+func isMissingDb(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	myerr, ok := err.(*ms.MySQLError)
+	return ok && myerr.Number == 1049
 }
 
 // Convert to JSON before storing to JSON field.
