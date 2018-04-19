@@ -80,7 +80,7 @@ func Close() error {
 		return adp.Close()
 	}
 
-	return errors.New("store: connection already closed")
+	return nil
 }
 
 // IsOpen checks if persistent storage connection has been initialized.
