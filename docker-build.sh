@@ -17,9 +17,11 @@ fi
 ver=( ${tag//./ } )
 
 # Remove earlier builds
+docker rmi tinode-rethinkdb
 docker rmi tinode/tinode-rethinkdb:latest
 docker rmi tinode/tinode-rethinkdb:"${ver[0]}.${ver[1]}.${ver[2]}"
 docker rmi tinode/tinode-rethinkdb:"${ver[0]}.${ver[1]}"
+docker rmi tinode-mysql
 docker rmi tinode/tinode-mysql:latest
 docker rmi tinode/tinode-mysql:"${ver[0]}.${ver[1]}.${ver[2]}"
 docker rmi tinode/tinode-mysql:"${ver[0]}.${ver[1]}"

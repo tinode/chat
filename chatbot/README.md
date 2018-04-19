@@ -14,24 +14,26 @@ python -m grpc_tools.protoc -I../pbx --python_out=. --grpc_python_out=. ../pbx/m
 
 ### Using Docker
 
-1. Follow [instructions](../docker/README.md) to build and run dockerized Tinode chat server up to an including _step 5_. 
+**Warning!** The chatbot image is almost 750MB: the basic Python 3 docker image is nearly 690MB, gRPC adds another 60MB.
+
+1. Follow [instructions](../docker/README.md) to build and run dockerized Tinode chat server up to an including _step 3_. 
 	
-2. In _step 6_ run the server adding `--env PLUGIN_PYTHON_CHAT_BOT_ENABLED=true` and `--volume botdata:/botdata` to the command line:
+2. In _step 4_ run the server adding `--env PLUGIN_PYTHON_CHAT_BOT_ENABLED=true` and `--volume botdata:/botdata` to the command line:
+	1. **RethinkDB**:
 	```
-	$ docker run -p 6060:18080 -d --name tinode-srv --env PLUGIN_PYTHON_CHAT_BOT_ENABLED=true --volume botdata:/botdata --network tinode-net tinode-srv
+	$ docker run -p 6060:18080 -d --name tinode-srv --env PLUGIN_PYTHON_CHAT_BOT_ENABLED=true --volume botdata:/botdata --network tinode-net tinode/tinode-rethink:latest
 	```
-	
-3. If the current folder is `chat/chatbot`, then the Dockerfile is located in `chat/docker/chatbot` folder; `cd ../docker` and build the chat bot image
+	1. **MySQL**:
 	```
-	$ docker build --tag=tinode-bot chatbot
-	```
-	
-4. Run the chatbot
-	```
-	$ docker run -d --name tinode-bot --network tinode-net --volume botdata:/botdata tinode-bot
+	$ docker run -p 6060:18080 -d --name tinode-srv --env PLUGIN_PYTHON_CHAT_BOT_ENABLED=true --volume botdata:/botdata --network tinode-net tinode/tinode-mysql:latest
 	```
 	
-5. Test that the bot is functional by pointing your browser to [http://localhost:6060/x/](http://localhost:6060/x/), login and talk to user `Tino`. The user should respond to every message with a random quote.
+3. Run the chatbot
+	```
+	$ docker run -d --name tino-chatbot --network tinode-net --volume botdata:/botdata tinode/chatbot:latest
+	```
+	
+4. Test that the bot is functional by pointing your browser to http://localhost:6060/x/, login and talk to user `Tino`. The user should respond to every message with a random quote.
 
 	
 ### Building from Source
