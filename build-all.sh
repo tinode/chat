@@ -90,6 +90,22 @@ do
   done
 done
 
+# Build chatbot release
+echo "Building chatbot..."
+
+rm -fR ./releases/tmp
+mkdir -p ./releases/tmp
+
+cp ${GOHOME}chat/chatbot/chatbot.py ./releases/tmp
+cp ${GOHOME}chat/chatbot/quotes.txt ./releases/tmp
+cp ${GOHOME}chat/pbx/model_pb2.py ./releases/tmp
+cp ${GOHOME}chat/pbx/model_pb2_grpc.py ./releases/tmp
+
+tar -C ${GOHOME}chat/releases/tmp -zcf ./releases/${version}/chatbot.tar.gz .
+pushd ./releases/tmp > /dev/null
+zip -q -r ../${version}/chatbot.zip ./*
+popd > /dev/null
+
 # Clean up temporary files
 rm -fR ./releases/tmp
 
