@@ -29,7 +29,6 @@
 	"store_config": {
 		"worker_id": 1,
 		"uid_key": "$UID_ENCRYPTION_KEY",
-		"use_adapter": "$TARGET_DB",
 		"adapters": {
 			"mysql": {
 				"database": "tinode",

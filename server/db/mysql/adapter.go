@@ -266,6 +266,7 @@ func (a *adapter) CreateDb(reset bool) error {
 			createdat 	DATETIME(3) NOT NULL,
 			updatedat 	DATETIME(3) NOT NULL,
 			deletedat 	DATETIME(3),
+			touchedat 	DATETIME(3),
 			name 		CHAR(25) NOT NULL,
 			usebt 		INT DEFAULT 0,
 			access 		JSON,
@@ -794,7 +795,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool) ([]t.Subscription, 
 	if len(topq) > 0 {
 		// Fetch grp & p2p topics
 		q, _, _ := sqlx.In(
-			"SELECT createdat,updatedat,deletedat,name AS id,access,seqid,delid,public,tags "+
+			"SELECT createdat,updatedat,deletedat,touchedat,name AS id,access,seqid,delid,public,tags "+
 				"FROM topics WHERE name IN (?)", topq)
 		rows, err = a.db.Queryx(q, topq...)
 		if err != nil {
@@ -809,8 +810,8 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool) ([]t.Subscription, 
 
 			sub = join[top.Id]
 			sub.ObjHeader.MergeTimes(&top.ObjHeader)
+			sub.SetTouchedAt(top.TouchedAt)
 			sub.SetSeqId(top.SeqId)
-			// sub.SetDelId(top.DelId)
 			if t.GetTopicCat(sub.Topic) == t.TopicCatGrp {
 				// all done with a grp topic
 				sub.SetPublic(fromJSON(top.Public))
@@ -919,7 +920,7 @@ func (a *adapter) TopicDelete(topic string) error {
 }
 
 func (a *adapter) TopicUpdateOnMessage(topic string, msg *t.Message) error {
-	_, err := a.db.Exec("UPDATE topics SET seqid=? WHERE name=?", msg.SeqId, topic)
+	_, err := a.db.Exec("UPDATE topics SET seqid=?,touchedat=? WHERE name=?", msg.SeqId, msg.CreatedAt, topic)
 
 	return err
 }

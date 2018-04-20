@@ -18,26 +18,20 @@ var adp adapter.Adapter
 var uGen types.UidGenerator
 
 type configType struct {
-	// Name of the adapter to use.
-	UseAdapter string `json:"use_adapter"`
 	// 16-byte key for XTEA. Used to initialize types.UidGenerator
 	UidKey []byte `json:"uid_key"`
 	// Configurations for individual adapters.
 	Adapters map[string]json.RawMessage `json:"adapters"`
 }
 
-func openAdapter(workerId int, useAdapter, jsonconf string) error {
+func openAdapter(workerId int, jsonconf string) error {
 	var config configType
 	if err := json.Unmarshal([]byte(jsonconf), &config); err != nil {
 		return errors.New("store: failed to parse config: " + err.Error() + "(" + jsonconf + ")")
 	}
 
-	if useAdapter == "" {
-		useAdapter = config.UseAdapter
-	}
-	adp = dbAdapters[useAdapter]
 	if adp == nil {
-		return errors.New("store: attept to Open an unknown adapter '" + useAdapter + "'")
+		return errors.New("store: database adapter is missing")
 	}
 
 	if adp.IsOpen() {
@@ -55,7 +49,7 @@ func openAdapter(workerId int, useAdapter, jsonconf string) error {
 
 	var adapter_config string
 	if config.Adapters != nil {
-		adapter_config = string(config.Adapters[useAdapter])
+		adapter_config = string(config.Adapters[adp.GetName()])
 	}
 
 	return adp.Open(adapter_config)
@@ -64,8 +58,8 @@ func openAdapter(workerId int, useAdapter, jsonconf string) error {
 // Open initializes the persistence system. Adapter holds a connection pool for a database instance.
 // 	 name - name of the adapter rquested in the config file
 //   jsonconf - configuration string
-func Open(workerId int, useAdapter, jsonconf string) error {
-	if err := openAdapter(workerId, useAdapter, jsonconf); err != nil {
+func Open(workerId int, jsonconf string) error {
+	if err := openAdapter(workerId, jsonconf); err != nil {
 		return err
 	}
 	if err := adp.CheckDbVersion(); err != nil {
@@ -92,37 +86,38 @@ func IsOpen() bool {
 	return false
 }
 
+func GetAdapterName() string {
+	if adp != nil {
+		return adp.GetName()
+	}
+
+	return ""
+}
+
 // InitDb creates a new database instance. If 'reset' is true it will first attempt to drop
 // existing database. If jsconf is nil it will assume that the connection is already open.
 // If it's non-nil, it will use the config string to open the DB connection first.
-func InitDb(useAdapter, jsonconf string, reset bool) error {
+func InitDb(jsonconf string, reset bool) error {
 	if !IsOpen() {
-		if err := openAdapter(1, useAdapter, jsonconf); err != nil {
+		if err := openAdapter(1, jsonconf); err != nil {
 			return err
 		}
 	}
 	return adp.CreateDb(reset)
 }
 
-// Registered database adapters.
-var dbAdapters map[string]adapter.Adapter
-
-// Register makes a persistence adapter available by the provided name.
+// Register makes a persistence adapter available.
 // If Register is called twice or if the adapter is nil, it panics.
-// Name is currently unused, i.e. only a single adapter can be registered
 func RegisterAdapter(name string, a adapter.Adapter) {
-	if dbAdapters == nil {
-		dbAdapters = make(map[string]adapter.Adapter)
-	}
 	if a == nil {
 		panic("store: Register adapter is nil")
 	}
 
-	if _, dup := dbAdapters[name]; dup {
-		panic("store: duplicate registration of adapter " + name)
+	if adp != nil {
+		panic("store: adapter '" + adp.GetName() + "' is already registered")
 	}
 
-	dbAdapters[name] = a
+	adp = a
 }
 
 // GetUid generates a unique ID suitable for use as a primary key.

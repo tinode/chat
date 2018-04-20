@@ -10,11 +10,21 @@ goarc=( amd64 )
 # Supported database tags
 dbtags=( mysql rethinkdb )
 
-pushd ${GOHOME}chat > /dev/null
+for line in $@; do
+  eval "$line"
+done
 
-# Get last git tag as release version. Tag looks like 'v.1.2.3', so strip 'v'.
-version=`git tag | tail -1`
-version=${version#?}
+version=${tag#?}
+
+if [ -z "$version" ]; then
+  # Get last git tag as release version. Tag looks like 'v.1.2.3', so strip 'v'.
+  version=`git tag | tail -1`
+  version=${version#?}
+fi
+
+GOSRC=${GOPATH}/src/github.com/tinode
+
+pushd ${GOSRC}/chat > /dev/null
 
 # Prepare directory for the new release
 rm -fR ./releases/${version}
@@ -84,7 +94,7 @@ do
         # Remove possibly existing archive.
         rm -f ./releases/${version}/tinode-${dbtag}."${plat}-${arc}".tar.gz
         # Generate a new one
-        tar -C ${GOHOME}chat/releases/tmp -zcf ./releases/${version}/tinode-${dbtag}."${plat}-${arc}".tar.gz .
+        tar -C ${GOSRC}/chat/releases/tmp -zcf ./releases/${version}/tinode-${dbtag}."${plat}-${arc}".tar.gz .
       fi
     done
   done
@@ -96,12 +106,12 @@ echo "Building chatbot..."
 rm -fR ./releases/tmp
 mkdir -p ./releases/tmp
 
-cp ${GOHOME}chat/chatbot/chatbot.py ./releases/tmp
-cp ${GOHOME}chat/chatbot/quotes.txt ./releases/tmp
-cp ${GOHOME}chat/pbx/model_pb2.py ./releases/tmp
-cp ${GOHOME}chat/pbx/model_pb2_grpc.py ./releases/tmp
+cp ${GOSRC}/chat/chatbot/chatbot.py ./releases/tmp
+cp ${GOSRC}/chat/chatbot/quotes.txt ./releases/tmp
+cp ${GOSRC}/chat/pbx/model_pb2.py ./releases/tmp
+cp ${GOSRC}/chat/pbx/model_pb2_grpc.py ./releases/tmp
 
-tar -C ${GOHOME}chat/releases/tmp -zcf ./releases/${version}/chatbot.tar.gz .
+tar -C ${GOSRC}/chat/releases/tmp -zcf ./releases/${version}/chatbot.tar.gz .
 pushd ./releases/tmp > /dev/null
 zip -q -r ../${version}/chatbot.zip ./*
 popd > /dev/null

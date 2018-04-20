@@ -75,6 +75,7 @@ CREATE TABLE topics(
 	createdat 	DATETIME(3) NOT NULL,
 	updatedat 	DATETIME(3) NOT NULL,
 	deletedat 	DATETIME(3),
+	touchedat 	DATETIME(3),
 	name 		CHAR(25) NOT NULL,
 	usebt 		INT DEFAULT 0,
 	access 		JSON,

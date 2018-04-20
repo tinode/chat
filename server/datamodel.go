@@ -308,6 +308,9 @@ type MsgAccessMode struct {
 type MsgTopicDesc struct {
 	CreatedAt *time.Time `json:"created,omitempty"`
 	UpdatedAt *time.Time `json:"updated,omitempty"`
+	// Timestamp of the last message
+	TouchedAt *time.Time `json:"touched,omitempty"`
+
 	// When a group topic is created, it's given a temporary name by the client.
 	// Then this name changes. Report the original name here.
 	TempName   string             `json:"tmpname,omitempty"`
@@ -354,11 +357,13 @@ type MsgTopicSub struct {
 	// Uid of the subscribed user
 	User string `json:"user,omitempty"`
 
-	// The following sections maks sense only in context of getting
+	// The following sections makes sense only in context of getting
 	// user's own subscriptions ('me' topic response)
 
 	// Topic name of this subscription
 	Topic string `json:"topic,omitempty"`
+	// Timestamp of the last message in the topic.
+	TouchedAt *time.Time `json:"touched,omitempty"`
 	// ID of the last {data} message in a topic
 	SeqId int `json:"seq,omitempty"`
 	// Id of the latest Delete operation

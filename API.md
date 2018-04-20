@@ -532,6 +532,9 @@ meta: {
       updated: "2015-10-24T10:26:09.716Z", // timestamp of the last change in the
                                            // subscription, present only for
                                            // requester's own subscriptions
+      touched: "2017-11-02T09:13:55.530Z", // timestamp of the last message in the
+                                           // topic (may also include other events
+                                           // in the future, such as new subscribers)
       acs: {  // user's access permissions
         want: "JRWP", // string, requested access permission, present for user's own
 					 // subscriptions and when the requester is topic's manager or owner

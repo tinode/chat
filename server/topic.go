@@ -1537,6 +1537,7 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 
 				if !deleted && !banned {
 					if isReader {
+						mts.TouchedAt = sub.GetTouchedAt()
 						mts.SeqId = sub.GetSeqId()
 						mts.DelId = sub.DelId
 					}

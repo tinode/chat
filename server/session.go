@@ -390,7 +390,7 @@ func (s *Session) hello(msg *ClientComMessage) {
 			s.queueOut(ErrVersionNotSupported(msg.Hi.Id, "", msg.timestamp))
 			return
 		}
-		params = map[string]interface{}{"ver": currentVersion, "build": builtfordb + ":" + buildstamp}
+		params = map[string]interface{}{"ver": currentVersion, "build": store.GetAdapterName() + ":" + buildstamp}
 
 	} else if msg.Hi.Version == "" || parseVersion(msg.Hi.Version) == s.ver {
 		// Save changed device ID or Lang.

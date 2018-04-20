@@ -90,9 +90,6 @@ const (
 // 	-ldflags "-X main.buildstamp=`date -u '+%Y%m%dT%H:%M:%SZ'`"
 var buildstamp = "undefined"
 
-// Database adapter that this binary was built for. Defined at compile time.
-var builtfordb = ""
-
 // CredValidator holds additional config params for a credential validator.
 type credValidator struct {
 	// AuthLevel(s) which require this validator.
@@ -172,10 +169,9 @@ type configType struct {
 
 func main() {
 	log.Printf("Server 'v%s:%s:%s'; pid %d; started with %d process(es)", currentVersion,
-		buildstamp, builtfordb, os.Getpid(), runtime.GOMAXPROCS(runtime.NumCPU()))
+		buildstamp, store.GetAdapterName(), os.Getpid(), runtime.GOMAXPROCS(runtime.NumCPU()))
 
 	var configfile = flag.String("config", "./tinode.conf", "Path to config file.")
-	var useAdapter = flag.String("store_use_adapter", builtfordb, "Override default database adapter")
 	// Path to static content.
 	var staticPath = flag.String("static_data", "", "Path to /static data for the server.")
 	var listenOn = flag.String("listen", "", "Override address and port to listen on for HTTP(S) clients.")
@@ -201,7 +197,7 @@ func main() {
 	// Cluster won't be started here yet.
 	workerId := clusterInit(config.Cluster, clusterSelf)
 
-	var err = store.Open(workerId, *useAdapter, string(config.Store))
+	var err = store.Open(workerId, string(config.Store))
 	if err != nil {
 		log.Fatal("Failed to connect to DB:", err)
 	}

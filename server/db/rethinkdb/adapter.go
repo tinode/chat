@@ -554,7 +554,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool) ([]t.Subscription, 
 			sub = join[top.Id]
 			sub.ObjHeader.MergeTimes(&top.ObjHeader)
 			sub.SetSeqId(top.SeqId)
-			// sub.SetDelId(top.DelId)
+			sub.SetTouchedAt(top.TouchedAt)
 			if t.GetTopicCat(sub.Topic) == t.TopicCatGrp {
 				// all done with a grp topic
 				sub.SetPublic(top.Public)
@@ -673,8 +673,9 @@ func (a *adapter) TopicDelete(topic string) error {
 func (a *adapter) TopicUpdateOnMessage(topic string, msg *t.Message) error {
 
 	update := struct {
-		SeqId int
-	}{msg.SeqId}
+		SeqId     int
+		TouchedAt time.Time
+	}{msg.SeqId, msg.CreatedAt}
 
 	// FIXME(gene): remove 'me' update; no longer relevant
 	var err error

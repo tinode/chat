@@ -611,8 +611,8 @@ type Subscription struct {
 	public interface{}
 	// deserialized SeqID from user or topic
 	seqId int
-	// Id of the last delete operation deserialized from user or topic
-	// delId int
+	// Deserialized TouchedAt from topic
+	touchedAt *time.Time
 	// timestamp when the user was last online
 	lastSeen time.Time
 	// user agent string of the last online access
@@ -642,6 +642,16 @@ func (s *Subscription) SetWith(with string) {
 // GetWith returns the other user for P2P subscriptions.
 func (s *Subscription) GetWith() string {
 	return s.with
+}
+
+// GetLastSeen returns lastSeen.
+func (s *Subscription) GetTouchedAt() *time.Time {
+	return s.touchedAt
+}
+
+// GetSeqId returns seqId.
+func (s *Subscription) SetTouchedAt(touchedAt *time.Time) {
+	s.touchedAt = touchedAt
 }
 
 // GetSeqId returns seqId.
@@ -697,11 +707,12 @@ type perUserData struct {
 	given   AccessMode
 }
 
-// Topic stored in database
+// Topic stored in database. Topic's name is Id
 type Topic struct {
 	ObjHeader
 
-	// Name  string -- topic name is stored in Id
+	// Timestamp when the last message has passed through the topic
+	TouchedAt *time.Time
 
 	// Use bearer token or use ACL
 	UseBt bool
