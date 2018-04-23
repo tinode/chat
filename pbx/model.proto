@@ -257,14 +257,15 @@ message ClientMsg {
 message TopicDesc {
 	int64 created_at = 1;
 	int64 updated_at = 2;
-	DefaultAcsMode defacs = 3;
-	AccessMode acs = 4;
-	int32 seq_id = 5;
-	int32 read_id = 6;
-	int32 recv_id = 7;
-	int32 del_id = 8;
-	bytes public = 9;
-	bytes private = 10;
+	int64 touched_at = 3;
+	DefaultAcsMode defacs = 4;
+	AccessMode acs = 5;
+	int32 seq_id = 6;
+	int32 read_id = 7;
+	int32 recv_id = 8;
+	int32 del_id = 9;
+	bytes public = 10;
+	bytes private = 11;
 }
 
 // MsgTopicSub: topic subscription details, sent in Meta message
@@ -289,16 +290,17 @@ message TopicSub {
 	
 	// Topic name of this subscription
 	string topic = 10;
+	int64 touched_at = 11;
 	// ID of the last {data} message in a topic
-	int32 seq_id = 11;
+	int32 seq_id = 12;
 	// Messages are deleted up to this ID
-	int32 del_id = 12;
+	int32 del_id = 13;
 
 	// P2P topics only:
 
 	// Other user's last online timestamp & user agent
-	int64 last_seen_time = 13;
-	string last_seen_user_agent = 14;
+	int64 last_seen_time = 14;
+	string last_seen_user_agent = 15;
 }
 
 message DelValues {

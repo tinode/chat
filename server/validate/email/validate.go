@@ -34,8 +34,10 @@ type validator struct {
 }
 
 const (
-	maxRetries     = 4
-	defaultPort    = "25"
+	maxRetries  = 4
+	defaultPort = "25"
+
+	// Technically email could be up to 255 bytes long but practically 128 is enough.
 	maxEmailLength = 128
 
 	// codeLength = log10(maxCodeValue)

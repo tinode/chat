@@ -627,6 +627,7 @@ func pbTopicDescSerialize(desc *MsgTopicDesc) *pbx.TopicDesc {
 	return &pbx.TopicDesc{
 		CreatedAt: timeToInt64(desc.CreatedAt),
 		UpdatedAt: timeToInt64(desc.UpdatedAt),
+		TouchedAt: timeToInt64(desc.TouchedAt),
 		Defacs:    pbDefaultAcsSerialize(desc.DefaultAcs),
 		Acs:       pbAccessModeSerialize(desc.Acs),
 		SeqId:     int32(desc.SeqId),
@@ -645,6 +646,7 @@ func pbTopicDescDeserialize(desc *pbx.TopicDesc) *MsgTopicDesc {
 	return &MsgTopicDesc{
 		CreatedAt:  int64ToTime(desc.GetCreatedAt()),
 		UpdatedAt:  int64ToTime(desc.GetUpdatedAt()),
+		TouchedAt:  int64ToTime(desc.GetTouchedAt()),
 		DefaultAcs: pbDefaultAcsDeserialize(desc.GetDefacs()),
 		Acs:        pbAccessModeDeserialize(desc.GetAcs()),
 		SeqId:      int(desc.SeqId),
@@ -696,6 +698,7 @@ func pbTopicSubSerialize(sub *MsgTopicSub) *pbx.TopicSub {
 		Private:   interfaceToBytes(sub.Private),
 		UserId:    sub.User,
 		Topic:     sub.Topic,
+		TouchedAt: timeToInt64(sub.TouchedAt),
 		SeqId:     int32(sub.SeqId),
 		DelId:     int32(sub.DelId),
 	}
@@ -723,6 +726,7 @@ func pbTopicSubSliceDeserialize(subs []*pbx.TopicSub) []MsgTopicSub {
 			Private:   bytesToInterface(subs[i].GetPrivate()),
 			User:      subs[i].GetUserId(),
 			Topic:     subs[i].GetTopic(),
+			TouchedAt: int64ToTime(subs[i].GetTouchedAt()),
 			SeqId:     int(subs[i].GetSeqId()),
 			DelId:     int(subs[i].GetDelId()),
 		}
