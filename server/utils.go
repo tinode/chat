@@ -74,7 +74,7 @@ func normalizeTags(src []string) []string {
 			return make([]string, 0, 1)
 		}
 
-		if len(curr) < minTagLength || curr == prev {
+		if len(curr) < minTagLength || len(curr) > maxTagLength || curr == prev {
 			continue
 		}
 

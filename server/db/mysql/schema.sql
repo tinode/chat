@@ -32,7 +32,7 @@ CREATE TABLE users(
 CREATE TABLE usertags(
 	id 		INT NOT NULL AUTO_INCREMENT,
 	userid 	BIGINT NOT NULL,
-	tag 	VARCHAR(255) NOT NULL,
+	tag 	VARCHAR(96) NOT NULL,
 	
 	PRIMARY KEY(id),
 	FOREIGN KEY(userid) REFERENCES users(id),
@@ -57,7 +57,7 @@ CREATE TABLE devices(
 # Authentication records for the basic authentication scheme.
 CREATE TABLE basicauth(
 	id 			INT NOT NULL AUTO_INCREMENT,
-	login	 	VARCHAR(255) NOT NULL,
+	login	 	VARCHAR(32) NOT NULL,
 	userid 		BIGINT NOT NULL,
 	authlvl 	INT NOT NULL,
 	secret 		VARCHAR(255) NOT NULL,

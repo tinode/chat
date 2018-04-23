@@ -14,6 +14,12 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+const (
+	// Define constraints on login
+	minLoginLength = 1
+	maxLoginLength = 32
+)
+
 // BasicAuth is the type to map authentication methods to.
 type BasicAuth struct{}
 
@@ -40,6 +46,10 @@ func (BasicAuth) AddRecord(rec *auth.Rec, secret []byte) (auth.Level, error) {
 	uname, password, fail := parseSecret(string(secret))
 	if fail != nil {
 		return auth.LevelNone, fail
+	}
+
+	if len(uname) < minLoginLength || len(uname) > maxLoginLength {
+		return auth.LevelNone, types.ErrPolicy
 	}
 
 	passhash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)

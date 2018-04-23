@@ -218,7 +218,7 @@ func (a *adapter) CreateDb(reset bool) error {
 		`CREATE TABLE usertags(
 			id 		INT NOT NULL AUTO_INCREMENT,
 			userid 	BIGINT NOT NULL,
-			tag 	VARCHAR(255) NOT NULL,
+			tag 	VARCHAR(96) NOT NULL,
 			PRIMARY KEY(id),
 			FOREIGN KEY(userid) REFERENCES users(id),
 			INDEX usertags_tag (tag)
@@ -247,7 +247,7 @@ func (a *adapter) CreateDb(reset bool) error {
 	if _, err = tx.Exec(
 		`CREATE TABLE basicauth(
 			id 			INT NOT NULL AUTO_INCREMENT,
-			login	 	VARCHAR(255) NOT NULL,
+			login	 	VARCHAR(32) NOT NULL,
 			userid 		BIGINT NOT NULL,
 			authlvl 	INT NOT NULL,
 			secret 		VARCHAR(255) NOT NULL,
@@ -285,7 +285,7 @@ func (a *adapter) CreateDb(reset bool) error {
 		`CREATE TABLE topictags(
 			id 		INT NOT NULL AUTO_INCREMENT,
 			topic 	CHAR(25) NOT NULL,
-			tag 	VARCHAR(255) NOT NULL,
+			tag 	VARCHAR(96) NOT NULL,
 			PRIMARY KEY(id),
 			FOREIGN KEY(topic) REFERENCES topics(name),
 			INDEX topictags_tag(tag)
@@ -362,8 +362,8 @@ func (a *adapter) CreateDb(reset bool) error {
 			createdat 	DATETIME(3) NOT NULL,
 			updatedat 	DATETIME(3) NOT NULL,	
 			method 		VARCHAR(16) NOT NULL,
-			value		VARCHAR(192) NOT NULL,
-			synthetic	VARCHAR(255) NOT NULL,
+			value		VARCHAR(128) NOT NULL,
+			synthetic	VARCHAR(192) NOT NULL,
 			userid 		BIGINT NOT NULL,
 			resp		VARCHAR(255),
 			done		TINYINT NOT NULL DEFAULT 0,

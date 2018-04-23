@@ -22,6 +22,8 @@ if [ -z "$version" ]; then
   version=${version#?}
 fi
 
+echo "Releasing $version"
+
 GOSRC=${GOPATH}/src/github.com/tinode
 
 pushd ${GOSRC}/chat > /dev/null

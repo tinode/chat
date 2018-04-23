@@ -16,48 +16,55 @@ fi
 # Convert tag into a version
 ver=( ${tag//./ } )
 
+if [[ ${ver[2]} != *"-rc"* ]]; then
+  FULLRELEASE=1
+fi
+
+dbtags=( mysql rethinkdb )
+
 # Remove earlier builds
-docker rmi tinode-rethinkdb
-docker rmi tinode/tinode-rethinkdb:latest
-docker rmi tinode/tinode-rethinkdb:"${ver[0]}.${ver[1]}.${ver[2]}"
-docker rmi tinode/tinode-rethinkdb:"${ver[0]}.${ver[1]}"
-docker rmi tinode-mysql
-docker rmi tinode/tinode-mysql:latest
-docker rmi tinode/tinode-mysql:"${ver[0]}.${ver[1]}.${ver[2]}"
-docker rmi tinode/tinode-mysql:"${ver[0]}.${ver[1]}"
-docker rmi tino-chatbot
-docker rmi tinode/chatbot:latest
+for dbtag in "${dbtags[@]}"
+do
+  if [ FULLRELEASE = 1 ]; then
+    docker rmi -f tinode/tinode-${dbtag}:latest
+    docker rmi -f tinode/tinode-${dbtag}:"${ver[0]}.${ver[1]}"
+  fi
+  docker rmi -f tinode/tinode-${dbtag}:"${ver[0]}.${ver[1]}.${ver[2]}"
+done
+
+if [ FULLRELEASE = 1 ]; then
+  docker rmi tinode/chatbot:latest
+  docker rmi tinode/chatbot:"${ver[0]}.${ver[1]}"
+fi
 docker rmi tinode/chatbot:"${ver[0]}.${ver[1]}.${ver[2]}"
-docker rmi tinode/chatbot:"${ver[0]}.${ver[1]}"
 
-# Build an image for RethinkDB
-docker build --build-arg TARGET_DB=rethinkdb --tag tinode-rethinkdb \
-  --tag tinode/tinode-rethinkdb:latest \
-  --tag tinode/tinode-rethinkdb:"${ver[0]}.${ver[1]}.${ver[2]}" \
-  --tag tinode/tinode-rethinkdb:"${ver[0]}.${ver[1]}" docker/tinode
+# Build an images for various DB backends
+for dbtag in "${dbtags[@]}"
+do
+  buildtags="--tag tinode/tinode-${dbtag}:${ver[0]}.${ver[1]}.${ver[2]}"
+  if [ FULLRELEASE = 1 ]; then
+    buildtags="${buildtags} --tag tinode/tinode-${dbtag}:latest --tag tinode/tinode-${dbtag}:${ver[0]}.${ver[1]}"
+  fi
+  docker build --build-arg VERSION=$tag --build-arg TARGET_DB=${dbtag} ${buildtags} docker/tinode
 
-# Deploy tagged image
-docker push tinode/tinode-rethinkdb:latest
-docker push tinode/tinode-rethinkdb:"${ver[0]}.${ver[1]}.${ver[2]}"
-docker push tinode/tinode-rethinkdb:"${ver[0]}.${ver[1]}"
-
-# Build an image for MySQL.
-docker build --build-arg TARGET_DB=mysql --tag tinode-mysql \
-  --tag tinode/tinode-mysql:latest \
-  --tag tinode/tinode-mysql:"${ver[0]}.${ver[1]}.${ver[2]}" \
-  --tag tinode/tinode-mysql:"${ver[0]}.${ver[1]}" docker/tinode
-
-docker push tinode/tinode-mysql:latest
-docker push tinode/tinode-mysql:"${ver[0]}.${ver[1]}.${ver[2]}"
-docker push tinode/tinode-mysql:"${ver[0]}.${ver[1]}"
+  # Deploy tagged image
+  if [ FULLRELEASE = 1 ]; then
+    docker push tinode/tinode-${dbtag}:latest
+    docker push tinode/tinode-${dbtag}:"${ver[0]}.${ver[1]}"
+  fi
+  docker push tinode/tinode-${dbtag}:"${ver[0]}.${ver[1]}.${ver[2]}"
+done
 
 # Build chatbot image
-docker build --tag tino-chatbot \
-  --tag tinode/chatbot:latest \
-  --tag tinode/chatbot:"${ver[0]}.${ver[1]}.${ver[2]}" \
-  --tag tinode/chatbot:"${ver[0]}.${ver[1]}" docker/chatbot
+buildtags="--tag tinode/chatbot:${ver[0]}.${ver[1]}.${ver[2]}"
+if [ FULLRELEASE = 1 ]; then
+  buildtags="${buildtags}  --tag tinode/chatbot:latest --tag tinode/chatbot:${ver[0]}.${ver[1]}"
+fi
+docker build --build-arg VERSION=$tag ${buildtags} docker/chatbot
 
 # Deploy tagged images
-docker push tinode/chatbot:latest
+if [ FULLRELEASE = 1 ]; then
+  docker push tinode/chatbot:latest
+  docker push tinode/chatbot:"${ver[0]}.${ver[1]}"
+fi
 docker push tinode/chatbot:"${ver[0]}.${ver[1]}.${ver[2]}"
-docker push tinode/chatbot:"${ver[0]}.${ver[1]}"

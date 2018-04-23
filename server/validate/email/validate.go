@@ -34,8 +34,13 @@ type validator struct {
 }
 
 const (
-	maxRetries  = 4
-	defaultPort = "25"
+	maxRetries     = 4
+	defaultPort    = "25"
+	maxEmailLength = 128
+
+	// codeLength = log10(maxCodeValue)
+	codeLength   = 6
+	maxCodeValue = 1000000
 )
 
 // Init: initialize validator.
@@ -76,10 +81,15 @@ func (v *validator) Init(jsonconf string) error {
 
 // PreCheck validates the credential and parameters without sending an email.
 func (v *validator) PreCheck(cred string, params interface{}) error {
+	if len(cred) > maxEmailLength {
+		return t.ErrMalformed
+	}
+
 	_, err := mail.ParseAddress(cred)
 	if err != nil {
 		return t.ErrMalformed
 	}
+
 	// TODO: Check email uniqueness
 	return nil
 }
@@ -93,8 +103,8 @@ func (v *validator) Request(user t.Uid, email, lang string, params interface{}, 
 	}
 
 	// Generate expected response as a random numeric string between 0 and 999999
-	resp = strconv.FormatInt(int64(rand.Intn(1000000)), 10)
-	resp = strings.Repeat("0", 6-len(resp)) + resp
+	resp = strconv.FormatInt(int64(rand.Intn(maxCodeValue)), 10)
+	resp = strings.Repeat("0", codeLength-len(resp)) + resp
 
 	body := new(bytes.Buffer)
 	if err := v.htmlTempl.Execute(body, map[string]interface{}{"Code": resp}); err != nil {
@@ -148,7 +158,7 @@ func (v *validator) Delete(user t.Uid) error {
 	return nil
 }
 
-// This is a basic SMTP sender which connectes to Gmail.
+// This is a basic SMTP sender which connectes to Gmail using login/password.
 // -
 // See here how to send email from Amazon SES:
 // https://docs.aws.amazon.com/sdk-for-go/api/service/ses/#example_SES_SendEmail_shared00
