@@ -92,7 +92,7 @@ CREATE TABLE topics(
 CREATE TABLE topictags(
 	id 		INT NOT NULL AUTO_INCREMENT,
 	topic 	CHAR(25) NOT NULL,
-	tag 	VARCHAR(255) NOT NULL,
+	tag 	VARCHAR(96) NOT NULL,
 	
 	PRIMARY KEY(id),
 	FOREIGN KEY(topic) REFERENCES topics(name),
@@ -164,8 +164,8 @@ CREATE TABLE credentials(
 	createdat 	DATETIME(3) NOT NULL,
 	updatedat 	DATETIME(3) NOT NULL,	
 	method 		VARCHAR(16) NOT NULL,
-	value		VARCHAR(192) NOT NULL,
-	synthetic	VARCHAR(255) NOT NULL,
+	value		VARCHAR(128) NOT NULL,
+	synthetic	VARCHAR(192) NOT NULL,
 	userid 		BIGINT NOT NULL,
 	resp		VARCHAR(255) NOT NULL,
 	done		TINYINT NOT NULL DEFAULT 0,
