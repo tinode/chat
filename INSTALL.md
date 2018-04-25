@@ -134,11 +134,11 @@ Otherwise `SIGHUP` may be received by the server if the shell connection is brok
 
 For more details see https://github.com/tinode/chat/issues/25.
 
-## Using MySQL Storage (experimental)
+## Using MySQL Storage
 
 1. Follow instructions for building from sources replacing all occurences of `-tags rethinkdb` with `-tags mysql`.
 
-2. Make sure MySQL (or MariaDB or Percona) is installed and running. The code has been tested with MySQL 5.7 but should work with earlier versions as well.
+2. Make sure MySQL (or MariaDB or Percona) is installed and running. The code has been tested with MySQL 5.7 using InnoDB engine but should work with earlier versions as well. MyISAM engine was not tested.
 
 3. Open `tinode.conf`. In the section `"store_config"` find `"use_adapter": "rethinkdb"` and replace it with `"use_adapter": "mysql"`. Check that the [DSN](https://github.com/go-sql-driver/mysql#dsn-data-source-name) in `"mysql"` section is appropriate for your MySQL installation. Option `parseTime=true` is required. 
 ```js

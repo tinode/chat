@@ -51,10 +51,9 @@ do
       rm -f $GOPATH/bin/init-db
       # Build tinode server and database initializer for RethinkDb and MySQL.
       ~/go/bin/gox -osarch="${plat}/${arc}" \
-        -ldflags "-X main.buildstamp=`date -u '+%Y%m%dT%H:%M:%SZ'` -X main.builtfordb=${dbtag}" \
+        -ldflags "-X main.buildstamp=`git describe --tags`" \
         -tags ${dbtag} -output $GOPATH/bin/tinode ./server > /dev/null
       ~/go/bin/gox -osarch="${plat}/${arc}" \
-        -ldflags "-X main.builtfordb=${dbtag}" \
         -tags ${dbtag} -output $GOPATH/bin/init-db ./tinode-db > /dev/null
       # Tar on Mac is inflexible about directories. Let's just copy release files to
       # one directory.
