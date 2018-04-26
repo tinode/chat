@@ -23,7 +23,9 @@ const (
 // BasicAuth is the type to map authentication methods to.
 type BasicAuth struct{}
 
-func parseSecret(secret string) (uname, password string, err error) {
+func parseSecret(bsecret []byte) (uname, password string, err error) {
+	secret := string(bsecret)
+
 	splitAt := strings.Index(secret, ":")
 	if splitAt < 1 {
 		err = types.ErrMalformed
@@ -32,7 +34,6 @@ func parseSecret(secret string) (uname, password string, err error) {
 
 	uname = strings.ToLower(secret[:splitAt])
 	password = secret[splitAt+1:]
-
 	return
 }
 
@@ -43,9 +44,9 @@ func (BasicAuth) Init(unused string) error {
 
 // AddRecord adds a basic authentication record to DB.
 func (BasicAuth) AddRecord(rec *auth.Rec, secret []byte) (auth.Level, error) {
-	uname, password, fail := parseSecret(string(secret))
-	if fail != nil {
-		return auth.LevelNone, fail
+	uname, password, err := parseSecret(secret)
+	if err != nil {
+		return auth.LevelNone, err
 	}
 
 	if len(uname) < minLoginLength || len(uname) > maxLoginLength {
@@ -71,17 +72,22 @@ func (BasicAuth) AddRecord(rec *auth.Rec, secret []byte) (auth.Level, error) {
 
 // UpdateRecord updates password for basic authentication.
 func (BasicAuth) UpdateRecord(rec *auth.Rec, secret []byte) error {
-	uname, password, fail := parseSecret(string(secret))
-	if fail != nil {
-		return fail
+	uname, password, err := parseSecret(secret)
+	if err != nil {
+		return err
 	}
 
 	storedUID, _, _, _, err := store.Users.GetAuthRecord("basic", uname)
 	if err != nil {
 		return err
 	}
+	// Record not found - probably invalid login
+	if storedUID.IsZero() {
+		return types.ErrNotFound
+	}
 	if storedUID != rec.Uid {
-		return types.ErrFailed
+		// User is trying to change login to one that is already taken
+		return types.ErrDuplicate
 	}
 	passhash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
@@ -100,9 +106,9 @@ func (BasicAuth) UpdateRecord(rec *auth.Rec, secret []byte) error {
 
 // Authenticate checks login and password.
 func (BasicAuth) Authenticate(secret []byte) (*auth.Rec, error) {
-	uname, password, fail := parseSecret(string(secret))
-	if fail != nil {
-		return nil, fail
+	uname, password, err := parseSecret(secret)
+	if err != nil {
+		return nil, err
 	}
 
 	uid, authLvl, passhash, expires, err := store.Users.GetAuthRecord("basic", uname)
@@ -135,9 +141,9 @@ func (BasicAuth) Authenticate(secret []byte) (*auth.Rec, error) {
 
 // IsUnique checks login uniqueness.
 func (BasicAuth) IsUnique(secret []byte) (bool, error) {
-	uname, _, fail := parseSecret(string(secret))
-	if fail != nil {
-		return false, fail
+	uname, _, err := parseSecret(secret)
+	if err != nil {
+		return false, err
 	}
 
 	uid, _, _, _, err := store.Users.GetAuthRecord("basic", uname)

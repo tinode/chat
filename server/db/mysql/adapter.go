@@ -472,8 +472,13 @@ func (a *adapter) AuthDelAllRecords(uid t.Uid) (int, error) {
 
 // Update user's authentication secret
 func (a *adapter) AuthUpdRecord(unique string, authLvl auth.Level, secret []byte, expires time.Time) (int, error) {
+	var exp *time.Time
+	if !expires.IsZero() {
+		exp = &expires
+	}
+
 	res, err := a.db.Exec("UPDATE basicauth SET authLvl=?,secret=?,expires=? WHERE login=?",
-		authLvl, secret, expires, unique)
+		authLvl, secret, exp, unique)
 
 	if err != nil {
 		return 0, err
