@@ -26,27 +26,44 @@ See [instructions](./docker/README.md)
 
 ## Building from Source
 
-- Install [Go environment](https://golang.org/doc/install). Make sure Go version is at least 1.9. Building with Go 1.8 or below **will fail**!
+1. Install [Go environment](https://golang.org/doc/install). Make sure Go version is at least 1.9. Building with Go 1.8 or below **will fail**!
 
-- Install [RethinkDB](https://www.rethinkdb.com/docs/install/) (or see MySQL instructions below)
+2. Make sure either [RethinkDB](https://www.rethinkdb.com/docs/install/) or MySQL (or MariaDB or Percona) is installed and running.
 
-- Fetch, build tinode server and tinode-db database initializer:
+3. Fetch, build Tinode server and tinode-db database initializer:
+ - **RethinkDb**:
 	```
 	go get -tags rethinkdb github.com/tinode/chat/server && go install -tags rethinkdb github.com/tinode/chat/server
 	go get -tags rethinkdb github.com/tinode/chat/tinode-db && go install -tags rethinkdb github.com/tinode/chat/tinode-db
 	```
+ - **MySQL**:
+	```
+	go get -tags mysql github.com/tinode/chat/server && go install -tags mysql github.com/tinode/chat/server
+	go get -tags mysql github.com/tinode/chat/tinode-db && go install -tags mysql github.com/tinode/chat/tinode-db
+	```
+	
+	Note the required **`-tags rethinkdb`** or **`-tags mysql`** build option. 
+	
+	You may also optionally define `main.buildstamp` for the server by adding a build option, for instance, with a timestamp:
+	```
+	-ldflags "-X main.buildstamp=`date -u '+%Y%m%dT%H:%M:%SZ'`"
+	```
+	The value of `buildstamp` will be sent by the server to the clients.
 
-Note the required **`-tags rethinkdb`** build option. 
 
-You may also optionally define `main.buildstamp` for the server by adding a build option, for instance, with a timestamp:
+4. Open `tinode.conf`. Check that the database connection parameters are correct for your database. If you are using MySQL make sure [DSN](https://github.com/go-sql-driver/mysql#dsn-data-source-name) in `"mysql"` section is approprite for your MySQL installation. Option `parseTime=true` is required. 
+```js
+	"mysql": {
+		"dsn": "root@tcp(localhost)/tinode?parseTime=true",
+		"database": "tinode"
+	},
 ```
--ldflags "-X main.buildstamp=`date -u '+%Y%m%dT%H:%M:%SZ'`"
-```
-The value of `buildstamp` will be sent by the server to the clients.
 
-- Download javascript client for testing:
+5. Download javascript client for testing:
  - https://github.com/tinode/example-react-js/archive/master.zip
  - https://github.com/tinode/tinode-js/archive/master.zip
+
+6. Now that you have built the binaries, follow instructions in the previous section for running the binaries.
 
 ## Running a Standalone Server
 
@@ -133,19 +150,3 @@ Specific note for [nohup](https://en.wikipedia.org/wiki/Nohup) users: an `exit` 
 Otherwise `SIGHUP` may be received by the server if the shell connection is broken before the ssh session has terminated (indicated by `Connection to XXX.XXX.XXX.XXX port 22: Broken pipe`). In such a case the server will shutdown because `SIGHUP` is intercepted by the server and interpreted as a shutdown request.
 
 For more details see https://github.com/tinode/chat/issues/25.
-
-## Using MySQL Storage
-
-1. Follow instructions for building from sources replacing all occurences of `-tags rethinkdb` with `-tags mysql`.
-
-2. Make sure MySQL (or MariaDB or Percona) is installed and running. The code has been tested with MySQL 5.7 using InnoDB engine but should work with earlier versions as well. MyISAM engine was not tested.
-
-3. Open `tinode.conf`. In the section `"store_config"` find `"use_adapter": "rethinkdb"` and replace it with `"use_adapter": "mysql"`. Check that the [DSN](https://github.com/go-sql-driver/mysql#dsn-data-source-name) in `"mysql"` section is appropriate for your MySQL installation. Option `parseTime=true` is required. 
-```js
-	"mysql": {
-		"dsn": "root@tcp(localhost)/tinode?parseTime=true",
-		"database": "tinode"
-	},
-```
-
-4. Follow the instructions for running as a standalone server from step 2.
