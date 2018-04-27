@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/tinode/chat/server/auth"
@@ -192,25 +193,36 @@ func (UsersObjMapper) Create(user *types.User, private interface{}) (*types.User
 
 // GetAuthRecord takes a unique identifier and a authentication scheme name, fetches user ID and
 // authentication secret.
-func (UsersObjMapper) GetAuthRecord(scheme, unique string) (types.Uid, auth.Level, []byte, time.Time, error) {
-	return adp.AuthGetRecord(scheme + ":" + unique)
+func (UsersObjMapper) GetAuthRecord(user types.Uid, scheme string) (string, auth.Level, []byte, time.Time, error) {
+	unique, authLvl, secret, expires, err := adp.AuthGetRecord(user, scheme)
+	if err == nil {
+		parts := strings.Split(unique, ":")
+		unique = parts[1]
+	}
+	return unique, authLvl, secret, expires, err
+}
+
+// GetAuthRecord takes a unique identifier and a authentication scheme name, fetches user ID and
+// authentication secret.
+func (UsersObjMapper) GetAuthUniqueRecord(scheme, unique string) (types.Uid, auth.Level, []byte, time.Time, error) {
+	return adp.AuthGetUniqueRecord(scheme + ":" + unique)
 }
 
 // AddAuthRecord creates a new authentication record for the given user.
 func (UsersObjMapper) AddAuthRecord(uid types.Uid, authLvl auth.Level, scheme, unique string, secret []byte,
 	expires time.Time) (bool, error) {
 
-	return adp.AuthAddRecord(uid, authLvl, scheme+":"+unique, secret, expires)
+	return adp.AuthAddRecord(uid, scheme, scheme+":"+unique, authLvl, secret, expires)
 }
 
 // UpdateAuthRecord updates authentication record with a new secret and expiration time.
 func (UsersObjMapper) UpdateAuthRecord(uid types.Uid, authLvl auth.Level, scheme, unique string,
-	secret []byte, expires time.Time) (int, error) {
+	secret []byte, expires time.Time) (bool, error) {
 
-	return adp.AuthUpdRecord(scheme+":"+unique, authLvl, secret, expires)
+	return adp.AuthUpdRecord(uid, scheme, scheme+":"+unique, authLvl, secret, expires)
 }
 
-// DelAuthRecord deletes user's all auth records of the givel scheme.
+// DelAuthRecord deletes user's all auth records of the given scheme.
 func (UsersObjMapper) DelAuthRecords(uid types.Uid, scheme string) error {
 	return adp.AuthDelRecord(uid, scheme)
 }

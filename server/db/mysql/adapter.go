@@ -186,7 +186,7 @@ func (a *adapter) CreateDb(reset bool) error {
 
 	if _, err = tx.Exec(
 		`CREATE TABLE kvmeta(` +
-			"`key` CHAR(32)," +
+			"`key`   CHAR(32)," +
 			"`value` TEXT," +
 			"PRIMARY KEY(`key`)" +
 			`)`); err != nil {
@@ -198,16 +198,16 @@ func (a *adapter) CreateDb(reset bool) error {
 
 	if _, err = tx.Exec(
 		`CREATE TABLE users(
-			id 			BIGINT NOT NULL,
-			createdat 	DATETIME(3) NOT NULL,
-			updatedat 	DATETIME(3) NOT NULL,
-			deletedat 	DATETIME(3),
-			state 		INT DEFAULT 0,
-			access 		JSON,
-			lastseen 	DATETIME,
-			useragent 	VARCHAR(255) DEFAULT '',
-			public 		JSON,
-			tags		JSON,
+			id        BIGINT NOT NULL,
+			createdat DATETIME(3) NOT NULL,
+			updatedat DATETIME(3) NOT NULL,
+			deletedat DATETIME(3),
+			state     INT DEFAULT 0,
+			access    JSON,
+			lastseen  DATETIME,
+			useragent VARCHAR(255) DEFAULT '',
+			public    JSON,
+			tags      JSON,
 			PRIMARY KEY(id)
 		)`); err != nil {
 		return err
@@ -216,9 +216,9 @@ func (a *adapter) CreateDb(reset bool) error {
 	// Indexed user tags.
 	if _, err = tx.Exec(
 		`CREATE TABLE usertags(
-			id 		INT NOT NULL AUTO_INCREMENT,
-			userid 	BIGINT NOT NULL,
-			tag 	VARCHAR(96) NOT NULL,
+			id     INT NOT NULL AUTO_INCREMENT,
+			userid BIGINT NOT NULL,
+			tag    VARCHAR(96) NOT NULL,
 			PRIMARY KEY(id),
 			FOREIGN KEY(userid) REFERENCES users(id),
 			INDEX usertags_tag (tag)
@@ -229,13 +229,13 @@ func (a *adapter) CreateDb(reset bool) error {
 	// Indexed devices. Normalized into a separate table.
 	if _, err = tx.Exec(
 		`CREATE TABLE devices(
-			id 			INT NOT NULL AUTO_INCREMENT,
-			userid 		BIGINT NOT NULL,
-			hash 		CHAR(16) NOT NULL,
-			deviceid 	TEXT NOT NULL,
-			platform	VARCHAR(32),
-			lastseen 	DATETIME NOT NULL,
-			lang 		VARCHAR(8),
+			id       INT NOT NULL AUTO_INCREMENT,
+			userid   BIGINT NOT NULL,
+			hash     CHAR(16) NOT NULL,
+			deviceid TEXT NOT NULL,
+			platform VARCHAR(32),
+			lastseen DATETIME NOT NULL,
+			lang     VARCHAR(8),
 			PRIMARY KEY(id),
 			FOREIGN KEY(userid) REFERENCES users(id),
 			UNIQUE INDEX devices_hash (hash)
@@ -245,16 +245,18 @@ func (a *adapter) CreateDb(reset bool) error {
 
 	// Authentication records for the basic authentication scheme.
 	if _, err = tx.Exec(
-		`CREATE TABLE basicauth(
-			id 			INT NOT NULL AUTO_INCREMENT,
-			login	 	VARCHAR(32) NOT NULL,
-			userid 		BIGINT NOT NULL,
-			authlvl 	INT NOT NULL,
-			secret 		VARCHAR(255) NOT NULL,
-			expires 	DATETIME,
+		`CREATE TABLE auth(
+			id      INT NOT NULL AUTO_INCREMENT,
+			uname   VARCHAR(32) NOT NULL,
+			userid  BIGINT NOT NULL,
+			scheme  VARCHAR(16) NOT NULL,
+			authlvl INT NOT NULL,
+			secret  VARCHAR(255) NOT NULL,
+			expires DATETIME,
 			PRIMARY KEY(id),
 			FOREIGN KEY(userid) REFERENCES users(id),
-			UNIQUE INDEX basicauth_login(login)
+			UNIQUE INDEX auth_userid_scheme(userid, scheme),
+			UNIQUE INDEX auth_uname(uname)
 		)`); err != nil {
 		return err
 	}
@@ -262,18 +264,18 @@ func (a *adapter) CreateDb(reset bool) error {
 	// Topics
 	if _, err = tx.Exec(
 		`CREATE TABLE topics(
-			id 			INT NOT NULL AUTO_INCREMENT,
-			createdat 	DATETIME(3) NOT NULL,
-			updatedat 	DATETIME(3) NOT NULL,
-			deletedat 	DATETIME(3),
-			touchedat 	DATETIME(3),
-			name 		CHAR(25) NOT NULL,
-			usebt 		INT DEFAULT 0,
-			access 		JSON,
-			seqid 		INT NOT NULL DEFAULT 0,
-			delid 		INT DEFAULT 0,
-			public 		JSON,
-			tags		JSON,
+			id        INT NOT NULL AUTO_INCREMENT,
+			createdat DATETIME(3) NOT NULL,
+			updatedat DATETIME(3) NOT NULL,
+			deletedat DATETIME(3),
+			touchedat DATETIME(3),
+			name      CHAR(25) NOT NULL,
+			usebt     INT DEFAULT 0,
+			access    JSON,
+			seqid     INT NOT NULL DEFAULT 0,
+			delid     INT DEFAULT 0,
+			public    JSON,
+			tags      JSON,
 			PRIMARY KEY(id),
 			UNIQUE INDEX topics_name(name)
 		)`); err != nil {
@@ -283,9 +285,9 @@ func (a *adapter) CreateDb(reset bool) error {
 	// Indexed topic tags.
 	if _, err = tx.Exec(
 		`CREATE TABLE topictags(
-			id 		INT NOT NULL AUTO_INCREMENT,
-			topic 	CHAR(25) NOT NULL,
-			tag 	VARCHAR(96) NOT NULL,
+			id    INT NOT NULL AUTO_INCREMENT,
+			topic CHAR(25) NOT NULL,
+			tag   VARCHAR(96) NOT NULL,
 			PRIMARY KEY(id),
 			FOREIGN KEY(topic) REFERENCES topics(name),
 			INDEX topictags_tag(tag)
@@ -319,16 +321,16 @@ func (a *adapter) CreateDb(reset bool) error {
 	// Messages
 	if _, err = tx.Exec(
 		`CREATE TABLE messages(
-			id 			INT NOT NULL AUTO_INCREMENT,
-			createdat 	DATETIME(3) NOT NULL,
-			updatedat 	DATETIME(3) NOT NULL,
-			deletedat 	DATETIME(3),
-			delid 		INT DEFAULT 0,
-			seqid 		INT NOT NULL,
-			topic 		CHAR(25) NOT NULL,` +
-			"`from` 	BIGINT NOT NULL," +
-			`head 		JSON,
-			content 	JSON,
+			id        INT NOT NULL AUTO_INCREMENT,
+			createdat DATETIME(3) NOT NULL,
+			updatedat DATETIME(3) NOT NULL,
+			deletedat DATETIME(3),
+			delid     INT DEFAULT 0,
+			seqid     INT NOT NULL,
+			topic     CHAR(25) NOT NULL,` +
+			"`from`   BIGINT NOT NULL," +
+			`head     JSON,
+			content   JSON,
 			PRIMARY KEY(id),` +
 			"FOREIGN KEY(`from`) REFERENCES users(id)," +
 			`FOREIGN KEY(topic) REFERENCES topics(name),
@@ -340,12 +342,12 @@ func (a *adapter) CreateDb(reset bool) error {
 	// Deletion log
 	if _, err = tx.Exec(
 		`CREATE TABLE dellog(
-			id INT NOT NULL AUTO_INCREMENT,
-			topic 		VARCHAR(25) NOT NULL,
-			deletedfor 	BIGINT NOT NULL DEFAULT 0,
-			delid 		INT NOT NULL,
-			low			INT NOT NULL,
-			hi			INT NOT NULL,
+			id         INT NOT NULL AUTO_INCREMENT,
+			topic      VARCHAR(25) NOT NULL,
+			deletedfor BIGINT NOT NULL DEFAULT 0,
+			delid      INT NOT NULL,
+			low        INT NOT NULL,
+			hi         INT NOT NULL,
 			PRIMARY KEY(id),
 			FOREIGN KEY(topic) REFERENCES topics(name),
 			UNIQUE INDEX dellog_topic_delid_deletedfor(topic,delid,deletedfor),
@@ -435,15 +437,15 @@ func (a *adapter) UserCreate(user *t.User) error {
 }
 
 // Add user's authentication record
-func (a *adapter) AuthAddRecord(uid t.Uid, authLvl auth.Level, unique string,
+func (a *adapter) AuthAddRecord(uid t.Uid, scheme, unique string, authLvl auth.Level,
 	secret []byte, expires time.Time) (bool, error) {
 
 	var exp *time.Time
 	if !expires.IsZero() {
 		exp = &expires
 	}
-	_, err := a.db.Exec("INSERT INTO basicauth(login,userid,authLvl,secret,expires) VALUES(?,?,?,?,?)",
-		unique, store.DecodeUid(uid), authLvl, secret, exp)
+	_, err := a.db.Exec("INSERT INTO auth(uname,userid,scheme,authLvl,secret,expires) VALUES(?,?,?,?,?,?)",
+		unique, store.DecodeUid(uid), scheme, authLvl, secret, exp)
 	if err != nil {
 		if isDupe(err) {
 			return true, t.ErrDuplicate
@@ -455,13 +457,13 @@ func (a *adapter) AuthAddRecord(uid t.Uid, authLvl auth.Level, unique string,
 
 // Delete user's authentication record
 func (a *adapter) AuthDelRecord(user t.Uid, unique string) error {
-	_, err := a.db.Exec("DELETE FROM basicauth WHERE userid=? AND login=?", store.DecodeUid(user), unique)
+	_, err := a.db.Exec("DELETE FROM auth WHERE userid=? AND uname=?", store.DecodeUid(user), unique)
 	return err
 }
 
 // Delete user's all authentication records
 func (a *adapter) AuthDelAllRecords(uid t.Uid) (int, error) {
-	res, err := a.db.Exec("DELETE FROM basicauth WHERE userid=?", store.DecodeUid(uid))
+	res, err := a.db.Exec("DELETE FROM auth WHERE userid=?", store.DecodeUid(uid))
 	if err != nil {
 		return 0, err
 	}
@@ -471,25 +473,52 @@ func (a *adapter) AuthDelAllRecords(uid t.Uid) (int, error) {
 }
 
 // Update user's authentication secret
-func (a *adapter) AuthUpdRecord(unique string, authLvl auth.Level, secret []byte, expires time.Time) (int, error) {
+func (a *adapter) AuthUpdRecord(uid t.Uid, scheme, unique string, authLvl auth.Level,
+	secret []byte, expires time.Time) (bool, error) {
 	var exp *time.Time
 	if !expires.IsZero() {
 		exp = &expires
 	}
 
-	res, err := a.db.Exec("UPDATE basicauth SET authLvl=?,secret=?,expires=? WHERE login=?",
-		authLvl, secret, exp, unique)
-
-	if err != nil {
-		return 0, err
+	_, err := a.db.Exec("UPDATE auth SET uname=?,authLvl=?,secret=?,expires=? WHERE uname=?",
+		unique, authLvl, secret, exp, unique)
+	if isDupe(err) {
+		return true, t.ErrDuplicate
 	}
 
-	count, _ := res.RowsAffected()
-	return int(count), nil
+	return false, err
 }
 
 // Retrieve user's authentication record
-func (a *adapter) AuthGetRecord(unique string) (t.Uid, auth.Level, []byte, time.Time, error) {
+func (a *adapter) AuthGetRecord(uid t.Uid, scheme string) (string, auth.Level, []byte, time.Time, error) {
+	var expires time.Time
+
+	var record struct {
+		Uname   string
+		Authlvl auth.Level
+		Secret  []byte
+		Expires *time.Time
+	}
+
+	err := a.db.Get(&record, "SELECT uname,secret,expires,authlvl FROM auth WHERE userid=? AND scheme=?",
+		store.DecodeUid(uid), scheme)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			// Nothing found - clear the error
+			err = nil
+		}
+		return "", 0, nil, expires, err
+	}
+
+	if record.Expires != nil {
+		expires = *record.Expires
+	}
+
+	return record.Uname, record.Authlvl, record.Secret, expires, nil
+}
+
+// Retrieve user's authentication record
+func (a *adapter) AuthGetUniqueRecord(unique string) (t.Uid, auth.Level, []byte, time.Time, error) {
 	var expires time.Time
 
 	var record struct {
@@ -499,7 +528,7 @@ func (a *adapter) AuthGetRecord(unique string) (t.Uid, auth.Level, []byte, time.
 		Expires *time.Time
 	}
 
-	err := a.db.Get(&record, "SELECT userid, secret, expires, authlvl FROM basicauth WHERE login=?", unique)
+	err := a.db.Get(&record, "SELECT userid,secret,expires,authlvl FROM auth WHERE uname=?", unique)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			// Nothing found - clear the error
@@ -512,7 +541,6 @@ func (a *adapter) AuthGetRecord(unique string) (t.Uid, auth.Level, []byte, time.
 		expires = *record.Expires
 	}
 
-	// log.Println("loggin in user Id=", user.Uid(), user.Id)
 	return store.EncodeUid(record.Userid), record.Authlvl, record.Secret, expires, nil
 }
 

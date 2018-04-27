@@ -292,13 +292,14 @@ func (a *adapter) UserCreate(user *t.User) error {
 }
 
 // Add user's authentication record
-func (a *adapter) AuthAddRecord(uid t.Uid, authLvl auth.Level, unique string,
+func (a *adapter) AuthAddRecord(uid t.Uid, scheme, unique string, authLvl auth.Level,
 	secret []byte, expires time.Time) (bool, error) {
 
 	_, err := rdb.DB(a.dbName).Table("auth").Insert(
 		map[string]interface{}{
 			"unique":  unique,
 			"userid":  uid.String(),
+			"scheme":  scheme,
 			"authLvl": authLvl,
 			"secret":  secret,
 			"expires": expires}).RunWrite(a.conn)
@@ -326,18 +327,77 @@ func (a *adapter) AuthDelAllRecords(uid t.Uid) (int, error) {
 	return res.Deleted, err
 }
 
-// Update user's authentication secret
-func (a *adapter) AuthUpdRecord(unique string, authLvl auth.Level, secret []byte, expires time.Time) (int, error) {
-	res, err := rdb.DB(a.dbName).Table("auth").Get(unique).Update(
-		map[string]interface{}{
-			"authLvl": authLvl,
-			"secret":  secret,
-			"expires": expires}).RunWrite(a.conn)
-	return res.Updated, err
+// Update user's authentication secret.
+func (a *adapter) AuthUpdRecord(uid t.Uid, scheme, unique string, authLvl auth.Level,
+	secret []byte, expires time.Time) (bool, error) {
+	// The 'unique' is used as a primary key (no other way to ensure uniqueness in RethinkDB).
+	// The primary key is immutable. If 'unique' has changed, we have to replace the old record with a new one:
+	// 1. Check if 'unique' has changed.
+	// 2. If not, execute update by 'unique'
+	// 3. If yes, first insert the new record (it may fail due to dublicate 'unique') then delete the old one.
+	var dupe bool
+	// Get the old 'unique'
+	res, err := rdb.DB(a.dbName).Table("auth").GetAllByIndex("userid", uid.String()).
+		Filter(map[string]interface{}{"scheme": scheme}).
+		Pluck("unique").Default(nil).Run(a.conn)
+	if err != nil {
+		return dupe, err
+	}
+	if res.IsNil() {
+		// If the record is not found, don't update it
+		return dupe, t.ErrNotFound
+	}
+	var record struct {
+		Unique string `gorethink:"unique"`
+	}
+	if err = res.One(&record); err != nil {
+		return dupe, err
+	}
+	if record.Unique == unique {
+		// Unique has not changed
+		_, err = rdb.DB(a.dbName).Table("auth").Get(unique).Update(
+			map[string]interface{}{
+				"authLvl": authLvl,
+				"secret":  secret,
+				"expires": expires}).RunWrite(a.conn)
+	} else {
+		// Unique has changed. Insert-Delete.
+		dupe, err = a.AuthAddRecord(uid, scheme, unique, authLvl, secret, expires)
+		if err == nil {
+			// We can't do much with the error here. No support for transactions :(
+			a.AuthDelRecord(uid, unique)
+		}
+	}
+	return dupe, err
 }
 
 // Retrieve user's authentication record
-func (a *adapter) AuthGetRecord(unique string) (t.Uid, auth.Level, []byte, time.Time, error) {
+func (a *adapter) AuthGetRecord(uid t.Uid, scheme string) (string, auth.Level, []byte, time.Time, error) {
+	// Default() is needed to prevent Pluck from returning an error
+	row, err := rdb.DB(a.dbName).Table("auth").GetAllByIndex("userid", uid.String()).
+		Filter(map[string]interface{}{"scheme": scheme}).
+		Pluck("unique", "secret", "expires", "authLvl").Default(nil).Run(a.conn)
+	if err != nil || row.IsNil() {
+		return "", 0, nil, time.Time{}, err
+	}
+
+	var record struct {
+		Unique  string     `gorethink:"unique"`
+		AuthLvl auth.Level `gorethink:"authLvl"`
+		Secret  []byte     `gorethink:"secret"`
+		Expires time.Time  `gorethink:"expires"`
+	}
+
+	if err = row.One(&record); err != nil {
+		return "", 0, nil, time.Time{}, err
+	}
+
+	// log.Println("loggin in user Id=", user.Uid(), user.Id)
+	return record.Unique, record.AuthLvl, record.Secret, record.Expires, nil
+}
+
+// Retrieve user's authentication record
+func (a *adapter) AuthGetUniqueRecord(unique string) (t.Uid, auth.Level, []byte, time.Time, error) {
 	// Default() is needed to prevent Pluck from returning an error
 	row, err := rdb.DB(a.dbName).Table("auth").Get(unique).Pluck(
 		"userid", "secret", "expires", "authLvl").Default(nil).Run(a.conn)

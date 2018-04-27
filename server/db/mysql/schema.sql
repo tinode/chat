@@ -55,17 +55,19 @@ CREATE TABLE devices(
 );
 
 # Authentication records for the basic authentication scheme.
-CREATE TABLE basicauth(
-	id 			INT NOT NULL AUTO_INCREMENT,
-	login	 	VARCHAR(32) NOT NULL,
-	userid 		BIGINT NOT NULL,
-	authlvl 	INT NOT NULL,
-	secret 		VARCHAR(255) NOT NULL,
-	expires 	DATETIME,
+CREATE TABLE auth(
+	id 		INT NOT NULL AUTO_INCREMENT,
+	uname	VARCHAR(32) NOT NULL,
+	userid 	BIGINT NOT NULL,
+	scheme	VARCHAR(16) NOT NULL,
+	authlvl	INT NOT NULL,
+	secret 	VARCHAR(255) NOT NULL,
+	expires DATETIME,
 	
 	PRIMARY KEY(id),
 	FOREIGN KEY(userid) REFERENCES users(id),
-	UNIQUE INDEX basicauth_login (login)
+	UNIQUE INDEX auth_userid_scheme(userid, scheme),
+	UNIQUE INDEX auth_uname (uname)
 );
 
 

@@ -27,7 +27,7 @@ func parseSecret(bsecret []byte) (uname, password string, err error) {
 	secret := string(bsecret)
 
 	splitAt := strings.Index(secret, ":")
-	if splitAt < 1 {
+	if splitAt < 0 {
 		err = types.ErrMalformed
 		return
 	}
@@ -77,17 +77,17 @@ func (BasicAuth) UpdateRecord(rec *auth.Rec, secret []byte) error {
 		return err
 	}
 
-	storedUID, _, _, _, err := store.Users.GetAuthRecord("basic", uname)
+	login, _, _, _, err := store.Users.GetAuthRecord(rec.Uid, "basic")
 	if err != nil {
 		return err
 	}
-	// Record not found - probably invalid login
-	if storedUID.IsZero() {
+	// User does not have a record.
+	if login == "" {
 		return types.ErrNotFound
 	}
-	if storedUID != rec.Uid {
-		// User is trying to change login to one that is already taken
-		return types.ErrDuplicate
+	if uname == "" {
+		// User is changing just the password.
+		uname = login
 	}
 	passhash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
@@ -95,7 +95,7 @@ func (BasicAuth) UpdateRecord(rec *auth.Rec, secret []byte) error {
 	}
 	var expires time.Time
 	if rec.Lifetime > 0 {
-		expires = time.Now().Add(rec.Lifetime)
+		expires = types.TimeNow().Add(rec.Lifetime)
 	}
 	_, err = store.Users.UpdateAuthRecord(rec.Uid, auth.LevelAuth, "basic", uname, passhash, expires)
 	if err != nil {
@@ -111,7 +111,11 @@ func (BasicAuth) Authenticate(secret []byte) (*auth.Rec, error) {
 		return nil, err
 	}
 
-	uid, authLvl, passhash, expires, err := store.Users.GetAuthRecord("basic", uname)
+	if len(uname) < minLoginLength || len(uname) > maxLoginLength {
+		return nil, types.ErrFailed
+	}
+
+	uid, authLvl, passhash, expires, err := store.Users.GetAuthUniqueRecord("basic", uname)
 	if err != nil {
 		return nil, err
 	} else if uid.IsZero() {
@@ -146,7 +150,11 @@ func (BasicAuth) IsUnique(secret []byte) (bool, error) {
 		return false, err
 	}
 
-	uid, _, _, _, err := store.Users.GetAuthRecord("basic", uname)
+	if len(uname) < minLoginLength || len(uname) > maxLoginLength {
+		return false, types.ErrPolicy
+	}
+
+	uid, _, _, _, err := store.Users.GetAuthUniqueRecord("basic", uname)
 	if err != nil {
 		return false, err
 	}

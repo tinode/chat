@@ -36,11 +36,12 @@ type Adapter interface {
 	CredGet(uid t.Uid, method string) ([]*t.Credential, error)
 
 	// Authentication management for the basic authentication scheme
-	AuthGetRecord(unique string) (t.Uid, auth.Level, []byte, time.Time, error)
-	AuthAddRecord(user t.Uid, authLvl auth.Level, unique string, secret []byte, expires time.Time) (bool, error)
+	AuthGetUniqueRecord(unique string) (t.Uid, auth.Level, []byte, time.Time, error)
+	AuthGetRecord(user t.Uid, scheme string) (string, auth.Level, []byte, time.Time, error)
+	AuthAddRecord(user t.Uid, scheme, unique string, authLvl auth.Level, secret []byte, expires time.Time) (bool, error)
 	AuthDelRecord(user t.Uid, unique string) error
 	AuthDelAllRecords(uid t.Uid) (int, error)
-	AuthUpdRecord(unique string, authLvl auth.Level, secret []byte, expires time.Time) (int, error)
+	AuthUpdRecord(user t.Uid, scheme, unique string, authLvl auth.Level, secret []byte, expires time.Time) (bool, error)
 
 	// Topic/contact management
 
