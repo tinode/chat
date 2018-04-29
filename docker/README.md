@@ -49,7 +49,8 @@ If you want to reset the data in the database, shut down the Tinode container an
 ```
 $ docker stop tinode-srv && docker rm tinode-srv
 ```
-then repeat step 4 to run it again.
+then repeat step 4 to run the image again with `--env RESET_DB=true`.
+
 
 ### Running the chatbot
 

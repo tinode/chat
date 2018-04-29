@@ -18,7 +18,7 @@ version=${tag#?}
 
 if [ -z "$version" ]; then
   # Get last git tag as release version. Tag looks like 'v.1.2.3', so strip 'v'.
-  version=`git tag | tail -1`
+  version=`git describe --tags`
   version=${version#?}
 fi
 

@@ -22,6 +22,14 @@ LABEL version=$VERSION
 ARG TARGET_DB=rethinkdb
 ENV TARGET_DB=$TARGET_DB
 
+# Runtime options.
+
+# An option to reset database.
+ENV RESET_DB=false
+
+# Disable chatbot plugin by default.
+ENV PLUGIN_PYTHON_CHAT_BOT_ENABLED=false
+
 # Various encryption and salt keys. Replace with your own in production.
 
 # Key to initialize UID generator
@@ -32,9 +40,6 @@ ENV API_KEY_SALT=T713/rYYgW7g4m3vG6zGRh7+FM1t0T8j13koXScOAj4=
 
 # Key used to sign authentication tokens.
 ENV AUTH_TOKEN_KEY=wfaY2RgF2S1OQI/ZlK+LSrp1KB2jwAdGAIHQ7JZn+Kc=
-
-# Disable chatbot plugin by default.
-ENV PLUGIN_PYTHON_CHAT_BOT_ENABLED=false
 
 # Adding bash and grep as they are used here.
 RUN apk add --no-cache bash grep
@@ -56,8 +61,6 @@ RUN mkdir /botdata
 # Make scripts runnable
 RUN chmod +x entrypoint.sh
 RUN chmod +x credentials.sh
-
-ENV RESET_DB=false
 
 # Generate config from template and run the server.
 ENTRYPOINT ./entrypoint.sh
