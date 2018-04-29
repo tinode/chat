@@ -923,6 +923,19 @@ func (a *adapter) FindUsers(uid t.Uid, tags []string) ([]t.Subscription, error) 
 		query = append(query, tag)
 		index[tag] = struct{}{}
 	}
+	// Query for selecting matches where every group includes at least one required match (restricting search to
+	// group members).
+	/*
+		r.db('tinode').
+			table('users').
+			getAll(<all tags here>, {index: "Tags"}).
+			pluck("Id", "Access", "CreatedAt", "UpdatedAt", "Public", "Tags").
+			group("Id").ungroup().
+			map(function(row) { return row.getField('reduction').nth(0).merge({matchedCount: row.getField('reduction').count()}); }).
+			filter(function(row) { return row.getField("Tags").setIntersection([<required tags here>]).count().ne(0); }).
+			orderBy(r.desc('matchedCount')).
+			limit(20);
+	*/
 
 	// Get users matched by tags, sort by number of matches from high to low.
 	rows, err := rdb.DB(a.dbName).

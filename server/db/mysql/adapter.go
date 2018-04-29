@@ -1161,6 +1161,17 @@ func (a *adapter) FindUsers(uid t.Uid, tags []string) ([]t.Subscription, error) 
 		index[tag] = struct{}{}
 	}
 
+	// Query for selecting matches where every group includes at least one required match (restricting search to
+	// group members).
+	/*
+		SELECT u.id, u.createdat, u.tags, COUNT(*) AS matches
+			FROM users as u LEFT JOIN usertags AS t ON t.userid=u.id
+			WHERE t.tag IN (<all tags here>)
+			GROUP BY u.id, u.createdat, u.tags
+			HAVING COUNT(t.tag IN (<required tags here>) OR NULL)>0
+			ORDER BY matches DESC LIMIT 20;
+	*/
+
 	// Get users matched by tags, sort by number of matches from high to low.
 	rows, err := a.db.Queryx(
 		"SELECT u.id,u.createdat,u.updatedat,u.public,u.tags,COUNT(*) AS matches "+

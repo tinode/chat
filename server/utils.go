@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/tinode/chat/server/auth"
 	"github.com/tinode/chat/server/store/types"
@@ -64,7 +65,7 @@ func normalizeTags(src []string) []string {
 	// Sort tags
 	sort.Strings(src)
 
-	// Remove short tags and de-dupe keeping the order. It may result in fewer tags than could have
+	// Remove short, invalid tags and de-dupe keeping the order. It may result in fewer tags than could have
 	// been if length were enforced later, but that's client's fault.
 	var prev string
 	var dst []string
@@ -75,6 +76,12 @@ func normalizeTags(src []string) []string {
 		}
 
 		if len(curr) < minTagLength || len(curr) > maxTagLength || curr == prev {
+			continue
+		}
+
+		// Make sure the tag starts with a letter or a number.
+		firstrune := []rune(curr)[0]
+		if !unicode.IsLetter(firstrune) && !unicode.IsDigit(firstrune) {
 			continue
 		}
 
