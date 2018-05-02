@@ -19,8 +19,8 @@ func (AnonAuth) Init(unused string) error {
 }
 
 // AddRecord is a noop. Just report success.
-func (AnonAuth) AddRecord(rec *auth.Rec, secret []byte) (auth.Level, error) {
-	return auth.LevelAnon, nil
+func (AnonAuth) AddRecord(rec *auth.Rec, secret []byte) (*auth.Rec, error) {
+	return rec, nil
 }
 
 // UpdateRecord is a noop. Just report success.

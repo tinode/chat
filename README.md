@@ -22,7 +22,7 @@ A javascript demo is usually available at https://api.tinode.co/x/example-react-
 
 ### Android
 
-[Android demo](https://github.com/tinode/android-example) is mostly stable and functional. See screenshots below. A [debug APK](https://storage.googleapis.com/tinode.co/tindroid.apk) is provided for convenience. 
+[Android demo](https://github.com/tinode/android-example) is mostly stable and functional. See screenshots below. A [debug APK](https://github.com/tinode/android-example/releases/latest) is provided for convenience. 
 
 ### Command Line
 
@@ -47,6 +47,7 @@ A text-only [command line client](./tn-cli) implements every possible command.
 * Group messaging with every member's access permissions managed individually. The maximum number of members is configurable (128 by default).
 * Topic access control with permissions for various actions.
 * Server-generated presence notifications for people, topics.
+* Support for custom authentication backends.
 * Sharded clustering with failover.
 * Persistent message store, paginated message history.
 * Javascript bindings with no external dependencies.
@@ -60,10 +61,9 @@ A text-only [command line client](./tn-cli) implements every possible command.
 * Message status notifications: message delivery to server; received and read notifications; typing notifications.
 * Support for client-side caching.
 * Ability to block unwanted communication server-side.
-* Authentication support customizable at compile time.
 * Anonymous users (important for use cases related to tech support over chat).
 * Mobile push notifications using [FCM](https://firebase.google.com/docs/cloud-messaging/).
-* Plugins to enable chat bots.
+* Plugins to extend functionality like enabling chat bots.
 
 ### Planned
 

@@ -4,6 +4,8 @@ package basic
 // tinode-db
 
 import (
+	"encoding/json"
+	"errors"
 	"strings"
 	"time"
 
@@ -21,7 +23,9 @@ const (
 )
 
 // BasicAuth is the type to map authentication methods to.
-type BasicAuth struct{}
+type authenticator struct {
+	addToTags bool
+}
 
 func parseSecret(bsecret []byte) (uname, password string, err error) {
 	secret := string(bsecret)
@@ -38,24 +42,33 @@ func parseSecret(bsecret []byte) (uname, password string, err error) {
 }
 
 // Init initializes the basic authenticator.
-func (BasicAuth) Init(unused string) error {
+func (a *authenticator) Init(jsonconf string) error {
+	type configType struct {
+		//
+		AddToTags bool `json:"add_to_tags"`
+	}
+	var config configType
+	if err := json.Unmarshal([]byte(jsonconf), &config); err != nil {
+		return errors.New("auth_basic: failed to parse config: " + err.Error() + "(" + jsonconf + ")")
+	}
+	a.addToTags = config.AddToTags
 	return nil
 }
 
 // AddRecord adds a basic authentication record to DB.
-func (BasicAuth) AddRecord(rec *auth.Rec, secret []byte) (auth.Level, error) {
+func (a *authenticator) AddRecord(rec *auth.Rec, secret []byte) (*auth.Rec, error) {
 	uname, password, err := parseSecret(secret)
 	if err != nil {
-		return auth.LevelNone, err
+		return nil, err
 	}
 
 	if len(uname) < minLoginLength || len(uname) > maxLoginLength {
-		return auth.LevelNone, types.ErrPolicy
+		return nil, types.ErrPolicy
 	}
 
 	passhash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
-		return auth.LevelNone, err
+		return nil, err
 	}
 	var expires time.Time
 	if rec.Lifetime > 0 {
@@ -63,15 +76,20 @@ func (BasicAuth) AddRecord(rec *auth.Rec, secret []byte) (auth.Level, error) {
 	}
 	dup, err := store.Users.AddAuthRecord(rec.Uid, auth.LevelAuth, "basic", uname, passhash, expires)
 	if dup {
-		return auth.LevelNone, types.ErrDuplicate
+		return nil, types.ErrDuplicate
 	} else if err != nil {
-		return auth.LevelNone, err
+		return nil, err
 	}
-	return auth.LevelAuth, nil
+
+	rec.AuthLevel = auth.LevelAuth
+	if a.addToTags {
+		rec.Tags = []string{"basic:" + uname}
+	}
+	return rec, nil
 }
 
 // UpdateRecord updates password for basic authentication.
-func (BasicAuth) UpdateRecord(rec *auth.Rec, secret []byte) error {
+func (authenticator) UpdateRecord(rec *auth.Rec, secret []byte) error {
 	uname, password, err := parseSecret(secret)
 	if err != nil {
 		return err
@@ -105,7 +123,7 @@ func (BasicAuth) UpdateRecord(rec *auth.Rec, secret []byte) error {
 }
 
 // Authenticate checks login and password.
-func (BasicAuth) Authenticate(secret []byte) (*auth.Rec, error) {
+func (authenticator) Authenticate(secret []byte) (*auth.Rec, error) {
 	uname, password, err := parseSecret(secret)
 	if err != nil {
 		return nil, err
@@ -144,7 +162,7 @@ func (BasicAuth) Authenticate(secret []byte) (*auth.Rec, error) {
 }
 
 // IsUnique checks login uniqueness.
-func (BasicAuth) IsUnique(secret []byte) (bool, error) {
+func (authenticator) IsUnique(secret []byte) (bool, error) {
 	uname, _, err := parseSecret(secret)
 	if err != nil {
 		return false, err
@@ -166,11 +184,11 @@ func (BasicAuth) IsUnique(secret []byte) (bool, error) {
 }
 
 // GenSecret is not supported, generates an error.
-func (BasicAuth) GenSecret(rec *auth.Rec) ([]byte, time.Time, error) {
+func (authenticator) GenSecret(rec *auth.Rec) ([]byte, time.Time, error) {
 	return nil, time.Time{}, types.ErrUnsupported
 }
 
-func (BasicAuth) DelRecords(uid types.Uid) error {
+func (authenticator) DelRecords(uid types.Uid) error {
 	if err := store.Users.DelAuthRecords(uid, "basic"); err != nil {
 		return err
 	}
@@ -178,5 +196,5 @@ func (BasicAuth) DelRecords(uid types.Uid) error {
 }
 
 func init() {
-	store.RegisterAuthScheme("basic", &BasicAuth{})
+	store.RegisterAuthScheme("basic", &authenticator{})
 }

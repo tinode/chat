@@ -381,6 +381,7 @@ func (a *adapter) CreateDb(reset bool) error {
 }
 
 func (a *adapter) addTags(tx *sqlx.Tx, table, keyName string, keyVal interface{}, tags []string) error {
+
 	if len(tags) > 0 {
 		var insert *sql.Stmt
 		var err error
@@ -603,13 +604,7 @@ func (a *adapter) UserDelete(uid t.Uid, soft bool) error {
 	return err
 }
 
-func (a *adapter) UserUpdateLastSeen(uid t.Uid, userAgent string, when time.Time) error {
-	_, err := a.db.Exec("UPDATE users SET lastseen=?, useragent=? WHERE id=?", when, userAgent, uid)
-
-	return err
-}
-
-// UserUpdate updates user object. Use UserTagsUpdate when updating Tags.
+// UserUpdate updates user object.
 func (a *adapter) UserUpdate(uid t.Uid, update map[string]interface{}) error {
 	tx, err := a.db.Beginx()
 	if err != nil {
@@ -1175,7 +1170,7 @@ func (a *adapter) FindUsers(uid t.Uid, tags []string) ([]t.Subscription, error) 
 	// Get users matched by tags, sort by number of matches from high to low.
 	rows, err := a.db.Queryx(
 		"SELECT u.id,u.createdat,u.updatedat,u.public,u.tags,COUNT(*) AS matches "+
-			"FROM users AS u LEFT JOIN usertags as t ON t.userid=u.id "+
+			"FROM users AS u LEFT JOIN usertags AS t ON t.userid=u.id "+
 			"WHERE t.tag IN (?"+strings.Repeat(",?", len(tags)-1)+") "+
 			"GROUP BY u.id,u.createdat,u.updatedat,u.public,u.tags ORDER BY matches DESC LIMIT ?",
 		append(args, maxResults)...)

@@ -74,8 +74,8 @@ type AuthHandler interface {
 	Init(jsonconf string) error
 
 	// AddRecord adds persistent record to database.
-	// Returns: auth level, error
-	AddRecord(rec *Rec, secret []byte) (Level, error)
+	// Returns: updated auth record, error
+	AddRecord(rec *Rec, secret []byte) (*Rec, error)
 
 	// UpdateRecord updates existing record with new credentials. Returns a numeric error code to indicate
 	// if the error is due to a duplicate or some other error.

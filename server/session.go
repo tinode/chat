@@ -527,7 +527,7 @@ func (s *Session) acc(msg *ClientComMessage) {
 			return
 		}
 
-		authLvl, err := authhdl.AddRecord(&auth.Rec{Uid: user.Uid()}, msg.Acc.Secret)
+		rec, err := authhdl.AddRecord(&auth.Rec{Uid: user.Uid()}, msg.Acc.Secret)
 		if err != nil {
 			log.Println("auth: add record failed", err)
 			// Attempt to delete incomplete user record
@@ -538,11 +538,11 @@ func (s *Session) acc(msg *ClientComMessage) {
 
 		// When creating an account, the user must provide all required credentials.
 		// If any are missing, reject the request.
-		if len(creds) < len(globals.authValidators[authLvl]) {
-			log.Println("missing credentials; have:", creds, "want:", globals.authValidators[authLvl])
+		if len(creds) < len(globals.authValidators[rec.AuthLevel]) {
+			log.Println("missing credentials; have:", creds, "want:", globals.authValidators[rec.AuthLevel])
 			// Attempt to delete incomplete user record
 			store.Users.Delete(user.Uid(), false)
-			_, missing := stringSliceDelta(globals.authValidators[authLvl], credentialMethods(creds))
+			_, missing := stringSliceDelta(globals.authValidators[rec.AuthLevel], credentialMethods(creds))
 			s.queueOut(decodeStoreError(types.ErrPolicy, msg.Acc.Id, msg.timestamp,
 				map[string]interface{}{"creds": missing}))
 			return
@@ -569,8 +569,8 @@ func (s *Session) acc(msg *ClientComMessage) {
 		var reply *ServerComMessage
 		if msg.Acc.Login {
 			// Process user's login request.
-			_, missing := stringSliceDelta(globals.authValidators[authLvl], validated)
-			reply = s.onLogin(msg.Acc.Id, msg.timestamp, user.Uid(), authLvl, 0, missing)
+			_, missing := stringSliceDelta(globals.authValidators[rec.AuthLevel], validated)
+			reply = s.onLogin(msg.Acc.Id, msg.timestamp, user.Uid(), rec.AuthLevel, 0, missing)
 		} else {
 			// User is not using the new account for logging in.
 			reply = NoErrCreated(msg.Acc.Id, "", msg.timestamp)

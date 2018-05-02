@@ -468,18 +468,6 @@ func (a *adapter) UserDelete(uid t.Uid, soft bool) error {
 	return err
 }
 
-func (a *adapter) UserUpdateLastSeen(uid t.Uid, userAgent string, when time.Time) error {
-	update := struct {
-		LastSeen  time.Time
-		UserAgent string
-	}{when, userAgent}
-
-	_, err := rdb.DB(a.dbName).Table("users").Get(uid.String()).
-		Update(update, rdb.UpdateOpts{Durability: "soft"}).RunWrite(a.conn)
-
-	return err
-}
-
 // UserUpdate updates user object.
 func (a *adapter) UserUpdate(uid t.Uid, update map[string]interface{}) error {
 	_, err := rdb.DB(a.dbName).Table("users").Get(uid.String()).Update(update).RunWrite(a.conn)

@@ -254,7 +254,7 @@ func (UsersObjMapper) Delete(id types.Uid, soft bool) error {
 
 // UpdateLastSeen updates LastSeen and UserAgent.
 func (UsersObjMapper) UpdateLastSeen(uid types.Uid, userAgent string, when time.Time) error {
-	return adp.UserUpdateLastSeen(uid, userAgent, when)
+	return adp.UserUpdate(uid, map[string]interface{}{"LastSeen": when, "UserAgent": userAgent})
 }
 
 // Update is a generic user data update.

@@ -24,7 +24,6 @@ type Adapter interface {
 	UserGet(id t.Uid) (*t.User, error)
 	UserGetAll(ids ...t.Uid) ([]t.User, error)
 	UserDelete(id t.Uid, soft bool) error
-	UserUpdateLastSeen(uid t.Uid, userAgent string, when time.Time) error
 	UserUpdate(uid t.Uid, update map[string]interface{}) error
 
 	// Credential management
