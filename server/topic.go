@@ -1725,47 +1725,62 @@ func (t *Topic) replyGetTags(sess *Session, id string) error {
 
 // replySetTags updates topic's tags - tokens used for discovery.
 func (t *Topic) replySetTags(sess *Session, set *MsgClientSet) error {
-	log.Println("Set tags", set.Tags)
+	var resp *ServerComMessage
+	var err error
 
 	now := types.TimeNow()
+
 	if t.cat != types.TopicCatMe && t.cat != types.TopicCatGrp {
-		sess.queueOut(ErrOperationNotAllowed(set.Id, t.original(sess.uid), now))
-		return errors.New("invalid topic category to assign tags")
+		resp = ErrOperationNotAllowed(set.Id, t.original(sess.uid), now)
+		err = errors.New("invalid topic category to assign tags")
+
 	} else if t.cat == types.TopicCatGrp && t.owner != sess.uid {
-		sess.queueOut(ErrPermissionDenied(set.Id, t.original(sess.uid), now))
-		return errors.New("tags update by non-owner")
-	}
+		resp = ErrPermissionDenied(set.Id, t.original(sess.uid), now)
+		err = errors.New("tags update by non-owner")
 
-	if tags := normalizeTags(set.Tags); tags != nil {
-		var err error
-		var resp *ServerComMessage
-
+	} else if tags := normalizeTags(set.Tags); tags != nil {
 		if !restrictedTags(t.tags, tags) {
 			err = errors.New("attempt to mutate restricted tags")
 			resp = ErrPermissionDenied(set.Id, t.original(sess.uid), now)
 		} else {
-			update := map[string]interface{}{"Tags": types.StringSlice(tags)}
+			added, removed := stringSliceDelta(t.tags, tags)
+			if len(added) > 0 || len(removed) > 0 {
+				log.Println("Updating tags in DB", tags, added, removed)
+				update := map[string]interface{}{"Tags": types.StringSlice(tags)}
 
-			if t.cat == types.TopicCatMe {
-				err = store.Users.Update(sess.uid, update)
-			} else if t.cat == types.TopicCatGrp {
-				err = store.Topics.Update(t.name, update)
-			}
+				if t.cat == types.TopicCatMe {
+					err = store.Users.Update(sess.uid, update)
+				} else if t.cat == types.TopicCatGrp {
+					err = store.Topics.Update(t.name, update)
+				}
 
-			if err != nil {
-				resp = ErrUnknown(set.Id, t.original(sess.uid), now)
+				if err != nil {
+					resp = ErrUnknown(set.Id, t.original(sess.uid), now)
+				} else {
+					t.tags = tags
+
+					resp = NoErr(set.Id, t.original(sess.uid), now)
+					params := make(map[string]interface{})
+					if len(added) > 0 {
+						params["added"] = len(added)
+					}
+					if len(removed) > 0 {
+						params["removed"] = len(removed)
+					}
+					resp.Ctrl.Params = params
+				}
+			} else {
+				resp = InfoNotModified(set.Id, t.original(sess.uid), now)
 			}
 		}
-
-		if err != nil {
-			sess.queueOut(resp)
-			return err
-		}
+	} else {
+		log.Println("replySetTags = 4")
+		resp = InfoNotModified(set.Id, t.original(sess.uid), now)
 	}
 
-	sess.queueOut(NoErr(set.Id, t.original(sess.uid), now))
+	sess.queueOut(resp)
 
-	return nil
+	return err
 }
 
 // replyGetDel is a response to a get[what=del] request: load a list of deleted message ids, send them to

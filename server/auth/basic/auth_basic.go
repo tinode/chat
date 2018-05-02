@@ -62,7 +62,7 @@ func (a *authenticator) AddRecord(rec *auth.Rec, secret []byte) (*auth.Rec, erro
 		return nil, err
 	}
 
-	if len(uname) < minLoginLength || len(uname) > maxLoginLength {
+	if len([]rune(uname)) < minLoginLength || len([]rune(uname)) > maxLoginLength {
 		return nil, types.ErrPolicy
 	}
 
@@ -129,7 +129,7 @@ func (authenticator) Authenticate(secret []byte) (*auth.Rec, error) {
 		return nil, err
 	}
 
-	if len(uname) < minLoginLength || len(uname) > maxLoginLength {
+	if len([]rune(uname)) < minLoginLength || len([]rune(uname)) > maxLoginLength {
 		return nil, types.ErrFailed
 	}
 
@@ -168,7 +168,7 @@ func (authenticator) IsUnique(secret []byte) (bool, error) {
 		return false, err
 	}
 
-	if len(uname) < minLoginLength || len(uname) > maxLoginLength {
+	if len([]rune(uname)) < minLoginLength || len([]rune(uname)) > maxLoginLength {
 		return false, types.ErrPolicy
 	}
 

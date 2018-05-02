@@ -75,13 +75,16 @@ func normalizeTags(src []string) []string {
 			return make([]string, 0, 1)
 		}
 
-		if len(curr) < minTagLength || len(curr) > maxTagLength || curr == prev {
+		// Unicode handling
+		ucurr := []rune(curr)
+
+		// Make sure the tag starts with a letter or a number.
+		if !unicode.IsLetter(ucurr[0]) && !unicode.IsDigit(ucurr[0]) {
 			continue
 		}
 
-		// Make sure the tag starts with a letter or a number.
-		firstrune := []rune(curr)[0]
-		if !unicode.IsLetter(firstrune) && !unicode.IsDigit(firstrune) {
+		// Enforce length in characters, not in bytes.
+		if len(ucurr) < minTagLength || len(ucurr) > maxTagLength || curr == prev {
 			continue
 		}
 
