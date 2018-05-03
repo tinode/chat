@@ -211,7 +211,12 @@ sub: {
       mode: "JRWS", // string, requested access mode, optional;
                    // default: server-defined
       info: { ... }  // application-defined payload to pass to the topic manager
-    } // object, optional
+    }, // object, optional
+	
+    // Optional update to tags (see fnd topic description)
+    tags: [ // array of strings
+        "email:alice@example.com", "tel:1234567890"
+    ]
   },
 
   get: {

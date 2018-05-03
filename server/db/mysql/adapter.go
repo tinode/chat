@@ -943,7 +943,28 @@ func (a *adapter) TopicShare(shares []*t.Subscription) (int, error) {
 }
 
 func (a *adapter) TopicDelete(topic string) error {
-	_, err := a.db.Exec("DELETE FROM topics WHERE name=?", topic)
+	tx, err := a.db.Beginx()
+	if err != nil {
+		return err
+	}
+
+	defer func() {
+		if err != nil {
+			tx.Rollback()
+		}
+	}()
+
+	_, err = tx.Exec("DELETE FROM topictags WHERE topic=?", topic)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec("DELETE FROM topics WHERE name=?", topic)
+	if err != nil {
+		return err
+	}
+	tx.Commit()
+
 	return err
 }
 

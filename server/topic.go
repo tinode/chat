@@ -1745,7 +1745,6 @@ func (t *Topic) replySetTags(sess *Session, set *MsgClientSet) error {
 		} else {
 			added, removed := stringSliceDelta(t.tags, tags)
 			if len(added) > 0 || len(removed) > 0 {
-				log.Println("Updating tags in DB", tags, added, removed)
 				update := map[string]interface{}{"Tags": types.StringSlice(tags)}
 
 				if t.cat == types.TopicCatMe {
@@ -1774,7 +1773,6 @@ func (t *Topic) replySetTags(sess *Session, set *MsgClientSet) error {
 			}
 		}
 	} else {
-		log.Println("replySetTags = 4")
 		resp = InfoNotModified(set.Id, t.original(sess.uid), now)
 	}
 

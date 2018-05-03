@@ -80,17 +80,17 @@ A text-only [command line client](./tn-cli) implements every possible command.
 ### Android
 
 <p align="center">
-<img src="android-chats.png" alt="android screenshot" width=270 /> <img src="android-messages.png" alt="android screenshot" width=270 />
+<img src="docs/android-chats.png" alt="android screenshot" width=270 /> <img src="docs/android-messages.png" alt="android screenshot" width=270 />
 </p>
 
 ### Desktop Web
 
 <p align="center">
-  <img src="web-desktop-2.png" alt="Desktop web: full app" width=866 />
+  <img src="docs/web-desktop-2.png" alt="Desktop web: full app" width=866 />
 </p>
 
 ### Mobile Web
 
 <p align="center">
-  <kbd><img src="web-mob-contacts-1.png" alt="Mobile web: contacts" width=323 /></kbd> <kbd><img src="web-mob-chat-1.png" alt="Mobile web: chat" width=323 /></kbd> <kbd><img src="web-mob-info-1.png" alt="Mobile web: topic info" width=323 /></kbd> <kbd><img src="web-mob-new-chat-1.png" alt="Mobile web: start new 1:1 chat" width=323 /></kbd>
+  <kbd><img src="docs/web-mob-contacts-1.png" alt="Mobile web: contacts" width=323 /></kbd> <kbd><img src="docs/web-mob-chat-1.png" alt="Mobile web: chat" width=323 /></kbd> <kbd><img src="docs/web-mob-info-1.png" alt="Mobile web: topic info" width=323 /></kbd> <kbd><img src="docs/web-mob-new-chat-1.png" alt="Mobile web: start new 1:1 chat" width=323 /></kbd>
 </p>

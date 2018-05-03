@@ -69,9 +69,9 @@ const (
 	// defaultMaxTagCount is the default maximum number of indexable tags
 	defaultMaxTagCount = 16
 
-	// minTagLength is the shortest acceptable length of a tag. Shorter tags are discarded.
+	// minTagLength is the shortest acceptable length of a tag in runes. Shorter tags are discarded.
 	minTagLength = 4
-	// maxTagLength is the maximum length of a tag. Longer tags are trimmed.
+	// maxTagLength is the maximum length of a tag in runes. Longer tags are trimmed.
 	maxTagLength = 96
 
 	// Delay before updating a User Agent
