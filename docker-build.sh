@@ -22,21 +22,53 @@ fi
 
 dbtags=( mysql rethinkdb )
 
+# Read dockerhub login/password from a separate file
+source .dockerhub
+
+# Obtain dockerhub API auth token
+jstoken=`curl -sX POST -H "Content-Type: application/json" -d "{\"username\":\"${user}\",\"password\":\"${pass}\"}" \
+  https://hub.docker.com/v2/users/login/ | python -c "import json,sys;obj=json.load(sys.stdin);print obj['token'];"`
+
 # Remove earlier builds
 for dbtag in "${dbtags[@]}"
 do
   if [ FULLRELEASE = 1 ]; then
     docker rmi -f tinode/tinode-${dbtag}:latest
+    curl -i -X DELETE \
+      -H "Accept: application/json" \
+      -H "Authorization: JWT ${jstoken}" \
+      https://hub.docker.com/v2/repositories/tinode/tinode-${dbtag}/tags/latest/
+
     docker rmi -f tinode/tinode-${dbtag}:"${ver[0]}.${ver[1]}"
+    curl -i -X DELETE \
+      -H "Accept: application/json" \
+      -H "Authorization: JWT ${jstoken}" \
+      https://hub.docker.com/v2/repositories/tinode/tinode-${dbtag}/tags/${ver[0]}.${ver[1]}/
   fi
   docker rmi -f tinode/tinode-${dbtag}:"${ver[0]}.${ver[1]}.${ver[2]}"
+  curl -i -X DELETE \
+    -H "Accept: application/json" \
+    -H "Authorization: JWT ${jstoken}" \
+    https://hub.docker.com/v2/repositories/tinode/tinode-${dbtag}/tags/${ver[0]}.${ver[1]}.${ver[2]}/
 done
 
 if [ FULLRELEASE = 1 ]; then
   docker rmi tinode/chatbot:latest
+  curl -i -X DELETE \
+    -H "Accept: application/json" \
+    -H "Authorization: JWT ${jstoken}" \
+    https://hub.docker.com/v2/repositories/tinode/chatbot/tags/latest/
   docker rmi tinode/chatbot:"${ver[0]}.${ver[1]}"
+  curl -i -X DELETE \
+    -H "Accept: application/json" \
+    -H "Authorization: JWT ${jstoken}" \
+    https://hub.docker.com/v2/repositories/tinode/chatbot/tags/${ver[0]}.${ver[1]}/
 fi
 docker rmi tinode/chatbot:"${ver[0]}.${ver[1]}.${ver[2]}"
+curl -i -X DELETE \
+  -H "Accept: application/json" \
+  -H "Authorization: JWT ${jstoken}" \
+  https://hub.docker.com/v2/repositories/tinode/chatbot/tags/${ver[0]}.${ver[1]}.${ver[2]}/
 
 # Build an images for various DB backends
 for dbtag in "${dbtags[@]}"
