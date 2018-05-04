@@ -101,6 +101,8 @@ message SetQuery {
 	SetDesc desc = 1;
 	// Subscription parameters
 	SetSub sub = 2;
+	// Indexable tags
+	repeated string tags = 3;
 }
 
 message SeqRange {

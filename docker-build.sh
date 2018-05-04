@@ -26,8 +26,11 @@ dbtags=( mysql rethinkdb )
 source .dockerhub
 
 # Obtain dockerhub API auth token
-jstoken=`curl -sX POST -H "Content-Type: application/json" -d "{\"username\":\"${user}\",\"password\":\"${pass}\"}" \
-  https://hub.docker.com/v2/users/login/ | python -c "import json,sys;obj=json.load(sys.stdin);print obj['token'];"`
+jstoken=`curl -sX POST \
+  -H "Content-Type: application/json" \
+  -d "{\"username\":\"${user}\",\"password\":\"${pass}\"}" \
+  https://hub.docker.com/v2/users/login/ \
+  | python -c "import json,sys;obj=json.load(sys.stdin);print obj['token'];"`
 
 # Remove earlier builds
 for dbtag in "${dbtags[@]}"
