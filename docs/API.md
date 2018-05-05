@@ -732,11 +732,13 @@ Message `{get what="sub"}` to `me` is different from any other topic as it retur
 
 Message `{get what="data"}` to `me` queries the history of invites/notifications. It's handled the same way as to any other topic.
 
-### `fnd`: Contacts and Topics Discovery
+### `fnd` and Tags: Contacts and Topics Discovery
 
 Topic `fnd` is automatically created for every user at the account creation time. It serves as an endpoint for discovering other users and group topics. 
 
-Users and group topics can be discovered by optional tags. A tag is an arbitrary case-insensitive string (forced to lowercase). Tags may have a prefix which serves as a namespace. The prefix is a string followed by a colon `:`, ex. prefixed phone tag `tel:14155551212` or prefixed email tag `email:alice@example.com`. Some prefixed tags are optionally enforced to be unique. It's done by listing them in the config, for instance `"unique_tags": ["tel", "email"]`. Only one user or topic may use such a unique tag.
+Users and group topics can be discovered by optional `tags`. A tag is an arbitrary case-insensitive Unicode string (forced to lowercase) starting with a Unicode letter or digit. `Tags` may have a prefix which serves as a namespace. The prefix is a string followed by a colon `:`, ex. prefixed phone tag `tel:14155551212` or prefixed email tag `email:alice@example.com`. Some prefixed `tags` are optionally enforced to be unique. In that case only one user or topic may use such a tag. Certain `tags` may be forced to be immutable to the user, i.e. user's attemps to add or remove an immutable tag will be rejected by the server. `Tags` maybe enumerable, i.e. their values may be restricted to a pre-defined set.
+
+The `tags` are indexed server-side. Seach returns either users or topics or both sorted by the number of matched tags in descending order. The serach results may be optionally required to contain at least one of some tags. 
 
 Tags can are assigned at creation time then can be updated by using `{set what="tags"}` against a `me` or a group topic. 
 
@@ -747,6 +749,20 @@ Topic `fnd` is read-only. `{pub}` messages to `fnd` are rejected.
 (The following functionality is not implemented yet) When a new user registers with tags matching the given query, the `fnd` topic will receive `{pres}` notification for the new user.
 
 [Plugins](./pbx) support `Find` service which can be used to replace default search with a custom one.
+
+#### Some use cases
+* Restricting users to organizations. 
+  An immutable tag(s) may be assigned to the user which denotes the organization the user belons to. When the user searches for other users or topics, the search can be restricted to always contain the tag. This approach can be used to segment users into organizations with limited visiblity into each other.
+
+* Search by geographical location. 
+  Client software may periodically assign a [geohash](https://en.wikipedia.org/wiki/Geohash) tag to the user based on current location. Searching for users in a given area would mean matching on geohash tags.
+
+* Search by numerical range, such as age range.
+  The approach is similar to geohashing. The entire range of numbers is covered by the smallest possible power of 2, for instance the range of human ages is covered by 2<sup>7</sup>=128 years. The entire range is split in two halves: the range 0-63 is denoted by 0, 64-127 by 1. The operation is repeated with each subrange, i.e. 0-31 is 00, 32-63 is 01, 0-15 is 000, 32-47 is 010. Once completed, the age 30 will belong to the following ranges: 0 (0-63), 00 (0-31), 001 (16-31), 0011 (24-31), 00111 (28-31), 001111 (30-31), 0011110 (30). A 30 y.o. user is assigned a few tags to indicate the age, i.e. `age:00111`, `age:001111`,  and `age:0011110`. Technically, all 7 tags may be assigned but usually it's impractical. To query for anyone in the age range 28-35 convert the range into a minimal number of tags: `age:00111` (28-31), `age:01000` (32-35). This query will match the 30 y.o. user by tag `age:00111`.
+
+#### Query language
+
+TBD
 
 
 ### Peer to Peer Topics
