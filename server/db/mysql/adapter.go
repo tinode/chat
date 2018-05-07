@@ -1247,10 +1247,10 @@ func (a *adapter) FindTopics(tags []string) ([]t.Subscription, error) {
 	}
 
 	rows, err := a.db.Queryx(
-		"SELECT t.id,t.createdat,t.updatedat,t.public,t.tags,COUNT(*) AS matches "+
+		"SELECT t.name AS topic,t.createdat,t.updatedat,t.public,t.tags,COUNT(*) AS matches "+
 			"FROM topics AS t LEFT JOIN topictags AS tt ON t.name=tt.topic "+
 			"WHERE tt.tag IN (?"+strings.Repeat(",?", len(tags)-1)+") "+
-			"GROUP BY t.id,t.createdat,t.updatedat,t.public,t.tags "+
+			"GROUP BY t.name,t.createdat,t.updatedat,t.public,t.tags "+
 			"ORDER BY matches DESC LIMIT ?", append(args, maxResults)...)
 
 	if err != nil {
