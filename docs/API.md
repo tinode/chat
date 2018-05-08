@@ -736,19 +736,20 @@ Message `{get what="data"}` to `me` queries the history of invites/notifications
 
 Topic `fnd` is automatically created for every user at the account creation time. It serves as an endpoint for discovering other users and group topics. 
 
-Users and group topics can be discovered by optional `tags`. A tag is an arbitrary case-insensitive Unicode string (forced to lowercase) starting with a Unicode letter or digit. `Tags` may have a prefix which serves as a namespace. The prefix is a string followed by a colon `:`, ex. prefixed phone tag `tel:14155551212` or prefixed email tag `email:alice@example.com`. Some prefixed `tags` are optionally enforced to be unique. In that case only one user or topic may use such a tag. Certain `tags` may be forced to be immutable to the user, i.e. user's attemps to add or remove an immutable tag will be rejected by the server. `Tags` maybe enumerable, i.e. their values may be restricted to a pre-defined set.
+Users and group topics can be discovered by optional `tags`. A tag is an arbitrary case-insensitive Unicode string (forced to lowercase) starting with a Unicode letter or digit. `Tags` must not contain the double quote `"`, `\u0022` but may contain spaces. `Tags` may have a prefix which serves as a namespace. The prefix is a string followed by a colon `:`, ex. prefixed phone tag `**tel**:14155551212` or prefixed email tag `**email**:alice@example.com`. Some prefixed `tags` are optionally enforced to be unique. In that case only one user or topic may have such a tag. Certain `tags` may be forced to be immutable to the user, i.e. user's attemps to add or remove an immutable tag will be rejected by the server. 
 
-The `tags` are indexed server-side. Seach returns either users or topics or both sorted by the number of matched tags in descending order. The serach results may be optionally required to contain at least one of some tags. 
+The `tags` are indexed server-side. Seach returns users and topics sorted by the number of matched tags in descending order. The serach results may be optionally required to contain at least one of some tags. 
 
-Tags can are assigned at creation time then can be updated by using `{set what="tags"}` against a `me` or a group topic. 
+Tags are optionally assigned at the topic or user creation time then can be updated by using `{set what="tags"}` against a `fnd` or a group topic. 
 
-In order to find users or topics, a user sets `private` parameter of the `fnd` topic to an array of tags then issues a `{get topic="fnd" what="sub"}` request. The system responds with a `{meta}` message with the `sub` section listing details of the found users or topics formatted as subscriptions.
+In order to find users or topics, a user sets `private` parameter of the `fnd` topic to string query containing tags (see _Query language_ below) then issues a `{get topic="fnd" what="sub"}` request. The system responds with a `{meta}` message with the `sub` section listing details of the found users or topics formatted as subscriptions.
 
 Topic `fnd` is read-only. `{pub}` messages to `fnd` are rejected.
 
 (The following functionality is not implemented yet) When a new user registers with tags matching the given query, the `fnd` topic will receive `{pres}` notification for the new user.
 
 [Plugins](./pbx) support `Find` service which can be used to replace default search with a custom one.
+
 
 #### Some use cases
 * Restricting users to organizations. 
@@ -764,12 +765,12 @@ Topic `fnd` is read-only. `{pub}` messages to `fnd` are rejected.
 
 Tinode query language is used to define search queries for finding users and topics. The query is a string containing tags separated by spaces or commas. Tags are strings - individual query terms which are matched against user's or topic's tags. The tags can be written in an RTL language but the query as a whole is parsed left to right. Spaces are treated as the `AND` operator, commas (as well commas preceeded and/or followed by a space) as the `OR` operator. The order of operators is ignored: all `AND` operators are grouped together, all `OR` operators are grouped together. `OR` takes precedence over `AND`.
 
-Tags containing spaces or commas must be enclosed in double quotes `"`, `\u0022`: i.e. `"abc, def"` is treated as a single token. Tags must start with a Unicode letter of digit. Tags must not contain the double quote `"`, `\u0022`.
+Tags containing spaces or commas must be enclosed in double quotes `"`, `\u0022`: i.e. `"abc, def"` is treated as a single token. Tags must start with a Unicode letter or digit. Tags must not contain the double quote `"`, `\u0022`.
 
 **Some examples:**
 * `flowers travel`: find topics or users which contain both tags `flowers` and `travel`.
 * `flowers, travel`: find topics or users which contain either tag `flowers` or `travel` (or both).
-* `flowers travel, puppies`: find topics or users which contain `travel` or `puppies` and `flowers`, i.e. `(travel OR puppies) AND flowers`
+* `flowers travel, puppies`: find topics or users which contain `travel` or `puppies` and `flowers`, i.e. `(travel OR puppies) AND flowers`.
 
 
 ### Peer to Peer Topics
