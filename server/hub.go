@@ -295,9 +295,6 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		t.accessAuth = user.Access.Auth
 		t.accessAnon = user.Access.Anon
 
-		// Assign tags
-		t.tags = user.Tags
-
 		if err = t.loadSubscribers(); err != nil {
 			log.Println("hub: cannot load subscribers for '" + t.name + "' (" + err.Error() + ")")
 			sreg.sess.queueOut(ErrUnknown(sreg.pkt.Id, t.xoriginal, timestamp))
@@ -328,6 +325,9 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		t.accessAuth = getDefaultAccess(t.cat, true)
 		t.accessAnon = getDefaultAccess(t.cat, false)
 
+		// Assign tags
+		t.tags = user.Tags
+
 		user, err := store.Users.Get(sreg.sess.uid)
 		if err != nil {
 			log.Println("hub: cannot load user object for 'fnd'='" + t.name + "' (" + err.Error() + ")")
@@ -344,8 +344,6 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 			sreg.sess.queueOut(ErrUnknown(sreg.pkt.Id, t.xoriginal, timestamp))
 			return
 		}
-
-		t.public = user.Tags
 
 		t.created = user.CreatedAt
 		t.updated = user.UpdatedAt

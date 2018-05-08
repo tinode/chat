@@ -762,7 +762,14 @@ Topic `fnd` is read-only. `{pub}` messages to `fnd` are rejected.
 
 #### Query language
 
-TBD
+Tinode query language is used to define search queries for finding users and topics. The query is a string containing tags separated by spaces or commas. Tags are strings - individual query terms which are matched against user's or topic's tags. The tags can be written in an RTL language but the query as a whole is parsed left to right. Spaces are treated as the `AND` operator, commas (as well commas preceeded and/or followed by a space) as the `OR` operator. The order of operators is ignored: all `AND` operators are grouped together, all `OR` operators are grouped together. `OR` takes precedence over `AND`.
+
+Tags containing spaces or commas must be enclosed in double quotes `"`, `\u0022`: i.e. `"abc, def"` is treated as a single token. Tags must start with a Unicode letter of digit. Tags must not contain the double quote `"`, `\u0022`.
+
+**Some examples:**
+* `flowers travel`: find topics or users which contain both tags `flowers` and `travel`.
+* `flowers, travel`: find topics or users which contain either tag `flowers` or `travel` (or both).
+* `flowers travel, puppies`: find topics or users which contain `travel` or `puppies` and `flowers`, i.e. `(travel OR puppies) AND flowers`
 
 
 ### Peer to Peer Topics

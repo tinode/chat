@@ -1439,6 +1439,8 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 		subs, err = store.Users.GetTopicsAny(sess.uid)
 		isSharer = true
 	} else if t.cat == types.TopicCatFnd {
+		// TODO: refactor .private from a slice of interfaces to a string.
+		// TODO: check the query (.private) against the set of allowed tags.
 		// Given a query provided in .private, fetch user's contacts. Private contains a slice of interfaces.
 		if ifquery, ok := t.perUser[sess.uid].private.([]interface{}); ok && len(ifquery) > 0 {
 			// Convert slice of interfaces to a slice of strings.
@@ -1704,7 +1706,7 @@ func (t *Topic) replyGetData(sess *Session, id string, req *MsgBrowseOpts) error
 // replyGetTags returns topic's tags - tokens used for discovery.
 func (t *Topic) replyGetTags(sess *Session, id string) error {
 	now := types.TimeNow()
-	if t.cat != types.TopicCatMe && t.cat != types.TopicCatGrp {
+	if t.cat != types.TopicCatFnd && t.cat != types.TopicCatGrp {
 		sess.queueOut(ErrOperationNotAllowed(id, t.original(sess.uid), now))
 		return errors.New("invalid topic category for getting tags")
 	}
@@ -1730,7 +1732,7 @@ func (t *Topic) replySetTags(sess *Session, set *MsgClientSet) error {
 
 	now := types.TimeNow()
 
-	if t.cat != types.TopicCatMe && t.cat != types.TopicCatGrp {
+	if t.cat != types.TopicCatFnd && t.cat != types.TopicCatGrp {
 		resp = ErrOperationNotAllowed(set.Id, t.original(sess.uid), now)
 		err = errors.New("invalid topic category to assign tags")
 
@@ -1747,7 +1749,7 @@ func (t *Topic) replySetTags(sess *Session, set *MsgClientSet) error {
 			if len(added) > 0 || len(removed) > 0 {
 				update := map[string]interface{}{"Tags": types.StringSlice(tags)}
 
-				if t.cat == types.TopicCatMe {
+				if t.cat == types.TopicCatFnd {
 					err = store.Users.Update(sess.uid, update)
 				} else if t.cat == types.TopicCatGrp {
 					err = store.Topics.Update(t.name, update)

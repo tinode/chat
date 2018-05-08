@@ -350,6 +350,11 @@ func versionToString(vers int) string {
 	return str
 }
 
+// Parser for search queries. Parameters: Fnd.Private, Fnd.Tags.
+func parseSearchQuery(query string, tags []string) error {
+	return nil
+}
+
 // Returns > 0 if v1 > v2; zero if equal; < 0 if v1 < v2
 // Only Major and Minor parts are compared, the trailer is ignored.
 func versionCompare(v1, v2 int) int {
