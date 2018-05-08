@@ -570,7 +570,7 @@ func (s *Session) acc(msg *ClientComMessage) {
 		if msg.Acc.Login {
 			// Process user's login request.
 			_, missing := stringSliceDelta(globals.authValidators[rec.AuthLevel], validated)
-			reply = s.onLogin(msg.Acc.Id, msg.timestamp, user.Uid(), rec.AuthLevel, 0, missing)
+			reply = s.onLogin(msg.Acc.Id, msg.timestamp, rec, missing)
 		} else {
 			// User is not using the new account for logging in.
 			reply = NoErrCreated(msg.Acc.Id, "", msg.timestamp)
@@ -671,21 +671,20 @@ func (s *Session) login(msg *ClientComMessage) {
 		log.Println("failed to validate credentials", err)
 		s.queueOut(decodeStoreError(err, msg.Login.Id, msg.timestamp, nil))
 	} else {
-		s.queueOut(s.onLogin(msg.Login.Id, msg.timestamp, rec.Uid, rec.AuthLevel, rec.Lifetime, missing))
+		s.queueOut(s.onLogin(msg.Login.Id, msg.timestamp, rec, missing))
 	}
 }
 
 // onLogin performs steps after successful authentication.
-func (s *Session) onLogin(msgID string, timestamp time.Time, uid types.Uid, authLvl auth.Level,
-	lifetime time.Duration, missing []string) *ServerComMessage {
+func (s *Session) onLogin(msgID string, timestamp time.Time, rec *auth.Rec, missing []string) *ServerComMessage {
 
 	var reply *ServerComMessage
 	var params map[string]interface{}
 	var features auth.Feature
 
 	params = map[string]interface{}{
-		"user":    uid.UserId(),
-		"authlvl": authLvl.String()}
+		"user":    rec.Uid.UserId(),
+		"authlvl": rec.AuthLevel.String()}
 	if len(missing) > 0 {
 		// Some credentials are not validated yet. Respond with request for validation.
 		reply = InfoValidateCredentials(msgID, timestamp)
@@ -697,24 +696,35 @@ func (s *Session) onLogin(msgID string, timestamp time.Time, uid types.Uid, auth
 		reply = NoErr(msgID, "", timestamp)
 
 		// Authenticate the session.
-		s.uid = uid
-		s.authLvl = authLvl
+		s.uid = rec.Uid
+		s.authLvl = rec.AuthLevel
 		features = auth.Validated
+
+		if len(rec.Tags) > 0 {
+			if err := store.Users.Update(rec.Uid,
+				map[string]interface{}{"Tags": normalizeTags(rec.Tags)}); err != nil {
+
+				log.Println("failed to update user's tags", err)
+			}
+		}
 
 		// Record deviceId used in this session
 		if s.deviceID != "" {
-			store.Devices.Update(uid, "", &types.DeviceDef{
+			if err := store.Devices.Update(rec.Uid, "", &types.DeviceDef{
 				DeviceId: s.deviceID,
 				Platform: "",
 				LastSeen: timestamp,
 				Lang:     s.lang,
-			})
+			}); err != nil {
+				log.Println("failed to update device record", err)
+			}
 		}
 	}
+
 	// GenSecret fails only if tokenLifetime is < 0. It can't be < 0 here,
 	// otherwise login would have failed earlier.
-	params["token"], params["expires"], _ = store.GetAuthHandler("token").GenSecret(
-		&auth.Rec{Uid: uid, AuthLevel: authLvl, Lifetime: lifetime, Features: features})
+	rec.Features = features
+	params["token"], params["expires"], _ = store.GetAuthHandler("token").GenSecret(rec)
 
 	reply.Ctrl.Params = params
 	return reply

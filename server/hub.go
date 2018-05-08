@@ -321,13 +321,6 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 
 		// 'fnd' has no owner, t.owner = nil
 
-		// Make sure no one can join the topic.
-		t.accessAuth = getDefaultAccess(t.cat, true)
-		t.accessAnon = getDefaultAccess(t.cat, false)
-
-		// Assign tags
-		t.tags = user.Tags
-
 		user, err := store.Users.Get(sreg.sess.uid)
 		if err != nil {
 			log.Println("hub: cannot load user object for 'fnd'='" + t.name + "' (" + err.Error() + ")")
@@ -338,6 +331,13 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 			sreg.sess.queueOut(ErrUserNotFound(sreg.pkt.Id, t.xoriginal, timestamp))
 			return
 		}
+
+		// Make sure no one can join the topic.
+		t.accessAuth = getDefaultAccess(t.cat, true)
+		t.accessAnon = getDefaultAccess(t.cat, false)
+
+		// Assign tags
+		t.tags = user.Tags
 
 		if err = t.loadSubscribers(); err != nil {
 			log.Println("hub: cannot load subscribers for '" + t.name + "' (" + err.Error() + ")")

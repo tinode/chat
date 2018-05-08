@@ -1706,9 +1706,14 @@ func (t *Topic) replyGetData(sess *Session, id string, req *MsgBrowseOpts) error
 // replyGetTags returns topic's tags - tokens used for discovery.
 func (t *Topic) replyGetTags(sess *Session, id string) error {
 	now := types.TimeNow()
+
 	if t.cat != types.TopicCatFnd && t.cat != types.TopicCatGrp {
 		sess.queueOut(ErrOperationNotAllowed(id, t.original(sess.uid), now))
 		return errors.New("invalid topic category for getting tags")
+	}
+	if t.cat == types.TopicCatGrp && t.owner != sess.uid {
+		sess.queueOut(ErrPermissionDenied(id, t.original(sess.uid), now))
+		return errors.New("request for tags from non-owner")
 	}
 
 	if len(t.tags) > 0 {
