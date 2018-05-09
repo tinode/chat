@@ -681,7 +681,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 			}
 
 			tags = normalizeTags(sreg.pkt.Set.Tags)
-			if !restrictedTags(tags, nil) {
+			if !restrictedTagsEqual(tags, nil, globals.immutableTagNS) {
 				log.Println("hub: attempt to directly set restricted tags")
 				sreg.sess.queueOut(ErrPermissionDenied(sreg.pkt.Id, t.xoriginal, timestamp))
 				return

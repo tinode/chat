@@ -141,11 +141,11 @@ func stringSliceDelta(rold, rnew []string) (added, removed []string) {
 	return added, removed
 }
 
-// restrictedTags checks if two sets of tags contain the same set of restricted tags:
+// restrictedTagsEqual checks if two sets of tags contain the same set of restricted tags:
 // true - same, false - different.
-func restrictedTags(oldTags, newTags []string) bool {
-	rold := filterRestrictedTags(oldTags)
-	rnew := filterRestrictedTags(newTags)
+func restrictedTagsEqual(oldTags, newTags []string, namespaces map[string]bool) bool {
+	rold := filterRestrictedTags(oldTags, namespaces)
+	rnew := filterRestrictedTags(newTags, namespaces)
 
 	if len(rold) != len(rnew) {
 		return false
@@ -193,10 +193,11 @@ func credentialMethods(creds []MsgAccCred) []string {
 	return out
 }
 
-// Take a slice of tags, return a slice of restricted tags contained in the input.
-func filterRestrictedTags(tags []string) []string {
+// Take a slice of tags, return a slice of restricted namespace tags contained in the input.
+// Tags to filter, restricted namespaces to filter.
+func filterRestrictedTags(tags []string, namespaces map[string]bool) []string {
 	var out []string
-	if len(globals.restrictedTags) > 0 && len(tags) > 0 {
+	if len(namespaces) > 0 && len(tags) > 0 {
 		for _, s := range tags {
 			parts := tagPrefixRegexp.FindStringSubmatch(s)
 
@@ -204,7 +205,7 @@ func filterRestrictedTags(tags []string) []string {
 				continue
 			}
 
-			if globals.restrictedTags[parts[1]] {
+			if namespaces[parts[1]] {
 				out = append(out, s)
 			}
 		}
@@ -355,7 +356,7 @@ func versionToString(vers int) string {
 // Parser for search queries. Parameters: Fnd.Private, Fnd.Tags. The query may contain non-ASCII
 // characters, i.e. length of string in bytes != length of string in runes.
 // Returns AND tags (all must be present in every result), OR tags (one or more present), error.
-func parseSearchQuery(query string, tags []string) ([]string, []string, error) {
+func parseSearchQuery(query string) ([]string, []string, error) {
 	type token struct {
 		val string
 		op  string
@@ -422,7 +423,7 @@ func parseSearchQuery(query string, tags []string) ([]string, []string, error) {
 	}
 
 	if ctx.val != "" && ctx.val != "end" {
-		return nil, nil, errors.New("invalid terminal context " + ctx.val)
+		return nil, nil, errors.New("unexpected terminal context '" + ctx.val + "'")
 	}
 
 	xlen := len(out)
@@ -435,6 +436,7 @@ func parseSearchQuery(query string, tags []string) ([]string, []string, error) {
 	} else {
 		out[xlen-1].op = out[xlen-2].op
 	}
+
 	var and, or []string
 	for _, t := range out {
 		if t.op == "and" {

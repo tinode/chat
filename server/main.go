@@ -111,8 +111,8 @@ var globals struct {
 	authValidators map[auth.Level][]string
 
 	apiKeySalt []byte
-	// Tags which are immutable to the client.
-	restrictedTags map[string]bool
+	// Tag namespaces (prefixes) which are immutable to the client.
+	immutableTagNS map[string]bool
 	// Add Strict-Transport-Security to headers, the value signifies age.
 	// Empty string "" turns it off
 	tlsStrictMaxAge string
@@ -253,12 +253,12 @@ func main() {
 	}
 
 	// List of tags for user discovery which cannot be changed directly by the client.
-	globals.restrictedTags = make(map[string]bool, len(config.Validator))
+	globals.immutableTagNS = make(map[string]bool, len(config.Validator))
 	for tag, _ := range config.Validator {
 		if strings.Index(tag, ":") >= 0 {
 			panic("acc_validation names should not contain character ':'")
 		}
-		globals.restrictedTags[tag] = true
+		globals.immutableTagNS[tag] = true
 	}
 	// Maximum message size
 	globals.maxMessageSize = int64(config.MaxMessageSize)

@@ -1746,7 +1746,7 @@ func (t *Topic) replySetTags(sess *Session, set *MsgClientSet) error {
 		err = errors.New("tags update by non-owner")
 
 	} else if tags := normalizeTags(set.Tags); tags != nil {
-		if !restrictedTags(t.tags, tags) {
+		if !restrictedTagsEqual(t.tags, tags, globals.immutableTagNS) {
 			err = errors.New("attempt to mutate restricted tags")
 			resp = ErrPermissionDenied(set.Id, t.original(sess.uid), now)
 		} else {
