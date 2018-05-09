@@ -363,6 +363,7 @@ func parseSearchQuery(query string, tags []string) ([]string, []string, error) {
 	type context struct {
 		val   string
 		start int
+		end   int
 	}
 	var ctx context
 	var out []token
@@ -374,22 +375,26 @@ func parseSearchQuery(query string, tags []string) ([]string, []string, error) {
 		if r == '"' {
 			newctx = "quo"
 		} else if ctx.val != "quo" {
-			if r == ' ' {
+			if r == ' ' || r == '\t' {
 				newctx = "and"
 			} else if r == ',' {
 				newctx = "or"
+			} else if i+w == len(query) {
+				newctx = "end"
+				ctx.end = i + w
 			}
 		}
 
 		if newctx == "quo" {
 			if ctx.val == "quo" {
-				out = append(out, token{val: query[ctx.start:i]})
 				ctx.val = ""
+				ctx.end = i
 			} else {
 				ctx.val = "quo"
+				ctx.start = i + w
 			}
-			ctx.start = i + w
 		} else if ctx.val == "or" || ctx.val == "and" {
+			ctx.end = 0
 			if newctx == "" {
 				if len(out) == 0 {
 					return nil, nil, errors.New("operator out of place " + ctx.val)
@@ -406,13 +411,17 @@ func parseSearchQuery(query string, tags []string) ([]string, []string, error) {
 			}
 			// Do nothing for cases 'and and' -> 'and', 'or and' -> 'or'.
 		} else if ctx.val == "" && newctx != "" {
-			out = append(out, token{val: query[ctx.start:i], op: newctx})
+			end := ctx.end
+			if end == 0 {
+				end = i
+			}
+			out = append(out, token{val: query[ctx.start:end], op: newctx})
 			ctx.val = newctx
 			ctx.start = i
 		}
 	}
 
-	if ctx.val != "" {
+	if ctx.val != "" && ctx.val != "end" {
 		return nil, nil, errors.New("invalid terminal context " + ctx.val)
 	}
 
@@ -433,8 +442,7 @@ func parseSearchQuery(query string, tags []string) ([]string, []string, error) {
 		} else if t.op == "or" {
 			or = append(or, t.val)
 		} else {
-			// Just a sanity check while debugging. This should not happen.
-			panic("invalid operation " + t.op + "val=" + t.val)
+			panic("invalid operation ='" + t.op + "', val='" + t.val + "'")
 		}
 	}
 	return and, or, nil
