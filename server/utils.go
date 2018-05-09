@@ -3,12 +3,14 @@
 package main
 
 import (
+	"errors"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/tinode/chat/server/auth"
 	"github.com/tinode/chat/server/store/types"
@@ -350,9 +352,92 @@ func versionToString(vers int) string {
 	return str
 }
 
-// Parser for search queries. Parameters: Fnd.Private, Fnd.Tags.
-func parseSearchQuery(query string, tags []string) error {
-	return nil
+// Parser for search queries. Parameters: Fnd.Private, Fnd.Tags. The query may contain non-ASCII
+// characters, i.e. length of string in bytes != length of string in runes.
+// Returns AND tags (all must be present in every result), OR tags (one or more present), error.
+func parseSearchQuery(query string, tags []string) ([]string, []string, error) {
+	type token struct {
+		val string
+		op  string
+	}
+	type context struct {
+		val   string
+		start int
+	}
+	var ctx context
+	var out []token
+	query = strings.TrimSpace(query)
+	for i, w := 0, 0; i < len(query); i += w {
+		var r rune
+		var newctx string
+		r, w = utf8.DecodeRuneInString(query[i:])
+		if r == '"' {
+			newctx = "quo"
+		} else if ctx.val != "quo" {
+			if r == ' ' {
+				newctx = "and"
+			} else if r == ',' {
+				newctx = "or"
+			}
+		}
+
+		if newctx == "quo" {
+			if ctx.val == "quo" {
+				out = append(out, token{val: query[ctx.start:i]})
+				ctx.val = ""
+			} else {
+				ctx.val = "quo"
+			}
+			ctx.start = i + w
+		} else if ctx.val == "or" || ctx.val == "and" {
+			if newctx == "" {
+				if len(out) == 0 {
+					return nil, nil, errors.New("operator out of place " + ctx.val)
+				} else {
+					out[len(out)-1].op = ctx.val
+					ctx.val = ""
+					ctx.start = i
+				}
+			} else if ctx.val == "or" && newctx == "or" {
+				return nil, nil, errors.New("invalid operator sequence " + ctx.val)
+			} else if newctx == "or" {
+				// Switch context from "and" to "or", i.e. the case like ' ,' -> ','
+				ctx.val = "or"
+			}
+			// Do nothing for cases 'and and' -> 'and', 'or and' -> 'or'.
+		} else if ctx.val == "" && newctx != "" {
+			out = append(out, token{val: query[ctx.start:i], op: newctx})
+			ctx.val = newctx
+			ctx.start = i
+		}
+	}
+
+	if ctx.val != "" {
+		return nil, nil, errors.New("invalid terminal context " + ctx.val)
+	}
+
+	xlen := len(out)
+	if xlen == 0 {
+		return nil, nil, nil
+	}
+
+	if xlen == 1 {
+		out[xlen-1].op = "and"
+	} else {
+		out[xlen-1].op = out[xlen-2].op
+	}
+	var and, or []string
+	for _, t := range out {
+		if t.op == "and" {
+			and = append(and, t.val)
+		} else if t.op == "or" {
+			or = append(or, t.val)
+		} else {
+			// Just a sanity check while debugging. This should not happen.
+			panic("invalid operation " + t.op + "val=" + t.val)
+		}
+	}
+	return and, or, nil
 }
 
 // Returns > 0 if v1 > v2; zero if equal; < 0 if v1 < v2
