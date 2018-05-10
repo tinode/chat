@@ -944,7 +944,7 @@ func (a *adapter) FindUsers(uid t.Uid, req, opt []string) ([]t.Subscription, err
 			reqTags = append(reqTags, tag)
 		}
 		query = query.Filter(func(row rdb.Term) rdb.Term {
-			return row.Field("Tags").SetIntersection(reqTags...).Count().Ne(0)
+			return row.Field("Tags").SetIntersection(reqTags).Count().Ne(0)
 		})
 	}
 	rows, err := query.
@@ -1014,7 +1014,7 @@ func (a *adapter) FindTopics(req, opt []string) ([]t.Subscription, error) {
 			reqTags = append(reqTags, tag)
 		}
 		query = query.Filter(func(row rdb.Term) rdb.Term {
-			return row.Field("Tags").SetIntersection(reqTags...).Count().Ne(0)
+			return row.Field("Tags").SetIntersection(reqTags).Count().Ne(0)
 		})
 	}
 
