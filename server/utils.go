@@ -235,38 +235,38 @@ func isNullValue(i interface{}) bool {
 	return false
 }
 
-func decodeStoreError(err error, id string, timestamp time.Time, params map[string]interface{}) *ServerComMessage {
+func decodeStoreError(err error, id, topic string, timestamp time.Time, params map[string]interface{}) *ServerComMessage {
 
 	var errmsg *ServerComMessage
 
 	if err == nil {
-		errmsg = NoErr(id, "", timestamp)
+		errmsg = NoErr(id, topic, timestamp)
 	}
 
 	if storeErr, ok := err.(types.StoreError); !ok {
-		errmsg = ErrUnknown(id, "", timestamp)
+		errmsg = ErrUnknown(id, topic, timestamp)
 	} else {
 		switch storeErr {
 		case types.ErrInternal:
-			errmsg = ErrUnknown(id, "", timestamp)
+			errmsg = ErrUnknown(id, topic, timestamp)
 		case types.ErrMalformed:
-			errmsg = ErrMalformed(id, "", timestamp)
+			errmsg = ErrMalformed(id, topic, timestamp)
 		case types.ErrFailed:
-			errmsg = ErrAuthFailed(id, "", timestamp)
+			errmsg = ErrAuthFailed(id, topic, timestamp)
 		case types.ErrDuplicate:
-			errmsg = ErrDuplicateCredential(id, "", timestamp)
+			errmsg = ErrDuplicateCredential(id, topic, timestamp)
 		case types.ErrUnsupported:
-			errmsg = ErrNotImplemented(id, "", timestamp)
+			errmsg = ErrNotImplemented(id, topic, timestamp)
 		case types.ErrExpired:
-			errmsg = ErrAuthFailed(id, "", timestamp)
+			errmsg = ErrAuthFailed(id, topic, timestamp)
 		case types.ErrPolicy:
-			errmsg = ErrPolicy(id, "", timestamp)
+			errmsg = ErrPolicy(id, topic, timestamp)
 		case types.ErrCredentials:
 			errmsg = InfoValidateCredentials(id, timestamp)
 		case types.ErrNotFound:
-			errmsg = ErrNotFound(id, "", timestamp)
+			errmsg = ErrNotFound(id, topic, timestamp)
 		default:
-			errmsg = ErrUnknown(id, "", timestamp)
+			errmsg = ErrUnknown(id, topic, timestamp)
 		}
 	}
 	errmsg.Ctrl.Params = params

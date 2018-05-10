@@ -460,7 +460,7 @@ func (s *Session) acc(msg *ClientComMessage) {
 		// Check if login is unique.
 		if ok, err := authhdl.IsUnique(msg.Acc.Secret); !ok {
 			log.Println("Check unique:", err)
-			s.queueOut(decodeStoreError(err, msg.Acc.Id, msg.timestamp, nil))
+			s.queueOut(decodeStoreError(err, msg.Acc.Id, "", msg.timestamp, nil))
 			return
 		}
 
@@ -487,7 +487,7 @@ func (s *Session) acc(msg *ClientComMessage) {
 			vld := store.GetValidator(cr.Method)
 			if err := vld.PreCheck(cr.Value, cr.Params); err != nil {
 				log.Println("failed credential pre-check", cr, err)
-				s.queueOut(decodeStoreError(err, msg.Acc.Id, msg.timestamp, nil))
+				s.queueOut(decodeStoreError(err, msg.Acc.Id, "", msg.timestamp, nil))
 				return
 			}
 
@@ -532,7 +532,7 @@ func (s *Session) acc(msg *ClientComMessage) {
 			log.Println("auth: add record failed", err)
 			// Attempt to delete incomplete user record
 			store.Users.Delete(user.Uid(), false)
-			s.queueOut(decodeStoreError(err, msg.Acc.Id, msg.timestamp, nil))
+			s.queueOut(decodeStoreError(err, msg.Acc.Id, "", msg.timestamp, nil))
 			return
 		}
 
@@ -543,7 +543,7 @@ func (s *Session) acc(msg *ClientComMessage) {
 			// Attempt to delete incomplete user record
 			store.Users.Delete(user.Uid(), false)
 			_, missing := stringSliceDelta(globals.authValidators[rec.AuthLevel], credentialMethods(creds))
-			s.queueOut(decodeStoreError(types.ErrPolicy, msg.Acc.Id, msg.timestamp,
+			s.queueOut(decodeStoreError(types.ErrPolicy, msg.Acc.Id, "", msg.timestamp,
 				map[string]interface{}{"creds": missing}))
 			return
 		}
@@ -555,7 +555,7 @@ func (s *Session) acc(msg *ClientComMessage) {
 				log.Println("Failed to save or validate credential", err)
 				// Delete incomplete user record.
 				store.Users.Delete(user.Uid(), false)
-				s.queueOut(decodeStoreError(err, msg.Acc.Id, msg.timestamp, nil))
+				s.queueOut(decodeStoreError(err, msg.Acc.Id, "", msg.timestamp, nil))
 				return
 			}
 
@@ -598,7 +598,7 @@ func (s *Session) acc(msg *ClientComMessage) {
 			// TODO(gene): support the case when msg.Acc.User is not equal to the current user
 			if err := authhdl.UpdateRecord(&auth.Rec{Uid: s.uid}, msg.Acc.Secret); err != nil {
 				log.Println("auth: failed to update secret", err)
-				s.queueOut(decodeStoreError(err, msg.Acc.Id, msg.timestamp, nil))
+				s.queueOut(decodeStoreError(err, msg.Acc.Id, "", msg.timestamp, nil))
 				return
 			}
 		} else if msg.Acc.Scheme != "" {
@@ -611,7 +611,7 @@ func (s *Session) acc(msg *ClientComMessage) {
 			validated, err := s.getValidatedGred(s.uid, s.authLvl, msg.Acc.Cred)
 			if err != nil {
 				log.Println("failed to get validated credentials", err)
-				s.queueOut(decodeStoreError(err, msg.Acc.Id, msg.timestamp, nil))
+				s.queueOut(decodeStoreError(err, msg.Acc.Id, "", msg.timestamp, nil))
 				return
 			}
 			_, missing := stringSliceDelta(globals.authValidators[s.authLvl], validated)
@@ -656,7 +656,7 @@ func (s *Session) login(msg *ClientComMessage) {
 	rec, err := handler.Authenticate(msg.Login.Secret)
 	if err != nil {
 		log.Println("auth failed", err)
-		s.queueOut(decodeStoreError(err, msg.Login.Id, msg.timestamp, nil))
+		s.queueOut(decodeStoreError(err, msg.Login.Id, "", msg.timestamp, nil))
 		return
 	}
 
@@ -669,7 +669,7 @@ func (s *Session) login(msg *ClientComMessage) {
 	}
 	if err != nil {
 		log.Println("failed to validate credentials", err)
-		s.queueOut(decodeStoreError(err, msg.Login.Id, msg.timestamp, nil))
+		s.queueOut(decodeStoreError(err, msg.Login.Id, "", msg.timestamp, nil))
 	} else {
 		s.queueOut(s.onLogin(msg.Login.Id, msg.timestamp, rec, missing))
 	}

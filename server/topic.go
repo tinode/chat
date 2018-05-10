@@ -1453,8 +1453,7 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 				}
 			}
 		} else {
-			sess.queueOut(ErrMalformed(id, t.original(sess.uid), now))
-			return types.ErrMalformed
+			err = types.ErrMalformed
 		}
 	} else {
 		// FIXME(gene): don't load subs from DB, use perUserData - it already contains subscriptions.
@@ -1464,7 +1463,7 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 	}
 
 	if err != nil {
-		sess.queueOut(ErrUnknown(id, t.original(sess.uid), now))
+		sess.queueOut(decodeStoreError(err, id, t.original(sess.uid), now, nil))
 		return err
 	}
 
