@@ -1439,25 +1439,22 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 		subs, err = store.Users.GetTopicsAny(sess.uid)
 		isSharer = true
 	} else if t.cat == types.TopicCatFnd {
-		// TODO: refactor .private from a slice of interfaces to a string.
 		// TODO: check the query (.private) against the set of allowed tags.
-		// Given a query provided in .private, fetch user's contacts. Private contains a slice of interfaces.
-		if ifquery, ok := t.perUser[sess.uid].private.([]interface{}); ok && len(ifquery) > 0 {
-			// Convert slice of interfaces to a slice of strings.
-			var query []string
-			for _, ifq := range ifquery {
-				switch str := ifq.(type) {
-				case string:
-					query = append(query, str)
-				default:
-				}
-			}
+		// Given a query provided in .private, fetch user's contacts. Private contains a string.
+		if query, ok := t.perUser[sess.uid].private.(string); ok {
 			if len(query) > 0 {
 				query, subs, err = pluginFind(sess.uid, query)
-				if err == nil && subs == nil && query != nil {
-					subs, err = store.Users.FindSubs(sess.uid, query)
+				if err == nil && subs == nil && query != "" {
+					var req, opt []string
+					req, opt, err = parseSearchQuery(query)
+					if err == nil {
+						subs, err = store.Users.FindSubs(sess.uid, req, opt)
+					}
 				}
 			}
+		} else {
+			sess.queueOut(ErrMalformed(id, t.original(sess.uid), now))
+			return types.ErrMalformed
 		}
 	} else {
 		// FIXME(gene): don't load subs from DB, use perUserData - it already contains subscriptions.

@@ -1169,32 +1169,29 @@ func (a *adapter) SubsDelForUser(user t.Uid) error {
 
 // Returns a list of users who match given tags, such as "email:jdoe@example.com" or "tel:18003287448".
 // Searching the 'users.Tags' for the given tags using respective index.
-func (a *adapter) FindUsers(uid t.Uid, tags []string) ([]t.Subscription, error) {
+func (a *adapter) FindUsers(uid t.Uid, req, opt []string) ([]t.Subscription, error) {
 	index := make(map[string]struct{})
 	var args []interface{}
-	for _, tag := range tags {
+	for _, tag := range append(req, opt...) {
 		args = append(args, tag)
 		index[tag] = struct{}{}
 	}
 
-	// Query for selecting matches where every group includes at least one required match (restricting search to
-	// group members).
-	/*
-		SELECT u.id, u.createdat, u.tags, COUNT(*) AS matches
-			FROM users as u LEFT JOIN usertags AS t ON t.userid=u.id
-			WHERE t.tag IN (<all tags here>)
-			GROUP BY u.id, u.createdat, u.tags
-			HAVING COUNT(t.tag IN (<required tags here>) OR NULL)>0
-			ORDER BY matches DESC LIMIT 20;
-	*/
+	query := "SELECT u.id,u.createdat,u.updatedat,u.public,u.tags,COUNT(*) AS matches " +
+		"FROM users AS u LEFT JOIN usertags AS t ON t.userid=u.id " +
+		"WHERE t.tag IN (?" + strings.Repeat(",?", len(req)+len(opt)-1) + ") " +
+		"GROUP BY u.id,u.createdat,u.updatedat,u.public,u.tags "
+	if len(req) > 0 {
+		query += "HAVING COUNT(t.tag IN (?" + strings.Repeat(",?", len(req)-1) + ") OR NULL)>=? "
+		for _, tag := range req {
+			args = append(args, tag)
+		}
+		args = append(args, len(req))
+	}
+	query += "ORDER BY matches DESC LIMIT ?"
 
 	// Get users matched by tags, sort by number of matches from high to low.
-	rows, err := a.db.Queryx(
-		"SELECT u.id,u.createdat,u.updatedat,u.public,u.tags,COUNT(*) AS matches "+
-			"FROM users AS u LEFT JOIN usertags AS t ON t.userid=u.id "+
-			"WHERE t.tag IN (?"+strings.Repeat(",?", len(tags)-1)+") "+
-			"GROUP BY u.id,u.createdat,u.updatedat,u.public,u.tags ORDER BY matches DESC LIMIT ?",
-		append(args, maxResults)...)
+	rows, err := a.db.Queryx(query, append(args, maxResults)...)
 
 	if err != nil {
 		return nil, err
@@ -1238,20 +1235,27 @@ func (a *adapter) FindUsers(uid t.Uid, tags []string) ([]t.Subscription, error) 
 
 // Returns a list of topics with matching tags.
 // Searching the 'topics.Tags' for the given tags using respective index.
-func (a *adapter) FindTopics(tags []string) ([]t.Subscription, error) {
+func (a *adapter) FindTopics(req, opt []string) ([]t.Subscription, error) {
 	index := make(map[string]struct{})
 	var args []interface{}
-	for _, tag := range tags {
+	for _, tag := range append(req, opt...) {
 		args = append(args, tag)
 		index[tag] = struct{}{}
 	}
 
-	rows, err := a.db.Queryx(
-		"SELECT t.name AS topic,t.createdat,t.updatedat,t.public,t.tags,COUNT(*) AS matches "+
-			"FROM topics AS t LEFT JOIN topictags AS tt ON t.name=tt.topic "+
-			"WHERE tt.tag IN (?"+strings.Repeat(",?", len(tags)-1)+") "+
-			"GROUP BY t.name,t.createdat,t.updatedat,t.public,t.tags "+
-			"ORDER BY matches DESC LIMIT ?", append(args, maxResults)...)
+	query := "SELECT t.name AS topic,t.createdat,t.updatedat,t.public,t.tags,COUNT(*) AS matches " +
+		"FROM topics AS t LEFT JOIN topictags AS tt ON t.name=tt.topic " +
+		"WHERE tt.tag IN (?" + strings.Repeat(",?", len(req)+len(opt)-1) + ") " +
+		"GROUP BY t.name,t.createdat,t.updatedat,t.public,t.tags "
+	if len(req) > 0 {
+		query += "HAVING COUNT(tt.tag IN (?" + strings.Repeat(",?", len(req)-1) + ") OR NULL)>=? "
+		for _, tag := range append(req) {
+			args = append(args, tag)
+		}
+		args = append(args, len(req))
+	}
+	query += "ORDER BY matches DESC LIMIT ?"
+	rows, err := a.db.Queryx(query, append(args, maxResults)...)
 
 	if err != nil {
 		return nil, err

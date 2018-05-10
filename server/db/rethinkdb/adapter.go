@@ -904,7 +904,7 @@ func (a *adapter) SubsDelForUser(user t.Uid) error {
 
 // Returns a list of users who match given tags, such as "email:jdoe@example.com" or "tel:18003287448".
 // Searching the 'users.Tags' for the given tags using respective index.
-func (a *adapter) FindUsers(uid t.Uid, tags []string) ([]t.Subscription, error) {
+func (a *adapter) FindUsers(uid t.Uid, req, opt []string) ([]t.Subscription, error) {
 	index := make(map[string]struct{})
 	var query []interface{}
 	for _, tag := range tags {
@@ -980,7 +980,7 @@ func (a *adapter) FindUsers(uid t.Uid, tags []string) ([]t.Subscription, error) 
 
 // Returns a list of topics with matching tags.
 // Searching the 'topics.Tags' for the given tags using respective index.
-func (a *adapter) FindTopics(tags []string) ([]t.Subscription, error) {
+func (a *adapter) FindTopics(req, opt []string) ([]t.Subscription, error) {
 	index := make(map[string]struct{})
 	var query []interface{}
 	for _, tag := range tags {

@@ -76,9 +76,9 @@ type Adapter interface {
 	SubsDelForUser(user t.Uid) error
 
 	// FindUsers searches for new contacts given a list of tags
-	FindUsers(user t.Uid, tags []string) ([]t.Subscription, error)
+	FindUsers(user t.Uid, req, opt []string) ([]t.Subscription, error)
 	// FindTopics searches for group topics given a list of tags
-	FindTopics(tags []string) ([]t.Subscription, error)
+	FindTopics(req, opt []string) ([]t.Subscription, error)
 
 	// Messages
 	MessageSave(msg *t.Message) error

@@ -433,13 +433,13 @@ message ClientReq {
 
 message SearchQuery {
 	string user_id = 1;
-	repeated string terms = 2;
+	string query = 2;
 }
 
 message SearchFound {
 	RespCode status = 1;
-	// New search terms If status == REPLACE, otherwise unset.
-	repeated string terms = 2;
+	// New search query If status == REPLACE, otherwise unset.
+	string query = 2;
 	// Search results.
 	repeated TopicSub result = 3;
 }

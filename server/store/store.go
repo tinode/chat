@@ -269,12 +269,12 @@ func (UsersObjMapper) GetSubs(id types.Uid) ([]types.Subscription, error) {
 }
 
 // FindSubs loads a list of users for the given tags.
-func (UsersObjMapper) FindSubs(id types.Uid, query []string) ([]types.Subscription, error) {
-	usubs, err := adp.FindUsers(id, query)
+func (UsersObjMapper) FindSubs(id types.Uid, required, optional []string) ([]types.Subscription, error) {
+	usubs, err := adp.FindUsers(id, required, optional)
 	if err != nil {
 		return nil, err
 	}
-	tsubs, err := adp.FindTopics(query)
+	tsubs, err := adp.FindTopics(required, optional)
 	if err != nil {
 		return nil, err
 	}
