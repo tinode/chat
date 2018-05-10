@@ -906,9 +906,9 @@ func (a *adapter) SubsDelForUser(user t.Uid) error {
 // Searching the 'users.Tags' for the given tags using respective index.
 func (a *adapter) FindUsers(uid t.Uid, req, opt []string) ([]t.Subscription, error) {
 	index := make(map[string]struct{})
-	var query []interface{}
-	for _, tag := range tags {
-		query = append(query, tag)
+	var allTags []interface{}
+	for _, tag := range append(req, opt...) {
+		allTags = append(allTags, tag)
 		index[tag] = struct{}{}
 	}
 	// Query for selecting matches where every group includes at least one required match (restricting search to
@@ -926,9 +926,9 @@ func (a *adapter) FindUsers(uid t.Uid, req, opt []string) ([]t.Subscription, err
 	*/
 
 	// Get users matched by tags, sort by number of matches from high to low.
-	rows, err := rdb.DB(a.dbName).
+	query := rdb.DB(a.dbName).
 		Table("users").
-		GetAllByIndex("Tags", query...).
+		GetAllByIndex("Tags", allTags...).
 		Pluck("Id", "Access", "CreatedAt", "UpdatedAt", "Public", "Tags").
 		Group("Id").
 		Ungroup().
@@ -936,13 +936,22 @@ func (a *adapter) FindUsers(uid t.Uid, req, opt []string) ([]t.Subscription, err
 			return row.Field("reduction").
 				Nth(0).
 				Merge(map[string]interface{}{"MatchedTagsCount": row.Field("reduction").Count()})
-		}).
-		// Query may contain redundant records, i.e. the same tag twice.
-		// User could be matched on multiple tags, i.e on email and phone#. Thus the query may
-		// return duplicate users. Thus the need for distinct.
+		})
+
+	if len(req) > 0 {
+		var reqTags []interface{}
+		for _, tag := range req {
+			reqTags = append(reqTags, tag)
+		}
+		query = query.Filter(func(row rdb.Term) rdb.Term {
+			return row.Field("Tags").SetIntersection(reqTags...).Count().Ne(0)
+		})
+	}
+	rows, err := query.
 		OrderBy(rdb.Desc("MatchedTagsCount")).
 		Limit(maxResults).
 		Run(a.conn)
+
 	if err != nil {
 		return nil, err
 	}
@@ -982,31 +991,14 @@ func (a *adapter) FindUsers(uid t.Uid, req, opt []string) ([]t.Subscription, err
 // Searching the 'topics.Tags' for the given tags using respective index.
 func (a *adapter) FindTopics(req, opt []string) ([]t.Subscription, error) {
 	index := make(map[string]struct{})
-	var query []interface{}
-	for _, tag := range tags {
-		query = append(query, tag)
+	var allTags []interface{}
+	for _, tag := range append(req, opt...) {
+		allTags = append(allTags, tag)
 		index[tag] = struct{}{}
 	}
-
-	/*
-	   Javascript query we are replicating here in Go:
-	   r.db('tinode').table('users')
-	   	.getAll("email:alice@example.com", "email:bob@example.com", "tel:17025550002", {index: 'Tags'})
-	   	.group("Id")
-	   	.ungroup()
-	   	.map(function(row) {
-	   		return row.getField('reduction')
-	   			.nth(0)
-	   			.merge({
-	   				merge_count: row.getField('reduction').count()
-	   			})
-	   	})
-	   	.orderBy(r.desc("merge_count"))
-	*/
-
-	rows, err := rdb.DB(a.dbName).
+	query := rdb.DB(a.dbName).
 		Table("topics").
-		GetAllByIndex("Tags", query...).
+		GetAllByIndex("Tags", allTags...).
 		Pluck("Id", "Access", "CreatedAt", "UpdatedAt", "Public", "Tags").
 		Group("Id").
 		Ungroup().
@@ -1014,7 +1006,19 @@ func (a *adapter) FindTopics(req, opt []string) ([]t.Subscription, error) {
 			return row.Field("reduction").
 				Nth(0).
 				Merge(map[string]interface{}{"MatchedTagsCount": row.Field("reduction").Count()})
-		}).
+		})
+
+	if len(req) > 0 {
+		var reqTags []interface{}
+		for _, tag := range req {
+			reqTags = append(reqTags, tag)
+		}
+		query = query.Filter(func(row rdb.Term) rdb.Term {
+			return row.Field("Tags").SetIntersection(reqTags...).Count().Ne(0)
+		})
+	}
+
+	rows, err := query.
 		OrderBy(rdb.Desc("MatchedTagsCount")).
 		Limit(maxResults).
 		Run(a.conn)
