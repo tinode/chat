@@ -1448,7 +1448,13 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 					var req, opt []string
 					req, opt, err = parseSearchQuery(query)
 					if err == nil {
-						subs, err = store.Users.FindSubs(sess.uid, req, opt)
+						// Check if the query contains terms that the user does not have.
+						if restr, _ := stringSliceDelta(t.tags,
+							filterRestrictedTags(append(req, opt...), globals.maskedTagNS)); len(restr) > 0 {
+							err = types.ErrPermissionDenied
+						} else {
+							subs, err = store.Users.FindSubs(sess.uid, req, opt)
+						}
 					} else {
 						// Convert specific parsing error into a generic ErrMalformed.
 						// Otherwise it will be reported as 500 Internal.

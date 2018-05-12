@@ -54,7 +54,7 @@ const (
 	// idleTopicTimeout defines now long to keep topic alive after the last session detached.
 	idleTopicTimeout = time.Second * 5
 
-	// currentVersion is the current API version
+	// currentVersion is the current API/protocol version
 	currentVersion = "0.14"
 	// minSupportedVersion is the minimum supported API version
 	minSupportedVersion = "0.14"
@@ -87,10 +87,13 @@ const (
 	defaultStaticPath = "/static/"
 )
 
-// Build timestamp defined by the compiler.
-// To define buildstamp as a timestamp of when the server was built add a flag to compiler command line:
-// 	-ldflags "-X main.buildstamp=`date -u '+%Y%m%dT%H:%M:%SZ'`"
-var buildstamp = "undefined"
+// Build version number defined by the compiler:
+// 		-ldflags "-X main.buildstamp=value_to_assign_to_buildstamp"
+// Reported to clients in response to {hi} message.
+// For instance, to define the buildstamp as a timestamp of when the server was built add a
+// flag to compiler command line:
+// 		-ldflags "-X main.buildstamp=`date -u '+%Y%m%dT%H:%M:%SZ'`"
+var buildstamp = "undef"
 
 // CredValidator holds additional config params for a credential validator.
 type credValidator struct {
@@ -113,6 +116,10 @@ var globals struct {
 	apiKeySalt []byte
 	// Tag namespaces (prefixes) which are immutable to the client.
 	immutableTagNS map[string]bool
+	// Tag namespaces which are immutable on User and partially mutable on Topic:
+	// user can only mutate tags he owns.
+	maskedTagNS map[string]bool
+
 	// Add Strict-Transport-Security to headers, the value signifies age.
 	// Empty string "" turns it off
 	tlsStrictMaxAge string
@@ -155,6 +162,8 @@ type configType struct {
 	MaxMessageSize int `json:"max_message_size"`
 	// Maximum number of group topic subscribers.
 	MaxSubscriberCount int `json:"max_subscriber_count"`
+	// Masked tags: tags immutable on User (mask), mutable on Topic only within the mask.
+	MaskedTagNamespaces []string `json:"masked_tags"`
 	// Maximum number of indexable tags
 	MaxTagCount int `json:"max_tag_count"`
 
@@ -252,7 +261,8 @@ func main() {
 			addToTags:       vconf.AddToTags}
 	}
 
-	// List of tags for user discovery which cannot be changed directly by the client.
+	// List of tag namespaces for user discovery which cannot be changed directly
+	// by the client, e.g. 'email' or 'tel'.
 	globals.immutableTagNS = make(map[string]bool, len(config.Validator))
 	for tag, _ := range config.Validator {
 		if strings.Index(tag, ":") >= 0 {
@@ -260,6 +270,16 @@ func main() {
 		}
 		globals.immutableTagNS[tag] = true
 	}
+
+	// Partially restricted tag namespaces
+	globals.maskedTagNS = make(map[string]bool, len(config.MaskedTagNamespaces))
+	for _, tag := range config.MaskedTagNamespaces {
+		if strings.Index(tag, ":") >= 0 {
+			panic("masked_tags namespaces should not contain character ':'")
+		}
+		globals.maskedTagNS[tag] = true
+	}
+
 	// Maximum message size
 	globals.maxMessageSize = int64(config.MaxMessageSize)
 	if globals.maxMessageSize <= 0 {

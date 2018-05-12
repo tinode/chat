@@ -253,6 +253,8 @@ func decodeStoreError(err error, id, topic string, timestamp time.Time, params m
 			errmsg = ErrMalformed(id, topic, timestamp)
 		case types.ErrFailed:
 			errmsg = ErrAuthFailed(id, topic, timestamp)
+		case types.ErrPermissionDenied:
+			errmsg = ErrPermissionDenied(id, topic, timestamp)
 		case types.ErrDuplicate:
 			errmsg = ErrDuplicateCredential(id, topic, timestamp)
 		case types.ErrUnsupported:
