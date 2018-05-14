@@ -55,9 +55,9 @@ const (
 	idleTopicTimeout = time.Second * 5
 
 	// currentVersion is the current API/protocol version
-	currentVersion = "0.14"
+	currentVersion = "0.15"
 	// minSupportedVersion is the minimum supported API version
-	minSupportedVersion = "0.14"
+	minSupportedVersion = "0.15"
 
 	// defaultMaxMessageSize is the default maximum message size
 	defaultMaxMessageSize = 1 << 19 // 512K
