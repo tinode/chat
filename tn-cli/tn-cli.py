@@ -16,7 +16,7 @@ import model_pb2 as pb
 import model_pb2_grpc as pbx
 
 APP_NAME = "tn-cli"
-VERSION = "0.14"
+VERSION = "0.15"
 
 # Dictionary wich contains lambdas to be executed when server response is received
 onCompletion = {}

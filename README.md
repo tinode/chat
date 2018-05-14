@@ -4,7 +4,7 @@ Instant messaging server. Backend in pure [Go](http://golang.org) (license [GPL 
 
 Tinode is meant as a replacement for XMPP. On the surface it's a lot like open source WhatsApp or Telegram.
 
-Version 0.14. This is beta-quality software: feature-complete but probably with a few bugs. Follow [instructions](INSTALL.md) to install and run. Read [API documentation](docs/API.md).
+Version 0.15. This is beta-quality software: feature-complete but probably with a few bugs. Follow [instructions](INSTALL.md) to install and run. Read [API documentation](docs/API.md).
 
 
 ## Why?
