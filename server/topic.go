@@ -943,7 +943,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktID string, want string,
 			if userData.modeGiven != oldGiven {
 				update["ModeGiven"] = userData.modeGiven
 			}
-			if err := store.Subs.Update(t.name, sess.uid, update, true); err != nil {
+			if err := store.Subs.Update(t.name, sess.uid, update, false); err != nil {
 				sess.queueOut(ErrUnknown(pktID, t.original(sess.uid), now))
 				return err
 			}
@@ -958,7 +958,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktID string, want string,
 			if err := store.Subs.Update(t.name, t.owner,
 				map[string]interface{}{
 					"ModeWant":  oldOwnerData.modeWant,
-					"ModeGiven": oldOwnerData.modeGiven}, true); err != nil {
+					"ModeGiven": oldOwnerData.modeGiven}, false); err != nil {
 				return err
 			}
 			t.perUser[t.owner] = oldOwnerData
@@ -1143,7 +1143,7 @@ func (t *Topic) approveSub(h *Hub, sess *Session, target types.Uid, set *MsgClie
 
 			// Save changed value to database
 			if err := store.Subs.Update(t.name, target,
-				map[string]interface{}{"ModeGiven": modeGiven}, true); err != nil {
+				map[string]interface{}{"ModeGiven": modeGiven}, false); err != nil {
 				return err
 			}
 
@@ -1186,6 +1186,11 @@ func (t *Topic) approveSub(h *Hub, sess *Session, target types.Uid, set *MsgClie
 // replyGetDesc is a response to a get.desc request on a topic, sent to just the session as a {meta} packet
 func (t *Topic) replyGetDesc(sess *Session, id, tempName string, opts *MsgGetOpts) error {
 	now := types.TimeNow()
+
+	if opt != nil && (opt.User != "" || opt.Limit != 0) {
+		sess.queueOut(ErrMalformed(id, t.original(sess.uid), now))
+		return errors.New("invalid GetDesc query")
+	}
 
 	// Check if user requested modified data
 	ifUpdated := (opts == nil || opts.IfModifiedSince == nil || opts.IfModifiedSince.Before(t.updated))

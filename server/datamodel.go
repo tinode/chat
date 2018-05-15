@@ -26,6 +26,7 @@ type MsgBrowseOpts struct {
 
 // MsgGetOpts defines parameters for queries by last modified time.
 type MsgGetOpts struct {
+	User            string     `json:"user,omitempty"`
 	IfModifiedSince *time.Time `json:"ims,omitempty"`
 	Limit           int        `json:"limit,omitempty"`
 }
