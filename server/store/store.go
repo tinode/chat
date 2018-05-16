@@ -268,7 +268,7 @@ func (UsersObjMapper) GetSubs(id types.Uid, opts *types.QueryOpt) ([]types.Subsc
 	return adp.SubsForUser(id, false, opts)
 }
 
-// FindSubs loads a list of users for the given tags.
+// FindSubs find a list of users and topics for the given tags. Results are formatted as subscriptions.
 func (UsersObjMapper) FindSubs(id types.Uid, required, optional []string) ([]types.Subscription, error) {
 	usubs, err := adp.FindUsers(id, required, optional)
 	if err != nil {
@@ -337,6 +337,7 @@ var Topics TopicsObjMapper
 func (TopicsObjMapper) Create(topic *types.Topic, owner types.Uid, private interface{}) error {
 
 	topic.InitTimes()
+	topic.TouchedAt = &topic.CreatedAt
 
 	err := adp.TopicCreate(topic)
 	if err != nil {
@@ -359,7 +360,9 @@ func (TopicsObjMapper) Create(topic *types.Topic, owner types.Uid, private inter
 // CreateP2P creates a P2P topic by generating two user's subsciptions to each other.
 func (TopicsObjMapper) CreateP2P(initiator, invited *types.Subscription) error {
 	initiator.InitTimes()
+	initiator.SetTouchedAt(&initiator.CreatedAt)
 	invited.InitTimes()
+	invited.SetTouchedAt((&invited.CreatedAt))
 
 	return adp.TopicCreateP2P(initiator, invited)
 }

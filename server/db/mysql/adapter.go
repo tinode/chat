@@ -646,8 +646,9 @@ func (a *adapter) UserUpdate(uid t.Uid, update map[string]interface{}) error {
 // *****************************
 
 func (a *adapter) topicCreate(tx *sqlx.Tx, topic *t.Topic) error {
-	_, err := tx.Exec("INSERT INTO topics(createdAt,updatedAt,name,access,public,tags) VALUES(?,?,?,?,?,?)",
-		topic.CreatedAt, topic.UpdatedAt, topic.Id, topic.Access, toJSON(topic.Public), topic.Tags)
+	_, err := tx.Exec("INSERT INTO topics(createdAt,updatedAt,touchedAt,name,access,public,tags) VALUES(?,?,?,?,?,?,?)",
+		topic.CreatedAt, topic.UpdatedAt, topic.TouchedAt,
+		topic.Id, topic.Access, toJSON(topic.Public), topic.Tags)
 	if err != nil {
 		return err
 	}
@@ -727,6 +728,7 @@ func (a *adapter) TopicCreateP2P(initiator, invited *t.Subscription) error {
 
 	topic := &t.Topic{ObjHeader: t.ObjHeader{Id: initiator.Topic}}
 	topic.ObjHeader.MergeTimes(&initiator.ObjHeader)
+	topic.TouchedAt = initiator.GetTouchedAt()
 	err = a.topicCreate(tx, topic)
 	if err != nil {
 		return err
@@ -739,7 +741,7 @@ func (a *adapter) TopicGet(topic string) (*t.Topic, error) {
 	// Fetch topic by name
 	var tt = new(t.Topic)
 	err := a.db.Get(tt,
-		"SELECT createdat,updatedat,deletedat,name AS id,access,seqid,delid,public,tags FROM topics WHERE name=?",
+		"SELECT createdat,updatedat,deletedat,touchedat,name AS id,access,seqid,delid,public,tags FROM topics WHERE name=?",
 		topic)
 
 	if err != nil {

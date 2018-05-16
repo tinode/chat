@@ -520,6 +520,7 @@ func (a *adapter) TopicCreateP2P(initiator, invited *t.Subscription) error {
 
 	topic := &t.Topic{ObjHeader: t.ObjHeader{Id: initiator.Topic}}
 	topic.ObjHeader.MergeTimes(&initiator.ObjHeader)
+	topic.TouchedAt = initiator.GetTouchedAt()
 	return a.TopicCreate(topic)
 }
 
