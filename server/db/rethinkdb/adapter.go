@@ -550,9 +550,9 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 	}
 	limit := maxResults
 	if opts != nil {
-		if opts.IfModifiedSince != nil {
-			q = q.Filter(rdb.Row.Field("UpdatedAt").Gt(opts.IfModifiedSince))
-		}
+		// Ignore IfModifiedSince - we must return all entries
+		// Those unmodified will be stripped of Public & Private.
+
 		if opts.Topic != "" {
 			q = q.Filter(rdb.Row.Field("Topic").Eq(opts.Topic))
 		}
@@ -668,9 +668,9 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 	}
 	limit := maxSubscribers
 	if opts != nil {
-		if opts.IfModifiedSince != nil {
-			q = q.Filter(rdb.Row.Field("UpdatedAt").Gt(opts.IfModifiedSince))
-		}
+		// Ignore IfModifiedSince - we must return all entries
+		// Those unmodified will be stripped of Public & Private.
+
 		if !opts.User.IsZero() {
 			q = q.Filter(rdb.Row.Field("User").Eq(opts.User.String()))
 		}
@@ -809,9 +809,9 @@ func (a *adapter) SubsForUser(forUser t.Uid, keepDeleted bool, opts *t.QueryOpt)
 	}
 	limit := maxResults
 	if opts != nil {
-		if opts.IfModifiedSince != nil {
-			q = q.Filter(rdb.Row.Field("UpdatedAt").Gt(opts.IfModifiedSince))
-		}
+		// Ignore IfModifiedSince - we must return all entries
+		// Those unmodified will be stripped of Public & Private.
+
 		if opts.Topic != "" {
 			q = q.Filter(rdb.Row.Field("Topic").Eq(opts.Topic))
 		}
@@ -846,9 +846,9 @@ func (a *adapter) SubsForTopic(topic string, keepDeleted bool, opts *t.QueryOpt)
 
 	limit := maxSubscribers
 	if opts != nil {
-		if opts.IfModifiedSince != nil {
-			q = q.Filter(rdb.Row.Field("UpdatedAt").Gt(opts.IfModifiedSince))
-		}
+		// Ignore IfModifiedSince - we must return all entries
+		// Those unmodified will be stripped of Public & Private.
+
 		if !opts.User.IsZero() {
 			q = q.Filter(rdb.Row.Field("User").Eq(opts.User.String()))
 		}
