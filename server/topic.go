@@ -1439,14 +1439,26 @@ func (t *Topic) replyGetSub(sess *Session, id string, req *MsgGetOpts) error {
 		return errors.New("invalid MsgGetOpts query")
 	}
 
+	var ifModified time.Time
+	if req != nil {
+		if req.IfModifiedSince != nil {
+			ifModified = *req.IfModifiedSince
+		}
+	}
+
 	var subs []types.Subscription
 	var err error
 	var isSharer bool
 
 	if t.cat == types.TopicCatMe {
 		// Fetch user's subscriptions, with Topic.Public denormalized into subscription.
-		// Include deleted subscriptions too.
-		subs, err = store.Users.GetTopicsAny(sess.uid, msgOpts2storeOpts(req))
+		if ifModified.IsZero() {
+			// No cache management. Skip deleted subscriptions.
+			subs, err = store.Users.GetTopics(sess.uid, msgOpts2storeOpts(req))
+		} else {
+			// User manages cache. Include deleted subscriptions too.
+			subs, err = store.Users.GetTopicsAny(sess.uid, msgOpts2storeOpts(req))
+		}
 		isSharer = true
 	} else if t.cat == types.TopicCatFnd {
 		// TODO: check the query (.private) against the set of allowed tags.
@@ -1477,7 +1489,13 @@ func (t *Topic) replyGetSub(sess *Session, id string, req *MsgGetOpts) error {
 		}
 	} else {
 		// FIXME(gene): don't load subs from DB, use perUserData - it already contains subscriptions.
-		subs, err = store.Topics.GetUsersAny(t.name, msgOpts2storeOpts(req))
+		if ifModified.IsZero() {
+			// No cache management. Skip deleted subscriptions.
+			subs, err = store.Topics.GetUsers(t.name, msgOpts2storeOpts(req))
+		} else {
+			// User manages cache. Include deleted subscriptions too.
+			subs, err = store.Topics.GetUsersAny(t.name, msgOpts2storeOpts(req))
+		}
 		userData := t.perUser[sess.uid]
 		isSharer = (userData.modeGiven & userData.modeWant).IsSharer()
 	}
@@ -1487,39 +1505,16 @@ func (t *Topic) replyGetSub(sess *Session, id string, req *MsgGetOpts) error {
 		return err
 	}
 
-	var ifModified time.Time
-	var limit int
-	if req != nil {
-		if req.IfModifiedSince != nil {
-			ifModified = *req.IfModifiedSince
-		}
-		limit = req.Limit
-	}
-
-	if limit <= 0 {
-		limit = 1024
-	}
-
 	meta := &MsgServerMeta{Id: id, Topic: t.original(sess.uid), Timestamp: &now}
 	if len(subs) > 0 {
 		meta.Sub = make([]MsgTopicSub, 0, len(subs))
-		idx := 0
 		for _, sub := range subs {
-			if idx == limit {
-				break
-			}
-			// Check if the requester has provided a cut off date for ts of pub & priv updates.
+			// Indicator if the requester has provided a cut off date for ts of pub & priv updates.
 			var sendPubPriv bool
 			var deleted, banned bool
 			var mts MsgTopicSub
 
 			if ifModified.IsZero() {
-				// If IfModifiedSince is not set then the user does not care about managing cache. The user
-				// only wants active subscriptions. Skip all deleted subscriptions regarless of deletion time.
-				if sub.DeletedAt != nil {
-					continue
-				}
-
 				sendPubPriv = true
 			} else {
 				// Skip sending deleted subscriptions if they were deleted before the cut off date.
@@ -1621,7 +1616,6 @@ func (t *Topic) replyGetSub(sess *Session, id string, req *MsgGetOpts) error {
 			}
 
 			meta.Sub = append(meta.Sub, mts)
-			idx++
 		}
 	}
 

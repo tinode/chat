@@ -769,10 +769,9 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 
 	limit := maxResults
 	if opts != nil {
-		if opts.IfModifiedSince != nil {
-			q += " AND updatedat>?"
-			args = append(args, opts.IfModifiedSince)
-		}
+		// Ignore IfModifiedSince - we must return all entries
+		// Those unmodified will be stripped of Public & Private.
+
 		if opts.Topic != "" {
 			q += " AND topic=?"
 			args = append(args, opts.Topic)
@@ -916,10 +915,9 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 
 	limit := maxSubscribers
 	if opts != nil {
-		if opts.IfModifiedSince != nil {
-			q += " AND s.updatedat>?"
-			args = append(args, opts.IfModifiedSince)
-		}
+		// Ignore IfModifiedSince - we must return all entries
+		// Those unmodified will be stripped of Public & Private.
+
 		if !opts.User.IsZero() {
 			q += " AND s.userid=?"
 			args = append(args, store.DecodeUid(opts.User))
@@ -1086,12 +1084,11 @@ func (a *adapter) SubsForUser(forUser t.Uid, keepDeleted bool, opts *t.QueryOpt)
 
 	limit := maxResults // maxResults here, not maxSubscribers
 	if opts != nil {
-		if opts.IfModifiedSince != nil {
-			q += " AND updatedat>?"
-			args = append(args, opts.IfModifiedSince)
-		}
+		// Ignore IfModifiedSince - we must return all entries
+		// Those unmodified will be stripped of Public & Private.
+
 		if opts.Topic != "" {
-			q += " AND updatedat>?"
+			q += " AND topic=?"
 			args = append(args, opts.Topic)
 		}
 		if opts.Limit > 0 && opts.Limit < limit {
@@ -1134,10 +1131,9 @@ func (a *adapter) SubsForTopic(topic string, keepDeleted bool, opts *t.QueryOpt)
 	}
 	limit := maxSubscribers
 	if opts != nil {
-		if opts.IfModifiedSince != nil {
-			q += " AND updatedAt>?"
-			args = append(args, opts.IfModifiedSince)
-		}
+		// Ignore IfModifiedSince - we must return all entries
+		// Those unmodified will be stripped of Public & Private.
+
 		if !opts.User.IsZero() {
 			q += " AND userid=?"
 			args = append(args, store.DecodeUid(opts.User))
