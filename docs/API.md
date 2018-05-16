@@ -238,6 +238,10 @@ sub: {
       ims: "2015-10-06T18:07:30.038Z", // timestamp, "if modified since" - return
               // public and private values only if at least one of them has been
               // updated after the stated timestamp, optional
+	  user: "usr2il9suCbuko", // string, return results for a single user only, 
+	                          // any topic other than 'me', optional
+	  topic: "usr2il9suCbuko", // string, return results for a single topic only,
+	                          // 'me' topic only, optional	
       limit: 20 // integer, limit the number of returned objects
     },
 
@@ -312,6 +316,10 @@ get: {
     ims: "2015-10-06T18:07:30.038Z", // timestamp, "if modified since" - return
           // public and private values only if at least one of them has been
           // updated after the stated timestamp, optional
+	user: "usr2il9suCbuko", // string, return results for a single user only, 
+	                        // any topic other than 'me', optional
+	topic: "usr2il9suCbuko", // string, return results for a single topic only,
+	                         // 'me' topic only, optional	
     limit: 20 // integer, limit the number of returned objects
   },
 
