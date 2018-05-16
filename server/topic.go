@@ -1681,6 +1681,7 @@ func (t *Topic) replyGetData(sess *Session, id string, req *MsgGetOpts) error {
 	}
 
 	// Check if the user has permission to read the topic data
+	count := 0
 	if userData := t.perUser[sess.uid]; (userData.modeGiven & userData.modeWant).IsReader() {
 		// Read messages from DB
 		messages, err := store.Messages.GetAll(t.name, sess.uid, msgOpts2storeOpts(req))
@@ -1693,7 +1694,8 @@ func (t *Topic) replyGetData(sess *Session, id string, req *MsgGetOpts) error {
 		// Messages are sent in reverse order than fetched from DB to make it easier for
 		// clients to process.
 		if messages != nil {
-			for i := len(messages) - 1; i >= 0; i-- {
+			count = len(messages)
+			for i := count - 1; i >= 0; i-- {
 				mm := messages[i]
 
 				from := types.ParseUid(mm.From)
@@ -1712,7 +1714,7 @@ func (t *Topic) replyGetData(sess *Session, id string, req *MsgGetOpts) error {
 
 	// Inform the requester that all the data has been served.
 	reply := NoErr(id, t.original(sess.uid), now)
-	reply.Ctrl.Params = map[string]string{"what": "data"}
+	reply.Ctrl.Params = map[string]interface{}{"what": "data", "count": count}
 	sess.queueOut(reply)
 
 	return nil
@@ -1815,7 +1817,7 @@ func (t *Topic) replyGetDel(sess *Session, id string, req *MsgGetOpts) error {
 	}
 
 	// Check if the user has permission to read the topic data and the request is valid
-	if userData := t.perUser[sess.uid]; (userData.modeGiven & userData.modeWant).IsReader() && req != nil {
+	if userData := t.perUser[sess.uid]; (userData.modeGiven & userData.modeWant).IsReader() {
 		ranges, delID, err := store.Messages.GetDeleted(t.name, sess.uid, msgOpts2storeOpts(req))
 		if err != nil {
 			sess.queueOut(ErrUnknown(id, t.original(sess.uid), now))
@@ -1867,7 +1869,9 @@ func (t *Topic) replyDelMsg(sess *Session, del *MsgClientDel) error {
 			}
 
 			if dq.HiId > t.lastID {
-				dq.HiId = t.lastID
+				// Range is inclusive - exclusive [low, hi),
+				// to delete all messages hi must be lastId + 1
+				dq.HiId = t.lastID + 1
 			} else if dq.LowId == dq.HiId {
 				dq.HiId = 0
 			}

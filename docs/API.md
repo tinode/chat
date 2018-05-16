@@ -363,8 +363,8 @@ Supported only for `me` and group topics.
 
 * `{get what="data"}`
 
-Query message history. Server sends `{data}` messages matching parameters provided in the `browse` field of the query.
-The `id` field of the data messages is not provided as it's common for data messages.
+Query message history. Server sends `{data}` messages matching parameters provided in the `data` field of the query.
+The `id` field of the data messages is not provided as it's common for data messages. When all `{data}` messages are transmitted, a `{ctrl}` message is sent.
 
 * `{get what="del"}`
 
@@ -420,16 +420,14 @@ del: {
                // entire topic or subscription or just the messages; 
                // optional, default: "msg"
   hard: false, // boolean, request to delete messages for all users, default: false
-  before: 123, // integer, delete messages with server-issued ID lower or equal
-               // to this value (inclusive), optional
   delseq: [{low: 123, hi: 125}, {low: 156}], // array of ranges of message IDs 
-				// to delete, optional
+				// to delete, inclusive-exclusive, i.e. [low, hi), optional
   user: "usr2il9suCbuko" // string, user whose subscription is being deleted 
                // (what="sub"), optional
 }
 ```
 
-User can soft-delete or hard-delete messages `what="msg"`. Soft-deleting messages hides them from the requesting user but does not delete them from storage. An `R` permission is required to soft-delete messages `hard=false` (default). Messages can be either deleted in bulk by setting the `before` parameter or deleted by a list of message IDs by setting the `list` parameter. Setting `before` will delete all messages with IDs below or equal to it. Either `before` or `list` must be provided. Hard-deleting messages deletes them from storage affecting all users. The `D` permission is needed to hard-delete messages.
+User can soft-delete or hard-delete messages `what="msg"`. Soft-deleting messages hides them from the requesting user but does not delete them from storage. An `R` permission is required to soft-delete messages `hard=false` (default). Messages can be deleted in bulk by sepcifying one or more message ID ranges in `delseq` parameter. Hard-deleting messages deletes them from storage affecting all users. The `D` permission is needed to hard-delete messages.
 
 Deleting a subscription `what="sub"` removes specified user from topic subscribers. It requires an `A` permission. A user cannot delete own subscription. A `{leave}` should be used instead.
 

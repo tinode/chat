@@ -84,7 +84,7 @@ const (
 	defaultStaticMount = "/x/"
 
 	// Local path to static content
-	defaultStaticPath = "/static/"
+	defaultStaticPath = "static"
 )
 
 // Build version number defined by the compiler:
@@ -184,7 +184,7 @@ func main() {
 
 	var configfile = flag.String("config", "./tinode.conf", "Path to config file.")
 	// Path to static content.
-	var staticPath = flag.String("static_data", "", "Path to /static data for the server.")
+	var staticPath = flag.String("static_data", defaultStaticPath, "Path to directory with static files to be served.")
 	var listenOn = flag.String("listen", "", "Override address and port to listen on for HTTP(S) clients.")
 	var listenGrpc = flag.String("grpc_listen", "", "Override address and port to listen on for gRPC clients.")
 	var tlsEnabled = flag.Bool("tls_enabled", false, "Override config value for enabling TLS")
@@ -322,33 +322,38 @@ func main() {
 	// available, otherwise assume '<current dir>/static'. The content is served at
 	// the path pointed by 'static_mount' in the config. If that is missing then it's
 	// served at '/x/'.
-	var staticContent = *staticPath
-	if staticContent == "" {
-		path, err := os.Getwd()
-		if err != nil {
-			log.Fatal(err)
+	if *staticPath != "" && *staticPath != "-" {
+		if *staticPath == defaultStaticPath {
+			path, err := os.Getwd()
+			if err != nil {
+				log.Fatal(err)
+			}
+			// FileServer expects "/" path separator even on Windows.
+			*staticPath = path + "/" + defaultStaticPath
 		}
-		staticContent = path + defaultStaticPath
-	}
-	staticMountPoint := config.StaticMount
-	if staticMountPoint == "" {
-		staticMountPoint = defaultStaticMount
+
+		staticMountPoint := config.StaticMount
+		if staticMountPoint == "" {
+			staticMountPoint = defaultStaticMount
+		} else {
+			if !strings.HasPrefix(staticMountPoint, "/") {
+				staticMountPoint = "/" + staticMountPoint
+			}
+			if !strings.HasSuffix(staticMountPoint, "/") {
+				staticMountPoint = staticMountPoint + "/"
+			}
+		}
+		http.Handle(staticMountPoint,
+			// Add gzip compression
+			gzip.CompressHandler(
+				// Remove mount point prefix
+				http.StripPrefix(staticMountPoint,
+					// Optionally add Strict-Transport_security to the response
+					hstsHandler(http.FileServer(http.Dir(*staticPath))))))
+		log.Printf("Serving static content from '%s' at '%s'", *staticPath, staticMountPoint)
 	} else {
-		if !strings.HasPrefix(staticMountPoint, "/") {
-			staticMountPoint = "/" + staticMountPoint
-		}
-		if !strings.HasSuffix(staticMountPoint, "/") {
-			staticMountPoint = staticMountPoint + "/"
-		}
+		log.Println("Static content is disabled")
 	}
-	http.Handle(staticMountPoint,
-		// Add gzip compression
-		gzip.CompressHandler(
-			// Remove mount point prefix
-			http.StripPrefix(staticMountPoint,
-				// Optionally add Strict-Transport_security to the response
-				hstsHandler(http.FileServer(http.Dir(staticContent))))))
-	log.Printf("Serving static content from '%s' at '%s'", staticContent, staticMountPoint)
 
 	// Configure HTTP channels
 	// Handle websocket clients.
