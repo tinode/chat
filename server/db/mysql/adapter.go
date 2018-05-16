@@ -757,17 +757,35 @@ func (a *adapter) TopicGet(topic string) (*t.Topic, error) {
 
 // TopicsForUser loads user's contact list: p2p and grp topics, except for 'me' subscription.
 // Reads and denormalizes Public value.
-func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool) ([]t.Subscription, error) {
+func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) ([]t.Subscription, error) {
 	// Fetch user's subscriptions
 	q := `SELECT createdat,updatedat,deletedat,topic,delid,recvseqid,
 		readseqid,modewant,modegiven,private FROM subscriptions WHERE userid=?`
+	args := []interface{}{store.DecodeUid(uid)}
 	if !keepDeleted {
 		// Filter out rows with defined DeletedAt
 		q += " AND deletedAt IS NULL"
 	}
-	q += " LIMIT ?"
 
-	rows, err := a.db.Queryx(q, store.DecodeUid(uid), maxResults)
+	limit := maxResults
+	if opts != nil {
+		if opts.IfModifiedSince != nil {
+			q += " AND updatedat>?"
+			args = append(args, opts.IfModifiedSince)
+		}
+		if opts.Topic != "" {
+			q += " AND topic=?"
+			args = append(args, opts.Topic)
+		}
+		if opts.Limit > 0 && opts.Limit < limit {
+			limit = opts.Limit
+		}
+	}
+
+	q += " LIMIT ?"
+	args = append(args, limit)
+
+	rows, err := a.db.Queryx(q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -881,19 +899,39 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool) ([]t.Subscription, 
 	return subs, err
 }
 
-// UsersForTopic loads users subscribed to the given topic
-func (a *adapter) UsersForTopic(topic string, keepDeleted bool) ([]t.Subscription, error) {
+// UsersForTopic loads users subscribed to the given topic.
+// The difference between UsersForTopic vs SubsForTopic is that the former loads user.public,
+// the latter does not.
+func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt) ([]t.Subscription, error) {
 	// Fetch all subscribed users. The number of users is not large
 	q := `SELECT s.createdat,s.updatedat,s.deletedat,s.userid,s.topic,s.delid,s.recvseqid,
 		s.readseqid,s.modewant,s.modegiven,u.public,s.private
 		FROM subscriptions AS s JOIN users AS u ON s.userid=u.id 
 		WHERE s.topic=?`
+	args := []interface{}{topic}
 	if !keepDeleted {
 		// Filter out rows with DeletedAt being not null
 		q += " AND s.deletedAt IS NULL"
 	}
+
+	limit := maxSubscribers
+	if opts != nil {
+		if opts.IfModifiedSince != nil {
+			q += " AND s.updatedat>?"
+			args = append(args, opts.IfModifiedSince)
+		}
+		if !opts.User.IsZero() {
+			q += " AND s.userid=?"
+			args = append(args, store.DecodeUid(opts.User))
+		}
+		if opts.Limit > 0 && opts.Limit < limit {
+			limit = opts.Limit
+		}
+	}
 	q += " LIMIT ?"
-	rows, err := a.db.Queryx(q, topic, maxSubscribers)
+	args = append(args, limit)
+
+	rows, err := a.db.Queryx(q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -1036,20 +1074,34 @@ func (a *adapter) SubsLastSeen(topic string, user t.Uid, lastSeen map[string]tim
 	return err
 }
 
-// SubsForUser loads a list of user's subscriptions to topics. Does NOT read Public value.
-func (a *adapter) SubsForUser(forUser t.Uid, keepDeleted bool) ([]t.Subscription, error) {
-	if forUser.IsZero() {
-		return nil, t.ErrMalformed
-	}
-
+// SubsForUser loads a list of user's subscriptions to topics. Does NOT load Public value.
+func (a *adapter) SubsForUser(forUser t.Uid, keepDeleted bool, opts *t.QueryOpt) ([]t.Subscription, error) {
 	q := `SELECT createdat,updatedat,deletedat,userid AS user,topic,delid,recvseqid,
 		readseqid,modewant,modegiven,private FROM subscriptions WHERE userid=?`
+	args := []interface{}{store.DecodeUid(forUser)}
+
 	if !keepDeleted {
 		q += " AND deletedAt IS NULL"
 	}
-	q += " LIMIT ?"
 
-	rows, err := a.db.Queryx(q, store.DecodeUid(forUser), maxResults)
+	limit := maxResults // maxResults here, not maxSubscribers
+	if opts != nil {
+		if opts.IfModifiedSince != nil {
+			q += " AND updatedat>?"
+			args = append(args, opts.IfModifiedSince)
+		}
+		if opts.Topic != "" {
+			q += " AND updatedat>?"
+			args = append(args, opts.Topic)
+		}
+		if opts.Limit > 0 && opts.Limit < limit {
+			limit = opts.Limit
+		}
+	}
+	q += " LIMIT ?"
+	args = append(args, limit)
+
+	rows, err := a.db.Queryx(q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -1068,32 +1120,37 @@ func (a *adapter) SubsForUser(forUser t.Uid, keepDeleted bool) ([]t.Subscription
 	return subs, err
 }
 
-// SubsForTopic fetches all subsciptions for a topic.
-func (a *adapter) SubsForTopic(topic string, keepDeleted bool) ([]t.Subscription, error) {
-	// log.Println("Loading subscriptions for topic ", topic)
-
-	// must load User.Public for p2p topics
-	var p2p []t.User
-	var err error
-	if t.GetTopicCat(topic) == t.TopicCatP2P {
-		uid1, uid2, _ := t.ParseP2P(topic)
-		if p2p, err = a.UserGetAll(uid1, uid2); err != nil {
-			// log.Println("SubsForTopic", "UserGetAll", err)
-			return nil, err
-		} else if len(p2p) != 2 {
-			return nil, errors.New("failed to load two p2p users")
-		}
-	}
-
+// SubsForTopic fetches all subsciptions for a topic. Does NOT load Public value.
+// The difference between UsersForTopic vs SubsForTopic is that the former loads user.public,
+// the latter does not.
+func (a *adapter) SubsForTopic(topic string, keepDeleted bool, opts *t.QueryOpt) ([]t.Subscription, error) {
 	q := `SELECT createdat,updatedat,deletedat,userid AS user,topic,delid,recvseqid,
 		readseqid,modewant,modegiven,private FROM subscriptions WHERE topic=?`
+	args := []interface{}{topic}
+
 	if !keepDeleted {
 		// Filter out rows where DeletedAt is defined
 		q += " AND deletedAt IS NULL"
 	}
-	q += " LIMIT ?"
+	limit := maxSubscribers
+	if opts != nil {
+		if opts.IfModifiedSince != nil {
+			q += " AND updatedAt>?"
+			args = append(args, opts.IfModifiedSince)
+		}
+		if !opts.User.IsZero() {
+			q += " AND userid=?"
+			args = append(args, store.DecodeUid(opts.User))
+		}
+		if opts.Limit > 0 && opts.Limit < limit {
+			limit = opts.Limit
+		}
+	}
 
-	rows, err := a.db.Queryx(q, topic, maxSubscribers)
+	q += " LIMIT ?"
+	args = append(args, limit)
+
+	rows, err := a.db.Queryx(q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -1102,24 +1159,11 @@ func (a *adapter) SubsForTopic(topic string, keepDeleted bool) ([]t.Subscription
 	var ss t.Subscription
 	for rows.Next() {
 		if err = rows.StructScan(&ss); err != nil {
-			// log.Println("SubsForTopic", "StructScan", err)
 			break
 		}
 
 		ss.User = encodeString(ss.User).String()
 		ss.Private = fromJSON(ss.Private)
-		if p2p != nil {
-			// Assigning values provided by the other user
-			if p2p[0].Id == ss.User {
-				ss.SetPublic(p2p[1].Public)
-				ss.SetWith(p2p[1].Id)
-				ss.SetDefaultAccess(p2p[1].Access.Auth, p2p[1].Access.Anon)
-			} else {
-				ss.SetPublic(p2p[0].Public)
-				ss.SetWith(p2p[0].Id)
-				ss.SetDefaultAccess(p2p[0].Access.Auth, p2p[0].Access.Anon)
-			}
-		}
 		subs = append(subs, ss)
 		// log.Printf("SubsForTopic: loaded sub %#+v", ss)
 	}
@@ -1302,7 +1346,7 @@ func (a *adapter) MessageSave(msg *t.Message) error {
 	return err
 }
 
-func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.BrowseOpt) ([]t.Message, error) {
+func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.QueryOpt) ([]t.Message, error) {
 	var limit = maxResults // TODO(gene): pass into adapter as a config param
 	var lower = 0
 	var upper = 1 << 31
@@ -1358,7 +1402,7 @@ var dellog struct {
 }
 
 // Get ranges of deleted messages
-func (a *adapter) MessageGetDeleted(topic string, forUser t.Uid, opts *t.BrowseOpt) ([]t.DelMessage, error) {
+func (a *adapter) MessageGetDeleted(topic string, forUser t.Uid, opts *t.QueryOpt) ([]t.DelMessage, error) {
 	var limit = maxResults
 	var lower = 0
 	var upper = 1 << 31

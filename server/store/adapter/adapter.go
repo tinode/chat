@@ -51,9 +51,9 @@ type Adapter interface {
 	// TopicGet loads a single topic by name, if it exists. If the topic does not exist the call returns (nil, nil)
 	TopicGet(topic string) (*t.Topic, error)
 	// TopicsForUser loads subscriptions for a given user. Reads public value.
-	TopicsForUser(uid t.Uid, keepDeleted bool) ([]t.Subscription, error)
-	// UsersForTopic loads users' subscriptions for a given topic
-	UsersForTopic(topic string, keepDeleted bool) ([]t.Subscription, error)
+	TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) ([]t.Subscription, error)
+	// UsersForTopic loads users' subscriptions for a given topic. Public is loaded.
+	UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt) ([]t.Subscription, error)
 	TopicShare(subs []*t.Subscription) (int, error)
 	TopicDelete(topic string) error
 	// Increment Topic's or User's SeqId value
@@ -62,10 +62,10 @@ type Adapter interface {
 
 	// SubscriptionGet rads a subscription of a user to a topic
 	SubscriptionGet(topic string, user t.Uid) (*t.Subscription, error)
-	// SubsForUser gets a list of topics of interest for a given user. Does NOT read public value.
-	SubsForUser(user t.Uid, keepDeleted bool) ([]t.Subscription, error)
-	// SubsForTopic gets a list of subscriptions to a given topic
-	SubsForTopic(topic string, keepDeleted bool) ([]t.Subscription, error)
+	// SubsForUser gets a list of topics of interest for a given user. Does NOT load Public value.
+	SubsForUser(user t.Uid, keepDeleted bool, opts *t.QueryOpt) ([]t.Subscription, error)
+	// SubsForTopic gets a list of subscriptions to a given topic.. Does NOT load Public value.
+	SubsForTopic(topic string, keepDeleted bool, opts *t.QueryOpt) ([]t.Subscription, error)
 	// SubsUpdate updates pasrt of a subscription object. Pass nil for fields which don't need to be updated
 	SubsUpdate(topic string, user t.Uid, update map[string]interface{}) error
 	// SubsDelete deletes a single subscription
@@ -82,11 +82,11 @@ type Adapter interface {
 
 	// Messages
 	MessageSave(msg *t.Message) error
-	MessageGetAll(topic string, forUser t.Uid, opts *t.BrowseOpt) ([]t.Message, error)
+	MessageGetAll(topic string, forUser t.Uid, opts *t.QueryOpt) ([]t.Message, error)
 	// Mark messages as deleted. Soft- or Hard- is defined by forUser value: forUSer.IsZero == true is hard.
 	MessageDeleteList(topic string, toDel *t.DelMessage) error
 	// Get a list of deleted message Ids
-	MessageGetDeleted(topic string, forUser t.Uid, opts *t.BrowseOpt) ([]t.DelMessage, error)
+	MessageGetDeleted(topic string, forUser t.Uid, opts *t.QueryOpt) ([]t.DelMessage, error)
 
 	// Devices (for push notifications)
 	DeviceUpsert(uid t.Uid, dev *t.DeviceDef) error

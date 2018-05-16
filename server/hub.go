@@ -376,7 +376,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		var subs []types.Subscription
 		if stopic != nil {
 			// Subs already have Public swapped
-			if subs, err = store.Topics.GetSubs(t.name); err != nil {
+			if subs, err = store.Topics.GetSubs(t.name, nil); err != nil {
 				log.Println("hub: cannot load subscritions for '" + t.name + "' (" + err.Error() + ")")
 				sreg.sess.queueOut(ErrUnknown(sreg.pkt.Id, t.xoriginal, timestamp))
 				return
@@ -778,7 +778,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 
 // loadSubscribers loads topic subscribers, sets topic owner
 func (t *Topic) loadSubscribers() error {
-	subs, err := store.Topics.GetSubs(t.name)
+	subs, err := store.Topics.GetSubs(t.name, nil)
 	if err != nil {
 		return err
 	}
@@ -879,7 +879,7 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *MsgClientDel, reason 
 			// Case 1.2: topic is offline.
 
 			// Get all subscribers: we have to notify them all.
-			if subs, err := store.Topics.GetSubs(topic); err != nil {
+			if subs, err := store.Topics.GetSubs(topic, nil); err != nil {
 				log.Println("topicUnreg failed to load subscribers:", err)
 				sess.queueOut(ErrUnknown(msg.Id, msg.Topic, now))
 				return

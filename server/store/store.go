@@ -264,8 +264,8 @@ func (UsersObjMapper) Update(uid types.Uid, update map[string]interface{}) error
 }
 
 // GetSubs loads a list of subscriptions for the given user
-func (UsersObjMapper) GetSubs(id types.Uid) ([]types.Subscription, error) {
-	return adp.SubsForUser(id, false)
+func (UsersObjMapper) GetSubs(id types.Uid, opts *types.QueryOpt) ([]types.Subscription, error) {
+	return adp.SubsForUser(id, false, opts)
 }
 
 // FindSubs loads a list of users for the given tags.
@@ -282,14 +282,14 @@ func (UsersObjMapper) FindSubs(id types.Uid, required, optional []string) ([]typ
 }
 
 // GetTopics load a list of user's subscriptions with Public field copied to subscription
-func (UsersObjMapper) GetTopics(id types.Uid) ([]types.Subscription, error) {
-	return adp.TopicsForUser(id, false)
+func (UsersObjMapper) GetTopics(id types.Uid, opts *types.QueryOpt) ([]types.Subscription, error) {
+	return adp.TopicsForUser(id, false, opts)
 }
 
 // GetTopicsAny load a list of user's subscriptions with Public field copied to subscription.
 // Deleted topics are returned too.
-func (UsersObjMapper) GetTopicsAny(id types.Uid) ([]types.Subscription, error) {
-	return adp.TopicsForUser(id, true)
+func (UsersObjMapper) GetTopicsAny(id types.Uid, opts *types.QueryOpt) ([]types.Subscription, error) {
+	return adp.TopicsForUser(id, true, opts)
 }
 
 // SaveCred saves a credential validation request.
@@ -370,19 +370,19 @@ func (TopicsObjMapper) Get(topic string) (*types.Topic, error) {
 }
 
 // GetUsers loads subscriptions for topic plus loads user.Public
-func (TopicsObjMapper) GetUsers(topic string) ([]types.Subscription, error) {
-	return adp.UsersForTopic(topic, false)
+func (TopicsObjMapper) GetUsers(topic string, opts *types.QueryOpt) ([]types.Subscription, error) {
+	return adp.UsersForTopic(topic, false, opts)
 }
 
 // GetUsersAny is the same as GetUsers, except it loads deleted subscriptions too.
-func (TopicsObjMapper) GetUsersAny(topic string) ([]types.Subscription, error) {
-	return adp.UsersForTopic(topic, true)
+func (TopicsObjMapper) GetUsersAny(topic string, opts *types.QueryOpt) ([]types.Subscription, error) {
+	return adp.UsersForTopic(topic, true, opts)
 }
 
 // GetSubs loads a list of subscriptions to the given topic, user.Public and deleted
 // subscriptions are not loaded
-func (TopicsObjMapper) GetSubs(topic string) ([]types.Subscription, error) {
-	return adp.SubsForTopic(topic, false)
+func (TopicsObjMapper) GetSubs(topic string, opts *types.QueryOpt) ([]types.Subscription, error) {
+	return adp.SubsForTopic(topic, false, opts)
 }
 
 // Update is a generic topic update.
@@ -488,12 +488,12 @@ func (MessagesObjMapper) DeleteList(topic string, delID int, forUser types.Uid, 
 }
 
 // GetAll returns multiple messages.
-func (MessagesObjMapper) GetAll(topic string, forUser types.Uid, opt *types.BrowseOpt) ([]types.Message, error) {
+func (MessagesObjMapper) GetAll(topic string, forUser types.Uid, opt *types.QueryOpt) ([]types.Message, error) {
 	return adp.MessageGetAll(topic, forUser, opt)
 }
 
 // GetDeleted returns the ranges of deleted messages and the largest DelId reported in the list.
-func (MessagesObjMapper) GetDeleted(topic string, forUser types.Uid, opt *types.BrowseOpt) ([]types.Range, int, error) {
+func (MessagesObjMapper) GetDeleted(topic string, forUser types.Uid, opt *types.QueryOpt) ([]types.Range, int, error) {
 	dmsgs, err := adp.MessageGetDeleted(topic, forUser, opt)
 	if err != nil {
 		return nil, 0, err

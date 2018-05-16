@@ -1187,7 +1187,7 @@ func (t *Topic) approveSub(h *Hub, sess *Session, target types.Uid, set *MsgClie
 func (t *Topic) replyGetDesc(sess *Session, id, tempName string, opts *MsgGetOpts) error {
 	now := types.TimeNow()
 
-	if opt != nil && (opt.User != "" || opt.Limit != 0) {
+	if opts != nil && (opts.User != "" || opts.Limit != 0) {
 		sess.queueOut(ErrMalformed(id, t.original(sess.uid), now))
 		return errors.New("invalid GetDesc query")
 	}
@@ -1431,8 +1431,13 @@ func (t *Topic) replySetDesc(sess *Session, set *MsgClientSet) error {
 // replyGetSub is a response to a get.sub request on a topic - load a list of subscriptions/subscribers,
 // send it just to the session as a {meta} packet
 // FIXME(gene): reject request if the user does not have the R permission
-func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
+func (t *Topic) replyGetSub(sess *Session, id string, req *MsgGetOpts) error {
 	now := types.TimeNow()
+
+	if req != nil && (req.SinceId != 0 || req.BeforeId != 0) {
+		sess.queueOut(ErrMalformed(id, t.original(sess.uid), now))
+		return errors.New("invalid MsgGetOpts query")
+	}
 
 	var subs []types.Subscription
 	var err error
@@ -1441,7 +1446,7 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 	if t.cat == types.TopicCatMe {
 		// Fetch user's subscriptions, with Topic.Public denormalized into subscription.
 		// Include deleted subscriptions too.
-		subs, err = store.Users.GetTopicsAny(sess.uid)
+		subs, err = store.Users.GetTopicsAny(sess.uid, msgOpts2storeOpts(req))
 		isSharer = true
 	} else if t.cat == types.TopicCatFnd {
 		// TODO: check the query (.private) against the set of allowed tags.
@@ -1472,7 +1477,7 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 		}
 	} else {
 		// FIXME(gene): don't load subs from DB, use perUserData - it already contains subscriptions.
-		subs, err = store.Topics.GetUsersAny(t.name)
+		subs, err = store.Topics.GetUsersAny(t.name, msgOpts2storeOpts(req))
 		userData := t.perUser[sess.uid]
 		isSharer = (userData.modeGiven & userData.modeWant).IsSharer()
 	}
@@ -1484,11 +1489,11 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 
 	var ifModified time.Time
 	var limit int
-	if opts != nil {
-		if opts.IfModifiedSince != nil {
-			ifModified = *opts.IfModifiedSince
+	if req != nil {
+		if req.IfModifiedSince != nil {
+			ifModified = *req.IfModifiedSince
 		}
-		limit = opts.Limit
+		limit = req.Limit
 	}
 
 	if limit <= 0 {
@@ -1673,8 +1678,13 @@ func (t *Topic) replySetSub(h *Hub, sess *Session, set *MsgClientSet) error {
 
 // replyGetData is a response to a get.data request - load a list of stored messages, send them to session as {data}
 // response goes to a single session rather than all sessions in a topic
-func (t *Topic) replyGetData(sess *Session, id string, req *MsgBrowseOpts) error {
+func (t *Topic) replyGetData(sess *Session, id string, req *MsgGetOpts) error {
 	now := types.TimeNow()
+
+	if req != nil && (req.IfModifiedSince != nil || req.User != "" || req.Topic != "") {
+		sess.queueOut(ErrMalformed(id, t.original(sess.uid), now))
+		return errors.New("invalid MsgGetOpts query")
+	}
 
 	// Check if the user has permission to read the topic data
 	if userData := t.perUser[sess.uid]; (userData.modeGiven & userData.modeWant).IsReader() {
@@ -1802,8 +1812,13 @@ func (t *Topic) replySetTags(sess *Session, set *MsgClientSet) error {
 // replyGetDel is a response to a get[what=del] request: load a list of deleted message ids, send them to
 // a session as {meta}
 // response goes to a single session rather than all sessions in a topic
-func (t *Topic) replyGetDel(sess *Session, id string, req *MsgBrowseOpts) error {
+func (t *Topic) replyGetDel(sess *Session, id string, req *MsgGetOpts) error {
 	now := types.TimeNow()
+
+	if req != nil && (req.IfModifiedSince != nil || req.User != "" || req.Topic != "") {
+		sess.queueOut(ErrMalformed(id, t.original(sess.uid), now))
+		return errors.New("invalid MsgGetOpts query")
+	}
 
 	// Check if the user has permission to read the topic data and the request is valid
 	if userData := t.perUser[sess.uid]; (userData.modeGiven & userData.modeWant).IsReader() && req != nil {

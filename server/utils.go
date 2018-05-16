@@ -213,14 +213,17 @@ func filterRestrictedTags(tags []string, namespaces map[string]bool) []string {
 	return out
 }
 
-// Takes get.data or get.del parameters, returns database query parameters
-func msgOpts2storeOpts(req *MsgBrowseOpts) *types.BrowseOpt {
-	var opts *types.BrowseOpt
+// Takes MsgClientGet query parameters, returns database query parameters
+func msgOpts2storeOpts(req *MsgGetOpts) *types.QueryOpt {
+	var opts *types.QueryOpt
 	if req != nil {
-		opts = &types.BrowseOpt{
-			Limit:  req.Limit,
-			Since:  req.SinceId,
-			Before: req.BeforeId,
+		opts = &types.QueryOpt{
+			User:            types.ParseUserId(req.User),
+			Topic:           req.Topic,
+			IfModifiedSince: req.IfModifiedSince,
+			Limit:           req.Limit,
+			Since:           req.SinceId,
+			Before:          req.BeforeId,
 		}
 	}
 	return opts

@@ -45,8 +45,9 @@ type configType struct {
 	NodeRefreshInterval int         `json:"node_refresh_interval,omitempty"`
 }
 
+// TODO: convert hard-coded limits to config options
 const (
-	// Maximum number of records to return
+	// Maximum number of records to return.
 	maxResults = 1024
 	// Maximum number of topic subscribers to return
 	maxSubscribers = 256
@@ -539,7 +540,7 @@ func (a *adapter) TopicGet(topic string) (*t.Topic, error) {
 
 // TopicsForUser loads user's contact list: p2p and grp topics, except for 'me' subscription.
 // Reads and denormalizes Public value.
-func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool) ([]t.Subscription, error) {
+func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) ([]t.Subscription, error) {
 	// Fetch user's subscriptions
 	// Subscription have Topic.UpdatedAt denormalized into Subscription.UpdatedAt
 	q := rdb.DB(a.dbName).Table("subscriptions").GetAllByIndex("User", uid.String())
@@ -547,7 +548,20 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool) ([]t.Subscription, 
 		// Filter out rows with defined DeletedAt
 		q = q.Filter(rdb.Row.HasFields("DeletedAt").Not())
 	}
-	q = q.Limit(maxResults)
+	limit := maxResults
+	if opts != nil {
+		if opts.IfModifiedSince != nil {
+			q = q.Filter(rdb.Row.Field("UpdatedAt").Gt(opts.IfModifiedSince))
+		}
+		if opts.Topic != "" {
+			q = q.Filter(rdb.Row.Field("Topic").Eq(opts.Topic))
+		}
+		if opts.Limit > 0 && opts.Limit < limit {
+			limit = opts.Limit
+		}
+	}
+	q = q.Limit(limit)
+
 	//log.Printf("RethinkDbAdapter.TopicsForUser q: %+v", q)
 	rows, err := q.Run(a.conn)
 	if err != nil {
@@ -644,7 +658,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool) ([]t.Subscription, 
 }
 
 // UsersForTopic loads users subscribed to the given topic
-func (a *adapter) UsersForTopic(topic string, keepDeleted bool) ([]t.Subscription, error) {
+func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt) ([]t.Subscription, error) {
 	// Fetch topic subscribers
 	// Fetch all subscribed users. The number of users is not large
 	q := rdb.DB(a.dbName).Table("subscriptions").GetAllByIndex("Topic", topic)
@@ -652,7 +666,19 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool) ([]t.Subscriptio
 		// Filter out rows with DeletedAt being not null
 		q = q.Filter(rdb.Row.HasFields("DeletedAt").Not())
 	}
-	q = q.Limit(maxSubscribers)
+	limit := maxSubscribers
+	if opts != nil {
+		if opts.IfModifiedSince != nil {
+			q = q.Filter(rdb.Row.Field("UpdatedAt").Gt(opts.IfModifiedSince))
+		}
+		if !opts.User.IsZero() {
+			q = q.Filter(rdb.Row.Field("User").Eq(opts.User.String()))
+		}
+		if opts.Limit > 0 && opts.Limit < limit {
+			limit = opts.Limit
+		}
+	}
+	q = q.Limit(limit)
 	//log.Printf("RethinkDbAdapter.UsersForTopic q: %+v", q)
 	rows, err := q.Run(a.conn)
 	if err != nil {
@@ -775,17 +801,25 @@ func (a *adapter) SubsLastSeen(topic string, user t.Uid, lastSeen map[string]tim
 	return err
 }
 
-// SubsForUser loads a list of user's subscriptions to topics. Does NOT read Public value.
-func (a *adapter) SubsForUser(forUser t.Uid, keepDeleted bool) ([]t.Subscription, error) {
-	if forUser.IsZero() {
-		return nil, t.ErrMalformed
-	}
-
+// SubsForUser loads a list of user's subscriptions to topics. Does NOT load Public value.
+func (a *adapter) SubsForUser(forUser t.Uid, keepDeleted bool, opts *t.QueryOpt) ([]t.Subscription, error) {
 	q := rdb.DB(a.dbName).Table("subscriptions").GetAllByIndex("User", forUser.String())
 	if !keepDeleted {
 		q = q.Filter(rdb.Row.HasFields("DeletedAt").Not())
 	}
-	q = q.Limit(maxResults)
+	limit := maxResults
+	if opts != nil {
+		if opts.IfModifiedSince != nil {
+			q = q.Filter(rdb.Row.Field("UpdatedAt").Gt(opts.IfModifiedSince))
+		}
+		if opts.Topic != "" {
+			q = q.Filter(rdb.Row.Field("Topic").Eq(opts.Topic))
+		}
+		if opts.Limit > 0 && opts.Limit < limit {
+			limit = opts.Limit
+		}
+	}
+	q = q.Limit(limit)
 
 	rows, err := q.Run(a.conn)
 	if err != nil {
@@ -801,28 +835,28 @@ func (a *adapter) SubsForUser(forUser t.Uid, keepDeleted bool) ([]t.Subscription
 	return subs, rows.Err()
 }
 
-// SubsForTopic fetches all subsciptions for a topic.
-func (a *adapter) SubsForTopic(topic string, keepDeleted bool) ([]t.Subscription, error) {
-	//log.Println("Loading subscriptions for topic ", topic)
-
-	// must load User.Public for p2p topics
-	var p2p []t.User
-	var err error
-	if t.GetTopicCat(topic) == t.TopicCatP2P {
-		uid1, uid2, _ := t.ParseP2P(topic)
-		if p2p, err = a.UserGetAll(uid1, uid2); err != nil {
-			return nil, err
-		} else if len(p2p) != 2 {
-			return nil, errors.New("failed to load two p2p users")
-		}
-	}
+// SubsForTopic fetches all subsciptions for a topic. Does NOT load Public value.
+func (a *adapter) SubsForTopic(topic string, keepDeleted bool, opts *t.QueryOpt) ([]t.Subscription, error) {
 
 	q := rdb.DB(a.dbName).Table("subscriptions").GetAllByIndex("Topic", topic)
 	if !keepDeleted {
 		// Filter out rows where DeletedAt is defined
 		q = q.Filter(rdb.Row.HasFields("DeletedAt").Not())
 	}
-	q = q.Limit(maxSubscribers)
+
+	limit := maxSubscribers
+	if opts != nil {
+		if opts.IfModifiedSince != nil {
+			q = q.Filter(rdb.Row.Field("UpdatedAt").Gt(opts.IfModifiedSince))
+		}
+		if !opts.User.IsZero() {
+			q = q.Filter(rdb.Row.Field("User").Eq(opts.User.String()))
+		}
+		if opts.Limit > 0 && opts.Limit < limit {
+			limit = opts.Limit
+		}
+	}
+	q = q.Limit(limit)
 	//log.Println("Loading subscription q=", q)
 
 	rows, err := q.Run(a.conn)
@@ -833,18 +867,6 @@ func (a *adapter) SubsForTopic(topic string, keepDeleted bool) ([]t.Subscription
 	var subs []t.Subscription
 	var ss t.Subscription
 	for rows.Next(&ss) {
-		if p2p != nil {
-			// Assigning values provided by the other user
-			if p2p[0].Id == ss.User {
-				ss.SetPublic(p2p[1].Public)
-				ss.SetWith(p2p[1].Id)
-				ss.SetDefaultAccess(p2p[1].Access.Auth, p2p[1].Access.Anon)
-			} else {
-				ss.SetPublic(p2p[0].Public)
-				ss.SetWith(p2p[0].Id)
-				ss.SetDefaultAccess(p2p[0].Access.Auth, p2p[0].Access.Anon)
-			}
-		}
 		subs = append(subs, ss)
 		//log.Printf("SubsForTopic: loaded sub %#+v", ss)
 	}
@@ -1060,7 +1082,7 @@ func (a *adapter) MessageSave(msg *t.Message) error {
 	return err
 }
 
-func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.BrowseOpt) ([]t.Message, error) {
+func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.QueryOpt) ([]t.Message, error) {
 
 	var limit = maxResults
 	var lower, upper interface{}
@@ -1112,8 +1134,8 @@ func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.BrowseOpt) 
 }
 
 // Get ranges of deleted messages
-func (a *adapter) MessageGetDeleted(topic string, forUser t.Uid, opts *t.BrowseOpt) ([]t.DelMessage, error) {
-	var limit = 1024 // TODO(gene): pass into adapter as a config param
+func (a *adapter) MessageGetDeleted(topic string, forUser t.Uid, opts *t.QueryOpt) ([]t.DelMessage, error) {
+	var limit = maxResults
 	var lower, upper interface{}
 
 	upper = rdb.MaxVal

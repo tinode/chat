@@ -901,11 +901,17 @@ type DelMessage struct {
 	SeqIdRanges []Range
 }
 
-// BrowseOpt is an ID-based query, [since, before] - both ends inclusive (closed)
-type BrowseOpt struct {
+// QueryOpt is options of a query, [since, before] - both ends inclusive (closed)
+type QueryOpt struct {
+	// Subscription query
+	User            Uid
+	Topic           string
+	IfModifiedSince *time.Time
+	// ID-based query parameters: Messages
 	Since  int
 	Before int
-	Limit  int
+	// Common parameter
+	Limit int
 }
 
 // TopicCat is an enum of topic categories.

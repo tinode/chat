@@ -14,8 +14,14 @@ import (
 	"time"
 )
 
-// MsgBrowseOpts defines parameters for queries by massage IDs.
-type MsgBrowseOpts struct {
+// MsgGetOpts defines Get query parameters.
+type MsgGetOpts struct {
+	// Optional User ID to return result for one user.
+	User string `json:"user,omitempty"`
+	// Optional topic name to return result for one topic.
+	Topic string `json:"topic,omitempty"`
+	// Return results modified dince this timespamp.
+	IfModifiedSince *time.Time `json:"ims,omitempty"`
 	// Load messages/ranges with IDs equal or greater than this (inclusive or closed)
 	SinceId int `json:"since,omitempty"`
 	// Load messages/ranges with IDs lower than this (exclusive or open)
@@ -24,25 +30,18 @@ type MsgBrowseOpts struct {
 	Limit int `json:"limit,omitempty"`
 }
 
-// MsgGetOpts defines parameters for queries by last modified time.
-type MsgGetOpts struct {
-	User            string     `json:"user,omitempty"`
-	IfModifiedSince *time.Time `json:"ims,omitempty"`
-	Limit           int        `json:"limit,omitempty"`
-}
-
 // MsgGetQuery is a topic metadata or data query.
 type MsgGetQuery struct {
 	What string `json:"what"`
 
-	// Parameters of "desc" request
+	// Parameters of "desc" request: IfModifiedSince
 	Desc *MsgGetOpts `json:"desc,omitempty"`
-	// Parameters of "sub" request
+	// Parameters of "sub" request: User, Topic, IfModifiedSince, Limit.
 	Sub *MsgGetOpts `json:"sub,omitempty"`
-	// Parameters of "data" request
-	Data *MsgBrowseOpts `json:"data,omitempty"`
-	// Parameters of "del" request
-	Del *MsgBrowseOpts `json:"del,omitempty"`
+	// Parameters of "data" request: Since, Before, Limit.
+	Data *MsgGetOpts `json:"data,omitempty"`
+	// Parameters of "del" request: Since, Before, Limit.
+	Del *MsgGetOpts `json:"del,omitempty"`
 }
 
 // MsgSetSub is a payload in set.sub request to update current subscription or invite another user, {sub.what} == "sub"
