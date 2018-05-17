@@ -26,7 +26,7 @@ dbtags=( mysql rethinkdb )
 source .dockerhub
 
 # Obtain dockerhub API auth token
-jstoken=`curl -sX POST \
+jstoken=`curl -X POST \
   -H "Content-Type: application/json" \
   -d "{\"username\":\"${user}\",\"password\":\"${pass}\"}" \
   https://hub.docker.com/v2/users/login/ \

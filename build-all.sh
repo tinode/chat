@@ -88,15 +88,20 @@ do
         zip -q -r ../${version}/tinode-${dbtag}."${plat}-${arc}".zip ./*
         popd > /dev/null
       else
+        plat2=$plat
+        # Rename 'darwin' tp 'mac'
+        if [ "$plat" = "darwin" ]; then
+          plat2=mac
+        fi
         # Copy binaries
         cp $GOPATH/bin/tinode ./releases/tmp
         cp $GOPATH/bin/init-db ./releases/tmp
         cp $GOPATH/bin/keygen ./releases/tmp
 
         # Remove possibly existing archive.
-        rm -f ./releases/${version}/tinode-${dbtag}."${plat}-${arc}".tar.gz
+        rm -f ./releases/${version}/tinode-${dbtag}."${plat2}-${arc}".tar.gz
         # Generate a new one
-        tar -C ${GOSRC}/chat/releases/tmp -zcf ./releases/${version}/tinode-${dbtag}."${plat}-${arc}".tar.gz .
+        tar -C ${GOSRC}/chat/releases/tmp -zcf ./releases/${version}/tinode-${dbtag}."${plat2}-${arc}".tar.gz .
       fi
     done
   done

@@ -742,13 +742,15 @@ Message `{get what="data"}` to `me` queries the history of invites/notifications
 
 Topic `fnd` is automatically created for every user at the account creation time. It serves as an endpoint for discovering other users and group topics. 
 
-Users and group topics can be discovered by optional `tags`. A tag is an arbitrary case-insensitive Unicode string (forced to lowercase) starting with a Unicode letter or digit. `Tags` must not contain the double quote `"`, `\u0022` but may contain spaces. `Tags` may have a prefix which serves as a namespace. The prefix is a string followed by a colon `:`, ex. prefixed phone tag `**tel**:14155551212` or prefixed email tag `**email**:alice@example.com`. Some prefixed `tags` are optionally enforced to be unique. In that case only one user or topic may have such a tag. Certain `tags` may be forced to be immutable to the user, i.e. user's attemps to add or remove an immutable tag will be rejected by the server. 
+Users and group topics can be discovered by optional `tags`. Tags are optionally assigned at the topic or user creation time then can be updated by using `{set what="tags"}` against a `fnd` or a group topic. 
 
-The `tags` are indexed server-side. Seach returns users and topics sorted by the number of matched tags in descending order. The serach results may be optionally required to contain at least one of some tags. 
+A tag is an arbitrary case-insensitive Unicode string (forced to lowercase) starting with a Unicode letter or digit. `Tags` must not contain the double quote `"`, `\u0022` but may contain spaces. `Tags` may have a prefix which serves as a namespace. The prefix is a string followed by a colon `:`, ex. prefixed phone tag `**tel**:14155551212` or prefixed email tag `**email**:alice@example.com`. Some prefixed `tags` are optionally enforced to be unique. In that case only one user or topic may have such a tag. Certain `tags` may be forced to be immutable to the user, i.e. user's attemps to add or remove an immutable tag will be rejected by the server. 
 
-Tags are optionally assigned at the topic or user creation time then can be updated by using `{set what="tags"}` against a `fnd` or a group topic. 
+The `tags` are indexed server-side and used in user and topic discovery. Seach returns users and topics sorted by the number of matched tags in descending order. 
 
-In order to find users or topics, a user sets `private` parameter of the `fnd` topic to string query containing tags (see _Query language_ below) then issues a `{get topic="fnd" what="sub"}` request. The system responds with a `{meta}` message with the `sub` section listing details of the found users or topics formatted as subscriptions.
+In order to find users or topics, a user sets either `public` or `private` parameter of the `fnd` topic to a search query (see [Query language](#query_language) below) then issues a `{get topic="fnd" what="sub"}` request. If both `public` and `private` are set, `private` query is used. The `public` query is persisted accress sessions and devices, i.e. all user's sessions see the same `public` query. The value of `private` query is ephemeral, i.e. not saved to database and not shared between user's sessions. The `public` query is intended for large queries which do not change often, such as finding matches for everyone in user's contact list on mobile phone. The `private` query is intended to be short and specific, such as finding some topic or a user who is not in the contact list.
+
+The system responds with a `{meta}` message with the `sub` section listing details of the found users or topics formatted as subscriptions.
 
 Topic `fnd` is read-only. `{pub}` messages to `fnd` are rejected.
 
@@ -776,7 +778,7 @@ Tags containing spaces or commas must be enclosed in double quotes `"`, `\u0022`
 **Some examples:**
 * `flowers travel`: find topics or users which contain both tags `flowers` and `travel`.
 * `flowers, travel`: find topics or users which contain either tag `flowers` or `travel` (or both).
-* `flowers travel, puppies`: find topics or users which contain `travel` or `puppies` and `flowers`, i.e. `(travel OR puppies) AND flowers`.
+* `flowers travel, puppies`: find topics or users which contain `flowers` and either `travel` or `puppies`, i.e. `flowers AND (travel OR puppies)`.
 
 
 ### Peer to Peer Topics
