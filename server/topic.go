@@ -1312,10 +1312,8 @@ func (t *Topic) replySetDesc(sess *Session, set *MsgClientSet) error {
 	assignGenericValues := func(upd map[string]interface{}, what string, p interface{}) (changed bool) {
 		if isNullValue(p) {
 			// Request to clear the value
-			if upd[what] != nil {
-				upd[what] = nil
-				changed = true
-			}
+			upd[what] = nil
+			changed = true
 		} else if p != nil {
 			// A new non-nil value
 			upd[what] = p
@@ -1399,19 +1397,7 @@ func (t *Topic) replySetDesc(sess *Session, set *MsgClientSet) error {
 		}
 	} else if t.cat == types.TopicCatFnd {
 		// Assign per-session fnd.Public.
-		var pubmap map[string]interface{}
-		if t.public == nil {
-			pubmap = make(map[string]interface{})
-		} else {
-			// Will cause intentional panic if it's wrong type.
-			pubmap = t.public.(map[string]interface{})
-		}
-		if core["Public"] != nil {
-			pubmap[sess.sid] = core["Public"]
-		} else {
-			delete(pubmap, sess.sid)
-		}
-		t.public = pubmap
+		t.fndSetPublic(sess, core["Public"])
 	}
 	if private, ok := sub["Private"]; ok {
 		pud := t.perUser[sess.uid]
@@ -1510,8 +1496,8 @@ func (t *Topic) replyGetSub(sess *Session, id string, req *MsgGetOpts) error {
 		return err
 	}
 
-	meta := &MsgServerMeta{Id: id, Topic: t.original(sess.uid), Timestamp: &now}
 	if len(subs) > 0 {
+		meta := &MsgServerMeta{Id: id, Topic: t.original(sess.uid), Timestamp: &now}
 		meta.Sub = make([]MsgTopicSub, 0, len(subs))
 		for _, sub := range subs {
 			// Indicator if the requester has provided a cut off date for ts of pub & priv updates.
@@ -1622,9 +1608,10 @@ func (t *Topic) replyGetSub(sess *Session, id string, req *MsgGetOpts) error {
 
 			meta.Sub = append(meta.Sub, mts)
 		}
+		sess.queueOut(&ServerComMessage{Meta: meta})
+	} else {
+		sess.queueOut(NoErr(id, t.original(sess.uid), now))
 	}
-
-	sess.queueOut(&ServerComMessage{Meta: meta})
 
 	return nil
 }
