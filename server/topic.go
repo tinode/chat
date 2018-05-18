@@ -1422,13 +1422,18 @@ func (t *Topic) replySetDesc(sess *Session, set *MsgClientSet) error {
 
 // replyGetSub is a response to a get.sub request on a topic - load a list of subscriptions/subscribers,
 // send it just to the session as a {meta} packet
-// FIXME(gene): reject request if the user does not have the R permission
 func (t *Topic) replyGetSub(sess *Session, id string, req *MsgGetOpts) error {
 	now := types.TimeNow()
 
 	if req != nil && (req.SinceId != 0 || req.BeforeId != 0) {
 		sess.queueOut(ErrMalformed(id, t.original(sess.uid), now))
 		return errors.New("invalid MsgGetOpts query")
+	}
+
+	userData := t.perUser[sess.uid]
+	if !(userData.modeGiven & userData.modeWant).IsReader() {
+		sess.queueOut(ErrPermissionDenied(id, t.original(sess.uid), now))
+		return errors.New("user does not have R permission")
 	}
 
 	var ifModified time.Time
@@ -1456,7 +1461,7 @@ func (t *Topic) replyGetSub(sess *Session, id string, req *MsgGetOpts) error {
 		// Select public or private query. Public has priority.
 		raw := t.fndGetPublic(sess)
 		if raw == nil {
-			raw = t.perUser[sess.uid].private
+			raw = userData.private
 		}
 
 		if query, ok := raw.(string); ok && len(query) > 0 {
@@ -1487,7 +1492,6 @@ func (t *Topic) replyGetSub(sess *Session, id string, req *MsgGetOpts) error {
 			// User manages cache. Include deleted subscriptions too.
 			subs, err = store.Topics.GetUsersAny(t.name, msgOpts2storeOpts(req))
 		}
-		userData := t.perUser[sess.uid]
 		isSharer = (userData.modeGiven & userData.modeWant).IsSharer()
 	}
 
