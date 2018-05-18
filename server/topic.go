@@ -259,6 +259,9 @@ func (t *Topic) run(hub *Hub) {
 					if err := store.Users.UpdateLastSeen(mrs.uid, mrs.userAgent, now); err != nil {
 						log.Println(err)
 					}
+				} else if t.cat == types.TopicCatFnd {
+					// Remove ephemeral query.
+					t.fndRemovePublic(leave.sess)
 				} else if t.cat == types.TopicCatGrp && pud.online == 0 {
 					// User is going offline: notify online subscribers on 'me'
 					t.presSubsOnline("off", leave.sess.uid.UserId(), nilPresParams,
@@ -1363,7 +1366,6 @@ func (t *Topic) replySetDesc(sess *Session, set *MsgClientSet) error {
 		sendPres = sendPres || assignGenericValues(sub, "Private", set.Desc.Private)
 	}
 
-	var change int
 	if len(core) > 0 {
 		if t.cat == types.TopicCatMe {
 			err = store.Users.Update(sess.uid, core)
@@ -1372,18 +1374,15 @@ func (t *Topic) replySetDesc(sess *Session, set *MsgClientSet) error {
 		} else {
 			err = store.Topics.Update(t.name, core)
 		}
-		// Change only affects message set to user: NoErr or InfoNotModified.
-		change++
 	}
 	if err == nil && len(sub) > 0 {
 		err = store.Subs.Update(t.name, sess.uid, sub, true)
-		change++
 	}
 
 	if err != nil {
 		sess.queueOut(ErrUnknown(set.Id, set.Topic, now))
 		return err
-	} else if change == 0 {
+	} else if len(core)+len(sub) == 0 {
 		sess.queueOut(InfoNotModified(set.Id, set.Topic, now))
 		return errors.New("{set} generated no update to DB")
 	}
@@ -1399,7 +1398,20 @@ func (t *Topic) replySetDesc(sess *Session, set *MsgClientSet) error {
 			t.public = public
 		}
 	} else if t.cat == types.TopicCatFnd {
-		// Assign per-session public.
+		// Assign per-session fnd.Public.
+		var pubmap map[string]interface{}
+		if t.public == nil {
+			pubmap = make(map[string]interface{})
+		} else {
+			// Will cause intentional panic if it's wrong type.
+			pubmap = t.public.(map[string]interface{})
+		}
+		if core["Public"] != nil {
+			pubmap[sess.sid] = core["Public"]
+		} else {
+			delete(pubmap, sess.sid)
+		}
+		t.public = pubmap
 	}
 	if private, ok := sub["Private"]; ok {
 		pud := t.perUser[sess.uid]
@@ -1455,31 +1467,30 @@ func (t *Topic) replyGetSub(sess *Session, id string, req *MsgGetOpts) error {
 		}
 		isSharer = true
 	} else if t.cat == types.TopicCatFnd {
-		// TODO: check the query (.private) against the set of allowed tags.
-		// Given a query provided in .private, fetch user's contacts. Private contains a string.
-		if query, ok := t.perUser[sess.uid].private.(string); ok {
-			if len(query) > 0 {
-				query, subs, err = pluginFind(sess.uid, query)
-				if err == nil && subs == nil && query != "" {
-					var req, opt []string
-					req, opt, err = parseSearchQuery(query)
-					if err == nil {
-						// Check if the query contains terms that the user does not have.
-						if restr, _ := stringSliceDelta(t.tags,
-							filterRestrictedTags(append(req, opt...), globals.maskedTagNS)); len(restr) > 0 {
-							err = types.ErrPermissionDenied
-						} else {
-							subs, err = store.Users.FindSubs(sess.uid, req, opt)
-						}
+		// Select public or private query. Public has priority.
+		raw := t.fndGetPublic(sess)
+		if raw == nil {
+			raw = t.perUser[sess.uid].private
+		}
+
+		if query, ok := raw.(string); ok && len(query) > 0 {
+			query, subs, err = pluginFind(sess.uid, query)
+			if err == nil && subs == nil && query != "" {
+				var req, opt []string
+				if req, opt, err = parseSearchQuery(query); err == nil {
+					// Check if the query contains terms that the user does not have.
+					if restr, _ := stringSliceDelta(t.tags,
+						filterRestrictedTags(append(req, opt...), globals.maskedTagNS)); len(restr) > 0 {
+						err = types.ErrPermissionDenied
 					} else {
-						// Convert specific parsing error into a generic ErrMalformed.
-						// Otherwise it will be reported as 500 Internal.
-						err = types.ErrMalformed
+						subs, err = store.Users.FindSubs(sess.uid, req, opt)
 					}
+				} else {
+					// Convert specific parsing error into a generic ErrMalformed.
+					// Otherwise it will be reported as 500 Internal.
+					err = types.ErrMalformed
 				}
 			}
-		} else {
-			err = types.ErrMalformed
 		}
 	} else {
 		// FIXME(gene): don't load subs from DB, use perUserData - it already contains subscriptions.
@@ -2199,7 +2210,7 @@ func (t *Topic) original(uid types.Uid) string {
 	panic("Invalid P2P topic")
 }
 
-// Get topic name suitable for the given client
+// Get ID of the other user in a P2P topic
 func (t *Topic) p2pOtherUser(uid types.Uid) types.Uid {
 	if t.cat == types.TopicCatP2P {
 		for u2 := range t.perUser {
@@ -2210,6 +2221,61 @@ func (t *Topic) p2pOtherUser(uid types.Uid) types.Uid {
 		panic("Invalid P2P topic")
 	}
 	panic("Not P2P topic")
+}
+
+// Get per-session value of fnd.Public
+func (t *Topic) fndGetPublic(sess *Session) interface{} {
+	if t.cat == types.TopicCatFnd {
+		if t.public == nil {
+			return nil
+		}
+		if pubmap, ok := t.public.(map[string]interface{}); ok {
+			return pubmap[sess.sid]
+		}
+		panic("Invalid Fnd.Public type")
+	}
+	panic("Not Fnd topic")
+}
+
+// Assign per-session fnd.Public. Returns true if value has been changed.
+func (t *Topic) fndSetPublic(sess *Session, public interface{}) bool {
+	if t.cat == types.TopicCatFnd {
+		var pubmap map[string]interface{}
+		var ok bool
+		if t.public == nil {
+			pubmap = make(map[string]interface{})
+		} else if pubmap, ok = t.public.(map[string]interface{}); !ok {
+			panic("Invalid Fnd.Public type")
+		}
+
+		if public != nil {
+			pubmap[sess.sid] = public
+		} else {
+			ok = (pubmap[sess.sid] != nil)
+			delete(pubmap, sess.sid)
+			if len(pubmap) == 0 {
+				pubmap = nil
+			}
+		}
+		t.public = pubmap
+		return ok
+	}
+	panic("Not Fnd topic")
+}
+
+// Remove per-session value of fnd.Public
+func (t *Topic) fndRemovePublic(sess *Session) {
+	if t.cat == types.TopicCatFnd {
+		if t.public == nil {
+			return
+		}
+		if pubmap, ok := t.public.(map[string]interface{}); ok {
+			delete(pubmap, sess.sid)
+			return
+		}
+		panic("Invalid Fnd.Public type")
+	}
+	panic("Not Fnd topic")
 }
 
 func (t *Topic) accessFor(authLvl auth.Level) types.AccessMode {
