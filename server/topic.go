@@ -1270,6 +1270,9 @@ func (t *Topic) replySetDesc(sess *Session, set *MsgClientSet) error {
 	now := types.TimeNow()
 
 	assignAccess := func(upd map[string]interface{}, mode *MsgDefaultAcsMode) error {
+		if mode == nil {
+			return nil
+		}
 		if auth, anon, err := parseTopicAccess(mode, types.ModeUnset, types.ModeUnset); err != nil {
 			return err
 		} else if auth.IsOwner() || anon.IsOwner() {
@@ -1318,32 +1321,22 @@ func (t *Topic) replySetDesc(sess *Session, set *MsgClientSet) error {
 		return
 	}
 
-	updateCached := func(upd map[string]interface{}) {
-		if tmp, ok := upd["Access"]; ok {
-			access := tmp.(types.DefaultAccess)
-			t.accessAuth = access.Auth
-			t.accessAnon = access.Anon
-		}
-		if public, ok := upd["Public"]; ok {
-			t.public = public
-		}
-	}
-
 	var err error
 	var sendPres bool
 
-	user := make(map[string]interface{})
-	topic := make(map[string]interface{})
+	// Change to the main object
+	core := make(map[string]interface{})
+	// Change to subscription
 	sub := make(map[string]interface{})
 	if set.Desc != nil {
 		if t.cat == types.TopicCatMe {
 			// Update current user
-			if set.Desc.DefaultAcs != nil {
-				err = assignAccess(user, set.Desc.DefaultAcs)
-			}
-			if set.Desc.Public != nil {
-				sendPres = assignGenericValues(user, "Public", set.Desc.Public)
-			}
+			err = assignAccess(core, set.Desc.DefaultAcs)
+			sendPres = assignGenericValues(core, "Public", set.Desc.Public)
+		} else if t.cat == types.TopicCatFnd {
+			// set.Desc.DefaultAcs is ignored.
+			// Do not send presence if fnd.Public has changed.
+			assignGenericValues(core, "Public", set.Desc.Public)
 		} else if t.cat == types.TopicCatP2P {
 			// Reject direct changes to P2P topics.
 			if set.Desc.Public != nil || set.Desc.DefaultAcs != nil {
@@ -1352,40 +1345,34 @@ func (t *Topic) replySetDesc(sess *Session, set *MsgClientSet) error {
 			}
 		} else if t.cat == types.TopicCatGrp {
 			// Update group topic
-			if set.Desc.DefaultAcs != nil || set.Desc.Public != nil {
-				if t.owner == sess.uid {
-					if set.Desc.DefaultAcs != nil {
-						err = assignAccess(topic, set.Desc.DefaultAcs)
-					}
-					if set.Desc.Public != nil {
-						sendPres = assignGenericValues(topic, "Public", set.Desc.Public)
-					}
-				} else {
-					// This is a request from non-owner
-					sess.queueOut(ErrPermissionDenied(set.Id, set.Topic, now))
-					return errors.New("attempt to change public or permissions by non-owner")
-				}
+			if t.owner == sess.uid {
+				err = assignAccess(core, set.Desc.DefaultAcs)
+				sendPres = assignGenericValues(core, "Public", set.Desc.Public)
+			} else if set.Desc.DefaultAcs != nil || set.Desc.Public != nil {
+				// This is a request from non-owner
+				sess.queueOut(ErrPermissionDenied(set.Id, set.Topic, now))
+				return errors.New("attempt to change public or permissions by non-owner")
 			}
 		}
-		// else fnd: update ignored
 
 		if err != nil {
 			sess.queueOut(ErrMalformed(set.Id, set.Topic, now))
 			return err
 		}
 
-		if set.Desc.Private != nil {
-			assignGenericValues(sub, "Private", set.Desc.Private)
-		}
+		sendPres = sendPres || assignGenericValues(sub, "Private", set.Desc.Private)
 	}
 
 	var change int
-	if len(user) > 0 {
-		err = store.Users.Update(sess.uid, user)
-		change++
-	}
-	if err == nil && len(topic) > 0 {
-		err = store.Topics.Update(t.name, topic)
+	if len(core) > 0 {
+		if t.cat == types.TopicCatMe {
+			err = store.Users.Update(sess.uid, core)
+		} else if t.cat == types.TopicCatFnd {
+			// The only value is Public, and Public for fnd is not saved according to specs.
+		} else {
+			err = store.Topics.Update(t.name, core)
+		}
+		// Change only affects message set to user: NoErr or InfoNotModified.
 		change++
 	}
 	if err == nil && len(sub) > 0 {
@@ -1402,15 +1389,22 @@ func (t *Topic) replySetDesc(sess *Session, set *MsgClientSet) error {
 	}
 
 	// Update values cached in the topic object
+	if t.cat == types.TopicCatMe || t.cat == types.TopicCatGrp {
+		if tmp, ok := core["Access"]; ok {
+			access := tmp.(types.DefaultAccess)
+			t.accessAuth = access.Auth
+			t.accessAnon = access.Anon
+		}
+		if public, ok := core["Public"]; ok {
+			t.public = public
+		}
+	} else if t.cat == types.TopicCatFnd {
+		// Assign per-session public.
+	}
 	if private, ok := sub["Private"]; ok {
 		pud := t.perUser[sess.uid]
 		pud.private = private
 		t.perUser[sess.uid] = pud
-	}
-	if t.cat == types.TopicCatMe {
-		updateCached(user)
-	} else if t.cat == types.TopicCatGrp {
-		updateCached(topic)
 	}
 
 	if sendPres {

@@ -738,7 +738,7 @@ Message `{get what="sub"}` to `me` is different from any other topic as it retur
 
 Message `{get what="data"}` to `me` queries the history of invites/notifications. It's handled the same way as to any other topic.
 
-### `fnd` and Tags: Contacts and Topics Discovery
+### `fnd` and Tags: Finding Users and Topics
 
 Topic `fnd` is automatically created for every user at the account creation time. It serves as an endpoint for discovering other users and group topics. 
 
@@ -748,7 +748,7 @@ A tag is an arbitrary case-insensitive Unicode string (forced to lowercase) star
 
 The `tags` are indexed server-side and used in user and topic discovery. Seach returns users and topics sorted by the number of matched tags in descending order. 
 
-In order to find users or topics, a user sets either `public` or `private` parameter of the `fnd` topic to a search query (see [Query language](#query_language) below) then issues a `{get topic="fnd" what="sub"}` request. If both `public` and `private` are set, `private` query is used. The `public` query is persisted accress sessions and devices, i.e. all user's sessions see the same `public` query. The value of `private` query is ephemeral, i.e. not saved to database and not shared between user's sessions. The `public` query is intended for large queries which do not change often, such as finding matches for everyone in user's contact list on mobile phone. The `private` query is intended to be short and specific, such as finding some topic or a user who is not in the contact list.
+In order to find users or topics, a user sets either `public` or `private` parameter of the `fnd` topic to a search query (see [Query language](#query_language) below) then issues a `{get topic="fnd" what="sub"}` request. If both `public` and `private` are set, the `public` query is used. The `private` query is persisted accress sessions and devices, i.e. all user's sessions see the same `private` query. The value of `public` query is ephemeral, i.e. it's not saved to database and not shared between user's sessions. The `private` query is intended for large queries which do not change often, such as finding matches for everyone in user's contact list on mobile phone. The `public` query is intended to be short and specific, such as finding some topic or a user who is not in the contact list.
 
 The system responds with a `{meta}` message with the `sub` section listing details of the found users or topics formatted as subscriptions.
 
@@ -757,17 +757,6 @@ Topic `fnd` is read-only. `{pub}` messages to `fnd` are rejected.
 (The following functionality is not implemented yet) When a new user registers with tags matching the given query, the `fnd` topic will receive `{pres}` notification for the new user.
 
 [Plugins](./pbx) support `Find` service which can be used to replace default search with a custom one.
-
-
-#### Some use cases
-* Restricting users to organizations. 
-  An immutable tag(s) may be assigned to the user which denotes the organization the user belons to. When the user searches for other users or topics, the search can be restricted to always contain the tag. This approach can be used to segment users into organizations with limited visiblity into each other.
-
-* Search by geographical location. 
-  Client software may periodically assign a [geohash](https://en.wikipedia.org/wiki/Geohash) tag to the user based on current location. Searching for users in a given area would mean matching on geohash tags.
-
-* Search by numerical range, such as age range.
-  The approach is similar to geohashing. The entire range of numbers is covered by the smallest possible power of 2, for instance the range of human ages is covered by 2<sup>7</sup>=128 years. The entire range is split in two halves: the range 0-63 is denoted by 0, 64-127 by 1. The operation is repeated with each subrange, i.e. 0-31 is 00, 32-63 is 01, 0-15 is 000, 32-47 is 010. Once completed, the age 30 will belong to the following ranges: 0 (0-63), 00 (0-31), 001 (16-31), 0011 (24-31), 00111 (28-31), 001111 (30-31), 0011110 (30). A 30 y.o. user is assigned a few tags to indicate the age, i.e. `age:00111`, `age:001111`,  and `age:0011110`. Technically, all 7 tags may be assigned but usually it's impractical. To query for anyone in the age range 28-35 convert the range into a minimal number of tags: `age:00111` (28-31), `age:01000` (32-35). This query will match the 30 y.o. user by tag `age:00111`.
 
 #### Query language
 
@@ -779,6 +768,17 @@ Tags containing spaces or commas must be enclosed in double quotes `"`, `\u0022`
 * `flowers travel`: find topics or users which contain both tags `flowers` and `travel`.
 * `flowers, travel`: find topics or users which contain either tag `flowers` or `travel` (or both).
 * `flowers travel, puppies`: find topics or users which contain `flowers` and either `travel` or `puppies`, i.e. `flowers AND (travel OR puppies)`.
+
+
+#### Some use cases
+* Restricting users to organizations. 
+  An immutable tag(s) may be assigned to the user which denotes the organization the user belons to. When the user searches for other users or topics, the search can be restricted to always contain the tag. This approach can be used to segment users into organizations with limited visiblity into each other.
+
+* Search by geographical location. 
+  Client software may periodically assign a [geohash](https://en.wikipedia.org/wiki/Geohash) tag to the user based on current location. Searching for users in a given area would mean matching on geohash tags.
+
+* Search by numerical range, such as age range.
+  The approach is similar to geohashing. The entire range of numbers is covered by the smallest possible power of 2, for instance the range of human ages is covered by 2<sup>7</sup>=128 years. The entire range is split in two halves: the range 0-63 is denoted by 0, 64-127 by 1. The operation is repeated with each subrange, i.e. 0-31 is 00, 32-63 is 01, 0-15 is 000, 32-47 is 010. Once completed, the age 30 will belong to the following ranges: 0 (0-63), 00 (0-31), 001 (16-31), 0011 (24-31), 00111 (28-31), 001111 (30-31), 0011110 (30). A 30 y.o. user is assigned a few tags to indicate the age, i.e. `age:00111`, `age:001111`,  and `age:0011110`. Technically, all 7 tags may be assigned but usually it's impractical. To query for anyone in the age range 28-35 convert the range into a minimal number of tags: `age:00111` (28-31), `age:01000` (32-35). This query will match the 30 y.o. user by tag `age:00111`.
 
 
 ### Peer to Peer Topics

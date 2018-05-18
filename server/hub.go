@@ -1025,24 +1025,3 @@ func replyTopicDescBasic(sess *Session, topic string, get *MsgClientGet) {
 	sess.queueOut(&ServerComMessage{
 		Meta: &MsgServerMeta{Id: get.Id, Topic: get.Topic, Timestamp: &now, Desc: desc}})
 }
-
-// Parse topic access parameters
-func parseTopicAccess(acs *MsgDefaultAcsMode, defAuth, defAnon types.AccessMode) (auth, anon types.AccessMode,
-	err error) {
-
-	auth, anon = defAuth, defAnon
-
-	if acs.Auth != "" {
-		if err = auth.UnmarshalText([]byte(acs.Auth)); err != nil {
-			log.Println("hub: invalid default auth access mode '" + acs.Auth + "'")
-		}
-	}
-
-	if acs.Anon != "" {
-		if err = anon.UnmarshalText([]byte(acs.Anon)); err != nil {
-			log.Println("hub: invalid default anon access mode '" + acs.Anon + "'")
-		}
-	}
-
-	return
-}

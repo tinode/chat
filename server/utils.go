@@ -315,6 +315,22 @@ func getDefaultAccess(cat types.TopicCat, auth bool) types.AccessMode {
 	}
 }
 
+// Parse topic access parameters
+func parseTopicAccess(acs *MsgDefaultAcsMode, defAuth, defAnon types.AccessMode) (auth, anon types.AccessMode,
+	err error) {
+
+	auth, anon = defAuth, defAnon
+
+	if acs.Auth != "" {
+		err = auth.UnmarshalText([]byte(acs.Auth))
+	}
+	if acs.Anon != "" {
+		err = anon.UnmarshalText([]byte(acs.Anon))
+	}
+
+	return
+}
+
 // Parses version of format 0.13.xx or 0.13-xx or 0.13
 // The major and minor parts must be valid, the last part is ignored if missing or unparceable.
 func parseVersion(vers string) int {
