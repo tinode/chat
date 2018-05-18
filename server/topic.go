@@ -1431,7 +1431,9 @@ func (t *Topic) replyGetSub(sess *Session, id string, req *MsgGetOpts) error {
 	}
 
 	userData := t.perUser[sess.uid]
-	if !(userData.modeGiven & userData.modeWant).IsReader() {
+	if t.cat != types.TopicCatMe && t.cat != types.TopicCatFnd &&
+		!(userData.modeGiven & userData.modeWant).IsReader() {
+
 		sess.queueOut(ErrPermissionDenied(id, t.original(sess.uid), now))
 		return errors.New("user does not have R permission")
 	}
@@ -2233,10 +2235,13 @@ func (t *Topic) fndSetPublic(sess *Session, public interface{}) bool {
 	if t.cat == types.TopicCatFnd {
 		var pubmap map[string]interface{}
 		var ok bool
-		if t.public == nil {
+		if t.public != nil {
+			if pubmap, ok = t.public.(map[string]interface{}); !ok {
+				panic("Invalid Fnd.Public type")
+			}
+		}
+		if pubmap == nil {
 			pubmap = make(map[string]interface{})
-		} else if pubmap, ok = t.public.(map[string]interface{}); !ok {
-			panic("Invalid Fnd.Public type")
 		}
 
 		if public != nil {
