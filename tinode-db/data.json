@@ -5,7 +5,7 @@
    "email": "alice@example.com",
    "tel": "17025550001",
    "passhash": "alice123",
-   "private": "some comment 123",
+   "private": {"comment": "some comment 123"},
    "public": {"fn": "Alice Johnson", "photo": "alice-64.jpg", "type": "jpg"},
    "state": 1,
    "status": {
@@ -22,9 +22,7 @@
    "email": "bob@example.com",
    "tel": "17025550002",
    "passhash": "bob123",
-   "private": {
-    "comment": "no comments :)"
-   },
+   "private": {"comment": "no comments :)"},
    "public": {"fn": "Bob Smith", "photo": "bob-64.jpg", "type": "jpg"},
    "state": 1,
    "status": "stuff",
@@ -39,7 +37,7 @@
    "email": "carol@example.com",
    "tel": "17025550003",
    "passhash": "carol123",
-   "private": "more stuff",
+   "private": {"comment": "more stuff"},
    "public": {"fn": "Carol Xmas", "photo": "carol-64.jpg", "type": "jpg"},
    "state": 1,
    "status": "ho ho ho",
@@ -54,7 +52,7 @@
    "email": "dave@example.com",
    "tel": "17025550004",
    "passhash": "dave123",
-   "private": "stuff 123",
+   "private": {"comment": "stuff 123"},
    "public": {"fn": "Dave Goliathsson", "photo": "dave-64.jpg", "type": "jpg"},
    "state": 1,
    "status": "hiding!",
@@ -69,7 +67,7 @@
    "email": "eve@example.com",
    "tel": "17025550005",
    "passhash": "eve123",
-   "private": "apples?",
+   "private": {"comment": "apples?"},
    "public": {"fn": "Eve Adams", "photo": "eve-64.jpg", "type": "jpg"},
    "state": 1,
    "username": "eve",
@@ -83,7 +81,7 @@
    "email": "frank@example.com",
    "tel": "17025550006",
    "passhash": "frank123",
-   "private": "things, not stuff",
+   "private": {"comment": "things, not stuff"},
    "public": {"fn": "Frank Singer"},
    "state": 2,
    "status": "singing!",
@@ -98,7 +96,7 @@
    "email": "tino@example.com",
    "tel": "17025550010",
    "passhash": "(random)",
-   "private": "I'm a chatbot short and stout",
+   "private": {"comment": "I'm a chatbot short and stout"},
    "public": {"fn": "Tino the Chatbot", "photo": "tino-64.jpg", "type": "jpg"},
    "state": 1,
    "status": "Chatting nonsensically",
@@ -133,83 +131,83 @@
  "p2psubs": [
   {
    "createdAt": "-120h",
-   "users": [{"name": "alice"}, {"name": "bob", "private": "Alice Jo"}]
+   "users": [{"name": "alice"}, {"name": "bob", "private": {"comment": "Alice Jo"}}]
   },
   {
    "createdAt": "-119h",
-	"users": [{"name": "alice"}, {"name": "carol", "private": "Alice Joha"}]
+	"users": [{"name": "alice"}, {"name": "carol", "private": {"comment": "Alice Joha"}}]
   },
   {
    "createdAt": "-118h",
-   "users": [{"name": "alice"}, {"name": "dave", "private": "Alice not in Wunderland"}]
+   "users": [{"name": "alice"}, {"name": "dave", "private": {"comment": "Alice not in Wunderland"}}]
   },
   {
    "createdAt": "-117h",
-   "private": "apples to oranges",
-   "users": [{"name": "alice", "private": "Apples"}, 
-             {"name": "eve", "private": "Alice is not what she seems"}]
+   "private": {"comment": "apples to oranges"},
+   "users": [{"name": "alice", "private": {"comment": "Apples"}}, 
+             {"name": "eve", "private": {"comment": "Alice is not what she seems"}}]
   },
   {
    "createdAt": "-116h",
-   "users": [{"name": "alice", "private": "Frank Frank Frank a-\u003ef"}, 
-             {"name": "frank", "private": "Johnson f-\u003ea"}]
+   "users": [{"name": "alice", "private": {"comment": "Frank Frank Frank a-\u003ef"}}, 
+             {"name": "frank", "private": {"comment": "Johnson f-\u003ea"}}]
   },
   {
    "createdAt": "-115.5h",
-   "users": [{"name": "alice", "private": "Python chatbot, short and stout"}, {"name": "tino"}]
+   "users": [{"name": "alice", "private": {"comment": "Python chatbot, short and stout"}}, {"name": "tino"}]
   },
   {
    "createdAt": "-114h",
-   "users": [{"name": "bob", "private": "I'm banned by Dave!", "have": "A"}, 
-             {"name": "dave", "private": "I banned Bob.", "want": "N"}]
+   "users": [{"name": "bob", "private": {"comment": "I'm banned by Dave!"}, "have": "A"}, 
+             {"name": "dave", "private": {"comment": "I banned Bob."}, "want": "N"}]
   },
   {
    "createdAt": "-113.5h",
-   "users": [{"name": "bob", "private": "Eve nee Ng"}, {"name": "eve"}]
+   "users": [{"name": "bob", "private": {"comment": "Eve nee Ng"}}, {"name": "eve"}]
   },
   {
    "createdAt": "-113.45h",
-   "users": [{"name": "bob", "private": "Python chatbot, short and stout"}, {"name": "tino"}]
+   "users": [{"name": "bob", "private": {"comment": "Python chatbot, short and stout"}}, {"name": "tino"}]
   },
   {
    "createdAt": "-113.3h",
-   "users": [{"name": "carol", "private": "Python chatbot, short and stout"}, {"name": "tino"}]
+   "users": [{"name": "carol", "private": {"comment": "Python chatbot, short and stout"}}, {"name": "tino"}]
   },
   {
    "createdAt": "-112.7h",
-   "private": "Python chatbot short and stout",
-   "users": [{"name": "dave", "private": "Python chatbot, short and stout"}, {"name": "tino"}]
+   "private": {"comment": "Python chatbot short and stout"},
+   "users": [{"name": "dave", "private": {"comment": "Python chatbot, short and stout"}}, {"name": "tino"}]
   },
   {
    "createdAt": "-112.3h",
-   "users": [{"name": "eve", "private": "Python chatbot, short and stout"}, {"name": "tino"}]
+   "users": [{"name": "eve", "private": {"comment": "Python chatbot, short and stout"}}, {"name": "tino"}]
   },
   {
    "createdAt": "-112.1h",
-   "users": [{"name": "frank", "private": "Python chatbot, short and stout"}, {"name": "tino"}]
+   "users": [{"name": "frank", "private": {"comment": "Python chatbot, short and stout"}}, {"name": "tino"}]
   }
  ],
  "groupsubs": [{
    "createdAt": "-112h",
-   "private": "My super cool group topic",
+   "private": {"comment": "My super cool group topic"},
    "topic": "*ABC",
    "user": "alice"
   },
   {
    "createdAt": "-111.9h",
-   "private": "Wow",
+   "private": {"comment": "Wow"},
    "topic": "*ABC",
    "user": "bob"
   },
   {
    "createdAt": "-111.8h",
-   "private": "Custom group description by Bob",
+   "private": {"comment": "Custom group description by Bob"},
    "topic": "*ABCDEF",
    "user": "bob"
   },
   {
    "createdAt": "-111.7h",
-   "private": "Kirgudu",
+   "private": {"comment": "Kirgudu"},
    "topic": "*ABCDEF",
    "user": "carol"
   },
@@ -230,7 +228,7 @@
   },
   {
    "createdAt": "-111.3h",
-   "private": "I'm not the owner, Frank is",
+   "private": {"comment": "I'm not the owner, Frank is"},
    "topic": "*BF",
    "user": "bob"
   }

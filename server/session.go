@@ -804,7 +804,7 @@ func (s *Session) get(msg *ClientComMessage) {
 		}
 	} else {
 		if meta.what&(constMsgMetaData|constMsgMetaSub|constMsgMetaDel) != 0 {
-			log.Println("s.get: invalid Get message action: '" + msg.Get.What + "'")
+			log.Println("s.get: subscribe first to get '" + msg.Get.What + "'")
 			s.queueOut(ErrPermissionDenied(msg.Get.Id, msg.Get.Topic, msg.timestamp))
 		} else {
 			// Description of a topic not currently subscribed to. Request desc from the hub
