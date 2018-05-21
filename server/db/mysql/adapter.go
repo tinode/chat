@@ -1566,8 +1566,8 @@ func (a *adapter) DeviceUpsert(uid t.Uid, def *t.DeviceDef) error {
 	}
 
 	// Actually add/update DeviceId for the new user
-	_, err = a.db.Exec("INSERT INTO devices(userid, hash, deviceId) VALUES(?,?,?)",
-		store.DecodeUid(uid), hash, def.DeviceId)
+	_, err = a.db.Exec("INSERT INTO devices(userid, hash, deviceId, platform, lastseen, lang) VALUES(?,?,?,?,?,?)",
+		store.DecodeUid(uid), hash, def.DeviceId, def.Platform, def.LastSeen, def.Lang)
 	if err != nil {
 		return err
 	}
