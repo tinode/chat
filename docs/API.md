@@ -829,19 +829,56 @@ Tinode supports mobile push notifications though compile-time plugins. The chann
 
 Topics and subscriptions have `public` and `private` fields. Generally, the fields are application-defined. The server does not enforce any particular structure of these fields except for `fnd` topic. At the same time, client software should use the same format for interoperability reasons. 
 
-The format of the `public` field is expected to be a [vCard](https://en.wikipedia.org/wiki/VCard). At a minimum `fn` and `photo` are supported. `email`, `tel` fields are expected to be arrays of string values.
-
-The format of the `private` field is expected to be a dictionary:
+### Public
+The format of the `public` field is expected to be a [vCard](https://en.wikipedia.org/wiki/VCard):
 ```js
-private: {
-  comment: "some comment",
-  arch: true
+vcard: {
+  fn: "John Doe", // string, formatted name
+  n: {
+	surname: "Miner", // last of family name
+    given: "Coal", // first or given name
+    additional: "Diamond", // additional name, such as middle name or patronymic or nickname.
+    prefix: "Dr.", // prefix, such as homnorary title or gender designation.
+    suffix: "Jr.", // suffix, such as 'Jr' or 'II'
+  }, // object, user's structured name'
+  org: "Most Evil Corp", // string, name of the organization the user belongs to.
+  title: "CEO", // string, job title
+  tel: [
+    {
+	  type: "HOME", // string, optional designation
+      uri: "tel:+17025551234" // string, phone number
+	}, ...
+  ], // array of objects, list of phone numbers associated with the user 
+  email: [
+    {
+	  type: "WORK", // string, optional designation
+      uri: "email:alice@example.com", // string, email address
+	}, ...
+  ], // array of objects, list of user's email addresses
+  impp: [
+	{
+	  type: "OTHER",
+      uri: "tinode:usrRkDVe0PYDOo", // string, email address
+	}, ...
+  ], // array of objects, list of user's IM handles
+  photo: {
+	type: "jpeg", // image type
+	data: "..." // base64-encoded binary image data
+  } // object, avatar photo. Java does not have a useful bitmap class, so keeping it as bits here.
 }
 ```
 
-Currently the following fields are defined:
- * `comment`: user comment about a topic or other user.
- * `arch`: boolean value indicating that the topic is archived by the user, i.e. should not be shown in the UI with other non-archived topics.
+### Private
+
+The format of the `private` field is expected to be a dictionary. The following fields are currently defined:
+```js
+private: {
+  comment: "some comment", // string, optional user comment about a topic or other user
+  arch: true // boolean value indicating that the topic is archived by the user, i.e. should not be shown in the UI with other non-archived topics.
+}
+```
+
+Although it's not yet enforced, custom fields should start with `x-`, e.g. `x-example: "abc"`. The fields should contain primitive types only, i.e. string, boolean, number, null.
 
 
 ## Format of Content
