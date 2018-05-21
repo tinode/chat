@@ -37,13 +37,13 @@ Server-issued message IDs are base-10 sequential numbers starting at 1. They gua
 
 ## Connecting to the server
 
-Client establishes a connection to the server over HTTP. Server offers two end points:
+Client establishes a connection to the server over HTTP(S). Server offers two end points:
  * `/v0/channels` for websocket connections
  * `/v0/channels/lp` for long polling
 
-`v0` denotes API version (currently zero). Every HTTP request must include the API key. It may be included in the URL as `...?apikey=<YOUR_API_KEY>`, in the request body as `apikey=<YOUR_API_KEY>`, or in the HTTP header `X-Tinode-APIKey: <YOUR_API_KEY>`.
+`v0` denotes API version (currently zero). Every HTTP(S) request must include the API key. It may be included in the URL as `...?apikey=<YOUR_API_KEY>`, in the request body as `apikey=<YOUR_API_KEY>`, or in the HTTP header `X-Tinode-APIKey: <YOUR_API_KEY>`. A default key is included in every demo app for convenience. Generate your own key using [`keygen` utility](../keygen).
 
-Once the connection is opened, the client must issue a `{hi}` message to the server. Server responds with a `{ctrl}` message which maybe an error message. The `params` field of the response contains server's protocol version: `"params":{"ver":"0.7"}`. `params` may include other values.
+Once the connection is opened, the client must issue a `{hi}` message to the server. Server responds with a `{ctrl}` message which maybe an error message. The `params` field of the response contains server's protocol version `"params":{"ver":"0.15"}` and may include other values.
 
 ### Websocket
 
@@ -835,35 +835,35 @@ The format of the `public` field is expected to be a [vCard](https://en.wikipedi
 vcard: {
   fn: "John Doe", // string, formatted name
   n: {
-	surname: "Miner", // last of family name
+    surname: "Miner", // last of family name
     given: "Coal", // first or given name
     additional: "Diamond", // additional name, such as middle name or patronymic or nickname.
     prefix: "Dr.", // prefix, such as homnorary title or gender designation.
     suffix: "Jr.", // suffix, such as 'Jr' or 'II'
-  }, // object, user's structured name'
+  }, // object, user's structured name
   org: "Most Evil Corp", // string, name of the organization the user belongs to.
   title: "CEO", // string, job title
   tel: [
     {
-	  type: "HOME", // string, optional designation
+      type: "HOME", // string, optional designation
       uri: "tel:+17025551234" // string, phone number
-	}, ...
+    }, ...
   ], // array of objects, list of phone numbers associated with the user 
   email: [
     {
-	  type: "WORK", // string, optional designation
+      type: "WORK", // string, optional designation
       uri: "email:alice@example.com", // string, email address
-	}, ...
+    }, ...
   ], // array of objects, list of user's email addresses
   impp: [
-	{
-	  type: "OTHER",
+    {
+      type: "OTHER",
       uri: "tinode:usrRkDVe0PYDOo", // string, email address
-	}, ...
+    }, ...
   ], // array of objects, list of user's IM handles
   photo: {
-	type: "jpeg", // image type
-	data: "..." // base64-encoded binary image data
+    type: "jpeg", // image type
+    data: "..." // base64-encoded binary image data
   } // object, avatar photo. Java does not have a useful bitmap class, so keeping it as bits here.
 }
 ```
