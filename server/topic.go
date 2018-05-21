@@ -1450,6 +1450,13 @@ func (t *Topic) replyGetSub(sess *Session, id string, req *MsgGetOpts) error {
 	var isSharer bool
 
 	if t.cat == types.TopicCatMe {
+		if req != nil {
+			// If topic is provided, it could be in the form of user ID 'usrAbCd'.
+			// Convert it to P2P topic name.
+			if uid2 := types.ParseUserId(req.Topic); !uid2.IsZero() {
+				req.Topic = uid2.P2PName(sess.uid)
+			}
+		}
 		// Fetch user's subscriptions, with Topic.Public denormalized into subscription.
 		if ifModified.IsZero() {
 			// No cache management. Skip deleted subscriptions.
