@@ -884,5 +884,7 @@ Although it's not yet enforced, custom fields should start with `x-`, e.g. `x-ex
 ## Format of Content
 
 Format of `{pub}` and `{data}` `content` field is application-defined and as such the server does not enforce any particular structure of the field. At the same time, client software should use the same format for interoperability reasons. Currently two types of `content` are supported:
- * Plain string
- * Drafty
+ * Plain text
+ * [Drafty](./drafty.md)
+
+If Drafty is used, message header `"head":{"mime":"text/x-drafty"}` must be set.
