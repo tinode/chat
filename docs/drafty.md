@@ -58,8 +58,9 @@ If key is provided, it's a 0-based index into the `ent` field which contains an 
  * `EX`: file attachment
 
 Examples:
- * `{"at": 8, "len": 4, "tp": "ST"}` means "apply formatting `ST` (strong/bold) to 4 characters starting at offset 8 into `txt`".
- * `{ "at":144, "len":8, "key":2 }` means "insert entity `ent[2]` into position 144, the entity spans 8 characters".
+ * `{ "at":8, "len":4, "tp":"ST"}`: apply formatting `ST` (strong/bold) to 4 characters starting at offset 8 into `txt`.
+ * `{ "at":144, "len":8, "key":2 }`: insert entity `ent[2]` into position 144, the entity spans 8 characters.
+ * `{ "at":-1, "len":0, "key":4 }`: show the `ent[4]` as a file attachment, don't apply any styling to text.
 
 ### Entities
 
@@ -90,6 +91,15 @@ The `url` could be any valid URl that the client knows how to interpret, for ins
  * `name`: optional name of the original file.
  * `size`: optional size of the file in bytes
 
+To create a message with just a single image and no text, use the following Drafty:
+```js
+{
+  txt: " ",
+  fmt: {at: 0, len: 1, key: 0},
+  ent: {tp: "IM", data: {<your image data here>}}
+}
+```
+
 #### `EX`: file attachment
 `EX` is an attachment which the client should not try to interpret. The `data` contains the following fields:
 ```js
@@ -107,6 +117,7 @@ The `url` could be any valid URl that the client knows how to interpret, for ins
 * `name`: optional name of the original file.
 * `size`: optional size of the file in bytes.
 
+To generate a message with the file attachment shown as a downloadable file, use the following format: `{ at: -1, len: 0, key: <EX entity reference> }`.
 
 #### `MN`: mention such as [@alice](#)
 Mention `data` contains a single `val` field with ID of the mentioned user:
