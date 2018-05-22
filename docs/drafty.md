@@ -58,12 +58,12 @@ If key is provided, it's a 0-based index into the `ent` field which contains an 
  * `EX`: file attachment
 
 Examples:
- * `{"at": 8, "len": 4, "tp": "ST"}` means "apply formatting `ST` (string/bold) to 4 characters starting at offset 8 into `txt`".
+ * `{"at": 8, "len": 4, "tp": "ST"}` means "apply formatting `ST` (strong/bold) to 4 characters starting at offset 8 into `txt`".
  * `{ "at":144, "len":8, "key":2 }` means "insert entity `ent[2]` into position 144, the entity spans 8 characters".
 
 ### Entities
 
-In general, an entity is text decoration with additional styling information. An entity is represented by an object with two fields: `tp` indicates type of the entity, `data` is type-dependent styling information. Unknown fields are ignored.
+In general, an entity is a text decoration which requires additional (possibly large) data. An entity is represented by an object with two fields: `tp` indicates type of the entity, `data` is type-dependent styling information. Unknown fields are ignored.
 
 #### `LN`: link (URL)
 `LN` is an URL. The `data` contains a single `url` field:
@@ -77,7 +77,7 @@ The `url` could be any valid URl that the client knows how to interpret, for ins
   "tp": "IM",
   "data": {
     "mime": "image/png",
-    "val": "iVBORw0KGgoA...==",
+    "val": "Rt53jUU...iVBORw0KGgoA==",
     "width": 512,
     "height": 512,
     "name": "sample_image.png"
@@ -109,7 +109,7 @@ The `url` could be any valid URl that the client knows how to interpret, for ins
 
 
 #### `MN`: mention such as [@alice](#)
-Mention `data` contains a single `val` field with address of the mentioned user:
+Mention `data` contains a single `val` field with ID of the mentioned user:
 `{ "tp":"MN", "data":{ "val":"usrFsk73jYRR" } }`
 
 #### `HT`: hashtag, e.g. [#tinode](#)
