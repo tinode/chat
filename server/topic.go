@@ -445,6 +445,11 @@ func (t *Topic) run(hub *Hub) {
 						if !(pud.modeGiven & pud.modeWant).IsReader() {
 							continue
 						}
+
+						// Don't send key presses from one user's session to the other sessions of the same user.
+						if msg.Info != nil && msg.Info.What == "kp" && msg.Info.From == sess.uid.UserId() {
+							continue
+						}
 					}
 
 					if t.cat == types.TopicCatP2P {
