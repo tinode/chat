@@ -22,9 +22,6 @@ fi
 
 dbtags=( mysql rethinkdb )
 
-# Read dockerhub login/password from a separate file
-source .dockerhub
-
 # Build an images for various DB backends
 for dbtag in "${dbtags[@]}"
 do
