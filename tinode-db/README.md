@@ -1,30 +1,25 @@
-# Utility to Create `tinode` DB in a local RethinkDB Cluster
+# Utility to Create and initialize `tinode` DB in a RethinkDB or MySQL
 
-Build the package:
 
-`go build -tags rethinkdb` or `go build -i -tags rethinkdb` to automatically install missing dependencies.
+## Build the package:
 
-Then run from the command line.
+ - **RethinkDB**
+  `go build -tags rethinkdb` or `go build -i -tags rethinkdb` to automatically install missing dependencies.
+
+ - **MySQL**
+  `go build -tags mysql` or `go build -i -tags mysql` to automatically install missing dependencies.
+
+
+## Run
+
+Run from the command line.
 
 `tinode-db [parameters]`
 
 Parameters:
  - `--reset`: delete `tinode` database if one exists, then re-create it in a blank state;
- - `--data=FILENAME`: fill `tinode` database with sample data from the provided file
- - `--config=FILENAME`: load configuration from FILENAME. Example config:
-```js
-{
-	"store_config": {
-		"adapter": "rethinkdb",
-		"worker_id": 1,
-		"uid_key": "la6YsO+bNX/+XIkOqc5Svw==",
-		"adapter_config": {
-			"database": "tinode",
-			"addresses": "localhost:28015"
-		}
-	}
-}
- ```
+ - `--data=FILENAME`: fill `tinode` database with sample data from the provided file. See [data.json](data.json).
+ - `--config=FILENAME`: load configuration from FILENAME. Example config is included as [tinode.conf](tinode.conf).
  
 RethinkDB adapter uses [snowflake](http://github.com/tinode/snowflake/) to generate object IDs. The `worker_id` and `uid_key` parameters are used to initialize snowflake and only used when sample data is loaded.
   - `worker_id` is the snowflake ID of the host running this utility, integer in the range 0 - 1023

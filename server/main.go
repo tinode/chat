@@ -360,6 +360,8 @@ func main() {
 	http.HandleFunc("/v0/channels", serveWebSocket)
 	// Handle long polling clients. Enable compression.
 	http.Handle("/v0/channels/lp", gzip.CompressHandler(http.HandlerFunc(serveLongPoll)))
+	// Handle uploads of large files.
+	http.Handle("/v0/blob/upload", gzip.CompressHandler(http.HandlerFunc(largeFileUpload)))
 	// Serve json-formatted 404 for all other URLs
 	http.HandleFunc("/", serve404)
 

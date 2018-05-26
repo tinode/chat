@@ -2,8 +2,9 @@
  *
  *  Description :
  *
- *    Handler of large file uploads. Default handler saves files to the
- *    file system at the configured endpoint.
+ *    Handler of large file uploads/downloads.
+ *    Default upload handler saves files to the file system at the configured
+ *    mount point.
  *
  *****************************************************************************/
 
