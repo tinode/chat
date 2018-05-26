@@ -189,10 +189,7 @@ func (authenticator) GenSecret(rec *auth.Rec) ([]byte, time.Time, error) {
 }
 
 func (authenticator) DelRecords(uid types.Uid) error {
-	if err := store.Users.DelAuthRecords(uid, "basic"); err != nil {
-		return err
-	}
-	return nil
+	return store.Users.DelAuthRecords(uid, "basic")
 }
 
 func init() {

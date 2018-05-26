@@ -264,7 +264,7 @@ func main() {
 	// List of tag namespaces for user discovery which cannot be changed directly
 	// by the client, e.g. 'email' or 'tel'.
 	globals.immutableTagNS = make(map[string]bool, len(config.Validator))
-	for tag, _ := range config.Validator {
+	for tag := range config.Validator {
 		if strings.Index(tag, ":") >= 0 {
 			panic("acc_validation names should not contain character ':'")
 		}

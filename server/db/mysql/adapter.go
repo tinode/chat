@@ -37,7 +37,7 @@ const (
 
 type configType struct {
 	DSN    string `json:"dsn,omitempty"`
-	DBName string `json:database,omitempty"`
+	DBName string `json:"database,omitempty"`
 }
 
 const (

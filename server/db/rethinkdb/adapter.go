@@ -1181,8 +1181,9 @@ func (a *adapter) MessageGetDeleted(topic string, forUser t.Uid, opts *t.QueryOp
 }
 
 // MessageDeleteList deletes messages in the given topic with seqIds from the list
-func (a *adapter) MessageDeleteList(topic string, toDel *t.DelMessage) (err error) {
+func (a *adapter) MessageDeleteList(topic string, toDel *t.DelMessage) error {
 	var indexVals []interface{}
+	var err error
 
 	query := rdb.DB(a.dbName).Table("messages")
 	if toDel == nil {
@@ -1196,7 +1197,7 @@ func (a *adapter) MessageDeleteList(topic string, toDel *t.DelMessage) (err erro
 		toDel.SetUid(store.GetUid())
 
 		// Start with making a log entry
-		_, err := rdb.DB(a.dbName).Table("dellog").Insert(toDel).RunWrite(a.conn)
+		_, err = rdb.DB(a.dbName).Table("dellog").Insert(toDel).RunWrite(a.conn)
 		if err != nil {
 			return err
 		}
