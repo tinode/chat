@@ -6,9 +6,10 @@ import (
 	"github.com/tinode/chat/server/store/types"
 )
 
+// Level is the type for authentication levels.
 type Level int
 
-// Authentication levels.
+// Authentication levels
 const (
 	// LevelNone is undefined/not authenticated
 	LevelNone Level = iota * 10
@@ -36,6 +37,7 @@ func (a Level) String() string {
 	}
 }
 
+// ParseAuthLevel parses authentication level from a string.
 func ParseAuthLevel(name string) Level {
 	switch name {
 	case "anon":
@@ -49,12 +51,15 @@ func ParseAuthLevel(name string) Level {
 	}
 }
 
+// Feature is a bitmap of authenticated features, such as validated/not validated.
 type Feature uint16
 
 const (
+	// Validated bit is set if user's credentials are already validated.
 	Validated Feature = 1 << iota
 )
 
+// Rec is an authentication record.
 type Rec struct {
 	// User ID
 	Uid types.Uid
