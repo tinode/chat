@@ -160,7 +160,7 @@ func (v *validator) Delete(user t.Uid) error {
 	return nil
 }
 
-// This is a basic SMTP sender which connectes to Gmail using login/password.
+// This is a basic SMTP sender which connects to Gmail using login/password.
 // -
 // See here how to send email from Amazon SES:
 // https://docs.aws.amazon.com/sdk-for-go/api/service/ses/#example_SES_SendEmail_shared00
@@ -168,15 +168,12 @@ func (v *validator) Delete(user t.Uid) error {
 // Here are instructions for Google cloud:
 // https://cloud.google.com/appengine/docs/standard/go/mail/sending-receiving-with-mail-api
 func (v *validator) send(to string, subj string, body string) error {
-	if err := smtp.SendMail(v.SMTPAddr+":"+v.SMTPPort, v.auth, v.SendFrom, []string{to},
+	return smtp.SendMail(v.SMTPAddr+":"+v.SMTPPort, v.auth, v.SendFrom, []string{to},
 		[]byte("To: "+to+
 			"\nSubject: "+
 			subj+
 			"\nMIME-version: 1.0;\nContent-Type: text/html; charset=\"UTF-8\";\n\n"+
-			body)); err != nil {
-		return err
-	}
-	return nil
+			body))
 }
 
 func init() {

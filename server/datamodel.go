@@ -641,6 +641,7 @@ func ErrPermissionDenied(id, topic string, ts time.Time) *ServerComMessage {
 		Timestamp: ts}}
 }
 
+// ErrAPIKeyRequired  valid API key is required
 func ErrAPIKeyRequired(ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Code:      http.StatusForbidden,

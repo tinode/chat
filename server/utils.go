@@ -420,11 +420,11 @@ func parseSearchQuery(query string) ([]string, []string, error) {
 			if newctx == "" {
 				if len(out) == 0 {
 					return nil, nil, errors.New("operator out of place " + ctx.val)
-				} else {
-					out[len(out)-1].op = ctx.val
-					ctx.val = ""
-					ctx.start = i
 				}
+				out[len(out)-1].op = ctx.val
+				ctx.val = ""
+				ctx.start = i
+
 			} else if ctx.val == "or" && newctx == "or" {
 				return nil, nil, errors.New("invalid operator sequence " + ctx.val)
 			} else if newctx == "or" {

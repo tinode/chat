@@ -10,8 +10,11 @@ import (
 	"time"
 )
 
+// StoreError satisfies Error interface but allows constant values for
+// direct comparison.
 type StoreError string
 
+// Error is required by error interface.
 func (s StoreError) Error() string {
 	return string(s)
 }
@@ -35,7 +38,7 @@ const (
 	ErrCredentials = StoreError("credentials")
 	// ErrNotFound means the objevy was not found
 	ErrNotFound = StoreError("not found")
-	// 	ErrPermissionDenied means the operation is not permitted
+	// ErrPermissionDenied means the operation is not permitted
 	ErrPermissionDenied = StoreError("denied")
 )
 
@@ -282,7 +285,7 @@ func (h *ObjHeader) IsDeleted() bool {
 	return h.DeletedAt != nil
 }
 
-// TagSlice is defined so Scanner and Valuer can be attached to it.
+// StringSlice is defined so Scanner and Valuer can be attached to it.
 type StringSlice []string
 
 // Scan implements sql.Scanner interface.
@@ -565,7 +568,7 @@ func (da DefaultAccess) Value() (driver.Value, error) {
 	return json.Marshal(da)
 }
 
-// Credential
+// Credential hold data needed to validate and check validity of a credential like email or phone.
 type Credential struct {
 	ObjHeader
 	// Credential owner
@@ -646,12 +649,12 @@ func (s *Subscription) GetWith() string {
 	return s.with
 }
 
-// GetLastSeen returns lastSeen.
+// GetTouchedAt returns touchedAt.
 func (s *Subscription) GetTouchedAt() *time.Time {
 	return s.touchedAt
 }
 
-// GetSeqId returns seqId.
+// SetTouchedAt sets the value of touchedAt.
 func (s *Subscription) SetTouchedAt(touchedAt *time.Time) {
 	s.touchedAt = touchedAt
 }
@@ -807,6 +810,7 @@ type SoftDelete struct {
 	DelId int
 }
 
+// MessageHeaders is needed to attach Scan() to.
 type MessageHeaders map[string]string
 
 // Scan implements sql.Scanner interface.

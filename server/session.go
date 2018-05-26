@@ -738,7 +738,7 @@ func (s *Session) getValidatedGred(uid types.Uid, authLvl auth.Level, creds []Ms
 		return nil, nil
 	}
 
-	allCred, err := store.Users.GetAllCred(uid, "")
+	allCred, err := store.Users.GetAllCred(uid)
 	if err != nil {
 		return nil, err
 	}
