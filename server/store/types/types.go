@@ -38,7 +38,7 @@ const (
 	ErrCredentials = StoreError("credentials")
 	// ErrNotFound means the objevy was not found
 	ErrNotFound = StoreError("not found")
-	// 	ErrPermissionDenied means the operation is not permitted
+	// ErrPermissionDenied means the operation is not permitted
 	ErrPermissionDenied = StoreError("denied")
 )
 
