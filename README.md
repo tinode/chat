@@ -51,7 +51,7 @@ A text-only [command line client](./tn-cli) implements every possible command.
 * Sharded clustering with failover.
 * Persistent message store, paginated message history.
 * Javascript bindings with no external dependencies.
-* Java bindings (dependencies: [jackson](https://github.com/FasterXML/jackson), [nv-websocket-client](https://github.com/TakahikoKawasaki/nv-websocket-client)). Suitable for Android but with no Android SDK dependencies.
+* Java bindings (dependencies: [Jackson](https://github.com/FasterXML/jackson), [Java-Websocket](https://github.com/TooTallNate/Java-WebSocket)). Suitable for Android but with no Android SDK dependencies.
 * Websocket, long polling, and [gRPC](https://grpc.io/) over TCP transports.
 * JSON or [protobuf version 3](https://developers.google.com/protocol-buffers/) wire protocols.
 * [TLS](https://en.wikipedia.org/wiki/Transport_Layer_Security) with [Letsenrypt](https://letsencrypt.org/) or conventional certificates.
