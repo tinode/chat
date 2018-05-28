@@ -17,6 +17,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"log"
@@ -51,12 +52,26 @@ func largeFileUpload(wrt http.ResponseWriter, req *http.Request) {
 
 	// Check authorization: either the token or SID must be present
 	var uid types.Uid
-	token := req.FormValue("token")
-	if token != "" {
-		authhdl := store.GetAuthHandler("token")
+	authMethod := req.FormValue("auth")
+	secret := req.FormValue("secret")
+	if authMethod != "" {
+		decodedSecret := make([]byte, base64.StdEncoding.DecodedLen(len(secret)))
+		if _, err := base64.StdEncoding.Decode(decodedSecret, []byte(secret)); err != nil {
+			wrt.WriteHeader(http.StatusBadRequest)
+			enc.Encode(ErrMalformed("", "", now))
+			return
+		}
+		authhdl := store.GetAuthHandler(authMethod)
 		if authhdl != nil {
-			rec, err := authhdl.Authenticate([]byte(token))
-			uid = rec.Uid
+			log.Println("Secret", secret)
+			if rec, err := authhdl.Authenticate(decodedSecret); err == nil {
+				uid = rec.Uid
+			} else {
+				log.Println("Auth failed", err)
+				wrt.WriteHeader(http.StatusUnauthorized)
+				enc.Encode(decodeStoreError(err, "", "", now, nil))
+				return
+			}
 		} else {
 			log.Println("fileUpload: token is present but token auth handler is not found")
 		}

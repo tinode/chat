@@ -14,11 +14,6 @@ import (
 	"github.com/tinode/chat/server/store/types"
 )
 
-const (
-	// Minimum length of HMAC salt in bytes.
-	tokenMinHmacLength = 32
-)
-
 // authenticator is a singleton instance of the authenticator.
 type authenticator struct {
 	hmacSalt     []byte
@@ -27,7 +22,7 @@ type authenticator struct {
 }
 
 // tokenLayout defines positioning of various bytes in token.
-// [8:UID][4:expires][2:authLevel][2:serial-number][4:feature-bits][32:signature]
+// [8:UID][4:expires][2:authLevel][2:serial-number][2:feature-bits][32:signature] = 50 bytes
 type tokenLayout struct {
 	// User ID.
 	Uid uint64
@@ -60,7 +55,7 @@ func (ta *authenticator) Init(jsonconf string) error {
 		return errors.New("auth_token: failed to parse config: " + err.Error() + "(" + jsonconf + ")")
 	}
 
-	if len(config.Key) < tokenMinHmacLength {
+	if len(config.Key) < sha256.Size {
 		return errors.New("auth_token: the key is missing or too short")
 	}
 	if config.ExpireIn <= 0 {
@@ -69,7 +64,6 @@ func (ta *authenticator) Init(jsonconf string) error {
 
 	ta.hmacSalt = config.Key
 	ta.lifetime = time.Duration(config.ExpireIn) * time.Second
-
 	ta.serialNumber = config.SerialNum
 
 	return nil
@@ -88,6 +82,12 @@ func (authenticator) UpdateRecord(rec *auth.Rec, secret []byte) error {
 // Authenticate checks validity of provided token.
 func (ta *authenticator) Authenticate(token []byte) (*auth.Rec, error) {
 	var tl tokenLayout
+	dataSize := binary.Size(&tl)
+	if len(token) < dataSize+sha256.Size {
+		// Token is too short
+		return nil, types.ErrMalformed
+	}
+
 	buf := bytes.NewBuffer(token)
 	err := binary.Read(buf, binary.LittleEndian, &tl)
 	if err != nil {
@@ -99,7 +99,7 @@ func (ta *authenticator) Authenticate(token []byte) (*auth.Rec, error) {
 
 	hasher := hmac.New(sha256.New, ta.hmacSalt)
 	hasher.Write(hbuf.Bytes())
-	if !hmac.Equal(token[len(token)-buf.Len():], hasher.Sum(nil)) {
+	if !hmac.Equal(token[dataSize:dataSize+sha256.Size], hasher.Sum(nil)) {
 		return nil, types.ErrFailed
 	}
 
