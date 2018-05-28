@@ -960,3 +960,20 @@ type DeviceDef struct {
 	// Device language, ISO code
 	Lang string
 }
+
+// FileDef is a stored record of a file upload
+type FileDef struct {
+	ObjHeader
+	// Status of uload
+	Status int
+	// Name of the file.
+	Name string
+	// Type of the file.
+	MimeType string
+	// Size of the complete file in bytes.
+	Size int64
+	// Number of bytes stored (for resumable uploads)
+	StoredBytes int64
+	// Internal file location, i.e. path on disk or an S3 blob address.
+	Location string
+}

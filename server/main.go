@@ -129,6 +129,12 @@ var globals struct {
 	maxSubscriberCount int
 	// Maximum number of indexable tags.
 	maxTagCount int
+
+	// Maximum size of an uploaded file
+	maxUploadSize int64
+	// Location of uploaded files on disk
+	// FIXME: this needs to be abstracted out
+	fileUploadLocation string
 }
 
 type validatorConfig struct {
@@ -361,7 +367,7 @@ func main() {
 	// Handle long polling clients. Enable compression.
 	http.Handle("/v0/channels/lp", gzip.CompressHandler(http.HandlerFunc(serveLongPoll)))
 	// Handle uploads of large files.
-	http.Handle("/v0/blob/upload", gzip.CompressHandler(http.HandlerFunc(largeFileUpload)))
+	http.Handle("/v0/file/upload", http.HandlerFunc(largeFileUpload))
 	// Serve json-formatted 404 for all other URLs
 	http.HandleFunc("/", serve404)
 
@@ -378,12 +384,4 @@ func main() {
 	if err := listenAndServe(config.Listen, *tlsEnabled, string(config.TLS), signalHandler()); err != nil {
 		log.Fatal(err)
 	}
-}
-
-func getAPIKey(req *http.Request) string {
-	apikey := req.FormValue("apikey")
-	if apikey == "" {
-		apikey = req.Header.Get("X-Tinode-APIKey")
-	}
-	return apikey
 }

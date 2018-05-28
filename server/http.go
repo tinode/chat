@@ -212,3 +212,12 @@ func tlsRedirect(toPort string) http.HandlerFunc {
 		http.Redirect(wrt, req, target, http.StatusTemporaryRedirect)
 	}
 }
+
+// Get API key from an HTTP request.
+func getAPIKey(req *http.Request) string {
+	apikey := req.FormValue("apikey")
+	if apikey == "" {
+		apikey = req.Header.Get("X-Tinode-APIKey")
+	}
+	return apikey
+}

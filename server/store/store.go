@@ -597,3 +597,39 @@ func (DeviceMapper) GetAll(uid ...types.Uid) (map[types.Uid][]types.DeviceDef, i
 func (DeviceMapper) Delete(uid types.Uid, deviceID string) error {
 	return adp.DeviceDelete(uid, deviceID)
 }
+
+// FileMapper is a struct to map methods used for file handling.
+type FileMapper struct{}
+
+// Files is an instance of FileMapper to be used for handling file uploads.
+var Files FileMapper
+
+// StartUpload records that the given user initiated a file upload
+func (FileMapper) StartUpload() error {
+	return nil
+}
+
+// FinishUpload marks started upload as successfully finished.
+func (FileMapper) FinishUpload() error {
+	return nil
+}
+
+// CancelUpload cancels started upload.
+func (FileMapper) CancelUpload() error {
+	return nil
+}
+
+// GetForUser fetches all file records for a given user
+func (FileMapper) GetForUser(uid types.Uid) ([]types.FileDef, error) {
+	return nil, nil
+}
+
+// Get fetches a file record for a unique file id.
+func (FileMapper) Get(fid string) (*types.FileDef, error) {
+	return nil, nil
+}
+
+// Delete file record by unique ID.
+func (FileMapper) Delete(fid string) error {
+	return nil
+}

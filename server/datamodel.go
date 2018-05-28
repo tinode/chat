@@ -649,6 +649,14 @@ func ErrAPIKeyRequired(ts time.Time) *ServerComMessage {
 		Timestamp: ts}}
 }
 
+// ErrSessionNotFound  valid API key is required
+func ErrSessionNotFound(ts time.Time) *ServerComMessage {
+	return &ServerComMessage{Ctrl: &MsgServerCtrl{
+		Code:      http.StatusForbidden,
+		Text:      "invalid or expired session",
+		Timestamp: ts}}
+}
+
 // ErrTopicNotFound topic is not found.
 func ErrTopicNotFound(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
