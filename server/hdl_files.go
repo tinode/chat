@@ -35,18 +35,21 @@ import (
 func largeFileUpload(wrt http.ResponseWriter, req *http.Request) {
 	now := time.Now().UTC().Round(time.Millisecond)
 
+	// Check if this is a POST request
+	if req.Method != http.MethodPost {
+		wrt.WriteHeader(http.StatusMethodNotAllowed)
+		enc.Encode(ErrOperationNotAllowed("", "", now))
+		return
+	}
+
+	// Limit the size of the uploaded file.
+	req.Body = http.MaxBytesReader(wrt, req.Body, globals.maxUploadSize)
+
 	// Check for API key presence
 	enc := json.NewEncoder(wrt)
 	if isValid, _ := checkAPIKey(getAPIKey(req)); !isValid {
 		wrt.WriteHeader(http.StatusForbidden)
 		enc.Encode(ErrAPIKeyRequired(now))
-		return
-	}
-
-	// Check if this is a POST request
-	if req.Method != http.MethodPost {
-		wrt.WriteHeader(http.StatusMethodNotAllowed)
-		enc.Encode(ErrOperationNotAllowed("", "", now))
 		return
 	}
 
@@ -99,10 +102,13 @@ func largeFileUpload(wrt http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// FIXME: The following code needs to be replaced in production with calls to S3, etc
+	// FIXME: The following code needs to be replaced in production with calls to S3,
+	// GCS, ABS, Minio, Ceph, etc.
 
-	// Generate unique file name.
-	filename := store.GetUidString()
+	// Generate a unique file name and attach it to path.
+	// FIXME: create two-three levels of nested directories. Dumping thousands of files in a
+	// single dir will not perform well.
+	filename := filepath.Join(globals.fileUploadLocation, store.GetUidString())
 	outfile, err := os.Create(filepath.Join(globals.fileUploadLocation, filename))
 	if err != nil {
 		wrt.WriteHeader(http.StatusInternalServerError)

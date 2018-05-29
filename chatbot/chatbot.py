@@ -5,6 +5,7 @@ import base64
 from concurrent import futures
 import json
 import os
+import platform
 try:
     import Queue as queue
 except ImportError:
@@ -22,7 +23,8 @@ import model_pb2 as pb
 import model_pb2_grpc as pbx
 
 APP_NAME = "Tino-chatbot"
-VERSION = "0.15"
+APP_VERSION = "1.0"
+LIB_VERSION = "0.15"
 
 # Dictionary wich contains lambdas to be executed when server response is received
 onCompletion = {}
@@ -106,8 +108,9 @@ def client_reset():
 
 def hello():
     tid = next_id()
-    return pb.ClientMsg(hi=pb.ClientHi(id=tid, user_agent=APP_NAME + "/" + VERSION + " gRPC-python",
-        ver=VERSION, lang="EN"))
+    return pb.ClientMsg(hi=pb.ClientHi(id=tid, user_agent=APP_NAME + "/" + APP_VERSION + " (" + 
+        platform.system() + "/" + platform.release() + "); gRPC-python/" + LIB_VERSION,
+        ver=LIB_VERSION, lang="EN"))
 
 def login(cookie_file_name, scheme, secret):
     tid = next_id()
@@ -280,7 +283,7 @@ def run(args):
         # Setup closure for graceful termination
         def exit_gracefully(signo, stack_frame):
             print("Terminated with signal", signo)
-            server.stop(None)
+            server.stop(0)
             client.cancel()
             sys.exit(0)
 

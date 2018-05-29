@@ -172,6 +172,10 @@ type configType struct {
 	MaskedTagNamespaces []string `json:"masked_tags"`
 	// Maximum number of indexable tags
 	MaxTagCount int `json:"max_tag_count"`
+	// Maximum size of an uploaded file. No default value. Missing value or zero disables file uploads.
+	MaxFileUpload int64 `json:"max_file_upload"`
+	// Directory for uploaded files
+	FileUploadDir string `json:"file_uploads_dir"`
 
 	// Configs for subsystems
 	Cluster json.RawMessage `json:"cluster_config"`
@@ -302,6 +306,9 @@ func main() {
 		globals.maxTagCount = defaultMaxTagCount
 	}
 
+	globals.maxUploadSize = config.MaxFileUpload
+	globals.fileUploadLocation = config.FileUploadDir
+
 	err = push.Init(string(config.Push))
 	if err != nil {
 		log.Fatal("Failed to initialize push notifications: ", err)
@@ -366,8 +373,10 @@ func main() {
 	http.HandleFunc("/v0/channels", serveWebSocket)
 	// Handle long polling clients. Enable compression.
 	http.Handle("/v0/channels/lp", gzip.CompressHandler(http.HandlerFunc(serveLongPoll)))
-	// Handle uploads of large files.
-	http.Handle("/v0/file/upload", http.HandlerFunc(largeFileUpload))
+	if globals.maxUploadSize > 0 {
+		// Handle uploads of large files.
+		http.Handle("/v0/file/upload", http.HandlerFunc(largeFileUpload))
+	}
 	// Serve json-formatted 404 for all other URLs
 	http.HandleFunc("/", serve404)
 
