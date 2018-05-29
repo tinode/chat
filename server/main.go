@@ -233,9 +233,9 @@ func main() {
 
 	for name, jsconf := range config.Auth {
 		if authhdl := store.GetAuthHandler(name); authhdl == nil {
-			panic("Config provided for unknown authentication scheme '" + name + "'")
+			log.Fatal("Config provided for unknown authentication scheme '" + name + "'")
 		} else if err := authhdl.Init(string(jsconf)); err != nil {
-			panic(err)
+			log.Fatal("Failed to init auth scheme", err)
 		}
 	}
 
@@ -259,9 +259,9 @@ func main() {
 		}
 
 		if val := store.GetValidator(name); val == nil {
-			panic("Config provided for an unknown validator '" + name + "'")
+			log.Fatal("Config provided for an unknown validator '" + name + "'")
 		} else if err := val.Init(string(vconf.Config)); err != nil {
-			panic(err)
+			log.Fatal("Failed to init validator '"+name+"':", err)
 		}
 		if globals.validators == nil {
 			globals.validators = make(map[string]credValidator)
@@ -276,7 +276,7 @@ func main() {
 	globals.immutableTagNS = make(map[string]bool, len(config.Validator))
 	for tag := range config.Validator {
 		if strings.Index(tag, ":") >= 0 {
-			panic("acc_validation names should not contain character ':'")
+			log.Fatal("acc_validation names should not contain character ':'")
 		}
 		globals.immutableTagNS[tag] = true
 	}
@@ -285,7 +285,7 @@ func main() {
 	globals.maskedTagNS = make(map[string]bool, len(config.MaskedTagNamespaces))
 	for _, tag := range config.MaskedTagNamespaces {
 		if strings.Index(tag, ":") >= 0 {
-			panic("masked_tags namespaces should not contain character ':'")
+			log.Fatal("masked_tags namespaces should not contain character ':'")
 		}
 		globals.maskedTagNS[tag] = true
 	}
@@ -306,12 +306,18 @@ func main() {
 		globals.maxTagCount = defaultMaxTagCount
 	}
 
-	globals.maxUploadSize = config.MaxFileUpload
-	globals.fileUploadLocation = config.FileUploadDir
+	if config.MaxFileUpload > 0 {
+		globals.maxUploadSize = config.MaxFileUpload
+		globals.fileUploadLocation = config.FileUploadDir
+		// Make sure the upload directory exists.
+		if err := os.MkdirAll(globals.fileUploadLocation, 0777); err != nil {
+			log.Fatal("Failed to create or access file upload directory", err)
+		}
+	}
 
 	err = push.Init(string(config.Push))
 	if err != nil {
-		log.Fatal("Failed to initialize push notifications: ", err)
+		log.Fatal("Failed to initialize push notifications:", err)
 	}
 	defer func() {
 		push.Stop()
@@ -339,7 +345,7 @@ func main() {
 		if *staticPath == defaultStaticPath {
 			path, err := os.Getwd()
 			if err != nil {
-				log.Fatal(err)
+				log.Fatal("Failed to get current directory:", err)
 			}
 			// FileServer expects "/" path separator even on Windows.
 			*staticPath = path + "/" + defaultStaticPath
