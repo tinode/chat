@@ -525,6 +525,8 @@ var authHandlers map[string]auth.AuthHandler
 
 // RegisterAuthScheme registers an authentication scheme handler.
 func RegisterAuthScheme(name string, handler auth.AuthHandler) {
+	name = strings.ToLower(name)
+
 	if authHandlers == nil {
 		authHandlers = make(map[string]auth.AuthHandler)
 	}
@@ -540,7 +542,7 @@ func RegisterAuthScheme(name string, handler auth.AuthHandler) {
 
 // GetAuthHandler returns an auth handler by name.
 func GetAuthHandler(name string) auth.AuthHandler {
-	return authHandlers[name]
+	return authHandlers[strings.ToLower(name)]
 }
 
 // Registered authentication handlers.
@@ -548,6 +550,7 @@ var validators map[string]validate.Validator
 
 // RegisterValidator registers validation scheme.
 func RegisterValidator(name string, v validate.Validator) {
+	name = strings.ToLower(name)
 	if validators == nil {
 		validators = make(map[string]validate.Validator)
 	}
@@ -563,7 +566,7 @@ func RegisterValidator(name string, v validate.Validator) {
 
 // GetValidator returns registered validator by name.
 func GetValidator(name string) validate.Validator {
-	return validators[name]
+	return validators[strings.ToLower(name)]
 }
 
 // DeviceMapper is a struct to map methods used for handling device IDs, used to generate push notifications.
@@ -605,17 +608,12 @@ type FileMapper struct{}
 var Files FileMapper
 
 // StartUpload records that the given user initiated a file upload
-func (FileMapper) StartUpload() error {
+func (FileMapper) StartUpload(uid types.Uid, fd *types.FileDef) error {
 	return nil
 }
 
 // FinishUpload marks started upload as successfully finished.
-func (FileMapper) FinishUpload() error {
-	return nil
-}
-
-// CancelUpload cancels started upload.
-func (FileMapper) CancelUpload() error {
+func (FileMapper) FinishUpload(uid types.Uid, fid string, success bool) error {
 	return nil
 }
 

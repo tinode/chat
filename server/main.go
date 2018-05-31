@@ -310,6 +310,7 @@ func main() {
 		globals.maxUploadSize = config.MaxFileUpload
 		globals.fileUploadLocation = config.FileUploadDir
 		// Make sure the upload directory exists.
+		// FIXME: this needs to be abstracted out into something like upload.Init.
 		if err := os.MkdirAll(globals.fileUploadLocation, 0777); err != nil {
 			log.Fatal("Failed to create or access file upload directory", err)
 		}

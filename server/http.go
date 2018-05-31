@@ -221,3 +221,14 @@ func getAPIKey(req *http.Request) string {
 	}
 	return apikey
 }
+
+// Get authorization credentials from an HTTP request.
+func getHttpAuth(req *http.Request) (string, string) {
+	if auth := req.FormValue("auth"); auth != "" {
+		return auth, req.FormValue("secret")
+	}
+	if parts := strings.Split(req.Header.Get("Authorization"), " "); len(parts) == 2 {
+		return parts[0], parts[1]
+	}
+	return "", ""
+}

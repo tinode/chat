@@ -24,6 +24,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/tinode/chat/server/store"
@@ -34,6 +35,8 @@ import (
 // system.
 func largeFileUpload(wrt http.ResponseWriter, req *http.Request) {
 	now := time.Now().UTC().Round(time.Millisecond)
+
+	enc := json.NewEncoder(wrt)
 
 	// Check if this is a POST request
 	if req.Method != http.MethodPost {
@@ -46,7 +49,6 @@ func largeFileUpload(wrt http.ResponseWriter, req *http.Request) {
 	req.Body = http.MaxBytesReader(wrt, req.Body, globals.maxUploadSize)
 
 	// Check for API key presence
-	enc := json.NewEncoder(wrt)
 	if isValid, _ := checkAPIKey(getAPIKey(req)); !isValid {
 		wrt.WriteHeader(http.StatusForbidden)
 		enc.Encode(ErrAPIKeyRequired(now))
@@ -55,9 +57,7 @@ func largeFileUpload(wrt http.ResponseWriter, req *http.Request) {
 
 	// Check authorization: either the token or SID must be present
 	var uid types.Uid
-	authMethod := req.FormValue("auth")
-	secret := req.FormValue("secret")
-	if authMethod != "" {
+	if authMethod, secret := getHttpAuth(req); authMethod != "" {
 		decodedSecret := make([]byte, base64.StdEncoding.DecodedLen(len(secret)))
 		if _, err := base64.StdEncoding.Decode(decodedSecret, []byte(secret)); err != nil {
 			wrt.WriteHeader(http.StatusBadRequest)
@@ -66,7 +66,6 @@ func largeFileUpload(wrt http.ResponseWriter, req *http.Request) {
 		}
 		authhdl := store.GetAuthHandler(authMethod)
 		if authhdl != nil {
-			log.Println("Secret", secret)
 			if rec, err := authhdl.Authenticate(decodedSecret); err == nil {
 				uid = rec.Uid
 			} else {
@@ -93,12 +92,17 @@ func largeFileUpload(wrt http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	fname := req.FormValue("filename")
-	log.Println("Starting upload", fname)
+	log.Println("Starting upload", req.FormValue("name"))
 	file, _, err := req.FormFile("file")
 	if err != nil {
-		wrt.WriteHeader(http.StatusBadRequest)
-		enc.Encode(ErrMalformed("", "", now))
+		log.Println("Error reading file", err)
+		if strings.Contains(err.Error(), "request body too large") {
+			wrt.WriteHeader(http.StatusRequestEntityTooLarge)
+			enc.Encode(ErrTooLarge("", "", now))
+		} else {
+			wrt.WriteHeader(http.StatusBadRequest)
+			enc.Encode(ErrMalformed("", "", now))
+		}
 		return
 	}
 
@@ -106,11 +110,12 @@ func largeFileUpload(wrt http.ResponseWriter, req *http.Request) {
 	// GCS, ABS, Minio, Ceph, etc.
 
 	// Generate a unique file name and attach it to path.
-	// FIXME: create two-three levels of nested directories. Dumping thousands of files in a
-	// single dir will not perform well.
+	// FIXME: create two-three levels of nested directories. Serving from a directory with
+	// thousands of files in it will not perform well.
 	filename := filepath.Join(globals.fileUploadLocation, store.GetUidString())
-	outfile, err := os.Create(filepath.Join(globals.fileUploadLocation, filename))
+	outfile, err := os.Create(filename)
 	if err != nil {
+		log.Println("Failed to create file", filename, err)
 		wrt.WriteHeader(http.StatusInternalServerError)
 		enc.Encode(ErrUnknown("", "", now))
 		return
@@ -118,6 +123,7 @@ func largeFileUpload(wrt http.ResponseWriter, req *http.Request) {
 	defer outfile.Close()
 
 	_, err = io.Copy(outfile, file)
+	log.Println("Finished upload", filename)
 	if err != nil {
 		wrt.WriteHeader(http.StatusInternalServerError)
 		enc.Encode(ErrUnknown("", "", now))

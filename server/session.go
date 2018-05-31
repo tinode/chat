@@ -655,7 +655,6 @@ func (s *Session) login(msg *ClientComMessage) {
 
 	rec, err := handler.Authenticate(msg.Login.Secret)
 	if err != nil {
-		log.Println("auth failed", err)
 		s.queueOut(decodeStoreError(err, msg.Login.Id, "", msg.timestamp, nil))
 		return
 	}

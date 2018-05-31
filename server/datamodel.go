@@ -757,6 +757,16 @@ func ErrGone(id, topic string, ts time.Time) *ServerComMessage {
 		Timestamp: ts}}
 }
 
+// ErrTooLarge packet or request size exceeded the limit.
+func ErrTooLarge(id, topic string, ts time.Time) *ServerComMessage {
+	return &ServerComMessage{Ctrl: &MsgServerCtrl{
+		Id:        id,
+		Code:      http.StatusRequestEntityTooLarge, // 413
+		Text:      "too large",
+		Topic:     topic,
+		Timestamp: ts}}
+}
+
 // ErrPolicy request violates a policy (e.g. password is too weak or too many subscribers).
 func ErrPolicy(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
