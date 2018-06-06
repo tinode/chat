@@ -43,16 +43,16 @@ All images are available at https://hub.docker.com/r/tinode/
 
 ## Optional
 
-### Resetting the data
+### Reset data in the database
 
 If you want to reset the data in the database, shut down the Tinode container and remove it:
 ```
 $ docker stop tinode-srv && docker rm tinode-srv
 ```
-then repeat step 4 to run the image again with `--env RESET_DB=true`.
+then repeat step 4 adding `--env RESET_DB=true`.
 
 
-### Running the chatbot
+### Run the chatbot
 
 See [instructions](../chatbot/).
 
