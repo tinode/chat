@@ -9,8 +9,8 @@
  *    This module cannot handle large volume of data. I's intended only to
  *    show how it's supposed to work.
  *
- *    Use commercial services (Amazon's S3 or Google's/MSFT's equivalents),
- *    or open source Ceph or Minio.
+ *    Use commercial services (Amazon S3 or Google's/MSFT's equivalents),
+ *    or open source like Ceph or Minio.
  *
  *****************************************************************************/
 
@@ -35,13 +35,19 @@ import (
 // system.
 func largeFileUpload(wrt http.ResponseWriter, req *http.Request) {
 	now := time.Now().UTC().Round(time.Millisecond)
-
 	enc := json.NewEncoder(wrt)
+
+	writeResponse := func(msg *ServerComMessage) {
+		if msg == nil {
+			msg = ErrUnknown("", "", now)
+		}
+		wrt.WriteHeader(msg.Ctrl.Code)
+		enc.Encode(msg)
+	}
 
 	// Check if this is a POST request
 	if req.Method != http.MethodPost {
-		wrt.WriteHeader(http.StatusMethodNotAllowed)
-		enc.Encode(ErrOperationNotAllowed("", "", now))
+		writeResponse(ErrOperationNotAllowed("", "", now))
 		return
 	}
 
@@ -50,8 +56,7 @@ func largeFileUpload(wrt http.ResponseWriter, req *http.Request) {
 
 	// Check for API key presence
 	if isValid, _ := checkAPIKey(getAPIKey(req)); !isValid {
-		wrt.WriteHeader(http.StatusForbidden)
-		enc.Encode(ErrAPIKeyRequired(now))
+		writeResponse(ErrAPIKeyRequired(now))
 		return
 	}
 
@@ -60,8 +65,7 @@ func largeFileUpload(wrt http.ResponseWriter, req *http.Request) {
 	if authMethod, secret := getHttpAuth(req); authMethod != "" {
 		decodedSecret := make([]byte, base64.StdEncoding.DecodedLen(len(secret)))
 		if _, err := base64.StdEncoding.Decode(decodedSecret, []byte(secret)); err != nil {
-			wrt.WriteHeader(http.StatusBadRequest)
-			enc.Encode(ErrMalformed("", "", now))
+			writeResponse(ErrMalformed("", "", now))
 			return
 		}
 		authhdl := store.GetAuthHandler(authMethod)
@@ -69,9 +73,7 @@ func largeFileUpload(wrt http.ResponseWriter, req *http.Request) {
 			if rec, err := authhdl.Authenticate(decodedSecret); err == nil {
 				uid = rec.Uid
 			} else {
-				log.Println("Auth failed", err)
-				wrt.WriteHeader(http.StatusUnauthorized)
-				enc.Encode(decodeStoreError(err, "", "", now, nil))
+				writeResponse(decodeStoreError(err, "", "", now, nil))
 				return
 			}
 		} else {
@@ -87,8 +89,7 @@ func largeFileUpload(wrt http.ResponseWriter, req *http.Request) {
 
 	if uid.IsZero() {
 		// Not authenticated
-		wrt.WriteHeader(http.StatusUnauthorized)
-		enc.Encode(ErrAuthRequired("", "", now))
+		writeResponse(ErrAuthRequired("", "", now))
 		return
 	}
 
@@ -97,14 +98,17 @@ func largeFileUpload(wrt http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		log.Println("Error reading file", err)
 		if strings.Contains(err.Error(), "request body too large") {
-			wrt.WriteHeader(http.StatusRequestEntityTooLarge)
-			enc.Encode(ErrTooLarge("", "", now))
+			writeResponse(ErrTooLarge("", "", now))
 		} else {
-			wrt.WriteHeader(http.StatusBadRequest)
-			enc.Encode(ErrMalformed("", "", now))
+			writeResponse(ErrMalformed("", "", now))
 		}
 		return
 	}
+
+	fdef := types.FileDef{}
+	fdef.Id = store.GetUidString()
+	fdef.InitTimes()
+	fdef.Name = req.FormValue("name")
 
 	// FIXME: The following code needs to be replaced in production with calls to S3,
 	// GCS, ABS, Minio, Ceph, etc.
@@ -112,24 +116,42 @@ func largeFileUpload(wrt http.ResponseWriter, req *http.Request) {
 	// Generate a unique file name and attach it to path.
 	// FIXME: create two-three levels of nested directories. Serving from a directory with
 	// thousands of files in it will not perform well.
-	filename := filepath.Join(globals.fileUploadLocation, store.GetUidString())
-	outfile, err := os.Create(filename)
+	fdef.Location = filepath.Join(globals.fileUploadLocation, fdef.Id)
+	outfile, err := os.Create(fdef.Location)
 	if err != nil {
-		log.Println("Failed to create file", filename, err)
-		wrt.WriteHeader(http.StatusInternalServerError)
-		enc.Encode(ErrUnknown("", "", now))
+		log.Println("Failed to create file", fdef.Location, err)
+		writeResponse(nil)
 		return
 	}
 	defer outfile.Close()
 
-	_, err = io.Copy(outfile, file)
-	log.Println("Finished upload", filename)
-	if err != nil {
-		wrt.WriteHeader(http.StatusInternalServerError)
-		enc.Encode(ErrUnknown("", "", now))
+	buff := make([]byte, 512)
+	if _, err = file.Read(buff); err != nil {
+		log.Println("Failed to detect mime type", err)
+		writeResponse(nil)
+		return
+	}
+	fdef.MimeType = http.DetectContentType(buff)
+
+	if _, err = file.Seek(0, io.SeekStart); err != nil {
+		log.Println("Failed to reset request buffer", err)
+		writeResponse(nil)
 		return
 	}
 
-	wrt.WriteHeader(http.StatusOK)
-	enc.Encode(NoErr("", "", now))
+	store.Files.StartUpload(uid, &fdef)
+
+	_, err = io.Copy(outfile, file)
+	log.Println("Finished upload", fdef.Location)
+	if err != nil {
+		store.Files.FinishUpload(uid, fdef.Id, false)
+		writeResponse(nil)
+		return
+	}
+
+	store.Files.FinishUpload(uid, fdef.Id, true)
+
+	resp := NoErr("", "", now)
+	resp.Ctrl.Params = map[string]string{"url": fdef.Id}
+	writeResponse(resp)
 }
