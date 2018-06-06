@@ -7,7 +7,7 @@ Describe your issue here.
 
 ### Your environment
 - [ ] api.tinode.co
-- [ ] Your wn setup:
+- [ ] Your own setup:
   * platform (Windows, Mac, Linux etc)
   * version of tinode server
   * database backend
