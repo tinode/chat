@@ -27,6 +27,9 @@ ENV TARGET_DB=$TARGET_DB
 # An option to reset database.
 ENV RESET_DB=false
 
+# The MYSQL DSN connection.
+ENV MYSQL_DSN='root@tcp(mysql)/tinode'
+
 # Disable chatbot plugin by default.
 ENV PLUGIN_PYTHON_CHAT_BOT_ENABLED=false
 
