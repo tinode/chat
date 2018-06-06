@@ -295,9 +295,6 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		t.accessAuth = user.Access.Auth
 		t.accessAnon = user.Access.Anon
 
-		// Assign tags
-		t.tags = user.Tags
-
 		if err = t.loadSubscribers(); err != nil {
 			log.Println("hub: cannot load subscribers for '" + t.name + "' (" + err.Error() + ")")
 			sreg.sess.queueOut(ErrUnknown(sreg.pkt.Id, t.xoriginal, timestamp))
@@ -324,10 +321,6 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 
 		// 'fnd' has no owner, t.owner = nil
 
-		// Make sure no one can join the topic.
-		t.accessAuth = getDefaultAccess(t.cat, true)
-		t.accessAnon = getDefaultAccess(t.cat, false)
-
 		user, err := store.Users.Get(sreg.sess.uid)
 		if err != nil {
 			log.Println("hub: cannot load user object for 'fnd'='" + t.name + "' (" + err.Error() + ")")
@@ -339,13 +332,18 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 			return
 		}
 
+		// Make sure no one can join the topic.
+		t.accessAuth = getDefaultAccess(t.cat, true)
+		t.accessAnon = getDefaultAccess(t.cat, false)
+
+		// Assign tags
+		t.tags = user.Tags
+
 		if err = t.loadSubscribers(); err != nil {
 			log.Println("hub: cannot load subscribers for '" + t.name + "' (" + err.Error() + ")")
 			sreg.sess.queueOut(ErrUnknown(sreg.pkt.Id, t.xoriginal, timestamp))
 			return
 		}
-
-		t.public = user.Tags
 
 		t.created = user.CreatedAt
 		t.updated = user.UpdatedAt
@@ -378,7 +376,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		var subs []types.Subscription
 		if stopic != nil {
 			// Subs already have Public swapped
-			if subs, err = store.Topics.GetSubs(t.name); err != nil {
+			if subs, err = store.Topics.GetSubs(t.name, nil); err != nil {
 				log.Println("hub: cannot load subscritions for '" + t.name + "' (" + err.Error() + ")")
 				sreg.sess.queueOut(ErrUnknown(sreg.pkt.Id, t.xoriginal, timestamp))
 				return
@@ -683,7 +681,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 			}
 
 			tags = normalizeTags(sreg.pkt.Set.Tags)
-			if !restrictedTags(tags, nil) {
+			if !restrictedTagsEqual(tags, nil, globals.immutableTagNS) {
 				log.Println("hub: attempt to directly set restricted tags")
 				sreg.sess.queueOut(ErrPermissionDenied(sreg.pkt.Id, t.xoriginal, timestamp))
 				return
@@ -780,7 +778,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 
 // loadSubscribers loads topic subscribers, sets topic owner
 func (t *Topic) loadSubscribers() error {
-	subs, err := store.Topics.GetSubs(t.name)
+	subs, err := store.Topics.GetSubs(t.name, nil)
 	if err != nil {
 		return err
 	}
@@ -881,7 +879,7 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *MsgClientDel, reason 
 			// Case 1.2: topic is offline.
 
 			// Get all subscribers: we have to notify them all.
-			if subs, err := store.Topics.GetSubs(topic); err != nil {
+			if subs, err := store.Topics.GetSubs(topic, nil); err != nil {
 				log.Println("topicUnreg failed to load subscribers:", err)
 				sess.queueOut(ErrUnknown(msg.Id, msg.Topic, now))
 				return
@@ -1026,25 +1024,4 @@ func replyTopicDescBasic(sess *Session, topic string, get *MsgClientGet) {
 	log.Printf("hub.replyTopicDescBasic: sending desc -- OK")
 	sess.queueOut(&ServerComMessage{
 		Meta: &MsgServerMeta{Id: get.Id, Topic: get.Topic, Timestamp: &now, Desc: desc}})
-}
-
-// Parse topic access parameters
-func parseTopicAccess(acs *MsgDefaultAcsMode, defAuth, defAnon types.AccessMode) (auth, anon types.AccessMode,
-	err error) {
-
-	auth, anon = defAuth, defAnon
-
-	if acs.Auth != "" {
-		if err = auth.UnmarshalText([]byte(acs.Auth)); err != nil {
-			log.Println("hub: invalid default auth access mode '" + acs.Auth + "'")
-		}
-	}
-
-	if acs.Anon != "" {
-		if err = anon.UnmarshalText([]byte(acs.Anon)); err != nil {
-			log.Println("hub: invalid default anon access mode '" + acs.Anon + "'")
-		}
-	}
-
-	return
 }

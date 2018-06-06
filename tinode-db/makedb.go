@@ -26,13 +26,17 @@ type vCardy struct {
 	Type  string `json:"type"`
 }
 
+type tPrivate struct {
+	Comment string `json:"comment"`
+}
+
 /*
 User object in data.json
    "createdAt": "-140h",
    "email": "alice@example.com",
    "tel": "17025550001",
    "passhash": "alice123",
-   "private": "some comment 123",
+   "private": {"comment": "some comment 123"},
    "public": {"fn": "Alice Johnson", "photo": "alice-64.jpg", "type": "jpg"},
    "state": 1,
    "status": {
@@ -51,7 +55,7 @@ type User struct {
 	Tel         string      `json:"tel"`
 	Username    string      `json:"username"`
 	Password    string      `json:"passhash"`
-	Private     interface{} `json:"private"`
+	Private     tPrivate    `json:"private"`
 	Public      vCardy      `json:"public"`
 	State       int         `json:"state"`
 	Status      interface{} `json:"status"`
@@ -67,12 +71,12 @@ GroupTopic object in data.json
    "public": {"fn": "Let's talk about flowers", "photo": "abc-64.jpg", "type": "jpg"}
 */
 type GroupTopic struct {
-	CreatedAt    string      `json:"createdAt"`
-	Name         string      `json:"name"`
-	Owner        string      `json:"owner"`
-	Public       vCardy      `json:"public"`
-	Tags         []string    `json:"tags"`
-	OwnerPrivate interface{} `json:"ownerPrivate"`
+	CreatedAt    string   `json:"createdAt"`
+	Name         string   `json:"name"`
+	Owner        string   `json:"owner"`
+	Public       vCardy   `json:"public"`
+	Tags         []string `json:"tags"`
+	OwnerPrivate tPrivate `json:"ownerPrivate"`
 }
 
 /*
@@ -87,12 +91,12 @@ GroupSub object in data.json
  "tags": ["super cool", "super", "cool"],
 */
 type GroupSub struct {
-	CreatedAt string      `json:"createdAt"`
-	Private   interface{} `json:"private"`
-	Topic     string      `json:"topic"`
-	User      string      `json:"user"`
-	Want      string      `json:"want"`
-	Have      string      `json:"have"`
+	CreatedAt string   `json:"createdAt"`
+	Private   tPrivate `json:"private"`
+	Topic     string   `json:"topic"`
+	User      string   `json:"user"`
+	Want      string   `json:"want"`
+	Have      string   `json:"have"`
 }
 
 /*
@@ -100,15 +104,15 @@ P2PUser topic in data.json
 
 "createdAt": "-117h",
 "users": [
-  {"name": "eve", "private": "ho ho", "want": "JRWP", "have": "N"},
-  {"name": "alice", "private": "ha ha"}
+  {"name": "eve", "private": {"comment":"ho ho"}, "want": "JRWP", "have": "N"},
+  {"name": "alice", "private": {"comment": "ha ha"}}
 ]
 */
 type P2PUser struct {
-	Name    string      `json:"name"`
-	Private interface{} `json:"private"`
-	Want    string      `json:"want"`
-	Have    string      `json:"have"`
+	Name    string   `json:"name"`
+	Private tPrivate `json:"private"`
+	Want    string   `json:"want"`
+	Have    string   `json:"have"`
 }
 
 // P2PSub is a p2p subscription in data.json
@@ -155,7 +159,7 @@ func main() {
 	if *datafile != "" {
 		raw, err := ioutil.ReadFile(*datafile)
 		if err != nil {
-			log.Fatal(err)
+			log.Fatal("Failed to parse data:", err)
 		}
 		err = json.Unmarshal(raw, &data)
 		if err != nil {

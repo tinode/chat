@@ -399,14 +399,14 @@ func pluginFireHose(sess *Session, msg *ClientComMessage) (*ClientComMessage, *S
 }
 
 // Ask plugin to perform search.
-func pluginFind(user types.Uid, query []string) ([]string, []types.Subscription, error) {
+func pluginFind(user types.Uid, query string) (string, []types.Subscription, error) {
 	if globals.plugins == nil {
 		return query, nil, nil
 	}
 
 	find := &pbx.SearchQuery{
 		UserId: user.UserId(),
-		Terms:  query,
+		Query:  query,
 	}
 	for _, p := range globals.plugins {
 		if !p.filterFind {
@@ -430,17 +430,17 @@ func pluginFind(user types.Uid, query []string) ([]string, []types.Subscription,
 			}
 			// DROP means stop processing the request
 			if respStatus == pbx.RespCode_DROP {
-				return nil, nil, nil
+				return "", nil, nil
 			}
 			// REPLACE: query string was changed. Use the new one for further processing.
 			if respStatus == pbx.RespCode_REPLACE {
-				return resp.GetTerms(), nil, nil
+				return resp.GetQuery(), nil, nil
 			}
 			// RESPOND: Plugin provided a specific response. Use it
-			return nil, pbSubSliceDeserialize(resp.GetResult()), nil
+			return "", pbSubSliceDeserialize(resp.GetResult()), nil
 		} else {
 			log.Println("plugins: Find call failed", p.name, err)
-			return nil, nil, err
+			return "", nil, err
 		}
 	}
 

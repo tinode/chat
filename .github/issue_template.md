@@ -6,10 +6,12 @@ Describe your issue here.
 - [ ] Feature request
 
 ### Your environment
-* platform (Windows, Mac, Linux etc)
-* version of tinode server
-* database backend
-* which client used (javascript, android, cli) and its version
+- [ ] api.tinode.co
+- [ ] Your own setup:
+  * platform (Windows, Mac, Linux etc)
+  * version of tinode server
+  * database backend
+  * which client used (javascript, android, cli) and its version
 
 ### Steps to reproduce
 Tell us how to reproduce this issue.

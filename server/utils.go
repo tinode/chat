@@ -3,11 +3,14 @@
 package main
 
 import (
+	"errors"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/tinode/chat/server/auth"
 	"github.com/tinode/chat/server/store/types"
@@ -64,7 +67,7 @@ func normalizeTags(src []string) []string {
 	// Sort tags
 	sort.Strings(src)
 
-	// Remove short tags and de-dupe keeping the order. It may result in fewer tags than could have
+	// Remove short, invalid tags and de-dupe keeping the order. It may result in fewer tags than could have
 	// been if length were enforced later, but that's client's fault.
 	var prev string
 	var dst []string
@@ -74,7 +77,16 @@ func normalizeTags(src []string) []string {
 			return make([]string, 0, 1)
 		}
 
-		if len(curr) < minTagLength || len(curr) > maxTagLength || curr == prev {
+		// Unicode handling
+		ucurr := []rune(curr)
+
+		// Make sure the tag starts with a letter or a number.
+		if !unicode.IsLetter(ucurr[0]) && !unicode.IsDigit(ucurr[0]) {
+			continue
+		}
+
+		// Enforce length in characters, not in bytes.
+		if len(ucurr) < minTagLength || len(ucurr) > maxTagLength || curr == prev {
 			continue
 		}
 
@@ -129,11 +141,11 @@ func stringSliceDelta(rold, rnew []string) (added, removed []string) {
 	return added, removed
 }
 
-// restrictedTags checks if two sets of tags contain the same set of restricted tags:
+// restrictedTagsEqual checks if two sets of tags contain the same set of restricted tags:
 // true - same, false - different.
-func restrictedTags(oldTags, newTags []string) bool {
-	rold := filterRestrictedTags(oldTags)
-	rnew := filterRestrictedTags(newTags)
+func restrictedTagsEqual(oldTags, newTags []string, namespaces map[string]bool) bool {
+	rold := filterRestrictedTags(oldTags, namespaces)
+	rnew := filterRestrictedTags(newTags, namespaces)
 
 	if len(rold) != len(rnew) {
 		return false
@@ -181,10 +193,11 @@ func credentialMethods(creds []MsgAccCred) []string {
 	return out
 }
 
-// Take a slice of tags, return a slice of restricted tags contained in the input.
-func filterRestrictedTags(tags []string) []string {
+// Take a slice of tags, return a slice of restricted namespace tags contained in the input.
+// Tags to filter, restricted namespaces to filter.
+func filterRestrictedTags(tags []string, namespaces map[string]bool) []string {
 	var out []string
-	if len(globals.restrictedTags) > 0 && len(tags) > 0 {
+	if len(namespaces) > 0 && len(tags) > 0 {
 		for _, s := range tags {
 			parts := tagPrefixRegexp.FindStringSubmatch(s)
 
@@ -192,7 +205,7 @@ func filterRestrictedTags(tags []string) []string {
 				continue
 			}
 
-			if globals.restrictedTags[parts[1]] {
+			if namespaces[parts[1]] {
 				out = append(out, s)
 			}
 		}
@@ -200,14 +213,17 @@ func filterRestrictedTags(tags []string) []string {
 	return out
 }
 
-// Takes get.data or get.del parameters, returns database query parameters
-func msgOpts2storeOpts(req *MsgBrowseOpts) *types.BrowseOpt {
-	var opts *types.BrowseOpt
+// Takes MsgClientGet query parameters, returns database query parameters
+func msgOpts2storeOpts(req *MsgGetOpts) *types.QueryOpt {
+	var opts *types.QueryOpt
 	if req != nil {
-		opts = &types.BrowseOpt{
-			Limit:  req.Limit,
-			Since:  req.SinceId,
-			Before: req.BeforeId,
+		opts = &types.QueryOpt{
+			User:            types.ParseUserId(req.User),
+			Topic:           req.Topic,
+			IfModifiedSince: req.IfModifiedSince,
+			Limit:           req.Limit,
+			Since:           req.SinceId,
+			Before:          req.BeforeId,
 		}
 	}
 	return opts
@@ -222,38 +238,40 @@ func isNullValue(i interface{}) bool {
 	return false
 }
 
-func decodeStoreError(err error, id string, timestamp time.Time, params map[string]interface{}) *ServerComMessage {
+func decodeStoreError(err error, id, topic string, timestamp time.Time, params map[string]interface{}) *ServerComMessage {
 
 	var errmsg *ServerComMessage
 
 	if err == nil {
-		errmsg = NoErr(id, "", timestamp)
+		errmsg = NoErr(id, topic, timestamp)
 	}
 
 	if storeErr, ok := err.(types.StoreError); !ok {
-		errmsg = ErrUnknown(id, "", timestamp)
+		errmsg = ErrUnknown(id, topic, timestamp)
 	} else {
 		switch storeErr {
 		case types.ErrInternal:
-			errmsg = ErrUnknown(id, "", timestamp)
+			errmsg = ErrUnknown(id, topic, timestamp)
 		case types.ErrMalformed:
-			errmsg = ErrMalformed(id, "", timestamp)
+			errmsg = ErrMalformed(id, topic, timestamp)
 		case types.ErrFailed:
-			errmsg = ErrAuthFailed(id, "", timestamp)
+			errmsg = ErrAuthFailed(id, topic, timestamp)
+		case types.ErrPermissionDenied:
+			errmsg = ErrPermissionDenied(id, topic, timestamp)
 		case types.ErrDuplicate:
-			errmsg = ErrDuplicateCredential(id, "", timestamp)
+			errmsg = ErrDuplicateCredential(id, topic, timestamp)
 		case types.ErrUnsupported:
-			errmsg = ErrNotImplemented(id, "", timestamp)
+			errmsg = ErrNotImplemented(id, topic, timestamp)
 		case types.ErrExpired:
-			errmsg = ErrAuthFailed(id, "", timestamp)
+			errmsg = ErrAuthFailed(id, topic, timestamp)
 		case types.ErrPolicy:
-			errmsg = ErrPolicy(id, "", timestamp)
+			errmsg = ErrPolicy(id, topic, timestamp)
 		case types.ErrCredentials:
 			errmsg = InfoValidateCredentials(id, timestamp)
 		case types.ErrNotFound:
-			errmsg = ErrNotFound(id, "", timestamp)
+			errmsg = ErrNotFound(id, topic, timestamp)
 		default:
-			errmsg = ErrUnknown(id, "", timestamp)
+			errmsg = ErrUnknown(id, topic, timestamp)
 		}
 	}
 	errmsg.Ctrl.Params = params
@@ -297,6 +315,22 @@ func getDefaultAccess(cat types.TopicCat, auth bool) types.AccessMode {
 	}
 }
 
+// Parse topic access parameters
+func parseTopicAccess(acs *MsgDefaultAcsMode, defAuth, defAnon types.AccessMode) (auth, anon types.AccessMode,
+	err error) {
+
+	auth, anon = defAuth, defAnon
+
+	if acs.Auth != "" {
+		err = auth.UnmarshalText([]byte(acs.Auth))
+	}
+	if acs.Anon != "" {
+		err = anon.UnmarshalText([]byte(acs.Anon))
+	}
+
+	return
+}
+
 // Parses version of format 0.13.xx or 0.13-xx or 0.13
 // The major and minor parts must be valid, the last part is ignored if missing or unparceable.
 func parseVersion(vers string) int {
@@ -338,6 +372,103 @@ func versionToString(vers int) string {
 		str += "-" + strconv.Itoa(vers&0xff)
 	}
 	return str
+}
+
+// Parser for search queries. Parameters: Fnd.Private, Fnd.Tags. The query may contain non-ASCII
+// characters, i.e. length of string in bytes != length of string in runes.
+// Returns AND tags (all must be present in every result), OR tags (one or more present), error.
+func parseSearchQuery(query string) ([]string, []string, error) {
+	type token struct {
+		val string
+		op  string
+	}
+	type context struct {
+		val   string
+		start int
+		end   int
+	}
+	var ctx context
+	var out []token
+	query = strings.TrimSpace(query)
+	for i, w := 0, 0; i < len(query); i += w {
+		var r rune
+		var newctx string
+		r, w = utf8.DecodeRuneInString(query[i:])
+		if r == '"' {
+			newctx = "quo"
+		} else if ctx.val != "quo" {
+			if r == ' ' || r == '\t' {
+				newctx = "and"
+			} else if r == ',' {
+				newctx = "or"
+			} else if i+w == len(query) {
+				newctx = "end"
+				ctx.end = i + w
+			}
+		}
+
+		if newctx == "quo" {
+			if ctx.val == "quo" {
+				ctx.val = ""
+				ctx.end = i
+			} else {
+				ctx.val = "quo"
+				ctx.start = i + w
+			}
+		} else if ctx.val == "or" || ctx.val == "and" {
+			ctx.end = 0
+			if newctx == "" {
+				if len(out) == 0 {
+					return nil, nil, errors.New("operator out of place " + ctx.val)
+				}
+				out[len(out)-1].op = ctx.val
+				ctx.val = ""
+				ctx.start = i
+
+			} else if ctx.val == "or" && newctx == "or" {
+				return nil, nil, errors.New("invalid operator sequence " + ctx.val)
+			} else if newctx == "or" {
+				// Switch context from "and" to "or", i.e. the case like ' ,' -> ','
+				ctx.val = "or"
+			}
+			// Do nothing for cases 'and and' -> 'and', 'or and' -> 'or'.
+		} else if ctx.val == "" && newctx != "" {
+			end := ctx.end
+			if end == 0 {
+				end = i
+			}
+			out = append(out, token{val: query[ctx.start:end], op: newctx})
+			ctx.val = newctx
+			ctx.start = i
+		}
+	}
+
+	if ctx.val != "" && ctx.val != "end" {
+		return nil, nil, errors.New("unexpected terminal context '" + ctx.val + "'")
+	}
+
+	xlen := len(out)
+	if xlen == 0 {
+		return nil, nil, nil
+	}
+
+	if xlen == 1 {
+		out[xlen-1].op = "and"
+	} else {
+		out[xlen-1].op = out[xlen-2].op
+	}
+
+	var and, or []string
+	for _, t := range out {
+		if t.op == "and" {
+			and = append(and, t.val)
+		} else if t.op == "or" {
+			or = append(or, t.val)
+		} else {
+			panic("invalid operation ='" + t.op + "', val='" + t.val + "'")
+		}
+	}
+	return and, or, nil
 }
 
 // Returns > 0 if v1 > v2; zero if equal; < 0 if v1 < v2

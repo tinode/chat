@@ -72,17 +72,18 @@ message SetDesc {
 }
 
 message GetOpts {
-	int64 if_modified_since = 1; // timestamp in milliseconds since epoch 01/01/1970
-	int32 limit = 2;
-}
-
-message BrowseOpts {
+	// Timestamp in milliseconds since epoch 01/01/1970
+	int64 if_modified_since = 1; 
+	// Limit search to this user ID
+	string user = 2;
+	// Limit search results to one topic;
+	string topic = 3;
 	// Load messages with seq id equal or greater than this
-	int32 since_id = 1;
+	int32 since_id = 4;
 	// Load messages with seq id lower than this
-	int32 before_id = 3;
-	// Limit the number of messages loaded
-	int32 limit = 5;
+	int32 before_id = 5;
+	// Maximum number of results to return
+	int32 limit = 6;
 }
 
 message GetQuery {
@@ -93,7 +94,7 @@ message GetQuery {
 	// Parameters of "sub" request
 	GetOpts sub = 3;
 	// Parameters of "data" request
-	BrowseOpts data = 4;
+	GetOpts data = 4;
 }
 
 message SetQuery {
@@ -101,6 +102,8 @@ message SetQuery {
 	SetDesc desc = 1;
 	// Subscription parameters
 	SetSub sub = 2;
+	// Indexable tags
+	repeated string tags = 3;
 }
 
 message SeqRange {
@@ -431,13 +434,13 @@ message ClientReq {
 
 message SearchQuery {
 	string user_id = 1;
-	repeated string terms = 2;
+	string query = 2;
 }
 
 message SearchFound {
 	RespCode status = 1;
-	// New search terms If status == REPLACE, otherwise unset.
-	repeated string terms = 2;
+	// New search query If status == REPLACE, otherwise unset.
+	string query = 2;
 	// Search results.
 	repeated TopicSub result = 3;
 }

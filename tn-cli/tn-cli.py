@@ -16,7 +16,7 @@ import model_pb2 as pb
 import model_pb2_grpc as pbx
 
 APP_NAME = "tn-cli"
-VERSION = "0.14"
+VERSION = "0.15"
 
 # Dictionary wich contains lambdas to be executed when server response is received
 onCompletion = {}
@@ -59,7 +59,7 @@ def hiMsg(id):
     return pb.ClientMsg(hi=pb.ClientHi(id=str(id), user_agent=APP_NAME + "/" + VERSION + " gRPC-python",
         ver=VERSION, lang="EN"))
 
-def accMsg(id, user, scheme, secret, uname, password, do_login, tags, fn, photo, private, auth, anon):
+def accMsg(id, user, scheme, secret, uname, password, do_login, fn, photo, private, auth, anon, tags):
     if secret == None and uname != None:
         if password == None:
             password = ''
@@ -79,22 +79,34 @@ def loginMsg(id, scheme, secret, uname=None, password=None):
     onCompletion[str(id)] = lambda params: save_cookie(params)
     return pb.ClientMsg(login=pb.ClientLogin(id=str(id), scheme=scheme, secret=secret))
 
-def getMsg(id, topic, desc, sub, data):
+def subMsg(id, topic, fn, photo, private, auth, anon, mode, tags, get_query):
+    if get_query:
+        get_query = pb.GetQuery(what=get_query.split(",").join(" "))
+
+    return pb.ClientMsg(sub=pb.ClientSub(id=str(id), topic=topic, 
+        set_query=pb.SetQuery(
+            desc=pb.SetDesc(public=make_vcard(fn, photo), private=private, default_acs=pb.DefaultAcsMode(auth=auth, anon=anon)),
+            sub=pb.SetSub(mode=mode),
+            tags=tags.split(",") if tags else None), get_query=get_query))
+	
+def getMsg(id, topic, desc, sub, tags, data):
     what = []
     if desc:
         what.append("desc")
     if sub:
         what.append("sub")
+    if tags:
+        what.append("tags")
     if data:
         what.append("data")
     return pb.ClientMsg(get=pb.ClientGet(id=str(id), topic=topic,
         query=pb.GetQuery(what=" ".join(what))))
 
-def setMsg(id, topic, user, fn, photo, private, auth, anon, mode):
+def setMsg(id, topic, user, fn, photo, private, auth, anon, mode, tags):
     return pb.ClientMsg(set=pb.ClientSet(id=str(id), topic=topic,
-        query=pb.SetQuery(desc=pb.SetDesc(default_acs=pb.DefaultAcsMode(auth=auth, anon=anon),
-        public=make_vcard(fn, photo), private=private),
-        sub=pb.SetSub(user_id=user, mode=mode))))
+        query=pb.SetQuery(desc=pb.SetDesc(default_acs=pb.DefaultAcsMode(auth=auth, anon=anon), public=make_vcard(fn, photo), private=private),
+        sub=pb.SetSub(user_id=user, mode=mode),
+        tags=tags)))
 
 def delMsg(id, topic, what, param, hard):
     if topic == None and param != None:
@@ -185,7 +197,9 @@ def parse_cmd(cmd):
         parser.add_argument('--private', default=None, help='topic\'s private info')
         parser.add_argument('--auth', default=None, help='default access mode for authenticated users')
         parser.add_argument('--anon', default=None, help='default access mode for anonymous users')
-        parser.add_argument('--get-query', default=None, help='query for topic metadata or messages')
+        parser.add_argument('--mode', default=None, help='new value of access mode')
+        parser.add_argument('--tags', default=None, help='tags for topic discovery, comma separated list without spaces')
+        parser.add_argument('--get-query', default=None, help='query for topic metadata or messages, comma separated list without spaces')
     elif parts[0] == "leave":
         parser = argparse.ArgumentParser(prog=parts[0], description='Detach or unsubscribe from topic')
         parser.add_argument('topic', nargs='?', default=argparse.SUPPRESS, help='topic to detach from')
@@ -203,6 +217,7 @@ def parse_cmd(cmd):
         parser.add_argument('--topic', dest='topic', default=None, help='topic to update')
         parser.add_argument('--desc', action='store_true', help='query topic description')
         parser.add_argument('--sub', action='store_true', help='query topic subscriptions')
+        parser.add_argument('--tags', action='store_true', help='query topic tags')
         parser.add_argument('--data', action='store_true', help='query topic messages')
     elif parts[0] == "set":
         parser = argparse.ArgumentParser(prog=parts[0], description='Update topic metadata')
@@ -214,6 +229,7 @@ def parse_cmd(cmd):
         parser.add_argument('--anon', default=None, help='default access mode for anonymous users')
         parser.add_argument('--user', default=None, help='ID of the account to update')
         parser.add_argument('--mode', default=None, help='new value of access mode')
+        parser.add_argument('--tags', default=None, help='tags for topic discovery, comma separated list without spaces')
     elif parts[0] == "del":
         parser = argparse.ArgumentParser(prog=parts[0], description='Delete message(s), subscription or topic')
         parser.add_argument('topic', nargs='?', default=argparse.SUPPRESS, help='topic being affected')
@@ -263,20 +279,22 @@ def serialize_cmd(string, id):
     # Process dictionary
     if cmd.cmd == "acc":
         return accMsg(id, cmd.user, cmd.scheme, cmd.secret, cmd.uname, cmd.password,
-            cmd.do_login, cmd.tags, cmd.fn, cmd.photo, cmd.private, cmd.auth, cmd.anon)
+            cmd.do_login, cmd.fn, cmd.photo, cmd.private, cmd.auth, cmd.anon, cmd.tags)
     elif cmd.cmd == "login":
         return loginMsg(id, cmd.scheme, cmd.secret, cmd.uname, cmd.password)
     elif cmd.cmd == "sub":
-        return pb.ClientMsg(sub=pb.ClientSub(id=str(id), topic=cmd.topic))
+        return subMsg(id, cmd.topic, cmd.fn, cmd.photo, cmd.private, cmd.auth, cmd.anon, 
+            cmd.mode, cmd.tags, cmd.get_query)
     elif cmd.cmd == "leave":
         return pb.ClientMsg(leave=pb.ClientLeave(id=str(id), topic=cmd.topic))
     elif cmd.cmd == "pub":
         return pb.ClientMsg(pub=pb.ClientPub(id=str(id), topic=cmd.topic, no_echo=True,
             content=json.dumps(cmd.content)))
     elif cmd.cmd == "get":
-        return getMsg(id, cmd.topic, cmd.desc, cmd.sub, cmd.data)
+        return getMsg(id, cmd.topic, cmd.desc, cmd.sub, cmd.tags, cmd.data)
     elif cmd.cmd == "set":
-        return setMsg(id, cmd.topic, cmd.user, cmd.fn, cmd.photo, cmd.private, cmd.auth, cmd.anon, cmd.mode)
+        return setMsg(id, cmd.topic, cmd.user, cmd.fn, cmd.photo, cmd.private, 
+            cmd.auth, cmd.anon, cmd.mode, cmd.tags)
     elif cmd.cmd == "del":
         return delMsg(id, cmd.topic, cmd.what, cmd.param, cmd.hard)
     elif cmd.cmd == "note":

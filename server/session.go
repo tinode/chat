@@ -460,7 +460,7 @@ func (s *Session) acc(msg *ClientComMessage) {
 		// Check if login is unique.
 		if ok, err := authhdl.IsUnique(msg.Acc.Secret); !ok {
 			log.Println("Check unique:", err)
-			s.queueOut(decodeStoreError(err, msg.Acc.Id, msg.timestamp, nil))
+			s.queueOut(decodeStoreError(err, msg.Acc.Id, "", msg.timestamp, nil))
 			return
 		}
 
@@ -472,7 +472,7 @@ func (s *Session) acc(msg *ClientComMessage) {
 		user.Access.Anon = getDefaultAccess(types.TopicCatP2P, false)
 
 		if tags := normalizeTags(msg.Acc.Tags); tags != nil {
-			if !restrictedTags(tags, nil) {
+			if !restrictedTagsEqual(tags, nil, globals.immutableTagNS) {
 				log.Println("Attempt to directly assign restricted tags")
 				s.queueOut(ErrPermissionDenied(msg.Acc.Id, "", msg.timestamp))
 				return
@@ -487,7 +487,7 @@ func (s *Session) acc(msg *ClientComMessage) {
 			vld := store.GetValidator(cr.Method)
 			if err := vld.PreCheck(cr.Value, cr.Params); err != nil {
 				log.Println("failed credential pre-check", cr, err)
-				s.queueOut(decodeStoreError(err, msg.Acc.Id, msg.timestamp, nil))
+				s.queueOut(decodeStoreError(err, msg.Acc.Id, "", msg.timestamp, nil))
 				return
 			}
 
@@ -527,23 +527,23 @@ func (s *Session) acc(msg *ClientComMessage) {
 			return
 		}
 
-		authLvl, err := authhdl.AddRecord(&auth.Rec{Uid: user.Uid()}, msg.Acc.Secret)
+		rec, err := authhdl.AddRecord(&auth.Rec{Uid: user.Uid()}, msg.Acc.Secret)
 		if err != nil {
 			log.Println("auth: add record failed", err)
 			// Attempt to delete incomplete user record
 			store.Users.Delete(user.Uid(), false)
-			s.queueOut(decodeStoreError(err, msg.Acc.Id, msg.timestamp, nil))
+			s.queueOut(decodeStoreError(err, msg.Acc.Id, "", msg.timestamp, nil))
 			return
 		}
 
 		// When creating an account, the user must provide all required credentials.
 		// If any are missing, reject the request.
-		if len(creds) < len(globals.authValidators[authLvl]) {
-			log.Println("missing credentials; have:", creds, "want:", globals.authValidators[authLvl])
+		if len(creds) < len(globals.authValidators[rec.AuthLevel]) {
+			log.Println("missing credentials; have:", creds, "want:", globals.authValidators[rec.AuthLevel])
 			// Attempt to delete incomplete user record
 			store.Users.Delete(user.Uid(), false)
-			_, missing := stringSliceDelta(globals.authValidators[authLvl], credentialMethods(creds))
-			s.queueOut(decodeStoreError(types.ErrPolicy, msg.Acc.Id, msg.timestamp,
+			_, missing := stringSliceDelta(globals.authValidators[rec.AuthLevel], credentialMethods(creds))
+			s.queueOut(decodeStoreError(types.ErrPolicy, msg.Acc.Id, "", msg.timestamp,
 				map[string]interface{}{"creds": missing}))
 			return
 		}
@@ -555,7 +555,7 @@ func (s *Session) acc(msg *ClientComMessage) {
 				log.Println("Failed to save or validate credential", err)
 				// Delete incomplete user record.
 				store.Users.Delete(user.Uid(), false)
-				s.queueOut(decodeStoreError(err, msg.Acc.Id, msg.timestamp, nil))
+				s.queueOut(decodeStoreError(err, msg.Acc.Id, "", msg.timestamp, nil))
 				return
 			}
 
@@ -569,8 +569,8 @@ func (s *Session) acc(msg *ClientComMessage) {
 		var reply *ServerComMessage
 		if msg.Acc.Login {
 			// Process user's login request.
-			_, missing := stringSliceDelta(globals.authValidators[authLvl], validated)
-			reply = s.onLogin(msg.Acc.Id, msg.timestamp, user.Uid(), authLvl, 0, missing)
+			_, missing := stringSliceDelta(globals.authValidators[rec.AuthLevel], validated)
+			reply = s.onLogin(msg.Acc.Id, msg.timestamp, rec, missing)
 		} else {
 			// User is not using the new account for logging in.
 			reply = NoErrCreated(msg.Acc.Id, "", msg.timestamp)
@@ -598,7 +598,7 @@ func (s *Session) acc(msg *ClientComMessage) {
 			// TODO(gene): support the case when msg.Acc.User is not equal to the current user
 			if err := authhdl.UpdateRecord(&auth.Rec{Uid: s.uid}, msg.Acc.Secret); err != nil {
 				log.Println("auth: failed to update secret", err)
-				s.queueOut(decodeStoreError(err, msg.Acc.Id, msg.timestamp, nil))
+				s.queueOut(decodeStoreError(err, msg.Acc.Id, "", msg.timestamp, nil))
 				return
 			}
 		} else if msg.Acc.Scheme != "" {
@@ -611,7 +611,7 @@ func (s *Session) acc(msg *ClientComMessage) {
 			validated, err := s.getValidatedGred(s.uid, s.authLvl, msg.Acc.Cred)
 			if err != nil {
 				log.Println("failed to get validated credentials", err)
-				s.queueOut(decodeStoreError(err, msg.Acc.Id, msg.timestamp, nil))
+				s.queueOut(decodeStoreError(err, msg.Acc.Id, "", msg.timestamp, nil))
 				return
 			}
 			_, missing := stringSliceDelta(globals.authValidators[s.authLvl], validated)
@@ -656,7 +656,7 @@ func (s *Session) login(msg *ClientComMessage) {
 	rec, err := handler.Authenticate(msg.Login.Secret)
 	if err != nil {
 		log.Println("auth failed", err)
-		s.queueOut(decodeStoreError(err, msg.Login.Id, msg.timestamp, nil))
+		s.queueOut(decodeStoreError(err, msg.Login.Id, "", msg.timestamp, nil))
 		return
 	}
 
@@ -669,23 +669,22 @@ func (s *Session) login(msg *ClientComMessage) {
 	}
 	if err != nil {
 		log.Println("failed to validate credentials", err)
-		s.queueOut(decodeStoreError(err, msg.Login.Id, msg.timestamp, nil))
+		s.queueOut(decodeStoreError(err, msg.Login.Id, "", msg.timestamp, nil))
 	} else {
-		s.queueOut(s.onLogin(msg.Login.Id, msg.timestamp, rec.Uid, rec.AuthLevel, rec.Lifetime, missing))
+		s.queueOut(s.onLogin(msg.Login.Id, msg.timestamp, rec, missing))
 	}
 }
 
 // onLogin performs steps after successful authentication.
-func (s *Session) onLogin(msgID string, timestamp time.Time, uid types.Uid, authLvl auth.Level,
-	lifetime time.Duration, missing []string) *ServerComMessage {
+func (s *Session) onLogin(msgID string, timestamp time.Time, rec *auth.Rec, missing []string) *ServerComMessage {
 
 	var reply *ServerComMessage
 	var params map[string]interface{}
 	var features auth.Feature
 
 	params = map[string]interface{}{
-		"user":    uid.UserId(),
-		"authlvl": authLvl.String()}
+		"user":    rec.Uid.UserId(),
+		"authlvl": rec.AuthLevel.String()}
 	if len(missing) > 0 {
 		// Some credentials are not validated yet. Respond with request for validation.
 		reply = InfoValidateCredentials(msgID, timestamp)
@@ -697,24 +696,35 @@ func (s *Session) onLogin(msgID string, timestamp time.Time, uid types.Uid, auth
 		reply = NoErr(msgID, "", timestamp)
 
 		// Authenticate the session.
-		s.uid = uid
-		s.authLvl = authLvl
+		s.uid = rec.Uid
+		s.authLvl = rec.AuthLevel
 		features = auth.Validated
+
+		if len(rec.Tags) > 0 {
+			if err := store.Users.Update(rec.Uid,
+				map[string]interface{}{"Tags": normalizeTags(rec.Tags)}); err != nil {
+
+				log.Println("failed to update user's tags", err)
+			}
+		}
 
 		// Record deviceId used in this session
 		if s.deviceID != "" {
-			store.Devices.Update(uid, "", &types.DeviceDef{
+			if err := store.Devices.Update(rec.Uid, "", &types.DeviceDef{
 				DeviceId: s.deviceID,
 				Platform: "",
 				LastSeen: timestamp,
 				Lang:     s.lang,
-			})
+			}); err != nil {
+				log.Println("failed to update device record", err)
+			}
 		}
 	}
+
 	// GenSecret fails only if tokenLifetime is < 0. It can't be < 0 here,
 	// otherwise login would have failed earlier.
-	params["token"], params["expires"], _ = store.GetAuthHandler("token").GenSecret(
-		&auth.Rec{Uid: uid, AuthLevel: authLvl, Lifetime: lifetime, Features: features})
+	rec.Features = features
+	params["token"], params["expires"], _ = store.GetAuthHandler("token").GenSecret(rec)
 
 	reply.Ctrl.Params = params
 	return reply
@@ -728,7 +738,7 @@ func (s *Session) getValidatedGred(uid types.Uid, authLvl auth.Level, creds []Ms
 		return nil, nil
 	}
 
-	allCred, err := store.Users.GetAllCred(uid, "")
+	allCred, err := store.Users.GetAllCred(uid)
 	if err != nil {
 		return nil, err
 	}
@@ -794,7 +804,7 @@ func (s *Session) get(msg *ClientComMessage) {
 		}
 	} else {
 		if meta.what&(constMsgMetaData|constMsgMetaSub|constMsgMetaDel) != 0 {
-			log.Println("s.get: invalid Get message action: '" + msg.Get.What + "'")
+			log.Println("s.get: subscribe first to get '" + msg.Get.What + "'")
 			s.queueOut(ErrPermissionDenied(msg.Get.Id, msg.Get.Topic, msg.timestamp))
 		} else {
 			// Description of a topic not currently subscribed to. Request desc from the hub

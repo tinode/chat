@@ -18,7 +18,7 @@ version=${tag#?}
 
 if [ -z "$version" ]; then
   # Get last git tag as release version. Tag looks like 'v.1.2.3', so strip 'v'.
-  version=`git tag | tail -1`
+  version=`git describe --tags`
   version=${version#?}
 fi
 
@@ -40,7 +40,7 @@ do
     # Remove previous build
     rm -f $GOPATH/bin/keygen
     # Build
-    ~/go/bin/gox -osarch="${plat}/${arc}" -output $GOPATH/bin/keygen ./keygen > /dev/null
+    ~/go/bin/gox -osarch="${plat}/${arc}" -ldflags "-s -w" -output $GOPATH/bin/keygen ./keygen > /dev/null
 
     for dbtag in "${dbtags[@]}"
     do
@@ -51,9 +51,10 @@ do
       rm -f $GOPATH/bin/init-db
       # Build tinode server and database initializer for RethinkDb and MySQL.
       ~/go/bin/gox -osarch="${plat}/${arc}" \
-        -ldflags "-X main.buildstamp=`git describe --tags`" \
+        -ldflags "-s -w -X main.buildstamp=`git describe --tags`" \
         -tags ${dbtag} -output $GOPATH/bin/tinode ./server > /dev/null
       ~/go/bin/gox -osarch="${plat}/${arc}" \
+        -ldflags "-s -w" \
         -tags ${dbtag} -output $GOPATH/bin/init-db ./tinode-db > /dev/null
       # Tar on Mac is inflexible about directories. Let's just copy release files to
       # one directory.
@@ -87,15 +88,20 @@ do
         zip -q -r ../${version}/tinode-${dbtag}."${plat}-${arc}".zip ./*
         popd > /dev/null
       else
+        plat2=$plat
+        # Rename 'darwin' tp 'mac'
+        if [ "$plat" = "darwin" ]; then
+          plat2=mac
+        fi
         # Copy binaries
         cp $GOPATH/bin/tinode ./releases/tmp
         cp $GOPATH/bin/init-db ./releases/tmp
         cp $GOPATH/bin/keygen ./releases/tmp
 
         # Remove possibly existing archive.
-        rm -f ./releases/${version}/tinode-${dbtag}."${plat}-${arc}".tar.gz
+        rm -f ./releases/${version}/tinode-${dbtag}."${plat2}-${arc}".tar.gz
         # Generate a new one
-        tar -C ${GOSRC}/chat/releases/tmp -zcf ./releases/${version}/tinode-${dbtag}."${plat}-${arc}".tar.gz .
+        tar -C ${GOSRC}/chat/releases/tmp -zcf ./releases/${version}/tinode-${dbtag}."${plat2}-${arc}".tar.gz .
       fi
     done
   done

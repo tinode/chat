@@ -259,6 +259,9 @@ func (t *Topic) run(hub *Hub) {
 					if err := store.Users.UpdateLastSeen(mrs.uid, mrs.userAgent, now); err != nil {
 						log.Println(err)
 					}
+				} else if t.cat == types.TopicCatFnd {
+					// Remove ephemeral query.
+					t.fndRemovePublic(leave.sess)
 				} else if t.cat == types.TopicCatGrp && pud.online == 0 {
 					// User is going offline: notify online subscribers on 'me'
 					t.presSubsOnline("off", leave.sess.uid.UserId(), nilPresParams,
@@ -943,7 +946,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktID string, want string,
 			if userData.modeGiven != oldGiven {
 				update["ModeGiven"] = userData.modeGiven
 			}
-			if err := store.Subs.Update(t.name, sess.uid, update, true); err != nil {
+			if err := store.Subs.Update(t.name, sess.uid, update, false); err != nil {
 				sess.queueOut(ErrUnknown(pktID, t.original(sess.uid), now))
 				return err
 			}
@@ -958,7 +961,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktID string, want string,
 			if err := store.Subs.Update(t.name, t.owner,
 				map[string]interface{}{
 					"ModeWant":  oldOwnerData.modeWant,
-					"ModeGiven": oldOwnerData.modeGiven}, true); err != nil {
+					"ModeGiven": oldOwnerData.modeGiven}, false); err != nil {
 				return err
 			}
 			t.perUser[t.owner] = oldOwnerData
@@ -1143,7 +1146,7 @@ func (t *Topic) approveSub(h *Hub, sess *Session, target types.Uid, set *MsgClie
 
 			// Save changed value to database
 			if err := store.Subs.Update(t.name, target,
-				map[string]interface{}{"ModeGiven": modeGiven}, true); err != nil {
+				map[string]interface{}{"ModeGiven": modeGiven}, false); err != nil {
 				return err
 			}
 
@@ -1186,6 +1189,11 @@ func (t *Topic) approveSub(h *Hub, sess *Session, target types.Uid, set *MsgClie
 // replyGetDesc is a response to a get.desc request on a topic, sent to just the session as a {meta} packet
 func (t *Topic) replyGetDesc(sess *Session, id, tempName string, opts *MsgGetOpts) error {
 	now := types.TimeNow()
+
+	if opts != nil && (opts.User != "" || opts.Limit != 0) {
+		sess.queueOut(ErrMalformed(id, t.original(sess.uid), now))
+		return errors.New("invalid GetDesc query")
+	}
 
 	// Check if user requested modified data
 	ifUpdated := (opts == nil || opts.IfModifiedSince == nil || opts.IfModifiedSince.Before(t.updated))
@@ -1265,6 +1273,9 @@ func (t *Topic) replySetDesc(sess *Session, set *MsgClientSet) error {
 	now := types.TimeNow()
 
 	assignAccess := func(upd map[string]interface{}, mode *MsgDefaultAcsMode) error {
+		if mode == nil {
+			return nil
+		}
 		if auth, anon, err := parseTopicAccess(mode, types.ModeUnset, types.ModeUnset); err != nil {
 			return err
 		} else if auth.IsOwner() || anon.IsOwner() {
@@ -1301,10 +1312,8 @@ func (t *Topic) replySetDesc(sess *Session, set *MsgClientSet) error {
 	assignGenericValues := func(upd map[string]interface{}, what string, p interface{}) (changed bool) {
 		if isNullValue(p) {
 			// Request to clear the value
-			if upd[what] != nil {
-				upd[what] = nil
-				changed = true
-			}
+			upd[what] = nil
+			changed = true
 		} else if p != nil {
 			// A new non-nil value
 			upd[what] = p
@@ -1313,32 +1322,22 @@ func (t *Topic) replySetDesc(sess *Session, set *MsgClientSet) error {
 		return
 	}
 
-	updateCached := func(upd map[string]interface{}) {
-		if tmp, ok := upd["Access"]; ok {
-			access := tmp.(types.DefaultAccess)
-			t.accessAuth = access.Auth
-			t.accessAnon = access.Anon
-		}
-		if public, ok := upd["Public"]; ok {
-			t.public = public
-		}
-	}
-
 	var err error
 	var sendPres bool
 
-	user := make(map[string]interface{})
-	topic := make(map[string]interface{})
+	// Change to the main object
+	core := make(map[string]interface{})
+	// Change to subscription
 	sub := make(map[string]interface{})
 	if set.Desc != nil {
 		if t.cat == types.TopicCatMe {
 			// Update current user
-			if set.Desc.DefaultAcs != nil {
-				err = assignAccess(user, set.Desc.DefaultAcs)
-			}
-			if set.Desc.Public != nil {
-				sendPres = assignGenericValues(user, "Public", set.Desc.Public)
-			}
+			err = assignAccess(core, set.Desc.DefaultAcs)
+			sendPres = assignGenericValues(core, "Public", set.Desc.Public)
+		} else if t.cat == types.TopicCatFnd {
+			// set.Desc.DefaultAcs is ignored.
+			// Do not send presence if fnd.Public has changed.
+			assignGenericValues(core, "Public", set.Desc.Public)
 		} else if t.cat == types.TopicCatP2P {
 			// Reject direct changes to P2P topics.
 			if set.Desc.Public != nil || set.Desc.DefaultAcs != nil {
@@ -1347,65 +1346,63 @@ func (t *Topic) replySetDesc(sess *Session, set *MsgClientSet) error {
 			}
 		} else if t.cat == types.TopicCatGrp {
 			// Update group topic
-			if set.Desc.DefaultAcs != nil || set.Desc.Public != nil {
-				if t.owner == sess.uid {
-					if set.Desc.DefaultAcs != nil {
-						err = assignAccess(topic, set.Desc.DefaultAcs)
-					}
-					if set.Desc.Public != nil {
-						sendPres = assignGenericValues(topic, "Public", set.Desc.Public)
-					}
-				} else {
-					// This is a request from non-owner
-					sess.queueOut(ErrPermissionDenied(set.Id, set.Topic, now))
-					return errors.New("attempt to change public or permissions by non-owner")
-				}
+			if t.owner == sess.uid {
+				err = assignAccess(core, set.Desc.DefaultAcs)
+				sendPres = assignGenericValues(core, "Public", set.Desc.Public)
+			} else if set.Desc.DefaultAcs != nil || set.Desc.Public != nil {
+				// This is a request from non-owner
+				sess.queueOut(ErrPermissionDenied(set.Id, set.Topic, now))
+				return errors.New("attempt to change public or permissions by non-owner")
 			}
 		}
-		// else fnd: update ignored
 
 		if err != nil {
 			sess.queueOut(ErrMalformed(set.Id, set.Topic, now))
 			return err
 		}
 
-		if set.Desc.Private != nil {
-			assignGenericValues(sub, "Private", set.Desc.Private)
-		}
+		sendPres = sendPres || assignGenericValues(sub, "Private", set.Desc.Private)
 	}
 
-	var change int
-	if len(user) > 0 {
-		err = store.Users.Update(sess.uid, user)
-		change++
-	}
-	if err == nil && len(topic) > 0 {
-		err = store.Topics.Update(t.name, topic)
-		change++
+	if len(core) > 0 {
+		if t.cat == types.TopicCatMe {
+			err = store.Users.Update(sess.uid, core)
+		} else if t.cat == types.TopicCatFnd {
+			// The only value is Public, and Public for fnd is not saved according to specs.
+		} else {
+			err = store.Topics.Update(t.name, core)
+		}
 	}
 	if err == nil && len(sub) > 0 {
 		err = store.Subs.Update(t.name, sess.uid, sub, true)
-		change++
 	}
 
 	if err != nil {
 		sess.queueOut(ErrUnknown(set.Id, set.Topic, now))
 		return err
-	} else if change == 0 {
+	} else if len(core)+len(sub) == 0 {
 		sess.queueOut(InfoNotModified(set.Id, set.Topic, now))
 		return errors.New("{set} generated no update to DB")
 	}
 
 	// Update values cached in the topic object
+	if t.cat == types.TopicCatMe || t.cat == types.TopicCatGrp {
+		if tmp, ok := core["Access"]; ok {
+			access := tmp.(types.DefaultAccess)
+			t.accessAuth = access.Auth
+			t.accessAnon = access.Anon
+		}
+		if public, ok := core["Public"]; ok {
+			t.public = public
+		}
+	} else if t.cat == types.TopicCatFnd {
+		// Assign per-session fnd.Public.
+		t.fndSetPublic(sess, core["Public"])
+	}
 	if private, ok := sub["Private"]; ok {
 		pud := t.perUser[sess.uid]
 		pud.private = private
 		t.perUser[sess.uid] = pud
-	}
-	if t.cat == types.TopicCatMe {
-		updateCached(user)
-	} else if t.cat == types.TopicCatGrp {
-		updateCached(topic)
 	}
 
 	if sendPres {
@@ -1425,83 +1422,103 @@ func (t *Topic) replySetDesc(sess *Session, set *MsgClientSet) error {
 
 // replyGetSub is a response to a get.sub request on a topic - load a list of subscriptions/subscribers,
 // send it just to the session as a {meta} packet
-// FIXME(gene): reject request if the user does not have the R permission
-func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
+func (t *Topic) replyGetSub(sess *Session, id string, req *MsgGetOpts) error {
 	now := types.TimeNow()
+
+	if req != nil && (req.SinceId != 0 || req.BeforeId != 0) {
+		sess.queueOut(ErrMalformed(id, t.original(sess.uid), now))
+		return errors.New("invalid MsgGetOpts query")
+	}
+
+	userData := t.perUser[sess.uid]
+	if t.cat != types.TopicCatMe && t.cat != types.TopicCatFnd &&
+		!(userData.modeGiven & userData.modeWant).IsReader() {
+
+		sess.queueOut(ErrPermissionDenied(id, t.original(sess.uid), now))
+		return errors.New("user does not have R permission")
+	}
+
+	var ifModified time.Time
+	if req != nil {
+		if req.IfModifiedSince != nil {
+			ifModified = *req.IfModifiedSince
+		}
+	}
 
 	var subs []types.Subscription
 	var err error
 	var isSharer bool
 
 	if t.cat == types.TopicCatMe {
+		if req != nil {
+			// If topic is provided, it could be in the form of user ID 'usrAbCd'.
+			// Convert it to P2P topic name.
+			if uid2 := types.ParseUserId(req.Topic); !uid2.IsZero() {
+				req.Topic = uid2.P2PName(sess.uid)
+			}
+		}
 		// Fetch user's subscriptions, with Topic.Public denormalized into subscription.
-		// Include deleted subscriptions too.
-		subs, err = store.Users.GetTopicsAny(sess.uid)
+		if ifModified.IsZero() {
+			// No cache management. Skip deleted subscriptions.
+			subs, err = store.Users.GetTopics(sess.uid, msgOpts2storeOpts(req))
+		} else {
+			// User manages cache. Include deleted subscriptions too.
+			subs, err = store.Users.GetTopicsAny(sess.uid, msgOpts2storeOpts(req))
+		}
 		isSharer = true
 	} else if t.cat == types.TopicCatFnd {
-		// Given a query provided in .private, fetch user's contacts. Private contains a slice of interfaces.
-		if ifquery, ok := t.perUser[sess.uid].private.([]interface{}); ok && len(ifquery) > 0 {
-			// Convert slice of interfaces to a slice of strings.
-			var query []string
-			for _, ifq := range ifquery {
-				switch str := ifq.(type) {
-				case string:
-					query = append(query, str)
-				default:
-				}
-			}
-			if len(query) > 0 {
-				query, subs, err = pluginFind(sess.uid, query)
-				if err == nil && subs == nil && query != nil {
-					subs, err = store.Users.FindSubs(sess.uid, query)
+		// Select public or private query. Public has priority.
+		raw := t.fndGetPublic(sess)
+		if raw == nil {
+			raw = userData.private
+		}
+
+		if query, ok := raw.(string); ok && len(query) > 0 {
+			query, subs, err = pluginFind(sess.uid, query)
+			if err == nil && subs == nil && query != "" {
+				var req, opt []string
+				if req, opt, err = parseSearchQuery(query); err == nil {
+					// Check if the query contains terms that the user does not have.
+					if restr, _ := stringSliceDelta(t.tags,
+						filterRestrictedTags(append(req, opt...), globals.maskedTagNS)); len(restr) > 0 {
+						err = types.ErrPermissionDenied
+					} else {
+						subs, err = store.Users.FindSubs(sess.uid, req, opt)
+					}
+				} else {
+					// Convert specific parsing error into a generic ErrMalformed.
+					// Otherwise it will be reported as 500 Internal.
+					err = types.ErrMalformed
 				}
 			}
 		}
 	} else {
 		// FIXME(gene): don't load subs from DB, use perUserData - it already contains subscriptions.
-		subs, err = store.Topics.GetUsersAny(t.name)
-		userData := t.perUser[sess.uid]
+		if ifModified.IsZero() {
+			// No cache management. Skip deleted subscriptions.
+			subs, err = store.Topics.GetUsers(t.name, msgOpts2storeOpts(req))
+		} else {
+			// User manages cache. Include deleted subscriptions too.
+			subs, err = store.Topics.GetUsersAny(t.name, msgOpts2storeOpts(req))
+		}
 		isSharer = (userData.modeGiven & userData.modeWant).IsSharer()
 	}
 
 	if err != nil {
-		sess.queueOut(ErrUnknown(id, t.original(sess.uid), now))
+		sess.queueOut(decodeStoreError(err, id, t.original(sess.uid), now, nil))
 		return err
 	}
 
-	var ifModified time.Time
-	var limit int
-	if opts != nil {
-		if opts.IfModifiedSince != nil {
-			ifModified = *opts.IfModifiedSince
-		}
-		limit = opts.Limit
-	}
-
-	if limit <= 0 {
-		limit = 1024
-	}
-
-	meta := &MsgServerMeta{Id: id, Topic: t.original(sess.uid), Timestamp: &now}
 	if len(subs) > 0 {
+		meta := &MsgServerMeta{Id: id, Topic: t.original(sess.uid), Timestamp: &now}
 		meta.Sub = make([]MsgTopicSub, 0, len(subs))
-		idx := 0
 		for _, sub := range subs {
-			if idx == limit {
-				break
-			}
-			// Check if the requester has provided a cut off date for ts of pub & priv updates.
+			// Indicator if the requester has provided a cut off date for ts of pub & priv updates.
 			var sendPubPriv bool
 			var deleted, banned bool
 			var mts MsgTopicSub
 
 			if ifModified.IsZero() {
-				// If IfModifiedSince is not set then the user does not care about managing cache. The user
-				// only wants active subscriptions. Skip all deleted subscriptions regarless of deletion time.
-				if sub.DeletedAt != nil {
-					continue
-				}
-
 				sendPubPriv = true
 			} else {
 				// Skip sending deleted subscriptions if they were deleted before the cut off date.
@@ -1603,11 +1620,11 @@ func (t *Topic) replyGetSub(sess *Session, id string, opts *MsgGetOpts) error {
 			}
 
 			meta.Sub = append(meta.Sub, mts)
-			idx++
 		}
+		sess.queueOut(&ServerComMessage{Meta: meta})
+	} else {
+		sess.queueOut(NoErr(id, t.original(sess.uid), now))
 	}
-
-	sess.queueOut(&ServerComMessage{Meta: meta})
 
 	return nil
 }
@@ -1660,10 +1677,16 @@ func (t *Topic) replySetSub(h *Hub, sess *Session, set *MsgClientSet) error {
 
 // replyGetData is a response to a get.data request - load a list of stored messages, send them to session as {data}
 // response goes to a single session rather than all sessions in a topic
-func (t *Topic) replyGetData(sess *Session, id string, req *MsgBrowseOpts) error {
+func (t *Topic) replyGetData(sess *Session, id string, req *MsgGetOpts) error {
 	now := types.TimeNow()
 
+	if req != nil && (req.IfModifiedSince != nil || req.User != "" || req.Topic != "") {
+		sess.queueOut(ErrMalformed(id, t.original(sess.uid), now))
+		return errors.New("invalid MsgGetOpts query")
+	}
+
 	// Check if the user has permission to read the topic data
+	count := 0
 	if userData := t.perUser[sess.uid]; (userData.modeGiven & userData.modeWant).IsReader() {
 		// Read messages from DB
 		messages, err := store.Messages.GetAll(t.name, sess.uid, msgOpts2storeOpts(req))
@@ -1676,7 +1699,8 @@ func (t *Topic) replyGetData(sess *Session, id string, req *MsgBrowseOpts) error
 		// Messages are sent in reverse order than fetched from DB to make it easier for
 		// clients to process.
 		if messages != nil {
-			for i := len(messages) - 1; i >= 0; i-- {
+			count = len(messages)
+			for i := count - 1; i >= 0; i-- {
 				mm := messages[i]
 
 				from := types.ParseUid(mm.From)
@@ -1695,7 +1719,7 @@ func (t *Topic) replyGetData(sess *Session, id string, req *MsgBrowseOpts) error
 
 	// Inform the requester that all the data has been served.
 	reply := NoErr(id, t.original(sess.uid), now)
-	reply.Ctrl.Params = map[string]string{"what": "data"}
+	reply.Ctrl.Params = map[string]interface{}{"what": "data", "count": count}
 	sess.queueOut(reply)
 
 	return nil
@@ -1704,9 +1728,14 @@ func (t *Topic) replyGetData(sess *Session, id string, req *MsgBrowseOpts) error
 // replyGetTags returns topic's tags - tokens used for discovery.
 func (t *Topic) replyGetTags(sess *Session, id string) error {
 	now := types.TimeNow()
-	if t.cat != types.TopicCatMe && t.cat != types.TopicCatGrp {
+
+	if t.cat != types.TopicCatFnd && t.cat != types.TopicCatGrp {
 		sess.queueOut(ErrOperationNotAllowed(id, t.original(sess.uid), now))
 		return errors.New("invalid topic category for getting tags")
+	}
+	if t.cat == types.TopicCatGrp && t.owner != sess.uid {
+		sess.queueOut(ErrPermissionDenied(id, t.original(sess.uid), now))
+		return errors.New("request for tags from non-owner")
 	}
 
 	if len(t.tags) > 0 {
@@ -1725,57 +1754,75 @@ func (t *Topic) replyGetTags(sess *Session, id string) error {
 
 // replySetTags updates topic's tags - tokens used for discovery.
 func (t *Topic) replySetTags(sess *Session, set *MsgClientSet) error {
-	log.Println("Set tags", set.Tags)
+	var resp *ServerComMessage
+	var err error
 
 	now := types.TimeNow()
-	if t.cat != types.TopicCatMe && t.cat != types.TopicCatGrp {
-		sess.queueOut(ErrOperationNotAllowed(set.Id, t.original(sess.uid), now))
-		return errors.New("invalid topic category to assign tags")
+
+	if t.cat != types.TopicCatFnd && t.cat != types.TopicCatGrp {
+		resp = ErrOperationNotAllowed(set.Id, t.original(sess.uid), now)
+		err = errors.New("invalid topic category to assign tags")
+
 	} else if t.cat == types.TopicCatGrp && t.owner != sess.uid {
-		sess.queueOut(ErrPermissionDenied(set.Id, t.original(sess.uid), now))
-		return errors.New("tags update by non-owner")
-	}
+		resp = ErrPermissionDenied(set.Id, t.original(sess.uid), now)
+		err = errors.New("tags update by non-owner")
 
-	if tags := normalizeTags(set.Tags); tags != nil {
-		var err error
-		var resp *ServerComMessage
-
-		if !restrictedTags(t.tags, tags) {
+	} else if tags := normalizeTags(set.Tags); tags != nil {
+		if !restrictedTagsEqual(t.tags, tags, globals.immutableTagNS) {
 			err = errors.New("attempt to mutate restricted tags")
 			resp = ErrPermissionDenied(set.Id, t.original(sess.uid), now)
 		} else {
-			update := map[string]interface{}{"Tags": types.StringSlice(tags)}
+			added, removed := stringSliceDelta(t.tags, tags)
+			if len(added) > 0 || len(removed) > 0 {
+				update := map[string]interface{}{"Tags": types.StringSlice(tags)}
 
-			if t.cat == types.TopicCatMe {
-				err = store.Users.Update(sess.uid, update)
-			} else if t.cat == types.TopicCatGrp {
-				err = store.Topics.Update(t.name, update)
-			}
+				if t.cat == types.TopicCatFnd {
+					err = store.Users.Update(sess.uid, update)
+				} else if t.cat == types.TopicCatGrp {
+					err = store.Topics.Update(t.name, update)
+				}
 
-			if err != nil {
-				resp = ErrUnknown(set.Id, t.original(sess.uid), now)
+				if err != nil {
+					resp = ErrUnknown(set.Id, t.original(sess.uid), now)
+				} else {
+					t.tags = tags
+
+					resp = NoErr(set.Id, t.original(sess.uid), now)
+					params := make(map[string]interface{})
+					if len(added) > 0 {
+						params["added"] = len(added)
+					}
+					if len(removed) > 0 {
+						params["removed"] = len(removed)
+					}
+					resp.Ctrl.Params = params
+				}
+			} else {
+				resp = InfoNotModified(set.Id, t.original(sess.uid), now)
 			}
 		}
-
-		if err != nil {
-			sess.queueOut(resp)
-			return err
-		}
+	} else {
+		resp = InfoNotModified(set.Id, t.original(sess.uid), now)
 	}
 
-	sess.queueOut(NoErr(set.Id, t.original(sess.uid), now))
+	sess.queueOut(resp)
 
-	return nil
+	return err
 }
 
 // replyGetDel is a response to a get[what=del] request: load a list of deleted message ids, send them to
 // a session as {meta}
 // response goes to a single session rather than all sessions in a topic
-func (t *Topic) replyGetDel(sess *Session, id string, req *MsgBrowseOpts) error {
+func (t *Topic) replyGetDel(sess *Session, id string, req *MsgGetOpts) error {
 	now := types.TimeNow()
 
+	if req != nil && (req.IfModifiedSince != nil || req.User != "" || req.Topic != "") {
+		sess.queueOut(ErrMalformed(id, t.original(sess.uid), now))
+		return errors.New("invalid MsgGetOpts query")
+	}
+
 	// Check if the user has permission to read the topic data and the request is valid
-	if userData := t.perUser[sess.uid]; (userData.modeGiven & userData.modeWant).IsReader() && req != nil {
+	if userData := t.perUser[sess.uid]; (userData.modeGiven & userData.modeWant).IsReader() {
 		ranges, delID, err := store.Messages.GetDeleted(t.name, sess.uid, msgOpts2storeOpts(req))
 		if err != nil {
 			sess.queueOut(ErrUnknown(id, t.original(sess.uid), now))
@@ -1827,7 +1874,9 @@ func (t *Topic) replyDelMsg(sess *Session, del *MsgClientDel) error {
 			}
 
 			if dq.HiId > t.lastID {
-				dq.HiId = t.lastID
+				// Range is inclusive - exclusive [low, hi),
+				// to delete all messages hi must be lastId + 1
+				dq.HiId = t.lastID + 1
 			} else if dq.LowId == dq.HiId {
 				dq.HiId = 0
 			}
@@ -2161,7 +2210,7 @@ func (t *Topic) original(uid types.Uid) string {
 	panic("Invalid P2P topic")
 }
 
-// Get topic name suitable for the given client
+// Get ID of the other user in a P2P topic
 func (t *Topic) p2pOtherUser(uid types.Uid) types.Uid {
 	if t.cat == types.TopicCatP2P {
 		for u2 := range t.perUser {
@@ -2172,6 +2221,64 @@ func (t *Topic) p2pOtherUser(uid types.Uid) types.Uid {
 		panic("Invalid P2P topic")
 	}
 	panic("Not P2P topic")
+}
+
+// Get per-session value of fnd.Public
+func (t *Topic) fndGetPublic(sess *Session) interface{} {
+	if t.cat == types.TopicCatFnd {
+		if t.public == nil {
+			return nil
+		}
+		if pubmap, ok := t.public.(map[string]interface{}); ok {
+			return pubmap[sess.sid]
+		}
+		panic("Invalid Fnd.Public type")
+	}
+	panic("Not Fnd topic")
+}
+
+// Assign per-session fnd.Public. Returns true if value has been changed.
+func (t *Topic) fndSetPublic(sess *Session, public interface{}) bool {
+	if t.cat == types.TopicCatFnd {
+		var pubmap map[string]interface{}
+		var ok bool
+		if t.public != nil {
+			if pubmap, ok = t.public.(map[string]interface{}); !ok {
+				panic("Invalid Fnd.Public type")
+			}
+		}
+		if pubmap == nil {
+			pubmap = make(map[string]interface{})
+		}
+
+		if public != nil {
+			pubmap[sess.sid] = public
+		} else {
+			ok = (pubmap[sess.sid] != nil)
+			delete(pubmap, sess.sid)
+			if len(pubmap) == 0 {
+				pubmap = nil
+			}
+		}
+		t.public = pubmap
+		return ok
+	}
+	panic("Not Fnd topic")
+}
+
+// Remove per-session value of fnd.Public
+func (t *Topic) fndRemovePublic(sess *Session) {
+	if t.cat == types.TopicCatFnd {
+		if t.public == nil {
+			return
+		}
+		if pubmap, ok := t.public.(map[string]interface{}); ok {
+			delete(pubmap, sess.sid)
+			return
+		}
+		panic("Invalid Fnd.Public type")
+	}
+	panic("Not Fnd topic")
 }
 
 func (t *Topic) accessFor(authLvl auth.Level) types.AccessMode {

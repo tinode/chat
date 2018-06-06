@@ -37,13 +37,13 @@ Server-issued message IDs are base-10 sequential numbers starting at 1. They gua
 
 ## Connecting to the server
 
-Client establishes a connection to the server over HTTP. Server offers two end points:
+Client establishes a connection to the server over HTTP(S). Server offers two end points:
  * `/v0/channels` for websocket connections
  * `/v0/channels/lp` for long polling
 
-`v0` denotes API version (currently zero). Every HTTP request must include the API key. It may be included in the URL as `...?apikey=<YOUR_API_KEY>`, in the request body as `apikey=<YOUR_API_KEY>`, or in the HTTP header `X-Tinode-APIKey: <YOUR_API_KEY>`.
+`v0` denotes API version (currently zero). Every HTTP(S) request must include the API key. It may be included in the URL as `...?apikey=<YOUR_API_KEY>`, in the request body as `apikey=<YOUR_API_KEY>`, or in the HTTP header `X-Tinode-APIKey: <YOUR_API_KEY>`. A default key is included in every demo app for convenience. Generate your own key using [`keygen` utility](../keygen).
 
-Once the connection is opened, the client must issue a `{hi}` message to the server. Server responds with a `{ctrl}` message which maybe an error message. The `params` field of the response contains server's protocol version: `"params":{"ver":"0.7"}`. `params` may include other values.
+Once the connection is opened, the client must issue a `{hi}` message to the server. Server responds with a `{ctrl}` message which maybe an error message. The `params` field of the response contains server's protocol version `"params":{"ver":"0.15"}` and may include other values.
 
 ### Websocket
 
@@ -211,7 +211,12 @@ sub: {
       mode: "JRWS", // string, requested access mode, optional;
                    // default: server-defined
       info: { ... }  // application-defined payload to pass to the topic manager
-    } // object, optional
+    }, // object, optional
+	
+    // Optional update to tags (see fnd topic description)
+    tags: [ // array of strings
+        "email:alice@example.com", "tel:1234567890"
+    ]
   },
 
   get: {
@@ -233,6 +238,10 @@ sub: {
       ims: "2015-10-06T18:07:30.038Z", // timestamp, "if modified since" - return
               // public and private values only if at least one of them has been
               // updated after the stated timestamp, optional
+	  user: "usr2il9suCbuko", // string, return results for a single user, 
+	                          // any topic other than 'me', optional
+	  topic: "usr2il9suCbuko", // string, return results for a single topic,
+	                          // 'me' topic only, optional	
       limit: 20 // integer, limit the number of returned objects
     },
 
@@ -248,6 +257,8 @@ sub: {
   }
 }
 ```
+
+See [Public and Private Fields](#public-and-private-fields) for `private` and `public` format considerations.
 
 #### `{leave}`
 
@@ -282,9 +293,12 @@ pub: {
 }
 ```
 
-Topic subscribers receive the `content` in the `{data}` message. By default the originating session gets a copy of `{data}` like any other session currently attached to the topic. If for some reason the originating session does not want to receive the copy of the data it just published, set `noecho` to `true`.
+Topic subscribers receive the `content` in the `{data}` message. By default the originating session gets a copy of `{data}` like any other session currently attached to the topic. If for some reason the originating session does not want to receive the copy of the data it just published, set `noecho` to `true`. 
 
-#### `{get}`
+See [Format of Content](#format-of-content) for `content` format considerations.
+
+#### `{get}
+`
 
 Query topic for metadata, such as description or a list of subscribers, or query message history.
 
@@ -307,6 +321,10 @@ get: {
     ims: "2015-10-06T18:07:30.038Z", // timestamp, "if modified since" - return
           // public and private values only if at least one of them has been
           // updated after the stated timestamp, optional
+	user: "usr2il9suCbuko", // string, return results for a single user, 
+	                        // any topic other than 'me', optional
+	topic: "usr2il9suCbuko", // string, return results for a single topic,
+	                         // 'me' topic only, optional	
     limit: 20 // integer, limit the number of returned objects
   },
 
@@ -335,7 +353,7 @@ get: {
 * `{get what="desc"}`
 
 Query topic description. Server responds with a `{meta}` message containing requested data. See `{meta}` for details.
-If `ims` is specified and data has not been updated, the message will skip `public` and `private` fields.
+If `ims` is specified and data has not been updated, the message will skip `public` and `private` fields. 
 
 * `{get what="sub"}`
 
@@ -350,12 +368,14 @@ Supported only for `me` and group topics.
 
 * `{get what="data"}`
 
-Query message history. Server sends `{data}` messages matching parameters provided in the `browse` field of the query.
-The `id` field of the data messages is not provided as it's common for data messages.
+Query message history. Server sends `{data}` messages matching parameters provided in the `data` field of the query.
+The `id` field of the data messages is not provided as it's common for data messages. When all `{data}` messages are transmitted, a `{ctrl}` message is sent.
 
 * `{get what="del"}`
 
 Query message deletion history. Server responds with a `{meta}` message containing a list of deleted message ranges.
+
+See [Public and Private Fields](#public-and-private-fields) for `private` and `public` format considerations.
 
 
 #### `{set}`
@@ -407,16 +427,14 @@ del: {
                // entire topic or subscription or just the messages; 
                // optional, default: "msg"
   hard: false, // boolean, request to delete messages for all users, default: false
-  before: 123, // integer, delete messages with server-issued ID lower or equal
-               // to this value (inclusive), optional
   delseq: [{low: 123, hi: 125}, {low: 156}], // array of ranges of message IDs 
-				// to delete, optional
+				// to delete, inclusive-exclusive, i.e. [low, hi), optional
   user: "usr2il9suCbuko" // string, user whose subscription is being deleted 
                // (what="sub"), optional
 }
 ```
 
-User can soft-delete or hard-delete messages `what="msg"`. Soft-deleting messages hides them from the requesting user but does not delete them from storage. An `R` permission is required to soft-delete messages `hard=false` (default). Messages can be either deleted in bulk by setting the `before` parameter or deleted by a list of message IDs by setting the `list` parameter. Setting `before` will delete all messages with IDs below or equal to it. Either `before` or `list` must be provided. Hard-deleting messages deletes them from storage affecting all users. The `D` permission is needed to hard-delete messages.
+User can soft-delete or hard-delete messages `what="msg"`. Soft-deleting messages hides them from the requesting user but does not delete them from storage. An `R` permission is required to soft-delete messages `hard=false` (default). Messages can be deleted in bulk by sepcifying one or more message ID ranges in `delseq` parameter. Hard-deleting messages deletes them from storage affecting all users. The `D` permission is needed to hard-delete messages.
 
 Deleting a subscription `what="sub"` removes specified user from topic subscribers. It requires an `A` permission. A user cannot delete own subscription. A `{leave}` should be used instead.
 
@@ -471,7 +489,7 @@ data: {
 }
 ```
 
-Data messages have a `seq` field which holds a sequential numeric ID generated by the server. The IDs are guaranteed to be unique within a topic. IDs start from 1 and sequentially increment with every successful `{pub}` message received by the topic.
+Data messages have a `seq` field which holds a sequential numeric ID generated by the server. The IDs are guaranteed to be unique within a topic. IDs start from 1 and sequentially increment with every successful `{pub}` message received by the topic. See [Format of Content](#format-of-content) for `content` format considerations.
 
 #### `{ctrl}`
 
@@ -547,7 +565,7 @@ meta: {
       clear: 12, // integer, in case some messages were deleted, the greatest ID
                  // of a deleted message, optional
       private: { ... } // application-defined user's 'private' object, present only
-                       // for the requester's own subscriptions
+                       // for the requester's own subscriptions.
       online: true, // boolean, current online status of the user; if this is a
                     // group or a p2p topic, it's user's online status in the topic,
                     // i.e. if the user is attached and listening to messages; if this
@@ -727,21 +745,47 @@ Message `{get what="sub"}` to `me` is different from any other topic as it retur
 
 Message `{get what="data"}` to `me` queries the history of invites/notifications. It's handled the same way as to any other topic.
 
-### `fnd`: Contacts and Topics Discovery
+### `fnd` and Tags: Finding Users and Topics
 
 Topic `fnd` is automatically created for every user at the account creation time. It serves as an endpoint for discovering other users and group topics. 
 
-Users and group topics can be discovered by optional tags. A tag is an arbitrary case-insensitive string (forced to lowercase). Tags may have a prefix which serves as a namespace. The prefix is a string followed by a colon `:`, ex. prefixed phone tag `tel:14155551212` or prefixed email tag `email:alice@example.com`. Some prefixed tags are optionally enforced to be unique. It's done by listing them in the config, for instance `"unique_tags": ["tel", "email"]`. Only one user or topic may use such a unique tag.
+Users and group topics can be discovered by optional `tags`. Tags are optionally assigned at the topic or user creation time then can be updated by using `{set what="tags"}` against a `fnd` or a group topic. 
 
-Tags can are assigned at creation time then can be updated by using `{set what="tags"}` against a `me` or a group topic. 
+A tag is an arbitrary case-insensitive Unicode string (forced to lowercase) starting with a Unicode letter or digit. `Tags` must not contain the double quote `"`, `\u0022` but may contain spaces. `Tags` may have a prefix which serves as a namespace. The prefix is a string followed by a colon `:`, ex. prefixed phone tag `tel:14155551212` or prefixed email tag `email:alice@example.com`. Some prefixed `tags` are optionally enforced to be unique. In that case only one user or topic may have such a tag. Certain `tags` may be forced to be immutable to the user, i.e. user's attemps to add or remove an immutable tag will be rejected by the server. 
 
-In order to find users or topics, a user sets `private` parameter of the `fnd` topic to an array of tags then issues a `{get topic="fnd" what="sub"}` request. The system responds with a `{meta}` message with the `sub` section listing details of the found users or topics formatted as subscriptions.
+The `tags` are indexed server-side and used in user and topic discovery. Seach returns users and topics sorted by the number of matched tags in descending order. 
+
+In order to find users or topics, a user sets either `public` or `private` parameter of the `fnd` topic to a search query (see [Query language](#query-language)) then issues a `{get topic="fnd" what="sub"}` request. If both `public` and `private` are set, the `public` query is used. The `private` query is persisted accress sessions and devices, i.e. all user's sessions see the same `private` query. The value of the `public` query is ephemeral, i.e. it's not saved to database and not shared between user's sessions. The `private` query is intended for large queries which do not change often, such as finding matches for everyone in user's contact list on a mobile phone. The `public` query is intended to be short and specific, such as finding some topic or a user who is not in the contact list.
+
+The system responds with a `{meta}` message with the `sub` section listing details of the found users or topics formatted as subscriptions.
 
 Topic `fnd` is read-only. `{pub}` messages to `fnd` are rejected.
 
 (The following functionality is not implemented yet) When a new user registers with tags matching the given query, the `fnd` topic will receive `{pres}` notification for the new user.
 
 [Plugins](./pbx) support `Find` service which can be used to replace default search with a custom one.
+
+#### Query language
+
+Tinode query language is used to define search queries for finding users and topics. The query is a string containing tags separated by spaces or commas. Tags are strings - individual query terms which are matched against user's or topic's tags. The tags can be written in an RTL language but the query as a whole is parsed left to right. Spaces are treated as the `AND` operator, commas (as well commas preceeded and/or followed by a space) as the `OR` operator. The order of operators is ignored: all `AND` operators are grouped together, all `OR` operators are grouped together. `OR` takes precedence over `AND`.
+
+Tags containing spaces or commas must be enclosed in double quotes (`"`, `\u0022`): i.e. `"abc, def"` is treated as a single token. Tags must start with a Unicode letter or digit. Tags must not contain the double quote (`"`, `\u0022`).
+
+**Some examples:**
+* `flowers travel`: find topics or users which contain both tags `flowers` and `travel`.
+* `flowers, travel`: find topics or users which contain either tag `flowers` or `travel` (or both).
+* `flowers travel, puppies`: find topics or users which contain `flowers` and either `travel` or `puppies`, i.e. `flowers AND (travel OR puppies)`.
+
+
+#### Some use cases
+* Restricting users to organizations. 
+  An immutable tag(s) may be assigned to the user which denotes the organization the user belons to. When the user searches for other users or topics, the search can be restricted to always contain the tag. This approach can be used to segment users into organizations with limited visiblity into each other.
+
+* Search by geographical location. 
+  Client software may periodically assign a [geohash](https://en.wikipedia.org/wiki/Geohash) tag to the user based on current location. Searching for users in a given area would mean matching on geohash tags.
+
+* Search by numerical range, such as age range.
+  The approach is similar to geohashing. The entire range of numbers is covered by the smallest possible power of 2, for instance the range of human ages is covered by 2<sup>7</sup>=128 years. The entire range is split in two halves: the range 0-63 is denoted by 0, 64-127 by 1. The operation is repeated with each subrange, i.e. 0-31 is 00, 32-63 is 01, 0-15 is 000, 32-47 is 010. Once completed, the age 30 will belong to the following ranges: 0 (0-63), 00 (0-31), 001 (16-31), 0011 (24-31), 00111 (28-31), 001111 (30-31), 0011110 (30). A 30 y.o. user is assigned a few tags to indicate the age, i.e. `age:00111`, `age:001111`,  and `age:0011110`. Technically, all 7 tags may be assigned but usually it's impractical. To query for anyone in the age range 28-35 convert the range into a minimal number of tags: `age:00111` (28-31), `age:01000` (32-35). This query will match the 30 y.o. user by tag `age:00111`.
 
 
 ### Peer to Peer Topics
@@ -777,6 +821,70 @@ A user is reported as being online when one or more of user's sessions are attac
 
 An empty `ua=""` _user agent_ is not reported. I.e. if user attaches to `me` with non-empty _user agent_ then does so with an empty one, the change is not reported. An empty _user agent_ may be disallowed in the future.
 
-## Push notifications support
+## Push Notifications Support
 
-Tinode supports mobile push notifications though compile-time plugins. The channel published by the plugin receives a copy of every data message which was attempted to be delivered.
+Tinode supports mobile push notifications though compile-time plugins. The channel published by the plugin receives a copy of every data message which was attempted to be delivered. The server supports [Google FCM](https://firebase.google.com/docs/cloud-messaging/) out of the box.
+
+## Public and Private Fields
+
+Topics and subscriptions have `public` and `private` fields. Generally, the fields are application-defined. The server does not enforce any particular structure of these fields except for `fnd` topic. At the same time, client software should use the same format for interoperability reasons. 
+
+### Public
+The format of the `public` field is expected to be a [vCard](https://en.wikipedia.org/wiki/VCard):
+```js
+vcard: {
+  fn: "John Doe", // string, formatted name
+  n: {
+    surname: "Miner", // last of family name
+    given: "Coal", // first or given name
+    additional: "Diamond", // additional name, such as middle name or patronymic or nickname.
+    prefix: "Dr.", // prefix, such as homnorary title or gender designation.
+    suffix: "Jr.", // suffix, such as 'Jr' or 'II'
+  }, // object, user's structured name
+  org: "Most Evil Corp", // string, name of the organization the user belongs to.
+  title: "CEO", // string, job title
+  tel: [
+    {
+      type: "HOME", // string, optional designation
+      uri: "tel:+17025551234" // string, phone number
+    }, ...
+  ], // array of objects, list of phone numbers associated with the user 
+  email: [
+    {
+      type: "WORK", // string, optional designation
+      uri: "email:alice@example.com", // string, email address
+    }, ...
+  ], // array of objects, list of user's email addresses
+  impp: [
+    {
+      type: "OTHER",
+      uri: "tinode:usrRkDVe0PYDOo", // string, email address
+    }, ...
+  ], // array of objects, list of user's IM handles
+  photo: {
+    type: "jpeg", // image type
+    data: "..." // base64-encoded binary image data
+  } // object, avatar photo. Java does not have a useful bitmap class, so keeping it as bits here.
+}
+```
+
+### Private
+
+The format of the `private` field is expected to be a dictionary. The following fields are currently defined:
+```js
+private: {
+  comment: "some comment", // string, optional user comment about a topic or other user
+  arch: true // boolean value indicating that the topic is archived by the user, i.e. should not be shown in the UI with other non-archived topics.
+}
+```
+
+Although it's not yet enforced, custom fields should start with `x-`, e.g. `x-example: "abc"`. The fields should contain primitive types only, i.e. string, boolean, number, null.
+
+
+## Format of Content
+
+Format of `{pub}` and `{data}` `content` field is application-defined and as such the server does not enforce any particular structure of the field. At the same time, client software should use the same format for interoperability reasons. Currently the following two types of `content` are supported:
+ * Plain text
+ * [Drafty](./drafty.md)
+
+If Drafty is used, message header `"head":{"mime":"text/x-drafty"}` must be set.

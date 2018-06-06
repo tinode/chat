@@ -76,8 +76,8 @@ func (ta *authenticator) Init(jsonconf string) error {
 }
 
 // AddRecord is not supprted, will produce an error.
-func (authenticator) AddRecord(rec *auth.Rec, secret []byte) (auth.Level, error) {
-	return auth.LevelNone, types.ErrUnsupported
+func (authenticator) AddRecord(rec *auth.Rec, secret []byte) (*auth.Rec, error) {
+	return nil, types.ErrUnsupported
 }
 
 // UpdateRecord is not supported, will produce an error.

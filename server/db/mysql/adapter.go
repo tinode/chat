@@ -30,14 +30,14 @@ const (
 	defaultDSN      = "root:@tcp(localhost:3306)/tinode?parseTime=true"
 	defaultDatabase = "tinode"
 
-	dbVersion = 100
+	dbVersion = 101
 
 	adapterName = "mysql"
 )
 
 type configType struct {
 	DSN    string `json:"dsn,omitempty"`
-	DBName string `json:database,omitempty"`
+	DBName string `json:"database,omitempty"`
 }
 
 const (
@@ -381,6 +381,7 @@ func (a *adapter) CreateDb(reset bool) error {
 }
 
 func (a *adapter) addTags(tx *sqlx.Tx, table, keyName string, keyVal interface{}, tags []string) error {
+
 	if len(tags) > 0 {
 		var insert *sql.Stmt
 		var err error
@@ -603,13 +604,7 @@ func (a *adapter) UserDelete(uid t.Uid, soft bool) error {
 	return err
 }
 
-func (a *adapter) UserUpdateLastSeen(uid t.Uid, userAgent string, when time.Time) error {
-	_, err := a.db.Exec("UPDATE users SET lastseen=?, useragent=? WHERE id=?", when, userAgent, uid)
-
-	return err
-}
-
-// UserUpdate updates user object. Use UserTagsUpdate when updating Tags.
+// UserUpdate updates user object.
 func (a *adapter) UserUpdate(uid t.Uid, update map[string]interface{}) error {
 	tx, err := a.db.Beginx()
 	if err != nil {
@@ -651,8 +646,9 @@ func (a *adapter) UserUpdate(uid t.Uid, update map[string]interface{}) error {
 // *****************************
 
 func (a *adapter) topicCreate(tx *sqlx.Tx, topic *t.Topic) error {
-	_, err := tx.Exec("INSERT INTO topics(createdAt,updatedAt,name,access,public,tags) VALUES(?,?,?,?,?,?)",
-		topic.CreatedAt, topic.UpdatedAt, topic.Id, topic.Access, toJSON(topic.Public), topic.Tags)
+	_, err := tx.Exec("INSERT INTO topics(createdAt,updatedAt,touchedAt,name,access,public,tags) VALUES(?,?,?,?,?,?,?)",
+		topic.CreatedAt, topic.UpdatedAt, topic.TouchedAt,
+		topic.Id, topic.Access, toJSON(topic.Public), topic.Tags)
 	if err != nil {
 		return err
 	}
@@ -732,6 +728,7 @@ func (a *adapter) TopicCreateP2P(initiator, invited *t.Subscription) error {
 
 	topic := &t.Topic{ObjHeader: t.ObjHeader{Id: initiator.Topic}}
 	topic.ObjHeader.MergeTimes(&initiator.ObjHeader)
+	topic.TouchedAt = initiator.GetTouchedAt()
 	err = a.topicCreate(tx, topic)
 	if err != nil {
 		return err
@@ -744,7 +741,7 @@ func (a *adapter) TopicGet(topic string) (*t.Topic, error) {
 	// Fetch topic by name
 	var tt = new(t.Topic)
 	err := a.db.Get(tt,
-		"SELECT createdat,updatedat,deletedat,name AS id,access,seqid,delid,public,tags FROM topics WHERE name=?",
+		"SELECT createdat,updatedat,deletedat,touchedat,name AS id,access,seqid,delid,public,tags FROM topics WHERE name=?",
 		topic)
 
 	if err != nil {
@@ -762,17 +759,34 @@ func (a *adapter) TopicGet(topic string) (*t.Topic, error) {
 
 // TopicsForUser loads user's contact list: p2p and grp topics, except for 'me' subscription.
 // Reads and denormalizes Public value.
-func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool) ([]t.Subscription, error) {
+func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) ([]t.Subscription, error) {
 	// Fetch user's subscriptions
 	q := `SELECT createdat,updatedat,deletedat,topic,delid,recvseqid,
 		readseqid,modewant,modegiven,private FROM subscriptions WHERE userid=?`
+	args := []interface{}{store.DecodeUid(uid)}
 	if !keepDeleted {
 		// Filter out rows with defined DeletedAt
 		q += " AND deletedAt IS NULL"
 	}
-	q += " LIMIT ?"
 
-	rows, err := a.db.Queryx(q, store.DecodeUid(uid), maxResults)
+	limit := maxResults
+	if opts != nil {
+		// Ignore IfModifiedSince - we must return all entries
+		// Those unmodified will be stripped of Public & Private.
+
+		if opts.Topic != "" {
+			q += " AND topic=?"
+			args = append(args, opts.Topic)
+		}
+		if opts.Limit > 0 && opts.Limit < limit {
+			limit = opts.Limit
+		}
+	}
+
+	q += " LIMIT ?"
+	args = append(args, limit)
+
+	rows, err := a.db.Queryx(q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -886,19 +900,38 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool) ([]t.Subscription, 
 	return subs, err
 }
 
-// UsersForTopic loads users subscribed to the given topic
-func (a *adapter) UsersForTopic(topic string, keepDeleted bool) ([]t.Subscription, error) {
+// UsersForTopic loads users subscribed to the given topic.
+// The difference between UsersForTopic vs SubsForTopic is that the former loads user.public,
+// the latter does not.
+func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt) ([]t.Subscription, error) {
 	// Fetch all subscribed users. The number of users is not large
 	q := `SELECT s.createdat,s.updatedat,s.deletedat,s.userid,s.topic,s.delid,s.recvseqid,
 		s.readseqid,s.modewant,s.modegiven,u.public,s.private
 		FROM subscriptions AS s JOIN users AS u ON s.userid=u.id 
 		WHERE s.topic=?`
+	args := []interface{}{topic}
 	if !keepDeleted {
 		// Filter out rows with DeletedAt being not null
 		q += " AND s.deletedAt IS NULL"
 	}
+
+	limit := maxSubscribers
+	if opts != nil {
+		// Ignore IfModifiedSince - we must return all entries
+		// Those unmodified will be stripped of Public & Private.
+
+		if !opts.User.IsZero() {
+			q += " AND s.userid=?"
+			args = append(args, store.DecodeUid(opts.User))
+		}
+		if opts.Limit > 0 && opts.Limit < limit {
+			limit = opts.Limit
+		}
+	}
 	q += " LIMIT ?"
-	rows, err := a.db.Queryx(q, topic, maxSubscribers)
+	args = append(args, limit)
+
+	rows, err := a.db.Queryx(q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -948,7 +981,28 @@ func (a *adapter) TopicShare(shares []*t.Subscription) (int, error) {
 }
 
 func (a *adapter) TopicDelete(topic string) error {
-	_, err := a.db.Exec("DELETE FROM topics WHERE name=?", topic)
+	tx, err := a.db.Beginx()
+	if err != nil {
+		return err
+	}
+
+	defer func() {
+		if err != nil {
+			tx.Rollback()
+		}
+	}()
+
+	_, err = tx.Exec("DELETE FROM topictags WHERE topic=?", topic)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec("DELETE FROM topics WHERE name=?", topic)
+	if err != nil {
+		return err
+	}
+	tx.Commit()
+
 	return err
 }
 
@@ -1020,20 +1074,33 @@ func (a *adapter) SubsLastSeen(topic string, user t.Uid, lastSeen map[string]tim
 	return err
 }
 
-// SubsForUser loads a list of user's subscriptions to topics. Does NOT read Public value.
-func (a *adapter) SubsForUser(forUser t.Uid, keepDeleted bool) ([]t.Subscription, error) {
-	if forUser.IsZero() {
-		return nil, t.ErrMalformed
-	}
-
+// SubsForUser loads a list of user's subscriptions to topics. Does NOT load Public value.
+func (a *adapter) SubsForUser(forUser t.Uid, keepDeleted bool, opts *t.QueryOpt) ([]t.Subscription, error) {
 	q := `SELECT createdat,updatedat,deletedat,userid AS user,topic,delid,recvseqid,
 		readseqid,modewant,modegiven,private FROM subscriptions WHERE userid=?`
+	args := []interface{}{store.DecodeUid(forUser)}
+
 	if !keepDeleted {
 		q += " AND deletedAt IS NULL"
 	}
-	q += " LIMIT ?"
 
-	rows, err := a.db.Queryx(q, store.DecodeUid(forUser), maxResults)
+	limit := maxResults // maxResults here, not maxSubscribers
+	if opts != nil {
+		// Ignore IfModifiedSince - we must return all entries
+		// Those unmodified will be stripped of Public & Private.
+
+		if opts.Topic != "" {
+			q += " AND topic=?"
+			args = append(args, opts.Topic)
+		}
+		if opts.Limit > 0 && opts.Limit < limit {
+			limit = opts.Limit
+		}
+	}
+	q += " LIMIT ?"
+	args = append(args, limit)
+
+	rows, err := a.db.Queryx(q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -1052,32 +1119,36 @@ func (a *adapter) SubsForUser(forUser t.Uid, keepDeleted bool) ([]t.Subscription
 	return subs, err
 }
 
-// SubsForTopic fetches all subsciptions for a topic.
-func (a *adapter) SubsForTopic(topic string, keepDeleted bool) ([]t.Subscription, error) {
-	// log.Println("Loading subscriptions for topic ", topic)
-
-	// must load User.Public for p2p topics
-	var p2p []t.User
-	var err error
-	if t.GetTopicCat(topic) == t.TopicCatP2P {
-		uid1, uid2, _ := t.ParseP2P(topic)
-		if p2p, err = a.UserGetAll(uid1, uid2); err != nil {
-			// log.Println("SubsForTopic", "UserGetAll", err)
-			return nil, err
-		} else if len(p2p) != 2 {
-			return nil, errors.New("failed to load two p2p users")
-		}
-	}
-
+// SubsForTopic fetches all subsciptions for a topic. Does NOT load Public value.
+// The difference between UsersForTopic vs SubsForTopic is that the former loads user.public,
+// the latter does not.
+func (a *adapter) SubsForTopic(topic string, keepDeleted bool, opts *t.QueryOpt) ([]t.Subscription, error) {
 	q := `SELECT createdat,updatedat,deletedat,userid AS user,topic,delid,recvseqid,
 		readseqid,modewant,modegiven,private FROM subscriptions WHERE topic=?`
+	args := []interface{}{topic}
+
 	if !keepDeleted {
 		// Filter out rows where DeletedAt is defined
 		q += " AND deletedAt IS NULL"
 	}
-	q += " LIMIT ?"
+	limit := maxSubscribers
+	if opts != nil {
+		// Ignore IfModifiedSince - we must return all entries
+		// Those unmodified will be stripped of Public & Private.
 
-	rows, err := a.db.Queryx(q, topic, maxSubscribers)
+		if !opts.User.IsZero() {
+			q += " AND userid=?"
+			args = append(args, store.DecodeUid(opts.User))
+		}
+		if opts.Limit > 0 && opts.Limit < limit {
+			limit = opts.Limit
+		}
+	}
+
+	q += " LIMIT ?"
+	args = append(args, limit)
+
+	rows, err := a.db.Queryx(q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -1086,24 +1157,11 @@ func (a *adapter) SubsForTopic(topic string, keepDeleted bool) ([]t.Subscription
 	var ss t.Subscription
 	for rows.Next() {
 		if err = rows.StructScan(&ss); err != nil {
-			// log.Println("SubsForTopic", "StructScan", err)
 			break
 		}
 
 		ss.User = encodeString(ss.User).String()
 		ss.Private = fromJSON(ss.Private)
-		if p2p != nil {
-			// Assigning values provided by the other user
-			if p2p[0].Id == ss.User {
-				ss.SetPublic(p2p[1].Public)
-				ss.SetWith(p2p[1].Id)
-				ss.SetDefaultAccess(p2p[1].Access.Auth, p2p[1].Access.Anon)
-			} else {
-				ss.SetPublic(p2p[0].Public)
-				ss.SetWith(p2p[0].Id)
-				ss.SetDefaultAccess(p2p[0].Access.Auth, p2p[0].Access.Anon)
-			}
-		}
 		subs = append(subs, ss)
 		// log.Printf("SubsForTopic: loaded sub %#+v", ss)
 	}
@@ -1153,21 +1211,29 @@ func (a *adapter) SubsDelForUser(user t.Uid) error {
 
 // Returns a list of users who match given tags, such as "email:jdoe@example.com" or "tel:18003287448".
 // Searching the 'users.Tags' for the given tags using respective index.
-func (a *adapter) FindUsers(uid t.Uid, tags []string) ([]t.Subscription, error) {
+func (a *adapter) FindUsers(uid t.Uid, req, opt []string) ([]t.Subscription, error) {
 	index := make(map[string]struct{})
 	var args []interface{}
-	for _, tag := range tags {
+	for _, tag := range append(req, opt...) {
 		args = append(args, tag)
 		index[tag] = struct{}{}
 	}
 
+	query := "SELECT u.id,u.createdat,u.updatedat,u.public,u.tags,COUNT(*) AS matches " +
+		"FROM users AS u LEFT JOIN usertags AS t ON t.userid=u.id " +
+		"WHERE t.tag IN (?" + strings.Repeat(",?", len(req)+len(opt)-1) + ") " +
+		"GROUP BY u.id,u.createdat,u.updatedat,u.public,u.tags "
+	if len(req) > 0 {
+		query += "HAVING COUNT(t.tag IN (?" + strings.Repeat(",?", len(req)-1) + ") OR NULL)>=? "
+		for _, tag := range req {
+			args = append(args, tag)
+		}
+		args = append(args, len(req))
+	}
+	query += "ORDER BY matches DESC LIMIT ?"
+
 	// Get users matched by tags, sort by number of matches from high to low.
-	rows, err := a.db.Queryx(
-		"SELECT u.id,u.createdat,u.updatedat,u.public,u.tags,COUNT(*) AS matches "+
-			"FROM users AS u LEFT JOIN usertags as t ON t.userid=u.id "+
-			"WHERE t.tag IN (?"+strings.Repeat(",?", len(tags)-1)+") "+
-			"GROUP BY u.id,u.createdat,u.updatedat,u.public,u.tags ORDER BY matches DESC LIMIT ?",
-		append(args, maxResults)...)
+	rows, err := a.db.Queryx(query, append(args, maxResults)...)
 
 	if err != nil {
 		return nil, err
@@ -1211,20 +1277,27 @@ func (a *adapter) FindUsers(uid t.Uid, tags []string) ([]t.Subscription, error) 
 
 // Returns a list of topics with matching tags.
 // Searching the 'topics.Tags' for the given tags using respective index.
-func (a *adapter) FindTopics(tags []string) ([]t.Subscription, error) {
+func (a *adapter) FindTopics(req, opt []string) ([]t.Subscription, error) {
 	index := make(map[string]struct{})
 	var args []interface{}
-	for _, tag := range tags {
+	for _, tag := range append(req, opt...) {
 		args = append(args, tag)
 		index[tag] = struct{}{}
 	}
 
-	rows, err := a.db.Queryx(
-		"SELECT t.id,t.createdat,t.updatedat,t.public,t.tags,COUNT(*) AS matches "+
-			"FROM topics AS t LEFT JOIN topictags AS tt ON t.name=tt.topic "+
-			"WHERE tt.tag IN (?"+strings.Repeat(",?", len(tags)-1)+") "+
-			"GROUP BY t.id,t.createdat,t.updatedat,t.public,t.tags "+
-			"ORDER BY matches DESC LIMIT ?", append(args, maxResults)...)
+	query := "SELECT t.name AS topic,t.createdat,t.updatedat,t.public,t.tags,COUNT(*) AS matches " +
+		"FROM topics AS t LEFT JOIN topictags AS tt ON t.name=tt.topic " +
+		"WHERE tt.tag IN (?" + strings.Repeat(",?", len(req)+len(opt)-1) + ") " +
+		"GROUP BY t.name,t.createdat,t.updatedat,t.public,t.tags "
+	if len(req) > 0 {
+		query += "HAVING COUNT(tt.tag IN (?" + strings.Repeat(",?", len(req)-1) + ") OR NULL)>=? "
+		for _, tag := range append(req) {
+			args = append(args, tag)
+		}
+		args = append(args, len(req))
+	}
+	query += "ORDER BY matches DESC LIMIT ?"
+	rows, err := a.db.Queryx(query, append(args, maxResults)...)
 
 	if err != nil {
 		return nil, err
@@ -1271,7 +1344,7 @@ func (a *adapter) MessageSave(msg *t.Message) error {
 	return err
 }
 
-func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.BrowseOpt) ([]t.Message, error) {
+func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.QueryOpt) ([]t.Message, error) {
 	var limit = maxResults // TODO(gene): pass into adapter as a config param
 	var lower = 0
 	var upper = 1 << 31
@@ -1327,7 +1400,7 @@ var dellog struct {
 }
 
 // Get ranges of deleted messages
-func (a *adapter) MessageGetDeleted(topic string, forUser t.Uid, opts *t.BrowseOpt) ([]t.DelMessage, error) {
+func (a *adapter) MessageGetDeleted(topic string, forUser t.Uid, opts *t.QueryOpt) ([]t.DelMessage, error) {
 	var limit = maxResults
 	var lower = 0
 	var upper = 1 << 31
@@ -1493,8 +1566,8 @@ func (a *adapter) DeviceUpsert(uid t.Uid, def *t.DeviceDef) error {
 	}
 
 	// Actually add/update DeviceId for the new user
-	_, err = a.db.Exec("INSERT INTO devices(userid, hash, deviceId) VALUES(?,?,?)",
-		store.DecodeUid(uid), hash, def.DeviceId)
+	_, err = a.db.Exec("INSERT INTO devices(userid, hash, deviceId, platform, lastseen, lang) VALUES(?,?,?,?,?,?)",
+		store.DecodeUid(uid), hash, def.DeviceId, def.Platform, def.LastSeen, def.Lang)
 	if err != nil {
 		return err
 	}

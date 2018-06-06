@@ -54,10 +54,10 @@ const (
 	// idleTopicTimeout defines now long to keep topic alive after the last session detached.
 	idleTopicTimeout = time.Second * 5
 
-	// currentVersion is the current API version
-	currentVersion = "0.14"
+	// currentVersion is the current API/protocol version
+	currentVersion = "0.15"
 	// minSupportedVersion is the minimum supported API version
-	minSupportedVersion = "0.14"
+	minSupportedVersion = "0.15"
 
 	// defaultMaxMessageSize is the default maximum message size
 	defaultMaxMessageSize = 1 << 19 // 512K
@@ -69,9 +69,9 @@ const (
 	// defaultMaxTagCount is the default maximum number of indexable tags
 	defaultMaxTagCount = 16
 
-	// minTagLength is the shortest acceptable length of a tag. Shorter tags are discarded.
+	// minTagLength is the shortest acceptable length of a tag in runes. Shorter tags are discarded.
 	minTagLength = 4
-	// maxTagLength is the maximum length of a tag. Longer tags are trimmed.
+	// maxTagLength is the maximum length of a tag in runes. Longer tags are trimmed.
 	maxTagLength = 96
 
 	// Delay before updating a User Agent
@@ -84,13 +84,16 @@ const (
 	defaultStaticMount = "/x/"
 
 	// Local path to static content
-	defaultStaticPath = "/static/"
+	defaultStaticPath = "static"
 )
 
-// Build timestamp defined by the compiler.
-// To define buildstamp as a timestamp of when the server was built add a flag to compiler command line:
-// 	-ldflags "-X main.buildstamp=`date -u '+%Y%m%dT%H:%M:%SZ'`"
-var buildstamp = "undefined"
+// Build version number defined by the compiler:
+// 		-ldflags "-X main.buildstamp=value_to_assign_to_buildstamp"
+// Reported to clients in response to {hi} message.
+// For instance, to define the buildstamp as a timestamp of when the server was built add a
+// flag to compiler command line:
+// 		-ldflags "-X main.buildstamp=`date -u '+%Y%m%dT%H:%M:%SZ'`"
+var buildstamp = "undef"
 
 // CredValidator holds additional config params for a credential validator.
 type credValidator struct {
@@ -111,8 +114,12 @@ var globals struct {
 	authValidators map[auth.Level][]string
 
 	apiKeySalt []byte
-	// Tags which are immutable to the client.
-	restrictedTags map[string]bool
+	// Tag namespaces (prefixes) which are immutable to the client.
+	immutableTagNS map[string]bool
+	// Tag namespaces which are immutable on User and partially mutable on Topic:
+	// user can only mutate tags he owns.
+	maskedTagNS map[string]bool
+
 	// Add Strict-Transport-Security to headers, the value signifies age.
 	// Empty string "" turns it off
 	tlsStrictMaxAge string
@@ -155,6 +162,8 @@ type configType struct {
 	MaxMessageSize int `json:"max_message_size"`
 	// Maximum number of group topic subscribers.
 	MaxSubscriberCount int `json:"max_subscriber_count"`
+	// Masked tags: tags immutable on User (mask), mutable on Topic only within the mask.
+	MaskedTagNamespaces []string `json:"masked_tags"`
 	// Maximum number of indexable tags
 	MaxTagCount int `json:"max_tag_count"`
 
@@ -175,7 +184,7 @@ func main() {
 
 	var configfile = flag.String("config", "./tinode.conf", "Path to config file.")
 	// Path to static content.
-	var staticPath = flag.String("static_data", "", "Path to /static data for the server.")
+	var staticPath = flag.String("static_data", defaultStaticPath, "Path to directory with static files to be served.")
 	var listenOn = flag.String("listen", "", "Override address and port to listen on for HTTP(S) clients.")
 	var listenGrpc = flag.String("grpc_listen", "", "Override address and port to listen on for gRPC clients.")
 	var tlsEnabled = flag.Bool("tls_enabled", false, "Override config value for enabling TLS")
@@ -252,14 +261,25 @@ func main() {
 			addToTags:       vconf.AddToTags}
 	}
 
-	// List of tags for user discovery which cannot be changed directly by the client.
-	globals.restrictedTags = make(map[string]bool, len(config.Validator))
-	for tag, _ := range config.Validator {
+	// List of tag namespaces for user discovery which cannot be changed directly
+	// by the client, e.g. 'email' or 'tel'.
+	globals.immutableTagNS = make(map[string]bool, len(config.Validator))
+	for tag := range config.Validator {
 		if strings.Index(tag, ":") >= 0 {
 			panic("acc_validation names should not contain character ':'")
 		}
-		globals.restrictedTags[tag] = true
+		globals.immutableTagNS[tag] = true
 	}
+
+	// Partially restricted tag namespaces
+	globals.maskedTagNS = make(map[string]bool, len(config.MaskedTagNamespaces))
+	for _, tag := range config.MaskedTagNamespaces {
+		if strings.Index(tag, ":") >= 0 {
+			panic("masked_tags namespaces should not contain character ':'")
+		}
+		globals.maskedTagNS[tag] = true
+	}
+
 	// Maximum message size
 	globals.maxMessageSize = int64(config.MaxMessageSize)
 	if globals.maxMessageSize <= 0 {
@@ -302,33 +322,38 @@ func main() {
 	// available, otherwise assume '<current dir>/static'. The content is served at
 	// the path pointed by 'static_mount' in the config. If that is missing then it's
 	// served at '/x/'.
-	var staticContent = *staticPath
-	if staticContent == "" {
-		path, err := os.Getwd()
-		if err != nil {
-			log.Fatal(err)
+	if *staticPath != "" && *staticPath != "-" {
+		if *staticPath == defaultStaticPath {
+			path, err := os.Getwd()
+			if err != nil {
+				log.Fatal(err)
+			}
+			// FileServer expects "/" path separator even on Windows.
+			*staticPath = path + "/" + defaultStaticPath
 		}
-		staticContent = path + defaultStaticPath
-	}
-	staticMountPoint := config.StaticMount
-	if staticMountPoint == "" {
-		staticMountPoint = defaultStaticMount
+
+		staticMountPoint := config.StaticMount
+		if staticMountPoint == "" {
+			staticMountPoint = defaultStaticMount
+		} else {
+			if !strings.HasPrefix(staticMountPoint, "/") {
+				staticMountPoint = "/" + staticMountPoint
+			}
+			if !strings.HasSuffix(staticMountPoint, "/") {
+				staticMountPoint = staticMountPoint + "/"
+			}
+		}
+		http.Handle(staticMountPoint,
+			// Add gzip compression
+			gzip.CompressHandler(
+				// Remove mount point prefix
+				http.StripPrefix(staticMountPoint,
+					// Optionally add Strict-Transport_security to the response
+					hstsHandler(http.FileServer(http.Dir(*staticPath))))))
+		log.Printf("Serving static content from '%s' at '%s'", *staticPath, staticMountPoint)
 	} else {
-		if !strings.HasPrefix(staticMountPoint, "/") {
-			staticMountPoint = "/" + staticMountPoint
-		}
-		if !strings.HasSuffix(staticMountPoint, "/") {
-			staticMountPoint = staticMountPoint + "/"
-		}
+		log.Println("Static content is disabled")
 	}
-	http.Handle(staticMountPoint,
-		// Add gzip compression
-		gzip.CompressHandler(
-			// Remove mount point prefix
-			http.StripPrefix(staticMountPoint,
-				// Optionally add Strict-Transport_security to the response
-				hstsHandler(http.FileServer(http.Dir(staticContent))))))
-	log.Printf("Serving static content from '%s' at '%s'", staticContent, staticMountPoint)
 
 	// Configure HTTP channels
 	// Handle websocket clients.

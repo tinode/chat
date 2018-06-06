@@ -441,15 +441,19 @@ func pbGetQuerySerialize(in *MsgGetQuery) *pbx.GetQuery {
 	if in.Desc != nil {
 		out.Desc = &pbx.GetOpts{
 			IfModifiedSince: timeToInt64(in.Desc.IfModifiedSince),
+			User:            in.Desc.User,
+			Topic:           in.Desc.Topic,
 			Limit:           int32(in.Desc.Limit)}
 	}
 	if in.Sub != nil {
 		out.Sub = &pbx.GetOpts{
 			IfModifiedSince: timeToInt64(in.Sub.IfModifiedSince),
+			User:            in.Desc.User,
+			Topic:           in.Desc.Topic,
 			Limit:           int32(in.Sub.Limit)}
 	}
 	if in.Data != nil {
-		out.Data = &pbx.BrowseOpts{
+		out.Data = &pbx.GetOpts{
 			BeforeId: int32(in.Data.BeforeId),
 			SinceId:  int32(in.Data.SinceId),
 			Limit:    int32(in.Data.Limit)}
@@ -476,7 +480,7 @@ func pbGetQueryDeserialize(in *pbx.GetQuery) *MsgGetQuery {
 			}
 		}
 		if data := in.GetData(); data != nil {
-			msg.Data = &MsgBrowseOpts{
+			msg.Data = &MsgGetOpts{
 				BeforeId: int(data.GetBeforeId()),
 				SinceId:  int(data.GetSinceId()),
 				Limit:    int(data.GetLimit()),
