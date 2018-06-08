@@ -608,18 +608,23 @@ type FileMapper struct{}
 var Files FileMapper
 
 // StartUpload records that the given user initiated a file upload
-func (FileMapper) StartUpload(uid types.Uid, fd *types.FileDef) error {
-	return nil
+func (FileMapper) StartUpload(fd *types.FileDef) error {
+	fd.Status = types.UploadStarted
+	return adp.FileStartUpload(fd)
 }
 
 // FinishUpload marks started upload as successfully finished.
-func (FileMapper) FinishUpload(uid types.Uid, fid string, success bool) error {
-	return nil
+func (FileMapper) FinishUpload(fid string, success bool) (*types.FileDef, error) {
+	status := types.UploadCompleted
+	if !success {
+		status = types.UploadFailed
+	}
+	return adp.FileFinishUpload(fid, status)
 }
 
 // GetForUser fetches all file records for a given user
 func (FileMapper) GetForUser(uid types.Uid) ([]types.FileDef, error) {
-	return nil, nil
+	return adp.FilesForUser(uid, nil)
 }
 
 // Get fetches a file record for a unique file id.

@@ -30,7 +30,7 @@ const (
 	defaultDSN      = "root:@tcp(localhost:3306)/tinode?parseTime=true"
 	defaultDatabase = "tinode"
 
-	dbVersion = 101
+	dbVersion = 102
 
 	adapterName = "mysql"
 )
@@ -374,6 +374,23 @@ func (a *adapter) CreateDb(reset bool) error {
 			UNIQUE credentials_uniqueness(synthetic),
 			FOREIGN KEY(userid) REFERENCES users(id)
 		);`); err != nil {
+		return err
+	}
+
+	// Records of uploaded files.
+	if _, err = tx.Exec(
+		`CREATE TABLE fileuploads(
+			id			INT NOT NULL AUTO_INCREMENT,
+			createdat	DATETIME(3) NOT NULL,
+			updatedat	DATETIME(3) NOT NULL,	
+			userid		BIGINT NOT NULL,
+			status		INT NOT NULL,
+			mimetype	VARCHAR(255) NOT NULL,
+			size		BIGINT NOT NULL,
+			location	VARCHAR(255) NOT NULL,
+			PRIMARY KEY(id),
+			FOREIGN KEY(userid) REFERENCES users(id)
+		)`); err != nil {
 		return err
 	}
 
@@ -1710,6 +1727,90 @@ func (a *adapter) CredGet(uid t.Uid, method string) ([]*t.Credential, error) {
 	rows.Close()
 
 	return result, err
+}
+
+// FileUploads
+
+// FileStartUpload initializes a file upload
+func (a *adapter) FileStartUpload(fd *t.FileDef) error {
+	_, err := a.db.Exec("INSERT INTO fileuploads(id,createdat,updatedat,userid,status,mimetype,size,location)"+
+		" VALUES(?,?,?,?,?,?,?,?)", fd.Id, fd.CreatedAt, fd.UpdatedAt, fd.User, fd.Status, fd.MimeType,
+		fd.Size, fd.Location)
+	return err
+}
+
+// FileFinishUpload markes file upload as completed, successfully or otherwise
+func (a *adapter) FileFinishUpload(fid string, status int) (*t.FileDef, error) {
+	fd, err := a.FileGet(fid)
+	if err != nil {
+		return nil, err
+	}
+	if fd == nil {
+		return nil, t.ErrNotFound
+	}
+	id := t.ParseUid(fid)
+	if id.IsZero() {
+		return nil, t.ErrMalformed
+	}
+	_, err = a.db.Exec("UPDATE fileuploads SET status=? WHERE id=?", status, id)
+	if err == nil {
+		fd.Status = status
+	} else {
+		fd = nil
+	}
+	return fd, err
+}
+
+// FilesForUser returns all file records for a given user.
+func (a *adapter) FilesForUser(uid t.Uid, opts *t.QueryOpt) ([]t.FileDef, error) {
+	rows, err := a.db.Queryx("SELECT id,createdat,updatedat,status,mimetype,size,location "+
+		"FROM fileuploads WHERE userid=?", store.DecodeUid(uid))
+
+	if err != nil {
+		return nil, err
+	}
+
+	var result []t.FileDef
+	user := uid.String()
+	for rows.Next() {
+		var fd t.FileDef
+		if err = rows.StructScan(&fd); err != nil {
+			break
+		}
+		fd.User = user
+		result = append(result, fd)
+	}
+	rows.Close()
+
+	return result, err
+}
+
+// FileGet fetches a record of a specific file
+func (a *adapter) FileGet(fid string) (*t.FileDef, error) {
+	id := t.ParseUid(fid)
+	if id.IsZero() {
+		return nil, t.ErrMalformed
+	}
+
+	var fd t.FileDef
+	err := a.db.Get(&fd, "SELECT id,createdat,updatedat,status,mimetype,size,location "+
+		"FROM fileuploads WHERE id=?", store.DecodeUid(id))
+	if err != nil {
+		return nil, err
+	}
+
+	return &fd, nil
+
+}
+
+// FileDelete deletes a record of a file
+func (a *adapter) FileDelete(fid string) error {
+	uid := t.ParseUid(fid)
+	if uid.IsZero() {
+		return t.ErrMalformed
+	}
+	_, err := a.db.Exec("DELETE FROM fileuploads WHERE id=?", store.DecodeUid(uid))
+	return err
 }
 
 // Helper functions

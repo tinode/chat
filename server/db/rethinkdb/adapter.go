@@ -27,7 +27,7 @@ const (
 	defaultHost     = "localhost:28015"
 	defaultDatabase = "tinode"
 
-	dbVersion = 100
+	dbVersion = 102
 
 	adapterName = "rethinkdb"
 )
@@ -275,6 +275,15 @@ func (a *adapter) CreateDb(reset bool) error {
 	}
 	// Create secondary index on credentials.User to be able to query credentials by user id.
 	if _, err := rdb.DB(a.dbName).Table("credentials").IndexCreate("User").RunWrite(a.conn); err != nil {
+		return err
+	}
+
+	// Records of file uploads. See types.FileDef.
+	if _, err := rdb.DB(a.dbName).TableCreate("files", rdb.TableCreateOpts{PrimaryKey: "Id"}).RunWrite(a.conn); err != nil {
+		return err
+	}
+	// Create secondary index on files.User to be able to get records by user id.
+	if _, err := rdb.DB(a.dbName).Table("files").IndexCreate("User").RunWrite(a.conn); err != nil {
 		return err
 	}
 

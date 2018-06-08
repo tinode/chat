@@ -10,6 +10,7 @@ package main
 
 import (
 	"crypto/tls"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"log"
@@ -20,6 +21,9 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/tinode/chat/server/store"
+	"github.com/tinode/chat/server/store/types"
 
 	"golang.org/x/crypto/acme/autocert"
 )
@@ -191,6 +195,7 @@ func hstsHandler(handler http.Handler) http.Handler {
 }
 
 func serve404(wrt http.ResponseWriter, req *http.Request) {
+	wrt.Header().Set("Content-Type", "application/json; charset=utf-8")
 	wrt.WriteHeader(http.StatusNotFound)
 	json.NewEncoder(wrt).Encode(
 		&ServerComMessage{Ctrl: &MsgServerCtrl{
@@ -231,4 +236,32 @@ func getHttpAuth(req *http.Request) (string, string) {
 		return parts[0], parts[1]
 	}
 	return "", ""
+}
+
+// Authenticate non-websocket HTTP request
+func authHttpRequest(req *http.Request) (types.Uid, error) {
+	var uid types.Uid
+	if authMethod, secret := getHttpAuth(req); authMethod != "" {
+		decodedSecret := make([]byte, base64.StdEncoding.DecodedLen(len(secret)))
+		if _, err := base64.StdEncoding.Decode(decodedSecret, []byte(secret)); err != nil {
+			return uid, types.ErrMalformed
+		}
+		authhdl := store.GetAuthHandler(authMethod)
+		if authhdl != nil {
+			if rec, err := authhdl.Authenticate(decodedSecret); err == nil {
+				uid = rec.Uid
+			} else {
+				return uid, err
+			}
+		} else {
+			log.Println("fileUpload: token is present but token auth handler is not found")
+		}
+	} else {
+		// Find the session, make sure it's appropriately authenticated.
+		sess := globals.sessionStore.Get(req.FormValue("sid"))
+		if sess != nil {
+			uid = sess.uid
+		}
+	}
+	return uid, nil
 }

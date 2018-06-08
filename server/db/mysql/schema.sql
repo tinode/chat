@@ -177,3 +177,17 @@ CREATE TABLE credentials(
 	UNIQUE credentials_uniqueness(synthetic),
 	FOREIGN KEY(userid) REFERENCES users(id),
 );
+
+# Records of uploaded files. Files themselves are stored elsewhere.
+CREATE TABLE fileuploads(
+	id			INT NOT NULL AUTO_INCREMENT,
+	createdat	DATETIME(3) NOT NULL,
+	updatedat	DATETIME(3) NOT NULL,	
+	userid		BIGINT NOT NULL,
+	status		INT NOT NULL,
+	mimetype	VARCHAR(255) NOT NULL,
+	size		BIGINT NOT NULL,
+	location	VARCHAR(255) NOT NULL,
+	PRIMARY KEY(id),
+	FOREIGN KEY(userid) REFERENCES users(id)
+)

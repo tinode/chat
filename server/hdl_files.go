@@ -6,7 +6,7 @@
  *    Default upload handler saves files to the file system at the configured
  *    mount point.
  *
- *    This module cannot handle large volume of data. I's intended only to
+ *    This module cannot handle large volume of data. It's intended only to
  *    show how it's supposed to work.
  *
  *    Use commercial services (Amazon S3 or Google's/MSFT's equivalents),
@@ -17,12 +17,13 @@
 package main
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"io"
 	"log"
+	"mime"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -31,23 +32,97 @@ import (
 	"github.com/tinode/chat/server/store/types"
 )
 
-// largeFileUpload receives files from HTTP(S) and saves them to local file
+func largeFileServe(wrt http.ResponseWriter, req *http.Request) {
+	log.Println("Request to download file", req.URL)
+
+	now := time.Now().UTC().Round(time.Millisecond)
+	enc := json.NewEncoder(wrt)
+
+	writeHttpResponse := func(msg *ServerComMessage) {
+		if msg == nil {
+			msg = ErrUnknown("", "", now)
+		}
+		// Gorilla CompressHandler requires Content-Type to be set.
+		wrt.Header().Set("Content-Type", "application/json; charset=utf-8")
+		wrt.WriteHeader(msg.Ctrl.Code)
+		enc.Encode(msg)
+	}
+
+	// Check if this is a GET request
+	if req.Method != http.MethodGet {
+		writeHttpResponse(ErrOperationNotAllowed("", "", now))
+		return
+	}
+
+	// Check for API key presence
+	if isValid, _ := checkAPIKey(getAPIKey(req)); !isValid {
+		writeHttpResponse(ErrAPIKeyRequired(now))
+		return
+	}
+
+	// Check authorization: either the token or SID must be present
+	uid, err := authHttpRequest(req)
+	if err != nil {
+		writeHttpResponse(decodeStoreError(err, "", "", now, nil))
+		return
+	}
+	if uid.IsZero() {
+		// Not authenticated
+		writeHttpResponse(ErrAuthRequired("", "", now))
+		return
+	}
+
+	dir, fname := path.Split(path.Clean(req.URL.Path))
+
+	// Check path validity
+	if dir != "/v0/file/s" {
+		writeHttpResponse(ErrNotFound("", "", now))
+		return
+	}
+
+	// Remove extension
+	parts := strings.Split(fname, ".")
+	fname = parts[0]
+
+	fd, err := store.Files.Get(fname)
+	if err != nil {
+		writeHttpResponse(decodeStoreError(err, "", "", now, nil))
+		return
+	}
+	if fd == nil {
+		writeHttpResponse(ErrNotFound("", "", now))
+		return
+	}
+	file, err := os.Open(fd.Location)
+	if err != nil {
+		writeHttpResponse(nil)
+		return
+	}
+	defer file.Close()
+
+	wrt.Header().Set("Content-Type", fd.MimeType)
+	http.ServeContent(wrt, req, "", fd.UpdatedAt, file)
+}
+
+// largeFileUpload receives files from client over HTTP(S) and saves them to local file
 // system.
 func largeFileUpload(wrt http.ResponseWriter, req *http.Request) {
 	now := time.Now().UTC().Round(time.Millisecond)
 	enc := json.NewEncoder(wrt)
 
-	writeResponse := func(msg *ServerComMessage) {
+	writeHttpResponse := func(msg *ServerComMessage) {
 		if msg == nil {
 			msg = ErrUnknown("", "", now)
 		}
+		// Gorilla CompressHandler requires Content-Type to be set.
+		wrt.Header().Set("Content-Type", "application/json; charset=utf-8")
 		wrt.WriteHeader(msg.Ctrl.Code)
 		enc.Encode(msg)
 	}
 
 	// Check if this is a POST request
 	if req.Method != http.MethodPost {
-		writeResponse(ErrOperationNotAllowed("", "", now))
+		writeHttpResponse(ErrOperationNotAllowed("", "", now))
 		return
 	}
 
@@ -56,40 +131,18 @@ func largeFileUpload(wrt http.ResponseWriter, req *http.Request) {
 
 	// Check for API key presence
 	if isValid, _ := checkAPIKey(getAPIKey(req)); !isValid {
-		writeResponse(ErrAPIKeyRequired(now))
+		writeHttpResponse(ErrAPIKeyRequired(now))
 		return
 	}
-
 	// Check authorization: either the token or SID must be present
-	var uid types.Uid
-	if authMethod, secret := getHttpAuth(req); authMethod != "" {
-		decodedSecret := make([]byte, base64.StdEncoding.DecodedLen(len(secret)))
-		if _, err := base64.StdEncoding.Decode(decodedSecret, []byte(secret)); err != nil {
-			writeResponse(ErrMalformed("", "", now))
-			return
-		}
-		authhdl := store.GetAuthHandler(authMethod)
-		if authhdl != nil {
-			if rec, err := authhdl.Authenticate(decodedSecret); err == nil {
-				uid = rec.Uid
-			} else {
-				writeResponse(decodeStoreError(err, "", "", now, nil))
-				return
-			}
-		} else {
-			log.Println("fileUpload: token is present but token auth handler is not found")
-		}
-	} else {
-		// Find the session, make sure it's appropriately authenticated.
-		sess := globals.sessionStore.Get(req.FormValue("sid"))
-		if sess != nil {
-			uid = sess.uid
-		}
+	uid, err := authHttpRequest(req)
+	if err != nil {
+		writeHttpResponse(decodeStoreError(err, "", "", now, nil))
+		return
 	}
-
 	if uid.IsZero() {
 		// Not authenticated
-		writeResponse(ErrAuthRequired("", "", now))
+		writeHttpResponse(ErrAuthRequired("", "", now))
 		return
 	}
 
@@ -98,9 +151,9 @@ func largeFileUpload(wrt http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		log.Println("Error reading file", err)
 		if strings.Contains(err.Error(), "request body too large") {
-			writeResponse(ErrTooLarge("", "", now))
+			writeHttpResponse(ErrTooLarge("", "", now))
 		} else {
-			writeResponse(ErrMalformed("", "", now))
+			writeHttpResponse(ErrMalformed("", "", now))
 		}
 		return
 	}
@@ -108,50 +161,56 @@ func largeFileUpload(wrt http.ResponseWriter, req *http.Request) {
 	fdef := types.FileDef{}
 	fdef.Id = store.GetUidString()
 	fdef.InitTimes()
-	fdef.Name = req.FormValue("name")
+	fdef.User = uid.String()
+
+	buff := make([]byte, 512)
+	if _, err = file.Read(buff); err != nil {
+		log.Println("Failed to detect mime type", err)
+		writeHttpResponse(nil)
+		return
+	}
+
+	fdef.MimeType = http.DetectContentType(buff)
+	if _, err = file.Seek(0, io.SeekStart); err != nil {
+		log.Println("Failed to reset request buffer", err)
+		writeHttpResponse(nil)
+		return
+	}
 
 	// FIXME: The following code needs to be replaced in production with calls to S3,
 	// GCS, ABS, Minio, Ceph, etc.
 
 	// Generate a unique file name and attach it to path.
 	// FIXME: create two-three levels of nested directories. Serving from a directory with
-	// thousands of files in it will not perform well.
+	// tens of thousands of files in it will not perform well.
 	fdef.Location = filepath.Join(globals.fileUploadLocation, fdef.Id)
+
 	outfile, err := os.Create(fdef.Location)
 	if err != nil {
 		log.Println("Failed to create file", fdef.Location, err)
-		writeResponse(nil)
+		writeHttpResponse(nil)
 		return
 	}
 	defer outfile.Close()
 
-	buff := make([]byte, 512)
-	if _, err = file.Read(buff); err != nil {
-		log.Println("Failed to detect mime type", err)
-		writeResponse(nil)
-		return
-	}
-	fdef.MimeType = http.DetectContentType(buff)
-
-	if _, err = file.Seek(0, io.SeekStart); err != nil {
-		log.Println("Failed to reset request buffer", err)
-		writeResponse(nil)
-		return
-	}
-
-	store.Files.StartUpload(uid, &fdef)
+	store.Files.StartUpload(&fdef)
 
 	_, err = io.Copy(outfile, file)
 	log.Println("Finished upload", fdef.Location)
 	if err != nil {
-		store.Files.FinishUpload(uid, fdef.Id, false)
-		writeResponse(nil)
+		store.Files.FinishUpload(fdef.Id, false)
+		writeHttpResponse(nil)
 		return
 	}
 
-	store.Files.FinishUpload(uid, fdef.Id, true)
+	store.Files.FinishUpload(fdef.Id, true)
 
+	fname := fdef.Id
+	ext, _ := mime.ExtensionsByType(fdef.MimeType)
+	if len(ext) > 0 {
+		fname += ext[0]
+	}
 	resp := NoErr("", "", now)
-	resp.Ctrl.Params = map[string]string{"url": fdef.Id}
-	writeResponse(resp)
+	resp.Ctrl.Params = map[string]string{"url": "/v0/file/s/" + fname}
+	writeHttpResponse(resp)
 }

@@ -961,19 +961,23 @@ type DeviceDef struct {
 	Lang string
 }
 
+const (
+	UploadStarted = iota
+	UploadCompleted
+	UploadFailed
+)
+
 // FileDef is a stored record of a file upload
 type FileDef struct {
 	ObjHeader
-	// Status of uload
+	// Status of upload
 	Status int
-	// Name of the file.
-	Name string
+	// User who created the file
+	User string
 	// Type of the file.
 	MimeType string
-	// Size of the complete file in bytes.
+	// Size of the file in bytes.
 	Size int64
-	// Number of bytes stored (for resumable uploads)
-	StoredBytes int64
 	// Internal file location, i.e. path on disk or an S3 blob address.
 	Location string
 }

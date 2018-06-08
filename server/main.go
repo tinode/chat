@@ -382,7 +382,9 @@ func main() {
 	http.Handle("/v0/channels/lp", gzip.CompressHandler(http.HandlerFunc(serveLongPoll)))
 	if globals.maxUploadSize > 0 {
 		// Handle uploads of large files.
-		http.Handle("/v0/file/upload", http.HandlerFunc(largeFileUpload))
+		http.Handle("/v0/file/u", gzip.CompressHandler(http.HandlerFunc(largeFileUpload)))
+		// Serve large files.
+		http.Handle("/v0/file/s/", gzip.CompressHandler(http.HandlerFunc(largeFileServe)))
 	}
 	// Serve json-formatted 404 for all other URLs
 	http.HandleFunc("/", serve404)

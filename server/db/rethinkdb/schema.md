@@ -268,3 +268,8 @@ Sample:
   "UpdatedAt": Tue Dec 05 2017 01:51:38 GMT+00:00
 }
 ```
+
+### Table `credentials`
+The tables stores user credentials used for validation.
+
+### Table `fileuploads`
