@@ -157,8 +157,13 @@ func largeFileUpload(wrt http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		log.Println("Error reading file", err)
 		if strings.Contains(err.Error(), "request body too large") {
+			log.Println("Uploaded file is too large", err)
 			writeHttpResponse(ErrTooLarge("", "", now))
+		if strings.Contains(err.Error(), "unexpected EOF") {
+			log.Println("Upload interrupted by client", err)
+			writeHttpResponse(ErrMalformed("", "", now))
 		} else {
+			log.Println("Upload error", err)
 			writeHttpResponse(ErrMalformed("", "", now))
 		}
 		return

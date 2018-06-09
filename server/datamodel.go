@@ -490,7 +490,7 @@ type ServerComMessage struct {
 
 // Generators of server-side error messages {ctrl}.
 
-// NoErr indicates successful completion.
+// NoErr indicates successful completion (200)
 func NoErr(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
@@ -500,7 +500,7 @@ func NoErr(id, topic string, ts time.Time) *ServerComMessage {
 		Timestamp: ts}}
 }
 
-// NoErrCreated indicated successful creation of an object.
+// NoErrCreated indicated successful creation of an object (201).
 func NoErrCreated(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
@@ -510,7 +510,7 @@ func NoErrCreated(id, topic string, ts time.Time) *ServerComMessage {
 		Timestamp: ts}}
 }
 
-// NoErrAccepted indicates request was accepted but not perocessed yet.
+// NoErrAccepted indicates request was accepted but not perocessed yet (202).
 func NoErrAccepted(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
@@ -520,7 +520,7 @@ func NoErrAccepted(id, topic string, ts time.Time) *ServerComMessage {
 		Timestamp: ts}}
 }
 
-// NoErrEvicted indicates that the user was disconnected from topic for no fault of the user.
+// NoErrEvicted indicates that the user was disconnected from topic for no fault of the user (205).
 func NoErrEvicted(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
@@ -530,7 +530,7 @@ func NoErrEvicted(id, topic string, ts time.Time) *ServerComMessage {
 		Timestamp: ts}}
 }
 
-// NoErrShutdown means user was disconnected from topic because system shutdown is in progress.
+// NoErrShutdown means user was disconnected from topic because system shutdown is in progress (205).
 func NoErrShutdown(ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Code:      http.StatusResetContent, // 205
@@ -540,7 +540,7 @@ func NoErrShutdown(ts time.Time) *ServerComMessage {
 
 // 3xx
 
-// InfoValidateCredentials requires user to confirm credentials before going forward.
+// InfoValidateCredentials requires user to confirm credentials before going forward (300).
 func InfoValidateCredentials(id string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
@@ -549,7 +549,7 @@ func InfoValidateCredentials(id string, ts time.Time) *ServerComMessage {
 		Timestamp: ts}}
 }
 
-// InfoAlreadySubscribed request to subscribe was ignored because user is already subscribed.
+// InfoAlreadySubscribed request to subscribe was ignored because user is already subscribed (304).
 func InfoAlreadySubscribed(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
@@ -559,7 +559,7 @@ func InfoAlreadySubscribed(id, topic string, ts time.Time) *ServerComMessage {
 		Timestamp: ts}}
 }
 
-// InfoNotJoined request to leave was ignored because user is not subscribed.
+// InfoNotJoined request to leave was ignored because user is not subscribed (304).
 func InfoNotJoined(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
@@ -569,7 +569,7 @@ func InfoNotJoined(id, topic string, ts time.Time) *ServerComMessage {
 		Timestamp: ts}}
 }
 
-// InfoNoAction request ignored bacause the object is already in the desired state.
+// InfoNoAction request ignored bacause the object is already in the desired state (304).
 func InfoNoAction(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
@@ -579,7 +579,7 @@ func InfoNoAction(id, topic string, ts time.Time) *ServerComMessage {
 		Timestamp: ts}}
 }
 
-// InfoNotModified update request is a noop.
+// InfoNotModified update request is a noop (304).
 func InfoNotModified(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
@@ -591,7 +591,7 @@ func InfoNotModified(id, topic string, ts time.Time) *ServerComMessage {
 
 // 4xx Errors
 
-// ErrMalformed request malformed.
+// ErrMalformed request malformed (400).
 func ErrMalformed(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
@@ -601,7 +601,7 @@ func ErrMalformed(id, topic string, ts time.Time) *ServerComMessage {
 		Timestamp: ts}}
 }
 
-// ErrAuthRequired authentication required  - user must authenticate first.
+// ErrAuthRequired authentication required  - user must authenticate first (401).
 func ErrAuthRequired(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
@@ -611,7 +611,7 @@ func ErrAuthRequired(id, topic string, ts time.Time) *ServerComMessage {
 		Timestamp: ts}}
 }
 
-// ErrAuthFailed authentication failed.
+// ErrAuthFailed authentication failed (401).
 func ErrAuthFailed(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
@@ -621,7 +621,7 @@ func ErrAuthFailed(id, topic string, ts time.Time) *ServerComMessage {
 		Timestamp: ts}}
 }
 
-// ErrAuthUnknownScheme authentication scheme is unrecognized or invalid.
+// ErrAuthUnknownScheme authentication scheme is unrecognized or invalid (401).
 func ErrAuthUnknownScheme(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
@@ -631,7 +631,7 @@ func ErrAuthUnknownScheme(id, topic string, ts time.Time) *ServerComMessage {
 		Timestamp: ts}}
 }
 
-// ErrPermissionDenied user is authenticated but operation is not permitted.
+// ErrPermissionDenied user is authenticated but operation is not permitted (403).
 func ErrPermissionDenied(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
@@ -641,7 +641,7 @@ func ErrPermissionDenied(id, topic string, ts time.Time) *ServerComMessage {
 		Timestamp: ts}}
 }
 
-// ErrAPIKeyRequired  valid API key is required
+// ErrAPIKeyRequired  valid API key is required (403).
 func ErrAPIKeyRequired(ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Code:      http.StatusForbidden,
@@ -649,7 +649,7 @@ func ErrAPIKeyRequired(ts time.Time) *ServerComMessage {
 		Timestamp: ts}}
 }
 
-// ErrSessionNotFound  valid API key is required
+// ErrSessionNotFound  valid API key is required (403).
 func ErrSessionNotFound(ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Code:      http.StatusForbidden,
@@ -657,7 +657,7 @@ func ErrSessionNotFound(ts time.Time) *ServerComMessage {
 		Timestamp: ts}}
 }
 
-// ErrTopicNotFound topic is not found.
+// ErrTopicNotFound topic is not found (404).
 func ErrTopicNotFound(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
@@ -667,7 +667,7 @@ func ErrTopicNotFound(id, topic string, ts time.Time) *ServerComMessage {
 		Timestamp: ts}}
 }
 
-// ErrUserNotFound user is not found.
+// ErrUserNotFound user is not found (404).
 func ErrUserNotFound(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
@@ -677,7 +677,7 @@ func ErrUserNotFound(id, topic string, ts time.Time) *ServerComMessage {
 		Timestamp: ts}}
 }
 
-// ErrNotFound is an error for missing objects other than user or topic.
+// ErrNotFound is an error for missing objects other than user or topic (404).
 func ErrNotFound(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
@@ -687,7 +687,7 @@ func ErrNotFound(id, topic string, ts time.Time) *ServerComMessage {
 		Timestamp: ts}}
 }
 
-// ErrOperationNotAllowed a valid operation is not permitted in this context.
+// ErrOperationNotAllowed a valid operation is not permitted in this context (405).
 func ErrOperationNotAllowed(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
@@ -698,7 +698,7 @@ func ErrOperationNotAllowed(id, topic string, ts time.Time) *ServerComMessage {
 }
 
 // ErrAlreadyAuthenticated invalid attempt to authenticate an already authenticated session
-// Switching users is not supported.
+// Switching users is not supported (409).
 func ErrAlreadyAuthenticated(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
@@ -708,7 +708,7 @@ func ErrAlreadyAuthenticated(id, topic string, ts time.Time) *ServerComMessage {
 		Timestamp: ts}}
 }
 
-// ErrDuplicateCredential attempt to create a duplicate credential.
+// ErrDuplicateCredential attempt to create a duplicate credential (409).
 func ErrDuplicateCredential(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
@@ -718,7 +718,7 @@ func ErrDuplicateCredential(id, topic string, ts time.Time) *ServerComMessage {
 		Timestamp: ts}}
 }
 
-// ErrAttachFirst must attach to topic first.
+// ErrAttachFirst must attach to topic first (409).
 func ErrAttachFirst(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
@@ -728,7 +728,7 @@ func ErrAttachFirst(id, topic string, ts time.Time) *ServerComMessage {
 		Timestamp: ts}}
 }
 
-// ErrAlreadyExists the object already exists.
+// ErrAlreadyExists the object already exists (409).
 func ErrAlreadyExists(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
@@ -738,7 +738,7 @@ func ErrAlreadyExists(id, topic string, ts time.Time) *ServerComMessage {
 		Timestamp: ts}}
 }
 
-// ErrCommandOutOfSequence invalid sequence of comments, i.e. attempt to {sub} before {hi}.
+// ErrCommandOutOfSequence invalid sequence of comments, i.e. attempt to {sub} before {hi} (409).
 func ErrCommandOutOfSequence(id, unused string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
@@ -747,7 +747,7 @@ func ErrCommandOutOfSequence(id, unused string, ts time.Time) *ServerComMessage 
 		Timestamp: ts}}
 }
 
-// ErrGone topic deleted or user banned.
+// ErrGone topic deleted or user banned (410).
 func ErrGone(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
@@ -757,7 +757,7 @@ func ErrGone(id, topic string, ts time.Time) *ServerComMessage {
 		Timestamp: ts}}
 }
 
-// ErrTooLarge packet or request size exceeded the limit.
+// ErrTooLarge packet or request size exceeded the limit (413).
 func ErrTooLarge(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
@@ -767,7 +767,7 @@ func ErrTooLarge(id, topic string, ts time.Time) *ServerComMessage {
 		Timestamp: ts}}
 }
 
-// ErrPolicy request violates a policy (e.g. password is too weak or too many subscribers).
+// ErrPolicy request violates a policy (e.g. password is too weak or too many subscribers) (422).
 func ErrPolicy(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
@@ -777,7 +777,7 @@ func ErrPolicy(id, topic string, ts time.Time) *ServerComMessage {
 		Timestamp: ts}}
 }
 
-// ErrLocked ???
+// ErrLocked operation rejected because the topic is being deleted (423).
 func ErrLocked(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
@@ -787,7 +787,7 @@ func ErrLocked(id, topic string, ts time.Time) *ServerComMessage {
 		Timestamp: ts}}
 }
 
-// ErrUnknown database error
+// ErrUnknown database or other server error (500).
 func ErrUnknown(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
@@ -797,7 +797,7 @@ func ErrUnknown(id, topic string, ts time.Time) *ServerComMessage {
 		Timestamp: ts}}
 }
 
-// ErrNotImplemented feature not implemented.
+// ErrNotImplemented feature not implemented (501).
 func ErrNotImplemented(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
@@ -807,7 +807,7 @@ func ErrNotImplemented(id, topic string, ts time.Time) *ServerComMessage {
 		Timestamp: ts}}
 }
 
-// ErrClusterNodeUnreachable topic is handled by another cluster node and than node is unreachable.
+// ErrClusterNodeUnreachable topic is handled by another cluster node and than node is unreachable (502).
 func ErrClusterNodeUnreachable(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
@@ -817,7 +817,7 @@ func ErrClusterNodeUnreachable(id, topic string, ts time.Time) *ServerComMessage
 		Timestamp: ts}}
 }
 
-// ErrVersionNotSupported invalid (too low) protocol version.
+// ErrVersionNotSupported invalid (too low) protocol version (505).
 func ErrVersionNotSupported(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
