@@ -342,12 +342,12 @@ func (a *adapter) CreateDb(reset bool) error {
 	// Deletion log
 	if _, err = tx.Exec(
 		`CREATE TABLE dellog(
-			id         INT NOT NULL AUTO_INCREMENT,
-			topic      VARCHAR(25) NOT NULL,
-			deletedfor BIGINT NOT NULL DEFAULT 0,
-			delid      INT NOT NULL,
-			low        INT NOT NULL,
-			hi         INT NOT NULL,
+			id			INT NOT NULL AUTO_INCREMENT,
+			topic		VARCHAR(25) NOT NULL,
+			deletedfor	BIGINT NOT NULL DEFAULT 0,
+			delid		INT NOT NULL,
+			low			INT NOT NULL,
+			hi			INT NOT NULL,
 			PRIMARY KEY(id),
 			FOREIGN KEY(topic) REFERENCES topics(name),
 			UNIQUE INDEX dellog_topic_delid_deletedfor(topic,delid,deletedfor),
@@ -360,13 +360,13 @@ func (a *adapter) CreateDb(reset bool) error {
 	// User credentials
 	if _, err = tx.Exec(
 		`CREATE TABLE credentials(
-			id 			INT NOT NULL AUTO_INCREMENT,
-			createdat 	DATETIME(3) NOT NULL,
-			updatedat 	DATETIME(3) NOT NULL,	
-			method 		VARCHAR(16) NOT NULL,
+			id			INT NOT NULL AUTO_INCREMENT,
+			createdat	DATETIME(3) NOT NULL,
+			updatedat	DATETIME(3) NOT NULL,	
+			method		VARCHAR(16) NOT NULL,
 			value		VARCHAR(128) NOT NULL,
 			synthetic	VARCHAR(192) NOT NULL,
-			userid 		BIGINT NOT NULL,
+			userid		BIGINT NOT NULL,
 			resp		VARCHAR(255),
 			done		TINYINT NOT NULL DEFAULT 0,
 			retries		INT NOT NULL DEFAULT 0,		
@@ -380,14 +380,14 @@ func (a *adapter) CreateDb(reset bool) error {
 	// Records of uploaded files.
 	if _, err = tx.Exec(
 		`CREATE TABLE fileuploads(
-			id			INT NOT NULL AUTO_INCREMENT,
+			id			BIGINT NOT NULL,
 			createdat	DATETIME(3) NOT NULL,
 			updatedat	DATETIME(3) NOT NULL,	
 			userid		BIGINT NOT NULL,
 			status		INT NOT NULL,
 			mimetype	VARCHAR(255) NOT NULL,
 			size		BIGINT NOT NULL,
-			location	VARCHAR(255) NOT NULL,
+			location	VARCHAR(2048) NOT NULL,
 			PRIMARY KEY(id),
 			FOREIGN KEY(userid) REFERENCES users(id)
 		)`); err != nil {
@@ -1734,13 +1734,19 @@ func (a *adapter) CredGet(uid t.Uid, method string) ([]*t.Credential, error) {
 // FileStartUpload initializes a file upload
 func (a *adapter) FileStartUpload(fd *t.FileDef) error {
 	_, err := a.db.Exec("INSERT INTO fileuploads(id,createdat,updatedat,userid,status,mimetype,size,location)"+
-		" VALUES(?,?,?,?,?,?,?,?)", fd.Id, fd.CreatedAt, fd.UpdatedAt, fd.User, fd.Status, fd.MimeType,
-		fd.Size, fd.Location)
+		" VALUES(?,?,?,?,?,?,?,?)",
+		store.DecodeUid(fd.Uid()), fd.CreatedAt, fd.UpdatedAt,
+		store.DecodeUid(t.ParseUid(fd.User)), fd.Status, fd.MimeType, fd.Size, fd.Location)
 	return err
 }
 
 // FileFinishUpload markes file upload as completed, successfully or otherwise
 func (a *adapter) FileFinishUpload(fid string, status int) (*t.FileDef, error) {
+	id := t.ParseUid(fid)
+	if id.IsZero() {
+		return nil, t.ErrMalformed
+	}
+
 	fd, err := a.FileGet(fid)
 	if err != nil {
 		return nil, err
@@ -1748,11 +1754,7 @@ func (a *adapter) FileFinishUpload(fid string, status int) (*t.FileDef, error) {
 	if fd == nil {
 		return nil, t.ErrNotFound
 	}
-	id := t.ParseUid(fid)
-	if id.IsZero() {
-		return nil, t.ErrMalformed
-	}
-	_, err = a.db.Exec("UPDATE fileuploads SET status=? WHERE id=?", status, id)
+	_, err = a.db.Exec("UPDATE fileuploads SET status=? WHERE id=?", status, store.DecodeUid(id))
 	if err == nil {
 		fd.Status = status
 	} else {
@@ -1761,7 +1763,8 @@ func (a *adapter) FileFinishUpload(fid string, status int) (*t.FileDef, error) {
 	return fd, err
 }
 
-// FilesForUser returns all file records for a given user.
+// FilesForUser returns all file records for a given user. Query is currently ignored.
+// FIXME: use opts.
 func (a *adapter) FilesForUser(uid t.Uid, opts *t.QueryOpt) ([]t.FileDef, error) {
 	rows, err := a.db.Queryx("SELECT id,createdat,updatedat,status,mimetype,size,location "+
 		"FROM fileuploads WHERE userid=?", store.DecodeUid(uid))
@@ -1777,6 +1780,7 @@ func (a *adapter) FilesForUser(uid t.Uid, opts *t.QueryOpt) ([]t.FileDef, error)
 		if err = rows.StructScan(&fd); err != nil {
 			break
 		}
+		fd.Id = encodeString(fd.Id).String()
 		fd.User = user
 		result = append(result, fd)
 	}
@@ -1793,11 +1797,17 @@ func (a *adapter) FileGet(fid string) (*t.FileDef, error) {
 	}
 
 	var fd t.FileDef
-	err := a.db.Get(&fd, "SELECT id,createdat,updatedat,status,mimetype,size,location "+
+	err := a.db.Get(&fd, "SELECT id,createdat,updatedat,userid AS user,status,mimetype,size,location "+
 		"FROM fileuploads WHERE id=?", store.DecodeUid(id))
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
 	if err != nil {
 		return nil, err
 	}
+
+	fd.Id = encodeString(fd.Id).String()
+	fd.User = encodeString(fd.User).String()
 
 	return &fd, nil
 

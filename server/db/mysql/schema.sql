@@ -143,10 +143,10 @@ CREATE TABLE messages(
 
 # Deletion log
 CREATE TABLE dellog(
-	id INT NOT NULL AUTO_INCREMENT,
-	topic 		VARCHAR(25) NOT NULL,
-	deletedfor 	BIGINT NOT NULL DEFAULT 0,
-	delid 		INT NOT NULL,
+	id			INT NOT NULL AUTO_INCREMENT,
+	topic		VARCHAR(25) NOT NULL,
+	deletedfor	BIGINT NOT NULL DEFAULT 0,
+	delid		INT NOT NULL,
 	low			INT NOT NULL,
 	hi			INT NOT NULL,
 	
@@ -162,7 +162,7 @@ CREATE TABLE dellog(
 
 # User credentials
 CREATE TABLE credentials(
-	id 			INT NOT NULL AUTO_INCREMENT,
+	id			INT NOT NULL AUTO_INCREMENT,
 	createdat 	DATETIME(3) NOT NULL,
 	updatedat 	DATETIME(3) NOT NULL,	
 	method 		VARCHAR(16) NOT NULL,
@@ -180,14 +180,15 @@ CREATE TABLE credentials(
 
 # Records of uploaded files. Files themselves are stored elsewhere.
 CREATE TABLE fileuploads(
-	id			INT NOT NULL AUTO_INCREMENT,
+	id			BIGINT NOT NULL,
 	createdat	DATETIME(3) NOT NULL,
 	updatedat	DATETIME(3) NOT NULL,	
 	userid		BIGINT NOT NULL,
 	status		INT NOT NULL,
 	mimetype	VARCHAR(255) NOT NULL,
 	size		BIGINT NOT NULL,
-	location	VARCHAR(255) NOT NULL,
+	location	VARCHAR(2048) NOT NULL,
+	
 	PRIMARY KEY(id),
 	FOREIGN KEY(userid) REFERENCES users(id)
 )

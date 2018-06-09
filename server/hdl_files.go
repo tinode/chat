@@ -75,7 +75,7 @@ func largeFileServe(wrt http.ResponseWriter, req *http.Request) {
 	dir, fname := path.Split(path.Clean(req.URL.Path))
 
 	// Check path validity
-	if dir != "/v0/file/s" {
+	if dir != "/v0/file/s/" {
 		writeHttpResponse(ErrNotFound("", "", now))
 		return
 	}
@@ -84,15 +84,21 @@ func largeFileServe(wrt http.ResponseWriter, req *http.Request) {
 	parts := strings.Split(fname, ".")
 	fname = parts[0]
 
+	log.Println("Fetching file record for", fname)
+
 	fd, err := store.Files.Get(fname)
 	if err != nil {
 		writeHttpResponse(decodeStoreError(err, "", "", now, nil))
 		return
 	}
 	if fd == nil {
+		log.Println("File record not found", fname)
 		writeHttpResponse(ErrNotFound("", "", now))
 		return
 	}
+
+	// FIXME: The following code is dependent on storage method.
+	log.Println("Opening file", fd.Location)
 	file, err := os.Open(fd.Location)
 	if err != nil {
 		writeHttpResponse(nil)
@@ -193,7 +199,11 @@ func largeFileUpload(wrt http.ResponseWriter, req *http.Request) {
 	}
 	defer outfile.Close()
 
-	store.Files.StartUpload(&fdef)
+	if err = store.Files.StartUpload(&fdef); err != nil {
+		log.Println("Failed to create file record", fdef.Id, err)
+		writeHttpResponse(decodeStoreError(err, "", "", now, nil))
+		return
+	}
 
 	_, err = io.Copy(outfile, file)
 	log.Println("Finished upload", fdef.Location)

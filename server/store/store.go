@@ -629,10 +629,10 @@ func (FileMapper) GetForUser(uid types.Uid) ([]types.FileDef, error) {
 
 // Get fetches a file record for a unique file id.
 func (FileMapper) Get(fid string) (*types.FileDef, error) {
-	return nil, nil
+	return adp.FileGet(fid)
 }
 
 // Delete file record by unique ID.
 func (FileMapper) Delete(fid string) error {
-	return nil
+	return adp.FileDelete(fid)
 }
