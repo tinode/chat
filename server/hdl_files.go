@@ -33,7 +33,7 @@ import (
 )
 
 func largeFileServe(wrt http.ResponseWriter, req *http.Request) {
-	log.Println("Request to download file", req.URL)
+	log.Println("Request to download file", req.URL.Path)
 
 	now := time.Now().UTC().Round(time.Millisecond)
 	enc := json.NewEncoder(wrt)
@@ -202,9 +202,10 @@ func largeFileUpload(wrt http.ResponseWriter, req *http.Request) {
 		writeHttpResponse(nil)
 		return
 	}
-	defer outfile.Close()
 
 	if err = store.Files.StartUpload(&fdef); err != nil {
+		outfile.Close()
+		os.Remove(fdef.Location)
 		log.Println("Failed to create file record", fdef.Id, err)
 		writeHttpResponse(decodeStoreError(err, "", "", now, nil))
 		return
@@ -212,8 +213,10 @@ func largeFileUpload(wrt http.ResponseWriter, req *http.Request) {
 
 	_, err = io.Copy(outfile, file)
 	log.Println("Finished upload", fdef.Location)
+	outfile.Close()
 	if err != nil {
 		store.Files.FinishUpload(fdef.Id, false)
+		os.Remove(fdef.Location)
 		writeHttpResponse(nil)
 		return
 	}
