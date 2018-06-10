@@ -101,6 +101,7 @@ func largeFileServe(wrt http.ResponseWriter, req *http.Request) {
 	defer file.Close()
 
 	wrt.Header().Set("Content-Type", fd.MimeType)
+	wrt.Header().Set("Content-Disposition", "attachment")
 	http.ServeContent(wrt, req, "", fd.UpdatedAt, file)
 }
 

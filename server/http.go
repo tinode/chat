@@ -220,32 +220,50 @@ func tlsRedirect(toPort string) http.HandlerFunc {
 
 // Get API key from an HTTP request.
 func getAPIKey(req *http.Request) string {
+	// Check header.
+	apikey := req.Header.Get("X-Tinode-APIKey")
+
 	// Check URL query parameters.
-	apikey := req.URL.Query().Get("apikey")
+	if apikey == "" {
+		apikey = req.URL.Query().Get("apikey")
+	}
+
 	// Check form values.
 	if apikey == "" {
 		apikey = req.FormValue("apikey")
 	}
-	// Check headers.
+
+	// Check cookies.
 	if apikey == "" {
-		apikey = req.Header.Get("X-Tinode-APIKey")
+		if c, err := req.Cookie("apikey"); err == nil {
+			apikey = c.Value
+		}
 	}
 	return apikey
 }
 
 // Get authorization credentials from an HTTP request.
 func getHttpAuth(req *http.Request) (string, string) {
+	// Check Authorization header.
+	if parts := strings.Split(req.Header.Get("Authorization"), " "); len(parts) == 2 {
+		return parts[0], parts[1]
+	}
+
 	// Check URL query parameters.
 	if auth := req.URL.Query().Get("auth"); auth != "" {
 		return auth, req.URL.Query().Get("secret")
 	}
+
 	// Check form values.
 	if auth := req.FormValue("auth"); auth != "" {
 		return auth, req.FormValue("secret")
 	}
-	// Check Authorization header.
-	if parts := strings.Split(req.Header.Get("Authorization"), " "); len(parts) == 2 {
-		return parts[0], parts[1]
+
+	// Check cookies as the last resort.
+	if auth, err := req.Cookie("auth"); err == nil {
+		if secret, err := req.Cookie("secret"); err == nil {
+			return auth.Value, secret.Value
+		}
 	}
 	return "", ""
 }
