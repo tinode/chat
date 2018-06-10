@@ -632,7 +632,8 @@ func (FileMapper) Get(fid string) (*types.FileDef, error) {
 	return adp.FileGet(fid)
 }
 
-// Delete file record by unique ID.
-func (FileMapper) Delete(fid string) error {
-	return adp.FileDelete(fid)
+// Delete deletes file records by a list of file IDs. If uid is not zero, only
+// files owned by the given user are deleted. If fids are missing, delete all files for the given uid.
+func (FileMapper) Delete(uid types.Uid, fid ...string) error {
+	return adp.FileDelete(uid, fid...)
 }

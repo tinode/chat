@@ -589,6 +589,7 @@ func (a *adapter) UserGetAll(ids ...t.Uid) ([]t.User, error) {
 
 	users := []t.User{}
 	q, _, _ := sqlx.In("SELECT * FROM users WHERE id IN (?)", uids)
+	q = a.db.Rebind(q)
 	rows, err := a.db.Queryx(q, uids...)
 	if err != nil {
 		return nil, err
@@ -861,6 +862,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 		q, _, _ := sqlx.In(
 			"SELECT createdat,updatedat,deletedat,touchedat,name AS id,access,seqid,delid,public,tags "+
 				"FROM topics WHERE name IN (?)", topq)
+		q = a.db.Rebind(q)
 		rows, err = a.db.Queryx(q, topq...)
 		if err != nil {
 			return nil, err
@@ -1813,13 +1815,33 @@ func (a *adapter) FileGet(fid string) (*t.FileDef, error) {
 
 }
 
-// FileDelete deletes a record of a file
-func (a *adapter) FileDelete(fid string) error {
-	uid := t.ParseUid(fid)
-	if uid.IsZero() {
-		return t.ErrMalformed
+// FileDelete deletes records of a files if uid matches the owner.
+// If uid is zero, delete the records regardless of the owner.
+// If fids is not provided, delete all record of a given user.
+func (a *adapter) FileDelete(uid t.Uid, fids ...string) error {
+	var args []interface{}
+	query := "DELETE FROM fileuploads WHERE "
+	if len(fids) > 0 {
+		query += "id IN (?" + strings.Repeat(",?", len(fids)-1) + ") "
+		for _, fid := range fids {
+			id := t.ParseUid(fid)
+			if id.IsZero() {
+				return t.ErrMalformed
+			}
+			args = append(args, id)
+		}
 	}
-	_, err := a.db.Exec("DELETE FROM fileuploads WHERE id=?", store.DecodeUid(uid))
+	if !uid.IsZero() {
+		if len(args) > 0 {
+			query += "AND "
+		}
+		query += "userid=?"
+		args = append(args, store.DecodeUid(uid))
+	}
+	if len(args) == 0 {
+		return errors.New("FileDelete: no arguments provided")
+	}
+	_, err := a.db.Exec(query, args...)
 	return err
 }
 

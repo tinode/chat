@@ -48,12 +48,6 @@ func largeFileServe(wrt http.ResponseWriter, req *http.Request) {
 		enc.Encode(msg)
 	}
 
-	// Check if this is a GET request
-	if req.Method != http.MethodGet {
-		writeHttpResponse(ErrOperationNotAllowed("", "", now))
-		return
-	}
-
 	// Check for API key presence
 	if isValid, _ := checkAPIKey(getAPIKey(req)); !isValid {
 		writeHttpResponse(ErrAPIKeyRequired(now))
@@ -97,7 +91,7 @@ func largeFileServe(wrt http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// FIXME: The following code is dependent on storage method.
+	// FIXME: The following code is dependent on the storage method.
 	log.Println("Opening file", fd.Location)
 	file, err := os.Open(fd.Location)
 	if err != nil {
@@ -159,16 +153,16 @@ func largeFileUpload(wrt http.ResponseWriter, req *http.Request) {
 		if strings.Contains(err.Error(), "request body too large") {
 			log.Println("Uploaded file is too large", err)
 			writeHttpResponse(ErrTooLarge("", "", now))
-		if strings.Contains(err.Error(), "unexpected EOF") {
-			log.Println("Upload interrupted by client", err)
-			writeHttpResponse(ErrMalformed("", "", now))
-		} else {
-			log.Println("Upload error", err)
-			writeHttpResponse(ErrMalformed("", "", now))
+			if strings.Contains(err.Error(), "unexpected EOF") {
+				log.Println("Upload interrupted by client", err)
+				writeHttpResponse(ErrMalformed("", "", now))
+			} else {
+				log.Println("Upload error", err)
+				writeHttpResponse(ErrMalformed("", "", now))
+			}
+			return
 		}
-		return
 	}
-
 	fdef := types.FileDef{}
 	fdef.Id = store.GetUidString()
 	fdef.InitTimes()

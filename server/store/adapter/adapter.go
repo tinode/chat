@@ -140,6 +140,7 @@ type Adapter interface {
 	FilesForUser(uid t.Uid, opts *t.QueryOpt) ([]t.FileDef, error)
 	// FileGet fetches a record of a specific file
 	FileGet(fid string) (*t.FileDef, error)
-	// FileDelete deletes a record of a file
-	FileDelete(fid string) error
+	// FileDelete deletes records of a file if file owner matched the uid.
+	// If uid is zero, the ownership is not checked.
+	FileDelete(uid t.Uid, fid ...string) error
 }
