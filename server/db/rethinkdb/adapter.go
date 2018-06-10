@@ -279,11 +279,11 @@ func (a *adapter) CreateDb(reset bool) error {
 	}
 
 	// Records of file uploads. See types.FileDef.
-	if _, err := rdb.DB(a.dbName).TableCreate("files", rdb.TableCreateOpts{PrimaryKey: "Id"}).RunWrite(a.conn); err != nil {
+	if _, err := rdb.DB(a.dbName).TableCreate("fileuploads", rdb.TableCreateOpts{PrimaryKey: "Id"}).RunWrite(a.conn); err != nil {
 		return err
 	}
-	// Create secondary index on files.User to be able to get records by user id.
-	if _, err := rdb.DB(a.dbName).Table("files").IndexCreate("User").RunWrite(a.conn); err != nil {
+	// Create secondary index on fileuploads.User to be able to get records by user id.
+	if _, err := rdb.DB(a.dbName).Table("fileuploads").IndexCreate("User").RunWrite(a.conn); err != nil {
 		return err
 	}
 
@@ -1456,6 +1456,78 @@ func (a *adapter) CredGet(uid t.Uid, method string) ([]*t.Credential, error) {
 	}
 
 	return result, nil
+}
+
+// FileUploads
+
+// FileStartUpload initializes a file upload
+func (a *adapter) FileStartUpload(fd *t.FileDef) error {
+	_, err := rdb.DB(a.dbName).Table("fileuploads").Insert(fd).RunWrite(a.conn)
+	return err
+}
+
+// FileFinishUpload markes file upload as completed, successfully or otherwise
+func (a *adapter) FileFinishUpload(fid string, status int) (*t.FileDef, error) {
+	if _, err := rdb.DB(a.dbName).Table("fileuploads").Get(fid).
+		Update(map[string]interface{}{"Status": status}).RunWrite(a.conn); err != nil {
+
+		return nil, err
+	}
+	return a.FileGet(fid)
+}
+
+// FilesForUser returns all file records for a given user. Query is currently ignored.
+// FIXME: use opts.
+func (a *adapter) FilesForUser(uid t.Uid, opts *t.QueryOpt) ([]t.FileDef, error) {
+	rows, err := rdb.DB(a.dbName).Table("fileuploads").
+		GetAllByIndex("User", uid.String()).Run(a.conn)
+
+	if err != nil || rows.IsNil() {
+		return nil, err
+	}
+
+	var result []t.FileDef
+	if err = rows.All(&result); err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
+// FileGet fetches a record of a specific file
+func (a *adapter) FileGet(fid string) (*t.FileDef, error) {
+	row, err := rdb.DB(a.dbName).Table("fileuploads").Get(fid).Run(a.conn)
+	if err != nil || row.IsNil() {
+		return nil, err
+	}
+
+	var fd t.FileDef
+	if err = row.One(&fd); err != nil {
+		return nil, err
+	}
+
+	return &fd, nil
+
+}
+
+// FileDelete deletes records of a files if uid matches the owner.
+// If uid is zero, delete the records regardless of the owner.
+// If fids is not provided, delete all record of a given user.
+func (a *adapter) FileDelete(uid t.Uid, fids ...string) error {
+	q := rdb.DB(a.dbName).Table("fileuploads")
+	if len(fids) > 0 {
+		q = q.GetAll(fids)
+		if !uid.IsZero() {
+			q = q.Filter(map[string]interface{}{"User": uid.String()})
+		}
+	} else if !uid.IsZero() {
+		q = q.GetAllByIndex("User", uid.String())
+	} else {
+		return errors.New("FileDelete: no arguments provided")
+	}
+
+	_, err := q.Delete().RunWrite(a.conn)
+	return err
 }
 
 func init() {
