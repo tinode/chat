@@ -254,10 +254,11 @@ Indexes:
 Sample:
 ```js
 {
-  "CreatedAt": Tue Dec 05 2017 01:51:38 GMT+00:00 ,
-  "DelId": 18 ,
-  "DeletedFor":  "xY-YHx09-WI" ,
-  "Id":  "9LfrjW349Rc" ,
+  "Id":  "9LfrjW349Rc",
+  "CreatedAt": Tue Dec 05 2017 01:51:38 GMT+00:00,
+  "DelId": 18,
+  "DeletedFor": "xY-YHx09-WI" ,
+
   "SeqIdRanges": [
     {
       "Low": 20,
@@ -272,4 +273,61 @@ Sample:
 ### Table `credentials`
 The tables stores user credentials used for validation.
 
+* `Id` unique credential, primary key
+* `CreatedAt` timestamp when the record was created
+* `UpdatedAt` timestamp when the last validation attempt was performed (successful or not).
+* `Method` validation method
+* `Done` indicator if the credential is validated
+* `Resp` expected validation response
+* `Retries` number of failed attempts at validation
+* `User` id of the user who owns this credential
+* `Value` value of the credential
+
+Indexes:
+* `Id` Primary key composed either as `User`:`Method`:`Value` for unconfirmed credentials or as `Method`:`Value` for confirmed.
+* `User` Index
+
+Sample:
+```js
+{
+  "Id": "tel:17025550001",
+  "CreatedAt": Sun Jun 10 2018 16:37:27 GMT+00:00 ,
+  "Method":  "tel" ,
+  "Done": true ,
+  "Resp":  "123456" ,
+  "Retries": 0 ,
+  "UpdatedAt": Sun Jun 10 2018 16:37:27 GMT+00:00 ,
+  "User":  "k3srBRk9RYw" ,
+  "Value":  "17025550001"
+}
+```
+
 ### Table `fileuploads`
+The table stores records of uploaded files. The files themselves are stored outside of the database.
+* `Id` unique user-visible file name, primary key
+* `CreatedAt` timestamp when the record was created
+* `UpdatedAt` timestamp of when th upload has cmpleted or failed
+* `User` id of the user who uploaded this file.
+* `Location` actual location of the file on the server.
+* `MimeType` file content type as a [Mime](https://en.wikipedia.org/wiki/MIME) string.
+* `Size` size of the file in bytes. Could be 0 if upload has not completed yet.
+* `Status` upload status: 0 pending, 1 completed, -1 failed.
+
+Indexes:
+ * `Id` file name, primary key
+ * `User` index
+ * `Topic_SeqId` compound index `["Topic", "SeqId"]`
+
+Sample:
+```js
+{
+  "CreatedAt": Sun Jun 10 2018 16:38:45 GMT+00:00 ,
+  "Id":  "sFmjlQ_kA6A" ,
+  "Location":  "uploads/sFmjlQ_kA6A" ,
+  "MimeType":  "image/jpeg" ,
+  "Size": 54961090 ,
+  "Status": 1 ,
+  "UpdatedAt": Sun Jun 10 2018 16:38:45 GMT+00:00 ,
+  "User":  "7j-RR1V7O3Y"
+}
+```

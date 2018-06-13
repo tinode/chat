@@ -184,11 +184,16 @@ CREATE TABLE fileuploads(
 	createdat	DATETIME(3) NOT NULL,
 	updatedat	DATETIME(3) NOT NULL,	
 	userid		BIGINT NOT NULL,
+	seqid 		INT,
+	topic 		CHAR(25) NOT NULL,
 	status		INT NOT NULL,
 	mimetype	VARCHAR(255) NOT NULL,
 	size		BIGINT NOT NULL,
 	location	VARCHAR(2048) NOT NULL,
 	
 	PRIMARY KEY(id),
-	FOREIGN KEY(userid) REFERENCES users(id)
+	FOREIGN KEY(userid) REFERENCES users(id),
+	FOREIGN KEY(topic) REFERENCES topics(name),
+	# This index should not be unique: one message may have multiple attachments.
+	INDEX messages_topic_seqid (topic, seqid)
 )

@@ -134,13 +134,14 @@ type Adapter interface {
 
 	// FileStartUpload initializes a file upload
 	FileStartUpload(fd *t.FileDef) error
-	// FileFinishUpload markes file upload as completed, successfully or otherwise
-	FileFinishUpload(fid string, status int) (*t.FileDef, error)
-	// FilesForUser returns all file records for a given user.
-	FilesForUser(uid t.Uid, opts *t.QueryOpt) ([]t.FileDef, error)
+	// FileFinishUpload markes file upload as completed, successfully or otherwise.
+	FileFinishUpload(fid string, status int, size int64) (*t.FileDef, error)
+	// FilePosted markes file as an attachment in a specific message
+	FilePosted(fid string, topic string, seqid int) error
 	// FileGet fetches a record of a specific file
 	FileGet(fid string) (*t.FileDef, error)
-	// FileDelete deletes records of a file if file owner matched the uid.
-	// If uid is zero, the ownership is not checked.
-	FileDelete(uid t.Uid, fid ...string) error
+	// FilesGetAll returns all file records for a given query.
+	FilesGetAll(opts *t.QueryOpt) ([]t.FileDef, error)
+	// FileDelete deletes file records by query.
+	FileDelete(opts *t.QueryOpt) error
 }

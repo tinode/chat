@@ -397,12 +397,15 @@ func (TopicsObjMapper) Update(topic string, update map[string]interface{}) error
 	return adp.TopicUpdate(topic, update)
 }
 
-// Delete deletes topic, messages and subscriptions.
+// Delete deletes topic, messages, attachments, and subscriptions.
 func (TopicsObjMapper) Delete(topic string) error {
 	if err := adp.SubsDelForTopic(topic); err != nil {
 		return err
 	}
 	if err := adp.MessageDeleteList(topic, nil); err != nil {
+		return err
+	}
+	if err := adp.FileDelete(&types.QueryOpt{Topic: topic}); err != nil {
 		return err
 	}
 
@@ -484,6 +487,8 @@ func (MessagesObjMapper) DeleteList(topic string, delID int, forUser types.Uid, 
 		if err != nil {
 			return err
 		}
+
+		// TODO: delete file attachments
 
 		// Soft-deleting will update one subscription, hard-deleting will ipdate all.
 		// Soft- or hard- is defined by the forUSer being defined.
@@ -614,17 +619,17 @@ func (FileMapper) StartUpload(fd *types.FileDef) error {
 }
 
 // FinishUpload marks started upload as successfully finished.
-func (FileMapper) FinishUpload(fid string, success bool) (*types.FileDef, error) {
+func (FileMapper) FinishUpload(fid string, success bool, size int64) (*types.FileDef, error) {
 	status := types.UploadCompleted
 	if !success {
 		status = types.UploadFailed
 	}
-	return adp.FileFinishUpload(fid, status)
+	return adp.FileFinishUpload(fid, status, size)
 }
 
 // GetForUser fetches all file records for a given user
-func (FileMapper) GetForUser(uid types.Uid) ([]types.FileDef, error) {
-	return adp.FilesForUser(uid, nil)
+func (FileMapper) GetAll(opts *types.QueryOpt) ([]types.FileDef, error) {
+	return adp.FilesGetAll(opts)
 }
 
 // Get fetches a file record for a unique file id.
@@ -634,6 +639,11 @@ func (FileMapper) Get(fid string) (*types.FileDef, error) {
 
 // Delete deletes file records by a list of file IDs. If uid is not zero, only
 // files owned by the given user are deleted. If fids are missing, delete all files for the given uid.
-func (FileMapper) Delete(uid types.Uid, fid ...string) error {
-	return adp.FileDelete(uid, fid...)
+func (FileMapper) Delete(opts *types.QueryOpt) error {
+	return adp.FileDelete(opts)
+}
+
+// Posted links file with a message it was sent in.
+func (FileMapper) Posted(fid string, topic string, seqid int) error {
+	return adp.FilePosted(fid, topic, seqid)
 }

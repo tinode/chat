@@ -14,6 +14,12 @@ The promise of [XMPP](http://xmpp.org/) was to deliver federated instant messagi
 The goal of this project is to actually deliver on XMPP's original vision: create a modern open platform for federated instant messaging with emphasis on mobile communication. A secondary goal is to create a decentralized IM platform which is much harder to track and block by the governments.
 
 
+## Getting support
+
+* For support, general questions, discussion post to [https://groups.google.com/d/forum/tinode](https://groups.google.com/d/forum/tinode).
+* For bugs [open an issue](https://github.com/tinode/chat/issues/new).
+
+
 ## Demo
 
 ### Web 

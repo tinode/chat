@@ -206,17 +206,17 @@ func largeFileUpload(wrt http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	_, err = io.Copy(outfile, file)
+	size, err := io.Copy(outfile, file)
 	log.Println("Finished upload", fdef.Location)
 	outfile.Close()
 	if err != nil {
-		store.Files.FinishUpload(fdef.Id, false)
+		store.Files.FinishUpload(fdef.Id, false, 0)
 		os.Remove(fdef.Location)
 		writeHttpResponse(nil)
 		return
 	}
 
-	store.Files.FinishUpload(fdef.Id, true)
+	store.Files.FinishUpload(fdef.Id, true, size)
 
 	fname := fdef.Id
 	ext, _ := mime.ExtensionsByType(fdef.MimeType)

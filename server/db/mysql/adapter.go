@@ -30,7 +30,7 @@ const (
 	defaultDSN      = "root:@tcp(localhost:3306)/tinode?parseTime=true"
 	defaultDatabase = "tinode"
 
-	dbVersion = 102
+	dbVersion = 103
 
 	adapterName = "mysql"
 )
@@ -384,12 +384,16 @@ func (a *adapter) CreateDb(reset bool) error {
 			createdat	DATETIME(3) NOT NULL,
 			updatedat	DATETIME(3) NOT NULL,	
 			userid		BIGINT NOT NULL,
+			seqid 		INT,
+			topic 		CHAR(25) NOT NULL,
 			status		INT NOT NULL,
 			mimetype	VARCHAR(255) NOT NULL,
 			size		BIGINT NOT NULL,
 			location	VARCHAR(2048) NOT NULL,
 			PRIMARY KEY(id),
-			FOREIGN KEY(userid) REFERENCES users(id)
+			FOREIGN KEY(userid) REFERENCES users(id),
+			FOREIGN KEY(topic) REFERENCES topics(name),
+			INDEX messages_topic_seqid (topic, seqid)
 		)`); err != nil {
 		return err
 	}
@@ -1428,8 +1432,8 @@ func (a *adapter) MessageGetDeleted(topic string, forUser t.Uid, opts *t.QueryOp
 		if opts.Since > 0 {
 			lower = opts.Since
 		}
-		if opts.Before > 0 {
-			upper = opts.Before
+		if opts.Before > 1 {
+			upper = opts.Before - 1
 		}
 
 		if opts.Limit > 0 && opts.Limit < limit {
@@ -1684,8 +1688,8 @@ func (a *adapter) CredDel(uid t.Uid, method string) error {
 
 func (a *adapter) CredConfirm(uid t.Uid, method string) error {
 	res, err := a.db.Exec(
-		"UPDATE credentials SET done=1,synthetic=CONCAT(method,':',value) WHERE userid=? AND method=?",
-		store.DecodeUid(uid), method)
+		"UPDATE credentials SET updatedat=?,done=1,synthetic=CONCAT(method,':',value) WHERE userid=? AND method=?",
+		t.TimeNow(), store.DecodeUid(uid), method)
 	if err != nil {
 		if isDupe(err) {
 			return t.ErrDuplicate
@@ -1699,8 +1703,8 @@ func (a *adapter) CredConfirm(uid t.Uid, method string) error {
 }
 
 func (a *adapter) CredFail(uid t.Uid, method string) error {
-	_, err := a.db.Exec("UPDATE credentials SET retries=retries+1 WHERE userid=? AND method=?",
-		store.DecodeUid(uid), method)
+	_, err := a.db.Exec("UPDATE credentials SET updatedat=?,retries=retries+1 WHERE userid=? AND method=?",
+		t.TimeNow(), store.DecodeUid(uid), method)
 	return err
 }
 
@@ -1738,12 +1742,12 @@ func (a *adapter) FileStartUpload(fd *t.FileDef) error {
 	_, err := a.db.Exec("INSERT INTO fileuploads(id,createdat,updatedat,userid,status,mimetype,size,location)"+
 		" VALUES(?,?,?,?,?,?,?,?)",
 		store.DecodeUid(fd.Uid()), fd.CreatedAt, fd.UpdatedAt,
-		store.DecodeUid(t.ParseUid(fd.User)), fd.Status, fd.MimeType, fd.Size, fd.Location)
+		store.DecodeUid(t.ParseUid(fd.User)), fd.Topic, fd.SeqId, fd.Status, fd.MimeType, fd.Size, fd.Location)
 	return err
 }
 
 // FileFinishUpload markes file upload as completed, successfully or otherwise
-func (a *adapter) FileFinishUpload(fid string, status int) (*t.FileDef, error) {
+func (a *adapter) FileFinishUpload(fid string, status int, size int64) (*t.FileDef, error) {
 	id := t.ParseUid(fid)
 	if id.IsZero() {
 		return nil, t.ErrMalformed
@@ -1756,34 +1760,100 @@ func (a *adapter) FileFinishUpload(fid string, status int) (*t.FileDef, error) {
 	if fd == nil {
 		return nil, t.ErrNotFound
 	}
-	_, err = a.db.Exec("UPDATE fileuploads SET status=? WHERE id=?", status, store.DecodeUid(id))
+
+	fd.UpdatedAt = t.TimeNow()
+	_, err = a.db.Exec("UPDATE fileuploads SET updatedat=?, status=?, size=? WHERE id=?",
+		fd.UpdatedAt, status, size, store.DecodeUid(id))
 	if err == nil {
 		fd.Status = status
+		fd.Size = size
 	} else {
 		fd = nil
 	}
 	return fd, err
 }
 
-// FilesForUser returns all file records for a given user. Query is currently ignored.
-// FIXME: use opts.
-func (a *adapter) FilesForUser(uid t.Uid, opts *t.QueryOpt) ([]t.FileDef, error) {
-	rows, err := a.db.Queryx("SELECT id,createdat,updatedat,status,mimetype,size,location "+
-		"FROM fileuploads WHERE userid=?", store.DecodeUid(uid))
+// FilePosted creates a relationship between the file and a message it was posted in.
+// TODO: create a separate table for linking attachments to messages.
+func (a *adapter) FilePosted(fid string, topic string, seqid int) error {
+	id := t.ParseUid(fid)
+	if id.IsZero() {
+		return t.ErrMalformed
+	}
+	_, err := a.db.Exec("UPDATE fileuploads SET topic=?, seqid=? WHERE id=? AND seqid=0",
+		topic, seqid, store.DecodeUid(id))
+	return err
+}
 
+func optsToQuery(opts *t.QueryOpt) (string, []interface{}) {
+	var params []string
+	var args []interface{}
+	var query string
+	if !opts.User.IsZero() {
+		params = append(params, "userid=?")
+		args = append(args, store.DecodeUid(opts.User))
+	}
+	if opts.Topic != "" {
+		params = append(params, "topic=?")
+		args = append(args, opts.Topic)
+
+		if opts.Before > 1 {
+			params = append(params, "seqid<?")
+			args = append(args, opts.Before)
+		}
+		if opts.Since > 0 {
+			params = append(params, "seqid>=?")
+			args = append(args, opts.Since)
+		}
+	}
+
+	if len(params) > 0 {
+		query = strings.Join(params, " AND ")
+	} else {
+		return "", nil
+	}
+
+	if opts.Limit > 0 {
+		var limit = opts.Limit
+		if limit > maxResults {
+			limit = maxResults
+		}
+		query += " LIMIT ?"
+		args = append(args, limit)
+	}
+
+	return query, args
+}
+
+// FilesForUser returns file records for a given user.
+func (a *adapter) FilesGetAll(opts *t.QueryOpt) ([]t.FileDef, error) {
+	query := "SELECT id,createdat,updatedat,userid AS user,topic,seqid,status,mimetype,size,location " +
+		"FROM fileuploads WHERE "
+	var args []interface{}
+	var where string
+	if opts != nil {
+		where, args = optsToQuery(opts)
+		query += where
+	}
+
+	if len(args) == 0 {
+		// Must provide some query parameters
+		return nil, t.ErrMalformed
+	}
+
+	rows, err := a.db.Queryx(query, args...)
 	if err != nil {
 		return nil, err
 	}
 
 	var result []t.FileDef
-	user := uid.String()
 	for rows.Next() {
 		var fd t.FileDef
 		if err = rows.StructScan(&fd); err != nil {
 			break
 		}
 		fd.Id = encodeString(fd.Id).String()
-		fd.User = user
+		fd.User = encodeString(fd.User).String()
 		result = append(result, fd)
 	}
 	rows.Close()
@@ -1799,7 +1869,7 @@ func (a *adapter) FileGet(fid string) (*t.FileDef, error) {
 	}
 
 	var fd t.FileDef
-	err := a.db.Get(&fd, "SELECT id,createdat,updatedat,userid AS user,status,mimetype,size,location "+
+	err := a.db.Get(&fd, "SELECT id,createdat,updatedat,userid AS user,topic,seqid,status,mimetype,size,location "+
 		"FROM fileuploads WHERE id=?", store.DecodeUid(id))
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -1818,29 +1888,20 @@ func (a *adapter) FileGet(fid string) (*t.FileDef, error) {
 // FileDelete deletes records of a files if uid matches the owner.
 // If uid is zero, delete the records regardless of the owner.
 // If fids is not provided, delete all record of a given user.
-func (a *adapter) FileDelete(uid t.Uid, fids ...string) error {
-	var args []interface{}
+func (a *adapter) FileDelete(opts *t.QueryOpt) error {
 	query := "DELETE FROM fileuploads WHERE "
-	if len(fids) > 0 {
-		query += "id IN (?" + strings.Repeat(",?", len(fids)-1) + ") "
-		for _, fid := range fids {
-			id := t.ParseUid(fid)
-			if id.IsZero() {
-				return t.ErrMalformed
-			}
-			args = append(args, id)
-		}
+	var args []interface{}
+	var where string
+	if opts != nil {
+		where, args = optsToQuery(opts)
+		query += where
 	}
-	if !uid.IsZero() {
-		if len(args) > 0 {
-			query += "AND "
-		}
-		query += "userid=?"
-		args = append(args, store.DecodeUid(uid))
-	}
+
 	if len(args) == 0 {
-		return errors.New("FileDelete: no arguments provided")
+		// Must provide some query parameters
+		return t.ErrMalformed
 	}
+
 	_, err := a.db.Exec(query, args...)
 	return err
 }

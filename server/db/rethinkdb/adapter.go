@@ -27,7 +27,7 @@ const (
 	defaultHost     = "localhost:28015"
 	defaultDatabase = "tinode"
 
-	dbVersion = 102
+	dbVersion = 103
 
 	adapterName = "rethinkdb"
 )
@@ -282,11 +282,17 @@ func (a *adapter) CreateDb(reset bool) error {
 	if _, err := rdb.DB(a.dbName).TableCreate("fileuploads", rdb.TableCreateOpts{PrimaryKey: "Id"}).RunWrite(a.conn); err != nil {
 		return err
 	}
-	// Create secondary index on fileuploads.User to be able to get records by user id.
+	// A secondary index on fileuploads.User to be able to get records by user id.
 	if _, err := rdb.DB(a.dbName).Table("fileuploads").IndexCreate("User").RunWrite(a.conn); err != nil {
 		return err
 	}
-
+	// Another secondary index for linking uploaded files to messages.
+	if _, err := rdb.DB(a.dbName).Table("fileuploads").IndexCreateFunc("Topic_SeqId",
+		func(row rdb.Term) interface{} {
+			return []interface{}{row.Field("Topic"), row.Field("SeqId")}
+		}).RunWrite(a.conn); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -1413,6 +1419,7 @@ func (a *adapter) CredConfirm(uid t.Uid, method string) error {
 	}
 
 	creds[0].Done = true
+	creds[0].UpdatedAt = t.TimeNow()
 	if err = a.CredAdd(creds[0]); err != nil {
 		if rdb.IsConflictErr(err) {
 			return t.ErrDuplicate
@@ -1434,7 +1441,8 @@ func (a *adapter) CredFail(uid t.Uid, method string) error {
 		GetAllByIndex("User", uid.String()).
 		Filter(map[string]interface{}{"Method": method}).
 		Update(map[string]interface{}{
-			"Retries": rdb.Row.Field("Retries").Add(1).Default(0),
+			"Retries":   rdb.Row.Field("Retries").Add(1).Default(0),
+			"UpdatedAt": t.TimeNow(),
 		}).RunWrite(a.conn)
 	return err
 }
@@ -1467,21 +1475,82 @@ func (a *adapter) FileStartUpload(fd *t.FileDef) error {
 }
 
 // FileFinishUpload markes file upload as completed, successfully or otherwise
-func (a *adapter) FileFinishUpload(fid string, status int) (*t.FileDef, error) {
+func (a *adapter) FileFinishUpload(fid string, status int, size int64) (*t.FileDef, error) {
 	if _, err := rdb.DB(a.dbName).Table("fileuploads").Get(fid).
-		Update(map[string]interface{}{"Status": status}).RunWrite(a.conn); err != nil {
+		Update(map[string]interface{}{
+			"Status": status,
+			"Size":   size,
+		}).RunWrite(a.conn); err != nil {
 
 		return nil, err
 	}
 	return a.FileGet(fid)
 }
 
+// FilePosted creates a relationship between the file and a message it was posted in.
+func (a *adapter) FilePosted(fid string, topic string, seqid int) error {
+	_, err := rdb.DB(a.dbName).Table("fileuploads").Get(fid).
+		Update(map[string]interface{}{
+			"Topic": topic,
+			"SeqId": seqid,
+		}).RunWrite(a.conn)
+
+	return err
+
+}
+
+func optsToQuery(q rdb.Term, opts *t.QueryOpt) *rdb.Term {
+	if !opts.User.IsZero() {
+		// Select all user uploads by User index, then filter Topic and SeqId.
+		q = q.GetAllByIndex("User", opts.User.String())
+		if opts.Topic != "" {
+			q = q.Filter(rdb.Row.Field("Topic").Eq(opts.Topic))
+			if opts.Before > 1 {
+				q = q.Filter(rdb.Row.Field("SeqId").Lt(opts.Before))
+			}
+			if opts.Since > 0 {
+				q = q.Filter(rdb.Row.Field("SeqId").Ge(opts.Since))
+			}
+		}
+	} else if opts.Topic != "" {
+		// Select by Topic and SeqId
+
+		var lower, upper interface{}
+		upper = rdb.MaxVal
+		lower = rdb.MinVal
+
+		if opts.Since > 0 {
+			lower = opts.Since
+		}
+		if opts.Before > 1 {
+			upper = opts.Before
+		}
+		q = q.Between([]interface{}{opts.Topic, lower},
+			[]interface{}{opts.Topic, upper},
+			rdb.BetweenOpts{Index: "Topic_SeqId"})
+	} else {
+		return nil
+	}
+	if opts.Limit > 0 && opts.Limit < maxResults {
+		q = q.Limit(opts.Limit)
+	}
+
+	return &q
+}
+
 // FilesForUser returns all file records for a given user. Query is currently ignored.
 // FIXME: use opts.
-func (a *adapter) FilesForUser(uid t.Uid, opts *t.QueryOpt) ([]t.FileDef, error) {
-	rows, err := rdb.DB(a.dbName).Table("fileuploads").
-		GetAllByIndex("User", uid.String()).Run(a.conn)
+func (a *adapter) FilesGetAll(opts *t.QueryOpt) ([]t.FileDef, error) {
+	var q *rdb.Term
+	if opts != nil {
+		q = optsToQuery(rdb.DB(a.dbName).Table("fileuploads"), opts)
+	}
 
+	if q == nil {
+		return nil, t.ErrMalformed
+	}
+
+	rows, err := q.Run(a.conn)
 	if err != nil || rows.IsNil() {
 		return nil, err
 	}
@@ -1513,17 +1582,14 @@ func (a *adapter) FileGet(fid string) (*t.FileDef, error) {
 // FileDelete deletes records of a files if uid matches the owner.
 // If uid is zero, delete the records regardless of the owner.
 // If fids is not provided, delete all record of a given user.
-func (a *adapter) FileDelete(uid t.Uid, fids ...string) error {
-	q := rdb.DB(a.dbName).Table("fileuploads")
-	if len(fids) > 0 {
-		q = q.GetAll(fids)
-		if !uid.IsZero() {
-			q = q.Filter(map[string]interface{}{"User": uid.String()})
-		}
-	} else if !uid.IsZero() {
-		q = q.GetAllByIndex("User", uid.String())
-	} else {
-		return errors.New("FileDelete: no arguments provided")
+func (a *adapter) FileDelete(opts *t.QueryOpt) error {
+	var q *rdb.Term
+	if opts != nil {
+		q = optsToQuery(rdb.DB(a.dbName).Table("fileuploads"), opts)
+	}
+
+	if q == nil {
+		return t.ErrMalformed
 	}
 
 	_, err := q.Delete().RunWrite(a.conn)
