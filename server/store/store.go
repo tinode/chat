@@ -405,7 +405,7 @@ func (TopicsObjMapper) Delete(topic string) error {
 	if err := adp.MessageDeleteList(topic, nil); err != nil {
 		return err
 	}
-	if err := adp.FileDelete(&types.QueryOpt{Topic: topic}); err != nil {
+	if err := adp.FileUnlink(&types.QueryOpt{Topic: topic}); err != nil {
 		return err
 	}
 
@@ -482,6 +482,22 @@ func (MessagesObjMapper) DeleteList(topic string, delID int, forUser types.Uid, 
 	}
 
 	if delID > 0 {
+		if forUser.IsZero() {
+			// If messages are deleted for all users delete attachments too.
+			var opts types.QueryOpt
+			opts.Topic = topic
+			for _, r := range ranges {
+				opts.Since = r.Low
+				opts.Before = r.Hi + 1
+				if opts.Before <= opts.Since {
+					opts.Before = opts.Since + 1
+				}
+				if err = adp.FileUnlink(&opts); err != nil {
+					return err
+				}
+			}
+		}
+
 		// Record ID of the delete transaction
 		err = adp.TopicUpdate(topic, map[string]interface{}{"DelId": delID})
 		if err != nil {
@@ -629,7 +645,7 @@ func (FileMapper) FinishUpload(fid string, success bool, size int64) (*types.Fil
 
 // GetForUser fetches all file records for a given user
 func (FileMapper) GetAll(opts *types.QueryOpt) ([]types.FileDef, error) {
-	return adp.FilesGetAll(opts)
+	return adp.FilesGetAll(opts, false)
 }
 
 // Get fetches a file record for a unique file id.
@@ -637,13 +653,12 @@ func (FileMapper) Get(fid string) (*types.FileDef, error) {
 	return adp.FileGet(fid)
 }
 
-// Delete deletes file records by a list of file IDs. If uid is not zero, only
-// files owned by the given user are deleted. If fids are missing, delete all files for the given uid.
+// Delete decrements usage count.
 func (FileMapper) Delete(opts *types.QueryOpt) error {
-	return adp.FileDelete(opts)
+	return adp.FileUnlink(opts)
 }
 
 // Posted links file with a message it was sent in.
 func (FileMapper) Posted(fid string, topic string, seqid int) error {
-	return adp.FilePosted(fid, topic, seqid)
+	return adp.FileLink(fid, topic, seqid)
 }

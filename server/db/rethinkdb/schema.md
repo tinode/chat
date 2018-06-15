@@ -311,12 +311,14 @@ The table stores records of uploaded files. The files themselves are stored outs
 * `Location` actual location of the file on the server.
 * `MimeType` file content type as a [Mime](https://en.wikipedia.org/wiki/MIME) string.
 * `Size` size of the file in bytes. Could be 0 if upload has not completed yet.
+* `UseCount` count of messages referencing this file.
 * `Status` upload status: 0 pending, 1 completed, -1 failed.
 
 Indexes:
  * `Id` file name, primary key
  * `User` index
  * `Topic_SeqId` compound index `["Topic", "SeqId"]`
+ * `UseCount` index
 
 Sample:
 ```js
@@ -326,6 +328,7 @@ Sample:
   "Location":  "uploads/sFmjlQ_kA6A" ,
   "MimeType":  "image/jpeg" ,
   "Size": 54961090 ,
+  "UseCount": 3,
   "Status": 1 ,
   "UpdatedAt": Sun Jun 10 2018 16:38:45 GMT+00:00 ,
   "User":  "7j-RR1V7O3Y"

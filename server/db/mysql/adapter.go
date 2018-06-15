@@ -30,7 +30,7 @@ const (
 	defaultDSN      = "root:@tcp(localhost:3306)/tinode?parseTime=true"
 	defaultDatabase = "tinode"
 
-	dbVersion = 103
+	dbVersion = 104
 
 	adapterName = "mysql"
 )
@@ -389,11 +389,13 @@ func (a *adapter) CreateDb(reset bool) error {
 			status		INT NOT NULL,
 			mimetype	VARCHAR(255) NOT NULL,
 			size		BIGINT NOT NULL,
+			usecount	INT NOT NULL DEFAULT 0,
 			location	VARCHAR(2048) NOT NULL,
 			PRIMARY KEY(id),
 			FOREIGN KEY(userid) REFERENCES users(id),
 			FOREIGN KEY(topic) REFERENCES topics(name),
-			INDEX messages_topic_seqid (topic, seqid)
+			INDEX fileuploads_topic_seqid (topic, seqid),
+			INDEX fileuploads_usecount(usecount) 
 		)`); err != nil {
 		return err
 	}
@@ -1773,19 +1775,7 @@ func (a *adapter) FileFinishUpload(fid string, status int, size int64) (*t.FileD
 	return fd, err
 }
 
-// FilePosted creates a relationship between the file and a message it was posted in.
-// TODO: create a separate table for linking attachments to messages.
-func (a *adapter) FilePosted(fid string, topic string, seqid int) error {
-	id := t.ParseUid(fid)
-	if id.IsZero() {
-		return t.ErrMalformed
-	}
-	_, err := a.db.Exec("UPDATE fileuploads SET topic=?, seqid=? WHERE id=? AND seqid=0",
-		topic, seqid, store.DecodeUid(id))
-	return err
-}
-
-func optsToQuery(opts *t.QueryOpt) (string, []interface{}) {
+func optsToQuery(opts *t.QueryOpt, unusedOnly bool) (string, []interface{}) {
 	var params []string
 	var args []interface{}
 	var query string
@@ -1807,6 +1797,10 @@ func optsToQuery(opts *t.QueryOpt) (string, []interface{}) {
 		}
 	}
 
+	if unusedOnly {
+		params = append(params, "usecount<=0")
+	}
+
 	if len(params) > 0 {
 		query = strings.Join(params, " AND ")
 	} else {
@@ -1826,13 +1820,13 @@ func optsToQuery(opts *t.QueryOpt) (string, []interface{}) {
 }
 
 // FilesForUser returns file records for a given user.
-func (a *adapter) FilesGetAll(opts *t.QueryOpt) ([]t.FileDef, error) {
+func (a *adapter) FilesGetAll(opts *t.QueryOpt, unusedOnly bool) ([]t.FileDef, error) {
 	query := "SELECT id,createdat,updatedat,userid AS user,topic,seqid,status,mimetype,size,location " +
 		"FROM fileuploads WHERE "
 	var args []interface{}
 	var where string
 	if opts != nil {
-		where, args = optsToQuery(opts)
+		where, args = optsToQuery(opts, unusedOnly)
 		query += where
 	}
 
@@ -1885,15 +1879,44 @@ func (a *adapter) FileGet(fid string) (*t.FileDef, error) {
 
 }
 
-// FileDelete deletes records of a files if uid matches the owner.
-// If uid is zero, delete the records regardless of the owner.
-// If fids is not provided, delete all record of a given user.
-func (a *adapter) FileDelete(opts *t.QueryOpt) error {
+// FileLink creates a relationship between the file and a message it was posted in incrementing usage counter.
+// TODO: create a separate table for linking attachments to messages.
+func (a *adapter) FileLink(fid string, topic string, seqid int) error {
+	id := t.ParseUid(fid)
+	if id.IsZero() {
+		return t.ErrMalformed
+	}
+	_, err := a.db.Exec("UPDATE fileuploads SET topic=?, seqid=?, usecount=usecount+1 WHERE id=? AND seqid=0",
+		topic, seqid, store.DecodeUid(id))
+	return err
+}
+
+// FileUnlink decrements use count of files.
+func (a *adapter) FileUnlink(opts *t.QueryOpt) error {
+	query := "UPDATE fileuploads SET updatedat=?,usecount=usecount+1 WHERE "
+	args := []interface{}{t.TimeNow()}
+	var where string
+	if opts != nil {
+		where, args = optsToQuery(opts, false)
+		query += where
+	}
+
+	if len(args) == 0 {
+		// Must provide some query parameters
+		return t.ErrMalformed
+	}
+
+	_, err := a.db.Exec(query, args...)
+	return err
+}
+
+// FileDelete deletes file records.
+func (a *adapter) FileDelete(opts *t.QueryOpt, unusedOnly bool) error {
 	query := "DELETE FROM fileuploads WHERE "
 	var args []interface{}
 	var where string
 	if opts != nil {
-		where, args = optsToQuery(opts)
+		where, args = optsToQuery(opts, unusedOnly)
 		query += where
 	}
 

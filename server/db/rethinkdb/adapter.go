@@ -27,7 +27,7 @@ const (
 	defaultHost     = "localhost:28015"
 	defaultDatabase = "tinode"
 
-	dbVersion = 103
+	dbVersion = 104
 
 	adapterName = "rethinkdb"
 )
@@ -291,6 +291,10 @@ func (a *adapter) CreateDb(reset bool) error {
 		func(row rdb.Term) interface{} {
 			return []interface{}{row.Field("Topic"), row.Field("SeqId")}
 		}).RunWrite(a.conn); err != nil {
+		return err
+	}
+	// A secondary index on fileuploads.UseCount to be able to delete unused records.
+	if _, err := rdb.DB(a.dbName).Table("fileuploads").IndexCreate("UseCount").RunWrite(a.conn); err != nil {
 		return err
 	}
 	return nil
@@ -1487,19 +1491,7 @@ func (a *adapter) FileFinishUpload(fid string, status int, size int64) (*t.FileD
 	return a.FileGet(fid)
 }
 
-// FilePosted creates a relationship between the file and a message it was posted in.
-func (a *adapter) FilePosted(fid string, topic string, seqid int) error {
-	_, err := rdb.DB(a.dbName).Table("fileuploads").Get(fid).
-		Update(map[string]interface{}{
-			"Topic": topic,
-			"SeqId": seqid,
-		}).RunWrite(a.conn)
-
-	return err
-
-}
-
-func optsToQuery(q rdb.Term, opts *t.QueryOpt) *rdb.Term {
+func optsToQuery(q rdb.Term, opts *t.QueryOpt, unusedOnly bool) *rdb.Term {
 	if !opts.User.IsZero() {
 		// Select all user uploads by User index, then filter Topic and SeqId.
 		q = q.GetAllByIndex("User", opts.User.String())
@@ -1511,6 +1503,9 @@ func optsToQuery(q rdb.Term, opts *t.QueryOpt) *rdb.Term {
 			if opts.Since > 0 {
 				q = q.Filter(rdb.Row.Field("SeqId").Ge(opts.Since))
 			}
+		}
+		if unusedOnly {
+			q = q.Filter(rdb.Row.Field("UseCount").Le(0))
 		}
 	} else if opts.Topic != "" {
 		// Select by Topic and SeqId
@@ -1528,6 +1523,13 @@ func optsToQuery(q rdb.Term, opts *t.QueryOpt) *rdb.Term {
 		q = q.Between([]interface{}{opts.Topic, lower},
 			[]interface{}{opts.Topic, upper},
 			rdb.BetweenOpts{Index: "Topic_SeqId"})
+
+		if unusedOnly {
+			q = q.Filter(rdb.Row.Field("UseCount").Le(0))
+		}
+	} else if unusedOnly {
+		// Select records where "infinity <= UseCount < 1"
+		q = q.Between(rdb.MinVal, 1, rdb.BetweenOpts{Index: "UseCount"})
 	} else {
 		return nil
 	}
@@ -1538,12 +1540,11 @@ func optsToQuery(q rdb.Term, opts *t.QueryOpt) *rdb.Term {
 	return &q
 }
 
-// FilesForUser returns all file records for a given user. Query is currently ignored.
-// FIXME: use opts.
-func (a *adapter) FilesGetAll(opts *t.QueryOpt) ([]t.FileDef, error) {
+// FilesGetAll returns all file records. If unusedOnly is true, return records with useCount equals zero.
+func (a *adapter) FilesGetAll(opts *t.QueryOpt, unusedOnly bool) ([]t.FileDef, error) {
 	var q *rdb.Term
 	if opts != nil {
-		q = optsToQuery(rdb.DB(a.dbName).Table("fileuploads"), opts)
+		q = optsToQuery(rdb.DB(a.dbName).Table("fileuploads"), opts, unusedOnly)
 	}
 
 	if q == nil {
@@ -1579,13 +1580,43 @@ func (a *adapter) FileGet(fid string) (*t.FileDef, error) {
 
 }
 
-// FileDelete deletes records of a files if uid matches the owner.
-// If uid is zero, delete the records regardless of the owner.
-// If fids is not provided, delete all record of a given user.
-func (a *adapter) FileDelete(opts *t.QueryOpt) error {
+// FileLink creates a relationship between the file and a message it was posted in incrementing usage counter.
+func (a *adapter) FileLink(fid string, topic string, seqid int) error {
+	_, err := rdb.DB(a.dbName).Table("fileuploads").Get(fid).
+		Update(map[string]interface{}{
+			"UpdatedAt": t.TimeNow(),
+			"Topic":     topic,
+			"SeqId":     seqid,
+			"UseCount":  rdb.Row.Field("UseCount").Default(0).Add(1),
+		}).RunWrite(a.conn)
+
+	return err
+
+}
+
+// FileUnlink decrements use count of files.
+func (a *adapter) FileUnlink(opts *t.QueryOpt) error {
 	var q *rdb.Term
 	if opts != nil {
-		q = optsToQuery(rdb.DB(a.dbName).Table("fileuploads"), opts)
+		q = optsToQuery(rdb.DB(a.dbName).Table("fileuploads"), opts, false)
+	}
+
+	if q == nil {
+		return t.ErrMalformed
+	}
+
+	_, err := q.Update(map[string]interface{}{
+		"UpdatedAt":  t.TimeNow(),
+		"UseCounter": rdb.Row.Field("UseCounter").Sub(1),
+	}).RunWrite(a.conn)
+	return err
+}
+
+// FileDelete.
+func (a *adapter) FileDelete(opts *t.QueryOpt, unusedOnly bool) error {
+	var q *rdb.Term
+	if opts != nil {
+		q = optsToQuery(rdb.DB(a.dbName).Table("fileuploads"), opts, unusedOnly)
 	}
 
 	if q == nil {

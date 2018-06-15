@@ -130,18 +130,20 @@ type Adapter interface {
 	// DeviceDelete deletes a device record
 	DeviceDelete(uid t.Uid, deviceID string) error
 
-	// File uploads
+	// File upload records. The files are stored outside of the database.
 
 	// FileStartUpload initializes a file upload
 	FileStartUpload(fd *t.FileDef) error
 	// FileFinishUpload markes file upload as completed, successfully or otherwise.
 	FileFinishUpload(fid string, status int, size int64) (*t.FileDef, error)
-	// FilePosted markes file as an attachment in a specific message
-	FilePosted(fid string, topic string, seqid int) error
 	// FileGet fetches a record of a specific file
 	FileGet(fid string) (*t.FileDef, error)
 	// FilesGetAll returns all file records for a given query.
-	FilesGetAll(opts *t.QueryOpt) ([]t.FileDef, error)
-	// FileDelete deletes file records by query.
-	FileDelete(opts *t.QueryOpt) error
+	FilesGetAll(opts *t.QueryOpt, unusedOnly bool) ([]t.FileDef, error)
+	// FileLink markes file as an attachment in a specific message incrementing usage counter.
+	FileLink(fid string, topic string, seqid int) error
+	// FileUnlink decrements usage counter of file records by query.
+	FileUnlink(opts *t.QueryOpt) error
+	// Delete file records by query. If unusedOnly is true, delete only records where useCount is zero.
+	FileDelete(opts *t.QueryOpt, unusedOnly bool) error
 }
