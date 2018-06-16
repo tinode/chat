@@ -186,10 +186,11 @@ func largeFileUpload(wrt http.ResponseWriter, req *http.Request) {
 	// FIXME: The following code needs to be replaced in production with calls to S3,
 	// GCS, ABS, Minio, Ceph, etc.
 
-	// Generate a unique file name and attach it to path.
-	// FIXME: create two-three levels of nested directories. Serving from a directory with
-	// tens of thousands of files in it will not perform well.
-	fdef.Location = filepath.Join(globals.fileUploadLocation, fdef.Id)
+	// Generate a unique file name and attach it to path. Using base32 to avoid possible
+	// file name collisions on Windows.
+	// FIXME: create two-three levels of nested directories. Serving from a single directory
+	// with tens of thousands of files in it will not perform well.
+	fdef.Location = filepath.Join(globals.fileUploadLocation, fdef.Uid().String32())
 
 	outfile, err := os.Create(fdef.Location)
 	if err != nil {

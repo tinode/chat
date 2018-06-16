@@ -2,6 +2,7 @@ package types
 
 import (
 	"database/sql/driver"
+	"encoding/base32"
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
@@ -137,16 +138,31 @@ func (uid *Uid) UnmarshalJSON(b []byte) error {
 	return uid.UnmarshalText(b[1 : size-1])
 }
 
-// String converts Uid to string
+// String converts Uid to base64 string.
 func (uid Uid) String() string {
 	buf, _ := uid.MarshalText()
 	return string(buf)
+}
+
+// String32 converts Uid to lowercase base32 string (suitable for file names on Windows).
+func (uid Uid) String32() string {
+	data, _ := uid.MarshalBinary()
+	return strings.ToLower(base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(data))
 }
 
 // ParseUid parses string NOT prefixed with anything
 func ParseUid(s string) Uid {
 	var uid Uid
 	uid.UnmarshalText([]byte(s))
+	return uid
+}
+
+// ParseUid32 parses base32-encoded string into Uid
+func ParseUid32(s string) Uid {
+	var uid Uid
+	if data, err := base32.StdEncoding.WithPadding(base32.NoPadding).DecodeString(s); err == nil {
+		uid.UnmarshalBinary(data)
+	}
 	return uid
 }
 
