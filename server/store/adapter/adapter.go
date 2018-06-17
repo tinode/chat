@@ -140,8 +140,8 @@ type Adapter interface {
 	FileGet(fid string) (*t.FileDef, error)
 	// FilesGetAll returns all file records for a given query.
 	FilesGetAll(opts *t.QueryOpt, unusedOnly bool) ([]t.FileDef, error)
-	// FileLink markes file as an attachment in a specific message incrementing usage counter.
-	FileLink(fid string, topic string, seqid int) error
+	// FileLink markes files as attachments in a specific message incrementing usage counter.
+	FileLink(fid []string, topic string, seqid int) error
 	// FileUnlink decrements usage counter of file records by query.
 	FileUnlink(opts *t.QueryOpt) error
 	// Delete file records by query. If unusedOnly is true, delete only records where useCount is zero.

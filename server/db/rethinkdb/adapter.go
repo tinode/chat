@@ -1581,8 +1581,12 @@ func (a *adapter) FileGet(fid string) (*t.FileDef, error) {
 }
 
 // FileLink creates a relationship between the file and a message it was posted in incrementing usage counter.
-func (a *adapter) FileLink(fid string, topic string, seqid int) error {
-	_, err := rdb.DB(a.dbName).Table("fileuploads").Get(fid).
+func (a *adapter) FileLink(fids []string, topic string, seqid int) error {
+	ids := make([]interface{}, len(fids))
+	for i, id := range fids {
+		ids[i] = id
+	}
+	_, err := rdb.DB(a.dbName).Table("fileuploads").GetAll(ids...).
 		Update(map[string]interface{}{
 			"UpdatedAt": t.TimeNow(),
 			"Topic":     topic,

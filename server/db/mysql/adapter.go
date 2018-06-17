@@ -1881,13 +1881,20 @@ func (a *adapter) FileGet(fid string) (*t.FileDef, error) {
 
 // FileLink creates a relationship between the file and a message it was posted in incrementing usage counter.
 // TODO: create a separate table for linking attachments to messages.
-func (a *adapter) FileLink(fid string, topic string, seqid int) error {
-	id := t.ParseUid(fid)
-	if id.IsZero() {
+func (a *adapter) FileLink(fids []string, topic string, seqid int) error {
+	args := []interface{}{topic, seqid}
+	for _, fid := range fids {
+		id := t.ParseUid(fid)
+		if id.IsZero() {
+			return t.ErrMalformed
+		}
+		args = append(args, store.DecodeUid(id))
+	}
+	if len(args) == 2 {
 		return t.ErrMalformed
 	}
-	_, err := a.db.Exec("UPDATE fileuploads SET topic=?, seqid=?, usecount=usecount+1 WHERE id=? AND seqid=0",
-		topic, seqid, store.DecodeUid(id))
+	_, err := a.db.Exec("UPDATE fileuploads SET topic=?, seqid=?, usecount=usecount+1 WHERE id IN (?"+
+		strings.Repeat(",?", len(args)-1)+") AND seqid=0", args...)
 	return err
 }
 

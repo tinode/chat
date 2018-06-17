@@ -306,6 +306,15 @@ func (t *Topic) run(hub *Hub) {
 					}
 				}
 
+				if attArray, ok := msg.Data.Head["attachments"]; ok {
+					if att, ok := attArray.([]string); ok {
+						store.Files.Link(att, t.name, t.lastID+1)
+					} else {
+						// Strip invalid header
+						delete(msg.Data.Head, "attachments")
+					}
+				}
+
 				if err := store.Messages.Save(&types.Message{
 					ObjHeader: types.ObjHeader{CreatedAt: msg.Data.Timestamp},
 					SeqId:     t.lastID + 1,

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/tinode/chat/server/auth"
+	"github.com/tinode/chat/server/media"
 	"github.com/tinode/chat/server/store/adapter"
 	"github.com/tinode/chat/server/store/types"
 	"github.com/tinode/chat/server/validate"
@@ -622,6 +623,23 @@ func (DeviceMapper) Delete(uid types.Uid, deviceID string) error {
 	return adp.DeviceDelete(uid, deviceID)
 }
 
+// Registered media/file handlers.
+var fileHandlers map[string]media.Handler
+
+func RegisterMediaHandler(name string, mh media.Handler) {
+	if fileHandlers == nil {
+		fileHandlers = make(map[string]media.Handler)
+	}
+
+	if mh == nil {
+		panic("RegisterMediaHandler: handler is nil")
+	}
+	if _, dup := fileHandlers[name]; dup {
+		panic("RegisterMediaHandler: called twice for handler " + name)
+	}
+	fileHandlers[name] = mh
+}
+
 // FileMapper is a struct to map methods used for file handling.
 type FileMapper struct{}
 
@@ -658,7 +676,7 @@ func (FileMapper) Delete(opts *types.QueryOpt) error {
 	return adp.FileUnlink(opts)
 }
 
-// Posted links file with a message it was sent in.
-func (FileMapper) Posted(fid string, topic string, seqid int) error {
-	return adp.FileLink(fid, topic, seqid)
+// Link links files with the message they were attached to.
+func (FileMapper) Link(fids []string, topic string, seqid int) error {
+	return adp.FileLink(fids, topic, seqid)
 }
