@@ -185,7 +185,7 @@ message ClientPub {
 	string id = 1;
 	string topic = 2;
 	bool no_echo = 3;
-	map<string, string> head = 4;
+	map<string, bytes> head = 4;
 	bytes content = 5;
 }
 
@@ -329,7 +329,7 @@ message ServerData {
 	// Timestamp when the message was deleted or 0. Milliseconds since the epoch 01/01/1970
 	int64 deleted_at = 3;
 	int32 seq_id = 4;
-	map<string, string> head = 5;
+	map<string, bytes> head = 5;
 	bytes content = 6;
 }
 

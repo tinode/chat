@@ -827,7 +827,7 @@ type SoftDelete struct {
 }
 
 // MessageHeaders is needed to attach Scan() to.
-type MessageHeaders map[string]string
+type MessageHeaders map[string]interface{}
 
 // Scan implements sql.Scanner interface.
 func (mh *MessageHeaders) Scan(val interface{}) error {

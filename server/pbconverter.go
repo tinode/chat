@@ -33,7 +33,7 @@ func pbServDataSerialize(data *MsgServerData) *pbx.ServerMsg_Data {
 		FromUserId: data.From,
 		DeletedAt:  timeToInt64(data.DeletedAt),
 		SeqId:      int32(data.SeqId),
-		Head:       data.Head,
+		Head:       interfaceMapToByteMap(data.Head),
 		Content:    interfaceToBytes(data.Content)}}
 }
 
@@ -132,7 +132,7 @@ func pbServDeserialize(pkt *pbx.ServerMsg) *ServerComMessage {
 			From:      data.GetFromUserId(),
 			DeletedAt: int64ToTime(data.GetDeletedAt()),
 			SeqId:     int(data.GetSeqId()),
-			Head:      data.GetHead(),
+			Head:      byteMapToInterfaceMap(data.GetHead()),
 			Content:   data.GetContent(),
 		}
 	} else if pres := pkt.GetPres(); pres != nil {
@@ -235,7 +235,7 @@ func pbCliSerialize(msg *ClientComMessage) *pbx.ClientMsg {
 			Id:      msg.Pub.Id,
 			Topic:   msg.Pub.Topic,
 			NoEcho:  msg.Pub.NoEcho,
-			Head:    msg.Pub.Head,
+			Head:    interfaceMapToByteMap(msg.Pub.Head),
 			Content: interfaceToBytes(msg.Pub.Content)}}
 	} else if msg.Get != nil {
 		pkt.Message = &pbx.ClientMsg_Get{Get: &pbx.ClientGet{
@@ -321,7 +321,7 @@ func pbCliDeserialize(pkt *pbx.ClientMsg) *ClientComMessage {
 			Id:      pub.GetId(),
 			Topic:   pub.GetTopic(),
 			NoEcho:  pub.GetNoEcho(),
-			Head:    pub.GetHead(),
+			Head:    byteMapToInterfaceMap(pub.GetHead()),
 			Content: bytesToInterface(pub.GetContent()),
 		}
 	} else if get := pkt.GetGet(); get != nil {

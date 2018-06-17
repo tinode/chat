@@ -219,11 +219,11 @@ type MsgClientLeave struct {
 
 // MsgClientPub is client's request to publish data to topic subscribers {pub}
 type MsgClientPub struct {
-	Id      string            `json:"id,omitempty"`
-	Topic   string            `json:"topic"`
-	NoEcho  bool              `json:"noecho,omitempty"`
-	Head    map[string]string `json:"head,omitempty"`
-	Content interface{}       `json:"content"`
+	Id      string                 `json:"id,omitempty"`
+	Topic   string                 `json:"topic"`
+	NoEcho  bool                   `json:"noecho,omitempty"`
+	Head    map[string]interface{} `json:"head,omitempty"`
+	Content interface{}            `json:"content"`
 }
 
 // MsgClientGet is a query of topic state {get}.
@@ -396,12 +396,12 @@ type MsgServerCtrl struct {
 type MsgServerData struct {
 	Topic string `json:"topic"`
 	// ID of the user who originated the message as {pub}, could be empty if sent by the system
-	From      string            `json:"from,omitempty"`
-	Timestamp time.Time         `json:"ts"`
-	DeletedAt *time.Time        `json:"deleted,omitempty"`
-	SeqId     int               `json:"seq"`
-	Head      map[string]string `json:"head,omitempty"`
-	Content   interface{}       `json:"content"`
+	From      string                 `json:"from,omitempty"`
+	Timestamp time.Time              `json:"ts"`
+	DeletedAt *time.Time             `json:"deleted,omitempty"`
+	SeqId     int                    `json:"seq"`
+	Head      map[string]interface{} `json:"head,omitempty"`
+	Content   interface{}            `json:"content"`
 }
 
 // MsgServerPres is presence notification {pres} (authoritative update).
