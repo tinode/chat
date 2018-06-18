@@ -104,11 +104,6 @@ func (fh *fshandler) Download(url string) (media.ReadSeekCloser, error) {
 	return file, nil
 }
 
-// Attach notifies the handler that certain file was sent as an attachment to the given message.
-func (fshandler) Attach(fid string, topic string, seqid int) error {
-	return nil
-}
-
 // Delete deletes file from storage
 func (fshandler) Delete(fid string) error {
 	return nil

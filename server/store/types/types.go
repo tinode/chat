@@ -52,10 +52,7 @@ const ZeroUid Uid = 0
 // Lengths of various Uid representations
 const (
 	uidBase64Unpadded = 11
-	uidBase64Padded   = 12
-
 	p2pBase64Unpadded = 22
-	p2pBase64Padded   = 24
 )
 
 // IsZero checks if Uid is uninitialized.
@@ -94,11 +91,8 @@ func (uid *Uid) UnmarshalText(src []byte) error {
 	if len(src) != uidBase64Unpadded {
 		return errors.New("Uid.UnmarshalText: invalid length")
 	}
-	dec := make([]byte, base64.URLEncoding.DecodedLen(uidBase64Padded))
-	for len(src) < uidBase64Padded {
-		src = append(src, '=')
-	}
-	count, err := base64.URLEncoding.Decode(dec, src)
+	dec := make([]byte, base64.URLEncoding.WithPadding(base64.NoPadding).DecodedLen(uidBase64Unpadded))
+	count, err := base64.URLEncoding.WithPadding(base64.NoPadding).Decode(dec, src)
 	if count < 8 {
 		if err != nil {
 			return errors.New("Uid.UnmarshalText: failed to decode " + err.Error())
@@ -115,10 +109,10 @@ func (uid *Uid) MarshalText() ([]byte, error) {
 		return []byte{}, nil
 	}
 	src := make([]byte, 8)
-	dst := make([]byte, base64.URLEncoding.EncodedLen(8))
+	dst := make([]byte, base64.URLEncoding.WithPadding(base64.NoPadding).EncodedLen(8))
 	binary.LittleEndian.PutUint64(src, uint64(*uid))
-	base64.URLEncoding.Encode(dst, src)
-	return dst[0:uidBase64Unpadded], nil
+	base64.URLEncoding.WithPadding(base64.NoPadding).Encode(dst, src)
+	return dst, nil
 }
 
 // MarshalJSON converts Uid to double quoted ("ajjj") string.
@@ -208,7 +202,7 @@ func (uid Uid) P2PName(u2 Uid) string {
 			return ""
 		}
 
-		return "p2p" + base64.URLEncoding.EncodeToString(b1)[:p2pBase64Unpadded]
+		return "p2p" + base64.URLEncoding.WithPadding(base64.NoPadding).EncodeToString(b1)
 	}
 
 	return ""
@@ -222,12 +216,9 @@ func ParseP2P(p2p string) (uid1, uid2 Uid, err error) {
 			err = errors.New("ParseP2P: invalid length")
 			return
 		}
-		dec := make([]byte, base64.URLEncoding.DecodedLen(p2pBase64Padded))
-		for len(src) < p2pBase64Padded {
-			src = append(src, '=')
-		}
+		dec := make([]byte, base64.URLEncoding.WithPadding(base64.NoPadding).DecodedLen(p2pBase64Unpadded))
 		var count int
-		count, err = base64.URLEncoding.Decode(dec, src)
+		count, err = base64.URLEncoding.WithPadding(base64.NoPadding).Decode(dec, src)
 		if count < 16 {
 			if err != nil {
 				err = errors.New("ParseP2P: failed to decode " + err.Error())
