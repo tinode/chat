@@ -410,7 +410,7 @@ func pluginFind(user types.Uid, query string) (string, []types.Subscription, err
 	}
 	for _, p := range globals.plugins {
 		if !p.filterFind {
-			// Plugin cannot cervice Find requests
+			// Plugin cannot service Find requests
 			continue
 		}
 
