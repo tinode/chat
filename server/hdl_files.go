@@ -2,7 +2,7 @@
  *
  *  Description :
  *
- *    Handler of large file uploads/downloads. Vlidates request then calls
+ *    Handler of large file uploads/downloads. Validates request first then calls
  *    a handler.
  *
  *    Use commercial services (Amazon S3 or Google's/MSFT's equivalents),
