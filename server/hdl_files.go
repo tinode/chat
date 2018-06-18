@@ -2,12 +2,8 @@
  *
  *  Description :
  *
- *    Handler of large file uploads/downloads.
- *    Default upload handler saves files to the file system at the configured
- *    mount point.
- *
- *    This module cannot handle large volume of data. It's intended only to
- *    show how it's supposed to work.
+ *    Handler of large file uploads/downloads. Vlidates request then calls
+ *    a handler.
  *
  *    Use commercial services (Amazon S3 or Google's/MSFT's equivalents),
  *    or open source like Ceph or Minio.
@@ -20,11 +16,7 @@ import (
 	"encoding/json"
 	"io"
 	"log"
-	"mime"
 	"net/http"
-	"os"
-	"path"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -37,6 +29,15 @@ func largeFileServe(wrt http.ResponseWriter, req *http.Request) {
 
 	now := time.Now().UTC().Round(time.Millisecond)
 	enc := json.NewEncoder(wrt)
+	mh := store.GetMediaHandler(globals.fileHandler)
+
+	if redirTo := mh.Redirect(req.URL.String()); redirTo != "" {
+		wrt.Header().Set("Location", redirTo)
+		wrt.Header().Set("Content-Type", "application/json; charset=utf-8")
+		wrt.WriteHeader(http.StatusFound)
+		enc.Encode(InfoFound("", "", now))
+		return
+	}
 
 	writeHttpResponse := func(msg *ServerComMessage) {
 		if msg == nil {
@@ -66,43 +67,12 @@ func largeFileServe(wrt http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	dir, fname := path.Split(path.Clean(req.URL.Path))
-
-	// Check path validity
-	if dir != "/v0/file/s/" {
-		writeHttpResponse(ErrNotFound("", "", now))
-		return
-	}
-
-	// Remove extension
-	parts := strings.Split(fname, ".")
-	fname = parts[0]
-
-	log.Println("Fetching file record for", fname)
-
-	fd, err := store.Files.Get(fname)
-	if err != nil {
-		writeHttpResponse(decodeStoreError(err, "", "", now, nil))
-		return
-	}
-	if fd == nil {
-		log.Println("File record not found", fname)
-		writeHttpResponse(ErrNotFound("", "", now))
-		return
-	}
-
-	// FIXME: The following code is dependent on the storage method.
-	log.Println("Opening file", fd.Location)
-	file, err := os.Open(fd.Location)
-	if err != nil {
-		writeHttpResponse(nil)
-		return
-	}
-	defer file.Close()
+	fd, rsc, err := mh.Download(req.URL.String())
+	defer rsc.Close()
 
 	wrt.Header().Set("Content-Type", fd.MimeType)
 	wrt.Header().Set("Content-Disposition", "attachment")
-	http.ServeContent(wrt, req, "", fd.UpdatedAt, file)
+	http.ServeContent(wrt, req, "", fd.UpdatedAt, rsc)
 }
 
 // largeFileUpload receives files from client over HTTP(S) and saves them to local file
@@ -110,6 +80,15 @@ func largeFileServe(wrt http.ResponseWriter, req *http.Request) {
 func largeFileUpload(wrt http.ResponseWriter, req *http.Request) {
 	now := time.Now().UTC().Round(time.Millisecond)
 	enc := json.NewEncoder(wrt)
+	mh := store.GetMediaHandler(globals.fileHandler)
+
+	if redirTo := mh.Redirect(req.URL.String()); redirTo != "" {
+		wrt.Header().Set("Location", redirTo)
+		wrt.Header().Set("Content-Type", "application/json; charset=utf-8")
+		wrt.WriteHeader(http.StatusFound)
+		enc.Encode(InfoFound("", "", now))
+		return
+	}
 
 	writeHttpResponse := func(msg *ServerComMessage) {
 		if msg == nil {
@@ -127,8 +106,9 @@ func largeFileUpload(wrt http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// Limit the size of the uploaded file.
-	req.Body = http.MaxBytesReader(wrt, req.Body, globals.maxUploadSize)
+	if globals.maxFileUploadSize > 0 {
+		req.Body = http.MaxBytesReader(wrt, req.Body, globals.maxFileUploadSize)
+	}
 
 	// Check for API key presence
 	if isValid, _ := checkAPIKey(getAPIKey(req)); !isValid {
@@ -183,48 +163,14 @@ func largeFileUpload(wrt http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// FIXME: The following code needs to be replaced in production with calls to S3,
-	// GCS, ABS, Minio, Ceph, etc.
-
-	// Generate a unique file name and attach it to path. Using base32 to avoid possible
-	// file name collisions on Windows.
-	// FIXME: create two-three levels of nested directories. Serving from a single directory
-	// with tens of thousands of files in it will not perform well.
-	fdef.Location = filepath.Join(globals.fileUploadLocation, fdef.Uid().String32())
-
-	outfile, err := os.Create(fdef.Location)
+	url, err := mh.Upload(&fdef, file)
 	if err != nil {
-		log.Println("Failed to create file", fdef.Location, err)
-		writeHttpResponse(nil)
-		return
-	}
-
-	if err = store.Files.StartUpload(&fdef); err != nil {
-		outfile.Close()
-		os.Remove(fdef.Location)
-		log.Println("Failed to create file record", fdef.Id, err)
+		log.Println("Failed to upload file", fdef.Id, err)
 		writeHttpResponse(decodeStoreError(err, "", "", now, nil))
 		return
 	}
 
-	size, err := io.Copy(outfile, file)
-	log.Println("Finished upload", fdef.Location)
-	outfile.Close()
-	if err != nil {
-		store.Files.FinishUpload(fdef.Id, false, 0)
-		os.Remove(fdef.Location)
-		writeHttpResponse(nil)
-		return
-	}
-
-	store.Files.FinishUpload(fdef.Id, true, size)
-
-	fname := fdef.Id
-	ext, _ := mime.ExtensionsByType(fdef.MimeType)
-	if len(ext) > 0 {
-		fname += ext[0]
-	}
 	resp := NoErr("", "", now)
-	resp.Ctrl.Params = map[string]string{"url": "/v0/file/s/" + fname}
+	resp.Ctrl.Params = map[string]string{"url": url}
 	writeHttpResponse(resp)
 }

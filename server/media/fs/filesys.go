@@ -1,7 +1,12 @@
-// Pckage fs implements media interface storing media objects in a file system.
+// Package fs implements github.com/tinode/chat/server/media interface by storing media objects in a file system.
+
+// This module won't perform well with tens of thousand of files because it stores all files in a single directory.
+
 package fs
 
 import (
+	"encoding/json"
+	"errors"
 	"io"
 	"log"
 	"mime"
@@ -19,38 +24,68 @@ const (
 	defaultServeURL = "/v0/file/s/"
 )
 
+type configType struct {
+	FileUploadLocation string `json:"upload_to,omitempty"`
+	ServeURL           string `json:"serve_url,omitempty"`
+}
+
 type fshandler struct {
+	// In case of a cluster fileUploadLocation must be accessible to all cluster members.
 	fileUploadLocation string
 	serveURL           string
 }
 
 func (fh *fshandler) Init(jsconf string) error {
-	return nil
+	var err error
+	var config configType
+
+	if err = json.Unmarshal([]byte(jsconf), &config); err != nil {
+		return errors.New("fs handler failed to parse config: " + err.Error())
+	}
+
+	fh.fileUploadLocation = config.FileUploadLocation
+	if fh.fileUploadLocation == "" {
+		return errors.New("fs handler: missing upload location")
+	}
+
+	fh.serveURL = config.ServeURL
+	if fh.serveURL == "" {
+		fh.serveURL = defaultServeURL
+	}
+
+	// Make sure the upload directory exists.
+	return os.MkdirAll(fh.fileUploadLocation, 0777)
+}
+
+// Redirect is used when one owants to serve files from a different external server.
+func (fshandler) Redirect(url string) string {
+	// This handler does not use redirects.
+	return ""
 }
 
 // Upload processes request for file upload. The file is given as io.Reader.
 func (fh *fshandler) Upload(fdef *types.FileDef, file io.Reader) (string, error) {
-	// Generate a unique file name and attach it to path. Using base32 to avoid possible
-	// file name collisions on Windows.
 	// FIXME: create two-three levels of nested directories. Serving from a single directory
 	// with tens of thousands of files in it will not perform well.
+
+	// Generate a unique file name and attach it to path. Using base32 to avoid possible
+	// file name collisions on Windows.
 	fdef.Location = filepath.Join(fh.fileUploadLocation, fdef.Uid().String32())
 
 	outfile, err := os.Create(fdef.Location)
 	if err != nil {
-		log.Println("Failed to create file", fdef.Location, err)
+		log.Println("Upload: failed to create file", fdef.Location, err)
 		return "", err
 	}
 
 	if err = store.Files.StartUpload(fdef); err != nil {
 		outfile.Close()
 		os.Remove(fdef.Location)
-		log.Println("Failed to create file record", fdef.Id, err)
+		log.Println("U: failed to create file record", fdef.Id, err)
 		return "", err
 	}
 
 	size, err := io.Copy(outfile, file)
-	log.Println("Finished upload", fdef.Location)
 	outfile.Close()
 	if err != nil {
 		store.Files.FinishUpload(fdef.Id, false, 0)
@@ -58,7 +93,11 @@ func (fh *fshandler) Upload(fdef *types.FileDef, file io.Reader) (string, error)
 		return "", err
 	}
 
-	store.Files.FinishUpload(fdef.Id, true, size)
+	fdef, err = store.Files.FinishUpload(fdef.Id, true, size)
+	if err != nil {
+		os.Remove(fdef.Location)
+		return "", err
+	}
 
 	fname := fdef.Id
 	ext, _ := mime.ExtensionsByType(fdef.MimeType)
@@ -71,42 +110,59 @@ func (fh *fshandler) Upload(fdef *types.FileDef, file io.Reader) (string, error)
 
 // Download processes request for file download.
 // The returned ReadSeekCloser must be closed after use.
-func (fh *fshandler) Download(url string) (media.ReadSeekCloser, error) {
+func (fh *fshandler) Download(url string) (*types.FileDef, media.ReadSeekCloser, error) {
+	fid := fh.GetIdFromUrl(url)
+	if fid.IsZero() {
+		return nil, nil, types.ErrNotFound
+	}
+
+	fd, err := fh.getFileRecord(fid)
+	if err != nil {
+		log.Println("Download: file not found", fid)
+		return nil, nil, err
+	}
+
+	file, err := os.Open(fd.Location)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return fd, file, nil
+}
+
+// Delete deletes file from storage
+func (fh *fshandler) Delete(fid types.Uid) error {
+	fd, err := fh.getFileRecord(fid)
+	if err != nil {
+		log.Println("Delete: file not found", fid)
+		return err
+	}
+
+	return os.Remove(fd.Location)
+}
+
+func (fh *fshandler) GetIdFromUrl(url string) types.Uid {
 	dir, fname := path.Split(path.Clean(url))
 
 	// Check path validity
-	if dir != defaultServeURL {
-		return nil, types.ErrNotFound
+	if dir != fh.serveURL {
+		return types.ZeroUid
 	}
 
-	// Remove extension
-	parts := strings.Split(fname, ".")
-	fname = parts[0]
+	// Remove file extension and parse UID
+	return types.ParseUid(strings.Split(fname, ".")[0])
+}
 
-	log.Println("Fetching file record for", fname)
-
-	fd, err := store.Files.Get(fname)
+// getFileRecord given file ID reads file record from the database.
+func (fh *fshandler) getFileRecord(fid types.Uid) (*types.FileDef, error) {
+	fd, err := store.Files.Get(fid.String())
 	if err != nil {
 		return nil, err
 	}
 	if fd == nil {
-		log.Println("File record not found", fname)
 		return nil, types.ErrNotFound
 	}
-
-	// FIXME: The following code is dependent on the storage method.
-	log.Println("Opening file", fd.Location)
-	file, err := os.Open(fd.Location)
-	if err != nil {
-		return nil, err
-	}
-
-	return file, nil
-}
-
-// Delete deletes file from storage
-func (fshandler) Delete(fid string) error {
-	return nil
+	return fd, nil
 }
 
 func init() {

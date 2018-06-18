@@ -46,6 +46,9 @@ import (
 	_ "github.com/tinode/chat/server/validate/email"
 	_ "github.com/tinode/chat/server/validate/tel"
 	"google.golang.org/grpc"
+
+	// File upload handlers
+	_ "github.com/tinode/chat/server/media/fs"
 )
 
 const (
@@ -130,11 +133,9 @@ var globals struct {
 	// Maximum number of indexable tags.
 	maxTagCount int
 
-	// Maximum size of an uploaded file
-	maxUploadSize int64
-	// Location of uploaded files on disk
-	// FIXME: this needs to be abstracted out
-	fileUploadLocation string
+	// Name of the upload/download file handler to use.
+	fileHandler       string
+	maxFileUploadSize int64
 }
 
 type validatorConfig struct {
@@ -144,6 +145,15 @@ type validatorConfig struct {
 	Required []string `json:"required"`
 	// Validator params passed to validator unchanged.
 	Config json.RawMessage `json:"config"`
+}
+
+type mediaConfig struct {
+	// The name of the handler to use for file uploads.
+	UseHandler string `json:"use_handler"`
+	// Maximum allowed size of an uploaded file
+	MaxFileUploadSize int64 `json:"max_size"`
+	// Individual handler config params to pass to handlers unchanged.
+	Handlers map[string]json.RawMessage `json:"handlers"`
 }
 
 // Contentx of the configuration file
@@ -172,20 +182,16 @@ type configType struct {
 	MaskedTagNamespaces []string `json:"masked_tags"`
 	// Maximum number of indexable tags
 	MaxTagCount int `json:"max_tag_count"`
-	// Maximum size of an uploaded file. No default value. Missing value or zero disables file uploads.
-	MaxFileUpload int64 `json:"max_file_upload"`
-	// Directory for uploaded files
-	FileUploadDir string `json:"file_uploads_dir"`
 
 	// Configs for subsystems
-	Cluster json.RawMessage `json:"cluster_config"`
-
+	Cluster   json.RawMessage             `json:"cluster_config"`
 	Plugin    json.RawMessage             `json:"plugins"`
 	Store     json.RawMessage             `json:"store_config"`
 	Push      json.RawMessage             `json:"push"`
 	TLS       json.RawMessage             `json:"tls"`
 	Auth      map[string]json.RawMessage  `json:"auth_config"`
 	Validator map[string]*validatorConfig `json:"acc_validation"`
+	Media     *mediaConfig                `json:"media"`
 }
 
 func main() {
@@ -306,13 +312,25 @@ func main() {
 		globals.maxTagCount = defaultMaxTagCount
 	}
 
-	if config.MaxFileUpload > 0 {
-		globals.maxUploadSize = config.MaxFileUpload
-		globals.fileUploadLocation = config.FileUploadDir
-		// Make sure the upload directory exists.
-		// FIXME: this needs to be abstracted out into something like upload.Init.
-		if err := os.MkdirAll(globals.fileUploadLocation, 0777); err != nil {
-			log.Fatal("Failed to create or access file upload directory", err)
+	if config.Media != nil {
+		if config.Media.UseHandler != "" {
+			config.Media = nil
+		} else {
+			globals.fileHandler = config.Media.UseHandler
+			globals.maxFileUploadSize = config.Media.MaxFileUploadSize
+			handler := store.GetMediaHandler(globals.fileHandler)
+			if handler == nil {
+				log.Fatal("Unknown media handler requested", globals.fileHandler)
+			}
+			if config.Media.Handlers != nil {
+				var conf string
+				if params := config.Media.Handlers[globals.fileHandler]; params != nil {
+					conf = string(params)
+				}
+				if err = handler.Init(conf); err != nil {
+					log.Fatal("Failed to init media handler", globals.fileHandler, err)
+				}
+			}
 		}
 	}
 
@@ -380,7 +398,7 @@ func main() {
 	http.HandleFunc("/v0/channels", serveWebSocket)
 	// Handle long polling clients. Enable compression.
 	http.Handle("/v0/channels/lp", gzip.CompressHandler(http.HandlerFunc(serveLongPoll)))
-	if globals.maxUploadSize > 0 {
+	if config.Media != nil {
 		// Handle uploads of large files.
 		http.Handle("/v0/file/u", gzip.CompressHandler(http.HandlerFunc(largeFileUpload)))
 		// Serve large files.

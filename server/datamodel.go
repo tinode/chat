@@ -589,6 +589,16 @@ func InfoNotModified(id, topic string, ts time.Time) *ServerComMessage {
 		Timestamp: ts}}
 }
 
+// InfoFound redirects to a new resource (307).
+func InfoFound(id, topic string, ts time.Time) *ServerComMessage {
+	return &ServerComMessage{Ctrl: &MsgServerCtrl{
+		Id:        id,
+		Code:      http.StatusFound, // 307
+		Text:      "found",
+		Topic:     topic,
+		Timestamp: ts}}
+}
+
 // 4xx Errors
 
 // ErrMalformed request malformed (400).

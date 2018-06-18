@@ -640,6 +640,10 @@ func RegisterMediaHandler(name string, mh media.Handler) {
 	fileHandlers[name] = mh
 }
 
+func GetMediaHandler(name string) media.Handler {
+	return fileHandlers[name]
+}
+
 // FileMapper is a struct to map methods used for file handling.
 type FileMapper struct{}
 

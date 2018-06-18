@@ -14,7 +14,7 @@ while IFS='' read -r line || [[ -n $line ]] ; do
 done < config.template
 
 
-# Initialize the database if it has not been initialized yet
+# Initialize the database if it has not been initialized yet or if data reset has been requested.
 if [ ! -f /botdata/.tn-cookie ] || [ "$RESET_DB" = true ] ; then
 	# Run the generator. Save stdout to to a file to extract Tino's password for possible later use.
 	./init-db --reset --config=working.config --data=data.json | grep "usr;tino;" > /botdata/tino-password
