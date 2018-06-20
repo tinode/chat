@@ -1894,7 +1894,7 @@ func (a *adapter) FileLink(fids []string, topic string, seqid int) error {
 		return t.ErrMalformed
 	}
 	_, err := a.db.Exec("UPDATE fileuploads SET topic=?, seqid=?, usecount=usecount+1 WHERE id IN (?"+
-		strings.Repeat(",?", len(args)-1)+") AND seqid=0", args...)
+		strings.Repeat(",?", len(args)-3)+") AND seqid=0", args...)
 	return err
 }
 

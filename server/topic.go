@@ -306,12 +306,25 @@ func (t *Topic) run(hub *Hub) {
 					}
 				}
 
-				if attArray, ok := msg.Data.Head["attachments"]; ok {
-					if att, ok := attArray.([]string); ok {
-						store.Files.Link(att, t.name, t.lastID+1)
-					} else {
-						// Strip invalid header
-						delete(msg.Data.Head, "attachments")
+				// Check if the message has attachments. If so, link earlier uploaded files to message.
+				if header, ok := msg.Data.Head["attachments"]; ok {
+					if mh := store.GetMediaHandler(globals.fileHandler); mh != nil {
+						// The header is typed as []interface{}, convert to []string
+						urls := interfaceToStringSlice(header)
+						var attachments []string
+						for _, url := range urls {
+							// Convert URLs to file IDs.
+							if fid := mh.GetIdFromUrl(url); !fid.IsZero() {
+								attachments = append(attachments, fid.String())
+							}
+						}
+
+						if len(attachments) > 0 {
+							store.Files.Link(attachments, t.name, t.lastID+1)
+						} else {
+							// Strip invalid header
+							delete(msg.Data.Head, "attachments")
+						}
 					}
 				}
 
@@ -1257,6 +1270,9 @@ func (t *Topic) replyGetDesc(sess *Session, id, tempName string, opts *MsgGetOpt
 		// Don't report message IDs to users without Read access.
 		if (pud.modeGiven & pud.modeWant).IsReader() {
 			desc.SeqId = t.lastID
+			// FIXME: report TouchedAt
+			// desc.TouchedAt = t.touchedAt
+
 			// Make sure reported values are sane:
 			// t.delID <= pud.delID; t.readID <= t.recvID <= t.lastID
 			desc.DelId = max(pud.delID, t.delID)

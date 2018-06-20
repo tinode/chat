@@ -313,7 +313,7 @@ func main() {
 	}
 
 	if config.Media != nil {
-		if config.Media.UseHandler != "" {
+		if config.Media.UseHandler == "" {
 			config.Media = nil
 		} else {
 			globals.fileHandler = config.Media.UseHandler
