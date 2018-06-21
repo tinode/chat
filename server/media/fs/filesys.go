@@ -80,7 +80,7 @@ func (fh *fshandler) Upload(fdef *types.FileDef, file io.Reader) (string, error)
 	if err = store.Files.StartUpload(fdef); err != nil {
 		outfile.Close()
 		os.Remove(fdef.Location)
-		log.Println("U: failed to create file record", fdef.Id, err)
+		log.Println("Upload: failed to create file record", fdef.Id, err)
 		return "", err
 	}
 

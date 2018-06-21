@@ -393,7 +393,6 @@ func (a *adapter) CreateDb(reset bool) error {
 			location	VARCHAR(2048) NOT NULL,
 			PRIMARY KEY(id),
 			FOREIGN KEY(userid) REFERENCES users(id),
-			FOREIGN KEY(topic) REFERENCES topics(name),
 			INDEX fileuploads_topic_seqid (topic, seqid),
 			INDEX fileuploads_usecount(usecount) 
 		)`); err != nil {
@@ -1741,8 +1740,8 @@ func (a *adapter) CredGet(uid t.Uid, method string) ([]*t.Credential, error) {
 
 // FileStartUpload initializes a file upload
 func (a *adapter) FileStartUpload(fd *t.FileDef) error {
-	_, err := a.db.Exec("INSERT INTO fileuploads(id,createdat,updatedat,userid,status,mimetype,size,location)"+
-		" VALUES(?,?,?,?,?,?,?,?)",
+	_, err := a.db.Exec("INSERT INTO fileuploads(id,createdat,updatedat,userid,topic,seqid,status,mimetype,size,location)"+
+		" VALUES(?,?,?,?,?,?,?,?,?,?)",
 		store.DecodeUid(fd.Uid()), fd.CreatedAt, fd.UpdatedAt,
 		store.DecodeUid(t.ParseUid(fd.User)), fd.Topic, fd.SeqId, fd.Status, fd.MimeType, fd.Size, fd.Location)
 	return err
