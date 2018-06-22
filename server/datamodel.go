@@ -76,7 +76,7 @@ type MsgFindQuery struct {
 	Tags []string `json:"tags"`
 }
 
-// MsgDelRange is aither an individual ID (HiId=0) or a randge of deleted IDs, low end inclusive (closed),
+// MsgDelRange is either an individual ID (HiId=0) or a randge of deleted IDs, low end inclusive (closed),
 // high-end exclusive (open): [LowId .. HiId), e.g. 1..5 -> 1, 2, 3, 4
 type MsgDelRange struct {
 	LowId int `json:"low,omitempty"`
