@@ -108,7 +108,7 @@ def client_reset():
 
 def hello():
     tid = next_id()
-    return pb.ClientMsg(hi=pb.ClientHi(id=tid, user_agent=APP_NAME + "/" + APP_VERSION + " (" + 
+    return pb.ClientMsg(hi=pb.ClientHi(id=tid, user_agent=APP_NAME + "/" + APP_VERSION + " (" +
         platform.system() + "/" + platform.release() + "); gRPC-python/" + LIB_VERSION,
         ver=LIB_VERSION, lang="EN"))
 
@@ -138,7 +138,7 @@ def leave(topic):
 
 def publish(topic, text):
     tid = next_id()
-    return pb.ClientMsg(pub=pb.ClientPub(id=tid, topic=topic, no_echo=True, 
+    return pb.ClientMsg(pub=pb.ClientPub(id=tid, topic=topic, no_echo=True,
 		content=json.dumps(text).encode('utf-8')))
 
 def note_read(topic, seq):
@@ -202,23 +202,18 @@ def client_message_loop(stream):
 
 def read_auth_cookie(cookie_file_name):
     """Read authentication token from a file"""
-    try:
-        cookie = open(cookie_file_name, 'r')
-        params = json.load(cookie)
-        cookie.close()
-        schema = params.get("schema")
-        secret = None
-        if schema == None:
-            return None, None
-        if schema == 'token':
-            secret = base64.b64decode(params.get('secret').encode('ascii'))
-        else:
-            secret = params.get('secret').encode('ascii')
-        return schema, secret
-
-    except Exception as err:
-        print("Failed to read authentication cookie", err)
+    cookie = open(cookie_file_name, 'r')
+    params = json.load(cookie)
+    cookie.close()
+    schema = params.get("schema")
+    secret = None
+    if schema == None:
         return None, None
+    if schema == 'token':
+        secret = base64.b64decode(params.get('secret').encode('ascii'))
+    else:
+        secret = params.get('secret').encode('ascii')
+    return schema, secret
 
 def save_auth_cookie(cookie_file_name, params):
     """Save authentication token to file"""
@@ -249,26 +244,28 @@ def load_quotes(file_name):
     return len(quotes)
 
 def run(args):
-    print("In run()")
     schema = None
     secret = None
 
     if args.login_token:
         """Use token to login"""
         schema = 'token'
-        secret = args.login_token
+        secret = args.login_token.encode('acsii')
         print("Logging in with token", args.login_token)
 
     elif args.login_basic:
         """Use username:password"""
         schema = 'basic'
-        secret = args.login_basic
+        secret = args.login_basic.encode('utf-8')
         print("Logging in with login:password", args.login_basic)
 
     else:
         """Try reading the cookie file"""
-        schema, secret = read_auth_cookie(args.login_cookie)
-        print("Logging in with cookie file", args.login_cookie)
+        try:
+            schema, secret = read_auth_cookie(args.login_cookie)
+            print("Logging in with cookie file", args.login_cookie)
+        except Exception as err:
+            print("Failed to read authentication cookie", err)
 
     if schema:
         # Load random quotes from file
@@ -304,7 +301,7 @@ def run(args):
         client.cancel()
 
     else:
-        print("Error: unknown authentication scheme")
+        print("Error: authentication scheme not defined")
 
 
 if __name__ == '__main__':
