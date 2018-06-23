@@ -981,10 +981,6 @@ type FileDef struct {
 	Status int
 	// User who created the file
 	User string
-	// Topic where this file was first posted
-	Topic string
-	// SeqId of the message where the file was first attached.
-	SeqId int
 	// Type of the file.
 	MimeType string
 	// Size of the file in bytes.

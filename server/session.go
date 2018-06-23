@@ -649,7 +649,7 @@ func (s *Session) login(msg *ClientComMessage) {
 
 	handler := store.GetAuthHandler(msg.Login.Scheme)
 	if handler == nil {
-		Log.Println("Unknown authentication scheme", msg.Login.Scheme)
+		log.Println("Unknown authentication scheme", msg.Login.Scheme)
 		s.queueOut(ErrAuthUnknownScheme(msg.Login.Id, "", msg.timestamp))
 		return
 	}

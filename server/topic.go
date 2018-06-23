@@ -320,7 +320,9 @@ func (t *Topic) run(hub *Hub) {
 						}
 
 						if len(attachments) > 0 {
-							store.Files.Link(attachments, t.name, t.lastID+1)
+							if err := store.Files.Link(attachments, t.name, t.lastID+1); err != nil {
+								log.Println("Failed to link attachments to messages", err)
+							}
 						} else {
 							// Strip invalid header
 							delete(msg.Data.Head, "attachments")

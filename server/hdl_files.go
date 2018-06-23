@@ -31,6 +31,7 @@ func largeFileServe(wrt http.ResponseWriter, req *http.Request) {
 	enc := json.NewEncoder(wrt)
 	mh := store.GetMediaHandler(globals.fileHandler)
 
+	//Check if media handler requests redirection to another service.
 	if redirTo := mh.Redirect(req.URL.String()); redirTo != "" {
 		wrt.Header().Set("Location", redirTo)
 		wrt.Header().Set("Content-Type", "application/json; charset=utf-8")
@@ -82,6 +83,7 @@ func largeFileUpload(wrt http.ResponseWriter, req *http.Request) {
 	enc := json.NewEncoder(wrt)
 	mh := store.GetMediaHandler(globals.fileHandler)
 
+	// Check if uploads are handled elsewhere.
 	if redirTo := mh.Redirect(req.URL.String()); redirTo != "" {
 		wrt.Header().Set("Location", redirTo)
 		wrt.Header().Set("Content-Type", "application/json; charset=utf-8")
@@ -107,6 +109,7 @@ func largeFileUpload(wrt http.ResponseWriter, req *http.Request) {
 	}
 
 	if globals.maxFileUploadSize > 0 {
+		// Enforce maximum upload size.
 		req.Body = http.MaxBytesReader(wrt, req.Body, globals.maxFileUploadSize)
 	}
 
@@ -127,7 +130,6 @@ func largeFileUpload(wrt http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	log.Println("Starting upload", req.FormValue("name"))
 	file, _, err := req.FormFile("file")
 	if err != nil {
 		log.Println("Error reading file", err)
