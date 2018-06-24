@@ -204,7 +204,7 @@ CREATE TABLE filemsglinks(
 	seqid 		INT,
 	
 	PRIMARY KEY(id),
-	FOREIGN KEY(fileid) REFERENCES fileuploads(id),
+	FOREIGN KEY(fileid) REFERENCES fileuploads(id) ON DELETE CASCADE,
 	FOREIGN KEY(topic) REFERENCES topics(name),
 	# This index should not be unique: one message may have multiple attachments.
 	INDEX filemsglinks_topic_seqid(topic, seqid)

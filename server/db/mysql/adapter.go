@@ -405,7 +405,7 @@ func (a *adapter) CreateDb(reset bool) error {
 			topic 		CHAR(25) NOT NULL,
 			seqid 		INT,	
 			PRIMARY KEY(id),
-			FOREIGN KEY(fileid) REFERENCES fileuploads(id),
+			FOREIGN KEY(fileid) REFERENCES fileuploads(id) ON DELETE CASCADE,
 			FOREIGN KEY(topic) REFERENCES topics(name),
 			INDEX filemsglinks_topic_seqid(topic, seqid)
 		)`); err != nil {
@@ -2044,11 +2044,9 @@ func (a *adapter) FileDelete(opts *t.QueryOpt, unusedOnly bool) error {
 	}
 
 	var fu_query string = "DELETE fu.* FROM fileuploads AS fu "
-	var fml_query string
 	if unusedOnly {
 		fu_query += "WHERE " + where
 	} else {
-		fml_query = "DELETE fml.* FROM filemsglinks AS fml WHERE " + where
 		fu_query += "INNER JOIN filemsglinks AS fml ON fu.id=fml.fileid WHERE " + where
 	}
 
@@ -2056,13 +2054,7 @@ func (a *adapter) FileDelete(opts *t.QueryOpt, unusedOnly bool) error {
 	if err != nil {
 		return err
 	}
-
-	if !unusedOnly {
-		_, err = tx.Exec(fml_query, args...)
-		if err != nil {
-			return err
-		}
-	}
+	// Records from filemsglinks will be deleted due to CASCADE on foreign key fileuploads.id.
 
 	return tx.Commit()
 }
