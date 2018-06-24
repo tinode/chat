@@ -406,7 +406,7 @@ func (TopicsObjMapper) Delete(topic string) error {
 	if err := adp.MessageDeleteList(topic, nil); err != nil {
 		return err
 	}
-	if err := adp.FileUnlink(&types.QueryOpt{Topic: topic}); err != nil {
+	if err := adp.FileUnlink(&types.QueryOpt{Topic: topic}, nil); err != nil {
 		return err
 	}
 
@@ -483,36 +483,26 @@ func (MessagesObjMapper) DeleteList(topic string, delID int, forUser types.Uid, 
 	}
 
 	if delID > 0 {
-		if forUser.IsZero() {
-			// If messages are deleted for all users delete attachments too.
-			var opts types.QueryOpt
-			opts.Topic = topic
-			for _, r := range ranges {
-				opts.Since = r.Low
-				opts.Before = r.Hi + 1
-				if opts.Before <= opts.Since {
-					opts.Before = opts.Since + 1
-				}
-				if err = adp.FileUnlink(&opts); err != nil {
-					return err
-				}
-			}
-		}
-
 		// Record ID of the delete transaction
 		err = adp.TopicUpdate(topic, map[string]interface{}{"DelId": delID})
 		if err != nil {
 			return err
 		}
 
-		// TODO: delete file attachments
-
 		// Soft-deleting will update one subscription, hard-deleting will ipdate all.
-		// Soft- or hard- is defined by the forUSer being defined.
-		return adp.SubsUpdate(topic, forUser, map[string]interface{}{"DelId": delID})
+		// Soft- or hard- is defined by the forUser being defined.
+		err = adp.SubsUpdate(topic, forUser, map[string]interface{}{"DelId": delID})
+		if err != nil {
+			return err
+		}
+
+		if forUser.IsZero() {
+			// If messages are hard-deleted then delete attachments too.
+			err = adp.FileUnlink(&types.QueryOpt{Topic: topic}, ranges)
+		}
 	}
 
-	return nil
+	return err
 }
 
 // GetAll returns multiple messages.
@@ -676,8 +666,8 @@ func (FileMapper) Get(fid string) (*types.FileDef, error) {
 }
 
 // Delete decrements usage count.
-func (FileMapper) Delete(opts *types.QueryOpt) error {
-	return adp.FileUnlink(opts)
+func (FileMapper) Delete(opts *types.QueryOpt, seqranges []types.Range) error {
+	return adp.FileUnlink(opts, seqranges)
 }
 
 // Link links files with the message they were attached to.

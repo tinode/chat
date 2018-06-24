@@ -143,7 +143,7 @@ type Adapter interface {
 	// FileLink markes files as attachments in a specific message incrementing usage counter.
 	FileLink(fid []string, topic string, seqid int) error
 	// FileUnlink decrements usage counter of file records by query.
-	FileUnlink(opts *t.QueryOpt) error
+	FileUnlink(opts *t.QueryOpt, seqids []t.Range) error
 	// Delete file records by query. If unusedOnly is true, delete only records where useCount is zero.
 	FileDelete(opts *t.QueryOpt, unusedOnly bool) error
 }

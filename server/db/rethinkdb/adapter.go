@@ -1599,7 +1599,7 @@ func (a *adapter) FileLink(fids []string, topic string, seqid int) error {
 }
 
 // FileUnlink decrements use count of files.
-func (a *adapter) FileUnlink(opts *t.QueryOpt) error {
+func (a *adapter) FileUnlink(opts *t.QueryOpt, seqids []t.Range) error {
 	var q *rdb.Term
 	if opts != nil {
 		q = optsToQuery(rdb.DB(a.dbName).Table("fileuploads"), opts, false)

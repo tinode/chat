@@ -1909,14 +1909,14 @@ func (t *Topic) replyDelMsg(sess *Session, del *MsgClientDel) error {
 				// Range is inclusive - exclusive [low, hi),
 				// to delete all messages hi must be lastId + 1
 				dq.HiId = t.lastID + 1
-			} else if dq.LowId == dq.HiId {
+			} else if dq.LowId == dq.HiId || dq.LowId+1 == dq.HiId {
 				dq.HiId = 0
 			}
 
 			if dq.HiId == 0 {
 				count++
 			} else {
-				count += dq.HiId - dq.LowId + 1
+				count += dq.HiId - dq.LowId
 			}
 
 			ranges = append(ranges, types.Range{Low: dq.LowId, Hi: dq.HiId})

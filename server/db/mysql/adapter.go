@@ -868,8 +868,6 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 		return nil, err
 	}
 
-	//log.Printf("TopicsForUser topq, usrq: %+v, %+v", topq, usrq)
-
 	var subs []t.Subscription
 	if len(topq) > 0 || len(usrq) > 0 {
 		subs = make([]t.Subscription, 0, len(join))
@@ -1200,7 +1198,6 @@ func (a *adapter) SubsForTopic(topic string, keepDeleted bool, opts *t.QueryOpt)
 		ss.User = encodeString(ss.User).String()
 		ss.Private = fromJSON(ss.Private)
 		subs = append(subs, ss)
-		// log.Printf("SubsForTopic: loaded sub %#+v", ss)
 	}
 	rows.Close()
 
@@ -1498,8 +1495,6 @@ func (a *adapter) MessageGetDeleted(topic string, forUser t.Uid, opts *t.QueryOp
 
 // MessageDeleteList deletes messages in the given topic with seqIds from the list
 func (a *adapter) MessageDeleteList(topic string, toDel *t.DelMessage) (err error) {
-	// log.Println("MessageDeleteList", topic, toDel)
-
 	tx, err := a.db.Begin()
 	if err != nil {
 		return err
@@ -1514,7 +1509,9 @@ func (a *adapter) MessageDeleteList(topic string, toDel *t.DelMessage) (err erro
 	if toDel == nil {
 		// Whole topic is being deleted, thus also deleting all messages.
 		_, err = tx.Exec("DELETE FROM dellog WHERE topic=?", topic)
-		_, err = tx.Exec("DELETE FROM messages WHERE topic=?", topic)
+		if err == nil {
+			_, err = tx.Exec("DELETE FROM messages WHERE topic=?", topic)
+		}
 	} else {
 		// Only some messages are being deleted
 		// Start with making log entries
@@ -1541,12 +1538,12 @@ func (a *adapter) MessageDeleteList(topic string, toDel *t.DelMessage) (err erro
 			// Hard-deleting messages requires updates to the messages table
 			where := "topic=? AND "
 			args := []interface{}{topic}
-			if len(toDel.SeqIdRanges) > 1 || toDel.SeqIdRanges[0].Hi <= toDel.SeqIdRanges[0].Low {
-				for _, rng := range toDel.SeqIdRanges {
-					if rng.Hi == 0 {
-						args = append(args, rng.Low)
+			if len(toDel.SeqIdRanges) > 1 || toDel.SeqIdRanges[0].Hi == 0 {
+				for _, r := range toDel.SeqIdRanges {
+					if r.Hi == 0 {
+						args = append(args, r.Low)
 					} else {
-						for i := rng.Low; i <= rng.Hi; i++ {
+						for i := r.Low; i < r.Hi; i++ {
 							args = append(args, i)
 						}
 					}
@@ -1554,10 +1551,10 @@ func (a *adapter) MessageDeleteList(topic string, toDel *t.DelMessage) (err erro
 
 				where += "seqid IN (?" + strings.Repeat(",?", seqCount-1) + ")"
 			} else {
-				// Optimizing for a special case of single range low..hi
+				// Optimizing for a special case of single range low..hi.
 				where += "seqid BETWEEN ? AND ?"
-				args = append(args, toDel.SeqIdRanges[0].Low)
-				args = append(args, toDel.SeqIdRanges[0].Hi)
+				// MySQL's BETWEEN is inclusive-inclusive thus decrement Hi by 1.
+				args = append(args, toDel.SeqIdRanges[0].Low, toDel.SeqIdRanges[0].Hi-1)
 			}
 
 			_, err = tx.Exec("UPDATE messages SET deletedAt=?,delId=?,head=NULL,content=NULL WHERE "+
@@ -1833,6 +1830,42 @@ func fileOptsToJoinQuery(opts *t.QueryOpt, unusedOnly bool) (string, []interface
 	return query, args
 }
 
+func seqRangesToQuery(seqids []t.Range) (string, []interface{}) {
+	var query string
+	var args []interface{}
+	if len(seqids) > 0 {
+		var in []interface{}
+		var between []interface{}
+		for _, r := range seqids {
+			if r.Hi != 0 {
+				// Range is inclusive - exclusive while MySQL BETWEEN is inclusive-inclusive, thus r.hi-1.
+				between = append(between, r.Low, r.Hi-1)
+			} else {
+				in = append(in, r.Low)
+			}
+		}
+		if len(between) > 0 {
+			query = "(fml.seqid BETWEEN ? AND ?)" +
+				strings.Repeat(" OR (fml.seqid BETWEEN ? AND ?)", len(between)/2-1)
+			args = append(args, between...)
+		}
+		if len(in) > 0 {
+			q := "fml.seqid IN (?" + strings.Repeat(",?", len(in)-1) + ")"
+			if query != "" {
+				query += " OR " + q
+			} else {
+				query = q
+			}
+			args = append(args, in...)
+		}
+
+		if query != "" {
+			query = "(" + query + ")"
+		}
+	}
+	return query, args
+}
+
 // FilesForUser returns file records for a given user.
 func (a *adapter) FilesGetAll(opts *t.QueryOpt, unusedOnly bool) ([]t.FileDef, error) {
 	query := "SELECT fu.id,fu.createdat,fu.updatedat,fu.userid AS user,fu.status,fu.mimetype,fu.size,fu.usecount,fu.location FROM fileuploads AS fu "
@@ -1942,7 +1975,7 @@ func (a *adapter) FileLink(fids []string, topic string, seqid int) error {
 }
 
 // FileUnlink deletes link record and decrements use counter.
-func (a *adapter) FileUnlink(opts *t.QueryOpt) error {
+func (a *adapter) FileUnlink(opts *t.QueryOpt, seqids []t.Range) error {
 	tx, err := a.db.Begin()
 	if err != nil {
 		return err
@@ -1953,15 +1986,21 @@ func (a *adapter) FileUnlink(opts *t.QueryOpt) error {
 		}
 	}()
 
-	fml_query := "DELETE FROM filemsglinks AS fml WHERE "
+	fml_query := "DELETE fml.* FROM filemsglinks AS fml WHERE "
 	fu_query := "UPDATE fileuploads AS fu INNER JOIN filemsglinks AS fml ON fu.id=fml.fileid " +
 		"SET fu.updatedat=?,fu.usecount=fu.usecount-1 WHERE "
 	var args []interface{}
-	var where string
 	if opts != nil {
-		where, args = fileOptsToJoinQuery(opts, false)
+		where, tmp := seqRangesToQuery(seqids)
+		if len(tmp) > 0 {
+			fml_query += where + " AND "
+			fu_query += where + " AND "
+			args = tmp
+		}
+		where, tmp = fileOptsToJoinQuery(opts, false)
 		fml_query += where
 		fu_query += where
+		args = append(args, tmp...)
 	}
 
 	if len(args) == 0 {
@@ -1969,15 +2008,16 @@ func (a *adapter) FileUnlink(opts *t.QueryOpt) error {
 		return t.ErrMalformed
 	}
 
+	_, err = tx.Exec(fu_query, append([]interface{}{t.TimeNow()}, args...)...)
+	if err != nil {
+		return err
+	}
+
 	_, err = tx.Exec(fml_query, args...)
 	if err != nil {
 		return err
 	}
 
-	_, err = tx.Exec(fu_query, append([]interface{}{t.TimeNow()}, args...)...)
-	if err != nil {
-		return err
-	}
 	return tx.Commit()
 }
 
@@ -2003,13 +2043,18 @@ func (a *adapter) FileDelete(opts *t.QueryOpt, unusedOnly bool) error {
 		return t.ErrMalformed
 	}
 
-	var fu_query string = "DELETE FROM fileuploads AS fu "
+	var fu_query string = "DELETE fu.* FROM fileuploads AS fu "
 	var fml_query string
 	if unusedOnly {
 		fu_query += "WHERE " + where
 	} else {
-		fml_query = "DELETE FROM filemsglinks AS fml WHERE " + where
+		fml_query = "DELETE fml.* FROM filemsglinks AS fml WHERE " + where
 		fu_query += "INNER JOIN filemsglinks AS fml ON fu.id=fml.fileid WHERE " + where
+	}
+
+	_, err = tx.Exec(fu_query, args...)
+	if err != nil {
+		return err
 	}
 
 	if !unusedOnly {
@@ -2017,10 +2062,6 @@ func (a *adapter) FileDelete(opts *t.QueryOpt, unusedOnly bool) error {
 		if err != nil {
 			return err
 		}
-	}
-	_, err = tx.Exec(fu_query, args...)
-	if err != nil {
-		return err
 	}
 
 	return tx.Commit()

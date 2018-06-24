@@ -845,7 +845,8 @@ type Message struct {
 	Content interface{}
 }
 
-// Range is a range of message SeqIDs. If one ID in range, Hi is set to 0 or unset
+// Range is a range of message SeqIDs. Low end is inclusive (closed), high end is exclusive (open): [Low, Hi).
+// If the range contains just one ID, Hi is set to 0
 type Range struct {
 	Low int
 	Hi  int `json:"Hi,omitempty"`
