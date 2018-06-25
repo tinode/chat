@@ -57,11 +57,17 @@ type Adapter interface {
 
 	// Authentication management for the basic authentication scheme
 
+	// AuthGetUniqueRecord returns authentication record for a given unique value i.e. login.
 	AuthGetUniqueRecord(unique string) (t.Uid, auth.Level, []byte, time.Time, error)
+	// AuthGetRecord returns authentication record given user ID and method.
 	AuthGetRecord(user t.Uid, scheme string) (string, auth.Level, []byte, time.Time, error)
+	// AuthAddRecord creates new authentication record
 	AuthAddRecord(user t.Uid, scheme, unique string, authLvl auth.Level, secret []byte, expires time.Time) (bool, error)
+	// AuthDelRecord deteles an existing record
 	AuthDelRecord(user t.Uid, unique string) error
+	// AuthDelAllRecords deletes all records of a given user.
 	AuthDelAllRecords(uid t.Uid) (int, error)
+	// AuthUpdRecord modifies an authentication record.
 	AuthUpdRecord(user t.Uid, scheme, unique string, authLvl auth.Level, secret []byte, expires time.Time) (bool, error)
 
 	// Topic management
@@ -120,6 +126,8 @@ type Adapter interface {
 	MessageDeleteList(topic string, toDel *t.DelMessage) error
 	// MessageGetDeleted returns a list of deleted message Ids.
 	MessageGetDeleted(topic string, forUser t.Uid, opts *t.QueryOpt) ([]t.DelMessage, error)
+	// MessageAttachments connects given message to a list of file record IDs.
+	MessageAttachments(msgId t.Uid, fids []string) error
 
 	// Devices (for push notifications)
 
@@ -138,12 +146,8 @@ type Adapter interface {
 	FileFinishUpload(fid string, status int, size int64) (*t.FileDef, error)
 	// FileGet fetches a record of a specific file
 	FileGet(fid string) (*t.FileDef, error)
-	// FilesGetAll returns all file records for a given query.
-	FilesGetAll(opts *t.QueryOpt, unusedOnly bool) ([]t.FileDef, error)
-	// FileLink markes files as attachments in a specific message incrementing usage counter.
-	FileLink(fid []string, topic string, seqid int) error
-	// FileUnlink decrements usage counter of file records by query.
-	FileUnlink(opts *t.QueryOpt, seqids []t.Range) error
-	// Delete file records by query. If unusedOnly is true, delete only records where useCount is zero.
-	FileDelete(opts *t.QueryOpt, unusedOnly bool) error
+	// FileDeleteUnused deletes records where UseCount is zero. If olderThan is non-zero, deletes
+	// unused records with UpdatedAt before olderThan.
+	// Returns array of FileDef.Location of deleted files so files can be deleted too.
+	FileDeleteUnused(olderThan time.Time, limit int) ([]string, error)
 }

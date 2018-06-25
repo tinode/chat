@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"hash/fnv"
+	"log"
 	"strconv"
 	"strings"
 	"time"
@@ -387,11 +388,9 @@ func (a *adapter) CreateDb(reset bool) error {
 			status		INT NOT NULL,
 			mimetype	VARCHAR(255) NOT NULL,
 			size		BIGINT NOT NULL,
-			usecount	INT NOT NULL DEFAULT 0,
 			location	VARCHAR(2048) NOT NULL,
 			PRIMARY KEY(id),
-			FOREIGN KEY(userid) REFERENCES users(id),
-			INDEX fileuploads_usecount(usecount) 
+			FOREIGN KEY(userid) REFERENCES users(id)
 		)`); err != nil {
 		return err
 	}
@@ -402,12 +401,10 @@ func (a *adapter) CreateDb(reset bool) error {
 			id			INT NOT NULL AUTO_INCREMENT,
 			createdat	DATETIME(3) NOT NULL,
 			fileid		BIGINT NOT NULL,
-			topic 		CHAR(25) NOT NULL,
-			seqid 		INT,	
+			msgid 		INT NOT NULL,
 			PRIMARY KEY(id),
 			FOREIGN KEY(fileid) REFERENCES fileuploads(id) ON DELETE CASCADE,
-			FOREIGN KEY(topic) REFERENCES topics(name),
-			INDEX filemsglinks_topic_seqid(topic, seqid)
+			FOREIGN KEY(msgid) REFERENCES messages(id) ON DELETE CASCADE
 		)`); err != nil {
 		return err
 	}
@@ -1371,10 +1368,14 @@ func (a *adapter) FindTopics(req, opt []string) ([]t.Subscription, error) {
 
 // Messages
 func (a *adapter) MessageSave(msg *t.Message) error {
-	_, err := a.db.Exec(
+	res, err := a.db.Exec(
 		"INSERT INTO messages(createdAt,updatedAt,seqid,topic,`from`,head,content) VALUES(?,?,?,?,?,?,?)",
 		msg.CreatedAt, msg.UpdatedAt, msg.SeqId, msg.Topic,
 		store.DecodeUid(t.ParseUid(msg.From)), msg.Head, toJSON(msg.Content))
+	if err == nil {
+		id, _ := res.LastInsertId()
+		msg.SetUid(t.Uid(id))
+	}
 	return err
 }
 
@@ -1512,12 +1513,14 @@ func (a *adapter) MessageDeleteList(topic string, toDel *t.DelMessage) (err erro
 		if err == nil {
 			_, err = tx.Exec("DELETE FROM messages WHERE topic=?", topic)
 		}
+		// filemsglinks will be deleted because of ON DELETE CASCADE
+
 	} else {
 		// Only some messages are being deleted
 		// Start with making log entries
 		forUser := decodeString(toDel.DeletedFor)
-		var stmt *sql.Stmt
-		if stmt, err = tx.Prepare(
+		var insert *sql.Stmt
+		if insert, err = tx.Prepare(
 			"INSERT INTO dellog(topic,deletedfor,delid,low,hi) VALUES(?,?,?,?,?)"); err != nil {
 			return err
 		}
@@ -1529,14 +1532,14 @@ func (a *adapter) MessageDeleteList(topic string, toDel *t.DelMessage) (err erro
 				rng.Hi = rng.Low
 			}
 			seqCount += rng.Hi - rng.Low + 1
-			if _, err = stmt.Exec(topic, forUser, toDel.DelId, rng.Low, rng.Hi); err != nil {
+			if _, err = insert.Exec(topic, forUser, toDel.DelId, rng.Low, rng.Hi); err != nil {
 				break
 			}
 		}
 
 		if err == nil && toDel.DeletedFor == "" {
 			// Hard-deleting messages requires updates to the messages table
-			where := "topic=? AND "
+			where := "m.topic=? AND "
 			args := []interface{}{topic}
 			if len(toDel.SeqIdRanges) > 1 || toDel.SeqIdRanges[0].Hi == 0 {
 				for _, r := range toDel.SeqIdRanges {
@@ -1549,21 +1552,72 @@ func (a *adapter) MessageDeleteList(topic string, toDel *t.DelMessage) (err erro
 					}
 				}
 
-				where += "seqid IN (?" + strings.Repeat(",?", seqCount-1) + ")"
+				where += "m.seqid IN (?" + strings.Repeat(",?", seqCount-1) + ")"
 			} else {
 				// Optimizing for a special case of single range low..hi.
-				where += "seqid BETWEEN ? AND ?"
+				where += "m.seqid BETWEEN ? AND ?"
 				// MySQL's BETWEEN is inclusive-inclusive thus decrement Hi by 1.
 				args = append(args, toDel.SeqIdRanges[0].Low, toDel.SeqIdRanges[0].Hi-1)
 			}
+			where += " AND m.deletedAt IS NULL"
 
-			_, err = tx.Exec("UPDATE messages SET deletedAt=?,delId=?,head=NULL,content=NULL WHERE "+
-				where+
-				" AND deletedAt IS NULL",
+			_, err = tx.Exec("DELETE fml.* FROM filemsglinks AS fml INNER JOIN messages AS m ON m.id=fml.msgid WHERE "+
+				where, args...)
+			if err != nil {
+				return err
+			}
+
+			_, err = tx.Exec("UPDATE messages AS m SET m.deletedAt=?,m.delId=?,m.head=NULL,m.content=NULL WHERE "+
+				where,
 				append([]interface{}{t.TimeNow(), toDel.DelId}, args...)...)
 		}
 	}
 
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+// MessageAttachments connects given message to a list of file record IDs.
+func (a *adapter) MessageAttachments(msgId t.Uid, fids []string) error {
+	var args []interface{}
+	var values []string
+	strNow := t.TimeNow().Format("2006-01-02T15:04:05.999")
+	// createdat,fileid,msgid
+	val := "VALUES('" + strNow + "',?," + strconv.FormatInt(int64(msgId), 10) + ")"
+	for _, fid := range fids {
+		id := t.ParseUid(fid)
+		if id.IsZero() {
+			return t.ErrMalformed
+		}
+		values = append(values, val)
+		args = append(args, store.DecodeUid(id))
+	}
+	if len(args) == 0 {
+		return t.ErrMalformed
+	}
+
+	tx, err := a.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err != nil {
+			tx.Rollback()
+		}
+	}()
+
+	log.Println("INSERT INTO filemsglinks(createdat,fileid,msgid) "+strings.Join(values, ","), args)
+
+	_, err = a.db.Exec("INSERT INTO filemsglinks(createdat,fileid,msgid) "+strings.Join(values, ","), args...)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec("UPDATE fileuploads SET updatedat='"+strNow+"' WHERE id IN (?"+
+		strings.Repeat(",?", len(args)-1)+")", args...)
 	if err != nil {
 		return err
 	}
@@ -1784,128 +1838,6 @@ func (a *adapter) FileFinishUpload(fid string, status int, size int64) (*t.FileD
 	return fd, err
 }
 
-// Generate WHERE clause assuming this is a JOIN between fileuploads AS fu and filemsglinks AS fml.
-func fileOptsToJoinQuery(opts *t.QueryOpt, unusedOnly bool) (string, []interface{}) {
-	var params []string
-	var args []interface{}
-	var query string
-	if !opts.User.IsZero() {
-		params = append(params, "fu.userid=?")
-		args = append(args, store.DecodeUid(opts.User))
-	}
-
-	if unusedOnly {
-		// Unused `fu` records by definition have no `fml` records.
-		params = append(params, "fu.usecount<=?")
-		args = append(args, 0)
-	} else if opts.Topic != "" {
-		params = append(params, "fml.topic=?")
-		args = append(args, opts.Topic)
-
-		if opts.Before > 1 {
-			params = append(params, "fml.seqid<?")
-			args = append(args, opts.Before)
-		}
-		if opts.Since > 0 {
-			params = append(params, "fml.seqid>=?")
-			args = append(args, opts.Since)
-		}
-	}
-
-	if len(params) > 0 {
-		query = strings.Join(params, " AND ")
-	} else {
-		return "", nil
-	}
-
-	if opts.Limit > 0 {
-		var limit = opts.Limit
-		if limit > maxResults {
-			limit = maxResults
-		}
-		query += " LIMIT ?"
-		args = append(args, limit)
-	}
-
-	return query, args
-}
-
-func seqRangesToQuery(seqids []t.Range) (string, []interface{}) {
-	var query string
-	var args []interface{}
-	if len(seqids) > 0 {
-		var in []interface{}
-		var between []interface{}
-		for _, r := range seqids {
-			if r.Hi != 0 {
-				// Range is inclusive - exclusive while MySQL BETWEEN is inclusive-inclusive, thus r.hi-1.
-				between = append(between, r.Low, r.Hi-1)
-			} else {
-				in = append(in, r.Low)
-			}
-		}
-		if len(between) > 0 {
-			query = "(fml.seqid BETWEEN ? AND ?)" +
-				strings.Repeat(" OR (fml.seqid BETWEEN ? AND ?)", len(between)/2-1)
-			args = append(args, between...)
-		}
-		if len(in) > 0 {
-			q := "fml.seqid IN (?" + strings.Repeat(",?", len(in)-1) + ")"
-			if query != "" {
-				query += " OR " + q
-			} else {
-				query = q
-			}
-			args = append(args, in...)
-		}
-
-		if query != "" {
-			query = "(" + query + ")"
-		}
-	}
-	return query, args
-}
-
-// FilesForUser returns file records for a given user.
-func (a *adapter) FilesGetAll(opts *t.QueryOpt, unusedOnly bool) ([]t.FileDef, error) {
-	query := "SELECT fu.id,fu.createdat,fu.updatedat,fu.userid AS user,fu.status,fu.mimetype,fu.size,fu.usecount,fu.location FROM fileuploads AS fu "
-	if unusedOnly {
-		query += "WHERE "
-	} else {
-		query += "INNER JOIN filemsglinks AS fml ON fu.id=fml.fileid WHERE "
-	}
-	var args []interface{}
-	var where string
-	if opts != nil || unusedOnly {
-		where, args = fileOptsToJoinQuery(opts, unusedOnly)
-		query += where
-	}
-
-	if len(args) == 0 {
-		// Must provide some query parameters
-		return nil, t.ErrMalformed
-	}
-
-	rows, err := a.db.Queryx(query, args...)
-	if err != nil {
-		return nil, err
-	}
-
-	var result []t.FileDef
-	for rows.Next() {
-		var fd t.FileDef
-		if err = rows.StructScan(&fd); err != nil {
-			break
-		}
-		fd.Id = encodeString(fd.Id).String()
-		fd.User = encodeString(fd.User).String()
-		result = append(result, fd)
-	}
-	rows.Close()
-
-	return result, err
-}
-
 // FileGet fetches a record of a specific file
 func (a *adapter) FileGet(fid string) (*t.FileDef, error) {
 	id := t.ParseUid(fid)
@@ -1914,7 +1846,7 @@ func (a *adapter) FileGet(fid string) (*t.FileDef, error) {
 	}
 
 	var fd t.FileDef
-	err := a.db.Get(&fd, "SELECT id,createdat,updatedat,userid AS user,status,mimetype,size,usecount,location "+
+	err := a.db.Get(&fd, "SELECT id,createdat,updatedat,userid AS user,status,mimetype,size,location "+
 		"FROM fileuploads WHERE id=?", store.DecodeUid(id))
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -1930,29 +1862,11 @@ func (a *adapter) FileGet(fid string) (*t.FileDef, error) {
 
 }
 
-// FileLink creates a relationship between the file and a message it was posted in incrementing usage counter.
-// TODO: create a separate table for linking attachments to messages.
-func (a *adapter) FileLink(fids []string, topic string, seqid int) error {
-	var args []interface{}
-	var values []string
-	now := t.TimeNow()
-	// createdat,fileid,topic,seqid
-	val := "VALUES('" + now.Format("2006-01-02T15:04:05.999") + "',?,'" + topic + "'," + strconv.Itoa(seqid) + ")"
-	for _, fid := range fids {
-		id := t.ParseUid(fid)
-		if id.IsZero() {
-			return t.ErrMalformed
-		}
-		values = append(values, val)
-		args = append(args, store.DecodeUid(id))
-	}
-	if len(args) == 0 {
-		return t.ErrMalformed
-	}
-
+// FileDeleteUnused deletes file upload records and (if unusedOnly==false) file message link records.
+func (a *adapter) FileDeleteUnused(olderThan time.Time, limit int) ([]string, error) {
 	tx, err := a.db.Begin()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer func() {
 		if err != nil {
@@ -1960,103 +1874,39 @@ func (a *adapter) FileLink(fids []string, topic string, seqid int) error {
 		}
 	}()
 
-	_, err = tx.Exec("INSERT INTO filemsglinks(createdat,fileid,topic,seqid) "+strings.Join(values, ","), args...)
-	if err != nil {
-		return err
-	}
-
-	_, err = tx.Exec("UPDATE fileuploads SET updatedat=?,usecount=usecount+1 WHERE id IN (?"+
-		strings.Repeat(",?", len(args)-1)+")", append([]interface{}{now}, args...)...)
-	if err != nil {
-		return err
-	}
-
-	return tx.Commit()
-}
-
-// FileUnlink deletes link record and decrements use counter.
-func (a *adapter) FileUnlink(opts *t.QueryOpt, seqids []t.Range) error {
-	tx, err := a.db.Begin()
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if err != nil {
-			tx.Rollback()
-		}
-	}()
-
-	fml_query := "DELETE fml.* FROM filemsglinks AS fml WHERE "
-	fu_query := "UPDATE fileuploads AS fu INNER JOIN filemsglinks AS fml ON fu.id=fml.fileid " +
-		"SET fu.updatedat=?,fu.usecount=fu.usecount-1 WHERE "
+	query := "FROM fileuploads AS fu LEFT JOIN filemsglinks AS fml ON fml.fileid=fu.id WHERE fml.id IS NULL "
 	var args []interface{}
-	if opts != nil {
-		where, tmp := seqRangesToQuery(seqids)
-		if len(tmp) > 0 {
-			fml_query += where + " AND "
-			fu_query += where + " AND "
-			args = tmp
+	if !olderThan.IsZero() {
+		query += "AND fu.updatedat<? "
+		args = append(args, olderThan)
+	}
+
+	query += " "
+
+	if limit > 0 {
+		query += "LIMIT ?"
+		args = append(args, limit)
+	}
+
+	rows, err := tx.Query("SELECT fu.location "+query, args...)
+	if err != nil {
+		return nil, err
+	}
+	var locations []string
+	for rows.Next() {
+		var loc map[string]string
+		if err = rows.Scan(&loc); err != nil {
+			return nil, err
 		}
-		where, tmp = fileOptsToJoinQuery(opts, false)
-		fml_query += where
-		fu_query += where
-		args = append(args, tmp...)
+		locations = append(locations, loc["location"])
 	}
 
-	if len(args) == 0 {
-		// Must provide some query parameters
-		return t.ErrMalformed
-	}
-
-	_, err = tx.Exec(fu_query, append([]interface{}{t.TimeNow()}, args...)...)
+	_, err = tx.Exec("DELETE fu.* "+query, args...)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	_, err = tx.Exec(fml_query, args...)
-	if err != nil {
-		return err
-	}
-
-	return tx.Commit()
-}
-
-// FileDelete deletes file upload records and (if unusedOnly==false) file message link records.
-func (a *adapter) FileDelete(opts *t.QueryOpt, unusedOnly bool) error {
-	tx, err := a.db.Begin()
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if err != nil {
-			tx.Rollback()
-		}
-	}()
-
-	var args []interface{}
-	var where string
-	if opts != nil || unusedOnly {
-		where, args = fileOptsToJoinQuery(opts, unusedOnly)
-	}
-	if len(args) == 0 {
-		// Must provide some query parameters
-		return t.ErrMalformed
-	}
-
-	var fu_query string = "DELETE fu.* FROM fileuploads AS fu "
-	if unusedOnly {
-		fu_query += "WHERE " + where
-	} else {
-		fu_query += "INNER JOIN filemsglinks AS fml ON fu.id=fml.fileid WHERE " + where
-	}
-
-	_, err = tx.Exec(fu_query, args...)
-	if err != nil {
-		return err
-	}
-	// Records from filemsglinks will be deleted due to CASCADE on foreign key fileuploads.id.
-
-	return tx.Commit()
+	return locations, tx.Commit()
 }
 
 // Helper functions

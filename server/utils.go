@@ -476,22 +476,6 @@ func parseSearchQuery(query string) ([]string, []string, error) {
 	return and, or, nil
 }
 
-func interfaceToStringSlice(src interface{}) []string {
-	var dst []string
-	if src != nil {
-		if arr, ok := src.([]string); ok {
-			dst = arr
-		} else if arr, ok := src.([]interface{}); ok {
-			for _, val := range arr {
-				if str, ok := val.(string); ok {
-					dst = append(dst, str)
-				}
-			}
-		}
-	}
-	return dst
-}
-
 // Returns > 0 if v1 > v2; zero if equal; < 0 if v1 < v2
 // Only Major and Minor parts are compared, the trailer is ignored.
 func versionCompare(v1, v2 int) int {

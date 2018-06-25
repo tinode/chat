@@ -123,6 +123,11 @@ func (fh *fshandler) Download(url string) (*types.FileDef, media.ReadSeekCloser,
 
 	file, err := os.Open(fd.Location)
 	if err != nil {
+		perr := err.(*os.PathError)
+		if perr.Err == os.ErrNotExist {
+			// If the file is not found, send 404 instead of the default 500
+			err = types.ErrNotFound
+		}
 		return nil, nil, err
 	}
 

@@ -27,7 +27,7 @@ const (
 	defaultHost     = "localhost:28015"
 	defaultDatabase = "tinode"
 
-	dbVersion = 104
+	dbVersion = 105
 
 	adapterName = "rethinkdb"
 )
@@ -248,7 +248,7 @@ func (a *adapter) CreateDb(reset bool) error {
 		return err
 	}
 	// Compound multi-index of soft-deleted messages: each message gets multiple compound index entries like
-	// [[Topic, User1, DelId1], [Topic, User2, DelId2],...]
+	// [Topic, User1, DelId1], [Topic, User2, DelId2],...
 	if _, err := rdb.DB(a.dbName).Table("messages").IndexCreateFunc("Topic_DeletedFor",
 		func(row rdb.Term) interface{} {
 			return row.Field("DeletedFor").Map(func(df rdb.Term) interface{} {
@@ -257,6 +257,7 @@ func (a *adapter) CreateDb(reset bool) error {
 		}, rdb.IndexCreateOpts{Multi: true}).RunWrite(a.conn); err != nil {
 		return err
 	}
+
 	// Log of deleted messages
 	if _, err := rdb.DB(a.dbName).TableCreate("dellog", rdb.TableCreateOpts{PrimaryKey: "Id"}).RunWrite(a.conn); err != nil {
 		return err
@@ -286,14 +287,7 @@ func (a *adapter) CreateDb(reset bool) error {
 	if _, err := rdb.DB(a.dbName).Table("fileuploads").IndexCreate("User").RunWrite(a.conn); err != nil {
 		return err
 	}
-	// Another secondary index for linking uploaded files to messages.
-	if _, err := rdb.DB(a.dbName).Table("fileuploads").IndexCreateFunc("Topic_SeqId",
-		func(row rdb.Term) interface{} {
-			return []interface{}{row.Field("Topic"), row.Field("SeqId")}
-		}).RunWrite(a.conn); err != nil {
-		return err
-	}
-	// A secondary index on fileuploads.UseCount to be able to delete unused records.
+	// A secondary index on fileuploads.UseCount to be able to delete unused records at once.
 	if _, err := rdb.DB(a.dbName).Table("fileuploads").IndexCreate("UseCount").RunWrite(a.conn); err != nil {
 		return err
 	}
@@ -1239,18 +1233,46 @@ func (a *adapter) MessageDeleteList(topic string, toDel *t.DelMessage) error {
 				[]interface{}{topic, toDel.SeqIdRanges[0].Hi},
 				rdb.BetweenOpts{Index: "Topic_SeqId", RightBound: "closed"})
 		}
-
+		// Skip already hard-deleted messages.
+		query = query.Filter(rdb.Row.HasFields("DelId").Not())
 		if toDel.DeletedFor == "" {
-			// Hard-deleting for all users{
-			// Hard-delete of individual messages. Mark some messages as deleted.
-			_, err = query.Filter(rdb.Row.HasFields("DelId").Not()).
-				Update(map[string]interface{}{"DeletedAt": t.TimeNow(), "DelId": toDel.DelId, "From": nil,
-					"Head": nil, "Content": nil}).RunWrite(a.conn)
+			// First decrement use counter for attachments.
+			/*
+						r.db("test").table("one")
+						.getAll(
+							r.args(r.db("test").table("zero")
+								.getAll(
+									"07e2c6fe-ac91-49cb-9834-ff34bf50aad1",
+				  					"0098a829-6da5-4f7b-8432-32b40de9ab3b",
+									"0926e7dd-321a-49cb-adb1-7a705d9d9a78",
+									"8e195450-babd-4954-a8fb-0cc414b43156")
+								.filter(r.row.hasFields("att"))
+								.concatMap(function(row) { return row.getField("att"); })
+								.coerceTo("array"))
+							)
+						.update({useCount: r.row.getField("useCount").default(0).add(1)})
+			*/
+
+			rdb.DB(a.dbName).Table("fileuploads").GetAll(
+				rdb.Args(
+					query.
+						// Fetch messages with attachments only
+						Filter(rdb.Row.HasFields("Attachments")).
+						// Flatten arrays
+						ConcatMap(func(row rdb.Term) interface{} { return row.Field("Attachments") }).
+						CoerceTo("array"))).
+				// Decrement UseCount.
+				Update(map[string]interface{}{"UseCount": rdb.Row.Field("UseCount").Default(0).Sub(1)}).
+				RunWrite(a.conn)
+			// Hard-delete individual messages. Message is not deleted but all fields with content
+			// are replaced with nulls.
+			_, err = query.Update(map[string]interface{}{
+				"DeletedAt": t.TimeNow(), "DelId": toDel.DelId, "From": nil,
+				"Head": nil, "Content": nil, "Attachments": nil}).RunWrite(a.conn)
+
 		} else {
 			// Soft-deleting: adding DelId to DeletedFor
 			_, err = query.
-				// Skip hard-deleted messages
-				Filter(rdb.Row.HasFields("DelId").Not()).
 				// Skip messages already soft-deleted for the current user
 				Filter(func(row rdb.Term) interface{} {
 					return rdb.Not(row.Field("DeletedFor").Default([]interface{}{}).Contains(
@@ -1269,6 +1291,31 @@ func (a *adapter) MessageDeleteList(topic string, toDel *t.DelMessage) error {
 		rdb.DB(a.dbName).Table("dellog").Get(toDel.Id).
 			Delete(rdb.DeleteOpts{Durability: "soft", ReturnChanges: false}).RunWrite(a.conn)
 	}
+
+	return err
+}
+
+// MessageAttachments adds attachments to a message.
+func (a *adapter) MessageAttachments(msgId t.Uid, fids []string) error {
+	now := t.TimeNow()
+	_, err := rdb.DB(a.dbName).Table("messages").Get(msgId.String()).
+		Update(map[string]interface{}{
+			"UpdatedAt":   now,
+			"Attachments": fids,
+		}).RunWrite(a.conn)
+	if err != nil {
+		return err
+	}
+
+	ids := make([]interface{}, len(fids))
+	for i, id := range fids {
+		ids[i] = id
+	}
+	_, err = rdb.DB(a.dbName).Table("fileuploads").GetAll(ids...).
+		Update(map[string]interface{}{
+			"UpdatedAt": now,
+			"UseCount":  rdb.Row.Field("UseCount").Default(0).Add(1),
+		}).RunWrite(a.conn)
 
 	return err
 }
@@ -1445,7 +1492,7 @@ func (a *adapter) CredFail(uid t.Uid, method string) error {
 		GetAllByIndex("User", uid.String()).
 		Filter(map[string]interface{}{"Method": method}).
 		Update(map[string]interface{}{
-			"Retries":   rdb.Row.Field("Retries").Add(1).Default(0),
+			"Retries":   rdb.Row.Field("Retries").Default(0).Add(1),
 			"UpdatedAt": t.TimeNow(),
 		}).RunWrite(a.conn)
 	return err
@@ -1482,86 +1529,14 @@ func (a *adapter) FileStartUpload(fd *t.FileDef) error {
 func (a *adapter) FileFinishUpload(fid string, status int, size int64) (*t.FileDef, error) {
 	if _, err := rdb.DB(a.dbName).Table("fileuploads").Get(fid).
 		Update(map[string]interface{}{
-			"Status": status,
-			"Size":   size,
+			"UpdatedAt": t.TimeNow(),
+			"Status":    status,
+			"Size":      size,
 		}).RunWrite(a.conn); err != nil {
 
 		return nil, err
 	}
 	return a.FileGet(fid)
-}
-
-func optsToQuery(q rdb.Term, opts *t.QueryOpt, unusedOnly bool) *rdb.Term {
-	if !opts.User.IsZero() {
-		// Select all user uploads by User index, then filter Topic and SeqId.
-		q = q.GetAllByIndex("User", opts.User.String())
-		if opts.Topic != "" {
-			q = q.Filter(rdb.Row.Field("Topic").Eq(opts.Topic))
-			if opts.Before > 1 {
-				q = q.Filter(rdb.Row.Field("SeqId").Lt(opts.Before))
-			}
-			if opts.Since > 0 {
-				q = q.Filter(rdb.Row.Field("SeqId").Ge(opts.Since))
-			}
-		}
-		if unusedOnly {
-			q = q.Filter(rdb.Row.Field("UseCount").Le(0))
-		}
-	} else if opts.Topic != "" {
-		// Select by Topic and SeqId
-
-		var lower, upper interface{}
-		upper = rdb.MaxVal
-		lower = rdb.MinVal
-
-		if opts.Since > 0 {
-			lower = opts.Since
-		}
-		if opts.Before > 1 {
-			upper = opts.Before
-		}
-		q = q.Between([]interface{}{opts.Topic, lower},
-			[]interface{}{opts.Topic, upper},
-			rdb.BetweenOpts{Index: "Topic_SeqId"})
-
-		if unusedOnly {
-			q = q.Filter(rdb.Row.Field("UseCount").Le(0))
-		}
-	} else if unusedOnly {
-		// Select records where "infinity <= UseCount < 1"
-		q = q.Between(rdb.MinVal, 1, rdb.BetweenOpts{Index: "UseCount"})
-	} else {
-		return nil
-	}
-	if opts.Limit > 0 && opts.Limit < maxResults {
-		q = q.Limit(opts.Limit)
-	}
-
-	return &q
-}
-
-// FilesGetAll returns all file records. If unusedOnly is true, return records with useCount equals zero.
-func (a *adapter) FilesGetAll(opts *t.QueryOpt, unusedOnly bool) ([]t.FileDef, error) {
-	var q *rdb.Term
-	if opts != nil {
-		q = optsToQuery(rdb.DB(a.dbName).Table("fileuploads"), opts, unusedOnly)
-	}
-
-	if q == nil {
-		return nil, t.ErrMalformed
-	}
-
-	rows, err := q.Run(a.conn)
-	if err != nil || rows.IsNil() {
-		return nil, err
-	}
-
-	var result []t.FileDef
-	if err = rows.All(&result); err != nil {
-		return nil, err
-	}
-
-	return result, nil
 }
 
 // FileGet fetches a record of a specific file
@@ -1580,55 +1555,34 @@ func (a *adapter) FileGet(fid string) (*t.FileDef, error) {
 
 }
 
-// FileLink creates a relationship between the file and a message it was posted in incrementing usage counter.
-func (a *adapter) FileLink(fids []string, topic string, seqid int) error {
-	ids := make([]interface{}, len(fids))
-	for i, id := range fids {
-		ids[i] = id
+// FileDeleteUnused
+func (a *adapter) FileDeleteUnused(olderThan time.Time, limit int) ([]string, error) {
+	q := rdb.DB(a.dbName).Table("fileuploads").GetAllByIndex("UseCount", 0)
+	if !olderThan.IsZero() {
+		q = q.Filter(rdb.Row.Field("UpdatedAt").Lt(olderThan))
 	}
-	_, err := rdb.DB(a.dbName).Table("fileuploads").GetAll(ids...).
-		Update(map[string]interface{}{
-			"UpdatedAt": t.TimeNow(),
-			"Topic":     topic,
-			"SeqId":     seqid,
-			"UseCount":  rdb.Row.Field("UseCount").Default(0).Add(1),
-		}).RunWrite(a.conn)
-
-	return err
-
-}
-
-// FileUnlink decrements use count of files.
-func (a *adapter) FileUnlink(opts *t.QueryOpt, seqids []t.Range) error {
-	var q *rdb.Term
-	if opts != nil {
-		q = optsToQuery(rdb.DB(a.dbName).Table("fileuploads"), opts, false)
+	if limit > 0 {
+		q = q.Limit(limit)
 	}
 
-	if q == nil {
-		return t.ErrMalformed
+	rows, err := q.Pluck("Location").Run(a.conn)
+	if err != nil {
+		return nil, err
 	}
 
-	_, err := q.Update(map[string]interface{}{
-		"UpdatedAt":  t.TimeNow(),
-		"UseCounter": rdb.Row.Field("UseCounter").Sub(1),
-	}).RunWrite(a.conn)
-	return err
-}
-
-// FileDelete.
-func (a *adapter) FileDelete(opts *t.QueryOpt, unusedOnly bool) error {
-	var q *rdb.Term
-	if opts != nil {
-		q = optsToQuery(rdb.DB(a.dbName).Table("fileuploads"), opts, unusedOnly)
+	var locations []string
+	var loc map[string]string
+	for rows.Next(&loc) {
+		locations = append(locations, loc["Location"])
 	}
 
-	if q == nil {
-		return t.ErrMalformed
+	if err = rows.Err(); err != nil {
+		return nil, err
 	}
 
-	_, err := q.Delete().RunWrite(a.conn)
-	return err
+	_, err = q.Delete().RunWrite(a.conn)
+
+	return locations, err
 }
 
 func init() {

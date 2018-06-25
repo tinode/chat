@@ -986,8 +986,6 @@ type FileDef struct {
 	MimeType string
 	// Size of the file in bytes.
 	Size int64
-	// How many messages are linked to this file.
-	UseCount int
 	// Internal file location, i.e. path on disk or an S3 blob address.
 	Location string
 }

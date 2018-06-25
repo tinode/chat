@@ -318,16 +318,12 @@ func main() {
 		} else {
 			globals.fileHandler = config.Media.UseHandler
 			globals.maxFileUploadSize = config.Media.MaxFileUploadSize
-			handler := store.GetMediaHandler(globals.fileHandler)
-			if handler == nil {
-				log.Fatal("Unknown media handler requested", globals.fileHandler)
-			}
 			if config.Media.Handlers != nil {
 				var conf string
 				if params := config.Media.Handlers[globals.fileHandler]; params != nil {
 					conf = string(params)
 				}
-				if err = handler.Init(conf); err != nil {
+				if err = store.UseMediaHandler(config.Media.UseHandler, conf); err != nil {
 					log.Fatal("Failed to init media handler", globals.fileHandler, err)
 				}
 			}

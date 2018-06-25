@@ -306,30 +306,6 @@ func (t *Topic) run(hub *Hub) {
 					}
 				}
 
-				// Check if the message has attachments. If so, link earlier uploaded files to message.
-				if header, ok := msg.Data.Head["attachments"]; ok {
-					if mh := store.GetMediaHandler(globals.fileHandler); mh != nil {
-						// The header is typed as []interface{}, convert to []string
-						urls := interfaceToStringSlice(header)
-						var attachments []string
-						for _, url := range urls {
-							// Convert URLs to file IDs.
-							if fid := mh.GetIdFromUrl(url); !fid.IsZero() {
-								attachments = append(attachments, fid.String())
-							}
-						}
-
-						if len(attachments) > 0 {
-							if err := store.Files.Link(attachments, t.name, t.lastID+1); err != nil {
-								log.Println("Failed to link attachments to messages", err)
-							}
-						} else {
-							// Strip invalid header
-							delete(msg.Data.Head, "attachments")
-						}
-					}
-				}
-
 				if err := store.Messages.Save(&types.Message{
 					ObjHeader: types.ObjHeader{CreatedAt: msg.Data.Timestamp},
 					SeqId:     t.lastID + 1,

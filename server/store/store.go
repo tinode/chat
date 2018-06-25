@@ -8,13 +8,14 @@ import (
 	"time"
 
 	"github.com/tinode/chat/server/auth"
+	"github.com/tinode/chat/server/db"
 	"github.com/tinode/chat/server/media"
-	"github.com/tinode/chat/server/store/adapter"
 	"github.com/tinode/chat/server/store/types"
 	"github.com/tinode/chat/server/validate"
 )
 
 var adp adapter.Adapter
+var mediaHandler media.Handler
 
 // Unique ID generator
 var uGen types.UidGenerator
@@ -406,9 +407,6 @@ func (TopicsObjMapper) Delete(topic string) error {
 	if err := adp.MessageDeleteList(topic, nil); err != nil {
 		return err
 	}
-	if err := adp.FileUnlink(&types.QueryOpt{Topic: topic}, nil); err != nil {
-		return err
-	}
 
 	return adp.TopicDelete(topic)
 }
@@ -453,16 +451,61 @@ type MessagesObjMapper struct{}
 // Messages is an instance of MessagesObjMapper to map methods to.
 var Messages MessagesObjMapper
 
+func interfaceToStringSlice(src interface{}) []string {
+	var dst []string
+	if src != nil {
+		if arr, ok := src.([]string); ok {
+			dst = arr
+		} else if arr, ok := src.([]interface{}); ok {
+			for _, val := range arr {
+				if str, ok := val.(string); ok {
+					dst = append(dst, str)
+				}
+			}
+		}
+	}
+	return dst
+}
+
 // Save message
 func (MessagesObjMapper) Save(msg *types.Message) error {
 	msg.InitTimes()
 
 	// Increment topic's or user's SeqId
-	if err := adp.TopicUpdateOnMessage(msg.Topic, msg); err != nil {
+	err := adp.TopicUpdateOnMessage(msg.Topic, msg)
+	if err != nil {
 		return err
 	}
 
-	return adp.MessageSave(msg)
+	// Check if the message has attachments. If so, link earlier uploaded files to message.
+	var attachments []string
+	if header, ok := msg.Head["attachments"]; ok {
+		// The header is typed as []interface{}, convert to []string
+		if arr, ok := header.([]interface{}); ok {
+			for _, val := range arr {
+				if url, ok := val.(string); ok {
+					// Convert attachment URLs to file IDs.
+					if fid := mediaHandler.GetIdFromUrl(url); !fid.IsZero() {
+						attachments = append(attachments, fid.String())
+					}
+				}
+			}
+		}
+
+		if len(attachments) == 0 {
+			delete(msg.Head, "attachments")
+		}
+	}
+
+	err = adp.MessageSave(msg)
+	if err != nil {
+		return err
+	}
+
+	if len(attachments) > 0 {
+		return adp.MessageAttachments(msg.Uid(), attachments)
+	}
+	return nil
 }
 
 // DeleteList deletes multiple messages defined by a list of ranges.
@@ -494,11 +537,6 @@ func (MessagesObjMapper) DeleteList(topic string, delID int, forUser types.Uid, 
 		err = adp.SubsUpdate(topic, forUser, map[string]interface{}{"DelId": delID})
 		if err != nil {
 			return err
-		}
-
-		if forUser.IsZero() {
-			// If messages are hard-deleted then delete attachments too.
-			err = adp.FileUnlink(&types.QueryOpt{Topic: topic}, ranges)
 		}
 	}
 
@@ -630,8 +668,16 @@ func RegisterMediaHandler(name string, mh media.Handler) {
 	fileHandlers[name] = mh
 }
 
-func GetMediaHandler(name string) media.Handler {
-	return fileHandlers[name]
+func GetMediaHandler() media.Handler {
+	return mediaHandler
+}
+
+func UseMediaHandler(name, config string) error {
+	mediaHandler = fileHandlers[name]
+	if mediaHandler == nil {
+		panic("UseMediaHandler: unknown handler '" + name + "'")
+	}
+	return mediaHandler.Init(config)
 }
 
 // FileMapper is a struct to map methods used for file handling.
@@ -655,22 +701,12 @@ func (FileMapper) FinishUpload(fid string, success bool, size int64) (*types.Fil
 	return adp.FileFinishUpload(fid, status, size)
 }
 
-// GetForUser fetches all file records for a given user
-func (FileMapper) GetAll(opts *types.QueryOpt) ([]types.FileDef, error) {
-	return adp.FilesGetAll(opts, false)
-}
-
 // Get fetches a file record for a unique file id.
 func (FileMapper) Get(fid string) (*types.FileDef, error) {
 	return adp.FileGet(fid)
 }
 
-// Delete decrements usage count.
-func (FileMapper) Delete(opts *types.QueryOpt, seqranges []types.Range) error {
-	return adp.FileUnlink(opts, seqranges)
-}
-
 // Link links files with the message they were attached to.
-func (FileMapper) Link(fids []string, topic string, seqid int) error {
-	return adp.FileLink(fids, topic, seqid)
+func (FileMapper) Link(msgId types.Uid, fids []string) error {
+	return adp.MessageAttachments(msgId, fids)
 }

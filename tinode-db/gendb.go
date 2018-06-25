@@ -275,14 +275,13 @@ func genDb(reset bool, dbSource string, data *Data) {
 		str := data.Messages[rand.Intn(len(data.Messages))]
 		// Max time between messages is 2 hours, averate - 1 hour, time is increasing as seqId increases
 		timestamp = timestamp.Add(time.Millisecond * time.Duration(rand.Intn(3600*2*1000)))
-		msg := types.Message{
+		if err = store.Messages.Save(&types.Message{
 			ObjHeader: types.ObjHeader{CreatedAt: timestamp},
 			SeqId:     seqId,
 			Topic:     topic,
 			From:      from.String(),
-			Content:   str}
-		if err = store.Messages.Save(&msg); err != nil {
-			log.Fatal(err)
+			Content:   str}); err != nil {
+			log.Fatal("Failed to create message: ", err)
 		}
 
 		// log.Printf("Msg.seq=%d at %v, topic='%s' from='%s'", msg.SeqId, msg.CreatedAt, topic, from.UserId())

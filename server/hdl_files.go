@@ -29,7 +29,7 @@ func largeFileServe(wrt http.ResponseWriter, req *http.Request) {
 
 	now := time.Now().UTC().Round(time.Millisecond)
 	enc := json.NewEncoder(wrt)
-	mh := store.GetMediaHandler(globals.fileHandler)
+	mh := store.GetMediaHandler()
 
 	//Check if media handler requests redirection to another service.
 	if redirTo := mh.Redirect(req.URL.String()); redirTo != "" {
@@ -81,7 +81,7 @@ func largeFileServe(wrt http.ResponseWriter, req *http.Request) {
 func largeFileUpload(wrt http.ResponseWriter, req *http.Request) {
 	now := time.Now().UTC().Round(time.Millisecond)
 	enc := json.NewEncoder(wrt)
-	mh := store.GetMediaHandler(globals.fileHandler)
+	mh := store.GetMediaHandler()
 
 	// Check if uploads are handled elsewhere.
 	if redirTo := mh.Redirect(req.URL.String()); redirTo != "" {
