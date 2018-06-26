@@ -380,9 +380,7 @@ func interfaceMapToByteMap(in map[string]interface{}) map[string][]byte {
 func byteMapToInterfaceMap(in map[string][]byte) map[string]interface{} {
 	out := make(map[string]interface{}, len(in))
 	for key, val := range in {
-		var iface interface{}
-		json.Unmarshal(val, &iface)
-		out[key] = iface
+		out[key] = bytesToInterface(val)
 	}
 	return out
 }
@@ -394,7 +392,10 @@ func interfaceToBytes(in interface{}) []byte {
 
 func bytesToInterface(in []byte) interface{} {
 	var out interface{}
-	json.Unmarshal(in, &out)
+	err := json.Unmarshal(in, &out)
+	if err != nil {
+		log.Println("pbx: failed to parse bytes", string(in), err)
+	}
 	return out
 }
 
