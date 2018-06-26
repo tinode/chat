@@ -133,8 +133,7 @@ var globals struct {
 	// Maximum number of indexable tags.
 	maxTagCount int
 
-	// Name of the upload/download file handler to use.
-	fileHandler       string
+	// Maximum allowed upload size.
 	maxFileUploadSize int64
 }
 
@@ -152,6 +151,10 @@ type mediaConfig struct {
 	UseHandler string `json:"use_handler"`
 	// Maximum allowed size of an uploaded file
 	MaxFileUploadSize int64 `json:"max_size"`
+	// Garbage collection timeout
+	GcPeriod int `json:"gc_period"`
+	// Number of entries to delete in one pass
+	GcBlockSize int `json:"gc_block_size"`
 	// Individual handler config params to pass to handlers unchanged.
 	Handlers map[string]json.RawMessage `json:"handlers"`
 }
@@ -316,16 +319,18 @@ func main() {
 		if config.Media.UseHandler == "" {
 			config.Media = nil
 		} else {
-			globals.fileHandler = config.Media.UseHandler
 			globals.maxFileUploadSize = config.Media.MaxFileUploadSize
 			if config.Media.Handlers != nil {
 				var conf string
-				if params := config.Media.Handlers[globals.fileHandler]; params != nil {
+				if params := config.Media.Handlers[config.Media.UseHandler]; params != nil {
 					conf = string(params)
 				}
 				if err = store.UseMediaHandler(config.Media.UseHandler, conf); err != nil {
-					log.Fatal("Failed to init media handler", globals.fileHandler, err)
+					log.Fatal("Failed to init media handler", config.Media.UseHandler, err)
 				}
+			}
+			if config.Media.GcPeriod > 0 && config.Media.GcBlockSize > 0 {
+				largeFileRunGarbageCollection(time.Second*time.Duration(config.Media.GcPeriod), config.Media.GcBlockSize)
 			}
 		}
 	}

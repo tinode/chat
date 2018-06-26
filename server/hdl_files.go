@@ -176,3 +176,22 @@ func largeFileUpload(wrt http.ResponseWriter, req *http.Request) {
 	resp.Ctrl.Params = map[string]string{"url": url}
 	writeHttpResponse(resp)
 }
+
+func largeFileRunGarbageCollection(period time.Duration, block int) chan<- bool {
+	stop := make(chan bool)
+	go func() {
+		gcTimer := time.Tick(period)
+		for {
+			select {
+			case <-gcTimer:
+				if err := store.Files.DeleteUnused(time.Now().Add(-time.Hour), block); err != nil {
+					log.Println("media gc:", err)
+				}
+			case <-stop:
+				return
+			}
+		}
+	}()
+
+	return stop
+}

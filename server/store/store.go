@@ -706,7 +706,14 @@ func (FileMapper) Get(fid string) (*types.FileDef, error) {
 	return adp.FileGet(fid)
 }
 
-// Link links files with the message they were attached to.
-func (FileMapper) Link(msgId types.Uid, fids []string) error {
-	return adp.MessageAttachments(msgId, fids)
+// DeleteUnused removes unused attachments.
+func (FileMapper) DeleteUnused(olderThan time.Time, limit int) error {
+	toDel, err := adp.FileDeleteUnused(olderThan, limit)
+	if err != nil {
+		return err
+	}
+	if len(toDel) > 0 {
+		return GetMediaHandler().Delete(toDel)
+	}
+	return nil
 }

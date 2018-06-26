@@ -134,15 +134,16 @@ func (fh *fshandler) Download(url string) (*types.FileDef, media.ReadSeekCloser,
 	return fd, file, nil
 }
 
-// Delete deletes file from storage
-func (fh *fshandler) Delete(fid types.Uid) error {
-	fd, err := fh.getFileRecord(fid)
-	if err != nil {
-		log.Println("Delete: file not found", fid)
-		return err
+// Delete deletes files from storage by provided slice of locations.
+func (fh *fshandler) Delete(locations []string) error {
+	for _, loc := range locations {
+		if err, _ := os.Remove(loc).(*os.PathError); err != nil {
+			if err != os.ErrNotExist {
+				log.Println("fs: error deleting file", loc, err)
+			}
+		}
 	}
-
-	return os.Remove(fd.Location)
+	return nil
 }
 
 func (fh *fshandler) GetIdFromUrl(url string) types.Uid {

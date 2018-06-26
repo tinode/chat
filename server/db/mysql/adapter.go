@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"hash/fnv"
-	"log"
 	"strconv"
 	"strings"
 	"time"
@@ -1454,7 +1453,7 @@ func (a *adapter) MessageGetDeleted(topic string, forUser t.Uid, opts *t.QueryOp
 	}
 
 	// Fetch log of deletions
-	rows, err := a.db.Queryx("SELECT * FROM dellog WHERE topic=? AND delid BETWEEN ? and ?"+
+	rows, err := a.db.Queryx("SELECT topic,deletedfor,delid,low,hi FROM dellog WHERE topic=? AND delid BETWEEN ? and ?"+
 		" AND (deletedFor=0 OR deletedFor=?)"+
 		" ORDER BY delid LIMIT ?", topic, lower, upper, store.DecodeUid(forUser), limit)
 	if err != nil {
@@ -1608,8 +1607,6 @@ func (a *adapter) MessageAttachments(msgId t.Uid, fids []string) error {
 			tx.Rollback()
 		}
 	}()
-
-	log.Println("INSERT INTO filemsglinks(createdat,fileid,msgid) "+strings.Join(values, ","), args)
 
 	_, err = a.db.Exec("INSERT INTO filemsglinks(createdat,fileid,msgid) "+strings.Join(values, ","), args...)
 	if err != nil {
@@ -1874,36 +1871,45 @@ func (a *adapter) FileDeleteUnused(olderThan time.Time, limit int) ([]string, er
 		}
 	}()
 
-	query := "FROM fileuploads AS fu LEFT JOIN filemsglinks AS fml ON fml.fileid=fu.id WHERE fml.id IS NULL "
+	query := "SELECT fu.id,fu.location FROM fileuploads AS fu LEFT JOIN filemsglinks AS fml ON fml.fileid=fu.id WHERE fml.id IS NULL "
 	var args []interface{}
 	if !olderThan.IsZero() {
 		query += "AND fu.updatedat<? "
 		args = append(args, olderThan)
 	}
-
-	query += " "
-
 	if limit > 0 {
 		query += "LIMIT ?"
 		args = append(args, limit)
 	}
 
-	rows, err := tx.Query("SELECT fu.location "+query, args...)
+	rows, err := tx.Query(query, args...)
 	if err != nil {
 		return nil, err
-	}
-	var locations []string
-	for rows.Next() {
-		var loc map[string]string
-		if err = rows.Scan(&loc); err != nil {
-			return nil, err
-		}
-		locations = append(locations, loc["location"])
 	}
 
-	_, err = tx.Exec("DELETE fu.* "+query, args...)
+	var locations []string
+	var ids []interface{}
+	for rows.Next() {
+		var id int
+		var loc string
+		if err = rows.Scan(&id, &loc); err != nil {
+			break
+		}
+		locations = append(locations, loc)
+		ids = append(ids, id)
+	}
+	rows.Close()
+
 	if err != nil {
 		return nil, err
+	}
+
+	if len(ids) > 0 {
+		query, _, _ = sqlx.In("DELETE FROM fileuploads WHERE id IN (?)", ids)
+		_, err = tx.Exec(query, ids...)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return locations, tx.Commit()

@@ -148,6 +148,6 @@ type Adapter interface {
 	FileGet(fid string) (*t.FileDef, error)
 	// FileDeleteUnused deletes records where UseCount is zero. If olderThan is non-zero, deletes
 	// unused records with UpdatedAt before olderThan.
-	// Returns array of FileDef.Location of deleted files so files can be deleted too.
+	// Returns array of FileDef.Location of deleted filerecords so actual files can be deleted too.
 	FileDeleteUnused(olderThan time.Time, limit int) ([]string, error)
 }

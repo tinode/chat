@@ -29,7 +29,7 @@ type Handler interface {
 	Download(url string) (*types.FileDef, ReadSeekCloser, error)
 
 	// Delete deletes file from storage.
-	Delete(fid types.Uid) error
+	Delete(locations []string) error
 
 	// GetIdFromUrl extracts file ID from download URL.
 	GetIdFromUrl(url string) types.Uid
