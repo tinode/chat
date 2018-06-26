@@ -194,6 +194,42 @@ func hstsHandler(handler http.Handler) http.Handler {
 	return handler
 }
 
+// The following code is used to intercept HTTP errors so they can be wrapped into json.
+
+// Wrapper around http.ResponseWriter which detects status set to 400+ and replaces
+// default error message with a custom one.
+type errorResponseWriter struct {
+	status int
+	http.ResponseWriter
+}
+
+func (w *errorResponseWriter) WriteHeader(status int) {
+	if status >= http.StatusBadRequest {
+		w.status = status
+		w.ResponseWriter.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.ResponseWriter.WriteHeader(status)
+	}
+}
+
+func (w *errorResponseWriter) Write(p []byte) (n int, err error) {
+	if w.status >= http.StatusBadRequest {
+		p, _ = json.Marshal(
+			&ServerComMessage{Ctrl: &MsgServerCtrl{
+				Timestamp: time.Now().UTC().Round(time.Millisecond),
+				Code:      w.status,
+				Text:      http.StatusText(w.status)}})
+	}
+	return w.ResponseWriter.Write(p)
+}
+
+// Handler which deploys errorResponseWriter
+func httpErrorHandler(h http.Handler) http.Handler {
+	return http.HandlerFunc(
+		func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(&errorResponseWriter{0, w}, r)
+		})
+}
+
 func serve404(wrt http.ResponseWriter, req *http.Request) {
 	wrt.Header().Set("Content-Type", "application/json; charset=utf-8")
 	wrt.WriteHeader(http.StatusNotFound)

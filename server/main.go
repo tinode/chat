@@ -361,6 +361,7 @@ func main() {
 	// available, otherwise assume '<current dir>/static'. The content is served at
 	// the path pointed by 'static_mount' in the config. If that is missing then it's
 	// served at '/x/'.
+	var staticMountPoint string
 	if *staticPath != "" && *staticPath != "-" {
 		if *staticPath == defaultStaticPath {
 			path, err := os.Getwd()
@@ -371,7 +372,7 @@ func main() {
 			*staticPath = path + "/" + defaultStaticPath
 		}
 
-		staticMountPoint := config.StaticMount
+		staticMountPoint = config.StaticMount
 		if staticMountPoint == "" {
 			staticMountPoint = defaultStaticMount
 		} else {
@@ -388,7 +389,9 @@ func main() {
 				// Remove mount point prefix
 				http.StripPrefix(staticMountPoint,
 					// Optionally add Strict-Transport_security to the response
-					hstsHandler(http.FileServer(http.Dir(*staticPath))))))
+					hstsHandler(
+						// And add custom formatter for errors.
+						httpErrorHandler(http.FileServer(http.Dir(*staticPath)))))))
 		log.Printf("Serving static content from '%s' at '%s'", *staticPath, staticMountPoint)
 	} else {
 		log.Println("Static content is disabled")
@@ -405,8 +408,11 @@ func main() {
 		// Serve large files.
 		http.Handle("/v0/file/s/", gzip.CompressHandler(http.HandlerFunc(largeFileServe)))
 	}
-	// Serve json-formatted 404 for all other URLs
-	http.HandleFunc("/", serve404)
+
+	if staticMountPoint != "/" {
+		// Serve json-formatted 404 for all other URLs
+		http.HandleFunc("/", serve404)
+	}
 
 	// Set up gRPC server, if one is configured
 	if *listenGrpc == "" {
