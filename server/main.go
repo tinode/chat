@@ -390,7 +390,7 @@ func main() {
 				http.StripPrefix(staticMountPoint,
 					// Optionally add Strict-Transport_security to the response
 					hstsHandler(
-						// And add custom formatter for errors.
+						// And add custom formatter of errors.
 						httpErrorHandler(http.FileServer(http.Dir(*staticPath)))))))
 		log.Printf("Serving static content from '%s' at '%s'", *staticPath, staticMountPoint)
 	} else {
