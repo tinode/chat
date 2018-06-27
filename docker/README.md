@@ -39,7 +39,7 @@ All images are available at https://hub.docker.com/r/tinode/
 		
 	The port mapping `-p 6060:18080` tells Docker to map container's port 18080 to host's port 6060 making server accessible at http://localhost:6060/. The container will initialize the database with test data on the first run. 
 
-5. Test the installation by pointing your browser to [http://localhost:6060/x/](http://localhost:6060/x/).
+5. Test the installation by pointing your browser to [http://localhost:6060/](http://localhost:6060/).
 
 ## Optional
 

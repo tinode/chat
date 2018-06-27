@@ -2,7 +2,7 @@
 
 ## Installing from Binaries
 
-1. Visit the [Releases page](https://github.com/tinode/chat/releases/), choose the latest or otherwise the most suitable release. From the list of binaries download the one for your database and platform. Once the binary is downloaded, unpack it to a directory of your choosing, `cd` to that directory. 
+1. Visit the [Releases page](https://github.com/tinode/chat/releases/), choose the latest or otherwise the most suitable release. From the list of binaries download the one for your database and platform. Once the binary is downloaded, unpack it to a directory of your choosing, `cd` to that directory.
 
 2. Make sure your database is running. Make sure it's configured to accept connections from `localhost`. In case of MySQL, Tinode will try to connect as `root` without the password. See notes below (_Building from Source_, section 4) on how to configure Tinode to use a different user or a password. MySQL 5.7 or above is required. MySQL 5.6 or below **will not work**.
 
@@ -41,9 +41,9 @@ See [instructions](./docker/README.md)
 	go get -tags mysql github.com/tinode/chat/server && go install -tags mysql github.com/tinode/chat/server
 	go get -tags mysql github.com/tinode/chat/tinode-db && go install -tags mysql github.com/tinode/chat/tinode-db
 	```
-	
-	Note the required **`-tags rethinkdb`** or **`-tags mysql`** build option. 
-	
+
+	Note the required **`-tags rethinkdb`** or **`-tags mysql`** build option.
+
 	You may also optionally define `main.buildstamp` for the server by adding a build option, for instance, with a timestamp:
 	```
 	-ldflags "-X main.buildstamp=`date -u '+%Y%m%dT%H:%M:%SZ'`"
@@ -51,7 +51,7 @@ See [instructions](./docker/README.md)
 	The value of `buildstamp` will be sent by the server to the clients.
 
 
-4. Open `tinode.conf`. Check that the database connection parameters are correct for your database. If you are using MySQL make sure [DSN](https://github.com/go-sql-driver/mysql#dsn-data-source-name) in `"mysql"` section is approprite for your MySQL installation. Option `parseTime=true` is required. 
+4. Open `tinode.conf`. Check that the database connection parameters are correct for your database. If you are using MySQL make sure [DSN](https://github.com/go-sql-driver/mysql#dsn-data-source-name) in `"mysql"` section is approprite for your MySQL installation. Option `parseTime=true` is required.
 ```js
 	"mysql": {
 		"dsn": "root@tcp(localhost)/tinode?parseTime=true",
@@ -67,7 +67,6 @@ See [instructions](./docker/README.md)
 
 ## Running a Standalone Server
 
-
 1. Run RethinkDB:
 	```
 	rethinkdb --bind all --daemon
@@ -81,17 +80,17 @@ See [instructions](./docker/README.md)
 	```
 	$GOPATH/bin/tinode-db -config=$GOPATH/src/github.com/tinode/chat/tinode-db/tinode.conf -data=$GOPATH/src/github.com/tinode/chat/tinode-db/data.json
 	```
-	
+
 	DB intializer needs to be run only once per installation. See [instructions](tinode-db/README.md) for more options.
 
 3. Unpack JS client to a directory, for instance `$HOME/tinode/example-react-js/` by first unzipping `https://github.com/tinode/example-react-js/archive/master.zip` then extract `tinode.js` from `https://github.com/tinode/tinode-js/archive/master.zip` to the same directory.
 
-4. Run server 
+4. Run server
 	```
 	$GOPATH/bin/server -config=$GOPATH/src/github.com/tinode/chat/server/tinode.conf -static_data=$HOME/tinode/example-react-js/
 	```
 
-5. Test your installation by pointing your browser to [http://localhost:6060/x/](http://localhost:6060/x/). Keep in mind that by default the static files from the `-static_data` path are served at `/x/`. You can change this by editing the line `static_mount` in the config file.
+5. Test your installation by pointing your browser to [http://localhost:6060/](http://localhost:6060/). The static files from the `-static_data` path are served at web root `/`. You can change this by editing the line `static_mount` in the config file.
 
 6.  If you want to use the [Android client](https://github.com/tinode/android-example) and want push notification to work, find the section `"push"` in `tinode.conf`, item `"name": "fcm"`, then change `"enabled"` to `true`. Go to [https://console.firebase.google.com/](https://console.firebase.google.com/) (https://console.firebase.google.com/project/**NAME-OF-YOUR-PROJECT**/settings/cloudmessaging) and get a server key. Paste the key to the `"api_key"` field. See more at [https://github.com/tinode/android-example](https://github.com/tinode/android-example).
 
@@ -99,7 +98,7 @@ See [instructions](./docker/README.md)
 
 - Install RethinkDB, run it stanalone or in [cluster mode](https://www.rethinkdb.com/docs/start-a-server/#a-rethinkdb-cluster-using-multiple-machines). Run DB initializer, unpack JS files as described in the previous section.
 
-- Cluster expects at least two nodes. A minimum of three nodes is recommended. 
+- Cluster expects at least two nodes. A minimum of three nodes is recommended.
 
 - The following section configures the cluster.
 
@@ -122,7 +121,7 @@ See [instructions](./docker/README.md)
 		}
 	}
 ```
-* `self` is the name of the current node. Generally it's more convenient to specify the name of the current node at the command line using `cluster_self` option. Command line value overrides the config file value. If the value is not provided either in the config file or through the command line, the clustering is disabled. 
+* `self` is the name of the current node. Generally it's more convenient to specify the name of the current node at the command line using `cluster_self` option. Command line value overrides the config file value. If the value is not provided either in the config file or through the command line, the clustering is disabled.
 * `nodes` defines individual cluster nodes. The sample defines three nodes named `one`, `two`, and `tree` running at the localhost at the specified cluster communication ports. Cluster addresses don't need to be exposed to the outside world.
 * `failover` is an experimental feature which migrates topics from failed cluster nodes keeping them accessible:
   * `enabled` turns on failover mode; failover mode requires at least three nodes in the cluster.

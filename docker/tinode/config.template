@@ -1,11 +1,23 @@
 {
 	"listen": ":18080",
-	"static_mount": "/x/",
+	"static_mount": "/",
 	"grpc_listen": ":16061",
 	"api_key_salt": "$API_KEY_SALT",
 	"max_message_size": 4194304,
 	"max_subscriber_count": 32,
 	"max_tag_count": 16,
+
+	"media": {
+		"use_handler": "fs",
+		"max_size": 33554432,
+		"gc_period": 60,
+		"gc_block_size": 100,
+		"handlers": {
+			"fs": {
+				"upload_to": "uploads"
+			}
+		}
+	},
 
 	"tls": {
 		"enabled": false,
@@ -19,6 +31,9 @@
 	},
 
 	"auth_config": {
+		"basic": {
+			"add_to_tags": true
+		},
 		"token": {
 			"expire_in": 1209600,
 			"serial_num": 1,
@@ -27,7 +42,6 @@
 	},
 
 	"store_config": {
-		"worker_id": 1,
 		"uid_key": "$UID_ENCRYPTION_KEY",
 		"adapters": {
 			"mysql": {
@@ -41,15 +55,42 @@
 		}
 	},
 
+	"acc_validation": {
+		"email": {
+			"add_to_tags": true,
+			"required": [],
+			"config": {
+				"smtp_server": "smtp.example.com",
+				"smtp_port": "25",
+				"sender": "noreply@example.com",
+				"sender_password": "your-password-here",
+				"msg_body_templ": "./templ/email-validation-body.templ",
+				"msg_subject": "Tinode chat: confirm email",
+				"headers": [],
+				"max_retries": 4,
+				"debug_response": "123456"
+			}
+		},
+
+		"tel": {
+			"add_to_tags": true,
+			"config": {
+				"template": "./templ/sms-validation.templ",
+				"max_retries": 4,
+				"debug_response": "123456"
+			}
+		}
+	},
+
 	"push": [
 		{
 			"name":"stdout",
 			"config": {
-				"disabled": true
+				"enabled": false
 			}
 		}
 	],
-	
+
 	"plugins": [
 		{
 			"enabled": $PLUGIN_PYTHON_CHAT_BOT_ENABLED,
@@ -63,5 +104,5 @@
 			"service_addr": "tcp://localhost:40051"
 		}
 	]
-	
+
 }
