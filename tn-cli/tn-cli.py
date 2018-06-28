@@ -1,5 +1,8 @@
 """The Python implementation of the gRPC Tinode client."""
 
+# To make print() compatible between p2 and p3
+from __future__ import print_function
+
 import argparse
 import base64
 import grpc
@@ -51,6 +54,16 @@ def make_vcard(fn, photofile):
 
     return card
 
+def parse_cred(cred):
+    result = None
+    if cred != None:
+        result = []
+        for c in cred.split(","):
+            parts = c.split(":")
+            result.append(pb.Credential(method=parts[0], value=parts[1]))
+
+    return result
+
 def encode_to_bytes(src):
     if src == None:
         return None
@@ -62,7 +75,7 @@ def hiMsg(id):
     return pb.ClientMsg(hi=pb.ClientHi(id=str(id), user_agent=APP_NAME + "/" + VERSION + " gRPC-python",
         ver=VERSION, lang="EN"))
 
-def accMsg(id, user, scheme, secret, uname, password, do_login, fn, photo, private, auth, anon, tags):
+def accMsg(id, user, scheme, secret, uname, password, do_login, fn, photo, private, auth, anon, tags, cred):
     if secret == None and uname != None:
         if password == None:
             password = ''
@@ -74,15 +87,19 @@ def accMsg(id, user, scheme, secret, uname, password, do_login, fn, photo, priva
     return pb.ClientMsg(acc=pb.ClientAcc(id=str(id), user_id=user,
         scheme=scheme, secret=secret, login=do_login, tags=tags.split(",") if tags else None,
         desc=pb.SetDesc(default_acs=pb.DefaultAcsMode(auth=auth, anon=anon),
-        public=public, private=private)))
+        public=public, private=private, cred=parse_cred(cred))))
 
-def loginMsg(id, scheme, secret, uname=None, password=None):
+def loginMsg(id, scheme, secret, cred, uname, password):
     if secret == None and uname != None:
         if password == None:
             password = ''
         secret = str(uname) + ":" + str(password)
+
+    if secret != None:
+        secret=secret.encode('utf-8')
     onCompletion[str(id)] = lambda params: save_cookie(params)
-    return pb.ClientMsg(login=pb.ClientLogin(id=str(id), scheme=scheme, secret=secret.encode('utf-8')))
+    return pb.ClientMsg(login=pb.ClientLogin(id=str(id), scheme=scheme,
+        secret=secret, cred=parse_cred(cred)))
 
 def subMsg(id, topic, fn, photo, private, auth, anon, mode, tags, get_query):
     if get_query:
@@ -194,13 +211,15 @@ def parse_cmd(cmd):
         parser.add_argument('--private', default=None, help='user\'s private info')
         parser.add_argument('--auth', default=None, help='default access mode for authenticated users')
         parser.add_argument('--anon', default=None, help='default access mode for anonymous users')
+        parser.add_argument('--cred', default=None, help='credentials, comma separated list in method:value format, e.g. email:test@example.com,tel:12345')
     elif parts[0] == "login":
         parser = argparse.ArgumentParser(prog=parts[0], description='Authenticate current session')
-        parser.add_argument('--scheme', default='basic')
-        parser.add_argument('secret', nargs='?', default=argparse.SUPPRESS)
-        parser.add_argument('--secret', dest='secret', default=None)
-        parser.add_argument('--uname', default=None)
-        parser.add_argument('--password', default=None)
+        parser.add_argument('--scheme', default='basic', help='authentication schema, default=basic')
+        parser.add_argument('secret', nargs='?', default=argparse.SUPPRESS, help='authentication secret')
+        parser.add_argument('--secret', dest='secret', default=None, help='authentication secret')
+        parser.add_argument('--uname', default=None, help='user name in basic authentication scheme')
+        parser.add_argument('--password', default=None, help='password in basic authentication scheme')
+        parser.add_argument('--cred', default=None, help='credentials, comma separated list in method:value format, e.g. email:test@example.com,tel:12345')
     elif parts[0] == "sub":
         parser = argparse.ArgumentParser(prog=parts[0], description='Subscribe to topic')
         parser.add_argument('topic', nargs='?', default=argparse.SUPPRESS, help='topic to subscribe to')
@@ -293,9 +312,9 @@ def serialize_cmd(string, id):
     # Process dictionary
     if cmd.cmd == "acc":
         return accMsg(id, cmd.user, cmd.scheme, cmd.secret, cmd.uname, cmd.password,
-            cmd.do_login, cmd.fn, cmd.photo, cmd.private, cmd.auth, cmd.anon, cmd.tags)
+            cmd.do_login, cmd.fn, cmd.photo, cmd.private, cmd.auth, cmd.anon, cmd.tags, cmd.cred)
     elif cmd.cmd == "login":
-        return loginMsg(id, cmd.scheme, cmd.secret, cmd.uname, cmd.password)
+        return loginMsg(id, cmd.scheme, cmd.secret, cmd.cred, cmd.uname, cmd.password)
     elif cmd.cmd == "sub":
         return subMsg(id, cmd.topic, cmd.fn, cmd.photo, cmd.private, cmd.auth, cmd.anon,
             cmd.mode, cmd.tags, cmd.get_query)
@@ -401,7 +420,7 @@ def save_cookie(params):
         print("Failed to save authentication cookie", err)
 
 def print_server_params(params):
-    print("Connected to server:")
+    print("\rConnected to server:")
     for p in params:
          print("\t" + p + ": " + json.loads(params[p]))
 
@@ -414,27 +433,29 @@ if __name__ == '__main__':
     parser.add_argument('--login-basic', help='login using basic authentication username:password')
     parser.add_argument('--login-token', help='login using token authentication')
     parser.add_argument('--login-cookie', action='store_true', help='read token from cookie file and use it for authentication')
+    parser.add_argument('--no-login', action='store_true', help='do not login even if cookie file is present')
     args = parser.parse_args()
 
     print("Server '" + args.host + "'")
 
     schema = None
     secret = None
-    if args.login_cookie:
-        """Try reading cookie file"""
-        params = read_cookie()
-        if params != None:
+    if args.no_login == None:
+        if args.login_cookie:
+            """Try reading cookie file"""
+            params = read_cookie()
+            if params != None:
+                schema = 'token'
+                secret = base64.b64decode(params.get('token').encode('ascii'))
+
+        if schema == None and args.login_token != None:
+            """Use token to login"""
             schema = 'token'
-            secret = base64.b64decode(params.get('token').encode('ascii'))
+            secret = args.login_token
 
-    if schema == None and args.login_token != None:
-        """Use token to login"""
-        schema = 'token'
-        secret = args.login_token
-
-    if schema == None and args.login_basic != None:
-        """Use username:password"""
-        schema = 'basic'
-        secret = args.login_basic
+        if schema == None and args.login_basic != None:
+            """Use username:password"""
+            schema = 'basic'
+            secret = args.login_basic
 
     run(args.host, schema, secret)
