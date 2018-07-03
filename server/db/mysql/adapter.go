@@ -350,7 +350,7 @@ func (a *adapter) CreateDb(reset bool) error {
 			hi			INT NOT NULL,
 			PRIMARY KEY(id),
 			FOREIGN KEY(topic) REFERENCES topics(name),
-			UNIQUE INDEX dellog_topic_delid_deletedfor(topic,delid,deletedfor),
+			INDEX dellog_topic_delid_deletedfor(topic,delid,deletedfor),
 			INDEX dellog_topic_deletedfor_low_hi(topic,deletedfor,low,hi),
 			INDEX dellog_deletedfor(deletedfor)
 		);`); err != nil {

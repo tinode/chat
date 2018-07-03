@@ -30,7 +30,7 @@ func genDb(reset bool, dbSource string, data *Data) {
 			log.Fatal("Failed to init DB: ", err)
 		}
 	} else {
-		log.Println("DB successfully initialized")
+		log.Println("Successfully initialized", store.GetAdapterName())
 
 	}
 	if data.Users == nil {

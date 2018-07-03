@@ -1862,12 +1862,6 @@ func (t *Topic) replyDelMsg(sess *Session, del *MsgClientDel) error {
 
 	var err error
 
-	defer func() {
-		if err != nil {
-			log.Println("failed to delete message(s):", err)
-		}
-	}()
-
 	var ranges []types.Range
 	if len(del.DelSeq) == 0 {
 		err = errors.New("del.msg: no IDs to delete")

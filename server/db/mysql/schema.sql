@@ -153,7 +153,7 @@ CREATE TABLE dellog(
 	PRIMARY KEY(id),
 	FOREIGN KEY(topic) REFERENCES topics(name),
 	# For getting the list of deleted message ranges
-	UNIQUE INDEX dellog_topic_delid_deletedfor(topic,delid,deletedfor),
+	INDEX dellog_topic_delid_deletedfor(topic,delid,deletedfor),
 	# Used when getting not-yet-deleted messages(messages LEFT JOIN dellog)
 	INDEX dellog_topic_deletedfor_low_hi(topic,deletedfor,low,hi), 
 	# Used when deleting a user
