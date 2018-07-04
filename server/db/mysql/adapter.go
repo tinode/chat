@@ -1528,9 +1528,9 @@ func (a *adapter) MessageDeleteList(topic string, toDel *t.DelMessage) (err erro
 		seqCount := 0
 		for _, rng := range toDel.SeqIdRanges {
 			if rng.Hi == 0 {
-				rng.Hi = rng.Low
+				rng.Hi = rng.Low + 1
 			}
-			seqCount += rng.Hi - rng.Low + 1
+			seqCount += rng.Hi - rng.Low
 			if _, err = insert.Exec(topic, forUser, toDel.DelId, rng.Low, rng.Hi); err != nil {
 				break
 			}
