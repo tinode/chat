@@ -918,7 +918,7 @@ Tinode provides two endpoints for handling large files: `/v0/file/u` for uploadi
 
 ### Uploading
 
-To upload a file create an RFC 2388 multipart request and send it to the server using HTTP POST. The server responds to the request either with a `307 Temporary Redirect` or with a `200 OK` and a `{ctrl}` message in response body:
+To upload a file first create an RFC 2388 multipart request then send it to the server using HTTP POST. The server responds to the request either with a `307 Temporary Redirect` or with a `200 OK` and a `{ctrl}` message in response body:
 
 ```js
 ctrl: {
@@ -933,7 +933,7 @@ ctrl: {
 
 The `ctrl.params.url` contains the location of the uploaded file relative to the main server. 
 
-Once the server response with the `url` is received, either immediately or after following a redirect, the client can use the `url` to send a `{pub}` message with the uploaded file as an attachment. The `url` should be used to produce a [Drafty](./drafty.md)-formatted `pub.content` field and also should be referenced in the `pub.head.attachments`:
+Once the `url` is received, either immediately or after following the redirect, the client can use the `url` to send a `{pub}` message with the uploaded file as an attachment. The `url` should be used to produce a [Drafty](./drafty.md)-formatted `pub.content` field and also should be referenced in the `pub.head.attachments`:
 
 ```js:
 pub: {
@@ -966,7 +966,7 @@ pub: {
 }
 ```
  
-It's important to list the URLs in the `head.attachments` field. Tinode server uses this field to maintain the uploaded file's use counters. If the use counter drops to zero for a given file (for instance, because a message with the shared URL was deleted or because the client failed to include the URl in the `head.attachments` field), the server will garbage collect the file. Only relative URLs should be used. Absolute URLs in the `head.attachments` field are ignored. 
+It's important to list the URLs in the `head.attachments` field. Tinode server uses this field to maintain the uploaded file's use counter. Once the use counter drops to zero for a given file (for instance, because a message with the shared URL was deleted or because the client failed to include the URl in the `head.attachments` field), the server will garbage collect the file. Only relative URLs should be used. Absolute URLs in the `head.attachments` field are ignored. 
 
 ### Downloading
 
