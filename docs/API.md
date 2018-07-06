@@ -887,4 +887,9 @@ Format of `{pub}` and `{data}` `content` field is application-defined and as suc
  * Plain text
  * [Drafty](./drafty.md)
 
-If Drafty is used, message header `"head":{"mime":"text/x-drafty"}` must be set.
+If Drafty is used, message header `"head": {"mime": "text/x-drafty"}` must be set.
+
+
+## Out-of-Band Handling of Large Files
+
+TBD (see code for now).
