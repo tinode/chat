@@ -247,9 +247,12 @@ func genDb(reset bool, dbSource string, data *Data) {
 
 	seqIds := map[string]int{}
 
-	// Starting 4 days ago
-	timestamp := time.Now().UTC().Round(time.Millisecond).Add(time.Second * time.Duration(-3600*24*4))
+	now := time.Now().UTC().Add(-time.Minute).Round(time.Millisecond)
+	// Starting 4 days ago.
+	timestamp := now.Add(time.Hour * time.Duration(-24*4))
 	toInsert := 96 // 96 is the maximum, otherwise messages may appear in the future
+	// Initial maximum increment of the message sent time in milliseconds
+	increment := 3600 * 1000
 	subIdx := rand.Intn(len(data.Groupsubs) + len(data.P2psubs)*2)
 	for i := 0; i < toInsert; i++ {
 		// At least 20% of subsequent messages should come from the same user in the same topic.
@@ -274,7 +277,7 @@ func genDb(reset bool, dbSource string, data *Data) {
 		seqId := seqIds[topic]
 		str := data.Messages[rand.Intn(len(data.Messages))]
 		// Max time between messages is 2 hours, averate - 1 hour, time is increasing as seqId increases
-		timestamp = timestamp.Add(time.Millisecond * time.Duration(rand.Intn(3600*2*1000)))
+		timestamp = timestamp.Add(time.Microsecond * time.Duration(rand.Intn(increment)))
 		if err = store.Messages.Save(&types.Message{
 			ObjHeader: types.ObjHeader{CreatedAt: timestamp},
 			SeqId:     seqId,
@@ -283,6 +286,10 @@ func genDb(reset bool, dbSource string, data *Data) {
 			Content:   str}); err != nil {
 			log.Fatal("Failed to create message: ", err)
 		}
+
+		// New increment: remaining time until 'now' divided by the number of messages to be inserted,
+		// then converted to milliseconds.
+		increment = int(now.Sub(timestamp).Nanoseconds() / int64(toInsert-i) / 1000000)
 
 		// log.Printf("Msg.seq=%d at %v, topic='%s' from='%s'", msg.SeqId, msg.CreatedAt, topic, from.UserId())
 	}

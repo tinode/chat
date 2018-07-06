@@ -101,6 +101,7 @@ A text-only [command line client](./tn-cli) implements every possible command.
   <kbd><img src="docs/web-mob-contacts-1.png" alt="Mobile web: contacts" width=323 /></kbd> <kbd><img src="docs/web-mob-chat-1.png" alt="Mobile web: chat" width=323 /></kbd> <kbd><img src="docs/web-mob-info-1.png" alt="Mobile web: topic info" width=323 /></kbd> <kbd><img src="docs/web-mob-new-chat-1.png" alt="Mobile web: start new 1:1 chat" width=323 /></kbd>
 </p>
 
-# SEO Strings (word 'chat' in Chinese, Russian, and Persian)
+
+#### SEO Strings (word 'chat' in Chinese, Russian, and Persian)
 
 聊天室 чат گپ

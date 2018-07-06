@@ -1444,6 +1444,7 @@ func (a *adapter) MessageGetDeleted(topic string, forUser t.Uid, opts *t.QueryOp
 			lower = opts.Since
 		}
 		if opts.Before > 1 {
+			// DelRange is inclusive-exclusive, while BETWEEN is inclusive-inclisive.
 			upper = opts.Before - 1
 		}
 
@@ -1480,7 +1481,7 @@ func (a *adapter) MessageGetDeleted(topic string, forUser t.Uid, opts *t.QueryOp
 				dmsg.SeqIdRanges = []t.Range{}
 			}
 		}
-		if dellog.Hi == dellog.Low {
+		if dellog.Hi <= dellog.Low+1 {
 			dellog.Hi = 0
 		}
 		dmsg.SeqIdRanges = append(dmsg.SeqIdRanges, t.Range{dellog.Low, dellog.Hi})
@@ -1528,6 +1529,7 @@ func (a *adapter) MessageDeleteList(topic string, toDel *t.DelMessage) (err erro
 		seqCount := 0
 		for _, rng := range toDel.SeqIdRanges {
 			if rng.Hi == 0 {
+				// Dellog must contain valid Low and *Hi*.
 				rng.Hi = rng.Low + 1
 			}
 			seqCount += rng.Hi - rng.Low
