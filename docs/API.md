@@ -40,6 +40,8 @@ Server-issued message IDs are base-10 sequential numbers starting at 1. They gua
 Client establishes a connection to the server over HTTP(S). Server offers two end points:
  * `/v0/channels` for websocket connections
  * `/v0/channels/lp` for long polling
+ * `/v0/file/u` for file uploads
+ * `/v0/file/s` for file serving (downloads)
 
 `v0` denotes API version (currently zero). Every HTTP(S) request must include the API key. It may be included in the URL as `...?apikey=<YOUR_API_KEY>`, in the request body as `apikey=<YOUR_API_KEY>`, or in the HTTP header `X-Tinode-APIKey: <YOUR_API_KEY>`. A default key is included in every demo app for convenience. Generate your own key using [`keygen` utility](../keygen).
 
@@ -54,6 +56,10 @@ Messages are sent in text frames, one message per frame. Binary frames are reser
 Long polling works over `HTTP POST` (preferred) or `GET`. In response to client's very first request server sends a `{ctrl}` message containing `sid` (session ID) in `params`. Long polling client must include `sid` in every subsequent request either in URL or in request body.
 
 Server allows connections from all origins, i.e. `Access-Control-Allow-Origin: *`
+
+### Out of Band Large Files
+
+Large files are sent out of band using `HTTP POST` as `Content-Type: multipart/form-data`. See [below](#out-of-band-handling-of-large-files) for details.
 
 ## Messages
 
@@ -892,4 +898,76 @@ If Drafty is used, message header `"head": {"mime": "text/x-drafty"}` must be se
 
 ## Out-of-Band Handling of Large Files
 
-TBD (see code for now).
+Large files create problems when sent in-band for multiple reasons: 
+ * limits on database storage as in-band messages are stored in database fields
+ * in-band messages must be downloaded completely as a part of downloading chat history
+
+Tinode provides two endpoints for handling large files: `/v0/file/u` for uploading files and `v0/file/s` for downloading. The endpoints require the client to provide both API key and login credentials. The server checks credentials in the following order:
+
+ **API key**
+ * HTTP header `X-Tinode-APIKey`
+ * URL query parameter `apikey` (/v0/file/s/abcdefg.jpeg?apikey=...)
+ * Form value `apikey`
+ * Cookie `apikey`
+
+**Login credentials**
+ * HTTP header `Authorization` (https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Authorization)
+ * URL query parameters `auth` and `secret` (/v0/file/s/abcdefg.jpeg?auth=...&secret=...)
+ * Form values `auth` and `secret`
+ * Cookies `auth` and `secret`
+
+### Uploading
+
+To upload a file create an RFC 2388 multipart request and send it to the server using HTTP POST. The server responds to the request either with a `307 Temporary Redirect` or with a `200 OK` and a `{ctrl}` message in response body:
+
+```js
+ctrl: {
+  params: {
+    url: "/v0/file/s/mfHLxDWFhfU.pdf"
+  }, 
+  code: 200, 
+  text: "ok", 
+  ts: "2018-07-06T18:47:51.265Z"
+}
+```
+
+The `ctrl.params.url` contains the location of the uploaded file relative to the main server. 
+
+Once the server response with the `url` is received, either immediately or after following a redirect, the client can use the `url` to send a `{pub}` message with the uploaded file as an attachment. The `url` should be used to produce a [Drafty](./drafty.md)-formatted `pub.content` field and also should be referenced in the `pub.head.attachments`:
+
+```js:
+pub: {
+  id: "121103",
+  topic: "grpnG99YhENiQU",
+  head: {
+    attachments: ["/v0/file/s/sJOD_tZDPz0.jpg"],
+	mime: "text/x-drafty"
+  },
+  content: {
+    ent: [
+	  {
+	    data: {
+		  mime: "image/jpeg",
+		  name: "roses-are-red.jpg",
+		  ref:  "/v0/file/s/sJOD_tZDPz0.jpg",
+		  size: 437265
+		},
+	    tp: "EX"
+	  }
+	],
+	fmt: [
+	  {
+	    at: -1, 
+		key:0, 
+		len:1
+	  }
+	]
+  }
+}
+```
+ 
+It's important to list the URLs in the `head.attachments` field. Tinode server uses this field to maintain the uploaded file's use counters. If the use counter drops to zero for a given file (for instance, because a message with the shared URL was deleted or because the client failed to include the URl in the `head.attachments` field), the server will garbage collect the file. Only relative URLs should be used. Absolute URLs in the `head.attachments` field are ignored. 
+
+### Downloading
+
+The default serving endpoint `v0/file/s` serves files in response to HTTP GET requests. As a security measure, the client should not send security credentials if the download URL is absolute and leads to another server.
