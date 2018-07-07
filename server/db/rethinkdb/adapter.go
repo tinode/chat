@@ -1525,7 +1525,7 @@ func (a *adapter) FileStartUpload(fd *t.FileDef) error {
 	return err
 }
 
-// FileFinishUpload markes file upload as completed, successfully or otherwise
+// FileFinishUpload marks file upload as completed, successfully or otherwise
 func (a *adapter) FileFinishUpload(fid string, status int, size int64) (*t.FileDef, error) {
 	if _, err := rdb.DB(a.dbName).Table("fileuploads").Get(fid).
 		Update(map[string]interface{}{

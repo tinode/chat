@@ -69,6 +69,11 @@ func largeFileServe(wrt http.ResponseWriter, req *http.Request) {
 	}
 
 	fd, rsc, err := mh.Download(req.URL.String())
+	if err != nil {
+		writeHttpResponse(decodeStoreError(err, "", "", now, nil))
+		return
+	}
+
 	defer rsc.Close()
 
 	wrt.Header().Set("Content-Type", fd.MimeType)
