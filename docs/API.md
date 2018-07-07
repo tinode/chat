@@ -931,7 +931,7 @@ ctrl: {
 }
 ```
 
-The `ctrl.params.url` contains the location of the uploaded file relative to the main server. 
+The `ctrl.params.url` contains the location of the uploaded file relative to the *download* endpoint `/v0/file/s/` at the current HTTP server. 
 
 Once the `url` is received, either immediately or after following the redirect, the client can use the `url` to send a `{pub}` message with the uploaded file as an attachment. The `url` should be used to produce a [Drafty](./drafty.md)-formatted `pub.content` field and also should be referenced in the `pub.head.attachments`:
 
@@ -970,4 +970,4 @@ It's important to list the URLs in the `head.attachments` field. Tinode server u
 
 ### Downloading
 
-The default serving endpoint `v0/file/s` serves files in response to HTTP GET requests. As a security measure, the client should not send security credentials if the download URL is absolute and leads to another server.
+The serving endpoint `/v0/file/s` serves files in response to HTTP GET requests. The client must evaluate relative URLs against this endpoint, i.e. if it receives a URL `mfHLxDWFhfU.pdf` or `./mfHLxDWFhfU.pdf` it should interpret it as a path `/v0/file/s/mfHLxDWFhfU.pdf` at the current Tinode HTTP server. As a security measure, the client should not send security credentials if the download URL is absolute and leads to another server.
