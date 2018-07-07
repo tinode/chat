@@ -8,12 +8,14 @@ import (
 	"github.com/tinode/chat/server/store/types"
 )
 
+// ReadSeekCloser is an interface expected by the downloader.
 type ReadSeekCloser interface {
 	io.Reader
 	io.Seeker
 	io.Closer
 }
 
+// Handler is an interface which must be implemented by media handlers (uploaders-downloaders).
 type Handler interface {
 	// Init initializes the media upload handler.
 	Init(jsconf string) error

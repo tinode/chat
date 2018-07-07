@@ -969,9 +969,13 @@ type DeviceDef struct {
 	Lang string
 }
 
+// Media handling constants
 const (
+	// UploadStarted indicates that the upload has started but not finished yet.
 	UploadStarted = iota
+	// UploadCompleted indicates that the upload has completed successfully.
 	UploadCompleted
+	// UploadFailed indicates that the upload has failed.
 	UploadFailed
 )
 

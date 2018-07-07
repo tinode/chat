@@ -654,6 +654,7 @@ func (DeviceMapper) Delete(uid types.Uid, deviceID string) error {
 // Registered media/file handlers.
 var fileHandlers map[string]media.Handler
 
+// RegisterMediaHandler saves reference to a media handler (file upload-download handler).
 func RegisterMediaHandler(name string, mh media.Handler) {
 	if fileHandlers == nil {
 		fileHandlers = make(map[string]media.Handler)
@@ -668,10 +669,12 @@ func RegisterMediaHandler(name string, mh media.Handler) {
 	fileHandlers[name] = mh
 }
 
+// GetMediaHandler returns default media handler.
 func GetMediaHandler() media.Handler {
 	return mediaHandler
 }
 
+// UseMediaHandler sets specified media handler as default.
 func UseMediaHandler(name, config string) error {
 	mediaHandler = fileHandlers[name]
 	if mediaHandler == nil {
