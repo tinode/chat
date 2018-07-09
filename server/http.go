@@ -51,7 +51,7 @@ type tlsAutocertConfig struct {
 	Email string `json:"email"`
 }
 
-func listenAndServe(addr string, tlsEnabled bool, jsconfig string, stop <-chan bool) error {
+func listenAndServe(addr string, mux *http.ServeMux, tlsEnabled bool, jsconfig string, stop <-chan bool) error {
 	var tlsConfig tlsConfig
 
 	if jsconfig != "" {
@@ -64,7 +64,10 @@ func listenAndServe(addr string, tlsEnabled bool, jsconfig string, stop <-chan b
 
 	httpdone := make(chan bool)
 
-	server := &http.Server{Addr: addr}
+	server := &http.Server{
+		Addr:    addr,
+		Handler: mux,
+	}
 	if tlsEnabled || tlsConfig.Enabled {
 
 		if tlsConfig.StrictMaxAge > 0 {
@@ -103,6 +106,8 @@ func listenAndServe(addr string, tlsEnabled bool, jsconfig string, stop <-chan b
 			if tlsConfig.RedirectHTTP != "" {
 				log.Printf("Redirecting connections from HTTP at [%s] to HTTPS at [%s]",
 					tlsConfig.RedirectHTTP, server.Addr)
+
+				// This is a second HTTP server listenning on a different port.
 				go http.ListenAndServe(tlsConfig.RedirectHTTP, tlsRedirect(addr))
 			}
 

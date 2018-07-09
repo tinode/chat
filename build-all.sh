@@ -107,6 +107,19 @@ do
   done
 done
 
+# Need to rebuild lthe inux-rethink binary without stripping debug info.
+echo "Building the binary for the demo at api.tinode.co"
+
+rm -f $GOPATH/bin/tinode
+rm -f $GOPATH/bin/init-db
+
+~/go/bin/gox -osarch=linux/amd64 \
+  -ldflags "-X main.buildstamp=`git describe --tags`" \
+  -tags rethinkdb -output $GOPATH/bin/tinode ./server > /dev/null
+~/go/bin/gox -osarch=linux/amd64 \
+  -tags rethinkdb -output $GOPATH/bin/init-db ./tinode-db > /dev/null
+
+
 # Build chatbot release
 echo "Building chatbot..."
 

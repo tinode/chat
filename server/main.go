@@ -12,12 +12,13 @@ package main
 
 import (
 	"encoding/json"
-	_ "expvar"
+	"expvar"
 	"flag"
 	"log"
 	"net/http"
 	"os"
 	"runtime"
+	"runtime/pprof"
 	"strings"
 	"time"
 
@@ -84,7 +85,7 @@ const (
 	defaultMaxDeleteCount = 1024
 
 	// Mount point where static content is served, http://host-name/<defaultStaticMount>
-	defaultStaticMount = "/x/"
+	defaultStaticMount = "/"
 
 	// Local path to static content
 	defaultStaticPath = "static"
@@ -200,7 +201,6 @@ type configType struct {
 func main() {
 	log.Printf("Server 'v%s:%s:%s'; pid %d; started with %d process(es)", currentVersion,
 		buildstamp, store.GetAdapterName(), os.Getpid(), runtime.GOMAXPROCS(runtime.NumCPU()))
-
 	var configfile = flag.String("config", "./tinode.conf", "Path to config file.")
 	// Path to static content.
 	var staticPath = flag.String("static_data", defaultStaticPath, "Path to directory with static files to be served.")
@@ -208,6 +208,8 @@ func main() {
 	var listenGrpc = flag.String("grpc_listen", "", "Override address and port to listen on for gRPC clients.")
 	var tlsEnabled = flag.Bool("tls_enabled", false, "Override config value for enabling TLS")
 	var clusterSelf = flag.String("cluster_self", "", "Override the name of the current cluster node")
+	var expvarPath = flag.String("expvar", "", "Expose runtime stats at the given endpoint, e.g. /debug/vars. Disabled if not set")
+	var pprofFile = flag.String("pprof", "", "File name to save profiling info to. Disabled if not set")
 	flag.Parse()
 
 	log.Printf("Using config from '%s'", *configfile)
@@ -227,7 +229,27 @@ func main() {
 	// Cluster won't be started here yet.
 	workerId := clusterInit(config.Cluster, clusterSelf)
 
-	var err = store.Open(workerId, string(config.Store))
+	if *pprofFile != "" {
+		cpuf, err := os.Create(*pprofFile + ".cpu")
+		if err != nil {
+			log.Fatal("Failed to create CPU pprof file:", err)
+		}
+		defer cpuf.Close()
+
+		memf, err := os.Create(*pprofFile + ".mem")
+		if err != nil {
+			log.Fatal("Failed to create Mem pprof file:", err)
+		}
+		defer memf.Close()
+
+		pprof.StartCPUProfile(cpuf)
+		defer pprof.StopCPUProfile()
+		defer pprof.WriteHeapProfile(memf)
+
+		log.Printf("Profiling info saved to '%s.(cpu|mem)'", *pprofFile)
+	}
+
+	err := store.Open(workerId, string(config.Store))
 	if err != nil {
 		log.Fatal("Failed to connect to DB:", err)
 	}
@@ -269,7 +291,7 @@ func main() {
 
 		if val := store.GetValidator(name); val == nil {
 			log.Fatal("Config provided for an unknown validator '" + name + "'")
-		} else if err := val.Init(string(vconf.Config)); err != nil {
+		} else if err = val.Init(string(vconf.Config)); err != nil {
 			log.Fatal("Failed to init validator '"+name+"':", err)
 		}
 		if globals.validators == nil {
@@ -357,10 +379,21 @@ func main() {
 	// Intialize plugins
 	pluginsInit(config.Plugin)
 
+	// Set up gRPC server, if one is configured
+	if *listenGrpc == "" {
+		*listenGrpc = config.GrpcListen
+	}
+	if globals.grpcServer, err = serveGrpc(*listenGrpc); err != nil {
+		log.Fatal(err)
+	}
+
+	// Set up HTTP server. Must use non-default mux because of expvar.
+	mux := http.NewServeMux()
+
 	// Serve static content from the directory in -static_data flag if that's
 	// available, otherwise assume '<current dir>/static'. The content is served at
 	// the path pointed by 'static_mount' in the config. If that is missing then it's
-	// served at '/x/'.
+	// served at root '/'.
 	var staticMountPoint string
 	if *staticPath != "" && *staticPath != "-" {
 		if *staticPath == defaultStaticPath {
@@ -383,7 +416,7 @@ func main() {
 				staticMountPoint = staticMountPoint + "/"
 			}
 		}
-		http.Handle(staticMountPoint,
+		mux.Handle(staticMountPoint,
 			// Add gzip compression
 			gzip.CompressHandler(
 				// Remove mount point prefix
@@ -397,34 +430,29 @@ func main() {
 		log.Println("Static content is disabled")
 	}
 
-	// Configure HTTP channels
 	// Handle websocket clients.
-	http.HandleFunc("/v0/channels", serveWebSocket)
+	mux.HandleFunc("/v0/channels", serveWebSocket)
 	// Handle long polling clients. Enable compression.
-	http.Handle("/v0/channels/lp", gzip.CompressHandler(http.HandlerFunc(serveLongPoll)))
+	mux.Handle("/v0/channels/lp", gzip.CompressHandler(http.HandlerFunc(serveLongPoll)))
 	if config.Media != nil {
 		// Handle uploads of large files.
-		http.Handle("/v0/file/u", gzip.CompressHandler(http.HandlerFunc(largeFileUpload)))
+		mux.Handle("/v0/file/u/", gzip.CompressHandler(http.HandlerFunc(largeFileUpload)))
 		// Serve large files.
-		http.Handle("/v0/file/s/", gzip.CompressHandler(http.HandlerFunc(largeFileServe)))
+		mux.Handle("/v0/file/s/", gzip.CompressHandler(http.HandlerFunc(largeFileServe)))
+		log.Printf("Large media handling enabled")
 	}
 
 	if staticMountPoint != "/" {
 		// Serve json-formatted 404 for all other URLs
-		http.HandleFunc("/", serve404)
+		mux.HandleFunc("/", serve404)
 	}
 
-	// Set up gRPC server, if one is configured
-	if *listenGrpc == "" {
-		*listenGrpc = config.GrpcListen
-	}
-	if srv, err := serveGrpc(*listenGrpc); err != nil {
-		log.Fatal(err)
-	} else {
-		globals.grpcServer = srv
+	if *expvarPath != "" {
+		mux.Handle(*expvarPath, expvar.Handler())
+		log.Printf("Debug variables exposed at '%s'", *expvarPath)
 	}
 
-	if err := listenAndServe(config.Listen, *tlsEnabled, string(config.TLS), signalHandler()); err != nil {
+	if err = listenAndServe(config.Listen, mux, *tlsEnabled, string(config.TLS), signalHandler()); err != nil {
 		log.Fatal(err)
 	}
 }
