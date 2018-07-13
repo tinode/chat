@@ -6,13 +6,24 @@ Describe your issue here.
 - [ ] Feature request
 
 ### Your environment
+#### Server-side
 - [ ] api.tinode.co
 - [ ] Your own setup:
   * platform (Windows, Mac, Linux etc)
   * version of tinode server, e.g. `0.15.2-rc3`
   * database backend
-  * which client used (javascript, android, cli)
-  * version of the client, e.g. `0.15.1`
+  
+#### Client-side
+- [ ] TinodeWeb/tinodejs: javascript client
+  * Browser make and version.
+- [ ] Tindroid: Android app
+  * Android API level (e.g. 25).
+  * Emulator or hardware, if hardware describe it.
+- [ ] tn-cli
+  * Python version
+- [ ] Chatbot
+  * Python version
+- Version of the client, e.g. `0.15.1`
 
 ### Steps to reproduce
 Tell us how to reproduce this issue.
