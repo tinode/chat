@@ -1447,10 +1447,8 @@ func (t *Topic) replyGetSub(sess *Session, id string, req *MsgGetOpts) error {
 	}
 
 	var ifModified time.Time
-	if req != nil {
-		if req.IfModifiedSince != nil {
-			ifModified = *req.IfModifiedSince
-		}
+	if req != nil && req.IfModifiedSince != nil {
+		ifModified = *req.IfModifiedSince
 	}
 
 	var subs []types.Subscription

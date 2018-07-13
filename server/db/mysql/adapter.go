@@ -789,7 +789,7 @@ func (a *adapter) TopicGet(topic string) (*t.Topic, error) {
 	return tt, nil
 }
 
-// TopicsForUser loads user's contact list: p2p and grp topics, except for 'me' subscription.
+// TopicsForUser loads user's contact list: p2p and grp topics, except for 'me' & 'fnd' subscriptions.
 // Reads and denormalizes Public value.
 func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) ([]t.Subscription, error) {
 	// Fetch user's subscriptions
@@ -904,7 +904,9 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 
 	// Fetch p2p users and join to p2p tables
 	if err == nil && len(usrq) > 0 {
-		q, _, _ := sqlx.In("SELECT * FROM users WHERE id IN (?)", usrq)
+		q, _, _ := sqlx.In(
+			"SELECT id,state,createdat,updatedat,deletedat,access,lastseen,useragent,public,tags FROM users WHERE id IN (?)",
+			usrq)
 		rows, err = a.db.Queryx(q, usrq...)
 		if err != nil {
 			return nil, err

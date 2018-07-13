@@ -552,11 +552,10 @@ func (a *adapter) TopicGet(topic string) (*t.Topic, error) {
 	return tt, nil
 }
 
-// TopicsForUser loads user's contact list: p2p and grp topics, except for 'me' subscription.
+// TopicsForUser loads user's contact list: p2p and grp topics, except for 'me' & 'fnd' subscriptions.
 // Reads and denormalizes Public value.
 func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) ([]t.Subscription, error) {
 	// Fetch user's subscriptions
-	// Subscription have Topic.UpdatedAt denormalized into Subscription.UpdatedAt
 	q := rdb.DB(a.dbName).Table("subscriptions").GetAllByIndex("User", uid.String())
 	if !keepDeleted {
 		// Filter out rows with defined DeletedAt
@@ -612,7 +611,6 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 		join[sub.Topic] = sub
 	}
 
-	//log.Printf("RethinkDbAdapter.TopicsForUser topq, usrq: %+v, %+v", topq, usrq)
 	var subs []t.Subscription
 	if len(topq) > 0 || len(usrq) > 0 {
 		subs = make([]t.Subscription, 0, len(join))
@@ -640,8 +638,6 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 				join[top.Id] = sub
 			}
 		}
-
-		//log.Printf("RethinkDbAdapter.TopicsForUser 1: %#+v", subs)
 	}
 
 	// Fetch p2p users and join to p2p tables
@@ -664,8 +660,6 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 				subs = append(subs, sub)
 			}
 		}
-
-		//log.Printf("RethinkDbAdapter.TopicsForUser 2: %#+v", subs)
 	}
 
 	return subs, nil

@@ -14,6 +14,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -249,13 +250,24 @@ func serve404(wrt http.ResponseWriter, req *http.Request) {
 func tlsRedirect(toPort string) http.HandlerFunc {
 	if toPort == ":443" || toPort == ":https" {
 		toPort = ""
+	} else if toPort != "" && toPort[:1] == ":" {
+		// Strip leading colon. JoinHostPort will add it back.
+		toPort = toPort[1:]
 	}
+
 	return func(wrt http.ResponseWriter, req *http.Request) {
-		target := "https://" + strings.Split(req.Host, ":")[0] + toPort + req.URL.Path
-		if req.URL.RawQuery != "" {
-			target += "?" + req.URL.RawQuery
+		target := *req.URL
+		target.Scheme = "https"
+		if target.Port() != "" {
+			if toPort != "" {
+				// Replace the port number.
+				target.Host = net.JoinHostPort(target.Hostname(), toPort)
+			} else {
+				// Just strip the port number.
+				target.Host = target.Hostname()
+			}
 		}
-		http.Redirect(wrt, req, target, http.StatusTemporaryRedirect)
+		http.Redirect(wrt, req, target.String(), http.StatusTemporaryRedirect)
 	}
 }
 
