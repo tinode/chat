@@ -281,7 +281,6 @@ func (s *Session) subscribe(msg *ClientComMessage) {
 			s.queueOut(ErrClusterNodeUnreachable(msg.Sub.Id, topic, msg.timestamp))
 		}
 	} else {
-		//log.Printf("Sub to'%s' (%s) from '%s' as '%s' -- OK!", expanded, msg.Sub.Topic, msg.from, topic)
 		globals.hub.join <- &sessionJoin{topic: expanded, pkt: msg.Sub, sess: s}
 		// Hub will send Ctrl success/failure packets back to session
 	}
@@ -459,7 +458,7 @@ func (s *Session) acc(msg *ClientComMessage) {
 
 		// Check if login is unique.
 		if ok, err := authhdl.IsUnique(msg.Acc.Secret); !ok {
-			log.Println("Check unique:", err)
+			log.Println("auth: check unique failed", err)
 			s.queueOut(decodeStoreError(err, msg.Acc.Id, "", msg.timestamp, nil))
 			return
 		}
@@ -486,7 +485,7 @@ func (s *Session) acc(msg *ClientComMessage) {
 		for _, cr := range creds {
 			vld := store.GetValidator(cr.Method)
 			if err := vld.PreCheck(cr.Value, cr.Params); err != nil {
-				log.Println("failed credential pre-check", cr, err)
+				log.Println("Failed credential pre-check", cr, err)
 				s.queueOut(decodeStoreError(err, msg.Acc.Id, "", msg.timestamp, nil))
 				return
 			}
@@ -754,7 +753,6 @@ func (s *Session) getValidatedGred(uid types.Uid, authLvl auth.Level, creds []Ms
 	// Add credential which are validated in this call.
 	creds = normalizeCredentials(creds, false)
 	for _, cr := range creds {
-		log.Println("processing credential confirmation", cr)
 		if cr.Response == "" {
 			// Ignore unknown validation type or empty response.
 			continue
@@ -848,7 +846,6 @@ func (s *Session) set(msg *ClientComMessage) {
 			log.Println("s.set: nil Set action")
 		}
 
-		log.Println("s.set: sending to topic")
 		sub.meta <- meta
 	} else if globals.cluster.isRemoteTopic(expanded) {
 		// The topic is handled by a remote node. Forward message to it.
@@ -885,7 +882,6 @@ func (s *Session) del(msg *ClientComMessage) {
 	sub, ok := s.subs[expanded]
 	if ok && what != constMsgDelTopic {
 		// Session is attached, deleting subscription or messages. Send to topic.
-		log.Println("s.del: sending to topic")
 		sub.meta <- &metaReq{
 			topic: expanded,
 			pkt:   msg,
