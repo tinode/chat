@@ -748,7 +748,7 @@ type Topic struct {
 }
 
 // GiveAccess updates access mode for the given user.
-func (t *Topic) GiveAccess(uid Uid, want AccessMode, given AccessMode) {
+func (t *Topic) GiveAccess(uid Uid, want, given AccessMode) {
 	if t.perUser == nil {
 		t.perUser = make(map[Uid]*perUserData, 1)
 	}

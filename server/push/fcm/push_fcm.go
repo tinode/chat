@@ -86,12 +86,13 @@ func sendNotification(rcpt *push.Receipt, config *configType) {
 	}
 
 	sendTo := make([]string, count)
-	i := 0
+	count = 0
 	for _, devList := range devices {
-		for _, d := range devList {
+		for i := range devList {
+			d := &devList[i]
 			if _, ok := skipDevices[d.DeviceId]; !ok {
-				sendTo[i] = d.DeviceId
-				i++
+				sendTo[count] = d.DeviceId
+				count++
 			}
 		}
 	}
@@ -136,23 +137,23 @@ func sendNotification(rcpt *push.Receipt, config *configType) {
 		// Generate an inverse index to speed up processing
 		devIds := make(map[string]t.Uid)
 		for uid, devList := range devices {
-			for _, d := range devList {
-				devIds[d.DeviceId] = uid
+			for i := range devList {
+				devIds[devList[i].DeviceId] = uid
 			}
 		}
 
-		i = 0
-		for _, fail := range resp.Results {
-			switch fail.Error {
+		count = 0
+		for i := range resp.Results {
+			switch resp.Results[i].Error {
 			case fcm.ErrorInvalidRegistration,
 				fcm.ErrorNotRegistered,
 				fcm.ErrorMismatchSenderId:
-				if uid, ok := devIds[sendTo[i]]; ok {
-					store.Devices.Delete(uid, sendTo[i])
+				if uid, ok := devIds[sendTo[count]]; ok {
+					store.Devices.Delete(uid, sendTo[count])
 					// log.Printf("FCM push: %s; token removed: %s", fail.Error, sendTo[i])
 				}
 			}
-			i++
+			count++
 		}
 	}
 

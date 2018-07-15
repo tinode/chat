@@ -558,7 +558,8 @@ func (MessagesObjMapper) GetDeleted(topic string, forUser types.Uid, opt *types.
 	var ranges []types.Range
 	var maxID int
 	// Flatten out the ranges
-	for _, dm := range dmsgs {
+	for i := range dmsgs {
+		dm := &dmsgs[i]
 		if dm.DelId > maxID {
 			maxID = dm.DelId
 		}

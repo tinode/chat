@@ -243,7 +243,8 @@ func (t *Topic) run(hub *Hub) {
 
 				pud := t.perUser[leave.sess.uid]
 				pud.online--
-				if t.cat == types.TopicCatMe {
+				switch t.cat {
+				case types.TopicCatMe:
 					mrs := t.mostRecentSession()
 					if mrs == nil {
 						// Last session
@@ -259,13 +260,15 @@ func (t *Topic) run(hub *Hub) {
 					if err := store.Users.UpdateLastSeen(mrs.uid, mrs.userAgent, now); err != nil {
 						log.Println(err)
 					}
-				} else if t.cat == types.TopicCatFnd {
+				case types.TopicCatFnd:
 					// Remove ephemeral query.
 					t.fndRemovePublic(leave.sess)
-				} else if t.cat == types.TopicCatGrp && pud.online == 0 {
-					// User is going offline: notify online subscribers on 'me'
-					t.presSubsOnline("off", leave.sess.uid.UserId(), nilPresParams,
-						&presFilters{filterIn: types.ModeRead}, "")
+				case types.TopicCatGrp:
+					if pud.online == 0 {
+						// User is going offline: notify online subscribers on 'me'
+						t.presSubsOnline("off", leave.sess.uid.UserId(), nilPresParams,
+							&presFilters{filterIn: types.ModeRead}, "")
+					}
 				}
 
 				t.perUser[leave.sess.uid] = pud
@@ -454,11 +457,12 @@ func (t *Topic) run(hub *Hub) {
 
 					if t.cat == types.TopicCatP2P {
 						// For p2p topics topic name is dependent on receiver
-						if msg.Data != nil {
+						switch {
+						case msg.Data != nil:
 							msg.Data.Topic = t.original(sess.uid)
-						} else if msg.Pres != nil {
+						case msg.Pres != nil:
 							msg.Pres.Topic = t.original(sess.uid)
-						} else if msg.Info != nil {
+						case msg.Info != nil:
 							msg.Info.Topic = t.original(sess.uid)
 						}
 					}
@@ -494,7 +498,8 @@ func (t *Topic) run(hub *Hub) {
 			// log.Printf("topic[%s]: got meta message '%#+v' %x", t.name, meta, meta.what)
 
 			// Request to get/set topic metadata
-			if meta.pkt.Get != nil {
+			switch {
+			case meta.pkt.Get != nil:
 				// Get request
 				if meta.what&constMsgMetaDesc != 0 {
 					if err := t.replyGetDesc(meta.sess, meta.pkt.Get.Id, "", meta.pkt.Get.Desc); err != nil {
@@ -517,7 +522,7 @@ func (t *Topic) run(hub *Hub) {
 					}
 				}
 
-			} else if meta.pkt.Set != nil {
+			case meta.pkt.Set != nil:
 				// Set request
 				if meta.what&constMsgMetaDesc != 0 {
 					if err := t.replySetDesc(meta.sess, meta.pkt.Set); err == nil {
@@ -538,7 +543,7 @@ func (t *Topic) run(hub *Hub) {
 					}
 				}
 
-			} else if meta.pkt.Del != nil {
+			case meta.pkt.Del != nil:
 				// Del request
 				var err error
 				switch meta.what {
@@ -792,8 +797,7 @@ func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin, sendDesc bool) error {
 // C. User is responding to an earlier invite (modeWant was "N" in subscription)
 // D. User is already subscribed, changing modeWant
 // E. User is accepting ownership transfer (requesting ownership transfer is not permitted)
-func (t *Topic) requestSub(h *Hub, sess *Session, pktID string, want string,
-	private interface{}) error {
+func (t *Topic) requestSub(h *Hub, sess *Session, pktID, want string, private interface{}) error {
 
 	now := types.TimeNow()
 
@@ -827,7 +831,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktID string, want string,
 			// If it's a re-subscription to a p2p topic, set public and permissions
 
 			// t.perUser contains just one element - the other user
-			for uid2, user2Data := range t.perUser {
+			for uid2 := range t.perUser {
 				if user2, err := store.Users.Get(uid2); err != nil {
 					sess.queueOut(ErrUnknown(pktID, t.original(sess.uid), now))
 					return err
@@ -841,7 +845,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktID string, want string,
 						user2.Access.Anon, user2.Access.Auth, types.ModeCP2P)
 					if modeWant == types.ModeUnset {
 						// By default give user1 the same thing user1 gave to user2.
-						userData.modeWant = user2Data.modeGiven
+						userData.modeWant = t.perUser[uid2].modeGiven
 					} else {
 						userData.modeWant = modeWant
 					}
@@ -1338,21 +1342,22 @@ func (t *Topic) replySetDesc(sess *Session, set *MsgClientSet) error {
 	// Change to subscription
 	sub := make(map[string]interface{})
 	if set.Desc != nil {
-		if t.cat == types.TopicCatMe {
+		switch t.cat {
+		case types.TopicCatMe:
 			// Update current user
 			err = assignAccess(core, set.Desc.DefaultAcs)
 			sendPres = assignGenericValues(core, "Public", set.Desc.Public)
-		} else if t.cat == types.TopicCatFnd {
+		case types.TopicCatFnd:
 			// set.Desc.DefaultAcs is ignored.
 			// Do not send presence if fnd.Public has changed.
 			assignGenericValues(core, "Public", set.Desc.Public)
-		} else if t.cat == types.TopicCatP2P {
+		case types.TopicCatP2P:
 			// Reject direct changes to P2P topics.
 			if set.Desc.Public != nil || set.Desc.DefaultAcs != nil {
 				sess.queueOut(ErrPermissionDenied(set.Id, set.Topic, now))
 				return errors.New("incorrect attempt to change metadata of a p2p topic")
 			}
-		} else if t.cat == types.TopicCatGrp {
+		case types.TopicCatGrp:
 			// Update group topic
 			if t.owner == sess.uid {
 				err = assignAccess(core, set.Desc.DefaultAcs)
@@ -1373,11 +1378,12 @@ func (t *Topic) replySetDesc(sess *Session, set *MsgClientSet) error {
 	}
 
 	if len(core) > 0 {
-		if t.cat == types.TopicCatMe {
+		switch t.cat {
+		case types.TopicCatMe:
 			err = store.Users.Update(sess.uid, core)
-		} else if t.cat == types.TopicCatFnd {
+		case types.TopicCatFnd:
 			// The only value is Public, and Public for fnd is not saved according to specs.
-		} else {
+		default:
 			err = store.Topics.Update(t.name, core)
 		}
 	}
@@ -1455,7 +1461,8 @@ func (t *Topic) replyGetSub(sess *Session, id string, req *MsgGetOpts) error {
 	var err error
 	var isSharer bool
 
-	if t.cat == types.TopicCatMe {
+	switch t.cat {
+	case types.TopicCatMe:
 		if req != nil {
 			// If topic is provided, it could be in the form of user ID 'usrAbCd'.
 			// Convert it to P2P topic name.
@@ -1472,7 +1479,7 @@ func (t *Topic) replyGetSub(sess *Session, id string, req *MsgGetOpts) error {
 			subs, err = store.Users.GetTopicsAny(sess.uid, msgOpts2storeOpts(req))
 		}
 		isSharer = true
-	} else if t.cat == types.TopicCatFnd {
+	case types.TopicCatFnd:
 		// Select public or private query. Public has priority.
 		raw := t.fndGetPublic(sess)
 		if raw == nil {
@@ -1498,7 +1505,7 @@ func (t *Topic) replyGetSub(sess *Session, id string, req *MsgGetOpts) error {
 				}
 			}
 		}
-	} else {
+	default:
 		// FIXME(gene): don't load subs from DB, use perUserData - it already contains subscriptions.
 		if ifModified.IsZero() {
 			// No cache management. Skip deleted subscriptions.
@@ -1518,7 +1525,8 @@ func (t *Topic) replyGetSub(sess *Session, id string, req *MsgGetOpts) error {
 	if len(subs) > 0 {
 		meta := &MsgServerMeta{Id: id, Topic: t.original(sess.uid), Timestamp: &now}
 		meta.Sub = make([]MsgTopicSub, 0, len(subs))
-		for _, sub := range subs {
+		for i := range subs {
+			sub := &subs[i]
 			// Indicator if the requester has provided a cut off date for ts of pub & priv updates.
 			var sendPubPriv bool
 			var deleted, banned bool
@@ -2161,8 +2169,8 @@ func (t *Topic) makePushReceipt(data *MsgServerData) *pushReceipt {
 			Content:   data.Content}}
 
 	i := 0
-	for uid, pud := range t.perUser {
-		if (pud.modeWant & pud.modeGiven).IsPresencer() {
+	for uid := range t.perUser {
+		if (t.perUser[uid].modeWant & t.perUser[uid].modeGiven).IsPresencer() {
 			// Only send to those users who have notifications enabled
 			receipt.To[i].User = uid
 			idx[uid] = i

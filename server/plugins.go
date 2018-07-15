@@ -240,7 +240,8 @@ func pluginsInit(configString json.RawMessage) {
 	nameIndex := make(map[string]bool)
 	globals.plugins = make([]Plugin, len(config))
 	count := 0
-	for _, conf := range config {
+	for i := range config {
+		conf := &config[i]
 		if !conf.Enabled {
 			continue
 		}
@@ -303,8 +304,8 @@ func pluginsInit(configString json.RawMessage) {
 		globals.plugins = nil
 	} else {
 		var names []string
-		for _, plg := range globals.plugins {
-			names = append(names, plg.name+"("+plg.addr+")")
+		for i := range globals.plugins {
+			names = append(names, globals.plugins[i].name+"("+globals.plugins[i].addr+")")
 		}
 
 		log.Println("plugins: active", "'"+strings.Join(names, "', '")+"'")
@@ -316,8 +317,8 @@ func pluginsShutdown() {
 		return
 	}
 
-	for _, p := range globals.plugins {
-		p.conn.Close()
+	for i := range globals.plugins {
+		globals.plugins[i].conn.Close()
 	}
 }
 
@@ -344,7 +345,8 @@ func pluginFireHose(sess *Session, msg *ClientComMessage) (*ClientComMessage, *S
 
 	id, topic := pluginIDAndTopic(msg)
 	ts := time.Now().UTC().Round(time.Millisecond)
-	for _, p := range globals.plugins {
+	for i := range globals.plugins {
+		p := &globals.plugins[i]
 		if !pluginDoFiltering(p.filterFireHose, msg) {
 			// Plugin is not interested in FireHose
 			continue
@@ -408,7 +410,8 @@ func pluginFind(user types.Uid, query string) (string, []types.Subscription, err
 		UserId: user.UserId(),
 		Query:  query,
 	}
-	for _, p := range globals.plugins {
+	for i := range globals.plugins {
+		p := &globals.plugins[i]
 		if !p.filterFind {
 			// Plugin cannot service Find requests
 			continue
@@ -453,7 +456,8 @@ func pluginAccount(user *types.User, action int) {
 	}
 
 	var event *pbx.AccountEvent
-	for _, p := range globals.plugins {
+	for i := range globals.plugins {
+		p := &globals.plugins[i]
 		if p.filterAccount == nil || p.filterAccount.byAction&action == 0 {
 			// Plugin is not interested in Account actions
 			continue
@@ -491,7 +495,8 @@ func pluginTopic(topic *Topic, action int) {
 	}
 
 	var event *pbx.TopicEvent
-	for _, p := range globals.plugins {
+	for i := range globals.plugins {
+		p := &globals.plugins[i]
 		if p.filterTopic == nil || p.filterTopic.byAction&action == 0 {
 			// Plugin is not interested in Message actions
 			continue
@@ -527,7 +532,8 @@ func pluginSubscription(sub *types.Subscription, action int) {
 	}
 
 	var event *pbx.SubscriptionEvent
-	for _, p := range globals.plugins {
+	for i := range globals.plugins {
+		p := &globals.plugins[i]
 		if p.filterSubscription == nil || p.filterSubscription.byAction&action == 0 {
 			// Plugin is not interested in Message actions
 			continue
@@ -575,7 +581,8 @@ func pluginMessage(data *MsgServerData, action int) {
 	}
 
 	var event *pbx.MessageEvent
-	for _, p := range globals.plugins {
+	for i := range globals.plugins {
+		p := &globals.plugins[i]
 		if p.filterMessage == nil || p.filterMessage.byAction&action == 0 {
 			// Plugin is not interested in Message actions
 			continue

@@ -167,7 +167,7 @@ func (n *ClusterNode) reconnect() {
 	}
 }
 
-func (n *ClusterNode) call(proc string, msg interface{}, resp interface{}) error {
+func (n *ClusterNode) call(proc string, msg, resp interface{}) error {
 	if !n.connected {
 		return errors.New("cluster: node '" + n.name + "' not connected")
 	}
@@ -188,7 +188,7 @@ func (n *ClusterNode) call(proc string, msg interface{}, resp interface{}) error
 	return nil
 }
 
-func (n *ClusterNode) callAsync(proc string, msg interface{}, resp interface{}, done chan *rpc.Call) *rpc.Call {
+func (n *ClusterNode) callAsync(proc string, msg, resp interface{}, done chan *rpc.Call) *rpc.Call {
 	if done != nil && cap(done) == 0 {
 		log.Panic("cluster: RPC done channel is unbuffered")
 	}

@@ -787,7 +787,8 @@ func (t *Topic) loadSubscribers() error {
 		return nil
 	}
 
-	for _, sub := range subs {
+	for i := range subs {
+		sub := &subs[i]
 		uid := types.ParseUid(sub.User)
 		t.perUser[uid] = perUserData{
 			created:   sub.CreatedAt,
@@ -977,14 +978,15 @@ func replyTopicDescBasic(sess *Session, topic string, get *MsgClientGet) {
 		if err != nil {
 			sess.queueOut(ErrUnknown(get.Id, get.Topic, now))
 			return
-		} else if stopic == nil {
+		}
+		if stopic == nil {
 			sess.queueOut(ErrTopicNotFound(get.Id, get.Topic, now))
 			return
-		} else {
-			desc.CreatedAt = &stopic.CreatedAt
-			desc.UpdatedAt = &stopic.UpdatedAt
-			desc.Public = stopic.Public
 		}
+		desc.CreatedAt = &stopic.CreatedAt
+		desc.UpdatedAt = &stopic.UpdatedAt
+		desc.Public = stopic.Public
+
 	} else {
 		// 'me' and p2p topics
 		var uid types.Uid
@@ -1011,14 +1013,14 @@ func replyTopicDescBasic(sess *Session, topic string, get *MsgClientGet) {
 			log.Printf("hub.replyTopicInfoBasic: sending  error 3")
 			sess.queueOut(ErrUnknown(get.Id, get.Topic, now))
 			return
-		} else if suser == nil {
+		}
+		if suser == nil {
 			sess.queueOut(ErrUserNotFound(get.Id, get.Topic, now))
 			return
-		} else {
-			desc.CreatedAt = &suser.CreatedAt
-			desc.UpdatedAt = &suser.UpdatedAt
-			desc.Public = suser.Public
 		}
+		desc.CreatedAt = &suser.CreatedAt
+		desc.UpdatedAt = &suser.UpdatedAt
+		desc.Public = suser.Public
 	}
 
 	log.Printf("hub.replyTopicDescBasic: sending desc -- OK")

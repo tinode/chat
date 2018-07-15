@@ -177,9 +177,10 @@ func normalizeCredentials(creds []MsgAccCred, valueRequired bool) []MsgAccCred {
 	}
 
 	index := make(map[string]*MsgAccCred)
-	for _, c := range creds {
+	for i := range creds {
+		c := &creds[i]
 		if _, ok := globals.validators[c.Method]; ok && (!valueRequired || c.Value != "") {
-			index[c.Method] = &c
+			index[c.Method] = c
 		}
 	}
 	creds = make([]MsgAccCred, 0, len(index))
@@ -192,8 +193,8 @@ func normalizeCredentials(creds []MsgAccCred, valueRequired bool) []MsgAccCred {
 // Get a string slice with methods of credentials.
 func credentialMethods(creds []MsgAccCred) []string {
 	var out []string
-	for _, c := range creds {
-		out = append(out, c.Method)
+	for i := range creds {
+		out = append(out, creds[i].Method)
 	}
 	return out
 }
@@ -465,11 +466,12 @@ func parseSearchQuery(query string) ([]string, []string, error) {
 
 	var and, or []string
 	for _, t := range out {
-		if t.op == "and" {
+		switch t.op {
+		case "and":
 			and = append(and, t.val)
-		} else if t.op == "or" {
+		case "or":
 			or = append(or, t.val)
-		} else {
+		default:
 			panic("invalid operation ='" + t.op + "', val='" + t.val + "'")
 		}
 	}

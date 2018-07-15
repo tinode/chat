@@ -482,7 +482,8 @@ func (s *Session) acc(msg *ClientComMessage) {
 		// Pre-check credentials for validity. We don't know user's access level
 		// consequently cannot check presence of required credentials. Must do that later.
 		creds := normalizeCredentials(msg.Acc.Cred, true)
-		for _, cr := range creds {
+		for i := range creds {
+			cr := &creds[i]
 			vld := store.GetValidator(cr.Method)
 			if err := vld.PreCheck(cr.Value, cr.Params); err != nil {
 				log.Println("Failed credential pre-check", cr, err)
@@ -548,7 +549,8 @@ func (s *Session) acc(msg *ClientComMessage) {
 		}
 
 		var validated []string
-		for _, cr := range creds {
+		for i := range creds {
+			cr := &creds[i]
 			vld := store.GetValidator(cr.Method)
 			if err := vld.Request(user.Uid(), cr.Value, s.lang, cr.Params, cr.Response); err != nil {
 				log.Println("Failed to save or validate credential", err)
@@ -752,7 +754,8 @@ func (s *Session) getValidatedGred(uid types.Uid, authLvl auth.Level, creds []Ms
 
 	// Add credential which are validated in this call.
 	creds = normalizeCredentials(creds, false)
-	for _, cr := range creds {
+	for i := range creds {
+		cr := &creds[i]
 		if cr.Response == "" {
 			// Ignore unknown validation type or empty response.
 			continue

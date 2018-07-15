@@ -136,10 +136,12 @@ func (authenticator) Authenticate(secret []byte) (*auth.Rec, error) {
 	uid, authLvl, passhash, expires, err := store.Users.GetAuthUniqueRecord("basic", uname)
 	if err != nil {
 		return nil, err
-	} else if uid.IsZero() {
+	}
+	if uid.IsZero() {
 		// Invalid login.
 		return nil, types.ErrFailed
-	} else if !expires.IsZero() && expires.Before(time.Now()) {
+	}
+	if !expires.IsZero() && expires.Before(time.Now()) {
 		// The record has expired
 		return nil, types.ErrExpired
 	}

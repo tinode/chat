@@ -26,11 +26,11 @@ func (k sortable) Less(i, j int) bool {
 	// Weak hash function may cause collisions.
 	if k[i].hash < k[j].hash {
 		return true
-	} else if k[i].hash == k[j].hash {
-		return k[i].key < k[j].key
-	} else {
-		return false
 	}
+	if k[i].hash == k[j].hash {
+		return k[i].key < k[j].key
+	}
+	return false
 }
 
 // Ring is the definition of the ringhash.

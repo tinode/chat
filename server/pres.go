@@ -70,10 +70,10 @@ func (t *Topic) loadContacts(uid types.Uid) error {
 	}
 
 	t.perSubs = make(map[string]perSubsData, len(subs))
-	for _, sub := range subs {
+	for i := range subs {
 		//log.Printf("Pres loadContacts: topic[%s]: processing sub '%s'", t.name, sub.Topic)
 
-		t.addToPerSubs(sub.Topic, false, (sub.ModeGiven & sub.ModeWant).IsPresencer())
+		t.addToPerSubs(subs[i].Topic, false, (subs[i].ModeGiven & subs[i].ModeWant).IsPresencer())
 	}
 	//log.Printf("Pres loadContacts: topic[%s]: total cached %d", t.name, len(t.perSubs))
 	return nil
@@ -91,7 +91,7 @@ func (t *Topic) loadContacts(uid types.Uid) error {
 // If status is followed by command "+en" then the current user should accept incoming notifications
 // from the user2; "+rem" means the subscription is removed. "+dis" is the opposite of "en".
 // The "+en/rem/dis" command itself is stripped from the notification.
-func (t *Topic) presProcReq(fromUserID string, what string, wantReply bool) string {
+func (t *Topic) presProcReq(fromUserID, what string, wantReply bool) string {
 
 	var reqReply, onlineUpdate bool
 
@@ -150,20 +150,21 @@ func (t *Topic) presProcReq(fromUserID string, what string, wantReply bool) stri
 				delete(t.perSubs, fromUserID)
 
 			} else {
-				if cmd == "" {
+				switch cmd {
+				case "":
 					// No change in being enabled or disabled and not being added or removed.
 					if !psd.enabled || online == nil || psd.online == *online {
 						// Not enabled or no change in online status - remove unnecessary notification.
 						what = ""
 					}
-				} else if cmd == "en" {
+				case "en":
 					if !psd.enabled {
 						psd.enabled = true
 					} else if online == nil || psd.online == *online {
 						// Was active and no change or online before: skip unnecessary update.
 						what = ""
 					}
-				} else if cmd == "dis" {
+				case "dis":
 					if psd.enabled {
 						psd.enabled = false
 						if !psd.online {
@@ -173,7 +174,7 @@ func (t *Topic) presProcReq(fromUserID string, what string, wantReply bool) stri
 						// Was disabled and consequently offline before, still offline - skip the update.
 						what = ""
 					}
-				} else {
+				default:
 					panic("presProcReq: unknown command '" + cmd + "'")
 				}
 
@@ -228,7 +229,7 @@ func (t *Topic) presProcReq(fromUserID string, what string, wantReply bool) stri
 // Case B: user went offline, "off", ua
 // Case C: user agent change, "ua", ua
 // Case D: User updated 'public', "upd"
-func (t *Topic) presUsersOfInterest(what string, ua string) {
+func (t *Topic) presUsersOfInterest(what, ua string) {
 	// Push update to subscriptions
 	for topic := range t.perSubs {
 		globals.hub.route <- &ServerComMessage{
@@ -324,8 +325,8 @@ func (t *Topic) presSubsOffline(what string, params *presParams, filter *presFil
 
 	//log.Printf("presSubsOffline: topic'%s' what='%s', who='%v'", t.name, what, params)
 
-	for uid, pud := range t.perUser {
-		if what != "acs" && !presOfflineFilter(pud.modeGiven&pud.modeWant, filter) {
+	for uid := range t.perUser {
+		if what != "acs" && !presOfflineFilter(t.perUser[uid].modeGiven&t.perUser[uid].modeWant, filter) {
 			continue
 		}
 
@@ -355,7 +356,8 @@ func presSubsOfflineOffline(topic string, cat types.TopicCat, subs []types.Subsc
 
 	var count = 0
 	original := topic
-	for _, sub := range subs {
+	for i := range subs {
+		sub := &subs[i]
 		if what != "acs" && !presOfflineFilter(sub.ModeWant&sub.ModeGiven, nil) {
 			continue
 		}
@@ -423,8 +425,7 @@ func (t *Topic) presSingleUserOffline(uid types.Uid, what string, params *presPa
 }
 
 // Same as above, but the topic is offline (not loaded from the DB)
-func presSingleUserOfflineOffline(uid types.Uid, original string, what string,
-	params *presParams, skipSid string) {
+func presSingleUserOfflineOffline(uid types.Uid, original, what string, params *presParams, skipSid string) {
 
 	user := uid.UserId()
 	actor := params.actor

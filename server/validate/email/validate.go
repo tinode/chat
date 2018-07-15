@@ -167,7 +167,7 @@ func (v *validator) Delete(user t.Uid) error {
 // -
 // Here are instructions for Google cloud:
 // https://cloud.google.com/appengine/docs/standard/go/mail/sending-receiving-with-mail-api
-func (v *validator) send(to string, subj string, body string) error {
+func (v *validator) send(to, subj, body string) error {
 	return smtp.SendMail(v.SMTPAddr+":"+v.SMTPPort, v.auth, v.SendFrom, []string{to},
 		[]byte("To: "+to+
 			"\nSubject: "+
