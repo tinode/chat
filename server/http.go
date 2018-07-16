@@ -322,22 +322,24 @@ func getHttpAuth(req *http.Request) (string, string) {
 }
 
 // Authenticate non-websocket HTTP request
-func authHttpRequest(req *http.Request) (types.Uid, error) {
+func authHttpRequest(req *http.Request) (types.Uid, []byte, error) {
 	var uid types.Uid
 	if authMethod, secret := getHttpAuth(req); authMethod != "" {
 		decodedSecret := make([]byte, base64.StdEncoding.DecodedLen(len(secret)))
 		if _, err := base64.StdEncoding.Decode(decodedSecret, []byte(secret)); err != nil {
-			return uid, types.ErrMalformed
+			return uid, nil, types.ErrMalformed
 		}
-		authhdl := store.GetAuthHandler(authMethod)
-		if authhdl != nil {
-			if rec, err := authhdl.Authenticate(decodedSecret); err == nil {
-				uid = rec.Uid
-			} else {
-				return uid, err
+		if authhdl := store.GetAuthHandler(authMethod); authhdl != nil {
+			rec, challenge, err := authhdl.Authenticate(decodedSecret)
+			if err != nil {
+				return uid, nil, err
 			}
+			if challenge != nil {
+				return uid, challenge, nil
+			}
+			uid = rec.Uid
 		} else {
-			log.Println("fileUpload: token is present but token auth handler is not found")
+			log.Println("fileUpload: auth data is present but handler is not found", authMethod)
 		}
 	} else {
 		// Find the session, make sure it's appropriately authenticated.
@@ -346,5 +348,5 @@ func authHttpRequest(req *http.Request) (types.Uid, error) {
 			uid = sess.uid
 		}
 	}
-	return uid, nil
+	return uid, nil, nil
 }

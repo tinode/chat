@@ -80,18 +80,18 @@ func (authenticator) UpdateRecord(rec *auth.Rec, secret []byte) error {
 }
 
 // Authenticate checks validity of provided token.
-func (ta *authenticator) Authenticate(token []byte) (*auth.Rec, error) {
+func (ta *authenticator) Authenticate(token []byte) (*auth.Rec, []byte, error) {
 	var tl tokenLayout
 	dataSize := binary.Size(&tl)
 	if len(token) < dataSize+sha256.Size {
 		// Token is too short
-		return nil, types.ErrMalformed
+		return nil, nil, types.ErrMalformed
 	}
 
 	buf := bytes.NewBuffer(token)
 	err := binary.Read(buf, binary.LittleEndian, &tl)
 	if err != nil {
-		return nil, types.ErrMalformed
+		return nil, nil, types.ErrMalformed
 	}
 
 	hbuf := new(bytes.Buffer)
@@ -100,27 +100,27 @@ func (ta *authenticator) Authenticate(token []byte) (*auth.Rec, error) {
 	hasher := hmac.New(sha256.New, ta.hmacSalt)
 	hasher.Write(hbuf.Bytes())
 	if !hmac.Equal(token[dataSize:dataSize+sha256.Size], hasher.Sum(nil)) {
-		return nil, types.ErrFailed
+		return nil, nil, types.ErrFailed
 	}
 
 	if tl.AuthLevel < 0 || auth.Level(tl.AuthLevel) > auth.LevelRoot {
-		return nil, types.ErrMalformed
+		return nil, nil, types.ErrMalformed
 	}
 
 	if int(tl.SerialNumber) != ta.serialNumber {
-		return nil, types.ErrMalformed
+		return nil, nil, types.ErrMalformed
 	}
 
 	expires := time.Unix(int64(tl.Expires), 0).UTC()
 	if expires.Before(time.Now().Add(1 * time.Second)) {
-		return nil, types.ErrExpired
+		return nil, nil, types.ErrExpired
 	}
 
 	return &auth.Rec{
 		Uid:       types.Uid(tl.Uid),
 		AuthLevel: auth.Level(tl.AuthLevel),
 		Lifetime:  time.Until(expires),
-		Features:  auth.Feature(tl.Features)}, nil
+		Features:  auth.Feature(tl.Features)}, nil, nil
 }
 
 // GenSecret generates a new token.

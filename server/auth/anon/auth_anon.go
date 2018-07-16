@@ -29,8 +29,8 @@ func (AnonAuth) UpdateRecord(rec *auth.Rec, secret []byte) error {
 }
 
 // Authenticate is not supported. It's used only at account creation time.
-func (AnonAuth) Authenticate(secret []byte) (*auth.Rec, error) {
-	return nil, types.ErrUnsupported
+func (AnonAuth) Authenticate(secret []byte) (*auth.Rec, []byte, error) {
+	return nil, nil, types.ErrUnsupported
 }
 
 // IsUnique for a noop. Anonymous login does not use secret, any secret is fine.

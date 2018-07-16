@@ -7,6 +7,29 @@
 		- [Websocket](#websocket)
 		- [Long polling](#long-polling)
 		- [Out of Band Large Files](#out-of-band-large-files)
+	- [Users](#users)
+		- [Authentication](#authentication)
+			- [Creating an Account](#creating-an-account)
+			- [Logging in](#logging-in)
+		- [Credentials](#credentials)
+		- [Access control](#access-control)
+	- [Topics](#topics)
+		- [`me` topic](#me-topic)
+		- [`fnd` and Tags: Finding Users and Topics](#fnd-and-tags-finding-users-and-topics)
+			- [Query language](#query-language)
+			- [Some use cases](#some-use-cases)
+		- [Peer to Peer Topics](#peer-to-peer-topics)
+		- [Group Topics](#group-topics)
+	- [Using Server-Issued Message IDs](#using-server-issued-message-ids)
+	- [User Agent and Presence Notifications](#user-agent-and-presence-notifications)
+	- [Push Notifications Support](#push-notifications-support)
+	- [Public and Private Fields](#public-and-private-fields)
+		- [Public](#public)
+		- [Private](#private)
+	- [Format of Content](#format-of-content)
+	- [Out-of-Band Handling of Large Files](#out-of-band-handling-of-large-files)
+		- [Uploading](#uploading)
+		- [Downloading](#downloading)
 	- [Messages](#messages)
 		- [Client to server messages](#client-to-server-messages)
 			- [`{hi}`](#hi)
@@ -25,27 +48,9 @@
 			- [`{meta}`](#meta)
 			- [`{pres}`](#pres)
 			- [`{info}`](#info)
-	- [Users](#users)
-	- [Access control](#access-control)
-	- [Topics](#topics)
-		- [`me` topic](#me-topic)
-		- [`fnd` and Tags: Finding Users and Topics](#fnd-and-tags-finding-users-and-topics)
-			- [Query language](#query-language)
-			- [Some use cases](#some-use-cases)
-		- [Peer to Peer Topics](#peer-to-peer-topics)
-		- [Group Topics](#group-topics)
-	- [Using Server-Issued Message IDs](#using-server-issued-message-ids)
-	- [User Agent and Presence Notifications](#user-agent-and-presence-notifications)
-	- [Push Notifications Support](#push-notifications-support)
-	- [Public and Private Fields](#public-and-private-fields)
-		- [Public](#public)
-		- [Private](#private)
-	- [Format of Content](#format-of-content)
-	- [Out-of-Band Handling of Large Files](#out-of-band-handling-of-large-files)
-		- [Uploading](#uploading)
-		- [Downloading](#downloading)
 
 <!-- /TOC -->
+
 # Server API
 
 ## How it works?
@@ -91,7 +96,13 @@ Client establishes a connection to the server over HTTP(S). Server offers two en
  * `/v0/file/u` for file uploads
  * `/v0/file/s` for file serving (downloads)
 
-`v0` denotes API version (currently zero). Every HTTP(S) request must include the API key. It may be included in the URL as `...?apikey=<YOUR_API_KEY>`, in the request body as `apikey=<YOUR_API_KEY>`, or in the HTTP header `X-Tinode-APIKey: <YOUR_API_KEY>`. A default key is included in every demo app for convenience. Generate your own key using [`keygen` utility](../keygen).
+`v0` denotes API version (currently zero). Every HTTP(S) request must include the API key. The server checks for the API key in the following order:
+* HTTP header `X-Tinode-APIKey`
+* URL query parameter `apikey` (/v0/file/s/abcdefg.jpeg?apikey=...)
+* Form value `apikey`
+* Cookie `apikey`
+
+A default key is included in every demo app for convenience. Generate your own key for production using [`keygen` utility](../keygen).
 
 Once the connection is opened, the client must issue a `{hi}` message to the server. Server responds with a `{ctrl}` message which maybe an error message. The `params` field of the response contains server's protocol version `"params":{"ver":"0.15"}` and may include other values.
 
@@ -101,13 +112,356 @@ Messages are sent in text frames, one message per frame. Binary frames are reser
 
 ### Long polling
 
-Long polling works over `HTTP POST` (preferred) or `GET`. In response to client's very first request server sends a `{ctrl}` message containing `sid` (session ID) in `params`. Long polling client must include `sid` in every subsequent request either in URL or in request body.
+Long polling works over `HTTP POST` (preferred) or `GET`. In response to client's very first request server sends a `{ctrl}` message containing `sid` (session ID) in `params`. Long polling client must include `sid` in every subsequent request either in the URL or in the request body.
 
 Server allows connections from all origins, i.e. `Access-Control-Allow-Origin: *`
 
 ### Out of Band Large Files
 
 Large files are sent out of band using `HTTP POST` as `Content-Type: multipart/form-data`. See [below](#out-of-band-handling-of-large-files) for details.
+
+## Users
+
+User is meant to represent a person, an end-user: producer and consumer of messages.
+
+There are two types of users: authenticated and anonymous. When a connection is first established, the client application can only send either an `{acc}` or a `{login}` message. Sending a `{login}` message will authenticate user or allow him to continue as an anonymous.
+
+Each user is assigned a unique ID. The IDs are composed as `usr` followed by base64-encoded 64-bit numeric value, e.g. `usr2il9suCbuko`. Users also have the following properties:
+
+* created: timestamp when the user record was created
+* updated: timestamp of when user's `public` was last updated
+* username: unique string used in `basic` authentication; username is not accessible to other users
+* defacs: object describing user's default access mode for peer to peer conversations with authenticated and anonymous users; see [Access control](#access-control) for details
+ * auth: default access mode for authenticated users
+ * anon: default access for anonymous users
+* public: an application-defined object that describes the user. Anyone who can query user for `public` data.
+* private: an application-defined object that is unique to the current user and accessible only by the user.
+* tags: [discovery](#fnd-and-tags-finding-users-and-topics) and credentials.
+
+A user may maintain multiple simultaneous connections (sessions) with the server. Each session is tagged with a client-provided User Agent string intended to differentiate client software.
+
+Logging out is not supported by design. If an application needs to change the user, it should open a new connection and authenticate it with the new user credentials.
+
+### Authentication
+
+The server comes with three authentication methods out of the box: `basic`, `token`, and `anon`:
+ * `basic` provides authentication by a login-password pair.
+ * `token` provides authentication by a cryptographic token.
+ * `anon` is "anonymous authentication" designed for cases where users are temporary, such as handling customer support requests through chat.
+
+Any other authentication method can be implemented using plugins.
+
+The `token` is intended to be the primary means of authentication. Tokens are designed in such a way that token authentication is light weight. For instance, token authenticator generally does not make any database calls, all processing is done in-memory. All other authentication methods are intended to be used sparingly in order to obtain the token. Once the token is obtained, all subsequent logins should use it.
+
+Authenticators are used during account registration [`{acc}`](#acc) and during [`{login}`](#login).
+
+#### Creating an Account
+
+When a new account is created, the user must provide inform the server which authentication method will be later used to gain access to this account as well as provide authentication secret, if appropriate. Only `basic` and `anon` can be used during account creation. The `basic` requires the user to generate and send a unique login and a secret password to the server. The `anon` does not exchange secrets.
+
+User may optionally set `{acc login=true}` to use the new account for authentication. When `login=false` (or not set), the new account is created but the authentication status of the session which created the account remains unchanged. When `login=true` the server will attempt to authenticate the session with the new account, the response to the `{acc}` request will contain the authentication token. This is particularly important for the `anon` authentication.
+
+#### Logging in
+
+Logging in is possible with `basic` and `token` only. Response to any login is a `{ctrl}` message with either a code 200 and a token which can be used in subsequent logins with `token` authentication, or a code 300 request for additional information, such as verifying credentials or responding to a method-dependent challenge, or a code 4xx error.
+
+Token has server-configured expiration time so it needs to be periodically refreshed.
+
+### Credentials
+
+Server may be optionally configured to require certain credentials associated with the user accounts. For instance, it's possible to require users to provide unique emails or phone numbers as a requirement of account registration or to solve a captcha.
+
+The server supports verification of email and phone numbers out of the box. Verification of emails is functional, verification of phone numbers is not because a commercial subscription is needed to be able to send SMS.
+
+### Access control
+
+Access control manages user's access to topics through access control lists (ACLs) or bearer tokens (_bearer tokens are not implemented as of version 0.15_).
+
+Access control is mostly usable for group topics. Its usability for `me` and P2P topics is limited to managing presence notifications and banning uses from initiating or continuing P2P conversations.
+
+User's access to a topic is defined by two sets of permissions: user's desired permissions "want", and permissions granted to user by topic's manager(s) "given". Each permission is represented by a bit in a bitmap. It can be either present or absent. The actual access is determined as a bitwise AND of wanted and given permissions. The permissions are communicated in messages as a set of ASCII characters, where presence of a character means a set permission bit:
+
+* No access: `N` is not a permission per se but an indicator that permissions are explicitly cleared/not set. It usually indicates that the default permissions should *not* be applied.
+* Join: `J`, permission to subscribe to a topic
+* Read: `R`, permission to receive `{data}` packets
+* Write: `W`, permission to `{pub}` to topic
+* Presence: `P`, permission to receive presence updates `{pres}`
+* Approve: `A`, permission to approve requests to join a topic; a user with such permission is topic's manager
+* Sharing: `S`, permission to invite other people to join the topic
+* Delete: `D`, permission to hard-delete messages; only owners can completely delete topics
+* Owner: `O`, user is the topic owner; topic may have a single owner only; some topics have no owner
+
+Topic's default access is established at the topic creation time by `{sub.init.defacs}` and can be subsequently modified by `{set}` messages. Default access is defined for two categories of users: authenticated and anonymous. This value is applied as a default "given" permission to all new subscriptions.
+
+Client may replace explicit permissions in `{sub}` and `{set}` messages with an empty string to tell Tinode to use default permissions. If client specifies no default access permissions at topic creation time, authenticated users will receive a `RWP` permission, anonymous users will receive and empty permission which means every subscription request must be explicitly approved by the topic manager.
+
+Access permissions can be assigned on a per-user basis by `{set}` messages.
+
+## Topics
+
+Topic is a named communication channel for one or more people. Topics have persistent properties. These following topic properties can be queried by `{get what="info"}` message.
+
+Topic properties independent of the user making the query:
+* created: timestamp of topic creation time
+* updated: timestamp of when topic's `public` or `private` was last updated
+* defacs: object describing topic's default access mode for authenticated and anonymous users; see [Access control](#access-control) for details
+ * auth: default access mode for authenticated users
+ * anon: default access for anonymous users
+* seq: integer server-issued sequential ID of the latest `{data}` message sent through the topic
+* public: an application-defined object that describes the topic. Anyone who can subscribe to topic can receive topic's `public` data.
+
+User-dependent topic properties:
+* acs: object describing given user's current access permissions; see [Access control](#access-control) for details
+ * want: access permission requested by this user
+ * given: access permissions given to this user
+* private: an application-defined object that is unique to the current user.
+
+Topic usually have subscribers. One the the subscribers may be designated as topic owner (`O` access permission) with full access permissions. The list of subscribers can be queries with a `{get what="sub"}` message. The list of subscribers is returned in a `sub` section of a `{meta}` message.
+
+### `me` topic
+
+Topic `me` is automatically created for every user at the account creation time. It serves as means for account updates, receiving presence notification from people and topics of interest, invites to join topics, requests to approve subscription for topics where this user is a manager (has `S` permission). Topic `me` has no owner. The topic cannot be deleted or unsubscribed from. One can leave the topic which will stop all relevant communication and indicate that the user is offline (although the user may still be logged in and may continue to use other topics).
+
+Joining or leaving `me` generates a `{pres}` presence update sent to all users who have peer to peer topics with the given user and `P` permissions set.
+
+Topic `me` is read-only. `{pub}` messages to `me` are rejected.
+
+The `{data}` message represents invites and requests to confirm a subscription. The `from` field of the message contains ID of the user who originated the request, for instance, the user who asked current user to join a topic or the user who requested an approval for subscription. The `content` field of the message contains the following information:
+* act: request action as string; possible actions are:
+ * "info" to notify the user that user's request to subscribe was approved; in case of peer to peer topics this could be a notification that the peer has subscribed to the topic
+ * "join" is an invitation to subscribe to a topic
+ * "appr" is a request to approve a subscription
+* topic: the name of the topic, in case of an invite the current user is invited to this topic; in case of a request to approve, another user wants to subscribe to this topic where the current user is a manager (has `S` permission)
+* user: user ID as a string of the user who is the target of this request. In case of an invite this is the ID of the current user; in case of an approval request this is the ID of the user who is being subscribed.
+* acs: object describing access permissions of the subscription, see [Access control](#access-control) for details
+* info: object with a free-form payload. It's passed unchanged from the originating `{sub}` or `{set}` message.
+
+Message `{get what="info"}` to `me` is automatically replied with a `{meta}` message containing `info` section with the topic parameters (see intro to [Topics](#topics) section). The `public` parameter of `me` topic is data that the user wants to show to his/her connections. Changing it changes `public` not just for the `me` topic, but also everywhere where user's public is shown, such as 'public' of all user's peer to peer topics.
+
+Message `{get what="sub"}` to `me` is different from any other topic as it returns the list of topics that the current user is subscribed to as opposite to the expected user's subscription to `me`.
+* seq: server-issued numeric id of the last message in the topic
+* read: seq value self-reported by the current user as received
+* recv: seq value self-reported by the current user as read
+* seen: for P2P subscriptions, timestamp of user's last presence and User Agent string are reported
+ * when: timestamp when the user was last online
+ * ua: user agent string of the user's client software last used
+
+Message `{get what="data"}` to `me` queries the history of invites/notifications. It's handled the same way as to any other topic.
+
+### `fnd` and Tags: Finding Users and Topics
+
+Topic `fnd` is automatically created for every user at the account creation time. It serves as an endpoint for discovering other users and group topics.
+
+Users and group topics can be discovered by optional `tags`. Tags are optionally assigned at the topic or user creation time then can be updated by using `{set what="tags"}` against a `fnd` or a group topic.
+
+A tag is an arbitrary case-insensitive Unicode string (forced to lowercase) starting with a Unicode letter or digit. `Tags` must not contain the double quote `"`, `\u0022` but may contain spaces. `Tags` may have a prefix which serves as a namespace. The prefix is a string followed by a colon `:`, ex. prefixed phone tag `tel:14155551212` or prefixed email tag `email:alice@example.com`. Some prefixed `tags` are optionally enforced to be unique. In that case only one user or topic may have such a tag. Certain `tags` may be forced to be immutable to the user, i.e. user's attemps to add or remove an immutable tag will be rejected by the server.
+
+The `tags` are indexed server-side and used in user and topic discovery. Seach returns users and topics sorted by the number of matched tags in descending order.
+
+In order to find users or topics, a user sets either `public` or `private` parameter of the `fnd` topic to a search query (see [Query language](#query-language)) then issues a `{get topic="fnd" what="sub"}` request. If both `public` and `private` are set, the `public` query is used. The `private` query is persisted accress sessions and devices, i.e. all user's sessions see the same `private` query. The value of the `public` query is ephemeral, i.e. it's not saved to database and not shared between user's sessions. The `private` query is intended for large queries which do not change often, such as finding matches for everyone in user's contact list on a mobile phone. The `public` query is intended to be short and specific, such as finding some topic or a user who is not in the contact list.
+
+The system responds with a `{meta}` message with the `sub` section listing details of the found users or topics formatted as subscriptions.
+
+Topic `fnd` is read-only. `{pub}` messages to `fnd` are rejected.
+
+(The following functionality is not implemented yet) When a new user registers with tags matching the given query, the `fnd` topic will receive `{pres}` notification for the new user.
+
+[Plugins](./pbx) support `Find` service which can be used to replace default search with a custom one.
+
+#### Query language
+
+Tinode query language is used to define search queries for finding users and topics. The query is a string containing tags separated by spaces or commas. Tags are strings - individual query terms which are matched against user's or topic's tags. The tags can be written in an RTL language but the query as a whole is parsed left to right. Spaces are treated as the `AND` operator, commas (as well commas preceded and/or followed by a space) as the `OR` operator. The order of operators is ignored: all `AND` operators are grouped together, all `OR` operators are grouped together. `OR` takes precedence over `AND`.
+
+Tags containing spaces or commas must be enclosed in double quotes (`"`, `\u0022`): i.e. `"abc, def"` is treated as a single token. Tags must start with a Unicode letter or digit. Tags must not contain the double quote (`"`, `\u0022`).
+
+**Some examples:**
+* `flowers travel`: find topics or users which contain both tags `flowers` and `travel`.
+* `flowers, travel`: find topics or users which contain either tag `flowers` or `travel` (or both).
+* `flowers travel, puppies`: find topics or users which contain `flowers` and either `travel` or `puppies`, i.e. `flowers AND (travel OR puppies)`.
+
+
+#### Some use cases
+* Restricting users to organizations.
+  An immutable tag(s) may be assigned to the user which denotes the organization the user belons to. When the user searches for other users or topics, the search can be restricted to always contain the tag. This approach can be used to segment users into organizations with limited visiblity into each other.
+
+* Search by geographical location.
+  Client software may periodically assign a [geohash](https://en.wikipedia.org/wiki/Geohash) tag to the user based on current location. Searching for users in a given area would mean matching on geohash tags.
+
+* Search by numerical range, such as age range.
+  The approach is similar to geohashing. The entire range of numbers is covered by the smallest possible power of 2, for instance the range of human ages is covered by 2<sup>7</sup>=128 years. The entire range is split in two halves: the range 0-63 is denoted by 0, 64-127 by 1. The operation is repeated with each subrange, i.e. 0-31 is 00, 32-63 is 01, 0-15 is 000, 32-47 is 010. Once completed, the age 30 will belong to the following ranges: 0 (0-63), 00 (0-31), 001 (16-31), 0011 (24-31), 00111 (28-31), 001111 (30-31), 0011110 (30). A 30 y.o. user is assigned a few tags to indicate the age, i.e. `age:00111`, `age:001111`,  and `age:0011110`. Technically, all 7 tags may be assigned but usually it's impractical. To query for anyone in the age range 28-35 convert the range into a minimal number of tags: `age:00111` (28-31), `age:01000` (32-35). This query will match the 30 y.o. user by tag `age:00111`.
+
+
+### Peer to Peer Topics
+
+Peer to peer (P2P) topics represent communication channels between strictly two users. The name of the topic is different for each of the two participants. Each of them sees the name of the topic as the user ID of the other participant: `usr` followed by base64 URL-encoded ID of the user. For example, if two users `usrOj0B3-gSBSs` and `usrIU_LOVwRNsc` start a P2P topic, the first one will see it as `usrIU_LOVwRNsc`, the second as `usrOj0B3-gSBSs`. The P2P topic has no owner.
+
+A P2P topic is created by one user subscribing to topic with the name equal to the ID of the other user. For instance, user `usrOj0B3-gSBSs` can establish a P2P topic with user `usrIU_LOVwRNsc` by sending a `{sub topic="usrIU_LOVwRNsc"}`. Tinode will respond with a `{ctrl}` packet with the name of the newly created topic as described above. The other user will receive a `{data}` message on `me` topic with either a request to confirm the subscription or a notification of a successful subscription, depending on user's default permissions.
+
+The 'public' parameter of P2P topics is user-dependent. For instance a P2P topic between users A and B would show user A's 'public' to user B and vice versa. If a user updates 'public', all user's P2P topics will automatically update 'public' too.
+
+The 'private' parameter of a P2P topic is defined by each participant individually as with any other topic type.
+
+### Group Topics
+
+Group topics represent communication channels between multiple users. The name of a group topic is `grp` followed by a string of characters from base64 URL-encoding set. No other assumptions can be made about internal structure or length of the group name.
+
+A group topic is created by sending a `{sub}` message with the topic field set to string `new` optionally followed by any characters, e.g. `new` or `newAbC123` are equivalent. Tinode will respond with a `{ctrl}` message with the name of the newly created topic, i.e. `{sub topic="new"}` is replied with `{ctrl topic="grpmiKBkQVXnm3P"}`. If topic creation fails, the error is reported on the original topic name, i.e. `new` or `newAbC123`. The user who created the topic becomes topic owner. Ownership can be transferred to another user with a `{set}` message but at least one user must remain the owner.
+
+A user joining or leaving the topic generates a `{pres}` message to all other users who are currently in the joined state with the topic.
+
+
+## Using Server-Issued Message IDs
+
+Tinode provides basic support for client-side caching of `{data}` messages in the form of server-issued message IDs. The client may request the last message id from the topic by issuing a `{get what="info"}` message. If the returned ID is greater than the ID of the latest received message, the client knows that the topic has unread messages and their count. The client may fetch these messages using `{get what="data"}` message. The client may also paginate history retrieval by using message IDs.
+
+## User Agent and Presence Notifications
+
+A user is reported as being online when one or more of user's sessions are attached to the `me` topic. Client-side software identifies itself to the server using `ua` (user agent) field of the `{login}` message. The _user agent_ is published in `{meta}` and `{pres}` messages in the following way:
+
+ * When user's first session attaches to `me`, the _user agent_ from that session is broadcast in the `{pres what="on" ua="..."}` message.
+ * When multiple user sessions are attached to `me`, the _user agent_ of the session where the most recent action has happened is reported in `{pres what="ua" ua="..."}`; the 'action' in this context means any message sent by the client. To avoid potentially excessive traffic, user agent changes are broadcast no more frequently than once a minute.
+ * When user's last session detaches from `me`, the _user agent_ from that session is recorded together with the timestamp; the user agent is broadcast in the `{pres what="off"  ua="..."}` message and subsequently reported as the last online timestamp and user agent.
+
+An empty `ua=""` _user agent_ is not reported. I.e. if user attaches to `me` with non-empty _user agent_ then does so with an empty one, the change is not reported. An empty _user agent_ may be disallowed in the future.
+
+## Push Notifications Support
+
+Tinode supports mobile push notifications though compile-time plugins. The channel published by the plugin receives a copy of every data message which was attempted to be delivered. The server supports [Google FCM](https://firebase.google.com/docs/cloud-messaging/) out of the box.
+
+## Public and Private Fields
+
+Topics and subscriptions have `public` and `private` fields. Generally, the fields are application-defined. The server does not enforce any particular structure of these fields except for `fnd` topic. At the same time, client software should use the same format for interoperability reasons.
+
+### Public
+The format of the `public` field is expected to be a [vCard](https://en.wikipedia.org/wiki/VCard):
+```js
+vcard: {
+  fn: "John Doe", // string, formatted name
+  n: {
+    surname: "Miner", // last of family name
+    given: "Coal", // first or given name
+    additional: "Diamond", // additional name, such as middle name or patronymic or nickname.
+    prefix: "Dr.", // prefix, such as homnorary title or gender designation.
+    suffix: "Jr.", // suffix, such as 'Jr' or 'II'
+  }, // object, user's structured name
+  org: "Most Evil Corp", // string, name of the organization the user belongs to.
+  title: "CEO", // string, job title
+  tel: [
+    {
+      type: "HOME", // string, optional designation
+      uri: "tel:+17025551234" // string, phone number
+    }, ...
+  ], // array of objects, list of phone numbers associated with the user
+  email: [
+    {
+      type: "WORK", // string, optional designation
+      uri: "email:alice@example.com", // string, email address
+    }, ...
+  ], // array of objects, list of user's email addresses
+  impp: [
+    {
+      type: "OTHER",
+      uri: "tinode:usrRkDVe0PYDOo", // string, email address
+    }, ...
+  ], // array of objects, list of user's IM handles
+  photo: {
+    type: "jpeg", // image type
+    data: "..." // base64-encoded binary image data
+  } // object, avatar photo. Java does not have a useful bitmap class, so keeping it as bits here.
+}
+```
+
+### Private
+
+The format of the `private` field is expected to be a dictionary. The following fields are currently defined:
+```js
+private: {
+  comment: "some comment", // string, optional user comment about a topic or other user
+  arch: true // boolean value indicating that the topic is archived by the user, i.e. should not be shown in the UI with other non-archived topics.
+}
+```
+
+Although it's not yet enforced, custom fields should start with `x-`, e.g. `x-example: "abc"`. The fields should contain primitive types only, i.e. string, boolean, number, null.
+
+
+## Format of Content
+
+Format of `{pub}` and `{data}` `content` field is application-defined and as such the server does not enforce any particular structure of the field. At the same time, client software should use the same format for interoperability reasons. Currently the following two types of `content` are supported:
+ * Plain text
+ * [Drafty](./drafty.md)
+
+If Drafty is used, message header `"head": {"mime": "text/x-drafty"}` must be set.
+
+
+## Out-of-Band Handling of Large Files
+
+Large files create problems when sent in-band for multiple reasons:
+ * limits on database storage as in-band messages are stored in database fields
+ * in-band messages must be downloaded completely as a part of downloading chat history
+
+Tinode provides two endpoints for handling large files: `/v0/file/u` for uploading files and `v0/file/s` for downloading. The endpoints require the client to provide both [API key](#connecting-to-the-server) and login credentials. The server checks credentials in the following order:
+
+**Login credentials**
+ * HTTP header `Authorization` (https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Authorization)
+ * URL query parameters `auth` and `secret` (/v0/file/s/abcdefg.jpeg?auth=...&secret=...)
+ * Form values `auth` and `secret`
+ * Cookies `auth` and `secret`
+
+### Uploading
+
+To upload a file first create an RFC 2388 multipart request then send it to the server using HTTP POST. The server responds to the request either with a `307 Temporary Redirect` or with a `200 OK` and a `{ctrl}` message in response body:
+
+```js
+ctrl: {
+  params: {
+    url: "/v0/file/s/mfHLxDWFhfU.pdf"
+  },
+  code: 200,
+  text: "ok",
+  ts: "2018-07-06T18:47:51.265Z"
+}
+```
+
+The `ctrl.params.url` contains the location of the uploaded file relative to the *download* endpoint `/v0/file/s/` at the current HTTP server.
+
+Once the `url` is received, either immediately or after following the redirect, the client can use the `url` to send a `{pub}` message with the uploaded file as an attachment. The `url` should be used to produce a [Drafty](./drafty.md)-formatted `pub.content` field and also should be referenced in the `pub.head.attachments`:
+
+```js:
+pub: {
+  id: "121103",
+  topic: "grpnG99YhENiQU",
+  head: {
+    attachments: ["/v0/file/s/sJOD_tZDPz0.jpg"],
+	mime: "text/x-drafty"
+  },
+  content: {
+    ent: [
+	  {
+	    data: {
+		  mime: "image/jpeg",
+		  name: "roses-are-red.jpg",
+		  ref:  "/v0/file/s/sJOD_tZDPz0.jpg",
+		  size: 437265
+		},
+	    tp: "EX"
+	  }
+	],
+	fmt: [
+	  {
+	    at: -1,
+		key:0,
+		len:1
+	  }
+	]
+  }
+}
+```
+
+It's important to list the URLs in the `head.attachments` field. Tinode server uses this field to maintain the uploaded file's use counter. Once the use counter drops to zero for a given file (for instance, because a message with the shared URL was deleted or because the client failed to include the URl in the `head.attachments` field), the server will garbage collect the file. Only relative URLs should be used. Absolute URLs in the `head.attachments` field are ignored.
+
+### Downloading
+
+The serving endpoint `/v0/file/s` serves files in response to HTTP GET requests. The client must evaluate relative URLs against this endpoint, i.e. if it receives a URL `mfHLxDWFhfU.pdf` or `./mfHLxDWFhfU.pdf` it should interpret it as a path `/v0/file/s/mfHLxDWFhfU.pdf` at the current Tinode HTTP server. As a security measure, the client should not send security credentials if the download URL is absolute and leads to another server.
 
 ## Messages
 
@@ -145,19 +499,21 @@ The user agent `ua` is expected to follow [RFC 7231 section 5.5.3](http://tools.
 
 #### `{acc}`
 
-Message `{acc}` creates users or updates `tags` or authentication credentials `scheme` and `secret` of exiting users. To create a new user set `user` to the string `new` optionally followed by any character sequence, e.g. `newr15gsr`. Either authenticated or anonymous session can send an `{acc}` message to create a new user. To authentication data or validate a credential of the current user leave `user` unset.
+Message `{acc}` creates users or updates `tags` or authentication credentials `scheme` and `secret` of exiting users. To create a new user set `user` to the string `new` optionally followed by any character sequence, e.g. `newr15gsr`. Either authenticated or anonymous session can send an `{acc}` message to create a new user. To update authentication data or validate a credential of the current user leave `user` unset.
 
 ```js
 acc: {
   id: "1a2b3", // string, client-provided message id, optional
   user: "new", // string, "new" to create a new user, default: current user, optional
   scheme: "basic", // authentication scheme for this account, required;
-               // "basic" and "anonymous" are currently supported for account creation. The
+               // "basic" and "anon" are currently supported for account creation. The
 				// current implementation of the basic scheme does not allow changes to
 				// username.
   secret: btoa("username:password"), // string, base64 encoded secret for the chosen
               // authentication scheme; to delete a scheme use a string with a single DEL
               // Unicode character "\u2421"; "token" and "basic" cannot be deleted
+  login: true, // boolean, use newly created account to authenticate current session, i.e.
+            // create account and immediately use it to login in.
   tags: ["alice johnson",... ], // array of tags for user discovery; see 'fnd' topic for
               // details, optional (if missing, user will not be discoverable other than
               // by login)
@@ -169,7 +525,7 @@ acc: {
       params: { ... } // parameters, specific to the verification method, optional
     },
 	...
-  ],   // account credentials which require verifiction, such as email.
+  ],   // account credentials which require verification, such as email or phone number.
 
   desc: {  // object, user initialization data closely matching that of table
            // initialization; optional
@@ -190,7 +546,7 @@ acc: {
 Server responds with a `{ctrl}` message with `params` containing details of the new user. If `desc.defacs` is missing,
 server will assign server-default access values.
 
-The only supported authentication schemes for account creation are `basic` and `anonymous`.
+The only supported authentication schemes for account creation are `basic` and `anon`.
 
 #### `{login}`
 
@@ -701,321 +1057,3 @@ info: {
             // read
 }
 ```
-
-
-## Users
-
-User is meant to represent a person, an end-user: producer and consumer of messages.
-
-There are two types of users: authenticated and anonymous. When a connection is first established, the client application can only send either an `{acc}` or a `{login}` message. Sending a `{login}` message will authenticate user or allow him to continue as an anonymous.
-
-Each user is assigned a unique ID. The IDs are composed as `usr` followed by base64-encoded 64-bit numeric value, e.g. `usr2il9suCbuko`. Users also have the following properties:
-
-* created: timestamp when the user record was created
-* updated: timestamp of when user's `public` was last updated
-* username: unique string used in `basic` authentication; username is not accessible to other users
-* defacs: object describing user's default access mode for peer to peer conversations with authenticated and anonymous users; see [Access control](#access-control) for details
- * auth: default access mode for authenticated users
- * anon: default access for anonymous users
-* public: an application-defined object that describes the user. Anyone who can query user for `public` data.
-* private: an application-defined object that is unique to the current user and accessible only by the user.
-
-A user may maintain multiple simultaneous connections (sessions) with the server. Each session is tagged with a client-provided User Agent string intended to differentiate client software.
-
-Logging out is not supported by design. If an application needs to change the user, it should open a new connection and authenticate it with the new user credentials.
-
-## Access control
-
-Access control manages user's access to topics through access control lists (ACLs) or bearer tokens (_bearer tokens are not implemented as of version 0.14_).
-
-Access control is mostly usable for group topics. Its usability for `me` and P2P topics is limited to managing presence notifications and banning uses from initiating or continuing P2P conversations.
-
-User's access to a topic is defined by two sets of permissions: user's desired permissions "want", and permissions granted to user by topic's manager(s) "given". Each permission is represented by a bit in a bitmap. It can be either present or absent. The actual access is determined as a bitwise AND of wanted and given permissions. The permissions are communicated in messages as a set of ASCII characters, where presence of a character means a set permission bit:
-
-* No access: `N` is not a permission per se but an indicator that permissions are explicitly cleared/not set. It usually indicates that the default permissions should *not* be applied.
-* Join: `J`, permission to subscribe to a topic
-* Read: `R`, permission to receive `{data}` packets
-* Write: `W`, permission to `{pub}` to topic
-* Presence: `P`, permission to receive presence updates `{pres}`
-* Approve: `A`, permission to approve requests to join a topic; a user with such permission is topic's manager
-* Sharing: `S`, permission to invite other people to join the topic
-* Delete: `D`, permission to hard-delete messages; only owners can completely delete topics
-* Owner: `O`, user is the topic owner; topic may have a single owner only; some topics have no owner
-
-Topic's default access is established at the topic creation time by `{sub.init.defacs}` and can be subsequently modified by `{set}` messages. Default access is defined for two categories of users: authenticated and anonymous. This value is applied as a default "given" permission to all new subscriptions.
-
-Client may replace explicit permissions in `{sub}` and `{set}` messages with an empty string to tell Tinode to use default permissions. If client specifies no default access permissions at topic creation time, authenticated users will receive a `RWP` permission, anonymous users will receive and empty permission which means every subscription request must be explicitly approved by the topic manager.
-
-Access permissions can be assigned on a per-user basis by `{set}` messages.
-
-## Topics
-
-Topic is a named communication channel for one or more people. Topics have persistent properties. These following topic properties can be queried by `{get what="info"}` message.
-
-Topic properties independent of the user making the query:
-* created: timestamp of topic creation time
-* updated: timestamp of when topic's `public` or `private` was last updated
-* defacs: object describing topic's default access mode for authenticated and anonymous users; see [Access control](#access-control) for details
- * auth: default access mode for authenticated users
- * anon: default access for anonymous users
-* seq: integer server-issued sequential ID of the latest `{data}` message sent through the topic
-* public: an application-defined object that describes the topic. Anyone who can subscribe to topic can receive topic's `public` data.
-
-User-dependent topic properties:
-* acs: object describing given user's current access permissions; see [Access control](#access-control) for details
- * want: access permission requested by this user
- * given: access permissions given to this user
-* private: an application-defined object that is unique to the current user.
-
-Topic usually have subscribers. One the the subscribers may be designated as topic owner (`O` access permission) with full access permissions. The list of subscribers can be queries with a `{get what="sub"}` message. The list of subscribers is returned in a `sub` section of a `{meta}` message.
-
-### `me` topic
-
-Topic `me` is automatically created for every user at the account creation time. It serves as means for account updates, receiving presence notification from people and topics of interest, invites to join topics, requests to approve subscription for topics where this user is a manager (has `S` permission). Topic `me` has no owner. The topic cannot be deleted or unsubscribed from. One can leave the topic which will stop all relevant communication and indicate that the user is offline (although the user may still be logged in and may continue to use other topics).
-
-Joining or leaving `me` generates a `{pres}` presence update sent to all users who have peer to peer topics with the given user and `P` permissions set.
-
-Topic `me` is read-only. `{pub}` messages to `me` are rejected.
-
-The `{data}` message represents invites and requests to confirm a subscription. The `from` field of the message contains ID of the user who originated the request, for instance, the user who asked current user to join a topic or the user who requested an approval for subscription. The `content` field of the message contains the following information:
-* act: request action as string; possible actions are:
- * "info" to notify the user that user's request to subscribe was approved; in case of peer to peer topics this could be a notification that the peer has subscribed to the topic
- * "join" is an invitation to subscribe to a topic
- * "appr" is a request to approve a subscription
-* topic: the name of the topic, in case of an invite the current user is invited to this topic; in case of a request to approve, another user wants to subscribe to this topic where the current user is a manager (has `S` permission)
-* user: user ID as a string of the user who is the target of this request. In case of an invite this is the ID of the current user; in case of an approval request this is the ID of the user who is being subscribed.
-* acs: object describing access permissions of the subscription, see [Access control](#access-control) for details
-* info: object with a free-form payload. It's passed unchanged from the originating `{sub}` or `{set}` message.
-
-Message `{get what="info"}` to `me` is automatically replied with a `{meta}` message containing `info` section with the topic parameters (see intro to [Topics](#topics) section). The `public` parameter of `me` topic is data that the user wants to show to his/her connections. Changing it changes `public` not just for the `me` topic, but also everywhere where user's public is shown, such as 'public' of all user's peer to peer topics.
-
-Message `{get what="sub"}` to `me` is different from any other topic as it returns the list of topics that the current user is subscribed to as opposite to the expected user's subscription to `me`.
-* seq: server-issued numeric id of the last message in the topic
-* read: seq value self-reported by the current user as received
-* recv: seq value self-reported by the current user as read
-* seen: for P2P subscriptions, timestamp of user's last presence and User Agent string are reported
- * when: timestamp when the user was last online
- * ua: user agent string of the user's client software last used
-
-Message `{get what="data"}` to `me` queries the history of invites/notifications. It's handled the same way as to any other topic.
-
-### `fnd` and Tags: Finding Users and Topics
-
-Topic `fnd` is automatically created for every user at the account creation time. It serves as an endpoint for discovering other users and group topics.
-
-Users and group topics can be discovered by optional `tags`. Tags are optionally assigned at the topic or user creation time then can be updated by using `{set what="tags"}` against a `fnd` or a group topic.
-
-A tag is an arbitrary case-insensitive Unicode string (forced to lowercase) starting with a Unicode letter or digit. `Tags` must not contain the double quote `"`, `\u0022` but may contain spaces. `Tags` may have a prefix which serves as a namespace. The prefix is a string followed by a colon `:`, ex. prefixed phone tag `tel:14155551212` or prefixed email tag `email:alice@example.com`. Some prefixed `tags` are optionally enforced to be unique. In that case only one user or topic may have such a tag. Certain `tags` may be forced to be immutable to the user, i.e. user's attemps to add or remove an immutable tag will be rejected by the server.
-
-The `tags` are indexed server-side and used in user and topic discovery. Seach returns users and topics sorted by the number of matched tags in descending order.
-
-In order to find users or topics, a user sets either `public` or `private` parameter of the `fnd` topic to a search query (see [Query language](#query-language)) then issues a `{get topic="fnd" what="sub"}` request. If both `public` and `private` are set, the `public` query is used. The `private` query is persisted accress sessions and devices, i.e. all user's sessions see the same `private` query. The value of the `public` query is ephemeral, i.e. it's not saved to database and not shared between user's sessions. The `private` query is intended for large queries which do not change often, such as finding matches for everyone in user's contact list on a mobile phone. The `public` query is intended to be short and specific, such as finding some topic or a user who is not in the contact list.
-
-The system responds with a `{meta}` message with the `sub` section listing details of the found users or topics formatted as subscriptions.
-
-Topic `fnd` is read-only. `{pub}` messages to `fnd` are rejected.
-
-(The following functionality is not implemented yet) When a new user registers with tags matching the given query, the `fnd` topic will receive `{pres}` notification for the new user.
-
-[Plugins](./pbx) support `Find` service which can be used to replace default search with a custom one.
-
-#### Query language
-
-Tinode query language is used to define search queries for finding users and topics. The query is a string containing tags separated by spaces or commas. Tags are strings - individual query terms which are matched against user's or topic's tags. The tags can be written in an RTL language but the query as a whole is parsed left to right. Spaces are treated as the `AND` operator, commas (as well commas preceeded and/or followed by a space) as the `OR` operator. The order of operators is ignored: all `AND` operators are grouped together, all `OR` operators are grouped together. `OR` takes precedence over `AND`.
-
-Tags containing spaces or commas must be enclosed in double quotes (`"`, `\u0022`): i.e. `"abc, def"` is treated as a single token. Tags must start with a Unicode letter or digit. Tags must not contain the double quote (`"`, `\u0022`).
-
-**Some examples:**
-* `flowers travel`: find topics or users which contain both tags `flowers` and `travel`.
-* `flowers, travel`: find topics or users which contain either tag `flowers` or `travel` (or both).
-* `flowers travel, puppies`: find topics or users which contain `flowers` and either `travel` or `puppies`, i.e. `flowers AND (travel OR puppies)`.
-
-
-#### Some use cases
-* Restricting users to organizations.
-  An immutable tag(s) may be assigned to the user which denotes the organization the user belons to. When the user searches for other users or topics, the search can be restricted to always contain the tag. This approach can be used to segment users into organizations with limited visiblity into each other.
-
-* Search by geographical location.
-  Client software may periodically assign a [geohash](https://en.wikipedia.org/wiki/Geohash) tag to the user based on current location. Searching for users in a given area would mean matching on geohash tags.
-
-* Search by numerical range, such as age range.
-  The approach is similar to geohashing. The entire range of numbers is covered by the smallest possible power of 2, for instance the range of human ages is covered by 2<sup>7</sup>=128 years. The entire range is split in two halves: the range 0-63 is denoted by 0, 64-127 by 1. The operation is repeated with each subrange, i.e. 0-31 is 00, 32-63 is 01, 0-15 is 000, 32-47 is 010. Once completed, the age 30 will belong to the following ranges: 0 (0-63), 00 (0-31), 001 (16-31), 0011 (24-31), 00111 (28-31), 001111 (30-31), 0011110 (30). A 30 y.o. user is assigned a few tags to indicate the age, i.e. `age:00111`, `age:001111`,  and `age:0011110`. Technically, all 7 tags may be assigned but usually it's impractical. To query for anyone in the age range 28-35 convert the range into a minimal number of tags: `age:00111` (28-31), `age:01000` (32-35). This query will match the 30 y.o. user by tag `age:00111`.
-
-
-### Peer to Peer Topics
-
-Peer to peer (P2P) topics represent communication channels between strictly two users. The name of the topic is different for each of the two participants. Each of them sees the name of the topic as the user ID of the other participant: `usr` followed by base64 URL-encoded ID of the user. For example, if two users `usrOj0B3-gSBSs` and `usrIU_LOVwRNsc` start a P2P topic, the first one will see it as `usrIU_LOVwRNsc`, the second as `usrOj0B3-gSBSs`. The P2P topic has no owner.
-
-A P2P topic is created by one user subscribing to topic with the name equal to the ID of the other user. For instance, user `usrOj0B3-gSBSs` can establish a P2P topic with user `usrIU_LOVwRNsc` by sending a `{sub topic="usrIU_LOVwRNsc"}`. Tinode will respond with a `{ctrl}` packet with the name of the newly created topic as described above. The other user will receive a `{data}` message on `me` topic with either a request to confirm the subscription or a notification of a successful subscription, depending on user's default permissions.
-
-The 'public' parameter of P2P topics is user-dependent. For instance a P2P topic between users A and B would show user A's 'public' to user B and vice versa. If a user updates 'public', all user's P2P topics will automatically update 'public' too.
-
-The 'private' parameter of a P2P topic is defined by each participant individually as with any other topic type.
-
-### Group Topics
-
-Group topics represent communication channels between multiple users. The name of a group topic is `grp` followed by a string of characters from base64 URL-encoding set. No other assumptions can be made about internal structure or length of the group name.
-
-A group topic is created by sending a `{sub}` message with the topic field set to string `new` optionally followed by any characters, e.g. `new` or `newAbC123` are equivalent. Tinode will respond with a `{ctrl}` message with the name of the newly created topic, i.e. `{sub topic="new"}` is replied with `{ctrl topic="grpmiKBkQVXnm3P"}`. If topic creation fails, the error is reported on the original topic name, i.e. `new` or `newAbC123`. The user who created the topic becomes topic owner. Ownership can be transferred to another user with a `{set}` message but at least one user must remain the owner.
-
-A user joining or leaving the topic generates a `{pres}` message to all other users who are currently in the joined state with the topic.
-
-
-## Using Server-Issued Message IDs
-
-Tinode provides basic support for client-side caching of `{data}` messages in the form of server-issued message IDs. The client may request the last message id from the topic by issuing a `{get what="info"}` message. If the returned ID is greater than the ID of the latest received message, the client knows that the topic has unread messages and their count. The client may fetch these messages using `{get what="data"}` message. The client may also paginate history retrieval by using message IDs.
-
-## User Agent and Presence Notifications
-
-A user is reported as being online when one or more of user's sessions are attached to the `me` topic. Client-side software identifies itself to the server using `ua` (user agent) field of the `{login}` message. The _user agent_ is published in `{meta}` and `{pres}` messages in the following way:
-
- * When user's first session attaches to `me`, the _user agent_ from that session is broadcast in the `{pres what="on" ua="..."}` message.
- * When multiple user sessions are attached to `me`, the _user agent_ of the session where the most recent action has happened is reported in `{pres what="ua" ua="..."}`; the 'action' in this context means any message sent by the client. To avoid potentially excessive traffic, user agent changes are broadcast no more frequently than once a minute.
- * When user's last session detaches from `me`, the _user agent_ from that session is recorded together with the timestamp; the user agent is broadcast in the `{pres what="off"  ua="..."}` message and subsequently reported as the last online timestamp and user agent.
-
-An empty `ua=""` _user agent_ is not reported. I.e. if user attaches to `me` with non-empty _user agent_ then does so with an empty one, the change is not reported. An empty _user agent_ may be disallowed in the future.
-
-## Push Notifications Support
-
-Tinode supports mobile push notifications though compile-time plugins. The channel published by the plugin receives a copy of every data message which was attempted to be delivered. The server supports [Google FCM](https://firebase.google.com/docs/cloud-messaging/) out of the box.
-
-## Public and Private Fields
-
-Topics and subscriptions have `public` and `private` fields. Generally, the fields are application-defined. The server does not enforce any particular structure of these fields except for `fnd` topic. At the same time, client software should use the same format for interoperability reasons.
-
-### Public
-The format of the `public` field is expected to be a [vCard](https://en.wikipedia.org/wiki/VCard):
-```js
-vcard: {
-  fn: "John Doe", // string, formatted name
-  n: {
-    surname: "Miner", // last of family name
-    given: "Coal", // first or given name
-    additional: "Diamond", // additional name, such as middle name or patronymic or nickname.
-    prefix: "Dr.", // prefix, such as homnorary title or gender designation.
-    suffix: "Jr.", // suffix, such as 'Jr' or 'II'
-  }, // object, user's structured name
-  org: "Most Evil Corp", // string, name of the organization the user belongs to.
-  title: "CEO", // string, job title
-  tel: [
-    {
-      type: "HOME", // string, optional designation
-      uri: "tel:+17025551234" // string, phone number
-    }, ...
-  ], // array of objects, list of phone numbers associated with the user
-  email: [
-    {
-      type: "WORK", // string, optional designation
-      uri: "email:alice@example.com", // string, email address
-    }, ...
-  ], // array of objects, list of user's email addresses
-  impp: [
-    {
-      type: "OTHER",
-      uri: "tinode:usrRkDVe0PYDOo", // string, email address
-    }, ...
-  ], // array of objects, list of user's IM handles
-  photo: {
-    type: "jpeg", // image type
-    data: "..." // base64-encoded binary image data
-  } // object, avatar photo. Java does not have a useful bitmap class, so keeping it as bits here.
-}
-```
-
-### Private
-
-The format of the `private` field is expected to be a dictionary. The following fields are currently defined:
-```js
-private: {
-  comment: "some comment", // string, optional user comment about a topic or other user
-  arch: true // boolean value indicating that the topic is archived by the user, i.e. should not be shown in the UI with other non-archived topics.
-}
-```
-
-Although it's not yet enforced, custom fields should start with `x-`, e.g. `x-example: "abc"`. The fields should contain primitive types only, i.e. string, boolean, number, null.
-
-
-## Format of Content
-
-Format of `{pub}` and `{data}` `content` field is application-defined and as such the server does not enforce any particular structure of the field. At the same time, client software should use the same format for interoperability reasons. Currently the following two types of `content` are supported:
- * Plain text
- * [Drafty](./drafty.md)
-
-If Drafty is used, message header `"head": {"mime": "text/x-drafty"}` must be set.
-
-
-## Out-of-Band Handling of Large Files
-
-Large files create problems when sent in-band for multiple reasons:
- * limits on database storage as in-band messages are stored in database fields
- * in-band messages must be downloaded completely as a part of downloading chat history
-
-Tinode provides two endpoints for handling large files: `/v0/file/u` for uploading files and `v0/file/s` for downloading. The endpoints require the client to provide both API key and login credentials. The server checks credentials in the following order:
-
- **API key**
- * HTTP header `X-Tinode-APIKey`
- * URL query parameter `apikey` (/v0/file/s/abcdefg.jpeg?apikey=...)
- * Form value `apikey`
- * Cookie `apikey`
-
-**Login credentials**
- * HTTP header `Authorization` (https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Authorization)
- * URL query parameters `auth` and `secret` (/v0/file/s/abcdefg.jpeg?auth=...&secret=...)
- * Form values `auth` and `secret`
- * Cookies `auth` and `secret`
-
-### Uploading
-
-To upload a file first create an RFC 2388 multipart request then send it to the server using HTTP POST. The server responds to the request either with a `307 Temporary Redirect` or with a `200 OK` and a `{ctrl}` message in response body:
-
-```js
-ctrl: {
-  params: {
-    url: "/v0/file/s/mfHLxDWFhfU.pdf"
-  },
-  code: 200,
-  text: "ok",
-  ts: "2018-07-06T18:47:51.265Z"
-}
-```
-
-The `ctrl.params.url` contains the location of the uploaded file relative to the *download* endpoint `/v0/file/s/` at the current HTTP server.
-
-Once the `url` is received, either immediately or after following the redirect, the client can use the `url` to send a `{pub}` message with the uploaded file as an attachment. The `url` should be used to produce a [Drafty](./drafty.md)-formatted `pub.content` field and also should be referenced in the `pub.head.attachments`:
-
-```js:
-pub: {
-  id: "121103",
-  topic: "grpnG99YhENiQU",
-  head: {
-    attachments: ["/v0/file/s/sJOD_tZDPz0.jpg"],
-	mime: "text/x-drafty"
-  },
-  content: {
-    ent: [
-	  {
-	    data: {
-		  mime: "image/jpeg",
-		  name: "roses-are-red.jpg",
-		  ref:  "/v0/file/s/sJOD_tZDPz0.jpg",
-		  size: 437265
-		},
-	    tp: "EX"
-	  }
-	],
-	fmt: [
-	  {
-	    at: -1,
-		key:0,
-		len:1
-	  }
-	]
-  }
-}
-```
-
-It's important to list the URLs in the `head.attachments` field. Tinode server uses this field to maintain the uploaded file's use counter. Once the use counter drops to zero for a given file (for instance, because a message with the shared URL was deleted or because the client failed to include the URl in the `head.attachments` field), the server will garbage collect the file. Only relative URLs should be used. Absolute URLs in the `head.attachments` field are ignored.
-
-### Downloading
-
-The serving endpoint `/v0/file/s` serves files in response to HTTP GET requests. The client must evaluate relative URLs against this endpoint, i.e. if it receives a URL `mfHLxDWFhfU.pdf` or `./mfHLxDWFhfU.pdf` it should interpret it as a path `/v0/file/s/mfHLxDWFhfU.pdf` at the current Tinode HTTP server. As a security measure, the client should not send security credentials if the download URL is absolute and leads to another server.

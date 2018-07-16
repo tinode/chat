@@ -549,6 +549,16 @@ func InfoValidateCredentials(id string, ts time.Time) *ServerComMessage {
 		Timestamp: ts}}
 }
 
+// InfoChallenge requires user to respond to presented challenge before login can be completed (300).
+func InfoChallenge(id string, ts time.Time, challenge []byte) *ServerComMessage {
+	return &ServerComMessage{Ctrl: &MsgServerCtrl{
+		Id:        id,
+		Code:      http.StatusMultipleChoices, // 300
+		Text:      "challenge",
+		Params:    map[string]interface{}{"challenge": challenge},
+		Timestamp: ts}}
+}
+
 // InfoAlreadySubscribed request to subscribe was ignored because user is already subscribed (304).
 func InfoAlreadySubscribed(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{

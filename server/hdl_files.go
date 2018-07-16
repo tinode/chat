@@ -56,10 +56,14 @@ func largeFileServe(wrt http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// Check authorization: either the token or SID must be present
-	uid, err := authHttpRequest(req)
+	// Check authorization: either auth information or SID must be present
+	uid, challenge, err := authHttpRequest(req)
 	if err != nil {
 		writeHttpResponse(decodeStoreError(err, "", "", now, nil))
+		return
+	}
+	if challenge != nil {
+		writeHttpResponse(InfoChallenge("", now, challenge))
 		return
 	}
 	if uid.IsZero() {
@@ -123,10 +127,14 @@ func largeFileUpload(wrt http.ResponseWriter, req *http.Request) {
 		writeHttpResponse(ErrAPIKeyRequired(now))
 		return
 	}
-	// Check authorization: either the token or SID must be present
-	uid, err := authHttpRequest(req)
+	// Check authorization: either auth information or SID must be present
+	uid, challenge, err := authHttpRequest(req)
 	if err != nil {
 		writeHttpResponse(decodeStoreError(err, "", "", now, nil))
+		return
+	}
+	if challenge != nil {
+		writeHttpResponse(InfoChallenge("", now, challenge))
 		return
 	}
 	if uid.IsZero() {

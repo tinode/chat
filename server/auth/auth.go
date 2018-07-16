@@ -75,10 +75,10 @@ type Rec struct {
 
 // AuthHandler is the interface which auth providers must implement.
 type AuthHandler interface {
-	// Init initialize the handler.
+	// Init initializes the handler.
 	Init(jsonconf string) error
 
-	// AddRecord adds persistent record to database.
+	// AddRecord adds persistent authentication record to the database.
 	// Returns: updated auth record, error
 	AddRecord(rec *Rec, secret []byte) (*Rec, error)
 
@@ -86,11 +86,12 @@ type AuthHandler interface {
 	// if the error is due to a duplicate or some other error.
 	UpdateRecord(rec *Rec, secret []byte) error
 
-	// Authenticate: given a user-provided authentication secret (such as "login:password"
-	// return user ID, time when the secret expires (zero, if never) or an error code.
+	// Authenticate: given a user-provided authentication secret (such as "login:password"), either
+	// return user's record (ID, time when the secret expires), or issue a challenge to
+	// continue the authentication process to the next step, or return an error code.
 	// store.Users.GetAuthRecord("scheme", "unique")
-	// Returns: user auth record, error.
-	Authenticate(secret []byte) (*Rec, error)
+	// Returns: user auth record, challenge, error.
+	Authenticate(secret []byte) (*Rec, []byte, error)
 
 	// IsUnique verifies if the provided secret can be considered unique by the auth scheme
 	// E.g. if login is unique.

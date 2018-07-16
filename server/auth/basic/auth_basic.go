@@ -123,33 +123,33 @@ func (authenticator) UpdateRecord(rec *auth.Rec, secret []byte) error {
 }
 
 // Authenticate checks login and password.
-func (authenticator) Authenticate(secret []byte) (*auth.Rec, error) {
+func (authenticator) Authenticate(secret []byte) (*auth.Rec, []byte, error) {
 	uname, password, err := parseSecret(secret)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if len([]rune(uname)) < minLoginLength || len([]rune(uname)) > maxLoginLength {
-		return nil, types.ErrFailed
+		return nil, nil, types.ErrFailed
 	}
 
 	uid, authLvl, passhash, expires, err := store.Users.GetAuthUniqueRecord("basic", uname)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if uid.IsZero() {
 		// Invalid login.
-		return nil, types.ErrFailed
+		return nil, nil, types.ErrFailed
 	}
 	if !expires.IsZero() && expires.Before(time.Now()) {
 		// The record has expired
-		return nil, types.ErrExpired
+		return nil, nil, types.ErrExpired
 	}
 
 	err = bcrypt.CompareHashAndPassword([]byte(passhash), []byte(password))
 	if err != nil {
 		// Invalid password
-		return nil, types.ErrFailed
+		return nil, nil, types.ErrFailed
 	}
 
 	var lifetime time.Duration
@@ -160,7 +160,7 @@ func (authenticator) Authenticate(secret []byte) (*auth.Rec, error) {
 		Uid:       uid,
 		AuthLevel: authLvl,
 		Lifetime:  lifetime,
-		Features:  0}, nil
+		Features:  0}, nil, nil
 }
 
 // IsUnique checks login uniqueness.

@@ -655,9 +655,15 @@ func (s *Session) login(msg *ClientComMessage) {
 		return
 	}
 
-	rec, err := handler.Authenticate(msg.Login.Secret)
+	rec, challenge, err := handler.Authenticate(msg.Login.Secret)
 	if err != nil {
 		s.queueOut(decodeStoreError(err, msg.Login.Id, "", msg.timestamp, nil))
+		return
+	}
+
+	if challenge != nil {
+		reply := NoErr(msg.Login.Id, "", msg.timestamp)
+		s.queueOut(reply)
 		return
 	}
 
