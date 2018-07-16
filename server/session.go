@@ -662,8 +662,8 @@ func (s *Session) login(msg *ClientComMessage) {
 	}
 
 	if challenge != nil {
-		reply := NoErr(msg.Login.Id, "", msg.timestamp)
-		s.queueOut(reply)
+		// Issue challenge to the client.
+		s.queueOut(InfoChallenge(msg.Login.Id, msg.timestamp, challenge))
 		return
 	}
 

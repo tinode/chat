@@ -11,6 +11,8 @@
 		- [Authentication](#authentication)
 			- [Creating an Account](#creating-an-account)
 			- [Logging in](#logging-in)
+			- [Changing Authentication Parameters](#changing-authentication-parameters)
+			- [Password Recovery](#password-recovery)
 		- [Credentials](#credentials)
 		- [Access control](#access-control)
 	- [Topics](#topics)
@@ -163,15 +165,31 @@ User may optionally set `{acc login=true}` to use the new account for authentica
 
 #### Logging in
 
-Logging in is possible with `basic` and `token` only. Response to any login is a `{ctrl}` message with either a code 200 and a token which can be used in subsequent logins with `token` authentication, or a code 300 request for additional information, such as verifying credentials or responding to a method-dependent challenge, or a code 4xx error.
+Logging in is possible with `basic` and `token` only. Response to any login is a `{ctrl}` message with either a code 200 and a token which can be used in subsequent logins with `token` authentication, or a code 300 request for additional information, such as verifying credentials or responding to a method-dependent challenge in multi-step authentication, or a code 4xx error.
 
 Token has server-configured expiration time so it needs to be periodically refreshed.
 
+#### Changing Authentication Parameters
+
+User may change authentication parameters, such as changing login and password, by issuing an `{acc}` request on an already authenticated session. Only `basic` authentication currently supports changing parameters:
+```js
+acc: {
+  id: "1a2b3", // string, client-provided message id, optional
+  scheme: "basic", // authentication scheme being updated
+  secret: btoa("new_username:new_password") // new parameters
+}
+```
+In order to change just the password, username should be left empty, i.e. `secret: btoa(":new_password")`.
+
+#### Password Recovery
+
+Currently not supported.
+
 ### Credentials
 
-Server may be optionally configured to require certain credentials associated with the user accounts. For instance, it's possible to require users to provide unique emails or phone numbers as a requirement of account registration or to solve a captcha.
+Server may be optionally configured to require certain credentials associated with the user accounts. For instance, it's possible to require user to provide a unique email or a phone number as a condition of account registration, or to solve a captcha.
 
-The server supports verification of email and phone numbers out of the box. Verification of emails is functional, verification of phone numbers is not because a commercial subscription is needed to be able to send SMS.
+The server supports verification of email and phone numbers out of the box. Verification of emails is mostly functional, verification of phone numbers is not functional because a commercial subscription is needed in order to be able to send SMS.
 
 ### Access control
 
@@ -506,9 +524,7 @@ acc: {
   id: "1a2b3", // string, client-provided message id, optional
   user: "new", // string, "new" to create a new user, default: current user, optional
   scheme: "basic", // authentication scheme for this account, required;
-               // "basic" and "anon" are currently supported for account creation. The
-				// current implementation of the basic scheme does not allow changes to
-				// username.
+               // "basic" and "anon" are currently supported for account creation.
   secret: btoa("username:password"), // string, base64 encoded secret for the chosen
               // authentication scheme; to delete a scheme use a string with a single DEL
               // Unicode character "\u2421"; "token" and "basic" cannot be deleted
