@@ -1,3 +1,51 @@
+<!-- TOC depthFrom:1 depthTo:6 withLinks:1 updateOnSave:1 orderedList:0 -->
+
+- [Server API](#server-api)
+	- [How it works?](#how-it-works)
+	- [General considerations](#general-considerations)
+	- [Connecting to the server](#connecting-to-the-server)
+		- [Websocket](#websocket)
+		- [Long polling](#long-polling)
+		- [Out of Band Large Files](#out-of-band-large-files)
+	- [Messages](#messages)
+		- [Client to server messages](#client-to-server-messages)
+			- [`{hi}`](#hi)
+			- [`{acc}`](#acc)
+			- [`{login}`](#login)
+			- [`{sub}`](#sub)
+			- [`{leave}`](#leave)
+			- [`{pub}`](#pub)
+			- [`{get}](#get)
+			- [`{set}`](#set)
+			- [`{del}`](#del)
+			- [`{note}`](#note)
+		- [Server to client messages](#server-to-client-messages)
+			- [`{data}`](#data)
+			- [`{ctrl}`](#ctrl)
+			- [`{meta}`](#meta)
+			- [`{pres}`](#pres)
+			- [`{info}`](#info)
+	- [Users](#users)
+	- [Access control](#access-control)
+	- [Topics](#topics)
+		- [`me` topic](#me-topic)
+		- [`fnd` and Tags: Finding Users and Topics](#fnd-and-tags-finding-users-and-topics)
+			- [Query language](#query-language)
+			- [Some use cases](#some-use-cases)
+		- [Peer to Peer Topics](#peer-to-peer-topics)
+		- [Group Topics](#group-topics)
+	- [Using Server-Issued Message IDs](#using-server-issued-message-ids)
+	- [User Agent and Presence Notifications](#user-agent-and-presence-notifications)
+	- [Push Notifications Support](#push-notifications-support)
+	- [Public and Private Fields](#public-and-private-fields)
+		- [Public](#public)
+		- [Private](#private)
+	- [Format of Content](#format-of-content)
+	- [Out-of-Band Handling of Large Files](#out-of-band-handling-of-large-files)
+		- [Uploading](#uploading)
+		- [Downloading](#downloading)
+
+<!-- /TOC -->
 # Server API
 
 ## How it works?
@@ -87,7 +135,7 @@ hi: {
   ua: "JS/1.0 (Windows 10)", // string, user agent identifying client software,
                    // optional
   dev: "L1iC2dNtk2", // string, unique value which identifies this specific
-				   // connected device for the purpose of push notifications; not 
+				   // connected device for the purpose of push notifications; not
 				   // interpreted by the server; optional
 				   // see [Push notifications support](#push-notifications-support); optional
   lang: "EN" 	   // human language of the client device; optional
@@ -104,8 +152,8 @@ acc: {
   id: "1a2b3", // string, client-provided message id, optional
   user: "new", // string, "new" to create a new user, default: current user, optional
   scheme: "basic", // authentication scheme for this account, required;
-               // "basic" and "anonymous" are currently supported for account creation. The 
-				// current implementation of the basic scheme does not allow changes to 
+               // "basic" and "anonymous" are currently supported for account creation. The
+				// current implementation of the basic scheme does not allow changes to
 				// username.
   secret: btoa("username:password"), // string, base64 encoded secret for the chosen
               // authentication scheme; to delete a scheme use a string with a single DEL
@@ -164,7 +212,7 @@ login: {
   ],   // response to a request for credential verification, optional
 }
 ```
-The `basic` authentication scheme expects `secret` to be a base64-encoded string of a string composed of a user name followed by a colon `:` followed by a plan text password. User name in the `basic` scheme must not contain colon character ':' (ASCII 0x3A). The `token` expects secret to be a previously obtained security token. 
+The `basic` authentication scheme expects `secret` to be a base64-encoded string of a string composed of a user name followed by a colon `:` followed by a plan text password. User name in the `basic` scheme must not contain colon character ':' (ASCII 0x3A). The `token` expects secret to be a previously obtained security token.
 
 The only supported authentication schemes are `basic` and `token`. Although `anonymous` scheme can be used to create accounts, it cannot be used for logging in.
 
@@ -218,7 +266,7 @@ sub: {
                    // default: server-defined
       info: { ... }  // application-defined payload to pass to the topic manager
     }, // object, optional
-	
+
     // Optional update to tags (see fnd topic description)
     tags: [ // array of strings
         "email:alice@example.com", "tel:1234567890"
@@ -244,10 +292,10 @@ sub: {
       ims: "2015-10-06T18:07:30.038Z", // timestamp, "if modified since" - return
               // public and private values only if at least one of them has been
               // updated after the stated timestamp, optional
-	  user: "usr2il9suCbuko", // string, return results for a single user, 
+	  user: "usr2il9suCbuko", // string, return results for a single user,
 	                          // any topic other than 'me', optional
 	  topic: "usr2il9suCbuko", // string, return results for a single topic,
-	                          // 'me' topic only, optional	
+	                          // 'me' topic only, optional
       limit: 20 // integer, limit the number of returned objects
     },
 
@@ -299,7 +347,7 @@ pub: {
 }
 ```
 
-Topic subscribers receive the `content` in the `{data}` message. By default the originating session gets a copy of `{data}` like any other session currently attached to the topic. If for some reason the originating session does not want to receive the copy of the data it just published, set `noecho` to `true`. 
+Topic subscribers receive the `content` in the `{data}` message. By default the originating session gets a copy of `{data}` like any other session currently attached to the topic. If for some reason the originating session does not want to receive the copy of the data it just published, set `noecho` to `true`.
 
 See [Format of Content](#format-of-content) for `content` format considerations.
 
@@ -327,10 +375,10 @@ get: {
     ims: "2015-10-06T18:07:30.038Z", // timestamp, "if modified since" - return
           // public and private values only if at least one of them has been
           // updated after the stated timestamp, optional
-	user: "usr2il9suCbuko", // string, return results for a single user, 
+	user: "usr2il9suCbuko", // string, return results for a single user,
 	                        // any topic other than 'me', optional
 	topic: "usr2il9suCbuko", // string, return results for a single topic,
-	                         // 'me' topic only, optional	
+	                         // 'me' topic only, optional
     limit: 20 // integer, limit the number of returned objects
   },
 
@@ -346,7 +394,7 @@ get: {
 
   // Optional parameters for {get what="del"}
   del: {
-    since: 5, // integer, load deleted ranges with the delete transaction IDs greater 
+    since: 5, // integer, load deleted ranges with the delete transaction IDs greater
 				// or equal to this (inclusive/closed), optional
     before: 12, // integer, load deleted ranges with the delete transaction IDs less
 				  // than this (exclusive/open), optional
@@ -359,7 +407,7 @@ get: {
 * `{get what="desc"}`
 
 Query topic description. Server responds with a `{meta}` message containing requested data. See `{meta}` for details.
-If `ims` is specified and data has not been updated, the message will skip `public` and `private` fields. 
+If `ims` is specified and data has not been updated, the message will skip `public` and `private` fields.
 
 * `{get what="sub"}`
 
@@ -430,12 +478,12 @@ del: {
   id: "1a2b3", // string, client-provided message id, optional
   topic: "grp1XUtEhjv6HND", // string, topic affect, required
   what: "msg", // string, either "topic" or "sub" or "msg"; what to delete - the
-               // entire topic or subscription or just the messages; 
+               // entire topic or subscription or just the messages;
                // optional, default: "msg"
   hard: false, // boolean, request to delete messages for all users, default: false
-  delseq: [{low: 123, hi: 125}, {low: 156}], // array of ranges of message IDs 
+  delseq: [{low: 123, hi: 125}, {low: 156}], // array of ranges of message IDs
 				// to delete, inclusive-exclusive, i.e. [low, hi), optional
-  user: "usr2il9suCbuko" // string, user whose subscription is being deleted 
+  user: "usr2il9suCbuko" // string, user whose subscription is being deleted
                // (what="sub"), optional
 }
 ```
@@ -604,7 +652,7 @@ meta: {
   ],
   del: {
 	clear: 3, // ID of the latest applicable 'delete' transaction
-	delseq: [{low: 15}, {low: 22, hi: 28}, ...], // ranges of IDs of deleted messages 
+	delseq: [{low: 15}, {low: 22, hi: 28}, ...], // ranges of IDs of deleted messages
   }
 }
 ```
@@ -621,14 +669,14 @@ pres: {
   seq: 123, // integer, "what" is "msg", a server-issued ID of the message,
            // optional
   clear: 15, // integer, "what" is "del", an update to the delete transaction ID.
-  delseq: [{low: 123}, {low: 126, hi: 136}], // array of ranges, "what" is "del", 
-			// ranges of IDs of deleted messages, optional 
-  ua: "Tinode/1.0 (Android 2.2)", // string, a User Agent string identifying client 
+  delseq: [{low: 123}, {low: 126, hi: 136}], // array of ranges, "what" is "del",
+			// ranges of IDs of deleted messages, optional
+  ua: "Tinode/1.0 (Android 2.2)", // string, a User Agent string identifying client
 						// software if "what" is "on" or "ua", optional
   act: "usr2il9suCbuko",	// string, user who performed the action, optional
   tgt: "usrRkDVe0PYDOo", 	// string, user affected by the action, optional
-  acs: {want: "+AS-D", given: "+S"} // object, changes to access mode, "what" is "acs", 
-			// optional 
+  acs: {want: "+AS-D", given: "+S"} // object, changes to access mode, "what" is "acs",
+			// optional
 }
 ```
 
@@ -659,7 +707,7 @@ info: {
 
 User is meant to represent a person, an end-user: producer and consumer of messages.
 
-There are two types of users: authenticated and anonymous. When a connection is first established, the client application can only send either an `{acc}` or a `{login}` message. Sending a `{login}` message will authenticate user or allow him to continue as an anonymous. 
+There are two types of users: authenticated and anonymous. When a connection is first established, the client application can only send either an `{acc}` or a `{login}` message. Sending a `{login}` message will authenticate user or allow him to continue as an anonymous.
 
 Each user is assigned a unique ID. The IDs are composed as `usr` followed by base64-encoded 64-bit numeric value, e.g. `usr2il9suCbuko`. Users also have the following properties:
 
@@ -753,13 +801,13 @@ Message `{get what="data"}` to `me` queries the history of invites/notifications
 
 ### `fnd` and Tags: Finding Users and Topics
 
-Topic `fnd` is automatically created for every user at the account creation time. It serves as an endpoint for discovering other users and group topics. 
+Topic `fnd` is automatically created for every user at the account creation time. It serves as an endpoint for discovering other users and group topics.
 
-Users and group topics can be discovered by optional `tags`. Tags are optionally assigned at the topic or user creation time then can be updated by using `{set what="tags"}` against a `fnd` or a group topic. 
+Users and group topics can be discovered by optional `tags`. Tags are optionally assigned at the topic or user creation time then can be updated by using `{set what="tags"}` against a `fnd` or a group topic.
 
-A tag is an arbitrary case-insensitive Unicode string (forced to lowercase) starting with a Unicode letter or digit. `Tags` must not contain the double quote `"`, `\u0022` but may contain spaces. `Tags` may have a prefix which serves as a namespace. The prefix is a string followed by a colon `:`, ex. prefixed phone tag `tel:14155551212` or prefixed email tag `email:alice@example.com`. Some prefixed `tags` are optionally enforced to be unique. In that case only one user or topic may have such a tag. Certain `tags` may be forced to be immutable to the user, i.e. user's attemps to add or remove an immutable tag will be rejected by the server. 
+A tag is an arbitrary case-insensitive Unicode string (forced to lowercase) starting with a Unicode letter or digit. `Tags` must not contain the double quote `"`, `\u0022` but may contain spaces. `Tags` may have a prefix which serves as a namespace. The prefix is a string followed by a colon `:`, ex. prefixed phone tag `tel:14155551212` or prefixed email tag `email:alice@example.com`. Some prefixed `tags` are optionally enforced to be unique. In that case only one user or topic may have such a tag. Certain `tags` may be forced to be immutable to the user, i.e. user's attemps to add or remove an immutable tag will be rejected by the server.
 
-The `tags` are indexed server-side and used in user and topic discovery. Seach returns users and topics sorted by the number of matched tags in descending order. 
+The `tags` are indexed server-side and used in user and topic discovery. Seach returns users and topics sorted by the number of matched tags in descending order.
 
 In order to find users or topics, a user sets either `public` or `private` parameter of the `fnd` topic to a search query (see [Query language](#query-language)) then issues a `{get topic="fnd" what="sub"}` request. If both `public` and `private` are set, the `public` query is used. The `private` query is persisted accress sessions and devices, i.e. all user's sessions see the same `private` query. The value of the `public` query is ephemeral, i.e. it's not saved to database and not shared between user's sessions. The `private` query is intended for large queries which do not change often, such as finding matches for everyone in user's contact list on a mobile phone. The `public` query is intended to be short and specific, such as finding some topic or a user who is not in the contact list.
 
@@ -784,10 +832,10 @@ Tags containing spaces or commas must be enclosed in double quotes (`"`, `\u0022
 
 
 #### Some use cases
-* Restricting users to organizations. 
+* Restricting users to organizations.
   An immutable tag(s) may be assigned to the user which denotes the organization the user belons to. When the user searches for other users or topics, the search can be restricted to always contain the tag. This approach can be used to segment users into organizations with limited visiblity into each other.
 
-* Search by geographical location. 
+* Search by geographical location.
   Client software may periodically assign a [geohash](https://en.wikipedia.org/wiki/Geohash) tag to the user based on current location. Searching for users in a given area would mean matching on geohash tags.
 
 * Search by numerical range, such as age range.
@@ -833,7 +881,7 @@ Tinode supports mobile push notifications though compile-time plugins. The chann
 
 ## Public and Private Fields
 
-Topics and subscriptions have `public` and `private` fields. Generally, the fields are application-defined. The server does not enforce any particular structure of these fields except for `fnd` topic. At the same time, client software should use the same format for interoperability reasons. 
+Topics and subscriptions have `public` and `private` fields. Generally, the fields are application-defined. The server does not enforce any particular structure of these fields except for `fnd` topic. At the same time, client software should use the same format for interoperability reasons.
 
 ### Public
 The format of the `public` field is expected to be a [vCard](https://en.wikipedia.org/wiki/VCard):
@@ -854,7 +902,7 @@ vcard: {
       type: "HOME", // string, optional designation
       uri: "tel:+17025551234" // string, phone number
     }, ...
-  ], // array of objects, list of phone numbers associated with the user 
+  ], // array of objects, list of phone numbers associated with the user
   email: [
     {
       type: "WORK", // string, optional designation
@@ -898,7 +946,7 @@ If Drafty is used, message header `"head": {"mime": "text/x-drafty"}` must be se
 
 ## Out-of-Band Handling of Large Files
 
-Large files create problems when sent in-band for multiple reasons: 
+Large files create problems when sent in-band for multiple reasons:
  * limits on database storage as in-band messages are stored in database fields
  * in-band messages must be downloaded completely as a part of downloading chat history
 
@@ -924,14 +972,14 @@ To upload a file first create an RFC 2388 multipart request then send it to the 
 ctrl: {
   params: {
     url: "/v0/file/s/mfHLxDWFhfU.pdf"
-  }, 
-  code: 200, 
-  text: "ok", 
+  },
+  code: 200,
+  text: "ok",
   ts: "2018-07-06T18:47:51.265Z"
 }
 ```
 
-The `ctrl.params.url` contains the location of the uploaded file relative to the *download* endpoint `/v0/file/s/` at the current HTTP server. 
+The `ctrl.params.url` contains the location of the uploaded file relative to the *download* endpoint `/v0/file/s/` at the current HTTP server.
 
 Once the `url` is received, either immediately or after following the redirect, the client can use the `url` to send a `{pub}` message with the uploaded file as an attachment. The `url` should be used to produce a [Drafty](./drafty.md)-formatted `pub.content` field and also should be referenced in the `pub.head.attachments`:
 
@@ -957,16 +1005,16 @@ pub: {
 	],
 	fmt: [
 	  {
-	    at: -1, 
-		key:0, 
+	    at: -1,
+		key:0,
 		len:1
 	  }
 	]
   }
 }
 ```
- 
-It's important to list the URLs in the `head.attachments` field. Tinode server uses this field to maintain the uploaded file's use counter. Once the use counter drops to zero for a given file (for instance, because a message with the shared URL was deleted or because the client failed to include the URl in the `head.attachments` field), the server will garbage collect the file. Only relative URLs should be used. Absolute URLs in the `head.attachments` field are ignored. 
+
+It's important to list the URLs in the `head.attachments` field. Tinode server uses this field to maintain the uploaded file's use counter. Once the use counter drops to zero for a given file (for instance, because a message with the shared URL was deleted or because the client failed to include the URl in the `head.attachments` field), the server will garbage collect the file. Only relative URLs should be used. Absolute URLs in the `head.attachments` field are ignored.
 
 ### Downloading
 
