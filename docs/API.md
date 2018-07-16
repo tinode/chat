@@ -40,7 +40,7 @@
 			- [`{sub}`](#sub)
 			- [`{leave}`](#leave)
 			- [`{pub}`](#pub)
-			- [`{get}](#get)
+			- [`{get}`](#get)
 			- [`{set}`](#set)
 			- [`{del}`](#del)
 			- [`{note}`](#note)
@@ -528,8 +528,8 @@ acc: {
   secret: btoa("username:password"), // string, base64 encoded secret for the chosen
               // authentication scheme; to delete a scheme use a string with a single DEL
               // Unicode character "\u2421"; "token" and "basic" cannot be deleted
-  login: true, // boolean, use newly created account to authenticate current session, i.e.
-            // create account and immediately use it to login in.
+  login: true, // boolean, use the newly created account to authenticate current session,
+              // i.e. create account and immediately use it to login.
   tags: ["alice johnson",... ], // array of tags for user discovery; see 'fnd' topic for
               // details, optional (if missing, user will not be discoverable other than
               // by login)
@@ -723,8 +723,7 @@ Topic subscribers receive the `content` in the `{data}` message. By default the 
 
 See [Format of Content](#format-of-content) for `content` format considerations.
 
-#### `{get}
-`
+#### `{get}`
 
 Query topic for metadata, such as description or a list of subscribers, or query message history.
 
