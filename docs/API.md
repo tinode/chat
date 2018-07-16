@@ -159,9 +159,9 @@ Authenticators are used during account registration [`{acc}`](#acc) and during [
 
 #### Creating an Account
 
-When a new account is created, the user must provide inform the server which authentication method will be later used to gain access to this account as well as provide authentication secret, if appropriate. Only `basic` and `anon` can be used during account creation. The `basic` requires the user to generate and send a unique login and a secret password to the server. The `anon` does not exchange secrets.
+When a new account is created, the user must inform the server which authentication method will be later used to gain access to this account as well as provide shared secret, if appropriate. Only `basic` and `anon` can be used during account creation. The `basic` requires the user to generate and send a unique login and password to the server. The `anon` does not exchange secrets.
 
-User may optionally set `{acc login=true}` to use the new account for authentication. When `login=false` (or not set), the new account is created but the authentication status of the session which created the account remains unchanged. When `login=true` the server will attempt to authenticate the session with the new account, the response to the `{acc}` request will contain the authentication token. This is particularly important for the `anon` authentication.
+User may optionally set `{acc login=true}` to use the new account for immediate authentication. When `login=false` (or not set), the new account is created but the authentication status of the session which created the account remains unchanged. When `login=true` the server will attempt to authenticate the session with the new account, the response to the `{acc}` request will contain the authentication token on success. This is particularly important for the `anon` authentication.
 
 #### Logging in
 
@@ -179,7 +179,7 @@ acc: {
   secret: btoa("new_username:new_password") // new parameters
 }
 ```
-In order to change just the password, username should be left empty, i.e. `secret: btoa(":new_password")`.
+In order to change just the password, `username` should be left empty, i.e. `secret: btoa(":new_password")`.
 
 #### Password Recovery
 
