@@ -34,7 +34,7 @@ type presFilters struct {
 	excludeUser string
 }
 
-func (p presParams) packAcs() *MsgAccessMode {
+func (p *presParams) packAcs() *MsgAccessMode {
 	if p.dWant != "" || p.dGiven != "" {
 		return &MsgAccessMode{Want: p.dWant, Given: p.dGiven}
 	}
@@ -469,24 +469,25 @@ func (t *Topic) presPubMessageCount(uid types.Uid, recv, read int, skip string) 
 // Let other sessions of a given user know that messages are now deleted
 // Cases V.1, V.2
 func (t *Topic) presPubMessageDelete(uid types.Uid, delID int, list []MsgDelRange, skip string) {
-	if len(list) > 0 || delID > 0 {
-		// This check is only needed for V.1, but it does not hurt V.2. Let's do it here for both.
-		pud, _ := t.perUser[uid]
-		if !(pud.modeGiven & pud.modeWant).IsPresencer() {
-			return
-		}
-
-		params := &presParams{delID: delID, delSeq: list}
-
-		// Case V.2
-		user := uid.UserId()
-		t.presSubsOnline("del", user, params, &presFilters{singleUser: user}, skip)
-
-		// Case V.1
-		t.presSingleUserOffline(uid, "del", params, skip, true)
-	} else {
+	if len(list) == 0 && delID <= 0 {
 		log.Printf("Case V.1, V.2: topic[%s] invalid request - missing payload", t.name)
+		return
 	}
+
+	// This check is only needed for V.1, but it does not hurt V.2. Let's do it here for both.
+	pud, _ := t.perUser[uid]
+	if !(pud.modeGiven & pud.modeWant).IsPresencer() {
+		return
+	}
+
+	params := &presParams{delID: delID, delSeq: list}
+
+	// Case V.2
+	user := uid.UserId()
+	t.presSubsOnline("del", user, params, &presFilters{singleUser: user}, skip)
+
+	// Case V.1
+	t.presSingleUserOffline(uid, "del", params, skip, true)
 }
 
 // Filter by permissions: mode.IsPresencer() AND mode has at least some
@@ -496,6 +497,6 @@ func (t *Topic) presPubMessageDelete(uid types.Uid, delID int, list []MsgDelRang
 func presOfflineFilter(mode types.AccessMode, pf *presFilters) bool {
 	return mode.IsPresencer() &&
 		(pf == nil ||
-			((pf.filterIn == 0 || mode&pf.filterIn != 0) &&
-				(pf.filterOut == 0 || mode&pf.filterOut == 0)))
+			((pf.filterIn == types.ModeNone || mode&pf.filterIn != 0) &&
+				(pf.filterOut == types.ModeNone || mode&pf.filterOut == 0)))
 }

@@ -841,14 +841,12 @@ func (s *Session) get(msg *ClientComMessage) {
 		if err := globals.cluster.routeToTopic(msg, expanded, s); err != nil {
 			s.queueOut(ErrClusterNodeUnreachable(msg.Get.Id, msg.Get.Topic, msg.timestamp))
 		}
+	} else if meta.what&(constMsgMetaData|constMsgMetaSub|constMsgMetaDel) != 0 {
+		log.Println("s.get: subscribe first to get '" + msg.Get.What + "'")
+		s.queueOut(ErrPermissionDenied(msg.Get.Id, msg.Get.Topic, msg.timestamp))
 	} else {
-		if meta.what&(constMsgMetaData|constMsgMetaSub|constMsgMetaDel) != 0 {
-			log.Println("s.get: subscribe first to get '" + msg.Get.What + "'")
-			s.queueOut(ErrPermissionDenied(msg.Get.Id, msg.Get.Topic, msg.timestamp))
-		} else {
-			// Description of a topic not currently subscribed to. Request desc from the hub
-			globals.hub.meta <- meta
-		}
+		// Description of a topic not currently subscribed to. Request desc from the hub
+		globals.hub.meta <- meta
 	}
 }
 

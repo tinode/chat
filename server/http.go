@@ -92,7 +92,7 @@ func listenAndServe(addr string, mux *http.ServeMux, tlsEnabled bool, jsconfig s
 
 			server.TLSConfig.GetCertificate = certManager.GetCertificate
 			if tlsConfig.CertFile != "" || tlsConfig.KeyFile != "" {
-				log.Printf("HTTP server: using autocert, static cert and key files are ignored")
+				log.Println("HTTP server: using autocert, static cert and key files are ignored")
 				tlsConfig.CertFile = ""
 				tlsConfig.KeyFile = ""
 			}
@@ -120,7 +120,7 @@ func listenAndServe(addr string, mux *http.ServeMux, tlsEnabled bool, jsconfig s
 		}
 		if err != nil {
 			if shuttingDown {
-				log.Printf("HTTP server: stopped")
+				log.Println("HTTP server: stopped")
 			} else {
 				log.Println("HTTP server: failed", err)
 			}
@@ -295,30 +295,34 @@ func getAPIKey(req *http.Request) string {
 	return apikey
 }
 
-// Get authorization credentials from an HTTP request.
-func getHttpAuth(req *http.Request) (string, string) {
+// Extracts authorization credentials from an HTTP request.
+// Returns authentication method and secret.
+func getHttpAuth(req *http.Request) (method, secret string) {
 	// Check Authorization header.
 	if parts := strings.Split(req.Header.Get("Authorization"), " "); len(parts) == 2 {
-		return parts[0], parts[1]
+		method, secret = parts[0], parts[1]
+		return
 	}
 
 	// Check URL query parameters.
-	if auth := req.URL.Query().Get("auth"); auth != "" {
-		return auth, req.URL.Query().Get("secret")
+	if method = req.URL.Query().Get("auth"); method != "" {
+		secret = req.URL.Query().Get("secret")
+		return
 	}
 
 	// Check form values.
-	if auth := req.FormValue("auth"); auth != "" {
-		return auth, req.FormValue("secret")
+	if method = req.FormValue("auth"); method != "" {
+		return method, req.FormValue("secret")
 	}
 
 	// Check cookies as the last resort.
-	if auth, err := req.Cookie("auth"); err == nil {
-		if secret, err := req.Cookie("secret"); err == nil {
-			return auth.Value, secret.Value
+	if mcookie, err := req.Cookie("auth"); err == nil {
+		if scookie, err := req.Cookie("secret"); err == nil {
+			method, secret = mcookie.Value, scookie.Value
 		}
 	}
-	return "", ""
+
+	return
 }
 
 // Authenticate non-websocket HTTP request

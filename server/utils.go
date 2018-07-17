@@ -302,8 +302,8 @@ func selectAccessMode(authLvl auth.Level, anonMode, authMode, rootMode types.Acc
 }
 
 // Get default modeWant for the given topic category
-func getDefaultAccess(cat types.TopicCat, auth bool) types.AccessMode {
-	if !auth {
+func getDefaultAccess(cat types.TopicCat, authUser bool) types.AccessMode {
+	if !authUser {
 		return types.ModeNone
 	}
 
@@ -322,16 +322,16 @@ func getDefaultAccess(cat types.TopicCat, auth bool) types.AccessMode {
 }
 
 // Parse topic access parameters
-func parseTopicAccess(acs *MsgDefaultAcsMode, defAuth, defAnon types.AccessMode) (auth, anon types.AccessMode,
+func parseTopicAccess(acs *MsgDefaultAcsMode, defAuth, defAnon types.AccessMode) (authMode, anonMode types.AccessMode,
 	err error) {
 
-	auth, anon = defAuth, defAnon
+	authMode, anonMode = defAuth, defAnon
 
 	if acs.Auth != "" {
-		err = auth.UnmarshalText([]byte(acs.Auth))
+		err = authMode.UnmarshalText([]byte(acs.Auth))
 	}
 	if acs.Anon != "" {
-		err = anon.UnmarshalText([]byte(acs.Anon))
+		err = anonMode.UnmarshalText([]byte(acs.Anon))
 	}
 
 	return

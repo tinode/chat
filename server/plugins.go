@@ -684,6 +684,7 @@ func pluginActionToCrud(action int) pbx.Crud {
 	panic("plugin: unknown action")
 }
 
+// pluginIDAndTopic extracts message ID and topic name.
 func pluginIDAndTopic(msg *ClientComMessage) (string, string) {
 	if msg.Hi != nil {
 		return msg.Hi.Id, ""
@@ -715,5 +716,5 @@ func pluginIDAndTopic(msg *ClientComMessage) (string, string) {
 	if msg.Note != nil {
 		return "", msg.Note.Topic
 	}
-	panic("plugin: unknown message")
+	panic("plugin: unknown or invalid message")
 }

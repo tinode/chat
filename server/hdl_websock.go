@@ -130,7 +130,7 @@ func serveWebSocket(wrt http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	if req.Method != "GET" {
+	if req.Method != http.MethodGet {
 		wrt.WriteHeader(http.StatusMethodNotAllowed)
 		json.NewEncoder(wrt).Encode(ErrOperationNotAllowed("", "", now))
 		log.Println("ws: Invalid HTTP method", req.Method)

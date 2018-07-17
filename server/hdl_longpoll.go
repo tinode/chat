@@ -27,10 +27,8 @@ func (sess *Session) writeOnce(wrt http.ResponseWriter) {
 	case msg, ok := <-sess.send:
 		if !ok {
 			log.Println("writeOnce: reading from a closed channel")
-		} else {
-			if err := lpWrite(wrt, msg); err != nil {
-				log.Println("sess.writeOnce: " + err.Error())
-			}
+		} else if err := lpWrite(wrt, msg); err != nil {
+			log.Println("sess.writeOnce: " + err.Error())
 		}
 	case <-closed:
 		log.Println("conn.writeOnce: connection closed by peer")

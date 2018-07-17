@@ -219,13 +219,10 @@ func (c *Cluster) electLeader() {
 				if call.Reply.(*ClusterVoteResponse).Result {
 					// Vote in my favor
 					voteCount++
-				} else {
-					// Vote against me
-					if c.fo.term < call.Reply.(*ClusterVoteResponse).Term {
-						// Abandon vote: this node's term is behind the cluster
-						i = nodeCount
-						voteCount = 0
-					}
+				} else if c.fo.term < call.Reply.(*ClusterVoteResponse).Term {
+					// Vote against me. Abandon vote: this node's term is behind the cluster
+					i = nodeCount
+					voteCount = 0
 				}
 			}
 

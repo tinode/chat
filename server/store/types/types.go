@@ -57,7 +57,7 @@ const (
 
 // IsZero checks if Uid is uninitialized.
 func (uid Uid) IsZero() bool {
-	return uid == 0
+	return uid == ZeroUid
 }
 
 // Compare returns 0 if uid is equal to u2, 1 if u2 is greater than uid, -1 if u2 is smaller.
@@ -105,7 +105,7 @@ func (uid *Uid) UnmarshalText(src []byte) error {
 
 // MarshalText converts Uid to string represented as byte slice.
 func (uid *Uid) MarshalText() ([]byte, error) {
-	if *uid == 0 {
+	if *uid == ZeroUid {
 		return []byte{}, nil
 	}
 	src := make([]byte, 8)
@@ -371,7 +371,7 @@ const (
 
 // MarshalText converts AccessMode to ASCII byte slice.
 func (m AccessMode) MarshalText() ([]byte, error) {
-	if m == 0 {
+	if m == ModeNone {
 		return []byte{'N'}, nil
 	}
 
@@ -413,7 +413,7 @@ func (m *AccessMode) UnmarshalText(b []byte) error {
 		case 'O', 'o':
 			m0 |= ModeOwner
 		case 'N', 'n':
-			m0 = 0 // N means explicitly no access, all bits cleared
+			m0 = ModeNone // N means explicitly no access, all bits cleared
 			break
 		default:
 			return errors.New("AccessMode: invalid character '" + string(b[i]) + "'")
@@ -550,7 +550,7 @@ func (m AccessMode) IsDeleter() bool {
 
 // IsZero checks if no flags are set.
 func (m AccessMode) IsZero() bool {
-	return m == 0
+	return m == ModeNone
 }
 
 // IsInvalid checks if mode is invalid.

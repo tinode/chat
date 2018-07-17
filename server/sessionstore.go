@@ -142,12 +142,12 @@ func (ss *SessionStore) Shutdown() {
 
 // NewSessionStore initializes a session store.
 func NewSessionStore(lifetime time.Duration) *SessionStore {
-	store := &SessionStore{
+	ss := &SessionStore{
 		lru:      list.New(),
 		lifeTime: lifetime,
 
 		sessCache: make(map[string]*Session),
 	}
 
-	return store
+	return ss
 }
