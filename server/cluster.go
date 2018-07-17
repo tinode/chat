@@ -493,10 +493,7 @@ func (sess *Session) rpcWriteLoop() {
 		log.Println("writeRPC - stop")
 		sess.closeRPC()
 		globals.sessionStore.Delete(sess)
-		for _, sub := range sess.subs {
-			// sub.done is the same as topic.unreg
-			sub.done <- &sessionLeave{sess: sess, unsub: false}
-		}
+		sess.unsubAll(false)
 	}()
 	var unused bool
 
@@ -524,10 +521,7 @@ func (sess *Session) rpcWriteLoop() {
 			return
 
 		case topic := <-sess.detach:
-			delete(sess.subs, topic)
-			if len(sess.subs) == 0 {
-				// TODO(gene): the session is not connected to any topics here, shut it down
-			}
+			sess.delSub(topic)
 		}
 	}
 }

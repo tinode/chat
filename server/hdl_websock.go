@@ -89,7 +89,7 @@ func (sess *Session) writeLoop() {
 			return
 
 		case topic := <-sess.detach:
-			delete(sess.subs, topic)
+			sess.delSub(topic)
 
 		case <-ticker.C:
 			if err := wsWrite(sess.ws, websocket.PingMessage, nil); err != nil {

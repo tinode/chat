@@ -41,7 +41,7 @@ func (sess *Session) writeOnce(wrt http.ResponseWriter) {
 		lpWrite(wrt, msg)
 
 	case topic := <-sess.detach:
-		delete(sess.subs, topic)
+		sess.delSub(topic)
 
 	case <-time.After(pingPeriod):
 		// just write an empty packet on timeout

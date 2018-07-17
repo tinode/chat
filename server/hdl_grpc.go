@@ -79,7 +79,7 @@ func (sess *Session) writeGrpcLoop() {
 			return
 
 		case topic := <-sess.detach:
-			delete(sess.subs, topic)
+			sess.delSub(topic)
 		}
 	}
 }

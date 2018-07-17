@@ -205,11 +205,11 @@ func (t *Topic) run(hub *Hub) {
 
 					// give a broadcast channel to the connection (.read)
 					// give channel to use when shutting down (.done)
-					sreg.sess.subs[t.name] = &Subscription{
+					sreg.sess.addSub(t.name, &Subscription{
 						broadcast: t.broadcast,
 						done:      t.unreg,
 						meta:      t.meta,
-						uaChange:  t.uaChange}
+						uaChange:  t.uaChange})
 
 					t.sessions[sreg.sess] = true
 
@@ -426,7 +426,7 @@ func (t *Topic) run(hub *Hub) {
 
 					if msg.Pres != nil {
 						// Skip notifying - already notified on topic.
-						if msg.Pres.skipTopic != "" && sess.subs[msg.Pres.skipTopic] != nil {
+						if msg.Pres.skipTopic != "" && sess.getSub(msg.Pres.skipTopic) != nil {
 							continue
 						}
 

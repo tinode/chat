@@ -91,17 +91,21 @@ type Session struct {
 	// detach - channel for detaching session from topic, buffered
 	detach chan string
 
-	// Map of topic subscriptions, indexed by topic name
+	// Map of topic subscriptions, indexed by topic name.
+	// Don't access directly. Use getters/setters.
 	subs map[string]*Subscription
+	// Mutex for subs access: both topic go routines and network go routines access
+	// subs concurrently.
+	subsLock sync.RWMutex
 
-	// Nodes to inform when the session is disconnected
+	// Cluster nodes to inform when the session is disconnected
 	nodes map[string]bool
 
 	// Session ID
 	sid string
 
-	// Needed for long polling
-	rw sync.RWMutex
+	// Needed for long polling.
+	lpLock sync.Mutex
 }
 
 // Subscription is a mapper of sessions to topics.
@@ -118,6 +122,37 @@ type Subscription struct {
 
 	// Channel to ping topic with session's user agent
 	uaChange chan<- string
+}
+
+func (s *Session) addSub(topic string, sub *Subscription) {
+	s.subsLock.Lock()
+	defer s.subsLock.Unlock()
+
+	s.subs[topic] = sub
+}
+
+func (s *Session) getSub(topic string) *Subscription {
+	s.subsLock.RLock()
+	defer s.subsLock.RUnlock()
+
+	return s.subs[topic]
+}
+
+func (s *Session) delSub(topic string) {
+	s.subsLock.Lock()
+	defer s.subsLock.Unlock()
+
+	delete(s.subs, topic)
+}
+
+func (s *Session) unsubAll(unsub bool) {
+	s.subsLock.RLock()
+	defer s.subsLock.RUnlock()
+
+	for _, sub := range s.subs {
+		// sub.done is the same as topic.unreg
+		sub.done <- &sessionLeave{sess: s, unsub: unsub}
+	}
 }
 
 // queueOut attempts to send a ServerComMessage to a session; if the send buffer is full, timeout is 50 usec
@@ -156,10 +191,7 @@ func (s *Session) cleanUp() {
 		globals.sessionStore.Delete(s)
 	}
 	globals.cluster.sessionGone(s)
-	for _, sub := range s.subs {
-		// sub.done is the same as topic.unreg
-		sub.done <- &sessionLeave{sess: s, unsub: false}
-	}
+	s.unsubAll(false)
 }
 
 // Message received, convert bytes to ClientComMessage and dispatch
@@ -186,8 +218,8 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 	// Locking-unlocking is needed for long polling: the client may issue multiple requests in parallel.
 	// Should not affect performance
 	if s.proto == LPOLL {
-		s.rw.Lock()
-		defer s.rw.Unlock()
+		s.lpLock.Lock()
+		defer s.lpLock.Unlock()
 	}
 
 	var resp *ServerComMessage
@@ -241,7 +273,7 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 
 	// Notify 'me' topic that this session is currently active
 	if msg.Leave == nil && (msg.Del == nil || msg.Del.What != "topic") {
-		if sub, ok := s.subs[s.uid.UserId()]; ok {
+		if sub := s.getSub(s.uid.UserId()); sub != nil {
 			// The chan is buffered. If the buffer is exhaused, the session will wait for 'me' to become available
 			sub.uaChange <- s.userAgent
 		}
@@ -272,7 +304,7 @@ func (s *Session) subscribe(msg *ClientComMessage) {
 		}
 	}
 
-	if _, ok := s.subs[expanded]; ok {
+	if sub := s.getSub(expanded); sub != nil {
 		log.Printf("sess.subscribe: already subscribed to '%s'", expanded)
 		s.queueOut(InfoAlreadySubscribed(msg.Sub.Id, topic, msg.timestamp))
 	} else if globals.cluster.isRemoteTopic(expanded) {
@@ -300,14 +332,14 @@ func (s *Session) leave(msg *ClientComMessage) {
 		return
 	}
 
-	if sub, ok := s.subs[expanded]; ok {
+	if sub := s.getSub(expanded); sub != nil {
 		// Session is attached to the topic.
 		if (msg.Leave.Topic == "me" || msg.Leave.Topic == "fnd") && msg.Leave.Unsub {
 			// User should not unsubscribe from 'me' or 'find'. Just leaving is fine.
 			s.queueOut(ErrPermissionDenied(msg.Leave.Id, msg.Leave.Topic, msg.timestamp))
 		} else {
 			// Unlink from topic, topic will send a reply.
-			delete(s.subs, expanded)
+			s.delSub(expanded)
 			sub.done <- &sessionLeave{
 				sess: s, unsub: msg.Leave.Unsub, topic: msg.Leave.Topic, reqID: msg.Leave.Id}
 		}
@@ -353,7 +385,7 @@ func (s *Session) publish(msg *ClientComMessage) {
 		data.skipSid = s.sid
 	}
 
-	if sub, ok := s.subs[expanded]; ok {
+	if sub := s.getSub(expanded); sub != nil {
 		// This is a post to a subscribed topic. The message is sent to the topic only
 		sub.broadcast <- data
 	} else if globals.cluster.isRemoteTopic(expanded) {
@@ -662,7 +694,7 @@ func (s *Session) login(msg *ClientComMessage) {
 	}
 
 	if challenge != nil {
-		// Issue challenge to the client.
+		// Multi-stage authentication. Issue challenge to the client.
 		s.queueOut(InfoChallenge(msg.Login.Id, msg.timestamp, challenge))
 		return
 	}
@@ -792,7 +824,7 @@ func (s *Session) get(msg *ClientComMessage) {
 		return
 	}
 
-	sub, ok := s.subs[expanded]
+	sub := s.getSub(expanded)
 	meta := &metaReq{
 		topic: expanded,
 		pkt:   msg,
@@ -802,7 +834,7 @@ func (s *Session) get(msg *ClientComMessage) {
 	if meta.what == 0 {
 		s.queueOut(ErrMalformed(msg.Get.Id, msg.Get.Topic, msg.timestamp))
 		log.Println("s.get: invalid Get message action: '" + msg.Get.What + "'")
-	} else if ok {
+	} else if sub != nil {
 		sub.meta <- meta
 	} else if globals.cluster.isRemoteTopic(expanded) {
 		// The topic is handled by a remote node. Forward message to it.
@@ -835,7 +867,7 @@ func (s *Session) set(msg *ClientComMessage) {
 		return
 	}
 
-	if sub, ok := s.subs[expanded]; ok {
+	if sub := s.getSub(expanded); sub != nil {
 		meta := &metaReq{
 			topic: expanded,
 			pkt:   msg,
@@ -888,8 +920,8 @@ func (s *Session) del(msg *ClientComMessage) {
 		log.Println("s.del: invalid Del action '" + msg.Del.What + "'")
 	}
 
-	sub, ok := s.subs[expanded]
-	if ok && what != constMsgDelTopic {
+	sub := s.getSub(expanded)
+	if sub != nil && what != constMsgDelTopic {
 		// Session is attached, deleting subscription or messages. Send to topic.
 		sub.meta <- &metaReq{
 			topic: expanded,
@@ -897,7 +929,7 @@ func (s *Session) del(msg *ClientComMessage) {
 			sess:  s,
 			what:  what}
 
-	} else if !ok && globals.cluster.isRemoteTopic(expanded) {
+	} else if sub == nil && globals.cluster.isRemoteTopic(expanded) {
 		// The topic is handled by a remote node. Forward message to it.
 		if err := globals.cluster.routeToTopic(msg, expanded, s); err != nil {
 			s.queueOut(ErrClusterNodeUnreachable(msg.Del.Id, msg.Del.Topic, msg.timestamp))
@@ -945,7 +977,7 @@ func (s *Session) note(msg *ClientComMessage) {
 		return
 	}
 
-	if sub, ok := s.subs[expanded]; ok {
+	if sub := s.getSub(expanded); sub != nil {
 		// Pings can be sent to subscribed topics only
 		sub.broadcast <- &ServerComMessage{Info: &MsgServerInfo{
 			Topic: msg.Note.Topic,

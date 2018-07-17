@@ -23,7 +23,7 @@ import (
 // SessionStore holds live sessions. Long polling sessions are stored in a linked list with
 // most recent sessions on top. In addition all sessions are stored in a map indexed by session ID.
 type SessionStore struct {
-	rw sync.RWMutex
+	lock sync.Mutex
 
 	// Support for long polling sessions: a list of sessions sorted by last access time.
 	// Needed for cleaning abandoned sessions.
@@ -50,7 +50,6 @@ func (ss *SessionStore) Create(conn interface{}, sid string) *Session {
 	case *ClusterNode:
 		s.proto = CLUSTER
 		s.clnode = c
-		// case *GrpcNode:
 	case pbx.Node_MessageLoopServer:
 		s.proto = GRPC
 		s.grpcnode = c
@@ -70,7 +69,7 @@ func (ss *SessionStore) Create(conn interface{}, sid string) *Session {
 		s.sid = store.GetUidString()
 	}
 
-	ss.rw.Lock()
+	ss.lock.Lock()
 	ss.sessCache[s.sid] = &s
 
 	if s.proto == LPOLL {
@@ -91,15 +90,15 @@ func (ss *SessionStore) Create(conn interface{}, sid string) *Session {
 		}
 	}
 
-	ss.rw.Unlock()
+	ss.lock.Unlock()
 
 	return &s
 }
 
 // Get fetches a session from store by session ID.
 func (ss *SessionStore) Get(sid string) *Session {
-	ss.rw.Lock()
-	defer ss.rw.Unlock()
+	ss.lock.Lock()
+	defer ss.lock.Unlock()
 
 	if sess := ss.sessCache[sid]; sess != nil {
 		if sess.proto == LPOLL {
@@ -115,8 +114,8 @@ func (ss *SessionStore) Get(sid string) *Session {
 
 // Delete removes session from store.
 func (ss *SessionStore) Delete(s *Session) {
-	ss.rw.Lock()
-	defer ss.rw.Unlock()
+	ss.lock.Lock()
+	defer ss.lock.Unlock()
 
 	delete(ss.sessCache, s.sid)
 
@@ -128,8 +127,8 @@ func (ss *SessionStore) Delete(s *Session) {
 // Shutdown terminates sessionStore. No need to clean up.
 // Don't send to clustered sessions, their servers are not being shut down.
 func (ss *SessionStore) Shutdown() {
-	ss.rw.Lock()
-	defer ss.rw.Unlock()
+	ss.lock.Lock()
+	defer ss.lock.Unlock()
 
 	shutdown := NoErrShutdown(time.Now().UTC().Round(time.Millisecond))
 	for _, s := range ss.sessCache {

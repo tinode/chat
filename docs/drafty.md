@@ -54,7 +54,7 @@ If key is provided, it's a 0-based index into the `ent` field which contains an 
  * `LN`: link (URL) [https://api.tinode.co](https://api.tinode.co)
  * `MN`: mention such as [@tinode](#)
  * `HT`: hashtag, e.g. [#hashtag](#)
- * `IM`: inline image
+ * `IM`: attached image
  * `EX`: file attachment
 
 Examples:
@@ -71,7 +71,7 @@ In general, an entity is a text decoration which requires additional (possibly l
 `{ "tp": "LN", "data": { "url": "https://www.example.com/abc#fragment" } }`
 The `url` could be any valid URl that the client knows how to interpret, for instance it could be email or phone URL too: `email:alice@example.com` or `tel:+17025550001`.
 
-#### `IM`: inline image
+#### `IM`: inline image or attached image with inline preview
 `IM` is an image. The `data` contains the following fields:
 ```js
 {
@@ -79,14 +79,17 @@ The `url` could be any valid URl that the client knows how to interpret, for ins
   "data": {
     "mime": "image/png",
     "val": "Rt53jUU...iVBORw0KGgoA==",
+    "ref": "https://api.tinode.co/file/s/abcdef12345.jpg",
     "width": 512,
     "height": 512,
-    "name": "sample_image.png"
+    "name": "sample_image.png",
+    "size": 123456
   }
 }
 ```
  * `mime`: data type, such as 'image/jpeg'.
- * `val`: base64-encoded image bits.
+ * `val`: optional in-band image data: base64-encoded image bits.
+ * `ref`: optional reference to out-of-band image data. Either `val` or `ref` must be present.
  * `width`, `height`: linear dimensions of the image in pixels
  * `name`: optional name of the original file.
  * `size`: optional size of the file in bytes
@@ -108,16 +111,26 @@ To create a message with just a single image and no text, use the following Draf
   "data": {
     "mime", "text/plain",
     "val", "Q3l0aG9uPT0w...PT00LjAuMAo=",
-    "name", "requirements.txt"
+    "ref": "https://api.tinode.co/file/s/abcdef12345.txt",
+    "name", "requirements.txt",
+    "size": 1234
   }
 }
 ```
 * `mime`: data type, such as 'application/octet-stream'.
-* `val`: base64-encoded file data.
+* `val`: optional in-band base64-encoded file data.
+* `ref`: optional reference to out-of-band file data. Either `val` or `ref` must be present.
 * `name`: optional name of the original file.
 * `size`: optional size of the file in bytes.
 
-To generate a message with the file attachment shown as a downloadable file, use the following format: `{ at: -1, len: 0, key: <EX entity reference> }`.
+To generate a message with the file attachment shown as a downloadable file, use the following format:
+```js
+{
+  at: -1,
+  len: 0,
+  key: <EX entity reference>
+}
+```
 
 #### `MN`: mention such as [@alice](#)
 Mention `data` contains a single `val` field with ID of the mentioned user:
