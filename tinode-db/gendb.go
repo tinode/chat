@@ -247,6 +247,11 @@ func genDb(reset bool, dbSource string, data *Data) {
 
 	seqIds := map[string]int{}
 
+	// Shuffle messages
+	rand.Shuffle(len(data.Messages), func(i, j int) {
+		data.Messages[i], data.Messages[j] = data.Messages[j], data.Messages[i]
+	})
+
 	now := time.Now().UTC().Add(-time.Minute).Round(time.Millisecond)
 	// Starting 4 days ago.
 	timestamp := now.Add(time.Hour * time.Duration(-24*4))
@@ -275,7 +280,7 @@ func genDb(reset bool, dbSource string, data *Data) {
 
 		seqIds[topic]++
 		seqId := seqIds[topic]
-		str := data.Messages[rand.Intn(len(data.Messages))]
+		str := data.Messages[i%len(data.Messages)]
 		// Max time between messages is 2 hours, averate - 1 hour, time is increasing as seqId increases
 		timestamp = timestamp.Add(time.Microsecond * time.Duration(rand.Intn(increment)))
 		if err = store.Messages.Save(&types.Message{

@@ -1716,19 +1716,25 @@ func (t *Topic) replyGetData(sess *Session, id string, req *MsgGetOpts) error {
 			count = len(messages)
 			for i := count - 1; i >= 0; i-- {
 				mm := messages[i]
-
-				from := types.ParseUid(mm.From)
-				msg := &ServerComMessage{Data: &MsgServerData{
+				sess.queueOut(&ServerComMessage{Data: &MsgServerData{
 					Topic:     t.original(sess.uid),
 					Head:      mm.Head,
 					SeqId:     mm.SeqId,
-					From:      from.UserId(),
+					From:      types.ParseUid(mm.From).UserId(),
 					Timestamp: mm.CreatedAt,
-					Content:   mm.Content}}
-
-				sess.queueOut(msg)
+					Content:   mm.Content}})
 			}
 		}
+	}
+
+	// Request for all available data returned no results while the client expects results
+	// because t.lastID > 0. Generate an empty data message to indicate that all messages
+	// have been deleted.
+	if count == 0 && t.lastID > 0 && (req == nil || (req.BeforeId == 0 && req.SinceId == 0)) {
+		sess.queueOut(&ServerComMessage{Data: &MsgServerData{
+			Topic:     t.original(sess.uid),
+			SeqId:     t.lastID,
+			Timestamp: now}})
 	}
 
 	// Inform the requester that all the data has been served.
