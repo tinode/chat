@@ -343,7 +343,11 @@ func pluginFireHose(sess *Session, msg *ClientComMessage) (*ClientComMessage, *S
 
 	var req *pbx.ClientReq
 
-	id, topic := pluginIDAndTopic(msg)
+	id, topic, err := pluginIDAndTopic(msg)
+	if err != nil {
+		return msg, nil
+	}
+
 	ts := time.Now().UTC().Round(time.Millisecond)
 	for i := range globals.plugins {
 		p := &globals.plugins[i]
@@ -687,34 +691,34 @@ func pluginActionToCrud(action int) pbx.Crud {
 // pluginIDAndTopic extracts message ID and topic name.
 func pluginIDAndTopic(msg *ClientComMessage) (string, string) {
 	if msg.Hi != nil {
-		return msg.Hi.Id, ""
+		return msg.Hi.Id, "", nil
 	}
 	if msg.Acc != nil {
-		return msg.Acc.Id, ""
+		return msg.Acc.Id, "", nil
 	}
 	if msg.Login != nil {
-		return msg.Login.Id, ""
+		return msg.Login.Id, "", nil
 	}
 	if msg.Sub != nil {
-		return msg.Sub.Id, msg.Sub.Topic
+		return msg.Sub.Id, msg.Sub.Topic, nil
 	}
 	if msg.Leave != nil {
-		return msg.Leave.Id, msg.Leave.Topic
+		return msg.Leave.Id, msg.Leave.Topic, nil
 	}
 	if msg.Pub != nil {
-		return msg.Pub.Id, msg.Pub.Topic
+		return msg.Pub.Id, msg.Pub.Topic, nil
 	}
 	if msg.Get != nil {
-		return msg.Get.Id, msg.Get.Topic
+		return msg.Get.Id, msg.Get.Topic, nil
 	}
 	if msg.Set != nil {
-		return msg.Set.Id, msg.Set.Topic
+		return msg.Set.Id, msg.Set.Topic, nil
 	}
 	if msg.Del != nil {
-		return msg.Del.Id, msg.Del.Topic
+		return msg.Del.Id, msg.Del.Topic, nil
 	}
 	if msg.Note != nil {
-		return "", msg.Note.Topic
+		return "", msg.Note.Topic, nil
 	}
-	panic("plugin: unknown or invalid message")
+	return "", "", errors.New("plugin: unknown or invalid message")
 }
