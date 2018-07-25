@@ -323,8 +323,12 @@ func pluginsShutdown() {
 }
 
 func pluginGenerateClientReq(sess *Session, msg *ClientComMessage) *pbx.ClientReq {
+	cmsg := pbCliSerialize(msg)
+	if cmsg == nil {
+		return nil
+	}
 	return &pbx.ClientReq{
-		Msg: pbCliSerialize(msg),
+		Msg: cmsg,
 		Sess: &pbx.Session{
 			SessionId:  sess.sid,
 			UserId:     sess.uid.UserId(),
@@ -343,11 +347,7 @@ func pluginFireHose(sess *Session, msg *ClientComMessage) (*ClientComMessage, *S
 
 	var req *pbx.ClientReq
 
-	id, topic, err := pluginIDAndTopic(msg)
-	if err != nil {
-		return msg, nil
-	}
-
+	id, topic := pluginIDAndTopic(msg)
 	ts := time.Now().UTC().Round(time.Millisecond)
 	for i := range globals.plugins {
 		p := &globals.plugins[i]
@@ -359,6 +359,10 @@ func pluginFireHose(sess *Session, msg *ClientComMessage) (*ClientComMessage, *S
 		if req == nil {
 			// Generate request only if needed
 			req = pluginGenerateClientReq(sess, msg)
+			if req == nil {
+				// Failed to serialize message. Most likely the message is invalid.
+				break
+			}
 		}
 
 		var ctx context.Context
@@ -691,34 +695,34 @@ func pluginActionToCrud(action int) pbx.Crud {
 // pluginIDAndTopic extracts message ID and topic name.
 func pluginIDAndTopic(msg *ClientComMessage) (string, string) {
 	if msg.Hi != nil {
-		return msg.Hi.Id, "", nil
+		return msg.Hi.Id, ""
 	}
 	if msg.Acc != nil {
-		return msg.Acc.Id, "", nil
+		return msg.Acc.Id, ""
 	}
 	if msg.Login != nil {
-		return msg.Login.Id, "", nil
+		return msg.Login.Id, ""
 	}
 	if msg.Sub != nil {
-		return msg.Sub.Id, msg.Sub.Topic, nil
+		return msg.Sub.Id, msg.Sub.Topic
 	}
 	if msg.Leave != nil {
-		return msg.Leave.Id, msg.Leave.Topic, nil
+		return msg.Leave.Id, msg.Leave.Topic
 	}
 	if msg.Pub != nil {
-		return msg.Pub.Id, msg.Pub.Topic, nil
+		return msg.Pub.Id, msg.Pub.Topic
 	}
 	if msg.Get != nil {
-		return msg.Get.Id, msg.Get.Topic, nil
+		return msg.Get.Id, msg.Get.Topic
 	}
 	if msg.Set != nil {
-		return msg.Set.Id, msg.Set.Topic, nil
+		return msg.Set.Id, msg.Set.Topic
 	}
 	if msg.Del != nil {
-		return msg.Del.Id, msg.Del.Topic, nil
+		return msg.Del.Id, msg.Del.Topic
 	}
 	if msg.Note != nil {
-		return "", msg.Note.Topic, nil
+		return "", msg.Note.Topic
 	}
-	return "", "", errors.New("plugin: unknown or invalid message")
+	return "", ""
 }

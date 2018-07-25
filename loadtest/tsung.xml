@@ -1,0 +1,49 @@
+<?xml version="1.0"?>
+<!DOCTYPE tsung SYSTEM "/usr/local/Cellar/tsung/1.7.0/share/tsung/tsung-1.0.dtd" []>
+<tsung loglevel="notice" version="1.0">
+  <clients>
+    <client host="localhost" use_controller_vm="true" maxusers="1000" />
+  </clients>
+
+  <servers>
+    <server host="127.0.0.1" port="6060" type="tcp" />
+  </servers>
+
+  <load>
+    <arrivalphase phase="1" duration="120" unit="second">
+      <users maxnumber="3" arrivalrate="1" unit="second" />
+    </arrivalphase>
+  </load>
+
+  <sessions>
+    <session name="websocket" probability="100" type="ts_websocket">
+      <request subst="true">
+        <websocket type="connect" path="/v0/channels?apikey=AQEAAAABAAD_rAp4DJh05a1HAwFT3A6K">
+          <!--http_header name="X-Tinode-APIKey" value="AQEAAAABAAD_rAp4DJh05a1HAwFT3A6K"/-->
+        </websocket>
+      </request>
+
+      <request>
+        <websocket type="message" frame="text">{"hi":{"id":"106686","ver":"0.15","ua":"Tsung-Loadtest/1.0; tsung/1.7.0"}}</websocket>
+      </request>
+
+      <request>
+        <dyn_variable name="uid" jsonpath="uid"/>
+        <websocket type="message" frame="text">{"user":"user", "password":"password"}</websocket>
+      </request>
+
+      <request subst="true">
+        <match do="log" when="nomatch">ok</match>
+        <websocket type="message" frame="text">{"uid":"%%_uid%%", "data":"data"}</websocket>
+      </request>
+
+      <request>
+        <websocket type="message" ack="no_ack" frame="text">{"key":"value"}</websocket>
+      </request>
+
+      <request>
+        <websocket type="close"></websocket>
+      </request>
+    </session>
+  </sessions>
+</tsung>

@@ -273,6 +273,10 @@ func pbCliSerialize(msg *ClientComMessage) *pbx.ClientMsg {
 			SeqId: int32(msg.Note.SeqId)}}
 	}
 
+	if pkt.Message == nil {
+		return nil
+	}
+
 	return &pkt
 }
 
