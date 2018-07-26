@@ -11,7 +11,7 @@
 
   <load>
     <arrivalphase phase="1" duration="120" unit="second">
-      <users maxnumber="3" arrivalrate="1" unit="second" />
+      <users maxnumber="100" arrivalrate="1" unit="second" />
     </arrivalphase>
   </load>
 
@@ -58,12 +58,13 @@
         <websocket type="message" frame="text">{"sub":{"id":"%%_baseid%%05","topic":"%%_topic%%","get":{"what":"desc sub data del"}}}</websocket>
       </request>
 
-      <thinktime min="2" max="10" random="true"></thinktime>
+      <for from="1" to="5" incr="1" var="counter">
+        <thinktime min="2" max="10" random="true"></thinktime>
 
-      <request subst="true">
-        <websocket type="message" frame="text">{"pub":{"id":"%%_baseid%%06","topic":"%%_topic%%","content":"This is a Tsung test %%_baseid%%"}}</websocket>
-      </request>
-
+        <request subst="true">
+          <websocket type="message" frame="text">{"pub":{"id":"%%_baseid%%06","topic":"%%_topic%%","content":"This is a Tsung test %%_baseid%% %%_counter%%"}}</websocket>
+        </request>
+      </for>
       <request>
         <websocket type="close"></websocket>
       </request>

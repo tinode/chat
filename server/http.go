@@ -9,6 +9,7 @@
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
@@ -135,7 +136,7 @@ loop:
 		case <-stop:
 			// Flip the flag that we are terminating and close the Accept-ing socket, so no new connections are possible
 			shuttingDown = true
-			if err := server.Shutdown(nil); err != nil {
+			if err := server.Shutdown(context.TODO()); err != nil {
 				// failure/timeout shutting down the server gracefully
 				return err
 			}
