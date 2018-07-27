@@ -54,7 +54,9 @@ func (sess *Session) readLoop() {
 		// Read a ClientComMessage
 		_, raw, err := sess.ws.ReadMessage()
 		if err != nil {
-			log.Println("sess.readLoop: " + err.Error())
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+				log.Println("sess.readLoop: " + err.Error())
+			}
 			return
 		}
 
@@ -148,6 +150,9 @@ func serveWebSocket(wrt http.ResponseWriter, req *http.Request) {
 
 	sess := globals.sessionStore.Create(ws, "")
 
+	// Do work in goroutines to return from serveWebSocket() to release file pointers.
+	// Otherwise "too many open files" will happen.
+
 	go sess.writeLoop()
-	sess.readLoop()
+	go sess.readLoop()
 }

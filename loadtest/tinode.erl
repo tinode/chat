@@ -1,6 +1,8 @@
 %% Support module for Tinode load testing with Tsung.
 %% Compile using erlc then copy resulting .beam to
 %% /usr/local/lib/erlang/lib/tsung-1.7.0/ebin/
+%% Alternatively you can just leave it in the current
+%% directory.
 
 -module(tinode).
 -export([rand_user_secret/1]).

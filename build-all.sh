@@ -107,7 +107,7 @@ do
   done
 done
 
-# Need to rebuild lthe inux-rethink binary without stripping debug info.
+# Need to rebuild the linux-rethink binary without stripping debug info.
 echo "Building the binary for the demo at api.tinode.co"
 
 rm -f $GOPATH/bin/tinode
