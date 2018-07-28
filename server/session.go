@@ -180,7 +180,7 @@ func (s *Session) queueOutBytes(data []byte) bool {
 	select {
 	case s.send <- data:
 	case <-time.After(time.Microsecond * 50):
-		log.Println("session.queueOut: timeout")
+		log.Println("session.queueOutBytes: timeout")
 		return false
 	}
 	return true
@@ -198,11 +198,19 @@ func (s *Session) cleanUp() {
 func (s *Session) dispatchRaw(raw []byte) {
 	var msg ClientComMessage
 
-	log.Printf("Session.dispatch got '%s' from '%s'", raw, s.remoteAddr)
+	truncateIfTooLong := func(b []byte) []byte {
+		if len(b) < 1024 {
+			return b
+		} else {
+			return append(b[:1024], '.', '.', '.')
+		}
+	}
+
+	log.Printf("in: '%s' ip='%s' sid='%s' uid='%s'", truncateIfTooLong(raw), s.remoteAddr, s.sid, s.uid)
 
 	if err := json.Unmarshal(raw, &msg); err != nil {
 		// Malformed message
-		log.Println("Session.dispatch: " + err.Error())
+		log.Println("Session.dispatch", err)
 		s.queueOut(ErrMalformed("", "", time.Now().UTC().Round(time.Millisecond)))
 		return
 	}
@@ -282,15 +290,12 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 
 // Request to subscribe to a topic
 func (s *Session) subscribe(msg *ClientComMessage) {
-	log.Printf("Sub to '%s' from '%s'", msg.Sub.Topic, msg.from)
-
-	var topic, expanded string
-
 	if s.ver == 0 {
 		s.queueOut(ErrCommandOutOfSequence(msg.Sub.Id, msg.Sub.Topic, msg.timestamp))
 		return
 	}
 
+	var topic, expanded string
 	if strings.HasPrefix(msg.Sub.Topic, "new") {
 		// Request to create a new named topic
 		expanded = genTopicName()
@@ -320,7 +325,6 @@ func (s *Session) subscribe(msg *ClientComMessage) {
 
 // Leave/Unsubscribe a topic
 func (s *Session) leave(msg *ClientComMessage) {
-
 	if s.ver == 0 {
 		s.queueOut(ErrCommandOutOfSequence(msg.Leave.Id, msg.Leave.Topic, msg.timestamp))
 		return
@@ -360,7 +364,6 @@ func (s *Session) leave(msg *ClientComMessage) {
 
 // Broadcast a message to all topic subscribers
 func (s *Session) publish(msg *ClientComMessage) {
-
 	if s.ver == 0 {
 		s.queueOut(ErrCommandOutOfSequence(msg.Pub.Id, msg.Pub.Topic, msg.timestamp))
 		return
@@ -401,7 +404,6 @@ func (s *Session) publish(msg *ClientComMessage) {
 
 // Client metadata
 func (s *Session) hello(msg *ClientComMessage) {
-
 	if msg.Hi.Version == "" {
 		s.queueOut(ErrMalformed(msg.Hi.Id, "", msg.timestamp))
 		return
@@ -468,7 +470,6 @@ func (s *Session) hello(msg *ClientComMessage) {
 
 // Account creation
 func (s *Session) acc(msg *ClientComMessage) {
-
 	if s.ver == 0 {
 		s.queueOut(ErrCommandOutOfSequence(msg.Acc.Id, "", msg.timestamp))
 		return

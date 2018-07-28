@@ -37,9 +37,9 @@ func (sess *Session) closeWS() {
 
 func (sess *Session) readLoop() {
 	defer func() {
-		log.Println("serveWebsocket - stop")
 		sess.closeWS()
 		sess.cleanUp()
+		log.Println("ws.readLoop exited", sess.sid)
 	}()
 
 	sess.ws.SetReadLimit(globals.maxMessageSize)
@@ -55,7 +55,7 @@ func (sess *Session) readLoop() {
 		_, raw, err := sess.ws.ReadMessage()
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				log.Println("sess.readLoop: " + err.Error())
+				log.Println("sess.readLoop", sess.sid, err)
 			}
 			return
 		}
@@ -70,6 +70,7 @@ func (sess *Session) writeLoop() {
 	defer func() {
 		ticker.Stop()
 		sess.closeWS() // break readLoop
+		log.Println("ws.writeLoop exited", sess.sid)
 	}()
 
 	for {
@@ -80,7 +81,7 @@ func (sess *Session) writeLoop() {
 				return
 			}
 			if err := wsWrite(sess.ws, websocket.TextMessage, msg); err != nil {
-				log.Println("sess.writeLoop: " + err.Error())
+				log.Println("ws.writeLoop", sess.sid, err)
 				return
 			}
 		case msg := <-sess.stop:
@@ -95,7 +96,7 @@ func (sess *Session) writeLoop() {
 
 		case <-ticker.C:
 			if err := wsWrite(sess.ws, websocket.PingMessage, nil); err != nil {
-				log.Println("sess.writeLoop: ping/" + err.Error())
+				log.Println("ws.writeLoop: ping", sess.sid, err)
 				return
 			}
 		}
@@ -144,7 +145,7 @@ func serveWebSocket(wrt http.ResponseWriter, req *http.Request) {
 		log.Println("ws: Not a websocket handshake")
 		return
 	} else if err != nil {
-		log.Println("ws: failed to Upgrade ", err.Error())
+		log.Println("ws: failed to Upgrade ", err)
 		return
 	}
 

@@ -387,6 +387,7 @@ func pluginFireHose(sess *Session, msg *ClientComMessage) (*ClientComMessage, *S
 			if respStatus == pbx.RespCode_REPLACE {
 				return pbCliDeserialize(resp.GetClmsg()), nil
 			}
+
 			// RESPOND: Plugin provided an alternative response message. Use it
 			return nil, pbServDeserialize(resp.GetSrvmsg())
 

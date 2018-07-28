@@ -752,11 +752,11 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		return
 	}
 
-	log.Println("hub: topic created or loaded: " + t.name)
-
 	h.topicPut(t.name, t)
 	h.topicsLive.Add(1)
 	go t.run(h)
+
+	log.Println("hub: started", t.name, "created=", sreg.created)
 
 	sreg.loaded = true
 	// Topic will check access rights, send invite to p2p user, send {ctrl} message to the initiator session

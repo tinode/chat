@@ -47,7 +47,7 @@ func (*grpcNodeServer) MessageLoop(stream pbx.Node_MessageLoopServer) error {
 		if err != nil {
 			return err
 		}
-		log.Println(in.String())
+		log.Println("grpc in:", in.String())
 		sess.dispatch(pbCliDeserialize(in))
 	}
 

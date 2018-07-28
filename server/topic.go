@@ -172,9 +172,6 @@ var nilPresParams = &presParams{}
 var nilPresFilters = &presFilters{}
 
 func (t *Topic) run(hub *Hub) {
-
-	log.Printf("Topic started: '%s'", t.name)
-
 	// TODO(gene): read keepalive value from the command line
 	keepAlive := idleTopicTimeout
 	killTimer := time.NewTimer(time.Hour)
