@@ -35,7 +35,7 @@ type SessionStore struct {
 }
 
 // Create creates a new session and adds it to store.
-func (ss *SessionStore) Create(conn interface{}, sid string) *Session {
+func (ss *SessionStore) Create(conn interface{}, sid string) (*Session, int) {
 	var s Session
 
 	s.sid = sid
@@ -71,6 +71,7 @@ func (ss *SessionStore) Create(conn interface{}, sid string) *Session {
 
 	ss.lock.Lock()
 	ss.sessCache[s.sid] = &s
+	count := len(ss.sessCache)
 
 	if s.proto == LPOLL {
 		// Only LP sessions need to be sorted by last active
@@ -92,7 +93,7 @@ func (ss *SessionStore) Create(conn interface{}, sid string) *Session {
 
 	ss.lock.Unlock()
 
-	return &s
+	return &s, count
 }
 
 // Get fetches a session from store by session ID.
@@ -113,15 +114,15 @@ func (ss *SessionStore) Get(sid string) *Session {
 }
 
 // Delete removes session from store.
-func (ss *SessionStore) Delete(s *Session) {
+func (ss *SessionStore) Delete(s *Session) int {
 	ss.lock.Lock()
 	defer ss.lock.Unlock()
 
 	delete(ss.sessCache, s.sid)
-
 	if s.proto == LPOLL {
 		ss.lru.Remove(s.lpTracker)
 	}
+	return len(ss.sessCache)
 }
 
 // Shutdown terminates sessionStore. No need to clean up.

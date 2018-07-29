@@ -164,7 +164,7 @@ func (s *Session) queueOut(msg *ServerComMessage) bool {
 	select {
 	case s.send <- s.serialize(msg):
 	case <-time.After(time.Microsecond * 50):
-		log.Println("session.queueOut: timeout")
+		log.Println("s.queueOut: timeout", s.sid)
 		return false
 	}
 	return true
@@ -180,18 +180,18 @@ func (s *Session) queueOutBytes(data []byte) bool {
 	select {
 	case s.send <- data:
 	case <-time.After(time.Microsecond * 50):
-		log.Println("session.queueOutBytes: timeout")
+		log.Println("s.queueOutBytes: timeout", s.sid)
 		return false
 	}
 	return true
 }
 
-func (s *Session) cleanUp() {
-	if s.proto != LPOLL {
-		globals.sessionStore.Delete(s)
-	}
+func (s *Session) cleanUp() int {
+	count := globals.sessionStore.Delete(s)
 	globals.cluster.sessionGone(s)
 	s.unsubAll(false)
+
+	return count
 }
 
 // Message received, convert bytes to ClientComMessage and dispatch
@@ -210,7 +210,7 @@ func (s *Session) dispatchRaw(raw []byte) {
 
 	if err := json.Unmarshal(raw, &msg); err != nil {
 		// Malformed message
-		log.Println("Session.dispatch", err)
+		log.Println("s.dispatch", err)
 		s.queueOut(ErrMalformed("", "", time.Now().UTC().Round(time.Millisecond)))
 		return
 	}
@@ -276,7 +276,7 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 	default:
 		// Unknown message
 		s.queueOut(ErrMalformed("", "", msg.timestamp))
-		log.Println("Session.dispatch: unknown message")
+		log.Println("s.dispatch: unknown message", s.sid)
 	}
 
 	// Notify 'me' topic that this session is currently active
@@ -310,7 +310,7 @@ func (s *Session) subscribe(msg *ClientComMessage) {
 	}
 
 	if sub := s.getSub(expanded); sub != nil {
-		log.Printf("sess.subscribe: already subscribed to '%s'", expanded)
+		log.Println("s.subscribe: already subscribed to topic=", expanded, "sid=", s.sid)
 		s.queueOut(InfoAlreadySubscribed(msg.Sub.Id, topic, msg.timestamp))
 	} else if globals.cluster.isRemoteTopic(expanded) {
 		// The topic is handled by a remote node. Forward message to it.
@@ -811,8 +811,6 @@ func (s *Session) getValidatedGred(uid types.Uid, authLvl auth.Level, creds []Ms
 }
 
 func (s *Session) get(msg *ClientComMessage) {
-	log.Println("s.get: processing 'get." + msg.Get.What + "'")
-
 	if s.ver == 0 {
 		s.queueOut(ErrCommandOutOfSequence(msg.Get.Id, msg.Get.Topic, msg.timestamp))
 		return
@@ -834,7 +832,7 @@ func (s *Session) get(msg *ClientComMessage) {
 
 	if meta.what == 0 {
 		s.queueOut(ErrMalformed(msg.Get.Id, msg.Get.Topic, msg.timestamp))
-		log.Println("s.get: invalid Get message action: '" + msg.Get.What + "'")
+		log.Println("s.get: invalid Get message action", msg.Get.What)
 	} else if sub != nil {
 		sub.meta <- meta
 	} else if globals.cluster.isRemoteTopic(expanded) {
@@ -843,7 +841,7 @@ func (s *Session) get(msg *ClientComMessage) {
 			s.queueOut(ErrClusterNodeUnreachable(msg.Get.Id, msg.Get.Topic, msg.timestamp))
 		}
 	} else if meta.what&(constMsgMetaData|constMsgMetaSub|constMsgMetaDel) != 0 {
-		log.Println("s.get: subscribe first to get '" + msg.Get.What + "'")
+		log.Println("s.get: subscribe first to get=", msg.Get.What)
 		s.queueOut(ErrPermissionDenied(msg.Get.Id, msg.Get.Topic, msg.timestamp))
 	} else {
 		// Description of a topic not currently subscribed to. Request desc from the hub
@@ -852,8 +850,6 @@ func (s *Session) get(msg *ClientComMessage) {
 }
 
 func (s *Session) set(msg *ClientComMessage) {
-	log.Println("s.set: processing 'set'")
-
 	if s.ver == 0 {
 		s.queueOut(ErrCommandOutOfSequence(msg.Set.Id, msg.Set.Topic, msg.timestamp))
 		return
@@ -899,8 +895,6 @@ func (s *Session) set(msg *ClientComMessage) {
 }
 
 func (s *Session) del(msg *ClientComMessage) {
-	log.Println("s.del: processing 'del." + msg.Del.What + "'")
-
 	if s.ver == 0 {
 		s.queueOut(ErrCommandOutOfSequence(msg.Del.Id, msg.Del.Topic, msg.timestamp))
 		return
@@ -916,7 +910,7 @@ func (s *Session) del(msg *ClientComMessage) {
 	what := parseMsgClientDel(msg.Del.What)
 	if what == 0 {
 		s.queueOut(ErrMalformed(msg.Del.Id, msg.Del.Topic, msg.timestamp))
-		log.Println("s.del: invalid Del action '" + msg.Del.What + "'")
+		log.Println("s.del: invalid Del action", msg.Del.What)
 	}
 
 	sub := s.getSub(expanded)
@@ -944,7 +938,7 @@ func (s *Session) del(msg *ClientComMessage) {
 	} else {
 		// Must join the topic to delete messages or subscriptions.
 		s.queueOut(ErrAttachFirst(msg.Del.Id, msg.Del.Topic, msg.timestamp))
-		log.Println("s.del: invalid Del action while unsubbed '" + msg.Del.What + "'")
+		log.Println("s.del: invalid Del action while unsubbed", msg.Del.What)
 	}
 }
 

@@ -393,9 +393,6 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 
 		if stopic != nil && len(subs) == 2 {
 			// Case 4.
-
-			log.Println("hub: existing p2p topic")
-
 			for i := 0; i < 2; i++ {
 				uid := types.ParseUid(subs[i].User)
 				t.perUser[uid] = perUserData{

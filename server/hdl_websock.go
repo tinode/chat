@@ -38,8 +38,8 @@ func (sess *Session) closeWS() {
 func (sess *Session) readLoop() {
 	defer func() {
 		sess.closeWS()
-		sess.cleanUp()
-		log.Println("ws.readLoop exited", sess.sid)
+		count := sess.cleanUp()
+		log.Println("ws.readLoop exited", sess.sid, count)
 	}()
 
 	sess.ws.SetReadLimit(globals.maxMessageSize)
@@ -54,8 +54,9 @@ func (sess *Session) readLoop() {
 		// Read a ClientComMessage
 		_, raw, err := sess.ws.ReadMessage()
 		if err != nil {
-			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				log.Println("sess.readLoop", sess.sid, err)
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure,
+				websocket.CloseNormalClosure) {
+				log.Println("ws.readLoop", sess.sid, err)
 			}
 			return
 		}
@@ -81,7 +82,10 @@ func (sess *Session) writeLoop() {
 				return
 			}
 			if err := wsWrite(sess.ws, websocket.TextMessage, msg); err != nil {
-				log.Println("ws.writeLoop", sess.sid, err)
+				if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure,
+					websocket.CloseNormalClosure) {
+					log.Println("ws.writeLoop", sess.sid, err)
+				}
 				return
 			}
 		case msg := <-sess.stop:
@@ -96,7 +100,10 @@ func (sess *Session) writeLoop() {
 
 		case <-ticker.C:
 			if err := wsWrite(sess.ws, websocket.PingMessage, nil); err != nil {
-				log.Println("ws.writeLoop: ping", sess.sid, err)
+				if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure,
+					websocket.CloseNormalClosure) {
+					log.Println("ws.writeLoop: ping", sess.sid, err)
+				}
 				return
 			}
 		}
@@ -149,11 +156,12 @@ func serveWebSocket(wrt http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	sess := globals.sessionStore.Create(ws, "")
+	sess, count := globals.sessionStore.Create(ws, "")
+
+	log.Println("ws: session started", sess.sid, count)
 
 	// Do work in goroutines to return from serveWebSocket() to release file pointers.
 	// Otherwise "too many open files" will happen.
-
 	go sess.writeLoop()
 	go sess.readLoop()
 }

@@ -117,8 +117,9 @@ func serveLongPoll(wrt http.ResponseWriter, req *http.Request) {
 	var sess *Session
 	if sid == "" {
 		// New session
-		sess = globals.sessionStore.Create(wrt, "")
-		log.Println("longPoll: new session created, sid=", sess.sid)
+		var count int
+		sess, count = globals.sessionStore.Create(wrt, "")
+		log.Println("lp: session started", sess.sid, count)
 		wrt.WriteHeader(http.StatusCreated)
 		pkt := NoErrCreated(req.FormValue("id"), "", now)
 		pkt.Ctrl.Params = map[string]string{

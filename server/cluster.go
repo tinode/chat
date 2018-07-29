@@ -297,7 +297,7 @@ func (c *Cluster) Master(msg *ClusterReq, rejected *bool) error {
 				return nil
 			}
 
-			sess = globals.sessionStore.Create(node, msg.Sess.Sid)
+			sess, _ = globals.sessionStore.Create(node, msg.Sess.Sid)
 			go sess.rpcWriteLoop()
 		}
 
