@@ -125,13 +125,18 @@ func (a *adapter) IsOpen() bool {
 
 // Read current database version
 func (a *adapter) getDbVersion() (int, error) {
-	resp, err := rdb.DB(a.dbName).Table("kvmeta").Get("version").Pluck("value").Run(a.conn)
-	if err != nil || resp.IsNil() {
+	cursor, err := rdb.DB(a.dbName).Table("kvmeta").Get("version").Pluck("value").Run(a.conn)
+	if err != nil {
 		return -1, err
+	}
+	defer cursor.Close()
+
+	if cursor.IsNil() {
+		return -1, nil
 	}
 
 	var vers map[string]int
-	if err = resp.One(&vers); err != nil {
+	if err = cursor.One(&vers); err != nil {
 		return -1, err
 	}
 	a.version = vers["value"]
@@ -351,20 +356,22 @@ func (a *adapter) AuthUpdRecord(uid t.Uid, scheme, unique string, authLvl auth.L
 	// 3. If yes, first insert the new record (it may fail due to dublicate 'unique') then delete the old one.
 	var dupe bool
 	// Get the old 'unique'
-	res, err := rdb.DB(a.dbName).Table("auth").GetAllByIndex("userid", uid.String()).
+	cursor, err := rdb.DB(a.dbName).Table("auth").GetAllByIndex("userid", uid.String()).
 		Filter(map[string]interface{}{"scheme": scheme}).
 		Pluck("unique").Default(nil).Run(a.conn)
 	if err != nil {
 		return dupe, err
 	}
-	if res.IsNil() {
+	defer cursor.Close()
+
+	if cursor.IsNil() {
 		// If the record is not found, don't update it
 		return dupe, t.ErrNotFound
 	}
 	var record struct {
 		Unique string `gorethink:"unique"`
 	}
-	if err = res.One(&record); err != nil {
+	if err = cursor.One(&record); err != nil {
 		return dupe, err
 	}
 	if record.Unique == unique {
@@ -388,11 +395,16 @@ func (a *adapter) AuthUpdRecord(uid t.Uid, scheme, unique string, authLvl auth.L
 // Retrieve user's authentication record
 func (a *adapter) AuthGetRecord(uid t.Uid, scheme string) (string, auth.Level, []byte, time.Time, error) {
 	// Default() is needed to prevent Pluck from returning an error
-	row, err := rdb.DB(a.dbName).Table("auth").GetAllByIndex("userid", uid.String()).
+	cursor, err := rdb.DB(a.dbName).Table("auth").GetAllByIndex("userid", uid.String()).
 		Filter(map[string]interface{}{"scheme": scheme}).
 		Pluck("unique", "secret", "expires", "authLvl").Default(nil).Run(a.conn)
-	if err != nil || row.IsNil() {
+	if err != nil {
 		return "", 0, nil, time.Time{}, err
+	}
+	defer cursor.Close()
+
+	if cursor.IsNil() {
+		return "", 0, nil, time.Time{}, t.ErrNotFound
 	}
 
 	var record struct {
@@ -402,7 +414,7 @@ func (a *adapter) AuthGetRecord(uid t.Uid, scheme string) (string, auth.Level, [
 		Expires time.Time  `gorethink:"expires"`
 	}
 
-	if err = row.One(&record); err != nil {
+	if err = cursor.One(&record); err != nil {
 		return "", 0, nil, time.Time{}, err
 	}
 
@@ -413,10 +425,15 @@ func (a *adapter) AuthGetRecord(uid t.Uid, scheme string) (string, auth.Level, [
 // Retrieve user's authentication record
 func (a *adapter) AuthGetUniqueRecord(unique string) (t.Uid, auth.Level, []byte, time.Time, error) {
 	// Default() is needed to prevent Pluck from returning an error
-	row, err := rdb.DB(a.dbName).Table("auth").Get(unique).Pluck(
+	cursor, err := rdb.DB(a.dbName).Table("auth").Get(unique).Pluck(
 		"userid", "secret", "expires", "authLvl").Default(nil).Run(a.conn)
-	if err != nil || row.IsNil() {
+	if err != nil {
 		return t.ZeroUid, 0, nil, time.Time{}, err
+	}
+	defer cursor.Close()
+
+	if cursor.IsNil() {
+		return t.ZeroUid, 0, nil, time.Time{}, nil
 	}
 
 	var record struct {
@@ -426,7 +443,7 @@ func (a *adapter) AuthGetUniqueRecord(unique string) (t.Uid, auth.Level, []byte,
 		Expires time.Time  `gorethink:"expires"`
 	}
 
-	if err = row.One(&record); err != nil {
+	if err = cursor.One(&record); err != nil {
 		return t.ZeroUid, 0, nil, time.Time{}, err
 	}
 
@@ -436,13 +453,18 @@ func (a *adapter) AuthGetUniqueRecord(unique string) (t.Uid, auth.Level, []byte,
 
 // UserGet fetches a single user by user id. If user is not found it returns (nil, nil)
 func (a *adapter) UserGet(uid t.Uid) (*t.User, error) {
-	row, err := rdb.DB(a.dbName).Table("users").Get(uid.String()).Run(a.conn)
-	if err != nil || row.IsNil() {
+	cursor, err := rdb.DB(a.dbName).Table("users").Get(uid.String()).Run(a.conn)
+	if err != nil {
 		return nil, err
+	}
+	defer cursor.Close()
+
+	if cursor.IsNil() {
+		return nil, nil
 	}
 
 	var user t.User
-	if err = row.One(&user); err != nil {
+	if err = cursor.One(&user); err != nil {
 		return nil, err
 	}
 	return &user, nil
@@ -455,13 +477,15 @@ func (a *adapter) UserGetAll(ids ...t.Uid) ([]t.User, error) {
 	}
 
 	users := []t.User{}
-	if rows, err := rdb.DB(a.dbName).Table("users").GetAll(uids...).Run(a.conn); err == nil {
+	if cursor, err := rdb.DB(a.dbName).Table("users").GetAll(uids...).Run(a.conn); err == nil {
+		defer cursor.Close()
+
 		var user t.User
-		for rows.Next(&user) {
+		for cursor.Next(&user) {
 			users = append(users, user)
 		}
 
-		if err = rows.Err(); err != nil {
+		if err = cursor.Err(); err != nil {
 			return nil, err
 		}
 	} else {
@@ -539,13 +563,18 @@ func (a *adapter) TopicCreateP2P(initiator, invited *t.Subscription) error {
 
 func (a *adapter) TopicGet(topic string) (*t.Topic, error) {
 	// Fetch topic by name
-	row, err := rdb.DB(a.dbName).Table("topics").Get(topic).Run(a.conn)
-	if err != nil || row.IsNil() {
+	cursor, err := rdb.DB(a.dbName).Table("topics").Get(topic).Run(a.conn)
+	if err != nil {
 		return nil, err
+	}
+	defer cursor.Close()
+
+	if cursor.IsNil() {
+		return nil, nil
 	}
 
 	var tt = new(t.Topic)
-	if err = row.One(tt); err != nil {
+	if err = cursor.One(tt); err != nil {
 		return nil, err
 	}
 
@@ -576,7 +605,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 	q = q.Limit(limit)
 
 	//log.Printf("RethinkDbAdapter.TopicsForUser q: %+v", q)
-	rows, err := q.Run(a.conn)
+	cursor, err := q.Run(a.conn)
 	if err != nil {
 		return nil, err
 	}
@@ -587,7 +616,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 	join := make(map[string]t.Subscription) // Keeping these to make a join with table for .private and .access
 	topq := make([]interface{}, 0, 16)
 	usrq := make([]interface{}, 0, 16)
-	for rows.Next(&sub) {
+	for cursor.Next(&sub) {
 		tcat := t.GetTopicCat(sub.Topic)
 
 		// 'me' or 'fnd' subscription, skip
@@ -610,6 +639,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 		}
 		join[sub.Topic] = sub
 	}
+	cursor.Close()
 
 	var subs []t.Subscription
 	if len(topq) > 0 || len(usrq) > 0 {
@@ -618,13 +648,13 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 
 	if len(topq) > 0 {
 		// Fetch grp & p2p topics
-		rows, err = rdb.DB(a.dbName).Table("topics").GetAll(topq...).Run(a.conn)
+		cursor, err = rdb.DB(a.dbName).Table("topics").GetAll(topq...).Run(a.conn)
 		if err != nil {
 			return nil, err
 		}
 
 		var top t.Topic
-		for rows.Next(&top) {
+		for cursor.Next(&top) {
 			sub = join[top.Id]
 			sub.ObjHeader.MergeTimes(&top.ObjHeader)
 			sub.SetSeqId(top.SeqId)
@@ -638,17 +668,18 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 				join[top.Id] = sub
 			}
 		}
+		cursor.Close()
 	}
 
 	// Fetch p2p users and join to p2p tables
 	if len(usrq) > 0 {
-		rows, err = rdb.DB(a.dbName).Table("users").GetAll(usrq...).Run(a.conn)
+		cursor, err = rdb.DB(a.dbName).Table("users").GetAll(usrq...).Run(a.conn)
 		if err != nil {
 			return nil, err
 		}
 
 		var usr t.User
-		for rows.Next(&usr) {
+		for cursor.Next(&usr) {
 			uid2 := t.ParseUid(usr.Id)
 			topic := uid.P2PName(uid2)
 			if sub, ok := join[topic]; ok {
@@ -660,6 +691,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 				subs = append(subs, sub)
 			}
 		}
+		cursor.Close()
 	}
 
 	return subs, nil
@@ -688,7 +720,7 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 	}
 	q = q.Limit(limit)
 	//log.Printf("RethinkDbAdapter.UsersForTopic q: %+v", q)
-	rows, err := q.Run(a.conn)
+	cursor, err := q.Run(a.conn)
 	if err != nil {
 		return nil, err
 	}
@@ -698,29 +730,31 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 	var subs []t.Subscription
 	join := make(map[string]t.Subscription)
 	usrq := make([]interface{}, 0, 16)
-	for rows.Next(&sub) {
+	for cursor.Next(&sub) {
 		join[sub.User] = sub
 		usrq = append(usrq, sub.User)
 	}
+	cursor.Close()
 
 	//log.Printf("RethinkDbAdapter.UsersForTopic usrq: %+v, usrq)
 	if len(usrq) > 0 {
 		subs = make([]t.Subscription, 0, len(usrq))
 
 		// Fetch users by a list of subscriptions
-		rows, err = rdb.DB(a.dbName).Table("users").GetAll(usrq...).Run(a.conn)
+		cursor, err = rdb.DB(a.dbName).Table("users").GetAll(usrq...).Run(a.conn)
 		if err != nil {
 			return nil, err
 		}
 
 		var usr t.User
-		for rows.Next(&usr) {
+		for cursor.Next(&usr) {
 			if sub, ok := join[usr.Id]; ok {
 				sub.ObjHeader.MergeTimes(&usr.ObjHeader)
 				sub.SetPublic(usr.Public)
 				subs = append(subs, sub)
 			}
 		}
+		cursor.Close()
 		//log.Printf("RethinkDbAdapter.UsersForTopic users: %+v", subs)
 	}
 
@@ -784,13 +818,18 @@ func (a *adapter) TopicUpdate(topic string, update map[string]interface{}) error
 // Get a subscription of a user to a topic
 func (a *adapter) SubscriptionGet(topic string, user t.Uid) (*t.Subscription, error) {
 
-	row, err := rdb.DB(a.dbName).Table("subscriptions").Get(topic + ":" + user.String()).Run(a.conn)
-	if err != nil || row.IsNil() {
+	cursor, err := rdb.DB(a.dbName).Table("subscriptions").Get(topic + ":" + user.String()).Run(a.conn)
+	if err != nil {
 		return nil, err
+	}
+	defer cursor.Close()
+
+	if cursor.IsNil() {
+		return nil, nil
 	}
 
 	var sub t.Subscription
-	if err = row.One(&sub); err != nil {
+	if err = cursor.One(&sub); err != nil {
 		return nil, err
 	}
 
@@ -829,18 +868,19 @@ func (a *adapter) SubsForUser(forUser t.Uid, keepDeleted bool, opts *t.QueryOpt)
 	}
 	q = q.Limit(limit)
 
-	rows, err := q.Run(a.conn)
+	cursor, err := q.Run(a.conn)
 	if err != nil {
 		return nil, err
 	}
+	defer cursor.Close()
 
 	var subs []t.Subscription
 	var ss t.Subscription
-	for rows.Next(&ss) {
+	for cursor.Next(&ss) {
 		subs = append(subs, ss)
 	}
 
-	return subs, rows.Err()
+	return subs, cursor.Err()
 }
 
 // SubsForTopic fetches all subsciptions for a topic. Does NOT load Public value.
@@ -867,19 +907,20 @@ func (a *adapter) SubsForTopic(topic string, keepDeleted bool, opts *t.QueryOpt)
 	q = q.Limit(limit)
 	//log.Println("Loading subscription q=", q)
 
-	rows, err := q.Run(a.conn)
+	cursor, err := q.Run(a.conn)
 	if err != nil {
 		return nil, err
 	}
+	defer cursor.Close()
 
 	var subs []t.Subscription
 	var ss t.Subscription
-	for rows.Next(&ss) {
+	for cursor.Next(&ss) {
 		subs = append(subs, ss)
 		//log.Printf("SubsForTopic: loaded sub %#+v", ss)
 	}
 
-	return subs, rows.Err()
+	return subs, cursor.Err()
 }
 
 // SubsUpdate updates a single subscription.
@@ -977,19 +1018,16 @@ func (a *adapter) FindUsers(uid t.Uid, req, opt []string) ([]t.Subscription, err
 			return row.Field("Tags").SetIntersection(reqTags).Count().Ne(0)
 		})
 	}
-	rows, err := query.
-		OrderBy(rdb.Desc("MatchedTagsCount")).
-		Limit(maxResults).
-		Run(a.conn)
-
+	cursor, err := query.OrderBy(rdb.Desc("MatchedTagsCount")).Limit(maxResults).Run(a.conn)
 	if err != nil {
 		return nil, err
 	}
+	defer cursor.Close()
 
 	var user t.User
 	var sub t.Subscription
 	var subs []t.Subscription
-	for rows.Next(&user) {
+	for cursor.Next(&user) {
 		if user.Id == uid.String() {
 			// Skip the callee
 			continue
@@ -1010,9 +1048,10 @@ func (a *adapter) FindUsers(uid t.Uid, req, opt []string) ([]t.Subscription, err
 		subs = append(subs, sub)
 	}
 
-	if err = rows.Err(); err != nil {
+	if err = cursor.Err(); err != nil {
 		return nil, err
 	}
+
 	return subs, nil
 
 }
@@ -1048,18 +1087,16 @@ func (a *adapter) FindTopics(req, opt []string) ([]t.Subscription, error) {
 		})
 	}
 
-	rows, err := query.
-		OrderBy(rdb.Desc("MatchedTagsCount")).
-		Limit(maxResults).
-		Run(a.conn)
+	cursor, err := query.OrderBy(rdb.Desc("MatchedTagsCount")).Limit(maxResults).Run(a.conn)
 	if err != nil {
 		return nil, err
 	}
+	defer cursor.Close()
 
 	var topic t.Topic
 	var sub t.Subscription
 	var subs []t.Subscription
-	for rows.Next(&topic) {
+	for cursor.Next(&topic) {
 		sub.CreatedAt = topic.CreatedAt
 		sub.UpdatedAt = topic.UpdatedAt
 		sub.Topic = topic.Id
@@ -1076,7 +1113,7 @@ func (a *adapter) FindTopics(req, opt []string) ([]t.Subscription, error) {
 		subs = append(subs, sub)
 	}
 
-	if err = rows.Err(); err != nil {
+	if err = cursor.Err(); err != nil {
 		return nil, err
 	}
 	return subs, nil
@@ -1115,7 +1152,7 @@ func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.QueryOpt) (
 	upper = []interface{}{topic, upper}
 
 	requester := forUser.String()
-	rows, err := rdb.DB(a.dbName).Table("messages").
+	cursor, err := rdb.DB(a.dbName).Table("messages").
 		Between(lower, upper, rdb.BetweenOpts{Index: "Topic_SeqId"}).
 		// Ordering by index must come before filtering
 		OrderBy(rdb.OrderByOpts{Index: rdb.Desc("Topic_SeqId")}).
@@ -1132,9 +1169,10 @@ func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.QueryOpt) (
 	if err != nil {
 		return nil, err
 	}
+	defer cursor.Close()
 
 	var msgs []t.Message
-	if err = rows.All(&msgs); err != nil {
+	if err = cursor.All(&msgs); err != nil {
 		return nil, err
 	}
 
@@ -1163,7 +1201,7 @@ func (a *adapter) MessageGetDeleted(topic string, forUser t.Uid, opts *t.QueryOp
 	}
 
 	// Fetch log of deletions
-	rows, err := rdb.DB(a.dbName).Table("dellog").
+	cursor, err := rdb.DB(a.dbName).Table("dellog").
 		// Select log entries for the given table and DelId values between two limits
 		Between([]interface{}{topic, lower}, []interface{}{topic, upper},
 			rdb.BetweenOpts{Index: "Topic_DelId"}).
@@ -1178,9 +1216,10 @@ func (a *adapter) MessageGetDeleted(topic string, forUser t.Uid, opts *t.QueryOp
 	if err != nil {
 		return nil, err
 	}
+	defer cursor.Close()
 
 	var dmsgs []t.DelMessage
-	if err = rows.All(&dmsgs); err != nil {
+	if err = cursor.All(&dmsgs); err != nil {
 		return nil, err
 	}
 
@@ -1330,7 +1369,7 @@ func (a *adapter) DeviceUpsert(uid t.Uid, def *t.DeviceDef) error {
 	// Ensure uniqueness of the device ID
 	var others []interface{}
 	// Find users who already use this device ID, ignore current user.
-	if resp, err := rdb.DB(a.dbName).Table("users").GetAllByIndex("DeviceIds", def.DeviceId).
+	cursor, err := rdb.DB(a.dbName).Table("users").GetAllByIndex("DeviceIds", def.DeviceId).
 		// We only care about user Ids
 		Pluck("Id").
 		// Make sure we filter out the current user who may legitimately use this device ID
@@ -1338,13 +1377,19 @@ func (a *adapter) DeviceUpsert(uid t.Uid, def *t.DeviceDef) error {
 		// Convert slice of objects to a slice of strings
 		ConcatMap(func(row rdb.Term) interface{} { return []interface{}{row.Field("Id")} }).
 		// Execute
-		Run(a.conn); err != nil {
+		Run(a.conn)
+	if err != nil {
 		return err
-	} else if err = resp.All(&others); err != nil {
+	}
+	defer cursor.Close()
+
+	if err = cursor.All(&others); err != nil {
 		return err
-	} else if len(others) > 0 {
+	}
+
+	if len(others) > 0 {
 		// Delete device ID for the other users.
-		_, err := rdb.DB(a.dbName).Table("users").GetAll(others...).Replace(rdb.Row.Without(
+		_, err = rdb.DB(a.dbName).Table("users").GetAll(others...).Replace(rdb.Row.Without(
 			map[string]string{"Devices": hash})).RunWrite(a.conn)
 		if err != nil {
 			return err
@@ -1352,7 +1397,7 @@ func (a *adapter) DeviceUpsert(uid t.Uid, def *t.DeviceDef) error {
 	}
 
 	// Actually add/update DeviceId for the new user
-	_, err := rdb.DB(a.dbName).Table("users").Get(user).
+	_, err = rdb.DB(a.dbName).Table("users").Get(user).
 		Update(map[string]interface{}{
 			"Devices": map[string]*t.DeviceDef{
 				hash: def,
@@ -1367,11 +1412,12 @@ func (a *adapter) DeviceGetAll(uids ...t.Uid) (map[t.Uid][]t.DeviceDef, int, err
 	}
 
 	// {Id: "userid", Devices: {"hash1": {..def1..}, "hash2": {..def2..}}
-	rows, err := rdb.DB(a.dbName).Table("users").GetAll(ids...).Pluck("Id", "Devices").
+	cursor, err := rdb.DB(a.dbName).Table("users").GetAll(ids...).Pluck("Id", "Devices").
 		Default(nil).Limit(maxResults).Run(a.conn)
 	if err != nil {
 		return nil, 0, err
 	}
+	defer cursor.Close()
 
 	var row struct {
 		Id      string
@@ -1381,7 +1427,7 @@ func (a *adapter) DeviceGetAll(uids ...t.Uid) (map[t.Uid][]t.DeviceDef, int, err
 	result := make(map[t.Uid][]t.DeviceDef)
 	count := 0
 	var uid t.Uid
-	for rows.Next(&row) {
+	for cursor.Next(&row) {
 		if row.Devices != nil && len(row.Devices) > 0 {
 			if err := uid.UnmarshalText([]byte(row.Id)); err != nil {
 				continue
@@ -1399,7 +1445,7 @@ func (a *adapter) DeviceGetAll(uids ...t.Uid) (map[t.Uid][]t.DeviceDef, int, err
 		}
 	}
 
-	return result, count, rows.Err()
+	return result, count, cursor.Err()
 }
 
 func (a *adapter) DeviceDelete(uid t.Uid, deviceID string) error {
@@ -1498,13 +1544,18 @@ func (a *adapter) CredGet(uid t.Uid, method string) ([]*t.Credential, error) {
 	if method != "" {
 		q = q.Filter(map[string]interface{}{"Method": method})
 	}
-	rows, err := q.Run(a.conn)
-	if err != nil || rows.IsNil() {
+	cursor, err := q.Run(a.conn)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close()
+
+	if cursor.IsNil() {
 		return nil, err
 	}
 
 	var result []*t.Credential
-	if err = rows.All(&result); err != nil {
+	if err = cursor.All(&result); err != nil {
 		return nil, err
 	}
 
@@ -1535,13 +1586,18 @@ func (a *adapter) FileFinishUpload(fid string, status int, size int64) (*t.FileD
 
 // FileGet fetches a record of a specific file
 func (a *adapter) FileGet(fid string) (*t.FileDef, error) {
-	row, err := rdb.DB(a.dbName).Table("fileuploads").Get(fid).Run(a.conn)
-	if err != nil || row.IsNil() {
+	cursor, err := rdb.DB(a.dbName).Table("fileuploads").Get(fid).Run(a.conn)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close()
+
+	if cursor.IsNil() {
 		return nil, err
 	}
 
 	var fd t.FileDef
-	if err = row.One(&fd); err != nil {
+	if err = cursor.One(&fd); err != nil {
 		return nil, err
 	}
 
@@ -1559,18 +1615,19 @@ func (a *adapter) FileDeleteUnused(olderThan time.Time, limit int) ([]string, er
 		q = q.Limit(limit)
 	}
 
-	rows, err := q.Pluck("Location").Run(a.conn)
+	cursor, err := q.Pluck("Location").Run(a.conn)
 	if err != nil {
 		return nil, err
 	}
+	defer cursor.Close()
 
 	var locations []string
 	var loc map[string]string
-	for rows.Next(&loc) {
+	for cursor.Next(&loc) {
 		locations = append(locations, loc["Location"])
 	}
 
-	if err = rows.Err(); err != nil {
+	if err = cursor.Err(); err != nil {
 		return nil, err
 	}
 
