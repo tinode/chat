@@ -271,6 +271,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		} else if user == nil {
 			log.Println("hub: user's account unexpectedly not found (deleted?)")
 			// Log out the session
+			// FIXME: this is a race condition
 			sreg.sess.uid = types.ZeroUid
 			sreg.sess.queueOut(ErrUserNotFound(sreg.pkt.Id, t.xoriginal, timestamp))
 			return
@@ -313,6 +314,8 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 			return
 		} else if user == nil {
 			log.Println("hub: user's account unexpectedly not found (deleted?)")
+			// FIXME: this is a race condition
+			sreg.sess.uid = types.ZeroUid
 			sreg.sess.queueOut(ErrUserNotFound(sreg.pkt.Id, t.xoriginal, timestamp))
 			return
 		}
