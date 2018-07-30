@@ -59,7 +59,7 @@ next_id.tid = 100
 
 def next_quote():
     idx = random.randrange(0, len(quotes))
-    # Make sure quotes and not repeated
+    # Make sure quotes are not repeated
     while idx == next_quote.idx:
         idx = random.randrange(0, len(quotes))
     next_quote.idx = idx

@@ -198,15 +198,13 @@ func (s *Session) cleanUp() int {
 func (s *Session) dispatchRaw(raw []byte) {
 	var msg ClientComMessage
 
-	truncateIfTooLong := func(b []byte) []byte {
-		if len(b) < 1024 {
-			return b
-		} else {
-			return append(b[:1024], '.', '.', '.')
-		}
+	toLog := raw
+	truncated := ""
+	if len(raw) > 1024 {
+		toLog = raw[:1024]
+		truncated = "<...>"
 	}
-
-	log.Printf("in: '%s' ip='%s' sid='%s' uid='%s'", truncateIfTooLong(raw), s.remoteAddr, s.sid, s.uid)
+	log.Printf("in: '%s%s' ip='%s' sid='%s' uid='%s'", toLog, truncated, s.remoteAddr, s.sid, s.uid)
 
 	if err := json.Unmarshal(raw, &msg); err != nil {
 		// Malformed message

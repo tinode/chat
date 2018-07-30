@@ -32,9 +32,9 @@ func (*grpcNodeServer) MessageLoop(stream pbx.Node_MessageLoopServer) error {
 	sess, _ := globals.sessionStore.Create(stream, "")
 
 	defer func() {
-		log.Println("grpc.MessageLoop - stop")
 		sess.closeGrpc()
 		sess.cleanUp()
+		log.Println("grpc exited", sess.sid)
 	}()
 
 	go sess.writeGrpcLoop()
@@ -47,7 +47,7 @@ func (*grpcNodeServer) MessageLoop(stream pbx.Node_MessageLoopServer) error {
 		if err != nil {
 			return err
 		}
-		log.Println("grpc in:", in.String())
+		log.Println("grpc in:", truncateStringIfTooLong(in.String()))
 		sess.dispatch(pbCliDeserialize(in))
 	}
 
@@ -68,7 +68,7 @@ func (sess *Session) writeGrpcLoop() {
 				return
 			}
 			if err := grpcWrite(sess, msg); err != nil {
-				log.Println("sess.writeLoop: " + err.Error())
+				log.Println("g.writeGrpcLoop", err)
 				return
 			}
 		case msg := <-sess.stop:
@@ -87,8 +87,7 @@ func (sess *Session) writeGrpcLoop() {
 func grpcWrite(sess *Session, msg interface{}) error {
 	out := sess.grpcnode
 	if out != nil {
-		// Will panic if format is wrong. This is an intentional panic.
-		log.Println("grpc: writing message to stream", msg)
+		// Will panic if msg is not of *pbx.ServerMsg type. This is an intentional panic.
 		return out.Send(msg.(*pbx.ServerMsg))
 	}
 	return nil

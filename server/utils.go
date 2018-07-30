@@ -490,3 +490,12 @@ func max(a, b int) int {
 	}
 	return b
 }
+
+// Truncate string if it's too long. Used in logging.
+func truncateStringIfTooLong(s string) string {
+	if len(s) <= 1024 {
+		return s
+	} else {
+		return s[:1024] + "..."
+	}
+}
