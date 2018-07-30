@@ -115,7 +115,7 @@ rm -f $GOPATH/bin/init-db
 
 ~/go/bin/gox -osarch=linux/amd64 \
   -ldflags "-X main.buildstamp=`git describe --tags`" \
-  -race -tags rethinkdb -output $GOPATH/bin/tinode ./server > /dev/null
+  -tags rethinkdb -output $GOPATH/bin/tinode ./server > /dev/null
 ~/go/bin/gox -osarch=linux/amd64 \
   -tags rethinkdb -output $GOPATH/bin/init-db ./tinode-db > /dev/null
 
