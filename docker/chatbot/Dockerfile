@@ -24,7 +24,7 @@ RUN tar -xzf chatbot.tar.gz \
 
 # Use command line parameter `-e LOGIN_AS=user:password` to login as someone other than Tino.
 
-ENTRYPOINT python chatbot.py --login-basic=${LOGIN_AS} --login-cookie=/botdata/.tn-cookie --host=tinode-srv:16061 > /var/log/chatbot.log
+CMD python chatbot.py --login-basic=${LOGIN_AS} --login-cookie=/botdata/.tn-cookie --host=tinode-srv:16061 > /var/log/chatbot.log
 
 # Plugin port
 EXPOSE 40051
