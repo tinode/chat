@@ -32,17 +32,21 @@ const (
 	adapterName = "rethinkdb"
 )
 
+// See https://godoc.org/github.com/GoRethink/gorethink#ConnectOpts for explanations.
 type configType struct {
-	Database            string      `json:"database,omitempty"`
-	Addresses           interface{} `json:"addresses,omitempty"`
-	AuthKey             string      `json:"authkey,omitempty"`
-	Timeout             int         `json:"timeout,omitempty"`
-	WriteTimeout        int         `json:"write_timeout,omitempty"`
-	ReadTimeout         int         `json:"read_timeout,omitempty"`
-	MaxIdle             int         `json:"max_idle,omitempty"`
-	MaxOpen             int         `json:"max_open,omitempty"`
-	DiscoverHosts       bool        `json:"discover_hosts,omitempty"`
-	NodeRefreshInterval int         `json:"node_refresh_interval,omitempty"`
+	Database          string      `json:"database,omitempty"`
+	Addresses         interface{} `json:"addresses,omitempty"`
+	Username          string      `json:"username,omitempty"`
+	Password          string      `json:"password,omitempty"`
+	AuthKey           string      `json:"authkey,omitempty"`
+	Timeout           int         `json:"timeout,omitempty"`
+	WriteTimeout      int         `json:"write_timeout,omitempty"`
+	ReadTimeout       int         `json:"read_timeout,omitempty"`
+	KeepAlivePeriod   int         `json:"keep_alive_timeout,omitempty"`
+	InitialCap        int         `json:"initial_cap,omitempty"`
+	MaxOpen           int         `json:"max_open,omitempty"`
+	DiscoverHosts     bool        `json:"discover_hosts,omitempty"`
+	HostDecayDuration int         `json:"host_decay_duration,omitempty"`
 }
 
 // TODO: convert hard-coded limits to config options
@@ -85,14 +89,17 @@ func (a *adapter) Open(jsonconfig string) error {
 	}
 
 	opts.Database = a.dbName
+	opts.Username = config.Username
+	opts.Password = config.Password
 	opts.AuthKey = config.AuthKey
 	opts.Timeout = time.Duration(config.Timeout) * time.Second
 	opts.WriteTimeout = time.Duration(config.WriteTimeout) * time.Second
 	opts.ReadTimeout = time.Duration(config.ReadTimeout) * time.Second
-	opts.MaxIdle = config.MaxIdle
+	opts.KeepAlivePeriod = time.Duration(config.KeepAlivePeriod) * time.Second
+	opts.InitialCap = config.InitialCap
 	opts.MaxOpen = config.MaxOpen
 	opts.DiscoverHosts = config.DiscoverHosts
-	opts.NodeRefreshInterval = time.Duration(config.NodeRefreshInterval) * time.Second
+	opts.HostDecayDuration = time.Duration(config.HostDecayDuration) * time.Second
 
 	a.conn, err = rdb.Connect(opts)
 	if err != nil {
