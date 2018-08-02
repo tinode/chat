@@ -5,9 +5,6 @@
  *    Handler of large file uploads/downloads. Validates request first then calls
  *    a handler.
  *
- *    Use commercial services (Amazon S3 or Google's/MSFT's equivalents),
- *    or open source like Ceph or Minio.
- *
  *****************************************************************************/
 
 package main
@@ -25,8 +22,6 @@ import (
 )
 
 func largeFileServe(wrt http.ResponseWriter, req *http.Request) {
-	log.Println("Request to download file", req.URL.Path)
-
 	now := time.Now().UTC().Round(time.Millisecond)
 	enc := json.NewEncoder(wrt)
 	mh := store.GetMediaHandler()
@@ -37,44 +32,44 @@ func largeFileServe(wrt http.ResponseWriter, req *http.Request) {
 		wrt.Header().Set("Content-Type", "application/json; charset=utf-8")
 		wrt.WriteHeader(http.StatusFound)
 		enc.Encode(InfoFound("", "", now))
+		log.Println("media serve redirected", redirTo)
 		return
 	}
 
-	writeHttpResponse := func(msg *ServerComMessage) {
-		if msg == nil {
-			msg = ErrUnknown("", "", now)
-		}
+	writeHttpResponse := func(msg *ServerComMessage, err error) {
 		// Gorilla CompressHandler requires Content-Type to be set.
 		wrt.Header().Set("Content-Type", "application/json; charset=utf-8")
 		wrt.WriteHeader(msg.Ctrl.Code)
 		enc.Encode(msg)
+
+		log.Println("media serve", msg.Ctrl.Code, msg.Ctrl.Text, err)
 	}
 
 	// Check for API key presence
 	if isValid, _ := checkAPIKey(getAPIKey(req)); !isValid {
-		writeHttpResponse(ErrAPIKeyRequired(now))
+		writeHttpResponse(ErrAPIKeyRequired(now), nil)
 		return
 	}
 
 	// Check authorization: either auth information or SID must be present
 	uid, challenge, err := authHttpRequest(req)
 	if err != nil {
-		writeHttpResponse(decodeStoreError(err, "", "", now, nil))
+		writeHttpResponse(decodeStoreError(err, "", "", now, nil), err)
 		return
 	}
 	if challenge != nil {
-		writeHttpResponse(InfoChallenge("", now, challenge))
+		writeHttpResponse(InfoChallenge("", now, challenge), nil)
 		return
 	}
 	if uid.IsZero() {
 		// Not authenticated
-		writeHttpResponse(ErrAuthRequired("", "", now))
+		writeHttpResponse(ErrAuthRequired("", "", now), nil)
 		return
 	}
 
 	fd, rsc, err := mh.Download(req.URL.String())
 	if err != nil {
-		writeHttpResponse(decodeStoreError(err, "", "", now, nil))
+		writeHttpResponse(decodeStoreError(err, "", "", now, nil), err)
 		return
 	}
 
@@ -83,6 +78,8 @@ func largeFileServe(wrt http.ResponseWriter, req *http.Request) {
 	wrt.Header().Set("Content-Type", fd.MimeType)
 	wrt.Header().Set("Content-Disposition", "attachment")
 	http.ServeContent(wrt, req, "", fd.UpdatedAt, rsc)
+
+	log.Println("media served OK")
 }
 
 // largeFileUpload receives files from client over HTTP(S) and saves them to local file
@@ -98,22 +95,23 @@ func largeFileUpload(wrt http.ResponseWriter, req *http.Request) {
 		wrt.Header().Set("Content-Type", "application/json; charset=utf-8")
 		wrt.WriteHeader(http.StatusFound)
 		enc.Encode(InfoFound("", "", now))
+
+		log.Println("media upload redirected", redirTo)
 		return
 	}
 
-	writeHttpResponse := func(msg *ServerComMessage) {
-		if msg == nil {
-			msg = ErrUnknown("", "", now)
-		}
+	writeHttpResponse := func(msg *ServerComMessage, err error) {
 		// Gorilla CompressHandler requires Content-Type to be set.
 		wrt.Header().Set("Content-Type", "application/json; charset=utf-8")
 		wrt.WriteHeader(msg.Ctrl.Code)
 		enc.Encode(msg)
+
+		log.Println("media upload", msg.Ctrl.Code, msg.Ctrl.Text, err)
 	}
 
 	// Check if this is a POST request
 	if req.Method != http.MethodPost {
-		writeHttpResponse(ErrOperationNotAllowed("", "", now))
+		writeHttpResponse(ErrOperationNotAllowed("", "", now), nil)
 		return
 	}
 
@@ -124,32 +122,33 @@ func largeFileUpload(wrt http.ResponseWriter, req *http.Request) {
 
 	// Check for API key presence
 	if isValid, _ := checkAPIKey(getAPIKey(req)); !isValid {
-		writeHttpResponse(ErrAPIKeyRequired(now))
+		writeHttpResponse(ErrAPIKeyRequired(now), nil)
 		return
 	}
+
+	msgID := req.FormValue("id")
 	// Check authorization: either auth information or SID must be present
 	uid, challenge, err := authHttpRequest(req)
 	if err != nil {
-		writeHttpResponse(decodeStoreError(err, "", "", now, nil))
+		writeHttpResponse(decodeStoreError(err, msgID, "", now, nil), err)
 		return
 	}
 	if challenge != nil {
-		writeHttpResponse(InfoChallenge("", now, challenge))
+		writeHttpResponse(InfoChallenge(msgID, now, challenge), nil)
 		return
 	}
 	if uid.IsZero() {
 		// Not authenticated
-		writeHttpResponse(ErrAuthRequired("", "", now))
+		writeHttpResponse(ErrAuthRequired(msgID, "", now), nil)
 		return
 	}
 
 	file, _, err := req.FormFile("file")
 	if err != nil {
-		log.Println("Error reading file", err)
 		if strings.Contains(err.Error(), "request body too large") {
-			writeHttpResponse(ErrTooLarge("", "", now))
+			writeHttpResponse(ErrTooLarge(msgID, "", now), err)
 		} else {
-			writeHttpResponse(ErrMalformed("", "", now))
+			writeHttpResponse(ErrMalformed(msgID, "", now), err)
 		}
 		return
 	}
@@ -160,28 +159,25 @@ func largeFileUpload(wrt http.ResponseWriter, req *http.Request) {
 
 	buff := make([]byte, 512)
 	if _, err = file.Read(buff); err != nil {
-		log.Println("Failed to detect mime type", err)
-		writeHttpResponse(nil)
+		writeHttpResponse(ErrUnknown(msgID, "", now), err)
 		return
 	}
 
 	fdef.MimeType = http.DetectContentType(buff)
 	if _, err = file.Seek(0, io.SeekStart); err != nil {
-		log.Println("Failed to reset request buffer", err)
-		writeHttpResponse(nil)
+		writeHttpResponse(ErrUnknown(msgID, "", now), err)
 		return
 	}
 
 	url, err := mh.Upload(&fdef, file)
 	if err != nil {
-		log.Println("Failed to upload file", fdef.Id, err)
-		writeHttpResponse(decodeStoreError(err, "", "", now, nil))
+		writeHttpResponse(decodeStoreError(err, msgID, "", now, nil), err)
 		return
 	}
 
-	resp := NoErr("", "", now)
+	resp := NoErr(msgID, "", now)
 	resp.Ctrl.Params = map[string]string{"url": url}
-	writeHttpResponse(resp)
+	writeHttpResponse(resp, nil)
 }
 
 func largeFileRunGarbageCollection(period time.Duration, block int) chan<- bool {

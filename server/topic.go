@@ -287,23 +287,17 @@ func (t *Topic) run(hub *Hub) {
 
 			if msg.Data != nil {
 				if t.isSuspended() {
-					if msg.sessFrom != nil {
-						msg.sessFrom.queueOut(ErrLocked(msg.id, t.original(msg.sessFrom.uid), msg.timestamp))
-					}
+					msg.sessFrom.queueOut(ErrLocked(msg.id, t.original(msg.sessFrom.uid), msg.timestamp))
 					continue
 				}
 
 				from := types.ParseUserId(msg.Data.From)
 				userData := t.perUser[from]
 
-				// msg.sessFrom is not nil when the message originated at the client.
-				// for internally generated messages the akn is nil
-				if msg.sessFrom != nil {
-					if !(userData.modeWant & userData.modeGiven).IsWriter() {
-						msg.sessFrom.queueOut(ErrPermissionDenied(msg.id, t.original(msg.sessFrom.uid),
-							msg.timestamp))
-						continue
-					}
+				if !(userData.modeWant & userData.modeGiven).IsWriter() {
+					msg.sessFrom.queueOut(ErrPermissionDenied(msg.id, t.original(msg.sessFrom.uid),
+						msg.timestamp))
+					continue
 				}
 
 				if err := store.Messages.Save(&types.Message{
