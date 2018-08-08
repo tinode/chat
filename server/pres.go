@@ -57,14 +57,10 @@ func (t *Topic) addToPerSubs(topic string, online, enabled bool) {
 		}
 	}
 
-	if t.perSubs == nil {
-		t.perSubs = make(map[string]perSubsData)
-	}
-
 	t.perSubs[topic] = perSubsData{online: online, enabled: enabled}
 }
 
-// loadContacts initializes topic.perSubs to support presence notifications.
+// loadContacts loads topic.perSubs to support presence notifications.
 // perSubs contains (a) topics that the user wants to notify of his presence and
 // (b) those which want to receive notifications from this user.
 func (t *Topic) loadContacts(uid types.Uid) error {

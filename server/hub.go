@@ -299,6 +299,8 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		t.userAgent = sreg.sess.userAgent
 		// Initialize channel for receiving user agent updates
 		t.uaChange = make(chan string, 32)
+		// Allocate storage for contacts.
+		t.perSubs = make(map[string]perSubsData)
 
 		// Request to load a 'find' topic. The topic always exists.
 	} else if t.xoriginal == "fnd" {
