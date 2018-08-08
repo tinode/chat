@@ -57,6 +57,10 @@ func (t *Topic) addToPerSubs(topic string, online, enabled bool) {
 		}
 	}
 
+	if t.perSubs == nil {
+		t.perSubs = make(map[string]perSubsData)
+	}
+
 	t.perSubs[topic] = perSubsData{online: online, enabled: enabled}
 }
 
@@ -69,7 +73,6 @@ func (t *Topic) loadContacts(uid types.Uid) error {
 		return err
 	}
 
-	t.perSubs = make(map[string]perSubsData, len(subs))
 	for i := range subs {
 		//log.Printf("Pres loadContacts: topic[%s]: processing sub '%s'", t.name, sub.Topic)
 

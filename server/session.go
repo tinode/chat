@@ -200,8 +200,8 @@ func (s *Session) dispatchRaw(raw []byte) {
 
 	toLog := raw
 	truncated := ""
-	if len(raw) > 1024 {
-		toLog = raw[:1024]
+	if len(raw) > 512 {
+		toLog = raw[:512]
 		truncated = "<...>"
 	}
 	log.Printf("in: '%s%s' ip='%s' sid='%s' uid='%s'", toLog, truncated, s.remoteAddr, s.sid, s.uid)
