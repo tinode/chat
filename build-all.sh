@@ -68,9 +68,10 @@ do
       cp -R ./server/static/audio ./releases/tmp/static
       cp -R ./server/static/css ./releases/tmp/static
       cp ./server/static/index.html ./releases/tmp/static
+      cp ./server/static/index-dev.html ./releases/tmp/static
       cp ./server/static/index.js ./releases/tmp/static
+      cp ./server/static/index.min.js ./releases/tmp/static
       cp ./server/static/tinode.js ./releases/tmp/static
-      cp ./server/static/drafty.js ./releases/tmp/static
       cp ./tinode-db/data.json ./releases/tmp
       cp ./tinode-db/*.jpg ./releases/tmp
       cp ./tinode-db/credentials.sh ./releases/tmp
