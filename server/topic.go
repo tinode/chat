@@ -620,67 +620,74 @@ func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 	}
 
 	pud := t.perUser[sreg.sess.uid]
-	if sreg.loaded {
+
+	switch t.cat {
+	case types.TopicCatMe:
 		// Notify user's contact that the given user is online now.
-		if t.cat == types.TopicCatMe {
+		if sreg.loaded {
 			if err := t.loadContacts(sreg.sess.uid); err != nil {
 				log.Println("topic: failed to load contacts", t.name, err.Error())
 			}
-			// User online: notify users of interest
+			// User online: notify users of interest.
 			t.presUsersOfInterest("on", sreg.sess.userAgent)
-		} else if t.cat == types.TopicCatGrp || t.cat == types.TopicCatP2P {
-			var enable string
-			if sreg.created {
-				// Notify creator's other sessions that the topic was created.
-				t.presSingleUserOffline(sreg.sess.uid, "acs",
-					&presParams{
-						dWant:  pud.modeWant.String(),
-						dGiven: pud.modeGiven.String(),
-						actor:  "me"},
-					sreg.sess.sid, false)
-
-				// Special handling of a P2P topic - notifying the other
-				// participant.
-				if t.cat == types.TopicCatP2P {
-					user2 := t.p2pOtherUser(sreg.sess.uid)
-					pud2 := t.perUser[user2]
-
-					// Inform the other user that the topic was just created
-					t.presSingleUserOffline(user2, "acs", &presParams{
-						dWant:  pud2.modeWant.String(),
-						dGiven: pud2.modeGiven.String(),
-						actor:  sreg.sess.uid.UserId()}, "", false)
-
-					// Notify current user's 'me' topic to accept notifications from user2
-					t.presSingleUserOffline(sreg.sess.uid, "?none+en", nilPresParams, "", false)
-
-					// Initiate exchange of 'online' status with the other user.
-					// We don't know if the current user is online in the 'me' topic,
-					// so sending an '?unkn' status to user2. His 'me' topic
-					// will reply with user2's status and request an actual status from user1.
-					if (pud2.modeGiven & pud2.modeWant).IsPresencer() {
-						// If user2 should receive notifications, enable it.
-						enable = "+en"
-					}
-					t.presSingleUserOffline(user2, "?unkn"+enable, nilPresParams, "", false)
-
-				} else if t.cat == types.TopicCatGrp {
-					// Enable notifications for a new topic, if appropriate
-					if (pud.modeGiven & pud.modeWant).IsPresencer() {
-						enable = "+en"
-					}
-				}
-			}
-
-			if t.cat == types.TopicCatGrp {
-				// Notify topic subscribers that the topic is online now.
-				t.presSubsOffline("on"+enable, nilPresParams, nilPresFilters, "", false)
-			}
 		}
-	} else if t.cat == types.TopicCatGrp && pud.online == 1 {
-		// User just joined. Notify other group members
-		t.presSubsOnline("on", sreg.sess.uid.UserId(), nilPresParams,
-			&presFilters{filterIn: types.ModeRead}, sreg.sess.sid)
+
+	case types.TopicCatGrp:
+		// Enable notifications for a new group topic, if appropriate.
+		if sreg.loaded {
+			status := "on"
+			if (pud.modeGiven & pud.modeWant).IsPresencer() {
+				status += "+en"
+			}
+
+			// Notify topic subscribers that the topic is online now.
+			t.presSubsOffline(status, nilPresParams, nilPresFilters, "", false)
+		} else if pud.online == 1 {
+			// If this is the first session of the user in the topic.
+			// Notify other online group members that the user is online now.
+			t.presSubsOnline("on", sreg.sess.uid.UserId(), nilPresParams,
+				&presFilters{filterIn: types.ModeRead}, sreg.sess.sid)
+		}
+
+	case types.TopicCatP2P:
+		user2 := t.p2pOtherUser(sreg.sess.uid)
+		pud2 := t.perUser[user2]
+
+		// Inform the other user that the topic was just created.
+		if sreg.created {
+			t.presSingleUserOffline(user2, "acs", &presParams{
+				dWant:  pud2.modeWant.String(),
+				dGiven: pud2.modeGiven.String(),
+				actor:  sreg.sess.uid.UserId()}, "", false)
+		}
+
+		if sreg.newsub {
+			// Notify current user's 'me' topic to accept notifications from user2
+			t.presSingleUserOffline(sreg.sess.uid, "?none+en", nilPresParams, "", false)
+
+			// Initiate exchange of 'online' status with the other user.
+			// We don't know if the current user is online in the 'me' topic,
+			// so sending an '?unkn' status to user2. His 'me' topic
+			// will reply with user2's status and request an actual status from user1.
+			status := "?unkn"
+			if (pud2.modeGiven & pud2.modeWant).IsPresencer() {
+				// If user2 should receive notifications, enable it.
+				status += "+en"
+			}
+			t.presSingleUserOffline(user2, status, nilPresParams, "", false)
+
+		}
+	}
+
+	// newsub could be true only for p2p and group topics, no need to check topic category explicitly.
+	if sreg.newsub {
+		// Notify creator's other sessions that the subscription (or the entire topic) was created.
+		t.presSingleUserOffline(sreg.sess.uid, "acs",
+			&presParams{
+				dWant:  pud.modeWant.String(),
+				dGiven: pud.modeGiven.String(),
+				actor:  "me"},
+			sreg.sess.sid, false)
 	}
 
 	if getWhat&constMsgMetaSub != 0 {
@@ -721,6 +728,11 @@ func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin, sendDesc bool) error {
 		now = t.updated
 	} else {
 		now = types.TimeNow()
+	}
+
+	if !sreg.newsub && (t.cat == types.TopicCatGrp || t.cat == types.TopicCatP2P) {
+		// Remember if this is a new subscription.
+		_, sreg.newsub = t.perUser[sreg.sess.uid]
 	}
 
 	// The topic is already initialized by the Hub
@@ -2075,7 +2087,7 @@ func (t *Topic) replyLeaveUnsub(h *Hub, sess *Session, id string) error {
 		sess.queueOut(NoErr(id, t.original(sess.uid), now))
 	}
 
-	// Evict all user's sessions and clear cached data
+	// Evict all user's sessions, clear cached data, send notifications.
 	t.evictUser(sess.uid, true, sess.sid)
 
 	return nil
@@ -2123,8 +2135,14 @@ func (t *Topic) evictUser(uid types.Uid, unsub bool, skip string) {
 		t.presSingleUserOffline(uid, "gone", nilPresParams, skip, false)
 
 		if len(t.perUser) == 2 {
-			// Tell user2 to stop sending updates to user1
-			presSingleUserOfflineOffline(t.p2pOtherUser(uid), uid.UserId(), "?none+rem", nilPresParams, "")
+			// If user2 is online, inform him that the topic is not longer useable.
+			t.presSubsOnline("gone", uid.UserId(), nilPresParams,
+				&presFilters{
+					filterIn:    types.ModeRead,
+					excludeUser: uid.UserId()},
+				skip)
+			// Show user1 as offline and tell user2 to stop sending updates to user1
+			presSingleUserOfflineOffline(t.p2pOtherUser(uid), uid.UserId(), "off+rem", nilPresParams, "")
 		}
 	}
 

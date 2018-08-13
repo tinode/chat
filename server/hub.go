@@ -27,10 +27,14 @@ type sessionJoin struct {
 	pkt *MsgClientSub
 	// Session to subscribe
 	sess *Session
-	// If this topic was just created
+	// True if this topic was just created.
+	// In case of p2p topics, it's true if the other user's subscription was
+	// created (as a part of new topic creation or just alone).
 	created bool
-	// If the topic was just loaded
+	// True if the topic was just activated (loaded into memory)
 	loaded bool
+	// True if this is a new subscription
+	newsub bool
 }
 
 // Request to hub to remove the topic
@@ -187,7 +191,9 @@ func (h *Hub) run() {
 			if unreg.del {
 				reason = StopDeleted
 			}
-			h.topicUnreg(unreg.sess, unreg.topic, unreg.msg, reason)
+			if err := h.topicUnreg(unreg.sess, unreg.topic, unreg.msg, reason); err != nil {
+				log.Println("hub.topicUnreg failed:", err)
+			}
 
 		case <-h.rehash:
 			h.topics.Range(func(_, t interface{}) bool {
@@ -254,7 +260,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		return mode
 	}
 
-	// Request to load a 'me' topic. The topic always exists.
+	// Request to load a 'me' topic. The topic always exists, the subscription is never new.
 	if t.xoriginal == "me" {
 
 		t.cat = types.TopicCatMe
@@ -302,7 +308,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		// Allocate storage for contacts.
 		t.perSubs = make(map[string]perSubsData)
 
-		// Request to load a 'find' topic. The topic always exists.
+		// Request to load a 'find' topic. The topic always exists, the subscription is never new.
 	} else if t.xoriginal == "fnd" {
 
 		t.cat = types.TopicCatFnd
@@ -426,8 +432,6 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 			userID2 := types.ParseUserId(t.xoriginal)
 			// User index: u1 - requester, u2 - the other user
 
-			log.Println("hub: creating new p2p topic", userID1.String(), userID2.String())
-
 			var u1, u2 int
 			users, err := store.Users.GetAll(userID1, userID2)
 			if err != nil {
@@ -461,7 +465,6 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 					sub2 = &subs[0]
 					user1only = true
 				}
-				log.Println("hub: one subscription already exists", subs[0].User, user1only)
 			}
 
 			// Other user's subscription is missing
@@ -484,6 +487,9 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 
 				// Swap Public to match swapped Public in subs returned from store.Topics.GetSubs
 				sub2.SetPublic(users[u1].Public)
+
+				// Mark the entire topic as new.
+				sreg.created = true
 
 				log.Println("hub: created second subscription")
 			}
@@ -538,6 +544,9 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 					Private:   userData.private}
 				// Swap Public to match swapped Public in subs returned from store.Topics.GetSubs
 				sub1.SetPublic(users[u2].Public)
+
+				// Mark this subscription as new
+				sreg.newsub = true
 
 				log.Println("hub: created first subscription")
 			}
@@ -601,9 +610,6 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 				readID:    sub2.ReadSeqId,
 				recvID:    sub2.RecvSeqId,
 			}
-
-			log.Println("hub: marking request as 'topic created'")
-			sreg.created = true
 		}
 
 		// Clear original topic name.
@@ -705,6 +711,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 
 		t.xoriginal = t.name // keeping 'new' as original has no value to the client
 		sreg.created = true
+		sreg.newsub = true
 
 	} else if strings.HasPrefix(t.xoriginal, "grp") {
 		t.cat = types.TopicCatGrp
@@ -824,7 +831,7 @@ func (t *Topic) loadSubscribers() error {
 // 2. Topic is just being unregistered (topic is going offline)
 // 2.1 Unregister it with no further action
 //
-func (h *Hub) topicUnreg(sess *Session, topic string, msg *MsgClientDel, reason int) {
+func (h *Hub) topicUnreg(sess *Session, topic string, msg *MsgClientDel, reason int) error {
 	now := time.Now().UTC().Round(time.Millisecond)
 
 	if reason == StopDeleted {
@@ -838,9 +845,8 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *MsgClientDel, reason 
 
 				if err := store.Topics.Delete(topic); err != nil {
 					t.resume()
-					log.Println("topicUnreg failed to delete online topic:", err)
 					sess.queueOut(ErrUnknown(msg.Id, msg.Topic, now))
-					return
+					return err
 				}
 
 				t.meta <- &metaReq{
@@ -871,17 +877,14 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *MsgClientDel, reason 
 			// Get all subscribers: we have to notify them all.
 			subs, err := store.Topics.GetSubs(topic, nil)
 			if err != nil {
-				log.Println("topicUnreg failed to load subscribers:", err)
 				sess.queueOut(ErrUnknown(msg.Id, msg.Topic, now))
-				return
+				return err
 			}
 
 			if subs == nil || len(subs) == 0 {
 				sess.queueOut(InfoNoAction(msg.Id, msg.Topic, now))
-				return
+				return nil
 			}
-
-			tcat := topicCat(topic)
 
 			var sub *types.Subscription
 			user := sess.uid.String()
@@ -895,27 +898,26 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *MsgClientDel, reason 
 			if sub == nil {
 				// If user has no subscription, tell him all is fine
 				sess.queueOut(InfoNoAction(msg.Id, msg.Topic, now))
-				return
+				return nil
 			}
 
+			tcat := topicCat(topic)
 			if !(sub.ModeGiven & sub.ModeWant).IsOwner() {
 				// Case 1.2.2.1 Not the owner, but possibly last subscription in a P2P topic.
 
 				if tcat == types.TopicCatP2P && len(subs) < 2 {
 					// This is a P2P topic and fewer than 2 subscriptions, delete the entire topic
 					if err := store.Topics.Delete(topic); err != nil {
-						log.Println("topicUnreg failed to delete offline topic:", err)
 						sess.queueOut(ErrUnknown(msg.Id, msg.Topic, now))
-						return
+						return err
 					}
 
 				} else if err := store.Subs.Delete(topic, sess.uid); err != nil {
 					// Not P2P or more than 1 subscription left.
 					// Delete user's own subscription only
 
-					log.Println("topicUnreg failed (3):", err)
 					sess.queueOut(ErrUnknown(msg.Id, msg.Topic, now))
-					return
+					return err
 				}
 
 				// Notify user's other sessions that the subscription is gone
@@ -929,9 +931,8 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *MsgClientDel, reason 
 			} else {
 				// Case 1.2.1.1: owner, delete the topic from db
 				if err := store.Topics.Delete(topic); err != nil {
-					log.Println("topicUnreg failed (4):", err)
 					sess.queueOut(ErrUnknown(msg.Id, msg.Topic, now))
-					return
+					return err
 				}
 
 				// Notify subscribers that the topic is gone
@@ -958,6 +959,8 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *MsgClientDel, reason 
 			sess.queueOut(NoErr(msg.Id, msg.Topic, now))
 		}
 	}
+
+	return nil
 }
 
 // replyTopicDescBasic loads minimal topic Desc when the requester is not subscribed to the topic
