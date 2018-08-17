@@ -487,30 +487,33 @@ func (t *Topic) run(hub *Hub) {
 			}
 
 		case meta := <-t.meta:
-			// log.Printf("topic[%s]: got meta message '%#+v' %x", t.name, meta, meta.what)
-
 			// Request to get/set topic metadata
 			switch {
 			case meta.pkt.Get != nil:
 				// Get request
 				if meta.what&constMsgMetaDesc != 0 {
 					if err := t.replyGetDesc(meta.sess, meta.pkt.Get.Id, "", meta.pkt.Get.Desc); err != nil {
-						log.Printf("topic[%s] meta.Get.Desc failed: %v", t.name, err)
+						log.Printf("topic[%s] meta.Get.Desc failed: %s", t.name, err)
 					}
 				}
 				if meta.what&constMsgMetaSub != 0 {
 					if err := t.replyGetSub(meta.sess, meta.pkt.Get.Id, meta.pkt.Get.Sub); err != nil {
-						log.Printf("topic[%s] meta.Get.Sub failed: %v", t.name, err)
+						log.Printf("topic[%s] meta.Get.Sub failed: %s", t.name, err)
 					}
 				}
 				if meta.what&constMsgMetaData != 0 {
 					if err := t.replyGetData(meta.sess, meta.pkt.Get.Id, meta.pkt.Get.Data); err != nil {
-						log.Printf("topic[%s] meta.Get.Data failed: %v", t.name, err)
+						log.Printf("topic[%s] meta.Get.Data failed: %s", t.name, err)
 					}
 				}
 				if meta.what&constMsgMetaDel != 0 {
 					if err := t.replyGetDel(meta.sess, meta.pkt.Get.Id, meta.pkt.Get.Del); err != nil {
-						log.Printf("topic[%s] meta.Get.Del failed: %v", t.name, err)
+						log.Printf("topic[%s] meta.Get.Del failed: %s", t.name, err)
+					}
+				}
+				if meta.what&constMsgMetaTags != 0 {
+					if err := t.replyGetTags(meta.sess, meta.pkt.Get.Id); err != nil {
+						log.Printf("topic[%s] meta.Get.Tags failed: %s", t.name, err)
 					}
 				}
 
