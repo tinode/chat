@@ -121,6 +121,7 @@ type perUserData struct {
 	// P2P only:
 	public    interface{}
 	topicName string
+	deleted   bool
 }
 
 // perSubsData holds user's (on 'me' topic) cache of subscription data
@@ -650,12 +651,12 @@ func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 		}
 
 	case types.TopicCatP2P:
-		user2 := t.p2pOtherUser(sreg.sess.uid)
-		pud2 := t.perUser[user2]
+		uid2 := t.p2pOtherUser(sreg.sess.uid)
+		pud2 := t.perUser[uid2]
 
 		// Inform the other user that the topic was just created.
 		if sreg.created {
-			t.presSingleUserOffline(user2, "acs", &presParams{
+			t.presSingleUserOffline(uid2, "acs", &presParams{
 				dWant:  pud2.modeWant.String(),
 				dGiven: pud2.modeGiven.String(),
 				actor:  sreg.sess.uid.UserId()}, "", false)
@@ -674,7 +675,7 @@ func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 				// If user2 should receive notifications, enable it.
 				status += "+en"
 			}
-			t.presSingleUserOffline(user2, status, nilPresParams, "", false)
+			t.presSingleUserOffline(uid2, status, nilPresParams, "", false)
 
 		}
 	}
@@ -820,42 +821,20 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktID, want string, private in
 	// Check if it's an attempt at a new subscription to the topic.
 	// It could be an actual subscription (IsJoiner() == true) or a ban (IsJoiner() == false)
 	userData, existingSub := t.perUser[sess.uid]
-	if !existingSub {
+	if !existingSub || userData.deleted {
 
 		// Check if the max number of subscriptions is already reached.
-		if t.cat == types.TopicCatGrp && len(t.perUser) >= globals.maxSubscriberCount {
+		if t.cat == types.TopicCatGrp && t.subsCount() >= globals.maxSubscriberCount {
 			sess.queueOut(ErrPolicy(pktID, t.original(sess.uid), now))
 			return errors.New("max subscription count exceeded")
 		}
 
-		userData.private = private
-
 		if t.cat == types.TopicCatP2P {
 			// If it's a re-subscription to a p2p topic, set public and permissions
-
-			// t.perUser contains just one element - the other user
-			for uid2 := range t.perUser {
-				if user2, err := store.Users.Get(uid2); err != nil {
-					sess.queueOut(ErrUnknown(pktID, t.original(sess.uid), now))
-					return err
-				} else if user2 == nil {
-					sess.queueOut(ErrUserNotFound(pktID, t.original(sess.uid), now))
-					return errors.New("user not found")
-				} else {
-					userData.public = user2.Public
-					userData.topicName = uid2.UserId()
-					userData.modeGiven = selectAccessMode(sess.authLvl,
-						user2.Access.Anon, user2.Access.Auth, types.ModeCP2P)
-					if modeWant == types.ModeUnset {
-						// By default give user1 the same thing user1 gave to user2.
-						userData.modeWant = t.perUser[uid2].modeGiven
-					} else {
-						userData.modeWant = modeWant
-					}
-				}
-				break
+			userData.deleted = false
+			if modeWant != types.ModeUnset {
+				userData.modeWant = modeWant
 			}
-
 			// Make sure the user is not asking for unreasonable permissions
 			userData.modeWant = (userData.modeWant & types.ModeCP2P) | types.ModeApprove
 		} else {
@@ -869,6 +848,8 @@ func (t *Topic) requestSub(h *Hub, sess *Session, pktID, want string, private in
 				userData.modeWant = modeWant
 			}
 		}
+
+		userData.private = private
 
 		// Add subscription to database
 		sub := &types.Subscription{
@@ -1100,7 +1081,7 @@ func (t *Topic) approveSub(h *Hub, sess *Session, target types.Uid, set *MsgClie
 	if !existingSub {
 
 		// Check if the max number of subscriptions is already reached.
-		if t.cat == types.TopicCatGrp && len(t.perUser) >= globals.maxSubscriberCount {
+		if t.cat == types.TopicCatGrp && t.subsCount() >= globals.maxSubscriberCount {
 			sess.queueOut(ErrPolicy(set.Id, t.original(sess.uid), now))
 			return errors.New("max subscription count exceeded")
 		}
@@ -1991,7 +1972,7 @@ func (t *Topic) replyDelMsg(sess *Session, del *MsgClientDel) error {
 func (t *Topic) replyDelTopic(h *Hub, sess *Session, del *MsgClientDel) error {
 	if t.owner != sess.uid {
 		// Cases 2.1.1 and 2.2
-		if t.cat != types.TopicCatP2P || len(t.perUser) > 1 {
+		if t.cat != types.TopicCatP2P || t.subsCount() == 2 {
 			return t.replyLeaveUnsub(h, sess, del.Id)
 		}
 	}
@@ -2093,7 +2074,7 @@ func (t *Topic) replyLeaveUnsub(h *Hub, sess *Session, id string) error {
 	return nil
 }
 
-// evictUser evicts given user's sessions from the topic and clears user's cached data, if requested
+// evictUser evicts all given user's sessions from the topic and clears user's cached data, if appropriate.
 func (t *Topic) evictUser(uid types.Uid, unsub bool, skip string) {
 	log.Println("evictUser", uid, unsub, skip)
 
@@ -2102,57 +2083,48 @@ func (t *Topic) evictUser(uid types.Uid, unsub bool, skip string) {
 	pud := t.perUser[uid]
 
 	// First notify topic subscribers that the user has left the topic
-	if t.cat == types.TopicCatGrp {
-		if unsub {
-			// Let admins know, exclude the user himself
-			t.presSubsOnline("acs", uid.UserId(),
-				&presParams{
-					actor:  skip,
-					target: uid.UserId(),
-					dWant:  types.ModeNone.String(),
-					dGiven: types.ModeNone.String()},
-				&presFilters{
-					filterIn:    types.ModeCSharer,
-					excludeUser: uid.UserId()},
-				skip)
-
-			// Let affected user know
-			t.presSingleUserOffline(uid, "gone", nilPresParams, skip, false)
-		}
-
-		if pud.online > 0 {
-			// Let all 'R' subscribers know that the user is gone.
-			t.presSubsOnline("off", uid.UserId(), nilPresParams,
-				&presFilters{
-					filterIn:    types.ModeRead,
-					excludeUser: uid.UserId()},
-				skip)
-		}
-
-	} else if t.cat == types.TopicCatP2P && unsub {
-		// Notify user's own sessions that the topic is gone and remove the other user from
-		// perSubs.
+	if unsub {
+		// Let other sessions of the affected user know.
 		t.presSingleUserOffline(uid, "gone", nilPresParams, skip, false)
 
-		if len(t.perUser) == 2 {
-			// If user2 is online, inform him that the topic is not longer useable.
-			t.presSubsOnline("gone", uid.UserId(), nilPresParams,
-				&presFilters{
-					filterIn:    types.ModeRead,
-					excludeUser: uid.UserId()},
-				skip)
+		// Let admins know, exclude the user himself
+		t.presSubsOnline("acs", uid.UserId(),
+			&presParams{
+				target: uid.UserId(),
+				dWant:  types.ModeNone.String(),
+				dGiven: types.ModeNone.String()},
+			&presFilters{
+				filterIn:    types.ModeCSharer,
+				excludeUser: uid.UserId()},
+			skip)
+
+		if t.cat == types.TopicCatP2P && t.subsCount() == 2 {
 			// Show user1 as offline and tell user2 to stop sending updates to user1
 			presSingleUserOfflineOffline(t.p2pOtherUser(uid), uid.UserId(), "off+rem", nilPresParams, "")
 		}
 	}
 
-	// Save topic name. It won't be available later
-	original := t.original(uid)
+	if t.cat == types.TopicCatGrp && pud.online > 0 {
+		// Let all 'R' subscribers know that the user is gone.
+		t.presSubsOnline("off", uid.UserId(), nilPresParams,
+			&presFilters{
+				filterIn:    types.ModeRead,
+				excludeUser: uid.UserId()},
+			skip)
+	}
 
 	// Second - detach user from topic
 	if unsub {
-		// Delete per-user data
-		delete(t.perUser, uid)
+		//
+		if t.cat == types.TopicCatP2P {
+			// P2P: mark user as deleted
+			pud.online = 0
+			pud.deleted = true
+			t.perUser[uid] = pud
+		} else {
+			// Grp: delete per-user data
+			delete(t.perUser, uid)
+		}
 	} else {
 		// Clear online status
 		pud.online = 0
@@ -2165,7 +2137,7 @@ func (t *Topic) evictUser(uid types.Uid, unsub bool, skip string) {
 			delete(t.sessions, sess)
 			sess.detach <- t.name
 			if sess.sid != skip {
-				sess.queueOut(NoErrEvicted("", original, now))
+				sess.queueOut(NoErrEvicted("", t.original(uid), now))
 			}
 		}
 	}
@@ -2173,9 +2145,9 @@ func (t *Topic) evictUser(uid types.Uid, unsub bool, skip string) {
 
 // Prepares a payload to be delivered to a mobile device as a push notification.
 func (t *Topic) makePushReceipt(data *MsgServerData) *pushReceipt {
-	idx := make(map[types.Uid]int, len(t.perUser))
+	idx := make(map[types.Uid]int, t.subsCount())
 	receipt := push.Receipt{
-		To: make([]push.Recipient, len(t.perUser)),
+		To: make([]push.Recipient, t.subsCount()),
 		Payload: push.Payload{
 			Topic:     data.Topic,
 			From:      data.From,
@@ -2185,7 +2157,7 @@ func (t *Topic) makePushReceipt(data *MsgServerData) *pushReceipt {
 
 	i := 0
 	for uid := range t.perUser {
-		if (t.perUser[uid].modeWant & t.perUser[uid].modeGiven).IsPresencer() {
+		if (t.perUser[uid].modeWant & t.perUser[uid].modeGiven).IsPresencer() && !t.perUser[uid].deleted {
 			// Only send to those users who have notifications enabled
 			receipt.To[i].User = uid
 			idx[uid] = i
@@ -2236,13 +2208,16 @@ func (t *Topic) original(uid types.Uid) string {
 // Get ID of the other user in a P2P topic
 func (t *Topic) p2pOtherUser(uid types.Uid) types.Uid {
 	if t.cat == types.TopicCatP2P {
+		// Try to find user in subscribers.
 		for u2 := range t.perUser {
 			if u2.Compare(uid) != 0 {
 				return u2
 			}
 		}
-		panic("Invalid P2P topic")
 	}
+
+	// Even when one user is deleted, the subscription must be restored
+	// before p2pOtherUser is called.
 	panic("Not P2P topic")
 }
 
@@ -2306,6 +2281,20 @@ func (t *Topic) fndRemovePublic(sess *Session) {
 
 func (t *Topic) accessFor(authLvl auth.Level) types.AccessMode {
 	return selectAccessMode(authLvl, t.accessAnon, t.accessAuth, getDefaultAccess(t.cat, true))
+}
+
+// subsCount returns the number of topic subsribers
+func (t *Topic) subsCount() int {
+	if t.cat == types.TopicCatP2P {
+		count := 0
+		for _, pud := range t.perUser {
+			if !pud.deleted {
+				count++
+			}
+		}
+		return count
+	}
+	return len(t.perUser)
 }
 
 func topicCat(name string) types.TopicCat {

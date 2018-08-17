@@ -212,7 +212,7 @@ User's access to a topic is defined by two sets of permissions: user's desired p
 * Delete: `D`, permission to hard-delete messages; only owners can completely delete topics
 * Owner: `O`, user is the topic owner; topic may have a single owner only; some topics have no owner
 
-Topic's default access is established at the topic creation time by `{sub.init.defacs}` and can be subsequently modified by `{set}` messages. Default access is defined for two categories of users: authenticated and anonymous. This value is applied as a default "given" permission to all new subscriptions.
+Topic's default access is established at the topic creation time by `{sub.desc.defacs}` and can be subsequently modified by `{set}` messages. Default access is defined for two categories of users: authenticated and anonymous. This value is applied as a default "given" permission to all new subscriptions.
 
 Client may replace explicit permissions in `{sub}` and `{set}` messages with an empty string to tell Tinode to use default permissions. If client specifies no default access permissions at topic creation time, authenticated users will receive a `RWP` permission, anonymous users will receive and empty permission which means every subscription request must be explicitly approved by the topic manager.
 
@@ -220,7 +220,7 @@ Access permissions can be assigned on a per-user basis by `{set}` messages.
 
 ## Topics
 
-Topic is a named communication channel for one or more people. Topics have persistent properties. These following topic properties can be queried by `{get what="info"}` message.
+Topic is a named communication channel for one or more people. Topics have persistent properties. These topic properties can be queried by `{get what="desc"}` message.
 
 Topic properties independent of the user making the query:
 * created: timestamp of topic creation time
@@ -247,17 +247,7 @@ Joining or leaving `me` generates a `{pres}` presence update sent to all users w
 
 Topic `me` is read-only. `{pub}` messages to `me` are rejected.
 
-The `{data}` message represents invites and requests to confirm a subscription. The `from` field of the message contains ID of the user who originated the request, for instance, the user who asked current user to join a topic or the user who requested an approval for subscription. The `content` field of the message contains the following information:
-* act: request action as string; possible actions are:
- * "info" to notify the user that user's request to subscribe was approved; in case of peer to peer topics this could be a notification that the peer has subscribed to the topic
- * "join" is an invitation to subscribe to a topic
- * "appr" is a request to approve a subscription
-* topic: the name of the topic, in case of an invite the current user is invited to this topic; in case of a request to approve, another user wants to subscribe to this topic where the current user is a manager (has `S` permission)
-* user: user ID as a string of the user who is the target of this request. In case of an invite this is the ID of the current user; in case of an approval request this is the ID of the user who is being subscribed.
-* acs: object describing access permissions of the subscription, see [Access control](#access-control) for details
-* info: object with a free-form payload. It's passed unchanged from the originating `{sub}` or `{set}` message.
-
-Message `{get what="info"}` to `me` is automatically replied with a `{meta}` message containing `info` section with the topic parameters (see intro to [Topics](#topics) section). The `public` parameter of `me` topic is data that the user wants to show to his/her connections. Changing it changes `public` not just for the `me` topic, but also everywhere where user's public is shown, such as 'public' of all user's peer to peer topics.
+Message `{get what="desc"}` to `me` is automatically replied with a `{meta}` message containing `desc` section with the topic parameters (see intro to [Topics](#topics) section). The `public` parameter of `me` topic is data that the user wants to show to his/her connections. Changing it changes `public` not just for the `me` topic, but also everywhere where user's `public` is shown, such as `public` of all user's peer to peer topics.
 
 Message `{get what="sub"}` to `me` is different from any other topic as it returns the list of topics that the current user is subscribed to as opposite to the expected user's subscription to `me`.
 * seq: server-issued numeric id of the last message in the topic
@@ -267,7 +257,7 @@ Message `{get what="sub"}` to `me` is different from any other topic as it retur
  * when: timestamp when the user was last online
  * ua: user agent string of the user's client software last used
 
-Message `{get what="data"}` to `me` queries the history of invites/notifications. It's handled the same way as to any other topic.
+Message `{get what="data"}` to `me` is rejected.
 
 ### `fnd` and Tags: Finding Users and Topics
 
@@ -316,7 +306,7 @@ Tags containing spaces or commas must be enclosed in double quotes (`"`, `\u0022
 
 Peer to peer (P2P) topics represent communication channels between strictly two users. The name of the topic is different for each of the two participants. Each of them sees the name of the topic as the user ID of the other participant: `usr` followed by base64 URL-encoded ID of the user. For example, if two users `usrOj0B3-gSBSs` and `usrIU_LOVwRNsc` start a P2P topic, the first one will see it as `usrIU_LOVwRNsc`, the second as `usrOj0B3-gSBSs`. The P2P topic has no owner.
 
-A P2P topic is created by one user subscribing to topic with the name equal to the ID of the other user. For instance, user `usrOj0B3-gSBSs` can establish a P2P topic with user `usrIU_LOVwRNsc` by sending a `{sub topic="usrIU_LOVwRNsc"}`. Tinode will respond with a `{ctrl}` packet with the name of the newly created topic as described above. The other user will receive a `{data}` message on `me` topic with either a request to confirm the subscription or a notification of a successful subscription, depending on user's default permissions.
+A P2P topic is created by one user subscribing to topic with the name equal to the ID of the other user. For instance, user `usrOj0B3-gSBSs` can establish a P2P topic with user `usrIU_LOVwRNsc` by sending a `{sub topic="usrIU_LOVwRNsc"}`. Tinode will respond with a `{ctrl}` packet with the name of the newly created topic as described above. The other user will receive a `{pres}` message on `me` topic with updated access permissions.
 
 The 'public' parameter of P2P topics is user-dependent. For instance a P2P topic between users A and B would show user A's 'public' to user B and vice versa. If a user updates 'public', all user's P2P topics will automatically update 'public' too.
 
@@ -639,7 +629,6 @@ sub: {
     sub: {
       mode: "JRWS", // string, requested access mode, optional;
                    // default: server-defined
-      info: { ... }  // application-defined payload to pass to the topic manager
     }, // object, optional
 
     // Optional update to tags (see fnd topic description)
@@ -650,7 +639,7 @@ sub: {
 
   get: {
     // Metadata to request from the topic; space-separated list, valid strings
-    // are "info", "sub", "data"; default: request nothing; unknown strings are
+    // are "desc", "sub", "data", "tags"; default: request nothing; unknown strings are
     // ignored; see {get  what} for details
     what: "desc sub data", // string, optional
 
@@ -829,11 +818,8 @@ set: {
   sub: {
     user: "usr2il9suCbuko", // string, user affected by this request;
                             // default (empty) means current user
-    mode: "JRWP", // string, access mode change, either given ('user'
+    mode: "JRWP" // string, access mode change, either given ('user'
 				  // is defined) or requested ('user' undefined)
-    info: { ... } // object, application-defined payload to pass to
-                  // the invited user or to the topic manager in {data}
-                  // message on 'me' topic
   }, // object, payload for what == "sub"
 
   // Optional update to tags (see fnd topic description)
@@ -1061,7 +1047,7 @@ Timestamp is not present in `{pres}` messages.
 
 #### `{info}`
 
-Forwarded client-generated notification `{note}`. Server guarantees that the message complies with this specification and that content of `topic` and `from` fields are valid. The other content is copied from the `{note}` message verbatim.
+Forwarded client-generated notification `{note}`. Server guarantees that the message complies with this specification and that content of `topic` and `from` fields is correct. The other content is copied from the `{note}` message verbatim and may potentially be incorrect or misleading if the originator  so desires.
 
 ```js
 info: {
@@ -1071,7 +1057,7 @@ info: {
   what: "read", // string, one of "kp", "recv", "read", see client-side {note},
                 // always present
   seq: 123, // integer, ID of the message that client has acknowledged,
-            // guaranteed 0 < read <= recv <= {ctrl.info.seq}; present for rcpt &
+            // guaranteed 0 < read <= recv <= {ctrl.params.seq}; present for rcpt &
             // read
 }
 ```

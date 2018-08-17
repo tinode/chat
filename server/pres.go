@@ -427,7 +427,8 @@ func (t *Topic) presSingleUserOffline(uid types.Uid, what string, params *presPa
 	// log.Printf("Pres J.1, K, M.1, N: topic'%s' what='%s', who='%s'", t.name, what, who.UserId())
 }
 
-// Same as above, but the topic is offline (not loaded from the DB)
+// Announce to a single user on 'me' topic. The originating topic is not used (not loaded or user
+// already unsubscribed).
 func presSingleUserOfflineOffline(uid types.Uid, original, what string, params *presParams, skipSid string) {
 
 	user := uid.UserId()
