@@ -656,7 +656,8 @@ func (s *Session) acc(msg *ClientComMessage) {
 		resp.Ctrl.Params = params
 		s.queueOut(resp)
 
-		// pluginAccount(&types.User{}, plgActUpd)
+		// TODO: Call plugin with the account update
+		// like pluginAccount(&types.User{}, plgActUpd)
 
 	} else {
 		// session is not authenticated and this is not an attempt to create a new account

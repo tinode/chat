@@ -150,7 +150,6 @@ func sendNotification(rcpt *push.Receipt, config *configType) {
 				fcm.ErrorMismatchSenderId:
 				if uid, ok := devIds[sendTo[count]]; ok {
 					store.Devices.Delete(uid, sendTo[count])
-					// log.Printf("FCM push: %s; token removed: %s", fail.Error, sendTo[i])
 				}
 			}
 			count++

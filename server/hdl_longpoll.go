@@ -109,9 +109,6 @@ func serveLongPoll(wrt http.ResponseWriter, req *http.Request) {
 
 	// TODO(gene): respond differently to valious HTTP methods
 
-	// log.Printf("HTTP %s %s?%s from '%s' %d bytes", req.Method,
-	// 	req.URL.Path, req.URL.RawQuery, req.RemoteAddr, req.ContentLength)
-
 	// Get session id
 	sid := req.FormValue("sid")
 	var sess *Session

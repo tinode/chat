@@ -160,7 +160,7 @@ func (h *Hub) run() {
 					select {
 					case dst.broadcast <- msg:
 					default:
-						log.Printf("hub: topic's broadcast queue is full '%s'", dst.name)
+						log.Println("hub: topic's broadcast queue is full", dst.name)
 					}
 				}
 			} else if msg.Pres == nil {

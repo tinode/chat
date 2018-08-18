@@ -70,11 +70,8 @@ func (t *Topic) loadContacts(uid types.Uid) error {
 	}
 
 	for i := range subs {
-		//log.Printf("Pres loadContacts: topic[%s]: processing sub '%s'", t.name, sub.Topic)
-
 		t.addToPerSubs(subs[i].Topic, false, (subs[i].ModeGiven & subs[i].ModeWant).IsPresencer())
 	}
-	//log.Printf("Pres loadContacts: topic[%s]: total cached %d", t.name, len(t.perSubs))
 	return nil
 }
 
@@ -100,9 +97,6 @@ func (t *Topic) presProcReq(fromUserID, what string, wantReply bool) string {
 
 	online := &onlineUpdate
 	replyAs := "on"
-
-	//log.Printf("presProcReq: topic[%s]: req from='%s', what=%s, wantReply=%v",
-	//	t.name, fromUserID, what, wantReply)
 
 	parts := strings.Split(what, "+")
 	what = parts[0]
@@ -134,15 +128,10 @@ func (t *Topic) presProcReq(fromUserID, what string, wantReply bool) string {
 		return what
 	}
 
-	//log.Printf("presProcReq: topic[%s]: req from='%s', what-now=%s, cmd=%s, reqReply(?unkn)=%v",
-	//	t.name, fromUserID, what, cmd, reqReply)
-
 	if t.cat == types.TopicCatMe {
 
 		// Find if the contact is listed.
 		if psd, ok := t.perSubs[fromUserID]; ok {
-			//log.Printf("presProcReq: topic[%s]: requester %s in list; enabled=%v, online=%v",
-			//	t.name, fromUserID, psd.enabled, psd.online)
 
 			if cmd == "rem" {
 				replyAs = "off+rem"
@@ -188,9 +177,6 @@ func (t *Topic) presProcReq(fromUserID, what string, wantReply bool) string {
 			}
 
 		} else if cmd != "rem" {
-			//log.Printf("presProcReq: topic[%s]: requester %s NOT in list, adding, online=%v, cmd='%s'",
-			//	t.name, fromUserID, online, cmd)
-
 			// Got request from a new topic. This must be a new subscription. Record it.
 			// If it's unknown, recording it as offline.
 			t.addToPerSubs(fromUserID, onlineUpdate, cmd == "en")
@@ -217,12 +203,7 @@ func (t *Topic) presProcReq(fromUserID, what string, wantReply bool) string {
 			// without forwarding to sessions
 			Pres:   &MsgServerPres{Topic: "me", What: replyAs, Src: t.name, wantReply: reqReply},
 			rcptto: fromUserID}
-
-		// log.Printf("presProcReq: topic[%s]: replying to %s with own status='%s', wantReply=%v",
-		//	t.name, fromUserID, replyAs, reqReply)
 	}
-
-	//log.Println("what is '", what, "'")
 
 	return what
 }
@@ -239,14 +220,6 @@ func (t *Topic) presUsersOfInterest(what, ua string) {
 			Pres: &MsgServerPres{
 				Topic: "me", What: what, Src: t.name, UserAgent: ua, wantReply: (what == "on")},
 			rcptto: topic}
-
-		// log.Printf("Pres A, B, C, D: User'%s' to '%s' what='%s', ua='%s'", t.name, topic, what, ua)
-
-	}
-}
-
-func (t *Topic) presEnableUser() {
-	if t.cat == types.TopicCatP2P {
 	}
 }
 
@@ -281,10 +254,6 @@ func (t *Topic) presSubsOnline(what, src string, params *presParams,
 			filterIn: int(pf.filterIn), filterOut: int(pf.filterOut),
 			singleUser: pf.singleUser, excludeUser: pf.excludeUser},
 		rcptto: t.name, skipSid: skipSid}
-
-	// log.Printf("Pres K.2, L.3, W.2: topic'%s' what='%s', who='%s', acs='w:%s/g:%s'", t.name, what,
-	// 	params.who, params.dWant, params.dGiven)
-
 }
 
 // Send presence notification to attached sessions directly, without routing though topic.
@@ -325,8 +294,6 @@ func (t *Topic) presSubsOffline(what string, params *presParams, filter *presFil
 	if offlineOnly {
 		skipTopic = t.name
 	}
-
-	//log.Printf("presSubsOffline: topic'%s' what='%s', who='%v'", t.name, what, params)
 
 	for uid := range t.perUser {
 		if what != "acs" && !presOfflineFilter(t.perUser[uid].modeGiven&t.perUser[uid].modeWant, filter) {
@@ -423,8 +390,6 @@ func (t *Topic) presSingleUserOffline(uid types.Uid, what string, params *presPa
 				wantReply: strings.HasPrefix(what, "?unkn"), skipTopic: skipTopic},
 			rcptto: user, skipSid: skipSid}
 	}
-
-	// log.Printf("Pres J.1, K, M.1, N: topic'%s' what='%s', who='%s'", t.name, what, who.UserId())
 }
 
 // Announce to a single user on 'me' topic. The originating topic is not used (not loaded or user

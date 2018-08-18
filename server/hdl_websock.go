@@ -70,7 +70,8 @@ func (sess *Session) writeLoop() {
 
 	defer func() {
 		ticker.Stop()
-		sess.closeWS() // break readLoop
+		// Break readLoop.
+		sess.closeWS()
 		log.Println("ws.writeLoop exited", sess.sid)
 	}()
 
@@ -78,7 +79,7 @@ func (sess *Session) writeLoop() {
 		select {
 		case msg, ok := <-sess.send:
 			if !ok {
-				// channel closed
+				// Channel closed.
 				return
 			}
 			if err := wsWrite(sess.ws, websocket.TextMessage, msg); err != nil {

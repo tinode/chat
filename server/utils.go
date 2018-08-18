@@ -495,7 +495,7 @@ func max(a, b int) int {
 func truncateStringIfTooLong(s string) string {
 	if len(s) <= 1024 {
 		return s
-	} else {
-		return s[:1024] + "..."
 	}
+
+	return s[:1024] + "..."
 }

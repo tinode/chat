@@ -413,7 +413,7 @@ func main() {
 				staticMountPoint = "/" + staticMountPoint
 			}
 			if !strings.HasSuffix(staticMountPoint, "/") {
-				staticMountPoint = staticMountPoint + "/"
+				staticMountPoint += "/"
 			}
 		}
 		mux.Handle(staticMountPoint,

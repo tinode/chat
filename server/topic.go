@@ -2294,8 +2294,8 @@ func (t *Topic) accessFor(authLvl auth.Level) types.AccessMode {
 func (t *Topic) subsCount() int {
 	if t.cat == types.TopicCatP2P {
 		count := 0
-		for _, pud := range t.perUser {
-			if !pud.deleted {
+		for uid := range t.perUser {
+			if !t.perUser[uid].deleted {
 				count++
 			}
 		}
