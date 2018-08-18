@@ -632,7 +632,7 @@ func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 			if err := t.loadContacts(sreg.sess.uid); err != nil {
 				log.Println("topic: failed to load contacts", t.name, err.Error())
 			}
-			// User online: notify users of interest.
+			// User online: notify users of interest without forcing response (no +en here).
 			t.presUsersOfInterest("on", sreg.sess.userAgent)
 		}
 
@@ -2087,23 +2087,27 @@ func (t *Topic) evictUser(uid types.Uid, unsub bool, skip string) {
 
 	// First notify topic subscribers that the user has left the topic
 	if unsub {
+		uname1 := uid.UserId()
 		// Let other sessions of the affected user know.
 		t.presSingleUserOffline(uid, "gone", nilPresParams, skip, false)
 
 		// Let admins know, exclude the user himself
-		t.presSubsOnline("acs", uid.UserId(),
+		t.presSubsOnline("acs", uname1,
 			&presParams{
-				target: uid.UserId(),
+				target: uname1,
 				dWant:  types.ModeNone.String(),
 				dGiven: types.ModeNone.String()},
 			&presFilters{
 				filterIn:    types.ModeCSharer,
-				excludeUser: uid.UserId()},
+				excludeUser: uname1},
 			skip)
 
 		if t.cat == types.TopicCatP2P && t.subsCount() == 2 {
-			// Don't change user1 online status for user2, just tell user2 to stop sending updates to user1
-			presSingleUserOfflineOffline(t.p2pOtherUser(uid), uid.UserId(), "?none+rem", nilPresParams, "")
+			uid2 := t.p2pOtherUser(uid)
+			// Tell user1 to stop sending updates to user2 without changing user2 online status.
+			presSingleUserOfflineOffline(uid, uid2.UserId(), "?none+rem", nilPresParams, "")
+			// Tell user2 that user1 is offline but let him keep sending updates in case user1 resubscribes.
+			presSingleUserOfflineOffline(uid2, uname1, "off", nilPresParams, "")
 		}
 	}
 

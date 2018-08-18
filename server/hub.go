@@ -237,7 +237,7 @@ func (h *Hub) run() {
 func topicInit(sreg *sessionJoin, h *Hub) {
 	var t *Topic
 
-	timestamp := time.Now().UTC().Round(time.Millisecond)
+	timestamp := types.TimeNow()
 
 	t = &Topic{name: sreg.topic,
 		xoriginal: sreg.pkt.Topic,
@@ -269,13 +269,13 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 
 		user, err := store.Users.Get(sreg.sess.uid)
 		if err != nil {
-			log.Println("hub: cannot load user object for 'me'='" + t.name + "' (" + err.Error() + ")")
+			log.Println("hub: cannot load 'me' user object", t.name, err)
 			// Log out the session
 			sreg.sess.uid = types.ZeroUid
 			sreg.sess.queueOut(ErrUnknown(sreg.pkt.Id, t.xoriginal, timestamp))
 			return
 		} else if user == nil {
-			log.Println("hub: user's account unexpectedly not found (deleted?)")
+			log.Println("hub: user's account not found", t.name)
 			// Log out the session
 			// FIXME: this is a race condition
 			sreg.sess.uid = types.ZeroUid
@@ -923,9 +923,13 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *MsgClientDel, reason 
 				// Notify user's other sessions that the subscription is gone
 				presSingleUserOfflineOffline(sess.uid, msg.Topic, "gone", nilPresParams, sess.sid)
 				if tcat == types.TopicCatP2P && len(subs) == 2 {
+					uname1 := sess.uid.UserId()
+					uid2 := types.ParseUserId(msg.Topic)
+					// Tell user1 to stop sending updates to user2 without changing user2 online status.
+					presSingleUserOfflineOffline(sess.uid, uid2.UserId(), "?none+rem", nilPresParams, "")
 					// Don't change the online status of user1, just ask user2 to stop notification exchange.
-					presSingleUserOfflineOffline(types.ParseUserId(msg.Topic),
-						sess.uid.UserId(), "?none+rem", nilPresParams, "")
+					// Tell user2 that user1 is offline but let him keep sending updates in case user1 resubscribes.
+					presSingleUserOfflineOffline(uid2, uname1, "off", nilPresParams, "")
 				}
 
 			} else {
