@@ -923,19 +923,20 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *MsgClientDel, reason 
 				// Notify user's other sessions that the subscription is gone
 				presSingleUserOfflineOffline(sess.uid, msg.Topic, "gone", nilPresParams, sess.sid)
 				if tcat == types.TopicCatP2P && len(subs) == 2 {
-					// Notify user2 that the current user is offline and stop notification exchange
+					// Don't change the online status of user1, just ask user2 to stop notification exchange.
 					presSingleUserOfflineOffline(types.ParseUserId(msg.Topic),
-						sess.uid.UserId(), "off+rem", nilPresParams, "")
+						sess.uid.UserId(), "?none+rem", nilPresParams, "")
 				}
 
 			} else {
-				// Case 1.2.1.1: owner, delete the topic from db
+				// Case 1.2.1.1: owner, delete the group topic from db.
+				// Only group topics have owners.
 				if err := store.Topics.Delete(topic); err != nil {
 					sess.queueOut(ErrUnknown(msg.Id, msg.Topic, now))
 					return err
 				}
 
-				// Notify subscribers that the topic is gone
+				// Notify subscribers that the group topic is gone.
 				presSubsOfflineOffline(msg.Topic, tcat, subs, "gone", &presParams{}, sess.sid)
 			}
 

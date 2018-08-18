@@ -2102,8 +2102,8 @@ func (t *Topic) evictUser(uid types.Uid, unsub bool, skip string) {
 			skip)
 
 		if t.cat == types.TopicCatP2P && t.subsCount() == 2 {
-			// Show user1 as offline and tell user2 to stop sending updates to user1
-			presSingleUserOfflineOffline(t.p2pOtherUser(uid), uid.UserId(), "off+rem", nilPresParams, "")
+			// Don't change user1 online status for user2, just tell user2 to stop sending updates to user1
+			presSingleUserOfflineOffline(t.p2pOtherUser(uid), uid.UserId(), "?none+rem", nilPresParams, "")
 		}
 	}
 
