@@ -9,14 +9,14 @@ done
 tag=${tag#?}
 
 if [ -z "$tag" ]; then
-    echo "Must provide tag as 'tag=v1.2.3'"
+    echo "Must provide tag as 'tag=v1.2.3' or 'v1.2.3-abc0'"
     exit 1
 fi
 
 # Convert tag into a version
 ver=( ${tag//./ } )
 
-if [[ ${ver[2]} != *"-rc"* ]]; then
+if [[ ${ver[2]} != *"-"* ]]; then
   FULLRELEASE=1
 fi
 

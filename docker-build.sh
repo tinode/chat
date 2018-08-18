@@ -16,7 +16,8 @@ fi
 # Convert tag into a version
 ver=( ${tag//./ } )
 
-if [[ ${ver[2]} != *"-rc"* ]]; then
+# if version contains a dash, it's not a full releave, i.e. v0.1.15.5-rc1
+if [[ ${ver[2]} != *"-"* ]]; then
   FULLRELEASE=1
 fi
 
