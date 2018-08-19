@@ -869,7 +869,8 @@ func (rs RangeSorter) Swap(i, j int) {
 func (rs RangeSorter) Less(i, j int) bool {
 	if rs[i].Low < rs[j].Low {
 		return true
-	} else if rs[i].Low == rs[j].Low {
+	}
+	if rs[i].Low == rs[j].Low {
 		return rs[i].Hi >= rs[j].Hi
 	}
 	return false
