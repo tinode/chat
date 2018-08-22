@@ -200,17 +200,6 @@ func (t *Topic) run(hub *Hub) {
 						// Call plugins with the new topic
 						pluginTopic(t, plgActCreate)
 					}
-
-					// give a broadcast channel to the connection (.read)
-					// give channel to use when shutting down (.done)
-					sreg.sess.addSub(t.name, &Subscription{
-						broadcast: t.broadcast,
-						done:      t.unreg,
-						meta:      t.meta,
-						uaChange:  t.uaChange})
-
-					t.sessions[sreg.sess] = true
-
 				} else {
 					if len(t.sessions) == 0 {
 						// Failed to subscribe, the topic is still inactive
@@ -764,9 +753,18 @@ func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin, sendDesc bool) error {
 		return err
 	}
 
+	// Subscription successfully created. Link topic to session.
 	pud := t.perUser[sreg.sess.uid]
 	pud.online++
 	t.perUser[sreg.sess.uid] = pud
+
+	sreg.sess.addSub(t.name, &Subscription{
+		broadcast: t.broadcast,
+		done:      t.unreg,
+		meta:      t.meta,
+		uaChange:  t.uaChange})
+
+	t.sessions[sreg.sess] = true
 
 	resp := NoErr(sreg.pkt.Id, t.original(sreg.sess.uid), now)
 	// Report access mode.

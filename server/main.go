@@ -352,7 +352,12 @@ func main() {
 				}
 			}
 			if config.Media.GcPeriod > 0 && config.Media.GcBlockSize > 0 {
-				largeFileRunGarbageCollection(time.Second*time.Duration(config.Media.GcPeriod), config.Media.GcBlockSize)
+				stopFilesGc := largeFileRunGarbageCollection(time.Second*time.Duration(config.Media.GcPeriod),
+					config.Media.GcBlockSize)
+				defer func() {
+					stopFilesGc <- true
+					log.Println("Stopped files garbage collector")
+				}
 			}
 		}
 	}
