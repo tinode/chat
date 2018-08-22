@@ -357,7 +357,7 @@ func main() {
 				defer func() {
 					stopFilesGc <- true
 					log.Println("Stopped files garbage collector")
-				}
+				}()
 			}
 		}
 	}
