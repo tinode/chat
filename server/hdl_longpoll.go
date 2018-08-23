@@ -137,6 +137,7 @@ func serveLongPoll(wrt http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	// FIXME: this is a race condition. Lock session before.
 	sess.remoteAddr = req.RemoteAddr
 
 	if req.ContentLength != 0 {
