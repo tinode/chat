@@ -24,6 +24,8 @@ import (
 	"syscall"
 	"time"
 
+	gh "github.com/gorilla/handlers"
+
 	"github.com/tinode/chat/server/store"
 	"github.com/tinode/chat/server/store/types"
 
@@ -211,10 +213,10 @@ type errorResponseWriter struct {
 }
 
 func (w *errorResponseWriter) WriteHeader(status int) {
+	w.status = status
+	w.ResponseWriter.WriteHeader(status)
 	if status >= http.StatusBadRequest {
-		w.status = status
 		w.ResponseWriter.Header().Set("Content-Type", "application/json; charset=utf-8")
-		w.ResponseWriter.WriteHeader(status)
 	}
 }
 
@@ -237,6 +239,7 @@ func httpErrorHandler(h http.Handler) http.Handler {
 		})
 }
 
+// Custom 404 response.
 func serve404(wrt http.ResponseWriter, req *http.Request) {
 	wrt.Header().Set("Content-Type", "application/json; charset=utf-8")
 	wrt.WriteHeader(http.StatusNotFound)
@@ -245,6 +248,18 @@ func serve404(wrt http.ResponseWriter, req *http.Request) {
 			Timestamp: time.Now().UTC().Round(time.Millisecond),
 			Code:      http.StatusNotFound,
 			Text:      "not found"}})
+}
+
+// Compress only if Content-Type: header is present. Needed in order to
+func compressWithContentTypeOnly(h http.Handler) http.Handler {
+	compressor := gh.CompressHandler(h)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if w.Header().Get("Content-Type") == "" {
+			h.ServeHTTP(w, r)
+		} else {
+			compressor.ServeHTTP(w, r)
+		}
+	})
 }
 
 // Redirect HTTP requests to HTTPS
