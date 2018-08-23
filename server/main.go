@@ -17,6 +17,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"runtime"
 	"runtime/pprof"
 	"strings"
@@ -198,9 +199,14 @@ type configType struct {
 }
 
 func main() {
-	log.Printf("Server 'v%s:%s:%s'; pid %d; started with %d process(es)", currentVersion,
+	executable, _ := os.Executable()
+
+	// All relative paths are resolved against the executable path, not against current working directory.
+	rootpath, _ := filepath.Split(executable)
+
+	log.Printf("Server v%s:%s:%s at '%s'; pid %d; started with %d process(es)", currentVersion, executable,
 		buildstamp, store.GetAdapterName(), os.Getpid(), runtime.GOMAXPROCS(runtime.NumCPU()))
-	var configfile = flag.String("config", "./tinode.conf", "Path to config file.")
+	var configfile = flag.String("config", "tinode.conf", "Path to config file.")
 	// Path to static content.
 	var staticPath = flag.String("static_data", defaultStaticPath, "Path to directory with static files to be served.")
 	var listenOn = flag.String("listen", "", "Override address and port to listen on for HTTP(S) clients.")
@@ -211,6 +217,7 @@ func main() {
 	var pprofFile = flag.String("pprof", "", "File name to save profiling info to. Disabled if not set")
 	flag.Parse()
 
+	*configfile = toAbsolutePath(rootpath, *configfile)
 	log.Printf("Using config from '%s'", *configfile)
 
 	var config configType
@@ -229,6 +236,8 @@ func main() {
 	workerId := clusterInit(config.Cluster, clusterSelf)
 
 	if *pprofFile != "" {
+		*pprofFile = toAbsolutePath(rootpath, *pprofFile)
+
 		cpuf, err := os.Create(*pprofFile + ".cpu")
 		if err != nil {
 			log.Fatal("Failed to create CPU pprof file:", err)
@@ -395,18 +404,15 @@ func main() {
 	mux := http.NewServeMux()
 
 	// Serve static content from the directory in -static_data flag if that's
-	// available, otherwise assume '<current dir>/static'. The content is served at
+	// available, otherwise assume '<path-to-executable>/static'. The content is served at
 	// the path pointed by 'static_mount' in the config. If that is missing then it's
 	// served at root '/'.
 	var staticMountPoint string
 	if *staticPath != "" && *staticPath != "-" {
-		if *staticPath == defaultStaticPath {
-			path, err := os.Getwd()
-			if err != nil {
-				log.Fatal("Failed to get current directory:", err)
-			}
-			// FileServer expects "/" path separator even on Windows.
-			*staticPath = path + "/" + defaultStaticPath
+		// Resolve path to static content.
+		*staticPath = toAbsolutePath(rootpath, *staticPath)
+		if _, err = os.Stat(*staticPath); os.IsNotExist(err) {
+			log.Fatal("Static content directory is configured but does not exist", *staticPath)
 		}
 
 		staticMountPoint = config.StaticMount
