@@ -181,6 +181,7 @@ func largeFileUpload(wrt http.ResponseWriter, req *http.Request) {
 }
 
 func largeFileRunGarbageCollection(period time.Duration, block int) chan<- bool {
+	// Unbuffered stop channel. Whoever stops it must wait for the process to finish.
 	stop := make(chan bool)
 	go func() {
 		gcTimer := time.Tick(period)
