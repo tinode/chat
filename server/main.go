@@ -202,6 +202,7 @@ func main() {
 	executable, _ := os.Executable()
 
 	// All relative paths are resolved against the executable path, not against current working directory.
+	// Absolute paths are left unchanged.
 	rootpath, _ := filepath.Split(executable)
 
 	log.Printf("Server v%s:%s:%s at '%s'; pid %d; started with %d process(es)", currentVersion, executable,
