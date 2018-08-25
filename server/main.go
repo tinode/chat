@@ -26,6 +26,8 @@ import (
 	// For stripping comments from JSON config
 	jcr "github.com/DisposaBoy/JsonConfigReader"
 
+	gh "github.com/gorilla/handlers"
+
 	// Authenticators
 	"github.com/tinode/chat/server/auth"
 	_ "github.com/tinode/chat/server/auth/anon"
@@ -433,7 +435,7 @@ func main() {
 				// And add custom formatter of errors.
 				httpErrorHandler(
 					// Add gzip compression
-					compressWithContentTypeOnly(
+					gh.CompressHandler(
 						// Remove mount point prefix
 						http.StripPrefix(staticMountPoint,
 							http.FileServer(http.Dir(*staticPath)))))))
@@ -445,12 +447,12 @@ func main() {
 	// Handle websocket clients.
 	mux.HandleFunc("/v0/channels", serveWebSocket)
 	// Handle long polling clients. Enable compression.
-	mux.Handle("/v0/channels/lp", compressWithContentTypeOnly(http.HandlerFunc(serveLongPoll)))
+	mux.Handle("/v0/channels/lp", gh.CompressHandler(http.HandlerFunc(serveLongPoll)))
 	if config.Media != nil {
 		// Handle uploads of large files.
-		mux.Handle("/v0/file/u/", compressWithContentTypeOnly(http.HandlerFunc(largeFileUpload)))
+		mux.Handle("/v0/file/u/", gh.CompressHandler(http.HandlerFunc(largeFileUpload)))
 		// Serve large files.
-		mux.Handle("/v0/file/s/", compressWithContentTypeOnly(http.HandlerFunc(largeFileServe)))
+		mux.Handle("/v0/file/s/", gh.CompressHandler(http.HandlerFunc(largeFileServe)))
 		log.Println("Large media handling enabled")
 	}
 
