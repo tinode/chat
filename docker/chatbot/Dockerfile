@@ -1,8 +1,8 @@
 # Dockerfile builds an image with a chatbot (Tino) for Tinode.
 
-FROM python:3
+FROM python:slim
 
-ARG VERSION=0.14.5
+ARG VERSION=0.15
 ENV VERSION=$VERSION
 
 LABEL maintainer="Gene Sokolov <gene@tinode.co>"
