@@ -134,23 +134,25 @@ loop:
 	for {
 		select {
 		case <-stop:
-			// Flip the flag that we are terminating and close the Accept-ing socket, so no new connections are possible
+			// Flip the flag that we are terminating and close the Accept-ing socket, so no new connections are possible.
 			shuttingDown = true
-			if err := server.Shutdown(context.TODO()); err != nil {
+			// Give server 2 seconds to shut down.
+			ctx, _ := context.WithTimeout(context.Background(), 2*time.Second)
+			if err := server.Shutdown(ctx); err != nil {
 				// failure/timeout shutting down the server gracefully
-				return err
+				log.Println("HTTP server failed to terminate gracefully", err)
 			}
+
+			// While the server shuts down, termianate all sessions.
+			globals.sessionStore.Shutdown()
 
 			// Wait for http server to stop Accept()-ing connections
 			<-httpdone
 
-			// Terminate all sessions
-			globals.sessionStore.Shutdown()
-
 			// Shutdown local cluster node, if it's a part of a cluster.
 			globals.cluster.shutdown()
 
-			// Shutdown gRPC server, if one is configures
+			// Shutdown gRPC server, if one is configured
 			if globals.grpcServer != nil {
 				globals.grpcServer.GracefulStop()
 			}
