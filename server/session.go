@@ -490,7 +490,8 @@ func (s *Session) acc(msg *ClientComMessage) {
 		// Check if login is unique.
 		if ok, err := authhdl.IsUnique(msg.Acc.Secret); !ok {
 			log.Println("auth: check unique failed", err)
-			s.queueOut(decodeStoreError(err, msg.Acc.Id, "", msg.timestamp, nil))
+			s.queueOut(decodeStoreError(err, msg.Acc.Id, "", msg.timestamp,
+				map[string]interface{}{"what": "auth"}))
 			return
 		}
 
@@ -504,7 +505,9 @@ func (s *Session) acc(msg *ClientComMessage) {
 		if tags := normalizeTags(msg.Acc.Tags); tags != nil {
 			if !restrictedTagsEqual(tags, nil, globals.immutableTagNS) {
 				log.Println("Attempt to directly assign restricted tags")
-				s.queueOut(ErrPermissionDenied(msg.Acc.Id, "", msg.timestamp))
+				msg := ErrPermissionDenied(msg.Acc.Id, "", msg.timestamp)
+				msg.Ctrl.Params = map[string]interface{}{"what": "tags"}
+				s.queueOut(msg)
 				return
 			}
 			user.Tags = tags
@@ -518,7 +521,8 @@ func (s *Session) acc(msg *ClientComMessage) {
 			vld := store.GetValidator(cr.Method)
 			if err := vld.PreCheck(cr.Value, cr.Params); err != nil {
 				log.Println("Failed credential pre-check", cr, err)
-				s.queueOut(decodeStoreError(err, msg.Acc.Id, "", msg.timestamp, nil))
+				s.queueOut(decodeStoreError(err, msg.Acc.Id, "", msg.timestamp,
+					map[string]interface{}{"what": cr.Method}))
 				return
 			}
 
@@ -587,7 +591,8 @@ func (s *Session) acc(msg *ClientComMessage) {
 				log.Println("Failed to save or validate credential", err)
 				// Delete incomplete user record.
 				store.Users.Delete(user.Uid(), false)
-				s.queueOut(decodeStoreError(err, msg.Acc.Id, "", msg.timestamp, nil))
+				s.queueOut(decodeStoreError(err, msg.Acc.Id, "", msg.timestamp,
+					map[string]interface{}{"what": cr.Method}))
 				return
 			}
 
@@ -769,7 +774,7 @@ func (s *Session) onLogin(msgID string, timestamp time.Time, rec *auth.Rec, miss
 	return reply
 }
 
-// Get a list of all validated credentials.
+// Get a list of all validated credentials including those validated in this call.
 func (s *Session) getValidatedGred(uid types.Uid, authLvl auth.Level, creds []MsgAccCred) ([]string, error) {
 
 	// Check if credential validation is required.
@@ -790,7 +795,8 @@ func (s *Session) getValidatedGred(uid types.Uid, authLvl auth.Level, creds []Ms
 		}
 	}
 
-	// Add credential which are validated in this call.
+	// Add credentials which are validated in this call.
+	// Unknown validators are removed.
 	creds = normalizeCredentials(creds, false)
 	for i := range creds {
 		cr := &creds[i]
@@ -800,6 +806,12 @@ func (s *Session) getValidatedGred(uid types.Uid, authLvl auth.Level, creds []Ms
 		}
 		vld := store.GetValidator(cr.Method)
 		if err := vld.Check(uid, cr.Response); err != nil {
+			// Check failed.
+			if storeErr, ok := err.(types.StoreError); ok && storeErr == types.ErrCredentials {
+				// Just an invalid response. Keep credential unvalidated.
+				continue
+			}
+			// Actual error. Report back.
 			return nil, err
 		}
 		// Check did not return an error: the request was successfully validated.

@@ -140,7 +140,7 @@ func (v *validator) Check(user t.Uid, resp string) error {
 		return t.ErrPolicy
 	}
 	if resp == "" {
-		return t.ErrFailed
+		return t.ErrCredentials
 	}
 
 	// Comparing with dummy response too.
@@ -152,7 +152,7 @@ func (v *validator) Check(user t.Uid, resp string) error {
 	// Invalid response, increment fail counter.
 	store.Users.FailCred(user, "email")
 
-	return t.ErrFailed
+	return t.ErrCredentials
 }
 
 // Delete deletes user's records.

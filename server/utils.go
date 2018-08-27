@@ -245,15 +245,14 @@ func isNullValue(i interface{}) bool {
 	return false
 }
 
-func decodeStoreError(err error, id, topic string, timestamp time.Time, params map[string]interface{}) *ServerComMessage {
+func decodeStoreError(err error, id, topic string, timestamp time.Time,
+	params map[string]interface{}) *ServerComMessage {
 
 	var errmsg *ServerComMessage
 
 	if err == nil {
 		errmsg = NoErr(id, topic, timestamp)
-	}
-
-	if storeErr, ok := err.(types.StoreError); !ok {
+	} else if storeErr, ok := err.(types.StoreError); !ok {
 		errmsg = ErrUnknown(id, topic, timestamp)
 	} else {
 		switch storeErr {
