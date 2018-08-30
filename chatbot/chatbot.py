@@ -18,7 +18,7 @@ import time
 import grpc
 
 # Import generated modules from ../pbx/
-sys.path.append('../pbx')
+sys.path.append('../py_grpc/tinode_grpc')
 import model_pb2 as pb
 import model_pb2_grpc as pbx
 
