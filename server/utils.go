@@ -337,8 +337,9 @@ func parseTopicAccess(acs *MsgDefaultAcsMode, defAuth, defAnon types.AccessMode)
 	return
 }
 
-// Parses version of format 0.13.xx or 0.13-xx or 0.13
-// The major and minor parts must be valid, the last part is ignored if missing or unparceable.
+// Parses version in the following formats:
+//  1.2 | 1.2abc | 1.2.3 | 1.2.3abc
+// The major and minor parts must be valid, the trailer is ignored if missing or unparceable.
 func parseVersion(vers string) int {
 	var major, minor, trailer int
 	var err error
@@ -353,7 +354,9 @@ func parseVersion(vers string) int {
 		return 0
 	}
 
-	dot2 := strings.IndexAny(vers[dot+1:], ".-")
+	dot2 := strings.IndexFunc(vers[dot+1:], func(r rune) bool {
+		return !unicode.IsDigit(r)
+	})
 	if dot2 > 0 {
 		minor, err = strconv.Atoi(vers[dot+1 : dot2])
 		// Ignoring the error here

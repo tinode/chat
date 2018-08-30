@@ -5,6 +5,7 @@ import base64
 from concurrent import futures
 import json
 import os
+import pkg_resources
 import platform
 try:
     import Queue as queue
@@ -17,14 +18,13 @@ import time
 
 import grpc
 
-# Import generated modules from ../pbx/
-sys.path.append('../py_grpc/tinode_grpc')
-import model_pb2 as pb
-import model_pb2_grpc as pbx
+# Import generated grpc modules
+from tinode_grpc import pb
+from tinode_grpc import pbx
 
 APP_NAME = "Tino-chatbot"
 APP_VERSION = "1.0"
-LIB_VERSION = "0.15"
+LIB_VERSION = pkg_resources.get_distribution("tinode_grpc").version
 
 # Dictionary wich contains lambdas to be executed when server response is received
 onCompletion = {}
@@ -72,6 +72,8 @@ class Plugin(pbx.PluginServicer):
         action = None
         if acc_event.action == pb.CREATE:
             action = "created"
+            # TODO: subscribe to the new user.
+
         elif acc_event.action == pb.UPDATE:
             action = "updated"
         elif acc_event.action == pb.DELETE:
@@ -80,8 +82,6 @@ class Plugin(pbx.PluginServicer):
             action = "unknown"
 
         print("Account", action, ":", acc_event.user_id, acc_event.public)
-
-        # TODO: subscribe to the new user.
 
         return pb.Unused()
 

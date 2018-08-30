@@ -1,2 +1,2 @@
-from .model_pb2 import *
-from .model_pb2_grpc import *
+from . import model_pb2 as pb
+from . import model_pb2_grpc as pbx
