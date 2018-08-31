@@ -61,7 +61,7 @@ def del_subscription(topic):
 def server_version(params):
     if params == None:
         return
-    print("Server:", params['build'], params['ver'])
+    print("Server:", params['build'].decode('ascii'), params['ver'].decode('ascii'))
 
 def next_id():
     next_id.tid += 1
