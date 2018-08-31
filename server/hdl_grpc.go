@@ -23,7 +23,9 @@ type grpcNodeServer struct {
 
 func (sess *Session) closeGrpc() {
 	if sess.proto == GRPC {
+		sess.lock.Lock()
 		sess.grpcnode = nil
+		sess.lock.Unlock()
 	}
 }
 
@@ -39,7 +41,7 @@ func (*grpcNodeServer) MessageLoop(stream pbx.Node_MessageLoopServer) error {
 
 	go sess.writeGrpcLoop()
 
-	for sess.grpcnode != nil {
+	for {
 		in, err := stream.Recv()
 		if err == io.EOF {
 			return nil
@@ -49,6 +51,13 @@ func (*grpcNodeServer) MessageLoop(stream pbx.Node_MessageLoopServer) error {
 		}
 		log.Println("grpc in:", truncateStringIfTooLong(in.String()))
 		sess.dispatch(pbCliDeserialize(in))
+
+		sess.lock.Lock()
+		if sess.grpcnode == nil {
+			sess.lock.Unlock()
+			break
+		}
+		sess.lock.Unlock()
 	}
 
 	return nil

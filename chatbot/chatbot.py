@@ -1,5 +1,8 @@
 """Python implementation of a Tinode chatbot."""
 
+# For compatibility between python 2 and 3
+from __future__ import print_function
+
 import argparse
 import base64
 from concurrent import futures
@@ -23,23 +26,26 @@ from tinode_grpc import pb
 from tinode_grpc import pbx
 
 APP_NAME = "Tino-chatbot"
-APP_VERSION = "1.0"
+APP_VERSION = "1.1"
 LIB_VERSION = pkg_resources.get_distribution("tinode_grpc").version
 
 # Dictionary wich contains lambdas to be executed when server response is received
 onCompletion = {}
+
 # Add bundle for future execution
 def add_future(tid, bundle):
     onCompletion[tid] = bundle
 
 # Resolve or reject the future
-def exec_future(tid, code, params):
+def exec_future(tid, code, text, params):
     bundle = onCompletion.get(tid)
     if bundle != None:
         del onCompletion[tid]
         if code >= 200 and code < 400:
             arg = bundle.get('arg')
             bundle.get('action')(arg, params)
+        else:
+            print("Error:", code, text)
 
 # List of active subscriptions
 subscriptions = {}
@@ -48,6 +54,11 @@ def add_subscription(topic):
 
 def del_subscription(topic):
     subscriptions.pop(topic, None)
+
+def server_version(params):
+    if params == None:
+        return
+    print("Server:", params['build'], params['ver'])
 
 # Quotes from the fortune cookie file
 quotes = []
@@ -108,32 +119,35 @@ def client_reset():
 
 def hello():
     tid = next_id()
+    add_future(tid, {
+        'action': lambda unused, params: server_version(params),
+    })
     return pb.ClientMsg(hi=pb.ClientHi(id=tid, user_agent=APP_NAME + "/" + APP_VERSION + " (" +
         platform.system() + "/" + platform.release() + "); gRPC-python/" + LIB_VERSION,
         ver=LIB_VERSION, lang="EN"))
 
 def login(cookie_file_name, scheme, secret):
     tid = next_id()
-    onCompletion[tid] = {
+    add_future(tid, {
         'arg': cookie_file_name,
         'action': lambda fname, params: save_auth_cookie(fname, params),
-    }
+    })
     return pb.ClientMsg(login=pb.ClientLogin(id=tid, scheme=scheme, secret=secret))
 
 def subscribe(topic):
     tid = next_id()
-    onCompletion[tid] = {
+    add_future(tid, {
         'arg': topic,
         'action': lambda topicName, unused: add_subscription(topicName),
-    }
+    })
     return pb.ClientMsg(sub=pb.ClientSub(id=tid, topic=topic))
 
 def leave(topic):
     tid = next_id()
-    onCompletion[tid] = {
+    add_future(tid, {
         'arg': topic,
         'action': lambda topicName, unused: del_subscription(topicName)
-    }
+    })
     return pb.ClientMsg(leave=pb.ClientLeave(id=tid, topic=topic))
 
 def publish(topic, text):
@@ -154,6 +168,8 @@ def init_server(listen):
     return server
 
 def init_client(addr, schema, secret, cookie_file_name):
+    print("Connecting to server at", addr)
+
     channel = grpc.insecure_channel(addr)
     stub = pbx.NodeStub(channel)
     # Call the server
@@ -172,7 +188,7 @@ def client_message_loop(stream):
             # print("in:", msg)
             if msg.HasField("ctrl"):
                 # Run code on command completion
-                exec_future(msg.ctrl.id, msg.ctrl.code, msg.ctrl.params)
+                exec_future(msg.ctrl.id, msg.ctrl.code, msg.ctrl.text, msg.ctrl.params)
                 # print(str(msg.ctrl.code) + " " + msg.ctrl.text)
 
             elif msg.HasField("data"):

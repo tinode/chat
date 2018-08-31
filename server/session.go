@@ -104,8 +104,8 @@ type Session struct {
 	// Session ID
 	sid string
 
-	// Needed for long polling.
-	lpLock sync.Mutex
+	// Needed for long polling and grpc.
+	lock sync.Mutex
 }
 
 // Subscription is a mapper of sessions to topics.
@@ -224,8 +224,8 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 	// Locking-unlocking is needed for long polling: the client may issue multiple requests in parallel.
 	// Should not affect performance
 	if s.proto == LPOLL {
-		s.lpLock.Lock()
-		defer s.lpLock.Unlock()
+		s.lock.Lock()
+		defer s.lock.Unlock()
 	}
 
 	var resp *ServerComMessage

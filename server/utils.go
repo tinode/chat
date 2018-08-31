@@ -345,30 +345,36 @@ func parseVersion(vers string) int {
 	var err error
 
 	dot := strings.Index(vers, ".")
-	if dot >= 0 {
-		major, err = strconv.Atoi(vers[:dot])
-	} else {
+	if dot < 0 {
 		major, err = strconv.Atoi(vers)
+		if err != nil || major > 0x1fff || major < 0 {
+			return 0
+		}
+		return major << 16
 	}
+
+	major, err = strconv.Atoi(vers[:dot])
 	if err != nil {
 		return 0
 	}
 
-	dot2 := strings.IndexFunc(vers[dot+1:], func(r rune) bool {
+	vers = vers[dot+1:]
+	dot2 := strings.IndexFunc(vers, func(r rune) bool {
 		return !unicode.IsDigit(r)
 	})
+
 	if dot2 > 0 {
-		minor, err = strconv.Atoi(vers[dot+1 : dot2])
+		minor, err = strconv.Atoi(vers[:dot2])
 		// Ignoring the error here
 		trailer, _ = strconv.Atoi(vers[dot2+1:])
-	} else {
-		minor, err = strconv.Atoi(vers[dot+1:])
+	} else if len(vers) > 0 {
+		minor, err = strconv.Atoi(vers)
 	}
 	if err != nil {
 		return 0
 	}
 
-	if major < 0 || minor < 0 || trailer < 0 || minor >= 0xff || trailer >= 0xff {
+	if major < 0 || minor < 0 || trailer < 0 || major > 0x1fff || minor >= 0xff || trailer >= 0xff {
 		return 0
 	}
 

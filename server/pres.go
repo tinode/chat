@@ -88,7 +88,6 @@ func (t *Topic) loadContacts(uid types.Uid) error {
 // from the user2; "+rem" means the subscription is removed. "+dis" is the opposite of "en".
 // The "+en/rem/dis" command itself is stripped from the notification.
 func (t *Topic) presProcReq(fromUserID, what string, wantReply bool) string {
-
 	if t.isSuspended() {
 		return ""
 	}
@@ -119,12 +118,12 @@ func (t *Topic) presProcReq(fromUserID, what string, wantReply bool) string {
 		// offline
 		cmd = "rem"
 	case "?unkn":
-		// offline
+		// no change in online status
+		online = nil
 		reqReply = true
 		what = ""
 	default:
 		// All other notifications are not processed here
-		// log.Println("done processing what=", what)
 		return what
 	}
 
@@ -136,7 +135,7 @@ func (t *Topic) presProcReq(fromUserID, what string, wantReply bool) string {
 			if cmd == "rem" {
 				replyAs = "off+rem"
 				if !psd.enabled {
-					// If it was disabled before, don't send a redundunt update.
+					// If it was disabled before, don't send a redundant update.
 					what = ""
 				}
 				delete(t.perSubs, fromUserID)
