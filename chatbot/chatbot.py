@@ -29,6 +29,9 @@ APP_NAME = "Tino-chatbot"
 APP_VERSION = "1.1"
 LIB_VERSION = pkg_resources.get_distribution("tinode_grpc").version
 
+# User ID of the current user
+botUID = None
+
 # Dictionary wich contains lambdas to be executed when server response is received
 onCompletion = {}
 
@@ -60,13 +63,13 @@ def server_version(params):
         return
     print("Server:", params['build'], params['ver'])
 
-# Quotes from the fortune cookie file
-quotes = []
-
 def next_id():
     next_id.tid += 1
     return str(next_id.tid)
 next_id.tid = 100
+
+# Quotes from the fortune cookie file
+quotes = []
 
 def next_quote():
     idx = random.randrange(0, len(quotes))
@@ -130,7 +133,7 @@ def login(cookie_file_name, scheme, secret):
     tid = next_id()
     add_future(tid, {
         'arg': cookie_file_name,
-        'action': lambda fname, params: save_auth_cookie(fname, params),
+        'action': lambda fname, params: on_login(fname, params),
     })
     return pb.ClientMsg(login=pb.ClientLogin(id=tid, scheme=scheme, secret=secret))
 
@@ -189,15 +192,19 @@ def client_message_loop(stream):
             if msg.HasField("ctrl"):
                 # Run code on command completion
                 exec_future(msg.ctrl.id, msg.ctrl.code, msg.ctrl.text, msg.ctrl.params)
-                # print(str(msg.ctrl.code) + " " + msg.ctrl.text)
 
             elif msg.HasField("data"):
-                # Respond to message.
                 # print("message from:", msg.data.from_user_id)
-                # Mark received message as read
-                client_post(note_read(msg.data.topic, msg.data.seq_id))
-                # Respond with a witty quote
-                client_post(publish(msg.data.topic, next_quote()))
+
+                # Protection against the bot talking to self from another session.
+                if msg.data.from_user_id != botUID:
+                    # Respond to message.
+                    # Mark received message as read
+                    client_post(note_read(msg.data.topic, msg.data.seq_id))
+                    # Insert a small delay to prevent accidental DoS self-attack.
+                    time.sleep(0.1)
+                    # Respond with a witty quote
+                    client_post(publish(msg.data.topic, next_quote()))
 
             elif msg.HasField("pres"):
                 # print("presence:", msg.pres.topic, msg.pres.what)
@@ -226,15 +233,18 @@ def read_auth_cookie(cookie_file_name):
     if schema == None:
         return None, None
     if schema == 'token':
-        secret = base64.b64decode(params.get('secret').encode('ascii'))
+        secret = base64.b64decode(params.get('secret').encode('utf-8'))
     else:
-        secret = params.get('secret').encode('ascii')
+        secret = params.get('secret').encode('utf-8')
     return schema, secret
 
-def save_auth_cookie(cookie_file_name, params):
+def on_login(cookie_file_name, params):
     """Save authentication token to file"""
     if params == None or cookie_file_name == None:
         return
+
+    if 'user' in params:
+        botUID = params['user'].decode("ascii")
 
     # Protobuf map 'params' is not a python object or dictionary. Convert it.
     nice = {'schema': 'token'}
@@ -243,7 +253,7 @@ def save_auth_cookie(cookie_file_name, params):
             key_out = 'secret'
         else:
             key_out = key_in
-        nice[key_out] = json.loads(params[key_in])
+        nice[key_out] = json.loads(params[key_in].decode('utf-8'))
 
     try:
         cookie = open(cookie_file_name, 'w')
