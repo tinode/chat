@@ -1,12 +1,14 @@
 # Script for packaging generated model_pb2*.py into tinode_grpc module.
-import os
 import setuptools
+from pkg_resources import resource_string
 
 with open("README.md", "r") as readme_file:
     long_description = readme_file.read()
 
-with open(os.path.join(mypackage_root_dir, "GIT_VERSION"), "r") as version_file:
-    git_version = version_file.read().strip()
+#with open("tinode_grpc/GIT_VERSION", "r") as version_file:
+#    git_version = version_file.read().strip()
+
+version = resource_string(__name__, 'GIT_VERSION')
 
 setuptools.setup(
     name="tinode_grpc",
@@ -21,6 +23,9 @@ setuptools.setup(
     install_requires=['grpcio>=1.9.1'],
     license="Apache 2.0",
     keywords="chat messaging messenger im tinode",
+    package_data={
+        "": ["GIT_VERSION"],
+    },
     classifiers=(
         "Programming Language :: Python :: 2",
         "Programming Language :: Python :: 2.7",
