@@ -72,6 +72,7 @@ do
       cp ./server/static/index.js ./releases/tmp/static
       cp ./server/static/index.min.js ./releases/tmp/static
       cp ./server/static/tinode.js ./releases/tmp/static
+      cp ./server/static/manifest.json ./releases/tmp/static
       cp ./tinode-db/data.json ./releases/tmp
       cp ./tinode-db/*.jpg ./releases/tmp
       cp ./tinode-db/credentials.sh ./releases/tmp
@@ -130,8 +131,6 @@ mkdir -p ./releases/tmp
 
 cp ${GOSRC}/chat/chatbot/chatbot.py ./releases/tmp
 cp ${GOSRC}/chat/chatbot/quotes.txt ./releases/tmp
-cp ${GOSRC}/chat/pbx/model_pb2.py ./releases/tmp
-cp ${GOSRC}/chat/pbx/model_pb2_grpc.py ./releases/tmp
 
 tar -C ${GOSRC}/chat/releases/tmp -zcf ./releases/${version}/chatbot.tar.gz .
 pushd ./releases/tmp > /dev/null

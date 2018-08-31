@@ -12,9 +12,7 @@ LABEL version=$VERSION
 RUN mkdir -p /usr/src/bot
 WORKDIR /usr/src/bot
 
-COPY requirements.txt .
-
-RUN pip install --no-cache-dir -q -r requirements.txt
+RUN pip install --no-cache-dir -q tinode-grpc
 
 # Get tarball with the chatbot code and data.
 ADD https://github.com/tinode/chat/releases/download/v$VERSION/chatbot.tar.gz .

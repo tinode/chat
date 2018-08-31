@@ -14,39 +14,76 @@ python -m grpc_tools.protoc -I../pbx --python_out=. --grpc_python_out=. ../pbx/m
 
 ### Using Docker
 
-**Warning!** The chatbot image is almost 750MB: the basic Python 3 docker image is nearly 690MB, gRPC adds another 60MB.
+**Warning!** Although the chatbot itself is less than 100KB, the chatbot Docker image is 175MB: the `:slim` Python 3 image is about 140MB, gRPC adds another ~30MB.
 
-1. Follow [instructions](../docker/README.md) to build and run dockerized Tinode chat server up to an including _step 3_. 
-	
+1. Follow [instructions](../docker/README.md) to build and run dockerized Tinode chat server up to an including _step 3_.
+
 2. In _step 4_ run the server adding `--env PLUGIN_PYTHON_CHAT_BOT_ENABLED=true` and `--volume botdata:/botdata` to the command line:
 	1. **RethinkDB**:
 	```
 	$ docker run -p 6060:18080 -d --name tinode-srv --env PLUGIN_PYTHON_CHAT_BOT_ENABLED=true --volume botdata:/botdata --network tinode-net tinode/tinode-rethink:latest
 	```
-	1. **MySQL**:
+	2. **MySQL**:
 	```
 	$ docker run -p 6060:18080 -d --name tinode-srv --env PLUGIN_PYTHON_CHAT_BOT_ENABLED=true --volume botdata:/botdata --network tinode-net tinode/tinode-mysql:latest
 	```
-	
+
+	You may replace `:latest` with a different tag. See all all available tags here:
+	 * [MySQL tags](https://hub.docker.com/r/tinode/tinode-mysql/tags/)
+	 * [RethinkDB tags](https://hub.docker.com/r/tinode/tinode-rethink/tags/)
+
 3. Run the chatbot
 	```
 	$ docker run -d --name tino-chatbot --network tinode-net --volume botdata:/botdata tinode/chatbot:latest
 	```
-	
-4. Test that the bot is functional by pointing your browser to http://localhost:6060/x/, login and talk to user `Tino`. The user should respond to every message with a random quote.
 
-	
-### Building from Source
+4. Test that the bot is functional by pointing your browser to http://localhost:6060/, login and talk to user `Tino`. The user should respond to every message with a random quote.
 
-Make sure [python](https://www.python.org/) 2.7 or 3.4 or higher is installed. Make sure [pip](https://pip.pypa.io/en/stable/installing/) 9.0.1 or higher is installed. If you are using python 2.7 install `futures`:
+
+### Using PIP
+
+#### Prerequisites
+
+[gRPC](https://grpc.io/) requires [python](https://www.python.org/) 2.7 or 3.4 or higher.
+Make sure [pip](https://pip.pypa.io/en/stable/installing/) 9.0.1 or higher is installed.
 ```
-pip install futures
+$ python -m pip install --upgrade pip
+```
+If you cannot upgrade pip due to a system-owned installation, you can run install it in a `virtualenv`:
+```
+$ python -m pip install virtualenv
+$ virtualenv venv
+$ source venv/bin/activate
+$ python -m pip install --upgrade pip
 ```
 
-Follow instructions to [install grpc](https://grpc.io/docs/quickstart/python.html#install-grpc). The package is called `grpcio` (*not* `grpc`!):
+If you are using python 2.7 install `futures`:
 ```
-pip install grpcio
+$ python -m pip install futures
 ```
+
+#### Install tinode-grpc
+
+Install tinode gRPC bindings:
+```
+$ python -m pip install tinode-grpc
+```
+
+Or, to install it system wide:
+```
+$ sudo python -m pip install tinode-grpc
+```
+
+On El Capitan OSX, you may get the following error:
+```
+$ OSError: [Errno 1] Operation not permitted: '/tmp/pip-qwTLbI-uninstall/System/Library/Frameworks/Python.framework/Versions/2.7/Extras/lib/python/six-1.4.1-py2.7.egg-info'
+```
+You can work around this using:
+```
+$ python -m pip install tinode-grpc --ignore-installed
+```
+
+#### Run the chatbot
 
 Start the [tinode server](../INSTALL.md) first. Then start the chatbot with credentials of the user you want to be your bot, `alice` in this example:
 ```

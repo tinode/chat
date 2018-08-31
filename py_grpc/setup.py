@@ -1,28 +1,16 @@
 # Script for packaging generated model_pb2*.py into tinode_grpc module.
-
+import os
 import setuptools
-from subprocess import Popen, PIPE
 
-with open("README.md", "r") as fh:
-    long_description = fh.read()
+with open("README.md", "r") as readme_file:
+    long_description = readme_file.read()
 
-# Convert git tag like "v0.15.5-rc5-3-g2084bd63" to PEP 440 version like "0.15.5rc5.post3"
-def git_version():
-    p = Popen(['git', 'describe', '--tags'], stdout=PIPE, stderr=PIPE)
-    p.stderr.close()
-    line = p.stdout.readlines()[0].decode("ascii").strip()
-    if line.startswith("v"):
-        line = line[1:]
-    if "-rc" in line:
-        line = line.replace("-rc", "rc")
-    if "-" in line:
-        parts = line.split("-")
-        line = parts[0] + ".post" + parts[1]
-    return line
+with open(os.path.join(mypackage_root_dir, "GIT_VERSION"), "r") as version_file:
+    git_version = version_file.read().strip()
 
 setuptools.setup(
     name="tinode_grpc",
-    version=git_version(),
+    version=git_version,
     author="Tinode Authors",
     author_email="gene@tinode.co",
     description="Tinode gRPC bindings.",

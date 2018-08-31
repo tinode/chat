@@ -207,8 +207,10 @@ func main() {
 	// Absolute paths are left unchanged.
 	rootpath, _ := filepath.Split(executable)
 
-	log.Printf("Server v%s:%s:%s at '%s'; pid %d; started with %d process(es)", currentVersion, executable,
-		buildstamp, store.GetAdapterName(), os.Getpid(), runtime.GOMAXPROCS(runtime.NumCPU()))
+	log.Printf("Server v%s:%s:%s; db: '%s'; pid %d; %d process(es)",
+		currentVersion, executable, buildstamp,
+		store.GetAdapterName(), os.Getpid(), runtime.GOMAXPROCS(runtime.NumCPU()))
+
 	var configfile = flag.String("config", "tinode.conf", "Path to config file.")
 	// Path to static content.
 	var staticPath = flag.String("static_data", defaultStaticPath, "Path to directory with static files to be served.")
