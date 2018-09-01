@@ -615,7 +615,7 @@ func (a *adapter) UserGetAll(ids ...t.Uid) ([]t.User, error) {
 			users = nil
 			break
 		}
-		user.SetUid(encodeString(user.Id))
+		user.SetUid(encodeUidString(user.Id))
 		user.Public = fromJSON(user.Public)
 
 		users = append(users, user)
@@ -917,7 +917,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 			if err = rows.StructScan(&usr); err != nil {
 				break
 			}
-			uid2 := encodeString(usr.Id)
+			uid2 := encodeUidString(usr.Id)
 			topic := uid.P2PName(uid2)
 			if sub, ok := join[topic]; ok {
 				sub.ObjHeader.MergeTimes(&usr.ObjHeader)
@@ -982,7 +982,7 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 			break
 		}
 
-		sub.User = encodeString(sub.User).String()
+		sub.User = encodeUidString(sub.User).String()
 		sub.Private = fromJSON(sub.Private)
 		sub.SetPublic(fromJSON(public))
 		subs = append(subs, sub)
@@ -1193,7 +1193,7 @@ func (a *adapter) SubsForTopic(topic string, keepDeleted bool, opts *t.QueryOpt)
 			break
 		}
 
-		ss.User = encodeString(ss.User).String()
+		ss.User = encodeUidString(ss.User).String()
 		ss.Private = fromJSON(ss.Private)
 		subs = append(subs, ss)
 	}
@@ -1418,7 +1418,7 @@ func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.QueryOpt) (
 		if err = rows.StructScan(&msg); err != nil {
 			break
 		}
-		msg.From = encodeString(msg.From).String()
+		msg.From = encodeUidString(msg.From).String()
 		msg.Content = fromJSON(msg.Content)
 		msgs = append(msgs, msg)
 	}
@@ -1520,7 +1520,7 @@ func (a *adapter) MessageDeleteList(topic string, toDel *t.DelMessage) (err erro
 	} else {
 		// Only some messages are being deleted
 		// Start with making log entries
-		forUser := decodeString(toDel.DeletedFor)
+		forUser := decodeUidString(toDel.DeletedFor)
 		var insert *sql.Stmt
 		if insert, err = tx.Prepare(
 			"INSERT INTO dellog(topic,deletedfor,delid,low,hi) VALUES(?,?,?,?,?)"); err != nil {
@@ -1722,7 +1722,7 @@ func (a *adapter) CredAdd(cred *t.Credential) error {
 	_, err := a.db.Exec("INSERT INTO credentials(createdat,updatedat,method,value,synthetic,userid,resp,done) "+
 		"VALUES(?,?,?,?,?,?,?,?)",
 		cred.CreatedAt, cred.UpdatedAt, cred.Method, cred.Value, synth,
-		decodeString(cred.User), cred.Resp, cred.Done)
+		decodeUidString(cred.User), cred.Resp, cred.Done)
 	if isDupe(err) {
 		return t.ErrDuplicate
 	}
@@ -1856,8 +1856,8 @@ func (a *adapter) FileGet(fid string) (*t.FileDef, error) {
 		return nil, err
 	}
 
-	fd.Id = encodeString(fd.Id).String()
-	fd.User = encodeString(fd.User).String()
+	fd.Id = encodeUidString(fd.Id).String()
+	fd.User = encodeUidString(fd.User).String()
 
 	return &fd, nil
 
@@ -1941,6 +1941,10 @@ func isMissingDb(err error) bool {
 }
 
 // Convert to JSON before storing to JSON field.
+// func toJSON(src interface{}) interface{} {
+// 	return src
+// }
+
 func toJSON(src interface{}) []byte {
 	if src == nil {
 		return nil
@@ -1951,6 +1955,10 @@ func toJSON(src interface{}) []byte {
 }
 
 // Deserialize JSON data from DB.
+//func fromJSON(src interface{}) interface{} {
+//	return src
+//}
+
 func fromJSON(src interface{}) interface{} {
 	if src == nil {
 		return nil
@@ -1964,12 +1972,12 @@ func fromJSON(src interface{}) interface{} {
 }
 
 // UIDs are stored as decoded int64 values. Take decoded string representation of int64, produce UID.
-func encodeString(str string) t.Uid {
+func encodeUidString(str string) t.Uid {
 	unum, _ := strconv.ParseInt(str, 10, 64)
 	return store.EncodeUid(unum)
 }
 
-func decodeString(str string) int64 {
+func decodeUidString(str string) int64 {
 	uid := t.ParseUid(str)
 	return store.DecodeUid(uid)
 }

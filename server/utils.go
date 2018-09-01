@@ -53,7 +53,7 @@ func delrangeSerialize(in []MsgDelRange) []types.Range {
 
 // Trim whitespace, remove short/empty tags and duplicates, convert to lowercase, ensure
 // the number of tags does not exceed the maximum.
-func normalizeTags(src []string) []string {
+func normalizeTags(src []string) types.StringSlice {
 	if len(src) == 0 {
 		return nil
 	}
@@ -100,7 +100,7 @@ func normalizeTags(src []string) []string {
 		prev = curr
 	}
 
-	return dst
+	return types.StringSlice(dst)
 }
 
 // stringDelta extracts the slices of added and removed strings from two slices:
