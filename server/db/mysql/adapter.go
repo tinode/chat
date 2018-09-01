@@ -1941,10 +1941,6 @@ func isMissingDb(err error) bool {
 }
 
 // Convert to JSON before storing to JSON field.
-// func toJSON(src interface{}) interface{} {
-// 	return src
-// }
-
 func toJSON(src interface{}) []byte {
 	if src == nil {
 		return nil
@@ -1955,10 +1951,6 @@ func toJSON(src interface{}) []byte {
 }
 
 // Deserialize JSON data from DB.
-//func fromJSON(src interface{}) interface{} {
-//	return src
-//}
-
 func fromJSON(src interface{}) interface{} {
 	if src == nil {
 		return nil
