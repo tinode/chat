@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Ensure the old config is removed
+# Remove the old config.
 rm -f working.config
 
 # Enable email verification if $SMTP_SERVER is defined.
@@ -9,7 +9,7 @@ if [ ! -z "$SMTP_SERVER" ] ; then
 fi
 
 # Enable TLS (httpS).
-if [ ! -z "TLS_DOMAIN_NAME" ] ; then
+if [ ! -z "$TLS_DOMAIN_NAME" ] ; then
 	TLS_ENABLED=true
 fi
 
