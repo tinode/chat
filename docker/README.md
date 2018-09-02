@@ -37,6 +37,8 @@ All images are available at https://hub.docker.com/r/tinode/
 	$ docker run -p 6060:18080 -d --name tinode-srv --network tinode-net tinode/tinode-mysql:latest
 	```
 
+	See [below](#supported-environment-variables) for more options.
+	
 	The port mapping `-p 6060:18080` tells Docker to map container's port 18080 to host's port 6060 making server accessible at http://localhost:6060/. The container will initialize the database with test data on the first run.
 
 	You may replace `:latest` with a different tag. See all all available tags here:
@@ -67,13 +69,13 @@ You can specify the following environment viriables when issuing `docker run` co
 | Variable | Type | Default | Function |
 | --- | --- | --- | --- |
 | API_KEY_SALT | string | `T713/rYYgW7g4m3vG6zGRh 7+FM1t0T8j13koXScOAj4=` | base64-encoded 32 random bytes used as API salt. Use [keygen](../keygen) to create a personalized API key. |
-| AUTH_TOKEN_KEY | string | `wfaY2RgF2S1OQI/ZlK+LS rp1KB2jwAdGAIHQ7JZn+Kc=` | base64-encoded 32 random bytes used as salt for authentication tokens |
+| AUTH_TOKEN_KEY | string | `wfaY2RgF2S1OQI/ZlK+LS rp1KB2jwAdGAIHQ7JZn+Kc=` | base64-encoded 32 random bytes used as salt for authentication tokens. |
 | DEBUG_EMAIL_VERIFICATION_CODE | string |  | Enable dummy email verification code, e.g. `123456`. Disabled by default (empty string). |
-| MYSQL_DSN | string | `'root@tcp(mysql)/tinode'` | MySQL [DSN](https://github.com/go-sql-driver/mysql#dsn-data-source-name) |
+| MYSQL_DSN | string | `'root@tcp(mysql)/tinode'` | MySQL [DSN](https://github.com/go-sql-driver/mysql#dsn-data-source-name). |
 | RESET_DB | bool | `false` | Drop and recreate the database. |
-| SMTP_PASSWORD | string |  | Password to use for authentication with the SMTP server |
+| SMTP_PASSWORD | string |  | Password to use for authentication with the SMTP server. |
 | SMTP_PORT | number |  | Port number of the SMTP server to use for sending verification emails, e.g. `25` or `587`. |
-| SMTP_SENDER | string |  | [RFC 5322](https://tools.ietf.org/html/rfc5322) email address to use in the `FROM` field of verification emails and for authentication with the SMTP server, .e.g. `'"John Doe" <jdoe@example.com>'` |
+| SMTP_SENDER | string |  | [RFC 5322](https://tools.ietf.org/html/rfc5322) email address to use in the `FROM` field of verification emails and for authentication with the SMTP server, .e.g. `'"John Doe" <jdoe@example.com>'`. |
 | SMTP_SERVER | string |  | Name of the SMTP server to use for sending verification emails, e.g. `smtp.gmail.com`. If SMTP_SERVER is not defined, email verification will be disabled. |
 | TLS_CONTACT_ADDRESS | string |  | Optional email to use as contact for [LetsEncrypt](https://letsencrypt.org/) certificates, e.g. `jdoe@example.com`. |
 | TLS_DOMAIN_NAME | string |  | If non-empty, enables TLS (http**s**) and configures domain name of your container, e.g. `www.example.com`. In order for TLS to work you have to expose your HTTPS port to the Internet and correctly configure DNS. It WILL FAIL with `localhost` or unroutable IPs. |
