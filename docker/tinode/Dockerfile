@@ -35,14 +35,15 @@ ENV PLUGIN_PYTHON_CHAT_BOT_ENABLED=false
 
 # Various encryption and salt keys. Replace with your own in production.
 
-# Key to initialize UID generator
-ENV UID_ENCRYPTION_KEY=la6YsO+bNX/+XIkOqc5Svw==
-
 # Key to sign API app ID.
 ENV API_KEY_SALT=T713/rYYgW7g4m3vG6zGRh7+FM1t0T8j13koXScOAj4=
 
 # Key used to sign authentication tokens.
 ENV AUTH_TOKEN_KEY=wfaY2RgF2S1OQI/ZlK+LSrp1KB2jwAdGAIHQ7JZn+Kc=
+
+# Key to initialize UID generator
+ENV UID_ENCRYPTION_KEY=la6YsO+bNX/+XIkOqc5Svw==
+
 
 # Adding bash and grep as they are used here.
 RUN apk add --no-cache bash grep

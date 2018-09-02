@@ -59,3 +59,28 @@ then repeat step 4 adding `--env RESET_DB=true`.
 ### Run the chatbot
 
 See [instructions](../chatbot/).
+
+## Supported environment variables
+
+You can specify the following environment viriables when issuing `docker run` command:
+
+| Variable | Type | Default | Function |
+| --- | --- | --- | --- |
+| API_KEY_SALT | string | `T713/rYYgW7g4m3vG6zGRh7+FM1t0T8j13koXScOAj4=` | base64-encoded 32 random bytes used as API salt. Use [keygen](../keygen) to create the API key. |
+| AUTH_TOKEN_KEY | string | `wfaY2RgF2S1OQI/ZlK+LSrp1KB2jwAdGAIHQ7JZn+Kc=` | base64-encoded 32 random bytes used as salt for authentication tokens |
+| DEBUG_EMAIL_VERIFICATION_CODE | string |  | Enable dummy email verification code. Disabled by default (empty string). |
+| MYSQL_DSN | string | `'root@tcp(mysql)/tinode'` | MySQL [DSN](https://github.com/go-sql-driver/mysql#dsn-data-source-name) |
+| RESET_DB | bool | `false` | Drop and recreate the database. |
+| SMTP_PASSWORD | string |  | Password to use for authentication with the SMTP server |
+| SMTP_PORT | string |  | Port number of the SMTP server to use for sending verification emails, e.g. `"25"` or `"587"`. |
+| SMTP_SENDER | string |  | Email address to use in the `FROM` field of verification emails and for authenticationwith the SMTP server. |
+| SMTP_SERVER | string |  | Name of the SMTP server to use for sending verification emails, e.g. `"smtp.gmail.com"`. If SMTP_SERVER is not defined, email verification will be disabled. |
+| TLS_CONTACT_ADDRESS | string |  | Optional email address to use as contact for Lets Encrypt certificats. |
+| TLS_DOMAIN_NAME | string |  | Domain name of your container for TLS support |
+| TLS_ENABLED | bool | `false` | Controls if TRL (http**s**) is enabled. If enabled, a valid TLS_DOMAIN_NAME must be provided too. You also have to correctly configure DNS for your container. |
+| UID_ENCRYPTION_KEY | string | `la6YsO+bNX/+XIkOqc5Svw==` | base64-encoded 16 random bytes used as an encryption key for user IDs. |
+
+Unix-like systems offer a convenient way to generate a random base64-encoded string of desired length as
+```
+$ openssl rand -base64 <desired length>
+```

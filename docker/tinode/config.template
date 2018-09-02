@@ -58,17 +58,17 @@
 	"acc_validation": {
 		"email": {
 			"add_to_tags": true,
-			"required": [],
+			"required": ["$EMAIL_VERIFICATION_REQUIRED"],
 			"config": {
-				"smtp_server": "smtp.example.com",
-				"smtp_port": "25",
-				"sender": "noreply@example.com",
-				"sender_password": "your-password-here",
+				"smtp_server": "$SMTP_SERVER",
+				"smtp_port": "$SMTP_PORT",
+				"sender": "$SMTP_SENDER",
+				"sender_password": "$SMTP_PASSWORD",
 				"msg_body_templ": "./templ/email-validation-body.templ",
 				"msg_subject": "Tinode chat: confirm email",
 				"headers": [],
 				"max_retries": 4,
-				"debug_response": "123456"
+				"debug_response": "$DEBUG_EMAIL_VERIFICATION_CODE"
 			}
 		},
 
@@ -77,7 +77,7 @@
 			"config": {
 				"template": "./templ/sms-validation.templ",
 				"max_retries": 4,
-				"debug_response": "123456"
+				"debug_response": "$DEBUG_TEL_VERIFICATION_CODE"
 			}
 		}
 	},
