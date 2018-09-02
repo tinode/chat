@@ -72,9 +72,9 @@ You can specify the following environment viriables when issuing `docker run` co
 | MYSQL_DSN | string | `'root@tcp(mysql)/tinode'` | MySQL [DSN](https://github.com/go-sql-driver/mysql#dsn-data-source-name) |
 | RESET_DB | bool | `false` | Drop and recreate the database. |
 | SMTP_PASSWORD | string |  | Password to use for authentication with the SMTP server |
-| SMTP_PORT | string |  | Port number of the SMTP server to use for sending verification emails, e.g. `"25"` or `"587"`. |
-| SMTP_SENDER | string |  | Email address to use in the `FROM` field of verification emails and for authenticationwith the SMTP server. |
-| SMTP_SERVER | string |  | Name of the SMTP server to use for sending verification emails, e.g. `"smtp.gmail.com"`. If SMTP_SERVER is not defined, email verification will be disabled. |
+| SMTP_PORT | number |  | Port number of the SMTP server to use for sending verification emails, e.g. `25` or `587`. |
+| SMTP_SENDER | string |  | RFC 5322 email address to use in the `FROM` field of verification emails and for authentication with the SMTP server. |
+| SMTP_SERVER | string |  | Name of the SMTP server to use for sending verification emails, e.g. `smtp.gmail.com`. If SMTP_SERVER is not defined, email verification will be disabled. |
 | TLS_CONTACT_ADDRESS | string |  | Optional email address to use as contact for Lets Encrypt certificats. |
 | TLS_DOMAIN_NAME | string |  | If non-empty, enables TLS (http**s**) and configures domain name of your container. In order for TLS to work you have to correctly configure DNS for your container. |
 | TLS_ENABLED | bool | `false` |  |

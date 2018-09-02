@@ -292,7 +292,10 @@ func main() {
 		for _, req := range vconf.Required {
 			lvl := auth.ParseAuthLevel(req)
 			if lvl == auth.LevelNone {
-				// Skip unknown authentication level.
+				if req != "" {
+					log.Fatalf("Invalid required AuthLevel '%s' in validator '%s'", req, name)
+				}
+				// Skip empty string
 				continue
 			}
 			reqLevels = append(reqLevels, lvl)
@@ -300,6 +303,11 @@ func main() {
 				globals.authValidators = make(map[auth.Level][]string)
 			}
 			globals.authValidators[lvl] = append(globals.authValidators[lvl], name)
+		}
+
+		if len(reqLevels) == 0 {
+			// Ignore validator with empty levels.
+			continue
 		}
 
 		if val := store.GetValidator(name); val == nil {

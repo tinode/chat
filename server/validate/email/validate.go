@@ -52,7 +52,12 @@ func (v *validator) Init(jsonconf string) error {
 		return err
 	}
 
-	v.auth = smtp.PlainAuth("", v.SendFrom, v.SenderPassword, v.SMTPAddr)
+	// SendFrom could be an RFC 5322 address of the form "John Doe <jdoe@example.com>". Parse it.
+	if sender, err := mail.ParseAddress(v.SendFrom); err == nil {
+		v.auth = smtp.PlainAuth("", sender.Address, v.SenderPassword, v.SMTPAddr)
+	} else {
+		return err
+	}
 
 	// If a relative path is provided, try to resolve it relative to the exec file location,
 	// not whatever directory the user is in.

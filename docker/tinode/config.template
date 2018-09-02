@@ -58,7 +58,7 @@
 	"acc_validation": {
 		"email": {
 			"add_to_tags": true,
-			"required": ["$EMAIL_VERIFICATION_REQUIRED"],
+			"required": [$EMAIL_VERIFICATION_REQUIRED],
 			"config": {
 				"smtp_server": "$SMTP_SERVER",
 				"smtp_port": "$SMTP_PORT",

@@ -5,7 +5,7 @@ rm -f working.config
 
 # Enable email verification if $SMTP_SERVER is defined.
 if [ ! -z "$SMTP_SERVER" ] ; then
-	EMAIL_VERIFICATION_REQUIRED=auth
+	EMAIL_VERIFICATION_REQUIRED='"auth"'
 fi
 
 # Enable TLS (httpS).
