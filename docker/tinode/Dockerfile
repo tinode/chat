@@ -9,7 +9,7 @@
 #	--env AUTH_TOKEN_KEY=base64+encoded+32+bytes \
 #	tinode-server
 
-FROM alpine:3.7
+FROM alpine:latest
 
 ARG VERSION=0.15
 ENV VERSION=$VERSION
@@ -51,19 +51,19 @@ ENV UID_ENCRYPTION_KEY=la6YsO+bNX/+XIkOqc5Svw==
 # Disable TLS by default.
 ENV TLS_ENABLED=false
 
+# Install root certificates. Needed for email validator to work
+# with the TLS SMTP servers like Gmail.
+RUN apk update && apk add --no-cache ca-certificates
+
 # Adding bash and grep as they are used here.
 RUN apk add --no-cache bash grep
 
 WORKDIR /opt/tinode
 
-# Install root certificates. Needed for email validator to work
-# with the TLS SMTP servers like Gmail.
-RUN apk update && apk add ca-certificates && rm -rf /var/cache/apk/*
-
 # Get the desired Tinode build.
 ADD https://github.com/tinode/chat/releases/download/v$VERSION/tinode-$TARGET_DB.linux-amd64.tar.gz .
 
-# Inpack the Tinode image.
+# Unpack the Tinode archive.
 RUN tar -xzf tinode-$TARGET_DB.linux-amd64.tar.gz \
 	&& rm tinode-$TARGET_DB.linux-amd64.tar.gz
 

@@ -80,7 +80,7 @@ You can specify the following environment variables when issuing `docker run` co
 | `TLS_DOMAIN_NAME` | string |  | If non-empty, enables TLS (http**s**) and configures domain name of your container, e.g. `www.example.com`. In order for TLS to work you have to expose your HTTPS port to the Internet and correctly configure DNS. It WILL FAIL with `localhost` or unroutable IPs. |
 | `UID_ENCRYPTION_KEY` | string | `la6YsO+bNX/+XIkOqc5Svw==` | base64-encoded 16 random bytes used as an encryption key for user IDs. |
 
-Unix-like systems offer a convenient way to generate a random base64-encoded string of desired length as
+A convenient way to generate a desired number of random bytes and base64-encode them on Linux and Mac:
 ```
 $ openssl rand -base64 <desired length>
 ```
