@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"encoding/json"
 	ht "html/template"
+	"log"
 	"math/rand"
 	"net/mail"
 	"net/smtp"
@@ -173,12 +174,15 @@ func (v *validator) Delete(user t.Uid) error {
 // Here are instructions for Google cloud:
 // https://cloud.google.com/appengine/docs/standard/go/mail/sending-receiving-with-mail-api
 func (v *validator) send(to, subj, body string) error {
-	return smtp.SendMail(v.SMTPAddr+":"+v.SMTPPort, v.auth, v.SendFrom, []string{to},
+	err := smtp.SendMail(v.SMTPAddr+":"+v.SMTPPort, v.auth, v.SendFrom, []string{to},
 		[]byte("To: "+to+
 			"\nSubject: "+
 			subj+
 			"\nMIME-version: 1.0;\nContent-Type: text/html; charset=\"UTF-8\";\n\n"+
 			body))
+	log.Println("Email validator error", err)
+
+	return err
 }
 
 func init() {

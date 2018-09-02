@@ -25,7 +25,12 @@ The goal of this project is to actually deliver on XMPP's original vision: creat
 
 ### Web
 
-A web demo is usually available at https://api.tinode.co/ ([source](https://github.com/tinode/example-react-js/)). Login as one of `alice`, `bob`, `carol`, `dave`, `frank`. Password is `<login>123`, e.g. login for `alice` is `alice123`. You can discover other users by email or phone by prefixing them with `email:` or `tel:` respectively. Emails are `<login>@example.com`, e.g. `alice@example.com`, phones are `17025550001` through `17025550009`.
+A web demo is usually available at https://api.tinode.co/ ([source](https://github.com/tinode/example-react-js/)).
+
+Login as one of `alice`, `bob`, `carol`, `dave`, `frank`. Password is `<login>123`, e.g. login for `alice` is `alice123`. You can discover other users by email or phone by prefixing them with `email:` or `tel:` respectively. Emails are `<login>@example.com`, e.g. `alice@example.com`, phones are `17025550001` through `17025550009`.
+
+If you register a new account you are asked for an email address to send validation code to. For demo purposes you may use `123456` as a universal validation code. The code you get in the email is also valid.
+
 
 [Docker images](https://hub.docker.com/u/tinode/).
 
