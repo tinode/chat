@@ -56,8 +56,14 @@ RUN apk add --no-cache bash grep
 
 WORKDIR /opt/tinode
 
+# Install root certificates. Needed for email validator to work
+# with the TLS SMTP servers like Gmail.
+RUN apk update && apk add ca-certificates && rm -rf /var/cache/apk/*
+
+# Get the desired Tinode build.
 ADD https://github.com/tinode/chat/releases/download/v$VERSION/tinode-$TARGET_DB.linux-amd64.tar.gz .
 
+# Inpack the Tinode image.
 RUN tar -xzf tinode-$TARGET_DB.linux-amd64.tar.gz \
 	&& rm tinode-$TARGET_DB.linux-amd64.tar.gz
 
@@ -65,7 +71,7 @@ RUN tar -xzf tinode-$TARGET_DB.linux-amd64.tar.gz \
 COPY config.template .
 COPY entrypoint.sh .
 
-# Directory for chatbot data
+# Create directory for chatbot data.
 RUN mkdir /botdata
 
 # Make scripts runnable

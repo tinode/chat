@@ -181,7 +181,10 @@ func (v *validator) send(to, subj, body string) error {
 			subj+
 			"\nMIME-version: 1.0;\nContent-Type: text/html; charset=\"UTF-8\";\n\n"+
 			body))
-	log.Println("Error sending validation email to", to, err)
+
+	if err != nil {
+		log.Println("Error sending validation email to", to, err)
+	}
 
 	return err
 }
