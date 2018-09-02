@@ -93,8 +93,9 @@ func (v *validator) PreCheck(cred string, params interface{}) error {
 		return t.ErrMalformed
 	}
 
-	_, err := mail.ParseAddress(cred)
-	if err != nil {
+	// The email must be plain user@domain.
+	addr, err := mail.ParseAddress(cred)
+	if err != nil || addr.Address != cred {
 		return t.ErrMalformed
 	}
 
@@ -180,7 +181,7 @@ func (v *validator) send(to, subj, body string) error {
 			subj+
 			"\nMIME-version: 1.0;\nContent-Type: text/html; charset=\"UTF-8\";\n\n"+
 			body))
-	log.Println("Email validator error", err)
+	log.Println("Error sending validation email to", to, err)
 
 	return err
 }
