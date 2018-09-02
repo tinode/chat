@@ -11,14 +11,17 @@
 
 FROM alpine:3.7
 
-ARG VERSION=0.14.5
+ARG VERSION=0.15
 ENV VERSION=$VERSION
 
 LABEL maintainer="Gene Sokolov <gene@tinode.co>"
 LABEL name="TinodeChatServer"
 LABEL version=$VERSION
 
-# Builds for RethinkDB by default. Alternatively use `--build-arg TARGET_DB=mysql` to build for MySQL.
+# Build-time options. 
+
+# Database selector. Builds for RethinkDB by default. 
+# Alternatively use `--build-arg TARGET_DB=mysql` to build for MySQL.
 ARG TARGET_DB=rethinkdb
 ENV TARGET_DB=$TARGET_DB
 
@@ -27,7 +30,7 @@ ENV TARGET_DB=$TARGET_DB
 # An option to reset database.
 ENV RESET_DB=false
 
-# The MYSQL DSN connection.
+# The MySQL DSN connection.
 ENV MYSQL_DSN='root@tcp(mysql)/tinode'
 
 # Disable chatbot plugin by default.
@@ -35,7 +38,8 @@ ENV PLUGIN_PYTHON_CHAT_BOT_ENABLED=false
 
 # Various encryption and salt keys. Replace with your own in production.
 
-# Key to sign API app ID.
+# Salt used to generate the API key. Don't change it unless you also change the 
+# API key in the webapp & Android.
 ENV API_KEY_SALT=T713/rYYgW7g4m3vG6zGRh7+FM1t0T8j13koXScOAj4=
 
 # Key used to sign authentication tokens.
