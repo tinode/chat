@@ -76,8 +76,8 @@ You can specify the following environment viriables when issuing `docker run` co
 | SMTP_SENDER | string |  | Email address to use in the `FROM` field of verification emails and for authenticationwith the SMTP server. |
 | SMTP_SERVER | string |  | Name of the SMTP server to use for sending verification emails, e.g. `"smtp.gmail.com"`. If SMTP_SERVER is not defined, email verification will be disabled. |
 | TLS_CONTACT_ADDRESS | string |  | Optional email address to use as contact for Lets Encrypt certificats. |
-| TLS_DOMAIN_NAME | string |  | Domain name of your container for TLS support |
-| TLS_ENABLED | bool | `false` | Controls if TRL (http**s**) is enabled. If enabled, a valid TLS_DOMAIN_NAME must be provided too. You also have to correctly configure DNS for your container. |
+| TLS_DOMAIN_NAME | string |  | If non-empty, enables TLS (http**s**) and configures domain name of your container. In order for TLS to work you have to correctly configure DNS for your container. |
+| TLS_ENABLED | bool | `false` |  |
 | UID_ENCRYPTION_KEY | string | `la6YsO+bNX/+XIkOqc5Svw==` | base64-encoded 16 random bytes used as an encryption key for user IDs. |
 
 Unix-like systems offer a convenient way to generate a random base64-encoded string of desired length as

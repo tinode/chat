@@ -3,7 +3,17 @@
 # Ensure the old config is removed
 rm -f working.config
 
-# Generate a new config from template and environment
+# Enable email verification if $SMTP_SERVER is defined.
+if [ ! -z "$SMTP_SERVER" ] ; then
+	EMAIL_VERIFICATION_REQUIRED=auth
+fi
+
+# Enable TLS (httpS).
+if [ ! -z "TLS_DOMAIN_NAME" ] ; then
+	TLS_ENABLED=true
+fi
+
+# Generate a new 'working.config' from template and environment
 while IFS='' read -r line || [[ -n $line ]] ; do
     while [[ "$line" =~ (\$[A-Z_][A-Z_0-9]*) ]] ; do
         LHS=${BASH_REMATCH[1]}

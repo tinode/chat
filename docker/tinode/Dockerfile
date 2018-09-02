@@ -44,6 +44,8 @@ ENV AUTH_TOKEN_KEY=wfaY2RgF2S1OQI/ZlK+LSrp1KB2jwAdGAIHQ7JZn+Kc=
 # Key to initialize UID generator
 ENV UID_ENCRYPTION_KEY=la6YsO+bNX/+XIkOqc5Svw==
 
+# Disable TLS by default.
+ENV TLS_ENABLED=false
 
 # Adding bash and grep as they are used here.
 RUN apk add --no-cache bash grep

@@ -20,13 +20,13 @@
 	},
 
 	"tls": {
-		"enabled": false,
+		"enabled": $TLS_ENABLED,
 		"http_redirect": ":80",
 		"strict_max_age": 604800,
 		"autocert": {
-			"cache": "/etc/letsencrypt/live/your.domain.name.here",
-			"email": "your-email-here@your-email-hoster-here.com",
-			"domains": ["-your.domain.name.here-"]
+			"cache": "/etc/letsencrypt/live/$TLS_DOMAIN_NAME",
+			"email": "$TLS_CONTACT_ADDRESS",
+			"domains": ["$TLS_DOMAIN_NAME"]
 		}
 	},
 
