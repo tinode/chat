@@ -66,8 +66,8 @@ You can specify the following environment viriables when issuing `docker run` co
 
 | Variable | Type | Default | Function |
 | --- | --- | --- | --- |
-| API_KEY_SALT | string | `T713/rYYgW7g4m3vG6zGRh\ 7+FM1t0T8j13koXScOAj4=` | base64-encoded 32 random bytes used as API salt. Use [keygen](../keygen) to create a personalized API key. |
-| AUTH_TOKEN_KEY | string | `wfaY2RgF2S1OQI/ZlK+LS\ rp1KB2jwAdGAIHQ7JZn+Kc=` | base64-encoded 32 random bytes used as salt for authentication tokens |
+| API_KEY_SALT | string | `T713/rYYgW7g4m3vG6zGRh 7+FM1t0T8j13koXScOAj4=` | base64-encoded 32 random bytes used as API salt. Use [keygen](../keygen) to create a personalized API key. |
+| AUTH_TOKEN_KEY | string | `wfaY2RgF2S1OQI/ZlK+LS rp1KB2jwAdGAIHQ7JZn+Kc=` | base64-encoded 32 random bytes used as salt for authentication tokens |
 | DEBUG_EMAIL_VERIFICATION_CODE | string |  | Enable dummy email verification code, e.g. `123456`. Disabled by default (empty string). |
 | MYSQL_DSN | string | `'root@tcp(mysql)/tinode'` | MySQL [DSN](https://github.com/go-sql-driver/mysql#dsn-data-source-name) |
 | RESET_DB | bool | `false` | Drop and recreate the database. |
