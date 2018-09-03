@@ -13,10 +13,9 @@ import sys
 
 from google.protobuf import json_format
 
-# Import generated modules from ../pbx/
-sys.path.append('../pbx')
-import model_pb2 as pb
-import model_pb2_grpc as pbx
+# Import generated grpc modules
+from tinode_grpc import pb
+from tinode_grpc import pbx
 
 APP_NAME = "tn-cli"
 VERSION = "0.15"
