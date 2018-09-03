@@ -92,7 +92,7 @@ Quotes are read from `quotes.txt` by default. The file is plain text with one qu
 
 **Warning!** Although the chatbot itself is less than 11KB, the chatbot Docker image is 175MB: the `:slim` Python 3 image is about 140MB, gRPC adds another ~30MB.
 
-1. Follow [instructions](../docker/README.md) to build and run dockerized Tinode chat server up to an including _step 3_.
+1. Follow [instructions](../docker/README.md) to build and run dockerized Tinode chat server up to and including _step 3_.
 
 2. In _step 4_ run the server adding `--env PLUGIN_PYTHON_CHAT_BOT_ENABLED=true` and `--volume botdata:/botdata` to the command line:
 	1. **RethinkDB**:
