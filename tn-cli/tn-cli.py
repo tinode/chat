@@ -7,6 +7,8 @@ import argparse
 import base64
 import grpc
 import json
+import pkg_resources
+import platform
 import random
 import shlex
 import sys
@@ -18,7 +20,8 @@ from tinode_grpc import pb
 from tinode_grpc import pbx
 
 APP_NAME = "tn-cli"
-VERSION = "0.15"
+APP_VERSION = "0.15"
+LIB_VERSION = pkg_resources.get_distribution("tinode_grpc").version
 
 # Dictionary wich contains lambdas to be executed when server response is received
 onCompletion = {}
@@ -71,8 +74,9 @@ def encode_to_bytes(src):
 # Constructing individual messages
 def hiMsg(id):
     onCompletion[str(id)] = lambda params: print_server_params(params)
-    return pb.ClientMsg(hi=pb.ClientHi(id=str(id), user_agent=APP_NAME + "/" + VERSION + " gRPC-python",
-        ver=VERSION, lang="EN"))
+    return pb.ClientMsg(hi=pb.ClientHi(id=str(id), user_agent=APP_NAME + "/" + APP_VERSION + " (" +
+        platform.system() + "/" + platform.release() + "); gRPC-python/" + LIB_VERSION,
+        ver=LIB_VERSION, lang="EN"))
 
 def accMsg(id, user, scheme, secret, uname, password, do_login, fn, photo, private, auth, anon, tags, cred):
     if secret == None and uname != None:
@@ -425,7 +429,7 @@ def print_server_params(params):
 
 if __name__ == '__main__':
     """Parse command-line arguments. Extract host name and authentication scheme, if one is provided"""
-    purpose = "Tinode command line client. Version " + VERSION + "."
+    purpose = "Tinode command line client. Version " + APP_VERSION + "/" + LIB_VERSION + "."
     print(purpose)
     parser = argparse.ArgumentParser(description=purpose)
     parser.add_argument('--host', default='localhost:6061', help='address of Tinode server')
