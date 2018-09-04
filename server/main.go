@@ -425,7 +425,7 @@ func main() {
 		// Resolve path to static content.
 		*staticPath = toAbsolutePath(rootpath, *staticPath)
 		if _, err = os.Stat(*staticPath); os.IsNotExist(err) {
-			log.Fatal("Static content directory is configured but does not exist", *staticPath)
+			log.Fatal("Static content directory is not found ", *staticPath)
 		}
 
 		staticMountPoint = config.StaticMount

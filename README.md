@@ -25,7 +25,7 @@ The goal of this project is to actually deliver on XMPP's original vision: creat
 
 ### Web
 
-A web demo is usually available at https://api.tinode.co/ ([source](https://github.com/tinode/example-react-js/)).
+A web demo is usually available at https://api.tinode.co/ ([source](https://github.com/tinode/webapp/)).
 
 Login as one of `alice`, `bob`, `carol`, `dave`, `frank`. Password is `<login>123`, e.g. login for `alice` is `alice123`. You can discover other users by email or phone by prefixing them with `email:` or `tel:` respectively. Emails are `<login>@example.com`, e.g. `alice@example.com`, phones are `17025550001` through `17025550009`.
 
@@ -36,7 +36,7 @@ If you register a new account you are asked for an email address to send validat
 
 ### Android
 
-[Android demo](https://github.com/tinode/android-example) is mostly stable and functional. See screenshots below. A [debug APK](https://github.com/tinode/android-example/releases/latest) is provided for convenience.
+[Android demo](https://github.com/tinode/tindroid) is mostly stable and functional. See screenshots below. A [debug APK](https://github.com/tinode/tindroid/releases/latest) is provided for convenience.
 
 ### Command Line
 
@@ -44,7 +44,7 @@ A text-only [command line client](./tn-cli) implements every possible command.
 
 ### Notes
 
-* The demo server is reset (all data wiped) every night at 3:15 am Pacific time. An error message `User not found or offline` means the server was reset while you were connected. If you see it on the web, reload and relogin; on Android delete the app then reinstall.
+* The demo server is reset (all data wiped) every night at 3:15am Pacific time. An error message `User not found or offline` means the server was reset while you were connected. If you see it on the web, reload and relogin. On Android log out and re-login. If the database was changed, delete the app then reinstall.
 
 * User `Tino` is a [basic chatbot](./chatbot) which responds with a [random quote](http://fortunes.cat-v.org/) to any message.
 
@@ -56,7 +56,7 @@ A text-only [command line client](./tn-cli) implements every possible command.
 
 ### Supported
 
-* [Android](https://github.com/tinode/android-example/), [web](https://github.com/tinode/example-react-js/), and [command line](tn-cli/) clients.
+* [Android](https://github.com/tinode/tindroid/), [web](https://github.com/tinode/webapp/), and [command line](tn-cli/) clients.
 * One-on-one messaging.
 * Group messaging with every member's access permissions managed individually. The maximum number of members is configurable (128 by default).
 * Topic access control with permissions for various actions.
@@ -88,6 +88,7 @@ A text-only [command line client](./tn-cli) implements every possible command.
 * Group messaging with unlimited number (or hundreds of thousands) of members with bearer token access control.
 * Hot standby.
 * Different levels of message persistence (from strict persistence to "store until delivered" to purely ephemeral messaging).
+* Push notification in the webapp.
 
 ## Screenshots
 
@@ -110,6 +111,16 @@ A text-only [command line client](./tn-cli) implements every possible command.
 </p>
 
 
-#### SEO Strings (word 'chat' in Chinese, Russian, and Persian)
+#### SEO Strings
 
-聊天室 чат گپ
+Words 'chat' and 'instant messaging' in Chinese, Russian, Persian and a few other languages.
+
+* 聊天室 即時通訊
+* чат мессенджер
+* インスタントメッセージ
+* 인스턴트 메신저
+پیام‌رسانی فوری گپ *
+تراسل فوري *
+* Nhắn tin tức thời
+* Mensageiro instantâneo
+* Pesan instan
