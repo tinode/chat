@@ -52,6 +52,7 @@ import (
 
 	// File upload handlers
 	_ "github.com/tinode/chat/server/media/fs"
+	_ "github.com/tinode/chat/server/media/aws"
 )
 
 const (
