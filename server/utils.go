@@ -389,99 +389,147 @@ func versionToString(vers int) string {
 	return str
 }
 
-// Parser for search queries. Parameters: Fnd.Private, Fnd.Tags. The query may contain non-ASCII
+// Parser for search queries. The query may contain non-ASCII
 // characters, i.e. length of string in bytes != length of string in runes.
 // Returns AND tags (all must be present in every result), OR tags (one or more present), error.
 func parseSearchQuery(query string) ([]string, []string, error) {
+	const (
+		NONE = iota
+		QUO
+		AND
+		OR
+		END
+		ORD
+	)
 	type token struct {
+		op  int
 		val string
-		op  string
 	}
 	type context struct {
-		val   string
+		// Pre-token operand
+		preOp int
+		// Post-token operand
+		postOp int
+		// Inside quoted string
+		quo bool
+		// Current token is a quoted string
+		unquote bool
+		// Start of the current token
 		start int
-		end   int
+		// End of the current token
+		end int
 	}
-	var ctx context
+	var ctx = context{preOp: AND}
 	var out []token
+	var prev int
 	query = strings.TrimSpace(query)
-	for i, w := 0, 0; i < len(query); i += w {
+	// Split query into tokens.
+	for i, w := 0, 0; prev != END; i += w {
+		//
+		var emit bool
+
+		// Lexer: get next rune.
 		var r rune
-		var newctx string
+		curr := ORD
 		r, w = utf8.DecodeRuneInString(query[i:])
-		if r == '"' {
-			newctx = "quo"
-		} else if ctx.val != "quo" {
+		if w == 0 {
+			curr = END
+		} else if r == '"' {
+			curr = QUO
+		} else if !ctx.quo {
 			if r == ' ' || r == '\t' {
-				newctx = "and"
+				curr = AND
 			} else if r == ',' {
-				newctx = "or"
-			} else if i+w == len(query) {
-				newctx = "end"
-				ctx.end = i + w
+				curr = OR
 			}
 		}
 
-		if newctx == "quo" {
-			if ctx.val == "quo" {
-				ctx.val = ""
-				ctx.end = i
+		if curr == QUO {
+			if ctx.quo {
+				// End of the quoted string. Close the quote.
+				ctx.quo = false
 			} else {
-				ctx.val = "quo"
-				ctx.start = i + w
+				// Start of the quoted string. Open the quote.
+				ctx.quo = true
+				ctx.unquote = true
 			}
-		} else if ctx.val == "or" || ctx.val == "and" {
-			ctx.end = 0
-			if newctx == "" {
-				if len(out) == 0 {
-					return nil, nil, errors.New("operator out of place " + ctx.val)
-				}
-				out[len(out)-1].op = ctx.val
-				ctx.val = ""
-				ctx.start = i
-
-			} else if ctx.val == "or" && newctx == "or" {
-				return nil, nil, errors.New("invalid operator sequence " + ctx.val)
-			} else if newctx == "or" {
-				// Switch context from "and" to "or", i.e. the case like ' ,' -> ','
-				ctx.val = "or"
-			}
-			// Do nothing for cases 'and and' -> 'and', 'or and' -> 'or'.
-		} else if ctx.val == "" && newctx != "" {
-			end := ctx.end
-			if end == 0 {
-				end = i
-			}
-			out = append(out, token{val: query[ctx.start:end], op: newctx})
-			ctx.val = newctx
-			ctx.start = i
+			curr = ORD
 		}
+
+		// Parser: process the current lexem in context.
+		switch curr {
+		case OR:
+			if ctx.postOp == OR {
+				// More than one comma: ' , ,,'
+				return nil, nil, errors.New("invalid operator sequence")
+			}
+			// Ensure context is not "and", i.e. the case like ' ,' -> ','
+			ctx.postOp = OR
+			if prev == ORD {
+				// Close the current token.
+				ctx.end = i
+			}
+		case AND:
+			if prev == ORD {
+				// Close the current token.
+				ctx.end = i
+				ctx.postOp = AND
+			} else if ctx.postOp != OR {
+				// "and" does not change the "or" context.
+				ctx.postOp = AND
+			}
+		case ORD:
+			if prev == OR || prev == AND {
+				// Ordinary character after a comma or a space: ' a' or ',a'.
+				// Emit without changing the operation.
+				emit = true
+			}
+		case END:
+			if prev == ORD {
+				// Close the current token.
+				ctx.end = i
+			}
+			emit = true
+		}
+
+		if emit {
+			if ctx.quo {
+				return nil, nil, errors.New("unterminated quoted string")
+			}
+
+			// Emit the new token.
+			op := ctx.preOp
+			if ctx.postOp == OR {
+				op = OR
+			}
+			start, end := ctx.start, ctx.end
+			if ctx.unquote {
+				start++
+				end--
+			}
+			if start < end {
+				out = append(out, token{val: query[start:end], op: op})
+			}
+			ctx.start = i
+			ctx.preOp = ctx.postOp
+			ctx.postOp = NONE
+			ctx.unquote = false
+		}
+
+		prev = curr
 	}
 
-	if ctx.val != "" && ctx.val != "end" {
-		return nil, nil, errors.New("unexpected terminal context '" + ctx.val + "'")
-	}
-
-	xlen := len(out)
-	if xlen == 0 {
+	if len(out) == 0 {
 		return nil, nil, nil
-	}
-
-	if xlen == 1 {
-		out[xlen-1].op = "and"
-	} else {
-		out[xlen-1].op = out[xlen-2].op
 	}
 
 	var and, or []string
 	for _, t := range out {
 		switch t.op {
-		case "and":
+		case AND:
 			and = append(and, t.val)
-		case "or":
+		case OR:
 			or = append(or, t.val)
-		default:
-			panic("invalid operation ='" + t.op + "', val='" + t.val + "'")
 		}
 	}
 	return and, or, nil

@@ -19,6 +19,7 @@
 		- [`me` topic](#me-topic)
 		- [`fnd` and Tags: Finding Users and Topics](#fnd-and-tags-finding-users-and-topics)
 			- [Query language](#query-language)
+			- [Incremental updates to queries](#incremental-updates-to-queries)
 			- [Some use cases](#some-use-cases)
 		- [Peer to Peer Topics](#peer-to-peer-topics)
 		- [Group Topics](#group-topics)
@@ -265,11 +266,11 @@ Topic `fnd` is automatically created for every user at the account creation time
 
 Users and group topics can be discovered by optional `tags`. Tags are optionally assigned at the topic or user creation time then can be updated by using `{set what="tags"}` against a `fnd` or a group topic.
 
-A tag is an arbitrary case-insensitive Unicode string (forced to lowercase) starting with a Unicode letter or digit. `Tags` must not contain the double quote `"`, `\u0022` but may contain spaces. `Tags` may have a prefix which serves as a namespace. The prefix is a string followed by a colon `:`, ex. prefixed phone tag `tel:14155551212` or prefixed email tag `email:alice@example.com`. Some prefixed `tags` are optionally enforced to be unique. In that case only one user or topic may have such a tag. Certain `tags` may be forced to be immutable to the user, i.e. user's attemps to add or remove an immutable tag will be rejected by the server.
+A tag is an arbitrary case-insensitive Unicode string (forced to lowercase) starting with a Unicode letter or digit. `Tags` must not contain the double quote `"`, `\u0022` but may contain spaces. `Tags` may have a prefix which serves as a namespace. The prefix is a string followed by a colon `:`, ex. prefixed phone tag `tel:14155551212` or prefixed email tag `email:alice@example.com`. Some prefixed `tags` are optionally enforced to be unique. In that case only one user or topic may have such a tag. Certain `tags` may be forced to be immutable to the user, i.e. user's attempts to add or remove an immutable tag will be rejected by the server.
 
-The `tags` are indexed server-side and used in user and topic discovery. Seach returns users and topics sorted by the number of matched tags in descending order.
+The `tags` are indexed server-side and used in user and topic discovery. Search returns users and topics sorted by the number of matched tags in descending order.
 
-In order to find users or topics, a user sets either `public` or `private` parameter of the `fnd` topic to a search query (see [Query language](#query-language)) then issues a `{get topic="fnd" what="sub"}` request. If both `public` and `private` are set, the `public` query is used. The `private` query is persisted accress sessions and devices, i.e. all user's sessions see the same `private` query. The value of the `public` query is ephemeral, i.e. it's not saved to database and not shared between user's sessions. The `private` query is intended for large queries which do not change often, such as finding matches for everyone in user's contact list on a mobile phone. The `public` query is intended to be short and specific, such as finding some topic or a user who is not in the contact list.
+In order to find users or topics, a user sets either `public` or `private` parameter of the `fnd` topic to a search query (see [Query language](#query-language)) then issues a `{get topic="fnd" what="sub"}` request. If both `public` and `private` are set, the `public` query is used. The `private` query is persisted across sessions and devices, i.e. all user's sessions see the same `private` query. The value of the `public` query is ephemeral, i.e. it's not saved to database and not shared between user's sessions. The `private` query is intended for large queries which do not change often, such as finding matches for everyone in user's contact list on a mobile phone. The `public` query is intended to be short and specific, such as finding some topic or a user who is not in the contact list.
 
 The system responds with a `{meta}` message with the `sub` section listing details of the found users or topics formatted as subscriptions.
 
@@ -281,19 +282,24 @@ Topic `fnd` is read-only. `{pub}` messages to `fnd` are rejected.
 
 #### Query language
 
-Tinode query language is used to define search queries for finding users and topics. The query is a string containing tags separated by spaces or commas. Tags are strings - individual query terms which are matched against user's or topic's tags. The tags can be written in an RTL language but the query as a whole is parsed left to right. Spaces are treated as the `AND` operator, commas (as well commas preceded and/or followed by a space) as the `OR` operator. The order of operators is ignored: all `AND` operators are grouped together, all `OR` operators are grouped together. `OR` takes precedence over `AND`.
+Tinode query language is used to define search queries for finding users and topics. The query is a string containing tags separated by spaces or commas. Tags are strings - individual query terms which are matched against user's or topic's tags. The tags can be written in an RTL language but the query as a whole is parsed left to right. Spaces are treated as the `AND` operator, commas (as well commas preceded and/or followed by a space) as the `OR` operator. The order of operators is ignored: all `AND` operators are grouped together, all `OR` operators are grouped together. `OR` takes precedence over `AND`: if a tag is preceded of followed by a comma, it's an `OR` tag, otherwise an `AND`. For example, `a AND b OR c` is rewritten as `(b OR c) AND a`.
 
 Tags containing spaces or commas must be enclosed in double quotes (`"`, `\u0022`): i.e. `"abc, def"` is treated as a single token. Tags must start with a Unicode letter or digit. Tags must not contain the double quote (`"`, `\u0022`).
 
 **Some examples:**
 * `flowers travel`: find topics or users which contain both tags `flowers` and `travel`.
 * `flowers, travel`: find topics or users which contain either tag `flowers` or `travel` (or both).
-* `flowers travel, puppies`: find topics or users which contain `flowers` and either `travel` or `puppies`, i.e. `flowers AND (travel OR puppies)`.
+* `flowers travel, puppies`: find topics or users which contain `flowers` and either `travel` or `puppies`, i.e. `(travel OR puppies) AND flowers`.
 
+#### Incremental updates to queries
 
-#### Some use cases
-* Restricting users to organizations.
-  An immutable tag(s) may be assigned to the user which denotes the organization the user belons to. When the user searches for other users or topics, the search can be restricted to always contain the tag. This approach can be used to segment users into organizations with limited visiblity into each other.
+Queries, particularly `fnd.private` could be arbitrarily large, limited only by the message size and by the underlying database. Instead of rewriting the entire query to add or remove a tag, tag can be added or removed incrementally.
+
+The incremental update request is processed left to right. It may contain the same tag multiple times, i.e. `-tag+tag` is a valid request.
+
+#### Possible use cases
+* Restricting users to organisations.
+  An immutable tag(s) may be assigned to the user which denotes the organisation the user belongs to. When the user searches for other users or topics, the search can be restricted to always contain the tag. This approach can be used to segment users into organisations with limited visibility into each other.
 
 * Search by geographical location.
   Client software may periodically assign a [geohash](https://en.wikipedia.org/wiki/Geohash) tag to the user based on current location. Searching for users in a given area would mean matching on geohash tags.
@@ -352,10 +358,10 @@ vcard: {
     surname: "Miner", // last of family name
     given: "Coal", // first or given name
     additional: "Diamond", // additional name, such as middle name or patronymic or nickname.
-    prefix: "Dr.", // prefix, such as homnorary title or gender designation.
+    prefix: "Dr.", // prefix, such as honorary title or gender designation.
     suffix: "Jr.", // suffix, such as 'Jr' or 'II'
   }, // object, user's structured name
-  org: "Most Evil Corp", // string, name of the organization the user belongs to.
+  org: "Most Evil Corp", // string, name of the organisation the user belongs to.
   title: "CEO", // string, job title
   tel: [
     {
@@ -468,7 +474,7 @@ pub: {
 }
 ```
 
-It's important to list the URLs in the `head.attachments` field. Tinode server uses this field to maintain the uploaded file's use counter. Once the use counter drops to zero for a given file (for instance, because a message with the shared URL was deleted or because the client failed to include the URl in the `head.attachments` field), the server will garbage collect the file. Only relative URLs should be used. Absolute URLs in the `head.attachments` field are ignored.
+It's important to list the URLs in the `head.attachments` field. Tinode server uses this field to maintain the uploaded file's use counter. Once the use counter drops to zero for a given file (for instance, because a message with the shared URL was deleted or because the client failed to include the URL in the `head.attachments` field), the server will garbage collect the file. Only relative URLs should be used. Absolute URLs in the `head.attachments` field are ignored.
 
 ### Downloading
 
@@ -478,7 +484,7 @@ The serving endpoint `/v0/file/s` serves files in response to HTTP GET requests.
 
 A message is a logically associated set of data. Messages are passed as JSON-formatted UTF-8 text.
 
-All client to server messages may have an optional `id` field. It's set by the client as means to receive an aknowledgement from the server that the message was received and processed. The `id` is expected to be a session-unique string but it can be any string. The server does not attempt to interpret it other than to check JSON validity. It's returned unchanged by the server when it replies to client messages.
+All client to server messages may have an optional `id` field. It's set by the client as means to receive an acknowledgement from the server that the message was received and processed. The `id` is expected to be a session-unique string but it can be any string. The server does not attempt to interpret it other than to check JSON validity. It's returned unchanged by the server when it replies to client messages.
 
 Server requires strictly valid JSON, including double quotes around field names. For brevity the notation below omits double quotes around field names as well as outer curly brackets.
 
@@ -536,8 +542,8 @@ acc: {
 	...
   ],   // account credentials which require verification, such as email or phone number.
 
-  desc: {  // object, user initialization data closely matching that of table
-           // initialization; optional
+  desc: {  // object, user initialisation data closely matching that of table
+           // initialisation; optional
     defacs: {
       auth: "JRWS", // string, default access mode for peer to peer conversations
                    // between this user and other authenticated users
@@ -611,7 +617,7 @@ sub: {
   id: "1a2b3",  // string, client-provided message id, optional
   topic: "me",   // topic to be subscribed or attached to
 
-  // Object with topic initialization data, new topics & new
+  // Object with topic initialisation data, new topics & new
   // subscriptions only, mirrors {set} message
   set: {
 	// New topic parameters, mirrors {set desc}
@@ -848,7 +854,7 @@ del: {
 }
 ```
 
-User can soft-delete or hard-delete messages `what="msg"`. Soft-deleting messages hides them from the requesting user but does not delete them from storage. An `R` permission is required to soft-delete messages `hard=false` (default). Messages can be deleted in bulk by sepcifying one or more message ID ranges in `delseq` parameter. Hard-deleting messages deletes them from storage affecting all users. The `D` permission is needed to hard-delete messages.
+User can soft-delete or hard-delete messages `what="msg"`. Soft-deleting messages hides them from the requesting user but does not delete them from storage. An `R` permission is required to soft-delete messages `hard=false` (default). Messages can be deleted in bulk by specifying one or more message ID ranges in `delseq` parameter. Hard-deleting messages deletes them from storage affecting all users. The `D` permission is needed to hard-delete messages.
 
 Deleting a subscription `what="sub"` removes specified user from topic subscribers. It requires an `A` permission. A user cannot delete own subscription. A `{leave}` should be used instead.
 
@@ -870,7 +876,7 @@ note: {
 }
 ```
 
-The following actions are currently recognized:
+The following actions are currently recognised:
  * kp: key press, i.e. a typing notification. The client should use it to indicate that the user is composing a new message.
  * recv: a `{data}` message is received by the client software but not yet seen by user.
  * read: a `{data}` message is seen by the user. It implies `recv` as well.
@@ -954,7 +960,7 @@ meta: {
                // of a deleted message, optional
     public: { ... }, // application-defined data that's available to all topic
                      // subscribers
-    private: { ...} // application-deinfed data that's available to the current
+    private: { ...} // application-defined data that's available to the current
                     // user only
   }, // object, topic description, optional
   sub:  [ // array of objects, topic subscribers or user's subscriptions, optional
