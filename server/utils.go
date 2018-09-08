@@ -511,6 +511,7 @@ func parseSearchQuery(query string) ([]string, []string, error) {
 				start++
 				end--
 			}
+			// Add token if non-empty.
 			if start < end {
 				out = append(out, token{val: query[start:end], op: op})
 			}
@@ -527,6 +528,7 @@ func parseSearchQuery(query string) ([]string, []string, error) {
 		return nil, nil, nil
 	}
 
+	// Convert tokens to two string slices.
 	var and, or []string
 	for _, t := range out {
 		switch t.op {
