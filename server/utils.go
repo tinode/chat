@@ -449,6 +449,10 @@ func parseSearchQuery(query string) ([]string, []string, error) {
 				// End of the quoted string. Close the quote.
 				ctx.quo = false
 			} else {
+				if prev == ORD {
+					// Reject strings like a"b
+					return nil, nil, errors.New("missing operator")
+				}
 				// Start of the quoted string. Open the quote.
 				ctx.quo = true
 				ctx.unquote = true
