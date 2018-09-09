@@ -8,7 +8,7 @@ import (
 	"github.com/tinode/chat/server/store/types"
 )
 
-// ReadSeekCloser is an interface expected by the downloader.
+// ReadSeekCloser must be implemented by the media being downloaded.
 type ReadSeekCloser interface {
 	io.Reader
 	io.Seeker

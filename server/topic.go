@@ -41,10 +41,12 @@ type Topic struct {
 	// 4. shut down the topic at master's request.
 	isProxy bool
 
-	// Time when the topic was first created
+	// Time when the topic was first created.
 	created time.Time
-	// Time when the topic was last updated
+	// Time when the topic was last updated.
 	updated time.Time
+	// Time of the last outgoing message.
+	touched time.Time
 
 	// Server-side ID of the last data message
 	lastID int
@@ -305,6 +307,7 @@ func (t *Topic) run(hub *Hub) {
 				}
 
 				t.lastID++
+				t.touched = msg.Data.Timestamp
 				msg.Data.SeqId = t.lastID
 
 				if msg.id != "" {
@@ -1237,8 +1240,9 @@ func (t *Topic) replyGetDesc(sess *Session, id, tempName string, opts *MsgGetOpt
 		// Don't report message IDs to users without Read access.
 		if (pud.modeGiven & pud.modeWant).IsReader() {
 			desc.SeqId = t.lastID
-			// FIXME: report touchedAt
-			// desc.TouchedAt = t.touchedAt or pud.touchedAt
+			if !t.touched.IsZero() {
+				desc.TouchedAt = &t.touched
+			}
 
 			// Make sure reported values are sane:
 			// t.delID <= pud.delID; t.readID <= t.recvID <= t.lastID

@@ -298,8 +298,8 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		t.created = user.CreatedAt
 		t.updated = user.UpdatedAt
 
-		// t.lastId = user.SeqId
-		// t.delId = user.DelId
+		// The following values are exlicitly not set for 'me'.
+		// t.touched, t.lastId, t.delId
 
 		// Initiate User Agent with the UA of the creating session to report it later
 		t.userAgent = sreg.sess.userAgent
@@ -345,7 +345,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		t.updated = user.UpdatedAt
 
 		// Publishing to fnd is not supported
-		// t.lastId = 0
+		// t.lastId = 0, t.delId = 0, t.touched = nil
 
 		// Request to load an existing or create a new p2p topic, then attach to it.
 	} else if strings.HasPrefix(t.xoriginal, "usr") || strings.HasPrefix(t.xoriginal, "p2p") {
@@ -387,7 +387,9 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 
 			t.created = stopic.CreatedAt
 			t.updated = stopic.UpdatedAt
-
+			if stopic.TouchedAt != nil {
+				t.touched = *stopic.TouchedAt
+			}
 			t.lastID = stopic.SeqId
 			t.delID = stopic.DelId
 		}
@@ -570,6 +572,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 
 				t.created = sub1.CreatedAt
 				t.updated = sub1.UpdatedAt
+				t.touched = t.updated
 
 				// t.lastId is not set (default 0) for new topics
 
@@ -686,13 +689,14 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 
 		t.perUser[t.owner] = userData
 
-		t.created = timestamp
-		t.updated = timestamp
-
 		// Assign tags
 		t.tags = tags
 
-		// t.lastId & t.clearId are not set for new topics
+		t.created = timestamp
+		t.updated = timestamp
+		t.touched = timestamp
+
+		// t.lastId & t.delId are not set for new topics
 
 		stopic := &types.Topic{
 			ObjHeader: types.ObjHeader{Id: sreg.topic, CreatedAt: timestamp},
@@ -747,7 +751,9 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 
 		t.created = stopic.CreatedAt
 		t.updated = stopic.UpdatedAt
-
+		if stopic.TouchedAt != nil {
+			t.touched = *stopic.TouchedAt
+		}
 		t.lastID = stopic.SeqId
 		t.delID = stopic.DelId
 
