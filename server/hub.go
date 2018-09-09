@@ -372,7 +372,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		var subs []types.Subscription
 		if stopic != nil {
 			// Subs already have Public swapped
-			if subs, err = store.Topics.GetSubs(t.name, nil); err != nil {
+			if subs, err = store.Topics.GetUsers(t.name, nil); err != nil {
 				log.Println("hub: cannot load subscritions for '" + t.name + "' (" + err.Error() + ")")
 				sreg.sess.queueOut(ErrUnknown(sreg.pkt.Id, t.xoriginal, timestamp))
 				return
@@ -405,6 +405,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		if stopic != nil && len(subs) == 2 {
 			// Case 4.
 			for i := 0; i < 2; i++ {
+
 				uid := types.ParseUid(subs[i].User)
 				t.perUser[uid] = perUserData{
 					// Adapter already swapped the public values

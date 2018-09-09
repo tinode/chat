@@ -1237,8 +1237,8 @@ func (t *Topic) replyGetDesc(sess *Session, id, tempName string, opts *MsgGetOpt
 		// Don't report message IDs to users without Read access.
 		if (pud.modeGiven & pud.modeWant).IsReader() {
 			desc.SeqId = t.lastID
-			// FIXME: report TouchedAt
-			// desc.TouchedAt = t.touchedAt
+			// FIXME: report touchedAt
+			// desc.TouchedAt = t.touchedAt or pud.touchedAt
 
 			// Make sure reported values are sane:
 			// t.delID <= pud.delID; t.readID <= t.recvID <= t.lastID
