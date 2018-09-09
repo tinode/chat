@@ -15,6 +15,12 @@
 		"handlers": {
 			"fs": {
 				"upload_to": "uploads"
+			},
+			"aws":{
+                "access_key_id":"your_aws_s3_access_key_id",
+                "secret_access_key":"your_aws_s3_secret_access_key",
+                "region":"your_s3_region",
+                "bucket":"your_s3_bucket"
 			}
 		}
 	},
