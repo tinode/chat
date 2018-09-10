@@ -228,9 +228,9 @@ func main() {
 
 	var config configType
 	if file, err := os.Open(*configfile); err != nil {
-		log.Fatal("Failed to read config file:", err)
+		log.Fatal("Failed to read config file: ", err)
 	} else if err = json.NewDecoder(jcr.New(file)).Decode(&config); err != nil {
-		log.Fatal("Failed to parse config file:", err)
+		log.Fatal("Failed to parse config file: ", err)
 	}
 
 	if *listenOn != "" {
@@ -246,13 +246,13 @@ func main() {
 
 		cpuf, err := os.Create(*pprofFile + ".cpu")
 		if err != nil {
-			log.Fatal("Failed to create CPU pprof file:", err)
+			log.Fatal("Failed to create CPU pprof file: ", err)
 		}
 		defer cpuf.Close()
 
 		memf, err := os.Create(*pprofFile + ".mem")
 		if err != nil {
-			log.Fatal("Failed to create Mem pprof file:", err)
+			log.Fatal("Failed to create Mem pprof file: ", err)
 		}
 		defer memf.Close()
 
@@ -314,7 +314,7 @@ func main() {
 		if val := store.GetValidator(name); val == nil {
 			log.Fatal("Config provided for an unknown validator '" + name + "'")
 		} else if err = val.Init(string(vconf.Config)); err != nil {
-			log.Fatal("Failed to init validator '"+name+"':", err)
+			log.Fatal("Failed to init validator '"+name+"': ", err)
 		}
 		if globals.validators == nil {
 			globals.validators = make(map[string]credValidator)
@@ -370,7 +370,7 @@ func main() {
 					conf = string(params)
 				}
 				if err = store.UseMediaHandler(config.Media.UseHandler, conf); err != nil {
-					log.Fatal("Failed to init media handler", config.Media.UseHandler, err)
+					log.Fatalf("Failed to init media handler '%s': %s", config.Media.UseHandler, err)
 				}
 			}
 			if config.Media.GcPeriod > 0 && config.Media.GcBlockSize > 0 {
@@ -386,7 +386,7 @@ func main() {
 
 	err = push.Init(string(config.Push))
 	if err != nil {
-		log.Fatal("Failed to initialize push notifications:", err)
+		log.Fatal("Failed to initialize push notifications: ", err)
 	}
 	defer func() {
 		push.Stop()

@@ -22,13 +22,13 @@ type Handler interface {
 
 	// Check if redirect is required.
 	// Redirect can be used to serve files from a different external server.
-	Redirect(url string) string
+	Redirect(upload bool, url string) (string, error)
 
 	// Upload processes request for file upload.
 	Upload(fdef *types.FileDef, file io.ReadSeeker) (string, error)
 
 	// Download processes request for file download.
-	Download(url string) (*types.FileDef, io.ReadCloser, error)
+	Download(url string) (*types.FileDef, ReadSeekCloser, error)
 
 	// Delete deletes file from storage.
 	Delete(locations []string) error

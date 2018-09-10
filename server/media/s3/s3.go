@@ -9,6 +9,7 @@ import (
 	"path"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
@@ -17,6 +18,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 
+	"github.com/tinode/chat/server/media"
 	"github.com/tinode/chat/server/store"
 	"github.com/tinode/chat/server/store/types"
 )
@@ -102,9 +104,23 @@ func (ah *awshandler) Init(jsconf string) error {
 }
 
 // Redirect is used when one wants to serve files from a different external server.
-func (ah awshandler) Redirect(url string) string {
-	// Not supported.
-	return ""
+func (ah *awshandler) Redirect(upload bool, url string) (string, error) {
+	if upload {
+		return "", nil
+	}
+
+	fid := ah.GetIdFromUrl(url)
+	if fid.IsZero() {
+		return "", types.ErrNotFound
+	}
+
+	req, _ := ah.svc.GetObjectRequest(&s3.GetObjectInput{
+		Bucket: aws.String(ah.conf.BucketName),
+		Key:    aws.String(fid.String32()),
+	})
+
+	// Presign for 5 minutes.
+	return req.Presign(5 * time.Minute)
 }
 
 // Upload processes request for a file upload. The file is given as io.Reader.
@@ -156,32 +172,33 @@ func (ah *awshandler) Upload(fdef *types.FileDef, file io.ReadSeeker) (string, e
 
 // Download processes request for file download.
 // The returned ReadSeekCloser must be closed after use.
-func (ah *awshandler) Download(url string) (*types.FileDef, io.ReadCloser, error) {
-
-	fid := ah.GetIdFromUrl(url)
-	if fid.IsZero() {
-		return nil, nil, types.ErrNotFound
-	}
-	fd, err := ah.getFileRecord(fid)
-	if err != nil {
-		log.Println("aws download: file not found", fid)
-		return nil, nil, err
-	}
-
-	result, err := ah.svc.GetObject(&s3.GetObjectInput{
-		Bucket: aws.String(ah.conf.BucketName),
-		Key:    aws.String(fd.Uid().String32()),
-	})
-	if err != nil {
-		if aerr, ok := err.(awserr.Error); ok && aerr.Code() == s3.ErrCodeNoSuchKey {
-			err = types.ErrNotFound
+func (ah *awshandler) Download(url string) (*types.FileDef, media.ReadSeekCloser, error) {
+	/*
+		fid := ah.GetIdFromUrl(url)
+		if fid.IsZero() {
+			return nil, nil, types.ErrNotFound
+		}
+		fd, err := ah.getFileRecord(fid)
+		if err != nil {
+			log.Println("aws download: file not found", fid)
+			return nil, nil, err
 		}
 
-		log.Println("aws download: read error ", err.Error())
-		return nil, nil, err
-	}
+		result, err := ah.svc.GetObject(&s3.GetObjectInput{
+			Bucket: aws.String(ah.conf.BucketName),
+			Key:    aws.String(fd.Uid().String32()),
+		})
+		if err != nil {
+			if aerr, ok := err.(awserr.Error); ok && aerr.Code() == s3.ErrCodeNoSuchKey {
+				err = types.ErrNotFound
+			}
 
-	return fd, result.Body, nil
+			log.Println("aws download: read error ", err.Error())
+			return nil, nil, err
+		}
+		return fd, result.Body, nil
+	*/
+	return nil, nil, types.ErrUnsupported
 }
 
 // Delete deletes files from aws by provided slice of locations.

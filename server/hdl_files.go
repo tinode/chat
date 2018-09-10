@@ -26,16 +26,6 @@ func largeFileServe(wrt http.ResponseWriter, req *http.Request) {
 	enc := json.NewEncoder(wrt)
 	mh := store.GetMediaHandler()
 
-	//Check if media handler requests redirection to another service.
-	if redirTo := mh.Redirect(req.URL.String()); redirTo != "" {
-		wrt.Header().Set("Location", redirTo)
-		wrt.Header().Set("Content-Type", "application/json; charset=utf-8")
-		wrt.WriteHeader(http.StatusFound)
-		enc.Encode(InfoFound("", "", now))
-		log.Println("media serve redirected", redirTo)
-		return
-	}
-
 	writeHttpResponse := func(msg *ServerComMessage, err error) {
 		// Gorilla CompressHandler requires Content-Type to be set.
 		wrt.Header().Set("Content-Type", "application/json; charset=utf-8")
@@ -67,6 +57,19 @@ func largeFileServe(wrt http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	// Check if media handler requests redirection to another service.
+	if redirTo, err := mh.Redirect(false, req.URL.String()); redirTo != "" {
+		wrt.Header().Set("Location", redirTo)
+		wrt.Header().Set("Content-Type", "application/json; charset=utf-8")
+		wrt.WriteHeader(http.StatusFound)
+		enc.Encode(InfoFound("", "", now))
+		log.Println("media serve redirected", redirTo)
+		return
+	} else if err != nil {
+		writeHttpResponse(decodeStoreError(err, "", "", now, nil), err)
+		return
+	}
+
 	fd, rsc, err := mh.Download(req.URL.String())
 	if err != nil {
 		writeHttpResponse(decodeStoreError(err, "", "", now, nil), err)
@@ -89,17 +92,6 @@ func largeFileUpload(wrt http.ResponseWriter, req *http.Request) {
 	enc := json.NewEncoder(wrt)
 	mh := store.GetMediaHandler()
 
-	// Check if uploads are handled elsewhere.
-	if redirTo := mh.Redirect(req.URL.String()); redirTo != "" {
-		wrt.Header().Set("Location", redirTo)
-		wrt.Header().Set("Content-Type", "application/json; charset=utf-8")
-		wrt.WriteHeader(http.StatusFound)
-		enc.Encode(InfoFound("", "", now))
-
-		log.Println("media upload redirected", redirTo)
-		return
-	}
-
 	writeHttpResponse := func(msg *ServerComMessage, err error) {
 		// Gorilla CompressHandler requires Content-Type to be set.
 		wrt.Header().Set("Content-Type", "application/json; charset=utf-8")
@@ -109,8 +101,8 @@ func largeFileUpload(wrt http.ResponseWriter, req *http.Request) {
 		log.Println("media upload", msg.Ctrl.Code, msg.Ctrl.Text, err)
 	}
 
-	// Check if this is a POST request
-	if req.Method != http.MethodPost {
+	// Check if this is a POST or a PUT request.
+	if req.Method != http.MethodPost && req.Method != http.MethodPut {
 		writeHttpResponse(ErrOperationNotAllowed("", "", now), nil)
 		return
 	}
@@ -140,6 +132,20 @@ func largeFileUpload(wrt http.ResponseWriter, req *http.Request) {
 	if uid.IsZero() {
 		// Not authenticated
 		writeHttpResponse(ErrAuthRequired(msgID, "", now), nil)
+		return
+	}
+
+	// Check if uploads are handled elsewhere.
+	if redirTo, err := mh.Redirect(true, req.URL.String()); redirTo != "" {
+		wrt.Header().Set("Location", redirTo)
+		wrt.Header().Set("Content-Type", "application/json; charset=utf-8")
+		wrt.WriteHeader(http.StatusFound)
+		enc.Encode(InfoFound("", "", now))
+
+		log.Println("media upload redirected", redirTo)
+		return
+	} else if err != nil {
+		writeHttpResponse(decodeStoreError(err, "", "", now, nil), err)
 		return
 	}
 

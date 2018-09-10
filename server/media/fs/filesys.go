@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/tinode/chat/server/media"
 	"github.com/tinode/chat/server/store"
 	"github.com/tinode/chat/server/store/types"
 )
@@ -56,9 +57,9 @@ func (fh *fshandler) Init(jsconf string) error {
 }
 
 // Redirect is used when one wants to serve files from a different external server.
-func (fshandler) Redirect(url string) string {
+func (fshandler) Redirect(upload bool, url string) (string, error) {
 	// This handler does not use redirects.
-	return ""
+	return "", nil
 }
 
 // Upload processes request for file upload. The file is given as io.Reader.
@@ -108,7 +109,7 @@ func (fh *fshandler) Upload(fdef *types.FileDef, file io.ReadSeeker) (string, er
 
 // Download processes request for file download.
 // The returned ReadSeekCloser must be closed after use.
-func (fh *fshandler) Download(url string) (*types.FileDef, io.ReadCloser, error) {
+func (fh *fshandler) Download(url string) (*types.FileDef, media.ReadSeekCloser, error) {
 	fid := fh.GetIdFromUrl(url)
 	if fid.IsZero() {
 		return nil, nil, types.ErrNotFound
