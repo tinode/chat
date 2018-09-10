@@ -69,7 +69,12 @@ You can specify the following environment variables when issuing `docker run` co
 | Variable | Type | Default | Function |
 | --- | --- | --- | --- |
 | `AUTH_TOKEN_KEY` | string | `wfaY2RgF2S1OQI/ZlK+LS​rp1KB2jwAdGAIHQ7JZn+Kc=` | base64-encoded 32 random bytes used as salt for authentication tokens. |
+| `AWS_ACCESS_KEY_ID` | string |  | AWS Access Key ID when using `s3` media handler |
+| `AWS_REGION` | string |  | AWS Region when using `s3` media handler |
+| `AWS_S3_BUCKET` | string |  | Name of the AWS S3 bucket when using `s3` media handler |
+| `AWS_SECRET_ACCESS_KEY` | string |  | AWS [Secret Access Key](https://aws.amazon.com/blogs/security/wheres-my-secret-access-key/) when using `s3` media handler |
 | `DEBUG_EMAIL_VERIFICATION_CODE` | string |  | Enable dummy email verification code, e.g. `123456`. Disabled by default (empty string). |
+| `MEDIA_HANDLER` | string | `fs` | Handler of large files, either `fs` or `s3` |
 | `MYSQL_DSN` | string | `'root@tcp(mysql)/tinode'` | MySQL [DSN](https://github.com/go-sql-driver/mysql#dsn-data-source-name). |
 | `RESET_DB` | bool | `false` | Drop and recreate the database. |
 | `SMTP_PASSWORD` | string |  | Password to use for authentication with the SMTP server. |

@@ -8,19 +8,19 @@
 	"max_tag_count": 16,
 
 	"media": {
-		"use_handler": "fs",
+		"use_handler": "$MEDIA_HANDLER",
 		"max_size": 33554432,
 		"gc_period": 60,
 		"gc_block_size": 100,
 		"handlers": {
 			"fs": {
-				"upload_to": "uploads"
+				"upload_dir": "uploads"
 			},
-			"aws":{
-                "access_key_id":"your_aws_s3_access_key_id",
-                "secret_access_key":"your_aws_s3_secret_access_key",
-                "region":"your_s3_region",
-                "bucket":"your_s3_bucket"
+			"s3":{
+                "access_key_id":"$AWS_ACCESS_KEY_ID",
+                "secret_access_key":"$AWS_SECRET_ACCESS_KEY",
+                "region":"$AWS_REGION",
+                "bucket":"$AWS_S3_BUCKET"
 			}
 		}
 	},

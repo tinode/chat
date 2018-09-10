@@ -24,8 +24,8 @@ const (
 )
 
 type configType struct {
-	FileUploadLocation string `json:"upload_to,omitempty"`
-	ServeURL           string `json:"serve_url,omitempty"`
+	FileUploadDirectory string `json:"upload_dir,omitempty"`
+	ServeURL            string `json:"serve_url,omitempty"`
 }
 
 type fshandler struct {
@@ -42,7 +42,7 @@ func (fh *fshandler) Init(jsconf string) error {
 		return errors.New("fs handler failed to parse config: " + err.Error())
 	}
 
-	fh.fileUploadLocation = config.FileUploadLocation
+	fh.fileUploadLocation = config.FileUploadDirectory
 	if fh.fileUploadLocation == "" {
 		return errors.New("fs handler: missing upload location")
 	}
@@ -56,7 +56,7 @@ func (fh *fshandler) Init(jsconf string) error {
 	return os.MkdirAll(fh.fileUploadLocation, 0777)
 }
 
-// Redirect is used when one owants to serve files from a different external server.
+// Redirect is used when one wants to serve files from a different external server.
 func (fshandler) Redirect(url string) string {
 	// This handler does not use redirects.
 	return ""
@@ -67,8 +67,8 @@ func (fh *fshandler) Upload(fdef *types.FileDef, file io.Reader) (string, error)
 	// FIXME: create two-three levels of nested directories. Serving from a single directory
 	// with tens of thousands of files in it will not perform well.
 
-	// Generate a unique file name and attach it to path. Using base32 to avoid possible
-	// file name collisions on Windows.
+	// Generate a unique file name and attach it to path. Using base32 instead of base64 to avoid possible
+	// file name collisions on Windows due to case-insensitive file names there.
 	fdef.Location = filepath.Join(fh.fileUploadLocation, fdef.Uid().String32())
 
 	outfile, err := os.Create(fdef.Location)

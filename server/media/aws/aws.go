@@ -1,22 +1,24 @@
 package aws
 
 import (
+	"context"
+	"encoding/json"
+	"errors"
 	"io"
 	"log"
-	"github.com/tinode/chat/server/store/types"
-	"github.com/tinode/chat/server/media"
-	"github.com/tinode/chat/server/store"
-	"encoding/json"
-	"github.com/kataras/iris/core/errors"
-	"github.com/google/go-cloud/blob"
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/credentials"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/google/go-cloud/blob/s3blob"
-	"context"
 	"mime"
 	"path"
 	"strings"
+
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/google/go-cloud/blob"
+	"github.com/google/go-cloud/blob/s3blob"
+
+	"github.com/tinode/chat/server/media"
+	"github.com/tinode/chat/server/store"
+	"github.com/tinode/chat/server/store/types"
 )
 
 const (
@@ -77,23 +79,25 @@ func (ah *awshandler) Init(jsconf string) error {
 	return nil
 }
 
+// Redirect is used when one wants to serve files from a different external server.
 func (ah awshandler) Redirect(url string) string {
 	//FIXME go-cloud not support generate link url currently,
 	return ""
 }
 
+// Upload processes request for file upload. The file is given as io.Reader.
 func (ah *awshandler) Upload(fdef *types.FileDef, file io.Reader) (string, error) {
 	key := fdef.Uid().String32()
 	fdef.Location = key
 	writer, err := ah.Bucket.NewWriter(context.Background(), key, &blob.WriterOptions{ContentType: fdef.MimeType})
 	if err != nil {
-		log.Println("Upload: failed to create writer for aws", fdef.Uid(), err)
+		log.Println("Upload: failed to create AWS writer", fdef.Uid(), err)
 		return "", err
 	}
 	defer writer.Close()
 	if err = store.Files.StartUpload(fdef); err != nil {
 		ah.Bucket.Delete(context.Background(), key)
-		log.Println("fs: failed to create file record", fdef.Id, err)
+		log.Println("aws: failed to create file record", fdef.Id, err)
 		return "", err
 	}
 
