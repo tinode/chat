@@ -378,29 +378,38 @@ func pbCliDeserialize(pkt *pbx.ClientMsg) *ClientComMessage {
 func interfaceMapToByteMap(in map[string]interface{}) map[string][]byte {
 	out := make(map[string][]byte, len(in))
 	for key, val := range in {
-		out[key], _ = json.Marshal(val)
+		if val != nil {
+			out[key], _ = json.Marshal(val)
+		}
 	}
 	return out
 }
 
 func byteMapToInterfaceMap(in map[string][]byte) map[string]interface{} {
 	out := make(map[string]interface{}, len(in))
-	for key, val := range in {
-		out[key] = bytesToInterface(val)
+	for key, raw := range in {
+		if val := bytesToInterface(raw); val != nil {
+			out[key] = val
+		}
 	}
 	return out
 }
 
 func interfaceToBytes(in interface{}) []byte {
-	out, _ := json.Marshal(in)
-	return out
+	if in != nil {
+		out, _ := json.Marshal(in)
+		return out
+	}
+	return nil
 }
 
 func bytesToInterface(in []byte) interface{} {
 	var out interface{}
-	err := json.Unmarshal(in, &out)
-	if err != nil {
-		log.Println("pbx: failed to parse bytes", string(in), err)
+	if len(in) > 0 {
+		err := json.Unmarshal(in, &out)
+		if err != nil {
+			log.Println("pbx: failed to parse bytes", string(in), err)
+		}
 	}
 	return out
 }

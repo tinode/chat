@@ -39,12 +39,12 @@ func (fh *fshandler) Init(jsconf string) error {
 	var config configType
 
 	if err = json.Unmarshal([]byte(jsconf), &config); err != nil {
-		return errors.New("fs handler failed to parse config: " + err.Error())
+		return errors.New("failed to parse config: " + err.Error())
 	}
 
 	fh.fileUploadLocation = config.FileUploadLocation
 	if fh.fileUploadLocation == "" {
-		return errors.New("fs handler: missing upload location")
+		return errors.New("missing upload location")
 	}
 
 	fh.serveURL = config.ServeURL
@@ -80,7 +80,7 @@ func (fh *fshandler) Upload(fdef *types.FileDef, file io.Reader) (string, error)
 	if err = store.Files.StartUpload(fdef); err != nil {
 		outfile.Close()
 		os.Remove(fdef.Location)
-		log.Println("fs: failed to create file record", fdef.Id, err)
+		log.Println("failed to create file record", fdef.Id, err)
 		return "", err
 	}
 

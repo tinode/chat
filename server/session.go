@@ -293,6 +293,11 @@ func (s *Session) subscribe(msg *ClientComMessage) {
 		return
 	}
 
+	if s.uid.IsZero() {
+		s.queueOut(ErrAuthRequired(msg.Sub.Id, msg.Sub.Topic, msg.timestamp))
+		return
+	}
+
 	var topic, expanded string
 	if strings.HasPrefix(msg.Sub.Topic, "new") {
 		// Request to create a new named topic
@@ -300,7 +305,7 @@ func (s *Session) subscribe(msg *ClientComMessage) {
 		topic = expanded
 	} else {
 		var err *ServerComMessage
-		expanded, err = s.validateTopicName(msg.Sub.Id, msg.Sub.Topic, msg.timestamp)
+		expanded, err = s.expandTopicName(msg.Sub.Id, msg.Sub.Topic, msg.timestamp)
 		if err != nil {
 			s.queueOut(err)
 			return
@@ -328,7 +333,13 @@ func (s *Session) leave(msg *ClientComMessage) {
 		return
 	}
 
-	expanded, err := s.validateTopicName(msg.Leave.Id, msg.Leave.Topic, msg.timestamp)
+	if s.uid.IsZero() {
+		s.queueOut(ErrAuthRequired(msg.Leave.Id, msg.Leave.Topic, msg.timestamp))
+		return
+	}
+
+	// Expand topic name
+	expanded, err := s.expandTopicName(msg.Leave.Id, msg.Leave.Topic, msg.timestamp)
 	if err != nil {
 		s.queueOut(err)
 		return
@@ -367,9 +378,14 @@ func (s *Session) publish(msg *ClientComMessage) {
 		return
 	}
 
+	if s.uid.IsZero() {
+		s.queueOut(ErrAuthRequired(msg.Pub.Id, msg.Pub.Topic, msg.timestamp))
+		return
+	}
+
 	// TODO(gene): Check for repeated messages with the same ID
 
-	expanded, err := s.validateTopicName(msg.Pub.Id, msg.Pub.Topic, msg.timestamp)
+	expanded, err := s.expandTopicName(msg.Pub.Id, msg.Pub.Topic, msg.timestamp)
 	if err != nil {
 		s.queueOut(err)
 		return
@@ -827,8 +843,13 @@ func (s *Session) get(msg *ClientComMessage) {
 		return
 	}
 
-	// Validate topic name
-	expanded, err := s.validateTopicName(msg.Get.Id, msg.Get.Topic, msg.timestamp)
+	if s.uid.IsZero() {
+		s.queueOut(ErrAuthRequired(msg.Get.Id, msg.Get.Topic, msg.timestamp))
+		return
+	}
+
+	// Expand topic name.
+	expanded, err := s.expandTopicName(msg.Get.Id, msg.Get.Topic, msg.timestamp)
 	if err != nil {
 		s.queueOut(err)
 		return
@@ -866,8 +887,13 @@ func (s *Session) set(msg *ClientComMessage) {
 		return
 	}
 
-	// Validate topic name
-	expanded, err := s.validateTopicName(msg.Set.Id, msg.Set.Topic, msg.timestamp)
+	if s.uid.IsZero() {
+		s.queueOut(ErrAuthRequired(msg.Set.Id, msg.Set.Topic, msg.timestamp))
+		return
+	}
+
+	// Expand topic name.
+	expanded, err := s.expandTopicName(msg.Set.Id, msg.Set.Topic, msg.timestamp)
 	if err != nil {
 		s.queueOut(err)
 		return
@@ -911,8 +937,13 @@ func (s *Session) del(msg *ClientComMessage) {
 		return
 	}
 
-	// Validate topic name
-	expanded, err := s.validateTopicName(msg.Del.Id, msg.Del.Topic, msg.timestamp)
+	if s.uid.IsZero() {
+		s.queueOut(ErrAuthRequired(msg.Del.Id, msg.Del.Topic, msg.timestamp))
+		return
+	}
+
+	// Expand topic name and validate request.
+	expanded, err := s.expandTopicName(msg.Del.Id, msg.Del.Topic, msg.timestamp)
 	if err != nil {
 		s.queueOut(err)
 		return
@@ -962,7 +993,8 @@ func (s *Session) note(msg *ClientComMessage) {
 		return
 	}
 
-	expanded, err := s.validateTopicName("", msg.Note.Topic, msg.timestamp)
+	// Expand topic name and validate request.
+	expanded, err := s.expandTopicName("", msg.Note.Topic, msg.timestamp)
 	if err != nil {
 		// Silently ignoring the message
 		return
@@ -995,20 +1027,15 @@ func (s *Session) note(msg *ClientComMessage) {
 	}
 }
 
-// validateTopicName expands session specific topic name to global name
+// expandTopicName expands session specific topic name to global name
 // Returns
 //   topic: session-specific topic name the message recipient should see
 //   routeTo: routable global topic name
 //   err: *ServerComMessage with an error to return to the sender
-func (s *Session) validateTopicName(msgID, topic string, timestamp time.Time) (string, *ServerComMessage) {
+func (s *Session) expandTopicName(msgID, topic string, timestamp time.Time) (string, *ServerComMessage) {
 
 	if topic == "" {
 		return "", ErrMalformed(msgID, "", timestamp)
-	}
-
-	if !strings.HasPrefix(topic, "grp") && s.uid.IsZero() {
-		// me, fnd, p2p topics require authentication
-		return "", ErrAuthRequired(msgID, topic, timestamp)
 	}
 
 	// Topic to route to i.e. rcptto: or s.subs[routeTo]

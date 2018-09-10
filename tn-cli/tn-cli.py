@@ -98,7 +98,7 @@ def loginMsg(id, scheme, secret, cred, uname, password):
             password = ''
         secret = str(uname) + ":" + str(password)
 
-    if secret != None:
+    if type(secret) is str:
         secret=secret.encode('utf-8')
     onCompletion[str(id)] = lambda params: save_cookie(params)
     return pb.ClientMsg(login=pb.ClientLogin(id=str(id), scheme=scheme,
@@ -325,7 +325,7 @@ def serialize_cmd(string, id):
         return pb.ClientMsg(leave=pb.ClientLeave(id=str(id), topic=cmd.topic))
     elif cmd.cmd == "pub":
         return pb.ClientMsg(pub=pb.ClientPub(id=str(id), topic=cmd.topic, no_echo=True,
-            content=json.dumps(cmd.content)))
+            content=encode_to_bytes(cmd.content)))
     elif cmd.cmd == "get":
         return getMsg(id, cmd.topic, cmd.desc, cmd.sub, cmd.tags, cmd.data)
     elif cmd.cmd == "set":
@@ -350,7 +350,7 @@ def gen_message(schema, secret):
 
     if schema != None:
         id += 1
-        yield loginMsg(id, schema, secret)
+        yield loginMsg(id, schema, secret, None, None, None)
 
     while True:
         id += 1
@@ -443,22 +443,28 @@ if __name__ == '__main__':
 
     schema = None
     secret = None
-    if args.no_login == None:
-        if args.login_cookie:
-            """Try reading cookie file"""
-            params = read_cookie()
-            if params != None:
-                schema = 'token'
-                secret = base64.b64decode(params.get('token').encode('ascii'))
 
-        if schema == None and args.login_token != None:
+    print(args.no_login)
+
+    if not args.no_login:
+        if args.login_token:
             """Use token to login"""
             schema = 'token'
-            secret = args.login_token
+            secret = args.login_token.encode('acsii')
+            print("Logging in with token", args.login_token)
 
-        if schema == None and args.login_basic != None:
+        elif args.login_basic:
             """Use username:password"""
             schema = 'basic'
-            secret = args.login_basic
+            secret = args.login_basic.encode('utf-8')
+            print("Logging in with login:password", args.login_basic)
+
+        else:
+            """Try reading the cookie file"""
+            try:
+                schema, secret = read_auth_cookie(args.login_cookie)
+                print("Logging in with cookie file", args.login_cookie)
+            except Exception as err:
+                print("Failed to read authentication cookie", err)
 
     run(args.host, schema, secret)
