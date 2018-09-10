@@ -25,10 +25,10 @@ type Handler interface {
 	Redirect(url string) string
 
 	// Upload processes request for file upload.
-	Upload(fdef *types.FileDef, file io.Reader) (string, error)
+	Upload(fdef *types.FileDef, file io.ReadSeeker) (string, error)
 
 	// Download processes request for file download.
-	Download(url string) (*types.FileDef, ReadSeekCloser, error)
+	Download(url string) (*types.FileDef, io.ReadCloser, error)
 
 	// Delete deletes file from storage.
 	Delete(locations []string) error

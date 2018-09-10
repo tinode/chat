@@ -36,6 +36,9 @@ ENV MYSQL_DSN='root@tcp(mysql)/tinode'
 # Disable chatbot plugin by default.
 ENV PLUGIN_PYTHON_CHAT_BOT_ENABLED=false
 
+# Default handler for large files
+ENV MEDIA_HANDLER=fs
+
 # Various encryption and salt keys. Replace with your own in production.
 
 # Salt used to generate the API key. Don't change it unless you also change the 

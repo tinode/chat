@@ -14,7 +14,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/tinode/chat/server/media"
 	"github.com/tinode/chat/server/store"
 	"github.com/tinode/chat/server/store/types"
 )
@@ -63,7 +62,7 @@ func (fshandler) Redirect(url string) string {
 }
 
 // Upload processes request for file upload. The file is given as io.Reader.
-func (fh *fshandler) Upload(fdef *types.FileDef, file io.Reader) (string, error) {
+func (fh *fshandler) Upload(fdef *types.FileDef, file io.ReadSeeker) (string, error) {
 	// FIXME: create two-three levels of nested directories. Serving from a single directory
 	// with tens of thousands of files in it will not perform well.
 
@@ -109,7 +108,7 @@ func (fh *fshandler) Upload(fdef *types.FileDef, file io.Reader) (string, error)
 
 // Download processes request for file download.
 // The returned ReadSeekCloser must be closed after use.
-func (fh *fshandler) Download(url string) (*types.FileDef, media.ReadSeekCloser, error) {
+func (fh *fshandler) Download(url string) (*types.FileDef, io.ReadCloser, error) {
 	fid := fh.GetIdFromUrl(url)
 	if fid.IsZero() {
 		return nil, nil, types.ErrNotFound
