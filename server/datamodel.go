@@ -342,7 +342,7 @@ type MsgTopicSub struct {
 
 	// Access mode. Topic admins receive the full info, non-admins receive just the cumulative mode
 	// Acs.Mode = want & given. The field is not a pointer because at least one value is always assigned.
-	Acs MsgAccessMode `json:"acs"`
+	Acs MsgAccessMode `json:"acs,omitempty"`
 	// ID of the message reported by the given user as read
 	ReadSeqId int `json:"read,omitempty"`
 	// ID of the message reported by the given user as received

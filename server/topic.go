@@ -1208,8 +1208,7 @@ func (t *Topic) replyGetDesc(sess *Session, id, tempName string, opts *MsgGetOpt
 	if ifUpdated {
 		if t.public != nil {
 			desc.Public = t.public
-		} else if full {
-			// p2p topic
+		} else if full && t.cat == types.TopicCatP2P {
 			desc.Public = pud.public
 		}
 	}

@@ -688,8 +688,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 		var usr t.User
 		for cursor.Next(&usr) {
 			uid2 := t.ParseUid(usr.Id)
-			topic := uid.P2PName(uid2)
-			if sub, ok := join[topic]; ok {
+			if sub, ok := join[uid.P2PName(uid2)]; ok {
 				sub.ObjHeader.MergeTimes(&usr.ObjHeader)
 				sub.SetPublic(usr.Public)
 				sub.SetWith(uid2.UserId())
@@ -763,6 +762,17 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 		}
 		cursor.Close()
 		//log.Printf("RethinkDbAdapter.UsersForTopic users: %+v", subs)
+	}
+
+	if t.GetTopicCat(topic) == t.TopicCatP2P && len(subs) > 0 {
+		// Swap public values of P2P topics as expected.
+		if len(subs) == 1 {
+			subs[0].SetPublic(nil)
+		} else {
+			pub := subs[0].GetPublic()
+			subs[0].SetPublic(subs[1].GetPublic())
+			subs[1].SetPublic(pub)
+		}
 	}
 
 	return subs, nil

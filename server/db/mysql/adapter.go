@@ -918,8 +918,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 				break
 			}
 			uid2 := encodeUidString(usr.Id)
-			topic := uid.P2PName(uid2)
-			if sub, ok := join[topic]; ok {
+			if sub, ok := join[uid.P2PName(uid2)]; ok {
 				sub.ObjHeader.MergeTimes(&usr.ObjHeader)
 				sub.SetPublic(fromJSON(usr.Public))
 				sub.SetWith(uid2.UserId())
@@ -988,6 +987,17 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 		subs = append(subs, sub)
 	}
 	rows.Close()
+
+	if t.GetTopicCat(topic) == t.TopicCatP2P && len(subs) > 0 {
+		// Swap public values of P2P topics as expected.
+		if len(subs) == 1 {
+			subs[0].SetPublic(nil)
+		} else {
+			pub := subs[0].GetPublic()
+			subs[0].SetPublic(subs[1].GetPublic())
+			subs[1].SetPublic(pub)
+		}
+	}
 
 	return subs, err
 }
