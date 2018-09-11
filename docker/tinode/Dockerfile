@@ -39,6 +39,8 @@ ENV PLUGIN_PYTHON_CHAT_BOT_ENABLED=false
 # Default handler for large files
 ENV MEDIA_HANDLER=fs
 
+ENV AWS_CORS_ORIGINS='["*"]'
+
 # Various encryption and salt keys. Replace with your own in production.
 
 # Salt used to generate the API key. Don't change it unless you also change the 

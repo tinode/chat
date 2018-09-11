@@ -304,7 +304,13 @@ func getAPIKey(req *http.Request) string {
 // Extracts authorization credentials from an HTTP request.
 // Returns authentication method and secret.
 func getHttpAuth(req *http.Request) (method, secret string) {
-	// Check Authorization header.
+	// Check X-Tinode-Auth header.
+	if parts := strings.Split(req.Header.Get("X-Tinode-Auth"), " "); len(parts) == 2 {
+		method, secret = parts[0], parts[1]
+		return
+	}
+
+	// Check canonical Authorization header.
 	if parts := strings.Split(req.Header.Get("Authorization"), " "); len(parts) == 2 {
 		method, secret = parts[0], parts[1]
 		return

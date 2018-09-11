@@ -21,11 +21,12 @@ import (
 
 const (
 	defaultServeURL = "/v0/file/s/"
+	handlerName     = "fs"
 )
 
 type configType struct {
-	FileUploadDirectory string `json:"upload_dir,omitempty"`
-	ServeURL            string `json:"serve_url,omitempty"`
+	FileUploadDirectory string `json:"upload_dir"`
+	ServeURL            string `json:"serve_url"`
 }
 
 type fshandler struct {
@@ -170,5 +171,5 @@ func (fh *fshandler) getFileRecord(fid types.Uid) (*types.FileDef, error) {
 }
 
 func init() {
-	store.RegisterMediaHandler("fs", &fshandler{})
+	store.RegisterMediaHandler(handlerName, &fshandler{})
 }

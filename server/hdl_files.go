@@ -61,7 +61,8 @@ func largeFileServe(wrt http.ResponseWriter, req *http.Request) {
 	if redirTo, err := mh.Redirect(false, req.URL.String()); redirTo != "" {
 		wrt.Header().Set("Location", redirTo)
 		wrt.Header().Set("Content-Type", "application/json; charset=utf-8")
-		wrt.WriteHeader(http.StatusFound)
+		wrt.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+		wrt.WriteHeader(http.StatusTemporaryRedirect)
 		enc.Encode(InfoFound("", "", now))
 		log.Println("media serve redirected", redirTo)
 		return
@@ -139,7 +140,7 @@ func largeFileUpload(wrt http.ResponseWriter, req *http.Request) {
 	if redirTo, err := mh.Redirect(true, req.URL.String()); redirTo != "" {
 		wrt.Header().Set("Location", redirTo)
 		wrt.Header().Set("Content-Type", "application/json; charset=utf-8")
-		wrt.WriteHeader(http.StatusFound)
+		wrt.WriteHeader(http.StatusTemporaryRedirect)
 		enc.Encode(InfoFound("", "", now))
 
 		log.Println("media upload redirected", redirTo)

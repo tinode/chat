@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"mime"
+	"net/http"
 	"path"
 	"strings"
 	"sync/atomic"
@@ -25,14 +26,16 @@ import (
 
 const (
 	defaultServeURL = "/v0/file/s/"
+	handlerName     = "s3"
 )
 
 type awsconfig struct {
-	AccessKeyId     string `json:"access_key_id,omitempty"`
-	SecretAccessKey string `json:"secret_access_key,omitempty"`
-	Region          string `json:"region,omitempty"`
-	BucketName      string `json:"bucket,omitempty"`
-	ServeURL        string `json:"serve_url,omitempty"`
+	AccessKeyId     string   `json:"access_key_id"`
+	SecretAccessKey string   `json:"secret_access_key"`
+	Region          string   `json:"region"`
+	BucketName      string   `json:"bucket"`
+	CorsOrigins     []string `json:"cors_origins"`
+	ServeURL        string   `json:"serve_url"`
 }
 
 type awshandler struct {
@@ -56,20 +59,20 @@ func (rc *readerCounter) Read(buf []byte) (int, error) {
 func (ah *awshandler) Init(jsconf string) error {
 	var err error
 	if err = json.Unmarshal([]byte(jsconf), &ah.conf); err != nil {
-		return errors.New("aws handler failed to parse config: " + err.Error())
+		return errors.New("failed to parse config: " + err.Error())
 	}
 
-	if ah.conf.AccessKeyId != "" {
-		return errors.New("aws handler missing Access Key ID")
+	if ah.conf.AccessKeyId == "" {
+		return errors.New("missing Access Key ID")
 	}
-	if ah.conf.SecretAccessKey != "" {
-		return errors.New("aws handler missing Secret Access Key")
+	if ah.conf.SecretAccessKey == "" {
+		return errors.New("missing Secret Access Key")
 	}
-	if ah.conf.Region != "" {
-		return errors.New("aws handler missing Region")
+	if ah.conf.Region == "" {
+		return errors.New("missing Region")
 	}
-	if ah.conf.BucketName != "" {
-		return errors.New("aws handler missing Bucket")
+	if ah.conf.BucketName == "" {
+		return errors.New("missing Bucket")
 	}
 
 	if ah.conf.ServeURL == "" {
@@ -90,17 +93,32 @@ func (ah *awshandler) Init(jsconf string) error {
 	// Check if the bucket exists, create one if not.
 	_, err = ah.svc.CreateBucket(&s3.CreateBucketInput{Bucket: aws.String(ah.conf.BucketName)})
 	if err != nil {
-		if aerr, ok := err.(awserr.Error); !ok || aerr.Code() != s3.ErrCodeBucketAlreadyExists {
+		if aerr, ok := err.(awserr.Error); !ok ||
+			(aerr.Code() != s3.ErrCodeBucketAlreadyExists &&
+				aerr.Code() != s3.ErrCodeBucketAlreadyOwnedByYou) {
 			return err
 		}
 	}
 
-	// Get bucket ACL to make sure it's accessible to the current user.
-	if _, err = ah.svc.GetBucketAcl(&s3.GetBucketAclInput{Bucket: aws.String(ah.conf.BucketName)}); err != nil {
-		return err
+	// The following serves two purposes:
+	// 1. Setup CORS policy to be able to serve media directly from S3
+	// 2. Verify that the bucket is accessible to the current user.
+	origins := ah.conf.CorsOrigins
+	if len(origins) == 0 {
+		origins = append(origins, "*")
 	}
+	_, err = ah.svc.PutBucketCors(&s3.PutBucketCorsInput{
+		Bucket: aws.String(ah.conf.BucketName),
+		CORSConfiguration: &s3.CORSConfiguration{
+			CORSRules: []*s3.CORSRule{&s3.CORSRule{
+				AllowedMethods: aws.StringSlice([]string{http.MethodGet}),
+				AllowedOrigins: aws.StringSlice(origins),
+				AllowedHeaders: aws.StringSlice([]string{"x-tinode-auth", "x-tinode-apikey"}),
+			}},
+		},
+	})
 
-	return nil
+	return err
 }
 
 // Redirect is used when one wants to serve files from a different external server.
@@ -114,13 +132,20 @@ func (ah *awshandler) Redirect(upload bool, url string) (string, error) {
 		return "", types.ErrNotFound
 	}
 
+	fd, err := ah.getFileRecord(fid)
+	if err != nil {
+		log.Println("file record found", fid)
+		return "", err
+	}
+
 	req, _ := ah.svc.GetObjectRequest(&s3.GetObjectInput{
-		Bucket: aws.String(ah.conf.BucketName),
-		Key:    aws.String(fid.String32()),
+		Bucket:              aws.String(ah.conf.BucketName),
+		Key:                 aws.String(fid.String32()),
+		ResponseContentType: aws.String(fd.MimeType),
 	})
 
-	// Presign for 5 minutes.
-	return req.Presign(5 * time.Minute)
+	// Presign for 2 minutes.
+	return req.Presign(time.Minute)
 }
 
 // Upload processes request for a file upload. The file is given as io.Reader.
@@ -244,5 +269,5 @@ func (ah *awshandler) getFileRecord(fid types.Uid) (*types.FileDef, error) {
 }
 
 func init() {
-	store.RegisterMediaHandler("aws", &awshandler{})
+	store.RegisterMediaHandler(handlerName, &awshandler{})
 }

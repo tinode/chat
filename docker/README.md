@@ -70,6 +70,7 @@ You can specify the following environment variables when issuing `docker run` co
 | --- | --- | --- | --- |
 | `AUTH_TOKEN_KEY` | string | `wfaY2RgF2S1OQI/ZlK+LS​rp1KB2jwAdGAIHQ7JZn+Kc=` | base64-encoded 32 random bytes used as salt for authentication tokens. |
 | `AWS_ACCESS_KEY_ID` | string |  | AWS Access Key ID when using `s3` media handler |
+| `AWS_CORS_ORIGINS` | string | `["*"]` | Allowed origins ([CORS](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Access-Control-Allow-Origin)) URL for downloads. Generally use your server URL and its aliases. |
 | `AWS_REGION` | string |  | AWS Region when using `s3` media handler |
 | `AWS_S3_BUCKET` | string |  | Name of the AWS S3 bucket when using `s3` media handler |
 | `AWS_SECRET_ACCESS_KEY` | string |  | AWS [Secret Access Key](https://aws.amazon.com/blogs/security/wheres-my-secret-access-key/) when using `s3` media handler |
