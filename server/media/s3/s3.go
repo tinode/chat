@@ -198,31 +198,6 @@ func (ah *awshandler) Upload(fdef *types.FileDef, file io.ReadSeeker) (string, e
 // Download processes request for file download.
 // The returned ReadSeekCloser must be closed after use.
 func (ah *awshandler) Download(url string) (*types.FileDef, media.ReadSeekCloser, error) {
-	/*
-		fid := ah.GetIdFromUrl(url)
-		if fid.IsZero() {
-			return nil, nil, types.ErrNotFound
-		}
-		fd, err := ah.getFileRecord(fid)
-		if err != nil {
-			log.Println("aws download: file not found", fid)
-			return nil, nil, err
-		}
-
-		result, err := ah.svc.GetObject(&s3.GetObjectInput{
-			Bucket: aws.String(ah.conf.BucketName),
-			Key:    aws.String(fd.Uid().String32()),
-		})
-		if err != nil {
-			if aerr, ok := err.(awserr.Error); ok && aerr.Code() == s3.ErrCodeNoSuchKey {
-				err = types.ErrNotFound
-			}
-
-			log.Println("aws download: read error ", err.Error())
-			return nil, nil, err
-		}
-		return fd, result.Body, nil
-	*/
 	return nil, nil, types.ErrUnsupported
 }
 
