@@ -243,72 +243,114 @@ func genDb(reset bool, dbSource string, data *Data) {
 		}
 	}
 
-	log.Println("Generating messages...")
+	messageCount := len(data.Messages)
+
+	if messageCount == 0 {
+		log.Println("No messages found, all done")
+		return
+	}
+
+	log.Println("Inserting messages...")
 
 	seqIds := map[string]int{}
 
-	// Shuffle messages
-	rand.Shuffle(len(data.Messages), func(i, j int) {
-		data.Messages[i], data.Messages[j] = data.Messages[j], data.Messages[i]
-	})
+	if messageCount > 1 {
+		// Shuffle messages
+		rand.Shuffle(len(data.Messages), func(i, j int) {
+			data.Messages[i], data.Messages[j] = data.Messages[j], data.Messages[i]
+		})
 
-	now := time.Now().UTC().Add(-time.Minute).Round(time.Millisecond)
-	// Starting 4 days ago.
-	timestamp := now.Add(time.Hour * time.Duration(-24*4))
-	toInsert := 96 // 96 is the maximum, otherwise messages may appear in the future
-	// Initial maximum increment of the message sent time in milliseconds
-	increment := 3600 * 1000
-	subIdx := rand.Intn(len(data.Groupsubs) + len(data.P2psubs)*2)
-	for i := 0; i < toInsert; i++ {
-		// At least 20% of subsequent messages should come from the same user in the same topic.
-		if rand.Intn(5) > 0 {
-			subIdx = rand.Intn(len(data.Groupsubs) + len(data.P2psubs)*2)
+		now := time.Now().UTC().Add(-time.Minute).Round(time.Millisecond)
+		// Starting 4 days ago.
+		timestamp := now.Add(time.Hour * time.Duration(-24*4))
+		toInsert := 96 // 96 is the maximum, otherwise messages may appear in the future
+		// Initial maximum increment of the message sent time in milliseconds
+		increment := 3600 * 1000
+		subIdx := rand.Intn(len(data.Groupsubs) + len(data.P2psubs)*2)
+		for i := 0; i < toInsert; i++ {
+			// At least 20% of subsequent messages should come from the same user in the same topic.
+			if rand.Intn(5) > 0 {
+				subIdx = rand.Intn(len(data.Groupsubs) + len(data.P2psubs)*2)
+			}
+
+			var topic string
+			var from types.Uid
+			if subIdx < len(data.Groupsubs) {
+				topic = nameIndex[data.Groupsubs[subIdx].Topic]
+				from = types.ParseUid(nameIndex[data.Groupsubs[subIdx].User])
+			} else {
+				idx := (subIdx - len(data.Groupsubs)) / 2
+				usr := (subIdx - len(data.Groupsubs)) % 2
+				sub := data.P2psubs[idx]
+				topic = nameIndex[sub.pair]
+				from = types.ParseUid(nameIndex[sub.Users[usr].Name])
+			}
+
+			seqIds[topic]++
+			seqId := seqIds[topic]
+			str := data.Messages[i%len(data.Messages)]
+			// Max time between messages is 2 hours, averate - 1 hour, time is increasing as seqId increases
+			timestamp = timestamp.Add(time.Microsecond * time.Duration(rand.Intn(increment)))
+			if err = store.Messages.Save(&types.Message{
+				ObjHeader: types.ObjHeader{CreatedAt: timestamp},
+				SeqId:     seqId,
+				Topic:     topic,
+				From:      from.String(),
+				Content:   str}); err != nil {
+				log.Fatal("Failed to insert message: ", err)
+			}
+
+			// New increment: remaining time until 'now' divided by the number of messages to be inserted,
+			// then converted to milliseconds.
+			increment = int(now.Sub(timestamp).Nanoseconds() / int64(toInsert-i) / 1000000)
+
+			// log.Printf("Msg.seq=%d at %v, topic='%s' from='%s'", msg.SeqId, msg.CreatedAt, topic, from.UserId())
+		}
+	} else {
+		// Only one message is provided. Just insert it in every topic.
+		now := time.Now().UTC().Add(-time.Minute).Round(time.Millisecond)
+
+		for _, gt := range data.Grouptopics {
+			if err = store.Messages.Save(&types.Message{
+				ObjHeader: types.ObjHeader{CreatedAt: now},
+				SeqId:     1,
+				Topic:     nameIndex[gt.Name],
+				From:      nameIndex[gt.Owner],
+				Content:   data.Messages[0]}); err != nil {
+
+				log.Fatal("Failed to insert message: ", err)
+			}
 		}
 
-		var topic string
-		var from types.Uid
-		if subIdx < len(data.Groupsubs) {
-			topic = nameIndex[data.Groupsubs[subIdx].Topic]
-			from = types.ParseUid(nameIndex[data.Groupsubs[subIdx].User])
-		} else {
-			idx := (subIdx - len(data.Groupsubs)) / 2
-			usr := (subIdx - len(data.Groupsubs)) % 2
-			sub := data.P2psubs[idx]
-			topic = nameIndex[sub.pair]
-			from = types.ParseUid(nameIndex[sub.Users[usr].Name])
+		usedp2p := make(map[string]bool)
+		for i := 0; len(usedp2p) < len(data.P2psubs)/2; i++ {
+			sub := data.P2psubs[i]
+			if usedp2p[nameIndex[sub.pair]] {
+				continue
+			}
+			usedp2p[nameIndex[sub.pair]] = true
+			if err = store.Messages.Save(&types.Message{
+				ObjHeader: types.ObjHeader{CreatedAt: now},
+				SeqId:     1,
+				Topic:     nameIndex[sub.pair],
+				From:      nameIndex[sub.Users[0].Name],
+				Content:   data.Messages[0]}); err != nil {
+
+				log.Fatal("Failed to insert message: ", err)
+			}
 		}
-
-		seqIds[topic]++
-		seqId := seqIds[topic]
-		str := data.Messages[i%len(data.Messages)]
-		// Max time between messages is 2 hours, averate - 1 hour, time is increasing as seqId increases
-		timestamp = timestamp.Add(time.Microsecond * time.Duration(rand.Intn(increment)))
-		if err = store.Messages.Save(&types.Message{
-			ObjHeader: types.ObjHeader{CreatedAt: timestamp},
-			SeqId:     seqId,
-			Topic:     topic,
-			From:      from.String(),
-			Content:   str}); err != nil {
-			log.Fatal("Failed to create message: ", err)
-		}
-
-		// New increment: remaining time until 'now' divided by the number of messages to be inserted,
-		// then converted to milliseconds.
-		increment = int(now.Sub(timestamp).Nanoseconds() / int64(toInsert-i) / 1000000)
-
-		// log.Printf("Msg.seq=%d at %v, topic='%s' from='%s'", msg.SeqId, msg.CreatedAt, topic, from.UserId())
 	}
+
+	log.Println("All done.")
 }
 
-// Go json cannot unmarshal Duration from a sring, thus this hask.
+// Go json cannot unmarshal Duration from a string, thus this hack.
 func getCreatedTime(delta string) time.Time {
-	if dd, err := time.ParseDuration(delta); err != nil && delta != "" {
+	dd, err := time.ParseDuration(delta)
+	if err != nil && delta != "" {
 		log.Fatal("Invalid duration string", delta)
-	} else {
-		return time.Now().UTC().Round(time.Millisecond).Add(dd)
 	}
-	// Useless return: Go refuses to compile witout it
-	return time.Time{}
+	return time.Now().UTC().Round(time.Millisecond).Add(dd)
 }
 
 type photoStruct struct {

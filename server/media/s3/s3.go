@@ -134,7 +134,6 @@ func (ah *awshandler) Redirect(upload bool, url string) (string, error) {
 
 	fd, err := ah.getFileRecord(fid)
 	if err != nil {
-		log.Println("file record found", fid)
 		return "", err
 	}
 

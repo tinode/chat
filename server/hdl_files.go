@@ -31,8 +31,9 @@ func largeFileServe(wrt http.ResponseWriter, req *http.Request) {
 		wrt.Header().Set("Content-Type", "application/json; charset=utf-8")
 		wrt.WriteHeader(msg.Ctrl.Code)
 		enc.Encode(msg)
-
-		log.Println("media serve", msg.Ctrl.Code, msg.Ctrl.Text, err)
+		if err != nil {
+			log.Println("media serve", err)
+		}
 	}
 
 	// Check for API key presence
