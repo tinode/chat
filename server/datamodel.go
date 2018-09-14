@@ -311,9 +311,6 @@ type MsgTopicDesc struct {
 	// Timestamp of the last message
 	TouchedAt *time.Time `json:"touched,omitempty"`
 
-	// When a group topic is created, it's given a temporary name by the client.
-	// Then this name changes. Report the original name here.
-	TempName   string             `json:"tmpname,omitempty"`
 	DefaultAcs *MsgDefaultAcsMode `json:"defacs,omitempty"`
 	// Actual access mode
 	Acs *MsgAccessMode `json:"acs,omitempty"`

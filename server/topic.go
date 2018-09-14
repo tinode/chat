@@ -484,7 +484,7 @@ func (t *Topic) run(hub *Hub) {
 			case meta.pkt.Get != nil:
 				// Get request
 				if meta.what&constMsgMetaDesc != 0 {
-					if err := t.replyGetDesc(meta.sess, meta.pkt.Get.Id, "", meta.pkt.Get.Desc); err != nil {
+					if err := t.replyGetDesc(meta.sess, meta.pkt.Get.Id, meta.pkt.Get.Desc); err != nil {
 						log.Printf("topic[%s] meta.Get.Desc failed: %s", t.name, err)
 					}
 				}
@@ -770,19 +770,23 @@ func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin, sendDesc bool) error {
 	t.sessions[sreg.sess] = true
 
 	resp := NoErr(sreg.pkt.Id, t.original(sreg.sess.uid), now)
-	// Report access mode.
-	resp.Ctrl.Params = map[string]MsgAccessMode{"acs": {
-		Given: pud.modeGiven.String(),
-		Want:  pud.modeWant.String(),
-		Mode:  (pud.modeGiven & pud.modeWant).String()}}
+	// Report back the assigned access mode.
+	params := map[string]interface{}{
+		"acs": &MsgAccessMode{
+			Given: pud.modeGiven.String(),
+			Want:  pud.modeWant.String(),
+			Mode:  (pud.modeGiven & pud.modeWant).String()}}
+
+	// When a group topic is created, it's given a temporary name by the client.
+	// Then this name changes. Report back the original name here.
+	if sreg.created && sreg.pkt.Topic != t.original(sreg.sess.uid) {
+		params["tmpname"] = sreg.pkt.Topic
+	}
+	resp.Ctrl.Params = params
 	sreg.sess.queueOut(resp)
 
 	if sendDesc {
-		var tmpName string
-		if sreg.created {
-			tmpName = sreg.pkt.Topic
-		}
-		if err := t.replyGetDesc(sreg.sess, sreg.pkt.Id, tmpName, sreg.pkt.Get.Desc); err != nil {
+		if err := t.replyGetDesc(sreg.sess, sreg.pkt.Id, sreg.pkt.Get.Desc); err != nil {
 			log.Printf("topic[%s] subCommonReply Get.Desc failed: %v", t.name, err)
 		}
 	}
@@ -1184,7 +1188,7 @@ func (t *Topic) approveSub(h *Hub, sess *Session, target types.Uid, set *MsgClie
 }
 
 // replyGetDesc is a response to a get.desc request on a topic, sent to just the session as a {meta} packet
-func (t *Topic) replyGetDesc(sess *Session, id, tempName string, opts *MsgGetOpts) error {
+func (t *Topic) replyGetDesc(sess *Session, id string, opts *MsgGetOpts) error {
 	now := types.TimeNow()
 
 	if opts != nil && (opts.User != "" || opts.Limit != 0) {
@@ -1248,12 +1252,6 @@ func (t *Topic) replyGetDesc(sess *Session, id, tempName string, opts *MsgGetOpt
 			desc.DelId = max(pud.delID, t.delID)
 			desc.ReadSeqId = pud.readID
 			desc.RecvSeqId = max(pud.recvID, pud.readID)
-		}
-
-		// When the topic is first created it may have been assigned a temporary name.
-		// Report the temporary name here. It could be empty.
-		if tempName != "" && tempName != t.original(sess.uid) {
-			desc.TempName = tempName
 		}
 	}
 
