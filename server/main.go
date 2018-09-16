@@ -386,7 +386,7 @@ func main() {
 
 	err = push.Init(string(config.Push))
 	if err != nil {
-		log.Fatal("Failed to initialize push notifications: ", err)
+		log.Fatal("Failed to initialize push notifications:", err)
 	}
 	defer func() {
 		push.Stop()
@@ -426,7 +426,7 @@ func main() {
 		// Resolve path to static content.
 		*staticPath = toAbsolutePath(rootpath, *staticPath)
 		if _, err = os.Stat(*staticPath); os.IsNotExist(err) {
-			log.Fatal("Static content directory is not found ", *staticPath)
+			log.Fatal("Static content directory is not found", *staticPath)
 		}
 
 		staticMountPoint = config.StaticMount

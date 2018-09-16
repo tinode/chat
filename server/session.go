@@ -418,11 +418,6 @@ func (s *Session) publish(msg *ClientComMessage) {
 
 // Client metadata
 func (s *Session) hello(msg *ClientComMessage) {
-	if msg.Hi.Version == "" {
-		s.queueOut(ErrMalformed(msg.Hi.Id, "", msg.timestamp))
-		return
-	}
-
 	var params map[string]interface{}
 
 	if s.ver == 0 {
