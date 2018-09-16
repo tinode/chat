@@ -31,8 +31,7 @@ Login as one of `alice`, `bob`, `carol`, `dave`, `frank`. Password is `<login>12
 
 If you register a new account you are asked for an email address to send validation code to. For demo purposes you may use `123456` as a universal validation code. The code you get in the email is also valid.
 
-
-[Docker images](https://hub.docker.com/u/tinode/).
+[Docker images](https://hub.docker.com/u/tinode/) with the same demo are available.
 
 ### Android
 
@@ -51,6 +50,9 @@ A text-only [command line client](./tn-cli) implements every possible command.
 * As generally accepted, when you register a new account you are asked for an email address. The server will send an email with a verification code to that address and you can use it to validate the account. To make things easier for testing, the server will also accept `123456` as a verification code. Remove line `"debug_response": "123456"` from `tinode.conf` to disable this option.
 
 * The demo server is configured to use [ACME](https://letsencrypt.org/) TLS [implementation](https://godoc.org/golang.org/x/crypto/acme) with hard-coded requirement for [SNI](https://en.wikipedia.org/wiki/Server_Name_Indication). If you are unable to connect then the most likely reason is your TLS client's missing support for SNI. Use a different client.
+
+* The demo uses a single minified javascript bundle and minified css. The un-minified version is available at https://api.tinode.co/index-dev.html
+
 
 ## Features
 

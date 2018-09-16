@@ -56,22 +56,30 @@ do
       ~/go/bin/gox -osarch="${plat}/${arc}" \
         -ldflags "-s -w" \
         -tags ${dbtag} -output $GOPATH/bin/init-db ./tinode-db > /dev/null
+
       # Tar on Mac is inflexible about directories. Let's just copy release files to
       # one directory.
       rm -fR ./releases/tmp
-      mkdir -p ./releases/tmp/static
+      mkdir -p ./releases/tmp/static/img
+      mkdir ./releases/tmp/static/css
+      mkdir ./releases/tmp/static/audio
+      mkdir ./releases/tmp/static/src
+      mkdir ./releases/tmp/static/umd
+      mkdir ./releases/tmp/templ
 
       # Copy templates and database initialization files
       cp ./server/tinode.conf ./releases/tmp
-      cp -R ./server/templ ./releases/tmp
-      cp -R ./server/static/img ./releases/tmp/static
-      cp -R ./server/static/audio ./releases/tmp/static
-      cp -R ./server/static/css ./releases/tmp/static
+      cp ./server/templ/*.templ ./releases/tmp/templ
+      cp ./server/static/img/*.png ./releases/tmp/static/img
+      cp ./server/static/img/*.svg ./releases/tmp/static/img
+      cp ./server/static/audio/*.mp3 ./releases/tmp/static/audio
+      cp ./server/static/css/*.css ./releases/tmp/static/css
       cp ./server/static/index.html ./releases/tmp/static
       cp ./server/static/index-dev.html ./releases/tmp/static
-      cp ./server/static/index.js ./releases/tmp/static
-      cp ./server/static/index.min.js ./releases/tmp/static
-      cp ./server/static/tinode.js ./releases/tmp/static
+      cp ./server/static/umd/*.js ./releases/tmp/static/umd
+      cp ./server/static/src/drafty.js ./releases/tmp/static/src
+      cp ./server/static/src/tinode.js ./releases/tmp/static/src
+      cp ./server/static/src/webapp.jsx ./releases/tmp/static/src
       cp ./server/static/manifest.json ./releases/tmp/static
       cp ./tinode-db/data.json ./releases/tmp
       cp ./tinode-db/*.jpg ./releases/tmp
