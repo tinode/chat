@@ -464,7 +464,7 @@ func main() {
 		mux.Handle("/v0/file/u/", gh.CompressHandler(http.HandlerFunc(largeFileUpload)))
 		// Serve large files.
 		mux.Handle("/v0/file/s/", gh.CompressHandler(http.HandlerFunc(largeFileServe)))
-		log.Println("Large media handling enabled")
+		log.Println("Large media handling enabled", config.Media.UseHandler)
 	}
 
 	if staticMountPoint != "/" {
