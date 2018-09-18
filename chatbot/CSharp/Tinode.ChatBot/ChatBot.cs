@@ -14,6 +14,7 @@ using System.Collections.Concurrent;
 using Newtonsoft.Json;
 using Google.Protobuf.Collections;
 using System.Runtime.InteropServices;
+using System.IO;
 
 namespace Tinode.ChatBot
 {
@@ -63,7 +64,7 @@ namespace Tinode.ChatBot
         public string AppVersion => "0.15.5";
         public string LibVersion => "0.15.5";
         public string Platform => $"({RuntimeInformation.OSDescription} {RuntimeInformation.OSArchitecture})";
-
+        public string CookieFile => "cookie.dat";
         public string BotUID { get; private set; }
         public long NextTid { get; private set; }
 
@@ -71,6 +72,7 @@ namespace Tinode.ChatBot
         public int ListenPort { get; set; }
         Server server;
         AsyncDuplexStreamingCall<ClientMsg, ServerMsg> client;
+        Channel channel;
         CancellationTokenSource cancellationTokenSource;
         Queue<ClientMsg> sendMsgQueue;
         Dictionary<string, bool> subscriptions;
@@ -104,7 +106,7 @@ namespace Tinode.ChatBot
 
         public AsyncDuplexStreamingCall<ClientMsg, ServerMsg> InitClient()
         {
-            var channel = new Channel(ServerHost, ChannelCredentials.Insecure);
+            channel = new Channel(ServerHost, ChannelCredentials.Insecure);
             var stub = new NodeClient(channel);
             var stream = stub.MessageLoop(cancellationToken:cancellationTokenSource.Token);
             return stream;
@@ -168,6 +170,67 @@ namespace Tinode.ChatBot
             if (paramaters.ContainsKey("user"))
             {
                 BotUID = paramaters["user"].ToString(Encoding.ASCII);
+            }
+            Dictionary<string, string> cookieDics = new Dictionary<string, string>();
+            cookieDics["schema"] = "token";
+            if (paramaters.ContainsKey("token"))
+            {
+                cookieDics["secret"] = JsonConvert.DeserializeObject<string>(paramaters["token"].ToString(Encoding.UTF8));
+                cookieDics["expires"] = JsonConvert.DeserializeObject<string>(paramaters["expires"].ToString(Encoding.UTF8));
+            }
+            else
+            {
+                cookieDics["schema"] = "basic";
+                cookieDics["secret"] = JsonConvert.DeserializeObject<string>(paramaters["token"].ToString(Encoding.UTF8));
+            }
+            try
+            {
+                using (FileStream stream = new FileStream(cookieFile, FileMode.Create,FileAccess.Write))
+                using (StreamWriter w = new StreamWriter(stream))
+                {
+                    w.Write(JsonConvert.SerializeObject(cookieDics));
+                }
+
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine($"Failed to save authentication cookie:{e}");
+            }
+
+        }
+
+        public bool ReadAuthCookie(out string schema,out string secret)
+        {
+            schema = null;
+            secret =null;
+            if (!File.Exists(CookieFile))
+            {
+                return false;
+            }
+
+            try
+            {
+                using (FileStream stream = new FileStream(CookieFile, FileMode.Open,FileAccess.Read))
+                using (StreamReader r = new StreamReader(stream))
+                {
+                    var cookies = JsonConvert.DeserializeObject<Dictionary<string, string>>(r.ReadToEnd());
+                    schema = cookies["schema"];
+                    secret = null;
+                    if (schema == "token")
+                    {
+                        secret = Encoding.UTF8.GetString(Convert.FromBase64String(cookies["secret"]));
+                    }
+                    else
+                    {
+                        secret = cookies["secret"];
+                    }
+                    return true;
+
+                }
+            }
+            catch (Exception)
+            {
+                return false;
             }
             
         }
@@ -273,7 +336,7 @@ namespace Tinode.ChatBot
             sendBackendTask.Start();
             ClientPost(Hello());
             //Thread.Sleep(50);
-            ClientPost(Login(null, "basic", "Abot1:abot1"));
+            ClientPost(Login(CookieFile, "basic", "bob:bob123"));
             //Thread.Sleep(50);
             ClientPost(Subscribe("me"));
             //Thread.Sleep(50);
@@ -316,7 +379,7 @@ namespace Tinode.ChatBot
             }
             catch (Exception e)
             {
-                Console.WriteLine("Connection Closed");
+                Console.WriteLine($"Connection Closed:{e}");
                 Thread.Sleep(3000);
                 ClientReset();
                 client = InitClient();
@@ -325,6 +388,8 @@ namespace Tinode.ChatBot
         
         public void Stop()
         {
+            server.KillAsync().Wait();
+            channel.ShutdownAsync().Wait();
             cancellationTokenSource.Cancel();
         }
 
