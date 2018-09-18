@@ -1,13 +1,20 @@
 package fcm
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"log"
+	"strconv"
+
+	fbase "firebase.google.com/go"
+	fcm "firebase.google.com/go/messaging"
 
 	"github.com/tinode/chat/server/push"
 	"github.com/tinode/chat/server/store"
 	t "github.com/tinode/chat/server/store/types"
-	"github.com/tinode/fcm"
+
+	"google.golang.org/api/option"
 )
 
 var handler Handler
@@ -24,6 +31,7 @@ type Handler struct {
 
 type configType struct {
 	Enabled     bool   `json:"enabled"`
+	ProjectID   string `json:"project_id"`
 	Buffer      int    `json:"buffer"`
 	APIKey      string `json:"api_key"`
 	TimeToLive  uint   `json:"time_to_live,omitempty"`
@@ -36,7 +44,8 @@ type configType struct {
 func (Handler) Init(jsonconf string) error {
 
 	var config configType
-	if err := json.Unmarshal([]byte(jsonconf), &config); err != nil {
+	err := json.Unmarshal([]byte(jsonconf), &config)
+	if err != nil {
 		return errors.New("failed to parse config: " + err.Error())
 	}
 
@@ -44,7 +53,17 @@ func (Handler) Init(jsonconf string) error {
 		return nil
 	}
 
-	handler.client = fcm.NewClient(config.APIKey)
+	app, err := fbase.NewApp(context.Background(),
+		&fbase.Config{ProjectID: config.ProjectID},
+		option.WithAPIKey(config.APIKey))
+	if err != nil {
+		return err
+	}
+
+	handler.client, err = app.Messaging(context.Background())
+	if err != nil {
+		return err
+	}
 
 	if config.Buffer <= 0 {
 		config.Buffer = defaultBuffer
@@ -57,7 +76,7 @@ func (Handler) Init(jsonconf string) error {
 		for {
 			select {
 			case rcpt := <-handler.input:
-				go sendNotification(rcpt, &config)
+				go sendNotifications(rcpt, &config)
 			case <-handler.stop:
 				return
 			}
@@ -67,7 +86,24 @@ func (Handler) Init(jsonconf string) error {
 	return nil
 }
 
-func sendNotification(rcpt *push.Receipt, config *configType) {
+func payloadToData(pl *push.Payload) map[string]string {
+	if pl == nil {
+		return nil
+	}
+
+	data := make(map[string]string)
+	data["topic"] = pl.Topic
+	data["from"] = pl.From
+	data["ts"] = pl.Timestamp.String()
+	data["seq"] = strconv.Itoa(pl.SeqId)
+	data["mime"] = pl.ContentType
+	data["content"], _ = push.DraftyToPlainText(pl.Content)
+	return nil
+}
+
+func sendNotifications(rcpt *push.Receipt, config *configType) {
+	ctx := context.Background()
+
 	// List of UIDs for querying the database
 	uids := make([]t.Uid, len(rcpt.To))
 	skipDevices := make(map[string]bool)
@@ -85,77 +121,75 @@ func sendNotification(rcpt *push.Receipt, config *configType) {
 		return
 	}
 
-	sendTo := make([]string, count)
-	count = 0
-	for _, devList := range devices {
+	data := payloadToData(&rcpt.Payload)
+
+	for uid, devList := range devices {
 		for i := range devList {
 			d := &devList[i]
-			if _, ok := skipDevices[d.DeviceId]; !ok {
-				sendTo[count] = d.DeviceId
-				count++
-			}
-		}
-	}
+			if _, ok := skipDevices[d.DeviceId]; !ok && d.DeviceId != "" {
+				msg := fcm.Message{
+					Token: d.DeviceId,
+					Data:  data,
+					Notification: &fcm.Notification{
+						Title: "You received a message",
+						Body:  data["content"],
+					},
+				}
 
-	msg := &fcm.HttpMessage{
-		To:               "",
-		RegistrationIds:  sendTo,
-		CollapseKey:      config.CollapseKey, // Optionally collapse several notification messages (i.e. "message sent")
-		Priority:         fcm.PriorityHigh,   // These are IM messages, they are high priority
-		ContentAvailable: true,               // to wake up the iOS app
-		TimeToLive:       &config.TimeToLive,
-		DryRun:           false,
-		// FIXME(gene): the real plugin must understand the structure of data to
-		// ensure it does not exceed 4KB. Messages on "me" are structured and must be converted to text first.
-		Data: rcpt.Payload,
-		Notification: &fcm.Notification{
-			Title:        "X sent a message",
-			Body:         "X sent a message",
-			Sound:        "default",
-			ClickAction:  "",
-			BodyLocKey:   "",
-			BodyLocArgs:  "",
-			TitleLocKey:  "",
-			TitleLocArgs: "",
-
-			// Android only
-			Icon:  config.Icon,
-			Tag:   "", // use some tag for coalesing notifications
-			Color: config.IconColor,
-
-			// iOS only
-			Badge: "",
-		},
-	}
-
-	resp, err := handler.client.SendHttp(msg)
-	if err != nil {
-		return
-	}
-
-	if resp.Fail > 0 {
-		// Generate an inverse index to speed up processing
-		devIds := make(map[string]t.Uid)
-		for uid, devList := range devices {
-			for i := range devList {
-				devIds[devList[i].DeviceId] = uid
-			}
-		}
-
-		count = 0
-		for i := range resp.Results {
-			switch resp.Results[i].Error {
-			case fcm.ErrorInvalidRegistration,
-				fcm.ErrorNotRegistered,
-				fcm.ErrorMismatchSenderId:
-				if uid, ok := devIds[sendTo[count]]; ok {
-					store.Devices.Delete(uid, sendTo[count])
+				_, err = handler.client.Send(ctx, &msg)
+				if err != nil {
+					if fcm.IsRegistrationTokenNotRegistered(err) {
+						// Token is no longer valid.
+						store.Devices.Delete(uid, d.DeviceId)
+					} else if fcm.IsMessageRateExceeded(err) ||
+						fcm.IsServerUnavailable(err) ||
+						fcm.IsInternal(err) ||
+						fcm.IsUnknown(err) {
+						// Transient errors. Stop sending this batch.
+						log.Println("fcm transient error", err)
+						return
+					} else if fcm.IsMismatchedCredential(err) || fcm.IsInvalidArgument(err) {
+						// Config errors
+						log.Println("fcm push failed", err)
+						return
+					}
 				}
 			}
-			count++
 		}
 	}
 
+	/*
+		msg := &fcm.HttpMessage{
+			To:               "",
+			RegistrationIds:  sendTo,
+			CollapseKey:      config.CollapseKey, // Optionally collapse several notification messages (i.e. "message sent")
+			Priority:         fcm.PriorityHigh,   // These are IM messages, they are high priority
+			ContentAvailable: true,               // to wake up the iOS app
+			TimeToLive:       &config.TimeToLive,
+			DryRun:           false,
+			// FIXME(gene): the real plugin must understand the structure of data to
+			// ensure it does not exceed 4KB. Messages on "me" are structured and must be converted to text first.
+			Data: rcpt.Payload,
+			Notification: &fcm.Notification{
+				Title:        "X sent a message",
+				Body:         "X sent a message",
+				Sound:        "default",
+				ClickAction:  "",
+				BodyLocKey:   "",
+				BodyLocArgs:  "",
+				TitleLocKey:  "",
+				TitleLocArgs: "",
+
+				// Android only
+				Icon:  config.Icon,
+				Tag:   "", // use some tag for coalesing notifications
+				Color: config.IconColor,
+
+				// iOS only
+				Badge: "",
+			},
+		}
+	*/
 }
 
 // IsReady checks if the push handler has been initialized.

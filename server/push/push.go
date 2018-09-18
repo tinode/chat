@@ -12,7 +12,7 @@ import (
 
 // Recipient is a user targeted by the push.
 type Recipient struct {
-	// Addresse
+	// Addressee
 	User t.Uid `json:"user"`
 	// Count of user's connections that were live when the packet was dispatched from the server
 	Delivered int `json:"delivered"`
@@ -30,11 +30,11 @@ type Receipt struct {
 
 // Payload is content of the push.
 type Payload struct {
-	Topic string `json:"topic"`
-	// Google is retarded. "from" is a reserved keyword in FCM
-	From      string    `json:"xfrom"`
-	Timestamp time.Time `json:"ts"`
-	SeqId     int       `json:"seq"`
+	Topic       string    `json:"topic"`
+	From        string    `json:"from"`
+	Timestamp   time.Time `json:"ts"`
+	SeqId       int       `json:"seq"`
+	ContentType string    `json:"mime"`
 	// Actual Data.Content of the message, if requested
 	Content interface{} `json:"content,omitempty"`
 }
