@@ -133,8 +133,8 @@ func (ss *SessionStore) Shutdown() {
 
 	shutdown := NoErrShutdown(time.Now().UTC().Round(time.Millisecond))
 	for _, s := range ss.sessCache {
-		if s.send != nil && s.proto != CLUSTER {
-			s.send <- s.serialize(shutdown)
+		if s.stop != nil && s.proto != CLUSTER {
+			s.stop <- s.serialize(shutdown)
 		}
 	}
 

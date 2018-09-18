@@ -10,10 +10,12 @@ import (
 	fbase "firebase.google.com/go"
 	fcm "firebase.google.com/go/messaging"
 
+	"github.com/tinode/chat/server/drafty"
 	"github.com/tinode/chat/server/push"
 	"github.com/tinode/chat/server/store"
 	t "github.com/tinode/chat/server/store/types"
 
+	"golang.org/x/oauth2/google"
 	"google.golang.org/api/option"
 )
 
@@ -30,14 +32,15 @@ type Handler struct {
 }
 
 type configType struct {
-	Enabled     bool   `json:"enabled"`
-	ProjectID   string `json:"project_id"`
-	Buffer      int    `json:"buffer"`
-	APIKey      string `json:"api_key"`
-	TimeToLive  uint   `json:"time_to_live,omitempty"`
-	CollapseKey string `json:"collapse_key,omitempty"`
-	Icon        string `json:"icon,omitempty"`
-	IconColor   string `json:"icon_color,omitempty"`
+	Enabled         bool            `json:"enabled"`
+	ProjectID       string          `json:"project_id"`
+	Buffer          int             `json:"buffer"`
+	Credentials     json.RawMessage `json:"credentials"`
+	CredentialsFile string          `json:"credentials_file"`
+	TimeToLive      uint            `json:"time_to_live,omitempty"`
+	CollapseKey     string          `json:"collapse_key,omitempty"`
+	Icon            string          `json:"icon,omitempty"`
+	IconColor       string          `json:"icon_color,omitempty"`
 }
 
 // Init initializes the push handler
@@ -52,15 +55,28 @@ func (Handler) Init(jsonconf string) error {
 	if !config.Enabled {
 		return nil
 	}
+	ctx := context.Background()
 
-	app, err := fbase.NewApp(context.Background(),
-		&fbase.Config{ProjectID: config.ProjectID},
-		option.WithAPIKey(config.APIKey))
+	var opt option.ClientOption
+	if config.Credentials != nil {
+		credentials, err := google.CredentialsFromJSON(ctx, config.Credentials,
+			"https://www.googleapis.com/auth/firebase.messaging")
+		if err != nil {
+			return err
+		}
+		opt = option.WithCredentials(credentials)
+	} else if config.CredentialsFile != "" {
+		opt = option.WithCredentialsFile(config.CredentialsFile)
+	} else {
+		return errors.New("missing credentials")
+	}
+
+	app, err := fbase.NewApp(ctx, &fbase.Config{ProjectID: config.ProjectID}, opt)
 	if err != nil {
 		return err
 	}
 
-	handler.client, err = app.Messaging(context.Background())
+	handler.client, err = app.Messaging(ctx)
 	if err != nil {
 		return err
 	}
@@ -86,22 +102,35 @@ func (Handler) Init(jsonconf string) error {
 	return nil
 }
 
-func payloadToData(pl *push.Payload) map[string]string {
+func payloadToData(pl *push.Payload) (map[string]string, error) {
 	if pl == nil {
-		return nil
+		return nil, nil
 	}
 
 	data := make(map[string]string)
+	var err error
 	data["topic"] = pl.Topic
-	data["from"] = pl.From
+	// Must use "xfrom" because "from" is a reserved word.
+	// Google did not bother to document it anywhere.
+	data["xfrom"] = pl.From
 	data["ts"] = pl.Timestamp.String()
 	data["seq"] = strconv.Itoa(pl.SeqId)
 	data["mime"] = pl.ContentType
-	data["content"], _ = push.DraftyToPlainText(pl.Content)
-	return nil
+	data["content"], err = drafty.ToPlainText(pl.Content)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(data["content"]) > 128 {
+		data["content"] = data["content"][:128]
+	}
+
+	return data, nil
 }
 
 func sendNotifications(rcpt *push.Receipt, config *configType) {
+	log.Println("sendNotifications", rcpt)
+
 	ctx := context.Background()
 
 	// List of UIDs for querying the database
@@ -118,10 +147,16 @@ func sendNotifications(rcpt *push.Receipt, config *configType) {
 
 	devices, count, err := store.Devices.GetAll(uids...)
 	if err != nil || count == 0 {
+		log.Println("sendNotifications", err, count)
 		return
 	}
 
-	data := payloadToData(&rcpt.Payload)
+	data, _ := payloadToData(&rcpt.Payload)
+	if data == nil || data["content"] == "" {
+		// Could not parse payload or empty payload.
+		log.Println("sendNotifications", "empty payload")
+		return
+	}
 
 	for uid, devList := range devices {
 		for i := range devList {
@@ -131,12 +166,13 @@ func sendNotifications(rcpt *push.Receipt, config *configType) {
 					Token: d.DeviceId,
 					Data:  data,
 					Notification: &fcm.Notification{
-						Title: "You received a message",
+						Title: "New message",
 						Body:  data["content"],
 					},
 				}
-
-				_, err = handler.client.Send(ctx, &msg)
+				log.Println("sendNotifications sending to", d.DeviceId)
+				msgid, err := handler.client.Send(ctx, &msg)
+				log.Println("sendNotifications sent", msgid, err)
 				if err != nil {
 					if fcm.IsRegistrationTokenNotRegistered(err) {
 						// Token is no longer valid.

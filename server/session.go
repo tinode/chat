@@ -767,7 +767,7 @@ func (s *Session) onLogin(msgID string, timestamp time.Time, rec *auth.Rec, miss
 		if s.deviceID != "" {
 			if err := store.Devices.Update(rec.Uid, "", &types.DeviceDef{
 				DeviceId: s.deviceID,
-				Platform: "",
+				Platform: platformFromUA(s.userAgent),
 				LastSeen: timestamp,
 				Lang:     s.lang,
 			}); err != nil {

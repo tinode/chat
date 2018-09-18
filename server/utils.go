@@ -570,3 +570,8 @@ func toAbsolutePath(base, path string) string {
 	}
 	return filepath.Clean(filepath.Join(base, path))
 }
+
+// Detect platform from UserAgent string.
+func platformFromUA(ua string) string {
+	return ""
+}
