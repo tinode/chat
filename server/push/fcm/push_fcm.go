@@ -38,7 +38,6 @@ type configType struct {
 	Credentials     json.RawMessage `json:"credentials"`
 	CredentialsFile string          `json:"credentials_file"`
 	TimeToLive      uint            `json:"time_to_live,omitempty"`
-	CollapseKey     string          `json:"collapse_key,omitempty"`
 	Icon            string          `json:"icon,omitempty"`
 	IconColor       string          `json:"icon_color,omitempty"`
 }
@@ -170,7 +169,6 @@ func sendNotifications(rcpt *push.Receipt, config *configType) {
 						Body:  data["content"],
 					},
 				}
-				log.Println("sendNotifications sending to", d.DeviceId)
 				msgid, err := handler.client.Send(ctx, &msg)
 				log.Println("sendNotifications sent", msgid, err)
 				if err != nil {
