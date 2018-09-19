@@ -1,6 +1,6 @@
 # Tinode Chatbot Example
 
-This is a rudimentary chatbot for Tinode using [gRPC API](../pbx/). It's written in Python as a demonstration
+This is a rudimentary chatbot for Tinode using [gRPC API](../../pbx/). It's written in Python as a demonstration
 that the API is language-independent.
 
 The chat bot subscribes to events stream using Plugin API and logs in as a regular user. The event stream API is used to listen for creation of new accounts. When a new account is created, the bot initiates a p2p topic with the new user. Then it listens for messages sent to the topic and responds to each with a random quote from `quotes.txt` file.
@@ -68,7 +68,7 @@ $ python -m pip install tinode_grpc --ignore-installed
 
 #### Run the chatbot
 
-Start the [tinode server](../INSTALL.md) first. Then start the chatbot with credentials of the user you want to be your bot, `alice` in this example:
+Start the [tinode server](../../INSTALL.md) first. Then start the chatbot with credentials of the user you want to be your bot, `alice` in this example:
 ```
 python chatbot.py --login-basic=alice:alice123
 ```

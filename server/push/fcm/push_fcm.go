@@ -128,9 +128,13 @@ func payloadToData(pl *push.Payload) (map[string]string, error) {
 }
 
 func sendNotifications(rcpt *push.Receipt, config *configType) {
-	log.Println("sendNotifications", rcpt)
-
 	ctx := context.Background()
+
+	data, _ := payloadToData(&rcpt.Payload)
+	if data == nil || data["content"] == "" {
+		// Could not parse payload or empty payload.
+		return
+	}
 
 	// List of UIDs for querying the database
 	uids := make([]t.Uid, len(rcpt.To))
@@ -145,15 +149,11 @@ func sendNotifications(rcpt *push.Receipt, config *configType) {
 	}
 
 	devices, count, err := store.Devices.GetAll(uids...)
-	if err != nil || count == 0 {
-		log.Println("sendNotifications", err, count)
+	if err != nil {
+		log.Println("fcm push db error", err)
 		return
 	}
-
-	data, _ := payloadToData(&rcpt.Payload)
-	if data == nil || data["content"] == "" {
-		// Could not parse payload or empty payload.
-		log.Println("sendNotifications", "empty payload")
+	if count == 0 {
 		return
 	}
 
@@ -169,8 +169,7 @@ func sendNotifications(rcpt *push.Receipt, config *configType) {
 						Body:  data["content"],
 					},
 				}
-				msgid, err := handler.client.Send(ctx, &msg)
-				log.Println("sendNotifications sent", msgid, err)
+				_, err := handler.client.Send(ctx, &msg)
 				if err != nil {
 					if fcm.IsRegistrationTokenNotRegistered(err) {
 						// Token is no longer valid.
@@ -180,7 +179,7 @@ func sendNotifications(rcpt *push.Receipt, config *configType) {
 						fcm.IsInternal(err) ||
 						fcm.IsUnknown(err) {
 						// Transient errors. Stop sending this batch.
-						log.Println("fcm transient error", err)
+						log.Println("fcm transient failure", err)
 						return
 					} else if fcm.IsMismatchedCredential(err) || fcm.IsInvalidArgument(err) {
 						// Config errors
@@ -196,7 +195,6 @@ func sendNotifications(rcpt *push.Receipt, config *configType) {
 		msg := &fcm.HttpMessage{
 			To:               "",
 			RegistrationIds:  sendTo,
-			CollapseKey:      config.CollapseKey, // Optionally collapse several notification messages (i.e. "message sent")
 			Priority:         fcm.PriorityHigh,   // These are IM messages, they are high priority
 			ContentAvailable: true,               // to wake up the iOS app
 			TimeToLive:       &config.TimeToLive,

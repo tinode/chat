@@ -316,7 +316,7 @@ func (t *Topic) run(hub *Hub) {
 					msg.sessFrom.queueOut(reply)
 				}
 
-				pushRcpt = t.makePushReceipt(msg.Data)
+				pushRcpt = t.makePushReceipt(from, msg.Data)
 
 				// Message sent: notify offline 'R' subscrbers on 'me'
 				t.presSubsOffline("msg", &presParams{seqID: t.lastID},
@@ -2150,12 +2150,12 @@ func (t *Topic) evictUser(uid types.Uid, unsub bool, skip string) {
 }
 
 // Prepares a payload to be delivered to a mobile device as a push notification.
-func (t *Topic) makePushReceipt(data *MsgServerData) *pushReceipt {
+func (t *Topic) makePushReceipt(fromUid types.Uid, data *MsgServerData) *pushReceipt {
 	idx := make(map[types.Uid]int, t.subsCount())
 	receipt := push.Receipt{
 		To: make([]push.Recipient, t.subsCount()),
 		Payload: push.Payload{
-			Topic:     data.Topic,
+			Topic:     t.original(fromUid),
 			From:      data.From,
 			Timestamp: data.Timestamp,
 			SeqId:     data.SeqId,
