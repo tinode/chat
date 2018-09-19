@@ -10,7 +10,7 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("")]
 [assembly: AssemblyProduct("Tinode.ChatBot.DemoNet46")]
-[assembly: AssemblyCopyright("Copyright ©  2018")]
+[assembly: AssemblyCopyright("https://github.com/tinode/chat")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 

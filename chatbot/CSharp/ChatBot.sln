@@ -7,6 +7,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Tinode.ChatBot.DemoNet46", 
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Tinode.ChatBot", "Tinode.ChatBot\Tinode.ChatBot.csproj", "{7ED0D9CF-EF11-4BE2-A7CA-AD8395F2A254}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Tinode.ChatBot.DemoNetCore", "Tinode.ChatBot.DemoNetCore\Tinode.ChatBot.DemoNetCore.csproj", "{C4CA23ED-33AA-4B91-A6D2-C5C3C30D76B7}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -21,6 +23,10 @@ Global
 		{7ED0D9CF-EF11-4BE2-A7CA-AD8395F2A254}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{7ED0D9CF-EF11-4BE2-A7CA-AD8395F2A254}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{7ED0D9CF-EF11-4BE2-A7CA-AD8395F2A254}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C4CA23ED-33AA-4B91-A6D2-C5C3C30D76B7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C4CA23ED-33AA-4B91-A6D2-C5C3C30D76B7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C4CA23ED-33AA-4B91-A6D2-C5C3C30D76B7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C4CA23ED-33AA-4B91-A6D2-C5C3C30D76B7}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -1,15 +1,9 @@
 ﻿using CommandLine;
-using Google.Protobuf;
 using Pbx;
 using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
-using Tinode.ChatBot;
 
-namespace Tinode.ChatBot.DemoNet46
+namespace Tinode.ChatBot.DemoNetCore
 {
     class Program
     {
@@ -36,7 +30,6 @@ namespace Tinode.ChatBot.DemoNet46
             {
                 return DateTime.Now.ToLongDateString();
             }
-
         }
 
         static ChatBot bot;
@@ -105,5 +98,4 @@ namespace Tinode.ChatBot.DemoNet46
             bot.Stop();
         }
     }
-
 }

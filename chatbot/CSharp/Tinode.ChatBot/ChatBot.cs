@@ -18,6 +18,9 @@ using System.IO;
 
 namespace Tinode.ChatBot
 {
+    /// <summary>
+    /// ChatBot Plugin implement
+    /// </summary>
     public class ChatBotPlugin : PluginBase
     {
         public override Task<Unused> Account(AccountEvent request, ServerCallContext context)
@@ -43,15 +46,34 @@ namespace Tinode.ChatBot
         }
     }
 
-
+    /// <summary>
+    /// CSharp ChatBot implement, same as the python version.
+    /// </summary>
     public class ChatBot
     {
+        /// <summary>
+        /// Help define functionale which will be called in future.
+        /// </summary>
         public class Future
         {
+            /// <summary>
+            /// Each rpc call message id
+            /// </summary>
             public string Tid { get; private set; }
+            /// <summary>
+            /// Argument needs by action.
+            /// </summary>
             public string Arg { get; private set; }
+            /// <summary>
+            /// callback function
+            /// </summary>
             public Action<string, MapField<string, ByteString>> Action { get; private set; }
-
+            /// <summary>
+            /// construction
+            /// </summary>
+            /// <param name="tid"> Each rpc call message id</param>
+            /// <param name="action">Argument needs by action.</param>
+            /// <param name="arg">callback function</param>
             public Future(string tid,Action<string, MapField<string, ByteString>> action,string arg="")
             {
                 Tid = tid;
@@ -60,16 +82,55 @@ namespace Tinode.ChatBot
             }
         }
 
+        /// <summary>
+        /// Chatbot application name
+        /// </summary>
         public string AppName => "CBot";
+        /// <summary>
+        /// Chatbot version
+        /// </summary>
         public string AppVersion => "0.15.5";
+        /// <summary>
+        /// Chatbot library version
+        /// </summary>
         public string LibVersion => "0.15.5";
+        /// <summary>
+        /// Chatbot current platfrom information
+        /// </summary>
         public string Platform => $"({RuntimeInformation.OSDescription} {RuntimeInformation.OSArchitecture})";
-        public string CookieFile => "cookie.dat";
+        /// <summary>
+        /// Chatbot instance id, this will be used in chat
+        /// </summary>
         public string BotUID { get; private set; }
+        /// <summary>
+        /// Next tid
+        /// </summary>
         public long NextTid { get; private set; }
-
+        /// <summary>
+        /// gRPC server
+        /// </summary>
         public string ServerHost { get; set; }
-        public int ListenPort { get; set; }
+        /// <summary>
+        /// Plugin API calls listen addr
+        /// </summary>
+        public string Listen { get; set; }
+        /// <summary>
+        /// Cookie file
+        /// </summary>
+        public string CookieFile { get; set; }
+        /// <summary>
+        /// Login in schema
+        /// </summary>
+        public string Schema { get; set; }
+        /// <summary>
+        /// Login in credentials
+        /// </summary>
+        public ByteString Secret { get; set; }
+        /// <summary>
+        /// Chatbot auto reply implement interface,you can use this to make you own chat logic
+        /// </summary>
+        public IBotResponse BotResponse { get; set; }
+
         Server server;
         AsyncDuplexStreamingCall<ClientMsg, ServerMsg> client;
         Channel channel;
@@ -77,46 +138,89 @@ namespace Tinode.ChatBot
         Queue<ClientMsg> sendMsgQueue;
         Dictionary<string, bool> subscriptions;
         Dictionary<string, Future> onCompletion;
-        public ChatBot(string serverHost="localhost:6061",int listenPort=40052)
+
+        /// <summary>
+        /// Contruction
+        /// </summary>
+        /// <param name="serverHost">gRPC server</param>
+        /// <param name="listen">Plugin API calls listen addr</param>
+        /// <param name="cookie">Cookie file</param>
+        /// <param name="schema">Login in schema</param>
+        /// <param name="secret">Login in credentials</param>
+        /// <param name="botResponse">Chatbot auto reply implement interface,you can use this to make you own chat logic</param>
+        public ChatBot(string serverHost="localhost:6061",string listen="0.0.0.0:40052",string cookie=".tn-cookie",string schema="basic",string secret="",IBotResponse botResponse=null)
         {
+            //Initial a tid with a random value btw 1~1000
             NextTid =new Random().Next(1,1000);
             ServerHost = serverHost;
-            ListenPort = listenPort;
+            Listen = listen;
+            CookieFile = cookie;
+            Schema = schema;
+            Secret = ByteString.CopyFromUtf8(secret);
+            BotResponse = botResponse;
             cancellationTokenSource = new CancellationTokenSource();
             sendMsgQueue = new Queue<ClientMsg>();
             subscriptions = new Dictionary<string, bool>();
             onCompletion = new Dictionary<string, Future>();
         }
 
+        /// <summary>
+        /// generate the next tid
+        /// </summary>
+        /// <returns>new tid</returns>
         public string GetNextTid()
         {
             NextTid += 1;
             return NextTid.ToString();
         }
         
-        
+        /// <summary>
+        /// Initialize plugin api calls listen server
+        /// </summary>
+        /// <returns>Plugin api calls server</returns>
         public Server InitServer()
         {
             var server = new Server();
             server.Services.Add(Plugin.BindService(new ChatBotPlugin()));
-            server.Ports.Add(new ServerPort("0.0.0.0", ListenPort, ServerCredentials.Insecure));
+            var listenHost = Listen.Split(':')[0];
+            var listenPort = int.Parse(Listen.Split(':')[1]);
+            server.Ports.Add(new ServerPort(listenHost,listenPort, ServerCredentials.Insecure));
             server.Start();
             return server;
         }
 
+        /// <summary>
+        /// Initialize chatbot client
+        /// </summary>
+        /// <returns>chatbot client instance</returns>
         public AsyncDuplexStreamingCall<ClientMsg, ServerMsg> InitClient()
         {
             channel = new Channel(ServerHost, ChannelCredentials.Insecure);
             var stub = new NodeClient(channel);
             var stream = stub.MessageLoop(cancellationToken:cancellationTokenSource.Token);
+            ClientPost(Hello());
+            ClientPost(Login(CookieFile, Schema, Secret));
+            ClientPost(Subscribe("me"));
             return stream;
         }
 
+        /// <summary>
+        /// Add future callback
+        /// </summary>
+        /// <param name="tid">tid</param>
+        /// <param name="bundle">callback instance</param>
         public void AddFuture(string tid,Future bundle)
         {
             onCompletion.Add(tid, bundle);
         }
 
+        /// <summary>
+        /// Execute callbacks in future callback collection
+        /// </summary>
+        /// <param name="tid">tid</param>
+        /// <param name="code">rpc status code</param>
+        /// <param name="text">text</param>
+        /// <param name="paramaters">paramaters</param>
         public void ExecFuture(string tid,int code,string text,MapField<string,ByteString> paramaters)
         {
             if (onCompletion.ContainsKey(tid))
@@ -136,6 +240,10 @@ namespace Tinode.ChatBot
 
         }
 
+        /// <summary>
+        /// add a chat topic to subscription
+        /// </summary>
+        /// <param name="topic">topic name </param>
         public void AddSubscription(string topic)
         {
             if (!subscriptions.ContainsKey(topic))
@@ -144,6 +252,10 @@ namespace Tinode.ChatBot
             }
         }
 
+        /// <summary>
+        /// delete a chat topic from subscription
+        /// </summary>
+        /// <param name="topic">topic name </param>
         public void DelSubscription(string topic)
         {
             if (subscriptions.ContainsKey(topic))
@@ -152,6 +264,10 @@ namespace Tinode.ChatBot
             }
         }
 
+        /// <summary>
+        /// Server version callback implement
+        /// </summary>
+        /// <param name="paramaters">paramaters</param>
         public void ServerVersion(MapField<string, ByteString> paramaters)
         {
             if (paramaters==null)
@@ -161,6 +277,11 @@ namespace Tinode.ChatBot
             Console.WriteLine($"Server:{paramaters["build"].ToString(Encoding.ASCII)},{paramaters["ver"].ToString(Encoding.ASCII)}");
         }
 
+        /// <summary>
+        /// login callback implement
+        /// </summary>
+        /// <param name="cookieFile">cookie file</param>
+        /// <param name="paramaters">paramaters</param>
         public void OnLogin(string cookieFile, MapField<string, ByteString> paramaters)
         {
             if (paramaters == null || string.IsNullOrEmpty(cookieFile))
@@ -199,7 +320,14 @@ namespace Tinode.ChatBot
 
         }
 
-        public bool ReadAuthCookie(out string schema,out string secret)
+
+        /// <summary>
+        /// read auth information from cookie
+        /// </summary>
+        /// <param name="schema">schema type</param>
+        /// <param name="secret">secret</param>
+        /// <returns>success-true, faild-false</returns>
+        public bool ReadAuthCookie(out string schema,out ByteString secret)
         {
             schema = null;
             secret =null;
@@ -218,11 +346,13 @@ namespace Tinode.ChatBot
                     secret = null;
                     if (schema == "token")
                     {
-                        secret = Encoding.UTF8.GetString(Convert.FromBase64String(cookies["secret"]));
+                        var defautl = Encoding.Default.GetBytes(cookies["secret"]);
+                        var utf8Str = Encoding.UTF8.GetString(defautl);
+                        secret = ByteString.FromBase64(utf8Str);
                     }
                     else
                     {
-                        secret = cookies["secret"];
+                        secret = ByteString.CopyFromUtf8(cookies["secret"]);
                     }
                     return true;
 
@@ -235,15 +365,24 @@ namespace Tinode.ChatBot
             
         }
 
+        /// <summary>
+        /// Post message to message queue
+        /// </summary>
+        /// <param name="msg">message</param>
         public void ClientPost(ClientMsg msg)
         {
             sendMsgQueue.Enqueue(msg);
         }
 
+        /// <summary>
+        /// reset client status
+        /// </summary>
         public void ClientReset()
         {
             try
             {
+                subscriptions.Clear();
+                onCompletion.Clear();
                 while (sendMsgQueue.Count > 0)
                 {
                     sendMsgQueue.Dequeue();
@@ -254,6 +393,10 @@ namespace Tinode.ChatBot
             }
         }
 
+        /// <summary>
+        /// Say Hi to server
+        /// </summary>
+        /// <returns>Hi message</returns>
         public ClientMsg Hello()
         {
             var tid = GetNextTid();
@@ -265,7 +408,14 @@ namespace Tinode.ChatBot
             return new ClientMsg() { Hi = new ClientHi() { Id = tid, UserAgent = $"{AppName}/{AppVersion} {Platform}; gRPC-csharp/{AppVersion}", Ver = LibVersion, Lang = "EN" } };
         }
 
-        public ClientMsg Login(string cookieFile,string scheme,string secret)
+        /// <summary>
+        /// login in
+        /// </summary>
+        /// <param name="cookieFile">cookie file</param>
+        /// <param name="scheme">schema type</param>
+        /// <param name="secret">secret</param>
+        /// <returns>login in message</returns>
+        public ClientMsg Login(string cookieFile,string scheme,ByteString secret)
         {
             var tid = GetNextTid();
             AddFuture(tid, new Future(tid, new Action<string, MapField<string, ByteString>>((fname, paramaters) =>
@@ -273,9 +423,14 @@ namespace Tinode.ChatBot
                 OnLogin(fname, paramaters);
             }),cookieFile));
 
-            return new ClientMsg() { Login = new ClientLogin() { Id = tid, Scheme = scheme, Secret = ByteString.CopyFrom(secret, Encoding.UTF8) } };
+            return new ClientMsg() { Login = new ClientLogin() { Id = tid, Scheme = scheme, Secret = secret } };
         }
 
+        /// <summary>
+        /// Subscribe topic
+        /// </summary>
+        /// <param name="topic">topic name</param>
+        /// <returns>subscribe message</returns>
         public ClientMsg Subscribe(string topic)
         {
             var tid = GetNextTid();
@@ -287,6 +442,11 @@ namespace Tinode.ChatBot
             return new ClientMsg() { Sub = new ClientSub() { Id = tid, Topic = topic } };
         }
 
+        /// <summary>
+        /// leave topic
+        /// </summary>
+        /// <param name="topic">topic name</param>
+        /// <returns>leave message</returns>
         public ClientMsg Leave(string topic)
         {
             var tid = GetNextTid();
@@ -298,6 +458,12 @@ namespace Tinode.ChatBot
             return new ClientMsg() { Leave = new ClientLeave() { Id = tid, Topic = topic } };
         }
 
+        /// <summary>
+        /// publish message to a topic 
+        /// </summary>
+        /// <param name="topic">topic name</param>
+        /// <param name="text">message</param>
+        /// <returns>publish message</returns>
         public ClientMsg Publish(string topic,string text)
         {
             var tid = GetNextTid();
@@ -306,15 +472,22 @@ namespace Tinode.ChatBot
             return new ClientMsg() { Pub = new ClientPub() { Id = tid, Topic = topic, NoEcho = true, Content = message } };
         }
 
+        /// <summary>
+        /// note read
+        /// </summary>
+        /// <param name="topic">topic name </param>
+        /// <param name="seq">chat sequence id</param>
+        /// <returns>note message</returns>
         public ClientMsg NoteRead(string topic, int seq)
         {
             return new ClientMsg() { Note = new ClientNote() { SeqId = seq, Topic = topic, What = InfoNote.Read } };
         }
 
-        public async Task Start()
+        /// <summary>
+        /// sending message queue loop
+        /// </summary>
+        public void SendMessageLoop()
         {
-            server= InitServer();
-            client = InitClient();
             Task sendBackendTask = new Task(async () =>
             {
                 Console.WriteLine("Message send queue started...");
@@ -323,7 +496,17 @@ namespace Tinode.ChatBot
                     if (sendMsgQueue.Count > 0)
                     {
                         var msg = sendMsgQueue.Dequeue();
-                        await client.RequestStream.WriteAsync(msg);
+                        try
+                        {
+                            await client.RequestStream.WriteAsync(msg);
+                        }
+                        catch (Exception e)
+                        {
+                            Console.WriteLine($"[Error] {e.Message} ,Failed message will be put back to queue...");
+                            sendMsgQueue.Enqueue(msg);
+                            Thread.Sleep(1000);
+                        }
+
 
                     }
                     else
@@ -332,65 +515,100 @@ namespace Tinode.ChatBot
                     }
                 }
                 Console.WriteLine("Detect cancel message,stop sending message...");
-            },cancellationTokenSource.Token);
+            }, cancellationTokenSource.Token);
             sendBackendTask.Start();
-            ClientPost(Hello());
-            //Thread.Sleep(50);
-            ClientPost(Login(CookieFile, "basic", "bob:bob123"));
-            //Thread.Sleep(50);
-            ClientPost(Subscribe("me"));
-            //Thread.Sleep(50);
-            
-            try
+
+        }
+
+        /// <summary>
+        /// client receive message loop
+        /// </summary>
+        /// <returns></returns>
+        public async Task ClientMessageLoop()
+        {
+            while (!cancellationTokenSource.IsCancellationRequested)
             {
-                while (!cancellationTokenSource.IsCancellationRequested&& await client.ResponseStream.MoveNext())
+                if (!await client.ResponseStream.MoveNext())
                 {
-                    var response = client.ResponseStream.Current;
-                    if (response.Ctrl != null)
+                    break;
+                }
+                var response = client.ResponseStream.Current;
+                if (response.Ctrl != null)
+                {
+                    Console.WriteLine($"Ctrl:{response.Ctrl.Id},{response.Ctrl.Code},{response.Ctrl.Text},{response.Ctrl.Params}");
+                    ExecFuture(response.Ctrl.Id, response.Ctrl.Code, response.Ctrl.Text, response.Ctrl.Params);
+                }
+                else if (response.Data != null)
+                {
+                    if (response.Data.FromUserId != BotUID)
                     {
-                        Console.WriteLine($"Ctrl:{response.Ctrl.Id},{response.Ctrl.Code},{response.Ctrl.Text},{response.Ctrl.Params}");
-                        ExecFuture(response.Ctrl.Id, response.Ctrl.Code, response.Ctrl.Text, response.Ctrl.Params);
-                    }
-                    else if (response.Data != null)
-                    {
-                        if (response.Data.FromUserId != BotUID)
+                        ClientPost(NoteRead(response.Data.Topic, response.Data.SeqId));
+                        Thread.Sleep(50);
+                        if (BotResponse != null)
                         {
-                            ClientPost(NoteRead(response.Data.Topic, response.Data.SeqId));
-                            Thread.Sleep(50);
-                            ClientPost(Publish(response.Data.Topic, "你好大兄弟"));
+                            ClientPost(Publish(response.Data.Topic, BotResponse.ThinkAndReply(response.Data.Clone())));
                         }
-                    }
-                    else if (response.Pres != null)
-                    {
-                        if (response.Pres.Topic == "me")
+                        else
                         {
-                            Console.WriteLine("me");
-                            if ((response.Pres.What == ServerPres.Types.What.On || response.Pres.What == ServerPres.Types.What.Msg)&&!subscriptions.ContainsKey(response.Pres.Src))
-                            {
-                                ClientPost(Subscribe(response.Pres.Src));
-                            }
-                            else if (response.Pres.What==ServerPres.Types.What.Off && subscriptions.ContainsKey(response.Pres.Src))
-                            {
-                                ClientPost(Leave(response.Pres.Src));
-                            }
+                            ClientPost(Publish(response.Data.Topic, "I don't know how to talk with you, maybe my father didn't put my brain in my head..."));
+                        }
+
+                    }
+                }
+                else if (response.Pres != null)
+                {
+                    if (response.Pres.Topic == "me")
+                    {
+                        if ((response.Pres.What == ServerPres.Types.What.On || response.Pres.What == ServerPres.Types.What.Msg) && !subscriptions.ContainsKey(response.Pres.Src))
+                        {
+                            ClientPost(Subscribe(response.Pres.Src));
+                        }
+                        else if (response.Pres.What == ServerPres.Types.What.Off && subscriptions.ContainsKey(response.Pres.Src))
+                        {
+                            ClientPost(Leave(response.Pres.Src));
                         }
                     }
                 }
             }
-            catch (Exception e)
+        }
+
+        /// <summary>
+        /// start chatbot
+        /// </summary>
+        /// <returns></returns>
+        public async Task Start()
+        {
+
+            server= InitServer();
+            client = InitClient();
+            SendMessageLoop();
+            while (!cancellationTokenSource.IsCancellationRequested)
             {
-                Console.WriteLine($"Connection Closed:{e}");
-                Thread.Sleep(3000);
-                ClientReset();
-                client = InitClient();
+                try
+                {
+                    await ClientMessageLoop();
+                }
+                catch (Exception e)
+                {
+                    Console.WriteLine($"Connection Closed:{e.Message}");
+                    Thread.Sleep(3000);
+                    ClientReset();
+                    client = InitClient();
+                }
             }
+
         } 
         
+        /// <summary>
+        /// stop chatbot
+        /// </summary>
         public void Stop()
         {
-            server.KillAsync().Wait();
-            channel.ShutdownAsync().Wait();
+            Console.WriteLine("[Exit] ChatBot is exiting...Wait a second...");
             cancellationTokenSource.Cancel();
+            server.ShutdownAsync().Wait();
+            channel.ShutdownAsync().Wait();
+
         }
 
     }
