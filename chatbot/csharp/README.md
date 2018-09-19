@@ -138,6 +138,4 @@ they are "Tinode.ChatBot.DemoNet46" and "Tinode.ChatBot.DemoNetCore".
 ```
 
 #### example screenshot
-![image](./screenshots/1.PNG)
-
-
+![image](./screenshots/1.png)
