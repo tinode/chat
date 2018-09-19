@@ -5,9 +5,9 @@ that the API is language-independent.
 
 The chat bot subscribes to events stream using Plugin API and logs in as a regular user. The event stream API is used to listen for creation of new accounts. When a new account is created, the bot initiates a p2p topic with the new user. Then it listens for messages sent to the topic and responds to each with a random quote from `quotes.txt` file.
 
-Generated files are provided for convenience in a [separate folder](../py_grpc/tinode_grpc). You may re-generate them if needed:
+Generated files are provided for convenience in a [separate folder](../../py_grpc/tinode_grpc). You may re-generate them if needed:
 ```
-python -m grpc_tools.protoc -I../pbx --python_out=. --grpc_python_out=. ../pbx/model.proto
+python -m grpc_tools.protoc -../../pbx --python_out=. --grpc_python_out=. ../../pbx/model.proto
 ```
 
 Chatbot expects gRPC binding to be provided as `tinode-grpc`. If you want to use them locally, first copy `model_pb2.py` and `model_pb2_grpc.py` to the same folder as `chatbot.py` then find the lines
@@ -92,7 +92,7 @@ Quotes are read from `quotes.txt` by default. The file is plain text with one qu
 
 **Warning!** Although the chatbot itself is less than 11KB, the chatbot Docker image is 175MB: the `:slim` Python 3 image is about 140MB, gRPC adds another ~30MB.
 
-1. Follow [instructions](../docker/README.md) to build and run dockerized Tinode chat server up to and including _step 3_.
+1. Follow [instructions](../../docker/README.md) to build and run dockerized Tinode chat server up to and including _step 3_.
 
 2. In _step 4_ run the server adding `--env PLUGIN_PYTHON_CHAT_BOT_ENABLED=true` and `--volume botdata:/botdata` to the command line:
 	1. **RethinkDB**:
