@@ -75,11 +75,11 @@ A text-only [command line client](./tn-cli) implements every possible command.
 * Rich formatting of messages, markdown-style: \*style\* &rarr; **style**.
 * Inline images and file attachments.
 * Message status notifications: message delivery to server; received and read notifications; typing notifications.
-* Support for client-side caching.
+* Support for client-side data caching.
 * Ability to block unwanted communication server-side.
 * Anonymous users (important for use cases related to tech support over chat).
-* Mobile push notifications using [FCM](https://firebase.google.com/docs/cloud-messaging/).
-* Support for storage and out of band transfer of large objects like video files.
+* Android and [web](https://caniuse.com/#feat=push-api) push notifications using [FCM](https://firebase.google.com/docs/cloud-messaging/).
+* Storage and out of band transfer of large objects like video files using local file system or Amazon S3.
 * Plugins to extend functionality like enabling chat bots.
 
 ### Planned
@@ -90,7 +90,6 @@ A text-only [command line client](./tn-cli) implements every possible command.
 * Group messaging with unlimited number (or hundreds of thousands) of members with bearer token access control.
 * Hot standby.
 * Different levels of message persistence (from strict persistence to "store until delivered" to purely ephemeral messaging).
-* Push notification in the webapp.
 
 ## Screenshots
 

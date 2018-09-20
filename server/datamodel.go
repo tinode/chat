@@ -311,6 +311,9 @@ type MsgTopicDesc struct {
 	// Timestamp of the last message
 	TouchedAt *time.Time `json:"touched,omitempty"`
 
+	// If the group topic is online.
+	Online bool `json:"online,omitempty"`
+
 	DefaultAcs *MsgDefaultAcsMode `json:"defacs,omitempty"`
 	// Actual access mode
 	Acs *MsgAccessMode `json:"acs,omitempty"`

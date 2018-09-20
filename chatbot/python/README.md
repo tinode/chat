@@ -116,4 +116,5 @@ You may replace the `:latest` with a different tag. See all available tags here:
  * [Tinode-MySQL tags](https://hub.docker.com/r/tinode/tinode-mysql/tags/)
  * [Tinode-RethinkDB tags](https://hub.docker.com/r/tinode/tinode-rethink/tags/)
  * [Chatbot tags](https://hub.docker.com/r/tinode/chatbot/tags/)
-In general try to use all images with the same tag.
+
+In general try to use docker images all with the same tag.

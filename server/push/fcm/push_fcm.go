@@ -164,16 +164,29 @@ func sendNotifications(rcpt *push.Receipt, config *configType) {
 				msg := fcm.Message{
 					Token: d.DeviceId,
 					Data:  data,
-					Notification: &fcm.Notification{
+				}
+				if d.Platform == "android" {
+					msg.Android = &fcm.AndroidConfig{
+						Notification: &fcm.AndroidNotification{
+							Title: "New message",
+							Body:  data["content"],
+							Icon:  config.Icon,
+							Color: config.IconColor,
+						},
+					}
+				} else {
+					// No need to handle webpush separately.
+					msg.Notification = &fcm.Notification{
 						Title: "New message",
 						Body:  data["content"],
-					},
+					}
 				}
 				_, err := handler.client.Send(ctx, &msg)
 				if err != nil {
 					if fcm.IsRegistrationTokenNotRegistered(err) {
 						// Token is no longer valid.
 						store.Devices.Delete(uid, d.DeviceId)
+						log.Println("fcm invalid token ", err)
 					} else if fcm.IsMessageRateExceeded(err) ||
 						fcm.IsServerUnavailable(err) ||
 						fcm.IsInternal(err) ||
@@ -185,43 +198,13 @@ func sendNotifications(rcpt *push.Receipt, config *configType) {
 						// Config errors
 						log.Println("fcm push failed", err)
 						return
+					} else {
+						log.Println("fcm push ", err)
 					}
 				}
 			}
 		}
 	}
-
-	/*
-		msg := &fcm.HttpMessage{
-			To:               "",
-			RegistrationIds:  sendTo,
-			Priority:         fcm.PriorityHigh,   // These are IM messages, they are high priority
-			ContentAvailable: true,               // to wake up the iOS app
-			TimeToLive:       &config.TimeToLive,
-			DryRun:           false,
-			// FIXME(gene): the real plugin must understand the structure of data to
-			// ensure it does not exceed 4KB. Messages on "me" are structured and must be converted to text first.
-			Data: rcpt.Payload,
-			Notification: &fcm.Notification{
-				Title:        "X sent a message",
-				Body:         "X sent a message",
-				Sound:        "default",
-				ClickAction:  "",
-				BodyLocKey:   "",
-				BodyLocArgs:  "",
-				TitleLocKey:  "",
-				TitleLocArgs: "",
-
-				// Android only
-				Icon:  config.Icon,
-				Tag:   "", // use some tag for coalesing notifications
-				Color: config.IconColor,
-
-				// iOS only
-				Badge: "",
-			},
-		}
-	*/
 }
 
 // IsReady checks if the push handler has been initialized.

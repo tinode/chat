@@ -443,10 +443,10 @@ func main() {
 		mux.Handle(staticMountPoint,
 			// Optionally add Strict-Transport_security to the response
 			hstsHandler(
-				// And add custom formatter of errors.
-				httpErrorHandler(
-					// Add gzip compression
-					gh.CompressHandler(
+				// Add gzip compression
+				gh.CompressHandler(
+					// And add custom formatter of errors.
+					httpErrorHandler(
 						// Remove mount point prefix
 						http.StripPrefix(staticMountPoint,
 							http.FileServer(http.Dir(*staticPath)))))))

@@ -1236,6 +1236,9 @@ func (t *Topic) replyGetDesc(sess *Session, id string, opts *MsgGetOpts) error {
 				Mode:  (pud.modeGiven & pud.modeWant).String()}
 		}
 
+		if t.cat == types.TopicCatGrp && (pud.modeGiven & pud.modeWant).IsPresencer() {
+			desc.Online = len(t.sessions) > 0
+		}
 		if ifUpdated {
 			desc.Private = pud.private
 		}

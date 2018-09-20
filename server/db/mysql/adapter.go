@@ -1717,7 +1717,8 @@ func (a *adapter) DeviceGetAll(uids ...t.Uid) (map[t.Uid][]t.DeviceDef, int, err
 }
 
 func (a *adapter) DeviceDelete(uid t.Uid, deviceID string) error {
-	_, err := a.db.Exec("DELETE FROM devices WHERE userid=? AND hash=?", uid, deviceHasher(deviceID))
+	_, err := a.db.Exec("DELETE FROM devices WHERE userid=? AND hash=?",
+		store.DecodeUid(uid), deviceHasher(deviceID))
 	return err
 }
 

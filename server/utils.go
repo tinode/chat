@@ -571,7 +571,13 @@ func toAbsolutePath(base, path string) string {
 	return filepath.Clean(filepath.Join(base, path))
 }
 
-// Detect platform from UserAgent string.
+// Detect platform from the UserAgent string.
 func platformFromUA(ua string) string {
+	switch {
+	case strings.Contains(ua, "tinodejs"):
+		return "web"
+	case strings.Contains(ua, "tindroid"):
+		return "android"
+	}
 	return ""
 }
