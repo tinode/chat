@@ -25,7 +25,7 @@ The goal of this project is to actually deliver on XMPP's original vision: creat
 
 ### Web
 
-A web demo is usually available at https://api.tinode.co/ ([source](https://github.com/tinode/webapp/)).
+TinodeWeb, a single page web app, is usually available at https://api.tinode.co/ ([source](https://github.com/tinode/webapp/)).
 
 Login as one of `alice`, `bob`, `carol`, `dave`, `frank`. Password is `<login>123`, e.g. login for `alice` is `alice123`. You can discover other users by email or phone by prefixing them with `email:` or `tel:` respectively. Emails are `<login>@example.com`, e.g. `alice@example.com`, phones are `17025550001` through `17025550009`.
 
@@ -35,7 +35,7 @@ If you register a new account you are asked for an email address to send validat
 
 ### Android
 
-[Android demo](https://github.com/tinode/tindroid) is mostly stable and functional. See screenshots below. A [debug APK](https://github.com/tinode/tindroid/releases/latest) is provided for convenience.
+[Tindroid](https://github.com/tinode/tindroid) is stable and functional. See screenshots below. A [debug APK](https://github.com/tinode/tindroid/releases/latest) is provided for convenience.
 
 ### Command Line
 

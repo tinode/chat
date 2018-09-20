@@ -9,9 +9,15 @@ import grpc
 import json
 import pkg_resources
 import platform
+try:
+    import Queue as queue
+except ImportError:
+    import queue
 import random
 import shlex
 import sys
+import threading
+import time
 
 from google.protobuf import json_format
 
@@ -29,9 +35,9 @@ onCompletion = {}
 # Saved topic: default topic name to make keyboard input easier
 SavedTopic = None
 
-# Python 3 has input(), Python 2 has raw_input. Make input() work in Python 2.x.
-try: input = raw_input
-except NameError: pass
+# IO queues for asynchronous input/output
+input_queue = queue.Queue()
+output_queue = queue.Queue()
 
 # Pack user's name and avatar into a vcard represented as json.
 def make_vcard(fn, photofile):
@@ -52,7 +58,7 @@ def make_vcard(fn, photofile):
                 # TODO: use mimetype.guess_type(ext) instead
                 card.photo.type = os.path.splitext(photofile)[1]
             except IOError as err:
-                print("Error opening '" + photofile + "'", err)
+                stdoutln("Error opening '" + photofile + "'", err)
 
     return card
 
@@ -65,6 +71,24 @@ def parse_cred(cred):
             result.append(pb.Credential(method=parts[0], value=parts[1]))
 
     return result
+
+# Support for asynchronous input-output to/from stdin/stdout
+def stdout(*args):
+    text = ""
+    for a in args:
+        text = text + str(a) + " "
+    output_queue.put(text)
+
+def stdoutln(*args):
+    args = args + ("\n",)
+    stdout(*args)
+
+def stdin(input_queue):
+    while True:
+        cmd = sys.stdin.readline().splitlines()[0]
+        input_queue.put(cmd)
+        if cmd == 'exit' or cmd == 'quit':
+            return
 
 def encode_to_bytes(src):
     if src == None:
@@ -146,7 +170,7 @@ def delMsg(id, topic, what, param, hard):
         topic = param
         param = None
 
-    print(id, topic, what, param, hard)
+    stdoutln(id, topic, what, param, hard)
     enum_what = None
     before = None
     seq_list = None
@@ -157,7 +181,7 @@ def delMsg(id, topic, what, param, hard):
             seq_list = [pb.DelQuery(range=pb.SeqRange(low=1, hi=0x8FFFFFF))]
         elif param != None:
             seq_list = [pb.DelQuery(seq_id=int(x.strip())) for x in param.split(',')]
-        print(seq_list)
+        stdoutln(seq_list)
 
     elif what == 'sub':
         enum_what = pb.ClientDel.SUB
@@ -199,6 +223,9 @@ def noteMsg(id, topic, what, seq):
 def parse_cmd(cmd):
     """Parses command line input into a dictionary"""
     parts = shlex.split(cmd)
+    if len(parts) == 0:
+        return None
+
     parser = None
     if parts[0] == "acc":
         parser = argparse.ArgumentParser(prog=parts[0], description='Create or alter an account')
@@ -336,7 +363,7 @@ def serialize_cmd(string, id):
     elif cmd.cmd == "note":
         return noteMsg(id, cmd.topic, cmd.what, cmd.seq)
     else:
-        print("Unrecognized: " + cmd.cmd)
+        stdoutln("Unrecognized: " + cmd.cmd)
         return None
 
 def gen_message(schema, secret):
@@ -352,17 +379,35 @@ def gen_message(schema, secret):
         id += 1
         yield loginMsg(id, schema, secret, None, None, None)
 
-    while True:
-        id += 1
-        inp = input("tn> ")
-        if inp == "":
-            continue
-        if inp == "exit" or inp == "quit":
-            return
-        cmd = serialize_cmd(inp, id)
-        if cmd != None:
-            yield cmd
+    # Asynchronous input-output
+    input_thread = threading.Thread(target=stdin, args=(input_queue,))
+    input_thread.daemon = True
+    input_thread.start()
 
+    print_prompt = True
+
+    while True:
+        if not input_queue.empty():
+            id += 1
+            inp = input_queue.get()
+            if inp == 'exit' or inp == 'quit':
+                return
+            cmd = serialize_cmd(inp, id)
+            print_prompt = True
+            if cmd != None:
+                yield cmd
+
+        elif not output_queue.empty():
+            sys.stdout.write(output_queue.get())
+            sys.stdout.flush()
+            print_prompt = True
+
+        else:
+            if print_prompt:
+                sys.stdout.write("tn-cli> ")
+                sys.stdout.flush()
+                print_prompt = False
+            time.sleep(0.1)
 
 def run(addr, schema, secret):
     channel = grpc.insecure_channel(addr)
@@ -379,17 +424,17 @@ def run(addr, schema, secret):
                     del onCompletion[msg.ctrl.id]
                     if msg.ctrl.code >= 200 and msg.ctrl.code < 400:
                         func(msg.ctrl.params)
-                print(str(msg.ctrl.code) + " " + msg.ctrl.text)
+                stdoutln(str(msg.ctrl.code) + " " + msg.ctrl.text)
             elif msg.HasField("data"):
-                print("\nFrom: " + msg.data.from_user_id + ":\n")
-                print(json.loads(msg.data.content) + "\n")
+                stdoutln("\nFrom: " + msg.data.from_user_id + ":\n")
+                stdoutln(json.loads(msg.data.content) + "\n")
             elif msg.HasField("pres"):
                 pass
             else:
-                print("Message type not handled", msg)
+                stdoutln("Message type not handled", msg)
 
     except grpc._channel._Rendezvous as err:
-        print(err)
+        stdoutln(err)
 
 def read_cookie():
     try:
@@ -401,7 +446,7 @@ def read_cookie():
         return params
 
     except Exception as err:
-        print("Missing or invalid cookie file '.tn-cli-cookie'", err)
+        stdoutln("Missing or invalid cookie file '.tn-cli-cookie'", err)
         return None
 
 def save_cookie(params):
@@ -413,19 +458,19 @@ def save_cookie(params):
     for p in params:
         nice[p] = json.loads(params[p])
 
-    print("Authenticated as", nice.get('user'))
+    stdoutln("Authenticated as", nice.get('user'))
 
     try:
         cookie = open('.tn-cookie', 'w')
         json.dump(nice, cookie)
         cookie.close()
     except Exception as err:
-        print("Failed to save authentication cookie", err)
+        stdoutln("Failed to save authentication cookie", err)
 
 def print_server_params(params):
-    print("\rConnected to server:")
+    stdoutln("\rConnected to server:")
     for p in params:
-         print("\t" + p + ": " + json.loads(params[p]))
+         stdoutln("\t" + p + ": " + json.loads(params[p]))
 
 if __name__ == '__main__':
     """Parse command-line arguments. Extract host name and authentication scheme, if one is provided"""
@@ -439,32 +484,32 @@ if __name__ == '__main__':
     parser.add_argument('--no-login', action='store_true', help='do not login even if cookie file is present')
     args = parser.parse_args()
 
-    print("Server '" + args.host + "'")
+    stdoutln("Server '" + args.host + "'")
 
     schema = None
     secret = None
 
-    print(args.no_login)
+    stdoutln(args.no_login)
 
     if not args.no_login:
         if args.login_token:
             """Use token to login"""
             schema = 'token'
             secret = args.login_token.encode('acsii')
-            print("Logging in with token", args.login_token)
+            stdoutln("Logging in with token", args.login_token)
 
         elif args.login_basic:
             """Use username:password"""
             schema = 'basic'
             secret = args.login_basic.encode('utf-8')
-            print("Logging in with login:password", args.login_basic)
+            stdoutln("Logging in with login:password", args.login_basic)
 
         else:
             """Try reading the cookie file"""
             try:
                 schema, secret = read_auth_cookie(args.login_cookie)
-                print("Logging in with cookie file", args.login_cookie)
+                stdoutln("Logging in with cookie file", args.login_cookie)
             except Exception as err:
-                print("Failed to read authentication cookie", err)
+                stdoutln("Failed to read authentication cookie", err)
 
     run(args.host, schema, secret)
