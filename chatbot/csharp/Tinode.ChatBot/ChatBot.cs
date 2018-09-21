@@ -52,6 +52,9 @@ namespace Tinode.ChatBot
     /// </summary>
     public class ChatBot
     {
+        /// <summary>
+        /// Server pres event 
+        /// </summary>
         public class ServerPresEventArgs : EventArgs
         {
             public ServerPres Pres { get; private set; }
@@ -62,6 +65,9 @@ namespace Tinode.ChatBot
             }
         }
 
+        /// <summary>
+        /// Server meta event
+        /// </summary>
         public class ServerMetaEventArgs : EventArgs
         {
             public ServerMeta Meta { get; private set; }
@@ -71,16 +77,38 @@ namespace Tinode.ChatBot
             }
         }
 
+        /// <summary>
+        /// Ctrl message event
+        /// </summary>
         public class CtrlMessageEventArgs : EventArgs
         {
+            /// <summary>
+            /// Ctrl message type
+            /// </summary>
             public FutureTypes Type { get;private set; }
+            /// <summary>
+            /// tid
+            /// </summary>
             public string Id { get;private set; }
+            /// <summary>
+            /// ctrl code
+            /// </summary>
             public int Code { get; private set; }
+            /// <summary>
+            /// ctrl text
+            /// </summary>
             public string Text { get; private set; }
+            /// <summary>
+            /// ctrl topic
+            /// </summary>
             public string Topic { get; private set; }
-
+            /// <summary>
+            /// rpc callback status, if error or failed ,this will be true
+            /// </summary>
             public bool HasError => !(Code >= 200 && Code < 400);
-
+            /// <summary>
+            /// paramaters
+            /// </summary>
             public MapField<string,ByteString> Params { get; private set; }
 
             public CtrlMessageEventArgs(FutureTypes type,string id,int code,string text,string topic, MapField<string, ByteString> paramaters)
@@ -96,16 +124,38 @@ namespace Tinode.ChatBot
 
         }
 
+        /// <summary>
+        /// Chatbot subscribed user information
+        /// </summary>
         public class Subscriber
         {
+            /// <summary>
+            /// topic
+            /// </summary>
             public string Topic { get; set; }
+            /// <summary>
+            /// user name/nick
+            /// </summary>
             public string UserName { get; set; }
+            /// <summary>
+            /// user photo with base64 encode
+            /// </summary>
             public string PhotoData { get; set; }
+            /// <summary>
+            /// user photo image type
+            /// </summary>
             public string PhotoType { get; set; }
             public Subscriber()
             {
 
             }
+            /// <summary>
+            /// constructor
+            /// </summary>
+            /// <param name="topic">topic</param>
+            /// <param name="username"> user name/nick</param>
+            /// <param name="photo"> user photo with base64 encode</param>
+            /// <param name="photoType">user photo image type</param>
             public Subscriber(string topic,string username,string photo,string photoType)
             {
                 Topic = topic;
@@ -116,8 +166,17 @@ namespace Tinode.ChatBot
 
         }
 
+        /// <summary>
+        /// chatbot received pres event
+        /// </summary>
         public event EventHandler<ServerPresEventArgs> ServerPresEvent;
+        /// <summary>
+        /// chatbot receive meta data event
+        /// </summary>
         public event EventHandler<ServerMetaEventArgs> ServerMetaEvent;
+        /// <summary>
+        /// chatbot receive ctrl message event
+        /// </summary>
         public event EventHandler<CtrlMessageEventArgs> CtrlMessageEvent;
         void OnServerPresEvent(ServerPresEventArgs e)
         {
@@ -146,15 +205,42 @@ namespace Tinode.ChatBot
             }
         }
 
+        /// <summary>
+        /// future callback types 
+        /// </summary>
         public enum FutureTypes
         {
+            /// <summary>
+            /// defatul, unknown callback operation
+            /// </summary>
             Unknown,
+            /// <summary>
+            /// Hi rpc call
+            /// </summary>
             Hi,
+            /// <summary>
+            /// login rpc call
+            /// </summary>
             Login,
+            /// <summary>
+            /// sub rpc call
+            /// </summary>
             Sub,
+            /// <summary>
+            /// get rpc call
+            /// </summary>
             Get,
+            /// <summary>
+            /// pub rpc call
+            /// </summary>
             Pub,
+            /// <summary>
+            /// note rpc call
+            /// </summary>
             Note, 
+            /// <summary>
+            /// leave rpc call
+            /// </summary>
             Leave,
         }
 
