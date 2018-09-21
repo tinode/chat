@@ -132,7 +132,7 @@ rm -f $GOPATH/bin/init-db
 
 
 # Build chatbot release
-echo "Building chatbot..."
+echo "Building python code..."
 
 pushd ./py_grpc > /dev/null
 
@@ -144,15 +144,30 @@ python3 setup.py -q sdist bdist_wheel
 
 popd > /dev/null
 
+# Release chatbot
+echo "Packaging chatbot.py..."
 rm -fR ./releases/tmp
 mkdir -p ./releases/tmp
 
-cp ${GOSRC}/chat/chatbot/chatbot.py ./releases/tmp
-cp ${GOSRC}/chat/chatbot/quotes.txt ./releases/tmp
+cp ${GOSRC}/chat/chatbot/python/chatbot.py ./releases/tmp
+cp ${GOSRC}/chat/chatbot/python/quotes.txt ./releases/tmp
 
-tar -C ${GOSRC}/chat/releases/tmp -zcf ./releases/${version}/chatbot.tar.gz .
+tar -C ${GOSRC}/chat/releases/tmp -zcf ./releases/${version}/py-chatbot.tar.gz .
 pushd ./releases/tmp > /dev/null
-zip -q -r ../${version}/chatbot.zip ./*
+zip -q -r ../${version}/py-chatbot.zip ./*
+popd > /dev/null
+
+# Release tn-cli
+echo "Packaging tn-cli..."
+
+rm -fR ./releases/tmp
+mkdir -p ./releases/tmp
+
+cp ${GOSRC}/chat/tn-cli/tn-cli.py ./releases/tmp
+
+tar -C ${GOSRC}/chat/releases/tmp -zcf ./releases/${version}/tn-cli.tar.gz .
+pushd ./releases/tmp > /dev/null
+zip -q -r ../${version}/tn-cli.zip ./*
 popd > /dev/null
 
 # Clean up temporary files

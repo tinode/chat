@@ -38,7 +38,7 @@ All images are available at https://hub.docker.com/r/tinode/
 	```
 
 	See [below](#supported-environment-variables) for more options.
-	
+
 	The port mapping `-p 6060:18080` tells Docker to map container's port 18080 to host's port 6060 making server accessible at http://localhost:6060/. The container will initialize the database with test data on the first run.
 
 	You may replace `:latest` with a different tag. See all all available tags here:
@@ -57,6 +57,17 @@ $ docker stop tinode-srv && docker rm tinode-srv
 ```
 then repeat step 4 adding `--env RESET_DB=true`.
 
+### Enable push notifications
+
+Download and save the file with [FCM service account credentials](https://cloud.google.com/docs/authentication/production).
+Assuming your Firebase project is `myproject-1234`, credentials file is named `myproject-1234-firebase-adminsdk-abc12-abcdef012345.json` and it's saved at `/Users/jdoe/`, start the container with the following parameters (using MySQL container as an example):
+
+```
+$ docker run -p 6060:18080 -d --name tinode-srv --network tinode-net \
+		-v /Users/jdoe:/fcm \
+		--env FCM_CRED_FILE=/fcm/myproject-1234-firebase-adminsdk-abc12-abcdef012345.json \
+		--env FCM_PROJECT_ID=myproject-1234 tinode/tinode-mysql:latest
+```
 
 ### Run the chatbot
 
@@ -75,6 +86,8 @@ You can specify the following environment variables when issuing `docker run` co
 | `AWS_S3_BUCKET` | string |  | Name of the AWS S3 bucket when using `s3` media handler |
 | `AWS_SECRET_ACCESS_KEY` | string |  | AWS [Secret Access Key](https://aws.amazon.com/blogs/security/wheres-my-secret-access-key/) when using `s3` media handler |
 | `DEBUG_EMAIL_VERIFICATION_CODE` | string |  | Enable dummy email verification code, e.g. `123456`. Disabled by default (empty string). |
+| `FCM_PROJECT_ID` | string |  | FCM project name. Used for push notifications. |
+| `FCM_CRED_FILE` | string |  | Path to json file with FCM service account credentials which will be used to send push notifications. |
 | `MEDIA_HANDLER` | string | `fs` | Handler of large files, either `fs` or `s3` |
 | `MYSQL_DSN` | string | `'root@tcp(mysql)/tinode'` | MySQL [DSN](https://github.com/go-sql-driver/mysql#dsn-data-source-name). |
 | `RESET_DB` | bool | `false` | Drop and recreate the database. |

@@ -18,9 +18,9 @@ LABEL maintainer="Gene Sokolov <gene@tinode.co>"
 LABEL name="TinodeChatServer"
 LABEL version=$VERSION
 
-# Build-time options. 
+# Build-time options.
 
-# Database selector. Builds for RethinkDB by default. 
+# Database selector. Builds for RethinkDB by default.
 # Alternatively use `--build-arg TARGET_DB=mysql` to build for MySQL.
 ARG TARGET_DB=rethinkdb
 ENV TARGET_DB=$TARGET_DB
@@ -43,7 +43,7 @@ ENV AWS_CORS_ORIGINS='["*"]'
 
 # Various encryption and salt keys. Replace with your own in production.
 
-# Salt used to generate the API key. Don't change it unless you also change the 
+# Salt used to generate the API key. Don't change it unless you also change the
 # API key in the webapp & Android.
 ENV API_KEY_SALT=T713/rYYgW7g4m3vG6zGRh7+FM1t0T8j13koXScOAj4=
 
@@ -55,6 +55,9 @@ ENV UID_ENCRYPTION_KEY=la6YsO+bNX/+XIkOqc5Svw==
 
 # Disable TLS by default.
 ENV TLS_ENABLED=false
+
+# Disable push notifications by default.
+ENV FCM_PUSH_ENABLED=false
 
 # Install root certificates. Needed for email validator to work
 # with the TLS SMTP servers like Gmail.

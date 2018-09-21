@@ -13,6 +13,12 @@ if [ ! -z "$TLS_DOMAIN_NAME" ] ; then
 	TLS_ENABLED=true
 fi
 
+# Enable push notifications.
+if [ ! -z "$FCM_CRED_FILE" ] ; then
+	FCM_PUSH_ENABLED=true
+fi
+
+
 # Generate a new 'working.config' from template and environment
 while IFS='' read -r line || [[ -n $line ]] ; do
     while [[ "$line" =~ (\$[A-Z_][A-Z_0-9]*) ]] ; do
