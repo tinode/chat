@@ -5,11 +5,13 @@ package email
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	ht "html/template"
 	"log"
 	"math/rand"
 	"net/mail"
 	"net/smtp"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -22,6 +24,7 @@ import (
 
 // Validator configuration.
 type validator struct {
+	HostUrl        string `json:"host_url"`
 	TemplateFile   string `json:"msg_body_templ"`
 	Subject        string `json:"msg_subject"`
 	SendFrom       string `json:"sender"`
@@ -77,6 +80,24 @@ func (v *validator) Init(jsonconf string) error {
 	// Initialize random number generator.
 	rand.Seed(time.Now().UnixNano())
 
+	hostUrl, err := url.Parse(v.HostUrl)
+	if err != nil {
+		return err
+	}
+	if !hostUrl.IsAbs() {
+		return errors.New("host_url must be absolute")
+	}
+	if hostUrl.Hostname() == "" {
+		return errors.New("invalid host_url")
+	}
+	if hostUrl.Fragment != "" {
+		return errors.New("fragment is not allowed in host_url")
+	}
+	if hostUrl.Path == "" {
+		hostUrl.Path = "/"
+	}
+	v.HostUrl = hostUrl.String()
+
 	if v.MaxRetries == 0 {
 		v.MaxRetries = maxRetries
 	}
@@ -116,12 +137,14 @@ func (v *validator) Request(user t.Uid, email, lang string, params interface{}, 
 	resp = strings.Repeat("0", codeLength-len(resp)) + resp
 
 	body := new(bytes.Buffer)
-	if err := v.htmlTempl.Execute(body, map[string]interface{}{"Code": resp}); err != nil {
+	if err := v.htmlTempl.Execute(body, map[string]interface{}{
+		"Code":    resp,
+		"HostUrl": v.HostUrl}); err != nil {
 		return err
 	}
 
 	// Send email without blocking. Email sending may take long time.
-	go v.send(email, "Confirm email", string(body.Bytes()))
+	go v.send(email, v.Subject, string(body.Bytes()))
 
 	return store.Users.SaveCred(&t.Credential{
 		User:   user.String(),
@@ -167,7 +190,7 @@ func (v *validator) Delete(user t.Uid) error {
 	return nil
 }
 
-// This is a basic SMTP sender which connects to Gmail using login/password.
+// This is a basic SMTP sender which connects to a server using login/password.
 // -
 // See here how to send email from Amazon SES:
 // https://docs.aws.amazon.com/sdk-for-go/api/service/ses/#example_SES_SendEmail_shared00

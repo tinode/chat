@@ -4,11 +4,11 @@
 <p>Hello.</p>
 
 <p>You're receiving this message because someone used your email to register at 
-<a href="https://api.tinode.co/">Tinode</a>.</p> 
+<a href="{{.HostUrl}}">Tinode</a>.</p> 
 
-<p><a href="https://api.tinode.co/#cred?method=email&code={{.Code}}">Click</a> to confirm 
+<p><a href="{{.HostUrl}}#cred?method=email&code={{.Code}}">Click</a> to confirm 
 or go to 
-<a href="https://api.tinode.co/#cred?what=email">https://api.tinode.co/#cred?method=email</a> 
+<a href="{{.HostUrl}}#cred?what=email">{{.HostUrl}}#cred?method=email</a> 
 and enter the following code:</p>
 <blockquote>{{.Code}}</blockquote> 
 <p>You may need to enter login and password.</p>

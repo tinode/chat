@@ -15,10 +15,10 @@ WORKDIR /usr/src/bot
 RUN pip install --no-cache-dir -q tinode-grpc
 
 # Get tarball with the chatbot code and data.
-ADD https://github.com/tinode/chat/releases/download/v$VERSION/chatbot.tar.gz .
+ADD https://github.com/tinode/chat/releases/download/v$VERSION/py-chatbot.tar.gz .
 # Unpack chatbot, delete archive
-RUN tar -xzf chatbot.tar.gz \
-	&& rm chatbot.tar.gz
+RUN tar -xzf py-chatbot.tar.gz \
+	&& rm py-chatbot.tar.gz
 
 # Use command line parameter `-e LOGIN_AS=user:password` to login as someone other than Tino.
 

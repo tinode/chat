@@ -39,7 +39,11 @@ ENV PLUGIN_PYTHON_CHAT_BOT_ENABLED=false
 # Default handler for large files
 ENV MEDIA_HANDLER=fs
 
+# Whitelisted domains for S3 large media handler.
 ENV AWS_CORS_ORIGINS='["*"]'
+
+# Default externally-visible hostname for email verification.
+ENV SMTP_HOST_URL='http://localhost:6060'
 
 # Various encryption and salt keys. Replace with your own in production.
 

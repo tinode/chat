@@ -81,6 +81,7 @@ do
       cp ./server/static/src/tinode.js ./releases/tmp/static/src
       cp ./server/static/src/webapp.jsx ./releases/tmp/static/src
       cp ./server/static/manifest.json ./releases/tmp/static
+      cp ./server/static/service-worker.js ./releases/tmp/static
       cp ./tinode-db/data.json ./releases/tmp
       cp ./tinode-db/*.jpg ./releases/tmp
       cp ./tinode-db/credentials.sh ./releases/tmp
