@@ -1488,6 +1488,8 @@ func (t *Topic) replyGetSub(sess *Session, id string, req *MsgGetOpts) error {
 						} else {
 							subs, err = store.Users.FindSubs(sess.uid, req, opt)
 						}
+					} else {
+						err = types.ErrMalformed
 					}
 				} else {
 					// Convert specific parsing error into a generic ErrMalformed.
