@@ -97,7 +97,7 @@
 				"enabled": $FCM_PUSH_ENABLED,
 				"buffer": 1024,
 				"project_id": "$FCM_PROJECT_ID",
-				"credential_file": "$FCM_CRED_FILE",
+				"credentials_file": "$FCM_CRED_FILE",
 				"time_to_live": 3600,
 				"icon": "ic_logo_push",
 				"icon_color": "#3949AB"
