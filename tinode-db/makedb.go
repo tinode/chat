@@ -8,7 +8,6 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
-	"strconv"
 	"time"
 
 	jcr "github.com/DisposaBoy/JsonConfigReader"
@@ -151,16 +150,11 @@ func getPassword(n int) string {
 }
 
 func main() {
-	var reset = flag.String("reset", "", "'true' to unconditinally delete the database, 'auto' to reset only if the current db is outdated")
-	var datafile = flag.String("data", "", "name of file with sample data")
+	var reset = flag.Bool("reset", false, "force database reset")
+	var datafile = flag.String("data", "", "name of file with sample data to load")
 	var conffile = flag.String("config", "./tinode.conf", "config of the database connection")
 
 	flag.Parse()
-
-	_, err := strconv.ParseBool(*reset)
-	if *reset != "auto" && *reset != "" && err != nil {
-		log.Fatal("Invalid 'reset' value:", *reset)
-	}
 
 	var data Data
 	if *datafile != "" {
