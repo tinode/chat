@@ -152,13 +152,13 @@ loop:
 			// Shutdown local cluster node, if it's a part of a cluster.
 			globals.cluster.shutdown()
 
+			// Terminate plugin connections
+			pluginsShutdown()
+
 			// Shutdown gRPC server, if one is configured
 			if globals.grpcServer != nil {
 				globals.grpcServer.GracefulStop()
 			}
-
-			// Terminate plugin connections
-			pluginsShutdown()
 
 			// Shutdown the hub. The hub will shutdown topics
 			hubdone := make(chan bool)

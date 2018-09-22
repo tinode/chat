@@ -35,7 +35,7 @@ type SessionStore struct {
 }
 
 // Create creates a new session and adds it to store.
-func (ss *SessionStore) Create(conn interface{}, sid string) (*Session, int) {
+func (ss *SessionStore) NewSession(conn interface{}, sid string) (*Session, int) {
 	var s Session
 
 	s.sid = sid

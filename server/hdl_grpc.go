@@ -31,7 +31,7 @@ func (sess *Session) closeGrpc() {
 
 // Equivalent of starting a new session and a read loop in one
 func (*grpcNodeServer) MessageLoop(stream pbx.Node_MessageLoopServer) error {
-	sess, _ := globals.sessionStore.Create(stream, "")
+	sess, _ := globals.sessionStore.NewSession(stream, "")
 
 	defer func() {
 		sess.closeGrpc()
