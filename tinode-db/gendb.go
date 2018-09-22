@@ -15,7 +15,7 @@ import (
 	"github.com/tinode/chat/server/store/types"
 )
 
-func genDb(reset bool, dbSource string, data *Data) {
+func genDb(reset string, dbSource string, data *Data) {
 	var err error
 
 	defer store.Close()

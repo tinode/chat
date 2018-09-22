@@ -49,9 +49,16 @@ All images are available at https://hub.docker.com/r/tinode/
 
 ## Optional
 
-### Reset data in the database
+### Resetting the database
 
-If you want to reset the data in the database, shut down the Tinode container and remove it:
+The data in the database is reset when either one of the following conditions is true:
+
+* File `/botdata/.tn-cookie` is missing.
+* `RESET_DB` environment variable is true.
+
+If you want to keep the data in the database between image upgrades, make sure the `/botdata` is a mounted volume (i.e. you launch the container with `--volume botdata:/botdata` option).
+
+If you want to reset the data in the database regardless of `/botdata/.tn-cookie` presence, shut down the Tinode container and remove it:
 ```
 $ docker stop tinode-srv && docker rm tinode-srv
 ```

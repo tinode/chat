@@ -881,14 +881,14 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *MsgClientDel, reason 
 		} else {
 			// Case 1.2: topic is offline.
 
-			// Get all subscribers: we have to notify them all.
+			// Get all subscribers: we need to know how many are left and notify them.
 			subs, err := store.Topics.GetSubs(topic, nil)
 			if err != nil {
 				sess.queueOut(ErrUnknown(msg.Id, msg.Topic, now))
 				return err
 			}
 
-			if subs == nil || len(subs) == 0 {
+			if len(subs) == 0 {
 				sess.queueOut(InfoNoAction(msg.Id, msg.Topic, now))
 				return nil
 			}
