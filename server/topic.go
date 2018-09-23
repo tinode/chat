@@ -134,18 +134,6 @@ type perSubsData struct {
 	enabled bool
 }
 
-// Session wants to leave the topic
-type sessionLeave struct {
-	// Session which initiated the request
-	sess *Session
-	// Leave and unsubscribe
-	unsub bool
-	// Topic to report success of failure on
-	topic string
-	// ID of originating request, if any
-	reqID string
-}
-
 // Reasons why topic is being shut down.
 const (
 	// StopNone no reason given/default.

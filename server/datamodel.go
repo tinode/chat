@@ -278,8 +278,13 @@ type ClientComMessage struct {
 	Del   *MsgClientDel   `json:"del"`
 	Note  *MsgClientNote  `json:"note"`
 
+	// message ID denormalized
+	id string
+	// topic denormalized
+	topic string
 	// from: userid as string
-	from      string
+	from string
+	// timestamp when this message was received by the server
 	timestamp time.Time
 }
 
@@ -476,15 +481,15 @@ type ServerComMessage struct {
 	Pres *MsgServerPres `json:"pres,omitempty"`
 	Info *MsgServerInfo `json:"info,omitempty"`
 
-	// to: topic
-	rcptto string
-	// Originating session to send an aknowledgement to. Used only for {data} messages. Could be nil.
-	sessFrom *Session
 	// MsgServerData has no Id field, copying it here for use in {ctrl} aknowledgements
 	id string
+	// to: topic
+	rcptto string
 	// timestamp for consistency of timestamps in {ctrl} messages
 	timestamp time.Time
-	// Should the packet be sent to the original sessions? SessionIDs to skip.
+	// Originating session to send an aknowledgement to. Could be nil.
+	sessFrom *Session
+	// Should the packet be sent to the original session? SessionID to skip.
 	skipSid string
 }
 

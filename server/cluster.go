@@ -493,7 +493,7 @@ func (sess *Session) rpcWriteLoop() {
 		log.Println("writeRPC - stop")
 		sess.closeRPC()
 		globals.sessionStore.Delete(sess)
-		sess.unsubAll(false)
+		sess.unsubAll()
 	}()
 	var unused bool
 

@@ -21,6 +21,8 @@ import (
 
 // Request to hub to subscribe session to topic
 type sessionJoin struct {
+	// User ID of the user who is joining the topic
+	userId types.Uid
 	// Routable (expanded) name of the topic to subscribe to
 	topic string
 	// Packet, containing request details
@@ -37,8 +39,24 @@ type sessionJoin struct {
 	newsub bool
 }
 
+// Session wants to leave the topic
+type sessionLeave struct {
+	// User ID of the user sent the request
+	userId types.Uid
+	// Topic to report success of failure on
+	topic string
+	// Session which initiated the request
+	sess *Session
+	// Leave and unsubscribe
+	unsub bool
+	// ID of originating request, if any
+	reqID string
+}
+
 // Request to hub to remove the topic
 type topicUnreg struct {
+	// User ID of the user who is leaving the topic
+	userId types.Uid
 	// Name of the topic to drop
 	topic string
 	// Session making the request, could be nil
@@ -163,9 +181,9 @@ func (h *Hub) run() {
 						log.Println("hub: topic's broadcast queue is full", dst.name)
 					}
 				}
-			} else if msg.Pres == nil {
+			} else if msg.Pres == nil && msg.Info == nil {
 				// Topic is unknown or offline.
-				// Presence is silently ignored, all other messages are reported as invalid.
+				// Pres & Info are silently ignored, all other messages are reported as invalid.
 
 				// TODO(gene): validate topic name, discarding invalid topics
 
