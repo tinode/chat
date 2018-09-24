@@ -16,9 +16,9 @@ import (
 
 // MsgGetOpts defines Get query parameters.
 type MsgGetOpts struct {
-	// Optional User ID to return result for one user.
+	// Optional User ID to return result(s) for one user.
 	User string `json:"user,omitempty"`
-	// Optional topic name to return result for one topic.
+	// Optional topic name to return result(s) for one topic.
 	Topic string `json:"topic,omitempty"`
 	// Return results modified dince this timespamp.
 	IfModifiedSince *time.Time `json:"ims,omitempty"`
@@ -115,8 +115,11 @@ type MsgAccCred struct {
 type MsgClientAcc struct {
 	// Message Id
 	Id string `json:"id,omitempty"`
-	// "newXYZ" to create a new user or UserId to update a user; default: current user
+	// "newXYZ" to create a new user or UserId to update a user; default: current user.
 	User string `json:"user,omitempty"`
+	// Authentication level of the user when UserID is set and not equal to the current user.
+	// Either "", "auth" or "anon". Default: ""
+	AuthLevel string
 	// The initial authentication scheme the account can use
 	Scheme string `json:"scheme,omitempty"`
 	// Shared secret
@@ -278,13 +281,15 @@ type ClientComMessage struct {
 	Del   *MsgClientDel   `json:"del"`
 	Note  *MsgClientNote  `json:"note"`
 
-	// message ID denormalized
+	// Message ID denormalized
 	id string
-	// topic denormalized
+	// Topic denormalized
 	topic string
-	// from: userid as string
+	// Sender's UserId as string
 	from string
-	// timestamp when this message was received by the server
+	// Sender's authentication level
+	authLvl int
+	// Timestamp when this message was received by the server
 	timestamp time.Time
 }
 

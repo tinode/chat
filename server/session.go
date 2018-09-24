@@ -237,6 +237,7 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 
 	if msg.from == "" {
 		msg.from = s.uid.UserId()
+		msg.authLvl = int(s.authLvl)
 	} else if s.authLvl != auth.LevelRoot {
 		// Only root user can set non-default msg.from value.
 		s.queueOut(ErrPermissionDenied("", "", msg.timestamp))
@@ -527,7 +528,9 @@ func (s *Session) acc(msg *ClientComMessage) {
 
 	authhdl := store.GetAuthHandler(msg.Acc.Scheme)
 	if strings.HasPrefix(msg.Acc.User, "new") {
-		// User cannot authenticate with the new account because the user is already authenticated
+		// New account
+
+		// The session cannot authenticate with the new account because  it's already authenticated.
 		if msg.Acc.Login && !s.uid.IsZero() {
 			s.queueOut(ErrAlreadyAuthenticated(msg.id, "", msg.timestamp))
 			return
@@ -661,7 +664,7 @@ func (s *Session) acc(msg *ClientComMessage) {
 			_, missing := stringSliceDelta(globals.authValidators[rec.AuthLevel], validated)
 			reply = s.onLogin(msg.id, msg.timestamp, rec, missing)
 		} else {
-			// User is not using the new account for logging in.
+			// Not using the new account for logging in.
 			reply = NoErrCreated(msg.id, "", msg.timestamp)
 			reply.Ctrl.Params = map[string]interface{}{"user": user.Uid().UserId()}
 		}
@@ -679,13 +682,40 @@ func (s *Session) acc(msg *ClientComMessage) {
 
 		pluginAccount(&user, plgActCreate)
 
-	} else if !s.uid.IsZero() {
+	} else {
+		// Existing account.
+
+		if s.uid.IsZero() {
+			log.Println("acc failed: not a new account and no valid UID", s.sid)
+			s.queueOut(ErrPermissionDenied(msg.id, "", msg.timestamp))
+			return
+		}
+
+		userId := msg.from
+		authLvl := auth.Level(msg.authLvl)
+		if msg.Acc.User != "" && msg.Acc.User != userId {
+			if s.authLvl != auth.LevelRoot {
+				log.Println("acc failed: attempt to change another's account by non-root", s.sid)
+				s.queueOut(ErrPermissionDenied(msg.id, "", msg.timestamp))
+				return
+			}
+			// Root is editing someone else's account.
+			userId = msg.Acc.User
+			authLvl = auth.ParseAuthLevel(msg.Acc.AuthLevel)
+		}
+
+		uid := types.ParseUserId(userId)
+		if uid.IsZero() || authLvl == auth.LevelNone {
+			// Either msg.Acc.User or msg.Acc.AuthLevel contains invalid data.
+			s.queueOut(ErrMalformed(msg.id, "", msg.timestamp))
+			return
+		}
+
 		var params map[string]interface{}
 		if authhdl != nil {
 			// Request to update auth of an existing account. Only basic auth is currently supported
 			// TODO(gene): support adding new auth schemes
-			// TODO(gene): support the case when msg.Acc.User is not equal to the current user
-			if err := authhdl.UpdateRecord(&auth.Rec{Uid: s.uid}, msg.Acc.Secret); err != nil {
+			if err := authhdl.UpdateRecord(&auth.Rec{Uid: uid}, msg.Acc.Secret); err != nil {
 				log.Println("auth: failed to update secret", err)
 				s.queueOut(decodeStoreError(err, msg.id, "", msg.timestamp, nil))
 				return
@@ -697,35 +727,31 @@ func (s *Session) acc(msg *ClientComMessage) {
 			return
 		} else if len(msg.Acc.Cred) > 0 {
 			// Use provided credentials for validation.
-			validated, err := s.getValidatedGred(s.uid, s.authLvl, msg.Acc.Cred)
+			validated, err := s.getValidatedGred(uid, authLvl, msg.Acc.Cred)
 			if err != nil {
 				log.Println("failed to get validated credentials", err)
 				s.queueOut(decodeStoreError(err, msg.id, "", msg.timestamp, nil))
 				return
 			}
-			_, missing := stringSliceDelta(globals.authValidators[s.authLvl], validated)
+			_, missing := stringSliceDelta(globals.authValidators[authLvl], validated)
 			if len(missing) > 0 {
 				params = map[string]interface{}{"cred": missing}
 			}
 		}
 
-		resp := NoErr(msg.Acc.Id, "", msg.timestamp)
+		resp := NoErr(msg.id, "", msg.timestamp)
 		resp.Ctrl.Params = params
 		s.queueOut(resp)
 
 		// TODO: Call plugin with the account update
 		// like pluginAccount(&types.User{}, plgActUpd)
 
-	} else {
-		// session is not authenticated and this is not an attempt to create a new account
-		log.Println("acc failed: not a new account and no valid UID")
-		s.queueOut(ErrPermissionDenied(msg.id, "", msg.timestamp))
-		return
 	}
 }
 
 // Authenticate
 func (s *Session) login(msg *ClientComMessage) {
+	// msg.from is ignored here
 
 	if !s.uid.IsZero() {
 		s.queueOut(ErrAlreadyAuthenticated(msg.id, "", msg.timestamp))

@@ -33,7 +33,6 @@ type Handler struct {
 
 type configType struct {
 	Enabled         bool            `json:"enabled"`
-	ProjectID       string          `json:"project_id"`
 	Buffer          int             `json:"buffer"`
 	Credentials     json.RawMessage `json:"credentials"`
 	CredentialsFile string          `json:"credentials_file"`
@@ -70,7 +69,7 @@ func (Handler) Init(jsonconf string) error {
 		return errors.New("missing credentials")
 	}
 
-	app, err := fbase.NewApp(ctx, &fbase.Config{ProjectID: config.ProjectID}, opt)
+	app, err := fbase.NewApp(ctx, &fbase.Config{}, opt)
 	if err != nil {
 		return err
 	}

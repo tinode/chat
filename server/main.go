@@ -181,7 +181,7 @@ type configType struct {
 	// Salt used in signing API keys
 	APIKeySalt []byte `json:"api_key_salt"`
 	// Maximum message size allowed from client. Intended to prevent malicious client from sending
-	// very large files.
+	// very large files inband (does not affect out of band uploads).
 	MaxMessageSize int `json:"max_message_size"`
 	// Maximum number of group topic subscribers.
 	MaxSubscriberCount int `json:"max_subscriber_count"`
