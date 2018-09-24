@@ -199,14 +199,14 @@ func (v *validator) Delete(user t.Uid) error {
 // https://cloud.google.com/appengine/docs/standard/go/mail/sending-receiving-with-mail-api
 func (v *validator) send(to, subj, body string) error {
 	err := smtp.SendMail(v.SMTPAddr+":"+v.SMTPPort, v.auth, v.SendFrom, []string{to},
-		[]byte("To: "+to+
-			"\nSubject: "+
-			subj+
+		[]byte("From: "+v.SendFrom+
+			"\nTo: "+to+
+			"\nSubject: "+subj+
 			"\nMIME-version: 1.0;\nContent-Type: text/html; charset=\"UTF-8\";\n\n"+
 			body))
 
 	if err != nil {
-		log.Println("Error sending validation email to", to, err)
+		log.Println("SMTP error", to, err)
 	}
 
 	return err

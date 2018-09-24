@@ -16,6 +16,12 @@ fi
 # Enable push notifications.
 if [ ! -z "$FCM_CRED_FILE" ] ; then
 	FCM_PUSH_ENABLED=true
+
+	# Write client config to static/firebase-init.js
+	echo "const FIREBASE_INIT={messagingSenderId: \"$FCM_SENDER_ID\", messagingVapidKey: \"$FCM_VAPID_KEY\"};"$'\n' > static/firebase-init.js
+else
+	# Create an empty firebase-init.js
+	echo "" > static/firebase-init.js
 fi
 
 
