@@ -150,9 +150,10 @@ func getPassword(n int) string {
 }
 
 func main() {
-	var reset = flag.Bool("reset", false, "first delete the database if one exists")
-	var datafile = flag.String("data", "", "name of file with sample data")
+	var reset = flag.Bool("reset", false, "force database reset")
+	var datafile = flag.String("data", "", "name of file with sample data to load")
 	var conffile = flag.String("config", "./tinode.conf", "config of the database connection")
+
 	flag.Parse()
 
 	var data Data

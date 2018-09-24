@@ -15,24 +15,32 @@ import (
 	"github.com/tinode/chat/server/store/types"
 )
 
-func genDb(reset bool, dbSource string, data *Data) {
+func genDb(reset bool, config string, data *Data) {
 	var err error
 
 	defer store.Close()
 
-	log.Println("Initializing DB...")
-
-	err = store.InitDb(dbSource, reset)
+	err = store.Open(1, config)
 	if err != nil {
-		if strings.Contains(err.Error(), " already exists") {
-			log.Println("DB already exists, NOT reinitializing")
+		if strings.Contains(err.Error(), "Database not initialized") {
+			log.Println("Database not found. Creating.", err)
+		} else if strings.Contains(err.Error(), "Invalid database version") {
+			log.Println("Wrong DB version, dropping and recreating the database.", err)
 		} else {
-			log.Fatal("Failed to init DB: ", err)
+			log.Fatal("Failed to init DB adapter:", err)
 		}
+	} else if reset {
+		log.Println("Database reset requested")
 	} else {
-		log.Println("Successfully initialized", store.GetAdapterName())
-
+		log.Println("Database exists, DB version is correct. All done.", store.GetAdapterName())
+		return
 	}
+
+	err = store.InitDb("", true)
+	if err != nil {
+		log.Fatal("Failed to init DB:", err)
+	}
+
 	if data.Users == nil {
 		log.Println("No data provided, stopping")
 		return
