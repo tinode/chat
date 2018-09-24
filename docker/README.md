@@ -49,9 +49,16 @@ All images are available at https://hub.docker.com/r/tinode/
 
 ## Optional
 
-### Reset data in the database
+### Resetting the database
 
-If you want to reset the data in the database, shut down the Tinode container and remove it:
+The data in the database is reset when either one of the following conditions is true:
+
+* File `/botdata/.tn-cookie` is missing.
+* `RESET_DB` environment variable is true.
+
+If you want to keep the data in the database between image upgrades, make sure the `/botdata` is a mounted volume (i.e. you launch the container with `--volume botdata:/botdata` option).
+
+If you want to reset the data in the database regardless of `/botdata/.tn-cookie` presence, shut down the Tinode container and remove it:
 ```
 $ docker stop tinode-srv && docker rm tinode-srv
 ```
@@ -86,8 +93,9 @@ You can specify the following environment variables when issuing `docker run` co
 | `AWS_S3_BUCKET` | string |  | Name of the AWS S3 bucket when using `s3` media handler |
 | `AWS_SECRET_ACCESS_KEY` | string |  | AWS [Secret Access Key](https://aws.amazon.com/blogs/security/wheres-my-secret-access-key/) when using `s3` media handler |
 | `DEBUG_EMAIL_VERIFICATION_CODE` | string |  | Enable dummy email verification code, e.g. `123456`. Disabled by default (empty string). |
-| `FCM_PROJECT_ID` | string |  | FCM project name. Used for push notifications. |
-| `FCM_CRED_FILE` | string |  | Path to json file with FCM service account credentials which will be used to send push notifications. |
+| `FCM_CRED_FILE` | string |  | Path to json file with FCM server-side service account credentials which will be used to send push notifications. |
+| `FCM_SENDER_ID` | string |  | FCM sender for receiving push notifications in the web client |
+| `FCM_VAPID_KEY` | string |  | Also called 'Web Client certificate' in the FCM console. Required by the web client to receive push notifications. |
 | `MEDIA_HANDLER` | string | `fs` | Handler of large files, either `fs` or `s3` |
 | `MYSQL_DSN` | string | `'root@tcp(mysql)/tinode'` | MySQL [DSN](https://github.com/go-sql-driver/mysql#dsn-data-source-name). |
 | `RESET_DB` | bool | `false` | Drop and recreate the database. |
