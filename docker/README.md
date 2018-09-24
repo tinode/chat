@@ -67,13 +67,15 @@ then repeat step 4 adding `--env RESET_DB=true`.
 ### Enable push notifications
 
 Download and save the file with [FCM service account credentials](https://cloud.google.com/docs/authentication/production).
-Assuming your Firebase project is `myproject-1234`, credentials file is named `myproject-1234-firebase-adminsdk-abc12-abcdef012345.json` and it's saved at `/Users/jdoe/`, start the container with the following parameters (using MySQL container as an example):
+Assuming your Firebase credentials file is named `myproject-1234-firebase-adminsdk-abc12-abcdef012345.json` and it's saved at `/Users/jdoe/`, sender ID is `114121611234`, and VAPID key (a.k.a. "Web Push certificates") is `83OrSoRandomLookingCharacters`, start the container with the following parameters (using MySQL container as an example):
 
 ```
 $ docker run -p 6060:18080 -d --name tinode-srv --network tinode-net \
 		-v /Users/jdoe:/fcm \
 		--env FCM_CRED_FILE=/fcm/myproject-1234-firebase-adminsdk-abc12-abcdef012345.json \
-		--env FCM_PROJECT_ID=myproject-1234 tinode/tinode-mysql:latest
+		--env FCM_SENDER_ID=114121611234 \
+		--env FCM_VAPID_KEY=83OrSoRandomLookingCharacters \
+		tinode/tinode-mysql:latest
 ```
 
 ### Run the chatbot
@@ -94,7 +96,7 @@ You can specify the following environment variables when issuing `docker run` co
 | `AWS_SECRET_ACCESS_KEY` | string |  | AWS [Secret Access Key](https://aws.amazon.com/blogs/security/wheres-my-secret-access-key/) when using `s3` media handler |
 | `DEBUG_EMAIL_VERIFICATION_CODE` | string |  | Enable dummy email verification code, e.g. `123456`. Disabled by default (empty string). |
 | `FCM_CRED_FILE` | string |  | Path to json file with FCM server-side service account credentials which will be used to send push notifications. |
-| `FCM_SENDER_ID` | string |  | FCM sender for receiving push notifications in the web client |
+| `FCM_SENDER_ID` | string |  | FCM sender ID for receiving push notifications in the web client |
 | `FCM_VAPID_KEY` | string |  | Also called 'Web Client certificate' in the FCM console. Required by the web client to receive push notifications. |
 | `MEDIA_HANDLER` | string | `fs` | Handler of large files, either `fs` or `s3` |
 | `MYSQL_DSN` | string | `'root@tcp(mysql)/tinode'` | MySQL [DSN](https://github.com/go-sql-driver/mysql#dsn-data-source-name). |
