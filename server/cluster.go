@@ -96,7 +96,7 @@ type ClusterReq struct {
 	// Cluster is desynchronized.
 	Signature string
 
-	Msg *ClientComMessage
+	Pkt *ClientComMessage
 
 	// Root user may send messages on behalf of other users.
 	OnBahalfOf string
@@ -317,9 +317,9 @@ func (c *Cluster) Master(msg *ClusterReq, rejected *bool) error {
 		sess.deviceID = msg.Sess.DeviceID
 
 		// Dispatch remote message to a local session.
-		msg.Msg.from = msg.OnBahalfOf
-		msg.Msg.authLvl = msg.AuthLvl
-		sess.dispatch(msg.Msg)
+		msg.Pkt.from = msg.OnBahalfOf
+		msg.Pkt.authLvl = msg.AuthLvl
+		sess.dispatch(msg.Pkt)
 	} else {
 		// Reject the request: wrong signature, cluster is out of sync.
 		*rejected = true
@@ -388,7 +388,7 @@ func (c *Cluster) routeToTopic(msg *ClientComMessage, topic string, sess *Sessio
 		&ClusterReq{
 			Node:       c.thisNodeName,
 			Signature:  c.ring.Signature(),
-			Msg:        msg,
+			Pkt:        msg,
 			OnBahalfOf: msg.from,
 			AuthLvl:    msg.authLvl,
 			RcptTo:     topic,

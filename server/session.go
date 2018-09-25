@@ -362,7 +362,7 @@ func (s *Session) subscribe(msg *ClientComMessage) {
 	if strings.HasPrefix(msg.topic, "new") {
 		// Request to create a new named topic
 		expanded = genTopicName()
-		msg.topic = expanded
+		// msg.topic = expanded
 	} else {
 		var err *ServerComMessage
 		expanded, err = s.expandTopicName(msg)
@@ -382,10 +382,9 @@ func (s *Session) subscribe(msg *ClientComMessage) {
 		}
 	} else {
 		globals.hub.join <- &sessionJoin{
-			userId: types.ParseUserId(msg.from),
-			topic:  expanded,
-			pkt:    msg.Sub,
-			sess:   s}
+			topic: expanded,
+			pkt:   msg,
+			sess:  s}
 		// Hub will send Ctrl success/failure packets back to session
 	}
 }
@@ -979,7 +978,7 @@ func (s *Session) del(msg *ClientComMessage) {
 
 	what := parseMsgClientDel(msg.Del.What)
 	if what == 0 {
-		s.queueOut(ErrMalformed(msg.id, msg.Del.Topic, msg.timestamp))
+		s.queueOut(ErrMalformed(msg.id, msg.topic, msg.timestamp))
 		log.Println("s.del: invalid Del action", msg.Del.What)
 	}
 
@@ -1002,7 +1001,7 @@ func (s *Session) del(msg *ClientComMessage) {
 		// Hub will forward to topic, if appropriate.
 		globals.hub.unreg <- &topicUnreg{
 			topic: expanded,
-			msg:   msg.Del,
+			pkt:   msg,
 			sess:  s,
 			del:   true}
 	} else {
@@ -1044,7 +1043,7 @@ func (s *Session) note(msg *ClientComMessage) {
 	if sub := s.getSub(expanded); sub != nil {
 		// Pings can be sent to subscribed topics only
 		sub.broadcast <- &ServerComMessage{Info: &MsgServerInfo{
-			Topic: msg.Note.Topic,
+			Topic: msg.topic,
 			From:  msg.from,
 			What:  msg.Note.What,
 			SeqId: msg.Note.SeqId,

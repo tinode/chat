@@ -180,7 +180,7 @@ func (t *Topic) run(hub *Hub) {
 			// Request to add a connection to this topic
 
 			if t.isSuspended() {
-				sreg.sess.queueOut(ErrLocked(sreg.pkt.Id, t.original(sreg.sess.uid), types.TimeNow()))
+				sreg.sess.queueOut(ErrLocked(sreg.pkt.id, t.original(sreg.sess.uid), types.TimeNow()))
 			} else {
 				// The topic is alive, so stop the kill timer, if it's ticking. We don't want the topic to die
 				// while processing the call
@@ -676,28 +676,28 @@ func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 
 	if getWhat&constMsgMetaSub != 0 {
 		// Send get.sub response as a separate {meta} packet
-		if err := t.replyGetSub(sreg.sess, sreg.pkt.Id, sreg.pkt.Get.Sub); err != nil {
+		if err := t.replyGetSub(sreg.sess, sreg.pkt.id, sreg.pkt.Get.Sub); err != nil {
 			log.Printf("topic[%s] handleSubscription Get.Sub failed: %v", t.name, err)
 		}
 	}
 
 	if getWhat&constMsgMetaTags != 0 {
 		// Send get.tags response as a separate {meta} packet
-		if err := t.replyGetTags(sreg.sess, sreg.pkt.Id); err != nil {
+		if err := t.replyGetTags(sreg.sess, sreg.pkt.id); err != nil {
 			log.Printf("topic[%s] handleSubscription Get.Tags failed: %v", t.name, err)
 		}
 	}
 
 	if getWhat&constMsgMetaData != 0 {
 		// Send get.data response as {data} packets
-		if err := t.replyGetData(sreg.sess, sreg.pkt.Id, sreg.pkt.Get.Data); err != nil {
+		if err := t.replyGetData(sreg.sess, sreg.pkt.id, sreg.pkt.Get.Data); err != nil {
 			log.Printf("topic[%s] handleSubscription Get.Data failed: %v", t.name, err)
 		}
 	}
 
 	if getWhat&constMsgMetaDel != 0 {
 		// Send get.del response as a separate {meta} packet
-		if err := t.replyGetDel(sreg.sess, sreg.pkt.Id, sreg.pkt.Get.Del); err != nil {
+		if err := t.replyGetDel(sreg.sess, sreg.pkt.id, sreg.pkt.Get.Del); err != nil {
 			log.Printf("topic[%s] handleSubscription Get.Del failed: %v", t.name, err)
 		}
 	}
@@ -707,6 +707,9 @@ func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 // subCommonReply generates a response to a subscription request
 func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin, sendDesc bool) error {
 	var now time.Time
+
+	msgsub := sreg.pkt.Sub
+
 	// For newly created topics report topic creation time.
 	if sreg.created {
 		now = t.updated
@@ -724,23 +727,23 @@ func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin, sendDesc bool) error {
 	var private interface{}
 	var mode string
 
-	if sreg.pkt.Set != nil {
-		if sreg.pkt.Set.Sub != nil {
-			if sreg.pkt.Set.Sub.User != "" {
-				sreg.sess.queueOut(ErrMalformed(sreg.pkt.Id, t.original(sreg.sess.uid), now))
+	if msgsub.Set != nil {
+		if msgsub.Set.Sub != nil {
+			if msgsub.Set.Sub.User != "" {
+				sreg.sess.queueOut(ErrMalformed(sreg.pkt.id, t.original(sreg.sess.uid), now))
 				return errors.New("user id must not be specified")
 			}
 
-			mode = sreg.pkt.Set.Sub.Mode
+			mode = msgsub.Set.Sub.Mode
 		}
 
-		if sreg.pkt.Set.Desc != nil && !isNullValue(sreg.pkt.Set.Desc.Private) {
-			private = sreg.pkt.Set.Desc.Private
+		if msgsub.Set.Desc != nil && !isNullValue(msgsub.Set.Desc.Private) {
+			private = msgsub.Set.Desc.Private
 		}
 	}
 
 	// Create new subscription or modify an existing one.
-	if err := t.requestSub(h, sreg.sess, sreg.pkt.Id, mode, private); err != nil {
+	if err := t.requestSub(h, sreg.sess, sreg.pkt.id, mode, private); err != nil {
 		return err
 	}
 
@@ -757,7 +760,7 @@ func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin, sendDesc bool) error {
 
 	t.sessions[sreg.sess] = true
 
-	resp := NoErr(sreg.pkt.Id, t.original(sreg.sess.uid), now)
+	resp := NoErr(sreg.pkt.id, t.original(sreg.sess.uid), now)
 	// Report back the assigned access mode.
 	params := map[string]interface{}{
 		"acs": &MsgAccessMode{
@@ -767,14 +770,14 @@ func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin, sendDesc bool) error {
 
 	// When a group topic is created, it's given a temporary name by the client.
 	// Then this name changes. Report back the original name here.
-	if sreg.created && sreg.pkt.Topic != t.original(sreg.sess.uid) {
-		params["tmpname"] = sreg.pkt.Topic
+	if sreg.created && sreg.pkt.topic != t.original(sreg.sess.uid) {
+		params["tmpname"] = sreg.pkt.topic
 	}
 	resp.Ctrl.Params = params
 	sreg.sess.queueOut(resp)
 
 	if sendDesc {
-		if err := t.replyGetDesc(sreg.sess, sreg.pkt.Id, sreg.pkt.Get.Desc); err != nil {
+		if err := t.replyGetDesc(sreg.sess, sreg.pkt.id, msgsub.Get.Desc); err != nil {
 			log.Printf("topic[%s] subCommonReply Get.Desc failed: %v", t.name, err)
 		}
 	}
