@@ -51,14 +51,13 @@ All images are available at https://hub.docker.com/r/tinode/
 
 ### Resetting the database
 
-The data in the database is reset when either one of the following conditions is true:
+The database is initialized or re-initialized when either one of the following conditions is true:
 
-* File `/botdata/.tn-cookie` is missing.
+* Database is missing.
+* Database has a wrong schema version.
 * `RESET_DB` environment variable is true.
 
-If you want to keep the data in the database between image upgrades, make sure the `/botdata` is a mounted volume (i.e. you launch the container with `--volume botdata:/botdata` option).
-
-If you want to reset the data in the database regardless of `/botdata/.tn-cookie` presence, shut down the Tinode container and remove it:
+If you want to reset the data in the database, shut down the Tinode container and remove it:
 ```
 $ docker stop tinode-srv && docker rm tinode-srv
 ```
@@ -66,21 +65,24 @@ then repeat step 4 adding `--env RESET_DB=true`.
 
 ### Enable push notifications
 
-Download and save the file with [FCM service account credentials](https://cloud.google.com/docs/authentication/production).
-Assuming your Firebase credentials file is named `myproject-1234-firebase-adminsdk-abc12-abcdef012345.json` and it's saved at `/Users/jdoe/`, sender ID is `114121611234`, and VAPID key (a.k.a. "Web Push certificates") is `83OrSoRandomLookingCharacters`, start the container with the following parameters (using MySQL container as an example):
+Download and save the file with the [FCM service account credentials](https://cloud.google.com/docs/authentication/production).
+Assuming your Firebase credentials file is named `myproject-1234-firebase-adminsdk-abc12-abcdef012345.json` and it's saved at `/Users/jdoe/`, sender ID is `141421356237`, and VAPID key (a.k.a. "Web Push certificates") is `83_OrSoRandomLookingCharacters`, start the container with the following parameters (using MySQL container as an example):
 
 ```
 $ docker run -p 6060:18080 -d --name tinode-srv --network tinode-net \
 		-v /Users/jdoe:/fcm \
 		--env FCM_CRED_FILE=/fcm/myproject-1234-firebase-adminsdk-abc12-abcdef012345.json \
-		--env FCM_SENDER_ID=114121611234 \
-		--env FCM_VAPID_KEY=83OrSoRandomLookingCharacters \
+		--env FCM_SENDER_ID=141421356237 \
+		--env FCM_VAPID_KEY=83_OrSoRandomLookingCharacters \
 		tinode/tinode-mysql:latest
 ```
 
 ### Run the chatbot
 
-See [instructions](../chatbot/).
+See [instructions](../chatbot/python/).
+
+The chatbot password is generated only when the database is initialized or reset. It's saved to `/botdata` directory in the container. If you want to keep the data available between container changes, such as image upgrades, make sure the `/botdata` is a mounted volume (i.e. you always launch the container with `--volume botdata:/botdata` option).
+
 
 ## Supported environment variables
 

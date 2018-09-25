@@ -37,13 +37,15 @@ done < config.template
 
 
 # Initialize the database if it has not been initialized yet or if data reset has been requested.
-if [ ! -f /botdata/.tn-cookie ] || [ "$RESET_DB" = true ] ; then
-	# Run the generator. Save stdout to to a file to extract Tino's password for possible later use.
-	./init-db --reset --config=working.config --data=data.json | grep "usr;tino;" > /botdata/tino-password
+./init-db --reset=${RESET_DB} --config=working.config --data=data.json | grep "usr;tino;" > /botdata/tino-password
 
+if [ -s /botdata/tino-password ] ; then
 	# Convert Tino's authentication credentials into a cookie file.
 	# The cookie file is also used to check if database has been initialized.
-	./credentials.sh < /botdata/tino-password > /botdata/.tn-cookie
+
+	# /botdata/tino-password could be empty if DB was not updated. In such a case the
+	# /botdata/.tn-cookie will not be modified.
+	./credentials.sh /botdata/.tn-cookie < /botdata/tino-password
 fi
 
 # Run the tinode server.
