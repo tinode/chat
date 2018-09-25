@@ -39,6 +39,16 @@ service Plugin {
 message Unused {
 }
 
+// Common client/server messages
+
+// Authentication level
+enum AuthLevel {
+	NONE = 0;
+	ANON = 10;
+	AUTH = 20;
+	ROOT = 30;
+}
+
 // Client messages
 
 // Topic default access mode
@@ -251,6 +261,9 @@ message ClientMsg {
 		ClientDel del = 9;
 		ClientNote note = 10;
 	}
+	// Root user may send messages on behalf of other users.
+	string on_behalf_of = 11;
+	AuthLevel authLvl = 12;
 }
 
 // ************************
@@ -412,12 +425,6 @@ message ServerResp {
 message Session {
 	string session_id = 1;
 	string user_id = 2;
-	enum AuthLevel {
-		NONE = 0;
-		ANON = 10;
-		AUTH = 20;
-		ROOT = 30;
-  	}
 	AuthLevel auth_level = 3;
 	string remote_addr = 4;
 	string user_agent = 5;

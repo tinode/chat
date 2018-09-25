@@ -332,7 +332,7 @@ func pluginGenerateClientReq(sess *Session, msg *ClientComMessage) *pbx.ClientRe
 		Sess: &pbx.Session{
 			SessionId:  sess.sid,
 			UserId:     sess.uid.UserId(),
-			AuthLevel:  pbx.Session_AuthLevel(sess.authLvl),
+			AuthLevel:  pbx.AuthLevel(sess.authLvl),
 			UserAgent:  sess.userAgent,
 			RemoteAddr: sess.remoteAddr,
 			DeviceId:   sess.deviceID,

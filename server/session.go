@@ -239,7 +239,7 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 		msg.from = s.uid.UserId()
 		msg.authLvl = int(s.authLvl)
 	} else if s.authLvl != auth.LevelRoot {
-		// Only root user can set non-default msg.from value.
+		// Only root user can set non-default msg.from && msg.authLvl values.
 		s.queueOut(ErrPermissionDenied("", "", msg.timestamp))
 		log.Println("s.dispatch: non-root asigned msg.from", s.sid)
 	}

@@ -97,6 +97,12 @@ type ClusterReq struct {
 	Signature string
 
 	Msg *ClientComMessage
+
+	// Root user may send messages on behalf of other users.
+	OnBahalfOf string
+	// AuthLevel of the user specified by root.
+	AuthLvl int
+
 	// Expanded (routable) topic name
 	RcptTo string
 	// Originating session
@@ -311,6 +317,8 @@ func (c *Cluster) Master(msg *ClusterReq, rejected *bool) error {
 		sess.deviceID = msg.Sess.DeviceID
 
 		// Dispatch remote message to a local session.
+		msg.Msg.from = msg.OnBahalfOf
+		msg.Msg.authLvl = msg.AuthLvl
 		sess.dispatch(msg.Msg)
 	} else {
 		// Reject the request: wrong signature, cluster is out of sync.
@@ -378,10 +386,12 @@ func (c *Cluster) routeToTopic(msg *ClientComMessage, topic string, sess *Sessio
 
 	return n.forward(
 		&ClusterReq{
-			Node:      c.thisNodeName,
-			Signature: c.ring.Signature(),
-			Msg:       msg,
-			RcptTo:    topic,
+			Node:       c.thisNodeName,
+			Signature:  c.ring.Signature(),
+			Msg:        msg,
+			OnBahalfOf: msg.from,
+			AuthLvl:    msg.authLvl,
+			RcptTo:     topic,
 			Sess: &ClusterSess{
 				Uid:        sess.uid,
 				AuthLvl:    sess.authLvl,
