@@ -524,7 +524,7 @@ func (t *Topic) run(hub *Hub) {
 				var err error
 				switch meta.what {
 				case constMsgDelMsg:
-					err = t.replyDelMsg(meta.sess, meta.pkt.Del)
+					err = t.replyDelMsg(meta.sess, asUid, meta.pkt.Del)
 				case constMsgDelSub:
 					err = t.replyDelSub(hub, meta.sess, meta.pkt.Del)
 				case constMsgDelTopic:
@@ -1867,10 +1867,24 @@ func (t *Topic) replyGetDel(sess *Session, asUid types.Uid, id string, req *MsgG
 }
 
 // replyDelMsg deletes (soft or hard) messages in response to del.msg packet.
-func (t *Topic) replyDelMsg(sess *Session, del *MsgClientDel) error {
+func (t *Topic) replyDelMsg(sess *Session, asUid types.Uid, del *MsgClientDel) error {
 	now := types.TimeNow()
 
 	var err error
+
+	pud := t.perUser[asUid]
+	if !(pud.modeGiven & pud.modeWant).IsDeleter() {
+		// User must have an R permission: if the user cannot read messages, he has
+		// no business of deleting them.
+		if !(pud.modeGiven & pud.modeWant).IsReader() {
+			sess.queueOut(ErrPermissionDenied(del.Id, t.original(asUid), now))
+			return errors.New("del.msg: permission denied")
+		}
+
+		// User has just the R permission, cannot hard-delete messages, silently
+		// switching to soft-deleting
+		del.Hard = false
+	}
 
 	var ranges []types.Range
 	if len(del.DelSeq) == 0 {
@@ -1915,31 +1929,17 @@ func (t *Topic) replyDelMsg(sess *Session, del *MsgClientDel) error {
 	}
 
 	if err != nil {
-		sess.queueOut(ErrMalformed(del.Id, t.original(sess.uid), now))
+		sess.queueOut(ErrMalformed(del.Id, t.original(asUid), now))
 		return err
 	}
 
-	pud := t.perUser[sess.uid]
-	if !(pud.modeGiven & pud.modeWant).IsDeleter() {
-		// User must have an R permission: if the user cannot read messages, he has
-		// no business of deleting them.
-		if !(pud.modeGiven & pud.modeWant).IsReader() {
-			sess.queueOut(ErrPermissionDenied(del.Id, t.original(sess.uid), now))
-			return errors.New("del.msg: permission denied")
-		}
-
-		// User has just the R permission, cannot hard-delete messages, silently
-		// switching to soft-deleting
-		del.Hard = false
-	}
-
-	forUser := sess.uid
+	forUser := asUid
 	if del.Hard {
 		forUser = types.ZeroUid
 	}
 
 	if err = store.Messages.DeleteList(t.name, t.delID+1, forUser, ranges); err != nil {
-		sess.queueOut(ErrUnknown(del.Id, t.original(sess.uid), now))
+		sess.queueOut(ErrUnknown(del.Id, t.original(asUid), now))
 		return err
 	}
 
@@ -1952,20 +1952,20 @@ func (t *Topic) replyDelMsg(sess *Session, del *MsgClientDel) error {
 			t.perUser[uid] = pud
 		}
 		// Broadcast the change to all, online and offline, exclude the session making the change.
-		params := &presParams{delID: t.delID, delSeq: dr, actor: sess.uid.UserId()}
+		params := &presParams{delID: t.delID, delSeq: dr, actor: asUid.UserId()}
 		filters := &presFilters{filterIn: types.ModeRead}
 		t.presSubsOnline("del", params.actor, params, filters, sess.sid)
 		t.presSubsOffline("del", params, filters, sess.sid, true)
 	} else {
-		pud := t.perUser[sess.uid]
+		pud := t.perUser[asUid]
 		pud.delID = t.delID
-		t.perUser[sess.uid] = pud
+		t.perUser[asUid] = pud
 
 		// Notify user's other sessions
-		t.presPubMessageDelete(sess.uid, t.delID, dr, sess.sid)
+		t.presPubMessageDelete(asUid, t.delID, dr, sess.sid)
 	}
 
-	reply := NoErr(del.Id, t.original(sess.uid), now)
+	reply := NoErr(del.Id, t.original(asUid), now)
 	reply.Ctrl.Params = map[string]int{"del": t.delID}
 	sess.queueOut(reply)
 
