@@ -595,7 +595,9 @@ func (t *Topic) run(hub *Hub) {
 
 // Session subscribed to a topic, created == true if topic was just created and {pres} needs to be announced
 func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
-	var getWhat = 0
+	asUid := types.ParseUserId(sreg.pkt.from)
+
+	getWhat := 0
 	if sreg.pkt.Get != nil {
 		getWhat = parseMsgClientMeta(sreg.pkt.Get.What)
 	}
@@ -604,13 +606,13 @@ func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 		return err
 	}
 
-	pud := t.perUser[sreg.sess.uid]
+	pud := t.perUser[asUid]
 
 	switch t.cat {
 	case types.TopicCatMe:
 		// Notify user's contact that the given user is online now.
 		if sreg.loaded {
-			if err := t.loadContacts(sreg.sess.uid); err != nil {
+			if err := t.loadContacts(asUid); err != nil {
 				log.Println("topic: failed to load contacts", t.name, err.Error())
 			}
 			// User online: notify users of interest without forcing response (no +en here).
@@ -630,12 +632,12 @@ func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 		} else if pud.online == 1 {
 			// If this is the first session of the user in the topic.
 			// Notify other online group members that the user is online now.
-			t.presSubsOnline("on", sreg.sess.uid.UserId(), nilPresParams,
+			t.presSubsOnline("on", asUid.UserId(), nilPresParams,
 				&presFilters{filterIn: types.ModeRead}, sreg.sess.sid)
 		}
 
 	case types.TopicCatP2P:
-		uid2 := t.p2pOtherUser(sreg.sess.uid)
+		uid2 := t.p2pOtherUser(asUid)
 		pud2 := t.perUser[uid2]
 
 		// Inform the other user that the topic was just created.
@@ -643,12 +645,12 @@ func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 			t.presSingleUserOffline(uid2, "acs", &presParams{
 				dWant:  pud2.modeWant.String(),
 				dGiven: pud2.modeGiven.String(),
-				actor:  sreg.sess.uid.UserId()}, "", false)
+				actor:  asUid.UserId()}, "", false)
 		}
 
 		if sreg.newsub {
 			// Notify current user's 'me' topic to accept notifications from user2
-			t.presSingleUserOffline(sreg.sess.uid, "?none+en", nilPresParams, "", false)
+			t.presSingleUserOffline(asUid, "?none+en", nilPresParams, "", false)
 
 			// Initiate exchange of 'online' status with the other user.
 			// We don't know if the current user is online in the 'me' topic,
@@ -667,7 +669,7 @@ func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 	// newsub could be true only for p2p and group topics, no need to check topic category explicitly.
 	if sreg.newsub {
 		// Notify creator's other sessions that the subscription (or the entire topic) was created.
-		t.presSingleUserOffline(sreg.sess.uid, "acs",
+		t.presSingleUserOffline(asUid, "acs",
 			&presParams{
 				dWant:  pud.modeWant.String(),
 				dGiven: pud.modeGiven.String(),
@@ -691,7 +693,7 @@ func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 
 	if getWhat&constMsgMetaData != 0 {
 		// Send get.data response as {data} packets
-		if err := t.replyGetData(sreg.sess, sreg.pkt.id, sreg.pkt.Get.Data); err != nil {
+		if err := t.replyGetData(sreg.sess, asUid, sreg.pkt.id, sreg.pkt.Get.Data); err != nil {
 			log.Printf("topic[%s] handleSubscription Get.Data failed: %v", t.name, err)
 		}
 	}
@@ -1685,21 +1687,22 @@ func (t *Topic) replySetSub(h *Hub, sess *Session, pkt *ClientComMessage) error 
 
 // replyGetData is a response to a get.data request - load a list of stored messages, send them to session as {data}
 // response goes to a single session rather than all sessions in a topic
-func (t *Topic) replyGetData(sess *Session, id string, req *MsgGetOpts) error {
+func (t *Topic) replyGetData(sess *Session, asUid types.Uid, id string, req *MsgGetOpts) error {
 	now := types.TimeNow()
+	toriginal := t.original(asUid)
 
 	if req != nil && (req.IfModifiedSince != nil || req.User != "" || req.Topic != "") {
-		sess.queueOut(ErrMalformed(id, t.original(sess.uid), now))
+		sess.queueOut(ErrMalformed(id, toriginal, now))
 		return errors.New("invalid MsgGetOpts query")
 	}
 
 	// Check if the user has permission to read the topic data
 	count := 0
-	if userData := t.perUser[sess.uid]; (userData.modeGiven & userData.modeWant).IsReader() {
+	if userData := t.perUser[asUid]; (userData.modeGiven & userData.modeWant).IsReader() {
 		// Read messages from DB
-		messages, err := store.Messages.GetAll(t.name, sess.uid, msgOpts2storeOpts(req))
+		messages, err := store.Messages.GetAll(t.name, asUid, msgOpts2storeOpts(req))
 		if err != nil {
-			sess.queueOut(ErrUnknown(id, t.original(sess.uid), now))
+			sess.queueOut(ErrUnknown(id, toriginal, now))
 			return err
 		}
 
@@ -1709,9 +1712,9 @@ func (t *Topic) replyGetData(sess *Session, id string, req *MsgGetOpts) error {
 		if messages != nil {
 			count = len(messages)
 			for i := count - 1; i >= 0; i-- {
-				mm := messages[i]
+				mm := &messages[i]
 				sess.queueOut(&ServerComMessage{Data: &MsgServerData{
-					Topic:     t.original(sess.uid),
+					Topic:     toriginal,
 					Head:      mm.Head,
 					SeqId:     mm.SeqId,
 					From:      types.ParseUid(mm.From).UserId(),
@@ -1726,13 +1729,13 @@ func (t *Topic) replyGetData(sess *Session, id string, req *MsgGetOpts) error {
 	// have been deleted.
 	if count == 0 && t.lastID > 0 && (req == nil || (req.BeforeId == 0 && req.SinceId == 0)) {
 		sess.queueOut(&ServerComMessage{Data: &MsgServerData{
-			Topic:     t.original(sess.uid),
+			Topic:     toriginal,
 			SeqId:     t.lastID,
 			Timestamp: now}})
 	}
 
 	// Inform the requester that all the data has been served.
-	reply := NoErr(id, t.original(sess.uid), now)
+	reply := NoErr(id, toriginal, now)
 	reply.Ctrl.Params = map[string]interface{}{"what": "data", "count": count}
 	sess.queueOut(reply)
 
