@@ -208,7 +208,9 @@ func (t *Topic) run(hub *Hub) {
 			asUid := leave.userId
 
 			if t.isSuspended() {
-				leave.sess.queueOut(ErrLocked(leave.reqID, t.original(asUid), now))
+				if !asUid.IsZero() && leave.reqID != "" {
+					leave.sess.queueOut(ErrLocked(leave.reqID, t.original(asUid), now))
+				}
 				continue
 
 			} else if leave.unsub {
@@ -220,7 +222,16 @@ func (t *Topic) run(hub *Hub) {
 
 			} else {
 				// Just leaving the topic without unsubscribing
-				delete(t.sessions, leave.sess)
+				if asUid.IsZero() {
+					// The entire session is being dropped
+					delete(t.sessions, leave.sess)
+				} else {
+					// One user is unsubscribing.
+					t.sessions[leave.sess]--
+					if t.sessions[leave.sess] == 0 {
+						delete(t.sessions, leave.sess)
+					}
+				}
 
 				pud := t.perUser[asUid]
 				pud.online--
@@ -254,7 +265,7 @@ func (t *Topic) run(hub *Hub) {
 
 				t.perUser[asUid] = pud
 
-				if leave.reqID != "" {
+				if !asUid.IsZero() && leave.reqID != "" {
 					leave.sess.queueOut(NoErr(leave.reqID, t.original(asUid), now))
 				}
 			}

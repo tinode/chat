@@ -263,7 +263,7 @@ message ClientMsg {
 	}
 	// Root user may send messages on behalf of other users.
 	string on_behalf_of = 11;
-	AuthLevel authLvl = 12;
+	AuthLevel auth_level = 12;
 }
 
 // ************************
