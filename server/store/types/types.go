@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"errors"
+	"sort"
 	"strings"
 	"time"
 )
@@ -185,6 +186,50 @@ func ParseUserId(s string) Uid {
 		(&uid).UnmarshalText([]byte(s)[3:])
 	}
 	return uid
+}
+
+// UidSlice is a slice of Uids sorted in ascending order.
+type UidSlice []Uid
+
+func (us UidSlice) find(uid Uid) (int, bool) {
+	l := len(us)
+	if l == 0 || us[0] > uid {
+		return 0, false
+	}
+	if uid > us[l-1] {
+		return l, false
+	}
+	idx := sort.Search(l, func(i int) bool {
+		return uid <= us[i]
+	})
+	return idx, idx < l && us[idx] == uid
+}
+
+// Add uid to UidSlice keeping it sorted.
+func (us *UidSlice) Add(uid Uid) bool {
+	idx, found := us.find(uid)
+	if found {
+		return false
+	}
+	// Inserting without creating a temporary slice.
+	*us = append(*us, ZeroUid)
+	copy((*us)[idx+1:], (*us)[idx:])
+	(*us)[idx] = uid
+	return true
+}
+
+// Rem removes uid from UidSlice.
+func (us *UidSlice) Rem(uid Uid) bool {
+	idx, found := us.find(uid)
+	if !found {
+		return false
+	}
+	if idx == len(*us)-1 {
+		*us = (*us)[:idx]
+	} else {
+		*us = append((*us)[:idx], (*us)[idx+1:]...)
+	}
+	return true
 }
 
 // P2PName takes two Uids and generates a P2P topic name

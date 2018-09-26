@@ -77,7 +77,7 @@ type Topic struct {
 
 	// Sessions attached to this topic.
 	// A session may represent more than one subsription.
-	sessions map[*Session]int
+	sessions map[*Session]types.UidSlice
 
 	// Inbound {data} and {pres} messages from sessions or other topics, already converted to SCM. Buffered = 256
 	broadcast chan *ServerComMessage
@@ -227,8 +227,8 @@ func (t *Topic) run(hub *Hub) {
 					delete(t.sessions, leave.sess)
 				} else {
 					// One user is unsubscribing.
-					t.sessions[leave.sess]--
-					if t.sessions[leave.sess] == 0 {
+					uids := t.remSession(leave.sess, asUid)
+					if len(uids) == 0 {
 						delete(t.sessions, leave.sess)
 					}
 				}
@@ -781,7 +781,7 @@ func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin, sendDesc bool) error {
 		meta:      t.meta,
 		uaChange:  t.uaChange})
 
-	t.sessions[sreg.sess]++
+	t.addSession(sreg.sess, asUid)
 
 	resp := NoErr(sreg.pkt.id, toriginal, now)
 	// Report back the assigned access mode.
@@ -2333,6 +2333,26 @@ func (t *Topic) subsCount() int {
 		return count
 	}
 	return len(t.perUser)
+}
+
+func (t *Topic) addSession(s *Session, user types.Uid) types.UidSlice {
+	uids := t.sessions[s]
+	if uids == nil {
+		uids = make(types.UidSlice, 1)
+	}
+	uids.Add(user)
+	t.sessions[s] = uids
+	return uids
+}
+
+func (t *Topic) remSession(s *Session, user types.Uid) types.UidSlice {
+	uids := t.sessions[s]
+	if uids == nil {
+		return nil
+	}
+	uids.Rem(user)
+	t.sessions[s] = uids
+	return uids
 }
 
 func topicCat(name string) types.TopicCat {

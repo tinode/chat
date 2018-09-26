@@ -255,7 +255,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 
 	t = &Topic{name: sreg.topic,
 		xoriginal: sreg.pkt.topic,
-		sessions:  make(map[*Session]int),
+		sessions:  make(map[*Session]types.UidSlice),
 		broadcast: make(chan *ServerComMessage, 256),
 		reg:       make(chan *sessionJoin, 32),
 		unreg:     make(chan *sessionLeave, 32),
