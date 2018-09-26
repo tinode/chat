@@ -468,31 +468,32 @@ func (t *Topic) run(hub *Hub) {
 
 		case meta := <-t.meta:
 			// Request to get/set topic metadata
+			asUid := types.ParseUserId(meta.pkt.from)
 			switch {
 			case meta.pkt.Get != nil:
 				// Get request
 				if meta.what&constMsgMetaDesc != 0 {
-					if err := t.replyGetDesc(meta.sess, meta.pkt.Get.Id, meta.pkt.Get.Desc); err != nil {
+					if err := t.replyGetDesc(meta.sess, asUid, meta.pkt.Get.Id, meta.pkt.Get.Desc); err != nil {
 						log.Printf("topic[%s] meta.Get.Desc failed: %s", t.name, err)
 					}
 				}
 				if meta.what&constMsgMetaSub != 0 {
-					if err := t.replyGetSub(meta.sess, meta.pkt.Get.Id, meta.pkt.Get.Sub); err != nil {
+					if err := t.replyGetSub(meta.sess, asUid, meta.pkt.Get.Id, meta.pkt.Get.Sub); err != nil {
 						log.Printf("topic[%s] meta.Get.Sub failed: %s", t.name, err)
 					}
 				}
 				if meta.what&constMsgMetaData != 0 {
-					if err := t.replyGetData(meta.sess, meta.pkt.Get.Id, meta.pkt.Get.Data); err != nil {
+					if err := t.replyGetData(meta.sess, asUid, meta.pkt.Get.Id, meta.pkt.Get.Data); err != nil {
 						log.Printf("topic[%s] meta.Get.Data failed: %s", t.name, err)
 					}
 				}
 				if meta.what&constMsgMetaDel != 0 {
-					if err := t.replyGetDel(meta.sess, meta.pkt.Get.Id, meta.pkt.Get.Del); err != nil {
+					if err := t.replyGetDel(meta.sess, asUid, meta.pkt.Get.Id, meta.pkt.Get.Del); err != nil {
 						log.Printf("topic[%s] meta.Get.Del failed: %s", t.name, err)
 					}
 				}
 				if meta.what&constMsgMetaTags != 0 {
-					if err := t.replyGetTags(meta.sess, meta.pkt.Get.Id); err != nil {
+					if err := t.replyGetTags(meta.sess, asUid, meta.pkt.Get.Id); err != nil {
 						log.Printf("topic[%s] meta.Get.Tags failed: %s", t.name, err)
 					}
 				}
@@ -676,7 +677,7 @@ func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 
 	if getWhat&constMsgMetaSub != 0 {
 		// Send get.sub response as a separate {meta} packet
-		if err := t.replyGetSub(sreg.sess, sreg.pkt.id, sreg.pkt.Get.Sub); err != nil {
+		if err := t.replyGetSub(sreg.sess, asUid, sreg.pkt.id, sreg.pkt.Get.Sub); err != nil {
 			log.Printf("topic[%s] handleSubscription Get.Sub failed: %v", t.name, err)
 		}
 	}
@@ -777,7 +778,7 @@ func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin, sendDesc bool) error {
 	sreg.sess.queueOut(resp)
 
 	if sendDesc {
-		if err := t.replyGetDesc(sreg.sess, sreg.pkt.id, msgsub.Get.Desc); err != nil {
+		if err := t.replyGetDesc(sreg.sess, asUid, sreg.pkt.id, msgsub.Get.Desc); err != nil {
 			log.Printf("topic[%s] subCommonReply Get.Desc failed: %v", t.name, err)
 		}
 	}
@@ -1183,11 +1184,11 @@ func (t *Topic) approveSub(h *Hub, sess *Session, asUid, target types.Uid, set *
 }
 
 // replyGetDesc is a response to a get.desc request on a topic, sent to just the session as a {meta} packet
-func (t *Topic) replyGetDesc(sess *Session, id string, opts *MsgGetOpts) error {
+func (t *Topic) replyGetDesc(sess *Session, asUid types.Uid, id string, opts *MsgGetOpts) error {
 	now := types.TimeNow()
 
 	if opts != nil && (opts.User != "" || opts.Limit != 0) {
-		sess.queueOut(ErrMalformed(id, t.original(sess.uid), now))
+		sess.queueOut(ErrMalformed(id, t.original(asUid), now))
 		return errors.New("invalid GetDesc query")
 	}
 
@@ -1199,7 +1200,7 @@ func (t *Topic) replyGetDesc(sess *Session, id string, opts *MsgGetOpts) error {
 		desc.UpdatedAt = &t.updated
 	}
 
-	pud, full := t.perUser[sess.uid]
+	pud, full := t.perUser[asUid]
 	if t.cat == types.TopicCatMe {
 		full = true
 	}
@@ -1256,7 +1257,7 @@ func (t *Topic) replyGetDesc(sess *Session, id string, opts *MsgGetOpts) error {
 	sess.queueOut(&ServerComMessage{
 		Meta: &MsgServerMeta{
 			Id:        id,
-			Topic:     t.original(sess.uid),
+			Topic:     t.original(asUid),
 			Desc:      desc,
 			Timestamp: &now}})
 
@@ -1420,19 +1421,19 @@ func (t *Topic) replySetDesc(sess *Session, set *MsgClientSet) error {
 
 // replyGetSub is a response to a get.sub request on a topic - load a list of subscriptions/subscribers,
 // send it just to the session as a {meta} packet
-func (t *Topic) replyGetSub(sess *Session, id string, req *MsgGetOpts) error {
+func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, id string, req *MsgGetOpts) error {
 	now := types.TimeNow()
 
 	if req != nil && (req.SinceId != 0 || req.BeforeId != 0) {
-		sess.queueOut(ErrMalformed(id, t.original(sess.uid), now))
+		sess.queueOut(ErrMalformed(id, t.original(asUid), now))
 		return errors.New("invalid MsgGetOpts query")
 	}
 
-	userData := t.perUser[sess.uid]
+	userData := t.perUser[asUid]
 	if t.cat != types.TopicCatMe && t.cat != types.TopicCatFnd &&
 		!(userData.modeGiven & userData.modeWant).IsReader() {
 
-		sess.queueOut(ErrPermissionDenied(id, t.original(sess.uid), now))
+		sess.queueOut(ErrPermissionDenied(id, t.original(asUid), now))
 		return errors.New("user does not have R permission")
 	}
 
@@ -1451,16 +1452,16 @@ func (t *Topic) replyGetSub(sess *Session, id string, req *MsgGetOpts) error {
 			// If topic is provided, it could be in the form of user ID 'usrAbCd'.
 			// Convert it to P2P topic name.
 			if uid2 := types.ParseUserId(req.Topic); !uid2.IsZero() {
-				req.Topic = uid2.P2PName(sess.uid)
+				req.Topic = uid2.P2PName(asUid)
 			}
 		}
 		// Fetch user's subscriptions, with Topic.Public denormalized into subscription.
 		if ifModified.IsZero() {
 			// No cache management. Skip deleted subscriptions.
-			subs, err = store.Users.GetTopics(sess.uid, msgOpts2storeOpts(req))
+			subs, err = store.Users.GetTopics(asUid, msgOpts2storeOpts(req))
 		} else {
 			// User manages cache. Include deleted subscriptions too.
-			subs, err = store.Users.GetTopicsAny(sess.uid, msgOpts2storeOpts(req))
+			subs, err = store.Users.GetTopicsAny(asUid, msgOpts2storeOpts(req))
 		}
 		isSharer = true
 	case types.TopicCatFnd:
@@ -1471,7 +1472,7 @@ func (t *Topic) replyGetSub(sess *Session, id string, req *MsgGetOpts) error {
 		}
 
 		if query, ok := raw.(string); ok && len(query) > 0 {
-			query, subs, err = pluginFind(sess.uid, query)
+			query, subs, err = pluginFind(asUid, query)
 			if err == nil && subs == nil && query != "" {
 				var req, opt []string
 				if req, opt, err = parseSearchQuery(query); err == nil {
@@ -1481,7 +1482,7 @@ func (t *Topic) replyGetSub(sess *Session, id string, req *MsgGetOpts) error {
 							filterRestrictedTags(append(req, opt...), globals.maskedTagNS)); len(restr) > 0 {
 							err = types.ErrPermissionDenied
 						} else {
-							subs, err = store.Users.FindSubs(sess.uid, req, opt)
+							subs, err = store.Users.FindSubs(asUid, req, opt)
 						}
 					} else {
 						err = types.ErrMalformed
@@ -1506,12 +1507,12 @@ func (t *Topic) replyGetSub(sess *Session, id string, req *MsgGetOpts) error {
 	}
 
 	if err != nil {
-		sess.queueOut(decodeStoreError(err, id, t.original(sess.uid), now, nil))
+		sess.queueOut(decodeStoreError(err, id, t.original(asUid), now, nil))
 		return err
 	}
 
 	if len(subs) > 0 {
-		meta := &MsgServerMeta{Id: id, Topic: t.original(sess.uid), Timestamp: &now}
+		meta := &MsgServerMeta{Id: id, Topic: t.original(asUid), Timestamp: &now}
 		meta.Sub = make([]MsgTopicSub, 0, len(subs))
 		for i := range subs {
 			sub := &subs[i]
@@ -1582,7 +1583,7 @@ func (t *Topic) replyGetSub(sess *Session, id string, req *MsgGetOpts) error {
 				}
 
 				if !deleted {
-					if uid == sess.uid && isReader {
+					if uid == asUid && isReader {
 						// Report deleted ID for own subscriptions only
 						mts.DelId = sub.DelId
 					}
@@ -1615,7 +1616,7 @@ func (t *Topic) replyGetSub(sess *Session, id string, req *MsgGetOpts) error {
 					mts.Public = sub.GetPublic()
 					// Reporting private only if it's user's own subscription or
 					// a synthetic 'private' in 'find' topic where it's a list of tags matched on.
-					if uid == sess.uid || t.cat == types.TopicCatFnd {
+					if uid == asUid || t.cat == types.TopicCatFnd {
 						mts.Private = sub.Private
 					}
 				}
@@ -1625,7 +1626,7 @@ func (t *Topic) replyGetSub(sess *Session, id string, req *MsgGetOpts) error {
 		}
 		sess.queueOut(&ServerComMessage{Meta: meta})
 	} else {
-		sess.queueOut(NoErr(id, t.original(sess.uid), now))
+		sess.queueOut(NoErr(id, t.original(asUid), now))
 	}
 
 	return nil
