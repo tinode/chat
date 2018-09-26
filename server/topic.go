@@ -204,12 +204,12 @@ func (t *Topic) run(hub *Hub) {
 			now := types.TimeNow()
 
 			if t.isSuspended() {
-				leave.sess.queueOut(ErrLocked(leave.reqID, t.original(leave.sess.uid), now))
+				leave.sess.queueOut(ErrLocked(leave.reqID, t.original(asUid), now))
 				continue
 
 			} else if leave.unsub {
 				// User wants to leave and unsubscribe.
-				if err := t.replyLeaveUnsub(hub, leave.sess, leave.reqID); err != nil {
+				if err := t.replyLeaveUnsub(hub, leave.sess, asUid, leave.reqID); err != nil {
 					log.Println("failed to unsub", err)
 					continue
 				}
@@ -218,7 +218,7 @@ func (t *Topic) run(hub *Hub) {
 				// Just leaving the topic without unsubscribing
 				delete(t.sessions, leave.sess)
 
-				pud := t.perUser[leave.sess.uid]
+				pud := t.perUser[asUid]
 				pud.online--
 				switch t.cat {
 				case types.TopicCatMe:
@@ -243,15 +243,15 @@ func (t *Topic) run(hub *Hub) {
 				case types.TopicCatGrp:
 					if pud.online == 0 {
 						// User is going offline: notify online subscribers on 'me'
-						t.presSubsOnline("off", leave.sess.uid.UserId(), nilPresParams,
+						t.presSubsOnline("off", asUid.UserId(), nilPresParams,
 							&presFilters{filterIn: types.ModeRead}, "")
 					}
 				}
 
-				t.perUser[leave.sess.uid] = pud
+				t.perUser[asUid] = pud
 
 				if leave.reqID != "" {
-					leave.sess.queueOut(NoErr(leave.reqID, t.original(leave.sess.uid), now))
+					leave.sess.queueOut(NoErr(leave.reqID, t.original(asUid), now))
 				}
 			}
 
@@ -267,7 +267,7 @@ func (t *Topic) run(hub *Hub) {
 
 			if msg.Data != nil {
 				if t.isSuspended() {
-					msg.sessFrom.queueOut(ErrLocked(msg.id, t.original(msg.sessFrom.uid), msg.timestamp))
+					msg.sessFrom.queueOut(ErrLocked(msg.id, t.original(asUid), msg.timestamp))
 					continue
 				}
 
@@ -275,7 +275,7 @@ func (t *Topic) run(hub *Hub) {
 				userData := t.perUser[from]
 
 				if !(userData.modeWant & userData.modeGiven).IsWriter() {
-					msg.sessFrom.queueOut(ErrPermissionDenied(msg.id, t.original(msg.sessFrom.uid),
+					msg.sessFrom.queueOut(ErrPermissionDenied(msg.id, t.original(asUid),
 						msg.timestamp))
 					continue
 				}
@@ -289,7 +289,7 @@ func (t *Topic) run(hub *Hub) {
 					Content:   msg.Data.Content}); err != nil {
 
 					log.Printf("topic[%s]: failed to save message: %v", t.name, err)
-					msg.sessFrom.queueOut(ErrUnknown(msg.id, t.original(msg.sessFrom.uid), msg.timestamp))
+					msg.sessFrom.queueOut(ErrUnknown(msg.id, t.original(asUid), msg.timestamp))
 
 					continue
 				}
@@ -299,7 +299,7 @@ func (t *Topic) run(hub *Hub) {
 				msg.Data.SeqId = t.lastID
 
 				if msg.id != "" {
-					reply := NoErrAccepted(msg.id, t.original(msg.sessFrom.uid), msg.timestamp)
+					reply := NoErrAccepted(msg.id, t.original(asUid), msg.timestamp)
 					reply.Ctrl.Params = map[string]int{"seq": t.lastID}
 					msg.sessFrom.queueOut(reply)
 				}
@@ -526,9 +526,9 @@ func (t *Topic) run(hub *Hub) {
 				case constMsgDelMsg:
 					err = t.replyDelMsg(meta.sess, asUid, meta.pkt.Del)
 				case constMsgDelSub:
-					err = t.replyDelSub(hub, meta.sess, meta.pkt.Del)
+					err = t.replyDelSub(hub, meta.sess, asUid, meta.pkt.Del)
 				case constMsgDelTopic:
-					err = t.replyDelTopic(hub, meta.sess, meta.pkt.Del)
+					err = t.replyDelTopic(hub, meta.sess, asUid, meta.pkt.Del)
 				}
 
 				if err != nil {
@@ -1983,11 +1983,11 @@ func (t *Topic) replyDelMsg(sess *Session, asUid types.Uid, del *MsgClientDel) e
 // 2.1.1 Check if the other subscription still exists, if so, treat request as {leave unreg=true}
 // 2.1.2 If the other subscription does not exist, delete topic
 // 2.2 If this is not a p2p topic, treat it as {leave unreg=true}
-func (t *Topic) replyDelTopic(h *Hub, sess *Session, del *MsgClientDel) error {
-	if t.owner != sess.uid {
+func (t *Topic) replyDelTopic(h *Hub, sess *Session, asUid types.Uid, del *MsgClientDel) error {
+	if t.owner != asUid {
 		// Cases 2.1.1 and 2.2
 		if t.cat != types.TopicCatP2P || t.subsCount() == 2 {
-			return t.replyLeaveUnsub(h, sess, del.Id)
+			return t.replyLeaveUnsub(h, sess, asUid, del.Id)
 		}
 	}
 
@@ -2001,7 +2001,7 @@ func (t *Topic) replyDelTopic(h *Hub, sess *Session, del *MsgClientDel) error {
 	return nil
 }
 
-func (t *Topic) replyDelSub(h *Hub, sess *Session, del *MsgClientDel) error {
+func (t *Topic) replyDelSub(h *Hub, sess *Session, asUid types.Uid, del *MsgClientDel) error {
 	now := types.TimeNow()
 
 	var err error
@@ -2009,10 +2009,10 @@ func (t *Topic) replyDelSub(h *Hub, sess *Session, del *MsgClientDel) error {
 	// Get ID of the affected user
 	uid := types.ParseUserId(del.User)
 
-	pud := t.perUser[sess.uid]
+	pud := t.perUser[asUid]
 	if !(pud.modeGiven & pud.modeWant).IsAdmin() {
 		err = errors.New("del.sub: permission denied")
-	} else if uid.IsZero() || uid == sess.uid {
+	} else if uid.IsZero() || uid == asUid {
 		// Cannot delete self-subscription. User [leave unsub] or [delete topic]
 		err = errors.New("del.sub: cannot delete self-subscription")
 	} else if t.cat == types.TopicCatP2P {
@@ -2021,13 +2021,13 @@ func (t *Topic) replyDelSub(h *Hub, sess *Session, del *MsgClientDel) error {
 	}
 
 	if err != nil {
-		sess.queueOut(ErrPermissionDenied(del.Id, t.original(sess.uid), now))
+		sess.queueOut(ErrPermissionDenied(del.Id, t.original(asUid), now))
 		return err
 	}
 
 	pud, ok := t.perUser[uid]
 	if !ok {
-		sess.queueOut(InfoNoAction(del.Id, t.original(sess.uid), now))
+		sess.queueOut(InfoNoAction(del.Id, t.original(asUid), now))
 		return errors.New("del.sub: user not found")
 	}
 
@@ -2041,49 +2041,49 @@ func (t *Topic) replyDelSub(h *Hub, sess *Session, del *MsgClientDel) error {
 	}
 
 	if err != nil {
-		sess.queueOut(ErrPermissionDenied(del.Id, t.original(sess.uid), now))
+		sess.queueOut(ErrPermissionDenied(del.Id, t.original(asUid), now))
 		return err
 	}
 
 	// Delete user's subscription from the database
 	if err := store.Subs.Delete(t.name, uid); err != nil {
-		sess.queueOut(ErrUnknown(del.Id, t.original(sess.uid), now))
+		sess.queueOut(ErrUnknown(del.Id, t.original(asUid), now))
 
 		return err
 	}
 
-	sess.queueOut(NoErr(del.Id, t.original(sess.uid), now))
+	sess.queueOut(NoErr(del.Id, t.original(asUid), now))
 
 	t.evictUser(uid, true, "")
 
 	return nil
 }
 
-func (t *Topic) replyLeaveUnsub(h *Hub, sess *Session, id string) error {
+func (t *Topic) replyLeaveUnsub(h *Hub, sess *Session, asUid types.Uid, id string) error {
 	now := types.TimeNow()
 
-	if t.owner == sess.uid {
+	if t.owner == asUid {
 		if id != "" {
-			sess.queueOut(ErrPermissionDenied(id, t.original(sess.uid), now))
+			sess.queueOut(ErrPermissionDenied(id, t.original(asUid), now))
 		}
 		return errors.New("replyLeaveUnsub: owner cannot unsubscribe")
 	}
 
 	// Delete user's subscription from the database
-	if err := store.Subs.Delete(t.name, sess.uid); err != nil {
+	if err := store.Subs.Delete(t.name, asUid); err != nil {
 		if id != "" {
-			sess.queueOut(ErrUnknown(id, t.original(sess.uid), now))
+			sess.queueOut(ErrUnknown(id, t.original(asUid), now))
 		}
 
 		return err
 	}
 
 	if id != "" {
-		sess.queueOut(NoErr(id, t.original(sess.uid), now))
+		sess.queueOut(NoErr(id, t.original(asUid), now))
 	}
 
 	// Evict all user's sessions, clear cached data, send notifications.
-	t.evictUser(sess.uid, true, sess.sid)
+	t.evictUser(asUid, true, sess.sid)
 
 	return nil
 }
