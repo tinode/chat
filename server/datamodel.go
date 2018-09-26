@@ -492,8 +492,10 @@ type ServerComMessage struct {
 	rcptto string
 	// timestamp for consistency of timestamps in {ctrl} messages
 	timestamp time.Time
+	// User ID of the sender of the original message.
+	from string
 	// Originating session to send an aknowledgement to. Could be nil.
-	sessFrom *Session
+	sess *Session
 	// Should the packet be sent to the original session? SessionID to skip.
 	skipSid string
 }

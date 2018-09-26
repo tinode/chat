@@ -443,7 +443,12 @@ func (s *Session) publish(msg *ClientComMessage) {
 		Timestamp: msg.timestamp,
 		Head:      msg.Pub.Head,
 		Content:   msg.Pub.Content},
-		rcptto: expanded, sessFrom: s, id: msg.id, timestamp: msg.timestamp}
+		// Unroutable values.
+		rcptto:    expanded,
+		sess:      s,
+		id:        msg.id,
+		timestamp: msg.timestamp,
+		from:      msg.from}
 	if msg.Pub.NoEcho {
 		data.skipSid = s.sid
 	}

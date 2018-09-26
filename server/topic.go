@@ -75,8 +75,9 @@ type Topic struct {
 	// The map keys are UserIds for P2P topics and grpXXX for group topics.
 	perSubs map[string]perSubsData
 
-	// Sessions attached to this topic
-	sessions map[*Session]bool
+	// Sessions attached to this topic.
+	// A session may represent more than one subsription.
+	sessions map[*Session]int
 
 	// Inbound {data} and {pres} messages from sessions or other topics, already converted to SCM. Buffered = 256
 	broadcast chan *ServerComMessage
@@ -203,6 +204,9 @@ func (t *Topic) run(hub *Hub) {
 			// Remove connection from topic; session may continue to function
 			now := types.TimeNow()
 
+			// userId.IsZero() == true when the entire session is being dropped.
+			asUid := leave.userId
+
 			if t.isSuspended() {
 				leave.sess.queueOut(ErrLocked(leave.reqID, t.original(asUid), now))
 				continue
@@ -264,10 +268,10 @@ func (t *Topic) run(hub *Hub) {
 			// Content message intended for broadcasting to recipients
 
 			var pushRcpt *pushReceipt
-
+			asUid := types.ParseUserId(msg.from)
 			if msg.Data != nil {
 				if t.isSuspended() {
-					msg.sessFrom.queueOut(ErrLocked(msg.id, t.original(asUid), msg.timestamp))
+					msg.sess.queueOut(ErrLocked(msg.id, t.original(asUid), msg.timestamp))
 					continue
 				}
 
@@ -275,7 +279,7 @@ func (t *Topic) run(hub *Hub) {
 				userData := t.perUser[from]
 
 				if !(userData.modeWant & userData.modeGiven).IsWriter() {
-					msg.sessFrom.queueOut(ErrPermissionDenied(msg.id, t.original(asUid),
+					msg.sess.queueOut(ErrPermissionDenied(msg.id, t.original(asUid),
 						msg.timestamp))
 					continue
 				}
@@ -289,7 +293,7 @@ func (t *Topic) run(hub *Hub) {
 					Content:   msg.Data.Content}); err != nil {
 
 					log.Printf("topic[%s]: failed to save message: %v", t.name, err)
-					msg.sessFrom.queueOut(ErrUnknown(msg.id, t.original(asUid), msg.timestamp))
+					msg.sess.queueOut(ErrUnknown(msg.id, t.original(asUid), msg.timestamp))
 
 					continue
 				}
@@ -301,7 +305,7 @@ func (t *Topic) run(hub *Hub) {
 				if msg.id != "" {
 					reply := NoErrAccepted(msg.id, t.original(asUid), msg.timestamp)
 					reply.Ctrl.Params = map[string]int{"seq": t.lastID}
-					msg.sessFrom.queueOut(reply)
+					msg.sess.queueOut(reply)
 				}
 
 				pushRcpt = t.makePushReceipt(from, msg.Data)
@@ -314,6 +318,10 @@ func (t *Topic) run(hub *Hub) {
 				pluginMessage(msg.Data, plgActCreate)
 
 			} else if msg.Pres != nil {
+				if t.isSuspended() {
+					// Ignore presence update - topic is being deleted
+					continue
+				}
 
 				what := t.presProcReq(msg.Pres.Src, msg.Pres.What, msg.Pres.wantReply)
 				if t.xoriginal != msg.Pres.Topic || what == "" {
@@ -408,7 +416,7 @@ func (t *Topic) run(hub *Hub) {
 						}
 
 						// Check presence filters
-						pud, _ := t.perUser[sess.uid]
+						pud := t.perUser[sess.uid]
 						if !(pud.modeGiven & pud.modeWant).IsPresencer() ||
 							(msg.Pres.filterIn != 0 && int(pud.modeGiven&pud.modeWant)&msg.Pres.filterIn == 0) ||
 							(msg.Pres.filterOut != 0 && int(pud.modeGiven&pud.modeWant)&msg.Pres.filterOut != 0) {
@@ -416,7 +424,7 @@ func (t *Topic) run(hub *Hub) {
 						}
 					} else {
 						// Check if the user has Read permission
-						pud, _ := t.perUser[sess.uid]
+						pud := t.perUser[sess.uid]
 						if !(pud.modeGiven & pud.modeWant).IsReader() {
 							continue
 						}
@@ -453,6 +461,7 @@ func (t *Topic) run(hub *Hub) {
 						}
 					} else {
 						log.Printf("topic[%s]: connection stuck, detaching", t.name)
+						// The whole session is being dropped, so sessionLeave.userId is not set.
 						t.unreg <- &sessionLeave{sess: sess, unsub: false}
 					}
 				}
@@ -761,7 +770,7 @@ func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin, sendDesc bool) error {
 		meta:      t.meta,
 		uaChange:  t.uaChange})
 
-	t.sessions[sreg.sess] = true
+	t.sessions[sreg.sess]++
 
 	resp := NoErr(sreg.pkt.id, toriginal, now)
 	// Report back the assigned access mode.

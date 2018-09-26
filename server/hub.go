@@ -185,7 +185,7 @@ func (h *Hub) run() {
 
 				log.Printf("Hub. Topic[%s] is unknown or offline", msg.rcptto)
 
-				msg.sessFrom.queueOut(NoErrAccepted(msg.id, msg.rcptto, types.TimeNow()))
+				msg.sess.queueOut(NoErrAccepted(msg.id, msg.rcptto, types.TimeNow()))
 			}
 
 		case meta := <-h.meta:
@@ -255,7 +255,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 
 	t = &Topic{name: sreg.topic,
 		xoriginal: sreg.pkt.topic,
-		sessions:  make(map[*Session]bool),
+		sessions:  make(map[*Session]int),
 		broadcast: make(chan *ServerComMessage, 256),
 		reg:       make(chan *sessionJoin, 32),
 		unreg:     make(chan *sessionLeave, 32),
