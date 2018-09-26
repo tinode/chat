@@ -501,7 +501,7 @@ func (t *Topic) run(hub *Hub) {
 			case meta.pkt.Set != nil:
 				// Set request
 				if meta.what&constMsgMetaDesc != 0 {
-					if err := t.replySetDesc(meta.sess, meta.pkt.Set); err == nil {
+					if err := t.replySetDesc(meta.sess, asUid, meta.pkt.Set); err == nil {
 						// Notify plugins of the update
 						pluginTopic(t, plgActUpd)
 					} else {
@@ -718,15 +718,15 @@ func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin, sendDesc bool) error {
 		now = types.TimeNow()
 	}
 
-	if !sreg.newsub && (t.cat == types.TopicCatGrp || t.cat == types.TopicCatP2P) {
-		// Remember if this is a new subscription.
-		_, sreg.newsub = t.perUser[sreg.sess.uid]
-	}
-
 	msgsub := sreg.pkt.Sub
 	asUid := types.ParseUserId(sreg.pkt.from)
 	asLvl := auth.Level(sreg.pkt.authLvl)
 	toriginal := t.original(asUid)
+
+	if !sreg.newsub && (t.cat == types.TopicCatGrp || t.cat == types.TopicCatP2P) {
+		// Remember if this is a new subscription.
+		_, sreg.newsub = t.perUser[asUid]
+	}
 
 	var private interface{}
 	var mode string
@@ -894,7 +894,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Le
 				// 3. Acceptance or rejection of the ownership transfer
 
 				// Make sure the current owner cannot unset the owner flag or ban himself
-				if t.owner == sess.uid && !modeWant.IsOwner() {
+				if t.owner == asUid && !modeWant.IsOwner() {
 					sess.queueOut(ErrPermissionDenied(pktID, toriginal, now))
 					return errors.New("cannot unset ownership")
 				}
@@ -970,7 +970,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Le
 	// If topic is being muted, send "off" notification and disable updates.
 	// DO it before applying the new permissions.
 	if (oldWant & oldGiven).IsPresencer() && !(userData.modeWant & userData.modeGiven).IsPresencer() {
-		t.presSingleUserOffline(sess.uid, "off+dis", nilPresParams, "", false)
+		t.presSingleUserOffline(asUid, "off+dis", nilPresParams, "", false)
 	}
 
 	// Apply changes.
@@ -992,7 +992,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Le
 	if (userData.modeWant & userData.modeGiven).IsPresencer() &&
 		(!existingSub || !(oldWant & oldGiven).IsPresencer()) {
 		// Notify subscriber of topic's online status.
-		// log.Printf("topic[%s] sending ?unkn+en to me[%s]", t.name, sess.uid.String())
+		// log.Printf("topic[%s] sending ?unkn+en to me[%s]", t.name, asUid.String())
 		t.presSingleUserOffline(asUid, "?unkn+en", nilPresParams, "", false)
 	}
 
@@ -1268,7 +1268,7 @@ func (t *Topic) replyGetDesc(sess *Session, asUid types.Uid, id string, opts *Ms
 
 // replySetDesc updates topic metadata, saves it to DB,
 // replies to the caller as {ctrl} message, generates {pres} update if necessary
-func (t *Topic) replySetDesc(sess *Session, set *MsgClientSet) error {
+func (t *Topic) replySetDesc(sess *Session, asUid types.Uid, set *MsgClientSet) error {
 	now := types.TimeNow()
 
 	assignAccess := func(upd map[string]interface{}, mode *MsgDefaultAcsMode) error {
@@ -1346,7 +1346,7 @@ func (t *Topic) replySetDesc(sess *Session, set *MsgClientSet) error {
 			}
 		case types.TopicCatGrp:
 			// Update group topic
-			if t.owner == sess.uid {
+			if t.owner == asUid {
 				err = assignAccess(core, set.Desc.DefaultAcs)
 				sendPres = assignGenericValues(core, "Public", set.Desc.Public)
 			} else if set.Desc.DefaultAcs != nil || set.Desc.Public != nil {
@@ -1367,7 +1367,7 @@ func (t *Topic) replySetDesc(sess *Session, set *MsgClientSet) error {
 	if len(core) > 0 {
 		switch t.cat {
 		case types.TopicCatMe:
-			err = store.Users.Update(sess.uid, core)
+			err = store.Users.Update(asUid, core)
 		case types.TopicCatFnd:
 			// The only value is Public, and Public for fnd is not saved according to specs.
 		default:
@@ -1375,7 +1375,7 @@ func (t *Topic) replySetDesc(sess *Session, set *MsgClientSet) error {
 		}
 	}
 	if err == nil && len(sub) > 0 {
-		err = store.Subs.Update(t.name, sess.uid, sub, true)
+		err = store.Subs.Update(t.name, asUid, sub, true)
 	}
 
 	if err != nil {
@@ -1401,16 +1401,16 @@ func (t *Topic) replySetDesc(sess *Session, set *MsgClientSet) error {
 		t.fndSetPublic(sess, core["Public"])
 	}
 	if private, ok := sub["Private"]; ok {
-		pud := t.perUser[sess.uid]
+		pud := t.perUser[asUid]
 		pud.private = private
-		t.perUser[sess.uid] = pud
+		t.perUser[asUid] = pud
 	}
 
 	if sendPres {
 		// t.Public has changed, make an announcement
 		if t.cat == types.TopicCatMe {
 			t.presUsersOfInterest("upd", "")
-			t.presSingleUserOffline(sess.uid, "upd", nilPresParams, sess.sid, false)
+			t.presSingleUserOffline(asUid, "upd", nilPresParams, sess.sid, false)
 		} else {
 			t.presSubsOffline("upd", nilPresParams, nilPresFilters, sess.sid, false)
 		}
