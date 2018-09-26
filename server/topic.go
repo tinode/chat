@@ -1028,10 +1028,11 @@ func (t *Topic) requestSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Le
 // A. Sharer or Approver is inviting another user for the first time (no prior subscription)
 // B. Sharer or Approver is re-inviting another user (adjusting modeGiven, modeWant is still Unset)
 // C. Approver is changing modeGiven for another user, modeWant != Unset
-func (t *Topic) approveSub(h *Hub, sess *Session, target types.Uid, set *MsgClientSet) error {
-	log.Printf("approveSub, session uid=%s, target uid=%s", sess.uid.String(), target.String())
+func (t *Topic) approveSub(h *Hub, sess *Session, asUid, target types.Uid, set *MsgClientSet) error {
+	log.Printf("approveSub, asUid=%s, target uid=%s", asUid.String(), target.String())
 
 	now := types.TimeNow()
+	toriginal := t.original(asUid)
 
 	// Access mode values as they were before this request was processed.
 	oldWant := types.ModeNone
@@ -1041,9 +1042,9 @@ func (t *Topic) approveSub(h *Hub, sess *Session, target types.Uid, set *MsgClie
 	var hostMode types.AccessMode
 
 	// Check if approver actually has permission to manage sharing
-	userData, ok := t.perUser[sess.uid]
+	userData, ok := t.perUser[asUid]
 	if !ok || !(userData.modeGiven & userData.modeWant).IsSharer() {
-		sess.queueOut(ErrPermissionDenied(set.Id, t.original(sess.uid), now))
+		sess.queueOut(ErrPermissionDenied(set.Id, toriginal, now))
 		return errors.New("topic access denied; approver has no permission")
 	}
 
@@ -1053,7 +1054,7 @@ func (t *Topic) approveSub(h *Hub, sess *Session, target types.Uid, set *MsgClie
 	modeGiven := types.ModeUnset
 	if set.Sub.Mode != "" {
 		if err := modeGiven.UnmarshalText([]byte(set.Sub.Mode)); err != nil {
-			sess.queueOut(ErrMalformed(set.Id, t.original(sess.uid), now))
+			sess.queueOut(ErrMalformed(set.Id, toriginal, now))
 			return err
 		}
 
@@ -1067,13 +1068,13 @@ func (t *Topic) approveSub(h *Hub, sess *Session, target types.Uid, set *MsgClie
 
 	// Make sure only the owner & approvers can set non-default access mode
 	if modeGiven != types.ModeUnset && !hostMode.IsAdmin() {
-		sess.queueOut(ErrPermissionDenied(set.Id, t.original(sess.uid), now))
+		sess.queueOut(ErrPermissionDenied(set.Id, toriginal, now))
 		return errors.New("sharer cannot set explicit modeGiven")
 	}
 
 	// Make sure no one but the owner can do an ownership transfer
-	if modeGiven.IsOwner() && t.owner != sess.uid {
-		sess.queueOut(ErrPermissionDenied(set.Id, t.original(sess.uid), now))
+	if modeGiven.IsOwner() && t.owner != asUid {
+		sess.queueOut(ErrPermissionDenied(set.Id, toriginal, now))
 		return errors.New("attempt to transfer ownership by non-owner")
 	}
 
@@ -1084,7 +1085,7 @@ func (t *Topic) approveSub(h *Hub, sess *Session, target types.Uid, set *MsgClie
 
 		// Check if the max number of subscriptions is already reached.
 		if t.cat == types.TopicCatGrp && t.subsCount() >= globals.maxSubscriberCount {
-			sess.queueOut(ErrPolicy(set.Id, t.original(sess.uid), now))
+			sess.queueOut(ErrPolicy(set.Id, toriginal, now))
 			return errors.New("max subscription count exceeded")
 		}
 
@@ -1097,10 +1098,10 @@ func (t *Topic) approveSub(h *Hub, sess *Session, target types.Uid, set *MsgClie
 		// Get user's default access mode to be used as modeWant
 		var modeWant types.AccessMode
 		if user, err := store.Users.Get(target); err != nil {
-			sess.queueOut(ErrUnknown(set.Id, t.original(sess.uid), now))
+			sess.queueOut(ErrUnknown(set.Id, toriginal, now))
 			return err
 		} else if user == nil {
-			sess.queueOut(ErrUserNotFound(set.Id, t.original(sess.uid), now))
+			sess.queueOut(ErrUserNotFound(set.Id, toriginal, now))
 			return errors.New("user not found")
 		} else {
 			modeWant = user.Access.Auth
@@ -1115,7 +1116,7 @@ func (t *Topic) approveSub(h *Hub, sess *Session, target types.Uid, set *MsgClie
 		}
 
 		if err := store.Subs.Create(sub); err != nil {
-			sess.queueOut(ErrUnknown(set.Id, t.original(sess.uid), now))
+			sess.queueOut(ErrUnknown(set.Id, toriginal, now))
 			return err
 		}
 
@@ -1151,14 +1152,14 @@ func (t *Topic) approveSub(h *Hub, sess *Session, target types.Uid, set *MsgClie
 
 	// The user does not want to be bothered, no further action is needed
 	if !userData.modeWant.IsJoiner() {
-		sess.queueOut(ErrPermissionDenied(set.Id, t.original(sess.uid), now))
+		sess.queueOut(ErrPermissionDenied(set.Id, toriginal, now))
 		return errors.New("user banned the topic")
 	}
 
 	// Access mode has changed.
 	if oldGiven != userData.modeGiven {
 		params := &presParams{
-			actor:  sess.uid.UserId(),
+			actor:  asUid.UserId(),
 			target: target.UserId(),
 			dWant:  oldWant.Delta(userData.modeWant),
 			dGiven: oldGiven.Delta(userData.modeGiven)}
@@ -1641,25 +1642,25 @@ func (t *Topic) replySetSub(h *Hub, sess *Session, pkt *ClientComMessage) error 
 	set := pkt.Set
 	toriginal := t.original(asUid)
 
-	var uid types.Uid
-	if uid = types.ParseUserId(set.Sub.User); uid.IsZero() && set.Sub.User != "" {
+	var target types.Uid
+	if target = types.ParseUserId(set.Sub.User); target.IsZero() && set.Sub.User != "" {
 		// Invalid user ID
 		sess.queueOut(ErrMalformed(pkt.id, toriginal, now))
 		return errors.New("invalid user id")
 	}
 
 	// if set.User is not set, request is for the current user
-	if uid.IsZero() {
-		uid = asUid
+	if target.IsZero() {
+		target = asUid
 	}
 
 	var err error
-	if uid == asUid {
+	if target == asUid {
 		// Request new subscription or modify own subscription
 		err = t.requestSub(h, sess, asUid, asLvl, pkt.id, set.Sub.Mode, nil)
 	} else {
 		// Request to approve/change someone's subscription
-		err = t.approveSub(h, sess, uid, set)
+		err = t.approveSub(h, sess, asUid, target, set)
 	}
 	if err != nil {
 		return err
@@ -1667,13 +1668,13 @@ func (t *Topic) replySetSub(h *Hub, sess *Session, pkt *ClientComMessage) error 
 
 	resp := NoErr(pkt.id, toriginal, now)
 	// Report resulting access mode.
-	pud := t.perUser[uid]
+	pud := t.perUser[target]
 	params := map[string]interface{}{"acs": MsgAccessMode{
 		Given: pud.modeGiven.String(),
 		Want:  pud.modeWant.String(),
 		Mode:  (pud.modeGiven & pud.modeWant).String()}}
-	if uid != asUid {
-		params["user"] = uid.String()
+	if target != asUid {
+		params["user"] = target.UserId()
 	}
 	resp.Ctrl.Params = params
 	sess.queueOut(resp)
