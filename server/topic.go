@@ -686,7 +686,7 @@ func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 
 	if getWhat&constMsgMetaTags != 0 {
 		// Send get.tags response as a separate {meta} packet
-		if err := t.replyGetTags(sreg.sess, sreg.pkt.id); err != nil {
+		if err := t.replyGetTags(sreg.sess, asUid, sreg.pkt.id); err != nil {
 			log.Printf("topic[%s] handleSubscription Get.Tags failed: %v", t.name, err)
 		}
 	}
@@ -700,7 +700,7 @@ func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 
 	if getWhat&constMsgMetaDel != 0 {
 		// Send get.del response as a separate {meta} packet
-		if err := t.replyGetDel(sreg.sess, sreg.pkt.id, sreg.pkt.Get.Del); err != nil {
+		if err := t.replyGetDel(sreg.sess, asUid, sreg.pkt.id, sreg.pkt.Get.Del); err != nil {
 			log.Printf("topic[%s] handleSubscription Get.Del failed: %v", t.name, err)
 		}
 	}
@@ -1743,26 +1743,26 @@ func (t *Topic) replyGetData(sess *Session, asUid types.Uid, id string, req *Msg
 }
 
 // replyGetTags returns topic's tags - tokens used for discovery.
-func (t *Topic) replyGetTags(sess *Session, id string) error {
+func (t *Topic) replyGetTags(sess *Session, asUid types.Uid, id string) error {
 	now := types.TimeNow()
 
 	if t.cat != types.TopicCatFnd && t.cat != types.TopicCatGrp {
-		sess.queueOut(ErrOperationNotAllowed(id, t.original(sess.uid), now))
+		sess.queueOut(ErrOperationNotAllowed(id, t.original(asUid), now))
 		return errors.New("invalid topic category for getting tags")
 	}
 	if t.cat == types.TopicCatGrp && t.owner != sess.uid {
-		sess.queueOut(ErrPermissionDenied(id, t.original(sess.uid), now))
+		sess.queueOut(ErrPermissionDenied(id, t.original(asUid), now))
 		return errors.New("request for tags from non-owner")
 	}
 
 	if len(t.tags) > 0 {
 		sess.queueOut(&ServerComMessage{
-			Meta: &MsgServerMeta{Id: id, Topic: t.original(sess.uid), Timestamp: &now, Tags: t.tags}})
+			Meta: &MsgServerMeta{Id: id, Topic: t.original(asUid), Timestamp: &now, Tags: t.tags}})
 		return nil
 	}
 
 	// Inform the requester that there are no tags.
-	reply := NoErr(id, t.original(sess.uid), now)
+	reply := NoErr(id, t.original(asUid), now)
 	reply.Ctrl.Params = map[string]string{"what": "tags"}
 	sess.queueOut(reply)
 
@@ -1830,26 +1830,27 @@ func (t *Topic) replySetTags(sess *Session, set *MsgClientSet) error {
 // replyGetDel is a response to a get[what=del] request: load a list of deleted message ids, send them to
 // a session as {meta}
 // response goes to a single session rather than all sessions in a topic
-func (t *Topic) replyGetDel(sess *Session, id string, req *MsgGetOpts) error {
+func (t *Topic) replyGetDel(sess *Session, asUid types.Uid, id string, req *MsgGetOpts) error {
 	now := types.TimeNow()
+	toriginal := t.original(asUid)
 
 	if req != nil && (req.IfModifiedSince != nil || req.User != "" || req.Topic != "") {
-		sess.queueOut(ErrMalformed(id, t.original(sess.uid), now))
+		sess.queueOut(ErrMalformed(id, toriginal, now))
 		return errors.New("invalid MsgGetOpts query")
 	}
 
 	// Check if the user has permission to read the topic data and the request is valid
-	if userData := t.perUser[sess.uid]; (userData.modeGiven & userData.modeWant).IsReader() {
-		ranges, delID, err := store.Messages.GetDeleted(t.name, sess.uid, msgOpts2storeOpts(req))
+	if userData := t.perUser[asUid]; (userData.modeGiven & userData.modeWant).IsReader() {
+		ranges, delID, err := store.Messages.GetDeleted(t.name, asUid, msgOpts2storeOpts(req))
 		if err != nil {
-			sess.queueOut(ErrUnknown(id, t.original(sess.uid), now))
+			sess.queueOut(ErrUnknown(id, toriginal, now))
 			return err
 		}
 
 		if len(ranges) > 0 {
 			sess.queueOut(&ServerComMessage{Meta: &MsgServerMeta{
 				Id:    id,
-				Topic: t.original(sess.uid),
+				Topic: toriginal,
 				Del: &MsgDelValues{
 					DelId:  delID,
 					DelSeq: delrangeDeserialize(ranges)},
@@ -1858,7 +1859,7 @@ func (t *Topic) replyGetDel(sess *Session, id string, req *MsgGetOpts) error {
 		}
 	}
 
-	reply := NoErr(id, t.original(sess.uid), now)
+	reply := NoErr(id, toriginal, now)
 	reply.Ctrl.Params = map[string]string{"what": "del"}
 	sess.queueOut(reply)
 
