@@ -514,7 +514,7 @@ func (t *Topic) run(hub *Hub) {
 					}
 				}
 				if meta.what&constMsgMetaTags != 0 {
-					if err := t.replySetTags(meta.sess, meta.pkt.Set); err != nil {
+					if err := t.replySetTags(meta.sess, asUid, meta.pkt.Set); err != nil {
 						log.Printf("topic[%s] meta.Set.Tags failed: %v", t.name, err)
 					}
 				}
@@ -1750,7 +1750,7 @@ func (t *Topic) replyGetTags(sess *Session, asUid types.Uid, id string) error {
 		sess.queueOut(ErrOperationNotAllowed(id, t.original(asUid), now))
 		return errors.New("invalid topic category for getting tags")
 	}
-	if t.cat == types.TopicCatGrp && t.owner != sess.uid {
+	if t.cat == types.TopicCatGrp && t.owner != asUid {
 		sess.queueOut(ErrPermissionDenied(id, t.original(asUid), now))
 		return errors.New("request for tags from non-owner")
 	}
@@ -1770,41 +1770,41 @@ func (t *Topic) replyGetTags(sess *Session, asUid types.Uid, id string) error {
 }
 
 // replySetTags updates topic's tags - tokens used for discovery.
-func (t *Topic) replySetTags(sess *Session, set *MsgClientSet) error {
+func (t *Topic) replySetTags(sess *Session, asUid types.Uid, set *MsgClientSet) error {
 	var resp *ServerComMessage
 	var err error
 
 	now := types.TimeNow()
 
 	if t.cat != types.TopicCatFnd && t.cat != types.TopicCatGrp {
-		resp = ErrOperationNotAllowed(set.Id, t.original(sess.uid), now)
+		resp = ErrOperationNotAllowed(set.Id, t.original(asUid), now)
 		err = errors.New("invalid topic category to assign tags")
 
-	} else if t.cat == types.TopicCatGrp && t.owner != sess.uid {
-		resp = ErrPermissionDenied(set.Id, t.original(sess.uid), now)
+	} else if t.cat == types.TopicCatGrp && t.owner != asUid {
+		resp = ErrPermissionDenied(set.Id, t.original(asUid), now)
 		err = errors.New("tags update by non-owner")
 
 	} else if tags := normalizeTags(set.Tags); tags != nil {
 		if !restrictedTagsEqual(t.tags, tags, globals.immutableTagNS) {
 			err = errors.New("attempt to mutate restricted tags")
-			resp = ErrPermissionDenied(set.Id, t.original(sess.uid), now)
+			resp = ErrPermissionDenied(set.Id, t.original(asUid), now)
 		} else {
 			added, removed := stringSliceDelta(t.tags, tags)
 			if len(added) > 0 || len(removed) > 0 {
 				update := map[string]interface{}{"Tags": types.StringSlice(tags)}
 
 				if t.cat == types.TopicCatFnd {
-					err = store.Users.Update(sess.uid, update)
+					err = store.Users.Update(asUid, update)
 				} else if t.cat == types.TopicCatGrp {
 					err = store.Topics.Update(t.name, update)
 				}
 
 				if err != nil {
-					resp = ErrUnknown(set.Id, t.original(sess.uid), now)
+					resp = ErrUnknown(set.Id, t.original(asUid), now)
 				} else {
 					t.tags = tags
 
-					resp = NoErr(set.Id, t.original(sess.uid), now)
+					resp = NoErr(set.Id, t.original(asUid), now)
 					params := make(map[string]interface{})
 					if len(added) > 0 {
 						params["added"] = len(added)
@@ -1815,11 +1815,11 @@ func (t *Topic) replySetTags(sess *Session, set *MsgClientSet) error {
 					resp.Ctrl.Params = params
 				}
 			} else {
-				resp = InfoNotModified(set.Id, t.original(sess.uid), now)
+				resp = InfoNotModified(set.Id, t.original(asUid), now)
 			}
 		}
 	} else {
-		resp = InfoNotModified(set.Id, t.original(sess.uid), now)
+		resp = InfoNotModified(set.Id, t.original(asUid), now)
 	}
 
 	sess.queueOut(resp)
