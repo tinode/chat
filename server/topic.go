@@ -215,6 +215,7 @@ func (t *Topic) run(hub *Hub) {
 
 			} else if leave.unsub {
 				// User wants to leave and unsubscribe.
+				// asUid must not be Zero.
 				if err := t.replyLeaveUnsub(hub, leave.sess, asUid, leave.reqID); err != nil {
 					log.Println("failed to unsub", err)
 					continue
@@ -222,51 +223,56 @@ func (t *Topic) run(hub *Hub) {
 
 			} else {
 				// Just leaving the topic without unsubscribing
+				var uids types.UidSlice
 				if asUid.IsZero() {
 					// The entire session is being dropped
+					uids = t.sessions[leave.sess]
 					delete(t.sessions, leave.sess)
 				} else {
 					// One user is unsubscribing.
-					uids := t.remSession(leave.sess, asUid)
-					if len(uids) == 0 {
+					t.remSession(leave.sess, asUid)
+					if len(t.sessions) == 0 {
 						delete(t.sessions, leave.sess)
 					}
+					uids = append(uids, asUid)
 				}
 
-				pud := t.perUser[asUid]
-				pud.online--
-				switch t.cat {
-				case types.TopicCatMe:
-					mrs := t.mostRecentSession()
-					if mrs == nil {
-						// Last session
-						mrs = leave.sess
-					} else {
-						// Change UA to the most recent live session and announce it. Don't block.
-						select {
-						case t.uaChange <- mrs.userAgent:
-						default:
+				for _, uid := range uids {
+					pud := t.perUser[uid]
+					pud.online--
+					switch t.cat {
+					case types.TopicCatMe:
+						mrs := t.mostRecentSession()
+						if mrs == nil {
+							// Last session
+							mrs = leave.sess
+						} else {
+							// Change UA to the most recent live session and announce it. Don't block.
+							select {
+							case t.uaChange <- mrs.userAgent:
+							default:
+							}
+						}
+						// Update user's last online timestamp & user agent
+						if err := store.Users.UpdateLastSeen(uid, mrs.userAgent, now); err != nil {
+							log.Println(err)
+						}
+					case types.TopicCatFnd:
+						// Remove ephemeral query.
+						t.fndRemovePublic(leave.sess)
+					case types.TopicCatGrp:
+						if pud.online == 0 {
+							// User is going offline: notify online subscribers on 'me'
+							t.presSubsOnline("off", uid.UserId(), nilPresParams,
+								&presFilters{filterIn: types.ModeRead}, "")
 						}
 					}
-					// Update user's last online timestamp & user agent
-					if err := store.Users.UpdateLastSeen(mrs.uid, mrs.userAgent, now); err != nil {
-						log.Println(err)
-					}
-				case types.TopicCatFnd:
-					// Remove ephemeral query.
-					t.fndRemovePublic(leave.sess)
-				case types.TopicCatGrp:
-					if pud.online == 0 {
-						// User is going offline: notify online subscribers on 'me'
-						t.presSubsOnline("off", asUid.UserId(), nilPresParams,
-							&presFilters{filterIn: types.ModeRead}, "")
-					}
-				}
 
-				t.perUser[asUid] = pud
+					t.perUser[uid] = pud
 
-				if !asUid.IsZero() && leave.reqID != "" {
-					leave.sess.queueOut(NoErr(leave.reqID, t.original(asUid), now))
+					if leave.reqID != "" {
+						leave.sess.queueOut(NoErr(leave.reqID, t.original(uid), now))
+					}
 				}
 			}
 
@@ -473,7 +479,7 @@ func (t *Topic) run(hub *Hub) {
 					} else {
 						log.Printf("topic[%s]: connection stuck, detaching", t.name)
 						// The whole session is being dropped, so sessionLeave.userId is not set.
-						t.unreg <- &sessionLeave{sess: sess, unsub: false}
+						t.unreg <- &sessionLeave{sess: sess}
 					}
 				}
 
@@ -2170,9 +2176,9 @@ func (t *Topic) evictUser(uid types.Uid, unsub bool, skip string) {
 	}
 
 	// Detach all user's sessions
-	for sess := range t.sessions {
-		if sess.uid == uid {
-			delete(t.sessions, sess)
+	for sess, uids := range t.sessions {
+		if uids.Contains(uid) {
+			t.remSession(sess, uid)
 			sess.detach <- t.name
 			if sess.sid != skip {
 				sess.queueOut(NoErrEvicted("", t.original(uid), now))
@@ -2275,31 +2281,34 @@ func (t *Topic) fndGetPublic(sess *Session) interface{} {
 
 // Assign per-session fnd.Public. Returns true if value has been changed.
 func (t *Topic) fndSetPublic(sess *Session, public interface{}) bool {
-	if t.cat == types.TopicCatFnd {
-		var pubmap map[string]interface{}
-		var ok bool
-		if t.public != nil {
-			if pubmap, ok = t.public.(map[string]interface{}); !ok {
-				panic("Invalid Fnd.Public type")
-			}
-		}
-		if pubmap == nil {
-			pubmap = make(map[string]interface{})
-		}
-
-		if public != nil {
-			pubmap[sess.sid] = public
-		} else {
-			ok = (pubmap[sess.sid] != nil)
-			delete(pubmap, sess.sid)
-			if len(pubmap) == 0 {
-				pubmap = nil
-			}
-		}
-		t.public = pubmap
-		return ok
+	if t.cat != types.TopicCatFnd {
+		panic("Not Fnd topic")
 	}
-	panic("Not Fnd topic")
+
+	var pubmap map[string]interface{}
+	var ok bool
+	if t.public != nil {
+		if pubmap, ok = t.public.(map[string]interface{}); !ok {
+			// This could only happen if fnd.public is assigned outside of this function.
+			panic("Invalid Fnd.Public type")
+		}
+	}
+	if pubmap == nil {
+		pubmap = make(map[string]interface{})
+	}
+
+	if public != nil {
+		pubmap[sess.sid] = public
+	} else {
+		ok = (pubmap[sess.sid] != nil)
+		delete(pubmap, sess.sid)
+		if len(pubmap) == 0 {
+			pubmap = nil
+		}
+	}
+	t.public = pubmap
+	return ok
+
 }
 
 // Remove per-session value of fnd.Public

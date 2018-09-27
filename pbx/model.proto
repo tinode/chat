@@ -400,6 +400,8 @@ message ServerMsg {
 		ServerMeta meta = 4;
 		ServerInfo info = 5;
 	}
+	// When response is sent to Root, send internal topic name too.
+	string topic = 6;
 }
 
 // Plugin response codes

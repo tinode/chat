@@ -160,6 +160,8 @@ func (s *Session) delSub(topic string) {
 	}
 }
 
+// Inform topics that the session is being terminated.
+// sessionLeave.userId is not set because the whole session is being dropped.
 func (s *Session) unsubAll() {
 	s.subsLock.RLock()
 	defer s.subsLock.RUnlock()

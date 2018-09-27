@@ -232,6 +232,12 @@ func (us *UidSlice) Rem(uid Uid) bool {
 	return true
 }
 
+// Contains checks if the UidSlice contains the given uid
+func (us UidSlice) Contains(uid Uid) bool {
+	_, contains := us.find(uid)
+	return contains
+}
+
 // P2PName takes two Uids and generates a P2P topic name
 func (uid Uid) P2PName(u2 Uid) string {
 	if !uid.IsZero() && !u2.IsZero() {
