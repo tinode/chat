@@ -623,9 +623,10 @@ func (t *Topic) run(hub *Hub) {
 func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 	asUid := types.ParseUserId(sreg.pkt.from)
 
+	msgsub := sreg.pkt.Sub
 	getWhat := 0
-	if sreg.pkt.Get != nil {
-		getWhat = parseMsgClientMeta(sreg.pkt.Get.What)
+	if msgsub.Get != nil {
+		getWhat = parseMsgClientMeta(msgsub.Get.What)
 	}
 
 	if err := t.subCommonReply(h, sreg, (getWhat&constMsgMetaDesc != 0)); err != nil {
@@ -705,7 +706,7 @@ func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 
 	if getWhat&constMsgMetaSub != 0 {
 		// Send get.sub response as a separate {meta} packet
-		if err := t.replyGetSub(sreg.sess, asUid, sreg.pkt.id, sreg.pkt.Get.Sub); err != nil {
+		if err := t.replyGetSub(sreg.sess, asUid, sreg.pkt.id, msgsub.Get.Sub); err != nil {
 			log.Printf("topic[%s] handleSubscription Get.Sub failed: %v", t.name, err)
 		}
 	}
@@ -719,14 +720,14 @@ func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 
 	if getWhat&constMsgMetaData != 0 {
 		// Send get.data response as {data} packets
-		if err := t.replyGetData(sreg.sess, asUid, sreg.pkt.id, sreg.pkt.Get.Data); err != nil {
+		if err := t.replyGetData(sreg.sess, asUid, sreg.pkt.id, msgsub.Get.Data); err != nil {
 			log.Printf("topic[%s] handleSubscription Get.Data failed: %v", t.name, err)
 		}
 	}
 
 	if getWhat&constMsgMetaDel != 0 {
 		// Send get.del response as a separate {meta} packet
-		if err := t.replyGetDel(sreg.sess, asUid, sreg.pkt.id, sreg.pkt.Get.Del); err != nil {
+		if err := t.replyGetDel(sreg.sess, asUid, sreg.pkt.id, msgsub.Get.Del); err != nil {
 			log.Printf("topic[%s] handleSubscription Get.Del failed: %v", t.name, err)
 		}
 	}

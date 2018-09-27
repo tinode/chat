@@ -25,3 +25,7 @@ The client takes optional parameters:
  * `--login-cookie` direct the client to read the token from the cookie file generated during an earlier login.
 
 If multiple `login-XYZ` are provided, `login-cookie` is considered first, then `login-token` then `login-basic`. Authentication with token (and cookie) is much faster than with the username-password pair.
+
+## Crash on shutdown
+
+Python 3 sometimes crashes on shutdown with a message `Fatal Python error: PyImport_GetModuleDict: no module dictionary!`. That happens because it's buggy: https://bugs.python.org/issue26153

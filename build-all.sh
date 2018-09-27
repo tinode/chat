@@ -137,15 +137,7 @@ rm -f $GOPATH/bin/init-db
 # Build chatbot release
 echo "Building python code..."
 
-pushd ./py_grpc > /dev/null
-
-# Generate version file from git tags
-python3 version.py
-
-# Generate tinode-grpc package
-python3 setup.py -q sdist bdist_wheel
-
-popd > /dev/null
+./build-py-grpc.py
 
 # Release chatbot
 echo "Packaging chatbot.py..."
