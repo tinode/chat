@@ -34,7 +34,7 @@ type SessionStore struct {
 	sessCache map[string]*Session
 }
 
-// Create creates a new session and adds it to store.
+// NewSession creates a new session and saves it to the session store.
 func (ss *SessionStore) NewSession(conn interface{}, sid string) (*Session, int) {
 	var s Session
 

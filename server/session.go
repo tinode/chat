@@ -484,7 +484,7 @@ func (s *Session) acc(msg *ClientComMessage) {
 		return
 	}
 
-	authhdl := store.GetAuthHandler(msg.Acc.Scheme)
+	authhdl := store.GetLogicalAuthHandler(msg.Acc.Scheme)
 	if strings.HasPrefix(msg.Acc.User, "new") {
 		// User cannot authenticate with the new account because the user is already authenticated
 		if msg.Acc.Login && !s.uid.IsZero() {
@@ -696,7 +696,7 @@ func (s *Session) login(msg *ClientComMessage) {
 		return
 	}
 
-	handler := store.GetAuthHandler(msg.Login.Scheme)
+	handler := store.GetLogicalAuthHandler(msg.Login.Scheme)
 	if handler == nil {
 		log.Println("Unknown authentication scheme", msg.Login.Scheme)
 		s.queueOut(ErrAuthUnknownScheme(msg.Login.Id, "", msg.timestamp))
@@ -779,7 +779,7 @@ func (s *Session) onLogin(msgID string, timestamp time.Time, rec *auth.Rec, miss
 	// GenSecret fails only if tokenLifetime is < 0. It can't be < 0 here,
 	// otherwise login would have failed earlier.
 	rec.Features = features
-	params["token"], params["expires"], _ = store.GetAuthHandler("token").GenSecret(rec)
+	params["token"], params["expires"], _ = store.GetLogicalAuthHandler("token").GenSecret(rec)
 
 	reply.Ctrl.Params = params
 	return reply

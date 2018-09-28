@@ -1,3 +1,4 @@
+// Package s3 implements media interface by storing media objects in Amazon S3 bucket.
 package s3
 
 import (
@@ -211,13 +212,9 @@ func (ah *awshandler) Delete(locations []string) error {
 			}}
 	}
 	batcher := s3manager.NewBatchDeleteWithClient(ah.svc)
-	if err := batcher.Delete(aws.BackgroundContext(), &s3manager.DeleteObjectsIterator{
+	return batcher.Delete(aws.BackgroundContext(), &s3manager.DeleteObjectsIterator{
 		Objects: toDelete,
-	}); err != nil {
-		return err
-	}
-
-	return nil
+	})
 }
 
 func (ah *awshandler) GetIdFromUrl(url string) types.Uid {

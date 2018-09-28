@@ -1,4 +1,4 @@
-// Conversion from Drafty to plain text.
+// Package drafty contains utilities for conversion from Drafty to plain text.
 package drafty
 
 import (
@@ -7,8 +7,8 @@ import (
 	"strings"
 )
 
-var unrecognizedContent = errors.New("content unrecognized")
-var invalidContent = errors.New("invalid format")
+var errUnrecognizedContent = errors.New("content unrecognized")
+var errInvalidContent = errors.New("invalid format")
 
 type span struct {
 	tp   string
@@ -36,7 +36,7 @@ var tags = map[string]spanfmt{
 	"EX": spanfmt{"", true},
 }
 
-// DraftyToPlainText converts message payload from Drafy format to string.
+// ToPlainText converts message payload from Drafy format to string.
 // If content is a string, then it's returned unchanged. If content is not recognized
 // as either Drafy (as a map[string]interface{}) or string, an error is returned.
 func ToPlainText(content interface{}) (string, error) {
@@ -52,25 +52,25 @@ func ToPlainText(content interface{}) (string, error) {
 	case map[string]interface{}:
 		drafty = data
 	default:
-		return "", unrecognizedContent
+		return "", errUnrecognizedContent
 	}
 
-	txt, txt_ok := drafty["txt"].(string)
-	fmt, fmt_ok := drafty["fmt"].([]interface{})
-	ent, ent_ok := drafty["ent"].([]interface{})
+	txt, txtOK := drafty["txt"].(string)
+	fmt, fmtOK := drafty["fmt"].([]interface{})
+	ent, entOK := drafty["ent"].([]interface{})
 
-	if !txt_ok && !fmt_ok && !ent_ok {
-		return "", unrecognizedContent
+	if !txtOK && !fmtOK && !entOK {
+		return "", errUnrecognizedContent
 	}
 
 	if fmt == nil {
-		if txt_ok {
+		if txtOK {
 			return txt, nil
 		}
-		return "", unrecognizedContent
+		return "", errUnrecognizedContent
 	}
 
-	max_len := len(txt)
+	maxLen := len(txt)
 
 	var spans []*span
 	for i := range fmt {
@@ -85,15 +85,15 @@ func ToPlainText(content interface{}) (string, error) {
 		s.at = int(tmp)
 		tmp, _ = f["len"].(float64)
 		s.end = s.at + int(tmp)
-		if s.end > max_len || s.end < s.at {
-			return "", invalidContent
+		if s.end > maxLen || s.end < s.at {
+			return "", errInvalidContent
 		}
 		tmp, _ = f["key"].(float64)
 		s.key = int(tmp)
 		// Denormalize entities into spans.
-		if s.tp == "" && ent_ok {
+		if s.tp == "" && entOK {
 			if s.key < 0 || s.key >= len(ent) {
-				return "", invalidContent
+				return "", errInvalidContent
 			}
 
 			e, _ := ent[s.key].(map[string]interface{})
@@ -104,7 +104,7 @@ func ToPlainText(content interface{}) (string, error) {
 			s.tp, _ = e["tp"].(string)
 		}
 		if s.tp == "" && s.at == 0 && s.end == 0 && s.key == 0 {
-			return "", unrecognizedContent
+			return "", errUnrecognizedContent
 		}
 		spans = append(spans, &s)
 	}
@@ -170,9 +170,8 @@ func formatter(tp string, data map[string]interface{}, value string) string {
 		url := data["url"].(string)
 		if url != value {
 			return "[" + value + "](" + url + ")"
-		} else {
-			return value
 		}
+		return value
 	case "MN", "HT":
 		return value
 	case "BR":

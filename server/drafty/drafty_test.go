@@ -6,7 +6,7 @@ import (
 )
 
 func TestToPlainText(t *testing.T) {
-	valid_inputs := []string{
+	validInputs := []string{
 		`{
 			"ent":[{"data":{"mime":"image/jpeg","name":"hello.jpg","val":"<38992, bytes: ...>"},"tp":"EX"}],
 			"fmt":[{"at":-1, "key":0}]
@@ -39,7 +39,7 @@ func TestToPlainText(t *testing.T) {
 		"This *text* is _formatted_ and ~deleted *too*~",
 	}
 
-	invalid_inputs := []string{
+	invalidInputs := []string{
 		`{
 			"txt":"This should fail",
 			"fmt":[{"at":50,"len":-45,"tp":"ST"}]
@@ -64,7 +64,7 @@ func TestToPlainText(t *testing.T) {
 
 	for i := range valid_inputs {
 		var val interface{}
-		json.Unmarshal([]byte(valid_inputs[i]), &val)
+		json.Unmarshal([]byte(validInputs[i]), &val)
 		res, err := ToPlainText(val)
 		if err != nil {
 			t.Error(err)
@@ -77,7 +77,7 @@ func TestToPlainText(t *testing.T) {
 
 	for i := range invalid_inputs {
 		var val interface{}
-		json.Unmarshal([]byte(invalid_inputs[i]), &val)
+		json.Unmarshal([]byte(invalidInputs[i]), &val)
 		res, err := ToPlainText(val)
 		if err == nil {
 			t.Errorf("invalid input %d did not cause an error '%s'", i, res)

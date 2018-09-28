@@ -137,7 +137,7 @@ loop:
 			// Flip the flag that we are terminating and close the Accept-ing socket, so no new connections are possible.
 			shuttingDown = true
 			// Give server 2 seconds to shut down.
-			ctx, _ := context.WithTimeout(context.Background(), 2*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			if err := server.Shutdown(ctx); err != nil {
 				// failure/timeout shutting down the server gracefully
 				log.Println("HTTP server failed to terminate gracefully", err)
@@ -148,6 +148,7 @@ loop:
 
 			// Wait for http server to stop Accept()-ing connections
 			<-httpdone
+			cancel()
 
 			// Shutdown local cluster node, if it's a part of a cluster.
 			globals.cluster.shutdown()
@@ -345,7 +346,7 @@ func authHttpRequest(req *http.Request) (types.Uid, []byte, error) {
 		if _, err := base64.StdEncoding.Decode(decodedSecret, []byte(secret)); err != nil {
 			return uid, nil, types.ErrMalformed
 		}
-		if authhdl := store.GetAuthHandler(authMethod); authhdl != nil {
+		if authhdl := store.GetLogicalAuthHandler(authMethod); authhdl != nil {
 			rec, challenge, err := authhdl.Authenticate(decodedSecret)
 			if err != nil {
 				return uid, nil, err

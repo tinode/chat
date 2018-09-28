@@ -277,11 +277,18 @@ func main() {
 	globals.apiKeySalt = config.APIKeySalt
 
 	for name, jsconf := range config.Auth {
-		if authhdl := store.GetAuthHandler(name); authhdl == nil {
-			log.Fatal("Config provided for unknown authentication scheme '" + name + "'")
-		} else if err := authhdl.Init(string(jsconf)); err != nil {
-			log.Fatal("Failed to init auth scheme", err)
+		if name != "logical_names" {
+			if authhdl := store.GetAuthHandler(name); authhdl == nil {
+				log.Fatal("Config provided for unknown authentication scheme '" + name + "'")
+			} else if err := authhdl.Init(string(jsconf)); err != nil {
+				log.Fatal("Failed to init auth scheme", err)
+			}
 		}
+	}
+
+	err = store.InitAuthLogicalNames(config.Auth["logical_names"])
+	if err != nil {
+		log.Fatal(err)
 	}
 
 	for name, vconf := range config.Validator {

@@ -574,6 +574,9 @@ func (MessagesObjMapper) GetDeleted(topic string, forUser types.Uid, opt *types.
 // Registered authentication handlers.
 var authHandlers map[string]auth.AuthHandler
 
+// Logical auth handler names
+var authHandlerNames map[string]string
+
 // RegisterAuthScheme registers an authentication scheme handler.
 func RegisterAuthScheme(name string, handler auth.AuthHandler) {
 	name = strings.ToLower(name)
@@ -591,9 +594,57 @@ func RegisterAuthScheme(name string, handler auth.AuthHandler) {
 	authHandlers[name] = handler
 }
 
-// GetAuthHandler returns an auth handler by name.
+// GetAuthHandler returns an auth handler by name irrspectful of logical naming.
 func GetAuthHandler(name string) auth.AuthHandler {
 	return authHandlers[strings.ToLower(name)]
+}
+
+// GetLogicalAuthHandler returns an auth handler by logical name.
+func GetLogicalAuthHandler(name string) auth.AuthHandler {
+	name = strings.ToLower(name)
+	if len(authHandlerNames) != 0 {
+		if lname, ok := authHandlerNames[name]; ok {
+			return authHandlers[lname]
+		}
+	}
+	return authHandlers[name]
+}
+
+// InitAuthLogicalNames initializes authentication mapping "logical handler name":"actual handler name".
+func InitAuthLogicalNames(config json.RawMessage) error {
+	if config == nil {
+		return nil
+	}
+	var mapping []string
+	if err := json.Unmarshal(config, &mapping); err != nil {
+		return errors.New("store: failed to parse logical auth names: " + err.Error() + "(" + string(config) + ")")
+	}
+	if len(mapping) == 0 {
+		return nil
+	}
+
+	if authHandlerNames == nil {
+		authHandlerNames = make(map[string]string)
+	}
+	for _, pair := range mapping {
+		if parts := strings.Split(pair, ":"); len(parts) == 2 {
+			if _, ok := authHandlerNames[parts[0]]; ok {
+				return errors.New("store: duplicate mapping for logical auth name '" + pair + "'")
+			}
+			parts[1] = strings.ToLower(parts[1])
+			if _, ok := authHandlers[parts[1]]; !ok {
+				return errors.New("store: unknown handler for logical auth name '" + pair + "'")
+			}
+			if parts[0] == parts[1] {
+				// Skip useless identity mapping.
+				continue
+			}
+			authHandlerNames[parts[0]] = parts[1]
+		} else {
+			return errors.New("store: invalid logical auth mapping '" + pair + "'")
+		}
+	}
+	return nil
 }
 
 // Registered authentication handlers.
