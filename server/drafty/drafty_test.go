@@ -62,7 +62,7 @@ func TestToPlainText(t *testing.T) {
 		}`,
 	}
 
-	for i := range valid_inputs {
+	for i := range validInputs {
 		var val interface{}
 		json.Unmarshal([]byte(validInputs[i]), &val)
 		res, err := ToPlainText(val)
@@ -75,7 +75,7 @@ func TestToPlainText(t *testing.T) {
 		}
 	}
 
-	for i := range invalid_inputs {
+	for i := range invalidInputs {
 		var val interface{}
 		json.Unmarshal([]byte(invalidInputs[i]), &val)
 		res, err := ToPlainText(val)
