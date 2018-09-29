@@ -612,7 +612,7 @@ func GetLogicalAuthHandler(name string) auth.AuthHandler {
 
 // InitAuthLogicalNames initializes authentication mapping "logical handler name":"actual handler name".
 func InitAuthLogicalNames(config json.RawMessage) error {
-	if config == nil {
+	if config == nil || string(config) == "null" {
 		return nil
 	}
 	var mapping []string

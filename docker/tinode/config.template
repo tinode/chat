@@ -38,6 +38,7 @@
 	},
 
 	"auth_config": {
+		"logical_names": [],
 		"basic": {
 			"add_to_tags": true
 		},
