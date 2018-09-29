@@ -125,6 +125,18 @@ namespace Tinode.ChatBot
         }
 
         /// <summary>
+        /// Server Data event, when there is a message this event will fired
+        /// </summary>
+        public class ServerDataEventArgs : EventArgs
+        {
+            public ServerData Data { get; private set; }
+            public ServerDataEventArgs(ServerData data)
+            {
+                Data = data;
+            }
+        }
+
+        /// <summary>
         /// Chatbot subscribed user information
         /// </summary>
         public class Subscriber
@@ -178,6 +190,10 @@ namespace Tinode.ChatBot
         /// chatbot receive ctrl message event
         /// </summary>
         public event EventHandler<CtrlMessageEventArgs> CtrlMessageEvent;
+        /// <summary>
+        /// chatbot receive message data event
+        /// </summary>
+        public event EventHandler<ServerDataEventArgs> ServerDataEvent;
         void OnServerPresEvent(ServerPresEventArgs e)
         {
             var handler = ServerPresEvent;
@@ -195,6 +211,16 @@ namespace Tinode.ChatBot
                 handler(this, e);
             }
         }
+
+        void OnServerDataEvent(ServerDataEventArgs e)
+        {
+            var handler = ServerDataEvent;
+            if (handler != null)
+            {
+                handler(this, e);
+            }
+        }
+
         void OnCtrlMessageEvent(FutureTypes type, string id, int code, string text, string topic, MapField<string, ByteString> paramaters)
         {
             var e = new CtrlMessageEventArgs(type, id, code, text, topic, paramaters);
@@ -785,13 +811,20 @@ namespace Tinode.ChatBot
                 }
                 else if (response.Data != null)
                 {
+                    OnServerDataEvent(new ServerDataEventArgs(response.Data.Clone()));
                     if (response.Data.FromUserId != BotUID)
                     {
                         ClientPost(NoteRead(response.Data.Topic, response.Data.SeqId));
                         Thread.Sleep(50);
                         if (BotResponse != null)
                         {
-                            ClientPost(Publish(response.Data.Topic, BotResponse.ThinkAndReply(response.Data.Clone())));
+                            var reply = BotResponse.ThinkAndReply(response.Data.Clone());
+                            //if the response is null, means no need to reply
+                            if (reply!=null)
+                            {
+                                ClientPost(Publish(response.Data.Topic, reply));
+                            }
+                            
                         }
                         else
                         {
