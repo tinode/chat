@@ -156,9 +156,10 @@ loop:
 			// Terminate plugin connections
 			pluginsShutdown()
 
-			// Shutdown gRPC server, if one is configured
+			// Shutdown gRPC server, if one is configured.
 			if globals.grpcServer != nil {
-				globals.grpcServer.GracefulStop()
+				// GracefulStop does not terminate ServerStream. Must use Stop().
+				globals.grpcServer.Stop()
 			}
 
 			// Shutdown the hub. The hub will shutdown topics

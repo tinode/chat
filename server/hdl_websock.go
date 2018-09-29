@@ -39,7 +39,6 @@ func (sess *Session) readLoop() {
 	defer func() {
 		sess.closeWS()
 		count := sess.cleanUp()
-		log.Println("ws.readLoop exited", sess.sid, count)
 	}()
 
 	sess.ws.SetReadLimit(globals.maxMessageSize)
@@ -72,7 +71,6 @@ func (sess *Session) writeLoop() {
 		ticker.Stop()
 		// Break readLoop.
 		sess.closeWS()
-		log.Println("ws.writeLoop exited", sess.sid)
 	}()
 
 	for {

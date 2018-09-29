@@ -26,12 +26,11 @@ func (sess *Session) writeOnce(wrt http.ResponseWriter) {
 	select {
 	case msg, ok := <-sess.send:
 		if !ok {
-			log.Println("writeOnce: reading from a closed channel")
+			log.Println("longPoll: writeOnce reading from a closed channel", sess.sid)
 		} else if err := lpWrite(wrt, msg); err != nil {
-			log.Println("sess.writeOnce: " + err.Error())
+			log.Println("longPoll: writeOnce failed", sess.sid, err)
 		}
 	case <-closed:
-		log.Println("conn.writeOnce: connection closed by peer")
 
 	case msg := <-sess.stop:
 		// Make session unavailable
@@ -44,7 +43,7 @@ func (sess *Session) writeOnce(wrt http.ResponseWriter) {
 	case <-time.After(pingPeriod):
 		// just write an empty packet on timeout
 		if _, err := wrt.Write([]byte{}); err != nil {
-			log.Println("sess.writeOnce: timout/" + err.Error())
+			log.Println("longPoll: writeOnce: timout", sess.sid, err)
 		}
 	}
 }
@@ -116,7 +115,7 @@ func serveLongPoll(wrt http.ResponseWriter, req *http.Request) {
 		// New session
 		var count int
 		sess, count = globals.sessionStore.NewSession(wrt, "")
-		log.Println("lp: session started", sess.sid, count)
+		log.Println("longPoll: session started", sess.sid, count)
 		wrt.WriteHeader(http.StatusCreated)
 		pkt := NoErrCreated(req.FormValue("id"), "", now)
 		pkt.Ctrl.Params = map[string]string{
@@ -143,7 +142,7 @@ func serveLongPoll(wrt http.ResponseWriter, req *http.Request) {
 	if req.ContentLength != 0 {
 		// Read payload and send it for processing.
 		if code, err := sess.readOnce(wrt, req); err != nil {
-			log.Println("longPoll: " + err.Error())
+			log.Println("longPoll: readOnce failed", sess.sid, err)
 			// Failed to read request, report an error, if possible
 			if code != 0 {
 				wrt.WriteHeader(code)
