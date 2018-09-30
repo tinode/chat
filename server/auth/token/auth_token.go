@@ -108,7 +108,7 @@ func (ta *authenticator) Authenticate(token []byte) (*auth.Rec, []byte, error) {
 	}
 
 	if int(tl.SerialNumber) != ta.serialNumber {
-		return nil, nil, types.ErrMalformed
+		return nil, nil, types.ErrFailed
 	}
 
 	expires := time.Unix(int64(tl.Expires), 0).UTC()
