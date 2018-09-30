@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
-    <Version>0.15.5.2</Version>
+    <Version>0.15.5.3</Version>
     <Description>This is a rudimentary chatbot for Tinode using gRPC API. It's written in .Net standard as a demonstration that the API is language-independent.</Description>
     <Copyright>Tinode</Copyright>
     <PackageLicenseUrl>https://github.com/tinode/chat/blob/master/LICENSE</PackageLicenseUrl>

@@ -578,8 +578,15 @@ namespace Tinode.ChatBot
                     var publicInfo = sub.Public.ToStringUtf8();
                     var subObj = JsonConvert.DeserializeObject<JObject>(publicInfo);
                     var userName = subObj["fn"].ToString() ;
-                    var photoData = subObj["photo"]["data"].ToString();
-                    var photoType = subObj["photo"]["type"].ToString();
+                    string photoData = string.Empty;
+                    string photoType = string.Empty;
+                    if (subObj.ContainsKey("photo"))
+                    {
+                        photoData = subObj["photo"]["data"].ToString();
+                        photoType = subObj["photo"]["type"].ToString();
+                    }
+                    
+                    
                     AddSubscriber(new Subscriber(topic, userName, photoData, photoType)); 
                 }
             }
