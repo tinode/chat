@@ -26,9 +26,9 @@ import (
 type validator struct {
 	HostUrl             string `json:"host_url"`
 	ValidationTemplFile string `json:"validation_body_templ"`
-	RecoveryTemplFile   string `json:"recovery_body_templ"`
+	ResetTemplFile      string `json:"reset_body_templ"`
 	ValidationSubject   string `json:"validation_subject"`
-	RecoverySubject     string `json:"recovery_subject"`
+	ResetSubject        string `json:"reset_subject"`
 	SendFrom            string `json:"sender"`
 	SenderPassword      string `json:"sender_password"`
 	DebugResponse       string `json:"debug_response"`
@@ -36,7 +36,7 @@ type validator struct {
 	SMTPAddr            string `json:"smtp_server"`
 	SMTPPort            string `json:"smtp_port"`
 	htmlValidationTempl *ht.Template
-	htmlRecoveryTempl   *ht.Template
+	htmlResetTempl      *ht.Template
 	auth                smtp.Auth
 }
 
@@ -74,10 +74,10 @@ func (v *validator) Init(jsonconf string) error {
 			v.ValidationTemplFile = filepath.Join(filepath.Dir(basepath), v.ValidationTemplFile)
 		}
 	}
-	if !filepath.IsAbs(v.RecoveryTemplFile) {
+	if !filepath.IsAbs(v.ResetTemplFile) {
 		basepath, err := os.Executable()
 		if err == nil {
-			v.RecoveryTemplFile = filepath.Join(filepath.Dir(basepath), v.RecoveryTemplFile)
+			v.ResetTemplFile = filepath.Join(filepath.Dir(basepath), v.ResetTemplFile)
 		}
 	}
 
@@ -85,7 +85,7 @@ func (v *validator) Init(jsonconf string) error {
 	if err != nil {
 		return err
 	}
-	v.htmlRecoveryTempl, err = ht.ParseFiles(v.RecoveryTemplFile)
+	v.htmlResetTempl, err = ht.ParseFiles(v.ResetTemplFile)
 	if err != nil {
 		return err
 	}
@@ -167,10 +167,10 @@ func (v *validator) Request(user t.Uid, email, lang string, resp string) error {
 	})
 }
 
-// Recover sends a message with instructions for recovery of an authentication secret.
-func (v *validator) Recover(email, scheme, lang string, tmpToken []byte) error {
+// ResetSecret sends a message with instructions for resetting an authentication secret.
+func (v *validator) ResetSecret(email, scheme, lang string, tmpToken []byte) error {
 	body := new(bytes.Buffer)
-	if err := v.htmlRecoveryTempl.Execute(body, map[string]interface{}{
+	if err := v.htmlResetTempl.Execute(body, map[string]interface{}{
 		"Token":   tmpToken,
 		"Scheme":  scheme,
 		"HostUrl": v.HostUrl}); err != nil {
@@ -178,7 +178,7 @@ func (v *validator) Recover(email, scheme, lang string, tmpToken []byte) error {
 	}
 
 	// Send email without blocking. Email sending may take long time.
-	go v.send(email, v.RecoverySubject, string(body.Bytes()))
+	go v.send(email, v.ResetSubject, string(body.Bytes()))
 
 	return nil
 }

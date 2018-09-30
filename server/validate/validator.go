@@ -21,12 +21,12 @@ type Validator interface {
 	//  resp: optional response if user already has it (i.e. captcha/recaptcha).
 	Request(user t.Uid, cred, lang string, resp string) error
 
-	// Recover sends a message with instructions for recovery of an authentication secret.
+	// ResetSecret sends a message with instructions for resetting an authentication secret.
 	//  cred: address to use for the message.
-	//  scheme: authentication scheme being recovered.
+	//  scheme: authentication scheme being reset.
 	//  lang: human language as reported in the session.
 	//  tmpToken: temporary authentication token
-	Recover(cred, scheme, lang string, tmpToken []byte) error
+	ResetSecret(cred, scheme, lang string, tmpToken []byte) error
 
 	// Check checks validity of user response.
 	Check(user t.Uid, resp string) error

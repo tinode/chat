@@ -691,8 +691,8 @@ func (s *Session) login(msg *ClientComMessage) {
 		return
 	}
 
-	if msg.Login.Scheme == "recover" {
-		s.queueOut(decodeStoreError(s.authSecretRecovery(msg.Login.Secret), msg.Login.Id, "", msg.timestamp, nil))
+	if msg.Login.Scheme == "reset" {
+		s.queueOut(decodeStoreError(s.authSecretReset(msg.Login.Secret), msg.Login.Id, "", msg.timestamp, nil))
 		return
 	}
 
@@ -735,9 +735,9 @@ func (s *Session) login(msg *ClientComMessage) {
 	}
 }
 
-// authSecretRecovery performs password recovery;
-//  params: "auth-method-to-recover:credential-method:credential-value".
-func (s *Session) authSecretRecovery(params []byte) error {
+// authSecretReset resets an authentication secret;
+//  params: "auth-method-to-reset:credential-method:credential-value".
+func (s *Session) authSecretReset(params []byte) error {
 	var authScheme, credMethod, credValue string
 	if parts := strings.Split(string(params), ":"); len(parts) == 3 {
 		authScheme, credMethod, credValue = parts[0], parts[1], parts[2]
@@ -772,7 +772,7 @@ func (s *Session) authSecretRecovery(params []byte) error {
 		return err
 	}
 
-	return validator.Recover(credValue, authScheme, s.lang, token)
+	return validator.ResetSecret(credValue, authScheme, s.lang, token)
 }
 
 // onLogin performs steps after successful authentication.

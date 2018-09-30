@@ -26,9 +26,9 @@ func (*validator) Request(user t.Uid, cred, lang string, resp string) error {
 	return nil
 }
 
-// Recover sends a message with instructions for recovery of an authentication secret.
-func (*validator) Recover(cred, scheme, lang string, tmpToken []byte) error {
-	// TODO: send recovery email
+// ResetSecret sends a message with instructions for resetting an authentication secret.
+func (*validator) ResetSecret(cred, scheme, lang string, tmpToken []byte) error {
+	// TODO: send SMS with rest instructions.
 	return nil
 }
 
