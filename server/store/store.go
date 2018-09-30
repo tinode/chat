@@ -242,6 +242,11 @@ func (UsersObjMapper) GetAll(uid ...types.Uid) ([]types.User, error) {
 	return adp.UserGetAll(uid...)
 }
 
+// GetByCred returns user ID for the given validated credential.
+func (UsersObjMapper) GetByCred(method, value string) (types.Uid, error) {
+	return adp.UserGetByCred(method, value)
+}
+
 // Delete deletes user records.
 func (UsersObjMapper) Delete(id types.Uid, soft bool) error {
 	if !soft {

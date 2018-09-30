@@ -111,7 +111,7 @@ type MsgAccCred struct {
 	Params interface{} `json:"params,omitempty"`
 }
 
-// MsgClientAcc is a message for creating or updating a user account {acc}.
+// MsgClientAcc is an {acc} message for creating or updating a user account.
 type MsgClientAcc struct {
 	// Message Id
 	Id string `json:"id,omitempty"`
@@ -139,7 +139,7 @@ type MsgClientLogin struct {
 	Scheme string `json:"scheme,omitempty"`
 	// Shared secret
 	Secret []byte `json:"secret"`
-	// Credntials to verify (email or phone)
+	// Credntials to verify (email or phone or captcha etc.)
 	Cred []MsgAccCred `json:"cred,omitempty"`
 }
 

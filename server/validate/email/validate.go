@@ -24,17 +24,20 @@ import (
 
 // Validator configuration.
 type validator struct {
-	HostUrl        string `json:"host_url"`
-	TemplateFile   string `json:"msg_body_templ"`
-	Subject        string `json:"msg_subject"`
-	SendFrom       string `json:"sender"`
-	SenderPassword string `json:"sender_password"`
-	DebugResponse  string `json:"debug_response"`
-	MaxRetries     int    `json:"max_retries"`
-	SMTPAddr       string `json:"smtp_server"`
-	SMTPPort       string `json:"smtp_port"`
-	htmlTempl      *ht.Template
-	auth           smtp.Auth
+	HostUrl             string `json:"host_url"`
+	ValidationTemplFile string `json:"validation_body_templ"`
+	RecoveryTemplFile   string `json:"recovery_body_templ"`
+	ValidationSubject   string `json:"validation_subject"`
+	RecoverySubject     string `json:"recovery_subject"`
+	SendFrom            string `json:"sender"`
+	SenderPassword      string `json:"sender_password"`
+	DebugResponse       string `json:"debug_response"`
+	MaxRetries          int    `json:"max_retries"`
+	SMTPAddr            string `json:"smtp_server"`
+	SMTPPort            string `json:"smtp_port"`
+	htmlValidationTempl *ht.Template
+	htmlRecoveryTempl   *ht.Template
+	auth                smtp.Auth
 }
 
 const (
@@ -65,14 +68,24 @@ func (v *validator) Init(jsonconf string) error {
 
 	// If a relative path is provided, try to resolve it relative to the exec file location,
 	// not whatever directory the user is in.
-	if !filepath.IsAbs(v.TemplateFile) {
+	if !filepath.IsAbs(v.ValidationTemplFile) {
 		basepath, err := os.Executable()
 		if err == nil {
-			v.TemplateFile = filepath.Join(filepath.Dir(basepath), v.TemplateFile)
+			v.ValidationTemplFile = filepath.Join(filepath.Dir(basepath), v.ValidationTemplFile)
+		}
+	}
+	if !filepath.IsAbs(v.RecoveryTemplFile) {
+		basepath, err := os.Executable()
+		if err == nil {
+			v.RecoveryTemplFile = filepath.Join(filepath.Dir(basepath), v.RecoveryTemplFile)
 		}
 	}
 
-	v.htmlTempl, err = ht.ParseFiles(v.TemplateFile)
+	v.htmlValidationTempl, err = ht.ParseFiles(v.ValidationTemplFile)
+	if err != nil {
+		return err
+	}
+	v.htmlRecoveryTempl, err = ht.ParseFiles(v.RecoveryTemplFile)
 	if err != nil {
 		return err
 	}
@@ -125,7 +138,7 @@ func (v *validator) PreCheck(cred string, params interface{}) error {
 }
 
 // Send a request for confirmation to the user: makes a record in DB  and nothing else.
-func (v *validator) Request(user t.Uid, email, lang string, params interface{}, resp string) error {
+func (v *validator) Request(user t.Uid, email, lang string, resp string) error {
 
 	// Email validator cannot accept an immmediate response.
 	if resp != "" {
@@ -137,14 +150,14 @@ func (v *validator) Request(user t.Uid, email, lang string, params interface{}, 
 	resp = strings.Repeat("0", codeLength-len(resp)) + resp
 
 	body := new(bytes.Buffer)
-	if err := v.htmlTempl.Execute(body, map[string]interface{}{
+	if err := v.htmlValidationTempl.Execute(body, map[string]interface{}{
 		"Code":    resp,
 		"HostUrl": v.HostUrl}); err != nil {
 		return err
 	}
 
 	// Send email without blocking. Email sending may take long time.
-	go v.send(email, v.Subject, string(body.Bytes()))
+	go v.send(email, v.ValidationSubject, string(body.Bytes()))
 
 	return store.Users.SaveCred(&t.Credential{
 		User:   user.String(),
@@ -152,6 +165,22 @@ func (v *validator) Request(user t.Uid, email, lang string, params interface{}, 
 		Value:  email,
 		Resp:   resp,
 	})
+}
+
+// Recover sends a message with instructions for recovery of an authentication secret.
+func (v *validator) Recover(email, scheme, lang string, tmpToken []byte) error {
+	body := new(bytes.Buffer)
+	if err := v.htmlRecoveryTempl.Execute(body, map[string]interface{}{
+		"Token":   tmpToken,
+		"Scheme":  scheme,
+		"HostUrl": v.HostUrl}); err != nil {
+		return err
+	}
+
+	// Send email without blocking. Email sending may take long time.
+	go v.send(email, v.RecoverySubject, string(body.Bytes()))
+
+	return nil
 }
 
 // Find if user exists in the database, and if so return OK.

@@ -20,9 +20,15 @@ func (*validator) PreCheck(cred string, params interface{}) error {
 	return nil
 }
 
-// Send a request for confirmation to the user: makes a record in DB  and nothing else.
-func (*validator) Request(user t.Uid, cred, lang string, params interface{}, resp string) error {
+// Request sends a request for confirmation to the user: makes a record in DB  and nothing else.
+func (*validator) Request(user t.Uid, cred, lang string, resp string) error {
 	// TODO: actually send a validation SMS or make a call to the provided `cred` here.
+	return nil
+}
+
+// Recover sends a message with instructions for recovery of an authentication secret.
+func (*validator) Recover(cred, scheme, lang string, tmpToken []byte) error {
+	// TODO: send recovery email
 	return nil
 }
 

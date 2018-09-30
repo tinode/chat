@@ -598,7 +598,7 @@ func (s *Session) acc(msg *ClientComMessage) {
 		for i := range creds {
 			cr := &creds[i]
 			vld := store.GetValidator(cr.Method)
-			if err := vld.Request(user.Uid(), cr.Value, s.lang, cr.Params, cr.Response); err != nil {
+			if err := vld.Request(user.Uid(), cr.Value, s.lang, cr.Response); err != nil {
 				log.Println("Failed to save or validate credential", err)
 				// Delete incomplete user record.
 				store.Users.Delete(user.Uid(), false)
@@ -691,6 +691,11 @@ func (s *Session) login(msg *ClientComMessage) {
 		return
 	}
 
+	if msg.Login.Scheme == "recover" {
+		s.queueOut(decodeStoreError(s.authSecretRecovery(msg.Login.Secret), msg.Login.Id, "", msg.timestamp, nil))
+		return
+	}
+
 	if !s.uid.IsZero() {
 		s.queueOut(ErrAlreadyAuthenticated(msg.Login.Id, "", msg.timestamp))
 		return
@@ -716,7 +721,7 @@ func (s *Session) login(msg *ClientComMessage) {
 	}
 
 	var missing []string
-	if rec.Features&auth.Validated == 0 {
+	if rec.Features&auth.FeatureValidated == 0 {
 		missing, err = s.getValidatedGred(rec.Uid, rec.AuthLevel, msg.Login.Cred)
 		if err == nil {
 			_, missing = stringSliceDelta(globals.authValidators[rec.AuthLevel], missing)
@@ -730,12 +735,53 @@ func (s *Session) login(msg *ClientComMessage) {
 	}
 }
 
+// authSecretRecovery performs password recovery;
+//  params: "auth-method-to-recover:credential-method:credential-value".
+func (s *Session) authSecretRecovery(params []byte) error {
+	var authScheme, credMethod, credValue string
+	if parts := strings.Split(string(params), ":"); len(parts) == 3 {
+		authScheme, credMethod, credValue = parts[0], parts[1], parts[2]
+	} else {
+		return types.ErrMalformed
+	}
+
+	// Tehnically we don't need to check it here, but we are going to mail the 'authName' string to the user.
+	// We have to make sure it does not contain any exploits. This is the simplest check.
+	if hdl := store.GetLogicalAuthHandler(authScheme); hdl == nil {
+		return types.ErrUnsupported
+	}
+	validator := store.GetValidator(credMethod)
+	if validator == nil {
+		return types.ErrUnsupported
+	}
+	uid, err := store.Users.GetByCred(credMethod, credValue)
+	if err != nil {
+		return err
+	}
+	if uid.IsZero() {
+		return types.ErrNotFound
+	}
+
+	token, _, err := store.GetLogicalAuthHandler("token").GenSecret(&auth.Rec{
+		Uid:       uid,
+		AuthLevel: auth.LevelNone,
+		Lifetime:  time.Hour * 24,
+		Features:  auth.FeatureNoLogin})
+
+	if err != nil {
+		return err
+	}
+
+	return validator.Recover(credValue, authScheme, s.lang, token)
+}
+
 // onLogin performs steps after successful authentication.
 func (s *Session) onLogin(msgID string, timestamp time.Time, rec *auth.Rec, missing []string) *ServerComMessage {
 
 	var reply *ServerComMessage
 	var params map[string]interface{}
-	var features auth.Feature
+
+	features := rec.Features
 
 	params = map[string]interface{}{
 		"user":    rec.Uid.UserId(),
@@ -750,10 +796,13 @@ func (s *Session) onLogin(msgID string, timestamp time.Time, rec *auth.Rec, miss
 
 		reply = NoErr(msgID, "", timestamp)
 
-		// Authenticate the session.
-		s.uid = rec.Uid
-		s.authLvl = rec.AuthLevel
-		features = auth.Validated
+		// Check if the token is suitable for session authentication.
+		if features&auth.FeatureNoLogin == 0 {
+			// Authenticate the session.
+			s.uid = rec.Uid
+			s.authLvl = rec.AuthLevel
+		}
+		features |= auth.FeatureValidated
 
 		if len(rec.Tags) > 0 {
 			if err := store.Users.Update(rec.Uid,

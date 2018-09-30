@@ -519,6 +519,26 @@ func (a *adapter) UserUpdate(uid t.Uid, update map[string]interface{}) error {
 	return err
 }
 
+// UserGetByCred returns user ID for the given validated credential.
+func (a *adapter) UserGetByCred(method, value string) (t.Uid, error) {
+	cursor, err := rdb.DB(a.dbName).Table("credentials").Get(method + ":" + value).Pluck("User").Run(a.conn)
+	if err != nil {
+		return t.ZeroUid, err
+	}
+	defer cursor.Close()
+
+	if cursor.IsNil() {
+		return t.ZeroUid, nil
+	}
+
+	var userId map[string]string
+	if err = cursor.One(&userId); err != nil {
+		return t.ZeroUid, err
+	}
+
+	return t.ParseUid(userId["User"]), nil
+}
+
 // *****************************
 
 // TopicCreate creates a topic from template
@@ -1568,7 +1588,7 @@ func (a *adapter) CredGet(uid t.Uid, method string) ([]*t.Credential, error) {
 	defer cursor.Close()
 
 	if cursor.IsNil() {
-		return nil, err
+		return nil, nil
 	}
 
 	var result []*t.Credential
@@ -1610,7 +1630,7 @@ func (a *adapter) FileGet(fid string) (*t.FileDef, error) {
 	defer cursor.Close()
 
 	if cursor.IsNil() {
-		return nil, err
+		return nil, nil
 	}
 
 	var fd t.FileDef
