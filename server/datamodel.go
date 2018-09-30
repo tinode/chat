@@ -117,6 +117,8 @@ type MsgClientAcc struct {
 	Id string `json:"id,omitempty"`
 	// "newXYZ" to create a new user or UserId to update a user; default: current user
 	User string `json:"user,omitempty"`
+	// Authentication token for changing a password.
+	Token []byte `json:"token,omitempty"`
 	// The initial authentication scheme the account can use
 	Scheme string `json:"scheme,omitempty"`
 	// Shared secret
@@ -127,7 +129,7 @@ type MsgClientAcc struct {
 	Tags []string `json:"tags,omitempty"`
 	// User initialization data when creating a new user, otherwise ignored
 	Desc *MsgSetDesc `json:"desc,omitempty"`
-	// Credntials to verify (email or phone)
+	// Credentials to verify (email or phone or captcha)
 	Cred []MsgAccCred `json:"cred,omitempty"`
 }
 

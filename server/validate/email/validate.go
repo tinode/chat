@@ -4,6 +4,7 @@ package email
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	ht "html/template"
@@ -169,9 +170,11 @@ func (v *validator) Request(user t.Uid, email, lang string, resp string) error {
 
 // ResetSecret sends a message with instructions for resetting an authentication secret.
 func (v *validator) ResetSecret(email, scheme, lang string, tmpToken []byte) error {
+	token := make([]byte, base64.URLEncoding.EncodedLen(len(tmpToken)))
+	base64.URLEncoding.Encode(token, tmpToken)
 	body := new(bytes.Buffer)
 	if err := v.htmlResetTempl.Execute(body, map[string]interface{}{
-		"Token":   tmpToken,
+		"Token":   string(token),
 		"Scheme":  scheme,
 		"HostUrl": v.HostUrl}); err != nil {
 		return err

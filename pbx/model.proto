@@ -148,6 +148,8 @@ message ClientAcc {
 	SetDesc desc = 7;
 	// Credentials for verification.
 	repeated Credential cred = 8;
+	// Authentication token used for resetting a password.
+	string token = 9;
 }
 
 // Login {login} message

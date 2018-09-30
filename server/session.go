@@ -484,6 +484,23 @@ func (s *Session) acc(msg *ClientComMessage) {
 		return
 	}
 
+	// If token is provided, get the user ID from it.
+	var rec *auth.Rec
+	if msg.Acc.Token != nil {
+		if !s.uid.IsZero() {
+			s.queueOut(ErrAlreadyAuthenticated(msg.Acc.Id, "", msg.timestamp))
+			return
+		}
+
+		var err error
+		rec, _, err = store.GetLogicalAuthHandler("token").Authenticate(msg.Acc.Token)
+		if err != nil {
+			s.queueOut(decodeStoreError(err, msg.Acc.Id, "", msg.timestamp,
+				map[string]interface{}{"what": "auth"}))
+			return
+		}
+	}
+
 	authhdl := store.GetLogicalAuthHandler(msg.Acc.Scheme)
 	if strings.HasPrefix(msg.Acc.User, "new") {
 		// User cannot authenticate with the new account because the user is already authenticated
@@ -638,13 +655,20 @@ func (s *Session) acc(msg *ClientComMessage) {
 
 		pluginAccount(&user, plgActCreate)
 
-	} else if !s.uid.IsZero() {
+	} else if !s.uid.IsZero() || rec != nil {
+		uid := s.uid
+		authLvl := s.authLvl
+		if rec != nil {
+			uid = rec.Uid
+			authLvl = rec.AuthLevel
+		}
+
 		var params map[string]interface{}
 		if authhdl != nil {
 			// Request to update auth of an existing account. Only basic auth is currently supported
 			// TODO(gene): support adding new auth schemes
 			// TODO(gene): support the case when msg.Acc.User is not equal to the current user
-			if err := authhdl.UpdateRecord(&auth.Rec{Uid: s.uid}, msg.Acc.Secret); err != nil {
+			if err := authhdl.UpdateRecord(&auth.Rec{Uid: uid}, msg.Acc.Secret); err != nil {
 				log.Println("auth: failed to update secret", err)
 				s.queueOut(decodeStoreError(err, msg.Acc.Id, "", msg.timestamp, nil))
 				return
@@ -656,13 +680,13 @@ func (s *Session) acc(msg *ClientComMessage) {
 			return
 		} else if len(msg.Acc.Cred) > 0 {
 			// Use provided credentials for validation.
-			validated, err := s.getValidatedGred(s.uid, s.authLvl, msg.Acc.Cred)
+			validated, err := s.getValidatedGred(uid, authLvl, msg.Acc.Cred)
 			if err != nil {
 				log.Println("failed to get validated credentials", err)
 				s.queueOut(decodeStoreError(err, msg.Acc.Id, "", msg.timestamp, nil))
 				return
 			}
-			_, missing := stringSliceDelta(globals.authValidators[s.authLvl], validated)
+			_, missing := stringSliceDelta(globals.authValidators[authLvl], validated)
 			if len(missing) > 0 {
 				params = map[string]interface{}{"cred": missing}
 			}
@@ -771,7 +795,7 @@ func (s *Session) authSecretReset(params []byte) error {
 	if err != nil {
 		return err
 	}
-
+	log.Println("calling validator.ResetSecret", credValue, authScheme, uid)
 	return validator.ResetSecret(credValue, authScheme, s.lang, token)
 }
 
