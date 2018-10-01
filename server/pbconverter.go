@@ -209,6 +209,7 @@ func pbCliSerialize(msg *ClientComMessage) *pbx.ClientMsg {
 		pkt.Message = &pbx.ClientMsg_Acc{Acc: &pbx.ClientAcc{
 			Id:     msg.Acc.Id,
 			UserId: msg.Acc.User,
+			Token:  msg.Acc.Token,
 			Scheme: msg.Acc.Scheme,
 			Secret: msg.Acc.Secret,
 			Login:  msg.Acc.Login,

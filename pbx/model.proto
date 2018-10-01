@@ -149,7 +149,7 @@ message ClientAcc {
 	// Credentials for verification.
 	repeated Credential cred = 8;
 	// Authentication token used for resetting a password.
-	string token = 9;
+	bytes token = 9;
 }
 
 // Login {login} message
