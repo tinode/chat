@@ -3,7 +3,6 @@ package store
 import (
 	"encoding/json"
 	"errors"
-	"log"
 	"sort"
 	"strings"
 	"time"
@@ -103,7 +102,6 @@ func GetAdapterName() string {
 func InitDb(jsonconf string, reset bool) error {
 	if !IsOpen() {
 		if err := openAdapter(1, jsonconf); err != nil {
-			log.Println("store.openAdapter", err)
 			return err
 		}
 	}
