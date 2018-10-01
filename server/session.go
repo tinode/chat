@@ -612,10 +612,15 @@ func (s *Session) acc(msg *ClientComMessage) {
 		}
 
 		var validated []string
+		tmpToken, _, _ := store.GetLogicalAuthHandler("token").GenSecret(&auth.Rec{
+			Uid:       user.Uid(),
+			AuthLevel: auth.LevelNone,
+			Lifetime:  time.Hour * 24,
+			Features:  auth.FeatureNoLogin})
 		for i := range creds {
 			cr := &creds[i]
 			vld := store.GetValidator(cr.Method)
-			if err := vld.Request(user.Uid(), cr.Value, s.lang, cr.Response); err != nil {
+			if err := vld.Request(user.Uid(), cr.Value, s.lang, cr.Response, tmpToken); err != nil {
 				log.Println("Failed to save or validate credential", err)
 				// Delete incomplete user record.
 				store.Users.Delete(user.Uid(), false)

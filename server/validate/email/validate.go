@@ -139,12 +139,14 @@ func (v *validator) PreCheck(cred string, params interface{}) error {
 }
 
 // Send a request for confirmation to the user: makes a record in DB  and nothing else.
-func (v *validator) Request(user t.Uid, email, lang string, resp string) error {
-
+func (v *validator) Request(user t.Uid, email, lang, resp string, tmpToken []byte) error {
 	// Email validator cannot accept an immmediate response.
 	if resp != "" {
 		return t.ErrFailed
 	}
+
+	token := make([]byte, base64.URLEncoding.EncodedLen(len(tmpToken)))
+	base64.URLEncoding.Encode(token, tmpToken)
 
 	// Generate expected response as a random numeric string between 0 and 999999
 	resp = strconv.FormatInt(int64(rand.Intn(maxCodeValue)), 10)
@@ -152,6 +154,7 @@ func (v *validator) Request(user t.Uid, email, lang string, resp string) error {
 
 	body := new(bytes.Buffer)
 	if err := v.htmlValidationTempl.Execute(body, map[string]interface{}{
+		"Token":   token,
 		"Code":    resp,
 		"HostUrl": v.HostUrl}); err != nil {
 		return err

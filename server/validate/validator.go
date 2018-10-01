@@ -19,7 +19,7 @@ type Validator interface {
 	// 	cred: credential being validated, such as email or phone.
 	//  lang: user's human language as repored in the session.
 	//  resp: optional response if user already has it (i.e. captcha/recaptcha).
-	Request(user t.Uid, cred, lang string, resp string) error
+	Request(user t.Uid, cred, lang, resp string, tmpToken []byte) error
 
 	// ResetSecret sends a message with instructions for resetting an authentication secret.
 	//  cred: address to use for the message.

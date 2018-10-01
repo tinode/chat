@@ -21,7 +21,7 @@ func (*validator) PreCheck(cred string, params interface{}) error {
 }
 
 // Request sends a request for confirmation to the user: makes a record in DB  and nothing else.
-func (*validator) Request(user t.Uid, cred, lang string, resp string) error {
+func (*validator) Request(user t.Uid, cred, lang, resp string, tmpToken []byte) error {
 	// TODO: actually send a validation SMS or make a call to the provided `cred` here.
 	return nil
 }
