@@ -3,6 +3,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"errors"
 	"path/filepath"
 	"regexp"
@@ -580,4 +581,26 @@ func platformFromUA(ua string) string {
 		return "android"
 	}
 	return ""
+}
+
+// Try different base64 methods for decoding the unknown string.
+func decodeUnknownBase64(unknown string) ([]byte, error) {
+	decoded := make([]byte, base64.RawStdEncoding.DecodedLen(len(unknown)))
+	count, err := base64.RawURLEncoding.Decode(decoded, []byte(unknown))
+	if err == nil {
+		return decoded[:count], nil
+	}
+	count, err = base64.URLEncoding.Decode(decoded, []byte(unknown))
+	if err == nil {
+		return decoded[:count], nil
+	}
+	count, err = base64.RawStdEncoding.Decode(decoded, []byte(unknown))
+	if err == nil {
+		return decoded[:count], nil
+	}
+	count, err = base64.StdEncoding.Decode(decoded, []byte(unknown))
+	if err == nil {
+		return decoded[:count], nil
+	}
+	return nil, errors.New("string cannot be base64-decoded")
 }

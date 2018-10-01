@@ -154,7 +154,7 @@ func (v *validator) Request(user t.Uid, email, lang, resp string, tmpToken []byt
 
 	body := new(bytes.Buffer)
 	if err := v.htmlValidationTempl.Execute(body, map[string]interface{}{
-		"Token":   token,
+		"Token":   string(token),
 		"Code":    resp,
 		"HostUrl": v.HostUrl}); err != nil {
 		return err

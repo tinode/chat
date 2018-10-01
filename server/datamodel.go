@@ -118,7 +118,9 @@ type MsgClientAcc struct {
 	// "newXYZ" to create a new user or UserId to update a user; default: current user
 	User string `json:"user,omitempty"`
 	// Authentication token for changing a password.
-	Token []byte `json:"token,omitempty"`
+	// We can't mandate specific token formatting (padding-no padding, standard or URL-encoding)
+	// and consequently take it as string which is later decoded into bytes.
+	Token string `json:"token,omitempty"`
 	// The initial authentication scheme the account can use
 	Scheme string `json:"scheme,omitempty"`
 	// Shared secret

@@ -738,7 +738,7 @@ The following values are defined for the `head` field:
  * `forwarded`: an indicator that the message was forwarded, a unique ID of the original message, `"grp1XUtEhjv6HND:123"`.
  * `mime`: MIME-type of message contents, `"text/x-drafty"`; null value is interpreted as `"text/plain"`.
  * `reply`: an indicator that the message is a reply to another message, a unique ID of the original message, `"grp1XUtEhjv6HND:123"`.
- * `thread`: an indicator that the message is a part of a conversation thread, a unique id of the thread, `"grp1XUtEhjv6HND:123"`.
+ * `thread`: an indicator that the message is a part of a conversation thread, a unique id of the first message in thread, `"grp1XUtEhjv6HND:123"`.
 
 The unique message ID should be formed as `<topic_name>:<seqId>` whenever possible, such as `"grp1XUtEhjv6HND:123"`.
 
