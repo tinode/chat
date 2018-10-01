@@ -83,7 +83,6 @@ func (a *adapter) Open(jsonconfig string) error {
 		// missing DB is OK.
 		err = nil
 	}
-
 	return err
 }
 
@@ -109,7 +108,7 @@ func (a *adapter) getDbVersion() (int, error) {
 	var vers int
 	err := a.db.Get(&vers, "SELECT `value` FROM kvmeta WHERE `key`='version'")
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if isMissingDb(err) || err == sql.ErrNoRows {
 			err = errors.New("Database not initialized")
 		}
 		return -1, err
