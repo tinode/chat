@@ -486,19 +486,14 @@ func (s *Session) acc(msg *ClientComMessage) {
 
 	// If token is provided, get the user ID from it.
 	var rec *auth.Rec
-	if msg.Acc.Token != "" {
+	if msg.Acc.Token != nil {
 		if !s.uid.IsZero() {
 			s.queueOut(ErrAlreadyAuthenticated(msg.Acc.Id, "", msg.timestamp))
 			return
 		}
 
-		token, err := decodeUnknownBase64(msg.Acc.Token)
-		if err != nil {
-			s.queueOut(ErrMalformed(msg.Acc.Id, "", msg.timestamp))
-			return
-		}
-
-		rec, _, err = store.GetLogicalAuthHandler("token").Authenticate(token)
+		var err error
+		rec, _, err = store.GetLogicalAuthHandler("token").Authenticate(msg.Acc.Token)
 		if err != nil {
 			s.queueOut(decodeStoreError(err, msg.Acc.Id, "", msg.timestamp,
 				map[string]interface{}{"what": "auth"}))
