@@ -244,6 +244,7 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 		// Only root user can set non-default msg.from && msg.authLvl values.
 		s.queueOut(ErrPermissionDenied("", "", msg.timestamp))
 		log.Println("s.dispatch: non-root asigned msg.from", s.sid)
+		return
 	}
 
 	// Locking-unlocking is needed for long polling: the client may issue multiple requests in parallel.
