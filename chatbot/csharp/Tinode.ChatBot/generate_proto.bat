@@ -1,1 +1,0 @@
-%UserProfile%\.nuget\packages\grpc.tools\1.15.0\tools\windows_x64\protoc.exe -I..\..\..\pbx --csharp_out . --grpc_out . ..\..\..\pbx\model.proto --plugin=protoc-gen-grpc=%UserProfile%\.nuget\packages\grpc.tools\1.15.0\tools\windows_x64\grpc_csharp_plugin.exe
