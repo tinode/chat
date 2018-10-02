@@ -1,4 +1,5 @@
 ﻿using CommandLine;
+using Newtonsoft.Json;
 using Pbx;
 using System;
 using System.Text;
@@ -28,7 +29,12 @@ namespace Tinode.ChatBot.DemoNetCore
         {
             public string ThinkAndReply(ServerData message)
             {
-                return DateTime.Now.ToLongDateString();
+                var ret = string.Empty;
+                foreach(var sub in bot.Subscribers)
+                {
+                    ret += $"{sub.Value.UserName}\r\n";
+                }
+                return ret;
             }
         }
 

@@ -15,6 +15,7 @@ using Newtonsoft.Json;
 using Google.Protobuf.Collections;
 using System.Runtime.InteropServices;
 using System.IO;
+using Newtonsoft.Json.Linq;
 
 namespace Tinode.ChatBot
 {
@@ -52,6 +53,224 @@ namespace Tinode.ChatBot
     public class ChatBot
     {
         /// <summary>
+        /// Server pres event 
+        /// </summary>
+        public class ServerPresEventArgs : EventArgs
+        {
+            public ServerPres Pres { get; private set; }
+
+            public ServerPresEventArgs(ServerPres pres)
+            {
+                Pres = pres;
+            }
+        }
+
+        /// <summary>
+        /// Server meta event
+        /// </summary>
+        public class ServerMetaEventArgs : EventArgs
+        {
+            public ServerMeta Meta { get; private set; }
+            public ServerMetaEventArgs(ServerMeta meta)
+            {
+                Meta = meta;
+            }
+        }
+
+        /// <summary>
+        /// Ctrl message event
+        /// </summary>
+        public class CtrlMessageEventArgs : EventArgs
+        {
+            /// <summary>
+            /// Ctrl message type
+            /// </summary>
+            public FutureTypes Type { get;private set; }
+            /// <summary>
+            /// tid
+            /// </summary>
+            public string Id { get;private set; }
+            /// <summary>
+            /// ctrl code
+            /// </summary>
+            public int Code { get; private set; }
+            /// <summary>
+            /// ctrl text
+            /// </summary>
+            public string Text { get; private set; }
+            /// <summary>
+            /// ctrl topic
+            /// </summary>
+            public string Topic { get; private set; }
+            /// <summary>
+            /// rpc callback status, if error or failed ,this will be true
+            /// </summary>
+            public bool HasError => !(Code >= 200 && Code < 400);
+            /// <summary>
+            /// paramaters
+            /// </summary>
+            public MapField<string,ByteString> Params { get; private set; }
+
+            public CtrlMessageEventArgs(FutureTypes type,string id,int code,string text,string topic, MapField<string, ByteString> paramaters)
+            {
+                Type = type;
+                Id = id;
+                Code = code;
+                Text = text;
+                Topic = topic;
+                Params = paramaters;
+            }
+
+
+        }
+
+        /// <summary>
+        /// Server Data event, when there is a message this event will fired
+        /// </summary>
+        public class ServerDataEventArgs : EventArgs
+        {
+            public ServerData Data { get; private set; }
+            public ServerDataEventArgs(ServerData data)
+            {
+                Data = data;
+            }
+        }
+
+        /// <summary>
+        /// Chatbot subscribed user information
+        /// </summary>
+        public class Subscriber
+        {
+            /// <summary>
+            /// topic
+            /// </summary>
+            public string Topic { get; set; }
+            /// <summary>
+            /// user name/nick
+            /// </summary>
+            public string UserName { get; set; }
+            /// <summary>
+            /// user photo with base64 encode
+            /// </summary>
+            public string PhotoData { get; set; }
+            /// <summary>
+            /// user photo image type
+            /// </summary>
+            public string PhotoType { get; set; }
+            public Subscriber()
+            {
+
+            }
+            /// <summary>
+            /// constructor
+            /// </summary>
+            /// <param name="topic">topic</param>
+            /// <param name="username"> user name/nick</param>
+            /// <param name="photo"> user photo with base64 encode</param>
+            /// <param name="photoType">user photo image type</param>
+            public Subscriber(string topic,string username,string photo,string photoType)
+            {
+                Topic = topic;
+                UserName = username;
+                PhotoData = photo;
+                PhotoType = photoType;
+            }
+
+        }
+
+        /// <summary>
+        /// chatbot received pres event
+        /// </summary>
+        public event EventHandler<ServerPresEventArgs> ServerPresEvent;
+        /// <summary>
+        /// chatbot receive meta data event
+        /// </summary>
+        public event EventHandler<ServerMetaEventArgs> ServerMetaEvent;
+        /// <summary>
+        /// chatbot receive ctrl message event
+        /// </summary>
+        public event EventHandler<CtrlMessageEventArgs> CtrlMessageEvent;
+        /// <summary>
+        /// chatbot receive message data event
+        /// </summary>
+        public event EventHandler<ServerDataEventArgs> ServerDataEvent;
+        void OnServerPresEvent(ServerPresEventArgs e)
+        {
+            var handler = ServerPresEvent;
+            if (handler!=null)
+            {
+                handler(this, e);
+            }
+        }
+
+        void OnServerMetaEvent(ServerMetaEventArgs e)
+        {
+            var handler = ServerMetaEvent;
+            if (handler != null)
+            {
+                handler(this, e);
+            }
+        }
+
+        void OnServerDataEvent(ServerDataEventArgs e)
+        {
+            var handler = ServerDataEvent;
+            if (handler != null)
+            {
+                handler(this, e);
+            }
+        }
+
+        void OnCtrlMessageEvent(FutureTypes type, string id, int code, string text, string topic, MapField<string, ByteString> paramaters)
+        {
+            var e = new CtrlMessageEventArgs(type, id, code, text, topic, paramaters);
+            var handler = CtrlMessageEvent;
+            if (handler != null)
+            {
+                handler(this, e);
+            }
+        }
+
+        /// <summary>
+        /// future callback types 
+        /// </summary>
+        public enum FutureTypes
+        {
+            /// <summary>
+            /// defatul, unknown callback operation
+            /// </summary>
+            Unknown,
+            /// <summary>
+            /// Hi rpc call
+            /// </summary>
+            Hi,
+            /// <summary>
+            /// login rpc call
+            /// </summary>
+            Login,
+            /// <summary>
+            /// sub rpc call
+            /// </summary>
+            Sub,
+            /// <summary>
+            /// get rpc call
+            /// </summary>
+            Get,
+            /// <summary>
+            /// pub rpc call
+            /// </summary>
+            Pub,
+            /// <summary>
+            /// note rpc call
+            /// </summary>
+            Note, 
+            /// <summary>
+            /// leave rpc call
+            /// </summary>
+            Leave,
+        }
+
+        /// <summary>
         /// Help define functionale which will be called in future.
         /// </summary>
         public class Future
@@ -65,6 +284,10 @@ namespace Tinode.ChatBot
             /// </summary>
             public string Arg { get; private set; }
             /// <summary>
+            /// Future action type
+            /// </summary>
+            public FutureTypes Type { get; private set; }
+            /// <summary>
             /// callback function
             /// </summary>
             public Action<string, MapField<string, ByteString>> Action { get; private set; }
@@ -74,9 +297,10 @@ namespace Tinode.ChatBot
             /// <param name="tid"> Each rpc call message id</param>
             /// <param name="action">Argument needs by action.</param>
             /// <param name="arg">callback function</param>
-            public Future(string tid,Action<string, MapField<string, ByteString>> action,string arg="")
+            public Future(string tid,FutureTypes type,Action<string, MapField<string, ByteString>> action,string arg="")
             {
                 Tid = tid;
+                Type = type;
                 Action = action;
                 Arg = arg;
             }
@@ -131,6 +355,8 @@ namespace Tinode.ChatBot
         /// </summary>
         public IBotResponse BotResponse { get; set; }
 
+        public Dictionary<string, Subscriber> Subscribers { get; private set; }
+
         Server server;
         AsyncDuplexStreamingCall<ClientMsg, ServerMsg> client;
         Channel channel;
@@ -162,6 +388,7 @@ namespace Tinode.ChatBot
             sendMsgQueue = new Queue<ClientMsg>();
             subscriptions = new Dictionary<string, bool>();
             onCompletion = new Dictionary<string, Future>();
+            Subscribers = new Dictionary<string, Subscriber>();
         }
 
         /// <summary>
@@ -201,6 +428,7 @@ namespace Tinode.ChatBot
             ClientPost(Hello());
             ClientPost(Login(CookieFile, Schema, Secret));
             ClientPost(Subscribe("me"));
+            
             return stream;
         }
 
@@ -220,24 +448,32 @@ namespace Tinode.ChatBot
         /// <param name="tid">tid</param>
         /// <param name="code">rpc status code</param>
         /// <param name="text">text</param>
+        /// <param name="topic">topic name</param>
         /// <param name="paramaters">paramaters</param>
-        public void ExecFuture(string tid,int code,string text,MapField<string,ByteString> paramaters)
+        public void ExecFuture(string tid,int code,string text, string topic, MapField<string,ByteString> paramaters)
         {
+            Console.WriteLine("Exec" + tid);
             if (onCompletion.ContainsKey(tid))
             {
                 var bundle = onCompletion[tid];
+                var type = onCompletion[tid].Type;
                 onCompletion.Remove(tid);
                 if (code>=200 && code<400)
                 {
                     var arg = bundle.Arg;
                     bundle.Action(arg, paramaters);
+                    if (type==FutureTypes.Sub)
+                    {
+                        ClientPost(GetSubs("me"));
+                    }
                 }
                 else
                 {
                     Console.WriteLine($"Error:{code}, {text}");
                 }
-            }
 
+                OnCtrlMessageEvent(type, tid, code, text, topic, paramaters);
+            }
         }
 
         /// <summary>
@@ -249,6 +485,18 @@ namespace Tinode.ChatBot
             if (!subscriptions.ContainsKey(topic))
             {
                 subscriptions.Add(topic, true);
+            }
+        }
+
+        public void AddSubscriber(Subscriber sub)
+        {
+            if (Subscribers.ContainsKey(sub.Topic))
+            {
+                Subscribers[sub.Topic] = sub;
+            }
+            else
+            {
+                Subscribers.Add(sub.Topic, sub);
             }
         }
 
@@ -320,6 +568,29 @@ namespace Tinode.ChatBot
 
         }
 
+        public void OnGetMeta(ServerMeta meta)
+        {
+            if (meta.Sub!=null)
+            {
+                foreach (var sub in meta.Sub)
+                {
+                    var topic = sub.Topic;
+                    var publicInfo = sub.Public.ToStringUtf8();
+                    var subObj = JsonConvert.DeserializeObject<JObject>(publicInfo);
+                    var userName = subObj["fn"].ToString() ;
+                    string photoData = string.Empty;
+                    string photoType = string.Empty;
+                    if (subObj.ContainsKey("photo"))
+                    {
+                        photoData = subObj["photo"]["data"].ToString();
+                        photoType = subObj["photo"]["type"].ToString();
+                    }
+                    
+                    
+                    AddSubscriber(new Subscriber(topic, userName, photoData, photoType)); 
+                }
+            }
+        }
 
         /// <summary>
         /// read auth information from cookie
@@ -383,6 +654,7 @@ namespace Tinode.ChatBot
             {
                 subscriptions.Clear();
                 onCompletion.Clear();
+                Subscribers.Clear();
                 while (sendMsgQueue.Count > 0)
                 {
                     sendMsgQueue.Dequeue();
@@ -400,12 +672,18 @@ namespace Tinode.ChatBot
         public ClientMsg Hello()
         {
             var tid = GetNextTid();
-            AddFuture(tid, new Future(tid, new Action<string, MapField<string, ByteString>>((unused, paramaters) =>
+            AddFuture(tid, new Future(tid, FutureTypes.Hi,new Action<string, MapField<string, ByteString>>((unused, paramaters) =>
             {
                 ServerVersion(paramaters);
             })));
 
             return new ClientMsg() { Hi = new ClientHi() { Id = tid, UserAgent = $"{AppName}/{AppVersion} {Platform}; gRPC-csharp/{AppVersion}", Ver = LibVersion, Lang = "EN" } };
+        }
+
+        public ClientMsg GetSubs(string topic="me")
+        {
+            var tid = GetNextTid();
+            return new ClientMsg() { Get = new ClientGet() { Id = tid, Topic = topic, Query = new GetQuery() { What = "sub" } } };
         }
 
         /// <summary>
@@ -418,7 +696,7 @@ namespace Tinode.ChatBot
         public ClientMsg Login(string cookieFile,string scheme,ByteString secret)
         {
             var tid = GetNextTid();
-            AddFuture(tid, new Future(tid, new Action<string, MapField<string, ByteString>>((fname, paramaters) =>
+            AddFuture(tid, new Future(tid, FutureTypes.Login,new Action<string, MapField<string, ByteString>>((fname, paramaters) =>
             {
                 OnLogin(fname, paramaters);
             }),cookieFile));
@@ -434,7 +712,7 @@ namespace Tinode.ChatBot
         public ClientMsg Subscribe(string topic)
         {
             var tid = GetNextTid();
-            AddFuture(tid, new Future(tid, new Action<string, MapField<string, ByteString>>((topicName, unused) =>
+            AddFuture(tid, new Future(tid, FutureTypes.Sub,new Action<string, MapField<string, ByteString>>((topicName, unused) =>
             {
                 AddSubscription(topicName);
             }),topic));
@@ -450,7 +728,7 @@ namespace Tinode.ChatBot
         public ClientMsg Leave(string topic)
         {
             var tid = GetNextTid();
-            AddFuture(tid, new Future(tid, new Action<string, MapField<string, ByteString>>((topicName, unused) =>
+            AddFuture(tid, new Future(tid, FutureTypes.Leave,new Action<string, MapField<string, ByteString>>((topicName, unused) =>
             {
                 DelSubscription(topicName);
             }), topic));
@@ -536,17 +814,24 @@ namespace Tinode.ChatBot
                 if (response.Ctrl != null)
                 {
                     Console.WriteLine($"Ctrl:{response.Ctrl.Id},{response.Ctrl.Code},{response.Ctrl.Text},{response.Ctrl.Params}");
-                    ExecFuture(response.Ctrl.Id, response.Ctrl.Code, response.Ctrl.Text, response.Ctrl.Params);
+                    ExecFuture(response.Ctrl.Id, response.Ctrl.Code, response.Ctrl.Text, response.Ctrl.Topic, response.Ctrl.Params);
                 }
                 else if (response.Data != null)
                 {
+                    OnServerDataEvent(new ServerDataEventArgs(response.Data.Clone()));
                     if (response.Data.FromUserId != BotUID)
                     {
                         ClientPost(NoteRead(response.Data.Topic, response.Data.SeqId));
                         Thread.Sleep(50);
                         if (BotResponse != null)
                         {
-                            ClientPost(Publish(response.Data.Topic, BotResponse.ThinkAndReply(response.Data.Clone())));
+                            var reply = BotResponse.ThinkAndReply(response.Data.Clone());
+                            //if the response is null, means no need to reply
+                            if (reply!=null)
+                            {
+                                ClientPost(Publish(response.Data.Topic, reply));
+                            }
+                            
                         }
                         else
                         {
@@ -562,12 +847,20 @@ namespace Tinode.ChatBot
                         if ((response.Pres.What == ServerPres.Types.What.On || response.Pres.What == ServerPres.Types.What.Msg) && !subscriptions.ContainsKey(response.Pres.Src))
                         {
                             ClientPost(Subscribe(response.Pres.Src));
+
                         }
                         else if (response.Pres.What == ServerPres.Types.What.Off && subscriptions.ContainsKey(response.Pres.Src))
                         {
                             ClientPost(Leave(response.Pres.Src));
                         }
                     }
+
+                    OnServerPresEvent(new ServerPresEventArgs(response.Pres.Clone()));
+                }
+                else if (response.Meta!=null)
+                {
+                    OnGetMeta(response.Meta);
+                    OnServerMetaEvent(new ServerMetaEventArgs(response.Meta.Clone()));
                 }
             }
         }
