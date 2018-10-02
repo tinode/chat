@@ -124,16 +124,20 @@ def accMsg(id, user, scheme, secret, uname, password, do_login, fn, photo, priva
         public=public, private=private), cred=parse_cred(cred)), on_behalf_of=default_user)
 
 def loginMsg(id, scheme, secret, cred, uname, password):
-    if secret == None and uname != None:
+    if secret == None:
+        if uname == None:
+            uname = ''
         if password == None:
             password = ''
         secret = str(uname) + ":" + str(password)
+        secret = secret.encode('utf-8')
+    else:
+        # Assuming secret is a base64-encoded string
+        secret = base64.b64decode(secret)
 
-    if type(secret) is str:
-        secret=secret.encode('utf-8')
     onCompletion[str(id)] = lambda params: save_cookie(params)
-    return pb.ClientMsg(login=pb.ClientLogin(id=str(id), scheme=scheme,
-        secret=secret, cred=parse_cred(cred)))
+    return pb.ClientMsg(login=pb.ClientLogin(id=str(id), scheme=scheme, secret=secret,
+        cred=parse_cred(cred)))
 
 def subMsg(id, topic, fn, photo, private, auth, anon, mode, tags, get_query):
     if not topic:
@@ -543,8 +547,6 @@ if __name__ == '__main__':
 
     schema = None
     secret = None
-
-    stdoutln(args.no_login)
 
     if not args.no_login:
         if args.login_token:
