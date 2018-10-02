@@ -36,7 +36,6 @@ func (*grpcNodeServer) MessageLoop(stream pbx.Node_MessageLoopServer) error {
 	defer func() {
 		sess.closeGrpc()
 		sess.cleanUp()
-		log.Println("grpc exited", sess.sid)
 	}()
 
 	go sess.writeGrpcLoop()
@@ -47,9 +46,10 @@ func (*grpcNodeServer) MessageLoop(stream pbx.Node_MessageLoopServer) error {
 			return nil
 		}
 		if err != nil {
+			log.Println("grpc: recv", sess.sid, err)
 			return err
 		}
-		log.Println("grpc in:", truncateStringIfTooLong(in.String()))
+		log.Println("grpc in:", truncateStringIfTooLong(in.String()), sess.sid)
 		sess.dispatch(pbCliDeserialize(in))
 
 		sess.lock.Lock()
@@ -77,7 +77,7 @@ func (sess *Session) writeGrpcLoop() {
 				return
 			}
 			if err := grpcWrite(sess, msg); err != nil {
-				log.Println("g.writeGrpcLoop", err)
+				log.Println("grpc: write", sess.sid, err)
 				return
 			}
 		case msg := <-sess.stop:
@@ -112,7 +112,7 @@ func serveGrpc(addr string) (*grpc.Server, error) {
 		return nil, err
 	}
 
-	srv := grpc.NewServer()
+	srv := grpc.NewServer(grpc.MaxRecvMsgSize(int(globals.maxMessageSize)))
 	pbx.RegisterNodeServer(srv, &grpcNodeServer{})
 	log.Printf("gRPC server is registered at [%s]", addr)
 

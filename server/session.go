@@ -532,7 +532,24 @@ func (s *Session) hello(msg *ClientComMessage) {
 // Account creation
 func (s *Session) acc(msg *ClientComMessage) {
 
-	authhdl := store.GetAuthHandler(msg.Acc.Scheme)
+	// If token is provided, get the user ID from it.
+	var rec *auth.Rec
+	if msg.Acc.Token != nil {
+		if !s.uid.IsZero() {
+			s.queueOut(ErrAlreadyAuthenticated(msg.Acc.Id, "", msg.timestamp))
+			return
+		}
+
+		var err error
+		rec, _, err = store.GetLogicalAuthHandler("token").Authenticate(msg.Acc.Token)
+		if err != nil {
+			s.queueOut(decodeStoreError(err, msg.Acc.Id, "", msg.timestamp,
+				map[string]interface{}{"what": "auth"}))
+			return
+		}
+	}
+
+	authhdl := store.GetLogicalAuthHandler(msg.Acc.Scheme)
 	if strings.HasPrefix(msg.Acc.User, "new") {
 		// New account
 
@@ -645,10 +662,15 @@ func (s *Session) acc(msg *ClientComMessage) {
 		}
 
 		var validated []string
+		tmpToken, _, _ := store.GetLogicalAuthHandler("token").GenSecret(&auth.Rec{
+			Uid:       user.Uid(),
+			AuthLevel: auth.LevelNone,
+			Lifetime:  time.Hour * 24,
+			Features:  auth.FeatureNoLogin})
 		for i := range creds {
 			cr := &creds[i]
 			vld := store.GetValidator(cr.Method)
-			if err := vld.Request(user.Uid(), cr.Value, s.lang, cr.Params, cr.Response); err != nil {
+			if err := vld.Request(user.Uid(), cr.Value, s.lang, cr.Response, tmpToken); err != nil {
 				log.Println("Failed to save or validate credential", err)
 				// Delete incomplete user record.
 				store.Users.Delete(user.Uid(), false)
@@ -691,14 +713,24 @@ func (s *Session) acc(msg *ClientComMessage) {
 	} else {
 		// Existing account.
 
-		if s.uid.IsZero() {
-			log.Println("acc failed: not a new account and no valid UID", s.sid)
+		if s.uid.IsZero() && rec == nil {
+			// Session is not authenticated and no token provided.
+			log.Println("acc failed: not a new account and not authenticated", s.sid)
 			s.queueOut(ErrPermissionDenied(msg.id, "", msg.timestamp))
+			return
+		} else if msg.from != "" && rec != nil {
+			// Two UIDs: one from msg.from, one from token. Ambigous, reject.
+			log.Println("acc failed: both authenticated session and token", s.sid)
+			s.queueOut(ErrMalformed(msg.id, "", msg.timestamp))
 			return
 		}
 
 		userId := msg.from
 		authLvl := auth.Level(msg.authLvl)
+		if rec != nil {
+			userId = rec.Uid.UserId()
+			authLvl = rec.AuthLevel
+		}
 		if msg.Acc.User != "" && msg.Acc.User != userId {
 			if s.authLvl != auth.LevelRoot {
 				log.Println("acc failed: attempt to change another's account by non-root", s.sid)
@@ -759,12 +791,17 @@ func (s *Session) acc(msg *ClientComMessage) {
 func (s *Session) login(msg *ClientComMessage) {
 	// msg.from is ignored here
 
+	if msg.Login.Scheme == "reset" {
+		s.queueOut(decodeStoreError(s.authSecretReset(msg.Login.Secret), msg.Login.Id, "", msg.timestamp, nil))
+		return
+	}
+
 	if !s.uid.IsZero() {
 		s.queueOut(ErrAlreadyAuthenticated(msg.id, "", msg.timestamp))
 		return
 	}
 
-	handler := store.GetAuthHandler(msg.Login.Scheme)
+	handler := store.GetLogicalAuthHandler(msg.Login.Scheme)
 	if handler == nil {
 		log.Println("Unknown authentication scheme", msg.Login.Scheme)
 		s.queueOut(ErrAuthUnknownScheme(msg.id, "", msg.timestamp))
@@ -784,7 +821,7 @@ func (s *Session) login(msg *ClientComMessage) {
 	}
 
 	var missing []string
-	if rec.Features&auth.Validated == 0 {
+	if rec.Features&auth.FeatureValidated == 0 {
 		missing, err = s.getValidatedGred(rec.Uid, rec.AuthLevel, msg.Login.Cred)
 		if err == nil {
 			_, missing = stringSliceDelta(globals.authValidators[rec.AuthLevel], missing)
@@ -798,12 +835,53 @@ func (s *Session) login(msg *ClientComMessage) {
 	}
 }
 
+// authSecretReset resets an authentication secret;
+//  params: "auth-method-to-reset:credential-method:credential-value".
+func (s *Session) authSecretReset(params []byte) error {
+	var authScheme, credMethod, credValue string
+	if parts := strings.Split(string(params), ":"); len(parts) == 3 {
+		authScheme, credMethod, credValue = parts[0], parts[1], parts[2]
+	} else {
+		return types.ErrMalformed
+	}
+
+	// Tehnically we don't need to check it here, but we are going to mail the 'authName' string to the user.
+	// We have to make sure it does not contain any exploits. This is the simplest check.
+	if hdl := store.GetLogicalAuthHandler(authScheme); hdl == nil {
+		return types.ErrUnsupported
+	}
+	validator := store.GetValidator(credMethod)
+	if validator == nil {
+		return types.ErrUnsupported
+	}
+	uid, err := store.Users.GetByCred(credMethod, credValue)
+	if err != nil {
+		return err
+	}
+	if uid.IsZero() {
+		return types.ErrNotFound
+	}
+
+	token, _, err := store.GetLogicalAuthHandler("token").GenSecret(&auth.Rec{
+		Uid:       uid,
+		AuthLevel: auth.LevelNone,
+		Lifetime:  time.Hour * 24,
+		Features:  auth.FeatureNoLogin})
+
+	if err != nil {
+		return err
+	}
+	log.Println("calling validator.ResetSecret", credValue, authScheme, uid)
+	return validator.ResetSecret(credValue, authScheme, s.lang, token)
+}
+
 // onLogin performs steps after successful authentication.
 func (s *Session) onLogin(msgID string, timestamp time.Time, rec *auth.Rec, missing []string) *ServerComMessage {
 
 	var reply *ServerComMessage
 	var params map[string]interface{}
-	var features auth.Feature
+
+	features := rec.Features
 
 	params = map[string]interface{}{
 		"user":    rec.Uid.UserId(),
@@ -818,10 +896,13 @@ func (s *Session) onLogin(msgID string, timestamp time.Time, rec *auth.Rec, miss
 
 		reply = NoErr(msgID, "", timestamp)
 
-		// Authenticate the session.
-		s.uid = rec.Uid
-		s.authLvl = rec.AuthLevel
-		features = auth.Validated
+		// Check if the token is suitable for session authentication.
+		if features&auth.FeatureNoLogin == 0 {
+			// Authenticate the session.
+			s.uid = rec.Uid
+			s.authLvl = rec.AuthLevel
+		}
+		features |= auth.FeatureValidated
 
 		if len(rec.Tags) > 0 {
 			if err := store.Users.Update(rec.Uid,
@@ -847,7 +928,7 @@ func (s *Session) onLogin(msgID string, timestamp time.Time, rec *auth.Rec, miss
 	// GenSecret fails only if tokenLifetime is < 0. It can't be < 0 here,
 	// otherwise login would have failed earlier.
 	rec.Features = features
-	params["token"], params["expires"], _ = store.GetAuthHandler("token").GenSecret(rec)
+	params["token"], params["expires"], _ = store.GetLogicalAuthHandler("token").GenSecret(rec)
 
 	reply.Ctrl.Params = params
 	return reply

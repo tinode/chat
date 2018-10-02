@@ -111,7 +111,7 @@ type MsgAccCred struct {
 	Params interface{} `json:"params,omitempty"`
 }
 
-// MsgClientAcc is a user creation message {acc}.
+// MsgClientAcc is an {acc} message for creating or updating a user account.
 type MsgClientAcc struct {
 	// Message Id
 	Id string `json:"id,omitempty"`
@@ -120,6 +120,8 @@ type MsgClientAcc struct {
 	// Authentication level of the user when UserID is set and not equal to the current user.
 	// Either "", "auth" or "anon". Default: ""
 	AuthLevel string
+	// Authentication token for resetting the password and maybe other one-time actions.
+	Token []byte `json:"token,omitempty"`
 	// The initial authentication scheme the account can use
 	Scheme string `json:"scheme,omitempty"`
 	// Shared secret
@@ -130,7 +132,7 @@ type MsgClientAcc struct {
 	Tags []string `json:"tags,omitempty"`
 	// User initialization data when creating a new user, otherwise ignored
 	Desc *MsgSetDesc `json:"desc,omitempty"`
-	// Credntials to verify (email or phone)
+	// Credentials to verify (email or phone or captcha)
 	Cred []MsgAccCred `json:"cred,omitempty"`
 }
 
@@ -142,7 +144,7 @@ type MsgClientLogin struct {
 	Scheme string `json:"scheme,omitempty"`
 	// Shared secret
 	Secret []byte `json:"secret"`
-	// Credntials to verify (email or phone)
+	// Credntials to verify (email or phone or captcha etc.)
 	Cred []MsgAccCred `json:"cred,omitempty"`
 }
 

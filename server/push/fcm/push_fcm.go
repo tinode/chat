@@ -182,23 +182,27 @@ func sendNotifications(rcpt *push.Receipt, config *configType) {
 				}
 				_, err := handler.client.Send(ctx, &msg)
 				if err != nil {
-					if fcm.IsRegistrationTokenNotRegistered(err) {
-						// Token is no longer valid.
-						store.Devices.Delete(uid, d.DeviceId)
-						log.Println("fcm invalid token ", err)
-					} else if fcm.IsMessageRateExceeded(err) ||
+					if fcm.IsMessageRateExceeded(err) ||
 						fcm.IsServerUnavailable(err) ||
 						fcm.IsInternal(err) ||
 						fcm.IsUnknown(err) {
 						// Transient errors. Stop sending this batch.
 						log.Println("fcm transient failure", err)
 						return
-					} else if fcm.IsMismatchedCredential(err) || fcm.IsInvalidArgument(err) {
+					}
+
+					if fcm.IsMismatchedCredential(err) || fcm.IsInvalidArgument(err) {
 						// Config errors
 						log.Println("fcm push failed", err)
 						return
+					}
+
+					if fcm.IsRegistrationTokenNotRegistered(err) {
+						// Token is no longer valid.
+						store.Devices.Delete(uid, d.DeviceId)
+						log.Println("fcm invalid token", err)
 					} else {
-						log.Println("fcm push ", err)
+						log.Println("fcm push", err)
 					}
 				}
 			}

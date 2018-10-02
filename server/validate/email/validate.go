@@ -4,6 +4,7 @@ package email
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	ht "html/template"
@@ -24,17 +25,20 @@ import (
 
 // Validator configuration.
 type validator struct {
-	HostUrl        string `json:"host_url"`
-	TemplateFile   string `json:"msg_body_templ"`
-	Subject        string `json:"msg_subject"`
-	SendFrom       string `json:"sender"`
-	SenderPassword string `json:"sender_password"`
-	DebugResponse  string `json:"debug_response"`
-	MaxRetries     int    `json:"max_retries"`
-	SMTPAddr       string `json:"smtp_server"`
-	SMTPPort       string `json:"smtp_port"`
-	htmlTempl      *ht.Template
-	auth           smtp.Auth
+	HostUrl             string `json:"host_url"`
+	ValidationTemplFile string `json:"validation_body_templ"`
+	ResetTemplFile      string `json:"reset_body_templ"`
+	ValidationSubject   string `json:"validation_subject"`
+	ResetSubject        string `json:"reset_subject"`
+	SendFrom            string `json:"sender"`
+	SenderPassword      string `json:"sender_password"`
+	DebugResponse       string `json:"debug_response"`
+	MaxRetries          int    `json:"max_retries"`
+	SMTPAddr            string `json:"smtp_server"`
+	SMTPPort            string `json:"smtp_port"`
+	htmlValidationTempl *ht.Template
+	htmlResetTempl      *ht.Template
+	auth                smtp.Auth
 }
 
 const (
@@ -65,14 +69,24 @@ func (v *validator) Init(jsonconf string) error {
 
 	// If a relative path is provided, try to resolve it relative to the exec file location,
 	// not whatever directory the user is in.
-	if !filepath.IsAbs(v.TemplateFile) {
+	if !filepath.IsAbs(v.ValidationTemplFile) {
 		basepath, err := os.Executable()
 		if err == nil {
-			v.TemplateFile = filepath.Join(filepath.Dir(basepath), v.TemplateFile)
+			v.ValidationTemplFile = filepath.Join(filepath.Dir(basepath), v.ValidationTemplFile)
+		}
+	}
+	if !filepath.IsAbs(v.ResetTemplFile) {
+		basepath, err := os.Executable()
+		if err == nil {
+			v.ResetTemplFile = filepath.Join(filepath.Dir(basepath), v.ResetTemplFile)
 		}
 	}
 
-	v.htmlTempl, err = ht.ParseFiles(v.TemplateFile)
+	v.htmlValidationTempl, err = ht.ParseFiles(v.ValidationTemplFile)
+	if err != nil {
+		return err
+	}
+	v.htmlResetTempl, err = ht.ParseFiles(v.ResetTemplFile)
 	if err != nil {
 		return err
 	}
@@ -125,26 +139,29 @@ func (v *validator) PreCheck(cred string, params interface{}) error {
 }
 
 // Send a request for confirmation to the user: makes a record in DB  and nothing else.
-func (v *validator) Request(user t.Uid, email, lang string, params interface{}, resp string) error {
-
+func (v *validator) Request(user t.Uid, email, lang, resp string, tmpToken []byte) error {
 	// Email validator cannot accept an immmediate response.
 	if resp != "" {
 		return t.ErrFailed
 	}
+
+	token := make([]byte, base64.URLEncoding.EncodedLen(len(tmpToken)))
+	base64.URLEncoding.Encode(token, tmpToken)
 
 	// Generate expected response as a random numeric string between 0 and 999999
 	resp = strconv.FormatInt(int64(rand.Intn(maxCodeValue)), 10)
 	resp = strings.Repeat("0", codeLength-len(resp)) + resp
 
 	body := new(bytes.Buffer)
-	if err := v.htmlTempl.Execute(body, map[string]interface{}{
+	if err := v.htmlValidationTempl.Execute(body, map[string]interface{}{
+		"Token":   string(token),
 		"Code":    resp,
 		"HostUrl": v.HostUrl}); err != nil {
 		return err
 	}
 
 	// Send email without blocking. Email sending may take long time.
-	go v.send(email, v.Subject, string(body.Bytes()))
+	go v.send(email, v.ValidationSubject, string(body.Bytes()))
 
 	return store.Users.SaveCred(&t.Credential{
 		User:   user.String(),
@@ -152,6 +169,24 @@ func (v *validator) Request(user t.Uid, email, lang string, params interface{}, 
 		Value:  email,
 		Resp:   resp,
 	})
+}
+
+// ResetSecret sends a message with instructions for resetting an authentication secret.
+func (v *validator) ResetSecret(email, scheme, lang string, tmpToken []byte) error {
+	token := make([]byte, base64.URLEncoding.EncodedLen(len(tmpToken)))
+	base64.URLEncoding.Encode(token, tmpToken)
+	body := new(bytes.Buffer)
+	if err := v.htmlResetTempl.Execute(body, map[string]interface{}{
+		"Token":   string(token),
+		"Scheme":  scheme,
+		"HostUrl": v.HostUrl}); err != nil {
+		return err
+	}
+
+	// Send email without blocking. Email sending may take long time.
+	go v.send(email, v.ResetSubject, string(body.Bytes()))
+
+	return nil
 }
 
 // Find if user exists in the database, and if so return OK.

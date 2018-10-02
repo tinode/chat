@@ -36,7 +36,7 @@ func genDb(reset bool, config string, data *Data) {
 		return
 	}
 
-	err = store.InitDb("", true)
+	err = store.InitDb(config, true)
 	if err != nil {
 		log.Fatal("Failed to init DB:", err)
 	}

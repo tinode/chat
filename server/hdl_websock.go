@@ -38,8 +38,7 @@ func (sess *Session) closeWS() {
 func (sess *Session) readLoop() {
 	defer func() {
 		sess.closeWS()
-		count := sess.cleanUp()
-		log.Println("ws.readLoop exited", sess.sid, count)
+		sess.cleanUp()
 	}()
 
 	sess.ws.SetReadLimit(globals.maxMessageSize)
@@ -56,7 +55,7 @@ func (sess *Session) readLoop() {
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure,
 				websocket.CloseNormalClosure) {
-				log.Println("ws.readLoop", sess.sid, err)
+				log.Println("ws: readLoop", sess.sid, err)
 			}
 			return
 		}
@@ -72,7 +71,6 @@ func (sess *Session) writeLoop() {
 		ticker.Stop()
 		// Break readLoop.
 		sess.closeWS()
-		log.Println("ws.writeLoop exited", sess.sid)
 	}()
 
 	for {
@@ -85,7 +83,7 @@ func (sess *Session) writeLoop() {
 			if err := wsWrite(sess.ws, websocket.TextMessage, msg); err != nil {
 				if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure,
 					websocket.CloseNormalClosure) {
-					log.Println("ws.writeLoop", sess.sid, err)
+					log.Println("ws: writeLoop", sess.sid, err)
 				}
 				return
 			}
@@ -103,7 +101,7 @@ func (sess *Session) writeLoop() {
 			if err := wsWrite(sess.ws, websocket.PingMessage, nil); err != nil {
 				if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure,
 					websocket.CloseNormalClosure) {
-					log.Println("ws.writeLoop: ping", sess.sid, err)
+					log.Println("ws: writeLoop ping", sess.sid, err)
 				}
 				return
 			}

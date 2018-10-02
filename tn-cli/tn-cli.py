@@ -121,7 +121,7 @@ def accMsg(id, user, scheme, secret, uname, password, do_login, fn, photo, priva
     return pb.ClientMsg(acc=pb.ClientAcc(id=str(id), user_id=user,
         scheme=scheme, secret=secret, login=do_login, tags=tags.split(",") if tags else None,
         desc=pb.SetDesc(default_acs=pb.DefaultAcsMode(auth=auth, anon=anon),
-        public=public, private=private, cred=parse_cred(cred))), on_behalf_of=default_user)
+        public=public, private=private), cred=parse_cred(cred)), on_behalf_of=default_user)
 
 def loginMsg(id, scheme, secret, cred, uname, password):
     if secret == None and uname != None:

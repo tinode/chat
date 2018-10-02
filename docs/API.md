@@ -12,7 +12,7 @@
 			- [Creating an Account](#creating-an-account)
 			- [Logging in](#logging-in)
 			- [Changing Authentication Parameters](#changing-authentication-parameters)
-			- [Password Recovery](#password-recovery)
+			- [Resetting a Password](#resetting-a-password)
 		- [Credentials](#credentials)
 		- [Access control](#access-control)
 	- [Topics](#topics)
@@ -169,25 +169,32 @@ User may optionally set `{acc login=true}` to use the new account for immediate 
 
 #### Logging in
 
-Logging in is possible with `basic` and `token` only. Response to any login is a `{ctrl}` message with either a code 200 and a token which can be used in subsequent logins with `token` authentication, or a code 300 request for additional information, such as verifying credentials or responding to a method-dependent challenge in multi-step authentication, or a code 4xx error.
+Logging in is performed by issuing a `{login}` request. Logging in is possible with `basic` and `token` only. Response to any login is a `{ctrl}` message with either a code 200 and a token which can be used in subsequent logins with `token` authentication, or a code 300 request for additional information, such as verifying credentials or responding to a method-dependent challenge in multi-step authentication, or a code 4xx error.
 
 Token has server-configured expiration time so it needs to be periodically refreshed.
 
 #### Changing Authentication Parameters
 
-User may change authentication parameters, such as changing login and password, by issuing an `{acc}` request on an already authenticated session. Only `basic` authentication currently supports changing parameters:
+User may change authentication parameters, such as changing login and password, by issuing an `{acc}` request. Only `basic` authentication currently supports changing parameters:
 ```js
 acc: {
   id: "1a2b3", // string, client-provided message id, optional
-  scheme: "basic", // authentication scheme being updated
+	user: "usr2il9suCbuko", // user, who is being affected by the change, optional
+	token: "XMg...g1Gp8+BO0=", // authentication token if the session is not yet authenticated, optional.
+  scheme: "basic", // authentication scheme being updated.
   secret: btoa("new_username:new_password") // new parameters
 }
 ```
 In order to change just the password, `username` should be left empty, i.e. `secret: btoa(":new_password")`.
 
-#### Password Recovery
+If the session is not authenticated, the request must include a `token`. It can be a regular authentication token obtained during login, or a restricted token received through [Resetting a Password](#resetting-a-password) process. If the session is authenticated, the token must not be included. If the request is authenticated for access level `ROOT`, then the `user` may be set to a valid ID of another user. Otherwise it must be blank (defaulting to the current user) or equal to the ID of the current user.
 
-Currently not supported.
+
+#### Resetting a Password
+
+To reset a password (or any other authentication secret, if such action is supported by the authenticator), one sends a `{login}` message with the `scheme` set to `reset` and the `secret` containing a base64-encoded string "`authentication scheme to reset secret for`:`reset method`:`reset method value`". Most basic case of resetting a password by email is `secret: btoa("basic:email:jdoe@example.com")`, where `jdoe@example.com` is an earlier validated user's email.
+
+If the email matches the registration, the server will send a message using specified method an address with instructions for resetting the secret. The email contains a restricted security token which the user can include into an `{acc}` request with the new secret as described in [Changing Authentication Parameters](#changing-authentication-parameters).
 
 ### Credentials
 
@@ -451,7 +458,7 @@ pub: {
   topic: "grpnG99YhENiQU",
   head: {
     attachments: ["/v0/file/s/sJOD_tZDPz0.jpg"],
-	mime: "text/x-drafty"
+	  mime: "text/x-drafty"
   },
   content: {
     ent: [
@@ -507,9 +514,9 @@ hi: {
   ver: "0.14",   // string, version of the wire protocol supported by the client, required
   ua: "JS/1.0 (Windows 10)", // string, user agent identifying client software,
                    // optional
-  dev: "L1iC2dNtk2", // string, unique value which identifies this specific
+  dev: "L1iC2...dNtk2", // string, unique value which identifies this specific
 				   // connected device for the purpose of push notifications; not
-				   // interpreted by the server; optional
+				   // interpreted by the server.
 				   // see [Push notifications support](#push-notifications-support); optional
   lang: "EN" 	   // human language of the client device; optional
 }
@@ -524,6 +531,8 @@ Message `{acc}` creates users or updates `tags` or authentication credentials `s
 acc: {
   id: "1a2b3", // string, client-provided message id, optional
   user: "new", // string, "new" to create a new user, default: current user, optional
+	token: "XMgS...8+BO0=", // string, authentication token to use for the request if the
+							// session is not authenticated, optional
   scheme: "basic", // authentication scheme for this account, required;
                // "basic" and "anon" are currently supported for account creation.
   secret: btoa("username:password"), // string, base64 encoded secret for the chosen
@@ -572,8 +581,8 @@ Login is used to authenticate the current session.
 ```js
 login: {
   id: "1a2b3",     // string, client-provided message id, optional
-  scheme: "basic", // string, authentication scheme, optional; "basic" and "token"
-                   // are currently supported
+  scheme: "basic", // string, authentication scheme; "basic",
+									 // "token", and "reset" are currently supported
   secret: btoa("username:password"), // string, base64-encoded secret for the chosen
                   // authentication scheme, required
   cred: [
@@ -587,7 +596,7 @@ login: {
 ```
 The `basic` authentication scheme expects `secret` to be a base64-encoded string of a string composed of a user name followed by a colon `:` followed by a plan text password. User name in the `basic` scheme must not contain colon character ':' (ASCII 0x3A). The `token` expects secret to be a previously obtained security token.
 
-The only supported authentication schemes are `basic` and `token`. Although `anonymous` scheme can be used to create accounts, it cannot be used for logging in.
+The only supported authentication schemes are `basic` and `token`. Although `anon` scheme can be used to create accounts, it cannot be used for logging in. A scheme `reset` can be used for password reset.
 
 Server responds to a `{login}` packet with a `{ctrl}` message. The `params` of the message contains the id of the logged in user as `user`. The `token` contains an encrypted string which can be used for authentication. Expiration time of the token is passed as `expires`.
 
@@ -719,9 +728,19 @@ pub: {
 }
 ```
 
-Topic subscribers receive the `content` in the `{data}` message. By default the originating session gets a copy of `{data}` like any other session currently attached to the topic. If for some reason the originating session does not want to receive the copy of the data it just published, set `noecho` to `true`.
+Topic subscribers receive the `content` in the [`{data}`](#data) message. By default the originating session gets a copy of `{data}` like any other session currently attached to the topic. If for some reason the originating session does not want to receive the copy of the data it just published, set `noecho` to `true`.
 
 See [Format of Content](#format-of-content) for `content` format considerations.
+
+The following values are defined for the `head` field:
+
+ * `attachments`: an array of paths indicating media attached to this message `["/v0/file/s/sJOD_tZDPz0.jpg"]`.
+ * `forwarded`: an indicator that the message was forwarded, a unique ID of the original message, `"grp1XUtEhjv6HND:123"`.
+ * `mime`: MIME-type of message contents, `"text/x-drafty"`; null value is interpreted as `"text/plain"`.
+ * `reply`: an indicator that the message is a reply to another message, a unique ID of the original message, `"grp1XUtEhjv6HND:123"`.
+ * `thread`: an indicator that the message is a part of a conversation thread, a unique id of the first message in thread, `"grp1XUtEhjv6HND:123"`.
+
+The unique message ID should be formed as `<topic_name>:<seqId>` whenever possible, such as `"grp1XUtEhjv6HND:123"`.
 
 #### `{get}`
 
@@ -911,7 +930,12 @@ data: {
 }
 ```
 
-Data messages have a `seq` field which holds a sequential numeric ID generated by the server. The IDs are guaranteed to be unique within a topic. IDs start from 1 and sequentially increment with every successful `{pub}` message received by the topic. See [Format of Content](#format-of-content) for `content` format considerations.
+Data messages have a `seq` field which holds a sequential numeric ID generated by the server. The IDs are guaranteed to be unique within a topic. IDs start from 1 and sequentially increment with every successful `{pub}`](#pub) message received by the topic.
+
+See [Format of Content](#format-of-content) for `content` format considerations.
+
+See [`{pub}`](#pub) message for the possible values of the `head` field.
+
 
 #### `{ctrl}`
 

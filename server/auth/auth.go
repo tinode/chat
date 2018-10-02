@@ -55,8 +55,10 @@ func ParseAuthLevel(name string) Level {
 type Feature uint16
 
 const (
-	// Validated bit is set if user's credentials are already validated.
-	Validated Feature = 1 << iota
+	// FeatureValidated bit is set if user's credentials are already validated.
+	FeatureValidated Feature = 1 << iota
+	// FeatureNoLogin is set if the token should not be used to permanently authenticate a session.
+	FeatureNoLogin
 )
 
 // Rec is an authentication record.

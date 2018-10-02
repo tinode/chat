@@ -83,7 +83,6 @@ func (a *adapter) Open(jsonconfig string) error {
 		// missing DB is OK.
 		err = nil
 	}
-
 	return err
 }
 
@@ -109,7 +108,7 @@ func (a *adapter) getDbVersion() (int, error) {
 	var vers int
 	err := a.db.Get(&vers, "SELECT `value` FROM kvmeta WHERE `key`='version'")
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if isMissingDb(err) || err == sql.ErrNoRows {
 			err = errors.New("Database not initialized")
 		}
 		return -1, err
@@ -673,6 +672,21 @@ func (a *adapter) UserUpdate(uid t.Uid, update map[string]interface{}) error {
 	}
 
 	return tx.Commit()
+}
+
+// UserGetByCred returns user ID for the given validated credential.
+func (a *adapter) UserGetByCred(method, value string) (t.Uid, error) {
+	var decodedUid int64
+	err := a.db.Get(&decodedUid, "SELECT userid FROM credentials WHERE synthetic=?", method+":"+value)
+	if err == nil {
+		return store.EncodeUid(decodedUid), nil
+	}
+
+	if err == sql.ErrNoRows {
+		// Clear the error if user does not exist
+		return t.ZeroUid, nil
+	}
+	return t.ZeroUid, err
 }
 
 // *****************************

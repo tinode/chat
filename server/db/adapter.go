@@ -39,6 +39,8 @@ type Adapter interface {
 	UserDelete(id t.Uid, soft bool) error
 	// UserUpdate updates user record
 	UserUpdate(uid t.Uid, update map[string]interface{}) error
+	// UserGetByCred returns user ID for the given validated credential.
+	UserGetByCred(method, value string) (t.Uid, error)
 
 	// Credential management
 
