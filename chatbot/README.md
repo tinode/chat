@@ -1,4 +1,4 @@
 # Tinode ChatBot Examples
 
 * [Python chatbot](python/)
-* [C# .Net/.NetCore chatbot](csharp/)
+* [C# .Net/.NetCore chatbot](https://github.com/tinode/csharpbot)
