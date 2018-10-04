@@ -70,9 +70,10 @@ func (ss *SessionStore) NewSession(conn interface{}, sid string) (*Session, int)
 	}
 
 	ss.lock.Lock()
+
 	ss.sessCache[s.sid] = &s
 	count := len(ss.sessCache)
-
+	var expired []*Session
 	if s.proto == LPOLL {
 		// Only LP sessions need to be sorted by last active
 		s.lpTracker = ss.lru.PushFront(&s)
@@ -84,14 +85,20 @@ func (ss *SessionStore) NewSession(conn interface{}, sid string) (*Session, int)
 			if sess.lastTouched.Before(expire) {
 				ss.lru.Remove(elem)
 				delete(ss.sessCache, sess.sid)
-				sess.cleanUp()
+				expired = append(expired, sess)
 			} else {
 				break // don't need to traverse further
 			}
 		}
+		count -= len(expired)
 	}
-
 	ss.lock.Unlock()
+
+	for _, sess := range expired {
+		// This locks the session. Thus cleaning up outside of the
+		// sessionStore lock. Otherwise deadlock.
+		sess.cleanUp(true)
+	}
 
 	return &s, count
 }

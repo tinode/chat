@@ -38,7 +38,7 @@ func (sess *Session) closeWS() {
 func (sess *Session) readLoop() {
 	defer func() {
 		sess.closeWS()
-		sess.cleanUp()
+		sess.cleanUp(false)
 	}()
 
 	sess.ws.SetReadLimit(globals.maxMessageSize)

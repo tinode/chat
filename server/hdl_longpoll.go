@@ -62,7 +62,11 @@ func (sess *Session) readOnce(wrt http.ResponseWriter, req *http.Request) (int, 
 	req.Body = http.MaxBytesReader(wrt, req.Body, globals.maxMessageSize)
 	raw, err := ioutil.ReadAll(req.Body)
 	if err == nil {
+		// Locking-unlocking is needed because the client may issue multiple requests in parallel.
+		// Should not affect performance
+		sess.lock.Lock()
 		sess.dispatchRaw(raw)
+		sess.lock.Unlock()
 		return 0, nil
 	}
 

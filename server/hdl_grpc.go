@@ -35,7 +35,7 @@ func (*grpcNodeServer) MessageLoop(stream pbx.Node_MessageLoopServer) error {
 
 	defer func() {
 		sess.closeGrpc()
-		sess.cleanUp()
+		sess.cleanUp(false)
 	}()
 
 	go sess.writeGrpcLoop()

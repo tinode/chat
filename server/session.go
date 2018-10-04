@@ -203,12 +203,12 @@ func (s *Session) queueOutBytes(data []byte) bool {
 	return true
 }
 
-func (s *Session) cleanUp() int {
-	count := globals.sessionStore.Delete(s)
+func (s *Session) cleanUp(expired bool) {
+	if !expired {
+		globals.sessionStore.Delete(s)
+	}
 	globals.cluster.sessionGone(s)
 	s.unsubAll()
-
-	return count
 }
 
 // Message received, convert bytes to ClientComMessage and dispatch
@@ -245,13 +245,6 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 		s.queueOut(ErrPermissionDenied("", "", msg.timestamp))
 		log.Println("s.dispatch: non-root asigned msg.from", s.sid)
 		return
-	}
-
-	// Locking-unlocking is needed for long polling: the client may issue multiple requests in parallel.
-	// Should not affect performance
-	if s.proto == LPOLL {
-		s.lock.Lock()
-		defer s.lock.Unlock()
 	}
 
 	var resp *ServerComMessage
