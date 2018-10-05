@@ -8,8 +8,6 @@ import (
 	"log"
 	"mime"
 	"net/http"
-	"path"
-	"strings"
 	"sync/atomic"
 	"time"
 
@@ -51,12 +49,14 @@ type readerCounter struct {
 	reader io.Reader
 }
 
+// Read reads the bytes and records the number of read bytes.
 func (rc *readerCounter) Read(buf []byte) (int, error) {
 	n, err := rc.reader.Read(buf)
 	atomic.AddInt64(&rc.count, int64(n))
 	return n, err
 }
 
+// Init initializes the media handler.
 func (ah *awshandler) Init(jsconf string) error {
 	var err error
 	if err = json.Unmarshal([]byte(jsconf), &ah.conf); err != nil {
@@ -217,14 +217,9 @@ func (ah *awshandler) Delete(locations []string) error {
 	})
 }
 
+// GetIdFromUrl converts an attahment URL to a file UID.
 func (ah *awshandler) GetIdFromUrl(url string) types.Uid {
-	dir, fname := path.Split(path.Clean(url))
-
-	if dir != ah.conf.ServeURL {
-		return types.ZeroUid
-	}
-
-	return types.ParseUid(strings.Split(fname, ".")[0])
+	return media.GetIdFromUrl(url, ah.conf.ServeURL)
 }
 
 // getFileRecord given file ID reads file record from the database.

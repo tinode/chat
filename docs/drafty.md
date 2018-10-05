@@ -134,8 +134,12 @@ To generate a message with the file attachment shown as a downloadable file, use
 
 #### `MN`: mention such as [@alice](#)
 Mention `data` contains a single `val` field with ID of the mentioned user:
-`{ "tp":"MN", "data":{ "val":"usrFsk73jYRR" } }`
+```js
+{ "tp":"MN", "data":{ "val":"usrFsk73jYRR" } }
+```
 
 #### `HT`: hashtag, e.g. [#tinode](#)
 Hashtag `data` contains a single `val` field with the hashtag value which the client software needs to interpret, for instance it could be a search term:
-`{ "tp":"HT", "data":{ "val":"tinode" } }`
+```js
+{ "tp":"HT", "data":{ "val":"tinode" } }
+```

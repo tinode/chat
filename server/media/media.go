@@ -4,6 +4,8 @@ package media
 
 import (
 	"io"
+	"path"
+	"strings"
 
 	"github.com/tinode/chat/server/store/types"
 )
@@ -35,4 +37,15 @@ type Handler interface {
 
 	// GetIdFromUrl extracts file ID from download URL.
 	GetIdFromUrl(url string) types.Uid
+}
+
+// Helper method for extracting file ID from a URL.
+func GetIdFromUrl(url string, serveUrl string) types.Uid {
+	dir, fname := path.Split(path.Clean(url))
+
+	if dir != "" && dir != serveUrl {
+		return types.ZeroUid
+	}
+
+	return types.ParseUid(strings.Split(fname, ".")[0])
 }

@@ -10,9 +10,7 @@ import (
 	"log"
 	"mime"
 	"os"
-	"path"
 	"path/filepath"
-	"strings"
 
 	"github.com/tinode/chat/server/media"
 	"github.com/tinode/chat/server/store"
@@ -146,16 +144,9 @@ func (fh *fshandler) Delete(locations []string) error {
 	return nil
 }
 
+// GetIdFromUrl converts an attahment URL to a file UID.
 func (fh *fshandler) GetIdFromUrl(url string) types.Uid {
-	dir, fname := path.Split(path.Clean(url))
-
-	// Check path validity
-	if dir != fh.serveURL {
-		return types.ZeroUid
-	}
-
-	// Remove file extension and parse UID
-	return types.ParseUid(strings.Split(fname, ".")[0])
+	return media.GetIdFromUrl(url, fh.serveURL)
 }
 
 // getFileRecord given file ID reads file record from the database.

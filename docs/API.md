@@ -732,15 +732,20 @@ Topic subscribers receive the `content` in the [`{data}`](#data) message. By def
 
 See [Format of Content](#format-of-content) for `content` format considerations.
 
-The following values are defined for the `head` field:
+The following values are currently defined for the `head` field:
 
  * `attachments`: an array of paths indicating media attached to this message `["/v0/file/s/sJOD_tZDPz0.jpg"]`.
- * `forwarded`: an indicator that the message was forwarded, a unique ID of the original message, `"grp1XUtEhjv6HND:123"`.
+ * `forwarded`: an indicator that the message is a forwarded message, a unique ID of the original message, `"grp1XUtEhjv6HND:123"`.
+ * `hashtags`: an array of hashtags in the message without the leading `#` symbol: `["onehash", "twohash"]`.
+ * `mentions`: an array of user IDs mentioned (`@user_name`) in the message: `["usr1XUtEhjv6HND", "usr2il9suCbuko"]`.
  * `mime`: MIME-type of message contents, `"text/x-drafty"`; null value is interpreted as `"text/plain"`.
+ * `replace`: an indicator that the message is a correction/replacement for another message, a topic-unique ID of the message being updated/replaced, `":123"`
  * `reply`: an indicator that the message is a reply to another message, a unique ID of the original message, `"grp1XUtEhjv6HND:123"`.
- * `thread`: an indicator that the message is a part of a conversation thread, a unique id of the first message in thread, `"grp1XUtEhjv6HND:123"`.
+ * `thread`: an indicator that the message is a part of a conversation thread, a unique ID of the first message in the thread, `"grp1XUtEhjv6HND:123"`.
 
-The unique message ID should be formed as `<topic_name>:<seqId>` whenever possible, such as `"grp1XUtEhjv6HND:123"`.
+Application-specific fields should start with an `x-<application-name>-`. Although the server does not enforce this rule yet, it may start doing so in the future.
+
+The unique message ID should be formed as `<topic_name>:<seqId>` whenever possible, such as `"grp1XUtEhjv6HND:123"`. If the topic is omitted, i.e. `":123"`, it's assumed to be the current topic.
 
 #### `{get}`
 
