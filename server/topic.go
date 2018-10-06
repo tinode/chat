@@ -229,7 +229,7 @@ func (t *Topic) run(hub *Hub) {
 					uids = t.sessions[leave.sess]
 					delete(t.sessions, leave.sess)
 				} else {
-					// One user is unsubscribing.
+					// One user is leaving.
 					t.remSession(leave.sess, asUid)
 					if len(t.sessions) == 0 {
 						delete(t.sessions, leave.sess)
@@ -2348,9 +2348,10 @@ func (t *Topic) subsCount() int {
 func (t *Topic) addSession(s *Session, user types.Uid) types.UidSlice {
 	uids := t.sessions[s]
 	if uids == nil {
-		uids = make(types.UidSlice, 1)
+		uids = types.UidSlice{user}
+	} else {
+		uids.Add(user)
 	}
-	uids.Add(user)
 	t.sessions[s] = uids
 	return uids
 }
@@ -2361,7 +2362,11 @@ func (t *Topic) remSession(s *Session, user types.Uid) types.UidSlice {
 		return nil
 	}
 	uids.Rem(user)
-	t.sessions[s] = uids
+	if len(uids) > 0 {
+		t.sessions[s] = uids
+	} else {
+		delete(t.sessions, s)
+	}
 	return uids
 }
 
