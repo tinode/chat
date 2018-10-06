@@ -74,14 +74,20 @@ func (a *authenticator) AddRecord(rec *auth.Rec, secret []byte) (*auth.Rec, erro
 	if rec.Lifetime > 0 {
 		expires = time.Now().Add(rec.Lifetime).UTC().Round(time.Millisecond)
 	}
-	dup, err := store.Users.AddAuthRecord(rec.Uid, auth.LevelAuth, "basic", uname, passhash, expires)
+
+	authLevel := rec.AuthLevel
+	if authLevel == auth.LevelNone {
+		authLevel = auth.LevelAuth
+	}
+
+	dup, err := store.Users.AddAuthRecord(rec.Uid, authLevel, "basic", uname, passhash, expires)
 	if dup {
 		return nil, types.ErrDuplicate
 	} else if err != nil {
 		return nil, err
 	}
 
-	rec.AuthLevel = auth.LevelAuth
+	rec.AuthLevel = authLevel
 	if a.addToTags {
 		rec.Tags = []string{"basic:" + uname}
 	}

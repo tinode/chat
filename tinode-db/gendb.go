@@ -99,6 +99,13 @@ func genDb(reset bool, config string, data *Data) {
 			}
 		}
 
+		authLevel := auth.LevelAuth
+		if uu.AuthLevel != "" {
+			authLevel = auth.ParseAuthLevel(uu.AuthLevel)
+			if authLevel == auth.None {
+				log.Fatal("Unknown authLevel", uu.AuthLevel)
+			}
+		}
 		// Add authentication record
 		authHandler := store.GetAuthHandler("basic")
 		passwd := uu.Password
@@ -106,7 +113,7 @@ func genDb(reset bool, config string, data *Data) {
 			// Generate random password
 			passwd = getPassword(8)
 		}
-		if _, err := authHandler.AddRecord(&auth.Rec{Uid: user.Uid()},
+		if _, err := authHandler.AddRecord(&auth.Rec{Uid: user.Uid(), AuthLevel: authLevel},
 			[]byte(uu.Username+":"+passwd)); err != nil {
 
 			log.Fatal(err)

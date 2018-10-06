@@ -40,11 +40,11 @@ func (a Level) String() string {
 // ParseAuthLevel parses authentication level from a string.
 func ParseAuthLevel(name string) Level {
 	switch name {
-	case "anon":
+	case "anon", "ANON":
 		return LevelAnon
-	case "auth":
+	case "auth", "AUTH":
 		return LevelAuth
-	case "root":
+	case "root", "ROOT":
 		return LevelRoot
 	default:
 		return LevelNone

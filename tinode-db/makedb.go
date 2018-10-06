@@ -39,8 +39,9 @@ User object in data.json
    "private": {"comment": "some comment 123"},
    "public": {"fn": "Alice Johnson", "photo": "alice-64.jpg", "type": "jpg"},
    "state": 1,
+   "authLevel": "auth",
    "status": {
-    "text": "DND"
+     "text": "DND"
    },
    "username": "alice",
 	"addressBook": ["email:bob@example.com", "email:carol@example.com", "email:dave@example.com",
@@ -53,6 +54,7 @@ type User struct {
 	CreatedAt   string      `json:"createdAt"`
 	Email       string      `json:"email"`
 	Tel         string      `json:"tel"`
+	AuthLevel   string      `json:"authLevel"`
 	Username    string      `json:"username"`
 	Password    string      `json:"passhash"`
 	Private     tPrivate    `json:"private"`

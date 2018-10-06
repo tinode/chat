@@ -108,6 +108,7 @@
    "email": "xena@example.com",
    "tel": "17025550099",
    "passhash": "xena123",
+   "authLevel": "root",
    "private": {"comment": "No one knowns that Xena exists"},
    "public": {"fn": "Xena Pacifist Peasant"},
    "state": 1,

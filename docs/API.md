@@ -4,6 +4,7 @@
 	- [How it works?](#how-it-works)
 	- [General considerations](#general-considerations)
 	- [Connecting to the server](#connecting-to-the-server)
+	  - [gRPC](#grpc)
 		- [Websocket](#websocket)
 		- [Long polling](#long-polling)
 		- [Out of Band Large Files](#out-of-band-large-files)
@@ -96,7 +97,9 @@ In order to connect requests to responses, client may assign message IDs to all 
 
 ## Connecting to the server
 
-Client establishes a connection to the server over HTTP(S). Server offers the following endpoints:
+There are three ways to access the server over the network: websocket, long polling, and [gRPC](https://grpc.io/).
+
+When the client establishes a connection to the server over HTTP(S), such as over a websocket or long polling, the server offers the following endpoints:
  * `/v0/channels` for websocket connections
  * `/v0/channels/lp` for long polling
  * `/v0/file/u` for file uploads
@@ -112,9 +115,13 @@ A default API key is included with every demo app for convenience. Generate your
 
 Once the connection is opened, the client must issue a `{hi}` message to the server. Server responds with a `{ctrl}` message which indicates either success or an error. The `params` field of the response contains server's protocol version `"params":{"ver":"0.15"}` and may include other values.
 
+### gRPC
+
+See definition of the gRPC API in the [proto file](../pbx/model.proto). gRPC API is nearly identical to HTTP API with an exception that it allows the `root` user to send messages on behalf of other users.
+
 ### Websocket
 
-Messages are sent in text frames, one message per frame. Binary frames are reserved for future use. Server allows connections with any value in the `Origin` header.
+Messages are sent in text frames, one message per frame. Binary frames are reserved for future use. By default server allows connections with any value in the `Origin` header.
 
 ### Long polling
 
@@ -130,7 +137,9 @@ Large files are sent out of band using `HTTP POST` as `Content-Type: multipart/f
 
 User is meant to represent a person, an end-user: producer and consumer of messages.
 
-Users are assigned one of the two authentication level: authenticated or anonymous. When a connection is first established, the client application can only send either an `{acc}` or a `{login}` message. Sending a `{login}` message will authenticate the user or allow him to continue as anonymous.
+Users are generally assigned one of the two authentication levels: authenticated `auth` or anonymous `anon`. The third level `root` is only accessible over `gRPC` where it permits the `root` to send messages on behalf of other users.
+
+When a connection is first established, the client application can send either an `{acc}` or a `{login}` message which authenticates the user at one the levels.
 
 Each user is assigned a unique ID. The IDs are composed as `usr` followed by base64-encoded 64-bit numeric value, e.g. `usr2il9suCbuko`. Users also have the following properties:
 
@@ -138,8 +147,8 @@ Each user is assigned a unique ID. The IDs are composed as `usr` followed by bas
 * updated: timestamp of when user's `public` was last updated
 * username: unique string used in `basic` authentication; username is not accessible to other users
 * defacs: object describing user's default access mode for peer to peer conversations with authenticated and anonymous users; see [Access control](#access-control) for details
- * auth: default access mode for authenticated users
- * anon: default access for anonymous users
+  * auth: default access mode for authenticated `auth` users
+  * anon: default access for anonymous `anon` users
 * public: an application-defined object that describes the user. Anyone who can query user for `public` data.
 * private: an application-defined object that is unique to the current user and accessible only by the user.
 * tags: [discovery](#fnd-and-tags-finding-users-and-topics) and credentials.
