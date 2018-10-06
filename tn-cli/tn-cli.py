@@ -451,7 +451,7 @@ def gen_message(schema, secret):
                 yield cmd
 
         elif not output_queue.empty():
-            sys.stdout.write(output_queue.get())
+            sys.stdout.write("\r"+output_queue.get())
             sys.stdout.flush()
             print_prompt = True
 
@@ -558,7 +558,7 @@ if __name__ == '__main__':
         elif args.login_basic:
             """Use username:password"""
             schema = 'basic'
-            secret = args.login_basic.encode('utf-8')
+            secret = base64.b64encode(args.login_basic.encode('utf-8'))
             print("Logging in with login:password", args.login_basic)
 
         else:
