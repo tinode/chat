@@ -737,7 +737,7 @@ The following values are currently defined for the `head` field:
  * `attachments`: an array of paths indicating media attached to this message `["/v0/file/s/sJOD_tZDPz0.jpg"]`.
  * `forwarded`: an indicator that the message is a forwarded message, a unique ID of the original message, `"grp1XUtEhjv6HND:123"`.
  * `hashtags`: an array of hashtags in the message without the leading `#` symbol: `["onehash", "twohash"]`.
- * `mentions`: an array of user IDs mentioned (`@user_name`) in the message: `["usr1XUtEhjv6HND", "usr2il9suCbuko"]`.
+ * `mentions`: an array of user IDs mentioned (`@alice`) in the message: `["usr1XUtEhjv6HND", "usr2il9suCbuko"]`.
  * `mime`: MIME-type of message contents, `"text/x-drafty"`; null value is interpreted as `"text/plain"`.
  * `replace`: an indicator that the message is a correction/replacement for another message, a topic-unique ID of the message being updated/replaced, `":123"`
  * `reply`: an indicator that the message is a reply to another message, a unique ID of the original message, `"grp1XUtEhjv6HND:123"`.
