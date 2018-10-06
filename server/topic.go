@@ -2358,15 +2358,14 @@ func (t *Topic) remSession(s *Session, user types.Uid) types.UidSlice {
 		// One uid is removed
 		if len(uids) > 0 {
 			t.sessions[s] = uids
-			uids = types.UidSlice{user}
 		} else {
 			delete(t.sessions, s)
 		}
+		uids = types.UidSlice{user}
 	} else {
 		// No uids removed
 		uids = nil
 	}
-
 	return uids
 }
 
