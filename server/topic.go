@@ -223,21 +223,9 @@ func (t *Topic) run(hub *Hub) {
 
 			} else {
 				// Just leaving the topic without unsubscribing
-				var uids types.UidSlice
-				if asUid.IsZero() {
-					// The entire session is being dropped
-					uids = t.sessions[leave.sess]
-					delete(t.sessions, leave.sess)
-				} else {
-					// One user is leaving.
-					t.remSession(leave.sess, asUid)
-					if len(t.sessions) == 0 {
-						delete(t.sessions, leave.sess)
-					}
-					uids = append(uids, asUid)
-				}
+				removedUids := t.remSession(leave.sess, asUid)
 
-				for _, uid := range uids {
+				for _, uid := range removedUids {
 					pud := t.perUser[uid]
 					pud.online--
 					switch t.cat {
@@ -2177,9 +2165,8 @@ func (t *Topic) evictUser(uid types.Uid, unsub bool, skip string) {
 	}
 
 	// Detach all user's sessions
-	for sess, uids := range t.sessions {
-		if uids.Contains(uid) {
-			t.remSession(sess, uid)
+	for sess := range t.sessions {
+		if len(t.remSession(sess, uid)) > 0 {
 			sess.detach <- t.name
 			if sess.sid != skip {
 				sess.queueOut(NoErrEvicted("", t.original(uid), now))
@@ -2356,17 +2343,30 @@ func (t *Topic) addSession(s *Session, user types.Uid) types.UidSlice {
 	return uids
 }
 
+// Removes Uid from the session record. If user.IsZero() then removes all UIDs.
+// Returns a slice of removed UIDs (all, just one or nil).
 func (t *Topic) remSession(s *Session, user types.Uid) types.UidSlice {
 	uids := t.sessions[s]
 	if uids == nil {
 		return nil
 	}
-	uids.Rem(user)
-	if len(uids) > 0 {
-		t.sessions[s] = uids
-	} else {
+
+	if user.IsZero() {
+		// All uids are removed.
 		delete(t.sessions, s)
+	} else if uids.Rem(user) {
+		// One uid is removed
+		if len(uids) > 0 {
+			t.sessions[s] = uids
+			uids = types.UidSlice{user}
+		} else {
+			delete(t.sessions, s)
+		}
+	} else {
+		// No uids removed
+		uids = nil
 	}
+
 	return uids
 }
 
