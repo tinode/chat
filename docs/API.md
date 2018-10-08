@@ -159,10 +159,10 @@ Logging out is not supported by design. If an application needs to change the us
 
 ### Authentication
 
-The server comes with three authentication methods out of the box: `basic`, `token`, and `anon`:
+The server comes with three authentication methods out of the box: `basic`, `token`, and `anonymous`:
  * `basic` provides authentication by a login-password pair.
  * `token` provides authentication by a cryptographic token.
- * `anon` is "anonymous authentication" designed for cases where users are temporary, such as handling customer support requests through chat.
+ * `anonymous` is designed for cases where users are temporary, such as handling customer support requests through chat.
 
 Any other authentication method can be implemented using plugins.
 
@@ -172,9 +172,9 @@ Authenticators are used during account registration [`{acc}`](#acc) and during [
 
 #### Creating an Account
 
-When a new account is created, the user must inform the server which authentication method will be later used to gain access to this account as well as provide shared secret, if appropriate. Only `basic` and `anon` can be used during account creation. The `basic` requires the user to generate and send a unique login and password to the server. The `anon` does not exchange secrets.
+When a new account is created, the user must inform the server which authentication method will be later used to gain access to this account as well as provide shared secret, if appropriate. Only `basic` and `anonymous` can be used during account creation. The `basic` requires the user to generate and send a unique login and password to the server. The `anonymous` does not exchange secrets.
 
-User may optionally set `{acc login=true}` to use the new account for immediate authentication. When `login=false` (or not set), the new account is created but the authentication status of the session which created the account remains unchanged. When `login=true` the server will attempt to authenticate the session with the new account, the response to the `{acc}` request will contain the authentication token on success. This is particularly important for the `anon` authentication.
+User may optionally set `{acc login=true}` to use the new account for immediate authentication. When `login=false` (or not set), the new account is created but the authentication status of the session which created the account remains unchanged. When `login=true` the server will attempt to authenticate the session with the new account, the response to the `{acc}` request will contain the authentication token on success. This is particularly important for the `anonymous` authentication.
 
 #### Logging in
 
@@ -581,7 +581,7 @@ acc: {
 Server responds with a `{ctrl}` message with `params` containing details of the new user. If `desc.defacs` is missing,
 server will assign server-default access values.
 
-The only supported authentication schemes for account creation are `basic` and `anon`.
+The only supported authentication schemes for account creation are `basic` and `anonymous`.
 
 #### `{login}`
 
@@ -605,7 +605,7 @@ login: {
 ```
 The `basic` authentication scheme expects `secret` to be a base64-encoded string of a string composed of a user name followed by a colon `:` followed by a plan text password. User name in the `basic` scheme must not contain colon character ':' (ASCII 0x3A). The `token` expects secret to be a previously obtained security token.
 
-The only supported authentication schemes are `basic` and `token`. Although `anon` scheme can be used to create accounts, it cannot be used for logging in. A scheme `reset` can be used for password reset.
+The only supported authentication schemes are `basic` and `token`. Although `anonymous` scheme can be used to create accounts, it cannot be used for logging in. A scheme `reset` can be used for password reset.
 
 Server responds to a `{login}` packet with a `{ctrl}` message. The `params` of the message contains the id of the logged in user as `user`. The `token` contains an encrypted string which can be used for authentication. Expiration time of the token is passed as `expires`.
 

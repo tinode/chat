@@ -26,7 +26,7 @@ from tinode_grpc import pb
 from tinode_grpc import pbx
 
 APP_NAME = "tn-cli"
-APP_VERSION = "0.15"
+APP_VERSION = "1.0.0"
 LIB_VERSION = pkg_resources.get_distribution("tinode_grpc").version
 
 # Dictionary wich contains lambdas to be executed when server response is received
@@ -114,10 +114,13 @@ def accMsg(id, user, scheme, secret, uname, password, do_login, fn, photo, priva
         if password == None:
             password = ''
         secret = str(uname) + ":" + str(password)
-    if secret != None:
-        secret=secret.encode('utf-8')
-    public = encode_to_bytes(make_vcard(fn, photo))
-    private = encode_to_bytes(private)
+    if secret:
+        secret = secret.encode('utf-8')
+    else:
+        secret = b''
+    print(default_user)
+    public = encode_to_bytes(make_vcard(fn, photo)) if (fn or photo) else None
+    private = encode_to_bytes(private) if private else None
     return pb.ClientMsg(acc=pb.ClientAcc(id=str(id), user_id=user,
         scheme=scheme, secret=secret, login=do_login, tags=tags.split(",") if tags else None,
         desc=pb.SetDesc(default_acs=pb.DefaultAcsMode(auth=auth, anon=anon),

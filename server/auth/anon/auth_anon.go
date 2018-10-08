@@ -18,8 +18,12 @@ func (AnonAuth) Init(unused string) error {
 	return nil
 }
 
-// AddRecord is a noop. Just report success.
+// AddRecord checks authLevel and assigns default LevelAnon. Otherwise it
+// just reports success.
 func (AnonAuth) AddRecord(rec *auth.Rec, secret []byte) (*auth.Rec, error) {
+	if rec.AuthLevel == auth.LevelNone {
+		rec.AuthLevel = auth.LevelAnon
+	}
 	return rec, nil
 }
 

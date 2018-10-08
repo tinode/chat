@@ -4,8 +4,8 @@
 model_pb2_grpc = "../py_grpc/tinode_grpc/model_pb2_grpc.py"
 
 with open(model_pb2_grpc, "r") as fh:
-    content = fh.read().replace("import model_pb2 as model__pb2",
-        "from . import model_pb2 as model__pb2")
+    content = fh.read().replace("\nimport model_pb2 as model__pb2",
+        "\nfrom . import model_pb2 as model__pb2")
 
     with open(model_pb2_grpc,"w") as fh:
         fh.write(content)
