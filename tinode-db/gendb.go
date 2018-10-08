@@ -102,7 +102,7 @@ func genDb(reset bool, config string, data *Data) {
 		authLevel := auth.LevelAuth
 		if uu.AuthLevel != "" {
 			authLevel = auth.ParseAuthLevel(uu.AuthLevel)
-			if authLevel == auth.None {
+			if authLevel == auth.LevelNone {
 				log.Fatal("Unknown authLevel", uu.AuthLevel)
 			}
 		}
