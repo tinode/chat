@@ -140,6 +140,14 @@
    "owner": "frank",
    "tags": ["sikrit", "secret"],
    "public": {"fn": "Sikrit group!", "photo": "bf-64.jpg", "type": "jpg"}
+  },
+  {
+   "createdAt": "-123h",
+   "name": "*X",
+   "owner": "xena",
+   "tags": ["support","public"],
+   "public": {"fn": "Support", "photo": "support-128.jpg", "type": "jpg"},
+   "access": {"anon": "JRWP", "auth": "JW"}
   }
  ],
  "p2psubs": [
@@ -245,14 +253,6 @@
    "private": {"comment": "I'm not the owner, Frank is"},
    "topic": "*BF",
    "user": "bob"
-  },
-  {
-   "createdAt": "-126h",
-   "name": "support",
-   "owner": "frank",
-   "tags": ["support","public"],
-   "public": {"fn": "Support", "photo": "support-64.jpg", "type": "jpg"},
-   "access": {"anon": 64, "auth": 64}
   }
  ],
  "messages": [
