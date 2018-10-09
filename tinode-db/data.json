@@ -147,7 +147,7 @@
    "owner": "xena",
    "tags": ["support","public"],
    "public": {"fn": "Support", "photo": "support-128.jpg", "type": "jpg"},
-   "access": {"anon": "JRWP", "auth": "JW"}
+   "access": {"auth": "JRWP", "anon": "JW"}
   }
  ],
  "p2psubs": [
