@@ -391,11 +391,11 @@ const (
 	ModeRead                           // user can receive broadcasts ({data}, {info}) (R:2)
 	ModeWrite                          // user can Write, i.e. {pub} (W:4)
 	ModePres                           // user can receive presence updates (P:8)
-	ModeApprove                        // user can approve new members or evict existing members (A:0x10)
-	ModeShare                          // user can invite new members (S:0x20)
-	ModeDelete                         // user can hard-delete messages (D:0x40)
-	ModeOwner                          // user is the owner (O:0x80) - full access
-	ModeUnset                          // Non-zero value to indicate unknown or undefined mode (:0x100),
+	ModeApprove                        // user can approve new members or evict existing members (A:0x10, 16)
+	ModeShare                          // user can invite new members (S:0x20, 32)
+	ModeDelete                         // user can hard-delete messages (D:0x40, 64)
+	ModeOwner                          // user is the owner (O:0x80, 128) - full access
+	ModeUnset                          // Non-zero value to indicate unknown or undefined mode (:0x100, 256),
 	// to make it different from ModeNone
 
 	ModeNone AccessMode = 0 // No access, requests to gain access are processed normally (N)

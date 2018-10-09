@@ -30,6 +30,11 @@ type tPrivate struct {
 	Comment string `json:"comment"`
 }
 
+type DefAccess struct {
+	Auth string `json:"auth"`
+	Anon string `json:"anon"`
+}
+
 /*
 User object in data.json
    "createdAt": "-140h",
@@ -73,12 +78,13 @@ GroupTopic object in data.json
    "public": {"fn": "Let's talk about flowers", "photo": "abc-64.jpg", "type": "jpg"}
 */
 type GroupTopic struct {
-	CreatedAt    string   `json:"createdAt"`
-	Name         string   `json:"name"`
-	Owner        string   `json:"owner"`
-	Public       vCardy   `json:"public"`
-	Tags         []string `json:"tags"`
-	OwnerPrivate tPrivate `json:"ownerPrivate"`
+	CreatedAt    string    `json:"createdAt"`
+	Name         string    `json:"name"`
+	Owner        string    `json:"owner"`
+	Public       vCardy    `json:"public"`
+	Access       DefAccess `json:"access"`
+	Tags         []string  `json:"tags"`
+	OwnerPrivate tPrivate  `json:"ownerPrivate"`
 }
 
 /*

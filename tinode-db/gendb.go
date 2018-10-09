@@ -138,11 +138,23 @@ func genDb(reset bool, config string, data *Data) {
 		name := genTopicName()
 		nameIndex[gt.Name] = name
 
+		accessAuth := types.ModeCPublic
+		if gt.Access.Auth != "" {
+			if err := accessAuth.UnmarshalText([]byte(gt.Access.Auth)); err != nil {
+				log.Fatal("Invalid Auth access mode", gt.Access.Auth, err)
+			}
+		}
+		accessAnon := types.ModeCReadOnly
+		if gt.Access.Anon != "" {
+			if err := accessAnon.UnmarshalText([]byte(gt.Access.Anon)); err != nil {
+				log.Fatal("Invalid Anon access mode", gt.Access.Anon, err)
+			}
+		}
 		topic := &types.Topic{
 			ObjHeader: types.ObjHeader{Id: name},
 			Access: types.DefaultAccess{
-				Auth: types.ModeCPublic,
-				Anon: types.ModeCReadOnly,
+				Auth: accessAuth,
+				Anon: accessAnon,
 			},
 			Tags:   gt.Tags,
 			Public: parsePublic(&gt.Public, data.datapath)}
