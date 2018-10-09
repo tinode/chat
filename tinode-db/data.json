@@ -7,6 +7,7 @@
    "passhash": "alice123",
    "private": {"comment": "some comment 123"},
    "public": {"fn": "Alice Johnson", "photo": "alice-64.jpg", "type": "jpg"},
+   "tags": ["Alice"],
    "state": 1,
    "status": {
     "text": "DND"
@@ -157,12 +158,12 @@
   {
    "createdAt": "-117h",
    "private": {"comment": "apples to oranges"},
-   "users": [{"name": "alice", "private": {"comment": "Apples"}}, 
+   "users": [{"name": "alice", "private": {"comment": "Apples"}},
              {"name": "eve", "private": {"comment": "Alice is not what she seems"}}]
   },
   {
    "createdAt": "-116h",
-   "users": [{"name": "alice", "private": {"comment": "Frank Frank Frank a-\u003ef"}}, 
+   "users": [{"name": "alice", "private": {"comment": "Frank Frank Frank a-\u003ef"}},
              {"name": "frank", "private": {"comment": "Johnson f-\u003ea"}}]
   },
   {
@@ -171,7 +172,7 @@
   },
   {
    "createdAt": "-114h",
-   "users": [{"name": "bob", "private": {"comment": "I'm banned by Dave!"}, "have": "A"}, 
+   "users": [{"name": "bob", "private": {"comment": "I'm banned by Dave!"}, "have": "A"},
              {"name": "dave", "private": {"comment": "I banned Bob."}, "want": "N"}]
   },
   {
@@ -244,6 +245,14 @@
    "private": {"comment": "I'm not the owner, Frank is"},
    "topic": "*BF",
    "user": "bob"
+  },
+  {
+   "createdAt": "-126h",
+   "name": "support",
+   "owner": "frank",
+   "tags": ["support","public"],
+   "public": {"fn": "Support", "photo": "support-64.jpg", "type": "jpg"},
+   "access": {"anon": 64, "auth": 64}
   }
  ],
  "messages": [

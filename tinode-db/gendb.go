@@ -58,6 +58,7 @@ func genDb(reset bool, config string, data *Data) {
 				Auth: types.ModeCP2P,
 				Anon: types.ModeNone,
 			},
+			Tags:   uu.Tags,
 			Public: parsePublic(&uu.Public, data.datapath),
 		}
 		user.CreatedAt = getCreatedTime(uu.CreatedAt)
