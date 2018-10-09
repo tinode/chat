@@ -44,6 +44,7 @@ User object in data.json
      "text": "DND"
    },
    "username": "alice",
+	"tags": ["tag1"],
 	"addressBook": ["email:bob@example.com", "email:carol@example.com", "email:dave@example.com",
 		"email:eve@example.com","email:frank@example.com","email:george@example.com","email:tob@example.com",
 		"tel:17025550001", "tel:17025550002", "tel:17025550003", "tel:17025550004", "tel:17025550005",
@@ -62,6 +63,7 @@ type User struct {
 	State       int         `json:"state"`
 	Status      interface{} `json:"status"`
 	AddressBook []string    `json:"addressBook"`
+	Tags        []string    `json:"tags"`
 }
 
 /*
