@@ -82,7 +82,7 @@ do
       cp ./server/static/src/webapp.jsx ./releases/tmp/static/src
       cp ./server/static/manifest.json ./releases/tmp/static
       cp ./server/static/service-worker.js ./releases/tmp/static
-      # Create empty FCM client-side config. 
+      # Create empty FCM client-side config.
       echo > ./releases/tmp/static/firebase-init.js
       cp ./tinode-db/data.json ./releases/tmp
       cp ./tinode-db/*.jpg ./releases/tmp
@@ -137,7 +137,7 @@ rm -f $GOPATH/bin/init-db
 # Build chatbot release
 echo "Building python code..."
 
-./build-py-grpc.py
+./build-py-grpc.sh
 
 # Release chatbot
 echo "Packaging chatbot.py..."
