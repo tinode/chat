@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log"
 	"strconv"
+	"time"
 
 	fbase "firebase.google.com/go"
 	fcm "firebase.google.com/go/messaging"
@@ -111,7 +112,7 @@ func payloadToData(pl *push.Payload) (map[string]string, error) {
 	// Must use "xfrom" because "from" is a reserved word.
 	// Google did not bother to document it anywhere.
 	data["xfrom"] = pl.From
-	data["ts"] = pl.Timestamp.String()
+	data["ts"] = pl.Timestamp.Format(time.RFC3339Nano)
 	data["seq"] = strconv.Itoa(pl.SeqId)
 	data["mime"] = pl.ContentType
 	data["content"], err = drafty.ToPlainText(pl.Content)
@@ -173,13 +174,17 @@ func sendNotifications(rcpt *push.Receipt, config *configType) {
 							Color: config.IconColor,
 						},
 					}
-				} else {
-					// No need to handle webpush separately.
-					msg.Notification = &fcm.Notification{
-						Title: "New message",
-						Body:  data["content"],
-					}
 				}
+
+				// Firebase messaging is buggy and poorly documented. If
+				// msg.Notification is defined, then firebase will ignore
+				// whatever handler is set in setBackgroundMessageHandler.
+				// See dicussion of this madness here:
+				// https://github.com/firebase/quickstart-js/issues/71
+				// msg.Notification = &fcm.Notification{
+				//	 Title: "New message",
+				//	 Body:  data["content"],
+				// }
 				_, err := handler.client.Send(ctx, &msg)
 				if err != nil {
 					if fcm.IsMessageRateExceeded(err) ||

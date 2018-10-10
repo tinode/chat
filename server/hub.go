@@ -607,8 +607,6 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 				}
 			}
 
-			// t.clearId is not currently used for p2p topics
-
 			// Publics is already swapped
 			userData.public = sub1.GetPublic()
 			userData.topicName = userID2.UserId()
