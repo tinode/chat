@@ -1073,8 +1073,7 @@ func (a *adapter) FindUsers(uid t.Uid, req, opt []string) ([]t.Subscription, err
 		sub.UpdatedAt = user.UpdatedAt
 		sub.User = user.Id
 		sub.SetPublic(user.Public)
-		// TODO: maybe report default access to user
-		// sub.SetDefaultAccess(user.Access.Auth, user.Access.Anon)
+		sub.SetDefaultAccess(user.Access.Auth, user.Access.Anon)
 		tags := make([]string, 0, 1)
 		for _, tag := range user.Tags {
 			if _, ok := index[tag]; ok {
@@ -1138,8 +1137,7 @@ func (a *adapter) FindTopics(req, opt []string) ([]t.Subscription, error) {
 		sub.UpdatedAt = topic.UpdatedAt
 		sub.Topic = topic.Id
 		sub.SetPublic(topic.Public)
-		// TODO: maybe report default access to user
-		// sub.SetDefaultAccess(user.Access.Auth, user.Access.Anon)
+		sub.SetDefaultAccess(topic.Access.Auth, topic.Access.Anon)
 		tags := make([]string, 0, 1)
 		for _, tag := range topic.Tags {
 			if _, ok := index[tag]; ok {

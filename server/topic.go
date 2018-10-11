@@ -483,6 +483,7 @@ func (t *Topic) run(hub *Hub) {
 		case meta := <-t.meta:
 			// Request to get/set topic metadata
 			asUid := types.ParseUserId(meta.pkt.from)
+			authLevel := auth.Level(meta.pkt.authLvl)
 			switch {
 			case meta.pkt.Get != nil:
 				// Get request
@@ -492,7 +493,7 @@ func (t *Topic) run(hub *Hub) {
 					}
 				}
 				if meta.what&constMsgMetaSub != 0 {
-					if err := t.replyGetSub(meta.sess, asUid, meta.pkt.Get.Id, meta.pkt.Get.Sub); err != nil {
+					if err := t.replyGetSub(meta.sess, asUid, authLevel, meta.pkt.Get.Id, meta.pkt.Get.Sub); err != nil {
 						log.Printf("topic[%s] meta.Get.Sub failed: %s", t.name, err)
 					}
 				}
@@ -610,6 +611,7 @@ func (t *Topic) run(hub *Hub) {
 // Session subscribed to a topic, created == true if topic was just created and {pres} needs to be announced
 func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 	asUid := types.ParseUserId(sreg.pkt.from)
+	authLevel := auth.Level(sreg.pkt.authLvl)
 
 	msgsub := sreg.pkt.Sub
 	getWhat := 0
@@ -694,7 +696,7 @@ func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 
 	if getWhat&constMsgMetaSub != 0 {
 		// Send get.sub response as a separate {meta} packet
-		if err := t.replyGetSub(sreg.sess, asUid, sreg.pkt.id, msgsub.Get.Sub); err != nil {
+		if err := t.replyGetSub(sreg.sess, asUid, authLevel, sreg.pkt.id, msgsub.Get.Sub); err != nil {
 			log.Printf("topic[%s] handleSubscription Get.Sub failed: %v", t.name, err)
 		}
 	}
@@ -1438,7 +1440,7 @@ func (t *Topic) replySetDesc(sess *Session, asUid types.Uid, set *MsgClientSet) 
 
 // replyGetSub is a response to a get.sub request on a topic - load a list of subscriptions/subscribers,
 // send it just to the session as a {meta} packet
-func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, id string, req *MsgGetOpts) error {
+func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level, id string, req *MsgGetOpts) error {
 	now := types.TimeNow()
 
 	if req != nil && (req.SinceId != 0 || req.BeforeId != 0) {
@@ -1625,6 +1627,14 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, id string, req *MsgG
 					if isSharer {
 						mts.Acs.Want = sub.ModeWant.String()
 						mts.Acs.Given = sub.ModeGiven.String()
+					}
+				} else if defacs := sub.GetDefaultAccess(); defacs != nil {
+					// Topic 'fnd'
+					switch authLevel {
+					case auth.LevelAnon:
+						mts.Acs.Mode = defacs.Anon.String()
+					case auth.LevelAuth, auth.LevelRoot:
+						mts.Acs.Mode = defacs.Auth.String()
 					}
 				}
 

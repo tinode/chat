@@ -1275,7 +1275,7 @@ func (a *adapter) FindUsers(uid t.Uid, req, opt []string) ([]t.Subscription, err
 		index[tag] = struct{}{}
 	}
 
-	query := "SELECT u.id,u.createdat,u.updatedat,u.public,u.tags,COUNT(*) AS matches " +
+	query := "SELECT u.id,u.createdat,u.updatedat,u.access,u.public,u.tags,COUNT(*) AS matches " +
 		"FROM users AS u LEFT JOIN usertags AS t ON t.userid=u.id " +
 		"WHERE t.tag IN (?" + strings.Repeat(",?", len(req)+len(opt)-1) + ") " +
 		"GROUP BY u.id,u.createdat,u.updatedat,u.public,u.tags "
@@ -1297,13 +1297,14 @@ func (a *adapter) FindUsers(uid t.Uid, req, opt []string) ([]t.Subscription, err
 
 	var userId int64
 	var public interface{}
+	var access t.DefaultAccess
 	var userTags t.StringSlice
 	var ignored int
 	var sub t.Subscription
 	var subs []t.Subscription
 	thisUser := store.DecodeUid(uid)
 	for rows.Next() {
-		if err = rows.Scan(&userId, &sub.CreatedAt, &sub.UpdatedAt, &public, &userTags, &ignored); err != nil {
+		if err = rows.Scan(&userId, &sub.CreatedAt, &sub.UpdatedAt, &access, &public, &userTags, &ignored); err != nil {
 			subs = nil
 			break
 		}
@@ -1314,8 +1315,7 @@ func (a *adapter) FindUsers(uid t.Uid, req, opt []string) ([]t.Subscription, err
 		}
 		sub.User = store.EncodeUid(userId).String()
 		sub.SetPublic(fromJSON(public))
-		// TODO: maybe report default access to user
-		// sub.SetDefaultAccess(user.Access.Auth, user.Access.Anon)
+		sub.SetDefaultAccess(access.Auth, access.Anon)
 		foundTags := make([]string, 0, 1)
 		for _, tag := range userTags {
 			if _, ok := index[tag]; ok {
@@ -1341,7 +1341,7 @@ func (a *adapter) FindTopics(req, opt []string) ([]t.Subscription, error) {
 		index[tag] = struct{}{}
 	}
 
-	query := "SELECT t.name AS topic,t.createdat,t.updatedat,t.public,t.tags,COUNT(*) AS matches " +
+	query := "SELECT t.name AS topic,t.createdat,t.updatedat,t.access,t.public,t.tags,COUNT(*) AS matches " +
 		"FROM topics AS t LEFT JOIN topictags AS tt ON t.name=tt.topic " +
 		"WHERE tt.tag IN (?" + strings.Repeat(",?", len(req)+len(opt)-1) + ") " +
 		"GROUP BY t.name,t.createdat,t.updatedat,t.public,t.tags "
@@ -1359,20 +1359,20 @@ func (a *adapter) FindTopics(req, opt []string) ([]t.Subscription, error) {
 		return nil, err
 	}
 
+	var access t.DefaultAccess
 	var public interface{}
 	var topicTags t.StringSlice
 	var ignored int
 	var sub t.Subscription
 	var subs []t.Subscription
 	for rows.Next() {
-		if err = rows.Scan(&sub.Topic, &sub.CreatedAt, &sub.UpdatedAt, &public, &topicTags, &ignored); err != nil {
+		if err = rows.Scan(&sub.Topic, &sub.CreatedAt, &sub.UpdatedAt, &access, &public, &topicTags, &ignored); err != nil {
 			subs = nil
 			break
 		}
 
 		sub.SetPublic(fromJSON(public))
-		// TODO: maybe report default access to user
-		// sub.SetDefaultAccess(user.Access.Auth, user.Access.Anon)
+		sub.SetDefaultAccess(access.Auth, access.Anon)
 		foundTags := make([]string, 0, 1)
 		for _, tag := range topicTags {
 			if _, ok := index[tag]; ok {
