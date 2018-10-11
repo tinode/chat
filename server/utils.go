@@ -432,11 +432,12 @@ func parseSearchQuery(query string) ([]string, []string, error) {
 		var r rune
 		curr := ORD
 		r, w = utf8.DecodeRuneInString(query[i:])
-		if w == 0 {
+		switch {
+		case w == 0:
 			curr = END
-		} else if r == '"' {
+		case r == '"':
 			curr = QUO
-		} else if !ctx.quo {
+		case !ctx.quo:
 			if r == ' ' || r == '\t' {
 				curr = AND
 			} else if r == ',' {
