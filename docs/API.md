@@ -444,7 +444,7 @@ Tinode provides two endpoints for handling large files: `/v0/file/u` for uploadi
 
 ### Uploading
 
-To upload a file first create an RFC 2388 multipart request then send it to the server using HTTP POST. The server responds to the request either with a `307 Temporary Redirect` or with a `200 OK` and a `{ctrl}` message in response body:
+To upload a file first create an RFC 2388 multipart request then send it to the server using HTTP POST. The server responds to the request either with a `307 Temporary Redirect` with the new upload URL, or with a `200 OK` and a `{ctrl}` message in response body:
 
 ```js
 ctrl: {
@@ -456,10 +456,11 @@ ctrl: {
   ts: "2018-07-06T18:47:51.265Z"
 }
 ```
+If `307 Temporary Redirect` is returned, the client must retry the upload at the provided URL. The URL returned in `307` response should be used for just this one upload. All subsequent uploads should try the default URL first.
 
-The `ctrl.params.url` contains the location of the uploaded file relative to the *download* endpoint `/v0/file/s/` at the current HTTP server.
+The `ctrl.params.url` contains the path to the uploaded file at the current server. It could be either the full path like `/v0/file/s/mfHLxDWFhfU.pdf`, a relative path like `./mfHLxDWFhfU.pdf`, or just the file name `mfHLxDWFhfU.pdf`. Anything but the full path is interpreted against the default *download* endpoint `/v0/file/s/`. For instance, if `mfHLxDWFhfU.pdf` is returned then the file is located at `http(s)://current-tinode-server/v0/file/s/mfHLxDWFhfU.pdf`.
 
-Once the `url` is received, either immediately or after following the redirect, the client can use the `url` to send a `{pub}` message with the uploaded file as an attachment. The `url` should be used to produce a [Drafty](./drafty.md)-formatted `pub.content` field and also should be referenced in the `pub.head.attachments`:
+Once the URL of the file is received, either immediately or after following the redirect, the client may use the URL to send a `{pub}` message with the uploaded file as an attachment. The URL should be used to produce a [Drafty](./drafty.md)-formatted `pub.content` field and also should be referenced in the `pub.head.attachments`:
 
 ```js:
 pub: {
@@ -492,11 +493,13 @@ pub: {
 }
 ```
 
-It's important to list the URLs in the `head.attachments` field. Tinode server uses this field to maintain the uploaded file's use counter. Once the use counter drops to zero for a given file (for instance, because a message with the shared URL was deleted or because the client failed to include the URL in the `head.attachments` field), the server will garbage collect the file. Only relative URLs should be used. Absolute URLs in the `head.attachments` field are ignored.
+It's important to list the URLs in the `head.attachments` field. Tinode server uses this field to maintain the uploaded file's use counter. Once the counter drops to zero for the given file (for instance, because a message with the shared URL was deleted or because the client failed to include the URL in the `head.attachments` field), the server will garbage collect the file. Only relative URLs should be used. Absolute URLs in the `head.attachments` field are ignored. The URL value is expected to be the `ctrl.params.url` returned in response to upload.
 
 ### Downloading
 
-The serving endpoint `/v0/file/s` serves files in response to HTTP GET requests. The client must evaluate relative URLs against this endpoint, i.e. if it receives a URL `mfHLxDWFhfU.pdf` or `./mfHLxDWFhfU.pdf` it should interpret it as a path `/v0/file/s/mfHLxDWFhfU.pdf` at the current Tinode HTTP server. As a security measure, the client should not send security credentials if the download URL is absolute and leads to another server.
+The serving endpoint `/v0/file/s` serves files in response to HTTP GET requests. The client must evaluate relative URLs against this endpoint, i.e. if it receives a URL `mfHLxDWFhfU.pdf` or `./mfHLxDWFhfU.pdf` it should interpret it as a path `/v0/file/s/mfHLxDWFhfU.pdf` at the current Tinode HTTP server.
+
+_Important!_ As a security measure, the client should not send security credentials if the download URL is absolute and leads to another server.
 
 ## Messages
 
