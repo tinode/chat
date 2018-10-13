@@ -2187,7 +2187,9 @@ func (t *Topic) evictUser(uid types.Uid, unsub bool, skip string) {
 
 // Prepares a payload to be delivered to a mobile device as a push notification.
 func (t *Topic) makePushReceipt(fromUid types.Uid, data *MsgServerData) *pushReceipt {
+	// Index user_id -> location_of_user_in_Rcpt_To_field
 	idx := make(map[types.Uid]int, t.subsCount())
+	// Initialize the push receipt.
 	receipt := push.Receipt{
 		To: make([]push.Recipient, t.subsCount()),
 		Payload: push.Payload{
@@ -2199,8 +2201,11 @@ func (t *Topic) makePushReceipt(fromUid types.Uid, data *MsgServerData) *pushRec
 
 	i := 0
 	for uid := range t.perUser {
-		if (t.perUser[uid].modeWant & t.perUser[uid].modeGiven).IsPresencer() && !t.perUser[uid].deleted {
-			// Only send to those users who have notifications enabled
+		// Done't send to the originating user, send only to those who have notifications enabled.
+		if uid != fromUid &&
+			(t.perUser[uid].modeWant & t.perUser[uid].modeGiven).IsPresencer() &&
+			!t.perUser[uid].deleted {
+
 			receipt.To[i].User = uid
 			idx[uid] = i
 			i++
