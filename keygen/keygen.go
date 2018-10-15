@@ -64,7 +64,6 @@ func generate(sequence, isRoot int, hmacSaltB64 string) int {
 			log.Println("Failed to generate HMAC salt", err)
 			return 1
 		}
-		hmacSaltB64 = base64.URLEncoding.EncodeToString(hmacSalt)
 	} else {
 		var err error
 		hmacSalt, err = base64.URLEncoding.DecodeString(hmacSaltB64)
@@ -77,6 +76,8 @@ func generate(sequence, isRoot int, hmacSaltB64 string) int {
 			return 1
 		}
 	}
+	// Make sure the salt is base64std encoded: tinode.conf requires std encoding.
+	hmacSaltB64 = base64.StdEncoding.EncodeToString(hmacSalt)
 
 	// [1:algorithm version][4:appid][2:key sequence][1:isRoot]
 	data[0] = 1 // default algorithm
