@@ -69,6 +69,10 @@ func generate(sequence, isRoot int, hmacSaltB64 string) int {
 		var err error
 		hmacSalt, err = base64.URLEncoding.DecodeString(hmacSaltB64)
 		if err != nil {
+			// Try standard base64 decoding
+			hmacSalt, err = base64.StdEncoding.DecodeString(hmacSaltB64)
+		}
+		if err != nil {
 			log.Println("Failed to decode HMAC salt", err)
 			return 1
 		}
@@ -110,6 +114,10 @@ func validate(apikey string, hmacSaltB64 string) int {
 
 	hmacSalt, err := base64.URLEncoding.DecodeString(hmacSaltB64)
 	if err != nil {
+		// Try standard base64 decoding
+		hmacSalt, err = base64.StdEncoding.DecodeString(hmacSaltB64)
+	}
+	if err != nil {
 		log.Println("Failed to decode HMAC salt", err)
 		return 1
 	}
@@ -121,7 +129,7 @@ func validate(apikey string, hmacSaltB64 string) int {
 
 	data, err := base64.URLEncoding.DecodeString(apikey)
 	if err != nil {
-		log.Println("Failed to decode key as base64", err)
+		log.Println("Failed to decode key as base64-URL-encoded", err)
 		return 1
 	}
 
