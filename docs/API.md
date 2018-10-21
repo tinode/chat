@@ -753,6 +753,7 @@ The following values are currently defined for the `head` field:
  * `mime`: MIME-type of message contents, `"text/x-drafty"`; null value is interpreted as `"text/plain"`.
  * `replace`: an indicator that the message is a correction/replacement for another message, a topic-unique ID of the message being updated/replaced, `":123"`
  * `reply`: an indicator that the message is a reply to another message, a unique ID of the original message, `"grp1XUtEhjv6HND:123"`.
+ * `sender`: a user ID of the sender added by the server when the message is sent by on behalf of another user, `"usr1XUtEhjv6HND"`.
  * `thread`: an indicator that the message is a part of a conversation thread, a unique ID of the first message in the thread, `"grp1XUtEhjv6HND:123"`.
 
 Application-specific fields should start with an `x-<application-name>-`. Although the server does not enforce this rule yet, it may start doing so in the future.

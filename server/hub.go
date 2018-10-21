@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/tinode/chat/server/auth"
 	"github.com/tinode/chat/server/store"
 	"github.com/tinode/chat/server/store/types"
 )
@@ -189,14 +190,13 @@ func (h *Hub) run() {
 			}
 
 		case meta := <-h.meta:
-			log.Println("hub.meta: got message")
 			// Request for topic info from a user who is not subscribed to the topic
 			if dst := h.topicGet(meta.topic); dst != nil {
 				// If topic is already in memory, pass request to topic
 				dst.meta <- meta
 			} else if meta.pkt.Get != nil {
 				// If topic is not in memory, fetch requested description from DB and reply here
-				go replyTopicDescBasic(meta.sess, meta.topic, meta.pkt.Get)
+				go replyTopicDescBasic(meta.sess, meta.topic, meta.pkt)
 			}
 
 		case unreg := <-h.unreg:
@@ -252,6 +252,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 	var t *Topic
 
 	timestamp := types.TimeNow()
+	pktsub := sreg.pkt.Sub
 
 	t = &Topic{name: sreg.topic,
 		xoriginal: sreg.pkt.topic,
@@ -444,10 +445,10 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 
 			// Fetching records for both users.
 			// Requester.
-			userID1 := sreg.sess.uid
+			userID1 := types.ParseUserId(sreg.pkt.from)
 			// The other user.
 			userID2 := types.ParseUserId(t.xoriginal)
-			// User index: u1 - requester, u2 - the other user
+			// User index: u1 - requester, u2 - responder, the other user
 
 			var u1, u2 int
 			users, err := store.Users.GetAll(userID1, userID2)
@@ -456,7 +457,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 				sreg.sess.queueOut(ErrUnknown(sreg.pkt.id, t.xoriginal, timestamp))
 				return
 			}
-			if users == nil || len(users) != 2 {
+			if len(users) != 2 {
 				// Invited user does not exist
 				log.Println("hub: missing user for '" + t.name + "'")
 				sreg.sess.queueOut(ErrUserNotFound(sreg.pkt.id, t.xoriginal, timestamp))
@@ -484,18 +485,19 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 				}
 			}
 
-			// Other user's subscription is missing
+			// Other user's (responder's) subscription is missing
 			if sub2 == nil {
 				sub2 = &types.Subscription{
 					User:    userID2.String(),
 					Topic:   t.name,
 					Private: nil}
 
-				// Assign user2's ModeGiven based on what user1 has provided
-				if sreg.pkt.Set != nil && sreg.pkt.Set.Desc != nil && sreg.pkt.Set.Desc.DefaultAcs != nil {
+				// Assign user2's ModeGiven based on what user1 has provided.
+				// We don't know access mode for user2, assume it's Auth.
+				if pktsub.Set != nil && pktsub.Set.Desc != nil && pktsub.Set.Desc.DefaultAcs != nil {
 					// Use provided DefaultAcs as non-default modeGiven for the other user.
 					// The other user is assumed to have auth level "Auth".
-					sub2.ModeGiven = parseMode(sreg.pkt.Set.Desc.DefaultAcs.Auth, users[u1].Access.Auth) &
+					sub2.ModeGiven = parseMode(pktsub.Set.Desc.DefaultAcs.Auth, users[u1].Access.Auth) &
 						types.ModeCP2P
 				} else {
 					// Use user1.Auth as modeGiven for the other user
@@ -507,8 +509,6 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 
 				// Mark the entire topic as new.
 				sreg.created = true
-
-				log.Println("hub: created second subscription")
 			}
 
 			// Requester's subscription is missing:
@@ -516,7 +516,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 			// b. requester's subscription is missing: deleted or creation failed
 			if sub1 == nil {
 				// Set user1's ModeGiven from user2's default values
-				userData.modeGiven = selectAccessMode(sreg.sess.authLvl,
+				userData.modeGiven = selectAccessMode(auth.Level(sreg.pkt.authLvl),
 					users[u2].Access.Anon,
 					users[u2].Access.Auth,
 					types.ModeCP2P)
@@ -524,19 +524,19 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 				// By default assign the same mode that user1 gave to user2 (could be changed below)
 				userData.modeWant = sub2.ModeGiven
 
-				if sreg.pkt.Set != nil {
-					if sreg.pkt.Set.Sub != nil {
-						uid := sreg.sess.uid
-						if sreg.pkt.Set.Sub.User != "" {
-							uid = types.ParseUserId(sreg.pkt.Set.Sub.User)
+				if pktsub.Set != nil {
+					if pktsub.Set.Sub != nil {
+						uid := userID1
+						if pktsub.Set.Sub.User != "" {
+							uid = types.ParseUserId(pktsub.Set.Sub.User)
 						}
 
-						if uid != sreg.sess.uid {
+						if uid != userID1 {
 							// Report the error and ignore the value
 							log.Println("hub: setting mode for another user is not supported '" + t.name + "'")
 						} else {
 							// user1 is setting non-default modeWant
-							userData.modeWant = parseMode(sreg.pkt.Set.Sub.Mode, userData.modeWant) &
+							userData.modeWant = parseMode(pktsub.Set.Sub.Mode, userData.modeWant) &
 								types.ModeCP2P
 						}
 
@@ -545,9 +545,9 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 					}
 
 					// user1 sets non-default Private
-					if sreg.pkt.Set.Desc != nil {
-						if !isNullValue(sreg.pkt.Set.Desc.Private) {
-							userData.private = sreg.pkt.Set.Desc.Private
+					if pktsub.Set.Desc != nil {
+						if !isNullValue(pktsub.Set.Desc.Private) {
+							userData.private = pktsub.Set.Desc.Private
 						}
 						// Public, if present, is ignored
 					}
@@ -564,13 +564,11 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 
 				// Mark this subscription as new
 				sreg.newsub = true
-
-				log.Println("hub: created first subscription")
 			}
 
 			if !user1only {
 				// sub2 is being created, assign sub2.modeWant to what user2 gave to user1 (sub1.modeGiven)
-				sub2.ModeWant = selectAccessMode(sreg.sess.authLvl,
+				sub2.ModeWant = selectAccessMode(auth.Level(sreg.pkt.authLvl),
 					users[u2].Access.Anon,
 					users[u2].Access.Auth,
 					types.ModeCP2P)
@@ -637,7 +635,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		t.cat = types.TopicCatGrp
 
 		// Generic topics have parameters stored in the topic object
-		t.owner = sreg.sess.uid
+		t.owner = types.ParseUserId(sreg.pkt.from)
 
 		t.accessAuth = getDefaultAccess(t.cat, true)
 		t.accessAnon = getDefaultAccess(t.cat, false)
@@ -648,19 +646,19 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 			modeWant:  types.ModeCFull}
 
 		var tags []string
-		if sreg.pkt.Set != nil {
+		if pktsub.Set != nil {
 			// User sent initialization parameters
-			if sreg.pkt.Set.Desc != nil {
-				if !isNullValue(sreg.pkt.Set.Desc.Public) {
-					t.public = sreg.pkt.Set.Desc.Public
+			if pktsub.Set.Desc != nil {
+				if !isNullValue(pktsub.Set.Desc.Public) {
+					t.public = pktsub.Set.Desc.Public
 				}
-				if !isNullValue(sreg.pkt.Set.Desc.Private) {
-					userData.private = sreg.pkt.Set.Desc.Private
+				if !isNullValue(pktsub.Set.Desc.Private) {
+					userData.private = pktsub.Set.Desc.Private
 				}
 
 				// set default access
-				if sreg.pkt.Set.Desc.DefaultAcs != nil {
-					if authMode, anonMode, err := parseTopicAccess(sreg.pkt.Set.Desc.DefaultAcs,
+				if pktsub.Set.Desc.DefaultAcs != nil {
+					if authMode, anonMode, err := parseTopicAccess(pktsub.Set.Desc.DefaultAcs,
 						t.accessAuth, t.accessAnon); err != nil {
 
 						// Invalid access for one or both. Make it explicitly None
@@ -685,13 +683,13 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 			}
 
 			// Owner/creator may restrict own access to topic
-			if sreg.pkt.Set.Sub != nil && sreg.pkt.Set.Sub.Mode != "" {
-				userData.modeWant = parseMode(sreg.pkt.Set.Sub.Mode, types.ModeCFull)
+			if pktsub.Set.Sub != nil && pktsub.Set.Sub.Mode != "" {
+				userData.modeWant = parseMode(pktsub.Set.Sub.Mode, types.ModeCFull)
 				// User must not unset ModeJoin or the owner flags
 				userData.modeWant |= types.ModeJoin | types.ModeOwner
 			}
 
-			tags = normalizeTags(sreg.pkt.Set.Tags)
+			tags = normalizeTags(pktsub.Set.Tags)
 			if !restrictedTagsEqual(tags, nil, globals.immutableTagNS) {
 				log.Println("hub: attempt to directly set restricted tags")
 				sreg.sess.queueOut(ErrPermissionDenied(sreg.pkt.id, t.xoriginal, timestamp))
@@ -854,10 +852,11 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 	now := time.Now().UTC().Round(time.Millisecond)
 
 	if reason == StopDeleted {
+		asUid := types.ParseUserId(msg.from)
 		// Case 1 (unregister and delete)
 		if t := h.topicGet(topic); t != nil {
 			// Case 1.1: topic is online
-			if t.owner == sess.uid || (t.cat == types.TopicCatP2P && t.subsCount() < 2) {
+			if t.owner == asUid || (t.cat == types.TopicCatP2P && t.subsCount() < 2) {
 				// Case 1.1.1: requester is the owner or last sub in a p2p topic
 
 				t.suspend()
@@ -874,9 +873,7 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 					sess:  sess,
 					what:  constMsgDelTopic}
 
-				if sess != nil && msg != nil {
-					sess.queueOut(NoErr(msg.id, msg.topic, now))
-				}
+				sess.queueOut(NoErr(msg.id, msg.topic, now))
 
 				h.topicDel(topic)
 				t.exit <- &shutDown{reason: StopDeleted}
@@ -892,7 +889,7 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 
 		} else {
 			// Case 1.2: topic is offline.
-
+			asUid := types.ParseUserId(msg.from)
 			// Get all subscribers: we need to know how many are left and notify them.
 			subs, err := store.Topics.GetSubs(topic, nil)
 			if err != nil {
@@ -906,7 +903,7 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 			}
 
 			var sub *types.Subscription
-			user := sess.uid.String()
+			user := asUid.String()
 			for i := 0; i < len(subs); i++ {
 				if subs[i].User == user {
 					sub = &subs[i]
@@ -931,7 +928,7 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 						return err
 					}
 
-				} else if err := store.Subs.Delete(topic, sess.uid); err != nil {
+				} else if err := store.Subs.Delete(topic, asUid); err != nil {
 					// Not P2P or more than 1 subscription left.
 					// Delete user's own subscription only
 
@@ -940,12 +937,12 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 				}
 
 				// Notify user's other sessions that the subscription is gone
-				presSingleUserOfflineOffline(sess.uid, msg.topic, "gone", nilPresParams, sess.sid)
+				presSingleUserOfflineOffline(asUid, msg.topic, "gone", nilPresParams, sess.sid)
 				if tcat == types.TopicCatP2P && len(subs) == 2 {
-					uname1 := sess.uid.UserId()
+					uname1 := asUid.UserId()
 					uid2 := types.ParseUserId(msg.topic)
 					// Tell user1 to stop sending updates to user2 without changing user2 online status.
-					presSingleUserOfflineOffline(sess.uid, uid2.UserId(), "?none+rem", nilPresParams, "")
+					presSingleUserOfflineOffline(asUid, uid2.UserId(), "?none+rem", nilPresParams, "")
 					// Don't change the online status of user1, just ask user2 to stop notification exchange.
 					// Tell user2 that user1 is offline but let him keep sending updates in case user1 resubscribes.
 					presSingleUserOfflineOffline(uid2, uname1, "off", nilPresParams, "")
@@ -963,9 +960,7 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 				presSubsOfflineOffline(msg.topic, tcat, subs, "gone", &presParams{}, sess.sid)
 			}
 
-			if sess != nil && msg != nil {
-				sess.queueOut(NoErr(msg.id, msg.topic, now))
-			}
+			sess.queueOut(NoErr(msg.id, msg.topic, now))
 		}
 
 	} else {
@@ -988,19 +983,19 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 }
 
 // replyTopicDescBasic loads minimal topic Desc when the requester is not subscribed to the topic
-func replyTopicDescBasic(sess *Session, topic string, get *MsgClientGet) {
+func replyTopicDescBasic(sess *Session, topic string, msg *ClientComMessage) {
 	log.Printf("hub.replyTopicDescBasic: topic %s", topic)
-	now := time.Now().UTC().Round(time.Millisecond)
+	now := types.TimeNow()
 	desc := &MsgTopicDesc{}
 
 	if strings.HasPrefix(topic, "grp") {
 		stopic, err := store.Topics.Get(topic)
 		if err != nil {
-			sess.queueOut(ErrUnknown(get.Id, get.Topic, now))
+			sess.queueOut(ErrUnknown(msg.id, msg.topic, now))
 			return
 		}
 		if stopic == nil {
-			sess.queueOut(ErrTopicNotFound(get.Id, get.Topic, now))
+			sess.queueOut(ErrTopicNotFound(msg.id, msg.topic, now))
 			return
 		}
 		desc.CreatedAt = &stopic.CreatedAt
@@ -1009,32 +1004,33 @@ func replyTopicDescBasic(sess *Session, topic string, get *MsgClientGet) {
 
 	} else {
 		// 'me' and p2p topics
-		var uid types.Uid
+		uid := types.ZeroUid
+		asUid := types.ParseUserId(msg.from)
 		if strings.HasPrefix(topic, "usr") {
 			// User specified as usrXXX
 			uid = types.ParseUserId(topic)
 		} else if strings.HasPrefix(topic, "p2p") {
 			// User specified as p2pXXXYYY
 			uid1, uid2, _ := types.ParseP2P(topic)
-			if uid1 == sess.uid {
+			if uid1 == asUid {
 				uid = uid2
-			} else if uid2 == sess.uid {
+			} else if uid2 == asUid {
 				uid = uid1
 			}
 		}
 
 		if uid.IsZero() {
-			sess.queueOut(ErrMalformed(get.Id, get.Topic, now))
+			sess.queueOut(ErrMalformed(msg.id, msg.topic, now))
 			return
 		}
 
 		suser, err := store.Users.Get(uid)
 		if err != nil {
-			sess.queueOut(ErrUnknown(get.Id, get.Topic, now))
+			sess.queueOut(ErrUnknown(msg.id, msg.topic, now))
 			return
 		}
 		if suser == nil {
-			sess.queueOut(ErrUserNotFound(get.Id, get.Topic, now))
+			sess.queueOut(ErrUserNotFound(msg.id, msg.topic, now))
 			return
 		}
 		desc.CreatedAt = &suser.CreatedAt
@@ -1043,5 +1039,5 @@ func replyTopicDescBasic(sess *Session, topic string, get *MsgClientGet) {
 	}
 
 	sess.queueOut(&ServerComMessage{
-		Meta: &MsgServerMeta{Id: get.Id, Topic: get.Topic, Timestamp: &now, Desc: desc}})
+		Meta: &MsgServerMeta{Id: msg.id, Topic: msg.topic, Timestamp: &now, Desc: desc}})
 }

@@ -441,6 +441,20 @@ func (s *Session) publish(msg *ClientComMessage) {
 		return
 	}
 
+	// Add "sender" header if the message is sent on behalf of another user.
+	if msg.from != s.uid.UserId() {
+		if msg.Pub.Head == nil {
+			msg.Pub.Head = make(map[string]interface{})
+		}
+		msg.Pub.Head["sender"] = s.uid.UserId()
+	} else if msg.Pub.Head != nil {
+		// Clear potentially false "sender" field.
+		delete(msg.Pub.Head, "sender")
+		if len(msg.Pub.Head) == 0 {
+			msg.Pub.Head = nil
+		}
+	}
+
 	data := &ServerComMessage{Data: &MsgServerData{
 		Topic:     msg.topic,
 		From:      msg.from,
