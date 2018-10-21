@@ -362,11 +362,10 @@ func (s *Session) subscribe(msg *ClientComMessage) {
 		expanded = genTopicName()
 		// msg.topic = expanded
 	} else {
-		var err *ServerComMessage
-		expanded, err = s.expandTopicName(msg)
-		if err != nil {
-			log.Println("s.subscribe:", err, s.sid)
-			s.queueOut(err)
+		var resp *ServerComMessage
+		expanded, resp = s.expandTopicName(msg)
+		if resp != nil {
+			s.queueOut(resp)
 			return
 		}
 	}
@@ -392,10 +391,9 @@ func (s *Session) subscribe(msg *ClientComMessage) {
 // Leave/Unsubscribe a topic
 func (s *Session) leave(msg *ClientComMessage) {
 	// Expand topic name
-	expanded, err := s.expandTopicName(msg)
-	if err != nil {
-		log.Println("s.leave:", err, s.sid)
-		s.queueOut(err)
+	expanded, resp := s.expandTopicName(msg)
+	if resp != nil {
+		s.queueOut(resp)
 		return
 	}
 
@@ -434,10 +432,9 @@ func (s *Session) leave(msg *ClientComMessage) {
 // Broadcast a message to all topic subscribers
 func (s *Session) publish(msg *ClientComMessage) {
 	// TODO(gene): Check for repeated messages with the same ID
-	expanded, err := s.expandTopicName(msg)
-	if err != nil {
-		log.Println("s.publish:", err, s.sid)
-		s.queueOut(err)
+	expanded, resp := s.expandTopicName(msg)
+	if resp != nil {
+		s.queueOut(resp)
 		return
 	}
 
@@ -1010,9 +1007,9 @@ func (s *Session) getValidatedGred(uid types.Uid, authLvl auth.Level, creds []Ms
 
 func (s *Session) get(msg *ClientComMessage) {
 	// Expand topic name.
-	expanded, err := s.expandTopicName(msg)
-	if err != nil {
-		s.queueOut(err)
+	expanded, resp := s.expandTopicName(msg)
+	if resp != nil {
+		s.queueOut(resp)
 		return
 	}
 
@@ -1044,9 +1041,9 @@ func (s *Session) get(msg *ClientComMessage) {
 
 func (s *Session) set(msg *ClientComMessage) {
 	// Expand topic name.
-	expanded, err := s.expandTopicName(msg)
-	if err != nil {
-		s.queueOut(err)
+	expanded, resp := s.expandTopicName(msg)
+	if resp != nil {
+		s.queueOut(resp)
 		return
 	}
 
@@ -1085,9 +1082,9 @@ func (s *Session) set(msg *ClientComMessage) {
 func (s *Session) del(msg *ClientComMessage) {
 
 	// Expand topic name and validate request.
-	expanded, err := s.expandTopicName(msg)
-	if err != nil {
-		s.queueOut(err)
+	expanded, resp := s.expandTopicName(msg)
+	if resp != nil {
+		s.queueOut(resp)
 		return
 	}
 
@@ -1136,8 +1133,8 @@ func (s *Session) note(msg *ClientComMessage) {
 	}
 
 	// Expand topic name and validate request.
-	expanded, err := s.expandTopicName(msg)
-	if err != nil {
+	expanded, resp := s.expandTopicName(msg)
+	if resp != nil {
 		// Silently ignoring the message
 		return
 	}
@@ -1177,6 +1174,7 @@ func (s *Session) note(msg *ClientComMessage) {
 func (s *Session) expandTopicName(msg *ClientComMessage) (string, *ServerComMessage) {
 
 	if msg.topic == "" {
+		log.Println("s.etn: empty topic name", s.sid)
 		return "", ErrMalformed(msg.id, "", msg.timestamp)
 	}
 
@@ -1192,9 +1190,11 @@ func (s *Session) expandTopicName(msg *ClientComMessage) (string, *ServerComMess
 		uid2 := types.ParseUserId(msg.topic)
 		if uid2.IsZero() {
 			// Ensure the user id is valid
+			log.Println("s.etn: failed to parse p2p topic name", s.sid)
 			return "", ErrMalformed(msg.id, msg.topic, msg.timestamp)
 		} else if uid2 == uid1 {
 			// Use 'me' to access self-topic
+			log.Println("s.etn: invalid p2p self-subscription", s.sid)
 			return "", ErrPermissionDenied(msg.id, msg.topic, msg.timestamp)
 		}
 		routeTo = uid1.P2PName(uid2)
