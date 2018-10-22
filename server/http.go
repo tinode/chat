@@ -246,7 +246,7 @@ func httpErrorHandler(h http.Handler) http.Handler {
 // Custom 404 response.
 func serve404(wrt http.ResponseWriter, req *http.Request) {
 	wrt.Header().Set("Content-Type", "application/json; charset=utf-8")
-	wrt.WriteHeader(http.StatusNotFound)
+	wrt.WriteHeader(http.StatusOK)
 	json.NewEncoder(wrt).Encode(
 		&ServerComMessage{Ctrl: &MsgServerCtrl{
 			Timestamp: time.Now().UTC().Round(time.Millisecond),
