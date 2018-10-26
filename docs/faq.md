@@ -1,7 +1,7 @@
 # Frequently Asked Questions
 
 
-**Q**: I'm running Tinode server in a docker container. Where can I find server logs?<br/>
+**Q: I'm running Tinode server in a docker container. Where can I find server logs?**<br/>
 **A**: The log is in the container at `/var/log/tinode.log`. Attach to a running container with command
 ```
 docker exec -it name-of-the-running-container /bin/bash
@@ -15,7 +15,7 @@ docker cp name-of-the-container:/var/log/tinode.log ./tinode.log
 
 Alternatively, you can instruct the docker container to save the logs to a directory on the host by mapping a host directory to `/var/log/` in the container. Add `-v /where/to/save/logs:/var/log` to the `docker run` command.
 
-**Q**: How to setup FCM push notifications?<br/>
+**Q: How to setup FCM push notifications?**<br/>
 **A**: If you are not using the official Docker image follow these steps:
 1. Create a project at https://console.firebase.google.com if you have not done so already.
 2. Follow instructions at https://cloud.google.com/iam/docs/creating-managing-service-account-keys to download the credentials file.
@@ -30,5 +30,5 @@ Alternatively, you can instruct the docker container to save the logs to a direc
 If you are using the official [Docker image](https://hub.docker.com/u/tinode):
 1. Create a project at https://console.firebase.google.com if you have not done so already.
 2. Follow instructions at https://cloud.google.com/iam/docs/creating-managing-service-account-keys to download the credentials file.
-3. Follow instructions in the Docker [README](https://github.com/tinode/chat/tree/master/docker#enable-push-notifications) to enable push notifications. 
+3. Follow instructions in the Docker [README](https://github.com/tinode/chat/tree/master/docker#enable-push-notifications) to enable push notifications.
 4. Add `google-services.json` to [Tindroid](/tinode/tindroid/) by following instructions at https://developers.google.com/android/guides/google-services-plugin.
