@@ -22,8 +22,7 @@ Alternatively, you can instruct the docker container to save the logs to a direc
 3. Update the server config: `"push"` -> `"name": "fcm"` section of the [`tinode.conf`](https://github.com/tinode/chat/blob/master/server/tinode.conf#L222) file. Do _ONE_ of the following:
   * _Either_ enter the path to the downloaded file into `"credentials_file"`.
   * _OR_ copy file contents to `"credentials"`.
-
-  Remove the other entry. I.e. if you have updated `"credentials_file"`, remove `"credentials"` and vice versa.
+    Remove the other entry. I.e. if you have updated `"credentials_file"`, remove `"credentials"` and vice versa.
 4. Update [TinodeWeb](/tinode/webapp/) config [`firebase-init.js`](https://github.com/tinode/webapp/blob/master/firebase-init.js): update `messagingSenderId` and `messagingVapidKey`. All values are obtained from the https://console.firebase.google.com/.
 5. Add `google-services.json` to [Tindroid](/tinode/tindroid/) by following instructions at https://developers.google.com/android/guides/google-services-plugin.
 
