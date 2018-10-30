@@ -53,7 +53,7 @@ type MsgSetSub struct {
 	Mode string `json:"mode,omitempty"`
 }
 
-// MsgSetDesc is a C2S in set.what == "desc" and sub.init message
+// MsgSetDesc is a C2S in set.what == "desc", acc, sub message
 type MsgSetDesc struct {
 	DefaultAcs *MsgDefaultAcsMode `json:"defacs,omitempty"` // default access mode
 	Public     interface{}        `json:"public,omitempty"`

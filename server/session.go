@@ -575,7 +575,7 @@ func (s *Session) acc(msg *ClientComMessage) {
 		// New account
 
 		// The session cannot authenticate with the new account because  it's already authenticated.
-		if msg.Acc.Login && !s.uid.IsZero() {
+		if msg.Acc.Login && (!s.uid.IsZero() || rec != nil) {
 			s.queueOut(ErrAlreadyAuthenticated(msg.id, "", msg.timestamp))
 			log.Println("s.acc: login requested while already authenticated", s.sid)
 			return
