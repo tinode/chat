@@ -411,12 +411,13 @@ vcard: {
 The format of the `private` field is expected to be a dictionary. The following fields are currently defined:
 ```js
 private: {
-  comment: "some comment", // string, optional user comment about a topic or other user
-  arch: true // boolean value indicating that the topic is archived by the user, i.e. should not be shown in the UI with other non-archived topics.
+  comment: "some comment", // string, optional user comment about a topic or a peer user
+  arch: true  // boolean value indicating that the topic is archived by the user, i.e.
+              // should not be shown in the UI with other non-archived topics.
 }
 ```
 
-Although it's not yet enforced, custom fields should start with `x-`, e.g. `x-example: "abc"`. The fields should contain primitive types only, i.e. string, boolean, number, null.
+Although it's not yet enforced, custom fields should start with an `x-` followed by the application name, e.g. `x-myapp-value: "abc"`. The fields should contain primitive types only, i.e. `string`, `boolean`, `number`, or `null`.
 
 
 ## Format of Content

@@ -33,7 +33,7 @@ Sample Drafty-JSON representation of the text above:
 
 ## Structure
 
-Drafty object has three fields: plain text `txt`, inline markup `fmt`, entities `ent`.
+Drafty object has three fields: plain text `txt`, inline markup `fmt`, and entities `ent`.
 
 ### Plain Text
 
