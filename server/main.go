@@ -171,6 +171,8 @@ type configType struct {
 	// Could be blank: if TLS is not configured, will use ":80", otherwise ":443".
 	// Can be overridden from the command line, see option --listen.
 	Listen string `json:"listen"`
+	// Cache-Control value for static content.
+	CacheControl int `json:"cache_control"`
 	// Address:port to listen for gRPC clients. If blank gRPC support will not be initialized.
 	// Could be overridden from the command line with --grpc_listen.
 	GrpcListen string `json:"grpc_listen"`
@@ -448,15 +450,17 @@ func main() {
 			}
 		}
 		mux.Handle(staticMountPoint,
-			// Optionally add Strict-Transport_security to the response
-			hstsHandler(
-				// Add gzip compression
-				gh.CompressHandler(
-					// And add custom formatter of errors.
-					httpErrorHandler(
-						// Remove mount point prefix
-						http.StripPrefix(staticMountPoint,
-							http.FileServer(http.Dir(*staticPath)))))))
+			// Add optional Cache-Control header
+			cacheControlHandler(config.CacheControl,
+				// Optionally add Strict-Transport_security to the response
+				hstsHandler(
+					// Add gzip compression
+					gh.CompressHandler(
+						// And add custom formatter of errors.
+						httpErrorHandler(
+							// Remove mount point prefix
+							http.StripPrefix(staticMountPoint,
+								http.FileServer(http.Dir(*staticPath))))))))
 		log.Printf("Serving static content from '%s' at '%s'", *staticPath, staticMountPoint)
 	} else {
 		log.Println("Static content is disabled")

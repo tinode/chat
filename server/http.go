@@ -70,6 +70,7 @@ func listenAndServe(addr string, mux *http.ServeMux, tlsEnabled bool, jsconfig s
 		Addr:    addr,
 		Handler: mux,
 	}
+
 	if tlsEnabled || tlsConfig.Enabled {
 
 		if tlsConfig.StrictMaxAge > 0 {
@@ -279,6 +280,18 @@ func tlsRedirect(toPort string) http.HandlerFunc {
 		}
 		http.Redirect(wrt, req, target.String(), http.StatusTemporaryRedirect)
 	}
+}
+
+// Wrapper for http.Handler which optionally adds a Cache-Control header to the response
+func cacheControlHandler(maxAge int, handler http.Handler) http.Handler {
+	if maxAge > 0 {
+		strMaxAge := strconv.Itoa(maxAge)
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Cache-Control", "must-revalidate, public, max-age="+strMaxAge)
+			handler.ServeHTTP(w, r)
+		})
+	}
+	return handler
 }
 
 // Get API key from an HTTP request.
