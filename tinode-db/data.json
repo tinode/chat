@@ -111,9 +111,9 @@
    "passhash": "xena123",
    "authLevel": "root",
    "private": {"comment": "No one knowns that Xena exists"},
-   "public": {"fn": "Xena Pacifist Peasant"},
+   "public": {"fn": "Xena Pacifist Peasant", "photo": "xena-128.jpg", "type": "jpg"},
    "state": 1,
-   "status": "Just a simple peaceful person",
+   "status": "Just a simple peaceful agriculture specialist",
    "username": "xena",
    "addressBook": []
   }
