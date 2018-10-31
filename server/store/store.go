@@ -599,7 +599,7 @@ func RegisterAuthScheme(name string, handler auth.AuthHandler) {
 	authHandlers[name] = handler
 }
 
-// GetAuthHandler returns an auth handler by name irrspectful of logical naming.
+// GetAuthHandler returns an auth handler by actual hardcoded name irrspectful of logical naming.
 func GetAuthHandler(name string) auth.AuthHandler {
 	return authHandlers[strings.ToLower(name)]
 }
@@ -616,6 +616,7 @@ func GetLogicalAuthHandler(name string) auth.AuthHandler {
 }
 
 // InitAuthLogicalNames initializes authentication mapping "logical handler name":"actual handler name".
+// Logical name must not be empty, actual name could be an empty string.
 func InitAuthLogicalNames(config json.RawMessage) error {
 	if config == nil || string(config) == "null" {
 		return nil
@@ -633,12 +634,17 @@ func InitAuthLogicalNames(config json.RawMessage) error {
 	}
 	for _, pair := range mapping {
 		if parts := strings.Split(pair, ":"); len(parts) == 2 {
+			if parts[0] == "" {
+				return errors.New("store: empty logical auth name '" + pair + "'")
+			}
 			if _, ok := authHandlerNames[parts[0]]; ok {
 				return errors.New("store: duplicate mapping for logical auth name '" + pair + "'")
 			}
 			parts[1] = strings.ToLower(parts[1])
-			if _, ok := authHandlers[parts[1]]; !ok {
-				return errors.New("store: unknown handler for logical auth name '" + pair + "'")
+			if parts[1] != "" {
+				if _, ok := authHandlers[parts[1]]; !ok {
+					return errors.New("store: unknown handler for logical auth name '" + pair + "'")
+				}
 			}
 			if parts[0] == parts[1] {
 				// Skip useless identity mapping.

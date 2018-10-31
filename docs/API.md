@@ -170,6 +170,9 @@ The `token` is intended to be the primary means of authentication. Tokens are de
 
 Authenticators are used during account registration [`{acc}`](#acc) and during [`{login}`](#login).
 
+Compiled-in authenticator names may be changed by using `logical_names` configuration feature. For example a custom authenticator may be exposed as `basic` instead of default one or `token` authenticator could be hidden from users. The feature is used by providing an array of mappings in the config file: `logical_name:actual_name` to rename or `actual_name:` to hide.
+
+
 #### Creating an Account
 
 When a new account is created, the user must inform the server which authentication method will be later used to gain access to this account as well as provide shared secret, if appropriate. Only `basic` and `anonymous` can be used during account creation. The `basic` requires the user to generate and send a unique login and password to the server. The `anonymous` does not exchange secrets.
