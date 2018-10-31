@@ -1,6 +1,6 @@
 {
 	"listen": ":18080",
-	"cache_contol": 86400,
+	"cache_contol": 39600,
 	"static_mount": "/",
 	"grpc_listen": ":16061",
 	"api_key_salt": "$API_KEY_SALT",
