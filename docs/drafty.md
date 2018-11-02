@@ -147,7 +147,12 @@ Hashtag `data` contains a single `val` field with the hashtag value which the cl
 ```
 
 #### `FM`: a form, an ordered set or fields
-Form provides means to arrange an array of Drafty elements in a predictable order.
+Form provides means to arrange an array of Drafty elements in a predictable order:
+| Do you agree? |
+|  :---:  |
+| <button>Yes</button> |
+| <button>No</button> |
+
 ```js
 {
   "tp": "FM",
@@ -155,14 +160,13 @@ Form provides means to arrange an array of Drafty elements in a predictable orde
     "name": "consent",
     "layout": "vlist",
     "val": [
-      "Do you agree?",
+      {"txt": "Do you agree?", "fmt": {"len": 12, "tp": "ST"},
       {"txt": "Yes", "fmt": {"len":3}, "ent":{"tp": "BN", "data": {"name": "yes", "act": "pub"}}},
       {"txt": "No", "fmt": {"len":2}, "ent":{"tp": "BN", "data": {"name": "no", "act": "pub"}}}
     ]
   }
 }
 ```
-The form in the example above represents a vertical list of three elements: a plain text "Do you agree?" and two buttons "Yes" and "No".
 * `name`: optional name of the form.
 * `layout`: optional name of layout:
   * `vlist`: elements are arranged in a column, default order.
