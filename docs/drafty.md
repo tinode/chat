@@ -158,7 +158,6 @@ Form provides means to arrange an array of text or Drafty elements in a predicta
 {
   "tp": "FM",
   "data": {
-    "name": "consent",
     "layout": "vlist",
     "val": [
       {"txt": "Do you agree?", "fmt": {"len": 12, "tp": "ST"},
@@ -168,7 +167,6 @@ Form provides means to arrange an array of text or Drafty elements in a predicta
   }
 }
 ```
-* `name`: optional name of the form.
 * `layout`: optional name of layout:
   * `vlist`: elements are arranged in a column, default order.
   * `hlist`: elements are arranged in a row.
