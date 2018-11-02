@@ -150,8 +150,8 @@ Hashtag `data` contains a single `val` field with the hashtag value which the cl
 Form provides means to arrange an array of Drafty elements in a predictable order:
 <table>
 <tr><th>Do you agree?</th></tr>
-<tr><td><button>Yes</button></th></tr>
-<tr><td><button>No</button></th></tr>
+<tr><td><input type="submit" value="Yes"></th></tr>
+<tr><td><input type="submit" value="No"></th></tr>
 </table>
 
 ```js
