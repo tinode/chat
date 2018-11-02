@@ -159,6 +159,7 @@ Form provides means to arrange an array of text or Drafty elements in a predicta
   "tp": "FM",
   "data": {
     "layout": "vlist",
+    "name": "consent",
     "val": [
       {"txt": "Do you agree?", "fmt": {"len": 12, "tp": "ST"},
       {"txt": "Yes", "fmt": {"len":3}, "ent":{"tp": "BN", "data": {"name": "yes", "act": "pub"}}},
@@ -167,10 +168,28 @@ Form provides means to arrange an array of text or Drafty elements in a predicta
   }
 }
 ```
+* `name`: optional name of the form.
 * `layout`: optional name of layout:
   * `vlist`: elements are arranged in a column, default order.
   * `hlist`: elements are arranged in a row.
-* `val`: array of elements. Either plain text or Drafty object including other forms. Implementations may impose limits on the maximum number of elements in the list and the depth of nesting.
+* `val`: array of elements. Either plain text or Drafty object. Implementations may impose limits on the maximum number of elements in the list and the depth of nesting. Default implementations permit up to 3 levels of nesting and up to 8 elements at each level.
+If a `Yes` button is pressed in the example above, the client is expected to send a message to the server with the following content:
+```js
+{
+  "txt": "Yes",
+  "fmt": {
+    "at":-1
+  },
+  "ent": {
+    "tp": "EX",
+    "data": {
+      "mime": "application/json",
+      "name": "consent",
+      "val": "{\"yes\": 1}"
+    }
+  }
+}
+```
 
 #### `BN`: interactive button
 `BN` offers an option to send data to a server, either origin server or another one. The `data` contains the following fields:
