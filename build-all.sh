@@ -77,9 +77,6 @@ do
       cp ./server/static/index.html ./releases/tmp/static
       cp ./server/static/index-dev.html ./releases/tmp/static
       cp ./server/static/umd/*.js ./releases/tmp/static/umd
-      cp ./server/static/src/drafty.js ./releases/tmp/static/src
-      cp ./server/static/src/tinode.js ./releases/tmp/static/src
-      cp ./server/static/src/webapp.jsx ./releases/tmp/static/src
       cp ./server/static/manifest.json ./releases/tmp/static
       cp ./server/static/service-worker.js ./releases/tmp/static
       # Create empty FCM client-side config.
