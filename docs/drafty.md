@@ -148,10 +148,11 @@ Hashtag `data` contains a single `val` field with the hashtag value which the cl
 
 #### `FM`: a form, an ordered set or fields
 Form provides means to arrange an array of Drafty elements in a predictable order:
-| Do you agree? |
-|  :---:  |
-| <button>Yes</button> |
-| <button>No</button> |
+<table>
+<tr><th>Do you agree?</th></tr>
+<tr><td><button>Yes</button></th></tr>
+<tr><td><button>No</button></th></tr>
+</table>
 
 ```js
 {
