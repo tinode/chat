@@ -13,10 +13,10 @@
     "text": "DND"
    },
    "username": "alice",
-	"addressBook": ["email:bob@example.com", "email:carol@example.com", "email:dave@example.com",
-		"email:eve@example.com","email:frank@example.com","email:george@example.com","email:tino@example.com",
-		"tel:17025550001", "tel:17025550002", "tel:17025550003", "tel:17025550004", "tel:17025550005",
-		"tel:17025550006", "tel:17025550007", "tel:17025550008", "tel:17025550009"]
+   "addressBook": ["email:bob@example.com", "email:carol@example.com", "email:dave@example.com",
+      "email:eve@example.com","email:frank@example.com","email:george@example.com","email:tino@example.com",
+      "tel:17025550001", "tel:17025550002", "tel:17025550003", "tel:17025550004", "tel:17025550005",
+      "tel:17025550006", "tel:17025550007", "tel:17025550008", "tel:17025550009"]
   },
   {
    "createdAt": "-139h",
@@ -28,10 +28,10 @@
    "state": 1,
    "status": "stuff",
    "username": "bob",
-	"addressBook": ["email:alice@example.com", "email:carol@example.com", "email:dave@example.com",
-		"email:eve@example.com", "email:frank@example.com", "email:george@example.com", "email:tino@example.com",
-		"tel:17025550001", "tel:17025550002", "tel:17025550003", "tel:17025550004", "tel:17025550005",
-		"tel:17025550006", "tel:17025550007", "tel:17025550008", "tel:17025550009"]
+   "addressBook": ["email:alice@example.com", "email:carol@example.com", "email:dave@example.com",
+      "email:eve@example.com", "email:frank@example.com", "email:george@example.com", "email:tino@example.com",
+      "tel:17025550001", "tel:17025550002", "tel:17025550003", "tel:17025550004", "tel:17025550005",
+      "tel:17025550006", "tel:17025550007", "tel:17025550008", "tel:17025550009"]
   },
   {
    "createdAt": "-138h",
@@ -43,10 +43,10 @@
    "state": 1,
    "status": "ho ho ho",
    "username": "carol",
-	"addressBook": ["email:alice@example.com", "email:bob@example.com", "email:dave@example.com",
-		"email:eve@example.com", "email:frank@example.com", "email:george@example.com", "email:tino@example.com",
-		"tel:17025550001", "tel:17025550002", "tel:17025550003", "tel:17025550004", "tel:17025550005",
-		"tel:17025550006", "tel:17025550007", "tel:17025550008", "tel:17025550009"]
+   "addressBook": ["email:alice@example.com", "email:bob@example.com", "email:dave@example.com",
+      "email:eve@example.com", "email:frank@example.com", "email:george@example.com", "email:tino@example.com",
+      "tel:17025550001", "tel:17025550002", "tel:17025550003", "tel:17025550004", "tel:17025550005",
+      "tel:17025550006", "tel:17025550007", "tel:17025550008", "tel:17025550009"]
   },
   {
    "createdAt": "-137h",
@@ -58,10 +58,10 @@
    "state": 1,
    "status": "hiding!",
    "username": "dave",
-	"addressBook": ["email:alice@example.com", "email:bob@example.com", "email:carol@example.com",
-		"email:eve@example.com", "email:frank@example.com", "email:george@example.com", "email:tino@example.com",
-		"tel:17025550001", "tel:17025550002", "tel:17025550003", "tel:17025550004", "tel:17025550005",
-		"tel:17025550006", "tel:17025550007", "tel:17025550008", "tel:17025550009"]
+   "addressBook": ["email:alice@example.com", "email:bob@example.com", "email:carol@example.com",
+      "email:eve@example.com", "email:frank@example.com", "email:george@example.com", "email:tino@example.com",
+      "tel:17025550001", "tel:17025550002", "tel:17025550003", "tel:17025550004", "tel:17025550005",
+      "tel:17025550006", "tel:17025550007", "tel:17025550008", "tel:17025550009"]
   },
   {
    "createdAt": "-136h",
@@ -72,10 +72,10 @@
    "public": {"fn": "Eve Adams", "photo": "eve-64.jpg", "type": "jpg"},
    "state": 1,
    "username": "eve",
-	"addressBook": ["email:alice@example.com", "email:bob@example.com", "email:carol@example.com",
-		"email:dave@example.com", "email:george@example.com", "email:tino@example.com",
-		"tel:17025550001", "tel:17025550002", "tel:17025550003", "tel:17025550004", "tel:17025550005",
-		"tel:17025550006", "tel:17025550007", "tel:17025550008", "tel:17025550009"]
+   "addressBook": ["email:alice@example.com", "email:bob@example.com", "email:carol@example.com",
+      "email:dave@example.com", "email:george@example.com", "email:tino@example.com",
+      "tel:17025550001", "tel:17025550002", "tel:17025550003", "tel:17025550004", "tel:17025550005",
+      "tel:17025550006", "tel:17025550007", "tel:17025550008", "tel:17025550009"]
   },
   {
    "createdAt": "-135h",
@@ -87,10 +87,10 @@
    "state": 2,
    "status": "singing!",
    "username": "frank",
-	"addressBook": ["email:bob@example.com", "email:carol@example.com", "email:dave@example.com",
-		"email:eve@example.com", "email:george@example.com", "email:tino@example.com",
-		"tel:17025550001", "tel:17025550002", "tel:17025550003", "tel:17025550004", "tel:17025550005",
-		"tel:17025550007", "tel:17025550008", "tel:17025550009"]
+   "addressBook": ["email:bob@example.com", "email:carol@example.com", "email:dave@example.com",
+      "email:eve@example.com", "email:george@example.com", "email:tino@example.com",
+      "tel:17025550001", "tel:17025550002", "tel:17025550003", "tel:17025550004", "tel:17025550005",
+      "tel:17025550007", "tel:17025550008", "tel:17025550009"]
   },
   {
    "createdAt": "-134h",
@@ -157,7 +157,7 @@
   },
   {
    "createdAt": "-119h",
-	"users": [{"name": "alice"}, {"name": "carol", "private": {"comment": "Alice Joha"}}]
+   "users": [{"name": "alice"}, {"name": "carol", "private": {"comment": "Alice Joha"}}]
   },
   {
    "createdAt": "-118h",
@@ -315,5 +315,61 @@
   "Outlook not so good",
   "Very doubtful",
   "All your base are belong to us"
- ]
+ ],
+"forms": [
+  {
+    "txt": "form",
+    "fmt": [{
+      "at": 0,
+      "len": 4,
+      "key": 0
+    }],
+    "ent": [{
+      "tp": "FM",
+      "data": {
+        "layout": "vlist",
+        "name": "consent",
+        "val": [
+          {"txt": "Post response", "fmt": [{"len": 13, "tp": "ST"}]},
+          {"txt": "Yes", "fmt": [{"len":3}], "ent":[{"tp": "BN", "data": {"name": "yes", "act": "pub"}}]},
+          {"txt": "OK", "fmt": [{"len":2}], "ent":[{"tp": "BN", "data": {"name": "no", "act": "pub"}}]}
+        ]
+      }
+    }]
+  },
+  {
+    "txt": "form",
+    "fmt": [{
+      "at": 0,
+      "len": 4,
+      "key": 0
+    }],
+    "ent": [{
+      "tp": "FM",
+      "data": {
+        "layout": "vlist",
+        "name": "consent",
+        "val": [
+          {"txt": "Go to URL:", "fmt": [{"len": 13, "tp": "ST"}]},
+          {"ent": [{
+            "tp": "FM",
+            "data": {
+              "layout": "hlist",
+              "val": [
+                {"txt": "OK",
+                  "fmt": [{"len":2}],
+                  "ent":[{"tp": "BN",
+                    "data": {"name": "yes", "act": "url", "ref": "https://www.example.com/?key=val"}}]},
+                {"txt": "Yes",
+                  "fmt": [{"len":3}],
+                  "ent":[{"tp": "BN",
+                    "data": {"name": "no", "act": "url", "ref": "https://www.example.com"}}]}
+              ]
+            }
+          }]}
+        ]
+      }
+    }]
+  }
+]
 }

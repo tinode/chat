@@ -74,6 +74,7 @@ A text-only [command line client](./tn-cli) implements every possible command.
 * User search/discovery.
 * Rich formatting of messages, markdown-style: \*style\* &rarr; **style**.
 * Inline images and file attachments.
+* Forms and templated responses suitable for chatbots.
 * Message status notifications: message delivery to server; received and read notifications; typing notifications.
 * Support for client-side data caching.
 * Ability to block unwanted communication server-side.

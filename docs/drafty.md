@@ -100,8 +100,8 @@ To create a message with just a single image and no text, use the following Draf
 ```js
 {
   txt: " ",
-  fmt: {at: 0, len: 1, key: 0},
-  ent: {tp: "IM", data: {<your image data here>}}
+  fmt: [{len: 1}],
+  ent: [{tp: "IM", data: {<your image data here>}]}
 }
 ```
 
@@ -161,14 +161,14 @@ Form provides means to arrange an array of text or Drafty elements in a predicta
     "layout": "vlist",
     "name": "consent",
     "val": [
-      {"txt": "Do you agree?", "fmt": {"len": 12, "tp": "ST"},
-      {"txt": "Yes", "fmt": {"len":3}, "ent":{"tp": "BN", "data": {"name": "yes", "act": "pub"}}},
-      {"txt": "No", "fmt": {"len":2}, "ent":{"tp": "BN", "data": {"name": "no", "act": "pub"}}}
+      {"txt": "Do you agree?", "fmt": [{"len": 12, "tp": "ST"}]},
+      {"txt": "Yes", "fmt": [{"len":3}], "ent":[{"tp": "BN", "data": {"name": "yes", "act": "pub"}}]},
+      {"txt": "No", "fmt": [{"len":2}], "ent":[{"tp": "BN", "data": {"name": "no", "act": "pub"}}]}
     ]
   }
 }
 ```
-* `name`: optional name of the form.
+* `name`: optional name of the form. This name is returned as a part of the answer.
 * `layout`: optional name of layout:
   * `vlist`: elements are arranged in a column, default order.
   * `hlist`: elements are arranged in a row.
@@ -177,17 +177,20 @@ If a `Yes` button is pressed in the example above, the client is expected to sen
 ```js
 {
   "txt": "Yes",
-  "fmt": {
+  "fmt": [{
     "at":-1
-  },
-  "ent": {
+  }],
+  "ent": [{
     "tp": "EX",
     "data": {
       "mime": "application/json",
-      "name": "consent",
-      "val": "{\"yes\": 1}"
+      "val": {
+        "name": "consent", // name of the form.
+        "seq": 15, // seq id of the message containing the form.
+        "resp": {"yes": 1} 
+      }
     }
-  }
+  }]
 }
 ```
 
