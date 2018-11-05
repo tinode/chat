@@ -350,7 +350,7 @@
         "layout": "vlist",
         "name": "consent",
         "val": [
-          {"txt": "Go to URL:", "fmt": [{"len": 13, "tp": "ST"}]},
+          {"txt": "Go to URL:", "fmt": [{"len": 10, "tp": "ST"}]},
           {"ent": [{
             "tp": "FM",
             "data": {
