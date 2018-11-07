@@ -139,6 +139,7 @@ message ClientHi {
 	string ver = 3;
 	string device_id = 4;
 	string lang = 5;
+	string platform = 6;
 }
 
 // User creation message {acc}

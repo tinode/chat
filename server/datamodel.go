@@ -97,6 +97,8 @@ type MsgClientHi struct {
 	DeviceID string `json:"dev,omitempty"`
 	// ISO 639-1 human language of the connected device
 	Lang string `json:"lang,omitempty"`
+	// Platform code: ios, android, web.
+	Platform string `json:"platf,omitempty"`
 }
 
 // MsgAccCred is an account credential, provided or verified.

@@ -65,6 +65,8 @@ type Session struct {
 
 	// Device ID of the client
 	deviceID string
+	// Platform: web, ios, android
+	platf string
 	// Human language of the client
 	lang string
 
@@ -504,12 +506,19 @@ func (s *Session) hello(msg *ClientComMessage) {
 		}
 		params = map[string]interface{}{"ver": currentVersion, "build": store.GetAdapterName() + ":" + buildstamp}
 
+		// Set ua & platform in the beginning of the session.
+		// Don't change them later.
+		s.userAgent = msg.Hi.UserAgent
+		s.platf = msg.Hi.Platform
+		if s.platf == "" {
+			s.platf = platformFromUA(msg.Hi.UserAgent)
+		}
 	} else if msg.Hi.Version == "" || parseVersion(msg.Hi.Version) == s.ver {
-		// Save changed device ID or Lang.
+		// Save changed device ID or Lang. Platform cannot be changed.
 		if !s.uid.IsZero() {
 			if err := store.Devices.Update(s.uid, s.deviceID, &types.DeviceDef{
 				DeviceId: msg.Hi.DeviceID,
-				Platform: "",
+				Platform: s.platf,
 				LastSeen: msg.timestamp,
 				Lang:     msg.Hi.Lang,
 			}); err != nil {
@@ -525,7 +534,6 @@ func (s *Session) hello(msg *ClientComMessage) {
 		return
 	}
 
-	s.userAgent = msg.Hi.UserAgent
 	s.deviceID = msg.Hi.DeviceID
 	s.lang = msg.Hi.Lang
 
@@ -940,7 +948,7 @@ func (s *Session) onLogin(msgID string, timestamp time.Time, rec *auth.Rec, miss
 		if s.deviceID != "" {
 			if err := store.Devices.Update(rec.Uid, "", &types.DeviceDef{
 				DeviceId: s.deviceID,
-				Platform: platformFromUA(s.userAgent),
+				Platform: s.platf,
 				LastSeen: timestamp,
 				Lang:     s.lang,
 			}); err != nil {

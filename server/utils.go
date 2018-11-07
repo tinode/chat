@@ -574,7 +574,17 @@ func toAbsolutePath(base, path string) string {
 
 // Detect platform from the UserAgent string.
 func platformFromUA(ua string) string {
+	ua = strings.ToLower(ua)
 	switch {
+	case strings.Contains(ua, "reactnative"):
+		switch {
+		case strings.Contains(ua, "iphone"),
+			strings.Contains(ua, "ipad"):
+			return "ios"
+		case strings.Contains(ua, "android"):
+			return "android"
+		}
+		return ""
 	case strings.Contains(ua, "tinodejs"):
 		return "web"
 	case strings.Contains(ua, "tindroid"):

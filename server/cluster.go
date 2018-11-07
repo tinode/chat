@@ -82,6 +82,9 @@ type ClusterSess struct {
 	// Device ID
 	DeviceID string
 
+	// Device platform: "web", "ios", "android"
+	Platform string
+
 	// Session ID
 	Sid string
 }
@@ -315,6 +318,7 @@ func (c *Cluster) Master(msg *ClusterReq, rejected *bool) error {
 		sess.remoteAddr = msg.Sess.RemoteAddr
 		sess.lang = msg.Sess.Lang
 		sess.deviceID = msg.Sess.DeviceID
+		sess.platf = msg.Sess.Platform
 
 		// Dispatch remote message to a local session.
 		msg.Pkt.from = msg.OnBahalfOf
@@ -400,6 +404,7 @@ func (c *Cluster) routeToTopic(msg *ClientComMessage, topic string, sess *Sessio
 				Ver:        sess.ver,
 				Lang:       sess.lang,
 				DeviceID:   sess.deviceID,
+				Platform:   sess.platf,
 				Sid:        sess.sid}})
 }
 
