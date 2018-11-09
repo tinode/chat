@@ -318,58 +318,33 @@
  ],
 "forms": [
   {
-    "txt": "form",
-    "fmt": [{
-      "at": 0,
-      "len": 4,
-      "key": 0
-    }],
-    "ent": [{
-      "tp": "FM",
-      "data": {
-        "layout": "vlist",
-        "name": "consent",
-        "val": [
-          {"txt": "Post response", "fmt": [{"len": 13, "tp": "ST"}]},
-          {"txt": "Yes", "fmt": [{"len":3}], "ent":[{"tp": "BN", "data": {"name": "yes", "act": "pub"}}]},
-          {"txt": "OK", "fmt": [{"len":2}], "ent":[{"tp": "BN", "data": {"name": "no", "act": "pub"}}]}
-        ]
-      }
-    }]
+    "txt": "Post response Yes Да",
+    "fmt": [
+      {"at": 0, "len": 20, "tp": "FM"},
+      {"at": 0, "len": 13, "tp": "ST"},
+      {"at": 13, "len": 1, "tp": "BR"},
+      {"at": 14, "len": 3, "key": 0},
+      {"at": 17, "len": 1, "tp": "BR"},
+      {"at": 18, "len": 2, "key": 1}
+    ],
+    "ent": [
+      {"tp": "BN", "data": {"name": "yes", "act": "pub"}},
+      {"tp": "BN", "data": {"name": "yes2", "act": "pub"}}
+    ]
   },
   {
-    "txt": "form",
-    "fmt": [{
-      "at": 0,
-      "len": 4,
-      "key": 0
-    }],
-    "ent": [{
-      "tp": "FM",
-      "data": {
-        "layout": "vlist",
-        "name": "consent",
-        "val": [
-          {"txt": "Go to URL:", "fmt": [{"len": 10, "tp": "ST"}]},
-          {"ent": [{
-            "tp": "FM",
-            "data": {
-              "layout": "hlist",
-              "val": [
-                {"txt": "OK",
-                  "fmt": [{"len":2}],
-                  "ent":[{"tp": "BN",
-                    "data": {"name": "yes", "act": "url", "ref": "https://www.example.com/?key=val"}}]},
-                {"txt": "Yes",
-                  "fmt": [{"len":3}],
-                  "ent":[{"tp": "BN",
-                    "data": {"name": "no", "act": "url", "ref": "https://www.example.com"}}]}
-              ]
-            }
-          }]}
-        ]
-      }
-    }]
+    "txt": "Go to URL: Yes OK",
+    "fmt": [
+      {"at": 0, "len": 17, "tp": "FM"},
+      {"at": 0, "len": 10, "tp": "ST"},
+      {"at": 11, "len": 6, "tp": "RW"},
+      {"at": 11, "len": 3, "key": 0},
+      {"at": 15, "len": 2, "key": 1}
+    ],
+    "ent": [
+      {"tp": "BN", "data": {"name": "ok", "act": "url", "ref": "https://www.example.com/?key=val"}},
+      {"tp": "BN", "data": {"name": "ok2", "act": "url", "ref": "https://www.example.com"}}
+    ]
   }
 ]
 }

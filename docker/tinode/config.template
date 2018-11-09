@@ -55,7 +55,7 @@
 		"adapters": {
 			"mysql": {
 				"database": "tinode",
-				"dsn": "$MYSQL_DSN?parseTime=true"
+				"dsn": "$MYSQL_DSN?parseTime=true&collation=utf8mb4_unicode_ci"
 			},
 			"rethinkdb": {
 				"database": "tinode",

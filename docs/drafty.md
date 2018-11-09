@@ -64,6 +64,52 @@ Examples:
  * `{ "at":144, "len":8, "key":2 }`: insert entity `ent[2]` into position 144, the entity spans 8 characters.
  * `{ "at":-1, "len":0, "key":4 }`: show the `ent[4]` as a file attachment, don't apply any styling to text.
 
+
+#### `FM`: a form, an ordered set or fields
+Form provides means to add paragraph-level formatting to a logical group of elements:
+<table>
+<tr><th>Do you agree?</th></tr>
+<tr><td><a href="">Yes</a></td></tr>
+<tr><td><a href="">No</a></td></tr>
+</table>
+
+```js
+{
+ "txt": "Do you agree? Yes No",
+ "fmt": [
+   {"at": 0, "len": 20, "tp": "FM"},
+   {"at": 0, "len": 13, "tp": "ST"}
+   {"at": 13, "len": 1, "tp": "BR"},
+   {"at": 14, "len": 3, "key": 0},
+   {"at": 17, "len": 1, "tp": "BR"},
+   {"at": 18, "len": 2, "key": 1},
+ ],
+ "ent": [
+   {"tp": "BN", "data": {"name": "yes", "act": "pub", "oh yes!"}},
+   {"tp": "BN", "data": {"name": "no", "act": "pub"}}
+ ]
+}
+```
+If a `Yes` button is pressed in the example above, the client is expected to send a message to the server with the following content:
+```js
+{
+ "txt": "Yes",
+ "fmt": [{
+   "at":-1
+ }],
+ "ent": [{
+   "tp": "EX",
+   "data": {
+     "mime": "application/json",
+     "val": {
+       "seq": 15, // seq id of the message containing the form.
+       "resp": {"yes": "oh yes!"}
+     }
+   }
+ }]
+}
+```
+
 ### Entities `ent`
 
 In general, an entity is a text decoration which requires additional (possibly large) data. An entity is represented by an object with two fields: `tp` indicates type of the entity, `data` is type-dependent styling information. Unknown fields are ignored.
@@ -144,54 +190,6 @@ Mention `data` contains a single `val` field with ID of the mentioned user:
 Hashtag `data` contains a single `val` field with the hashtag value which the client software needs to interpret, for instance it could be a search term:
 ```js
 { "tp":"HT", "data":{ "val":"tinode" } }
-```
-
-#### `FM`: a form, an ordered set or fields
-Form provides means to arrange an array of text or Drafty elements in a predictable order:
-<table>
-<tr><th>Do you agree?</th></tr>
-<tr><td><a href="">Yes</a></td></tr>
-<tr><td><a href="">No</a></td></tr>
-</table>
-
-```js
-{
-  "tp": "FM",
-  "data": {
-    "layout": "vlist",
-    "name": "consent",
-    "val": [
-      {"txt": "Do you agree?", "fmt": [{"len": 12, "tp": "ST"}]},
-      {"txt": "Yes", "fmt": [{"len":3}], "ent":[{"tp": "BN", "data": {"name": "yes", "act": "pub"}}]},
-      {"txt": "No", "fmt": [{"len":2}], "ent":[{"tp": "BN", "data": {"name": "no", "act": "pub"}}]}
-    ]
-  }
-}
-```
-* `name`: optional name of the form. This name is returned as a part of the answer.
-* `layout`: optional name of layout:
-  * `vlist`: elements are arranged in a column, default order.
-  * `hlist`: elements are arranged in a row.
-* `val`: array of elements. Either plain text or Drafty object. Implementations may impose limits on the maximum number of elements in the list and the depth of nesting. Default implementations permit up to 3 levels of nesting and up to 8 elements at each level.
-If a `Yes` button is pressed in the example above, the client is expected to send a message to the server with the following content:
-```js
-{
-  "txt": "Yes",
-  "fmt": [{
-    "at":-1
-  }],
-  "ent": [{
-    "tp": "EX",
-    "data": {
-      "mime": "application/json",
-      "val": {
-        "name": "consent", // name of the form.
-        "seq": 15, // seq id of the message containing the form.
-        "resp": {"yes": 1} 
-      }
-    }
-  }]
-}
 ```
 
 #### `BN`: interactive button
