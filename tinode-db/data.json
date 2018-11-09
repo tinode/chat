@@ -318,14 +318,12 @@
  ],
 "forms": [
   {
-    "txt": "Post response Yes Да",
+    "txt": "Post responseYesДа",
     "fmt": [
-      {"at": 0, "len": 20, "tp": "FM"},
+      {"at": 0, "len": 18, "tp": "FM"},
       {"at": 0, "len": 13, "tp": "ST"},
-      {"at": 13, "len": 1, "tp": "BR"},
-      {"at": 14, "len": 3, "key": 0},
-      {"at": 17, "len": 1, "tp": "BR"},
-      {"at": 18, "len": 2, "key": 1}
+      {"at": 13, "len": 3, "key": 0},
+      {"at": 16, "len": 2, "key": 1}
     ],
     "ent": [
       {"tp": "BN", "data": {"name": "yes", "act": "pub"}},
