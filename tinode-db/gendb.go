@@ -278,7 +278,7 @@ func genDb(reset bool, config string, data *Data) {
 	}
 
 	seqIds := map[string]int{}
-	now := types.TimeNow().Add(-time.Minute)
+	now := types.TimeNow().Add(-time.Minute * 10)
 
 	messageCount := len(data.Messages)
 	if messageCount > 0 {
@@ -376,13 +376,15 @@ func genDb(reset bool, config string, data *Data) {
 	if len(data.Forms) != 0 {
 		from := nameIndex[botAccount]
 		log.Println("Inserting forms as ", botAccount, from)
+		ts := now
 		for _, form := range data.Forms {
 			for _, sub := range data.P2psubs {
+				ts = ts.Add(time.Second)
 				seqIds[nameIndex[sub.pair]]++
 				seqId := seqIds[nameIndex[sub.pair]]
 				if sub.Users[0].Name == botAccount || sub.Users[1].Name == botAccount {
 					if err = store.Messages.Save(&types.Message{
-						ObjHeader: types.ObjHeader{CreatedAt: now},
+						ObjHeader: types.ObjHeader{CreatedAt: ts},
 						SeqId:     seqId,
 						Topic:     nameIndex[sub.pair],
 						Head:      types.MessageHeaders{"mime": "text/x-drafty"},

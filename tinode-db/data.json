@@ -331,17 +331,17 @@
     ]
   },
   {
-    "txt": "Go to URL: Yes OK",
+    "txt": "Go to URL:Yes OK",
     "fmt": [
-      {"at": 0, "len": 17, "tp": "FM"},
+      {"at": 0, "len": 16, "tp": "FM"},
       {"at": 0, "len": 10, "tp": "ST"},
-      {"at": 11, "len": 6, "tp": "RW"},
-      {"at": 11, "len": 3, "key": 0},
-      {"at": 15, "len": 2, "key": 1}
+      {"at": 10, "len": 6, "tp": "RW"},
+      {"at": 10, "len": 3, "key": 0},
+      {"at": 14, "len": 2, "key": 1}
     ],
     "ent": [
-      {"tp": "BN", "data": {"name": "ok", "act": "url", "ref": "https://www.example.com/?key=val"}},
-      {"tp": "BN", "data": {"name": "ok2", "act": "url", "ref": "https://www.example.com"}}
+      {"tp": "BN", "data": {"name": "ok", "act": "url", "ref": "https://github.com/tinode/chat/?key=val"}},
+      {"tp": "BN", "data": {"name": "ok2", "act": "url", "ref": "https://github.com/tinode/chat"}}
     ]
   }
 ]

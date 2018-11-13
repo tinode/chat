@@ -584,14 +584,16 @@ var authHandlerNames map[string]string
 
 // RegisterAuthScheme registers an authentication scheme handler.
 func RegisterAuthScheme(name string, handler auth.AuthHandler) {
-	name = strings.ToLower(name)
-
-	if authHandlers == nil {
-		authHandlers = make(map[string]auth.AuthHandler)
+	if name == "" {
+		panic("RegisterAuthScheme: empty auth scheme name")
 	}
-
 	if handler == nil {
 		panic("RegisterAuthScheme: scheme handler is nil")
+	}
+
+	name = strings.ToLower(name)
+	if authHandlers == nil {
+		authHandlers = make(map[string]auth.AuthHandler)
 	}
 	if _, dup := authHandlers[name]; dup {
 		panic("RegisterAuthScheme: called twice for scheme " + name)
