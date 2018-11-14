@@ -168,9 +168,13 @@ const (
 	constMsgMetaData
 	constMsgMetaTags
 	constMsgMetaDel
-	constMsgDelTopic
+)
+
+const (
+	constMsgDelTopic = iota
 	constMsgDelMsg
 	constMsgDelSub
+	constMsgDelUser
 )
 
 func parseMsgClientMeta(params string) int {
@@ -205,6 +209,8 @@ func parseMsgClientDel(params string) int {
 		return constMsgDelTopic
 	case "sub":
 		return constMsgDelSub
+	case "user":
+		return constMsgDelUser
 	default:
 		// ignore
 	}
@@ -250,15 +256,18 @@ type MsgClientSet struct {
 // MsgClientDel delete messages or topic {del}.
 type MsgClientDel struct {
 	Id    string `json:"id,omitempty"`
-	Topic string `json:"topic"`
-	// What to delete, either "msg" to delete messages (default) or "topic" to delete the topic or "sub"
-	// to delete a subscription to topic.
+	Topic string `json:"topic,omitempty"`
+	// What to delete:
+	// * "msg" to delete messages (default)
+	// * "topic" to delete the topic
+	// * "sub" to delete a subscription to topic.
+	// * "user" to delete or disable user.
 	What string `json:"what"`
 	// Delete messages with these IDs (either one by one or a set of ranges)
 	DelSeq []MsgDelRange `json:"delseq,omitempty"`
-	// User ID of the subscription to delete
+	// User ID of the user or subscription to delete
 	User string `json:"user,omitempty"`
-	// Request to hard-delete messages for all users, if such option is available.
+	// Request to hard-delete objects (i.e. delete messages for all users), if such option is available.
 	Hard bool `json:"hard,omitempty"`
 }
 

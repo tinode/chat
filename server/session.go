@@ -1088,6 +1088,42 @@ func (s *Session) set(msg *ClientComMessage) {
 }
 
 func (s *Session) del(msg *ClientComMessage) {
+	what := parseMsgClientDel(msg.Del.What)
+
+	// Delete user
+	if what == constMsgDelUser {
+		var reply *ServerComMessage
+		if msg.Del.User == "" || msg.Del.User == s.uid.UserId() {
+			// Delete current user.
+			if err := store.Users.Delete(s.uid, msg.Del.Hard); err != nil {
+				reply = decodeStoreError(err, msg.id, "", msg.timestamp, nil)
+				log.Println("s.del: failed to delete user", err, s.sid)
+			}
+			
+		} else if s.authLvl == auth.LevelRoot {
+			// Delete another user.
+			uid := types.ParseUserId(msg.Del.User)
+			if uid.IsZero() {
+				reply = ErrMalformed(msg.id, "", msg.timestamp))
+				log.Println("s.del: invalid user ID", msg.Del.User, s.sid)
+			} else if err := store.Users.Delete(uid, msg.Del.Hard); err != nil {
+				reply = decodeStoreError(err, msg.id, "", msg.timestamp, nil)
+				log.Println("s.del: failed to delete user", err, s.sid)
+			}
+			
+		} else {
+			reply = ErrPermissionDenied(msg.id, "", msg.timestamp)
+			log.Println("s.del: illegal attempt to delete another user", msg.Del.User, s.sid)
+		}
+		
+		if reply == nil {
+			reply = NoErr(msg.id, "", msg.timestamp)
+		}
+		s.queueOut(reply)
+		return
+	}
+
+	// Delete something other than user: topic, subscription, message(s)
 
 	// Expand topic name and validate request.
 	expanded, resp := s.expandTopicName(msg)
@@ -1096,10 +1132,10 @@ func (s *Session) del(msg *ClientComMessage) {
 		return
 	}
 
-	what := parseMsgClientDel(msg.Del.What)
 	if what == 0 {
 		s.queueOut(ErrMalformed(msg.id, msg.topic, msg.timestamp))
-		log.Println("s.del: invalid Del action", msg.Del.What)
+		log.Println("s.del: invalid Del action", msg.Del.What, s.sid)
+		return
 	}
 
 	sub := s.getSub(expanded)
@@ -1127,7 +1163,7 @@ func (s *Session) del(msg *ClientComMessage) {
 	} else {
 		// Must join the topic to delete messages or subscriptions.
 		s.queueOut(ErrAttachFirst(msg.id, msg.topic, msg.timestamp))
-		log.Println("s.del: invalid Del action while unsubbed", msg.Del.What)
+		log.Println("s.del: invalid Del action while unsubbed", msg.Del.What, s.sid)
 	}
 }
 

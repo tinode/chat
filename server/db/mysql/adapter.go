@@ -624,13 +624,13 @@ func (a *adapter) UserGetAll(ids ...t.Uid) ([]t.User, error) {
 	return users, err
 }
 
-func (a *adapter) UserDelete(uid t.Uid, soft bool) error {
+func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 	var err error
-	if soft {
+	if hard {
+		_, err = a.db.Exec("DELETE FROM users WHERE id=?", uid)
+	} else {
 		now := t.TimeNow()
 		_, err = a.db.Exec("UPDATE users SET updatedAt=?, deletedAt=? WHERE id=?", now, now, uid)
-	} else {
-		_, err = a.db.Exec("DELETE FROM users WHERE id=?", uid)
 	}
 	return err
 }

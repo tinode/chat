@@ -405,7 +405,7 @@ func (TopicsObjMapper) Update(topic string, update map[string]interface{}) error
 }
 
 // Delete deletes topic, messages, attachments, and subscriptions.
-func (TopicsObjMapper) Delete(topic string) error {
+func (TopicsObjMapper) Delete(topic string, hard bool) error {
 	if err := adp.SubsDelForTopic(topic); err != nil {
 		return err
 	}

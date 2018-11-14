@@ -501,14 +501,14 @@ func (a *adapter) UserGetAll(ids ...t.Uid) ([]t.User, error) {
 	return users, nil
 }
 
-func (a *adapter) UserDelete(uid t.Uid, soft bool) error {
+func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 	var err error
 	q := rdb.DB(a.dbName).Table("users").Get(uid.String())
-	if soft {
+	if hard {
+		_, err = q.Delete().RunWrite(a.conn)
+	} else {
 		now := t.TimeNow()
 		_, err = q.Update(map[string]interface{}{"DeletedAt": now, "UpdatedAt": now}).RunWrite(a.conn)
-	} else {
-		_, err = q.Delete().RunWrite(a.conn)
 	}
 	return err
 }
