@@ -189,7 +189,7 @@ func (UsersObjMapper) Create(user *types.User, private interface{}) (*types.User
 	if err != nil {
 		// Best effort to delete incomplete user record. Orphaned user records are not a problem.
 		// They just take up space.
-		adp.UserDelete(user.Uid(), false)
+		adp.UserDelete(user.Uid(), true)
 		return nil, err
 	}
 
@@ -248,8 +248,11 @@ func (UsersObjMapper) GetByCred(method, value string) (types.Uid, error) {
 }
 
 // Delete deletes user records.
-func (UsersObjMapper) Delete(id types.Uid, soft bool) error {
-	if !soft {
+func (UsersObjMapper) Delete(id types.Uid, hard bool) error {
+	if hard {
+		// Move this logic to adapter.
+
+		adp.DeviceDelete(id)
 		adp.SubsDelForUser(id)
 		// TODO: Maybe delete topics where the user is the owner and all subscriptions to those topics,
 		// and messages
@@ -257,9 +260,7 @@ func (UsersObjMapper) Delete(id types.Uid, soft bool) error {
 		adp.CredDel(id, "")
 	}
 
-	adp.UserDelete(id, soft)
-
-	return errors.New("store: not implemented")
+	return adp.UserDelete(id, hard)
 }
 
 // UpdateLastSeen updates LastSeen and UserAgent.

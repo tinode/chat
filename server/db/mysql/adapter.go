@@ -625,14 +625,59 @@ func (a *adapter) UserGetAll(ids ...t.Uid) ([]t.User, error) {
 }
 
 func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
-	var err error
+	tx, err := a.db.Beginx()
+	if err != nil {
+		return err
+	}
+
+	defer func() {
+		if err != nil {
+			tx.Rollback()
+		}
+	}()
+
+	decoded_uid := store.DecodeUid(uid)
 	if hard {
-		_, err = a.db.Exec("DELETE FROM users WHERE id=?", uid)
+		err = a.DeviceDelete(uid)
+		if err != nil {
+			return err
+		}
+
+		err = a.SubsDelForUser(uid, true)
+		if err != nil {
+			return err
+		}
+
+		// TODO: Delete topics where the user is the owner.
+		// TODO: Delete all user's P2P topics.
+		// TODO: Delete all user's messages.
+
+		_, err = a.AuthDelAllRecords(uid)
+		if err != nil {
+			return err
+		}
+
+		err = a.CredDel(id, "")
+		if err != nil {
+			return err
+		}
+
+		_, err = a.db.Exec("DELETE FROM usertags WHERE userid=?", decoded_uid)
+		if err != nil {
+			return err
+		}
+		_, err = a.db.Exec("DELETE FROM users WHERE id=?", decoded_uid)
 	} else {
 		now := t.TimeNow()
-		_, err = a.db.Exec("UPDATE users SET updatedAt=?, deletedAt=? WHERE id=?", now, now, uid)
+		// Disable all subscriptions.
+		a.SubsDelForUser(uid, false)
+		// Disable user.
+		_, err = a.db.Exec("UPDATE users SET updatedAt=?, deletedAt=? WHERE id=?", now, now, decoded_uid)
+		if err != nil {
+			return err
+		}
 	}
-	return err
+	return tx.Commit()
 }
 
 // UserUpdate updates user object.
@@ -1049,18 +1094,23 @@ func (a *adapter) TopicDelete(topic string) error {
 		}
 	}()
 
-	_, err = tx.Exec("DELETE FROM topictags WHERE topic=?", topic)
-	if err != nil {
+	if err = a.SubsDelForTopic(topic); err != nil {
 		return err
 	}
 
-	_, err = tx.Exec("DELETE FROM topics WHERE name=?", topic)
-	if err != nil {
+	if err = a.MessageDeleteList(topic, nil); err != nil {
 		return err
 	}
-	tx.Commit()
 
-	return err
+	if _, err = tx.Exec("DELETE FROM topictags WHERE topic=?", topic); err != nil {
+		return err
+	}
+
+	if _, err = tx.Exec("DELETE FROM topics WHERE name=?", topic); err != nil {
+		return err
+	}
+
+	return tx.Commit()
 }
 
 func (a *adapter) TopicUpdateOnMessage(topic string, msg *t.Message) error {
@@ -1258,10 +1308,15 @@ func (a *adapter) SubsDelForTopic(topic string) error {
 }
 
 // SubsDelForTopic marks user's subscriptions as deleted
-func (a *adapter) SubsDelForUser(user t.Uid) error {
-	now := t.TimeNow()
-	_, err := a.db.Exec("UPDATE subscriptions SET updatedat=?, deletedat=? WHERE userid=?",
-		now, now, store.DecodeUid(user))
+func (a *adapter) SubsDelForUser(user t.Uid, hard bool) error {
+	var err error
+	if hard {
+		_, err = a.db.Exec("DELETE FROM subscriptions WHERE userid=?", store.DecodeUid(user))
+	} else {
+		now := t.TimeNow()
+		_, err = a.db.Exec("UPDATE subscriptions SET updatedat=?, deletedat=? WHERE userid=?",
+			now, now, store.DecodeUid(user))
+	}
 	return err
 }
 
@@ -1731,8 +1786,14 @@ func (a *adapter) DeviceGetAll(uids ...t.Uid) (map[t.Uid][]t.DeviceDef, int, err
 }
 
 func (a *adapter) DeviceDelete(uid t.Uid, deviceID string) error {
-	_, err := a.db.Exec("DELETE FROM devices WHERE userid=? AND hash=?",
-		store.DecodeUid(uid), deviceHasher(deviceID))
+	var err error
+	if deviceID == "" {
+		_, err = a.db.Exec("DELETE FROM devices WHERE userid=?",
+			store.DecodeUid(uid))
+	} else {
+		_, err = a.db.Exec("DELETE FROM devices WHERE userid=? AND hash=?",
+			store.DecodeUid(uid), deviceHasher(deviceID))
+	}
 	return err
 }
 

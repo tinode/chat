@@ -819,6 +819,13 @@ func (a *adapter) TopicShare(shares []*t.Subscription) (int, error) {
 }
 
 func (a *adapter) TopicDelete(topic string) error {
+	var err error
+	if err = a.SubsDelForTopic(topic); err != nil {
+		return err
+	}
+	if err = a.MessageDeleteList(topic, nil); err != nil {
+		return err
+	}
 	_, err := rdb.DB(a.dbName).Table("topics").Get(topic).Delete().RunWrite(a.conn)
 	return err
 }
@@ -1484,8 +1491,14 @@ func (a *adapter) DeviceGetAll(uids ...t.Uid) (map[t.Uid][]t.DeviceDef, int, err
 }
 
 func (a *adapter) DeviceDelete(uid t.Uid, deviceID string) error {
-	_, err := rdb.DB(a.dbName).Table("users").Get(uid.String()).Replace(rdb.Row.Without(
-		map[string]string{"Devices": deviceHasher(deviceID)})).RunWrite(a.conn)
+	var err error
+	q := rdb.DB(a.dbName).Table("users").Get(uid.String())
+	if deviceId == "" {
+		q = q.Update(map[string]interface{}{"Devices": nil})
+	} else {
+		q = q.Replace(rdb.Row.Without(map[string]string{"Devices": deviceHasher(deviceID)}))
+	}
+	_, err := q.RunWrite(a.conn)
 	return err
 }
 
