@@ -638,7 +638,7 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 
 	decoded_uid := store.DecodeUid(uid)
 	if hard {
-		err = a.DeviceDelete(uid)
+		err = a.DeviceDelete(uid, "")
 		if err != nil {
 			return err
 		}
@@ -657,7 +657,7 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 			return err
 		}
 
-		err = a.CredDel(id, "")
+		err = a.CredDel(uid, "")
 		if err != nil {
 			return err
 		}
@@ -1094,7 +1094,7 @@ func (a *adapter) TopicDelete(topic string) error {
 		}
 	}()
 
-	if err = a.SubsDelForTopic(topic); err != nil {
+	if err = a.SubsDelForTopic(topic, true); err != nil {
 		return err
 	}
 
@@ -1301,9 +1301,14 @@ func (a *adapter) SubsDelete(topic string, user t.Uid) error {
 }
 
 // SubsDelForTopic marks all subscriptions to the given topic as deleted
-func (a *adapter) SubsDelForTopic(topic string) error {
-	now := t.TimeNow()
-	_, err := a.db.Exec("UPDATE subscriptions SET updatedat=?, deletedat=? WHERE topic=?", now, now, topic)
+func (a *adapter) SubsDelForTopic(topic string, hard bool) error {
+	var err error
+	if hard {
+		_, err = a.db.Exec("DELETE FROM subscriptions WHERE topic=?", topic)
+	} else {
+		now := t.TimeNow()
+		_, err = a.db.Exec("UPDATE subscriptions SET updatedat=?, deletedat=? WHERE topic=?", now, now, topic)
+	}
 	return err
 }
 

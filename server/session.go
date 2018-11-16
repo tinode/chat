@@ -585,7 +585,7 @@ func (s *Session) acc(msg *ClientComMessage) {
 		// The session cannot authenticate with the new account because  it's already authenticated.
 		if msg.Acc.Login && (!s.uid.IsZero() || rec != nil) {
 			s.queueOut(ErrAlreadyAuthenticated(msg.id, "", msg.timestamp))
-			log.Println("s.acc: login requested while already authenticated", s.sid)
+			log.Println("s.acc: login requested while authenticated", s.sid)
 			return
 		}
 
@@ -835,7 +835,7 @@ func (s *Session) login(msg *ClientComMessage) {
 
 	handler := store.GetLogicalAuthHandler(msg.Login.Scheme)
 	if handler == nil {
-		log.Println("Unknown authentication scheme", msg.Login.Scheme)
+		log.Println("s.login: unknown authentication scheme", msg.Login.Scheme, s.sid)
 		s.queueOut(ErrAuthUnknownScheme(msg.id, "", msg.timestamp))
 		return
 	}
@@ -860,7 +860,7 @@ func (s *Session) login(msg *ClientComMessage) {
 		}
 	}
 	if err != nil {
-		log.Println("failed to validate credentials", err)
+		log.Println("s.login: failed to validate credentials", err, s.sid)
 		s.queueOut(decodeStoreError(err, msg.id, "", msg.timestamp, nil))
 	} else {
 		s.queueOut(s.onLogin(msg.id, msg.timestamp, rec, missing))
@@ -1099,23 +1099,23 @@ func (s *Session) del(msg *ClientComMessage) {
 				reply = decodeStoreError(err, msg.id, "", msg.timestamp, nil)
 				log.Println("s.del: failed to delete user", err, s.sid)
 			}
-			
+
 		} else if s.authLvl == auth.LevelRoot {
 			// Delete another user.
 			uid := types.ParseUserId(msg.Del.User)
 			if uid.IsZero() {
-				reply = ErrMalformed(msg.id, "", msg.timestamp))
+				reply = ErrMalformed(msg.id, "", msg.timestamp)
 				log.Println("s.del: invalid user ID", msg.Del.User, s.sid)
 			} else if err := store.Users.Delete(uid, msg.Del.Hard); err != nil {
 				reply = decodeStoreError(err, msg.id, "", msg.timestamp, nil)
 				log.Println("s.del: failed to delete user", err, s.sid)
 			}
-			
+
 		} else {
 			reply = ErrPermissionDenied(msg.id, "", msg.timestamp)
 			log.Println("s.del: illegal attempt to delete another user", msg.Del.User, s.sid)
 		}
-		
+
 		if reply == nil {
 			reply = NoErr(msg.id, "", msg.timestamp)
 		}

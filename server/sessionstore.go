@@ -154,7 +154,7 @@ func (ss *SessionStore) EvictUser(uid types.Uid) {
 	ss.lock.Lock()
 	defer ss.lock.Unlock()
 
-	evicted := NoErrEvicted("", types.TimeNow())
+	evicted := NoErrEvicted("", "", types.TimeNow())
 	for _, s := range ss.sessCache {
 		if s.uid == uid && s.stop != nil {
 			s.stop <- s.serialize(evicted)

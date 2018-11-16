@@ -861,7 +861,7 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 
 				t.suspend()
 
-				if err := store.Topics.Delete(topic); err != nil {
+				if err := store.Topics.Delete(topic, true); err != nil {
 					t.resume()
 					sess.queueOut(ErrUnknown(msg.id, msg.topic, now))
 					return err
@@ -923,7 +923,7 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 
 				if tcat == types.TopicCatP2P && len(subs) < 2 {
 					// This is a P2P topic and fewer than 2 subscriptions, delete the entire topic
-					if err := store.Topics.Delete(topic); err != nil {
+					if err := store.Topics.Delete(topic, true); err != nil {
 						sess.queueOut(ErrUnknown(msg.id, msg.topic, now))
 						return err
 					}
@@ -951,7 +951,7 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 			} else {
 				// Case 1.2.1.1: owner, delete the group topic from db.
 				// Only group topics have owners.
-				if err := store.Topics.Delete(topic); err != nil {
+				if err := store.Topics.Delete(topic, true); err != nil {
 					sess.queueOut(ErrUnknown(msg.id, msg.topic, now))
 					return err
 				}

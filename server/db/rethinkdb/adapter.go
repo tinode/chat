@@ -820,7 +820,7 @@ func (a *adapter) TopicShare(shares []*t.Subscription) (int, error) {
 
 func (a *adapter) TopicDelete(topic string) error {
 	var err error
-	if err = a.SubsDelForTopic(topic); err != nil {
+	if err = a.SubsDelForTopic(topic, true); err != nil {
 		return err
 	}
 	if err = a.MessageDeleteList(topic, nil); err != nil {
@@ -994,14 +994,20 @@ func (a *adapter) SubsDelete(topic string, user t.Uid) error {
 }
 
 // SubsDelForTopic marks all subscriptions to the given topic as deleted
-func (a *adapter) SubsDelForTopic(topic string) error {
-	now := t.TimeNow()
-	update := map[string]interface{}{
-		"UpdatedAt": now,
-		"DeletedAt": now,
+func (a *adapter) SubsDelForTopic(topic string, hard bool) error {
+	var err error
+	q := rdb.DB(a.dbName).Table("subscriptions").GetAllByIndex("Topic", topic)
+	if hard {
+		_, err = q.Delete().RunWrite(a.conn)
+
+	} else {
+		now := t.TimeNow()
+		update := map[string]interface{}{
+			"UpdatedAt": now,
+			"DeletedAt": now,
+		}
+		_, err = q.Update(update).RunWrite(a.conn)
 	}
-	_, err := rdb.DB(a.dbName).Table("subscriptions").GetAllByIndex("Topic", topic).
-		Update(update).RunWrite(a.conn)
 	return err
 }
 
