@@ -36,7 +36,7 @@ type Adapter interface {
 	// UserGetAll returns user records for a given list of user IDs
 	UserGetAll(ids ...t.Uid) ([]t.User, error)
 	// UserDelete deletes user record
-	UserDelete(id t.Uid, soft bool) error
+	UserDelete(id t.Uid, hard bool) error
 	// UserUpdate updates user record
 	UserUpdate(uid t.Uid, update map[string]interface{}) error
 	// UserGetByCred returns user ID for the given validated credential.

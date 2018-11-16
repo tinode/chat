@@ -249,17 +249,6 @@ func (UsersObjMapper) GetByCred(method, value string) (types.Uid, error) {
 
 // Delete deletes user records.
 func (UsersObjMapper) Delete(id types.Uid, hard bool) error {
-	if hard {
-		// Move this logic to adapter.
-
-		adp.DeviceDelete(id)
-		adp.SubsDelForUser(id)
-		// TODO: Maybe delete topics where the user is the owner and all subscriptions to those topics,
-		// and messages
-		adp.AuthDelAllRecords(id)
-		adp.CredDel(id, "")
-	}
-
 	return adp.UserDelete(id, hard)
 }
 
@@ -407,13 +396,6 @@ func (TopicsObjMapper) Update(topic string, update map[string]interface{}) error
 
 // Delete deletes topic, messages, attachments, and subscriptions.
 func (TopicsObjMapper) Delete(topic string, hard bool) error {
-	if err := adp.SubsDelForTopic(topic); err != nil {
-		return err
-	}
-	if err := adp.MessageDeleteList(topic, nil); err != nil {
-		return err
-	}
-
 	return adp.TopicDelete(topic)
 }
 
