@@ -149,13 +149,12 @@ func (ss *SessionStore) Shutdown() {
 	log.Printf("SessionStore shut down, sessions terminated: %d", len(ss.sessCache))
 }
 
-// Shutdown terminates sessionStore. No need to clean up.
-// Don't send to clustered sessions, their servers are not being shut down.
+// Terminate all sessions of a given user.
 func (ss *SessionStore) EvictUser(uid types.Uid) {
 	ss.lock.Lock()
 	defer ss.lock.Unlock()
 
-	evicted := (types.TimeNow())
+	evicted := NoErrEvicted("", types.TimeNow())
 	for _, s := range ss.sessCache {
 		if s.uid == uid && s.stop != nil {
 			s.stop <- s.serialize(evicted)
