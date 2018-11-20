@@ -31,6 +31,7 @@ func pbServDataSerialize(data *MsgServerData) *pbx.ServerMsg_Data {
 	return &pbx.ServerMsg_Data{Data: &pbx.ServerData{
 		Topic:      data.Topic,
 		FromUserId: data.From,
+		Timestamp:  timeToInt64(&data.Timestamp),
 		DeletedAt:  timeToInt64(data.DeletedAt),
 		SeqId:      int32(data.SeqId),
 		Head:       interfaceMapToByteMap(data.Head),
@@ -130,9 +131,14 @@ func pbServDeserialize(pkt *pbx.ServerMsg) *ServerComMessage {
 			Params: byteMapToInterfaceMap(ctrl.GetParams()),
 		}
 	} else if data := pkt.GetData(); data != nil {
+		tsptr := int64ToTime(data.GetTimestamp())
+		if tsptr == nil {
+			tsptr = &time.Time{}
+		}
 		msg.Data = &MsgServerData{
 			Topic:     data.GetTopic(),
 			From:      data.GetFromUserId(),
+			Timestamp: *tsptr,
 			DeletedAt: int64ToTime(data.GetDeletedAt()),
 			SeqId:     int(data.GetSeqId()),
 			Head:      byteMapToInterfaceMap(data.GetHead()),
