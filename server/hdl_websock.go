@@ -59,7 +59,6 @@ func (sess *Session) readLoop() {
 			}
 			return
 		}
-
 		sess.dispatchRaw(raw)
 	}
 }
