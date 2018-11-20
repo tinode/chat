@@ -26,7 +26,7 @@ from tinode_grpc import pb
 from tinode_grpc import pbx
 
 APP_NAME = "tn-cli"
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.0.1"
 LIB_VERSION = pkg_resources.get_distribution("tinode_grpc").version
 
 # Dictionary wich contains lambdas to be executed when server response is received
@@ -320,8 +320,8 @@ def parse_cmd(cmd):
         parser.add_argument('--content', dest='content', help='message to send')
     elif parts[0] == "get":
         parser = argparse.ArgumentParser(prog=parts[0], description='Query topic for messages or metadata')
-        parser.add_argument('topic', nargs='?', default=argparse.SUPPRESS, help='topic to update')
-        parser.add_argument('--topic', dest='topic', default=None, help='topic to update')
+        parser.add_argument('topic', nargs='?', default=argparse.SUPPRESS, help='topic to query')
+        parser.add_argument('--topic', dest='topic', default=None, help='topic to query')
         parser.add_argument('--desc', action='store_true', help='query topic description')
         parser.add_argument('--sub', action='store_true', help='query topic subscriptions')
         parser.add_argument('--tags', action='store_true', help='query topic tags')
@@ -483,7 +483,11 @@ def run(addr, schema, secret):
                         func(msg.ctrl.params)
                 stdoutln("\r" + str(msg.ctrl.code) + " " + msg.ctrl.text)
             elif msg.HasField("data"):
-                stdoutln("\rFrom: " + msg.data.from_user_id + ":\n")
+                stdoutln("\n\rFrom [" + msg.data.from_user_id + "]:")
+                if msg.data.head:
+                    stdoutln("Headers:")
+                    for key in msg.data.head:
+                        stdoutln("\t" + key + ": "+str(msg.data.head[key]))
                 stdoutln(json.loads(msg.data.content))
             elif msg.HasField("pres"):
                 pass

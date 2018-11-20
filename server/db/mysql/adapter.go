@@ -1447,7 +1447,6 @@ func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.QueryOpt) (
 		msgs = append(msgs, msg)
 	}
 	rows.Close()
-
 	return msgs, err
 }
 
