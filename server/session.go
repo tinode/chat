@@ -217,6 +217,12 @@ func (s *Session) cleanUp(expired bool) {
 func (s *Session) dispatchRaw(raw []byte) {
 	var msg ClientComMessage
 
+	if len(raw) == 1 && raw[0] == 0x31 {
+		// 0x31 == '1'. This is a network probe message. Respond with a '0':
+		s.queueOutBytes([]byte{0x30})
+		return
+	}
+
 	toLog := raw
 	truncated := ""
 	if len(raw) > 512 {
