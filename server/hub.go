@@ -982,6 +982,22 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 	return nil
 }
 
+// Terminate then delete all topics associated with the given user:
+// * all p2p topics with the given user
+// * topics where the given user is the owner.
+// * user's 'me' and 'fnd' topics.
+func (h *Hub) deleteTopicsForUser(uid types.Uid) error {
+	h.topics.Range(func(_, t interface{}) bool {
+		topic := t.(*Topic)
+		if _, member := topic.perUser[uid]; (topic.cat != types.TopicCatGrp && member) ||
+			topic.owner == uid {
+
+			topic.exit <- &shutDown{reason: StopDeleted}
+		}
+		return true
+	})
+}
+
 // replyTopicDescBasic loads minimal topic Desc when the requester is not subscribed to the topic
 func replyTopicDescBasic(sess *Session, topic string, msg *ClientComMessage) {
 	log.Printf("hub.replyTopicDescBasic: topic %s", topic)
