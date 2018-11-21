@@ -986,7 +986,7 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 // * all p2p topics with the given user
 // * topics where the given user is the owner.
 // * user's 'me' and 'fnd' topics.
-func (h *Hub) deleteTopicsForUser(uid types.Uid) error {
+func (h *Hub) deleteTopicsForUser(uid types.Uid) {
 	h.topics.Range(func(_, t interface{}) bool {
 		topic := t.(*Topic)
 		if _, member := topic.perUser[uid]; (topic.cat != types.TopicCatGrp && member) ||
