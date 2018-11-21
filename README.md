@@ -16,7 +16,7 @@ The goal of this project is to actually deliver on XMPP's original vision: creat
 
 ## Getting support
 
-* Read [API documentation](docs/API.md).
+* Read [API documentation](docs/API.md) and [FAQ](docs/faq.md).
 * For support, general questions, discussions post to [https://groups.google.com/d/forum/tinode](https://groups.google.com/d/forum/tinode).
 * For bugs and feature requests [open an issue](https://github.com/tinode/chat/issues/new).
 
