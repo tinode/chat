@@ -475,7 +475,7 @@ func (a *adapter) UserGet(uid t.Uid) (*t.User, error) {
 	}
 
 	var user t.User
-	if err = cursor.One(&user); err != nil {
+	if err = cursor.One(&user); err != nil || user.DeletedAt != nil {
 		return nil, err
 	}
 	return &user, nil
@@ -493,7 +493,9 @@ func (a *adapter) UserGetAll(ids ...t.Uid) ([]t.User, error) {
 
 		var user t.User
 		for cursor.Next(&user) {
-			users = append(users, user)
+			if user.DeletedAt == nil {
+				users = append(users, user)
+			}
 		}
 
 		if err = cursor.Err(); err != nil {

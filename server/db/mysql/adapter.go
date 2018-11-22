@@ -586,8 +586,8 @@ func (a *adapter) UserGet(uid t.Uid) (*t.User, error) {
 		return &user, nil
 	}
 
-	if err == sql.ErrNoRows {
-		// Clear the error if user does not exist
+	if err == sql.ErrNoRows || user.DeletedAt != nil {
+		// Clear the error if user does not exist or deleted.
 		return nil, nil
 	}
 
@@ -615,6 +615,11 @@ func (a *adapter) UserGetAll(ids ...t.Uid) ([]t.User, error) {
 			users = nil
 			break
 		}
+
+		if user.DeletedAt != nil {
+			continue
+		}
+
 		user.SetUid(encodeUidString(user.Id))
 		user.Public = fromJSON(user.Public)
 
