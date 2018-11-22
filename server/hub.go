@@ -982,20 +982,34 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 	return nil
 }
 
-// Terminate then delete all topics associated with the given user:
+// Terminate all topics associated with the given user:
 // * all p2p topics with the given user
-// * topics where the given user is the owner.
+// * group topics where the given user is the owner.
 // * user's 'me' and 'fnd' topics.
-func (h *Hub) deleteTopicsForUser(uid types.Uid) {
+func (h *Hub) stopTopicsForUser(uid types.Uid, alldone chan<- bool) {
+	var done chan bool
+	if alldone != nil {
+		done = make(chan bool, 32)
+	}
+
+	count := 0
 	h.topics.Range(func(_, t interface{}) bool {
 		topic := t.(*Topic)
 		if _, member := topic.perUser[uid]; (topic.cat != types.TopicCatGrp && member) ||
 			topic.owner == uid {
-
-			topic.exit <- &shutDown{reason: StopDeleted}
+			// This call is non-blocking unless some other routine tries to stop it at the same time.
+			topic.exit <- &shutDown{reason: StopDeleted, done: done}
+			count++
 		}
 		return true
 	})
+
+	if alldone != nil {
+		for i := 0; i < count; i++ {
+			<-done
+		}
+		alldone <- true
+	}
 }
 
 // replyTopicDescBasic loads minimal topic Desc when the requester is not subscribed to the topic
