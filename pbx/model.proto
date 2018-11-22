@@ -9,28 +9,28 @@ service Node {
 
 // Plugin interface.
 service Plugin {
-	// This plugin method is called by Tinode server for every message received from the clients. The 
-	// method returns a ServerCtrl message. Non-zero ServerCtrl.code indicates that no further 
-	// processing is needed. The Tinode server will generate a {ctrl} message from the returned ServerCtrl 
-	// and forward it to the client session. 
+	// This plugin method is called by Tinode server for every message received from the clients. The
+	// method returns a ServerCtrl message. Non-zero ServerCtrl.code indicates that no further
+	// processing is needed. The Tinode server will generate a {ctrl} message from the returned ServerCtrl
+	// and forward it to the client session.
 	// ServerCtrl.code equals to 0 instructs the server to continue with default processing of the client message.
   	rpc FireHose(ClientReq) returns (ServerResp) {}
-	
-	// An alteranative user and topic discovery mechanism. 
+
+	// An alteranative user and topic discovery mechanism.
 	// A search request issued on a 'fnd' topic. This method is called to generate an alternative result set.
 	rpc Find(SearchQuery) returns (SearchFound) {}
-	
+
 	// The following methods are for the Tinode server to report individual events.
-		
+
 	// Account created, updated or deleted
 	rpc Account(AccountEvent) returns (Unused) {}
-	
+
 	// Topic created, updated [or deleted -- not supported yet]
 	rpc Topic(TopicEvent) returns (Unused) {}
-	
+
 	// Subscription created, updated or deleted
 	rpc Subscription(SubscriptionEvent) returns (Unused) {}
-	
+
 	// Message published or deleted
 	rpc Message(MessageEvent) returns (Unused) {}
 }
@@ -83,7 +83,7 @@ message SetDesc {
 
 message GetOpts {
 	// Timestamp in milliseconds since epoch 01/01/1970
-	int64 if_modified_since = 1; 
+	int64 if_modified_since = 1;
 	// Limit search to this user ID
 	string user = 2;
 	// Limit search results to one topic;
@@ -226,6 +226,7 @@ message ClientDel {
 		MSG = 0;
 		TOPIC = 1;
 		SUB = 2;
+		USER = 3;
 	}
 	What what = 3;
 	// Delete messages by id or range of ids
@@ -241,7 +242,7 @@ enum InfoNote {
 	RECV = 1;
 	KP = 2;
 }
-	
+
 // ClientNote is a client-generated notification for topic subscribers
 message ClientNote {
 	string topic = 1;
@@ -306,7 +307,7 @@ message TopicSub {
 	string user_id = 9;
 
 	// 'me' topic only
-	
+
 	// Topic name of this subscription
 	string topic = 10;
 	int64 touched_at = 11;
@@ -416,7 +417,7 @@ enum RespCode {
 	DROP = 1;
 	// Send the the provided response to the client.
 	RESPOND = 2;
-	// Replace client's original request with the provided request then continue with 
+	// Replace client's original request with the provided request then continue with
 	// processing.
 	REPLACE = 3;
 }
@@ -435,7 +436,7 @@ message Session {
 	string remote_addr = 4;
 	string user_agent = 5;
 	string device_id = 6;
-	string language = 7;	
+	string language = 7;
 }
 
 message ClientReq {
@@ -473,7 +474,7 @@ message TopicEvent {
 }
 
 message AccountEvent {
-	Crud action = 1;	
+	Crud action = 1;
 	string user_id = 2;
 
 	DefaultAcsMode default_acs = 3;
@@ -487,13 +488,13 @@ message SubscriptionEvent {
 	Crud action = 1;
 	string topic = 2;
 	string user_id = 3;
-	
+
 	int32 del_id = 4;
 	int32 read_id = 5;
 	int32 recv_id = 6;
 
 	AccessMode mode = 7;
-	
+
 	bytes private = 8;
 }
 

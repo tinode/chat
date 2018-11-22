@@ -268,6 +268,8 @@ func pbCliSerialize(msg *ClientComMessage) *pbx.ClientMsg {
 			what = pbx.ClientDel_TOPIC
 		case "sub":
 			what = pbx.ClientDel_SUB
+		case "user":
+			what = pbx.ClientDel_USER
 		}
 		pkt.Message = &pbx.ClientMsg_Del{Del: &pbx.ClientDel{
 			Id:     msg.Del.Id,
@@ -371,6 +373,8 @@ func pbCliDeserialize(pkt *pbx.ClientMsg) *ClientComMessage {
 			msg.Del.What = "topic"
 		case pbx.ClientDel_SUB:
 			msg.Del.What = "sub"
+		case pbx.ClientDel_USER:
+			msg.Del.What = "user"
 		}
 	} else if note := pkt.GetNote(); note != nil {
 		msg.Note = &MsgClientNote{

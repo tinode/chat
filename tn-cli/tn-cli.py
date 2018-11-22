@@ -226,6 +226,8 @@ def delMsg(id, topic, what, param, hard):
         user = param
     elif what == 'topic':
         enum_what = pb.ClientDel.TOPIC
+    elif what == 'user':
+        enum_what = pb.ClientDel.USER
 
     # Field named 'del' conflicts with the keyword 'del. This is a work around.
     msg = pb.ClientMsg(on_behalf_of=default_user)
