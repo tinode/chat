@@ -27,7 +27,7 @@ const (
 	defaultHost     = "localhost:28015"
 	defaultDatabase = "tinode"
 
-	dbVersion = 105
+	dbVersion = 106
 
 	adapterName = "rethinkdb"
 )
@@ -195,6 +195,10 @@ func (a *adapter) CreateDb(reset bool) error {
 
 	// Users
 	if _, err := rdb.DB(a.dbName).TableCreate("users", rdb.TableCreateOpts{PrimaryKey: "Id"}).RunWrite(a.conn); err != nil {
+		return err
+	}
+	// Create secondary index on User.DeletedAt for finding soft-deleted users
+	if _, err := rdb.DB(a.dbName).Table("users").IndexCreate("DeletedAt").RunWrite(a.conn); err != nil {
 		return err
 	}
 	// Create secondary index on User.Tags array so user can be found by tags
@@ -511,6 +515,28 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 		_, err = q.Update(map[string]interface{}{"DeletedAt": now, "UpdatedAt": now}).RunWrite(a.conn)
 	}
 	return err
+}
+
+// UserGetDisabled returns ID of users who were soft-deleted since specified time.
+func (a *adapter) UserGetDisabled(since time.Time) ([]t.Uid, error) {
+	cursor, err := rdb.DB(a.dbName).Table("users").
+		Between(since, rdb.MaxVal, rdb.BetweenOpts{Index: "DeletedAt"}).Run(a.conn)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close()
+
+	var uids []t.Uid
+	var userId t.Uid
+	for cursor.Next(&userId) {
+		uids = append(uids, userId)
+	}
+
+	if err = cursor.Err(); err != nil {
+		return nil, err
+	}
+
+	return uids, nil
 }
 
 // UserUpdate updates user object.

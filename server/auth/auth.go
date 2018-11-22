@@ -107,6 +107,6 @@ type AuthHandler interface {
 	// GenSecret generates a new secret, if appropriate.
 	GenSecret(rec *Rec) ([]byte, time.Time, error)
 
-	// DelRecords deletes all authentication records for the given user.
+	// DelRecords deletes (or disables) all authentication records for the given user.
 	DelRecords(uid types.Uid) error
 }

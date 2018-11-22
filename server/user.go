@@ -276,6 +276,23 @@ func replyDelUser(s *Session, msg *ClientComMessage) {
 	}
 
 	if reply == nil {
+		// Disable all authenticators
+		authnames := store.GetAuthHandlerNames()
+		for _, name := range authnames {
+			if err := store.GetAuthHandler(name).DelRecords(uid); err != nil {
+				log.Println("replyDelUser: failed to delete user auth record", msg.Del.User, name, s.sid)
+			}
+		}
+
+		// Terminate all sessions. Skip current session.
+		globals.sessionStore.EvictUser(uid, s.sid)
+
+		// Stop topics
+		done := make(chan bool)
+		globals.hub.unreg <- &topicUnreg{forUser: uid, del: true, done: done}
+		<-done
+
+		// Delete user's records from the database.
 		if err := store.Users.Delete(uid, msg.Del.Hard); err != nil {
 			reply = decodeStoreError(err, msg.id, "", msg.timestamp, nil)
 			log.Println("replyDelUser: failed to delete user", err, s.sid)
@@ -285,4 +302,5 @@ func replyDelUser(s *Session, msg *ClientComMessage) {
 	}
 
 	s.queueOut(reply)
+	s.stop <- s.serialize(NoErrEvicted("", "", msg.timestamp))
 }

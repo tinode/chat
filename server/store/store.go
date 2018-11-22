@@ -252,6 +252,11 @@ func (UsersObjMapper) Delete(id types.Uid, hard bool) error {
 	return adp.UserDelete(id, hard)
 }
 
+// GetDisabled returns user IDs which were disabled (soft-deleted) since specifid time.
+func (UsersObjMapper) GetDisabled(since time.Time) ([]types.Uid, error) {
+	return adp.UserGetDisabled(since)
+}
+
 // UpdateLastSeen updates LastSeen and UserAgent.
 func (UsersObjMapper) UpdateLastSeen(uid types.Uid, userAgent string, when time.Time) error {
 	return adp.UserUpdate(uid, map[string]interface{}{"LastSeen": when, "UserAgent": userAgent})
@@ -589,7 +594,20 @@ func GetAuthHandler(name string) auth.AuthHandler {
 	return authHandlers[strings.ToLower(name)]
 }
 
-// GetLogicalAuthHandler returns an auth handler by logical name.
+// GetAuthHandlerNames returns a slice of strings containing authenticator names.
+func GetAuthHandlerNames() []string {
+	if len(authHandlers) == 0 {
+		return nil
+	}
+	var names []string
+	for name, _ := range authHandlers {
+		names = append(names, name)
+	}
+	return names
+}
+
+// GetLogicalAuthHandler returns an auth handler by logical name. If there is no handler by that
+// logical name it tries to find one by the hardcoded name.
 func GetLogicalAuthHandler(name string) auth.AuthHandler {
 	name = strings.ToLower(name)
 	if len(authHandlerNames) != 0 {

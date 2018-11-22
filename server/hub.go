@@ -56,12 +56,16 @@ type sessionLeave struct {
 type topicUnreg struct {
 	// Routable name of the topic to drop
 	topic string
+	// UID of the user being deleted
+	forUser types.Uid
 	// Session making the request, could be nil
 	sess *Session
 	// Original request, could be nil
 	pkt *ClientComMessage
 	// Unregister then delete the topic
 	del bool
+	// Channel for reporting operation completion when deleting topics for a user
+	done chan<- bool
 }
 
 type metaReq struct {
@@ -200,13 +204,17 @@ func (h *Hub) run() {
 			}
 
 		case unreg := <-h.unreg:
-			// The topic is being garbage collected or deleted.
 			reason := StopNone
 			if unreg.del {
 				reason = StopDeleted
 			}
-			if err := h.topicUnreg(unreg.sess, unreg.topic, unreg.pkt, reason); err != nil {
-				log.Println("hub.topicUnreg failed:", err)
+			if unreg.forUser.IsZero() {
+				// The topic is being garbage collected or deleted.
+				if err := h.topicUnreg(unreg.sess, unreg.topic, unreg.pkt, reason); err != nil {
+					log.Println("hub.topicUnreg failed:", err)
+				}
+			} else {
+				go h.stopTopicsForUser(unreg.forUser, reason, unreg.done)
 			}
 
 		case <-h.rehash:
@@ -986,10 +994,10 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 // * all p2p topics with the given user
 // * group topics where the given user is the owner.
 // * user's 'me' and 'fnd' topics.
-func (h *Hub) stopTopicsForUser(uid types.Uid, alldone chan<- bool) {
+func (h *Hub) stopTopicsForUser(uid types.Uid, reason int, alldone chan<- bool) {
 	var done chan bool
 	if alldone != nil {
-		done = make(chan bool, 32)
+		done = make(chan bool, 128)
 	}
 
 	count := 0
@@ -998,7 +1006,7 @@ func (h *Hub) stopTopicsForUser(uid types.Uid, alldone chan<- bool) {
 		if _, member := topic.perUser[uid]; (topic.cat != types.TopicCatGrp && member) ||
 			topic.owner == uid {
 			// This call is non-blocking unless some other routine tries to stop it at the same time.
-			topic.exit <- &shutDown{reason: StopDeleted, done: done}
+			topic.exit <- &shutDown{reason: reason, done: done}
 			count++
 		}
 		return true

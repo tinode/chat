@@ -115,6 +115,7 @@ var globals struct {
 	cluster      *Cluster
 	grpcServer   *grpc.Server
 	plugins      []Plugin
+
 	// Credential validators.
 	validators map[string]credValidator
 	// Validators required for each auth level.

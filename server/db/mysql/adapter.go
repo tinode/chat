@@ -30,7 +30,7 @@ const (
 	defaultDSN      = "root:@tcp(localhost:3306)/tinode?parseTime=true"
 	defaultDatabase = "tinode"
 
-	dbVersion = 105
+	dbVersion = 106
 
 	adapterName = "mysql"
 )
@@ -207,7 +207,8 @@ func (a *adapter) CreateDb(reset bool) error {
 			useragent VARCHAR(255) DEFAULT '',
 			public    JSON,
 			tags      JSON,
-			PRIMARY KEY(id)
+			PRIMARY KEY(id),
+			INDEX users_deletedat(deletedat)
 		)`); err != nil {
 		return err
 	}
@@ -678,6 +679,26 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 		}
 	}
 	return tx.Commit()
+}
+
+func (a *adapter) UserGetDisabled(since time.Time) ([]t.Uid, error) {
+	rows, err := a.db.Queryx("SELECT id FROM users WHERE deletedat>=?", since)
+	if err != nil {
+		return nil, err
+	}
+
+	var uids []t.Uid
+	for rows.Next() {
+		var userId int64
+		if err = rows.StructScan(&userId); err != nil {
+			uids = nil
+			break
+		}
+		uids = append(uids, store.EncodeUid(userId))
+	}
+	rows.Close()
+
+	return uids, err
 }
 
 // UserUpdate updates user object.
