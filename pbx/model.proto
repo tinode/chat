@@ -343,6 +343,7 @@ message ServerData {
 	string topic = 1;
 	// ID of the user who originated the message as {pub}, could be empty if sent by the system
 	string from_user_id = 2;
+	// Timestamp when the message was sent.
 	int64 timestamp = 7;
 	// Timestamp when the message was deleted or 0. Milliseconds since the epoch 01/01/1970
 	int64 deleted_at = 3;
