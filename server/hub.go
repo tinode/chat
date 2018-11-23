@@ -1041,16 +1041,3 @@ func replyTopicDescBasic(sess *Session, topic string, msg *ClientComMessage) {
 	sess.queueOut(&ServerComMessage{
 		Meta: &MsgServerMeta{Id: msg.id, Topic: msg.topic, Timestamp: &now, Desc: desc}})
 }
-
-// Terminate all p2p topics with the given user or where the user is the owner
-func (h *hub) terminateTopicsForUser(uid types.Uid) error {
-	h.topics.Range(func(_, ti interface{}) bool {
-		topic := ti.(*Topic)
-		if topic.owner == uid || 
-			(topic.cat == types.TopicCatP2P && ) {
-			topic.exit <- &shutDown{done: topicsdone}
-		}
-		return true
-	})
-	return nil
-}
