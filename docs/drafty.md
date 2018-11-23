@@ -85,7 +85,7 @@ Form provides means to add paragraph-level formatting to a logical group of elem
    {"at": 18, "len": 2, "key": 1},
  ],
  "ent": [
-   {"tp": "BN", "data": {"name": "yes", "act": "pub", "oh yes!"}},
+   {"tp": "BN", "data": {"name": "yes", "act": "pub", "val": "oh yes!"}},
    {"tp": "BN", "data": {"name": "no", "act": "pub"}}
  ]
 }
