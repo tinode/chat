@@ -695,7 +695,7 @@ func (a *adapter) UserGetDisabled(since time.Time) ([]t.Uid, error) {
 	var uids []t.Uid
 	for rows.Next() {
 		var userId int64
-		if err = rows.StructScan(&userId); err != nil {
+		if err = rows.Scan(&userId); err != nil {
 			uids = nil
 			break
 		}

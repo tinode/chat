@@ -26,7 +26,7 @@ from tinode_grpc import pb
 from tinode_grpc import pbx
 
 APP_NAME = "tn-cli"
-APP_VERSION = "1.0.1"
+APP_VERSION = "1.1.0"
 LIB_VERSION = pkg_resources.get_distribution("tinode_grpc").version
 
 # Dictionary wich contains lambdas to be executed when server response is received
@@ -200,44 +200,49 @@ def setMsg(id, topic, user, fn, photo, public, private, auth, anon, mode, tags):
         tags=tags)), on_behalf_of=default_user)
 
 
-def delMsg(id, topic, what, param, hard):
-    if topic == None and param != None:
-        topic = param
-        param = None
+def delMsg(id, topic, user, msglist, hard):
+    if msglist != None:
+        what = 'msg'
+        if not topic:
+            topic = default_topic
+    elif user != None:
+        if not topic:
+            what = 'user'
+        else:
+            what = 'sub'
+    else:
+        what = 'topic'
+        if not topic:
+            topic = default_topic
 
-    if not topic:
-        topic = default_topic
+    stdoutln(id, what, topic, user, msglist, hard)
 
-    stdoutln(id, topic, what, param, hard)
     enum_what = None
     before = None
     seq_list = None
-    user = None
     if what == 'msg':
         enum_what = pb.ClientDel.MSG
-        if param == 'all':
+        if msglist == 'all':
             seq_list = [pb.DelQuery(range=pb.SeqRange(low=1, hi=0x8FFFFFF))]
-        elif param != None:
-            seq_list = [pb.DelQuery(seq_id=int(x.strip())) for x in param.split(',')]
+        elif msglist != None:
+            seq_list = [pb.DelQuery(seq_id=int(x.strip())) for x in msglist.split(',')]
         stdoutln(seq_list)
 
     elif what == 'sub':
         enum_what = pb.ClientDel.SUB
-        user = param
     elif what == 'topic':
         enum_what = pb.ClientDel.TOPIC
     elif what == 'user':
         enum_what = pb.ClientDel.USER
 
-    # Field named 'del' conflicts with the keyword 'del. This is a work around.
     msg = pb.ClientMsg(on_behalf_of=default_user)
+    # Field named 'del' conflicts with the keyword 'del. This is a work around.
     xdel = getattr(msg, 'del')
     """
     setattr(msg, 'del', pb.ClientDel(id=str(id), topic=topic, what=enum_what, hard=hard,
         del_seq=seq_list, user_id=user))
     """
     xdel.id = str(id)
-    xdel.topic = topic
     xdel.what = enum_what
     if hard != None:
         xdel.hard = hard
@@ -245,6 +250,8 @@ def delMsg(id, topic, what, param, hard):
         xdel.del_seq.extend(seq_list)
     if user != None:
         xdel.user_id = user
+    if topic != None:
+        xdel.topic = topic
     return msg
 
 def noteMsg(id, topic, what, seq):
@@ -341,15 +348,11 @@ def parse_cmd(cmd):
         parser.add_argument('--mode', default=None, help='new value of access mode')
         parser.add_argument('--tags', default=None, help='tags for topic discovery, comma separated list without spaces')
     elif parts[0] == "del":
-        parser = argparse.ArgumentParser(prog=parts[0], description='Delete message(s), subscription or topic')
-        parser.add_argument('topic', nargs='?', default=argparse.SUPPRESS, help='topic being affected')
-        parser.add_argument('--topic', dest='topic', default=None, help='topic being affected')
-        parser.add_argument('what', default='msg', choices=('msg', 'sub', 'topic'),
-            help='what to delete')
-        group = parser.add_mutually_exclusive_group()
-        group.add_argument('--user', dest='param', help='delete subscription with the given user id')
-        group.add_argument('--list', dest='param', help='comma separated list of message IDs to delete')
-        parser.add_argument('--hard', action='store_true', help='hard-delete messages')
+        parser = argparse.ArgumentParser(prog=parts[0], description='Delete message(s), subscription, topic, user')
+        parser.add_argument('--topic', default=None, help='topic being affected')
+        parser.add_argument('--user', default=None, help='either delete this user or a subscription with this user')
+        parser.add_argument('--msglist', default=None, dest='msglist', help='comma separated list of message IDs to delete')
+        parser.add_argument('--hard', action='store_true', help='request to hard-delete')
     elif parts[0] == "note":
         parser = argparse.ArgumentParser(prog=parts[0], description='Send notification to topic, ex "note kp"')
         parser.add_argument('topic', help='topic to notify')
@@ -367,7 +370,7 @@ def parse_cmd(cmd):
         print("\tpub\t- post message to topic")
         print("\tget\t- query topic for metadata or messages")
         print("\tset\t- update topic metadata")
-        print("\tdel\t- delete message(s), topic or subscription")
+        print("\tdel\t- delete message(s), topic, subscription, or user")
         print("\tnote\t- send notification")
         print("\n\tType <command> -h for help")
         return None
@@ -416,7 +419,7 @@ def serialize_cmd(string, id):
         return setMsg(id, cmd.topic, cmd.user, cmd.fn, cmd.photo, cmd.public, cmd.private,
             cmd.auth, cmd.anon, cmd.mode, cmd.tags)
     elif cmd.cmd == "del":
-        return delMsg(id, cmd.topic, cmd.what, cmd.param, cmd.hard)
+        return delMsg(id, cmd.topic, cmd.user, cmd.msglist, cmd.hard)
     elif cmd.cmd == "note":
         return noteMsg(id, cmd.topic, cmd.what, cmd.seq)
     else:
