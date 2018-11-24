@@ -645,51 +645,58 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 
 	decoded_uid := store.DecodeUid(uid)
 	if hard {
+		// TODO: Move under transaction
 		err = a.DeviceDelete(uid, "")
 		if err != nil {
 			return err
 		}
 
+		// TODO: move under transaction
 		err = a.SubsDelForUser(uid, true)
 		if err != nil {
 			return err
 		}
 
 		// TODO: Delete topics where the user is the owner.
-		// TODO: Delete all user's P2P topics.
 		// TODO: Delete all user's messages.
 
+		// TODO: move under transaction.
 		_, err = a.AuthDelAllRecords(uid)
 		if err != nil {
 			return err
 		}
 
+		// TODO: move under transaction
 		err = a.CredDel(uid, "")
 		if err != nil {
 			return err
 		}
 
-		_, err = a.db.Exec("DELETE FROM usertags WHERE userid=?", decoded_uid)
+		_, err = tx.Exec("DELETE FROM usertags WHERE userid=?", decoded_uid)
 		if err != nil {
 			return err
 		}
-		_, err = a.db.Exec("DELETE FROM users WHERE id=?", decoded_uid)
+		_, err = tx.Exec("DELETE FROM users WHERE id=?", decoded_uid)
 		if err != nil {
 			return err
 		}
 	} else {
 		now := t.TimeNow()
-		// Disable all subscriptions.
+		// Disable all subscriptions. That includes p2p subscriptions. No need to delete them.
+		// TODO: move under transaction.
 		a.SubsDelForUser(uid, false)
 
 		// TODO: Disable all topics where the user is the owner.
+		// "UPDATE topics AS t LEFT JOIN subscriptions AS s ON t.name=s.topic SET t.updatedAt=?, t.deletedAt=? WHERE s.userid=? AND s.isowner>0",
+		// now, now, decoded_uid
 
 		// Disable user.
-		_, err = a.db.Exec("UPDATE users SET updatedAt=?, deletedAt=? WHERE id=?", now, now, decoded_uid)
+		_, err = tx.Exec("UPDATE users SET updatedAt=?, deletedAt=? WHERE id=?", now, now, decoded_uid)
 		if err != nil {
 			return err
 		}
 	}
+
 	return tx.Commit()
 }
 
@@ -1117,6 +1124,7 @@ func (a *adapter) TopicShare(shares []*t.Subscription) (int, error) {
 	return len(shares), tx.Commit()
 }
 
+// TopicDelete deletes specified topic.
 func (a *adapter) TopicDelete(topic string, hard bool) error {
 	tx, err := a.db.Beginx()
 	if err != nil {
@@ -1129,22 +1137,32 @@ func (a *adapter) TopicDelete(topic string, hard bool) error {
 		}
 	}()
 
-	if err = a.SubsDelForTopic(topic, hard); err != nil {
-		return err
-	}
+	if hard {
+		if _, err = tx.Exec("DELETE FROM subscriptions WHERE topic=?", topic); err != nil {
+			return err
+		}
 
-	if err = a.MessageDeleteList(topic, nil); err != nil {
-		return err
-	}
+		if err = messageDeleteList(tx, topic, nil); err != nil {
+			return err
+		}
 
-	if _, err = tx.Exec("DELETE FROM topictags WHERE topic=?", topic); err != nil {
-		return err
-	}
+		if _, err = tx.Exec("DELETE FROM topictags WHERE topic=?", topic); err != nil {
+			return err
+		}
 
-	if _, err = tx.Exec("DELETE FROM topics WHERE name=?", topic); err != nil {
-		return err
-	}
+		if _, err = tx.Exec("DELETE FROM topics WHERE name=?", topic); err != nil {
+			return err
+		}
+	} else {
+		now := t.TimeNow()
+		if _, err = tx.Exec("UPDATE subscriptions SET updatedat=?,deletedat=? WHERE topic=?", now, now, topic); err != nil {
+			return err
+		}
 
+		if _, err = tx.Exec("UPDATE topics SET updatedat=?,deletedat=? WHERE name=?", now, now, topic); err != nil {
+			return err
+		}
+	}
 	return tx.Commit()
 }
 
@@ -1614,19 +1632,8 @@ func (a *adapter) MessageGetDeleted(topic string, forUser t.Uid, opts *t.QueryOp
 	return dmsgs, err
 }
 
-// MessageDeleteList deletes messages in the given topic with seqIds from the list
-func (a *adapter) MessageDeleteList(topic string, toDel *t.DelMessage) (err error) {
-	tx, err := a.db.Begin()
-	if err != nil {
-		return err
-	}
-
-	defer func() {
-		if err != nil {
-			tx.Rollback()
-		}
-	}()
-
+func messageDeleteList(tx *sql.Tx, topic string, toDel *t.DelMessage) error {
+	var err error
 	if toDel == nil {
 		// Whole topic is being deleted, thus also deleting all messages.
 		_, err = tx.Exec("DELETE FROM dellog WHERE topic=?", topic)
@@ -1694,7 +1701,23 @@ func (a *adapter) MessageDeleteList(topic string, toDel *t.DelMessage) (err erro
 		}
 	}
 
+	return err
+}
+
+// MessageDeleteList deletes messages in the given topic with seqIds from the list
+func (a *adapter) MessageDeleteList(topic string, toDel *t.DelMessage) (err error) {
+	tx, err := a.db.Begin()
 	if err != nil {
+		return err
+	}
+
+	defer func() {
+		if err != nil {
+			tx.Rollback()
+		}
+	}()
+
+	if err = messageDeleteList(tx, topic, toDel); err != nil {
 		return err
 	}
 

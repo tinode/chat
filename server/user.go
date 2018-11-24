@@ -284,10 +284,10 @@ func replyDelUser(s *Session, msg *ClientComMessage) {
 			}
 		}
 
-		// Terminate all sessions. Skip current session.
+		// Terminate all sessions. Skip the current session so the requester gets a response.
 		globals.sessionStore.EvictUser(uid, s.sid)
 
-		// Stop topics
+		// Stop topics.
 		done := make(chan bool)
 		globals.hub.unreg <- &topicUnreg{forUser: uid, del: msg.Del.Hard, done: done}
 		<-done

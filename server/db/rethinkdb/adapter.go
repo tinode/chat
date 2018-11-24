@@ -848,13 +848,26 @@ func (a *adapter) TopicShare(shares []*t.Subscription) (int, error) {
 
 func (a *adapter) TopicDelete(topic string, hard bool) error {
 	var err error
-	if err = a.SubsDelForTopic(topic, true); err != nil {
+	if err = a.SubsDelForTopic(topic, hard); err != nil {
 		return err
 	}
-	if err = a.MessageDeleteList(topic, nil); err != nil {
-		return err
+
+	if hard {
+		if err = a.MessageDeleteList(topic, nil); err != nil {
+			return err
+		}
 	}
-	_, err := rdb.DB(a.dbName).Table("topics").Get(topic).Delete().RunWrite(a.conn)
+
+	q := rdb.DB(a.dbName).Table("topics").Get(topic)
+	if hard {
+		_, err = q.Delete().RunWrite(a.conn)
+	} else {
+		now := t.TimeNow()
+		_, err = q.Update(map[string]interface{}{
+			"UpdatedAt": now,
+			"DeletedAt": now,
+		}).RunWrite(a.conn)
+	}
 	return err
 }
 
@@ -1027,14 +1040,12 @@ func (a *adapter) SubsDelForTopic(topic string, hard bool) error {
 	q := rdb.DB(a.dbName).Table("subscriptions").GetAllByIndex("Topic", topic)
 	if hard {
 		_, err = q.Delete().RunWrite(a.conn)
-
 	} else {
 		now := t.TimeNow()
-		update := map[string]interface{}{
+		_, err = q.Update(map[string]interface{}{
 			"UpdatedAt": now,
 			"DeletedAt": now,
-		}
-		_, err = q.Update(update).RunWrite(a.conn)
+		}).RunWrite(a.conn)
 	}
 	return err
 }
