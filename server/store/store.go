@@ -401,7 +401,7 @@ func (TopicsObjMapper) Update(topic string, update map[string]interface{}) error
 
 // Delete deletes topic, messages, attachments, and subscriptions.
 func (TopicsObjMapper) Delete(topic string, hard bool) error {
-	return adp.TopicDelete(topic)
+	return adp.TopicDelete(topic, hard)
 }
 
 // SubsObjMapper is A struct to hold methods for persistence mapping for the Subscription object.

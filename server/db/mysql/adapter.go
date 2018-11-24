@@ -298,19 +298,20 @@ func (a *adapter) CreateDb(reset bool) error {
 	// Subscriptions
 	if _, err = tx.Exec(
 		`CREATE TABLE subscriptions(
-			id 			INT NOT NULL AUTO_INCREMENT,
-			createdat 	DATETIME(3) NOT NULL,
-			updatedat 	DATETIME(3) NOT NULL,
-			deletedat 	DATETIME(3),
-			userid 		BIGINT NOT NULL,
-			topic 		CHAR(25) NOT NULL,
+			id         INT NOT NULL AUTO_INCREMENT,
+			createdat  DATETIME(3) NOT NULL,
+			updatedat  DATETIME(3) NOT NULL,
+			deletedat  DATETIME(3),
+			userid     BIGINT NOT NULL,
+			topic      CHAR(25) NOT NULL,
 			delid      INT DEFAULT 0,
 			recvseqid  INT DEFAULT 0,
 			readseqid  INT DEFAULT 0,
-			modewant	CHAR(8),
-			modegiven  	CHAR(8),
-			private 	JSON,
-			PRIMARY KEY(id)	,
+			isowner    BOOLEAN DEFAULT 0,
+			modewant   CHAR(8),
+			modegiven  CHAR(8),
+			private    JSON,
+			PRIMARY KEY(id),
 			FOREIGN KEY(userid) REFERENCES users(id),
 			UNIQUE INDEX subscriptions_topic_userid(topic, userid),
 			INDEX subscriptions_topic(topic)
@@ -673,10 +674,16 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 			return err
 		}
 		_, err = a.db.Exec("DELETE FROM users WHERE id=?", decoded_uid)
+		if err != nil {
+			return err
+		}
 	} else {
 		now := t.TimeNow()
 		// Disable all subscriptions.
 		a.SubsDelForUser(uid, false)
+
+		// TODO: Disable all topics where the user is the owner.
+
 		// Disable user.
 		_, err = a.db.Exec("UPDATE users SET updatedAt=?, deletedAt=? WHERE id=?", now, now, decoded_uid)
 		if err != nil {
@@ -763,7 +770,8 @@ func (a *adapter) UserGetByCred(method, value string) (t.Uid, error) {
 // *****************************
 
 func (a *adapter) topicCreate(tx *sqlx.Tx, topic *t.Topic) error {
-	_, err := tx.Exec("INSERT INTO topics(createdAt,updatedAt,touchedAt,name,access,public,tags) VALUES(?,?,?,?,?,?,?)",
+	_, err := tx.Exec("INSERT INTO topics(createdAt,updatedAt,touchedAt,name,access,public,tags) "+
+		"VALUES(?,?,?,?,?,?,?)",
 		topic.CreatedAt, topic.UpdatedAt, topic.TouchedAt,
 		topic.Id, topic.Access, toJSON(topic.Public), topic.Tags)
 	if err != nil {
@@ -793,29 +801,30 @@ func (a *adapter) TopicCreate(topic *t.Topic) error {
 	return tx.Commit()
 }
 
-// If upsert = true - update subscription on duplicate key, otherwise ignore the duplicate.
+// If undelete = true - update subscription on duplicate key, otherwise ignore the duplicate.
 func createSubscription(tx *sqlx.Tx, sub *t.Subscription, undelete bool) error {
 
 	jpriv := toJSON(sub.Private)
 	user := store.DecodeUid(t.ParseUid(sub.User))
 	_, err := tx.Exec(
-		"INSERT INTO subscriptions(createdAt,updatedAt,deletedAt,userid,topic,modeWant,modeGiven,private) "+
+		"INSERT INTO subscriptions(createdAt,updatedAt,deletedAt,userid,topic,isowner,modeWant,modeGiven,private) "+
 			"VALUES(?,?,NULL,?,?,?,?,?)",
-		sub.CreatedAt, sub.UpdatedAt, user, sub.Topic,
-		sub.ModeWant.String(), sub.ModeGiven.String(),
-		jpriv)
+		sub.CreatedAt, sub.UpdatedAt, user, sub.Topic, sub.ModeWant.IsOwner() && sub.ModeGiven.IsOwner(),
+		sub.ModeWant.String(), sub.ModeGiven.String(), jpriv)
 
 	if err != nil && isDupe(err) {
 		if undelete {
-			_, err = tx.Exec("UPDATE subscriptions SET createdAt=?,updatedAt=?,deletedAt=NULL,modeGiven=? "+
+			_, err = tx.Exec("UPDATE subscriptions SET createdAt=?,updatedAt=?,deletedAt=NULL,isowner=?,modeGiven=? "+
 				"WHERE topic=? AND userid=?",
-				sub.CreatedAt, sub.UpdatedAt, sub.ModeGiven.String(), sub.Topic, user)
+				sub.CreatedAt, sub.UpdatedAt, sub.ModeWant.IsOwner() && sub.ModeGiven.IsOwner(),
+				sub.ModeGiven.String(), sub.Topic, user)
 
 		} else {
 			_, err = tx.Exec(
-				"UPDATE subscriptions SET createdAt=?,updatedAt=?,deletedAt=NULL,modeWant=?,modeGiven=?,private=? "+
+				"UPDATE subscriptions SET createdAt=?,updatedAt=?,deletedAt=NULL,isowner=?,modeWant=?,modeGiven=?,private=? "+
 					"WHERE topic=? AND userid=?",
-				sub.CreatedAt, sub.UpdatedAt, sub.ModeWant.String(), sub.ModeGiven.String(), jpriv, sub.Topic, user)
+				sub.CreatedAt, sub.UpdatedAt, sub.ModeWant.IsOwner() && sub.ModeGiven.IsOwner(),
+				sub.ModeWant.String(), sub.ModeGiven.String(), jpriv, sub.Topic, user)
 		}
 	}
 	return err
@@ -1108,7 +1117,7 @@ func (a *adapter) TopicShare(shares []*t.Subscription) (int, error) {
 	return len(shares), tx.Commit()
 }
 
-func (a *adapter) TopicDelete(topic string) error {
+func (a *adapter) TopicDelete(topic string, hard bool) error {
 	tx, err := a.db.Beginx()
 	if err != nil {
 		return err
@@ -1120,7 +1129,7 @@ func (a *adapter) TopicDelete(topic string) error {
 		}
 	}()
 
-	if err = a.SubsDelForTopic(topic, true); err != nil {
+	if err = a.SubsDelForTopic(topic, hard); err != nil {
 		return err
 	}
 

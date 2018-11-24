@@ -302,5 +302,9 @@ func replyDelUser(s *Session, msg *ClientComMessage) {
 	}
 
 	s.queueOut(reply)
-	s.stop <- s.serialize(NoErrEvicted("", "", msg.timestamp))
+
+	if s.uid == uid {
+		// Evict the current session if it belongs to the deleted user.
+		s.stop <- s.serialize(NoErrEvicted("", "", msg.timestamp))
+	}
 }

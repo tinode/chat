@@ -495,19 +495,25 @@ def run(addr, schema, secret):
                         func(msg.ctrl.params)
                 topic = " (" + str(msg.ctrl.topic) + ")" if msg.ctrl.topic else ""
                 stdoutln("\r" + str(msg.ctrl.code) + " " + msg.ctrl.text + topic)
+
             elif msg.HasField("data"):
-                stdoutln("\n\rFrom [" + msg.data.from_user_id + "]:")
+                stdoutln("\n\rFrom: " + msg.data.from_user_id)
+                stdoutln("Topic: " + msg.data.topic)
+                stdoutln("Seq: " + str(msg.data.seq))
                 if msg.data.head:
                     stdoutln("Headers:")
                     for key in msg.data.head:
                         stdoutln("\t" + key + ": "+str(msg.data.head[key]))
                 stdoutln(json.loads(msg.data.content))
+
             elif msg.HasField("pres"):
                 pass
+
             elif msg.HasField("info"):
                 user = getattr(msg.info, 'from')
                 stdoutln("\rMessage #" + str(msg.info.seq) + " " + msg.info.what +
                     " by " + user + "; topic=" + msg.info.topic + "(" + msg.topic + ")")
+
             else:
                 stdoutln("\rMessage type not handled", msg)
 

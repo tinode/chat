@@ -846,7 +846,7 @@ func (a *adapter) TopicShare(shares []*t.Subscription) (int, error) {
 	return resp.Inserted + resp.Replaced, err
 }
 
-func (a *adapter) TopicDelete(topic string) error {
+func (a *adapter) TopicDelete(topic string, hard bool) error {
 	var err error
 	if err = a.SubsDelForTopic(topic, true); err != nil {
 		return err
