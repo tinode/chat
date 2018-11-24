@@ -200,40 +200,46 @@ def setMsg(id, topic, user, fn, photo, public, private, auth, anon, mode, tags):
         tags=tags)), on_behalf_of=default_user)
 
 
-def delMsg(id, topic, user, msglist, hard):
-    if msglist != None:
-        what = 'msg'
-        if not topic:
-            topic = default_topic
-    elif user != None:
-        if not topic:
-            what = 'user'
-        else:
-            what = 'sub'
-    else:
-        what = 'topic'
-        if not topic:
-            topic = default_topic
+def delMsg(id, what, topic, user, msglist, hard):
+    if not what:
+        stdoutln("Must specify what to delete")
+        return None
 
-    stdoutln(id, what, topic, user, msglist, hard)
-
+    topic = topic if topic else default_topic
+    user = user if user else default_user
     enum_what = None
     before = None
     seq_list = None
     if what == 'msg':
+        if not topic:
+            stdoutln("Must specify topic to delete messages")
+            return None
         enum_what = pb.ClientDel.MSG
+        user = None
         if msglist == 'all':
             seq_list = [pb.DelQuery(range=pb.SeqRange(low=1, hi=0x8FFFFFF))]
         elif msglist != None:
             seq_list = [pb.DelQuery(seq_id=int(x.strip())) for x in msglist.split(',')]
-        stdoutln(seq_list)
 
     elif what == 'sub':
+        if not user or not topic:
+            stdoutln("Must specify topic and user to delete subscription")
+            return None
         enum_what = pb.ClientDel.SUB
+
     elif what == 'topic':
+        if not topic:
+            stdoutln("Must specify topic to delete")
+            return None
         enum_what = pb.ClientDel.TOPIC
+        user = None
+
     elif what == 'user':
+        if not user:
+            stdoutln("Must specify user to delete")
+            return None
         enum_what = pb.ClientDel.USER
+        topic = None
 
     msg = pb.ClientMsg(on_behalf_of=default_user)
     # Field named 'del' conflicts with the keyword 'del. This is a work around.
@@ -349,9 +355,10 @@ def parse_cmd(cmd):
         parser.add_argument('--tags', default=None, help='tags for topic discovery, comma separated list without spaces')
     elif parts[0] == "del":
         parser = argparse.ArgumentParser(prog=parts[0], description='Delete message(s), subscription, topic, user')
+        parser.add_argument('what', default=None, help='what to delete')
         parser.add_argument('--topic', default=None, help='topic being affected')
         parser.add_argument('--user', default=None, help='either delete this user or a subscription with this user')
-        parser.add_argument('--msglist', default=None, dest='msglist', help='comma separated list of message IDs to delete')
+        parser.add_argument('--seq', default=None, help='"all" or comma separated list of message IDs to delete')
         parser.add_argument('--hard', action='store_true', help='request to hard-delete')
     elif parts[0] == "note":
         parser = argparse.ArgumentParser(prog=parts[0], description='Send notification to topic, ex "note kp"')
@@ -419,7 +426,7 @@ def serialize_cmd(string, id):
         return setMsg(id, cmd.topic, cmd.user, cmd.fn, cmd.photo, cmd.public, cmd.private,
             cmd.auth, cmd.anon, cmd.mode, cmd.tags)
     elif cmd.cmd == "del":
-        return delMsg(id, cmd.topic, cmd.user, cmd.msglist, cmd.hard)
+        return delMsg(id, cmd.what, cmd.topic, cmd.user, cmd.seq, cmd.hard)
     elif cmd.cmd == "note":
         return noteMsg(id, cmd.topic, cmd.what, cmd.seq)
     else:
@@ -486,7 +493,8 @@ def run(addr, schema, secret):
                     del onCompletion[msg.ctrl.id]
                     if msg.ctrl.code >= 200 and msg.ctrl.code < 400:
                         func(msg.ctrl.params)
-                stdoutln("\r" + str(msg.ctrl.code) + " " + msg.ctrl.text)
+                topic = " (" + str(msg.ctrl.topic) + ")" if msg.ctrl.topic else ""
+                stdoutln("\r" + str(msg.ctrl.code) + " " + msg.ctrl.text + topic)
             elif msg.HasField("data"):
                 stdoutln("\n\rFrom [" + msg.data.from_user_id + "]:")
                 if msg.data.head:

@@ -265,7 +265,7 @@ func replyDelUser(s *Session, msg *ClientComMessage) {
 		uid = s.uid
 	} else if s.authLvl == auth.LevelRoot {
 		// Delete another user.
-		uid := types.ParseUserId(msg.Del.User)
+		uid = types.ParseUserId(msg.Del.User)
 		if uid.IsZero() {
 			reply = ErrMalformed(msg.id, "", msg.timestamp)
 			log.Println("replyDelUser: invalid user ID", msg.Del.User, s.sid)
@@ -289,7 +289,7 @@ func replyDelUser(s *Session, msg *ClientComMessage) {
 
 		// Stop topics
 		done := make(chan bool)
-		globals.hub.unreg <- &topicUnreg{forUser: uid, del: true, done: done}
+		globals.hub.unreg <- &topicUnreg{forUser: uid, del: msg.Del.Hard, done: done}
 		<-done
 
 		// Delete user's records from the database.
