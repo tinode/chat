@@ -7,13 +7,12 @@ import (
 	"errors"
 	"hash/fnv"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/tinode/chat/server/auth"
 	"github.com/tinode/chat/server/store"
 	t "github.com/tinode/chat/server/store/types"
-	rdb "gopkg.in/gorethink/gorethink.v4"
+	rdb "gopkg.in/rethinkdb/rethinkdb-go.v5"
 )
 
 // adapter holds RethinkDb connection data.
@@ -509,12 +508,52 @@ func (a *adapter) UserGetAll(ids ...t.Uid) ([]t.User, error) {
 
 func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 	var err error
-	q := rdb.DB(a.dbName).Table("users").Get(uid.String())
 	if hard {
-		_, err = q.Delete().RunWrite(a.conn)
+		// Delete user's subscriptions.
+		if err = a.SubsDelForUser(uid, true); err != nil {
+			return err
+		}
+
+		// Delete user's messages in all topics.
+		// TODO: Delete from dellog too.
+		// TODO: Delete from fileuploads.
+		// TODO: Add index on From.
+		if _, err = rdb.DB(a.dbName).Table("messages").GetAllByIndex("From", uid.String()).
+			Delete().RunWrite(a.conn); err != nil {
+			return err
+		}
+
+		// Delete topics where the user is the owner.
+
+		// TODO: Delete all messages in those topics: delete from messages, delete from dellog.
+
+		// TODO: Delete all subscriptions
+
+		// And finally delete the topics.
+		// TODO: denormalize Owner into topic, add index on Owner.
+		if _, err = rdb.DB(a.dbName).Table("topics").GetAllByIndex("Owner", uid.String()).
+			Delete().RunWrite(a.conn); err != nil {
+			return err
+		}
+
+		// Delete user's authentication records.
+		if _, err = a.AuthDelAllRecords(uid); err != nil {
+			return err
+		}
+
+		if err = a.CredDel(uid, ""); err != nil {
+			return err
+		}
+
+		_, err = rdb.DB(a.dbName).Table("users").Get(uid.String()).
+			Delete().RunWrite(a.conn)
 	} else {
+		if err = a.SubsDelForUser(uid, false); err != nil {
+			return err
+		}
 		now := t.TimeNow()
-		_, err = q.Update(map[string]interface{}{"DeletedAt": now, "UpdatedAt": now}).RunWrite(a.conn)
+		_, err = rdb.DB(a.dbName).Table("users").Get(uid.String()).
+			Update(map[string]interface{}{"DeletedAt": now, "UpdatedAt": now}).RunWrite(a.conn)
 	}
 	return err
 }
@@ -891,7 +930,9 @@ func (a *adapter) TopicUpdate(topic string, update map[string]interface{}) error
 }
 
 func (a *adapter) TopicOwnerChange(topic string, newOwner, oldOwner t.Uid) error {
-
+	_, err := rdb.DB(a.dbName).Table("topics").Get(topic).
+		Update(map[string]interface{}{"Owner": newOwner}).RunWrite(a.conn)
+	return err
 }
 
 // SubscriptionGet returns a subscription of a user to a topic
@@ -1045,14 +1086,18 @@ func (a *adapter) SubsDelForTopic(topic string, hard bool) error {
 }
 
 // SubsDelForUser marks all subscriptions of a given user as deleted
-func (a *adapter) SubsDelForUser(user t.Uid) error {
-	now := t.TimeNow()
-	update := map[string]interface{}{
-		"UpdatedAt": now,
-		"DeletedAt": now,
+func (a *adapter) SubsDelForUser(user t.Uid, hard bool) error {
+	var err error
+	if hard {
+	} else {
+		now := t.TimeNow()
+		update := map[string]interface{}{
+			"UpdatedAt": now,
+			"DeletedAt": now,
+		}
+		_, err = rdb.DB(a.dbName).Table("subscriptions").GetAllByIndex("User", user.String()).
+			Update(update).RunWrite(a.conn)
 	}
-	_, err := rdb.DB(a.dbName).Table("subscriptions").GetAllByIndex("User", user.String()).
-		Update(update).RunWrite(a.conn)
 	return err
 }
 
@@ -1307,18 +1352,33 @@ func (a *adapter) MessageGetDeleted(topic string, forUser t.Uid, opts *t.QueryOp
 	return dmsgs, nil
 }
 
+func (a *adapter) messagesHardDelete(topic string) error {
+	var err error
+
+	// TODO: handle file uploads
+
+	if _, err = rdb.DB(a.dbName).Table("dellog").Between(
+		[]interface{}{topic, rdb.MinVal},
+		[]interface{}{topic, rdb.MaxVal},
+		rdb.BetweenOpts{Index: "Topic_DelId"}).Delete().RunWrite(a.conn); err != nil {
+		return err
+	}
+	// Whole topic is being deleted, thus also deleting all messages
+	_, err = rdb.DB(a.dbName).Table("messages").Between(
+		[]interface{}{topic, rdb.MinVal},
+		[]interface{}{topic, rdb.MaxVal},
+		rdb.BetweenOpts{Index: "Topic_SeqId"}).Delete().RunWrite(a.conn)
+
+	return err
+}
+
 // MessageDeleteList deletes messages in the given topic with seqIds from the list
 func (a *adapter) MessageDeleteList(topic string, toDel *t.DelMessage) error {
 	var indexVals []interface{}
 	var err error
 
-	query := rdb.DB(a.dbName).Table("messages")
 	if toDel == nil {
-		// Whole topic is being deleted, thus also deleting all messages
-		_, err = query.Between(
-			[]interface{}{topic, rdb.MinVal},
-			[]interface{}{topic, rdb.MaxVal},
-			rdb.BetweenOpts{Index: "Topic_SeqId"}).Delete().RunWrite(a.conn)
+		err = a.messagesHardDelete(topic)
 	} else {
 		// Only some messages are being deleted
 		toDel.SetUid(store.GetUid())
@@ -1329,6 +1389,7 @@ func (a *adapter) MessageDeleteList(topic string, toDel *t.DelMessage) error {
 			return err
 		}
 
+		query := rdb.DB(a.dbName).Table("messages")
 		if len(toDel.SeqIdRanges) > 1 || toDel.SeqIdRanges[0].Hi <= toDel.SeqIdRanges[0].Low {
 			for _, rng := range toDel.SeqIdRanges {
 				if rng.Hi == 0 {
@@ -1399,11 +1460,12 @@ func (a *adapter) MessageDeleteList(topic string, toDel *t.DelMessage) error {
 					User:  toDel.DeletedFor,
 					DelId: toDel.DelId})}).RunWrite(a.conn)
 		}
-	}
 
-	if err != nil && toDel != nil {
-		rdb.DB(a.dbName).Table("dellog").Get(toDel.Id).
-			Delete(rdb.DeleteOpts{Durability: "soft", ReturnChanges: false}).RunWrite(a.conn)
+		// If operation has failed, remove dellog record.
+		if err != nil {
+			rdb.DB(a.dbName).Table("dellog").Get(toDel.Id).
+				Delete(rdb.DeleteOpts{Durability: "soft", ReturnChanges: false}).RunWrite(a.conn)
+		}
 	}
 
 	return err
@@ -1532,12 +1594,12 @@ func (a *adapter) DeviceGetAll(uids ...t.Uid) (map[t.Uid][]t.DeviceDef, int, err
 func (a *adapter) DeviceDelete(uid t.Uid, deviceID string) error {
 	var err error
 	q := rdb.DB(a.dbName).Table("users").Get(uid.String())
-	if deviceId == "" {
+	if deviceID == "" {
 		q = q.Update(map[string]interface{}{"Devices": nil})
 	} else {
 		q = q.Replace(rdb.Row.Without(map[string]string{"Devices": deviceHasher(deviceID)}))
 	}
-	_, err := q.RunWrite(a.conn)
+	_, err = q.RunWrite(a.conn)
 	return err
 }
 

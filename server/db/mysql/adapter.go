@@ -344,12 +344,12 @@ func (a *adapter) CreateDb(reset bool) error {
 	// Deletion log
 	if _, err = tx.Exec(
 		`CREATE TABLE dellog(
-			id			INT NOT NULL AUTO_INCREMENT,
-			topic		VARCHAR(25) NOT NULL,
-			deletedfor	BIGINT NOT NULL DEFAULT 0,
-			delid		INT NOT NULL,
-			low			INT NOT NULL,
-			hi			INT NOT NULL,
+			id         INT NOT NULL AUTO_INCREMENT,
+			topic      VARCHAR(25) NOT NULL,
+			deletedfor BIGINT NOT NULL DEFAULT 0,
+			delid      INT NOT NULL,
+			low        INT NOT NULL,
+			hi         INT NOT NULL,
 			PRIMARY KEY(id),
 			FOREIGN KEY(topic) REFERENCES topics(name),
 			INDEX dellog_topic_delid_deletedfor(topic,delid,deletedfor),
@@ -362,16 +362,16 @@ func (a *adapter) CreateDb(reset bool) error {
 	// User credentials
 	if _, err = tx.Exec(
 		`CREATE TABLE credentials(
-			id			INT NOT NULL AUTO_INCREMENT,
-			createdat	DATETIME(3) NOT NULL,
-			updatedat	DATETIME(3) NOT NULL,	
-			method		VARCHAR(16) NOT NULL,
-			value		VARCHAR(128) NOT NULL,
-			synthetic	VARCHAR(192) NOT NULL,
-			userid		BIGINT NOT NULL,
-			resp		VARCHAR(255),
-			done		TINYINT NOT NULL DEFAULT 0,
-			retries		INT NOT NULL DEFAULT 0,		
+			id        INT NOT NULL AUTO_INCREMENT,
+			createdat DATETIME(3) NOT NULL,
+			updatedat DATETIME(3) NOT NULL,
+			method    VARCHAR(16) NOT NULL,
+			value     VARCHAR(128) NOT NULL,
+			synthetic VARCHAR(192) NOT NULL,
+			userid    BIGINT NOT NULL,
+			resp      VARCHAR(255),
+			done      TINYINT NOT NULL DEFAULT 0,
+			retries   INT NOT NULL DEFAULT 0,
 			PRIMARY KEY(id),
 			UNIQUE credentials_uniqueness(synthetic),
 			FOREIGN KEY(userid) REFERENCES users(id)
@@ -382,14 +382,14 @@ func (a *adapter) CreateDb(reset bool) error {
 	// Records of uploaded files.
 	if _, err = tx.Exec(
 		`CREATE TABLE fileuploads(
-			id			BIGINT NOT NULL,
-			createdat	DATETIME(3) NOT NULL,
-			updatedat	DATETIME(3) NOT NULL,	
-			userid		BIGINT NOT NULL,
-			status		INT NOT NULL,
-			mimetype	VARCHAR(255) NOT NULL,
-			size		BIGINT NOT NULL,
-			location	VARCHAR(2048) NOT NULL,
+			id        BIGINT NOT NULL,
+			createdat DATETIME(3) NOT NULL,
+			updatedat DATETIME(3) NOT NULL,	
+			userid    BIGINT NOT NULL,
+			status    INT NOT NULL,
+			mimetype  VARCHAR(255) NOT NULL,
+			size	      BIGINT NOT NULL,
+			location  VARCHAR(2048) NOT NULL,
 			PRIMARY KEY(id),
 			FOREIGN KEY(userid) REFERENCES users(id)
 		)`); err != nil {
