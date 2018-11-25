@@ -400,6 +400,11 @@ func (TopicsObjMapper) Update(topic string, update map[string]interface{}) error
 }
 
 // Delete deletes topic, messages, attachments, and subscriptions.
+func (TopicsObjMapper) OwnerChange(topic string, newOwner, oldOwner types.Uid) error {
+	return adp.TopicOwnerChange(topic, newOwner, oldOwner)
+}
+
+// Delete deletes topic, messages, attachments, and subscriptions.
 func (TopicsObjMapper) Delete(topic string, hard bool) error {
 	return adp.TopicDelete(topic, hard)
 }

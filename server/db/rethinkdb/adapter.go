@@ -871,6 +871,7 @@ func (a *adapter) TopicDelete(topic string, hard bool) error {
 	return err
 }
 
+// TopicUpdateOnMessage deserializes message-related values into topic.
 func (a *adapter) TopicUpdateOnMessage(topic string, msg *t.Message) error {
 
 	update := struct {
@@ -878,19 +879,8 @@ func (a *adapter) TopicUpdateOnMessage(topic string, msg *t.Message) error {
 		TouchedAt time.Time
 	}{msg.SeqId, msg.CreatedAt}
 
-	// FIXME(gene): remove 'me' update; no longer relevant
-	var err error
-	if strings.HasPrefix(topic, "usr") {
-		// Topic is passed as usrABCD, but the 'users' table expects Id without the 'usr' prefix.
-		user := t.ParseUserId(topic).String()
-		_, err = rdb.DB(a.dbName).Table("users").Get(user).
-			Update(update, rdb.UpdateOpts{Durability: "soft"}).RunWrite(a.conn)
-
-		// All other messages
-	} else {
-		_, err = rdb.DB(a.dbName).Table("topics").Get(topic).
-			Update(update, rdb.UpdateOpts{Durability: "soft"}).RunWrite(a.conn)
-	}
+	_, err := rdb.DB(a.dbName).Table("topics").Get(topic).
+		Update(update, rdb.UpdateOpts{Durability: "soft"}).RunWrite(a.conn)
 
 	return err
 }
@@ -900,7 +890,11 @@ func (a *adapter) TopicUpdate(topic string, update map[string]interface{}) error
 	return err
 }
 
-// Get a subscription of a user to a topic
+func (a *adapter) TopicOwnerChange(topic string, newOwner, oldOwner t.Uid) error {
+
+}
+
+// SubscriptionGet returns a subscription of a user to a topic
 func (a *adapter) SubscriptionGet(topic string, user t.Uid) (*t.Subscription, error) {
 
 	cursor, err := rdb.DB(a.dbName).Table("subscriptions").Get(topic + ":" + user.String()).Run(a.conn)

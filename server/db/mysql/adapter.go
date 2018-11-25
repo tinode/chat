@@ -271,13 +271,15 @@ func (a *adapter) CreateDb(reset bool) error {
 			touchedat DATETIME(3),
 			name      CHAR(25) NOT NULL,
 			usebt     INT DEFAULT 0,
+			owner	  BIGINT NOT NULL DEFAULT 0,
 			access    JSON,
 			seqid     INT NOT NULL DEFAULT 0,
 			delid     INT DEFAULT 0,
 			public    JSON,
 			tags      JSON,
 			PRIMARY KEY(id),
-			UNIQUE INDEX topics_name(name)
+			UNIQUE INDEX topics_name(name),
+			INDEX topics_owner(owner)
 		)`); err != nil {
 		return err
 	}
@@ -307,7 +309,6 @@ func (a *adapter) CreateDb(reset bool) error {
 			delid      INT DEFAULT 0,
 			recvseqid  INT DEFAULT 0,
 			readseqid  INT DEFAULT 0,
-			isowner    BOOLEAN DEFAULT 0,
 			modewant   CHAR(8),
 			modegiven  CHAR(8),
 			private    JSON,
@@ -412,7 +413,7 @@ func (a *adapter) CreateDb(reset bool) error {
 	return tx.Commit()
 }
 
-func (a *adapter) addTags(tx *sqlx.Tx, table, keyName string, keyVal interface{}, tags []string) error {
+func addTags(tx *sqlx.Tx, table, keyName string, keyVal interface{}, tags []string) error {
 
 	if len(tags) > 0 {
 		var insert *sql.Stmt
@@ -451,18 +452,15 @@ func (a *adapter) UserCreate(user *t.User) error {
 	}()
 
 	decoded_uid := store.DecodeUid(user.Uid())
-	_, err = tx.Exec("INSERT INTO users(id,createdat,updatedat,access,public,tags) VALUES(?,?,?,?,?,?)",
+	if _, err = tx.Exec("INSERT INTO users(id,createdat,updatedat,access,public,tags) VALUES(?,?,?,?,?,?)",
 		decoded_uid,
 		user.CreatedAt, user.UpdatedAt,
-		user.Access, toJSON(user.Public), user.Tags)
-
-	if err != nil {
+		user.Access, toJSON(user.Public), user.Tags); err != nil {
 		return err
 	}
 
 	// Save user's tags to a separate table to make user findable.
-	err = a.addTags(tx, "usertags", "userid", decoded_uid, user.Tags)
-	if err != nil {
+	if err = addTags(tx, "usertags", "userid", decoded_uid, user.Tags); err != nil {
 		return err
 	}
 
@@ -533,9 +531,8 @@ func (a *adapter) AuthGetRecord(uid t.Uid, scheme string) (string, auth.Level, [
 		Expires *time.Time
 	}
 
-	err := a.db.Get(&record, "SELECT uname,secret,expires,authlvl FROM auth WHERE userid=? AND scheme=?",
-		store.DecodeUid(uid), scheme)
-	if err != nil {
+	if err := a.db.Get(&record, "SELECT uname,secret,expires,authlvl FROM auth WHERE userid=? AND scheme=?",
+		store.DecodeUid(uid), scheme); err != nil {
 		if err == sql.ErrNoRows {
 			// Nothing found - clear the error
 			err = nil
@@ -561,8 +558,7 @@ func (a *adapter) AuthGetUniqueRecord(unique string) (t.Uid, auth.Level, []byte,
 		Expires *time.Time
 	}
 
-	err := a.db.Get(&record, "SELECT userid,secret,expires,authlvl FROM auth WHERE uname=?", unique)
-	if err != nil {
+	if err := a.db.Get(&record, "SELECT userid,secret,expires,authlvl FROM auth WHERE uname=?", unique); err != nil {
 		if err == sql.ErrNoRows {
 			// Nothing found - clear the error
 			err = nil
@@ -632,7 +628,7 @@ func (a *adapter) UserGetAll(ids ...t.Uid) ([]t.User, error) {
 }
 
 func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
-	tx, err := a.db.Beginx()
+	tx, err := a.db.Begin()
 	if err != nil {
 		return err
 	}
@@ -646,23 +642,54 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 	decoded_uid := store.DecodeUid(uid)
 	if hard {
 		// TODO: Move under transaction
-		err = a.DeviceDelete(uid, "")
-		if err != nil {
+		if err = a.DeviceDelete(uid, ""); err != nil {
 			return err
 		}
 
-		// TODO: move under transaction
-		err = a.SubsDelForUser(uid, true)
-		if err != nil {
+		// Delete user's subscriptions.
+		if err = subsDelForUser(tx, uid, true); err != nil {
 			return err
 		}
 
-		// TODO: Delete topics where the user is the owner.
-		// TODO: Delete all user's messages.
+		// Delete user's messages in all topics.
+		if _, err = tx.Exec("DELETE FROM dellog WHERE deletedfor=?", decoded_uid); err != nil {
+			return err
+		}
+		if _, err = tx.Exec("DELETE FROM messages WHERE `from`=?", decoded_uid); err != nil {
+			return err
+		}
 
-		// TODO: move under transaction.
-		_, err = a.AuthDelAllRecords(uid)
-		if err != nil {
+		// Delete topics where the user is the owner.
+
+		// First delete all messages in those topics.
+		if _, err = tx.Exec("DELETE FROM dellog LEFT JOIN topics ON topics.name=dellog.topic WHERE topic.owner=?",
+			decoded_uid); err != nil {
+			return err
+		}
+		if _, err = tx.Exec("DELETE FROM messages LEFT JOIN topics ON topics.name=messages.topic WHERE topic.owner=?",
+			decoded_uid); err != nil {
+			return err
+		}
+
+		// Delete all subscriptions
+		if _, err = tx.Exec("DELETE FROM subscriptions AS sub LEFT JOIN topics ON topics.name=sub.topic WHERE topic.owner=?",
+			decoded_uid); err != nil {
+			return err
+		}
+
+		// Delete topic tags
+		if _, err = tx.Exec("DELETE FROM topictags LEFT JOIN topics ON topics.name=topictags.topic WHERE topic.owner=?",
+			decoded_uid); err != nil {
+			return err
+		}
+
+		// And finally delete the topics.
+		if _, err = tx.Exec("DELETE FROM topics WHERE owner=?", decoded_uid); err != nil {
+			return err
+		}
+
+		// Delete user's authentication records.
+		if _, err = tx.Exec("DELETE FROM auth WHERE userid=?", decoded_uid); err != nil {
 			return err
 		}
 
@@ -682,17 +709,24 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 		}
 	} else {
 		now := t.TimeNow()
-		// Disable all subscriptions. That includes p2p subscriptions. No need to delete them.
-		// TODO: move under transaction.
-		a.SubsDelForUser(uid, false)
-
-		// TODO: Disable all topics where the user is the owner.
-		// "UPDATE topics AS t LEFT JOIN subscriptions AS s ON t.name=s.topic SET t.updatedAt=?, t.deletedAt=? WHERE s.userid=? AND s.isowner>0",
-		// now, now, decoded_uid
+		// Disable all user's subscriptions. That includes p2p subscriptions. No need to delete them.
+		if err = subsDelForUser(tx, uid, false); err != nil {
+			return err
+		}
+		// Disable all subscriptions to topics where the user is the owner.
+		if _, err = tx.Exec("UPDATE subscriptions LEFT JOIN topics ON subscriptions.topic=topic.name "+
+			"SET subscriptions.updatedAt=?, subscriptions.deletedAt=? WHERE topic.owner=?",
+			now, now, decoded_uid); err != nil {
+			return err
+		}
+		// Disable all topics where the user is the owner.
+		if _, err = tx.Exec("UPDATE topics SET updatedAt=?, deletedAt=? WHERE owner=?",
+			now, now, decoded_uid); err != nil {
+			return err
+		}
 
 		// Disable user.
-		_, err = tx.Exec("UPDATE users SET updatedAt=?, deletedAt=? WHERE id=?", now, now, decoded_uid)
-		if err != nil {
+		if _, err = tx.Exec("UPDATE users SET updatedAt=?, deletedAt=? WHERE id=?", now, now, decoded_uid); err != nil {
 			return err
 		}
 	}
@@ -750,7 +784,7 @@ func (a *adapter) UserUpdate(uid t.Uid, update map[string]interface{}) error {
 			return err
 		}
 		// Now insert new tags
-		err = a.addTags(tx, "usertags", "userid", decoded_uid, tags)
+		err = addTags(tx, "usertags", "userid", decoded_uid, tags)
 		if err != nil {
 			return err
 		}
@@ -786,7 +820,7 @@ func (a *adapter) topicCreate(tx *sqlx.Tx, topic *t.Topic) error {
 	}
 
 	// Save topic's tags to a separate table to make topic findable.
-	return a.addTags(tx, "topictags", "topic", topic.Id, topic.Tags)
+	return addTags(tx, "topictags", "topic", topic.Id, topic.Tags)
 }
 
 // TopicCreate saves topic object to database.
@@ -811,28 +845,30 @@ func (a *adapter) TopicCreate(topic *t.Topic) error {
 // If undelete = true - update subscription on duplicate key, otherwise ignore the duplicate.
 func createSubscription(tx *sqlx.Tx, sub *t.Subscription, undelete bool) error {
 
+	isOwner := (sub.ModeGiven & sub.ModeWant).IsOwner()
+
 	jpriv := toJSON(sub.Private)
-	user := store.DecodeUid(t.ParseUid(sub.User))
+	decoded_uid := store.DecodeUid(t.ParseUid(sub.User))
 	_, err := tx.Exec(
-		"INSERT INTO subscriptions(createdAt,updatedAt,deletedAt,userid,topic,isowner,modeWant,modeGiven,private) "+
-			"VALUES(?,?,NULL,?,?,?,?,?)",
-		sub.CreatedAt, sub.UpdatedAt, user, sub.Topic, sub.ModeWant.IsOwner() && sub.ModeGiven.IsOwner(),
-		sub.ModeWant.String(), sub.ModeGiven.String(), jpriv)
+		"INSERT INTO subscriptions(createdAt,updatedAt,deletedAt,userid,topic,modeWant,modeGiven,private) "+
+			"VALUES(?,?,NULL,?,?,?,?)",
+		sub.CreatedAt, sub.UpdatedAt, decoded_uid, sub.Topic, sub.ModeWant.String(), sub.ModeGiven.String(), jpriv)
 
 	if err != nil && isDupe(err) {
 		if undelete {
-			_, err = tx.Exec("UPDATE subscriptions SET createdAt=?,updatedAt=?,deletedAt=NULL,isowner=?,modeGiven=? "+
+			_, err = tx.Exec("UPDATE subscriptions SET createdAt=?,updatedAt=?,deletedAt=NULL,modeGiven=? "+
 				"WHERE topic=? AND userid=?",
-				sub.CreatedAt, sub.UpdatedAt, sub.ModeWant.IsOwner() && sub.ModeGiven.IsOwner(),
-				sub.ModeGiven.String(), sub.Topic, user)
+				sub.CreatedAt, sub.UpdatedAt, sub.ModeGiven.String(), sub.Topic, decoded_uid)
 
 		} else {
 			_, err = tx.Exec(
-				"UPDATE subscriptions SET createdAt=?,updatedAt=?,deletedAt=NULL,isowner=?,modeWant=?,modeGiven=?,private=? "+
+				"UPDATE subscriptions SET createdAt=?,updatedAt=?,deletedAt=NULL,modeWant=?,modeGiven=?,private=? "+
 					"WHERE topic=? AND userid=?",
-				sub.CreatedAt, sub.UpdatedAt, sub.ModeWant.IsOwner() && sub.ModeGiven.IsOwner(),
-				sub.ModeWant.String(), sub.ModeGiven.String(), jpriv, sub.Topic, user)
+				sub.CreatedAt, sub.UpdatedAt, sub.ModeWant.String(), sub.ModeGiven.String(), jpriv, sub.Topic, decoded_uid)
 		}
+	}
+	if err == nil && isOwner {
+		_, err = tx.Exec("UPDATE topics SET owner=? WHERE name=?", decoded_uid, sub.Topic)
 	}
 	return err
 }
@@ -1126,7 +1162,7 @@ func (a *adapter) TopicShare(shares []*t.Subscription) (int, error) {
 
 // TopicDelete deletes specified topic.
 func (a *adapter) TopicDelete(topic string, hard bool) error {
-	tx, err := a.db.Beginx()
+	tx, err := a.db.Begin()
 	if err != nil {
 		return err
 	}
@@ -1199,13 +1235,18 @@ func (a *adapter) TopicUpdate(topic string, update map[string]interface{}) error
 			return err
 		}
 		// Now insert new tags
-		err = a.addTags(tx, "topictags", "topic", topic, tags)
+		err = addTags(tx, "topictags", "topic", topic, tags)
 		if err != nil {
 			return err
 		}
 	}
 
 	return tx.Commit()
+}
+
+func (a *adapter) TopicOwnerChange(topic string, newOwner, oldOwner t.Uid) error {
+	_, err := a.db.Exec("UPDATE topics SET owner=? WHERE name=?", store.DecodeUid(newOwner), topic)
+	return err
 }
 
 // Get a subscription of a user to a topic
@@ -1329,8 +1370,19 @@ func (a *adapter) SubsForTopic(topic string, keepDeleted bool, opts *t.QueryOpt)
 	return subs, err
 }
 
-// SubsUpdate updates subscriptions of a topic.
+// SubsUpdate updates one or multiple subscriptions to a topic.
 func (a *adapter) SubsUpdate(topic string, user t.Uid, update map[string]interface{}) error {
+	tx, err := a.db.Begin()
+	if err != nil {
+		return err
+	}
+
+	defer func() {
+		if err != nil {
+			tx.Rollback()
+		}
+	}()
+
 	cols, args := updateByMap(update)
 	q := "UPDATE subscriptions SET " + strings.Join(cols, ",") + " WHERE topic=?"
 	args = append(args, topic)
@@ -1340,9 +1392,11 @@ func (a *adapter) SubsUpdate(topic string, user t.Uid, update map[string]interfa
 		args = append(args, store.DecodeUid(user))
 	}
 
-	_, err := a.db.Exec(q, args...)
+	if _, err = tx.Exec(q, args...); err != nil {
+		return err
+	}
 
-	return err
+	return tx.Commit()
 }
 
 // SubsDelete marks subscription as deleted.
@@ -1365,17 +1419,38 @@ func (a *adapter) SubsDelForTopic(topic string, hard bool) error {
 	return err
 }
 
-// SubsDelForTopic marks user's subscriptions as deleted
-func (a *adapter) SubsDelForUser(user t.Uid, hard bool) error {
+// subsDelForTopic marks user's subscriptions as deleted
+func subsDelForUser(tx *sql.Tx, user t.Uid, hard bool) error {
 	var err error
 	if hard {
-		_, err = a.db.Exec("DELETE FROM subscriptions WHERE userid=?", store.DecodeUid(user))
+		_, err = tx.Exec("DELETE FROM subscriptions WHERE userid=?", store.DecodeUid(user))
 	} else {
 		now := t.TimeNow()
-		_, err = a.db.Exec("UPDATE subscriptions SET updatedat=?, deletedat=? WHERE userid=?",
+		_, err = tx.Exec("UPDATE subscriptions SET updatedat=?, deletedat=? WHERE userid=?",
 			now, now, store.DecodeUid(user))
 	}
 	return err
+}
+
+// SubsDelForTopic marks user's subscriptions as deleted
+func (a *adapter) SubsDelForUser(user t.Uid, hard bool) error {
+	tx, err := a.db.Begin()
+	if err != nil {
+		return err
+	}
+
+	defer func() {
+		if err != nil {
+			tx.Rollback()
+		}
+	}()
+
+	if err = subsDelForUser(tx, user, hard); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+
 }
 
 // Returns a list of users who match given tags, such as "email:jdoe@example.com" or "tel:18003287448".

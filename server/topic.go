@@ -979,6 +979,9 @@ func (t *Topic) requestSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Le
 					"ModeGiven": oldOwnerData.modeGiven}, false); err != nil {
 				return err
 			}
+			if err := store.Topics.OwnerChange(t.name, asUid, t.owner); err != nil {
+				return err
+			}
 			t.perUser[t.owner] = oldOwnerData
 			t.owner = asUid
 		}
