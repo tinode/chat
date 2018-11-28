@@ -811,10 +811,10 @@ func (a *adapter) UserGetByCred(method, value string) (t.Uid, error) {
 // *****************************
 
 func (a *adapter) topicCreate(tx *sqlx.Tx, topic *t.Topic) error {
-	_, err := tx.Exec("INSERT INTO topics(createdAt,updatedAt,touchedAt,name,access,public,tags) "+
-		"VALUES(?,?,?,?,?,?,?)",
-		topic.CreatedAt, topic.UpdatedAt, topic.TouchedAt,
-		topic.Id, topic.Access, toJSON(topic.Public), topic.Tags)
+	_, err := tx.Exec("INSERT INTO topics(createdAt,updatedAt,touchedAt,name,owner,access,public,tags) "+
+		"VALUES(?,?,?,?,?,?,?,?)",
+		topic.CreatedAt, topic.UpdatedAt, topic.TouchedAt, topic.Id, store.DecodeUid(topic.GetOwner()),
+		topic.Access, toJSON(topic.Public), topic.Tags)
 	if err != nil {
 		return err
 	}
@@ -851,7 +851,7 @@ func createSubscription(tx *sqlx.Tx, sub *t.Subscription, undelete bool) error {
 	decoded_uid := store.DecodeUid(t.ParseUid(sub.User))
 	_, err := tx.Exec(
 		"INSERT INTO subscriptions(createdAt,updatedAt,deletedAt,userid,topic,modeWant,modeGiven,private) "+
-			"VALUES(?,?,NULL,?,?,?,?)",
+			"VALUES(?,?,NULL,?,?,?,?,?)",
 		sub.CreatedAt, sub.UpdatedAt, decoded_uid, sub.Topic, sub.ModeWant.String(), sub.ModeGiven.String(), jpriv)
 
 	if err != nil && isDupe(err) {
