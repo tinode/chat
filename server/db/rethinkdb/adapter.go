@@ -31,7 +31,7 @@ const (
 	adapterName = "rethinkdb"
 )
 
-// See https://godoc.org/github.com/GoRethink/gorethink#ConnectOpts for explanations.
+// See https://godoc.org/github.com/rethinkdb/rethinkdb-go#ConnectOpts for explanations.
 type configType struct {
 	Database          string      `json:"database,omitempty"`
 	Addresses         interface{} `json:"addresses,omitempty"`
@@ -379,7 +379,7 @@ func (a *adapter) AuthUpdRecord(uid t.Uid, scheme, unique string, authLvl auth.L
 		return dupe, t.ErrNotFound
 	}
 	var record struct {
-		Unique string `gorethink:"unique"`
+		Unique string `json:"unique"`
 	}
 	if err = cursor.One(&record); err != nil {
 		return dupe, err
@@ -418,10 +418,10 @@ func (a *adapter) AuthGetRecord(uid t.Uid, scheme string) (string, auth.Level, [
 	}
 
 	var record struct {
-		Unique  string     `gorethink:"unique"`
-		AuthLvl auth.Level `gorethink:"authLvl"`
-		Secret  []byte     `gorethink:"secret"`
-		Expires time.Time  `gorethink:"expires"`
+		Unique  string     `json:"unique"`
+		AuthLvl auth.Level `json:"authLvl"`
+		Secret  []byte     `json:"secret"`
+		Expires time.Time  `json:"expires"`
 	}
 
 	if err = cursor.One(&record); err != nil {
@@ -447,10 +447,10 @@ func (a *adapter) AuthGetUniqueRecord(unique string) (t.Uid, auth.Level, []byte,
 	}
 
 	var record struct {
-		Userid  string     `gorethink:"userid"`
-		AuthLvl auth.Level `gorethink:"authLvl"`
-		Secret  []byte     `gorethink:"secret"`
-		Expires time.Time  `gorethink:"expires"`
+		Userid  string     `json:"userid"`
+		AuthLvl auth.Level `json:"authLvl"`
+		Secret  []byte     `json:"secret"`
+		Expires time.Time  `json:"expires"`
 	}
 
 	if err = cursor.One(&record); err != nil {
@@ -525,7 +525,13 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 
 		// Delete topics where the user is the owner.
 
-		// TODO: Delete all messages in those topics: delete from messages, delete from dellog.
+		// TODO: delete from dellog
+		// Delete all messages in those topics
+		rdb.Do(
+			rdb.DB(a.dbName).Table("topics").GetAllByIndex("Owner", uid.String()).Field("Id").CoerceTo("array"),
+			func(tables rdb.Term) rdb.Term {
+				return rdb.DB(a.dbName).Table("messages").GetAllByIndex("Table", tables).Delete()
+			}).RunWrite(a.conn)
 
 		// TODO: Delete all subscriptions
 
