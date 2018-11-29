@@ -103,6 +103,7 @@
 				"project_id": "$FCM_PROJECT_ID",
 				"credentials_file": "$FCM_CRED_FILE",
 				"time_to_live": 3600,
+				"include_android_notification": $FCM_PUSH_INCLUDE_ANDROID_NOTIFICATION,
 				"icon": "ic_logo_push",
 				"icon_color": "#3949AB"
 			}
