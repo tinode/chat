@@ -523,17 +523,24 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 			return err
 		}
 
-		// Delete topics where the user is the owner.
+		// Delete topics where the user is the owner:
 
-		// TODO: delete from dellog
-		// Delete all messages in those topics
-		rdb.Do(
-			rdb.DB(a.dbName).Table("topics").GetAllByIndex("Owner", uid.String()).Field("Id").CoerceTo("array"),
-			func(tables rdb.Term) rdb.Term {
-				return rdb.DB(a.dbName).Table("messages").GetAllByIndex("Table", tables).Delete()
+		// 1. Delete delllog
+		// 2. Delete all messages.
+		// 2. Delete subscriptions.
+		rdb.DB(a.dbName).Table("topics").GetAllByIndex("Owner", uid.String()).ForEach(
+			func(topic rdb.Term) rdb.Term {
+				topicName := topic.Field("Name")
+				lower := []interface{}{topicName, rdb.MinVal}
+				upper := []interface{}{topicName, rdb.MaxVal}
+				return rdb.Expr([]interface{}{
+					rdb.DB(a.dbName).Table("dellog").Between(
+						lower, upper, rdb.BetweenOpts{Index: "Topic_DelId"}).Delete(),
+					rdb.DB(a.dbName).Table("messages").Between(
+						lower, upper, rdb.BetweenOpts{Index: "Topic_SeqId"}).Delete(),
+					rdb.DB(a.dbName).Table("subscriptions").GetAllByIndex("Topic", topicName).Delete(),
+				})
 			}).RunWrite(a.conn)
-
-		// TODO: Delete all subscriptions
 
 		// And finally delete the topics.
 		// TODO: denormalize Owner into topic, add index on Owner.
@@ -547,19 +554,34 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 			return err
 		}
 
+		// Delete credentials.
 		if err = a.CredDel(uid, ""); err != nil {
 			return err
 		}
-
+		// And finally delete the user.
 		_, err = rdb.DB(a.dbName).Table("users").Get(uid.String()).
 			Delete().RunWrite(a.conn)
 	} else {
+		// Disable user's subscriptions.
 		if err = a.SubsDelForUser(uid, false); err != nil {
 			return err
 		}
+
+		// Disable subscriptions for topics where the user is the owner.
+		// Disable topics where the user is the owner.
 		now := t.TimeNow()
-		_, err = rdb.DB(a.dbName).Table("users").Get(uid.String()).
-			Update(map[string]interface{}{"DeletedAt": now, "UpdatedAt": now}).RunWrite(a.conn)
+		disable := map[string]interface{}{"DeletedAt": now, "UpdatedAt": now}
+		if _, err = rdb.DB(a.dbName).Table("topics").GetAllByIndex("Owner", uid.String()).ForEach(
+			func(topic rdb.Term) rdb.Term {
+				return rdb.Expr([]interface{}{
+					rdb.DB(a.dbName).Table("subscriptions").GetAllByIndex("Topic", topic.Field("Name")).Update(disable),
+					rdb.DB(a.dbName).Table("topics").Get(topic.Field("Name")).Update(disable),
+				})
+			}).RunWrite(a.conn); err != nil {
+			return err
+		}
+
+		_, err = rdb.DB(a.dbName).Table("users").Get(uid.String()).Update(disable).RunWrite(a.conn)
 	}
 	return err
 }
