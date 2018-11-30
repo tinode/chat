@@ -26,8 +26,9 @@ from tinode_grpc import pb
 from tinode_grpc import pbx
 
 APP_NAME = "tn-cli"
-APP_VERSION = "1.1.0"
+APP_VERSION = "1.1.1"
 LIB_VERSION = pkg_resources.get_distribution("tinode_grpc").version
+GRPC_VERSION = pkg_resources.get_distribution("grpcio").version
 
 # Dictionary wich contains lambdas to be executed when server response is received
 onCompletion = {}
@@ -51,17 +52,17 @@ def make_vcard(fn, photofile):
     if (fn != None and fn.strip() != "") or photofile != None:
         card = {}
         if fn != None:
-            card.fn = fn.strip()
+            card['fn'] = fn.strip()
 
         if photofile != None:
             try:
                 f = open(photofile, 'rb')
                 dataStart = imageDataUrl.indexOf(",");
-                card.photo = {}
-                card.photo.data = base64.b64encode(f.read())
+                card['photo'] = {}
+                card.photo['data'] = base64.b64encode(f.read())
                 # File extension is used as a file type
                 # TODO: use mimetype.guess_type(ext) instead
-                card.photo.type = os.path.splitext(photofile)[1]
+                card.photo['type'] = os.path.splitext(photofile)[1]
             except IOError as err:
                 stdoutln("Error opening '" + photofile + "'", err)
 
@@ -118,9 +119,9 @@ def accMsg(id, user, scheme, secret, uname, password, do_login, fn, photo, priva
         secret = secret.encode('utf-8')
     else:
         secret = b''
-    print(default_user)
-    public = encode_to_bytes(make_vcard(fn, photo)) if (fn or photo) else None
-    private = encode_to_bytes(private) if private else None
+
+    public = encode_to_bytes(make_vcard(fn, photo))
+    private = encode_to_bytes(private)
     return pb.ClientMsg(acc=pb.ClientAcc(id=str(id), user_id=user,
         scheme=scheme, secret=secret, login=do_login, tags=tags.split(",") if tags else None,
         desc=pb.SetDesc(default_acs=pb.DefaultAcsMode(auth=auth, anon=anon),
@@ -559,7 +560,7 @@ def print_server_params(params):
 
 if __name__ == '__main__':
     """Parse command-line arguments. Extract host name and authentication scheme, if one is provided"""
-    purpose = "Tinode command line client. Version " + APP_VERSION + "/" + LIB_VERSION + "."
+    purpose = "Tinode command line client. Version " + APP_VERSION + "/" + LIB_VERSION + "; gRPC/" + GRPC_VERSION + "."
     print(purpose)
     parser = argparse.ArgumentParser(description=purpose)
     parser.add_argument('--host', default='localhost:6061', help='address of Tinode server')
