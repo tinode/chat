@@ -100,6 +100,7 @@ You can specify the following environment variables when issuing `docker run` co
 | `FCM_CRED_FILE` | string |  | Path to json file with FCM server-side service account credentials which will be used to send push notifications. |
 | `FCM_SENDER_ID` | string |  | FCM sender ID for receiving push notifications in the web client |
 | `FCM_VAPID_KEY` | string |  | Also called 'Web Client certificate' in the FCM console. Required by the web client to receive push notifications. |
+| `FCM_INCLUDE_ANDROID_NOTIFICATION` | boolean | true | If true, pushes a data + notification message, otherwise a data-only message. [More info](https://firebase.google.com/docs/cloud-messaging/concept-options). |
 | `MEDIA_HANDLER` | string | `fs` | Handler of large files, either `fs` or `s3` |
 | `MYSQL_DSN` | string | `'root@tcp(mysql)/tinode'` | MySQL [DSN](https://github.com/go-sql-driver/mysql#dsn-data-source-name). |
 | `PLUGIN_PYTHON_CHAT_BOT_ENABLED` | bool | `false` | Enable calling into the plugin provided by Python chatbot | 

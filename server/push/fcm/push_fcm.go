@@ -33,13 +33,14 @@ type Handler struct {
 }
 
 type configType struct {
-	Enabled         bool            `json:"enabled"`
-	Buffer          int             `json:"buffer"`
-	Credentials     json.RawMessage `json:"credentials"`
-	CredentialsFile string          `json:"credentials_file"`
-	TimeToLive      uint            `json:"time_to_live,omitempty"`
-	Icon            string          `json:"icon,omitempty"`
-	IconColor       string          `json:"icon_color,omitempty"`
+	Enabled                    bool            `json:"enabled"`
+	Buffer                     int             `json:"buffer"`
+	Credentials                json.RawMessage `json:"credentials"`
+	CredentialsFile            string          `json:"credentials_file"`
+	TimeToLive                 uint            `json:"time_to_live,omitempty"`
+	IncludeAndroidNotification bool            `json:"include_android_notification,omitempty"`
+	Icon                       string          `json:"icon,omitempty"`
+	IconColor                  string          `json:"icon_color,omitempty"`
 }
 
 // Init initializes the push handler
@@ -167,12 +168,15 @@ func sendNotifications(rcpt *push.Receipt, config *configType) {
 				}
 				if d.Platform == "android" {
 					msg.Android = &fcm.AndroidConfig{
-						Notification: &fcm.AndroidNotification{
+						Priority: "high",
+					}
+					if config.IncludeAndroidNotification {
+						msg.Android.Notification = &fcm.AndroidNotification{
 							Title: "New message",
 							Body:  data["content"],
 							Icon:  config.Icon,
 							Color: config.IconColor,
-						},
+						}
 					}
 				}
 
