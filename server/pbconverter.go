@@ -564,6 +564,9 @@ func pbSetQuerySerialize(in *MsgSetQuery) *pbx.SetQuery {
 			Mode:   in.Sub.Mode,
 		}
 	}
+
+	out.Tags = in.Tags
+
 	return out
 }
 
@@ -574,12 +577,15 @@ func pbSetQueryDeserialize(in *pbx.SetQuery) *MsgSetQuery {
 		if desc := in.GetDesc(); desc != nil {
 			msg.Desc = pbSetDescDeserialize(desc)
 		}
+
 		if sub := in.GetSub(); sub != nil {
 			msg.Sub = &MsgSetSub{
 				User: sub.GetUserId(),
 				Mode: sub.GetMode(),
 			}
 		}
+
+		msg.Tags = in.GetTags()
 	}
 
 	return &msg
