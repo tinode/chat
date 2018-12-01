@@ -67,8 +67,8 @@ type Adapter interface {
 	AuthGetRecord(user t.Uid, scheme string) (string, auth.Level, []byte, time.Time, error)
 	// AuthAddRecord creates new authentication record
 	AuthAddRecord(user t.Uid, scheme, unique string, authLvl auth.Level, secret []byte, expires time.Time) (bool, error)
-	// AuthDelRecord deteles an existing record
-	AuthDelRecord(user t.Uid, unique string) error
+	// AuthDelScheme deletes an existing authentication scheme for the user.
+	AuthDelScheme(user t.Uid, scheme string) error
 	// AuthDelAllRecords deletes all records of a given user.
 	AuthDelAllRecords(uid t.Uid) (int, error)
 	// AuthUpdRecord modifies an authentication record.

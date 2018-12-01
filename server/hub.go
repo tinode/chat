@@ -289,7 +289,6 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		t.cat = types.TopicCatMe
 
 		// 'me' has no owner, t.owner = nil
-
 		user, err := store.Users.Get(sreg.sess.uid)
 		if err != nil {
 			log.Println("hub: cannot load 'me' user object", t.name, err)
@@ -1001,10 +1000,11 @@ func (h *Hub) stopTopicsForUser(uid types.Uid, reason int, alldone chan<- bool) 
 	}
 
 	count := 0
-	h.topics.Range(func(_, t interface{}) bool {
+	h.topics.Range(func(name interface{}, t interface{}) bool {
 		topic := t.(*Topic)
-		if _, member := topic.perUser[uid]; (topic.cat != types.TopicCatGrp && member) ||
+		if _, isMember := topic.perUser[uid]; (topic.cat != types.TopicCatGrp && isMember) ||
 			topic.owner == uid {
+			h.topics.Delete(name)
 			// This call is non-blocking unless some other routine tries to stop it at the same time.
 			topic.exit <- &shutDown{reason: reason, done: done}
 			count++

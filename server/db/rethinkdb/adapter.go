@@ -341,16 +341,16 @@ func (a *adapter) AuthAddRecord(uid t.Uid, scheme, unique string, authLvl auth.L
 	return false, nil
 }
 
-// Delete user's authentication record.
-func (a *adapter) AuthDelRecord(uid t.Uid, unique string) error {
+// AuthDelScheme deletes an existing authentication scheme for the user.
+func (a *adapter) AuthDelScheme(uid t.Uid, scheme string) error {
 	_, err := rdb.DB(a.dbName).Table("auth").
 		GetAllByIndex("userid", uid.String()).
-		Filter(map[string]interface{}{"unique": unique}).
+		Filter(map[string]interface{}{"scheme": scheme}).
 		Delete().RunWrite(a.conn)
 	return err
 }
 
-// Delete user's all authentication records
+// AuthDelAllRecords deletes user's all authentication records
 func (a *adapter) AuthDelAllRecords(uid t.Uid) (int, error) {
 	res, err := rdb.DB(a.dbName).Table("auth").GetAllByIndex("userid", uid.String()).Delete().RunWrite(a.conn)
 	return res.Deleted, err
@@ -463,7 +463,8 @@ func (a *adapter) AuthGetUniqueRecord(unique string) (t.Uid, auth.Level, []byte,
 
 // UserGet fetches a single user by user id. If user is not found it returns (nil, nil)
 func (a *adapter) UserGet(uid t.Uid) (*t.User, error) {
-	cursor, err := rdb.DB(a.dbName).Table("users").Get(uid.String()).Run(a.conn)
+	cursor, err := rdb.DB(a.dbName).Table("users").Get(uid.String()).
+		Filter(rdb.Row.HasFields("DeletedAt").Not()).Run(a.conn)
 	if err != nil {
 		return nil, err
 	}
@@ -474,7 +475,7 @@ func (a *adapter) UserGet(uid t.Uid) (*t.User, error) {
 	}
 
 	var user t.User
-	if err = cursor.One(&user); err != nil || user.DeletedAt != nil {
+	if err = cursor.One(&user); err != nil {
 		return nil, err
 	}
 	return &user, nil
@@ -487,14 +488,13 @@ func (a *adapter) UserGetAll(ids ...t.Uid) ([]t.User, error) {
 	}
 
 	users := []t.User{}
-	if cursor, err := rdb.DB(a.dbName).Table("users").GetAll(uids...).Run(a.conn); err == nil {
+	if cursor, err := rdb.DB(a.dbName).Table("users").GetAll(uids...).
+		Filter(rdb.Row.HasFields("DeletedAt").Not()).Run(a.conn); err == nil {
 		defer cursor.Close()
 
 		var user t.User
 		for cursor.Next(&user) {
-			if user.DeletedAt == nil {
-				users = append(users, user)
-			}
+			users = append(users, user)
 		}
 
 		if err = cursor.Err(); err != nil {
@@ -795,7 +795,11 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 
 	// Fetch p2p users and join to p2p tables
 	if len(usrq) > 0 {
-		cursor, err = rdb.DB(a.dbName).Table("users").GetAll(usrq...).Run(a.conn)
+		q = rdb.DB(a.dbName).Table("users").GetAll(usrq...)
+		if !keepDeleted {
+			q = q.Filter(rdb.Row.HasFields("DeletedAt").Not())
+		}
+		cursor, err = q.Run(a.conn)
 		if err != nil {
 			return nil, err
 		}
@@ -862,7 +866,8 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 		subs = make([]t.Subscription, 0, len(usrq))
 
 		// Fetch users by a list of subscriptions
-		cursor, err = rdb.DB(a.dbName).Table("users").GetAll(usrq...).Run(a.conn)
+		cursor, err = rdb.DB(a.dbName).Table("users").GetAll(usrq...).
+			Filter(rdb.Row.HasFields("DeletedAt").Not()).Run(a.conn)
 		if err != nil {
 			return nil, err
 		}
@@ -1156,6 +1161,7 @@ func (a *adapter) FindUsers(uid t.Uid, req, opt []string) ([]t.Subscription, err
 	query := rdb.DB(a.dbName).
 		Table("users").
 		GetAllByIndex("Tags", allTags...).
+		Filter(rdb.Row.HasFields("DeletedAt").Not()).
 		Pluck("Id", "Access", "CreatedAt", "UpdatedAt", "Public", "Tags").
 		Group("Id").
 		Ungroup().
@@ -1223,6 +1229,7 @@ func (a *adapter) FindTopics(req, opt []string) ([]t.Subscription, error) {
 	query := rdb.DB(a.dbName).
 		Table("topics").
 		GetAllByIndex("Tags", allTags...).
+		Filter(rdb.Row.HasFields("DeletedAt").Not()).
 		Pluck("Id", "Access", "CreatedAt", "UpdatedAt", "Public", "Tags").
 		Group("Id").
 		Ungroup().

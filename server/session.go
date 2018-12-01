@@ -379,7 +379,6 @@ func (s *Session) subscribe(msg *ClientComMessage) {
 	}
 
 	if sub := s.getSub(expanded); sub != nil {
-		log.Println("s.subscribe: already subscribed to topic=", expanded, s.sid)
 		s.queueOut(InfoAlreadySubscribed(msg.id, msg.topic, msg.timestamp))
 	} else if globals.cluster.isRemoteTopic(expanded) {
 		// The topic is handled by a remote node. Forward message to it.

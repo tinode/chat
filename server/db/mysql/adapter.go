@@ -486,13 +486,13 @@ func (a *adapter) AuthAddRecord(uid t.Uid, scheme, unique string, authLvl auth.L
 	return false, nil
 }
 
-// Delete user's authentication record
-func (a *adapter) AuthDelRecord(user t.Uid, unique string) error {
-	_, err := a.db.Exec("DELETE FROM auth WHERE userid=? AND uname=?", store.DecodeUid(user), unique)
+// AuthDelScheme deletes an existing authentication scheme for the user.
+func (a *adapter) AuthDelScheme(user t.Uid, scheme string) error {
+	_, err := a.db.Exec("DELETE FROM auth WHERE userid=? AND scheme=?", store.DecodeUid(user), scheme)
 	return err
 }
 
-// Delete all authentication records for the user.
+// AuthDelAllRecords deletes all authentication records for the user.
 func (a *adapter) AuthDelAllRecords(user t.Uid) (int, error) {
 	res, err := a.db.Exec("DELETE FROM auth WHERE userid=?", store.DecodeUid(user))
 	if err != nil {
@@ -1542,7 +1542,7 @@ func (a *adapter) FindTopics(req, opt []string) ([]t.Subscription, error) {
 
 	query := "SELECT t.name AS topic,t.createdat,t.updatedat,t.access,t.public,t.tags,COUNT(*) AS matches " +
 		"FROM topics AS t LEFT JOIN topictags AS tt ON t.name=tt.topic " +
-		"WHERE tt.tag IN (?" + strings.Repeat(",?", len(req)+len(opt)-1) + ") " +
+		"WHERE tt.tag IN (?" + strings.Repeat(",?", len(req)+len(opt)-1) + ") AND t.deletedat IS NULL " +
 		"GROUP BY t.name,t.createdat,t.updatedat,t.public,t.tags "
 	if len(req) > 0 {
 		query += "HAVING COUNT(tt.tag IN (?" + strings.Repeat(",?", len(req)-1) + ") OR NULL)>=? "
