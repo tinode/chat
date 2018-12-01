@@ -396,13 +396,13 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		if stopic != nil {
 			// Subs already have Public swapped
 			if subs, err = store.Topics.GetUsers(t.name, nil); err != nil {
-				log.Println("hub: cannot load subscritions for '" + t.name + "' (" + err.Error() + ")")
+				log.Println("hub: cannot load subscriptions for '" + t.name + "' (" + err.Error() + ")")
 				sreg.sess.queueOut(ErrUnknown(sreg.pkt.id, t.xoriginal, timestamp))
 				return
 			}
 
 			// Case 3, fail
-			if subs == nil || len(subs) == 0 {
+			if len(subs) == 0 {
 				log.Println("hub: missing both subscriptions for '" + t.name + "' (SHOULD NEVER HAPPEN!)")
 				sreg.sess.queueOut(ErrUnknown(sreg.pkt.id, t.xoriginal, timestamp))
 				return

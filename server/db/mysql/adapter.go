@@ -576,15 +576,15 @@ func (a *adapter) AuthGetUniqueRecord(unique string) (t.Uid, auth.Level, []byte,
 // UserGet fetches a single user by user id. If user is not found it returns (nil, nil)
 func (a *adapter) UserGet(uid t.Uid) (*t.User, error) {
 	var user t.User
-	err := a.db.Get(&user, "SELECT * FROM users WHERE id=?", store.DecodeUid(uid))
+	err := a.db.Get(&user, "SELECT * FROM users WHERE id=? AND deletedat IS NULL", store.DecodeUid(uid))
 	if err == nil {
 		user.SetUid(uid)
 		user.Public = fromJSON(user.Public)
 		return &user, nil
 	}
 
-	if err == sql.ErrNoRows || user.DeletedAt != nil {
-		// Clear the error if user does not exist or deleted.
+	if err == sql.ErrNoRows {
+		// Clear the error if user does not exist or marked as soft-deleted.
 		return nil, nil
 	}
 
@@ -599,7 +599,7 @@ func (a *adapter) UserGetAll(ids ...t.Uid) ([]t.User, error) {
 	}
 
 	users := []t.User{}
-	q, _, _ := sqlx.In("SELECT * FROM users WHERE id IN (?)", uids)
+	q, _, _ := sqlx.In("SELECT * FROM users WHERE id IN (?) AND deletedat IS NULL", uids)
 	q = a.db.Rebind(q)
 	rows, err := a.db.Queryx(q, uids...)
 	if err != nil {
@@ -641,8 +641,8 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 
 	decoded_uid := store.DecodeUid(uid)
 	if hard {
-		// TODO: Move under transaction
-		if err = a.DeviceDelete(uid, ""); err != nil {
+		// Delete user's devices
+		if err = deviceDelete(tx, uid, ""); err != nil {
 			return err
 		}
 
@@ -650,6 +650,8 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 		if err = subsDelForUser(tx, uid, true); err != nil {
 			return err
 		}
+
+		// TODO: Delete all p2p subscriptions with the user.
 
 		// Delete user's messages in all topics.
 		if _, err = tx.Exec("DELETE FROM dellog WHERE deletedfor=?", decoded_uid); err != nil {
@@ -713,6 +715,9 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 		if err = subsDelForUser(tx, uid, false); err != nil {
 			return err
 		}
+
+		// TODO: Disable all p2p subscriptions with the user.
+
 		// Disable all subscriptions to topics where the user is the owner.
 		if _, err = tx.Exec("UPDATE subscriptions LEFT JOIN topics ON subscriptions.topic=topics.name "+
 			"SET subscriptions.updatedAt=?, subscriptions.deletedAt=? WHERE topics.owner=?",
@@ -935,7 +940,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 	args := []interface{}{store.DecodeUid(uid)}
 	if !keepDeleted {
 		// Filter out rows with defined DeletedAt
-		q += " AND deletedAt IS NULL"
+		q += " AND deletedat IS NULL"
 	}
 
 	limit := maxResults
@@ -1054,6 +1059,12 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 			if err = rows.StructScan(&usr); err != nil {
 				break
 			}
+
+			// Optionally skip deleted users.
+			if usr.DeletedAt != nil && !keepDeleted {
+				continue
+			}
+
 			uid2 := encodeUidString(usr.Id)
 			if sub, ok := join[uid.P2PName(uid2)]; ok {
 				sub.ObjHeader.MergeTimes(&usr.ObjHeader)
@@ -1081,7 +1092,7 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 	args := []interface{}{topic}
 	if !keepDeleted {
 		// Filter out rows with DeletedAt being not null
-		q += " AND s.deletedAt IS NULL"
+		q += " AND s.deletedAt IS NULL AND u.deletedat IS NULL"
 	}
 
 	limit := maxSubscribers
@@ -1465,7 +1476,7 @@ func (a *adapter) FindUsers(uid t.Uid, req, opt []string) ([]t.Subscription, err
 
 	query := "SELECT u.id,u.createdat,u.updatedat,u.access,u.public,u.tags,COUNT(*) AS matches " +
 		"FROM users AS u LEFT JOIN usertags AS t ON t.userid=u.id " +
-		"WHERE t.tag IN (?" + strings.Repeat(",?", len(req)+len(opt)-1) + ") " +
+		"WHERE t.tag IN (?" + strings.Repeat(",?", len(req)+len(opt)-1) + ") AND u.deletedat IS NULL " +
 		"GROUP BY u.id,u.createdat,u.updatedat,u.public,u.tags "
 	if len(req) > 0 {
 		query += "HAVING COUNT(t.tag IN (?" + strings.Repeat(",?", len(req)-1) + ") OR NULL)>=? "
@@ -1922,16 +1933,33 @@ func (a *adapter) DeviceGetAll(uids ...t.Uid) (map[t.Uid][]t.DeviceDef, int, err
 	return result, count, err
 }
 
-func (a *adapter) DeviceDelete(uid t.Uid, deviceID string) error {
+func deviceDelete(tx *sql.Tx, uid t.Uid, deviceID string) error {
 	var err error
 	if deviceID == "" {
-		_, err = a.db.Exec("DELETE FROM devices WHERE userid=?",
-			store.DecodeUid(uid))
+		_, err = tx.Exec("DELETE FROM devices WHERE userid=?", store.DecodeUid(uid))
 	} else {
-		_, err = a.db.Exec("DELETE FROM devices WHERE userid=? AND hash=?",
-			store.DecodeUid(uid), deviceHasher(deviceID))
+		_, err = tx.Exec("DELETE FROM devices WHERE userid=? AND hash=?", store.DecodeUid(uid), deviceHasher(deviceID))
 	}
 	return err
+}
+
+func (a *adapter) DeviceDelete(uid t.Uid, deviceID string) error {
+	tx, err := a.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err != nil {
+			tx.Rollback()
+		}
+	}()
+
+	err = deviceDelete(tx, uid, deviceID)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit()
 }
 
 // Credential management
