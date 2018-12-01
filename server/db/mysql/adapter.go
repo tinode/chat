@@ -662,23 +662,23 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 		// Delete topics where the user is the owner.
 
 		// First delete all messages in those topics.
-		if _, err = tx.Exec("DELETE FROM dellog LEFT JOIN topics ON topics.name=dellog.topic WHERE topic.owner=?",
+		if _, err = tx.Exec("DELETE FROM dellog LEFT JOIN topics ON topics.name=dellog.topic WHERE topics.owner=?",
 			decoded_uid); err != nil {
 			return err
 		}
-		if _, err = tx.Exec("DELETE FROM messages LEFT JOIN topics ON topics.name=messages.topic WHERE topic.owner=?",
+		if _, err = tx.Exec("DELETE FROM messages LEFT JOIN topics ON topics.name=messages.topic WHERE topics.owner=?",
 			decoded_uid); err != nil {
 			return err
 		}
 
 		// Delete all subscriptions
-		if _, err = tx.Exec("DELETE FROM subscriptions AS sub LEFT JOIN topics ON topics.name=sub.topic WHERE topic.owner=?",
+		if _, err = tx.Exec("DELETE FROM subscriptions AS sub LEFT JOIN topics ON topics.name=sub.topic WHERE topics.owner=?",
 			decoded_uid); err != nil {
 			return err
 		}
 
 		// Delete topic tags
-		if _, err = tx.Exec("DELETE FROM topictags LEFT JOIN topics ON topics.name=topictags.topic WHERE topic.owner=?",
+		if _, err = tx.Exec("DELETE FROM topictags LEFT JOIN topics ON topics.name=topictags.topic WHERE topics.owner=?",
 			decoded_uid); err != nil {
 			return err
 		}
@@ -714,8 +714,8 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 			return err
 		}
 		// Disable all subscriptions to topics where the user is the owner.
-		if _, err = tx.Exec("UPDATE subscriptions LEFT JOIN topics ON subscriptions.topic=topic.name "+
-			"SET subscriptions.updatedAt=?, subscriptions.deletedAt=? WHERE topic.owner=?",
+		if _, err = tx.Exec("UPDATE subscriptions LEFT JOIN topics ON subscriptions.topic=topics.name "+
+			"SET subscriptions.updatedAt=?, subscriptions.deletedAt=? WHERE topics.owner=?",
 			now, now, decoded_uid); err != nil {
 			return err
 		}
