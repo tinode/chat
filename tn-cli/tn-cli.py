@@ -57,12 +57,9 @@ def make_vcard(fn, photofile):
         if photofile != None:
             try:
                 f = open(photofile, 'rb')
-                dataStart = imageDataUrl.indexOf(",");
-                card['photo'] = {}
-                card.photo['data'] = base64.b64encode(f.read())
                 # File extension is used as a file type
                 # TODO: use mimetype.guess_type(ext) instead
-                card.photo['type'] = os.path.splitext(photofile)[1]
+                card['photo'] = {'data': base64.b64encode(f.read()), 'type': os.path.splitext(photofile)[1]}
             except IOError as err:
                 stdoutln("Error opening '" + photofile + "'", err)
 
