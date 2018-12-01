@@ -271,7 +271,7 @@ func (a *adapter) CreateDb(reset bool) error {
 			touchedat DATETIME(3),
 			name      CHAR(25) NOT NULL,
 			usebt     INT DEFAULT 0,
-			owner	  BIGINT NOT NULL DEFAULT 0,
+			owner     BIGINT NOT NULL DEFAULT 0,
 			access    JSON,
 			seqid     INT NOT NULL DEFAULT 0,
 			delid     INT DEFAULT 0,
