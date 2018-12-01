@@ -51,17 +51,17 @@ def make_vcard(fn, photofile):
     if (fn != None and fn.strip() != "") or photofile != None:
         card = {}
         if fn != None:
-            card.fn = fn.strip()
+            card['fn'] = fn.strip()
 
         if photofile != None:
             try:
                 f = open(photofile, 'rb')
                 dataStart = imageDataUrl.indexOf(",");
-                card.photo = {}
-                card.photo.data = base64.b64encode(f.read())
+                card['photo'] = {}
+                card.photo['data'] = base64.b64encode(f.read())
                 # File extension is used as a file type
                 # TODO: use mimetype.guess_type(ext) instead
-                card.photo.type = os.path.splitext(photofile)[1]
+                card.photo['type'] = os.path.splitext(photofile)[1]
             except IOError as err:
                 stdoutln("Error opening '" + photofile + "'", err)
 
