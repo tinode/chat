@@ -515,8 +515,8 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 		}
 
 		// Delete user's messages in all topics.
-		// TODO: Delete from dellog too.
-		// TODO: Delete from fileuploads.
+		// TODO: Maybe add a record to dellog.
+		// TODO: Decrement fileuploads.
 		// TODO: Add index on From.
 		if _, err = rdb.DB(a.dbName).Table("messages").GetAllByIndex("From", uid.String()).
 			Delete().RunWrite(a.conn); err != nil {
@@ -527,7 +527,8 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 
 		// 1. Delete delllog
 		// 2. Delete all messages.
-		// 2. Delete subscriptions.
+		// 3. TODO: Decrement fileuploads.
+		// 4. Delete subscriptions.
 		rdb.DB(a.dbName).Table("topics").GetAllByIndex("Owner", uid.String()).ForEach(
 			func(topic rdb.Term) rdb.Term {
 				topicName := topic.Field("Name")

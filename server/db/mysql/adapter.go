@@ -657,6 +657,8 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 		if _, err = tx.Exec("DELETE FROM dellog WHERE deletedfor=?", decoded_uid); err != nil {
 			return err
 		}
+
+		// TODO: maybe add a dellog record for these messages.
 		if _, err = tx.Exec("DELETE FROM messages WHERE `from`=?", decoded_uid); err != nil {
 			return err
 		}

@@ -171,7 +171,7 @@ const (
 )
 
 const (
-	constMsgDelTopic = iota
+	constMsgDelTopic = iota + 1
 	constMsgDelMsg
 	constMsgDelSub
 	constMsgDelUser
@@ -200,8 +200,6 @@ func parseMsgClientMeta(params string) int {
 }
 
 func parseMsgClientDel(params string) int {
-	var bits int
-
 	switch params {
 	case "", "msg":
 		return constMsgDelMsg
@@ -214,7 +212,7 @@ func parseMsgClientDel(params string) int {
 	default:
 		// ignore
 	}
-	return bits
+	return 0
 }
 
 // MsgDefaultAcsMode is a topic default access mode.

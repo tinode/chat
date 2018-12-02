@@ -227,7 +227,7 @@ func (UsersObjMapper) UpdateAuthRecord(uid types.Uid, authLvl auth.Level, scheme
 	return adp.AuthUpdRecord(uid, scheme, scheme+":"+unique, authLvl, secret, expires)
 }
 
-// DelAuthRecords deletes user's all auth records of the given scheme.
+// DelAuthRecords deletes user's auth records of the given scheme.
 func (UsersObjMapper) DelAuthRecords(uid types.Uid, scheme string) error {
 	return adp.AuthDelScheme(uid, scheme)
 }
