@@ -279,9 +279,9 @@ func replyDelUser(s *Session, msg *ClientComMessage) {
 		// Disable all authenticators
 		authnames := store.GetAuthHandlerNames()
 		for _, name := range authnames {
-			//if err := store.GetAuthHandler(name).DelRecords(uid); err != nil {
-			log.Println("replyDelUser: failed to delete user auth record", msg.Del.User, name /*err,*/, s.sid)
-			//}
+			if err := store.GetAuthHandler(name).DelRecords(uid); err != nil {
+				log.Println("replyDelUser: failed to delete user auth record", msg.Del.User, name, err, s.sid)
+			}
 		}
 
 		// Terminate all sessions. Skip the current session so the requester gets a response.

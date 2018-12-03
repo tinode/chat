@@ -666,23 +666,23 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 		// Delete topics where the user is the owner.
 
 		// First delete all messages in those topics.
-		if _, err = tx.Exec("DELETE FROM dellog LEFT JOIN topics ON topics.name=dellog.topic WHERE topics.owner=?",
+		if _, err = tx.Exec("DELETE dellog FROM dellog LEFT JOIN topics ON topics.name=dellog.topic WHERE topics.owner=?",
 			decoded_uid); err != nil {
 			return err
 		}
-		if _, err = tx.Exec("DELETE FROM messages LEFT JOIN topics ON topics.name=messages.topic WHERE topics.owner=?",
+		if _, err = tx.Exec("DELETE messages FROM messages LEFT JOIN topics ON topics.name=messages.topic WHERE topics.owner=?",
 			decoded_uid); err != nil {
 			return err
 		}
 
 		// Delete all subscriptions
-		if _, err = tx.Exec("DELETE FROM subscriptions AS sub LEFT JOIN topics ON topics.name=sub.topic WHERE topics.owner=?",
+		if _, err = tx.Exec("DELETE sub FROM subscriptions AS sub LEFT JOIN topics ON topics.name=sub.topic WHERE topics.owner=?",
 			decoded_uid); err != nil {
 			return err
 		}
 
 		// Delete topic tags
-		if _, err = tx.Exec("DELETE FROM topictags LEFT JOIN topics ON topics.name=topictags.topic WHERE topics.owner=?",
+		if _, err = tx.Exec("DELETE topictags FROM topictags LEFT JOIN topics ON topics.name=topictags.topic WHERE topics.owner=?",
 			decoded_uid); err != nil {
 			return err
 		}
