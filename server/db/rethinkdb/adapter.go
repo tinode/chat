@@ -235,11 +235,15 @@ func (a *adapter) CreateDb(reset bool) error {
 		return err
 	}
 
-	// Topic stored in database
+	// Topics stored in database
 	if _, err := rdb.DB(a.dbName).TableCreate("topics", rdb.TableCreateOpts{PrimaryKey: "Id"}).RunWrite(a.conn); err != nil {
 		return err
 	}
-	// Create secondary index on Topic.Tags array so topics can be found by tags
+	// Secondary index on Owner field for deleting users.
+	if _, err := rdb.DB(a.dbName).Table("topics").IndexCreate("Owner").RunWrite(a.conn); err != nil {
+		return err
+	}
+	// Secondary index on Topic.Tags array so topics can be found by tags.
 	// These tags are not unique as opposite to User.Tags.
 	if _, err := rdb.DB(a.dbName).Table("topics").IndexCreate("Tags", rdb.IndexCreateOpts{Multi: true}).RunWrite(a.conn); err != nil {
 		return err
@@ -468,7 +472,7 @@ func (a *adapter) AuthGetUniqueRecord(unique string) (t.Uid, auth.Level, []byte,
 
 // UserGet fetches a single user by user id. If user is not found it returns (nil, nil)
 func (a *adapter) UserGet(uid t.Uid) (*t.User, error) {
-	cursor, err := rdb.DB(a.dbName).Table("users").Get(uid.String()).
+	cursor, err := rdb.DB(a.dbName).Table("users").GetAll(uid.String()).
 		Filter(rdb.Row.HasFields("DeletedAt").Not()).Run(a.conn)
 	if err != nil {
 		return nil, err
