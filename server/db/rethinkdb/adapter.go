@@ -249,6 +249,11 @@ func (a *adapter) CreateDb(reset bool) error {
 	if _, err := rdb.DB(a.dbName).TableCreate("messages", rdb.TableCreateOpts{PrimaryKey: "Id"}).RunWrite(a.conn); err != nil {
 		return err
 	}
+	// Index on From field for deleting messages for a user.
+	if _, err := rdb.DB(a.dbName).Table("messages").IndexCreate("From").RunWrite(a.conn); err != nil {
+		return err
+	}
+	// Compound index of topic - seqID for selecting messages in a topic.
 	if _, err := rdb.DB(a.dbName).Table("messages").IndexCreateFunc("Topic_SeqId",
 		func(row rdb.Term) interface{} {
 			return []interface{}{row.Field("Topic"), row.Field("SeqId")}
@@ -396,7 +401,7 @@ func (a *adapter) AuthUpdRecord(uid t.Uid, scheme, unique string, authLvl auth.L
 		dupe, err = a.AuthAddRecord(uid, scheme, unique, authLvl, secret, expires)
 		if err == nil {
 			// We can't do much with the error here. No support for transactions :(
-			a.AuthDelRecord(uid, unique)
+			a.AuthDelScheme(uid, unique)
 		}
 	}
 	return dupe, err
@@ -516,30 +521,49 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 
 		// Delete user's messages in all topics.
 		// TODO: Maybe add a record to dellog.
-		// TODO: Decrement fileuploads.
-		// TODO: Add index on From.
-		if _, err = rdb.DB(a.dbName).Table("messages").GetAllByIndex("From", uid.String()).
-			Delete().RunWrite(a.conn); err != nil {
+
+		q := rdb.DB(a.dbName).Table("messages").GetAllByIndex("From", uid.String())
+		if err = a.fileDecrementUseCounter(q); err != nil {
+			return err
+		}
+		if _, err = q.Delete().RunWrite(a.conn); err != nil {
 			return err
 		}
 
 		// Delete topics where the user is the owner:
 
-		// 1. Delete delllog
-		// 2. Delete all messages.
-		// 3. TODO: Decrement fileuploads.
+		// 1. Delete dellog
+		// 2. Decrement fileuploads.
+		// 3. Delete all messages.
 		// 4. Delete subscriptions.
-		rdb.DB(a.dbName).Table("topics").GetAllByIndex("Owner", uid.String()).ForEach(
+		_, err = rdb.DB(a.dbName).Table("topics").GetAllByIndex("Owner", uid.String()).ForEach(
 			func(topic rdb.Term) rdb.Term {
-				topicName := topic.Field("Name")
-				lower := []interface{}{topicName, rdb.MinVal}
-				upper := []interface{}{topicName, rdb.MaxVal}
 				return rdb.Expr([]interface{}{
+					// Delete dellog
 					rdb.DB(a.dbName).Table("dellog").Between(
-						lower, upper, rdb.BetweenOpts{Index: "Topic_DelId"}).Delete(),
+						[]interface{}{topic.Field("Name"), rdb.MinVal},
+						[]interface{}{topic.Field("Name"), rdb.MaxVal},
+						rdb.BetweenOpts{Index: "Topic_DelId"}).Delete(),
+					// Decrement fileuploads UseCounter
+					rdb.DB(a.dbName).Table("fileuploads").GetAll(
+						rdb.Args(
+							rdb.DB(a.dbName).Table("messages").Between(
+								[]interface{}{topic.Field("Name"), rdb.MinVal},
+								[]interface{}{topic.Field("Name"), rdb.MaxVal},
+								rdb.BetweenOpts{Index: "Topic_SeqId"}).
+								// Fetch messages with attachments only
+								Filter(rdb.Row.HasFields("Attachments")).
+								// Flatten arrays
+								ConcatMap(func(row rdb.Term) interface{} { return row.Field("Attachments") }).
+								CoerceTo("array"))).
+						Update(map[string]interface{}{"UseCount": rdb.Row.Field("UseCount").Default(1).Sub(1)}),
+					// Delete messages
 					rdb.DB(a.dbName).Table("messages").Between(
-						lower, upper, rdb.BetweenOpts{Index: "Topic_SeqId"}).Delete(),
-					rdb.DB(a.dbName).Table("subscriptions").GetAllByIndex("Topic", topicName).Delete(),
+						[]interface{}{topic.Field("Name"), rdb.MinVal},
+						[]interface{}{topic.Field("Name"), rdb.MaxVal},
+						rdb.BetweenOpts{Index: "Topic_SeqId"}).Delete(),
+					// Delete subscriptions
+					rdb.DB(a.dbName).Table("subscriptions").GetAllByIndex("Topic", topic.Field("Name")).Delete(),
 				})
 			}).RunWrite(a.conn)
 
@@ -1399,11 +1423,17 @@ func (a *adapter) messagesHardDelete(topic string) error {
 		rdb.BetweenOpts{Index: "Topic_DelId"}).Delete().RunWrite(a.conn); err != nil {
 		return err
 	}
-	// Whole topic is being deleted, thus also deleting all messages
-	_, err = rdb.DB(a.dbName).Table("messages").Between(
+
+	q := rdb.DB(a.dbName).Table("messages").Between(
 		[]interface{}{topic, rdb.MinVal},
 		[]interface{}{topic, rdb.MaxVal},
-		rdb.BetweenOpts{Index: "Topic_SeqId"}).Delete().RunWrite(a.conn)
+		rdb.BetweenOpts{Index: "Topic_SeqId"})
+
+	if err = a.fileDecrementUseCounter(q); err != nil {
+		return err
+	}
+
+	_, err = q.Delete().RunWrite(a.conn)
 
 	return err
 }
@@ -1448,38 +1478,13 @@ func (a *adapter) MessageDeleteList(topic string, toDel *t.DelMessage) error {
 		query = query.Filter(rdb.Row.HasFields("DelId").Not())
 		if toDel.DeletedFor == "" {
 			// First decrement use counter for attachments.
-			/*
-						r.db("test").table("one")
-						.getAll(
-							r.args(r.db("test").table("zero")
-								.getAll(
-									"07e2c6fe-ac91-49cb-9834-ff34bf50aad1",
-				  					"0098a829-6da5-4f7b-8432-32b40de9ab3b",
-									"0926e7dd-321a-49cb-adb1-7a705d9d9a78",
-									"8e195450-babd-4954-a8fb-0cc414b43156")
-								.filter(r.row.hasFields("att"))
-								.concatMap(function(row) { return row.getField("att"); })
-								.coerceTo("array"))
-							)
-						.update({useCount: r.row.getField("useCount").default(0).add(1)})
-			*/
-
-			rdb.DB(a.dbName).Table("fileuploads").GetAll(
-				rdb.Args(
-					query.
-						// Fetch messages with attachments only
-						Filter(rdb.Row.HasFields("Attachments")).
-						// Flatten arrays
-						ConcatMap(func(row rdb.Term) interface{} { return row.Field("Attachments") }).
-						CoerceTo("array"))).
-				// Decrement UseCount.
-				Update(map[string]interface{}{"UseCount": rdb.Row.Field("UseCount").Default(0).Sub(1)}).
-				RunWrite(a.conn)
-			// Hard-delete individual messages. Message is not deleted but all fields with content
-			// are replaced with nulls.
-			_, err = query.Update(map[string]interface{}{
-				"DeletedAt": t.TimeNow(), "DelId": toDel.DelId, "From": nil,
-				"Head": nil, "Content": nil, "Attachments": nil}).RunWrite(a.conn)
+			if err = a.fileDecrementUseCounter(query); err == nil {
+				// Hard-delete individual messages. Message is not deleted but all fields with content
+				// are replaced with nulls.
+				_, err = query.Update(map[string]interface{}{
+					"DeletedAt": t.TimeNow(), "DelId": toDel.DelId, "From": nil,
+					"Head": nil, "Content": nil, "Attachments": nil}).RunWrite(a.conn)
+			}
 
 		} else {
 			// Soft-deleting: adding DelId to DeletedFor
@@ -1790,7 +1795,7 @@ func (a *adapter) FileGet(fid string) (*t.FileDef, error) {
 
 }
 
-// FileDeleteUnused
+// FileDeleteUnused deletes orphaned file uploads.
 func (a *adapter) FileDeleteUnused(olderThan time.Time, limit int) ([]string, error) {
 	q := rdb.DB(a.dbName).Table("fileuploads").GetAllByIndex("UseCount", 0)
 	if !olderThan.IsZero() {
@@ -1819,6 +1824,37 @@ func (a *adapter) FileDeleteUnused(olderThan time.Time, limit int) ([]string, er
 	_, err = q.Delete().RunWrite(a.conn)
 
 	return locations, err
+}
+
+// Given a select query against 'messages' table, decrement corresponding use counter in 'fileuploads' table.
+func (a *adapter) fileDecrementUseCounter(msgQuery rdb.Term) error {
+	/*
+		r.db("test").table("one")
+			.getAll(
+				r.args(r.db("test").table("zero")
+					.getAll(
+						"07e2c6fe-ac91-49cb-9834-ff34bf50aad1",
+			  			"0098a829-6da5-4f7b-8432-32b40de9ab3b",
+						"0926e7dd-321a-49cb-adb1-7a705d9d9a78",
+						"8e195450-babd-4954-a8fb-0cc414b43156")
+					.filter(r.row.hasFields("att"))
+					.concatMap(function(row) { return row.getField("att"); })
+					.coerceTo("array"))
+				)
+			.update({useCount: r.row.getField("useCount").default(0).add(1)})
+	*/
+	_, err := rdb.DB(a.dbName).Table("fileuploads").GetAll(
+		rdb.Args(
+			msgQuery.
+				// Fetch messages with attachments only
+				Filter(rdb.Row.HasFields("Attachments")).
+				// Flatten arrays
+				ConcatMap(func(row rdb.Term) interface{} { return row.Field("Attachments") }).
+				CoerceTo("array"))).
+		// Decrement UseCount.
+		Update(map[string]interface{}{"UseCount": rdb.Row.Field("UseCount").Default(1).Sub(1)}).
+		RunWrite(a.conn)
+	return err
 }
 
 func init() {

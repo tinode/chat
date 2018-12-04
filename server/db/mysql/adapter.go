@@ -380,23 +380,23 @@ func (a *adapter) CreateDb(reset bool) error {
 	}
 
 	// Records of uploaded files.
+	// Don't add FOREIGN KEY on userid. It's not needed and it will break user deletion.
 	if _, err = tx.Exec(
 		`CREATE TABLE fileuploads(
 			id        BIGINT NOT NULL,
 			createdat DATETIME(3) NOT NULL,
-			updatedat DATETIME(3) NOT NULL,	
+			updatedat DATETIME(3) NOT NULL,
 			userid    BIGINT NOT NULL,
 			status    INT NOT NULL,
 			mimetype  VARCHAR(255) NOT NULL,
 			size	      BIGINT NOT NULL,
 			location  VARCHAR(2048) NOT NULL,
-			PRIMARY KEY(id),
-			FOREIGN KEY(userid) REFERENCES users(id)
+			PRIMARY KEY(id)
 		)`); err != nil {
 		return err
 	}
 
-	// Links between uploaded files and messages they are attached to.
+	// Links between uploaded files and the messages they are attached to.
 	if _, err = tx.Exec(
 		`CREATE TABLE filemsglinks(
 			id			INT NOT NULL AUTO_INCREMENT,
@@ -627,6 +627,8 @@ func (a *adapter) UserGetAll(ids ...t.Uid) ([]t.User, error) {
 	return users, err
 }
 
+// UserDelete deletes specified user: wipes completely (hard-delete) or marks as deleted.
+// TODO: report when the user is not found.
 func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 	tx, err := a.db.Begin()
 	if err != nil {
@@ -640,6 +642,7 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 	}()
 
 	decoded_uid := store.DecodeUid(uid)
+
 	if hard {
 		// Delete user's devices
 		if err = deviceDelete(tx, uid, ""); err != nil {
@@ -698,17 +701,15 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 		}
 
 		// TODO: move under transaction
-		err = a.CredDel(uid, "")
-		if err != nil {
+		if err = a.CredDel(uid, ""); err != nil {
 			return err
 		}
 
-		_, err = tx.Exec("DELETE FROM usertags WHERE userid=?", decoded_uid)
-		if err != nil {
+		if _, err = tx.Exec("DELETE FROM usertags WHERE userid=?", decoded_uid); err != nil {
 			return err
 		}
-		_, err = tx.Exec("DELETE FROM users WHERE id=?", decoded_uid)
-		if err != nil {
+
+		if _, err = tx.Exec("DELETE FROM users WHERE id=?", decoded_uid); err != nil {
 			return err
 		}
 	} else {
@@ -2116,7 +2117,7 @@ func (a *adapter) FileGet(fid string) (*t.FileDef, error) {
 
 }
 
-// FileDeleteUnused deletes file upload records and (if unusedOnly==false) file message link records.
+// FileDeleteUnused deletes file upload records.
 func (a *adapter) FileDeleteUnused(olderThan time.Time, limit int) ([]string, error) {
 	tx, err := a.db.Begin()
 	if err != nil {
