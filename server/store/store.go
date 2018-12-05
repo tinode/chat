@@ -523,6 +523,7 @@ func (MessagesObjMapper) DeleteList(topic string, delID int, forUser types.Uid, 
 		return err
 	}
 
+	// TODO: move to adapter
 	if delID > 0 {
 		// Record ID of the delete transaction
 		err = adp.TopicUpdate(topic, map[string]interface{}{"DelId": delID})

@@ -334,7 +334,8 @@ func (a *adapter) CreateDb(reset bool) error {
 			`head     JSON,
 			content   JSON,
 			PRIMARY KEY(id),` +
-			"FOREIGN KEY(`from`) REFERENCES users(id)," +
+			"INDEX messages_from(`from`)," +
+			"INDEX messages_topic_from(topic, `from`)" +
 			`FOREIGN KEY(topic) REFERENCES topics(name),
 			UNIQUE INDEX messages_topic_seqid(topic, seqid)
 		);`); err != nil {
@@ -627,10 +628,69 @@ func (a *adapter) UserGetAll(ids ...t.Uid) ([]t.User, error) {
 	return users, err
 }
 
+// userDelMessages deletes messages where the given user is the sender.
+func userDelMessages(tx *sqlx.Tx, decoded_uid int64) error {
+	// Get a list of affected topics.
+	rows, err := tx.Query("SELECT DISTINCT topic FROM messages WHERE `from`=?", decoded_uid)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		// For each affected topic get a list of messages, format it as a t.DelMessage, pass to
+		// messageDeleteList
+		var topic string
+		if err = rows.Scan(&topic); err != nil {
+			return err
+		}
+
+		idRows, err := tx.Query("SELECT seqid FROM messages WHERE `from`=? AND topic=? ORDER BY seqid",
+			decoded_uid, topic)
+		if err != nil {
+			return err
+		}
+
+		toDel := t.DelMessage{Topic: topic}
+		for idRows.Next() {
+			var id int
+			if err = rows.Scan(&id); err != nil {
+				idRows.Close()
+				return err
+			}
+
+			// Add message SeqId to the range of deleted messages.
+			if l := len(toDel.SeqIdRanges); (l > 0) &&
+				(toDel.SeqIdRanges[l-1].Low+1 == id || toDel.SeqIdRanges[l-1].Hi == id) {
+				// Extend previous range
+				toDel.SeqIdRanges[l-1].Hi = id + 1
+			} else {
+				// Start a new range
+				toDel.SeqIdRanges = append(toDel.SeqIdRanges, t.Range{Low: id})
+			}
+
+		}
+		idRows.Close()
+
+		if len(toDel.SeqIdRanges) > 0 {
+			err = tx.Get(&toDel.DelId, "SELECT delid FROM topics WHERE name=?", topic)
+			if err != nil {
+				return err
+			}
+			toDel.DelId++
+			if err = messageDeleteList(tx, topic, &toDel); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
 // UserDelete deletes specified user: wipes completely (hard-delete) or marks as deleted.
 // TODO: report when the user is not found.
 func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
-	tx, err := a.db.Begin()
+	tx, err := a.db.Beginx()
 	if err != nil {
 		return err
 	}
@@ -654,15 +714,15 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 			return err
 		}
 
-		// TODO: Delete all p2p subscriptions with the user.
-
 		// Delete user's messages in all topics.
+
+		// Delete records of messages soft-deleted for the user.
 		if _, err = tx.Exec("DELETE FROM dellog WHERE deletedfor=?", decoded_uid); err != nil {
 			return err
 		}
 
-		// TODO: maybe add a dellog record for these messages.
-		if _, err = tx.Exec("DELETE FROM messages WHERE `from`=?", decoded_uid); err != nil {
+		// Wipe content of user's messages in all topics.
+		if err = userDelMessages(tx, decoded_uid); err != nil {
 			return err
 		}
 
@@ -803,10 +863,10 @@ func (a *adapter) UserUpdate(uid t.Uid, update map[string]interface{}) error {
 
 // UserGetByCred returns user ID for the given validated credential.
 func (a *adapter) UserGetByCred(method, value string) (t.Uid, error) {
-	var decodedUid int64
-	err := a.db.Get(&decodedUid, "SELECT userid FROM credentials WHERE synthetic=?", method+":"+value)
+	var decoded_uid int64
+	err := a.db.Get(&decoded_uid, "SELECT userid FROM credentials WHERE synthetic=?", method+":"+value)
 	if err == nil {
-		return store.EncodeUid(decodedUid), nil
+		return store.EncodeUid(decoded_uid), nil
 	}
 
 	if err == sql.ErrNoRows {
@@ -1176,7 +1236,7 @@ func (a *adapter) TopicShare(shares []*t.Subscription) (int, error) {
 
 // TopicDelete deletes specified topic.
 func (a *adapter) TopicDelete(topic string, hard bool) error {
-	tx, err := a.db.Begin()
+	tx, err := a.db.Beginx()
 	if err != nil {
 		return err
 	}
@@ -1434,7 +1494,7 @@ func (a *adapter) SubsDelForTopic(topic string, hard bool) error {
 }
 
 // subsDelForTopic marks user's subscriptions as deleted
-func subsDelForUser(tx *sql.Tx, user t.Uid, hard bool) error {
+func subsDelForUser(tx *sqlx.Tx, user t.Uid, hard bool) error {
 	var err error
 	if hard {
 		_, err = tx.Exec("DELETE FROM subscriptions WHERE userid=?", store.DecodeUid(user))
@@ -1448,7 +1508,7 @@ func subsDelForUser(tx *sql.Tx, user t.Uid, hard bool) error {
 
 // SubsDelForTopic marks user's subscriptions as deleted
 func (a *adapter) SubsDelForUser(user t.Uid, hard bool) error {
-	tx, err := a.db.Begin()
+	tx, err := a.db.Beginx()
 	if err != nil {
 		return err
 	}
@@ -1721,7 +1781,7 @@ func (a *adapter) MessageGetDeleted(topic string, forUser t.Uid, opts *t.QueryOp
 	return dmsgs, err
 }
 
-func messageDeleteList(tx *sql.Tx, topic string, toDel *t.DelMessage) error {
+func messageDeleteList(tx *sqlx.Tx, topic string, toDel *t.DelMessage) error {
 	var err error
 	if toDel == nil {
 		// Whole topic is being deleted, thus also deleting all messages.
@@ -1795,7 +1855,7 @@ func messageDeleteList(tx *sql.Tx, topic string, toDel *t.DelMessage) error {
 
 // MessageDeleteList deletes messages in the given topic with seqIds from the list
 func (a *adapter) MessageDeleteList(topic string, toDel *t.DelMessage) (err error) {
-	tx, err := a.db.Begin()
+	tx, err := a.db.Beginx()
 	if err != nil {
 		return err
 	}
@@ -1936,7 +1996,7 @@ func (a *adapter) DeviceGetAll(uids ...t.Uid) (map[t.Uid][]t.DeviceDef, int, err
 	return result, count, err
 }
 
-func deviceDelete(tx *sql.Tx, uid t.Uid, deviceID string) error {
+func deviceDelete(tx *sqlx.Tx, uid t.Uid, deviceID string) error {
 	var err error
 	if deviceID == "" {
 		_, err = tx.Exec("DELETE FROM devices WHERE userid=?", store.DecodeUid(uid))
@@ -1947,7 +2007,7 @@ func deviceDelete(tx *sql.Tx, uid t.Uid, deviceID string) error {
 }
 
 func (a *adapter) DeviceDelete(uid t.Uid, deviceID string) error {
-	tx, err := a.db.Begin()
+	tx, err := a.db.Beginx()
 	if err != nil {
 		return err
 	}
