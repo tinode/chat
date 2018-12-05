@@ -117,9 +117,9 @@ Once the connection is opened, the client must issue a `{hi}` message to the ser
 
 ### gRPC
 
-See definition of the gRPC API in the [proto file](../pbx/model.proto). gRPC API is nearly identical to HTTP API with an exception that it allows the `root` user to send messages on behalf of other users.
+See definition of the gRPC API in the [proto file](../pbx/model.proto). gRPC API has slightly more functionality than the API described in this document: it allows the `root` user to send messages on behalf of other users as well as delete users.
 
-### Websocket
+### WebSocket
 
 Messages are sent in text frames, one message per frame. Binary frames are reserved for future use. By default server allows connections with any value in the `Origin` header.
 
@@ -883,7 +883,7 @@ set: {
 
 #### `{del}`
 
-Delete messages or topic.
+Delete messages, subscriptions, topics, users.
 
 ```js
 del: {
@@ -891,7 +891,7 @@ del: {
   topic: "grp1XUtEhjv6HND", // string, topic affected, required for "topic", "sub",
                // "msg"
   what: "msg", // string, one of "topic", "sub", "msg", "user"; what to delete - the
-               // entire topic, subscription, messages, user;
+               // entire topic, a subscription, some or all messages, a user;
                // optional, default: "msg"
   hard: false, // boolean, request to hard-delete vs mark as deleted; in case of
                // what="msg" delete for all users vs current user only;
