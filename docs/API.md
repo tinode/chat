@@ -535,7 +535,7 @@ hi: {
                    // interpreted by the server.
                    // see [Push notifications support](#push-notifications-support); optional
   platf: "android", // string, underlying OS for the purpose of push notifications, one of
-                   // "android", "ios", "web"; if missing, the server will try its best to 
+                   // "android", "ios", "web"; if missing, the server will try its best to
                    // detect the platform; optional
   lang: "en-US"    // human language of the client device; optional
 }
@@ -888,23 +888,37 @@ Delete messages or topic.
 ```js
 del: {
   id: "1a2b3", // string, client-provided message id, optional
-  topic: "grp1XUtEhjv6HND", // string, topic affect, required
-  what: "msg", // string, either "topic" or "sub" or "msg"; what to delete - the
-               // entire topic or subscription or just the messages;
+  topic: "grp1XUtEhjv6HND", // string, topic affected, required for "topic", "sub",
+               // "msg"
+  what: "msg", // string, one of "topic", "sub", "msg", "user"; what to delete - the
+               // entire topic, subscription, messages, user;
                // optional, default: "msg"
-  hard: false, // boolean, request to delete messages for all users, default: false
+  hard: false, // boolean, request to hard-delete vs mark as deleted; in case of
+               // what="msg" delete for all users vs current user only;
+               // optional, default: false
   delseq: [{low: 123, hi: 125}, {low: 156}], // array of ranges of message IDs
-				// to delete, inclusive-exclusive, i.e. [low, hi), optional
-  user: "usr2il9suCbuko" // string, user whose subscription is being deleted
-               // (what="sub"), optional
+               // to delete, inclusive-exclusive, i.e. [low, hi), optional
+  user: "usr2il9suCbuko" // string, user being deleted (what="user") or whose
+               // subscription is being deleted (what="sub"), optional
 }
 ```
 
-User can soft-delete or hard-delete messages `what="msg"`. Soft-deleting messages hides them from the requesting user but does not delete them from storage. An `R` permission is required to soft-delete messages `hard=false` (default). Messages can be deleted in bulk by specifying one or more message ID ranges in `delseq` parameter. Hard-deleting messages deletes them from storage affecting all users. The `D` permission is needed to hard-delete messages.
+`what="msg"`
 
-Deleting a subscription `what="sub"` removes specified user from topic subscribers. It requires an `A` permission. A user cannot delete own subscription. A `{leave}` should be used instead.
+User can soft-delete `hard=false` (default) or hard-delete `hard=true` messages. Soft-deleting messages hides them from the requesting user but does not delete them from storage. An `R` permission is required to soft-delete messages. Hard-deleting messages deletes message content from storage (`head`, `content`) leaving a message stub. It affects all users. A `D` permission is needed to hard-delete messages. Messages can be deleted in bulk by specifying one or more message ID ranges in `delseq` parameter. Each delete operation is assigned a unique `delete ID`. The greatest `delete ID` is reported back in the `clear` of the `{meta}` message.
 
-Deleting a topic `what="topic"` deletes the topic including all subscriptions, and all messages. The `hard` parameter has no effect on topic deletion: all topic deletions are hard-deletions. Only the owner can delete a topic. The greatest deleted ID is reported back in the `clear` of the `{meta}` message.
+`what="sub"`
+
+Deleting a subscription removes specified user from topic subscribers. It requires an `A` permission. A user cannot delete own subscription. A `{leave}` should be used instead. If the subscription is soft-deleted (default), it's marked as deleted without actually deleting a record from storage.
+
+`what="topic"`
+
+Deleting a topic deletes the topic including all subscriptions, and all messages. Only the owner can delete a topic.
+
+`what="user"`
+
+Deleting a user is a very heavy operation. Use caution.
+
 
 #### `{note}`
 
