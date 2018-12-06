@@ -843,12 +843,12 @@ func ErrNotImplemented(id, topic string, ts time.Time) *ServerComMessage {
 		Timestamp: ts}}
 }
 
-// ErrClusterNodeUnreachable topic is handled by another cluster node and than node is unreachable (502).
-func ErrClusterNodeUnreachable(id, topic string, ts time.Time) *ServerComMessage {
+// ErrClusterUnreachable in-cluster communication has failed (502).
+func ErrClusterUnreachable(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
 		Code:      http.StatusBadGateway, // 502
-		Text:      "unreachable",
+		Text:      "cluster unreachable",
 		Topic:     topic,
 		Timestamp: ts}}
 }
