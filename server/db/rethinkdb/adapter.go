@@ -253,10 +253,6 @@ func (a *adapter) CreateDb(reset bool) error {
 	if _, err := rdb.DB(a.dbName).TableCreate("messages", rdb.TableCreateOpts{PrimaryKey: "Id"}).RunWrite(a.conn); err != nil {
 		return err
 	}
-	// Index on From field for deleting messages for a user.
-	if _, err := rdb.DB(a.dbName).Table("messages").IndexCreate("From").RunWrite(a.conn); err != nil {
-		return err
-	}
 	// Compound index of topic - seqID for selecting messages in a topic.
 	if _, err := rdb.DB(a.dbName).Table("messages").IndexCreateFunc("Topic_SeqId",
 		func(row rdb.Term) interface{} {
@@ -518,21 +514,14 @@ func (a *adapter) UserGetAll(ids ...t.Uid) ([]t.User, error) {
 func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 	var err error
 	if hard {
-		// Delete user's subscriptions.
+		// Delete user's subscriptions in all topics.
 		if err = a.SubsDelForUser(uid, true); err != nil {
 			return err
 		}
 
-		// Delete user's messages in all topics.
-		// TODO: Maybe add a record to dellog.
-
-		q := rdb.DB(a.dbName).Table("messages").GetAllByIndex("From", uid.String())
-		if err = a.fileDecrementUseCounter(q); err != nil {
-			return err
-		}
-		if _, err = q.Delete().RunWrite(a.conn); err != nil {
-			return err
-		}
+		// Can't delete user's messages in all topics because we cannot notify topics of such deletion.
+		// Or we have to delete these messages one by one.
+		// For now, just leave the messages there marked as sent by "not found" user.
 
 		// Delete topics where the user is the owner:
 
