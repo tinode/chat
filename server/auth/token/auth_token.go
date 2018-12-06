@@ -1,5 +1,7 @@
 package token
 
+// Authentication by HMAC-signed security token.
+
 import (
 	"bytes"
 	"crypto/hmac"

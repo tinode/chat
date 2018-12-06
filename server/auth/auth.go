@@ -84,8 +84,7 @@ type AuthHandler interface {
 	// Returns: updated auth record, error
 	AddRecord(rec *Rec, secret []byte) (*Rec, error)
 
-	// UpdateRecord updates existing record with new credentials. Returns a numeric error code to indicate
-	// if the error is due to a duplicate or some other error.
+	// UpdateRecord updates existing record with new credentials.
 	UpdateRecord(rec *Rec, secret []byte) error
 
 	// Authenticate: given a user-provided authentication secret (such as "login:password"), either

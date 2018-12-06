@@ -1,7 +1,6 @@
 package basic
 
-// This handler must be kept in a separate package because it's referenced by
-// tinode-db
+// Authentication by login-password.
 
 import (
 	"encoding/json"
@@ -22,7 +21,7 @@ const (
 	maxLoginLength = 32
 )
 
-// BasicAuth is the type to map authentication methods to.
+// authenticator is the type to map authentication methods to.
 type authenticator struct {
 	addToTags bool
 }
@@ -44,7 +43,7 @@ func parseSecret(bsecret []byte) (uname, password string, err error) {
 // Init initializes the basic authenticator.
 func (a *authenticator) Init(jsonconf string) error {
 	type configType struct {
-		//
+		// AddToTags indicates that the user name should be used as a searchable tag.
 		AddToTags bool `json:"add_to_tags"`
 	}
 	var config configType

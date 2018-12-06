@@ -1,5 +1,6 @@
 package anon
 
+// Authentication without credentials. Most useful for customer support.
 // Anonymous authentication is used only at account creation time.
 
 import (
@@ -10,17 +11,17 @@ import (
 	"github.com/tinode/chat/server/store/types"
 )
 
-// AnonAuth is the singleton instance of the anonymous authorizer.
-type AnonAuth struct{}
+// authenticator is the singleton instance of the anonymous authorizer.
+type authenticator struct{}
 
 // Init is a noop, always returns success.
-func (AnonAuth) Init(unused string) error {
+func (authenticator) Init(unused string) error {
 	return nil
 }
 
 // AddRecord checks authLevel and assigns default LevelAnon. Otherwise it
 // just reports success.
-func (AnonAuth) AddRecord(rec *auth.Rec, secret []byte) (*auth.Rec, error) {
+func (authenticator) AddRecord(rec *auth.Rec, secret []byte) (*auth.Rec, error) {
 	if rec.AuthLevel == auth.LevelNone {
 		rec.AuthLevel = auth.LevelAnon
 	}
@@ -28,30 +29,30 @@ func (AnonAuth) AddRecord(rec *auth.Rec, secret []byte) (*auth.Rec, error) {
 }
 
 // UpdateRecord is a noop. Just report success.
-func (AnonAuth) UpdateRecord(rec *auth.Rec, secret []byte) error {
+func (authenticator) UpdateRecord(rec *auth.Rec, secret []byte) error {
 	return nil
 }
 
 // Authenticate is not supported. It's used only at account creation time.
-func (AnonAuth) Authenticate(secret []byte) (*auth.Rec, []byte, error) {
+func (authenticator) Authenticate(secret []byte) (*auth.Rec, []byte, error) {
 	return nil, nil, types.ErrUnsupported
 }
 
 // IsUnique for a noop. Anonymous login does not use secret, any secret is fine.
-func (AnonAuth) IsUnique(secret []byte) (bool, error) {
+func (authenticator) IsUnique(secret []byte) (bool, error) {
 	return true, nil
 }
 
 // GenSecret always fails.
-func (AnonAuth) GenSecret(rec *auth.Rec) ([]byte, time.Time, error) {
+func (authenticator) GenSecret(rec *auth.Rec) ([]byte, time.Time, error) {
 	return nil, time.Time{}, types.ErrUnsupported
 }
 
 // DelRecords is a noop which always succeeds.
-func (AnonAuth) DelRecords(uid types.Uid) error {
+func (authenticator) DelRecords(uid types.Uid) error {
 	return nil
 }
 
 func init() {
-	store.RegisterAuthScheme("anonymous", &AnonAuth{})
+	store.RegisterAuthScheme("anonymous", &authenticator{})
 }
