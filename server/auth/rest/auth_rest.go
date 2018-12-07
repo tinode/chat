@@ -113,7 +113,7 @@ func (a *authenticator) callEndpoint(endpoint string, rec *auth.Rec, secret []by
 		return nil, types.ErrInternal
 	}
 
-	// Convert response to map.
+	// Parse response.
 	var resp response
 	err = json.Unmarshal(body, &resp)
 	if err != nil {

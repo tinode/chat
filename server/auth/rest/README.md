@@ -2,9 +2,10 @@
 
 This authenticator permits authentication of Tinode users and creation of Tinode accounts using a separate process as a source of truth.
 
-This authenticator calls a REST service over HTTP(S). A skeleton implementation of such a server is provided for reference at [rest-auth](../../../rest-auth/).
+This authenticator calls a REST service by HTTP POST. A skeleton implementation of a server is provided for reference at [rest-auth](../../../rest-auth/).
 
-Request and response payloads are formatted as JSON. Some of the request or response fields may be skipped.
+Request and response payloads are formatted as JSON. Some of the request or response fields are context-dependent and may be skipped.
+
 
 ## Request
 
@@ -48,27 +49,30 @@ Request and response payloads are formatted as JSON. Some of the request or resp
 
 ## Recognized error responses
 
-See [here](../server/store/types/types.go#L24).
+The error is returned as json:
 
-* "internal": DB or other internal failure
-* "malformed": the secret cannot be parsed or otherwise wrong
-* "failed": authentication failed (wrong login or password, etc)
-* "duplicate value": duplicate credential, i.e. attempt to create record with a non-unique login
-* "unsupported": an operation is not supported
-* "expired": the secret has expired
+```json
+{ "err": "error-message" }
+```
+
+See [here](../../store/types/types.go#L24) for an up to date list of supported error messages.
+
+* "internal": database failure or other internal failure.
+* "malformed": request cannot be parsed or otherwise wrong.
+* "failed": authentication failed (wrong login or password, etc).
+* "duplicate value": duplicate credential, i.e. attempt to create a record with a non-unique login.
+* "unsupported": the operation is not supported.
+* "expired": the secret has expired.
 * "policy": policy violation, e.g. password too weak.
-* "credentials": credentials like email or captcha must be validated
-* "not found": the object was not found
-* "denied": the operation is not permitted
+* "credentials": credentials like email or captcha must be validated.
+* "not found": the object was not found.
+* "denied": the operation is not permitted.
 
 ## The server must implement the following endpoints:
 
 ### `add` Add new authentication record
 
-This endpoint requests server to add a new authentication record. This endpoint is generally used for account creation. If accounts are managed externally, it's likely to be unused and should generally return an error `"unsupported"`:
-```json
-{ "err": "unsupported" }
-```
+This endpoint requests server to add a new authentication record. This endpoint is generally used for account creation. If accounts are managed externally, it's likely to be unused and should generally return an error `"unsupported"`.
 
 #### Sample request:
 ```json
@@ -99,6 +103,9 @@ This endpoint requests server to add a new authentication record. This endpoint 
 
 ### `auth` Request for authentication
 
+Request to authenticate a user. Client (Tinode) provides a secret, authentication server responds with a user record. If this is a very first login and the server manages the accounts, the server may return `newacc` object which will be used by client (Tinode) to create the account.
+The server may optionally return a challenge as `byteval`.
+
 #### Sample request:
 ```json
 {
@@ -107,19 +114,19 @@ This endpoint requests server to add a new authentication record. This endpoint 
 }
 ```
 
-#### Sample response when the account already exists:
+#### Sample response when the account already exists (optional challenge included):
 ```json
 {
   "rec": {
     "uid": "LELEQHDWbgY",
-    "authlvl": "auth",
-    "tags": ["email:alice@example.com", "uname:alice"]
-  }
+    "authlvl": "auth"
+  },
+  "byteval": "9X6m3tWeBEMlDxlcFAABAAEAbVs"
 }
 ```
 
 #### Sample response when the account needs to be created by Tinode:
-```json
+```js
 {
   "rec": {
     "authlvl": "auth",
@@ -130,18 +137,46 @@ This endpoint requests server to add a new authentication record. This endpoint 
   "newacc": {
     "auth": "JRWPS",
     "anon": "N",
-  	"public": {...},
-  	"private": {...}
+  	"public": {/* see /docs/API.md#public-and-private-fields */},
+  	"private": {/* see /docs/API.md#public-and-private-fields */}
   }  
 }
 ```
 
 ### `checkunique` Checks if provided authentication record is unique.
 
+Request is used for account creation. If accounts are managed by the server, the server should respond with an error `"unsupported"`.
+
 ### `del` Requests to delete authentication record.
+
+If accounts are managed by the server, the server should respond with an error `"unsupported"`.
 
 ### `gen` Generate authentication secret.
 
+If accounts are managed by the server, the server should respond with an error `"unsupported"`.
+
 ### `link` Requests server to link new account ID to authentication record.
 
+If server requested Tinode to create a new account, this endpoint is used to link the new Tinode user ID with the server's authentication record. If linking was successful, the server should respond with a non-empty json.
+
+#### Sample request
+```json
+{
+  "endpoint": "auth",
+  "secret": "Ym9iOmJvYjEyMw==",
+  "rec": {
+    "uid": "LELEQHDWbgY",
+    "authlvl": "auth",
+  },
+}
+```
+
+#### Sample response
+```json
+{}
+```
+
+
 ### `upd` Update authentication record.
+
+If accounts are managed by the server, the server should respond with an error `"unsupported"`.
