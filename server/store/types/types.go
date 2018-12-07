@@ -493,8 +493,7 @@ func (m AccessMode) MarshalJSON() ([]byte, error) {
 		return nil, err
 	}
 
-	res = append([]byte{'"'}, res...)
-	return append(res, '"'), nil
+	return append(append([]byte{'"'}, res...), '"'), nil
 }
 
 // UnmarshalJSON reads AccessMode from a quoted string.
