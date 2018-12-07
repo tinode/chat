@@ -6,3 +6,7 @@ The service uses [Flask](http://flask.pocoo.org/), so make sure it's installed:
 ```
 pip install flask
 ```
+Run the service as
+```
+python auth.py
+```
