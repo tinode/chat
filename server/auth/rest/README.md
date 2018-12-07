@@ -41,8 +41,8 @@ Request and response payloads are formatted as JSON. Some of the request or resp
     // Default access mode
     "auth": "JRWPS",
     "anon": "N",
-  	"public": {...}, // user's public data, see /docs/API.md#public-and-private-fields
-  	"private": {...} // user's private data, see /docs/API.md#public-and-private-fields
+    "public": {...}, // user's public data, see /docs/API.md#public-and-private-fields
+    "private": {...} // user's private data, see /docs/API.md#public-and-private-fields
   }
 }
 ```
@@ -137,8 +137,8 @@ The server may optionally return a challenge as `byteval`.
   "newacc": {
     "auth": "JRWPS",
     "anon": "N",
-  	"public": {/* see /docs/API.md#public-and-private-fields */},
-  	"private": {/* see /docs/API.md#public-and-private-fields */}
+    "public": {/* see /docs/API.md#public-and-private-fields */},
+    "private": {/* see /docs/API.md#public-and-private-fields */}
   }  
 }
 ```
@@ -147,13 +147,64 @@ The server may optionally return a challenge as `byteval`.
 
 Request is used for account creation. If accounts are managed by the server, the server should respond with an error `"unsupported"`.
 
+#### Sample request
+```json
+{
+  "endpoint": "checkunique",
+  "secret": "Ym9iOmJvYjEyMw==",
+}
+```
+
+#### Sample response
+```json
+{
+  "boolval": true
+}
+```
+
 ### `del` Requests to delete authentication record.
 
 If accounts are managed by the server, the server should respond with an error `"unsupported"`.
 
+#### Sample request
+```json
+{
+  "endpoint": "del",
+  "rec": {
+    "uid": "LELEQHDWbgY",
+  },
+}
+```
+
+#### Sample response
+```json
+{}
+```
+
+
 ### `gen` Generate authentication secret.
 
 If accounts are managed by the server, the server should respond with an error `"unsupported"`.
+
+#### Sample request
+```json
+{
+  "endpoint": "gen",
+  "rec": {
+    "uid": "LELEQHDWbgY",
+    "authlvl": "auth",
+  },
+}
+```
+
+#### Sample response
+```json
+{
+  "byteval": "9X6m3tWeBEMlDxlcFAABAAEAbVs",
+  "ts": "2018-12-04T15:17:02.627Z",
+}
+```
+
 
 ### `link` Requests server to link new account ID to authentication record.
 
@@ -162,7 +213,7 @@ If server requested Tinode to create a new account, this endpoint is used to lin
 #### Sample request
 ```json
 {
-  "endpoint": "auth",
+  "endpoint": "link",
   "secret": "Ym9iOmJvYjEyMw==",
   "rec": {
     "uid": "LELEQHDWbgY",
@@ -180,3 +231,20 @@ If server requested Tinode to create a new account, this endpoint is used to lin
 ### `upd` Update authentication record.
 
 If accounts are managed by the server, the server should respond with an error `"unsupported"`.
+
+#### Sample request
+```json
+{
+  "endpoint": "upd",
+  "secret": "Ym9iOmJvYjEyMw==",
+  "rec": {
+    "uid": "LELEQHDWbgY",
+    "authlvl": "auth",
+  },
+}
+```
+
+#### Sample response
+```json
+{}
+```
