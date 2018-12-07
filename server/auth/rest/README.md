@@ -11,7 +11,7 @@ Request and response payloads are formatted as JSON. Some of the request or resp
 ```js
 {
   "endpoint": "auth", // string, one of the endpoints as described below.
-  "secret": "",       // authentication secret as provided by the client.
+  "secret": "Ym9iOmJvYjEyMw==", // authentication secret as provided by the client.
   "rec": {            // authentication record
     {
       "uid": "LELEQHDWbgY", // user ID, int64 base64-encoded
@@ -33,22 +33,37 @@ Request and response payloads are formatted as JSON. Some of the request or resp
   "rec": {           // authentication record.
     ...              // the same as `request.rec`
   },
-  "byteval": "",     // array of bytes, optional
-  "ts": "",          // time stamp, optional
-  "boolval": true,   // boolean value, optional
+  "byteval": "Ym9iOmJvYjEyMw==",    // array of bytes, optional
+  "ts": "2018-12-04T15:17:02.627Z", // time stamp, optional
+  "boolval": true,                  // boolean value, optional
   "newacc": {        // data to use for creating a new account.
     // Default access mode
     "auth": "JRWPS",
-    "anon": "N"
-  	"public": {...}  // user's public data
-  	"private": {...} // user's private data
+    "anon": "N",
+  	"public": {...}, // user's public data, see /docs/API.md#public-and-private-fields
+  	"private": {...} // user's private data, see /docs/API.md#public-and-private-fields
   }
 }
 ```
 
-The server must implement the following endpoints:
+## Recognized error responses
 
-## `add` Add new authentication record
+See [here](../server/store/types/types.go#L24).
+
+* "internal": DB or other internal failure
+* "malformed": the secret cannot be parsed or otherwise wrong
+* "failed": authentication failed (wrong login or password, etc)
+* "duplicate value": duplicate credential, i.e. attempt to create record with a non-unique login
+* "unsupported": an operation is not supported
+* "expired": the secret has expired
+* "policy": policy violation, e.g. password too weak.
+* "credentials": credentials like email or captcha must be validated
+* "not found": the object was not found
+* "denied": the operation is not permitted
+
+## The server must implement the following endpoints:
+
+### `add` Add new authentication record
 
 This endpoint requests server to add a new authentication record. This endpoint is generally used for account creation. If accounts are managed externally, it's likely to be unused and should generally return an error `"unsupported"`:
 ```json
@@ -82,14 +97,51 @@ This endpoint requests server to add a new authentication record. This endpoint 
 }
 ```
 
-## `auth` Request for authentication
+### `auth` Request for authentication
 
-## `checkunique` Checks if provided authentication record is unique.
+#### Sample request:
+```json
+{
+  "endpoint": "auth",
+  "secret": "Ym9iOmJvYjEyMw==",
+}
+```
 
-## `del` Requests to delete authentication record.
+#### Sample response when the account already exists:
+```json
+{
+  "rec": {
+    "uid": "LELEQHDWbgY",
+    "authlvl": "auth",
+    "tags": ["email:alice@example.com", "uname:alice"]
+  }
+}
+```
 
-## `gen` Generate authentication secret.
+#### Sample response when the account needs to be created by Tinode:
+```json
+{
+  "rec": {
+    "authlvl": "auth",
+    "lifetime": "5000s",
+    "features": 1,
+    "tags": ["email:alice@example.com", "uname:alice"]
+  },
+  "newacc": {
+    "auth": "JRWPS",
+    "anon": "N",
+  	"public": {...},
+  	"private": {...}
+  }  
+}
+```
 
-## `link` Requests server to link new account ID to authentication record.
+### `checkunique` Checks if provided authentication record is unique.
 
-## `upd` Update authentication record.
+### `del` Requests to delete authentication record.
+
+### `gen` Generate authentication secret.
+
+### `link` Requests server to link new account ID to authentication record.
+
+### `upd` Update authentication record.
