@@ -19,9 +19,12 @@ import (
 
 // authenticator is the type to map authentication methods to.
 type authenticator struct {
+	// URL of the server
 	serverUrl string
 	// Authenticator may add new accounts to local database.
 	allowNewAccounts bool
+	// Use separate endpoints, i.e. add request name to serverUrl path when making requests.
+	useSeparateEndpoints bool
 }
 
 type request struct {
@@ -63,6 +66,8 @@ func (a *authenticator) Init(jsonconf string) error {
 		ServerUrl string `json:"server_url"`
 		// Server may create new accounts.
 		AllowNewAccounts bool `json:"allow_new_accounts"`
+		// Use separate endpoints, i.e. add request name to serverUrl path when making requests.
+		UseSeparateEndpoints bool `json:"use_separae_endpoints"`
 	}
 
 	var config configType
@@ -81,8 +86,8 @@ func (a *authenticator) Init(jsonconf string) error {
 	}
 
 	a.serverUrl = serverUrl.String()
-
 	a.allowNewAccounts = config.AllowNewAccounts
+	a.useSeparateEndpoints = config.UseSeparateEndpoints
 
 	return nil
 }
@@ -96,12 +101,15 @@ func (a *authenticator) callEndpoint(endpoint string, rec *auth.Rec, secret []by
 		return nil, types.ErrMalformed
 	}
 
-	// Append endpoint to the server URL.
-	epUrl, _ := url.Parse(a.serverUrl)
-	epUrl.Path += endpoint
+	urlToCall := a.serverUrl
+	if a.useSeparateEndpoints {
+		epUrl, _ := url.Parse(a.serverUrl)
+		epUrl.Path += endpoint
+		urlToCall = epUrl.String()
+	}
 
 	// Send payload to server using default HTTP client.
-	post, err := http.Post(epUrl.String(), "application/json", bytes.NewBuffer(content))
+	post, err := http.Post(urlToCall, "application/json", bytes.NewBuffer(content))
 	if err != nil {
 		return nil, types.ErrInternal
 	}

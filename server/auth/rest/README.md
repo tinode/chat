@@ -1,17 +1,30 @@
-# REST authenticator
+# REST or JSON-RPC authenticator
 
-This authenticator permits authentication of Tinode users and creation of Tinode accounts using a separate process as a source of truth.
+This authenticator permits authentication of Tinode users and creation of Tinode accounts using a separate process as a source of truth. For instance, if accounts are managed by corporate LDAP, this service allows handling of Tinode authentication using the same LDAP service.
 
-This authenticator calls a REST service by HTTP POST. A skeleton implementation of a server is provided for reference at [rest-auth](../../../rest-auth/).
+This authenticator calls a designated authentication service over HTTP(S) POST. A skeleton implementation of a server is provided for reference at [rest-auth](../../../rest-auth/). The requests may be handled either by a single endpoint or by separate per-request endpoints.
 
 Request and response payloads are formatted as JSON. Some of the request or response fields are context-dependent and may be skipped.
 
+## Configuration
+
+```js
+{
+  // ServerUrl is the URL of the authentication server to call.
+  "server_url": "http://127.0.0.1:5000/",
+  // Server may create new accounts.
+  "allow_new_accounts": true,
+  // Use separate endpoints, i.e. add request name to serverUrl path when making requests:
+  // http://127.0.0.1:5000/add
+  "use_separae_endpoints": true
+}
+```
 
 ## Request
 
 ```js
 {
-  "endpoint": "auth", // string, one of the endpoints as described below.
+  "endpoint": "auth", // string, one of the endpoints as described below, optional.
   "secret": "Ym9iOmJvYjEyMw==", // authentication secret as provided by the client.
   "rec": {            // authentication record
     {
@@ -57,7 +70,7 @@ The error is returned as json:
 
 See [here](../../store/types/types.go#L24) for an up to date list of supported error messages.
 
-* "internal": database failure or other internal failure.
+* "internal": database failure or other internal catch-all failure.
 * "malformed": request cannot be parsed or otherwise wrong.
 * "failed": authentication failed (wrong login or password, etc).
 * "duplicate value": duplicate credential, i.e. attempt to create a record with a non-unique login.
