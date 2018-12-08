@@ -39,7 +39,7 @@ type Handler interface {
 	GetIdFromUrl(url string) types.Uid
 }
 
-// Helper method for extracting file ID from a URL.
+// GetIdFromUrl is a helper method for extracting file ID from a URL.
 func GetIdFromUrl(url string, serveUrl string) types.Uid {
 	dir, fname := path.Split(path.Clean(url))
 

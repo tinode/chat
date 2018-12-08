@@ -111,7 +111,7 @@ func (ah *awshandler) Init(jsconf string) error {
 	_, err = ah.svc.PutBucketCors(&s3.PutBucketCorsInput{
 		Bucket: aws.String(ah.conf.BucketName),
 		CORSConfiguration: &s3.CORSConfiguration{
-			CORSRules: []*s3.CORSRule{&s3.CORSRule{
+			CORSRules: []*s3.CORSRule{{
 				AllowedMethods: aws.StringSlice([]string{http.MethodGet}),
 				AllowedOrigins: aws.StringSlice(origins),
 				AllowedHeaders: aws.StringSlice([]string{"x-tinode-auth", "x-tinode-apikey"}),

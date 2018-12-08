@@ -890,7 +890,7 @@ func (s *Session) authSecretReset(params []byte) error {
 		return types.ErrMalformed
 	}
 
-	// Tehnically we don't need to check it here, but we are going to mail the 'authName' string to the user.
+	// Technically we don't need to check it here, but we are going to mail the 'authName' string to the user.
 	// We have to make sure it does not contain any exploits. This is the simplest check.
 	if hdl := store.GetLogicalAuthHandler(authScheme); hdl == nil {
 		return types.ErrUnsupported

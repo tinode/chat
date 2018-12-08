@@ -24,16 +24,16 @@ type spanfmt struct {
 }
 
 var tags = map[string]spanfmt{
-	"ST": spanfmt{"*", false},
-	"EM": spanfmt{"_", false},
-	"DL": spanfmt{"~", false},
-	"CO": spanfmt{"", false},
-	"BR": spanfmt{"\n", true},
-	"LN": spanfmt{"", false},
-	"MN": spanfmt{"", false},
-	"HT": spanfmt{"", false},
-	"IM": spanfmt{"", true},
-	"EX": spanfmt{"", true},
+	"ST": {"*", false},
+	"EM": {"_", false},
+	"DL": {"~", false},
+	"CO": {"", false},
+	"BR": {"\n", true},
+	"LN": {"", false},
+	"MN": {"", false},
+	"HT": {"", false},
+	"IM": {"", true},
+	"EX": {"", true},
 }
 
 // ToPlainText converts message payload from Drafy format to string.

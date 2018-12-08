@@ -30,6 +30,7 @@ type tPrivate struct {
 	Comment string `json:"comment"`
 }
 
+// DefAccess is default access mode.
 type DefAccess struct {
 	Auth string `json:"auth"`
 	Anon string `json:"anon"`
