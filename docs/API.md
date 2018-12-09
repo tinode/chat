@@ -371,7 +371,8 @@ Tinode supports mobile push notifications though compile-time plugins. The chann
 Topics and subscriptions have `public` and `private` fields. Generally, the fields are application-defined. The server does not enforce any particular structure of these fields except for `fnd` topic. At the same time, client software should use the same format for interoperability reasons.
 
 ### Public
-The format of the `public` field is expected to be a [vCard](https://en.wikipedia.org/wiki/VCard):
+The format of the `public` field is expected to be a [vCard](https://en.wikipedia.org/wiki/VCard) although only `fn` and `photo` fields are currently used by client software:
+
 ```js
 vcard: {
   fn: "John Doe", // string, formatted name
