@@ -351,6 +351,13 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 		return
 	}
 
+	if globals.cluster.isPartitioned() {
+		// The cluster is partitioned due to network or other failure and this node is a part of the smaller partition.
+		// In order to avoid data inconsistency accross the cluster we must reject all requests.
+		s.queueOut(ErrClusterUnreachable(msg.id, msg.topic, msg.timestamp))
+		return
+	}
+
 	handler(msg)
 
 	// Notify 'me' topic that this session is currently active
@@ -384,7 +391,7 @@ func (s *Session) subscribe(msg *ClientComMessage) {
 		// The topic is handled by a remote node. Forward message to it.
 		if err := globals.cluster.routeToTopic(msg, expanded, s); err != nil {
 			log.Println("s.subscribe:", err, s.sid)
-			s.queueOut(ErrClusterNodeUnreachable(msg.id, msg.topic, msg.timestamp))
+			s.queueOut(ErrClusterUnreachable(msg.id, msg.topic, msg.timestamp))
 		}
 	} else {
 		globals.hub.join <- &sessionJoin{
@@ -423,7 +430,7 @@ func (s *Session) leave(msg *ClientComMessage) {
 		// The topic is handled by a remote node. Forward message to it.
 		if err := globals.cluster.routeToTopic(msg, expanded, s); err != nil {
 			log.Println("s.leave:", err, s.sid)
-			s.queueOut(ErrClusterNodeUnreachable(msg.id, msg.topic, msg.timestamp))
+			s.queueOut(ErrClusterUnreachable(msg.id, msg.topic, msg.timestamp))
 		}
 	} else if !msg.Leave.Unsub {
 		// Session is not attached to the topic, wants to leave - fine, no change
@@ -482,7 +489,7 @@ func (s *Session) publish(msg *ClientComMessage) {
 		// The topic is handled by a remote node. Forward message to it.
 		if err := globals.cluster.routeToTopic(msg, expanded, s); err != nil {
 			log.Println("s.publish:", err, s.sid)
-			s.queueOut(ErrClusterNodeUnreachable(msg.id, msg.topic, msg.timestamp))
+			s.queueOut(ErrClusterUnreachable(msg.id, msg.topic, msg.timestamp))
 		}
 	} else {
 		// Publish request received without attaching to topic first.
@@ -809,7 +816,7 @@ func (s *Session) get(msg *ClientComMessage) {
 	} else if globals.cluster.isRemoteTopic(expanded) {
 		// The topic is handled by a remote node. Forward message to it.
 		if err := globals.cluster.routeToTopic(msg, expanded, s); err != nil {
-			s.queueOut(ErrClusterNodeUnreachable(msg.id, msg.topic, msg.timestamp))
+			s.queueOut(ErrClusterUnreachable(msg.id, msg.topic, msg.timestamp))
 		}
 	} else if meta.what&(constMsgMetaData|constMsgMetaSub|constMsgMetaDel) != 0 {
 		log.Println("s.get: subscribe first to get=", msg.Get.What)
@@ -852,7 +859,7 @@ func (s *Session) set(msg *ClientComMessage) {
 	} else if globals.cluster.isRemoteTopic(expanded) {
 		// The topic is handled by a remote node. Forward message to it.
 		if err := globals.cluster.routeToTopic(msg, expanded, s); err != nil {
-			s.queueOut(ErrClusterNodeUnreachable(msg.id, msg.topic, msg.timestamp))
+			s.queueOut(ErrClusterUnreachable(msg.id, msg.topic, msg.timestamp))
 		}
 	} else {
 		log.Println("s.set: can Set for subscribed topics only")
@@ -896,7 +903,7 @@ func (s *Session) del(msg *ClientComMessage) {
 	} else if sub == nil && globals.cluster.isRemoteTopic(expanded) {
 		// The topic is handled by a remote node. Forward message to it.
 		if err := globals.cluster.routeToTopic(msg, expanded, s); err != nil {
-			s.queueOut(ErrClusterNodeUnreachable(msg.id, msg.topic, msg.timestamp))
+			s.queueOut(ErrClusterUnreachable(msg.id, msg.topic, msg.timestamp))
 		}
 	} else if what == constMsgDelTopic {
 		// Deleting topic: for sessions attached or not attached, send request to hub first.

@@ -263,7 +263,7 @@ func (n *ClusterNode) respond(msg *ClusterResp) error {
 
 // Cluster is the representation of the cluster.
 type Cluster struct {
-	// Cluster nodes with RPC endpoints
+	// Cluster nodes with RPC endpoints (excluding current node).
 	nodes map[string]*ClusterNode
 	// Name of the local node
 	thisNodeName string
@@ -366,12 +366,24 @@ func (c *Cluster) nodeForTopic(topic string) *ClusterNode {
 	return node
 }
 
+// isRemoteTopic checks if the given topic is handled by this node or a remote node.
 func (c *Cluster) isRemoteTopic(topic string) bool {
 	if c == nil {
 		// Cluster not initialized, all topics are local
 		return false
 	}
 	return c.ring.Get(topic) != c.thisNodeName
+}
+
+// isPartitioned checks if the cluster is partitioned due to network or other failure and if the
+// current node is a part of the smaller partition.
+func (c *Cluster) isPartitioned() bool {
+	if c == nil || c.fo == nil {
+		// Cluster not initialized or failover disabled therefore not partitioned.
+		return false
+	}
+
+	return (len(c.nodes)+1)/2 >= len(c.fo.activeNodes)
 }
 
 // Forward client message to the Master (cluster node which owns the topic)
@@ -478,12 +490,10 @@ func clusterInit(configString json.RawMessage, self *string) int {
 			continue
 		}
 
-		n := ClusterNode{
+		globals.cluster.nodes[host.Name] = &ClusterNode{
 			address: host.Addr,
 			name:    host.Name,
 			done:    make(chan bool, 1)}
-
-		globals.cluster.nodes[host.Name] = &n
 	}
 
 	if len(globals.cluster.nodes) == 0 {
