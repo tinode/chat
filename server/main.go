@@ -284,7 +284,7 @@ func main() {
 			if authhdl := store.GetAuthHandler(name); authhdl == nil {
 				log.Fatal("Config provided for unknown authentication scheme '" + name + "'")
 			} else if err := authhdl.Init(string(jsconf)); err != nil {
-				log.Fatal("Failed to init auth scheme", err)
+				log.Fatalln("Failed to init auth scheme", name+":", err)
 			}
 		}
 	}

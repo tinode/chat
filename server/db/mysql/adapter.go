@@ -388,7 +388,7 @@ func (a *adapter) CreateDb(reset bool) error {
 			userid    BIGINT NOT NULL,
 			status    INT NOT NULL,
 			mimetype  VARCHAR(255) NOT NULL,
-			size	      BIGINT NOT NULL,
+			size      BIGINT NOT NULL,
 			location  VARCHAR(2048) NOT NULL,
 			PRIMARY KEY(id)
 		)`); err != nil {
@@ -816,7 +816,7 @@ func (a *adapter) UserGetByCred(method, value string) (t.Uid, error) {
 func (a *adapter) topicCreate(tx *sqlx.Tx, topic *t.Topic) error {
 	_, err := tx.Exec("INSERT INTO topics(createdAt,updatedAt,touchedAt,name,owner,access,public,tags) "+
 		"VALUES(?,?,?,?,?,?,?,?)",
-		topic.CreatedAt, topic.UpdatedAt, topic.TouchedAt, topic.Id, store.DecodeUid(topic.GetOwner()),
+		topic.CreatedAt, topic.UpdatedAt, topic.TouchedAt, topic.Id, store.DecodeUid(topic.Owner),
 		topic.Access, toJSON(topic.Public), topic.Tags)
 	if err != nil {
 		return err

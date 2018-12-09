@@ -607,16 +607,16 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 // UserGetDisabled returns ID of users who were soft-deleted since specified time.
 func (a *adapter) UserGetDisabled(since time.Time) ([]t.Uid, error) {
 	cursor, err := rdb.DB(a.dbName).Table("users").
-		Between(since, rdb.MaxVal, rdb.BetweenOpts{Index: "DeletedAt"}).Run(a.conn)
+		Between(since, rdb.MaxVal, rdb.BetweenOpts{Index: "DeletedAt"}).Field("Id").Run(a.conn)
 	if err != nil {
 		return nil, err
 	}
 	defer cursor.Close()
 
 	var uids []t.Uid
-	var userId t.Uid
+	var userId string
 	for cursor.Next(&userId) {
-		uids = append(uids, userId)
+		uids = append(uids, t.ParseUid(userId))
 	}
 
 	if err = cursor.Err(); err != nil {

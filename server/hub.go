@@ -718,6 +718,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		stopic := &types.Topic{
 			ObjHeader: types.ObjHeader{Id: sreg.topic, CreatedAt: timestamp},
 			Access:    types.DefaultAccess{Auth: t.accessAuth, Anon: t.accessAnon},
+			Owner:     t.owner,
 			Tags:      tags,
 			Public:    t.public}
 
