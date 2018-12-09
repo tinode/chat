@@ -297,6 +297,11 @@ func (UsersObjMapper) GetTopicsAny(id types.Uid, opts *types.QueryOpt) ([]types.
 	return adp.TopicsForUser(id, true, opts)
 }
 
+// GetOwnTopics retuens a slice of group topic names where the user is the owner.
+func (UsersObjMapper) GetOwnTopics(id types.Uid, opts *types.QueryOpt) ([]string, error) {
+	return adp.OwnTopics(id, opts)
+}
+
 // SaveCred saves a credential validation request.
 func (UsersObjMapper) SaveCred(cred *types.Credential) error {
 	cred.InitTimes()
@@ -343,8 +348,8 @@ func (TopicsObjMapper) Create(topic *types.Topic, owner types.Uid, private inter
 
 	topic.InitTimes()
 	topic.TouchedAt = &topic.CreatedAt
-
 	topic.Owner = owner.String()
+
 	err := adp.TopicCreate(topic)
 	if err != nil {
 		return err

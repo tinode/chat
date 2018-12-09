@@ -1005,6 +1005,10 @@ func (h *Hub) stopTopicsForUser(uid types.Uid, reason int, alldone chan<- bool) 
 		if _, isMember := topic.perUser[uid]; (topic.cat != types.TopicCatGrp && isMember) ||
 			topic.owner == uid {
 			h.topics.Delete(name)
+			// Just send to p2p topics here.
+			if topic.cat == types.TopicCatP2P && len(topic.perUser) == 2 {
+				presSingleUserOfflineOffline(topic.p2pOtherUser(uid), uid.UserId(), "gone", nilPresParams, "")
+			}
 			// This call is non-blocking unless some other routine tries to stop it at the same time.
 			topic.exit <- &shutDown{reason: reason, done: done}
 			count++

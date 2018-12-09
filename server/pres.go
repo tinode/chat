@@ -115,7 +115,7 @@ func (t *Topic) presProcReq(fromUserID, what string, wantReply bool) string {
 		online = nil
 		what = ""
 	case "gone":
-		// offline
+		// offline: off+rem
 		cmd = "rem"
 	case "?unkn":
 		// no change in online status

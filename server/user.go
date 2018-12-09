@@ -287,10 +287,20 @@ func replyDelUser(s *Session, msg *ClientComMessage) {
 		// Terminate all sessions. Skip the current session so the requester gets a response.
 		globals.sessionStore.EvictUser(uid, s.sid)
 
-		// Stop topics.
+		// Stop topics where the user is the owner and p2p topics.
 		done := make(chan bool)
 		globals.hub.unreg <- &topicUnreg{forUser: uid, del: msg.Del.Hard, done: done}
 		<-done
+
+		// TODO: Notify subscribers of the group topics where the user was the owner that the topics were deleted.
+		/*
+			if ownTopics, err := store.Users.GetOwnTopics(uid, nil); err == nil {
+				for _, topicName := range ownTopics {
+				// FIXME: load subscribers.
+					presSubsOfflineOffline(topicName, types.TopicCatGrp, subs, "gone", &presParams{}, s.sid)
+				}
+			}
+		*/
 
 		// Delete user's records from the database.
 		if err := store.Users.Delete(uid, msg.Del.Hard); err != nil {

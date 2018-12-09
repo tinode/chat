@@ -1135,7 +1135,7 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 	}
 	rows.Close()
 
-	if t.GetTopicCat(topic) == t.TopicCatP2P && len(subs) > 0 {
+	if err == nil && t.GetTopicCat(topic) == t.TopicCatP2P && len(subs) > 0 {
 		// Swap public values of P2P topics as expected.
 		if len(subs) == 1 {
 			subs[0].SetPublic(nil)
@@ -1147,6 +1147,26 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 	}
 
 	return subs, err
+}
+
+// OwnTopics loads a slice of topic names where the user is the owner.
+func (a *adapter) OwnTopics(uid t.Uid, opts *t.QueryOpt) ([]string, error) {
+	rows, err := a.db.Queryx("SELECT name FROM topics WHERE owner=?", store.DecodeUid(uid))
+	if err != nil {
+		return nil, err
+	}
+
+	var names []string
+	var name string
+	for rows.Next() {
+		if err = rows.Scan(&name); err != nil {
+			break
+		}
+		names = append(names, name)
+	}
+	rows.Close()
+
+	return names, err
 }
 
 func (a *adapter) TopicShare(shares []*t.Subscription) (int, error) {

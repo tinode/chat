@@ -2268,7 +2268,7 @@ func (t *Topic) p2pOtherUser(uid types.Uid) types.Uid {
 
 	// Even when one user is deleted, the subscription must be restored
 	// before p2pOtherUser is called.
-	panic("Not P2P topic")
+	panic("Not a valid P2P topic")
 }
 
 // Get per-session value of fnd.Public

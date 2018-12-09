@@ -916,6 +916,22 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 	return subs, nil
 }
 
+// OwnTopics loads a slice of topic names where the user is the owner.
+func (a *adapter) OwnTopics(uid t.Uid, opts *t.QueryOpt) ([]string, error) {
+	cursor, err := rdb.DB(a.dbName).Table("topics").GetAllByIndex("Owner", uid.String()).
+		Filter(rdb.Row.HasFields("DeletedAt").Not()).Field("Id").Run(a.conn)
+	if err != nil {
+		return nil, err
+	}
+	var names []string
+	var name string
+	for cursor.Next(&name) {
+		names = append(names, name)
+	}
+	cursor.Close()
+	return names, nil
+}
+
 func (a *adapter) TopicShare(shares []*t.Subscription) (int, error) {
 	// Assign Ids.
 	for i := 0; i < len(shares); i++ {
