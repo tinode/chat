@@ -252,10 +252,12 @@ func replyUpdateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 
 // Request to delete a user:
 // 1. Disable user's login
-// 2. Terminate all user's sessions.
+// 2. Terminate all user's sessions except the current session.
 // 3. Stop all active topics
-// 4. Delete user from the database.
-// 5. Report success or failure.
+// 4. Notify other subscribers that topics are being deleted.
+// 5. Delete user from the database.
+// 6. Report success or failure.
+// 7. Terminate user's last session.
 func replyDelUser(s *Session, msg *ClientComMessage) {
 	var reply *ServerComMessage
 	var uid types.Uid
@@ -292,15 +294,14 @@ func replyDelUser(s *Session, msg *ClientComMessage) {
 		globals.hub.unreg <- &topicUnreg{forUser: uid, del: msg.Del.Hard, done: done}
 		<-done
 
-		// TODO: Notify subscribers of the group topics where the user was the owner that the topics were deleted.
-		/*
-			if ownTopics, err := store.Users.GetOwnTopics(uid, nil); err == nil {
-				for _, topicName := range ownTopics {
-				// FIXME: load subscribers.
+		// Notify subscribers of the group topics where the user was the owner that the topics were deleted.
+		if ownTopics, err := store.Users.GetOwnTopics(uid, nil); err == nil {
+			for _, topicName := range ownTopics {
+				if subs, err := store.Topics.GetSubs(topicName, nil); err == nil {
 					presSubsOfflineOffline(topicName, types.TopicCatGrp, subs, "gone", &presParams{}, s.sid)
 				}
 			}
-		*/
+		}
 
 		// Delete user's records from the database.
 		if err := store.Users.Delete(uid, msg.Del.Hard); err != nil {
