@@ -816,7 +816,7 @@ func (a *adapter) UserGetByCred(method, value string) (t.Uid, error) {
 func (a *adapter) topicCreate(tx *sqlx.Tx, topic *t.Topic) error {
 	_, err := tx.Exec("INSERT INTO topics(createdAt,updatedAt,touchedAt,name,owner,access,public,tags) "+
 		"VALUES(?,?,?,?,?,?,?,?)",
-		topic.CreatedAt, topic.UpdatedAt, topic.TouchedAt, topic.Id, store.DecodeUid(topic.Owner),
+		topic.CreatedAt, topic.UpdatedAt, topic.TouchedAt, topic.Id, store.DecodeUid(t.ParseUid(topic.Owner)),
 		topic.Access, toJSON(topic.Public), topic.Tags)
 	if err != nil {
 		return err
@@ -913,7 +913,7 @@ func (a *adapter) TopicGet(topic string) (*t.Topic, error) {
 	// Fetch topic by name
 	var tt = new(t.Topic)
 	err := a.db.Get(tt,
-		"SELECT createdat,updatedat,deletedat,touchedat,name AS id,access,seqid,delid,public,tags FROM topics WHERE name=?",
+		"SELECT createdat,updatedat,deletedat,touchedat,name AS id,access,owner,seqid,delid,public,tags FROM topics WHERE name=?",
 		topic)
 
 	if err != nil {
@@ -924,6 +924,7 @@ func (a *adapter) TopicGet(topic string) (*t.Topic, error) {
 		return nil, err
 	}
 
+	tt.Owner = encodeUidString(tt.Owner).String()
 	tt.Public = fromJSON(tt.Public)
 
 	return tt, nil

@@ -344,7 +344,7 @@ func (TopicsObjMapper) Create(topic *types.Topic, owner types.Uid, private inter
 	topic.InitTimes()
 	topic.TouchedAt = &topic.CreatedAt
 
-	topic.Owner = owner
+	topic.Owner = owner.String()
 	err := adp.TopicCreate(topic)
 	if err != nil {
 		return err

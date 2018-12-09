@@ -781,7 +781,7 @@ type Topic struct {
 	UseBt bool
 
 	// Topic owner. Could be zero
-	Owner Uid
+	Owner string
 
 	// Default access to topic
 	Access DefaultAccess
@@ -815,8 +815,8 @@ func (t *Topic) GiveAccess(uid Uid, want, given AccessMode) {
 	pud.given = given
 
 	t.perUser[uid] = pud
-	if want&given&ModeOwner != 0 && t.Owner.IsZero() {
-		t.Owner = uid
+	if want&given&ModeOwner != 0 && t.Owner == "" {
+		t.Owner = uid.String()
 	}
 }
 
