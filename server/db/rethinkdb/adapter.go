@@ -599,8 +599,8 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 		if _, err = rdb.DB(a.dbName).Table("topics").GetAllByIndex("Owner", uid.String()).ForEach(
 			func(topic rdb.Term) rdb.Term {
 				return rdb.Expr([]interface{}{
-					rdb.DB(a.dbName).Table("subscriptions").GetAllByIndex("Topic", topic.Field("Name")).Update(disable),
-					rdb.DB(a.dbName).Table("topics").Get(topic.Field("Name")).Update(disable),
+					rdb.DB(a.dbName).Table("subscriptions").GetAllByIndex("Topic", topic.Field("Id")).Update(disable),
+					rdb.DB(a.dbName).Table("topics").Get(topic.Field("Id")).Update(disable),
 				})
 			}).RunWrite(a.conn); err != nil {
 			return err
