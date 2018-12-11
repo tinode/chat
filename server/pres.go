@@ -115,7 +115,7 @@ func (t *Topic) presProcReq(fromUserID, what string, wantReply bool) string {
 		online = nil
 		what = ""
 	case "gone":
-		// offline
+		// offline: off+rem
 		cmd = "rem"
 	case "?unkn":
 		// no change in online status
@@ -216,9 +216,21 @@ func (t *Topic) presUsersOfInterest(what, ua string) {
 	// Push update to subscriptions
 	for topic := range t.perSubs {
 		globals.hub.route <- &ServerComMessage{
-			Pres: &MsgServerPres{
-				Topic: "me", What: what, Src: t.name, UserAgent: ua, wantReply: (what == "on")},
+			Pres:   &MsgServerPres{Topic: "me", What: what, Src: t.name, UserAgent: ua, wantReply: (what == "on")},
 			rcptto: topic}
+	}
+}
+
+// Publish user's update to his/her users of interest on their 'me' topic while user's 'me' topic is offline
+// Case A: user is being deleted, "gone"
+func presUsersOfInterestOffline(uid types.Uid, subs []types.Subscription, what string) {
+	// Push update to subscriptions
+	for _, sub := range subs {
+		if (sub.ModeGiven & sub.ModeWant).IsPresencer() {
+			globals.hub.route <- &ServerComMessage{
+				Pres:   &MsgServerPres{Topic: "me", What: what, Src: uid.UserId(), wantReply: false},
+				rcptto: sub.Topic}
+		}
 	}
 }
 

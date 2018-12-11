@@ -189,7 +189,7 @@ func (UsersObjMapper) Create(user *types.User, private interface{}) (*types.User
 	if err != nil {
 		// Best effort to delete incomplete user record. Orphaned user records are not a problem.
 		// They just take up space.
-		adp.UserDelete(user.Uid(), false)
+		adp.UserDelete(user.Uid(), true)
 		return nil, err
 	}
 
@@ -227,9 +227,9 @@ func (UsersObjMapper) UpdateAuthRecord(uid types.Uid, authLvl auth.Level, scheme
 	return adp.AuthUpdRecord(uid, scheme, scheme+":"+unique, authLvl, secret, expires)
 }
 
-// DelAuthRecords deletes user's all auth records of the given scheme.
+// DelAuthRecords deletes user's auth records of the given scheme.
 func (UsersObjMapper) DelAuthRecords(uid types.Uid, scheme string) error {
-	return adp.AuthDelRecord(uid, scheme)
+	return adp.AuthDelScheme(uid, scheme)
 }
 
 // Get returns a user object for the given user id
@@ -248,18 +248,13 @@ func (UsersObjMapper) GetByCred(method, value string) (types.Uid, error) {
 }
 
 // Delete deletes user records.
-func (UsersObjMapper) Delete(id types.Uid, soft bool) error {
-	if !soft {
-		adp.SubsDelForUser(id)
-		// TODO: Maybe delete topics where the user is the owner and all subscriptions to those topics,
-		// and messages
-		adp.AuthDelAllRecords(id)
-		adp.CredDel(id, "")
-	}
+func (UsersObjMapper) Delete(id types.Uid, hard bool) error {
+	return adp.UserDelete(id, hard)
+}
 
-	adp.UserDelete(id, soft)
-
-	return errors.New("store: not implemented")
+// GetDisabled returns user IDs which were disabled (soft-deleted) since specifid time.
+func (UsersObjMapper) GetDisabled(since time.Time) ([]types.Uid, error) {
+	return adp.UserGetDisabled(since)
 }
 
 // UpdateLastSeen updates LastSeen and UserAgent.
@@ -300,6 +295,11 @@ func (UsersObjMapper) GetTopics(id types.Uid, opts *types.QueryOpt) ([]types.Sub
 // Deleted topics are returned too.
 func (UsersObjMapper) GetTopicsAny(id types.Uid, opts *types.QueryOpt) ([]types.Subscription, error) {
 	return adp.TopicsForUser(id, true, opts)
+}
+
+// GetOwnTopics retuens a slice of group topic names where the user is the owner.
+func (UsersObjMapper) GetOwnTopics(id types.Uid, opts *types.QueryOpt) ([]string, error) {
+	return adp.OwnTopics(id, opts)
 }
 
 // SaveCred saves a credential validation request.
@@ -348,6 +348,7 @@ func (TopicsObjMapper) Create(topic *types.Topic, owner types.Uid, private inter
 
 	topic.InitTimes()
 	topic.TouchedAt = &topic.CreatedAt
+	topic.Owner = owner.String()
 
 	err := adp.TopicCreate(topic)
 	if err != nil {
@@ -405,15 +406,13 @@ func (TopicsObjMapper) Update(topic string, update map[string]interface{}) error
 }
 
 // Delete deletes topic, messages, attachments, and subscriptions.
-func (TopicsObjMapper) Delete(topic string) error {
-	if err := adp.SubsDelForTopic(topic); err != nil {
-		return err
-	}
-	if err := adp.MessageDeleteList(topic, nil); err != nil {
-		return err
-	}
+func (TopicsObjMapper) OwnerChange(topic string, newOwner, oldOwner types.Uid) error {
+	return adp.TopicOwnerChange(topic, newOwner, oldOwner)
+}
 
-	return adp.TopicDelete(topic)
+// Delete deletes topic, messages, attachments, and subscriptions.
+func (TopicsObjMapper) Delete(topic string, hard bool) error {
+	return adp.TopicDelete(topic, hard)
 }
 
 // SubsObjMapper is A struct to hold methods for persistence mapping for the Subscription object.
@@ -530,6 +529,7 @@ func (MessagesObjMapper) DeleteList(topic string, delID int, forUser types.Uid, 
 		return err
 	}
 
+	// TODO: move to adapter
 	if delID > 0 {
 		// Record ID of the delete transaction
 		err = adp.TopicUpdate(topic, map[string]interface{}{"DelId": delID})
@@ -606,7 +606,20 @@ func GetAuthHandler(name string) auth.AuthHandler {
 	return authHandlers[strings.ToLower(name)]
 }
 
-// GetLogicalAuthHandler returns an auth handler by logical name.
+// GetAuthHandlerNames returns a slice of strings containing authenticator names.
+func GetAuthHandlerNames() []string {
+	if len(authHandlers) == 0 {
+		return nil
+	}
+	var names []string
+	for name, _ := range authHandlers {
+		names = append(names, name)
+	}
+	return names
+}
+
+// GetLogicalAuthHandler returns an auth handler by logical name. If there is no handler by that
+// logical name it tries to find one by the hardcoded name.
 func GetLogicalAuthHandler(name string) auth.AuthHandler {
 	name = strings.ToLower(name)
 	if len(authHandlerNames) != 0 {

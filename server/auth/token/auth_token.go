@@ -9,12 +9,15 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"errors"
+	"sync"
 	"time"
 
 	"github.com/tinode/chat/server/auth"
 	"github.com/tinode/chat/server/store"
 	"github.com/tinode/chat/server/store/types"
 )
+
+var disabledUserIDs *sync.Map
 
 // authenticator is a singleton instance of the authenticator.
 type authenticator struct {
@@ -68,6 +71,18 @@ func (ta *authenticator) Init(jsonconf string) error {
 	ta.lifetime = time.Duration(config.ExpireIn) * time.Second
 	ta.serialNumber = config.SerialNum
 
+	disabledUserIDs = &sync.Map{}
+
+	// Load UIDs which were disabled within token lifetime.
+	disabled, err := store.Users.GetDisabled(time.Now().Add(-ta.lifetime))
+	if err != nil {
+		return err
+	}
+
+	for _, uid := range disabled {
+		disabledUserIDs.Store(uid, struct{}{})
+	}
+
 	return nil
 }
 
@@ -99,23 +114,32 @@ func (ta *authenticator) Authenticate(token []byte) (*auth.Rec, []byte, error) {
 	hbuf := new(bytes.Buffer)
 	binary.Write(hbuf, binary.LittleEndian, &tl)
 
+	// Check signature.
 	hasher := hmac.New(sha256.New, ta.hmacSalt)
 	hasher.Write(hbuf.Bytes())
 	if !hmac.Equal(token[dataSize:dataSize+sha256.Size], hasher.Sum(nil)) {
 		return nil, nil, types.ErrFailed
 	}
 
+	// Check authentication level for validity.
 	if tl.AuthLevel < 0 || auth.Level(tl.AuthLevel) > auth.LevelRoot {
 		return nil, nil, types.ErrMalformed
 	}
 
+	// Check serial number.
 	if int(tl.SerialNumber) != ta.serialNumber {
 		return nil, nil, types.ErrFailed
 	}
 
+	// Check token expiration time.
 	expires := time.Unix(int64(tl.Expires), 0).UTC()
 	if expires.Before(time.Now().Add(1 * time.Second)) {
 		return nil, nil, types.ErrExpired
+	}
+
+	// Check if the user is disabled.
+	if _, disabled := disabledUserIDs.Load(types.Uid(tl.Uid)); disabled {
+		return nil, nil, types.ErrFailed
 	}
 
 	return &auth.Rec{
@@ -156,8 +180,9 @@ func (authenticator) IsUnique(token []byte) (bool, error) {
 	return false, types.ErrUnsupported
 }
 
-// DelRecords is a noop which always succeeds.
+// DelRecords adds disabled user ID to a stop list.
 func (authenticator) DelRecords(uid types.Uid) error {
+	disabledUserIDs.Store(uid, struct{}{})
 	return nil
 }
 

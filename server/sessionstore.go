@@ -18,6 +18,7 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/tinode/chat/pbx"
 	"github.com/tinode/chat/server/store"
+	"github.com/tinode/chat/server/store/types"
 )
 
 // SessionStore holds live sessions. Long polling sessions are stored in a linked list with
@@ -138,7 +139,7 @@ func (ss *SessionStore) Shutdown() {
 	ss.lock.Lock()
 	defer ss.lock.Unlock()
 
-	shutdown := NoErrShutdown(time.Now().UTC().Round(time.Millisecond))
+	shutdown := NoErrShutdown(types.TimeNow())
 	for _, s := range ss.sessCache {
 		if s.stop != nil && s.proto != CLUSTER {
 			s.stop <- s.serialize(shutdown)
@@ -146,6 +147,23 @@ func (ss *SessionStore) Shutdown() {
 	}
 
 	log.Printf("SessionStore shut down, sessions terminated: %d", len(ss.sessCache))
+}
+
+// Terminate all sessions of a given user.
+func (ss *SessionStore) EvictUser(uid types.Uid, skipSid string) {
+	ss.lock.Lock()
+	defer ss.lock.Unlock()
+
+	evicted := NoErrEvicted("", "", types.TimeNow())
+	for _, s := range ss.sessCache {
+		if s.uid == uid && s.stop != nil && s.sid != skipSid {
+			s.stop <- s.serialize(evicted)
+			delete(ss.sessCache, s.sid)
+			if s.proto == LPOLL {
+				ss.lru.Remove(s.lpTracker)
+			}
+		}
+	}
 }
 
 // NewSessionStore initializes a session store.

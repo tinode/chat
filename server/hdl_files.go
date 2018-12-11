@@ -11,6 +11,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"log"
 	"net/http"
@@ -22,7 +23,7 @@ import (
 )
 
 func largeFileServe(wrt http.ResponseWriter, req *http.Request) {
-	now := time.Now().UTC().Round(time.Millisecond)
+	now := types.TimeNow()
 	enc := json.NewEncoder(wrt)
 	mh := store.GetMediaHandler()
 
@@ -90,7 +91,9 @@ func largeFileServe(wrt http.ResponseWriter, req *http.Request) {
 // largeFileUpload receives files from client over HTTP(S) and saves them to local file
 // system.
 func largeFileUpload(wrt http.ResponseWriter, req *http.Request) {
-	now := time.Now().UTC().Round(time.Millisecond)
+	log.Println("Upload request", req.RequestURI)
+
+	now := types.TimeNow()
 	enc := json.NewEncoder(wrt)
 	mh := store.GetMediaHandler()
 
@@ -100,12 +103,12 @@ func largeFileUpload(wrt http.ResponseWriter, req *http.Request) {
 		wrt.WriteHeader(msg.Ctrl.Code)
 		enc.Encode(msg)
 
-		log.Println("media upload", msg.Ctrl.Code, msg.Ctrl.Text, err)
+		log.Println("media upload:", msg.Ctrl.Code, msg.Ctrl.Text, "/", err)
 	}
 
 	// Check if this is a POST or a PUT request.
 	if req.Method != http.MethodPost && req.Method != http.MethodPut {
-		writeHttpResponse(ErrOperationNotAllowed("", "", now), nil)
+		writeHttpResponse(ErrOperationNotAllowed("", "", now), errors.New("method '"+req.Method+"' not allowed"))
 		return
 	}
 

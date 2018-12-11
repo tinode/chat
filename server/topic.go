@@ -596,8 +596,12 @@ func (t *Topic) run(hub *Hub) {
 				// broadcast channel won't work - it will be shut down too soon.
 				t.presSubsOnlineDirect("term")
 			}
-
 			// In case of a system shutdown don't bother with notifications. They won't be delivered anyway.
+
+			// Tell sessions to remove the topic
+			for s := range t.sessions {
+				s.detach <- t.name
+			}
 
 			// Report completion back to sender, if 'done' is not nil.
 			if sd.done != nil {
@@ -977,6 +981,9 @@ func (t *Topic) requestSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Le
 				map[string]interface{}{
 					"ModeWant":  oldOwnerData.modeWant,
 					"ModeGiven": oldOwnerData.modeGiven}, false); err != nil {
+				return err
+			}
+			if err := store.Topics.OwnerChange(t.name, asUid, t.owner); err != nil {
 				return err
 			}
 			t.perUser[t.owner] = oldOwnerData
@@ -2018,11 +2025,6 @@ func (t *Topic) replyDelTopic(h *Hub, sess *Session, asUid types.Uid, del *MsgCl
 
 	// Notifications are sent from the topic loop.
 
-	for s := range t.sessions {
-		delete(t.sessions, s)
-		s.detach <- t.name
-	}
-
 	return nil
 }
 
@@ -2265,7 +2267,7 @@ func (t *Topic) p2pOtherUser(uid types.Uid) types.Uid {
 
 	// Even when one user is deleted, the subscription must be restored
 	// before p2pOtherUser is called.
-	panic("Not P2P topic")
+	panic("Not a valid P2P topic")
 }
 
 // Get per-session value of fnd.Public

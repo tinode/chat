@@ -779,6 +779,9 @@ type Topic struct {
 	// Use bearer token or use ACL
 	UseBt bool
 
+	// Topic owner. Could be zero
+	Owner string
+
 	// Default access to topic
 	Access DefaultAccess
 
@@ -793,7 +796,6 @@ type Topic struct {
 	Tags StringSlice
 
 	// Deserialized ephemeral params
-	owner   Uid                  // first assigned owner
 	perUser map[Uid]*perUserData // deserialized from Subscription
 }
 
@@ -812,8 +814,8 @@ func (t *Topic) GiveAccess(uid Uid, want, given AccessMode) {
 	pud.given = given
 
 	t.perUser[uid] = pud
-	if want&given&ModeOwner != 0 && t.owner.IsZero() {
-		t.owner = uid
+	if want&given&ModeOwner != 0 && t.Owner == "" {
+		t.Owner = uid.String()
 	}
 }
 
@@ -828,11 +830,6 @@ func (t *Topic) SetPrivate(uid Uid, private interface{}) {
 	}
 	pud.private = private
 	t.perUser[uid] = pud
-}
-
-// GetOwner returns topic's owner.
-func (t *Topic) GetOwner() Uid {
-	return t.owner
 }
 
 // GetPrivate returns given user's private value.

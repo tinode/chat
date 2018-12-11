@@ -25,7 +25,8 @@ CREATE TABLE users(
 	public 		JSON,
 	tags		JSON, -- Denormalized array of tags
 	
-	PRIMARY KEY(id)
+	PRIMARY KEY(id),
+	INDEX users_deletedat(deletedat)
 );
 
 # Indexed user tags.
@@ -80,6 +81,7 @@ CREATE TABLE topics(
 	touchedat 	DATETIME(3),
 	name 		CHAR(25) NOT NULL,
 	usebt 		INT DEFAULT 0,
+	owner 		BIGINT NOT NULL DEFAULT 0,
 	access 		JSON,
 	seqid 		INT NOT NULL DEFAULT 0,
 	delid 		INT DEFAULT 0,
@@ -87,7 +89,8 @@ CREATE TABLE topics(
 	tags		JSON, -- Denormalized array of tags
 	
 	PRIMARY KEY(id),
-	UNIQUE INDEX topics_name (name)
+	UNIQUE INDEX topics_name (name),
+	INDEX topics_owner(owner)
 );
 
 # Indexed topic tags.
@@ -136,7 +139,6 @@ CREATE TABLE messages(
 	content 	JSON,
 	
 	PRIMARY KEY(id),
-	FOREIGN KEY(`from`) REFERENCES users(id),
 	FOREIGN KEY(topic) REFERENCES topics(name),
 	UNIQUE INDEX messages_topic_seqid (topic, seqid)
 );
@@ -189,8 +191,7 @@ CREATE TABLE fileuploads(
 	size		BIGINT NOT NULL,
 	location	VARCHAR(2048) NOT NULL,
 	
-	PRIMARY KEY(id),
-	FOREIGN KEY(userid) REFERENCES users(id)
+	PRIMARY KEY(id)
 );
 
 # Links between uploaded files and messages.

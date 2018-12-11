@@ -226,6 +226,7 @@ message ClientDel {
 		MSG = 0;
 		TOPIC = 1;
 		SUB = 2;
+		USER = 3;
 	}
 	What what = 3;
 	// Delete messages by id or range of ids

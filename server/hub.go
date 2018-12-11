@@ -56,12 +56,16 @@ type sessionLeave struct {
 type topicUnreg struct {
 	// Routable name of the topic to drop
 	topic string
+	// UID of the user being deleted
+	forUser types.Uid
 	// Session making the request, could be nil
 	sess *Session
 	// Original request, could be nil
 	pkt *ClientComMessage
 	// Unregister then delete the topic
 	del bool
+	// Channel for reporting operation completion when deleting topics for a user
+	done chan<- bool
 }
 
 type metaReq struct {
@@ -200,13 +204,17 @@ func (h *Hub) run() {
 			}
 
 		case unreg := <-h.unreg:
-			// The topic is being garbage collected or deleted.
 			reason := StopNone
 			if unreg.del {
 				reason = StopDeleted
 			}
-			if err := h.topicUnreg(unreg.sess, unreg.topic, unreg.pkt, reason); err != nil {
-				log.Println("hub.topicUnreg failed:", err)
+			if unreg.forUser.IsZero() {
+				// The topic is being garbage collected or deleted.
+				if err := h.topicUnreg(unreg.sess, unreg.topic, unreg.pkt, reason); err != nil {
+					log.Println("hub.topicUnreg failed:", err)
+				}
+			} else {
+				go h.stopTopicsForUser(unreg.forUser, reason, unreg.done)
 			}
 
 		case <-h.rehash:
@@ -281,7 +289,6 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		t.cat = types.TopicCatMe
 
 		// 'me' has no owner, t.owner = nil
-
 		user, err := store.Users.Get(sreg.sess.uid)
 		if err != nil {
 			log.Println("hub: cannot load 'me' user object", t.name, err)
@@ -388,13 +395,13 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 		if stopic != nil {
 			// Subs already have Public swapped
 			if subs, err = store.Topics.GetUsers(t.name, nil); err != nil {
-				log.Println("hub: cannot load subscritions for '" + t.name + "' (" + err.Error() + ")")
+				log.Println("hub: cannot load subscriptions for '" + t.name + "' (" + err.Error() + ")")
 				sreg.sess.queueOut(ErrUnknown(sreg.pkt.id, t.xoriginal, timestamp))
 				return
 			}
 
 			// Case 3, fail
-			if subs == nil || len(subs) == 0 {
+			if len(subs) == 0 {
 				log.Println("hub: missing both subscriptions for '" + t.name + "' (SHOULD NEVER HAPPEN!)")
 				sreg.sess.queueOut(ErrUnknown(sreg.pkt.id, t.xoriginal, timestamp))
 				return
@@ -861,17 +868,11 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 
 				t.suspend()
 
-				if err := store.Topics.Delete(topic); err != nil {
+				if err := store.Topics.Delete(topic, true); err != nil {
 					t.resume()
 					sess.queueOut(ErrUnknown(msg.id, msg.topic, now))
 					return err
 				}
-
-				t.meta <- &metaReq{
-					topic: topic,
-					pkt:   msg,
-					sess:  sess,
-					what:  constMsgDelTopic}
 
 				sess.queueOut(NoErr(msg.id, msg.topic, now))
 
@@ -923,7 +924,7 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 
 				if tcat == types.TopicCatP2P && len(subs) < 2 {
 					// This is a P2P topic and fewer than 2 subscriptions, delete the entire topic
-					if err := store.Topics.Delete(topic); err != nil {
+					if err := store.Topics.Delete(topic, true); err != nil {
 						sess.queueOut(ErrUnknown(msg.id, msg.topic, now))
 						return err
 					}
@@ -951,7 +952,7 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 			} else {
 				// Case 1.2.1.1: owner, delete the group topic from db.
 				// Only group topics have owners.
-				if err := store.Topics.Delete(topic); err != nil {
+				if err := store.Topics.Delete(topic, true); err != nil {
 					sess.queueOut(ErrUnknown(msg.id, msg.topic, now))
 					return err
 				}
@@ -980,6 +981,48 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 	}
 
 	return nil
+}
+
+// Terminate all topics associated with the given user:
+// * all p2p topics with the given user
+// * group topics where the given user is the owner.
+// * user's 'me' and 'fnd' topics.
+func (h *Hub) stopTopicsForUser(uid types.Uid, reason int, alldone chan<- bool) {
+	var done chan bool
+	if alldone != nil {
+		done = make(chan bool, 128)
+	}
+
+	count := 0
+	h.topics.Range(func(name interface{}, t interface{}) bool {
+		topic := t.(*Topic)
+		if _, isMember := topic.perUser[uid]; (topic.cat != types.TopicCatGrp && isMember) ||
+			topic.owner == uid {
+
+			topic.suspend()
+
+			h.topics.Delete(name)
+
+			// This call is non-blocking unless some other routine tries to stop it at the same time.
+			topic.exit <- &shutDown{reason: reason, done: done}
+
+			// Just send to p2p topics here.
+			if topic.cat == types.TopicCatP2P && len(topic.perUser) == 2 {
+				presSingleUserOfflineOffline(topic.p2pOtherUser(uid), uid.UserId(), "gone", nilPresParams, "")
+			}
+			count++
+		}
+		return true
+	})
+
+	h.topicsLive.Add(-int64(count))
+
+	if alldone != nil {
+		for i := 0; i < count; i++ {
+			<-done
+		}
+		alldone <- true
+	}
 }
 
 // replyTopicDescBasic loads minimal topic Desc when the requester is not subscribed to the topic

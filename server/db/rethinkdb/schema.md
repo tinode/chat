@@ -26,6 +26,7 @@ Fields:
 Indexes:
  * `Id` primary key
  * `Tags` multi-index (indexed array)
+ * `DeletedAt` index
  * `DeviceIds` multi-index of push notification tokens
 
 Sample:
@@ -83,23 +84,6 @@ Sample:
 }
 ```
 
-### Table `tagunique`
-Indexed user tags, mostly to ensure tag uniqueness
-
-Fields:
-* `Id` unique tag, primary keys
-* `Source` ID of the user who owns the tag
-
-Indexes:
-
-Sample:
-```js
-{
-  "Id": "email:alice@example.com" ,
-  "Source": "7yUCHniegrM"
-}
-```
-
 ### Table `topics`
 The table stores topics.
 
@@ -110,6 +94,7 @@ Fields:
  * `DeletedAt` currently unused
  * `Access` stores topic's default access permissions
   * `Auth`, `Anon` permissions for authenticated and anonymous users respectively
+ * `Owner` ID of the user who owns the topic
  * `Public` application-defined data
  * `State` currently unused
  * `SeqId` sequential ID of the last message
@@ -118,6 +103,7 @@ Fields:
 
 Indexes:
 * `Id` primary key
+* `Owner` index
 
 Sample:
 ```js
@@ -131,6 +117,7 @@ Sample:
  "DeletedAt": null ,
  "LastMessageAt": Sat Oct 17 2015 13:51:56 GMT+00:00 ,
  "Id":  "p2pavVGHLCBbKrvJQIeeJ6Csw" ,
+ "Owner": "v2JyG4OLSoA" ,
  "Public": {
    "fn":  "Travel, travel, travel" ,
    "photo": {
@@ -200,11 +187,14 @@ Fields:
 * `Topic` which received this message
 * `SeqId` messages ID - sequential number of the message in the topic
 * `Head` message headers
+* `Attachments` denormalized IDs of files attached to the message
 * `Content` application-defined message payload
 
 Indexes:
  * `Id` primary key
  * `Topic_SeqId` compound index `["Topic", "SeqId"]`
+ * `Topic_DelId` compound index `["Topic", "DelId"]`
+ * `Topic_DeletedFor` compound multi-index `["Topic", "DeletedFor"("User"), "DeletedFor"("DelId")]`
 
 Sample:
 ```js
@@ -249,6 +239,7 @@ Fields:
 * `SeqIdRanges` array of ranges of deleted message IDs (see `messages.SeqId`)
 
 Indexes:
+ * `Id` primary key
 * `Topic_DelId` compound index `["Topic", "DelId"]`
 
 Sample:
@@ -317,7 +308,6 @@ The table stores records of uploaded files. The files themselves are stored outs
 Indexes:
  * `Id` file name, primary key
  * `User` index
- * `Topic_SeqId` compound index `["Topic", "SeqId"]`
  * `UseCount` index
 
 Sample:
