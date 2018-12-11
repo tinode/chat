@@ -535,15 +535,15 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 				return rdb.Expr([]interface{}{
 					// Delete dellog
 					rdb.DB(a.dbName).Table("dellog").Between(
-						[]interface{}{topic.Field("Name"), rdb.MinVal},
-						[]interface{}{topic.Field("Name"), rdb.MaxVal},
+						[]interface{}{topic.Field("Id"), rdb.MinVal},
+						[]interface{}{topic.Field("Id"), rdb.MaxVal},
 						rdb.BetweenOpts{Index: "Topic_DelId"}).Delete(),
 					// Decrement fileuploads UseCounter
 					rdb.DB(a.dbName).Table("fileuploads").GetAll(
 						rdb.Args(
 							rdb.DB(a.dbName).Table("messages").Between(
-								[]interface{}{topic.Field("Name"), rdb.MinVal},
-								[]interface{}{topic.Field("Name"), rdb.MaxVal},
+								[]interface{}{topic.Field("Id"), rdb.MinVal},
+								[]interface{}{topic.Field("Id"), rdb.MaxVal},
 								rdb.BetweenOpts{Index: "Topic_SeqId"}).
 								// Fetch messages with attachments only
 								Filter(func(msg rdb.Term) rdb.Term {
@@ -557,11 +557,11 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 						}),
 					// Delete messages
 					rdb.DB(a.dbName).Table("messages").Between(
-						[]interface{}{topic.Field("Name"), rdb.MinVal},
-						[]interface{}{topic.Field("Name"), rdb.MaxVal},
+						[]interface{}{topic.Field("Id"), rdb.MinVal},
+						[]interface{}{topic.Field("Id"), rdb.MaxVal},
 						rdb.BetweenOpts{Index: "Topic_SeqId"}).Delete(),
 					// Delete subscriptions
-					rdb.DB(a.dbName).Table("subscriptions").GetAllByIndex("Topic", topic.Field("Name")).Delete(),
+					rdb.DB(a.dbName).Table("subscriptions").GetAllByIndex("Topic", topic.Field("Id")).Delete(),
 				})
 			}).RunWrite(a.conn)
 
