@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"hash/fnv"
+	"log"
 	"strconv"
 	"time"
 
@@ -518,7 +519,7 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 		if err = a.SubsDelForUser(uid, true); err != nil {
 			return err
 		}
-
+		log.Println("Subscriptions deleted")
 		// Can't delete user's messages in all topics because we cannot notify topics of such deletion.
 		// Or we have to delete these messages one by one.
 		// For now, just leave the messages there marked as sent by "not found" user.
@@ -545,11 +546,15 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 								[]interface{}{topic.Field("Name"), rdb.MaxVal},
 								rdb.BetweenOpts{Index: "Topic_SeqId"}).
 								// Fetch messages with attachments only
-								Filter(rdb.Row.HasFields("Attachments")).
+								Filter(func(msg rdb.Term) rdb.Term {
+									return msg.HasFields("Attachments")
+								}).
 								// Flatten arrays
 								ConcatMap(func(row rdb.Term) interface{} { return row.Field("Attachments") }).
 								CoerceTo("array"))).
-						Update(map[string]interface{}{"UseCount": rdb.Row.Field("UseCount").Default(1).Sub(1)}),
+						Update(func(fu rdb.Term) interface{} {
+							return map[string]interface{}{"UseCount": fu.Field("UseCount").Default(1).Sub(1)}
+						}),
 					// Delete messages
 					rdb.DB(a.dbName).Table("messages").Between(
 						[]interface{}{topic.Field("Name"), rdb.MinVal},
@@ -559,6 +564,8 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 					rdb.DB(a.dbName).Table("subscriptions").GetAllByIndex("Topic", topic.Field("Name")).Delete(),
 				})
 			}).RunWrite(a.conn)
+
+		log.Println("dellog, attachment, messages delete result:", err)
 
 		// And finally delete the topics.
 		// TODO: denormalize Owner into topic, add index on Owner.

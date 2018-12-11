@@ -187,6 +187,7 @@ Fields:
 * `Topic` which received this message
 * `SeqId` messages ID - sequential number of the message in the topic
 * `Head` message headers
+* `Attachments` denormalized IDs of files attached to the message
 * `Content` application-defined message payload
 
 Indexes:

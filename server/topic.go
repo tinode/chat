@@ -596,8 +596,12 @@ func (t *Topic) run(hub *Hub) {
 				// broadcast channel won't work - it will be shut down too soon.
 				t.presSubsOnlineDirect("term")
 			}
-
 			// In case of a system shutdown don't bother with notifications. They won't be delivered anyway.
+
+			// Tell sessions to remove the topic
+			for s := range t.sessions {
+				s.detach <- t.name
+			}
 
 			// Report completion back to sender, if 'done' is not nil.
 			if sd.done != nil {
@@ -2020,11 +2024,6 @@ func (t *Topic) replyDelTopic(h *Hub, sess *Session, asUid types.Uid, del *MsgCl
 	}
 
 	// Notifications are sent from the topic loop.
-
-	for s := range t.sessions {
-		delete(t.sessions, s)
-		s.detach <- t.name
-	}
 
 	return nil
 }

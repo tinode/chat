@@ -294,13 +294,24 @@ func replyDelUser(s *Session, msg *ClientComMessage) {
 		globals.hub.unreg <- &topicUnreg{forUser: uid, del: msg.Del.Hard, done: done}
 		<-done
 
+		// Notify users of interest that the user is gone.
+		if uoi, err := store.Users.GetSubs(uid, nil); err == nil {
+			log.Println("notifying users of interest", uoi)
+			presUsersOfInterestOffline(uid, uoi, "gone")
+		} else {
+			log.Println("replyDelUser: failed to send notifications to users", err, s.sid)
+		}
+
 		// Notify subscribers of the group topics where the user was the owner that the topics were deleted.
 		if ownTopics, err := store.Users.GetOwnTopics(uid, nil); err == nil {
+			log.Println("deleting owned topics", ownTopics)
 			for _, topicName := range ownTopics {
 				if subs, err := store.Topics.GetSubs(topicName, nil); err == nil {
 					presSubsOfflineOffline(topicName, types.TopicCatGrp, subs, "gone", &presParams{}, s.sid)
 				}
 			}
+		} else {
+			log.Println("replyDelUser: failed to send notifications to owned topics", err, s.sid)
 		}
 
 		// Delete user's records from the database.

@@ -874,12 +874,6 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 					return err
 				}
 
-				t.meta <- &metaReq{
-					topic: topic,
-					pkt:   msg,
-					sess:  sess,
-					what:  constMsgDelTopic}
-
 				sess.queueOut(NoErr(msg.id, msg.topic, now))
 
 				h.topicDel(topic)
@@ -1004,17 +998,24 @@ func (h *Hub) stopTopicsForUser(uid types.Uid, reason int, alldone chan<- bool) 
 		topic := t.(*Topic)
 		if _, isMember := topic.perUser[uid]; (topic.cat != types.TopicCatGrp && isMember) ||
 			topic.owner == uid {
+
+			topic.suspend()
+
 			h.topics.Delete(name)
+
+			// This call is non-blocking unless some other routine tries to stop it at the same time.
+			topic.exit <- &shutDown{reason: reason, done: done}
+
 			// Just send to p2p topics here.
 			if topic.cat == types.TopicCatP2P && len(topic.perUser) == 2 {
 				presSingleUserOfflineOffline(topic.p2pOtherUser(uid), uid.UserId(), "gone", nilPresParams, "")
 			}
-			// This call is non-blocking unless some other routine tries to stop it at the same time.
-			topic.exit <- &shutDown{reason: reason, done: done}
 			count++
 		}
 		return true
 	})
+
+	h.topicsLive.Add(-int64(count))
 
 	if alldone != nil {
 		for i := 0; i < count; i++ {
