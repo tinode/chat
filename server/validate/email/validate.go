@@ -25,17 +25,18 @@ import (
 
 // Validator configuration.
 type validator struct {
-	HostUrl             string `json:"host_url"`
-	ValidationTemplFile string `json:"validation_body_templ"`
-	ResetTemplFile      string `json:"reset_body_templ"`
-	ValidationSubject   string `json:"validation_subject"`
-	ResetSubject        string `json:"reset_subject"`
-	SendFrom            string `json:"sender"`
-	SenderPassword      string `json:"sender_password"`
-	DebugResponse       string `json:"debug_response"`
-	MaxRetries          int    `json:"max_retries"`
-	SMTPAddr            string `json:"smtp_server"`
-	SMTPPort            string `json:"smtp_port"`
+	HostUrl             string   `json:"host_url"`
+	ValidationTemplFile string   `json:"validation_body_templ"`
+	ResetTemplFile      string   `json:"reset_body_templ"`
+	ValidationSubject   string   `json:"validation_subject"`
+	ResetSubject        string   `json:"reset_subject"`
+	SendFrom            string   `json:"sender"`
+	SenderPassword      string   `json:"sender_password"`
+	DebugResponse       string   `json:"debug_response"`
+	MaxRetries          int      `json:"max_retries"`
+	SMTPAddr            string   `json:"smtp_server"`
+	SMTPPort            string   `json:"smtp_port"`
+	Domains             []string `json:"domains"`
 	htmlValidationTempl *ht.Template
 	htmlResetTempl      *ht.Template
 	auth                smtp.Auth
@@ -134,7 +135,29 @@ func (v *validator) PreCheck(cred string, params interface{}) error {
 		return t.ErrMalformed
 	}
 
+	// If a whitelist of domains is provided, make sure the email belongs to the list.
+	if len(v.Domains) > 0 {
+		// Parse email into user and domain parts.
+		parts := strings.Split(addr.Address, "@")
+		if len(parts) != 2 {
+			return t.ErrMalformed
+		}
+
+		var found bool
+		for _, domain := range v.Domains {
+			if domain == parts[1] {
+				found = true
+				break
+			}
+		}
+
+		if !found {
+			return t.ErrPolicy
+		}
+	}
+
 	// TODO: Check email uniqueness
+
 	return nil
 }
 
