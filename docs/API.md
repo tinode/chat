@@ -159,10 +159,11 @@ Logging out is not supported by design. If an application needs to change the us
 
 ### Authentication
 
-The server comes with three authentication methods out of the box: `basic`, `token`, and `anonymous`:
+The server comes with the following authentication methods out of the box:
  * `basic` provides authentication by a login-password pair.
  * `token` provides authentication by a cryptographic token.
  * `anonymous` is designed for cases where users are temporary, such as handling customer support requests through chat.
+ * `rest` is a [meta-method](../server/auth/rest/) which allows use of external systems for authentication.
 
 Any other authentication method can be implemented using plugins.
 
@@ -170,7 +171,7 @@ The `token` is intended to be the primary means of authentication. Tokens are de
 
 Authenticators are used during account registration [`{acc}`](#acc) and during [`{login}`](#login).
 
-Compiled-in authenticator names may be changed by using `logical_names` configuration feature. For example, a custom authenticator may be exposed as `basic` instead of default one or `token` authenticator could be hidden from users. The feature is activated by providing an array of mappings in the config file: `logical_name:actual_name` to rename or `actual_name:` to hide.
+Compiled-in authenticator names may be changed by using `logical_names` configuration feature. For example, a custom `rest` authenticator may be exposed as `basic` instead of default one or `token` authenticator could be hidden from users. The feature is activated by providing an array of mappings in the config file: `logical_name:actual_name` to rename or `actual_name:` to hide. For instance, to use a `rest` service for basic authentication use `"logical_names": ["basic:rest"]`.
 
 
 #### Creating an Account
