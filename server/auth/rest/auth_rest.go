@@ -67,7 +67,7 @@ func (a *authenticator) Init(jsonconf string) error {
 		// Server may create new accounts.
 		AllowNewAccounts bool `json:"allow_new_accounts"`
 		// Use separate endpoints, i.e. add request name to serverUrl path when making requests.
-		UseSeparateEndpoints bool `json:"use_separae_endpoints"`
+		UseSeparateEndpoints bool `json:"use_separate_endpoints"`
 	}
 
 	var config configType
@@ -215,4 +215,8 @@ func (a *authenticator) GenSecret(rec *auth.Rec) ([]byte, time.Time, error) {
 func (a *authenticator) DelRecords(uid types.Uid) error {
 	_, err := a.callEndpoint("del", &auth.Rec{Uid: uid}, nil)
 	return err
+}
+
+func init() {
+	store.RegisterAuthScheme("rest", &authenticator{})
 }

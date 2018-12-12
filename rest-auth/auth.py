@@ -3,7 +3,7 @@
 # Sample Tinode REST/JSON-RPC authentication service.
 # See https://github.com/tinode/chat/rest-auth for details.
 
-from flask import Flask, jsonify, make_response
+from flask import Flask, jsonify, make_response, request
 import base64
 import json
 
@@ -28,25 +28,27 @@ def add():
 def auth():
     if not request.json:
         return jsonify({'err': 'malformed'})
-    uname, password = parse_secret(request.json.secret)
-    if dummy_data[uname]:
+    uname, password = parse_secret(request.json.get('secret'))
+    if uname in dummy_data:
         if dummy_data[uname]['password'] != password:
             # Wrong password
             return jsonify({'err': 'failed'})
-        if dummy_data[uname]['uid']:
+        if 'uid' in dummy_data[uname]:
             # We have uname -> uid mapping
-            jsonify({
+            return jsonify({
                 'rec': {
                     'uid': dummy_data[uname]['uid'],
                     'authlvl': dummy_data[uname]['authlvl'],
+                    'features': dummy_data[uname]['features']
                 }
             })
         else:
             # This is the first login. Tell Tinode to create a new account.
-            jsonify({
+            return jsonify({
                 'rec': {
                     'authlvl': dummy_data[uname]['authlvl'],
-                    'tags': dummy_data[uname]['tags']
+                    'tags': dummy_data[uname]['tags'],
+                    'features': dummy_data[uname]['features']
                 },
                 'newacc': {
                     'auth': dummy_data[uname]['auth'],
@@ -83,17 +85,17 @@ def link():
 
     # Save the link account <-> secret to database.
     uname, password = parse_secret(secret)
-    if not dummy_data[uname]:
+    if uname not in dummy_data:
         # Unknown user name
         return jsonify({'err': 'not found'})
-    if dummy_data[uname]['uid']:
+    if 'uid' in dummy_data[uname]:
         # Already linked
         return jsonify({'err': 'duplicate value'})
 
     # Save updated data to file
     dummy_data[uname]['uid'] = rec['uid']
     with open('dummy_data.json', 'w') as outfile:
-        json.dump(dummy_data, outfile)
+        json.dump(dummy_data, outfile, indent=2, sort_keys=True)
 
     # Success
     return jsonify({})

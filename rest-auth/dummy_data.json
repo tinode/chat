@@ -1,10 +1,11 @@
 {
   "alice": {
-    "password": "alice123",
-    "authlvl": "auth",
-    "auth": "JRWPA",
     "anon": "N",
-    "tags": ["email:alice@example.com"],
+    "auth": "JRWPA",
+    "authlvl": "auth",
+    "features": "V",
+    "password": "alice123",
+    "private": "email:bob@example.com,email:carol@example.com,email:dave@example.com,email:eve@example.com,email:frank@example.com",
     "public": {
       "fn": "Alice Johnson",
       "photo": {
@@ -12,14 +13,18 @@
         "type": "jpeg"
       }
     },
-    "private": "email:bob@example.com,email:carol@example.com,email:dave@example.com,email:eve@example.com,email:frank@example.com"
+    "tags": [
+      "email:alice@example.com"
+    ],
+    "uid": "QVuwC5jz9o4"
   },
   "bob": {
-    "password": "bob123",
-    "authlvl": "auth",
-    "auth": "JRWPA",
     "anon": "N",
-    "tags": ["email:bob@example.com"],
+    "auth": "JRWPA",
+    "authlvl": "auth",
+    "features": "V",
+    "password": "bob123",
+    "private": "email:alice@example.com,email:carol@example.com,email:dave@example.com,email:eve@example.com,email:frank@example.com",
     "public": {
       "fn": "Bob Smith",
       "photo": {
@@ -27,14 +32,18 @@
         "type": "jpeg"
       }
     },
-    "private": "email:alice@example.com,email:carol@example.com,email:dave@example.com,email:eve@example.com,email:frank@example.com"
+    "tags": [
+      "email:bob@example.com"
+    ],
+    "uid": "Pp-n0RjGm8s"
   },
   "carol": {
-    "password": "carol123",
-    "authlvl": "auth",
-    "auth": "JRWPA",
     "anon": "N",
-    "tags": ["email:carol@example.com"],
+    "auth": "JRWPA",
+    "authlvl": "auth",
+    "features": "V",
+    "password": "carol123",
+    "private": "email:alice@example.com,email:bob@example.com,email:dave@example.com,email:eve@example.com,email:frank@example.com",
     "public": {
       "fn": "Carol Xmas",
       "photo": {
@@ -42,14 +51,17 @@
         "type": "jpeg"
       }
     },
-    "private": "email:alice@example.com,email:bob@example.com,email:dave@example.com,email:eve@example.com,email:frank@example.com"
+    "tags": [
+      "email:carol@example.com"
+    ]
   },
   "dave": {
-    "password": "dave123",
-    "authlvl": "auth",
-    "auth": "JRWPA",
     "anon": "N",
-    "tags": ["email:dave@example.com"],
+    "auth": "JRWPA",
+    "authlvl": "auth",
+    "features": "V",
+    "password": "dave123",
+    "private": "email:alice@example.com,email:bob@example.com,email:carol@example.com,email:eve@example.com,email:frank@example.com",
     "public": {
       "fn": "Dave Goliathsson",
       "photo": {
@@ -57,14 +69,17 @@
         "type": "jpeg"
       }
     },
-    "private": "email:alice@example.com,email:bob@example.com,email:carol@example.com,email:eve@example.com,email:frank@example.com"
+    "tags": [
+      "email:dave@example.com"
+    ]
   },
   "eve": {
-    "password": "eve123",
-    "authlvl": "auth",
-    "auth": "JRWPA",
     "anon": "N",
-    "tags": ["email:eve@example.com"],
+    "auth": "JRWPA",
+    "authlvl": "auth",
+    "features": "V",
+    "password": "eve123",
+    "private": "email:alice@example.com,email:bob@example.com,email:carol@example.com,email:dave@example.com,email:frank@example.com",
     "public": {
       "fn": "Eve Adams",
       "photo": {
@@ -72,14 +87,17 @@
         "type": "jpeg"
       }
     },
-    "private": "email:alice@example.com,email:bob@example.com,email:carol@example.com,email:dave@example.com,email:frank@example.com"
+    "tags": [
+      "email:eve@example.com"
+    ]
   },
   "frank": {
-    "password": "frank123",
-    "authlvl": "auth",
-    "auth": "JRWPA",
     "anon": "N",
-    "tags": ["email:frank@example.com"],
+    "auth": "JRWPA",
+    "authlvl": "auth",
+    "features": "V",
+    "password": "frank123",
+    "private": "email:alice@example.com,email:bob@example.com,email:carol@example.com,email:dave@example.com,email:eve@example.com",
     "public": {
       "fn": "Frank Singer",
       "photo": {
@@ -87,14 +105,17 @@
         "type": "jpeg"
       }
     },
-    "private": "email:alice@example.com,email:bob@example.com,email:carol@example.com,email:dave@example.com,email:eve@example.com"
+    "tags": [
+      "email:frank@example.com"
+    ]
   },
   "xena": {
-    "password": "xena123",
-    "authlvl": "root",
-    "auth": "JRWPA",
     "anon": "N",
-    "tags": ["email:xena@example.com"],
+    "auth": "JRWPA",
+    "authlvl": "root",
+    "features": "V",
+    "password": "xena123",
+    "private": "",
     "public": {
       "fn": "Xena Peaceful Peasant",
       "photo": {
@@ -102,6 +123,8 @@
         "type": "jpeg"
       }
     },
-    "private": ""
+    "tags": [
+      "email:xena@example.com"
+    ]
   }
 }
