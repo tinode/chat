@@ -399,6 +399,12 @@ func (TopicsObjMapper) GetSubs(topic string, opts *types.QueryOpt) ([]types.Subs
 	return adp.SubsForTopic(topic, false, opts)
 }
 
+// GetSubsAny loads a list of subscriptions to the given topic including deleted subscription.
+// user.Public is not loaded
+func (TopicsObjMapper) GetSubsAny(topic string, opts *types.QueryOpt) ([]types.Subscription, error) {
+	return adp.SubsForTopic(topic, true, opts)
+}
+
 // Update is a generic topic update.
 func (TopicsObjMapper) Update(topic string, update map[string]interface{}) error {
 	update["UpdatedAt"] = types.TimeNow()

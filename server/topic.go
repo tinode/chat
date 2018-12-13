@@ -1520,8 +1520,19 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 				}
 			}
 		}
-	default:
+	case types.TopicCatP2P:
 		// FIXME(gene): don't load subs from DB, use perUserData - it already contains subscriptions.
+		// No need to load Public for p2p topics.
+		if ifModified.IsZero() {
+			// No cache management. Skip deleted subscriptions.
+			subs, err = store.Topics.GetSubs(t.name, msgOpts2storeOpts(req))
+		} else {
+			// User manages cache. Include deleted subscriptions too.
+			subs, err = store.Topics.GetSubsAny(t.name, msgOpts2storeOpts(req))
+		}
+		isSharer = (userData.modeGiven & userData.modeWant).IsSharer()
+	case types.TopicCatGrp:
+		// Include sub.Public.
 		if ifModified.IsZero() {
 			// No cache management. Skip deleted subscriptions.
 			subs, err = store.Topics.GetUsers(t.name, msgOpts2storeOpts(req))
