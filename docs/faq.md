@@ -31,3 +31,16 @@ If you are using the official [Docker image](https://hub.docker.com/u/tinode):
 2. Follow instructions at https://cloud.google.com/iam/docs/creating-managing-service-account-keys to download the credentials file.
 3. Follow instructions in the Docker [README](https://github.com/tinode/chat/tree/master/docker#enable-push-notifications) to enable push notifications.
 4. Add `google-services.json` to [Tindroid](/tinode/tindroid/) by following instructions at https://developers.google.com/android/guides/google-services-plugin.
+
+
+### Q: How to create a `root` user?<br/>
+**A**: The `root` access can be granted to a user only by executing a database query. First create or choose the use you want to promote to `root` then execute the query:
+* RethinkDB:
+```js
+r.db("tinode").table("auth").get("basic:login-of-the-user-to-make-root").update({authLvl: 30})
+```
+* MySQL:
+```sql
+UPDATE auth SET authlvl=30 WHERE uname='basic:login-of-the-user-to-make-root';
+```
+The test database has a stock user `xena` which has root access.
