@@ -1,20 +1,20 @@
 import setuptools
 from subprocess import Popen, PIPE
 
-with open("README.md", "r") as fh:
+with open('README.md', 'r') as fh:
     long_description = fh.read()
 
 setuptools.setup(
     name="tinode-chatbot",
     version=git_version(),
     author="Tinode Authors",
-    author_email="gene@tinode.co",
+    author_email="info@tinode.co",
     description="Tinode demo chatbot.",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/tinode/chat",
     packages=setuptools.find_packages(),
-    install_requires=['grpcio'],
+    install_requires=['grpcio>=1.15.0'],
     classifiers=(
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: Apache 2.0",
