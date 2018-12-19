@@ -51,14 +51,14 @@ All images are available at https://hub.docker.com/r/tinode/
 
 ### External config file
 
-The container comes with a built-in config file which can be customized with values from the environment variables (see [Supported environment variables](#supported_environment_variables) below). If changes are extensive it may be more convenient to replace the built-in config file with a custom one. In order to do that map the config file located on your host to container using [Docker volumes](https://docs.docker.com/storage/volumes/) (`--volume /users/jdoe/tinode.conf:/tinode.conf`) then instruct Tinode to use the new config instead of the default one (`--env EXT_CONFIG=/tinode.conf`):
+The container comes with a built-in config file which can be customized with values from the environment variables (see [Supported environment variables](#supported_environment_variables) below). If changes are extensive it may be more convenient to replace the built-in config file with a custom one. In that case map the config file located on your host (e.g. `/users/jdoe/new_tinode.conf`) to container (e.g. `/tinode.conf`) using [Docker volumes](https://docs.docker.com/storage/volumes/) `--volume /users/jdoe/new_tinode.conf:/tinode.conf` then instruct the container to use the new config `--env EXT_CONFIG=/tinode.conf`:
 ```
 $ docker run -p 6060:18080 -d --name tinode-srv --network tinode-net \
-	--volume /users/jdoe/tinode.conf:/tinode.conf \
-	--env EXT_CONFIG=/tinode.conf \
-	tinode/tinode-mysql:latest
+		--volume /users/jdoe/new_tinode.conf:/tinode.conf \
+		--env EXT_CONFIG=/tinode.conf \
+		tinode/tinode-mysql:latest
 ```
-If you set `EXT_CONFIG` all other environment variables except `RESET_DB` are ignored.
+If you set `EXT_CONFIG` all other environment variables except `RESET_DB`, `FCM_SENDER_ID`, `FCM_VAPID_KEY` are ignored.
 
 ### Resetting the database
 
@@ -77,7 +77,7 @@ then repeat step 4 adding `--env RESET_DB=true`.
 ### Enable push notifications
 
 Download and save the file with the [FCM service account credentials](https://cloud.google.com/docs/authentication/production).
-Assuming your Firebase credentials file is named `myproject-1234-firebase-adminsdk-abc12-abcdef012345.json` and it's saved at `/Users/jdoe/`, sender ID is `141421356237`, and VAPID key (a.k.a. "Web Push certificates") is `83_OrSoRandomLookingCharacters`, start the container with the following parameters (using MySQL container as an example):
+Assuming your Firebase credentials file is named `myproject-1234-firebase-adminsdk-abc12-abcdef012345.json` and it's saved at `/Users/jdoe/`, your Sender ID is `141421356237`, and VAPID key (a.k.a. "Web Push certificates") is `83_OrSoRandomLookingCharacters`, start the container with the following parameters (using MySQL container as an example):
 
 ```
 $ docker run -p 6060:18080 -d --name tinode-srv --network tinode-net \
@@ -108,15 +108,16 @@ You can specify the following environment variables when issuing `docker run` co
 | `AWS_S3_BUCKET` | string |  | Name of the AWS S3 bucket when using `s3` media handler |
 | `AWS_SECRET_ACCESS_KEY` | string |  | AWS [Secret Access Key](https://aws.amazon.com/blogs/security/wheres-my-secret-access-key/) when using `s3` media handler |
 | `DEBUG_EMAIL_VERIFICATION_CODE` | string |  | Enable dummy email verification code, e.g. `123456`. Disabled by default (empty string). |
+| `EXT_CONFIG` | string |  | Path to external config file to use instead of the built-in one. If this parameter is used all other variables except `RESET_DB`, `FCM_SENDER_ID`, `FCM_VAPID_KEY` are ignored. |
 | `FCM_CRED_FILE` | string |  | Path to json file with FCM server-side service account credentials which will be used to send push notifications. |
 | `FCM_SENDER_ID` | string |  | FCM sender ID for receiving push notifications in the web client |
 | `FCM_VAPID_KEY` | string |  | Also called 'Web Client certificate' in the FCM console. Required by the web client to receive push notifications. |
 | `FCM_INCLUDE_ANDROID_NOTIFICATION` | boolean | true | If true, pushes a data + notification message, otherwise a data-only message. [More info](https://firebase.google.com/docs/cloud-messaging/concept-options). |
 | `MEDIA_HANDLER` | string | `fs` | Handler of large files, either `fs` or `s3` |
 | `MYSQL_DSN` | string | `'root@tcp(mysql)/tinode'` | MySQL [DSN](https://github.com/go-sql-driver/mysql#dsn-data-source-name). |
-| `PLUGIN_PYTHON_CHAT_BOT_ENABLED` | bool | `false` | Enable calling into the plugin provided by Python chatbot | 
+| `PLUGIN_PYTHON_CHAT_BOT_ENABLED` | bool | `false` | Enable calling into the plugin provided by Python chatbot |
 | `RESET_DB` | bool | `false` | Drop and recreate the database. |
-| `SMTP_DOMAINS` | string | `[]` | White list of email domains; when non-empty accept emails from these domains only  (email verification). | 
+| `SMTP_DOMAINS` | string | `[]` | White list of email domains; when non-empty accept emails from these domains only  (email verification). |
 | `SMTP_HOST_URL` | string | `'http://localhost:6060/'` | URL of the host where the webapp is running (email verification). |
 | `SMTP_PASSWORD` | string |  | Password to use for authentication with the SMTP server (email verification). |
 | `SMTP_PORT` | number |  | Port number of the SMTP server to use for sending verification emails, e.g. `25` or `587`. |
@@ -125,7 +126,6 @@ You can specify the following environment variables when issuing `docker run` co
 | `TLS_CONTACT_ADDRESS` | string |  | Optional email to use as contact for [LetsEncrypt](https://letsencrypt.org/) certificates, e.g. `jdoe@example.com`. |
 | `TLS_DOMAIN_NAME` | string |  | If non-empty, enables TLS (http**s**) and configures domain name of your container, e.g. `www.example.com`. In order for TLS to work you have to expose your HTTPS port to the Internet and correctly configure DNS. It WILL FAIL with `localhost` or unroutable IPs. |
 | `UID_ENCRYPTION_KEY` | string | `la6YsO+bNX/+XIkOqc5Svw==` | base64-encoded 16 random bytes used as an encryption key for user IDs. |
-| `EXT_CONFIG` | string |  | Path to external config file to use instead of built-in one. If this parameter is used all other variables except `RESET_DB` are ignored. |
 
 A convenient way to generate a desired number of random bytes and base64-encode them on Linux and Mac:
 ```

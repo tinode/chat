@@ -69,12 +69,10 @@ ENV FCM_PUSH_ENABLED=false
 # Enable Android-specific notifications by default.
 ENV FCM_INCLUDE_ANDROID_NOTIFICATION=true
 
-# Install root certificates. Needed for email validator to work
-# with the TLS SMTP servers like Gmail.
-RUN apk update && apk add --no-cache ca-certificates
-
-# Adding bash and grep as they are used here.
-RUN apk add --no-cache bash grep
+# Install root certificates, they are needed for email validator to work
+# with the TLS SMTP servers like Gmail. Also add bash and grep.
+RUN apk update && \
+	apk add --no-cache ca-certificates bash grep
 
 WORKDIR /opt/tinode
 
