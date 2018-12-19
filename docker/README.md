@@ -49,6 +49,17 @@ All images are available at https://hub.docker.com/r/tinode/
 
 ## Optional
 
+### External config file
+
+The container comes with a built-in config file which can be customized with values from the environment variables (see [Supported environment variables](#supported_environment_variables) below). If changes are extensive it may be more convenient to replace the built-in config file with a custom one. In order to do that map the config file located on your host to container using [Docker volumes](https://docs.docker.com/storage/volumes/) (`--volume /users/jdoe/tinode.conf:/tinode.conf`) then instruct Tinode to use the new config instead of the default one (`--env EXT_CONFIG=/tinode.conf`):
+```
+$ docker run -p 6060:18080 -d --name tinode-srv --network tinode-net \
+	--volume /users/jdoe/tinode.conf:/tinode.conf \
+	--env EXT_CONFIG=/tinode.conf \
+	tinode/tinode-mysql:latest
+```
+If you set `EXT_CONFIG` all other environment variables except `RESET_DB` are ignored.
+
 ### Resetting the database
 
 The database is initialized or re-initialized when either one of the following conditions is true:
@@ -105,6 +116,7 @@ You can specify the following environment variables when issuing `docker run` co
 | `MYSQL_DSN` | string | `'root@tcp(mysql)/tinode'` | MySQL [DSN](https://github.com/go-sql-driver/mysql#dsn-data-source-name). |
 | `PLUGIN_PYTHON_CHAT_BOT_ENABLED` | bool | `false` | Enable calling into the plugin provided by Python chatbot | 
 | `RESET_DB` | bool | `false` | Drop and recreate the database. |
+| `SMTP_DOMAINS` | string | `[]` | White list of email domains; when non-empty accept emails from these domains only  (email verification). | 
 | `SMTP_HOST_URL` | string | `'http://localhost:6060/'` | URL of the host where the webapp is running (email verification). |
 | `SMTP_PASSWORD` | string |  | Password to use for authentication with the SMTP server (email verification). |
 | `SMTP_PORT` | number |  | Port number of the SMTP server to use for sending verification emails, e.g. `25` or `587`. |
@@ -113,6 +125,7 @@ You can specify the following environment variables when issuing `docker run` co
 | `TLS_CONTACT_ADDRESS` | string |  | Optional email to use as contact for [LetsEncrypt](https://letsencrypt.org/) certificates, e.g. `jdoe@example.com`. |
 | `TLS_DOMAIN_NAME` | string |  | If non-empty, enables TLS (http**s**) and configures domain name of your container, e.g. `www.example.com`. In order for TLS to work you have to expose your HTTPS port to the Internet and correctly configure DNS. It WILL FAIL with `localhost` or unroutable IPs. |
 | `UID_ENCRYPTION_KEY` | string | `la6YsO+bNX/+XIkOqc5Svw==` | base64-encoded 16 random bytes used as an encryption key for user IDs. |
+| `EXT_CONFIG` | string |  | Path to external config file to use instead of built-in one. If this parameter is used all other variables except `RESET_DB` are ignored. |
 
 A convenient way to generate a desired number of random bytes and base64-encode them on Linux and Mac:
 ```
