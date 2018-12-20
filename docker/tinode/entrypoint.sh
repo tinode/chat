@@ -32,12 +32,12 @@ else
 
 	# Generate a new 'working.config' from template and environment
 	while IFS='' read -r line || [[ -n $line ]] ; do
-	    while [[ "$line" =~ (\$[A-Z_][A-Z_0-9]*) ]] ; do
-	        LHS=${BASH_REMATCH[1]}
-	        RHS="$(eval echo "\"$LHS\"")"
-	        line=${line//$LHS/$RHS}
-	    done
-	    echo "$line" >> working.config
+		while [[ "$line" =~ (\$[A-Z_][A-Z_0-9]*) ]] ; do
+			LHS=${BASH_REMATCH[1]}
+			RHS="$(eval echo "\"$LHS\"")"
+			line=${line//$LHS/$RHS}
+		done
+		echo "$line" >> working.config
 	done < config.template
 fi
 
