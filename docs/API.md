@@ -372,7 +372,7 @@ Tinode supports mobile push notifications though compile-time plugins. The chann
 Topics and subscriptions have `public` and `private` fields. Generally, the fields are application-defined. The server does not enforce any particular structure of these fields except for `fnd` topic. At the same time, client software should use the same format for interoperability reasons.
 
 ### Public
-The format of the `public` field is expected to be a [vCard](https://en.wikipedia.org/wiki/VCard) although only `fn` and `photo` fields are currently used by client software:
+The format of the `public` field in group and peer to peer topics is expected to be a [vCard](https://en.wikipedia.org/wiki/VCard) although only `fn` and `photo` fields are currently used by client software:
 
 ```js
 vcard: {
@@ -411,9 +411,11 @@ vcard: {
 }
 ```
 
+The `fnd` topic expects `public` to be a string representing a [search query](#query-language)).
+
 ### Private
 
-The format of the `private` field is expected to be a dictionary. The following fields are currently defined:
+The format of the `private` field in group and peer to peer topics is expected to be a dictionary. The following fields are currently defined:
 ```js
 private: {
   comment: "some comment", // string, optional user comment about a topic or a peer user
@@ -424,6 +426,7 @@ private: {
 
 Although it's not yet enforced, custom fields should start with an `x-` followed by the application name, e.g. `x-myapp-value: "abc"`. The fields should contain primitive types only, i.e. `string`, `boolean`, `number`, or `null`.
 
+The `fnd` topic expects `private` to be a string representing a [search query](#query-language)).
 
 ## Format of Content
 
@@ -624,9 +627,9 @@ Server responds to a `{login}` packet with a `{ctrl}` message. The `params` of t
 #### `{sub}`
 
 The `{sub}` packet serves the following functions:
- * creating a topic
- * subscribing user to a topic
- * attaching session to a topic
+ * creating a new topic
+ * subscribing user to an existing topic
+ * attaching session to a previously subscribed topic
  * fetching topic data
 
 User creates a new group topic by sending `{sub}` packet with the `topic` field set to `"new"`. Server will create a topic and respond back to session with the name of the newly created topic.
@@ -641,7 +644,7 @@ Joining (attaching to) a topic means for the session to start consuming content 
 
 Server replies to the `{sub}` with a `{ctrl}`.
 
-The `{sub}` message may include a `get` and `browse` fields which mirror `what` and `browse` fields of a {get} message. If included, server will treat them as a subsequent `{get}` message on the same topic. In that case the reply may also include `{meta}` and `{data}` messages.
+The `{sub}` message may include a `get` and `set` fields which mirror `{get}` and `{set}` messages. If included, server will treat them as a subsequent `{set}` and `{get}` messages on the same topic. They `get` is set the reply may include `{meta}` and `{data}` messages.
 
 
 ```js

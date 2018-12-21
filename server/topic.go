@@ -814,9 +814,10 @@ func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin, sendDesc bool) error {
 //
 //	h 		- hub
 //	sess 	- originating session
-//  pktId 	- originating packet Id
+//	asUid 	- id of the user making the request
+//	asLvl	- access level of the user making the request
+//	pktID	- id of {sub} packet
 //	want	- requested access mode
-//	info 	- explanation info given by the requester
 //	private	- private value to assign to the subscription
 // Handle these cases:
 // A. User is trying to subscribe for the first time (no subscription)
@@ -957,8 +958,8 @@ func (t *Topic) requestSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Le
 		}
 
 		// Save changes to DB
+		update := map[string]interface{}{}
 		if userData.modeWant != oldWant || userData.modeGiven != oldGiven {
-			update := map[string]interface{}{}
 			if userData.modeWant != oldWant {
 				update["ModeWant"] = userData.modeWant
 			}
