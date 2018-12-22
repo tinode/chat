@@ -170,13 +170,13 @@ def init_server(listen):
 
     return server
 
-def init_client(addr, schema, secret, cookie_file_name):
+def init_client(addr, schema, secret, cookie_file_name, secure=False):
     print("Connecting to server at", addr)
 
-    channel = grpc.insecure_channel(addr)
-    stub = pbx.NodeStub(channel)
+    channel = grpc.secure_channel(addr, grpc.ssl_channel_credentials()) if secure else grpc.insecure_channel(addr)
     # Call the server
-    stream = stub.MessageLoop(client_generate())
+    stream = pbx.NodeStub(channel).MessageLoop(client_generate())
+
     # Session initialization sequence: {hi}, {login}, {sub topic='me'}
     client_post(hello())
     client_post(login(cookie_file_name, schema, secret))
@@ -301,7 +301,7 @@ def run(args):
         server = init_server(args.listen)
 
         # Initialize and launch client
-        client = init_client(args.host, schema, secret, args.login_cookie)
+        client = init_client(args.host, schema, secret, args.login_cookie, args.ssl)
 
         # Setup closure for graceful termination
         def exit_gracefully(signo, stack_frame):
@@ -343,6 +343,7 @@ if __name__ == '__main__':
     parser.add_argument('--login-token', help='login using token authentication')
     parser.add_argument('--login-cookie', default='.tn-cookie', help='read credentials from the provided cookie file')
     parser.add_argument('--quotes', default='quotes.txt', help='file with messages for the chatbot to use, one message per line')
+    parser.add_argument('--ssl', action='store_true', help='connect to server over secure connection')
     args = parser.parse_args()
 
     run(args)

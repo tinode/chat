@@ -475,12 +475,12 @@ def gen_message(schema, secret):
                 print_prompt = False
             time.sleep(0.1)
 
-def run(addr, schema, secret):
+def run(addr, schema, secret, secure=False):
     try:
-        channel = grpc.insecure_channel(addr)
-        stub = pbx.NodeStub(channel)
+        # Create secure channel with default credentials.
+        channel = grpc.secure_channel(addr, grpc.ssl_channel_credentials()) if secure else grpc.insecure_channel(addr)
         # Call the server
-        stream = stub.MessageLoop(gen_message(schema, secret))
+        stream = pbx.NodeStub(channel).MessageLoop(gen_message(schema, secret))
 
         # Read server responses
         for msg in stream:
@@ -565,6 +565,7 @@ if __name__ == '__main__':
     parser.add_argument('--login-token', help='login using token authentication')
     parser.add_argument('--login-cookie', action='store_true', help='read token from cookie file and use it for authentication')
     parser.add_argument('--no-login', action='store_true', help='do not login even if cookie file is present')
+    parser.add_argument('--ssl', action='store_true', help='connect to server over secure connection')
     args = parser.parse_args()
 
     stdoutln("Server '" + args.host + "'")
@@ -594,4 +595,4 @@ if __name__ == '__main__':
             except Exception as err:
                 print("Failed to read authentication cookie", err)
 
-    run(args.host, schema, secret)
+    run(args.host, schema, secret, args.ssl)
