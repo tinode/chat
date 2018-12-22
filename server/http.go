@@ -53,6 +53,26 @@ type tlsAutocertConfig struct {
 	Email string `json:"email"`
 }
 
+func getTLSConfig(config *tlsConfig) (*tls.Config, error) {
+	// If autocert is provided, use it.
+	if config.Autocert != nil {
+		certManager := autocert.Manager{
+			Prompt:     autocert.AcceptTOS,
+			HostPolicy: autocert.HostWhitelist(config.Autocert.Domains...),
+			Cache:      autocert.DirCache(config.Autocert.CertCache),
+			Email:      config.Autocert.Email,
+		}
+		return &tls.Config{GetCertificate: certManager.GetCertificate}, nil
+	}
+
+	// Otherwise try to use static keys.
+	cert, err := tls.LoadX509KeyPair(config.CertFile, config.KeyFile)
+	if err != nil {
+		return nil, err
+	}
+	return &tls.Config{Certificates: []tls.Certificate{cert}}, nil
+}
+
 func listenAndServe(addr string, mux *http.ServeMux, tlsEnabled bool, jsconfig string, stop <-chan bool) error {
 	var tlsConfig tlsConfig
 
@@ -77,35 +97,22 @@ func listenAndServe(addr string, mux *http.ServeMux, tlsEnabled bool, jsconfig s
 			globals.tlsStrictMaxAge = strconv.Itoa(tlsConfig.StrictMaxAge)
 		}
 
-		// If port is not specified, use default https port (443),
-		// otherwise it will default to 80
-		if server.Addr == "" {
-			server.Addr = ":https"
-		}
-
-		server.TLSConfig = &tls.Config{}
-		if tlsConfig.Autocert != nil {
-			certManager := autocert.Manager{
-				Prompt:     autocert.AcceptTOS,
-				HostPolicy: autocert.HostWhitelist(tlsConfig.Autocert.Domains...),
-				Cache:      autocert.DirCache(tlsConfig.Autocert.CertCache),
-				Email:      tlsConfig.Autocert.Email,
-			}
-
-			server.TLSConfig.GetCertificate = certManager.GetCertificate
-			if tlsConfig.CertFile != "" || tlsConfig.KeyFile != "" {
-				log.Println("HTTP server: using autocert, static cert and key files are ignored")
-				tlsConfig.CertFile = ""
-				tlsConfig.KeyFile = ""
-			}
-		} else if tlsConfig.CertFile == "" || tlsConfig.KeyFile == "" {
-			return errors.New("HTTP server: missing certificate or key file names")
+		// Configure TLS certificate, if necessary.
+		var err error
+		if server.TLSConfig, err = getTLSConfig(&tlsConfig); err != nil {
+			return err
 		}
 	}
 
 	go func() {
 		var err error
-		if tlsEnabled || tlsConfig.Enabled {
+		if server.TLSConfig != nil {
+			// If port is not specified, use default https port (443),
+			// otherwise it will default to 80
+			if server.Addr == "" {
+				server.Addr = ":https"
+			}
+
 			if tlsConfig.RedirectHTTP != "" {
 				log.Printf("Redirecting connections from HTTP at [%s] to HTTPS at [%s]",
 					tlsConfig.RedirectHTTP, server.Addr)
@@ -115,7 +122,7 @@ func listenAndServe(addr string, mux *http.ServeMux, tlsEnabled bool, jsconfig s
 			}
 
 			log.Printf("Listening for client HTTPS connections on [%s]", server.Addr)
-			err = server.ListenAndServeTLS(tlsConfig.CertFile, tlsConfig.KeyFile)
+			err = server.ListenAndServeTLS("", "")
 		} else {
 			log.Printf("Listening for client HTTP connections on [%s]", server.Addr)
 			err = server.ListenAndServe()
