@@ -761,7 +761,7 @@ func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin, sendDesc bool) error {
 			mode = msgsub.Set.Sub.Mode
 		}
 
-		if msgsub.Set.Desc != nil && !isNullValue(msgsub.Set.Desc.Private) {
+		if msgsub.Set.Desc != nil {
 			private = msgsub.Set.Desc.Private
 		}
 	}
@@ -876,6 +876,9 @@ func (t *Topic) requestSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Le
 			}
 		}
 
+		if isNullValue(private) {
+			private = nil
+		}
 		userData.private = private
 
 		// Add subscription to database
@@ -959,13 +962,20 @@ func (t *Topic) requestSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Le
 
 		// Save changes to DB
 		update := map[string]interface{}{}
-		if userData.modeWant != oldWant || userData.modeGiven != oldGiven {
-			if userData.modeWant != oldWant {
-				update["ModeWant"] = userData.modeWant
-			}
-			if userData.modeGiven != oldGiven {
-				update["ModeGiven"] = userData.modeGiven
-			}
+		if isNullValue(private) {
+			update["Private"] = nil
+			userData.private = nil
+		} else if private != nil {
+			update["Private"] = private
+			userData.private = private
+		}
+		if userData.modeWant != oldWant {
+			update["ModeWant"] = userData.modeWant
+		}
+		if userData.modeGiven != oldGiven {
+			update["ModeGiven"] = userData.modeGiven
+		}
+		if len(update) > 0 {
 			if err := store.Subs.Update(t.name, asUid, update, false); err != nil {
 				sess.queueOut(ErrUnknown(pktID, toriginal, now))
 				return err
