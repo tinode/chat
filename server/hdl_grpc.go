@@ -10,12 +10,14 @@
 package main
 
 import (
+	"crypto/tls"
 	"io"
 	"log"
 	"net"
 
 	"github.com/tinode/chat/pbx"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 )
 
 type grpcNodeServer struct {
@@ -102,7 +104,7 @@ func grpcWrite(sess *Session, msg interface{}) error {
 	return nil
 }
 
-func serveGrpc(addr string) (*grpc.Server, error) {
+func serveGrpc(addr string, tlsConf *tls.Config) (*grpc.Server, error) {
 	if addr == "" {
 		return nil, nil
 	}
@@ -112,9 +114,16 @@ func serveGrpc(addr string) (*grpc.Server, error) {
 		return nil, err
 	}
 
-	srv := grpc.NewServer(grpc.MaxRecvMsgSize(int(globals.maxMessageSize)))
+	secure := ""
+	var opts []grpc.ServerOption
+	opts = append(opts, grpc.MaxRecvMsgSize(int(globals.maxMessageSize)))
+	if tlsConf != nil {
+		opts = append(opts, grpc.Creds(credentials.NewTLS(tlsConf)))
+		secure = " secure"
+	}
+	srv := grpc.NewServer(opts...)
 	pbx.RegisterNodeServer(srv, &grpcNodeServer{})
-	log.Printf("gRPC server is registered at [%s]", addr)
+	log.Printf("gRPC%s server is registered at [%s]", secure, addr)
 
 	go func() {
 		if err := srv.Serve(lis); err != nil {

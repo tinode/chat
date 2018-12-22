@@ -13,7 +13,6 @@ import (
 	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"log"
 	"net"
 	"net/http"
@@ -26,62 +25,9 @@ import (
 
 	"github.com/tinode/chat/server/store"
 	"github.com/tinode/chat/server/store/types"
-
-	"golang.org/x/crypto/acme/autocert"
 )
 
-type tlsConfig struct {
-	// Flag enabling TLS
-	Enabled bool `json:"enabled"`
-	// Listen on port 80 and redirect plain HTTP to HTTPS
-	RedirectHTTP string `json:"http_redirect"`
-	// Enable Strict-Transport-Security by setting max_age > 0
-	StrictMaxAge int `json:"strict_max_age"`
-	// ACME autocert config, e.g. letsencrypt.org
-	Autocert *tlsAutocertConfig `json:"autocert"`
-	// If Autocert is not defined, provide file names of static certificate and key
-	CertFile string `json:"cert_file"`
-	KeyFile  string `json:"key_file"`
-}
-
-type tlsAutocertConfig struct {
-	// Domains to support by autocert
-	Domains []string `json:"domains"`
-	// Name of directory where auto-certificates are cached, e.g. /etc/letsencrypt/live/your-domain-here
-	CertCache string `json:"cache"`
-	// Contact email for letsencrypt
-	Email string `json:"email"`
-}
-
-func getTLSConfig(config *tlsConfig) (*tls.Config, error) {
-	// If autocert is provided, use it.
-	if config.Autocert != nil {
-		certManager := autocert.Manager{
-			Prompt:     autocert.AcceptTOS,
-			HostPolicy: autocert.HostWhitelist(config.Autocert.Domains...),
-			Cache:      autocert.DirCache(config.Autocert.CertCache),
-			Email:      config.Autocert.Email,
-		}
-		return &tls.Config{GetCertificate: certManager.GetCertificate}, nil
-	}
-
-	// Otherwise try to use static keys.
-	cert, err := tls.LoadX509KeyPair(config.CertFile, config.KeyFile)
-	if err != nil {
-		return nil, err
-	}
-	return &tls.Config{Certificates: []tls.Certificate{cert}}, nil
-}
-
-func listenAndServe(addr string, mux *http.ServeMux, tlsEnabled bool, jsconfig string, stop <-chan bool) error {
-	var tlsConfig tlsConfig
-
-	if jsconfig != "" {
-		if err := json.Unmarshal([]byte(jsconfig), &tlsConfig); err != nil {
-			return errors.New("http: failed to parse tls_config: " + err.Error() + "(" + jsconfig + ")")
-		}
-	}
-
+func listenAndServe(addr string, mux *http.ServeMux, tlfConf *tls.Config, stop <-chan bool) error {
 	shuttingDown := false
 
 	httpdone := make(chan bool)
@@ -91,18 +37,7 @@ func listenAndServe(addr string, mux *http.ServeMux, tlsEnabled bool, jsconfig s
 		Handler: mux,
 	}
 
-	if tlsEnabled || tlsConfig.Enabled {
-
-		if tlsConfig.StrictMaxAge > 0 {
-			globals.tlsStrictMaxAge = strconv.Itoa(tlsConfig.StrictMaxAge)
-		}
-
-		// Configure TLS certificate, if necessary.
-		var err error
-		if server.TLSConfig, err = getTLSConfig(&tlsConfig); err != nil {
-			return err
-		}
-	}
+	server.TLSConfig = tlfConf
 
 	go func() {
 		var err error
@@ -113,12 +48,12 @@ func listenAndServe(addr string, mux *http.ServeMux, tlsEnabled bool, jsconfig s
 				server.Addr = ":https"
 			}
 
-			if tlsConfig.RedirectHTTP != "" {
+			if globals.tlsRedirectHTTP != "" {
 				log.Printf("Redirecting connections from HTTP at [%s] to HTTPS at [%s]",
-					tlsConfig.RedirectHTTP, server.Addr)
+					globals.tlsRedirectHTTP, server.Addr)
 
 				// This is a second HTTP server listenning on a different port.
-				go http.ListenAndServe(tlsConfig.RedirectHTTP, tlsRedirect(addr))
+				go http.ListenAndServe(globals.tlsRedirectHTTP, tlsRedirect(addr))
 			}
 
 			log.Printf("Listening for client HTTPS connections on [%s]", server.Addr)

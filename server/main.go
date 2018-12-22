@@ -132,6 +132,8 @@ var globals struct {
 	// Add Strict-Transport-Security to headers, the value signifies age.
 	// Empty string "" turns it off
 	tlsStrictMaxAge string
+	// Listen for connections on this address:port and redirect them to HTTPS port.
+	tlsRedirectHTTP string
 	// Maximum message size allowed from peer.
 	maxMessageSize int64
 	// Maximum number of group topic subscribers.
@@ -414,6 +416,11 @@ func main() {
 		globals.cluster.start()
 	}
 
+	tlsConfig, err := parseTLSConfig(*tlsEnabled, config.TLS)
+	if err != nil {
+		log.Fatalln(err)
+	}
+
 	// Intialize plugins
 	pluginsInit(config.Plugin)
 
@@ -421,7 +428,7 @@ func main() {
 	if *listenGrpc == "" {
 		*listenGrpc = config.GrpcListen
 	}
-	if globals.grpcServer, err = serveGrpc(*listenGrpc); err != nil {
+	if globals.grpcServer, err = serveGrpc(*listenGrpc, tlsConfig); err != nil {
 		log.Fatal(err)
 	}
 
@@ -490,7 +497,7 @@ func main() {
 		log.Printf("Debug variables exposed at '%s'", *expvarPath)
 	}
 
-	if err = listenAndServe(config.Listen, mux, *tlsEnabled, string(config.TLS), signalHandler()); err != nil {
+	if err = listenAndServe(config.Listen, mux, tlsConfig, signalHandler()); err != nil {
 		log.Fatal(err)
 	}
 }
