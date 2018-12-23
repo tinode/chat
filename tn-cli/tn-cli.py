@@ -7,6 +7,7 @@ import argparse
 import base64
 import grpc
 import json
+import os
 import pkg_resources
 import platform
 try:
@@ -32,6 +33,9 @@ GRPC_VERSION = pkg_resources.get_distribution("grpcio").version
 
 # Dictionary wich contains lambdas to be executed when server response is received
 onCompletion = {}
+
+# This is needed for gRPC ssl to work correctly.
+os.environ["GRPC_SSL_CIPHER_SUITES"] = "HIGH+ECDSA"
 
 # Saved topic: default topic name to make keyboard input easier
 SavedTopic = None
@@ -475,10 +479,16 @@ def gen_message(schema, secret):
                 print_prompt = False
             time.sleep(0.1)
 
-def run(addr, schema, secret, secure=False):
+def run(addr, schema, secret, secure, ssl_host):
     try:
         # Create secure channel with default credentials.
-        channel = grpc.secure_channel(addr, grpc.ssl_channel_credentials()) if secure else grpc.insecure_channel(addr)
+        channel = None
+        if secure:
+            opts = (('grpc.ssl_target_name_override', ssl_host),) if ssl_host else None
+            channel = grpc.secure_channel(addr, grpc.ssl_channel_credentials(), opts)
+        else:
+            channel = grpc.insecure_channel(addr)
+
         # Call the server
         stream = pbx.NodeStub(channel).MessageLoop(gen_message(schema, secret))
 
@@ -561,14 +571,16 @@ if __name__ == '__main__':
     print(purpose)
     parser = argparse.ArgumentParser(description=purpose)
     parser.add_argument('--host', default='localhost:6061', help='address of Tinode server')
+    parser.add_argument('--ssl', action='store_true', help='connect to server over secure connection')
+    parser.add_argument('--ssl-host', help='SSL host name to use instead of default (useful for connecting to localhost)')
     parser.add_argument('--login-basic', help='login using basic authentication username:password')
     parser.add_argument('--login-token', help='login using token authentication')
     parser.add_argument('--login-cookie', action='store_true', help='read token from cookie file and use it for authentication')
     parser.add_argument('--no-login', action='store_true', help='do not login even if cookie file is present')
-    parser.add_argument('--ssl', action='store_true', help='connect to server over secure connection')
     args = parser.parse_args()
 
-    stdoutln("Server '" + args.host + "'")
+    print("Secure server" if args.ssl else "Server", "at '"+args.host+"'",
+        "SNI="+args.ssl_host if args.ssl_host else "")
 
     schema = None
     secret = None
@@ -595,4 +607,4 @@ if __name__ == '__main__':
             except Exception as err:
                 print("Failed to read authentication cookie", err)
 
-    run(args.host, schema, secret, args.ssl)
+    run(args.host, schema, secret, args.ssl, args.ssl_host)
