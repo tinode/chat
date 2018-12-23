@@ -35,16 +35,16 @@ The client takes optional parameters:
 
 If multiple `login-XYZ` are provided, `login-cookie` is considered first, then `login-token` then `login-basic`. Authentication with token (and cookie) is much faster than with the username-password pair.
 
-## Connecting to secure server
+## Connecting to secure (HTTPS) server
 
-If the server is secure, i.e. running as `httpS://tinode.example.com/`, add the `--ssl` option.
+If the server is configured to use TLS, i.e. running as `httpS://my-server.example.com/`, gRPC endpoint also uses the same SSL certificate. In that case add the `--ssl` option.
 
-If you want to connect to the secure server over a local network or under a different name i.e. as `localhost` instead of  `tinode.example.com` in this example, you must specify the SSL domain name to use, otherwise the server will not be able to find the right SSL certificate:
+If you want to connect to the secure gRPC endpoint over a local network or under a different name i.e. as `localhost` instead of  `my-server.example.com` in this example, you must specify the SSL domain name to use, otherwise the server will not be able to find the right SSL certificate:
 ```
-python tn-cli.py --host=localhost:6001 --ssl --ssl-host=tinode.example.com
+python tn-cli.py --host=localhost:6001 --ssl --ssl-host=my-server.example.com
 ```
-
+The `--ssl-host` option makes the connection susceptible to the [Man-in-the-middle attack](https://en.wikipedia.org/wiki/Man-in-the-middle_attack), so don't do it over public networks.
 
 ## Crash on shutdown
 
-Python 3 sometimes crashes on shutdown with a message `Fatal Python error: PyImport_GetModuleDict: no module dictionary!`. That happens because Python is buggy: https://bugs.python.org/issue26153
+Python 3.6 sometimes crashes on shutdown with a message `Fatal Python error: PyImport_GetModuleDict: no module dictionary!`. That happens because Python is buggy: https://bugs.python.org/issue26153

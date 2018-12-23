@@ -85,9 +85,9 @@ You can use cookie file to store credentials. Sample cookie files are provided a
 python chatbot.py
 ```
 
-If the server is secure, i.e. running as `https://tinode.example.com/`, add the `--ssl` option when starting the chatbot. If you want the chatbot to connect to the secure server over a local network or under a different name rather than the `tinode.example.com`, for instance as `localhost`, you must specify the SSL domain name to use, otherwise the server will not be able to find the right SSL certificate:
+If the server is configured to use TLS, i.e. running as `httpS://my-server.example.com/`, the gRPC endpoint also uses the same SSL certificate. In that case add the `--ssl` option when starting the chatbot. If you want the chatbot to connect to the secure server over a local network or under a different name rather than the `my-server.example.com`, for instance as `localhost`, you must specify the SSL domain name to use, otherwise the server will not be able to find the right SSL certificate:
 ```
-python chatbot.py --host=localhost:6001 --ssl --ssl-host=tinode.example.com
+python chatbot.py --host=localhost:6001 --ssl --ssl-host=my-server.example.com
 ```
 
 Quotes are read from `quotes.txt` by default. The file is plain text with one quote per line.
