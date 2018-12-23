@@ -12,10 +12,6 @@ LABEL version=$VERSION
 RUN mkdir -p /usr/src/bot
 WORKDIR /usr/src/bot
 
-# Install root certificates, they are needed for secure gRPC.
-RUN apk update && \
-	apk add --no-cache ca-certificates
-
 RUN pip install --no-cache-dir -q tinode-grpc
 
 # Get tarball with the chatbot code and data.
