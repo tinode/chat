@@ -78,9 +78,9 @@ nohup python chatbot.py --login-basic=alice:alice123 &
 ```
 Run `python chatbot.py -h` for more options.
 
-If you are using python 2.7, keep in mind that `condition.wait()` [is forever buggy](https://bugs.python.org/issue8844). As a consequence of this bug the bot cannot be terminated with a SIGINT. It has to be stopped with a SIGKILL.  
+If you are using python 2, keep in mind that `condition.wait()` [is forever buggy](https://bugs.python.org/issue8844). As a consequence of this bug the bot cannot be terminated with a SIGINT. It has to be stopped with a SIGKILL.
 
-You can use cookie file to store credentials. Sample cookie files are provided as `basic-cookie.sample` and `token-cookie.sample`. Once authenticated the bot will attempt to store the token in the cookie file, `.tn-cookie` by default. If you have a cookie file with the default name, you can run the bot with no parameters:
+You can use cookie file to store credentials. Sample cookie files are provided as `basic-cookie.sample` and `token-cookie.sample`. Once authenticated the bot will store the token in the cookie file, `.tn-cookie` by default. If you have a cookie file with the desired credentials, you can run the bot with no parameters:
 ```
 python chatbot.py
 ```

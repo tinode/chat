@@ -199,7 +199,7 @@ def setMsg(id, topic, user, fn, photo, public, private, auth, anon, mode, tags):
             desc=pb.SetDesc(default_acs=pb.DefaultAcsMode(auth=auth, anon=anon),
                 public=public, private=private),
         sub=pb.SetSub(user_id=user, mode=mode),
-        tags=tags)), on_behalf_of=default_user)
+        tags=tags.split(",") if tags else None)), on_behalf_of=default_user)
 
 
 def delMsg(id, what, topic, user, msglist, hard):
