@@ -767,7 +767,7 @@ func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin, sendDesc bool) error {
 	}
 
 	// Create new subscription or modify an existing one.
-	if err := t.requestSub(h, sreg.sess, asUid, asLvl, sreg.pkt.id, mode, private); err != nil {
+	if _, err := t.requestSub(h, sreg.sess, asUid, asLvl, sreg.pkt.id, mode, private); err != nil {
 		return err
 	}
 
@@ -826,10 +826,10 @@ func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin, sendDesc bool) error {
 // D. User is already subscribed, changing modeWant
 // E. User is accepting ownership transfer (requesting ownership transfer is not permitted)
 func (t *Topic) requestSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Level,
-	pktID, want string, private interface{}) error {
+	pktID, want string, private interface{}) (bool, error) {
 
 	now := types.TimeNow()
-
+	changed := false
 	toriginal := t.original(asUid)
 
 	// Access mode values as they were before this request was processed.
@@ -841,7 +841,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Le
 	if want != "" {
 		if err := modeWant.UnmarshalText([]byte(want)); err != nil {
 			sess.queueOut(ErrMalformed(pktID, toriginal, now))
-			return err
+			return changed, err
 		}
 	}
 
@@ -853,7 +853,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Le
 		// Check if the max number of subscriptions is already reached.
 		if t.cat == types.TopicCatGrp && t.subsCount() >= globals.maxSubscriberCount {
 			sess.queueOut(ErrPolicy(pktID, toriginal, now))
-			return errors.New("max subscription count exceeded")
+			return changed, errors.New("max subscription count exceeded")
 		}
 
 		if t.cat == types.TopicCatP2P {
@@ -892,8 +892,10 @@ func (t *Topic) requestSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Le
 
 		if err := store.Subs.Create(sub); err != nil {
 			sess.queueOut(ErrUnknown(pktID, toriginal, now))
-			return err
+			return changed, err
 		}
+
+		changed = true
 
 		// Notify plugins of a new subscription
 		pluginSubscription(sub, plgActCreate)
@@ -921,7 +923,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Le
 				// Make sure the current owner cannot unset the owner flag or ban himself
 				if t.owner == asUid && (!modeWant.IsOwner() || !modeWant.IsJoiner()) {
 					sess.queueOut(ErrPermissionDenied(pktID, toriginal, now))
-					return errors.New("cannot unset ownership")
+					return changed, errors.New("cannot unset ownership")
 				}
 
 				// Ownership transfer
@@ -935,7 +937,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Le
 			} else if modeWant.IsOwner() {
 				// Ownership transfer can only be initiated by the owner
 				sess.queueOut(ErrPermissionDenied(pktID, toriginal, now))
-				return errors.New("non-owner cannot request ownership transfer")
+				return changed, errors.New("non-owner cannot request ownership transfer")
 			} else if t.cat == types.TopicCatP2P {
 				// For P2P topics ignore requests for 'D'. Otherwise it will generate a useless announcement
 				modeWant = (modeWant & types.ModeCP2P) | types.ModeApprove
@@ -978,8 +980,9 @@ func (t *Topic) requestSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Le
 		if len(update) > 0 {
 			if err := store.Subs.Update(t.name, asUid, update, false); err != nil {
 				sess.queueOut(ErrUnknown(pktID, toriginal, now))
-				return err
+				return changed, err
 			}
+			changed = true
 		}
 
 		// No transactions in RethinkDB, but two owners are better than none
@@ -992,10 +995,10 @@ func (t *Topic) requestSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Le
 				map[string]interface{}{
 					"ModeWant":  oldOwnerData.modeWant,
 					"ModeGiven": oldOwnerData.modeGiven}, false); err != nil {
-				return err
+				return changed, err
 			}
 			if err := store.Topics.OwnerChange(t.name, asUid, t.owner); err != nil {
-				return err
+				return changed, err
 			}
 			t.perUser[t.owner] = oldOwnerData
 			t.owner = asUid
@@ -1016,11 +1019,11 @@ func (t *Topic) requestSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Le
 	if !userData.modeWant.IsJoiner() {
 		t.evictUser(asUid, false, "")
 		// The callee will send NoErrOK
-		return nil
+		return changed, nil
 	} else if !userData.modeGiven.IsJoiner() {
 		// User was banned
 		sess.queueOut(ErrPermissionDenied(pktID, toriginal, now))
-		return errors.New("topic access denied; user is banned")
+		return changed, errors.New("topic access denied; user is banned")
 	}
 
 	// If this is a new subscription or the topic is being un-muted, notify after applying the changes.
@@ -1058,7 +1061,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Le
 		}
 	}
 
-	return nil
+	return changed, nil
 }
 
 // approveSub processes a request to initiate an invite or approve a subscription request from another user:
@@ -1712,28 +1715,36 @@ func (t *Topic) replySetSub(h *Hub, sess *Session, pkt *ClientComMessage) error 
 	}
 
 	var err error
+	changed := false
 	if target == asUid {
 		// Request new subscription or modify own subscription
-		err = t.requestSub(h, sess, asUid, asLvl, pkt.id, set.Sub.Mode, nil)
+		changed, err = t.requestSub(h, sess, asUid, asLvl, pkt.id, set.Sub.Mode, nil)
 	} else {
 		// Request to approve/change someone's subscription
 		err = t.approveSub(h, sess, asUid, target, set)
+		changed = true
 	}
 	if err != nil {
 		return err
 	}
 
-	resp := NoErr(pkt.id, toriginal, now)
-	// Report resulting access mode.
-	pud := t.perUser[target]
-	params := map[string]interface{}{"acs": MsgAccessMode{
-		Given: pud.modeGiven.String(),
-		Want:  pud.modeWant.String(),
-		Mode:  (pud.modeGiven & pud.modeWant).String()}}
-	if target != asUid {
-		params["user"] = target.UserId()
+	var resp *ServerComMessage
+	if changed {
+		resp = NoErr(pkt.id, toriginal, now)
+		// Report resulting access mode.
+		pud := t.perUser[target]
+		params := map[string]interface{}{"acs": MsgAccessMode{
+			Given: pud.modeGiven.String(),
+			Want:  pud.modeWant.String(),
+			Mode:  (pud.modeGiven & pud.modeWant).String()}}
+		if target != asUid {
+			params["user"] = target.UserId()
+		}
+		resp.Ctrl.Params = params
+	} else {
+		resp = InfoNotModified(pkt.id, toriginal, now)
 	}
-	resp.Ctrl.Params = params
+
 	sess.queueOut(resp)
 
 	return nil

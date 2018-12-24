@@ -534,11 +534,15 @@ func pbSetDescSerialize(in *MsgSetDesc) *pbx.SetDesc {
 		return nil
 	}
 
-	return &pbx.SetDesc{
-		DefaultAcs: pbDefaultAcsSerialize(in.DefaultAcs),
-		Public:     interfaceToBytes(in.Public),
-		Private:    interfaceToBytes(in.Private),
+	if in.DefaultAcs != nil || in.Public != nil || in.Private != nil {
+		return &pbx.SetDesc{
+			DefaultAcs: pbDefaultAcsSerialize(in.DefaultAcs),
+			Public:     interfaceToBytes(in.Public),
+			Private:    interfaceToBytes(in.Private),
+		}
 	}
+
+	return nil
 }
 
 func pbSetDescDeserialize(in *pbx.SetDesc) *MsgSetDesc {
@@ -546,11 +550,19 @@ func pbSetDescDeserialize(in *pbx.SetDesc) *MsgSetDesc {
 		return nil
 	}
 
-	return &MsgSetDesc{
-		DefaultAcs: pbDefaultAcsDeserialize(in.GetDefaultAcs()),
-		Public:     bytesToInterface(in.GetPublic()),
-		Private:    bytesToInterface(in.GetPrivate()),
+	defacs := pbDefaultAcsDeserialize(in.GetDefaultAcs())
+	public := in.GetPublic()
+	private := in.GetPrivate()
+
+	if defacs != nil || public != nil || private != nil {
+		return &MsgSetDesc{
+			DefaultAcs: defacs,
+			Public:     bytesToInterface(public),
+			Private:    bytesToInterface(private),
+		}
 	}
+
+	return nil
 }
 
 func pbSetQuerySerialize(in *MsgSetQuery) *pbx.SetQuery {
@@ -575,24 +587,40 @@ func pbSetQuerySerialize(in *MsgSetQuery) *pbx.SetQuery {
 }
 
 func pbSetQueryDeserialize(in *pbx.SetQuery) *MsgSetQuery {
-	msg := MsgSetQuery{}
+	var msg *MsgSetQuery
 
 	if in != nil {
+
 		if desc := in.GetDesc(); desc != nil {
+			msg = &MsgSetQuery{}
 			msg.Desc = pbSetDescDeserialize(desc)
 		}
 
 		if sub := in.GetSub(); sub != nil {
-			msg.Sub = &MsgSetSub{
-				User: sub.GetUserId(),
-				Mode: sub.GetMode(),
+			user := sub.GetUserId()
+			mode := sub.GetMode()
+
+			if user != "" || mode != "" {
+				if msg == nil {
+					msg = &MsgSetQuery{}
+				}
+
+				msg.Sub = &MsgSetSub{
+					User: sub.GetUserId(),
+					Mode: sub.GetMode(),
+				}
 			}
 		}
 
-		msg.Tags = in.GetTags()
+		if tags := in.GetTags(); tags != nil {
+			if msg == nil {
+				msg = &MsgSetQuery{}
+			}
+			msg.Tags = in.GetTags()
+		}
 	}
 
-	return &msg
+	return msg
 }
 
 func pbInfoNoteWhatSerialize(what string) pbx.InfoNote {
@@ -662,10 +690,16 @@ func pbDefaultAcsDeserialize(defacs *pbx.DefaultAcsMode) *MsgDefaultAcsMode {
 		return nil
 	}
 
-	return &MsgDefaultAcsMode{
-		Auth: defacs.GetAuth(),
-		Anon: defacs.GetAnon(),
+	auth := defacs.GetAuth()
+	anon := defacs.GetAnon()
+
+	if auth != "" || anon != "" {
+		return &MsgDefaultAcsMode{
+			Auth: auth,
+			Anon: anon,
+		}
 	}
+	return nil
 }
 
 func pbTopicDescSerialize(desc *MsgTopicDesc) *pbx.TopicDesc {
