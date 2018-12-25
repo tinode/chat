@@ -1204,11 +1204,15 @@ func (t *Topic) approveSub(h *Hub, sess *Session, asUid, target types.Uid, set *
 			target: target.UserId(),
 			dWant:  oldWant.Delta(userData.modeWant),
 			dGiven: oldGiven.Delta(userData.modeGiven)}
+		filter := &presFilters{filterIn: types.ModeCSharer}
 
-		// Inform topic sharers.
-		t.presSubsOffline("acs", params, &presFilters{filterIn: types.ModeCSharer}, sess.sid, false)
+		// Inform topic sharers who are currently not in topic that the user's access mode has changed.
+		t.presSubsOffline("acs", params, filter, sess.sid, true)
 
-		// If tagret user is not a sharer, inform the target user separately.
+		// Inform sharers online in topic of the same event.
+		t.presSubsOnline("acs", params.target, params, filter, sess.sid)
+
+		// If target user is not a sharer, inform the target user separately.
 		if !(userData.modeGiven & userData.modeWant).IsSharer() {
 			t.presSingleUserOffline(target, "acs", params, sess.sid, false)
 		}
