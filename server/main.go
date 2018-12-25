@@ -297,11 +297,26 @@ func main() {
 		log.Fatal(err)
 	}
 
+	// List of tag namespaces for user discovery which cannot be changed directly
+	// by the client, e.g. 'email' or 'tel'.
+	globals.immutableTagNS = make(map[string]bool)
+
+	// Process validators.
 	for name, vconf := range config.Validator {
+		// Check if validator is restrictive. If so, add validator name to the list of restricted tags.
+		// The namespace can be restricted even if the validator is disabled.
+		if vconf.AddToTags {
+			if strings.Index(name, ":") >= 0 {
+				log.Fatal("acc_validation names should not contain character ':'")
+			}
+			globals.immutableTagNS[name] = true
+		}
+
 		if len(vconf.Required) == 0 {
 			// Skip disabled validator.
 			continue
 		}
+
 		var reqLevels []auth.Level
 		for _, req := range vconf.Required {
 			lvl := auth.ParseAuthLevel(req)
@@ -335,19 +350,6 @@ func main() {
 		globals.validators[name] = credValidator{
 			requiredAuthLvl: reqLevels,
 			addToTags:       vconf.AddToTags}
-	}
-
-	// List of tag namespaces for user discovery which cannot be changed directly
-	// by the client, e.g. 'email' or 'tel'.
-	globals.immutableTagNS = make(map[string]bool)
-	for tag, vconf := range config.Validator {
-		// Check if validator is restrictive and enabled.
-		if vconf.AddToTags && len(vconf.Required) > 0 {
-			if strings.Index(tag, ":") >= 0 {
-				log.Fatal("acc_validation names should not contain character ':'")
-			}
-			globals.immutableTagNS[tag] = true
-		}
 	}
 
 	// Partially restricted tag namespaces
