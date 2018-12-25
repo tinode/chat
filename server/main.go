@@ -339,12 +339,15 @@ func main() {
 
 	// List of tag namespaces for user discovery which cannot be changed directly
 	// by the client, e.g. 'email' or 'tel'.
-	globals.immutableTagNS = make(map[string]bool, len(config.Validator))
-	for tag := range config.Validator {
-		if strings.Index(tag, ":") >= 0 {
-			log.Fatal("acc_validation names should not contain character ':'")
+	globals.immutableTagNS = make(map[string]bool)
+	for tag, vconf := range config.Validator {
+		// Check if validator is restrictive and enabled.
+		if vconf.AddToTags && len(vconf.Required) > 0 {
+			if strings.Index(tag, ":") >= 0 {
+				log.Fatal("acc_validation names should not contain character ':'")
+			}
+			globals.immutableTagNS[tag] = true
 		}
-		globals.immutableTagNS[tag] = true
 	}
 
 	// Partially restricted tag namespaces
