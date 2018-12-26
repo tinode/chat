@@ -636,9 +636,10 @@ func (s *Session) login(msg *ClientComMessage) {
 
 	var missing []string
 	if rec.Features&auth.FeatureValidated == 0 {
-		missing, err = s.getValidatedGred(rec.Uid, rec.AuthLevel, msg.Login.Cred)
-		if err == nil {
-			_, missing = stringSliceDelta(globals.authValidators[rec.AuthLevel], missing)
+		var validated []string
+		if validated, err = s.getValidatedGred(rec.Uid, rec.AuthLevel, msg.Login.Cred); err == nil {
+			// Get a list of credentials which have not been validated.
+			_, missing = stringSliceDelta(globals.authValidators[rec.AuthLevel], validated)
 		}
 	}
 	if err != nil {
@@ -718,9 +719,11 @@ func (s *Session) onLogin(msgID string, timestamp time.Time, rec *auth.Rec, miss
 		}
 		features |= auth.FeatureValidated
 
+		// If authenticator provided updated tags, use them to update the user.
 		if len(rec.Tags) > 0 {
-			if err := store.Users.Update(rec.Uid,
-				map[string]interface{}{"Tags": normalizeTags(rec.Tags)}); err != nil {
+			log.Println("Resetting user's tags", normalizeTags(rec.Tags))
+
+			if err := store.Users.UpdateTags(rec.Uid, normalizeTags(rec.Tags), true); err != nil {
 
 				log.Println("failed to update user's tags", err)
 			}
@@ -772,6 +775,7 @@ func (s *Session) getValidatedGred(uid types.Uid, authLvl auth.Level, creds []Ms
 	// Add credentials which are validated in this call.
 	// Unknown validators are removed.
 	creds = normalizeCredentials(creds, false)
+	var tags []string
 	for i := range creds {
 		cr := &creds[i]
 		if cr.Response == "" {
@@ -788,8 +792,21 @@ func (s *Session) getValidatedGred(uid types.Uid, authLvl auth.Level, creds []Ms
 			// Actual error. Report back.
 			return nil, err
 		}
+
 		// Check did not return an error: the request was successfully validated.
 		validated = append(validated, cr.Method)
+
+		// Add validated credential to user's tags.
+		if globals.validators[cr.Method].addToTags {
+			tags = append(tags, cr.Method+":"+cr.Value)
+		}
+	}
+
+	if len(tags) > 0 {
+		// Save update to tags
+		if err := store.Users.UpdateTags(uid, tags, false); err != nil {
+			return nil, err
+		}
 	}
 
 	return validated, nil

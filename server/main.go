@@ -362,6 +362,21 @@ func main() {
 		globals.maskedTagNS[tag] = true
 	}
 
+	var tags []string
+	for tag := range globals.immutableTagNS {
+		tags = append(tags, "'"+tag+"'")
+	}
+	if len(tags) > 0 {
+		log.Println("Restricted tags:", tags)
+	}
+	tags = nil
+	for tag := range globals.maskedTagNS {
+		tags = append(tags, "'"+tag+"'")
+	}
+	if len(tags) > 0 {
+		log.Println("Masked tags:", tags)
+	}
+
 	// Maximum message size
 	globals.maxMessageSize = int64(config.MaxMessageSize)
 	if globals.maxMessageSize <= 0 {

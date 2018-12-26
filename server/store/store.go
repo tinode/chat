@@ -268,6 +268,11 @@ func (UsersObjMapper) Update(uid types.Uid, update map[string]interface{}) error
 	return adp.UserUpdate(uid, update)
 }
 
+// UpdateTags either resets tags to the given slice or creates a union of existing tags and the new ones.
+func (UsersObjMapper) UpdateTags(uid types.Uid, tags []string, reset bool) error {
+	return adp.UserUpdateTags(uid, tags, reset)
+}
+
 // GetSubs loads a list of subscriptions for the given user
 func (UsersObjMapper) GetSubs(id types.Uid, opts *types.QueryOpt) ([]types.Subscription, error) {
 	return adp.SubsForUser(id, false, opts)

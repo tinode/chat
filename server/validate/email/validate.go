@@ -213,6 +213,7 @@ func (v *validator) ResetSecret(email, scheme, lang string, tmpToken []byte) err
 }
 
 // Find if user exists in the database, and if so return OK.
+// This call is idempotent.
 func (v *validator) Check(user t.Uid, resp string) error {
 	cred, err := store.Users.GetCred(user, "email")
 	if err != nil {
@@ -237,7 +238,7 @@ func (v *validator) Check(user t.Uid, resp string) error {
 		return store.Users.ConfirmCred(user, "email")
 	}
 
-	// Invalid response, increment fail counter.
+	// Invalid response, increment fail counter, ignore possible error.
 	store.Users.FailCred(user, "email")
 
 	return t.ErrCredentials

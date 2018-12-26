@@ -64,10 +64,6 @@ func replyCreateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 				map[string]interface{}{"what": cr.Method}))
 			return
 		}
-
-		if globals.validators[cr.Method].addToTags {
-			user.Tags = append(user.Tags, cr.Method+":"+cr.Value)
-		}
 	}
 
 	if msg.Acc.Desc != nil {
@@ -95,8 +91,10 @@ func replyCreateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 		}
 	}
 
+	log.Println("Creating user", user.Tags)
+
 	if _, err := store.Users.Create(&user, private); err != nil {
-		log.Println("a.acc: failed to create user", err, s.sid)
+		log.Println("s.acc: failed to create user", err, s.sid)
 		s.queueOut(ErrUnknown(msg.id, "", msg.timestamp))
 		return
 	}
@@ -144,11 +142,30 @@ func replyCreateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 			// If response is provided and Request did not return an error, the request was
 			// successfully validated.
 			validated = append(validated, cr.Method)
+
+			// Generate tags for these confirmed credentials.
+			if globals.validators[cr.Method].addToTags {
+				rec.Tags = append(rec.Tags, cr.Method+":"+cr.Value)
+			}
 		}
+	}
+
+	// Save updated tags:
+	log.Println("Updating tags:", rec.Tags)
+
+	if err := store.Users.Update(user.Uid(),
+		map[string]interface{}{"Tags": types.StringSlice(rec.Tags)}); err != nil {
+
+		log.Println("s.acc: failed to update user's tags", err, s.sid)
+		// Delete incomplete user record.
+		store.Users.Delete(user.Uid(), false)
+		s.queueOut(decodeStoreError(err, msg.id, "", msg.timestamp, nil))
+		return
 	}
 
 	var reply *ServerComMessage
 	if msg.Acc.Login {
+		log.Println("Calling onLogin", rec.Tags)
 		// Process user's login request.
 		_, missing := stringSliceDelta(globals.authValidators[rec.AuthLevel], validated)
 		reply = s.onLogin(msg.id, msg.timestamp, rec, missing)

@@ -412,7 +412,7 @@ func (a *adapter) CreateDb(reset bool) error {
 	return tx.Commit()
 }
 
-func addTags(tx *sqlx.Tx, table, keyName string, keyVal interface{}, tags []string) error {
+func addTags(tx *sqlx.Tx, table, keyName string, keyVal interface{}, tags []string, ignoreDups bool) error {
 
 	if len(tags) > 0 {
 		var insert *sql.Stmt
@@ -427,6 +427,9 @@ func addTags(tx *sqlx.Tx, table, keyName string, keyVal interface{}, tags []stri
 
 			if err != nil {
 				if isDupe(err) {
+					if ignoreDups {
+						continue
+					}
 					return t.ErrDuplicate
 				}
 				return err
@@ -459,7 +462,7 @@ func (a *adapter) UserCreate(user *t.User) error {
 	}
 
 	// Save user's tags to a separate table to make user findable.
-	if err = addTags(tx, "usertags", "userid", decoded_uid, user.Tags); err != nil {
+	if err = addTags(tx, "usertags", "userid", decoded_uid, user.Tags, false); err != nil {
 		return err
 	}
 
@@ -787,13 +790,65 @@ func (a *adapter) UserUpdate(uid t.Uid, update map[string]interface{}) error {
 			return err
 		}
 		// Now insert new tags
-		err = addTags(tx, "usertags", "userid", decoded_uid, tags)
+		err = addTags(tx, "usertags", "userid", decoded_uid, tags, false)
 		if err != nil {
 			return err
 		}
 	}
 
 	return tx.Commit()
+}
+
+// UserUpdateTags adds or resets user's tags
+func (a *adapter) UserUpdateTags(uid t.Uid, tags []string, reset bool) error {
+	tx, err := a.db.Beginx()
+	if err != nil {
+		return err
+	}
+
+	defer func() {
+		if err != nil {
+			tx.Rollback()
+		}
+	}()
+
+	decoded_uid := store.DecodeUid(uid)
+
+	if reset {
+		// Delete all tags first.
+		_, err = tx.Exec("DELETE FROM usertags WHERE userid=?", decoded_uid)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Now insert new tags
+	err = addTags(tx, "usertags", "userid", decoded_uid, tags, !reset)
+	if err != nil {
+		return err
+	}
+
+	rows, err := tx.Queryx("SELECT tag FROM usertags WHERE userid=?", decoded_uid)
+	if err != nil {
+		return err
+	}
+
+	var allTags []string
+	for rows.Next() {
+		var tag string
+		if err = rows.Scan(&tag); err != nil {
+			break
+		}
+		allTags = append(allTags, tag)
+	}
+
+	_, err = tx.Exec("UPDATE users SET tags=? WHERE id=?", t.StringSlice(tags), decoded_uid)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit()
+
 }
 
 // UserGetByCred returns user ID for the given validated credential.
@@ -823,7 +878,7 @@ func (a *adapter) topicCreate(tx *sqlx.Tx, topic *t.Topic) error {
 	}
 
 	// Save topic's tags to a separate table to make topic findable.
-	return addTags(tx, "topictags", "topic", topic.Id, topic.Tags)
+	return addTags(tx, "topictags", "topic", topic.Id, topic.Tags, false)
 }
 
 // TopicCreate saves topic object to database.
@@ -1265,7 +1320,7 @@ func (a *adapter) TopicUpdate(topic string, update map[string]interface{}) error
 			return err
 		}
 		// Now insert new tags
-		err = addTags(tx, "topictags", "topic", topic, tags)
+		err = addTags(tx, "topictags", "topic", topic, tags, false)
 		if err != nil {
 			return err
 		}

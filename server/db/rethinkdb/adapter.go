@@ -639,6 +639,20 @@ func (a *adapter) UserUpdate(uid t.Uid, update map[string]interface{}) error {
 	return err
 }
 
+// UserUpdateTags append or resets user's tags
+func (a *adapter) UserUpdateTags(uid t.Uid, tags []string, reset bool) error {
+	if reset {
+		// Replace Tags with the new value
+		return a.UserUpdate(uid, map[string]interface{}{"Tags": tags})
+	}
+
+	// Add tags to the list.
+	_, err := rdb.DB(a.dbName).Table("users").Get(uid.String()).Update(
+		map[string]interface{}{"Tags": rdb.Row.Field("Tags").SetUnion(tags)}).RunWrite(a.conn)
+
+	return err
+}
+
 // UserGetByCred returns user ID for the given validated credential.
 func (a *adapter) UserGetByCred(method, value string) (t.Uid, error) {
 	cursor, err := rdb.DB(a.dbName).Table("credentials").Get(method + ":" + value).Pluck("User").Run(a.conn)
