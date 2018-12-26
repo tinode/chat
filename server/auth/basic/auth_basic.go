@@ -88,7 +88,7 @@ func (a *authenticator) AddRecord(rec *auth.Rec, secret []byte) (*auth.Rec, erro
 
 	rec.AuthLevel = authLevel
 	if a.addToTags {
-		rec.Tags = []string{"basic:" + uname}
+		rec.Tags = append(rec.Tags, "basic:"+uname)
 	}
 	return rec, nil
 }
