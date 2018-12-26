@@ -19,6 +19,8 @@ import (
 
 // authenticator is the type to map authentication methods to.
 type authenticator struct {
+	// Logical name of this authenticator
+	name string
 	// URL of the server
 	serverUrl string
 	// Authenticator may add new accounts to local database.
@@ -29,6 +31,7 @@ type authenticator struct {
 
 type request struct {
 	Endpoint string    `json:"endpoint"`
+	Name     string    `json:"name"`
 	Record   *auth.Rec `json:"rec,omitempty"`
 	Secret   []byte    `json:"secret,omitempty"`
 }
@@ -60,7 +63,7 @@ type response struct {
 }
 
 // Init initializes the handler.
-func (a *authenticator) Init(jsonconf string) error {
+func (a *authenticator) Init(jsonconf, name string) error {
 	type configType struct {
 		// ServerUrl is the URL of the server to call.
 		ServerUrl string `json:"server_url"`
@@ -85,6 +88,7 @@ func (a *authenticator) Init(jsonconf string) error {
 		serverUrl.Path += "/"
 	}
 
+	a.name = name
 	a.serverUrl = serverUrl.String()
 	a.allowNewAccounts = config.AllowNewAccounts
 	a.useSeparateEndpoints = config.UseSeparateEndpoints
@@ -95,7 +99,7 @@ func (a *authenticator) Init(jsonconf string) error {
 // Execute HTTP POST to the server at the specified endpoint and with the provided payload.
 func (a *authenticator) callEndpoint(endpoint string, rec *auth.Rec, secret []byte) (*response, error) {
 	// Convert payload to json.
-	req := &request{Endpoint: endpoint, Record: rec, Secret: secret}
+	req := &request{Endpoint: endpoint, Name: a.name, Record: rec, Secret: secret}
 	content, err := json.Marshal(req)
 	if err != nil {
 		return nil, types.ErrMalformed

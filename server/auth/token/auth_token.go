@@ -21,6 +21,7 @@ var disabledUserIDs *sync.Map
 
 // authenticator is a singleton instance of the authenticator.
 type authenticator struct {
+	name         string
 	hmacSalt     []byte
 	lifetime     time.Duration
 	serialNumber int
@@ -42,7 +43,7 @@ type tokenLayout struct {
 }
 
 // Init initializes the authenticator: parses the config and sets salt, serial number and lifetime.
-func (ta *authenticator) Init(jsonconf string) error {
+func (ta *authenticator) Init(jsonconf, name string) error {
 	if ta.hmacSalt != nil {
 		return errors.New("auth_token: already initialized")
 	}
@@ -67,6 +68,7 @@ func (ta *authenticator) Init(jsonconf string) error {
 		return errors.New("auth_token: invalid expiration value")
 	}
 
+	ta.name = name
 	ta.hmacSalt = config.Key
 	ta.lifetime = time.Duration(config.ExpireIn) * time.Second
 	ta.serialNumber = config.SerialNum

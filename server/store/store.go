@@ -589,6 +589,7 @@ var authHandlers map[string]auth.AuthHandler
 var authHandlerNames map[string]string
 
 // RegisterAuthScheme registers an authentication scheme handler.
+// The 'name' must be the hardcoded name, NOT the logical name.
 func RegisterAuthScheme(name string, handler auth.AuthHandler) {
 	if name == "" {
 		panic("RegisterAuthScheme: empty auth scheme name")

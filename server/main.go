@@ -282,6 +282,11 @@ func main() {
 	// API key signing secret
 	globals.apiKeySalt = config.APIKeySalt
 
+	err = store.InitAuthLogicalNames(config.Auth["logical_names"])
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	for name, jsconf := range config.Auth {
 		if name != "logical_names" {
 			if authhdl := store.GetAuthHandler(name); authhdl == nil {
@@ -290,11 +295,6 @@ func main() {
 				log.Fatalln("Failed to init auth scheme", name+":", err)
 			}
 		}
-	}
-
-	err = store.InitAuthLogicalNames(config.Auth["logical_names"])
-	if err != nil {
-		log.Fatal(err)
 	}
 
 	// List of tag namespaces for user discovery which cannot be changed directly

@@ -199,8 +199,8 @@ type Rec struct {
 
 // AuthHandler is the interface which auth providers must implement.
 type AuthHandler interface {
-	// Init initializes the handler.
-	Init(jsonconf string) error
+	// Init initializes the handler taking config string and logical name as parameters.
+	Init(jsonconf, name string) error
 
 	// AddRecord adds persistent authentication record to the database.
 	// Returns: updated auth record, error

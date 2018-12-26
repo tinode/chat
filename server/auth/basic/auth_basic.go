@@ -23,6 +23,7 @@ const (
 
 // authenticator is the type to map authentication methods to.
 type authenticator struct {
+	name      string
 	addToTags bool
 }
 
@@ -41,7 +42,7 @@ func parseSecret(bsecret []byte) (uname, password string, err error) {
 }
 
 // Init initializes the basic authenticator.
-func (a *authenticator) Init(jsonconf string) error {
+func (a *authenticator) Init(jsonconf, name string) error {
 	type configType struct {
 		// AddToTags indicates that the user name should be used as a searchable tag.
 		AddToTags bool `json:"add_to_tags"`
@@ -50,6 +51,7 @@ func (a *authenticator) Init(jsonconf string) error {
 	if err := json.Unmarshal([]byte(jsonconf), &config); err != nil {
 		return errors.New("auth_basic: failed to parse config: " + err.Error() + "(" + jsonconf + ")")
 	}
+	a.name = name
 	a.addToTags = config.AddToTags
 	return nil
 }
@@ -79,7 +81,7 @@ func (a *authenticator) AddRecord(rec *auth.Rec, secret []byte) (*auth.Rec, erro
 		authLevel = auth.LevelAuth
 	}
 
-	dup, err := store.Users.AddAuthRecord(rec.Uid, authLevel, "basic", uname, passhash, expires)
+	dup, err := store.Users.AddAuthRecord(rec.Uid, authLevel, a.name, uname, passhash, expires)
 	if dup {
 		return nil, types.ErrDuplicate
 	} else if err != nil {
@@ -88,19 +90,19 @@ func (a *authenticator) AddRecord(rec *auth.Rec, secret []byte) (*auth.Rec, erro
 
 	rec.AuthLevel = authLevel
 	if a.addToTags {
-		rec.Tags = []string{"basic:" + uname}
+		rec.Tags = append(rec.Tags, a.name+":"+uname)
 	}
 	return rec, nil
 }
 
 // UpdateRecord updates password for basic authentication.
-func (authenticator) UpdateRecord(rec *auth.Rec, secret []byte) error {
+func (a *authenticator) UpdateRecord(rec *auth.Rec, secret []byte) error {
 	uname, password, err := parseSecret(secret)
 	if err != nil {
 		return err
 	}
 
-	login, _, _, _, err := store.Users.GetAuthRecord(rec.Uid, "basic")
+	login, _, _, _, err := store.Users.GetAuthRecord(rec.Uid, a.name)
 	if err != nil {
 		return err
 	}
@@ -120,7 +122,7 @@ func (authenticator) UpdateRecord(rec *auth.Rec, secret []byte) error {
 	if rec.Lifetime > 0 {
 		expires = types.TimeNow().Add(rec.Lifetime)
 	}
-	_, err = store.Users.UpdateAuthRecord(rec.Uid, auth.LevelAuth, "basic", uname, passhash, expires)
+	_, err = store.Users.UpdateAuthRecord(rec.Uid, auth.LevelAuth, a.name, uname, passhash, expires)
 	if err != nil {
 		return err
 	}
@@ -128,7 +130,7 @@ func (authenticator) UpdateRecord(rec *auth.Rec, secret []byte) error {
 }
 
 // Authenticate checks login and password.
-func (authenticator) Authenticate(secret []byte) (*auth.Rec, []byte, error) {
+func (a *authenticator) Authenticate(secret []byte) (*auth.Rec, []byte, error) {
 	uname, password, err := parseSecret(secret)
 	if err != nil {
 		return nil, nil, err
@@ -138,7 +140,7 @@ func (authenticator) Authenticate(secret []byte) (*auth.Rec, []byte, error) {
 		return nil, nil, types.ErrFailed
 	}
 
-	uid, authLvl, passhash, expires, err := store.Users.GetAuthUniqueRecord("basic", uname)
+	uid, authLvl, passhash, expires, err := store.Users.GetAuthUniqueRecord(a.name, uname)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -179,7 +181,7 @@ func (authenticator) IsUnique(secret []byte) (bool, error) {
 		return false, types.ErrPolicy
 	}
 
-	uid, _, _, _, err := store.Users.GetAuthUniqueRecord("basic", uname)
+	uid, _, _, _, err := store.Users.GetAuthUniqueRecord(a.name, uname)
 	if err != nil {
 		return false, err
 	}
@@ -195,8 +197,8 @@ func (authenticator) GenSecret(rec *auth.Rec) ([]byte, time.Time, error) {
 	return nil, time.Time{}, types.ErrUnsupported
 }
 
-func (authenticator) DelRecords(uid types.Uid) error {
-	return store.Users.DelAuthRecords(uid, "basic")
+func (a *authenticator) DelRecords(uid types.Uid) error {
+	return store.Users.DelAuthRecords(uid, a.name)
 }
 
 func init() {
