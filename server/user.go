@@ -279,7 +279,7 @@ func replyDelUser(s *Session, msg *ClientComMessage) {
 
 	if reply == nil {
 		// Disable all authenticators
-		authnames := store.GetAuthHandlerNames()
+		authnames := store.GetAuthNames()
 		for _, name := range authnames {
 			if err := store.GetAuthHandler(name).DelRecords(uid); err != nil {
 				log.Println("replyDelUser: failed to delete user auth record", msg.Del.User, name, err, s.sid)

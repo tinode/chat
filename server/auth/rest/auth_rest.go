@@ -64,6 +64,10 @@ type response struct {
 
 // Init initializes the handler.
 func (a *authenticator) Init(jsonconf, name string) error {
+	if a.name != "" {
+		return errors.New("auth_rest: already initialized as " + a.name + "; " + name)
+	}
+
 	type configType struct {
 		// ServerUrl is the URL of the server to call.
 		ServerUrl string `json:"server_url"`

@@ -608,21 +608,35 @@ func RegisterAuthScheme(name string, handler auth.AuthHandler) {
 	authHandlers[name] = handler
 }
 
-// GetAuthHandler returns an auth handler by actual hardcoded name irrspectful of logical naming.
-func GetAuthHandler(name string) auth.AuthHandler {
-	return authHandlers[strings.ToLower(name)]
-}
-
-// GetAuthHandlerNames returns a slice of strings containing authenticator names.
-func GetAuthHandlerNames() []string {
+// GetAuthNames returns all addressable auth handler names, logical and hardcoded
+// excluding those which are disabled like "basic:".
+func GetAuthNames() []string {
 	if len(authHandlers) == 0 {
 		return nil
 	}
-	var names []string
+
+	var allNames []string
 	for name, _ := range authHandlers {
-		names = append(names, name)
+		allNames = append(allNames, name)
 	}
+	for name, _ := range authHandlerNames {
+		allNames = append(allNames, name)
+	}
+
+	var names []string
+	for _, name := range allNames {
+		if GetLogicalAuthHandler(name) != nil {
+			names = append(names, name)
+		}
+	}
+
 	return names
+
+}
+
+// GetAuthHandler returns an auth handler by actual hardcoded name irrspectful of logical naming.
+func GetAuthHandler(name string) auth.AuthHandler {
+	return authHandlers[strings.ToLower(name)]
 }
 
 // GetLogicalAuthHandler returns an auth handler by logical name. If there is no handler by that
@@ -659,6 +673,7 @@ func InitAuthLogicalNames(config json.RawMessage) error {
 			if parts[0] == "" {
 				return errors.New("store: empty logical auth name '" + pair + "'")
 			}
+			parts[0] = strings.ToLower(parts[0])
 			if _, ok := authHandlerNames[parts[0]]; ok {
 				return errors.New("store: duplicate mapping for logical auth name '" + pair + "'")
 			}

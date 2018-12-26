@@ -1,8 +1,5 @@
 #!/bin/bash
 
-# Remove the old config.
-rm -f working.config
-
 # If EXT_CONFIG is set, use it as a config file.
 if [ ! -z "$EXT_CONFIG" ] ; then
 	CONFIG="$EXT_CONFIG"
@@ -14,6 +11,9 @@ if [ ! -z "$EXT_CONFIG" ] ; then
 
 else
 	CONFIG=working.config
+
+	# Remove the old config.
+	rm -f working.config
 
 	# Enable email verification if $SMTP_SERVER is defined.
 	if [ ! -z "$SMTP_SERVER" ] ; then

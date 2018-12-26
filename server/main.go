@@ -287,11 +287,12 @@ func main() {
 		log.Fatal(err)
 	}
 
-	for name, jsconf := range config.Auth {
-		if name != "logical_names" {
-			if authhdl := store.GetAuthHandler(name); authhdl == nil {
-				log.Fatal("Config provided for unknown authentication scheme '" + name + "'")
-			} else if err := authhdl.Init(string(jsconf)); err != nil {
+	authNames := store.GetAuthNames()
+	for _, name := range authNames {
+		if authhdl := store.GetLogicalAuthHandler(name); authhdl == nil {
+			log.Fatalln("Unknown authenticator", name)
+		} else if jsconf := config.Auth[name]; jsconf != nil {
+			if err := authhdl.Init(string(jsconf), name); err != nil {
 				log.Fatalln("Failed to init auth scheme", name+":", err)
 			}
 		}

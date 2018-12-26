@@ -1,7 +1,7 @@
 # Frequently Asked Questions
 
 
-### Q: I'm running Tinode server in a docker container. Where can I find server logs?<br/>
+### Q: Where can I find server logs when running in Docker?<br/>
 **A**: The log is in the container at `/var/log/tinode.log`. Attach to a running container with command
 ```
 docker exec -it name-of-the-running-container /bin/bash
@@ -34,7 +34,7 @@ If you are using the official [Docker image](https://hub.docker.com/u/tinode):
 
 
 ### Q: How to create a `root` user?<br/>
-**A**: The `root` access can be granted to a user only by executing a database query. First create or choose the use you want to promote to `root` then execute the query:
+**A**: The `root` access can be granted to a user only by executing a database query. First create or choose the user you want to promote to `root` then execute the query:
 * RethinkDB:
 ```js
 r.db("tinode").table("auth").get("basic:login-of-the-user-to-make-root").update({authLvl: 30})

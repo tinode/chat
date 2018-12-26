@@ -15,7 +15,7 @@ import (
 type authenticator struct{}
 
 // Init is a noop, always returns success.
-func (authenticator) Init(unused string) error {
+func (authenticator) Init(_, _ string) error {
 	return nil
 }
 
@@ -33,7 +33,7 @@ func (authenticator) UpdateRecord(rec *auth.Rec, secret []byte) error {
 	return nil
 }
 
-// Authenticate is not supported. It's used only at account creation time.
+// Authenticate is not supported. This authenticator is used only at account creation time.
 func (authenticator) Authenticate(secret []byte) (*auth.Rec, []byte, error) {
 	return nil, nil, types.ErrUnsupported
 }

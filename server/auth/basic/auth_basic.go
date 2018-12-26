@@ -43,6 +43,10 @@ func parseSecret(bsecret []byte) (uname, password string, err error) {
 
 // Init initializes the basic authenticator.
 func (a *authenticator) Init(jsonconf, name string) error {
+	if a.name != "" {
+		return errors.New("auth_basic: already initialized as " + a.name + "; " + name)
+	}
+
 	type configType struct {
 		// AddToTags indicates that the user name should be used as a searchable tag.
 		AddToTags bool `json:"add_to_tags"`
@@ -171,7 +175,7 @@ func (a *authenticator) Authenticate(secret []byte) (*auth.Rec, []byte, error) {
 }
 
 // IsUnique checks login uniqueness.
-func (authenticator) IsUnique(secret []byte) (bool, error) {
+func (a *authenticator) IsUnique(secret []byte) (bool, error) {
 	uname, _, err := parseSecret(secret)
 	if err != nil {
 		return false, err

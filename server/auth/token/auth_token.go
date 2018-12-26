@@ -44,8 +44,8 @@ type tokenLayout struct {
 
 // Init initializes the authenticator: parses the config and sets salt, serial number and lifetime.
 func (ta *authenticator) Init(jsonconf, name string) error {
-	if ta.hmacSalt != nil {
-		return errors.New("auth_token: already initialized")
+	if ta.name != "" {
+		return errors.New("auth_token: already initialized as " + ta.name + "; " + name)
 	}
 
 	type configType struct {
