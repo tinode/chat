@@ -29,8 +29,8 @@ func (authenticator) AddRecord(rec *auth.Rec, secret []byte) (*auth.Rec, error) 
 }
 
 // UpdateRecord is a noop. Just report success.
-func (authenticator) UpdateRecord(rec *auth.Rec, secret []byte) error {
-	return nil
+func (authenticator) UpdateRecord(rec *auth.Rec, secret []byte) (*auth.Rec, error) {
+	return rec, nil
 }
 
 // Authenticate is not supported. This authenticator is used only at account creation time.

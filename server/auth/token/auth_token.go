@@ -94,8 +94,8 @@ func (authenticator) AddRecord(rec *auth.Rec, secret []byte) (*auth.Rec, error) 
 }
 
 // UpdateRecord is not supported, will produce an error.
-func (authenticator) UpdateRecord(rec *auth.Rec, secret []byte) error {
-	return types.ErrUnsupported
+func (authenticator) UpdateRecord(rec *auth.Rec, secret []byte) (*auth.Rec, error) {
+	return nil, types.ErrUnsupported
 }
 
 // Authenticate checks validity of provided token.

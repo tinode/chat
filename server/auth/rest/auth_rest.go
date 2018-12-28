@@ -155,9 +155,9 @@ func (a *authenticator) AddRecord(rec *auth.Rec, secret []byte) (*auth.Rec, erro
 }
 
 // UpdateRecord updates existing record with new credentials.
-func (a *authenticator) UpdateRecord(rec *auth.Rec, secret []byte) error {
+func (a *authenticator) UpdateRecord(rec *auth.Rec, secret []byte) (*auth.Rec, error) {
 	_, err := a.callEndpoint("upd", rec, secret)
-	return err
+	return rec, err
 }
 
 // Authenticate: get user record by provided secret

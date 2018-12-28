@@ -230,16 +230,33 @@ func replyUpdateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 		return
 	}
 
+	user, err := store.Users.Get(uid)
+	if user == nil && err == nil {
+		err = types.ErrNotFound
+	}
+	if err != nil {
+		log.Println("replyUpdateUser: failed to fetch user from DB", err, s.sid)
+		s.queueOut(decodeStoreError(err, msg.id, "", msg.timestamp, nil))
+		return
+	}
+
 	var params map[string]interface{}
 	authhdl := store.GetLogicalAuthHandler(msg.Acc.Scheme)
 	if authhdl != nil {
-		// Request to update auth of an existing account. Only basic auth is currently supported
+		// Request to update auth of an existing account. Only basic & rest auth are currently supported
+
 		// TODO(gene): support adding new auth schemes
-		if err := authhdl.UpdateRecord(&auth.Rec{Uid: uid}, msg.Acc.Secret); err != nil {
+
+		rec, err := authhdl.UpdateRecord(&auth.Rec{Uid: uid, Tags: user.Tags}, msg.Acc.Secret)
+		if err != nil {
 			log.Println("replyUpdateUser: failed to update auth secret", err, s.sid)
 			s.queueOut(decodeStoreError(err, msg.id, "", msg.timestamp, nil))
 			return
 		}
+
+		// Tags may have changed, update them
+		store.Users.UpdateTags(uid, rec.Tags, true)
+
 	} else if msg.Acc.Scheme != "" {
 		// Invalid or unknown auth scheme
 		log.Println("replyUpdateUser: unknown auth scheme", msg.Acc.Scheme, s.sid)
@@ -263,8 +280,8 @@ func replyUpdateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 	resp.Ctrl.Params = params
 	s.queueOut(resp)
 
-	// TODO: Call plugin with the account update
-	// like pluginAccount(&types.User{}, plgActUpd)
+	// Call plugin with the account update
+	pluginAccount(user, plgActUpd)
 }
 
 // Request to delete a user:
