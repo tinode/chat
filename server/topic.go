@@ -1861,7 +1861,6 @@ func (t *Topic) replySetTags(sess *Session, asUid types.Uid, set *MsgClientSet) 
 			added, removed := stringSliceDelta(t.tags, tags)
 			if len(added) > 0 || len(removed) > 0 {
 				update := map[string]interface{}{"Tags": types.StringSlice(tags)}
-
 				if t.cat == types.TopicCatFnd {
 					err = store.Users.Update(asUid, update)
 				} else if t.cat == types.TopicCatGrp {

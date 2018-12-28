@@ -28,9 +28,10 @@ type Validator interface {
 	//  tmpToken: temporary authentication token
 	ResetSecret(cred, scheme, lang string, tmpToken []byte) error
 
-	// Check checks validity of user response.
-	Check(user t.Uid, resp string) error
+	// Check checks validity of user's response.
+	// Returns the value of validated credential on success.
+	Check(user t.Uid, resp string) (string, error)
 
-	// Delete deletes user's records.
+	// Delete deletes user's record.
 	Delete(user t.Uid) error
 }

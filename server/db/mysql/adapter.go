@@ -698,8 +698,8 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 			return err
 		}
 
-		// TODO: move under transaction
-		if err = a.CredDel(uid, ""); err != nil {
+		// Delete all credentials.
+		if err = credDel(tx, uid, ""); err != nil {
 			return err
 		}
 
@@ -2066,15 +2066,34 @@ func (a *adapter) CredIsConfirmed(uid t.Uid, method string) (bool, error) {
 	return done > 0, err
 }
 
-func (a *adapter) CredDel(uid t.Uid, method string) error {
+func credDel(tx *sqlx.Tx, uid t.Uid, method string) error {
 	query := "DELETE FROM credentials WHERE userid=?"
 	args := []interface{}{store.DecodeUid(uid)}
 	if method != "" {
 		query += " AND method=?"
 		args = append(args, method)
 	}
-	_, err := a.db.Exec(query, args...)
+	_, err := tx.Exec(query, args...)
 	return err
+}
+
+func (a *adapter) CredDel(uid t.Uid, method string) error {
+	tx, err := a.db.Beginx()
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err != nil {
+			tx.Rollback()
+		}
+	}()
+
+	err = credDel(tx, uid, method)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit()
 }
 
 func (a *adapter) CredConfirm(uid t.Uid, method string) error {

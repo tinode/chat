@@ -783,7 +783,8 @@ func (s *Session) getValidatedGred(uid types.Uid, authLvl auth.Level, creds []Ms
 			continue
 		}
 		vld := store.GetValidator(cr.Method)
-		if err := vld.Check(uid, cr.Response); err != nil {
+		value, err := vld.Check(uid, cr.Response)
+		if err != nil {
 			// Check failed.
 			if storeErr, ok := err.(types.StoreError); ok && storeErr == types.ErrCredentials {
 				// Just an invalid response. Keep credential unvalidated.
@@ -798,7 +799,7 @@ func (s *Session) getValidatedGred(uid types.Uid, authLvl auth.Level, creds []Ms
 
 		// Add validated credential to user's tags.
 		if globals.validators[cr.Method].addToTags {
-			tags = append(tags, cr.Method+":"+cr.Value)
+			tags = append(tags, cr.Method+":"+value)
 		}
 	}
 

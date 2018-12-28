@@ -342,6 +342,11 @@ func (UsersObjMapper) GetAllCred(id types.Uid) ([]*types.Credential, error) {
 	return adp.CredGet(id, "")
 }
 
+// DelCred deletes user's credentials. If method is "" all credentials are deleted.
+func (UsersObjMapper) DelCred(id types.Uid, method string) error {
+	return adp.CredDel(id, method)
+}
+
 // TopicsObjMapper is a struct to hold methods for persistence mapping for the topic object.
 type TopicsObjMapper struct{}
 

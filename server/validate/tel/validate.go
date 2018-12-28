@@ -32,13 +32,13 @@ func (*validator) ResetSecret(cred, scheme, lang string, tmpToken []byte) error 
 	return nil
 }
 
-// Find if user exists in the database, and if so return OK. Any response is accepted.
-func (*validator) Check(user t.Uid, resp string) error {
+// Check checks validity of user's response.
+func (*validator) Check(user t.Uid, resp string) (string, error) {
 	// TODO: check response against a database.
-	return nil
+	return "", nil
 }
 
-// Delete deletes user's records.
+// Delete deletes user's records. Returns deleted credentials.
 func (*validator) Delete(user t.Uid) error {
 	return nil
 }
