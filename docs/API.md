@@ -159,17 +159,20 @@ Logging out is not supported by design. If an application needs to change the us
 
 ### Authentication
 
-The server comes with the following authentication methods out of the box:
- * `basic` provides authentication by a login-password pair.
+Authentication is conceptually similar to [SASL](https://en.wikipedia.org/wiki/Simple_Authentication_and_Security_Layer): it's provided as a set of adapters each implementing a different authentication method. Authenticators are used during account registration [`{acc}`](#acc) and during [`{login}`](#login). The server comes with the following authentication methods out of the box:
+
  * `token` provides authentication by a cryptographic token.
+ * `basic` provides authentication by a login-password pair.
  * `anonymous` is designed for cases where users are temporary, such as handling customer support requests through chat.
- * `rest` is a [meta-method](../server/auth/rest/) which allows use of external systems for authentication.
+ * `rest` is a [meta-method](../server/auth/rest/) which allows use of external authentication systems by means of JSON RPC.
 
-Any other authentication method can be implemented using plugins.
+Any other authentication method can be implemented using adapters.
 
-The `token` is intended to be the primary means of authentication. Tokens are designed in such a way that token authentication is light weight. For instance, token authenticator generally does not make any database calls, all processing is done in-memory. All other authentication methods are intended to be used sparingly in order to obtain the token. Once the token is obtained, all subsequent logins should use it.
+The `token` is intended to be the primary means of authentication. Tokens are designed in such a way that token authentication is light weight. For instance, token authenticator generally does not make any database calls, all processing is done in-memory. All other authentication methods are intended to be used only to obtain or refresh the token. Once the token is obtained, subsequent logins should use it.
 
-Authenticators are used during account registration [`{acc}`](#acc) and during [`{login}`](#login).
+The `basic` authentication scheme expects `secret` to be a base64-encoded string of a string composed of a user name followed by a colon `:` followed by a plan text password. User name in the `basic` scheme must not contain the colon character `:` (ASCII 0x3A).
+
+The `anonymous` scheme can be used to create accounts, it cannot be used for logging in: a user creates an account using `anonymous` scheme and obtains a cryptographic token which it uses for subsequent `token` logins. If the token is lost or expired, the user is no longer able to access the account.
 
 Compiled-in authenticator names may be changed by using `logical_names` configuration feature. For example, a custom `rest` authenticator may be exposed as `basic` instead of default one or `token` authenticator could be hidden from users. The feature is activated by providing an array of mappings in the config file: `logical_name:actual_name` to rename or `actual_name:` to hide. For instance, to use a `rest` service for basic authentication use `"logical_names": ["basic:rest"]`.
 
@@ -618,9 +621,6 @@ login: {
   ],   // response to a request for credential verification, optional
 }
 ```
-The `basic` authentication scheme expects `secret` to be a base64-encoded string of a string composed of a user name followed by a colon `:` followed by a plan text password. User name in the `basic` scheme must not contain colon character ':' (ASCII 0x3A). The `token` expects secret to be a previously obtained security token.
-
-The only supported authentication schemes are `basic` and `token`. Although `anonymous` scheme can be used to create accounts, it cannot be used for logging in. A scheme `reset` can be used for password reset.
 
 Server responds to a `{login}` packet with a `{ctrl}` message. The `params` of the message contains the id of the logged in user as `user`. The `token` contains an encrypted string which can be used for authentication. Expiration time of the token is passed as `expires`.
 
