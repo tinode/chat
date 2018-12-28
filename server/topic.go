@@ -1524,17 +1524,24 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 						// Check if the query contains terms that the user does not have.
 						if restr, _ := stringSliceDelta(t.tags,
 							filterRestrictedTags(append(req, opt...), globals.maskedTagNS)); len(restr) > 0 {
-							err = types.ErrPermissionDenied
+							sess.queueOut(ErrPermissionDenied(id, t.original(asUid), now))
+							return errors.New("attempt to search by restricted tags")
 						} else {
 							subs, err = store.Users.FindSubs(asUid, req, opt)
+							if err != nil {
+								sess.queueOut(decodeStoreError(err, id, t.original(asUid), now, nil))
+								return err
+							}
 						}
 					} else {
-						err = types.ErrMalformed
+						// Query string is empty.
+						sess.queueOut(ErrMalformed(id, t.original(asUid), now))
+						return errors.New("empty search query")
 					}
 				} else {
-					// Convert specific parsing error into a generic ErrMalformed.
-					// Otherwise it will be reported as 500 Internal.
-					err = types.ErrMalformed
+					// Query parsing error. Report it externally as a generic ErrMalformed.
+					sess.queueOut(ErrMalformed(id, t.original(asUid), now))
+					return errors.New("failed to parse search query; " + err.Error())
 				}
 			}
 		}
@@ -1549,6 +1556,12 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 			subs, err = store.Topics.GetSubsAny(t.name, msgOpts2storeOpts(req))
 		}
 		isSharer = (userData.modeGiven & userData.modeWant).IsSharer()
+
+		if err != nil {
+			sess.queueOut(decodeStoreError(err, id, t.original(asUid), now, nil))
+			return err
+		}
+
 	case types.TopicCatGrp:
 		// Include sub.Public.
 		if ifModified.IsZero() {
@@ -1559,11 +1572,11 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 			subs, err = store.Topics.GetUsersAny(t.name, msgOpts2storeOpts(req))
 		}
 		isSharer = (userData.modeGiven & userData.modeWant).IsSharer()
-	}
 
-	if err != nil {
-		sess.queueOut(decodeStoreError(err, id, t.original(asUid), now, nil))
-		return err
+		if err != nil {
+			sess.queueOut(decodeStoreError(err, id, t.original(asUid), now, nil))
+			return err
+		}
 	}
 
 	if len(subs) > 0 {

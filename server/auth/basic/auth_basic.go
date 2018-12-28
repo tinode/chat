@@ -86,7 +86,10 @@ func (a *authenticator) Init(jsonconf, name string) error {
 		a.minPasswordLength = defaultMinPasswordLength
 	}
 	a.minLoginLength = config.MinLoginLength
-	if a.minLoginLength < defaultMinLoginLength {
+	if a.minLoginLength > defaultMaxLoginLength {
+		return errors.New("auth_basic: min_login_length exceeds the limit")
+	}
+	if a.minLoginLength <= 0 {
 		a.minLoginLength = defaultMinLoginLength
 	}
 

@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -284,7 +285,10 @@ func decodeStoreError(err error, id, topic string, timestamp time.Time,
 			errmsg = ErrUnknown(id, topic, timestamp)
 		}
 	}
-	errmsg.Ctrl.Params = params
+
+	if params != nil {
+		errmsg.Ctrl.Params = params
+	}
 
 	return errmsg
 }
@@ -428,7 +432,7 @@ func parseSearchQuery(query string) ([]string, []string, error) {
 	var prev int
 	query = strings.TrimSpace(query)
 	// Split query into tokens.
-	for i, w := 0, 0; prev != END; i += w {
+	for i, w, pos := 0, 0; prev != END; i += w, pos++ {
 		//
 		var emit bool
 
@@ -456,7 +460,7 @@ func parseSearchQuery(query string) ([]string, []string, error) {
 			} else {
 				if prev == ORD {
 					// Reject strings like a"b
-					return nil, nil, errors.New("missing operator")
+					return nil, nil, fmt.Errorf("missing operator at or near %d", pos)
 				}
 				// Start of the quoted string. Open the quote.
 				ctx.quo = true
@@ -470,7 +474,7 @@ func parseSearchQuery(query string) ([]string, []string, error) {
 		case OR:
 			if ctx.postOp == OR {
 				// More than one comma: ' , ,,'
-				return nil, nil, errors.New("invalid operator sequence")
+				return nil, nil, fmt.Errorf("invalid operator sequence at or near %d", pos)
 			}
 			// Ensure context is not "and", i.e. the case like ' ,' -> ','
 			ctx.postOp = OR
@@ -503,7 +507,7 @@ func parseSearchQuery(query string) ([]string, []string, error) {
 
 		if emit {
 			if ctx.quo {
-				return nil, nil, errors.New("unterminated quoted string")
+				return nil, nil, fmt.Errorf("unterminated quoted string at or near %d", pos)
 			}
 
 			// Emit the new token.

@@ -47,6 +47,10 @@ func genDb(reset bool, config string, data *Data) {
 		return
 	}
 
+	// Add authentication record
+	authHandler := store.GetAuthHandler("basic")
+	authHandler.Init(`{"add_to_tags": true}`, "basic")
+
 	nameIndex := make(map[string]string, len(data.Users))
 
 	log.Println("Generating users...")
@@ -64,14 +68,13 @@ func genDb(reset bool, config string, data *Data) {
 		}
 		user.CreatedAt = getCreatedTime(uu.CreatedAt)
 
-		if uu.Email != "" || uu.Tel != "" {
-			user.Tags = make([]string, 0)
-			if uu.Email != "" {
-				user.Tags = append(user.Tags, "email:"+uu.Email)
-			}
-			if uu.Tel != "" {
-				user.Tags = append(user.Tags, "tel:"+uu.Tel)
-			}
+		user.Tags = make([]string, 0)
+		user.Tags = append(user.Tags, "basic:"+uu.Username)
+		if uu.Email != "" {
+			user.Tags = append(user.Tags, "email:"+uu.Email)
+		}
+		if uu.Tel != "" {
+			user.Tags = append(user.Tags, "tel:"+uu.Tel)
 		}
 
 		// store.Users.Create will subscribe user to !me topic but won't create a !me topic
