@@ -1690,11 +1690,15 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 				// Returning public and private only if they have changed since ifModified
 				if sendPubPriv {
 					mts.Public = sub.GetPublic()
-					// Reporting private only if it's user's own subscription or
-					// a synthetic 'private' in 'find' topic where it's a list of tags matched on.
-					if uid == asUid || t.cat == types.TopicCatFnd {
+					// Reporting 'private' only if it's user's own subscription.
+					if uid == asUid {
 						mts.Private = sub.Private
 					}
+				}
+
+				// Always reporting 'private' for fnd topic.
+				if t.cat == types.TopicCatFnd {
+					mts.Private = sub.Private
 				}
 			}
 

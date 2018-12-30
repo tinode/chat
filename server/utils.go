@@ -432,7 +432,7 @@ func parseSearchQuery(query string) ([]string, []string, error) {
 	var prev int
 	query = strings.TrimSpace(query)
 	// Split query into tokens.
-	for i, w, pos := 0, 0; prev != END; i += w, pos++ {
+	for i, w, pos := 0, 0, 0; prev != END; i, pos = i+w, pos+1 {
 		//
 		var emit bool
 
