@@ -46,7 +46,7 @@ ENV AWS_CORS_ORIGINS='["*"]'
 ENV SMTP_HOST_URL='http://localhost:6060'
 
 # Whitelist of permitted email domains for email verification (empty list means all domains are permitted)
-ENV SMTP_DOMAINS='[]'
+ENV SMTP_DOMAINS=''
 
 # Various encryption and salt keys. Replace with your own in production.
 

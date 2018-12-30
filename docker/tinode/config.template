@@ -82,7 +82,7 @@
 				"reset_subject": "Reset Tinode password",
 				"headers": [],
 				"max_retries": 4,
-				"domains": "$SMTP_DOMAINS",
+				"domains": [$SMTP_DOMAINS],
 				"debug_response": "$DEBUG_EMAIL_VERIFICATION_CODE"
 			}
 		},
