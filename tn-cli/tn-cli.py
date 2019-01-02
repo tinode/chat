@@ -27,7 +27,7 @@ from tinode_grpc import pb
 from tinode_grpc import pbx
 
 APP_NAME = "tn-cli"
-APP_VERSION = "1.1.1"
+APP_VERSION = "1.1.2"
 LIB_VERSION = pkg_resources.get_distribution("tinode_grpc").version
 GRPC_VERSION = pkg_resources.get_distribution("grpcio").version
 
@@ -366,21 +366,21 @@ def parse_cmd(cmd):
         parser = argparse.ArgumentParser(prog=parts[0], description='Send notification to topic, ex "note kp"')
         parser.add_argument('topic', help='topic to notify')
         parser.add_argument('what', nargs='?', default='kp', const='kp', choices=['kp', 'read', 'recv'],
-            help='notification type')
-        parser.add_argument('--seq', help='value being reported')
+            help='notification type: kp (key press), recv, read - message received or read receipt')
+        parser.add_argument('--seq', help='message ID being reported')
     else:
         print("Unrecognized:", parts[0])
         print("Possible commands:")
-        print("\t.use\t- set default user or topic")
-        print("\tacc\t- create account")
-        print("\tlogin\t- authenticate")
+        print("\t.use\t- set default user (on_behalf_of user) or topic")
+        print("\tacc\t- create or alter an account")
+        print("\tlogin\t- authenticate current session")
         print("\tsub\t- subscribe to topic")
         print("\tleave\t- detach or unsubscribe from topic")
         print("\tpub\t- post message to topic")
         print("\tget\t- query topic for metadata or messages")
         print("\tset\t- update topic metadata")
         print("\tdel\t- delete message(s), topic, subscription, or user")
-        print("\tnote\t- send notification")
+        print("\tnote\t- send a notification")
         print("\n\tType <command> -h for help")
         return None
 
