@@ -1,8 +1,8 @@
 /******************************************************************************
  *
- *  Description :
+ *  Description:
  *
- *  Management of long polling sessions
+ *  Session management.
  *
  *****************************************************************************/
 
@@ -10,7 +10,6 @@ package main
 
 import (
 	"container/list"
-	"expvar"
 	"log"
 	"net/http"
 	"sync"
@@ -34,8 +33,6 @@ type SessionStore struct {
 
 	// All sessions indexed by session ID
 	sessCache map[string]*Session
-
-	sessionsLive *expvar.Int
 }
 
 // NewSession creates a new session and saves it to the session store.
@@ -104,7 +101,7 @@ func (ss *SessionStore) NewSession(conn interface{}, sid string) (*Session, int)
 		sess.cleanUp(true)
 	}
 
-	ss.sessionsLive.Set(len(ss.sessCache))
+	statsSet("LiveSessions", int64(len(ss.sessCache)))
 
 	return &s, count
 }
@@ -136,7 +133,7 @@ func (ss *SessionStore) Delete(s *Session) {
 		ss.lru.Remove(s.lpTracker)
 	}
 
-	ss.sessionsLive.Set(len(ss.sessCache))
+	statsSet("LiveSessions", int64(len(ss.sessCache)))
 }
 
 // Shutdown terminates sessionStore. No need to clean up.
@@ -171,7 +168,7 @@ func (ss *SessionStore) EvictUser(uid types.Uid, skipSid string) {
 		}
 	}
 
-	ss.sessionsLive.Set(len(ss.sessCache))
+	statsSet("LiveSessions", int64(len(ss.sessCache)))
 }
 
 // NewSessionStore initializes a session store.
@@ -180,9 +177,10 @@ func NewSessionStore(lifetime time.Duration) *SessionStore {
 		lru:      list.New(),
 		lifeTime: lifetime,
 
-		sessCache:    make(map[string]*Session),
-		sessionsLive: new(expvar.Int),
+		sessCache: make(map[string]*Session),
 	}
+
+	statsRegisterInt("LiveSessions")
 
 	return ss
 }

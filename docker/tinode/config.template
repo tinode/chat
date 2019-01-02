@@ -7,6 +7,7 @@
 	"max_message_size": 4194304,
 	"max_subscriber_count": 32,
 	"max_tag_count": 16,
+	"expvar": "",
 
 	"media": {
 		"use_handler": "$MEDIA_HANDLER",

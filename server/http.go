@@ -89,14 +89,14 @@ loop:
 			// While the server shuts down, termianate all sessions.
 			globals.sessionStore.Shutdown()
 
-			// Wait for http server to stop Accept()-ing connections
+			// Wait for http server to stop Accept()-ing connections.
 			<-httpdone
 			cancel()
 
 			// Shutdown local cluster node, if it's a part of a cluster.
 			globals.cluster.shutdown()
 
-			// Terminate plugin connections
+			// Terminate plugin connections.
 			pluginsShutdown()
 
 			// Shutdown gRPC server, if one is configured.
@@ -105,11 +105,14 @@ loop:
 				globals.grpcServer.Stop()
 			}
 
-			// Shutdown the hub. The hub will shutdown topics
+			// Stop publishing statistics.
+			statsShutdown()
+
+			// Shutdown the hub. The hub will shutdown topics.
 			hubdone := make(chan bool)
 			globals.hub.shutdown <- hubdone
 
-			// wait for the hub to finish
+			// Wait for the hub to finish.
 			<-hubdone
 
 			break loop
