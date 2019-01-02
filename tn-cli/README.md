@@ -37,16 +37,16 @@ If multiple `login-XYZ` are provided, `login-cookie` is considered first, then `
 
 ## Commands
 
-	* `.use` - set default user (on_behalf_of user) or topic
-	* `acc` - create  or modify an account
-	* `login` - authenticate current session
-	* `sub` - subscribe to topic
-	* `leave` - detach or unsubscribe from topic
-	* `pub` - post message to topic
-	* `get` - query topic for metadata or messages
-	* `set` - update topic metadata
-	* `del` - delete message(s), topic, subscription, or user
-	* `note` - send notification
+* `.use` - set default user (on_behalf_of user) or topic
+* `acc` - create  or modify an account
+* `login` - authenticate current session
+* `sub` - subscribe to topic
+* `leave` - detach or unsubscribe from topic
+* `pub` - post message to topic
+* `get` - query topic for metadata or messages
+* `set` - update topic metadata
+* `del` - delete message(s), topic, subscription, or user
+* `note` - send notification
 
 Type `<command> -h` for help
 
