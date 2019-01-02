@@ -134,6 +134,7 @@ func newHub() *Hub {
 	}
 
 	statsRegisterInt("LiveTopics")
+	statsRegisterInt("TotalTopics")
 
 	go h.run()
 
@@ -784,6 +785,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 	h.topicPut(t.name, t)
 
 	statsInc("LiveTopics", 1)
+	statsInc("TotalTopics", 1)
 
 	go t.run(h)
 

@@ -102,6 +102,7 @@ func (ss *SessionStore) NewSession(conn interface{}, sid string) (*Session, int)
 	}
 
 	statsSet("LiveSessions", int64(len(ss.sessCache)))
+	statsInc("TotalSessions", 1)
 
 	return &s, count
 }
@@ -181,6 +182,7 @@ func NewSessionStore(lifetime time.Duration) *SessionStore {
 	}
 
 	statsRegisterInt("LiveSessions")
+	statsRegisterInt("TotalSessions")
 
 	return ss
 }
