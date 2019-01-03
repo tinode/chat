@@ -42,7 +42,7 @@
 		"logical_names": [],
 		"basic": {
 			"add_to_tags": true,
-			"min_login_length": 4,
+			"min_login_length": 3,
 			"min_password_length": 6
 		},
 		"token": {
