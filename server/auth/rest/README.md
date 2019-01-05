@@ -6,6 +6,39 @@ This authenticator calls a designated authentication service over HTTP(S) POST. 
 
 Request and response payloads are formatted as JSON. Some of the request or response fields are context-dependent and may be skipped.
 
+<!-- TOC depthFrom:1 depthTo:6 withLinks:1 updateOnSave:1 orderedList:0 -->
+
+- [REST or JSON-RPC authenticator](#rest-or-json-rpc-authenticator)
+	- [Configuration](#configuration)
+	- [Request](#request)
+	- [Response](#response)
+	- [Recognized error responses](#recognized-error-responses)
+	- [The server must implement the following endpoints:](#the-server-must-implement-the-following-endpoints)
+		- [`add` Add new authentication record](#add-add-new-authentication-record)
+			- [Sample request:](#sample-request)
+			- [Sample response (rec values may change):](#sample-response-rec-values-may-change)
+		- [`auth` Request for authentication](#auth-request-for-authentication)
+			- [Sample request:](#sample-request)
+			- [Sample response when the account already exists (optional challenge included):](#sample-response-when-the-account-already-exists-optional-challenge-included)
+			- [Sample response when the account needs to be created by Tinode:](#sample-response-when-the-account-needs-to-be-created-by-tinode)
+		- [`checkunique` Checks if provided authentication record is unique.](#checkunique-checks-if-provided-authentication-record-is-unique)
+			- [Sample request](#sample-request)
+			- [Sample response](#sample-response)
+		- [`del` Requests to delete authentication record.](#del-requests-to-delete-authentication-record)
+			- [Sample request](#sample-request)
+			- [Sample response](#sample-response)
+		- [`gen` Generate authentication secret.](#gen-generate-authentication-secret)
+			- [Sample request](#sample-request)
+			- [Sample response](#sample-response)
+		- [`link` Requests server to link new account ID to authentication record.](#link-requests-server-to-link-new-account-id-to-authentication-record)
+			- [Sample request](#sample-request)
+			- [Sample response](#sample-response)
+		- [`upd` Update authentication record.](#upd-update-authentication-record)
+			- [Sample request](#sample-request)
+			- [Sample response](#sample-response)
+
+<!-- /TOC -->
+
 ## Configuration
 
 ```js
