@@ -36,7 +36,7 @@ If you are using the official [Docker image](https://hub.docker.com/u/tinode):
 ### Q: How can new users be added to Tinode?
 **A**: There are three ways to create accounts:
 * A user can create a new account using client-side UI.
-* A nw account can be created manually using [tn-cli](../tn-cli/) (`acc` command).
+* A new account can be created manually using [tn-cli](../tn-cli/) (`acc` command).
 * If the user already exists in an external database, the Tinode account can be automatically created on the first login using the [rest authenticator](../rest-auth/).
 
 
