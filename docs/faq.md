@@ -33,6 +33,13 @@ If you are using the official [Docker image](https://hub.docker.com/u/tinode):
 4. Add `google-services.json` to [Tindroid](/tinode/tindroid/) by following instructions at https://developers.google.com/android/guides/google-services-plugin.
 
 
+### Q: How can new users be added to Tinode?
+**A**: There are three ways to create accounts:
+* A user can create a new account using client-side UI.
+* A nw account can be created manually using [tn-cli](../tn-cli/) (`acc` command).
+* If the user already exists in an external database, the Tinode account can be automatically created on the first login using the [rest authenticator](../rest-auth/).
+
+
 ### Q: How to create a `root` user?<br/>
 **A**: The `root` access can be granted to a user only by executing a database query. First create or choose the user you want to promote to `root` then execute the query:
 * RethinkDB:
