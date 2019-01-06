@@ -15,12 +15,12 @@ Request and response payloads are formatted as JSON. Some of the request or resp
 	- [Recognized error responses](#recognized-error-responses)
 	- [The server must implement the following endpoints:](#the-server-must-implement-the-following-endpoints)
 		- [`add` Add new authentication record](#add-add-new-authentication-record)
-			- [Sample request:](#sample-request)
-			- [Sample response (rec values may change):](#sample-response-rec-values-may-change)
+			- [Sample request](#sample-request)
+			- [Sample response (rec values may change)](#sample-response-rec-values-may-change)
 		- [`auth` Request for authentication](#auth-request-for-authentication)
-			- [Sample request:](#sample-request)
-			- [Sample response when the account already exists (optional challenge included):](#sample-response-when-the-account-already-exists-optional-challenge-included)
-			- [Sample response when the account needs to be created by Tinode:](#sample-response-when-the-account-needs-to-be-created-by-tinode)
+			- [Sample request](#sample-request)
+			- [Sample response when the account already exists (optional challenge included)](#sample-response-when-the-account-already-exists-optional-challenge-included)
+			- [Sample response when the account needs to be created by Tinode](#sample-response-when-the-account-needs-to-be-created-by-tinode)
 		- [`checkunique` Checks if provided authentication record is unique.](#checkunique-checks-if-provided-authentication-record-is-unique)
 			- [Sample request](#sample-request)
 			- [Sample response](#sample-response)
@@ -120,7 +120,7 @@ See [here](../../store/types/types.go#L24) for an up to date list of supported e
 
 This endpoint requests server to add a new authentication record. This endpoint is generally used for account creation. If accounts are managed externally, it's likely to be unused and should generally return an error `"unsupported"`.
 
-#### Sample request:
+#### Sample request
 ```json
 {
   "endpoint": "add",
@@ -134,7 +134,7 @@ This endpoint requests server to add a new authentication record. This endpoint 
 }
 ```
 
-#### Sample response (rec values may change):
+#### Sample response (rec values may change)
 ```json
 {
   "rec": {
@@ -152,7 +152,7 @@ This endpoint requests server to add a new authentication record. This endpoint 
 Request to authenticate a user. Client (Tinode) provides a secret, authentication server responds with a user record. If this is a very first login and the server manages the accounts, the server may return `newacc` object which will be used by client (Tinode) to create the account.
 The server may optionally return a challenge as `byteval`.
 
-#### Sample request:
+#### Sample request
 ```json
 {
   "endpoint": "auth",
@@ -160,7 +160,7 @@ The server may optionally return a challenge as `byteval`.
 }
 ```
 
-#### Sample response when the account already exists (optional challenge included):
+#### Sample response when the account already exists (optional challenge included)
 ```json
 {
   "rec": {
@@ -171,7 +171,7 @@ The server may optionally return a challenge as `byteval`.
 }
 ```
 
-#### Sample response when the account needs to be created by Tinode:
+#### Sample response when the account needs to be created by Tinode
 ```js
 {
   "rec": {
