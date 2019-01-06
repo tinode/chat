@@ -85,8 +85,8 @@ A text-only [command line client](./tn-cli) implements every possible command.
 
 ### Planned
 
-* iOS client bindings and client.
-* Federation.
+* iOS client bindings and client ([in progress](https://github.com/tinode/ios)).
+* [Federation](https://en.wikipedia.org/wiki/Federation_(information_technology)).
 * End to end encryption with [OTR](https://en.wikipedia.org/wiki/Off-the-Record_Messaging) for one-on-one messaging and undecided method for group messaging.
 * Group messaging with unlimited number (or hundreds of thousands) of members with bearer token access control.
 * Hot standby.
