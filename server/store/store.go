@@ -421,7 +421,7 @@ func (TopicsObjMapper) Update(topic string, update map[string]interface{}) error
 	return adp.TopicUpdate(topic, update)
 }
 
-// Delete deletes topic, messages, attachments, and subscriptions.
+// OwnerChange replaces the old topic owner with the new owner.
 func (TopicsObjMapper) OwnerChange(topic string, newOwner, oldOwner types.Uid) error {
 	return adp.TopicOwnerChange(topic, newOwner, oldOwner)
 }
@@ -626,10 +626,10 @@ func GetAuthNames() []string {
 	}
 
 	var allNames []string
-	for name, _ := range authHandlers {
+	for name := range authHandlers {
 		allNames = append(allNames, name)
 	}
-	for name, _ := range authHandlerNames {
+	for name := range authHandlerNames {
 		allNames = append(allNames, name)
 	}
 

@@ -82,8 +82,8 @@ func (a *Level) UnmarshalText(b []byte) error {
 }
 
 // MarshalJSON converts Level to a quoted string.
-func (m Level) MarshalJSON() ([]byte, error) {
-	res, err := m.MarshalText()
+func (a Level) MarshalJSON() ([]byte, error) {
+	res, err := a.MarshalText()
 	if err != nil {
 		return nil, err
 	}
@@ -92,12 +92,12 @@ func (m Level) MarshalJSON() ([]byte, error) {
 }
 
 // UnmarshalJSON reads Level from a quoted string.
-func (m *Level) UnmarshalJSON(b []byte) error {
+func (a *Level) UnmarshalJSON(b []byte) error {
 	if b[0] != '"' || b[len(b)-1] != '"' {
 		return errors.New("syntax error")
 	}
 
-	return m.UnmarshalText(b[1 : len(b)-1])
+	return a.UnmarshalText(b[1 : len(b)-1])
 }
 
 // Feature is a bitmap of authenticated features, such as validated/not validated.

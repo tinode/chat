@@ -149,7 +149,7 @@ func (ss *SessionStore) Shutdown() {
 	log.Printf("SessionStore shut down, sessions terminated: %d", len(ss.sessCache))
 }
 
-// Terminate all sessions of a given user.
+// EvictUser terminates all sessions of a given user.
 func (ss *SessionStore) EvictUser(uid types.Uid, skipSid string) {
 	ss.lock.Lock()
 	defer ss.lock.Unlock()

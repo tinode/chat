@@ -829,8 +829,9 @@ func (t *Topic) requestSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Le
 	pktID, want string, private interface{}) (bool, error) {
 
 	now := types.TimeNow()
-	changed := false
 	toriginal := t.original(asUid)
+
+	var changed bool
 
 	// Access mode values as they were before this request was processed.
 	oldWant := types.ModeNone
@@ -1521,18 +1522,21 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 				var req, opt []string
 				if req, opt, err = parseSearchQuery(query); err == nil {
 					if len(req) > 0 || len(opt) > 0 {
-						// Check if the query contains terms that the user does not have.
-						if restr, _ := stringSliceDelta(t.tags,
-							filterRestrictedTags(append(req, opt...), globals.maskedTagNS)); len(restr) > 0 {
+						// Check if the query contains terms that the user is not allowed to use.
+						restr, _ := stringSliceDelta(t.tags, filterRestrictedTags(append(req, opt...),
+							globals.maskedTagNS))
+
+						if len(restr) > 0 {
 							sess.queueOut(ErrPermissionDenied(id, t.original(asUid), now))
 							return errors.New("attempt to search by restricted tags")
-						} else {
-							subs, err = store.Users.FindSubs(asUid, req, opt)
-							if err != nil {
-								sess.queueOut(decodeStoreError(err, id, t.original(asUid), now, nil))
-								return err
-							}
 						}
+
+						subs, err = store.Users.FindSubs(asUid, req, opt)
+						if err != nil {
+							sess.queueOut(decodeStoreError(err, id, t.original(asUid), now, nil))
+							return err
+						}
+
 					} else {
 						// Query string is empty.
 						sess.queueOut(ErrMalformed(id, t.original(asUid), now))
@@ -1736,7 +1740,7 @@ func (t *Topic) replySetSub(h *Hub, sess *Session, pkt *ClientComMessage) error 
 	}
 
 	var err error
-	changed := false
+	var changed bool
 	if target == asUid {
 		// Request new subscription or modify own subscription
 		changed, err = t.requestSub(h, sess, asUid, asLvl, pkt.id, set.Sub.Mode, nil)
