@@ -27,7 +27,7 @@ from tinode_grpc import pb
 from tinode_grpc import pbx
 
 APP_NAME = "tn-cli"
-APP_VERSION = "1.1.2"
+APP_VERSION = "1.2.0"
 LIB_VERSION = pkg_resources.get_distribution("tinode_grpc").version
 GRPC_VERSION = pkg_resources.get_distribution("grpcio").version
 
@@ -69,6 +69,7 @@ def make_vcard(fn, photofile):
 
     return card
 
+# Parse credentials
 def parse_cred(cred):
     result = None
     if cred != None:
@@ -80,25 +81,59 @@ def parse_cred(cred):
     return result
 
 # Support for asynchronous input-output to/from stdin/stdout
+
+# Stdout asynchronously writes to sys.stdout
 def stdout(*args):
     text = ""
     for a in args:
         text = text + str(a) + " "
+    # Strip just the spaces here, don't strip the newline or tabs.
     text = text.strip(" ")
-    if text != "":
+    if text:
         output_queue.put(text)
 
+# Stdoutln asynchronously writes to sys.stdout and adds a new line to input.
 def stdoutln(*args):
     args = args + ("\n",)
     stdout(*args)
 
+# Stdin reads a possibly multiline input from stdin and queues it for asynchronous processing.
 def stdin(input_queue):
+    partial_input = ""
     while True:
-        cmd = sys.stdin.readline().splitlines()[0]
-        input_queue.put(cmd)
-        if cmd == 'exit' or cmd == 'quit':
-            return
+        for cmd in sys.stdin.readline().splitlines():
+            cmd = cmd.strip()
+            # Check for continuation symbol \ in the end of the line.
+            if len(cmd) > 0 and cmd[-1] == "\\":
+                cmd = cmd[:-1].rstrip()
+                if cmd:
+                    if partial_input:
+                        partial_input += " " + cmd
+                    else:
+                        partial_input = cmd
 
+                sys.stdout.write("... ")
+                sys.stdout.flush()
+                continue
+
+            # Check if we have cached input from a previous multiline command.
+            if partial_input:
+                if cmd:
+                    partial_input += " " + cmd
+                input_queue.put(partial_input)
+                partial_input = ""
+                continue
+
+            if cmd == "":
+                continue
+
+            input_queue.put(cmd)
+
+            # Stop processing input
+            if cmd == 'exit' or cmd == 'quit' or cmd == '.exit' or cmd == '.quit':
+                return
+
+# encode_to_bytes takes an object/dictionary and converts it to json-formatted byte array.
 def encode_to_bytes(src):
     if src == None:
         return None
@@ -136,13 +171,18 @@ def loginMsg(id, scheme, secret, cred, uname, password):
             password = ''
         secret = str(uname) + ":" + str(password)
         secret = secret.encode('utf-8')
+    elif scheme == "basic":
+        # Assuming secret is a uname:password string.
+        secret = str(secret).encode('utf-8')
     else:
-        # Assuming secret is a base64-encoded string
+        # All other schemes: assume secret is a base64-encoded string
         secret = base64.b64decode(secret)
 
-    onCompletion[str(id)] = lambda params: save_cookie(params)
-    return pb.ClientMsg(login=pb.ClientLogin(id=str(id), scheme=scheme, secret=secret,
+    msg = pb.ClientMsg(login=pb.ClientLogin(id=str(id), scheme=scheme, secret=secret,
         cred=parse_cred(cred)))
+    onCompletion[str(id)] = lambda params: save_cookie(params)
+
+    return msg
 
 def subMsg(id, topic, fn, photo, private, auth, anon, mode, tags, get_query):
     if not topic:
@@ -289,11 +329,18 @@ def parse_cmd(cmd):
         parser = argparse.ArgumentParser(prog=parts[0], description='Set default user or topic')
         parser.add_argument('--user', default="unchanged", help='ID of the default user')
         parser.add_argument('--topic', default="unchanged", help='Name of default topic')
+    elif parts[0] == ".await":
+        pass
+    elif parts[0] == ".must":
+        pass
+    elif parts[0] == ".log":
+        pass
     elif parts[0] == "acc":
         parser = argparse.ArgumentParser(prog=parts[0], description='Create or alter an account')
         parser.add_argument('--user', default='new', help='ID of the account to update')
         parser.add_argument('--scheme', default='basic', help='authentication scheme, default=basic')
-        parser.add_argument('--secret', default=None, help='secret for authentication')
+        parser.add_argument('--secret', default=None, help='secret for authentication, base64-encoded')
+        parser.add_argument('--asecret', default=None, help='secret for authentication, ASCII-encoded')
         parser.add_argument('--uname', default=None, help='user name for basic authentication')
         parser.add_argument('--password', default=None, help='password for basic authentication')
         parser.add_argument('--do-login', action='store_true', help='login with the newly created account')
@@ -307,8 +354,9 @@ def parse_cmd(cmd):
     elif parts[0] == "login":
         parser = argparse.ArgumentParser(prog=parts[0], description='Authenticate current session')
         parser.add_argument('--scheme', default='basic', help='authentication schema, default=basic')
-        parser.add_argument('secret', nargs='?', default=argparse.SUPPRESS, help='authentication secret')
-        parser.add_argument('--secret', dest='secret', default=None, help='authentication secret')
+        parser.add_argument('secret', nargs='?', default=argparse.SUPPRESS, help='secret for authentication')
+        parser.add_argument('--secret', dest='secret', default=None, help='secret for authentication, base64-encoded')
+        parser.add_argument('--asecret', default=None, help='secret for authentication, ASCII-encoded')
         parser.add_argument('--uname', default=None, help='user name in basic authentication scheme')
         parser.add_argument('--password', default=None, help='password in basic authentication scheme')
         parser.add_argument('--cred', default=None, help='credentials, comma separated list in method:value format, e.g. email:test@example.com,tel:12345')
@@ -346,7 +394,7 @@ def parse_cmd(cmd):
     elif parts[0] == "set":
         parser = argparse.ArgumentParser(prog=parts[0], description='Update topic metadata')
         parser.add_argument('topic', help='topic to update')
-        parser.add_argument('--fn', default=None, help='topic\'s name')
+        parser.add_argument('--fn', default=None, help='topic\'s title')
         parser.add_argument('--photo', default=None, help='avatar file name')
         parser.add_argument('--public', default=None, help='topic\'s public info, alternative to fn+photo')
         parser.add_argument('--private', default=None, help='topic\'s private info')
@@ -371,17 +419,24 @@ def parse_cmd(cmd):
     else:
         print("Unrecognized:", parts[0])
         print("Possible commands:")
-        print("\t.use\t- set default user (on_behalf_of user) or topic")
+        print("\t.await\t- wait for completion of an operation")
+        print("\t.exit\t- exit the program (also .quit)")
+        print("\t.log\t- write value of a variable to stdout")
+        print("\t.must\t- wait for completion of an operation terminating on failure")
+        print("\t.use\t- set default user (on_behalf_of) or topic")
         print("\tacc\t- create or alter an account")
-        print("\tlogin\t- authenticate current session")
-        print("\tsub\t- subscribe to topic")
-        print("\tleave\t- detach or unsubscribe from topic")
-        print("\tpub\t- post message to topic")
-        print("\tget\t- query topic for metadata or messages")
-        print("\tset\t- update topic metadata")
         print("\tdel\t- delete message(s), topic, subscription, or user")
+        print("\tget\t- query topic for metadata or messages")
+        print("\tleave\t- detach or unsubscribe from topic")
+        print("\tlogin\t- authenticate current session")
         print("\tnote\t- send a notification")
+        print("\tpub\t- post message to topic")
+        print("\tset\t- update topic metadata")
+        print("\tsub\t- subscribe to topic")
         print("\n\tType <command> -h for help")
+        return None
+
+    if not parser:
         return None
 
     try:
@@ -393,46 +448,50 @@ def parse_cmd(cmd):
 
 def serialize_cmd(string, id):
     """Take string read from the command line, convert in into a protobuf message"""
+    try:
+        # Convert string into a dictionary
+        cmd = parse_cmd(string)
+        if cmd == None:
+            return None
 
-    # Convert string into a dictionary
-    cmd = parse_cmd(string)
-    if cmd == None:
-        return None
+        # Process dictionary
+        if cmd.cmd == ".use":
+            if cmd.user != "unchanged":
+                global default_user
+                default_user = cmd.user
+                stdoutln("Default user='" + default_user + "'")
+            if cmd.topic != "unchanged":
+                global default_topic
+                default_topic = cmd.topic
+                stdoutln("Default topic='" + default_topic + "'")
+            return None
+        elif cmd.cmd == "acc":
+            return accMsg(id, cmd.user, cmd.scheme, cmd.secret, cmd.uname, cmd.password,
+                cmd.do_login, cmd.fn, cmd.photo, cmd.private, cmd.auth, cmd.anon, cmd.tags, cmd.cred)
+        elif cmd.cmd == "login":
+            return loginMsg(id, cmd.scheme, cmd.secret, cmd.cred, cmd.uname, cmd.password)
+        elif cmd.cmd == "sub":
+            return subMsg(id, cmd.topic, cmd.fn, cmd.photo, cmd.private, cmd.auth, cmd.anon,
+                cmd.mode, cmd.tags, cmd.get_query)
+        elif cmd.cmd == "leave":
+            return leaveMsg(id, cmd.topic, cmd.unsub)
+        elif cmd.cmd == "pub":
+            return pubMsg(id, cmd.topic, cmd.content)
+        elif cmd.cmd == "get":
+            return getMsg(id, cmd.topic, cmd.desc, cmd.sub, cmd.tags, cmd.data)
+        elif cmd.cmd == "set":
+            return setMsg(id, cmd.topic, cmd.user, cmd.fn, cmd.photo, cmd.public, cmd.private,
+                cmd.auth, cmd.anon, cmd.mode, cmd.tags)
+        elif cmd.cmd == "del":
+            return delMsg(id, cmd.what, cmd.topic, cmd.user, cmd.seq, cmd.hard)
+        elif cmd.cmd == "note":
+            return noteMsg(id, cmd.topic, cmd.what, cmd.seq)
+        else:
+            stdoutln("Unrecognized: '{0}'".format(cmd.cmd))
+            return None
 
-    # Process dictionary
-    if cmd.cmd == ".use":
-        if cmd.user != "unchanged":
-            global default_user
-            default_user = cmd.user
-            stdoutln("Default user is '" + default_user + "'")
-        if cmd.topic != "unchanged":
-            global default_topic
-            default_topic = cmd.topic
-            stdoutln("Default topic is '" + default_topic + "'")
-        return None
-    elif cmd.cmd == "acc":
-        return accMsg(id, cmd.user, cmd.scheme, cmd.secret, cmd.uname, cmd.password,
-            cmd.do_login, cmd.fn, cmd.photo, cmd.private, cmd.auth, cmd.anon, cmd.tags, cmd.cred)
-    elif cmd.cmd == "login":
-        return loginMsg(id, cmd.scheme, cmd.secret, cmd.cred, cmd.uname, cmd.password)
-    elif cmd.cmd == "sub":
-        return subMsg(id, cmd.topic, cmd.fn, cmd.photo, cmd.private, cmd.auth, cmd.anon,
-            cmd.mode, cmd.tags, cmd.get_query)
-    elif cmd.cmd == "leave":
-        return leaveMsg(id, cmd.topic, cmd.unsub)
-    elif cmd.cmd == "pub":
-        return pubMsg(id, cmd.topic, cmd.content)
-    elif cmd.cmd == "get":
-        return getMsg(id, cmd.topic, cmd.desc, cmd.sub, cmd.tags, cmd.data)
-    elif cmd.cmd == "set":
-        return setMsg(id, cmd.topic, cmd.user, cmd.fn, cmd.photo, cmd.public, cmd.private,
-            cmd.auth, cmd.anon, cmd.mode, cmd.tags)
-    elif cmd.cmd == "del":
-        return delMsg(id, cmd.what, cmd.topic, cmd.user, cmd.seq, cmd.hard)
-    elif cmd.cmd == "note":
-        return noteMsg(id, cmd.topic, cmd.what, cmd.seq)
-    else:
-        stdoutln("Unrecognized: " + cmd.cmd)
+    except Exception as err:
+        stdoutln("Error in '{0}': {1}".format(cmd.cmd, err))
         return None
 
 def gen_message(schema, secret):
@@ -460,7 +519,7 @@ def gen_message(schema, secret):
         if not input_queue.empty():
             id += 1
             inp = input_queue.get()
-            if inp == 'exit' or inp == 'quit':
+            if inp == 'exit' or inp == 'quit' or inp == '.exit' or inp == '.quit':
                 return
             cmd = serialize_cmd(inp, id)
             print_prompt = True
@@ -474,7 +533,7 @@ def gen_message(schema, secret):
 
         else:
             if print_prompt:
-                sys.stdout.write("tn-cli> ")
+                sys.stdout.write("tn> ")
                 sys.stdout.flush()
                 print_prompt = False
             time.sleep(0.1)
@@ -525,8 +584,8 @@ def run(addr, schema, secret, secure, ssl_host):
             else:
                 stdoutln("\rMessage type not handled", msg)
 
-    except grpc._channel._Rendezvous as err:
-        print(err)
+    except grpc.RpcError as err:
+        print('gRPC failed with {0}: {1}'.format(err.code(), err.details()))
         channel.close()
         if input_thread != None:
             input_thread.join(0.3)
