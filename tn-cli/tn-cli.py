@@ -1,4 +1,6 @@
-"""The Python implementation of the gRPC Tinode client."""
+#!/usr/bin/env python
+
+"""Python implementation of Tinode command line client using gRPC."""
 
 # To make print() compatible between p2 and p3
 from __future__ import print_function
@@ -31,14 +33,11 @@ APP_VERSION = "1.2.0"
 LIB_VERSION = pkg_resources.get_distribution("tinode_grpc").version
 GRPC_VERSION = pkg_resources.get_distribution("grpcio").version
 
-# Dictionary wich contains lambdas to be executed when server response is received
-onCompletion = {}
-
 # This is needed for gRPC ssl to work correctly.
 os.environ["GRPC_SSL_CIPHER_SUITES"] = "HIGH+ECDSA"
 
-# Saved topic: default topic name to make keyboard input easier
-SavedTopic = None
+# Dictionary wich contains lambdas to be executed when server response is received
+OnCompletion = {}
 
 # IO queues and thread for asynchronous input/output
 input_queue = queue.Queue()
@@ -46,8 +45,11 @@ output_queue = queue.Queue()
 input_thread = None
 
 # Default values for user and topic
-default_user = None
-default_topic = None
+DefaultUser = None
+DefaultTopic = None
+
+# Variables: results of command execution
+Variables = {}
 
 # Pack user's name and avatar into a vcard represented as json.
 def make_vcard(fn, photofile):
@@ -141,7 +143,7 @@ def encode_to_bytes(src):
 
 # Constructing individual messages
 def hiMsg(id):
-    onCompletion[str(id)] = lambda params: print_server_params(params)
+    OnCompletion[str(id)] = lambda params: print_server_params(params)
     return pb.ClientMsg(hi=pb.ClientHi(id=str(id), user_agent=APP_NAME + "/" + APP_VERSION + " (" +
         platform.system() + "/" + platform.release() + "); gRPC-python/" + LIB_VERSION,
         ver=LIB_VERSION, lang="EN"))
@@ -161,7 +163,7 @@ def accMsg(id, user, scheme, secret, uname, password, do_login, fn, photo, priva
     return pb.ClientMsg(acc=pb.ClientAcc(id=str(id), user_id=user,
         scheme=scheme, secret=secret, login=do_login, tags=tags.split(",") if tags else None,
         desc=pb.SetDesc(default_acs=pb.DefaultAcsMode(auth=auth, anon=anon),
-        public=public, private=private), cred=parse_cred(cred)), on_behalf_of=default_user)
+        public=public, private=private), cred=parse_cred(cred)), on_behalf_of=DefaultUser)
 
 def loginMsg(id, scheme, secret, cred, uname, password):
     if secret == None:
@@ -180,13 +182,13 @@ def loginMsg(id, scheme, secret, cred, uname, password):
 
     msg = pb.ClientMsg(login=pb.ClientLogin(id=str(id), scheme=scheme, secret=secret,
         cred=parse_cred(cred)))
-    onCompletion[str(id)] = lambda params: save_cookie(params)
+    OnCompletion[str(id)] = lambda params: save_cookie(params)
 
     return msg
 
 def subMsg(id, topic, fn, photo, private, auth, anon, mode, tags, get_query):
     if not topic:
-        topic = default_topic
+        topic = DefaultTopic
     if get_query:
         get_query = pb.GetQuery(what=get_query.split(",").join(" "))
     public = encode_to_bytes(make_vcard(fn, photo))
@@ -195,22 +197,22 @@ def subMsg(id, topic, fn, photo, private, auth, anon, mode, tags, get_query):
         set_query=pb.SetQuery(
             desc=pb.SetDesc(public=public, private=private, default_acs=pb.DefaultAcsMode(auth=auth, anon=anon)),
             sub=pb.SetSub(mode=mode),
-            tags=tags.split(",") if tags else None), get_query=get_query), on_behalf_of=default_user)
+            tags=tags.split(",") if tags else None), get_query=get_query), on_behalf_of=DefaultUser)
 
 def leaveMsg(id, topic, unsub):
     if not topic:
-        topic = default_topic
-    return pb.ClientMsg(leave=pb.ClientLeave(id=str(id), topic=topic, unsub=unsub), on_behalf_of=default_user)
+        topic = DefaultTopic
+    return pb.ClientMsg(leave=pb.ClientLeave(id=str(id), topic=topic, unsub=unsub), on_behalf_of=DefaultUser)
 
 def pubMsg(id, topic, content):
     if not topic:
-        topic = default_topic
+        topic = DefaultTopic
     return pb.ClientMsg(pub=pb.ClientPub(id=str(id), topic=topic, no_echo=True,
-                content=encode_to_bytes(content)), on_behalf_of=default_user)
+                content=encode_to_bytes(content)), on_behalf_of=DefaultUser)
 
 def getMsg(id, topic, desc, sub, tags, data):
     if not topic:
-        topic = default_topic
+        topic = DefaultTopic
 
     what = []
     if desc:
@@ -222,12 +224,12 @@ def getMsg(id, topic, desc, sub, tags, data):
     if data:
         what.append("data")
     return pb.ClientMsg(get=pb.ClientGet(id=str(id), topic=topic,
-        query=pb.GetQuery(what=" ".join(what))), on_behalf_of=default_user)
+        query=pb.GetQuery(what=" ".join(what))), on_behalf_of=DefaultUser)
 
 
 def setMsg(id, topic, user, fn, photo, public, private, auth, anon, mode, tags):
     if not topic:
-        topic = default_topic
+        topic = DefaultTopic
 
     if public == None:
         public = encode_to_bytes(make_vcard(fn, photo))
@@ -239,7 +241,7 @@ def setMsg(id, topic, user, fn, photo, public, private, auth, anon, mode, tags):
             desc=pb.SetDesc(default_acs=pb.DefaultAcsMode(auth=auth, anon=anon),
                 public=public, private=private),
         sub=pb.SetSub(user_id=user, mode=mode),
-        tags=tags.split(",") if tags else None)), on_behalf_of=default_user)
+        tags=tags.split(",") if tags else None)), on_behalf_of=DefaultUser)
 
 
 def delMsg(id, what, topic, user, msglist, hard):
@@ -247,8 +249,8 @@ def delMsg(id, what, topic, user, msglist, hard):
         stdoutln("Must specify what to delete")
         return None
 
-    topic = topic if topic else default_topic
-    user = user if user else default_user
+    topic = topic if topic else DefaultTopic
+    user = user if user else DefaultUser
     enum_what = None
     before = None
     seq_list = None
@@ -283,7 +285,7 @@ def delMsg(id, what, topic, user, msglist, hard):
         enum_what = pb.ClientDel.USER
         topic = None
 
-    msg = pb.ClientMsg(on_behalf_of=default_user)
+    msg = pb.ClientMsg(on_behalf_of=DefaultUser)
     # Field named 'del' conflicts with the keyword 'del. This is a work around.
     xdel = getattr(msg, 'del')
     """
@@ -304,7 +306,7 @@ def delMsg(id, what, topic, user, msglist, hard):
 
 def noteMsg(id, topic, what, seq):
     if not topic:
-        topic = default_topic
+        topic = DefaultTopic
 
     enum_what = None
     if what == 'kp':
@@ -316,26 +318,11 @@ def noteMsg(id, topic, what, seq):
     elif what == 'recv':
         enum_what = pb.READ
         seq = int(seq)
-    return pb.ClientMsg(note=pb.ClientNote(topic=topic, what=enum_what, seq_id=seq), on_behalf_of=default_user)
+    return pb.ClientMsg(note=pb.ClientNote(topic=topic, what=enum_what, seq_id=seq), on_behalf_of=DefaultUser)
 
-def parse_cmd(cmd):
-    """Parses command line input into a dictionary"""
-    parts = shlex.split(cmd)
-    if len(parts) == 0:
-        return None
-
-    parser = None
-    if parts[0] == ".use":
-        parser = argparse.ArgumentParser(prog=parts[0], description='Set default user or topic')
-        parser.add_argument('--user', default="unchanged", help='ID of the default user')
-        parser.add_argument('--topic', default="unchanged", help='Name of default topic')
-    elif parts[0] == ".await":
-        pass
-    elif parts[0] == ".must":
-        pass
-    elif parts[0] == ".log":
-        pass
-    elif parts[0] == "acc":
+# Given an array of parts, parse commands and arguments
+def parse_cmd(parts):
+    if parts[0] == "acc":
         parser = argparse.ArgumentParser(prog=parts[0], description='Create or alter an account')
         parser.add_argument('--user', default='new', help='ID of the account to update')
         parser.add_argument('--scheme', default='basic', help='authentication scheme, default=basic')
@@ -416,7 +403,44 @@ def parse_cmd(cmd):
         parser.add_argument('what', nargs='?', default='kp', const='kp', choices=['kp', 'read', 'recv'],
             help='notification type: kp (key press), recv, read - message received or read receipt')
         parser.add_argument('--seq', help='message ID being reported')
+
+    return parser
+
+# Parses command line into command and parameters.
+def parse_input(cmd):
+    # Split line into parts using shell-like syntax.
+    parts = shlex.split(cmd, comments=True)
+    if len(parts) == 0:
+        return None
+
+    # Commands which can be targets of .await and .must
+    waitable = ['acc', 'del', 'get', 'leave', 'login', 'pub', 'set', 'sub']
+
+    parser = None
+    if parts[0] == ".use":
+        parser = argparse.ArgumentParser(prog=parts[0], description='Set default user or topic')
+        parser.add_argument('--user', default="unchanged", help='ID of default (on_behalf_of) user')
+        parser.add_argument('--topic', default="unchanged", help='Name of default topic')
+    elif parts[0] == ".await" or parts[0] == ".must":
+        # .await|.must [<variable_name>] <waitable_command> <params>
+        if len(parts) > 1:
+            synchronous = True
+            failOnError = parts[0] == ".must"
+            if len(parts) > 2 and parts[2] in waitable:
+                varname = parts[1]
+                parts = parts[:2]
+                parser = parse_cmd(parts)
+            else if parts[1] in waitable:
+                parts = parts[:1]
+                parser = parse_cmd(parts)
+
+    elif parts[0] == ".log":
+        parser = argparse.ArgumentParser(prog=parts[0], description='Write value of a variable to stdout')
+        parser.add_argument('varname', nargs='1', help='name of the variable to print')
     else:
+        parser = parse_cmd(parts)
+
+    if not parser:
         print("Unrecognized:", parts[0])
         print("Possible commands:")
         print("\t.await\t- wait for completion of an operation")
@@ -436,9 +460,6 @@ def parse_cmd(cmd):
         print("\n\tType <command> -h for help")
         return None
 
-    if not parser:
-        return None
-
     try:
         args = parser.parse_args(parts[1:])
         args.cmd = parts[0]
@@ -450,20 +471,23 @@ def serialize_cmd(string, id):
     """Take string read from the command line, convert in into a protobuf message"""
     try:
         # Convert string into a dictionary
-        cmd = parse_cmd(string)
+        cmd = parse_input(string)
         if cmd == None:
             return None
 
         # Process dictionary
-        if cmd.cmd == ".use":
+        if cmd.cmd == ".log":
+            stdoutln(Variables[cmd.varname])
+            return None
+        elif cmd.cmd == ".use":
             if cmd.user != "unchanged":
-                global default_user
-                default_user = cmd.user
-                stdoutln("Default user='" + default_user + "'")
+                global DefaultUser
+                DefaultUser = cmd.user
+                stdoutln("Default user='" + DefaultUser + "'")
             if cmd.topic != "unchanged":
-                global default_topic
-                default_topic = cmd.topic
-                stdoutln("Default topic='" + default_topic + "'")
+                global DefaultTopic
+                DefaultTopic = cmd.topic
+                stdoutln("Default topic='" + DefaultTopic + "'")
             return None
         elif cmd.cmd == "acc":
             return accMsg(id, cmd.user, cmd.scheme, cmd.secret, cmd.uname, cmd.password,
@@ -555,9 +579,9 @@ def run(addr, schema, secret, secure, ssl_host):
         for msg in stream:
             if msg.HasField("ctrl"):
                 # Run code on command completion
-                func = onCompletion.get(msg.ctrl.id)
+                func = OnCompletion.get(msg.ctrl.id)
                 if func != None:
-                    del onCompletion[msg.ctrl.id]
+                    del OnCompletion[msg.ctrl.id]
                     if msg.ctrl.code >= 200 and msg.ctrl.code < 400:
                         func(msg.ctrl.params)
                 topic = " (" + str(msg.ctrl.topic) + ")" if msg.ctrl.topic else ""
