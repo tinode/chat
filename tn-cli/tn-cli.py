@@ -33,16 +33,22 @@ APP_VERSION = "1.2.0"
 LIB_VERSION = pkg_resources.get_distribution("tinode_grpc").version
 GRPC_VERSION = pkg_resources.get_distribution("grpcio").version
 
-# This is needed for gRPC ssl to work correctly.
+# 5 seconds timeout for .await/.must commands.
+AWAIT_TIMEOUT = 5
+
+# This is needed for gRPC SSL to work correctly.
 os.environ["GRPC_SSL_CIPHER_SUITES"] = "HIGH+ECDSA"
 
-# Dictionary wich contains lambdas to be executed when server response is received
+# Dictionary wich contains lambdas to be executed when server {ctrl} response is received.
 OnCompletion = {}
 
-# IO queues and thread for asynchronous input/output
-input_queue = queue.Queue()
-output_queue = queue.Queue()
-input_thread = None
+# Outstanding request for a synchronous message.
+WaitingFor = None
+
+# IO queues and a thread for asynchronous input/output
+InputQueue = queue.Queue()
+OutputQueue = queue.Queue()
+InputThread = None
 
 # Default values for user and topic
 DefaultUser = None
@@ -92,7 +98,7 @@ def stdout(*args):
     # Strip just the spaces here, don't strip the newline or tabs.
     text = text.strip(" ")
     if text:
-        output_queue.put(text)
+        OutputQueue.put(text)
 
 # Stdoutln asynchronously writes to sys.stdout and adds a new line to input.
 def stdoutln(*args):
@@ -100,7 +106,7 @@ def stdoutln(*args):
     stdout(*args)
 
 # Stdin reads a possibly multiline input from stdin and queues it for asynchronous processing.
-def stdin(input_queue):
+def stdin(InputQueue):
     partial_input = ""
     while True:
         for cmd in sys.stdin.readline().splitlines():
@@ -122,14 +128,14 @@ def stdin(input_queue):
             if partial_input:
                 if cmd:
                     partial_input += " " + cmd
-                input_queue.put(partial_input)
+                InputQueue.put(partial_input)
                 partial_input = ""
                 continue
 
             if cmd == "":
                 continue
 
-            input_queue.put(cmd)
+            InputQueue.put(cmd)
 
             # Stop processing input
             if cmd == 'exit' or cmd == 'quit' or cmd == '.exit' or cmd == '.quit':
@@ -148,142 +154,147 @@ def hiMsg(id):
         platform.system() + "/" + platform.release() + "); gRPC-python/" + LIB_VERSION,
         ver=LIB_VERSION, lang="EN"))
 
-def accMsg(id, user, scheme, secret, uname, password, do_login, fn, photo, private, auth, anon, tags, cred):
-    if secret == None and uname != None:
-        if password == None:
-            password = ''
-        secret = str(uname) + ":" + str(password)
-    if secret:
-        secret = secret.encode('utf-8')
+def accMsg(id, cmd):
+    if cmd.uname:
+        if cmd.password == None:
+            cmd.password = ''
+        cmd.secret = str(cmd.uname) + ":" + str(cmd.password)
+    elif cmd.asecret:
+        cmd.secret = base64.encode(cmd.asecret)
+
+    if cmd.secret:
+        cmd.secret = cmd.secret.encode('utf-8')
     else:
-        secret = b''
+        cmd.secret = b''
 
-    public = encode_to_bytes(make_vcard(fn, photo))
-    private = encode_to_bytes(private)
-    return pb.ClientMsg(acc=pb.ClientAcc(id=str(id), user_id=user,
-        scheme=scheme, secret=secret, login=do_login, tags=tags.split(",") if tags else None,
-        desc=pb.SetDesc(default_acs=pb.DefaultAcsMode(auth=auth, anon=anon),
-        public=public, private=private), cred=parse_cred(cred)), on_behalf_of=DefaultUser)
+    cmd.public = encode_to_bytes(make_vcard(cmd.fn, cmd.photo))
+    cmd.private = encode_to_bytes(cmd.private)
+    return pb.ClientMsg(acc=pb.ClientAcc(id=str(id), user_id=cmd.user,
+        scheme=cmd.scheme, secret=cmd.secret, login=cmd.do_login, tags=cmd.tags.split(",") if cmd.tags else None,
+        desc=pb.SetDesc(default_acs=pb.DefaultAcsMode(auth=cmd.auth, anon=cmd.anon),
+            public=cmd.public, private=cmd.private), 
+        cred=parse_cred(cmd.cred)), on_behalf_of=DefaultUser)
 
-def loginMsg(id, scheme, secret, cred, uname, password):
-    if secret == None:
-        if uname == None:
-            uname = ''
-        if password == None:
-            password = ''
-        secret = str(uname) + ":" + str(password)
-        secret = secret.encode('utf-8')
-    elif scheme == "basic":
+def loginMsg(id, cmd):
+    if cmd.secret == None:
+        if cmd.uname == None:
+            cmd.uname = ''
+        if cmd.password == None:
+            cmd.password = ''
+        cmd.secret = str(cmd.uname) + ":" + str(cmd.password)
+        cmd.secret = cmd.secret.encode('utf-8')
+    elif cmd.scheme == "basic":
         # Assuming secret is a uname:password string.
-        secret = str(secret).encode('utf-8')
+        cmd.secret = str(cmd.secret).encode('utf-8')
     else:
         # All other schemes: assume secret is a base64-encoded string
-        secret = base64.b64decode(secret)
+        cmd.secret = base64.b64decode(cmd.secret)
 
-    msg = pb.ClientMsg(login=pb.ClientLogin(id=str(id), scheme=scheme, secret=secret,
-        cred=parse_cred(cred)))
+    msg = pb.ClientMsg(login=pb.ClientLogin(id=str(id), scheme=cmd.scheme, secret=cmd.secret,
+        cred=parse_cred(cmd.cred)))
     OnCompletion[str(id)] = lambda params: save_cookie(params)
 
     return msg
 
-def subMsg(id, topic, fn, photo, private, auth, anon, mode, tags, get_query):
-    if not topic:
-        topic = DefaultTopic
-    if get_query:
-        get_query = pb.GetQuery(what=get_query.split(",").join(" "))
-    public = encode_to_bytes(make_vcard(fn, photo))
-    private = encode_to_bytes(private)
-    return pb.ClientMsg(sub=pb.ClientSub(id=str(id), topic=topic,
+def subMsg(id, cmd):
+    if not cmd.topic:
+        cmd.topic = DefaultTopic
+    if cmd.get_query:
+        cmd.get_query = pb.GetQuery(what=cmd.get_query.split(",").join(" "))
+    cmd.public = encode_to_bytes(make_vcard(cmd.fn, cmd.photo))
+    cmd.private = encode_to_bytes(cmd.private)
+    return pb.ClientMsg(sub=pb.ClientSub(id=str(id), topic=cmd.topic,
         set_query=pb.SetQuery(
-            desc=pb.SetDesc(public=public, private=private, default_acs=pb.DefaultAcsMode(auth=auth, anon=anon)),
-            sub=pb.SetSub(mode=mode),
-            tags=tags.split(",") if tags else None), get_query=get_query), on_behalf_of=DefaultUser)
+            desc=pb.SetDesc(public=cmd.public, private=cmd.private,
+                default_acs=pb.DefaultAcsMode(auth=cmd.auth, anon=cmd.anon)),
+            sub=pb.SetSub(mode=cmd.mode),
+            tags=cmd.tags.split(",") if cmd.tags else None), get_query=cmd.get_query), on_behalf_of=DefaultUser)
 
-def leaveMsg(id, topic, unsub):
-    if not topic:
-        topic = DefaultTopic
-    return pb.ClientMsg(leave=pb.ClientLeave(id=str(id), topic=topic, unsub=unsub), on_behalf_of=DefaultUser)
+def leaveMsg(id, cmd):
+    if not cmd.topic:
+        cmd.topic = DefaultTopic
+    return pb.ClientMsg(leave=pb.ClientLeave(id=str(id), topic=cmd.topic, unsub=cmd.unsub), on_behalf_of=DefaultUser)
 
-def pubMsg(id, topic, content):
-    if not topic:
-        topic = DefaultTopic
-    return pb.ClientMsg(pub=pb.ClientPub(id=str(id), topic=topic, no_echo=True,
-                content=encode_to_bytes(content)), on_behalf_of=DefaultUser)
+def pubMsg(id, cmd):
+    if not cmd.topic:
+        cmd.topic = DefaultTopic
+    return pb.ClientMsg(pub=pb.ClientPub(id=str(id), topic=cmd.topic, no_echo=True,
+                head=cmd.head, content=encode_to_bytes(cmd.content)), on_behalf_of=DefaultUser)
 
-def getMsg(id, topic, desc, sub, tags, data):
-    if not topic:
-        topic = DefaultTopic
+def getMsg(id, cmd):
+    if not cmd.topic:
+        cmd.topic = DefaultTopic
 
     what = []
-    if desc:
+    if cmd.desc:
         what.append("desc")
-    if sub:
+    if cmd.sub:
         what.append("sub")
-    if tags:
+    if cmd.tags:
         what.append("tags")
-    if data:
+    if cmd.data:
         what.append("data")
-    return pb.ClientMsg(get=pb.ClientGet(id=str(id), topic=topic,
+    return pb.ClientMsg(get=pb.ClientGet(id=str(id), topic=cmd.topic,
         query=pb.GetQuery(what=" ".join(what))), on_behalf_of=DefaultUser)
 
 
-def setMsg(id, topic, user, fn, photo, public, private, auth, anon, mode, tags):
-    if not topic:
-        topic = DefaultTopic
+def setMsg(id, cmd):
+    if not cmd.topic:
+        cmd.topic = DefaultTopic
 
-    if public == None:
-        public = encode_to_bytes(make_vcard(fn, photo))
+    if cmd.public == None:
+        cmd.public = encode_to_bytes(make_vcard(cmd.fn, cmd.photo))
     else:
-        public = encode_to_bytes(public)
-    private = encode_to_bytes(private)
-    return pb.ClientMsg(set=pb.ClientSet(id=str(id), topic=topic,
+        cmd.public = encode_to_bytes(cmd.public)
+    cmd.private = encode_to_bytes(cmd.private)
+    return pb.ClientMsg(set=pb.ClientSet(id=str(id), topic=cmd.topic,
         query=pb.SetQuery(
-            desc=pb.SetDesc(default_acs=pb.DefaultAcsMode(auth=auth, anon=anon),
-                public=public, private=private),
-        sub=pb.SetSub(user_id=user, mode=mode),
-        tags=tags.split(",") if tags else None)), on_behalf_of=DefaultUser)
+            desc=pb.SetDesc(default_acs=pb.DefaultAcsMode(auth=cmd.auth, anon=cmd.anon),
+                public=cmd.public, private=cmd.private),
+        sub=pb.SetSub(user_id=cmd.user, mode=cmd.mode),
+        tags=cmd.tags.split(",") if cmd.tags else None)), on_behalf_of=DefaultUser)
 
 
-def delMsg(id, what, topic, user, msglist, hard):
-    if not what:
+def delMsg(id, cmd):
+    if not cmd.what:
         stdoutln("Must specify what to delete")
         return None
 
-    topic = topic if topic else DefaultTopic
-    user = user if user else DefaultUser
+    cmd.topic = cmd.topic if cmd.topic else DefaultTopic
+    cmd.user = cmd.user if cmd.user else DefaultUser
     enum_what = None
     before = None
     seq_list = None
-    if what == 'msg':
-        if not topic:
+    if cmd.what == 'msg':
+        if not cmd.topic:
             stdoutln("Must specify topic to delete messages")
             return None
         enum_what = pb.ClientDel.MSG
-        user = None
-        if msglist == 'all':
+        cmd.user = None
+        if cmd.msglist == 'all':
             seq_list = [pb.DelQuery(range=pb.SeqRange(low=1, hi=0x8FFFFFF))]
-        elif msglist != None:
-            seq_list = [pb.DelQuery(seq_id=int(x.strip())) for x in msglist.split(',')]
+        elif cmd.msglist != None:
+            seq_list = [pb.DelQuery(seq_id=int(x.strip())) for x in cmd.msglist.split(',')]
 
-    elif what == 'sub':
-        if not user or not topic:
+    elif cmd.what == 'sub':
+        if not cmd.user or not cmd.topic:
             stdoutln("Must specify topic and user to delete subscription")
             return None
         enum_what = pb.ClientDel.SUB
 
-    elif what == 'topic':
-        if not topic:
+    elif cmd.what == 'topic':
+        if not cmd.topic:
             stdoutln("Must specify topic to delete")
             return None
         enum_what = pb.ClientDel.TOPIC
-        user = None
+        cmd.user = None
 
-    elif what == 'user':
-        if not user:
+    elif cmd.what == 'user':
+        if not cmd.user:
             stdoutln("Must specify user to delete")
             return None
         enum_what = pb.ClientDel.USER
-        topic = None
+        cmd.topic = None
 
     msg = pb.ClientMsg(on_behalf_of=DefaultUser)
     # Field named 'del' conflicts with the keyword 'del. This is a work around.
@@ -294,34 +305,35 @@ def delMsg(id, what, topic, user, msglist, hard):
     """
     xdel.id = str(id)
     xdel.what = enum_what
-    if hard != None:
-        xdel.hard = hard
+    if cmd.hard != None:
+        xdel.hard = cmd.hard
     if seq_list != None:
         xdel.del_seq.extend(seq_list)
-    if user != None:
+    if cmd.user != None:
         xdel.user_id = user
-    if topic != None:
+    if cmd.topic != None:
         xdel.topic = topic
     return msg
 
-def noteMsg(id, topic, what, seq):
-    if not topic:
-        topic = DefaultTopic
+def noteMsg(id, cmd):
+    if not cmd.topic:
+        cmd.topic = DefaultTopic
 
     enum_what = None
-    if what == 'kp':
+    if cmd.what == 'kp':
         enum_what = pb.KP
-        seq = None
-    elif what == 'read':
+        cmd.seq = None
+    elif cmd.what == 'read':
         enum_what = pb.READ
-        seq = int(seq)
+        cmd.seq = int(cmd.seq)
     elif what == 'recv':
-        enum_what = pb.READ
-        seq = int(seq)
-    return pb.ClientMsg(note=pb.ClientNote(topic=topic, what=enum_what, seq_id=seq), on_behalf_of=DefaultUser)
+        enum_what = pb.RECV
+        cmd.seq = int(cmd.seq)
+    return pb.ClientMsg(note=pb.ClientNote(topic=cmd.topic, what=enum_what, seq_id=cmd.seq), on_behalf_of=DefaultUser)
 
 # Given an array of parts, parse commands and arguments
 def parse_cmd(parts):
+    parser = None
     if parts[0] == "acc":
         parser = argparse.ArgumentParser(prog=parts[0], description='Create or alter an account')
         parser.add_argument('--user', default='new', help='ID of the account to update')
@@ -413,25 +425,28 @@ def parse_input(cmd):
     if len(parts) == 0:
         return None
 
-    # Commands which can be targets of .await and .must
-    waitable = ['acc', 'del', 'get', 'leave', 'login', 'pub', 'set', 'sub']
-
     parser = None
+    varname = None
+    synchronous = False
+    failOnError = False
+
     if parts[0] == ".use":
         parser = argparse.ArgumentParser(prog=parts[0], description='Set default user or topic')
         parser.add_argument('--user', default="unchanged", help='ID of default (on_behalf_of) user')
         parser.add_argument('--topic', default="unchanged", help='Name of default topic')
     elif parts[0] == ".await" or parts[0] == ".must":
-        # .await|.must [<variable_name>] <waitable_command> <params>
+        # .await|.must [<$variable_name>] <waitable_command> <params>
         if len(parts) > 1:
             synchronous = True
             failOnError = parts[0] == ".must"
-            if len(parts) > 2 and parts[2] in waitable:
+            if len(parts) > 2 and parts[1][0] == '$':
+                # Varname is given
                 varname = parts[1]
-                parts = parts[:2]
+                parts = parts[2:]
                 parser = parse_cmd(parts)
-            else if parts[1] in waitable:
-                parts = parts[:1]
+            else:
+                # No varname
+                parts = parts[1:]
                 parser = parse_cmd(parts)
 
     elif parts[0] == ".log":
@@ -446,7 +461,7 @@ def parse_input(cmd):
         print("\t.await\t- wait for completion of an operation")
         print("\t.exit\t- exit the program (also .quit)")
         print("\t.log\t- write value of a variable to stdout")
-        print("\t.must\t- wait for completion of an operation terminating on failure")
+        print("\t.must\t- wait for completion of an operation, terminate on failure")
         print("\t.use\t- set default user (on_behalf_of) or topic")
         print("\tacc\t- create or alter an account")
         print("\tdel\t- delete message(s), topic, subscription, or user")
@@ -463,7 +478,11 @@ def parse_input(cmd):
     try:
         args = parser.parse_args(parts[1:])
         args.cmd = parts[0]
+        args.synchronous = synchronous
+        args.failOnError = failOnError
+        args.varname = varname
         return args
+
     except SystemExit:
         return None
 
@@ -473,12 +492,12 @@ def serialize_cmd(string, id):
         # Convert string into a dictionary
         cmd = parse_input(string)
         if cmd == None:
-            return None
+            return None, None
 
         # Process dictionary
         if cmd.cmd == ".log":
             stdoutln(Variables[cmd.varname])
-            return None
+            return None, None
         elif cmd.cmd == ".use":
             if cmd.user != "unchanged":
                 global DefaultUser
@@ -488,48 +507,46 @@ def serialize_cmd(string, id):
                 global DefaultTopic
                 DefaultTopic = cmd.topic
                 stdoutln("Default topic='" + DefaultTopic + "'")
-            return None
+            return None, None
         elif cmd.cmd == "acc":
-            return accMsg(id, cmd.user, cmd.scheme, cmd.secret, cmd.uname, cmd.password,
-                cmd.do_login, cmd.fn, cmd.photo, cmd.private, cmd.auth, cmd.anon, cmd.tags, cmd.cred)
+            return accMsg(id, cmd), cmd
         elif cmd.cmd == "login":
-            return loginMsg(id, cmd.scheme, cmd.secret, cmd.cred, cmd.uname, cmd.password)
+            return loginMsg(id, cmd), cmd
         elif cmd.cmd == "sub":
-            return subMsg(id, cmd.topic, cmd.fn, cmd.photo, cmd.private, cmd.auth, cmd.anon,
-                cmd.mode, cmd.tags, cmd.get_query)
+            return subMsg(id, cmd), cmd
         elif cmd.cmd == "leave":
-            return leaveMsg(id, cmd.topic, cmd.unsub)
+            return leaveMsg(id, cmd), cmd
         elif cmd.cmd == "pub":
-            return pubMsg(id, cmd.topic, cmd.content)
+            return pubMsg(id, cmd), cmd
         elif cmd.cmd == "get":
-            return getMsg(id, cmd.topic, cmd.desc, cmd.sub, cmd.tags, cmd.data)
+            return getMsg(id, cmd), cmd
         elif cmd.cmd == "set":
-            return setMsg(id, cmd.topic, cmd.user, cmd.fn, cmd.photo, cmd.public, cmd.private,
-                cmd.auth, cmd.anon, cmd.mode, cmd.tags)
+            return setMsg(id, cmd), cmd
         elif cmd.cmd == "del":
-            return delMsg(id, cmd.what, cmd.topic, cmd.user, cmd.seq, cmd.hard)
+            return delMsg(id, cmd), cmd
         elif cmd.cmd == "note":
-            return noteMsg(id, cmd.topic, cmd.what, cmd.seq)
+            return noteMsg(id, cmd), cmd
         else:
             stdoutln("Unrecognized: '{0}'".format(cmd.cmd))
-            return None
+            return None, None
 
     except Exception as err:
         stdoutln("Error in '{0}': {1}".format(cmd.cmd, err))
-        return None
+        return None, None
 
 def gen_message(schema, secret):
     """Client message generator: reads user input as string,
     converts to pb.ClientMsg, and yields"""
-    global input_thread
+    global InputThread
+    global WaitingFor
 
     random.seed()
     id = random.randint(10000,60000)
 
     # Asynchronous input-output
-    input_thread = threading.Thread(target=stdin, args=(input_queue,))
-    input_thread.daemon = True
-    input_thread.start()
+    InputThread = threading.Thread(target=stdin, args=(InputQueue,))
+    InputThread.daemon = True
+    InputThread.start()
 
     yield hiMsg(id)
 
@@ -540,18 +557,22 @@ def gen_message(schema, secret):
     print_prompt = True
 
     while True:
-        if not input_queue.empty():
+        if not WaitingFor and not InputQueue.empty():
             id += 1
-            inp = input_queue.get()
+            inp = InputQueue.get()
             if inp == 'exit' or inp == 'quit' or inp == '.exit' or inp == '.quit':
                 return
-            cmd = serialize_cmd(inp, id)
+            pbMsg, cmd = serialize_cmd(inp, id)
             print_prompt = True
-            if cmd != None:
-                yield cmd
+            if pbMsg != None:
+                if cmd.synchronous:
+                    cmd.await_ts = time.time()
+                    cmd.await_id = str(id)
+                    WaitingFor = cmd
+                yield pbMsg
 
-        elif not output_queue.empty():
-            sys.stdout.write("\r"+output_queue.get())
+        elif not OutputQueue.empty():
+            sys.stdout.write("\r"+OutputQueue.get())
             sys.stdout.flush()
             print_prompt = True
 
@@ -560,9 +581,15 @@ def gen_message(schema, secret):
                 sys.stdout.write("tn> ")
                 sys.stdout.flush()
                 print_prompt = False
+            if WaitingFor:
+                if time.time() - WaitingFor.await_ts > AWAIT_TIMEOUT:
+                    stdoutln("Timeout while waiting for {0}".format(WaitingFor.cmd))
+                    WaitingFor = None
             time.sleep(0.1)
 
 def run(addr, schema, secret, secure, ssl_host):
+    global WaitingFor
+
     try:
         # Create secure channel with default credentials.
         channel = None
@@ -580,12 +607,27 @@ def run(addr, schema, secret, secure, ssl_host):
             if msg.HasField("ctrl"):
                 # Run code on command completion
                 func = OnCompletion.get(msg.ctrl.id)
-                if func != None:
+                if func:
                     del OnCompletion[msg.ctrl.id]
                     if msg.ctrl.code >= 200 and msg.ctrl.code < 400:
                         func(msg.ctrl.params)
+
+                if WaitingFor and WaitingFor.await_id == msg.ctrl.id:
+                    if WaitingFor.varname:
+                        Variables[WaitingFor.varname] = msg.ctrl
+                    if WaitingFor.failOnError and msg.ctrl.code >= 400:
+                        raise Exception(str(msg.ctrl.code) + " " + msg.ctrl.text)
+                    WaitingFor = None
+
                 topic = " (" + str(msg.ctrl.topic) + ")" if msg.ctrl.topic else ""
                 stdoutln("\r" + str(msg.ctrl.code) + " " + msg.ctrl.text + topic)
+
+            elif msg.HasField("meta"):
+                stdoutln("\n\rMeta: " + str(msg.meta))
+                if WaitingFor and WaitingFor.await_id == msg.meta.id:
+                    if WaitingFor.varname:
+                        Variables[WaitingFor.varname] = msg.meta
+                    WaitingFor = None
 
             elif msg.HasField("data"):
                 stdoutln("\n\rFrom: " + msg.data.from_user_id)
@@ -610,9 +652,13 @@ def run(addr, schema, secret, secure, ssl_host):
 
     except grpc.RpcError as err:
         print('gRPC failed with {0}: {1}'.format(err.code(), err.details()))
+    except Exception as ex:
+        print('Request failed: {0}'.format(ex))
+    finally:
         channel.close()
-        if input_thread != None:
-            input_thread.join(0.3)
+        if InputThread != None:
+            InputThread.join(0.3)
+
 
 def read_cookie():
     try:
