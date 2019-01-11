@@ -160,10 +160,11 @@ def accMsg(id, cmd):
             cmd.password = ''
         cmd.secret = str(cmd.uname) + ":" + str(cmd.password)
     elif cmd.asecret:
-        cmd.secret = base64.encode(cmd.asecret)
+        cmd.secret = cmd.asecret.encode('utf-8')
 
     if cmd.secret:
-        cmd.secret = cmd.secret.encode('utf-8')
+        if type(cmd.secret) is str:
+            cmd.secret = cmd.secret.encode('utf-8')
     else:
         cmd.secret = b''
 
@@ -172,7 +173,7 @@ def accMsg(id, cmd):
     return pb.ClientMsg(acc=pb.ClientAcc(id=str(id), user_id=cmd.user,
         scheme=cmd.scheme, secret=cmd.secret, login=cmd.do_login, tags=cmd.tags.split(",") if cmd.tags else None,
         desc=pb.SetDesc(default_acs=pb.DefaultAcsMode(auth=cmd.auth, anon=cmd.anon),
-            public=cmd.public, private=cmd.private), 
+            public=cmd.public, private=cmd.private),
         cred=parse_cred(cmd.cred)), on_behalf_of=DefaultUser)
 
 def loginMsg(id, cmd):
@@ -451,7 +452,7 @@ def parse_input(cmd):
 
     elif parts[0] == ".log":
         parser = argparse.ArgumentParser(prog=parts[0], description='Write value of a variable to stdout')
-        parser.add_argument('varname', nargs='1', help='name of the variable to print')
+        parser.add_argument('varname', help='name of the variable to print')
     else:
         parser = parse_cmd(parts)
 
@@ -480,7 +481,8 @@ def parse_input(cmd):
         args.cmd = parts[0]
         args.synchronous = synchronous
         args.failOnError = failOnError
-        args.varname = varname
+        if varname:
+            args.varname = varname
         return args
 
     except SystemExit:
@@ -488,6 +490,7 @@ def parse_input(cmd):
 
 def serialize_cmd(string, id):
     """Take string read from the command line, convert in into a protobuf message"""
+    cmd = {}
     try:
         # Convert string into a dictionary
         cmd = parse_input(string)
@@ -496,7 +499,10 @@ def serialize_cmd(string, id):
 
         # Process dictionary
         if cmd.cmd == ".log":
-            stdoutln(Variables[cmd.varname])
+            if cmd.varname in Variables:
+                stdoutln(Variables[cmd.varname])
+            else:
+                raise Exception("variable '{0}' is undefined".format(cmd.varname))
             return None, None
         elif cmd.cmd == ".use":
             if cmd.user != "unchanged":
@@ -558,6 +564,7 @@ def gen_message(schema, secret):
 
     while True:
         if not WaitingFor and not InputQueue.empty():
+            print("+")
             id += 1
             inp = InputQueue.get()
             if inp == 'exit' or inp == 'quit' or inp == '.exit' or inp == '.quit':
@@ -582,6 +589,7 @@ def gen_message(schema, secret):
                 sys.stdout.flush()
                 print_prompt = False
             if WaitingFor:
+                print(".")
                 if time.time() - WaitingFor.await_ts > AWAIT_TIMEOUT:
                     stdoutln("Timeout while waiting for {0}".format(WaitingFor.cmd))
                     WaitingFor = None
