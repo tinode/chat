@@ -172,7 +172,10 @@ func replyCreateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 	} else {
 		// Not using the new account for logging in.
 		reply = NoErrCreated(msg.id, "", msg.timestamp)
-		reply.Ctrl.Params = map[string]interface{}{"user": user.Uid().UserId()}
+		reply.Ctrl.Params = map[string]interface{}{
+			"user":    user.Uid().UserId(),
+			"authlvl": rec.AuthLevel.String(),
+		}
 	}
 	params := reply.Ctrl.Params.(map[string]interface{})
 	params["desc"] = &MsgTopicDesc{
