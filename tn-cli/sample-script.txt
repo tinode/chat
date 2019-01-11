@@ -1,3 +1,18 @@
-.must $user acc --scheme=basic --asecret=test:test123 \
+#  This script creates a new user Test, uses fnd to locate user Alice,
+# subscribes to Alice, sends typing notification, sends a message, deletes user Test.
+
+# Register new account
+.must $user acc --scheme=basic --secret=test:test123 \
   --fn='Test User' --tags=test,test-user --do-login --cred=email:test@example.com
+
 .log $user
+
+# Login with dummy credentials response
+# {"login":{"id":"65719","scheme":"token","secret":"l3EBgNYQcyc7OktcFAABAAAAOL7TArz/PuRC4RTkNj31P4eZ5mnTDYotYb9xdzkkMqs=","cred":[{"meth":"email","resp":"123456"}]}}
+.must login --scheme=token --secret=$user.params.token
+
+.must sub fnd
+.must set fnd --public=email:alice@example.com
+.must $meta get --sub
+.log $meta
+.await .del user --hard

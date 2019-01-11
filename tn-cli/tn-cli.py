@@ -21,6 +21,7 @@ import shlex
 import sys
 import threading
 import time
+import traceback
 
 from google.protobuf import json_format
 
@@ -159,12 +160,9 @@ def accMsg(id, cmd):
         if cmd.password == None:
             cmd.password = ''
         cmd.secret = str(cmd.uname) + ":" + str(cmd.password)
-    elif cmd.asecret:
-        cmd.secret = cmd.asecret.encode('utf-8')
 
     if cmd.secret:
-        if type(cmd.secret) is str:
-            cmd.secret = cmd.secret.encode('utf-8')
+        cmd.secret = cmd.secret.encode('utf-8')
     else:
         cmd.secret = b''
 
@@ -311,9 +309,9 @@ def delMsg(id, cmd):
     if seq_list != None:
         xdel.del_seq.extend(seq_list)
     if cmd.user != None:
-        xdel.user_id = user
+        xdel.user_id = cmd.user
     if cmd.topic != None:
-        xdel.topic = topic
+        xdel.topic = cmd.topic
     return msg
 
 def noteMsg(id, cmd):
@@ -339,8 +337,7 @@ def parse_cmd(parts):
         parser = argparse.ArgumentParser(prog=parts[0], description='Create or alter an account')
         parser.add_argument('--user', default='new', help='ID of the account to update')
         parser.add_argument('--scheme', default='basic', help='authentication scheme, default=basic')
-        parser.add_argument('--secret', default=None, help='secret for authentication, base64-encoded')
-        parser.add_argument('--asecret', default=None, help='secret for authentication, ASCII-encoded')
+        parser.add_argument('--secret', default=None, help='secret for authentication')
         parser.add_argument('--uname', default=None, help='user name for basic authentication')
         parser.add_argument('--password', default=None, help='password for basic authentication')
         parser.add_argument('--do-login', action='store_true', help='login with the newly created account')
@@ -351,12 +348,18 @@ def parse_cmd(parts):
         parser.add_argument('--auth', default=None, help='default access mode for authenticated users')
         parser.add_argument('--anon', default=None, help='default access mode for anonymous users')
         parser.add_argument('--cred', default=None, help='credentials, comma separated list in method:value format, e.g. email:test@example.com,tel:12345')
+    elif parts[0] == "del":
+        parser = argparse.ArgumentParser(prog=parts[0], description='Delete message(s), subscription, topic, user')
+        parser.add_argument('what', default=None, help='what to delete')
+        parser.add_argument('--topic', default=None, help='topic being affected')
+        parser.add_argument('--user', default=None, help='either delete this user or a subscription with this user')
+        parser.add_argument('--seq', default=None, help='"all" or comma separated list of message IDs to delete')
+        parser.add_argument('--hard', action='store_true', help='request to hard-delete')
     elif parts[0] == "login":
         parser = argparse.ArgumentParser(prog=parts[0], description='Authenticate current session')
-        parser.add_argument('--scheme', default='basic', help='authentication schema, default=basic')
         parser.add_argument('secret', nargs='?', default=argparse.SUPPRESS, help='secret for authentication')
-        parser.add_argument('--secret', dest='secret', default=None, help='secret for authentication, base64-encoded')
-        parser.add_argument('--asecret', default=None, help='secret for authentication, ASCII-encoded')
+        parser.add_argument('--scheme', default='basic', help='authentication schema, default=basic')
+        parser.add_argument('--secret', dest='secret', default=None, help='secret for authentication')
         parser.add_argument('--uname', default=None, help='user name in basic authentication scheme')
         parser.add_argument('--password', default=None, help='password in basic authentication scheme')
         parser.add_argument('--cred', default=None, help='credentials, comma separated list in method:value format, e.g. email:test@example.com,tel:12345')
@@ -403,13 +406,6 @@ def parse_cmd(parts):
         parser.add_argument('--user', default=None, help='ID of the account to update')
         parser.add_argument('--mode', default=None, help='new value of access mode')
         parser.add_argument('--tags', default=None, help='tags for topic discovery, comma separated list without spaces')
-    elif parts[0] == "del":
-        parser = argparse.ArgumentParser(prog=parts[0], description='Delete message(s), subscription, topic, user')
-        parser.add_argument('what', default=None, help='what to delete')
-        parser.add_argument('--topic', default=None, help='topic being affected')
-        parser.add_argument('--user', default=None, help='either delete this user or a subscription with this user')
-        parser.add_argument('--seq', default=None, help='"all" or comma separated list of message IDs to delete')
-        parser.add_argument('--hard', action='store_true', help='request to hard-delete')
     elif parts[0] == "note":
         parser = argparse.ArgumentParser(prog=parts[0], description='Send notification to topic, ex "note kp"')
         parser.add_argument('topic', help='topic to notify')
@@ -533,14 +529,14 @@ def serialize_cmd(string, id):
         elif cmd.cmd == "note":
             return noteMsg(id, cmd), cmd
         else:
-            stdoutln("Unrecognized: '{0}'".format(cmd.cmd))
+            stdoutln("Error: unrecognized: '{0}'".format(cmd.cmd))
             return None, None
 
     except Exception as err:
         stdoutln("Error in '{0}': {1}".format(cmd.cmd, err))
         return None, None
 
-def gen_message(schema, secret):
+def gen_message(scheme, secret):
     """Client message generator: reads user input as string,
     converts to pb.ClientMsg, and yields"""
     global InputThread
@@ -556,9 +552,13 @@ def gen_message(schema, secret):
 
     yield hiMsg(id)
 
-    if schema != None:
+    if scheme != None:
         id += 1
-        yield loginMsg(id, schema, secret, None, None, None)
+        login = lambda:None
+        setattr(login, 'scheme', scheme)
+        setattr(login, 'secret', secret)
+        setattr(login, 'cred', None)
+        yield loginMsg(id, login)
 
     print_prompt = True
 
@@ -569,6 +569,7 @@ def gen_message(schema, secret):
             inp = InputQueue.get()
             if inp == 'exit' or inp == 'quit' or inp == '.exit' or inp == '.quit':
                 return
+
             pbMsg, cmd = serialize_cmd(inp, id)
             print_prompt = True
             if pbMsg != None:
@@ -597,6 +598,7 @@ def gen_message(schema, secret):
 
 def run(addr, schema, secret, secure, ssl_host):
     global WaitingFor
+    global Variables
 
     try:
         # Create secure channel with default credentials.
@@ -621,7 +623,7 @@ def run(addr, schema, secret, secure, ssl_host):
                         func(msg.ctrl.params)
 
                 if WaitingFor and WaitingFor.await_id == msg.ctrl.id:
-                    if WaitingFor.varname:
+                    if 'varname' in WaitingFor:
                         Variables[WaitingFor.varname] = msg.ctrl
                     if WaitingFor.failOnError and msg.ctrl.code >= 400:
                         raise Exception(str(msg.ctrl.code) + " " + msg.ctrl.text)
@@ -633,7 +635,7 @@ def run(addr, schema, secret, secure, ssl_host):
             elif msg.HasField("meta"):
                 stdoutln("\n\rMeta: " + str(msg.meta))
                 if WaitingFor and WaitingFor.await_id == msg.meta.id:
-                    if WaitingFor.varname:
+                    if 'varname' in WaitingFor:
                         Variables[WaitingFor.varname] = msg.meta
                     WaitingFor = None
 
@@ -662,7 +664,9 @@ def run(addr, schema, secret, secure, ssl_host):
         print('gRPC failed with {0}: {1}'.format(err.code(), err.details()))
     except Exception as ex:
         print('Request failed: {0}'.format(ex))
+        # print(traceback.format_exc())
     finally:
+        print('Shutting down...')
         channel.close()
         if InputThread != None:
             InputThread.join(0.3)

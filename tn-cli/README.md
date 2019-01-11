@@ -37,7 +37,17 @@ If multiple `login-XYZ` are provided, `login-cookie` is considered first, then `
 
 ## Commands
 
+### Local
+
+* `.await` - issue a gRPC call and wait for completion, optionally assign result to a variable.
+* `.exit` - terminate execution and exit the CLI; also `.quit`.
+* `.log` - write a value of a variable to `stdout`.
+* `.must` - issue a gRPC call and wait for completion, optionally assign result to a variable; raise an exception if result is not a success.
+* `.quit` - terminate execution and exit the CLI; also `.exit`.
 * `.use` - set default user (on_behalf_of user) or topic
+
+### gRPC calls
+
 * `acc` - create  or modify an account
 * `login` - authenticate current session
 * `sub` - subscribe to topic
