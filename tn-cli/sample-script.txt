@@ -1,0 +1,3 @@
+.must $user acc --scheme=basic --asecret=test:test123 \
+  --fn='Test User' --tags=test,test-user --do-login --cred=email:test@example.com
+.log $user
