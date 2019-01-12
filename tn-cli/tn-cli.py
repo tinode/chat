@@ -51,6 +51,9 @@ InputQueue = queue.Queue()
 OutputQueue = queue.Queue()
 InputThread = None
 
+# Detect if the tn-cli is running interactively or being piped.
+IsTTY = sys.stdin.isatty()
+
 # Default values for user and topic
 DefaultUser = None
 DefaultTopic = None
@@ -101,22 +104,32 @@ def getVar(path):
         return None
     var = Variables[parts[0]]
     if len(parts) > 1:
-        reIndex = re.compile(r"(\w+)\[(\d+)\]")
         parts = parts[1:]
+        reIndex = re.compile(r"(\w+)\[(\d+)\]")
         for p in parts:
             x = -1
             m = reIndex.match(p)
             if m:
                 p = m.group(1)
                 x = int(m.group(2))
-            if p in var:
-                var = var[p]
+            try:
+                var = getattr(var, p)
                 if x >= 0:
                     var = var[x]
-            else:
+            except Exception as ex:
+                print("Undefined", path, "at", p)
                 var = None
                 break
     return var
+
+# Dereference values, i.e. cmd.val == $usr => cmd.val == <actual value of usr>
+def derefVals(cmd):
+    for key in dir(cmd):
+        if not key.startswith("__") and key != 'varname':
+            val = getattr(cmd, key)
+            if type(val) is str and val.startswith("$"):
+                setattr(cmd, key, getVar(val))
+    return cmd
 
 # Support for asynchronous input-output to/from stdin/stdout
 
@@ -138,38 +151,43 @@ def stdoutln(*args):
 # Stdin reads a possibly multiline input from stdin and queues it for asynchronous processing.
 def stdin(InputQueue):
     partial_input = ""
-    while True:
-        for cmd in sys.stdin.readline().splitlines():
-            cmd = cmd.strip()
-            # Check for continuation symbol \ in the end of the line.
-            if len(cmd) > 0 and cmd[-1] == "\\":
-                cmd = cmd[:-1].rstrip()
-                if cmd:
-                    if partial_input:
+    try:
+        while True:
+            for cmd in sys.stdin.readline().splitlines():
+                cmd = cmd.strip()
+                # Check for continuation symbol \ in the end of the line.
+                if len(cmd) > 0 and cmd[-1] == "\\":
+                    cmd = cmd[:-1].rstrip()
+                    if cmd:
+                        if partial_input:
+                            partial_input += " " + cmd
+                        else:
+                            partial_input = cmd
+
+                    sys.stdout.write("... ")
+                    sys.stdout.flush()
+                    continue
+
+                # Check if we have cached input from a previous multiline command.
+                if partial_input:
+                    if cmd:
                         partial_input += " " + cmd
-                    else:
-                        partial_input = cmd
+                    InputQueue.put(partial_input)
+                    partial_input = ""
+                    continue
 
-                sys.stdout.write("... ")
-                sys.stdout.flush()
-                continue
+                if cmd == "":
+                    continue
 
-            # Check if we have cached input from a previous multiline command.
-            if partial_input:
-                if cmd:
-                    partial_input += " " + cmd
-                InputQueue.put(partial_input)
-                partial_input = ""
-                continue
+                InputQueue.put(cmd)
 
-            if cmd == "":
-                continue
+                # Stop processing input
+                if cmd == 'exit' or cmd == 'quit' or cmd == '.exit' or cmd == '.quit':
+                    return
 
-            InputQueue.put(cmd)
-
-            # Stop processing input
-            if cmd == 'exit' or cmd == 'quit' or cmd == '.exit' or cmd == '.quit':
-                return
+    except Exception as ex:
+        print("Exception in stdin", ex)
+        InputQueue.put("exit")
 
 # encode_to_bytes takes an object/dictionary and converts it to json-formatted byte array.
 def encode_to_bytes(src):
@@ -246,8 +264,15 @@ def leaveMsg(id, cmd):
 def pubMsg(id, cmd):
     if not cmd.topic:
         cmd.topic = DefaultTopic
+
+    head = []
+    if cmd.head:
+        for h in cmd.head.split(","):
+            key, val = h.split(":")
+            head.append(pb.ClientPub.HeadEntry(key=key, value=value.encode('utf-8')))
+
     return pb.ClientMsg(pub=pb.ClientPub(id=str(id), topic=cmd.topic, no_echo=True,
-                head=cmd.head, content=encode_to_bytes(cmd.content)), on_behalf_of=DefaultUser)
+        head=head, content=encode_to_bytes(cmd.content)), on_behalf_of=DefaultUser)
 
 def getMsg(id, cmd):
     if not cmd.topic:
@@ -414,6 +439,7 @@ def parse_cmd(parts):
         parser.add_argument('topic', nargs='?', default=argparse.SUPPRESS, help='topic to publish to')
         parser.add_argument('--topic', dest='topic', default=None, help='topic to publish to')
         parser.add_argument('content', nargs='?', default=argparse.SUPPRESS, help='message to send')
+        parser.add_argument('--head', help='message headers')
         parser.add_argument('--content', dest='content', help='message to send')
     elif parts[0] == "get":
         parser = argparse.ArgumentParser(prog=parts[0], description='Query topic for messages or metadata')
@@ -516,6 +542,17 @@ def parse_input(cmd):
 def serialize_cmd(string, id):
     """Take string read from the command line, convert in into a protobuf message"""
     cmd = {}
+    messages = {
+        "acc": accMsg,
+        "login": loginMsg,
+        "sub": subMsg,
+        "leave": leaveMsg,
+        "pub": pubMsg,
+        "get": getMsg,
+        "set": setMsg,
+        "del": delMsg,
+        "note": noteMsg
+    }
     try:
         # Convert string into a dictionary
         cmd = parse_input(string)
@@ -525,6 +562,7 @@ def serialize_cmd(string, id):
         # Process dictionary
         if cmd.cmd == ".log":
             if cmd.varname in Variables:
+                stdoutln("=== .log - " + cmd.varname)
                 stdoutln(Variables[cmd.varname])
             else:
                 raise Exception("variable '{0}' is undefined".format(cmd.varname))
@@ -539,24 +577,8 @@ def serialize_cmd(string, id):
                 DefaultTopic = cmd.topic
                 stdoutln("Default topic='" + DefaultTopic + "'")
             return None, None
-        elif cmd.cmd == "acc":
-            return accMsg(id, cmd), cmd
-        elif cmd.cmd == "login":
-            return loginMsg(id, cmd), cmd
-        elif cmd.cmd == "sub":
-            return subMsg(id, cmd), cmd
-        elif cmd.cmd == "leave":
-            return leaveMsg(id, cmd), cmd
-        elif cmd.cmd == "pub":
-            return pubMsg(id, cmd), cmd
-        elif cmd.cmd == "get":
-            return getMsg(id, cmd), cmd
-        elif cmd.cmd == "set":
-            return setMsg(id, cmd), cmd
-        elif cmd.cmd == "del":
-            return delMsg(id, cmd), cmd
-        elif cmd.cmd == "note":
-            return noteMsg(id, cmd), cmd
+        elif cmd.cmd in messages:
+            return messages[cmd.cmd](id, derefVals(cmd)), cmd
         else:
             stdoutln("Error: unrecognized: '{0}'".format(cmd.cmd))
             return None, None
@@ -651,6 +673,7 @@ def run(addr, schema, secret, secure, ssl_host):
 
                 if WaitingFor and WaitingFor.await_id == msg.ctrl.id:
                     if 'varname' in WaitingFor:
+                        print("Saving [ctrl] to variables", WaitingFor.varname)
                         Variables[WaitingFor.varname] = msg.ctrl
                     if WaitingFor.failOnError and msg.ctrl.code >= 400:
                         raise Exception(str(msg.ctrl.code) + " " + msg.ctrl.text)
@@ -663,6 +686,7 @@ def run(addr, schema, secret, secure, ssl_host):
                 stdoutln("\n\rMeta: " + str(msg.meta))
                 if WaitingFor and WaitingFor.await_id == msg.meta.id:
                     if 'varname' in WaitingFor:
+                        print("Saving [meta] to variables", WaitingFor.varname)
                         Variables[WaitingFor.varname] = msg.meta
                     WaitingFor = None
 

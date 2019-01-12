@@ -2,16 +2,32 @@
 # subscribes to Alice, sends typing notification, sends a message, deletes user Test.
 
 # Register new account
-.must $user acc --scheme=basic --secret=test:test123 \
-  --fn='Test User' --tags=test,test-user --do-login --cred=email:test@example.com
 
-.log $user
+#.must $user acc --scheme=basic --secret=test:test123 \
+#  --fn='Test User' --tags=test,test-user --do-login --cred=email:test@example.com
+
+.must $user login bob:bob123
+
+# .log $user
 
 # Login with a dummy credentials response
-.must login --scheme=token --secret=$user.params.token --cred=email::123456
+# .must login --scheme=token --secret=$user.params.token --cred=email::123456
 
+# Find Alice
 .must sub fnd
 .must set fnd --public=email:alice@example.com
-.must $meta get --sub
-.log $meta
-.await .del user --hard
+.must $meta get fnd --sub
+
+# .log $meta
+
+# Subscribe to Alice
+.must sub $meta.sub[0].user_id
+
+# Send typing notification to Alice (async)
+note $meta.sub[0].user_id
+
+# Send message to Alice (async)
+pub $meta.sub[0].user_id 'Hello, Alice'
+
+# Delete current user
+# .await del user --hard
