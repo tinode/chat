@@ -17,11 +17,11 @@ try:
 except ImportError:
     import queue
 import random
+import re
 import shlex
 import sys
 import threading
 import time
-import traceback
 
 from google.protobuf import json_format
 
@@ -85,9 +85,38 @@ def parse_cred(cred):
         result = []
         for c in cred.split(","):
             parts = c.split(":")
-            result.append(pb.Credential(method=parts[0], value=parts[1]))
+            result.append(pb.Credential(method=parts[0] if len(parts) > 0 else None,
+                value=parts[1] if len(parts) > 1 else None,
+                response=parts[2] if len(parts) > 2 else None))
 
     return result
+
+# Read a value in the server response using dot notation, i.e.
+# $user.params.token or $meta.sub[1].user
+def getVar(path):
+    if not path:
+        return None
+    parts = path.split('.')
+    if parts[0] not in Variables:
+        return None
+    var = Variables[parts[0]]
+    if len(parts) > 1:
+        reIndex = re.compile(r"(\w+)\[(\d+)\]")
+        parts = parts[1:]
+        for p in parts:
+            x = -1
+            m = reIndex.match(p)
+            if m:
+                p = m.group(1)
+                x = int(m.group(2))
+            if p in var:
+                var = var[p]
+                if x >= 0:
+                    var = var[x]
+            else:
+                var = None
+                break
+    return var
 
 # Support for asynchronous input-output to/from stdin/stdout
 
@@ -564,7 +593,6 @@ def gen_message(scheme, secret):
 
     while True:
         if not WaitingFor and not InputQueue.empty():
-            print("+")
             id += 1
             inp = InputQueue.get()
             if inp == 'exit' or inp == 'quit' or inp == '.exit' or inp == '.quit':
@@ -590,9 +618,8 @@ def gen_message(scheme, secret):
                 sys.stdout.flush()
                 print_prompt = False
             if WaitingFor:
-                print(".")
                 if time.time() - WaitingFor.await_ts > AWAIT_TIMEOUT:
-                    stdoutln("Timeout while waiting for {0}".format(WaitingFor.cmd))
+                    stdoutln("Timeout while waiting for '{0}' response".format(WaitingFor.cmd))
                     WaitingFor = None
             time.sleep(0.1)
 

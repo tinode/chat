@@ -7,9 +7,8 @@
 
 .log $user
 
-# Login with dummy credentials response
-# {"login":{"id":"65719","scheme":"token","secret":"l3EBgNYQcyc7OktcFAABAAAAOL7TArz/PuRC4RTkNj31P4eZ5mnTDYotYb9xdzkkMqs=","cred":[{"meth":"email","resp":"123456"}]}}
-.must login --scheme=token --secret=$user.params.token
+# Login with a dummy credentials response
+.must login --scheme=token --secret=$user.params.token --cred=email::123456
 
 .must sub fnd
 .must set fnd --public=email:alice@example.com
