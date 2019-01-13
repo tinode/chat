@@ -689,15 +689,15 @@ def run(addr, schema, secret, secure, ssl_host):
 
             elif msg.HasField("meta"):
                 what = []
-                if msg.meta.HasField("sub"):
+                if len(msg.meta.sub) > 0:
                     what.append("sub")
                 if msg.meta.HasField("desc"):
                     what.append("desc")
                 if msg.meta.HasField("del"):
                     what.append("del")
-                if msg.meta.HasField("tags"):
+                if len(msg.meta.tags) > 0:
                     what.append("tags")
-                stdoutln("\n\rMeta " + what.join(",") + " " msg.meta.topic)
+                stdoutln("\n\rMeta " + ",".join(what) + " " + msg.meta.topic)
 
                 if WaitingFor and WaitingFor.await_id == msg.meta.id:
                     if 'varname' in WaitingFor:
@@ -773,9 +773,10 @@ def save_cookie(params):
         stdoutln("Failed to save authentication cookie", err)
 
 def print_server_params(params):
-    stdoutln("\rConnected to server:")
+    servParams = []
     for p in params:
-         stdoutln("\t" + p + ": " + json.loads(params[p]))
+        servParams.append(p + ": " + json.loads(params[p]))
+    stdoutln("\rConnected to server: " + "; ".join(servParams))
 
 if __name__ == '__main__':
     """Parse command-line arguments. Extract host name and authentication scheme, if one is provided"""
