@@ -686,7 +686,7 @@ func (s *Session) authSecretReset(params []byte) error {
 	if err != nil {
 		return err
 	}
-	log.Println("calling validator.ResetSecret", credValue, authScheme, uid)
+
 	return validator.ResetSecret(credValue, authScheme, s.lang, token)
 }
 

@@ -9,6 +9,7 @@ import argparse
 import base64
 import grpc
 import json
+import mimetypes
 import os
 import pkg_resources
 import platform
@@ -59,7 +60,13 @@ def printout(*args):
         print(args)
 
 def printerr(*args):
-    sys.stderr.write(args)
+    text = ""
+    for a in args:
+        text = text + str(a) + " "
+    # Strip just the spaces here, don't strip the newline or tabs.
+    text = text.strip(" ")
+    if text:
+        sys.stderr.write(text)
 
 # Default values for user and topic
 DefaultUser = None
@@ -81,12 +88,30 @@ def make_vcard(fn, photofile):
             try:
                 f = open(photofile, 'rb')
                 # File extension is used as a file type
-                # TODO: use mimetype.guess_type(ext) instead
-                card['photo'] = {'data': base64.b64encode(f.read()), 'type': os.path.splitext(photofile)[1]}
+                mimetype = mimetypes.guess_type(photofile)
+                if mimetype[0]:
+                    mimetype = mimetype[0].split("/")[1]
+                else:
+                    mimetype = 'jpeg'
+                data = base64.b64encode(f.read())
+                # python3 fix.
+                if type(data) is not str:
+                    data = data.decode()
+                card['photo'] = {
+                    'data': data,
+                    'type': mimetype
+                }
+                f.close()
             except IOError as err:
-                stdoutln("Error opening '" + photofile + "'", err)
+                stdoutln("Error opening '" + photofile + "':", err)
 
     return card
+
+# encode_to_bytes takes an object/dictionary and converts it to json-formatted byte array.
+def encode_to_bytes(src):
+    if src == None:
+        return None
+    return json.dumps(src).encode('utf-8')
 
 # Parse credentials
 def parse_cred(cred):
@@ -113,15 +138,18 @@ def getVar(path):
     var = Variables[parts[0]]
     if len(parts) > 1:
         parts = parts[1:]
-        reIndex = re.compile(r"(\w+)\[(\d+)\]")
+        reIndex = re.compile(r"(\w+)\[(\w+)\]")
         for p in parts:
-            x = -1
+            x = None
             m = reIndex.match(p)
             if m:
                 p = m.group(1)
-                x = int(m.group(2))
+                if m.group(2).isdigit():
+                    x = int(m.group(2))
+                else:
+                    x = m.group(2)
             var = getattr(var, p)
-            if x >= 0:
+            if x or x == 0:
                 var = var[x]
     return var
 
@@ -193,12 +221,6 @@ def stdin(InputQueue):
         printerr("Exception in stdin", ex)
 
     InputQueue.put("exit")
-
-# encode_to_bytes takes an object/dictionary and converts it to json-formatted byte array.
-def encode_to_bytes(src):
-    if src == None:
-        return None
-    return json.dumps(src).encode('utf-8')
 
 # Constructing individual messages
 def hiMsg(id):
@@ -421,7 +443,7 @@ def parse_cmd(parts):
         parser.add_argument('--secret', dest='secret', default=None, help='secret for authentication')
         parser.add_argument('--uname', default=None, help='user name in basic authentication scheme')
         parser.add_argument('--password', default=None, help='password in basic authentication scheme')
-        parser.add_argument('--cred', default=None, help='credentials, comma separated list in method:value format, e.g. email:test@example.com,tel:12345')
+        parser.add_argument('--cred', default=None, help='credentials, comma separated list in method:value:response format, e.g. email:test@example.com,tel:12345')
     elif parts[0] == "sub":
         parser = argparse.ArgumentParser(prog=parts[0], description='Subscribe to topic')
         parser.add_argument('topic', nargs='?', default=argparse.SUPPRESS, help='topic to subscribe to')
@@ -491,6 +513,7 @@ def parse_input(cmd):
         parser = argparse.ArgumentParser(prog=parts[0], description='Set default user or topic')
         parser.add_argument('--user', default="unchanged", help='ID of default (on_behalf_of) user')
         parser.add_argument('--topic', default="unchanged", help='Name of default topic')
+
     elif parts[0] == ".await" or parts[0] == ".must":
         # .await|.must [<$variable_name>] <waitable_command> <params>
         if len(parts) > 1:
@@ -509,6 +532,11 @@ def parse_input(cmd):
     elif parts[0] == ".log":
         parser = argparse.ArgumentParser(prog=parts[0], description='Write value of a variable to stdout')
         parser.add_argument('varname', help='name of the variable to print')
+
+    elif parts[0] == ".sleep":
+        parser = argparse.ArgumentParser(prog=parts[0], description='Pause execution')
+        parser.add_argument('millis', type=int, help='milliseconds to wait')
+
     else:
         parser = parse_cmd(parts)
 
@@ -519,6 +547,7 @@ def parse_input(cmd):
         printout("\t.exit\t- exit the program (also .quit)")
         printout("\t.log\t- write value of a variable to stdout")
         printout("\t.must\t- wait for completion of an operation, terminate on failure")
+        printout("\t.sleep\t- pause execution")
         printout("\t.use\t- set default user (on_behalf_of) or topic")
         printout("\tacc\t- create or alter an account")
         printout("\tdel\t- delete message(s), topic, subscription, or user")
@@ -568,6 +597,7 @@ def serialize_cmd(string, id):
         if cmd.cmd == ".log":
             stdoutln(getVar(cmd.varname))
             return None, None
+
         elif cmd.cmd == ".use":
             if cmd.user != "unchanged":
                 global DefaultUser
@@ -578,8 +608,14 @@ def serialize_cmd(string, id):
                 DefaultTopic = cmd.topic
                 stdoutln("Default topic='" + DefaultTopic + "'")
             return None, None
+
+        elif cmd.cmd == ".sleep":
+            time.sleep(cmd.millis/1000.)
+            return None, None
+
         elif cmd.cmd in messages:
             return messages[cmd.cmd](id, derefVals(cmd)), cmd
+
         else:
             stdoutln("Error: unrecognized: '{0}'".format(cmd.cmd))
             return None, None
@@ -733,7 +769,7 @@ def run(addr, schema, secret, secure, ssl_host):
     except grpc.RpcError as err:
         printerr('gRPC failed with {0}: {1}'.format(err.code(), err.details()))
     except Exception as ex:
-        printerr('Request failed: {0}'.format(ex), ex)
+        printerr('Request failed: {0}'.format(ex))
         # print(traceback.format_exc())
     finally:
         printout('Shutting down...')

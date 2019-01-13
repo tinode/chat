@@ -91,8 +91,6 @@ func replyCreateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 		}
 	}
 
-	log.Println("Creating user", user.Tags)
-
 	if _, err := store.Users.Create(&user, private); err != nil {
 		log.Println("s.acc: failed to create user", err, s.sid)
 		s.queueOut(ErrUnknown(msg.id, "", msg.timestamp))
@@ -150,9 +148,7 @@ func replyCreateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 		}
 	}
 
-	// Save updated tags:
-	log.Println("Updating tags:", rec.Tags)
-
+	// Save tags potentially changed by the validator.
 	if err := store.Users.Update(user.Uid(),
 		map[string]interface{}{"Tags": types.StringSlice(rec.Tags)}); err != nil {
 
@@ -165,7 +161,6 @@ func replyCreateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 
 	var reply *ServerComMessage
 	if msg.Acc.Login {
-		log.Println("Calling onLogin", rec.Tags)
 		// Process user's login request.
 		_, missing := stringSliceDelta(globals.authValidators[rec.AuthLevel], validated)
 		reply = s.onLogin(msg.id, msg.timestamp, rec, missing)

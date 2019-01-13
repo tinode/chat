@@ -4,18 +4,20 @@
 
 # Create user 'Test User'
 
-#.must $user acc --scheme=basic --secret=test:test123 \
-#  --fn='Test User' --photo=./test-128.jpg --tags=test,test-user --do-login \
-#  --auth=JRWPA --anon=JW \
-#  --cred=email:test@example.com
+.must $user acc --scheme=basic --secret=test:test123 \
+  --fn='Test User' --photo=./test-128.jpg --tags=test,test-user --do-login \
+  --auth=JRWPA --anon=JW \
+  --cred=email:test@example.com
 
-.must $user login bob:bob123
+# Alternatively just login with an existing user.
+# .must $user login bob:bob123
 
 # Print out user's auth token.
-.log $user.params.token
+# Params is a map, thus must be addressed as params[x] instead of params.x
+.log $user.params[token]
 
 # Login and confirm credentials with a dummy response
-# .must login --scheme=token --secret=$user.params.token --cred=email::123456
+.must login --scheme=token --secret=$user.params[token] --cred=email::123456
 
 # Find Alice
 .must sub fnd
@@ -34,5 +36,11 @@ note $meta.sub[0].user_id
 # Send message to Alice (async)
 pub $meta.sub[0].user_id 'Hello, Alice'
 
-# Clean up: delete Test user
-# .await del user --hard
+# Wait 10 seconds before cleaning up.
+.sleep 10000
+
+# Clean up: delete Test User
+.await del user --hard
+
+# Wait for completion before exiting.
+.sleep 2000
