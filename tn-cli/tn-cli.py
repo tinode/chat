@@ -66,7 +66,7 @@ def printerr(*args):
     # Strip just the spaces here, don't strip the newline or tabs.
     text = text.strip(" ")
     if text:
-        sys.stderr.write(text)
+        sys.stderr.write(text + "\n")
 
 # Default values for user and topic
 DefaultUser = None
@@ -769,9 +769,9 @@ def run(addr, schema, secret, secure, ssl_host):
                 stdoutln("\rMessage type not handled" + str(msg))
 
     except grpc.RpcError as err:
-        printerr('gRPC failed with {0}: {1}'.format(err.code(), err.details()))
+        printerr("gRPC failed with {0}: {1}".format(err.code(), err.details()))
     except Exception as ex:
-        printerr('Request failed: {0}'.format(ex))
+        printerr("Request failed: {0}".format(ex))
         # print(traceback.format_exc())
     finally:
         printout('Shutting down...')
