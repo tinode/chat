@@ -95,6 +95,7 @@ func pbServMetaSerialize(meta *MsgServerMeta) *pbx.ServerMsg_Meta {
 		Desc:  pbTopicDescSerialize(meta.Desc),
 		Sub:   pbTopicSubSliceSerialize(meta.Sub),
 		Del:   pbDelValuesSerialize(meta.Del),
+		Tags:  meta.Tags,
 	}}
 }
 
@@ -196,6 +197,7 @@ func pbServDeserialize(pkt *pbx.ServerMsg) *ServerComMessage {
 			Desc:  pbTopicDescDeserialize(meta.GetDesc()),
 			Sub:   pbTopicSubSliceDeserialize(meta.GetSub()),
 			Del:   pbDelValuesDeserialize(meta.GetDel()),
+			Tags:  meta.GetTags(),
 		}
 	}
 	return &msg

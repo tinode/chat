@@ -387,6 +387,7 @@ message ServerMeta {
 	TopicDesc desc = 3;
 	repeated TopicSub sub = 4;
 	DelValues del = 5;
+	repeated string tags = 6;
 }
 
 // {info} message: server-side copy of ClientNote with From added

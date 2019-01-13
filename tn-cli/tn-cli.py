@@ -52,7 +52,14 @@ OutputQueue = queue.Queue()
 InputThread = None
 
 # Detect if the tn-cli is running interactively or being piped.
-IsTTY = sys.stdin.isatty()
+IsInteractive = sys.stdin.isatty()
+# Print prompts in interactive mode only.
+def printout(*args):
+    if IsInteractive:
+        print(args)
+
+def printerr(*args):
+    sys.stderr.write(args)
 
 # Default values for user and topic
 DefaultUser = None
@@ -97,8 +104,9 @@ def parse_cred(cred):
 # Read a value in the server response using dot notation, i.e.
 # $user.params.token or $meta.sub[1].user
 def getVar(path):
-    if not path:
-        return None
+    if not path.startswith("$"):
+        return path
+
     parts = path.split('.')
     if parts[0] not in Variables:
         return None
@@ -112,14 +120,9 @@ def getVar(path):
             if m:
                 p = m.group(1)
                 x = int(m.group(2))
-            try:
-                var = getattr(var, p)
-                if x >= 0:
-                    var = var[x]
-            except Exception as ex:
-                print("Undefined", path, "at", p)
-                var = None
-                break
+            var = getattr(var, p)
+            if x >= 0:
+                var = var[x]
     return var
 
 # Dereference values, i.e. cmd.val == $usr => cmd.val == <actual value of usr>
@@ -152,42 +155,45 @@ def stdoutln(*args):
 def stdin(InputQueue):
     partial_input = ""
     try:
-        while True:
-            for cmd in sys.stdin.readline().splitlines():
-                cmd = cmd.strip()
-                # Check for continuation symbol \ in the end of the line.
-                if len(cmd) > 0 and cmd[-1] == "\\":
-                    cmd = cmd[:-1].rstrip()
-                    if cmd:
-                        if partial_input:
-                            partial_input += " " + cmd
-                        else:
-                            partial_input = cmd
+        for cmd in sys.stdin:
+            cmd = cmd.strip()
+            # Check for continuation symbol \ in the end of the line.
+            if len(cmd) > 0 and cmd[-1] == "\\":
+                cmd = cmd[:-1].rstrip()
+                if cmd:
+                    if partial_input:
+                        partial_input += " " + cmd
+                    else:
+                        partial_input = cmd
 
+                if IsInteractive:
                     sys.stdout.write("... ")
                     sys.stdout.flush()
-                    continue
 
-                # Check if we have cached input from a previous multiline command.
-                if partial_input:
-                    if cmd:
-                        partial_input += " " + cmd
-                    InputQueue.put(partial_input)
-                    partial_input = ""
-                    continue
+                continue
 
-                if cmd == "":
-                    continue
+            # Check if we have cached input from a previous multiline command.
+            if partial_input:
+                if cmd:
+                    partial_input += " " + cmd
+                InputQueue.put(partial_input)
+                partial_input = ""
+                continue
 
-                InputQueue.put(cmd)
+            if cmd == "":
+                continue
 
-                # Stop processing input
-                if cmd == 'exit' or cmd == 'quit' or cmd == '.exit' or cmd == '.quit':
-                    return
+            InputQueue.put(cmd)
+
+            # Stop processing input
+            if cmd == 'exit' or cmd == 'quit' or cmd == '.exit' or cmd == '.quit':
+                return
 
     except Exception as ex:
-        print("Exception in stdin", ex)
-        InputQueue.put("exit")
+        printerr("Exception in stdin", ex)
+
+    print("stdin exited")
+    InputQueue.put("exit")
 
 # encode_to_bytes takes an object/dictionary and converts it to json-formatted byte array.
 def encode_to_bytes(src):
@@ -508,23 +514,23 @@ def parse_input(cmd):
         parser = parse_cmd(parts)
 
     if not parser:
-        print("Unrecognized:", parts[0])
-        print("Possible commands:")
-        print("\t.await\t- wait for completion of an operation")
-        print("\t.exit\t- exit the program (also .quit)")
-        print("\t.log\t- write value of a variable to stdout")
-        print("\t.must\t- wait for completion of an operation, terminate on failure")
-        print("\t.use\t- set default user (on_behalf_of) or topic")
-        print("\tacc\t- create or alter an account")
-        print("\tdel\t- delete message(s), topic, subscription, or user")
-        print("\tget\t- query topic for metadata or messages")
-        print("\tleave\t- detach or unsubscribe from topic")
-        print("\tlogin\t- authenticate current session")
-        print("\tnote\t- send a notification")
-        print("\tpub\t- post message to topic")
-        print("\tset\t- update topic metadata")
-        print("\tsub\t- subscribe to topic")
-        print("\n\tType <command> -h for help")
+        printout("Unrecognized:", parts[0])
+        printout("Possible commands:")
+        printout("\t.await\t- wait for completion of an operation")
+        printout("\t.exit\t- exit the program (also .quit)")
+        printout("\t.log\t- write value of a variable to stdout")
+        printout("\t.must\t- wait for completion of an operation, terminate on failure")
+        printout("\t.use\t- set default user (on_behalf_of) or topic")
+        printout("\tacc\t- create or alter an account")
+        printout("\tdel\t- delete message(s), topic, subscription, or user")
+        printout("\tget\t- query topic for metadata or messages")
+        printout("\tleave\t- detach or unsubscribe from topic")
+        printout("\tlogin\t- authenticate current session")
+        printout("\tnote\t- send a notification")
+        printout("\tpub\t- post message to topic")
+        printout("\tset\t- update topic metadata")
+        printout("\tsub\t- subscribe to topic")
+        printout("\n\tType <command> -h for help")
         return None
 
     try:
@@ -561,11 +567,7 @@ def serialize_cmd(string, id):
 
         # Process dictionary
         if cmd.cmd == ".log":
-            if cmd.varname in Variables:
-                stdoutln("=== .log - " + cmd.varname)
-                stdoutln(Variables[cmd.varname])
-            else:
-                raise Exception("variable '{0}' is undefined".format(cmd.varname))
+            stdoutln(getVar(cmd.varname))
             return None, None
         elif cmd.cmd == ".use":
             if cmd.user != "unchanged":
@@ -621,8 +623,12 @@ def gen_message(scheme, secret):
                 return
 
             pbMsg, cmd = serialize_cmd(inp, id)
-            print_prompt = True
+            print_prompt = IsInteractive
             if pbMsg != None:
+                if not IsInteractive:
+                    sys.stdout.write(inp + "\n")
+                    sys.stdout.flush()
+
                 if cmd.synchronous:
                     cmd.await_ts = time.time()
                     cmd.await_id = str(id)
@@ -632,7 +638,7 @@ def gen_message(scheme, secret):
         elif not OutputQueue.empty():
             sys.stdout.write("\r"+OutputQueue.get())
             sys.stdout.flush()
-            print_prompt = True
+            print_prompt = IsInteractive
 
         else:
             if print_prompt:
@@ -673,7 +679,6 @@ def run(addr, schema, secret, secure, ssl_host):
 
                 if WaitingFor and WaitingFor.await_id == msg.ctrl.id:
                     if 'varname' in WaitingFor:
-                        print("Saving [ctrl] to variables", WaitingFor.varname)
                         Variables[WaitingFor.varname] = msg.ctrl
                     if WaitingFor.failOnError and msg.ctrl.code >= 400:
                         raise Exception(str(msg.ctrl.code) + " " + msg.ctrl.text)
@@ -683,17 +688,26 @@ def run(addr, schema, secret, secure, ssl_host):
                 stdoutln("\r" + str(msg.ctrl.code) + " " + msg.ctrl.text + topic)
 
             elif msg.HasField("meta"):
-                stdoutln("\n\rMeta: " + str(msg.meta))
+                what = []
+                if msg.meta.HasField("sub"):
+                    what.append("sub")
+                if msg.meta.HasField("desc"):
+                    what.append("desc")
+                if msg.meta.HasField("del"):
+                    what.append("del")
+                if msg.meta.HasField("tags"):
+                    what.append("tags")
+                stdoutln("\n\rMeta " + what.join(",") + " " msg.meta.topic)
+
                 if WaitingFor and WaitingFor.await_id == msg.meta.id:
                     if 'varname' in WaitingFor:
-                        print("Saving [meta] to variables", WaitingFor.varname)
                         Variables[WaitingFor.varname] = msg.meta
                     WaitingFor = None
 
             elif msg.HasField("data"):
                 stdoutln("\n\rFrom: " + msg.data.from_user_id)
                 stdoutln("Topic: " + msg.data.topic)
-                stdoutln("Seq: " + str(msg.data.seq))
+                stdoutln("Seq: " + str(msg.data.seq_id))
                 if msg.data.head:
                     stdoutln("Headers:")
                     for key in msg.data.head:
@@ -704,20 +718,26 @@ def run(addr, schema, secret, secure, ssl_host):
                 pass
 
             elif msg.HasField("info"):
-                user = getattr(msg.info, 'from')
-                stdoutln("\rMessage #" + str(msg.info.seq) + " " + msg.info.what +
-                    " by " + user + "; topic=" + msg.info.topic + "(" + msg.topic + ")")
+                what = "unknown"
+                if msg.info.what == pb.READ:
+                    what = "read"
+                elif msg.info.what == pb.RECV:
+                    what = "recv"
+                elif msg.info.what == pb.KP:
+                    what = "kp"
+                stdoutln("\rMessage #" + str(msg.info.seq_id) + " " + what +
+                    " by " + msg.info.from_user_id + "; topic=" + msg.info.topic + " (" + msg.topic + ")")
 
             else:
-                stdoutln("\rMessage type not handled", msg)
+                stdoutln("\rMessage type not handled" + str(msg))
 
     except grpc.RpcError as err:
-        print('gRPC failed with {0}: {1}'.format(err.code(), err.details()))
+        printerr('gRPC failed with {0}: {1}'.format(err.code(), err.details()))
     except Exception as ex:
-        print('Request failed: {0}'.format(ex))
+        printerr('Request failed: {0}'.format(ex), ex)
         # print(traceback.format_exc())
     finally:
-        print('Shutting down...')
+        printout('Shutting down...')
         channel.close()
         if InputThread != None:
             InputThread.join(0.3)
@@ -759,8 +779,9 @@ def print_server_params(params):
 
 if __name__ == '__main__':
     """Parse command-line arguments. Extract host name and authentication scheme, if one is provided"""
-    purpose = "Tinode command line client. Version " + APP_VERSION + "/" + LIB_VERSION + "; gRPC/" + GRPC_VERSION + "."
-    print(purpose)
+    version = APP_VERSION + "/" + LIB_VERSION + "; gRPC/" + GRPC_VERSION
+    purpose = "Tinode command line client. Version " + version + "."
+
     parser = argparse.ArgumentParser(description=purpose)
     parser.add_argument('--host', default='localhost:6061', help='address of Tinode server')
     parser.add_argument('--ssl', action='store_true', help='connect to server over secure connection')
@@ -769,9 +790,15 @@ if __name__ == '__main__':
     parser.add_argument('--login-token', help='login using token authentication')
     parser.add_argument('--login-cookie', action='store_true', help='read token from cookie file and use it for authentication')
     parser.add_argument('--no-login', action='store_true', help='do not login even if cookie file is present')
+    parser.add_argument('--version', action='store_true', help='print version')
     args = parser.parse_args()
 
-    print("Secure server" if args.ssl else "Server", "at '"+args.host+"'",
+    if args.version:
+        printout(version)
+        exit()
+
+    printout(purpose)
+    printout("Secure server" if args.ssl else "Server", "at '"+args.host+"'",
         "SNI="+args.ssl_host if args.ssl_host else "")
 
     schema = None
@@ -782,21 +809,21 @@ if __name__ == '__main__':
             """Use token to login"""
             schema = 'token'
             secret = args.login_token.encode('acsii')
-            print("Logging in with token", args.login_token)
+            printout("Logging in with token", args.login_token)
 
         elif args.login_basic:
             """Use username:password"""
             schema = 'basic'
             secret = base64.b64encode(args.login_basic.encode('utf-8'))
-            print("Logging in with login:password", args.login_basic)
+            printout("Logging in with login:password", args.login_basic)
 
         else:
             """Try reading the cookie file"""
             try:
                 schema = 'token'
                 secret = read_cookie()
-                print("Logging in with cookie file")
+                printout("Logging in with cookie file")
             except Exception as err:
-                print("Failed to read authentication cookie", err)
+                printerr("Failed to read authentication cookie", err)
 
     run(args.host, schema, secret, args.ssl, args.ssl_host)
