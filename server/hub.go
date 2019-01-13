@@ -9,7 +9,6 @@
 package main
 
 import (
-	"expvar"
 	"log"
 	"strings"
 	"sync"
@@ -105,9 +104,6 @@ type Hub struct {
 
 	// Flag for indicating that system shutdown is in progress
 	isShutdownInProgress bool
-
-	// Exported counter of live topics
-	topicsLive *expvar.Int
 }
 
 func (h *Hub) topicGet(name string) *Topic {
@@ -129,15 +125,16 @@ func newHub() *Hub {
 	var h = &Hub{
 		topics: &sync.Map{}, //make(map[string]*Topic),
 		// this needs to be buffered - hub generates invites and adds them to this queue
-		route:      make(chan *ServerComMessage, 4096),
-		join:       make(chan *sessionJoin),
-		unreg:      make(chan *topicUnreg),
-		rehash:     make(chan bool),
-		meta:       make(chan *metaReq, 128),
-		shutdown:   make(chan chan<- bool),
-		topicsLive: new(expvar.Int)}
+		route:    make(chan *ServerComMessage, 4096),
+		join:     make(chan *sessionJoin),
+		unreg:    make(chan *topicUnreg),
+		rehash:   make(chan bool),
+		meta:     make(chan *metaReq, 128),
+		shutdown: make(chan chan<- bool),
+	}
 
-	expvar.Publish("LiveTopics", h.topicsLive)
+	statsRegisterInt("LiveTopics")
+	statsRegisterInt("TotalTopics")
 
 	go h.run()
 
@@ -786,7 +783,10 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 	}
 
 	h.topicPut(t.name, t)
-	h.topicsLive.Add(1)
+
+	statsInc("LiveTopics", 1)
+	statsInc("TotalTopics", 1)
+
 	go t.run(h)
 
 	log.Println("hub: started", t.name, "created=", sreg.created)
@@ -878,7 +878,8 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 
 				h.topicDel(topic)
 				t.exit <- &shutDown{reason: StopDeleted}
-				h.topicsLive.Add(-1)
+
+				statsInc("LiveTopics", -1)
 			} else {
 				// Case 1.1.2: requester is NOT the owner
 				t.meta <- &metaReq{
@@ -971,7 +972,8 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 			t.suspend()
 			h.topicDel(topic)
 			t.exit <- &shutDown{reason: reason}
-			h.topicsLive.Add(-1)
+
+			statsInc("LiveTopics", -1)
 		}
 
 		// sess && msg could be nil if the topic is being killed by timer
@@ -1015,7 +1017,7 @@ func (h *Hub) stopTopicsForUser(uid types.Uid, reason int, alldone chan<- bool) 
 		return true
 	})
 
-	h.topicsLive.Add(-int64(count))
+	statsInc("LiveTopics", -count)
 
 	if alldone != nil {
 		for i := 0; i < count; i++ {

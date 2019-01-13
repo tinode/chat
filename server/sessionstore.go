@@ -1,8 +1,8 @@
 /******************************************************************************
  *
- *  Description :
+ *  Description:
  *
- *  Management of long polling sessions
+ *  Session management.
  *
  *****************************************************************************/
 
@@ -101,6 +101,9 @@ func (ss *SessionStore) NewSession(conn interface{}, sid string) (*Session, int)
 		sess.cleanUp(true)
 	}
 
+	statsSet("LiveSessions", int64(len(ss.sessCache)))
+	statsInc("TotalSessions", 1)
+
 	return &s, count
 }
 
@@ -122,7 +125,7 @@ func (ss *SessionStore) Get(sid string) *Session {
 }
 
 // Delete removes session from store.
-func (ss *SessionStore) Delete(s *Session) int {
+func (ss *SessionStore) Delete(s *Session) {
 	ss.lock.Lock()
 	defer ss.lock.Unlock()
 
@@ -130,7 +133,8 @@ func (ss *SessionStore) Delete(s *Session) int {
 	if s.proto == LPOLL {
 		ss.lru.Remove(s.lpTracker)
 	}
-	return len(ss.sessCache)
+
+	statsSet("LiveSessions", int64(len(ss.sessCache)))
 }
 
 // Shutdown terminates sessionStore. No need to clean up.
@@ -164,6 +168,8 @@ func (ss *SessionStore) EvictUser(uid types.Uid, skipSid string) {
 			}
 		}
 	}
+
+	statsSet("LiveSessions", int64(len(ss.sessCache)))
 }
 
 // NewSessionStore initializes a session store.
@@ -174,6 +180,9 @@ func NewSessionStore(lifetime time.Duration) *SessionStore {
 
 		sessCache: make(map[string]*Session),
 	}
+
+	statsRegisterInt("LiveSessions")
+	statsRegisterInt("TotalSessions")
 
 	return ss
 }

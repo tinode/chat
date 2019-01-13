@@ -12,7 +12,6 @@ package main
 
 import (
 	"encoding/json"
-	"expvar"
 	"flag"
 	"log"
 	"net/http"
@@ -116,6 +115,7 @@ var globals struct {
 	cluster      *Cluster
 	grpcServer   *grpc.Server
 	plugins      []Plugin
+	statsUpdate  chan *varUpdate
 
 	// Credential validators.
 	validators map[string]credValidator
@@ -195,6 +195,8 @@ type configType struct {
 	MaskedTagNamespaces []string `json:"masked_tags"`
 	// Maximum number of indexable tags
 	MaxTagCount int `json:"max_tag_count"`
+	// URL path for exposing runtime stats. Disabled if the path is blank.
+	ExpvarPath string `json:"expvar"`
 
 	// Configs for subsystems
 	Cluster   json.RawMessage             `json:"cluster_config"`
@@ -223,10 +225,10 @@ func main() {
 	var staticPath = flag.String("static_data", defaultStaticPath, "Path to directory with static files to be served.")
 	var listenOn = flag.String("listen", "", "Override address and port to listen on for HTTP(S) clients.")
 	var listenGrpc = flag.String("grpc_listen", "", "Override address and port to listen on for gRPC clients.")
-	var tlsEnabled = flag.Bool("tls_enabled", false, "Override config value for enabling TLS")
-	var clusterSelf = flag.String("cluster_self", "", "Override the name of the current cluster node")
-	var expvarPath = flag.String("expvar", "", "Expose runtime stats at the given endpoint, e.g. /debug/vars. Disabled if not set")
-	var pprofFile = flag.String("pprof", "", "File name to save profiling info to. Disabled if not set")
+	var tlsEnabled = flag.Bool("tls_enabled", false, "Override config value for enabling TLS.")
+	var clusterSelf = flag.String("cluster_self", "", "Override the name of the current cluster node.")
+	var expvarPath = flag.String("expvar", "", "Override the path where runtime stats are exposed.")
+	var pprofFile = flag.String("pprof", "", "File name to save profiling info to. Disabled if not set.")
 	flag.Parse()
 
 	*configfile = toAbsolutePath(rootpath, *configfile)
@@ -513,10 +515,11 @@ func main() {
 		mux.HandleFunc("/", serve404)
 	}
 
-	if *expvarPath != "" {
-		mux.Handle(*expvarPath, expvar.Handler())
-		log.Printf("Debug variables exposed at '%s'", *expvarPath)
+	evpath := *expvarPath
+	if evpath == "" {
+		evpath = config.ExpvarPath
 	}
+	statsInit(mux, evpath)
 
 	if err = listenAndServe(config.Listen, mux, tlsConfig, signalHandler()); err != nil {
 		log.Fatal(err)
