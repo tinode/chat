@@ -314,7 +314,8 @@ func replyDelUser(s *Session, msg *ClientComMessage) {
 		authnames := store.GetAuthNames()
 		for _, name := range authnames {
 			if err := store.GetAuthHandler(name).DelRecords(uid); err != nil {
-				log.Println("replyDelUser: failed to delete user auth record", msg.Del.User, name, err, s.sid)
+				// This could be completely benighn, i.e. authenticator exists but not used.
+				log.Println("replyDelUser: failed to delete auth record", uid.UserId(), name, err, s.sid)
 			}
 		}
 

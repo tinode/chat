@@ -9,15 +9,15 @@
   --auth=JRWPA --anon=JW \
   --cred=email:test@example.com
 
-# Alternatively just login with an existing user.
-# .must $user login bob:bob123
-
 # Print out user's auth token.
 # Params is a map, thus must be addressed as params[x] instead of params.x
 .log $user.params[token]
 
 # Login and confirm credentials with a dummy response
 .must login --scheme=token --secret=$user.params[token] --cred=email::123456
+
+# Alternatively just login with an existing user.
+# .must $user login bob:bob123
 
 # Find Alice
 .must sub fnd
@@ -36,8 +36,8 @@ note $meta.sub[0].user_id
 # Send message to Alice (async)
 pub $meta.sub[0].user_id 'Hello, Alice'
 
-# Wait 10 seconds before cleaning up.
-.sleep 10000
+# Wait 2 seconds before cleaning up.
+.sleep 2000
 
 # Clean up: delete Test User
 .await del user --hard

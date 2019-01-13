@@ -57,7 +57,7 @@ IsInteractive = sys.stdin.isatty()
 # Print prompts in interactive mode only.
 def printout(*args):
     if IsInteractive:
-        print(args)
+        print(*args)
 
 def printerr(*args):
     text = ""
@@ -183,7 +183,8 @@ def stdoutln(*args):
 def stdin(InputQueue):
     partial_input = ""
     try:
-        for cmd in sys.stdin:
+        # iter(...) is a workaround for a python2 bug https://bugs.python.org/issue3907
+        for cmd in iter(sys.stdin.readline, ''):
             cmd = cmd.strip()
             # Check for continuation symbol \ in the end of the line.
             if len(cmd) > 0 and cmd[-1] == "\\":
@@ -206,9 +207,6 @@ def stdin(InputQueue):
                     partial_input += " " + cmd
                 InputQueue.put(partial_input)
                 partial_input = ""
-                continue
-
-            if cmd == "":
                 continue
 
             InputQueue.put(cmd)
@@ -370,11 +368,12 @@ def delMsg(id, cmd):
         cmd.user = None
 
     elif cmd.what == 'user':
-        if not cmd.user:
-            stdoutln("Must specify user to delete")
-            return None
         enum_what = pb.ClientDel.USER
         cmd.topic = None
+
+    else:
+        stdoutln("Unrecognized delete option '", cmd.what, "'")
+        return None
 
     msg = pb.ClientMsg(on_behalf_of=DefaultUser)
     # Field named 'del' conflicts with the keyword 'del. This is a work around.
@@ -393,6 +392,7 @@ def delMsg(id, cmd):
         xdel.user_id = cmd.user
     if cmd.topic != None:
         xdel.topic = cmd.topic
+
     return msg
 
 def noteMsg(id, cmd):
@@ -654,6 +654,7 @@ def gen_message(scheme, secret):
         if not WaitingFor and not InputQueue.empty():
             id += 1
             inp = InputQueue.get()
+
             if inp == 'exit' or inp == 'quit' or inp == '.exit' or inp == '.quit':
                 return
 
@@ -661,17 +662,18 @@ def gen_message(scheme, secret):
             print_prompt = IsInteractive
             if pbMsg != None:
                 if not IsInteractive:
-                    sys.stdout.write(inp + "\n")
+                    sys.stdout.write("=> " + inp + "\n")
                     sys.stdout.flush()
 
                 if cmd.synchronous:
                     cmd.await_ts = time.time()
                     cmd.await_id = str(id)
                     WaitingFor = cmd
+
                 yield pbMsg
 
         elif not OutputQueue.empty():
-            sys.stdout.write("\r"+OutputQueue.get())
+            sys.stdout.write("\r<= "+OutputQueue.get())
             sys.stdout.flush()
             print_prompt = IsInteractive
 
@@ -720,7 +722,7 @@ def run(addr, schema, secret, secure, ssl_host):
                     WaitingFor = None
 
                 topic = " (" + str(msg.ctrl.topic) + ")" if msg.ctrl.topic else ""
-                stdoutln("\r" + str(msg.ctrl.code) + " " + msg.ctrl.text + topic)
+                stdoutln("\r<= " + str(msg.ctrl.code) + " " + msg.ctrl.text + topic)
 
             elif msg.HasField("meta"):
                 what = []
@@ -732,7 +734,7 @@ def run(addr, schema, secret, secure, ssl_host):
                     what.append("del")
                 if len(msg.meta.tags) > 0:
                     what.append("tags")
-                stdoutln("\n\rMeta " + ",".join(what) + " " + msg.meta.topic)
+                stdoutln("\r<= meta " + ",".join(what) + " " + msg.meta.topic)
 
                 if WaitingFor and WaitingFor.await_id == msg.meta.id:
                     if 'varname' in WaitingFor:
@@ -811,7 +813,7 @@ def print_server_params(params):
     servParams = []
     for p in params:
         servParams.append(p + ": " + json.loads(params[p]))
-    stdoutln("\rConnected to server: " + "; ".join(servParams))
+    stdoutln("\r<= Connected to server: " + "; ".join(servParams))
 
 if __name__ == '__main__':
     """Parse command-line arguments. Extract host name and authentication scheme, if one is provided"""
