@@ -1,16 +1,20 @@
-#  This script creates a new user Test, uses fnd to locate user Alice,
-# subscribes to Alice, sends typing notification, sends a message, deletes user Test.
+#  This script creates a new user Test User, uses fnd to locate user Alice,
+# subscribes Test User to Alice, sends typing notification, sends a message,
+# deletes user Test.
 
-# Register new account
+# Create user 'Test User'
 
 #.must $user acc --scheme=basic --secret=test:test123 \
-#  --fn='Test User' --tags=test,test-user --do-login --cred=email:test@example.com
+#  --fn='Test User' --photo=./test-128.jpg --tags=test,test-user --do-login \
+#  --auth=JRWPA --anon=JW \
+#  --cred=email:test@example.com
 
 .must $user login bob:bob123
 
-# .log $user
+# Print out user's auth token.
+.log $user.params.token
 
-# Login with a dummy credentials response
+# Login and confirm credentials with a dummy response
 # .must login --scheme=token --secret=$user.params.token --cred=email::123456
 
 # Find Alice
@@ -18,7 +22,8 @@
 .must set fnd --public=email:alice@example.com
 .must $meta get fnd --sub
 
-# .log $meta
+# Print out Alice's UID.
+.log $meta.sub[0].user_id
 
 # Subscribe to Alice
 .must sub $meta.sub[0].user_id
@@ -29,5 +34,5 @@ note $meta.sub[0].user_id
 # Send message to Alice (async)
 pub $meta.sub[0].user_id 'Hello, Alice'
 
-# Delete current user
+# Clean up: delete Test user
 # .await del user --hard

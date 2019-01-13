@@ -192,7 +192,6 @@ def stdin(InputQueue):
     except Exception as ex:
         printerr("Exception in stdin", ex)
 
-    print("stdin exited")
     InputQueue.put("exit")
 
 # encode_to_bytes takes an object/dictionary and converts it to json-formatted byte array.

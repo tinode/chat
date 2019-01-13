@@ -60,6 +60,7 @@ If multiple `login-XYZ` are provided, `login-cookie` is considered first, then `
 
 Type `<command> -h` for help
 
+See example at [sample-script.txt](sample-script.txt).
 
 ## Connecting to secure (HTTPS) server
 
