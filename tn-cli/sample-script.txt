@@ -43,4 +43,4 @@ pub $meta.sub[0].user_id 'Hello, Alice'
 .await del user --hard
 
 # Wait for completion before exiting.
-.sleep 2000
+.sleep 1000

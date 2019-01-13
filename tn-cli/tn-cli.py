@@ -75,7 +75,7 @@ DefaultTopic = None
 # Variables: results of command execution
 Variables = {}
 
-# Pack user's name and avatar into a vcard represented as json.
+# Pack user's name and avatar into a vcard.
 def make_vcard(fn, photofile):
     card = None
 
@@ -221,12 +221,14 @@ def stdin(InputQueue):
     InputQueue.put("exit")
 
 # Constructing individual messages
+# {hi}
 def hiMsg(id):
     OnCompletion[str(id)] = lambda params: print_server_params(params)
     return pb.ClientMsg(hi=pb.ClientHi(id=str(id), user_agent=APP_NAME + "/" + APP_VERSION + " (" +
         platform.system() + "/" + platform.release() + "); gRPC-python/" + LIB_VERSION,
         ver=LIB_VERSION, lang="EN"))
 
+# {acc}
 def accMsg(id, cmd):
     if cmd.uname:
         if cmd.password == None:
@@ -246,6 +248,7 @@ def accMsg(id, cmd):
             public=cmd.public, private=cmd.private),
         cred=parse_cred(cmd.cred)), on_behalf_of=DefaultUser)
 
+# {login}
 def loginMsg(id, cmd):
     if cmd.secret == None:
         if cmd.uname == None:
@@ -267,6 +270,7 @@ def loginMsg(id, cmd):
 
     return msg
 
+# {sub}
 def subMsg(id, cmd):
     if not cmd.topic:
         cmd.topic = DefaultTopic
@@ -281,11 +285,13 @@ def subMsg(id, cmd):
             sub=pb.SetSub(mode=cmd.mode),
             tags=cmd.tags.split(",") if cmd.tags else None), get_query=cmd.get_query), on_behalf_of=DefaultUser)
 
+# {leave}
 def leaveMsg(id, cmd):
     if not cmd.topic:
         cmd.topic = DefaultTopic
     return pb.ClientMsg(leave=pb.ClientLeave(id=str(id), topic=cmd.topic, unsub=cmd.unsub), on_behalf_of=DefaultUser)
 
+# {pub}
 def pubMsg(id, cmd):
     if not cmd.topic:
         cmd.topic = DefaultTopic
@@ -299,6 +305,7 @@ def pubMsg(id, cmd):
     return pb.ClientMsg(pub=pb.ClientPub(id=str(id), topic=cmd.topic, no_echo=True,
         head=head, content=encode_to_bytes(cmd.content)), on_behalf_of=DefaultUser)
 
+# {get}
 def getMsg(id, cmd):
     if not cmd.topic:
         cmd.topic = DefaultTopic
@@ -315,7 +322,7 @@ def getMsg(id, cmd):
     return pb.ClientMsg(get=pb.ClientGet(id=str(id), topic=cmd.topic,
         query=pb.GetQuery(what=" ".join(what))), on_behalf_of=DefaultUser)
 
-
+# {set}
 def setMsg(id, cmd):
     if not cmd.topic:
         cmd.topic = DefaultTopic
@@ -332,7 +339,7 @@ def setMsg(id, cmd):
         sub=pb.SetSub(user_id=cmd.user, mode=cmd.mode),
         tags=cmd.tags.split(",") if cmd.tags else None)), on_behalf_of=DefaultUser)
 
-
+# {del}
 def delMsg(id, cmd):
     if not cmd.what:
         stdoutln("Must specify what to delete")
@@ -395,6 +402,7 @@ def delMsg(id, cmd):
 
     return msg
 
+# {note}
 def noteMsg(id, cmd):
     if not cmd.topic:
         cmd.topic = DefaultTopic
@@ -573,6 +581,8 @@ def parse_input(cmd):
     except SystemExit:
         return None
 
+# Process command-line input string: execute local commands, generate
+# protobuf messages for remote commands.
 def serialize_cmd(string, id):
     """Take string read from the command line, convert in into a protobuf message"""
     cmd = {}
@@ -624,6 +634,7 @@ def serialize_cmd(string, id):
         stdoutln("Error in '{0}': {1}".format(cmd.cmd, err))
         return None, None
 
+# Generator of protobuf messages.
 def gen_message(scheme, secret):
     """Client message generator: reads user input as string,
     converts to pb.ClientMsg, and yields"""
@@ -688,6 +699,7 @@ def gen_message(scheme, secret):
                     WaitingFor = None
             time.sleep(0.1)
 
+# The main processing loop: send messages to server, receive responses.
 def run(addr, schema, secret, secure, ssl_host):
     global WaitingFor
     global Variables
@@ -779,7 +791,7 @@ def run(addr, schema, secret, secure, ssl_host):
         if InputThread != None:
             InputThread.join(0.3)
 
-
+# Read cookie file for logging in with the cookie.
 def read_cookie():
     try:
         cookie = open('.tn-cli-cookie', 'r')
@@ -791,11 +803,12 @@ def read_cookie():
         println("Missing or invalid cookie file '.tn-cli-cookie'", err)
         return None
 
+# Save cookie to file after successful login.
 def save_cookie(params):
     if params == None:
         return
 
-    # Protobuf map 'params' is not a python object or dictionary. Convert it.
+    # Protobuf map 'params' is a map which is not a python object or a dictionary. Convert it.
     nice = {}
     for p in params:
         nice[p] = json.loads(params[p])
@@ -809,6 +822,7 @@ def save_cookie(params):
     except Exception as err:
         stdoutln("Failed to save authentication cookie", err)
 
+# Log server info.
 def print_server_params(params):
     servParams = []
     for p in params:
