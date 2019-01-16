@@ -297,13 +297,19 @@ def pubMsg(id, cmd):
         cmd.topic = DefaultTopic
 
     head = {}
+    if cmd.drafty:
+        head['mime'] = encode_to_bytes('text/x-drafty')
+
+    # Excplicitly provided 'mime' will override the one assigned above.
     if cmd.head:
         for h in cmd.head.split(","):
             key, val = h.split(":")
-            head[key] = ('"' + val + '"').encode('utf-8')
+            head[key] = encode_to_bytes(val)
+
+    content = json.loads(cmd.drafty) if cmd.drafty else cmd.content
 
     return pb.ClientMsg(pub=pb.ClientPub(id=str(id), topic=cmd.topic, no_echo=True,
-        head=head, content=encode_to_bytes(cmd.content)), on_behalf_of=DefaultUser)
+        head=head, content=encode_to_bytes(content)), on_behalf_of=DefaultUser)
 
 # {get}
 def getMsg(id, cmd):
@@ -476,6 +482,7 @@ def parse_cmd(parts):
         parser.add_argument('content', nargs='?', default=argparse.SUPPRESS, help='message to send')
         parser.add_argument('--head', help='message headers')
         parser.add_argument('--content', dest='content', help='message to send')
+        parser.add_argument('--drafty', dest='drafty', help='structured message to send, e.g. drafty content')
     elif parts[0] == "get":
         parser = argparse.ArgumentParser(prog=parts[0], description='Query topic for messages or metadata')
         parser.add_argument('topic', nargs='?', default=argparse.SUPPRESS, help='topic to query')
