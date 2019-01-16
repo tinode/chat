@@ -296,11 +296,11 @@ def pubMsg(id, cmd):
     if not cmd.topic:
         cmd.topic = DefaultTopic
 
-    head = []
+    head = {}
     if cmd.head:
         for h in cmd.head.split(","):
             key, val = h.split(":")
-            head.append(pb.ClientPub.HeadEntry(key=key, value=value.encode('utf-8')))
+            head[key] = ('"' + val + '"').encode('utf-8')
 
     return pb.ClientMsg(pub=pb.ClientPub(id=str(id), topic=cmd.topic, no_echo=True,
         head=head, content=encode_to_bytes(cmd.content)), on_behalf_of=DefaultUser)
@@ -866,7 +866,7 @@ if __name__ == '__main__':
         elif args.login_basic:
             """Use username:password"""
             schema = 'basic'
-            secret = base64.b64encode(args.login_basic.encode('utf-8'))
+            secret = args.login_basic
             printout("Logging in with login:password", args.login_basic)
 
         else:

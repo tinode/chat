@@ -44,6 +44,7 @@ If multiple `login-XYZ` are provided, `login-cookie` is considered first, then `
 * `.log` - write a value of a variable to `stdout`.
 * `.must` - issue a gRPC call and wait for completion, optionally assign result to a variable; raise an exception if result is not a success.
 * `.quit` - terminate execution and exit the CLI; also `.exit`.
+* `.sleep` - suspend the process for a number of milliseconds.
 * `.use` - set default user (on_behalf_of user) or topic
 
 ### gRPC calls
