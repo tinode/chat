@@ -33,8 +33,16 @@
 # Send typing notification to Alice (async)
 note $meta.sub[0].user_id
 
-# Send message to Alice (async)
+# Send a plain text message to Alice (async)
 pub $meta.sub[0].user_id 'Hello, Alice'
+
+# Send a drafty-formatted form to Alice (async)
+pub $meta.sub[0].user_id --drafty='{"txt": "What’s your favorite color?red green none",\
+  "fmt": [ {"at": 0, "len": 42, "tp": "FM"}, {"at": 0, "len": 27, "tp": "ST"},\
+  {"at": 27, "len": 14, "tp": "RW"}, {"at": 27, "len": 3, "key": 0}, {"at": 31, "len": 5, "key": 1},\
+  {"at": 37, "len": 4, "key": 2} ], "ent": [ {"tp": "BN", "data": {"name": "red", "act": "pub", "val": 3840}},\
+  {"tp": "BN", "data": {"name": "green", "act": "pub", "val": 240}},\
+  {"tp": "BN", "data": {"name": "none", "act": "pub"}}]}'
 
 # Wait 2 seconds before cleaning up.
 .sleep 2000
@@ -42,5 +50,5 @@ pub $meta.sub[0].user_id 'Hello, Alice'
 # Clean up: delete Test User
 .await del user --hard
 
-# Wait for completion before exiting.
+# Wait for more messages before exiting.
 .sleep 1000
