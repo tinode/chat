@@ -1,6 +1,7 @@
-#  This script creates a new user Test User, uses fnd to locate user Alice,
+# This script creates a new user Test User, uses fnd to locate user Alice,
 # subscribes Test User to Alice, sends typing notification, sends a message,
-# deletes user Test.
+# creates a group topic Test Group, adds Alice to the group, sends a message
+# with a drafty-formatted form to the group, deletes Test Group, deletes Test User.
 
 # Create user 'Test User'
 
@@ -36,18 +37,29 @@ note $meta.sub[0].user_id
 # Send a plain text message to Alice (async)
 pub $meta.sub[0].user_id 'Hello, Alice'
 
-# Send a drafty-formatted form to Alice (async)
-pub $meta.sub[0].user_id --drafty='{"txt": "What’s your favorite color?red green none",\
+# Create a new group topic Test Group
+.must $group sub new --fn='Test Group' --tags=test,test-group \
+  --auth=JRWPA --anon=JR
+
+# Add Alice to the new topic.
+.must set $group.topic --user=$meta.sub[0].user_id
+
+# Publish a drafty-formatted form to the new topic.
+pub $group.topic --drafty='{"txt": "What’s your favorite color?red green none",\
   "fmt": [ {"at": 0, "len": 42, "tp": "FM"}, {"at": 0, "len": 27, "tp": "ST"},\
   {"at": 27, "len": 14, "tp": "RW"}, {"at": 27, "len": 3, "key": 0}, {"at": 31, "len": 5, "key": 1},\
   {"at": 37, "len": 4, "key": 2} ], "ent": [ {"tp": "BN", "data": {"name": "red", "act": "pub", "val": 3840}},\
   {"tp": "BN", "data": {"name": "green", "act": "pub", "val": 240}},\
   {"tp": "BN", "data": {"name": "none", "act": "pub"}}]}'
 
+
 # Wait 2 seconds before cleaning up.
 .sleep 2000
 
-# Clean up: delete Test User
+# Delete Test Group.
+.await del topic --topic=$group.topic --hard
+
+# Delete Test User
 .await del user --hard
 
 # Wait for more messages before exiting.
