@@ -627,9 +627,8 @@ def serialize_cmd(string, id):
             return None, None
 
         elif cmd.cmd == ".sleep":
-            stdout("Pausing for " + str(cmd.millis) + "ms...")
+            stdoutln("Pausing for " + str(cmd.millis) + "ms...")
             time.sleep(cmd.millis/1000.)
-            stdoutln(" done")
             return None, None
 
         elif cmd.cmd in messages:

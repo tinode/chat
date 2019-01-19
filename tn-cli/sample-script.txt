@@ -1,7 +1,19 @@
-# This script creates a new user Test User, uses fnd to locate user Alice,
-# subscribes Test User to Alice, sends typing notification, sends a message,
-# creates a group topic Test Group, adds Alice to the group, sends a message
-# with a drafty-formatted form to the group, deletes Test Group, deletes Test User.
+# This script shows what can be done with tn-cli. Run it as
+#
+#   python tn-cli.py --no-login < sample-script.txt
+#
+# The script performs the following:
+#
+#  - Creates a new user Test User
+#  - Uses fnd to locate user Alice
+#  - Subscribes Test User to Alice
+#  - Sends typing notification to Alice
+#  - Sends a message to Alice
+#  - Creates a group topic Test Group
+#  - Adds Alice to the Test Group
+#  - Sends a message with a drafty-formatted form to the Test Group
+#  - Deletes Test Group
+#  - Deletes Test User
 
 # Create user 'Test User'
 
