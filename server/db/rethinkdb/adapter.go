@@ -43,6 +43,8 @@ type configType struct {
 	WriteTimeout      int         `json:"write_timeout,omitempty"`
 	ReadTimeout       int         `json:"read_timeout,omitempty"`
 	KeepAlivePeriod   int         `json:"keep_alive_timeout,omitempty"`
+	UseJSONNumber     bool        `json:"use_json_number,omitempty"`
+	NumRetries        int         `json:"num_retries,omitempty"`
 	InitialCap        int         `json:"initial_cap,omitempty"`
 	MaxOpen           int         `json:"max_open,omitempty"`
 	DiscoverHosts     bool        `json:"discover_hosts,omitempty"`
@@ -96,6 +98,8 @@ func (a *adapter) Open(jsonconfig string) error {
 	opts.WriteTimeout = time.Duration(config.WriteTimeout) * time.Second
 	opts.ReadTimeout = time.Duration(config.ReadTimeout) * time.Second
 	opts.KeepAlivePeriod = time.Duration(config.KeepAlivePeriod) * time.Second
+	opts.UseJSONNumber = config.UseJSONNumber
+	opts.NumRetries = config.NumRetries
 	opts.InitialCap = config.InitialCap
 	opts.MaxOpen = config.MaxOpen
 	opts.DiscoverHosts = config.DiscoverHosts
