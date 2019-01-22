@@ -210,19 +210,20 @@ func tlsRedirect(toPort string) http.HandlerFunc {
 	}
 
 	return func(wrt http.ResponseWriter, req *http.Request) {
-		target := *req.URL
-		target.Scheme = "https"
 		// Host name is guaranteed to be valid because of TLS whitelist.
 		host, _, _ := net.SplitHostPort(req.Host)
-		if target.Port() != "" {
-			if toPort != "" {
-				// Replace the port number.
-				target.Host = net.JoinHostPort(host, toPort)
-			} else {
-				// Just strip the port number.
-				target.Host = host
-			}
+
+		target := *req.URL
+		target.Scheme = "https"
+
+		// Ensure valid redirect target.
+		if toPort != "" {
+			// Replace the port number.
+			target.Host = net.JoinHostPort(host, toPort)
+		} else {
+			target.Host = host
 		}
+
 		http.Redirect(wrt, req, target.String(), http.StatusTemporaryRedirect)
 	}
 }
