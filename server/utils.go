@@ -651,7 +651,7 @@ func parseTLSConfig(tlsEnabled bool, jsconfig json.RawMessage) (*tls.Config, err
 			Cache:      autocert.DirCache(config.Autocert.CertCache),
 			Email:      config.Autocert.Email,
 		}
-		return &tls.Config{GetCertificate: certManager.GetCertificate}, nil
+		return certManager.TLSConfig(), nil
 	}
 
 	// Otherwise try to use static keys.

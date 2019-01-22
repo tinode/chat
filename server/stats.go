@@ -63,7 +63,6 @@ func statsInc(name string, val int) {
 func statsShutdown() {
 	if globals.statsUpdate != nil {
 		globals.statsUpdate <- nil
-		globals.statsUpdate = nil
 	}
 }
 
@@ -76,6 +75,7 @@ loop:
 			if upd == nil {
 				// Nil update means shutdown
 				close(globals.statsUpdate)
+				globals.statsUpdate = nil
 				break loop
 			}
 
