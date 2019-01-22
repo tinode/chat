@@ -16,6 +16,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"strconv"
@@ -53,7 +54,7 @@ func listenAndServe(addr string, mux *http.ServeMux, tlfConf *tls.Config, stop <
 					globals.tlsRedirectHTTP, server.Addr)
 
 				// This is a second HTTP server listenning on a different port.
-				go http.ListenAndServe(globals.tlsRedirectHTTP, tlsRedirect(addr))
+				go http.ListenAndServe(globals.tlsRedirectHTTP, tlsRedirect(server.Addr))
 			}
 
 			log.Printf("Listening for client HTTPS connections on [%s]", server.Addr)
@@ -210,10 +211,13 @@ func tlsRedirect(toPort string) http.HandlerFunc {
 	}
 
 	return func(wrt http.ResponseWriter, req *http.Request) {
-		// Host name is guaranteed to be valid because of TLS whitelist.
-		host, _, _ := net.SplitHostPort(req.Host)
+		host, _, err := net.SplitHostPort(req.Host)
+		if err != nil {
+			// If SplitHostPort has failed assume it's because :port part is missing.
+			host = req.Host
+		}
 
-		target := *req.URL
+		target, _ := url.ParseRequestURI(req.RequestURI)
 		target.Scheme = "https"
 
 		// Ensure valid redirect target.
@@ -222,6 +226,10 @@ func tlsRedirect(toPort string) http.HandlerFunc {
 			target.Host = net.JoinHostPort(host, toPort)
 		} else {
 			target.Host = host
+		}
+
+		if target.Path == "" {
+			target.Path = "/"
 		}
 
 		http.Redirect(wrt, req, target.String(), http.StatusTemporaryRedirect)
