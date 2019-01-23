@@ -26,7 +26,7 @@ from tinode_grpc import pb
 from tinode_grpc import pbx
 
 APP_NAME = "Tino-chatbot"
-APP_VERSION = "1.1.1"
+APP_VERSION = "1.1.2"
 LIB_VERSION = pkg_resources.get_distribution("tinode_grpc").version
 
 # User ID of the current user
@@ -159,7 +159,7 @@ def leave(topic):
 def publish(topic, text):
     tid = next_id()
     return pb.ClientMsg(pub=pb.ClientPub(id=tid, topic=topic, no_echo=True,
-		content=json.dumps(text).encode('utf-8')))
+        head={"auto": True}, content=json.dumps(text).encode('utf-8')))
 
 def note_read(topic, seq):
     return pb.ClientMsg(note=pb.ClientNote(topic=topic, what=pb.READ, seq_id=seq))
