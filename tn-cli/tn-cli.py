@@ -19,6 +19,7 @@ except ImportError:
     import queue
 import random
 import re
+import requests
 import shlex
 import sys
 import threading
@@ -32,6 +33,7 @@ from tinode_grpc import pbx
 
 APP_NAME = "tn-cli"
 APP_VERSION = "1.2.0"
+PROTOCOL_VERSION = "0"
 LIB_VERSION = pkg_resources.get_distribution("tinode_grpc").version
 GRPC_VERSION = pkg_resources.get_distribution("grpcio").version
 
@@ -425,6 +427,21 @@ def noteMsg(id, cmd):
         cmd.seq = int(cmd.seq)
     return pb.ClientMsg(note=pb.ClientNote(topic=cmd.topic, what=enum_what, seq_id=cmd.seq), on_behalf_of=DefaultUser)
 
+# Upload file out of band (not gRPC)
+def upload(id, cmd):
+    result = requests.post('/v' + PROTOCOL_VERSION + '/file/u/',
+        headers = {
+            'X-Tinode-APIKey': this._apiKey,
+            'X-Tinode-Auth': 'Token ' + this._authToken.token,
+            'User-Agent': APP_NAME + " " + APP_VERSION + "/" + LIB_VERSION
+        },
+        data = {'id': id},
+        files = {'file': (cmd.filename, open(cmd.filename, 'rb'))})
+
+    print(result.status_code, result.reason)
+
+    return None
+
 # Given an array of parts, parse commands and arguments
 def parse_cmd(parts):
     parser = None
@@ -482,7 +499,9 @@ def parse_cmd(parts):
         parser.add_argument('content', nargs='?', default=argparse.SUPPRESS, help='message to send')
         parser.add_argument('--head', help='message headers')
         parser.add_argument('--content', dest='content', help='message to send')
-        parser.add_argument('--drafty', dest='drafty', help='structured message to send, e.g. drafty content')
+        parser.add_argument('--drafty', help='structured message to send, e.g. drafty content')
+        parser.add_argument('--image', help='image file to insert into message (not implemented yet)')
+        parser.add_argument('--attachment', help='file to send as an attachment (not implemented yet)')
     elif parts[0] == "get":
         parser = argparse.ArgumentParser(prog=parts[0], description='Query topic for messages or metadata')
         parser.add_argument('topic', nargs='?', default=argparse.SUPPRESS, help='topic to query')
@@ -494,22 +513,24 @@ def parse_cmd(parts):
     elif parts[0] == "set":
         parser = argparse.ArgumentParser(prog=parts[0], description='Update topic metadata')
         parser.add_argument('topic', help='topic to update')
-        parser.add_argument('--fn', default=None, help='topic\'s title')
-        parser.add_argument('--photo', default=None, help='avatar file name')
-        parser.add_argument('--public', default=None, help='topic\'s public info, alternative to fn+photo')
-        parser.add_argument('--private', default=None, help='topic\'s private info')
-        parser.add_argument('--auth', default=None, help='default access mode for authenticated users')
-        parser.add_argument('--anon', default=None, help='default access mode for anonymous users')
-        parser.add_argument('--user', default=None, help='ID of the account to update')
-        parser.add_argument('--mode', default=None, help='new value of access mode')
-        parser.add_argument('--tags', default=None, help='tags for topic discovery, comma separated list without spaces')
+        parser.add_argument('--fn', help='topic\'s title')
+        parser.add_argument('--photo', help='avatar file name')
+        parser.add_argument('--public', help='topic\'s public info, alternative to fn+photo')
+        parser.add_argument('--private', help='topic\'s private info')
+        parser.add_argument('--auth', help='default access mode for authenticated users')
+        parser.add_argument('--anon', help='default access mode for anonymous users')
+        parser.add_argument('--user', help='ID of the account to update')
+        parser.add_argument('--mode', help='new value of access mode')
+        parser.add_argument('--tags', help='tags for topic discovery, comma separated list without spaces')
     elif parts[0] == "note":
         parser = argparse.ArgumentParser(prog=parts[0], description='Send notification to topic, ex "note kp"')
         parser.add_argument('topic', help='topic to notify')
         parser.add_argument('what', nargs='?', default='kp', const='kp', choices=['kp', 'read', 'recv'],
             help='notification type: kp (key press), recv, read - message received or read receipt')
         parser.add_argument('--seq', help='message ID being reported')
-
+    elif parts[0] == "upload":
+        parser = argparse.ArgumentParser(prog=parts[0], description='Upload file out of band')
+        parser.add_argument('filename', help='name of the file to upload')
     return parser
 
 # Parses command line into command and parameters.
@@ -573,6 +594,7 @@ def parse_input(cmd):
         printout("\tpub\t- post message to topic")
         printout("\tset\t- update topic metadata")
         printout("\tsub\t- subscribe to topic")
+        printout("\tupload\t- upload file out of band")
         printout("\n\tType <command> -h for help")
         return None
 
@@ -602,7 +624,8 @@ def serialize_cmd(string, id):
         "get": getMsg,
         "set": setMsg,
         "del": delMsg,
-        "note": noteMsg
+        "note": noteMsg,
+        "upload": upload
     }
     try:
         # Convert string into a dictionary
@@ -708,18 +731,18 @@ def gen_message(scheme, secret):
             time.sleep(0.1)
 
 # The main processing loop: send messages to server, receive responses.
-def run(addr, schema, secret, secure, ssl_host):
+def run(args, schema, secret):
     global WaitingFor
     global Variables
 
     try:
         # Create secure channel with default credentials.
         channel = None
-        if secure:
-            opts = (('grpc.ssl_target_name_override', ssl_host),) if ssl_host else None
-            channel = grpc.secure_channel(addr, grpc.ssl_channel_credentials(), opts)
+        if args.ssl:
+            opts = (('grpc.ssl_target_name_override', args.ssl_host),) if args.ssl_host else None
+            channel = grpc.secure_channel(args.host, grpc.ssl_channel_credentials(), opts)
         else:
-            channel = grpc.insecure_channel(addr)
+            channel = grpc.insecure_channel(args.host)
 
         # Call the server
         stream = pbx.NodeStub(channel).MessageLoop(gen_message(schema, secret))
@@ -843,13 +866,15 @@ if __name__ == '__main__':
     purpose = "Tinode command line client. Version " + version + "."
 
     parser = argparse.ArgumentParser(description=purpose)
-    parser.add_argument('--host', default='localhost:6061', help='address of Tinode server')
+    parser.add_argument('--host', default='localhost:6061', help='address of Tinode gRPC server')
+    parser.add_argument('--web-host', default='localhost:6060', help='address of Tinode web server')
     parser.add_argument('--ssl', action='store_true', help='connect to server over secure connection')
     parser.add_argument('--ssl-host', help='SSL host name to use instead of default (useful for connecting to localhost)')
     parser.add_argument('--login-basic', help='login using basic authentication username:password')
     parser.add_argument('--login-token', help='login using token authentication')
     parser.add_argument('--login-cookie', action='store_true', help='read token from cookie file and use it for authentication')
     parser.add_argument('--no-login', action='store_true', help='do not login even if cookie file is present')
+    parser.add_argument('--api-key', default='AQEAAAABAAD_rAp4DJh05a1HAwFT3A6K', help='API key for file uploads')
     parser.add_argument('--version', action='store_true', help='print version')
     args = parser.parse_args()
 
@@ -886,4 +911,4 @@ if __name__ == '__main__':
             except Exception as err:
                 printerr("Failed to read authentication cookie", err)
 
-    run(args.host, schema, secret, args.ssl, args.ssl_host)
+    run(args, schema, secret)
