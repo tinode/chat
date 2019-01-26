@@ -25,13 +25,15 @@ where `X.XX.XX` is the version number which must match the server version number
 
 The client takes optional parameters:
 
- * `--host` is the address of the server to connect to; default is `localhost:6061`.
+ * `--host` is the address of the gRPC server to connect to; default `localhost:6061`.
+ * `--web-host` is the address of Tinode web server, used for file uploads only; default `localhost:6060`.
  * `--ssl` the server requires a secure connection (SSL)
  * `--ssl-host` the domain name to use for SNI if different from the `--host` domain name.
  * `--login-basic` is the `login:password` to be authenticated with.
  * `--login-token` is the token to be authenticated with.
  * `--login-cookie` direct the client to read the token from the cookie file `.tn-cli-cookie` generated during an earlier login.
  * `--no-login` do not login even if cookie file is present.
+ * `--api-key` web API key for file uploads; default `AQEAAAABAAD_rAp4DJh05a1HAwFT3A6K`
 
 If multiple `login-XYZ` are provided, `login-cookie` is considered first, then `login-token` then `login-basic`. Authentication with token (and cookie) is much faster than with the username-password pair.
 
@@ -58,6 +60,11 @@ If multiple `login-XYZ` are provided, `login-cookie` is considered first, then `
 * `set` - update topic metadata
 * `del` - delete message(s), topic, subscription, or user
 * `note` - send notification
+
+### HTTP requests
+
+* `upload` - upload file out of band
+
 
 Type `<command> -h` for help
 

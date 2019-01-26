@@ -9,6 +9,11 @@ import argparse
 import base64
 import grpc
 import json
+from PIL import Image
+try:
+    from io import BytesIO as memory_io
+except ImportError:
+    from cStringIO import StringIO as memory_io
 import mimetypes
 import os
 import pkg_resources
@@ -36,6 +41,17 @@ APP_VERSION = "1.2.0"
 PROTOCOL_VERSION = "0"
 LIB_VERSION = pkg_resources.get_distribution("tinode_grpc").version
 GRPC_VERSION = pkg_resources.get_distribution("grpcio").version
+
+# Maximum in-band (included directly into the message) attachment size which fits into
+# a message of 256K in size, assuming base64 encoding and 1024 bytes of overhead.
+# This is size of an object *before* base64 encoding is applied.
+MAX_INBAND_ATTACHMENT_SIZE = 195840
+
+# Absolute maximum attachment size to be used with the server = 8MB.
+MAX_EXTERN_ATTACHMENT_SIZE = 1 << 23
+
+# Maximum allowed linear dimension of an inline image in pixels.
+MAX_IMAGE_DIM = 768
 
 # 5 seconds timeout for .await/.must commands.
 AWAIT_TIMEOUT = 5
@@ -108,6 +124,44 @@ def make_vcard(fn, photofile):
                 stdoutln("Error opening '" + photofile + "':", err)
 
     return card
+
+# Create drafty representation of a message with an inline image.
+def inline_image(filename):
+    try:
+        im = Image.open(filename, 'r')
+        width = im.width
+        height = im.height
+        format = im.format if im.format else "JPEG"
+        if width > MAX_IMAGE_DIM or height > MAX_IMAGE_DIM:
+            # Scale the image
+            scale = min(min(width, MAX_IMAGE_DIM) / width, min(height, MAX_IMAGE_DIM) / height)
+            width = int(width * scale)
+            height = int(height * scale)
+            resized = im.resize((width, height))
+            im.close()
+            im = resized
+
+        mimetype = 'image/' + format.lower()
+        bitbuffer = memory_io()
+        im.save(bitbuffer, format=format)
+        data = base64.b64encode(bitbuffer.getvalue())
+
+        # python3 fix.
+        if type(data) is not str:
+            data = data.decode()
+
+        result = {
+            'txt': ' ',
+            'fmt': [{'len': 1}],
+            'ent': [{'tp': 'IM', 'data':
+                {'val': data, 'mime': mimetype, 'width': width, 'height': height,
+                    'name': os.path.basename(filename)}}]
+        }
+        im.close()
+        return result
+    except IOError as err:
+        stdoutln("Failed processing image '" + filename + "':", err)
+        return None
 
 # encode_to_bytes takes an object/dictionary and converts it to json-formatted byte array.
 def encode_to_bytes(src):
@@ -299,7 +353,7 @@ def pubMsg(id, cmd):
         cmd.topic = DefaultTopic
 
     head = {}
-    if cmd.drafty:
+    if cmd.drafty or cmd.image or cmd.attachment:
         head['mime'] = encode_to_bytes('text/x-drafty')
 
     # Excplicitly provided 'mime' will override the one assigned above.
@@ -308,7 +362,9 @@ def pubMsg(id, cmd):
             key, val = h.split(":")
             head[key] = encode_to_bytes(val)
 
-    content = json.loads(cmd.drafty) if cmd.drafty else cmd.content
+    content = json.loads(cmd.drafty) if cmd.drafty else inline_image(cmd.image) if cmd.image else cmd.content
+    if not content:
+        return None
 
     return pb.ClientMsg(pub=pb.ClientPub(id=str(id), topic=cmd.topic, no_echo=True,
         head=head, content=encode_to_bytes(content)), on_behalf_of=DefaultUser)
