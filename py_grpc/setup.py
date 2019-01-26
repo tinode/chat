@@ -25,7 +25,7 @@ setuptools.setup(
     package_data={
         "": ["GIT_VERSION"],
     },
-    classifiers=(
+    classifiers=[
         "Programming Language :: Python :: 2",
         "Programming Language :: Python :: 2.7",
         "Programming Language :: Python :: 3",
@@ -35,5 +35,5 @@ setuptools.setup(
         "Operating System :: OS Independent",
         "Topic :: Communications :: Chat",
         "Intended Audience :: Developers",
-    ),
+    ],
 )
