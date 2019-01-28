@@ -7,6 +7,7 @@ The chat bot subscribes to events stream using Plugin API and logs in as a regul
 
 Generated files are provided for convenience in a [separate folder](../../py_grpc/tinode_grpc). You may re-generate them if needed:
 ```
+python -m pip install grpcio-tools
 python -m grpc_tools.protoc -../../pbx --python_out=. --grpc_python_out=. ../../pbx/model.proto
 ```
 
@@ -40,21 +41,9 @@ $ source venv/bin/activate
 $ python -m pip install --upgrade pip
 ```
 
-If you are using python 2.7 install `futures`:
+#### Install dependencies:
 ```
-$ python -m pip install futures
-```
-
-#### Install tinode_grpc
-
-Install tinode gRPC bindings:
-```
-$ python -m pip install tinode_grpc
-```
-
-Or, to install it system wide:
-```
-$ sudo python -m pip install tinode_grpc
+$ python -m pip install -r requirements.txt
 ```
 
 On El Capitan OSX, you may get the following error:
@@ -66,7 +55,7 @@ You can work around this using:
 $ python -m pip install tinode_grpc --ignore-installed
 ```
 
-#### Run the chatbot
+### Run the chatbot
 
 Start the [tinode server](../../INSTALL.md) first. Then start the chatbot with credentials of the user you want to be your bot, `alice` in this example:
 ```
