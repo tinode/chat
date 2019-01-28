@@ -2,14 +2,11 @@
 
 This is a command line chat client. It's written in Python as a demonstration of Tinode [gRPC](https://grpc.io) [API](../pbx/).
 
-Python 2.7 or 3.4 or newer is required. PIP 9.0.1 or newer is required. If you are using Python 2.7 install `futures`:
-```
-$ python -m pip install futures
-```
+Python 2.7 or 3.4+ is required. PIP 9.0.1 or newer is required.
 
-Install [tinode gRPC](https://pypi.org/project/tinode-grpc/) bindings:
+Install dependencies:
 ```
-$ python -m pip install tinode_grpc
+$ python -m pip install -r requirements.txt
 ```
 
 Run the client from the command line:
