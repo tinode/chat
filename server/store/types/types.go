@@ -273,8 +273,9 @@ func ParseP2P(p2p string) (uid1, uid2 Uid, err error) {
 		if count < 16 {
 			if err != nil {
 				err = errors.New("ParseP2P: failed to decode " + err.Error())
+			} else {
+				err = errors.New("ParseP2P: invalid decoded length")
 			}
-			err = errors.New("ParseP2P: invalid decoded length")
 			return
 		}
 		uid1 = Uid(binary.LittleEndian.Uint64(dec))
