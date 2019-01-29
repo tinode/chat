@@ -1560,12 +1560,6 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 			subs, err = store.Topics.GetSubsAny(t.name, msgOpts2storeOpts(req))
 		}
 		isSharer = (userData.modeGiven & userData.modeWant).IsSharer()
-
-		if err != nil {
-			sess.queueOut(decodeStoreError(err, id, t.original(asUid), now, nil))
-			return err
-		}
-
 	case types.TopicCatGrp:
 		// Include sub.Public.
 		if ifModified.IsZero() {
@@ -1576,11 +1570,11 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 			subs, err = store.Topics.GetUsersAny(t.name, msgOpts2storeOpts(req))
 		}
 		isSharer = (userData.modeGiven & userData.modeWant).IsSharer()
+	}
 
-		if err != nil {
-			sess.queueOut(decodeStoreError(err, id, t.original(asUid), now, nil))
-			return err
-		}
+	if err != nil {
+		sess.queueOut(decodeStoreError(err, id, t.original(asUid), now, nil))
+		return err
 	}
 
 	if len(subs) > 0 {
