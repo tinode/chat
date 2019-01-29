@@ -273,7 +273,7 @@ func (t *Topic) presSubsOnlineDirect(what string) {
 
 	for sess := range t.sessions {
 		// Check presence filters
-		pud, _ := t.perUser[sess.uid]
+		pud := t.perUser[sess.uid]
 		if !(pud.modeGiven & pud.modeWant).IsPresencer() {
 			continue
 		}
@@ -455,7 +455,7 @@ func (t *Topic) presPubMessageDelete(uid types.Uid, delID int, list []MsgDelRang
 	}
 
 	// This check is only needed for V.1, but it does not hurt V.2. Let's do it here for both.
-	pud, _ := t.perUser[uid]
+	pud := t.perUser[uid]
 	if !(pud.modeGiven & pud.modeWant).IsPresencer() {
 		return
 	}

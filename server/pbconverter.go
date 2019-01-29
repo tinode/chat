@@ -759,7 +759,7 @@ func pbTopicSerialize(topic *Topic) *pbx.TopicDesc {
 }
 
 func pbTopicSubSliceSerialize(subs []MsgTopicSub) []*pbx.TopicSub {
-	if subs == nil || len(subs) == 0 {
+	if len(subs) == 0 {
 		return nil
 	}
 
@@ -794,7 +794,7 @@ func pbTopicSubSerialize(sub *MsgTopicSub) *pbx.TopicSub {
 }
 
 func pbTopicSubSliceDeserialize(subs []*pbx.TopicSub) []MsgTopicSub {
-	if subs == nil || len(subs) == 0 {
+	if len(subs) == 0 {
 		return nil
 	}
 
@@ -828,7 +828,7 @@ func pbTopicSubSliceDeserialize(subs []*pbx.TopicSub) []MsgTopicSub {
 }
 
 func pbSubSliceDeserialize(subs []*pbx.TopicSub) []types.Subscription {
-	if subs == nil || len(subs) == 0 {
+	if len(subs) == 0 {
 		return nil
 	}
 

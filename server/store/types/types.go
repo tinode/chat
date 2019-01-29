@@ -446,6 +446,7 @@ func (m AccessMode) MarshalText() ([]byte, error) {
 func (m *AccessMode) UnmarshalText(b []byte) error {
 	m0 := ModeUnset
 
+loop:
 	for i := 0; i < len(b); i++ {
 		switch b[i] {
 		case 'J', 'j':
@@ -466,7 +467,7 @@ func (m *AccessMode) UnmarshalText(b []byte) error {
 			m0 |= ModeOwner
 		case 'N', 'n':
 			m0 = ModeNone // N means explicitly no access, all bits cleared
-			break
+			break loop
 		default:
 			return errors.New("AccessMode: invalid character '" + string(b[i]) + "'")
 		}

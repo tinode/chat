@@ -309,7 +309,7 @@ func main() {
 		// Check if validator is restrictive. If so, add validator name to the list of restricted tags.
 		// The namespace can be restricted even if the validator is disabled.
 		if vconf.AddToTags {
-			if strings.Index(name, ":") >= 0 {
+			if strings.Contains(name, ":") {
 				log.Fatal("acc_validation names should not contain character ':'")
 			}
 			globals.immutableTagNS[name] = true
@@ -358,7 +358,7 @@ func main() {
 	// Partially restricted tag namespaces
 	globals.maskedTagNS = make(map[string]bool, len(config.MaskedTagNamespaces))
 	for _, tag := range config.MaskedTagNamespaces {
-		if strings.Index(tag, ":") >= 0 {
+		if strings.Contains(tag, ":") {
 			log.Fatal("masked_tags namespaces should not contain character ':'")
 		}
 		globals.maskedTagNS[tag] = true

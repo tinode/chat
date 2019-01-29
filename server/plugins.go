@@ -118,7 +118,7 @@ func ParsePluginFilter(s *string, filterBy int) (*PluginFilter, error) {
 	parseAction := func(parts []string) int {
 		var result int
 		for _, inp := range parts {
-
+		loop:
 			for _, char := range inp {
 				switch char {
 				case 'c', 'C':
@@ -130,7 +130,7 @@ func ParsePluginFilter(s *string, filterBy int) (*PluginFilter, error) {
 				default:
 					// Unknown symbol means this is not an action string.
 					result = 0
-					break
+					break loop
 				}
 			}
 
