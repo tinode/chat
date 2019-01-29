@@ -68,29 +68,26 @@ func statsShutdown() {
 
 // The go routine which actually publishes stats updates.
 func statsUpdater() {
-loop:
-	for {
-		select {
-		case upd := <-globals.statsUpdate:
-			if upd == nil {
-				// Nil update means shutdown
-				close(globals.statsUpdate)
-				globals.statsUpdate = nil
-				break loop
-			}
 
-			// Handle var update
-			if ev := expvar.Get(upd.varname); ev != nil {
-				// Intentional panic if the ev is not *expvar.Int.
-				intvar := ev.(*expvar.Int)
-				if upd.inc {
-					intvar.Add(upd.count)
-				} else {
-					intvar.Set(upd.count)
-				}
+	for upd := range globals.statsUpdate {
+		if upd == nil {
+			// Nil update means shutdown
+			close(globals.statsUpdate)
+			globals.statsUpdate = nil
+			break
+		}
+
+		// Handle var update
+		if ev := expvar.Get(upd.varname); ev != nil {
+			// Intentional panic if the ev is not *expvar.Int.
+			intvar := ev.(*expvar.Int)
+			if upd.inc {
+				intvar.Add(upd.count)
 			} else {
-				panic("stats: update to unknown variable " + upd.varname)
+				intvar.Set(upd.count)
 			}
+		} else {
+			panic("stats: update to unknown variable " + upd.varname)
 		}
 	}
 
