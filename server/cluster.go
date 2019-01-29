@@ -218,22 +218,21 @@ func (n *ClusterNode) callAsync(proc string, msg, resp interface{}, done chan *r
 
 	myDone := make(chan *rpc.Call, 1)
 	go func() {
-		select {
-		case call := <-myDone:
-			if call.Error != nil {
-				n.lock.Lock()
-				if n.connected {
-					n.endpoint.Close()
-					n.connected = false
-					go n.reconnect()
-				}
-				n.lock.Unlock()
+		call := <-myDone
+		if call.Error != nil {
+			n.lock.Lock()
+			if n.connected {
+				n.endpoint.Close()
+				n.connected = false
+				go n.reconnect()
 			}
-
-			if done != nil {
-				done <- call
-			}
+			n.lock.Unlock()
 		}
+
+		if done != nil {
+			done <- call
+		}
+
 	}()
 
 	call := n.endpoint.Go(proc, msg, resp, myDone)
