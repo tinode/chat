@@ -62,6 +62,7 @@ func (a Level) MarshalText() ([]byte, error) {
 	}
 }
 
+// UnmarshalText parses authentication level from a string.
 func (a *Level) UnmarshalText(b []byte) error {
 	switch string(b) {
 	case "":
