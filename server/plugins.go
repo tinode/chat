@@ -624,7 +624,12 @@ func pluginDoFiltering(filter *PluginFilter, msg *ClientComMessage) bool {
 		if topic == "" || flt == plgTopicCatMask {
 			return true
 		}
-		switch topic[:3] {
+
+		tt := topic
+		if len(tt) > 3 {
+			tt = topic[:3]
+		}
+		switch tt {
 		case "me":
 			return flt&plgTopicMe != 0
 		case "fnd":
