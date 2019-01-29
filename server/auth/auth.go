@@ -131,6 +131,7 @@ func (f *Feature) UnmarshalText(b []byte) error {
 		if b[0] >= '0' && b[0] <= '9' {
 			f0, err = strconv.Atoi(string(b))
 		} else {
+		loop:
 			for i := 0; i < len(b); i++ {
 				switch b[i] {
 				case 'V', 'v':
@@ -139,7 +140,7 @@ func (f *Feature) UnmarshalText(b []byte) error {
 					f0 |= int(FeatureNoLogin)
 				default:
 					err = errors.New("Feature: invalid character '" + string(b[i]) + "'")
-					break
+					break loop
 				}
 			}
 		}

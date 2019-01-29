@@ -124,7 +124,7 @@ func (ta *authenticator) Authenticate(token []byte) (*auth.Rec, []byte, error) {
 	}
 
 	// Check authentication level for validity.
-	if tl.AuthLevel < 0 || auth.Level(tl.AuthLevel) > auth.LevelRoot {
+	if auth.Level(tl.AuthLevel) > auth.LevelRoot {
 		return nil, nil, types.ErrMalformed
 	}
 
