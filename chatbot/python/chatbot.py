@@ -26,7 +26,7 @@ from tinode_grpc import pb
 from tinode_grpc import pbx
 
 APP_NAME = "Tino-chatbot"
-APP_VERSION = "1.1.2"
+APP_VERSION = "1.1.3"
 LIB_VERSION = pkg_resources.get_distribution("tinode_grpc").version
 
 # User ID of the current user
