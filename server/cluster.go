@@ -232,7 +232,6 @@ func (n *ClusterNode) callAsync(proc string, msg, resp interface{}, done chan *r
 		if done != nil {
 			done <- call
 		}
-
 	}()
 
 	call := n.endpoint.Go(proc, msg, resp, myDone)
@@ -621,9 +620,7 @@ func (c *Cluster) rehash(nodes []string) []string {
 		}
 		ringKeys = append(ringKeys, c.thisNodeName)
 	} else {
-		for _, name := range nodes {
-			ringKeys = append(ringKeys, name)
-		}
+		ringKeys = append(ringKeys, nodes...)
 	}
 	ring.Add(ringKeys...)
 
