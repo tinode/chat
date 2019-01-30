@@ -18,32 +18,40 @@ import (
 	"time"
 )
 
-func (sess *Session) writeOnce(wrt http.ResponseWriter) {
+func (sess *Session) writeOnce(wrt http.ResponseWriter, req *http.Request) {
 
-	notifier, _ := wrt.(http.CloseNotifier)
-	closed := notifier.CloseNotify()
+	for {
+		select {
+		case msg, ok := <-sess.send:
+			if !ok {
+				log.Println("longPoll: writeOnce reading from a closed channel", sess.sid)
+			} else if err := lpWrite(wrt, msg); err != nil {
+				log.Println("longPoll: writeOnce failed", sess.sid, err)
+			}
+			return
 
-	select {
-	case msg, ok := <-sess.send:
-		if !ok {
-			log.Println("longPoll: writeOnce reading from a closed channel", sess.sid)
-		} else if err := lpWrite(wrt, msg); err != nil {
-			log.Println("longPoll: writeOnce failed", sess.sid, err)
-		}
-	case <-closed:
+		case msg := <-sess.stop:
+			// Request to close the session. Make it unavailable.
+			globals.sessionStore.Delete(sess)
+			// Don't care if lpWrite fails.
+			lpWrite(wrt, msg)
+			return
 
-	case msg := <-sess.stop:
-		// Make session unavailable
-		globals.sessionStore.Delete(sess)
-		lpWrite(wrt, msg)
+		case topic := <-sess.detach:
+			// Request to detach the session from a topic.
+			sess.delSub(topic)
+			// No 'return' statement here: continue waiting
 
-	case topic := <-sess.detach:
-		sess.delSub(topic)
+		case <-time.After(pingPeriod):
+			// just write an empty packet on timeout
+			if _, err := wrt.Write([]byte{}); err != nil {
+				log.Println("longPoll: writeOnce: timout", sess.sid, err)
+			}
+			return
 
-	case <-time.After(pingPeriod):
-		// just write an empty packet on timeout
-		if _, err := wrt.Write([]byte{}); err != nil {
-			log.Println("longPoll: writeOnce: timout", sess.sid, err)
+		case <-req.Context().Done():
+			// HTTP request cancelled or connection lost.
+			return
 		}
 	}
 }
@@ -158,5 +166,5 @@ func serveLongPoll(wrt http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	sess.writeOnce(wrt)
+	sess.writeOnce(wrt, req)
 }

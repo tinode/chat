@@ -928,7 +928,7 @@ func (rs RangeSorter) Less(i, j int) bool {
 // Normalize ranges - remove overlaps: [1..4],[2..4],[5..7] -> [1..7].
 // The ranges are expected to be sorted.
 // Ranges are inclusive-inclusive, i.e. [1..3] -> 1, 2, 3.
-func (rs RangeSorter) Normalize() {
+func (rs RangeSorter) Normalize() RangeSorter {
 	ll := rs.Len()
 	if ll > 1 {
 		prev := 0
@@ -952,6 +952,8 @@ func (rs RangeSorter) Normalize() {
 		}
 		rs = rs[:prev+1]
 	}
+
+	return rs
 }
 
 // DelMessage is a log entry of a deleted message range.

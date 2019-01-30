@@ -2003,7 +2003,7 @@ func (t *Topic) replyDelMsg(sess *Session, asUid types.Uid, del *MsgClientDel) e
 			// Sort by Low ascending then by Hi descending.
 			sort.Sort(types.RangeSorter(ranges))
 			// Collapse overlapping ranges
-			types.RangeSorter(ranges).Normalize()
+			ranges = types.RangeSorter(ranges).Normalize()
 		}
 
 		if count > defaultMaxDeleteCount && len(ranges) > 1 {

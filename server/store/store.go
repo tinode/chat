@@ -587,7 +587,7 @@ func (MessagesObjMapper) GetDeleted(topic string, forUser types.Uid, opt *types.
 		ranges = append(ranges, dm.SeqIdRanges...)
 	}
 	sort.Sort(types.RangeSorter(ranges))
-	types.RangeSorter(ranges).Normalize()
+	ranges = types.RangeSorter(ranges).Normalize()
 
 	return ranges, maxID, nil
 }
