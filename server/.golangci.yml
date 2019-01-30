@@ -1,0 +1,41 @@
+linters-settings:
+  govet:
+    check-shadowing: true
+  golint:
+    min-confidence: 0
+  gocyclo:
+    min-complexity: 10
+  maligned:
+    suggest-new: true
+  dupl:
+    threshold: 100
+  goconst:
+    min-len: 2
+    min-occurrences: 2
+  misspell:
+    locale: US
+  lll:
+    line-length: 140
+  gocritic:
+    enabled-tags:
+      - performance
+      - style
+      - experimental
+    disabled-checks:
+      - wrapperFunc
+      - commentFormatting # https://github.com/go-critic/go-critic/issues/755
+
+linters:
+  enable-all: true
+  disable:
+    - maligned
+    - prealloc
+    - gosec
+    - gochecknoglobals
+
+# options for analysis running
+run:
+  # list of build tags, all linters use it. Default is empty list.
+  build-tags:
+    - mysql
+    - rethinkdb
