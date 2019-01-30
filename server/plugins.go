@@ -118,7 +118,7 @@ func ParsePluginFilter(s *string, filterBy int) (*PluginFilter, error) {
 	parseAction := func(parts []string) int {
 		var result int
 		for _, inp := range parts {
-		loop:
+		Loop:
 			for _, char := range inp {
 				switch char {
 				case 'c', 'C':
@@ -130,7 +130,7 @@ func ParsePluginFilter(s *string, filterBy int) (*PluginFilter, error) {
 				default:
 					// Unknown symbol means this is not an action string.
 					result = 0
-					break loop
+					break Loop
 				}
 			}
 
@@ -531,8 +531,6 @@ func pluginTopic(topic *Topic, action int) {
 			log.Println("plugins: Topic call failed", p.name, err)
 		}
 	}
-
-	return
 }
 
 func pluginSubscription(sub *types.Subscription, action int) {
@@ -579,8 +577,6 @@ func pluginSubscription(sub *types.Subscription, action int) {
 			log.Println("plugins: Subscription call failed", p.name, err)
 		}
 	}
-
-	return
 }
 
 // Message accepted for delivery

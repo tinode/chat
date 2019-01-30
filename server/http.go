@@ -74,7 +74,7 @@ func listenAndServe(addr string, mux *http.ServeMux, tlfConf *tls.Config, stop <
 	}()
 
 	// Wait for either a termination signal or an error
-loop:
+Loop:
 	for {
 		select {
 		case <-stop:
@@ -116,10 +116,10 @@ loop:
 			// Wait for the hub to finish.
 			<-hubdone
 
-			break loop
+			break Loop
 
 		case <-httpdone:
-			break loop
+			break Loop
 		}
 	}
 	return nil
