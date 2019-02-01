@@ -38,24 +38,6 @@ func delrangeDeserialize(in []types.Range) []MsgDelRange {
 	return out
 }
 
-func delrangeSerialize(in []MsgDelRange) []types.Range {
-	if len(in) == 0 {
-		return nil
-	}
-
-	var out []types.Range
-	for _, r := range in {
-		if r.HiId <= r.LowId+1 {
-			// High end is exclusive, i.e. range 1..2 is equivalent to 1.
-			out = append(out, types.Range{Low: r.LowId})
-		} else {
-			out = append(out, types.Range{Low: r.LowId, Hi: r.HiId})
-		}
-	}
-
-	return out
-}
-
 // Trim whitespace, remove short/empty tags and duplicates, convert to lowercase, ensure
 // the number of tags does not exceed the maximum.
 func normalizeTags(src []string) types.StringSlice {

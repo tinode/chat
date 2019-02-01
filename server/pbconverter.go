@@ -438,22 +438,6 @@ func bytesToInterface(in []byte) interface{} {
 	return out
 }
 
-func intSliceToInt32(in []int) []int32 {
-	out := make([]int32, len(in))
-	for i, v := range in {
-		out[i] = int32(v)
-	}
-	return out
-}
-
-func int32SliceToInt(in []int32) []int {
-	out := make([]int, len(in))
-	for i, v := range in {
-		out[i] = int(v)
-	}
-	return out
-}
-
 func timeToInt64(ts *time.Time) int64 {
 	if ts != nil {
 		return ts.UnixNano() / int64(time.Millisecond)
