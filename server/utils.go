@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"sort"
 	"strconv"
@@ -23,6 +24,8 @@ import (
 )
 
 var tagPrefixRegexp = regexp.MustCompile(`^([a-z]\w{0,5}):\S`)
+
+const nullValue = "\u2421"
 
 // Convert a list of IDs into ranges
 func delrangeDeserialize(in []types.Range) []MsgDelRange {
@@ -225,9 +228,8 @@ func msgOpts2storeOpts(req *MsgGetOpts) *types.QueryOpt {
 
 // Check if the interface contains a string with a single Unicode Del control character.
 func isNullValue(i interface{}) bool {
-	const clearValue = "\u2421"
 	if str, ok := i.(string); ok {
-		return str == clearValue
+		return str == nullValue
 	}
 	return false
 }
@@ -642,4 +644,84 @@ func parseTLSConfig(tlsEnabled bool, jsconfig json.RawMessage) (*tls.Config, err
 		return nil, err
 	}
 	return &tls.Config{Certificates: []tls.Certificate{cert}}, nil
+}
+
+// Merge source interface{} into destination interface.
+// If values are maps,deep-merge them. Otherwise shallow-copy.
+// Returns dst, true if the dst value was changed.
+func mergeInterfaces(dst, src interface{}) (interface{}, bool) {
+	var changed bool
+
+	if src == nil {
+		return dst, changed
+	}
+
+	vsrc := reflect.ValueOf(src)
+	switch vsrc.Kind() {
+	case reflect.Map:
+		if xsrc, ok := src.(map[string]interface{}); ok {
+			xdst, _ := dst.(map[string]interface{})
+			dst, changed = mergeMaps(xdst, xsrc)
+		} else {
+			changed = true
+			dst = src
+		}
+	case reflect.String:
+		if vsrc.String() == nullValue {
+			changed = dst != nil
+			dst = nil
+		} else if src != nil {
+			changed = true
+			dst = src
+		}
+	default:
+		changed = true
+		dst = src
+	}
+	return dst, changed
+}
+
+// Deep copy maps.
+func mergeMaps(dst, src map[string]interface{}) (map[string]interface{}, bool) {
+	var changed bool
+
+	if len(src) == 0 {
+		return dst, changed
+	}
+
+	if dst == nil {
+		dst = make(map[string]interface{})
+	}
+
+	for key, val := range src {
+		xval := reflect.ValueOf(val)
+		switch xval.Kind() {
+		case reflect.Map:
+			if xsrc, _ := val.(map[string]interface{}); xsrc != nil {
+				// Deep-copy map[string]interface{}
+				xdst, _ := dst[key].(map[string]interface{})
+				var lchange bool
+				dst[key], lchange = mergeMaps(xdst, xsrc)
+				changed = changed || lchange
+			} else if val != nil {
+				// The map is shallow-copied if it's not of the type map[string]interface{}
+				dst[key] = val
+				changed = true
+			}
+		case reflect.String:
+			changed = true
+			if xval.String() == nullValue {
+				delete(dst, key)
+			} else if val != nil {
+				dst[key] = val
+			}
+		default:
+			if val != nil {
+				dst[key] = val
+				changed = true
+			}
+		}
+	}
+
+	return dst, changed
 }

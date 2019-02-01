@@ -471,22 +471,6 @@ type MessagesObjMapper struct{}
 // Messages is an instance of MessagesObjMapper to map methods to.
 var Messages MessagesObjMapper
 
-func interfaceToStringSlice(src interface{}) []string {
-	var dst []string
-	if src != nil {
-		if arr, ok := src.([]string); ok {
-			dst = arr
-		} else if arr, ok := src.([]interface{}); ok {
-			for _, val := range arr {
-				if str, ok := val.(string); ok {
-					dst = append(dst, str)
-				}
-			}
-		}
-	}
-	return dst
-}
-
 // Save message
 func (MessagesObjMapper) Save(msg *types.Message) error {
 	msg.InitTimes()

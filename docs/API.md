@@ -418,7 +418,7 @@ The `fnd` topic expects `public` to be a string representing a [search query](#q
 
 ### Private
 
-The format of the `private` field in group and peer to peer topics is expected to be a dictionary. The following fields are currently defined:
+The format of the `private` field in group and peer to peer topics is expected to be a set of key-value pairs. The following keys are currently defined:
 ```js
 private: {
   comment: "some comment", // string, optional user comment about a topic or a peer user

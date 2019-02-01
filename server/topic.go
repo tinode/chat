@@ -1351,15 +1351,9 @@ func (t *Topic) replySetDesc(sess *Session, asUid types.Uid, set *MsgClientSet) 
 		return nil
 	}
 
-	assignGenericValues := func(upd map[string]interface{}, what string, p interface{}) (changed bool) {
-		if isNullValue(p) {
-			// Request to clear the value
-			upd[what] = nil
-			changed = true
-		} else if p != nil {
-			// A new non-nil value
-			upd[what] = p
-			changed = true
+	assignGenericValues := func(upd map[string]interface{}, what string, dst, src interface{}) (changed bool) {
+		if dst, changed = mergeInterfaces(dst, src); changed {
+			upd[what] = dst
 		}
 		return
 	}
@@ -1376,11 +1370,11 @@ func (t *Topic) replySetDesc(sess *Session, asUid types.Uid, set *MsgClientSet) 
 		case types.TopicCatMe:
 			// Update current user
 			err = assignAccess(core, set.Desc.DefaultAcs)
-			sendPres = assignGenericValues(core, "Public", set.Desc.Public)
+			sendPres = assignGenericValues(core, "Public", t.public, set.Desc.Public)
 		case types.TopicCatFnd:
 			// set.Desc.DefaultAcs is ignored.
 			// Do not send presence if fnd.Public has changed.
-			assignGenericValues(core, "Public", set.Desc.Public)
+			assignGenericValues(core, "Public", t.fndGetPublic(sess), set.Desc.Public)
 		case types.TopicCatP2P:
 			// Reject direct changes to P2P topics.
 			if set.Desc.Public != nil || set.Desc.DefaultAcs != nil {
@@ -1391,7 +1385,7 @@ func (t *Topic) replySetDesc(sess *Session, asUid types.Uid, set *MsgClientSet) 
 			// Update group topic
 			if t.owner == asUid {
 				err = assignAccess(core, set.Desc.DefaultAcs)
-				sendPres = assignGenericValues(core, "Public", set.Desc.Public)
+				sendPres = assignGenericValues(core, "Public", t.public, set.Desc.Public)
 			} else if set.Desc.DefaultAcs != nil || set.Desc.Public != nil {
 				// This is a request from non-owner
 				sess.queueOut(ErrPermissionDenied(set.Id, set.Topic, now))
@@ -1404,7 +1398,7 @@ func (t *Topic) replySetDesc(sess *Session, asUid types.Uid, set *MsgClientSet) 
 			return err
 		}
 
-		sendPres = sendPres || assignGenericValues(sub, "Private", set.Desc.Private)
+		sendPres = sendPres || assignGenericValues(sub, "Private", t.perUser[asUid].private, set.Desc.Private)
 	}
 
 	if len(core) > 0 {
@@ -1412,7 +1406,7 @@ func (t *Topic) replySetDesc(sess *Session, asUid types.Uid, set *MsgClientSet) 
 		case types.TopicCatMe:
 			err = store.Users.Update(asUid, core)
 		case types.TopicCatFnd:
-			// The only value is Public, and Public for fnd is not saved according to specs.
+			// The only value to be stored in topic is Public, and Public for fnd is not saved according to specs.
 		default:
 			err = store.Topics.Update(t.name, core)
 		}
