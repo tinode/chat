@@ -70,12 +70,6 @@ type MsgSetQuery struct {
 	Tags []string `json:"tags,omitempty"`
 }
 
-// MsgFindQuery is a format of fndXXX.private.
-type MsgFindQuery struct {
-	// List of tags to query for. Tags of the form "email:jdoe@example.com" or "tel:18005551212"
-	Tags []string `json:"tags"`
-}
-
 // MsgDelRange is either an individual ID (HiId=0) or a randge of deleted IDs, low end inclusive (closed),
 // high-end exclusive (open): [LowId .. HiId), e.g. 1..5 -> 1, 2, 3, 4
 type MsgDelRange struct {
