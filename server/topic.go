@@ -2236,11 +2236,19 @@ func (t *Topic) evictUser(uid types.Uid, unsub bool, skip string) {
 func (t *Topic) makePushReceipt(fromUid types.Uid, data *MsgServerData) *pushReceipt {
 	// Index user_id -> location_of_user_in_Rcpt_To_field
 	idx := make(map[types.Uid]int, t.subsCount())
+
+	// The `Topic` in the push receipt is `t.xoriginal` for group topics, `fromUid` for p2p topics,
+	// not the t.original(fromUid) because it's the topic name as seen by the recepient, not by the sender.
+	topic := t.xoriginal
+	if t.cat == types.TopicCatP2P {
+		topic = fromUid.UserId()
+	}
+
 	// Initialize the push receipt.
 	receipt := push.Receipt{
 		To: make([]push.Recipient, t.subsCount()),
 		Payload: push.Payload{
-			Topic:     t.original(fromUid),
+			Topic:     topic,
 			From:      data.From,
 			Timestamp: data.Timestamp,
 			SeqId:     data.SeqId,
