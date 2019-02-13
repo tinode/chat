@@ -9,7 +9,7 @@ Version 0.15. This is beta-quality software: feature-complete but probably with 
 
 ## Why?
 
-The promise of [XMPP](http://xmpp.org/) was to deliver federated instant messaging: anyone would be able to spin up an IM server capable of exchanging messages with any other XMPP server in the world. Unfortunately XMPP never delivered on this promse. Instant messengers are still a bunch of incompatible walled gardens, similar to what AoL of the late 1990s was to the open Internet.
+The promise of [XMPP](http://xmpp.org/) was to deliver federated instant messaging: anyone would be able to spin up an IM server capable of exchanging messages with any other XMPP server in the world. Unfortunately XMPP never delivered on this promise. Instant messengers are still a bunch of incompatible walled gardens, similar to what AoL of the late 1990s was to the open Internet.
 
 The goal of this project is to actually deliver on XMPP's original vision: create a modern open platform for federated instant messaging with emphasis on mobile communication. A secondary goal is to create a decentralized IM platform which is much harder to track and block by the governments.
 
@@ -70,7 +70,7 @@ A text-only [command line client](./tn-cli) implements every possible command.
 * Java bindings (dependencies: [Jackson](https://github.com/FasterXML/jackson), [Java-Websocket](https://github.com/TooTallNate/Java-WebSocket)). Suitable for Android but with no Android SDK dependencies.
 * Websocket, long polling, and [gRPC](https://grpc.io/) over TCP transports.
 * JSON or [protobuf version 3](https://developers.google.com/protocol-buffers/) wire protocols.
-* [TLS](https://en.wikipedia.org/wiki/Transport_Layer_Security) with [Letsenrypt](https://letsencrypt.org/) or conventional certificates.
+* [TLS](https://en.wikipedia.org/wiki/Transport_Layer_Security) with [Letsencrypt](https://letsencrypt.org/) or conventional certificates.
 * User search/discovery.
 * Rich formatting of messages, markdown-style: \*style\* &rarr; **style**.
 * Inline images and file attachments.
