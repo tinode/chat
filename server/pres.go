@@ -226,7 +226,7 @@ func (t *Topic) presUsersOfInterest(what, ua string) {
 func presUsersOfInterestOffline(uid types.Uid, subs []types.Subscription, what string) {
 	// Push update to subscriptions
 	for _, sub := range subs {
-		if (sub.ModeGiven & sub.ModeWant).IsPresencer() {
+		if (sub.ModeGiven & sub.ModeWant).IsPresencer() || what == "gone" {
 			globals.hub.route <- &ServerComMessage{
 				Pres:   &MsgServerPres{Topic: "me", What: what, Src: uid.UserId(), wantReply: false},
 				rcptto: sub.Topic}
@@ -274,7 +274,7 @@ func (t *Topic) presSubsOnlineDirect(what string) {
 	for sess := range t.sessions {
 		// Check presence filters
 		pud := t.perUser[sess.uid]
-		if !(pud.modeGiven & pud.modeWant).IsPresencer() {
+		if !(pud.modeGiven & pud.modeWant).IsPresencer() && what != "gone" {
 			continue
 		}
 
@@ -307,7 +307,8 @@ func (t *Topic) presSubsOffline(what string, params *presParams, filter *presFil
 	}
 
 	for uid := range t.perUser {
-		if what != "acs" && !presOfflineFilter(t.perUser[uid].modeGiven&t.perUser[uid].modeWant, filter) {
+		if what != "acs" && what != "gone" &&
+			!presOfflineFilter(t.perUser[uid].modeGiven&t.perUser[uid].modeWant, filter) {
 			continue
 		}
 
@@ -339,7 +340,7 @@ func presSubsOfflineOffline(topic string, cat types.TopicCat, subs []types.Subsc
 	original := topic
 	for i := range subs {
 		sub := &subs[i]
-		if what != "acs" && !presOfflineFilter(sub.ModeWant&sub.ModeGiven, nil) {
+		if what != "acs" && what != "gone" && !presOfflineFilter(sub.ModeWant&sub.ModeGiven, nil) {
 			continue
 		}
 
@@ -381,7 +382,7 @@ func (t *Topic) presSingleUserOffline(uid types.Uid, what string, params *presPa
 
 	if pud, ok := t.perUser[uid]; ok &&
 		// Send access change notification regardless of P permission.
-		(what == "acs" || presOfflineFilter(pud.modeGiven&pud.modeWant, nil)) {
+		(what == "acs" || what == "gone" || presOfflineFilter(pud.modeGiven&pud.modeWant, nil)) {
 
 		user := uid.UserId()
 		actor := params.actor

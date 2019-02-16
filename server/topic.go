@@ -422,11 +422,13 @@ func (t *Topic) run(hub *Hub) {
 
 						// Check presence filters
 						pud := t.perUser[sess.uid]
-						if !(pud.modeGiven & pud.modeWant).IsPresencer() ||
+						// Send "gone" notification even if the topic is muted.
+						if (!(pud.modeGiven & pud.modeWant).IsPresencer() && msg.Pres.What != "gone") ||
 							(msg.Pres.filterIn != 0 && int(pud.modeGiven&pud.modeWant)&msg.Pres.filterIn == 0) ||
 							(msg.Pres.filterOut != 0 && int(pud.modeGiven&pud.modeWant)&msg.Pres.filterOut != 0) {
 							continue
 						}
+
 					} else {
 						// Check if the user has Read permission
 						pud := t.perUser[sess.uid]
