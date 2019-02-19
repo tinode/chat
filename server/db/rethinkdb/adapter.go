@@ -726,6 +726,7 @@ func (a *adapter) TopicCreateP2P(initiator, invited *t.Subscription) error {
 	return a.TopicCreate(topic)
 }
 
+// TopicGet loads a single topic by name, if it exists. If the topic does not exist the call returns (nil, nil)
 func (a *adapter) TopicGet(topic string) (*t.Topic, error) {
 	// Fetch topic by name
 	cursor, err := rdb.DB(a.dbName).Table("topics").Get(topic).Run(a.conn)

@@ -1027,22 +1027,25 @@ func (h *Hub) stopTopicsForUser(uid types.Uid, reason int, alldone chan<- bool) 
 	}
 }
 
-// replyTopicDescBasic loads minimal topic Desc when the requester is not subscribed to the topic
+// replyTopicDescBasic loads minimal topic Desc when the topic is not loaded in memory.
+// The requester may or maynot be subscribed to the topic.
 func replyTopicDescBasic(sess *Session, topic string, msg *ClientComMessage) {
-	log.Printf("hub.replyTopicDescBasic: topic %s", topic)
 	now := types.TimeNow()
 	desc := &MsgTopicDesc{}
+	asUid := types.ParseUserId(msg.from)
 
 	if strings.HasPrefix(topic, "grp") {
 		stopic, err := store.Topics.Get(topic)
 		if err != nil {
-			sess.queueOut(ErrUnknown(msg.id, msg.topic, now))
+			log.Println("hub.replyTopicDescBasic", err)
+			sess.queueOut(decodeStoreError(err, msg.id, msg.topic, now, nil))
 			return
 		}
 		if stopic == nil {
 			sess.queueOut(ErrTopicNotFound(msg.id, msg.topic, now))
 			return
 		}
+
 		desc.CreatedAt = &stopic.CreatedAt
 		desc.UpdatedAt = &stopic.UpdatedAt
 		desc.Public = stopic.Public
@@ -1050,10 +1053,10 @@ func replyTopicDescBasic(sess *Session, topic string, msg *ClientComMessage) {
 	} else {
 		// 'me' and p2p topics
 		uid := types.ZeroUid
-		asUid := types.ParseUserId(msg.from)
 		if strings.HasPrefix(topic, "usr") {
 			// User specified as usrXXX
 			uid = types.ParseUserId(topic)
+			topic = asUid.P2PName(uid)
 		} else if strings.HasPrefix(topic, "p2p") {
 			// User specified as p2pXXXYYY
 			uid1, uid2, _ := types.ParseP2P(topic)
@@ -1065,13 +1068,14 @@ func replyTopicDescBasic(sess *Session, topic string, msg *ClientComMessage) {
 		}
 
 		if uid.IsZero() {
+			log.Println("hub.replyTopicDescBasic: malformed p2p topic name")
 			sess.queueOut(ErrMalformed(msg.id, msg.topic, now))
 			return
 		}
 
 		suser, err := store.Users.Get(uid)
 		if err != nil {
-			sess.queueOut(ErrUnknown(msg.id, msg.topic, now))
+			sess.queueOut(decodeStoreError(err, msg.id, msg.topic, now, nil))
 			return
 		}
 		if suser == nil {
@@ -1081,6 +1085,17 @@ func replyTopicDescBasic(sess *Session, topic string, msg *ClientComMessage) {
 		desc.CreatedAt = &suser.CreatedAt
 		desc.UpdatedAt = &suser.UpdatedAt
 		desc.Public = suser.Public
+	}
+
+	sub, err := store.Subs.Get(topic, asUid)
+	if err != nil {
+		log.Println("hub.replyTopicDescBasic:", err)
+		sess.queueOut(decodeStoreError(err, msg.id, msg.topic, now, nil))
+		return
+	}
+
+	if sub != nil {
+		desc.Private = sub.Private
 	}
 
 	sess.queueOut(&ServerComMessage{

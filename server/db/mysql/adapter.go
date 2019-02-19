@@ -964,6 +964,7 @@ func (a *adapter) TopicCreateP2P(initiator, invited *t.Subscription) error {
 	return tx.Commit()
 }
 
+// TopicGet loads a single topic by name, if it exists. If the topic does not exist the call returns (nil, nil)
 func (a *adapter) TopicGet(topic string) (*t.Topic, error) {
 	// Fetch topic by name
 	var tt = new(t.Topic)
