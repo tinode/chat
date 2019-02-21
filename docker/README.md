@@ -21,7 +21,7 @@ All images are available at https://hub.docker.com/r/tinode/
 	```
 	$ docker run --name mysql --network tinode-net --env MYSQL_ALLOW_EMPTY_PASSWORD=yes -d mysql:5.7
 	```
-	See [instructions](https://hub.docker.com/_/mysql/) for more options.
+	See [instructions](https://hub.docker.com/_/mysql/) for more options. MySQL 5.7 or above is required.
 
 	The name `rethinkdb` or `mysql` in the `--name` assignment is important. It's used by other containers as a database's host name.
 

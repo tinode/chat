@@ -838,7 +838,7 @@ func (s *Session) get(msg *ClientComMessage) {
 		if err := globals.cluster.routeToTopic(msg, expanded, s); err != nil {
 			s.queueOut(ErrClusterUnreachable(msg.id, msg.topic, msg.timestamp))
 		}
-	} else if meta.what&(constMsgMetaData|constMsgMetaSub|constMsgMetaDel) != 0 {
+	} else if meta.what&(constMsgMetaData|constMsgMetaSub|constMsgMetaDel|constMsgMetaTags) != 0 {
 		log.Println("s.get: subscribe first to get=", msg.Get.What)
 		s.queueOut(ErrPermissionDenied(msg.id, msg.topic, msg.timestamp))
 	} else {
@@ -855,35 +855,37 @@ func (s *Session) set(msg *ClientComMessage) {
 		return
 	}
 
-	if sub := s.getSub(expanded); sub != nil {
-		meta := &metaReq{
-			topic: expanded,
-			pkt:   msg,
-			sess:  s}
+	meta := &metaReq{
+		topic: expanded,
+		pkt:   msg,
+		sess:  s}
 
-		if msg.Set.Desc != nil {
-			meta.what = constMsgMetaDesc
-		}
-		if msg.Set.Sub != nil {
-			meta.what |= constMsgMetaSub
-		}
-		if msg.Set.Tags != nil {
-			meta.what |= constMsgMetaTags
-		}
-		if meta.what == 0 {
-			s.queueOut(ErrMalformed(msg.id, msg.topic, msg.timestamp))
-			log.Println("s.set: nil Set action")
-		}
+	if msg.Set.Desc != nil {
+		meta.what = constMsgMetaDesc
+	}
+	if msg.Set.Sub != nil {
+		meta.what |= constMsgMetaSub
+	}
+	if msg.Set.Tags != nil {
+		meta.what |= constMsgMetaTags
+	}
 
+	if meta.what == 0 {
+		s.queueOut(ErrMalformed(msg.id, msg.topic, msg.timestamp))
+		log.Println("s.set: nil Set action")
+	} else if sub := s.getSub(expanded); sub != nil {
 		sub.meta <- meta
 	} else if globals.cluster.isRemoteTopic(expanded) {
 		// The topic is handled by a remote node. Forward message to it.
 		if err := globals.cluster.routeToTopic(msg, expanded, s); err != nil {
 			s.queueOut(ErrClusterUnreachable(msg.id, msg.topic, msg.timestamp))
 		}
-	} else {
-		log.Println("s.set: can Set for subscribed topics only")
+	} else if meta.what&constMsgMetaTags != 0 {
+		log.Println("s.set: can Set tags for subscribed topics only")
 		s.queueOut(ErrPermissionDenied(msg.id, msg.topic, msg.timestamp))
+	} else {
+		// Some minor updates are possible without the subscription.
+		globals.hub.meta <- meta
 	}
 }
 

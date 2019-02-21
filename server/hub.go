@@ -191,13 +191,17 @@ func (h *Hub) run() {
 			}
 
 		case meta := <-h.meta:
-			// Request for topic info from a user who is not subscribed to the topic
+			// Metadata red or update from a user who is not attached to the topic.
 			if dst := h.topicGet(meta.topic); dst != nil {
-				// If topic is already in memory, pass request to topic
+				// If topic is already in memory, pass request to the topic.
 				dst.meta <- meta
-			} else if meta.pkt.Get != nil {
-				// If topic is not in memory, fetch requested description from DB and reply here
-				go replyTopicDescBasic(meta.sess, meta.topic, meta.pkt)
+			} else {
+				// Topic is not in memory. Read or update the DB record and reply here.
+				if meta.pkt.Get != nil {
+					go replyOfflineTopicGetDesc(meta.sess, meta.topic, meta.pkt)
+				} else if meta.pkt.Set != nil {
+					go replyOfflineTopicSetSub(meta.sess, meta.topic, meta.pkt)
+				}
 			}
 
 		case unreg := <-h.unreg:
@@ -1027,9 +1031,9 @@ func (h *Hub) stopTopicsForUser(uid types.Uid, reason int, alldone chan<- bool) 
 	}
 }
 
-// replyTopicDescBasic loads minimal topic Desc when the topic is not loaded in memory.
+// replyOfflineTopicGetDesc reads a minimal topic Desc from the database.
 // The requester may or maynot be subscribed to the topic.
-func replyTopicDescBasic(sess *Session, topic string, msg *ClientComMessage) {
+func replyOfflineTopicGetDesc(sess *Session, topic string, msg *ClientComMessage) {
 	now := types.TimeNow()
 	desc := &MsgTopicDesc{}
 	asUid := types.ParseUserId(msg.from)
@@ -1037,7 +1041,7 @@ func replyTopicDescBasic(sess *Session, topic string, msg *ClientComMessage) {
 	if strings.HasPrefix(topic, "grp") {
 		stopic, err := store.Topics.Get(topic)
 		if err != nil {
-			log.Println("hub.replyTopicDescBasic", err)
+			log.Println("replyOfflineTopicGetDesc", err)
 			sess.queueOut(decodeStoreError(err, msg.id, msg.topic, now, nil))
 			return
 		}
@@ -1049,6 +1053,11 @@ func replyTopicDescBasic(sess *Session, topic string, msg *ClientComMessage) {
 		desc.CreatedAt = &stopic.CreatedAt
 		desc.UpdatedAt = &stopic.UpdatedAt
 		desc.Public = stopic.Public
+		if stopic.Owner == msg.from {
+			desc.DefaultAcs = &MsgDefaultAcsMode{
+				Auth: stopic.Access.Auth.String(),
+				Anon: stopic.Access.Anon.String()}
+		}
 
 	} else {
 		// 'me' and p2p topics
@@ -1068,7 +1077,7 @@ func replyTopicDescBasic(sess *Session, topic string, msg *ClientComMessage) {
 		}
 
 		if uid.IsZero() {
-			log.Println("hub.replyTopicDescBasic: malformed p2p topic name")
+			log.Println("replyOfflineTopicGetDesc: malformed p2p topic name")
 			sess.queueOut(ErrMalformed(msg.id, msg.topic, now))
 			return
 		}
@@ -1089,15 +1098,97 @@ func replyTopicDescBasic(sess *Session, topic string, msg *ClientComMessage) {
 
 	sub, err := store.Subs.Get(topic, asUid)
 	if err != nil {
-		log.Println("hub.replyTopicDescBasic:", err)
+		log.Println("replyOfflineTopicGetDesc:", err)
 		sess.queueOut(decodeStoreError(err, msg.id, msg.topic, now, nil))
 		return
 	}
 
 	if sub != nil {
 		desc.Private = sub.Private
+		desc.Acs = &MsgAccessMode{
+			Want:  sub.ModeWant.String(),
+			Given: sub.ModeGiven.String(),
+			Mode:  (sub.ModeGiven & sub.ModeWant).String()}
 	}
 
 	sess.queueOut(&ServerComMessage{
 		Meta: &MsgServerMeta{Id: msg.id, Topic: msg.topic, Timestamp: &now, Desc: desc}})
+}
+
+// replyOfflineTopicSetSub updates Desc.Private and Sub.Mode when the topic is not loaded in memory.
+// Only Private and Mode are updated and only for the requester. The requester must be subscribed to the
+// topic but does not need to be attached.
+func replyOfflineTopicSetSub(sess *Session, topic string, msg *ClientComMessage) {
+	now := types.TimeNow()
+
+	if (msg.Set.Desc == nil || msg.Set.Desc.Private == nil) && (msg.Set.Sub == nil || msg.Set.Sub.Mode == "") {
+		sess.queueOut(InfoNotModified(msg.id, msg.topic, now))
+		return
+	}
+
+	if msg.Set.Sub != nil && msg.Set.Sub.User != "" && msg.Set.Sub.User != msg.from {
+		sess.queueOut(ErrPermissionDenied(msg.id, msg.topic, now))
+		return
+	}
+
+	asUid := types.ParseUserId(msg.from)
+
+	sub, err := store.Subs.Get(topic, asUid)
+	if err != nil {
+		log.Println("replyOfflineTopicSetSub:", err)
+		sess.queueOut(decodeStoreError(err, msg.id, msg.topic, now, nil))
+		return
+	}
+
+	if sub == nil {
+		sess.queueOut(ErrTopicNotFound(msg.id, msg.topic, now))
+		return
+	}
+
+	update := make(map[string]interface{})
+	if msg.Set.Desc != nil && msg.Set.Desc.Private != nil {
+		private, ok := msg.Set.Desc.Private.(map[string]interface{})
+		if !ok {
+			update = map[string]interface{}{"Private": msg.Set.Desc.Private}
+		} else if private, changed := mergeInterfaces(sub.Private, private); changed {
+			update = map[string]interface{}{"Private": private}
+		}
+	}
+
+	if msg.Set.Sub != nil && msg.Set.Sub.Mode != "" {
+		var modeWant types.AccessMode
+		if err = modeWant.UnmarshalText([]byte(msg.Set.Sub.Mode)); err != nil {
+			log.Println("replyOfflineTopicSetSub:", err)
+			sess.queueOut(decodeStoreError(err, msg.id, msg.topic, now, nil))
+			return
+		}
+
+		if modeWant.IsOwner() != sub.ModeWant.IsOwner() {
+			// No ownership changes here.
+			sess.queueOut(ErrPermissionDenied(msg.id, msg.topic, now))
+			return
+		}
+
+		if types.GetTopicCat(topic) == types.TopicCatP2P {
+			// For P2P topics ignore requests exceeding types.ModeCP2P and do not allow
+			// removal of 'A' permission.
+			modeWant = (modeWant & types.ModeCP2P) | types.ModeApprove
+		}
+
+		if modeWant != sub.ModeWant {
+			update["ModeWant"] = modeWant
+		}
+	}
+
+	if len(update) > 0 {
+		err = store.Subs.Update(topic, asUid, update, true)
+		if err != nil {
+			log.Println("replyOfflineTopicSetSub:", err)
+			sess.queueOut(decodeStoreError(err, msg.id, msg.topic, now, nil))
+		} else {
+			sess.queueOut(NoErr(msg.id, msg.topic, now))
+		}
+	} else {
+		sess.queueOut(InfoNotModified(msg.id, msg.topic, now))
+	}
 }

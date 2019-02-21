@@ -67,10 +67,14 @@ See [instructions](./docker/README.md)
 
 ## Running a Standalone Server
 
-1. Run RethinkDB:
+1. Make sure your database is running:
+ - **RethinkDB**:
 	```
 	rethinkdb --bind all --daemon
 	```
+ - **MySQL**:
+   See instructions https://dev.mysql.com/doc/mysql-startstop-excerpt/5.7/en/programs-server.html
+
 
 2. Run DB initializer
 	```
