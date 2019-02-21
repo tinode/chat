@@ -16,7 +16,7 @@
 	./tinode
 	```
 
-5. Test your installation by pointing your browser to http://localhost:6060/x/
+5. Test your installation by pointing your browser to http://localhost:6060/
 
 
 ## Docker
@@ -63,18 +63,19 @@ See [instructions](./docker/README.md)
  - https://github.com/tinode/example-react-js/archive/master.zip
  - https://github.com/tinode/tinode-js/archive/master.zip
 
-6. Now that you have built the binaries, follow instructions in the previous section for running the binaries.
+6. Now that you have built the binaries, follow instructions in the _Installing from Binaries_ section for running the binaries except in step 3 the initializer is called `tinode-db` (`tinode-db.exe` on Windows), not `init-db`.
 
 ## Running a Standalone Server
 
 1. Make sure your database is running:
- - **RethinkDB**:
+ - **RethinkDB**: https://www.rethinkdb.com/docs/start-a-server/
 	```
 	rethinkdb --bind all --daemon
 	```
- - **MySQL**:
-   See instructions https://dev.mysql.com/doc/mysql-startstop-excerpt/5.7/en/programs-server.html
-
+ - **MySQL**: https://dev.mysql.com/doc/mysql-startstop-excerpt/5.7/en/programs-server.html
+	```
+	mysql.server start
+	```
 
 2. Run DB initializer
 	```
@@ -146,8 +147,8 @@ There is [no clean way](https://github.com/golang/go/issues/227) to daemonize a 
 Specific note for [nohup](https://en.wikipedia.org/wiki/Nohup) users: an `exit` must be issued immediately after `nohup` call to close the foreground session cleanly:
 
 ```
-> nohup $GOPATH/bin/server -config=$GOPATH/src/github.com/tinode/chat/server/tinode.conf -static_data=$HOME/tinode/example-react-js/ &
-> exit
+nohup $GOPATH/bin/server -config=$GOPATH/src/github.com/tinode/chat/server/tinode.conf -static_data=$HOME/tinode/example-react-js/ &
+exit
 ```
 
 Otherwise `SIGHUP` may be received by the server if the shell connection is broken before the ssh session has terminated (indicated by `Connection to XXX.XXX.XXX.XXX port 22: Broken pipe`). In such a case the server will shutdown because `SIGHUP` is intercepted by the server and interpreted as a shutdown request.
