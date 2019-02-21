@@ -1103,7 +1103,7 @@ func replyOfflineTopicGetDesc(sess *Session, topic string, msg *ClientComMessage
 		return
 	}
 
-	if sub != nil {
+	if sub != nil && sub.DeletedAt == nil {
 		desc.Private = sub.Private
 		desc.Acs = &MsgAccessMode{
 			Want:  sub.ModeWant.String(),
@@ -1113,6 +1113,51 @@ func replyOfflineTopicGetDesc(sess *Session, topic string, msg *ClientComMessage
 
 	sess.queueOut(&ServerComMessage{
 		Meta: &MsgServerMeta{Id: msg.id, Topic: msg.topic, Timestamp: &now, Desc: desc}})
+}
+
+// replyOfflineTopicGetSub reads user's subscription from the database.
+// Only own subscription is available.
+// The requester must be subscribed but need not be attached.
+func replyOfflineTopicGetSub(sess *Session, topic string, msg *ClientComMessage) {
+	now := types.TimeNow()
+
+	if msg.Get.Sub.User != msg.from {
+		sess.queueOut(ErrPermissionDenied(msg.id, msg.topic, now))
+		return
+	}
+
+	ssub, err := store.Subs.Get(topic, types.ParseUserId(msg.from))
+	if err != nil {
+		log.Println("replyOfflineTopicGetSub:", err)
+		sess.queueOut(decodeStoreError(err, msg.id, msg.topic, now, nil))
+		return
+	}
+
+	if ssub == nil {
+		sess.queueOut(ErrNotFound(msg.id, msg.topic, now))
+		return
+	}
+
+	sub := MsgTopicSub{DeletedAt: ssub.DeletedAt}
+
+	if ssub.DeletedAt == nil {
+		sub.UpdatedAt = &ssub.UpdatedAt
+		sub.Acs = MsgAccessMode{
+			Want:  ssub.ModeWant.String(),
+			Given: ssub.ModeGiven.String(),
+			Mode:  (ssub.ModeGiven & ssub.ModeWant).String()}
+		sub.Private = ssub.Private
+		sub.User = ssub.User
+
+		if (ssub.ModeGiven & ssub.ModeWant).IsReader() && (ssub.ModeWant & ssub.ModeGiven).IsJoiner() {
+			sub.DelId = ssub.DelId
+			sub.ReadSeqId = ssub.ReadSeqId
+			sub.RecvSeqId = ssub.RecvSeqId
+		}
+	}
+
+	sess.queueOut(&ServerComMessage{
+		Meta: &MsgServerMeta{Id: msg.id, Topic: msg.topic, Timestamp: &now, Sub: []MsgTopicSub{sub}}})
 }
 
 // replyOfflineTopicSetSub updates Desc.Private and Sub.Mode when the topic is not loaded in memory.
@@ -1135,13 +1180,13 @@ func replyOfflineTopicSetSub(sess *Session, topic string, msg *ClientComMessage)
 
 	sub, err := store.Subs.Get(topic, asUid)
 	if err != nil {
-		log.Println("replyOfflineTopicSetSub:", err)
+		log.Println("replyOfflineTopicSetSub get sub:", err)
 		sess.queueOut(decodeStoreError(err, msg.id, msg.topic, now, nil))
 		return
 	}
 
-	if sub == nil {
-		sess.queueOut(ErrTopicNotFound(msg.id, msg.topic, now))
+	if sub == nil || sub.DeletedAt != nil {
+		sess.queueOut(ErrNotFound(msg.id, msg.topic, now))
 		return
 	}
 
@@ -1158,7 +1203,7 @@ func replyOfflineTopicSetSub(sess *Session, topic string, msg *ClientComMessage)
 	if msg.Set.Sub != nil && msg.Set.Sub.Mode != "" {
 		var modeWant types.AccessMode
 		if err = modeWant.UnmarshalText([]byte(msg.Set.Sub.Mode)); err != nil {
-			log.Println("replyOfflineTopicSetSub:", err)
+			log.Println("replyOfflineTopicSetSub mode:", err)
 			sess.queueOut(decodeStoreError(err, msg.id, msg.topic, now, nil))
 			return
 		}
@@ -1183,7 +1228,7 @@ func replyOfflineTopicSetSub(sess *Session, topic string, msg *ClientComMessage)
 	if len(update) > 0 {
 		err = store.Subs.Update(topic, asUid, update, true)
 		if err != nil {
-			log.Println("replyOfflineTopicSetSub:", err)
+			log.Println("replyOfflineTopicSetSub update:", err)
 			sess.queueOut(decodeStoreError(err, msg.id, msg.topic, now, nil))
 		} else {
 			sess.queueOut(NoErr(msg.id, msg.topic, now))

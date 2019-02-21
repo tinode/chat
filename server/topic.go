@@ -1599,10 +1599,10 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 			}
 
 			uid := types.ParseUid(sub.User)
-			isReader := sub.ModeGiven.IsReader() && sub.ModeWant.IsReader()
+			isReader := (sub.ModeGiven & sub.ModeWant).IsReader()
 			if t.cat == types.TopicCatMe {
 				// Mark subscriptions that the user does not care about.
-				if !sub.ModeWant.IsJoiner() || !sub.ModeGiven.IsJoiner() {
+				if !(sub.ModeWant & sub.ModeGiven).IsJoiner() {
 					banned = true
 				}
 
@@ -1633,8 +1633,7 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 				}
 			} else {
 				// Mark subscriptions that the user does not care about.
-				if t.cat == types.TopicCatGrp && !isSharer &&
-					(!sub.ModeWant.IsJoiner() || !sub.ModeGiven.IsJoiner()) {
+				if t.cat == types.TopicCatGrp && !isSharer && !(sub.ModeWant & sub.ModeGiven).IsJoiner() {
 					banned = true
 				}
 
@@ -1645,7 +1644,7 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 				}
 
 				if !deleted {
-					if uid == asUid && isReader {
+					if uid == asUid && isReader && !banned {
 						// Report deleted ID for own subscriptions only
 						mts.DelId = sub.DelId
 					}

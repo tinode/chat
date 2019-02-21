@@ -1338,7 +1338,10 @@ func (a *adapter) TopicOwnerChange(topic string, newOwner, oldOwner t.Uid) error
 // Get a subscription of a user to a topic
 func (a *adapter) SubscriptionGet(topic string, user t.Uid) (*t.Subscription, error) {
 	var sub t.Subscription
-	err := a.db.Get(&sub, "SELECT * FROM subscriptions WHERE topic=? AND userid=", topic, store.DecodeUid(user))
+	err := a.db.Get(&sub, `SELECT createdat,updatedat,deletedat,userid AS user,topic,delid,recvseqid,
+		readseqid,modewant,modegiven,private FROM subscriptions WHERE topic=? AND userid=?`,
+		topic, store.DecodeUid(user))
+
 	if err != nil {
 		if err == sql.ErrNoRows {
 			// Nothing found - clear the error
