@@ -1353,6 +1353,9 @@ func (a *adapter) SubscriptionGet(topic string, user t.Uid) (*t.Subscription, er
 	if sub.DeletedAt != nil {
 		return nil, nil
 	}
+
+	sub.Private = fromJSON(sub.Private)
+
 	return &sub, nil
 }
 
@@ -1365,6 +1368,7 @@ func (a *adapter) SubsLastSeen(topic string, user t.Uid, lastSeen map[string]tim
 }
 
 // SubsForUser loads a list of user's subscriptions to topics. Does NOT load Public value.
+// TODO: this is used only for presence notifications, no need to load Private either.
 func (a *adapter) SubsForUser(forUser t.Uid, keepDeleted bool, opts *t.QueryOpt) ([]t.Subscription, error) {
 	q := `SELECT createdat,updatedat,deletedat,userid AS user,topic,delid,recvseqid,
 		readseqid,modewant,modegiven,private FROM subscriptions WHERE userid=?`
@@ -1402,6 +1406,7 @@ func (a *adapter) SubsForUser(forUser t.Uid, keepDeleted bool, opts *t.QueryOpt)
 			break
 		}
 		ss.User = forUser.String()
+		ss.Private = fromJSON(ss.Private)
 		subs = append(subs, ss)
 	}
 	rows.Close()

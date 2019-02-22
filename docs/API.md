@@ -418,12 +418,13 @@ The `fnd` topic expects `public` to be a string representing a [search query](#q
 
 ### Private
 
-The format of the `private` field in group and peer to peer topics is expected to be a set of key-value pairs. The following keys are currently defined:
+The format of the `private` field in group and peer to peer topics is a set of key-value pairs. The following keys are currently defined:
 ```js
 private: {
   comment: "some comment", // string, optional user comment about a topic or a peer user
-  arch: true  // boolean value indicating that the topic is archived by the user, i.e.
+  arch: true, // boolean value indicating that the topic is archived by the user, i.e.
               // should not be shown in the UI with other non-archived topics.
+  accepted: "JRWS" // string, 'given' mode accepted by the user.
 }
 ```
 
