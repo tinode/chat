@@ -165,6 +165,8 @@ func (a *adapter) CreateDb(reset bool) error {
 
 	defer func() {
 		if err != nil {
+			// FIXME: This is useless: MySQL auto-commits on every CREATE TABLE.
+			// Maybe DROP DATABASE instead.
 			tx.Rollback()
 		}
 	}()
