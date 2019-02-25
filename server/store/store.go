@@ -472,7 +472,7 @@ type MessagesObjMapper struct{}
 var Messages MessagesObjMapper
 
 // Save message
-func (MessagesObjMapper) Save(msg *types.Message) error {
+func (MessagesObjMapper) Save(msg *types.Message, readBySender bool) error {
 	msg.InitTimes()
 
 	// Increment topic's or user's SeqId
@@ -506,9 +506,19 @@ func (MessagesObjMapper) Save(msg *types.Message) error {
 		return err
 	}
 
+	// Mark message as read by the sender.
+	if readBySender {
+		// Ignore the error here. It's not a big deal if it fails.
+		adp.SubsUpdate(msg.Topic, types.ParseUserId(msg.From),
+			map[string]interface{}{
+				"RecvSeqId": msg.SeqId,
+				"ReadSeqId": msg.SeqId})
+	}
+
 	if len(attachments) > 0 {
 		return adp.MessageAttachments(msg.Uid(), attachments)
 	}
+
 	return nil
 }
 

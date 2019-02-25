@@ -295,7 +295,7 @@ func (t *Topic) run(hub *Hub) {
 					Topic:     t.name,
 					From:      from.String(),
 					Head:      msg.Data.Head,
-					Content:   msg.Data.Content}); err != nil {
+					Content:   msg.Data.Content}, (userData.modeGiven & userData.modeWant).IsReader()); err != nil {
 
 					log.Printf("topic[%s]: failed to save message: %v", t.name, err)
 					msg.sess.queueOut(ErrUnknown(msg.id, t.original(asUid), msg.timestamp))
@@ -306,6 +306,9 @@ func (t *Topic) run(hub *Hub) {
 				t.lastID++
 				t.touched = msg.Data.Timestamp
 				msg.Data.SeqId = t.lastID
+				userData.readID = t.lastID
+				userData.readID = t.lastID
+				t.perUser[from] = userData
 
 				if msg.id != "" {
 					reply := NoErrAccepted(msg.id, t.original(asUid), msg.timestamp)
