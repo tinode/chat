@@ -60,7 +60,7 @@ See [instructions](./docker/README.md)
 ```
 
 5. Download javascript client for testing:
- - https://github.com/tinode/example-react-js/archive/master.zip
+ - https://github.com/tinode/webapp/archive/master.zip
  - https://github.com/tinode/tinode-js/archive/master.zip
 
 6. Now that you have built the binaries, follow instructions in the _Installing from Binaries_ section for running the binaries except in step 3 the initializer is called `tinode-db` (`tinode-db.exe` on Windows), not `init-db`.
@@ -88,7 +88,7 @@ See [instructions](./docker/README.md)
 
 	DB intializer needs to be run only once per installation. See [instructions](tinode-db/README.md) for more options.
 
-3. Unpack JS client to a directory, for instance `$HOME/tinode/example-react-js/` by first unzipping `https://github.com/tinode/example-react-js/archive/master.zip` then extract `tinode.js` from `https://github.com/tinode/tinode-js/archive/master.zip` to the same directory.
+3. Unpack JS client to a directory, for instance `$HOME/tinode/example-react-js/` by first unzipping `https://github.com/tinode/webapp/archive/master.zip` then extract `tinode.js` from `https://github.com/tinode/tinode-js/archive/master.zip` to the same directory.
 
 4. Run server
 	```
@@ -97,7 +97,7 @@ See [instructions](./docker/README.md)
 
 5. Test your installation by pointing your browser to [http://localhost:6060/](http://localhost:6060/). The static files from the `-static_data` path are served at web root `/`. You can change this by editing the line `static_mount` in the config file.
 
-6.  If you want to use the [Android client](https://github.com/tinode/android-example) and want push notification to work, find the section `"push"` in `tinode.conf`, item `"name": "fcm"`, then change `"enabled"` to `true`. Go to [https://console.firebase.google.com/](https://console.firebase.google.com/) (https://console.firebase.google.com/project/**NAME-OF-YOUR-PROJECT**/settings/cloudmessaging) and get a server key. Paste the key to the `"api_key"` field. See more at [https://github.com/tinode/android-example](https://github.com/tinode/android-example).
+6.  If you want to use the [Android client](https://github.com/tinode/tindroid) and want push notification to work, find the section `"push"` in `tinode.conf`, item `"name": "fcm"`, then change `"enabled"` to `true`. Go to [https://console.firebase.google.com/](https://console.firebase.google.com/) (https://console.firebase.google.com/project/**NAME-OF-YOUR-PROJECT**/settings/cloudmessaging) and get a server key. Paste the key to the `"api_key"` field. See more at https://github.com/tinode/tindroid.
 
 ## Running a Cluster
 
