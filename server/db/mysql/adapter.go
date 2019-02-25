@@ -184,18 +184,6 @@ func (a *adapter) CreateDb(reset bool) error {
 	}
 
 	if _, err = tx.Exec(
-		`CREATE TABLE kvmeta(` +
-			"`key`   CHAR(32)," +
-			"`value` TEXT," +
-			"PRIMARY KEY(`key`)" +
-			`)`); err != nil {
-		return err
-	}
-	if _, err = tx.Exec("INSERT INTO kvmeta(`key`, `value`) VALUES('version', ?)", dbVersion); err != nil {
-		return err
-	}
-
-	if _, err = tx.Exec(
 		`CREATE TABLE users(
 			id        BIGINT NOT NULL,
 			createdat DATETIME(3) NOT NULL,
@@ -406,6 +394,18 @@ func (a *adapter) CreateDb(reset bool) error {
 			FOREIGN KEY(fileid) REFERENCES fileuploads(id) ON DELETE CASCADE,
 			FOREIGN KEY(msgid) REFERENCES messages(id) ON DELETE CASCADE
 		)`); err != nil {
+		return err
+	}
+
+	if _, err = tx.Exec(
+		`CREATE TABLE kvmeta(` +
+			"`key`   CHAR(32)," +
+			"`value` TEXT," +
+			"PRIMARY KEY(`key`)" +
+			`)`); err != nil {
+		return err
+	}
+	if _, err = tx.Exec("INSERT INTO kvmeta(`key`, `value`) VALUES('version', ?)", dbVersion); err != nil {
 		return err
 	}
 
