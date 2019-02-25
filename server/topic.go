@@ -1072,15 +1072,15 @@ func (t *Topic) requestSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Le
 // A. Sharer or Approver is inviting another user for the first time (no prior subscription)
 // B. Sharer or Approver is re-inviting another user (adjusting modeGiven, modeWant is still Unset)
 // C. Approver is changing modeGiven for another user, modeWant != Unset
-func (t *Topic) approveSub(h *Hub, sess *Session, asUid, target types.Uid, set *MsgClientSet) error {
+func (t *Topic) approveSub(h *Hub, sess *Session, asUid, target types.Uid, set *MsgClientSet) (bool, error) {
 	log.Printf("approveSub, asUid=%s, target uid=%s", asUid.String(), target.String())
 
 	now := types.TimeNow()
 	toriginal := t.original(asUid)
 
 	// Access mode values as they were before this request was processed.
-	oldWant := types.ModeNone
-	oldGiven := types.ModeNone
+	oldWant := types.ModeUnset
+	oldGiven := types.ModeUnset
 
 	// Access mode of the person who is executing this approval process
 	var hostMode types.AccessMode
@@ -1089,7 +1089,7 @@ func (t *Topic) approveSub(h *Hub, sess *Session, asUid, target types.Uid, set *
 	userData, ok := t.perUser[asUid]
 	if !ok || !(userData.modeGiven & userData.modeWant).IsSharer() {
 		sess.queueOut(ErrPermissionDenied(set.Id, toriginal, now))
-		return errors.New("topic access denied; approver has no permission")
+		return false, errors.New("topic access denied; approver has no permission")
 	}
 
 	hostMode = userData.modeGiven & userData.modeWant
@@ -1099,27 +1099,26 @@ func (t *Topic) approveSub(h *Hub, sess *Session, asUid, target types.Uid, set *
 	if set.Sub.Mode != "" {
 		if err := modeGiven.UnmarshalText([]byte(set.Sub.Mode)); err != nil {
 			sess.queueOut(ErrMalformed(set.Id, toriginal, now))
-			return err
+			return false, err
 		}
 
 		// Make sure the new permissions are reasonable in P2P topics: permissions no greater than default,
 		// approver permission cannot be removed.
 		if t.cat == types.TopicCatP2P {
-			modeGiven &= types.ModeCP2P
-			modeGiven |= types.ModeApprove
+			modeGiven = (modeGiven & types.ModeCP2P) | types.ModeApprove
 		}
 	}
 
 	// Make sure only the owner & approvers can set non-default access mode
 	if modeGiven != types.ModeUnset && !hostMode.IsAdmin() {
 		sess.queueOut(ErrPermissionDenied(set.Id, toriginal, now))
-		return errors.New("sharer cannot set explicit modeGiven")
+		return false, errors.New("sharer cannot set explicit modeGiven")
 	}
 
 	// Make sure no one but the owner can do an ownership transfer
 	if modeGiven.IsOwner() && t.owner != asUid {
 		sess.queueOut(ErrPermissionDenied(set.Id, toriginal, now))
-		return errors.New("attempt to transfer ownership by non-owner")
+		return false, errors.New("attempt to transfer ownership by non-owner")
 	}
 
 	// Check if it's a new invite. If so, save it to database as a subscription.
@@ -1130,7 +1129,7 @@ func (t *Topic) approveSub(h *Hub, sess *Session, asUid, target types.Uid, set *
 		// Check if the max number of subscriptions is already reached.
 		if t.cat == types.TopicCatGrp && t.subsCount() >= globals.maxSubscriberCount {
 			sess.queueOut(ErrPolicy(set.Id, toriginal, now))
-			return errors.New("max subscription count exceeded")
+			return false, errors.New("max subscription count exceeded")
 		}
 
 		if modeGiven == types.ModeUnset {
@@ -1143,10 +1142,10 @@ func (t *Topic) approveSub(h *Hub, sess *Session, asUid, target types.Uid, set *
 		var modeWant types.AccessMode
 		if user, err := store.Users.Get(target); err != nil {
 			sess.queueOut(ErrUnknown(set.Id, toriginal, now))
-			return err
+			return false, err
 		} else if user == nil {
 			sess.queueOut(ErrUserNotFound(set.Id, toriginal, now))
-			return errors.New("user not found")
+			return false, errors.New("user not found")
 		} else {
 			modeWant = user.Access.Auth
 		}
@@ -1161,7 +1160,7 @@ func (t *Topic) approveSub(h *Hub, sess *Session, asUid, target types.Uid, set *
 
 		if err := store.Subs.Create(sub); err != nil {
 			sess.queueOut(ErrUnknown(set.Id, toriginal, now))
-			return err
+			return false, err
 		}
 
 		userData = perUserData{
@@ -1187,7 +1186,7 @@ func (t *Topic) approveSub(h *Hub, sess *Session, asUid, target types.Uid, set *
 			// Save changed value to database
 			if err := store.Subs.Update(t.name, target,
 				map[string]interface{}{"ModeGiven": modeGiven}, false); err != nil {
-				return err
+				return false, err
 			}
 
 			t.perUser[target] = userData
@@ -1197,10 +1196,11 @@ func (t *Topic) approveSub(h *Hub, sess *Session, asUid, target types.Uid, set *
 	// The user does not want to be bothered, no further action is needed
 	if !userData.modeWant.IsJoiner() {
 		sess.queueOut(ErrPermissionDenied(set.Id, toriginal, now))
-		return errors.New("user banned the topic")
+		return false, errors.New("user banned the topic")
 	}
 
 	// Access mode has changed.
+	var changed bool
 	if oldGiven != userData.modeGiven {
 		params := &presParams{
 			actor:  asUid.UserId(),
@@ -1219,6 +1219,7 @@ func (t *Topic) approveSub(h *Hub, sess *Session, asUid, target types.Uid, set *
 		if !(userData.modeGiven & userData.modeWant).IsSharer() {
 			t.presSingleUserOffline(target, "acs", params, sess.sid, false)
 		}
+		changed = true
 	}
 
 	if !existingSub && len(t.sessions) > 0 {
@@ -1227,7 +1228,7 @@ func (t *Topic) approveSub(h *Hub, sess *Session, asUid, target types.Uid, set *
 		t.presSingleUserOffline(target, "on+en", nilPresParams, "", false)
 	}
 
-	return nil
+	return changed, nil
 }
 
 // replyGetDesc is a response to a get.desc request on a topic, sent to just the session as a {meta} packet
@@ -1735,8 +1736,7 @@ func (t *Topic) replySetSub(h *Hub, sess *Session, pkt *ClientComMessage) error 
 		changed, err = t.requestSub(h, sess, asUid, asLvl, pkt.id, set.Sub.Mode, nil)
 	} else {
 		// Request to approve/change someone's subscription
-		err = t.approveSub(h, sess, asUid, target, set)
-		changed = true
+		changed, err = t.approveSub(h, sess, asUid, target, set)
 	}
 	if err != nil {
 		return err
