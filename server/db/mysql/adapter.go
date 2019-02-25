@@ -171,10 +171,8 @@ func (a *adapter) CreateDb(reset bool) error {
 		}
 	}()
 
-	if reset {
-		if _, err = tx.Exec("DROP DATABASE IF EXISTS " + a.dbName); err != nil {
-			return err
-		}
+	if _, err = tx.Exec("DROP DATABASE IF EXISTS " + a.dbName); err != nil {
+		return err
 	}
 
 	if _, err = tx.Exec("CREATE DATABASE " + a.dbName + " CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"); err != nil {
