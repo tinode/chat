@@ -1475,11 +1475,13 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 	}
 
 	userData := t.perUser[asUid]
+	// FIXME: The (t.cat != types.TopicCatMe && t.cat != types.TopicCatFnd) is unnecessary.
+	// It's here for backwards compatibility only.
 	if t.cat != types.TopicCatMe && t.cat != types.TopicCatFnd &&
-		!(userData.modeGiven & userData.modeWant).IsReader() {
+		!(userData.modeGiven & userData.modeWant).IsSharer() {
 
 		sess.queueOut(ErrPermissionDenied(id, t.original(asUid), now))
-		return errors.New("user does not have R permission")
+		return errors.New("user does not have S permission")
 	}
 
 	var ifModified time.Time
@@ -1489,7 +1491,6 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 
 	var subs []types.Subscription
 	var err error
-	var isSharer bool
 
 	switch t.cat {
 	case types.TopicCatMe:
@@ -1508,7 +1509,6 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 			// User manages cache. Include deleted subscriptions too.
 			subs, err = store.Users.GetTopicsAny(asUid, msgOpts2storeOpts(req))
 		}
-		isSharer = true
 	case types.TopicCatFnd:
 		// Select public or private query. Public has priority.
 		raw := t.fndGetPublic(sess)
@@ -1559,7 +1559,6 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 			// User manages cache. Include deleted subscriptions too.
 			subs, err = store.Topics.GetSubsAny(t.name, msgOpts2storeOpts(req))
 		}
-		isSharer = (userData.modeGiven & userData.modeWant).IsSharer()
 	case types.TopicCatGrp:
 		// Include sub.Public.
 		if ifModified.IsZero() {
@@ -1569,7 +1568,6 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 			// User manages cache. Include deleted subscriptions too.
 			subs, err = store.Topics.GetUsersAny(t.name, msgOpts2storeOpts(req))
 		}
-		isSharer = (userData.modeGiven & userData.modeWant).IsSharer()
 	}
 
 	if err != nil {
@@ -1637,7 +1635,7 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 				}
 			} else {
 				// Mark subscriptions that the user does not care about.
-				if t.cat == types.TopicCatGrp && !isSharer && !(sub.ModeWant & sub.ModeGiven).IsJoiner() {
+				if t.cat == types.TopicCatGrp && !(sub.ModeWant & sub.ModeGiven).IsJoiner() {
 					banned = true
 				}
 
@@ -1670,10 +1668,8 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 
 				if t.cat != types.TopicCatFnd {
 					mts.Acs.Mode = (sub.ModeGiven & sub.ModeWant).String()
-					if isSharer {
-						mts.Acs.Want = sub.ModeWant.String()
-						mts.Acs.Given = sub.ModeGiven.String()
-					}
+					mts.Acs.Want = sub.ModeWant.String()
+					mts.Acs.Given = sub.ModeGiven.String()
 				} else if defacs := sub.GetDefaultAccess(); defacs != nil {
 					// Topic 'fnd'
 					switch authLevel {

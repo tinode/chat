@@ -403,8 +403,8 @@ const (
 
 	// Normal user's access to a topic ("JRWPS")
 	ModeCPublic AccessMode = ModeJoin | ModeRead | ModeWrite | ModePres | ModeShare
-	// User's subscription to 'me' and 'fnd' ("JP")
-	ModeCSelf AccessMode = ModeJoin | ModePres
+	// User's subscription to 'me' and 'fnd' ("JPS")
+	ModeCSelf AccessMode = ModeJoin | ModePres | ModeShare
 	// Owner's subscription to a generic topic ("JRWPASDO")
 	ModeCFull AccessMode = ModeJoin | ModeRead | ModeWrite | ModePres | ModeApprove | ModeShare | ModeDelete | ModeOwner
 	// Default P2P access mode ("JRWPA")
