@@ -444,6 +444,10 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 					recvID:    subs[i].RecvSeqId,
 					readID:    subs[i].ReadSeqId,
 				}
+
+				if t.perUser[uid].public == nil {
+					log.Println("LOADED NIL public (both subscriptions present)")
+				}
 			}
 
 		} else {
@@ -631,6 +635,10 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 				delID:     sub2.DelId,
 				readID:    sub2.ReadSeqId,
 				recvID:    sub2.RecvSeqId,
+			}
+
+			if t.perUser[userID1].public == nil || t.perUser[userID2].public == nil {
+				log.Println("LOADED NIL public (one or both subs missing)")
 			}
 		}
 

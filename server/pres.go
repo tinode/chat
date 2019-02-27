@@ -226,7 +226,7 @@ func (t *Topic) presUsersOfInterest(what, ua string) {
 func presUsersOfInterestOffline(uid types.Uid, subs []types.Subscription, what string) {
 	// Push update to subscriptions
 	for _, sub := range subs {
-		if (sub.ModeGiven & sub.ModeWant).IsPresencer() || what == "gone" {
+		if (sub.ModeGiven & sub.ModeWant).IsPresencer() || what == "gone" || what == "acs" {
 			globals.hub.route <- &ServerComMessage{
 				Pres:   &MsgServerPres{Topic: "me", What: what, Src: uid.UserId(), wantReply: false},
 				rcptto: sub.Topic}
@@ -274,7 +274,7 @@ func (t *Topic) presSubsOnlineDirect(what string) {
 	for sess := range t.sessions {
 		// Check presence filters
 		pud := t.perUser[sess.uid]
-		if !(pud.modeGiven & pud.modeWant).IsPresencer() && what != "gone" {
+		if pud.deleted || (!(pud.modeGiven & pud.modeWant).IsPresencer() && what != "gone" && what != "acs") {
 			continue
 		}
 
@@ -307,8 +307,8 @@ func (t *Topic) presSubsOffline(what string, params *presParams, filter *presFil
 	}
 
 	for uid := range t.perUser {
-		if what != "acs" && what != "gone" &&
-			!presOfflineFilter(t.perUser[uid].modeGiven&t.perUser[uid].modeWant, filter) {
+		if t.perUser[uid].deleted || (what != "acs" && what != "gone" &&
+			!presOfflineFilter(t.perUser[uid].modeGiven&t.perUser[uid].modeWant, filter)) {
 			continue
 		}
 
@@ -340,6 +340,8 @@ func presSubsOfflineOffline(topic string, cat types.TopicCat, subs []types.Subsc
 	original := topic
 	for i := range subs {
 		sub := &subs[i]
+		// Let "acs" and "gone" through regardless of 'P'. Don't check for deleted subscriptions:
+		// they are not passed here.
 		if what != "acs" && what != "gone" && !presOfflineFilter(sub.ModeWant&sub.ModeGiven, nil) {
 			continue
 		}
@@ -380,7 +382,7 @@ func (t *Topic) presSingleUserOffline(uid types.Uid, what string, params *presPa
 		skipTopic = t.name
 	}
 
-	if pud, ok := t.perUser[uid]; ok &&
+	if pud, ok := t.perUser[uid]; ok && !pud.deleted &&
 		// Send access change notification regardless of P permission.
 		(what == "acs" || what == "gone" || presOfflineFilter(pud.modeGiven&pud.modeWant, nil)) {
 
@@ -457,7 +459,7 @@ func (t *Topic) presPubMessageDelete(uid types.Uid, delID int, list []MsgDelRang
 
 	// This check is only needed for V.1, but it does not hurt V.2. Let's do it here for both.
 	pud := t.perUser[uid]
-	if !(pud.modeGiven & pud.modeWant).IsPresencer() {
+	if !(pud.modeGiven & pud.modeWant).IsPresencer() || pud.deleted {
 		return
 	}
 

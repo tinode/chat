@@ -273,7 +273,8 @@ func (UsersObjMapper) UpdateTags(uid types.Uid, tags []string, reset bool) error
 	return adp.UserUpdateTags(uid, tags, reset)
 }
 
-// GetSubs loads a list of subscriptions for the given user
+// GetSubs loads a list of subscriptions for the given user. Does not load Public, does not load
+// deleted subscriptions.
 func (UsersObjMapper) GetSubs(id types.Uid, opts *types.QueryOpt) ([]types.Subscription, error) {
 	return adp.SubsForUser(id, false, opts)
 }

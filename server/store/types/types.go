@@ -525,6 +525,11 @@ func (m AccessMode) Value() (driver.Value, error) {
 	return string(res), nil
 }
 
+// BetterThan checks if grant mode allows more permissions than requested in want mode.
+func (grant AccessMode) BetterThan(want AccessMode) bool {
+	return grant & ^want != 0
+}
+
 // BetterEqual checks if grant mode allows all permissions requested in want mode.
 func (grant AccessMode) BetterEqual(want AccessMode) bool {
 	return grant&want == want

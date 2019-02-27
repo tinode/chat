@@ -856,6 +856,8 @@ func (t *Topic) requestSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Le
 	userData, existingSub := t.perUser[asUid]
 	if !existingSub || userData.deleted {
 
+		log.Println("new subscription", t.name)
+
 		// Check if the max number of subscriptions is already reached.
 		if t.cat == types.TopicCatGrp && t.subsCount() >= globals.maxSubscriberCount {
 			sess.queueOut(ErrPolicy(pktID, toriginal, now))
@@ -908,6 +910,8 @@ func (t *Topic) requestSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Le
 
 	} else {
 		// Process update to existing subscription. It could be an incomplete subscription for a new topic.
+
+		log.Println("existing subscription", t.name)
 
 		var ownerChange bool
 
@@ -1174,7 +1178,7 @@ func (t *Topic) approveSub(h *Hub, sess *Session, asUid, target types.Uid, set *
 		t.perUser[target] = userData
 
 	} else {
-		// Action on an existing subscription (re-invite or confirm/decline request)
+		// Action on an existing subscription: re-invite, change existing permission, confirm/decline request.
 
 		oldGiven = userData.modeGiven
 		oldWant = userData.modeWant
@@ -1194,12 +1198,6 @@ func (t *Topic) approveSub(h *Hub, sess *Session, asUid, target types.Uid, set *
 
 			t.perUser[target] = userData
 		}
-	}
-
-	// The user does not want to be bothered, no further action is needed
-	if !userData.modeWant.IsJoiner() {
-		sess.queueOut(ErrPermissionDenied(set.Id, toriginal, now))
-		return false, errors.New("user banned the topic")
 	}
 
 	// Access mode has changed.
@@ -1252,6 +1250,9 @@ func (t *Topic) replyGetDesc(sess *Session, asUid types.Uid, id string, opts *Ms
 	}
 
 	pud, full := t.perUser[asUid]
+	if t.cat == types.TopicCatP2P && !full {
+		log.Println("missing p2p subscription in getDesc")
+	}
 	if t.cat == types.TopicCatMe {
 		full = true
 	}
@@ -1682,6 +1683,7 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 
 				// Returning public and private only if they have changed since ifModified
 				if sendPubPriv {
+					// 'sub' has nil 'public' in p2p topics which is OK.
 					mts.Public = sub.GetPublic()
 					// Reporting 'private' only if it's user's own subscription.
 					if uid == asUid {
