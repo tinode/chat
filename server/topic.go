@@ -1024,51 +1024,19 @@ func (t *Topic) requestSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Le
 	// Apply changes.
 	t.perUser[asUid] = userData
 
-	// If the user is self-banning himself from the topic, no action is needed.
-	// Re-subscription will unban.
+	// Send presence notifications.
+	if oldWant != userData.modeWant || oldGiven != userData.modeGiven {
+		t.notifySubChange(asUid, asUid, oldWant, oldGiven, userData.modeWant, userData.modeGiven, sess.sid)
+	}
+
 	if !userData.modeWant.IsJoiner() {
+		// The user is self-banning from the topic. Re-subscription will unban.
 		t.evictUser(asUid, false, "")
 		// The callee will send NoErrOK
-		return changed, nil
 	} else if !userData.modeGiven.IsJoiner() {
 		// User was banned
 		sess.queueOut(ErrPermissionDenied(pktID, toriginal, now))
 		return changed, errors.New("topic access denied; user is banned")
-	}
-
-	// If this is a new subscription or the topic is being un-muted, notify after applying the changes.
-	if (userData.modeWant & userData.modeGiven).IsPresencer() &&
-		(!existingSub || !(oldWant & oldGiven).IsPresencer()) {
-		// Notify subscriber of topic's online status.
-		// log.Printf("topic[%s] sending ?unkn+en to me[%s]", t.name, asUid.String())
-		t.presSingleUserOffline(asUid, "?unkn+en", nilPresParams, "", false)
-	}
-
-	// If something has changed and the requested access mode is different from the given, notify topic admins.
-	// This will not send a notification for a newly created topic because Hub sets the same values for
-	// the old want/given.
-	if userData.modeWant != oldWant || userData.modeGiven != oldGiven {
-		params := &presParams{
-			actor:  asUid.UserId(),
-			dWant:  oldWant.Delta(userData.modeWant),
-			dGiven: oldGiven.Delta(userData.modeGiven)}
-
-		// Announce to the admins who are online in the topic.
-		t.presSubsOnline("acs", asUid.UserId(), params, &presFilters{filterIn: types.ModeCSharer}, sess.sid)
-
-		// If it's a new subscription or if the user asked for permissions in excess of what was granted,
-		// announce the request to topic admins on 'me' as well.
-		var adminsNotified bool
-		if !userData.modeGiven.BetterEqual(userData.modeWant) || !existingSub {
-			t.presSubsOffline("acs", params, &presFilters{filterIn: types.ModeCSharer}, sess.sid, true)
-			adminsNotified = true
-		}
-
-		if !adminsNotified || !(userData.modeWant & userData.modeGiven).IsSharer() {
-			// Notify requester's other sessions.
-			// Don't notify if already notified as an admin in the step above.
-			t.presSingleUserOffline(asUid, "acs", params, sess.sid, false)
-		}
 	}
 
 	return changed, nil
@@ -1203,30 +1171,8 @@ func (t *Topic) approveSub(h *Hub, sess *Session, asUid, target types.Uid, set *
 	// Access mode has changed.
 	var changed bool
 	if oldGiven != userData.modeGiven {
-		params := &presParams{
-			actor:  asUid.UserId(),
-			target: target.UserId(),
-			dWant:  oldWant.Delta(userData.modeWant),
-			dGiven: oldGiven.Delta(userData.modeGiven)}
-		filter := &presFilters{filterIn: types.ModeCSharer}
-
-		// Inform topic sharers who are currently not in topic that the user's access mode has changed.
-		t.presSubsOffline("acs", params, filter, sess.sid, true)
-
-		// Inform sharers online in topic of the same event.
-		t.presSubsOnline("acs", params.target, params, filter, sess.sid)
-
-		// If target user is not a sharer, inform the target user separately.
-		if !(userData.modeGiven & userData.modeWant).IsSharer() {
-			t.presSingleUserOffline(target, "acs", params, sess.sid, false)
-		}
+		t.notifySubChange(target, asUid, oldWant, oldGiven, userData.modeWant, userData.modeGiven, sess.sid)
 		changed = true
-	}
-
-	if !existingSub && len(t.sessions) > 0 {
-		// Notify the new subscriber that the topic is online, tell him to
-		// track the new topic.
-		t.presSingleUserOffline(target, "on+en", nilPresParams, "", false)
 	}
 
 	return changed, nil
@@ -2127,6 +2073,7 @@ func (t *Topic) replyDelSub(h *Hub, sess *Session, asUid types.Uid, del *MsgClie
 	}
 
 	sess.queueOut(NoErr(del.Id, t.original(asUid), now))
+	t.notifySubChange(uid, asUid, pud.modeWant, pud.modeGiven, types.ModeNone, types.ModeNone, sess.sid)
 
 	t.evictUser(uid, true, "")
 
@@ -2156,6 +2103,9 @@ func (t *Topic) replyLeaveUnsub(h *Hub, sess *Session, asUid types.Uid, id strin
 		sess.queueOut(NoErr(id, t.original(asUid), now))
 	}
 
+	pud := t.perUser[asUid]
+	// Send notifications.
+	t.notifySubChange(asUid, asUid, pud.modeWant, pud.modeGiven, types.ModeNone, types.ModeNone, sess.sid)
 	// Evict all user's sessions, clear cached data, send notifications.
 	t.evictUser(asUid, true, sess.sid)
 
@@ -2164,50 +2114,11 @@ func (t *Topic) replyLeaveUnsub(h *Hub, sess *Session, asUid types.Uid, id strin
 
 // evictUser evicts all given user's sessions from the topic and clears user's cached data, if appropriate.
 func (t *Topic) evictUser(uid types.Uid, unsub bool, skip string) {
-	log.Println("evictUser", uid, unsub, skip)
-
 	now := types.TimeNow()
-
 	pud := t.perUser[uid]
 
-	// First notify topic subscribers that the user has left the topic
+	// Detach user from topic
 	if unsub {
-		uname1 := uid.UserId()
-		// Let other sessions of the affected user know.
-		t.presSingleUserOffline(uid, "gone", nilPresParams, skip, false)
-
-		// Let admins know, exclude the user himself
-		t.presSubsOnline("acs", uname1,
-			&presParams{
-				target: uname1,
-				dWant:  types.ModeNone.String(),
-				dGiven: types.ModeNone.String()},
-			&presFilters{
-				filterIn:    types.ModeCSharer,
-				excludeUser: uname1},
-			skip)
-
-		if t.cat == types.TopicCatP2P && t.subsCount() == 2 {
-			uid2 := t.p2pOtherUser(uid)
-			// Tell user1 to stop sending updates to user2 without changing user2 online status.
-			presSingleUserOfflineOffline(uid, uid2.UserId(), "?none+rem", nilPresParams, "")
-			// Tell user2 that user1 is offline but let him keep sending updates in case user1 resubscribes.
-			presSingleUserOfflineOffline(uid2, uname1, "off", nilPresParams, "")
-		}
-	}
-
-	if t.cat == types.TopicCatGrp && pud.online > 0 {
-		// Let all 'R' subscribers know that the user is gone.
-		t.presSubsOnline("off", uid.UserId(), nilPresParams,
-			&presFilters{
-				filterIn:    types.ModeRead,
-				excludeUser: uid.UserId()},
-			skip)
-	}
-
-	// Second - detach user from topic
-	if unsub {
-		//
 		if t.cat == types.TopicCatP2P {
 			// P2P: mark user as deleted
 			pud.online = 0
@@ -2230,6 +2141,75 @@ func (t *Topic) evictUser(uid types.Uid, unsub bool, skip string) {
 			if sess.sid != skip {
 				sess.queueOut(NoErrEvicted("", t.original(uid), now))
 			}
+		}
+	}
+}
+
+// User's subscription to a topic has changed, send presence notifications.
+func (t *Topic) notifySubChange(uid, actor types.Uid, oldWant, oldGiven,
+	newWant, newGiven types.AccessMode, skip string) {
+
+	uname1 := uid.UserId()
+	dWant := oldWant.Delta(newWant)
+	if newWant == types.ModeNone {
+		dWant = newWant.String()
+	}
+	dGiven := oldGiven.Delta(newGiven)
+	if newGiven == types.ModeNone {
+		dGiven = newGiven.String()
+	}
+	params := &presParams{
+		target: uname1,
+		actor:  actor.UserId(),
+		dWant:  dWant,
+		dGiven: dGiven}
+
+	// Announce the change in permissions to the admins who are online in the topic, exclude the user himself.
+	t.presSubsOnline("acs", uname1, params,
+		&presFilters{filterIn: types.ModeCSharer, excludeUser: uname1},
+		skip)
+
+	// If it's a new subscription or if the user asked for permissions in excess of what was granted,
+	// announce the request to topic admins on 'me'.
+	var adminsNotified bool
+	if newWant.BetterThan(newGiven) || oldWant == types.ModeNone {
+		t.presSubsOffline("acs", params,
+			&presFilters{filterIn: types.ModeCSharer, excludeUser: uname1},
+			skip, true)
+		adminsNotified = true
+	}
+
+	// Handling of muting/unmuting.
+	if !(newWant & newGiven).IsPresencer() && (oldWant & oldGiven).IsPresencer() {
+		// In case of a P2P topic subscribe/unsubscribe users from each other's notifications.
+		if t.cat == types.TopicCatP2P && t.subsCount() == 2 {
+			uid2 := t.p2pOtherUser(uid)
+			// Tell user1 to stop sending updates to user2 without changing user2 online status.
+			presSingleUserOfflineOffline(uid, uid2.UserId(), "?none+rem", nilPresParams, "")
+			// Tell user2 that user1 is offline but let him keep sending updates in case user1 resubscribes.
+			presSingleUserOfflineOffline(uid2, uname1, "off", nilPresParams, "")
+		} else if t.cat == types.TopicCatGrp {
+			// Notify all sharers that the user is gone.
+			t.presSubsOnline("off", uid.UserId(), nilPresParams,
+				&presFilters{
+					filterIn:    types.ModeCSharer,
+					excludeUser: uid.UserId()},
+				skip)
+		}
+	} else if (newWant & newGiven).IsPresencer() && !(oldWant & oldGiven).IsPresencer() {
+		// If this is a new subscription or the topic is being un-muted, notify after applying the changes.
+		// Notify subscriber of topic's online status.
+		// log.Printf("topic[%s] sending ?unkn+en to me[%s]", t.name, asUid.String())
+		t.presSingleUserOffline(uid, "?unkn+en", nilPresParams, "", false)
+	}
+
+	// Notify requester's other sessions.
+	// Don't notify if already notified as an admin in the step above.
+	if !adminsNotified || !(newWant & newGiven).IsSharer() {
+		if newWant != types.ModeNone || newGiven != types.ModeNone {
+			t.presSingleUserOffline(uid, "acs", params, skip, false)
+		} else {
+			t.presSingleUserOffline(uid, "gone", nilPresParams, skip, false)
 		}
 	}
 }

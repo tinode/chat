@@ -509,12 +509,16 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 				if pktsub.Set != nil && pktsub.Set.Desc != nil && pktsub.Set.Desc.DefaultAcs != nil {
 					// Use provided DefaultAcs as non-default modeGiven for the other user.
 					// The other user is assumed to have auth level "Auth".
-					sub2.ModeGiven = parseMode(pktsub.Set.Desc.DefaultAcs.Auth, users[u1].Access.Auth) &
-						types.ModeCP2P
+					sub2.ModeGiven = parseMode(pktsub.Set.Desc.DefaultAcs.Auth, users[u1].Access.Auth)
+					// Sanity check
+					log.Println("User2 mode assigned from pktsub.Set.Desc.DefaultAcs", sub2.ModeGiven.String())
 				} else {
 					// Use user1.Auth as modeGiven for the other user
 					sub2.ModeGiven = users[u1].Access.Auth
+					log.Println("User2 mode assigned from users[u1].Access.Auth", sub2.ModeGiven.String())
 				}
+				sub2.ModeGiven = sub2.ModeGiven&types.ModeCP2P | types.ModeApprove
+				log.Println("User2 sanitized mode", sub2.ModeGiven.String())
 
 				// Swap Public to match swapped Public in subs returned from store.Topics.GetSubs
 				sub2.SetPublic(users[u1].Public)
@@ -548,8 +552,9 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 							log.Println("hub: setting mode for another user is not supported '" + t.name + "'")
 						} else {
 							// user1 is setting non-default modeWant
-							userData.modeWant = parseMode(pktsub.Set.Sub.Mode, userData.modeWant) &
-								types.ModeCP2P
+							userData.modeWant = parseMode(pktsub.Set.Sub.Mode, userData.modeWant)
+							// Ensure sanity
+							userData.modeWant = userData.modeWant&types.ModeCP2P | types.ModeApprove
 						}
 
 						// Since user1 issued a {sub} request, make sure the user can join
@@ -584,6 +589,8 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 					users[u2].Access.Anon,
 					users[u2].Access.Auth,
 					types.ModeCP2P)
+				// Ensure sanity
+				sub2.ModeWant = sub2.ModeWant&types.ModeCP2P | types.ModeApprove
 			}
 
 			// Create everything
@@ -1225,7 +1232,7 @@ func replyOfflineTopicSetSub(sess *Session, topic string, msg *ClientComMessage)
 		if types.GetTopicCat(topic) == types.TopicCatP2P {
 			// For P2P topics ignore requests exceeding types.ModeCP2P and do not allow
 			// removal of 'A' permission.
-			modeWant = (modeWant & types.ModeCP2P) | types.ModeApprove
+			modeWant = modeWant&types.ModeCP2P | types.ModeApprove
 		}
 
 		if modeWant != sub.ModeWant {
