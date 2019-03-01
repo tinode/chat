@@ -419,6 +419,9 @@ const (
 
 	// Invalid mode to indicate an error
 	ModeInvalid AccessMode = 0x100000
+
+	// All possible valid bits (excluding ModeInvalid and ModeUnset)
+	ModeBitmask AccessMode = ModeJoin | ModeRead | ModeWrite | ModePres | ModeApprove | ModeShare | ModeDelete | ModeOwner
 )
 
 // MarshalText converts AccessMode to ASCII byte slice.
@@ -527,19 +530,19 @@ func (m AccessMode) Value() (driver.Value, error) {
 
 // BetterThan checks if grant mode allows more permissions than requested in want mode.
 func (grant AccessMode) BetterThan(want AccessMode) bool {
-	return grant & ^want != 0
+	return ModeBitmask&grant&^want != 0
 }
 
 // BetterEqual checks if grant mode allows all permissions requested in want mode.
 func (grant AccessMode) BetterEqual(want AccessMode) bool {
-	return grant&want == want
+	return ModeBitmask&grant&want == want
 }
 
 // Delta between two modes as a string old.Delta(new). JRPAS -> JRWS: "+W-PA"
 // Zero delta is an empty string ""
 func (o AccessMode) Delta(n AccessMode) string {
 	// Removed bits, bits present in 'old' but missing in 'new' -> '-'
-	o2n := o &^ n
+	o2n := ModeBitmask & o &^ n
 	var removed string
 	if o2n > 0 {
 		removed = o2n.String()
@@ -549,7 +552,7 @@ func (o AccessMode) Delta(n AccessMode) string {
 	}
 
 	// Added bits, bits present in 'n' but missing in 'o' -> '+'
-	n2o := n &^ o
+	n2o := ModeBitmask & n &^ o
 	var added string
 	if n2o > 0 {
 		added = n2o.String()

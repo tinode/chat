@@ -79,18 +79,22 @@ func (t *Topic) loadContacts(uid types.Uid) error {
 // The originating topic reports its own status in 'what' as "on", "off", "gone" or "?unkn".
 // 	"on" - requester came online
 // 	"off" - requester is offline now
-//  "?none" - requester status is unknown, but don't request a response and don't forward to clients.
+//  "?none" - anchor for "+" command: requester status is unknown, won't generate a response and isn't forwarded to clients.
 //  "gone" - topic deleted or otherwise gone - equivalent of "off+remove"
 //	"?unkn" - requester wants to initiate online status exchange but it's own status is unknown yet. This
 //  notifications is not forwarded to users.
 //
-// If status is followed by command "+en" then the current user should accept incoming notifications
-// from the user2; "+rem" means the subscription is removed. "+dis" is the opposite of "en".
+// "+" commands:
+// "+en": enable subscription, i.e. start accepting incoming notifications from the user2;
+// "+rem": terminate and remove the subscription (subscription deleted)
+// "+dis" disable subscription withot removing it, the opposite of "en".
 // The "+en/rem/dis" command itself is stripped from the notification.
 func (t *Topic) presProcReq(fromUserID, what string, wantReply bool) string {
 	if t.isSuspended() {
 		return ""
 	}
+
+	debugWhat := what
 
 	var reqReply, onlineUpdate bool
 
@@ -191,6 +195,8 @@ func (t *Topic) presProcReq(fromUserID, what string, wantReply bool) string {
 		}
 	}
 
+	log.Println("what:", debugWhat, "from:", fromUserID, "to:", t.name, "reply:", replyAs)
+
 	// If requester's online status has not changed, do not reply, otherwise an endless loop will happen.
 	// wantReply is needed to ensure unnecessary {pres} is not sent:
 	// A[online, B:off] to B[online, A:off]: {pres A on}
@@ -226,11 +232,9 @@ func (t *Topic) presUsersOfInterest(what, ua string) {
 func presUsersOfInterestOffline(uid types.Uid, subs []types.Subscription, what string) {
 	// Push update to subscriptions
 	for _, sub := range subs {
-		if (sub.ModeGiven & sub.ModeWant).IsPresencer() || what == "gone" || what == "acs" {
-			globals.hub.route <- &ServerComMessage{
-				Pres:   &MsgServerPres{Topic: "me", What: what, Src: uid.UserId(), wantReply: false},
-				rcptto: sub.Topic}
-		}
+		globals.hub.route <- &ServerComMessage{
+			Pres:   &MsgServerPres{Topic: "me", What: what, Src: uid.UserId(), wantReply: false},
+			rcptto: sub.Topic}
 	}
 }
 

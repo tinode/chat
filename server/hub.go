@@ -511,14 +511,11 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 					// The other user is assumed to have auth level "Auth".
 					sub2.ModeGiven = parseMode(pktsub.Set.Desc.DefaultAcs.Auth, users[u1].Access.Auth)
 					// Sanity check
-					log.Println("User2 mode assigned from pktsub.Set.Desc.DefaultAcs", sub2.ModeGiven.String())
 				} else {
 					// Use user1.Auth as modeGiven for the other user
 					sub2.ModeGiven = users[u1].Access.Auth
-					log.Println("User2 mode assigned from users[u1].Access.Auth", sub2.ModeGiven.String())
 				}
 				sub2.ModeGiven = sub2.ModeGiven&types.ModeCP2P | types.ModeApprove
-				log.Println("User2 sanitized mode", sub2.ModeGiven.String())
 
 				// Swap Public to match swapped Public in subs returned from store.Topics.GetSubs
 				sub2.SetPublic(users[u1].Public)
@@ -807,8 +804,6 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 	statsInc("TotalTopics", 1)
 
 	go t.run(h)
-
-	log.Println("hub: started", t.name, "created=", sreg.created)
 
 	sreg.loaded = true
 	// Topic will check access rights, send invite to p2p user, send {ctrl} message to the initiator session
