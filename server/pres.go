@@ -145,6 +145,7 @@ func (t *Topic) presProcReq(fromUserID, what string, wantReply bool) string {
 				delete(t.perSubs, fromUserID)
 
 			} else {
+
 				switch cmd {
 				case "":
 					// No change in being enabled or disabled and not being added or removed.
@@ -173,9 +174,13 @@ func (t *Topic) presProcReq(fromUserID, what string, wantReply bool) string {
 					panic("presProcReq: unknown command '" + cmd + "'")
 				}
 
-				if online != nil {
+				if !psd.enabled {
+					// If we don't care about updates, keep the other user off
+					psd.online = false
+				} else if online != nil {
 					psd.online = *online
 				}
+
 				t.perSubs[fromUserID] = psd
 			}
 
@@ -195,7 +200,7 @@ func (t *Topic) presProcReq(fromUserID, what string, wantReply bool) string {
 		}
 	}
 
-	log.Println("what:", debugWhat, "from:", fromUserID, "to:", t.name, "reply:", replyAs)
+	// log.Println("in-what:", debugWhat, "out-what", what, "from:", fromUserID, "to:", t.name, "reply:", replyAs)
 
 	// If requester's online status has not changed, do not reply, otherwise an endless loop will happen.
 	// wantReply is needed to ensure unnecessary {pres} is not sent:
