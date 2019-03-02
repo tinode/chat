@@ -94,8 +94,6 @@ func (t *Topic) presProcReq(fromUserID, what string, wantReply bool) string {
 		return ""
 	}
 
-	debugWhat := what
-
 	var reqReply, onlineUpdate bool
 
 	online := &onlineUpdate

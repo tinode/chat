@@ -129,9 +129,9 @@ type perUserData struct {
 
 // perSubsData holds user's (on 'me' topic) cache of subscription data
 type perSubsData struct {
-	// The other user/topic is online.
+	// The other user's/topic's online status as seen by this user.
 	online bool
-	// True if we care about the updates from the other user/topic. False otherwise.
+	// True if we care about the updates from the other user/topic: (want&given).IsPresencer().
 	// Does not affect sending notifications from this user to other users.
 	enabled bool
 }
@@ -1527,20 +1527,20 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 			sub := &subs[i]
 			// Indicator if the requester has provided a cut off date for ts of pub & priv updates.
 			var sendPubPriv bool
-			var deleted, banned bool
+			var banned bool
 			var mts MsgTopicSub
+			deleted := sub.DeletedAt != nil
 
 			if ifModified.IsZero() {
 				sendPubPriv = true
 			} else {
 				// Skip sending deleted subscriptions if they were deleted before the cut off date.
 				// If they are freshly deleted send minimum info
-				if sub.DeletedAt != nil {
+				if deleted {
 					if !sub.DeletedAt.After(ifModified) {
 						continue
 					}
 					mts.DeletedAt = sub.DeletedAt
-					deleted = true
 				}
 				sendPubPriv = !deleted && sub.UpdatedAt.After(ifModified)
 			}
@@ -2151,13 +2151,13 @@ func (t *Topic) notifySubChange(uid, actor types.Uid, oldWant, oldGiven,
 	unsub := newWant == types.ModeUnset || newGiven == types.ModeUnset
 
 	uname1 := uid.UserId()
-	dWant := oldWant.Delta(newWant)
-	if newWant == types.ModeNone || newWant == types.ModeUnset {
-		dWant = newWant.String()
+	dWant := types.ModeNone.String()
+	if newWant.IsDefined() {
+		dWant = oldWant.Delta(newWant)
 	}
-	dGiven := oldGiven.Delta(newGiven)
-	if newGiven == types.ModeNone || newGiven == types.ModeUnset {
-		dGiven = newGiven.String()
+	dGiven := types.ModeNone.String()
+	if newGiven.IsDefined() {
+		dGiven = oldGiven.Delta(newGiven)
 	}
 	params := &presParams{
 		target: uname1,
@@ -2191,7 +2191,7 @@ func (t *Topic) notifySubChange(uid, actor types.Uid, oldWant, oldGiven,
 			// In case of a P2P topic subscribe/unsubscribe users from each other's notifications.
 			if t.cat == types.TopicCatP2P {
 				uid2 := t.p2pOtherUser(uid)
-				// Remove user1's subscription to user2 without changing user2 online status.
+				// Remove user1's subscription to user2 without passing "off" change to user1's sessions.
 				presSingleUserOfflineOffline(uid, uid2.UserId(), "?none+rem", nilPresParams, "")
 				// Tell user2 that user1 is offline but let him keep sending updates in case user1 resubscribes.
 				presSingleUserOfflineOffline(uid2, uname1, "off", nilPresParams, "")

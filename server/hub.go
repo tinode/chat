@@ -957,7 +957,7 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 				if tcat == types.TopicCatP2P && len(subs) == 2 {
 					uname1 := asUid.UserId()
 					uid2 := types.ParseUserId(msg.topic)
-					// Tell user1 to stop sending updates to user2 without changing user2 online status.
+					// Tell user1 to stop sending updates to user2 without passing change to user1's sessions.
 					presSingleUserOfflineOffline(asUid, uid2.UserId(), "?none+rem", nilPresParams, "")
 					// Don't change the online status of user1, just ask user2 to stop notification exchange.
 					// Tell user2 that user1 is offline but let him keep sending updates in case user1 resubscribes.

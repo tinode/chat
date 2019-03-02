@@ -618,6 +618,12 @@ func (m AccessMode) IsInvalid() bool {
 	return m == ModeInvalid
 }
 
+// IsDefined checks if the mode is defined: not invalid and not unset.
+// ModeNone is considered to be defined.
+func (m AccessMode) IsDefined() bool {
+	return m != ModeInvalid && m != ModeUnset
+}
+
 // DefaultAccess is a per-topic default access modes
 type DefaultAccess struct {
 	Auth AccessMode
