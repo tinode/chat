@@ -394,12 +394,14 @@ func (TopicsObjMapper) Get(topic string) (*types.Topic, error) {
 	return adp.TopicGet(topic)
 }
 
-// GetUsers loads subscriptions for topic plus loads user.Public
+// GetUsers loads subscriptions for topic plus loads user.Public.
+// Deleted subscriptions are not loaded.
 func (TopicsObjMapper) GetUsers(topic string, opts *types.QueryOpt) ([]types.Subscription, error) {
 	return adp.UsersForTopic(topic, false, opts)
 }
 
-// GetUsersAny is the same as GetUsers, except it loads deleted subscriptions too.
+// GetUsersAny loads subscriptions for topic plus loads user.Public. It's the same as GetUsers,
+// except it loads deleted subscriptions too.
 func (TopicsObjMapper) GetUsersAny(topic string, opts *types.QueryOpt) ([]types.Subscription, error) {
 	return adp.UsersForTopic(topic, true, opts)
 }

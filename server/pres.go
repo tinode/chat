@@ -136,7 +136,7 @@ func (t *Topic) presProcReq(fromUserID, what string, wantReply bool) string {
 
 			if cmd == "rem" {
 				replyAs = "off+rem"
-				if !psd.enabled {
+				if !psd.enabled && what == "off" {
 					// If it was disabled before, don't send a redundant update.
 					what = ""
 				}

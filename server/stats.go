@@ -71,9 +71,8 @@ func statsUpdater() {
 
 	for upd := range globals.statsUpdate {
 		if upd == nil {
-			// Nil update means shutdown
-			close(globals.statsUpdate)
 			globals.statsUpdate = nil
+			// Dont' care to close the channel.
 			break
 		}
 

@@ -1139,6 +1139,8 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 // The difference between UsersForTopic vs SubsForTopic is that the former loads user.public,
 // the latter does not.
 func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt) ([]t.Subscription, error) {
+	tcat := t.GetTopicCat(topic)
+
 	// Fetch all subscribed users. The number of users is not large
 	q := `SELECT s.createdat,s.updatedat,s.deletedat,s.userid,s.topic,s.delid,s.recvseqid,
 		s.readseqid,s.modewant,s.modegiven,u.public,s.private
@@ -1146,18 +1148,30 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 		WHERE s.topic=?`
 	args := []interface{}{topic}
 	if !keepDeleted {
-		// Filter out rows with DeletedAt being not null
-		q += " AND s.deletedAt IS NULL AND u.deletedat IS NULL"
+		// Filter out rows with users deleted
+		q += " AND u.deletedat IS NULL"
+
+		// For p2p topics we must load all subscriptions including deleted.
+		// Otherwise it will be impossibel to swipe Public values.
+		if tcat != t.TopicCatP2P {
+			// Filter out deletd subscriptions.
+			q += " AND s.deletedAt IS NULL"
+		}
 	}
 
 	limit := maxSubscribers
+	var oneUser t.Uid
 	if opts != nil {
 		// Ignore IfModifiedSince - we must return all entries
 		// Those unmodified will be stripped of Public & Private.
 
 		if !opts.User.IsZero() {
-			q += " AND s.userid=?"
-			args = append(args, store.DecodeUid(opts.User))
+			// For p2p topics we have to fetch both users otherwise public cannot be swapped.
+			if tcat != t.TopicCatP2P {
+				q += " AND s.userid=?"
+				args = append(args, store.DecodeUid(opts.User))
+			}
+			oneUser = opts.User
 		}
 		if opts.Limit > 0 && opts.Limit < limit {
 			limit = opts.Limit
@@ -1191,14 +1205,27 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 	}
 	rows.Close()
 
-	if err == nil && t.GetTopicCat(topic) == t.TopicCatP2P && len(subs) > 0 {
+	if err == nil && tcat == t.TopicCatP2P && len(subs) > 0 {
 		// Swap public values of P2P topics as expected.
 		if len(subs) == 1 {
+			// The other user is deleted, nothing we can do.
 			subs[0].SetPublic(nil)
 		} else {
 			pub := subs[0].GetPublic()
 			subs[0].SetPublic(subs[1].GetPublic())
 			subs[1].SetPublic(pub)
+		}
+
+		// Remove deleted and unneeded subscriptions
+		if !keepDeleted || !oneUser.IsZero() {
+			var xsubs []t.Subscription
+			for i := range subs {
+				if (subs[i].DeletedAt != nil && !keepDeleted) || (!oneUser.IsZero() && subs[i].Uid() != oneUser) {
+					continue
+				}
+				xsubs = append(xsubs, subs[i])
+			}
+			subs = xsubs
 		}
 	}
 

@@ -444,10 +444,6 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 					recvID:    subs[i].RecvSeqId,
 					readID:    subs[i].ReadSeqId,
 				}
-
-				if t.perUser[uid].public == nil {
-					log.Println("LOADED NIL public (both subscriptions present)")
-				}
 			}
 
 		} else {
@@ -528,6 +524,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 			// a. requester is starting a new topic
 			// b. requester's subscription is missing: deleted or creation failed
 			if sub1 == nil {
+
 				// Set user1's ModeGiven from user2's default values
 				userData.modeGiven = selectAccessMode(auth.Level(sreg.pkt.authLvl),
 					users[u2].Access.Anon,
@@ -639,10 +636,6 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 				delID:     sub2.DelId,
 				readID:    sub2.ReadSeqId,
 				recvID:    sub2.RecvSeqId,
-			}
-
-			if t.perUser[userID1].public == nil || t.perUser[userID2].public == nil {
-				log.Println("LOADED NIL public (one or both subs missing)")
 			}
 		}
 
@@ -905,6 +898,7 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 
 		} else {
 			// Case 1.2: topic is offline.
+
 			asUid := types.ParseUserId(msg.from)
 			// Get all subscribers: we need to know how many are left and notify them.
 			subs, err := store.Topics.GetSubs(topic, nil)

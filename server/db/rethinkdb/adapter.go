@@ -868,20 +868,29 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 
 // UsersForTopic loads users subscribed to the given topic
 func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt) ([]t.Subscription, error) {
+	tcat := t.GetTopicCat(topic)
+
 	// Fetch topic subscribers
 	// Fetch all subscribed users. The number of users is not large
 	q := rdb.DB(a.dbName).Table("subscriptions").GetAllByIndex("Topic", topic)
-	if !keepDeleted {
-		// Filter out rows with DeletedAt being not null
+	if !keepDeleted && tcat != t.TopicCatP2P {
+		// Filter out rows with DeletedAt being not null.
+		// P2P topics must load all subscriptions otherwise it will be impossible
+		// to swap Public values.
 		q = q.Filter(rdb.Row.HasFields("DeletedAt").Not())
 	}
+
 	limit := maxSubscribers
+	var oneUser t.Uid
 	if opts != nil {
 		// Ignore IfModifiedSince - we must return all entries
 		// Those unmodified will be stripped of Public & Private.
 
 		if !opts.User.IsZero() {
-			q = q.Filter(rdb.Row.Field("User").Eq(opts.User.String()))
+			if tcat != t.TopicCatP2P {
+				q = q.Filter(rdb.Row.Field("User").Eq(opts.User.String()))
+			}
+			oneUser = opts.User
 		}
 		if opts.Limit > 0 && opts.Limit < limit {
 			limit = opts.Limit
@@ -931,11 +940,24 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 	if t.GetTopicCat(topic) == t.TopicCatP2P && len(subs) > 0 {
 		// Swap public values of P2P topics as expected.
 		if len(subs) == 1 {
+			// User is deleted. Nothing we can do.
 			subs[0].SetPublic(nil)
 		} else {
 			pub := subs[0].GetPublic()
 			subs[0].SetPublic(subs[1].GetPublic())
 			subs[1].SetPublic(pub)
+		}
+
+		// Remove deleted and unneeded subscriptions
+		if !keepDeleted || !oneUser.IsZero() {
+			var xsubs []t.Subscription
+			for i := range subs {
+				if (subs[i].DeletedAt != nil && !keepDeleted) || (!oneUser.IsZero() && subs[i].Uid() != oneUser) {
+					continue
+				}
+				xsubs = append(xsubs, subs[i])
+			}
+			subs = xsubs
 		}
 	}
 

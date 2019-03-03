@@ -2187,8 +2187,8 @@ func (t *Topic) notifySubChange(uid, actor types.Uid, oldWant, oldGiven,
 			// In case of a P2P topic subscribe/unsubscribe users from each other's notifications.
 			if t.cat == types.TopicCatP2P {
 				uid2 := t.p2pOtherUser(uid)
-				// Remove user1's subscription to user2 without passing "off" change to user1's sessions.
-				presSingleUserOfflineOffline(uid, uid2.UserId(), "?none+rem", nilPresParams, "")
+				// Remove user1's subscription to user2 and notify user1's other sessions that he is gone.
+				t.presSingleUserOffline(uid, "gone", nilPresParams, skip, false)
 				// Tell user2 that user1 is offline but let him keep sending updates in case user1 resubscribes.
 				presSingleUserOfflineOffline(uid2, target, "off", nilPresParams, "")
 			} else if t.cat == types.TopicCatGrp {
@@ -2220,10 +2220,8 @@ func (t *Topic) notifySubChange(uid, actor types.Uid, oldWant, oldGiven,
 		t.presSingleUserOffline(uid, "?unkn+en", nilPresParams, "", false)
 	}
 
-	// Notify requester's other sessions.
-	if unsub {
-		t.presSingleUserOffline(uid, "gone", nilPresParams, skip, false)
-	} else {
+	// Notify requester's other sessions that permissions have changed.
+	if !unsub {
 		t.presSingleUserOffline(uid, "acs", params, skip, false)
 	}
 }
