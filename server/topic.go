@@ -2061,7 +2061,8 @@ func (t *Topic) replyDelSub(h *Hub, sess *Session, asUid types.Uid, del *MsgClie
 	}
 
 	sess.queueOut(NoErr(del.Id, t.original(asUid), now))
-	// ModeUnset signifies deleted subscriptoion as opposite to ModeNone - no access.
+
+	// ModeUnset signifies deleted subscription as opposite to ModeNone - no access.
 	t.notifySubChange(uid, asUid, pud.modeWant, pud.modeGiven, types.ModeUnset, types.ModeUnset, sess.sid)
 
 	t.evictUser(uid, true, "")
