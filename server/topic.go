@@ -1748,16 +1748,6 @@ func (t *Topic) replyGetData(sess *Session, asUid types.Uid, id string, req *Msg
 		}
 	}
 
-	// Request for all available data returned no results while the client expects results
-	// because t.lastID > 0. Generate an empty data message to indicate that all messages
-	// have been deleted.
-	if count == 0 && t.lastID > 0 && (req == nil || (req.BeforeId == 0 && req.SinceId == 0)) {
-		sess.queueOut(&ServerComMessage{Data: &MsgServerData{
-			Topic:     toriginal,
-			SeqId:     t.lastID,
-			Timestamp: now}})
-	}
-
 	// Inform the requester that all the data has been served.
 	reply := NoErr(id, toriginal, now)
 	reply.Ctrl.Params = map[string]interface{}{"what": "data", "count": count}
