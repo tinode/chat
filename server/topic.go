@@ -2134,23 +2134,28 @@ func (t *Topic) evictUser(uid types.Uid, unsub bool, skip string) {
 	}
 
 	// Detach all user's sessions
+	msg := NoErrEvicted("", t.original(uid), now)
+	msg.Ctrl.Params = map[string]interface{}{"unsub": unsub}
 	for sess := range t.sessions {
 		if len(t.remSession(sess, uid)) > 0 {
 			sess.detach <- t.name
 			if sess.sid != skip {
-				sess.queueOut(NoErrEvicted("", t.original(uid), now))
+				sess.queueOut(msg)
 			}
 		}
 	}
 }
 
 // User's subscription to a topic has changed, send presence notifications.
+// 1. New subscription
+// 2. Deleted subscription
+// 3. Permissions changed
 func (t *Topic) notifySubChange(uid, actor types.Uid, oldWant, oldGiven,
 	newWant, newGiven types.AccessMode, skip string) {
 
 	unsub := newWant == types.ModeUnset || newGiven == types.ModeUnset
 
-	uname1 := uid.UserId()
+	target := uid.UserId()
 	dWant := types.ModeNone.String()
 	if newWant.IsDefined() {
 		dWant = oldWant.Delta(newWant)
@@ -2160,24 +2165,24 @@ func (t *Topic) notifySubChange(uid, actor types.Uid, oldWant, oldGiven,
 		dGiven = oldGiven.Delta(newGiven)
 	}
 	params := &presParams{
-		target: uname1,
+		target: target,
 		actor:  actor.UserId(),
 		dWant:  dWant,
 		dGiven: dGiven}
 
-	// Announce the change in permissions to the admins who are online in the topic, exclude the user himself.
-	t.presSubsOnline("acs", uname1, params,
-		&presFilters{filterIn: types.ModeCSharer, excludeUser: uname1},
+	// Announce the change in permissions to the admins who are online in the topic, exclude the target
+	// and exclude the actor's session.
+	t.presSubsOnline("acs", target, params,
+		&presFilters{filterIn: types.ModeCSharer, excludeUser: target},
 		skip)
 
 	// If it's a new subscription or if the user asked for permissions in excess of what was granted,
-	// announce the request to topic admins on 'me'.
-	var adminsNotified bool
+	// announce the request to topic admins on 'me' so they can approve the request. The notification
+	// is not sent to the target user or the actor's session.
 	if newWant.BetterThan(newGiven) || oldWant == types.ModeNone {
 		t.presSubsOffline("acs", params,
-			&presFilters{filterIn: types.ModeCSharer, excludeUser: uname1},
+			&presFilters{filterIn: types.ModeCSharer, excludeUser: target},
 			skip, true)
-		adminsNotified = true
 	}
 
 	// Handling of muting/unmuting.
@@ -2194,13 +2199,13 @@ func (t *Topic) notifySubChange(uid, actor types.Uid, oldWant, oldGiven,
 				// Remove user1's subscription to user2 without passing "off" change to user1's sessions.
 				presSingleUserOfflineOffline(uid, uid2.UserId(), "?none+rem", nilPresParams, "")
 				// Tell user2 that user1 is offline but let him keep sending updates in case user1 resubscribes.
-				presSingleUserOfflineOffline(uid2, uname1, "off", nilPresParams, "")
+				presSingleUserOfflineOffline(uid2, target, "off", nilPresParams, "")
 			} else if t.cat == types.TopicCatGrp {
-				// Notify all sharers that the user is gone.
+				// Notify all sharers that the user is offline now.
 				t.presSubsOnline("off", uid.UserId(), nilPresParams,
 					&presFilters{
 						filterIn:    types.ModeCSharer,
-						excludeUser: uid.UserId()},
+						excludeUser: target},
 					skip)
 			}
 		} else {
@@ -2225,13 +2230,10 @@ func (t *Topic) notifySubChange(uid, actor types.Uid, oldWant, oldGiven,
 	}
 
 	// Notify requester's other sessions.
-	// Don't notify if already notified as an admin in the step above.
-	if !adminsNotified || !(newWant & newGiven).IsSharer() {
-		if unsub {
-			t.presSingleUserOffline(uid, "gone", nilPresParams, skip, false)
-		} else {
-			t.presSingleUserOffline(uid, "acs", params, skip, false)
-		}
+	if unsub {
+		t.presSingleUserOffline(uid, "gone", nilPresParams, skip, false)
+	} else {
+		t.presSingleUserOffline(uid, "acs", params, skip, false)
 	}
 }
 
