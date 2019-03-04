@@ -629,7 +629,7 @@ func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 		getWhat = parseMsgClientMeta(msgsub.Get.What)
 	}
 
-	if err := t.subCommonReply(h, sreg, (getWhat&constMsgMetaDesc != 0)); err != nil {
+	if err := t.subCommonReply(h, sreg); err != nil {
 		return err
 	}
 
@@ -689,7 +689,6 @@ func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 				status += "+en"
 			}
 			t.presSingleUserOffline(uid2, status, nilPresParams, "", false)
-
 		}
 	}
 
@@ -700,8 +699,15 @@ func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 			&presParams{
 				dWant:  pud.modeWant.String(),
 				dGiven: pud.modeGiven.String(),
-				actor:  "me"},
+				actor:  asUid.UserId()},
 			sreg.sess.sid, false)
+	}
+
+	if getWhat&constMsgMetaDesc != 0 {
+		// Send get.desc as a {meta} packet.
+		if err := t.replyGetDesc(sreg.sess, asUid, sreg.pkt.id, msgsub.Get.Desc); err != nil {
+			log.Printf("topic[%s] subCommonReply Get.Desc failed: %v", t.name, err)
+		}
 	}
 
 	if getWhat&constMsgMetaSub != 0 {
@@ -731,11 +737,12 @@ func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 			log.Printf("topic[%s] handleSubscription Get.Del failed: %v", t.name, err)
 		}
 	}
+
 	return nil
 }
 
 // subCommonReply generates a response to a subscription request
-func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin, sendDesc bool) error {
+func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin) error {
 	// The topic is already initialized by the Hub
 	var now time.Time
 	// For newly created topics report topic creation time.
@@ -751,8 +758,9 @@ func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin, sendDesc bool) error {
 	toriginal := t.original(asUid)
 
 	if !sreg.newsub && (t.cat == types.TopicCatGrp || t.cat == types.TopicCatP2P) {
-		// Remember if this is a new subscription.
-		_, sreg.newsub = t.perUser[asUid]
+		// Check if this is a new subscription.
+		_, found := t.perUser[asUid]
+		sreg.newsub = !found
 	}
 
 	var private interface{}
@@ -805,12 +813,6 @@ func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin, sendDesc bool) error {
 	}
 	resp.Ctrl.Params = params
 	sreg.sess.queueOut(resp)
-
-	if sendDesc {
-		if err := t.replyGetDesc(sreg.sess, asUid, sreg.pkt.id, msgsub.Get.Desc); err != nil {
-			log.Printf("topic[%s] subCommonReply Get.Desc failed: %v", t.name, err)
-		}
-	}
 
 	return nil
 }
