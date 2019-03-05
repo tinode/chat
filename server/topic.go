@@ -987,7 +987,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Le
 			update["ModeGiven"] = userData.modeGiven
 		}
 		if len(update) > 0 {
-			if err := store.Subs.Update(t.name, asUid, update, false); err != nil {
+			if err := store.Subs.Update(t.name, asUid, update, true); err != nil {
 				sess.queueOut(ErrUnknown(pktID, toriginal, now))
 				return changed, err
 			}
@@ -1247,6 +1247,9 @@ func (t *Topic) replyGetDesc(sess *Session, asUid types.Uid, id string, opts *Ms
 			desc.DelId = max(pud.delID, t.delID)
 			desc.ReadSeqId = pud.readID
 			desc.RecvSeqId = max(pud.recvID, pud.readID)
+		} else {
+			// Send some sane value of touched.
+			desc.TouchedAt = &t.updated
 		}
 	}
 
@@ -1571,6 +1574,8 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 						mts.TouchedAt = sub.GetTouchedAt()
 						mts.SeqId = sub.GetSeqId()
 						mts.DelId = sub.DelId
+					} else {
+						mts.TouchedAt = &sub.UpdatedAt
 					}
 
 					lastSeen := sub.GetLastSeen()
@@ -1607,7 +1612,6 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 
 			if !deleted {
 				mts.UpdatedAt = &sub.UpdatedAt
-
 				if isReader && !banned {
 					mts.ReadSeqId = sub.ReadSeqId
 					mts.RecvSeqId = sub.RecvSeqId

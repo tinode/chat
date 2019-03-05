@@ -729,7 +729,13 @@ func (s *Subscription) GetTouchedAt() *time.Time {
 
 // SetTouchedAt sets the value of touchedAt.
 func (s *Subscription) SetTouchedAt(touchedAt *time.Time) {
-	s.touchedAt = touchedAt
+	if s.touchedAt == nil || s.touchedAt.Before(touchedAt) {
+		s.touchedAt = touchedAt
+	}
+
+	if s.touchedAt.Before(s.UpdatedAt) {
+		s.touchedAt = &s.UpdatedAt
+	}
 }
 
 // GetSeqId returns seqId.
