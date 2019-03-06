@@ -729,7 +729,7 @@ func (s *Subscription) GetTouchedAt() *time.Time {
 
 // SetTouchedAt sets the value of touchedAt.
 func (s *Subscription) SetTouchedAt(touchedAt *time.Time) {
-	if s.touchedAt == nil || s.touchedAt.Before(touchedAt) {
+	if s.touchedAt == nil || touchedAt.After(*s.touchedAt) {
 		s.touchedAt = touchedAt
 	}
 

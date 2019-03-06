@@ -1313,7 +1313,10 @@ func (t *Topic) replySetDesc(sess *Session, asUid types.Uid, set *MsgClientSet) 
 	}
 
 	var err error
-	var sendPres bool
+	// DefaultAccess and/or Public have chanegd
+	var sendCommon bool
+	// Private has changed
+	var sendPriv bool
 
 	// Change to the main object
 	core := make(map[string]interface{})
@@ -1324,7 +1327,7 @@ func (t *Topic) replySetDesc(sess *Session, asUid types.Uid, set *MsgClientSet) 
 		case types.TopicCatMe:
 			// Update current user
 			err = assignAccess(core, set.Desc.DefaultAcs)
-			sendPres = assignGenericValues(core, "Public", t.public, set.Desc.Public)
+			sendCommon = assignGenericValues(core, "Public", t.public, set.Desc.Public)
 		case types.TopicCatFnd:
 			// set.Desc.DefaultAcs is ignored.
 			// Do not send presence if fnd.Public has changed.
@@ -1339,7 +1342,7 @@ func (t *Topic) replySetDesc(sess *Session, asUid types.Uid, set *MsgClientSet) 
 			// Update group topic
 			if t.owner == asUid {
 				err = assignAccess(core, set.Desc.DefaultAcs)
-				sendPres = assignGenericValues(core, "Public", t.public, set.Desc.Public)
+				sendCommon = assignGenericValues(core, "Public", t.public, set.Desc.Public)
 			} else if set.Desc.DefaultAcs != nil || set.Desc.Public != nil {
 				// This is a request from non-owner
 				sess.queueOut(ErrPermissionDenied(set.Id, set.Topic, now))
@@ -1352,7 +1355,7 @@ func (t *Topic) replySetDesc(sess *Session, asUid types.Uid, set *MsgClientSet) 
 			return err
 		}
 
-		sendPres = sendPres || assignGenericValues(sub, "Private", t.perUser[asUid].private, set.Desc.Private)
+		sendPriv = assignGenericValues(sub, "Private", t.perUser[asUid].private, set.Desc.Private)
 	}
 
 	if len(core) > 0 {
@@ -1397,14 +1400,19 @@ func (t *Topic) replySetDesc(sess *Session, asUid types.Uid, set *MsgClientSet) 
 		t.perUser[asUid] = pud
 	}
 
-	if sendPres {
-		// t.Public has changed, make an announcement
-		if t.cat == types.TopicCatMe {
-			t.presUsersOfInterest("upd", "")
-			t.presSingleUserOffline(asUid, "upd", nilPresParams, sess.sid, false)
-		} else {
-			t.presSubsOffline("upd", nilPresParams, nilPresFilters, sess.sid, false)
+	if sendCommon || sendPriv {
+		// t.public, t.accessAuth/Anon have changed, make an announcement
+		if sendCommon {
+			if t.cat == types.TopicCatMe {
+				t.presUsersOfInterest("upd", "")
+			} else {
+				// Notify all subscribers on 'me' except the user who made the change.
+				// He will be notified separately (see below).
+				t.presSubsOffline("upd", nilPresParams, &presFilters{excludeUser: asUid.UserId()}, sess.sid, false)
+			}
 		}
+		// Notify user's other sessions.
+		t.presSingleUserOffline(asUid, "upd", nilPresParams, sess.sid, false)
 	}
 
 	sess.queueOut(NoErr(set.Id, set.Topic, now))
