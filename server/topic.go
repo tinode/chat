@@ -2191,43 +2191,40 @@ func (t *Topic) notifySubChange(uid, actor types.Uid, oldWant, oldGiven,
 	}
 
 	// Handling of muting/unmuting.
-	if !(newWant & newGiven).IsPresencer() && (oldWant & oldGiven).IsPresencer() {
-		// Muted.
-		// Case A: subscription deleted.
-		// Case B: subscription muted only.
-
-		if unsub {
-			// Subscription deleted
-			// In case of a P2P topic subscribe/unsubscribe users from each other's notifications.
-			if t.cat == types.TopicCatP2P {
-				uid2 := t.p2pOtherUser(uid)
-				// Remove user1's subscription to user2 and notify user1's other sessions that he is gone.
-				t.presSingleUserOffline(uid, "gone", nilPresParams, skip, false)
-				// Tell user2 that user1 is offline but let him keep sending updates in case user1 resubscribes.
-				presSingleUserOfflineOffline(uid2, target, "off", nilPresParams, "")
-			} else if t.cat == types.TopicCatGrp {
-				// Notify all sharers that the user is offline now.
-				t.presSubsOnline("off", uid.UserId(), nilPresParams,
-					&presFilters{
-						filterIn:    types.ModeCSharer,
-						excludeUser: target},
-					skip)
-			}
-		} else {
-			// Subscription just muted.
-			var source string
-			if t.cat == types.TopicCatP2P {
-				source = t.p2pOtherUser(uid).UserId()
-			} else if t.cat == types.TopicCatGrp {
-				source = t.name
-			}
-			if source != "" {
-				// Tell user1 to start discarding updates from muted topic/user.
-				presSingleUserOfflineOffline(uid, source, "off+dis", nilPresParams, "")
-			}
+	// Case A: subscription deleted.
+	// Case B: subscription muted only.
+	if unsub {
+		// Subscription deleted
+		// In case of a P2P topic subscribe/unsubscribe users from each other's notifications.
+		if t.cat == types.TopicCatP2P {
+			uid2 := t.p2pOtherUser(uid)
+			// Remove user1's subscription to user2 and notify user1's other sessions that he is gone.
+			t.presSingleUserOffline(uid, "gone", nilPresParams, skip, false)
+			// Tell user2 that user1 is offline but let him keep sending updates in case user1 resubscribes.
+			presSingleUserOfflineOffline(uid2, target, "off", nilPresParams, "")
+		} else if t.cat == types.TopicCatGrp {
+			// Notify all sharers that the user is offline now.
+			t.presSubsOnline("off", uid.UserId(), nilPresParams,
+				&presFilters{
+					filterIn:    types.ModeCSharer,
+					excludeUser: target},
+				skip)
 		}
+	} else if !(newWant & newGiven).IsPresencer() && (oldWant & oldGiven).IsPresencer() {
+		// Subscription just muted.
+		var source string
+		if t.cat == types.TopicCatP2P {
+			source = t.p2pOtherUser(uid).UserId()
+		} else if t.cat == types.TopicCatGrp {
+			source = t.name
+		}
+		if source != "" {
+			// Tell user1 to start discarding updates from muted topic/user.
+			presSingleUserOfflineOffline(uid, source, "off+dis", nilPresParams, "")
+		}
+
 	} else if (newWant & newGiven).IsPresencer() && !(oldWant & oldGiven).IsPresencer() {
-		// Un-muted.
+		// Subscription un-muted.
 
 		// Notify subscriber of topic's online status.
 		// log.Printf("topic[%s] sending ?unkn+en to me[%s]", t.name, asUid.String())
