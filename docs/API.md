@@ -938,15 +938,22 @@ note: {
   what: "kp", // string, one of "kp" (key press), "read" (read notification),
               // "rcpt" (received notification), any other string will cause
               // message to be silently ignored, required
-  seq: 123, // integer, ID of the message being acknowledged, required for
-            // rcpt & read
+  seq: 123,   // integer, ID of the message being acknowledged, required for
+              // rcpt & read
+  unread: 10  // integer, client-reported total count of unread messages, optional.
 }
 ```
 
 The following actions are currently recognised:
  * kp: key press, i.e. a typing notification. The client should use it to indicate that the user is composing a new message.
- * recv: a `{data}` message is received by the client software but not yet seen by user.
+ * recv: a `{data}` message is received by the client software but may not yet seen by user.
  * read: a `{data}` message is seen by the user. It implies `recv` as well.
+
+The `read` and `recv` notifications may optionally include `unread` value which is the total count of unread messages as determined by this client. The `unread` count is stored on the server and included in push notifications to be shown on a badge on iOS:
+<p align="center">
+  <img src="./ios-pill-128.png" alt="Tinode iOS icon with a pill counter" width=64 height=64 />
+</p>
+
 
 ### Server to client messages
 

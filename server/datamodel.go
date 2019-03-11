@@ -271,6 +271,8 @@ type MsgClientNote struct {
 	What string `json:"what"`
 	// Server-issued message ID being reported
 	SeqId int `json:"seq,omitempty"`
+	// Client's count of unread messages to report back to the server. Used in push notifications on iOS.
+	Unread int `json:"unread,omitempty"`
 }
 
 // ClientComMessage is a wrapper for client messages.
