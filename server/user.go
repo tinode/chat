@@ -419,9 +419,10 @@ func userUpdater() {
 						continue
 					}
 					uce.unread = count
-				}
+				} else {
 
-				uce.unread++
+					uce.unread++
+				}
 				usersCache[uid] = uce
 
 				rcptTo.Unread = uce.unread
