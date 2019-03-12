@@ -116,13 +116,19 @@ func payloadToData(pl *push.Payload) (map[string]string, error) {
 	data["ts"] = pl.Timestamp.Format(time.RFC3339Nano)
 	data["seq"] = strconv.Itoa(pl.SeqId)
 	data["mime"] = pl.ContentType
+	data["unread"] = strconv.Itoa(pl.Unread)
 	data["content"], err = drafty.ToPlainText(pl.Content)
 	if err != nil {
 		return nil, err
 	}
 
-	if len(data["content"]) > 128 {
-		data["content"] = data["content"][:128]
+	// Trim long strings to 80 runes.
+	// Check byte length first and don't waste time converting short strings.
+	if len(data["content"]) > 80 {
+		runes := []rune(data["content"])
+		if len(runes) > 80 {
+			data["content"] = string(runes[:80]) + "…"
+		}
 	}
 
 	return data, nil

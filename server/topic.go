@@ -466,6 +466,7 @@ func (t *Topic) run(hub *Hub) {
 								if sess.deviceID != "" {
 									// List of device IDs which already received the message. Push should
 									// skip them.
+									// The same device ID may appear twice.
 									pushRcpt.rcpt.To[i].Devices = append(pushRcpt.rcpt.To[i].Devices, sess.deviceID)
 								}
 							}
@@ -2261,7 +2262,7 @@ func (t *Topic) makePushReceipt(fromUid types.Uid, data *MsgServerData) *pushRec
 
 	i := 0
 	for uid := range t.perUser {
-		// Done't send to the originating user, send only to those who have notifications enabled.
+		// Don't send to the originating user, send only to those who have notifications enabled.
 		if uid != fromUid &&
 			(t.perUser[uid].modeWant & t.perUser[uid].modeGiven).IsPresencer() &&
 			!t.perUser[uid].deleted {

@@ -18,6 +18,8 @@ type Recipient struct {
 	Delivered int `json:"delivered"`
 	// List of user's devices that the packet was delivered to (if known). Len(Devices) >= Delivered
 	Devices []string `json:"devices,omitempty"`
+	// Unread count to include in the push
+	Unread int `json:"unread"`
 }
 
 // Receipt is the push payload with a list of recipients.

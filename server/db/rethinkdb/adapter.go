@@ -677,6 +677,46 @@ func (a *adapter) UserGetByCred(method, value string) (t.Uid, error) {
 	return t.ParseUid(userId["User"]), nil
 }
 
+// UserUnreadCount returns the total number of unread messages in all topics with
+// the R permission.
+func (a *adapter) UserUnreadCount(uid t.Uid) (int, error) {
+	/*
+		r.db("tinode").table("subscriptions").getAll("8L6HpDuF05c", {index: "User"})
+			.eqJoin("Topic", r.db("tinode").table("topics"), {index: "Id"})
+			.filter(
+				r.not(r.row.hasFields({"left": "DeletedAt"}, {"right": "DeletedAt"}))
+			)
+			.zip()
+			.pluck("ReadSeqId", "ModeWant", "ModeGiven", "SeqId")
+			.filter(r.js('(function(row) {return row.ModeWant&row.ModeGiven&1 > 0;})'))
+			.sum(function(x) {return x.getField("SeqId").sub(x.getField("ReadSeqId"));})
+	*/
+	cursor, err := rdb.DB(a.dbName).Table("subscriptions").GetAllByIndex("User", uid.String()).
+		EqJoin("Topic", rdb.DB(a.dbName).Table("topics"), rdb.EqJoinOpts{Index: "Id"}).
+		Filter(rdb.Not(rdb.Row.HasFields(map[string]interface{}{"left": "DeletedAt"}).
+			And(rdb.Not(rdb.Row.HasFields(map[string]interface{}{"right": "DeletedAt"}))))).
+		Zip().
+		Pluck("ReadSeqId", "ModeWant", "ModeGiven", "SeqId").
+		Filter(rdb.JS("(function(row) {return (row.ModeWant & row.ModeGiven & 2) > 0;})")).
+		Sum(func(row rdb.Term) rdb.Term { return row.Field("SeqId").Sub(row.Field("ReadSeqId")) }).
+		Run(a.conn)
+	if err != nil {
+		return -1, err
+	}
+	defer cursor.Close()
+
+	if cursor.IsNil() {
+		return 0, nil
+	}
+
+	var count int
+	if err = cursor.One(&count); err != nil {
+		return -1, err
+	}
+
+	return count, nil
+}
+
 // *****************************
 
 // TopicCreate creates a topic from template

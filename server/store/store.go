@@ -348,6 +348,11 @@ func (UsersObjMapper) DelCred(id types.Uid, method string) error {
 	return adp.CredDel(id, method)
 }
 
+// GetUnreadCount returs user's total count of unread messages in all topics with the R permissions
+func (UsersObjMapper) GetUnreadCount(id types.Uid) (int, error) {
+	return adp.UserUnreadCount(id)
+}
+
 // TopicsObjMapper is a struct to hold methods for persistence mapping for the topic object.
 type TopicsObjMapper struct{}
 

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/tinode/chat/server/auth"
+	"github.com/tinode/chat/server/push"
 	"github.com/tinode/chat/server/store"
 	"github.com/tinode/chat/server/store/types"
 )
@@ -362,4 +363,75 @@ func replyDelUser(s *Session, msg *ClientComMessage) {
 		// Evict the current session if it belongs to the deleted user.
 		s.stop <- s.serialize(NoErrEvicted("", "", msg.timestamp))
 	}
+}
+
+type userUpdate struct {
+	// User id being updated
+	uid types.Uid
+	// Unread count
+	unread int
+	// Treat the count as an increment as opposite to the final value.
+	inc bool
+
+	// Optional push notification
+	pushRcpt *push.Receipt
+}
+
+type UserCacheEntry struct {
+	unread int
+}
+
+var usersCache map[types.Uid]UserCacheEntry
+
+// Initialize users cache.
+func usersInit() {
+	usersCache = make(map[types.Uid]UserCacheEntry)
+
+	globals.usersUpdate = make(chan *userUpdate, 1024)
+
+	go userUpdater()
+}
+
+// Shutdown users cache.
+func usersShutdown() {
+	if globals.statsUpdate != nil {
+		globals.statsUpdate <- nil
+	}
+}
+
+// The go routine for processing updates to users cache.
+func userUpdater() {
+	for upd := range globals.usersUpdate {
+		if upd == nil {
+			globals.usersUpdate = nil
+			// Dont' care to close the channel.
+			break
+		}
+
+		// Handle update
+		uce, ok := usersCache[upd.uid]
+		if !ok {
+			count, err := store.Users.GetUnreadCount(upd.uid)
+			if err != nil {
+				log.Println("users: failed to load unread count", err)
+				continue
+			}
+			uce.unread = count
+		}
+
+		if upd.inc {
+			uce.unread += upd.unread
+		} else {
+			uce.unread = upd.unread
+		}
+
+		usersCache[upd.uid] = uce
+
+		if upd.pushRcpt != nil {
+			upd.pushRcpt.Payload.Unread = uce.unread
+			push.Push(upd.pushRcpt)
+		}
+	}
+
+	log.Println("users: shutdown")
 }
