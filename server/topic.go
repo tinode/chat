@@ -156,11 +156,6 @@ type shutDown struct {
 	reason int
 }
 
-type pushReceipt struct {
-	rcpt   *push.Receipt
-	uidMap map[types.Uid]int
-}
-
 var nilPresParams = &presParams{}
 var nilPresFilters = &presFilters{}
 
@@ -273,7 +268,7 @@ func (t *Topic) run(hub *Hub) {
 		case msg := <-t.broadcast:
 			// Content message intended for broadcasting to recipients
 
-			var pushRcpt *pushReceipt
+			var pushRcpt *push.Receipt
 			asUid := types.ParseUserId(msg.from)
 			if msg.Data != nil {
 				if t.isSuspended() {
@@ -461,14 +456,15 @@ func (t *Topic) run(hub *Hub) {
 					if sess.queueOut(msg) {
 						// Update device map with the device ID which should NOT receive the notification.
 						if pushRcpt != nil {
-							if i, ok := pushRcpt.uidMap[sess.uid]; ok {
-								pushRcpt.rcpt.To[i].Delivered++
+							if addr, ok := pushRcpt.To[sess.uid]; ok {
+								addr.Delivered++
 								if sess.deviceID != "" {
 									// List of device IDs which already received the message. Push should
 									// skip them.
 									// The same device ID may appear twice.
-									pushRcpt.rcpt.To[i].Devices = append(pushRcpt.rcpt.To[i].Devices, sess.deviceID)
+									addr.Devices = append(addr.Devices, sess.deviceID)
 								}
+								pushRcpt.To[sess.uid] = addr
 							}
 						}
 					} else {
@@ -479,7 +475,7 @@ func (t *Topic) run(hub *Hub) {
 				}
 
 				if pushRcpt != nil {
-					push.Push(pushRcpt.rcpt)
+					push.Push(pushRcpt)
 				}
 
 			} else {
@@ -2239,10 +2235,7 @@ func (t *Topic) notifySubChange(uid, actor types.Uid, oldWant, oldGiven,
 }
 
 // Prepares a payload to be delivered to a mobile device as a push notification.
-func (t *Topic) makePushReceipt(fromUid types.Uid, data *MsgServerData) *pushReceipt {
-	// Index user_id -> location_of_user_in_Rcpt_To_field
-	idx := make(map[types.Uid]int, t.subsCount())
-
+func (t *Topic) makePushReceipt(fromUid types.Uid, data *MsgServerData) *push.Receipt {
 	// The `Topic` in the push receipt is `t.xoriginal` for group topics, `fromUid` for p2p topics,
 	// not the t.original(fromUid) because it's the topic name as seen by the recepient, not by the sender.
 	topic := t.xoriginal
@@ -2252,7 +2245,7 @@ func (t *Topic) makePushReceipt(fromUid types.Uid, data *MsgServerData) *pushRec
 
 	// Initialize the push receipt.
 	receipt := push.Receipt{
-		To: make([]push.Recipient, t.subsCount()),
+		To: make(map[types.Uid]push.Recipient, t.subsCount()),
 		Payload: push.Payload{
 			Topic:     topic,
 			From:      data.From,
@@ -2260,20 +2253,21 @@ func (t *Topic) makePushReceipt(fromUid types.Uid, data *MsgServerData) *pushRec
 			SeqId:     data.SeqId,
 			Content:   data.Content}}
 
-	i := 0
 	for uid := range t.perUser {
-		// Don't send to the originating user, send only to those who have notifications enabled.
+		// Send only to those who have notifications enabled, exclude the originating user.
 		if uid != fromUid &&
 			(t.perUser[uid].modeWant & t.perUser[uid].modeGiven).IsPresencer() &&
 			!t.perUser[uid].deleted {
 
-			receipt.To[i].User = uid
-			idx[uid] = i
-			i++
+			receipt.To[uid] = push.Recipient{}
 		}
 	}
-
-	return &pushReceipt{rcpt: &receipt, uidMap: idx}
+	if len(receipt.To) > 0 {
+		return &receipt
+	} else {
+		// If there are no recepients there is no need to send the push notification.
+		return nil
+	}
 }
 
 func (t *Topic) mostRecentSession() *Session {

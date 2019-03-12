@@ -408,27 +408,26 @@ func userUpdater() {
 			break
 		}
 
-		// Handle update
-		uce, ok := usersCache[upd.uid]
-		if !ok {
-			count, err := store.Users.GetUnreadCount(upd.uid)
-			if err != nil {
-				log.Println("users: failed to load unread count", err)
-				continue
-			}
-			uce.unread = count
-		}
-
-		if upd.inc {
-			uce.unread += upd.unread
-		} else {
-			uce.unread = upd.unread
-		}
-
-		usersCache[upd.uid] = uce
-
 		if upd.pushRcpt != nil {
-			upd.pushRcpt.Payload.Unread = uce.unread
+			for uid, rcptTo := range upd.pushRcpt.To {
+				// Handle update
+				uce, ok := usersCache[uid]
+				if !ok {
+					count, err := store.Users.GetUnreadCount(uid)
+					if err != nil {
+						log.Println("users: failed to load unread count", err)
+						continue
+					}
+					uce.unread = count
+				}
+
+				uce.unread++
+				usersCache[uid] = uce
+
+				rcptTo.Unread = uce.unread
+				upd.pushRcpt.To[uid] = rcptTo
+			}
+
 			push.Push(upd.pushRcpt)
 		}
 	}

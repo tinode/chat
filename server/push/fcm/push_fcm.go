@@ -116,7 +116,6 @@ func payloadToData(pl *push.Payload) (map[string]string, error) {
 	data["ts"] = pl.Timestamp.Format(time.RFC3339Nano)
 	data["seq"] = strconv.Itoa(pl.SeqId)
 	data["mime"] = pl.ContentType
-	data["unread"] = strconv.Itoa(pl.Unread)
 	data["content"], err = drafty.ToPlainText(pl.Content)
 	if err != nil {
 		return nil, err
@@ -146,8 +145,10 @@ func sendNotifications(rcpt *push.Receipt, config *configType) {
 	// List of UIDs for querying the database
 	uids := make([]t.Uid, len(rcpt.To))
 	skipDevices := make(map[string]bool)
-	for i, to := range rcpt.To {
-		uids[i] = to.User
+	i := 0
+	for uid, to := range rcpt.To {
+		uids[i] = uid
+		i++
 
 		// Some devices were online and received the message. Skip them.
 		for _, deviceID := range to.Devices {
@@ -172,6 +173,7 @@ func sendNotifications(rcpt *push.Receipt, config *configType) {
 					Token: d.DeviceId,
 					Data:  data,
 				}
+
 				if d.Platform == "android" {
 					msg.Android = &fcm.AndroidConfig{
 						Priority: "high",
@@ -183,6 +185,14 @@ func sendNotifications(rcpt *push.Receipt, config *configType) {
 							Icon:  config.Icon,
 							Color: config.IconColor,
 						}
+					}
+				} else if d.Platform == "ios" {
+					// iOS uses Badge to show the total unread message count.
+					badge := rcpt.To[uid].Unread
+					msg.APNS = &fcm.APNSConfig{
+						Payload: &fcm.APNSPayload{
+							Aps: &fcm.Aps{Badge: &badge},
+						},
 					}
 				}
 
