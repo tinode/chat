@@ -194,6 +194,10 @@ func sendNotifications(rcpt *push.Receipt, config *configType) {
 							Aps: &fcm.Aps{Badge: &badge},
 						},
 					}
+					msg.Notification = &fcm.Notification{
+						Title: "New message",
+						Body:  data["content"],
+					}
 				}
 
 				// Firebase messaging is buggy and poorly documented. If
