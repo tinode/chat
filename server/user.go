@@ -399,8 +399,46 @@ func usersShutdown() {
 	}
 }
 
+func usersUpdateCache(uid types.Uid, val int, inc bool) {
+	if globals.usersUpdate != nil && (!inc || val != 0) {
+		select {
+		case globals.usersUpdate <- &userUpdate{uid: uid, unread: val, inc: inc}:
+		default:
+		}
+	}
+}
+
+func usersPush(rcpt *push.Receipt) {
+	if globals.usersUpdate != nil {
+		select {
+		case globals.usersUpdate <- &userUpdate{pushRcpt: rcpt}:
+		default:
+		}
+	}
+}
+
 // The go routine for processing updates to users cache.
 func userUpdater() {
+	updater := func(uid types.Uid, val int, inc bool) int {
+		uce, ok := usersCache[uid]
+		if !ok {
+			count, err := store.Users.GetUnreadCount(uid)
+			if err != nil {
+				log.Println("users: failed to load unread count", err)
+				return -1
+			}
+			uce.unread = count
+		} else if inc {
+			uce.unread += val
+		} else {
+			uce.unread = val
+		}
+
+		usersCache[uid] = uce
+
+		return uce.unread
+	}
+
 	for upd := range globals.usersUpdate {
 		if upd == nil {
 			globals.usersUpdate = nil
@@ -411,25 +449,16 @@ func userUpdater() {
 		if upd.pushRcpt != nil {
 			for uid, rcptTo := range upd.pushRcpt.To {
 				// Handle update
-				uce, ok := usersCache[uid]
-				if !ok {
-					count, err := store.Users.GetUnreadCount(uid)
-					if err != nil {
-						log.Println("users: failed to load unread count", err)
-						continue
-					}
-					uce.unread = count
-				} else {
-
-					uce.unread++
+				unread := updater(uid, 1, true)
+				if unread >= 0 {
+					rcptTo.Unread = unread
+					upd.pushRcpt.To[uid] = rcptTo
 				}
-				usersCache[uid] = uce
-
-				rcptTo.Unread = uce.unread
-				upd.pushRcpt.To[uid] = rcptTo
 			}
 
 			push.Push(upd.pushRcpt)
+		} else {
+			updater(upd.uid, upd.unread, upd.inc)
 		}
 	}
 

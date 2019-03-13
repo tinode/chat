@@ -360,9 +360,11 @@ func (t *Topic) run(hub *Hub) {
 						continue
 					}
 
-					var read, recv int
+					var read, recv, unread int
 					if msg.Info.What == "read" {
 						if msg.Info.SeqId > pud.readID {
+							// The number of unread messages has decreased, negative value
+							unread = pud.readID - msg.Info.SeqId
 							pud.readID = msg.Info.SeqId
 							read = pud.readID
 						} else {
@@ -395,6 +397,9 @@ func (t *Topic) run(hub *Hub) {
 
 					// Read/recv updated: notify user's other sessions of the change
 					t.presPubMessageCount(uid, recv, read, msg.skipSid)
+
+					// Update cached count of unread messages
+					usersUpdateCache(uid, unread, true)
 
 					t.perUser[uid] = pud
 				}
@@ -475,7 +480,8 @@ func (t *Topic) run(hub *Hub) {
 				}
 
 				if pushRcpt != nil {
-					push.Push(pushRcpt)
+					// usersPush will update unread message count and send push notification.
+					usersPush(pushRcpt)
 				}
 
 			} else {
@@ -1020,8 +1026,17 @@ func (t *Topic) requestSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Le
 	// Apply changes.
 	t.perUser[asUid] = userData
 
-	// Send presence notifications.
+	// Send presence notifications and update cached unread count.
 	if oldWant != userData.modeWant || oldGiven != userData.modeGiven {
+		oldReader := (oldWant & oldGiven).IsReader()
+		newReader := (userData.modeWant & userData.modeGiven).IsReader()
+		if oldReader && !newReader {
+			// Decrement unread count
+			usersUpdateCache(asUid, userData.readID-t.lastID, true)
+		} else if !oldReader && newReader {
+			// Increment unread count
+			usersUpdateCache(asUid, t.lastID-userData.readID, true)
+		}
 		t.notifySubChange(asUid, asUid, oldWant, oldGiven, userData.modeWant, userData.modeGiven, sess.sid)
 	}
 
@@ -1166,6 +1181,16 @@ func (t *Topic) approveSub(h *Hub, sess *Session, asUid, target types.Uid, set *
 	// Access mode has changed.
 	var changed bool
 	if oldGiven != userData.modeGiven {
+		oldReader := (oldWant & oldGiven).IsReader()
+		newReader := (userData.modeWant & userData.modeGiven).IsReader()
+		if oldReader && !newReader {
+			// Decrement unread count
+			usersUpdateCache(target, userData.readID-t.lastID, true)
+		} else if !oldReader && newReader {
+			// Increment unread count
+			usersUpdateCache(target, t.lastID-userData.readID, true)
+		}
+
 		t.notifySubChange(target, asUid, oldWant, oldGiven, userData.modeWant, userData.modeGiven, sess.sid)
 		changed = true
 	}
@@ -2073,6 +2098,11 @@ func (t *Topic) replyDelSub(h *Hub, sess *Session, asUid types.Uid, del *MsgClie
 
 	sess.queueOut(NoErr(del.Id, t.original(asUid), now))
 
+	// Update cached unread count: negative value
+	if (pud.modeWant & pud.modeGiven).IsReader() {
+		usersUpdateCache(uid, pud.readID-t.lastID, true)
+	}
+
 	// ModeUnset signifies deleted subscription as opposite to ModeNone - no access.
 	t.notifySubChange(uid, asUid, pud.modeWant, pud.modeGiven, types.ModeUnset, types.ModeUnset, sess.sid)
 
@@ -2105,6 +2135,12 @@ func (t *Topic) replyLeaveUnsub(h *Hub, sess *Session, asUid types.Uid, id strin
 	}
 
 	pud := t.perUser[asUid]
+
+	// Update cached unread count: negative value
+	if (pud.modeWant & pud.modeGiven).IsReader() {
+		usersUpdateCache(asUid, pud.readID-t.lastID, true)
+	}
+
 	// Send notifications.
 	t.notifySubChange(asUid, asUid, pud.modeWant, pud.modeGiven, types.ModeUnset, types.ModeUnset, sess.sid)
 	// Evict all user's sessions, clear cached data, send notifications.
