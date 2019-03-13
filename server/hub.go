@@ -198,7 +198,11 @@ func (h *Hub) run() {
 			} else {
 				// Topic is not in memory. Read or update the DB record and reply here.
 				if meta.pkt.Get != nil {
-					go replyOfflineTopicGetDesc(meta.sess, meta.topic, meta.pkt)
+					if meta.what == constMsgMetaDesc {
+						go replyOfflineTopicGetDesc(meta.sess, meta.topic, meta.pkt)
+					} else {
+						go replyOfflineTopicGetSub(meta.sess, meta.topic, meta.pkt)
+					}
 				} else if meta.pkt.Set != nil {
 					go replyOfflineTopicSetSub(meta.sess, meta.topic, meta.pkt)
 				}
