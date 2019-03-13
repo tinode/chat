@@ -518,7 +518,6 @@ func (sess *Session) rpcWriteLoop() {
 		globals.sessionStore.Delete(sess)
 		sess.unsubAll()
 	}()
-	var unused bool
 
 	for {
 		select {
@@ -529,8 +528,7 @@ func (sess *Session) rpcWriteLoop() {
 			}
 			// The error is returned if the remote node is down. Which means the remote
 			// session is also disconnected.
-			if err := sess.clnode.call("Cluster.Proxy",
-				&ClusterResp{Msg: msg.([]byte), FromSID: sess.sid}, &unused); err != nil {
+			if err := sess.clnode.respond(&ClusterResp{Msg: msg.([]byte), FromSID: sess.sid}); err != nil {
 
 				log.Println("sess.writeRPC: " + err.Error())
 				return
@@ -538,8 +536,7 @@ func (sess *Session) rpcWriteLoop() {
 		case msg := <-sess.stop:
 			// Shutdown is requested, don't care if the message is delivered
 			if msg != nil {
-				sess.clnode.call("Cluster.Proxy", &ClusterResp{Msg: msg.([]byte), FromSID: sess.sid},
-					&unused)
+				sess.clnode.respond(&ClusterResp{Msg: msg.([]byte), FromSID: sess.sid})
 			}
 			return
 
