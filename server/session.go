@@ -1024,25 +1024,6 @@ func (s *Session) expandTopicName(msg *ClientComMessage) (string, *ServerComMess
 	return routeTo, nil
 }
 
-// SerialFormat is an enum of possible serialization formats.
-type SerialFormat int
-
-const (
-	// FmtNONE undefined format
-	FmtNONE SerialFormat = iota
-	// FmtJSON JSON format
-	FmtJSON
-	// FmtPROTO Protobuffer format
-	FmtPROTO
-)
-
-func (s *Session) getSerialFormat() SerialFormat {
-	if s.proto == GRPC {
-		return FmtPROTO
-	}
-	return FmtJSON
-}
-
 func (s *Session) serialize(msg *ServerComMessage) interface{} {
 	if s.proto == GRPC {
 		return pbServSerialize(msg)
