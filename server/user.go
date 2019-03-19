@@ -455,7 +455,6 @@ func userUpdater() {
 					upd.pushRcpt.To[uid] = rcptTo
 				}
 			}
-
 			push.Push(upd.pushRcpt)
 		} else {
 			updater(upd.uid, upd.unread, upd.inc)
