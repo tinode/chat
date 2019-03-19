@@ -908,7 +908,7 @@ type Message struct {
 	DeletedFor []SoftDelete `json:"DeletedFor,omitempty"`
 	SeqId      int
 	Topic      string
-	// UID as string of the user who sent the message, could be empty
+	// Sender's user ID as string (without 'usr' prefix), could be empty.
 	From    string
 	Head    MessageHeaders `json:"Head,omitempty"`
 	Content interface{}

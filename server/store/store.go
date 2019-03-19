@@ -512,7 +512,7 @@ func (MessagesObjMapper) Save(msg *types.Message, readBySender bool) error {
 	// Mark message as read by the sender.
 	if readBySender {
 		// Ignore the error here. It's not a big deal if it fails.
-		adp.SubsUpdate(msg.Topic, types.ParseUserId(msg.From),
+		adp.SubsUpdate(msg.Topic, types.ParseUid(msg.From),
 			map[string]interface{}{
 				"RecvSeqId": msg.SeqId,
 				"ReadSeqId": msg.SeqId})
