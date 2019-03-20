@@ -18,9 +18,10 @@ import (
 
 // adapter holds RethinkDb connection data.
 type adapter struct {
-	conn    *rdb.Session
-	dbName  string
-	version int
+	conn       *rdb.Session
+	dbName     string
+	maxResults int
+	version    int
 }
 
 const (
@@ -30,6 +31,8 @@ const (
 	dbVersion = 106
 
 	adapterName = "rethinkdb"
+
+	defaultMaxResults = 1024
 )
 
 // See https://godoc.org/github.com/rethinkdb/rethinkdb-go#ConnectOpts for explanations.
@@ -50,14 +53,6 @@ type configType struct {
 	DiscoverHosts     bool        `json:"discover_hosts,omitempty"`
 	HostDecayDuration int         `json:"host_decay_duration,omitempty"`
 }
-
-// TODO: convert hard-coded limits to config options
-const (
-	// Maximum number of records to return.
-	maxResults = 1024
-	// Maximum number of topic subscribers to return
-	maxSubscribers = 256
-)
 
 // Open initializes rethinkdb session
 func (a *adapter) Open(jsonconfig string) error {
@@ -89,6 +84,8 @@ func (a *adapter) Open(jsonconfig string) error {
 	} else {
 		a.dbName = config.Database
 	}
+
+	a.maxResults = defaultMaxResults
 
 	opts.Database = a.dbName
 	opts.Username = config.Username
@@ -172,6 +169,17 @@ func (a *adapter) CheckDbVersion() error {
 // GetName returns string that adapter uses to register itself with store.
 func (a *adapter) GetName() string {
 	return adapterName
+}
+
+// SetMaxResults configures how many results can be returned in a single DB call.
+func (a *adapter) SetMaxResults(val int) error {
+	if val <= 0 {
+		a.maxResults = defaultMaxResults
+	} else {
+		a.maxResults = val
+	}
+
+	return nil
 }
 
 // CreateDb initializes the storage. If reset is true, the database is first deleted losing all the data.
@@ -796,7 +804,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 		// Filter out rows with defined DeletedAt
 		q = q.Filter(rdb.Row.HasFields("DeletedAt").Not())
 	}
-	limit := maxResults
+	limit := a.maxResults
 	if opts != nil {
 		// Ignore IfModifiedSince - we must return all entries
 		// Those unmodified will be stripped of Public & Private.
@@ -920,7 +928,7 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 		q = q.Filter(rdb.Row.HasFields("DeletedAt").Not())
 	}
 
-	limit := maxSubscribers
+	limit := a.maxResults
 	var oneUser t.Uid
 	if opts != nil {
 		// Ignore IfModifiedSince - we must return all entries
@@ -1129,7 +1137,7 @@ func (a *adapter) SubsForUser(forUser t.Uid, keepDeleted bool, opts *t.QueryOpt)
 	if !keepDeleted {
 		q = q.Filter(rdb.Row.HasFields("DeletedAt").Not())
 	}
-	limit := maxResults
+	limit := a.maxResults
 	if opts != nil {
 		// Ignore IfModifiedSince - we must return all entries
 		// Those unmodified will be stripped of Public & Private.
@@ -1167,7 +1175,7 @@ func (a *adapter) SubsForTopic(topic string, keepDeleted bool, opts *t.QueryOpt)
 		q = q.Filter(rdb.Row.HasFields("DeletedAt").Not())
 	}
 
-	limit := maxSubscribers
+	limit := a.maxResults
 	if opts != nil {
 		// Ignore IfModifiedSince - we must return all entries
 		// Those unmodified will be stripped of Public & Private.
@@ -1302,7 +1310,7 @@ func (a *adapter) FindUsers(uid t.Uid, req, opt []string) ([]t.Subscription, err
 			return row.Field("Tags").SetIntersection(reqTags).Count().Ne(0)
 		})
 	}
-	cursor, err := query.OrderBy(rdb.Desc("MatchedTagsCount")).Limit(maxResults).Run(a.conn)
+	cursor, err := query.OrderBy(rdb.Desc("MatchedTagsCount")).Limit(a.maxResults).Run(a.conn)
 	if err != nil {
 		return nil, err
 	}
@@ -1371,7 +1379,7 @@ func (a *adapter) FindTopics(req, opt []string) ([]t.Subscription, error) {
 		})
 	}
 
-	cursor, err := query.OrderBy(rdb.Desc("MatchedTagsCount")).Limit(maxResults).Run(a.conn)
+	cursor, err := query.OrderBy(rdb.Desc("MatchedTagsCount")).Limit(a.maxResults).Run(a.conn)
 	if err != nil {
 		return nil, err
 	}
@@ -1412,7 +1420,7 @@ func (a *adapter) MessageSave(msg *t.Message) error {
 
 func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.QueryOpt) ([]t.Message, error) {
 
-	var limit = maxResults
+	var limit = a.maxResults
 	var lower, upper interface{}
 
 	upper = rdb.MaxVal
@@ -1464,7 +1472,7 @@ func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.QueryOpt) (
 
 // Get ranges of deleted messages
 func (a *adapter) MessageGetDeleted(topic string, forUser t.Uid, opts *t.QueryOpt) ([]t.DelMessage, error) {
-	var limit = maxResults
+	var limit = a.maxResults
 	var lower, upper interface{}
 
 	upper = rdb.MaxVal
@@ -1694,7 +1702,7 @@ func (a *adapter) DeviceGetAll(uids ...t.Uid) (map[t.Uid][]t.DeviceDef, int, err
 
 	// {Id: "userid", Devices: {"hash1": {..def1..}, "hash2": {..def2..}}
 	cursor, err := rdb.DB(a.dbName).Table("users").GetAll(ids...).Pluck("Id", "Devices").
-		Default(nil).Limit(maxResults).Run(a.conn)
+		Default(nil).Limit(a.maxResults).Run(a.conn)
 	if err != nil {
 		return nil, 0, err
 	}

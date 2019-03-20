@@ -20,10 +20,12 @@ import (
 
 // adapter holds MySQL connection data.
 type adapter struct {
-	db      *sqlx.DB
-	dsn     string
-	dbName  string
-	version int
+	db     *sqlx.DB
+	dsn    string
+	dbName string
+	// Maximum number of records to return
+	maxResults int
+	version    int
 }
 
 const (
@@ -33,19 +35,14 @@ const (
 	dbVersion = 106
 
 	adapterName = "mysql"
+
+	defaultMaxResults = 1024
 )
 
 type configType struct {
 	DSN    string `json:"dsn,omitempty"`
 	DBName string `json:"database,omitempty"`
 }
-
-const (
-	// Maximum number of records to return
-	maxResults = 1024
-	// Maximum number of topic subscribers to return
-	maxSubscribers = 256
-)
 
 // Open initializes database session
 func (a *adapter) Open(jsonconfig string) error {
@@ -69,6 +66,8 @@ func (a *adapter) Open(jsonconfig string) error {
 	if a.dbName == "" {
 		a.dbName = defaultDatabase
 	}
+
+	a.maxResults = defaultMaxResults
 
 	// This just initializes the driver but does not open the network connection.
 	a.db, err = sqlx.Open("mysql", a.dsn)
@@ -138,6 +137,17 @@ func (a *adapter) CheckDbVersion() error {
 // GetName returns string that adapter uses to register itself with store.
 func (a *adapter) GetName() string {
 	return adapterName
+}
+
+// SetMaxResults configures how many results can be returned in a single DB call.
+func (a *adapter) SetMaxResults(val int) error {
+	if val <= 0 {
+		a.maxResults = defaultMaxResults
+	} else {
+		a.maxResults = val
+	}
+
+	return nil
 }
 
 // CreateDb initializes the storage.
@@ -1016,7 +1026,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 		q += " AND deletedat IS NULL"
 	}
 
-	limit := maxResults
+	limit := a.maxResults
 	if opts != nil {
 		// Ignore IfModifiedSince - we must return all entries
 		// Those unmodified will be stripped of Public & Private.
@@ -1177,7 +1187,7 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 		}
 	}
 
-	limit := maxSubscribers
+	limit := a.maxResults
 	var oneUser t.Uid
 	if opts != nil {
 		// Ignore IfModifiedSince - we must return all entries
@@ -1423,7 +1433,7 @@ func (a *adapter) SubsForUser(forUser t.Uid, keepDeleted bool, opts *t.QueryOpt)
 		q += " AND deletedAt IS NULL"
 	}
 
-	limit := maxResults // maxResults here, not maxSubscribers
+	limit := a.maxResults // maxResults here, not maxSubscribers
 	if opts != nil {
 		// Ignore IfModifiedSince - we must return all entries
 		// Those unmodified will be stripped of Public & Private.
@@ -1471,7 +1481,7 @@ func (a *adapter) SubsForTopic(topic string, keepDeleted bool, opts *t.QueryOpt)
 		// Filter out rows where DeletedAt is defined
 		q += " AND deletedAt IS NULL"
 	}
-	limit := maxSubscribers
+	limit := a.maxResults
 	if opts != nil {
 		// Ignore IfModifiedSince - we must return all entries
 		// Those unmodified will be stripped of Public & Private.
@@ -1616,7 +1626,7 @@ func (a *adapter) FindUsers(uid t.Uid, req, opt []string) ([]t.Subscription, err
 	query += "ORDER BY matches DESC LIMIT ?"
 
 	// Get users matched by tags, sort by number of matches from high to low.
-	rows, err := a.db.Queryx(query, append(args, maxResults)...)
+	rows, err := a.db.Queryx(query, append(args, a.maxResults)...)
 
 	if err != nil {
 		return nil, err
@@ -1680,7 +1690,7 @@ func (a *adapter) FindTopics(req, opt []string) ([]t.Subscription, error) {
 		args = append(args, len(req))
 	}
 	query += "ORDER BY matches DESC LIMIT ?"
-	rows, err := a.db.Queryx(query, append(args, maxResults)...)
+	rows, err := a.db.Queryx(query, append(args, a.maxResults)...)
 
 	if err != nil {
 		return nil, err
@@ -1732,7 +1742,7 @@ func (a *adapter) MessageSave(msg *t.Message) error {
 }
 
 func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.QueryOpt) ([]t.Message, error) {
-	var limit = maxResults // TODO(gene): pass into adapter as a config param
+	var limit = a.maxResults
 	var lower = 0
 	var upper = 1 << 31
 
@@ -1787,7 +1797,7 @@ var dellog struct {
 
 // Get ranges of deleted messages
 func (a *adapter) MessageGetDeleted(topic string, forUser t.Uid, opts *t.QueryOpt) ([]t.DelMessage, error) {
-	var limit = maxResults
+	var limit = a.maxResults
 	var lower = 0
 	var upper = 1 << 31
 
