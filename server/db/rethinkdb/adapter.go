@@ -85,7 +85,9 @@ func (a *adapter) Open(jsonconfig string) error {
 		a.dbName = config.Database
 	}
 
-	a.maxResults = defaultMaxResults
+	if a.maxResults <= 0 {
+		a.maxResults = defaultMaxResults
+	}
 
 	opts.Database = a.dbName
 	opts.Username = config.Username

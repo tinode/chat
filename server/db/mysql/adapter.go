@@ -67,7 +67,9 @@ func (a *adapter) Open(jsonconfig string) error {
 		a.dbName = defaultDatabase
 	}
 
-	a.maxResults = defaultMaxResults
+	if a.maxResults <= 0 {
+		a.maxResults = defaultMaxResults
+	}
 
 	// This just initializes the driver but does not open the network connection.
 	a.db, err = sqlx.Open("mysql", a.dsn)
