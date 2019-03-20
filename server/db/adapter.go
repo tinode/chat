@@ -23,7 +23,8 @@ type Adapter interface {
 	CheckDbVersion() error
 	// GetName returns the name of the adapter
 	GetName() string
-
+	// SetMaxResults configures how many results can be returned in a single DB call.
+	SetMaxResults(val int) error
 	// CreateDb creates the database optionally dropping an existing database first.
 	CreateDb(reset bool) error
 

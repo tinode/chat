@@ -21,8 +21,10 @@ var mediaHandler media.Handler
 var uGen types.UidGenerator
 
 type configType struct {
-	// 16-byte key for XTEA. Used to initialize types.UidGenerator
+	// 16-byte key for XTEA. Used to initialize types.UidGenerator.
 	UidKey []byte `json:"uid_key"`
+	// Maximum number of results to return from adapter.
+	MaxResults int `json:"max_results"`
 	// Configurations for individual adapters.
 	Adapters map[string]json.RawMessage `json:"adapters"`
 }
@@ -48,6 +50,10 @@ func openAdapter(workerId int, jsonconf string) error {
 
 	if err := uGen.Init(uint(workerId), config.UidKey); err != nil {
 		return errors.New("store: failed to init snowflake: " + err.Error())
+	}
+
+	if err := adp.SetMaxResults(config.MaxResults); err != nil {
+		return err
 	}
 
 	var adapterConfig string
