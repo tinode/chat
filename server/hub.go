@@ -1230,6 +1230,8 @@ func replyOfflineTopicSetSub(sess *Session, topic string, msg *ClientComMessage)
 
 		if modeWant != sub.ModeWant {
 			update["ModeWant"] = modeWant
+			// Cache it for later use
+			sub.ModeWant = modeWant
 		}
 	}
 
@@ -1239,7 +1241,14 @@ func replyOfflineTopicSetSub(sess *Session, topic string, msg *ClientComMessage)
 			log.Println("replyOfflineTopicSetSub update:", err)
 			sess.queueOut(decodeStoreError(err, msg.id, msg.topic, now, nil))
 		} else {
-			sess.queueOut(NoErr(msg.id, msg.topic, now))
+			var params interface{}
+			if update["ModeWant"] != nil {
+				params = map[string]interface{}{"acs": MsgAccessMode{
+					Given: sub.ModeGiven.String(),
+					Want:  sub.ModeWant.String(),
+					Mode:  (sub.ModeGiven & sub.ModeWant).String()}}
+			}
+			sess.queueOut(NoErrParams(msg.id, msg.topic, now, params))
 		}
 	} else {
 		sess.queueOut(InfoNotModified(msg.id, msg.topic, now))

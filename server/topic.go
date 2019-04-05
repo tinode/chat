@@ -798,7 +798,6 @@ func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin) error {
 
 	t.addSession(sreg.sess, asUid)
 
-	resp := NoErr(sreg.pkt.id, toriginal, now)
 	// Report back the assigned access mode.
 	params := map[string]interface{}{
 		"acs": &MsgAccessMode{
@@ -811,8 +810,7 @@ func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin) error {
 	if sreg.created && sreg.pkt.topic != toriginal {
 		params["tmpname"] = sreg.pkt.topic
 	}
-	resp.Ctrl.Params = params
-	sreg.sess.queueOut(resp)
+	sreg.sess.queueOut(NoErrParams(sreg.pkt.id, toriginal, now, params))
 
 	return nil
 }
@@ -1703,7 +1701,6 @@ func (t *Topic) replySetSub(h *Hub, sess *Session, pkt *ClientComMessage) error 
 
 	var resp *ServerComMessage
 	if changed {
-		resp = NoErr(pkt.id, toriginal, now)
 		// Report resulting access mode.
 		pud := t.perUser[target]
 		params := map[string]interface{}{"acs": MsgAccessMode{
@@ -1713,7 +1710,7 @@ func (t *Topic) replySetSub(h *Hub, sess *Session, pkt *ClientComMessage) error 
 		if target != asUid {
 			params["user"] = target.UserId()
 		}
-		resp.Ctrl.Params = params
+		resp = NoErrParams(pkt.id, toriginal, now, params)
 	} else {
 		resp = InfoNotModified(pkt.id, toriginal, now)
 	}
@@ -1763,9 +1760,7 @@ func (t *Topic) replyGetData(sess *Session, asUid types.Uid, id string, req *Msg
 	}
 
 	// Inform the requester that all the data has been served.
-	reply := NoErr(id, toriginal, now)
-	reply.Ctrl.Params = map[string]interface{}{"what": "data", "count": count}
-	sess.queueOut(reply)
+	sess.queueOut(NoErrParams(id, toriginal, now, map[string]interface{}{"what": "data", "count": count}))
 
 	return nil
 }
@@ -1790,9 +1785,7 @@ func (t *Topic) replyGetTags(sess *Session, asUid types.Uid, id string) error {
 	}
 
 	// Inform the requester that there are no tags.
-	reply := NoErr(id, t.original(asUid), now)
-	reply.Ctrl.Params = map[string]string{"what": "tags"}
-	sess.queueOut(reply)
+	sess.queueOut(NoErrParams(id, t.original(asUid), now, map[string]string{"what": "tags"}))
 
 	return nil
 }
@@ -1831,7 +1824,6 @@ func (t *Topic) replySetTags(sess *Session, asUid types.Uid, set *MsgClientSet) 
 				} else {
 					t.tags = tags
 
-					resp = NoErr(set.Id, t.original(asUid), now)
 					params := make(map[string]interface{})
 					if len(added) > 0 {
 						params["added"] = len(added)
@@ -1839,7 +1831,7 @@ func (t *Topic) replySetTags(sess *Session, asUid types.Uid, set *MsgClientSet) 
 					if len(removed) > 0 {
 						params["removed"] = len(removed)
 					}
-					resp.Ctrl.Params = params
+					resp = NoErrParams(set.Id, t.original(asUid), now, params)
 				}
 			} else {
 				resp = InfoNotModified(set.Id, t.original(asUid), now)
@@ -1886,9 +1878,7 @@ func (t *Topic) replyGetDel(sess *Session, asUid types.Uid, id string, req *MsgG
 		}
 	}
 
-	reply := NoErr(id, toriginal, now)
-	reply.Ctrl.Params = map[string]string{"what": "del"}
-	sess.queueOut(reply)
+	sess.queueOut(NoErrParams(id, toriginal, now, map[string]string{"what": "del"}))
 
 	return nil
 }
@@ -1992,9 +1982,7 @@ func (t *Topic) replyDelMsg(sess *Session, asUid types.Uid, del *MsgClientDel) e
 		t.presPubMessageDelete(asUid, t.delID, dr, sess.sid)
 	}
 
-	reply := NoErr(del.Id, t.original(asUid), now)
-	reply.Ctrl.Params = map[string]int{"del": t.delID}
-	sess.queueOut(reply)
+	sess.queueOut(NoErrParams(del.Id, t.original(asUid), now, map[string]int{"del": t.delID}))
 
 	return nil
 }
