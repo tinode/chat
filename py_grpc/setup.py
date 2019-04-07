@@ -5,9 +5,9 @@ from pkg_resources import resource_string
 with open('README.md', 'r') as readme_file:
     long_description = readme_file.read()
 
-#with open("tinode_grpc/GIT_VERSION", "r") as version_file:
-#    git_version = version_file.read().strip()
-git_version = resource_string(__name__, 'tinode_grpc/GIT_VERSION').decode('ascii')
+with open("tinode_grpc/GIT_VERSION", "r") as version_file:
+    git_version = version_file.read().strip()
+# git_version = resource_string(__name__, 'tinode_grpc/GIT_VERSION').decode('ascii')
 
 setuptools.setup(
     name="tinode_grpc",
@@ -19,7 +19,7 @@ setuptools.setup(
     long_description_content_type="text/markdown",
     url="https://github.com/tinode/chat",
     packages=setuptools.find_packages(),
-    install_requires=['protobuf>=3.6.1', 'grpcio>=1.15.0'],
+    install_requires=['protobuf>=3.6.1', 'grpcio>=1.19.0'],
     license="Apache 2.0",
     keywords="chat messaging messenger im tinode",
     package_data={
