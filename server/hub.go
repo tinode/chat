@@ -799,6 +799,7 @@ func topicInit(sreg *sessionJoin, h *Hub) {
 
 	statsInc("LiveTopics", 1)
 	statsInc("TotalTopics", 1)
+	usersRegisterTopic(t, types.ZeroUid, true)
 
 	go t.run(h)
 
@@ -889,7 +890,6 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 
 				h.topicDel(topic)
 				t.exit <- &shutDown{reason: StopDeleted}
-
 				statsInc("LiveTopics", -1)
 			} else {
 				// Case 1.1.2: requester is NOT the owner
@@ -983,6 +983,7 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 		if t := h.topicGet(topic); t != nil {
 			t.suspend()
 			h.topicDel(topic)
+
 			t.exit <- &shutDown{reason: reason}
 
 			statsInc("LiveTopics", -1)

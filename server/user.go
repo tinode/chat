@@ -364,8 +364,10 @@ func replyDelUser(s *Session, msg *ClientComMessage) {
 }
 
 type userUpdate struct {
-	// User id being updated
+	// Single user ID being updated
 	uid types.Uid
+	// User IDs being updated
+	uidList []types.Uid
 	// Unread count
 	unread int
 	// Treat the count as an increment as opposite to the final value.
@@ -377,6 +379,7 @@ type userUpdate struct {
 
 type UserCacheEntry struct {
 	unread int
+	topics int
 }
 
 var usersCache map[types.Uid]UserCacheEntry
@@ -397,7 +400,7 @@ func usersShutdown() {
 	}
 }
 
-func usersUpdateCache(uid types.Uid, val int, inc bool) {
+func usersUpdateUnread(uid types.Uid, val int, inc bool) {
 	if globals.usersUpdate != nil && (!inc || val != 0) {
 		select {
 		case globals.usersUpdate <- &userUpdate{uid: uid, unread: val, inc: inc}:
@@ -406,6 +409,7 @@ func usersUpdateCache(uid types.Uid, val int, inc bool) {
 	}
 }
 
+// Process push notification.
 func usersPush(rcpt *push.Receipt) {
 	if globals.usersUpdate != nil {
 		select {
@@ -415,11 +419,41 @@ func usersPush(rcpt *push.Receipt) {
 	}
 }
 
+// Account users as members of an active topic. Used for cache management.
+func usersRegisterTopic(t *Topic, uid types.Uid, add bool) {
+	var upd *userUpdate
+	if t != nil {
+		if len(t.perUser) == 0 {
+			// me and fnd topics
+			return
+		}
+
+		upd = &userUpdate{uidList: make([]types.Uid, len(t.perUser))}
+		i := 0
+		for uid := range t.perUser {
+			upd.uidList[i] = uid
+			i++
+		}
+	} else {
+		upd = &userUpdate{uidList: make([]types.Uid, 1)}
+		upd.uidList[0] = uid
+	}
+
+	upd.inc = add
+
+	if globals.usersUpdate != nil {
+		select {
+		case globals.usersUpdate <- upd:
+		default:
+		}
+	}
+}
+
 // The go routine for processing updates to users cache.
 func userUpdater() {
-	updater := func(uid types.Uid, val int, inc bool) int {
+	unreadUpdater := func(uid types.Uid, val int, inc bool) int {
 		uce, ok := usersCache[uid]
-		if !ok {
+		if !ok || uce.unread < 0 {
 			count, err := store.Users.GetUnreadCount(uid)
 			if err != nil {
 				log.Println("users: failed to load unread count", err)
@@ -447,16 +481,44 @@ func userUpdater() {
 		if upd.pushRcpt != nil {
 			for uid, rcptTo := range upd.pushRcpt.To {
 				// Handle update
-				unread := updater(uid, 1, true)
+				unread := unreadUpdater(uid, 1, true)
 				if unread >= 0 {
 					rcptTo.Unread = unread
 					upd.pushRcpt.To[uid] = rcptTo
 				}
 			}
 			push.Push(upd.pushRcpt)
-		} else {
-			updater(upd.uid, upd.unread, upd.inc)
+			continue
 		}
+
+		if len(upd.uidList) > 0 {
+			for _, uid := range upd.uidList {
+				uce, ok := usersCache[uid]
+				if upd.inc {
+					if !ok {
+						// This is a registration of a new user.
+						// We are not loading unread count here, so set it to -1.
+						uce.unread = -1
+					}
+					uce.topics++
+					usersCache[uid] = uce
+				} else if ok {
+					if uce.topics > 1 {
+						uce.topics--
+						usersCache[uid] = uce
+					} else {
+						// Remove user from cache
+						delete(usersCache, uid)
+					}
+				} else {
+					// BUG!
+					panic("request to unregister user which has not been registered")
+				}
+			}
+			continue
+		}
+
+		unreadUpdater(upd.uid, upd.unread, upd.inc)
 	}
 
 	log.Println("users: shutdown")

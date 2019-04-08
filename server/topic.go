@@ -399,7 +399,7 @@ func (t *Topic) run(hub *Hub) {
 					t.presPubMessageCount(uid, recv, read, msg.skipSid)
 
 					// Update cached count of unread messages
-					usersUpdateCache(uid, unread, true)
+					usersUpdateUnread(uid, unread, true)
 
 					t.perUser[uid] = pud
 				}
@@ -589,7 +589,6 @@ func (t *Topic) run(hub *Hub) {
 			// 2. Topic is being deleted (reason == StopDeleted)
 			// 3. System shutdown (reason == StopShutdown, done != nil).
 			// 4. Cluster rehashing (reason == StopRehashing)
-			// TODO(gene): save lastMessage value;
 
 			if sd.reason == StopDeleted {
 				if t.cat == types.TopicCatGrp {
@@ -611,6 +610,8 @@ func (t *Topic) run(hub *Hub) {
 			for s := range t.sessions {
 				s.detach <- t.name
 			}
+
+			usersRegisterTopic(t, types.ZeroUid, false)
 
 			// Report completion back to sender, if 'done' is not nil.
 			if sd.done != nil {
@@ -814,6 +815,11 @@ func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin) error {
 		params["tmpname"] = sreg.pkt.topic
 	}
 	sreg.sess.queueOut(NoErrParams(sreg.pkt.id, toriginal, now, params))
+
+	if sreg.newsub && !sreg.created {
+		// Register new subscription if it's not a part of topic creation.
+		usersRegisterTopic(nil, asUid, true)
+	}
 
 	return nil
 }
@@ -1030,10 +1036,10 @@ func (t *Topic) requestSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Le
 		newReader := (userData.modeWant & userData.modeGiven).IsReader()
 		if oldReader && !newReader {
 			// Decrement unread count
-			usersUpdateCache(asUid, userData.readID-t.lastID, true)
+			usersUpdateUnread(asUid, userData.readID-t.lastID, true)
 		} else if !oldReader && newReader {
 			// Increment unread count
-			usersUpdateCache(asUid, t.lastID-userData.readID, true)
+			usersUpdateUnread(asUid, t.lastID-userData.readID, true)
 		}
 		t.notifySubChange(asUid, asUid, oldWant, oldGiven, userData.modeWant, userData.modeGiven, sess.sid)
 	}
@@ -1183,10 +1189,10 @@ func (t *Topic) approveSub(h *Hub, sess *Session, asUid, target types.Uid, set *
 		newReader := (userData.modeWant & userData.modeGiven).IsReader()
 		if oldReader && !newReader {
 			// Decrement unread count
-			usersUpdateCache(target, userData.readID-t.lastID, true)
+			usersUpdateUnread(target, userData.readID-t.lastID, true)
 		} else if !oldReader && newReader {
 			// Increment unread count
-			usersUpdateCache(target, t.lastID-userData.readID, true)
+			usersUpdateUnread(target, t.lastID-userData.readID, true)
 		}
 
 		t.notifySubChange(target, asUid, oldWant, oldGiven, userData.modeWant, userData.modeGiven, sess.sid)
@@ -2088,7 +2094,7 @@ func (t *Topic) replyDelSub(h *Hub, sess *Session, asUid types.Uid, del *MsgClie
 
 	// Update cached unread count: negative value
 	if (pud.modeWant & pud.modeGiven).IsReader() {
-		usersUpdateCache(uid, pud.readID-t.lastID, true)
+		usersUpdateUnread(uid, pud.readID-t.lastID, true)
 	}
 
 	// ModeUnset signifies deleted subscription as opposite to ModeNone - no access.
@@ -2126,7 +2132,7 @@ func (t *Topic) replyLeaveUnsub(h *Hub, sess *Session, asUid types.Uid, id strin
 
 	// Update cached unread count: negative value
 	if (pud.modeWant & pud.modeGiven).IsReader() {
-		usersUpdateCache(asUid, pud.readID-t.lastID, true)
+		usersUpdateUnread(asUid, pud.readID-t.lastID, true)
 	}
 
 	// Send notifications.
@@ -2152,6 +2158,8 @@ func (t *Topic) evictUser(uid types.Uid, unsub bool, skip string) {
 		} else {
 			// Grp: delete per-user data
 			delete(t.perUser, uid)
+
+			usersRegisterTopic(nil, uid, false)
 		}
 	} else {
 		// Clear online status
