@@ -88,16 +88,14 @@ See [instructions](./docker/README.md)
 
 	DB intializer needs to be run only once per installation. See [instructions](tinode-db/README.md) for more options.
 
-3. Unpack JS client to a directory, for instance `$HOME/tinode/example-react-js/` by first unzipping `https://github.com/tinode/webapp/archive/master.zip` then extract `tinode.js` from `https://github.com/tinode/tinode-js/archive/master.zip` to the same directory.
+3. Unpack JS client to a directory, for instance `$HOME/tinode/webapp/` by first unzipping `https://github.com/tinode/webapp/archive/master.zip` then extract `tinode.js` from `https://github.com/tinode/tinode-js/archive/master.zip` to the same directory.
 
 4. Run server
 	```
-	$GOPATH/bin/server -config=$GOPATH/src/github.com/tinode/chat/server/tinode.conf -static_data=$HOME/tinode/example-react-js/
+	$GOPATH/bin/server -config=$GOPATH/src/github.com/tinode/chat/server/tinode.conf -static_data=$HOME/tinode/webapp/
 	```
 
 5. Test your installation by pointing your browser to [http://localhost:6060/](http://localhost:6060/). The static files from the `-static_data` path are served at web root `/`. You can change this by editing the line `static_mount` in the config file.
-
-6.  If you want to use the [Android client](https://github.com/tinode/tindroid) and want push notification to work, find the section `"push"` in `tinode.conf`, item `"name": "fcm"`, then change `"enabled"` to `true`. Go to [https://console.firebase.google.com/](https://console.firebase.google.com/) (https://console.firebase.google.com/project/**NAME-OF-YOUR-PROJECT**/settings/cloudmessaging) and get a server key. Paste the key to the `"api_key"` field. See more at https://github.com/tinode/tindroid.
 
 ## Running a Cluster
 
@@ -132,13 +130,18 @@ See [instructions](./docker/README.md)
   * `enabled` turns on failover mode; failover mode requires at least three nodes in the cluster.
   * `heartbeat` interval in milliseconds between heartbeats sent by the leader node to follower nodes to ensure they are accessible.
   * `vote_after` number of failed heartbeats before a new leader node is elected.
-  * `node_fail_after` number of heartbeats that a follower node misses before it's cosidered to be down.
+  * `node_fail_after` number of heartbeats that a follower node misses before it's considered to be down.
 
-If you are testing the cluster with all nodes running on the same host, you also must override the `listen` port. Here is an example for launching two cluster nodes from the same host using the same config file:
+If you are testing the cluster with all nodes running on the same host, you also must override the `listen` and `grpc_listen` ports. Here is an example for launching two cluster nodes from the same host using the same config file:
 ```
-./server -config=./tinode.conf -static_data=./example-react-js/ -listen=:6060 -cluster_self=one &
-./server -config=./tinode.conf -static_data=./example-react-js/ -listen=:6061 -cluster_self=two &
+./server -config=./tinode.conf -static_data=./webapp/ -listen=:6060 -grpc_listen=:6080 -cluster_self=one &
+./server -config=./tinode.conf -static_data=./webapp/ -listen=:6061 -grpc_listen=:6081 -cluster_self=two &
 ```
+A bash script [run-cluster.sh](./server/run-cluster.sh) may be also useful.
+
+### Enabling Push Notifications
+
+See [instructions](./docs/faq.md#q-how-to-setup-fcm-push-notifications)
 
 ### Note on Running the Server in Background
 
@@ -147,7 +150,7 @@ There is [no clean way](https://github.com/golang/go/issues/227) to daemonize a 
 Specific note for [nohup](https://en.wikipedia.org/wiki/Nohup) users: an `exit` must be issued immediately after `nohup` call to close the foreground session cleanly:
 
 ```
-nohup $GOPATH/bin/server -config=$GOPATH/src/github.com/tinode/chat/server/tinode.conf -static_data=$HOME/tinode/example-react-js/ &
+nohup $GOPATH/bin/server -config=$GOPATH/src/github.com/tinode/chat/server/tinode.conf -static_data=$HOME/tinode/webapp/ &
 exit
 ```
 
