@@ -1266,7 +1266,7 @@ func (a *adapter) SubsDelForUser(user t.Uid, hard bool) error {
 	return err
 }
 
-// Returns a list of users who match given tags, such as "email:jdoe@example.com" or "tel:18003287448".
+// Returns a list of users who match given tags, such as "email:jdoe@example.com" or "tel:+18003287448".
 // Searching the 'users.Tags' for the given tags using respective index.
 func (a *adapter) FindUsers(uid t.Uid, req, opt []string) ([]t.Subscription, error) {
 	index := make(map[string]struct{})

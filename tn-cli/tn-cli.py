@@ -37,7 +37,7 @@ from tinode_grpc import pb
 from tinode_grpc import pbx
 
 APP_NAME = "tn-cli"
-APP_VERSION = "1.2.0"
+APP_VERSION = "1.2.1"
 PROTOCOL_VERSION = "0"
 LIB_VERSION = pkg_resources.get_distribution("tinode_grpc").version
 GRPC_VERSION = pkg_resources.get_distribution("grpcio").version
@@ -58,6 +58,10 @@ AWAIT_TIMEOUT = 5
 
 # This is needed for gRPC SSL to work correctly.
 os.environ["GRPC_SSL_CIPHER_SUITES"] = "HIGH+ECDSA"
+
+# Enable the following variables for debugging.
+# os.environ["GRPC_TRACE"] = "all"
+# os.environ["GRPC_VERBOSITY"] = "INFO"
 
 # Dictionary wich contains lambdas to be executed when server {ctrl} response is received.
 OnCompletion = {}
@@ -313,7 +317,7 @@ def stdin(InputQueue):
 def hiMsg(id):
     OnCompletion[str(id)] = lambda params: print_server_params(params)
     return pb.ClientMsg(hi=pb.ClientHi(id=str(id), user_agent=APP_NAME + "/" + APP_VERSION + " (" +
-        platform.system() + "/" + platform.release() + "); gRPC-python/" + LIB_VERSION,
+        platform.system() + "/" + platform.release() + "); gRPC-python/" + LIB_VERSION + "-" + GRPC_VERSION,
         ver=LIB_VERSION, lang="EN"))
 
 # {acc}
@@ -711,7 +715,6 @@ def parse_input(cmd):
 # protobuf messages for remote commands.
 def serialize_cmd(string, id, args):
     """Take string read from the command line, convert in into a protobuf message"""
-    cmd = {}
     messages = {
         "acc": accMsg,
         "login": loginMsg,
@@ -796,43 +799,48 @@ def gen_message(scheme, secret, args):
     print_prompt = True
 
     while True:
-        if not WaitingFor and not InputQueue.empty():
-            id += 1
-            inp = InputQueue.get()
+        try:
+            if not WaitingFor and not InputQueue.empty():
+                id += 1
+                inp = InputQueue.get()
 
-            if inp == 'exit' or inp == 'quit' or inp == '.exit' or inp == '.quit':
-                return
+                if inp == 'exit' or inp == 'quit' or inp == '.exit' or inp == '.quit':
+                    return
 
-            pbMsg, cmd = serialize_cmd(inp, id, args)
-            print_prompt = IsInteractive
-            if pbMsg != None:
-                if not IsInteractive:
-                    sys.stdout.write("=> " + inp + "\n")
-                    sys.stdout.flush()
+                pbMsg, cmd = serialize_cmd(inp, id, args)
+                print_prompt = IsInteractive
+                if pbMsg != None:
+                    if not IsInteractive:
+                        sys.stdout.write("=> " + inp + "\n")
+                        sys.stdout.flush()
 
-                if cmd.synchronous:
-                    cmd.await_ts = time.time()
-                    cmd.await_id = str(id)
-                    WaitingFor = cmd
+                    if cmd.synchronous:
+                        cmd.await_ts = time.time()
+                        cmd.await_id = str(id)
+                        WaitingFor = cmd
 
-                if not cmd.no_yield:
-                    yield pbMsg
+                    if not hasattr(cmd, 'no_yield'):
+                        yield pbMsg
 
-        elif not OutputQueue.empty():
-            sys.stdout.write("\r<= "+OutputQueue.get())
-            sys.stdout.flush()
-            print_prompt = IsInteractive
-
-        else:
-            if print_prompt:
-                sys.stdout.write("tn> ")
+            elif not OutputQueue.empty():
+                sys.stdout.write("\r<= "+OutputQueue.get())
                 sys.stdout.flush()
-                print_prompt = False
-            if WaitingFor:
-                if time.time() - WaitingFor.await_ts > AWAIT_TIMEOUT:
-                    stdoutln("Timeout while waiting for '{0}' response".format(WaitingFor.cmd))
-                    WaitingFor = None
-            time.sleep(0.1)
+                print_prompt = IsInteractive
+
+            else:
+                if print_prompt:
+                    sys.stdout.write("tn> ")
+                    sys.stdout.flush()
+                    print_prompt = False
+                if WaitingFor:
+                    if time.time() - WaitingFor.await_ts > AWAIT_TIMEOUT:
+                        stdoutln("Timeout while waiting for '{0}' response".format(WaitingFor.cmd))
+                        WaitingFor = None
+
+                time.sleep(0.1)
+
+        except Exception as err:
+            stdoutln("Exception in generator: {0}".format(err))
 
 
 # Handle {ctrl} server response
@@ -924,7 +932,7 @@ def run(args, schema, secret):
                 stdoutln("\rMessage type not handled" + str(msg))
 
     except grpc.RpcError as err:
-        print(err)
+        # print(err)
         printerr("gRPC failed with {0}: {1}".format(err.code(), err.details()))
     except Exception as ex:
         printerr("Request failed: {0}".format(ex))

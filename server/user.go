@@ -275,9 +275,7 @@ func replyUpdateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 		}
 	}
 
-	resp := NoErr(msg.id, "", msg.timestamp)
-	resp.Ctrl.Params = params
-	s.queueOut(resp)
+	s.queueOut(NoErrParams(msg.id, "", msg.timestamp, params))
 
 	// Call plugin with the account update
 	pluginAccount(user, plgActUpd)

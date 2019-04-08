@@ -123,7 +123,7 @@ func serveGrpc(addr string, tlsConf *tls.Config) (*grpc.Server, error) {
 	}
 	srv := grpc.NewServer(opts...)
 	pbx.RegisterNodeServer(srv, &grpcNodeServer{})
-	log.Printf("gRPC%s server is registered at [%s]", secure, addr)
+	log.Printf("gRPC/%s%s server is registered at [%s]", grpc.Version, secure, addr)
 
 	go func() {
 		if err := srv.Serve(lis); err != nil {

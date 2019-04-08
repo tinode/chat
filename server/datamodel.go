@@ -511,11 +511,17 @@ type ServerComMessage struct {
 
 // NoErr indicates successful completion (200)
 func NoErr(id, topic string, ts time.Time) *ServerComMessage {
+	return NoErrParams(id, topic, ts, nil)
+}
+
+// NoErrParams indicates successful completion with additional parameters (200)
+func NoErrParams(id, topic string, ts time.Time, params interface{}) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
 		Code:      http.StatusOK, // 200
 		Text:      "ok",
 		Topic:     topic,
+		Params:    params,
 		Timestamp: ts}}
 }
 

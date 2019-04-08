@@ -102,7 +102,7 @@ type ClusterReq struct {
 	Pkt *ClientComMessage
 
 	// Root user may send messages on behalf of other users.
-	OnBahalfOf string
+	OnBehalfOf string
 	// AuthLevel of the user specified by root.
 	AuthLvl int
 
@@ -319,7 +319,7 @@ func (c *Cluster) Master(msg *ClusterReq, rejected *bool) error {
 		sess.platf = msg.Sess.Platform
 
 		// Dispatch remote message to a local session.
-		msg.Pkt.from = msg.OnBahalfOf
+		msg.Pkt.from = msg.OnBehalfOf
 		msg.Pkt.authLvl = msg.AuthLvl
 		sess.dispatch(msg.Pkt)
 	} else {
@@ -398,24 +398,30 @@ func (c *Cluster) routeToTopic(msg *ClientComMessage, topic string, sess *Sessio
 	}
 	sess.nodes[n.name] = true
 
-	return n.forward(
-		&ClusterReq{
-			Node:       c.thisNodeName,
-			Signature:  c.ring.Signature(),
-			Pkt:        msg,
-			OnBahalfOf: msg.from,
-			AuthLvl:    msg.authLvl,
-			RcptTo:     topic,
-			Sess: &ClusterSess{
-				Uid:        sess.uid,
-				AuthLvl:    sess.authLvl,
-				RemoteAddr: sess.remoteAddr,
-				UserAgent:  sess.userAgent,
-				Ver:        sess.ver,
-				Lang:       sess.lang,
-				DeviceID:   sess.deviceID,
-				Platform:   sess.platf,
-				Sid:        sess.sid}})
+	req := &ClusterReq{
+		Node:      c.thisNodeName,
+		Signature: c.ring.Signature(),
+		Pkt:       msg,
+		RcptTo:    topic,
+		Sess: &ClusterSess{
+			Uid:        sess.uid,
+			AuthLvl:    sess.authLvl,
+			RemoteAddr: sess.remoteAddr,
+			UserAgent:  sess.userAgent,
+			Ver:        sess.ver,
+			Lang:       sess.lang,
+			DeviceID:   sess.deviceID,
+			Platform:   sess.platf,
+			Sid:        sess.sid}}
+
+	if sess.authLvl == auth.LevelRoot {
+		// Assign these values only when the sender is root
+		req.OnBehalfOf = msg.from
+		req.AuthLvl = msg.authLvl
+	}
+
+	return n.forward(req)
+
 }
 
 // Session terminated at origin. Inform remote Master nodes that the session is gone.

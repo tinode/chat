@@ -186,9 +186,7 @@ func largeFileUpload(wrt http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	resp := NoErr(msgID, "", now)
-	resp.Ctrl.Params = map[string]string{"url": url}
-	writeHttpResponse(resp, nil)
+	writeHttpResponse(NoErrParams(msgID, "", now, map[string]string{"url": url}), nil)
 }
 
 func largeFileRunGarbageCollection(period time.Duration, block int) chan<- bool {
