@@ -316,11 +316,13 @@ func authHttpRequest(req *http.Request) (types.Uid, []byte, error) {
 	var uid types.Uid
 	if authMethod, secret := getHttpAuth(req); authMethod != "" {
 		decodedSecret := make([]byte, base64.StdEncoding.DecodedLen(len(secret)))
-		if _, err := base64.StdEncoding.Decode(decodedSecret, []byte(secret)); err != nil {
+		n, err := base64.StdEncoding.Decode(decodedSecret, []byte(secret))
+		if err != nil {
 			return uid, nil, types.ErrMalformed
 		}
+
 		if authhdl := store.GetLogicalAuthHandler(authMethod); authhdl != nil {
-			rec, challenge, err := authhdl.Authenticate(decodedSecret)
+			rec, challenge, err := authhdl.Authenticate(decodedSecret[:n])
 			if err != nil {
 				return uid, nil, err
 			}
