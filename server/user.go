@@ -421,27 +421,27 @@ func usersPush(rcpt *push.Receipt) {
 
 // Account users as members of an active topic. Used for cache management.
 func usersRegisterTopic(t *Topic, uid types.Uid, add bool) {
-	var upd *userUpdate
-	if t != nil {
-		if len(t.perUser) == 0 {
-			// me and fnd topics
-			return
-		}
-
-		upd = &userUpdate{uidList: make([]types.Uid, len(t.perUser))}
-		i := 0
-		for uid := range t.perUser {
-			upd.uidList[i] = uid
-			i++
-		}
-	} else {
-		upd = &userUpdate{uidList: make([]types.Uid, 1)}
-		upd.uidList[0] = uid
-	}
-
-	upd.inc = add
-
 	if globals.usersUpdate != nil {
+		var upd *userUpdate
+		if t != nil {
+			if len(t.perUser) == 0 {
+				// me and fnd topics
+				return
+			}
+
+			upd = &userUpdate{uidList: make([]types.Uid, len(t.perUser))}
+			i := 0
+			for uid := range t.perUser {
+				upd.uidList[i] = uid
+				i++
+			}
+		} else {
+			upd = &userUpdate{uidList: make([]types.Uid, 1)}
+			upd.uidList[0] = uid
+		}
+
+		upd.inc = add
+
 		select {
 		case globals.usersUpdate <- upd:
 		default:
@@ -453,7 +453,12 @@ func usersRegisterTopic(t *Topic, uid types.Uid, add bool) {
 func userUpdater() {
 	unreadUpdater := func(uid types.Uid, val int, inc bool) int {
 		uce, ok := usersCache[uid]
-		if !ok || uce.unread < 0 {
+		if !ok {
+			// BUG!
+			panic("attempt to update unread count for user who has not been loaded")
+		}
+
+		if uce.unread < 0 {
 			count, err := store.Users.GetUnreadCount(uid)
 			if err != nil {
 				log.Println("users: failed to load unread count", err)
