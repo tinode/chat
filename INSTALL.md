@@ -141,7 +141,7 @@ A bash script [run-cluster.sh](./server/run-cluster.sh) may be also useful.
 
 ### Enabling Push Notifications
 
-See [instructions](./docs/faq.md#q-how-to-setup-fcm-push-notifications)
+Follow [instructions](./docs/faq.md#q-how-to-setup-fcm-push-notifications).
 
 ### Note on Running the Server in Background
 
