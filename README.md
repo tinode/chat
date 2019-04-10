@@ -97,7 +97,7 @@ A text-only [command line client](./tn-cli) implements every possible command.
 ### Android
 
 <p align="center">
-<img src="docs/android-chats.png" alt="android screenshot" width=270 /> <img src="docs/android-messages.png" alt="android screenshot" width=270 />
+<img src="docs/android-contacts.png" alt="android screenshot" width=270 /> <img src="docs/android-chat.png" alt="android screenshot" width=270 />
 </p>
 
 ### Desktop Web
