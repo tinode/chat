@@ -92,6 +92,13 @@ A text-only [command line client](./tn-cli) implements every possible command.
 * Hot standby.
 * Different levels of message persistence (from strict persistence to "store until delivered" to purely ephemeral messaging).
 
+## Other
+
+Demo avatars and some other graphics are from https://www.pexels.com/ under [CC0 license](https://www.pexels.com/photo-license/).
+
+Background patterns from http://subtlepatterns.com/, commercial and non-commercial use allowed with attribution.
+
+
 ## Screenshots
 
 ### Android

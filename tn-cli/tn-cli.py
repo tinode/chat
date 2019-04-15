@@ -1018,7 +1018,7 @@ if __name__ == '__main__':
         if args.login_token:
             """Use token to login"""
             schema = 'token'
-            secret = args.login_token.encode('acsii')
+            secret = args.login_token.encode('ascii')
             printout("Logging in with token", args.login_token)
 
         elif args.login_basic:
