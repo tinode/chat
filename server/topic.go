@@ -1657,7 +1657,8 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 		}
 		sess.queueOut(&ServerComMessage{Meta: meta})
 	} else {
-		sess.queueOut(NoErr(id, t.original(asUid), now))
+		// Inform the client that there are no subscriptions.
+		sess.queueOut(NoErrParams(id, t.original(asUid), now, map[string]interface{}{"what": "sub"}))
 	}
 
 	return nil
