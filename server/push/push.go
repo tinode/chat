@@ -12,18 +12,18 @@ import (
 
 // Recipient is a user targeted by the push.
 type Recipient struct {
-	// Addressee
-	User t.Uid `json:"user"`
 	// Count of user's connections that were live when the packet was dispatched from the server
 	Delivered int `json:"delivered"`
 	// List of user's devices that the packet was delivered to (if known). Len(Devices) >= Delivered
 	Devices []string `json:"devices,omitempty"`
+	// Unread count to include in the push
+	Unread int `json:"unread"`
 }
 
 // Receipt is the push payload with a list of recipients.
 type Receipt struct {
 	// List of recipients, including those who did not receive the message
-	To []Recipient `json:"to"`
+	To map[t.Uid]Recipient `json:"to"`
 	// Actual content to be delivered to the client
 	Payload Payload `json:"payload"`
 }

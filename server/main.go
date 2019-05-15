@@ -110,18 +110,27 @@ type credValidator struct {
 }
 
 var globals struct {
-	hub          *Hub
+	// Topics cache and processing.
+	hub *Hub
+	// Sessions cache.
 	sessionStore *SessionStore
-	cluster      *Cluster
-	grpcServer   *grpc.Server
-	plugins      []Plugin
-	statsUpdate  chan *varUpdate
+	// Cluster data.
+	cluster *Cluster
+	// gRPC server.
+	grpcServer *grpc.Server
+	// Plugins.
+	plugins []Plugin
+	// Runtime statistics communication channel.
+	statsUpdate chan *varUpdate
+	// Users cache communication channel.
+	usersUpdate chan *userUpdate
 
 	// Credential validators.
 	validators map[string]credValidator
 	// Validators required for each auth level.
 	authValidators map[auth.Level][]string
 
+	// Salt used for signing API key.
 	apiKeySalt []byte
 	// Tag namespaces (prefixes) which are immutable to the client.
 	immutableTagNS map[string]bool
@@ -446,6 +455,9 @@ func main() {
 
 	// Intialize plugins
 	pluginsInit(config.Plugin)
+
+	// Initialize users cache
+	usersInit()
 
 	// Set up gRPC server, if one is configured
 	if *listenGrpc == "" {

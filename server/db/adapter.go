@@ -46,6 +46,9 @@ type Adapter interface {
 	UserUpdateTags(uid t.Uid, tags []string, reset bool) error
 	// UserGetByCred returns user ID for the given validated credential.
 	UserGetByCred(method, value string) (t.Uid, error)
+	// UserUnreadCount returns the total number of unread messages in all topics with
+	// the R permission.
+	UserUnreadCount(uid t.Uid) (int, error)
 
 	// Credential management
 

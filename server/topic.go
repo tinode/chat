@@ -156,11 +156,6 @@ type shutDown struct {
 	reason int
 }
 
-type pushReceipt struct {
-	rcpt   *push.Receipt
-	uidMap map[types.Uid]int
-}
-
 var nilPresParams = &presParams{}
 var nilPresFilters = &presFilters{}
 
@@ -273,7 +268,7 @@ func (t *Topic) run(hub *Hub) {
 		case msg := <-t.broadcast:
 			// Content message intended for broadcasting to recipients
 
-			var pushRcpt *pushReceipt
+			var pushRcpt *push.Receipt
 			asUid := types.ParseUserId(msg.from)
 			if msg.Data != nil {
 				if t.isSuspended() {
@@ -365,9 +360,11 @@ func (t *Topic) run(hub *Hub) {
 						continue
 					}
 
-					var read, recv int
+					var read, recv, unread int
 					if msg.Info.What == "read" {
 						if msg.Info.SeqId > pud.readID {
+							// The number of unread messages has decreased, negative value
+							unread = pud.readID - msg.Info.SeqId
 							pud.readID = msg.Info.SeqId
 							read = pud.readID
 						} else {
@@ -400,6 +397,9 @@ func (t *Topic) run(hub *Hub) {
 
 					// Read/recv updated: notify user's other sessions of the change
 					t.presPubMessageCount(uid, recv, read, msg.skipSid)
+
+					// Update cached count of unread messages
+					usersUpdateUnread(uid, unread, true)
 
 					t.perUser[uid] = pud
 				}
@@ -461,13 +461,15 @@ func (t *Topic) run(hub *Hub) {
 					if sess.queueOut(msg) {
 						// Update device map with the device ID which should NOT receive the notification.
 						if pushRcpt != nil {
-							if i, ok := pushRcpt.uidMap[sess.uid]; ok {
-								pushRcpt.rcpt.To[i].Delivered++
+							if addr, ok := pushRcpt.To[sess.uid]; ok {
+								addr.Delivered++
 								if sess.deviceID != "" {
 									// List of device IDs which already received the message. Push should
 									// skip them.
-									pushRcpt.rcpt.To[i].Devices = append(pushRcpt.rcpt.To[i].Devices, sess.deviceID)
+									// The same device ID may appear twice.
+									addr.Devices = append(addr.Devices, sess.deviceID)
 								}
+								pushRcpt.To[sess.uid] = addr
 							}
 						}
 					} else {
@@ -478,7 +480,8 @@ func (t *Topic) run(hub *Hub) {
 				}
 
 				if pushRcpt != nil {
-					push.Push(pushRcpt.rcpt)
+					// usersPush will update unread message count and send push notification.
+					usersPush(pushRcpt)
 				}
 
 			} else {
@@ -586,7 +589,6 @@ func (t *Topic) run(hub *Hub) {
 			// 2. Topic is being deleted (reason == StopDeleted)
 			// 3. System shutdown (reason == StopShutdown, done != nil).
 			// 4. Cluster rehashing (reason == StopRehashing)
-			// TODO(gene): save lastMessage value;
 
 			if sd.reason == StopDeleted {
 				if t.cat == types.TopicCatGrp {
@@ -608,6 +610,8 @@ func (t *Topic) run(hub *Hub) {
 			for s := range t.sessions {
 				s.detach <- t.name
 			}
+
+			usersRegisterTopic(t, types.ZeroUid, false)
 
 			// Report completion back to sender, if 'done' is not nil.
 			if sd.done != nil {
@@ -811,6 +815,11 @@ func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin) error {
 		params["tmpname"] = sreg.pkt.topic
 	}
 	sreg.sess.queueOut(NoErrParams(sreg.pkt.id, toriginal, now, params))
+
+	if sreg.newsub && !sreg.created {
+		// Register new subscription if it's not a part of topic creation.
+		usersRegisterTopic(nil, asUid, true)
+	}
 
 	return nil
 }
@@ -1021,8 +1030,17 @@ func (t *Topic) requestSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Le
 	// Apply changes.
 	t.perUser[asUid] = userData
 
-	// Send presence notifications.
+	// Send presence notifications and update cached unread count.
 	if oldWant != userData.modeWant || oldGiven != userData.modeGiven {
+		oldReader := (oldWant & oldGiven).IsReader()
+		newReader := (userData.modeWant & userData.modeGiven).IsReader()
+		if oldReader && !newReader {
+			// Decrement unread count
+			usersUpdateUnread(asUid, userData.readID-t.lastID, true)
+		} else if !oldReader && newReader {
+			// Increment unread count
+			usersUpdateUnread(asUid, t.lastID-userData.readID, true)
+		}
 		t.notifySubChange(asUid, asUid, oldWant, oldGiven, userData.modeWant, userData.modeGiven, sess.sid)
 	}
 
@@ -1167,6 +1185,16 @@ func (t *Topic) approveSub(h *Hub, sess *Session, asUid, target types.Uid, set *
 	// Access mode has changed.
 	var changed bool
 	if oldGiven != userData.modeGiven {
+		oldReader := (oldWant & oldGiven).IsReader()
+		newReader := (userData.modeWant & userData.modeGiven).IsReader()
+		if oldReader && !newReader {
+			// Decrement unread count
+			usersUpdateUnread(target, userData.readID-t.lastID, true)
+		} else if !oldReader && newReader {
+			// Increment unread count
+			usersUpdateUnread(target, t.lastID-userData.readID, true)
+		}
+
 		t.notifySubChange(target, asUid, oldWant, oldGiven, userData.modeWant, userData.modeGiven, sess.sid)
 		changed = true
 	}
@@ -2065,6 +2093,11 @@ func (t *Topic) replyDelSub(h *Hub, sess *Session, asUid types.Uid, del *MsgClie
 
 	sess.queueOut(NoErr(del.Id, t.original(asUid), now))
 
+	// Update cached unread count: negative value
+	if (pud.modeWant & pud.modeGiven).IsReader() {
+		usersUpdateUnread(uid, pud.readID-t.lastID, true)
+	}
+
 	// ModeUnset signifies deleted subscription as opposite to ModeNone - no access.
 	t.notifySubChange(uid, asUid, pud.modeWant, pud.modeGiven, types.ModeUnset, types.ModeUnset, sess.sid)
 
@@ -2097,6 +2130,12 @@ func (t *Topic) replyLeaveUnsub(h *Hub, sess *Session, asUid types.Uid, id strin
 	}
 
 	pud := t.perUser[asUid]
+
+	// Update cached unread count: negative value
+	if (pud.modeWant & pud.modeGiven).IsReader() {
+		usersUpdateUnread(asUid, pud.readID-t.lastID, true)
+	}
+
 	// Send notifications.
 	t.notifySubChange(asUid, asUid, pud.modeWant, pud.modeGiven, types.ModeUnset, types.ModeUnset, sess.sid)
 	// Evict all user's sessions, clear cached data, send notifications.
@@ -2120,6 +2159,8 @@ func (t *Topic) evictUser(uid types.Uid, unsub bool, skip string) {
 		} else {
 			// Grp: delete per-user data
 			delete(t.perUser, uid)
+
+			usersRegisterTopic(nil, uid, false)
 		}
 	} else {
 		// Clear online status
@@ -2227,10 +2268,7 @@ func (t *Topic) notifySubChange(uid, actor types.Uid, oldWant, oldGiven,
 }
 
 // Prepares a payload to be delivered to a mobile device as a push notification.
-func (t *Topic) makePushReceipt(fromUid types.Uid, data *MsgServerData) *pushReceipt {
-	// Index user_id -> location_of_user_in_Rcpt_To_field
-	idx := make(map[types.Uid]int, t.subsCount())
-
+func (t *Topic) makePushReceipt(fromUid types.Uid, data *MsgServerData) *push.Receipt {
 	// The `Topic` in the push receipt is `t.xoriginal` for group topics, `fromUid` for p2p topics,
 	// not the t.original(fromUid) because it's the topic name as seen by the recepient, not by the sender.
 	topic := t.xoriginal
@@ -2240,7 +2278,7 @@ func (t *Topic) makePushReceipt(fromUid types.Uid, data *MsgServerData) *pushRec
 
 	// Initialize the push receipt.
 	receipt := push.Receipt{
-		To: make([]push.Recipient, t.subsCount()),
+		To: make(map[types.Uid]push.Recipient, t.subsCount()),
 		Payload: push.Payload{
 			Topic:     topic,
 			From:      data.From,
@@ -2248,20 +2286,21 @@ func (t *Topic) makePushReceipt(fromUid types.Uid, data *MsgServerData) *pushRec
 			SeqId:     data.SeqId,
 			Content:   data.Content}}
 
-	i := 0
 	for uid := range t.perUser {
-		// Done't send to the originating user, send only to those who have notifications enabled.
+		// Send only to those who have notifications enabled, exclude the originating user.
 		if uid != fromUid &&
 			(t.perUser[uid].modeWant & t.perUser[uid].modeGiven).IsPresencer() &&
 			!t.perUser[uid].deleted {
 
-			receipt.To[i].User = uid
-			idx[uid] = i
-			i++
+			receipt.To[uid] = push.Recipient{}
 		}
 	}
-
-	return &pushReceipt{rcpt: &receipt, uidMap: idx}
+	if len(receipt.To) > 0 {
+		return &receipt
+	} else {
+		// If there are no recepients there is no need to send the push notification.
+		return nil
+	}
 }
 
 func (t *Topic) mostRecentSession() *Session {

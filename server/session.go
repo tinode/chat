@@ -412,7 +412,6 @@ func (s *Session) leave(msg *ClientComMessage) {
 	}
 
 	if sub := s.getSub(expanded); sub != nil {
-		log.Println("leave", expanded, "attached")
 		// Session is attached to the topic.
 		if (msg.topic == "me" || msg.topic == "fnd") && msg.Leave.Unsub {
 			// User should not unsubscribe from 'me' or 'find'. Just leaving is fine.
@@ -434,7 +433,6 @@ func (s *Session) leave(msg *ClientComMessage) {
 			s.queueOut(ErrClusterUnreachable(msg.id, msg.topic, msg.timestamp))
 		}
 	} else if !msg.Leave.Unsub {
-		log.Println("leave", expanded, "not attached")
 		// Session is not attached to the topic, wants to leave - fine, no change
 		s.queueOut(InfoNotJoined(msg.id, msg.topic, msg.timestamp))
 	} else {

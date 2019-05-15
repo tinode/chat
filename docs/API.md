@@ -34,6 +34,7 @@
 	- [Out-of-Band Handling of Large Files](#out-of-band-handling-of-large-files)
 		- [Uploading](#uploading)
 		- [Downloading](#downloading)
+	- [Push Notifications](#push-notifications)
 	- [Messages](#messages)
 		- [Client to server messages](#client-to-server-messages)
 			- [`{hi}`](#hi)
@@ -475,7 +476,7 @@ The `ctrl.params.url` contains the path to the uploaded file at the current serv
 
 Once the URL of the file is received, either immediately or after following the redirect, the client may use the URL to send a `{pub}` message with the uploaded file as an attachment. The URL should be used to produce a [Drafty](./drafty.md)-formatted `pub.content` field and also should be referenced in the `pub.head.attachments`:
 
-```js:
+```js
 pub: {
   id: "121103",
   topic: "grpnG99YhENiQU",
@@ -514,16 +515,32 @@ The serving endpoint `/v0/file/s` serves files in response to HTTP GET requests.
 
 _Important!_ As a security measure, the client should not send security credentials if the download URL is absolute and leads to another server.
 
+## Push Notifications
+
+Tinode uses compile-time adapters for handling push notifications. The server comes with [Google FCM](https://firebase.google.com/docs/cloud-messaging/) and `stdout` adapters. FCM supports all major mobile platforms except Chinese flavor of Android. Any type of push notifications can be handled by writing an appropriate adapter. The payload of the notification from the FCM adapter is the following:
+```js
+{
+	topic: "grpnG99YhENiQU", 	// Topic which received the message.
+  xfrom: "usr2il9suCbuko", // ID of the user who sent the message.
+  ts: "2019-01-06T18:07:30.038Z", // message timestamp in RFC3339 format.
+  seq: "1234", // sequential ID of the message (integer value sent as text).
+  mime: "text/x-drafty", // message MIME-Type.
+	content: "Lorem ipsum dolor sit amet, consectetur adipisci", // The first 80 characters of the message content as plain text.
+}
+```
+
 ## Messages
 
 A message is a logically associated set of data. Messages are passed as JSON-formatted UTF-8 text.
 
-All client to server messages may have an optional `id` field. It's set by the client as means to receive an acknowledgement from the server that the message was received and processed. The `id` is expected to be a session-unique string but it can be any string. The server does not attempt to interpret it other than to check JSON validity. It's returned unchanged by the server when it replies to client messages.
+All client to server messages may have an optional `id` field. It's set by the client as means to receive an acknowledgement from the server that the message was received and processed. The `id` is expected to be a session-unique string but it can be any string. The server does not attempt to interpret it other than to check JSON validity. The `id` is returned unchanged by the server when it replies to the client message.
 
-Server requires strictly valid JSON, including double quotes around field names. For brevity the notation below omits double quotes around field names as well as outer curly brackets.
+Server requires strictly valid JSON, including double quotes around field names. For brevity the notation below omits double quotes around field names as well as outer curly brackets. Examples use `//` comments only for expressiveness. The comments cannot be used in actual communication with the server.
 
 For messages that update application-defined data, such as `{set}` `private` or `public` fields, when server-side
 data needs to be cleared, use a string with a single Unicode DEL character "&#x2421;" `"\u2421"`. I.e. sending `"public": null` will not clear the field, but sending `"public": "\u2421"` will.
+
+Any unrecognized fields are silently ignored by the server.
 
 ### Client to server messages
 
@@ -938,15 +955,22 @@ note: {
   what: "kp", // string, one of "kp" (key press), "read" (read notification),
               // "rcpt" (received notification), any other string will cause
               // message to be silently ignored, required
-  seq: 123, // integer, ID of the message being acknowledged, required for
-            // rcpt & read
+  seq: 123,   // integer, ID of the message being acknowledged, required for
+              // rcpt & read
+  unread: 10  // integer, client-reported total count of unread messages, optional.
 }
 ```
 
 The following actions are currently recognised:
  * kp: key press, i.e. a typing notification. The client should use it to indicate that the user is composing a new message.
- * recv: a `{data}` message is received by the client software but not yet seen by user.
+ * recv: a `{data}` message is received by the client software but may not yet seen by user.
  * read: a `{data}` message is seen by the user. It implies `recv` as well.
+
+The `read` and `recv` notifications may optionally include `unread` value which is the total count of unread messages as determined by this client. The per-user `unread` count is maintained by the server: it's incremented when new `{data}` messages are sent to user and reset to the values reported by the `{note unread=...}` message. The `unread` value is never decremented by the server. The value is included in push notifications to be shown on a badge on iOS:
+<p align="center">
+  <img src="./ios-pill-128.png" alt="Tinode iOS icon with a pill counter" width=64 height=64 />
+</p>
+
 
 ### Server to client messages
 

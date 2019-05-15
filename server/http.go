@@ -116,6 +116,9 @@ Loop:
 			// Wait for the hub to finish.
 			<-hubdone
 
+			// Stop updating users cache
+			usersShutdown()
+
 			break Loop
 
 		case <-httpdone:

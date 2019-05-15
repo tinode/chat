@@ -878,6 +878,24 @@ func (a *adapter) UserGetByCred(method, value string) (t.Uid, error) {
 	return t.ZeroUid, err
 }
 
+// UserUnreadCount returns the total number of unread messages in all topics with
+// the R permission.
+func (a *adapter) UserUnreadCount(uid t.Uid) (int, error) {
+	var count int
+	err := a.db.Get(&count, "SELECT SUM(t.seqid)-SUM(s.readseqid) FROM topics AS t, subscriptions AS s "+
+		"WHERE s.userid=? AND t.name=s.topic AND s.deletedat IS NULL AND t.deletedat IS NULL AND "+
+		"INSTR(s.modewant, 'R')>0 AND INSTR(s.modegiven, 'R')>0", store.DecodeUid(uid))
+	if err == nil {
+		return count, nil
+	}
+
+	if err == sql.ErrNoRows {
+		return 0, nil
+	}
+
+	return -1, err
+}
+
 // *****************************
 
 func (a *adapter) topicCreate(tx *sqlx.Tx, topic *t.Topic) error {

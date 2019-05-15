@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/tinode/chat/server/auth"
+	"github.com/tinode/chat/server/push"
 	"github.com/tinode/chat/server/store"
 	"github.com/tinode/chat/server/store/types"
 )
@@ -360,4 +361,172 @@ func replyDelUser(s *Session, msg *ClientComMessage) {
 		// Evict the current session if it belongs to the deleted user.
 		s.stop <- s.serialize(NoErrEvicted("", "", msg.timestamp))
 	}
+}
+
+type userUpdate struct {
+	// Single user ID being updated
+	uid types.Uid
+	// User IDs being updated
+	uidList []types.Uid
+	// Unread count
+	unread int
+	// Treat the count as an increment as opposite to the final value.
+	inc bool
+
+	// Optional push notification
+	pushRcpt *push.Receipt
+}
+
+type UserCacheEntry struct {
+	unread int
+	topics int
+}
+
+var usersCache map[types.Uid]UserCacheEntry
+
+// Initialize users cache.
+func usersInit() {
+	usersCache = make(map[types.Uid]UserCacheEntry)
+
+	globals.usersUpdate = make(chan *userUpdate, 1024)
+
+	go userUpdater()
+}
+
+// Shutdown users cache.
+func usersShutdown() {
+	if globals.statsUpdate != nil {
+		globals.statsUpdate <- nil
+	}
+}
+
+func usersUpdateUnread(uid types.Uid, val int, inc bool) {
+	if globals.usersUpdate != nil && (!inc || val != 0) {
+		select {
+		case globals.usersUpdate <- &userUpdate{uid: uid, unread: val, inc: inc}:
+		default:
+		}
+	}
+}
+
+// Process push notification.
+func usersPush(rcpt *push.Receipt) {
+	if globals.usersUpdate != nil {
+		select {
+		case globals.usersUpdate <- &userUpdate{pushRcpt: rcpt}:
+		default:
+		}
+	}
+}
+
+// Account users as members of an active topic. Used for cache management.
+func usersRegisterTopic(t *Topic, uid types.Uid, add bool) {
+	if globals.usersUpdate == nil {
+		return
+	}
+
+	var upd *userUpdate
+	if t != nil {
+		if len(t.perUser) == 0 {
+			// me and fnd topics
+			return
+		}
+
+		upd = &userUpdate{uidList: make([]types.Uid, len(t.perUser))}
+		i := 0
+		for uid := range t.perUser {
+			upd.uidList[i] = uid
+			i++
+		}
+	} else {
+		upd = &userUpdate{uidList: make([]types.Uid, 1)}
+		upd.uidList[0] = uid
+	}
+
+	upd.inc = add
+
+	select {
+	case globals.usersUpdate <- upd:
+	default:
+	}
+}
+
+// The go routine for processing updates to users cache.
+func userUpdater() {
+	unreadUpdater := func(uid types.Uid, val int, inc bool) int {
+		uce, ok := usersCache[uid]
+		if !ok {
+			// BUG!
+			panic("attempt to update unread count for user who has not been loaded")
+		}
+
+		if uce.unread < 0 {
+			count, err := store.Users.GetUnreadCount(uid)
+			if err != nil {
+				log.Println("users: failed to load unread count", err)
+				return -1
+			}
+			uce.unread = count
+		} else if inc {
+			uce.unread += val
+		} else {
+			uce.unread = val
+		}
+
+		usersCache[uid] = uce
+
+		return uce.unread
+	}
+
+	for upd := range globals.usersUpdate {
+		if upd == nil {
+			globals.usersUpdate = nil
+			// Dont' care to close the channel.
+			break
+		}
+
+		if upd.pushRcpt != nil {
+			for uid, rcptTo := range upd.pushRcpt.To {
+				// Handle update
+				unread := unreadUpdater(uid, 1, true)
+				if unread >= 0 {
+					rcptTo.Unread = unread
+					upd.pushRcpt.To[uid] = rcptTo
+				}
+			}
+			push.Push(upd.pushRcpt)
+			continue
+		}
+
+		if len(upd.uidList) > 0 {
+			for _, uid := range upd.uidList {
+				uce, ok := usersCache[uid]
+				if upd.inc {
+					if !ok {
+						// This is a registration of a new user.
+						// We are not loading unread count here, so set it to -1.
+						uce.unread = -1
+					}
+					uce.topics++
+					usersCache[uid] = uce
+				} else if ok {
+					if uce.topics > 1 {
+						uce.topics--
+						usersCache[uid] = uce
+					} else {
+						// Remove user from cache
+						delete(usersCache, uid)
+					}
+				} else {
+					// BUG!
+					panic("request to unregister user which has not been registered")
+				}
+			}
+			continue
+		}
+
+		unreadUpdater(upd.uid, upd.unread, upd.inc)
+	}
+
+	log.Println("users: shutdown")
 }
