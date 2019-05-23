@@ -93,9 +93,9 @@ A text-only [command line client](./tn-cli) implements every possible command.
 
 ## Other
 
-* Demo avatars and some other graphics are from https://www.pexels.com/ under [CC0 license](https://www.pexels.com/photo-license/).
-* Web and Android background pattern from http://subtlepatterns.com/ under [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/).
-* Some iOS icons from https://icons8.com/ under [CC BY-ND 3.0](https://icons8.com/license)
+* Demo avatars and some other graphics are from https://www.pexels.com/ under [CC0](https://www.pexels.com/photo-license/) license.
+* Web and Android background pattern from http://subtlepatterns.com/ under [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/) license.
+* Some iOS icons from https://icons8.com/ under [CC BY-ND 3.0](https://icons8.com/license) license.
 
 ## Screenshots
 
