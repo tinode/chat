@@ -58,7 +58,7 @@ A text-only [command line client](./tn-cli) implements every possible command.
 
 ### Supported
 
-* [Android](https://github.com/tinode/tindroid/), [web](https://github.com/tinode/webapp/), and [command line](tn-cli/) clients.
+* [Android](https://github.com/tinode/tindroid/), [iOS](https://github.com/tinode/ios), [web](https://github.com/tinode/webapp/), and [command line](tn-cli/) clients.
 * One-on-one messaging.
 * Group messaging with every member's access permissions managed individually. The maximum number of members is configurable (128 by default).
 * Topic access control with permissions for various actions.
@@ -82,7 +82,6 @@ A text-only [command line client](./tn-cli) implements every possible command.
 * Android and [web](https://caniuse.com/#feat=push-api) push notifications using [FCM](https://firebase.google.com/docs/cloud-messaging/).
 * Storage and out of band transfer of large objects like video files using local file system or Amazon S3.
 * Plugins to extend functionality like enabling chat bots.
-* iOS client bindings and client ([in progress](https://github.com/tinode/ios)).
 
 ### Planned
 
@@ -94,10 +93,9 @@ A text-only [command line client](./tn-cli) implements every possible command.
 
 ## Other
 
-Demo avatars and some other graphics are from https://www.pexels.com/ under [CC0 license](https://www.pexels.com/photo-license/).
-
-Background patterns from http://subtlepatterns.com/, commercial and non-commercial use allowed with attribution.
-
+* Demo avatars and some other graphics are from https://www.pexels.com/ under [CC0 license](https://www.pexels.com/photo-license/).
+* Web and Android background pattern from http://subtlepatterns.com/ under [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/).
+* Some iOS icons from https://icons8.com/ under [CC BY-ND 3.0](https://icons8.com/license)
 
 ## Screenshots
 
