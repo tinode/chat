@@ -1,6 +1,6 @@
 # Tinode Instant Messaging Server
 
-<img src="docs/logo.svg" align="left" width=128 height=128> Instant messaging server. Backend in pure [Go](http://golang.org) (license [GPL 3.0](http://www.gnu.org/licenses/gpl-3.0.en.html)), custom client-side binding in Java and Javascript, as well as [gRPC](https://grpc.io/) client support for C++, C#, Go, Java, Node, PHP, Python, Ruby, Objective-C (license [Apache 2.0](http://www.apache.org/licenses/LICENSE-2.0)). Wire transport is JSON over websocket (long polling is also available) for custom bindings, or [protobuf](https://developers.google.com/protocol-buffers/) over plain TCP for gRPC. Persistent storage [RethinkDB](http://rethinkdb.com/) and MySQL. A third-party [DynamoDB adapter](https://github.com/riandyrn/chat/tree/master/server/db/dynamodb) also exists. Other databases can be supported by writing custom adapters.
+<img src="docs/logo.svg" align="left" width=128 height=128> Instant messaging server. Backend in pure [Go](http://golang.org) (license [GPL 3.0](http://www.gnu.org/licenses/gpl-3.0.en.html)), client-side binding in Java, Javascript, and Swift, as well as [gRPC](https://grpc.io/) client support for C++, C#, Go, Java, Node, PHP, Python, Ruby, Objective-C, etc. (license [Apache 2.0](http://www.apache.org/licenses/LICENSE-2.0)). Wire transport is JSON over websocket (long polling is also available) for custom bindings, or [protobuf](https://developers.google.com/protocol-buffers/) with gRPC. Persistent storage [RethinkDB](http://rethinkdb.com/) and MySQL. A third-party [DynamoDB adapter](https://github.com/riandyrn/chat/tree/master/server/db/dynamodb) also exists. Other databases can be supported by writing custom adapters.
 
 Tinode is *not* XMPP/Jabber. It is *not* compatible with XMPP. It's meant as a replacement for XMPP. On the surface it's a lot like open source WhatsApp or Telegram.
 
@@ -82,10 +82,10 @@ A text-only [command line client](./tn-cli) implements every possible command.
 * Android and [web](https://caniuse.com/#feat=push-api) push notifications using [FCM](https://firebase.google.com/docs/cloud-messaging/).
 * Storage and out of band transfer of large objects like video files using local file system or Amazon S3.
 * Plugins to extend functionality like enabling chat bots.
+* iOS client bindings and client ([in progress](https://github.com/tinode/ios)).
 
 ### Planned
 
-* iOS client bindings and client ([in progress](https://github.com/tinode/ios)).
 * [Federation](https://en.wikipedia.org/wiki/Federation_(information_technology)).
 * End to end encryption with [OTR](https://en.wikipedia.org/wiki/Off-the-Record_Messaging) for one-on-one messaging and undecided method for group messaging.
 * Group messaging with unlimited number (or hundreds of thousands) of members with bearer token access control.
@@ -104,7 +104,13 @@ Background patterns from http://subtlepatterns.com/, commercial and non-commerci
 ### Android
 
 <p align="center">
-<img src="docs/android-contacts.png" alt="android screenshot" width=270 /> <img src="docs/android-chat.png" alt="android screenshot" width=270 />
+<img src="docs/android-contacts.png" alt="Android screenshot: list of chats" width=270 /> <img src="docs/android-chat.png" alt="Android screenshot: one conversation" width=270 />
+</p>
+
+### iOS
+
+<p align="center">
+<img src="docs/ios-contacts.png" alt="iOS screenshot: list of chats" width=207 /> <img src="docs/ios-chat.png" alt="iOS screenshot: one conversation" width=207 />
 </p>
 
 ### Desktop Web
