@@ -27,7 +27,7 @@ The goal of this project is to actually deliver on XMPP's original vision: creat
 
 TinodeWeb, a single page web app, is usually available at https://api.tinode.co/ ([source](https://github.com/tinode/webapp/)).
 
-Login as one of `alice`, `bob`, `carol`, `dave`, `frank`. Password is `<login>123`, e.g. login for `alice` is `alice123`. You can discover other users by email or phone by prefixing them with `email:` or `tel:` respectively. Emails are `<login>@example.com`, e.g. `alice@example.com`, phones are `17025550001` through `17025550009`.
+Login as one of `alice`, `bob`, `carol`, `dave`, `frank`. Password is `<login>123`, e.g. login for `alice` is `alice123`. You can discover other users by email or phone by prefixing them with `email:` or `tel:` respectively. Emails are `<login>@example.com`, e.g. `alice@example.com`, phones are `+17025550001` through `+17025550009`.
 
 If you register a new account you are asked for an email address to send validation code to. For demo purposes you may use `123456` as a universal validation code. The code you get in the email is also valid.
 
@@ -91,34 +91,34 @@ A text-only [command line client](./tn-cli) implements every possible command.
 * Hot standby.
 * Different levels of message persistence (from strict persistence to "store until delivered" to purely ephemeral messaging).
 
-## Other
+## Third Party Licenses
 
 * Demo avatars and some other graphics are from https://www.pexels.com/ under [CC0](https://www.pexels.com/photo-license/) license.
-* Web and Android background patterns from http://subtlepatterns.com/ under [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/) license.
-* Android icons from https://material.io/tools/icons/ under [Apache 2.0](https://www.apache.org/licenses/LICENSE-2.0.html) license.
-* Some iOS icons from https://icons8.com/ under [CC BY-ND 3.0](https://icons8.com/license) license.
+* Web and Android background patterns are from http://subtlepatterns.com/ under [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/) license.
+* Android icons are from https://material.io/tools/icons/ under [Apache 2.0](https://www.apache.org/licenses/LICENSE-2.0.html) license.
+* Some iOS icons are from https://icons8.com/ under [CC BY-ND 3.0](https://icons8.com/license) license.
 
 ## Screenshots
 
-### Android
+### [Android](https://github.com/tinode/tindroid/)
 
 <p align="center">
 <img src="docs/android-contacts.png" alt="Android screenshot: list of chats" width=270 /> <img src="docs/android-chat.png" alt="Android screenshot: one conversation" width=270 />
 </p>
 
-### iOS
+### [iOS](https://github.com/tinode/ios)
 
 <p align="center">
 <img src="docs/ios-contacts.png" alt="iOS screenshot: list of chats" width=207 /> <img src="docs/ios-chat.png" alt="iOS screenshot: one conversation" width=207 />
 </p>
 
-### Desktop Web
+### [Desktop Web](https://github.com/tinode/webapp/)
 
 <p align="center">
   <img src="docs/web-desktop-2.png" alt="Desktop web: full app" width=866 />
 </p>
 
-### Mobile Web
+### [Mobile Web](https://github.com/tinode/webapp/)
 
 <p align="center">
   <kbd><img src="docs/web-mob-contacts-1.png" alt="Mobile web: contacts" width=323 /></kbd> <kbd><img src="docs/web-mob-chat-1.png" alt="Mobile web: chat" width=323 /></kbd> <kbd><img src="docs/web-mob-info-1.png" alt="Mobile web: topic info" width=323 /></kbd> <kbd><img src="docs/web-mob-new-chat-1.png" alt="Mobile web: start new 1:1 chat" width=323 /></kbd>
