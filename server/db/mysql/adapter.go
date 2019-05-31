@@ -633,7 +633,7 @@ func (a *adapter) UserGetAll(ids ...t.Uid) ([]t.User, error) {
 	}
 
 	users := []t.User{}
-	q, _, _ := sqlx.In("SELECT * FROM users WHERE id IN (?) AND deletedat IS NULL", uids)
+	q, uids, _ := sqlx.In("SELECT * FROM users WHERE id IN (?) AND deletedat IS NULL", uids)
 	q = a.db.Rebind(q)
 	rows, err := a.db.Queryx(q, uids...)
 	if err != nil {
@@ -1126,7 +1126,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 
 	if len(topq) > 0 {
 		// Fetch grp & p2p topics
-		q, _, _ := sqlx.In(
+		q, topq, _ := sqlx.In(
 			"SELECT createdat,updatedat,deletedat,touchedat,name AS id,access,seqid,delid,public,tags "+
 				"FROM topics WHERE name IN (?)", topq)
 		q = a.db.Rebind(q)
@@ -1159,7 +1159,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 
 	// Fetch p2p users and join to p2p tables
 	if err == nil && len(usrq) > 0 {
-		q, _, _ := sqlx.In(
+		q, usrq, _ := sqlx.In(
 			"SELECT id,state,createdat,updatedat,deletedat,access,lastseen,useragent,public,tags FROM users WHERE id IN (?)",
 			usrq)
 		rows, err = a.db.Queryx(q, usrq...)
@@ -2065,7 +2065,7 @@ func (a *adapter) DeviceGetAll(uids ...t.Uid) (map[t.Uid][]t.DeviceDef, int, err
 		unums = append(unums, store.DecodeUid(uid))
 	}
 
-	q, _, _ := sqlx.In("SELECT userid,deviceid,platform,lastseen,lang FROM devices WHERE userid IN (?)", unums)
+	q, unums, _ := sqlx.In("SELECT userid,deviceid,platform,lastseen,lang FROM devices WHERE userid IN (?)", unums)
 	rows, err := a.db.Queryx(q, unums...)
 	if err != nil {
 		return nil, 0, err
@@ -2131,6 +2131,8 @@ func (a *adapter) DeviceDelete(uid t.Uid, deviceID string) error {
 }
 
 // Credential management
+
+// CredAdd adds credential validation record: userd ID, method, credential value, possible response.
 func (a *adapter) CredAdd(cred *t.Credential) error {
 	// Enforce uniqueness: if credential is confirmed, "method:value" must be unique.
 	// if credential is not yet confirmed, "userid:method:value" is unique.
@@ -2148,9 +2150,11 @@ func (a *adapter) CredAdd(cred *t.Credential) error {
 	return err
 }
 
+// CredIsConfirmed returns true of the given validation method is confirmed.
 func (a *adapter) CredIsConfirmed(uid t.Uid, method string) (bool, error) {
 	var done int
-	err := a.db.Get(&done, "SELECT done FROM credentials WHERE userid=? AND method=?",
+	// There could be more than one credential of the same method. We just need one.
+	err := a.db.Get(&done, "SELECT done FROM credentials WHERE userid=? AND method=? AND done=1",
 		store.DecodeUid(uid), method)
 	if err == sql.ErrNoRows {
 		// Nothing found, clear the error, otherwise it will be reported as internal error.
@@ -2160,7 +2164,9 @@ func (a *adapter) CredIsConfirmed(uid t.Uid, method string) (bool, error) {
 	return done > 0, err
 }
 
+// credDel deletes given validation method or ll methods of the given user.
 func credDel(tx *sqlx.Tx, uid t.Uid, method string) error {
+	// FIXME: There could be more than one credential of the same method.
 	query := "DELETE FROM credentials WHERE userid=?"
 	args := []interface{}{store.DecodeUid(uid)}
 	if method != "" {
@@ -2171,7 +2177,10 @@ func credDel(tx *sqlx.Tx, uid t.Uid, method string) error {
 	return err
 }
 
+// CredDel deletes either all credentials of the given user and method
+// or all credentials of the given user if the method is blank.
 func (a *adapter) CredDel(uid t.Uid, method string) error {
+	// FIXME: There could be more than one credential of the same method.
 	tx, err := a.db.Beginx()
 	if err != nil {
 		return err
@@ -2190,7 +2199,9 @@ func (a *adapter) CredDel(uid t.Uid, method string) error {
 	return tx.Commit()
 }
 
+// CredConfirm marks given credential method as confirmed.
 func (a *adapter) CredConfirm(uid t.Uid, method string) error {
+	// FIXME: There could be more than one credential of the same method.
 	res, err := a.db.Exec(
 		"UPDATE credentials SET updatedat=?,done=1,synthetic=CONCAT(method,':',value) WHERE userid=? AND method=?",
 		t.TimeNow(), store.DecodeUid(uid), method)
@@ -2206,15 +2217,18 @@ func (a *adapter) CredConfirm(uid t.Uid, method string) error {
 	return nil
 }
 
+// CredFail increments failure count of the given validation method.
 func (a *adapter) CredFail(uid t.Uid, method string) error {
+	// FIXME: There could be more than one credential of the same method.
 	_, err := a.db.Exec("UPDATE credentials SET updatedat=?,retries=retries+1 WHERE userid=? AND method=?",
 		t.TimeNow(), store.DecodeUid(uid), method)
 	return err
 }
 
+// CredGet returns all credentials of the given user and method, validated or not.
 func (a *adapter) CredGet(uid t.Uid, method string) ([]*t.Credential, error) {
 	query := "SELECT createdat,updatedat,method,value,resp,done,retries " +
-		"FROM credentials WHERE userid=?"
+		"FROM credentials WHERE userid=? ORDER BY createdat DESC"
 	args := []interface{}{store.DecodeUid(uid)}
 	if method != "" {
 		query += " AND method=?"
@@ -2347,7 +2361,7 @@ func (a *adapter) FileDeleteUnused(olderThan time.Time, limit int) ([]string, er
 	}
 
 	if len(ids) > 0 {
-		query, _, _ = sqlx.In("DELETE FROM fileuploads WHERE id IN (?)", ids)
+		query, ids, _ = sqlx.In("DELETE FROM fileuploads WHERE id IN (?)", ids)
 		_, err = tx.Exec(query, ids...)
 		if err != nil {
 			return nil, err

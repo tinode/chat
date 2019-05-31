@@ -320,18 +320,21 @@ func (UsersObjMapper) SaveCred(cred *types.Credential) error {
 	return adp.CredAdd(cred)
 }
 
-// ConfirmCred marks credential as confirmed.
+// ConfirmCred marks credential method as confirmed.
 func (UsersObjMapper) ConfirmCred(id types.Uid, method string) error {
+	// FIXME: There could be more than one credential of the same method.
 	return adp.CredConfirm(id, method)
 }
 
-// FailCred increments fail count.
+// FailCred increments fail count for the given credential method.
 func (UsersObjMapper) FailCred(id types.Uid, method string) error {
+	// FIXME: There could be more than one credential of the same method.
 	return adp.CredFail(id, method)
 }
 
-// GetCred gets a list of confirmed credentials.
+// GetCred gets a list of credentials for the given user and method.
 func (UsersObjMapper) GetCred(id types.Uid, method string) (*types.Credential, error) {
+	// FIXME: There could be more than one credential of the same method.
 	var creds []*types.Credential
 	var err error
 	if creds, err = adp.CredGet(id, method); err == nil {
@@ -344,12 +347,12 @@ func (UsersObjMapper) GetCred(id types.Uid, method string) (*types.Credential, e
 
 }
 
-// GetAllCred retrieves all confimed credential for the given user.
+// GetAllCred retrieves all credentials for the given user.
 func (UsersObjMapper) GetAllCred(id types.Uid) ([]*types.Credential, error) {
 	return adp.CredGet(id, "")
 }
 
-// DelCred deletes user's credentials. If method is "" all credentials are deleted.
+// DelCred deletes user's credentials. If method is "", all credentials are deleted.
 func (UsersObjMapper) DelCred(id types.Uid, method string) error {
 	return adp.CredDel(id, method)
 }

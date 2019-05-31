@@ -5,7 +5,7 @@
 	- [General considerations](#general-considerations)
 	- [Connecting to the server](#connecting-to-the-server)
 		- [gRPC](#grpc)
-		- [Websocket](#websocket)
+		- [WebSocket](#websocket)
 		- [Long polling](#long-polling)
 		- [Out of Band Large Files](#out-of-band-large-files)
 	- [Users](#users)
@@ -13,8 +13,9 @@
 			- [Creating an Account](#creating-an-account)
 			- [Logging in](#logging-in)
 			- [Changing Authentication Parameters](#changing-authentication-parameters)
-			- [Resetting a Password](#resetting-a-password)
+			- [Resetting a Password, i.e. "Forgot Password"](#resetting-a-password-ie-forgot-password)
 		- [Credentials](#credentials)
+			- [Changing Credentials](#changing-credentials)
 		- [Access control](#access-control)
 	- [Topics](#topics)
 		- [`me` topic](#me-topic)
@@ -197,7 +198,8 @@ User may change authentication parameters, such as changing login and password, 
 acc: {
   id: "1a2b3", // string, client-provided message id, optional
   user: "usr2il9suCbuko", // user being affected by the change, optional
-  token: "XMg...g1Gp8+BO0=", // authentication token if the session is not yet authenticated, optional.
+  token: "XMg...g1Gp8+BO0=", // authentication token if the session
+                             // is not yet authenticated, optional.
   scheme: "basic", // authentication scheme being updated.
   secret: base64encode("new_username:new_password") // new parameters
 }
@@ -236,7 +238,8 @@ Credentials can be added or deleted by sending an `{acc}` message:
 acc: {
   id: "1a2b3", // string, client-provided message id, optional
   user: "usr2il9suCbuko", // user being affected by the change, optional
-  token: "XMg...g1Gp8+BO0=", // authentication token if the session is not yet authenticated, optional.
+  token: "XMg...g1Gp8+BO0=", // authentication token if the session is
+                             // not yet authenticated, optional.
   cred: [
     {
       meth: "email", // string, verification method, e.g. "email", "tel", "recaptcha", etc.
@@ -250,7 +253,7 @@ acc: {
 ```
 To remove an existing credential set `resp` to a single Unicode DEL character "&#x2421;" (`\u2421`): `resp: "␡"`.
 
-If certain credentials are required, then the user must maintain them at all times. It means if a required credential has to be changed, the user must first add and validate a new credential, then remove the old one.
+If certain credentials are required, then user must maintain them in validated state at all times. It means if a required credential has to be changed, the user must first add and validate the new credential and only then remove the old one.
 
 
 ### Access control
