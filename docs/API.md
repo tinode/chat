@@ -248,7 +248,7 @@ acc: {
   ]
 }
 ```
-To remove an existing credential set `resp` to a single Unicode DEL character "&#x2421;": `resp: "␡"`.
+To remove an existing credential set `resp` to a single Unicode DEL character "&#x2421;" (`\u2421`): `resp: "␡"`.
 
 If certain credentials are required, then the user must maintain them at all times. It means if a required credential has to be changed, the user must first add and validate a new credential, then remove the old one.
 
@@ -572,7 +572,7 @@ All client to server messages may have an optional `id` field. It's set by the c
 Server requires strictly valid JSON, including double quotes around field names. For brevity the notation below omits double quotes around field names as well as outer curly brackets. Examples use `//` comments only for expressiveness. The comments cannot be used in actual communication with the server.
 
 For messages that update application-defined data, such as `{set}` `private` or `public` fields, when server-side
-data needs to be cleared, use a string with a single Unicode DEL character "&#x2421;" `"\u2421"`. I.e. sending `"public": null` will not clear the field, but sending `"public": "\u2421"` will.
+data needs to be cleared, use a string with a single Unicode DEL character "&#x2421;" (`\u2421`). I.e. sending `"public": null` will not clear the field, but sending `"public": "␡"` will.
 
 Any unrecognized fields are silently ignored by the server.
 
