@@ -196,28 +196,62 @@ User may change authentication parameters, such as changing login and password, 
 ```js
 acc: {
   id: "1a2b3", // string, client-provided message id, optional
-	user: "usr2il9suCbuko", // user, who is being affected by the change, optional
-	token: "XMg...g1Gp8+BO0=", // authentication token if the session is not yet authenticated, optional.
+  user: "usr2il9suCbuko", // user being affected by the change, optional
+  token: "XMg...g1Gp8+BO0=", // authentication token if the session is not yet authenticated, optional.
   scheme: "basic", // authentication scheme being updated.
-  secret: btoa("new_username:new_password") // new parameters
+  secret: base64encode("new_username:new_password") // new parameters
 }
 ```
-In order to change just the password, `username` should be left empty, i.e. `secret: btoa(":new_password")`.
+In order to change just the password, `username` should be left empty, i.e. `secret: base64encode(":new_password")`.
 
 If the session is not authenticated, the request must include a `token`. It can be a regular authentication token obtained during login, or a restricted token received through [Resetting a Password](#resetting-a-password) process. If the session is authenticated, the token must not be included. If the request is authenticated for access level `ROOT`, then the `user` may be set to a valid ID of another user. Otherwise it must be blank (defaulting to the current user) or equal to the ID of the current user.
 
 
-#### Resetting a Password
+#### Resetting a Password, i.e. "Forgot Password"
 
-To reset a password (or any other authentication secret, if such action is supported by the authenticator), one sends a `{login}` message with the `scheme` set to `reset` and the `secret` containing a base64-encoded string "`authentication scheme to reset secret for`:`reset method`:`reset method value`". Most basic case of resetting a password by email is `secret: btoa("basic:email:jdoe@example.com")`, where `jdoe@example.com` is an earlier validated user's email.
+To reset login or password, (or any other authentication secret, if such action is supported by the authenticator), one sends a `{login}` message with the `scheme` set to `reset` and the `secret` containing a base64-encoded string "`authentication scheme to reset secret for`:`reset method`:`reset method value`". Most basic case of resetting a password by email is
+```js
+login: {
+  id: "1a2b3",
+  scheme: "reset",
+  secret: base64encode("basic:email:jdoe@example.com")
+}
+```
+where `jdoe@example.com` is an earlier validated user's email.
 
-If the email matches the registration, the server will send a message using specified method an address with instructions for resetting the secret. The email contains a restricted security token which the user can include into an `{acc}` request with the new secret as described in [Changing Authentication Parameters](#changing-authentication-parameters).
+If the email matches the registration, the server will send a message using specified method and address with instructions for resetting the secret. The email contains a restricted security token which the user can include into an `{acc}` request with the new secret as described in [Changing Authentication Parameters](#changing-authentication-parameters).
 
 ### Credentials
 
-Server may be optionally configured to require certain credentials associated with the user accounts. For instance, it's possible to require user to provide a unique email or a phone number as a condition of account registration, or to solve a captcha.
+Server may be optionally configured to require certain credentials associated with the user accounts and authentication scheme. For instance, it's possible to require user to provide a unique email or a phone number, or to solve a captcha as a condition of account registration.
 
-The server supports verification of email and phone numbers out of the box. Verification of emails is mostly functional, verification of phone numbers is not functional because a commercial subscription is needed in order to be able to send SMS.
+The server supports verification of email and phone numbers out of the box. Verification of emails is mostly functional, verification of phone numbers is not functional because a commercial subscription is needed in order to be able to send text messages (SMS).
+
+Credentials are added or removed by sending an `{acc}` message, verified by sending either a `{login}` or an `{acc}` message.
+
+#### Changing Credentials
+
+Credentials can be added or deleted by sending an `{acc}` message:
+```js
+acc: {
+  id: "1a2b3", // string, client-provided message id, optional
+  user: "usr2il9suCbuko", // user being affected by the change, optional
+  token: "XMg...g1Gp8+BO0=", // authentication token if the session is not yet authenticated, optional.
+  cred: [
+    {
+      meth: "email", // string, verification method, e.g. "email", "tel", "recaptcha", etc.
+      val: "alice@example.com", // string, credential to update such as email or phone
+      resp: "178307", // string, verification response, optional
+      params: { ... } // parameters, specific to the verification method, optional
+    },
+    ...
+  ]
+}
+```
+To remove an existing credential set `resp` to a single Unicode DEL character "&#x2421;": `resp: "␡"`.
+
+If certain credentials are required, then the user must maintain them at all times. It means if a required credential has to be changed, the user must first add and validate a new credential, then remove the old one.
+
 
 ### Access control
 
@@ -482,27 +516,27 @@ pub: {
   topic: "grpnG99YhENiQU",
   head: {
     attachments: ["/v0/file/s/sJOD_tZDPz0.jpg"],
-	  mime: "text/x-drafty"
+    mime: "text/x-drafty"
   },
   content: {
     ent: [
-	  {
-	    data: {
-		  mime: "image/jpeg",
-		  name: "roses-are-red.jpg",
-		  ref:  "/v0/file/s/sJOD_tZDPz0.jpg",
-		  size: 437265
-		},
-	    tp: "EX"
-	  }
-	],
-	fmt: [
-	  {
-	    at: -1,
-		key:0,
-		len:1
-	  }
-	]
+    {
+      data: {
+      mime: "image/jpeg",
+      name: "roses-are-red.jpg",
+      ref:  "/v0/file/s/sJOD_tZDPz0.jpg",
+      size: 437265
+    },
+      tp: "EX"
+    }
+  ],
+  fmt: [
+    {
+      at: -1,
+    key:0,
+    len:1
+    }
+  ]
   }
 }
 ```
@@ -520,12 +554,12 @@ _Important!_ As a security measure, the client should not send security credenti
 Tinode uses compile-time adapters for handling push notifications. The server comes with [Google FCM](https://firebase.google.com/docs/cloud-messaging/) and `stdout` adapters. FCM supports all major mobile platforms except Chinese flavor of Android. Any type of push notifications can be handled by writing an appropriate adapter. The payload of the notification from the FCM adapter is the following:
 ```js
 {
-	topic: "grpnG99YhENiQU", 	// Topic which received the message.
+  topic: "grpnG99YhENiQU", // Topic which received the message.
   xfrom: "usr2il9suCbuko", // ID of the user who sent the message.
   ts: "2019-01-06T18:07:30.038Z", // message timestamp in RFC3339 format.
   seq: "1234", // sequential ID of the message (integer value sent as text).
   mime: "text/x-drafty", // message MIME-Type.
-	content: "Lorem ipsum dolor sit amet, consectetur adipisci", // The first 80 characters of the message content as plain text.
+  content: "Lorem ipsum dolor sit amet, consectetur adipisci", // The first 80 characters of the message content as plain text.
 }
 ```
 
@@ -562,7 +596,7 @@ hi: {
                    // see [Push notifications support](#push-notifications-support); optional
   platf: "android", // string, underlying OS for the purpose of push notifications, one of
                    // "android", "ios", "web"; if missing, the server will try its best to
-                   // detect the platform; optional
+                   // detect the platform from the user agent string; optional
   lang: "en-US"    // human language of the client device; optional
 }
 ```
@@ -576,11 +610,11 @@ Message `{acc}` creates users or updates `tags` or authentication credentials `s
 acc: {
   id: "1a2b3", // string, client-provided message id, optional
   user: "new", // string, "new" to create a new user, default: current user, optional
-	token: "XMgS...8+BO0=", // string, authentication token to use for the request if the
-							// session is not authenticated, optional
+  token: "XMgS...8+BO0=", // string, authentication token to use for the request if the
+               // session is not authenticated, optional
   scheme: "basic", // authentication scheme for this account, required;
                // "basic" and "anon" are currently supported for account creation.
-  secret: btoa("username:password"), // string, base64 encoded secret for the chosen
+  secret: base64encode("username:password"), // string, base64 encoded secret for the chosen
               // authentication scheme; to delete a scheme use a string with a single DEL
               // Unicode character "\u2421"; "token" and "basic" cannot be deleted
   login: true, // boolean, use the newly created account to authenticate current session,
@@ -595,7 +629,7 @@ acc: {
       resp: "178307", // string, verification response, optional
       params: { ... } // parameters, specific to the verification method, optional
     },
-	...
+  ...
   ],   // account credentials which require verification, such as email or phone number.
 
   desc: {  // object, user initialisation data closely matching that of table
@@ -627,15 +661,15 @@ Login is used to authenticate the current session.
 login: {
   id: "1a2b3",     // string, client-provided message id, optional
   scheme: "basic", // string, authentication scheme; "basic",
-									 // "token", and "reset" are currently supported
-  secret: btoa("username:password"), // string, base64-encoded secret for the chosen
+                   // "token", and "reset" are currently supported
+  secret: base64encode("username:password"), // string, base64-encoded secret for the chosen
                   // authentication scheme, required
   cred: [
     {
       meth: "email", // string, verification method, e.g. "email", "tel", "captcha", etc, required
       resp: "178307" // string, verification response, required
     },
-	...
+  ...
   ],   // response to a request for credential verification, optional
 }
 ```
@@ -673,7 +707,7 @@ sub: {
   // Object with topic initialisation data, new topics & new
   // subscriptions only, mirrors {set} message
   set: {
-	// New topic parameters, mirrors {set desc}
+  // New topic parameters, mirrors {set desc}
     desc: {
       defacs: {
         auth: "JRWS", // string, default access for new authenticated subscribers
@@ -715,19 +749,19 @@ sub: {
       ims: "2015-10-06T18:07:30.038Z", // timestamp, "if modified since" - return
               // public and private values only if at least one of them has been
               // updated after the stated timestamp, optional
-	  user: "usr2il9suCbuko", // string, return results for a single user,
-	                          // any topic other than 'me', optional
-	  topic: "usr2il9suCbuko", // string, return results for a single topic,
-	                          // 'me' topic only, optional
+    user: "usr2il9suCbuko", // string, return results for a single user,
+                            // any topic other than 'me', optional
+    topic: "usr2il9suCbuko", // string, return results for a single topic,
+                            // 'me' topic only, optional
       limit: 20 // integer, limit the number of returned objects
     },
 
     // Optional parameters for {get what="data"}, see {get what="data"} for details
     data: {
       since: 123, // integer, load messages with server-issued IDs greater or equal
-  				 // to this (inclusive/closed), optional
+            // to this (inclusive/closed), optional
       before: 321, // integer, load messages with server-issued sequential IDs less
-  				  // than this (exclusive/open), optional
+            // than this (exclusive/open), optional
       limit: 20, // integer, limit the number of returned objects,
                  // default: 32, optional
     } // object, optional
@@ -814,19 +848,19 @@ get: {
     ims: "2015-10-06T18:07:30.038Z", // timestamp, "if modified since" - return
           // public and private values only if at least one of them has been
           // updated after the stated timestamp, optional
-	user: "usr2il9suCbuko", // string, return results for a single user,
-	                        // any topic other than 'me', optional
-	topic: "usr2il9suCbuko", // string, return results for a single topic,
-	                         // 'me' topic only, optional
+  user: "usr2il9suCbuko", // string, return results for a single user,
+                          // any topic other than 'me', optional
+  topic: "usr2il9suCbuko", // string, return results for a single topic,
+                           // 'me' topic only, optional
     limit: 20 // integer, limit the number of returned objects
   },
 
   // Optional parameters for {get what="data"}
   data: {
     since: 123, // integer, load messages with server-issued IDs greater or equal
-				 // to this (inclusive/closed), optional
+          // to this (inclusive/closed), optional
     before: 321, // integer, load messages with server-issed sequential IDs less
-				  // than this (exclusive/open), optional
+          // than this (exclusive/open), optional
     limit: 20, // integer, limit the number of returned objects, default: 32,
                // optional
   },
@@ -834,9 +868,9 @@ get: {
   // Optional parameters for {get what="del"}
   del: {
     since: 5, // integer, load deleted ranges with the delete transaction IDs greater
-				// or equal to this (inclusive/closed), optional
+              // or equal to this (inclusive/closed), optional
     before: 12, // integer, load deleted ranges with the delete transaction IDs less
-				  // than this (exclusive/open), optional
+                // than this (exclusive/open), optional
     limit: 25, // integer, limit the number of returned objects, default: 32,
                // optional
   }
@@ -895,7 +929,7 @@ set: {
     user: "usr2il9suCbuko", // string, user affected by this request;
                             // default (empty) means current user
     mode: "JRWP" // string, access mode change, either given ('user'
-				  // is defined) or requested ('user' undefined)
+                 // is defined) or requested ('user' undefined)
   }, // object, payload for what == "sub"
 
   // Optional update to tags (see fnd topic description)
@@ -992,7 +1026,7 @@ data: {
                           // message; could be missing if the message was
                           // generated by the server
   head: { key: "value", ... }, // set of string key-value pairs, passed
-						   // unchanged from {pub}, optional
+                               // unchanged from {pub}, optional
   ts: "2015-10-06T18:07:30.038Z", // string, timestamp
   seq: 123, // integer, server-issued sequential ID
   content: { ... } // object, application-defined content exactly as published
@@ -1046,7 +1080,7 @@ meta: {
     acs: {  // user's actual access permissions
       want: "JRWP", // string, requested access permission
       given: "JRWP", // string, granted access permission
-	  mode: "JRWP" // string, combination of want and given
+    mode: "JRWP" // string, combination of want and given
     },
     seq: 123, // integer, server-issued id of the last {data} message
     read: 112, // integer, ID of the message user claims through {note} message
@@ -1071,9 +1105,9 @@ meta: {
                                            // in the future, such as new subscribers)
       acs: {  // user's access permissions
         want: "JRWP", // string, requested access permission, present for user's own
-					 // subscriptions and when the requester is topic's manager or owner
+              // subscriptions and when the requester is topic's manager or owner
         given: "JRWP", // string, granted access permission, optional exactly as 'want'
-	    mode: "JRWP" // string, combination of want and given
+        mode: "JRWP" // string, combination of want and given
       },
       read: 112, // integer, ID of the message user claims through {note} message
                  // to have read, optional
@@ -1110,11 +1144,11 @@ meta: {
     ...
   ],
   tags: [ // array of tags that the topic or user (in case of "me" topic) is indexed by
-	"email:alice@example.com", "tel:1234567890"
+    "email:alice@example.com", "tel:+1234567890"
   ],
   del: {
-	clear: 3, // ID of the latest applicable 'delete' transaction
-	delseq: [{low: 15}, {low: 22, hi: 28}, ...], // ranges of IDs of deleted messages
+    clear: 3, // ID of the latest applicable 'delete' transaction
+    delseq: [{low: 15}, {low: 22, hi: 28}, ...], // ranges of IDs of deleted messages
   }
 }
 ```
@@ -1129,16 +1163,16 @@ pres: {
   src: "grp1XUtEhjv6HND", // string, topic or user affected by the change, always present
   what: "on", // string, what's changed, always present
   seq: 123, // integer, "what" is "msg", a server-issued ID of the message,
-           // optional
+            // optional
   clear: 15, // integer, "what" is "del", an update to the delete transaction ID.
   delseq: [{low: 123}, {low: 126, hi: 136}], // array of ranges, "what" is "del",
-			// ranges of IDs of deleted messages, optional
+             // ranges of IDs of deleted messages, optional
   ua: "Tinode/1.0 (Android 2.2)", // string, a User Agent string identifying client
-						// software if "what" is "on" or "ua", optional
-  act: "usr2il9suCbuko",	// string, user who performed the action, optional
-  tgt: "usrRkDVe0PYDOo", 	// string, user affected by the action, optional
+             // software if "what" is "on" or "ua", optional
+  act: "usr2il9suCbuko",  // string, user who performed the action, optional
+  tgt: "usrRkDVe0PYDOo",  // string, user affected by the action, optional
   acs: {want: "+AS-D", given: "+S"} // object, changes to access mode, "what" is "acs",
-			// optional
+                          // optional
 }
 ```
 

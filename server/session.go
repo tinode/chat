@@ -721,7 +721,7 @@ func (s *Session) onLogin(msgID string, timestamp time.Time, rec *auth.Rec, miss
 		if len(rec.Tags) > 0 {
 			log.Println("Resetting user's tags", normalizeTags(rec.Tags))
 
-			if err := store.Users.UpdateTags(rec.Uid, normalizeTags(rec.Tags), true); err != nil {
+			if err := store.Users.UpdateTags(rec.Uid, nil, nil, normalizeTags(rec.Tags)); err != nil {
 
 				log.Println("failed to update user's tags", err)
 			}
@@ -762,18 +762,19 @@ func (s *Session) getValidatedGred(uid types.Uid, authLvl auth.Level, creds []Ms
 		return nil, err
 	}
 
-	// Compile a list of validated credentials.
-	var validated []string
+	// Compile a list of validated methods.
+	// There could be multiple validated credentials for the same method, so count them.
+	methods := make(map[string]int)
 	for _, cr := range allCred {
 		if cr.Done {
-			validated = append(validated, cr.Method)
+			methods[cr.Method]++
 		}
 	}
 
 	// Add credentials which are validated in this call.
 	// Unknown validators are removed.
 	creds = normalizeCredentials(creds, false)
-	var tags []string
+	var tagsToAdd, tagsToRemove []string
 	for i := range creds {
 		cr := &creds[i]
 		if cr.Response == "" {
@@ -792,19 +793,37 @@ func (s *Session) getValidatedGred(uid types.Uid, authLvl auth.Level, creds []Ms
 			return nil, err
 		}
 
-		// Check did not return an error: the request was successfully validated.
-		validated = append(validated, cr.Method)
+		// Value could be empty if validated credential was deleted.
+		if value != "" {
+			// Check did not return an error: the request was successfully validated.
+			methods[cr.Method]++
 
-		// Add validated credential to user's tags.
-		if globals.validators[cr.Method].addToTags {
-			tags = append(tags, cr.Method+":"+value)
+			// Add validated credential to user's tags.
+			if globals.validators[cr.Method].addToTags {
+				tagsToAdd = append(tagsToAdd, cr.Method+":"+value)
+			}
+		} else {
+			// Credential deleted.
+			methods[cr.Method]--
+
+			// Remove deleted credential from user's tags.
+			if globals.validators[cr.Method].addToTags {
+				tagsToRemove = append(tagsToRemove, cr.Method+":"+value)
+			}
 		}
 	}
 
-	if len(tags) > 0 {
+	if len(tagsToAdd) > 0 || len(tagsToRemove) > 0 {
 		// Save update to tags
-		if err := store.Users.UpdateTags(uid, tags, false); err != nil {
+		if err := store.Users.UpdateTags(uid, tagsToAdd, tagsToRemove, nil); err != nil {
 			return nil, err
+		}
+	}
+
+	var validated []string
+	for method, count := range methods {
+		if count > 0 {
+			validated = append(validated, method)
 		}
 	}
 

@@ -50,6 +50,9 @@ type Uid uint64
 // ZeroUid is a constant representing uninitialized Uid.
 const ZeroUid Uid = 0
 
+// Unicode DEL character which indicated that the value is being deleted.
+const NullValue = "\u2421"
+
 // Lengths of various Uid representations
 const (
 	uidBase64Unpadded = 11

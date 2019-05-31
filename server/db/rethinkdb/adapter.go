@@ -654,15 +654,29 @@ func (a *adapter) UserUpdate(uid t.Uid, update map[string]interface{}) error {
 }
 
 // UserUpdateTags append or resets user's tags
-func (a *adapter) UserUpdateTags(uid t.Uid, tags []string, reset bool) error {
-	if reset {
+func (a *adapter) UserUpdateTags(uid t.Uid, add, remove, reset []string) error {
+	// Compare to nil vs checking for zero length: zero length reset is valid.
+	if reset != nil {
 		// Replace Tags with the new value
-		return a.UserUpdate(uid, map[string]interface{}{"Tags": tags})
+		return a.UserUpdate(uid, map[string]interface{}{"Tags": reset})
 	}
 
-	// Add tags to the list.
+	if len(add) == 0 && len(remove) == 0 {
+		return nil
+	}
+
+	// Mutate the tag list.
+
+	newTags := rdb.Row.Field("Tags")
+	if len(add) > 0 {
+		newTags = newTags.SetUnion(add)
+	}
+	if len(remove) > 0 {
+		newTags = newTags.SetDifference(remove)
+	}
+
 	_, err := rdb.DB(a.dbName).Table("users").Get(uid.String()).Update(
-		map[string]interface{}{"Tags": rdb.Row.Field("Tags").SetUnion(tags)}).RunWrite(a.conn)
+		map[string]interface{}{"Tags": newTags}).RunWrite(a.conn)
 
 	return err
 }
@@ -1753,8 +1767,6 @@ func (a *adapter) DeviceDelete(uid t.Uid, deviceID string) error {
 
 // Credential management
 func (a *adapter) CredAdd(cred *t.Credential) error {
-	// log.Println("saving credential", cred)
-
 	cred.Id = cred.Method + ":" + cred.Value
 	if !cred.Done {
 		// If credential is not confirmed, it should not block others

@@ -163,7 +163,7 @@ func (v *validator) PreCheck(cred string, params interface{}) error {
 
 // Send a request for confirmation to the user: makes a record in DB  and nothing else.
 func (v *validator) Request(user t.Uid, email, lang, resp string, tmpToken []byte) error {
-	// Email validator cannot accept an immmediate response.
+	// Email validator cannot accept an immediate response.
 	if resp != "" {
 		return t.ErrFailed
 	}
@@ -228,6 +228,19 @@ func (v *validator) Check(user t.Uid, resp string) (string, error) {
 	if cred.Retries > v.MaxRetries {
 		return "", t.ErrPolicy
 	}
+
+	if cred.Done {
+		// Credential has been validated earlier.
+		if resp == t.NullValue {
+			// The user is asking to clear validation status effectively removing the credential.
+			// Unvalidated credential cannot be removed to prevent abuse of going above MaxRetries.
+			return "", store.Users.DelCred(user, "email")
+		}
+
+		// The credential has been already validated. No change.
+		return cred.Value, nil
+	}
+
 	if resp == "" {
 		return "", t.ErrCredentials
 	}

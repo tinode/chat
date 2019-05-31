@@ -426,29 +426,49 @@ func (a *adapter) CreateDb(reset bool) error {
 
 func addTags(tx *sqlx.Tx, table, keyName string, keyVal interface{}, tags []string, ignoreDups bool) error {
 
-	if len(tags) > 0 {
-		var insert *sql.Stmt
-		var err error
-		insert, err = tx.Prepare("INSERT INTO " + table + "(" + keyName + ",tag) VALUES(?,?)")
+	if len(tags) == 0 {
+		return nil
+	}
+
+	var insert *sql.Stmt
+	var err error
+	insert, err = tx.Prepare("INSERT INTO " + table + "(" + keyName + ",tag) VALUES(?,?)")
+	if err != nil {
+		return err
+	}
+
+	for _, tag := range tags {
+		_, err = insert.Exec(keyVal, tag)
+
 		if err != nil {
+			if isDupe(err) {
+				if ignoreDups {
+					continue
+				}
+				return t.ErrDuplicate
+			}
 			return err
 		}
-
-		for _, tag := range tags {
-			_, err = insert.Exec(keyVal, tag)
-
-			if err != nil {
-				if isDupe(err) {
-					if ignoreDups {
-						continue
-					}
-					return t.ErrDuplicate
-				}
-				return err
-			}
-		}
 	}
+
 	return nil
+}
+
+func removeTags(tx *sqlx.Tx, table, keyName string, keyVal interface{}, tags []string) error {
+	if len(tags) == 0 {
+		return nil
+	}
+
+	args := []interface{}{keyVal}
+	for _, tag := range tags {
+		args = append(args, tag)
+	}
+
+	query, args, _ := sqlx.In("DELETE FROM "+table+" WHERE "+keyName+"=? AND tag IN (?)", args)
+	tx.Rebind(query)
+	_, err := tx.Exec(query, args...)
+
+	return err
 }
 
 // UserCreate creates a new user. Returns error and true if error is due to duplicate user name,
@@ -812,7 +832,7 @@ func (a *adapter) UserUpdate(uid t.Uid, update map[string]interface{}) error {
 }
 
 // UserUpdateTags adds or resets user's tags
-func (a *adapter) UserUpdateTags(uid t.Uid, tags []string, reset bool) error {
+func (a *adapter) UserUpdateTags(uid t.Uid, add, remove, reset []string) error {
 	tx, err := a.db.Beginx()
 	if err != nil {
 		return err
@@ -826,16 +846,24 @@ func (a *adapter) UserUpdateTags(uid t.Uid, tags []string, reset bool) error {
 
 	decoded_uid := store.DecodeUid(uid)
 
-	if reset {
-		// Delete all tags first.
+	if reset != nil {
+		// Delete all tags first if resetting.
 		_, err = tx.Exec("DELETE FROM usertags WHERE userid=?", decoded_uid)
 		if err != nil {
 			return err
 		}
+		add = reset
+		remove = nil
+	}
+
+	// Now insert new tags. Ignore duplicates if resetting.
+	err = addTags(tx, "usertags", "userid", decoded_uid, add, reset == nil)
+	if err != nil {
+		return err
 	}
 
 	// Now insert new tags
-	err = addTags(tx, "usertags", "userid", decoded_uid, tags, !reset)
+	err = removeTags(tx, "usertags", "userid", decoded_uid, remove)
 	if err != nil {
 		return err
 	}
@@ -854,7 +882,7 @@ func (a *adapter) UserUpdateTags(uid t.Uid, tags []string, reset bool) error {
 		allTags = append(allTags, tag)
 	}
 
-	_, err = tx.Exec("UPDATE users SET tags=? WHERE id=?", t.StringSlice(tags), decoded_uid)
+	_, err = tx.Exec("UPDATE users SET tags=? WHERE id=?", t.StringSlice(allTags), decoded_uid)
 	if err != nil {
 		return err
 	}
@@ -2104,7 +2132,7 @@ func (a *adapter) DeviceDelete(uid t.Uid, deviceID string) error {
 
 // Credential management
 func (a *adapter) CredAdd(cred *t.Credential) error {
-	// Enforece uniqueness: if credential is confirmed, "method:value" must be unique.
+	// Enforce uniqueness: if credential is confirmed, "method:value" must be unique.
 	// if credential is not yet confirmed, "userid:method:value" is unique.
 	synth := cred.Method + ":" + cred.Value
 	if !cred.Done {

@@ -253,8 +253,8 @@ func replyUpdateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 			return
 		}
 
-		// Tags may have changed, update them
-		store.Users.UpdateTags(uid, rec.Tags, true)
+		// Tags may have changed, reset them.
+		store.Users.UpdateTags(uid, nil, nil, rec.Tags)
 
 	} else if msg.Acc.Scheme != "" {
 		// Invalid or unknown auth scheme
