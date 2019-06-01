@@ -176,7 +176,7 @@ func (t *Topic) run(hub *Hub) {
 		case sreg := <-t.reg:
 			// Request to add a connection to this topic
 
-			if t.isSuspended() {
+			if !t.isReady() {
 				sreg.sess.queueOut(ErrLocked(sreg.pkt.id, t.original(sreg.sess.uid), types.TimeNow()))
 			} else {
 				// The topic is alive, so stop the kill timer, if it's ticking. We don't want the topic to die
@@ -203,7 +203,7 @@ func (t *Topic) run(hub *Hub) {
 			// userId.IsZero() == true when the entire session is being dropped.
 			asUid := leave.userId
 
-			if t.isSuspended() {
+			if !t.isReady() {
 				if !asUid.IsZero() && leave.reqID != "" {
 					leave.sess.queueOut(ErrLocked(leave.reqID, t.original(asUid), now))
 				}
@@ -271,7 +271,7 @@ func (t *Topic) run(hub *Hub) {
 			var pushRcpt *push.Receipt
 			asUid := types.ParseUserId(msg.from)
 			if msg.Data != nil {
-				if t.isSuspended() {
+				if !t.isReady() {
 					msg.sess.queueOut(ErrLocked(msg.id, t.original(asUid), msg.timestamp))
 					continue
 				}
@@ -322,7 +322,7 @@ func (t *Topic) run(hub *Hub) {
 				pluginMessage(msg.Data, plgActCreate)
 
 			} else if msg.Pres != nil {
-				if t.isSuspended() {
+				if !t.isReady() {
 					// Ignore presence update - topic is being deleted
 					continue
 				}
@@ -336,7 +336,7 @@ func (t *Topic) run(hub *Hub) {
 				// "what" may have changed, i.e. unset or "+command" removed ("on+en" -> "on")
 				msg.Pres.What = what
 			} else if msg.Info != nil {
-				if t.isSuspended() {
+				if !t.isReady() {
 					// Ignore info messages - topic is being deleted
 					continue
 				}
@@ -2351,12 +2351,20 @@ func (t *Topic) suspend() {
 	atomic.StoreInt32((*int32)(&t.suspended), 1)
 }
 
+func (t *Topic) markDeleted() {
+	atomic.StoreInt32((*int32)(&t.suspended), 2)
+}
+
 func (t *Topic) resume() {
 	atomic.StoreInt32((*int32)(&t.suspended), 0)
 }
 
-func (t *Topic) isSuspended() bool {
-	return atomic.LoadInt32((*int32)(&t.suspended)) != 0
+func (t *Topic) isReady() bool {
+	return atomic.LoadInt32((*int32)(&t.suspended)) == 0
+}
+
+func (t *Topic) isDeleted() bool {
+	return atomic.LoadInt32((*int32)(&t.suspended)) == 2
 }
 
 // Get topic name suitable for the given client

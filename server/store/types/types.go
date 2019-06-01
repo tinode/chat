@@ -38,7 +38,11 @@ const (
 	ErrPolicy = StoreError("policy")
 	// ErrCredentials means credentials like email or captcha must be validated
 	ErrCredentials = StoreError("credentials")
-	// ErrNotFound means the objevy was not found
+	// ErrUserNotFound means the user was not found
+	ErrUserNotFound = StoreError("user not found")
+	// ErrNotFound means the topic was not found
+	ErrTopicNotFound = StoreError("topic not found")
+	// ErrNotFound means the object other then user or topic was not found
 	ErrNotFound = StoreError("not found")
 	// ErrPermissionDenied means the operation is not permitted
 	ErrPermissionDenied = StoreError("denied")

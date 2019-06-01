@@ -263,6 +263,10 @@ func decodeStoreError(err error, id, topic string, timestamp time.Time,
 			errmsg = ErrPolicy(id, topic, timestamp)
 		case types.ErrCredentials:
 			errmsg = InfoValidateCredentials(id, timestamp)
+		case types.ErrUserNotFound:
+			errmsg = ErrUserNotFound(id, topic, timestamp)
+		case types.ErrTopicNotFound:
+			errmsg = ErrTopicNotFound(id, topic, timestamp)
 		case types.ErrNotFound:
 			errmsg = ErrNotFound(id, topic, timestamp)
 		default:

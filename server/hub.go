@@ -156,10 +156,28 @@ func (h *Hub) run() {
 			// 2. Check access rights and reject, if appropriate
 			// 3. Attach session to the topic
 
-			t := h.topicGet(sreg.topic) // is the topic already loaded?
+			// Is the topic already loaded?
+			t := h.topicGet(sreg.topic)
 			if t == nil {
-				// Topic does not exist or not loaded
-				go topicInit(sreg, h)
+				// Topic does not exist or not loaded.
+				t = &Topic{name: sreg.topic,
+					xoriginal: sreg.pkt.topic,
+					sessions:  make(map[*Session]types.UidSlice),
+					broadcast: make(chan *ServerComMessage, 256),
+					reg:       make(chan *sessionJoin, 32),
+					unreg:     make(chan *sessionLeave, 32),
+					meta:      make(chan *metaReq, 32),
+					perUser:   make(map[types.Uid]perUserData),
+					exit:      make(chan *shutDown, 1),
+				}
+				// Topic is created in suspended state because it's not yet configured.
+				t.suspend()
+				// Save topic now to prevent race condition.
+				h.topicPut(sreg.topic, t)
+
+				// Create the topic.
+				go topicInit(t, sreg, h)
+
 			} else {
 				// Topic found.
 				// Topic will check access rights and send appropriate {ctrl}
@@ -309,6 +327,7 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 				sess.queueOut(NoErr(msg.id, msg.topic, now))
 
 				h.topicDel(topic)
+				t.markDeleted()
 				t.exit <- &shutDown{reason: StopDeleted}
 				statsInc("LiveTopics", -1)
 			} else {
@@ -401,7 +420,7 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 		// Case 2: just unregister.
 		// If t is nil, it's not registered, no action is needed
 		if t := h.topicGet(topic); t != nil {
-			t.suspend()
+			t.markDeleted()
 			h.topicDel(topic)
 
 			t.exit <- &shutDown{reason: reason}
@@ -434,7 +453,7 @@ func (h *Hub) stopTopicsForUser(uid types.Uid, reason int, alldone chan<- bool) 
 		if _, isMember := topic.perUser[uid]; (topic.cat != types.TopicCatGrp && isMember) ||
 			topic.owner == uid {
 
-			topic.suspend()
+			topic.markDeleted()
 
 			h.topics.Delete(name)
 
