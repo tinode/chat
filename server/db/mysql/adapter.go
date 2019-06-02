@@ -2132,18 +2132,42 @@ func (a *adapter) DeviceDelete(uid t.Uid, deviceID string) error {
 
 // Credential management
 
-// CredAdd adds credential validation record: userd ID, method, credential value, possible response.
-func (a *adapter) CredAdd(cred *t.Credential) error {
+// CredUpsert adds or updates a validation record.
+func (a *adapter) CredUpsert(cred *t.Credential) error {
+	// If credential is validated it cannot be changed so assume it does not exist, just try to add it.
+	// If credential is not valiated, try to find it first: if it does not exist add it, otherwise
+	// update UpdatedAt and Resp.
+
+	userId := decodeUidString(cred.User)
+
+	// Deactivate all unverified records of this user and method.
+	_, err := a.db.Exec("UPDATE credentials SET done=-1 WHERE userid=? AND method=?", userId, cred.Method)
+
 	// Enforce uniqueness: if credential is confirmed, "method:value" must be unique.
 	// if credential is not yet confirmed, "userid:method:value" is unique.
 	synth := cred.Method + ":" + cred.Value
+	done := 1
 	if !cred.Done {
 		synth = cred.User + ":" + synth
+		done = 0
+
+		// Assume that the record exists and try to update it: mark as active, update timestamp and response value.
+		res, err := a.db.Exec("UPDATE credentials SET updatedat=?,resp=?,done=0 WHERE synthetic=?",
+			cred.UpdatedAt, cred.Resp, synth)
+		if err != nil {
+			return err
+		}
+
+		// If record was updated, then all is fine.
+		if numrows, _ := res.RowsAffected(); numrows > 0 {
+			return nil
+		}
 	}
-	_, err := a.db.Exec("INSERT INTO credentials(createdat,updatedat,method,value,synthetic,userid,resp,done) "+
+
+	// Add new record.
+	_, err = a.db.Exec("INSERT INTO credentials(createdat,updatedat,method,value,synthetic,userid,resp,done) "+
 		"VALUES(?,?,?,?,?,?,?,?)",
-		cred.CreatedAt, cred.UpdatedAt, cred.Method, cred.Value, synth,
-		decodeUidString(cred.User), cred.Resp, cred.Done)
+		cred.CreatedAt, cred.UpdatedAt, cred.Method, cred.Value, synth, userId, cred.Resp, done)
 	if isDupe(err) {
 		return t.ErrDuplicate
 	}
@@ -2164,9 +2188,8 @@ func (a *adapter) CredIsConfirmed(uid t.Uid, method string) (bool, error) {
 	return done > 0, err
 }
 
-// credDel deletes given validation method or ll methods of the given user.
+// credDel deletes given validation method or all methods of the given user.
 func credDel(tx *sqlx.Tx, uid t.Uid, method string) error {
-	// FIXME: There could be more than one credential of the same method.
 	query := "DELETE FROM credentials WHERE userid=?"
 	args := []interface{}{store.DecodeUid(uid)}
 	if method != "" {
@@ -2180,7 +2203,6 @@ func credDel(tx *sqlx.Tx, uid t.Uid, method string) error {
 // CredDel deletes either all credentials of the given user and method
 // or all credentials of the given user if the method is blank.
 func (a *adapter) CredDel(uid t.Uid, method string) error {
-	// FIXME: There could be more than one credential of the same method.
 	tx, err := a.db.Beginx()
 	if err != nil {
 		return err
@@ -2201,9 +2223,8 @@ func (a *adapter) CredDel(uid t.Uid, method string) error {
 
 // CredConfirm marks given credential method as confirmed.
 func (a *adapter) CredConfirm(uid t.Uid, method string) error {
-	// FIXME: There could be more than one credential of the same method.
 	res, err := a.db.Exec(
-		"UPDATE credentials SET updatedat=?,done=1,synthetic=CONCAT(method,':',value) WHERE userid=? AND method=?",
+		"UPDATE credentials SET updatedat=?,done=1,synthetic=CONCAT(method,':',value) WHERE userid=? AND method=? AND done=0",
 		t.TimeNow(), store.DecodeUid(uid), method)
 	if err != nil {
 		if isDupe(err) {
@@ -2219,38 +2240,25 @@ func (a *adapter) CredConfirm(uid t.Uid, method string) error {
 
 // CredFail increments failure count of the given validation method.
 func (a *adapter) CredFail(uid t.Uid, method string) error {
-	// FIXME: There could be more than one credential of the same method.
-	_, err := a.db.Exec("UPDATE credentials SET updatedat=?,retries=retries+1 WHERE userid=? AND method=?",
+	_, err := a.db.Exec("UPDATE credentials SET updatedat=?,retries=retries+1 WHERE userid=? AND method=? AND done=0",
 		t.TimeNow(), store.DecodeUid(uid), method)
 	return err
 }
 
-// CredGet returns all credentials of the given user and method, validated or not.
-func (a *adapter) CredGet(uid t.Uid, method string) ([]*t.Credential, error) {
-	query := "SELECT createdat,updatedat,method,value,resp,done,retries " +
-		"FROM credentials WHERE userid=? ORDER BY createdat DESC"
-	args := []interface{}{store.DecodeUid(uid)}
-	if method != "" {
-		query += " AND method=?"
-		args = append(args, method)
-	}
-	rows, err := a.db.Queryx(query, args...)
+// CredGetActive returns currently active unvalidated credential of the given user and method.
+func (a *adapter) CredGetActive(uid t.Uid, method string) (*t.Credential, error) {
+	var cred t.Credential
+	err := a.db.Get(&cred, "SELECT createdat,updatedat,method,value,resp,done,retries "+
+		"FROM credentials WHERE userid=? AND method=? AND done=0", store.DecodeUid(uid), method)
 	if err != nil {
+		if err == sql.ErrNoRows {
+			err = nil
+		}
 		return nil, err
 	}
+	cred.User = uid.String()
 
-	var result []*t.Credential
-	for rows.Next() {
-		var cred t.Credential
-		if err = rows.StructScan(&cred); err != nil {
-			break
-		}
-		cred.User = uid.String()
-		result = append(result, &cred)
-	}
-	rows.Close()
-
-	return result, err
+	return &cred, nil
 }
 
 // FileUploads

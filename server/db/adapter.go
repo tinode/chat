@@ -52,10 +52,10 @@ type Adapter interface {
 
 	// Credential management
 
-	// CredAdd adds a credential record.
-	CredAdd(cred *t.Credential) error
-	// CredGet returns all credential records for the given method.
-	CredGet(uid t.Uid, method string) ([]*t.Credential, error)
+	// CredUpsert adds or updates a credential record.
+	CredUpsert(cred *t.Credential) error
+	// CredGetActive returns the currently active credential record for the given method.
+	CredGetActive(uid t.Uid, method string) (*t.Credential, error)
 	// CredIsConfirmed returns true if the given credential method has been verified, false otherwise.
 	CredIsConfirmed(uid t.Uid, metod string) (bool, error)
 	// CredDel deletes credentials for the given method. If method is empty, deletes all user's credentials.

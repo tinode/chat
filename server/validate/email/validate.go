@@ -183,15 +183,19 @@ func (v *validator) Request(user t.Uid, email, lang, resp string, tmpToken []byt
 		return err
 	}
 
-	// Send email without blocking. Email sending may take long time.
-	go v.send(email, v.ValidationSubject, string(body.Bytes()))
-
-	return store.Users.SaveCred(&t.Credential{
+	// Create or update validation record in DB.
+	if err := store.Users.UpsertCred(&t.Credential{
 		User:   user.String(),
 		Method: "email",
 		Value:  email,
-		Resp:   resp,
-	})
+		Resp:   resp}); err != nil {
+		return err
+	}
+
+	// Send email without blocking. Email sending may take long time.
+	go v.send(email, v.ValidationSubject, string(body.Bytes()))
+
+	return nil
 }
 
 // ResetSecret sends a message with instructions for resetting an authentication secret.
@@ -215,7 +219,7 @@ func (v *validator) ResetSecret(email, scheme, lang string, tmpToken []byte) err
 // Check checks if the provided validation response matches the expected response.
 // Returns the value of validated credential on success.
 func (v *validator) Check(user t.Uid, resp string) (string, error) {
-	cred, err := store.Users.GetCred(user, "email")
+	cred, err := store.Users.GetActiveCred(user, "email")
 	if err != nil {
 		return "", err
 	}

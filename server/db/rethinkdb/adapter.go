@@ -304,7 +304,7 @@ func (a *adapter) CreateDb(reset bool) error {
 		return err
 	}
 
-	// User credentials - contact information such as "email:jdoe@example.com" or "tel:18003287448":
+	// User credentials - contact information such as "email:jdoe@example.com" or "tel:+18003287448":
 	// Id: "method:credential" like "email:jdoe@example.com". See types.Credential.
 	if _, err := rdb.DB(a.dbName).TableCreate("credentials", rdb.TableCreateOpts{PrimaryKey: "Id"}).RunWrite(a.conn); err != nil {
 		return err
@@ -1766,33 +1766,68 @@ func (a *adapter) DeviceDelete(uid t.Uid, deviceID string) error {
 }
 
 // Credential management
-func (a *adapter) CredAdd(cred *t.Credential) error {
-	cred.Id = cred.Method + ":" + cred.Value
-	if !cred.Done {
-		// If credential is not confirmed, it should not block others
-		// from attempting to validate it.
-		cred.Id = cred.User + ":" + cred.Id
+
+// CredUpsert adds or updates a validation record.
+func (a *adapter) CredUpsert(cred *t.Credential) error {
+	// If credential is validated it cannot be changed so assume it does not exist, just try to add it.
+	// If credential is not valiated, try to find it first: if it does not exist add it, otherwise
+	// update UpdatedAt and Resp, remove Closed.
+
+	// Deactivate all unverified records of this user and method.
+	_, err := rdb.DB(a.dbName).Table("credentials").
+		GetAllByIndex("User", cred.User).
+		Filter(map[string]interface{}{"Method": cred.Method, "Done": false}).Update(
+		map[string]interface{}{"Closed": true}).RunWrite(a.conn)
+	if err != nil {
+		return err
 	}
 
-	_, err := rdb.DB(a.dbName).Table("credentials").Insert(cred).RunWrite(a.conn)
+	cred.Id = cred.Method + ":" + cred.Value
+
+	if !cred.Done {
+		// If credential is not confirmed, it should not block others
+		// from attempting to validate it: make index user-unique instead of global-unique.
+		cred.Id = cred.User + ":" + cred.Id
+
+		// Assume that the record exists and try to update it: remove Closed, update timestamp and response.
+		result, err := rdb.DB(a.dbName).Table("credentials").Get(cred.Id).
+			Replace(rdb.Row.Without("Closed").
+				Merge(map[string]interface{}{
+					"UpdatedAt": cred.UpdatedAt,
+					"Resp":      cred.Resp})).RunWrite(a.conn)
+		if err != nil {
+			return err
+		}
+
+		// If record was updated, then all is fine.
+		if result.Updated > 0 {
+			return nil
+		}
+	}
+
+	// Insert a new record.
+	_, err = rdb.DB(a.dbName).Table("credentials").Insert(cred).RunWrite(a.conn)
 	if rdb.IsConflictErr(err) {
 		return t.ErrDuplicate
 	}
+
 	return err
 }
 
+// CredIsConfirmed returns true if the given credential method has been verified, false otherwise.
 func (a *adapter) CredIsConfirmed(uid t.Uid, method string) (bool, error) {
-	creds, err := a.CredGet(uid, method)
+	cursor, err := rdb.DB(a.dbName).Table("credentials").
+		GetAllByIndex("User", uid.String()).
+		Filter(map[string]interface{}{"Method": method, "Done": true}).Run(a.conn)
 	if err != nil {
 		return false, err
 	}
+	defer cursor.Close()
 
-	if len(creds) > 0 {
-		return creds[0].Done, nil
-	}
-	return false, nil
+	return !cursor.IsNil(), nil
 }
 
+// CredDel deletes credentials for the given method. If method is empty, deletes all user's credentials.
 func (a *adapter) CredDel(uid t.Uid, method string) error {
 	q := rdb.DB(a.dbName).Table("credentials").
 		GetAllByIndex("User", uid.String())
@@ -1803,43 +1838,61 @@ func (a *adapter) CredDel(uid t.Uid, method string) error {
 	return err
 }
 
+// credGetActive reads the currently active unvalidated credential
+func (a *adapter) credGetActive(uid t.Uid, method string) (*t.Credential, error) {
+	// Get the active unconfirmed credential:
+	cursor, err := rdb.DB(a.dbName).Table("credentials").GetAllByIndex("User", uid.String()).
+		Filter(rdb.Row.HasFields("Closed").Not()).
+		Filter(map[string]interface{}{"Method": method, "Done": false}).Run(a.conn)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close()
+
+	if cursor.IsNil() {
+		return nil, t.ErrNotFound
+	}
+
+	var cred t.Credential
+	if err = cursor.One(&cred); err != nil {
+		return nil, err
+	}
+
+	return &cred, nil
+}
+
+// CredConfirm marks given credential as validated.
 func (a *adapter) CredConfirm(uid t.Uid, method string) error {
-	// RethinkDb does not allow primary key to be changed (userid:method:value -> method:value)
-	// We have to delete and re-insert with a different primary key.
-	creds, err := a.CredGet(uid, method)
+
+	cred, err := a.credGetActive(uid, method)
 	if err != nil {
 		return err
 	}
-	if len(creds) == 0 {
-		return t.ErrNotFound
-	}
-	if creds[0].Done {
-		// Already confirmed
-		return nil
-	}
 
-	creds[0].Done = true
-	creds[0].UpdatedAt = t.TimeNow()
-	if err = a.CredAdd(creds[0]); err != nil {
-		if rdb.IsConflictErr(err) {
-			return t.ErrDuplicate
-		}
+	// RethinkDb does not allow primary key to be changed (userid:method:value -> method:value)
+	// We have to delete and re-insert with a different primary key.
+
+	cred.Done = true
+	cred.UpdatedAt = t.TimeNow()
+	if err = a.CredUpsert(cred); err != nil {
 		return err
 	}
 
 	rdb.DB(a.dbName).
 		Table("credentials").
-		Get(uid.String() + ":" + creds[0].Method + ":" + creds[0].Value).
+		Get(uid.String() + ":" + cred.Method + ":" + cred.Value).
 		Delete(rdb.DeleteOpts{Durability: "soft", ReturnChanges: false}).
 		RunWrite(a.conn)
 
 	return nil
 }
 
+// CredFail increments count of failed validation attepmts for the given credentials.
 func (a *adapter) CredFail(uid t.Uid, method string) error {
 	_, err := rdb.DB(a.dbName).Table("credentials").
 		GetAllByIndex("User", uid.String()).
-		Filter(map[string]interface{}{"Method": method}).
+		Filter(map[string]interface{}{"Method": method, "Done": false}).
+		Filter(rdb.Row.HasFields("Closed").Not()).
 		Update(map[string]interface{}{
 			"Retries":   rdb.Row.Field("Retries").Default(0).Add(1),
 			"UpdatedAt": t.TimeNow(),
@@ -1847,28 +1900,9 @@ func (a *adapter) CredFail(uid t.Uid, method string) error {
 	return err
 }
 
-func (a *adapter) CredGet(uid t.Uid, method string) ([]*t.Credential, error) {
-	q := rdb.DB(a.dbName).Table("credentials").
-		GetAllByIndex("User", uid.String())
-	if method != "" {
-		q = q.Filter(map[string]interface{}{"Method": method})
-	}
-	cursor, err := q.Run(a.conn)
-	if err != nil {
-		return nil, err
-	}
-	defer cursor.Close()
-
-	if cursor.IsNil() {
-		return nil, nil
-	}
-
-	var result []*t.Credential
-	if err = cursor.All(&result); err != nil {
-		return nil, err
-	}
-
-	return result, nil
+// CredGetActive returns currently active credential record for the given method.
+func (a *adapter) CredGetActive(uid t.Uid, method string) (*t.Credential, error) {
+	return a.credGetActive(uid, method)
 }
 
 // FileUploads

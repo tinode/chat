@@ -204,15 +204,15 @@ func (t *Topic) run(hub *Hub) {
 			asUid := leave.userId
 
 			if !t.isReady() {
-				if !asUid.IsZero() && leave.reqID != "" {
-					leave.sess.queueOut(ErrLocked(leave.reqID, t.original(asUid), now))
+				if !asUid.IsZero() && leave.id != "" {
+					leave.sess.queueOut(ErrLocked(leave.id, t.original(asUid), now))
 				}
 				continue
 
 			} else if leave.unsub {
 				// User wants to leave and unsubscribe.
 				// asUid must not be Zero.
-				if err := t.replyLeaveUnsub(hub, leave.sess, asUid, leave.reqID); err != nil {
+				if err := t.replyLeaveUnsub(hub, leave.sess, asUid, leave.id); err != nil {
 					log.Println("failed to unsub", err)
 					continue
 				}
@@ -254,8 +254,8 @@ func (t *Topic) run(hub *Hub) {
 
 					t.perUser[uid] = pud
 
-					if leave.reqID != "" {
-						leave.sess.queueOut(NoErr(leave.reqID, t.original(uid), now))
+					if leave.id != "" {
+						leave.sess.queueOut(NoErr(leave.id, t.original(uid), now))
 					}
 				}
 			}

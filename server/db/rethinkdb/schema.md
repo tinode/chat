@@ -264,7 +264,7 @@ Sample:
 ### Table `credentials`
 The tables stores user credentials used for validation.
 
-* `Id` unique credential, primary key
+* `Id` credential, primary key
 * `CreatedAt` timestamp when the record was created
 * `UpdatedAt` timestamp when the last validation attempt was performed (successful or not).
 * `Method` validation method
@@ -273,6 +273,7 @@ The tables stores user credentials used for validation.
 * `Retries` number of failed attempts at validation
 * `User` id of the user who owns this credential
 * `Value` value of the credential
+* `Closed` unvalidated credential is no longer being validated. Only one credential is not Closed for each user/method.
 
 Indexes:
 * `Id` Primary key composed either as `User`:`Method`:`Value` for unconfirmed credentials or as `Method`:`Value` for confirmed.
@@ -281,15 +282,15 @@ Indexes:
 Sample:
 ```js
 {
-  "Id": "tel:17025550001",
+  "Id": "tel:+17025550001",
   "CreatedAt": Sun Jun 10 2018 16:37:27 GMT+00:00 ,
+  "UpdatedAt": Sun Jun 10 2018 16:37:28 GMT+00:00 ,
   "Method":  "tel" ,
   "Done": true ,
   "Resp":  "123456" ,
   "Retries": 0 ,
-  "UpdatedAt": Sun Jun 10 2018 16:37:27 GMT+00:00 ,
   "User":  "k3srBRk9RYw" ,
-  "Value":  "17025550001"
+  "Value":  "+17025550001"
 }
 ```
 

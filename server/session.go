@@ -424,7 +424,7 @@ func (s *Session) leave(msg *ClientComMessage) {
 				topic:  msg.topic,
 				sess:   s,
 				unsub:  msg.Leave.Unsub,
-				reqID:  msg.id}
+				id:     msg.id}
 		}
 	} else if globals.cluster.isRemoteTopic(expanded) {
 		// The topic is handled by a remote node. Forward message to it.
@@ -757,7 +757,7 @@ func (s *Session) getValidatedGred(uid types.Uid, authLvl auth.Level, creds []Ms
 		return nil, nil
 	}
 
-	allCred, err := store.Users.GetAllCred(uid)
+	allCred, err := store.Users.GetValidatedCred(uid)
 	if err != nil {
 		return nil, err
 	}

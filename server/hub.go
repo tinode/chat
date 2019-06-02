@@ -48,7 +48,7 @@ type sessionLeave struct {
 	// Leave and unsubscribe
 	unsub bool
 	// ID of originating request, if any
-	reqID string
+	id string
 }
 
 // Request to hub to remove the topic

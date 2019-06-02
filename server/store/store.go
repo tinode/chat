@@ -314,41 +314,29 @@ func (UsersObjMapper) GetOwnTopics(id types.Uid, opts *types.QueryOpt) ([]string
 	return adp.OwnTopics(id, opts)
 }
 
-// SaveCred saves a credential validation request.
-func (UsersObjMapper) SaveCred(cred *types.Credential) error {
+// UpsertCred adds or updates a credential validation request.
+func (UsersObjMapper) UpsertCred(cred *types.Credential) error {
 	cred.InitTimes()
-	return adp.CredAdd(cred)
+	return adp.CredUpsert(cred)
 }
 
 // ConfirmCred marks credential method as confirmed.
 func (UsersObjMapper) ConfirmCred(id types.Uid, method string) error {
-	// FIXME: There could be more than one credential of the same method.
 	return adp.CredConfirm(id, method)
 }
 
 // FailCred increments fail count for the given credential method.
 func (UsersObjMapper) FailCred(id types.Uid, method string) error {
-	// FIXME: There could be more than one credential of the same method.
 	return adp.CredFail(id, method)
 }
 
-// GetCred gets a list of credentials for the given user and method.
-func (UsersObjMapper) GetCred(id types.Uid, method string) (*types.Credential, error) {
-	// FIXME: There could be more than one credential of the same method.
-	var creds []*types.Credential
-	var err error
-	if creds, err = adp.CredGet(id, method); err == nil {
-		if len(creds) > 0 {
-			return creds[0], nil
-		}
-		return nil, nil
-	}
-	return nil, err
-
+// GetActiveCred gets a the currently active credential for the given user and method.
+func (UsersObjMapper) GetActiveCred(id types.Uid, method string) (*types.Credential, error) {
+	return adp.CredGetActive(id, method)
 }
 
-// GetAllCred retrieves all credentials for the given user.
-func (UsersObjMapper) GetAllCred(id types.Uid) ([]*types.Credential, error) {
+// GetValidatedCred retrieves all validated credential methods for the given user.
+func (UsersObjMapper) GetValidatedCred(id types.Uid) ([]string, error) {
 	return adp.CredGet(id, "")
 }
 
