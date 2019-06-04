@@ -74,6 +74,18 @@ message SetSub {
 	string mode = 2;
 }
 
+// Credentials such as email or phone number
+message ClientCred {
+	// Credential type, i.e. `email` or `tel`.
+	string method = 1;
+	// Value to verify, i.e. `user@example.com` or `+18003287448`
+	string value = 2;
+	// Verification response
+	string response = 3;
+	// Request parameters, such as preferences.
+	bytes params = 4;
+}
+
 // SetDesc: C2S in set.what == "desc" and sub.init message
 message SetDesc {
 	DefaultAcsMode default_acs = 1;
@@ -114,22 +126,13 @@ message SetQuery {
 	SetSub sub = 2;
 	// Indexable tags
 	repeated string tags = 3;
+	// Credentials
+	repeated ClientCred cred = 4;
 }
 
 message SeqRange {
 	int32 low = 1;
 	int32 hi = 2;
-}
-
-message Credential {
-	// Credential type, i.e. `email` or `tel`.
-	string method = 1;
-	// Value to verify, i.e. `user@example.com` or `+18003287448`
-	string value = 2;
-	// Verification response
-	string response = 3;
-	// Request parameters, such as preferences.
-	bytes params = 4;
 }
 
 // Client handshake
@@ -158,7 +161,7 @@ message ClientAcc {
 	// User initialization data when creating a new user, otherwise ignored
 	SetDesc desc = 7;
 	// Credentials for verification.
-	repeated Credential cred = 8;
+	repeated ClientCred cred = 8;
 	// Authentication token used for resetting a password.
 	bytes token = 9;
 }
@@ -171,7 +174,7 @@ message ClientLogin  {
 	// Shared secret
 	bytes secret = 3;
 	// Credentials for verification.
-	repeated Credential cred = 4;
+	repeated ClientCred cred = 4;
 }
 
 // Subscription request {sub} message
@@ -272,6 +275,16 @@ message ClientMsg {
 
 // ************************
 // Server response messages
+
+// Credentials
+message ServerCred {
+	// Credential type, i.e. `email` or `tel`.
+	string method = 1;
+	// Value to verify, i.e. `user@example.com` or `+18003287448`
+	string value = 2;
+	// Indicator that the credential is validated
+	bool done = 3;
+}
 
 // Topic description, S2C in Meta message
 message TopicDesc {
@@ -388,6 +401,7 @@ message ServerMeta {
 	repeated TopicSub sub = 4;
 	DelValues del = 5;
 	repeated string tags = 6;
+	repeated ServerCred cred = 7;
 }
 
 // {info} message: server-side copy of ClientNote with From added

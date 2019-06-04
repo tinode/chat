@@ -335,9 +335,9 @@ func (UsersObjMapper) GetActiveCred(id types.Uid, method string) (*types.Credent
 	return adp.CredGetActive(id, method)
 }
 
-// GetValidatedCred retrieves all validated credential methods for the given user.
-func (UsersObjMapper) GetValidatedCred(id types.Uid) ([]string, error) {
-	return adp.CredGet(id, "")
+// GetAllCreds returns credentials of the given user, all or validated only.
+func (UsersObjMapper) GetAllCreds(id types.Uid, validatedOnly bool) ([]types.Credential, error) {
+	return adp.CredGetAll(id, validatedOnly)
 }
 
 // DelCred deletes user's credentials. If method is "", all credentials are deleted.

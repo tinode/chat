@@ -162,19 +162,19 @@ func restrictedTagsEqual(oldTags, newTags []string, namespaces map[string]bool) 
 
 // Process credentials for correctness: remove duplicates and unknown methods.
 // If valueRequired is true, keep only those where Value is non-empty.
-func normalizeCredentials(creds []MsgAccCred, valueRequired bool) []MsgAccCred {
+func normalizeCredentials(creds []MsgCredClient, valueRequired bool) []MsgCredClient {
 	if len(creds) == 0 {
 		return nil
 	}
 
-	index := make(map[string]*MsgAccCred)
+	index := make(map[string]*MsgCredClient)
 	for i := range creds {
 		c := &creds[i]
 		if _, ok := globals.validators[c.Method]; ok && (!valueRequired || c.Value != "") {
 			index[c.Method] = c
 		}
 	}
-	creds = make([]MsgAccCred, 0, len(index))
+	creds = make([]MsgCredClient, 0, len(index))
 	for _, c := range index {
 		creds = append(creds, *index[c.Method])
 	}
@@ -182,7 +182,7 @@ func normalizeCredentials(creds []MsgAccCred, valueRequired bool) []MsgAccCred {
 }
 
 // Get a string slice with methods of credentials.
-func credentialMethods(creds []MsgAccCred) []string {
+func credentialMethods(creds []MsgCredClient) []string {
 	var out []string
 	for i := range creds {
 		out = append(out, creds[i].Method)

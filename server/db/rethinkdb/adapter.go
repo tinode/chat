@@ -1905,6 +1905,30 @@ func (a *adapter) CredGetActive(uid t.Uid, method string) (*t.Credential, error)
 	return a.credGetActive(uid, method)
 }
 
+// CredGetAll returns user's credential records, validated only or all.
+func (a *adapter) CredGetAll(uid t.Uid, validatedOnly bool) ([]t.Credential, error) {
+	q := rdb.DB(a.dbName).Table("credentials").GetAllByIndex("User", uid.String())
+	if validatedOnly {
+		q = q.Filter(map[string]interface{}{"Done": true})
+	} else {
+		q = q.Filter(rdb.Row.HasFields("Closed").Not())
+	}
+
+	cursor, err := q.Run(a.conn)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close()
+
+	if cursor.IsNil() {
+		return nil, nil
+	}
+
+	var credentials []t.Credential
+	err = cursor.All(&credentials)
+	return credentials, err
+}
+
 // FileUploads
 
 // FileStartUpload initializes a file upload

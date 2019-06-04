@@ -1846,7 +1846,7 @@ func (a *adapter) MessageGetDeleted(topic string, forUser t.Uid, opts *t.QueryOp
 	}
 
 	// Fetch log of deletions
-	rows, err := a.db.Queryx("SELECT topic,deletedfor,delid,low,hi FROM dellog WHERE topic=? AND delid BETWEEN ? and ?"+
+	rows, err := a.db.Queryx("SELECT topic,deletedfor,delid,low,hi FROM dellog WHERE topic=? AND delid BETWEEN ? AND ?"+
 		" AND (deletedFor=0 OR deletedFor=?)"+
 		" ORDER BY delid LIMIT ?", topic, lower, upper, store.DecodeUid(forUser), limit)
 	if err != nil {
@@ -2259,6 +2259,29 @@ func (a *adapter) CredGetActive(uid t.Uid, method string) (*t.Credential, error)
 	cred.User = uid.String()
 
 	return &cred, nil
+}
+
+// CredGetAll returns credential records for the given user, all or validated only.
+func (a *adapter) CredGetAll(uid t.Uid, validatedOnly bool) ([]t.Credential, error) {
+	query := "SELECT createdat,updatedat,method,value,resp,done,retries FROM credentials WHERE userid=? AND done"
+	if validatedOnly {
+		query += "=1"
+	} else {
+		query += ">=0"
+	}
+
+	var credentials []t.Credential
+	err := a.db.Select(&credentials, query, store.DecodeUid(uid))
+	if err != nil {
+		return nil, err
+	}
+
+	user := uid.String()
+	for i := range credentials {
+		credentials[i].User = user
+	}
+
+	return credentials, err
 }
 
 // FileUploads

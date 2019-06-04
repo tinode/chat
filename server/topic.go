@@ -521,6 +521,11 @@ func (t *Topic) run(hub *Hub) {
 						log.Printf("topic[%s] meta.Get.Tags failed: %s", t.name, err)
 					}
 				}
+				if meta.what&constMsgMetaCred != 0 {
+					if err := t.replyGetCreds(meta.sess, asUid, meta.pkt.Get.Id); err != nil {
+						log.Printf("topic[%s] meta.Get.Creds failed: %s", t.name, err)
+					}
+				}
 
 			case meta.pkt.Set != nil:
 				// Set request
@@ -540,6 +545,11 @@ func (t *Topic) run(hub *Hub) {
 				if meta.what&constMsgMetaTags != 0 {
 					if err := t.replySetTags(meta.sess, asUid, meta.pkt.Set); err != nil {
 						log.Printf("topic[%s] meta.Set.Tags failed: %v", t.name, err)
+					}
+				}
+				if meta.what&constMsgMetaCred != 0 {
+					if err := t.replySetCreds(meta.sess, asUid, authLevel, meta.pkt.Set); err != nil {
+						log.Printf("topic[%s] meta.Set.Creds failed: %v", t.name, err)
 					}
 				}
 
@@ -1903,6 +1913,54 @@ func (t *Topic) replySetTags(sess *Session, asUid types.Uid, set *MsgClientSet) 
 	}
 
 	sess.queueOut(resp)
+
+	return err
+}
+
+// replyGetCreds returns user's credentials such as email and phone numbers.
+func (t *Topic) replyGetCreds(sess *Session, asUid types.Uid, id string) error {
+	now := types.TimeNow()
+
+	if t.cat != types.TopicCatMe {
+		sess.queueOut(ErrOperationNotAllowed(id, t.original(asUid), now))
+		return errors.New("invalid topic category for getting credentials")
+	}
+
+	screds, err := store.Users.GetAllCreds(asUid, false)
+	if err != nil {
+		sess.queueOut(decodeStoreError(err, id, t.original(asUid), now, nil))
+		return err
+	}
+
+	if len(screds) > 0 {
+		creds := make([]*MsgCredServer, len(screds))
+		for i, sc := range screds {
+			creds[i] = &MsgCredServer{Method: sc.Method, Value: sc.Value, Done: sc.Done}
+		}
+		sess.queueOut(&ServerComMessage{
+			Meta: &MsgServerMeta{Id: id, Topic: t.original(asUid), Timestamp: &now, Cred: creds}})
+		return nil
+	}
+
+	// Inform the requester that there are no credentials.
+	sess.queueOut(NoErrParams(id, t.original(asUid), now, map[string]string{"what": "creds"}))
+
+	return nil
+}
+
+// replySetCreds updates user's credentials such as email and phone numbers.
+func (t *Topic) replySetCreds(sess *Session, asUid types.Uid, authLevel auth.Level, set *MsgClientSet) error {
+
+	now := types.TimeNow()
+
+	if t.cat != types.TopicCatMe {
+		sess.queueOut(ErrOperationNotAllowed(set.Id, t.original(asUid), now))
+		return errors.New("invalid topic category for updating credentials")
+	}
+
+	_, err := updateCreds(asUid, authLevel, set.Cred)
+
+	sess.queueOut(decodeStoreError(err, set.Id, t.original(asUid), now, nil))
 
 	return err
 }

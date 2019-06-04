@@ -15,21 +15,22 @@ func replyCreateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 	// The session cannot authenticate with the new account because  it's already authenticated.
 	if msg.Acc.Login && (!s.uid.IsZero() || rec != nil) {
 		s.queueOut(ErrAlreadyAuthenticated(msg.id, "", msg.timestamp))
-		log.Println("s.acc: login requested while authenticated", s.sid)
+		log.Println("create user: login requested while authenticated", s.sid)
 		return
 	}
 
+	// Find authenticator for the requested scheme.
 	authhdl := store.GetLogicalAuthHandler(msg.Acc.Scheme)
 	if authhdl == nil {
 		// New accounts must have an authentication scheme
 		s.queueOut(ErrMalformed(msg.id, "", msg.timestamp))
-		log.Println("s.acc: unknown auth handler", s.sid)
+		log.Println("create user: unknown auth handler", s.sid)
 		return
 	}
 
 	// Check if login is unique.
 	if ok, err := authhdl.IsUnique(msg.Acc.Secret); !ok {
-		log.Println("s.acc: auth secret is not unique", err, s.sid)
+		log.Println("create user: auth secret is not unique", err, s.sid)
 		s.queueOut(decodeStoreError(err, msg.id, "", msg.timestamp,
 			map[string]interface{}{"what": "auth"}))
 		return
@@ -38,13 +39,10 @@ func replyCreateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 	var user types.User
 	var private interface{}
 
-	// Assign default access values in case the acc creator has not provided them
-	user.Access.Auth = getDefaultAccess(types.TopicCatP2P, true)
-	user.Access.Anon = getDefaultAccess(types.TopicCatP2P, false)
-
+	// Ensure tags are unique and not restricted.
 	if tags := normalizeTags(msg.Acc.Tags); tags != nil {
 		if !restrictedTagsEqual(tags, nil, globals.immutableTagNS) {
-			log.Println("a.acc: attempt to directly assign restricted tags", s.sid)
+			log.Println("create user: attempt to directly assign restricted tags", s.sid)
 			msg := ErrPermissionDenied(msg.id, "", msg.timestamp)
 			msg.Ctrl.Params = map[string]interface{}{"what": "tags"}
 			s.queueOut(msg)
@@ -60,13 +58,18 @@ func replyCreateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 		cr := &creds[i]
 		vld := store.GetValidator(cr.Method)
 		if err := vld.PreCheck(cr.Value, cr.Params); err != nil {
-			log.Println("a.acc: failed credential pre-check", cr, err, s.sid)
+			log.Println("create user: failed credential pre-check", cr, err, s.sid)
 			s.queueOut(decodeStoreError(err, msg.Acc.Id, "", msg.timestamp,
 				map[string]interface{}{"what": cr.Method}))
 			return
 		}
 	}
 
+	// Assign default access values in case the acc creator has not provided them
+	user.Access.Auth = getDefaultAccess(types.TopicCatP2P, true)
+	user.Access.Anon = getDefaultAccess(types.TopicCatP2P, false)
+
+	// Assign actual access values, public and private.
 	if msg.Acc.Desc != nil {
 		if msg.Acc.Desc.DefaultAcs != nil {
 			if msg.Acc.Desc.DefaultAcs.Auth != "" {
@@ -92,15 +95,17 @@ func replyCreateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 		}
 	}
 
+	// Create user record in the database.
 	if _, err := store.Users.Create(&user, private); err != nil {
-		log.Println("s.acc: failed to create user", err, s.sid)
+		log.Println("create user: failed to create user", err, s.sid)
 		s.queueOut(ErrUnknown(msg.id, "", msg.timestamp))
 		return
 	}
 
+	// Add authentication record. The authhdl.AddRecord may change tags.
 	rec, err := authhdl.AddRecord(&auth.Rec{Uid: user.Uid(), Tags: user.Tags}, msg.Acc.Secret)
 	if err != nil {
-		log.Println("s.acc: add auth record failed", err, s.sid)
+		log.Println("create user: add auth record failed", err, s.sid)
 		// Attempt to delete incomplete user record
 		store.Users.Delete(user.Uid(), false)
 		s.queueOut(decodeStoreError(err, msg.id, "", msg.timestamp, nil))
@@ -110,7 +115,7 @@ func replyCreateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 	// When creating an account, the user must provide all required credentials.
 	// If any are missing, reject the request.
 	if len(creds) < len(globals.authValidators[rec.AuthLevel]) {
-		log.Println("s.acc: missing credentials; have:", creds, "want:", globals.authValidators[rec.AuthLevel], s.sid)
+		log.Println("create user: missing credentials; have:", creds, "want:", globals.authValidators[rec.AuthLevel], s.sid)
 		// Attempt to delete incomplete user record
 		store.Users.Delete(user.Uid(), false)
 		_, missing := stringSliceDelta(globals.authValidators[rec.AuthLevel], credentialMethods(creds))
@@ -119,43 +124,17 @@ func replyCreateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 		return
 	}
 
-	var validated []string
+	// Save credentials, update tags if necessary.
 	tmpToken, _, _ := store.GetLogicalAuthHandler("token").GenSecret(&auth.Rec{
 		Uid:       user.Uid(),
 		AuthLevel: auth.LevelNone,
 		Lifetime:  time.Hour * 24,
 		Features:  auth.FeatureNoLogin})
-	for i := range creds {
-		cr := &creds[i]
-		vld := store.GetValidator(cr.Method)
-		if err := vld.Request(user.Uid(), cr.Value, s.lang, cr.Response, tmpToken); err != nil {
-			log.Println("s.acc: failed to save or validate credential", err, s.sid)
-			// Delete incomplete user record.
-			store.Users.Delete(user.Uid(), false)
-			s.queueOut(decodeStoreError(err, msg.id, "", msg.timestamp,
-				map[string]interface{}{"what": cr.Method}))
-			return
-		}
-
-		if cr.Response != "" {
-			// If response is provided and Request did not return an error, the request was
-			// successfully validated.
-			validated = append(validated, cr.Method)
-
-			// Generate tags for these confirmed credentials.
-			if globals.validators[cr.Method].addToTags {
-				rec.Tags = append(rec.Tags, cr.Method+":"+cr.Value)
-			}
-		}
-	}
-
-	// Save tags potentially changed by the validator.
-	if err := store.Users.Update(user.Uid(),
-		map[string]interface{}{"Tags": types.StringSlice(rec.Tags)}); err != nil {
-
-		log.Println("s.acc: failed to update user's tags", err, s.sid)
+	validated, err := addCreds(user.Uid(), creds, rec.Tags, s.lang, tmpToken)
+	if err != nil {
 		// Delete incomplete user record.
 		store.Users.Delete(user.Uid(), false)
+		log.Println("create user: failed to save or validate credential", err, s.sid)
 		s.queueOut(decodeStoreError(err, msg.id, "", msg.timestamp, nil))
 		return
 	}
@@ -189,7 +168,7 @@ func replyCreateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 }
 
 // Process update to an account:
-// * Authentication update, i.e. password change
+// * Authentication update, i.e. login/password change
 // * Credentials update
 func replyUpdateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 	if s.uid.IsZero() && rec == nil {
@@ -210,6 +189,7 @@ func replyUpdateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 		userId = rec.Uid.UserId()
 		authLvl = rec.AuthLevel
 	}
+
 	if msg.Acc.User != "" && msg.Acc.User != userId {
 		if s.authLvl != auth.LevelRoot {
 			log.Println("replyUpdateUser: attempt to change another's account by non-root", s.sid)
@@ -240,45 +220,169 @@ func replyUpdateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 	}
 
 	var params map[string]interface{}
-	authhdl := store.GetLogicalAuthHandler(msg.Acc.Scheme)
-	if authhdl != nil {
-		// Request to update auth of an existing account. Only basic & rest auth are currently supported
-
-		// TODO(gene): support adding new auth schemes
-
-		rec, err := authhdl.UpdateRecord(&auth.Rec{Uid: uid, Tags: user.Tags}, msg.Acc.Secret)
-		if err != nil {
-			log.Println("replyUpdateUser: failed to update auth secret", err, s.sid)
-			s.queueOut(decodeStoreError(err, msg.id, "", msg.timestamp, nil))
-			return
-		}
-
-		// Tags may have changed, reset them.
-		store.Users.UpdateTags(uid, nil, nil, rec.Tags)
-
-	} else if msg.Acc.Scheme != "" {
-		// Invalid or unknown auth scheme
-		log.Println("replyUpdateUser: unknown auth scheme", msg.Acc.Scheme, s.sid)
-		s.queueOut(ErrMalformed(msg.id, "", msg.timestamp))
-		return
+	if msg.Acc.Scheme != "" {
+		err = updateUserAuth(msg, user, rec)
 	} else if len(msg.Acc.Cred) > 0 {
-		// Use provided credentials for validation.
-		validated, err := s.getValidatedGred(uid, authLvl, msg.Acc.Cred)
-		if err != nil {
-			log.Println("replyUpdateUser: failed to get validated credentials", err, s.sid)
-			s.queueOut(decodeStoreError(err, msg.id, "", msg.timestamp, nil))
-			return
+		validated, err := updateCreds(uid, authLvl, msg.Acc.Cred)
+		if err == nil {
+			_, missing := stringSliceDelta(globals.authValidators[authLvl], validated)
+			if len(missing) > 0 {
+				params = map[string]interface{}{"cred": missing}
+			}
 		}
-		_, missing := stringSliceDelta(globals.authValidators[authLvl], validated)
-		if len(missing) > 0 {
-			params = map[string]interface{}{"cred": missing}
-		}
+	} else {
+		err = types.ErrMalformed
+	}
+
+	if err != nil {
+		log.Println("replyUpdateUser: failed to update user", err, s.sid)
+		s.queueOut(decodeStoreError(err, msg.id, "", msg.timestamp, nil))
+		return
 	}
 
 	s.queueOut(NoErrParams(msg.id, "", msg.timestamp, params))
 
 	// Call plugin with the account update
 	pluginAccount(user, plgActUpd)
+}
+
+// Authentication update
+func updateUserAuth(msg *ClientComMessage, user *types.User, rec *auth.Rec) error {
+	authhdl := store.GetLogicalAuthHandler(msg.Acc.Scheme)
+	if authhdl != nil {
+		// Request to update auth of an existing account. Only basic & rest auth are currently supported
+
+		// TODO(gene): support adding new auth schemes
+
+		rec, err := authhdl.UpdateRecord(&auth.Rec{Uid: user.Uid(), Tags: user.Tags}, msg.Acc.Secret)
+		if err != nil {
+			return err
+		}
+
+		// Tags may have been changed by authhdl.UpdateRecord, reset them.
+		// Can't do much with the error here, so ignoring it.
+		store.Users.UpdateTags(user.Uid(), nil, nil, rec.Tags)
+		return nil
+	}
+
+	// Invalid or unknown auth scheme
+	return types.ErrMalformed
+}
+
+// addCreds adds user's credentials. Returns validated methods.
+func addCreds(uid types.Uid, creds []MsgCredClient, tags []string, lang string, tmpToken []byte) ([]string, error) {
+	var validated []string
+	for i := range creds {
+		cr := &creds[i]
+		vld := store.GetValidator(cr.Method)
+		if err := vld.Request(uid, cr.Value, lang, cr.Response, tmpToken); err != nil {
+			return nil, err
+		}
+
+		if cr.Response != "" {
+			// If response is provided and vld.Request did not return an error, the request was
+			// successfully validated.
+			validated = append(validated, cr.Method)
+
+			// Generate tags for these confirmed credentials.
+			if globals.validators[cr.Method].addToTags {
+				tags = append(tags, cr.Method+":"+cr.Value)
+			}
+		}
+	}
+
+	// Save tags potentially changed by the validator.
+	if len(tags) > 0 {
+		if err := store.Users.UpdateTags(uid, nil, nil, tags); err != nil {
+			return nil, err
+		}
+	}
+
+	return validated, nil
+}
+
+// updateCred uses provided credentials to update user's credentials:
+// 1. Add new credential.
+// 2. Validate earlier added credential
+// 3. Remove credential
+// Returns validated methods including those validated in this call.
+func updateCreds(uid types.Uid, authLvl auth.Level, creds []MsgCredClient) ([]string, error) {
+
+	// Check if credential validation is required.
+	if len(globals.authValidators[authLvl]) == 0 || len(creds) == 0 {
+		return nil, nil
+	}
+
+	// There could be multiple validated credentials for the same method thus we are getting a map with count
+	// for each method.
+	alreadyValidatedCreds, err := store.Users.GetAllCreds(uid, true)
+	if err != nil {
+		return nil, err
+	}
+
+	// Index credential methods.
+	var methods map[string]int
+	for _, cred := range alreadyValidatedCreds {
+		methods[cred.Method]++
+	}
+
+	// Add credentials which are validated in this call.
+	// Unknown validators are removed.
+	creds = normalizeCredentials(creds, false)
+	var tagsToAdd, tagsToRemove []string
+	for i := range creds {
+		cr := &creds[i]
+		if cr.Response == "" {
+			// Ignore unknown validation type or empty response.
+			continue
+		}
+		vld := store.GetValidator(cr.Method)
+		value, err := vld.Check(uid, cr.Response)
+		if err != nil {
+			// Check failed.
+			if storeErr, ok := err.(types.StoreError); ok && storeErr == types.ErrCredentials {
+				// Just an invalid response. Keep credential unvalidated.
+				continue
+			}
+			// Actual error. Report back.
+			return nil, err
+		}
+
+		// Value could be empty if validated credential was deleted.
+		if value != "" {
+			// Check did not return an error: the request was successfully validated.
+			methods[cr.Method]++
+
+			// Add validated credential to user's tags.
+			if globals.validators[cr.Method].addToTags {
+				tagsToAdd = append(tagsToAdd, cr.Method+":"+value)
+			}
+		} else {
+			// Credential deleted.
+			methods[cr.Method]--
+
+			// Remove deleted credential from user's tags.
+			if globals.validators[cr.Method].addToTags {
+				tagsToRemove = append(tagsToRemove, cr.Method+":"+value)
+			}
+		}
+	}
+
+	if len(tagsToAdd) > 0 || len(tagsToRemove) > 0 {
+		// Save update to tags
+		if err := store.Users.UpdateTags(uid, tagsToAdd, tagsToRemove, nil); err != nil {
+			return nil, err
+		}
+	}
+
+	var validated []string
+	for method, count := range methods {
+		if count > 0 {
+			validated = append(validated, method)
+		}
+	}
+
+	return validated, nil
 }
 
 // Request to delete a user:

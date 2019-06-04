@@ -635,7 +635,7 @@ func (s *Session) login(msg *ClientComMessage) {
 	var missing []string
 	if rec.Features&auth.FeatureValidated == 0 {
 		var validated []string
-		if validated, err = s.getValidatedGred(rec.Uid, rec.AuthLevel, msg.Login.Cred); err == nil {
+		if validated, err = updateCreds(rec.Uid, rec.AuthLevel, msg.Login.Cred); err == nil {
 			// Get a list of credentials which have not been validated.
 			_, missing = stringSliceDelta(globals.authValidators[rec.AuthLevel], validated)
 		}
@@ -717,16 +717,6 @@ func (s *Session) onLogin(msgID string, timestamp time.Time, rec *auth.Rec, miss
 		}
 		features |= auth.FeatureValidated
 
-		// If authenticator provided updated tags, use them to update the user.
-		if len(rec.Tags) > 0 {
-			log.Println("Resetting user's tags", normalizeTags(rec.Tags))
-
-			if err := store.Users.UpdateTags(rec.Uid, nil, nil, normalizeTags(rec.Tags)); err != nil {
-
-				log.Println("failed to update user's tags", err)
-			}
-		}
-
 		// Record deviceId used in this session
 		if s.deviceID != "" {
 			if err := store.Devices.Update(rec.Uid, "", &types.DeviceDef{
@@ -747,87 +737,6 @@ func (s *Session) onLogin(msgID string, timestamp time.Time, rec *auth.Rec, miss
 
 	reply.Ctrl.Params = params
 	return reply
-}
-
-// Get a list of all validated credentials including those validated in this call.
-func (s *Session) getValidatedGred(uid types.Uid, authLvl auth.Level, creds []MsgAccCred) ([]string, error) {
-
-	// Check if credential validation is required.
-	if len(globals.authValidators[authLvl]) == 0 {
-		return nil, nil
-	}
-
-	allCred, err := store.Users.GetValidatedCred(uid)
-	if err != nil {
-		return nil, err
-	}
-
-	// Compile a list of validated methods.
-	// There could be multiple validated credentials for the same method, so count them.
-	methods := make(map[string]int)
-	for _, cr := range allCred {
-		if cr.Done {
-			methods[cr.Method]++
-		}
-	}
-
-	// Add credentials which are validated in this call.
-	// Unknown validators are removed.
-	creds = normalizeCredentials(creds, false)
-	var tagsToAdd, tagsToRemove []string
-	for i := range creds {
-		cr := &creds[i]
-		if cr.Response == "" {
-			// Ignore unknown validation type or empty response.
-			continue
-		}
-		vld := store.GetValidator(cr.Method)
-		value, err := vld.Check(uid, cr.Response)
-		if err != nil {
-			// Check failed.
-			if storeErr, ok := err.(types.StoreError); ok && storeErr == types.ErrCredentials {
-				// Just an invalid response. Keep credential unvalidated.
-				continue
-			}
-			// Actual error. Report back.
-			return nil, err
-		}
-
-		// Value could be empty if validated credential was deleted.
-		if value != "" {
-			// Check did not return an error: the request was successfully validated.
-			methods[cr.Method]++
-
-			// Add validated credential to user's tags.
-			if globals.validators[cr.Method].addToTags {
-				tagsToAdd = append(tagsToAdd, cr.Method+":"+value)
-			}
-		} else {
-			// Credential deleted.
-			methods[cr.Method]--
-
-			// Remove deleted credential from user's tags.
-			if globals.validators[cr.Method].addToTags {
-				tagsToRemove = append(tagsToRemove, cr.Method+":"+value)
-			}
-		}
-	}
-
-	if len(tagsToAdd) > 0 || len(tagsToRemove) > 0 {
-		// Save update to tags
-		if err := store.Users.UpdateTags(uid, tagsToAdd, tagsToRemove, nil); err != nil {
-			return nil, err
-		}
-	}
-
-	var validated []string
-	for method, count := range methods {
-		if count > 0 {
-			validated = append(validated, method)
-		}
-	}
-
-	return validated, nil
 }
 
 func (s *Session) get(msg *ClientComMessage) {

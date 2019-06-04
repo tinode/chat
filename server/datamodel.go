@@ -60,6 +60,28 @@ type MsgSetDesc struct {
 	Private    interface{}        `json:"private,omitempty"` // Per-subscription private data
 }
 
+// MsgCredClient is an account credential such as email or phone number.
+type MsgCredClient struct {
+	// Credential type, i.e. `email` or `tel`.
+	Method string `json:"meth,omitempty"`
+	// Value to verify, i.e. `user@example.com` or `+18003287448`
+	Value string `json:"val,omitempty"`
+	// Verification response
+	Response string `json:"resp,omitempty"`
+	// Request parameters, such as preferences. Passed to valiator without interpretation.
+	Params interface{} `json:"params,omitempty"`
+}
+
+// MsgCredServer is an account credential such as email or phone number.
+type MsgCredServer struct {
+	// Credential type, i.e. `email` or `tel`.
+	Method string `json:"meth,omitempty"`
+	// Credential value, i.e. `user@example.com` or `+18003287448`
+	Value string `json:"val,omitempty"`
+	// Indicates that the credential is validated.
+	Done bool `json:"done,omitempty"`
+}
+
 // MsgSetQuery is an update to topic metadata: Desc, subscriptions, or tags.
 type MsgSetQuery struct {
 	// Topic metadata, new topic & new subscriptions only
@@ -68,6 +90,8 @@ type MsgSetQuery struct {
 	Sub *MsgSetSub `json:"sub,omitempty"`
 	// Indexable tags for user discovery
 	Tags []string `json:"tags,omitempty"`
+	// Update to account credentials.
+	Cred []MsgCredClient `json:"cred,omitempty"`
 }
 
 // MsgDelRange is either an individual ID (HiId=0) or a randge of deleted IDs, low end inclusive (closed),
@@ -95,18 +119,6 @@ type MsgClientHi struct {
 	Platform string `json:"platf,omitempty"`
 }
 
-// MsgAccCred is an account credential, provided or verified.
-type MsgAccCred struct {
-	// Credential type, i.e. `email` or `tel`.
-	Method string `json:"meth,omitempty"`
-	// Value to verify, i.e. `user@example.com` or `+18003287448`
-	Value string `json:"val,omitempty"`
-	// Verification response
-	Response string `json:"resp,omitempty"`
-	// Request parameters, such as preferences. Passed to valiator without interpretation.
-	Params interface{} `json:"params,omitempty"`
-}
-
 // MsgClientAcc is an {acc} message for creating or updating a user account.
 type MsgClientAcc struct {
 	// Message Id
@@ -129,7 +141,7 @@ type MsgClientAcc struct {
 	// User initialization data when creating a new user, otherwise ignored
 	Desc *MsgSetDesc `json:"desc,omitempty"`
 	// Credentials to verify (email or phone or captcha)
-	Cred []MsgAccCred `json:"cred,omitempty"`
+	Cred []MsgCredClient `json:"cred,omitempty"`
 }
 
 // MsgClientLogin is a login {login} message.
@@ -141,7 +153,7 @@ type MsgClientLogin struct {
 	// Shared secret
 	Secret []byte `json:"secret"`
 	// Credntials to verify (email or phone or captcha etc.)
-	Cred []MsgAccCred `json:"cred,omitempty"`
+	Cred []MsgCredClient `json:"cred,omitempty"`
 }
 
 // MsgClientSub is a subscription request {sub} message.
@@ -162,6 +174,7 @@ const (
 	constMsgMetaData
 	constMsgMetaTags
 	constMsgMetaDel
+	constMsgMetaCred
 )
 
 const (
@@ -186,6 +199,8 @@ func parseMsgClientMeta(params string) int {
 			bits |= constMsgMetaTags
 		case "del":
 			bits |= constMsgMetaDel
+		case "cred":
+			bits |= constMsgMetaCred
 		default:
 			// ignore unknown
 		}
@@ -472,6 +487,8 @@ type MsgServerMeta struct {
 	Del *MsgDelValues `json:"del,omitempty"`
 	// User discovery tags
 	Tags []string `json:"tags,omitempty"`
+	// Account credentials, 'me' only.
+	Cred []*MsgCredServer `json:"cred,omitempty"`
 }
 
 // MsgServerInfo is the server-side copy of MsgClientNote with From added (non-authoritative).

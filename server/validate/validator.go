@@ -19,6 +19,7 @@ type Validator interface {
 	// 	cred: credential being validated, such as email or phone.
 	//  lang: user's human language as repored in the session.
 	//  resp: optional response if user already has it (i.e. captcha/recaptcha).
+	//  tmpToken: temporary authenticaton token to include in the request.
 	Request(user t.Uid, cred, lang, resp string, tmpToken []byte) error
 
 	// ResetSecret sends a message with instructions for resetting an authentication secret.
