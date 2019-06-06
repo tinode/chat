@@ -53,6 +53,11 @@ func (authenticator) DelRecords(uid types.Uid) error {
 	return nil
 }
 
+// RestrictedTags returns tag namespaces restricted by this authenticator (none for anonymous).
+func (authenticator) RestrictedTags() ([]string, error) {
+	return nil, nil
+}
+
 func init() {
 	store.RegisterAuthScheme("anonymous", &authenticator{})
 }

@@ -104,6 +104,11 @@ def link():
 def upd():
     return jsonify({'err': 'unsupported'})
 
+@app.route('/rtagns', methods=['POST'])
+def rtags():
+    # Return dummy namespace "rest" and "email"
+    return jsonify({'strarr': ['rest', 'email']})
+
 @app.errorhandler(404)
 def not_found(error):
     return make_response(jsonify({'err': 'not found'}), 404)

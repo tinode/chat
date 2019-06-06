@@ -298,6 +298,10 @@ func main() {
 		log.Fatal(err)
 	}
 
+	// List of tag namespaces for user discovery which cannot be changed directly
+	// by the client, e.g. 'email' or 'tel'.
+	globals.immutableTagNS = make(map[string]bool)
+
 	authNames := store.GetAuthNames()
 	for _, name := range authNames {
 		if authhdl := store.GetLogicalAuthHandler(name); authhdl == nil {
@@ -306,12 +310,15 @@ func main() {
 			if err := authhdl.Init(string(jsconf), name); err != nil {
 				log.Fatalln("Failed to init auth scheme", name+":", err)
 			}
+			tags, err := authhdl.RestrictedTags()
+			if err != nil {
+				log.Fatalln("Failed get restricted tag namespaces", name+":", err)
+			}
+			for _, tag := range tags {
+				globals.immutableTagNS[tag] = true
+			}
 		}
 	}
-
-	// List of tag namespaces for user discovery which cannot be changed directly
-	// by the client, e.g. 'email' or 'tel'.
-	globals.immutableTagNS = make(map[string]bool)
 
 	// Process validators.
 	for name, vconf := range config.Validator {

@@ -228,4 +228,7 @@ type AuthHandler interface {
 
 	// DelRecords deletes (or disables) all authentication records for the given user.
 	DelRecords(uid types.Uid) error
+
+	// RestrictedTags returns the tag namespaces which are restricted by this authenticator.
+	RestrictedTags() ([]string, error)
 }

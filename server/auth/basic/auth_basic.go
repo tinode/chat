@@ -64,6 +64,10 @@ func parseSecret(bsecret []byte) (uname, password string, err error) {
 
 // Init initializes the basic authenticator.
 func (a *authenticator) Init(jsonconf, name string) error {
+	if name == "" {
+		return errors.New("auth_basic: authenticator name cannot be blank")
+	}
+
 	if a.name != "" {
 		return errors.New("auth_basic: already initialized as " + a.name + "; " + name)
 	}
@@ -258,8 +262,18 @@ func (authenticator) GenSecret(rec *auth.Rec) ([]byte, time.Time, error) {
 	return nil, time.Time{}, types.ErrUnsupported
 }
 
+// DelRecords deletes saved authentication records of the given user.
 func (a *authenticator) DelRecords(uid types.Uid) error {
 	return store.Users.DelAuthRecords(uid, a.name)
+}
+
+// RestrictedTags returns tag namespaces restricted in this config.
+func (a *authenticator) RestrictedTags() ([]string, error) {
+	var tags []string
+	if a.addToTags {
+		tags = []string{a.name}
+	}
+	return tags, nil
 }
 
 func init() {

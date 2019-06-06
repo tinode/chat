@@ -72,16 +72,6 @@ type MsgCredClient struct {
 	Params interface{} `json:"params,omitempty"`
 }
 
-// MsgCredServer is an account credential such as email or phone number.
-type MsgCredServer struct {
-	// Credential type, i.e. `email` or `tel`.
-	Method string `json:"meth,omitempty"`
-	// Credential value, i.e. `user@example.com` or `+18003287448`
-	Value string `json:"val,omitempty"`
-	// Indicates that the credential is validated.
-	Done bool `json:"done,omitempty"`
-}
-
 // MsgSetQuery is an update to topic metadata: Desc, subscriptions, or tags.
 type MsgSetQuery struct {
 	// Topic metadata, new topic & new subscriptions only
@@ -152,7 +142,7 @@ type MsgClientLogin struct {
 	Scheme string `json:"scheme,omitempty"`
 	// Shared secret
 	Secret []byte `json:"secret"`
-	// Credntials to verify (email or phone or captcha etc.)
+	// Credntials being verified (email or phone or captcha etc.)
 	Cred []MsgCredClient `json:"cred,omitempty"`
 }
 
@@ -182,6 +172,7 @@ const (
 	constMsgDelMsg
 	constMsgDelSub
 	constMsgDelUser
+	constMsgDelCred
 )
 
 func parseMsgClientMeta(params string) int {
@@ -218,6 +209,8 @@ func parseMsgClientDel(params string) int {
 		return constMsgDelSub
 	case "user":
 		return constMsgDelUser
+	case "cred":
+		return constMsgDelCred
 	default:
 		// ignore
 	}
@@ -269,11 +262,14 @@ type MsgClientDel struct {
 	// * "topic" to delete the topic
 	// * "sub" to delete a subscription to topic.
 	// * "user" to delete or disable user.
+	// * "cred" to delete credential (email or phone)
 	What string `json:"what"`
 	// Delete messages with these IDs (either one by one or a set of ranges)
 	DelSeq []MsgDelRange `json:"delseq,omitempty"`
 	// User ID of the user or subscription to delete
 	User string `json:"user,omitempty"`
+	// Credential to delete
+	Cred *MsgCredClient `json:"cred,omitempty"`
 	// Request to hard-delete objects (i.e. delete messages for all users), if such option is available.
 	Hard bool `json:"hard,omitempty"`
 }
@@ -324,6 +320,16 @@ type MsgLastSeenInfo struct {
 	When *time.Time `json:"when,omitempty"`
 	// User agent of the device when the user was last online.
 	UserAgent string `json:"ua,omitempty"`
+}
+
+// MsgCredServer is an account credential such as email or phone number.
+type MsgCredServer struct {
+	// Credential type, i.e. `email` or `tel`.
+	Method string `json:"meth,omitempty"`
+	// Credential value, i.e. `user@example.com` or `+18003287448`
+	Value string `json:"val,omitempty"`
+	// Indicates that the credential is validated.
+	Done bool `json:"done,omitempty"`
 }
 
 // MsgAccessMode is a definition of access mode.

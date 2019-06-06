@@ -522,6 +522,7 @@ func (t *Topic) run(hub *Hub) {
 					}
 				}
 				if meta.what&constMsgMetaCred != 0 {
+					log.Printf("topic[%s] handle getCred", t.name)
 					if err := t.replyGetCreds(meta.sess, asUid, meta.pkt.Get.Id); err != nil {
 						log.Printf("topic[%s] meta.Get.Creds failed: %s", t.name, err)
 					}
@@ -548,6 +549,7 @@ func (t *Topic) run(hub *Hub) {
 					}
 				}
 				if meta.what&constMsgMetaCred != 0 {
+					log.Printf("topic[%s] meta.Set.Cred", t.name)
 					if err := t.replySetCreds(meta.sess, asUid, authLevel, meta.pkt.Set); err != nil {
 						log.Printf("topic[%s] meta.Set.Creds failed: %v", t.name, err)
 					}
@@ -563,6 +565,8 @@ func (t *Topic) run(hub *Hub) {
 					err = t.replyDelSub(hub, meta.sess, asUid, meta.pkt.Del)
 				case constMsgDelTopic:
 					err = t.replyDelTopic(hub, meta.sess, asUid, meta.pkt.Del)
+				case constMsgDelCred:
+					err = t.replyDelCred(hub, meta.sess, asUid, meta.pkt.Del)
 				}
 
 				if err != nil {
@@ -767,6 +771,13 @@ func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 		// Send get.tags response as a separate {meta} packet
 		if err := t.replyGetTags(sreg.sess, asUid, sreg.pkt.id); err != nil {
 			log.Printf("topic[%s] handleSubscription Get.Tags failed: %v", t.name, err)
+		}
+	}
+
+	if getWhat&constMsgMetaCred != 0 {
+		// Send get.tags response as a separate {meta} packet
+		if err := t.replyGetCreds(sreg.sess, asUid, sreg.pkt.id); err != nil {
+			log.Printf("topic[%s] handleSubscription Get.Cred failed: %v", t.name, err)
 		}
 	}
 
@@ -1840,7 +1851,7 @@ func (t *Topic) replyGetData(sess *Session, asUid types.Uid, id string, req *Msg
 func (t *Topic) replyGetTags(sess *Session, asUid types.Uid, id string) error {
 	now := types.TimeNow()
 
-	if t.cat != types.TopicCatFnd && t.cat != types.TopicCatGrp {
+	if t.cat != types.TopicCatMe && t.cat != types.TopicCatGrp {
 		sess.queueOut(ErrOperationNotAllowed(id, t.original(asUid), now))
 		return errors.New("invalid topic category for getting tags")
 	}
@@ -1868,7 +1879,7 @@ func (t *Topic) replySetTags(sess *Session, asUid types.Uid, set *MsgClientSet) 
 
 	now := types.TimeNow()
 
-	if t.cat != types.TopicCatFnd && t.cat != types.TopicCatGrp {
+	if t.cat != types.TopicCatMe && t.cat != types.TopicCatGrp {
 		resp = ErrOperationNotAllowed(set.Id, t.original(asUid), now)
 		err = errors.New("invalid topic category to assign tags")
 
@@ -1919,6 +1930,7 @@ func (t *Topic) replySetTags(sess *Session, asUid types.Uid, set *MsgClientSet) 
 
 // replyGetCreds returns user's credentials such as email and phone numbers.
 func (t *Topic) replyGetCreds(sess *Session, asUid types.Uid, id string) error {
+	log.Println("replyGetCreds")
 	now := types.TimeNow()
 
 	if t.cat != types.TopicCatMe {
@@ -2130,6 +2142,12 @@ func (t *Topic) replyDelTopic(h *Hub, sess *Session, asUid types.Uid, del *MsgCl
 	return nil
 }
 
+// Delete credential
+func (t *Topic) replyDelCred(h *Hub, sess *Session, asUid types.Uid, del *MsgClientDel) error {
+
+}
+
+// Delete subscription
 func (t *Topic) replyDelSub(h *Hub, sess *Session, asUid types.Uid, del *MsgClientDel) error {
 	now := types.TimeNow()
 

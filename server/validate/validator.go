@@ -33,6 +33,9 @@ type Validator interface {
 	// Returns the value of validated credential on success.
 	Check(user t.Uid, resp string) (string, error)
 
+	// Remove deletes or deactivates user's given method and value.
+	Remove(user t.Uid, method, value string) error
+
 	// Delete deletes user's record.
 	Delete(user t.Uid) error
 }

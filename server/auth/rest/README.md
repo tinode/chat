@@ -36,6 +36,9 @@ Request and response payloads are formatted as JSON. Some of the request or resp
 		- [`upd` Update authentication record.](#upd-update-authentication-record)
 			- [Sample request](#sample-request)
 			- [Sample response](#sample-response)
+		- [`rtagns` Get a list of restricted tag namespaces.](#get-a-list-of-restricted-tag-namespaces)
+			- [Sample request](#sample-request)
+			- [Sample response](#sample-response)
 
 <!-- /TOC -->
 
@@ -83,6 +86,7 @@ Request and response payloads are formatted as JSON. Some of the request or resp
   "byteval": "Ym9iOmJvYjEyMw==",    // array of bytes, optional
   "ts": "2018-12-04T15:17:02.627Z", // time stamp, optional
   "boolval": true,                  // boolean value, optional
+  "strarr": ["abc", "def"],         // array of strings, optoional
   "newacc": {        // data to use for creating a new account.
     // Default access mode
     "auth": "JRWPS",
@@ -293,4 +297,22 @@ If accounts are managed by the server, the server should respond with an error `
 #### Sample response
 ```json
 {}
+```
+
+### `rtagns` Get a list of restricted tag namespaces.
+
+Server may enforce certain tag namespaces to be restricted, i.e. not editable by the user.
+
+#### Sample request
+```json
+{
+  "endpoint": "rtagns",
+}
+```
+
+#### Sample response
+```json
+{
+	"strarr": ["basic", "email", "tel"]
+}
 ```

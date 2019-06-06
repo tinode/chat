@@ -29,6 +29,7 @@ type authenticator struct {
 	useSeparateEndpoints bool
 }
 
+// Request to the server.
 type request struct {
 	Endpoint string    `json:"endpoint"`
 	Name     string    `json:"name"`
@@ -36,7 +37,7 @@ type request struct {
 	Secret   []byte    `json:"secret,omitempty"`
 }
 
-// User initialization data when creating a new user
+// User initialization data when creating a new user.
 type newAccount struct {
 	// Default access mode
 	Auth string `json:"auth,omitempty"`
@@ -47,6 +48,7 @@ type newAccount struct {
 	Private interface{} `json:"private,omitempty"`
 }
 
+// Response from the server.
 type response struct {
 	// Error message in case of an error.
 	Err string `json:"err,omitempty"`
@@ -58,6 +60,8 @@ type response struct {
 	TimeVal time.Time `json:"ts,omitempty"`
 	// Boolean value
 	BoolVal bool `json:"boolval,omitempty"`
+	// String slice value
+	StrSliceVal []string `json:"strarr,omitempty"`
 	// Account creation data
 	NewAcc *newAccount `json:"newacc,omitempty"`
 }
@@ -223,6 +227,16 @@ func (a *authenticator) GenSecret(rec *auth.Rec) ([]byte, time.Time, error) {
 func (a *authenticator) DelRecords(uid types.Uid) error {
 	_, err := a.callEndpoint("del", &auth.Rec{Uid: uid}, nil)
 	return err
+}
+
+// RestrictedTags returns tag namespaces restricted by the server.
+func (a *authenticator) RestrictedTags() ([]string, error) {
+	resp, err := a.callEndpoint("rtagns", nil, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return resp.StrSliceVal, nil
 }
 
 func init() {

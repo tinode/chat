@@ -269,12 +269,17 @@ func updateUserAuth(msg *ClientComMessage, user *types.User, rec *auth.Rec) erro
 	return types.ErrMalformed
 }
 
-// addCreds adds user's credentials. Returns validated methods.
+// addCreds adds user's credentials. Returns all validated methods, including those validated in this call.
 func addCreds(uid types.Uid, creds []MsgCredClient, tags []string, lang string, tmpToken []byte) ([]string, error) {
 	var validated []string
 	for i := range creds {
 		cr := &creds[i]
 		vld := store.GetValidator(cr.Method)
+		if vld == nil {
+			// Ignore unknown validator.
+			continue
+		}
+
 		if err := vld.Request(uid, cr.Value, lang, cr.Response, tmpToken); err != nil {
 			return nil, err
 		}
@@ -309,7 +314,11 @@ func addCreds(uid types.Uid, creds []MsgCredClient, tags []string, lang string, 
 func updateCreds(uid types.Uid, authLvl auth.Level, creds []MsgCredClient) ([]string, error) {
 
 	// Check if credential validation is required.
-	if len(globals.authValidators[authLvl]) == 0 || len(creds) == 0 {
+	if len(globals.authValidators[authLvl]) == 0 {
+		return nil, types.ErrUnsupported
+	}
+
+	if len(creds) == 0 {
 		return nil, nil
 	}
 
@@ -383,6 +392,51 @@ func updateCreds(uid types.Uid, authLvl auth.Level, creds []MsgCredClient) ([]st
 	}
 
 	return validated, nil
+}
+
+// deleteCred deletes user's credential.
+func deleteCred(uid types.Uid, authLvl auth.Level, cred *MsgCredClient) error {
+	vld := store.GetValidator(cred.Method)
+	if vld == nil {
+		// Ignore unknown validation method.
+		return nil
+	}
+
+	// Is this a required credential for this validation level?
+	var isRequired bool
+	for _, method := range globals.authValidators[authLvl] {
+		if method == cred.Method {
+			isRequired = true
+			break
+		}
+	}
+
+	// If credential is required, make sure the method remains validated even after this credential is deleted.
+	if isRequired {
+
+		// There could be multiple validated credentials for the same method thus we are getting a map with count
+		// for each method.
+
+		// Get validated credentials.
+		alreadyValidatedCreds, err := store.Users.GetAllCreds(uid, true)
+		if err != nil {
+			return nil, err
+		}
+
+		// Index credential methods.
+		var methods map[string]int
+		for _, cr := range alreadyValidatedCreds {
+			methods[cr.Method]++
+		}
+
+		if methods[cred.Method] < 2 {
+			// Reject: this is the only validated credential and it must be provided.
+			return types.ErrPolicy
+		}
+	}
+
+	// The credential is either not required or more than one credential is validated for the given method.
+	return vld.Remove(uid, method, value)
 }
 
 // Request to delete a user:

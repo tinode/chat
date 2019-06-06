@@ -14,8 +14,7 @@
 			- [Logging in](#logging-in)
 			- [Changing Authentication Parameters](#changing-authentication-parameters)
 			- [Resetting a Password, i.e. "Forgot Password"](#resetting-a-password-ie-forgot-password)
-		- [Credentials](#credentials)
-			- [Changing Credentials](#changing-credentials)
+		- [Credential Validation](#credential-validation)
 		- [Access control](#access-control)
 	- [Topics](#topics)
 		- [`me` topic](#me-topic)
@@ -223,37 +222,15 @@ where `jdoe@example.com` is an earlier validated user's email.
 
 If the email matches the registration, the server will send a message using specified method and address with instructions for resetting the secret. The email contains a restricted security token which the user can include into an `{acc}` request with the new secret as described in [Changing Authentication Parameters](#changing-authentication-parameters).
 
-### Credentials
+### Credential Validation
 
-Server may be optionally configured to require certain credentials associated with the user accounts and authentication scheme. For instance, it's possible to require user to provide a unique email or a phone number, or to solve a captcha as a condition of account registration.
+Server may be optionally configured to require validation of certain credentials associated with the user accounts and authentication scheme. For instance, it's possible to require user to provide a unique email or a phone number, or to solve a captcha as a condition of account registration.
 
-The server supports verification of email and phone numbers out of the box. Verification of emails is mostly functional, verification of phone numbers is not functional because a commercial subscription is needed in order to be able to send text messages (SMS).
-
-Credentials are added or removed by sending an `{acc}` message, verified by sending either a `{login}` or an `{acc}` message.
-
-#### Changing Credentials
-
-Credentials can be added or deleted by sending an `{acc}` message:
-```js
-acc: {
-  id: "1a2b3", // string, client-provided message id, optional
-  user: "usr2il9suCbuko", // user being affected by the change, optional
-  token: "XMg...g1Gp8+BO0=", // authentication token if the session is
-                             // not yet authenticated, optional.
-  cred: [
-    {
-      meth: "email", // string, verification method, e.g. "email", "tel", "recaptcha", etc.
-      val: "alice@example.com", // string, credential to update such as email or phone
-      resp: "178307", // string, verification response, optional
-      params: { ... } // parameters, specific to the verification method, optional
-    },
-    ...
-  ]
-}
-```
-To remove an existing credential set `resp` to a single Unicode DEL character "&#x2421;" (`\u2421`): `resp: "␡"`.
+The server supports verification of email out of the box with just a configuration change. is mostly functional, verification of phone numbers is not functional because a commercial subscription is needed in order to be able to send text messages (SMS).
 
 If certain credentials are required, then user must maintain them in validated state at all times. It means if a required credential has to be changed, the user must first add and validate the new credential and only then remove the old one.
+
+Credentials are initially assigned at registration time by sending an `{acc}` message, added using `{set topic="me"}`, deleted using `{del topic="me"}`, and queries by `{get topic="me"}` messages. Credentials are verified by the client by sending either a `{login}` or an `{acc}` message.
 
 
 ### Access control
@@ -625,7 +602,7 @@ acc: {
   tags: ["alice johnson",... ], // array of tags for user discovery; see 'fnd' topic for
               // details, optional (if missing, user will not be discoverable other than
               // by login)
-  cred: [
+  cred: [  // account credentials which require verification, such as email or phone number.
     {
       meth: "email", // string, verification method, e.g. "email", "tel", "recaptcha", etc.
       val: "alice@example.com", // string, credential to verify such as email or phone
@@ -633,7 +610,7 @@ acc: {
       params: { ... } // parameters, specific to the verification method, optional
     },
   ...
-  ],   // account credentials which require verification, such as email or phone number.
+  ],
 
   desc: {  // object, user initialisation data closely matching that of table
            // initialisation; optional
@@ -730,6 +707,16 @@ sub: {
     // Optional update to tags (see fnd topic description)
     tags: [ // array of strings
         "email:alice@example.com", "tel:1234567890"
+    ],
+
+    // Optional update to validated credentials.
+    cred: [
+      {
+        meth: "email", // string, verification method, e.g. "email", "tel", "recaptcha", etc.
+        val: "alice@example.com", // string, credential to verify such as email or phone
+        resp: "178307", // string, verification response, optional
+        params: { ... } // parameters, specific to the verification method, optional
+      },
     ]
   },
 
@@ -836,8 +823,8 @@ Query topic for metadata, such as description or a list of subscribers, or query
 get: {
   id: "1a2b3", // string, client-provided message id, optional
   topic: "grp1XUtEhjv6HND", // string, name of topic to request data from
-  what: "sub desc data del", // string, space-separated list of parameters to query;
-                        // unknown strings are ignored; required
+  what: "sub desc data del cred", // string, space-separated list of parameters to query;
+                        // unknown values are ignored; required
 
   // Optional parameters for {get what="desc"}
   desc: {
@@ -907,6 +894,9 @@ Query message deletion history. Server responds with a `{meta}` message containi
 
 See [Public and Private Fields](#public-and-private-fields) for `private` and `public` format considerations.
 
+* `{get what="cred"}`
+
+Query [credentials](#credentail-validation). Server responds with a `{meta}` message containing an array of credentials. Supported only for `me` topic only.
 
 #### `{set}`
 
@@ -951,9 +941,9 @@ del: {
   id: "1a2b3", // string, client-provided message id, optional
   topic: "grp1XUtEhjv6HND", // string, topic affected, required for "topic", "sub",
                // "msg"
-  what: "msg", // string, one of "topic", "sub", "msg", "user"; what to delete - the
-               // entire topic, a subscription, some or all messages, a user;
-               // optional, default: "msg"
+  what: "msg", // string, one of "topic", "sub", "msg", "user", "cred"; what
+               // to delete - the entire topic, a subscription, some or all messages,
+               // a user, a credential; optional, default: "msg"
   hard: false, // boolean, request to hard-delete vs mark as deleted; in case of
                // what="msg" delete for all users vs current user only;
                // optional, default: false
@@ -979,6 +969,10 @@ Deleting a topic deletes the topic including all subscriptions, and all messages
 `what="user"`
 
 Deleting a user is a very heavy operation. Use caution.
+
+`what="cred"`
+
+Delete credential. Only validated credentials and those with no attempts at validation are deleted. Credentials with failed attempts at validation are hidden.
 
 
 #### `{note}`
@@ -1148,6 +1142,14 @@ meta: {
   ],
   tags: [ // array of tags that the topic or user (in case of "me" topic) is indexed by
     "email:alice@example.com", "tel:+1234567890"
+  ],
+  cred: [ // array of user's credentials
+    {
+      meth: "email", // string, validation method
+      val: "alice@example.com", // string, credential value
+      done: true     // validation status
+    },
+    ...
   ],
   del: {
     clear: 3, // ID of the latest applicable 'delete' transaction
