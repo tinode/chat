@@ -41,6 +41,11 @@ else
 	done < config.template
 fi
 
+# Load default sample data when generating or resetting the database.
+if [[ -z "$SAMPLE_DATA" && "$UPGRADE_DB" = "false" ]] ; then
+	SAMPLE_DATA="$DEFAULT_SAMPLE_DATA"
+fi
+
 # If push notifications are enabled, generate client-side firebase config file.
 if [ ! -z "$FCM_PUSH_ENABLED" ] ; then
 	# Write client config to static/firebase-init.js
@@ -51,7 +56,7 @@ else
 fi
 
 # Initialize the database if it has not been initialized yet or if data reset/upgrade has been requested.
-./init-db --reset=${RESET_DB} --upgrade=${UPGRADE_DB} --config=${CONFIG} --data=data.json | grep "usr;tino;" > /botdata/tino-password
+./init-db --reset=${RESET_DB} --upgrade=${UPGRADE_DB} --config=${CONFIG} --data=${SAMPLE_DATA} | grep "usr;tino;" > /botdata/tino-password
 
 if [ -s /botdata/tino-password ] ; then
 	# Convert Tino's authentication credentials into a cookie file.

@@ -420,7 +420,7 @@ func deleteCred(uid types.Uid, authLvl auth.Level, cred *MsgCredClient) error {
 		// Get validated credentials.
 		alreadyValidatedCreds, err := store.Users.GetAllCreds(uid, true)
 		if err != nil {
-			return nil, err
+			return err
 		}
 
 		// Index credential methods.
@@ -436,7 +436,7 @@ func deleteCred(uid types.Uid, authLvl auth.Level, cred *MsgCredClient) error {
 	}
 
 	// The credential is either not required or more than one credential is validated for the given method.
-	return vld.Remove(uid, value)
+	return vld.Remove(uid, cred.Value)
 }
 
 // Request to delete a user:

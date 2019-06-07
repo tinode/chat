@@ -238,7 +238,7 @@ func (v *validator) Check(user t.Uid, resp string) (string, error) {
 		if resp == t.NullValue {
 			// The user is asking to clear validation status effectively removing the credential.
 			// Unvalidated credential cannot be removed to prevent abuse of going above MaxRetries.
-			return "", store.Users.DelCred(user, "email")
+			return "", store.Users.DelCred(user, "email", cred.Value)
 		}
 
 		// The credential has been already validated. No change.
@@ -263,7 +263,7 @@ func (v *validator) Check(user t.Uid, resp string) (string, error) {
 
 // Delete deletes user's records.
 func (v *validator) Delete(user t.Uid) error {
-	return store.Users.DelCred(user, "email")
+	return store.Users.DelCred(user, "email", "")
 }
 
 // Remove deactivates or removes user's credential.

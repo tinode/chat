@@ -43,6 +43,11 @@ func (*validator) Delete(user t.Uid) error {
 	return nil
 }
 
+// Remove or disable the given record
+func (*validator) Remove(user t.Uid, value string) error {
+	return nil
+}
+
 func init() {
 	store.RegisterValidator("tel", &validator{})
 }

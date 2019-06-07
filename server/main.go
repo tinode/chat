@@ -282,7 +282,7 @@ func main() {
 
 	err := store.Open(workerId, string(config.Store))
 	if err != nil {
-		log.Fatal("Failed to connect to DB:", err)
+		log.Fatal("Failed to connect to DB: ", err)
 	}
 	defer func() {
 		store.Close()

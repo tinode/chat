@@ -34,7 +34,8 @@ ENV RESET_DB=false
 ENV UPGRADE_DB=false
 
 # Load sample data to database from data.json.
-ENV LOAD_SAMPLE_DATA=data.json
+ARG DEFAULT_SAMPLE_DATA=data.json
+ENV SAMPLE_DATA=
 
 # The MySQL DSN connection.
 ENV MYSQL_DSN='root@tcp(mysql)/tinode'

@@ -170,7 +170,7 @@ func main() {
 	flag.Parse()
 
 	var data Data
-	if *datafile != "" {
+	if *datafile != "" && *data != "-" {
 		raw, err := ioutil.ReadFile(*datafile)
 		if err != nil {
 			log.Fatal("Failed to parse data:", err)
@@ -224,6 +224,7 @@ func main() {
 		// Reset or create DB
 		err = store.InitDb(config, true)
 	}
+
 	if err != nil {
 		log.Fatal("Failed to init DB:", err)
 	}

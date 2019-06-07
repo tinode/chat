@@ -566,7 +566,7 @@ func (t *Topic) run(hub *Hub) {
 				case constMsgDelTopic:
 					err = t.replyDelTopic(hub, meta.sess, asUid, meta.pkt.Del)
 				case constMsgDelCred:
-					err = t.replyDelCred(hub, meta.sess, asUid, meta.pkt.Del)
+					err = t.replyDelCred(hub, meta.sess, asUid, authLevel, meta.pkt.Del)
 				}
 
 				if err != nil {
@@ -2143,12 +2143,17 @@ func (t *Topic) replyDelTopic(h *Hub, sess *Session, asUid types.Uid, del *MsgCl
 }
 
 // Delete credential
-func (t *Topic) replyDelCred(h *Hub, sess *Session, asUid types.Uid, del *MsgClientDel) error {
+func (t *Topic) replyDelCred(h *Hub, sess *Session, asUid types.Uid, authLvl auth.Level, del *MsgClientDel) error {
+	now := types.TimeNow()
+
 	if t.cat != types.TopicCatMe {
 		sess.queueOut(ErrPermissionDenied(del.Id, t.original(asUid), now))
 		return errors.New("del.cred: invalid topic category")
 	}
 
+	err := deleteCred(asUid, authLvl, del.Cred)
+	sess.queueOut(decodeStoreError(err, del.Id, del.Topic, now, nil))
+	return err
 }
 
 // Delete subscription
