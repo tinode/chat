@@ -19,6 +19,8 @@ type Adapter interface {
 	Close() error
 	// IsOpen checks if the adapter is ready for use
 	IsOpen() bool
+	// GetDbVersion returns current database version.
+	GetDbVersion() (int, error)
 	// CheckDbVersion checks if the actual database version matches adapter version.
 	CheckDbVersion() error
 	// GetName returns the name of the adapter
@@ -27,6 +29,10 @@ type Adapter interface {
 	SetMaxResults(val int) error
 	// CreateDb creates the database optionally dropping an existing database first.
 	CreateDb(reset bool) error
+	// UpgradeDb upgrades database to the current adapter version.
+	UpgradeDb() error
+	// Version returns adapter version
+	Version() int
 
 	// User management
 
@@ -60,8 +66,9 @@ type Adapter interface {
 	CredGetAll(uid t.Uid, validatedOnly bool) ([]t.Credential, error)
 	// CredIsConfirmed returns true if the given credential method has been verified, false otherwise.
 	CredIsConfirmed(uid t.Uid, metod string) (bool, error)
-	// CredDel deletes credentials for the given method. If method is empty, deletes all user's credentials.
-	CredDel(uid t.Uid, method string) error
+	// CredDel deletes credentials for the given method/value. If method is empty, deletes all
+	// user's credentials.
+	CredDel(uid t.Uid, method, value string) error
 	// CredConfirm marks given credential as validated.
 	CredConfirm(uid t.Uid, method string) error
 	// CredFail increments count of failed validation attepmts for the given credentials.

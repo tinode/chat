@@ -165,8 +165,9 @@ CREATE TABLE dellog(
 # User credentials
 CREATE TABLE credentials(
 	id			INT NOT NULL AUTO_INCREMENT,
-	createdat 	DATETIME(3) NOT NULL,
-	updatedat 	DATETIME(3) NOT NULL,	
+	createdat	DATETIME(3) NOT NULL,
+	updatedat	DATETIME(3) NOT NULL,
+	deletedat	DATETIME(3),
 	method 		VARCHAR(16) NOT NULL,
 	value		VARCHAR(128) NOT NULL,
 	synthetic	VARCHAR(192) NOT NULL,

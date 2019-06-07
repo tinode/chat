@@ -28,7 +28,7 @@ const (
 	defaultHost     = "localhost:28015"
 	defaultDatabase = "tinode"
 
-	dbVersion = 106
+	adpVersion = 107
 
 	adapterName = "rethinkdb"
 
@@ -134,38 +134,49 @@ func (a *adapter) IsOpen() bool {
 }
 
 // Read current database version
-func (a *adapter) getDbVersion() (int, error) {
-	cursor, err := rdb.DB(a.dbName).Table("kvmeta").Get("version").Pluck("value").Run(a.conn)
+func (a *adapter) GetDbVersion() (int, error) {
+	if a.version > 0 {
+		return a.version, nil
+	}
+
+	cursor, err := rdb.DB(a.dbName).Table("kvmeta").Get("version").Field("value").Run(a.conn)
 	if err != nil {
 		return -1, err
 	}
 	defer cursor.Close()
 
 	if cursor.IsNil() {
-		return -1, nil
+		return -1, errors.New("Database not initialized")
 	}
 
-	var vers map[string]int
+	var vers int
 	if err = cursor.One(&vers); err != nil {
 		return -1, err
 	}
-	a.version = vers["value"]
 
-	return a.version, nil
+	a.version = vers
+
+	return vers, nil
 }
 
 // CheckDbVersion checks whether the actual DB version matches the expected version of this adapter.
 func (a *adapter) CheckDbVersion() error {
-	if a.version <= 0 {
-		a.getDbVersion()
+	version, err := a.GetDbVersion()
+	if err != nil {
+		return err
 	}
 
-	if a.version != dbVersion {
-		return errors.New("Invalid database version " + strconv.Itoa(a.version) +
-			". Expected " + strconv.Itoa(dbVersion))
+	if version != adpVersion {
+		return errors.New("Invalid database version " + strconv.Itoa(version) +
+			". Expected " + strconv.Itoa(adpVersion))
 	}
 
 	return nil
+}
+
+// Version returns adapter version.
+func (adapter) Version() int {
+	return adpVersion
 }
 
 // GetName returns string that adapter uses to register itself with store.
@@ -198,12 +209,6 @@ func (a *adapter) CreateDb(reset bool) error {
 
 	// Table with metadata key-value pairs.
 	if _, err := rdb.DB(a.dbName).TableCreate("kvmeta", rdb.TableCreateOpts{PrimaryKey: "key"}).RunWrite(a.conn); err != nil {
-		return err
-	}
-
-	// Record current DB version.
-	if _, err := rdb.DB(a.dbName).Table("kvmeta").Insert(
-		map[string]interface{}{"key": "version", "value": dbVersion}).RunWrite(a.conn); err != nil {
 		return err
 	}
 
@@ -325,6 +330,48 @@ func (a *adapter) CreateDb(reset bool) error {
 	// A secondary index on fileuploads.UseCount to be able to delete unused records at once.
 	if _, err := rdb.DB(a.dbName).Table("fileuploads").IndexCreate("UseCount").RunWrite(a.conn); err != nil {
 		return err
+	}
+
+	// Record current DB version.
+	if _, err := rdb.DB(a.dbName).Table("kvmeta").Insert(
+		map[string]interface{}{"key": "version", "value": adpVersion}).RunWrite(a.conn); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (a *adapter) updateDbVersion(v int) error {
+	if _, err := rdb.DB(a.dbName).Table("kvmeta").Get("version").
+		Update(map[string]interface{}{"value": v}).RunWrite(a.conn); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (a *adapter) UpgradeDb() error {
+	_, err := a.GetDbVersion()
+	if err != nil {
+		return err
+	}
+
+	if a.version == 106 {
+		// Perform database upgrade from version 106 to version 107.
+
+		// There is nothing to upgrade other than the version.
+
+		if err := a.updateDbVersion(107); err != nil {
+			return err
+		}
+
+		if _, err := a.GetDbVersion(); err != nil {
+			return err
+		}
+	}
+
+	if a.version != adpVersion {
+		return errors.New("Failed to perform database upgrade to version " + strconv.Itoa(adpVersion) +
+			". DB is still at " + strconv.Itoa(a.version))
 	}
 	return nil
 }
@@ -594,7 +641,7 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 		}
 
 		// Delete credentials.
-		if err = a.CredDel(uid, ""); err != nil {
+		if err = a.CredDel(uid, "", ""); err != nil {
 			return err
 		}
 		// And finally delete the user.
@@ -1777,7 +1824,7 @@ func (a *adapter) CredUpsert(cred *t.Credential) error {
 	_, err := rdb.DB(a.dbName).Table("credentials").
 		GetAllByIndex("User", cred.User).
 		Filter(map[string]interface{}{"Method": cred.Method, "Done": false}).Update(
-		map[string]interface{}{"Closed": true}).RunWrite(a.conn)
+		map[string]interface{}{"DeletedAt": t.TimeNow()}).RunWrite(a.conn)
 	if err != nil {
 		return err
 	}
@@ -1791,7 +1838,7 @@ func (a *adapter) CredUpsert(cred *t.Credential) error {
 
 		// Assume that the record exists and try to update it: remove Closed, update timestamp and response.
 		result, err := rdb.DB(a.dbName).Table("credentials").Get(cred.Id).
-			Replace(rdb.Row.Without("Closed").
+			Replace(rdb.Row.Without("DeletedAt").
 				Merge(map[string]interface{}{
 					"UpdatedAt": cred.UpdatedAt,
 					"Resp":      cred.Resp})).RunWrite(a.conn)
@@ -1828,13 +1875,29 @@ func (a *adapter) CredIsConfirmed(uid t.Uid, method string) (bool, error) {
 }
 
 // CredDel deletes credentials for the given method. If method is empty, deletes all user's credentials.
-func (a *adapter) CredDel(uid t.Uid, method string) error {
+func (a *adapter) CredDel(uid t.Uid, method, value string) error {
 	q := rdb.DB(a.dbName).Table("credentials").
 		GetAllByIndex("User", uid.String())
 	if method != "" {
 		q = q.Filter(map[string]interface{}{"Method": method})
+		if value != "" {
+			q = q.Filter(map[string]interface{}{"Value": value})
+		}
 	}
-	_, err := q.Delete().RunWrite(a.conn)
+
+	if method == "" {
+		_, err := q.Delete().RunWrite(a.conn)
+		return err
+	}
+
+	// Hard-delete all confirmed values or values with no attempts at confirmation.
+	_, err := q.Filter(rdb.Or(rdb.Row.Field("Done").Eq(true), rdb.Row.Field("Retries").Eq(0))).Delete().RunWrite(a.conn)
+	if err != nil {
+		return err
+	}
+
+	// Soft-delete all other values.
+	_, err = q.Update(map[string]interface{}{"DeletedAt": t.TimeNow()}).RunWrite(a.conn)
 	return err
 }
 
@@ -1842,7 +1905,7 @@ func (a *adapter) CredDel(uid t.Uid, method string) error {
 func (a *adapter) credGetActive(uid t.Uid, method string) (*t.Credential, error) {
 	// Get the active unconfirmed credential:
 	cursor, err := rdb.DB(a.dbName).Table("credentials").GetAllByIndex("User", uid.String()).
-		Filter(rdb.Row.HasFields("Closed").Not()).
+		Filter(rdb.Row.HasFields("DeletedAt").Not()).
 		Filter(map[string]interface{}{"Method": method, "Done": false}).Run(a.conn)
 	if err != nil {
 		return nil, err
@@ -1892,7 +1955,7 @@ func (a *adapter) CredFail(uid t.Uid, method string) error {
 	_, err := rdb.DB(a.dbName).Table("credentials").
 		GetAllByIndex("User", uid.String()).
 		Filter(map[string]interface{}{"Method": method, "Done": false}).
-		Filter(rdb.Row.HasFields("Closed").Not()).
+		Filter(rdb.Row.HasFields("DeletedAt").Not()).
 		Update(map[string]interface{}{
 			"Retries":   rdb.Row.Field("Retries").Default(0).Add(1),
 			"UpdatedAt": t.TimeNow(),
@@ -1911,7 +1974,7 @@ func (a *adapter) CredGetAll(uid t.Uid, validatedOnly bool) ([]t.Credential, err
 	if validatedOnly {
 		q = q.Filter(map[string]interface{}{"Done": true})
 	} else {
-		q = q.Filter(rdb.Row.HasFields("Closed").Not())
+		q = q.Filter(rdb.Row.HasFields("DeletedAt").Not())
 	}
 
 	cursor, err := q.Run(a.conn)

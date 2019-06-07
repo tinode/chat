@@ -266,6 +266,11 @@ func (v *validator) Delete(user t.Uid) error {
 	return store.Users.DelCred(user, "email")
 }
 
+// Remove deactivates or removes user's credential.
+func (v *validator) Remove(user t.Uid, value string) error {
+	return store.Users.DelCred(user, "email", value)
+}
+
 // This is a basic SMTP sender which connects to a server using login/password.
 // -
 // See here how to send email from Amazon SES:

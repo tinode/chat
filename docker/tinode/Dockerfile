@@ -30,6 +30,12 @@ ENV TARGET_DB=$TARGET_DB
 # An option to reset database.
 ENV RESET_DB=false
 
+# An option to upgrade database.
+ENV UPGRADE_DB=false
+
+# Load sample data to database from data.json.
+ENV LOAD_SAMPLE_DATA=data.json
+
 # The MySQL DSN connection.
 ENV MYSQL_DSN='root@tcp(mysql)/tinode'
 

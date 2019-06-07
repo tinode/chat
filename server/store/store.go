@@ -102,9 +102,29 @@ func GetAdapterName() string {
 	return ""
 }
 
-// InitDb creates a new database instance. If 'reset' is true it will first attempt to drop
-// existing database. If jsconf is nil it will assume that the connection is already open.
-// If it's non-nil, it will use the config string to open the DB connection first.
+// GetAdapterVersion returns version of the current adater.
+func GetAdapterVersion() int {
+	if adp != nil {
+		return adp.Version()
+	}
+
+	return -1
+}
+
+// GetDbVersion returns version of the underlying database.
+func GetDbVersion() int {
+	if adp != nil {
+		vers, _ := adp.GetDbVersion()
+		return vers
+	}
+
+	return -1
+}
+
+// InitDb creates and configures a new database instance. If 'reset' is true it will first
+// attempt to drop an existing database. If jsconf is nil it will assume that the adapter is
+// already open. If it's non-nil and the adapter is not open, it will use the config string
+// to open the adapter first.
 func InitDb(jsonconf string, reset bool) error {
 	if !IsOpen() {
 		if err := openAdapter(1, jsonconf); err != nil {
@@ -112,6 +132,18 @@ func InitDb(jsonconf string, reset bool) error {
 		}
 	}
 	return adp.CreateDb(reset)
+}
+
+// UpgradeDb performes an upgrade of the database to the current adapter version.
+// If jsconf is nil it will assume that the adapter is already open. If it's non-nil and the
+// adapter is not open, it will use the config string to open the adapter first.
+func UpgradeDb(jsonconf string) error {
+	if !IsOpen() {
+		if err := openAdapter(1, jsonconf); err != nil {
+			return err
+		}
+	}
+	return adp.UpgradeDb()
 }
 
 // RegisterAdapter makes a persistence adapter available.
@@ -341,8 +373,8 @@ func (UsersObjMapper) GetAllCreds(id types.Uid, validatedOnly bool) ([]types.Cre
 }
 
 // DelCred deletes user's credentials. If method is "", all credentials are deleted.
-func (UsersObjMapper) DelCred(id types.Uid, method string) error {
-	return adp.CredDel(id, method)
+func (UsersObjMapper) DelCred(id types.Uid, method, value string) error {
+	return adp.CredDel(id, method, value)
 }
 
 // GetUnreadCount returs user's total count of unread messages in all topics with the R permissions

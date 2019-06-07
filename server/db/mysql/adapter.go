@@ -32,7 +32,7 @@ const (
 	defaultDSN      = "root:@tcp(localhost:3306)/tinode?parseTime=true"
 	defaultDatabase = "tinode"
 
-	dbVersion = 106
+	adpVersion = 107
 
 	adapterName = "mysql"
 
@@ -104,8 +104,12 @@ func (a *adapter) IsOpen() bool {
 	return a.db != nil
 }
 
-// Read current database version
-func (a *adapter) getDbVersion() (int, error) {
+// GetDbVersion returns current database version.
+func (a *adapter) GetDbVersion() (int, error) {
+	if a.version > 0 {
+		return a.version, nil
+	}
+
 	var vers int
 	err := a.db.Get(&vers, "SELECT `value` FROM kvmeta WHERE `key`='version'")
 	if err != nil {
@@ -114,26 +118,30 @@ func (a *adapter) getDbVersion() (int, error) {
 		}
 		return -1, err
 	}
+
 	a.version = vers
 
-	return a.version, nil
+	return vers, nil
 }
 
 // CheckDbVersion checks whether the actual DB version matches the expected version of this adapter.
 func (a *adapter) CheckDbVersion() error {
-	if a.version <= 0 {
-		_, err := a.getDbVersion()
-		if err != nil {
-			return err
-		}
+	version, err := a.GetDbVersion()
+	if err != nil {
+		return err
 	}
 
-	if a.version != dbVersion {
-		return errors.New("Invalid database version " + strconv.Itoa(a.version) +
-			". Expected " + strconv.Itoa(dbVersion))
+	if version != adpVersion {
+		return errors.New("Invalid database version " + strconv.Itoa(version) +
+			". Expected " + strconv.Itoa(adpVersion))
 	}
 
 	return nil
+}
+
+// Version returns adapter version.
+func (adapter) Version() int {
+	return adpVersion
 }
 
 // GetName returns string that adapter uses to register itself with store.
@@ -364,6 +372,7 @@ func (a *adapter) CreateDb(reset bool) error {
 			id        INT NOT NULL AUTO_INCREMENT,
 			createdat DATETIME(3) NOT NULL,
 			updatedat DATETIME(3) NOT NULL,
+			deletedat DATETIME(3),
 			method    VARCHAR(16) NOT NULL,
 			value     VARCHAR(128) NOT NULL,
 			synthetic VARCHAR(192) NOT NULL,
@@ -417,11 +426,46 @@ func (a *adapter) CreateDb(reset bool) error {
 			`)`); err != nil {
 		return err
 	}
-	if _, err = tx.Exec("INSERT INTO kvmeta(`key`, `value`) VALUES('version', ?)", dbVersion); err != nil {
+	if _, err = tx.Exec("INSERT INTO kvmeta(`key`, `value`) VALUES('version', ?)", adpVersion); err != nil {
 		return err
 	}
 
 	return tx.Commit()
+}
+
+func (a *adapter) updateDbVersion(v int) error {
+	if _, err := a.db.Exec("UPDATE kvmeta SET version=? WHERE key='version'", v); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (a *adapter) UpgradeDb() error {
+	if _, err := a.GetDbVersion(); err != nil {
+		return err
+	}
+
+	if a.version == 106 {
+		// Perform database upgrade from version 106 to version 107.
+
+		if _, err := a.db.Exec("ALTER TABLE credentials ADD deletedat DATETIME(3) AFTER updatedat"); err != nil {
+			return err
+		}
+
+		if err := a.updateDbVersion(107); err != nil {
+			return err
+		}
+
+		if _, err := a.GetDbVersion(); err != nil {
+			return err
+		}
+	}
+
+	if a.version != adpVersion {
+		return errors.New("Failed to perform database upgrade to version " + strconv.Itoa(adpVersion) +
+			". DB is still at " + strconv.Itoa(a.version))
+	}
+	return nil
 }
 
 func addTags(tx *sqlx.Tx, table, keyName string, keyVal interface{}, tags []string, ignoreDups bool) error {
@@ -731,7 +775,7 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 		}
 
 		// Delete all credentials.
-		if err = credDel(tx, uid, ""); err != nil {
+		if err = credDel(tx, uid, "", ""); err != nil {
 			return err
 		}
 
@@ -2134,6 +2178,8 @@ func (a *adapter) DeviceDelete(uid t.Uid, deviceID string) error {
 
 // CredUpsert adds or updates a validation record.
 func (a *adapter) CredUpsert(cred *t.Credential) error {
+	now := t.TimeNow()
+
 	// If credential is validated it cannot be changed so assume it does not exist, just try to add it.
 	// If credential is not valiated, try to find it first: if it does not exist add it, otherwise
 	// update UpdatedAt and Resp.
@@ -2141,18 +2187,16 @@ func (a *adapter) CredUpsert(cred *t.Credential) error {
 	userId := decodeUidString(cred.User)
 
 	// Deactivate all unverified records of this user and method.
-	_, err := a.db.Exec("UPDATE credentials SET done=-1 WHERE userid=? AND method=?", userId, cred.Method)
+	_, err := a.db.Exec("UPDATE credentials SET deletedat=? WHERE userid=? AND method=?", now, userId, cred.Method)
 
 	// Enforce uniqueness: if credential is confirmed, "method:value" must be unique.
 	// if credential is not yet confirmed, "userid:method:value" is unique.
 	synth := cred.Method + ":" + cred.Value
-	done := 1
 	if !cred.Done {
 		synth = cred.User + ":" + synth
-		done = 0
 
-		// Assume that the record exists and try to update it: mark as active, update timestamp and response value.
-		res, err := a.db.Exec("UPDATE credentials SET updatedat=?,resp=?,done=0 WHERE synthetic=?",
+		// Assume that the record exists and try to update it: undelete, update timestamp and response value.
+		res, err := a.db.Exec("UPDATE credentials SET updatedat=?,deletedat=NULL,resp=?,done=0 WHERE synthetic=?",
 			cred.UpdatedAt, cred.Resp, synth)
 		if err != nil {
 			return err
@@ -2167,7 +2211,7 @@ func (a *adapter) CredUpsert(cred *t.Credential) error {
 	// Add new record.
 	_, err = a.db.Exec("INSERT INTO credentials(createdat,updatedat,method,value,synthetic,userid,resp,done) "+
 		"VALUES(?,?,?,?,?,?,?,?)",
-		cred.CreatedAt, cred.UpdatedAt, cred.Method, cred.Value, synth, userId, cred.Resp, done)
+		cred.CreatedAt, cred.UpdatedAt, cred.Method, cred.Value, synth, userId, cred.Resp, cred.Done)
 	if isDupe(err) {
 		return t.ErrDuplicate
 	}
@@ -2178,7 +2222,7 @@ func (a *adapter) CredUpsert(cred *t.Credential) error {
 func (a *adapter) CredIsConfirmed(uid t.Uid, method string) (bool, error) {
 	var done int
 	// There could be more than one credential of the same method. We just need one.
-	err := a.db.Get(&done, "SELECT done FROM credentials WHERE userid=? AND method=? AND done=1",
+	err := a.db.Get(&done, "SELECT done FROM credentials WHERE userid=? AND method=? AND done=true",
 		store.DecodeUid(uid), method)
 	if err == sql.ErrNoRows {
 		// Nothing found, clear the error, otherwise it will be reported as internal error.
@@ -2189,20 +2233,46 @@ func (a *adapter) CredIsConfirmed(uid t.Uid, method string) (bool, error) {
 }
 
 // credDel deletes given validation method or all methods of the given user.
-func credDel(tx *sqlx.Tx, uid t.Uid, method string) error {
-	query := "DELETE FROM credentials WHERE userid=?"
+// 1. If user is being deleted, hard-delete all records (method == "")
+// 2. If one value is being deleted:
+// 2.1 Delete it if it's valiated or if there were no attempts at validation
+// (otherwise it could be used to circumvent the limit on validation attempts).
+// 2.2 In that case mark it as soft-deleted.
+func credDel(tx *sqlx.Tx, uid t.Uid, method, value string) error {
+	constraints := " WHERE userid=?"
 	args := []interface{}{store.DecodeUid(uid)}
+
 	if method != "" {
-		query += " AND method=?"
+		constraints += " AND method=?"
 		args = append(args, method)
+
+		if value != "" {
+			constraints += " AND value=?"
+			args = append(args, value)
+		}
 	}
-	_, err := tx.Exec(query, args...)
+
+	if method == "" {
+		_, err := tx.Exec("DELETE FROM credentials"+constraints, args...)
+		return err
+	}
+
+	// Case 2.1
+	if _, err := tx.Exec("DELETE FROM credentials"+constraints+" AND (done=true OR retries=0)", args...); err != nil {
+		return err
+	}
+
+	// Case 2.2
+	args = append([]interface{}{t.TimeNow()}, args...)
+	_, err := tx.Exec("UPDATE credentials SET deletedat=?"+constraints, args...)
+
 	return err
 }
 
-// CredDel deletes either all credentials of the given user and method
-// or all credentials of the given user if the method is blank.
-func (a *adapter) CredDel(uid t.Uid, method string) error {
+// CredDel deletes either credentials of the given user. If method is blank all
+// credentials are removed. If value is blank all credentials of the given the
+// method are removed.
+func (a *adapter) CredDel(uid t.Uid, method, value string) error {
 	tx, err := a.db.Beginx()
 	if err != nil {
 		return err
@@ -2213,7 +2283,7 @@ func (a *adapter) CredDel(uid t.Uid, method string) error {
 		}
 	}()
 
-	err = credDel(tx, uid, method)
+	err = credDel(tx, uid, method, value)
 	if err != nil {
 		return err
 	}
@@ -2224,7 +2294,7 @@ func (a *adapter) CredDel(uid t.Uid, method string) error {
 // CredConfirm marks given credential method as confirmed.
 func (a *adapter) CredConfirm(uid t.Uid, method string) error {
 	res, err := a.db.Exec(
-		"UPDATE credentials SET updatedat=?,done=1,synthetic=CONCAT(method,':',value) WHERE userid=? AND method=? AND done=0",
+		"UPDATE credentials SET updatedat=?,done=true,synthetic=CONCAT(method,':',value) WHERE userid=? AND method=? AND done=false",
 		t.TimeNow(), store.DecodeUid(uid), method)
 	if err != nil {
 		if isDupe(err) {
@@ -2240,7 +2310,7 @@ func (a *adapter) CredConfirm(uid t.Uid, method string) error {
 
 // CredFail increments failure count of the given validation method.
 func (a *adapter) CredFail(uid t.Uid, method string) error {
-	_, err := a.db.Exec("UPDATE credentials SET updatedat=?,retries=retries+1 WHERE userid=? AND method=? AND done=0",
+	_, err := a.db.Exec("UPDATE credentials SET updatedat=?,retries=retries+1 WHERE userid=? AND method=? AND done=false",
 		t.TimeNow(), store.DecodeUid(uid), method)
 	return err
 }
@@ -2249,7 +2319,8 @@ func (a *adapter) CredFail(uid t.Uid, method string) error {
 func (a *adapter) CredGetActive(uid t.Uid, method string) (*t.Credential, error) {
 	var cred t.Credential
 	err := a.db.Get(&cred, "SELECT createdat,updatedat,method,value,resp,done,retries "+
-		"FROM credentials WHERE userid=? AND method=? AND done=0", store.DecodeUid(uid), method)
+		"FROM credentials WHERE userid=? AND deletedat IS NULL AND method=? AND done=false",
+		store.DecodeUid(uid), method)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			err = nil
@@ -2263,11 +2334,9 @@ func (a *adapter) CredGetActive(uid t.Uid, method string) (*t.Credential, error)
 
 // CredGetAll returns credential records for the given user, all or validated only.
 func (a *adapter) CredGetAll(uid t.Uid, validatedOnly bool) ([]t.Credential, error) {
-	query := "SELECT createdat,updatedat,method,value,resp,done,retries FROM credentials WHERE userid=? AND done"
+	query := "SELECT createdat,updatedat,method,value,resp,done,retries FROM credentials WHERE userid=? AND deletedat IS NULL"
 	if validatedOnly {
-		query += "=1"
-	} else {
-		query += ">=0"
+		query += " AND done=true"
 	}
 
 	var credentials []t.Credential

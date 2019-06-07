@@ -50,8 +50,8 @@ else
 	echo "" > static/firebase-init.js
 fi
 
-# Initialize the database if it has not been initialized yet or if data reset has been requested.
-./init-db --reset=${RESET_DB} --config=${CONFIG} --data=data.json | grep "usr;tino;" > /botdata/tino-password
+# Initialize the database if it has not been initialized yet or if data reset/upgrade has been requested.
+./init-db --reset=${RESET_DB} --upgrade=${UPGRADE_DB} --config=${CONFIG} --data=data.json | grep "usr;tino;" > /botdata/tino-password
 
 if [ -s /botdata/tino-password ] ; then
 	# Convert Tino's authentication credentials into a cookie file.

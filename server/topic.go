@@ -2144,6 +2144,10 @@ func (t *Topic) replyDelTopic(h *Hub, sess *Session, asUid types.Uid, del *MsgCl
 
 // Delete credential
 func (t *Topic) replyDelCred(h *Hub, sess *Session, asUid types.Uid, del *MsgClientDel) error {
+	if t.cat != types.TopicCatMe {
+		sess.queueOut(ErrPermissionDenied(del.Id, t.original(asUid), now))
+		return errors.New("del.cred: invalid topic category")
+	}
 
 }
 

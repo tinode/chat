@@ -436,7 +436,7 @@ func deleteCred(uid types.Uid, authLvl auth.Level, cred *MsgCredClient) error {
 	}
 
 	// The credential is either not required or more than one credential is validated for the given method.
-	return vld.Remove(uid, method, value)
+	return vld.Remove(uid, value)
 }
 
 // Request to delete a user:
