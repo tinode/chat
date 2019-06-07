@@ -8,6 +8,8 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"time"
 
 	jcr "github.com/DisposaBoy/JsonConfigReader"
@@ -170,7 +172,7 @@ func main() {
 	flag.Parse()
 
 	var data Data
-	if *datafile != "" && *data != "-" {
+	if *datafile != "" && *datafile != "-" {
 		raw, err := ioutil.ReadFile(*datafile)
 		if err != nil {
 			log.Fatal("Failed to parse data:", err)
@@ -219,10 +221,13 @@ func main() {
 
 	if *upgrade {
 		// Upgrade DB from one version to another.
-		err = store.UpgradeDb(config)
+		err = store.UpgradeDb(string(config.StoreConfig))
+		if err == nil {
+			log.Println("Database successfully upgraded")
+		}
 	} else {
 		// Reset or create DB
-		err = store.InitDb(config, true)
+		err = store.InitDb(string(config.StoreConfig), true)
 	}
 
 	if err != nil {

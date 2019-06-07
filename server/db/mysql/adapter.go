@@ -124,6 +124,14 @@ func (a *adapter) GetDbVersion() (int, error) {
 	return vers, nil
 }
 
+func (a *adapter) updateDbVersion(v int) error {
+	a.version = -1
+	if _, err := a.db.Exec("UPDATE kvmeta SET `value`=? WHERE `key`='version'", v); err != nil {
+		return err
+	}
+	return nil
+}
+
 // CheckDbVersion checks whether the actual DB version matches the expected version of this adapter.
 func (a *adapter) CheckDbVersion() error {
 	version, err := a.GetDbVersion()
@@ -431,13 +439,6 @@ func (a *adapter) CreateDb(reset bool) error {
 	}
 
 	return tx.Commit()
-}
-
-func (a *adapter) updateDbVersion(v int) error {
-	if _, err := a.db.Exec("UPDATE kvmeta SET version=? WHERE key='version'", v); err != nil {
-		return err
-	}
-	return nil
 }
 
 func (a *adapter) UpgradeDb() error {

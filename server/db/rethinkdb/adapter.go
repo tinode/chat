@@ -159,6 +159,15 @@ func (a *adapter) GetDbVersion() (int, error) {
 	return vers, nil
 }
 
+func (a *adapter) updateDbVersion(v int) error {
+	a.version = -1
+	if _, err := rdb.DB(a.dbName).Table("kvmeta").Get("version").
+		Update(map[string]interface{}{"value": v}).RunWrite(a.conn); err != nil {
+		return err
+	}
+	return nil
+}
+
 // CheckDbVersion checks whether the actual DB version matches the expected version of this adapter.
 func (a *adapter) CheckDbVersion() error {
 	version, err := a.GetDbVersion()
@@ -338,14 +347,6 @@ func (a *adapter) CreateDb(reset bool) error {
 		return err
 	}
 
-	return nil
-}
-
-func (a *adapter) updateDbVersion(v int) error {
-	if _, err := rdb.DB(a.dbName).Table("kvmeta").Get("version").
-		Update(map[string]interface{}{"value": v}).RunWrite(a.conn); err != nil {
-		return err
-	}
 	return nil
 }
 

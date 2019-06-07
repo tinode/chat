@@ -61,7 +61,7 @@ func genDb(data *Data) {
 
 		// Save credentials: email and phone number as if they were confirmed.
 		if uu.Email != "" {
-			if err := store.Users.SaveCred(&types.Credential{
+			if err := store.Users.UpsertCred(&types.Credential{
 				User:   user.Id,
 				Method: "email",
 				Value:  uu.Email,
@@ -71,7 +71,7 @@ func genDb(data *Data) {
 			}
 		}
 		if uu.Tel != "" {
-			if err := store.Users.SaveCred(&types.Credential{
+			if err := store.Users.UpsertCred(&types.Credential{
 				User:   user.Id,
 				Method: "tel",
 				Value:  uu.Tel,
