@@ -549,9 +549,8 @@ func (t *Topic) run(hub *Hub) {
 					}
 				}
 				if meta.what&constMsgMetaCred != 0 {
-					log.Printf("topic[%s] meta.Set.Cred", t.name)
-					if err := t.replySetCreds(meta.sess, asUid, authLevel, meta.pkt.Set); err != nil {
-						log.Printf("topic[%s] meta.Set.Creds failed: %v", t.name, err)
+					if err := t.replySetCred(meta.sess, asUid, authLevel, meta.pkt.Set); err != nil {
+						log.Printf("topic[%s] meta.Set.Cred failed: %v", t.name, err)
 					}
 				}
 
@@ -1930,7 +1929,6 @@ func (t *Topic) replySetTags(sess *Session, asUid types.Uid, set *MsgClientSet) 
 
 // replyGetCreds returns user's credentials such as email and phone numbers.
 func (t *Topic) replyGetCreds(sess *Session, asUid types.Uid, id string) error {
-	log.Println("replyGetCreds")
 	now := types.TimeNow()
 
 	if t.cat != types.TopicCatMe {
@@ -1938,7 +1936,7 @@ func (t *Topic) replyGetCreds(sess *Session, asUid types.Uid, id string) error {
 		return errors.New("invalid topic category for getting credentials")
 	}
 
-	screds, err := store.Users.GetAllCreds(asUid, false)
+	screds, err := store.Users.GetAllCreds(asUid, "", false)
 	if err != nil {
 		sess.queueOut(decodeStoreError(err, id, t.original(asUid), now, nil))
 		return err
@@ -1960,17 +1958,35 @@ func (t *Topic) replyGetCreds(sess *Session, asUid types.Uid, id string) error {
 	return nil
 }
 
-// replySetCreds updates user's credentials such as email and phone numbers.
-func (t *Topic) replySetCreds(sess *Session, asUid types.Uid, authLevel auth.Level, set *MsgClientSet) error {
+// replySetCreds adds user credentials such as email and phone numbers.
+func (t *Topic) replySetCred(sess *Session, asUid types.Uid, authLevel auth.Level, set *MsgClientSet) error {
 
 	now := types.TimeNow()
-
 	if t.cat != types.TopicCatMe {
 		sess.queueOut(ErrOperationNotAllowed(set.Id, t.original(asUid), now))
 		return errors.New("invalid topic category for updating credentials")
 	}
 
-	_, err := updateCreds(asUid, authLevel, set.Cred)
+	var err error
+	creds := []MsgCredClient{{
+		Method:   set.Cred.Method,
+		Value:    set.Cred.Value,
+		Response: set.Cred.Response,
+		Params:   set.Cred.Params,
+	}}
+	if set.Cred.Response != "" {
+		// Credential is being validated.
+		_, err = validatedCreds(asUid, authLevel, creds)
+	} else {
+		// Credential is being added or updated.
+		tmpToken, _, _ := store.GetLogicalAuthHandler("token").GenSecret(&auth.Rec{
+			Uid:       asUid,
+			AuthLevel: auth.LevelNone,
+			Lifetime:  time.Hour * 24,
+			Features:  auth.FeatureNoLogin})
+
+		addCreds(asUid, creds, nil, sess.lang, tmpToken)
+	}
 
 	sess.queueOut(decodeStoreError(err, set.Id, t.original(asUid), now, nil))
 

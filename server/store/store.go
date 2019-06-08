@@ -346,8 +346,8 @@ func (UsersObjMapper) GetOwnTopics(id types.Uid, opts *types.QueryOpt) ([]string
 	return adp.OwnTopics(id, opts)
 }
 
-// UpsertCred adds or updates a credential validation request.
-func (UsersObjMapper) UpsertCred(cred *types.Credential) error {
+// UpsertCred adds or updates a credential validation request. Return true if the record was inserted, false if updated.
+func (UsersObjMapper) UpsertCred(cred *types.Credential) (bool, error) {
 	cred.InitTimes()
 	return adp.CredUpsert(cred)
 }
@@ -368,8 +368,8 @@ func (UsersObjMapper) GetActiveCred(id types.Uid, method string) (*types.Credent
 }
 
 // GetAllCreds returns credentials of the given user, all or validated only.
-func (UsersObjMapper) GetAllCreds(id types.Uid, validatedOnly bool) ([]types.Credential, error) {
-	return adp.CredGetAll(id, validatedOnly)
+func (UsersObjMapper) GetAllCreds(id types.Uid, method string, validatedOnly bool) ([]types.Credential, error) {
+	return adp.CredGetAll(id, method, validatedOnly)
 }
 
 // DelCred deletes user's credentials. If method is "", all credentials are deleted.

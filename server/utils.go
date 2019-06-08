@@ -160,7 +160,8 @@ func restrictedTagsEqual(oldTags, newTags []string, namespaces map[string]bool) 
 	return true
 }
 
-// Process credentials for correctness: remove duplicates and unknown methods.
+// Process credentials for correctness: remove duplicate and unknown methods.
+// In case of duplicate methods only the first one satisfying valueRequired is kept.
 // If valueRequired is true, keep only those where Value is non-empty.
 func normalizeCredentials(creds []MsgCredClient, valueRequired bool) []MsgCredClient {
 	if len(creds) == 0 {

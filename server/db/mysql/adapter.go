@@ -2177,8 +2177,8 @@ func (a *adapter) DeviceDelete(uid t.Uid, deviceID string) error {
 
 // Credential management
 
-// CredUpsert adds or updates a validation record.
-func (a *adapter) CredUpsert(cred *t.Credential) error {
+// CredUpsert adds or updates a validation record. Returns true if inserted, false if updated.
+func (a *adapter) CredUpsert(cred *t.Credential) (bool, error) {
 	now := t.TimeNow()
 
 	// If credential is validated it cannot be changed so assume it does not exist, just try to add it.
@@ -2200,12 +2200,12 @@ func (a *adapter) CredUpsert(cred *t.Credential) error {
 		res, err := a.db.Exec("UPDATE credentials SET updatedat=?,deletedat=NULL,resp=?,done=0 WHERE synthetic=?",
 			cred.UpdatedAt, cred.Resp, synth)
 		if err != nil {
-			return err
+			return false, err
 		}
 
 		// If record was updated, then all is fine.
 		if numrows, _ := res.RowsAffected(); numrows > 0 {
-			return nil
+			return false, nil
 		}
 	}
 
@@ -2214,9 +2214,9 @@ func (a *adapter) CredUpsert(cred *t.Credential) error {
 		"VALUES(?,?,?,?,?,?,?,?)",
 		cred.CreatedAt, cred.UpdatedAt, cred.Method, cred.Value, synth, userId, cred.Resp, cred.Done)
 	if isDupe(err) {
-		return t.ErrDuplicate
+		return true, t.ErrDuplicate
 	}
-	return err
+	return true, err
 }
 
 // CredIsConfirmed returns true of the given validation method is confirmed.
@@ -2333,15 +2333,20 @@ func (a *adapter) CredGetActive(uid t.Uid, method string) (*t.Credential, error)
 	return &cred, nil
 }
 
-// CredGetAll returns credential records for the given user, all or validated only.
-func (a *adapter) CredGetAll(uid t.Uid, validatedOnly bool) ([]t.Credential, error) {
+// CredGetAll returns credential records for the given user and method, all or validated only.
+func (a *adapter) CredGetAll(uid t.Uid, method string, validatedOnly bool) ([]t.Credential, error) {
 	query := "SELECT createdat,updatedat,method,value,resp,done,retries FROM credentials WHERE userid=? AND deletedat IS NULL"
+	args := []interface{}{store.DecodeUid(uid)}
+	if method != "" {
+		query += " AND method=?"
+		args = append(args, method)
+	}
 	if validatedOnly {
 		query += " AND done=true"
 	}
 
 	var credentials []t.Credential
-	err := a.db.Select(&credentials, query, store.DecodeUid(uid))
+	err := a.db.Select(&credentials, query, args...)
 	if err != nil {
 		return nil, err
 	}

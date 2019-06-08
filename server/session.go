@@ -635,7 +635,7 @@ func (s *Session) login(msg *ClientComMessage) {
 	var missing []string
 	if rec.Features&auth.FeatureValidated == 0 {
 		var validated []string
-		if validated, err = updateCreds(rec.Uid, rec.AuthLevel, msg.Login.Cred); err == nil {
+		if validated, err = validatedCreds(rec.Uid, rec.AuthLevel, msg.Login.Cred); err == nil {
 			// Get a list of credentials which have not been validated.
 			_, missing = stringSliceDelta(globals.authValidators[rec.AuthLevel], validated)
 		}
@@ -794,6 +794,9 @@ func (s *Session) set(msg *ClientComMessage) {
 	}
 	if msg.Set.Tags != nil {
 		meta.what |= constMsgMetaTags
+	}
+	if msg.Set.Cred != nil {
+		meta.what |= constMsgMetaCred
 	}
 
 	if meta.what == 0 {

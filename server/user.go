@@ -223,7 +223,14 @@ func replyUpdateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 	if msg.Acc.Scheme != "" {
 		err = updateUserAuth(msg, user, rec)
 	} else if len(msg.Acc.Cred) > 0 {
-		validated, err := updateCreds(uid, authLvl, msg.Acc.Cred)
+		// Handle request to update credentials.
+		tmpToken, _, _ := store.GetLogicalAuthHandler("token").GenSecret(&auth.Rec{
+			Uid:       uid,
+			AuthLevel: auth.LevelNone,
+			Lifetime:  time.Hour * 24,
+			Features:  auth.FeatureNoLogin})
+		// FIXME: get all validated credentials, not just those validated in addCreds call.
+		validated, err := addCreds(uid, msg.Acc.Cred, nil, s.lang, tmpToken)
 		if err == nil {
 			_, missing := stringSliceDelta(globals.authValidators[authLvl], validated)
 			if len(missing) > 0 {
@@ -269,7 +276,9 @@ func updateUserAuth(msg *ClientComMessage, user *types.User, rec *auth.Rec) erro
 	return types.ErrMalformed
 }
 
-// addCreds adds user's credentials. Returns all validated methods, including those validated in this call.
+// addCreds adds new credentials and re-send validation request for existing ones. It also adds credential-defined
+// tags if necessary.
+// Returns methods validated in this call only.
 func addCreds(uid types.Uid, creds []MsgCredClient, tags []string, lang string, tmpToken []byte) ([]string, error) {
 	var validated []string
 	for i := range creds {
@@ -280,12 +289,13 @@ func addCreds(uid types.Uid, creds []MsgCredClient, tags []string, lang string, 
 			continue
 		}
 
-		if err := vld.Request(uid, cr.Value, lang, cr.Response, tmpToken); err != nil {
+		isNew, err := vld.Request(uid, cr.Value, lang, cr.Response, tmpToken)
+		if err != nil {
 			return nil, err
 		}
 
-		if cr.Response != "" {
-			// If response is provided and vld.Request did not return an error, the request was
+		if isNew && cr.Response != "" {
+			// If response is provided and vld.Request did not return an error, the new request was
 			// successfully validated.
 			validated = append(validated, cr.Method)
 
@@ -298,7 +308,7 @@ func addCreds(uid types.Uid, creds []MsgCredClient, tags []string, lang string, 
 
 	// Save tags potentially changed by the validator.
 	if len(tags) > 0 {
-		if err := store.Users.UpdateTags(uid, nil, nil, tags); err != nil {
+		if err := store.Users.UpdateTags(uid, tags, nil, nil); err != nil {
 			return nil, err
 		}
 	}
@@ -306,12 +316,9 @@ func addCreds(uid types.Uid, creds []MsgCredClient, tags []string, lang string, 
 	return validated, nil
 }
 
-// updateCred uses provided credentials to update user's credentials:
-// 1. Add new credential.
-// 2. Validate earlier added credential
-// 3. Remove credential
-// Returns validated methods including those validated in this call.
-func updateCreds(uid types.Uid, authLvl auth.Level, creds []MsgCredClient) ([]string, error) {
+// validatedCreds returns the list of validated credentials including those validated in this call.
+// Returns all validated methods including those validated earlier and now.
+func validatedCreds(uid types.Uid, authLvl auth.Level, creds []MsgCredClient) ([]string, error) {
 
 	// Check if credential validation is required.
 	if len(globals.authValidators[authLvl]) == 0 {
@@ -322,30 +329,29 @@ func updateCreds(uid types.Uid, authLvl auth.Level, creds []MsgCredClient) ([]st
 		return nil, nil
 	}
 
-	// There could be multiple validated credentials for the same method thus we are getting a map with count
-	// for each method.
-	alreadyValidatedCreds, err := store.Users.GetAllCreds(uid, true)
+	// Get all validated methods
+	allCreds, err := store.Users.GetAllCreds(uid, "", true)
 	if err != nil {
 		return nil, err
 	}
 
-	// Index credential methods.
-	var methods map[string]int
-	for _, cred := range alreadyValidatedCreds {
-		methods[cred.Method]++
+	methods := make(map[string]struct{})
+	for i := range allCreds {
+		methods[allCreds[i].Method] = struct{}{}
 	}
 
 	// Add credentials which are validated in this call.
 	// Unknown validators are removed.
 	creds = normalizeCredentials(creds, false)
-	var tagsToAdd, tagsToRemove []string
+	var tagsToAdd []string
 	for i := range creds {
 		cr := &creds[i]
 		if cr.Response == "" {
-			// Ignore unknown validation type or empty response.
+			// Ignore empty response.
 			continue
 		}
-		vld := store.GetValidator(cr.Method)
+
+		vld := store.GetValidator(cr.Method) // No need to check for nil, unknown methods are removed earlier.
 		value, err := vld.Check(uid, cr.Response)
 		if err != nil {
 			// Check failed.
@@ -357,38 +363,25 @@ func updateCreds(uid types.Uid, authLvl auth.Level, creds []MsgCredClient) ([]st
 			return nil, err
 		}
 
-		// Value could be empty if validated credential was deleted.
-		if value != "" {
-			// Check did not return an error: the request was successfully validated.
-			methods[cr.Method]++
+		// Check did not return an error: the request was successfully validated.
+		methods[cr.Method] = struct{}{}
 
-			// Add validated credential to user's tags.
-			if globals.validators[cr.Method].addToTags {
-				tagsToAdd = append(tagsToAdd, cr.Method+":"+value)
-			}
-		} else {
-			// Credential deleted.
-			methods[cr.Method]--
-
-			// Remove deleted credential from user's tags.
-			if globals.validators[cr.Method].addToTags {
-				tagsToRemove = append(tagsToRemove, cr.Method+":"+value)
-			}
+		// Add validated credential to user's tags.
+		if globals.validators[cr.Method].addToTags {
+			tagsToAdd = append(tagsToAdd, cr.Method+":"+value)
 		}
 	}
 
-	if len(tagsToAdd) > 0 || len(tagsToRemove) > 0 {
+	if len(tagsToAdd) > 0 {
 		// Save update to tags
-		if err := store.Users.UpdateTags(uid, tagsToAdd, tagsToRemove, nil); err != nil {
+		if err := store.Users.UpdateTags(uid, tagsToAdd, nil, nil); err != nil {
 			return nil, err
 		}
 	}
 
 	var validated []string
-	for method, count := range methods {
-		if count > 0 {
-			validated = append(validated, method)
-		}
+	for method := range methods {
+		validated = append(validated, method)
 	}
 
 	return validated, nil
@@ -417,26 +410,41 @@ func deleteCred(uid types.Uid, authLvl auth.Level, cred *MsgCredClient) error {
 		// There could be multiple validated credentials for the same method thus we are getting a map with count
 		// for each method.
 
-		// Get validated credentials.
-		alreadyValidatedCreds, err := store.Users.GetAllCreds(uid, true)
+		// Get all credentials of the given method.
+		allCreds, err := store.Users.GetAllCreds(uid, cred.Method, false)
 		if err != nil {
 			return err
 		}
 
-		// Index credential methods.
-		var methods map[string]int
-		for _, cr := range alreadyValidatedCreds {
-			methods[cr.Method]++
+		// Check if it's OK to delete: there is another validated value.
+		var okTodelete bool
+		for _, cr := range allCreds {
+			if cr.Done && cr.Value != cred.Value {
+				okTodelete = true
+				break
+			}
 		}
 
-		if methods[cred.Method] < 2 {
+		if !okTodelete {
 			// Reject: this is the only validated credential and it must be provided.
 			return types.ErrPolicy
 		}
 	}
 
+	// TODO: remove tag!
+
 	// The credential is either not required or more than one credential is validated for the given method.
-	return vld.Remove(uid, cred.Value)
+	err := vld.Remove(uid, cred.Value)
+	if err != nil {
+		return err
+	}
+
+	// Remove generated tags for the deleted credential.
+	if globals.validators[cred.Method].addToTags {
+		// Error is useless here, don't report it
+		store.Users.UpdateTags(uid, nil, []string{cred.Method + ":" + cred.Value}, nil)
+	}
+	return nil
 }
 
 // Request to delete a user:

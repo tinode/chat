@@ -1816,7 +1816,7 @@ func (a *adapter) DeviceDelete(uid t.Uid, deviceID string) error {
 // Credential management
 
 // CredUpsert adds or updates a validation record.
-func (a *adapter) CredUpsert(cred *t.Credential) error {
+func (a *adapter) CredUpsert(cred *t.Credential) (bool, error) {
 	// If credential is validated it cannot be changed so assume it does not exist, just try to add it.
 	// If credential is not valiated, try to find it first: if it does not exist add it, otherwise
 	// update UpdatedAt and Resp, remove Closed.
@@ -1827,7 +1827,7 @@ func (a *adapter) CredUpsert(cred *t.Credential) error {
 		Filter(map[string]interface{}{"Method": cred.Method, "Done": false}).Update(
 		map[string]interface{}{"DeletedAt": t.TimeNow()}).RunWrite(a.conn)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	cred.Id = cred.Method + ":" + cred.Value
@@ -1844,22 +1844,22 @@ func (a *adapter) CredUpsert(cred *t.Credential) error {
 					"UpdatedAt": cred.UpdatedAt,
 					"Resp":      cred.Resp})).RunWrite(a.conn)
 		if err != nil {
-			return err
+			return false, err
 		}
 
 		// If record was updated, then all is fine.
 		if result.Updated > 0 {
-			return nil
+			return false, nil
 		}
 	}
 
 	// Insert a new record.
 	_, err = rdb.DB(a.dbName).Table("credentials").Insert(cred).RunWrite(a.conn)
 	if rdb.IsConflictErr(err) {
-		return t.ErrDuplicate
+		return true, t.ErrDuplicate
 	}
 
-	return err
+	return true, err
 }
 
 // CredIsConfirmed returns true if the given credential method has been verified, false otherwise.
@@ -1938,7 +1938,7 @@ func (a *adapter) CredConfirm(uid t.Uid, method string) error {
 
 	cred.Done = true
 	cred.UpdatedAt = t.TimeNow()
-	if err = a.CredUpsert(cred); err != nil {
+	if _, err = a.CredUpsert(cred); err != nil {
 		return err
 	}
 
@@ -1969,9 +1969,12 @@ func (a *adapter) CredGetActive(uid t.Uid, method string) (*t.Credential, error)
 	return a.credGetActive(uid, method)
 }
 
-// CredGetAll returns user's credential records, validated only or all.
-func (a *adapter) CredGetAll(uid t.Uid, validatedOnly bool) ([]t.Credential, error) {
+// CredGetAll returns user's credential records of the given method, validated only or all.
+func (a *adapter) CredGetAll(uid t.Uid, method string, validatedOnly bool) ([]t.Credential, error) {
 	q := rdb.DB(a.dbName).Table("credentials").GetAllByIndex("User", uid.String())
+	if method != "" {
+		q = q.Filter(map[string]interface{}{"Method": method})
+	}
 	if validatedOnly {
 		q = q.Filter(map[string]interface{}{"Done": true})
 	} else {

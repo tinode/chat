@@ -14,19 +14,20 @@ type Validator interface {
 	// check uniqueness (if appropriate), format, etc
 	PreCheck(cred string, params interface{}) error
 
-	// Request sends a request for confirmation to the user.
-	// 	user: UID of the user making the request.
-	// 	cred: credential being validated, such as email or phone.
-	//  lang: user's human language as repored in the session.
-	//  resp: optional response if user already has it (i.e. captcha/recaptcha).
-	//  tmpToken: temporary authenticaton token to include in the request.
-	Request(user t.Uid, cred, lang, resp string, tmpToken []byte) error
+	// Request sends a request for confirmation to the user. Returns true if it's a new credential,
+	// false if it re-sent request for an existing unconfirmed credential.
+	//   user: UID of the user making the request.
+	//   cred: credential being validated, such as email or phone.
+	//   lang: user's human language as repored in the session.
+	//   resp: optional response if user already has it (i.e. captcha/recaptcha).
+	//   tmpToken: temporary authenticaton token to include in the request.
+	Request(user t.Uid, cred, lang, resp string, tmpToken []byte) (bool, error)
 
 	// ResetSecret sends a message with instructions for resetting an authentication secret.
-	//  cred: address to use for the message.
-	//  scheme: authentication scheme being reset.
-	//  lang: human language as reported in the session.
-	//  tmpToken: temporary authentication token
+	//   cred: address to use for the message.
+	//   scheme: authentication scheme being reset.
+	//   lang: human language as reported in the session.
+	//   tmpToken: temporary authentication token
 	ResetSecret(cred, scheme, lang string, tmpToken []byte) error
 
 	// Check checks validity of user's response.

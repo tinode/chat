@@ -81,7 +81,7 @@ type MsgSetQuery struct {
 	// Indexable tags for user discovery
 	Tags []string `json:"tags,omitempty"`
 	// Update to account credentials.
-	Cred []MsgCredClient `json:"cred,omitempty"`
+	Cred *MsgCredClient `json:"cred,omitempty"`
 }
 
 // MsgDelRange is either an individual ID (HiId=0) or a randge of deleted IDs, low end inclusive (closed),

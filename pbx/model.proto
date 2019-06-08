@@ -126,8 +126,8 @@ message SetQuery {
 	SetSub sub = 2;
 	// Indexable tags
 	repeated string tags = 3;
-	// Credentials
-	repeated ClientCred cred = 4;
+	// Credential being updated.
+	ClientCred cred = 4;
 }
 
 message SeqRange {
@@ -230,14 +230,17 @@ message ClientDel {
 		TOPIC = 1;
 		SUB = 2;
 		USER = 3;
+		CRED = 4;
 	}
 	What what = 3;
 	// Delete messages by id or range of ids
 	repeated SeqRange del_seq = 4;
 	// User ID of the subscription to delete
 	string user_id = 5;
+	// Credential to delete.
+	ClientCred cred = 6; 
 	// Request to hard-delete messages for all users, if such option is available.
-	bool hard = 6;
+	bool hard = 7;
 }
 
 enum InfoNote {

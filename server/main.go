@@ -56,15 +56,15 @@ import (
 )
 
 const (
+	// currentVersion is the current API/protocol version
+	currentVersion = "0.16"
+	// minSupportedVersion is the minimum supported API version
+	minSupportedVersion = "0.15"
+
 	// idleSessionTimeout defines duration of being idle before terminating a session.
 	idleSessionTimeout = time.Second * 55
 	// idleTopicTimeout defines now long to keep topic alive after the last session detached.
 	idleTopicTimeout = time.Second * 5
-
-	// currentVersion is the current API/protocol version
-	currentVersion = "0.15"
-	// minSupportedVersion is the minimum supported API version
-	minSupportedVersion = "0.15"
 
 	// defaultMaxMessageSize is the default maximum message size
 	defaultMaxMessageSize = 1 << 19 // 512K
