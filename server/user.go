@@ -431,8 +431,6 @@ func deleteCred(uid types.Uid, authLvl auth.Level, cred *MsgCredClient) error {
 		}
 	}
 
-	// TODO: remove tag!
-
 	// The credential is either not required or more than one credential is validated for the given method.
 	err := vld.Remove(uid, cred.Value)
 	if err != nil {

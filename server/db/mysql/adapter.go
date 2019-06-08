@@ -2188,7 +2188,8 @@ func (a *adapter) CredUpsert(cred *t.Credential) (bool, error) {
 	userId := decodeUidString(cred.User)
 
 	// Deactivate all unverified records of this user and method.
-	_, err := a.db.Exec("UPDATE credentials SET deletedat=? WHERE userid=? AND method=?", now, userId, cred.Method)
+	_, err := a.db.Exec("UPDATE credentials SET deletedat=? WHERE userid=? AND method=? AND done=false",
+		now, userId, cred.Method)
 
 	// Enforce uniqueness: if credential is confirmed, "method:value" must be unique.
 	// if credential is not yet confirmed, "userid:method:value" is unique.
