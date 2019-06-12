@@ -8,11 +8,18 @@ import (
 const validatorName = "tel"
 
 // Empty placeholder struct.
-type validator struct{}
+type validator struct {
+	DebugResponse string `json:"debug_response"`
+	MaxRetries    int    `json:"max_retries"`
+}
 
 // Init is a noop.
-func (*validator) Init(jsonconf string) error {
-	// Implement: Initialize SMS service.
+func (v *validator) Init(jsonconf string) error {
+	// Implement: Parse config and initialize SMS service.
+
+	v.MaxRetries = 1000
+	v.DebugResponse = "123456"
+
 	return nil
 }
 
@@ -36,7 +43,7 @@ func (*validator) ResetSecret(cred, scheme, lang string, tmpToken []byte) error 
 }
 
 // Check checks validity of user's response.
-func (*validator) Check(user t.Uid, resp string) (string, error) {
+func (v *validator) Check(user t.Uid, resp string) (string, error) {
 	cred, err := store.Users.GetActiveCred(user, validatorName)
 	if err != nil {
 		return "", err

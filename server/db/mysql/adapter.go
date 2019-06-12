@@ -505,13 +505,13 @@ func removeTags(tx *sqlx.Tx, table, keyName string, keyVal interface{}, tags []s
 		return nil
 	}
 
-	args := []interface{}{keyVal}
+	var args []interface{}
 	for _, tag := range tags {
 		args = append(args, tag)
 	}
 
-	query, args, _ := sqlx.In("DELETE FROM "+table+" WHERE "+keyName+"=? AND tag IN (?)", args)
-	tx.Rebind(query)
+	query, args, _ := sqlx.In("DELETE FROM "+table+" WHERE "+keyName+"=? AND tag IN (?)", keyVal, args)
+	query = tx.Rebind(query)
 	_, err := tx.Exec(query, args...)
 
 	return err
@@ -908,25 +908,19 @@ func (a *adapter) UserUpdateTags(uid t.Uid, add, remove, reset []string) error {
 		return err
 	}
 
-	// Now insert new tags
+	// Delete tags.
 	err = removeTags(tx, "usertags", "userid", decoded_uid, remove)
 	if err != nil {
 		return err
 	}
 
-	rows, err := tx.Queryx("SELECT tag FROM usertags WHERE userid=?", decoded_uid)
+	var allTags []string
+	err = tx.Select(&allTags, "SELECT tag FROM usertags WHERE userid=?", decoded_uid)
 	if err != nil {
 		return err
 	}
 
-	var allTags []string
-	for rows.Next() {
-		var tag string
-		if err = rows.Scan(&tag); err != nil {
-			break
-		}
-		allTags = append(allTags, tag)
-	}
+	log.Println("Updated tags:", allTags)
 
 	_, err = tx.Exec("UPDATE users SET tags=? WHERE id=?", t.StringSlice(allTags), decoded_uid)
 	if err != nil {
@@ -934,7 +928,6 @@ func (a *adapter) UserUpdateTags(uid t.Uid, add, remove, reset []string) error {
 	}
 
 	return tx.Commit()
-
 }
 
 // UserGetByCred returns user ID for the given validated credential.
@@ -2212,7 +2205,10 @@ func (a *adapter) CredUpsert(cred *t.Credential) (bool, error) {
 		// Check if this credential is already validated.
 		var done bool
 		err = tx.Get(&done, "SELECT done FROM credentials WHERE synthetic=?", synth)
-		if err != nil && err != sql.ErrNoRows {
+		if err == nil {
+			return false, t.ErrDuplicate
+		}
+		if err != sql.ErrNoRows {
 			return false, err
 		}
 		// We are going to insert new record.
@@ -2272,8 +2268,6 @@ func (a *adapter) CredIsConfirmed(uid t.Uid, method string) (bool, error) {
 // (otherwise it could be used to circumvent the limit on validation attempts).
 // 2.2 In that case mark it as soft-deleted.
 func credDel(tx *sqlx.Tx, uid t.Uid, method, value string) error {
-	log.Println("credDel", uid, method, value)
-
 	constraints := " WHERE userid=?"
 	args := []interface{}{store.DecodeUid(uid)}
 
@@ -2287,16 +2281,12 @@ func credDel(tx *sqlx.Tx, uid t.Uid, method, value string) error {
 		}
 	}
 
-	log.Println("DELETE FROM credentials" + constraints)
-
 	if method == "" {
 		_, err := tx.Exec("DELETE FROM credentials"+constraints, args...)
 		return err
 	}
 
 	// Case 2.1
-	sql := "DELETE FROM credentials" + constraints + " AND (done=true OR retries=0)"
-	log.Println(sql)
 	if _, err := tx.Exec("DELETE FROM credentials"+constraints+" AND (done=true OR retries=0)", args...); err != nil {
 		return err
 	}

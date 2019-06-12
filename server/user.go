@@ -280,10 +280,8 @@ func updateUserAuth(msg *ClientComMessage, user *types.User, rec *auth.Rec) erro
 // tags if necessary.
 // Returns methods validated in this call only.
 func addCreds(uid types.Uid, creds []MsgCredClient, tags []string, lang string, tmpToken []byte) ([]string, error) {
-	log.Println("addCred 1")
 	var validated []string
 	for i := range creds {
-		log.Println("addCred 2", i)
 		cr := &creds[i]
 		vld := store.GetValidator(cr.Method)
 		if vld == nil {
@@ -307,14 +305,13 @@ func addCreds(uid types.Uid, creds []MsgCredClient, tags []string, lang string, 
 			}
 		}
 	}
-	log.Println("addCRed 3")
 	// Save tags potentially changed by the validator.
 	if len(tags) > 0 {
+		log.Println("addCreds updating tags", tags)
 		if err := store.Users.UpdateTags(uid, tags, nil, nil); err != nil {
 			return nil, err
 		}
 	}
-	log.Println("addCRed 4")
 	return validated, nil
 }
 
@@ -388,9 +385,9 @@ func validatedCreds(uid types.Uid, authLvl auth.Level, creds []MsgCredClient) ([
 // deleteCred deletes user's credential.
 func deleteCred(uid types.Uid, authLvl auth.Level, cred *MsgCredClient) error {
 	vld := store.GetValidator(cred.Method)
-	if vld == nil {
-		// Ignore unknown validation method.
-		return nil
+	if vld == nil || cred.Value == "" {
+		// Reject invalid request: unknown validation method or missing credential value.
+		return types.ErrMalformed
 	}
 
 	// Is this a required credential for this validation level?
