@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"hash/fnv"
+	"log"
 	"strconv"
 	"strings"
 	"time"
@@ -2178,46 +2179,76 @@ func (a *adapter) DeviceDelete(uid t.Uid, deviceID string) error {
 // Credential management
 
 // CredUpsert adds or updates a validation record. Returns true if inserted, false if updated.
+// 1. if credential is validated:
+// 1.1 Hard-delete unconfirmed equivalent record, if exists.
+// 1.2 Insert new. Report error if duplicate.
+// 2. if credential is not validated:
+// 2.1 Check if validated equivalent exist. If so, report an error.
+// 2.2 Soft-delete all unvalidated records of the same method.
+// 2.3 Undelete existing credential. Return if successful.
+// 2.4 Insert new credential record.
 func (a *adapter) CredUpsert(cred *t.Credential) (bool, error) {
+	var err error
+
+	tx, err := a.db.Beginx()
+	if err != nil {
+		return false, err
+	}
+	defer func() {
+		if err != nil {
+			log.Println("Rollback")
+			tx.Rollback()
+		}
+	}()
+
 	now := t.TimeNow()
-
-	// If credential is validated it cannot be changed so assume it does not exist, just try to add it.
-	// If credential is not valiated, try to find it first: if it does not exist add it, otherwise
-	// update UpdatedAt and Resp.
-
 	userId := decodeUidString(cred.User)
-
-	// Deactivate all unverified records of this user and method.
-	_, err := a.db.Exec("UPDATE credentials SET deletedat=? WHERE userid=? AND method=? AND done=false",
-		now, userId, cred.Method)
 
 	// Enforce uniqueness: if credential is confirmed, "method:value" must be unique.
 	// if credential is not yet confirmed, "userid:method:value" is unique.
 	synth := cred.Method + ":" + cred.Value
+
 	if !cred.Done {
+		// Check if this credential is already validated.
+		var done bool
+		err = tx.Get(&done, "SELECT done FROM credentials WHERE synthetic=?", synth)
+		if err != nil && err != sql.ErrNoRows {
+			return false, err
+		}
+		// We are going to insert new record.
 		synth = cred.User + ":" + synth
 
+		// Adding new unvalidated credential. Deactivate all unvalidated records of this user and method.
+		_, err = tx.Exec("UPDATE credentials SET deletedat=? WHERE userid=? AND method=? AND done=false",
+			now, userId, cred.Method)
 		// Assume that the record exists and try to update it: undelete, update timestamp and response value.
-		res, err := a.db.Exec("UPDATE credentials SET updatedat=?,deletedat=NULL,resp=?,done=0 WHERE synthetic=?",
+		res, err := tx.Exec("UPDATE credentials SET updatedat=?,deletedat=NULL,resp=?,done=0 WHERE synthetic=?",
 			cred.UpdatedAt, cred.Resp, synth)
 		if err != nil {
 			return false, err
 		}
-
 		// If record was updated, then all is fine.
 		if numrows, _ := res.RowsAffected(); numrows > 0 {
-			return false, nil
+			return false, tx.Commit()
+		}
+	} else {
+		// Hard-deleting unconformed record if it exists.
+		_, err = tx.Exec("DELETE FROM credentials WHERE synthetic=?", cred.User+":"+synth)
+		if err != nil {
+			return false, err
 		}
 	}
-
 	// Add new record.
-	_, err = a.db.Exec("INSERT INTO credentials(createdat,updatedat,method,value,synthetic,userid,resp,done) "+
+	_, err = tx.Exec("INSERT INTO credentials(createdat,updatedat,method,value,synthetic,userid,resp,done) "+
 		"VALUES(?,?,?,?,?,?,?,?)",
 		cred.CreatedAt, cred.UpdatedAt, cred.Method, cred.Value, synth, userId, cred.Resp, cred.Done)
-	if isDupe(err) {
-		return true, t.ErrDuplicate
+	if err != nil {
+		if isDupe(err) {
+			return true, t.ErrDuplicate
+		}
+		return true, err
 	}
-	return true, err
+	return true, tx.Commit()
 }
 
 // CredIsConfirmed returns true of the given validation method is confirmed.
@@ -2241,6 +2272,8 @@ func (a *adapter) CredIsConfirmed(uid t.Uid, method string) (bool, error) {
 // (otherwise it could be used to circumvent the limit on validation attempts).
 // 2.2 In that case mark it as soft-deleted.
 func credDel(tx *sqlx.Tx, uid t.Uid, method, value string) error {
+	log.Println("credDel", uid, method, value)
+
 	constraints := " WHERE userid=?"
 	args := []interface{}{store.DecodeUid(uid)}
 
@@ -2254,12 +2287,16 @@ func credDel(tx *sqlx.Tx, uid t.Uid, method, value string) error {
 		}
 	}
 
+	log.Println("DELETE FROM credentials" + constraints)
+
 	if method == "" {
 		_, err := tx.Exec("DELETE FROM credentials"+constraints, args...)
 		return err
 	}
 
 	// Case 2.1
+	sql := "DELETE FROM credentials" + constraints + " AND (done=true OR retries=0)"
+	log.Println(sql)
 	if _, err := tx.Exec("DELETE FROM credentials"+constraints+" AND (done=true OR retries=0)", args...); err != nil {
 		return err
 	}
@@ -2296,7 +2333,8 @@ func (a *adapter) CredDel(uid t.Uid, method, value string) error {
 // CredConfirm marks given credential method as confirmed.
 func (a *adapter) CredConfirm(uid t.Uid, method string) error {
 	res, err := a.db.Exec(
-		"UPDATE credentials SET updatedat=?,done=true,synthetic=CONCAT(method,':',value) WHERE userid=? AND method=? AND done=false",
+		"UPDATE credentials SET updatedat=?,done=true,synthetic=CONCAT(method,':',value) "+
+			"WHERE userid=? AND method=? AND deletedat IS NULL AND done=false",
 		t.TimeNow(), store.DecodeUid(uid), method)
 	if err != nil {
 		if isDupe(err) {

@@ -641,7 +641,7 @@ func (s *Session) login(msg *ClientComMessage) {
 		}
 	}
 	if err != nil {
-		log.Println("s.login: failed to validate credentials", err, s.sid)
+		log.Println("s.login: failed to validate credentials:", err, s.sid)
 		s.queueOut(decodeStoreError(err, msg.id, "", msg.timestamp, nil))
 	} else {
 		s.queueOut(s.onLogin(msg.id, msg.timestamp, rec, missing))

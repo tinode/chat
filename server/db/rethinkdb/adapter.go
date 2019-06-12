@@ -1815,30 +1815,46 @@ func (a *adapter) DeviceDelete(uid t.Uid, deviceID string) error {
 
 // Credential management
 
-// CredUpsert adds or updates a validation record.
+// CredUpsert adds or updates a validation record. Returns true if inserted, false if updated.
+// 1. if credential is validated:
+// 1.1 Hard-delete unconfirmed equivalent record, if exists.
+// 1.2 Insert new. Report error if duplicate.
+// 2. if credential is not validated:
+// 2.1 Check if validated equivalent exist. If so, report an error.
+// 2.2 Soft-delete all unvalidated records of the same method.
+// 2.3 Undelete existing credential. Return if successful.
+// 2.4 Insert new credential record.
 func (a *adapter) CredUpsert(cred *t.Credential) (bool, error) {
-	// If credential is validated it cannot be changed so assume it does not exist, just try to add it.
-	// If credential is not valiated, try to find it first: if it does not exist add it, otherwise
-	// update UpdatedAt and Resp, remove Closed.
-
-	// Deactivate all unverified records of this user and method.
-	_, err := rdb.DB(a.dbName).Table("credentials").
-		GetAllByIndex("User", cred.User).
-		Filter(map[string]interface{}{"Method": cred.Method, "Done": false}).Update(
-		map[string]interface{}{"DeletedAt": t.TimeNow()}).RunWrite(a.conn)
-	if err != nil {
-		return false, err
-	}
+	var err error
+	tableCredentials := rdb.DB(a.dbName).Table("credentials")
 
 	cred.Id = cred.Method + ":" + cred.Value
 
 	if !cred.Done {
+		// Check if the same credential is already validated.
+		cursor, err := tableCredentials.Get(cred.Id).Run(a.conn)
+		if err != nil {
+			return false, err
+		}
+		if !cursor.IsNil() {
+			return false, t.ErrDuplicate
+		}
+		cursor.Close()
+
 		// If credential is not confirmed, it should not block others
 		// from attempting to validate it: make index user-unique instead of global-unique.
 		cred.Id = cred.User + ":" + cred.Id
 
-		// Assume that the record exists and try to update it: remove Closed, update timestamp and response.
-		result, err := rdb.DB(a.dbName).Table("credentials").Get(cred.Id).
+		// Deactivate all unverified records of this user and method.
+		_, err = tableCredentials.GetAllByIndex("User", cred.User).
+			Filter(map[string]interface{}{"Method": cred.Method, "Done": false}).Update(
+			map[string]interface{}{"DeletedAt": t.TimeNow()}).RunWrite(a.conn)
+		if err != nil {
+			return false, err
+		}
+
+		// Assume that the record exists and try to update it: remove DeletedAt, update timestamp and response.
+		result, err := tableCredentials.Get(cred.Id).
 			Replace(rdb.Row.Without("DeletedAt").
 				Merge(map[string]interface{}{
 					"UpdatedAt": cred.UpdatedAt,
@@ -1851,10 +1867,16 @@ func (a *adapter) CredUpsert(cred *t.Credential) (bool, error) {
 		if result.Updated > 0 {
 			return false, nil
 		}
+	} else {
+		// Hard-delete potentially present unvalidated credential.
+		_, err = tableCredentials.Get(cred.User + ":" + cred.Id).Delete().RunWrite(a.conn)
+		if err != nil {
+			return false, err
+		}
 	}
 
 	// Insert a new record.
-	_, err = rdb.DB(a.dbName).Table("credentials").Insert(cred).RunWrite(a.conn)
+	_, err = tableCredentials.Insert(cred).RunWrite(a.conn)
 	if rdb.IsConflictErr(err) {
 		return true, t.ErrDuplicate
 	}

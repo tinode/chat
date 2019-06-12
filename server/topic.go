@@ -1958,7 +1958,7 @@ func (t *Topic) replyGetCreds(sess *Session, asUid types.Uid, id string) error {
 	return nil
 }
 
-// replySetCreds adds user credentials such as email and phone numbers.
+// replySetCreds adds or validates user credentials such as email and phone numbers.
 func (t *Topic) replySetCred(sess *Session, asUid types.Uid, authLevel auth.Level, set *MsgClientSet) error {
 
 	now := types.TimeNow()
@@ -1968,12 +1968,7 @@ func (t *Topic) replySetCred(sess *Session, asUid types.Uid, authLevel auth.Leve
 	}
 
 	var err error
-	creds := []MsgCredClient{{
-		Method:   set.Cred.Method,
-		Value:    set.Cred.Value,
-		Response: set.Cred.Response,
-		Params:   set.Cred.Params,
-	}}
+	creds := []MsgCredClient{*set.Cred}
 	if set.Cred.Response != "" {
 		// Credential is being validated.
 		_, err = validatedCreds(asUid, authLevel, creds)
@@ -1984,8 +1979,7 @@ func (t *Topic) replySetCred(sess *Session, asUid types.Uid, authLevel auth.Leve
 			AuthLevel: auth.LevelNone,
 			Lifetime:  time.Hour * 24,
 			Features:  auth.FeatureNoLogin})
-
-		addCreds(asUid, creds, nil, sess.lang, tmpToken)
+		_, err = addCreds(asUid, creds, nil, sess.lang, tmpToken)
 	}
 
 	sess.queueOut(decodeStoreError(err, set.Id, t.original(asUid), now, nil))

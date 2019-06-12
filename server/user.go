@@ -280,8 +280,10 @@ func updateUserAuth(msg *ClientComMessage, user *types.User, rec *auth.Rec) erro
 // tags if necessary.
 // Returns methods validated in this call only.
 func addCreds(uid types.Uid, creds []MsgCredClient, tags []string, lang string, tmpToken []byte) ([]string, error) {
+	log.Println("addCred 1")
 	var validated []string
 	for i := range creds {
+		log.Println("addCred 2", i)
 		cr := &creds[i]
 		vld := store.GetValidator(cr.Method)
 		if vld == nil {
@@ -305,14 +307,14 @@ func addCreds(uid types.Uid, creds []MsgCredClient, tags []string, lang string, 
 			}
 		}
 	}
-
+	log.Println("addCRed 3")
 	// Save tags potentially changed by the validator.
 	if len(tags) > 0 {
 		if err := store.Users.UpdateTags(uid, tags, nil, nil); err != nil {
 			return nil, err
 		}
 	}
-
+	log.Println("addCRed 4")
 	return validated, nil
 }
 
@@ -323,10 +325,6 @@ func validatedCreds(uid types.Uid, authLvl auth.Level, creds []MsgCredClient) ([
 	// Check if credential validation is required.
 	if len(globals.authValidators[authLvl]) == 0 {
 		return nil, types.ErrUnsupported
-	}
-
-	if len(creds) == 0 {
-		return nil, nil
 	}
 
 	// Get all validated methods
@@ -431,6 +429,8 @@ func deleteCred(uid types.Uid, authLvl auth.Level, cred *MsgCredClient) error {
 		}
 	}
 
+	log.Println("Calling vld.Remove", cred.Method, cred.Value)
+
 	// The credential is either not required or more than one credential is validated for the given method.
 	err := vld.Remove(uid, cred.Value)
 	if err != nil {
@@ -439,7 +439,7 @@ func deleteCred(uid types.Uid, authLvl auth.Level, cred *MsgCredClient) error {
 
 	// Remove generated tags for the deleted credential.
 	if globals.validators[cred.Method].addToTags {
-		// Error is useless here, don't report it
+		// This error should not be returned to user.
 		store.Users.UpdateTags(uid, nil, []string{cred.Method + ":" + cred.Value}, nil)
 	}
 	return nil

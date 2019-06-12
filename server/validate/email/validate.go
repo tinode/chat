@@ -43,6 +43,8 @@ type validator struct {
 }
 
 const (
+	validatorName = "email"
+
 	maxRetries  = 4
 	defaultPort = "25"
 
@@ -186,7 +188,7 @@ func (v *validator) Request(user t.Uid, email, lang, resp string, tmpToken []byt
 	// Create or update validation record in DB.
 	isNew, err := store.Users.UpsertCred(&t.Credential{
 		User:   user.String(),
-		Method: "email",
+		Method: validatorName,
 		Value:  email,
 		Resp:   resp})
 	if err != nil {
@@ -220,7 +222,7 @@ func (v *validator) ResetSecret(email, scheme, lang string, tmpToken []byte) err
 // Check checks if the provided validation response matches the expected response.
 // Returns the value of validated credential on success.
 func (v *validator) Check(user t.Uid, resp string) (string, error) {
-	cred, err := store.Users.GetActiveCred(user, "email")
+	cred, err := store.Users.GetActiveCred(user, validatorName)
 	if err != nil {
 		return "", err
 	}
@@ -241,23 +243,23 @@ func (v *validator) Check(user t.Uid, resp string) (string, error) {
 	// Comparing with dummy response too.
 	if cred.Resp == resp || v.DebugResponse == resp {
 		// Valid response, save confirmation.
-		return cred.Value, store.Users.ConfirmCred(user, "email")
+		return cred.Value, store.Users.ConfirmCred(user, validatorName)
 	}
 
 	// Invalid response, increment fail counter, ignore possible error.
-	store.Users.FailCred(user, "email")
+	store.Users.FailCred(user, validatorName)
 
 	return "", t.ErrCredentials
 }
 
 // Delete deletes user's records.
 func (v *validator) Delete(user t.Uid) error {
-	return store.Users.DelCred(user, "email", "")
+	return store.Users.DelCred(user, validatorName, "")
 }
 
 // Remove deactivates or removes user's credential.
 func (v *validator) Remove(user t.Uid, value string) error {
-	return store.Users.DelCred(user, "email", value)
+	return store.Users.DelCred(user, validatorName, value)
 }
 
 // This is a basic SMTP sender which connects to a server using login/password.
@@ -283,5 +285,5 @@ func (v *validator) send(to, subj, body string) error {
 }
 
 func init() {
-	store.RegisterValidator("email", &validator{})
+	store.RegisterValidator(validatorName, &validator{})
 }
