@@ -445,7 +445,7 @@ type MsgServerData struct {
 // MsgServerPres is presence notification {pres} (authoritative update).
 type MsgServerPres struct {
 	Topic     string        `json:"topic"`
-	Src       string        `json:"src"`
+	Src       string        `json:"src,omitempty"`
 	What      string        `json:"what"`
 	UserAgent string        `json:"ua,omitempty"`
 	SeqId     int           `json:"seq,omitempty"`
