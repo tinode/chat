@@ -307,7 +307,7 @@ func (UsersObjMapper) Update(uid types.Uid, update map[string]interface{}) error
 }
 
 // UpdateTags either adds, removes, or resets tags to the given slices.
-func (UsersObjMapper) UpdateTags(uid types.Uid, add, remove, reset []string) error {
+func (UsersObjMapper) UpdateTags(uid types.Uid, add, remove, reset []string) ([]string, error) {
 	return adp.UserUpdateTags(uid, add, remove, reset)
 }
 

@@ -384,6 +384,7 @@ message ServerPres {
 		READ = 9;
 		RECV = 10;
 		DEL = 11;
+		TAGS = 12;
 	}
 	What what = 3;
 	string user_agent = 4;

@@ -1904,6 +1904,7 @@ func (t *Topic) replySetTags(sess *Session, asUid types.Uid, set *MsgClientSet) 
 					resp = ErrUnknown(set.Id, t.original(asUid), now)
 				} else {
 					t.tags = tags
+					t.presSubsOnline("tags", "", nilPresParams, &presFilters{singleUser: asUid.UserId()}, "")
 
 					params := make(map[string]interface{})
 					if len(added) > 0 {
@@ -1968,10 +1969,11 @@ func (t *Topic) replySetCred(sess *Session, asUid types.Uid, authLevel auth.Leve
 	}
 
 	var err error
+	var tags []string
 	creds := []MsgCredClient{*set.Cred}
 	if set.Cred.Response != "" {
 		// Credential is being validated.
-		_, err = validatedCreds(asUid, authLevel, creds)
+		_, tags, err = validatedCreds(asUid, authLevel, creds)
 	} else {
 		// Credential is being added or updated.
 		tmpToken, _, _ := store.GetLogicalAuthHandler("token").GenSecret(&auth.Rec{
@@ -1979,7 +1981,12 @@ func (t *Topic) replySetCred(sess *Session, asUid types.Uid, authLevel auth.Leve
 			AuthLevel: auth.LevelNone,
 			Lifetime:  time.Hour * 24,
 			Features:  auth.FeatureNoLogin})
-		_, err = addCreds(asUid, creds, nil, sess.lang, tmpToken)
+		_, tags, err = addCreds(asUid, creds, nil, sess.lang, tmpToken)
+	}
+
+	if err == nil && len(tags) > 0 {
+		t.tags = tags
+		t.presSubsOnline("tags", "", nilPresParams, nilPresFilters, "")
 	}
 
 	sess.queueOut(decodeStoreError(err, set.Id, t.original(asUid), now, nil))
@@ -2161,7 +2168,11 @@ func (t *Topic) replyDelCred(h *Hub, sess *Session, asUid types.Uid, authLvl aut
 		return errors.New("del.cred: invalid topic category")
 	}
 
-	err := deleteCred(asUid, authLvl, del.Cred)
+	tags, err := deleteCred(asUid, authLvl, del.Cred)
+	if err == nil {
+		t.tags = tags
+		t.presSubsOnline("tags", "", nilPresParams, nilPresFilters, "")
+	}
 	sess.queueOut(decodeStoreError(err, del.Id, del.Topic, now, nil))
 	return err
 }

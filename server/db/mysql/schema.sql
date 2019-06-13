@@ -37,7 +37,8 @@ CREATE TABLE usertags(
 	
 	PRIMARY KEY(id),
 	FOREIGN KEY(userid) REFERENCES users(id),
-	INDEX usertags_tag (tag)
+	INDEX usertags_tag(tag),
+	UNIQUE INDEX usertags_userid_tag(userid, tag)
 );
 
 # Indexed devices. Normalized into a separate table.
@@ -101,7 +102,8 @@ CREATE TABLE topictags(
 	
 	PRIMARY KEY(id),
 	FOREIGN KEY(topic) REFERENCES topics(name),
-	INDEX topictags_tag (tag)
+	INDEX topictags_tag (tag),
+	UNIQUE INDEX topictags_userid_tag(topic, tag)
 );
 
 # Subscriptions

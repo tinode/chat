@@ -702,15 +702,11 @@ func (a *adapter) UserUpdate(uid t.Uid, update map[string]interface{}) error {
 }
 
 // UserUpdateTags append or resets user's tags
-func (a *adapter) UserUpdateTags(uid t.Uid, add, remove, reset []string) error {
+func (a *adapter) UserUpdateTags(uid t.Uid, add, remove, reset []string) ([]string, error) {
 	// Compare to nil vs checking for zero length: zero length reset is valid.
 	if reset != nil {
 		// Replace Tags with the new value
-		return a.UserUpdate(uid, map[string]interface{}{"Tags": reset})
-	}
-
-	if len(add) == 0 && len(remove) == 0 {
-		return nil
+		return reset, a.UserUpdate(uid, map[string]interface{}{"Tags": reset})
 	}
 
 	// Mutate the tag list.
@@ -723,15 +719,27 @@ func (a *adapter) UserUpdateTags(uid t.Uid, add, remove, reset []string) error {
 		newTags = newTags.SetDifference(remove)
 	}
 
-	_, err := rdb.DB(a.dbName).Table("users").Get(uid.String()).Update(
-		map[string]interface{}{"Tags": newTags}).RunWrite(a.conn)
+	q := rdb.DB(a.dbName).Table("users").Get(uid.String())
+	_, err := q.Update(map[string]interface{}{"Tags": newTags}).RunWrite(a.conn)
+	if err != nil {
+		return nil, err
+	}
 
-	return err
+	// Get the new tags
+	cursor, err := q.Field("Tags").Run(a.conn)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close()
+
+	var tags []string
+	err = cursor.One(&tags)
+	return tags, err
 }
 
 // UserGetByCred returns user ID for the given validated credential.
 func (a *adapter) UserGetByCred(method, value string) (t.Uid, error) {
-	cursor, err := rdb.DB(a.dbName).Table("credentials").Get(method + ":" + value).Pluck("User").Run(a.conn)
+	cursor, err := rdb.DB(a.dbName).Table("credentials").Get(method + ":" + value).Field("User").Run(a.conn)
 	if err != nil {
 		return t.ZeroUid, err
 	}
@@ -741,12 +749,12 @@ func (a *adapter) UserGetByCred(method, value string) (t.Uid, error) {
 		return t.ZeroUid, nil
 	}
 
-	var userId map[string]string
+	var userId string
 	if err = cursor.One(&userId); err != nil {
 		return t.ZeroUid, err
 	}
 
-	return t.ParseUid(userId["User"]), nil
+	return t.ParseUid(userId), nil
 }
 
 // UserUnreadCount returns the total number of unread messages in all topics with

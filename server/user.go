@@ -130,7 +130,7 @@ func replyCreateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 		AuthLevel: auth.LevelNone,
 		Lifetime:  time.Hour * 24,
 		Features:  auth.FeatureNoLogin})
-	validated, err := addCreds(user.Uid(), creds, rec.Tags, s.lang, tmpToken)
+	validated, _, err := addCreds(user.Uid(), creds, rec.Tags, s.lang, tmpToken)
 	if err != nil {
 		// Delete incomplete user record.
 		store.Users.Delete(user.Uid(), false)
@@ -229,12 +229,17 @@ func replyUpdateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 			AuthLevel: auth.LevelNone,
 			Lifetime:  time.Hour * 24,
 			Features:  auth.FeatureNoLogin})
-		// FIXME: get all validated credentials, not just those validated in addCreds call.
-		validated, err := addCreds(uid, msg.Acc.Cred, nil, s.lang, tmpToken)
+		_, _, err := addCreds(uid, msg.Acc.Cred, nil, s.lang, tmpToken)
 		if err == nil {
-			_, missing := stringSliceDelta(globals.authValidators[authLvl], validated)
-			if len(missing) > 0 {
-				params = map[string]interface{}{"cred": missing}
+			if allCreds, err := store.Users.GetAllCreds(uid, "", true); err != nil {
+				var validated []string
+				for i := range allCreds {
+					validated = append(validated, allCreds[i].Method)
+				}
+				_, missing := stringSliceDelta(globals.authValidators[authLvl], validated)
+				if len(missing) > 0 {
+					params = map[string]interface{}{"cred": missing}
+				}
 			}
 		}
 	} else {
@@ -278,8 +283,9 @@ func updateUserAuth(msg *ClientComMessage, user *types.User, rec *auth.Rec) erro
 
 // addCreds adds new credentials and re-send validation request for existing ones. It also adds credential-defined
 // tags if necessary.
-// Returns methods validated in this call only.
-func addCreds(uid types.Uid, creds []MsgCredClient, tags []string, lang string, tmpToken []byte) ([]string, error) {
+// Returns methods validated in this call only, full set of tags.
+func addCreds(uid types.Uid, creds []MsgCredClient, tags []string, lang string,
+	tmpToken []byte) ([]string, []string, error) {
 	var validated []string
 	for i := range creds {
 		cr := &creds[i]
@@ -291,7 +297,7 @@ func addCreds(uid types.Uid, creds []MsgCredClient, tags []string, lang string, 
 
 		isNew, err := vld.Request(uid, cr.Value, lang, cr.Response, tmpToken)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 		if isNew && cr.Response != "" {
@@ -305,29 +311,27 @@ func addCreds(uid types.Uid, creds []MsgCredClient, tags []string, lang string, 
 			}
 		}
 	}
+
 	// Save tags potentially changed by the validator.
 	if len(tags) > 0 {
-		log.Println("addCreds updating tags", tags)
-		if err := store.Users.UpdateTags(uid, tags, nil, nil); err != nil {
-			return nil, err
-		}
+		tags, _ = store.Users.UpdateTags(uid, tags, nil, nil)
 	}
-	return validated, nil
+	return validated, tags, nil
 }
 
 // validatedCreds returns the list of validated credentials including those validated in this call.
-// Returns all validated methods including those validated earlier and now.
-func validatedCreds(uid types.Uid, authLvl auth.Level, creds []MsgCredClient) ([]string, error) {
+// Returns all validated methods including those validated earlier and now, full set of tags.
+func validatedCreds(uid types.Uid, authLvl auth.Level, creds []MsgCredClient) ([]string, []string, error) {
 
 	// Check if credential validation is required.
 	if len(globals.authValidators[authLvl]) == 0 {
-		return nil, types.ErrUnsupported
+		return nil, nil, types.ErrUnsupported
 	}
 
 	// Get all validated methods
 	allCreds, err := store.Users.GetAllCreds(uid, "", true)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	methods := make(map[string]struct{})
@@ -355,7 +359,7 @@ func validatedCreds(uid types.Uid, authLvl auth.Level, creds []MsgCredClient) ([
 				continue
 			}
 			// Actual error. Report back.
-			return nil, err
+			return nil, nil, err
 		}
 
 		// Check did not return an error: the request was successfully validated.
@@ -367,11 +371,10 @@ func validatedCreds(uid types.Uid, authLvl auth.Level, creds []MsgCredClient) ([
 		}
 	}
 
+	var tags []string
 	if len(tagsToAdd) > 0 {
 		// Save update to tags
-		if err := store.Users.UpdateTags(uid, tagsToAdd, nil, nil); err != nil {
-			return nil, err
-		}
+		tags, _ = store.Users.UpdateTags(uid, tagsToAdd, nil, nil)
 	}
 
 	var validated []string
@@ -379,15 +382,15 @@ func validatedCreds(uid types.Uid, authLvl auth.Level, creds []MsgCredClient) ([
 		validated = append(validated, method)
 	}
 
-	return validated, nil
+	return validated, tags, nil
 }
 
 // deleteCred deletes user's credential.
-func deleteCred(uid types.Uid, authLvl auth.Level, cred *MsgCredClient) error {
+func deleteCred(uid types.Uid, authLvl auth.Level, cred *MsgCredClient) ([]string, error) {
 	vld := store.GetValidator(cred.Method)
 	if vld == nil || cred.Value == "" {
 		// Reject invalid request: unknown validation method or missing credential value.
-		return types.ErrMalformed
+		return nil, types.ErrMalformed
 	}
 
 	// Is this a required credential for this validation level?
@@ -408,7 +411,7 @@ func deleteCred(uid types.Uid, authLvl auth.Level, cred *MsgCredClient) error {
 		// Get all credentials of the given method.
 		allCreds, err := store.Users.GetAllCreds(uid, cred.Method, false)
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		// Check if it's OK to delete: there is another validated value.
@@ -422,7 +425,7 @@ func deleteCred(uid types.Uid, authLvl auth.Level, cred *MsgCredClient) error {
 
 		if !okTodelete {
 			// Reject: this is the only validated credential and it must be provided.
-			return types.ErrPolicy
+			return nil, types.ErrPolicy
 		}
 	}
 
@@ -431,15 +434,16 @@ func deleteCred(uid types.Uid, authLvl auth.Level, cred *MsgCredClient) error {
 	// The credential is either not required or more than one credential is validated for the given method.
 	err := vld.Remove(uid, cred.Value)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// Remove generated tags for the deleted credential.
+	var tags []string
 	if globals.validators[cred.Method].addToTags {
 		// This error should not be returned to user.
-		store.Users.UpdateTags(uid, nil, []string{cred.Method + ":" + cred.Value}, nil)
+		tags, _ = store.Users.UpdateTags(uid, nil, []string{cred.Method + ":" + cred.Value}, nil)
 	}
-	return nil
+	return tags, nil
 }
 
 // Request to delete a user:

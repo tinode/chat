@@ -63,6 +63,8 @@ func pbServPresSerialize(pres *MsgServerPres) *pbx.ServerMsg_Pres {
 		what = pbx.ServerPres_RECV
 	case "del":
 		what = pbx.ServerPres_DEL
+	case "tags":
+		what = pbx.ServerPres_TAGS
 	default:
 		log.Fatal("Unknown pres.what value", pres.What)
 	}
@@ -170,6 +172,8 @@ func pbServDeserialize(pkt *pbx.ServerMsg) *ServerComMessage {
 			what = "recv"
 		case pbx.ServerPres_DEL:
 			what = "del"
+		case pbx.ServerPres_TAGS:
+			what = "tags"
 		}
 		msg.Pres = &MsgServerPres{
 			Topic:     pres.GetTopic(),

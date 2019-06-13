@@ -49,7 +49,7 @@ type Adapter interface {
 	// UserUpdate updates user record
 	UserUpdate(uid t.Uid, update map[string]interface{}) error
 	// UserUpdateTags adds, removes, or resets user's tags
-	UserUpdateTags(uid t.Uid, add, remove, reset []string) error
+	UserUpdateTags(uid t.Uid, add, remove, reset []string) ([]string, error)
 	// UserGetByCred returns user ID for the given validated credential.
 	UserGetByCred(method, value string) (t.Uid, error)
 	// UserUnreadCount returns the total number of unread messages in all topics with

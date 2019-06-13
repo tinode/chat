@@ -238,7 +238,8 @@ func (a *adapter) CreateDb(reset bool) error {
 			tag    VARCHAR(96) NOT NULL,
 			PRIMARY KEY(id),
 			FOREIGN KEY(userid) REFERENCES users(id),
-			INDEX usertags_tag (tag)
+			INDEX usertags_tag(tag),
+			UNIQUE INDEX usertags_userid_tag(userid, tag)
 		)`); err != nil {
 		return err
 	}
@@ -309,7 +310,8 @@ func (a *adapter) CreateDb(reset bool) error {
 			tag   VARCHAR(96) NOT NULL,
 			PRIMARY KEY(id),
 			FOREIGN KEY(topic) REFERENCES topics(name),
-			INDEX topictags_tag(tag)
+			INDEX topictags_tag(tag),
+			UNIQUE INDEX topictags_userid_tag(topic, tag)
 		)`); err != nil {
 		return err
 	}
@@ -449,6 +451,14 @@ func (a *adapter) UpgradeDb() error {
 
 	if a.version == 106 {
 		// Perform database upgrade from version 106 to version 107.
+
+		if _, err := a.db.Exec("CREATE UNIQUE INDEX usertags_userid_tag ON usertags(userid, tag)"); err != nil {
+			return err
+		}
+
+		if _, err := a.db.Exec("CREATE UNIQUE INDEX topictags_userid_tag ON topictags(topic, tag)"); err != nil {
+			return err
+		}
 
 		if _, err := a.db.Exec("ALTER TABLE credentials ADD deletedat DATETIME(3) AFTER updatedat"); err != nil {
 			return err
@@ -878,10 +888,10 @@ func (a *adapter) UserUpdate(uid t.Uid, update map[string]interface{}) error {
 }
 
 // UserUpdateTags adds or resets user's tags
-func (a *adapter) UserUpdateTags(uid t.Uid, add, remove, reset []string) error {
+func (a *adapter) UserUpdateTags(uid t.Uid, add, remove, reset []string) ([]string, error) {
 	tx, err := a.db.Beginx()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	defer func() {
@@ -896,7 +906,7 @@ func (a *adapter) UserUpdateTags(uid t.Uid, add, remove, reset []string) error {
 		// Delete all tags first if resetting.
 		_, err = tx.Exec("DELETE FROM usertags WHERE userid=?", decoded_uid)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		add = reset
 		remove = nil
@@ -905,29 +915,27 @@ func (a *adapter) UserUpdateTags(uid t.Uid, add, remove, reset []string) error {
 	// Now insert new tags. Ignore duplicates if resetting.
 	err = addTags(tx, "usertags", "userid", decoded_uid, add, reset == nil)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// Delete tags.
 	err = removeTags(tx, "usertags", "userid", decoded_uid, remove)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	var allTags []string
 	err = tx.Select(&allTags, "SELECT tag FROM usertags WHERE userid=?", decoded_uid)
 	if err != nil {
-		return err
+		return nil, err
 	}
-
-	log.Println("Updated tags:", allTags)
 
 	_, err = tx.Exec("UPDATE users SET tags=? WHERE id=?", t.StringSlice(allTags), decoded_uid)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	return tx.Commit()
+	return allTags, tx.Commit()
 }
 
 // UserGetByCred returns user ID for the given validated credential.
