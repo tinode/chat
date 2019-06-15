@@ -704,20 +704,16 @@ sub: {
                    // default: server-defined
     }, // object, optional
 
-    // Optional update to tags (see fnd topic description)
-    tags: [ // array of strings
+    tags: [ // array of strings, update to tags (see fnd topic description), optional.
         "email:alice@example.com", "tel:1234567890"
     ],
 
-    // Optional update to validated credentials.
-    cred: [
-      {
-        meth: "email", // string, verification method, e.g. "email", "tel", "recaptcha", etc.
-        val: "alice@example.com", // string, credential to verify such as email or phone
-        resp: "178307", // string, verification response, optional
-        params: { ... } // parameters, specific to the verification method, optional
-      },
-    ]
+    cred: { // update to credentials, optional.
+      meth: "email", // string, verification method, e.g. "email", "tel", "recaptcha", etc.
+      val: "alice@example.com", // string, credential to verify such as email or phone
+      resp: "178307", // string, verification response, optional
+      params: { ... } // parameters, specific to the verification method, optional
+    }
   },
 
   get: {
@@ -896,7 +892,7 @@ See [Public and Private Fields](#public-and-private-fields) for `private` and `p
 
 * `{get what="cred"}`
 
-Query [credentials](#credentail-validation). Server responds with a `{meta}` message containing an array of credentials. Supported only for `me` topic only.
+Query [credentials](#credentail-validation). Server responds with a `{meta}` message containing an array of credentials. Supported for `me` topic only.
 
 #### `{set}`
 
@@ -928,7 +924,14 @@ set: {
   // Optional update to tags (see fnd topic description)
   tags: [ // array of strings
     "email:alice@example.com", "tel:1234567890"
-  ]
+  ],
+
+  cred: { // Optional update to credentials.
+    meth: "email", // string, verification method, e.g. "email", "tel", "recaptcha", etc.
+    val: "alice@example.com", // string, credential to verify such as email or phone
+    resp: "178307", // string, verification response, optional
+    params: { ... } // parameters, specific to the verification method, optional
+  }
 }
 ```
 
@@ -951,6 +954,10 @@ del: {
                // to delete, inclusive-exclusive, i.e. [low, hi), optional
   user: "usr2il9suCbuko" // string, user being deleted (what="user") or whose
                // subscription is being deleted (what="sub"), optional
+  cred: { // credential to delete ('me' topic only).
+    meth: "email", // string, verification method, e.g. "email", "tel", etc.
+    val: "alice@example.com" // string, credential being deleted
+  }
 }
 ```
 
@@ -972,7 +979,7 @@ Deleting a user is a very heavy operation. Use caution.
 
 `what="cred"`
 
-Delete credential. Only validated credentials and those with no attempts at validation are deleted. Credentials with failed attempts at validation are hidden.
+Delete credential. Validated credentials and those with no attempts at validation are hard-deleted. Credentials with failed attempts at validation are soft-deleted which prevents their reuse by the same user.
 
 
 #### `{note}`
