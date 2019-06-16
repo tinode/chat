@@ -60,19 +60,18 @@ $ docker run -p 6060:18080 -d --name tinode-srv --network tinode-net \
 ```
 If you set `EXT_CONFIG` all other environment variables except `RESET_DB`, `FCM_SENDER_ID`, `FCM_VAPID_KEY` are ignored.
 
-### Resetting the database
+### Resetting or upgrading the database
 
-The database is initialized or re-initialized when either one of the following conditions is true:
+The database schema may change from time to time. An error `Invalid database version 101. Expected 103` means the schema has changed and needs to be updated, in this case from version 101 to version 103. You need to either reset or upgrade the database to continue:
 
-* Database is missing.
-* Database has a wrong schema version.
-* `RESET_DB` environment variable is true.
-
-If you want to reset the data in the database, shut down the Tinode container and remove it:
+Shut down the Tinode container and remove it:
 ```
 $ docker stop tinode-srv && docker rm tinode-srv
 ```
-then repeat step 4 adding `--env RESET_DB=true`.
+then repeat step 4 adding `--env RESET_DB=true` to reset or `--env UPGRADE_DB=true` to upgrade.
+
+Also, the database is automatically created if missing.
+
 
 ### Enable push notifications
 

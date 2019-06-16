@@ -13,7 +13,7 @@ setuptools.setup(
     name="tinode_grpc",
     version=git_version,
     author="Tinode Authors",
-    author_email="gene@tinode.co",
+    author_email="info@tinode.co",
     description="Tinode gRPC bindings.",
     long_description=long_description,
     long_description_content_type="text/markdown",
