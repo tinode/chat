@@ -270,6 +270,8 @@ func decodeStoreError(err error, id, topic string, timestamp time.Time,
 			errmsg = ErrTopicNotFound(id, topic, timestamp)
 		case types.ErrNotFound:
 			errmsg = ErrNotFound(id, topic, timestamp)
+		case types.ErrInvalidResponse:
+			errmsg = ErrInvalidResponse(id, topic, timestamp)
 		default:
 			errmsg = ErrUnknown(id, topic, timestamp)
 		}

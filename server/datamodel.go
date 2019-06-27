@@ -765,6 +765,16 @@ func ErrOperationNotAllowed(id, topic string, ts time.Time) *ServerComMessage {
 		Timestamp: ts}}
 }
 
+// ErrInvalidResponse indicates that the client's response in invalid (406).
+func ErrInvalidResponse(id, topic string, ts time.Time) *ServerComMessage {
+	return &ServerComMessage{Ctrl: &MsgServerCtrl{
+		Id:        id,
+		Code:      http.StatusNotAcceptable, // 406
+		Text:      "invalid response",
+		Topic:     topic,
+		Timestamp: ts}}
+}
+
 // ErrAlreadyAuthenticated invalid attempt to authenticate an already authenticated session
 // Switching users is not supported (409).
 func ErrAlreadyAuthenticated(id, topic string, ts time.Time) *ServerComMessage {

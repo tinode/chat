@@ -1972,8 +1972,8 @@ func (t *Topic) replySetCred(sess *Session, asUid types.Uid, authLevel auth.Leve
 	var tags []string
 	creds := []MsgCredClient{*set.Cred}
 	if set.Cred.Response != "" {
-		// Credential is being validated.
-		_, tags, err = validatedCreds(asUid, authLevel, creds)
+		// Credential is being validated. Return an arror if response is invalid.
+		_, tags, err = validatedCreds(asUid, authLevel, creds, true)
 	} else {
 		// Credential is being added or updated.
 		tmpToken, _, _ := store.GetLogicalAuthHandler("token").GenSecret(&auth.Rec{

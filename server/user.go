@@ -321,7 +321,7 @@ func addCreds(uid types.Uid, creds []MsgCredClient, tags []string, lang string,
 
 // validatedCreds returns the list of validated credentials including those validated in this call.
 // Returns all validated methods including those validated earlier and now, full set of tags.
-func validatedCreds(uid types.Uid, authLvl auth.Level, creds []MsgCredClient) ([]string, []string, error) {
+func validatedCreds(uid types.Uid, authLvl auth.Level, creds []MsgCredClient, errorOnFail bool) ([]string, []string, error) {
 
 	// Check if credential validation is required.
 	if len(globals.authValidators[authLvl]) == 0 {
@@ -355,8 +355,13 @@ func validatedCreds(uid types.Uid, authLvl auth.Level, creds []MsgCredClient) ([
 		if err != nil {
 			// Check failed.
 			if storeErr, ok := err.(types.StoreError); ok && storeErr == types.ErrCredentials {
-				// Just an invalid response. Keep credential unvalidated.
-				continue
+				if errorOnFail {
+					// Report invalid response.
+					return nil, nil, types.ErrInvalidResponse
+				} else {
+					// Skip invalid response. Keep credential unvalidated.
+					continue
+				}
 			}
 			// Actual error. Report back.
 			return nil, nil, err

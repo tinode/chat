@@ -635,7 +635,8 @@ func (s *Session) login(msg *ClientComMessage) {
 	var missing []string
 	if rec.Features&auth.FeatureValidated == 0 {
 		var validated []string
-		if validated, _, err = validatedCreds(rec.Uid, rec.AuthLevel, msg.Login.Cred); err == nil {
+		// Check responses. Ignore invalid responses, just keep cred unvalidated.
+		if validated, _, err = validatedCreds(rec.Uid, rec.AuthLevel, msg.Login.Cred, false); err == nil {
 			// Get a list of credentials which have not been validated.
 			_, missing = stringSliceDelta(globals.authValidators[rec.AuthLevel], validated)
 		}
