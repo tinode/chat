@@ -569,7 +569,7 @@ func replyOfflineTopicGetDesc(sess *Session, topic string, msg *ClientComMessage
 func replyOfflineTopicGetSub(sess *Session, topic string, msg *ClientComMessage) {
 	now := types.TimeNow()
 
-	if msg.Get.Sub.User != msg.from {
+	if msg.Get.Sub != nil && msg.Get.Sub.User != msg.from {
 		sess.queueOut(ErrPermissionDenied(msg.id, msg.topic, now))
 		return
 	}
