@@ -28,7 +28,7 @@ func main() {
 
 	if *apikey != "" {
 		if *hmacSalt == "auto" {
-			fmt.Printf("Cannot validate the key with 'auto' HMAC salt")
+			log.Printn("Error: Cannot validate the key with 'auto' HMAC salt")
 			os.Exit(1)
 		}
 		os.Exit(validate(*apikey, *hmacSalt))
@@ -61,7 +61,7 @@ func generate(sequence, isRoot int, hmacSaltB64 string) int {
 		hmacSalt = make([]byte, 32)
 		_, err := rand.Read(hmacSalt)
 		if err != nil {
-			log.Println("Failed to generate HMAC salt", err)
+			log.Println("Error: Failed to generate HMAC salt", err)
 			return 1
 		}
 	} else {
@@ -72,7 +72,7 @@ func generate(sequence, isRoot int, hmacSaltB64 string) int {
 			hmacSalt, err = base64.StdEncoding.DecodeString(hmacSaltB64)
 		}
 		if err != nil {
-			log.Println("Failed to decode HMAC salt", err)
+			log.Println("Error: Failed to decode HMAC salt", err)
 			return 1
 		}
 	}
@@ -119,18 +119,18 @@ func validate(apikey string, hmacSaltB64 string) int {
 		hmacSalt, err = base64.StdEncoding.DecodeString(hmacSaltB64)
 	}
 	if err != nil {
-		log.Println("Failed to decode HMAC salt", err)
+		log.Println("Error: Failed to decode HMAC salt", err)
 		return 1
 	}
 
 	if declen := base64.URLEncoding.DecodedLen(len(apikey)); declen != APIKEY_LENGTH {
-		log.Printf("Invalid key length %d, expecting %d", declen, APIKEY_LENGTH)
+		log.Printf("Error: Invalid key length %d, expecting %d", declen, APIKEY_LENGTH)
 		return 1
 	}
 
 	data, err := base64.URLEncoding.DecodeString(apikey)
 	if err != nil {
-		log.Println("Failed to decode key as base64-URL-encoded", err)
+		log.Println("Error: Failed to decode key as base64-URL-encoded", err)
 		return 1
 	}
 
@@ -138,7 +138,7 @@ func validate(apikey string, hmacSaltB64 string) int {
 	binary.Read(buf, binary.LittleEndian, &version)
 
 	if version != 1 {
-		log.Println("Unknown signature algorithm ", data[0])
+		log.Println("Error: Unknown signature algorithm ", version)
 		return 1
 	}
 
@@ -147,7 +147,7 @@ func validate(apikey string, hmacSaltB64 string) int {
 	signature := hasher.Sum(nil)
 
 	if !bytes.Equal(data[APIKEY_VERSION+APIKEY_APPID+APIKEY_SEQUENCE+APIKEY_WHO:], signature) {
-		fmt.Println("Invalid signature ", data, signature)
+		log.Println("Error: Invalid signature ", data, signature)
 		return 1
 	}
 	// [1:algorithm version][4:deprecated][2:key sequence][1:isRoot]
