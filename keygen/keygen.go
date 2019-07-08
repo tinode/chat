@@ -28,7 +28,7 @@ func main() {
 
 	if *apikey != "" {
 		if *hmacSalt == "auto" {
-			log.Printn("Error: Cannot validate the key with 'auto' HMAC salt")
+			log.Println("Error: Cannot validate the key with 'auto' HMAC salt")
 			os.Exit(1)
 		}
 		os.Exit(validate(*apikey, *hmacSalt))
