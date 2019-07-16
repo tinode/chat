@@ -633,7 +633,7 @@ func (s *Session) login(msg *ClientComMessage) {
 	}
 
 	var missing []string
-	if rec.Features&auth.FeatureValidated == 0 {
+	if rec.Features&auth.FeatureValidated == 0 && len(globals.authValidators[rec.AuthLevel]) > 0 {
 		var validated []string
 		// Check responses. Ignore invalid responses, just keep cred unvalidated.
 		if validated, _, err = validatedCreds(rec.Uid, rec.AuthLevel, msg.Login.Cred, false); err == nil {

@@ -325,7 +325,7 @@ func validatedCreds(uid types.Uid, authLvl auth.Level, creds []MsgCredClient, er
 
 	// Check if credential validation is required.
 	if len(globals.authValidators[authLvl]) == 0 {
-		return nil, nil, types.ErrUnsupported
+		return nil, nil, nil
 	}
 
 	// Get all validated methods
