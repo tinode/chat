@@ -1266,7 +1266,10 @@ func (t *Topic) replyGetDesc(sess *Session, asUid types.Uid, id string, opts *Ms
 	// Check if user requested modified data
 	ifUpdated := (opts == nil || opts.IfModifiedSince == nil || opts.IfModifiedSince.Before(t.updated))
 
-	desc := &MsgTopicDesc{CreatedAt: &t.created}
+	desc := &MsgTopicDesc{}
+	if !ifUpdated {
+		desc.CreatedAt = &t.created
+	}
 	if !t.updated.IsZero() {
 		desc.UpdatedAt = &t.updated
 	}
@@ -2224,12 +2227,15 @@ func (t *Topic) replyDelSub(h *Hub, sess *Session, asUid types.Uid, del *MsgClie
 
 	// Delete user's subscription from the database
 	if err := store.Subs.Delete(t.name, uid); err != nil {
-		sess.queueOut(ErrUnknown(del.Id, t.original(asUid), now))
-
-		return err
+		if err == types.ErrNotFound {
+			sess.queueOut(InfoNoAction(del.Id, t.original(asUid), now))
+		} else {
+			sess.queueOut(ErrUnknown(del.Id, t.original(asUid), now))
+			return err
+		}
+	} else {
+		sess.queueOut(NoErr(del.Id, t.original(asUid), now))
 	}
-
-	sess.queueOut(NoErr(del.Id, t.original(asUid), now))
 
 	// Update cached unread count: negative value
 	if (pud.modeWant & pud.modeGiven).IsReader() {
@@ -2254,9 +2260,14 @@ func (t *Topic) replyLeaveUnsub(h *Hub, sess *Session, asUid types.Uid, id strin
 		return errors.New("replyLeaveUnsub: owner cannot unsubscribe")
 	}
 
-	// Delete user's subscription from the database
+	// Delete user's subscription from the database.
 	if err := store.Subs.Delete(t.name, asUid); err != nil {
-		if id != "" {
+		if err == types.ErrNotFound {
+			if id != "" {
+				sess.queueOut(InfoNoAction(id, t.original(asUid), now))
+			}
+			err = nil
+		} else if id != "" {
 			sess.queueOut(ErrUnknown(id, t.original(asUid), now))
 		}
 

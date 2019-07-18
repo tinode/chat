@@ -384,8 +384,12 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 				} else if err := store.Subs.Delete(topic, asUid); err != nil {
 					// Not P2P or more than 1 subscription left.
 					// Delete user's own subscription only
-
-					sess.queueOut(ErrUnknown(msg.id, msg.topic, now))
+					if err == types.ErrNotFound {
+						sess.queueOut(InfoNoAction(msg.id, msg.topic, now))
+						err = nil
+					} else {
+						sess.queueOut(ErrUnknown(msg.id, msg.topic, now))
+					}
 					return err
 				}
 

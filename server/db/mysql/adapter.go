@@ -1628,8 +1628,11 @@ func (a *adapter) SubsUpdate(topic string, user t.Uid, update map[string]interfa
 // SubsDelete marks subscription as deleted.
 func (a *adapter) SubsDelete(topic string, user t.Uid) error {
 	now := t.TimeNow()
-	_, err := a.db.Exec("UPDATE subscriptions SET updatedat=?, deletedat=? WHERE topic=? AND userid=?",
+	res, err := a.db.Exec("UPDATE subscriptions SET updatedat=?, deletedat=? WHERE topic=? AND userid=? AND deletedat IS NULL",
 		now, now, topic, store.DecodeUid(user))
+	if err == nil && res.RowsAffected() == 0 {
+		err = t.ErrNotFound
+	}
 	return err
 }
 
@@ -1640,7 +1643,8 @@ func (a *adapter) SubsDelForTopic(topic string, hard bool) error {
 		_, err = a.db.Exec("DELETE FROM subscriptions WHERE topic=?", topic)
 	} else {
 		now := t.TimeNow()
-		_, err = a.db.Exec("UPDATE subscriptions SET updatedat=?, deletedat=? WHERE topic=?", now, now, topic)
+		_, err = a.db.Exec("UPDATE subscriptions SET updatedat=?, deletedat=? WHERE topic=? AND deletedat IS NULL",
+			now, now, topic)
 	}
 	return err
 }
