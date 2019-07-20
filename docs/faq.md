@@ -29,7 +29,7 @@ Alternatively, you can instruct the docker container to save the logs to a direc
 If you are using the [Docker image](https://hub.docker.com/u/tinode):
 1. Create a project at https://firebase.google.com/ if you have not done so already.
 2. Follow instructions at https://cloud.google.com/iam/docs/creating-managing-service-account-keys to download the credentials file.
-3. Follow instructions in the Docker [README](../docker#enable-push-notifications) to enable push notifications.
+3. Follow instructions in the Docker [README](../docker#enable-push-notifications) to enable push notifications for the `TinodeWeb`.
 4. Add `google-services.json` to [Tindroid](/tinode/tindroid/#push_notifications), `GoogleService-Info.plist` to [Tinodios](/tinode/ios/#push_notifications), recompile the apps.
 
 
