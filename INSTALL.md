@@ -51,7 +51,7 @@ See [instructions](./docker/README.md)
 	The value of `buildstamp` will be sent by the server to the clients.
 
 
-4. Open `tinode.conf`. Check that the database connection parameters are correct for your database. If you are using MySQL make sure [DSN](https://github.com/go-sql-driver/mysql#dsn-data-source-name) in `"mysql"` section is approprite for your MySQL installation. Option `parseTime=true` is required.
+4. Open `tinode.conf`. Check that the database connection parameters are correct for your database. If you are using MySQL make sure [DSN](https://github.com/go-sql-driver/mysql#dsn-data-source-name) in `"mysql"` section is appropriate for your MySQL installation. Option `parseTime=true` is required.
 ```js
 	"mysql": {
 		"dsn": "root@tcp(localhost)/tinode?parseTime=true",

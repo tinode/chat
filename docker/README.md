@@ -76,14 +76,14 @@ Also, the database is automatically created if missing.
 ### Enable push notifications
 
 Download and save the file with the [FCM service account credentials](https://cloud.google.com/docs/authentication/production).
-Assuming your Firebase credentials file is named `myproject-1234-firebase-adminsdk-abc12-abcdef012345.json` and it's saved at `/Users/jdoe/`, your Sender ID is `141421356237`, and VAPID key (a.k.a. "Web Push certificates") is `83_OrSoRandomLookingCharacters`, start the container with the following parameters (using MySQL container as an example):
+Assuming your Firebase credentials file is named `myproject-1234-firebase-adminsdk-abc12-abcdef012345.json` and it's saved at `/Users/jdoe/`, your Sender ID is `141421356237`, and VAPID key (a.k.a. "Web Push certificates") is `83_Or_So_Random_Looking_Characters`, start the container with the following parameters (using MySQL container as an example):
 
 ```
 $ docker run -p 6060:18080 -d --name tinode-srv --network tinode-net \
 		-v /Users/jdoe:/fcm \
 		--env FCM_CRED_FILE=/fcm/myproject-1234-firebase-adminsdk-abc12-abcdef012345.json \
 		--env FCM_SENDER_ID=141421356237 \
-		--env FCM_VAPID_KEY=83_OrSoRandomLookingCharacters \
+		--env FCM_VAPID_KEY=83_Or_So_Random_Looking_Characters \
 		tinode/tinode-mysql:latest
 ```
 
