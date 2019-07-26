@@ -34,6 +34,9 @@ const (
 	CLUSTER
 )
 
+// Wait time before abandoning the outbound send operation.
+const sendTimeout = time.Microsecond * 150
+
 var minSupportedVersionValue = parseVersion(minSupportedVersion)
 
 // Session represents a single WS connection or a long polling session. A user may have multiple
@@ -174,7 +177,8 @@ func (s *Session) unsubAll() {
 	}
 }
 
-// queueOut attempts to send a ServerComMessage to a session; if the send buffer is full, timeout is 50 usec
+// queueOut attempts to send a ServerComMessage to a session; if the send buffer is full,
+// timeout is `sendTimeout`.
 func (s *Session) queueOut(msg *ServerComMessage) bool {
 	if s == nil {
 		return true
@@ -182,7 +186,7 @@ func (s *Session) queueOut(msg *ServerComMessage) bool {
 
 	select {
 	case s.send <- s.serialize(msg):
-	case <-time.After(time.Microsecond * 50):
+	case <-time.After(sendTimeout):
 		log.Println("s.queueOut: timeout", s.sid)
 		return false
 	}
@@ -190,7 +194,7 @@ func (s *Session) queueOut(msg *ServerComMessage) bool {
 }
 
 // queueOutBytes attempts to send a ServerComMessage already serialized to []byte.
-// If the send buffer is full, timeout is 50 usec
+// If the send buffer is full, timeout is `sendTimeout`.
 func (s *Session) queueOutBytes(data []byte) bool {
 	if s == nil {
 		return true
@@ -198,7 +202,7 @@ func (s *Session) queueOutBytes(data []byte) bool {
 
 	select {
 	case s.send <- data:
-	case <-time.After(time.Microsecond * 50):
+	case <-time.After(sendTimeout):
 		log.Println("s.queueOutBytes: timeout", s.sid)
 		return false
 	}
