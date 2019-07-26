@@ -1630,7 +1630,8 @@ func (a *adapter) SubsDelete(topic string, user t.Uid) error {
 	now := t.TimeNow()
 	res, err := a.db.Exec("UPDATE subscriptions SET updatedat=?, deletedat=? WHERE topic=? AND userid=? AND deletedat IS NULL",
 		now, now, topic, store.DecodeUid(user))
-	if err == nil && res.RowsAffected() == 0 {
+	affected, err := res.RowsAffected()
+	if err == nil && affected == 0 {
 		err = t.ErrNotFound
 	}
 	return err
