@@ -106,7 +106,7 @@ func grpcWrite(sess *Session, msg interface{}) error {
 	return nil
 }
 
-func serveGrpc(addr string, keepalive bool, tlsConf *tls.Config) (*grpc.Server, error) {
+func serveGrpc(addr string, kaEnabled bool, tlsConf *tls.Config) (*grpc.Server, error) {
 	if addr == "" {
 		return nil, nil
 	}
@@ -124,7 +124,7 @@ func serveGrpc(addr string, keepalive bool, tlsConf *tls.Config) (*grpc.Server, 
 		secure = " secure"
 	}
 
-	if keepalive {
+	if kaEnabled {
 		kepConfig := keepalive.EnforcementPolicy{
 			MinTime:             1 * time.Second, // If a client pings more than once every second, terminate the connection
 			PermitWithoutStream: true,            // Allow pings even when there are no active streams

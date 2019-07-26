@@ -191,7 +191,7 @@ type configType struct {
 	GrpcListen string `json:"grpc_listen"`
 	// Enable handling of gRPC keepalives https://github.com/grpc/grpc/blob/master/doc/keepalive.md
 	// This sets server's GRPC_ARG_KEEPALIVE_TIME_MS to 60 seconds instead of the default 2 hours.
-	GrpcKeepalive string `json:"grpc_keepalive_enabled"`
+	GrpcKeepalive bool `json:"grpc_keepalive_enabled"`
 	// URL path for mounting the directory with static files.
 	StaticMount string `json:"static_mount"`
 	// Local path to static files. All files in this path are made accessible by HTTP.
