@@ -408,7 +408,7 @@ const (
 	ModeUnset                          // Non-zero value to indicate unknown or undefined mode (:0x100, 256),
 	// to make it different from ModeNone
 
-	ModeNone AccessMode = 0 // No access, requests to gain access are processed normally (N)
+	ModeNone AccessMode = 0 // No access, requests to gain access are processed normally (N:0)
 
 	// Normal user's access to a topic ("JRWPS")
 	ModeCPublic AccessMode = ModeJoin | ModeRead | ModeWrite | ModePres | ModeShare
@@ -486,7 +486,7 @@ Loop:
 	}
 
 	if m0 != ModeUnset {
-		*m = m0
+		*m = (m0 & ModeBitmask)
 	}
 	return nil
 }
