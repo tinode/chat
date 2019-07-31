@@ -981,7 +981,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Le
 				// Make sure the current owner cannot unset the owner flag or ban himself
 				if t.owner == asUid && (!modeWant.IsOwner() || !modeWant.IsJoiner()) {
 					sess.queueOut(ErrPermissionDenied(pktID, toriginal, now))
-					return changed, errors.New("cannot unset ownership")
+					return changed, errors.New("cannot unset ownership or self-ban the owner")
 				}
 
 				// Ownership transfer
