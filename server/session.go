@@ -115,10 +115,6 @@ type Session struct {
 
 // Subscription is a mapper of sessions to topics.
 type Subscription struct {
-	// Root's session may have multiple subscriptions to topic on behalf of other users.
-	// This is the use counter.
-	count int
-
 	// Channel to communicate with the topic, copy of Topic.broadcast
 	broadcast chan<- *ServerComMessage
 
@@ -137,12 +133,7 @@ func (s *Session) addSub(topic string, sub *Subscription) {
 	s.subsLock.Lock()
 	defer s.subsLock.Unlock()
 
-	if xsub, ok := s.subs[topic]; ok {
-		xsub.count++
-	} else {
-		sub.count = 1
-		s.subs[topic] = sub
-	}
+	s.subs[topic] = sub
 }
 
 func (s *Session) getSub(topic string) *Subscription {
@@ -156,13 +147,7 @@ func (s *Session) delSub(topic string) {
 	s.subsLock.Lock()
 	defer s.subsLock.Unlock()
 
-	if xsub, ok := s.subs[topic]; ok {
-		if xsub.count <= 1 {
-			delete(s.subs, topic)
-		} else {
-			xsub.count--
-		}
-	}
+	delete(s.subs, topic)
 }
 
 // Inform topics that the session is being terminated.

@@ -589,31 +589,39 @@ func usersPush(rcpt *push.Receipt) {
 	}
 }
 
-// Account users as members of an active topic. Used for cache management.
-func usersRegisterTopic(t *Topic, uid types.Uid, add bool) {
+// Start tracking a single user. Used for cache management.
+func usersRegisterUser(uid types.Uid, add bool) {
 	if globals.usersUpdate == nil {
 		return
 	}
 
-	var upd *userUpdate
-	if t != nil {
-		if len(t.perUser) == 0 {
-			// me and fnd topics
-			return
-		}
+	upd := &userUpdate{uidList: make([]types.Uid, 1), inc: add}
+	upd.uidList[0] = uid
 
-		upd = &userUpdate{uidList: make([]types.Uid, len(t.perUser))}
-		i := 0
-		for uid := range t.perUser {
-			upd.uidList[i] = uid
-			i++
-		}
-	} else {
-		upd = &userUpdate{uidList: make([]types.Uid, 1)}
-		upd.uidList[0] = uid
+	select {
+	case globals.usersUpdate <- upd:
+	default:
 	}
 
-	upd.inc = add
+}
+
+// Account users as members of an active topic. Used for cache management.
+func usersRegisterTopic(t *Topic, add bool) {
+	if globals.usersUpdate == nil {
+		return
+	}
+
+	if len(t.perUser) == 0 {
+		// me and fnd topics
+		return
+	}
+
+	upd := &userUpdate{uidList: make([]types.Uid, len(t.perUser)), inc: add}
+	i := 0
+	for uid := range t.perUser {
+		upd.uidList[i] = uid
+		i++
+	}
 
 	select {
 	case globals.usersUpdate <- upd:
@@ -649,12 +657,14 @@ func userUpdater() {
 	}
 
 	for upd := range globals.usersUpdate {
+		// Shutdown requested.
 		if upd == nil {
 			globals.usersUpdate = nil
 			// Dont' care to close the channel.
 			break
 		}
 
+		// Request to send push notifications.
 		if upd.pushRcpt != nil {
 			for uid, rcptTo := range upd.pushRcpt.To {
 				// Handle update
@@ -668,6 +678,7 @@ func userUpdater() {
 			continue
 		}
 
+		// Request to add/remove user from cache.
 		if len(upd.uidList) > 0 {
 			for _, uid := range upd.uidList {
 				uce, ok := usersCache[uid]
@@ -692,9 +703,11 @@ func userUpdater() {
 					log.Println("ERROR: request to unregister user which has not been registered")
 				}
 			}
+
 			continue
 		}
 
+		// Request to update unread count.
 		unreadUpdater(upd.uid, upd.unread, upd.inc)
 	}
 

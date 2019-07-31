@@ -91,15 +91,15 @@ func topicInit(t *Topic, sreg *sessionJoin, h *Hub) {
 
 	statsInc("LiveTopics", 1)
 	statsInc("TotalTopics", 1)
-	usersRegisterTopic(t, types.ZeroUid, true)
+	usersRegisterTopic(t, true)
+
+	sreg.loaded = true
 
 	// Topic will check access rights, send invite to p2p user, send {ctrl} message to the initiator session
 	t.reg <- sreg
 
 	t.resume()
 	go t.run(h)
-
-	sreg.loaded = true
 }
 
 // Initialize 'me' topic.

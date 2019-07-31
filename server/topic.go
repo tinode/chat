@@ -594,7 +594,6 @@ func (t *Topic) run(hub *Hub) {
 			} else if t.cat == types.TopicCatGrp {
 				t.presSubsOffline("off", nilPresParams, nilPresFilters, "", false)
 			}
-			return
 
 		case sd := <-t.exit:
 			// Handle four cases:
@@ -624,7 +623,7 @@ func (t *Topic) run(hub *Hub) {
 				s.detach <- t.name
 			}
 
-			usersRegisterTopic(t, types.ZeroUid, false)
+			usersRegisterTopic(t, false)
 
 			// Report completion back to sender, if 'done' is not nil.
 			if sd.done != nil {
@@ -755,7 +754,7 @@ func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 	if getWhat&constMsgMetaDesc != 0 {
 		// Send get.desc as a {meta} packet.
 		if err := t.replyGetDesc(sreg.sess, asUid, sreg.pkt.id, msgsub.Get.Desc); err != nil {
-			log.Printf("topic[%s] subCommonReply Get.Desc failed: %v", t.name, err)
+			log.Printf("topic[%s] handleSubscription Get.Desc failed: %v", t.name, err)
 		}
 	}
 
@@ -836,30 +835,23 @@ func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin) error {
 		}
 	}
 
+	var err error
+	var changed bool
 	// Create new subscription or modify an existing one.
-	if _, err := t.requestSub(h, sreg.sess, asUid, asLvl, sreg.pkt.id, mode, private); err != nil {
+	if changed, err = t.requestSub(h, sreg.sess, asUid, asLvl, sreg.pkt.id, mode, private); err != nil {
 		return err
 	}
 
-	// Subscription successfully created. Link topic to session.
-	pud := t.perUser[asUid]
-	pud.online++
-	t.perUser[asUid] = pud
+	params := map[string]interface{}{}
 
-	sreg.sess.addSub(t.name, &Subscription{
-		broadcast: t.broadcast,
-		done:      t.unreg,
-		meta:      t.meta,
-		uaChange:  t.uaChange})
-
-	t.addSession(sreg.sess, asUid)
-
-	// Report back the assigned access mode.
-	params := map[string]interface{}{
-		"acs": &MsgAccessMode{
+	if changed {
+		pud := t.perUser[asUid]
+		// Report back the assigned access mode.
+		params["acs"] = &MsgAccessMode{
 			Given: pud.modeGiven.String(),
 			Want:  pud.modeWant.String(),
-			Mode:  (pud.modeGiven & pud.modeWant).String()}}
+			Mode:  (pud.modeGiven & pud.modeWant).String()}
+	}
 
 	// When a group topic is created, it's given a temporary name by the client.
 	// Then this name changes. Report back the original name here.
@@ -867,11 +859,6 @@ func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin) error {
 		params["tmpname"] = sreg.pkt.topic
 	}
 	sreg.sess.queueOut(NoErrParams(sreg.pkt.id, toriginal, now, params))
-
-	if sreg.newsub && !sreg.created {
-		// Register new subscription if it's not a part of topic creation.
-		usersRegisterTopic(nil, asUid, true)
-	}
 
 	return nil
 }
@@ -964,6 +951,9 @@ func (t *Topic) requestSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Le
 		}
 
 		changed = true
+
+		// Add user to cache.
+		usersRegisterUser(asUid, true)
 
 		// Notify plugins of a new subscription
 		pluginSubscription(sub, plgActCreate)
@@ -1079,6 +1069,9 @@ func (t *Topic) requestSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Le
 		t.presSingleUserOffline(asUid, "off+dis", nilPresParams, "", false)
 	}
 
+	// The user is online in topic.
+	userData.online++
+
 	// Apply changes.
 	t.perUser[asUid] = userData
 
@@ -1088,9 +1081,13 @@ func (t *Topic) requestSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Le
 		newReader := (userData.modeWant & userData.modeGiven).IsReader()
 		if oldReader && !newReader {
 			// Decrement unread count
+			log.Println("Dec usersUpdateUnread", asUid, userData.readID-t.lastID, true)
+
 			usersUpdateUnread(asUid, userData.readID-t.lastID, true)
 		} else if !oldReader && newReader {
 			// Increment unread count
+			log.Println("Inc usersUpdateUnread", asUid, t.lastID-userData.readID, true)
+
 			usersUpdateUnread(asUid, t.lastID-userData.readID, true)
 		}
 		t.notifySubChange(asUid, asUid, oldWant, oldGiven, userData.modeWant, userData.modeGiven, sess.sid)
@@ -1100,11 +1097,21 @@ func (t *Topic) requestSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Le
 		// The user is self-banning from the topic. Re-subscription will unban.
 		t.evictUser(asUid, false, "")
 		// The callee will send NoErrOK
+		return changed, nil
+
 	} else if !userData.modeGiven.IsJoiner() {
 		// User was banned
 		sess.queueOut(ErrPermissionDenied(pktID, toriginal, now))
 		return changed, errors.New("topic access denied; user is banned")
 	}
+
+	// Subscription successfully created. Link topic to session.
+	sess.addSub(t.name, &Subscription{
+		broadcast: t.broadcast,
+		done:      t.unreg,
+		meta:      t.meta,
+		uaChange:  t.uaChange})
+	t.addSession(sess, asUid)
 
 	return changed, nil
 }
@@ -1212,7 +1219,7 @@ func (t *Topic) approveSub(h *Hub, sess *Session, asUid, target types.Uid, set *
 		t.perUser[target] = userData
 
 		// Cache user's record
-		usersRegisterTopic(nil, target, true)
+		usersRegisterUser(target, true)
 	} else {
 		// Action on an existing subscription: re-invite, change existing permission, confirm/decline request.
 
@@ -2311,7 +2318,7 @@ func (t *Topic) evictUser(uid types.Uid, unsub bool, skip string) {
 			// Grp: delete per-user data
 			delete(t.perUser, uid)
 
-			usersRegisterTopic(nil, uid, false)
+			usersRegisterUser(uid, false)
 		}
 	} else {
 		// Clear online status
