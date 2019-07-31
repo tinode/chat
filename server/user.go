@@ -626,8 +626,8 @@ func userUpdater() {
 	unreadUpdater := func(uid types.Uid, val int, inc bool) int {
 		uce, ok := usersCache[uid]
 		if !ok {
-			// BUG!
-			panic("attempt to update unread count for user who has not been loaded")
+			log.Println("ERROR: attempt to update unread count for user who has not been loaded")
+			return -1
 		}
 
 		if uce.unread < 0 {
@@ -689,7 +689,7 @@ func userUpdater() {
 					}
 				} else {
 					// BUG!
-					panic("request to unregister user which has not been registered")
+					log.Println("ERROR: request to unregister user which has not been registered")
 				}
 			}
 			continue

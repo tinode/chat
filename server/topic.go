@@ -1211,6 +1211,8 @@ func (t *Topic) approveSub(h *Hub, sess *Session, asUid, target types.Uid, set *
 		}
 		t.perUser[target] = userData
 
+		// Cache user's record
+		usersRegisterTopic(nil, target, true)
 	} else {
 		// Action on an existing subscription: re-invite, change existing permission, confirm/decline request.
 
