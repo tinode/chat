@@ -1081,13 +1081,9 @@ func (t *Topic) requestSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Le
 		newReader := (userData.modeWant & userData.modeGiven).IsReader()
 		if oldReader && !newReader {
 			// Decrement unread count
-			log.Println("Dec usersUpdateUnread", asUid, userData.readID-t.lastID, true)
-
 			usersUpdateUnread(asUid, userData.readID-t.lastID, true)
 		} else if !oldReader && newReader {
 			// Increment unread count
-			log.Println("Inc usersUpdateUnread", asUid, t.lastID-userData.readID, true)
-
 			usersUpdateUnread(asUid, t.lastID-userData.readID, true)
 		}
 		t.notifySubChange(asUid, asUid, oldWant, oldGiven, userData.modeWant, userData.modeGiven, sess.sid)

@@ -434,8 +434,6 @@ func deleteCred(uid types.Uid, authLvl auth.Level, cred *MsgCredClient) ([]strin
 		}
 	}
 
-	log.Println("Calling vld.Remove", cred.Method, cred.Value)
-
 	// The credential is either not required or more than one credential is validated for the given method.
 	err := vld.Remove(uid, cred.Value)
 	if err != nil {
@@ -498,7 +496,6 @@ func replyDelUser(s *Session, msg *ClientComMessage) {
 
 		// Notify users of interest that the user is gone.
 		if uoi, err := store.Users.GetSubs(uid, nil); err == nil {
-			log.Println("notifying users of interest", uoi)
 			presUsersOfInterestOffline(uid, uoi, "gone")
 		} else {
 			log.Println("replyDelUser: failed to send notifications to users", err, s.sid)
@@ -506,7 +503,6 @@ func replyDelUser(s *Session, msg *ClientComMessage) {
 
 		// Notify subscribers of the group topics where the user was the owner that the topics were deleted.
 		if ownTopics, err := store.Users.GetOwnTopics(uid, nil); err == nil {
-			log.Println("deleting owned topics", ownTopics)
 			for _, topicName := range ownTopics {
 				if subs, err := store.Topics.GetSubs(topicName, nil); err == nil {
 					presSubsOfflineOffline(topicName, types.TopicCatGrp, subs, "gone", &presParams{}, s.sid)
