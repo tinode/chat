@@ -2347,11 +2347,20 @@ func (t *Topic) notifySubChange(uid, actor types.Uid, oldWant, oldGiven,
 	target := uid.UserId()
 	dWant := types.ModeNone.String()
 	if newWant.IsDefined() {
-		dWant = oldWant.Delta(newWant)
+		if oldWant.IsDefined() && !oldWant.IsZero() {
+			dWant = oldWant.Delta(newWant)
+		} else {
+			dWant = newWant.String()
+		}
 	}
+
 	dGiven := types.ModeNone.String()
 	if newGiven.IsDefined() {
-		dGiven = oldGiven.Delta(newGiven)
+		if oldGiven.IsDefined() && !oldGiven.IsZero() {
+			dGiven = oldGiven.Delta(newGiven)
+		} else {
+			dGiven = newGiven.String()
+		}
 	}
 	params := &presParams{
 		target: target,
