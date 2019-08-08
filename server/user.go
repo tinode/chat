@@ -66,8 +66,8 @@ func replyCreateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 	}
 
 	// Assign default access values in case the acc creator has not provided them
-	user.Access.Auth = getDefaultAccess(types.TopicCatP2P, true)
-	user.Access.Anon = getDefaultAccess(types.TopicCatP2P, false)
+	user.Access.Auth = getDefaultAccess(types.TopicCatP2P, true) | getDefaultAccess(types.TopicCatGrp, true)
+	user.Access.Anon = getDefaultAccess(types.TopicCatP2P, false) | getDefaultAccess(types.TopicCatGrp, false)
 
 	// Assign actual access values, public and private.
 	if msg.Acc.Desc != nil {

@@ -192,7 +192,7 @@ func (t *Topic) run(hub *Hub) {
 						// Failed to subscribe, the topic is still inactive
 						killTimer.Reset(keepAlive)
 					}
-					log.Printf("topic[%s] subscription failed %v", t.name, err)
+					log.Printf("topic[%s] subscription failed %v, sid=%s", t.name, err, sreg.sess.sid)
 				}
 			}
 
@@ -213,7 +213,7 @@ func (t *Topic) run(hub *Hub) {
 				// User wants to leave and unsubscribe.
 				// asUid must not be Zero.
 				if err := t.replyLeaveUnsub(hub, leave.sess, asUid, leave.id); err != nil {
-					log.Println("failed to unsub", err)
+					log.Println("failed to unsub", err, leave.sess.sid)
 					continue
 				}
 
@@ -754,42 +754,42 @@ func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 	if getWhat&constMsgMetaDesc != 0 {
 		// Send get.desc as a {meta} packet.
 		if err := t.replyGetDesc(sreg.sess, asUid, sreg.pkt.id, msgsub.Get.Desc); err != nil {
-			log.Printf("topic[%s] handleSubscription Get.Desc failed: %v", t.name, err)
+			log.Printf("topic[%s] handleSubscription Get.Desc failed: %v sid=%s", t.name, err, sreg.sess.sid)
 		}
 	}
 
 	if getWhat&constMsgMetaSub != 0 {
 		// Send get.sub response as a separate {meta} packet
 		if err := t.replyGetSub(sreg.sess, asUid, authLevel, sreg.pkt.id, msgsub.Get.Sub); err != nil {
-			log.Printf("topic[%s] handleSubscription Get.Sub failed: %v", t.name, err)
+			log.Printf("topic[%s] handleSubscription Get.Sub failed: %v sid=%s", t.name, err, sreg.sess.sid)
 		}
 	}
 
 	if getWhat&constMsgMetaTags != 0 {
 		// Send get.tags response as a separate {meta} packet
 		if err := t.replyGetTags(sreg.sess, asUid, sreg.pkt.id); err != nil {
-			log.Printf("topic[%s] handleSubscription Get.Tags failed: %v", t.name, err)
+			log.Printf("topic[%s] handleSubscription Get.Tags failed: %v sid=%s", t.name, err, sreg.sess.sid)
 		}
 	}
 
 	if getWhat&constMsgMetaCred != 0 {
 		// Send get.tags response as a separate {meta} packet
 		if err := t.replyGetCreds(sreg.sess, asUid, sreg.pkt.id); err != nil {
-			log.Printf("topic[%s] handleSubscription Get.Cred failed: %v", t.name, err)
+			log.Printf("topic[%s] handleSubscription Get.Cred failed: %v sid=%s", t.name, err, sreg.sess.sid)
 		}
 	}
 
 	if getWhat&constMsgMetaData != 0 {
 		// Send get.data response as {data} packets
 		if err := t.replyGetData(sreg.sess, asUid, sreg.pkt.id, msgsub.Get.Data); err != nil {
-			log.Printf("topic[%s] handleSubscription Get.Data failed: %v", t.name, err)
+			log.Printf("topic[%s] handleSubscription Get.Data failed: %v sid=%s", t.name, err, sreg.sess.sid)
 		}
 	}
 
 	if getWhat&constMsgMetaDel != 0 {
 		// Send get.del response as a separate {meta} packet
 		if err := t.replyGetDel(sreg.sess, asUid, sreg.pkt.id, msgsub.Get.Del); err != nil {
-			log.Printf("topic[%s] handleSubscription Get.Del failed: %v", t.name, err)
+			log.Printf("topic[%s] handleSubscription Get.Del failed: %v sid=%s", t.name, err, sreg.sess.sid)
 		}
 	}
 
@@ -870,7 +870,7 @@ func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin) error {
 //	sess 	- originating session
 //	asUid 	- id of the user making the request
 //	asLvl	- access level of the user making the request
-//	pktID	- id of {sub} packet
+//	pktID	- id of {sub} or {set} packet
 //	want	- requested access mode
 //	private	- private value to assign to the subscription
 // Handle these cases:
@@ -912,11 +912,15 @@ func (t *Topic) requestSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Le
 		}
 
 		if t.cat == types.TopicCatP2P {
-			// If it's a re-subscription to a p2p topic, set public and permissions
+			// P2P could be here only if it was previously deleted. I.e. existingSub is always true for P2P.
+
+			// Undelete
 			userData.deleted = false
 			if modeWant != types.ModeUnset {
 				userData.modeWant = modeWant
 			}
+			// If no modeWant is provided, leave existing one unchanged.
+
 			// Make sure the user is not asking for unreasonable permissions
 			userData.modeWant = (userData.modeWant & types.ModeCP2P) | types.ModeApprove
 		} else {
@@ -925,7 +929,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Le
 
 			if modeWant == types.ModeUnset {
 				// User wants default access mode.
-				userData.modeWant = t.accessFor(asLvl)
+				userData.modeWant = userData.modeGiven
 			} else {
 				userData.modeWant = modeWant
 			}
@@ -1012,6 +1016,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Le
 		if modeWant == types.ModeUnset {
 			// If the user has self-banned before, un-self-ban. Otherwise do not make a change.
 			if !userData.modeWant.IsJoiner() {
+				log.Println("No J permissions before")
 				// Set permissions NO WORSE than default, but possibly better (admin or owner banned himself).
 				userData.modeWant = userData.modeGiven | t.accessFor(asLvl)
 			}
@@ -1038,7 +1043,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Le
 		if len(update) > 0 {
 			if err := store.Subs.Update(t.name, asUid, update, true); err != nil {
 				sess.queueOut(ErrUnknown(pktID, toriginal, now))
-				return changed, err
+				return false, err
 			}
 			changed = true
 		}
@@ -1191,7 +1196,8 @@ func (t *Topic) approveSub(h *Hub, sess *Session, asUid, target types.Uid, set *
 			sess.queueOut(ErrUserNotFound(set.Id, toriginal, now))
 			return false, errors.New("user not found")
 		} else {
-			modeWant = user.Access.Auth
+			// Don't ask by default for more permissions than the granted ones.
+			modeWant = user.Access.Auth & modeGiven
 		}
 
 		// Add subscription to database
@@ -2420,7 +2426,6 @@ func (t *Topic) notifySubChange(uid, actor types.Uid, oldWant, oldGiven,
 		// Subscription un-muted.
 
 		// Notify subscriber of topic's online status.
-		// log.Printf("topic[%s] sending ?unkn+en to me[%s]", t.name, asUid.String())
 		t.presSingleUserOffline(uid, "?unkn+en", nilPresParams, "", false)
 	}
 
