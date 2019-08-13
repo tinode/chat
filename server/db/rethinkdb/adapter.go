@@ -6,8 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"hash/fnv"
-	"log"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/tinode/chat/server/auth"
@@ -141,6 +141,9 @@ func (a *adapter) GetDbVersion() (int, error) {
 
 	cursor, err := rdb.DB(a.dbName).Table("kvmeta").Get("version").Field("value").Run(a.conn)
 	if err != nil {
+		if isMissingDb(err) {
+			err = errors.New("Database not initialized")
+		}
 		return -1, err
 	}
 	defer cursor.Close()
@@ -496,7 +499,6 @@ func (a *adapter) AuthGetRecord(uid t.Uid, scheme string) (string, auth.Level, [
 		return "", 0, nil, time.Time{}, err
 	}
 
-	// log.Println("loggin in user Id=", user.Uid(), user.Id)
 	return record.Unique, record.AuthLvl, record.Secret, record.Expires, nil
 }
 
@@ -525,7 +527,6 @@ func (a *adapter) AuthGetUniqueRecord(unique string) (t.Uid, auth.Level, []byte,
 		return t.ZeroUid, 0, nil, time.Time{}, err
 	}
 
-	// log.Println("loggin in user Id=", user.Uid(), user.Id)
 	return t.ParseUid(record.Userid), record.AuthLvl, record.Secret, record.Expires, nil
 }
 
@@ -581,7 +582,6 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 		if err = a.SubsDelForUser(uid, true); err != nil {
 			return err
 		}
-		log.Println("Subscriptions deleted")
 		// Can't delete user's messages in all topics because we cannot notify topics of such deletion.
 		// Or we have to delete these messages one by one.
 		// For now, just leave the messages there marked as sent by "not found" user.
@@ -626,8 +626,6 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 					rdb.DB(a.dbName).Table("subscriptions").GetAllByIndex("Topic", topic.Field("Id")).Delete(),
 				})
 			}).RunWrite(a.conn)
-
-		log.Println("dellog, attachment, messages delete result:", err)
 
 		// And finally delete the topics.
 		// TODO: denormalize Owner into topic, add index on Owner.
@@ -890,7 +888,6 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 	}
 	q = q.Limit(limit)
 
-	//log.Printf("RethinkDbAdapter.TopicsForUser q: %+v", q)
 	cursor, err := q.Run(a.conn)
 	if err != nil {
 		return nil, err
@@ -1017,7 +1014,7 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 		}
 	}
 	q = q.Limit(limit)
-	//log.Printf("RethinkDbAdapter.UsersForTopic q: %+v", q)
+
 	cursor, err := q.Run(a.conn)
 	if err != nil {
 		return nil, err
@@ -1034,7 +1031,6 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 	}
 	cursor.Close()
 
-	//log.Printf("RethinkDbAdapter.UsersForTopic usrq: %+v, usrq)
 	if len(usrq) > 0 {
 		subs = make([]t.Subscription, 0, len(usrq))
 
@@ -1054,7 +1050,6 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 			}
 		}
 		cursor.Close()
-		//log.Printf("RethinkDbAdapter.UsersForTopic users: %+v", subs)
 	}
 
 	if t.GetTopicCat(topic) == t.TopicCatP2P && len(subs) > 0 {
@@ -1260,7 +1255,6 @@ func (a *adapter) SubsForTopic(topic string, keepDeleted bool, opts *t.QueryOpt)
 		}
 	}
 	q = q.Limit(limit)
-	//log.Println("Loading subscription q=", q)
 
 	cursor, err := q.Run(a.conn)
 	if err != nil {
@@ -1272,7 +1266,6 @@ func (a *adapter) SubsForTopic(topic string, keepDeleted bool, opts *t.QueryOpt)
 	var ss t.Subscription
 	for cursor.Next(&ss) {
 		subs = append(subs, ss)
-		//log.Printf("SubsForTopic: loaded sub %#+v", ss)
 	}
 
 	return subs, cursor.Err()
@@ -2129,6 +2122,16 @@ func (a *adapter) fileDecrementUseCounter(msgQuery rdb.Term) error {
 		Update(map[string]interface{}{"UseCount": rdb.Row.Field("UseCount").Default(1).Sub(1)}).
 		RunWrite(a.conn)
 	return err
+}
+
+func isMissingDb(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	msg := err.Error()
+	// "Database `db_name` does not exist"
+	return strings.Contains(msg, "Database `") && strings.Contains(msg, "` does not exist")
 }
 
 func init() {

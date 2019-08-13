@@ -164,6 +164,7 @@ func getPassword(n int) string {
 }
 
 func main() {
+	log.Println("Initializing", store.GetAdapterName(), store.GetAdapterVersion())
 	var reset = flag.Bool("reset", false, "force database reset")
 	var upgrade = flag.Bool("upgrade", false, "perform database version upgrade")
 	var datafile = flag.String("data", "", "name of file with sample data to load")
@@ -198,7 +199,7 @@ func main() {
 
 	if err != nil {
 		if strings.Contains(err.Error(), "Database not initialized") {
-			log.Println("Database not found. Creating.", err)
+			log.Println("Database not found. Creating.")
 		} else if strings.Contains(err.Error(), "Invalid database version") {
 			msg := "Wrong DB version: expected " + strconv.Itoa(store.GetAdapterVersion()) + ", got " +
 				strconv.Itoa(store.GetDbVersion()) + "."
@@ -215,7 +216,7 @@ func main() {
 	} else if *reset {
 		log.Println("Database reset requested")
 	} else {
-		log.Println("Database exists, DB version is correct. All done.", store.GetAdapterName())
+		log.Println("Database exists, DB version is correct. All done.")
 		return
 	}
 
