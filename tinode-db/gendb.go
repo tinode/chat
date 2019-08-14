@@ -37,7 +37,7 @@ func genDb(data *Data) {
 		user := types.User{
 			State: uu.State,
 			Access: types.DefaultAccess{
-				Auth: types.ModeCP2P,
+				Auth: types.ModeCAuth,
 				Anon: types.ModeNone,
 			},
 			Tags:   uu.Tags,

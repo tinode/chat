@@ -28,7 +28,7 @@ const (
 	defaultHost     = "localhost:28015"
 	defaultDatabase = "tinode"
 
-	adpVersion = 107
+	adpVersion = 108
 
 	adapterName = "rethinkdb"
 
@@ -359,12 +359,17 @@ func (a *adapter) UpgradeDb() error {
 		return err
 	}
 
-	if a.version == 106 {
-		// Perform database upgrade from version 106 to version 107.
+	if a.version == 106 || a.version == 107 {
+		// Perform database upgrade from versions 106 or 107 to version 108.
 
-		// There is nothing to upgrade other than the version.
+		// Replace default 'Auth' access mode JRWPA with JRWPAS
+		filter := map[string]interface{}{"Access": map[string]interface{}{"Auth": t.ModeCP2P}}
+		update := map[string]interface{}{"Access": map[string]interface{}{"Auth": t.ModeCAuth}}
+		if _, err := rdb.DB(a.dbName).Table("users").Filter(filter).Update(update).RunWrite(a.conn); err != nil {
+			return err
+		}
 
-		if err := a.updateDbVersion(107); err != nil {
+		if err := a.updateDbVersion(108); err != nil {
 			return err
 		}
 

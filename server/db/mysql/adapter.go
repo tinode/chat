@@ -33,7 +33,7 @@ const (
 	defaultDSN      = "root:@tcp(localhost:3306)/tinode?parseTime=true"
 	defaultDatabase = "tinode"
 
-	adpVersion = 107
+	adpVersion = 108
 
 	adapterName = "mysql"
 
@@ -465,6 +465,24 @@ func (a *adapter) UpgradeDb() error {
 		}
 
 		if err := a.updateDbVersion(107); err != nil {
+			return err
+		}
+
+		if _, err := a.GetDbVersion(); err != nil {
+			return err
+		}
+	}
+
+	if a.version == 107 {
+		// Perform database upgrade from version 107 to version 108.
+
+		// Replace default user access JRWPA with JRWPAS.
+		if _, err := a.db.Exec(`UPDATE users SET access=JSON_REPLACE(access, '$.Auth', 'JRWPAS') 
+			WHERE CAST(JSON_EXTRACT(access, '$.Auth') AS CHAR) LIKE '"JRWPA"'`); err != nil {
+			return err
+		}
+
+		if err := a.updateDbVersion(108); err != nil {
 			return err
 		}
 
