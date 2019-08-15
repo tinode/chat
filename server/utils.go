@@ -677,7 +677,7 @@ func mergeInterfaces(dst, src interface{}) (interface{}, bool) {
 		if vsrc.String() == nullValue {
 			changed = dst != nil
 			dst = nil
-		} else if src != nil {
+		} else {
 			changed = true
 			dst = src
 		}
