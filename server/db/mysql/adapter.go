@@ -1275,7 +1275,7 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 		q += " AND u.deletedat IS NULL"
 
 		// For p2p topics we must load all subscriptions including deleted.
-		// Otherwise it will be impossibel to swipe Public values.
+		// Otherwise it will be impossible to swipe Public values.
 		if tcat != t.TopicCatP2P {
 			// Filter out deletd subscriptions.
 			q += " AND s.deletedAt IS NULL"
@@ -1648,6 +1648,9 @@ func (a *adapter) SubsDelete(topic string, user t.Uid) error {
 	now := t.TimeNow()
 	res, err := a.db.Exec("UPDATE subscriptions SET updatedat=?, deletedat=? WHERE topic=? AND userid=? AND deletedat IS NULL",
 		now, now, topic, store.DecodeUid(user))
+	if err != nil {
+		return err
+	}
 	affected, err := res.RowsAffected()
 	if err == nil && affected == 0 {
 		err = t.ErrNotFound

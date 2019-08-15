@@ -40,7 +40,7 @@ const (
 	ErrCredentials = StoreError("credentials")
 	// ErrUserNotFound means the user was not found.
 	ErrUserNotFound = StoreError("user not found")
-	// ErrNotFound means the topic was not found.
+	// ErrTopicNotFound means the topic was not found.
 	ErrTopicNotFound = StoreError("topic not found")
 	// ErrNotFound means the object other then user or topic was not found.
 	ErrNotFound = StoreError("not found")
@@ -56,7 +56,7 @@ type Uid uint64
 // ZeroUid is a constant representing uninitialized Uid.
 const ZeroUid Uid = 0
 
-// Unicode DEL character which indicated that the value is being deleted.
+// NullValue is a Unicode DEL character which indicated that the value is being deleted.
 const NullValue = "\u2421"
 
 // Lengths of various Uid representations

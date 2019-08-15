@@ -358,10 +358,9 @@ func validatedCreds(uid types.Uid, authLvl auth.Level, creds []MsgCredClient, er
 				if errorOnFail {
 					// Report invalid response.
 					return nil, nil, types.ErrInvalidResponse
-				} else {
-					// Skip invalid response. Keep credential unvalidated.
-					continue
 				}
+				// Skip invalid response. Keep credential unvalidated.
+				continue
 			}
 			// Actual error. Report back.
 			return nil, nil, err
@@ -543,16 +542,16 @@ type userUpdate struct {
 	pushRcpt *push.Receipt
 }
 
-type UserCacheEntry struct {
+type userCacheEntry struct {
 	unread int
 	topics int
 }
 
-var usersCache map[types.Uid]UserCacheEntry
+var usersCache map[types.Uid]userCacheEntry
 
 // Initialize users cache.
 func usersInit() {
-	usersCache = make(map[types.Uid]UserCacheEntry)
+	usersCache = make(map[types.Uid]userCacheEntry)
 
 	globals.usersUpdate = make(chan *userUpdate, 1024)
 

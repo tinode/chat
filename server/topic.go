@@ -2438,7 +2438,7 @@ func (t *Topic) notifySubChange(uid, actor types.Uid, oldWant, oldGiven,
 // Prepares a payload to be delivered to a mobile device as a push notification.
 func (t *Topic) makePushReceipt(fromUid types.Uid, data *MsgServerData) *push.Receipt {
 	// The `Topic` in the push receipt is `t.xoriginal` for group topics, `fromUid` for p2p topics,
-	// not the t.original(fromUid) because it's the topic name as seen by the recepient, not by the sender.
+	// not the t.original(fromUid) because it's the topic name as seen by the recipient, not by the sender.
 	topic := t.xoriginal
 	if t.cat == types.TopicCatP2P {
 		topic = fromUid.UserId()
@@ -2465,10 +2465,9 @@ func (t *Topic) makePushReceipt(fromUid types.Uid, data *MsgServerData) *push.Re
 	}
 	if len(receipt.To) > 0 {
 		return &receipt
-	} else {
-		// If there are no recepients there is no need to send the push notification.
-		return nil
 	}
+	// If there are no recipient there is no need to send the push notification.
+	return nil
 }
 
 func (t *Topic) mostRecentSession() *Session {

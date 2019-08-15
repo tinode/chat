@@ -597,7 +597,7 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 		// 2. Decrement fileuploads.
 		// 3. Delete all messages.
 		// 4. Delete subscriptions.
-		_, err = rdb.DB(a.dbName).Table("topics").GetAllByIndex("Owner", uid.String()).ForEach(
+		if _, err = rdb.DB(a.dbName).Table("topics").GetAllByIndex("Owner", uid.String()).ForEach(
 			func(topic rdb.Term) rdb.Term {
 				return rdb.Expr([]interface{}{
 					// Delete dellog
@@ -630,10 +630,11 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 					// Delete subscriptions
 					rdb.DB(a.dbName).Table("subscriptions").GetAllByIndex("Topic", topic.Field("Id")).Delete(),
 				})
-			}).RunWrite(a.conn)
+			}).RunWrite(a.conn); err != nil {
+			return err
+		}
 
 		// And finally delete the topics.
-		// TODO: denormalize Owner into topic, add index on Owner.
 		if _, err = rdb.DB(a.dbName).Table("topics").GetAllByIndex("Owner", uid.String()).
 			Delete().RunWrite(a.conn); err != nil {
 			return err
@@ -649,8 +650,7 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 			return err
 		}
 		// And finally delete the user.
-		_, err = rdb.DB(a.dbName).Table("users").Get(uid.String()).
-			Delete().RunWrite(a.conn)
+		_, err = rdb.DB(a.dbName).Table("users").Get(uid.String()).Delete().RunWrite(a.conn)
 	} else {
 		// Disable user's subscriptions.
 		if err = a.SubsDelForUser(uid, false); err != nil {
