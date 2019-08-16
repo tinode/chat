@@ -98,6 +98,7 @@ func pbServMetaSerialize(meta *MsgServerMeta) *pbx.ServerMsg_Meta {
 		Sub:   pbTopicSubSliceSerialize(meta.Sub),
 		Del:   pbDelValuesSerialize(meta.Del),
 		Tags:  meta.Tags,
+		Cred:  pbServerCredsSerialize(meta.Cred),
 	}}
 }
 
@@ -202,6 +203,7 @@ func pbServDeserialize(pkt *pbx.ServerMsg) *ServerComMessage {
 			Sub:   pbTopicSubSliceDeserialize(meta.GetSub()),
 			Del:   pbDelValuesDeserialize(meta.GetDel()),
 			Tags:  meta.GetTags(),
+			Cred:  pbServerCredsDeserialize(meta.GetCred()),
 		}
 	}
 	return &msg
@@ -955,14 +957,13 @@ func pbClientCredsDeserialize(in []*pbx.ClientCred) []MsgCredClient {
 	return out
 }
 
-func pbServerCredsSerialize(in []MsgCredServer) []*pbx.ServerCred {
+func pbServerCredsSerialize(in []*MsgCredServer) []*pbx.ServerCred {
 	if in == nil {
 		return nil
 	}
 
 	out := make([]*pbx.ServerCred, len(in))
-	for i := range in {
-		cr := &in[i]
+	for i, cr := range in {
 		out[i] = &pbx.ServerCred{
 			Method: cr.Method,
 			Value:  cr.Value}
@@ -971,12 +972,12 @@ func pbServerCredsSerialize(in []MsgCredServer) []*pbx.ServerCred {
 	return out
 }
 
-func pbServerCredsDeserialize(in []*pbx.ServerCred) []MsgCredServer {
+func pbServerCredsDeserialize(in []*pbx.ServerCred) []*MsgCredServer {
 	if in == nil {
 		return nil
 	}
 
-	out := make([]MsgCredServer, len(in))
+	out := make([]*MsgCredServer, len(in))
 	for i, cr := range in {
 		out[i].Method = cr.GetMethod()
 		out[i].Value = cr.GetValue()
