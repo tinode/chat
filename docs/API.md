@@ -267,7 +267,7 @@ Topic properties independent of the user making the query:
 * defacs: object describing topic's default access mode for authenticated and anonymous users; see [Access control](#access-control) for details
  * auth: default access mode for authenticated users
  * anon: default access for anonymous users
-* seq: integer server-issued sequential ID of the latest `{data}` message sent through the topic
+* seq_id: integer server-issued sequential ID of the latest `{data}` message sent through the topic
 * public: an application-defined object that describes the topic. Anyone who can subscribe to topic can receive topic's `public` data.
 
 User-dependent topic properties:
@@ -289,7 +289,7 @@ Topic `me` is read-only. `{pub}` messages to `me` are rejected.
 Message `{get what="desc"}` to `me` is automatically replied with a `{meta}` message containing `desc` section with the topic parameters (see intro to [Topics](#topics) section). The `public` parameter of `me` topic is data that the user wants to show to his/her connections. Changing it changes `public` not just for the `me` topic, but also everywhere where user's `public` is shown, such as `public` of all user's peer to peer topics.
 
 Message `{get what="sub"}` to `me` is different from any other topic as it returns the list of topics that the current user is subscribed to as opposite to the expected user's subscription to `me`.
-* seq: server-issued numeric id of the last message in the topic
+* seq_id: server-issued numeric id of the last message in the topic
 * read: seq value self-reported by the current user as received
 * recv: seq value self-reported by the current user as read
 * seen: for P2P subscriptions, timestamp of user's last presence and User Agent string are reported
@@ -537,7 +537,7 @@ Tinode uses compile-time adapters for handling push notifications. The server co
   topic: "grpnG99YhENiQU", // Topic which received the message.
   xfrom: "usr2il9suCbuko", // ID of the user who sent the message.
   ts: "2019-01-06T18:07:30.038Z", // message timestamp in RFC3339 format.
-  seq: "1234", // sequential ID of the message (integer value sent as text).
+  seq_id: "1234", // sequential ID of the message (integer value sent as text).
   mime: "text/x-drafty", // message MIME-Type.
   content: "Lorem ipsum dolor sit amet, consectetur adipisci", // The first 80 characters of the message content as plain text.
 }
@@ -993,7 +993,7 @@ note: {
   what: "kp", // string, one of "kp" (key press), "read" (read notification),
               // "rcpt" (received notification), any other string will cause
               // message to be silently ignored, required
-  seq: 123,   // integer, ID of the message being acknowledged, required for
+  seq_id: 123,   // integer, ID of the message being acknowledged, required for
               // rcpt & read
   unread: 10  // integer, client-reported total count of unread messages, optional.
 }
@@ -1032,7 +1032,7 @@ data: {
   head: { key: "value", ... }, // set of string key-value pairs, passed
                                // unchanged from {pub}, optional
   ts: "2015-10-06T18:07:30.038Z", // string, timestamp
-  seq: 123, // integer, server-issued sequential ID
+  seq_id: 123, // integer, server-issued sequential ID
   content: { ... } // object, application-defined content exactly as published
               // by the user in the {pub} message
 }
@@ -1086,7 +1086,7 @@ meta: {
       given: "JRWP", // string, granted access permission
     mode: "JRWP" // string, combination of want and given
     },
-    seq: 123, // integer, server-issued id of the last {data} message
+    seq_id: 123, // integer, server-issued id of the last {data} message
     read: 112, // integer, ID of the message user claims through {note} message
               // to have read, optional
     recv: 115, // integer, like 'read', but received, optional
@@ -1132,7 +1132,7 @@ meta: {
       // The following fields are present only when querying 'me' topic
 
       topic: "grp1XUtEhjv6HND", // string, topic this subscription describes
-      seq: 321, // integer, server-issued id of the last {data} message
+      seq_id: 321, // integer, server-issued id of the last {data} message
 
       // The following fields are present only when querying 'me' topic and the
       // topic described is a P2P topic
@@ -1174,7 +1174,7 @@ pres: {
   topic: "me", // string, topic which receives the notification, always present
   src: "grp1XUtEhjv6HND", // string, topic or user affected by the change, always present
   what: "on", // string, what's changed, always present
-  seq: 123, // integer, "what" is "msg", a server-issued ID of the message,
+  seq_id: 123, // integer, "what" is "msg", a server-issued ID of the message,
             // optional
   clear: 15, // integer, "what" is "del", an update to the delete transaction ID.
   delseq: [{low: 123}, {low: 126, hi: 136}], // array of ranges, "what" is "del",
@@ -1204,7 +1204,7 @@ info: {
                           // message, always present
   what: "read", // string, one of "kp", "recv", "read", see client-side {note},
                 // always present
-  seq: 123, // integer, ID of the message that client has acknowledged,
+  seq_id: 123, // integer, ID of the message that client has acknowledged,
             // guaranteed 0 < read <= recv <= {ctrl.params.seq}; present for rcpt &
             // read
 }
