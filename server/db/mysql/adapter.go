@@ -1877,8 +1877,8 @@ func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.QueryOpt) (
 	}
 
 	var msgs []t.Message
-	var msg t.Message
 	for rows.Next() {
+		var msg t.Message
 		if err = rows.StructScan(&msg); err != nil {
 			break
 		}
