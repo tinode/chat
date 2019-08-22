@@ -979,9 +979,10 @@ func pbServerCredsDeserialize(in []*pbx.ServerCred) []*MsgCredServer {
 
 	out := make([]*MsgCredServer, len(in))
 	for i, cr := range in {
-		out[i].Method = cr.GetMethod()
-		out[i].Value = cr.GetValue()
-		out[i].Done = cr.GetDone()
+		out[i] = &MsgCredServer{
+			Method: cr.GetMethod(),
+			Value:  cr.GetValue(),
+			Done:   cr.GetDone()}
 	}
 
 	return out
