@@ -25,7 +25,7 @@ The goal of this project is to actually deliver on XMPP's original vision: creat
 
 ### Web
 
-TinodeWeb, a single page web app, is usually available at https://api.tinode.co/ ([source](https://github.com/tinode/webapp/)).
+TinodeWeb, a single page web app, is usually available at https://web.tinode.co/ ([source](https://github.com/tinode/webapp/)).
 
 Login as one of `alice`, `bob`, `carol`, `dave`, `frank`. Password is `<login>123`, e.g. login for `alice` is `alice123`. You can discover other users by email or phone by prefixing them with `email:` or `tel:` respectively. Emails are `<login>@example.com`, e.g. `alice@example.com`, phones are `+17025550001` through `+17025550009`.
 
@@ -51,7 +51,7 @@ A text-only [command line client](./tn-cli) implements every possible command.
 
 * The demo server is configured to use [ACME](https://letsencrypt.org/) TLS [implementation](https://godoc.org/golang.org/x/crypto/acme) with hard-coded requirement for [SNI](https://en.wikipedia.org/wiki/Server_Name_Indication). If you are unable to connect then the most likely reason is your TLS client's missing support for SNI. Use a different client.
 
-* The demo uses a single minified javascript bundle and minified css. The un-minified version is available at https://api.tinode.co/index-dev.html
+* The demo uses a single minified javascript bundle and minified css. The un-minified version is available at https://web.tinode.co/index-dev.html
 
 
 ## Features

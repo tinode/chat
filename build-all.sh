@@ -119,7 +119,7 @@ do
 done
 
 # Need to rebuild the linux-rethink binary without stripping debug info.
-echo "Building the binary for the demo at api.tinode.co"
+echo "Building the binary for web.tinode.co"
 
 rm -f $GOPATH/bin/tinode
 rm -f $GOPATH/bin/init-db
