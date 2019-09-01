@@ -1,3 +1,5 @@
+// Package fcm implements push notification plugin for Google FCM backend.
+// Push notifications for Android, iOS and web clients are sent through Google's Firebase Cloud Messaging service.
 package fcm
 
 import (
@@ -244,7 +246,7 @@ func (Handler) IsReady() bool {
 	return handler.input != nil
 }
 
-// Push return a channel that the server will use to send messages to.
+// Push returns a channel that the server will use to send messages to.
 // If the adapter blocks, the message will be dropped.
 func (Handler) Push() chan<- *push.Receipt {
 	return handler.input

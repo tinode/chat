@@ -99,7 +99,7 @@ See [instructions](./docker/README.md)
 
 ## Running a Cluster
 
-- Install RethinkDB, run it stanalone or in [cluster mode](https://www.rethinkdb.com/docs/start-a-server/#a-rethinkdb-cluster-using-multiple-machines). Run DB initializer, unpack JS files as described in the previous section.
+- Install and run the database, run DB initializer, unpack JS files as described in the previous section. Both MySQL and RethinkDB supports [cluster](https://www.mysql.com/products/cluster/) [mode](https://www.rethinkdb.com/docs/start-a-server/#a-rethinkdb-cluster-using-multiple-machines). You may consider it for added resiliency.
 
 - Cluster expects at least two nodes. A minimum of three nodes is recommended.
 
@@ -137,7 +137,7 @@ If you are testing the cluster with all nodes running on the same host, you also
 ./server -config=./tinode.conf -static_data=./webapp/ -listen=:6060 -grpc_listen=:6080 -cluster_self=one &
 ./server -config=./tinode.conf -static_data=./webapp/ -listen=:6061 -grpc_listen=:6081 -cluster_self=two &
 ```
-A bash script [run-cluster.sh](./server/run-cluster.sh) may be also useful.
+A bash script [run-cluster.sh](./server/run-cluster.sh) may be found useful.
 
 ### Enabling Push Notifications
 

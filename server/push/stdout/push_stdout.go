@@ -1,3 +1,6 @@
+// Package stdout is a sample implementation of a push plugin.
+// If enabled, it writes every notification to stdout.
+
 package stdout
 
 import (
@@ -70,7 +73,7 @@ func (stdoutPush) IsReady() bool {
 	return handler.input != nil
 }
 
-// Push return a channel that the server will use to send messages to.
+// Push returns a channel that the server will use to send messages to.
 // If the adapter blocks, the message will be dropped.
 func (stdoutPush) Push() chan<- *push.Receipt {
 	return handler.input

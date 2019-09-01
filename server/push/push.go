@@ -1,6 +1,5 @@
+// Package push contains interfaces to be implemented by push notification plugins.
 package push
-
-// Interfaces for push notifications
 
 import (
 	"encoding/json"
@@ -30,28 +29,33 @@ type Receipt struct {
 
 // Payload is content of the push.
 type Payload struct {
-	Topic       string    `json:"topic"`
-	From        string    `json:"from"`
-	Timestamp   time.Time `json:"ts"`
-	SeqId       int       `json:"seq"`
-	ContentType string    `json:"mime"`
+	// Topic which received the message.
+	Topic string `json:"topic"`
+	// Message sender 'usrXXX'
+	From string `json:"from"`
+	// Timestapm of the message.
+	Timestamp time.Time `json:"ts"`
+	// Sequential ID of the message.
+	SeqId int `json:"seq"`
+	// MIME-Type of the message content, text/x-drafty or text/plain
+	ContentType string `json:"mime"`
 	// Actual Data.Content of the message, if requested
 	Content interface{} `json:"content,omitempty"`
 }
 
 // Handler is an interface which must be implemented by handlers.
 type Handler interface {
-	// Initialize the handler
+	// Init initializes the handler.
 	Init(jsonconf string) error
 
-	// Check if the handler is initialized
+	// IsReady сheckы if the handler is initialized.
 	IsReady() bool
 
 	// Push returns a channel that the server will use to send messages to.
 	// The message will be dropped if the channel blocks.
 	Push() chan<- *Receipt
 
-	// Stop operations
+	// Stop terminates the handler's worker and stops sending pushes.
 	Stop()
 }
 
