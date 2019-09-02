@@ -138,6 +138,10 @@ func newHub() *Hub {
 
 	go h.run()
 
+	// Initialize system 'sys' topic.
+	// There is only one sys topic per server.
+	h.join <- &sessionJoin{topic: "sys", pkt: &ClientComMessage{topic: "sys"}}
+
 	return h
 }
 

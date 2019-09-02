@@ -160,12 +160,12 @@ var nilPresParams = &presParams{}
 var nilPresFilters = &presFilters{}
 
 func (t *Topic) run(hub *Hub) {
-	// TODO(gene): read keepalive value from the command line
+	// Kills topic after a period of inactivity.
 	keepAlive := idleTopicTimeout
 	killTimer := time.NewTimer(time.Hour)
 	killTimer.Stop()
 
-	// 'me' only
+	// Notifies about user agent change. 'me' only
 	var uaTimer *time.Timer
 	var currentUA string
 	uaTimer = time.NewTimer(time.Minute)
@@ -188,7 +188,7 @@ func (t *Topic) run(hub *Hub) {
 						pluginTopic(t, plgActCreate)
 					}
 				} else {
-					if len(t.sessions) == 0 {
+					if len(t.sessions) == 0 && t.cat != types.TopicCatSys {
 						// Failed to subscribe, the topic is still inactive
 						killTimer.Reset(keepAlive)
 					}
@@ -261,7 +261,7 @@ func (t *Topic) run(hub *Hub) {
 			}
 
 			// If there are no more subscriptions to this topic, start a kill timer
-			if len(t.sessions) == 0 {
+			if len(t.sessions) == 0 && t.cat != types.TopicCatSys {
 				killTimer.Reset(keepAlive)
 			}
 

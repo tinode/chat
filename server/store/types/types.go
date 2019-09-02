@@ -1021,6 +1021,8 @@ const (
 	TopicCatP2P
 	// TopicCatGrp is a a value denoting group topic.
 	TopicCatGrp
+	// TopicCatSys is a constant indicating a system topic.
+	TopicCatSys
 )
 
 // GetTopicCat given topic name returns topic category.
@@ -1034,6 +1036,8 @@ func GetTopicCat(name string) TopicCat {
 		return TopicCatGrp
 	case "fnd":
 		return TopicCatFnd
+	case "sys":
+		return TopicCatSys
 	default:
 		panic("invalid topic type for name '" + name + "'")
 	}
