@@ -1,6 +1,6 @@
 # Command Line Client for Tinode
 
-This is a command line chat client. It's written in Python as a demonstration of Tinode [gRPC](https://grpc.io) [API](../pbx/).
+This is a scriptable command line chat client. It's written in Python and can be used to extend Tinode using [gRPC](https://grpc.io) [API](../pbx/).
 
 Python 2.7 or 3.4+ is required. PIP 9.0.1 or newer is required.
 
@@ -36,7 +36,14 @@ If multiple `login-XYZ` are provided, `login-cookie` is considered first, then `
 
 ## Commands
 
-### Local
+Type `<command> -h` for help
+
+See some of these commands in use in the [sample-script.txt](sample-script.txt). Try it as
+```
+python tn-cli.py --no-login < sample-script.txt
+```
+
+### Local (non-networking)
 
 * `.await` - issue a gRPC call and wait for completion, optionally assign result to a variable.
 * `.exit` - terminate execution and exit the CLI; also `.quit`.
@@ -61,14 +68,6 @@ If multiple `login-XYZ` are provided, `login-cookie` is considered first, then `
 ### HTTP requests
 
 * `upload` - upload file out of band
-
-
-Type `<command> -h` for help
-
-See some of these commands in use in the [sample-script.txt](sample-script.txt). Try it as
-```
-python tn-cli.py --no-login < sample-script.txt
-```
 
 ## Connecting to secure (HTTPS) server
 
