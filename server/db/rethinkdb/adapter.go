@@ -280,6 +280,10 @@ func (a *adapter) CreateDb(reset bool) error {
 	if _, err := rdb.DB(a.dbName).Table("topics").IndexCreate("Tags", rdb.IndexCreateOpts{Multi: true}).RunWrite(a.conn); err != nil {
 		return err
 	}
+	// Create system topic 'sys'.
+	if err := createSystemTopic(a); err != nil {
+		return err
+	}
 
 	// Stored message
 	if _, err := rdb.DB(a.dbName).TableCreate("messages", rdb.TableCreateOpts{PrimaryKey: "Id"}).RunWrite(a.conn); err != nil {
@@ -354,6 +358,14 @@ func (a *adapter) CreateDb(reset bool) error {
 }
 
 func (a *adapter) UpgradeDb() error {
+	bumpVersion := func(a *adapter, x int) error {
+		if err := a.updateDbVersion(x); err != nil {
+			return err
+		}
+		_, err := a.GetDbVersion()
+		return err
+	}
+
 	_, err := a.GetDbVersion()
 	if err != nil {
 		return err
@@ -369,11 +381,19 @@ func (a *adapter) UpgradeDb() error {
 			return err
 		}
 
-		if err := a.updateDbVersion(108); err != nil {
+		if err := bumpVersion(a, 108); err != nil {
+			return err
+		}
+	}
+
+	if a.version == 108 {
+		// Perform database upgrade from versions 108 to version 109.
+
+		if err := createSystemTopic(a); err != nil {
 			return err
 		}
 
-		if _, err := a.GetDbVersion(); err != nil {
+		if err := bumpVersion(a, 109); err != nil {
 			return err
 		}
 	}
@@ -385,15 +405,24 @@ func (a *adapter) UpgradeDb() error {
 	return nil
 }
 
+// Create system topic 'sys'.
+func createSystemTopic(a *adapter) error {
+	now := t.TimeNow()
+	_, err := rdb.DB(a.dbName).Table("topics").Insert(&t.Topic{
+		Id:        "sys",
+		CreatedAt: now,
+		UpdatedAt: now,
+		Access:    t.DefaultAccess{Auth: t.ModeNone, Anon: t.ModeNone},
+		Public:    map[string]interface{}{"fn": "System"},
+	}).RunWrite(a.conn)
+	return err
+}
+
 // UserCreate creates a new user. Returns error and true if error is due to duplicate user name,
 // false for any other error
 func (a *adapter) UserCreate(user *t.User) error {
 	_, err := rdb.DB(a.dbName).Table("users").Insert(&user).RunWrite(a.conn)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return err
 }
 
 // Add user's authentication record
