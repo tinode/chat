@@ -834,9 +834,9 @@ get: {
     ims: "2015-10-06T18:07:30.038Z", // timestamp, "if modified since" - return
           // public and private values only if at least one of them has been
           // updated after the stated timestamp, optional
-  user: "usr2il9suCbuko", // string, return results for a single user,
+    user: "usr2il9suCbuko", // string, return results for a single user,
                           // any topic other than 'me', optional
-  topic: "usr2il9suCbuko", // string, return results for a single topic,
+    topic: "usr2il9suCbuko", // string, return results for a single topic,
                            // 'me' topic only, optional
     limit: 20 // integer, limit the number of returned objects
   },
@@ -844,9 +844,9 @@ get: {
   // Optional parameters for {get what="data"}
   data: {
     since: 123, // integer, load messages with server-issued IDs greater or equal
-          // to this (inclusive/closed), optional
+                // to this (inclusive/closed), optional
     before: 321, // integer, load messages with server-issed sequential IDs less
-          // than this (exclusive/open), optional
+               // than this (exclusive/open), optional
     limit: 20, // integer, limit the number of returned objects, default: 32,
                // optional
   },
