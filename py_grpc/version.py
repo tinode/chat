@@ -16,5 +16,5 @@ def git_version():
     return line
 
 if __name__ == '__main__':
-    with open('tinode_grpc/GIT_VERSION','w') as fh:
+    with open('tinode_grpc/GIT_VERSION','w+') as fh:
         fh.write(git_version())
