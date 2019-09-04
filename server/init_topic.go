@@ -99,7 +99,9 @@ func topicInit(t *Topic, sreg *sessionJoin, h *Hub) {
 	sreg.loaded = true
 
 	// Topic will check access rights, send invite to p2p user, send {ctrl} message to the initiator session
-	t.reg <- sreg
+	if !sreg.internal {
+		t.reg <- sreg
+	}
 
 	t.resume()
 	go t.run(h)

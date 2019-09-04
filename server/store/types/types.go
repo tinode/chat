@@ -358,6 +358,9 @@ type StringSlice []string
 
 // Scan implements sql.Scanner interface.
 func (ss *StringSlice) Scan(val interface{}) error {
+	if val == nil {
+		return nil
+	}
 	return json.Unmarshal(val.([]byte), ss)
 }
 

@@ -409,11 +409,11 @@ func (a *adapter) UpgradeDb() error {
 func createSystemTopic(a *adapter) error {
 	now := t.TimeNow()
 	_, err := rdb.DB(a.dbName).Table("topics").Insert(&t.Topic{
-		Id:        "sys",
-		CreatedAt: now,
-		UpdatedAt: now,
-		Access:    t.DefaultAccess{Auth: t.ModeNone, Anon: t.ModeNone},
-		Public:    map[string]interface{}{"fn": "System"},
+		ObjHeader: t.ObjHeader{Id: "sys",
+			CreatedAt: now,
+			UpdatedAt: now},
+		Access: t.DefaultAccess{Auth: t.ModeNone, Anon: t.ModeNone},
+		Public: map[string]interface{}{"fn": "System"},
 	}).RunWrite(a.conn)
 	return err
 }
