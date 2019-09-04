@@ -1372,10 +1372,10 @@ func (t *Topic) replySetDesc(sess *Session, asUid types.Uid, set *MsgClientSet) 
 			access := types.DefaultAccess{Auth: t.accessAuth, Anon: t.accessAnon}
 			if auth != types.ModeUnset {
 				if t.cat == types.TopicCatMe {
-					auth &= types.ModeCP2P
+					auth &= types.ModeCAuth
 					if auth != types.ModeNone {
 						// This is the default access mode for P2P topics.
-						// It must be either an N or must include an A permission
+						// It must be either an N or must include an A permission.
 						auth |= types.ModeApprove
 					}
 				}
