@@ -21,20 +21,22 @@ import (
 
 // Request to hub to subscribe session to topic
 type sessionJoin struct {
-	// Routable (expanded) name of the topic to subscribe to
+	// Routable (expanded) name of the topic to subscribe to.
 	topic string
-	// Packet, containing request details
+	// Packet, containing request details.
 	pkt *ClientComMessage
-	// Session to subscribe
+	// Session to subscribe.
 	sess *Session
 	// True if this topic was just created.
 	// In case of p2p topics, it's true if the other user's subscription was
 	// created (as a part of new topic creation or just alone).
 	created bool
-	// True if the topic was just activated (loaded into memory)
+	// True if the topic was just activated (loaded into memory).
 	loaded bool
-	// True if this is a new subscription
+	// True if this is a new subscription.
 	newsub bool
+	// True if this topic is created internally.
+	internal bool
 }
 
 // Session wants to leave the topic
@@ -140,7 +142,7 @@ func newHub() *Hub {
 
 	// Initialize system 'sys' topic.
 	// There is only one sys topic per server.
-	h.join <- &sessionJoin{topic: "sys", pkt: &ClientComMessage{topic: "sys"}}
+	h.join <- &sessionJoin{topic: "sys", internal: true, pkt: &ClientComMessage{topic: "sys"}}
 
 	return h
 }

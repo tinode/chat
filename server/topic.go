@@ -923,8 +923,12 @@ func (t *Topic) requestSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Le
 
 			// Make sure the user is not asking for unreasonable permissions
 			userData.modeWant = (userData.modeWant & types.ModeCP2P) | types.ModeApprove
+		} else if t.cat == types.TopicCatSys {
+			// TODO(gene): handle system topic.
+			sess.queueOut(ErrPolicy(pktID, toriginal, now))
+			return changed, errors.New("subscription to 'sys' topic is not implemented yet")
 		} else {
-			// For non-p2p2 topics access is given as default access
+			// For non-p2p & non-sys topics access is given as default access
 			userData.modeGiven = t.accessFor(asLvl)
 
 			if modeWant == types.ModeUnset {

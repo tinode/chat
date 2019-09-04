@@ -303,7 +303,7 @@ func (a *adapter) CreateDb(reset bool) error {
 	}
 
 	// Create system topic 'sys'.
-	if _, err = createSystemTopic(tx); err != nil {
+	if err = createSystemTopic(tx); err != nil {
 		return err
 	}
 
@@ -497,11 +497,19 @@ func (a *adapter) UpgradeDb() error {
 	}
 
 	if a.version == 108 {
-		if _, err = createSystemTopic(tx); err != nil {
+		tx, err := a.db.Begin()
+		if err != nil {
+			return err
+		}
+		if err = createSystemTopic(tx); err != nil {
+			tx.Rollback()
+			return err
+		}
+		if err = tx.Commit(); err != nil {
 			return err
 		}
 
-		if err := a.bumpVersion(a, 109); err != nil {
+		if err = bumpVersion(a, 109); err != nil {
 			return err
 		}
 	}
@@ -513,10 +521,11 @@ func (a *adapter) UpgradeDb() error {
 	return nil
 }
 
-func createSystemTopic(tx *sqlx.Tx) error {
+func createSystemTopic(tx *sql.Tx) error {
 	now := t.TimeNow()
-	_, err = tx.Exec(`INSERT INTO topics(createdat,updatedat,name,access,public) 
-		VALUES(?,?,'sys','{"Auth": "N","Anon": "N"}','{"fn": "System"}')`, now, now)
+	sql := `INSERT INTO topics(createdat,updatedat,name,access,public) 
+				VALUES(?,?,'sys','{"Auth": "N","Anon": "N"}','{"fn": "System"}')`
+	_, err := tx.Exec(sql, now, now)
 	return err
 }
 
