@@ -740,7 +740,7 @@ func ErrUserNotFound(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
 		Code:      http.StatusNotFound, // 404
-		Text:      "user not found or offline",
+		Text:      "user not found",
 		Topic:     topic,
 		Timestamp: ts}}
 }
