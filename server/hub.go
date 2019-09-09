@@ -140,9 +140,10 @@ func newHub() *Hub {
 
 	go h.run()
 
-	// Initialize system 'sys' topic.
-	// There is only one sys topic per server.
-	h.join <- &sessionJoin{topic: "sys", internal: true, pkt: &ClientComMessage{topic: "sys"}}
+	if !globals.cluster.isRemoteTopic("sys") {
+		// Initialize system 'sys' topic. There is only one sys topic per cluster.
+		h.join <- &sessionJoin{topic: "sys", internal: true, pkt: &ClientComMessage{topic: "sys"}}
+	}
 
 	return h
 }

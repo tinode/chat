@@ -480,6 +480,9 @@ func (s *Session) publish(msg *ClientComMessage) {
 			log.Println("s.publish:", err, s.sid)
 			s.queueOut(ErrClusterUnreachable(msg.id, msg.topic, msg.timestamp))
 		}
+	} else if expanded == "sys" {
+		// Publishing to "sys" topic requires no subsription.
+		globals.hub.route <- data
 	} else {
 		// Publish request received without attaching to topic first.
 		s.queueOut(ErrAttachFirst(msg.id, msg.topic, msg.timestamp))
