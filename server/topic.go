@@ -277,12 +277,14 @@ func (t *Topic) run(hub *Hub) {
 				}
 
 				from := types.ParseUserId(msg.Data.From)
-				userData := t.perUser[from]
-
-				if !(userData.modeWant & userData.modeGiven).IsWriter() {
-					msg.sess.queueOut(ErrPermissionDenied(msg.id, t.original(asUid),
-						msg.timestamp))
-					continue
+				userData, userFound := t.perUser[from]
+				// Anyone is allowed to post to 'sys' topic.
+				if t.cat != types.TopicCatSys {
+					if !(userData.modeWant & userData.modeGiven).IsWriter() {
+						msg.sess.queueOut(ErrPermissionDenied(msg.id, t.original(asUid),
+							msg.timestamp))
+						continue
+					}
 				}
 
 				if err := store.Messages.Save(&types.Message{
@@ -302,10 +304,11 @@ func (t *Topic) run(hub *Hub) {
 				t.lastID++
 				t.touched = msg.Data.Timestamp
 				msg.Data.SeqId = t.lastID
-				userData.readID = t.lastID
-				userData.readID = t.lastID
-				t.perUser[from] = userData
-
+				if userFound {
+					userData.readID = t.lastID
+					userData.readID = t.lastID
+					t.perUser[from] = userData
+				}
 				if msg.id != "" {
 					reply := NoErrAccepted(msg.id, t.original(asUid), msg.timestamp)
 					reply.Ctrl.Params = map[string]int{"seq": t.lastID}
