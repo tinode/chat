@@ -89,7 +89,7 @@ type ClusterSess struct {
 	Sid string
 }
 
-// ClusterReq is a Proxy to Master request message.
+// ClusterReq is either a Proxy to Master or intra-cluster routing request message.
 type ClusterReq struct {
 	// Name of the node sending this request
 	Node string
@@ -99,7 +99,10 @@ type ClusterReq struct {
 	// Cluster is desynchronized.
 	Signature string
 
+	// Client message. Set for C2S requests.
 	Pkt *ClientComMessage
+	// Message to be routed. Set for route requests.
+	Msg *ServerComMessage
 
 	// Root user may send messages on behalf of other users.
 	OnBehalfOf string
@@ -119,23 +122,6 @@ type ClusterResp struct {
 	Msg []byte
 	// Session ID to forward message to, if any.
 	FromSID string
-}
-
-// Infra-cluster message routing.
-type ClusterRouteReq struct {
-	// Name of the node sending this request
-	Node string
-
-	// Ring hash signature of the node sending this request
-	// Signature must match the signature of the receiver, otherwise the
-	// Cluster is desynchronized.
-	Signature string
-
-	// Expanded (routable) topic name
-	RcptTo string
-
-	// Message to be routed.
-	Msg *ServerComMessage
 }
 
 // Handle outbound node communication: read messages from the channel, forward to remote nodes.
@@ -261,7 +247,7 @@ func (n *ClusterNode) callAsync(proc string, msg, resp interface{}, done chan *r
 func (n *ClusterNode) forward(msg *ClusterReq) error {
 	log.Printf("cluster: forwarding request to node '%s'", n.name)
 	msg.Node = globals.cluster.thisNodeName
-	rejected := false
+	var rejected bool
 	err := n.call("Cluster.Master", msg, &rejected)
 	if err == nil && rejected {
 		err = errors.New("cluster: master node out of sync")
@@ -272,14 +258,14 @@ func (n *ClusterNode) forward(msg *ClusterReq) error {
 // Master responds to proxy
 func (n *ClusterNode) respond(msg *ClusterResp) error {
 	log.Printf("cluster: replying to node '%s'", n.name)
-	unused := false
+	var unused bool
 	return n.call("Cluster.Proxy", msg, &unused)
 }
 
 // Routes the message within the cluster.
-func (n *ClusterNode) route(msg *ClusterRouteReq) error {
+func (n *ClusterNode) route(msg *ClusterReq) error {
 	log.Printf("cluster: routing message for topic '%s' to node '%s'", msg.RcptTo, n.name)
-	unused := false
+	var unused bool
 	return n.call("Cluster.Route", msg, &unused)
 }
 
@@ -375,11 +361,11 @@ func (Cluster) Proxy(msg *ClusterResp, unused *bool) error {
 // Route endpoint receives intra-cluster messages (e.g. pres) destined
 // for the nodes hosting topic.
 // Called by Hub.route channel consumer.
-func (c *Cluster) Route(msg *ClusterRouteReq, rejected *bool) error {
+func (c *Cluster) Route(msg *ClusterReq, rejected *bool) error {
 	log.Printf("cluster: node '%s' received route request for topic '%s' from node '%s'", c.thisNodeName, msg.RcptTo, msg.Node)
 
 	*rejected = false
-	if msg.Signature != c.ring.Signature() {
+	if msg.Signature != c.ring.Signature() || msg.Msg == nil {
 		*rejected = true
 		return nil
 	}
@@ -471,7 +457,7 @@ func (c *Cluster) routeToTopicIntraCluster(topic string, msg *ServerComMessage) 
 		return errors.New("attempt to route to non-existent node")
 	}
 
-	req := &ClusterRouteReq{
+	req := &ClusterReq{
 		Node:      c.thisNodeName,
 		Signature: c.ring.Signature(),
 		RcptTo:    topic,
