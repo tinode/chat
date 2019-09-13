@@ -204,6 +204,11 @@ func (h *Hub) run() {
 						log.Println("hub: topic's broadcast queue is full", dst.name)
 					}
 				}
+			} else if (strings.HasPrefix(msg.rcptto, "usr") || strings.HasPrefix(msg.rcptto, "grp")) && globals.cluster.isRemoteTopic(msg.rcptto) {
+				// It is a remote topic.
+				if err := globals.cluster.routeToTopicIntraCluster(msg.rcptto, msg); err != nil {
+					log.Printf("hub: routing to '%s' failed", msg.rcptto)
+				}
 			} else if msg.Pres == nil && msg.Info == nil {
 				// Topic is unknown or offline.
 				// Pres & Info are silently ignored, all other messages are reported as invalid.

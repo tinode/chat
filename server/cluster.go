@@ -121,6 +121,23 @@ type ClusterResp struct {
 	FromSID string
 }
 
+// Infra-cluster message routing.
+type ClusterRouteReq struct {
+	// Name of the node sending this request
+	Node string
+
+	// Ring hash signature of the node sending this request
+	// Signature must match the signature of the receiver, otherwise the
+	// Cluster is desynchronized.
+	Signature string
+
+	// Expanded (routable) topic name
+	RcptTo string
+
+	// Message to be routed.
+	Msg *ServerComMessage
+}
+
 // Handle outbound node communication: read messages from the channel, forward to remote nodes.
 // FIXME(gene): this will drain the outbound queue in case of a failure: all unprocessed messages will be dropped.
 // Maybe it's a good thing, maybe not.
@@ -259,6 +276,13 @@ func (n *ClusterNode) respond(msg *ClusterResp) error {
 	return n.call("Cluster.Proxy", msg, &unused)
 }
 
+// Routes the message within the cluster.
+func (n *ClusterNode) route(msg *ClusterRouteReq) error {
+	log.Printf("cluster: routing message for topic '%s' to node '%s'", msg.RcptTo, n.name)
+	unused := false
+	return n.call("Cluster.Route", msg, &unused)
+}
+
 // Cluster is the representation of the cluster.
 type Cluster struct {
 	// Cluster nodes with RPC endpoints (excluding current node).
@@ -348,6 +372,22 @@ func (Cluster) Proxy(msg *ClusterResp, unused *bool) error {
 	return nil
 }
 
+// Route endpoint receives intra-cluster messages (e.g. pres) destined
+// for the nodes hosting topic.
+// Called by Hub.route channel consumer.
+func (c *Cluster) Route(msg *ClusterRouteReq, rejected *bool) error {
+	log.Printf("cluster: node '%s' received route request for topic '%s' from node '%s'", c.thisNodeName, msg.RcptTo, msg.Node)
+
+	*rejected = false
+	if msg.Signature != c.ring.Signature() {
+		*rejected = true
+		return nil
+	}
+  msg.Msg.rcptto = msg.RcptTo
+	globals.hub.route <- msg.Msg
+	return nil
+}
+
 // Given topic name, find appropriate cluster node to route message to
 func (c *Cluster) nodeForTopic(topic string) *ClusterNode {
 	key := c.ring.Get(topic)
@@ -422,6 +462,22 @@ func (c *Cluster) routeToTopic(msg *ClientComMessage, topic string, sess *Sessio
 
 	return n.forward(req)
 
+}
+
+// Forward server message to the node that owns topic.
+func (c *Cluster) routeToTopicIntraCluster(topic string, msg *ServerComMessage) error {
+	n := c.nodeForTopic(topic)
+	if n == nil {
+		return errors.New("attempt to route to non-existent node")
+	}
+
+	req := &ClusterRouteReq{
+		Node:      c.thisNodeName,
+		Signature: c.ring.Signature(),
+		RcptTo:    topic,
+		Msg:       msg}
+
+	return n.route(req)
 }
 
 // Session terminated at origin. Inform remote Master nodes that the session is gone.
