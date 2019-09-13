@@ -100,9 +100,9 @@ type ClusterReq struct {
 	Signature string
 
 	// Client message. Set for C2S requests.
-	Pkt *ClientComMessage
+	CliMsg *ClientComMessage
 	// Message to be routed. Set for route requests.
-	Msg *ServerComMessage
+	SrvMsg *ServerComMessage
 
 	// Root user may send messages on behalf of other users.
 	OnBehalfOf string
@@ -329,9 +329,9 @@ func (c *Cluster) Master(msg *ClusterReq, rejected *bool) error {
 		sess.platf = msg.Sess.Platform
 
 		// Dispatch remote message to a local session.
-		msg.Pkt.from = msg.OnBehalfOf
-		msg.Pkt.authLvl = msg.AuthLvl
-		sess.dispatch(msg.Pkt)
+		msg.CliMsg.from = msg.OnBehalfOf
+		msg.CliMsg.authLvl = msg.AuthLvl
+		sess.dispatch(msg.CliMsg)
 	} else {
 		// Reject the request: wrong signature, cluster is out of sync.
 		*rejected = true
@@ -365,12 +365,12 @@ func (c *Cluster) Route(msg *ClusterReq, rejected *bool) error {
 	log.Printf("cluster: node '%s' received route request for topic '%s' from node '%s'", c.thisNodeName, msg.RcptTo, msg.Node)
 
 	*rejected = false
-	if msg.Signature != c.ring.Signature() || msg.Msg == nil {
+	if msg.Signature != c.ring.Signature() || msg.SrvMsg == nil {
 		*rejected = true
 		return nil
 	}
-  msg.Msg.rcptto = msg.RcptTo
-	globals.hub.route <- msg.Msg
+	msg.SrvMsg.rcptto = msg.RcptTo
+	globals.hub.route <- msg.SrvMsg
 	return nil
 }
 
@@ -427,7 +427,7 @@ func (c *Cluster) routeToTopic(msg *ClientComMessage, topic string, sess *Sessio
 	req := &ClusterReq{
 		Node:      c.thisNodeName,
 		Signature: c.ring.Signature(),
-		Pkt:       msg,
+		CliMsg:    msg,
 		RcptTo:    topic,
 		Sess: &ClusterSess{
 			Uid:        sess.uid,
@@ -461,7 +461,7 @@ func (c *Cluster) routeToTopicIntraCluster(topic string, msg *ServerComMessage) 
 		Node:      c.thisNodeName,
 		Signature: c.ring.Signature(),
 		RcptTo:    topic,
-		Msg:       msg}
+		SrvMsg:    msg}
 
 	return n.route(req)
 }
