@@ -89,7 +89,7 @@ type ClusterSess struct {
 	Sid string
 }
 
-// ClusterReq is a Proxy to Master request message.
+// ClusterReq is either a Proxy to Master or intra-cluster routing request message.
 type ClusterReq struct {
 	// Name of the node sending this request
 	Node string
@@ -99,7 +99,10 @@ type ClusterReq struct {
 	// Cluster is desynchronized.
 	Signature string
 
-	Pkt *ClientComMessage
+	// Client message. Set for C2S requests.
+	CliMsg *ClientComMessage
+	// Message to be routed. Set for route requests.
+	SrvMsg *ServerComMessage
 
 	// Root user may send messages on behalf of other users.
 	OnBehalfOf string
@@ -244,7 +247,7 @@ func (n *ClusterNode) callAsync(proc string, msg, resp interface{}, done chan *r
 func (n *ClusterNode) forward(msg *ClusterReq) error {
 	log.Printf("cluster: forwarding request to node '%s'", n.name)
 	msg.Node = globals.cluster.thisNodeName
-	rejected := false
+	var rejected bool
 	err := n.call("Cluster.Master", msg, &rejected)
 	if err == nil && rejected {
 		err = errors.New("cluster: master node out of sync")
@@ -255,8 +258,15 @@ func (n *ClusterNode) forward(msg *ClusterReq) error {
 // Master responds to proxy
 func (n *ClusterNode) respond(msg *ClusterResp) error {
 	log.Printf("cluster: replying to node '%s'", n.name)
-	unused := false
+	var unused bool
 	return n.call("Cluster.Proxy", msg, &unused)
+}
+
+// Routes the message within the cluster.
+func (n *ClusterNode) route(msg *ClusterReq) error {
+	log.Printf("cluster: routing message for topic '%s' to node '%s'", msg.RcptTo, n.name)
+	var unused bool
+	return n.call("Cluster.Route", msg, &unused)
 }
 
 // Cluster is the representation of the cluster.
@@ -319,9 +329,9 @@ func (c *Cluster) Master(msg *ClusterReq, rejected *bool) error {
 		sess.platf = msg.Sess.Platform
 
 		// Dispatch remote message to a local session.
-		msg.Pkt.from = msg.OnBehalfOf
-		msg.Pkt.authLvl = msg.AuthLvl
-		sess.dispatch(msg.Pkt)
+		msg.CliMsg.from = msg.OnBehalfOf
+		msg.CliMsg.authLvl = msg.AuthLvl
+		sess.dispatch(msg.CliMsg)
 	} else {
 		// Reject the request: wrong signature, cluster is out of sync.
 		*rejected = true
@@ -345,6 +355,22 @@ func (Cluster) Proxy(msg *ClusterResp, unused *bool) error {
 		log.Println("cluster: master response for unknown session", msg.FromSID)
 	}
 
+	return nil
+}
+
+// Route endpoint receives intra-cluster messages (e.g. pres) destined
+// for the nodes hosting topic.
+// Called by Hub.route channel consumer.
+func (c *Cluster) Route(msg *ClusterReq, rejected *bool) error {
+	log.Printf("cluster: node '%s' received route request for topic '%s' from node '%s'", c.thisNodeName, msg.RcptTo, msg.Node)
+
+	*rejected = false
+	if msg.Signature != c.ring.Signature() || msg.SrvMsg == nil {
+		*rejected = true
+		return nil
+	}
+	msg.SrvMsg.rcptto = msg.RcptTo
+	globals.hub.route <- msg.SrvMsg
 	return nil
 }
 
@@ -401,7 +427,7 @@ func (c *Cluster) routeToTopic(msg *ClientComMessage, topic string, sess *Sessio
 	req := &ClusterReq{
 		Node:      c.thisNodeName,
 		Signature: c.ring.Signature(),
-		Pkt:       msg,
+		CliMsg:    msg,
 		RcptTo:    topic,
 		Sess: &ClusterSess{
 			Uid:        sess.uid,
@@ -422,6 +448,22 @@ func (c *Cluster) routeToTopic(msg *ClientComMessage, topic string, sess *Sessio
 
 	return n.forward(req)
 
+}
+
+// Forward server message to the node that owns topic.
+func (c *Cluster) routeToTopicIntraCluster(topic string, msg *ServerComMessage) error {
+	n := c.nodeForTopic(topic)
+	if n == nil {
+		return errors.New("attempt to route to non-existent node")
+	}
+
+	req := &ClusterReq{
+		Node:      c.thisNodeName,
+		Signature: c.ring.Signature(),
+		RcptTo:    topic,
+		SrvMsg:    msg}
+
+	return n.route(req)
 }
 
 // Session terminated at origin. Inform remote Master nodes that the session is gone.
