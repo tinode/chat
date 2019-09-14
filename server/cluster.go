@@ -115,6 +115,8 @@ type ClusterReq struct {
 	Sess *ClusterSess
 	// True if the original session has disconnected
 	SessGone bool
+	// For {pres} messages, indicates whether to break reply loop.
+	PresWantReply bool
 }
 
 // ClusterResp is a Master to Proxy response message.
@@ -370,6 +372,9 @@ func (c *Cluster) Route(msg *ClusterReq, rejected *bool) error {
 		return nil
 	}
 	msg.SrvMsg.rcptto = msg.RcptTo
+	if msg.SrvMsg.Pres != nil && msg.PresWantReply {
+		msg.SrvMsg.Pres.wantReply = true
+	}
 	globals.hub.route <- msg.SrvMsg
 	return nil
 }
@@ -462,6 +467,9 @@ func (c *Cluster) routeToTopicIntraCluster(topic string, msg *ServerComMessage) 
 		Signature: c.ring.Signature(),
 		RcptTo:    topic,
 		SrvMsg:    msg}
+	if msg.Pres != nil && msg.Pres.wantReply {
+		req.PresWantReply = true
+	}
 
 	return n.route(req)
 }
