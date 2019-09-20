@@ -58,7 +58,7 @@ A text-only [command line client](./tn-cli) implements every possible command.
 
 ### Supported
 
-* [Android](https://github.com/tinode/tindroid/), [iOS](https://github.com/tinode/ios), [web](https://github.com/tinode/webapp/), and [command line](tn-cli/) clients.
+* [Android](https://github.com/tinode/tindroid/), [iOS](https://github.com/tinode/ios), [web](https://github.com/tinode/webapp/) and [command line](tn-cli/) clients.
 * One-on-one messaging.
 * Group messaging with every member's access permissions managed individually. The maximum number of members is configurable (128 by default).
 * Topic access control with permissions for various actions.
