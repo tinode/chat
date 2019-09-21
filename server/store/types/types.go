@@ -425,6 +425,8 @@ const (
 	ModeCAuth AccessMode = ModeCP2P | ModeCPublic
 	// Read-only access to topic ("JR", 3)
 	ModeCReadOnly = ModeJoin | ModeRead
+	// Access to 'sys' topic by a root user ("JRWPD", 79, 0x4F)
+	ModeCSys = ModeJoin | ModeRead | ModeWrite | ModePres | ModeDelete
 
 	// Admin: user who can modify access mode ("OA", dec: 144, hex: 0x90)
 	ModeCAdmin = ModeOwner | ModeApprove
