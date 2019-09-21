@@ -604,6 +604,10 @@ func initTopicSys(t *Topic, sreg *sessionJoin) error {
 		return types.ErrTopicNotFound
 	}
 
+	if err = t.loadSubscribers(); err != nil {
+		return err
+	}
+
 	// There is no t.owner
 
 	// Default permissions are 'W'

@@ -815,7 +815,7 @@ func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin) error {
 	asLvl := auth.Level(sreg.pkt.authLvl)
 	toriginal := t.original(asUid)
 
-	if !sreg.newsub && (t.cat == types.TopicCatGrp || t.cat == types.TopicCatP2P) {
+	if !sreg.newsub && (t.cat == types.TopicCatP2P || t.cat == types.TopicCatGrp || t.cat == types.TopicCatSys) {
 		// Check if this is a new subscription.
 		_, found := t.perUser[asUid]
 		sreg.newsub = !found
@@ -916,9 +916,6 @@ func (t *Topic) requestSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Le
 
 		if t.cat == types.TopicCatP2P {
 			// P2P could be here only if it was previously deleted. I.e. existingSub is always true for P2P.
-
-			// Undelete
-			userData.deleted = false
 			if modeWant != types.ModeUnset {
 				userData.modeWant = modeWant
 			}
@@ -927,9 +924,17 @@ func (t *Topic) requestSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Le
 			// Make sure the user is not asking for unreasonable permissions
 			userData.modeWant = (userData.modeWant & types.ModeCP2P) | types.ModeApprove
 		} else if t.cat == types.TopicCatSys {
-			// TODO(gene): handle system topic.
-			sess.queueOut(ErrPolicy(pktID, toriginal, now))
-			return changed, errors.New("subscription to 'sys' topic is not implemented yet")
+			if asLvl != auth.LevelRoot {
+				sess.queueOut(ErrPermissionDenied(pktID, toriginal, now))
+				return changed, errors.New("subscription to 'sys' topic requires root access level")
+			}
+
+			// Assign default access levels
+			userData.modeWant = types.ModeCSys
+			userData.modeGiven = types.ModeCSys
+			if modeWant != types.ModeUnset {
+				userData.modeWant = (modeWant & types.ModeCSys) | types.ModeWrite
+			}
 		} else {
 			// For non-p2p & non-sys topics access is given as default access
 			userData.modeGiven = t.accessFor(asLvl)
@@ -941,6 +946,9 @@ func (t *Topic) requestSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Le
 				userData.modeWant = modeWant
 			}
 		}
+
+		// Undelete
+		userData.deleted = false
 
 		if isNullValue(private) {
 			private = nil
@@ -1007,15 +1015,20 @@ func (t *Topic) requestSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Le
 				// Ownership transfer can only be initiated by the owner
 				sess.queueOut(ErrPermissionDenied(pktID, toriginal, now))
 				return changed, errors.New("non-owner cannot request ownership transfer")
-			} else if t.cat == types.TopicCatP2P {
-				// For P2P topics ignore requests for 'D'. Otherwise it will generate a useless announcement
-				modeWant = (modeWant & types.ModeCP2P) | types.ModeApprove
 			} else if userData.modeGiven.IsAdmin() && modeWant.IsAdmin() {
 				// The Admin should be able to grant any permissions except ownership (checked previously) &
 				// hard-deleting messages.
 				if !userData.modeGiven.BetterEqual(modeWant & ^types.ModeDelete) {
 					userData.modeGiven |= (modeWant & ^types.ModeDelete)
 				}
+			}
+
+			if t.cat == types.TopicCatP2P {
+				// For P2P topics ignore requests for 'D'. Otherwise it will generate a useless announcement
+				modeWant = (modeWant & types.ModeCP2P) | types.ModeApprove
+			} else if t.cat == types.TopicCatSys {
+				//
+				modeWant &= (modeWant & types.ModeCSys) | types.ModeWrite
 			}
 		}
 
@@ -1057,7 +1070,6 @@ func (t *Topic) requestSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Le
 
 		// No transactions in RethinkDB, but two owners are better than none
 		if ownerChange {
-
 			oldOwnerData := t.perUser[t.owner]
 			oldOwnerData.modeGiven = (oldOwnerData.modeGiven & ^types.ModeOwner)
 			oldOwnerData.modeWant = (oldOwnerData.modeWant & ^types.ModeOwner)
