@@ -508,7 +508,15 @@ func (s *Session) hello(msg *ClientComMessage) {
 			log.Println("s.hello:", "unsupported version", s.sid)
 			return
 		}
-		params = map[string]interface{}{"ver": currentVersion, "build": store.GetAdapterName() + ":" + buildstamp}
+
+		params = map[string]interface{}{
+			"ver":                currentVersion,
+			"build":              store.GetAdapterName() + ":" + buildstamp,
+			"maxMessageSize":     globals.maxMessageSize,
+			"maxSubscriberCount": globals.maxSubscriberCount,
+			"maxTagCount":        globals.maxTagCount,
+			"maxFileUploadSize":  globals.maxFileUploadSize,
+		}
 
 		// Set ua & platform in the beginning of the session.
 		// Don't change them later.
