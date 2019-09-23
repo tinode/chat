@@ -11,7 +11,7 @@
 
 FROM alpine:latest
 
-ARG VERSION=0.15
+ARG VERSION=0.16.1
 ENV VERSION=$VERSION
 
 LABEL maintainer="Gene Sokolov <gene@tinode.co>"
