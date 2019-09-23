@@ -21,17 +21,15 @@ The goal of this project is to actually deliver on XMPP's original vision: creat
 * For bugs and feature requests [open an issue](https://github.com/tinode/chat/issues/new).
 
 
-## Demo
+## Public service
 
 ### Web
 
-TinodeWeb, a single page web app, is usually available at https://web.tinode.co/ ([source](https://github.com/tinode/webapp/)).
+TinodeWeb, a single page web app, is available at https://web.tinode.co/ ([source](https://github.com/tinode/webapp/)).
 
-Login as one of `alice`, `bob`, `carol`, `dave`, `frank`. Password is `<login>123`, e.g. login for `alice` is `alice123`. You can discover other users by email or phone by prefixing them with `email:` or `tel:` respectively. Emails are `<login>@example.com`, e.g. `alice@example.com`, phones are `+17025550001` through `+17025550009`.
+### iOS
 
-If you register a new account you are asked for an email address to send validation code to. For demo purposes you may use `123456` as a universal validation code. The code you get in the email is also valid.
-
-[Docker images](https://hub.docker.com/u/tinode/) with the same demo are available.
+[Tindios](https://github.com/tinode/ios) is stable and functional. See screenshots below.
 
 ### Android
 
@@ -41,17 +39,27 @@ If you register a new account you are asked for an email address to send validat
 
 A text-only [command line client](./tn-cli) implements every possible command.
 
+### Demo/Sandbox
+
+A sandboxed demo service is available at https://sandbox.tinode.co/.
+
+Login as one of `alice`, `bob`, `carol`, `dave`, `frank`. Password is `<login>123`, e.g. login for `alice` is `alice123`. You can discover other users by email or phone by prefixing them with `email:` or `tel:` respectively. Emails are `<login>@example.com`, e.g. `alice@example.com`, phones are `+17025550001` through `+17025550009`.
+
+If you register a new account you are asked for an email address to send validation code to. For demo purposes you may use `123456` as a universal validation code. The code you get in the email is also valid.
+
 ### Notes
 
-* The demo server is reset (all data wiped) every night at 3:15am Pacific time. An error message `User not found or offline` means the server was reset while you were connected. If you see it on the web, reload and relogin. On Android log out and re-login. If the database was changed, delete the app then reinstall.
+* The sandbox server is reset (all data wiped) every night at 3:15am Pacific time. An error message `User not found or offline` means the server was reset while you were connected. If you see it on the web, reload and relogin. On Android log out and re-login. If the database was changed, delete the app then reinstall.
 
-* User `Tino` is a [basic chatbot](./chatbot) which responds with a [random quote](http://fortunes.cat-v.org/) to any message.
+* Sandbox user `Tino` is a [basic chatbot](./chatbot) which responds with a [random quote](http://fortunes.cat-v.org/) to any message.
 
 * As generally accepted, when you register a new account you are asked for an email address. The server will send an email with a verification code to that address and you can use it to validate the account. To make things easier for testing, the server will also accept `123456` as a verification code. Remove line `"debug_response": "123456"` from `tinode.conf` to disable this option.
 
 * The demo server is configured to use [ACME](https://letsencrypt.org/) TLS [implementation](https://godoc.org/golang.org/x/crypto/acme) with hard-coded requirement for [SNI](https://en.wikipedia.org/wiki/Server_Name_Indication). If you are unable to connect then the most likely reason is your TLS client's missing support for SNI. Use a different client.
 
-* The demo uses a single minified javascript bundle and minified css. The un-minified version is available at https://web.tinode.co/index-dev.html
+* The demo uses a single minified javascript bundle and minified css. The un-minified version is available at https://sandbox.tinode.co/index-dev.html
+
+* [Docker images](https://hub.docker.com/u/tinode/) with the same demo are available.
 
 
 ## Features
