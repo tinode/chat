@@ -561,8 +561,8 @@ Any unrecognized fields are silently ignored by the server.
 #### `{hi}`
 
 Handshake message client uses to inform the server of its version and user agent. This message must be the first that
-the client sends to the server. Server responds with a `{ctrl}` which contains server build `build`, wire protocol version `ver`, and
-session ID `sid` in case of long polling, all in `ctrl.params`.
+the client sends to the server. Server responds with a `{ctrl}` which contains server build `build`, wire protocol version `ver`,
+session ID `sid` in case of long polling, as well as server constraints, all in `ctrl.params`.
 
 ```js
 hi: {
