@@ -56,7 +56,8 @@ else
 fi
 
 # Initialize the database if it has not been initialized yet or if data reset/upgrade has been requested.
-./init-db --reset=${RESET_DB} --upgrade=${UPGRADE_DB} --config=${CONFIG} --data=${SAMPLE_DATA} | grep "usr;tino;" > /botdata/tino-password
+./init-db --reset=${RESET_DB} --upgrade=${UPGRADE_DB} --config=${CONFIG} --data=${SAMPLE_DATA} 2>&1 > /var/log/tinode-init-db.log
+grep "usr;tino;" /var/log/tinode-init-db.log > /botdata/tino-password
 
 if [ -s /botdata/tino-password ] ; then
 	# Convert Tino's authentication credentials into a cookie file.
@@ -68,4 +69,4 @@ if [ -s /botdata/tino-password ] ; then
 fi
 
 # Run the tinode server.
-./tinode --config=${CONFIG} --static_data=static 2> /var/log/tinode.log
+./tinode --config=${CONFIG} --static_data=static 2>&1
