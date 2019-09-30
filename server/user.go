@@ -567,7 +567,14 @@ func usersShutdown() {
 }
 
 func usersUpdateUnread(uid types.Uid, val int, inc bool) {
-	if globals.usersUpdate != nil && (!inc || val != 0) {
+	if globals.usersUpdate == nil || (val == 0 && inc) {
+		return
+	}
+
+	if globals.cluster.isRemoteTopic(uid.UserId()) {
+		// Send request to remote node which owns the user.
+		globals.cluster.routeUserReq(upd)
+	} else {
 		select {
 		case globals.usersUpdate <- &UserCacheReq{UserId: uid, Unread: val, Inc: inc}:
 		default:
@@ -577,11 +584,31 @@ func usersUpdateUnread(uid types.Uid, val int, inc bool) {
 
 // Process push notification.
 func usersPush(rcpt *push.Receipt) {
-	if globals.usersUpdate != nil {
+	if globals.usersUpdate == nil {
+		return
+	}
+
+	// In case of a cluster pushes will be initiated at the nodes which own the users.
+	// Sort users into loacl and remote.
+	local := &UserCacheReq{PushRcpt: rcpt}
+	remote := &UserCacheReq{PushRcpt: rcpt}
+
+	for uid := range t.perUser {
+		if globals.cluster.isRemoteTopic(uid.UserId()) {
+			remote.UserIdList = append(remote.UserIdList, uid)
+		} else {
+			local.UserIdList = append(local.UserIdList, uid)
+		}
+	}
+
+	if len(local) > 0 {
 		select {
 		case globals.usersUpdate <- &UserCacheReq{PushRcpt: rcpt}:
 		default:
 		}
+	}
+	if len(remote) > 0 {
+		globals.cluster.routeUserReq(remote)
 	}
 }
 
@@ -629,6 +656,7 @@ func usersRegisterTopic(t *Topic, add bool) {
 			local.UserIdList = append(local.UserIdList, uid)
 		}
 	}
+
 	if len(local.UserIdList) > 0 {
 		select {
 		case globals.usersUpdate <- local:
