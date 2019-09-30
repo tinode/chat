@@ -394,6 +394,50 @@ func (c *Cluster) UserPush(req *UserCacheReq, rejected *bool) error {
 
 // Sends user cahce update to user's master node
 func (c *Cluster) routeUserReq(req *UserCacheReq) error {
+	// Index requests by cluster node.
+	reqByNode = make(map[string]*UserCacheReq)
+
+	if req.PushRcpt != nil {
+		// Request to send push notifications.
+		for uid, rcptTo := range upd.PushRcpt.To {
+			// Handle update
+			unread := unreadUpdater(uid, 1, true)
+			if unread >= 0 {
+				rcptTo.Unread = unread
+				upd.PushRcpt.To[uid] = rcptTo
+			}
+		}
+		push.Push(upd.PushRcpt)
+
+	} else if len(req.UserIdList) > 0 {
+		// Request to add/remove user from cache.
+		for _, uid := range upd.UserIdList {
+			uce, ok := usersCache[uid]
+			if upd.Inc {
+				if !ok {
+					// This is a registration of a new user.
+					// We are not loading unread count here, so set it to -1.
+					uce.unread = -1
+				}
+				uce.topics++
+				usersCache[uid] = uce
+			} else if ok {
+				if uce.topics > 1 {
+					uce.topics--
+					usersCache[uid] = uce
+				} else {
+					// Remove user from cache
+					delete(usersCache, uid)
+				}
+			} else {
+				// BUG!
+				log.Println("ERROR: request to unregister user which has not been registered")
+			}
+		}
+
+		continue
+	}
+
 	return nil
 }
 
