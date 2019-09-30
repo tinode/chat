@@ -528,18 +528,19 @@ func replyDelUser(s *Session, msg *ClientComMessage) {
 	}
 }
 
-type userUpdate struct {
-	// Single user ID being updated
-	uid types.Uid
-	// User IDs being updated
-	uidList []types.Uid
+// UserCacheReq contains data which mutates one or more user cache entries.
+type UserCacheReq struct {
+	// UserId is set when a single user is updated.
+	UserId types.Uid
+	// UserIdList  is set when multiple users are updated.
+	UserIdList []types.Uid
 	// Unread count
-	unread int
+	Unread int
 	// Treat the count as an increment as opposite to the final value.
-	inc bool
+	Inc bool
 
 	// Optional push notification
-	pushRcpt *push.Receipt
+	PushRcpt *push.Receipt
 }
 
 type userCacheEntry struct {
@@ -553,7 +554,7 @@ var usersCache map[types.Uid]userCacheEntry
 func usersInit() {
 	usersCache = make(map[types.Uid]userCacheEntry)
 
-	globals.usersUpdate = make(chan *userUpdate, 1024)
+	globals.usersUpdate = make(chan *UserCacheReq, 1024)
 
 	go userUpdater()
 }
@@ -568,7 +569,7 @@ func usersShutdown() {
 func usersUpdateUnread(uid types.Uid, val int, inc bool) {
 	if globals.usersUpdate != nil && (!inc || val != 0) {
 		select {
-		case globals.usersUpdate <- &userUpdate{uid: uid, unread: val, inc: inc}:
+		case globals.usersUpdate <- &UserCacheReq{UserId: uid, Unread: val, Inc: inc}:
 		default:
 		}
 	}
@@ -578,7 +579,7 @@ func usersUpdateUnread(uid types.Uid, val int, inc bool) {
 func usersPush(rcpt *push.Receipt) {
 	if globals.usersUpdate != nil {
 		select {
-		case globals.usersUpdate <- &userUpdate{pushRcpt: rcpt}:
+		case globals.usersUpdate <- &UserCacheReq{PushRcpt: rcpt}:
 		default:
 		}
 	}
@@ -590,17 +591,22 @@ func usersRegisterUser(uid types.Uid, add bool) {
 		return
 	}
 
-	upd := &userUpdate{uidList: make([]types.Uid, 1), inc: add}
-	upd.uidList[0] = uid
+	upd := &UserCacheReq{UserIdList: make([]types.Uid, 1), Inc: add}
+	upd.UserIdList[0] = uid
 
-	select {
-	case globals.usersUpdate <- upd:
-	default:
+	if globals.cluster.isRemoteTopic(uid.UserId()) {
+		// Send request to remote node which owns the user.
+		globals.cluster.routeUserReq(upd)
+	} else {
+		select {
+		case globals.usersUpdate <- upd:
+		default:
+		}
 	}
-
 }
 
 // Account users as members of an active topic. Used for cache management.
+// In case of a cluster this method is called only when the topic is local.
 func usersRegisterTopic(t *Topic, add bool) {
 	if globals.usersUpdate == nil {
 		return
@@ -611,16 +617,26 @@ func usersRegisterTopic(t *Topic, add bool) {
 		return
 	}
 
-	upd := &userUpdate{uidList: make([]types.Uid, len(t.perUser)), inc: add}
-	i := 0
+	// In case of a cluster UIDs could be local and remote. Process local UIDs locally,
+	// send remote UIDs to other cluster nodes for processing. The UIDs may have to be
+	// sent to multiple nodes.
+	local := &UserCacheReq{Inc: add}
+	remote := &UserCacheReq{Inc: add}
 	for uid := range t.perUser {
-		upd.uidList[i] = uid
-		i++
+		if globals.cluster.isRemoteTopic(uid.UserId()) {
+			remote.UserIdList = append(remote.UserIdList, uid)
+		} else {
+			local.UserIdList = append(local.UserIdList, uid)
+		}
 	}
-
-	select {
-	case globals.usersUpdate <- upd:
-	default:
+	if len(local.UserIdList) > 0 {
+		select {
+		case globals.usersUpdate <- local:
+		default:
+		}
+	}
+	if len(remote.UserIdList) > 0 {
+		globals.cluster.routeUserReq(remote)
 	}
 }
 
@@ -660,24 +676,24 @@ func userUpdater() {
 		}
 
 		// Request to send push notifications.
-		if upd.pushRcpt != nil {
-			for uid, rcptTo := range upd.pushRcpt.To {
+		if upd.PushRcpt != nil {
+			for uid, rcptTo := range upd.PushRcpt.To {
 				// Handle update
 				unread := unreadUpdater(uid, 1, true)
 				if unread >= 0 {
 					rcptTo.Unread = unread
-					upd.pushRcpt.To[uid] = rcptTo
+					upd.PushRcpt.To[uid] = rcptTo
 				}
 			}
-			push.Push(upd.pushRcpt)
+			push.Push(upd.PushRcpt)
 			continue
 		}
 
 		// Request to add/remove user from cache.
-		if len(upd.uidList) > 0 {
-			for _, uid := range upd.uidList {
+		if len(upd.UserIdList) > 0 {
+			for _, uid := range upd.UserIdList {
 				uce, ok := usersCache[uid]
-				if upd.inc {
+				if upd.Inc {
 					if !ok {
 						// This is a registration of a new user.
 						// We are not loading unread count here, so set it to -1.
@@ -703,7 +719,7 @@ func userUpdater() {
 		}
 
 		// Request to update unread count.
-		unreadUpdater(upd.uid, upd.unread, upd.inc)
+		unreadUpdater(upd.UserId, upd.Unread, upd.Inc)
 	}
 
 	log.Println("users: shutdown")

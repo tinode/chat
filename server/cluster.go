@@ -379,6 +379,24 @@ func (c *Cluster) Route(msg *ClusterReq, rejected *bool) error {
 	return nil
 }
 
+// User cache & push notifications management. These are calls received by the Master from Proxy.
+// The Proxy expects no payload to be returned by the master.
+
+// UserUpdate endpoint updates user's cached values.
+func (c *Cluster) UserUpdate(req *UserCacheReq, rejected *bool) error {
+	return nil
+}
+
+// UserPush endpoint processes requests to send push notifications.
+func (c *Cluster) UserPush(req *UserCacheReq, rejected *bool) error {
+	return nil
+}
+
+// Sends user cahce update to user's master node
+func (c *Cluster) routeUserReq(req *UserCacheReq) error {
+	return nil
+}
+
 // Given topic name, find appropriate cluster node to route message to
 func (c *Cluster) nodeForTopic(topic string) *ClusterNode {
 	key := c.ring.Get(topic)
@@ -415,7 +433,7 @@ func (c *Cluster) isPartitioned() bool {
 	return (len(c.nodes)+1)/2 >= len(c.fo.activeNodes)
 }
 
-// Forward client message to the Master (cluster node which owns the topic)
+// Forward client request message to the Master (cluster node which owns the topic)
 func (c *Cluster) routeToTopic(msg *ClientComMessage, topic string, sess *Session) error {
 	// Find the cluster node which owns the topic, then forward to it.
 	n := c.nodeForTopic(topic)
@@ -455,7 +473,7 @@ func (c *Cluster) routeToTopic(msg *ClientComMessage, topic string, sess *Sessio
 
 }
 
-// Forward server message to the node that owns topic.
+// Forward server response message to the node that owns topic.
 func (c *Cluster) routeToTopicIntraCluster(topic string, msg *ServerComMessage) error {
 	n := c.nodeForTopic(topic)
 	if n == nil {

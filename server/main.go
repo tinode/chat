@@ -123,7 +123,7 @@ var globals struct {
 	// Runtime statistics communication channel.
 	statsUpdate chan *varUpdate
 	// Users cache communication channel.
-	usersUpdate chan *userUpdate
+	usersUpdate chan *UserCacheReq
 
 	// Credential validators.
 	validators map[string]credValidator
