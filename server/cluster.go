@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/tinode/chat/server/auth"
+	"github.com/tinode/chat/server/push"
 	rh "github.com/tinode/chat/server/ringhash"
 	"github.com/tinode/chat/server/store/types"
 )
@@ -382,63 +383,77 @@ func (c *Cluster) Route(msg *ClusterReq, rejected *bool) error {
 // User cache & push notifications management. These are calls received by the Master from Proxy.
 // The Proxy expects no payload to be returned by the master.
 
-// UserUpdate endpoint updates user's cached values.
-func (c *Cluster) UserUpdate(req *UserCacheReq, rejected *bool) error {
+// UserCacheUpdate endpoint receives updates to user's cached values as well as sends push notifications.
+func (c *Cluster) UserCacheUpdate(req *UserCacheReq, rejected *bool) error {
+	usersRequestFromCluster(req)
 	return nil
 }
 
-// UserPush endpoint processes requests to send push notifications.
-func (c *Cluster) UserPush(req *UserCacheReq, rejected *bool) error {
-	return nil
-}
-
-// Sends user cahce update to user's master node
+// Sends user cache update to user's Master node where the cache actually resides.
+// The request is extected to contain users who reside at remote nodes only.
 func (c *Cluster) routeUserReq(req *UserCacheReq) error {
 	// Index requests by cluster node.
-	reqByNode = make(map[string]*UserCacheReq)
+	reqByNode := make(map[string]*UserCacheReq)
 
 	if req.PushRcpt != nil {
-		// Request to send push notifications.
-		for uid, rcptTo := range upd.PushRcpt.To {
-			// Handle update
-			unread := unreadUpdater(uid, 1, true)
-			if unread >= 0 {
-				rcptTo.Unread = unread
-				upd.PushRcpt.To[uid] = rcptTo
+		// Request to send push notifications. Cretae separate packets for each affected cluster node.
+		for uid, recepient := range req.PushRcpt.To {
+			n := c.nodeForTopic(uid.UserId())
+			if n == nil {
+				return errors.New("attempt to update user at a non-existent node (1)")
 			}
+			r := reqByNode[n.name]
+			if r == nil {
+				r = &UserCacheReq{PushRcpt: &push.Receipt{
+					Payload: req.PushRcpt.Payload,
+					To:      make(map[types.Uid]push.Recipient),
+				}}
+			}
+			r.PushRcpt.To[uid] = recepient
+			reqByNode[n.name] = r
 		}
-		push.Push(upd.PushRcpt)
-
 	} else if len(req.UserIdList) > 0 {
 		// Request to add/remove user from cache.
-		for _, uid := range upd.UserIdList {
-			uce, ok := usersCache[uid]
-			if upd.Inc {
-				if !ok {
-					// This is a registration of a new user.
-					// We are not loading unread count here, so set it to -1.
-					uce.unread = -1
-				}
-				uce.topics++
-				usersCache[uid] = uce
-			} else if ok {
-				if uce.topics > 1 {
-					uce.topics--
-					usersCache[uid] = uce
-				} else {
-					// Remove user from cache
-					delete(usersCache, uid)
-				}
-			} else {
-				// BUG!
-				log.Println("ERROR: request to unregister user which has not been registered")
+		for _, uid := range req.UserIdList {
+			n := c.nodeForTopic(uid.UserId())
+			if n == nil {
+				return errors.New("attempt to update user at a non-existent node (2)")
 			}
+			r := reqByNode[n.name]
+			if r == nil {
+				r = &UserCacheReq{Inc: req.Inc}
+			}
+			r.UserIdList = append(r.UserIdList, uid)
+			reqByNode[n.name] = r
 		}
-
-		continue
 	}
 
-	return nil
+	if len(reqByNode) > 0 {
+		for nodeName, r := range reqByNode {
+			n := globals.cluster.nodes[nodeName]
+			var rejected bool
+			err := n.call("Cluster.UserCacheUpdate", r, &rejected)
+			if rejected {
+				err = errors.New("cluster: master node out of sync")
+			}
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	// Update to cached values.
+	n := c.nodeForTopic(req.UserId.UserId())
+	if n == nil {
+		return errors.New("attempt to update user at a non-existent node (3)")
+	}
+	var rejected bool
+	err := n.call("Cluster.UserCacheUpdate", req, &rejected)
+	if rejected {
+		err = errors.New("cluster: master node out of sync")
+	}
+	return err
 }
 
 // Given topic name, find appropriate cluster node to route message to

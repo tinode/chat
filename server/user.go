@@ -571,12 +571,13 @@ func usersUpdateUnread(uid types.Uid, val int, inc bool) {
 		return
 	}
 
+	upd := &UserCacheReq{UserId: uid, Unread: val, Inc: inc}
 	if globals.cluster.isRemoteTopic(uid.UserId()) {
 		// Send request to remote node which owns the user.
 		globals.cluster.routeUserReq(upd)
 	} else {
 		select {
-		case globals.usersUpdate <- &UserCacheReq{UserId: uid, Unread: val, Inc: inc}:
+		case globals.usersUpdate <- upd:
 		default:
 		}
 	}
@@ -588,27 +589,40 @@ func usersPush(rcpt *push.Receipt) {
 		return
 	}
 
+	var local *UserCacheReq
+
 	// In case of a cluster pushes will be initiated at the nodes which own the users.
 	// Sort users into loacl and remote.
-	local := &UserCacheReq{PushRcpt: rcpt}
-	remote := &UserCacheReq{PushRcpt: rcpt}
+	if globals.cluster != nil {
+		local = &UserCacheReq{PushRcpt: &push.Receipt{
+			Payload: rcpt.Payload,
+			To:      make(map[types.Uid]push.Recipient),
+		}}
+		remote := &UserCacheReq{PushRcpt: &push.Receipt{
+			Payload: rcpt.Payload,
+			To:      make(map[types.Uid]push.Recipient),
+		}}
 
-	for uid := range t.perUser {
-		if globals.cluster.isRemoteTopic(uid.UserId()) {
-			remote.UserIdList = append(remote.UserIdList, uid)
-		} else {
-			local.UserIdList = append(local.UserIdList, uid)
+		for uid, recepient := range rcpt.To {
+			if globals.cluster.isRemoteTopic(uid.UserId()) {
+				remote.PushRcpt.To[uid] = recepient
+			} else {
+				local.PushRcpt.To[uid] = recepient
+			}
 		}
+
+		if len(remote.PushRcpt.To) > 0 {
+			globals.cluster.routeUserReq(remote)
+		}
+	} else {
+		local = &UserCacheReq{PushRcpt: rcpt}
 	}
 
-	if len(local) > 0 {
+	if len(local.PushRcpt.To) > 0 {
 		select {
-		case globals.usersUpdate <- &UserCacheReq{PushRcpt: rcpt}:
+		case globals.usersUpdate <- local:
 		default:
 		}
-	}
-	if len(remote) > 0 {
-		globals.cluster.routeUserReq(remote)
 	}
 }
 
@@ -633,7 +647,8 @@ func usersRegisterUser(uid types.Uid, add bool) {
 }
 
 // Account users as members of an active topic. Used for cache management.
-// In case of a cluster this method is called only when the topic is local.
+// In case of a cluster this method is called only when the topic is local:
+// globals.cluster.isRemoteTopic(t.name) == false
 func usersRegisterTopic(t *Topic, add bool) {
 	if globals.usersUpdate == nil {
 		return
@@ -644,10 +659,11 @@ func usersRegisterTopic(t *Topic, add bool) {
 		return
 	}
 
+	local := &UserCacheReq{Inc: add}
+
 	// In case of a cluster UIDs could be local and remote. Process local UIDs locally,
 	// send remote UIDs to other cluster nodes for processing. The UIDs may have to be
 	// sent to multiple nodes.
-	local := &UserCacheReq{Inc: add}
 	remote := &UserCacheReq{Inc: add}
 	for uid := range t.perUser {
 		if globals.cluster.isRemoteTopic(uid.UserId()) {
@@ -657,14 +673,27 @@ func usersRegisterTopic(t *Topic, add bool) {
 		}
 	}
 
+	if len(remote.UserIdList) > 0 {
+		globals.cluster.routeUserReq(remote)
+	}
+
 	if len(local.UserIdList) > 0 {
 		select {
 		case globals.usersUpdate <- local:
 		default:
 		}
 	}
-	if len(remote.UserIdList) > 0 {
-		globals.cluster.routeUserReq(remote)
+}
+
+// usersRequestFromCluster handles requests which came from other cluser nodes.
+func usersRequestFromCluster(req *UserCacheReq) {
+	if globals.usersUpdate == nil {
+		return
+	}
+
+	select {
+	case globals.usersUpdate <- req:
+	default:
 	}
 }
 
