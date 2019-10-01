@@ -82,7 +82,7 @@ func topicInit(t *Topic, sreg *sessionJoin, h *Hub) {
 	}
 
 	// prevent newly initialized topics to go live while shutdown in progress
-	if h.isShutdownInProgress {
+	if globals.shuttingDown {
 		h.topicDel(sreg.topic)
 		return
 	}
