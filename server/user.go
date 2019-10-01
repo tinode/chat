@@ -530,6 +530,9 @@ func replyDelUser(s *Session, msg *ClientComMessage) {
 
 // UserCacheReq contains data which mutates one or more user cache entries.
 type UserCacheReq struct {
+	// Name of the node sending this request in case of cluster. Not set otherwise.
+	Node string
+
 	// UserId is set when a single user is updated.
 	UserId types.Uid
 	// UserIdList  is set when multiple users are updated.

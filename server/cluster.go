@@ -384,8 +384,9 @@ func (c *Cluster) Route(msg *ClusterReq, rejected *bool) error {
 // The Proxy expects no payload to be returned by the master.
 
 // UserCacheUpdate endpoint receives updates to user's cached values as well as sends push notifications.
-func (c *Cluster) UserCacheUpdate(req *UserCacheReq, rejected *bool) error {
-	usersRequestFromCluster(req)
+func (c *Cluster) UserCacheUpdate(msg *UserCacheReq, rejected *bool) error {
+	log.Printf("cluster: node '%s' received user cache update from node '%s'", c.thisNodeName, msg.Node)
+	usersRequestFromCluster(msg)
 	return nil
 }
 
@@ -404,10 +405,11 @@ func (c *Cluster) routeUserReq(req *UserCacheReq) error {
 			}
 			r := reqByNode[n.name]
 			if r == nil {
-				r = &UserCacheReq{PushRcpt: &push.Receipt{
-					Payload: req.PushRcpt.Payload,
-					To:      make(map[types.Uid]push.Recipient),
-				}}
+				r = &UserCacheReq{
+					PushRcpt: &push.Receipt{
+						Payload: req.PushRcpt.Payload,
+						To:      make(map[types.Uid]push.Recipient)},
+					Node: c.thisNodeName}
 			}
 			r.PushRcpt.To[uid] = recepient
 			reqByNode[n.name] = r
@@ -421,7 +423,7 @@ func (c *Cluster) routeUserReq(req *UserCacheReq) error {
 			}
 			r := reqByNode[n.name]
 			if r == nil {
-				r = &UserCacheReq{Inc: req.Inc}
+				r = &UserCacheReq{Node: c.thisNodeName, Inc: req.Inc}
 			}
 			r.UserIdList = append(r.UserIdList, uid)
 			reqByNode[n.name] = r
@@ -448,6 +450,7 @@ func (c *Cluster) routeUserReq(req *UserCacheReq) error {
 	if n == nil {
 		return errors.New("attempt to update user at a non-existent node (3)")
 	}
+	req.Node = c.thisNodeName
 	var rejected bool
 	err := n.call("Cluster.UserCacheUpdate", req, &rejected)
 	if rejected {
