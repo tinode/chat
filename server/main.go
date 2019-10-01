@@ -112,6 +112,8 @@ type credValidator struct {
 var globals struct {
 	// Topics cache and processing.
 	hub *Hub
+	// Indicator that shutdown is in progress
+	shuttingDown bool
 	// Sessions cache.
 	sessionStore *SessionStore
 	// Cluster data.

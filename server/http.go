@@ -29,7 +29,7 @@ import (
 )
 
 func listenAndServe(addr string, mux *http.ServeMux, tlfConf *tls.Config, stop <-chan bool) error {
-	shuttingDown := false
+	globals.shuttingDown = false
 
 	httpdone := make(chan bool)
 
@@ -64,7 +64,7 @@ func listenAndServe(addr string, mux *http.ServeMux, tlfConf *tls.Config, stop <
 			err = server.ListenAndServe()
 		}
 		if err != nil {
-			if shuttingDown {
+			if globals.shuttingDown {
 				log.Println("HTTP server: stopped")
 			} else {
 				log.Println("HTTP server: failed", err)
@@ -79,7 +79,7 @@ Loop:
 		select {
 		case <-stop:
 			// Flip the flag that we are terminating and close the Accept-ing socket, so no new connections are possible.
-			shuttingDown = true
+			globals.shuttingDown = true
 			// Give server 2 seconds to shut down.
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			if err := server.Shutdown(ctx); err != nil {

@@ -728,6 +728,12 @@ func userUpdater() {
 	}
 
 	for upd := range globals.usersUpdate {
+		if globals.shuttingDown {
+			// If shutdown is in progress we don't care to process anything.
+			// ignore all calls.
+			continue
+		}
+
 		// Shutdown requested.
 		if upd == nil {
 			globals.usersUpdate = nil
@@ -745,6 +751,7 @@ func userUpdater() {
 					upd.PushRcpt.To[uid] = rcptTo
 				}
 			}
+
 			push.Push(upd.PushRcpt)
 			continue
 		}
@@ -771,7 +778,7 @@ func userUpdater() {
 					}
 				} else {
 					// BUG!
-					log.Println("ERROR: request to unregister user which has not been registered")
+					log.Println("ERROR: request to unregister user which has not been registered", uid)
 				}
 			}
 
