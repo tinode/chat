@@ -236,7 +236,7 @@ func (c *Cluster) electLeader() {
 	if voteCount >= expectVotes {
 		// Current node elected as the leader
 		c.fo.leader = c.thisNodeName
-		log.Println("Elected myself as a new leader")
+		log.Printf("'%s' elected self as a new leader", c.thisNodeName)
 	}
 }
 
