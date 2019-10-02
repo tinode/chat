@@ -10,8 +10,8 @@ HTTP_BASE_PORT=6080
 GRPC_BASE_PORT=6090
 
 # Allow for non-default config file to be specifid on the command line like config=file_name
-if [ ! -z "$CONFIG" ] ; then
-  TINODE_CONF=$CONFIG
+if [ ! -z "$config" ] ; then
+  TINODE_CONF=$config
 else
   TINODE_CONF="./tinode.conf"
 fi
@@ -46,5 +46,5 @@ case "$1" in
     done
     ;;
   *)
-    echo $"Usage: $0 {start|stop} [config=./tinode.conf]"
+    echo $"Usage: $0 {start|stop} [ config=<path_to_tinode.conf> ]"
 esac
