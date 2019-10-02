@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/tinode/chat/server/auth"
+	"github.com/tinode/chat/server/push"
 	rh "github.com/tinode/chat/server/ringhash"
 	"github.com/tinode/chat/server/store/types"
 )
@@ -379,6 +380,85 @@ func (c *Cluster) Route(msg *ClusterReq, rejected *bool) error {
 	return nil
 }
 
+// User cache & push notifications management. These are calls received by the Master from Proxy.
+// The Proxy expects no payload to be returned by the master.
+
+// UserCacheUpdate endpoint receives updates to user's cached values as well as sends push notifications.
+func (c *Cluster) UserCacheUpdate(msg *UserCacheReq, rejected *bool) error {
+	log.Printf("cluster: node '%s' received user cache update from node '%s'", c.thisNodeName, msg.Node)
+	usersRequestFromCluster(msg)
+	return nil
+}
+
+// Sends user cache update to user's Master node where the cache actually resides.
+// The request is extected to contain users who reside at remote nodes only.
+func (c *Cluster) routeUserReq(req *UserCacheReq) error {
+	// Index requests by cluster node.
+	reqByNode := make(map[string]*UserCacheReq)
+
+	if req.PushRcpt != nil {
+		// Request to send push notifications. Create separate packets for each affected cluster node.
+		for uid, recepient := range req.PushRcpt.To {
+			n := c.nodeForTopic(uid.UserId())
+			if n == nil {
+				return errors.New("attempt to update user at a non-existent node (1)")
+			}
+			r := reqByNode[n.name]
+			if r == nil {
+				r = &UserCacheReq{
+					PushRcpt: &push.Receipt{
+						Payload: req.PushRcpt.Payload,
+						To:      make(map[types.Uid]push.Recipient)},
+					Node: c.thisNodeName}
+			}
+			r.PushRcpt.To[uid] = recepient
+			reqByNode[n.name] = r
+		}
+	} else if len(req.UserIdList) > 0 {
+		// Request to add/remove user from cache.
+		for _, uid := range req.UserIdList {
+			n := c.nodeForTopic(uid.UserId())
+			if n == nil {
+				return errors.New("attempt to update user at a non-existent node (2)")
+			}
+			r := reqByNode[n.name]
+			if r == nil {
+				r = &UserCacheReq{Node: c.thisNodeName, Inc: req.Inc}
+			}
+			r.UserIdList = append(r.UserIdList, uid)
+			reqByNode[n.name] = r
+		}
+	}
+
+	if len(reqByNode) > 0 {
+		for nodeName, r := range reqByNode {
+			n := globals.cluster.nodes[nodeName]
+			var rejected bool
+			err := n.call("Cluster.UserCacheUpdate", r, &rejected)
+			if rejected {
+				err = errors.New("cluster: master node out of sync")
+			}
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	// Update to cached values.
+	n := c.nodeForTopic(req.UserId.UserId())
+	if n == nil {
+		return errors.New("attempt to update user at a non-existent node (3)")
+	}
+	req.Node = c.thisNodeName
+	var rejected bool
+	err := n.call("Cluster.UserCacheUpdate", req, &rejected)
+	if rejected {
+		err = errors.New("cluster: master node out of sync")
+	}
+	return err
+}
+
 // Given topic name, find appropriate cluster node to route message to
 func (c *Cluster) nodeForTopic(topic string) *ClusterNode {
 	key := c.ring.Get(topic)
@@ -415,7 +495,7 @@ func (c *Cluster) isPartitioned() bool {
 	return (len(c.nodes)+1)/2 >= len(c.fo.activeNodes)
 }
 
-// Forward client message to the Master (cluster node which owns the topic)
+// Forward client request message to the Master (cluster node which owns the topic)
 func (c *Cluster) routeToTopic(msg *ClientComMessage, topic string, sess *Session) error {
 	// Find the cluster node which owns the topic, then forward to it.
 	n := c.nodeForTopic(topic)
@@ -455,7 +535,7 @@ func (c *Cluster) routeToTopic(msg *ClientComMessage, topic string, sess *Sessio
 
 }
 
-// Forward server message to the node that owns topic.
+// Forward server response message to the node that owns topic.
 func (c *Cluster) routeToTopicIntraCluster(topic string, msg *ServerComMessage) error {
 	n := c.nodeForTopic(topic)
 	if n == nil {

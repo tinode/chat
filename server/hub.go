@@ -103,9 +103,6 @@ type Hub struct {
 
 	// Request to shutdown, unbuffered
 	shutdown chan chan<- bool
-
-	// Flag for indicating that system shutdown is in progress
-	isShutdownInProgress bool
 }
 
 func (h *Hub) topicGet(name string) *Topic {
@@ -262,9 +259,6 @@ func (h *Hub) run() {
 			})
 
 		case hubdone := <-h.shutdown:
-			// mark immediately to prevent more topics being added to hub.topics
-			h.isShutdownInProgress = true
-
 			// start cleanup process
 			topicsdone := make(chan bool)
 			topicCount := 0

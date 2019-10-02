@@ -81,9 +81,9 @@ func (uid Uid) Compare(u2 Uid) int {
 }
 
 // MarshalBinary converts Uid to byte slice.
-func (uid *Uid) MarshalBinary() ([]byte, error) {
+func (uid Uid) MarshalBinary() ([]byte, error) {
 	dst := make([]byte, 8)
-	binary.LittleEndian.PutUint64(dst, uint64(*uid))
+	binary.LittleEndian.PutUint64(dst, uint64(uid))
 	return dst, nil
 }
 
