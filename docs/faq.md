@@ -1,15 +1,18 @@
 # Frequently Asked Questions
 
 ### Q: Where can I find server logs when running in Docker?<br/>
-**A**: The logs are written to container's stdout. To view the logs, run
+**A**: The log is in the container at `/var/log/tinode.log`. Attach to a running container with command
 ```
-docker logs name-of-the-running-container
+docker exec -it name-of-the-running-container /bin/bash
+```
+Then, for instance, see the log with `tail -50 /var/log/tinode.log`
+
+If the container has stopped already, you can copy the log out of the container (saving it to `./tinode.log`):
+```
+docker cp name-of-the-container:/var/log/tinode.log ./tinode.log
 ```
 
-Alternatively, you can access the log file on the host machine at
-```
-/var/lib/docker/containers/<container id>/<container id>-json.log
-```
+Alternatively, you can instruct the docker container to save the logs to a directory on the host by mapping a host directory to `/var/log/` in the container. Add `-v /where/to/save/logs:/var/log` to the `docker run` command.
 
 ### Q: How to setup FCM push notifications?<br/>
 **A**: If you running the server directly:
