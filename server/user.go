@@ -533,13 +533,14 @@ type UserCacheReq struct {
 	// Name of the node sending this request in case of cluster. Not set otherwise.
 	Node string
 
-	// UserId is set when a single user is updated.
+	// UserId is set when count of unread messages is updated for a single user.
 	UserId types.Uid
-	// UserIdList  is set when multiple users are updated.
+	// UserIdList  is set when subscription count is updated for users of a topic.
 	UserIdList []types.Uid
-	// Unread count
+	// Unread count (UserId is set)
 	Unread int
-	// Treat the count as an increment as opposite to the final value.
+	// In case of set UserId: treat Unread count as an increment as opposite to the final value.
+	// In case of set UserIdList: intement (Inc == true) or decrement subscription count by one.
 	Inc bool
 
 	// Optional push notification
