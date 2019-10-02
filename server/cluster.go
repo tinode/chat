@@ -397,7 +397,7 @@ func (c *Cluster) routeUserReq(req *UserCacheReq) error {
 	reqByNode := make(map[string]*UserCacheReq)
 
 	if req.PushRcpt != nil {
-		// Request to send push notifications. Cretae separate packets for each affected cluster node.
+		// Request to send push notifications. Create separate packets for each affected cluster node.
 		for uid, recepient := range req.PushRcpt.To {
 			n := c.nodeForTopic(uid.UserId())
 			if n == nil {

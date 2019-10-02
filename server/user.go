@@ -595,7 +595,7 @@ func usersPush(rcpt *push.Receipt) {
 	var local *UserCacheReq
 
 	// In case of a cluster pushes will be initiated at the nodes which own the users.
-	// Sort users into loacl and remote.
+	// Sort users into local and remote.
 	if globals.cluster != nil {
 		local = &UserCacheReq{PushRcpt: &push.Receipt{
 			Payload: rcpt.Payload,
