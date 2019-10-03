@@ -1,12 +1,12 @@
 <!-- TOC depthFrom:1 depthTo:6 withLinks:1 updateOnSave:1 orderedList:0 -->
 
 - [Server API](#server-api)
-	- [How it works?](#how-it-works)
-	- [General considerations](#general-considerations)
-	- [Connecting to the server](#connecting-to-the-server)
+	- [How it Works?](#how-it-works)
+	- [General Considerations](#general-considerations)
+	- [Connecting to the Server](#connecting-to-the-server)
 		- [gRPC](#grpc)
 		- [WebSocket](#websocket)
-		- [Long polling](#long-polling)
+		- [Long Polling](#long-polling)
 		- [Out of Band Large Files](#out-of-band-large-files)
 	- [Users](#users)
 		- [Authentication](#authentication)
@@ -15,15 +15,16 @@
 			- [Changing Authentication Parameters](#changing-authentication-parameters)
 			- [Resetting a Password, i.e. "Forgot Password"](#resetting-a-password-ie-forgot-password)
 		- [Credential Validation](#credential-validation)
-		- [Access control](#access-control)
+		- [Access Control](#access-control)
 	- [Topics](#topics)
-		- [`me` topic](#me-topic)
+		- [`me` Topic](#me-topic)
 		- [`fnd` and Tags: Finding Users and Topics](#fnd-and-tags-finding-users-and-topics)
-			- [Query language](#query-language)
-			- [Incremental updates to queries](#incremental-updates-to-queries)
-			- [Possible use cases](#possible-use-cases)
+			- [Query Language](#query-language)
+			- [Incremental Updates to Queries](#incremental-updates-to-queries)
+			- [Possible Use Cases](#possible-use-cases)
 		- [Peer to Peer Topics](#peer-to-peer-topics)
 		- [Group Topics](#group-topics)
+		- [`sys` Topic](#sys-topic)
 	- [Using Server-Issued Message IDs](#using-server-issued-message-ids)
 	- [User Agent and Presence Notifications](#user-agent-and-presence-notifications)
 	- [Push Notifications Support](#push-notifications-support)
@@ -36,7 +37,7 @@
 		- [Downloading](#downloading)
 	- [Push Notifications](#push-notifications)
 	- [Messages](#messages)
-		- [Client to server messages](#client-to-server-messages)
+		- [Client to Server Messages](#client-to-server-messages)
 			- [`{hi}`](#hi)
 			- [`{acc}`](#acc)
 			- [`{login}`](#login)
@@ -47,7 +48,7 @@
 			- [`{set}`](#set)
 			- [`{del}`](#del)
 			- [`{note}`](#note)
-		- [Server to client messages](#server-to-client-messages)
+		- [Server to Client Messages](#server-to-client-messages)
 			- [`{data}`](#data)
 			- [`{ctrl}`](#ctrl)
 			- [`{meta}`](#meta)
@@ -58,7 +59,7 @@
 
 # Server API
 
-## How it works?
+## How it Works?
 
 Tinode is an IM router and a store. Conceptually it loosely follows a publish-subscribe model.
 
@@ -86,7 +87,7 @@ Changes to topic metadata, such as changes in topic description, or when other u
 
 When user's `me` topic comes online (i.e. an authenticated session attaches to `me` topic), a `{pres}` packet is sent to `me` topics of all other users, who have peer to peer subscriptions with the first user.
 
-## General considerations
+## General Considerations
 
 Timestamps are always represented as [RFC 3339](http://tools.ietf.org/html/rfc3339)-formatted string with precision up to milliseconds and timezone always set to UTC, e.g. `"2015-10-06T18:07:29.841Z"`.
 
@@ -96,7 +97,7 @@ The `{data}` packets have server-issued sequential IDs: base-10 numbers starting
 
 In order to connect requests to responses, client may assign message IDs to all packets set to the server. These IDs are strings defined by the client. Client should make them unique at least per session. The client-assigned IDs are not interpreted by the server, they are returned to the client as is.
 
-## Connecting to the server
+## Connecting to the Server
 
 There are three ways to access the server over the network: websocket, long polling, and [gRPC](https://grpc.io/).
 
@@ -124,7 +125,7 @@ See definition of the gRPC API in the [proto file](../pbx/model.proto). gRPC API
 
 Messages are sent in text frames, one message per frame. Binary frames are reserved for future use. By default server allows connections with any value in the `Origin` header.
 
-### Long polling
+### Long Polling
 
 Long polling works over `HTTP POST` (preferred) or `GET`. In response to client's very first request server sends a `{ctrl}` message containing `sid` (session ID) in `params`. Long polling client must include `sid` in every subsequent request either in the URL or in the request body.
 
@@ -233,7 +234,7 @@ If certain credentials are required, then user must maintain them in validated s
 Credentials are initially assigned at registration time by sending an `{acc}` message, added using `{set topic="me"}`, deleted using `{del topic="me"}`, and queries by `{get topic="me"}` messages. Credentials are verified by the client by sending either a `{login}` or an `{acc}` message.
 
 
-### Access control
+### Access Control
 
 Access control manages user's access to topics through access control lists (ACLs) or bearer tokens (_bearer tokens are not implemented as of version 0.15_).
 
@@ -278,9 +279,9 @@ User-dependent topic properties:
 
 Topic usually have subscribers. One the the subscribers may be designated as topic owner (`O` access permission) with full access permissions. The list of subscribers can be queries with a `{get what="sub"}` message. The list of subscribers is returned in a `sub` section of a `{meta}` message.
 
-### `me` topic
+### `me` Topic
 
-Topic `me` is automatically created for every user at the account creation time. It serves as means for account updates, receiving presence notification from people and topics of interest, invites to join topics, requests to approve subscription for topics where this user is a manager (has `S` permission). Topic `me` has no owner. The topic cannot be deleted or unsubscribed from. One can leave the topic which will stop all relevant communication and indicate that the user is offline (although the user may still be logged in and may continue to use other topics).
+Topic `me` is automatically created for every user at the account creation time. It serves as means of managing account information, receiving presence notification from people and topics of interest. Topic `me` has no owner. The topic cannot be deleted or unsubscribed from. One can `leave` the topic which will stop all relevant communication and indicate that the user is offline (although the user may still be logged in and may continue to use other topics).
 
 Joining or leaving `me` generates a `{pres}` presence update sent to all users who have peer to peer topics with the given user and `P` permissions set.
 
@@ -318,7 +319,7 @@ Topic `fnd` is read-only. `{pub}` messages to `fnd` are rejected.
 
 [Plugins](../pbx) support `Find` service which can be used to replace default search with a custom one.
 
-#### Query language
+#### Query Language
 
 Tinode query language is used to define search queries for finding users and topics. The query is a string containing tags separated by spaces or commas. Tags are strings - individual query terms which are matched against user's or topic's tags. The tags can be written in an RTL language but the query as a whole is parsed left to right. Spaces are treated as the `AND` operator, commas (as well as commas preceded and/or followed by a space) as the `OR` operator. The order of operators is ignored: all `AND` tags are grouped together, all `OR` tags are grouped together. `OR` takes precedence over `AND`: if a tag is preceded of followed by a comma, it's an `OR` tag, otherwise an `AND`. For example, `a AND b OR c` is rewritten as `(b OR c) AND a`.
 
@@ -331,13 +332,13 @@ Tags containing spaces or commas must be enclosed in double quotes (`"`, `\u0022
 * `flowers travel, puppies`: find topics or users which contain `flowers` and either `travel` or `puppies`, i.e. `(travel OR puppies) AND flowers`.
 * `flowers, travel puppies, kittens`: find topics or users which contain either one of `flowers`, `travel`, `puppies`, or `kittens`, i.e. `flowers OR travel OR puppies OR kittens`. The space between `travel` and `puppies` is treated as `OR` due to `OR` taking precedence over `AND`.
 
-#### Incremental updates to queries
+#### Incremental Updates to Queries
 
 Queries, particularly `fnd.private` could be arbitrarily large, limited only by the message size and by the underlying database. Instead of rewriting the entire query to add or remove a tag, tag can be added or removed incrementally.
 
 The incremental update request is processed left to right. It may contain the same tag multiple times, i.e. `-tag+tag` is a valid request.
 
-#### Possible use cases
+#### Possible Use Cases
 * Restricting users to organisations.
   An immutable tag(s) may be assigned to the user which denotes the organisation the user belongs to. When the user searches for other users or topics, the search can be restricted to always contain the tag. This approach can be used to segment users into organisations with limited visibility into each other.
 
@@ -366,6 +367,9 @@ A group topic is created by sending a `{sub}` message with the topic field set t
 
 A user joining or leaving the topic generates a `{pres}` message to all other users who are currently in the joined state with the topic.
 
+### `sys` Topic
+
+The `sys` topic serves as an always available channel of communication with the system administrators. A normal non-root user cannot subscribe to `sys` but can publish to it without subscription. Existing clients use this channel to report abuse by sending a Drafty-formatted `{pub}` message with the report as JSON attachment. A root user can subscribe to `sys` topic. Once subscribed, the root user will receive messages sent to `sys` topic by other users.
 
 ## Using Server-Issued Message IDs
 
@@ -556,7 +560,7 @@ data needs to be cleared, use a string with a single Unicode DEL character "&#x2
 
 Any unrecognized fields are silently ignored by the server.
 
-### Client to server messages
+### Client to Server Messages
 
 #### `{hi}`
 
@@ -1010,7 +1014,7 @@ The `read` and `recv` notifications may optionally include `unread` value which 
 </p>
 
 
-### Server to client messages
+### Server to Client Messages
 
 Messages to a session generated in response to a specific request contain an `id` field equal to the id of the
 originating message. The `id` is not interpreted by the server.
