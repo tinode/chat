@@ -10,9 +10,9 @@ Run this service as
     --namespace=tinode --listen_at=:6222 --metrics_path=/metrics
 ```
 
-* `tinode_addr` is the address of the Tinode instance to scrape
-* `namespace` prefix to use for mentrics names. If you are monitoring multiple tinode instances you may want to use different namespaces.
-* `listen_at` hostname to use for serving the mertics
-* `metrics_path` path under which to expose metrics
+* `tinode_addr` is the address where the Tinode instance publishes `expvar` data to scrape.
+* `namespace` is a prefix to use for metrics names. If you are monitoring multiple tinode instances you may want to use different namespaces.
+* `listen_at` is the hostname to bind to for serving the metrics.
+* `metrics_path` path under which to expose the metrics.
 
 Once running, configure your Prometheus monitoring installation to collect data from this exporter.
