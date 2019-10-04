@@ -1,4 +1,4 @@
-# Prometheus expvar exporter
+# Prometheus `expvar` Exporter
 
 This is a [prometheus](https://prometheus.io/) [exporter](https://prometheus.io/docs/instrumenting/exporters/): a service which reads JSON monitoring data exposed by Tinode server using [expvar](https://golang.org/pkg/expvar/) and re-publishes it in [prometheus format](https://prometheus.io/docs/concepts/data_model/).
 
@@ -6,7 +6,8 @@ This is a [prometheus](https://prometheus.io/) [exporter](https://prometheus.io/
 
 Run this service as
 ```
-./prometheus --tinode_addr=http://localhost:6060/stats/expvar --namespace=tinode --listen_at=:6222 --metrics_path=/metrics
+./prometheus --tinode_addr=http://localhost:6060/stats/expvar \
+    --namespace=tinode --listen_at=:6222 --metrics_path=/metrics
 ```
 
 * `tinode_addr` is the address of the Tinode instance to scrape
