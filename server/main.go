@@ -283,7 +283,7 @@ func main() {
 		log.Printf("Profiling info saved to '%s.(cpu|mem)'", *pprofFile)
 	}
 
-	err := store.Open(workerId, string(config.Store))
+	err := store.Open(workerId, config.Store)
 	if err != nil {
 		log.Fatal("Failed to connect to DB: ", err)
 	}
