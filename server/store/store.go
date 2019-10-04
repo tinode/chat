@@ -29,10 +29,10 @@ type configType struct {
 	Adapters map[string]json.RawMessage `json:"adapters"`
 }
 
-func openAdapter(workerId int, jsonconf string) error {
+func openAdapter(workerId int, jsonconf json.RawMessage) error {
 	var config configType
-	if err := json.Unmarshal([]byte(jsonconf), &config); err != nil {
-		return errors.New("store: failed to parse config: " + err.Error() + "(" + jsonconf + ")")
+	if err := json.Unmarshal(jsonconf, &config); err != nil {
+		return errors.New("store: failed to parse config: " + err.Error() + "(" + string(jsonconf) + ")")
 	}
 
 	if adp == nil {
@@ -67,7 +67,7 @@ func openAdapter(workerId int, jsonconf string) error {
 // Open initializes the persistence system. Adapter holds a connection pool for a database instance.
 // 	 name - name of the adapter rquested in the config file
 //   jsonconf - configuration string
-func Open(workerId int, jsonconf string) error {
+func Open(workerId int, jsonconf json.RawMessage) error {
 	if err := openAdapter(workerId, jsonconf); err != nil {
 		return err
 	}
@@ -125,7 +125,7 @@ func GetDbVersion() int {
 // attempt to drop an existing database. If jsconf is nil it will assume that the adapter is
 // already open. If it's non-nil and the adapter is not open, it will use the config string
 // to open the adapter first.
-func InitDb(jsonconf string, reset bool) error {
+func InitDb(jsonconf json.RawMessage, reset bool) error {
 	if !IsOpen() {
 		if err := openAdapter(1, jsonconf); err != nil {
 			return err
@@ -137,7 +137,7 @@ func InitDb(jsonconf string, reset bool) error {
 // UpgradeDb performes an upgrade of the database to the current adapter version.
 // If jsconf is nil it will assume that the adapter is already open. If it's non-nil and the
 // adapter is not open, it will use the config string to open the adapter first.
-func UpgradeDb(jsonconf string) error {
+func UpgradeDb(jsonconf json.RawMessage) error {
 	if !IsOpen() {
 		if err := openAdapter(1, jsonconf); err != nil {
 			return err
