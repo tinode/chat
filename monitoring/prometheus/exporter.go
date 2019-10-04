@@ -79,7 +79,7 @@ func NewExporter(server, namespace string, timeout time.Duration) *Exporter {
 		),
 		malloced: prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "", "malloced_bytes"),
-			"Number of bytes of memory allocated.",
+			"Number of bytes of memory allocated and in use.",
 			nil,
 			nil,
 		),
@@ -129,7 +129,7 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 func (e *Exporter) parseStats(ch chan<- prometheus.Metric, stats map[string]interface{}) error {
 
 	err := firstError(
-		e.parseAndUpdate(ch, e.version, prometheus.GaugeValue, stats, "version"),
+		e.parseAndUpdate(ch, e.version, prometheus.GaugeValue, stats, "Version"),
 		e.parseAndUpdate(ch, e.uptime, prometheus.CounterValue, stats, "uptime"),
 		e.parseAndUpdate(ch, e.topicsLive, prometheus.GaugeValue, stats, "LiveTopics"),
 		e.parseAndUpdate(ch, e.topicsTotal, prometheus.CounterValue, stats, "TotalTopics"),
