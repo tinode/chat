@@ -543,7 +543,10 @@ func main() {
 	if evpath == "" {
 		evpath = config.ExpvarPath
 	}
+
 	statsInit(mux, evpath)
+	statsRegisterInt("Version")
+	statsSet("Version", parseVersion(currentVersion))
 
 	if err = listenAndServe(config.Listen, mux, tlsConfig, signalHandler()); err != nil {
 		log.Fatal(err)

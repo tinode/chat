@@ -1,3 +1,3 @@
-# Monitoring Support
+# Prometheus expvar exporter
 
-This directory contains code related to monitoring Tinode server. Only [Prometheus](https://promehteus.io/) is [suppoter](./prometheus/) at this time.
+This is a [prometheus](https://prometheus.io/) [exporter](https://prometheus.io/docs/instrumenting/exporters/): a service which reads JSON monitoring data exposed by Tinode server using [expvar](https://golang.org/pkg/expvar/) and re-publishes it in [prometheus format](https://prometheus.io/docs/concepts/data_model/).
