@@ -100,6 +100,8 @@ const (
 // For instance, to define the buildstamp as a timestamp of when the server was built add a
 // flag to compiler command line:
 // 		-ldflags "-X main.buildstamp=`date -u '+%Y%m%dT%H:%M:%SZ'`"
+// or to set it to git tag:
+// 		-ldflags "-X main.buildstamp=`git describe --tags`"
 var buildstamp = "undef"
 
 // CredValidator holds additional config params for a credential validator.
@@ -546,7 +548,7 @@ func main() {
 
 	statsInit(mux, evpath)
 	statsRegisterInt("Version")
-	statsSet("Version", parseVersion(currentVersion))
+	statsSet("Version", int64(parseVersion(currentVersion)))
 
 	if err = listenAndServe(config.Listen, mux, tlsConfig, signalHandler()); err != nil {
 		log.Fatal(err)
