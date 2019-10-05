@@ -18,7 +18,6 @@ type Exporter struct {
 	namespace string
 
 	up            *prometheus.Desc
-	uptime        *prometheus.Desc
 	version       *prometheus.Desc
 	topicsLive    *prometheus.Desc
 	topicsTotal   *prometheus.Desc
@@ -38,12 +37,6 @@ func NewExporter(server, namespace string, timeout time.Duration) *Exporter {
 		up: prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "", "up"),
 			"If tinode server is reachable.",
-			nil,
-			nil,
-		),
-		uptime: prometheus.NewDesc(
-			prometheus.BuildFQName(namespace, "", "uptime_seconds"),
-			"Number of seconds since the server started.",
 			nil,
 			nil,
 		),
@@ -90,7 +83,6 @@ func NewExporter(server, namespace string, timeout time.Duration) *Exporter {
 // implements prometheus.Collector.
 func (e *Exporter) Describe(ch chan<- *prometheus.Desc) {
 	ch <- e.up
-	ch <- e.uptime
 	ch <- e.version
 	ch <- e.topicsLive
 	ch <- e.topicsTotal
@@ -130,7 +122,6 @@ func (e *Exporter) parseStats(ch chan<- prometheus.Metric, stats map[string]inte
 
 	err := firstError(
 		e.parseAndUpdate(ch, e.version, prometheus.GaugeValue, stats, "Version"),
-		e.parseAndUpdate(ch, e.uptime, prometheus.CounterValue, stats, "uptime"),
 		e.parseAndUpdate(ch, e.topicsLive, prometheus.GaugeValue, stats, "LiveTopics"),
 		e.parseAndUpdate(ch, e.topicsTotal, prometheus.CounterValue, stats, "TotalTopics"),
 		e.parseAndUpdate(ch, e.sessionsLive, prometheus.GaugeValue, stats, "LiveSessions"),
