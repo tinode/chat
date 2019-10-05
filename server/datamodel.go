@@ -896,11 +896,10 @@ func ErrClusterUnreachable(id, topic string, ts time.Time) *ServerComMessage {
 }
 
 // ErrVersionNotSupported invalid (too low) protocol version (505).
-func ErrVersionNotSupported(id, topic string, ts time.Time) *ServerComMessage {
+func ErrVersionNotSupported(id, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
 		Code:      http.StatusHTTPVersionNotSupported, // 505
 		Text:      "version not supported",
-		Topic:     topic,
 		Timestamp: ts}}
 }

@@ -37,11 +37,12 @@ func main() {
 	registry.MustRegister(NewExporter(*tinodeAddr, *namespace, time.Duration(*timeout)*time.Second))
 	http.Handle(*metricsPath,
 		promhttp.InstrumentMetricHandler(
-			prometheus.DefaultRegisterer,
+			registry,
 			promhttp.HandlerFor(
 				registry,
 				promhttp.HandlerOpts{
 					ErrorLog: &promHTTPLogger{},
+					Timeout:  time.Duration(*timeout) * time.Second,
 				},
 			),
 		),
@@ -51,7 +52,7 @@ func main() {
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`<html><head><title>Tinode Exporter</title></head><body>
 <h1>Tinode Exporter</h1>
-<p><a href='` + *metricsPath + `'>Metrics</a></p>
+<p><a href="` + *metricsPath + `">Metrics</a></p>
 <h2>Build</h2>
 <pre>` + version.Info() + ` ` + version.BuildContext() + `</pre>
 </body></html>`))

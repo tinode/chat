@@ -504,7 +504,7 @@ func (s *Session) hello(msg *ClientComMessage) {
 		// Check version compatibility
 		if versionCompare(s.ver, minSupportedVersionValue) < 0 {
 			s.ver = 0
-			s.queueOut(ErrVersionNotSupported(msg.id, "", msg.timestamp))
+			s.queueOut(ErrVersionNotSupported(msg.id, msg.timestamp))
 			log.Println("s.hello:", "unsupported version", s.sid)
 			return
 		}
