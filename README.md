@@ -146,3 +146,4 @@ Words 'chat' and 'instant messaging' in Chinese, Russian, Persian and a few othe
 * Nhắn tin tức thời
 * Mensageiro instantâneo
 * Pesan instan
+* Mensajería instantánea

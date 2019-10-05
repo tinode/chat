@@ -154,6 +154,7 @@ func (n *ClusterNode) reconnect() {
 			n.connected = true
 			n.reconnecting = false
 			n.lock.Unlock()
+			statsInc("LiveClusterNodes", 1)
 			log.Printf("cluster: connection to '%s' established", n.name)
 			return
 		} else if count == 0 {
@@ -194,6 +195,7 @@ func (n *ClusterNode) call(proc string, msg, resp interface{}) error {
 		if n.connected {
 			n.endpoint.Close()
 			n.connected = false
+			statsInc("LiveClusterNodes", -1)
 			go n.reconnect()
 		}
 		n.lock.Unlock()
@@ -230,6 +232,7 @@ func (n *ClusterNode) callAsync(proc string, msg, resp interface{}, done chan *r
 			if n.connected {
 				n.endpoint.Close()
 				n.connected = false
+				statsInc("LiveClusterNodes", -1)
 				go n.reconnect()
 			}
 			n.lock.Unlock()
@@ -585,6 +588,16 @@ func clusterInit(configString json.RawMessage, self *string) int {
 		log.Fatal("Cluster already initialized.")
 	}
 
+	// Registering variables even if it's a standalone server. Otherwise monitoring software will
+	// complain about missing vars.
+
+	// 1 if this node is cluster leader, 0 otherwise
+	statsRegisterInt("ClusterLeader")
+	// Total number of nodes configured
+	statsRegisterInt("TotalClusterNodes")
+	// Number of nodes currently believed to be up.
+	statsRegisterInt("LiveClusterNodes")
+
 	// This is a standalone server, not initializing
 	if len(configString) == 0 {
 		log.Println("Running as a standalone server.")
@@ -641,6 +654,8 @@ func clusterInit(configString json.RawMessage, self *string) int {
 
 	sort.Strings(nodeNames)
 	workerId := sort.SearchStrings(nodeNames, thisName) + 1
+
+	statsSet("TotalClusterNodes", int64(len(globals.cluster.nodes)+1))
 
 	return workerId
 }

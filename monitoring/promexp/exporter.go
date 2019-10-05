@@ -17,13 +17,16 @@ type Exporter struct {
 	timeout   time.Duration
 	namespace string
 
-	up            *prometheus.Desc
-	version       *prometheus.Desc
-	topicsLive    *prometheus.Desc
-	topicsTotal   *prometheus.Desc
-	sessionsLive  *prometheus.Desc
-	sessionsTotal *prometheus.Desc
-	malloced      *prometheus.Desc
+	up               *prometheus.Desc
+	version          *prometheus.Desc
+	topicsLive       *prometheus.Desc
+	topicsTotal      *prometheus.Desc
+	sessionsLive     *prometheus.Desc
+	sessionsTotal    *prometheus.Desc
+	clusterLeader    *prometheus.Desc
+	clusterSize      *prometheus.Desc
+	clusterNodesLive *prometheus.Desc
+	malloced         *prometheus.Desc
 }
 
 var errKeyNotFound = errors.New("key not found")
@@ -36,13 +39,13 @@ func NewExporter(server, namespace string, timeout time.Duration) *Exporter {
 		namespace: namespace,
 		up: prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "", "up"),
-			"If tinode server is reachable.",
+			"If tinode instance is reachable.",
 			nil,
 			nil,
 		),
 		version: prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "", "version"),
-			"The version of this tinode server.",
+			"The version of this tinode instance.",
 			[]string{"version"},
 			nil,
 		),
@@ -54,7 +57,7 @@ func NewExporter(server, namespace string, timeout time.Duration) *Exporter {
 		),
 		topicsTotal: prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "", "topics_total"),
-			"Total number of topics used during server lifetime.",
+			"Total number of topics used during instance lifetime.",
 			nil,
 			nil,
 		),
@@ -66,7 +69,25 @@ func NewExporter(server, namespace string, timeout time.Duration) *Exporter {
 		),
 		sessionsTotal: prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "", "sessions_total"),
-			"Total number of sessions since server start.",
+			"Total number of sessions since instance start.",
+			nil,
+			nil,
+		),
+		clusterLeader: prometheus.NewDesc(
+			prometheus.BuildFQName(namespace, "", "cluster_leader"),
+			"If this cluster node is the cluster leader.",
+			nil,
+			nil,
+		),
+		clusterSize: prometheus.NewDesc(
+			prometheus.BuildFQName(namespace, "", "cluster_size"),
+			"Configured number of cluster nodes.",
+			nil,
+			nil,
+		),
+		clusterNodesLive: prometheus.NewDesc(
+			prometheus.BuildFQName(namespace, "", "cluster_nodes_live"),
+			"Number of cluster nodes believed to be live by the current node.",
 			nil,
 			nil,
 		),
@@ -88,6 +109,9 @@ func (e *Exporter) Describe(ch chan<- *prometheus.Desc) {
 	ch <- e.topicsTotal
 	ch <- e.sessionsLive
 	ch <- e.sessionsTotal
+	ch <- e.clusterLeader
+	ch <- e.clusterSize
+	ch <- e.clusterNodesLive
 	ch <- e.malloced
 }
 
@@ -126,6 +150,9 @@ func (e *Exporter) parseStats(ch chan<- prometheus.Metric, stats map[string]inte
 		e.parseAndUpdate(ch, e.topicsTotal, prometheus.CounterValue, stats, "TotalTopics"),
 		e.parseAndUpdate(ch, e.sessionsLive, prometheus.GaugeValue, stats, "LiveSessions"),
 		e.parseAndUpdate(ch, e.sessionsTotal, prometheus.CounterValue, stats, "TotalSessions"),
+		e.parseAndUpdate(ch, e.clusterLeader, prometheus.GaugeValue, stats, "ClusterLeader")
+		e.parseAndUpdate(ch, e.clusterSize, prometheus.GaugeValue, stats, "TotalClusterNodes")
+		e.parseAndUpdate(ch, e.clusterNodesLive, prometheus.GaugeValue, stats, "LiveClusterNodes")
 		e.parseAndUpdate(ch, e.malloced, prometheus.GaugeValue, stats, "memstats.Alloc"),
 	)
 

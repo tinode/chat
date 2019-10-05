@@ -261,6 +261,17 @@ func main() {
 		config.Listen = *listenOn
 	}
 
+	// Set up HTTP server. Must use non-default mux because of expvar.
+	mux := http.NewServeMux()
+
+	evpath := *expvarPath
+	if evpath == "" {
+		evpath = config.ExpvarPath
+	}
+	statsInit(mux, evpath)
+	statsRegisterInt("Version")
+	statsSet("Version", int64(parseVersion(currentVersion)))
+
 	// Initialize cluster and receive calculated workerId.
 	// Cluster won't be started here yet.
 	workerId := clusterInit(config.Cluster, clusterSelf)
@@ -481,9 +492,6 @@ func main() {
 		log.Fatal(err)
 	}
 
-	// Set up HTTP server. Must use non-default mux because of expvar.
-	mux := http.NewServeMux()
-
 	// Serve static content from the directory in -static_data flag if that's
 	// available, otherwise assume '<path-to-executable>/static'. The content is served at
 	// the path pointed by 'static_mount' in the config. If that is missing then it's
@@ -540,15 +548,6 @@ func main() {
 		// Serve json-formatted 404 for all other URLs
 		mux.HandleFunc("/", serve404)
 	}
-
-	evpath := *expvarPath
-	if evpath == "" {
-		evpath = config.ExpvarPath
-	}
-
-	statsInit(mux, evpath)
-	statsRegisterInt("Version")
-	statsSet("Version", int64(parseVersion(currentVersion)))
 
 	if err = listenAndServe(config.Listen, mux, tlsConfig, signalHandler()); err != nil {
 		log.Fatal(err)
