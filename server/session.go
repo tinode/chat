@@ -493,6 +493,7 @@ func (s *Session) publish(msg *ClientComMessage) {
 // Client metadata
 func (s *Session) hello(msg *ClientComMessage) {
 	var params map[string]interface{}
+	var deviceIDUpdate bool
 
 	if s.ver == 0 {
 		s.ver = parseVersion(msg.Hi.Version)
@@ -526,6 +527,8 @@ func (s *Session) hello(msg *ClientComMessage) {
 			s.platf = platformFromUA(msg.Hi.UserAgent)
 		}
 	} else if msg.Hi.Version == "" || parseVersion(msg.Hi.Version) == s.ver {
+		deviceIDUpdate = true
+
 		// Save changed device ID or Lang. Platform cannot be changed.
 		if !s.uid.IsZero() {
 			if err := store.Devices.Update(s.uid, s.deviceID, &types.DeviceDef{
@@ -551,8 +554,9 @@ func (s *Session) hello(msg *ClientComMessage) {
 
 	var httpStatus int
 	var httpStatusText string
-	if s.proto == LPOLL {
+	if s.proto == LPOLL || deviceIDUpdate {
 		// In case of long polling StatusCreated was reported earlier.
+		// In case of deviceID update just report success.
 		httpStatus = http.StatusOK
 		httpStatusText = "ok"
 
