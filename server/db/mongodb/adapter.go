@@ -3,11 +3,16 @@
 package mongodb
 
 import (
+	"context"
+	"encoding/json"
+	"errors"
 	"time"
 
 	"github.com/tinode/chat/server/auth"
+	"github.com/tinode/chat/server/store"
 	t "github.com/tinode/chat/server/store/types"
 	mdb "go.mongodb.org/mongo-driver/mongo"
+	mdbopts "go.mongodb.org/mongo-driver/mongo/options"
 )
 
 // adapter holds MongoDB connection data.
@@ -30,7 +35,7 @@ const (
 
 // See https://godoc.org/go.mongodb.org/mongo-driver/mongo/options#ClientOptions for explanations.
 type configType struct {
-	Hosts          interface{} `json:"addresses,omitempty"`
+	Addresses      interface{} `json:"addresses,omitempty"`
 	ConnectTimeout int         `json:"timeout,omitempty"`
 
 	// Separately from ClientOptions (additional options):
@@ -38,18 +43,63 @@ type configType struct {
 }
 
 // Open initializes mongodb session
-func (a *adapter) Open(jsonconfig string) error {
+func (a *adapter) Open(jsonconfig json.RawMessage) error {
+	if a.conn != nil {
+		return errors.New("adapter mongodb is already connected")
+	}
+
+	var err error
+	var config configType
+	if err = json.Unmarshal(jsonconfig, &config); err != nil {
+		return errors.New("adapter mongodb failed to parse config: " + err.Error())
+	}
+
+	var opts mdbopts.ClientOptions
+
+	if config.Addresses == nil {
+		opts.SetHosts([]string{defaultHost})
+	} else if host, ok := config.Addresses.(string); ok {
+		opts.SetHosts([]string{host})
+	} else if hosts, ok := config.Addresses.([]string); ok {
+		opts.SetHosts(hosts)
+	} else {
+		return errors.New("adapter mongodb failed to parse config.Addresses")
+	}
+
+	if config.Collection == "" {
+		a.dbName = defaultCollection
+	} else {
+		a.dbName = config.Collection
+	}
+
+	if a.maxResults <= 0 {
+		a.maxResults = defaultMaxResults
+	}
+
+	a.conn, err = mdb.Connect(context.TODO(), &opts)
+	if err != nil {
+		return err
+	}
+
+	a.version = -1
+
 	return nil
 }
 
 // Close the adapter
 func (a *adapter) Close() error {
-	return nil
+	var err error
+	if a.conn != nil {
+		err = a.conn.Disconnect(context.TODO())
+		a.conn = nil
+		a.version = -1
+	}
+	return err
 }
 
 // IsOpen checks if the adapter is ready for use
 func (a *adapter) IsOpen() bool {
-	return false
+	return a.conn != nil
 }
 
 // GetDbVersion returns current database version.
@@ -64,11 +114,17 @@ func (a *adapter) CheckDbVersion() error {
 
 // GetName returns the name of the adapter
 func (a *adapter) GetName() string {
-	return ""
+	return adapterName
 }
 
 // SetMaxResults configures how many results can be returned in a single DB call.
 func (a *adapter) SetMaxResults(val int) error {
+	if val <= 0 {
+		a.maxResults = defaultMaxResults
+	} else {
+		a.maxResults = val
+	}
+
 	return nil
 }
 
@@ -91,7 +147,7 @@ func (a *adapter) Version() int {
 
 // UserCreate creates user record
 func (a *adapter) UserCreate(usr *t.User) error {
-	return  nil
+	return nil
 }
 
 // UserGet returns record for a given user ID
@@ -378,4 +434,8 @@ func (a *adapter) FileGet(fid string) (*t.FileDef, error) {
 // Returns array of FileDef.Location of deleted filerecords so actual files can be deleted too.
 func (a *adapter) FileDeleteUnused(olderThan time.Time, limit int) ([]string, error) {
 	return nil, nil
+}
+
+func init() {
+	store.RegisterAdapter(adapterName, &adapter{})
 }
