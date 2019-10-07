@@ -4,7 +4,9 @@
 
 Tinode is *not* XMPP/Jabber. It is *not* compatible with XMPP. It's meant as a replacement for XMPP. On the surface it's a lot like open source WhatsApp or Telegram.
 
-Version 0.16. This is beta-quality software: feature-complete but probably with a few bugs. Follow [instructions](INSTALL.md) to install and run. Read [API documentation](docs/API.md).
+Version 0.16. This is beta-quality software: feature-complete but probably with a few bugs. Follow [instructions](INSTALL.md) to install and run or use one of the cloud services below. Read [API documentation](docs/API.md).
+
+<img src="docs/app-store.svg" style="opacity:0.35;height:36px"> <img src="docs/play-store.svg" style="opacity:0.35;height:36px"> <a href="https://web.tinode.co/"><img src="docs/web-app.svg;height:36px"></a>
 
 ## Why?
 
