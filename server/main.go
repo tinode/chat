@@ -35,6 +35,7 @@ import (
 	_ "github.com/tinode/chat/server/auth/token"
 
 	// Database backends
+	_ "github.com/tinode/chat/server/db/mongodb"
 	_ "github.com/tinode/chat/server/db/mysql"
 	_ "github.com/tinode/chat/server/db/rethinkdb"
 
