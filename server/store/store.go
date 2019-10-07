@@ -56,9 +56,9 @@ func openAdapter(workerId int, jsonconf json.RawMessage) error {
 		return err
 	}
 
-	var adapterConfig string
+	var adapterConfig json.RawMessage
 	if config.Adapters != nil {
-		adapterConfig = string(config.Adapters[adp.GetName()])
+		adapterConfig = config.Adapters[adp.GetName()]
 	}
 
 	return adp.Open(adapterConfig)
