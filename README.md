@@ -39,7 +39,7 @@ TinodeWeb, a single page web app, is available at https://web.tinode.co/ ([sourc
 [Tinode for Android](https://play.google.com/store/apps/details?id=co.tinode.tindroid) a.k.a. Tindroid is stable and functional ([source](https://github.com/tinode/tindroid)). See screenshots below.
 
 
-### Demo/Sandbox
+## Demo/Sandbox
 
 A sandboxed demo service is available at https://sandbox.tinode.co/.
 
@@ -47,7 +47,7 @@ Login as one of `alice`, `bob`, `carol`, `dave`, `frank`. Password is `<login>12
 
 If you register a new account you are asked for an email address to send validation code to. For demo purposes you may use `123456` as a universal validation code. The code you get in the email is also valid.
 
-#### Sandbox Notes
+### Sandbox Notes
 
 * The sandbox server is reset (all data wiped) every night at 3:15am Pacific time. An error message `User not found or offline` means the server was reset while you were connected. If you see it on the web, reload and relogin. On Android log out and re-login. If the database was changed, delete the app then reinstall.
 * Sandbox user `Tino` is a [basic chatbot](./chatbot) which responds with a [random quote](http://fortunes.cat-v.org/) to any message.
