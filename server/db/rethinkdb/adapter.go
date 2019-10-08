@@ -2169,5 +2169,5 @@ func isMissingDb(err error) bool {
 }
 
 func init() {
-	store.RegisterAdapter(adapterName, &adapter{})
+	store.RegisterAdapter(&adapter{})
 }

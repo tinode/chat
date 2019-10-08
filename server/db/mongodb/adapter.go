@@ -437,5 +437,5 @@ func (a *adapter) FileDeleteUnused(olderThan time.Time, limit int) ([]string, er
 }
 
 func init() {
-	store.RegisterAdapter(adapterName, &adapter{})
+	store.RegisterAdapter(&adapter{})
 }

@@ -148,7 +148,7 @@ func UpgradeDb(jsonconf json.RawMessage) error {
 
 // RegisterAdapter makes a persistence adapter available.
 // If Register is called twice or if the adapter is nil, it panics.
-func RegisterAdapter(name string, a adapter.Adapter) {
+func RegisterAdapter(a adapter.Adapter) {
 	if a == nil {
 		panic("store: Register adapter is nil")
 	}

@@ -2652,5 +2652,5 @@ func extractTags(update map[string]interface{}) []string {
 }
 
 func init() {
-	store.RegisterAdapter(adapterName, &adapter{})
+	store.RegisterAdapter(&adapter{})
 }
