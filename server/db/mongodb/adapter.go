@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log"
+	"strconv"
 	"time"
 
 	"github.com/tinode/chat/server/auth"
@@ -108,12 +109,40 @@ func (a *adapter) IsOpen() bool {
 
 // GetDbVersion returns current database version.
 func (a *adapter) GetDbVersion() (int, error) {
-	return 0, nil
+	if a.version > 0 {
+		return a.version, nil
+	}
+
+	var result struct {
+		Key   string
+		Value int
+	}
+	if err := a.db.Collection("kvmeta").FindOne(c.TODO(), bson.D{{"key", "version"}}).Decode(&result); err != nil {
+		return -1, err
+	}
+
+	a.version = result.Value
+	return result.Value, nil
 }
 
 // CheckDbVersion checks if the actual database version matches adapter version.
 func (a *adapter) CheckDbVersion() error {
+	version, err := a.GetDbVersion()
+	if err != nil {
+		return err
+	}
+
+	if version != adpVersion {
+		return errors.New("Invalid database version " + strconv.Itoa(version) +
+			". Expected " + strconv.Itoa(adpVersion))
+	}
+
 	return nil
+}
+
+// Version returns adapter version
+func (a *adapter) Version() int {
+	return adpVersion
 }
 
 // GetName returns the name of the adapter
@@ -241,13 +270,7 @@ func createSystemTopic(a *adapter) error {
 	return err
 }
 
-// Version returns adapter version
-func (a *adapter) Version() int {
-	return 0
-}
-
 // User management
-
 // UserCreate creates user record
 func (a *adapter) UserCreate(usr *t.User) error {
 	return nil
