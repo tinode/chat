@@ -3,14 +3,16 @@
 package mongodb
 
 import (
-	"context"
+	c "context"
 	"encoding/json"
 	"errors"
+	"log"
 	"time"
 
 	"github.com/tinode/chat/server/auth"
 	"github.com/tinode/chat/server/store"
 	t "github.com/tinode/chat/server/store/types"
+	"go.mongodb.org/mongo-driver/bson"
 	mdb "go.mongodb.org/mongo-driver/mongo"
 	mdbopts "go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -18,14 +20,15 @@ import (
 // adapter holds MongoDB connection data.
 type adapter struct {
 	conn       *mdb.Client
+	db         *mdb.Database
 	dbName     string
 	maxResults int
 	version    int
 }
 
 const (
-	defaultHost       = "localhost:27017"
-	defaultCollection = "tinode"
+	defaultHost     = "localhost:27017"
+	defaultDatabase = "tinode"
 
 	adpVersion  = 108
 	adapterName = "mongodb"
@@ -39,7 +42,7 @@ type configType struct {
 	ConnectTimeout int         `json:"timeout,omitempty"`
 
 	// Separately from ClientOptions (additional options):
-	Collection string `json:"database,omitempty"`
+	Database string `json:"database,omitempty"`
 }
 
 // Open initializes mongodb session
@@ -66,17 +69,18 @@ func (a *adapter) Open(jsonconfig json.RawMessage) error {
 		return errors.New("adapter mongodb failed to parse config.Addresses")
 	}
 
-	if config.Collection == "" {
-		a.dbName = defaultCollection
+	if config.Database == "" {
+		a.dbName = defaultDatabase
 	} else {
-		a.dbName = config.Collection
+		a.dbName = config.Database
 	}
 
 	if a.maxResults <= 0 {
 		a.maxResults = defaultMaxResults
 	}
 
-	a.conn, err = mdb.Connect(context.TODO(), &opts)
+	a.conn, err = mdb.Connect(c.TODO(), &opts)
+	a.db = a.conn.Database(a.dbName)
 	if err != nil {
 		return err
 	}
@@ -90,7 +94,7 @@ func (a *adapter) Open(jsonconfig json.RawMessage) error {
 func (a *adapter) Close() error {
 	var err error
 	if a.conn != nil {
-		err = a.conn.Disconnect(context.TODO())
+		err = a.conn.Disconnect(c.TODO())
 		a.conn = nil
 		a.version = -1
 	}
@@ -130,12 +134,111 @@ func (a *adapter) SetMaxResults(val int) error {
 
 // CreateDb creates the database optionally dropping an existing database first.
 func (a *adapter) CreateDb(reset bool) error {
+	if reset {
+		log.Print("Dropping database...")
+		if err := a.db.Drop(c.TODO()); err != nil {
+			return nil
+		}
+	}
+
+	// Collections (tables) do not need to be explicitly created since MongoDB creates them with first write operation
+
+	// Collection with metadata key-value pairs.
+	var idxOpts mdbopts.IndexOptions
+	idxOpts.SetUnique(true)
+	if _, err := a.db.Collection("kvmeta").Indexes().CreateOne(c.TODO(), mdb.IndexModel{Keys: bson.M{"key": 1}, Options: &idxOpts}); err != nil {
+		return err
+	}
+
+	// Users
+	// Create secondary index on User.DeletedAt for finding soft-deleted users
+	if _, err := a.db.Collection("users").Indexes().CreateOne(c.TODO(), mdb.IndexModel{Keys: bson.M{"DeletedAt": 1}}); err != nil {
+		return err
+	}
+	// Create secondary index on User.Tags array so user can be found by tags
+	if _, err := a.db.Collection("users").Indexes().CreateOne(c.TODO(), mdb.IndexModel{Keys: bson.M{"Tags": 1}}); err != nil {
+		return err
+	}
+	// TODO: Create secondary index for User.Devices.<hash>.DeviceId to ensure ID uniqueness across users
+
+	// User authentication records {unique, userid, secret}
+	// Should be able to access user's auth records by user id
+	if _, err := a.db.Collection("auth").Indexes().CreateOne(c.TODO(), mdb.IndexModel{Keys: bson.M{"userid": 1}}); err != nil {
+		return err
+	}
+
+	// Should be able to access user's auth records by user id
+	if _, err := a.db.Collection("subscriptions").Indexes().CreateOne(c.TODO(), mdb.IndexModel{Keys: bson.M{"User": 1}}); err != nil {
+		return err
+	}
+	if _, err := a.db.Collection("subscriptions").Indexes().CreateOne(c.TODO(), mdb.IndexModel{Keys: bson.M{"Topic": 1}}); err != nil {
+		return err
+	}
+
+	// Topics stored in database
+	// Secondary index on Owner field for deleting users.
+	if _, err := a.db.Collection("topics").Indexes().CreateOne(c.TODO(), mdb.IndexModel{Keys: bson.M{"Owner": 1}}); err != nil {
+		return err
+	}
+	// Secondary index on Topic.Tags array so topics can be found by tags.
+	// These tags are not unique as opposite to User.Tags.
+	if _, err := a.db.Collection("topics").Indexes().CreateOne(c.TODO(), mdb.IndexModel{Keys: bson.M{"Tags": 1}}); err != nil {
+		return err
+	}
+	// Create system topic 'sys'.
+	if err := createSystemTopic(a); err != nil {
+		return err
+	}
+
+	// Stored message
+	// TODO: Compound index of topic - seqID for selecting messages in a topic.
+	// TODO: Compound index of hard-deleted messages
+	// TODO: Compound multi-index of soft-deleted messages: each message gets multiple compound index entries like
+	// 		 [Topic, User1, DelId1], [Topic, User2, DelId2],...
+
+	// Log of deleted messages
+	// TODO: Compound index of topic - delId
+
+	// User credentials - contact information such as "email:jdoe@example.com" or "tel:+18003287448":
+	// Id: "method:credential" like "email:jdoe@example.com". See types.Credential.
+	// Create secondary index on credentials.User to be able to query credentials by user id.
+	if _, err := a.db.Collection("credentials").Indexes().CreateOne(c.TODO(), mdb.IndexModel{Keys: bson.M{"User": 1}}); err != nil {
+		return err
+	}
+
+	// Records of file uploads. See types.FileDef.
+	// A secondary index on fileuploads.User to be able to get records by user id.
+	if _, err := a.db.Collection("fileuploads").Indexes().CreateOne(c.TODO(), mdb.IndexModel{Keys: bson.M{"User": 1}}); err != nil {
+		return err
+	}
+	// A secondary index on fileuploads.UseCount to be able to delete unused records at once.
+	if _, err := a.db.Collection("fileuploads").Indexes().CreateOne(c.TODO(), mdb.IndexModel{Keys: bson.M{"UseCount": 1}}); err != nil {
+		return err
+	}
+
+	// Record current DB version.
+	if _, err := a.db.Collection("kvmeta").InsertOne(c.TODO(), map[string]interface{}{"key": "version", "value": adpVersion}); err != nil {
+		return err
+	}
+
 	return nil
 }
 
+// TODO:
 // UpgradeDb upgrades database to the current adapter version.
 func (a *adapter) UpgradeDb() error {
 	return nil
+}
+
+// Create system topic 'sys'.
+func createSystemTopic(a *adapter) error {
+	now := t.TimeNow()
+	_, err := a.db.Collection("topics").InsertOne(c.TODO(), &t.Topic{
+		ObjHeader: t.ObjHeader{Id: "sys", CreatedAt: now, UpdatedAt: now},
+		Access:    t.DefaultAccess{Auth: t.ModeNone, Anon: t.ModeNone},
+		Public:    map[string]interface{}{"fn": "System"},
+	})
+	return err
 }
 
 // Version returns adapter version
