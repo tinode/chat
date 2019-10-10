@@ -139,6 +139,7 @@ Words 'chat' and 'instant messaging' in Chinese, Russian, Persian and a few othe
 * پیام‌رسانی فوری گپ
 * تراسل فوري
 * Nhắn tin tức thời
-* Mensageiro instantâneo
-* Pesan instan
-* Mensajería instantánea
+* anlık mesajlaşma sohbet
+* mensageiro instantâneo
+* pesan instan
+* mensajería instantánea
