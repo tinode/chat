@@ -8,6 +8,7 @@ import (
 	"errors"
 	"log"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/tinode/chat/server/auth"
@@ -280,9 +281,22 @@ func (a *adapter) UserCreate(usr *t.User) error {
 	return nil
 }
 
-// UserGet returns record for a given user ID
+// UserGet fetches a single user by user id. If user is not found it returns (nil, nil)
 func (a *adapter) UserGet(id t.Uid) (*t.User, error) {
-	return &t.User{}, nil
+	var user t.User
+
+	filter := bson.M{"$and": bson.A{
+		bson.D{{"id", id.String()}},
+		bson.D{{"deletedat", bson.D{{"$exists", false}}}}}}
+	if err := a.db.Collection("users").FindOne(c.TODO(), filter).Decode(&user); err != nil {
+		if strings.Contains(err.Error(), "no documents in user") {  // User not found
+			return nil, nil
+		} else {
+			return nil, err
+		}
+	}
+
+	return &user, nil
 }
 
 // UserGetAll returns user records for a given list of user IDs
