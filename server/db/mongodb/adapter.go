@@ -273,6 +273,10 @@ func createSystemTopic(a *adapter) error {
 // User management
 // UserCreate creates user record
 func (a *adapter) UserCreate(usr *t.User) error {
+	if _, err := a.db.Collection("users").InsertOne(c.TODO(), &usr); err != nil {
+		return err
+	}
+
 	return nil
 }
 

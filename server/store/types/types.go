@@ -301,7 +301,7 @@ type ObjHeader struct {
 	id        Uid
 	CreatedAt time.Time
 	UpdatedAt time.Time
-	DeletedAt *time.Time `json:"DeletedAt,omitempty"`
+	DeletedAt *time.Time `json:"DeletedAt,omitempty" bson:",omitempty"`
 }
 
 // Uid assigns Uid header field.
@@ -371,7 +371,7 @@ func (ss StringSlice) Value() (driver.Value, error) {
 
 // User is a representation of a DB-stored user record.
 type User struct {
-	ObjHeader
+	ObjHeader `bson:",inline"`
 
 	State int
 
