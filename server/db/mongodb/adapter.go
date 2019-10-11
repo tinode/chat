@@ -354,7 +354,8 @@ func (a *adapter) UserGetDisabled(since time.Time) ([]t.Uid, error) {
 
 // UserUpdate updates user record
 func (a *adapter) UserUpdate(uid t.Uid, update map[string]interface{}) error {
-	return nil
+	_, err := a.db.Collection("users").UpdateOne(c.TODO(), bson.M{"id": uid.String()}, update)
+	return err
 }
 
 // UserUpdateTags adds, removes, or resets user's tags
