@@ -320,21 +320,36 @@ func (a *adapter) UserGetAll(ids ...t.Uid) ([]t.User, error) {
 			}
 			users = append(users, user)
 		}
+		return users, nil
 	} else {
 		return nil, err
 	}
-
-	return users, nil
 }
 
-// UserDelete deletes user record
+// TODO: UserDelete deletes user record
 func (a *adapter) UserDelete(id t.Uid, hard bool) error {
 	return nil
 }
 
 // UserGetDisabled returns IDs of users which were soft-deleted since given time.
-func (a *adapter) UserGetDisabled(time.Time) ([]t.Uid, error) {
-	return []t.Uid{}, nil
+func (a *adapter) UserGetDisabled(since time.Time) ([]t.Uid, error) {
+	filter := bson.M{"deletedat": bson.M{"$gte": since}}
+	findOpts := &mdbopts.FindOptions{Projection: bson.D{{"id", 1}, {"_id", 0}}}
+	if cur, err := a.db.Collection("users").Find(c.TODO(), filter, findOpts); err == nil {
+		defer cur.Close(c.TODO())
+
+		var uids []t.Uid
+		var userId map[string]string
+		for cur.Next(c.TODO()) {
+			if err := cur.Decode(&userId); err != nil {
+				return nil, err
+			}
+			uids = append(uids, t.ParseUid(userId["id"]))
+		}
+		return uids, nil
+	} else {
+		return nil, err
+	}
 }
 
 // UserUpdate updates user record
