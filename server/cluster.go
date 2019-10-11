@@ -564,8 +564,8 @@ func (c *Cluster) routeToTopicIntraCluster(topic string, msg *ServerComMessage) 
 
 	req := &ClusterReq{
 		Node:        c.thisNodeName,
-		Fingerprint: c.fingerprint,
 		Signature:   c.ring.Signature(),
+		Fingerprint: c.fingerprint,
 		RcptTo:      topic,
 		SrvMsg:      msg}
 	if msg.Pres != nil && msg.Pres.wantReply {
