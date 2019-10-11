@@ -289,7 +289,7 @@ func (a *adapter) UserGet(id t.Uid) (*t.User, error) {
 		bson.D{{"id", id.String()}},
 		bson.D{{"deletedat", bson.D{{"$exists", false}}}}}}
 	if err := a.db.Collection("users").FindOne(c.TODO(), filter).Decode(&user); err != nil {
-		if strings.Contains(err.Error(), "no documents in user") {  // User not found
+		if strings.Contains(err.Error(), "no documents in user") { // User not found
 			return nil, nil
 		} else {
 			return nil, err
@@ -301,7 +301,30 @@ func (a *adapter) UserGet(id t.Uid) (*t.User, error) {
 
 // UserGetAll returns user records for a given list of user IDs
 func (a *adapter) UserGetAll(ids ...t.Uid) ([]t.User, error) {
-	return []t.User{}, nil
+	uids := make([]interface{}, len(ids))
+	for i, id := range ids {
+		uids[i] = id.String()
+	}
+
+	var users []t.User
+	filter := bson.M{"$and": bson.A{
+		bson.M{"id": bson.M{"$in": uids}},
+		bson.M{"deletedat": bson.M{"$exists": false}}}}
+	if cur, err := a.db.Collection("users").Find(c.TODO(), filter); err == nil {
+		defer cur.Close(c.TODO())
+
+		var user t.User
+		for cur.Next(c.TODO()) {
+			if err := cur.Decode(&user); err != nil {
+				return nil, err
+			}
+			users = append(users, user)
+		}
+	} else {
+		return nil, err
+	}
+
+	return users, nil
 }
 
 // UserDelete deletes user record
