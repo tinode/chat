@@ -354,13 +354,46 @@ func (a *adapter) UserGetDisabled(since time.Time) ([]t.Uid, error) {
 
 // UserUpdate updates user record
 func (a *adapter) UserUpdate(uid t.Uid, update map[string]interface{}) error {
-	_, err := a.db.Collection("users").UpdateOne(c.TODO(), bson.M{"id": uid.String()}, update)
+	upd := bson.M{"$set": update}
+	_, err := a.db.Collection("users").UpdateOne(c.TODO(), bson.M{"id": uid.String()}, upd)
 	return err
 }
 
 // UserUpdateTags adds, removes, or resets user's tags
 func (a *adapter) UserUpdateTags(uid t.Uid, add, remove, reset []string) ([]string, error) {
-	return nil, nil
+	// Compare to nil vs checking for zero length: zero length reset is valid.
+	if reset != nil {
+		// Replace Tags with the new value
+		return reset, a.UserUpdate(uid, map[string]interface{}{"tags": reset})
+	}
+
+	var user t.User
+	if err := a.db.Collection("users").FindOne(c.TODO(), bson.M{"id": uid.String()}).Decode(&user); err != nil {
+		return nil, err
+	}
+
+	// Mutate the tag list.
+	newTags := user.Tags
+	if len(add) > 0 {
+		newTags = union(newTags, add)
+	}
+	if len(remove) > 0 {
+		newTags = diff(newTags, remove)
+	}
+
+	update := map[string]interface{}{"tags": newTags}
+	if err := a.UserUpdate(uid, update); err != nil {
+		return nil, err
+	}
+
+	// Get the new tags
+	var tags map[string][]string
+	findOpts := &mdbopts.FindOneOptions{Projection: bson.D{{"tags", 1}, {"_id", 0}}}
+	if err := a.db.Collection("users").FindOne(c.TODO(), bson.M{"id": uid.String()}, findOpts).Decode(&tags); err == nil {
+		return tags["tags"], nil
+	} else {
+		return nil, err
+	}
 }
 
 // UserGetByCred returns user ID for the given validated credential.
@@ -621,4 +654,32 @@ func (a *adapter) FileDeleteUnused(olderThan time.Time, limit int) ([]string, er
 
 func init() {
 	store.RegisterAdapter(&adapter{})
+}
+
+func contains(s []string, e string) bool {
+	for _, a := range s {
+		if a == e {
+			return true
+		}
+	}
+	return false
+}
+
+func union(userTags []string, addTags []string) []string {
+	for _, tag := range addTags {
+		if !contains(userTags, tag) {
+			userTags = append(userTags, tag)
+		}
+	}
+	return userTags
+}
+
+func diff(userTags []string, removeTags []string) []string {
+	var result []string
+	for _, tag := range userTags {
+		if !contains(removeTags, tag) {
+			result = append(result, tag)
+		}
+	}
+	return result
 }
