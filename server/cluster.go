@@ -496,11 +496,20 @@ func (c *Cluster) nodeForTopic(topic string) *ClusterNode {
 
 // isRemoteTopic checks if the given topic is handled by this node or a remote node.
 func (c *Cluster) isRemoteTopic(topic string) bool {
+	return c.isRemoteTopicExpanded(topic, nil)
+}
+
+func (c *Cluster) isRemoteTopicExpanded(topic string, nodeName *string) bool {
 	if c == nil {
 		// Cluster not initialized, all topics are local
 		return false
 	}
-	return c.ring.Get(topic) != c.thisNodeName
+	var remoteNode string
+	remoteNode = c.ring.Get(topic)
+	if nodeName != nil {
+		*nodeName = remoteNode
+	}
+	return remoteNode != c.thisNodeName
 }
 
 // isPartitioned checks if the cluster is partitioned due to network or other failure and if the
@@ -795,4 +804,27 @@ func (c *Cluster) rehash(nodes []string) []string {
 	c.ring = ring
 
 	return ringKeys
+}
+
+// Iterates over sessions hosted on this node and for each session
+// sends "{pres term}" to all displayed topics.
+// Called immediately after Cluster.rehash().
+func (c *Cluster) invalidateRemoteSubs(ss *SessionStore) {
+	ss.lock.Lock()
+	defer ss.lock.Unlock()
+
+	for _, s := range ss.sessCache {
+		if s.proto == CLUSTER || len(s.remoteSubs) == 0 {
+			continue
+		}
+		s.subsLock.Lock()
+		var topicsToTerminate []string
+		for topic, remSub := range s.remoteSubs {
+			if remSub.node != c.ring.Get(topic) {
+				topicsToTerminate = append(topicsToTerminate, remSub.originalTopic)
+			}
+		}
+		s.presTermDirect(topicsToTerminate)
+		s.subsLock.Unlock()
+	}
 }
