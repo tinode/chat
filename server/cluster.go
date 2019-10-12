@@ -504,8 +504,7 @@ func (c *Cluster) isRemoteTopicExpanded(topic string, nodeName *string) bool {
 		// Cluster not initialized, all topics are local
 		return false
 	}
-	var remoteNode string
-	remoteNode = c.ring.Get(topic)
+	remoteNode := c.ring.Get(topic)
 	if nodeName != nil {
 		*nodeName = remoteNode
 	}
