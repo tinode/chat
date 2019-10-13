@@ -121,6 +121,7 @@ You can specify the following environment variables when issuing `docker run` co
 | `SAMPLE_DATA` | string |  _see comment_ | File with sample data to load. Default `data.json` when resetting or generating new DB, none when upgrading. Use `-` to disable |
 | `SMTP_DOMAINS` | string |  | White list of email domains; when non-empty, accept registrations with emails from these domains only (email verification). |
 | `SMTP_HOST_URL` | string | `'http://localhost:6060/'` | URL of the host where the webapp is running (email verification). |
+| `SMTP_LOGIN` | string |  | Optional login to use for authentication with the SMTP server (email verification). If login is missing, `addr-spec` part of `SMTP_SENDER` will be used: e.g. if `SMTP_SENDER` is `'"John Doe" <jdoe@example.com>'`, `jdoe@example.com` will be used as login. |
 | `SMTP_PASSWORD` | string |  | Password to use for authentication with the SMTP server (email verification). |
 | `SMTP_PORT` | number |  | Port number of the SMTP server to use for sending verification emails, e.g. `25` or `587`. |
 | `SMTP_SENDER` | string |  | [RFC 5322](https://tools.ietf.org/html/rfc5322) email address to use in the `FROM` field of verification emails and for authentication with the SMTP server, e.g. `'"John Doe" <jdoe@example.com>'`. |

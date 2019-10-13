@@ -75,6 +75,7 @@
 				"host_url": "$SMTP_HOST_URL",
 				"smtp_server": "$SMTP_SERVER",
 				"smtp_port": "$SMTP_PORT",
+				"login": "$SMTP_LOGIN",
 				"sender": "$SMTP_SENDER",
 				"sender_password": "$SMTP_PASSWORD",
 				"validation_body_templ": "./templ/email-validation-body.templ",
