@@ -179,7 +179,6 @@ func (c *Cluster) sendPings() {
 
 		c.fo.activeNodes = activeNodes
 		c.rehash(activeNodes)
-		c.invalidateRemoteSubs(globals.sessionStore)
 
 		log.Println("cluster: initiating failover rehash for nodes", activeNodes)
 		globals.hub.rehash <- true
@@ -302,7 +301,6 @@ func (c *Cluster) run() {
 					log.Println("cluster: rehashing at a request of",
 						ping.Leader, ping.Nodes, ping.Signature, c.ring.Signature())
 					c.rehash(ping.Nodes)
-					c.invalidateRemoteSubs(globals.sessionStore)
 					rehashSkipped = false
 
 					globals.hub.rehash <- true
