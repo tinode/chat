@@ -119,6 +119,9 @@ func (a *adapter) GetDbVersion() (int, error) {
 		Value int
 	}
 	if err := a.db.Collection("kvmeta").FindOne(c.TODO(), bson.D{{"key", "version"}}).Decode(&result); err != nil {
+		if isMissingDb(err) {
+			err = errors.New("Database not initialized")
+		}
 		return -1, err
 	}
 
@@ -682,4 +685,14 @@ func diff(userTags []string, removeTags []string) []string {
 		}
 	}
 	return result
+}
+
+func isMissingDb(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	msg := err.Error()
+	// "Database `db_name` does not exist"
+	return strings.Contains(msg, "no documents in result")
 }
