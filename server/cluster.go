@@ -503,6 +503,16 @@ func (c *Cluster) isRemoteTopic(topic string) bool {
 	return c.ring.Get(topic) != c.thisNodeName
 }
 
+// Returns remote node name where the topic is hosted.
+// If the topic is hosted locally, returns an empty string.
+func (c *Cluster) nodeNameForTopicIfRemote(topic string) string {
+	key := c.ring.Get(topic)
+	if key == c.thisNodeName {
+		return ""
+	}
+	return key
+}
+
 // isPartitioned checks if the cluster is partitioned due to network or other failure and if the
 // current node is a part of the smaller partition.
 func (c *Cluster) isPartitioned() bool {
@@ -795,4 +805,32 @@ func (c *Cluster) rehash(nodes []string) []string {
 	c.ring = ring
 
 	return ringKeys
+}
+
+// Iterates over sessions hosted on this node and for each session
+// sends "{pres term}" to all displayed topics.
+// Called immediately after Cluster.rehash().
+func (c *Cluster) invalidateRemoteSubs(ss *SessionStore) {
+	ss.lock.Lock()
+	defer ss.lock.Unlock()
+
+	for _, s := range ss.sessCache {
+		if s.proto == CLUSTER || len(s.remoteSubs) == 0 {
+			continue
+		}
+		s.remoteSubsLock.Lock()
+		var topicsToTerminate []string
+		var keysToDelete []string
+		for topic, remSub := range s.remoteSubs {
+			if remSub.node != c.ring.Get(topic) {
+				topicsToTerminate = append(topicsToTerminate, remSub.originalTopic)
+				keysToDelete = append(keysToDelete, topic)
+			}
+		}
+		for _, topic := range keysToDelete {
+			delete(s.remoteSubs, topic)
+		}
+		s.remoteSubsLock.Unlock()
+		s.presTermDirect(topicsToTerminate)
+	}
 }

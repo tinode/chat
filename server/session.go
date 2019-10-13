@@ -39,6 +39,14 @@ const sendTimeout = time.Microsecond * 150
 
 var minSupportedVersionValue = parseVersion(minSupportedVersion)
 
+// Holds metadata on the subscription/topic hosted on a remote node.
+type RemoteSubscription struct {
+	// Hosting node.
+	node string
+	// Topic name, as specified by the client.
+	originalTopic string
+}
+
 // Session represents a single WS connection or a long polling session. A user may have multiple
 // sessions.
 type Session struct {
@@ -103,6 +111,11 @@ type Session struct {
 	// subs concurrently.
 	subsLock sync.RWMutex
 
+	// Map of remote topic subscriptions, indexed by topic name.
+	remoteSubs map[string]*RemoteSubscription
+	// Synchronizes access to remoteSubs.
+	remoteSubsLock sync.RWMutex
+
 	// Cluster nodes to inform when the session is disconnected
 	nodes map[string]bool
 
@@ -160,6 +173,20 @@ func (s *Session) unsubAll() {
 		// sub.done is the same as topic.unreg
 		sub.done <- &sessionLeave{sess: s}
 	}
+}
+
+func (s *Session) addRemoteSub(topic string, remoteSub *RemoteSubscription) {
+	s.remoteSubsLock.Lock()
+	defer s.remoteSubsLock.Unlock()
+
+	s.remoteSubs[topic] = remoteSub
+}
+
+func (s *Session) delRemoteSub(topic string) {
+	s.remoteSubsLock.Lock()
+	defer s.remoteSubsLock.Unlock()
+
+	delete(s.remoteSubs, topic)
 }
 
 // queueOut attempts to send a ServerComMessage to a session; if the send buffer is full,
@@ -376,11 +403,13 @@ func (s *Session) subscribe(msg *ClientComMessage) {
 
 	if sub := s.getSub(expanded); sub != nil {
 		s.queueOut(InfoAlreadySubscribed(msg.id, msg.topic, msg.timestamp))
-	} else if globals.cluster.isRemoteTopic(expanded) {
+	} else if remoteNodeName := globals.cluster.nodeNameForTopicIfRemote(expanded); remoteNodeName != "" {
 		// The topic is handled by a remote node. Forward message to it.
 		if err := globals.cluster.routeToTopic(msg, expanded, s); err != nil {
 			log.Println("s.subscribe:", err, s.sid)
 			s.queueOut(ErrClusterUnreachable(msg.id, msg.topic, msg.timestamp))
+		} else {
+			s.addRemoteSub(expanded, &RemoteSubscription{node: remoteNodeName, originalTopic: msg.topic})
 		}
 	} else {
 		globals.hub.join <- &sessionJoin{
@@ -420,6 +449,8 @@ func (s *Session) leave(msg *ClientComMessage) {
 		if err := globals.cluster.routeToTopic(msg, expanded, s); err != nil {
 			log.Println("s.leave:", err, s.sid)
 			s.queueOut(ErrClusterUnreachable(msg.id, msg.topic, msg.timestamp))
+		} else {
+			s.delRemoteSub(expanded)
 		}
 	} else if !msg.Leave.Unsub {
 		// Session is not attached to the topic, wants to leave - fine, no change
