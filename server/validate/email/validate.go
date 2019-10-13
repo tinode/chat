@@ -31,15 +31,18 @@ type validator struct {
 	ValidationSubject   string   `json:"validation_subject"`
 	ResetSubject        string   `json:"reset_subject"`
 	SendFrom            string   `json:"sender"`
+	Login               string   `json:"login"`
 	SenderPassword      string   `json:"sender_password"`
 	DebugResponse       string   `json:"debug_response"`
 	MaxRetries          int      `json:"max_retries"`
 	SMTPAddr            string   `json:"smtp_server"`
 	SMTPPort            string   `json:"smtp_port"`
 	Domains             []string `json:"domains"`
+
 	htmlValidationTempl *ht.Template
 	htmlResetTempl      *ht.Template
 	auth                smtp.Auth
+	senderEmail         string
 }
 
 const (
@@ -63,11 +66,18 @@ func (v *validator) Init(jsonconf string) error {
 		return err
 	}
 
-	// SendFrom could be an RFC 5322 address of the form "John Doe <jdoe@example.com>". Parse it.
-	if sender, err := mail.ParseAddress(v.SendFrom); err == nil {
-		v.auth = smtp.PlainAuth("", sender.Address, v.SenderPassword, v.SMTPAddr)
-	} else {
+	sender, err := mail.ParseAddress(v.SendFrom)
+	if err != nil {
 		return err
+	}
+	v.senderEmail = sender.Address
+
+	// Check if login is provided explicitly. Otherwise parse Sender and use that as login for authentication.
+	if v.Login != "" {
+		v.auth = smtp.PlainAuth("", v.Login, v.SenderPassword, v.SMTPAddr)
+	} else {
+		// SendFrom could be an RFC 5322 address of the form "John Doe <jdoe@example.com>". Parse it.
+		v.auth = smtp.PlainAuth("", v.senderEmail, v.SenderPassword, v.SMTPAddr)
 	}
 
 	// If a relative path is provided, try to resolve it relative to the exec file location,
@@ -157,8 +167,6 @@ func (v *validator) PreCheck(cred string, params interface{}) error {
 			return t.ErrPolicy
 		}
 	}
-
-	// TODO: Check email uniqueness
 
 	return nil
 }
@@ -270,7 +278,7 @@ func (v *validator) Remove(user t.Uid, value string) error {
 // Here are instructions for Google cloud:
 // https://cloud.google.com/appengine/docs/standard/go/mail/sending-receiving-with-mail-api
 func (v *validator) send(to, subj, body string) error {
-	err := smtp.SendMail(v.SMTPAddr+":"+v.SMTPPort, v.auth, v.SendFrom, []string{to},
+	err := smtp.SendMail(v.SMTPAddr+":"+v.SMTPPort, v.auth, v.senderEmail, []string{to},
 		[]byte("From: "+v.SendFrom+
 			"\nTo: "+to+
 			"\nSubject: "+subj+
