@@ -816,14 +816,19 @@ func (c *Cluster) invalidateRemoteSubs(ss *SessionStore) {
 		if s.proto == CLUSTER || len(s.remoteSubs) == 0 {
 			continue
 		}
-		s.subsLock.Lock()
+		s.remoteSubsLock.Lock()
 		var topicsToTerminate []string
+		var keysToDelete []string
 		for topic, remSub := range s.remoteSubs {
 			if remSub.node != c.ring.Get(topic) {
 				topicsToTerminate = append(topicsToTerminate, remSub.originalTopic)
+				keysToDelete = append(keysToDelete, topic)
 			}
 		}
+		for _, topic := range keysToDelete {
+			delete(s.remoteSubs, topic)
+		}
+		s.remoteSubsLock.Unlock()
 		s.presTermDirect(topicsToTerminate)
-		s.subsLock.Unlock()
 	}
 }
