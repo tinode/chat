@@ -52,6 +52,8 @@ type ClusterNode struct {
 	address string
 	// Name of the node
 	name string
+	// Fingerprint of the node: unique value which changes when the node restarts.
+	fingerprint int64
 
 	// A number of times this node has failed in a row
 	failCount int
@@ -99,6 +101,10 @@ type ClusterReq struct {
 	// Signature must match the signature of the receiver, otherwise the
 	// Cluster is desynchronized.
 	Signature string
+
+	// Fingerprint of the node sending this request.
+	// Fingerprint changes when the node is restarted.
+	Fingerprint int64
 
 	// Client message. Set for C2S requests.
 	CliMsg *ClientComMessage
@@ -281,6 +287,8 @@ type Cluster struct {
 	nodes map[string]*ClusterNode
 	// Name of the local node
 	thisNodeName string
+	// Fingerprint of the local node
+	fingerprint int64
 
 	// Resolved address to listed on
 	listenOn string
@@ -311,15 +319,24 @@ func (c *Cluster) Master(msg *ClusterReq, rejected *bool) error {
 		}
 	} else if msg.Signature == c.ring.Signature() {
 		// This cluster member received a request for a topic it owns.
+		node := globals.cluster.nodes[msg.Node]
+
+		if node == nil {
+			log.Println("cluster: request from an unknown node", msg.Node)
+			return nil
+		}
+
+		// Check if the remote node has been restarted and if so cleanup stale sessions
+		// which originated at that node.
+		if node.fingerprint == 0 {
+			node.fingerprint = msg.Fingerprint
+		} else if node.fingerprint != msg.Fingerprint {
+			globals.sessionStore.NodeRestarted(node.name, msg.Fingerprint)
+			node.fingerprint = msg.Fingerprint
+		}
 
 		if sess == nil {
 			// If the session is not found, create it.
-			node := globals.cluster.nodes[msg.Node]
-			if node == nil {
-				log.Println("cluster: request from an unknown node", msg.Node)
-				return nil
-			}
-
 			sess, _ = globals.sessionStore.NewSession(node, msg.Sess.Sid)
 			go sess.rpcWriteLoop()
 		}
@@ -364,8 +381,7 @@ func (Cluster) Proxy(msg *ClusterResp, unused *bool) error {
 	return nil
 }
 
-// Route endpoint receives intra-cluster messages (e.g. pres) destined
-// for the nodes hosting topic.
+// Route endpoint receives intra-cluster messages (e.g. pres) destined for the nodes hosting topic.
 // Called by Hub.route channel consumer.
 func (c *Cluster) Route(msg *ClusterReq, rejected *bool) error {
 	log.Printf("cluster: node '%s' received route request for topic '%s' from node '%s'", c.thisNodeName, msg.RcptTo, msg.Node)
@@ -487,6 +503,20 @@ func (c *Cluster) isRemoteTopic(topic string) bool {
 	return c.ring.Get(topic) != c.thisNodeName
 }
 
+// Returns remote node name where the topic is hosted.
+// If the topic is hosted locally, returns an empty string.
+func (c *Cluster) nodeNameForTopicIfRemote(topic string) string {
+	if c == nil {
+		// Cluster not initialized, all topics are local
+		return ""
+	}
+	key := c.ring.Get(topic)
+	if key == c.thisNodeName {
+		return ""
+	}
+	return key
+}
+
 // isPartitioned checks if the cluster is partitioned due to network or other failure and if the
 // current node is a part of the smaller partition.
 func (c *Cluster) isPartitioned() bool {
@@ -506,17 +536,17 @@ func (c *Cluster) routeToTopic(msg *ClientComMessage, topic string, sess *Sessio
 		return errors.New("attempt to route to non-existent node")
 	}
 
-	// Save node name: it's need in order to inform relevant nodes when the session is disconnected
-	if sess.nodes == nil {
-		sess.nodes = make(map[string]bool)
+	if sess.getRemoteSub(topic) == nil {
+		log.Printf("Remote subscription missing for topic '%s', sid '%s'", topic, sess.sid)
+		sess.addRemoteSub(topic, &RemoteSubscription{node: n.name})
 	}
-	sess.nodes[n.name] = true
 
 	req := &ClusterReq{
-		Node:      c.thisNodeName,
-		Signature: c.ring.Signature(),
-		CliMsg:    msg,
-		RcptTo:    topic,
+		Node:        c.thisNodeName,
+		Signature:   c.ring.Signature(),
+		Fingerprint: c.fingerprint,
+		CliMsg:      msg,
+		RcptTo:      topic,
 		Sess: &ClusterSess{
 			Uid:        sess.uid,
 			AuthLvl:    sess.authLvl,
@@ -546,10 +576,11 @@ func (c *Cluster) routeToTopicIntraCluster(topic string, msg *ServerComMessage) 
 	}
 
 	req := &ClusterReq{
-		Node:      c.thisNodeName,
-		Signature: c.ring.Signature(),
-		RcptTo:    topic,
-		SrvMsg:    msg}
+		Node:        c.thisNodeName,
+		Signature:   c.ring.Signature(),
+		Fingerprint: c.fingerprint,
+		RcptTo:      topic,
+		SrvMsg:      msg}
 	if msg.Pres != nil && msg.Pres.wantReply {
 		req.PresWantReply = true
 	}
@@ -563,20 +594,32 @@ func (c *Cluster) sessionGone(sess *Session) error {
 		return nil
 	}
 
-	// Save node name: it's need in order to inform relevant nodes when the session is disconnected
-	for name := range sess.nodes {
-		n := c.nodes[name]
+	notifiedNodes := make(map[string]bool)
+
+	sess.remoteSubsLock.RLock()
+	defer sess.remoteSubsLock.RUnlock()
+
+	for _, remSub := range sess.remoteSubs {
+		nodeName := remSub.node
+		if notifiedNodes[nodeName] {
+			continue
+		}
+		notifiedNodes[nodeName] = true
+		n := c.nodes[nodeName]
 		if n != nil {
-			return n.forward(
+			if err := n.forward(
 				&ClusterReq{
-					Node:     c.thisNodeName,
-					SessGone: true,
+					Node:        c.thisNodeName,
+					Fingerprint: c.fingerprint,
+					SessGone:    true,
 					Sess: &ClusterSess{
 						Uid:        sess.uid,
 						RemoteAddr: sess.remoteAddr,
 						UserAgent:  sess.userAgent,
 						Ver:        sess.ver,
-						Sid:        sess.sid}})
+						Sid:        sess.sid}}); err != nil {
+				log.Printf("cluster: remote session shutdown failure: node '%s', error: '%s'", nodeName, err)
+			}
 		}
 	}
 	return nil
@@ -625,6 +668,7 @@ func clusterInit(configString json.RawMessage, self *string) int {
 
 	globals.cluster = &Cluster{
 		thisNodeName: thisName,
+		fingerprint:  time.Now().Unix(),
 		nodes:        make(map[string]*ClusterNode)}
 
 	var nodeNames []string
@@ -775,4 +819,30 @@ func (c *Cluster) rehash(nodes []string) []string {
 	c.ring = ring
 
 	return ringKeys
+}
+
+// Iterates over sessions hosted on this node and for each session
+// sends "{pres term}" to all displayed topics.
+// Called immediately after Cluster.rehash().
+func (c *Cluster) invalidateRemoteSubs() {
+	globals.sessionStore.lock.Lock()
+	defer globals.sessionStore.lock.Unlock()
+
+	for _, s := range globals.sessionStore.sessCache {
+		if s.proto == CLUSTER || len(s.remoteSubs) == 0 {
+			continue
+		}
+		s.remoteSubsLock.Lock()
+		var topicsToTerminate []string
+		for topic, remSub := range s.remoteSubs {
+			if remSub.node != c.ring.Get(topic) {
+				if remSub.originalTopic != "" {
+					topicsToTerminate = append(topicsToTerminate, remSub.originalTopic)
+				}
+				delete(s.remoteSubs, topic)
+			}
+		}
+		s.remoteSubsLock.Unlock()
+		s.presTermDirect(topicsToTerminate)
+	}
 }

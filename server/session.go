@@ -39,6 +39,14 @@ const sendTimeout = time.Microsecond * 150
 
 var minSupportedVersionValue = parseVersion(minSupportedVersion)
 
+// Holds metadata on the subscription/topic hosted on a remote node.
+type RemoteSubscription struct {
+	// Hosting node.
+	node string
+	// Topic name, as specified by the client.
+	originalTopic string
+}
+
 // Session represents a single WS connection or a long polling session. A user may have multiple
 // sessions.
 type Session struct {
@@ -103,8 +111,10 @@ type Session struct {
 	// subs concurrently.
 	subsLock sync.RWMutex
 
-	// Cluster nodes to inform when the session is disconnected
-	nodes map[string]bool
+	// Map of remote topic subscriptions, indexed by topic name.
+	remoteSubs map[string]*RemoteSubscription
+	// Synchronizes access to remoteSubs.
+	remoteSubsLock sync.RWMutex
 
 	// Session ID
 	sid string
@@ -160,6 +170,27 @@ func (s *Session) unsubAll() {
 		// sub.done is the same as topic.unreg
 		sub.done <- &sessionLeave{sess: s}
 	}
+}
+
+func (s *Session) getRemoteSub(topic string) *RemoteSubscription {
+	s.remoteSubsLock.RLock()
+	defer s.remoteSubsLock.RUnlock()
+
+	return s.remoteSubs[topic]
+}
+
+func (s *Session) addRemoteSub(topic string, remoteSub *RemoteSubscription) {
+	s.remoteSubsLock.Lock()
+	defer s.remoteSubsLock.Unlock()
+
+	s.remoteSubs[topic] = remoteSub
+}
+
+func (s *Session) delRemoteSub(topic string) {
+	s.remoteSubsLock.Lock()
+	defer s.remoteSubsLock.Unlock()
+
+	delete(s.remoteSubs, topic)
 }
 
 // queueOut attempts to send a ServerComMessage to a session; if the send buffer is full,
@@ -361,9 +392,11 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 // Request to subscribe to a topic
 func (s *Session) subscribe(msg *ClientComMessage) {
 	var expanded string
+	isNewTopic := false
 	if strings.HasPrefix(msg.topic, "new") {
 		// Request to create a new named topic
 		expanded = genTopicName()
+		isNewTopic = true
 		// msg.topic = expanded
 	} else {
 		var resp *ServerComMessage
@@ -376,11 +409,20 @@ func (s *Session) subscribe(msg *ClientComMessage) {
 
 	if sub := s.getSub(expanded); sub != nil {
 		s.queueOut(InfoAlreadySubscribed(msg.id, msg.topic, msg.timestamp))
-	} else if globals.cluster.isRemoteTopic(expanded) {
+	} else if remoteNodeName := globals.cluster.nodeNameForTopicIfRemote(expanded); remoteNodeName != "" {
 		// The topic is handled by a remote node. Forward message to it.
 		if err := globals.cluster.routeToTopic(msg, expanded, s); err != nil {
 			log.Println("s.subscribe:", err, s.sid)
 			s.queueOut(ErrClusterUnreachable(msg.id, msg.topic, msg.timestamp))
+		} else {
+			var originalTopic string
+			if isNewTopic {
+				// New topics are "grp". It's okay to use expaneded.
+				originalTopic = expanded
+			} else {
+				originalTopic = msg.topic
+			}
+			s.addRemoteSub(expanded, &RemoteSubscription{node: remoteNodeName, originalTopic: originalTopic})
 		}
 	} else {
 		globals.hub.join <- &sessionJoin{
@@ -420,6 +462,8 @@ func (s *Session) leave(msg *ClientComMessage) {
 		if err := globals.cluster.routeToTopic(msg, expanded, s); err != nil {
 			log.Println("s.leave:", err, s.sid)
 			s.queueOut(ErrClusterUnreachable(msg.id, msg.topic, msg.timestamp))
+		} else {
+			s.delRemoteSub(expanded)
 		}
 	} else if !msg.Leave.Unsub {
 		// Session is not attached to the topic, wants to leave - fine, no change
@@ -493,6 +537,7 @@ func (s *Session) publish(msg *ClientComMessage) {
 // Client metadata
 func (s *Session) hello(msg *ClientComMessage) {
 	var params map[string]interface{}
+	var deviceIDUpdate bool
 
 	if s.ver == 0 {
 		s.ver = parseVersion(msg.Hi.Version)
@@ -526,6 +571,8 @@ func (s *Session) hello(msg *ClientComMessage) {
 			s.platf = platformFromUA(msg.Hi.UserAgent)
 		}
 	} else if msg.Hi.Version == "" || parseVersion(msg.Hi.Version) == s.ver {
+		deviceIDUpdate = true
+
 		// Save changed device ID or Lang. Platform cannot be changed.
 		if !s.uid.IsZero() {
 			if err := store.Devices.Update(s.uid, s.deviceID, &types.DeviceDef{
@@ -551,8 +598,9 @@ func (s *Session) hello(msg *ClientComMessage) {
 
 	var httpStatus int
 	var httpStatusText string
-	if s.proto == LPOLL {
+	if s.proto == LPOLL || deviceIDUpdate {
 		// In case of long polling StatusCreated was reported earlier.
+		// In case of deviceID update just report success.
 		httpStatus = http.StatusOK
 		httpStatusText = "ok"
 

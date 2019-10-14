@@ -250,6 +250,8 @@ func (h *Hub) run() {
 			}
 
 		case <-h.rehash:
+			// Cluster rehashing. Some previously local topics became remote.
+			// Such topics must be shut down at this node.
 			h.topics.Range(func(_, t interface{}) bool {
 				topic := t.(*Topic)
 				if globals.cluster.isRemoteTopic(topic.name) {
@@ -257,6 +259,12 @@ func (h *Hub) run() {
 				}
 				return true
 			})
+
+			// Check if 'sys' topic has migrated to this node.
+			if h.topicGet("sys") == nil && !globals.cluster.isRemoteTopic("sys") {
+				// Yes, 'sys' has migrated here. Initialize it.
+				h.join <- &sessionJoin{topic: "sys", internal: true, pkt: &ClientComMessage{topic: "sys"}}
+			}
 
 		case hubdone := <-h.shutdown:
 			// start cleanup process
@@ -438,7 +446,7 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 			statsInc("LiveTopics", -1)
 		}
 
-		// sess && msg could be nil if the topic is being killed by timer
+		// sess && msg could be nil if the topic is being killed by timer or due to rehashing.
 		if sess != nil && msg != nil {
 			sess.queueOut(NoErr(msg.id, msg.topic, now))
 		}
