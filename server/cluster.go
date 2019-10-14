@@ -536,11 +536,10 @@ func (c *Cluster) routeToTopic(msg *ClientComMessage, topic string, sess *Sessio
 		return errors.New("attempt to route to non-existent node")
 	}
 
-	// Save node name: it's needed in order to inform relevant nodes when the session is disconnected.
-	if sess.nodes == nil {
-		sess.nodes = make(map[string]bool)
+	if sess.getRemoteSub(topic) == nil {
+		log.Println("Remote subscription missing for topic '%s', sid '%s'", topic, sess.sid)
+		sess.addRemoteSub(topic, &RemoteSubscription{node: n.name})
 	}
-	sess.nodes[n.name] = true
 
 	req := &ClusterReq{
 		Node:        c.thisNodeName,
@@ -595,11 +594,20 @@ func (c *Cluster) sessionGone(sess *Session) error {
 		return nil
 	}
 
-	// Save node name: it's need in order to inform relevant nodes when the session is disconnected
-	for name := range sess.nodes {
-		n := c.nodes[name]
+	notifiedNodes := make(map[string]bool)
+
+	sess.remoteSubsLock.Lock()
+	defer sess.remoteSubsLock.Unlock()
+
+	for _, remSub := range sess.remoteSubs {
+		nodeName := remSub.node
+		if notifiedNodes[nodeName] {
+			continue
+		}
+		notifiedNodes[nodeName] = true
+		n := c.nodes[nodeName]
 		if n != nil {
-			return n.forward(
+			if err := n.forward(
 				&ClusterReq{
 					Node:        c.thisNodeName,
 					Fingerprint: c.fingerprint,
@@ -609,7 +617,9 @@ func (c *Cluster) sessionGone(sess *Session) error {
 						RemoteAddr: sess.remoteAddr,
 						UserAgent:  sess.userAgent,
 						Ver:        sess.ver,
-						Sid:        sess.sid}})
+						Sid:        sess.sid}}); err != nil {
+				log.Printf("cluster: remote session shutdown failure: node '%s', error: '%s'", nodeName, err)
+			}
 		}
 	}
 	return nil
@@ -826,7 +836,9 @@ func (c *Cluster) invalidateRemoteSubs() {
 		var topicsToTerminate []string
 		for topic, remSub := range s.remoteSubs {
 			if remSub.node != c.ring.Get(topic) {
-				topicsToTerminate = append(topicsToTerminate, remSub.originalTopic)
+				if remSub.originalTopic != "" {
+					topicsToTerminate = append(topicsToTerminate, remSub.originalTopic)
+				}
 				delete(s.remoteSubs, topic)
 			}
 		}

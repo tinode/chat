@@ -116,9 +116,6 @@ type Session struct {
 	// Synchronizes access to remoteSubs.
 	remoteSubsLock sync.RWMutex
 
-	// Cluster nodes to inform when the session is disconnected
-	nodes map[string]bool
-
 	// Session ID
 	sid string
 
@@ -173,6 +170,13 @@ func (s *Session) unsubAll() {
 		// sub.done is the same as topic.unreg
 		sub.done <- &sessionLeave{sess: s}
 	}
+}
+
+func (s *Session) getRemoteSub(topic string) *RemoteSubscription {
+	s.remoteSubsLock.RLock()
+	defer s.remoteSubsLock.RUnlock()
+
+	return s.remoteSubs[topic]
 }
 
 func (s *Session) addRemoteSub(topic string, remoteSub *RemoteSubscription) {
