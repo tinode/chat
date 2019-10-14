@@ -388,9 +388,11 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 // Request to subscribe to a topic
 func (s *Session) subscribe(msg *ClientComMessage) {
 	var expanded string
+	isNewTopic := false
 	if strings.HasPrefix(msg.topic, "new") {
 		// Request to create a new named topic
 		expanded = genTopicName()
+		isNewTopic = true
 		// msg.topic = expanded
 	} else {
 		var resp *ServerComMessage
@@ -409,7 +411,14 @@ func (s *Session) subscribe(msg *ClientComMessage) {
 			log.Println("s.subscribe:", err, s.sid)
 			s.queueOut(ErrClusterUnreachable(msg.id, msg.topic, msg.timestamp))
 		} else {
-			s.addRemoteSub(expanded, &RemoteSubscription{node: remoteNodeName, originalTopic: msg.topic})
+			var originalTopic string
+			if isNewTopic {
+				// New topics are "grp". It's okay to use expaneded.
+				originalTopic = expanded
+			} else {
+				originalTopic = msg.topic
+			}
+			s.addRemoteSub(expanded, &RemoteSubscription{node: remoteNodeName, originalTopic: originalTopic})
 		}
 	} else {
 		globals.hub.join <- &sessionJoin{
