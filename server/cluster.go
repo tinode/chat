@@ -829,10 +829,8 @@ func (c *Cluster) invalidateRemoteSubs(ss *SessionStore) {
 			if remSub.node != c.ring.Get(topic) {
 				topicsToTerminate = append(topicsToTerminate, remSub.originalTopic)
 				keysToDelete = append(keysToDelete, topic)
+				delete(s.remoteSubs, topic)
 			}
-		}
-		for _, topic := range keysToDelete {
-			delete(s.remoteSubs, topic)
 		}
 		s.remoteSubsLock.Unlock()
 		s.presTermDirect(topicsToTerminate)
