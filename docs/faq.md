@@ -33,9 +33,9 @@ If you are using the [Docker image](https://hub.docker.com/u/tinode):
 4. Add `google-services.json` to [Tindroid](/tinode/tindroid/#push_notifications), `GoogleService-Info.plist` to [Tinodios](/tinode/ios/#push_notifications), recompile the apps.
 
 
-### Q: How can new users be added to Tinode?
+### Q: How can new users be added to Tinode?<br/>
 **A**: There are three ways to create accounts:
-* A user can create a new account using client-side UI.
+* A user can create a new account using one of the applications (web, Android, iOS).
 * A new account can be created using [tn-cli](../tn-cli/) (`acc` command). The process can be scripted.
 * If the user already exists in an external database, the Tinode account can be automatically created on the first login using the [rest authenticator](../server/auth/rest/).
 

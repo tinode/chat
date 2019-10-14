@@ -4,8 +4,9 @@
 
 Tinode is *not* XMPP/Jabber. It is *not* compatible with XMPP. It's meant as a replacement for XMPP. On the surface, it's a lot like open source WhatsApp or Telegram.
 
-Version 0.16. This is beta-quality software: feature-complete but probably with a few bugs. Follow [instructions](INSTALL.md) to install and run. Read [API documentation](docs/API.md).
+Version 0.16. This is beta-quality software: feature-complete but probably with a few bugs. Follow [instructions](INSTALL.md) to install and run or use one of the cloud services below. Read [API documentation](docs/API.md).
 
+<img src="docs/app-store.svg" style="opacity:0.35" height=36> <img src="docs/play-store.svg" style="opacity:0.35" height=36> <a href="https://web.tinode.co/"><img src="docs/web-app.svg" height=36></a>
 
 ## Why?
 
@@ -21,38 +22,44 @@ The goal of this project is to deliver on XMPP's original vision: create a moder
 * For bugs and feature requests [open an issue](https://github.com/tinode/chat/issues/new).
 
 
-## Demo
+## Public service
+
+A public Tinode service is now available. You can register and use it just like any other instant messenger. Keep in mind that demo accounts present in [sandbox](https://sandbox.tinode.co/) are not available in the public service. You must register an account using valid email in order to use the service.
 
 ### Web
 
-TinodeWeb, a single page web app, is usually available at https://web.tinode.co/ ([source](https://github.com/tinode/webapp/)).
-
-Log in as one of `alice`, `bob`, `carol`, `dave`, `frank`. Password is `<login>123`, e.g. login for `alice` is `alice123`. You can discover other users by email or phone by prefixing them with `email:` or `tel:` respectively. Emails are `<login>@example.com`, e.g. `alice@example.com`, phones are `+17025550001` through `+17025550009`.
-
-If you register a new account you are asked for an email address to send validation code to. For demo purposes, you may use `123456` as a universal validation code. The code you get in the email is also valid.
-
-[Docker images](https://hub.docker.com/u/tinode/) with the same demo are available.
+TinodeWeb, a single page web app, is available at https://web.tinode.co/ ([source](https://github.com/tinode/webapp/)). See screenshots below.
 
 ### Android
 
 [Tindroid](https://github.com/tinode/tindroid) is stable and functional. See the screenshots below. A [debug APK](https://github.com/tinode/tindroid/releases/latest) is provided for convenience.
 
-### Command Line
+### iOS
 
-A text-only [command line client](./tn-cli) implements every possible command.
+[Tinode for iOS](https://apps.apple.com/app/reference-to-tinodios-here/id123) a.k.a. Tinodios is stable and functional ([source](https://github.com/tinode/ios)). See the screenshots below.
 
-### Notes
+### Android
 
-* The demo server is reset (all data wiped) every night at 3:15am Pacific time. An error message `User not found or offline` means the server was reset while you were connected. If you see it on the web, reload and relogin. On Android log out and re-login. If the database was changed, delete the app then reinstall.
+[Tinode for Android](https://play.google.com/store/apps/details?id=co.tinode.tindroid) a.k.a. Tindroid is stable and functional ([source](https://github.com/tinode/tindroid)). See the screenshots below.
 
-* User `Tino` is a [basic chatbot](./chatbot) which responds with a [random quote](http://fortunes.cat-v.org/) to any message.
 
+## Demo/Sandbox
+
+A sandboxed demo service is available at https://sandbox.tinode.co/.
+
+Log in as one of `alice`, `bob`, `carol`, `dave`, `frank`. Password is `<login>123`, e.g. login for `alice` is `alice123`. You can discover other users by email or phone by prefixing them with `email:` or `tel:` respectively. Emails are `<login>@example.com`, e.g. `alice@example.com`, phones are `+17025550001` through `+17025550009`.
+
+If you register a new account you are asked for an email address to send validation code to. For demo purposes you may use `123456` as a universal validation code. The code you get in the email is also valid.
+
+### Sandbox Notes
+
+* The sandbox server is reset (all data wiped) every night at 3:15am Pacific time. An error message `User not found or offline` means the server was reset while you were connected. If you see it on the web, reload and relogin. On Android log out and re-login. If the database was changed, delete the app then reinstall.
+* Sandbox user `Tino` is a [basic chatbot](./chatbot) which responds with a [random quote](http://fortunes.cat-v.org/) to any message.
 * As generally accepted, when you register a new account you are asked for an email address. The server will send an email with a verification code to that address and you can use it to validate the account. To make things easier for testing, the server will also accept `123456` as a verification code. Remove line `"debug_response": "123456"` from `tinode.conf` to disable this option.
-
-* The demo server is configured to use [ACME](https://letsencrypt.org/) TLS [implementation](https://godoc.org/golang.org/x/crypto/acme) with hard-coded requirement for [SNI](https://en.wikipedia.org/wiki/Server_Name_Indication). If you are unable to connect then the most likely reason is your TLS client's missing support for SNI. Use a different client.
-
-* The demo uses a single minified javascript bundle and minified CSS. The un-minified version is available at https://web.tinode.co/index-dev.html
-
+* The sandbox server is configured to use [ACME](https://letsencrypt.org/) TLS [implementation](https://godoc.org/golang.org/x/crypto/acme) with hard-coded requirement for [SNI](https://en.wikipedia.org/wiki/Server_Name_Indication). If you are unable to connect then the most likely reason is your TLS client's missing support for SNI. Use a different client.
+* The default web app loads a single minified javascript bundle and minified CSS. The un-minified version is also available at https://sandbox.tinode.co/index-dev.html
+* [Docker images](https://hub.docker.com/u/tinode/) with the same demo are available.
+* You are welcome to test your client software against the sandbox, hack it, etc. No DDoS-ing though please.
 
 ## Features
 
@@ -136,5 +143,7 @@ Words 'chat' and 'instant messaging' in Chinese, Russian, Persian and a few othe
 * پیام‌رسانی فوری گپ
 * تراسل فوري
 * Nhắn tin tức thời
-* Mensageiro instantâneo
-* Pesan instan
+* anlık mesajlaşma sohbet
+* mensageiro instantâneo
+* pesan instan
+* mensajería instantánea

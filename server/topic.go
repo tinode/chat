@@ -160,12 +160,12 @@ var nilPresParams = &presParams{}
 var nilPresFilters = &presFilters{}
 
 func (t *Topic) run(hub *Hub) {
-	// TODO(gene): read keepalive value from the command line
+	// Kills topic after a period of inactivity.
 	keepAlive := idleTopicTimeout
 	killTimer := time.NewTimer(time.Hour)
 	killTimer.Stop()
 
-	// 'me' only
+	// Notifies about user agent change. 'me' only
 	var uaTimer *time.Timer
 	var currentUA string
 	uaTimer = time.NewTimer(time.Minute)
@@ -188,7 +188,7 @@ func (t *Topic) run(hub *Hub) {
 						pluginTopic(t, plgActCreate)
 					}
 				} else {
-					if len(t.sessions) == 0 {
+					if len(t.sessions) == 0 && t.cat != types.TopicCatSys {
 						// Failed to subscribe, the topic is still inactive
 						killTimer.Reset(keepAlive)
 					}
@@ -261,7 +261,7 @@ func (t *Topic) run(hub *Hub) {
 			}
 
 			// If there are no more subscriptions to this topic, start a kill timer
-			if len(t.sessions) == 0 {
+			if len(t.sessions) == 0 && t.cat != types.TopicCatSys {
 				killTimer.Reset(keepAlive)
 			}
 
@@ -277,12 +277,14 @@ func (t *Topic) run(hub *Hub) {
 				}
 
 				from := types.ParseUserId(msg.Data.From)
-				userData := t.perUser[from]
-
-				if !(userData.modeWant & userData.modeGiven).IsWriter() {
-					msg.sess.queueOut(ErrPermissionDenied(msg.id, t.original(asUid),
-						msg.timestamp))
-					continue
+				userData, userFound := t.perUser[from]
+				// Anyone is allowed to post to 'sys' topic.
+				if t.cat != types.TopicCatSys {
+					if !(userData.modeWant & userData.modeGiven).IsWriter() {
+						msg.sess.queueOut(ErrPermissionDenied(msg.id, t.original(asUid),
+							msg.timestamp))
+						continue
+					}
 				}
 
 				if err := store.Messages.Save(&types.Message{
@@ -302,10 +304,11 @@ func (t *Topic) run(hub *Hub) {
 				t.lastID++
 				t.touched = msg.Data.Timestamp
 				msg.Data.SeqId = t.lastID
-				userData.readID = t.lastID
-				userData.readID = t.lastID
-				t.perUser[from] = userData
-
+				if userFound {
+					userData.readID = t.lastID
+					userData.readID = t.lastID
+					t.perUser[from] = userData
+				}
 				if msg.id != "" {
 					reply := NoErrAccepted(msg.id, t.original(asUid), msg.timestamp)
 					reply.Ctrl.Params = map[string]int{"seq": t.lastID}
@@ -812,7 +815,7 @@ func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin) error {
 	asLvl := auth.Level(sreg.pkt.authLvl)
 	toriginal := t.original(asUid)
 
-	if !sreg.newsub && (t.cat == types.TopicCatGrp || t.cat == types.TopicCatP2P) {
+	if !sreg.newsub && (t.cat == types.TopicCatP2P || t.cat == types.TopicCatGrp || t.cat == types.TopicCatSys) {
 		// Check if this is a new subscription.
 		_, found := t.perUser[asUid]
 		sreg.newsub = !found
@@ -913,9 +916,6 @@ func (t *Topic) requestSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Le
 
 		if t.cat == types.TopicCatP2P {
 			// P2P could be here only if it was previously deleted. I.e. existingSub is always true for P2P.
-
-			// Undelete
-			userData.deleted = false
 			if modeWant != types.ModeUnset {
 				userData.modeWant = modeWant
 			}
@@ -923,8 +923,20 @@ func (t *Topic) requestSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Le
 
 			// Make sure the user is not asking for unreasonable permissions
 			userData.modeWant = (userData.modeWant & types.ModeCP2P) | types.ModeApprove
+		} else if t.cat == types.TopicCatSys {
+			if asLvl != auth.LevelRoot {
+				sess.queueOut(ErrPermissionDenied(pktID, toriginal, now))
+				return changed, errors.New("subscription to 'sys' topic requires root access level")
+			}
+
+			// Assign default access levels
+			userData.modeWant = types.ModeCSys
+			userData.modeGiven = types.ModeCSys
+			if modeWant != types.ModeUnset {
+				userData.modeWant = (modeWant & types.ModeCSys) | types.ModeWrite
+			}
 		} else {
-			// For non-p2p2 topics access is given as default access
+			// For non-p2p & non-sys topics access is given as default access
 			userData.modeGiven = t.accessFor(asLvl)
 
 			if modeWant == types.ModeUnset {
@@ -934,6 +946,9 @@ func (t *Topic) requestSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Le
 				userData.modeWant = modeWant
 			}
 		}
+
+		// Undelete
+		userData.deleted = false
 
 		if isNullValue(private) {
 			private = nil
@@ -1000,15 +1015,20 @@ func (t *Topic) requestSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Le
 				// Ownership transfer can only be initiated by the owner
 				sess.queueOut(ErrPermissionDenied(pktID, toriginal, now))
 				return changed, errors.New("non-owner cannot request ownership transfer")
-			} else if t.cat == types.TopicCatP2P {
-				// For P2P topics ignore requests for 'D'. Otherwise it will generate a useless announcement
-				modeWant = (modeWant & types.ModeCP2P) | types.ModeApprove
 			} else if userData.modeGiven.IsAdmin() && modeWant.IsAdmin() {
 				// The Admin should be able to grant any permissions except ownership (checked previously) &
 				// hard-deleting messages.
 				if !userData.modeGiven.BetterEqual(modeWant & ^types.ModeDelete) {
 					userData.modeGiven |= (modeWant & ^types.ModeDelete)
 				}
+			}
+
+			if t.cat == types.TopicCatP2P {
+				// For P2P topics ignore requests for 'D'. Otherwise it will generate a useless announcement
+				modeWant = (modeWant & types.ModeCP2P) | types.ModeApprove
+			} else if t.cat == types.TopicCatSys {
+				//
+				modeWant &= (modeWant & types.ModeCSys) | types.ModeWrite
 			}
 		}
 
@@ -1050,7 +1070,6 @@ func (t *Topic) requestSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Le
 
 		// No transactions in RethinkDB, but two owners are better than none
 		if ownerChange {
-
 			oldOwnerData := t.perUser[t.owner]
 			oldOwnerData.modeGiven = (oldOwnerData.modeGiven & ^types.ModeOwner)
 			oldOwnerData.modeWant = (oldOwnerData.modeWant & ^types.ModeOwner)

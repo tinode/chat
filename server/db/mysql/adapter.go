@@ -33,7 +33,7 @@ const (
 	defaultDSN      = "root:@tcp(localhost:3306)/tinode?parseTime=true"
 	defaultDatabase = "tinode"
 
-	adpVersion = 108
+	adpVersion = 109
 
 	adapterName = "mysql"
 
@@ -302,6 +302,11 @@ func (a *adapter) CreateDb(reset bool) error {
 		return err
 	}
 
+	// Create system topic 'sys'.
+	if err = createSystemTopic(tx); err != nil {
+		return err
+	}
+
 	// Indexed topic tags.
 	if _, err = tx.Exec(
 		`CREATE TABLE topictags(
@@ -445,6 +450,14 @@ func (a *adapter) CreateDb(reset bool) error {
 }
 
 func (a *adapter) UpgradeDb() error {
+	bumpVersion := func(a *adapter, x int) error {
+		if err := a.updateDbVersion(x); err != nil {
+			return err
+		}
+		_, err := a.GetDbVersion()
+		return err
+	}
+
 	if _, err := a.GetDbVersion(); err != nil {
 		return err
 	}
@@ -464,11 +477,7 @@ func (a *adapter) UpgradeDb() error {
 			return err
 		}
 
-		if err := a.updateDbVersion(107); err != nil {
-			return err
-		}
-
-		if _, err := a.GetDbVersion(); err != nil {
+		if err := bumpVersion(a, 107); err != nil {
 			return err
 		}
 	}
@@ -482,11 +491,25 @@ func (a *adapter) UpgradeDb() error {
 			return err
 		}
 
-		if err := a.updateDbVersion(108); err != nil {
+		if err := bumpVersion(a, 108); err != nil {
+			return err
+		}
+	}
+
+	if a.version == 108 {
+		tx, err := a.db.Begin()
+		if err != nil {
+			return err
+		}
+		if err = createSystemTopic(tx); err != nil {
+			tx.Rollback()
+			return err
+		}
+		if err = tx.Commit(); err != nil {
 			return err
 		}
 
-		if _, err := a.GetDbVersion(); err != nil {
+		if err = bumpVersion(a, 109); err != nil {
 			return err
 		}
 	}
@@ -496,6 +519,14 @@ func (a *adapter) UpgradeDb() error {
 			". DB is still at " + strconv.Itoa(a.version))
 	}
 	return nil
+}
+
+func createSystemTopic(tx *sql.Tx) error {
+	now := t.TimeNow()
+	sql := `INSERT INTO topics(createdat,updatedat,name,access,public) 
+				VALUES(?,?,'sys','{"Auth": "N","Anon": "N"}','{"fn": "System"}')`
+	_, err := tx.Exec(sql, now, now)
+	return err
 }
 
 func addTags(tx *sqlx.Tx, table, keyName string, keyVal interface{}, tags []string, ignoreDups bool) error {

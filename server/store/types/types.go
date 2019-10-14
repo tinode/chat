@@ -81,9 +81,9 @@ func (uid Uid) Compare(u2 Uid) int {
 }
 
 // MarshalBinary converts Uid to byte slice.
-func (uid *Uid) MarshalBinary() ([]byte, error) {
+func (uid Uid) MarshalBinary() ([]byte, error) {
 	dst := make([]byte, 8)
-	binary.LittleEndian.PutUint64(dst, uint64(*uid))
+	binary.LittleEndian.PutUint64(dst, uint64(uid))
 	return dst, nil
 }
 
@@ -358,6 +358,9 @@ type StringSlice []string
 
 // Scan implements sql.Scanner interface.
 func (ss *StringSlice) Scan(val interface{}) error {
+	if val == nil {
+		return nil
+	}
 	return json.Unmarshal(val.([]byte), ss)
 }
 
@@ -422,6 +425,8 @@ const (
 	ModeCAuth AccessMode = ModeCP2P | ModeCPublic
 	// Read-only access to topic ("JR", 3)
 	ModeCReadOnly = ModeJoin | ModeRead
+	// Access to 'sys' topic by a root user ("JRWPD", 79, 0x4F)
+	ModeCSys = ModeJoin | ModeRead | ModeWrite | ModePres | ModeDelete
 
 	// Admin: user who can modify access mode ("OA", dec: 144, hex: 0x90)
 	ModeCAdmin = ModeOwner | ModeApprove
@@ -1021,6 +1026,8 @@ const (
 	TopicCatP2P
 	// TopicCatGrp is a a value denoting group topic.
 	TopicCatGrp
+	// TopicCatSys is a constant indicating a system topic.
+	TopicCatSys
 )
 
 // GetTopicCat given topic name returns topic category.
@@ -1034,6 +1041,8 @@ func GetTopicCat(name string) TopicCat {
 		return TopicCatGrp
 	case "fnd":
 		return TopicCatFnd
+	case "sys":
+		return TopicCatSys
 	default:
 		panic("invalid topic type for name '" + name + "'")
 	}

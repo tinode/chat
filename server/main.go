@@ -100,6 +100,8 @@ const (
 // For instance, to define the buildstamp as a timestamp of when the server was built add a
 // flag to compiler command line:
 // 		-ldflags "-X main.buildstamp=`date -u '+%Y%m%dT%H:%M:%SZ'`"
+// or to set it to git tag:
+// 		-ldflags "-X main.buildstamp=`git describe --tags`"
 var buildstamp = "undef"
 
 // CredValidator holds additional config params for a credential validator.
@@ -112,6 +114,8 @@ type credValidator struct {
 var globals struct {
 	// Topics cache and processing.
 	hub *Hub
+	// Indicator that shutdown is in progress
+	shuttingDown bool
 	// Sessions cache.
 	sessionStore *SessionStore
 	// Cluster data.
@@ -123,7 +127,7 @@ var globals struct {
 	// Runtime statistics communication channel.
 	statsUpdate chan *varUpdate
 	// Users cache communication channel.
-	usersUpdate chan *userUpdate
+	usersUpdate chan *UserCacheReq
 
 	// Credential validators.
 	validators map[string]credValidator
@@ -257,6 +261,17 @@ func main() {
 		config.Listen = *listenOn
 	}
 
+	// Set up HTTP server. Must use non-default mux because of expvar.
+	mux := http.NewServeMux()
+
+	evpath := *expvarPath
+	if evpath == "" {
+		evpath = config.ExpvarPath
+	}
+	statsInit(mux, evpath)
+	statsRegisterInt("Version")
+	statsSet("Version", int64(parseVersion(currentVersion)))
+
 	// Initialize cluster and receive calculated workerId.
 	// Cluster won't be started here yet.
 	workerId := clusterInit(config.Cluster, clusterSelf)
@@ -283,7 +298,7 @@ func main() {
 		log.Printf("Profiling info saved to '%s.(cpu|mem)'", *pprofFile)
 	}
 
-	err := store.Open(workerId, string(config.Store))
+	err := store.Open(workerId, config.Store)
 	if err != nil {
 		log.Fatal("Failed to connect to DB: ", err)
 	}
@@ -477,9 +492,6 @@ func main() {
 		log.Fatal(err)
 	}
 
-	// Set up HTTP server. Must use non-default mux because of expvar.
-	mux := http.NewServeMux()
-
 	// Serve static content from the directory in -static_data flag if that's
 	// available, otherwise assume '<path-to-executable>/static'. The content is served at
 	// the path pointed by 'static_mount' in the config. If that is missing then it's
@@ -536,12 +548,6 @@ func main() {
 		// Serve json-formatted 404 for all other URLs
 		mux.HandleFunc("/", serve404)
 	}
-
-	evpath := *expvarPath
-	if evpath == "" {
-		evpath = config.ExpvarPath
-	}
-	statsInit(mux, evpath)
 
 	if err = listenAndServe(config.Listen, mux, tlsConfig, signalHandler()); err != nil {
 		log.Fatal(err)
