@@ -814,21 +814,19 @@ func (c *Cluster) rehash(nodes []string) []string {
 // Iterates over sessions hosted on this node and for each session
 // sends "{pres term}" to all displayed topics.
 // Called immediately after Cluster.rehash().
-func (c *Cluster) invalidateRemoteSubs(ss *SessionStore) {
-	ss.lock.Lock()
-	defer ss.lock.Unlock()
+func (c *Cluster) invalidateRemoteSubs() {
+	globals.sessionStore.lock.Lock()
+	defer globals.sessionStore.lock.Unlock()
 
-	for _, s := range ss.sessCache {
+	for _, s := range globals.sessionStore.sessCache {
 		if s.proto == CLUSTER || len(s.remoteSubs) == 0 {
 			continue
 		}
 		s.remoteSubsLock.Lock()
 		var topicsToTerminate []string
-		var keysToDelete []string
 		for topic, remSub := range s.remoteSubs {
 			if remSub.node != c.ring.Get(topic) {
 				topicsToTerminate = append(topicsToTerminate, remSub.originalTopic)
-				keysToDelete = append(keysToDelete, topic)
 				delete(s.remoteSubs, topic)
 			}
 		}
