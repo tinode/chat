@@ -596,8 +596,8 @@ func (c *Cluster) sessionGone(sess *Session) error {
 
 	notifiedNodes := make(map[string]bool)
 
-	sess.remoteSubsLock.Lock()
-	defer sess.remoteSubsLock.Unlock()
+	sess.remoteSubsLock.RLock()
+	defer sess.remoteSubsLock.RUnlock()
 
 	for _, remSub := range sess.remoteSubs {
 		nodeName := remSub.node
