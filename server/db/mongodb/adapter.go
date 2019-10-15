@@ -432,7 +432,23 @@ func (a *adapter) CredUpsert(cred *t.Credential) (bool, error) {
 
 // CredGetActive returns the currently active credential record for the given method.
 func (a *adapter) CredGetActive(uid t.Uid, method string) (*t.Credential, error) {
-	return &t.Credential{}, nil
+	var cred t.Credential
+
+	filter := bson.M{"$and": bson.A{
+		bson.M{"user": uid.String()},
+		bson.M{"deletedat": bson.M{"$exists": false}},
+		bson.M{"method": method},
+		bson.M{"done": false}}}
+
+	if err := a.db.Collection("credentials").FindOne(c.TODO(), filter).Decode(&cred); err != nil {
+		if strings.Contains(err.Error(), "no documents in") { // Cred not found
+			return nil, t.ErrNotFound
+		} else {
+			return nil, err
+		}
+	}
+
+	return &cred, nil
 }
 
 // CredGetAll returns credential records for the given user and method, validated only or all.
