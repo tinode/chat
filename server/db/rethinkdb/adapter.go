@@ -28,7 +28,7 @@ const (
 	defaultHost     = "localhost:28015"
 	defaultDatabase = "tinode"
 
-	adpVersion = 108
+	adpVersion = 109
 
 	adapterName = "rethinkdb"
 
@@ -1871,16 +1871,13 @@ func (a *adapter) CredUpsert(cred *t.Credential) (bool, error) {
 		if err != nil {
 			return false, err
 		}
+		defer cursor.Close()
 		if !cursor.IsNil() {
+			// Someone has already validated this credential.
 			return false, t.ErrDuplicate
 		}
-		cursor.Close()
 
-		// If credential is not confirmed, it should not block others
-		// from attempting to validate it: make index user-unique instead of global-unique.
-		cred.Id = cred.User + ":" + cred.Id
-
-		// Deactivate all unverified records of this user and method.
+		// Deactivate all unvalidated records of this user and method.
 		_, err = tableCredentials.GetAllByIndex("User", cred.User).
 			Filter(map[string]interface{}{"Method": cred.Method, "Done": false}).Update(
 			map[string]interface{}{"DeletedAt": t.TimeNow()}).RunWrite(a.conn)
@@ -1888,20 +1885,29 @@ func (a *adapter) CredUpsert(cred *t.Credential) (bool, error) {
 			return false, err
 		}
 
-		// Assume that the record exists and try to update it: remove DeletedAt, update timestamp and response.
-		result, err := tableCredentials.Get(cred.Id).
-			Replace(rdb.Row.Without("DeletedAt").
-				Merge(map[string]interface{}{
-					"UpdatedAt": cred.UpdatedAt,
-					"Resp":      cred.Resp})).RunWrite(a.conn)
+		// If credential is not confirmed, it should not block others
+		// from attempting to validate it: make index user-unique instead of global-unique.
+		cred.Id = cred.User + ":" + cred.Id
+
+		// Check if this credential has already been added by the user.
+		cursor2, err := tableCredentials.Get(cred.Id).Run(a.conn)
 		if err != nil {
 			return false, err
 		}
-
-		// If record was updated, then all is fine.
-		if result.Updated > 0 {
+		defer cursor2.Close()
+		if !cursor2.IsNil() {
+			tableCredentials.Get(cred.Id).
+				Replace(rdb.Row.Without("DeletedAt").
+					Merge(map[string]interface{}{
+						"UpdatedAt": cred.UpdatedAt,
+						"Resp":      cred.Resp})).RunWrite(a.conn)
+			if err != nil {
+				return false, err
+			}
+			// The record was updated, all is fine.
 			return false, nil
 		}
+
 	} else {
 		// Hard-delete potentially present unvalidated credential.
 		_, err = tableCredentials.Get(cred.User + ":" + cred.Id).Delete().RunWrite(a.conn)
