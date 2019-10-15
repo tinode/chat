@@ -177,9 +177,10 @@ func (a *adapter) CreateDb(reset bool) error {
 	// Collections (tables) do not need to be explicitly created since MongoDB creates them with first write operation
 
 	// Collection with metadata key-value pairs.
-	var idxOpts mdbopts.IndexOptions
-	idxOpts.SetUnique(true)
-	if _, err := a.db.Collection("kvmeta").Indexes().CreateOne(c.TODO(), mdb.IndexModel{Keys: bson.M{"key": 1}, Options: &idxOpts}); err != nil {
+	var idxUniqueOpt mdbopts.IndexOptions
+	idxUniqueOpt.SetUnique(true)
+	_, err := a.db.Collection("kvmeta").Indexes().CreateOne(c.TODO(), mdb.IndexModel{Keys: bson.M{"key": 1}, Options: &idxUniqueOpt})
+	if err != nil {
 		return err
 	}
 
@@ -196,6 +197,10 @@ func (a *adapter) CreateDb(reset bool) error {
 
 	// User authentication records {unique, userid, secret}
 	// Should be able to access user's auth records by user id
+	_, err := a.db.Collection("auth").Indexes().CreateOne(c.TODO(),	mdb.IndexModel{Keys: bson.M{"unique": 1}, Options: &idxUniqueOpt})
+	if err != nil {
+		return err
+	}
 	if _, err := a.db.Collection("auth").Indexes().CreateOne(c.TODO(), mdb.IndexModel{Keys: bson.M{"userid": 1}}); err != nil {
 		return err
 	}
