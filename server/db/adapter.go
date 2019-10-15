@@ -37,15 +37,15 @@ type Adapter interface {
 	// User management
 
 	// UserCreate creates user record
-	UserCreate(usr *t.User) error
+	UserCreate(user *t.User) error
 	// UserGet returns record for a given user ID
-	UserGet(id t.Uid) (*t.User, error)
+	UserGet(uid t.Uid) (*t.User, error)
 	// UserGetAll returns user records for a given list of user IDs
 	UserGetAll(ids ...t.Uid) ([]t.User, error)
 	// UserDelete deletes user record
-	UserDelete(id t.Uid, hard bool) error
+	UserDelete(uid t.Uid, hard bool) error
 	// UserGetDisabled returns IDs of users which were soft-deleted since given time.
-	UserGetDisabled(time.Time) ([]t.Uid, error)
+	UserGetDisabled(since time.Time) ([]t.Uid, error)
 	// UserUpdate updates user record
 	UserUpdate(uid t.Uid, update map[string]interface{}) error
 	// UserUpdateTags adds, removes, or resets user's tags
@@ -65,7 +65,7 @@ type Adapter interface {
 	// CredGetAll returns credential records for the given user and method, validated only or all.
 	CredGetAll(uid t.Uid, method string, validatedOnly bool) ([]t.Credential, error)
 	// CredIsConfirmed returns true if the given credential method has been verified, false otherwise.
-	CredIsConfirmed(uid t.Uid, metod string) (bool, error)
+	CredIsConfirmed(uid t.Uid, method string) (bool, error)
 	// CredDel deletes credentials for the given method/value. If method is empty, deletes all
 	// user's credentials.
 	CredDel(uid t.Uid, method, value string) error
