@@ -1925,19 +1925,6 @@ func (a *adapter) CredUpsert(cred *t.Credential) (bool, error) {
 	return true, err
 }
 
-// CredIsConfirmed returns true if the given credential method has been verified, false otherwise.
-func (a *adapter) CredIsConfirmed(uid t.Uid, method string) (bool, error) {
-	cursor, err := rdb.DB(a.dbName).Table("credentials").
-		GetAllByIndex("User", uid.String()).
-		Filter(map[string]interface{}{"Method": method, "Done": true}).Run(a.conn)
-	if err != nil {
-		return false, err
-	}
-	defer cursor.Close()
-
-	return !cursor.IsNil(), nil
-}
-
 // CredDel deletes credentials for the given method. If method is empty, deletes all user's credentials.
 func (a *adapter) CredDel(uid t.Uid, method, value string) error {
 	q := rdb.DB(a.dbName).Table("credentials").

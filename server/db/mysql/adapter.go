@@ -2312,20 +2312,6 @@ func (a *adapter) CredUpsert(cred *t.Credential) (bool, error) {
 	return true, tx.Commit()
 }
 
-// CredIsConfirmed returns true of the given validation method is confirmed.
-func (a *adapter) CredIsConfirmed(uid t.Uid, method string) (bool, error) {
-	var done int
-	// There could be more than one credential of the same method. We just need one.
-	err := a.db.Get(&done, "SELECT done FROM credentials WHERE userid=? AND method=? AND done=true",
-		store.DecodeUid(uid), method)
-	if err == sql.ErrNoRows {
-		// Nothing found, clear the error, otherwise it will be reported as internal error.
-		err = nil
-	}
-
-	return done > 0, err
-}
-
 // credDel deletes given validation method or all methods of the given user.
 // 1. If user is being deleted, hard-delete all records (method == "")
 // 2. If one value is being deleted:

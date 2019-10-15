@@ -64,8 +64,6 @@ type Adapter interface {
 	CredGetActive(uid t.Uid, method string) (*t.Credential, error)
 	// CredGetAll returns credential records for the given user and method, validated only or all.
 	CredGetAll(uid t.Uid, method string, validatedOnly bool) ([]t.Credential, error)
-	// CredIsConfirmed returns true if the given credential method has been verified, false otherwise.
-	CredIsConfirmed(uid t.Uid, method string) (bool, error)
 	// CredDel deletes credentials for the given method/value. If method is empty, deletes all
 	// user's credentials.
 	CredDel(uid t.Uid, method, value string) error
