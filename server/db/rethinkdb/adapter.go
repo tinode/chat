@@ -1952,8 +1952,8 @@ func (a *adapter) CredDel(uid t.Uid, method, value string) error {
 	return err
 }
 
-// credGetActive reads the currently active unvalidated credential
-func (a *adapter) credGetActive(uid t.Uid, method string) (*t.Credential, error) {
+// CredGetActive returns currently active credential record for the given method.
+func (a *adapter) CredGetActive(uid t.Uid, method string) (*t.Credential, error) {
 	// Get the active unconfirmed credential:
 	cursor, err := rdb.DB(a.dbName).Table("credentials").GetAllByIndex("User", uid.String()).
 		Filter(rdb.Row.HasFields("DeletedAt").Not()).
@@ -1978,7 +1978,7 @@ func (a *adapter) credGetActive(uid t.Uid, method string) (*t.Credential, error)
 // CredConfirm marks given credential as validated.
 func (a *adapter) CredConfirm(uid t.Uid, method string) error {
 
-	cred, err := a.credGetActive(uid, method)
+	cred, err := a.CredGetActive(uid, method)
 	if err != nil {
 		return err
 	}
@@ -2012,11 +2012,6 @@ func (a *adapter) CredFail(uid t.Uid, method string) error {
 			"UpdatedAt": t.TimeNow(),
 		}).RunWrite(a.conn)
 	return err
-}
-
-// CredGetActive returns currently active credential record for the given method.
-func (a *adapter) CredGetActive(uid t.Uid, method string) (*t.Credential, error) {
-	return a.credGetActive(uid, method)
 }
 
 // CredGetAll returns user's credential records of the given method, validated only or all.
