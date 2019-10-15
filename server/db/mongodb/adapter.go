@@ -257,8 +257,7 @@ func (a *adapter) CreateDb(reset bool) error {
 	return nil
 }
 
-// TODO:
-// UpgradeDb upgrades database to the current adapter version.
+// TODO: UpgradeDb upgrades database to the current adapter version.
 func (a *adapter) UpgradeDb() error {
 	return nil
 }
@@ -425,7 +424,7 @@ func (a *adapter) UserUnreadCount(uid t.Uid) (int, error) {
 
 // Credential management
 
-// CredUpsert adds or updates a credential record. Returns true if record was inserted, false if updated.
+// TODO: CredUpsert adds or updates a credential record. Returns true if record was inserted, false if updated.
 func (a *adapter) CredUpsert(cred *t.Credential) (bool, error) {
 	return false, nil
 }
@@ -508,14 +507,23 @@ func (a *adapter) CredDel(uid t.Uid, method, value string) error {
 	return err
 }
 
-// CredConfirm marks given credential as validated.
+// TODO (after CredUpsert done): CredConfirm marks given credential as validated.
 func (a *adapter) CredConfirm(uid t.Uid, method string) error {
 	return nil
 }
 
 // CredFail increments count of failed validation attepmts for the given credentials.
 func (a *adapter) CredFail(uid t.Uid, method string) error {
-	return nil
+	filter := bson.M{"$and": bson.A{
+		bson.M{"user": uid.String()},
+		bson.M{"deletedat": bson.M{"$exists": false}},
+		bson.M{"method": method},
+		bson.M{"done": false}}}
+	update := bson.M{}
+	update["$inc"] = bson.M{"retries": 1}
+	update["$set"] = bson.M{"updatedat": t.TimeNow()}
+	_, err := a.db.Collection("credentials").UpdateOne(c.TODO(), filter, update)
+	return err
 }
 
 // Authentication management for the basic authentication scheme
