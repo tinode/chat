@@ -440,15 +440,38 @@ func (a *adapter) CredGetAll(uid t.Uid, method string, validatedOnly bool) ([]t.
 	return nil, nil
 }
 
-// CredIsConfirmed returns true if the given credential method has been verified, false otherwise.
-func (a *adapter) CredIsConfirmed(uid t.Uid, metod string) (bool, error) {
-	return false, nil
-}
-
 // CredDel deletes credentials for the given method/value. If method is empty, deletes all
 // user's credentials.
 func (a *adapter) CredDel(uid t.Uid, method, value string) error {
-	return nil
+	credCollection := a.db.Collection("credentials")
+	filter := bson.M{}
+	filterAnd := bson.A{}
+
+	filterUser := bson.M{"user": uid.String()}
+	filterAnd = append(filterAnd, filterUser)
+	if method != "" {
+		filterAnd = append(filterAnd, bson.M{"method": method})
+		if value != "" {
+			filterAnd = append(filterAnd, bson.M{"value": value})
+		}
+	} else {
+		_, err := credCollection.DeleteMany(c.TODO(), filterUser)
+		return err
+	}
+
+	// Hard-delete all confirmed values or values with no attempts at confirmation.
+	filterOr := bson.M{"$or": bson.A{
+		bson.M{"done": true},
+		bson.M{"retries": 0}}}
+	filterAnd = append(filterAnd, filterOr)
+	filter["$and"] = filterAnd
+	if _, err := credCollection.DeleteMany(c.TODO(), filter); err != nil {
+		return err
+	}
+
+	// Soft-delete all other values.
+	_, err := credCollection.UpdateMany(c.TODO(), filter, bson.M{"$set": bson.M{"deletedat": t.TimeNow()}})
+	return err
 }
 
 // CredConfirm marks given credential as validated.
