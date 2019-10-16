@@ -418,10 +418,8 @@ func (a *adapter) UserGetByCred(method, value string) (t.Uid, error) {
 	err := a.db.Collection("credentials").FindOne(c.TODO(), filter, findOpts).Decode(&userId)
 	if err != nil {
 		if isNoResult(err) {
-			log.Println("NO RESULT:", err)
 			return t.ZeroUid, nil
 		}
-		log.Println("ERRRR:", err)
 		return t.ZeroUid, err
 	}
 
