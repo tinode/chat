@@ -165,6 +165,16 @@ func (a *adapter) SetMaxResults(val int) error {
 	return nil
 }
 
+func getIdxOpts(field string, unique bool) mdb.IndexModel {
+	if unique {
+		var idxUniqueOpt mdbopts.IndexOptions
+		idxUniqueOpt.SetUnique(true)
+		return mdb.IndexModel{Keys: bson.M{field: 1}, Options: &idxUniqueOpt}
+	} else {
+		return mdb.IndexModel{Keys: bson.M{field: 1}}
+	}
+}
+
 // CreateDb creates the database optionally dropping an existing database first.
 func (a *adapter) CreateDb(reset bool) error {
 	if reset {
@@ -177,50 +187,47 @@ func (a *adapter) CreateDb(reset bool) error {
 	// Collections (tables) do not need to be explicitly created since MongoDB creates them with first write operation
 
 	// Collection with metadata key-value pairs.
-	var idxUniqueOpt mdbopts.IndexOptions
-	idxUniqueOpt.SetUnique(true)
-	_, err := a.db.Collection("kvmeta").Indexes().CreateOne(c.TODO(), mdb.IndexModel{Keys: bson.M{"key": 1}, Options: &idxUniqueOpt})
-	if err != nil {
+	if _, err := a.db.Collection("kvmeta").Indexes().CreateOne(c.TODO(), getIdxOpts("key", true));
+		err != nil {
 		return err
 	}
 
 	// Users
 	// Create secondary index on User.DeletedAt for finding soft-deleted users
-	if _, err := a.db.Collection("users").Indexes().CreateOne(c.TODO(), mdb.IndexModel{Keys: bson.M{"deletedat": 1}}); err != nil {
+	if _, err := a.db.Collection("users").Indexes().CreateOne(c.TODO(), getIdxOpts("deletedat", false)); err != nil {
 		return err
 	}
 	// Create secondary index on User.Tags array so user can be found by tags
-	if _, err := a.db.Collection("users").Indexes().CreateOne(c.TODO(), mdb.IndexModel{Keys: bson.M{"tags": 1}}); err != nil {
+	if _, err := a.db.Collection("users").Indexes().CreateOne(c.TODO(), getIdxOpts("tags", false)); err != nil {
 		return err
 	}
 	// TODO: Create secondary index for User.Devices.<hash>.DeviceId to ensure ID uniqueness across users
 
 	// User authentication records {unique, userid, secret}
 	// Should be able to access user's auth records by user id
-	_, err := a.db.Collection("auth").Indexes().CreateOne(c.TODO(),	mdb.IndexModel{Keys: bson.M{"unique": 1}, Options: &idxUniqueOpt})
-	if err != nil {
+	if _, err := a.db.Collection("auth").Indexes().CreateOne(c.TODO(), getIdxOpts("unique", true)); err != nil {
 		return err
 	}
-	if _, err := a.db.Collection("auth").Indexes().CreateOne(c.TODO(), mdb.IndexModel{Keys: bson.M{"userid": 1}}); err != nil {
+	if _, err := a.db.Collection("auth").Indexes().CreateOne(c.TODO(), getIdxOpts("userid", false)); err != nil {
 		return err
 	}
 
 	// Should be able to access user's auth records by user id
-	if _, err := a.db.Collection("subscriptions").Indexes().CreateOne(c.TODO(), mdb.IndexModel{Keys: bson.M{"user": 1}}); err != nil {
+	if _, err := a.db.Collection("subscriptions").Indexes().CreateOne(c.TODO(), getIdxOpts("user", false)); err != nil {
 		return err
 	}
-	if _, err := a.db.Collection("subscriptions").Indexes().CreateOne(c.TODO(), mdb.IndexModel{Keys: bson.M{"topic": 1}}); err != nil {
+	if _, err := a.db.Collection("subscriptions").Indexes().CreateOne(c.TODO(), getIdxOpts("topic", false)); err != nil {
 		return err
 	}
 
 	// Topics stored in database
 	// Secondary index on Owner field for deleting users.
-	if _, err := a.db.Collection("topics").Indexes().CreateOne(c.TODO(), mdb.IndexModel{Keys: bson.M{"owner": 1}}); err != nil {
+	if _, err := a.db.Collection("topics").Indexes().CreateOne(c.TODO(), getIdxOpts("owner", false)); err != nil {
 		return err
 	}
 	// Secondary index on Topic.Tags array so topics can be found by tags.
 	// These tags are not unique as opposite to User.Tags.
-	if _, err := a.db.Collection("topics").Indexes().CreateOne(c.TODO(), mdb.IndexModel{Keys: bson.M{"tags": 1}}); err != nil {
+	if _, err := a.db.Collection("topics").Indexes().CreateOne(c.TODO(), getIdxOpts("tags", false)); err != nil {
 		return err
 	}
 	// Create system topic 'sys'.
@@ -240,17 +247,17 @@ func (a *adapter) CreateDb(reset bool) error {
 	// User credentials - contact information such as "email:jdoe@example.com" or "tel:+18003287448":
 	// Id: "method:credential" like "email:jdoe@example.com". See types.Credential.
 	// Create secondary index on credentials.User to be able to query credentials by user id.
-	if _, err := a.db.Collection("credentials").Indexes().CreateOne(c.TODO(), mdb.IndexModel{Keys: bson.M{"user": 1}}); err != nil {
+	if _, err := a.db.Collection("credentials").Indexes().CreateOne(c.TODO(), getIdxOpts("user", false)); err != nil {
 		return err
 	}
 
 	// Records of file uploads. See types.FileDef.
 	// A secondary index on fileuploads.User to be able to get records by user id.
-	if _, err := a.db.Collection("fileuploads").Indexes().CreateOne(c.TODO(), mdb.IndexModel{Keys: bson.M{"user": 1}}); err != nil {
+	if _, err := a.db.Collection("fileuploads").Indexes().CreateOne(c.TODO(), getIdxOpts("user", false)); err != nil {
 		return err
 	}
 	// A secondary index on fileuploads.UseCount to be able to delete unused records at once.
-	if _, err := a.db.Collection("fileuploads").Indexes().CreateOne(c.TODO(), mdb.IndexModel{Keys: bson.M{"usecount": 1}}); err != nil {
+	if _, err := a.db.Collection("fileuploads").Indexes().CreateOne(c.TODO(), getIdxOpts("usecount", false)); err != nil {
 		return err
 	}
 
