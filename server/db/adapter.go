@@ -2,6 +2,7 @@
 package adapter
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/tinode/chat/server/auth"
@@ -14,7 +15,7 @@ type Adapter interface {
 	// General
 
 	// Open and configure the adapter
-	Open(config string) error
+	Open(config json.RawMessage) error
 	// Close the adapter
 	Close() error
 	// IsOpen checks if the adapter is ready for use
