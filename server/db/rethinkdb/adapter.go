@@ -55,7 +55,7 @@ type configType struct {
 }
 
 // Open initializes rethinkdb session
-func (a *adapter) Open(jsonconfig string) error {
+func (a *adapter) Open(jsonconfig json.RawMessage) error {
 	if a.conn != nil {
 		return errors.New("adapter rethinkdb is already connected")
 	}
@@ -63,7 +63,7 @@ func (a *adapter) Open(jsonconfig string) error {
 	var err error
 	var config configType
 
-	if err = json.Unmarshal([]byte(jsonconfig), &config); err != nil {
+	if err = json.Unmarshal(jsonconfig, &config); err != nil {
 		return errors.New("adapter rethinkdb failed to parse config: " + err.Error())
 	}
 
