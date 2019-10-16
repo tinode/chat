@@ -565,8 +565,32 @@ func (a *adapter) AuthGetUniqueRecord(unique string) (t.Uid, auth.Level, []byte,
 }
 
 // AuthGetRecord returns authentication record given user ID and method.
-func (a *adapter) AuthGetRecord(user t.Uid, scheme string) (string, auth.Level, []byte, time.Time, error) {
-	return "", 0, nil, time.Time{}, nil
+func (a *adapter) AuthGetRecord(uid t.Uid, scheme string) (string, auth.Level, []byte, time.Time, error) {
+	var record struct {
+		Unique  string
+		AuthLvl auth.Level
+		Secret  []byte
+		Expires time.Time
+	}
+	filter := bson.M{"$and": bson.A{
+		bson.M{"userid": uid.String()},
+		bson.M{"scheme": scheme},
+	}}
+	findOpts := &mdbopts.FindOneOptions{Projection: bson.M{
+		"_id":     0,
+		"unique":  1,
+		"authLvl": 1,
+		"secret":  1,
+		"expires": 1,
+	}}
+	if err := a.db.Collection("auth").FindOne(c.TODO(), filter, findOpts).Decode(&record); err != nil {
+		if isNoResult(err) {
+			return "", 0, nil, time.Time{}, t.ErrNotFound
+		}
+		return "", 0, nil, time.Time{}, err
+	}
+
+	return record.Unique, record.AuthLvl, record.Secret, record.Expires, nil
 }
 
 // AuthAddRecord creates new authentication record
