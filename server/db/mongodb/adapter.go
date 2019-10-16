@@ -594,7 +594,21 @@ func (a *adapter) AuthGetRecord(uid t.Uid, scheme string) (string, auth.Level, [
 }
 
 // AuthAddRecord creates new authentication record
-func (a *adapter) AuthAddRecord(user t.Uid, scheme, unique string, authLvl auth.Level, secret []byte, expires time.Time) (bool, error) {
+func (a *adapter) AuthAddRecord(uid t.Uid, scheme, unique string, authLvl auth.Level, secret []byte, expires time.Time) (bool, error) {
+	authRecord := bson.D{
+		{"unique", unique},
+		{"userid", uid.String()},
+		{"scheme", scheme},
+		{"authlvl", authLvl},
+		{"secret", secret},
+		{"expires", expires},
+	}
+	if _, err := a.db.Collection("auth").InsertOne(c.TODO(), authRecord); err != nil {
+		if strings.Contains(err.Error(), "duplicate key error") {
+			return true, t.ErrDuplicate
+		}
+		return false, err
+	}
 	return false, nil
 }
 
