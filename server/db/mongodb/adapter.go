@@ -613,8 +613,13 @@ func (a *adapter) AuthAddRecord(uid t.Uid, scheme, unique string, authLvl auth.L
 }
 
 // AuthDelScheme deletes an existing authentication scheme for the user.
-func (a *adapter) AuthDelScheme(user t.Uid, scheme string) error {
-	return nil
+func (a *adapter) AuthDelScheme(uid t.Uid, scheme string) error {
+	_, err := a.db.Collection("auth").DeleteOne(c.TODO(),
+		bson.D{
+			{"userid", uid.String()},
+			{"scheme", scheme},
+		})
+	return err
 }
 
 // AuthDelAllRecords deletes all records of a given user.
