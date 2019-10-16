@@ -629,7 +629,21 @@ func (a *adapter) AuthDelAllRecords(uid t.Uid) (int, error) {
 }
 
 // AuthUpdRecord modifies an authentication record.
-func (a *adapter) AuthUpdRecord(user t.Uid, scheme, unique string, authLvl auth.Level, secret []byte, expires time.Time) (bool, error) {
+func (a *adapter) AuthUpdRecord(uid t.Uid, scheme, unique string,
+	authLvl auth.Level, secret []byte, expires time.Time) (bool, error) {
+	filter := bson.D{
+		{"userid", uid.String()},
+		{"scheme", scheme}}
+	update := bson.M{"$set": bson.M{
+		"unique": unique,
+		"authlvl": authLvl,
+		"secret": secret,
+		"expires": expires,
+	}}
+	// TODO: Handle possible 'unique' field duplicate
+	if _, err := a.db.Collection("auth").UpdateOne(c.TODO(), filter, update); err != nil {
+		return true, err
+	}
 	return false, nil
 }
 
