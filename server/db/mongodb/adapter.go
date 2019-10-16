@@ -540,7 +540,28 @@ func (a *adapter) CredFail(uid t.Uid, method string) error {
 
 // AuthGetUniqueRecord returns authentication record for a given unique value i.e. login.
 func (a *adapter) AuthGetUniqueRecord(unique string) (t.Uid, auth.Level, []byte, time.Time, error) {
-	return 0, 0, nil, time.Time{}, nil
+	var record struct {
+		Userid  string
+		AuthLvl auth.Level
+		Secret  []byte
+		Expires time.Time
+	}
+	filter := bson.M{"unique": unique}
+	findOpts := &mdbopts.FindOneOptions{Projection: bson.M{
+		"_id":     0,
+		"userid":  1,
+		"authLvl": 1,
+		"secret":  1,
+		"expires": 1,
+	}}
+	if err := a.db.Collection("auth").FindOne(c.TODO(), filter, findOpts).Decode(&record); err != nil {
+		if isNoResult(err) {
+			return t.ZeroUid, 0, nil, time.Time{}, nil
+		}
+		return t.ZeroUid, 0, nil, time.Time{}, err
+	}
+
+	return t.ParseUid(record.Userid), record.AuthLvl, record.Secret, record.Expires, nil
 }
 
 // AuthGetRecord returns authentication record given user ID and method.
