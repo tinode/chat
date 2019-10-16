@@ -624,7 +624,8 @@ func (a *adapter) AuthDelScheme(uid t.Uid, scheme string) error {
 
 // AuthDelAllRecords deletes all records of a given user.
 func (a *adapter) AuthDelAllRecords(uid t.Uid) (int, error) {
-	return 0, nil
+	res, err := a.db.Collection("auth").DeleteMany(c.TODO(), bson.M{"userid": uid.String()})
+	return int(res.DeletedCount), err
 }
 
 // AuthUpdRecord modifies an authentication record.
