@@ -115,10 +115,10 @@ func (a *adapter) GetDbVersion() (int, error) {
 	}
 
 	var result struct {
-		Key   string
+		Key   string `bson:"_id"`
 		Value int
 	}
-	if err := a.db.Collection("kvmeta").FindOne(c.TODO(), bson.D{{"key", "version"}}).Decode(&result); err != nil {
+	if err := a.db.Collection("kvmeta").FindOne(c.TODO(), bson.D{{"_id", "version"}}).Decode(&result); err != nil {
 		if isNoResult(err) {
 			err = errors.New("Database not initialized")
 		}
@@ -186,11 +186,8 @@ func (a *adapter) CreateDb(reset bool) error {
 
 	// Collections (tables) do not need to be explicitly created since MongoDB creates them with first write operation
 
-	// Collection with metadata key-value pairs.
-	if _, err := a.db.Collection("kvmeta").Indexes().CreateOne(c.TODO(), getIdxOpts("key", true));
-		err != nil {
-		return err
-	}
+	// Collection "kvmeta" with metadata key-value pairs.
+	// Key in "_id" field.
 
 	// Users
 	// Create secondary index on User.DeletedAt for finding soft-deleted users
@@ -259,7 +256,7 @@ func (a *adapter) CreateDb(reset bool) error {
 	}
 
 	// Record current DB version.
-	if _, err := a.db.Collection("kvmeta").InsertOne(c.TODO(), map[string]interface{}{"key": "version", "value": adpVersion}); err != nil {
+	if _, err := a.db.Collection("kvmeta").InsertOne(c.TODO(), map[string]interface{}{"_id": "version", "value": adpVersion}); err != nil {
 		return err
 	}
 
