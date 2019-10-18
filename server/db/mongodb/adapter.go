@@ -182,8 +182,9 @@ func (a *adapter) CreateDb(reset bool) error {
 		if err := a.db.Drop(c.TODO()); err != nil {
 			return nil
 		}
+	} else if a.isDbInitialized() {
+		return errors.New("Database already initialized")
 	}
-
 	// Collections (tables) do not need to be explicitly created since MongoDB creates them with first write operation
 
 	// Collection "kvmeta" with metadata key-value pairs.
@@ -816,6 +817,16 @@ func (a *adapter) FileGet(fid string) (*t.FileDef, error) {
 // Returns array of FileDef.Location of deleted filerecords so actual files can be deleted too.
 func (a *adapter) FileDeleteUnused(olderThan time.Time, limit int) ([]string, error) {
 	return nil, nil
+}
+
+func (a *adapter) isDbInitialized() bool {
+	var result map[string]int
+
+	findOpts := &mdbopts.FindOneOptions{Projection: bson.M{"value": 1, "_id": 0}}
+	if err := a.db.Collection("kvmeta").FindOne(c.TODO(), bson.M{"_id": "version"}, findOpts).Decode(&result); err != nil {
+		return false
+	}
+	return true
 }
 
 func init() {
