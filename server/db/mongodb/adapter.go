@@ -203,11 +203,8 @@ func (a *adapter) CreateDb(reset bool) error {
 	}
 	// TODO: Create secondary index for User.Devices.<hash>.DeviceId to ensure ID uniqueness across users
 
-	// User authentication records {unique, userid, secret}
+	// User authentication records {_id, userid, secret}
 	// Should be able to access user's auth records by user id
-	if _, err := a.db.Collection("auth").Indexes().CreateOne(c.TODO(), getIdxOpts("unique", true)); err != nil {
-		return err
-	}
 	if _, err := a.db.Collection("auth").Indexes().CreateOne(c.TODO(), getIdxOpts("userid", false)); err != nil {
 		return err
 	}
@@ -286,6 +283,7 @@ func createSystemTopic(a *adapter) error {
 }
 
 // User management
+
 // UserCreate creates user record
 func (a *adapter) UserCreate(usr *t.User) error {
 	if _, err := a.db.Collection("users").InsertOne(c.TODO(), &usr); err != nil {
@@ -300,7 +298,7 @@ func (a *adapter) UserGet(id t.Uid) (*t.User, error) {
 	var user t.User
 
 	filter := bson.M{"$and": bson.A{
-		bson.D{{"id", id.String()}},
+		bson.D{{"_id", id.String()}},
 		bson.D{{"deletedat", bson.D{{"$exists", false}}}}}}
 	if err := a.db.Collection("users").FindOne(c.TODO(), filter).Decode(&user); err != nil {
 		if strings.Contains(err.Error(), "no documents in user") { // User not found
@@ -322,7 +320,7 @@ func (a *adapter) UserGetAll(ids ...t.Uid) ([]t.User, error) {
 
 	var users []t.User
 	filter := bson.M{"$and": bson.A{
-		bson.M{"id": bson.M{"$in": uids}},
+		bson.M{"_id": bson.M{"$in": uids}},
 		bson.M{"deletedat": bson.M{"$exists": false}}}}
 	if cur, err := a.db.Collection("users").Find(c.TODO(), filter); err == nil {
 		defer cur.Close(c.TODO())
@@ -348,7 +346,7 @@ func (a *adapter) UserDelete(id t.Uid, hard bool) error {
 // UserGetDisabled returns IDs of users which were soft-deleted since given time.
 func (a *adapter) UserGetDisabled(since time.Time) ([]t.Uid, error) {
 	filter := bson.M{"deletedat": bson.M{"$gte": since}}
-	findOpts := &mdbopts.FindOptions{Projection: bson.D{{"id", 1}, {"_id", 0}}}
+	findOpts := &mdbopts.FindOptions{Projection: bson.D{{"_id", 1}}}
 	if cur, err := a.db.Collection("users").Find(c.TODO(), filter, findOpts); err == nil {
 		defer cur.Close(c.TODO())
 
@@ -358,7 +356,7 @@ func (a *adapter) UserGetDisabled(since time.Time) ([]t.Uid, error) {
 			if err := cur.Decode(&userId); err != nil {
 				return nil, err
 			}
-			uids = append(uids, t.ParseUid(userId["id"]))
+			uids = append(uids, t.ParseUid(userId["_id"]))
 		}
 		return uids, nil
 	} else {
@@ -368,8 +366,12 @@ func (a *adapter) UserGetDisabled(since time.Time) ([]t.Uid, error) {
 
 // UserUpdate updates user record
 func (a *adapter) UserUpdate(uid t.Uid, update map[string]interface{}) error {
-	upd := bson.M{"$set": update}
-	_, err := a.db.Collection("users").UpdateOne(c.TODO(), bson.M{"id": uid.String()}, upd)
+	if val, ok := update["UpdatedAt"]; ok { // to get round the hardcoded "UpdatedAt" key in store.Users.Update()
+		update["updatedat"] = val
+		delete(update, "UpdatedAt")
+	}
+
+	_, err := a.db.Collection("users").UpdateOne(c.TODO(), bson.M{"_id": uid.String()}, bson.M{"$set": update})
 	return err
 }
 
@@ -382,7 +384,7 @@ func (a *adapter) UserUpdateTags(uid t.Uid, add, remove, reset []string) ([]stri
 	}
 
 	var user t.User
-	if err := a.db.Collection("users").FindOne(c.TODO(), bson.M{"id": uid.String()}).Decode(&user); err != nil {
+	if err := a.db.Collection("users").FindOne(c.TODO(), bson.M{"_id": uid.String()}).Decode(&user); err != nil {
 		return nil, err
 	}
 
@@ -403,7 +405,7 @@ func (a *adapter) UserUpdateTags(uid t.Uid, add, remove, reset []string) ([]stri
 	// Get the new tags
 	var tags map[string][]string
 	findOpts := &mdbopts.FindOneOptions{Projection: bson.D{{"tags", 1}, {"_id", 0}}}
-	if err := a.db.Collection("users").FindOne(c.TODO(), bson.M{"id": uid.String()}, findOpts).Decode(&tags); err == nil {
+	if err := a.db.Collection("users").FindOne(c.TODO(), bson.M{"_id": uid.String()}, findOpts).Decode(&tags); err == nil {
 		return tags["tags"], nil
 	} else {
 		return nil, err
@@ -541,15 +543,13 @@ func (a *adapter) CredFail(uid t.Uid, method string) error {
 // AuthGetUniqueRecord returns authentication record for a given unique value i.e. login.
 func (a *adapter) AuthGetUniqueRecord(unique string) (t.Uid, auth.Level, []byte, time.Time, error) {
 	var record struct {
-		Userid  string
+		Id  string `bson:"_id"`
 		AuthLvl auth.Level
 		Secret  []byte
 		Expires time.Time
 	}
-	filter := bson.M{"unique": unique}
+	filter := bson.M{"_id": unique}
 	findOpts := &mdbopts.FindOneOptions{Projection: bson.M{
-		"_id":     0,
-		"userid":  1,
 		"authLvl": 1,
 		"secret":  1,
 		"expires": 1,
@@ -561,13 +561,13 @@ func (a *adapter) AuthGetUniqueRecord(unique string) (t.Uid, auth.Level, []byte,
 		return t.ZeroUid, 0, nil, time.Time{}, err
 	}
 
-	return t.ParseUid(record.Userid), record.AuthLvl, record.Secret, record.Expires, nil
+	return t.ParseUid(record.Id), record.AuthLvl, record.Secret, record.Expires, nil
 }
 
 // AuthGetRecord returns authentication record given user ID and method.
 func (a *adapter) AuthGetRecord(uid t.Uid, scheme string) (string, auth.Level, []byte, time.Time, error) {
 	var record struct {
-		Unique  string
+		Id   string`bson:"_id"`
 		AuthLvl auth.Level
 		Secret  []byte
 		Expires time.Time
@@ -577,8 +577,6 @@ func (a *adapter) AuthGetRecord(uid t.Uid, scheme string) (string, auth.Level, [
 		bson.M{"scheme": scheme},
 	}}
 	findOpts := &mdbopts.FindOneOptions{Projection: bson.M{
-		"_id":     0,
-		"unique":  1,
 		"authLvl": 1,
 		"secret":  1,
 		"expires": 1,
@@ -590,13 +588,13 @@ func (a *adapter) AuthGetRecord(uid t.Uid, scheme string) (string, auth.Level, [
 		return "", 0, nil, time.Time{}, err
 	}
 
-	return record.Unique, record.AuthLvl, record.Secret, record.Expires, nil
+	return record.Id, record.AuthLvl, record.Secret, record.Expires, nil
 }
 
 // AuthAddRecord creates new authentication record
 func (a *adapter) AuthAddRecord(uid t.Uid, scheme, unique string, authLvl auth.Level, secret []byte, expires time.Time) (bool, error) {
 	authRecord := bson.D{
-		{"unique", unique},
+		{"_id", unique},
 		{"userid", uid.String()},
 		{"scheme", scheme},
 		{"authlvl", authLvl},
@@ -635,9 +633,9 @@ func (a *adapter) AuthUpdRecord(uid t.Uid, scheme, unique string,
 		{"userid", uid.String()},
 		{"scheme", scheme}}
 	update := bson.M{"$set": bson.M{
-		"unique": unique,
+		"unique":  unique,
 		"authlvl": authLvl,
-		"secret": secret,
+		"secret":  secret,
 		"expires": expires,
 	}}
 	// TODO: Handle possible 'unique' field duplicate
@@ -651,7 +649,8 @@ func (a *adapter) AuthUpdRecord(uid t.Uid, scheme, unique string,
 
 // TopicCreate creates a topic
 func (a *adapter) TopicCreate(topic *t.Topic) error {
-	return nil
+	_, err := a.db.Collection("topics").InsertOne(c.TODO(), &topic)
+	return err
 }
 
 // TopicCreateP2P creates a p2p topic
