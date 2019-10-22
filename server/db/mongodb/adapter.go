@@ -608,7 +608,7 @@ func (a *adapter) CredFail(uid t.Uid, method string) error {
 // AuthGetUniqueRecord returns authentication record for a given unique value i.e. login.
 func (a *adapter) AuthGetUniqueRecord(unique string) (t.Uid, auth.Level, []byte, time.Time, error) {
 	var record struct {
-		Id  string `bson:"_id"`
+		Id      string `bson:"_id"`
 		AuthLvl auth.Level
 		Secret  []byte
 		Expires time.Time
@@ -632,7 +632,7 @@ func (a *adapter) AuthGetUniqueRecord(unique string) (t.Uid, auth.Level, []byte,
 // AuthGetRecord returns authentication record given user ID and method.
 func (a *adapter) AuthGetRecord(uid t.Uid, scheme string) (string, auth.Level, []byte, time.Time, error) {
 	var record struct {
-		Id   string`bson:"_id"`
+		Id      string `bson:"_id"`
 		AuthLvl auth.Level
 		Secret  []byte
 		Expires time.Time
