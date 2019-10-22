@@ -434,9 +434,76 @@ func (a *adapter) UserUnreadCount(uid t.Uid) (int, error) {
 
 // Credential management
 
-// TODO: CredUpsert adds or updates a credential record. Returns true if record was inserted, false if updated.
+// CredUpsert adds or updates a validation record. Returns true if inserted, false if updated.
+// 1. if credential is validated:
+// 1.1 Hard-delete unconfirmed equivalent record, if exists.
+// 1.2 Insert new. Report error if duplicate.
+// 2. if credential is not validated:
+// 2.1 Check if validated equivalent exist. If so, report an error.
+// 2.2 Soft-delete all unvalidated records of the same method.
+// 2.3 Undelete existing credential. Return if successful.
+// 2.4 Insert new credential record.
 func (a *adapter) CredUpsert(cred *t.Credential) (bool, error) {
-	return false, nil
+	credCollection := a.db.Collection("credentials")
+
+	cred.Id = cred.Method + ":" + cred.Value
+
+	if !cred.Done {
+		// Check if the same credential is already validated.
+		var result1 t.Credential
+		err := credCollection.FindOne(c.TODO(), bson.M{"_id": cred.Id}).Decode(&result1)
+		if result1 != (t.Credential{}) {
+			// Someone has already validated this credential.
+			return false, t.ErrDuplicate
+		} else if err != nil && !isNoResult(err) {  // no result -> continue
+			return false, err
+		}
+
+		// Soft-delete all unvalidated records of this user and method.
+		_, err = credCollection.UpdateMany(c.TODO(),
+			bson.D{{"user", cred.User}, {"method", cred.Method}, {"done", false}},
+			bson.M{"$set": bson.M{"deletedat": t.TimeNow()}})
+		if err != nil {
+			return false, err
+		}
+
+		// If credential is not confirmed, it should not block others
+		// from attempting to validate it: make index user-unique instead of global-unique.
+		cred.Id = cred.User + ":" + cred.Id
+
+		// Check if this credential has already been added by the user.
+		var result2 t.Credential
+		err = credCollection.FindOne(c.TODO(), bson.M{"_id": cred.Id}).Decode(&result2)
+		if result2 != (t.Credential{}) {
+			_, err = credCollection.UpdateOne(c.TODO(),
+				bson.D{{"_id", cred.Id},},
+				bson.M{
+					"$unset": bson.M{"deletedat": ""},
+					"$set":   bson.M{"updatedat": cred.UpdatedAt, "resp": cred.Resp}})
+			if err != nil {
+				return false, err
+			}
+
+			// The record was updated, all is fine.
+			return false, nil
+		} else if err != nil && !isNoResult(err) {
+			return false, err
+		}
+	} else {
+		// Hard-delete potentially present unvalidated credential.
+		_, err := credCollection.DeleteOne(c.TODO(), bson.M{"_id": cred.User + ":" + cred.Id})
+		if err != nil {
+			return false, err
+		}
+	}
+
+	// Insert a new record.
+	_, err := credCollection.InsertOne(c.TODO(), cred)
+	if isDuplicateErr(err) {
+		return true, t.ErrDuplicate
+	}
+
+	return true, err
 }
 
 // CredGetActive returns the currently active credential record for the given method.
@@ -600,7 +667,7 @@ func (a *adapter) AuthAddRecord(uid t.Uid, scheme, unique string, authLvl auth.L
 		{"expires", expires},
 	}
 	if _, err := a.db.Collection("auth").InsertOne(c.TODO(), authRecord); err != nil {
-		if strings.Contains(err.Error(), "duplicate key error") {
+		if isDuplicateErr(err) {
 			return true, t.ErrDuplicate
 		}
 		return false, err
@@ -868,4 +935,13 @@ func isNoResult(err error) bool {
 
 	msg := err.Error()
 	return strings.Contains(msg, "no documents in result")
+}
+
+func isDuplicateErr(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	msg := err.Error()
+	return strings.Contains(msg, "duplicate key error")
 }
