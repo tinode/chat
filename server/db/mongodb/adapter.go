@@ -455,7 +455,7 @@ func (a *adapter) CredUpsert(cred *t.Credential) (bool, error) {
 		if result1 != (t.Credential{}) {
 			// Someone has already validated this credential.
 			return false, t.ErrDuplicate
-		} else if err != nil && !isNoResult(err) {  // no result -> continue
+		} else if err != nil && !isNoResult(err) { // no result -> continue
 			return false, err
 		}
 
@@ -586,6 +586,18 @@ func (a *adapter) CredDel(uid t.Uid, method, value string) error {
 
 // TODO (after CredUpsert done): CredConfirm marks given credential as validated.
 func (a *adapter) CredConfirm(uid t.Uid, method string) error {
+	cred, err := a.CredGetActive(uid, method)
+	if err != nil {
+		return err
+	}
+
+	cred.Done = true
+	cred.UpdatedAt = t.TimeNow()
+	if _, err = a.CredUpsert(cred); err != nil {
+		return err
+	}
+
+	_, _ = a.db.Collection("credentials").DeleteOne(c.TODO(), bson.M{"_id": uid.String() + ":" + cred.Method + ":" + cred.Value})
 	return nil
 }
 
