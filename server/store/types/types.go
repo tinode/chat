@@ -297,7 +297,7 @@ func ParseP2P(p2p string) (uid1, uid2 Uid, err error) {
 
 // ObjHeader is the header shared by all stored objects.
 type ObjHeader struct {
-	// using string to get around rethinkdb's problems with unit64;
+	// using string to get around rethinkdb's problems with uint64;
 	// `bson:"_id"` tag is for mongodb to use as primary key '_id'
 	Id        string `bson:"_id"`
 	id        Uid
@@ -661,7 +661,7 @@ func (da DefaultAccess) Value() (driver.Value, error) {
 
 // Credential hold data needed to validate and check validity of a credential like email or phone.
 type Credential struct {
-	ObjHeader
+	ObjHeader `bson:",inline"`
 	// Credential owner
 	User string
 	// Verification method (email, tel, captcha, etc)
@@ -678,7 +678,7 @@ type Credential struct {
 
 // Subscription to a topic
 type Subscription struct {
-	ObjHeader
+	ObjHeader `bson:",inline"`
 	// User who has relationship with the topic
 	User string
 	// Topic subscribed to
@@ -811,7 +811,7 @@ type perUserData struct {
 
 // Topic stored in database. Topic's name is Id
 type Topic struct {
-	ObjHeader
+	ObjHeader `bson:",inline"`
 
 	// Timestamp when the last message has passed through the topic
 	TouchedAt *time.Time
@@ -919,7 +919,7 @@ func (mh MessageHeaders) Value() (driver.Value, error) {
 
 // Message is a stored {data} message
 type Message struct {
-	ObjHeader
+	ObjHeader `bson:",inline"`
 	// ID of the hard-delete operation
 	DelId int `json:"DelId,omitempty"`
 	// List of users who have marked this message as soft-deleted
@@ -996,7 +996,7 @@ func (rs RangeSorter) Normalize() RangeSorter {
 
 // DelMessage is a log entry of a deleted message range.
 type DelMessage struct {
-	ObjHeader
+	ObjHeader `bson:",inline"`
 	Topic       string
 	DeletedFor  string
 	DelId       int
@@ -1075,7 +1075,7 @@ const (
 
 // FileDef is a stored record of a file upload
 type FileDef struct {
-	ObjHeader
+	ObjHeader `bson:",inline"`
 	// Status of upload
 	Status int
 	// User who created the file
