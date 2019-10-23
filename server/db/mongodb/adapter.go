@@ -759,7 +759,7 @@ func (a *adapter) TopicCreateP2P(initiator, invited *t.Subscription) error {
 				"$set": bson.M{
 					"updatedat": invited.UpdatedAt,
 					"createdat": invited.CreatedAt,
-					"modegive":  invited.ModeGiven}})
+					"modegiven":  invited.ModeGiven}})
 		if err != nil {
 			return err
 		}
@@ -773,7 +773,15 @@ func (a *adapter) TopicCreateP2P(initiator, invited *t.Subscription) error {
 
 // TopicGet loads a single topic by name, if it exists. If the topic does not exist the call returns (nil, nil)
 func (a *adapter) TopicGet(topic string) (*t.Topic, error) {
-	return &t.Topic{}, nil
+	var tpc = new(t.Topic)
+	err := a.db.Collection("topics").FindOne(c.TODO(), bson.M{"_id": topic}).Decode(tpc)
+	if err != nil {
+		if isNoResult(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return tpc, nil
 }
 
 // TopicsForUser loads subscriptions for a given user. Reads public value.
