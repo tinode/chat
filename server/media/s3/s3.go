@@ -14,6 +14,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/aws/aws-sdk-go/aws/request"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
@@ -112,7 +113,7 @@ func (ah *awshandler) Init(jsconf string) error {
 		Bucket: aws.String(ah.conf.BucketName),
 		CORSConfiguration: &s3.CORSConfiguration{
 			CORSRules: []*s3.CORSRule{{
-				AllowedMethods: aws.StringSlice([]string{http.MethodGet}),
+				AllowedMethods: aws.StringSlice([]string{http.MethodGet, http.MethodHead}),
 				AllowedOrigins: aws.StringSlice(origins),
 				AllowedHeaders: aws.StringSlice([]string{"*"}),
 			}},
@@ -123,8 +124,8 @@ func (ah *awshandler) Init(jsconf string) error {
 }
 
 // Redirect is used when one wants to serve files from a different external server.
-func (ah *awshandler) Redirect(upload bool, url string) (string, error) {
-	if upload {
+func (ah *awshandler) Redirect(method, url string) (string, error) {
+	if method == "PUT" || method == "POST" {
 		return "", nil
 	}
 
@@ -138,14 +139,25 @@ func (ah *awshandler) Redirect(upload bool, url string) (string, error) {
 		return "", err
 	}
 
-	req, _ := ah.svc.GetObjectRequest(&s3.GetObjectInput{
-		Bucket:              aws.String(ah.conf.BucketName),
-		Key:                 aws.String(fid.String32()),
-		ResponseContentType: aws.String(fd.MimeType),
-	})
+	var req *request.Request
+	if method == "GET" {
+		req, _ = ah.svc.GetObjectRequest(&s3.GetObjectInput{
+			Bucket:              aws.String(ah.conf.BucketName),
+			Key:                 aws.String(fid.String32()),
+			ResponseContentType: aws.String(fd.MimeType),
+		})
+	} else if method == "HEAD" {
+		req, _ = ah.svc.HeadObjectRequest(&s3.HeadObjectInput{
+			Bucket: aws.String(ah.conf.BucketName),
+			Key:    aws.String(fid.String32()),
+		})
+	}
 
-	// Presign for 2 minutes.
-	return req.Presign(time.Minute)
+	if req != nil {
+		// Presign for 2 minutes.
+		return req.Presign(time.Minute * 2)
+	}
+	return "", nil
 }
 
 // Upload processes request for a file upload. The file is given as io.Reader.

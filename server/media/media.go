@@ -24,7 +24,7 @@ type Handler interface {
 
 	// Check if redirect is required.
 	// Redirect can be used to serve files from a different external server.
-	Redirect(upload bool, url string) (string, error)
+	Redirect(method, url string) (string, error)
 
 	// Upload processes request for file upload.
 	Upload(fdef *types.FileDef, file io.ReadSeeker) (string, error)

@@ -56,7 +56,7 @@ func (fh *fshandler) Init(jsconf string) error {
 }
 
 // Redirect is used when one wants to serve files from a different external server.
-func (fshandler) Redirect(upload bool, url string) (string, error) {
+func (fshandler) Redirect(method, url string) (string, error) {
 	// This handler does not use redirects.
 	return "", nil
 }
