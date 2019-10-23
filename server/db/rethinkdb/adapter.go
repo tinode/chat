@@ -1114,7 +1114,7 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 }
 
 // OwnTopics loads a slice of topic names where the user is the owner.
-func (a *adapter) OwnTopics(uid t.Uid, opts *t.QueryOpt) ([]string, error) {
+func (a *adapter) OwnTopics(uid t.Uid) ([]string, error) {
 	cursor, err := rdb.DB(a.dbName).Table("topics").GetAllByIndex("Owner", uid.String()).
 		Filter(rdb.Row.HasFields("DeletedAt").Not()).Field("Id").Run(a.conn)
 	if err != nil {

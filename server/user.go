@@ -501,7 +501,7 @@ func replyDelUser(s *Session, msg *ClientComMessage) {
 		}
 
 		// Notify subscribers of the group topics where the user was the owner that the topics were deleted.
-		if ownTopics, err := store.Users.GetOwnTopics(uid, nil); err == nil {
+		if ownTopics, err := store.Users.GetOwnTopics(uid); err == nil {
 			for _, topicName := range ownTopics {
 				if subs, err := store.Topics.GetSubs(topicName, nil); err == nil {
 					presSubsOfflineOffline(topicName, types.TopicCatGrp, subs, "gone", &presParams{}, s.sid)

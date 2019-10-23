@@ -101,7 +101,7 @@ type Adapter interface {
 	// UsersForTopic loads users' subscriptions for a given topic. Public is loaded.
 	UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt) ([]t.Subscription, error)
 	// OwnTopics loads a slice of topic names where the user is the owner.
-	OwnTopics(uid t.Uid, opts *t.QueryOpt) ([]string, error)
+	OwnTopics(uid t.Uid) ([]string, error)
 	// TopicShare creates topc subscriptions
 	TopicShare(subs []*t.Subscription) (int, error)
 	// TopicDelete deletes topic, subscription, messages
