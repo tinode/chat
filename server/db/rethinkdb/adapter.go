@@ -865,7 +865,7 @@ func (a *adapter) TopicCreateP2P(initiator, invited *t.Subscription) error {
 				Merge(map[string]interface{}{
 					"CreatedAt": invited.CreatedAt,
 					"UpdatedAt": invited.UpdatedAt,
-					"ModeGive":  invited.ModeGiven})).
+					"ModeGiven":  invited.ModeGiven})).
 			RunWrite(a.conn)
 		if err != nil {
 			return err
@@ -1143,7 +1143,7 @@ func (a *adapter) TopicShare(shares []*t.Subscription) (int, error) {
 			return oldsub.Without("DeletedAt").Merge(map[string]interface{}{
 				"CreatedAt": newsub.Field("CreatedAt"),
 				"UpdatedAt": newsub.Field("UpdatedAt"),
-				"ModeGive":  newsub.Field("ModeGiven")})
+				"ModeGiven":  newsub.Field("ModeGiven")})
 		}}).RunWrite(a.conn)
 
 	return resp.Inserted + resp.Replaced, err
