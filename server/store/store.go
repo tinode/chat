@@ -342,8 +342,8 @@ func (UsersObjMapper) GetTopicsAny(id types.Uid, opts *types.QueryOpt) ([]types.
 }
 
 // GetOwnTopics retuens a slice of group topic names where the user is the owner.
-func (UsersObjMapper) GetOwnTopics(id types.Uid, opts *types.QueryOpt) ([]string, error) {
-	return adp.OwnTopics(id, opts)
+func (UsersObjMapper) GetOwnTopics(id types.Uid) ([]string, error) {
+	return adp.OwnTopics(id)
 }
 
 // UpsertCred adds or updates a credential validation request. Return true if the record was inserted, false if updated.
