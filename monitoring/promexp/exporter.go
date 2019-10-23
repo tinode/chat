@@ -46,7 +46,7 @@ func NewExporter(server, namespace string, timeout time.Duration) *Exporter {
 		version: prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "", "version"),
 			"The version of this tinode instance.",
-			[]string{"version"},
+			nil,
 			nil,
 		),
 		topicsLive: prometheus.NewDesc(
