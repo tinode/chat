@@ -584,7 +584,7 @@ func (a *adapter) CredDel(uid t.Uid, method, value string) error {
 	return err
 }
 
-// TODO (after CredUpsert done): CredConfirm marks given credential as validated.
+// CredConfirm marks given credential as validated.
 func (a *adapter) CredConfirm(uid t.Uid, method string) error {
 	cred, err := a.CredGetActive(uid, method)
 	if err != nil {
@@ -732,7 +732,43 @@ func (a *adapter) TopicCreate(topic *t.Topic) error {
 
 // TopicCreateP2P creates a p2p topic
 func (a *adapter) TopicCreateP2P(initiator, invited *t.Subscription) error {
-	return nil
+	initiator.Id = initiator.Topic + ":" + initiator.User
+	// Don't care if the initiator changes own subscription
+	replOpts := mdbopts.ReplaceOptions{}
+	replOpts.SetUpsert(true)
+	_, err := a.db.Collection("subscriptions").ReplaceOne(c.TODO(), bson.M{}, initiator, &replOpts)
+	if err != nil {
+		return err
+	}
+
+	// If the second subscription exists, don't overwrite it. Just make sure it's not deleted.
+	invited.Id = invited.Topic + ":" + invited.User
+	_, err = a.db.Collection("subscriptions").InsertOne(c.TODO(), invited)
+	if err != nil {
+		// Is this a duplicate subscription?
+		if !isDuplicateErr(err) {
+			// It's a genuine DB error
+			return err
+		}
+		// Undelete the second subsription if it exists: remove DeletedAt, update CreatedAt and UpdatedAt,
+		// update ModeGiven.
+		_, err = a.db.Collection("subscriptions").UpdateOne(c.TODO(),
+			bson.M{"_id": invited.Id},
+			bson.M{
+				"$unset": bson.M{"deletedat": ""},
+				"$set": bson.M{
+					"updatedat": invited.UpdatedAt,
+					"createdat": invited.CreatedAt,
+					"modegive":  invited.ModeGiven}})
+		if err != nil {
+			return err
+		}
+	}
+
+	topic := &t.Topic{ObjHeader: t.ObjHeader{Id: initiator.Topic}}
+	topic.ObjHeader.MergeTimes(&initiator.ObjHeader)
+	topic.TouchedAt = initiator.GetTouchedAt()
+	return a.TopicCreate(topic)
 }
 
 // TopicGet loads a single topic by name, if it exists. If the topic does not exist the call returns (nil, nil)
