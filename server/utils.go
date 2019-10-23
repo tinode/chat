@@ -578,7 +578,8 @@ func platformFromUA(ua string) string {
 	case strings.Contains(ua, "reactnative"):
 		switch {
 		case strings.Contains(ua, "iphone"),
-			strings.Contains(ua, "ipad"):
+			strings.Contains(ua, "ipad"),
+			strings.Contains(ua, "ios"):
 			return "ios"
 		case strings.Contains(ua, "android"):
 			return "android"
@@ -588,6 +589,8 @@ func platformFromUA(ua string) string {
 		return "web"
 	case strings.Contains(ua, "tindroid"):
 		return "android"
+	case strings.Contains(ua, "ios"):
+		return "ios"
 	}
 	return ""
 }
