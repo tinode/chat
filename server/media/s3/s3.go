@@ -102,7 +102,7 @@ func (ah *awshandler) Init(jsconf string) error {
 	}
 
 	// The following serves two purposes:
-	// 1. Setup CORS policy to be able to serve media directly from S3
+	// 1. Setup CORS policy to be able to serve media directly from S3.
 	// 2. Verify that the bucket is accessible to the current user.
 	origins := ah.conf.CorsOrigins
 	if len(origins) == 0 {
@@ -114,7 +114,7 @@ func (ah *awshandler) Init(jsconf string) error {
 			CORSRules: []*s3.CORSRule{{
 				AllowedMethods: aws.StringSlice([]string{http.MethodGet}),
 				AllowedOrigins: aws.StringSlice(origins),
-				AllowedHeaders: aws.StringSlice([]string{"x-tinode-auth", "x-tinode-apikey"}),
+				AllowedHeaders: aws.StringSlice([]string{"*"}),
 			}},
 		},
 	})
