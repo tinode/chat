@@ -291,8 +291,8 @@ Message `{get what="desc"}` to `me` is automatically replied with a `{meta}` mes
 
 Message `{get what="sub"}` to `me` is different from any other topic as it returns the list of topics that the current user is subscribed to as opposite to the expected user's subscription to `me`.
 * seq: server-issued numeric id of the last message in the topic
-* read: seq value self-reported by the current user as received
-* recv: seq value self-reported by the current user as read
+* recv: seq value self-reported by the current user as received
+* read: seq value self-reported by the current user as read
 * seen: for P2P subscriptions, timestamp of user's last presence and User Agent string are reported
  * when: timestamp when the user was last online
  * ua: user agent string of the user's client software last used

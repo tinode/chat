@@ -114,7 +114,7 @@ func (a *adapter) GetDbVersion() (int, error) {
 	var vers int
 	err := a.db.Get(&vers, "SELECT `value` FROM kvmeta WHERE `key`='version'")
 	if err != nil {
-		if isMissingDb(err) || err == sql.ErrNoRows {
+		if isMissingDb(err) || isMissingTable(err) || err == sql.ErrNoRows {
 			err = errors.New("Database not initialized")
 		}
 		return -1, err
@@ -1387,7 +1387,7 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 }
 
 // OwnTopics loads a slice of topic names where the user is the owner.
-func (a *adapter) OwnTopics(uid t.Uid, opts *t.QueryOpt) ([]string, error) {
+func (a *adapter) OwnTopics(uid t.Uid) ([]string, error) {
 	rows, err := a.db.Queryx("SELECT name FROM topics WHERE owner=?", store.DecodeUid(uid))
 	if err != nil {
 		return nil, err
@@ -2567,6 +2567,15 @@ func isDupe(err error) bool {
 
 	myerr, ok := err.(*ms.MySQLError)
 	return ok && myerr.Number == 1062
+}
+
+func isMissingTable(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	myerr, ok := err.(*ms.MySQLError)
+	return ok && myerr.Number == 1146
 }
 
 func isMissingDb(err error) bool {

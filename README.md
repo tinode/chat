@@ -6,7 +6,7 @@ Tinode is *not* XMPP/Jabber. It is *not* compatible with XMPP. It's meant as a r
 
 Version 0.16. This is beta-quality software: feature-complete but probably with a few bugs. Follow [instructions](INSTALL.md) to install and run or use one of the cloud services below. Read [API documentation](docs/API.md).
 
-<img src="docs/app-store.svg" style="opacity:0.35" height=36> <img src="docs/play-store.svg" style="opacity:0.35" height=36> <a href="https://web.tinode.co/"><img src="docs/web-app.svg" height=36></a>
+<img src="docs/app-store.svg" style="opacity:0.35" height=36> <a href="https://play.google.com/store/apps/details?id=co.tinode.tindroidx"><img src="docs/play-store.svg" height=36></a> <a href="https://web.tinode.co/"><img src="docs/web-app.svg" height=36></a>
 
 ## Why?
 
@@ -28,15 +28,17 @@ A public Tinode service is now available. You can register and use it just like 
 
 ### Web
 
-TinodeWeb, a single page web app, is available at https://web.tinode.co/ ([source](https://github.com/tinode/webapp/)). See screenshots below.
+TinodeWeb, a single page web app, is available at https://web.tinode.co/ ([source](https://github.com/tinode/webapp/)). See screenshots below. Currently available in English, Simplified Chinese, Russian. More translations are welcome.
 
 ### Android
 
-[Tindroid](https://github.com/tinode/tindroid) is stable and functional. See the screenshots below. A [debug APK](https://github.com/tinode/tindroid/releases/latest) is provided for convenience.
+[Tindroid](https://github.com/tinode/tindroid) is stable and functional. See the screenshots below. A [debug APK](https://github.com/tinode/tindroid/releases/latest) is provided for convenience. Currently available in English, Russian. More translations are welcome.
+
 
 ### iOS
 
-[Tinode for iOS](https://apps.apple.com/app/reference-to-tinodios-here/id123) a.k.a. Tinodios is stable and functional ([source](https://github.com/tinode/ios)). See the screenshots below.
+[Tinode for iOS](https://apps.apple.com/app/reference-to-tinodios-here/id123) a.k.a. Tinodios is stable and functional ([source](https://github.com/tinode/ios)). See the screenshots below. Currently available in English, Simplified Chinese. More translations are welcome.
+
 
 ### Android
 

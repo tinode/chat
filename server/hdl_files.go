@@ -60,7 +60,7 @@ func largeFileServe(wrt http.ResponseWriter, req *http.Request) {
 	}
 
 	// Check if media handler requests redirection to another service.
-	if redirTo, err := mh.Redirect(false, req.URL.String()); redirTo != "" {
+	if redirTo, err := mh.Redirect(req.Method, req.URL.String()); redirTo != "" {
 		wrt.Header().Set("Location", redirTo)
 		wrt.Header().Set("Content-Type", "application/json; charset=utf-8")
 		wrt.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
@@ -141,7 +141,7 @@ func largeFileUpload(wrt http.ResponseWriter, req *http.Request) {
 	}
 
 	// Check if uploads are handled elsewhere.
-	if redirTo, err := mh.Redirect(true, req.URL.String()); redirTo != "" {
+	if redirTo, err := mh.Redirect(req.Method, req.URL.String()); redirTo != "" {
 		wrt.Header().Set("Location", redirTo)
 		wrt.Header().Set("Content-Type", "application/json; charset=utf-8")
 		wrt.WriteHeader(http.StatusTemporaryRedirect)

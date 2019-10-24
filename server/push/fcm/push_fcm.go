@@ -136,6 +136,8 @@ func payloadToData(pl *push.Payload) (map[string]string, error) {
 }
 
 func sendNotifications(rcpt *push.Receipt, config *configType) {
+	log.Println("PUSH", rcpt)
+
 	ctx := context.Background()
 
 	data, _ := payloadToData(&rcpt.Payload)
@@ -212,6 +214,7 @@ func sendNotifications(rcpt *push.Receipt, config *configType) {
 				//	 Body:  data["content"],
 				// }
 				_, err := handler.client.Send(ctx, &msg)
+				log.Println("Pushed", msg, err)
 				if err != nil {
 					if fcm.IsMessageRateExceeded(err) ||
 						fcm.IsServerUnavailable(err) ||

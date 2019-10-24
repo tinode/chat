@@ -651,7 +651,7 @@ func InfoNotModified(id, topic string, ts time.Time) *ServerComMessage {
 func InfoFound(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
-		Code:      http.StatusFound, // 307
+		Code:      http.StatusTemporaryRedirect, // 307
 		Text:      "found",
 		Topic:     topic,
 		Timestamp: ts}}
