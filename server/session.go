@@ -657,6 +657,8 @@ func (s *Session) login(msg *ClientComMessage) {
 	}
 
 	if !s.uid.IsZero() {
+		// TODO: change error to notice InfoNoChange and return current user ID & auth level
+		// params := map[string]interface{}{"user": s.uid.UserId(), "authlvl": s.authLevel.String()}
 		s.queueOut(ErrAlreadyAuthenticated(msg.id, "", msg.timestamp))
 		return
 	}
