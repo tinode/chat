@@ -898,7 +898,11 @@ func (a *adapter) TopicUpdate(topic string, update map[string]interface{}) error
 
 // TopicOwnerChange updates topic's owner
 func (a *adapter) TopicOwnerChange(topic string, newOwner, oldOwner t.Uid) error {
-	return nil
+	_, err := a.db.Collection("topics").UpdateOne(ctx,
+		bson.M{"_id": topic},
+		bson.M{"$set": bson.M{"owner": newOwner}})
+
+	return err
 }
 
 // Topic subscriptions
