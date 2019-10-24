@@ -819,9 +819,55 @@ func (a *adapter) OwnTopics(uid t.Uid) ([]string, error) {
 	return names, nil
 }
 
-// TopicShare creates topc subscriptions
-func (a *adapter) TopicShare(subs []*t.Subscription) (int, error) {
-	return 0, nil
+// TopicShare creates topic subscriptions
+func (a *adapter) TopicShare(subs []*t.Subscription) error {
+	// Assign Ids.
+	for i := 0; i < len(subs); i++ {
+		subs[i].Id = subs[i].Topic + ":" + subs[i].User
+	}
+
+	// Subscription could have been marked as deleted (DeletedAt != nil). If it's marked
+	// as deleted, unmark by clearing the DeletedAt field of the old subscription and
+	// updating times and ModeGiven.
+	var sess mdb.Session
+	var err error
+	if sess, err = a.conn.StartSession(); err != nil {
+		return err
+	}
+	if err = sess.StartTransaction(); err != nil {
+		return err
+	}
+	if err = mdb.WithSession(c.TODO(), sess, func(sc mdb.SessionContext) error {
+		replOpts := new(mdbopts.ReplaceOptions)
+		replOpts.SetUpsert(true)
+		for _, sub := range subs {
+			if _, err := a.db.Collection("subscriptions").InsertOne(ctx, sub); err != nil {
+				if isDuplicateErr(err) {
+					_, err := a.db.Collection("subscriptions").UpdateOne(ctx,
+						bson.M{"_id": sub.Id},
+						bson.M{
+							"$unset": bson.M{"deletedat": ""},
+							"$set":   bson.M{
+								"createdat": sub.CreatedAt,
+								"updatedat": sub.UpdatedAt,
+								"modegiven": sub.ModeGiven}})
+					if err != nil {
+						return err
+					}
+				}
+				return err
+			}
+		}
+		if err := sess.CommitTransaction(ctx); err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+	sess.EndSession(ctx)
+
+	return err
 }
 
 // TopicDelete deletes topic, subscription, messages
