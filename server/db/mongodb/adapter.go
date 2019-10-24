@@ -886,7 +886,14 @@ func (a *adapter) TopicUpdateOnMessage(topic string, msg *t.Message) error {
 
 // TopicUpdate updates topic record.
 func (a *adapter) TopicUpdate(topic string, update map[string]interface{}) error {
-	return nil
+	// to get round the hardcoded "UpdatedAt" key in store.Topics.Update()
+	if val, ok := update["UpdatedAt"]; ok {
+		update["updatedat"] = val
+		delete(update, "UpdatedAt")
+	}
+
+	_, err := a.db.Collection("topics").UpdateOne(ctx, bson.M{"_id": topic}, bson.M{"$set": update})
+	return err
 }
 
 // TopicOwnerChange updates topic's owner
