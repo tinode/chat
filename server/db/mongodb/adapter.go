@@ -38,6 +38,8 @@ const (
 	defaultMaxResults = 1024
 )
 
+var ctx c.Context
+
 // See https://godoc.org/go.mongodb.org/mongo-driver/mongo/options#ClientOptions for explanations.
 type configType struct {
 	Addresses      interface{} `json:"addresses,omitempty"`
@@ -81,7 +83,7 @@ func (a *adapter) Open(jsonconfig json.RawMessage) error {
 		a.maxResults = defaultMaxResults
 	}
 
-	a.conn, err = mdb.Connect(c.TODO(), &opts)
+	a.conn, err = mdb.Connect(ctx, &opts)
 	a.db = a.conn.Database(a.dbName)
 	if err != nil {
 		return err
@@ -96,7 +98,7 @@ func (a *adapter) Open(jsonconfig json.RawMessage) error {
 func (a *adapter) Close() error {
 	var err error
 	if a.conn != nil {
-		err = a.conn.Disconnect(c.TODO())
+		err = a.conn.Disconnect(ctx)
 		a.conn = nil
 		a.version = -1
 	}
@@ -118,7 +120,7 @@ func (a *adapter) GetDbVersion() (int, error) {
 		Key   string `bson:"_id"`
 		Value int
 	}
-	if err := a.db.Collection("kvmeta").FindOne(c.TODO(), bson.D{{"_id", "version"}}).Decode(&result); err != nil {
+	if err := a.db.Collection("kvmeta").FindOne(ctx, bson.D{{"_id", "version"}}).Decode(&result); err != nil {
 		if isNoResult(err) {
 			err = errors.New("Database not initialized")
 		}
@@ -179,7 +181,7 @@ func getIdxOpts(field string, unique bool) mdb.IndexModel {
 func (a *adapter) CreateDb(reset bool) error {
 	if reset {
 		log.Print("Dropping database...")
-		if err := a.db.Drop(c.TODO()); err != nil {
+		if err := a.db.Drop(ctx); err != nil {
 			return nil
 		}
 	} else if a.isDbInitialized() {
@@ -192,37 +194,37 @@ func (a *adapter) CreateDb(reset bool) error {
 
 	// Users
 	// Create secondary index on User.DeletedAt for finding soft-deleted users
-	if _, err := a.db.Collection("users").Indexes().CreateOne(c.TODO(), getIdxOpts("deletedat", false)); err != nil {
+	if _, err := a.db.Collection("users").Indexes().CreateOne(ctx, getIdxOpts("deletedat", false)); err != nil {
 		return err
 	}
 	// Create secondary index on User.Tags array so user can be found by tags
-	if _, err := a.db.Collection("users").Indexes().CreateOne(c.TODO(), getIdxOpts("tags", false)); err != nil {
+	if _, err := a.db.Collection("users").Indexes().CreateOne(ctx, getIdxOpts("tags", false)); err != nil {
 		return err
 	}
 	// TODO: Create secondary index for User.Devices.<hash>.DeviceId to ensure ID uniqueness across users
 
 	// User authentication records {_id, userid, secret}
 	// Should be able to access user's auth records by user id
-	if _, err := a.db.Collection("auth").Indexes().CreateOne(c.TODO(), getIdxOpts("userid", false)); err != nil {
+	if _, err := a.db.Collection("auth").Indexes().CreateOne(ctx, getIdxOpts("userid", false)); err != nil {
 		return err
 	}
 
 	// Should be able to access user's auth records by user id
-	if _, err := a.db.Collection("subscriptions").Indexes().CreateOne(c.TODO(), getIdxOpts("user", false)); err != nil {
+	if _, err := a.db.Collection("subscriptions").Indexes().CreateOne(ctx, getIdxOpts("user", false)); err != nil {
 		return err
 	}
-	if _, err := a.db.Collection("subscriptions").Indexes().CreateOne(c.TODO(), getIdxOpts("topic", false)); err != nil {
+	if _, err := a.db.Collection("subscriptions").Indexes().CreateOne(ctx, getIdxOpts("topic", false)); err != nil {
 		return err
 	}
 
 	// Topics stored in database
 	// Secondary index on Owner field for deleting users.
-	if _, err := a.db.Collection("topics").Indexes().CreateOne(c.TODO(), getIdxOpts("owner", false)); err != nil {
+	if _, err := a.db.Collection("topics").Indexes().CreateOne(ctx, getIdxOpts("owner", false)); err != nil {
 		return err
 	}
 	// Secondary index on Topic.Tags array so topics can be found by tags.
 	// These tags are not unique as opposite to User.Tags.
-	if _, err := a.db.Collection("topics").Indexes().CreateOne(c.TODO(), getIdxOpts("tags", false)); err != nil {
+	if _, err := a.db.Collection("topics").Indexes().CreateOne(ctx, getIdxOpts("tags", false)); err != nil {
 		return err
 	}
 	// Create system topic 'sys'.
@@ -242,22 +244,22 @@ func (a *adapter) CreateDb(reset bool) error {
 	// User credentials - contact information such as "email:jdoe@example.com" or "tel:+18003287448":
 	// Id: "method:credential" like "email:jdoe@example.com". See types.Credential.
 	// Create secondary index on credentials.User to be able to query credentials by user id.
-	if _, err := a.db.Collection("credentials").Indexes().CreateOne(c.TODO(), getIdxOpts("user", false)); err != nil {
+	if _, err := a.db.Collection("credentials").Indexes().CreateOne(ctx, getIdxOpts("user", false)); err != nil {
 		return err
 	}
 
 	// Records of file uploads. See types.FileDef.
 	// A secondary index on fileuploads.User to be able to get records by user id.
-	if _, err := a.db.Collection("fileuploads").Indexes().CreateOne(c.TODO(), getIdxOpts("user", false)); err != nil {
+	if _, err := a.db.Collection("fileuploads").Indexes().CreateOne(ctx, getIdxOpts("user", false)); err != nil {
 		return err
 	}
 	// A secondary index on fileuploads.UseCount to be able to delete unused records at once.
-	if _, err := a.db.Collection("fileuploads").Indexes().CreateOne(c.TODO(), getIdxOpts("usecount", false)); err != nil {
+	if _, err := a.db.Collection("fileuploads").Indexes().CreateOne(ctx, getIdxOpts("usecount", false)); err != nil {
 		return err
 	}
 
 	// Record current DB version.
-	if _, err := a.db.Collection("kvmeta").InsertOne(c.TODO(), map[string]interface{}{"_id": "version", "value": adpVersion}); err != nil {
+	if _, err := a.db.Collection("kvmeta").InsertOne(ctx, map[string]interface{}{"_id": "version", "value": adpVersion}); err != nil {
 		return err
 	}
 
@@ -272,7 +274,7 @@ func (a *adapter) UpgradeDb() error {
 // Create system topic 'sys'.
 func createSystemTopic(a *adapter) error {
 	now := t.TimeNow()
-	_, err := a.db.Collection("topics").InsertOne(c.TODO(), &t.Topic{
+	_, err := a.db.Collection("topics").InsertOne(ctx, &t.Topic{
 		ObjHeader: t.ObjHeader{Id: "sys", CreatedAt: now, UpdatedAt: now},
 		Access:    t.DefaultAccess{Auth: t.ModeNone, Anon: t.ModeNone},
 		Public:    map[string]interface{}{"fn": "System"},
@@ -284,7 +286,7 @@ func createSystemTopic(a *adapter) error {
 
 // UserCreate creates user record
 func (a *adapter) UserCreate(usr *t.User) error {
-	if _, err := a.db.Collection("users").InsertOne(c.TODO(), &usr); err != nil {
+	if _, err := a.db.Collection("users").InsertOne(ctx, &usr); err != nil {
 		return err
 	}
 
@@ -298,7 +300,7 @@ func (a *adapter) UserGet(id t.Uid) (*t.User, error) {
 	filter := bson.M{"$and": bson.A{
 		bson.D{{"_id", id.String()}},
 		bson.D{{"deletedat", bson.D{{"$exists", false}}}}}}
-	if err := a.db.Collection("users").FindOne(c.TODO(), filter).Decode(&user); err != nil {
+	if err := a.db.Collection("users").FindOne(ctx, filter).Decode(&user); err != nil {
 		if strings.Contains(err.Error(), "no documents in user") { // User not found
 			return nil, nil
 		} else {
@@ -320,11 +322,11 @@ func (a *adapter) UserGetAll(ids ...t.Uid) ([]t.User, error) {
 	filter := bson.M{"$and": bson.A{
 		bson.M{"_id": bson.M{"$in": uids}},
 		bson.M{"deletedat": bson.M{"$exists": false}}}}
-	if cur, err := a.db.Collection("users").Find(c.TODO(), filter); err == nil {
-		defer cur.Close(c.TODO())
+	if cur, err := a.db.Collection("users").Find(ctx, filter); err == nil {
+		defer cur.Close(ctx)
 
 		var user t.User
-		for cur.Next(c.TODO()) {
+		for cur.Next(ctx) {
 			if err := cur.Decode(&user); err != nil {
 				return nil, err
 			}
@@ -345,12 +347,12 @@ func (a *adapter) UserDelete(id t.Uid, hard bool) error {
 func (a *adapter) UserGetDisabled(since time.Time) ([]t.Uid, error) {
 	filter := bson.M{"deletedat": bson.M{"$gte": since}}
 	findOpts := &mdbopts.FindOptions{Projection: bson.D{{"_id", 1}}}
-	if cur, err := a.db.Collection("users").Find(c.TODO(), filter, findOpts); err == nil {
-		defer cur.Close(c.TODO())
+	if cur, err := a.db.Collection("users").Find(ctx, filter, findOpts); err == nil {
+		defer cur.Close(ctx)
 
 		var uids []t.Uid
 		var userId map[string]string
-		for cur.Next(c.TODO()) {
+		for cur.Next(ctx) {
 			if err := cur.Decode(&userId); err != nil {
 				return nil, err
 			}
@@ -369,7 +371,7 @@ func (a *adapter) UserUpdate(uid t.Uid, update map[string]interface{}) error {
 		delete(update, "UpdatedAt")
 	}
 
-	_, err := a.db.Collection("users").UpdateOne(c.TODO(), bson.M{"_id": uid.String()}, bson.M{"$set": update})
+	_, err := a.db.Collection("users").UpdateOne(ctx, bson.M{"_id": uid.String()}, bson.M{"$set": update})
 	return err
 }
 
@@ -382,7 +384,7 @@ func (a *adapter) UserUpdateTags(uid t.Uid, add, remove, reset []string) ([]stri
 	}
 
 	var user t.User
-	if err := a.db.Collection("users").FindOne(c.TODO(), bson.M{"_id": uid.String()}).Decode(&user); err != nil {
+	if err := a.db.Collection("users").FindOne(ctx, bson.M{"_id": uid.String()}).Decode(&user); err != nil {
 		return nil, err
 	}
 
@@ -403,7 +405,7 @@ func (a *adapter) UserUpdateTags(uid t.Uid, add, remove, reset []string) ([]stri
 	// Get the new tags
 	var tags map[string][]string
 	findOpts := &mdbopts.FindOneOptions{Projection: bson.D{{"tags", 1}, {"_id", 0}}}
-	if err := a.db.Collection("users").FindOne(c.TODO(), bson.M{"_id": uid.String()}, findOpts).Decode(&tags); err == nil {
+	if err := a.db.Collection("users").FindOne(ctx, bson.M{"_id": uid.String()}, findOpts).Decode(&tags); err == nil {
 		return tags["tags"], nil
 	} else {
 		return nil, err
@@ -415,7 +417,7 @@ func (a *adapter) UserGetByCred(method, value string) (t.Uid, error) {
 	var userId map[string]string
 	filter := bson.M{"_id": method + ":" + value}
 	findOpts := &mdbopts.FindOneOptions{Projection: bson.D{{"user", 1}, {"_id", 0}}}
-	err := a.db.Collection("credentials").FindOne(c.TODO(), filter, findOpts).Decode(&userId)
+	err := a.db.Collection("credentials").FindOne(ctx, filter, findOpts).Decode(&userId)
 	if err != nil {
 		if isNoResult(err) {
 			return t.ZeroUid, nil
@@ -451,7 +453,7 @@ func (a *adapter) CredUpsert(cred *t.Credential) (bool, error) {
 	if !cred.Done {
 		// Check if the same credential is already validated.
 		var result1 t.Credential
-		err := credCollection.FindOne(c.TODO(), bson.M{"_id": cred.Id}).Decode(&result1)
+		err := credCollection.FindOne(ctx, bson.M{"_id": cred.Id}).Decode(&result1)
 		if result1 != (t.Credential{}) {
 			// Someone has already validated this credential.
 			return false, t.ErrDuplicate
@@ -460,7 +462,7 @@ func (a *adapter) CredUpsert(cred *t.Credential) (bool, error) {
 		}
 
 		// Soft-delete all unvalidated records of this user and method.
-		_, err = credCollection.UpdateMany(c.TODO(),
+		_, err = credCollection.UpdateMany(ctx,
 			bson.D{{"user", cred.User}, {"method", cred.Method}, {"done", false}},
 			bson.M{"$set": bson.M{"deletedat": t.TimeNow()}})
 		if err != nil {
@@ -473,9 +475,9 @@ func (a *adapter) CredUpsert(cred *t.Credential) (bool, error) {
 
 		// Check if this credential has already been added by the user.
 		var result2 t.Credential
-		err = credCollection.FindOne(c.TODO(), bson.M{"_id": cred.Id}).Decode(&result2)
+		err = credCollection.FindOne(ctx, bson.M{"_id": cred.Id}).Decode(&result2)
 		if result2 != (t.Credential{}) {
-			_, err = credCollection.UpdateOne(c.TODO(),
+			_, err = credCollection.UpdateOne(ctx,
 				bson.D{{"_id", cred.Id},},
 				bson.M{
 					"$unset": bson.M{"deletedat": ""},
@@ -491,14 +493,14 @@ func (a *adapter) CredUpsert(cred *t.Credential) (bool, error) {
 		}
 	} else {
 		// Hard-delete potentially present unvalidated credential.
-		_, err := credCollection.DeleteOne(c.TODO(), bson.M{"_id": cred.User + ":" + cred.Id})
+		_, err := credCollection.DeleteOne(ctx, bson.M{"_id": cred.User + ":" + cred.Id})
 		if err != nil {
 			return false, err
 		}
 	}
 
 	// Insert a new record.
-	_, err := credCollection.InsertOne(c.TODO(), cred)
+	_, err := credCollection.InsertOne(ctx, cred)
 	if isDuplicateErr(err) {
 		return true, t.ErrDuplicate
 	}
@@ -516,7 +518,7 @@ func (a *adapter) CredGetActive(uid t.Uid, method string) (*t.Credential, error)
 		bson.M{"method": method},
 		bson.M{"done": false}}}
 
-	if err := a.db.Collection("credentials").FindOne(c.TODO(), filter).Decode(&cred); err != nil {
+	if err := a.db.Collection("credentials").FindOne(ctx, filter).Decode(&cred); err != nil {
 		if strings.Contains(err.Error(), "no documents in") { // Cred not found
 			return nil, t.ErrNotFound
 		} else {
@@ -539,9 +541,9 @@ func (a *adapter) CredGetAll(uid t.Uid, method string, validatedOnly bool) ([]t.
 		filter = append(filter, bson.M{"deletedat": bson.M{"$exists": false}})
 	}
 
-	if cur, err := a.db.Collection("credentials").Find(c.TODO(), bson.M{"$and": filter}); err == nil {
+	if cur, err := a.db.Collection("credentials").Find(ctx, bson.M{"$and": filter}); err == nil {
 		var credentials []t.Credential
-		if err := cur.All(c.TODO(), &credentials); err != nil {
+		if err := cur.All(ctx, &credentials); err != nil {
 			return nil, err
 		}
 		return credentials, nil
@@ -565,7 +567,7 @@ func (a *adapter) CredDel(uid t.Uid, method, value string) error {
 			filterAnd = append(filterAnd, bson.M{"value": value})
 		}
 	} else {
-		_, err := credCollection.DeleteMany(c.TODO(), filterUser)
+		_, err := credCollection.DeleteMany(ctx, filterUser)
 		return err
 	}
 
@@ -575,12 +577,12 @@ func (a *adapter) CredDel(uid t.Uid, method, value string) error {
 		bson.M{"retries": 0}}}
 	filterAnd = append(filterAnd, filterOr)
 	filter["$and"] = filterAnd
-	if _, err := credCollection.DeleteMany(c.TODO(), filter); err != nil {
+	if _, err := credCollection.DeleteMany(ctx, filter); err != nil {
 		return err
 	}
 
 	// Soft-delete all other values.
-	_, err := credCollection.UpdateMany(c.TODO(), filter, bson.M{"$set": bson.M{"deletedat": t.TimeNow()}})
+	_, err := credCollection.UpdateMany(ctx, filter, bson.M{"$set": bson.M{"deletedat": t.TimeNow()}})
 	return err
 }
 
@@ -597,7 +599,7 @@ func (a *adapter) CredConfirm(uid t.Uid, method string) error {
 		return err
 	}
 
-	_, _ = a.db.Collection("credentials").DeleteOne(c.TODO(), bson.M{"_id": uid.String() + ":" + cred.Method + ":" + cred.Value})
+	_, _ = a.db.Collection("credentials").DeleteOne(ctx, bson.M{"_id": uid.String() + ":" + cred.Method + ":" + cred.Value})
 	return nil
 }
 
@@ -611,7 +613,7 @@ func (a *adapter) CredFail(uid t.Uid, method string) error {
 	update := bson.M{}
 	update["$inc"] = bson.M{"retries": 1}
 	update["$set"] = bson.M{"updatedat": t.TimeNow()}
-	_, err := a.db.Collection("credentials").UpdateOne(c.TODO(), filter, update)
+	_, err := a.db.Collection("credentials").UpdateOne(ctx, filter, update)
 	return err
 }
 
@@ -631,7 +633,7 @@ func (a *adapter) AuthGetUniqueRecord(unique string) (t.Uid, auth.Level, []byte,
 		"secret":  1,
 		"expires": 1,
 	}}
-	if err := a.db.Collection("auth").FindOne(c.TODO(), filter, findOpts).Decode(&record); err != nil {
+	if err := a.db.Collection("auth").FindOne(ctx, filter, findOpts).Decode(&record); err != nil {
 		if isNoResult(err) {
 			return t.ZeroUid, 0, nil, time.Time{}, nil
 		}
@@ -658,7 +660,7 @@ func (a *adapter) AuthGetRecord(uid t.Uid, scheme string) (string, auth.Level, [
 		"secret":  1,
 		"expires": 1,
 	}}
-	if err := a.db.Collection("auth").FindOne(c.TODO(), filter, findOpts).Decode(&record); err != nil {
+	if err := a.db.Collection("auth").FindOne(ctx, filter, findOpts).Decode(&record); err != nil {
 		if isNoResult(err) {
 			return "", 0, nil, time.Time{}, t.ErrNotFound
 		}
@@ -678,7 +680,7 @@ func (a *adapter) AuthAddRecord(uid t.Uid, scheme, unique string, authLvl auth.L
 		{"secret", secret},
 		{"expires", expires},
 	}
-	if _, err := a.db.Collection("auth").InsertOne(c.TODO(), authRecord); err != nil {
+	if _, err := a.db.Collection("auth").InsertOne(ctx, authRecord); err != nil {
 		if isDuplicateErr(err) {
 			return true, t.ErrDuplicate
 		}
@@ -689,7 +691,7 @@ func (a *adapter) AuthAddRecord(uid t.Uid, scheme, unique string, authLvl auth.L
 
 // AuthDelScheme deletes an existing authentication scheme for the user.
 func (a *adapter) AuthDelScheme(uid t.Uid, scheme string) error {
-	_, err := a.db.Collection("auth").DeleteOne(c.TODO(),
+	_, err := a.db.Collection("auth").DeleteOne(ctx,
 		bson.D{
 			{"userid", uid.String()},
 			{"scheme", scheme},
@@ -699,7 +701,7 @@ func (a *adapter) AuthDelScheme(uid t.Uid, scheme string) error {
 
 // AuthDelAllRecords deletes all records of a given user.
 func (a *adapter) AuthDelAllRecords(uid t.Uid) (int, error) {
-	res, err := a.db.Collection("auth").DeleteMany(c.TODO(), bson.M{"userid": uid.String()})
+	res, err := a.db.Collection("auth").DeleteMany(ctx, bson.M{"userid": uid.String()})
 	return int(res.DeletedCount), err
 }
 
@@ -716,7 +718,7 @@ func (a *adapter) AuthUpdRecord(uid t.Uid, scheme, unique string,
 		"expires": expires,
 	}}
 	// TODO: Handle possible 'unique' field duplicate
-	if _, err := a.db.Collection("auth").UpdateOne(c.TODO(), filter, update); err != nil {
+	if _, err := a.db.Collection("auth").UpdateOne(ctx, filter, update); err != nil {
 		return true, err
 	}
 	return false, nil
@@ -726,7 +728,7 @@ func (a *adapter) AuthUpdRecord(uid t.Uid, scheme, unique string,
 
 // TopicCreate creates a topic
 func (a *adapter) TopicCreate(topic *t.Topic) error {
-	_, err := a.db.Collection("topics").InsertOne(c.TODO(), &topic)
+	_, err := a.db.Collection("topics").InsertOne(ctx, &topic)
 	return err
 }
 
@@ -736,14 +738,14 @@ func (a *adapter) TopicCreateP2P(initiator, invited *t.Subscription) error {
 	// Don't care if the initiator changes own subscription
 	replOpts := mdbopts.ReplaceOptions{}
 	replOpts.SetUpsert(true)
-	_, err := a.db.Collection("subscriptions").ReplaceOne(c.TODO(), bson.M{}, initiator, &replOpts)
+	_, err := a.db.Collection("subscriptions").ReplaceOne(ctx, bson.M{}, initiator, &replOpts)
 	if err != nil {
 		return err
 	}
 
 	// If the second subscription exists, don't overwrite it. Just make sure it's not deleted.
 	invited.Id = invited.Topic + ":" + invited.User
-	_, err = a.db.Collection("subscriptions").InsertOne(c.TODO(), invited)
+	_, err = a.db.Collection("subscriptions").InsertOne(ctx, invited)
 	if err != nil {
 		// Is this a duplicate subscription?
 		if !isDuplicateErr(err) {
@@ -752,7 +754,7 @@ func (a *adapter) TopicCreateP2P(initiator, invited *t.Subscription) error {
 		}
 		// Undelete the second subsription if it exists: remove DeletedAt, update CreatedAt and UpdatedAt,
 		// update ModeGiven.
-		_, err = a.db.Collection("subscriptions").UpdateOne(c.TODO(),
+		_, err = a.db.Collection("subscriptions").UpdateOne(ctx,
 			bson.M{"_id": invited.Id},
 			bson.M{
 				"$unset": bson.M{"deletedat": ""},
@@ -774,7 +776,7 @@ func (a *adapter) TopicCreateP2P(initiator, invited *t.Subscription) error {
 // TopicGet loads a single topic by name, if it exists. If the topic does not exist the call returns (nil, nil)
 func (a *adapter) TopicGet(topic string) (*t.Topic, error) {
 	var tpc = new(t.Topic)
-	err := a.db.Collection("topics").FindOne(c.TODO(), bson.M{"_id": topic}).Decode(tpc)
+	err := a.db.Collection("topics").FindOne(ctx, bson.M{"_id": topic}).Decode(tpc)
 	if err != nil {
 		if isNoResult(err) {
 			return nil, nil
@@ -798,21 +800,21 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 func (a *adapter) OwnTopics(uid t.Uid) ([]string, error) {
 	filter := bson.D{{"owner", uid.String()}, {"deletedat", bson.M{"$exists": false}}}
 	findOpts := &mdbopts.FindOptions{Projection: bson.D{{"_id", 1}}}
-	cur, err := a.db.Collection("topics").Find(c.TODO(), filter, findOpts)
+	cur, err := a.db.Collection("topics").Find(ctx, filter, findOpts)
 	if err != nil {
 		return nil, err
 	}
 
 	var res map[string]string
 	var names []string
-	for cur.Next(c.TODO()) {
+	for cur.Next(ctx) {
 		if err := cur.Decode(&res); err == nil {
 			names = append(names, res["_id"])
 		} else {
 			return nil, err
 		}
 	}
-	cur.Close(c.TODO())
+	cur.Close(ctx)
 
 	return names, nil
 }
@@ -964,7 +966,7 @@ func (a *adapter) isDbInitialized() bool {
 	var result map[string]int
 
 	findOpts := &mdbopts.FindOneOptions{Projection: bson.M{"value": 1, "_id": 0}}
-	if err := a.db.Collection("kvmeta").FindOne(c.TODO(), bson.M{"_id": "version"}, findOpts).Decode(&result); err != nil {
+	if err := a.db.Collection("kvmeta").FindOne(ctx, bson.M{"_id": "version"}, findOpts).Decode(&result); err != nil {
 		return false
 	}
 	return true
@@ -972,6 +974,7 @@ func (a *adapter) isDbInitialized() bool {
 
 func init() {
 	store.RegisterAdapter(&adapter{})
+	ctx = c.Background()
 }
 
 func contains(s []string, e string) bool {
