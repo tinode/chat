@@ -1406,10 +1406,10 @@ func (a *adapter) OwnTopics(uid t.Uid) ([]string, error) {
 	return names, err
 }
 
-func (a *adapter) TopicShare(shares []*t.Subscription) (int, error) {
+func (a *adapter) TopicShare(shares []*t.Subscription) error {
 	tx, err := a.db.Beginx()
 	if err != nil {
-		return 0, err
+		return err
 	}
 	defer func() {
 		if err != nil {
@@ -1420,11 +1420,11 @@ func (a *adapter) TopicShare(shares []*t.Subscription) (int, error) {
 	for _, sub := range shares {
 		err = createSubscription(tx, sub, true)
 		if err != nil {
-			return 0, err
+			return err
 		}
 	}
 
-	return len(shares), tx.Commit()
+	return tx.Commit()
 }
 
 // TopicDelete deletes specified topic.
@@ -1511,7 +1511,7 @@ func (a *adapter) TopicUpdate(topic string, update map[string]interface{}) error
 	return tx.Commit()
 }
 
-func (a *adapter) TopicOwnerChange(topic string, newOwner, oldOwner t.Uid) error {
+func (a *adapter) TopicOwnerChange(topic string, newOwner t.Uid) error {
 	_, err := a.db.Exec("UPDATE topics SET owner=? WHERE name=?", store.DecodeUid(newOwner), topic)
 	return err
 }

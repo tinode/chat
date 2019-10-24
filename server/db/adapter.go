@@ -103,7 +103,7 @@ type Adapter interface {
 	// OwnTopics loads a slice of topic names where the user is the owner.
 	OwnTopics(uid t.Uid) ([]string, error)
 	// TopicShare creates topc subscriptions
-	TopicShare(subs []*t.Subscription) (int, error)
+	TopicShare(subs []*t.Subscription) error
 	// TopicDelete deletes topic, subscription, messages
 	TopicDelete(topic string, hard bool) error
 	// TopicUpdateOnMessage increments Topic's or User's SeqId value and updates TouchedAt timestamp.
@@ -111,7 +111,7 @@ type Adapter interface {
 	// TopicUpdate updates topic record.
 	TopicUpdate(topic string, update map[string]interface{}) error
 	// TopicOwnerChange updates topic's owner
-	TopicOwnerChange(topic string, newOwner, oldOwner t.Uid) error
+	TopicOwnerChange(topic string, newOwner t.Uid) error
 	// Topic subscriptions
 
 	// SubscriptionGet reads a subscription of a user to a topic
