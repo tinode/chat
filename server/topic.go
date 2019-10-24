@@ -1079,7 +1079,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Le
 					"ModeGiven": oldOwnerData.modeGiven}, false); err != nil {
 				return changed, err
 			}
-			if err := store.Topics.OwnerChange(t.name, asUid, t.owner); err != nil {
+			if err := store.Topics.OwnerChange(t.name, asUid); err != nil {
 				return changed, err
 			}
 			t.perUser[t.owner] = oldOwnerData

@@ -459,8 +459,8 @@ func (TopicsObjMapper) Update(topic string, update map[string]interface{}) error
 }
 
 // OwnerChange replaces the old topic owner with the new owner.
-func (TopicsObjMapper) OwnerChange(topic string, newOwner, oldOwner types.Uid) error {
-	return adp.TopicOwnerChange(topic, newOwner, oldOwner)
+func (TopicsObjMapper) OwnerChange(topic string, newOwner types.Uid) error {
+	return adp.TopicOwnerChange(topic, newOwner)
 }
 
 // Delete deletes topic, messages, attachments, and subscriptions.

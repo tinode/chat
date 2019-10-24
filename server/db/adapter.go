@@ -111,7 +111,7 @@ type Adapter interface {
 	// TopicUpdate updates topic record.
 	TopicUpdate(topic string, update map[string]interface{}) error
 	// TopicOwnerChange updates topic's owner
-	TopicOwnerChange(topic string, newOwner, oldOwner t.Uid) error
+	TopicOwnerChange(topic string, newOwner t.Uid) error
 	// Topic subscriptions
 
 	// SubscriptionGet reads a subscription of a user to a topic
