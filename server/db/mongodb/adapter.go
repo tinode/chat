@@ -759,7 +759,7 @@ func (a *adapter) TopicCreateP2P(initiator, invited *t.Subscription) error {
 				"$set": bson.M{
 					"updatedat": invited.UpdatedAt,
 					"createdat": invited.CreatedAt,
-					"modegiven":  invited.ModeGiven}})
+					"modegiven": invited.ModeGiven}})
 		if err != nil {
 			return err
 		}
@@ -784,19 +784,37 @@ func (a *adapter) TopicGet(topic string) (*t.Topic, error) {
 	return tpc, nil
 }
 
-// TopicsForUser loads subscriptions for a given user. Reads public value.
+// TODO: TopicsForUser loads subscriptions for a given user. Reads public value.
 func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) ([]t.Subscription, error) {
 	return nil, nil
 }
 
-// UsersForTopic loads users' subscriptions for a given topic. Public is loaded.
+// TODO: UsersForTopic loads users' subscriptions for a given topic. Public is loaded.
 func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt) ([]t.Subscription, error) {
 	return nil, nil
 }
 
 // OwnTopics loads a slice of topic names where the user is the owner.
-func (a *adapter) OwnTopics(uid t.Uid, opts *t.QueryOpt) ([]string, error) {
-	return nil, nil
+func (a *adapter) OwnTopics(uid t.Uid) ([]string, error) {
+	filter := bson.D{{"owner", uid.String()}, {"deletedat", bson.M{"$exists": false}}}
+	findOpts := &mdbopts.FindOptions{Projection: bson.D{{"_id", 1}}}
+	cur, err := a.db.Collection("topics").Find(c.TODO(), filter, findOpts)
+	if err != nil {
+		return nil, err
+	}
+
+	var res map[string]string
+	var names []string
+	for cur.Next(c.TODO()) {
+		if err := cur.Decode(&res); err == nil {
+			names = append(names, res["_id"])
+		} else {
+			return nil, err
+		}
+	}
+	cur.Close(c.TODO())
+
+	return names, nil
 }
 
 // TopicShare creates topc subscriptions
