@@ -480,8 +480,7 @@ func (SubsObjMapper) Create(subs ...*types.Subscription) error {
 		sub.InitTimes()
 	}
 
-	_, err := adp.TopicShare(subs)
-	return err
+	return adp.TopicShare(subs)
 }
 
 // Get given subscription

@@ -103,7 +103,7 @@ type Adapter interface {
 	// OwnTopics loads a slice of topic names where the user is the owner.
 	OwnTopics(uid t.Uid) ([]string, error)
 	// TopicShare creates topc subscriptions
-	TopicShare(subs []*t.Subscription) (int, error)
+	TopicShare(subs []*t.Subscription) error
 	// TopicDelete deletes topic, subscription, messages
 	TopicDelete(topic string, hard bool) error
 	// TopicUpdateOnMessage increments Topic's or User's SeqId value and updates TouchedAt timestamp.
