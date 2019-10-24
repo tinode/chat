@@ -847,7 +847,7 @@ func (a *adapter) TopicShare(subs []*t.Subscription) error {
 						bson.M{"_id": sub.Id},
 						bson.M{
 							"$unset": bson.M{"deletedat": ""},
-							"$set":   bson.M{
+							"$set": bson.M{
 								"createdat": sub.CreatedAt,
 								"updatedat": sub.UpdatedAt,
 								"modegiven": sub.ModeGiven}})
@@ -870,14 +870,18 @@ func (a *adapter) TopicShare(subs []*t.Subscription) error {
 	return err
 }
 
-// TopicDelete deletes topic, subscription, messages
+// TODO (after a.SubsDelForTopic() and a.MessageDeleteList() done): TopicDelete deletes topic, subscription, messages
 func (a *adapter) TopicDelete(topic string, hard bool) error {
 	return nil
 }
 
 // TopicUpdateOnMessage increments Topic's or User's SeqId value and updates TouchedAt timestamp.
 func (a *adapter) TopicUpdateOnMessage(topic string, msg *t.Message) error {
-	return nil
+	_, err := a.db.Collection("topics").UpdateOne(ctx,
+		bson.M{"_id": topic},
+		bson.M{"$set": bson.M{"seqid": msg.SeqId, "touchedat": msg.CreatedAt}})
+
+	return err
 }
 
 // TopicUpdate updates topic record.
