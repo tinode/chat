@@ -1019,7 +1019,11 @@ func (a *adapter) SubsUpdate(topic string, user t.Uid, update map[string]interfa
 
 // SubsDelete deletes a single subscription
 func (a *adapter) SubsDelete(topic string, user t.Uid) error {
-	return nil
+	now := t.TimeNow()
+	_, err := a.db.Collection("subscriptions").UpdateOne(ctx,
+		bson.M{"_id": topic + ":" + user.String()},
+		bson.M{"updatedat": now, "deletedat": now})
+	return err
 }
 
 // SubsDelForTopic deletes all subscriptions to the given topic
