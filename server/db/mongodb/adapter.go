@@ -965,7 +965,42 @@ func (a *adapter) SubsForUser(user t.Uid, keepDeleted bool, opts *t.QueryOpt) ([
 
 // SubsForTopic gets a list of subscriptions to a given topic.. Does NOT load Public value.
 func (a *adapter) SubsForTopic(topic string, keepDeleted bool, opts *t.QueryOpt) ([]t.Subscription, error) {
-	return nil, nil
+	filter := bson.D{{"topic", topic}}
+	if !keepDeleted {
+		filter = append(filter, bson.E{Key: "deletedat", Value: bson.M{"$exists": false}})
+	}
+
+	limit := a.maxResults
+	if opts != nil {
+		// Ignore IfModifiedSince - we must return all entries
+		// Those unmodified will be stripped of Public & Private.
+
+		if !opts.User.IsZero() {
+			filter = append(filter, bson.E{Key: "user", Value: opts.User.String()})
+		}
+		if opts.Limit > 0 && opts.Limit < limit {
+			limit = opts.Limit
+		}
+	}
+	findOpts := new(mdbopts.FindOptions)
+	findOpts.SetLimit(int64(limit))
+
+	cur, err := a.db.Collection("subscriptions").Find(ctx, filter, findOpts)
+	if err != nil {
+		return nil, err
+	}
+	defer cur.Close(ctx)
+
+	var subs []t.Subscription
+	var ss t.Subscription
+	for cur.Next(ctx) {
+		if err := cur.Decode(&ss); err != nil {
+			return nil, err
+		}
+		subs = append(subs, ss)
+	}
+
+	return subs, cur.Err()
 }
 
 // SubsUpdate updates pasrt of a subscription object. Pass nil for fields which don't need to be updated
