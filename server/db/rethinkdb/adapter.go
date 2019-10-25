@@ -865,7 +865,7 @@ func (a *adapter) TopicCreateP2P(initiator, invited *t.Subscription) error {
 				Merge(map[string]interface{}{
 					"CreatedAt": invited.CreatedAt,
 					"UpdatedAt": invited.UpdatedAt,
-					"ModeGiven":  invited.ModeGiven})).
+					"ModeGiven": invited.ModeGiven})).
 			RunWrite(a.conn)
 		if err != nil {
 			return err
@@ -1143,7 +1143,7 @@ func (a *adapter) TopicShare(shares []*t.Subscription) error {
 			return oldsub.Without("DeletedAt").Merge(map[string]interface{}{
 				"CreatedAt": newsub.Field("CreatedAt"),
 				"UpdatedAt": newsub.Field("UpdatedAt"),
-				"ModeGiven":  newsub.Field("ModeGiven")})
+				"ModeGiven": newsub.Field("ModeGiven")})
 		}}).RunWrite(a.conn)
 
 	return err
@@ -1347,10 +1347,12 @@ func (a *adapter) SubsDelForTopic(topic string, hard bool) error {
 	return err
 }
 
-// SubsDelForUser marks all subscriptions of a given user as deleted
+// SubsDelForUser deletes or marks all subscriptions of a given user as deleted
 func (a *adapter) SubsDelForUser(user t.Uid, hard bool) error {
 	var err error
 	if hard {
+		_, err = rdb.DB(a.dbName).Table("subscriptions").GetAllByIndex("User", user.String()).
+			Delete().RunWrite(a.conn)
 	} else {
 		now := t.TimeNow()
 		update := map[string]interface{}{

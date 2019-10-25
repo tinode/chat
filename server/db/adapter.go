@@ -126,7 +126,7 @@ type Adapter interface {
 	SubsDelete(topic string, user t.Uid) error
 	// SubsDelForTopic deletes all subscriptions to the given topic
 	SubsDelForTopic(topic string, hard bool) error
-	// SubsDelForUser deletes all subscriptions of the given user
+	// SubsDelForUser deletes or marks as deleted all subscriptions of the given user.
 	SubsDelForUser(user t.Uid, hard bool) error
 
 	// Search
