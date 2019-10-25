@@ -897,7 +897,7 @@ func (a *adapter) TopicUpdate(topic string, update map[string]interface{}) error
 }
 
 // TopicOwnerChange updates topic's owner
-func (a *adapter) TopicOwnerChange(topic string, newOwner, oldOwner t.Uid) error {
+func (a *adapter) TopicOwnerChange(topic string, newOwner t.Uid) error {
 	_, err := a.db.Collection("topics").UpdateOne(ctx,
 		bson.M{"_id": topic},
 		bson.M{"$set": bson.M{"owner": newOwner}})
@@ -909,7 +909,18 @@ func (a *adapter) TopicOwnerChange(topic string, newOwner, oldOwner t.Uid) error
 
 // SubscriptionGet reads a subscription of a user to a topic
 func (a *adapter) SubscriptionGet(topic string, user t.Uid) (*t.Subscription, error) {
-	return &t.Subscription{}, nil
+	sub := new(t.Subscription)
+	err := a.db.Collection("subscriptions").FindOne(ctx, bson.M{
+		"_id":       topic + ":" + user.String(),
+		"deletedat": bson.M{"$exists": false}}).Decode(sub)
+	if err != nil {
+		if isNoResult(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	return sub, nil
 }
 
 // SubsForUser gets a list of topics of interest for a given user. Does NOT load Public value.
