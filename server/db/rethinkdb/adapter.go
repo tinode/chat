@@ -1129,7 +1129,7 @@ func (a *adapter) OwnTopics(uid t.Uid) ([]string, error) {
 	return names, nil
 }
 
-func (a *adapter) TopicShare(shares []*t.Subscription) (int, error) {
+func (a *adapter) TopicShare(shares []*t.Subscription) error {
 	// Assign Ids.
 	for i := 0; i < len(shares); i++ {
 		shares[i].Id = shares[i].Topic + ":" + shares[i].User
@@ -1138,7 +1138,7 @@ func (a *adapter) TopicShare(shares []*t.Subscription) (int, error) {
 	// Subscription could have been marked as deleted (DeletedAt != nil). If it's marked
 	// as deleted, unmark by clearing the DeletedAt field of the old subscription and
 	// updating times and ModeGiven.
-	resp, err := rdb.DB(a.dbName).Table("subscriptions").
+	_, err := rdb.DB(a.dbName).Table("subscriptions").
 		Insert(shares, rdb.InsertOpts{Conflict: func(id, oldsub, newsub rdb.Term) interface{} {
 			return oldsub.Without("DeletedAt").Merge(map[string]interface{}{
 				"CreatedAt": newsub.Field("CreatedAt"),
@@ -1146,7 +1146,7 @@ func (a *adapter) TopicShare(shares []*t.Subscription) (int, error) {
 				"ModeGiven":  newsub.Field("ModeGiven")})
 		}}).RunWrite(a.conn)
 
-	return resp.Inserted + resp.Replaced, err
+	return err
 }
 
 func (a *adapter) TopicDelete(topic string, hard bool) error {
@@ -1193,7 +1193,7 @@ func (a *adapter) TopicUpdate(topic string, update map[string]interface{}) error
 	return err
 }
 
-func (a *adapter) TopicOwnerChange(topic string, newOwner, oldOwner t.Uid) error {
+func (a *adapter) TopicOwnerChange(topic string, newOwner t.Uid) error {
 	_, err := rdb.DB(a.dbName).Table("topics").Get(topic).
 		Update(map[string]interface{}{"Owner": newOwner}).RunWrite(a.conn)
 	return err

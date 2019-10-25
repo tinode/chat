@@ -78,7 +78,7 @@ const (
 	defaultMaxTagCount = 16
 
 	// minTagLength is the shortest acceptable length of a tag in runes. Shorter tags are discarded.
-	minTagLength = 4
+	minTagLength = 2
 	// maxTagLength is the maximum length of a tag in runes. Longer tags are trimmed.
 	maxTagLength = 96
 
