@@ -1036,14 +1036,24 @@ func (a *adapter) SubsDelForTopic(topic string, hard bool) error {
 		now := t.TimeNow()
 		_, err = a.db.Collection("subscriptions").UpdateMany(ctx,
 			filter,
-			bson.M{"updatedat": now, "deletedat": now})
+			bson.M{"$set": bson.M{"updatedat": now, "deletedat": now}})
 	}
 	return err
 }
 
 // SubsDelForUser deletes all subscriptions of the given user
 func (a *adapter) SubsDelForUser(user t.Uid, hard bool) error {
-	return nil
+	var err error
+	filter := bson.M{"user": user.String()}
+	if hard {
+		//_, err = a.db.Collection("subscriptions").DeleteMany(ctx, filter)
+	} else {
+		now := t.TimeNow()
+		_, err = a.db.Collection("subscriptions").UpdateMany(ctx,
+			filter,
+			bson.M{"$set": bson.M{"updatedat": now, "deletedat": now}})
+	}
+	return err
 }
 
 // Search
