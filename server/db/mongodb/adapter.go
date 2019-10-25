@@ -1046,7 +1046,7 @@ func (a *adapter) SubsDelForUser(user t.Uid, hard bool) error {
 	var err error
 	filter := bson.M{"user": user.String()}
 	if hard {
-		//_, err = a.db.Collection("subscriptions").DeleteMany(ctx, filter)
+		_, err = a.db.Collection("subscriptions").DeleteMany(ctx, filter)
 	} else {
 		now := t.TimeNow()
 		_, err = a.db.Collection("subscriptions").UpdateMany(ctx,
