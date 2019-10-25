@@ -1117,24 +1117,71 @@ func (a *adapter) DeviceDelete(uid t.Uid, deviceID string) error {
 
 // FileStartUpload initializes a file upload
 func (a *adapter) FileStartUpload(fd *t.FileDef) error {
-	return nil
+	_, err := a.db.Collection("fileuploads").InsertOne(ctx, fd)
+	return err
 }
 
 // FileFinishUpload marks file upload as completed, successfully or otherwise.
 func (a *adapter) FileFinishUpload(fid string, status int, size int64) (*t.FileDef, error) {
-	return &t.FileDef{}, nil
+	if _, err := a.db.Collection("fileuploads").UpdateOne(ctx,
+		bson.M{"_id": fid},
+		bson.M{"$set": bson.M{
+			"updatedat": t.TimeNow(),
+			"status":    status,
+			"size":      size}}); err != nil {
+
+		return nil, err
+	}
+
+	return a.FileGet(fid)
 }
 
 // FileGet fetches a record of a specific file
 func (a *adapter) FileGet(fid string) (*t.FileDef, error) {
-	return &t.FileDef{}, nil
+	var fd t.FileDef
+	err := a.db.Collection("fileuploads").FindOne(ctx, bson.M{"_id": fid}).Decode(&fd)
+	if err != nil {
+		if isNoResult(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	return &fd, nil
 }
 
 // FileDeleteUnused deletes records where UseCount is zero. If olderThan is non-zero, deletes
 // unused records with UpdatedAt before olderThan.
 // Returns array of FileDef.Location of deleted filerecords so actual files can be deleted too.
 func (a *adapter) FileDeleteUnused(olderThan time.Time, limit int) ([]string, error) {
-	return nil, nil
+	filter := bson.D{{"usecount", 0}}
+	if !olderThan.IsZero() {
+		filter = append(filter, bson.E{Key: "updatedat", Value: bson.M{"$lt": olderThan},})
+	}
+	if limit > 0 {
+		findOpts := new(mdbopts.FindOptions)
+		findOpts.SetLimit(int64(limit))
+	}
+
+	findOpts := new(mdbopts.FindOptions)
+	findOpts.SetProjection(bson.M{"location": 1, "_id": 0})
+	cur, err := a.db.Collection("fileuploads").Find(ctx, filter, findOpts)
+	if err != nil {
+		return nil, err
+	}
+
+	var result map[string]string
+	var locations []string
+	for cur.Next(ctx) {
+		if err := cur.Decode(&result); err != nil {
+			return nil, err
+		}
+		locations = append(locations, result["location"])
+	}
+
+	_, err = a.db.Collection("fileuploads").DeleteMany(ctx, filter)
+	cur.Close(ctx)
+	return locations, err
 }
 
 func (a *adapter) isDbInitialized() bool {
