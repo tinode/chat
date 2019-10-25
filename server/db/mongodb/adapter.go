@@ -1005,7 +1005,16 @@ func (a *adapter) SubsForTopic(topic string, keepDeleted bool, opts *t.QueryOpt)
 
 // SubsUpdate updates pasrt of a subscription object. Pass nil for fields which don't need to be updated
 func (a *adapter) SubsUpdate(topic string, user t.Uid, update map[string]interface{}) error {
-	return nil
+	filter := bson.D{}
+	if !user.IsZero() {
+		// Update one topic subscription
+		filter = append(filter, bson.E{Key: "_id", Value: topic + ":" + user.String()})
+	} else {
+		// Update all topic subscriptions
+		filter = append(filter, bson.E{Key: "topic", Value: topic})
+	}
+	_, err := a.db.Collection("subscriptions").UpdateOne(ctx, filter, bson.M{"$set": update})
+	return err
 }
 
 // SubsDelete deletes a single subscription
