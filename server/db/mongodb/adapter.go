@@ -1095,7 +1095,25 @@ func (a *adapter) MessageGetDeleted(topic string, forUser t.Uid, opts *t.QueryOp
 
 // MessageAttachments connects given message to a list of file record IDs.
 func (a *adapter) MessageAttachments(msgId t.Uid, fids []string) error {
-	return nil
+	now := t.TimeNow()
+	_, err := a.db.Collection("messages").UpdateOne(ctx,
+		bson.M{"_id": msgId.String()},
+		bson.M{"$set": bson.M{"updatedat": now, "attachments": fids}})
+	if err != nil {
+		return err
+	}
+
+	ids := make([]interface{}, len(fids))
+	for i, id := range fids {
+		ids[i] = id
+	}
+	_, err = a.db.Collection("fileuploads").UpdateMany(ctx,
+		bson.M{"_id": bson.M{"$in": ids}},
+		bson.M{
+			"$set": bson.M{"updatedat": now},
+			"$inc": bson.M{"usecount": 1}})
+
+	return err
 }
 
 // Devices (for push notifications)
