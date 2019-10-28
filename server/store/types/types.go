@@ -922,14 +922,14 @@ func (mh MessageHeaders) Value() (driver.Value, error) {
 type Message struct {
 	ObjHeader `bson:",inline"`
 	// ID of the hard-delete operation
-	DelId int `json:"DelId,omitempty"`
+	DelId int `json:"DelId,omitempty" bson:",omitempty"`
 	// List of users who have marked this message as soft-deleted
-	DeletedFor []SoftDelete `json:"DeletedFor,omitempty"`
+	DeletedFor []SoftDelete `json:"DeletedFor,omitempty" bson:",omitempty"`
 	SeqId      int
 	Topic      string
 	// Sender's user ID as string (without 'usr' prefix), could be empty.
 	From    string
-	Head    MessageHeaders `json:"Head,omitempty"`
+	Head    MessageHeaders `json:"Head,omitempty" bson:",omitempty"`
 	Content interface{}
 }
 
@@ -937,7 +937,7 @@ type Message struct {
 // If the range contains just one ID, Hi is set to 0
 type Range struct {
 	Low int
-	Hi  int `json:"Hi,omitempty"`
+	Hi  int `json:"Hi,omitempty" bson:",omitempty"`
 }
 
 // RangeSorter is a helper type required by 'sort' package.
