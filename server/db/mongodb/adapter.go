@@ -700,23 +700,54 @@ func (a *adapter) AuthDelAllRecords(uid t.Uid) (int, error) {
 	return int(res.DeletedCount), err
 }
 
-// TODO (fix): AuthUpdRecord modifies an authentication record.
+// AuthUpdRecord modifies an authentication record.
 func (a *adapter) AuthUpdRecord(uid t.Uid, scheme, unique string,
 	authLvl auth.Level, secret []byte, expires time.Time) (bool, error) {
-	//filter := b.M{
-	//	"userid": uid.String(),
-	//	"scheme": scheme}
-	//update := b.M{"$set": b.M{
-	//	"unique":  unique,
-	//	"authlvl": authLvl,
-	//	"secret":  secret,
-	//	"expires": expires,
-	//}}
-	//
-	//if _, err := a.db.Collection("auth").UpdateOne(ctx, filter, update); err != nil {
-	//	return true, err
-	//}
-	return false, nil
+	// The primary key is immutable. If '_id' has changed, we have to replace the old record with a new one:
+	// 1. Check if '_id' has changed.
+	// 2. If not, execute update by '_id'
+	// 3. If yes, first insert the new record (it may fail due to dublicate '_id') then delete the old one.
+
+	var dupe bool
+	var err error
+	var record struct{ Unique string `bson:"_id"` }
+	findOpts := mdbopts.FindOneOptions{Projection: b.M{"_id": 1}}
+	filter := b.M{"userid": uid.String(), "scheme": scheme}
+	if err = a.db.Collection("auth").FindOne(ctx, filter, &findOpts).Decode(&record); err != nil {
+		return false, err
+	}
+
+	if record.Unique == unique {
+		_, err = a.db.Collection("auth").UpdateOne(ctx,
+			b.M{"_id": unique},
+			b.M{"$set": b.M{
+				"authlvl": authLvl,
+				"secret":  secret,
+				"expires": expires}})
+	} else {
+		var sess mdb.Session
+		if sess, err = a.conn.StartSession(); err != nil {
+			return false, err
+		}
+		if err = sess.StartTransaction(); err != nil {
+			return false, err
+		}
+		if err = mdb.WithSession(ctx, sess, func(sc mdb.SessionContext) error {
+			dupe, err = a.AuthAddRecord(uid, scheme, unique, authLvl, secret, expires)
+			if err != nil {
+				return err
+			}
+			if err = a.AuthDelScheme(uid, scheme); err != nil {
+				return err
+			}
+			return sess.CommitTransaction(ctx)
+		}); err != nil {
+			return dupe, err
+		}
+		sess.EndSession(ctx)
+	}
+
+	return dupe, err
 }
 
 // Topic management
