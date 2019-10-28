@@ -1154,16 +1154,19 @@ func (a *adapter) FileGet(fid string) (*t.FileDef, error) {
 // unused records with UpdatedAt before olderThan.
 // Returns array of FileDef.Location of deleted filerecords so actual files can be deleted too.
 func (a *adapter) FileDeleteUnused(olderThan time.Time, limit int) ([]string, error) {
-	filter := bson.D{{"usecount", 0}}
+	findOpts := new(mdbopts.FindOptions)
+	filter := bson.D{bson.E{
+		Key: "$or",
+		Value: bson.A{
+			bson.M{"usecount": 0},
+			bson.M{"usecount": bson.M{"$exists": false}}}}}
 	if !olderThan.IsZero() {
 		filter = append(filter, bson.E{Key: "updatedat", Value: bson.M{"$lt": olderThan},})
 	}
 	if limit > 0 {
-		findOpts := new(mdbopts.FindOptions)
 		findOpts.SetLimit(int64(limit))
 	}
 
-	findOpts := new(mdbopts.FindOptions)
 	findOpts.SetProjection(bson.M{"location": 1, "_id": 0})
 	cur, err := a.db.Collection("fileuploads").Find(ctx, filter, findOpts)
 	if err != nil {
