@@ -1072,7 +1072,9 @@ func (a *adapter) FindTopics(req, opt []string) ([]t.Subscription, error) {
 
 // MessageSave saves message to database
 func (a *adapter) MessageSave(msg *t.Message) error {
-	return nil
+	msg.SetUid(store.GetUid())
+	_, err := a.db.Collection("messages").InsertOne(ctx, msg)
+	return err
 }
 
 // MessageGetAll returns messages matching the query
