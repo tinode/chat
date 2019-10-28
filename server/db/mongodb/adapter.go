@@ -3,7 +3,7 @@
 package mongodb
 
 import (
-	c "context"
+	"context"
 	"encoding/json"
 	"errors"
 	"log"
@@ -38,14 +38,14 @@ const (
 	defaultMaxResults = 1024
 )
 
-var ctx c.Context
+var ctx context.Context
 
 // See https://godoc.org/go.mongodb.org/mongo-driver/mongo/options#ClientOptions for explanations.
 type configType struct {
 	Addresses      interface{} `json:"addresses,omitempty"`
 	ConnectTimeout int         `json:"timeout,omitempty"`
 
-	// Separately from ClientOptions (additional options):
+	// Options separately from ClientOptions (custom options):
 	Database string `json:"database,omitempty"`
 }
 
@@ -120,8 +120,8 @@ func (a *adapter) GetDbVersion() (int, error) {
 		Key   string `bson:"_id"`
 		Value int
 	}
-	if err := a.db.Collection("kvmeta").FindOne(ctx, bson.D{{"_id", "version"}}).Decode(&result); err != nil {
-		if isNoResult(err) {
+	if err := a.db.Collection("kvmeta").FindOne(ctx, bson.M{"_id": "version"}).Decode(&result); err != nil {
+		if err == mdb.ErrNoDocuments {
 			err = errors.New("Database not initialized")
 		}
 		return -1, err
@@ -298,10 +298,10 @@ func (a *adapter) UserGet(id t.Uid) (*t.User, error) {
 	var user t.User
 
 	filter := bson.M{"$and": bson.A{
-		bson.D{{"_id", id.String()}},
-		bson.D{{"deletedat", bson.D{{"$exists", false}}}}}}
+		bson.M{"_id": id.String()},
+		bson.M{"deletedat": bson.M{"$exists": false}}}}
 	if err := a.db.Collection("users").FindOne(ctx, filter).Decode(&user); err != nil {
-		if strings.Contains(err.Error(), "no documents in user") { // User not found
+		if err == mdb.ErrNoDocuments { // User not found
 			return nil, nil
 		} else {
 			return nil, err
@@ -346,8 +346,8 @@ func (a *adapter) UserDelete(id t.Uid, hard bool) error {
 // UserGetDisabled returns IDs of users which were soft-deleted since given time.
 func (a *adapter) UserGetDisabled(since time.Time) ([]t.Uid, error) {
 	filter := bson.M{"deletedat": bson.M{"$gte": since}}
-	findOpts := &mdbopts.FindOptions{Projection: bson.D{{"_id", 1}}}
-	if cur, err := a.db.Collection("users").Find(ctx, filter, findOpts); err == nil {
+	findOpts := mdbopts.FindOptions{Projection: bson.M{"_id": 1}}
+	if cur, err := a.db.Collection("users").Find(ctx, filter, &findOpts); err == nil {
 		defer cur.Close(ctx)
 
 		var uids []t.Uid
@@ -404,8 +404,8 @@ func (a *adapter) UserUpdateTags(uid t.Uid, add, remove, reset []string) ([]stri
 
 	// Get the new tags
 	var tags map[string][]string
-	findOpts := &mdbopts.FindOneOptions{Projection: bson.D{{"tags", 1}, {"_id", 0}}}
-	if err := a.db.Collection("users").FindOne(ctx, bson.M{"_id": uid.String()}, findOpts).Decode(&tags); err == nil {
+	findOpts := mdbopts.FindOneOptions{Projection: bson.M{"tags": 1, "_id": 0}}
+	if err := a.db.Collection("users").FindOne(ctx, bson.M{"_id": uid.String()}, &findOpts).Decode(&tags); err == nil {
 		return tags["tags"], nil
 	} else {
 		return nil, err
@@ -416,10 +416,10 @@ func (a *adapter) UserUpdateTags(uid t.Uid, add, remove, reset []string) ([]stri
 func (a *adapter) UserGetByCred(method, value string) (t.Uid, error) {
 	var userId map[string]string
 	filter := bson.M{"_id": method + ":" + value}
-	findOpts := &mdbopts.FindOneOptions{Projection: bson.D{{"user", 1}, {"_id", 0}}}
-	err := a.db.Collection("credentials").FindOne(ctx, filter, findOpts).Decode(&userId)
+	findOpts := mdbopts.FindOneOptions{Projection: bson.M{"user": 1, "_id": 0}}
+	err := a.db.Collection("credentials").FindOne(ctx, filter, &findOpts).Decode(&userId)
 	if err != nil {
-		if isNoResult(err) {
+		if err == mdb.ErrNoDocuments {
 			return t.ZeroUid, nil
 		}
 		return t.ZeroUid, err
@@ -457,13 +457,13 @@ func (a *adapter) CredUpsert(cred *t.Credential) (bool, error) {
 		if result1 != (t.Credential{}) {
 			// Someone has already validated this credential.
 			return false, t.ErrDuplicate
-		} else if err != nil && !isNoResult(err) { // no result -> continue
+		} else if err != nil && err != mdb.ErrNoDocuments { // if no result -> continue
 			return false, err
 		}
 
 		// Soft-delete all unvalidated records of this user and method.
 		_, err = credCollection.UpdateMany(ctx,
-			bson.D{{"user", cred.User}, {"method", cred.Method}, {"done", false}},
+			bson.M{"user": cred.User, "method": cred.Method, "done": false},
 			bson.M{"$set": bson.M{"deletedat": t.TimeNow()}})
 		if err != nil {
 			return false, err
@@ -478,7 +478,7 @@ func (a *adapter) CredUpsert(cred *t.Credential) (bool, error) {
 		err = credCollection.FindOne(ctx, bson.M{"_id": cred.Id}).Decode(&result2)
 		if result2 != (t.Credential{}) {
 			_, err = credCollection.UpdateOne(ctx,
-				bson.D{{"_id", cred.Id},},
+				bson.M{"_id": cred.Id},
 				bson.M{
 					"$unset": bson.M{"deletedat": ""},
 					"$set":   bson.M{"updatedat": cred.UpdatedAt, "resp": cred.Resp}})
@@ -488,7 +488,7 @@ func (a *adapter) CredUpsert(cred *t.Credential) (bool, error) {
 
 			// The record was updated, all is fine.
 			return false, nil
-		} else if err != nil && !isNoResult(err) {
+		} else if err != nil && err != mdb.ErrNoDocuments {
 			return false, err
 		}
 	} else {
@@ -512,14 +512,14 @@ func (a *adapter) CredUpsert(cred *t.Credential) (bool, error) {
 func (a *adapter) CredGetActive(uid t.Uid, method string) (*t.Credential, error) {
 	var cred t.Credential
 
-	filter := bson.M{"$and": bson.A{
-		bson.M{"user": uid.String()},
-		bson.M{"deletedat": bson.M{"$exists": false}},
-		bson.M{"method": method},
-		bson.M{"done": false}}}
+	filter := bson.M{
+		"user":      uid.String(),
+		"deletedat": bson.M{"$exists": false},
+		"method":    method,
+		"done":      false}
 
 	if err := a.db.Collection("credentials").FindOne(ctx, filter).Decode(&cred); err != nil {
-		if strings.Contains(err.Error(), "no documents in") { // Cred not found
+		if err == mdb.ErrNoDocuments { // Cred not found
 			return nil, t.ErrNotFound
 		} else {
 			return nil, err
@@ -531,17 +531,17 @@ func (a *adapter) CredGetActive(uid t.Uid, method string) (*t.Credential, error)
 
 // CredGetAll returns credential records for the given user and method, validated only or all.
 func (a *adapter) CredGetAll(uid t.Uid, method string, validatedOnly bool) ([]t.Credential, error) {
-	filter := bson.A{}
+	filter := bson.M{}
 	if method != "" {
-		filter = append(filter, bson.M{"method": method})
+		filter["method"] = method
 	}
 	if validatedOnly {
-		filter = append(filter, bson.M{"done": true})
+		filter["done"] = true
 	} else {
-		filter = append(filter, bson.M{"deletedat": bson.M{"$exists": false}})
+		filter["deletedat"] = bson.M{"$exists": false}
 	}
 
-	if cur, err := a.db.Collection("credentials").Find(ctx, bson.M{"$and": filter}); err == nil {
+	if cur, err := a.db.Collection("credentials").Find(ctx, filter); err == nil {
 		var credentials []t.Credential
 		if err := cur.All(ctx, &credentials); err != nil {
 			return nil, err
@@ -556,9 +556,7 @@ func (a *adapter) CredGetAll(uid t.Uid, method string, validatedOnly bool) ([]t.
 // user's credentials.
 func (a *adapter) CredDel(uid t.Uid, method, value string) error {
 	credCollection := a.db.Collection("credentials")
-	filter := bson.M{}
 	filterAnd := bson.A{}
-
 	filterUser := bson.M{"user": uid.String()}
 	filterAnd = append(filterAnd, filterUser)
 	if method != "" {
@@ -576,7 +574,7 @@ func (a *adapter) CredDel(uid t.Uid, method, value string) error {
 		bson.M{"done": true},
 		bson.M{"retries": 0}}}
 	filterAnd = append(filterAnd, filterOr)
-	filter["$and"] = filterAnd
+	filter := bson.M{"$and": filterAnd}
 	if _, err := credCollection.DeleteMany(ctx, filter); err != nil {
 		return err
 	}
@@ -605,14 +603,15 @@ func (a *adapter) CredConfirm(uid t.Uid, method string) error {
 
 // CredFail increments count of failed validation attepmts for the given credentials.
 func (a *adapter) CredFail(uid t.Uid, method string) error {
-	filter := bson.M{"$and": bson.A{
-		bson.M{"user": uid.String()},
-		bson.M{"deletedat": bson.M{"$exists": false}},
-		bson.M{"method": method},
-		bson.M{"done": false}}}
-	update := bson.M{}
-	update["$inc"] = bson.M{"retries": 1}
-	update["$set"] = bson.M{"updatedat": t.TimeNow()}
+	filter := bson.M{
+		"user":      uid.String(),
+		"deletedat": bson.M{"$exists": false},
+		"method":    method,
+		"done":      false}
+
+	update := bson.M{
+		"$inc": bson.M{"retries": 1},
+		"$set": bson.M{"updatedat": t.TimeNow()}}
 	_, err := a.db.Collection("credentials").UpdateOne(ctx, filter, update)
 	return err
 }
@@ -628,13 +627,12 @@ func (a *adapter) AuthGetUniqueRecord(unique string) (t.Uid, auth.Level, []byte,
 		Expires time.Time
 	}
 	filter := bson.M{"_id": unique}
-	findOpts := &mdbopts.FindOneOptions{Projection: bson.M{
+	findOpts := mdbopts.FindOneOptions{Projection: bson.M{
 		"authLvl": 1,
 		"secret":  1,
-		"expires": 1,
-	}}
-	if err := a.db.Collection("auth").FindOne(ctx, filter, findOpts).Decode(&record); err != nil {
-		if isNoResult(err) {
+		"expires": 1}}
+	if err := a.db.Collection("auth").FindOne(ctx, filter, &findOpts).Decode(&record); err != nil {
+		if err == mdb.ErrNoDocuments {
 			return t.ZeroUid, 0, nil, time.Time{}, nil
 		}
 		return t.ZeroUid, 0, nil, time.Time{}, err
@@ -651,17 +649,16 @@ func (a *adapter) AuthGetRecord(uid t.Uid, scheme string) (string, auth.Level, [
 		Secret  []byte
 		Expires time.Time
 	}
-	filter := bson.M{"$and": bson.A{
-		bson.M{"userid": uid.String()},
-		bson.M{"scheme": scheme},
-	}}
+	filter := bson.M{
+		"userid": uid.String(),
+		"scheme": scheme}
 	findOpts := &mdbopts.FindOneOptions{Projection: bson.M{
 		"authLvl": 1,
 		"secret":  1,
 		"expires": 1,
 	}}
 	if err := a.db.Collection("auth").FindOne(ctx, filter, findOpts).Decode(&record); err != nil {
-		if isNoResult(err) {
+		if err == mdb.ErrNoDocuments {
 			return "", 0, nil, time.Time{}, t.ErrNotFound
 		}
 		return "", 0, nil, time.Time{}, err
@@ -672,14 +669,13 @@ func (a *adapter) AuthGetRecord(uid t.Uid, scheme string) (string, auth.Level, [
 
 // AuthAddRecord creates new authentication record
 func (a *adapter) AuthAddRecord(uid t.Uid, scheme, unique string, authLvl auth.Level, secret []byte, expires time.Time) (bool, error) {
-	authRecord := bson.D{
-		{"_id", unique},
-		{"userid", uid.String()},
-		{"scheme", scheme},
-		{"authlvl", authLvl},
-		{"secret", secret},
-		{"expires", expires},
-	}
+	authRecord := bson.M{
+		"_id":     unique,
+		"userid":  uid.String(),
+		"scheme":  scheme,
+		"authlvl": authLvl,
+		"secret":  secret,
+		"expires": expires}
 	if _, err := a.db.Collection("auth").InsertOne(ctx, authRecord); err != nil {
 		if isDuplicateErr(err) {
 			return true, t.ErrDuplicate
@@ -692,10 +688,9 @@ func (a *adapter) AuthAddRecord(uid t.Uid, scheme, unique string, authLvl auth.L
 // AuthDelScheme deletes an existing authentication scheme for the user.
 func (a *adapter) AuthDelScheme(uid t.Uid, scheme string) error {
 	_, err := a.db.Collection("auth").DeleteOne(ctx,
-		bson.D{
-			{"userid", uid.String()},
-			{"scheme", scheme},
-		})
+		bson.M{
+			"userid": uid.String(),
+			"scheme": scheme})
 	return err
 }
 
@@ -705,22 +700,22 @@ func (a *adapter) AuthDelAllRecords(uid t.Uid) (int, error) {
 	return int(res.DeletedCount), err
 }
 
-// AuthUpdRecord modifies an authentication record.
+// TODO (fix): AuthUpdRecord modifies an authentication record.
 func (a *adapter) AuthUpdRecord(uid t.Uid, scheme, unique string,
 	authLvl auth.Level, secret []byte, expires time.Time) (bool, error) {
-	filter := bson.D{
-		{"userid", uid.String()},
-		{"scheme", scheme}}
-	update := bson.M{"$set": bson.M{
-		"unique":  unique,
-		"authlvl": authLvl,
-		"secret":  secret,
-		"expires": expires,
-	}}
-	// TODO: Handle possible 'unique' field duplicate
-	if _, err := a.db.Collection("auth").UpdateOne(ctx, filter, update); err != nil {
-		return true, err
-	}
+	//filter := bson.M{
+	//	"userid": uid.String(),
+	//	"scheme": scheme}
+	//update := bson.M{"$set": bson.M{
+	//	"unique":  unique,
+	//	"authlvl": authLvl,
+	//	"secret":  secret,
+	//	"expires": expires,
+	//}}
+	//
+	//if _, err := a.db.Collection("auth").UpdateOne(ctx, filter, update); err != nil {
+	//	return true, err
+	//}
 	return false, nil
 }
 
@@ -767,9 +762,10 @@ func (a *adapter) TopicCreateP2P(initiator, invited *t.Subscription) error {
 		}
 	}
 
-	topic := &t.Topic{ObjHeader: t.ObjHeader{Id: initiator.Topic}}
+	topic := &t.Topic{
+		ObjHeader: t.ObjHeader{Id: initiator.Topic},
+		TouchedAt: initiator.GetTouchedAt()}
 	topic.ObjHeader.MergeTimes(&initiator.ObjHeader)
-	topic.TouchedAt = initiator.GetTouchedAt()
 	return a.TopicCreate(topic)
 }
 
@@ -778,7 +774,7 @@ func (a *adapter) TopicGet(topic string) (*t.Topic, error) {
 	var tpc = new(t.Topic)
 	err := a.db.Collection("topics").FindOne(ctx, bson.M{"_id": topic}).Decode(tpc)
 	if err != nil {
-		if isNoResult(err) {
+		if err == mdb.ErrNoDocuments {
 			return nil, nil
 		}
 		return nil, err
@@ -798,9 +794,9 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 
 // OwnTopics loads a slice of topic names where the user is the owner.
 func (a *adapter) OwnTopics(uid t.Uid) ([]string, error) {
-	filter := bson.D{{"owner", uid.String()}, {"deletedat", bson.M{"$exists": false}}}
-	findOpts := &mdbopts.FindOptions{Projection: bson.D{{"_id", 1}}}
-	cur, err := a.db.Collection("topics").Find(ctx, filter, findOpts)
+	filter := bson.M{"owner": uid.String(), "deletedat": bson.M{"$exists": false}}
+	findOpts := mdbopts.FindOptions{Projection: bson.M{"_id": 1}}
+	cur, err := a.db.Collection("topics").Find(ctx, filter, &findOpts)
 	if err != nil {
 		return nil, err
 	}
@@ -837,9 +833,7 @@ func (a *adapter) TopicShare(subs []*t.Subscription) error {
 	if err = sess.StartTransaction(); err != nil {
 		return err
 	}
-	if err = mdb.WithSession(c.TODO(), sess, func(sc mdb.SessionContext) error {
-		replOpts := new(mdbopts.ReplaceOptions)
-		replOpts.SetUpsert(true)
+	if err = mdb.WithSession(ctx, sess, func(sc mdb.SessionContext) error {
 		for _, sub := range subs {
 			if _, err := a.db.Collection("subscriptions").InsertOne(ctx, sub); err != nil {
 				if isDuplicateErr(err) {
@@ -879,7 +873,9 @@ func (a *adapter) TopicDelete(topic string, hard bool) error {
 func (a *adapter) TopicUpdateOnMessage(topic string, msg *t.Message) error {
 	_, err := a.db.Collection("topics").UpdateOne(ctx,
 		bson.M{"_id": topic},
-		bson.M{"$set": bson.M{"seqid": msg.SeqId, "touchedat": msg.CreatedAt}})
+		bson.M{"$set": bson.M{
+			"seqid":     msg.SeqId,
+			"touchedat": msg.CreatedAt}})
 
 	return err
 }
@@ -892,7 +888,9 @@ func (a *adapter) TopicUpdate(topic string, update map[string]interface{}) error
 		delete(update, "UpdatedAt")
 	}
 
-	_, err := a.db.Collection("topics").UpdateOne(ctx, bson.M{"_id": topic}, bson.M{"$set": update})
+	_, err := a.db.Collection("topics").UpdateOne(ctx,
+		bson.M{"_id": topic},
+		bson.M{"$set": update})
 	return err
 }
 
@@ -914,7 +912,7 @@ func (a *adapter) SubscriptionGet(topic string, user t.Uid) (*t.Subscription, er
 		"_id":       topic + ":" + user.String(),
 		"deletedat": bson.M{"$exists": false}}).Decode(sub)
 	if err != nil {
-		if isNoResult(err) {
+		if err == mdb.ErrNoDocuments {
 			return nil, nil
 		}
 		return nil, err
@@ -925,9 +923,9 @@ func (a *adapter) SubscriptionGet(topic string, user t.Uid) (*t.Subscription, er
 
 // SubsForUser gets a list of topics of interest for a given user. Does NOT load Public value.
 func (a *adapter) SubsForUser(user t.Uid, keepDeleted bool, opts *t.QueryOpt) ([]t.Subscription, error) {
-	filter := bson.D{{"user", user.String()}}
+	filter := bson.M{"user": user.String()}
 	if !keepDeleted {
-		filter = append(filter, bson.E{Key: "deletedat", Value: bson.M{"$exists": false}})
+		filter["deletedat"] = bson.M{"$exists": false}
 	}
 	limit := a.maxResults
 
@@ -936,14 +934,13 @@ func (a *adapter) SubsForUser(user t.Uid, keepDeleted bool, opts *t.QueryOpt) ([
 		// Those unmodified will be stripped of Public & Private.
 
 		if opts.Topic != "" {
-			filter = append(filter, bson.E{Key: "topic", Value: opts.Topic})
+			filter["topic"] = opts.Topic
 		}
 		if opts.Limit > 0 && opts.Limit < limit {
 			limit = opts.Limit
 		}
 	}
-	findOpts := new(mdbopts.FindOptions)
-	findOpts.SetLimit(int64(limit))
+	findOpts := new(mdbopts.FindOptions).SetLimit(int64(limit))
 
 	cur, err := a.db.Collection("subscriptions").Find(ctx, filter, findOpts)
 	if err != nil {
@@ -965,9 +962,9 @@ func (a *adapter) SubsForUser(user t.Uid, keepDeleted bool, opts *t.QueryOpt) ([
 
 // SubsForTopic gets a list of subscriptions to a given topic.. Does NOT load Public value.
 func (a *adapter) SubsForTopic(topic string, keepDeleted bool, opts *t.QueryOpt) ([]t.Subscription, error) {
-	filter := bson.D{{"topic", topic}}
+	filter := bson.M{"topic": topic}
 	if !keepDeleted {
-		filter = append(filter, bson.E{Key: "deletedat", Value: bson.M{"$exists": false}})
+		filter["deletedat"] = bson.M{"$exists": false}
 	}
 
 	limit := a.maxResults
@@ -976,14 +973,13 @@ func (a *adapter) SubsForTopic(topic string, keepDeleted bool, opts *t.QueryOpt)
 		// Those unmodified will be stripped of Public & Private.
 
 		if !opts.User.IsZero() {
-			filter = append(filter, bson.E{Key: "user", Value: opts.User.String()})
+			filter["user"] = opts.User.String()
 		}
 		if opts.Limit > 0 && opts.Limit < limit {
 			limit = opts.Limit
 		}
 	}
-	findOpts := new(mdbopts.FindOptions)
-	findOpts.SetLimit(int64(limit))
+	findOpts := new(mdbopts.FindOptions).SetLimit(int64(limit))
 
 	cur, err := a.db.Collection("subscriptions").Find(ctx, filter, findOpts)
 	if err != nil {
@@ -1005,13 +1001,13 @@ func (a *adapter) SubsForTopic(topic string, keepDeleted bool, opts *t.QueryOpt)
 
 // SubsUpdate updates pasrt of a subscription object. Pass nil for fields which don't need to be updated
 func (a *adapter) SubsUpdate(topic string, user t.Uid, update map[string]interface{}) error {
-	filter := bson.D{}
+	filter := bson.M{}
 	if !user.IsZero() {
 		// Update one topic subscription
-		filter = append(filter, bson.E{Key: "_id", Value: topic + ":" + user.String()})
+		filter["_id"] = topic + ":" + user.String()
 	} else {
 		// Update all topic subscriptions
-		filter = append(filter, bson.E{Key: "topic", Value: topic})
+		filter["topic"] = topic
 	}
 	_, err := a.db.Collection("subscriptions").UpdateOne(ctx, filter, bson.M{"$set": update})
 	return err
@@ -1161,7 +1157,7 @@ func (a *adapter) FileGet(fid string) (*t.FileDef, error) {
 	var fd t.FileDef
 	err := a.db.Collection("fileuploads").FindOne(ctx, bson.M{"_id": fid}).Decode(&fd)
 	if err != nil {
-		if isNoResult(err) {
+		if err == mdb.ErrNoDocuments {
 			return nil, nil
 		}
 		return nil, err
@@ -1175,13 +1171,11 @@ func (a *adapter) FileGet(fid string) (*t.FileDef, error) {
 // Returns array of FileDef.Location of deleted filerecords so actual files can be deleted too.
 func (a *adapter) FileDeleteUnused(olderThan time.Time, limit int) ([]string, error) {
 	findOpts := new(mdbopts.FindOptions)
-	filter := bson.D{bson.E{
-		Key: "$or",
-		Value: bson.A{
-			bson.M{"usecount": 0},
-			bson.M{"usecount": bson.M{"$exists": false}}}}}
+	filter := bson.M{"$or": bson.A{
+		bson.M{"usecount": 0},
+		bson.M{"usecount": bson.M{"$exists": false}}}}
 	if !olderThan.IsZero() {
-		filter = append(filter, bson.E{Key: "updatedat", Value: bson.M{"$lt": olderThan},})
+		filter["updatedat"] = bson.M{"$lt": olderThan}
 	}
 	if limit > 0 {
 		findOpts.SetLimit(int64(limit))
@@ -1210,8 +1204,8 @@ func (a *adapter) FileDeleteUnused(olderThan time.Time, limit int) ([]string, er
 func (a *adapter) isDbInitialized() bool {
 	var result map[string]int
 
-	findOpts := &mdbopts.FindOneOptions{Projection: bson.M{"value": 1, "_id": 0}}
-	if err := a.db.Collection("kvmeta").FindOne(ctx, bson.M{"_id": "version"}, findOpts).Decode(&result); err != nil {
+	findOpts := mdbopts.FindOneOptions{Projection: bson.M{"value": 1, "_id": 0}}
+	if err := a.db.Collection("kvmeta").FindOne(ctx, bson.M{"_id": "version"}, &findOpts).Decode(&result); err != nil {
 		return false
 	}
 	return true
@@ -1219,7 +1213,7 @@ func (a *adapter) isDbInitialized() bool {
 
 func init() {
 	store.RegisterAdapter(&adapter{})
-	ctx = c.Background()
+	ctx = context.Background()
 }
 
 func contains(s []string, e string) bool {
@@ -1248,15 +1242,6 @@ func diff(userTags []string, removeTags []string) []string {
 		}
 	}
 	return result
-}
-
-func isNoResult(err error) bool {
-	if err == nil {
-		return false
-	}
-
-	msg := err.Error()
-	return strings.Contains(msg, "no documents in result")
 }
 
 func isDuplicateErr(err error) bool {
