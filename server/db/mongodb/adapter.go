@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"hash/fnv"
 	"log"
 	"strconv"
 	"strings"
@@ -1303,12 +1304,12 @@ func (a *adapter) SubsDelForUser(user t.Uid, hard bool) error {
 
 // Search
 
-// FindUsers searches for new contacts given a list of tags
+// TODO: FindUsers searches for new contacts given a list of tags
 func (a *adapter) FindUsers(user t.Uid, req, opt []string) ([]t.Subscription, error) {
 	return nil, nil
 }
 
-// FindTopics searches for group topics given a list of tags
+// TODO: FindTopics searches for group topics given a list of tags
 func (a *adapter) FindTopics(req, opt []string) ([]t.Subscription, error) {
 	return nil, nil
 }
@@ -1322,18 +1323,18 @@ func (a *adapter) MessageSave(msg *t.Message) error {
 	return err
 }
 
-// MessageGetAll returns messages matching the query
+// TODO: MessageGetAll returns messages matching the query
 func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.QueryOpt) ([]t.Message, error) {
 	return nil, nil
 }
 
-// MessageDeleteList marks messages as deleted.
+// TODO: MessageDeleteList marks messages as deleted.
 // Soft- or Hard- is defined by forUser value: forUSer.IsZero == true is hard.
 func (a *adapter) MessageDeleteList(topic string, toDel *t.DelMessage) error {
 	return nil
 }
 
-// MessageGetDeleted returns a list of deleted message Ids.
+// TODO: MessageGetDeleted returns a list of deleted message Ids.
 func (a *adapter) MessageGetDeleted(topic string, forUser t.Uid, opts *t.QueryOpt) ([]t.DelMessage, error) {
 	return nil, nil
 }
@@ -1363,19 +1364,28 @@ func (a *adapter) MessageAttachments(msgId t.Uid, fids []string) error {
 
 // Devices (for push notifications)
 
-// DeviceUpsert creates or updates a device record
+// TODO: DeviceUpsert creates or updates a device record
 func (a *adapter) DeviceUpsert(uid t.Uid, dev *t.DeviceDef) error {
 	return nil
 }
 
-// DeviceGetAll returns all devices for a given set of users
+// TODO: DeviceGetAll returns all devices for a given set of users
 func (a *adapter) DeviceGetAll(uid ...t.Uid) (map[t.Uid][]t.DeviceDef, int, error) {
 	return nil, 0, nil
 }
 
 // DeviceDelete deletes a device record
 func (a *adapter) DeviceDelete(uid t.Uid, deviceID string) error {
-	return nil
+	var err error
+	filter := b.M{"_id": uid.String()}
+	update := b.M{}
+	if deviceID == "" {
+		update["$set"] = b.M{"devices": nil}
+	} else {
+		update["$unset"] = b.M{"devices." + deviceHasher(deviceID): ""}
+	}
+	_, err = a.db.Collection("users").UpdateOne(ctx, filter, update)
+	return err
 }
 
 // File upload records. The files are stored outside of the database.
@@ -1491,6 +1501,14 @@ func diff(userTags []string, removeTags []string) []string {
 		}
 	}
 	return result
+}
+
+func deviceHasher(deviceID string) string {
+	// Generate custom key as [64-bit hash of device id] to ensure predictable
+	// length of the key
+	hasher := fnv.New64()
+	hasher.Write([]byte(deviceID))
+	return strconv.FormatUint(uint64(hasher.Sum64()), 16)
 }
 
 func isDuplicateErr(err error) bool {
