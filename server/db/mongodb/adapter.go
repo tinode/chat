@@ -27,6 +27,7 @@ type adapter struct {
 	dbName     string
 	maxResults int
 	version    int
+	ctx        context.Context
 }
 
 const (
@@ -84,14 +85,14 @@ func (a *adapter) Open(jsonconfig json.RawMessage) error {
 		a.maxResults = defaultMaxResults
 	}
 
-	a.conn, err = mdb.Connect(ctx, &opts)
+	a.conn, err = mdb.Connect(a.ctx, &opts)
 	a.db = a.conn.Database(a.dbName)
 	if err != nil {
 		return err
 	}
-
+	a.ctx = context.Background()
 	a.version = -1
-
+	
 	return nil
 }
 
@@ -121,7 +122,7 @@ func (a *adapter) GetDbVersion() (int, error) {
 		Key   string `bson:"_id"`
 		Value int
 	}
-	if err := a.db.Collection("kvmeta").FindOne(ctx, b.M{"_id": "version"}).Decode(&result); err != nil {
+	if err := a.db.Collection("kvmeta").FindOne(a.ctx, b.M{"_id": "version"}).Decode(&result); err != nil {
 		if err == mdb.ErrNoDocuments {
 			err = errors.New("Database not initialized")
 		}
@@ -189,37 +190,37 @@ func (a *adapter) CreateDb(reset bool) error {
 
 	// Users
 	// Create secondary index on User.DeletedAt for finding soft-deleted users
-	if _, err := a.db.Collection("users").Indexes().CreateOne(ctx, getIdxOpts("deletedat")); err != nil {
+	if _, err := a.db.Collection("users").Indexes().CreateOne(a.ctx, getIdxOpts("deletedat")); err != nil {
 		return err
 	}
 	// Create secondary index on User.Tags array so user can be found by tags
-	if _, err := a.db.Collection("users").Indexes().CreateOne(ctx, getIdxOpts("tags")); err != nil {
+	if _, err := a.db.Collection("users").Indexes().CreateOne(a.ctx, getIdxOpts("tags")); err != nil {
 		return err
 	}
 	// TODO: Create secondary index for User.Devices.<hash>.DeviceId to ensure ID uniqueness across users
 
 	// User authentication records {_id, userid, secret}
 	// Should be able to access user's auth records by user id
-	if _, err := a.db.Collection("auth").Indexes().CreateOne(ctx, getIdxOpts("userid")); err != nil {
+	if _, err := a.db.Collection("auth").Indexes().CreateOne(a.ctx, getIdxOpts("userid")); err != nil {
 		return err
 	}
 
 	// Should be able to access user's auth records by user id
-	if _, err := a.db.Collection("subscriptions").Indexes().CreateOne(ctx, getIdxOpts("user")); err != nil {
+	if _, err := a.db.Collection("subscriptions").Indexes().CreateOne(a.ctx, getIdxOpts("user")); err != nil {
 		return err
 	}
-	if _, err := a.db.Collection("subscriptions").Indexes().CreateOne(ctx, getIdxOpts("topic")); err != nil {
+	if _, err := a.db.Collection("subscriptions").Indexes().CreateOne(a.ctx, getIdxOpts("topic")); err != nil {
 		return err
 	}
 
 	// Topics stored in database
 	// Secondary index on Owner field for deleting users.
-	if _, err := a.db.Collection("topics").Indexes().CreateOne(ctx, getIdxOpts("owner")); err != nil {
+	if _, err := a.db.Collection("topics").Indexes().CreateOne(a.ctx, getIdxOpts("owner")); err != nil {
 		return err
 	}
 	// Secondary index on Topic.Tags array so topics can be found by tags.
 	// These tags are not unique as opposite to User.Tags.
-	if _, err := a.db.Collection("topics").Indexes().CreateOne(ctx, getIdxOpts("tags")); err != nil {
+	if _, err := a.db.Collection("topics").Indexes().CreateOne(a.ctx, getIdxOpts("tags")); err != nil {
 		return err
 	}
 	// Create system topic 'sys'.
@@ -239,22 +240,22 @@ func (a *adapter) CreateDb(reset bool) error {
 	// User credentials - contact information such as "email:jdoe@example.com" or "tel:+18003287448":
 	// Id: "method:credential" like "email:jdoe@example.com". See types.Credential.
 	// Create secondary index on credentials.User to be able to query credentials by user id.
-	if _, err := a.db.Collection("credentials").Indexes().CreateOne(ctx, getIdxOpts("user")); err != nil {
+	if _, err := a.db.Collection("credentials").Indexes().CreateOne(a.ctx, getIdxOpts("user")); err != nil {
 		return err
 	}
 
 	// Records of file uploads. See types.FileDef.
 	// A secondary index on fileuploads.User to be able to get records by user id.
-	if _, err := a.db.Collection("fileuploads").Indexes().CreateOne(ctx, getIdxOpts("user")); err != nil {
+	if _, err := a.db.Collection("fileuploads").Indexes().CreateOne(a.ctx, getIdxOpts("user")); err != nil {
 		return err
 	}
 	// A secondary index on fileuploads.UseCount to be able to delete unused records at once.
-	if _, err := a.db.Collection("fileuploads").Indexes().CreateOne(ctx, getIdxOpts("usecount")); err != nil {
+	if _, err := a.db.Collection("fileuploads").Indexes().CreateOne(a.ctx, getIdxOpts("usecount")); err != nil {
 		return err
 	}
 
 	// Record current DB version.
-	if _, err := a.db.Collection("kvmeta").InsertOne(ctx, map[string]interface{}{"_id": "version", "value": adpVersion}); err != nil {
+	if _, err := a.db.Collection("kvmeta").InsertOne(a.ctx, map[string]interface{}{"_id": "version", "value": adpVersion}); err != nil {
 		return err
 	}
 
@@ -269,7 +270,7 @@ func (a *adapter) UpgradeDb() error {
 // Create system topic 'sys'.
 func createSystemTopic(a *adapter) error {
 	now := t.TimeNow()
-	_, err := a.db.Collection("topics").InsertOne(ctx, &t.Topic{
+	_, err := a.db.Collection("topics").InsertOne(a.ctx, &t.Topic{
 		ObjHeader: t.ObjHeader{Id: "sys", CreatedAt: now, UpdatedAt: now},
 		Access:    t.DefaultAccess{Auth: t.ModeNone, Anon: t.ModeNone},
 		Public:    map[string]interface{}{"fn": "System"},
@@ -281,7 +282,7 @@ func createSystemTopic(a *adapter) error {
 
 // UserCreate creates user record
 func (a *adapter) UserCreate(usr *t.User) error {
-	if _, err := a.db.Collection("users").InsertOne(ctx, &usr); err != nil {
+	if _, err := a.db.Collection("users").InsertOne(a.ctx, &usr); err != nil {
 		return err
 	}
 
@@ -295,7 +296,7 @@ func (a *adapter) UserGet(id t.Uid) (*t.User, error) {
 	filter := b.M{"$and": b.A{
 		b.M{"_id": id.String()},
 		b.M{"deletedat": b.M{"$exists": false}}}}
-	if err := a.db.Collection("users").FindOne(ctx, filter).Decode(&user); err != nil {
+	if err := a.db.Collection("users").FindOne(a.ctx, filter).Decode(&user); err != nil {
 		if err == mdb.ErrNoDocuments { // User not found
 			return nil, nil
 		} else {
@@ -317,7 +318,7 @@ func (a *adapter) UserGetAll(ids ...t.Uid) ([]t.User, error) {
 	filter := b.M{"$and": b.A{
 		b.M{"_id": b.M{"$in": uids}},
 		b.M{"deletedat": b.M{"$exists": false}}}}
-	if cur, err := a.db.Collection("users").Find(ctx, filter); err == nil {
+	if cur, err := a.db.Collection("users").Find(a.ctx, filter); err == nil {
 		defer cur.Close(ctx)
 
 		var user t.User
@@ -342,7 +343,7 @@ func (a *adapter) UserDelete(id t.Uid, hard bool) error {
 func (a *adapter) UserGetDisabled(since time.Time) ([]t.Uid, error) {
 	filter := b.M{"deletedat": b.M{"$gte": since}}
 	findOpts := mdbopts.FindOptions{Projection: b.M{"_id": 1}}
-	if cur, err := a.db.Collection("users").Find(ctx, filter, &findOpts); err == nil {
+	if cur, err := a.db.Collection("users").Find(a.ctx, filter, &findOpts); err == nil {
 		defer cur.Close(ctx)
 
 		var uids []t.Uid
@@ -366,7 +367,7 @@ func (a *adapter) UserUpdate(uid t.Uid, update map[string]interface{}) error {
 		delete(update, "UpdatedAt")
 	}
 
-	_, err := a.db.Collection("users").UpdateOne(ctx, b.M{"_id": uid.String()}, b.M{"$set": update})
+	_, err := a.db.Collection("users").UpdateOne(a.ctx, b.M{"_id": uid.String()}, b.M{"$set": update})
 	return err
 }
 
@@ -379,7 +380,7 @@ func (a *adapter) UserUpdateTags(uid t.Uid, add, remove, reset []string) ([]stri
 	}
 
 	var user t.User
-	if err := a.db.Collection("users").FindOne(ctx, b.M{"_id": uid.String()}).Decode(&user); err != nil {
+	if err := a.db.Collection("users").FindOne(a.ctx, b.M{"_id": uid.String()}).Decode(&user); err != nil {
 		return nil, err
 	}
 
@@ -400,7 +401,7 @@ func (a *adapter) UserUpdateTags(uid t.Uid, add, remove, reset []string) ([]stri
 	// Get the new tags
 	var tags map[string][]string
 	findOpts := mdbopts.FindOneOptions{Projection: b.M{"tags": 1, "_id": 0}}
-	if err := a.db.Collection("users").FindOne(ctx, b.M{"_id": uid.String()}, &findOpts).Decode(&tags); err == nil {
+	if err := a.db.Collection("users").FindOne(a.ctx, b.M{"_id": uid.String()}, &findOpts).Decode(&tags); err == nil {
 		return tags["tags"], nil
 	} else {
 		return nil, err
@@ -412,7 +413,7 @@ func (a *adapter) UserGetByCred(method, value string) (t.Uid, error) {
 	var userId map[string]string
 	filter := b.M{"_id": method + ":" + value}
 	findOpts := mdbopts.FindOneOptions{Projection: b.M{"user": 1, "_id": 0}}
-	err := a.db.Collection("credentials").FindOne(ctx, filter, &findOpts).Decode(&userId)
+	err := a.db.Collection("credentials").FindOne(a.ctx, filter, &findOpts).Decode(&userId)
 	if err != nil {
 		if err == mdb.ErrNoDocuments {
 			return t.ZeroUid, nil
@@ -448,7 +449,7 @@ func (a *adapter) CredUpsert(cred *t.Credential) (bool, error) {
 	if !cred.Done {
 		// Check if the same credential is already validated.
 		var result1 t.Credential
-		err := credCollection.FindOne(ctx, b.M{"_id": cred.Id}).Decode(&result1)
+		err := credCollection.FindOne(a.ctx, b.M{"_id": cred.Id}).Decode(&result1)
 		if result1 != (t.Credential{}) {
 			// Someone has already validated this credential.
 			return false, t.ErrDuplicate
@@ -457,7 +458,7 @@ func (a *adapter) CredUpsert(cred *t.Credential) (bool, error) {
 		}
 
 		// Soft-delete all unvalidated records of this user and method.
-		_, err = credCollection.UpdateMany(ctx,
+		_, err = credCollection.UpdateMany(a.ctx,
 			b.M{"user": cred.User, "method": cred.Method, "done": false},
 			b.M{"$set": b.M{"deletedat": t.TimeNow()}})
 		if err != nil {
@@ -470,9 +471,9 @@ func (a *adapter) CredUpsert(cred *t.Credential) (bool, error) {
 
 		// Check if this credential has already been added by the user.
 		var result2 t.Credential
-		err = credCollection.FindOne(ctx, b.M{"_id": cred.Id}).Decode(&result2)
+		err = credCollection.FindOne(a.ctx, b.M{"_id": cred.Id}).Decode(&result2)
 		if result2 != (t.Credential{}) {
-			_, err = credCollection.UpdateOne(ctx,
+			_, err = credCollection.UpdateOne(a.ctx,
 				b.M{"_id": cred.Id},
 				b.M{
 					"$unset": b.M{"deletedat": ""},
@@ -488,14 +489,14 @@ func (a *adapter) CredUpsert(cred *t.Credential) (bool, error) {
 		}
 	} else {
 		// Hard-delete potentially present unvalidated credential.
-		_, err := credCollection.DeleteOne(ctx, b.M{"_id": cred.User + ":" + cred.Id})
+		_, err := credCollection.DeleteOne(a.ctx, b.M{"_id": cred.User + ":" + cred.Id})
 		if err != nil {
 			return false, err
 		}
 	}
 
 	// Insert a new record.
-	_, err := credCollection.InsertOne(ctx, cred)
+	_, err := credCollection.InsertOne(a.ctx, cred)
 	if isDuplicateErr(err) {
 		return true, t.ErrDuplicate
 	}
@@ -513,7 +514,7 @@ func (a *adapter) CredGetActive(uid t.Uid, method string) (*t.Credential, error)
 		"method":    method,
 		"done":      false}
 
-	if err := a.db.Collection("credentials").FindOne(ctx, filter).Decode(&cred); err != nil {
+	if err := a.db.Collection("credentials").FindOne(a.ctx, filter).Decode(&cred); err != nil {
 		if err == mdb.ErrNoDocuments { // Cred not found
 			return nil, t.ErrNotFound
 		} else {
@@ -536,9 +537,9 @@ func (a *adapter) CredGetAll(uid t.Uid, method string, validatedOnly bool) ([]t.
 		filter["deletedat"] = b.M{"$exists": false}
 	}
 
-	if cur, err := a.db.Collection("credentials").Find(ctx, filter); err == nil {
+	if cur, err := a.db.Collection("credentials").Find(a.ctx, filter); err == nil {
 		var credentials []t.Credential
-		if err := cur.All(ctx, &credentials); err != nil {
+		if err := cur.All(a.ctx, &credentials); err != nil {
 			return nil, err
 		}
 		return credentials, nil
@@ -560,7 +561,7 @@ func (a *adapter) CredDel(uid t.Uid, method, value string) error {
 			filterAnd = append(filterAnd, b.M{"value": value})
 		}
 	} else {
-		_, err := credCollection.DeleteMany(ctx, filterUser)
+		_, err := credCollection.DeleteMany(a.ctx, filterUser)
 		return err
 	}
 
@@ -570,12 +571,12 @@ func (a *adapter) CredDel(uid t.Uid, method, value string) error {
 		b.M{"retries": 0}}}
 	filterAnd = append(filterAnd, filterOr)
 	filter := b.M{"$and": filterAnd}
-	if _, err := credCollection.DeleteMany(ctx, filter); err != nil {
+	if _, err := credCollection.DeleteMany(a.ctx, filter); err != nil {
 		return err
 	}
 
 	// Soft-delete all other values.
-	_, err := credCollection.UpdateMany(ctx, filter, b.M{"$set": b.M{"deletedat": t.TimeNow()}})
+	_, err := credCollection.UpdateMany(a.ctx, filter, b.M{"$set": b.M{"deletedat": t.TimeNow()}})
 	return err
 }
 
@@ -592,7 +593,7 @@ func (a *adapter) CredConfirm(uid t.Uid, method string) error {
 		return err
 	}
 
-	_, _ = a.db.Collection("credentials").DeleteOne(ctx, b.M{"_id": uid.String() + ":" + cred.Method + ":" + cred.Value})
+	_, _ = a.db.Collection("credentials").DeleteOne(a.ctx, b.M{"_id": uid.String() + ":" + cred.Method + ":" + cred.Value})
 	return nil
 }
 
@@ -607,7 +608,7 @@ func (a *adapter) CredFail(uid t.Uid, method string) error {
 	update := b.M{
 		"$inc": b.M{"retries": 1},
 		"$set": b.M{"updatedat": t.TimeNow()}}
-	_, err := a.db.Collection("credentials").UpdateOne(ctx, filter, update)
+	_, err := a.db.Collection("credentials").UpdateOne(a.ctx, filter, update)
 	return err
 }
 
@@ -626,7 +627,7 @@ func (a *adapter) AuthGetUniqueRecord(unique string) (t.Uid, auth.Level, []byte,
 		"authLvl": 1,
 		"secret":  1,
 		"expires": 1}}
-	if err := a.db.Collection("auth").FindOne(ctx, filter, &findOpts).Decode(&record); err != nil {
+	if err := a.db.Collection("auth").FindOne(a.ctx, filter, &findOpts).Decode(&record); err != nil {
 		if err == mdb.ErrNoDocuments {
 			return t.ZeroUid, 0, nil, time.Time{}, nil
 		}
@@ -652,7 +653,7 @@ func (a *adapter) AuthGetRecord(uid t.Uid, scheme string) (string, auth.Level, [
 		"secret":  1,
 		"expires": 1,
 	}}
-	if err := a.db.Collection("auth").FindOne(ctx, filter, findOpts).Decode(&record); err != nil {
+	if err := a.db.Collection("auth").FindOne(a.ctx, filter, findOpts).Decode(&record); err != nil {
 		if err == mdb.ErrNoDocuments {
 			return "", 0, nil, time.Time{}, t.ErrNotFound
 		}
@@ -671,7 +672,7 @@ func (a *adapter) AuthAddRecord(uid t.Uid, scheme, unique string, authLvl auth.L
 		"authlvl": authLvl,
 		"secret":  secret,
 		"expires": expires}
-	if _, err := a.db.Collection("auth").InsertOne(ctx, authRecord); err != nil {
+	if _, err := a.db.Collection("auth").InsertOne(a.ctx, authRecord); err != nil {
 		if isDuplicateErr(err) {
 			return true, t.ErrDuplicate
 		}
@@ -682,7 +683,7 @@ func (a *adapter) AuthAddRecord(uid t.Uid, scheme, unique string, authLvl auth.L
 
 // AuthDelScheme deletes an existing authentication scheme for the user.
 func (a *adapter) AuthDelScheme(uid t.Uid, scheme string) error {
-	_, err := a.db.Collection("auth").DeleteOne(ctx,
+	_, err := a.db.Collection("auth").DeleteOne(a.ctx,
 		b.M{
 			"userid": uid.String(),
 			"scheme": scheme})
@@ -691,7 +692,7 @@ func (a *adapter) AuthDelScheme(uid t.Uid, scheme string) error {
 
 // AuthDelAllRecords deletes all records of a given user.
 func (a *adapter) AuthDelAllRecords(uid t.Uid) (int, error) {
-	res, err := a.db.Collection("auth").DeleteMany(ctx, b.M{"userid": uid.String()})
+	res, err := a.db.Collection("auth").DeleteMany(a.ctx, b.M{"userid": uid.String()})
 	return int(res.DeletedCount), err
 }
 
@@ -708,12 +709,12 @@ func (a *adapter) AuthUpdRecord(uid t.Uid, scheme, unique string,
 	var record struct{ Unique string `bson:"_id"` }
 	findOpts := mdbopts.FindOneOptions{Projection: b.M{"_id": 1}}
 	filter := b.M{"userid": uid.String(), "scheme": scheme}
-	if err = a.db.Collection("auth").FindOne(ctx, filter, &findOpts).Decode(&record); err != nil {
+	if err = a.db.Collection("auth").FindOne(a.ctx, filter, &findOpts).Decode(&record); err != nil {
 		return false, err
 	}
 
 	if record.Unique == unique {
-		_, err = a.db.Collection("auth").UpdateOne(ctx,
+		_, err = a.db.Collection("auth").UpdateOne(a.ctx,
 			b.M{"_id": unique},
 			b.M{"$set": b.M{
 				"authlvl": authLvl,
@@ -727,7 +728,7 @@ func (a *adapter) AuthUpdRecord(uid t.Uid, scheme, unique string,
 		if err = sess.StartTransaction(); err != nil {
 			return false, err
 		}
-		if err = mdb.WithSession(ctx, sess, func(sc mdb.SessionContext) error {
+		if err = mdb.WithSession(a.ctx, sess, func(sc mdb.SessionContext) error {
 			dupe, err = a.AuthAddRecord(uid, scheme, unique, authLvl, secret, expires)
 			if err != nil {
 				return err
@@ -749,7 +750,7 @@ func (a *adapter) AuthUpdRecord(uid t.Uid, scheme, unique string,
 
 // TopicCreate creates a topic
 func (a *adapter) TopicCreate(topic *t.Topic) error {
-	_, err := a.db.Collection("topics").InsertOne(ctx, &topic)
+	_, err := a.db.Collection("topics").InsertOne(a.ctx, &topic)
 	return err
 }
 
@@ -759,14 +760,14 @@ func (a *adapter) TopicCreateP2P(initiator, invited *t.Subscription) error {
 	// Don't care if the initiator changes own subscription
 	replOpts := mdbopts.ReplaceOptions{}
 	replOpts.SetUpsert(true)
-	_, err := a.db.Collection("subscriptions").ReplaceOne(ctx, b.M{}, initiator, &replOpts)
+	_, err := a.db.Collection("subscriptions").ReplaceOne(a.ctx, b.M{}, initiator, &replOpts)
 	if err != nil {
 		return err
 	}
 
 	// If the second subscription exists, don't overwrite it. Just make sure it's not deleted.
 	invited.Id = invited.Topic + ":" + invited.User
-	_, err = a.db.Collection("subscriptions").InsertOne(ctx, invited)
+	_, err = a.db.Collection("subscriptions").InsertOne(a.ctx, invited)
 	if err != nil {
 		// Is this a duplicate subscription?
 		if !isDuplicateErr(err) {
@@ -775,7 +776,7 @@ func (a *adapter) TopicCreateP2P(initiator, invited *t.Subscription) error {
 		}
 		// Undelete the second subsription if it exists: remove DeletedAt, update CreatedAt and UpdatedAt,
 		// update ModeGiven.
-		_, err = a.db.Collection("subscriptions").UpdateOne(ctx,
+		_, err = a.db.Collection("subscriptions").UpdateOne(a.ctx,
 			b.M{"_id": invited.Id},
 			b.M{
 				"$unset": b.M{"deletedat": ""},
@@ -798,7 +799,7 @@ func (a *adapter) TopicCreateP2P(initiator, invited *t.Subscription) error {
 // TopicGet loads a single topic by name, if it exists. If the topic does not exist the call returns (nil, nil)
 func (a *adapter) TopicGet(topic string) (*t.Topic, error) {
 	var tpc = new(t.Topic)
-	err := a.db.Collection("topics").FindOne(ctx, b.M{"_id": topic}).Decode(tpc)
+	err := a.db.Collection("topics").FindOne(a.ctx, b.M{"_id": topic}).Decode(tpc)
 	if err != nil {
 		if err == mdb.ErrNoDocuments {
 			return nil, nil
@@ -829,7 +830,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 		}
 	}
 
-	cur, err := a.db.Collection("subscriptions").Find(ctx, filter, mdbopts.Find().SetLimit(int64(limit)))
+	cur, err := a.db.Collection("subscriptions").Find(a.ctx, filter, mdbopts.Find().SetLimit(int64(limit)))
 	if err != nil {
 		return nil, err
 	}
@@ -875,7 +876,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 
 	if len(topq) > 0 {
 		// Fetch grp & p2p topics
-		cur, err = a.db.Collection("topics").Find(ctx, b.M{"_id": b.M{"$in": topq}})
+		cur, err = a.db.Collection("topics").Find(a.ctx, b.M{"_id": b.M{"$in": topq}})
 		if err != nil {
 			return nil, err
 		}
@@ -907,7 +908,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 		if !keepDeleted {
 			filter["deletedat"] = b.M{"$exists": false}
 		}
-		cur, err = a.db.Collection("users").Find(ctx, filter)
+		cur, err = a.db.Collection("users").Find(a.ctx, filter)
 		if err != nil {
 			return nil, err
 		}
@@ -965,7 +966,7 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 		}
 	}
 
-	cur, err := a.db.Collection("subscriptions").Find(ctx, filter, mdbopts.Find().SetLimit(int64(limit)))
+	cur, err := a.db.Collection("subscriptions").Find(a.ctx, filter, mdbopts.Find().SetLimit(int64(limit)))
 	if err != nil {
 		return nil, err
 	}
@@ -988,7 +989,7 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 		subs = make([]t.Subscription, 0, len(usrq))
 
 		// Fetch users by a list of subscriptions
-		cur, err = a.db.Collection("users").Find(ctx, b.M{
+		cur, err = a.db.Collection("users").Find(a.ctx, b.M{
 			"_id":       b.M{"$in": usrq},
 			"deletedat": b.M{"$exists": false}})
 		if err != nil {
@@ -1040,7 +1041,7 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 func (a *adapter) OwnTopics(uid t.Uid) ([]string, error) {
 	filter := b.M{"owner": uid.String(), "deletedat": b.M{"$exists": false}}
 	findOpts := mdbopts.FindOptions{Projection: b.M{"_id": 1}}
-	cur, err := a.db.Collection("topics").Find(ctx, filter, &findOpts)
+	cur, err := a.db.Collection("topics").Find(a.ctx, filter, &findOpts)
 	if err != nil {
 		return nil, err
 	}
@@ -1077,11 +1078,11 @@ func (a *adapter) TopicShare(subs []*t.Subscription) error {
 	if err = sess.StartTransaction(); err != nil {
 		return err
 	}
-	if err = mdb.WithSession(ctx, sess, func(sc mdb.SessionContext) error {
+	if err = mdb.WithSession(a.ctx, sess, func(sc mdb.SessionContext) error {
 		for _, sub := range subs {
-			if _, err := a.db.Collection("subscriptions").InsertOne(ctx, sub); err != nil {
+			if _, err := a.db.Collection("subscriptions").InsertOne(a.ctx, sub); err != nil {
 				if isDuplicateErr(err) {
-					_, err := a.db.Collection("subscriptions").UpdateOne(ctx,
+					_, err := a.db.Collection("subscriptions").UpdateOne(a.ctx,
 						b.M{"_id": sub.Id},
 						b.M{
 							"$unset": b.M{"deletedat": ""},
@@ -1115,7 +1116,7 @@ func (a *adapter) TopicDelete(topic string, hard bool) error {
 
 // TopicUpdateOnMessage increments Topic's or User's SeqId value and updates TouchedAt timestamp.
 func (a *adapter) TopicUpdateOnMessage(topic string, msg *t.Message) error {
-	_, err := a.db.Collection("topics").UpdateOne(ctx,
+	_, err := a.db.Collection("topics").UpdateOne(a.ctx,
 		b.M{"_id": topic},
 		b.M{"$set": b.M{
 			"seqid":     msg.SeqId,
@@ -1132,7 +1133,7 @@ func (a *adapter) TopicUpdate(topic string, update map[string]interface{}) error
 		delete(update, "UpdatedAt")
 	}
 
-	_, err := a.db.Collection("topics").UpdateOne(ctx,
+	_, err := a.db.Collection("topics").UpdateOne(a.ctx,
 		b.M{"_id": topic},
 		b.M{"$set": update})
 	return err
@@ -1140,7 +1141,7 @@ func (a *adapter) TopicUpdate(topic string, update map[string]interface{}) error
 
 // TopicOwnerChange updates topic's owner
 func (a *adapter) TopicOwnerChange(topic string, newOwner t.Uid) error {
-	_, err := a.db.Collection("topics").UpdateOne(ctx,
+	_, err := a.db.Collection("topics").UpdateOne(a.ctx,
 		b.M{"_id": topic},
 		b.M{"$set": b.M{"owner": newOwner}})
 
@@ -1152,7 +1153,7 @@ func (a *adapter) TopicOwnerChange(topic string, newOwner t.Uid) error {
 // SubscriptionGet reads a subscription of a user to a topic
 func (a *adapter) SubscriptionGet(topic string, user t.Uid) (*t.Subscription, error) {
 	sub := new(t.Subscription)
-	err := a.db.Collection("subscriptions").FindOne(ctx, b.M{
+	err := a.db.Collection("subscriptions").FindOne(a.ctx, b.M{
 		"_id":       topic + ":" + user.String(),
 		"deletedat": b.M{"$exists": false}}).Decode(sub)
 	if err != nil {
@@ -1186,7 +1187,7 @@ func (a *adapter) SubsForUser(user t.Uid, keepDeleted bool, opts *t.QueryOpt) ([
 	}
 	findOpts := new(mdbopts.FindOptions).SetLimit(int64(limit))
 
-	cur, err := a.db.Collection("subscriptions").Find(ctx, filter, findOpts)
+	cur, err := a.db.Collection("subscriptions").Find(a.ctx, filter, findOpts)
 	if err != nil {
 		return nil, err
 	}
@@ -1225,7 +1226,7 @@ func (a *adapter) SubsForTopic(topic string, keepDeleted bool, opts *t.QueryOpt)
 	}
 	findOpts := new(mdbopts.FindOptions).SetLimit(int64(limit))
 
-	cur, err := a.db.Collection("subscriptions").Find(ctx, filter, findOpts)
+	cur, err := a.db.Collection("subscriptions").Find(a.ctx, filter, findOpts)
 	if err != nil {
 		return nil, err
 	}
@@ -1253,14 +1254,14 @@ func (a *adapter) SubsUpdate(topic string, user t.Uid, update map[string]interfa
 		// Update all topic subscriptions
 		filter["topic"] = topic
 	}
-	_, err := a.db.Collection("subscriptions").UpdateOne(ctx, filter, b.M{"$set": update})
+	_, err := a.db.Collection("subscriptions").UpdateOne(a.ctx, filter, b.M{"$set": update})
 	return err
 }
 
 // SubsDelete deletes a single subscription
 func (a *adapter) SubsDelete(topic string, user t.Uid) error {
 	now := t.TimeNow()
-	_, err := a.db.Collection("subscriptions").UpdateOne(ctx,
+	_, err := a.db.Collection("subscriptions").UpdateOne(a.ctx,
 		b.M{"_id": topic + ":" + user.String()},
 		b.M{"updatedat": now, "deletedat": now})
 	return err
@@ -1271,10 +1272,10 @@ func (a *adapter) SubsDelForTopic(topic string, hard bool) error {
 	var err error
 	filter := b.M{"topic": topic}
 	if hard {
-		_, err = a.db.Collection("subscriptions").DeleteMany(ctx, filter)
+		_, err = a.db.Collection("subscriptions").DeleteMany(a.ctx, filter)
 	} else {
 		now := t.TimeNow()
-		_, err = a.db.Collection("subscriptions").UpdateMany(ctx,
+		_, err = a.db.Collection("subscriptions").UpdateMany(a.ctx,
 			filter,
 			b.M{"$set": b.M{"updatedat": now, "deletedat": now}})
 	}
@@ -1286,10 +1287,10 @@ func (a *adapter) SubsDelForUser(user t.Uid, hard bool) error {
 	var err error
 	filter := b.M{"user": user.String()}
 	if hard {
-		_, err = a.db.Collection("subscriptions").DeleteMany(ctx, filter)
+		_, err = a.db.Collection("subscriptions").DeleteMany(a.ctx, filter)
 	} else {
 		now := t.TimeNow()
-		_, err = a.db.Collection("subscriptions").UpdateMany(ctx,
+		_, err = a.db.Collection("subscriptions").UpdateMany(a.ctx,
 			filter,
 			b.M{"$set": b.M{"updatedat": now, "deletedat": now}})
 	}
@@ -1313,7 +1314,7 @@ func (a *adapter) FindTopics(req, opt []string) ([]t.Subscription, error) {
 // MessageSave saves message to database
 func (a *adapter) MessageSave(msg *t.Message) error {
 	msg.SetUid(store.GetUid())
-	_, err := a.db.Collection("messages").InsertOne(ctx, msg)
+	_, err := a.db.Collection("messages").InsertOne(a.ctx, msg)
 	return err
 }
 
@@ -1336,7 +1337,7 @@ func (a *adapter) MessageGetDeleted(topic string, forUser t.Uid, opts *t.QueryOp
 // MessageAttachments connects given message to a list of file record IDs.
 func (a *adapter) MessageAttachments(msgId t.Uid, fids []string) error {
 	now := t.TimeNow()
-	_, err := a.db.Collection("messages").UpdateOne(ctx,
+	_, err := a.db.Collection("messages").UpdateOne(a.ctx,
 		b.M{"_id": msgId.String()},
 		b.M{"$set": b.M{"updatedat": now, "attachments": fids}})
 	if err != nil {
@@ -1347,7 +1348,7 @@ func (a *adapter) MessageAttachments(msgId t.Uid, fids []string) error {
 	for i, id := range fids {
 		ids[i] = id
 	}
-	_, err = a.db.Collection("fileuploads").UpdateMany(ctx,
+	_, err = a.db.Collection("fileuploads").UpdateMany(a.ctx,
 		b.M{"_id": b.M{"$in": ids}},
 		b.M{
 			"$set": b.M{"updatedat": now},
@@ -1378,7 +1379,7 @@ func (a *adapter) DeviceDelete(uid t.Uid, deviceID string) error {
 	} else {
 		update["$unset"] = b.M{"devices." + deviceHasher(deviceID): ""}
 	}
-	_, err = a.db.Collection("users").UpdateOne(ctx, filter, update)
+	_, err = a.db.Collection("users").UpdateOne(a.ctx, filter, update)
 	return err
 }
 
@@ -1386,13 +1387,13 @@ func (a *adapter) DeviceDelete(uid t.Uid, deviceID string) error {
 
 // FileStartUpload initializes a file upload
 func (a *adapter) FileStartUpload(fd *t.FileDef) error {
-	_, err := a.db.Collection("fileuploads").InsertOne(ctx, fd)
+	_, err := a.db.Collection("fileuploads").InsertOne(a.ctx, fd)
 	return err
 }
 
 // FileFinishUpload marks file upload as completed, successfully or otherwise.
 func (a *adapter) FileFinishUpload(fid string, status int, size int64) (*t.FileDef, error) {
-	if _, err := a.db.Collection("fileuploads").UpdateOne(ctx,
+	if _, err := a.db.Collection("fileuploads").UpdateOne(a.ctx,
 		b.M{"_id": fid},
 		b.M{"$set": b.M{
 			"updatedat": t.TimeNow(),
@@ -1408,7 +1409,7 @@ func (a *adapter) FileFinishUpload(fid string, status int, size int64) (*t.FileD
 // FileGet fetches a record of a specific file
 func (a *adapter) FileGet(fid string) (*t.FileDef, error) {
 	var fd t.FileDef
-	err := a.db.Collection("fileuploads").FindOne(ctx, b.M{"_id": fid}).Decode(&fd)
+	err := a.db.Collection("fileuploads").FindOne(a.ctx, b.M{"_id": fid}).Decode(&fd)
 	if err != nil {
 		if err == mdb.ErrNoDocuments {
 			return nil, nil
@@ -1435,7 +1436,7 @@ func (a *adapter) FileDeleteUnused(olderThan time.Time, limit int) ([]string, er
 	}
 
 	findOpts.SetProjection(b.M{"location": 1, "_id": 0})
-	cur, err := a.db.Collection("fileuploads").Find(ctx, filter, findOpts)
+	cur, err := a.db.Collection("fileuploads").Find(a.ctx, filter, findOpts)
 	if err != nil {
 		return nil, err
 	}
@@ -1449,7 +1450,7 @@ func (a *adapter) FileDeleteUnused(olderThan time.Time, limit int) ([]string, er
 		locations = append(locations, result["location"])
 	}
 
-	_, err = a.db.Collection("fileuploads").DeleteMany(ctx, filter)
+	_, err = a.db.Collection("fileuploads").DeleteMany(a.ctx, filter)
 	cur.Close(ctx)
 	return locations, err
 }
@@ -1458,7 +1459,7 @@ func (a *adapter) isDbInitialized() bool {
 	var result map[string]int
 
 	findOpts := mdbopts.FindOneOptions{Projection: b.M{"value": 1, "_id": 0}}
-	if err := a.db.Collection("kvmeta").FindOne(ctx, b.M{"_id": "version"}, &findOpts).Decode(&result); err != nil {
+	if err := a.db.Collection("kvmeta").FindOne(a.ctx, b.M{"_id": "version"}, &findOpts).Decode(&result); err != nil {
 		return false
 	}
 	return true
