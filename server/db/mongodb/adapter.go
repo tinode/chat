@@ -49,6 +49,9 @@ type configType struct {
 
 	// Options separately from ClientOptions (custom options):
 	Database string `json:"database,omitempty"`
+
+	Username string `json:"username,omitempty"`
+	Password string `json:"password,omitempty"`
 }
 
 // Open initializes mongodb session
@@ -79,6 +82,21 @@ func (a *adapter) Open(jsonconfig json.RawMessage) error {
 		a.dbName = defaultDatabase
 	} else {
 		a.dbName = config.Database
+	}
+
+	if config.Username != "" {
+		var passwordSet bool
+		if config.Password != "" {
+			passwordSet = true
+		}
+		opts.SetAuth(
+			mdbopts.Credential{
+				AuthMechanism: "SCRAM-SHA-256",
+				AuthSource:    "admin",
+				Username:      config.Username,
+				Password:      config.Password,
+				PasswordSet:   passwordSet,
+			})
 	}
 
 	if a.maxResults <= 0 {
