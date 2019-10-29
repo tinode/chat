@@ -813,9 +813,130 @@ func (a *adapter) TopicGet(topic string) (*t.Topic, error) {
 	return tpc, nil
 }
 
-// TODO: TopicsForUser loads subscriptions for a given user. Reads public value.
+// TopicsForUser loads subscriptions for a given user. Reads public value.
 func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) ([]t.Subscription, error) {
-	return nil, nil
+	// Fetch user's subscriptions
+	filter := b.M{"user": uid.String()}
+	if !keepDeleted {
+		// Filter out rows with defined deletedat
+		filter["deletedat"] = b.M{"$exists": false}
+	}
+	limit := a.maxResults
+	if opts != nil {
+		// Ignore IfModifiedSince - we must return all entries
+		// Those unmodified will be stripped of Public & Private.
+
+		if opts.Topic != "" {
+			filter["topic"] = opts.Topic
+		}
+		if opts.Limit > 0 && opts.Limit < limit {
+			limit = opts.Limit
+		}
+	}
+
+	cur, err := a.db.Collection("subscriptions").Find(ctx, filter, mdbopts.Find().SetLimit(int64(limit)))
+	if err != nil {
+		return nil, err
+	}
+
+	// Fetch subscriptions. Two queries are needed: users table (me & p2p) and topics table (p2p and grp).
+	// Prepare a list of Separate subscriptions to users vs topics
+	var sub t.Subscription
+	join := make(map[string]t.Subscription) // Keeping these to make a join with table for .private and .access
+	topq := make([]string, 0, 16)
+	usrq := make([]string, 0, 16)
+	for cur.Next(ctx) {
+		if err = cur.Decode(&sub); err != nil {
+			return nil, err
+		}
+		tcat := t.GetTopicCat(sub.Topic)
+
+		// skip 'me' or 'fnd' subscription
+		if tcat == t.TopicCatMe || tcat == t.TopicCatFnd {
+			continue
+
+			// p2p subscription, find the other user to get user.Public
+		} else if tcat == t.TopicCatP2P {
+			uid1, uid2, _ := t.ParseP2P(sub.Topic)
+			if uid1 == uid {
+				usrq = append(usrq, uid2.String())
+			} else {
+				usrq = append(usrq, uid1.String())
+			}
+			topq = append(topq, sub.Topic)
+
+			// grp subscription
+		} else {
+			topq = append(topq, sub.Topic)
+		}
+		join[sub.Topic] = sub
+	}
+	cur.Close(ctx)
+
+	var subs []t.Subscription
+	if len(topq) > 0 || len(usrq) > 0 {
+		subs = make([]t.Subscription, 0, len(join))
+	}
+
+	if len(topq) > 0 {
+		// Fetch grp & p2p topics
+		cur, err = a.db.Collection("topics").Find(ctx, b.M{"_id": b.M{"$in": topq}})
+		if err != nil {
+			return nil, err
+		}
+
+		var top t.Topic
+		for cur.Next(ctx) {
+			if err = cur.Decode(&top); err != nil {
+				return nil, err
+			}
+			sub = join[top.Id]
+			sub.ObjHeader.MergeTimes(&top.ObjHeader)
+			sub.SetSeqId(top.SeqId)
+			sub.SetTouchedAt(top.TouchedAt)
+			if t.GetTopicCat(sub.Topic) == t.TopicCatGrp {
+				// all done with a grp topic
+				sub.SetPublic(top.Public)
+				subs = append(subs, sub)
+			} else {
+				// put back the updated value of a p2p subsription, will process further below
+				join[top.Id] = sub
+			}
+		}
+		cur.Close(ctx)
+	}
+
+	// Fetch p2p users and join to p2p tables
+	if len(usrq) > 0 {
+		filter := b.M{"_id": b.M{"$in": usrq}}
+		if !keepDeleted {
+			filter["deletedat"] = b.M{"$exists": false}
+		}
+		cur, err = a.db.Collection("users").Find(ctx, filter)
+		if err != nil {
+			return nil, err
+		}
+
+		var usr t.User
+		for cur.Next(ctx) {
+			if err = cur.Decode(&usr); err != nil {
+				return nil, err
+			}
+
+			uid2 := t.ParseUid(usr.Id)
+			if sub, ok := join[uid.P2PName(uid2)]; ok {
+				sub.ObjHeader.MergeTimes(&usr.ObjHeader)
+				sub.SetPublic(usr.Public)
+				sub.SetWith(uid2.UserId())
+				sub.SetDefaultAccess(usr.Access.Auth, usr.Access.Anon)
+				sub.SetLastSeenAndUA(usr.LastSeen, usr.UserAgent)
+				subs = append(subs, sub)
+			}
+		}
+		cur.Close(ctx)
+	}
+
+	return subs, nil
 }
 
 // TODO: UsersForTopic loads users' subscriptions for a given topic. Public is loaded.
