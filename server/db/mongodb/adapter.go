@@ -939,9 +939,106 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 	return subs, nil
 }
 
-// TODO: UsersForTopic loads users' subscriptions for a given topic. Public is loaded.
+// UsersForTopic loads users' subscriptions for a given topic. Public is loaded.
 func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt) ([]t.Subscription, error) {
-	return nil, nil
+	tcat := t.GetTopicCat(topic)
+
+	// Fetch topic subscribers
+	// Fetch all subscribed users. The number of users is not large
+	filter := b.M{"topic": topic}
+	if !keepDeleted && tcat != t.TopicCatP2P {
+		// Filter out rows with DeletedAt being not null.
+		// P2P topics must load all subscriptions otherwise it will be impossible
+		// to swap Public values.
+		filter["deletedat"] = b.M{"$exists": false}
+	}
+
+	limit := a.maxResults
+	var oneUser t.Uid
+	if opts != nil {
+		// Ignore IfModifiedSince - we must return all entries
+		// Those unmodified will be stripped of Public & Private.
+
+		if !opts.User.IsZero() {
+			if tcat != t.TopicCatP2P {
+				filter["user"] = opts.User.String()
+			}
+			oneUser = opts.User
+		}
+		if opts.Limit > 0 && opts.Limit < limit {
+			limit = opts.Limit
+		}
+	}
+
+	cur, err := a.db.Collection("subscriptions").Find(ctx, filter, mdbopts.Find().SetLimit(int64(limit)))
+	if err != nil {
+		return nil, err
+	}
+
+	// Fetch subscriptions
+	var sub t.Subscription
+	var subs []t.Subscription
+	join := make(map[string]t.Subscription)
+	usrq := make([]interface{}, 0, 16)
+	for cur.Next(ctx) {
+		if err = cur.Decode(&sub); err != nil {
+			return nil, err
+		}
+		join[sub.User] = sub
+		usrq = append(usrq, sub.User)
+	}
+	cur.Close(ctx)
+
+	if len(usrq) > 0 {
+		subs = make([]t.Subscription, 0, len(usrq))
+
+		// Fetch users by a list of subscriptions
+		cur, err = a.db.Collection("users").Find(ctx, b.M{
+			"_id":       b.M{"$in": usrq},
+			"deletedat": b.M{"$exists": false}})
+		if err != nil {
+			return nil, err
+		}
+
+		var usr t.User
+		for cur.Next(ctx) {
+			if err = cur.Decode(&usr); err != nil {
+				return nil, err
+			}
+			if sub, ok := join[usr.Id]; ok {
+				sub.ObjHeader.MergeTimes(&usr.ObjHeader)
+				sub.SetPublic(usr.Public)
+				subs = append(subs, sub)
+			}
+		}
+		cur.Close(ctx)
+	}
+
+	if t.GetTopicCat(topic) == t.TopicCatP2P && len(subs) > 0 {
+		// Swap public values of P2P topics as expected.
+		if len(subs) == 1 {
+			// User is deleted. Nothing we can do.
+			subs[0].SetPublic(nil)
+		} else {
+			pub := subs[0].GetPublic()
+			subs[0].SetPublic(subs[1].GetPublic())
+			subs[1].SetPublic(pub)
+		}
+
+		// Remove deleted and unneeded subscriptions
+		if !keepDeleted || !oneUser.IsZero() {
+			var xsubs []t.Subscription
+			for i := range subs {
+				if (subs[i].DeletedAt != nil && !keepDeleted) || (!oneUser.IsZero() && subs[i].Uid() != oneUser) {
+					continue
+				}
+				xsubs = append(xsubs, subs[i])
+			}
+			subs = xsubs
+		}
+	}
+
+	return subs, nil
 }
 
 // OwnTopics loads a slice of topic names where the user is the owner.
