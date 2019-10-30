@@ -40,8 +40,6 @@ const (
 	defaultMaxResults = 1024
 )
 
-var ctx context.Context
-
 // See https://godoc.org/go.mongodb.org/mongo-driver/mongo/options#ClientOptions for explanations.
 type configType struct {
 	Addresses      interface{} `json:"addresses,omitempty"`
@@ -118,7 +116,7 @@ func (a *adapter) Open(jsonconfig json.RawMessage) error {
 func (a *adapter) Close() error {
 	var err error
 	if a.conn != nil {
-		err = a.conn.Disconnect(ctx)
+		err = a.conn.Disconnect(a.ctx)
 		a.conn = nil
 		a.version = -1
 	}
@@ -195,7 +193,7 @@ func getIdxOpts(field string) mdb.IndexModel {
 func (a *adapter) CreateDb(reset bool) error {
 	if reset {
 		log.Print("Dropping database...")
-		if err := a.db.Drop(ctx); err != nil {
+		if err := a.db.Drop(a.ctx); err != nil {
 			return nil
 		}
 	} else if a.isDbInitialized() {
@@ -337,10 +335,10 @@ func (a *adapter) UserGetAll(ids ...t.Uid) ([]t.User, error) {
 		b.M{"_id": b.M{"$in": uids}},
 		b.M{"deletedat": b.M{"$exists": false}}}}
 	if cur, err := a.db.Collection("users").Find(a.ctx, filter); err == nil {
-		defer cur.Close(ctx)
+		defer cur.Close(a.ctx)
 
 		var user t.User
-		for cur.Next(ctx) {
+		for cur.Next(a.ctx) {
 			if err := cur.Decode(&user); err != nil {
 				return nil, err
 			}
@@ -362,11 +360,11 @@ func (a *adapter) UserGetDisabled(since time.Time) ([]t.Uid, error) {
 	filter := b.M{"deletedat": b.M{"$gte": since}}
 	findOpts := mdbopts.FindOptions{Projection: b.M{"_id": 1}}
 	if cur, err := a.db.Collection("users").Find(a.ctx, filter, &findOpts); err == nil {
-		defer cur.Close(ctx)
+		defer cur.Close(a.ctx)
 
 		var uids []t.Uid
 		var userId map[string]string
-		for cur.Next(ctx) {
+		for cur.Next(a.ctx) {
 			if err := cur.Decode(&userId); err != nil {
 				return nil, err
 			}
@@ -754,11 +752,11 @@ func (a *adapter) AuthUpdRecord(uid t.Uid, scheme, unique string,
 			if err = a.AuthDelScheme(uid, scheme); err != nil {
 				return err
 			}
-			return sess.CommitTransaction(ctx)
+			return sess.CommitTransaction(a.ctx)
 		}); err != nil {
 			return dupe, err
 		}
-		sess.EndSession(ctx)
+		sess.EndSession(a.ctx)
 	}
 
 	return dupe, err
@@ -859,7 +857,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 	join := make(map[string]t.Subscription) // Keeping these to make a join with table for .private and .access
 	topq := make([]string, 0, 16)
 	usrq := make([]string, 0, 16)
-	for cur.Next(ctx) {
+	for cur.Next(a.ctx) {
 		if err = cur.Decode(&sub); err != nil {
 			return nil, err
 		}
@@ -885,7 +883,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 		}
 		join[sub.Topic] = sub
 	}
-	cur.Close(ctx)
+	cur.Close(a.ctx)
 
 	var subs []t.Subscription
 	if len(topq) > 0 || len(usrq) > 0 {
@@ -900,7 +898,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 		}
 
 		var top t.Topic
-		for cur.Next(ctx) {
+		for cur.Next(a.ctx) {
 			if err = cur.Decode(&top); err != nil {
 				return nil, err
 			}
@@ -917,7 +915,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 				join[top.Id] = sub
 			}
 		}
-		cur.Close(ctx)
+		cur.Close(a.ctx)
 	}
 
 	// Fetch p2p users and join to p2p tables
@@ -932,7 +930,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 		}
 
 		var usr t.User
-		for cur.Next(ctx) {
+		for cur.Next(a.ctx) {
 			if err = cur.Decode(&usr); err != nil {
 				return nil, err
 			}
@@ -947,7 +945,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 				subs = append(subs, sub)
 			}
 		}
-		cur.Close(ctx)
+		cur.Close(a.ctx)
 	}
 
 	return subs, nil
@@ -994,14 +992,14 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 	var subs []t.Subscription
 	join := make(map[string]t.Subscription)
 	usrq := make([]interface{}, 0, 16)
-	for cur.Next(ctx) {
+	for cur.Next(a.ctx) {
 		if err = cur.Decode(&sub); err != nil {
 			return nil, err
 		}
 		join[sub.User] = sub
 		usrq = append(usrq, sub.User)
 	}
-	cur.Close(ctx)
+	cur.Close(a.ctx)
 
 	if len(usrq) > 0 {
 		subs = make([]t.Subscription, 0, len(usrq))
@@ -1015,7 +1013,7 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 		}
 
 		var usr t.User
-		for cur.Next(ctx) {
+		for cur.Next(a.ctx) {
 			if err = cur.Decode(&usr); err != nil {
 				return nil, err
 			}
@@ -1025,7 +1023,7 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 				subs = append(subs, sub)
 			}
 		}
-		cur.Close(ctx)
+		cur.Close(a.ctx)
 	}
 
 	if t.GetTopicCat(topic) == t.TopicCatP2P && len(subs) > 0 {
@@ -1066,14 +1064,14 @@ func (a *adapter) OwnTopics(uid t.Uid) ([]string, error) {
 
 	var res map[string]string
 	var names []string
-	for cur.Next(ctx) {
+	for cur.Next(a.ctx) {
 		if err := cur.Decode(&res); err == nil {
 			names = append(names, res["_id"])
 		} else {
 			return nil, err
 		}
 	}
-	cur.Close(ctx)
+	cur.Close(a.ctx)
 
 	return names, nil
 }
@@ -1115,14 +1113,14 @@ func (a *adapter) TopicShare(subs []*t.Subscription) error {
 				return err
 			}
 		}
-		if err := sess.CommitTransaction(ctx); err != nil {
+		if err := sess.CommitTransaction(a.ctx); err != nil {
 			return err
 		}
 		return nil
 	}); err != nil {
 		return err
 	}
-	sess.EndSession(ctx)
+	sess.EndSession(a.ctx)
 
 	return err
 }
@@ -1209,11 +1207,11 @@ func (a *adapter) SubsForUser(user t.Uid, keepDeleted bool, opts *t.QueryOpt) ([
 	if err != nil {
 		return nil, err
 	}
-	defer cur.Close(ctx)
+	defer cur.Close(a.ctx)
 
 	var subs []t.Subscription
 	var ss t.Subscription
-	for cur.Next(ctx) {
+	for cur.Next(a.ctx) {
 		if err := cur.Decode(&ss); err != nil {
 			return nil, err
 		}
@@ -1248,11 +1246,11 @@ func (a *adapter) SubsForTopic(topic string, keepDeleted bool, opts *t.QueryOpt)
 	if err != nil {
 		return nil, err
 	}
-	defer cur.Close(ctx)
+	defer cur.Close(a.ctx)
 
 	var subs []t.Subscription
 	var ss t.Subscription
-	for cur.Next(ctx) {
+	for cur.Next(a.ctx) {
 		if err := cur.Decode(&ss); err != nil {
 			return nil, err
 		}
@@ -1461,7 +1459,7 @@ func (a *adapter) FileDeleteUnused(olderThan time.Time, limit int) ([]string, er
 
 	var result map[string]string
 	var locations []string
-	for cur.Next(ctx) {
+	for cur.Next(a.ctx) {
 		if err := cur.Decode(&result); err != nil {
 			return nil, err
 		}
@@ -1469,7 +1467,7 @@ func (a *adapter) FileDeleteUnused(olderThan time.Time, limit int) ([]string, er
 	}
 
 	_, err = a.db.Collection("fileuploads").DeleteMany(a.ctx, filter)
-	cur.Close(ctx)
+	cur.Close(a.ctx)
 	return locations, err
 }
 
@@ -1485,7 +1483,6 @@ func (a *adapter) isDbInitialized() bool {
 
 func init() {
 	store.RegisterAdapter(&adapter{})
-	ctx = context.Background()
 }
 
 func contains(s []string, e string) bool {
