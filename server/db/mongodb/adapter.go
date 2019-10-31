@@ -108,7 +108,7 @@ func (a *adapter) Open(jsonconfig json.RawMessage) error {
 		return err
 	}
 	a.version = -1
-	
+
 	return nil
 }
 
@@ -194,7 +194,7 @@ func (a *adapter) CreateDb(reset bool) error {
 	if reset {
 		log.Print("Dropping database...")
 		if err := a.db.Drop(a.ctx); err != nil {
-			return nil
+			return err
 		}
 	} else if a.isDbInitialized() {
 		return errors.New("Database already initialized")
