@@ -1481,6 +1481,11 @@ func (a *adapter) isDbInitialized() bool {
 	return true
 }
 
+// Required for running adapter tests.
+func GetAdapter() *adapter {
+	return &adapter{}
+}
+
 func init() {
 	store.RegisterAdapter(&adapter{})
 }
