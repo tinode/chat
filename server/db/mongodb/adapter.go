@@ -1453,9 +1453,9 @@ func (a *adapter) DeviceDelete(uid t.Uid, deviceID string) error {
 	filter := b.M{"_id": uid.String()}
 	update := b.M{}
 	if deviceID == "" {
-		update["$set"] = b.M{"devices": nil}
+		update["$set"] = b.M{"devices": []interface{}{}}
 	} else {
-		update["$unset"] = b.M{"devices." + deviceHasher(deviceID): ""}
+		update["$pull"] = b.M{"devices": b.M{"deviceid": deviceID}}
 	}
 	_, err = a.db.Collection("users").UpdateOne(a.ctx, filter, update)
 	return err
