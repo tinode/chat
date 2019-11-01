@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"hash/fnv"
 	"log"
 	"strconv"
 	"strings"
@@ -1612,14 +1611,6 @@ func diff(userTags []string, removeTags []string) []string {
 		}
 	}
 	return result
-}
-
-func deviceHasher(deviceID string) string {
-	// Generate custom key as [64-bit hash of device id] to ensure predictable
-	// length of the key
-	hasher := fnv.New64()
-	hasher.Write([]byte(deviceID))
-	return strconv.FormatUint(uint64(hasher.Sum64()), 16)
 }
 
 func isDuplicateErr(err error) bool {
