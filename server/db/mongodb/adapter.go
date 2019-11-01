@@ -213,7 +213,16 @@ func (a *adapter) CreateDb(reset bool) error {
 	if _, err := a.db.Collection("users").Indexes().CreateOne(a.ctx, getIdxOpts("tags")); err != nil {
 		return err
 	}
-	// TODO: Create secondary index for User.Devices.<hash>.DeviceId to ensure ID uniqueness across users
+	// Create secondary index for user.devices.deviceid to ensure Device ID uniqueness across users.
+	// Partial filter set to avoid unique constraint for null values (when user object have no devices).
+	if _, err := a.db.Collection("users").Indexes().CreateOne(a.ctx, mdb.IndexModel{
+		Keys: b.M{"devices.deviceid": 1},
+		Options: mdbopts.Index().
+			SetUnique(true).
+			SetPartialFilterExpression(b.M{"devices.deviceid": b.M{"$exists": true}}),
+	}); err != nil {
+		return err
+	}
 
 	// User authentication records {_id, userid, secret}
 	// Should be able to access user's auth records by user id
@@ -1375,9 +1384,62 @@ func (a *adapter) MessageAttachments(msgId t.Uid, fids []string) error {
 
 // Devices (for push notifications)
 
-// TODO: DeviceUpsert creates or updates a device record
+// DeviceUpsert creates or updates a device record
 func (a *adapter) DeviceUpsert(uid t.Uid, dev *t.DeviceDef) error {
-	return nil
+	userId := uid.String()
+	var user t.User
+	err := a.db.Collection("users").FindOne(a.ctx, b.M{
+		"_id":              userId,
+		"devices.deviceid": dev.DeviceId,}).Decode(&user)
+
+	if err == nil && user.Id != "" { // current user owns this device
+		// ArrayFilter used to avoid adding another (duplicate) device object. Update that device data
+		updOpts := mdbopts.Update().SetArrayFilters(mdbopts.ArrayFilters{
+			Filters: []interface{}{b.M{"dev.deviceid": dev.DeviceId}},})
+		_, err = a.db.Collection("users").UpdateOne(a.ctx,
+			b.M{"_id": userId},
+			b.M{"$set": b.M{
+				"devices.$[dev].platform": dev.Platform,
+				"devices.$[dev].lastseen": dev.LastSeen,
+				"devices.$[dev].lang":     dev.Lang}},
+			updOpts)
+		return err
+	} else if err == mdb.ErrNoDocuments { // device is free or owned by other user
+		err = a.deviceInsert(userId, dev)
+
+		if isDuplicateErr(err) {
+			// Other user owns this device.
+			// We need to delete this device from that user and then insert again
+			if _, err = a.db.Collection("users").UpdateOne(a.ctx,
+				b.M{"devices.deviceid": dev.DeviceId},
+				b.M{"$pull": b.M{"devices": b.M{"deviceid": dev.DeviceId}}}); err != nil {
+
+				return err
+			}
+			return a.deviceInsert(userId, dev)
+		}
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+
+	return err
+}
+
+// deviceInsert adds device object to user.devices array
+func (a *adapter) deviceInsert(userId string, dev *t.DeviceDef) error {
+	filter := b.M{"_id": userId}
+	_, err := a.db.Collection("users").UpdateOne(a.ctx, filter,
+		b.M{"$push": b.M{"devices": dev}})
+
+	if err != nil && strings.Contains(err.Error(), "must be an array") {
+		// field 'devices' is not array. Make it array with 'dev' as its first element
+		_, err = a.db.Collection("users").UpdateOne(a.ctx, filter,
+			b.M{"$set": b.M{"devices": []interface{}{dev}}})
+	}
+
+	return err
 }
 
 // TODO: DeviceGetAll returns all devices for a given set of users

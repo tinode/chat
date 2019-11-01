@@ -395,7 +395,9 @@ type User struct {
 	Tags StringSlice
 
 	// Info on known devices, used for push notifications
-	Devices map[string]*DeviceDef
+	Devices map[string]*DeviceDef `bson:"__devices,skip"`
+	// Same for mongodb scheme. Ignore in other db backends if its not suitable.
+	DeviceArray []*DeviceDef `json:"-" bson:"devices"`
 }
 
 // AccessMode is a definition of access mode bits.
@@ -997,7 +999,7 @@ func (rs RangeSorter) Normalize() RangeSorter {
 
 // DelMessage is a log entry of a deleted message range.
 type DelMessage struct {
-	ObjHeader `bson:",inline"`
+	ObjHeader   `bson:",inline"`
 	Topic       string
 	DeletedFor  string
 	DelId       int
