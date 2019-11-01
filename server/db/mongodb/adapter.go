@@ -1442,9 +1442,43 @@ func (a *adapter) deviceInsert(userId string, dev *t.DeviceDef) error {
 	return err
 }
 
-// TODO: DeviceGetAll returns all devices for a given set of users
-func (a *adapter) DeviceGetAll(uid ...t.Uid) (map[t.Uid][]t.DeviceDef, int, error) {
-	return nil, 0, nil
+// DeviceGetAll returns all devices for a given set of users
+func (a *adapter) DeviceGetAll(uids ...t.Uid) (map[t.Uid][]t.DeviceDef, int, error) {
+	ids := make([]interface{}, len(uids))
+	for i, id := range uids {
+		ids[i] = id.String()
+	}
+
+	filter := b.M{"_id": b.M{"$in": ids}}
+	findOpts := mdbopts.Find().SetProjection(b.M{"_id": 1, "devices": 1})
+	cur, err := a.db.Collection("users").Find(a.ctx, filter, findOpts)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer cur.Close(a.ctx)
+
+	var row struct {
+		Id      string `bson:"_id"`
+		Devices []t.DeviceDef
+	}
+
+	result := make(map[t.Uid][]t.DeviceDef)
+	count := 0
+	var uid t.Uid
+	for cur.Next(a.ctx) {
+		if err = cur.Decode(&row); err != nil {
+			return nil, 0, err
+		}
+		if row.Devices != nil && len(row.Devices) > 0 {
+			if err := uid.UnmarshalText([]byte(row.Id)); err != nil {
+				continue
+			}
+
+			result[uid] = row.Devices
+			count++
+		}
+	}
+	return result, count, cur.Err()
 }
 
 // DeviceDelete deletes a device record
