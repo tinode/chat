@@ -861,6 +861,12 @@ func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin) error {
 	if sreg.created && sreg.pkt.topic != toriginal {
 		params["tmpname"] = sreg.pkt.topic
 	}
+
+	if len(params) == 0 {
+		// Don't send empty params '{}'
+		params = nil
+	}
+
 	sreg.sess.queueOut(NoErrParams(sreg.pkt.id, toriginal, now, params))
 
 	return nil
