@@ -253,13 +253,33 @@ func (a *adapter) CreateDb(reset bool) error {
 	}
 
 	// Stored message
-	// TODO: Compound index of topic - seqID for selecting messages in a topic.
-	// TODO: Compound index of hard-deleted messages
-	// TODO: Compound multi-index of soft-deleted messages: each message gets multiple compound index entries like
+	// Compound index of topic - seqID for selecting messages in a topic.
+	if _, err := a.db.Collection("messages").Indexes().CreateOne(a.ctx, mdb.IndexModel{
+		Keys: b.M{"topic": 1, "seqid": 1},
+	}); err != nil {
+		return err
+	}
+	// Compound index of hard-deleted messages
+	if _, err := a.db.Collection("messages").Indexes().CreateOne(a.ctx, mdb.IndexModel{
+		Keys: b.M{"topic": 1, "delid": 1},
+	}); err != nil {
+		return err
+	}
+	// Compound multi-index of soft-deleted messages: each message gets multiple compound index entries like
 	// 		 [Topic, User1, DelId1], [Topic, User2, DelId2],...
+	if _, err := a.db.Collection("messages").Indexes().CreateOne(a.ctx, mdb.IndexModel{
+		Keys: b.M{"topic": 1, "deletedfor.user": 1, "deletedfor.delid": 1},
+	}); err != nil {
+		return err
+	}
 
 	// Log of deleted messages
-	// TODO: Compound index of topic - delId
+	// Compound index of topic - delId
+	if _, err := a.db.Collection("dellog").Indexes().CreateOne(a.ctx, mdb.IndexModel{
+		Keys: b.M{"topic": 1, "delid": 1},
+	}); err != nil {
+		return err
+	}
 
 	// User credentials - contact information such as "email:jdoe@example.com" or "tel:+18003287448":
 	// Id: "method:credential" like "email:jdoe@example.com". See types.Credential.
