@@ -473,18 +473,19 @@ func (a *adapter) UserGetByCred(method, value string) (t.Uid, error) {
 func (a *adapter) UserUnreadCount(uid t.Uid) (int, error) {
 	pipeline := b.A{
 		b.M{"$match": b.M{"user": uid.String()}},
-
+		// Join documents from two collection
 		b.M{"$lookup": b.M{
 			"from":         "topics",
 			"localField":   "topic",
 			"foreignField": "_id",
 			"as":           "fromTopics"},
 		},
-
+		// Merge two documents into one
 		b.M{"$replaceRoot": b.M{"newRoot": b.M{"$mergeObjects": b.A{b.M{"$arrayElemAt": b.A{"$fromTopics", 0}}, "$$ROOT"}}}},
 
 		b.M{"$match": b.M{
 			"deletedat": b.M{"$exists": false},
+			// Filter by access mode
 			"modewant":  b.M{"$bitsAllSet": b.A{1}},
 			"modegiven": b.M{"$bitsAllSet": b.A{1}}}},
 
@@ -1399,9 +1400,48 @@ func (a *adapter) MessageSave(msg *t.Message) error {
 	return err
 }
 
-// TODO: MessageGetAll returns messages matching the query
+// MessageGetAll returns messages matching the query
 func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.QueryOpt) ([]t.Message, error) {
-	return nil, nil
+	var limit = a.maxResults
+	var lower, upper int
+	requester := forUser.String()
+	if opts != nil {
+		if opts.Since > 0 {
+			lower = opts.Since
+		}
+		if opts.Before > 0 {
+			upper = opts.Before
+		}
+
+		if opts.Limit > 0 && opts.Limit < limit {
+			limit = opts.Limit
+		}
+	}
+	filter := b.M{
+		"topic":           topic,
+		"delid":           b.M{"$exists": false},
+		"deletedfor.user": b.M{"$ne": requester},
+	}
+	if upper == 0 {
+		filter["seqid"] = b.M{"$gte": lower}
+	} else {
+		filter["seqid"] = b.M{"$gte": lower, "$lte": upper}
+	}
+	findOpts := mdbopts.Find().SetSort(b.M{"topic": -1, "seqid": -1})
+	findOpts.SetLimit(int64(limit))
+
+	cur, err := a.db.Collection("messages").Find(a.ctx, filter, findOpts)
+	if err != nil {
+		return nil, err
+	}
+	defer cur.Close(a.ctx)
+
+	var msgs []t.Message
+	if err = cur.All(a.ctx, &msgs); err != nil {
+		return nil, err
+	}
+
+	return msgs, nil
 }
 
 // TODO: MessageDeleteList marks messages as deleted.
