@@ -1450,9 +1450,48 @@ func (a *adapter) MessageDeleteList(topic string, toDel *t.DelMessage) error {
 	return nil
 }
 
-// TODO: MessageGetDeleted returns a list of deleted message Ids.
+// MessageGetDeleted returns a list of deleted message Ids.
 func (a *adapter) MessageGetDeleted(topic string, forUser t.Uid, opts *t.QueryOpt) ([]t.DelMessage, error) {
-	return nil, nil
+	var limit = a.maxResults
+	var lower, upper int
+	if opts != nil {
+		if opts.Since > 0 {
+			lower = opts.Since
+		}
+		if opts.Before > 0 {
+			upper = opts.Before
+		}
+
+		if opts.Limit > 0 && opts.Limit < limit {
+			limit = opts.Limit
+		}
+	}
+	filter := b.M{
+		"topic": topic,
+		"$or": b.A{
+			b.M{"deletedfor": forUser.String()},
+			b.M{"deletedfor": ""},
+		}}
+	if upper == 0 {
+		filter["delid"] = b.M{"$gte": lower}
+	} else {
+		filter["delid"] = b.M{"$gte": lower, "$lte": upper}
+	}
+	findOpts := mdbopts.Find().SetSort(b.M{"topic": 1, "delid": 1})
+	findOpts.SetLimit(int64(limit))
+
+	cur, err := a.db.Collection("dellog").Find(a.ctx, filter, findOpts)
+	if err != nil {
+		return nil, err
+	}
+	defer cur.Close(a.ctx)
+
+	var dmsgs []t.DelMessage
+	if err = cur.All(a.ctx, &dmsgs); err != nil {
+		return nil, err
+	}
+
+	return dmsgs, nil
 }
 
 // MessageAttachments connects given message to a list of file record IDs.
