@@ -468,10 +468,47 @@ func (a *adapter) UserGetByCred(method, value string) (t.Uid, error) {
 	return t.ParseUid(userId["user"]), nil
 }
 
-// TODO: UserUnreadCount returns the total number of unread messages in all topics with
+// UserUnreadCount returns the total number of unread messages in all topics with
 // the R permission.
 func (a *adapter) UserUnreadCount(uid t.Uid) (int, error) {
-	return 0, nil
+	pipeline := b.A{
+		b.M{"$match": b.M{"user": uid.String()}},
+
+		b.M{"$lookup": b.M{
+			"from":         "topics",
+			"localField":   "topic",
+			"foreignField": "_id",
+			"as":           "fromTopics"},
+		},
+
+		b.M{"$replaceRoot": b.M{"newRoot": b.M{"$mergeObjects": b.A{b.M{"$arrayElemAt": b.A{"$fromTopics", 0}}, "$$ROOT"}}}},
+
+		b.M{"$match": b.M{
+			"deletedat": b.M{"$exists": false},
+			"modewant":  b.M{"$bitsAllSet": b.A{1}},
+			"modegiven": b.M{"$bitsAllSet": b.A{1}}}},
+
+		b.M{"$group": b.M{"_id": nil, "unreadCount": b.M{"$sum": b.M{"$subtract": b.A{"$seqid", "$readseqid"}}}}},
+	}
+	cur, err := a.db.Collection("subscriptions").Aggregate(a.ctx, pipeline)
+	if err != nil {
+		if err == mdb.ErrNilCursor {
+			return 0, nil
+		}
+		return 0, err
+	}
+	defer cur.Close(a.ctx)
+
+	var result struct {
+		Id          interface{} `bson:"_id"`
+		UnreadCount int         `bson:"unreadCount"`
+	}
+	for cur.Next(a.ctx) {
+		if err = cur.Decode(&result); err != nil {
+			return 0, err
+		}
+	}
+	return result.UnreadCount, nil
 }
 
 // Credential management
