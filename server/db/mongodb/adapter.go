@@ -378,9 +378,123 @@ func (a *adapter) UserGetAll(ids ...t.Uid) ([]t.User, error) {
 	}
 }
 
-// TODO: UserDelete deletes user record
-func (a *adapter) UserDelete(id t.Uid, hard bool) error {
-	return nil
+// UserDelete deletes user record
+func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
+	topicIds, err := a.db.Collection("topics").Distinct(a.ctx, "_id", b.M{"owner": uid.String()})
+	if err != nil {
+		return err
+	}
+	topicFilter := b.M{"topic": b.M{"$in:": topicIds}}
+
+	var sess mdb.Session
+	if sess, err = a.conn.StartSession(); err != nil {
+		return err
+	}
+	if err = sess.StartTransaction(); err != nil {
+		return err
+	}
+	if err = mdb.WithSession(a.ctx, sess, func(sc mdb.SessionContext) error {
+		if hard {
+			// Can't delete user's messages in all topics because we cannot notify topics of such deletion.
+			// Or we have to delete these messages one by one.
+			// For now, just leave the messages there marked as sent by "not found" user.
+
+			// Delete topics where the user is the owner:
+
+			// 1. Delete dellog
+			// 2. Decrement fileuploads.
+			// 3. Delete all messages.
+			// 4. Delete subscriptions.
+
+			// Delete user's subscriptions in all topics.
+			if err = a.SubsDelForUser(uid, true); err != nil {
+				return err
+			}
+
+			// Delete dellog
+			_, err = a.db.Collection("dellog").DeleteMany(a.ctx, topicFilter)
+			if err != nil {
+				return err
+			}
+
+			// Decrement fileuploads UseCounter
+			// First get array of attachments IDs that were used in messages of topics from topicIds
+			fileIds, err := a.db.Collection("messages").Distinct(a.ctx, "attachments", b.M{
+				"topic":       b.M{"$in:": topicIds},
+				"attachments": b.M{"$exists": true},
+			})
+			if err != nil {
+				return err
+			}
+			// Then decrement the usecount field of these file records
+			_, err = a.db.Collection("fileuploads").UpdateMany(a.ctx,
+				b.M{"_id": b.M{"$in": fileIds}},
+				b.M{"$inc": b.M{"usecount": -1},})
+			if err != nil {
+				return err
+			}
+
+			// Delete messages
+			_, err = a.db.Collection("messages").DeleteMany(a.ctx, topicFilter)
+			if err != nil {
+				return err
+			}
+
+			// Delete subscriptions
+			_, err = a.db.Collection("subscriptions").DeleteMany(a.ctx, topicFilter)
+			if err != nil {
+				return err
+			}
+
+			// And finally delete the topics.
+			if _, err = a.db.Collection("topics").DeleteMany(a.ctx, b.M{"owner": uid.String()}); err != nil {
+				return err
+			}
+
+			// Delete user's authentication records.
+			if _, err = a.AuthDelAllRecords(uid); err != nil {
+				return err
+			}
+
+			// Delete credentials.
+			if err = a.CredDel(uid, "", ""); err != nil {
+				return err
+			}
+
+			// And finally delete the user.
+			if _, err = a.db.Collection("users").DeleteOne(a.ctx, b.M{"_id": uid.String()}); err != nil {
+				return err
+			}
+		} else {
+			// Disable user's subscriptions.
+			if err = a.SubsDelForUser(uid, false); err != nil {
+				return err
+			}
+
+			// Disable subscriptions for topics where the user is the owner.
+			// Disable topics where the user is the owner.
+			now := t.TimeNow()
+			disable := b.M{"deletedat": now, "updatedat": now}
+
+			if _, err = a.db.Collection("subscriptions").UpdateMany(a.ctx, topicFilter, disable); err != nil {
+				return err
+			}
+			if _, err = a.db.Collection("topics").UpdateMany(a.ctx, b.M{"_id": b.M{"$in": topicIds}}, disable); err != nil {
+				return err
+			}
+			if _, err = a.db.Collection("users").UpdateMany(a.ctx, b.M{"_id": uid.String()}, disable); err != nil {
+				return err
+			}
+		}
+
+		// Finally commit all changes
+		return sess.CommitTransaction(a.ctx)
+	}); err != nil {
+		return err
+	}
+	sess.EndSession(a.ctx)
+
+	return err
 }
 
 // UserGetDisabled returns IDs of users which were soft-deleted since given time.
