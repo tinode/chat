@@ -699,13 +699,14 @@ func (a *adapter) CredFail(uid t.Uid, method string) error {
 // AuthGetUniqueRecord returns authentication record for a given unique value i.e. login.
 func (a *adapter) AuthGetUniqueRecord(unique string) (t.Uid, auth.Level, []byte, time.Time, error) {
 	var record struct {
-		Id      string `bson:"_id"`
+		UserId  string
 		AuthLvl auth.Level
 		Secret  []byte
 		Expires time.Time
 	}
 	filter := b.M{"_id": unique}
 	findOpts := mdbopts.FindOneOptions{Projection: b.M{
+		"userid":  1,
 		"authLvl": 1,
 		"secret":  1,
 		"expires": 1}}
@@ -716,7 +717,7 @@ func (a *adapter) AuthGetUniqueRecord(unique string) (t.Uid, auth.Level, []byte,
 		return t.ZeroUid, 0, nil, time.Time{}, err
 	}
 
-	return t.ParseUid(record.Id), record.AuthLvl, record.Secret, record.Expires, nil
+	return t.ParseUid(record.UserId), record.AuthLvl, record.Secret, record.Expires, nil
 }
 
 // AuthGetRecord returns authentication record given user ID and method.
@@ -842,7 +843,7 @@ func (a *adapter) TopicCreateP2P(initiator, invited *t.Subscription) error {
 	// Don't care if the initiator changes own subscription
 	replOpts := mdbopts.ReplaceOptions{}
 	replOpts.SetUpsert(true)
-	_, err := a.db.Collection("subscriptions").ReplaceOne(a.ctx, b.M{}, initiator, &replOpts)
+	_, err := a.db.Collection("subscriptions").ReplaceOne(a.ctx, b.M{"_id": initiator.Id}, initiator, &replOpts)
 	if err != nil {
 		return err
 	}
