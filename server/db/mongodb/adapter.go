@@ -1445,10 +1445,87 @@ func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.QueryOpt) (
 	return msgs, nil
 }
 
-// TODO: MessageDeleteList marks messages as deleted.
+func (a *adapter) messagesHardDelete(topic string) error {
+	var err error
+
+	// TODO: handle file uploads
+
+	if _, err = a.db.Collection("dellog").DeleteMany(a.ctx, b.M{"topic": topic}); err != nil {
+		return err
+	}
+
+	if _, err = a.db.Collection("messages").DeleteMany(a.ctx, b.M{"topic": topic}); err != nil {
+		return err
+	}
+
+	return err
+}
+
+// MessageDeleteList marks messages as deleted.
 // Soft- or Hard- is defined by forUser value: forUSer.IsZero == true is hard.
 func (a *adapter) MessageDeleteList(topic string, toDel *t.DelMessage) error {
-	return nil
+	var err error
+
+	if toDel == nil {
+		err = a.messagesHardDelete(topic)
+	} else {
+		// Only some messages are being deleted
+		toDel.SetUid(store.GetUid())
+
+		// Start with making a log entry
+		_, err = a.db.Collection("dellog").InsertOne(a.ctx, toDel)
+		if err != nil {
+			return err
+		}
+
+		filter := b.M{
+			"topic": topic,
+			// Skip already hard-deleted messages.
+			"delid": b.M{"$exists": false},
+		}
+		if len(toDel.SeqIdRanges) == 1 {
+			filter["seqid"] = b.M{"seqid": b.M{"$gte": toDel.SeqIdRanges[0].Low, "$lte": toDel.SeqIdRanges[0].Hi}}
+		} else {
+			rangeFilter := b.A{}
+			for _, rng := range toDel.SeqIdRanges {
+				if rng.Hi == 0 {
+					rangeFilter = append(rangeFilter, b.M{"seqid": b.M{"$gte": rng.Low}})
+				} else {
+					rangeFilter = append(rangeFilter, b.M{"seqid": b.M{"$gte": rng.Low, "$lte": rng.Hi}})
+				}
+			}
+			filter["$or"] = rangeFilter
+		}
+
+		if toDel.DeletedFor == "" {
+			// Hard-delete individual messages. Message is not deleted but all fields with content
+			// are replaced with nulls.
+			_, err = a.db.Collection("messages").UpdateMany(a.ctx, filter, b.M{"$set": b.M{
+				"deletedat":   t.TimeNow(),
+				"delid":       toDel.DelId,
+				"from":        nil,
+				"head":        nil,
+				"content":     nil,
+				"attachments": nil}})
+		} else {
+			// Soft-deleting: adding DelId to DeletedFor
+
+			// Skip messages already soft-deleted for the current user
+			filter["deletedfor.user"] = b.M{"$ne": toDel.DeletedFor}
+			_, err = a.db.Collection("messages").UpdateMany(a.ctx, filter,
+				b.M{"$addToSet": b.M{
+					"deletedfor": &t.SoftDelete{
+						User:  toDel.DeletedFor,
+						DelId: toDel.DelId,
+					}}})
+		}
+
+		// If operation has failed, remove dellog record.
+		if err != nil {
+			_, _ = a.db.Collection("dellog").DeleteOne(a.ctx, b.M{"_id": toDel.Id})
+		}
+	}
+	return err
 }
 
 // MessageGetDeleted returns a list of deleted message Ids.
