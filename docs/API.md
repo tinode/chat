@@ -806,6 +806,7 @@ The following values are currently defined for the `head` field:
  * `hashtags`: an array of hashtags in the message without the leading `#` symbol: `["onehash", "twohash"]`.
  * `mentions`: an array of user IDs mentioned (`@alice`) in the message: `["usr1XUtEhjv6HND", "usr2il9suCbuko"]`.
  * `mime`: MIME-type of the message content, `"text/x-drafty"`; a `null` or a missing value is interpreted as `"text/plain"`.
+ * `priority`: message display priority: hint for the client that the message should be displayed more or less prominently; only `"high"` is currently defined; `priority` can be set by the topic owner or administrator (`A` permission) only.
  * `replace`: an indicator that the message is a correction/replacement for another message, a topic-unique ID of the message being updated/replaced, `":123"`
  * `reply`: an indicator that the message is a reply to another message, a unique ID of the original message, `"grp1XUtEhjv6HND:123"`.
  * `sender`: a user ID of the sender added by the server when the message is sent by on behalf of another user, `"usr1XUtEhjv6HND"`.
