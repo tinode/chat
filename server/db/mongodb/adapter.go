@@ -1192,9 +1192,30 @@ func (a *adapter) TopicShare(subs []*t.Subscription) error {
 	return err
 }
 
-// TODO (after a.SubsDelForTopic() and a.MessageDeleteList() done): TopicDelete deletes topic, subscription, messages
+// TopicDelete deletes topic, subscription, messages
 func (a *adapter) TopicDelete(topic string, hard bool) error {
-	return nil
+	var err error
+	if err = a.SubsDelForTopic(topic, hard); err != nil {
+		return err
+	}
+
+	if hard {
+		if err = a.MessageDeleteList(topic, nil); err != nil {
+			return err
+		}
+	}
+
+	filter := b.M{"_id": topic}
+	if hard {
+		_, err = a.db.Collection("topics").DeleteOne(a.ctx, filter)
+	} else {
+		now := t.TimeNow()
+		_, err = a.db.Collection("topics").UpdateOne(a.ctx, filter, b.M{"$set": b.M{
+			"updatedat": now,
+			"deletedat": now,
+		}})
+	}
+	return err
 }
 
 // TopicUpdateOnMessage increments Topic's or User's SeqId value and updates TouchedAt timestamp.
