@@ -1584,12 +1584,16 @@ func (a *adapter) messagesHardDelete(topic string) error {
 	var err error
 
 	// TODO: handle file uploads
-
-	if _, err = a.db.Collection("dellog").DeleteMany(a.ctx, b.M{"topic": topic}); err != nil {
+	filter := b.M{"topic": topic}
+	if _, err = a.db.Collection("dellog").DeleteMany(a.ctx, filter); err != nil {
 		return err
 	}
 
-	if _, err = a.db.Collection("messages").DeleteMany(a.ctx, b.M{"topic": topic}); err != nil {
+	if _, err = a.db.Collection("messages").DeleteMany(a.ctx, filter); err != nil {
+		return err
+	}
+
+	if err = a.fileDecrementUseCounter(filter); err != nil {
 		return err
 	}
 
@@ -1633,6 +1637,9 @@ func (a *adapter) MessageDeleteList(topic string, toDel *t.DelMessage) error {
 		}
 
 		if toDel.DeletedFor == "" {
+			if err = a.fileDecrementUseCounter(filter); err != nil {
+				return err
+			}
 			// Hard-delete individual messages. Message is not deleted but all fields with content
 			// are replaced with nulls.
 			_, err = a.db.Collection("messages").UpdateMany(a.ctx, filter, b.M{"$set": b.M{
@@ -1913,6 +1920,18 @@ func (a *adapter) FileDeleteUnused(olderThan time.Time, limit int) ([]string, er
 	_, err = a.db.Collection("fileuploads").DeleteMany(a.ctx, filter)
 	cur.Close(a.ctx)
 	return locations, err
+}
+
+// Given a select query against 'messages' table, decrement corresponding use counter in 'fileuploads' table.
+func (a *adapter) fileDecrementUseCounter(msgFilter b.M) error {
+	msgFilter["attachments"] = b.M{"$exists": true}
+	fileIds, err := a.db.Collection("messages").Distinct(a.ctx, "attachments", msgFilter)
+
+	_, err = a.db.Collection("fileuploads").UpdateMany(a.ctx,
+		b.M{"_id": b.M{"$in": fileIds}},
+		b.M{"$inc": b.M{"usecount": -1}})
+
+	return err
 }
 
 func (a *adapter) isDbInitialized() bool {
