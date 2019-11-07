@@ -40,3 +40,4 @@ run:
   build-tags:
     - mysql
     - rethinkdb
+    - mongodb
