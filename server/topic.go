@@ -318,7 +318,7 @@ func (t *Topic) run(hub *Hub) {
 				pushRcpt = t.makePushReceipt(from, msg.Data)
 
 				// Message sent: notify offline 'R' subscrbers on 'me'
-				t.presSubsOffline("msg", &presParams{seqID: t.lastID},
+				t.presSubsOffline("msg", &presParams{seqID: t.lastID, actor: msg.Data.From},
 					&presFilters{filterIn: types.ModeRead}, "", true)
 
 				// Tell the plugins that a message was accepted for delivery
