@@ -1464,6 +1464,11 @@ func (a *adapter) SubsForTopic(topic string, keepDeleted bool, opts *t.QueryOpt)
 
 // SubsUpdate updates pasrt of a subscription object. Pass nil for fields which don't need to be updated
 func (a *adapter) SubsUpdate(topic string, user t.Uid, update map[string]interface{}) error {
+	if val, ok := update["Private"]; ok { // to get round the hardcoded pass of "Private" key
+		update["private"] = val
+		delete(update, "Private")
+	}
+
 	filter := b.M{}
 	if !user.IsZero() {
 		// Update one topic subscription
