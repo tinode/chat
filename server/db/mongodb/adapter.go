@@ -1517,9 +1517,85 @@ func (a *adapter) SubsDelForUser(user t.Uid, hard bool) error {
 
 // Search
 
-// TODO: FindUsers searches for new contacts given a list of tags
-func (a *adapter) FindUsers(user t.Uid, req, opt []string) ([]t.Subscription, error) {
-	return nil, nil
+// FindUsers searches for new contacts given a list of tags
+func (a *adapter) FindUsers(uid t.Uid, req, opt []string) ([]t.Subscription, error) {
+	index := make(map[string]struct{})
+	var allTags []interface{}
+	for _, tag := range append(req, opt...) {
+		allTags = append(allTags, tag)
+		index[tag] = struct{}{}
+	}
+
+	pipeline := b.A{
+		b.M{"$match": b.M{
+			"tags":      b.M{"$in": allTags},
+			"deletedat": b.M{"$exists": false},
+		}},
+
+		b.M{"$project": b.M{"_id": 1, "access": 1, "createdat": 1, "updatedat": 1, "public": 1, "tags": 1}},
+
+		b.M{"$unwind": "$tags"},
+
+		b.M{"$match": b.M{"tags": b.M{"$in": allTags}}},
+
+		b.M{"$group": b.M{
+			"_id":              "$_id",
+			"access":           b.M{"$first": "$access"},
+			"createdat":        b.M{"$first": "$createdat"},
+			"updatedat":        b.M{"$first": "$updatedat"},
+			"public":           b.M{"$first": "$public"},
+			"tags":             b.M{"$addToSet": "$tags"},
+			"matchedTagsCount": b.M{"$sum": 1},
+		}},
+
+		b.M{"$sort": b.M{"matchedTagsCount": -1}},
+	}
+
+	if len(req) > 0 {
+		var reqTags []interface{}
+		for _, tag := range req {
+			reqTags = append(reqTags, tag)
+		}
+
+		// Filter out documents where 'tags' intersection with 'reqTags' is an empty array
+		pipeline = append(pipeline,
+			b.M{"$match": b.M{"$expr": b.M{"$ne": b.A{b.M{"$size": b.M{"$setIntersection": b.A{"$tags", reqTags}}}, 0},}}})
+	}
+
+	pipeline = append(pipeline, b.M{"$limit": a.maxResults})
+	cur, err := a.db.Collection("users").Aggregate(a.ctx, pipeline)
+	if err != nil {
+		return nil, err
+	}
+	defer cur.Close(a.ctx)
+
+	var user t.User
+	var sub t.Subscription
+	var subs []t.Subscription
+	for cur.Next(a.ctx) {
+		if err = cur.Decode(&user); err != nil {
+			return nil, err
+		}
+		if user.Id == uid.String() {
+			// Skip the caller
+			continue
+		}
+		sub.CreatedAt = user.CreatedAt
+		sub.UpdatedAt = user.UpdatedAt
+		sub.User = user.Id
+		sub.SetPublic(user.Public)
+		sub.SetDefaultAccess(user.Access.Auth, user.Access.Anon)
+		tags := make([]string, 0, 1)
+		for _, tag := range user.Tags {
+			if _, ok := index[tag]; ok {
+				tags = append(tags, tag)
+			}
+		}
+		sub.Private = tags
+		subs = append(subs, sub)
+	}
+
+	return subs, nil
 }
 
 // TODO: FindTopics searches for group topics given a list of tags
