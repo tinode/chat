@@ -395,7 +395,7 @@ type User struct {
 	Tags StringSlice
 
 	// Info on known devices, used for push notifications
-	Devices map[string]*DeviceDef `bson:"__devices,skip"`
+	Devices map[string]*DeviceDef `bson:"__devices,skip,omitempty"`
 	// Same for mongodb scheme. Ignore in other db backends if its not suitable.
 	DeviceArray []*DeviceDef `json:"-" bson:"devices"`
 }
