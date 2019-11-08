@@ -48,8 +48,8 @@ type configType struct {
 	Database string `json:"database,omitempty"`
 
 	AuthSource string `json:"auth_source,omitempty"`
-	Username string `json:"username,omitempty"`
-	Password string `json:"password,omitempty"`
+	Username   string `json:"username,omitempty"`
+	Password   string `json:"password,omitempty"`
 }
 
 // Open initializes mongodb session
@@ -524,10 +524,8 @@ func (a *adapter) UserGetDisabled(since time.Time) ([]t.Uid, error) {
 
 // UserUpdate updates user record
 func (a *adapter) UserUpdate(uid t.Uid, update map[string]interface{}) error {
-	if val, ok := update["UpdatedAt"]; ok { // to get round the hardcoded "UpdatedAt" key in store.Users.Update()
-		update["updatedat"] = val
-		delete(update, "UpdatedAt")
-	}
+	// to get round the hardcoded "UpdatedAt" key in store.Users.Update()
+	update = normalizeUpdateMap(update)
 
 	_, err := a.db.Collection("users").UpdateOne(a.ctx, b.M{"_id": uid.String()}, b.M{"$set": update})
 	return err
@@ -1350,6 +1348,8 @@ func (a *adapter) TopicUpdateOnMessage(topic string, msg *t.Message) error {
 // TopicUpdate updates topic record.
 func (a *adapter) TopicUpdate(topic string, update map[string]interface{}) error {
 	// to get round the hardcoded "UpdatedAt" key in store.Topics.Update()
+	update = normalizeUpdateMap(update)
+
 	if val, ok := update["UpdatedAt"]; ok {
 		update["updatedat"] = val
 		delete(update, "UpdatedAt")
@@ -1468,10 +1468,8 @@ func (a *adapter) SubsForTopic(topic string, keepDeleted bool, opts *t.QueryOpt)
 
 // SubsUpdate updates pasrt of a subscription object. Pass nil for fields which don't need to be updated
 func (a *adapter) SubsUpdate(topic string, user t.Uid, update map[string]interface{}) error {
-	if val, ok := update["Private"]; ok { // to get round the hardcoded pass of "Private" key
-		update["private"] = val
-		delete(update, "Private")
-	}
+	// to get round the hardcoded pass of "Private" key
+	update = normalizeUpdateMap(update)
 
 	filter := b.M{}
 	if !user.IsZero() {
@@ -2136,6 +2134,16 @@ func diff(userTags []string, removeTags []string) []string {
 			result = append(result, tag)
 		}
 	}
+	return result
+}
+
+// normalizeUpdateMap turns keys that hardcoded as CamelCase into lowercase
+func normalizeUpdateMap(update map[string]interface{}) map[string]interface{} {
+	result := make(map[string]interface{}, len(update))
+	for key, value := range update {
+		result[strings.ToLower(key)] = value
+	}
+
 	return result
 }
 
