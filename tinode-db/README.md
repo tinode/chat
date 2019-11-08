@@ -10,6 +10,9 @@ This utility initializes the `tinode` database and optionally loads it with samp
  - **MySQL**
   `go build -tags mysql` or `go build -i -tags mysql` to automatically install missing dependencies.
 
+ - **MongoDB**
+  `go build -tags mongodb` or `go build -i -tags mongodb` to automatically install missing dependencies.
+
 
 ## Run
 
@@ -40,3 +43,4 @@ Avatar photos curtesy of https://www.pexels.com/ under [CC0 license](https://www
 
 * [RethinkDB schema](https://github.com/tinode/chat/tree/master/server/db/rethinkdb/schema.md)
 * [MySQL schema](https://github.com/tinode/chat/tree/master/server/db/mysql/schema.sql)
+* [MongoDB schema](https://github.com/tinode/chat/tree/master/server/db/mongodb/schema.md)
