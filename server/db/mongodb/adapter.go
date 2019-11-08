@@ -47,6 +47,7 @@ type configType struct {
 	// Options separately from ClientOptions (custom options):
 	Database string `json:"database,omitempty"`
 
+	AuthSource string `json:"auth_source,omitempty"`
 	Username string `json:"username,omitempty"`
 	Password string `json:"password,omitempty"`
 }
@@ -83,13 +84,16 @@ func (a *adapter) Open(jsonconfig json.RawMessage) error {
 
 	if config.Username != "" {
 		var passwordSet bool
+		if config.AuthSource == "" {
+			config.AuthSource = "admin"
+		}
 		if config.Password != "" {
 			passwordSet = true
 		}
 		opts.SetAuth(
 			mdbopts.Credential{
 				AuthMechanism: "SCRAM-SHA-256",
-				AuthSource:    "admin",
+				AuthSource:    config.AuthSource,
 				Username:      config.Username,
 				Password:      config.Password,
 				PasswordSet:   passwordSet,
