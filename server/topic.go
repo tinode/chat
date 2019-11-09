@@ -1696,7 +1696,12 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 
 				if !deleted && !banned {
 					if isReader {
-						mts.TouchedAt = sub.GetTouchedAt()
+						if sub.GetTouchedAt().IsZero() {
+							mts.TouchedAt = nil
+						} else {
+							touchedAt := sub.GetTouchedAt()
+							mts.TouchedAt = &touchedAt
+						}
 						mts.SeqId = sub.GetSeqId()
 						mts.DelId = sub.DelId
 					} else {

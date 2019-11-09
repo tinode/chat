@@ -392,7 +392,7 @@ var Topics TopicsObjMapper
 func (TopicsObjMapper) Create(topic *types.Topic, owner types.Uid, private interface{}) error {
 
 	topic.InitTimes()
-	topic.TouchedAt = &topic.CreatedAt
+	topic.TouchedAt = topic.CreatedAt
 	topic.Owner = owner.String()
 
 	err := adp.TopicCreate(topic)
@@ -416,9 +416,9 @@ func (TopicsObjMapper) Create(topic *types.Topic, owner types.Uid, private inter
 // CreateP2P creates a P2P topic by generating two user's subsciptions to each other.
 func (TopicsObjMapper) CreateP2P(initiator, invited *types.Subscription) error {
 	initiator.InitTimes()
-	initiator.SetTouchedAt(&initiator.CreatedAt)
+	initiator.SetTouchedAt(initiator.CreatedAt)
 	invited.InitTimes()
-	invited.SetTouchedAt((&invited.CreatedAt))
+	invited.SetTouchedAt(invited.CreatedAt)
 
 	return adp.TopicCreateP2P(initiator, invited)
 }

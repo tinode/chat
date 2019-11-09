@@ -706,7 +706,7 @@ type Subscription struct {
 	// deserialized SeqID from user or topic
 	seqId int
 	// Deserialized TouchedAt from topic
-	touchedAt *time.Time
+	touchedAt time.Time
 	// timestamp when the user was last online
 	lastSeen time.Time
 	// user agent string of the last online access
@@ -739,18 +739,18 @@ func (s *Subscription) GetWith() string {
 }
 
 // GetTouchedAt returns touchedAt.
-func (s *Subscription) GetTouchedAt() *time.Time {
+func (s *Subscription) GetTouchedAt() time.Time {
 	return s.touchedAt
 }
 
 // SetTouchedAt sets the value of touchedAt.
-func (s *Subscription) SetTouchedAt(touchedAt *time.Time) {
-	if s.touchedAt == nil || touchedAt.After(*s.touchedAt) {
+func (s *Subscription) SetTouchedAt(touchedAt time.Time) {
+	if touchedAt.After(s.touchedAt) {
 		s.touchedAt = touchedAt
 	}
 
 	if s.touchedAt.Before(s.UpdatedAt) {
-		s.touchedAt = &s.UpdatedAt
+		s.touchedAt = s.UpdatedAt
 	}
 }
 
@@ -812,7 +812,7 @@ type Topic struct {
 	ObjHeader
 
 	// Timestamp when the last message has passed through the topic
-	TouchedAt *time.Time
+	TouchedAt time.Time
 
 	// Use bearer token or use ACL
 	UseBt bool
