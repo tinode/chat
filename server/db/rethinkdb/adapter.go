@@ -771,7 +771,7 @@ func (a *adapter) UserUpdateTags(uid t.Uid, add, remove, reset []string) ([]stri
 
 // UserGetByCred returns user ID for the given validated credential.
 func (a *adapter) UserGetByCred(method, value string) (t.Uid, error) {
-	cursor, err := rdb.DB(a.dbName).Table("credentials").Get(method + ":" + value).Field("User").Run(a.conn)
+	cursor, err := rdb.DB(a.dbName).Table("credentials").Get(method + ":" + value).Field("User").Default(nil).Run(a.conn)
 	if err != nil {
 		return t.ZeroUid, err
 	}
