@@ -6,12 +6,12 @@ import (
 	"github.com/tinode/chat/server/store/types"
 )
 
-var users []*types.User
+var users []types.User
 
 func initUsers() {
 	now := time.Now().Round(time.Millisecond).UTC()
 
-	users = append(users, &types.User{
+	users = append(users, types.User{
 		ObjHeader: types.ObjHeader{
 			Id:        "02TvNSWWktw",
 			CreatedAt: now.Add(-140 * time.Minute),
@@ -23,7 +23,7 @@ func initUsers() {
 		UserAgent:   "SomeAgent v1.2.3",
 		Tags:        []string{"alice"},
 	})
-	users = append(users, &types.User{
+	users = append(users, types.User{
 		ObjHeader: types.ObjHeader{
 			Id:        "4Og8ARhtBWA",
 			CreatedAt: now.Add(-130 * time.Minute),

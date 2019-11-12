@@ -341,9 +341,7 @@ func (a *adapter) UserCreate(usr *t.User) error {
 func (a *adapter) UserGet(id t.Uid) (*t.User, error) {
 	var user t.User
 
-	filter := b.M{"$and": b.A{
-		b.M{"_id": id.String()},
-		b.M{"deletedat": b.M{"$exists": false}}}}
+	filter := b.M{"_id": id.String(), "deletedat": b.M{"$exists": false}}
 	if err := a.db.Collection("users").FindOne(a.ctx, filter).Decode(&user); err != nil {
 		if err == mdb.ErrNoDocuments { // User not found
 			return nil, nil
@@ -363,23 +361,21 @@ func (a *adapter) UserGetAll(ids ...t.Uid) ([]t.User, error) {
 	}
 
 	var users []t.User
-	filter := b.M{"$and": b.A{
-		b.M{"_id": b.M{"$in": uids}},
-		b.M{"deletedat": b.M{"$exists": false}}}}
-	if cur, err := a.db.Collection("users").Find(a.ctx, filter); err == nil {
-		defer cur.Close(a.ctx)
-
-		var user t.User
-		for cur.Next(a.ctx) {
-			if err := cur.Decode(&user); err != nil {
-				return nil, err
-			}
-			users = append(users, user)
-		}
-		return users, nil
-	} else {
+	filter := b.M{"_id": b.M{"$in": uids}, "deletedat": b.M{"$exists": false}}
+	cur, err := a.db.Collection("users").Find(a.ctx, filter)
+	if err != nil {
 		return nil, err
 	}
+	defer cur.Close(a.ctx)
+
+	for cur.Next(a.ctx) {
+		var user t.User
+		if err := cur.Decode(&user); err != nil {
+			return nil, err
+		}
+		users = append(users, user)
+	}
+	return users, nil
 }
 
 // UserDelete deletes user record

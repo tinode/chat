@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"flag"
+	"fmt"
 	"log"
 	"os"
 	"reflect"
@@ -65,7 +66,7 @@ func TestCreateDb(t *testing.T) {
 
 func TestUserCreate(t *testing.T) {
 	for _, user := range users {
-		if err := adp.UserCreate(user); err != nil {
+		if err := adp.UserCreate(&user); err != nil {
 			t.Error(err)
 		}
 	}
@@ -79,19 +80,45 @@ func TestUserCreate(t *testing.T) {
 }
 
 func TestUserGet(t *testing.T) {
-	user, err := adp.UserGet(types.ParseUserId("usr"+users[0].Id))
+	// Test not found
+	user, err := adp.UserGet(types.ParseUserId("dummyuserid"))
+	if err == nil && user != nil {
+		t.Error("user should be nil.")
+	}
+
+	user, err = adp.UserGet(types.ParseUserId("usr" + users[0].Id))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if user == nil {
-		t.Fatal("User not found.")
-	}
-	if !reflect.DeepEqual(user, users[0]) {
-		t.Error("Value mismatch:", user, users[0])
+	if !reflect.DeepEqual(*user, users[0]) {
+		t.Errorf(mismatchErrorString("User", *user, users[0]))
 	}
 }
 
+func TestUserGetAll(t *testing.T) {
+	// Test not found
+	resultUsers, err := adp.UserGetAll(types.ParseUserId("dummyuserid"), types.ParseUserId("otherdummyid"))
+	if err == nil && resultUsers != nil {
+		t.Error("resultUsers should be nil.")
+	}
 
+	resultUsers, err = adp.UserGetAll(types.ParseUserId("usr"+users[0].Id), types.ParseUserId("usr"+users[1].Id))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resultUsers) != 2 {
+		t.Fatal(mismatchErrorString("resultUsers length", len(resultUsers), 2))
+	}
+	for i, usr := range resultUsers {
+		if !reflect.DeepEqual(usr, users[i]) {
+			t.Error(mismatchErrorString("User", usr, users[i]))
+		}
+	}
+}
+
+func mismatchErrorString(key string, got, want interface{}) string {
+	return fmt.Sprintf("%v mismatch:\nGot  = %v\nWant = %v", key, got, want)
+}
 
 func initConnectionToDb() {
 	var adpConfig struct {
