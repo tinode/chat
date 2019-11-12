@@ -567,9 +567,10 @@ func (a *adapter) UserUpdateTags(uid t.Uid, add, remove, reset []string) ([]stri
 // UserGetByCred returns user ID for the given validated credential.
 func (a *adapter) UserGetByCred(method, value string) (t.Uid, error) {
 	var userId map[string]string
-	filter := b.M{"_id": method + ":" + value}
-	findOpts := mdbopts.FindOneOptions{Projection: b.M{"user": 1, "_id": 0}}
-	err := a.db.Collection("credentials").FindOne(a.ctx, filter, &findOpts).Decode(&userId)
+	err := a.db.Collection("credentials").FindOne(a.ctx,
+		b.M{"_id": method + ":" + value},
+		mdbopts.FindOne().SetProjection(b.M{"user": 1, "_id": 0}),
+	).Decode(&userId)
 	if err != nil {
 		if err == mdb.ErrNoDocuments {
 			return t.ZeroUid, nil

@@ -80,6 +80,17 @@ func TestUserCreate(t *testing.T) {
 	}
 }
 
+// TODO (incomplete test)
+func TestCredUpsert(t *testing.T) {
+	inserted, err := adp.CredUpsert(&creds[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !inserted {
+		t.Error("Should be inserted, but updated")
+	}
+}
+
 func TestUserGet(t *testing.T) {
 	// Test not found
 	got, err := adp.UserGet(types.ParseUserId("dummyuserid"))
@@ -100,7 +111,7 @@ func TestUserGetAll(t *testing.T) {
 	// Test not found
 	got, err := adp.UserGetAll(types.ParseUserId("dummyuserid"), types.ParseUserId("otherdummyid"))
 	if err == nil && got != nil {
-		t.Error("resultUsers should be nil.")
+		t.Error("result users should be nil.")
 	}
 
 	got, err = adp.UserGetAll(types.ParseUserId("usr"+users[0].Id), types.ParseUserId("usr"+users[1].Id))
@@ -116,7 +127,6 @@ func TestUserGetAll(t *testing.T) {
 		}
 	}
 }
-
 
 func TestUserGetDisabled(t *testing.T) {
 	// Test before deletion date
@@ -141,6 +151,21 @@ func TestUserGetDisabled(t *testing.T) {
 	}
 }
 
+func TestUserGetByCred(t *testing.T) {
+	// Test not found
+	got, err := adp.UserGetByCred("foo", "bar")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != types.ZeroUid {
+		t.Error("result uid should be ZeroUid")
+	}
+
+	got, err = adp.UserGetByCred(creds[0].Method, creds[0].Value)
+	if got != types.ParseUserId("usr"+creds[0].User) {
+		t.Error(mismatchErrorString("Uid", got, types.ParseUserId("usr"+creds[0].User)))
+	}
+}
 
 func mismatchErrorString(key string, got, want interface{}) string {
 	return fmt.Sprintf("%v mismatch:\nGot  = %v\nWant = %v", key, got, want)
