@@ -663,7 +663,11 @@ func (s *Session) login(msg *ClientComMessage) {
 	// msg.from is ignored here
 
 	if msg.Login.Scheme == "reset" {
-		s.queueOut(decodeStoreError(s.authSecretReset(msg.Login.Secret), msg.id, "", msg.timestamp, nil))
+		if err := s.authSecretReset(msg.Login.Secret); err != nil {
+			s.queueOut(decodeStoreError(err, msg.id, "", msg.timestamp, nil))
+		} else {
+			s.queueOut(InfoAuthReset(msg.id, msg.timestamp))
+		}
 		return
 	}
 
