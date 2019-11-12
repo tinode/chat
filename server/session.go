@@ -743,7 +743,7 @@ func (s *Session) authSecretReset(params []byte) error {
 
 	token, _, err := store.GetLogicalAuthHandler("token").GenSecret(&auth.Rec{
 		Uid:       uid,
-		AuthLevel: auth.LevelNone,
+		AuthLevel: auth.LevelAuth,
 		Lifetime:  time.Hour * 24,
 		Features:  auth.FeatureNoLogin})
 
