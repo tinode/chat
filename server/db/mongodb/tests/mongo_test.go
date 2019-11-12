@@ -1,6 +1,9 @@
-// Adapter test.
-// Create GetAdapter function inside your db backend adapter package (like one inside mongodb adapter) and
-// uncomment your db backend package ('backend' named package) and run tests
+// To test another db backend:
+// 1) Create GetAdapter function inside your db backend adapter package (like one inside mongodb adapter)
+// 2) Uncomment your db backend package ('backend' named package)
+// 3) Write own initConnectionToDb and 'db' variable
+// 4) Replace mongodb specific db queries inside test to your own queries.
+// 5) Run.
 
 package tests
 
@@ -28,36 +31,17 @@ import (
 	"github.com/tinode/chat/server/store/types"
 )
 
-type configFile struct {
-	TestingConfig json.RawMessage `json:"testing_config"`
-}
 type configType struct {
-	// 16-byte key for XTEA. Used to initialize types.UidGenerator.
-	UidKey []byte `json:"uid_key"`
 	// If Reset=true test will recreate database every time it runs
 	Reset bool `json:"reset_db_data"`
 	// Configurations for individual adapters.
 	Adapters map[string]json.RawMessage `json:"adapters"`
 }
 
-var uGen types.UidGenerator
 var config configType
 var adp adapter.Adapter
 var db *mdb.Database
 var ctx context.Context
-
-func TestOne(t *testing.T) {
-	//var err error
-	//if _, err = adp.UserGet(types.ParseUserId("usr07ZtlTZfaXo")); err != nil {
-	//	t.Error("TestUserCreate failed: ", err)
-	//}
-
-	//for i := 0; i < 10; i++ {
-	//	log.Println(uGen.GetStr())
-	//}
-
-	//_ = adp.UserDelete(types.ParseUserId("usrdiuMKIEz1b4"), true)
-}
 
 func TestCreateDb(t *testing.T) {
 	if err := adp.CreateDb(config.Reset); err != nil {
@@ -65,6 +49,7 @@ func TestCreateDb(t *testing.T) {
 	}
 }
 
+// ================== Create tests ================================
 func TestUserCreate(t *testing.T) {
 	for _, user := range users {
 		if err := adp.UserCreate(&user); err != nil {
@@ -91,6 +76,27 @@ func TestCredUpsert(t *testing.T) {
 	}
 }
 
+//func TestAuthAddRecord(t *testing.T) {
+//	// TODO
+//}
+//
+//func TestTopicCreate(t *testing.T) {
+//	// TODO
+//}
+//
+//func TestMessageSave(t *testing.T) {
+//	// TODO
+//}
+//
+//func TestDeviceUpsert(t *testing.T) {
+//	// TODO
+//}
+//
+//func TestFileStartUpload(t *testing.T) {
+//	// TODO
+//}
+
+// ================== Read tests ==================================
 func TestUserGet(t *testing.T) {
 	// Test not found
 	got, err := adp.UserGet(types.ParseUserId("dummyuserid"))
@@ -167,6 +173,179 @@ func TestUserGetByCred(t *testing.T) {
 	}
 }
 
+//func TestUserUnreadCount(t *testing.T) {
+//	// TODO
+//}
+//
+//func TestCredGetActive(t *testing.T) {
+//	// TODO
+//}
+//
+//func TestCredGetAll(t *testing.T) {
+//	// TODO
+//}
+//
+//func TestAuthGetUniqueRecord(t *testing.T) {
+//	// TODO
+//}
+//
+//func TestAuthGetRecord(t *testing.T) {
+//	// TODO
+//}
+//
+//func TestTopicGet(t *testing.T) {
+//	// TODO
+//}
+//
+//func TestTopicsForUser(t *testing.T) {
+//	// TODO
+//}
+//
+//func TestUsersForTopic(t *testing.T) {
+//	// TODO
+//}
+//
+//func TestOwnTopics(t *testing.T) {
+//	// TODO
+//}
+//
+//func TestSubscriptionGet(t *testing.T) {
+//	// TODO
+//}
+//
+//func TestSubsForUser(t *testing.T) {
+//	// TODO
+//}
+//
+//func TestSubsForTopic(t *testing.T) {
+//	// TODO
+//}
+//
+//func TestFindUsers(t *testing.T) {
+//	// TODO
+//}
+//
+//func TestFindTopics(t *testing.T) {
+//	// TODO
+//}
+//
+//func TestMessageGetAll(t *testing.T) {
+//	// TODO
+//}
+//
+//func TestMessageGetDeleted(t *testing.T) {
+//	// TODO
+//}
+//
+//func TestDeviceGetAll(t *testing.T) {
+//	// TODO
+//}
+//
+//func TestFileGet(t *testing.T) {
+//	// TODO
+//}
+
+
+// ================== Update tests ================================
+//func TestUserUpdate(t *testing.T) {
+//	// TODO
+//}
+//
+//func TestUserUpdateTags(t *testing.T) {
+//	// TODO
+//}
+//
+//func TestCredFail(t *testing.T) {
+//	// TODO
+//}
+//
+//func TestAuthUpdRecord(t *testing.T) {
+//	// TODO
+//}
+//
+//func TestTopicUpdateOnMessage(t *testing.T) {
+//	// TODO
+//}
+//
+//func TestTopicUpdate(t *testing.T) {
+//	// TODO
+//}
+//
+//func TestTopicOwnerChange(t *testing.T) {
+//	// TODO
+//}
+//
+//func TestSubsUpdate(t *testing.T) {
+//	// TODO
+//}
+//
+//func TestMessageAttachments(t *testing.T) {
+//	// TODO
+//}
+//
+//func TestDeviceDelete(t *testing.T) {
+//	// TODO
+//}
+//
+//func TestFileFinishUpload(t *testing.T) {
+//	// TODO
+//}
+
+// ================== Delete tests ================================
+//func TestUserDelete(t *testing.T) {
+//	// TODO
+//}
+//
+//func TestCredDel(t *testing.T) {
+//	// TODO
+//}
+//
+//func TestAuthDelScheme(t *testing.T) {
+//	// TODO
+//}
+//
+//func TestAuthDelAllRecords(t *testing.T) {
+//	// TODO
+//}
+//
+//func TestTopicDelete(t *testing.T) {
+//	// TODO
+//}
+//
+//func TestSubsDelete(t *testing.T) {
+//	// TODO
+//}
+//
+//func TestFileDeleteUnused(t *testing.T) {
+//	// TODO
+//}
+//
+//// ================== Mixed tests =================================
+//func TestCredConfirm(t *testing.T) {
+//	// TODO
+//}
+//
+//func TestTopicCreateP2P(t *testing.T) {
+//	// TODO
+//}
+//
+//func TestTopicShare(t *testing.T) {
+//	// TODO
+//}
+//
+//func TestSubsDelForTopic(t *testing.T) {
+//	// TODO
+//}
+//
+//func TestSubsDelForUser(t *testing.T) {
+//	// TODO
+//}
+//
+//func TestMessageDeleteList(t *testing.T) {
+//	// TODO
+//}
+
+// ================================================================
 func mismatchErrorString(key string, got, want interface{}) string {
 	return fmt.Sprintf("%v mismatch:\nGot  = %v\nWant = %v", key, got, want)
 }
@@ -210,14 +389,10 @@ func init() {
 	adp = backend.GetAdapter()
 	conffile := flag.String("config", "./test.conf", "config of the database connection")
 
-	var configFile configFile
 	if file, err := os.Open(*conffile); err != nil {
 		log.Fatal("Failed to read config file:", err)
-	} else if err = json.NewDecoder(jcr.New(file)).Decode(&configFile); err != nil {
+	} else if err = json.NewDecoder(jcr.New(file)).Decode(&config); err != nil {
 		log.Fatal("Failed to parse config file:", err)
-	}
-	if err := json.Unmarshal(configFile.TestingConfig, &config); err != nil {
-		log.Fatal("Failed to parse config: " + err.Error() + "(" + string(configFile.TestingConfig) + ")")
 	}
 
 	if adp == nil {
@@ -225,9 +400,6 @@ func init() {
 	}
 	if adp.IsOpen() {
 		log.Print("Connection is already opened")
-	}
-	if err := uGen.Init(77, config.UidKey); err != nil {
-		log.Fatal("Failed to init snowflake: " + err.Error())
 	}
 
 	err := adp.Open(config.Adapters[adp.GetName()])
