@@ -13,6 +13,7 @@ import (
 	"os"
 	"reflect"
 	"testing"
+	"time"
 
 	jcr "github.com/DisposaBoy/JsonConfigReader"
 	adapter "github.com/tinode/chat/server/db"
@@ -81,40 +82,65 @@ func TestUserCreate(t *testing.T) {
 
 func TestUserGet(t *testing.T) {
 	// Test not found
-	user, err := adp.UserGet(types.ParseUserId("dummyuserid"))
-	if err == nil && user != nil {
+	got, err := adp.UserGet(types.ParseUserId("dummyuserid"))
+	if err == nil && got != nil {
 		t.Error("user should be nil.")
 	}
 
-	user, err = adp.UserGet(types.ParseUserId("usr" + users[0].Id))
+	got, err = adp.UserGet(types.ParseUserId("usr" + users[0].Id))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(*user, users[0]) {
-		t.Errorf(mismatchErrorString("User", *user, users[0]))
+	if !reflect.DeepEqual(*got, users[0]) {
+		t.Errorf(mismatchErrorString("User", *got, users[0]))
 	}
 }
 
 func TestUserGetAll(t *testing.T) {
 	// Test not found
-	resultUsers, err := adp.UserGetAll(types.ParseUserId("dummyuserid"), types.ParseUserId("otherdummyid"))
-	if err == nil && resultUsers != nil {
+	got, err := adp.UserGetAll(types.ParseUserId("dummyuserid"), types.ParseUserId("otherdummyid"))
+	if err == nil && got != nil {
 		t.Error("resultUsers should be nil.")
 	}
 
-	resultUsers, err = adp.UserGetAll(types.ParseUserId("usr"+users[0].Id), types.ParseUserId("usr"+users[1].Id))
+	got, err = adp.UserGetAll(types.ParseUserId("usr"+users[0].Id), types.ParseUserId("usr"+users[1].Id))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(resultUsers) != 2 {
-		t.Fatal(mismatchErrorString("resultUsers length", len(resultUsers), 2))
+	if len(got) != 2 {
+		t.Fatal(mismatchErrorString("resultUsers length", len(got), 2))
 	}
-	for i, usr := range resultUsers {
+	for i, usr := range got {
 		if !reflect.DeepEqual(usr, users[i]) {
 			t.Error(mismatchErrorString("User", usr, users[i]))
 		}
 	}
 }
+
+
+func TestUserGetDisabled(t *testing.T) {
+	// Test before deletion date
+	got, err := adp.UserGetDisabled(users[2].DeletedAt.Add(-10 * time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 {
+		t.Fatal(mismatchErrorString("uids length", len(got), 1))
+	}
+	if got[0].String() != users[2].Id {
+		t.Error(mismatchErrorString("userId", got[0].String(), users[2].Id))
+	}
+
+	// Test after deletion date
+	got, err = adp.UserGetDisabled(users[2].DeletedAt.Add(10 * time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != nil {
+		t.Fatal(mismatchErrorString("result", got, nil))
+	}
+}
+
 
 func mismatchErrorString(key string, got, want interface{}) string {
 	return fmt.Sprintf("%v mismatch:\nGot  = %v\nWant = %v", key, got, want)

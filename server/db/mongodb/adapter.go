@@ -501,21 +501,21 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 func (a *adapter) UserGetDisabled(since time.Time) ([]t.Uid, error) {
 	filter := b.M{"deletedat": b.M{"$gte": since}}
 	findOpts := mdbopts.FindOptions{Projection: b.M{"_id": 1}}
-	if cur, err := a.db.Collection("users").Find(a.ctx, filter, &findOpts); err == nil {
-		defer cur.Close(a.ctx)
-
-		var uids []t.Uid
-		var userId map[string]string
-		for cur.Next(a.ctx) {
-			if err := cur.Decode(&userId); err != nil {
-				return nil, err
-			}
-			uids = append(uids, t.ParseUid(userId["_id"]))
-		}
-		return uids, nil
-	} else {
+	cur, err := a.db.Collection("users").Find(a.ctx, filter, &findOpts)
+	if err != nil {
 		return nil, err
 	}
+	defer cur.Close(a.ctx)
+
+	var uids []t.Uid
+	var userId map[string]string
+	for cur.Next(a.ctx) {
+		if err := cur.Decode(&userId); err != nil {
+			return nil, err
+		}
+		uids = append(uids, t.ParseUid(userId["_id"]))
+	}
+	return uids, nil
 }
 
 // UserUpdate updates user record

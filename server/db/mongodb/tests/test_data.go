@@ -35,6 +35,20 @@ func initUsers() {
 		UserAgent:   "Tinode Web v111.222.333",
 		Tags:        []string{"bob"},
 	})
+	deletedAt := now.Add(-100 * time.Minute)
+	users = append(users, types.User{
+		ObjHeader: types.ObjHeader{
+			Id:        "07ZtlTZfaXo",
+			CreatedAt: now.Add(-130 * time.Minute),
+			UpdatedAt: now.Add(-130 * time.Minute),
+			DeletedAt: &deletedAt,
+		},
+		State:       1,
+		Access:      types.DefaultAccess{},
+		LastSeen:    &now,
+		UserAgent:   "Tindroid v1.2.3",
+		Tags:        []string{"carol"},
+	})
 }
 
 func initData() {
