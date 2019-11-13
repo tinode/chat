@@ -536,7 +536,8 @@ func (a *adapter) UserUpdateTags(uid t.Uid, add, remove, reset []string) ([]stri
 	}
 
 	var user t.User
-	if err := a.db.Collection("users").FindOne(a.ctx, b.M{"_id": uid.String()}).Decode(&user); err != nil {
+	err := a.db.Collection("users").FindOne(a.ctx, b.M{"_id": uid.String()}).Decode(&user)
+	if err != nil {
 		return nil, err
 	}
 
@@ -556,12 +557,13 @@ func (a *adapter) UserUpdateTags(uid t.Uid, add, remove, reset []string) ([]stri
 
 	// Get the new tags
 	var tags map[string][]string
-	findOpts := mdbopts.FindOneOptions{Projection: b.M{"tags": 1, "_id": 0}}
-	if err := a.db.Collection("users").FindOne(a.ctx, b.M{"_id": uid.String()}, &findOpts).Decode(&tags); err == nil {
-		return tags["tags"], nil
-	} else {
+	findOpts := mdbopts.FindOne().SetProjection(b.M{"tags": 1, "_id": 0})
+	err = a.db.Collection("users").FindOne(a.ctx, b.M{"_id": uid.String()}, findOpts).Decode(&tags)
+	if err != nil {
 		return nil, err
 	}
+
+	return tags["tags"], nil
 }
 
 // UserGetByCred returns user ID for the given validated credential.
@@ -721,7 +723,7 @@ func (a *adapter) CredGetActive(uid t.Uid, method string) (*t.Credential, error)
 
 // CredGetAll returns credential records for the given user and method, validated only or all.
 func (a *adapter) CredGetAll(uid t.Uid, method string, validatedOnly bool) ([]t.Credential, error) {
-	filter := b.M{}
+	filter := b.M{"user": uid.String()}
 	if method != "" {
 		filter["method"] = method
 	}
@@ -731,15 +733,17 @@ func (a *adapter) CredGetAll(uid t.Uid, method string, validatedOnly bool) ([]t.
 		filter["deletedat"] = b.M{"$exists": false}
 	}
 
-	if cur, err := a.db.Collection("credentials").Find(a.ctx, filter); err == nil {
-		var credentials []t.Credential
-		if err := cur.All(a.ctx, &credentials); err != nil {
-			return nil, err
-		}
-		return credentials, nil
-	} else {
+	cur, err := a.db.Collection("credentials").Find(a.ctx, filter)
+	if err != nil {
 		return nil, err
 	}
+	defer cur.Close(a.ctx)
+
+	var credentials []t.Credential
+	if err := cur.All(a.ctx, &credentials); err != nil {
+		return nil, err
+	}
+	return credentials, nil
 }
 
 // CredDel deletes credentials for the given method/value. If method is empty, deletes all
@@ -816,13 +820,16 @@ func (a *adapter) AuthGetUniqueRecord(unique string) (t.Uid, auth.Level, []byte,
 		Secret  []byte
 		Expires time.Time
 	}
+
 	filter := b.M{"_id": unique}
-	findOpts := mdbopts.FindOneOptions{Projection: b.M{
+	findOpts := mdbopts.FindOne().SetProjection(b.M{
 		"userid":  1,
-		"authLvl": 1,
+		"authlvl": 1,
 		"secret":  1,
-		"expires": 1}}
-	if err := a.db.Collection("auth").FindOne(a.ctx, filter, &findOpts).Decode(&record); err != nil {
+		"expires": 1,
+	})
+	err := a.db.Collection("auth").FindOne(a.ctx, filter, findOpts).Decode(&record)
+	if err != nil {
 		if err == mdb.ErrNoDocuments {
 			return t.ZeroUid, 0, nil, time.Time{}, nil
 		}
@@ -840,15 +847,17 @@ func (a *adapter) AuthGetRecord(uid t.Uid, scheme string) (string, auth.Level, [
 		Secret  []byte
 		Expires time.Time
 	}
+
 	filter := b.M{
 		"userid": uid.String(),
 		"scheme": scheme}
-	findOpts := &mdbopts.FindOneOptions{Projection: b.M{
-		"authLvl": 1,
+	findOpts := mdbopts.FindOne().SetProjection(b.M{
+		"authlvl": 1,
 		"secret":  1,
 		"expires": 1,
-	}}
-	if err := a.db.Collection("auth").FindOne(a.ctx, filter, findOpts).Decode(&record); err != nil {
+	})
+	err := a.db.Collection("auth").FindOne(a.ctx, filter, findOpts).Decode(&record)
+	if err != nil {
 		if err == mdb.ErrNoDocuments {
 			return "", 0, nil, time.Time{}, t.ErrNotFound
 		}
