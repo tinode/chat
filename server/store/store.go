@@ -253,14 +253,14 @@ func (UsersObjMapper) GetAuthUniqueRecord(scheme, unique string) (types.Uid, aut
 
 // AddAuthRecord creates a new authentication record for the given user.
 func (UsersObjMapper) AddAuthRecord(uid types.Uid, authLvl auth.Level, scheme, unique string, secret []byte,
-	expires time.Time) (bool, error) {
+	expires time.Time) error {
 
 	return adp.AuthAddRecord(uid, scheme, scheme+":"+unique, authLvl, secret, expires)
 }
 
 // UpdateAuthRecord updates authentication record with a new secret and expiration time.
 func (UsersObjMapper) UpdateAuthRecord(uid types.Uid, authLvl auth.Level, scheme, unique string,
-	secret []byte, expires time.Time) (bool, error) {
+	secret []byte, expires time.Time) error {
 
 	return adp.AuthUpdRecord(uid, scheme, scheme+":"+unique, authLvl, secret, expires)
 }
