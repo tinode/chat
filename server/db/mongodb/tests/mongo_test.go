@@ -8,6 +8,7 @@
 package tests
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"flag"
@@ -112,10 +113,20 @@ func TestCredUpsert(t *testing.T) {
 	}
 }
 
-//func TestAuthAddRecord(t *testing.T) {
-//	// TODO
-//}
-//
+func TestAuthAddRecord(t *testing.T) {
+	_, err := adp.AuthAddRecord(types.ParseUserId("usr"+users[0].Id), recs[0].Scheme, recs[0].Id,
+		recs[0].AuthLvl, recs[0].Secret, recs[0].Expires)
+	if err != nil {
+		t.Fatal(err)
+	}
+	//Test duplicate
+	_, err = adp.AuthAddRecord(types.ParseUserId("usr"+users[0].Id), recs[0].Scheme, recs[0].Id,
+		recs[0].AuthLvl, recs[0].Secret, recs[0].Expires)
+	if err != types.ErrDuplicate {
+		t.Fatal("Should be duplicate error but got", err)
+	}
+}
+
 //func TestTopicCreate(t *testing.T) {
 //	// TODO
 //}
@@ -253,17 +264,51 @@ func TestCredGetAll(t *testing.T) {
 //func TestUserUnreadCount(t *testing.T) {
 //	// TODO
 //}
-//
-//
-//
-//func TestAuthGetUniqueRecord(t *testing.T) {
-//	// TODO
-//}
-//
-//func TestAuthGetRecord(t *testing.T) {
-//	// TODO
-//}
-//
+
+func TestAuthGetUniqueRecord(t *testing.T) {
+	uid, authLvl, secret, expires, err := adp.AuthGetUniqueRecord("basic:alice")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if uid != types.ParseUserId("usr"+recs[0].UserId) ||
+		authLvl != recs[0].AuthLvl ||
+		bytes.Compare(secret, recs[0].Secret) != 0 ||
+		expires != recs[0].Expires {
+
+		got := fmt.Sprintf("%v %v %v %v", uid, authLvl, secret, expires)
+		want := fmt.Sprintf("%v %v %v %v", recs[0].UserId, recs[0].AuthLvl, recs[0].Secret, recs[0].Expires)
+		t.Errorf(mismatchErrorString("Auth record", got, want))
+	}
+
+	// Test not found
+	uid, _, _, _, err = adp.AuthGetUniqueRecord("qwert:asdfg")
+	if err == nil && !uid.IsZero() {
+		t.Error("Auth record found but shouldn't. Uid:", uid.String())
+	}
+}
+
+func TestAuthGetRecord(t *testing.T) {
+	recId, authLvl, secret, expires, err := adp.AuthGetRecord(types.ParseUserId("usr"+recs[0].UserId), "basic")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if recId != recs[0].Id ||
+		authLvl != recs[0].AuthLvl ||
+		bytes.Compare(secret, recs[0].Secret) != 0 ||
+		expires != recs[0].Expires {
+
+		got := fmt.Sprintf("%v %v %v %v", recId, authLvl, secret, expires)
+		want := fmt.Sprintf("%v %v %v %v", recs[0].Id, recs[0].AuthLvl, recs[0].Secret, recs[0].Expires)
+		t.Errorf(mismatchErrorString("Auth record", got, want))
+	}
+
+	// Test not found
+	recId, _, _, _, err = adp.AuthGetRecord(types.ParseUserId("dummyuserid"), "scheme")
+	if err != types.ErrNotFound {
+		t.Error("Auth record found but shouldn't. recId:", recId)
+	}
+}
+
 //func TestTopicGet(t *testing.T) {
 //	// TODO
 //}

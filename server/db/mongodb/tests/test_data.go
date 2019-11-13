@@ -3,11 +3,22 @@ package tests
 import (
 	"time"
 
+	"github.com/tinode/chat/server/auth"
 	"github.com/tinode/chat/server/store/types"
 )
 
+type AuthRecord struct {
+	Id      string
+	UserId  string
+	Scheme  string
+	AuthLvl auth.Level
+	Secret  []byte
+	Expires time.Time
+}
+
 var users []*types.User
 var creds []*types.Credential
+var recs []AuthRecord
 var now time.Time
 
 func initUsers() {
@@ -80,8 +91,20 @@ func initCreds() {
 	creds[3].UpdatedAt = now.Add(-10 * time.Minute)
 }
 
+func initAuthRecords() {
+	recs = append(recs, AuthRecord{
+		Id:      "basic:alice",
+		UserId:  users[0].Id,
+		Scheme:  "basic",
+		AuthLvl: auth.LevelAuth,
+		Secret:  []byte{'a', 'l', 'i', 'c', 'e'},
+		Expires: now.Add(24 * time.Hour),
+	})
+}
+
 func initData() {
 	now = types.TimeNow()
 	initUsers()
 	initCreds()
+	initAuthRecords()
 }

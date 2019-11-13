@@ -821,13 +821,16 @@ func (a *adapter) AuthGetUniqueRecord(unique string) (t.Uid, auth.Level, []byte,
 		Secret  []byte
 		Expires time.Time
 	}
+
 	filter := b.M{"_id": unique}
-	findOpts := mdbopts.FindOneOptions{Projection: b.M{
+	findOpts := mdbopts.FindOne().SetProjection(b.M{
 		"userid":  1,
-		"authLvl": 1,
+		"authlvl": 1,
 		"secret":  1,
-		"expires": 1}}
-	if err := a.db.Collection("auth").FindOne(a.ctx, filter, &findOpts).Decode(&record); err != nil {
+		"expires": 1,
+	})
+	err := a.db.Collection("auth").FindOne(a.ctx, filter, findOpts).Decode(&record)
+	if err != nil {
 		if err == mdb.ErrNoDocuments {
 			return t.ZeroUid, 0, nil, time.Time{}, nil
 		}
@@ -845,15 +848,17 @@ func (a *adapter) AuthGetRecord(uid t.Uid, scheme string) (string, auth.Level, [
 		Secret  []byte
 		Expires time.Time
 	}
+
 	filter := b.M{
 		"userid": uid.String(),
 		"scheme": scheme}
-	findOpts := &mdbopts.FindOneOptions{Projection: b.M{
-		"authLvl": 1,
+	findOpts := mdbopts.FindOne().SetProjection(b.M{
+		"authlvl": 1,
 		"secret":  1,
 		"expires": 1,
-	}}
-	if err := a.db.Collection("auth").FindOne(a.ctx, filter, findOpts).Decode(&record); err != nil {
+	})
+	err := a.db.Collection("auth").FindOne(a.ctx, filter, findOpts).Decode(&record)
+	if err != nil {
 		if err == mdb.ErrNoDocuments {
 			return "", 0, nil, time.Time{}, t.ErrNotFound
 		}
