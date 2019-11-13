@@ -427,7 +427,7 @@ func (a *adapter) UserCreate(user *t.User) error {
 
 // Add user's authentication record
 func (a *adapter) AuthAddRecord(uid t.Uid, scheme, unique string, authLvl auth.Level,
-	secret []byte, expires time.Time) (bool, error) {
+	secret []byte, expires time.Time) error {
 
 	_, err := rdb.DB(a.dbName).Table("auth").Insert(
 		map[string]interface{}{
@@ -439,11 +439,11 @@ func (a *adapter) AuthAddRecord(uid t.Uid, scheme, unique string, authLvl auth.L
 			"expires": expires}).RunWrite(a.conn)
 	if err != nil {
 		if rdb.IsConflictErr(err) {
-			return true, t.ErrDuplicate
+			return t.ErrDuplicate
 		}
-		return false, err
+		return err
 	}
-	return false, nil
+	return nil
 }
 
 // AuthDelScheme deletes an existing authentication scheme for the user.
@@ -463,31 +463,31 @@ func (a *adapter) AuthDelAllRecords(uid t.Uid) (int, error) {
 
 // Update user's authentication secret.
 func (a *adapter) AuthUpdRecord(uid t.Uid, scheme, unique string, authLvl auth.Level,
-	secret []byte, expires time.Time) (bool, error) {
+	secret []byte, expires time.Time) error {
 	// The 'unique' is used as a primary key (no other way to ensure uniqueness in RethinkDB).
 	// The primary key is immutable. If 'unique' has changed, we have to replace the old record with a new one:
 	// 1. Check if 'unique' has changed.
 	// 2. If not, execute update by 'unique'
 	// 3. If yes, first insert the new record (it may fail due to dublicate 'unique') then delete the old one.
-	var dupe bool
+
 	// Get the old 'unique'
 	cursor, err := rdb.DB(a.dbName).Table("auth").GetAllByIndex("userid", uid.String()).
 		Filter(map[string]interface{}{"scheme": scheme}).
 		Pluck("unique").Default(nil).Run(a.conn)
 	if err != nil {
-		return dupe, err
+		return err
 	}
 	defer cursor.Close()
 
 	if cursor.IsNil() {
 		// If the record is not found, don't update it
-		return dupe, t.ErrNotFound
+		return t.ErrNotFound
 	}
 	var record struct {
 		Unique string `json:"unique"`
 	}
 	if err = cursor.One(&record); err != nil {
-		return dupe, err
+		return err
 	}
 	if record.Unique == unique {
 		// Unique has not changed
@@ -498,13 +498,13 @@ func (a *adapter) AuthUpdRecord(uid t.Uid, scheme, unique string, authLvl auth.L
 				"expires": expires}).RunWrite(a.conn)
 	} else {
 		// Unique has changed. Insert-Delete.
-		dupe, err = a.AuthAddRecord(uid, scheme, unique, authLvl, secret, expires)
+		err = a.AuthAddRecord(uid, scheme, unique, authLvl, secret, expires)
 		if err == nil {
 			// We can't do much with the error here. No support for transactions :(
 			a.AuthDelScheme(uid, unique)
 		}
 	}
-	return dupe, err
+	return err
 }
 
 // Retrieve user's authentication record
