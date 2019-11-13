@@ -13,21 +13,21 @@ var now time.Time
 func initUsers() {
 	users = append(users, &types.User{
 		ObjHeader: types.ObjHeader{
-			Id:        "02TvNSWWktw",
+			Id: "02TvNSWWktw",
 		},
 		UserAgent: "SomeAgent v1.2.3",
 		Tags:      []string{"alice"},
 	})
 	users = append(users, &types.User{
 		ObjHeader: types.ObjHeader{
-			Id:        "4Og8ARhtBWA",
+			Id: "4Og8ARhtBWA",
 		},
 		UserAgent: "Tinode Web v111.222.333",
 		Tags:      []string{"bob"},
 	})
 	users = append(users, &types.User{
 		ObjHeader: types.ObjHeader{
-			Id:        "07ZtlTZfaXo",
+			Id: "07ZtlTZfaXo",
 		},
 		UserAgent: "Tindroid v1.2.3",
 		Tags:      []string{"carol"},
@@ -62,9 +62,22 @@ func initCreds() {
 		Method: "tel",
 		Value:  "+998991112233",
 	})
+	creds = append(creds, &types.Credential{ // 4
+		User:   users[2].Id,
+		Method: "tel",
+		Value:  "+998993332211",
+		Done:   true,
+	})
+	creds = append(creds, &types.Credential{ // 5
+		User:   users[2].Id,
+		Method: "email",
+		Value:  "asdf@example.com",
+	})
 	for _, cred := range creds {
 		cred.InitTimes()
 	}
+	deletedAt := now.Add(10 * time.Minute)
+	creds[5].DeletedAt = &deletedAt
 }
 
 func initData() {

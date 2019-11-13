@@ -722,7 +722,7 @@ func (a *adapter) CredGetActive(uid t.Uid, method string) (*t.Credential, error)
 
 // CredGetAll returns credential records for the given user and method, validated only or all.
 func (a *adapter) CredGetAll(uid t.Uid, method string, validatedOnly bool) ([]t.Credential, error) {
-	filter := b.M{}
+	filter := b.M{"user": uid.String()}
 	if method != "" {
 		filter["method"] = method
 	}
@@ -732,15 +732,17 @@ func (a *adapter) CredGetAll(uid t.Uid, method string, validatedOnly bool) ([]t.
 		filter["deletedat"] = b.M{"$exists": false}
 	}
 
-	if cur, err := a.db.Collection("credentials").Find(a.ctx, filter); err == nil {
-		var credentials []t.Credential
-		if err := cur.All(a.ctx, &credentials); err != nil {
-			return nil, err
-		}
-		return credentials, nil
-	} else {
+	cur, err := a.db.Collection("credentials").Find(a.ctx, filter)
+	if err != nil {
 		return nil, err
 	}
+	defer cur.Close(a.ctx)
+
+	var credentials []t.Credential
+	if err := cur.All(a.ctx, &credentials); err != nil {
+		return nil, err
+	}
+	return credentials, nil
 }
 
 // CredDel deletes credentials for the given method/value. If method is empty, deletes all

@@ -65,7 +65,6 @@ func TestUserCreate(t *testing.T) {
 	}
 }
 
-// TODO (incomplete test)
 func TestCredUpsert(t *testing.T) {
 	// Test just inserts:
 	for i := 0; i < 2; i++ {
@@ -90,6 +89,9 @@ func TestCredUpsert(t *testing.T) {
 
 	// Test add new unvalidated credentials
 	inserted, err := adp.CredUpsert(creds[3])
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !inserted {
 		t.Error("Should be inserted, but updated")
 	}
@@ -99,6 +101,14 @@ func TestCredUpsert(t *testing.T) {
 	}
 	if inserted {
 		t.Error("Should be updated, but inserted")
+	}
+
+	// Just insert other creds (used in other tests)
+	for _, cred := range creds[4:] {
+		_, err = adp.CredUpsert(cred)
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 
@@ -215,14 +225,36 @@ func TestCredGetActive(t *testing.T) {
 	}
 }
 
+func TestCredGetAll(t *testing.T) {
+	got, err := adp.CredGetAll(types.ParseUserId("usr"+users[2].Id), "", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 {
+		t.Errorf(mismatchErrorString("Credentials length", len(got), 2))
+	}
+
+	got, err = adp.CredGetAll(types.ParseUserId("usr"+users[2].Id), "tel", false)
+	if len(got) != 2 {
+		t.Errorf(mismatchErrorString("Credentials length", len(got), 2))
+	}
+
+	got, err = adp.CredGetAll(types.ParseUserId("usr"+users[2].Id), "", true)
+	if len(got) != 1 {
+		t.Errorf(mismatchErrorString("Credentials length", len(got), 1))
+	}
+
+	got, err = adp.CredGetAll(types.ParseUserId("usr"+users[2].Id), "tel", true)
+	if len(got) != 1 {
+		t.Errorf(mismatchErrorString("Credentials length", len(got), 1))
+	}
+}
+
 //func TestUserUnreadCount(t *testing.T) {
 //	// TODO
 //}
 //
 //
-//func TestCredGetAll(t *testing.T) {
-//	// TODO
-//}
 //
 //func TestAuthGetUniqueRecord(t *testing.T) {
 //	// TODO
