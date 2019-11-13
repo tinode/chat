@@ -7,7 +7,7 @@ import (
 )
 
 var users []types.User
-var creds []types.Credential
+var creds []*types.Credential
 var now time.Time
 
 func initUsers() {
@@ -52,22 +52,35 @@ func initUsers() {
 }
 
 func initCreds() {
-	creds = append(creds, types.Credential{
-		ObjHeader: types.ObjHeader{
-			CreatedAt: now.Add(-140 * time.Minute),
-			UpdatedAt: now.Add(-140 * time.Minute),
-		},
-		User:    users[0].Id,
-		Method:  "email",
-		Value:   "alice@test.example.com",
-		Resp:    "",
-		Done:    true,
-		Retries: 0,
+	creds = append(creds, &types.Credential{ // 0
+		User:   users[0].Id,
+		Method: "email",
+		Value:  "alice@test.example.com",
+		Done:   true,
 	})
+	creds = append(creds, &types.Credential{ // 1
+		User:   users[1].Id,
+		Method: "email",
+		Value:  "bob@test.example.com",
+		Done:   true,
+	})
+	creds = append(creds, &types.Credential{ // 2
+		User:   users[1].Id,
+		Method: "email",
+		Value:  "bob@test.example.com",
+	})
+	creds = append(creds, &types.Credential{ // 3
+		User:   users[2].Id,
+		Method: "tel",
+		Value:  "+998991112233",
+	})
+	for _, cred := range creds {
+		cred.InitTimes()
+	}
 }
 
 func initData() {
-	now = time.Now().Round(time.Millisecond).UTC()
+	now = types.TimeNow()
 	initUsers()
 	initCreds()
 }

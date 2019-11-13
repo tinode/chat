@@ -67,12 +67,38 @@ func TestUserCreate(t *testing.T) {
 
 // TODO (incomplete test)
 func TestCredUpsert(t *testing.T) {
-	inserted, err := adp.CredUpsert(&creds[0])
+	// Test just inserts:
+	for i := 0; i < 2; i++ {
+		inserted, err := adp.CredUpsert(creds[i])
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !inserted {
+			t.Error("Should be inserted, but updated")
+		}
+	}
+
+	// Test duplicate:
+	_, err := adp.CredUpsert(creds[1])
+	if err != types.ErrDuplicate {
+		t.Error("Should return duplicate error but got", err)
+	}
+	_, err = adp.CredUpsert(creds[2])
+	if err != types.ErrDuplicate {
+		t.Error("Should return duplicate error but got", err)
+	}
+
+	// Test add new unvalidated credentials
+	inserted, err := adp.CredUpsert(creds[3])
+	if !inserted {
+		t.Error("Should be inserted, but updated")
+	}
+	inserted, err = adp.CredUpsert(creds[3])
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !inserted {
-		t.Error("Should be inserted, but updated")
+	if inserted {
+		t.Error("Should be updated, but inserted")
 	}
 }
 
@@ -173,13 +199,26 @@ func TestUserGetByCred(t *testing.T) {
 	}
 }
 
+func TestCredGetActive(t *testing.T) {
+	got, err := adp.CredGetActive(types.ParseUserId("usr"+users[2].Id), "tel")
+	if err != nil {
+		t.Error(err)
+	}
+	if !reflect.DeepEqual(got, creds[3]) {
+		t.Errorf(mismatchErrorString("Credential", got, creds[3]))
+	}
+
+	// Test not found
+	_, err = adp.CredGetActive(types.ParseUserId("dummyusrid"), "")
+	if err != types.ErrNotFound {
+		t.Error("Err should be types.ErrNotFound, but got", err)
+	}
+}
+
 //func TestUserUnreadCount(t *testing.T) {
 //	// TODO
 //}
 //
-//func TestCredGetActive(t *testing.T) {
-//	// TODO
-//}
 //
 //func TestCredGetAll(t *testing.T) {
 //	// TODO
@@ -244,7 +283,6 @@ func TestUserGetByCred(t *testing.T) {
 //func TestFileGet(t *testing.T) {
 //	// TODO
 //}
-
 
 // ================== Update tests ================================
 //func TestUserUpdate(t *testing.T) {
