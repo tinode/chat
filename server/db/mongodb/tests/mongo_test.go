@@ -52,7 +52,7 @@ func TestCreateDb(t *testing.T) {
 // ================== Create tests ================================
 func TestUserCreate(t *testing.T) {
 	for _, user := range users {
-		if err := adp.UserCreate(&user); err != nil {
+		if err := adp.UserCreate(user); err != nil {
 			t.Error(err)
 		}
 	}
@@ -134,8 +134,8 @@ func TestUserGet(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(*got, users[0]) {
-		t.Errorf(mismatchErrorString("User", *got, users[0]))
+	if !reflect.DeepEqual(got, users[0]) {
+		t.Errorf(mismatchErrorString("User", got, users[0]))
 	}
 }
 
@@ -154,8 +154,8 @@ func TestUserGetAll(t *testing.T) {
 		t.Fatal(mismatchErrorString("resultUsers length", len(got), 2))
 	}
 	for i, usr := range got {
-		if !reflect.DeepEqual(usr, users[i]) {
-			t.Error(mismatchErrorString("User", usr, users[i]))
+		if !reflect.DeepEqual(&usr, users[i]) {
+			t.Error(mismatchErrorString("User", &usr, users[i]))
 		}
 	}
 }
