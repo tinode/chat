@@ -317,14 +317,68 @@ func TestCredGetAll(t *testing.T) {
 //}
 
 // ================== Update tests ================================
-//func TestUserUpdate(t *testing.T) {
-//	// TODO
-//}
-//
-//func TestUserUpdateTags(t *testing.T) {
-//	// TODO
-//}
-//
+func TestUserUpdate(t *testing.T) {
+	update := map[string]interface{}{
+		"UserAgent": "Test Agent v0.11",
+		"UpdatedAt": now.Add(30 * time.Minute),
+	}
+	err := adp.UserUpdate(types.ParseUserId("usr"+users[0].Id), update)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var got types.User
+	err = db.Collection("users").FindOne(ctx, b.M{"_id": users[0].Id}).Decode(&got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.UserAgent != "Test Agent v0.11" {
+		t.Errorf(mismatchErrorString("UserAgent", got.UserAgent, "Test Agent v0.11"))
+	}
+	if got.UpdatedAt == got.CreatedAt {
+		t.Error("UpdatedAt field not updated")
+	}
+}
+
+func TestUserUpdateTags(t *testing.T) {
+	addTags := []string{"tag1", "Alice"}
+	removeTags := []string{"alice", "tag1", "tag2"}
+	resetTags := []string{"Alice", "tag111", "tag333"}
+	got, err := adp.UserUpdateTags(types.ParseUserId("usr"+users[0].Id), addTags, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"alice", "tag1", "Alice"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf(mismatchErrorString("Tags", got, want))
+
+	}
+	got, err = adp.UserUpdateTags(types.ParseUserId("usr"+users[0].Id), nil, removeTags, nil)
+	want = []string{"Alice"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf(mismatchErrorString("Tags", got, want))
+
+	}
+	got, err = adp.UserUpdateTags(types.ParseUserId("usr"+users[0].Id), nil, nil, resetTags)
+	want = []string{"Alice", "tag111", "tag333"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf(mismatchErrorString("Tags", got, want))
+
+	}
+	got, err = adp.UserUpdateTags(types.ParseUserId("usr"+users[0].Id), addTags, removeTags, nil)
+	want = []string{"Alice", "tag111", "tag333"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf(mismatchErrorString("Tags", got, want))
+
+	}
+	got, err = adp.UserUpdateTags(types.ParseUserId("usr"+users[0].Id), addTags, removeTags, nil)
+	want = []string{"Alice", "tag111", "tag333"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf(mismatchErrorString("Tags", got, want))
+
+	}
+}
+
 func TestCredFail(t *testing.T) {
 	err := adp.CredFail(types.ParseUserId("usr"+creds[3].User), "tel")
 	if err != nil {
@@ -334,9 +388,9 @@ func TestCredFail(t *testing.T) {
 	// Check if fields updated
 	var got types.Credential
 	err = db.Collection("credentials").FindOne(ctx, b.M{
-		"user": creds[3].User,
+		"user":   creds[3].User,
 		"method": "tel",
-		"value": creds[3].Value}).Decode(&got)
+		"value":  creds[3].Value}).Decode(&got)
 	if got.Retries != 1 {
 		t.Errorf(mismatchErrorString("Retries count", got.Retries, 1))
 	}
@@ -354,9 +408,9 @@ func TestCredConfirm(t *testing.T) {
 	// Test fields are updated
 	var got types.Credential
 	err = db.Collection("credentials").FindOne(ctx, b.M{
-		"user": creds[3].User,
+		"user":   creds[3].User,
 		"method": "tel",
-		"value": creds[3].Value}).Decode(&got)
+		"value":  creds[3].Value}).Decode(&got)
 	if err != nil {
 		t.Fatal(err)
 	}

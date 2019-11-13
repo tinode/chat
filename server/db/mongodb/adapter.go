@@ -536,7 +536,8 @@ func (a *adapter) UserUpdateTags(uid t.Uid, add, remove, reset []string) ([]stri
 	}
 
 	var user t.User
-	if err := a.db.Collection("users").FindOne(a.ctx, b.M{"_id": uid.String()}).Decode(&user); err != nil {
+	err := a.db.Collection("users").FindOne(a.ctx, b.M{"_id": uid.String()}).Decode(&user)
+	if err != nil {
 		return nil, err
 	}
 
@@ -556,12 +557,13 @@ func (a *adapter) UserUpdateTags(uid t.Uid, add, remove, reset []string) ([]stri
 
 	// Get the new tags
 	var tags map[string][]string
-	findOpts := mdbopts.FindOneOptions{Projection: b.M{"tags": 1, "_id": 0}}
-	if err := a.db.Collection("users").FindOne(a.ctx, b.M{"_id": uid.String()}, &findOpts).Decode(&tags); err == nil {
-		return tags["tags"], nil
-	} else {
+	findOpts := mdbopts.FindOne().SetProjection(b.M{"tags": 1, "_id": 0})
+	err = a.db.Collection("users").FindOne(a.ctx, b.M{"_id": uid.String()}, findOpts).Decode(&tags)
+	if err != nil {
 		return nil, err
 	}
+
+	return tags["tags"], nil
 }
 
 // UserGetByCred returns user ID for the given validated credential.
