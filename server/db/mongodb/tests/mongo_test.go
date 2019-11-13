@@ -230,8 +230,8 @@ func TestCredGetAll(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got) != 2 {
-		t.Errorf(mismatchErrorString("Credentials length", len(got), 2))
+	if len(got) != 3 {
+		t.Errorf(mismatchErrorString("Credentials length", len(got), 3))
 	}
 
 	got, err = adp.CredGetAll(types.ParseUserId("usr"+users[2].Id), "tel", false)
@@ -325,10 +325,51 @@ func TestCredGetAll(t *testing.T) {
 //	// TODO
 //}
 //
-//func TestCredFail(t *testing.T) {
-//	// TODO
-//}
-//
+func TestCredFail(t *testing.T) {
+	err := adp.CredFail(types.ParseUserId("usr"+creds[3].User), "tel")
+	if err != nil {
+		t.Error(err)
+	}
+
+	// Check if fields updated
+	var got types.Credential
+	err = db.Collection("credentials").FindOne(ctx, b.M{
+		"user": creds[3].User,
+		"method": "tel",
+		"value": creds[3].Value}).Decode(&got)
+	if got.Retries != 1 {
+		t.Errorf(mismatchErrorString("Retries count", got.Retries, 1))
+	}
+	if got.UpdatedAt == got.CreatedAt {
+		t.Error("UpdatedAt field not updated")
+	}
+}
+
+func TestCredConfirm(t *testing.T) {
+	err := adp.CredConfirm(types.ParseUserId("usr"+creds[3].User), "tel")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Test fields are updated
+	var got types.Credential
+	err = db.Collection("credentials").FindOne(ctx, b.M{
+		"user": creds[3].User,
+		"method": "tel",
+		"value": creds[3].Value}).Decode(&got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.UpdatedAt == got.CreatedAt {
+		t.Error("Credential not updated correctly")
+	}
+	// and uncomfirmed credential deleted
+	err = db.Collection("credentials").FindOne(ctx, b.M{"_id": creds[3].User + ":" + got.Method + ":" + got.Value}).Decode(&got)
+	if err != mdb.ErrNoDocuments {
+		t.Error("Uncomfirmed credential not deleted")
+	}
+}
+
 //func TestAuthUpdRecord(t *testing.T) {
 //	// TODO
 //}
@@ -389,12 +430,8 @@ func TestCredGetAll(t *testing.T) {
 //func TestFileDeleteUnused(t *testing.T) {
 //	// TODO
 //}
-//
-//// ================== Mixed tests =================================
-//func TestCredConfirm(t *testing.T) {
-//	// TODO
-//}
-//
+
+// ================== Mixed tests =================================
 //func TestTopicCreateP2P(t *testing.T) {
 //	// TODO
 //}

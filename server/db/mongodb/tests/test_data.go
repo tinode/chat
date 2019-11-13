@@ -76,8 +76,8 @@ func initCreds() {
 	for _, cred := range creds {
 		cred.InitTimes()
 	}
-	deletedAt := now.Add(10 * time.Minute)
-	creds[5].DeletedAt = &deletedAt
+	creds[3].CreatedAt = now.Add(-10 * time.Minute)
+	creds[3].UpdatedAt = now.Add(-10 * time.Minute)
 }
 
 func initData() {
