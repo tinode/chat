@@ -1878,7 +1878,7 @@ func (a *adapter) MessageSave(msg *t.Message) error {
 func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.QueryOpt) ([]t.Message, error) {
 	var limit = a.maxResults
 	var lower = 0
-	var upper = 1 << 31
+	var upper = 1<<31 - 1
 
 	if opts != nil {
 		if opts.Since > 0 {
@@ -1933,7 +1933,7 @@ var dellog struct {
 func (a *adapter) MessageGetDeleted(topic string, forUser t.Uid, opts *t.QueryOpt) ([]t.DelMessage, error) {
 	var limit = a.maxResults
 	var lower = 0
-	var upper = 1 << 31
+	var upper = 1<<31 - 1
 
 	if opts != nil {
 		if opts.Since > 0 {
