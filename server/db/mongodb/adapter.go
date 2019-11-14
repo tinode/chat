@@ -961,9 +961,8 @@ func (a *adapter) TopicCreate(topic *t.Topic) error {
 func (a *adapter) TopicCreateP2P(initiator, invited *t.Subscription) error {
 	initiator.Id = initiator.Topic + ":" + initiator.User
 	// Don't care if the initiator changes own subscription
-	replOpts := mdbopts.ReplaceOptions{}
-	replOpts.SetUpsert(true)
-	_, err := a.db.Collection("subscriptions").ReplaceOne(a.ctx, b.M{"_id": initiator.Id}, initiator, &replOpts)
+	replOpts := mdbopts.Replace().SetUpsert(true)
+	_, err := a.db.Collection("subscriptions").ReplaceOne(a.ctx, b.M{"_id": initiator.Id}, initiator, replOpts)
 	if err != nil {
 		return err
 	}

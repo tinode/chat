@@ -129,10 +129,35 @@ func TestAuthAddRecord(t *testing.T) {
 	}
 }
 
-//func TestTopicCreate(t *testing.T) {
-//	// TODO
-//}
-//
+func TestTopicCreate(t *testing.T) {
+	err := adp.TopicCreate(topics[0])
+	if err != nil {
+		t.Error(err)
+	}
+}
+
+func TestTopicCreateP2P(t *testing.T) {
+	err := adp.TopicCreateP2P(subs[2], subs[3])
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	oldModeGiven := subs[2].ModeGiven
+	subs[2].ModeGiven = 255
+	err = adp.TopicCreateP2P(subs[4], subs[2])
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got types.Subscription
+	err = db.Collection("subscriptions").FindOne(ctx, b.M{"_id": subs[2].Id}).Decode(&got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ModeGiven == oldModeGiven {
+		t.Error("ModeGiven update failed")
+	}
+}
+
 //func TestMessageSave(t *testing.T) {
 //	// TODO
 //}
@@ -550,7 +575,7 @@ func TestAuthDelScheme(t *testing.T) {
 }
 
 func TestAuthDelAllRecords(t *testing.T) {
-	delCount, err := adp.AuthDelAllRecords(types.ParseUserId("usr"+recs[0].UserId))
+	delCount, err := adp.AuthDelAllRecords(types.ParseUserId("usr" + recs[0].UserId))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -578,10 +603,6 @@ func TestAuthDelAllRecords(t *testing.T) {
 //}
 
 // ================== Mixed tests =================================
-//func TestTopicCreateP2P(t *testing.T) {
-//	// TODO
-//}
-//
 //func TestTopicShare(t *testing.T) {
 //	// TODO
 //}

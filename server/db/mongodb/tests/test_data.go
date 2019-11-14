@@ -19,26 +19,28 @@ type AuthRecord struct {
 var users []*types.User
 var creds []*types.Credential
 var recs []AuthRecord
+var topics []*types.Topic
+var subs []*types.Subscription
 var now time.Time
 
 func initUsers() {
 	users = append(users, &types.User{
 		ObjHeader: types.ObjHeader{
-			Id: "02TvNSWWktw",
+			Id: "3ysxkod5hNM",
 		},
 		UserAgent: "SomeAgent v1.2.3",
 		Tags:      []string{"alice"},
 	})
 	users = append(users, &types.User{
 		ObjHeader: types.ObjHeader{
-			Id: "4Og8ARhtBWA",
+			Id: "9AVDamaNCRY",
 		},
 		UserAgent: "Tinode Web v111.222.333",
 		Tags:      []string{"bob"},
 	})
 	users = append(users, &types.User{
 		ObjHeader: types.ObjHeader{
-			Id: "07ZtlTZfaXo",
+			Id: "xQLrX3WPS2o",
 		},
 		UserAgent: "Tindroid v1.2.3",
 		Tags:      []string{"carol"},
@@ -110,9 +112,109 @@ func initAuthRecords() {
 	})
 }
 
+func initTopics() {
+	topics = append(topics, &types.Topic{
+		ObjHeader: types.ObjHeader{
+			Id:        "grpgRXf0rU4uR4",
+			CreatedAt: now,
+			UpdatedAt: now,
+		},
+		TouchedAt: now,
+		Owner:     users[0].Id,
+		SeqId:     111,
+		Tags:      []string{"travel"},
+	})
+	topics = append(topics, &types.Topic{
+		ObjHeader: types.ObjHeader{
+			Id:        "p2p9AVDamaNCRbfKzGSh3mE0w",
+			CreatedAt: now,
+			UpdatedAt: now,
+		},
+		TouchedAt: now,
+		SeqId:     12,
+	})
+	topics = append(topics, &types.Topic{
+		ObjHeader: types.ObjHeader{
+			Id:        "p2pxQLrX3WPS2rfKzGSh3mE0w",
+			CreatedAt: now,
+			UpdatedAt: now,
+		},
+		TouchedAt: now,
+		SeqId:     12,
+	})
+}
+
+func initSubs() {
+	subs = append(subs, &types.Subscription{
+		ObjHeader: types.ObjHeader{
+			CreatedAt: now,
+			UpdatedAt: now,
+		},
+		User:      users[0].Id,
+		Topic:     topics[0].Id,
+		RecvSeqId: 5,
+		ReadSeqId: 1,
+		ModeWant:  255,
+		ModeGiven: 255,
+	})
+	subs = append(subs, &types.Subscription{
+		ObjHeader: types.ObjHeader{
+			CreatedAt: now,
+			UpdatedAt: now,
+		},
+		User:      users[1].Id,
+		Topic:     topics[0].Id,
+		RecvSeqId: 6,
+		ReadSeqId: 3,
+		ModeWant:  47,
+		ModeGiven: 47,
+	})
+	subs = append(subs, &types.Subscription{
+		ObjHeader: types.ObjHeader{
+			CreatedAt: now.Add(-10 * time.Hour),
+			UpdatedAt: now.Add(-10 * time.Hour),
+		},
+		User:      users[0].Id,
+		Topic:     topics[1].Id,
+		RecvSeqId: 9,
+		ReadSeqId: 5,
+		ModeWant:  47,
+		ModeGiven: 47,
+	})
+	subs = append(subs, &types.Subscription{
+		ObjHeader: types.ObjHeader{
+			CreatedAt: now,
+			UpdatedAt: now,
+		},
+		User:      users[1].Id,
+		Topic:     topics[1].Id,
+		RecvSeqId: 9,
+		ReadSeqId: 5,
+		ModeWant:  47,
+		ModeGiven: 47,
+	})
+	subs = append(subs, &types.Subscription{
+		ObjHeader: types.ObjHeader{
+			CreatedAt: now,
+			UpdatedAt: now,
+		},
+		User:      users[2].Id,
+		Topic:     topics[2].Id,
+		RecvSeqId: 9,
+		ReadSeqId: 5,
+		ModeWant:  47,
+		ModeGiven: 47,
+	})
+	for _, sub := range subs {
+		sub.SetTouchedAt(now)
+	}
+}
+
 func initData() {
 	now = types.TimeNow()
 	initUsers()
 	initCreds()
 	initAuthRecords()
+	initTopics()
+	initSubs()
 }
