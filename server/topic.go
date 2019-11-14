@@ -318,7 +318,7 @@ func (t *Topic) run(hub *Hub) {
 				pushRcpt = t.makePushReceipt(from, msg.Data)
 
 				// Message sent: notify offline 'R' subscrbers on 'me'
-				t.presSubsOffline("msg", &presParams{seqID: t.lastID},
+				t.presSubsOffline("msg", &presParams{seqID: t.lastID, actor: msg.Data.From},
 					&presFilters{filterIn: types.ModeRead}, "", true)
 
 				// Tell the plugins that a message was accepted for delivery
@@ -861,6 +861,12 @@ func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin) error {
 	if sreg.created && sreg.pkt.topic != toriginal {
 		params["tmpname"] = sreg.pkt.topic
 	}
+
+	if len(params) == 0 {
+		// Don't send empty params '{}'
+		params = nil
+	}
+
 	sreg.sess.queueOut(NoErrParams(sreg.pkt.id, toriginal, now, params))
 
 	return nil
@@ -1690,7 +1696,12 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 
 				if !deleted && !banned {
 					if isReader {
-						mts.TouchedAt = sub.GetTouchedAt()
+						if sub.GetTouchedAt().IsZero() {
+							mts.TouchedAt = nil
+						} else {
+							touchedAt := sub.GetTouchedAt()
+							mts.TouchedAt = &touchedAt
+						}
 						mts.SeqId = sub.GetSeqId()
 						mts.DelId = sub.DelId
 					} else {

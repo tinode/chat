@@ -571,17 +571,25 @@ func (s *Session) hello(msg *ClientComMessage) {
 			s.platf = platformFromUA(msg.Hi.UserAgent)
 		}
 	} else if msg.Hi.Version == "" || parseVersion(msg.Hi.Version) == s.ver {
-		deviceIDUpdate = true
-
-		// Save changed device ID or Lang. Platform cannot be changed.
+		// Save changed device ID+Lang or delete earlier specified device ID.
+		// Platform cannot be changed.
 		if !s.uid.IsZero() {
-			if err := store.Devices.Update(s.uid, s.deviceID, &types.DeviceDef{
-				DeviceId: msg.Hi.DeviceID,
-				Platform: s.platf,
-				LastSeen: msg.timestamp,
-				Lang:     msg.Hi.Lang,
-			}); err != nil {
-				log.Println("s.hello:", "database error", err, s.sid)
+			var err error
+			if msg.Hi.DeviceID == types.NullValue {
+				deviceIDUpdate = true
+				err = store.Devices.Delete(s.uid, s.deviceID)
+			} else if msg.Hi.DeviceID != "" {
+				deviceIDUpdate = true
+				err = store.Devices.Update(s.uid, s.deviceID, &types.DeviceDef{
+					DeviceId: msg.Hi.DeviceID,
+					Platform: s.platf,
+					LastSeen: msg.timestamp,
+					Lang:     msg.Hi.Lang,
+				})
+			}
+
+			if err != nil {
+				log.Println("s.hello:", "device ID", err, s.sid)
 				s.queueOut(ErrUnknown(msg.id, "", msg.timestamp))
 				return
 			}
@@ -593,6 +601,9 @@ func (s *Session) hello(msg *ClientComMessage) {
 		return
 	}
 
+	if msg.Hi.DeviceID == types.NullValue {
+		msg.Hi.DeviceID = ""
+	}
 	s.deviceID = msg.Hi.DeviceID
 	s.lang = msg.Hi.Lang
 
@@ -652,7 +663,11 @@ func (s *Session) login(msg *ClientComMessage) {
 	// msg.from is ignored here
 
 	if msg.Login.Scheme == "reset" {
-		s.queueOut(decodeStoreError(s.authSecretReset(msg.Login.Secret), msg.id, "", msg.timestamp, nil))
+		if err := s.authSecretReset(msg.Login.Secret); err != nil {
+			s.queueOut(decodeStoreError(err, msg.id, "", msg.timestamp, nil))
+		} else {
+			s.queueOut(InfoAuthReset(msg.id, msg.timestamp))
+		}
 		return
 	}
 
@@ -728,7 +743,7 @@ func (s *Session) authSecretReset(params []byte) error {
 
 	token, _, err := store.GetLogicalAuthHandler("token").GenSecret(&auth.Rec{
 		Uid:       uid,
-		AuthLevel: auth.LevelNone,
+		AuthLevel: auth.LevelAuth,
 		Lifetime:  time.Hour * 24,
 		Features:  auth.FeatureNoLogin})
 

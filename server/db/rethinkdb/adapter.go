@@ -427,7 +427,7 @@ func (a *adapter) UserCreate(user *t.User) error {
 
 // Add user's authentication record
 func (a *adapter) AuthAddRecord(uid t.Uid, scheme, unique string, authLvl auth.Level,
-	secret []byte, expires time.Time) (bool, error) {
+	secret []byte, expires time.Time) error {
 
 	_, err := rdb.DB(a.dbName).Table("auth").Insert(
 		map[string]interface{}{
@@ -439,11 +439,11 @@ func (a *adapter) AuthAddRecord(uid t.Uid, scheme, unique string, authLvl auth.L
 			"expires": expires}).RunWrite(a.conn)
 	if err != nil {
 		if rdb.IsConflictErr(err) {
-			return true, t.ErrDuplicate
+			return t.ErrDuplicate
 		}
-		return false, err
+		return err
 	}
-	return false, nil
+	return nil
 }
 
 // AuthDelScheme deletes an existing authentication scheme for the user.
@@ -463,31 +463,31 @@ func (a *adapter) AuthDelAllRecords(uid t.Uid) (int, error) {
 
 // Update user's authentication secret.
 func (a *adapter) AuthUpdRecord(uid t.Uid, scheme, unique string, authLvl auth.Level,
-	secret []byte, expires time.Time) (bool, error) {
+	secret []byte, expires time.Time) error {
 	// The 'unique' is used as a primary key (no other way to ensure uniqueness in RethinkDB).
 	// The primary key is immutable. If 'unique' has changed, we have to replace the old record with a new one:
 	// 1. Check if 'unique' has changed.
 	// 2. If not, execute update by 'unique'
 	// 3. If yes, first insert the new record (it may fail due to dublicate 'unique') then delete the old one.
-	var dupe bool
+
 	// Get the old 'unique'
 	cursor, err := rdb.DB(a.dbName).Table("auth").GetAllByIndex("userid", uid.String()).
 		Filter(map[string]interface{}{"scheme": scheme}).
 		Pluck("unique").Default(nil).Run(a.conn)
 	if err != nil {
-		return dupe, err
+		return err
 	}
 	defer cursor.Close()
 
 	if cursor.IsNil() {
 		// If the record is not found, don't update it
-		return dupe, t.ErrNotFound
+		return t.ErrNotFound
 	}
 	var record struct {
 		Unique string `json:"unique"`
 	}
 	if err = cursor.One(&record); err != nil {
-		return dupe, err
+		return err
 	}
 	if record.Unique == unique {
 		// Unique has not changed
@@ -498,13 +498,13 @@ func (a *adapter) AuthUpdRecord(uid t.Uid, scheme, unique string, authLvl auth.L
 				"expires": expires}).RunWrite(a.conn)
 	} else {
 		// Unique has changed. Insert-Delete.
-		dupe, err = a.AuthAddRecord(uid, scheme, unique, authLvl, secret, expires)
+		err = a.AuthAddRecord(uid, scheme, unique, authLvl, secret, expires)
 		if err == nil {
 			// We can't do much with the error here. No support for transactions :(
 			a.AuthDelScheme(uid, unique)
 		}
 	}
-	return dupe, err
+	return err
 }
 
 // Retrieve user's authentication record
@@ -771,7 +771,7 @@ func (a *adapter) UserUpdateTags(uid t.Uid, add, remove, reset []string) ([]stri
 
 // UserGetByCred returns user ID for the given validated credential.
 func (a *adapter) UserGetByCred(method, value string) (t.Uid, error) {
-	cursor, err := rdb.DB(a.dbName).Table("credentials").Get(method + ":" + value).Field("User").Run(a.conn)
+	cursor, err := rdb.DB(a.dbName).Table("credentials").Get(method + ":" + value).Field("User").Default(nil).Run(a.conn)
 	if err != nil {
 		return t.ZeroUid, err
 	}
@@ -865,7 +865,7 @@ func (a *adapter) TopicCreateP2P(initiator, invited *t.Subscription) error {
 				Merge(map[string]interface{}{
 					"CreatedAt": invited.CreatedAt,
 					"UpdatedAt": invited.UpdatedAt,
-					"ModeGiven":  invited.ModeGiven})).
+					"ModeGiven": invited.ModeGiven})).
 			RunWrite(a.conn)
 		if err != nil {
 			return err
@@ -1143,7 +1143,7 @@ func (a *adapter) TopicShare(shares []*t.Subscription) error {
 			return oldsub.Without("DeletedAt").Merge(map[string]interface{}{
 				"CreatedAt": newsub.Field("CreatedAt"),
 				"UpdatedAt": newsub.Field("UpdatedAt"),
-				"ModeGiven":  newsub.Field("ModeGiven")})
+				"ModeGiven": newsub.Field("ModeGiven")})
 		}}).RunWrite(a.conn)
 
 	return err
@@ -1347,10 +1347,12 @@ func (a *adapter) SubsDelForTopic(topic string, hard bool) error {
 	return err
 }
 
-// SubsDelForUser marks all subscriptions of a given user as deleted
+// SubsDelForUser deletes or marks all subscriptions of a given user as deleted
 func (a *adapter) SubsDelForUser(user t.Uid, hard bool) error {
 	var err error
 	if hard {
+		_, err = rdb.DB(a.dbName).Table("subscriptions").GetAllByIndex("User", user.String()).
+			Delete().RunWrite(a.conn)
 	} else {
 		now := t.TimeNow()
 		update := map[string]interface{}{

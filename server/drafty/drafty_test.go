@@ -30,6 +30,10 @@ func TestToPlainText(t *testing.T) {
 			"txt":"This text is formatted and deleted too",
 			"fmt":[{"at":5,"len":4,"tp":"ST"},{"at":13,"len":9,"tp":"EM"},{"at":35,"len":3,"tp":"ST"},{"at":27,"len":11,"tp":"DL"}]
 		}`,
+		`{
+			"txt":"мультибайтовый юникод",
+			"fmt":[{"len":14,"tp":"ST"},{"at":15,"len":6,"tp":"EM"}]
+		}`,
 	}
 	expect := []string{
 		"[FILE 'hello.jpg']",
@@ -37,6 +41,7 @@ func TestToPlainText(t *testing.T) {
 		"https://api.tinode.co/",
 		"[IMAGE 'roses.jpg']",
 		"This *text* is _formatted_ and ~deleted *too*~",
+		"*мультибайтовый* _юникод_",
 	}
 
 	invalidInputs := []string{

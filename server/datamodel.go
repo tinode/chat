@@ -607,7 +607,16 @@ func InfoChallenge(id string, ts time.Time, challenge []byte) *ServerComMessage 
 		Timestamp: ts}}
 }
 
-// InfoAlreadySubscribed request to subscribe was ignored because user is already subscribed (304).
+// InfoAuthReset is sent in response to request to reset authentication when it was completed but login was not performed (301).
+func InfoAuthReset(id string, ts time.Time) *ServerComMessage {
+	return &ServerComMessage{Ctrl: &MsgServerCtrl{
+		Id:        id,
+		Code:      http.StatusMovedPermanently, // 301
+		Text:      "auth reset",
+		Timestamp: ts}}
+}
+
+// InfoAlreadySubscribed response means request to subscribe was ignored because user is already subscribed (304).
 func InfoAlreadySubscribed(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
@@ -617,7 +626,7 @@ func InfoAlreadySubscribed(id, topic string, ts time.Time) *ServerComMessage {
 		Timestamp: ts}}
 }
 
-// InfoNotJoined request to leave was ignored because user is not subscribed (304).
+// InfoNotJoined response means request to leave was ignored because user was not subscribed (304).
 func InfoNotJoined(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
@@ -627,7 +636,7 @@ func InfoNotJoined(id, topic string, ts time.Time) *ServerComMessage {
 		Timestamp: ts}}
 }
 
-// InfoNoAction request ignored bacause the object is already in the desired state (304).
+// InfoNoAction response means request was ignored because the object was already in the desired state (304).
 func InfoNoAction(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
@@ -637,7 +646,7 @@ func InfoNoAction(id, topic string, ts time.Time) *ServerComMessage {
 		Timestamp: ts}}
 }
 
-// InfoNotModified update request is a noop (304).
+// InfoNotModified response means update request was a noop (304).
 func InfoNotModified(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
