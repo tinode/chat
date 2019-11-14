@@ -536,8 +536,8 @@ func (c *Cluster) routeToTopic(msg *ClientComMessage, topic string, sess *Sessio
 		return errors.New("attempt to route to non-existent node")
 	}
 
-	if sess.getRemoteSub(topic) == nil && msg.sub == nil {
-		panic("ERROR: Remote subscription missing for topic '%s', sid '%s'", topic, sess.sid)
+	if sess.getRemoteSub(topic) == nil {
+		log.Println("No remote subscription (yet) for topic '%s', sid '%s'", topic, sess.sid)
 	}
 
 	req := &ClusterReq{
