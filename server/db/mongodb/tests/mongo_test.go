@@ -114,13 +114,15 @@ func TestCredUpsert(t *testing.T) {
 }
 
 func TestAuthAddRecord(t *testing.T) {
-	_, err := adp.AuthAddRecord(types.ParseUserId("usr"+users[0].Id), recs[0].Scheme, recs[0].Id,
-		recs[0].AuthLvl, recs[0].Secret, recs[0].Expires)
-	if err != nil {
-		t.Fatal(err)
+	for _, rec := range recs {
+		err := adp.AuthAddRecord(types.ParseUserId("usr"+rec.UserId), rec.Scheme, rec.Id,
+			rec.AuthLvl, rec.Secret, rec.Expires)
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
 	//Test duplicate
-	_, err = adp.AuthAddRecord(types.ParseUserId("usr"+users[0].Id), recs[0].Scheme, recs[0].Id,
+	err := adp.AuthAddRecord(types.ParseUserId("usr"+users[0].Id), recs[0].Scheme, recs[0].Id,
 		recs[0].AuthLvl, recs[0].Secret, recs[0].Expires)
 	if err != types.ErrDuplicate {
 		t.Fatal("Should be duplicate error but got", err)
@@ -469,10 +471,43 @@ func TestCredConfirm(t *testing.T) {
 	}
 }
 
-//func TestAuthUpdRecord(t *testing.T) {
-//	// TODO
-//}
-//
+func TestAuthUpdRecord(t *testing.T) {
+	rec := recs[1]
+	newSecret := []byte{'s', 'e', 'c', 'r', 'e', 't'}
+	err := adp.AuthUpdRecord(types.ParseUserId("usr"+rec.UserId), rec.Scheme, rec.Id,
+		rec.AuthLvl, newSecret, rec.Expires)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got AuthRecord
+	err = db.Collection("auth").FindOne(ctx, b.M{"_id": rec.Id}).Decode(&got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Equal(got.Secret, rec.Secret) {
+		t.Errorf(mismatchErrorString("Secret", got.Secret, rec.Secret))
+	}
+
+	// Test with auth ID (unique) change
+	newId := "basic:bob12345"
+	err = adp.AuthUpdRecord(types.ParseUserId("usr"+rec.UserId), rec.Scheme, newId,
+		rec.AuthLvl, newSecret, rec.Expires)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Test if old ID deleted
+	err = db.Collection("auth").FindOne(ctx, b.M{"_id": rec.Id}).Decode(&got)
+	if err == nil || err != mdb.ErrNoDocuments {
+		t.Errorf("Unique not changed. Got error: %v; ID: %v", err, got.Id)
+	}
+	if bytes.Equal(got.Secret, rec.Secret) {
+		t.Errorf(mismatchErrorString("Secret", got.Secret, rec.Secret))
+	}
+	if bytes.Equal(got.Secret, rec.Secret) {
+		t.Errorf(mismatchErrorString("Secret", got.Secret, rec.Secret))
+	}
+}
+
 //func TestTopicUpdateOnMessage(t *testing.T) {
 //	// TODO
 //}
@@ -510,14 +545,26 @@ func TestCredConfirm(t *testing.T) {
 //	// TODO
 //}
 //
-//func TestAuthDelScheme(t *testing.T) {
-//	// TODO
-//}
-//
-//func TestAuthDelAllRecords(t *testing.T) {
-//	// TODO
-//}
-//
+func TestAuthDelScheme(t *testing.T) {
+	// tested during TestAuthUpdRecord
+}
+
+func TestAuthDelAllRecords(t *testing.T) {
+	delCount, err := adp.AuthDelAllRecords(types.ParseUserId("usr"+recs[0].UserId))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if delCount != 1 {
+		t.Errorf(mismatchErrorString("delCount", delCount, 1))
+	}
+
+	// With dummy user
+	delCount, err = adp.AuthDelAllRecords(types.ParseUserId("dummyuserid"))
+	if delCount != 0 {
+		t.Errorf(mismatchErrorString("delCount", delCount, 0))
+	}
+}
+
 //func TestTopicDelete(t *testing.T) {
 //	// TODO
 //}

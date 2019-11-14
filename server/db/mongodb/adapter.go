@@ -911,9 +911,9 @@ func (a *adapter) AuthUpdRecord(uid t.Uid, scheme, unique string,
 
 	var err error
 	var record struct{ Unique string `bson:"_id"` }
-	findOpts := mdbopts.FindOneOptions{Projection: b.M{"_id": 1}}
+	findOpts := mdbopts.FindOne().SetProjection(b.M{"_id": 1})
 	filter := b.M{"userid": uid.String(), "scheme": scheme}
-	if err = a.db.Collection("auth").FindOne(a.ctx, filter, &findOpts).Decode(&record); err != nil {
+	if err = a.db.Collection("auth").FindOne(a.ctx, filter, findOpts).Decode(&record); err != nil {
 		return err
 	}
 
@@ -933,8 +933,7 @@ func (a *adapter) AuthUpdRecord(uid t.Uid, scheme, unique string,
 			return err
 		}
 		if err = mdb.WithSession(a.ctx, sess, func(sc mdb.SessionContext) error {
-			err = a.AuthAddRecord(uid, scheme, unique, authLvl, secret, expires)
-			if err != nil {
+			if err = a.AuthAddRecord(uid, scheme, unique, authLvl, secret, expires); err != nil {
 				return err
 			}
 			if err = a.AuthDelScheme(uid, scheme); err != nil {

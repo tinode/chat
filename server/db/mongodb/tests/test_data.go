@@ -8,7 +8,7 @@ import (
 )
 
 type AuthRecord struct {
-	Id      string
+	Id      string `bson:"_id"`
 	UserId  string
 	Scheme  string
 	AuthLvl auth.Level
@@ -98,6 +98,14 @@ func initAuthRecords() {
 		Scheme:  "basic",
 		AuthLvl: auth.LevelAuth,
 		Secret:  []byte{'a', 'l', 'i', 'c', 'e'},
+		Expires: now.Add(24 * time.Hour),
+	})
+	recs = append(recs, AuthRecord{
+		Id:      "basic:bob",
+		UserId:  users[1].Id,
+		Scheme:  "basic",
+		AuthLvl: auth.LevelAuth,
+		Secret:  []byte{'b', 'o', 'b'},
 		Expires: now.Add(24 * time.Hour),
 	})
 }
