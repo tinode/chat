@@ -221,8 +221,8 @@ func initTopicP2P(t *Topic, sreg *sessionJoin) error {
 
 		t.created = stopic.CreatedAt
 		t.updated = stopic.UpdatedAt
-		if stopic.TouchedAt != nil {
-			t.touched = *stopic.TouchedAt
+		if !stopic.TouchedAt.IsZero() {
+			t.touched = stopic.TouchedAt
 		}
 		t.lastID = stopic.SeqId
 		t.delID = stopic.DelId
@@ -584,8 +584,8 @@ func initTopicGrp(t *Topic, sreg *sessionJoin) error {
 
 	t.created = stopic.CreatedAt
 	t.updated = stopic.UpdatedAt
-	if stopic.TouchedAt != nil {
-		t.touched = *stopic.TouchedAt
+	if !stopic.TouchedAt.IsZero() {
+		t.touched = stopic.TouchedAt
 	}
 	t.lastID = stopic.SeqId
 	t.delID = stopic.DelId
@@ -618,8 +618,8 @@ func initTopicSys(t *Topic, sreg *sessionJoin) error {
 
 	t.created = stopic.CreatedAt
 	t.updated = stopic.UpdatedAt
-	if stopic.TouchedAt != nil {
-		t.touched = *stopic.TouchedAt
+	if !stopic.TouchedAt.IsZero() {
+		t.touched = stopic.TouchedAt
 	}
 	t.lastID = stopic.SeqId
 

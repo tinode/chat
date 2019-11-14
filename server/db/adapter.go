@@ -80,13 +80,13 @@ type Adapter interface {
 	// AuthGetRecord returns authentication record given user ID and method.
 	AuthGetRecord(user t.Uid, scheme string) (string, auth.Level, []byte, time.Time, error)
 	// AuthAddRecord creates new authentication record
-	AuthAddRecord(user t.Uid, scheme, unique string, authLvl auth.Level, secret []byte, expires time.Time) (bool, error)
+	AuthAddRecord(user t.Uid, scheme, unique string, authLvl auth.Level, secret []byte, expires time.Time) error
 	// AuthDelScheme deletes an existing authentication scheme for the user.
 	AuthDelScheme(user t.Uid, scheme string) error
 	// AuthDelAllRecords deletes all records of a given user.
 	AuthDelAllRecords(uid t.Uid) (int, error)
 	// AuthUpdRecord modifies an authentication record.
-	AuthUpdRecord(user t.Uid, scheme, unique string, authLvl auth.Level, secret []byte, expires time.Time) (bool, error)
+	AuthUpdRecord(user t.Uid, scheme, unique string, authLvl auth.Level, secret []byte, expires time.Time) error
 
 	// Topic management
 
@@ -126,7 +126,7 @@ type Adapter interface {
 	SubsDelete(topic string, user t.Uid) error
 	// SubsDelForTopic deletes all subscriptions to the given topic
 	SubsDelForTopic(topic string, hard bool) error
-	// SubsDelForUser deletes all subscriptions of the given user
+	// SubsDelForUser deletes or marks as deleted all subscriptions of the given user.
 	SubsDelForUser(user t.Uid, hard bool) error
 
 	// Search

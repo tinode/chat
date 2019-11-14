@@ -5,6 +5,7 @@ import (
 	"errors"
 	"sort"
 	"strings"
+	"unicode/utf8"
 )
 
 var errUnrecognizedContent = errors.New("content unrecognized")
@@ -37,8 +38,8 @@ var tags = map[string]spanfmt{
 }
 
 // ToPlainText converts message payload from Drafy format to string.
-// If content is a string, then it's returned unchanged. If content is not recognized
-// as either Drafy (as a map[string]interface{}) or string, an error is returned.
+// If content is plain string, then it's returned unchanged. If content is not recognized
+// as either Drafy (as a map[string]interface{}) or as a string, an error is returned.
 func ToPlainText(content interface{}) (string, error) {
 	if content == nil {
 		return "", nil
@@ -59,6 +60,7 @@ func ToPlainText(content interface{}) (string, error) {
 	fmt, fmtOK := drafty["fmt"].([]interface{})
 	ent, entOK := drafty["ent"].([]interface{})
 
+	// At least one must be set.
 	if !txtOK && !fmtOK && !entOK {
 		return "", errUnrecognizedContent
 	}
@@ -70,7 +72,7 @@ func ToPlainText(content interface{}) (string, error) {
 		return "", errUnrecognizedContent
 	}
 
-	maxLen := len(txt)
+	textLen := utf8.RuneCountInString(txt)
 
 	var spans []*span
 	for i := range fmt {
@@ -85,7 +87,7 @@ func ToPlainText(content interface{}) (string, error) {
 		s.at = int(tmp)
 		tmp, _ = f["len"].(float64)
 		s.end = s.at + int(tmp)
-		if s.end > maxLen || s.end < s.at {
+		if s.end > textLen || s.end < s.at {
 			return "", errInvalidContent
 		}
 		tmp, _ = f["key"].(float64)
@@ -118,10 +120,10 @@ func ToPlainText(content interface{}) (string, error) {
 		return spans[i].at < spans[j].at
 	})
 
-	return forEach(txt, 0, len(txt), spans), nil
+	return forEach([]rune(txt), 0, textLen, spans), nil
 }
 
-func forEach(line string, start, end int, spans []*span) string {
+func forEach(line []rune, start, end int, spans []*span) string {
 	// Process ranges calling formatter for each range.
 	var result []string
 	for i := 0; i < len(spans); i++ {
@@ -135,7 +137,7 @@ func forEach(line string, start, end int, spans []*span) string {
 
 		// Add un-styled range before the styled span starts.
 		if start < sp.at {
-			result = append(result, formatter("", nil, line[start:sp.at]))
+			result = append(result, formatter("", nil, string(line[start:sp.at])))
 			start = sp.at
 		}
 		// Get all spans which are within current span.
@@ -156,7 +158,7 @@ func forEach(line string, start, end int, spans []*span) string {
 
 	// Add the last unformatted range.
 	if start < end {
-		result = append(result, formatter("", nil, line[start:end]))
+		result = append(result, formatter("", nil, string(line[start:end])))
 	}
 
 	return strings.Join(result, "")
