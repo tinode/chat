@@ -868,7 +868,7 @@ func (a *adapter) AuthGetRecord(uid t.Uid, scheme string) (string, auth.Level, [
 }
 
 // AuthAddRecord creates new authentication record
-func (a *adapter) AuthAddRecord(uid t.Uid, scheme, unique string, authLvl auth.Level, secret []byte, expires time.Time) (bool, error) {
+func (a *adapter) AuthAddRecord(uid t.Uid, scheme, unique string, authLvl auth.Level, secret []byte, expires time.Time) error {
 	authRecord := b.M{
 		"_id":     unique,
 		"userid":  uid.String(),
@@ -878,11 +878,11 @@ func (a *adapter) AuthAddRecord(uid t.Uid, scheme, unique string, authLvl auth.L
 		"expires": expires}
 	if _, err := a.db.Collection("auth").InsertOne(a.ctx, authRecord); err != nil {
 		if isDuplicateErr(err) {
-			return true, t.ErrDuplicate
+			return t.ErrDuplicate
 		}
-		return false, err
+		return err
 	}
-	return false, nil
+	return nil
 }
 
 // AuthDelScheme deletes an existing authentication scheme for the user.
@@ -902,19 +902,18 @@ func (a *adapter) AuthDelAllRecords(uid t.Uid) (int, error) {
 
 // AuthUpdRecord modifies an authentication record.
 func (a *adapter) AuthUpdRecord(uid t.Uid, scheme, unique string,
-	authLvl auth.Level, secret []byte, expires time.Time) (bool, error) {
+	authLvl auth.Level, secret []byte, expires time.Time) error {
 	// The primary key is immutable. If '_id' has changed, we have to replace the old record with a new one:
 	// 1. Check if '_id' has changed.
 	// 2. If not, execute update by '_id'
 	// 3. If yes, first insert the new record (it may fail due to dublicate '_id') then delete the old one.
 
-	var dupe bool
 	var err error
 	var record struct{ Unique string `bson:"_id"` }
 	findOpts := mdbopts.FindOneOptions{Projection: b.M{"_id": 1}}
 	filter := b.M{"userid": uid.String(), "scheme": scheme}
 	if err = a.db.Collection("auth").FindOne(a.ctx, filter, &findOpts).Decode(&record); err != nil {
-		return false, err
+		return err
 	}
 
 	if record.Unique == unique {
@@ -927,13 +926,13 @@ func (a *adapter) AuthUpdRecord(uid t.Uid, scheme, unique string,
 	} else {
 		var sess mdb.Session
 		if sess, err = a.conn.StartSession(); err != nil {
-			return false, err
+			return err
 		}
 		if err = sess.StartTransaction(); err != nil {
-			return false, err
+			return err
 		}
 		if err = mdb.WithSession(a.ctx, sess, func(sc mdb.SessionContext) error {
-			dupe, err = a.AuthAddRecord(uid, scheme, unique, authLvl, secret, expires)
+			err = a.AuthAddRecord(uid, scheme, unique, authLvl, secret, expires)
 			if err != nil {
 				return err
 			}
@@ -942,12 +941,12 @@ func (a *adapter) AuthUpdRecord(uid t.Uid, scheme, unique string,
 			}
 			return sess.CommitTransaction(a.ctx)
 		}); err != nil {
-			return dupe, err
+			return err
 		}
 		sess.EndSession(a.ctx)
 	}
 
-	return dupe, err
+	return err
 }
 
 // Topic management
