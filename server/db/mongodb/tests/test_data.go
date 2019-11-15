@@ -122,7 +122,7 @@ func initTopics() {
 		TouchedAt: now,
 		Owner:     users[0].Id,
 		SeqId:     111,
-		Tags:      []string{"travel"},
+		Tags:      []string{"travel", "zxcv"},
 	})
 	topics = append(topics, &types.Topic{
 		ObjHeader: types.ObjHeader{
@@ -141,6 +141,26 @@ func initTopics() {
 		},
 		TouchedAt: now,
 		SeqId:     12,
+	})
+	topics = append(topics, &types.Topic{
+		ObjHeader: types.ObjHeader{
+			Id:        "p2pE1iE7I9JN5ESv44HiLbj1A",
+			CreatedAt: now,
+			UpdatedAt: now,
+		},
+		TouchedAt: now,
+		SeqId:     555,
+		Tags:      []string{"qwer"},
+	})
+	topics = append(topics, &types.Topic{
+		ObjHeader: types.ObjHeader{
+			Id:        "p2pQvr1xwKU01LfKzGSh3mE0w",
+			CreatedAt: now,
+			UpdatedAt: now,
+		},
+		TouchedAt: now,
+		SeqId:     333,
+		Tags:      []string{"asdf"},
 	})
 }
 

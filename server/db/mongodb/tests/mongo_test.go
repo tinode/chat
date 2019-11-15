@@ -135,6 +135,12 @@ func TestTopicCreate(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
+	for _, tpc := range topics[3:] {
+		err = adp.TopicCreate(tpc)
+		if err != nil {
+			t.Error(err)
+		}
+	}
 }
 
 func TestTopicCreateP2P(t *testing.T) {
@@ -491,14 +497,28 @@ func TestSubsForTopic(t *testing.T) {
 	}
 }
 
-//func TestFindUsers(t *testing.T) {
-//	// TODO
-//}
-//
-//func TestFindTopics(t *testing.T) {
-//	// TODO
-//}
-//
+func TestFindUsers(t *testing.T) {
+	reqTags := []string{"alice", "bob", "carol"}
+	gotSubs, err := adp.FindUsers(types.ParseUserId("usr"+users[2].Id), reqTags, nil)
+	if err != nil {
+		t.Error(err)
+	}
+	if len(gotSubs) != 2 {
+		t.Errorf(mismatchErrorString("result length", len(gotSubs), 3))
+	}
+}
+
+func TestFindTopics(t *testing.T) {
+	reqTags := []string{"travel", "qwer", "asdf", "zxcv"}
+	gotSubs, err := adp.FindTopics(reqTags, nil)
+	if err != nil {
+		t.Error(err)
+	}
+	if len(gotSubs) != 3 {
+		t.Fatal(mismatchErrorString("result length", len(gotSubs), 3))
+	}
+}
+
 //func TestMessageGetAll(t *testing.T) {
 //	// TODO
 //}
