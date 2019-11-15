@@ -158,6 +158,13 @@ func TestTopicCreateP2P(t *testing.T) {
 	}
 }
 
+func TestTopicShare(t *testing.T) {
+	err := adp.TopicShare(subs)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 //func TestMessageSave(t *testing.T) {
 //	// TODO
 //}
@@ -336,22 +343,89 @@ func TestAuthGetRecord(t *testing.T) {
 	}
 }
 
-//func TestTopicGet(t *testing.T) {
-//	// TODO
-//}
-//
-//func TestTopicsForUser(t *testing.T) {
-//	// TODO
-//}
-//
-//func TestUsersForTopic(t *testing.T) {
-//	// TODO
-//}
-//
-//func TestOwnTopics(t *testing.T) {
-//	// TODO
-//}
-//
+func TestTopicGet(t *testing.T) {
+	got, err := adp.TopicGet(topics[0].Id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(got, topics[0]) {
+		t.Errorf(mismatchErrorString("Topic", got, topics[0]))
+	}
+	// Test not found
+	got, err = adp.TopicGet("asdfasdfasdf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != nil {
+		t.Error("Topic should be nil but got:", got)
+	}
+}
+
+func TestTopicsForUser(t *testing.T) {
+	qOpts := types.QueryOpt{
+		Topic: "p2p9AVDamaNCRbfKzGSh3mE0w",
+		Limit: 999,
+	}
+	gotSubs, err := adp.TopicsForUser(types.ParseUserId("usr"+users[0].Id), false, &qOpts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(gotSubs) != 1 {
+		t.Errorf(mismatchErrorString("Subs length", len(gotSubs), 1))
+	}
+
+	gotSubs, err = adp.TopicsForUser(types.ParseUserId("usr"+users[1].Id), true, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(gotSubs) != 2 {
+		t.Errorf(mismatchErrorString("Subs length", len(gotSubs), 2))
+	}
+}
+
+func TestUsersForTopic(t *testing.T) {
+	qOpts := types.QueryOpt{
+		User:  types.ParseUserId("usr" + users[0].Id),
+		Limit: 999,
+	}
+	gotSubs, err := adp.UsersForTopic("grpgRXf0rU4uR4", false, &qOpts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(gotSubs) != 1 {
+		t.Errorf(mismatchErrorString("Subs length", len(gotSubs), 1))
+	}
+
+	gotSubs, err = adp.UsersForTopic("grpgRXf0rU4uR4", true, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(gotSubs) != 2 {
+		t.Errorf(mismatchErrorString("Subs length", len(gotSubs), 2))
+	}
+
+	gotSubs, err = adp.UsersForTopic("p2p9AVDamaNCRbfKzGSh3mE0w", false, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(gotSubs) != 2 {
+		t.Errorf(mismatchErrorString("Subs length", len(gotSubs), 2))
+	}
+}
+
+func TestOwnTopics(t *testing.T) {
+	gotSubs, err := adp.OwnTopics(types.ParseUserId("usr" + users[0].Id))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(gotSubs) != 1 {
+		t.Fatalf("Got topic length %v instead of %v", len(gotSubs), 1)
+	}
+	if gotSubs[0] != topics[0].Id {
+		t.Errorf("Got topic %v instead of %v", gotSubs[0], topics[0].Id)
+	}
+}
+
 //func TestSubscriptionGet(t *testing.T) {
 //	// TODO
 //}
@@ -533,18 +607,55 @@ func TestAuthUpdRecord(t *testing.T) {
 	}
 }
 
-//func TestTopicUpdateOnMessage(t *testing.T) {
-//	// TODO
-//}
-//
-//func TestTopicUpdate(t *testing.T) {
-//	// TODO
-//}
-//
-//func TestTopicOwnerChange(t *testing.T) {
-//	// TODO
-//}
-//
+func TestTopicUpdateOnMessage(t *testing.T) {
+	msg := types.Message{
+		ObjHeader: types.ObjHeader{
+			CreatedAt: now.Add(33 * time.Minute),
+		},
+		SeqId: 66,
+	}
+	err := adp.TopicUpdateOnMessage(topics[1].Id, &msg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got types.Topic
+	err = db.Collection("topics").FindOne(ctx, b.M{"_id": topics[1].Id}).Decode(&got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.TouchedAt != msg.CreatedAt || got.SeqId != msg.SeqId {
+		t.Errorf(mismatchErrorString("TouchedAt", got.TouchedAt, msg.CreatedAt))
+		t.Errorf(mismatchErrorString("SeqId", got.SeqId, msg.SeqId))
+	}
+}
+
+func TestTopicUpdate(t *testing.T) {
+	update := map[string]interface{}{
+		"UpdatedAt": now.Add(55 * time.Minute),
+	}
+	err := adp.TopicUpdate(topics[0].Id, update)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got types.Topic
+	err = db.Collection("topics").FindOne(ctx, b.M{"_id": topics[0].Id}).Decode(&got)
+	if got.UpdatedAt != update["UpdatedAt"] {
+		t.Errorf(mismatchErrorString("UpdatedAt", got.UpdatedAt, update["UpdatedAt"]))
+	}
+}
+
+func TestTopicOwnerChange(t *testing.T) {
+	err := adp.TopicOwnerChange(topics[0].Id, types.ParseUserId("usr"+users[1].Id))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got types.Topic
+	err = db.Collection("topics").FindOne(ctx, b.M{"_id": topics[0].Id}).Decode(&got)
+	if got.Owner != users[1].Id {
+		t.Errorf(mismatchErrorString("Owner", got.Owner, users[1].Id))
+	}
+}
+
 //func TestSubsUpdate(t *testing.T) {
 //	// TODO
 //}
@@ -603,10 +714,6 @@ func TestAuthDelAllRecords(t *testing.T) {
 //}
 
 // ================== Mixed tests =================================
-//func TestTopicShare(t *testing.T) {
-//	// TODO
-//}
-//
 //func TestSubsDelForTopic(t *testing.T) {
 //	// TODO
 //}

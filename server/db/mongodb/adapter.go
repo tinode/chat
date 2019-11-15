@@ -951,6 +951,18 @@ func (a *adapter) AuthUpdRecord(uid t.Uid, scheme, unique string,
 
 // Topic management
 
+func (a *adapter) undeleteSubscription(sub *t.Subscription) error {
+	_, err := a.db.Collection("subscriptions").UpdateOne(a.ctx,
+		b.M{"_id": sub.Id},
+		b.M{
+			"$unset": b.M{"deletedat": ""},
+			"$set": b.M{
+				"updatedat": sub.UpdatedAt,
+				"createdat": sub.CreatedAt,
+				"modegiven": sub.ModeGiven}})
+	return err
+}
+
 // TopicCreate creates a topic
 func (a *adapter) TopicCreate(topic *t.Topic) error {
 	_, err := a.db.Collection("topics").InsertOne(a.ctx, &topic)
@@ -978,14 +990,7 @@ func (a *adapter) TopicCreateP2P(initiator, invited *t.Subscription) error {
 		}
 		// Undelete the second subsription if it exists: remove DeletedAt, update CreatedAt and UpdatedAt,
 		// update ModeGiven.
-		_, err = a.db.Collection("subscriptions").UpdateOne(a.ctx,
-			b.M{"_id": invited.Id},
-			b.M{
-				"$unset": b.M{"deletedat": ""},
-				"$set": b.M{
-					"updatedat": invited.UpdatedAt,
-					"createdat": invited.CreatedAt,
-					"modegiven": invited.ModeGiven}})
+		err = a.undeleteSubscription(invited)
 		if err != nil {
 			return err
 		}
@@ -1032,7 +1037,8 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 		}
 	}
 
-	cur, err := a.db.Collection("subscriptions").Find(a.ctx, filter, mdbopts.Find().SetLimit(int64(limit)))
+	findOpts := mdbopts.Find().SetLimit(int64(limit))
+	cur, err := a.db.Collection("subscriptions").Find(a.ctx, filter, findOpts)
 	if err != nil {
 		return nil, err
 	}
@@ -1242,8 +1248,8 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 // OwnTopics loads a slice of topic names where the user is the owner.
 func (a *adapter) OwnTopics(uid t.Uid) ([]string, error) {
 	filter := b.M{"owner": uid.String(), "deletedat": b.M{"$exists": false}}
-	findOpts := mdbopts.FindOptions{Projection: b.M{"_id": 1}}
-	cur, err := a.db.Collection("topics").Find(a.ctx, filter, &findOpts)
+	findOpts := mdbopts.Find().SetProjection(b.M{"_id": 1})
+	cur, err := a.db.Collection("topics").Find(a.ctx, filter, findOpts)
 	if err != nil {
 		return nil, err
 	}
@@ -1282,27 +1288,20 @@ func (a *adapter) TopicShare(subs []*t.Subscription) error {
 	}
 	if err = mdb.WithSession(a.ctx, sess, func(sc mdb.SessionContext) error {
 		for _, sub := range subs {
-			if _, err := a.db.Collection("subscriptions").InsertOne(a.ctx, sub); err != nil {
+			_, err = a.db.Collection("subscriptions").InsertOne(a.ctx, sub)
+			if err != nil {
 				if isDuplicateErr(err) {
-					_, err := a.db.Collection("subscriptions").UpdateOne(a.ctx,
-						b.M{"_id": sub.Id},
-						b.M{
-							"$unset": b.M{"deletedat": ""},
-							"$set": b.M{
-								"createdat": sub.CreatedAt,
-								"updatedat": sub.UpdatedAt,
-								"modegiven": sub.ModeGiven}})
+					err = a.undeleteSubscription(sub)
 					if err != nil {
 						return err
 					}
+				} else {
+					return err
 				}
-				return err
 			}
 		}
-		if err := sess.CommitTransaction(a.ctx); err != nil {
-			return err
-		}
-		return nil
+
+		return sess.CommitTransaction(a.ctx)
 	}); err != nil {
 		return err
 	}
@@ -1339,36 +1338,23 @@ func (a *adapter) TopicDelete(topic string, hard bool) error {
 
 // TopicUpdateOnMessage increments Topic's or User's SeqId value and updates TouchedAt timestamp.
 func (a *adapter) TopicUpdateOnMessage(topic string, msg *t.Message) error {
-	_, err := a.db.Collection("topics").UpdateOne(a.ctx,
-		b.M{"_id": topic},
-		b.M{"$set": b.M{
-			"seqid":     msg.SeqId,
-			"touchedat": msg.CreatedAt}})
-
-	return err
+	return a.topicUpdate(topic, map[string]interface{}{"seqid": msg.SeqId, "touchedat": msg.CreatedAt})
 }
 
 // TopicUpdate updates topic record.
 func (a *adapter) TopicUpdate(topic string, update map[string]interface{}) error {
-	// to get round the hardcoded "UpdatedAt" key in store.Topics.Update()
-	update = normalizeUpdateMap(update)
-
-	if val, ok := update["UpdatedAt"]; ok {
-		update["updatedat"] = val
-		delete(update, "UpdatedAt")
-	}
-
-	_, err := a.db.Collection("topics").UpdateOne(a.ctx,
-		b.M{"_id": topic},
-		b.M{"$set": update})
-	return err
+	return a.topicUpdate(topic, normalizeUpdateMap(update))
 }
 
 // TopicOwnerChange updates topic's owner
 func (a *adapter) TopicOwnerChange(topic string, newOwner t.Uid) error {
+	return a.topicUpdate(topic, map[string]interface{}{"owner": newOwner.String()})
+}
+
+func (a *adapter) topicUpdate(topic string, update map[string]interface{}) error {
 	_, err := a.db.Collection("topics").UpdateOne(a.ctx,
 		b.M{"_id": topic},
-		b.M{"$set": b.M{"owner": newOwner}})
+		b.M{"$set": update})
 
 	return err
 }
@@ -2140,7 +2126,7 @@ func diff(userTags []string, removeTags []string) []string {
 	return result
 }
 
-// normalizeUpdateMap turns keys that hardcoded as CamelCase into lowercase
+// normalizeUpdateMap turns keys that hardcoded as CamelCase into lowercase (MongoDB uses lowercase by default)
 func normalizeUpdateMap(update map[string]interface{}) map[string]interface{} {
 	result := make(map[string]interface{}, len(update))
 	for key, value := range update {
