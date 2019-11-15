@@ -1514,7 +1514,6 @@ func (a *adapter) FindTopics(req, opt []string) ([]t.Subscription, error) {
 
 // Messages
 func (a *adapter) MessageSave(msg *t.Message) error {
-	msg.SetUid(store.GetUid())
 	_, err := rdb.DB(a.dbName).Table("messages").Insert(msg).RunWrite(a.conn)
 	return err
 }
@@ -1653,7 +1652,6 @@ func (a *adapter) MessageDeleteList(topic string, toDel *t.DelMessage) error {
 		err = a.messagesHardDelete(topic)
 	} else {
 		// Only some messages are being deleted
-		toDel.SetUid(store.GetUid())
 
 		// Start with making a log entry
 		_, err = rdb.DB(a.dbName).Table("dellog").Insert(toDel).RunWrite(a.conn)
