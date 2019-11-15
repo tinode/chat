@@ -20,6 +20,8 @@ import (
 	"time"
 
 	jcr "github.com/DisposaBoy/JsonConfigReader"
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	adapter "github.com/tinode/chat/server/db"
 
 	b "go.mongodb.org/mongo-driver/bson"
@@ -426,18 +428,70 @@ func TestOwnTopics(t *testing.T) {
 	}
 }
 
-//func TestSubscriptionGet(t *testing.T) {
-//	// TODO
-//}
-//
-//func TestSubsForUser(t *testing.T) {
-//	// TODO
-//}
-//
-//func TestSubsForTopic(t *testing.T) {
-//	// TODO
-//}
-//
+func TestSubscriptionGet(t *testing.T) {
+	got, err := adp.SubscriptionGet(topics[0].Id, types.ParseUserId("usr"+users[0].Id))
+	if err != nil {
+		t.Error(err)
+	}
+	opts := cmpopts.IgnoreUnexported(types.Subscription{}, types.ObjHeader{})
+	if !cmp.Equal(got, subs[0], opts) {
+		t.Errorf(mismatchErrorString("Subs", got, subs[0]))
+	}
+	// Test not found
+	got, err = adp.SubscriptionGet("dummytopic", types.ParseUserId("dummyuserid"))
+	if err != nil {
+		t.Error(err)
+	}
+	if got != nil {
+		t.Error("result sub should be nil.")
+	}
+}
+
+func TestSubsForUser(t *testing.T) {
+	qOpts := types.QueryOpt{
+		Topic: topics[0].Id,
+		Limit: 999,
+	}
+	gotSubs, err := adp.SubsForUser(types.ParseUserId("usr"+users[0].Id), false, &qOpts)
+	if err != nil {
+		t.Error(err)
+	}
+	if len(gotSubs) != 1 {
+		t.Errorf(mismatchErrorString("Subs length", len(gotSubs), 1))
+	}
+
+	// Test not found
+	gotSubs, err = adp.SubsForUser(types.ParseUserId("dummyuserid"), false, nil)
+	if err != nil {
+		t.Error(err)
+	}
+	if len(gotSubs) != 0 {
+		t.Errorf(mismatchErrorString("Subs length", len(gotSubs), 0))
+	}
+}
+
+func TestSubsForTopic(t *testing.T) {
+	qOpts := types.QueryOpt{
+		User:  types.ParseUserId("usr" + users[0].Id),
+		Limit: 999,
+	}
+	gotSubs, err := adp.SubsForTopic(topics[0].Id, false, &qOpts)
+	if err != nil {
+		t.Error(err)
+	}
+	if len(gotSubs) != 1 {
+		t.Errorf(mismatchErrorString("Subs length", len(gotSubs), 1))
+	}
+	// Test not found
+	gotSubs, err = adp.SubsForTopic("dummytopicid", false, nil)
+	if err != nil {
+		t.Error(err)
+	}
+	if len(gotSubs) != 0 {
+		t.Errorf(mismatchErrorString("Subs length", len(gotSubs), 0))
+	}
+}
+
 //func TestFindUsers(t *testing.T) {
 //	// TODO
 //}
