@@ -1477,7 +1477,7 @@ func (a *adapter) SubsDelete(topic string, user t.Uid) error {
 	now := t.TimeNow()
 	_, err := a.db.Collection("subscriptions").UpdateOne(a.ctx,
 		b.M{"_id": topic + ":" + user.String()},
-		b.M{"updatedat": now, "deletedat": now})
+		b.M{"$set": b.M{"updatedat": now, "deletedat": now}})
 	return err
 }
 
@@ -1489,8 +1489,7 @@ func (a *adapter) SubsDelForTopic(topic string, hard bool) error {
 		_, err = a.db.Collection("subscriptions").DeleteMany(a.ctx, filter)
 	} else {
 		now := t.TimeNow()
-		_, err = a.db.Collection("subscriptions").UpdateMany(a.ctx,
-			filter,
+		_, err = a.db.Collection("subscriptions").UpdateMany(a.ctx, filter,
 			b.M{"$set": b.M{"updatedat": now, "deletedat": now}})
 	}
 	return err
@@ -1504,8 +1503,7 @@ func (a *adapter) SubsDelForUser(user t.Uid, hard bool) error {
 		_, err = a.db.Collection("subscriptions").DeleteMany(a.ctx, filter)
 	} else {
 		now := t.TimeNow()
-		_, err = a.db.Collection("subscriptions").UpdateMany(a.ctx,
-			filter,
+		_, err = a.db.Collection("subscriptions").UpdateMany(a.ctx, filter,
 			b.M{"$set": b.M{"updatedat": now, "deletedat": now}})
 	}
 	return err

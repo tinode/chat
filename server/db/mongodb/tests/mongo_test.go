@@ -23,7 +23,6 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	adapter "github.com/tinode/chat/server/db"
-
 	b "go.mongodb.org/mongo-driver/bson"
 	mdb "go.mongodb.org/mongo-driver/mongo"
 	mdbopts "go.mongodb.org/mongo-driver/mongo/options"
@@ -710,10 +709,42 @@ func TestTopicOwnerChange(t *testing.T) {
 	}
 }
 
-//func TestSubsUpdate(t *testing.T) {
-//	// TODO
-//}
-//
+func TestSubsUpdate(t *testing.T) {
+	update := map[string]interface{}{
+		"UpdatedAt": now.Add(22 * time.Minute),
+	}
+	err := adp.SubsUpdate(topics[0].Id, types.ParseUserId("usr"+users[0].Id), update)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got types.Subscription
+	err = db.Collection("subscriptions").FindOne(ctx, b.M{"_id": topics[0].Id + ":" + users[0].Id}).Decode(&got)
+	if got.UpdatedAt != update["UpdatedAt"] {
+		t.Errorf(mismatchErrorString("UpdatedAt", got.UpdatedAt, update["UpdatedAt"]))
+	}
+
+	err = adp.SubsUpdate(topics[1].Id, types.ZeroUid, update)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = db.Collection("subscriptions").FindOne(ctx, b.M{"topic": topics[1].Id}).Decode(&got)
+	if got.UpdatedAt != update["UpdatedAt"] {
+		t.Errorf(mismatchErrorString("UpdatedAt", got.UpdatedAt, update["UpdatedAt"]))
+	}
+}
+
+func TestSubsDelete(t *testing.T) {
+	err := adp.SubsDelete(topics[1].Id, types.ParseUserId("usr"+users[0].Id))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got types.Subscription
+	err = db.Collection("subscriptions").FindOne(ctx, b.M{"_id": topics[1].Id + ":" + users[0].Id}).Decode(&got)
+	if got.DeletedAt == nil {
+		t.Errorf(mismatchErrorString("DeletedAt", got.DeletedAt, nil))
+	}
+}
+
 //func TestMessageAttachments(t *testing.T) {
 //	// TODO
 //}
@@ -755,11 +786,51 @@ func TestAuthDelAllRecords(t *testing.T) {
 	}
 }
 
+func TestSubsDelForTopic(t *testing.T) {
+	// Soft
+	err := adp.SubsDelForTopic(topics[1].Id, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got types.Subscription
+	err = db.Collection("subscriptions").FindOne(ctx, b.M{"topic": topics[1].Id}).Decode(&got)
+	if got.DeletedAt == nil {
+		t.Errorf(mismatchErrorString("DeletedAt", got.DeletedAt, nil))
+	}
+	// Hard
+	err = adp.SubsDelForTopic(topics[1].Id, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = db.Collection("subscriptions").FindOne(ctx, b.M{"topic": topics[1].Id}).Decode(&got)
+	if err != mdb.ErrNoDocuments {
+		t.Error("Sub not deleted. Err:", err)
+	}
+}
+
+func TestSubsDelForUser(t *testing.T) {
+	// Soft
+	err := adp.SubsDelForUser(types.ParseUserId("usr"+users[2].Id), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got types.Subscription
+	err = db.Collection("subscriptions").FindOne(ctx, b.M{"user": users[2].Id}).Decode(&got)
+	if got.DeletedAt == nil {
+		t.Errorf(mismatchErrorString("DeletedAt", got.DeletedAt, nil))
+	}
+	// Hard
+	err = adp.SubsDelForUser(types.ParseUserId("usr"+users[2].Id), true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = db.Collection("subscriptions").FindOne(ctx, b.M{"user": users[2].Id}).Decode(&got)
+	if err != mdb.ErrNoDocuments {
+		t.Error("Sub not deleted. Err:", err)
+	}
+}
+
 //func TestTopicDelete(t *testing.T) {
-//	// TODO
-//}
-//
-//func TestSubsDelete(t *testing.T) {
 //	// TODO
 //}
 //
@@ -768,14 +839,6 @@ func TestAuthDelAllRecords(t *testing.T) {
 //}
 
 // ================== Mixed tests =================================
-//func TestSubsDelForTopic(t *testing.T) {
-//	// TODO
-//}
-//
-//func TestSubsDelForUser(t *testing.T) {
-//	// TODO
-//}
-//
 //func TestMessageDeleteList(t *testing.T) {
 //	// TODO
 //}
