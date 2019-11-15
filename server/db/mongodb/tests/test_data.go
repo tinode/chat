@@ -21,6 +21,8 @@ var creds []*types.Credential
 var recs []AuthRecord
 var topics []*types.Topic
 var subs []*types.Subscription
+var msgs []*types.Message
+var devs []*types.DeviceDef
 var now time.Time
 
 func initUsers() {
@@ -51,7 +53,6 @@ func initUsers() {
 	deletedAt := now.Add(10 * time.Minute)
 	users[2].DeletedAt = &deletedAt
 }
-
 func initCreds() {
 	creds = append(creds, &types.Credential{ // 0
 		User:   users[0].Id,
@@ -92,7 +93,6 @@ func initCreds() {
 	creds[3].CreatedAt = now.Add(-10 * time.Minute)
 	creds[3].UpdatedAt = now.Add(-10 * time.Minute)
 }
-
 func initAuthRecords() {
 	recs = append(recs, AuthRecord{
 		Id:      "basic:alice",
@@ -111,7 +111,6 @@ func initAuthRecords() {
 		Expires: now.Add(24 * time.Hour),
 	})
 }
-
 func initTopics() {
 	topics = append(topics, &types.Topic{
 		ObjHeader: types.ObjHeader{
@@ -163,7 +162,6 @@ func initTopics() {
 		Tags:      []string{"asdf"},
 	})
 }
-
 func initSubs() {
 	subs = append(subs, &types.Subscription{
 		ObjHeader: types.ObjHeader{
@@ -229,6 +227,62 @@ func initSubs() {
 		sub.SetTouchedAt(now)
 	}
 }
+func initMessages() {
+	msgs = append(msgs, &types.Message{
+		SeqId:      1,
+		Topic:      "grpgRXf0rU4uR4",
+		From:       "3ysxkod5hNM",
+		Content:    "msg1",
+	})
+	msgs = append(msgs, &types.Message{
+		SeqId:      2,
+		Topic:      "grpgRXf0rU4uR4",
+		From:       "xQLrX3WPS2o",
+		Content:    "msg2",
+	})
+	msgs = append(msgs, &types.Message{
+		SeqId:      3,
+		Topic:      "grpgRXf0rU4uR4",
+		From:       "3ysxkod5hNM",
+		Content:    "msg31",
+	})
+	msgs = append(msgs, &types.Message{
+		SeqId:      1,
+		Topic:      "p2p9AVDamaNCRbfKzGSh3mE0w",
+		From:       "9AVDamaNCRY",
+		Content:    "msg1",
+	})
+	msgs = append(msgs, &types.Message{
+		SeqId:      2,
+		Topic:      "p2p9AVDamaNCRbfKzGSh3mE0w",
+		From:       "9AVDamaNCRY",
+		Content:    "msg2",
+	})
+	msgs = append(msgs, &types.Message{
+		SeqId:      3,
+		Topic:      "p2p9AVDamaNCRbfKzGSh3mE0w",
+		From:       "3ysxkod5hNM",
+		Content:    "msg3",
+	})
+
+	for _, msg := range msgs {
+		msg.InitTimes()
+	}
+}
+func initDevices() {
+	devs = append(devs, &types.DeviceDef{
+		DeviceId: "2934ujfoviwj09ntf094",
+		Platform: "Android",
+		LastSeen: now,
+		Lang:     "en_EN",
+	})
+	devs = append(devs, &types.DeviceDef{
+		DeviceId: "pogpjb023b09gfdmp",
+		Platform: "iOS",
+		LastSeen: now,
+		Lang:     "en_EN",
+	})
+}
 
 func initData() {
 	now = types.TimeNow()
@@ -237,4 +291,6 @@ func initData() {
 	initAuthRecords()
 	initTopics()
 	initSubs()
+	initMessages()
+	initDevices()
 }

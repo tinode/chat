@@ -172,14 +172,15 @@ func TestTopicShare(t *testing.T) {
 	}
 }
 
-//func TestMessageSave(t *testing.T) {
-//	// TODO
-//}
-//
-//func TestDeviceUpsert(t *testing.T) {
-//	// TODO
-//}
-//
+func TestMessageSave(t *testing.T) {
+	//for _, msg := range msgs {
+	//	err := adp.MessageSave(msg)
+	//	if err != nil {
+	//		t.Fatal(err)
+	//	}
+	//}
+}
+
 //func TestFileStartUpload(t *testing.T) {
 //	// TODO
 //}
@@ -519,10 +520,21 @@ func TestFindTopics(t *testing.T) {
 	}
 }
 
-//func TestMessageGetAll(t *testing.T) {
-//	// TODO
-//}
-//
+func TestMessageGetAll(t *testing.T) {
+	//opts := types.QueryOpt{
+	//	Since:           1,
+	//	Before:          2,
+	//	Limit:           999,
+	//}
+	//gotMsgs, err := adp.MessageGetAll("grpgRXf0rU4uR4", types.ZeroUid, &opts)
+	//if err != nil {
+	//	t.Error(err)
+	//}
+	//if len(gotMsgs) != 2 {
+	//	t.Error("Messages length", len(gotMsgs), 2)
+	//}
+}
+
 //func TestMessageGetDeleted(t *testing.T) {
 //	// TODO
 //}
@@ -762,6 +774,46 @@ func TestSubsDelete(t *testing.T) {
 	err = db.Collection("subscriptions").FindOne(ctx, b.M{"_id": topics[1].Id + ":" + users[0].Id}).Decode(&got)
 	if got.DeletedAt == nil {
 		t.Errorf(mismatchErrorString("DeletedAt", got.DeletedAt, nil))
+	}
+}
+
+func TestDeviceUpsert(t *testing.T) {
+	err := adp.DeviceUpsert(types.ParseUserId("usr" + users[0].Id), devs[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got types.User
+	err = db.Collection("users").FindOne(ctx, b.M{"_id": users[0].Id}).Decode(&got)
+	if err != nil {
+		t.Error(err)
+	}
+	if !reflect.DeepEqual(got.DeviceArray[0], devs[0]) {
+		t.Error(mismatchErrorString("Device", got.DeviceArray[0], devs[0]))
+	}
+	// Test update
+	devs[0].Platform = "Web"
+	err = adp.DeviceUpsert(types.ParseUserId("usr" + users[0].Id), devs[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = db.Collection("users").FindOne(ctx, b.M{"_id": users[0].Id}).Decode(&got)
+	if err != nil {
+		t.Error(err)
+	}
+	if got.DeviceArray[0].Platform != "Web" {
+		t.Error("Device not updated.", got.DeviceArray[0])
+	}
+	// Test add same device to another user
+	err = adp.DeviceUpsert(types.ParseUserId("usr" + users[1].Id), devs[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = db.Collection("users").FindOne(ctx, b.M{"_id": users[1].Id}).Decode(&got)
+	if err != nil {
+		t.Error(err)
+	}
+	if got.DeviceArray[0].Platform != "Web" {
+		t.Error("Device not updated.", got.DeviceArray[0])
 	}
 }
 
