@@ -1,33 +1,52 @@
-// Debugging threading issues: dumps stacktraces of all goroutines in response to
-// HTTP request to the given path.
+// Debug tooling. Dumps named profile in response to HTTP request at
+// 		http(s)://<host-name>/<configured-path>/<profile-name>
+// See godoc for the list of possible profile names: https://golang.org/pkg/runtime/pprof/#Profile
 
 package main
 
 import (
+	"fmt"
 	"log"
 	"net/http"
+	"path"
 	"runtime/pprof"
 	"strings"
 )
 
-// Initialize stack tracing at the given URL path.
-func threadzInit(mux *http.ServeMux, path string) {
-	if path == "" || path == "-" {
+var pprofHttpRoot string
+
+// Expose debug profiling at the given URL path.
+func servePprof(mux *http.ServeMux, serveAt string) {
+	if serveAt == "" || serveAt == "-" {
 		return
 	}
 
-	// Make sure the path is absolute.
-	if !strings.HasPrefix(path, "/") {
-		path = "/" + path
-	}
+	pprofHttpRoot = path.Clean("/"+serveAt) + "/"
+	mux.HandleFunc(pprofHttpRoot, profileHandler)
 
-	mux.HandleFunc(path, threadzHandler)
-
-	log.Printf("threadz: stack traces exposed at '%s'", path)
+	log.Printf("pprof: profiling info exposed at '%s'", pprofHttpRoot)
 }
 
-// Handler which dumps stacktraces of all goroutines to response writer.
-func threadzHandler(wrt http.ResponseWriter, req *http.Request) {
+func profileHandler(wrt http.ResponseWriter, req *http.Request) {
+	wrt.Header().Set("X-Content-Type-Options", "nosniff")
 	wrt.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	pprof.Lookup("goroutine").WriteTo(wrt, 2)
+
+	profileName := strings.TrimPrefix(req.URL.Path, pprofHttpRoot)
+
+	profile := pprof.Lookup(profileName)
+	if profile == nil {
+		servePprofError(wrt, http.StatusNotFound, "Unknown profile '"+profileName+"'")
+		return
+	}
+
+	// Respond with the requested profile.
+	profile.WriteTo(wrt, 2)
+}
+
+func servePprofError(wrt http.ResponseWriter, status int, txt string) {
+	wrt.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	wrt.Header().Set("X-Go-Pprof", "1")
+	wrt.Header().Del("Content-Disposition")
+	wrt.WriteHeader(status)
+	fmt.Fprintln(wrt, txt)
 }

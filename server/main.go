@@ -245,7 +245,7 @@ func main() {
 	var clusterSelf = flag.String("cluster_self", "", "Override the name of the current cluster node.")
 	var expvarPath = flag.String("expvar", "", "Override the URL path where runtime stats are exposed. Use '-' to disable.")
 	var pprofFile = flag.String("pprof", "", "File name to save profiling info to. Disabled if not set.")
-	var threadzPath = flag.String("threadz", "", "Debugging only! URL path for exposing call stacks of all goroutines.")
+	var pprofUrl = flag.String("pprof_url", "", "Debugging only! URL path for exposing profiling info. Disabled if not set.")
 	flag.Parse()
 
 	*configfile = toAbsolutePath(rootpath, *configfile)
@@ -274,8 +274,8 @@ func main() {
 	statsRegisterInt("Version")
 	statsSet("Version", int64(parseVersion(currentVersion)))
 
-	// Initialize optional debug stack tracing.
-	threadzInit(mux, *threadzPath)
+	// Initialize serving debug profiles (optional).
+	servePprof(mux, *pprofUrl)
 
 	// Initialize cluster and receive calculated workerId.
 	// Cluster won't be started here yet.
