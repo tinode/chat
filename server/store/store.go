@@ -160,10 +160,10 @@ func RegisterAdapter(a adapter.Adapter) {
 	adp = a
 }
 
-// GetUid generates a unique ID suitable for use as a primary key. (Not used anymore)
-//func GetUid() types.Uid {
-//	return uGen.Get()
-//}
+// GetUid generates a unique ID suitable for use as a primary key.
+func GetUid() types.Uid {
+	return uGen.Get()
+}
 
 // GetUidString generate unique ID as string
 func GetUidString() string {
@@ -197,7 +197,7 @@ var Users UsersObjMapper
 // Create inserts User object into a database, updates creation time and assigns UID
 func (UsersObjMapper) Create(user *types.User, private interface{}) (*types.User, error) {
 
-	user.SetUid(uGen.Get())
+	user.SetUid(GetUid())
 	user.InitTimes()
 
 	err := adp.UserCreate(user)
@@ -510,7 +510,7 @@ var Messages MessagesObjMapper
 // Save message
 func (MessagesObjMapper) Save(msg *types.Message, readBySender bool) error {
 	msg.InitTimes()
-	msg.SetUid(uGen.Get())
+	msg.SetUid(GetUid())
 	// Increment topic's or user's SeqId
 	err := adp.TopicUpdateOnMessage(msg.Topic, msg)
 	if err != nil {
@@ -571,7 +571,7 @@ func (MessagesObjMapper) DeleteList(topic string, delID int, forUser types.Uid, 
 			DelId:       delID,
 			DeletedFor:  forUser.String(),
 			SeqIdRanges: ranges}
-		toDel.SetUid(uGen.Get())
+		toDel.SetUid(GetUid())
 		toDel.InitTimes()
 	}
 
