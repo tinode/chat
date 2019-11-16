@@ -510,7 +510,7 @@ var Messages MessagesObjMapper
 // Save message
 func (MessagesObjMapper) Save(msg *types.Message, readBySender bool) error {
 	msg.InitTimes()
-
+	msg.SetUid(GetUid())
 	// Increment topic's or user's SeqId
 	err := adp.TopicUpdateOnMessage(msg.Topic, msg)
 	if err != nil {
@@ -571,6 +571,7 @@ func (MessagesObjMapper) DeleteList(topic string, delID int, forUser types.Uid, 
 			DelId:       delID,
 			DeletedFor:  forUser.String(),
 			SeqIdRanges: ranges}
+		toDel.SetUid(GetUid())
 		toDel.InitTimes()
 	}
 
