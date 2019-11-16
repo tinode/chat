@@ -537,8 +537,7 @@ func (c *Cluster) routeToTopic(msg *ClientComMessage, topic string, sess *Sessio
 	}
 
 	if sess.getRemoteSub(topic) == nil {
-		log.Printf("Remote subscription missing for topic '%s', sid '%s'", topic, sess.sid)
-		sess.addRemoteSub(topic, &RemoteSubscription{node: n.name})
+		log.Printf("No remote subscription (yet) for topic '%s', sid '%s'", topic, sess.sid)
 	}
 
 	req := &ClusterReq{
