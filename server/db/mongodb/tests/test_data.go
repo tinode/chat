@@ -16,6 +16,7 @@ type AuthRecord struct {
 	Expires time.Time
 }
 
+var uGen types.UidGenerator
 var users []*types.User
 var creds []*types.Credential
 var recs []AuthRecord
@@ -229,44 +230,48 @@ func initSubs() {
 }
 func initMessages() {
 	msgs = append(msgs, &types.Message{
-		SeqId:      1,
-		Topic:      "grpgRXf0rU4uR4",
-		From:       "3ysxkod5hNM",
-		Content:    "msg1",
+		SeqId:   1,
+		Topic:   topics[0].Id,
+		From:    users[0].Id,
+		Content: "msg1",
 	})
 	msgs = append(msgs, &types.Message{
-		SeqId:      2,
-		Topic:      "grpgRXf0rU4uR4",
-		From:       "xQLrX3WPS2o",
-		Content:    "msg2",
+		SeqId:   2,
+		Topic:   topics[0].Id,
+		From:    users[2].Id,
+		Content: "msg2",
+		DeletedFor: []types.SoftDelete{{
+			User:  users[0].Id,
+			DelId: 1}},
 	})
 	msgs = append(msgs, &types.Message{
-		SeqId:      3,
-		Topic:      "grpgRXf0rU4uR4",
-		From:       "3ysxkod5hNM",
-		Content:    "msg31",
+		SeqId:   3,
+		Topic:   topics[0].Id,
+		From:    users[0].Id,
+		Content: "msg31",
 	})
 	msgs = append(msgs, &types.Message{
-		SeqId:      1,
-		Topic:      "p2p9AVDamaNCRbfKzGSh3mE0w",
-		From:       "9AVDamaNCRY",
-		Content:    "msg1",
+		SeqId:   1,
+		Topic:   topics[1].Id,
+		From:    users[1].Id,
+		Content: "msg1",
 	})
 	msgs = append(msgs, &types.Message{
-		SeqId:      2,
-		Topic:      "p2p9AVDamaNCRbfKzGSh3mE0w",
-		From:       "9AVDamaNCRY",
-		Content:    "msg2",
+		SeqId:   2,
+		Topic:   topics[1].Id,
+		From:    users[1].Id,
+		Content: "msg2",
 	})
 	msgs = append(msgs, &types.Message{
-		SeqId:      3,
-		Topic:      "p2p9AVDamaNCRbfKzGSh3mE0w",
-		From:       "3ysxkod5hNM",
-		Content:    "msg3",
+		SeqId:   3,
+		Topic:   topics[1].Id,
+		From:    users[0].Id,
+		Content: "msg3",
 	})
 
 	for _, msg := range msgs {
 		msg.InitTimes()
+		msg.SetUid(uGen.Get())
 	}
 }
 func initDevices() {

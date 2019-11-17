@@ -173,12 +173,12 @@ func TestTopicShare(t *testing.T) {
 }
 
 func TestMessageSave(t *testing.T) {
-	//for _, msg := range msgs {
-	//	err := adp.MessageSave(msg)
-	//	if err != nil {
-	//		t.Fatal(err)
-	//	}
-	//}
+	for _, msg := range msgs {
+		err := adp.MessageSave(msg)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
 }
 
 //func TestFileStartUpload(t *testing.T) {
@@ -521,25 +521,29 @@ func TestFindTopics(t *testing.T) {
 }
 
 func TestMessageGetAll(t *testing.T) {
-	//opts := types.QueryOpt{
-	//	Since:           1,
-	//	Before:          2,
-	//	Limit:           999,
-	//}
-	//gotMsgs, err := adp.MessageGetAll("grpgRXf0rU4uR4", types.ZeroUid, &opts)
-	//if err != nil {
-	//	t.Error(err)
-	//}
-	//if len(gotMsgs) != 2 {
-	//	t.Error("Messages length", len(gotMsgs), 2)
-	//}
+	opts := types.QueryOpt{
+		Since:  1,
+		Before: 2,
+		Limit:  999,
+	}
+	gotMsgs, err := adp.MessageGetAll(topics[0].Id, types.ParseUserId("usr"+users[0].Id), &opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(gotMsgs) != 1 {
+		t.Error(mismatchErrorString("Messages length", len(gotMsgs), 1))
+	}
+	gotMsgs, err = adp.MessageGetAll(topics[0].Id, types.ParseUserId("usr"+users[0].Id), nil)
+	if len(gotMsgs) != 2 {
+		t.Error(mismatchErrorString("Messages length", len(gotMsgs), 2))
+	}
+	gotMsgs, err = adp.MessageGetAll(topics[0].Id, types.ZeroUid, nil)
+	if len(gotMsgs) != 3 {
+		t.Error(mismatchErrorString("Messages length", len(gotMsgs), 3))
+	}
 }
 
 //func TestMessageGetDeleted(t *testing.T) {
-//	// TODO
-//}
-//
-//func TestDeviceGetAll(t *testing.T) {
 //	// TODO
 //}
 //
@@ -778,7 +782,7 @@ func TestSubsDelete(t *testing.T) {
 }
 
 func TestDeviceUpsert(t *testing.T) {
-	err := adp.DeviceUpsert(types.ParseUserId("usr" + users[0].Id), devs[0])
+	err := adp.DeviceUpsert(types.ParseUserId("usr"+users[0].Id), devs[0])
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -792,7 +796,7 @@ func TestDeviceUpsert(t *testing.T) {
 	}
 	// Test update
 	devs[0].Platform = "Web"
-	err = adp.DeviceUpsert(types.ParseUserId("usr" + users[0].Id), devs[0])
+	err = adp.DeviceUpsert(types.ParseUserId("usr"+users[0].Id), devs[0])
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -804,7 +808,7 @@ func TestDeviceUpsert(t *testing.T) {
 		t.Error("Device not updated.", got.DeviceArray[0])
 	}
 	// Test add same device to another user
-	err = adp.DeviceUpsert(types.ParseUserId("usr" + users[1].Id), devs[0])
+	err = adp.DeviceUpsert(types.ParseUserId("usr"+users[1].Id), devs[0])
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -815,13 +819,14 @@ func TestDeviceUpsert(t *testing.T) {
 	if got.DeviceArray[0].Platform != "Web" {
 		t.Error("Device not updated.", got.DeviceArray[0])
 	}
+
+	err = adp.DeviceUpsert(types.ParseUserId("usr"+users[2].Id), devs[1])
+	if err != nil {
+		t.Error(err)
+	}
 }
 
 //func TestMessageAttachments(t *testing.T) {
-//	// TODO
-//}
-//
-//func TestDeviceDelete(t *testing.T) {
 //	// TODO
 //}
 //
@@ -911,6 +916,52 @@ func TestSubsDelForUser(t *testing.T) {
 //}
 
 // ================== Mixed tests =================================
+func TestDeviceGetAll(t *testing.T) {
+	uid0 := types.ParseUserId("usr" + users[0].Id)
+	uid1 := types.ParseUserId("usr" + users[1].Id)
+	uid2 := types.ParseUserId("usr" + users[2].Id)
+	gotDevs, count, err := adp.DeviceGetAll(uid0, uid1, uid2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count != 2 {
+		t.Fatal(mismatchErrorString("count", count, 2))
+	}
+	if !reflect.DeepEqual(gotDevs[uid1][0], *devs[0]) {
+		t.Error(mismatchErrorString("Device", gotDevs[uid1][0], *devs[0]))
+	}
+	if !reflect.DeepEqual(gotDevs[uid2][0], *devs[1]) {
+		t.Error(mismatchErrorString("Device", gotDevs[uid2][0], *devs[1]))
+	}
+}
+
+func TestDeviceDelete(t *testing.T) {
+	err := adp.DeviceDelete(types.ParseUserId("usr"+users[1].Id), devs[0].DeviceId)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got types.User
+	err = db.Collection("users").FindOne(ctx, b.M{"_id": users[1].Id}).Decode(&got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.DeviceArray) != 0 {
+		t.Error("Device not deleted:", got.DeviceArray)
+	}
+
+	err = adp.DeviceDelete(types.ParseUserId("usr"+users[2].Id), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = db.Collection("users").FindOne(ctx, b.M{"_id": users[2].Id}).Decode(&got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.DeviceArray) != 0 {
+		t.Error("Device not deleted:", got.DeviceArray)
+	}
+}
+
 //func TestMessageDeleteList(t *testing.T) {
 //	// TODO
 //}
@@ -974,6 +1025,10 @@ func init() {
 
 	err := adp.Open(config.Adapters[adp.GetName()])
 	if err != nil {
+		log.Fatal(err)
+	}
+
+	if err := uGen.Init(11, []byte("testtesttesttest")); err != nil {
 		log.Fatal(err)
 	}
 

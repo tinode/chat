@@ -429,7 +429,7 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 			// Then decrement the usecount field of these file records
 			_, err = a.db.Collection("fileuploads").UpdateMany(a.ctx,
 				b.M{"_id": b.M{"$in": fileIds}},
-				b.M{"$inc": b.M{"usecount": -1},})
+				b.M{"$inc": b.M{"usecount": -1}})
 			if err != nil {
 				return err
 			}
@@ -910,7 +910,9 @@ func (a *adapter) AuthUpdRecord(uid t.Uid, scheme, unique string,
 	// 3. If yes, first insert the new record (it may fail due to dublicate '_id') then delete the old one.
 
 	var err error
-	var record struct{ Unique string `bson:"_id"` }
+	var record struct {
+		Unique string `bson:"_id"`
+	}
 	findOpts := mdbopts.FindOne().SetProjection(b.M{"_id": 1})
 	filter := b.M{"userid": uid.String(), "scheme": scheme}
 	if err = a.db.Collection("auth").FindOne(a.ctx, filter, findOpts).Decode(&record); err != nil {
@@ -1553,7 +1555,7 @@ func (a *adapter) FindUsers(uid t.Uid, req, opt []string) ([]t.Subscription, err
 
 		// Filter out documents where 'tags' intersection with 'reqTags' is an empty array
 		pipeline = append(pipeline,
-			b.M{"$match": b.M{"$expr": b.M{"$ne": b.A{b.M{"$size": b.M{"$setIntersection": b.A{"$tags", reqTags}}}, 0},}}})
+			b.M{"$match": b.M{"$expr": b.M{"$ne": b.A{b.M{"$size": b.M{"$setIntersection": b.A{"$tags", reqTags}}}, 0}}}})
 	}
 
 	pipeline = append(pipeline, b.M{"$limit": a.maxResults})
@@ -1634,7 +1636,7 @@ func (a *adapter) FindTopics(req, opt []string) ([]t.Subscription, error) {
 
 		// Filter out documents where 'tags' intersection with 'reqTags' is an empty array
 		pipeline = append(pipeline,
-			b.M{"$match": b.M{"$expr": b.M{"$ne": b.A{b.M{"$size": b.M{"$setIntersection": b.A{"$tags", reqTags}}}, 0},}}})
+			b.M{"$match": b.M{"$expr": b.M{"$ne": b.A{b.M{"$size": b.M{"$setIntersection": b.A{"$tags", reqTags}}}, 0}}}})
 	}
 
 	pipeline = append(pipeline, b.M{"$limit": a.maxResults})
@@ -1674,7 +1676,6 @@ func (a *adapter) FindTopics(req, opt []string) ([]t.Subscription, error) {
 
 // MessageSave saves message to database
 func (a *adapter) MessageSave(msg *t.Message) error {
-	msg.SetUid(store.GetUid())
 	_, err := a.db.Collection("messages").InsertOne(a.ctx, msg)
 	return err
 }
@@ -1824,7 +1825,6 @@ func (a *adapter) MessageGetDeleted(topic string, forUser t.Uid, opts *t.QueryOp
 		if opts.Before > 0 {
 			upper = opts.Before
 		}
-
 		if opts.Limit > 0 && opts.Limit < limit {
 			limit = opts.Limit
 		}
@@ -1832,7 +1832,7 @@ func (a *adapter) MessageGetDeleted(topic string, forUser t.Uid, opts *t.QueryOp
 	filter := b.M{
 		"topic": topic,
 		"$or": b.A{
-			b.M{"deletedfor": forUser.String()},
+			b.M{"deletedfor.user": forUser.String()},
 			b.M{"deletedfor": ""},
 		}}
 	if upper == 0 {
@@ -1888,12 +1888,12 @@ func (a *adapter) DeviceUpsert(uid t.Uid, dev *t.DeviceDef) error {
 	var user t.User
 	err := a.db.Collection("users").FindOne(a.ctx, b.M{
 		"_id":              userId,
-		"devices.deviceid": dev.DeviceId,}).Decode(&user)
+		"devices.deviceid": dev.DeviceId}).Decode(&user)
 
 	if err == nil && user.Id != "" { // current user owns this device
 		// ArrayFilter used to avoid adding another (duplicate) device object. Update that device data
 		updOpts := mdbopts.Update().SetArrayFilters(mdbopts.ArrayFilters{
-			Filters: []interface{}{b.M{"dev.deviceid": dev.DeviceId}},})
+			Filters: []interface{}{b.M{"dev.deviceid": dev.DeviceId}}})
 		_, err = a.db.Collection("users").UpdateOne(a.ctx,
 			b.M{"_id": userId},
 			b.M{"$set": b.M{
@@ -1955,15 +1955,14 @@ func (a *adapter) DeviceGetAll(uids ...t.Uid) (map[t.Uid][]t.DeviceDef, int, err
 	}
 	defer cur.Close(a.ctx)
 
-	var row struct {
-		Id      string `bson:"_id"`
-		Devices []t.DeviceDef
-	}
-
 	result := make(map[t.Uid][]t.DeviceDef)
 	count := 0
 	var uid t.Uid
 	for cur.Next(a.ctx) {
+		var row struct {
+			Id      string `bson:"_id"`
+			Devices []t.DeviceDef
+		}
 		if err = cur.Decode(&row); err != nil {
 			return nil, 0, err
 		}
