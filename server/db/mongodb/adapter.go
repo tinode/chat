@@ -204,106 +204,131 @@ func (a *adapter) CreateDb(reset bool) error {
 	}
 	// Collections (tables) do not need to be explicitly created since MongoDB creates them with first write operation
 
+	indexes := []struct {
+		Collection string
+		Field      string
+		IndexOpts  mdb.IndexModel
+	}{
+		// Users
+		// Index on 'user.deletedat' for finding soft-deleted users
+		{
+			Collection: "users",
+			Field:      "deletedat",
+		},
+		// Index on 'user.tags' array so user can be found by tags
+		{
+			Collection: "users",
+			Field:      "tags",
+		},
+		// Index for 'user.devices.deviceid' to ensure Device ID uniqueness across users.
+		// Partial filter set to avoid unique constraint for null values (when user object have no devices).
+		{
+			Collection: "users",
+			IndexOpts: mdb.IndexModel{
+				Keys: b.M{"devices.deviceid": 1},
+				Options: mdbopts.Index().
+					SetUnique(true).
+					SetPartialFilterExpression(b.M{"devices.deviceid": b.M{"$exists": true}}),
+			},
+		},
+
+		// User authentication records {_id, userid, secret}
+		// Should be able to access user's auth records by user id
+		{
+			Collection: "auth",
+			Field:      "userid",
+		},
+
+		// Subscription to a topic. The primary key is a topic:user string
+		{
+			Collection: "subscriptions",
+			Field:      "user",
+		},
+		{
+			Collection: "subscriptions",
+			Field:      "topic",
+		},
+
+		// Topics stored in database
+		// Index on 'owner' field for deleting users.
+		{
+			Collection: "topics",
+			Field:      "owner",
+		},
+		// Index on 'topic.tags' array so topics can be found by tags.
+		// These tags are not unique as opposite to 'user.tags'.
+		{
+			Collection: "topics",
+			Field:      "tags",
+		},
+
+		// Stored message
+		// Compound index of 'topic - seqid' for selecting messages in a topic.
+		{
+			Collection: "messages",
+			IndexOpts:  mdb.IndexModel{Keys: b.M{"topic": 1, "seqid": 1}},
+		},
+		// Compound index of hard-deleted messages
+		{
+			Collection: "messages",
+			IndexOpts:  mdb.IndexModel{Keys: b.M{"topic": 1, "delid": 1}},
+		},
+		// Compound multi-index of soft-deleted messages: each message gets multiple compound index entries like
+		// 		 [topic, user1, delid1], [topic, user2, delid2],...
+		{
+			Collection: "messages",
+			IndexOpts:  mdb.IndexModel{Keys: b.M{"topic": 1, "deletedfor.user": 1, "deletedfor.delid": 1}},
+		},
+
+		// Log of deleted messages
+		// Compound index of 'topic - delid'
+		{
+			Collection: "dellog",
+			IndexOpts:  mdb.IndexModel{Keys: b.M{"topic": 1, "delid": 1}},
+		},
+
+		// User credentials - contact information such as "email:jdoe@example.com" or "tel:+18003287448":
+		// Id: "method:credential" like "email:jdoe@example.com". See types.Credential.
+		// Index on 'credentials.user' to be able to query credentials by user id.
+		{
+			Collection: "credentials",
+			Field:      "user",
+		},
+
+		// Records of file uploads. See types.FileDef.
+		// Index on 'fileuploads.user' to be able to get records by user id.
+		{
+			Collection: "fileuploads",
+			Field:      "user",
+		},
+		// Index on 'fileuploads.usecount' to be able to delete unused records at once.
+		{
+			Collection: "fileuploads",
+			Field:      "usecount",
+		},
+	}
+
+	var err error
+	for _, idx := range indexes {
+		if idx.Field != "" {
+			_, err = a.db.Collection(idx.Collection).Indexes().CreateOne(a.ctx, mdb.IndexModel{Keys: b.M{idx.Field: 1}})
+		} else {
+			_, err = a.db.Collection(idx.Collection).Indexes().CreateOne(a.ctx, idx.IndexOpts)
+		}
+		if err != nil {
+			return err
+		}
+	}
+
 	// Collection "kvmeta" with metadata key-value pairs.
 	// Key in "_id" field.
-
-	// Users
-	// Create secondary index on User.DeletedAt for finding soft-deleted users
-	if _, err := a.db.Collection("users").Indexes().CreateOne(a.ctx, getIdxOpts("deletedat")); err != nil {
-		return err
-	}
-	// Create secondary index on User.Tags array so user can be found by tags
-	if _, err := a.db.Collection("users").Indexes().CreateOne(a.ctx, getIdxOpts("tags")); err != nil {
-		return err
-	}
-	// Create secondary index for user.devices.deviceid to ensure Device ID uniqueness across users.
-	// Partial filter set to avoid unique constraint for null values (when user object have no devices).
-	if _, err := a.db.Collection("users").Indexes().CreateOne(a.ctx, mdb.IndexModel{
-		Keys: b.M{"devices.deviceid": 1},
-		Options: mdbopts.Index().
-			SetUnique(true).
-			SetPartialFilterExpression(b.M{"devices.deviceid": b.M{"$exists": true}}),
-	}); err != nil {
-		return err
-	}
-
-	// User authentication records {_id, userid, secret}
-	// Should be able to access user's auth records by user id
-	if _, err := a.db.Collection("auth").Indexes().CreateOne(a.ctx, getIdxOpts("userid")); err != nil {
-		return err
-	}
-
-	// Should be able to access user's auth records by user id
-	if _, err := a.db.Collection("subscriptions").Indexes().CreateOne(a.ctx, getIdxOpts("user")); err != nil {
-		return err
-	}
-	if _, err := a.db.Collection("subscriptions").Indexes().CreateOne(a.ctx, getIdxOpts("topic")); err != nil {
-		return err
-	}
-
-	// Topics stored in database
-	// Secondary index on Owner field for deleting users.
-	if _, err := a.db.Collection("topics").Indexes().CreateOne(a.ctx, getIdxOpts("owner")); err != nil {
-		return err
-	}
-	// Secondary index on Topic.Tags array so topics can be found by tags.
-	// These tags are not unique as opposite to User.Tags.
-	if _, err := a.db.Collection("topics").Indexes().CreateOne(a.ctx, getIdxOpts("tags")); err != nil {
-		return err
-	}
-	// Create system topic 'sys'.
-	if err := createSystemTopic(a); err != nil {
-		return err
-	}
-
-	// Stored message
-	// Compound index of topic - seqID for selecting messages in a topic.
-	if _, err := a.db.Collection("messages").Indexes().CreateOne(a.ctx, mdb.IndexModel{
-		Keys: b.M{"topic": 1, "seqid": 1},
-	}); err != nil {
-		return err
-	}
-	// Compound index of hard-deleted messages
-	if _, err := a.db.Collection("messages").Indexes().CreateOne(a.ctx, mdb.IndexModel{
-		Keys: b.M{"topic": 1, "delid": 1},
-	}); err != nil {
-		return err
-	}
-	// Compound multi-index of soft-deleted messages: each message gets multiple compound index entries like
-	// 		 [Topic, User1, DelId1], [Topic, User2, DelId2],...
-	if _, err := a.db.Collection("messages").Indexes().CreateOne(a.ctx, mdb.IndexModel{
-		Keys: b.M{"topic": 1, "deletedfor.user": 1, "deletedfor.delid": 1},
-	}); err != nil {
-		return err
-	}
-
-	// Log of deleted messages
-	// Compound index of topic - delId
-	if _, err := a.db.Collection("dellog").Indexes().CreateOne(a.ctx, mdb.IndexModel{
-		Keys: b.M{"topic": 1, "delid": 1},
-	}); err != nil {
-		return err
-	}
-
-	// User credentials - contact information such as "email:jdoe@example.com" or "tel:+18003287448":
-	// Id: "method:credential" like "email:jdoe@example.com". See types.Credential.
-	// Create secondary index on credentials.User to be able to query credentials by user id.
-	if _, err := a.db.Collection("credentials").Indexes().CreateOne(a.ctx, getIdxOpts("user")); err != nil {
-		return err
-	}
-
-	// Records of file uploads. See types.FileDef.
-	// A secondary index on fileuploads.User to be able to get records by user id.
-	if _, err := a.db.Collection("fileuploads").Indexes().CreateOne(a.ctx, getIdxOpts("user")); err != nil {
-		return err
-	}
-	// A secondary index on fileuploads.UseCount to be able to delete unused records at once.
-	if _, err := a.db.Collection("fileuploads").Indexes().CreateOne(a.ctx, getIdxOpts("usecount")); err != nil {
-		return err
-	}
-
 	// Record current DB version.
 	if _, err := a.db.Collection("kvmeta").InsertOne(a.ctx, map[string]interface{}{"_id": "version", "value": adpVersion}); err != nil {
+		return err
+	}
+
+	// Create system topic 'sys'.
+	if err := createSystemTopic(a); err != nil {
 		return err
 	}
 
