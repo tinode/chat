@@ -889,11 +889,54 @@ func TestFileFinishUpload(t *testing.T) {
 	}
 }
 
+// ================== Other tests =================================
+func TestDeviceGetAll(t *testing.T) {
+	uid0 := types.ParseUserId("usr" + users[0].Id)
+	uid1 := types.ParseUserId("usr" + users[1].Id)
+	uid2 := types.ParseUserId("usr" + users[2].Id)
+	gotDevs, count, err := adp.DeviceGetAll(uid0, uid1, uid2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count != 2 {
+		t.Fatal(mismatchErrorString("count", count, 2))
+	}
+	if !reflect.DeepEqual(gotDevs[uid1][0], *devs[0]) {
+		t.Error(mismatchErrorString("Device", gotDevs[uid1][0], *devs[0]))
+	}
+	if !reflect.DeepEqual(gotDevs[uid2][0], *devs[1]) {
+		t.Error(mismatchErrorString("Device", gotDevs[uid2][0], *devs[1]))
+	}
+}
+
+func TestDeviceDelete(t *testing.T) {
+	err := adp.DeviceDelete(types.ParseUserId("usr"+users[1].Id), devs[0].DeviceId)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got types.User
+	err = db.Collection("users").FindOne(ctx, b.M{"_id": users[1].Id}).Decode(&got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.DeviceArray) != 0 {
+		t.Error("Device not deleted:", got.DeviceArray)
+	}
+
+	err = adp.DeviceDelete(types.ParseUserId("usr"+users[2].Id), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = db.Collection("users").FindOne(ctx, b.M{"_id": users[2].Id}).Decode(&got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.DeviceArray) != 0 {
+		t.Error("Device not deleted:", got.DeviceArray)
+	}
+}
+
 // ================== Delete tests ================================
-//func TestUserDelete(t *testing.T) {
-//	// TODO
-//}
-//
 func TestCredDel(t *testing.T) {
 	err := adp.CredDel(types.ParseUserId("usr"+users[0].Id), "email", "alice@test.example.com")
 	if err != nil {
@@ -970,25 +1013,7 @@ func TestSubsDelForTopic(t *testing.T) {
 }
 
 func TestSubsDelForUser(t *testing.T) {
-	// Soft
-	err := adp.SubsDelForUser(types.ParseUserId("usr"+users[2].Id), false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var got types.Subscription
-	err = db.Collection("subscriptions").FindOne(ctx, b.M{"user": users[2].Id}).Decode(&got)
-	if got.DeletedAt == nil {
-		t.Errorf(mismatchErrorString("DeletedAt", got.DeletedAt, nil))
-	}
-	// Hard
-	err = adp.SubsDelForUser(types.ParseUserId("usr"+users[2].Id), true)
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = db.Collection("subscriptions").FindOne(ctx, b.M{"user": users[2].Id}).Decode(&got)
-	if err != mdb.ErrNoDocuments {
-		t.Error("Sub not deleted. Err:", err)
-	}
+	// Tested during TestUserDelete (both hard and soft deletions)
 }
 
 func TestMessageDeleteList(t *testing.T) {
@@ -1118,53 +1143,31 @@ func TestFileDeleteUnused(t *testing.T) {
 	}
 }
 
-// ================== Mixed tests =================================
-func TestDeviceGetAll(t *testing.T) {
-	uid0 := types.ParseUserId("usr" + users[0].Id)
-	uid1 := types.ParseUserId("usr" + users[1].Id)
-	uid2 := types.ParseUserId("usr" + users[2].Id)
-	gotDevs, count, err := adp.DeviceGetAll(uid0, uid1, uid2)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if count != 2 {
-		t.Fatal(mismatchErrorString("count", count, 2))
-	}
-	if !reflect.DeepEqual(gotDevs[uid1][0], *devs[0]) {
-		t.Error(mismatchErrorString("Device", gotDevs[uid1][0], *devs[0]))
-	}
-	if !reflect.DeepEqual(gotDevs[uid2][0], *devs[1]) {
-		t.Error(mismatchErrorString("Device", gotDevs[uid2][0], *devs[1]))
-	}
-}
-
-func TestDeviceDelete(t *testing.T) {
-	err := adp.DeviceDelete(types.ParseUserId("usr"+users[1].Id), devs[0].DeviceId)
+func TestUserDelete(t *testing.T) {
+	err := adp.UserDelete(types.ParseUserId("usr"+users[0].Id), false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	var got types.User
-	err = db.Collection("users").FindOne(ctx, b.M{"_id": users[1].Id}).Decode(&got)
+	err = db.Collection("users").FindOne(ctx, b.M{"_id": users[0].Id}).Decode(&got)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got.DeviceArray) != 0 {
-		t.Error("Device not deleted:", got.DeviceArray)
+	if got.DeletedAt == nil {
+		t.Error("User soft delete failed", got)
 	}
 
-	err = adp.DeviceDelete(types.ParseUserId("usr"+users[2].Id), "")
+	err = adp.UserDelete(types.ParseUserId("usr"+users[1].Id), true)
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = db.Collection("users").FindOne(ctx, b.M{"_id": users[2].Id}).Decode(&got)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(got.DeviceArray) != 0 {
-		t.Error("Device not deleted:", got.DeviceArray)
+	err = db.Collection("users").FindOne(ctx, b.M{"_id": users[1].Id}).Decode(&got)
+	if err != mdb.ErrNoDocuments {
+		t.Error("User hard delete failed", err)
 	}
 }
 
+// ================== Other tests =================================
 func TestMessageGetDeleted(t *testing.T) {
 	qOpts := types.QueryOpt{
 		Since:  1,

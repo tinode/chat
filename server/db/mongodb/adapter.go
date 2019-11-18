@@ -409,7 +409,7 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 	if err != nil {
 		return err
 	}
-	topicFilter := b.M{"topic": b.M{"$in:": topicIds}}
+	topicFilter := b.M{"topic": b.M{"$in": topicIds}}
 
 	var sess mdb.Session
 	if sess, err = a.conn.StartSession(); err != nil {
@@ -445,7 +445,7 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 			// Decrement fileuploads UseCounter
 			// First get array of attachments IDs that were used in messages of topics from topicIds
 			fileIds, err := a.db.Collection("messages").Distinct(a.ctx, "attachments", b.M{
-				"topic":       b.M{"$in:": topicIds},
+				"topic":       b.M{"$in": topicIds},
 				"attachments": b.M{"$exists": true},
 			})
 			if err != nil {
@@ -499,7 +499,7 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 			// Disable subscriptions for topics where the user is the owner.
 			// Disable topics where the user is the owner.
 			now := t.TimeNow()
-			disable := b.M{"deletedat": now, "updatedat": now}
+			disable := b.M{"$set": b.M{"deletedat": now, "updatedat": now}}
 
 			if _, err = a.db.Collection("subscriptions").UpdateMany(a.ctx, topicFilter, disable); err != nil {
 				return err
@@ -2158,7 +2158,7 @@ func normalizeUpdateMap(update map[string]interface{}) map[string]interface{} {
 	return result
 }
 
-func copyBsonMap(mp b.M) b.M{
+func copyBsonMap(mp b.M) b.M {
 	result := b.M{}
 	for k, v := range mp {
 		result[k] = v
