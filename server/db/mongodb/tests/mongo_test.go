@@ -308,9 +308,24 @@ func TestCredGetAll(t *testing.T) {
 	}
 }
 
-//func TestUserUnreadCount(t *testing.T) {
-//	// TODO
-//}
+func TestUserUnreadCount(t *testing.T) {
+	count, err := adp.UserUnreadCount(types.ParseUserId("usr" + users[2].Id))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count != 100 {
+		t.Error(mismatchErrorString("UnreadCount", count, 100))
+	}
+
+	// Test not found
+	count, err = adp.UserUnreadCount(types.ParseUserId("dummyuserid"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Error(mismatchErrorString("UnreadCount", count, 0))
+	}
+}
 
 func TestAuthGetUniqueRecord(t *testing.T) {
 	uid, authLvl, secret, expires, err := adp.AuthGetUniqueRecord("basic:alice")
@@ -712,12 +727,12 @@ func TestTopicUpdateOnMessage(t *testing.T) {
 		},
 		SeqId: 66,
 	}
-	err := adp.TopicUpdateOnMessage(topics[1].Id, &msg)
+	err := adp.TopicUpdateOnMessage(topics[2].Id, &msg)
 	if err != nil {
 		t.Fatal(err)
 	}
 	var got types.Topic
-	err = db.Collection("topics").FindOne(ctx, b.M{"_id": topics[1].Id}).Decode(&got)
+	err = db.Collection("topics").FindOne(ctx, b.M{"_id": topics[2].Id}).Decode(&got)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -835,10 +850,32 @@ func TestDeviceUpsert(t *testing.T) {
 	}
 }
 
-//func TestMessageAttachments(t *testing.T) {
-//	// TODO
-//}
-//
+func TestMessageAttachments(t *testing.T) {
+	fids := []string{files[0].Id, files[1].Id}
+	err := adp.MessageAttachments(types.ParseUid(msgs[1].Id), fids)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got map[string][]string
+	findOpts := mdbopts.FindOne().SetProjection(b.M{"attachments": 1, "_id": 0})
+	err = db.Collection("messages").FindOne(ctx, b.M{"_id": msgs[1].Id}, findOpts).Decode(&got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(got["attachments"], fids) {
+		t.Error(mismatchErrorString("Attachments", got["attachments"], fids))
+	}
+	var got2 map[string]int
+	findOpts = mdbopts.FindOne().SetProjection(b.M{"usecount": 1, "_id": 0})
+	err = db.Collection("fileuploads").FindOne(ctx, b.M{"_id": files[0].Id}, findOpts).Decode(&got2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got2["usecount"] != 1 {
+		t.Error(mismatchErrorString("UseCount", got2["usecount"], 1))
+	}
+}
+
 func TestFileFinishUpload(t *testing.T) {
 	got, err := adp.FileFinishUpload(files[0].Id, types.UploadCompleted, 22222)
 	if err != nil {
@@ -934,7 +971,7 @@ func TestMessageDeleteList(t *testing.T) {
 		},
 		Topic:       topics[1].Id,
 		DeletedFor:  users[2].Id,
-		DelId:       555,
+		DelId:       1,
 		SeqIdRanges: []types.Range{{Low: 9}, {Low: 3, Hi: 7}},
 	}
 	err := adp.MessageDeleteList(toDel.Topic, &toDel)
@@ -969,7 +1006,7 @@ func TestMessageDeleteList(t *testing.T) {
 			UpdatedAt: now,
 		},
 		Topic:       topics[0].Id,
-		DelId:       222,
+		DelId:       3,
 		SeqIdRanges: []types.Range{{Low: 1, Hi: 3}},
 	}
 	err = adp.MessageDeleteList(toDel.Topic, &toDel)
@@ -1061,7 +1098,18 @@ func TestDeviceDelete(t *testing.T) {
 }
 
 func TestMessageGetDeleted(t *testing.T) {
-
+	qOpts := types.QueryOpt{
+		Since:  1,
+		Before: 10,
+		Limit:  999,
+	}
+	got, err := adp.MessageGetDeleted(topics[1].Id, types.ParseUserId("usr"+users[2].Id), &qOpts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 {
+		t.Error(mismatchErrorString("result length", len(got), 1))
+	}
 }
 
 // ================================================================

@@ -633,23 +633,21 @@ func (a *adapter) UserUnreadCount(uid t.Uid) (int, error) {
 	}
 	cur, err := a.db.Collection("subscriptions").Aggregate(a.ctx, pipeline)
 	if err != nil {
-		if err == mdb.ErrNilCursor {
-			return 0, nil
-		}
 		return 0, err
 	}
 	defer cur.Close(a.ctx)
 
-	var result struct {
+	var result []struct {
 		Id          interface{} `bson:"_id"`
 		UnreadCount int         `bson:"unreadCount"`
 	}
-	for cur.Next(a.ctx) {
-		if err = cur.Decode(&result); err != nil {
-			return 0, err
-		}
+	if err = cur.All(a.ctx, &result); err != nil {
+		return 0, err
 	}
-	return result.UnreadCount, nil
+	if len(result) == 0 { // Not found
+		return 0, nil
+	}
+	return result[0].UnreadCount, nil
 }
 
 // Credential management
@@ -1856,7 +1854,7 @@ func (a *adapter) MessageGetDeleted(topic string, forUser t.Uid, opts *t.QueryOp
 	filter := b.M{
 		"topic": topic,
 		"$or": b.A{
-			b.M{"deletedfor.user": forUser.String()},
+			b.M{"deletedfor": forUser.String()},
 			b.M{"deletedfor": ""},
 		}}
 	if upper == 0 {
@@ -1864,8 +1862,9 @@ func (a *adapter) MessageGetDeleted(topic string, forUser t.Uid, opts *t.QueryOp
 	} else {
 		filter["delid"] = b.M{"$gte": lower, "$lte": upper}
 	}
-	findOpts := mdbopts.Find().SetSort(b.M{"topic": 1, "delid": 1})
-	findOpts.SetLimit(int64(limit))
+	findOpts := mdbopts.Find().
+		SetSort(b.M{"topic": 1, "delid": 1}).
+		SetLimit(int64(limit))
 
 	cur, err := a.db.Collection("dellog").Find(a.ctx, filter, findOpts)
 	if err != nil {

@@ -141,7 +141,7 @@ func initTopics() {
 			UpdatedAt: now,
 		},
 		TouchedAt: now,
-		SeqId:     12,
+		SeqId:     15,
 	})
 	topics = append(topics, &types.Topic{
 		ObjHeader: types.ObjHeader{
@@ -220,8 +220,20 @@ func initSubs() {
 		},
 		User:      users[2].Id,
 		Topic:     topics[2].Id,
-		RecvSeqId: 9,
-		ReadSeqId: 5,
+		RecvSeqId: 0,
+		ReadSeqId: 0,
+		ModeWant:  47,
+		ModeGiven: 47,
+	})
+	subs = append(subs, &types.Subscription{
+		ObjHeader: types.ObjHeader{
+			CreatedAt: now,
+			UpdatedAt: now,
+		},
+		User:      users[2].Id,
+		Topic:     topics[3].Id,
+		RecvSeqId: 555,
+		ReadSeqId: 455,
 		ModeWant:  47,
 		ModeGiven: 47,
 	})
