@@ -263,7 +263,10 @@ func (h *Hub) run() {
 			// Check if 'sys' topic has migrated to this node.
 			if h.topicGet("sys") == nil && !globals.cluster.isRemoteTopic("sys") {
 				// Yes, 'sys' has migrated here. Initialize it.
-				h.join <- &sessionJoin{topic: "sys", internal: true, pkt: &ClientComMessage{topic: "sys"}}
+				// The h.join is unbuffered. We must call from another goroutine. Otherwise deadlock.
+				go func() {
+					h.join <- &sessionJoin{topic: "sys", internal: true, pkt: &ClientComMessage{topic: "sys"}}
+				}()
 			}
 
 		case hubdone := <-h.shutdown:

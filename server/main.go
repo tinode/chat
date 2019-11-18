@@ -239,13 +239,14 @@ func main() {
 
 	var configfile = flag.String("config", "tinode.conf", "Path to config file.")
 	// Path to static content.
-	var staticPath = flag.String("static_data", defaultStaticPath, "Path to directory with static files to be served.")
+	var staticPath = flag.String("static_data", defaultStaticPath, "File path to directory with static files to be served.")
 	var listenOn = flag.String("listen", "", "Override address and port to listen on for HTTP(S) clients.")
 	var listenGrpc = flag.String("grpc_listen", "", "Override address and port to listen on for gRPC clients.")
 	var tlsEnabled = flag.Bool("tls_enabled", false, "Override config value for enabling TLS.")
 	var clusterSelf = flag.String("cluster_self", "", "Override the name of the current cluster node.")
-	var expvarPath = flag.String("expvar", "", "Override the path where runtime stats are exposed.")
+	var expvarPath = flag.String("expvar", "", "Override the URL path where runtime stats are exposed. Use '-' to disable.")
 	var pprofFile = flag.String("pprof", "", "File name to save profiling info to. Disabled if not set.")
+	var pprofUrl = flag.String("pprof_url", "", "Debugging only! URL path for exposing profiling info. Disabled if not set.")
 	flag.Parse()
 
 	*configfile = toAbsolutePath(rootpath, *configfile)
@@ -265,6 +266,7 @@ func main() {
 	// Set up HTTP server. Must use non-default mux because of expvar.
 	mux := http.NewServeMux()
 
+	// Exposing values for statistics and monitoring.
 	evpath := *expvarPath
 	if evpath == "" {
 		evpath = config.ExpvarPath
@@ -272,6 +274,9 @@ func main() {
 	statsInit(mux, evpath)
 	statsRegisterInt("Version")
 	statsSet("Version", int64(parseVersion(currentVersion)))
+
+	// Initialize serving debug profiles (optional).
+	servePprof(mux, *pprofUrl)
 
 	// Initialize cluster and receive calculated workerId.
 	// Cluster won't be started here yet.

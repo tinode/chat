@@ -191,14 +191,26 @@ func sendNotifications(rcpt *push.Receipt, config *configType) {
 				} else if d.Platform == "ios" {
 					// iOS uses Badge to show the total unread message count.
 					badge := rcpt.To[uid].Unread
+					// Need to duplicate these in APNS.Payload.Aps.Alert so
+					// iOS may call NotificationServiceExtension (if present). 
+					title := "New message"
+					body  := data["content"]
 					msg.APNS = &fcm.APNSConfig{
 						Payload: &fcm.APNSPayload{
-							Aps: &fcm.Aps{Badge: &badge},
+							Aps: &fcm.Aps{
+								Badge:          &badge,
+								MutableContent: true,
+								Sound:          "default",
+								Alert: &fcm.ApsAlert{
+									Title: title,
+									Body:  body,
+								},
+							},
 						},
 					}
 					msg.Notification = &fcm.Notification{
-						Title: "New message",
-						Body:  data["content"],
+						Title: title,
+						Body:  body,
 					}
 				}
 

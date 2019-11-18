@@ -1864,12 +1864,15 @@ func (a *adapter) FindTopics(req, opt []string) ([]t.Subscription, error) {
 
 // Messages
 func (a *adapter) MessageSave(msg *t.Message) error {
+	// store assignes message ID, but we don't use it. Message IDs are not used anywhere.
+	// Using a sequential ID provided by the database.
 	res, err := a.db.Exec(
 		"INSERT INTO messages(createdAt,updatedAt,seqid,topic,`from`,head,content) VALUES(?,?,?,?,?,?,?)",
 		msg.CreatedAt, msg.UpdatedAt, msg.SeqId, msg.Topic,
 		store.DecodeUid(t.ParseUid(msg.From)), msg.Head, toJSON(msg.Content))
 	if err == nil {
 		id, _ := res.LastInsertId()
+		// Replacing ID given by store by ID given by the DB.
 		msg.SetUid(t.Uid(id))
 	}
 	return err
