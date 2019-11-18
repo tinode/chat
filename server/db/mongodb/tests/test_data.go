@@ -24,6 +24,7 @@ var topics []*types.Topic
 var subs []*types.Subscription
 var msgs []*types.Message
 var devs []*types.DeviceDef
+var files []*types.FileDef
 var now time.Time
 
 func initUsers() {
@@ -257,13 +258,13 @@ func initMessages() {
 		Content: "msg1",
 	})
 	msgs = append(msgs, &types.Message{
-		SeqId:   2,
+		SeqId:   5,
 		Topic:   topics[1].Id,
 		From:    users[1].Id,
 		Content: "msg2",
 	})
 	msgs = append(msgs, &types.Message{
-		SeqId:   3,
+		SeqId:   11,
 		Topic:   topics[1].Id,
 		From:    users[0].Id,
 		Content: "msg3",
@@ -288,7 +289,29 @@ func initDevices() {
 		Lang:     "en_EN",
 	})
 }
-
+func initFileDefs() {
+	files = append(files, &types.FileDef{
+		ObjHeader: types.ObjHeader{
+			Id:        uGen.GetStr(),
+			CreatedAt: now,
+			UpdatedAt: now,
+		},
+		Status:    types.UploadStarted,
+		User:      users[0].Id,
+		MimeType:  "application/pdf",
+		Location:  "uploads/qwerty.pdf",
+	})
+	files = append(files, &types.FileDef{
+		ObjHeader: types.ObjHeader{
+			Id:        uGen.GetStr(),
+			CreatedAt: now,
+			UpdatedAt: now,
+		},
+		Status:    types.UploadStarted,
+		User:      users[0].Id,
+		Location:  "uploads/asdf.txt",
+	})
+}
 func initData() {
 	now = types.TimeNow()
 	initUsers()
@@ -298,4 +321,5 @@ func initData() {
 	initSubs()
 	initMessages()
 	initDevices()
+	initFileDefs()
 }

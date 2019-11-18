@@ -181,9 +181,14 @@ func TestMessageSave(t *testing.T) {
 	}
 }
 
-//func TestFileStartUpload(t *testing.T) {
-//	// TODO
-//}
+func TestFileStartUpload(t *testing.T) {
+	for _, f := range files {
+		err := adp.FileStartUpload(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}
 
 // ================== Read tests ==================================
 func TestUserGet(t *testing.T) {
@@ -543,13 +548,17 @@ func TestMessageGetAll(t *testing.T) {
 	}
 }
 
-//func TestMessageGetDeleted(t *testing.T) {
-//	// TODO
-//}
-//
-//func TestFileGet(t *testing.T) {
-//	// TODO
-//}
+func TestFileGet(t *testing.T) {
+	// General test done during TestFileFinishUpload().
+
+	// Test not found
+	got, err := adp.FileGet("dummyfileid")
+	if err != nil {
+		if got != nil {
+			t.Error("File found but shouldn't:", got)
+		}
+	}
+}
 
 // ================== Update tests ================================
 func TestUserUpdate(t *testing.T) {
@@ -830,9 +839,18 @@ func TestDeviceUpsert(t *testing.T) {
 //	// TODO
 //}
 //
-//func TestFileFinishUpload(t *testing.T) {
-//	// TODO
-//}
+func TestFileFinishUpload(t *testing.T) {
+	got, err := adp.FileFinishUpload(files[0].Id, types.UploadCompleted, 22222)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != types.UploadCompleted {
+		t.Error(mismatchErrorString("Status", got.Status, types.UploadCompleted))
+	}
+	if got.Size != 22222 {
+		t.Error(mismatchErrorString("Size", got.Size, 22222))
+	}
+}
 
 // ================== Delete tests ================================
 //func TestUserDelete(t *testing.T) {
@@ -907,6 +925,86 @@ func TestSubsDelForUser(t *testing.T) {
 	}
 }
 
+func TestMessageDeleteList(t *testing.T) {
+	toDel := types.DelMessage{
+		ObjHeader: types.ObjHeader{
+			Id:        uGen.GetStr(),
+			CreatedAt: now,
+			UpdatedAt: now,
+		},
+		Topic:       topics[1].Id,
+		DeletedFor:  users[2].Id,
+		DelId:       555,
+		SeqIdRanges: []types.Range{{Low: 9}, {Low: 3, Hi: 7}},
+	}
+	err := adp.MessageDeleteList(toDel.Topic, &toDel)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var got []types.Message
+	cur, err := db.Collection("messages").Find(ctx, b.M{"topic": toDel.Topic})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = cur.All(ctx, &got); err != nil {
+		t.Fatal(err)
+	}
+	for _, msg := range got {
+		if msg.SeqId == 1 && msg.DeletedFor != nil {
+			t.Error("Message with SeqID=1 should not be deleted")
+		}
+		if msg.SeqId == 5 && msg.DeletedFor == nil {
+			t.Error("Message with SeqID=5 should be deleted")
+		}
+		if msg.SeqId == 11 && msg.DeletedFor == nil {
+			t.Error("Message with SeqID=5 should be deleted")
+		}
+	}
+	//
+	toDel = types.DelMessage{
+		ObjHeader: types.ObjHeader{
+			Id:        uGen.GetStr(),
+			CreatedAt: now,
+			UpdatedAt: now,
+		},
+		Topic:       topics[0].Id,
+		DelId:       222,
+		SeqIdRanges: []types.Range{{Low: 1, Hi: 3}},
+	}
+	err = adp.MessageDeleteList(toDel.Topic, &toDel)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cur, err = db.Collection("messages").Find(ctx, b.M{"topic": toDel.Topic})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = cur.All(ctx, &got); err != nil {
+		t.Fatal(err)
+	}
+	for _, msg := range got {
+		if msg.Content != nil {
+			t.Error("Message not deleted:", msg)
+		}
+	}
+
+	err = adp.MessageDeleteList(topics[0].Id, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cur, err = db.Collection("messages").Find(ctx, b.M{"topic": topics[0].Id})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = cur.All(ctx, &got); err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 0 {
+		t.Error("Result should be empty:", got)
+	}
+}
+
 //func TestTopicDelete(t *testing.T) {
 //	// TODO
 //}
@@ -962,9 +1060,9 @@ func TestDeviceDelete(t *testing.T) {
 	}
 }
 
-//func TestMessageDeleteList(t *testing.T) {
-//	// TODO
-//}
+func TestMessageGetDeleted(t *testing.T) {
+
+}
 
 // ================================================================
 func mismatchErrorString(key string, got, want interface{}) string {

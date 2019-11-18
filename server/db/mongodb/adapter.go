@@ -1750,66 +1750,65 @@ func (a *adapter) MessageDeleteList(topic string, toDel *t.DelMessage) error {
 	var err error
 
 	if toDel == nil {
-		err = a.messagesHardDelete(topic)
-	} else {
-		// Only some messages are being deleted
-		toDel.SetUid(store.GetUid())
+		return a.messagesHardDelete(topic)
+	}
 
-		// Start with making a log entry
-		_, err = a.db.Collection("dellog").InsertOne(a.ctx, toDel)
-		if err != nil {
+	// Only some messages are being deleted
+
+	// Start with making a log entry
+	_, err = a.db.Collection("dellog").InsertOne(a.ctx, toDel)
+	if err != nil {
+		return err
+	}
+
+	filter := b.M{
+		"topic": topic,
+		// Skip already hard-deleted messages.
+		"delid": b.M{"$exists": false},
+	}
+	if len(toDel.SeqIdRanges) > 1 || toDel.SeqIdRanges[0].Hi <= toDel.SeqIdRanges[0].Low {
+		rangeFilter := b.A{}
+		for _, rng := range toDel.SeqIdRanges {
+			if rng.Hi == 0 {
+				rangeFilter = append(rangeFilter, b.M{"seqid": b.M{"$gte": rng.Low}})
+			} else {
+				rangeFilter = append(rangeFilter, b.M{"seqid": b.M{"$gte": rng.Low, "$lte": rng.Hi}})
+			}
+		}
+		filter["$or"] = rangeFilter
+	} else {
+		filter["seqid"] = b.M{"$gte": toDel.SeqIdRanges[0].Low, "$lte": toDel.SeqIdRanges[0].Hi}
+	}
+
+	if toDel.DeletedFor == "" {
+		if err = a.fileDecrementUseCounter(filter); err != nil {
 			return err
 		}
+		// Hard-delete individual messages. Message is not deleted but all fields with content
+		// are replaced with nulls.
+		_, err = a.db.Collection("messages").UpdateMany(a.ctx, filter, b.M{"$set": b.M{
+			"deletedat":   t.TimeNow(),
+			"delid":       toDel.DelId,
+			"from":        "",
+			"head":        nil,
+			"content":     nil,
+			"attachments": nil}})
+	} else {
+		// Soft-deleting: adding DelId to DeletedFor
 
-		filter := b.M{
-			"topic": topic,
-			// Skip already hard-deleted messages.
-			"delid": b.M{"$exists": false},
-		}
-		if len(toDel.SeqIdRanges) == 1 {
-			filter["seqid"] = b.M{"seqid": b.M{"$gte": toDel.SeqIdRanges[0].Low, "$lte": toDel.SeqIdRanges[0].Hi}}
-		} else {
-			rangeFilter := b.A{}
-			for _, rng := range toDel.SeqIdRanges {
-				if rng.Hi == 0 {
-					rangeFilter = append(rangeFilter, b.M{"seqid": b.M{"$gte": rng.Low}})
-				} else {
-					rangeFilter = append(rangeFilter, b.M{"seqid": b.M{"$gte": rng.Low, "$lte": rng.Hi}})
-				}
-			}
-			filter["$or"] = rangeFilter
-		}
+		// Skip messages already soft-deleted for the current user
+		filter["deletedfor.user"] = b.M{"$ne": toDel.DeletedFor}
+		_, err = a.db.Collection("messages").UpdateMany(a.ctx, filter,
+			b.M{"$addToSet": b.M{
+				"deletedfor": &t.SoftDelete{
+					User:  toDel.DeletedFor,
+					DelId: toDel.DelId,
+				}}})
+	}
 
-		if toDel.DeletedFor == "" {
-			if err = a.fileDecrementUseCounter(filter); err != nil {
-				return err
-			}
-			// Hard-delete individual messages. Message is not deleted but all fields with content
-			// are replaced with nulls.
-			_, err = a.db.Collection("messages").UpdateMany(a.ctx, filter, b.M{"$set": b.M{
-				"deletedat":   t.TimeNow(),
-				"delid":       toDel.DelId,
-				"from":        nil,
-				"head":        nil,
-				"content":     nil,
-				"attachments": nil}})
-		} else {
-			// Soft-deleting: adding DelId to DeletedFor
-
-			// Skip messages already soft-deleted for the current user
-			filter["deletedfor.user"] = b.M{"$ne": toDel.DeletedFor}
-			_, err = a.db.Collection("messages").UpdateMany(a.ctx, filter,
-				b.M{"$addToSet": b.M{
-					"deletedfor": &t.SoftDelete{
-						User:  toDel.DeletedFor,
-						DelId: toDel.DelId,
-					}}})
-		}
-
-		// If operation has failed, remove dellog record.
-		if err != nil {
-			_, _ = a.db.Collection("dellog").DeleteOne(a.ctx, b.M{"_id": toDel.Id})
-		}
+	// If operation has failed, remove dellog record.
+	if err != nil {
+		_, _ = a.db.Collection("dellog").DeleteOne(a.ctx, b.M{"_id": toDel.Id})
 	}
 	return err
 }
@@ -2066,8 +2065,13 @@ func (a *adapter) FileDeleteUnused(olderThan time.Time, limit int) ([]string, er
 
 // Given a select query against 'messages' table, decrement corresponding use counter in 'fileuploads' table.
 func (a *adapter) fileDecrementUseCounter(msgFilter b.M) error {
-	msgFilter["attachments"] = b.M{"$exists": true}
-	fileIds, err := a.db.Collection("messages").Distinct(a.ctx, "attachments", msgFilter)
+	// Copy msgFilter
+	filter := b.M{}
+	for k, v := range msgFilter {
+		filter[k] = v
+	}
+	filter["attachments"] = b.M{"$exists": true}
+	fileIds, err := a.db.Collection("messages").Distinct(a.ctx, "attachments", filter)
 
 	_, err = a.db.Collection("fileuploads").UpdateMany(a.ctx,
 		b.M{"_id": b.M{"$in": fileIds}},
