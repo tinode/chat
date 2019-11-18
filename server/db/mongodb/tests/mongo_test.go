@@ -1071,13 +1071,52 @@ func TestMessageDeleteList(t *testing.T) {
 	}
 }
 
-//func TestTopicDelete(t *testing.T) {
-//	// TODO
-//}
-//
-//func TestFileDeleteUnused(t *testing.T) {
-//	// TODO
-//}
+func TestTopicDelete(t *testing.T) {
+	err := adp.TopicDelete(topics[1].Id, false)
+	if err != nil {
+		t.Fatal()
+	}
+	var got types.Topic
+	cur, err := db.Collection("topics").Find(ctx, b.M{"topic": topics[1].Id})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for cur.Next(ctx) {
+		if err = cur.Decode(&got); err != nil {
+			t.Error(err)
+		}
+		if got.DeletedAt == nil {
+			t.Error("Soft delete failed:", got)
+		}
+	}
+
+	err = adp.TopicDelete(topics[0].Id, true)
+	if err != nil {
+		t.Fatal()
+	}
+
+	var got2 []types.Topic
+	cur, err = db.Collection("topics").Find(ctx, b.M{"topic": topics[0].Id})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = cur.All(ctx, &got2); err != nil {
+		t.Fatal(err)
+	}
+	if len(got2) != 0 {
+		t.Error("Hard delete failed:", got2)
+	}
+}
+
+func TestFileDeleteUnused(t *testing.T) {
+	locs, err := adp.FileDeleteUnused(now.Add(1*time.Minute), 999)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(locs) == 0 {
+		t.Error(mismatchErrorString("Locations length", len(locs), 0))
+	}
+}
 
 // ================== Mixed tests =================================
 func TestDeviceGetAll(t *testing.T) {
