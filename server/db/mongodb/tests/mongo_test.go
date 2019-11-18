@@ -894,10 +894,39 @@ func TestFileFinishUpload(t *testing.T) {
 //	// TODO
 //}
 //
-//func TestCredDel(t *testing.T) {
-//	// TODO
-//}
-//
+func TestCredDel(t *testing.T) {
+	err := adp.CredDel(types.ParseUserId("usr"+users[0].Id), "email", "alice@test.example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []map[string]interface{}
+	cur, err := db.Collection("credentials").Find(ctx, b.M{"method": "email", "value": "alice@test.example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = cur.All(ctx, &got); err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 0 {
+		t.Error("Got result but shouldn't", got)
+	}
+
+	err = adp.CredDel(types.ParseUserId("usr"+users[1].Id), "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cur, err = db.Collection("credentials").Find(ctx, b.M{"user": users[1].Id})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = cur.All(ctx, &got); err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 0 {
+		t.Error("Got result but shouldn't", got)
+	}
+}
+
 func TestAuthDelScheme(t *testing.T) {
 	// tested during TestAuthUpdRecord
 }

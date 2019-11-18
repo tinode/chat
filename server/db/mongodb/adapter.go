@@ -774,26 +774,23 @@ func (a *adapter) CredGetAll(uid t.Uid, method string, validatedOnly bool) ([]t.
 // user's credentials.
 func (a *adapter) CredDel(uid t.Uid, method, value string) error {
 	credCollection := a.db.Collection("credentials")
-	filterAnd := b.A{}
-	filterUser := b.M{"user": uid.String()}
-	filterAnd = append(filterAnd, filterUser)
+	filter := b.M{"user": uid.String()}
 	if method != "" {
-		filterAnd = append(filterAnd, b.M{"method": method})
+		filter["method"] = method
 		if value != "" {
-			filterAnd = append(filterAnd, b.M{"value": value})
+			filter["value"] = value
 		}
 	} else {
-		_, err := credCollection.DeleteMany(a.ctx, filterUser)
+		_, err := credCollection.DeleteMany(a.ctx, filter)
 		return err
 	}
 
 	// Hard-delete all confirmed values or values with no attempts at confirmation.
-	filterOr := b.M{"$or": b.A{
+	hardDeleteFilter := copyBsonMap(filter)
+	hardDeleteFilter["$or"] = b.A{
 		b.M{"done": true},
-		b.M{"retries": 0}}}
-	filterAnd = append(filterAnd, filterOr)
-	filter := b.M{"$and": filterAnd}
-	if _, err := credCollection.DeleteMany(a.ctx, filter); err != nil {
+		b.M{"retries": 0}}
+	if _, err := credCollection.DeleteMany(a.ctx, hardDeleteFilter); err != nil {
 		return err
 	}
 
@@ -2161,6 +2158,13 @@ func normalizeUpdateMap(update map[string]interface{}) map[string]interface{} {
 	return result
 }
 
+func copyBsonMap(mp b.M) b.M{
+	result := b.M{}
+	for k, v := range mp {
+		result[k] = v
+	}
+	return result
+}
 func isDuplicateErr(err error) bool {
 	if err == nil {
 		return false
