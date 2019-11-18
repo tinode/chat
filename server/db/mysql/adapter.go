@@ -522,7 +522,7 @@ func (a *adapter) UpgradeDb() error {
 			return err
 		}
 
-		if err = bumpVersion(a, 110); err != nil {
+		if err := bumpVersion(a, 110); err != nil {
 			return err
 		}
 	}
