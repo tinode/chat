@@ -204,106 +204,131 @@ func (a *adapter) CreateDb(reset bool) error {
 	}
 	// Collections (tables) do not need to be explicitly created since MongoDB creates them with first write operation
 
+	indexes := []struct {
+		Collection string
+		Field      string
+		IndexOpts  mdb.IndexModel
+	}{
+		// Users
+		// Index on 'user.deletedat' for finding soft-deleted users
+		{
+			Collection: "users",
+			Field:      "deletedat",
+		},
+		// Index on 'user.tags' array so user can be found by tags
+		{
+			Collection: "users",
+			Field:      "tags",
+		},
+		// Index for 'user.devices.deviceid' to ensure Device ID uniqueness across users.
+		// Partial filter set to avoid unique constraint for null values (when user object have no devices).
+		{
+			Collection: "users",
+			IndexOpts: mdb.IndexModel{
+				Keys: b.M{"devices.deviceid": 1},
+				Options: mdbopts.Index().
+					SetUnique(true).
+					SetPartialFilterExpression(b.M{"devices.deviceid": b.M{"$exists": true}}),
+			},
+		},
+
+		// User authentication records {_id, userid, secret}
+		// Should be able to access user's auth records by user id
+		{
+			Collection: "auth",
+			Field:      "userid",
+		},
+
+		// Subscription to a topic. The primary key is a topic:user string
+		{
+			Collection: "subscriptions",
+			Field:      "user",
+		},
+		{
+			Collection: "subscriptions",
+			Field:      "topic",
+		},
+
+		// Topics stored in database
+		// Index on 'owner' field for deleting users.
+		{
+			Collection: "topics",
+			Field:      "owner",
+		},
+		// Index on 'topic.tags' array so topics can be found by tags.
+		// These tags are not unique as opposite to 'user.tags'.
+		{
+			Collection: "topics",
+			Field:      "tags",
+		},
+
+		// Stored message
+		// Compound index of 'topic - seqid' for selecting messages in a topic.
+		{
+			Collection: "messages",
+			IndexOpts:  mdb.IndexModel{Keys: b.M{"topic": 1, "seqid": 1}},
+		},
+		// Compound index of hard-deleted messages
+		{
+			Collection: "messages",
+			IndexOpts:  mdb.IndexModel{Keys: b.M{"topic": 1, "delid": 1}},
+		},
+		// Compound multi-index of soft-deleted messages: each message gets multiple compound index entries like
+		// 		 [topic, user1, delid1], [topic, user2, delid2],...
+		{
+			Collection: "messages",
+			IndexOpts:  mdb.IndexModel{Keys: b.M{"topic": 1, "deletedfor.user": 1, "deletedfor.delid": 1}},
+		},
+
+		// Log of deleted messages
+		// Compound index of 'topic - delid'
+		{
+			Collection: "dellog",
+			IndexOpts:  mdb.IndexModel{Keys: b.M{"topic": 1, "delid": 1}},
+		},
+
+		// User credentials - contact information such as "email:jdoe@example.com" or "tel:+18003287448":
+		// Id: "method:credential" like "email:jdoe@example.com". See types.Credential.
+		// Index on 'credentials.user' to be able to query credentials by user id.
+		{
+			Collection: "credentials",
+			Field:      "user",
+		},
+
+		// Records of file uploads. See types.FileDef.
+		// Index on 'fileuploads.user' to be able to get records by user id.
+		{
+			Collection: "fileuploads",
+			Field:      "user",
+		},
+		// Index on 'fileuploads.usecount' to be able to delete unused records at once.
+		{
+			Collection: "fileuploads",
+			Field:      "usecount",
+		},
+	}
+
+	var err error
+	for _, idx := range indexes {
+		if idx.Field != "" {
+			_, err = a.db.Collection(idx.Collection).Indexes().CreateOne(a.ctx, mdb.IndexModel{Keys: b.M{idx.Field: 1}})
+		} else {
+			_, err = a.db.Collection(idx.Collection).Indexes().CreateOne(a.ctx, idx.IndexOpts)
+		}
+		if err != nil {
+			return err
+		}
+	}
+
 	// Collection "kvmeta" with metadata key-value pairs.
 	// Key in "_id" field.
-
-	// Users
-	// Create secondary index on User.DeletedAt for finding soft-deleted users
-	if _, err := a.db.Collection("users").Indexes().CreateOne(a.ctx, getIdxOpts("deletedat")); err != nil {
-		return err
-	}
-	// Create secondary index on User.Tags array so user can be found by tags
-	if _, err := a.db.Collection("users").Indexes().CreateOne(a.ctx, getIdxOpts("tags")); err != nil {
-		return err
-	}
-	// Create secondary index for user.devices.deviceid to ensure Device ID uniqueness across users.
-	// Partial filter set to avoid unique constraint for null values (when user object have no devices).
-	if _, err := a.db.Collection("users").Indexes().CreateOne(a.ctx, mdb.IndexModel{
-		Keys: b.M{"devices.deviceid": 1},
-		Options: mdbopts.Index().
-			SetUnique(true).
-			SetPartialFilterExpression(b.M{"devices.deviceid": b.M{"$exists": true}}),
-	}); err != nil {
-		return err
-	}
-
-	// User authentication records {_id, userid, secret}
-	// Should be able to access user's auth records by user id
-	if _, err := a.db.Collection("auth").Indexes().CreateOne(a.ctx, getIdxOpts("userid")); err != nil {
-		return err
-	}
-
-	// Should be able to access user's auth records by user id
-	if _, err := a.db.Collection("subscriptions").Indexes().CreateOne(a.ctx, getIdxOpts("user")); err != nil {
-		return err
-	}
-	if _, err := a.db.Collection("subscriptions").Indexes().CreateOne(a.ctx, getIdxOpts("topic")); err != nil {
-		return err
-	}
-
-	// Topics stored in database
-	// Secondary index on Owner field for deleting users.
-	if _, err := a.db.Collection("topics").Indexes().CreateOne(a.ctx, getIdxOpts("owner")); err != nil {
-		return err
-	}
-	// Secondary index on Topic.Tags array so topics can be found by tags.
-	// These tags are not unique as opposite to User.Tags.
-	if _, err := a.db.Collection("topics").Indexes().CreateOne(a.ctx, getIdxOpts("tags")); err != nil {
-		return err
-	}
-	// Create system topic 'sys'.
-	if err := createSystemTopic(a); err != nil {
-		return err
-	}
-
-	// Stored message
-	// Compound index of topic - seqID for selecting messages in a topic.
-	if _, err := a.db.Collection("messages").Indexes().CreateOne(a.ctx, mdb.IndexModel{
-		Keys: b.M{"topic": 1, "seqid": 1},
-	}); err != nil {
-		return err
-	}
-	// Compound index of hard-deleted messages
-	if _, err := a.db.Collection("messages").Indexes().CreateOne(a.ctx, mdb.IndexModel{
-		Keys: b.M{"topic": 1, "delid": 1},
-	}); err != nil {
-		return err
-	}
-	// Compound multi-index of soft-deleted messages: each message gets multiple compound index entries like
-	// 		 [Topic, User1, DelId1], [Topic, User2, DelId2],...
-	if _, err := a.db.Collection("messages").Indexes().CreateOne(a.ctx, mdb.IndexModel{
-		Keys: b.M{"topic": 1, "deletedfor.user": 1, "deletedfor.delid": 1},
-	}); err != nil {
-		return err
-	}
-
-	// Log of deleted messages
-	// Compound index of topic - delId
-	if _, err := a.db.Collection("dellog").Indexes().CreateOne(a.ctx, mdb.IndexModel{
-		Keys: b.M{"topic": 1, "delid": 1},
-	}); err != nil {
-		return err
-	}
-
-	// User credentials - contact information such as "email:jdoe@example.com" or "tel:+18003287448":
-	// Id: "method:credential" like "email:jdoe@example.com". See types.Credential.
-	// Create secondary index on credentials.User to be able to query credentials by user id.
-	if _, err := a.db.Collection("credentials").Indexes().CreateOne(a.ctx, getIdxOpts("user")); err != nil {
-		return err
-	}
-
-	// Records of file uploads. See types.FileDef.
-	// A secondary index on fileuploads.User to be able to get records by user id.
-	if _, err := a.db.Collection("fileuploads").Indexes().CreateOne(a.ctx, getIdxOpts("user")); err != nil {
-		return err
-	}
-	// A secondary index on fileuploads.UseCount to be able to delete unused records at once.
-	if _, err := a.db.Collection("fileuploads").Indexes().CreateOne(a.ctx, getIdxOpts("usecount")); err != nil {
-		return err
-	}
-
 	// Record current DB version.
 	if _, err := a.db.Collection("kvmeta").InsertOne(a.ctx, map[string]interface{}{"_id": "version", "value": adpVersion}); err != nil {
+		return err
+	}
+
+	// Create system topic 'sys'.
+	if err := createSystemTopic(a); err != nil {
 		return err
 	}
 
@@ -384,7 +409,7 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 	if err != nil {
 		return err
 	}
-	topicFilter := b.M{"topic": b.M{"$in:": topicIds}}
+	topicFilter := b.M{"topic": b.M{"$in": topicIds}}
 
 	var sess mdb.Session
 	if sess, err = a.conn.StartSession(); err != nil {
@@ -420,7 +445,7 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 			// Decrement fileuploads UseCounter
 			// First get array of attachments IDs that were used in messages of topics from topicIds
 			fileIds, err := a.db.Collection("messages").Distinct(a.ctx, "attachments", b.M{
-				"topic":       b.M{"$in:": topicIds},
+				"topic":       b.M{"$in": topicIds},
 				"attachments": b.M{"$exists": true},
 			})
 			if err != nil {
@@ -429,7 +454,7 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 			// Then decrement the usecount field of these file records
 			_, err = a.db.Collection("fileuploads").UpdateMany(a.ctx,
 				b.M{"_id": b.M{"$in": fileIds}},
-				b.M{"$inc": b.M{"usecount": -1},})
+				b.M{"$inc": b.M{"usecount": -1}})
 			if err != nil {
 				return err
 			}
@@ -474,7 +499,7 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 			// Disable subscriptions for topics where the user is the owner.
 			// Disable topics where the user is the owner.
 			now := t.TimeNow()
-			disable := b.M{"deletedat": now, "updatedat": now}
+			disable := b.M{"$set": b.M{"deletedat": now, "updatedat": now}}
 
 			if _, err = a.db.Collection("subscriptions").UpdateMany(a.ctx, topicFilter, disable); err != nil {
 				return err
@@ -569,9 +594,10 @@ func (a *adapter) UserUpdateTags(uid t.Uid, add, remove, reset []string) ([]stri
 // UserGetByCred returns user ID for the given validated credential.
 func (a *adapter) UserGetByCred(method, value string) (t.Uid, error) {
 	var userId map[string]string
-	filter := b.M{"_id": method + ":" + value}
-	findOpts := mdbopts.FindOneOptions{Projection: b.M{"user": 1, "_id": 0}}
-	err := a.db.Collection("credentials").FindOne(a.ctx, filter, &findOpts).Decode(&userId)
+	err := a.db.Collection("credentials").FindOne(a.ctx,
+		b.M{"_id": method + ":" + value},
+		mdbopts.FindOne().SetProjection(b.M{"user": 1, "_id": 0}),
+	).Decode(&userId)
 	if err != nil {
 		if err == mdb.ErrNoDocuments {
 			return t.ZeroUid, nil
@@ -607,23 +633,21 @@ func (a *adapter) UserUnreadCount(uid t.Uid) (int, error) {
 	}
 	cur, err := a.db.Collection("subscriptions").Aggregate(a.ctx, pipeline)
 	if err != nil {
-		if err == mdb.ErrNilCursor {
-			return 0, nil
-		}
 		return 0, err
 	}
 	defer cur.Close(a.ctx)
 
-	var result struct {
+	var result []struct {
 		Id          interface{} `bson:"_id"`
 		UnreadCount int         `bson:"unreadCount"`
 	}
-	for cur.Next(a.ctx) {
-		if err = cur.Decode(&result); err != nil {
-			return 0, err
-		}
+	if err = cur.All(a.ctx, &result); err != nil {
+		return 0, err
 	}
-	return result.UnreadCount, nil
+	if len(result) == 0 { // Not found
+		return 0, nil
+	}
+	return result[0].UnreadCount, nil
 }
 
 // Credential management
@@ -750,26 +774,23 @@ func (a *adapter) CredGetAll(uid t.Uid, method string, validatedOnly bool) ([]t.
 // user's credentials.
 func (a *adapter) CredDel(uid t.Uid, method, value string) error {
 	credCollection := a.db.Collection("credentials")
-	filterAnd := b.A{}
-	filterUser := b.M{"user": uid.String()}
-	filterAnd = append(filterAnd, filterUser)
+	filter := b.M{"user": uid.String()}
 	if method != "" {
-		filterAnd = append(filterAnd, b.M{"method": method})
+		filter["method"] = method
 		if value != "" {
-			filterAnd = append(filterAnd, b.M{"value": value})
+			filter["value"] = value
 		}
 	} else {
-		_, err := credCollection.DeleteMany(a.ctx, filterUser)
+		_, err := credCollection.DeleteMany(a.ctx, filter)
 		return err
 	}
 
 	// Hard-delete all confirmed values or values with no attempts at confirmation.
-	filterOr := b.M{"$or": b.A{
+	hardDeleteFilter := copyBsonMap(filter)
+	hardDeleteFilter["$or"] = b.A{
 		b.M{"done": true},
-		b.M{"retries": 0}}}
-	filterAnd = append(filterAnd, filterOr)
-	filter := b.M{"$and": filterAnd}
-	if _, err := credCollection.DeleteMany(a.ctx, filter); err != nil {
+		b.M{"retries": 0}}
+	if _, err := credCollection.DeleteMany(a.ctx, hardDeleteFilter); err != nil {
 		return err
 	}
 
@@ -909,10 +930,12 @@ func (a *adapter) AuthUpdRecord(uid t.Uid, scheme, unique string,
 	// 3. If yes, first insert the new record (it may fail due to dublicate '_id') then delete the old one.
 
 	var err error
-	var record struct{ Unique string `bson:"_id"` }
-	findOpts := mdbopts.FindOneOptions{Projection: b.M{"_id": 1}}
+	var record struct {
+		Unique string `bson:"_id"`
+	}
+	findOpts := mdbopts.FindOne().SetProjection(b.M{"_id": 1})
 	filter := b.M{"userid": uid.String(), "scheme": scheme}
-	if err = a.db.Collection("auth").FindOne(a.ctx, filter, &findOpts).Decode(&record); err != nil {
+	if err = a.db.Collection("auth").FindOne(a.ctx, filter, findOpts).Decode(&record); err != nil {
 		return err
 	}
 
@@ -932,8 +955,7 @@ func (a *adapter) AuthUpdRecord(uid t.Uid, scheme, unique string,
 			return err
 		}
 		if err = mdb.WithSession(a.ctx, sess, func(sc mdb.SessionContext) error {
-			err = a.AuthAddRecord(uid, scheme, unique, authLvl, secret, expires)
-			if err != nil {
+			if err = a.AuthAddRecord(uid, scheme, unique, authLvl, secret, expires); err != nil {
 				return err
 			}
 			if err = a.AuthDelScheme(uid, scheme); err != nil {
@@ -951,6 +973,18 @@ func (a *adapter) AuthUpdRecord(uid t.Uid, scheme, unique string,
 
 // Topic management
 
+func (a *adapter) undeleteSubscription(sub *t.Subscription) error {
+	_, err := a.db.Collection("subscriptions").UpdateOne(a.ctx,
+		b.M{"_id": sub.Id},
+		b.M{
+			"$unset": b.M{"deletedat": ""},
+			"$set": b.M{
+				"updatedat": sub.UpdatedAt,
+				"createdat": sub.CreatedAt,
+				"modegiven": sub.ModeGiven}})
+	return err
+}
+
 // TopicCreate creates a topic
 func (a *adapter) TopicCreate(topic *t.Topic) error {
 	_, err := a.db.Collection("topics").InsertOne(a.ctx, &topic)
@@ -961,9 +995,8 @@ func (a *adapter) TopicCreate(topic *t.Topic) error {
 func (a *adapter) TopicCreateP2P(initiator, invited *t.Subscription) error {
 	initiator.Id = initiator.Topic + ":" + initiator.User
 	// Don't care if the initiator changes own subscription
-	replOpts := mdbopts.ReplaceOptions{}
-	replOpts.SetUpsert(true)
-	_, err := a.db.Collection("subscriptions").ReplaceOne(a.ctx, b.M{"_id": initiator.Id}, initiator, &replOpts)
+	replOpts := mdbopts.Replace().SetUpsert(true)
+	_, err := a.db.Collection("subscriptions").ReplaceOne(a.ctx, b.M{"_id": initiator.Id}, initiator, replOpts)
 	if err != nil {
 		return err
 	}
@@ -979,14 +1012,7 @@ func (a *adapter) TopicCreateP2P(initiator, invited *t.Subscription) error {
 		}
 		// Undelete the second subsription if it exists: remove DeletedAt, update CreatedAt and UpdatedAt,
 		// update ModeGiven.
-		_, err = a.db.Collection("subscriptions").UpdateOne(a.ctx,
-			b.M{"_id": invited.Id},
-			b.M{
-				"$unset": b.M{"deletedat": ""},
-				"$set": b.M{
-					"updatedat": invited.UpdatedAt,
-					"createdat": invited.CreatedAt,
-					"modegiven": invited.ModeGiven}})
+		err = a.undeleteSubscription(invited)
 		if err != nil {
 			return err
 		}
@@ -1033,7 +1059,8 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 		}
 	}
 
-	cur, err := a.db.Collection("subscriptions").Find(a.ctx, filter, mdbopts.Find().SetLimit(int64(limit)))
+	findOpts := mdbopts.Find().SetLimit(int64(limit))
+	cur, err := a.db.Collection("subscriptions").Find(a.ctx, filter, findOpts)
 	if err != nil {
 		return nil, err
 	}
@@ -1243,8 +1270,8 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 // OwnTopics loads a slice of topic names where the user is the owner.
 func (a *adapter) OwnTopics(uid t.Uid) ([]string, error) {
 	filter := b.M{"owner": uid.String(), "deletedat": b.M{"$exists": false}}
-	findOpts := mdbopts.FindOptions{Projection: b.M{"_id": 1}}
-	cur, err := a.db.Collection("topics").Find(a.ctx, filter, &findOpts)
+	findOpts := mdbopts.Find().SetProjection(b.M{"_id": 1})
+	cur, err := a.db.Collection("topics").Find(a.ctx, filter, findOpts)
 	if err != nil {
 		return nil, err
 	}
@@ -1283,27 +1310,20 @@ func (a *adapter) TopicShare(subs []*t.Subscription) error {
 	}
 	if err = mdb.WithSession(a.ctx, sess, func(sc mdb.SessionContext) error {
 		for _, sub := range subs {
-			if _, err := a.db.Collection("subscriptions").InsertOne(a.ctx, sub); err != nil {
+			_, err = a.db.Collection("subscriptions").InsertOne(a.ctx, sub)
+			if err != nil {
 				if isDuplicateErr(err) {
-					_, err := a.db.Collection("subscriptions").UpdateOne(a.ctx,
-						b.M{"_id": sub.Id},
-						b.M{
-							"$unset": b.M{"deletedat": ""},
-							"$set": b.M{
-								"createdat": sub.CreatedAt,
-								"updatedat": sub.UpdatedAt,
-								"modegiven": sub.ModeGiven}})
+					err = a.undeleteSubscription(sub)
 					if err != nil {
 						return err
 					}
+				} else {
+					return err
 				}
-				return err
 			}
 		}
-		if err := sess.CommitTransaction(a.ctx); err != nil {
-			return err
-		}
-		return nil
+
+		return sess.CommitTransaction(a.ctx)
 	}); err != nil {
 		return err
 	}
@@ -1340,36 +1360,23 @@ func (a *adapter) TopicDelete(topic string, hard bool) error {
 
 // TopicUpdateOnMessage increments Topic's or User's SeqId value and updates TouchedAt timestamp.
 func (a *adapter) TopicUpdateOnMessage(topic string, msg *t.Message) error {
-	_, err := a.db.Collection("topics").UpdateOne(a.ctx,
-		b.M{"_id": topic},
-		b.M{"$set": b.M{
-			"seqid":     msg.SeqId,
-			"touchedat": msg.CreatedAt}})
-
-	return err
+	return a.topicUpdate(topic, map[string]interface{}{"seqid": msg.SeqId, "touchedat": msg.CreatedAt})
 }
 
 // TopicUpdate updates topic record.
 func (a *adapter) TopicUpdate(topic string, update map[string]interface{}) error {
-	// to get round the hardcoded "UpdatedAt" key in store.Topics.Update()
-	update = normalizeUpdateMap(update)
-
-	if val, ok := update["UpdatedAt"]; ok {
-		update["updatedat"] = val
-		delete(update, "UpdatedAt")
-	}
-
-	_, err := a.db.Collection("topics").UpdateOne(a.ctx,
-		b.M{"_id": topic},
-		b.M{"$set": update})
-	return err
+	return a.topicUpdate(topic, normalizeUpdateMap(update))
 }
 
 // TopicOwnerChange updates topic's owner
 func (a *adapter) TopicOwnerChange(topic string, newOwner t.Uid) error {
+	return a.topicUpdate(topic, map[string]interface{}{"owner": newOwner.String()})
+}
+
+func (a *adapter) topicUpdate(topic string, update map[string]interface{}) error {
 	_, err := a.db.Collection("topics").UpdateOne(a.ctx,
 		b.M{"_id": topic},
-		b.M{"$set": b.M{"owner": newOwner}})
+		b.M{"$set": update})
 
 	return err
 }
@@ -1492,7 +1499,7 @@ func (a *adapter) SubsDelete(topic string, user t.Uid) error {
 	now := t.TimeNow()
 	_, err := a.db.Collection("subscriptions").UpdateOne(a.ctx,
 		b.M{"_id": topic + ":" + user.String()},
-		b.M{"updatedat": now, "deletedat": now})
+		b.M{"$set": b.M{"updatedat": now, "deletedat": now}})
 	return err
 }
 
@@ -1504,8 +1511,7 @@ func (a *adapter) SubsDelForTopic(topic string, hard bool) error {
 		_, err = a.db.Collection("subscriptions").DeleteMany(a.ctx, filter)
 	} else {
 		now := t.TimeNow()
-		_, err = a.db.Collection("subscriptions").UpdateMany(a.ctx,
-			filter,
+		_, err = a.db.Collection("subscriptions").UpdateMany(a.ctx, filter,
 			b.M{"$set": b.M{"updatedat": now, "deletedat": now}})
 	}
 	return err
@@ -1519,8 +1525,7 @@ func (a *adapter) SubsDelForUser(user t.Uid, hard bool) error {
 		_, err = a.db.Collection("subscriptions").DeleteMany(a.ctx, filter)
 	} else {
 		now := t.TimeNow()
-		_, err = a.db.Collection("subscriptions").UpdateMany(a.ctx,
-			filter,
+		_, err = a.db.Collection("subscriptions").UpdateMany(a.ctx, filter,
 			b.M{"$set": b.M{"updatedat": now, "deletedat": now}})
 	}
 	return err
@@ -1570,7 +1575,7 @@ func (a *adapter) FindUsers(uid t.Uid, req, opt []string) ([]t.Subscription, err
 
 		// Filter out documents where 'tags' intersection with 'reqTags' is an empty array
 		pipeline = append(pipeline,
-			b.M{"$match": b.M{"$expr": b.M{"$ne": b.A{b.M{"$size": b.M{"$setIntersection": b.A{"$tags", reqTags}}}, 0},}}})
+			b.M{"$match": b.M{"$expr": b.M{"$ne": b.A{b.M{"$size": b.M{"$setIntersection": b.A{"$tags", reqTags}}}, 0}}}})
 	}
 
 	pipeline = append(pipeline, b.M{"$limit": a.maxResults})
@@ -1651,7 +1656,7 @@ func (a *adapter) FindTopics(req, opt []string) ([]t.Subscription, error) {
 
 		// Filter out documents where 'tags' intersection with 'reqTags' is an empty array
 		pipeline = append(pipeline,
-			b.M{"$match": b.M{"$expr": b.M{"$ne": b.A{b.M{"$size": b.M{"$setIntersection": b.A{"$tags", reqTags}}}, 0},}}})
+			b.M{"$match": b.M{"$expr": b.M{"$ne": b.A{b.M{"$size": b.M{"$setIntersection": b.A{"$tags", reqTags}}}, 0}}}})
 	}
 
 	pipeline = append(pipeline, b.M{"$limit": a.maxResults})
@@ -1691,7 +1696,6 @@ func (a *adapter) FindTopics(req, opt []string) ([]t.Subscription, error) {
 
 // MessageSave saves message to database
 func (a *adapter) MessageSave(msg *t.Message) error {
-	msg.SetUid(store.GetUid())
 	_, err := a.db.Collection("messages").InsertOne(a.ctx, msg)
 	return err
 }
@@ -1766,66 +1770,65 @@ func (a *adapter) MessageDeleteList(topic string, toDel *t.DelMessage) error {
 	var err error
 
 	if toDel == nil {
-		err = a.messagesHardDelete(topic)
-	} else {
-		// Only some messages are being deleted
-		toDel.SetUid(store.GetUid())
+		return a.messagesHardDelete(topic)
+	}
 
-		// Start with making a log entry
-		_, err = a.db.Collection("dellog").InsertOne(a.ctx, toDel)
-		if err != nil {
+	// Only some messages are being deleted
+
+	// Start with making a log entry
+	_, err = a.db.Collection("dellog").InsertOne(a.ctx, toDel)
+	if err != nil {
+		return err
+	}
+
+	filter := b.M{
+		"topic": topic,
+		// Skip already hard-deleted messages.
+		"delid": b.M{"$exists": false},
+	}
+	if len(toDel.SeqIdRanges) > 1 || toDel.SeqIdRanges[0].Hi <= toDel.SeqIdRanges[0].Low {
+		rangeFilter := b.A{}
+		for _, rng := range toDel.SeqIdRanges {
+			if rng.Hi == 0 {
+				rangeFilter = append(rangeFilter, b.M{"seqid": b.M{"$gte": rng.Low}})
+			} else {
+				rangeFilter = append(rangeFilter, b.M{"seqid": b.M{"$gte": rng.Low, "$lte": rng.Hi}})
+			}
+		}
+		filter["$or"] = rangeFilter
+	} else {
+		filter["seqid"] = b.M{"$gte": toDel.SeqIdRanges[0].Low, "$lte": toDel.SeqIdRanges[0].Hi}
+	}
+
+	if toDel.DeletedFor == "" {
+		if err = a.fileDecrementUseCounter(filter); err != nil {
 			return err
 		}
+		// Hard-delete individual messages. Message is not deleted but all fields with content
+		// are replaced with nulls.
+		_, err = a.db.Collection("messages").UpdateMany(a.ctx, filter, b.M{"$set": b.M{
+			"deletedat":   t.TimeNow(),
+			"delid":       toDel.DelId,
+			"from":        "",
+			"head":        nil,
+			"content":     nil,
+			"attachments": nil}})
+	} else {
+		// Soft-deleting: adding DelId to DeletedFor
 
-		filter := b.M{
-			"topic": topic,
-			// Skip already hard-deleted messages.
-			"delid": b.M{"$exists": false},
-		}
-		if len(toDel.SeqIdRanges) == 1 {
-			filter["seqid"] = b.M{"seqid": b.M{"$gte": toDel.SeqIdRanges[0].Low, "$lte": toDel.SeqIdRanges[0].Hi}}
-		} else {
-			rangeFilter := b.A{}
-			for _, rng := range toDel.SeqIdRanges {
-				if rng.Hi == 0 {
-					rangeFilter = append(rangeFilter, b.M{"seqid": b.M{"$gte": rng.Low}})
-				} else {
-					rangeFilter = append(rangeFilter, b.M{"seqid": b.M{"$gte": rng.Low, "$lte": rng.Hi}})
-				}
-			}
-			filter["$or"] = rangeFilter
-		}
+		// Skip messages already soft-deleted for the current user
+		filter["deletedfor.user"] = b.M{"$ne": toDel.DeletedFor}
+		_, err = a.db.Collection("messages").UpdateMany(a.ctx, filter,
+			b.M{"$addToSet": b.M{
+				"deletedfor": &t.SoftDelete{
+					User:  toDel.DeletedFor,
+					DelId: toDel.DelId,
+				}}})
+	}
 
-		if toDel.DeletedFor == "" {
-			if err = a.fileDecrementUseCounter(filter); err != nil {
-				return err
-			}
-			// Hard-delete individual messages. Message is not deleted but all fields with content
-			// are replaced with nulls.
-			_, err = a.db.Collection("messages").UpdateMany(a.ctx, filter, b.M{"$set": b.M{
-				"deletedat":   t.TimeNow(),
-				"delid":       toDel.DelId,
-				"from":        nil,
-				"head":        nil,
-				"content":     nil,
-				"attachments": nil}})
-		} else {
-			// Soft-deleting: adding DelId to DeletedFor
-
-			// Skip messages already soft-deleted for the current user
-			filter["deletedfor.user"] = b.M{"$ne": toDel.DeletedFor}
-			_, err = a.db.Collection("messages").UpdateMany(a.ctx, filter,
-				b.M{"$addToSet": b.M{
-					"deletedfor": &t.SoftDelete{
-						User:  toDel.DeletedFor,
-						DelId: toDel.DelId,
-					}}})
-		}
-
-		// If operation has failed, remove dellog record.
-		if err != nil {
-			_, _ = a.db.Collection("dellog").DeleteOne(a.ctx, b.M{"_id": toDel.Id})
-		}
+	// If operation has failed, remove dellog record.
+	if err != nil {
+		_, _ = a.db.Collection("dellog").DeleteOne(a.ctx, b.M{"_id": toDel.Id})
 	}
 	return err
 }
@@ -1841,7 +1844,6 @@ func (a *adapter) MessageGetDeleted(topic string, forUser t.Uid, opts *t.QueryOp
 		if opts.Before > 0 {
 			upper = opts.Before
 		}
-
 		if opts.Limit > 0 && opts.Limit < limit {
 			limit = opts.Limit
 		}
@@ -1857,8 +1859,9 @@ func (a *adapter) MessageGetDeleted(topic string, forUser t.Uid, opts *t.QueryOp
 	} else {
 		filter["delid"] = b.M{"$gte": lower, "$lte": upper}
 	}
-	findOpts := mdbopts.Find().SetSort(b.M{"topic": 1, "delid": 1})
-	findOpts.SetLimit(int64(limit))
+	findOpts := mdbopts.Find().
+		SetSort(b.M{"topic": 1, "delid": 1}).
+		SetLimit(int64(limit))
 
 	cur, err := a.db.Collection("dellog").Find(a.ctx, filter, findOpts)
 	if err != nil {
@@ -1905,12 +1908,12 @@ func (a *adapter) DeviceUpsert(uid t.Uid, dev *t.DeviceDef) error {
 	var user t.User
 	err := a.db.Collection("users").FindOne(a.ctx, b.M{
 		"_id":              userId,
-		"devices.deviceid": dev.DeviceId,}).Decode(&user)
+		"devices.deviceid": dev.DeviceId}).Decode(&user)
 
 	if err == nil && user.Id != "" { // current user owns this device
 		// ArrayFilter used to avoid adding another (duplicate) device object. Update that device data
 		updOpts := mdbopts.Update().SetArrayFilters(mdbopts.ArrayFilters{
-			Filters: []interface{}{b.M{"dev.deviceid": dev.DeviceId}},})
+			Filters: []interface{}{b.M{"dev.deviceid": dev.DeviceId}}})
 		_, err = a.db.Collection("users").UpdateOne(a.ctx,
 			b.M{"_id": userId},
 			b.M{"$set": b.M{
@@ -1972,15 +1975,14 @@ func (a *adapter) DeviceGetAll(uids ...t.Uid) (map[t.Uid][]t.DeviceDef, int, err
 	}
 	defer cur.Close(a.ctx)
 
-	var row struct {
-		Id      string `bson:"_id"`
-		Devices []t.DeviceDef
-	}
-
 	result := make(map[t.Uid][]t.DeviceDef)
 	count := 0
 	var uid t.Uid
 	for cur.Next(a.ctx) {
+		var row struct {
+			Id      string `bson:"_id"`
+			Devices []t.DeviceDef
+		}
 		if err = cur.Decode(&row); err != nil {
 			return nil, 0, err
 		}
@@ -2051,7 +2053,7 @@ func (a *adapter) FileGet(fid string) (*t.FileDef, error) {
 // unused records with UpdatedAt before olderThan.
 // Returns array of FileDef.Location of deleted filerecords so actual files can be deleted too.
 func (a *adapter) FileDeleteUnused(olderThan time.Time, limit int) ([]string, error) {
-	findOpts := new(mdbopts.FindOptions)
+	findOpts := mdbopts.Find()
 	filter := b.M{"$or": b.A{
 		b.M{"usecount": 0},
 		b.M{"usecount": b.M{"$exists": false}}}}
@@ -2067,6 +2069,7 @@ func (a *adapter) FileDeleteUnused(olderThan time.Time, limit int) ([]string, er
 	if err != nil {
 		return nil, err
 	}
+	defer cur.Close(a.ctx)
 
 	var result map[string]string
 	var locations []string
@@ -2078,14 +2081,18 @@ func (a *adapter) FileDeleteUnused(olderThan time.Time, limit int) ([]string, er
 	}
 
 	_, err = a.db.Collection("fileuploads").DeleteMany(a.ctx, filter)
-	cur.Close(a.ctx)
 	return locations, err
 }
 
 // Given a select query against 'messages' table, decrement corresponding use counter in 'fileuploads' table.
 func (a *adapter) fileDecrementUseCounter(msgFilter b.M) error {
-	msgFilter["attachments"] = b.M{"$exists": true}
-	fileIds, err := a.db.Collection("messages").Distinct(a.ctx, "attachments", msgFilter)
+	// Copy msgFilter
+	filter := b.M{}
+	for k, v := range msgFilter {
+		filter[k] = v
+	}
+	filter["attachments"] = b.M{"$exists": true}
+	fileIds, err := a.db.Collection("messages").Distinct(a.ctx, "attachments", filter)
 
 	_, err = a.db.Collection("fileuploads").UpdateMany(a.ctx,
 		b.M{"_id": b.M{"$in": fileIds}},
@@ -2141,7 +2148,7 @@ func diff(userTags []string, removeTags []string) []string {
 	return result
 }
 
-// normalizeUpdateMap turns keys that hardcoded as CamelCase into lowercase
+// normalizeUpdateMap turns keys that hardcoded as CamelCase into lowercase (MongoDB uses lowercase by default)
 func normalizeUpdateMap(update map[string]interface{}) map[string]interface{} {
 	result := make(map[string]interface{}, len(update))
 	for key, value := range update {
@@ -2151,6 +2158,13 @@ func normalizeUpdateMap(update map[string]interface{}) map[string]interface{} {
 	return result
 }
 
+func copyBsonMap(mp b.M) b.M {
+	result := b.M{}
+	for k, v := range mp {
+		result[k] = v
+	}
+	return result
+}
 func isDuplicateErr(err error) bool {
 	if err == nil {
 		return false
