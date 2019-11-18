@@ -116,7 +116,6 @@ func largeFileUpload(wrt http.ResponseWriter, req *http.Request) {
 		// Enforce maximum upload size.
 		req.Body = http.MaxBytesReader(wrt, req.Body, globals.maxFileUploadSize)
 	}
-	defer req.Body.Close()
 
 	// Check for API key presence
 	if isValid, _ := checkAPIKey(getAPIKey(req)); !isValid {
