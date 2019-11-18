@@ -33,7 +33,7 @@ const (
 	defaultDSN      = "root:@tcp(localhost:3306)/tinode?parseTime=true"
 	defaultDatabase = "tinode"
 
-	adpVersion = 109
+	adpVersion = 110
 
 	adapterName = "mysql"
 
@@ -497,6 +497,8 @@ func (a *adapter) UpgradeDb() error {
 	}
 
 	if a.version == 108 {
+		// Perform database upgrade from version 108 to version 109.
+
 		tx, err := a.db.Begin()
 		if err != nil {
 			return err
@@ -514,6 +516,17 @@ func (a *adapter) UpgradeDb() error {
 		}
 	}
 
+	if a.version == 109 {
+		// Perform database upgrade from version 109 to version 110.
+		if _, err := a.db.Exec(`UPDATE topics SET touchedat=updatedat WHERE touchedat IS NULL`); err != nil {
+			return err
+		}
+
+		if err = bumpVersion(a, 110); err != nil {
+			return err
+		}
+	}
+
 	if a.version != adpVersion {
 		return errors.New("Failed to perform database upgrade to version " + strconv.Itoa(adpVersion) +
 			". DB is still at " + strconv.Itoa(a.version))
@@ -523,9 +536,9 @@ func (a *adapter) UpgradeDb() error {
 
 func createSystemTopic(tx *sql.Tx) error {
 	now := t.TimeNow()
-	sql := `INSERT INTO topics(createdat,updatedat,name,access,public) 
-				VALUES(?,?,'sys','{"Auth": "N","Anon": "N"}','{"fn": "System"}')`
-	_, err := tx.Exec(sql, now, now)
+	sql := `INSERT INTO topics(createdat,updatedat,touchedat,name,access,public)
+				VALUES(?,?,?,'sys','{"Auth": "N","Anon": "N"}','{"fn": "System"}')`
+	_, err := tx.Exec(sql, now, now, now)
 	return err
 }
 
