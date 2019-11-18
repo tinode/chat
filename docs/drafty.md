@@ -49,6 +49,8 @@ If `tp` is provided, it means the style is a basic text decoration:
  * `DL`: deleted or strikethrough text: ~~strikethrough~~.
  * `CO`: code or monotyped text, possibly with different background: `monotype`.
  * `BR`: line break.
+ * `RW`: logical grouping of formats, a row.
+ * `HD`: hidden text.
 
 If key is provided, it's a 0-based index into the `ent` field which contains an entity definition such as an image or an URL:
  * `LN`: link (URL) [https://api.tinode.co](https://api.tinode.co)

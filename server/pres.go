@@ -295,6 +295,17 @@ func (t *Topic) presSubsOnlineDirect(what string) {
 	}
 }
 
+// Communicates "topic unaccessible (cluster rehashing or node connection lost)" event
+// to a list of topics promting the client to resubscribe to the topics.
+func (s *Session) presTermDirect(subs []string) {
+	log.Printf("sid '%s', uid '%s', terminating %s", s.sid, s.uid, subs)
+	msg := &ServerComMessage{Pres: &MsgServerPres{Topic: "me", What: "term"}}
+	for _, topic := range subs {
+		msg.Pres.Src = topic
+		s.queueOut(msg)
+	}
+}
+
 // Publish to topic subscribers's sessions currently offline in the topic, on their 'me'
 // Group and P2P.
 // Case E: topic came online, "on"

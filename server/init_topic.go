@@ -38,6 +38,9 @@ func topicInit(t *Topic, sreg *sessionJoin, h *Hub) {
 	case strings.HasPrefix(t.xoriginal, "grp"):
 		// Load existing group topic
 		err = initTopicGrp(t, sreg)
+	case t.xoriginal == "sys":
+		// Initialize system topic.
+		err = initTopicSys(t, sreg)
 	default:
 		// Unrecognized topic name
 		err = types.ErrTopicNotFound
@@ -79,7 +82,7 @@ func topicInit(t *Topic, sreg *sessionJoin, h *Hub) {
 	}
 
 	// prevent newly initialized topics to go live while shutdown in progress
-	if h.isShutdownInProgress {
+	if globals.shuttingDown {
 		h.topicDel(sreg.topic)
 		return
 	}
@@ -96,7 +99,9 @@ func topicInit(t *Topic, sreg *sessionJoin, h *Hub) {
 	sreg.loaded = true
 
 	// Topic will check access rights, send invite to p2p user, send {ctrl} message to the initiator session
-	t.reg <- sreg
+	if !sreg.internal {
+		t.reg <- sreg
+	}
 
 	t.resume()
 	go t.run(h)
@@ -216,8 +221,8 @@ func initTopicP2P(t *Topic, sreg *sessionJoin) error {
 
 		t.created = stopic.CreatedAt
 		t.updated = stopic.UpdatedAt
-		if stopic.TouchedAt != nil {
-			t.touched = *stopic.TouchedAt
+		if !stopic.TouchedAt.IsZero() {
+			t.touched = stopic.TouchedAt
 		}
 		t.lastID = stopic.SeqId
 		t.delID = stopic.DelId
@@ -579,11 +584,44 @@ func initTopicGrp(t *Topic, sreg *sessionJoin) error {
 
 	t.created = stopic.CreatedAt
 	t.updated = stopic.UpdatedAt
-	if stopic.TouchedAt != nil {
-		t.touched = *stopic.TouchedAt
+	if !stopic.TouchedAt.IsZero() {
+		t.touched = stopic.TouchedAt
 	}
 	t.lastID = stopic.SeqId
 	t.delID = stopic.DelId
+
+	return nil
+}
+
+// Initialize system topic. System topic is a singleton, always in memory.
+func initTopicSys(t *Topic, sreg *sessionJoin) error {
+	t.cat = types.TopicCatSys
+
+	stopic, err := store.Topics.Get(t.name)
+	if err != nil {
+		return err
+	} else if stopic == nil {
+		return types.ErrTopicNotFound
+	}
+
+	if err = t.loadSubscribers(); err != nil {
+		return err
+	}
+
+	// There is no t.owner
+
+	// Default permissions are 'W'
+	t.accessAuth = types.ModeWrite
+	t.accessAnon = types.ModeWrite
+
+	t.public = stopic.Public
+
+	t.created = stopic.CreatedAt
+	t.updated = stopic.UpdatedAt
+	if !stopic.TouchedAt.IsZero() {
+		t.touched = stopic.TouchedAt
+	}
+	t.lastID = stopic.SeqId
 
 	return nil
 }

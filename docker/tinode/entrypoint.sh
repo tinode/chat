@@ -41,6 +41,14 @@ else
 	done < config.template
 fi
 
+# If external static dir is defined, use it.
+# Otherwise, fall back to "./static".
+if [ ! -z "$EXT_STATIC_DIR" ] ; then
+  STATIC_DIR=$EXT_STATIC_DIR
+else
+  STATIC_DIR="./static"
+fi
+
 # Load default sample data when generating or resetting the database.
 if [[ -z "$SAMPLE_DATA" && "$UPGRADE_DB" = "false" ]] ; then
 	SAMPLE_DATA="$DEFAULT_SAMPLE_DATA"
@@ -48,11 +56,11 @@ fi
 
 # If push notifications are enabled, generate client-side firebase config file.
 if [ ! -z "$FCM_PUSH_ENABLED" ] ; then
-	# Write client config to static/firebase-init.js
-	echo "const FIREBASE_INIT={messagingSenderId: \"$FCM_SENDER_ID\", messagingVapidKey: \"$FCM_VAPID_KEY\"};"$'\n' > static/firebase-init.js
+	# Write client config to $STATIC_DIR/firebase-init.js
+	echo "const FIREBASE_INIT={messagingSenderId: \"$FCM_SENDER_ID\", messagingVapidKey: \"$FCM_VAPID_KEY\"};"$'\n' > $STATIC_DIR/firebase-init.js
 else
 	# Create an empty firebase-init.js
-	echo "" > static/firebase-init.js
+	echo "" > $STATIC_DIR/firebase-init.js
 fi
 
 # Initialize the database if it has not been initialized yet or if data reset/upgrade has been requested.
@@ -67,5 +75,11 @@ if [ -s /botdata/tino-password ] ; then
 	./credentials.sh /botdata/.tn-cookie < /botdata/tino-password
 fi
 
+args=("--config=${CONFIG}" "--static_data=$STATIC_DIR")
+
+# Maybe set node name in the cluster.
+if [ ! -z "$CLUSTER_SELF" ] ; then
+  args+=("--cluster_self=$CLUSTER_SELF")
+fi
 # Run the tinode server.
-./tinode --config=${CONFIG} --static_data=static 2> /var/log/tinode.log
+./tinode "${args[@]}" 2> /var/log/tinode.log

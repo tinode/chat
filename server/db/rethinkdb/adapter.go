@@ -28,7 +28,7 @@ const (
 	defaultHost     = "localhost:28015"
 	defaultDatabase = "tinode"
 
-	adpVersion = 108
+	adpVersion = 109
 
 	adapterName = "rethinkdb"
 
@@ -55,7 +55,7 @@ type configType struct {
 }
 
 // Open initializes rethinkdb session
-func (a *adapter) Open(jsonconfig string) error {
+func (a *adapter) Open(jsonconfig json.RawMessage) error {
 	if a.conn != nil {
 		return errors.New("adapter rethinkdb is already connected")
 	}
@@ -63,7 +63,7 @@ func (a *adapter) Open(jsonconfig string) error {
 	var err error
 	var config configType
 
-	if err = json.Unmarshal([]byte(jsonconfig), &config); err != nil {
+	if err = json.Unmarshal(jsonconfig, &config); err != nil {
 		return errors.New("adapter rethinkdb failed to parse config: " + err.Error())
 	}
 
@@ -280,6 +280,10 @@ func (a *adapter) CreateDb(reset bool) error {
 	if _, err := rdb.DB(a.dbName).Table("topics").IndexCreate("Tags", rdb.IndexCreateOpts{Multi: true}).RunWrite(a.conn); err != nil {
 		return err
 	}
+	// Create system topic 'sys'.
+	if err := createSystemTopic(a); err != nil {
+		return err
+	}
 
 	// Stored message
 	if _, err := rdb.DB(a.dbName).TableCreate("messages", rdb.TableCreateOpts{PrimaryKey: "Id"}).RunWrite(a.conn); err != nil {
@@ -354,6 +358,14 @@ func (a *adapter) CreateDb(reset bool) error {
 }
 
 func (a *adapter) UpgradeDb() error {
+	bumpVersion := func(a *adapter, x int) error {
+		if err := a.updateDbVersion(x); err != nil {
+			return err
+		}
+		_, err := a.GetDbVersion()
+		return err
+	}
+
 	_, err := a.GetDbVersion()
 	if err != nil {
 		return err
@@ -369,11 +381,19 @@ func (a *adapter) UpgradeDb() error {
 			return err
 		}
 
-		if err := a.updateDbVersion(108); err != nil {
+		if err := bumpVersion(a, 108); err != nil {
+			return err
+		}
+	}
+
+	if a.version == 108 {
+		// Perform database upgrade from versions 108 to version 109.
+
+		if err := createSystemTopic(a); err != nil {
 			return err
 		}
 
-		if _, err := a.GetDbVersion(); err != nil {
+		if err := bumpVersion(a, 109); err != nil {
 			return err
 		}
 	}
@@ -385,20 +405,29 @@ func (a *adapter) UpgradeDb() error {
 	return nil
 }
 
+// Create system topic 'sys'.
+func createSystemTopic(a *adapter) error {
+	now := t.TimeNow()
+	_, err := rdb.DB(a.dbName).Table("topics").Insert(&t.Topic{
+		ObjHeader: t.ObjHeader{Id: "sys",
+			CreatedAt: now,
+			UpdatedAt: now},
+		Access: t.DefaultAccess{Auth: t.ModeNone, Anon: t.ModeNone},
+		Public: map[string]interface{}{"fn": "System"},
+	}).RunWrite(a.conn)
+	return err
+}
+
 // UserCreate creates a new user. Returns error and true if error is due to duplicate user name,
 // false for any other error
 func (a *adapter) UserCreate(user *t.User) error {
 	_, err := rdb.DB(a.dbName).Table("users").Insert(&user).RunWrite(a.conn)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return err
 }
 
 // Add user's authentication record
 func (a *adapter) AuthAddRecord(uid t.Uid, scheme, unique string, authLvl auth.Level,
-	secret []byte, expires time.Time) (bool, error) {
+	secret []byte, expires time.Time) error {
 
 	_, err := rdb.DB(a.dbName).Table("auth").Insert(
 		map[string]interface{}{
@@ -410,11 +439,11 @@ func (a *adapter) AuthAddRecord(uid t.Uid, scheme, unique string, authLvl auth.L
 			"expires": expires}).RunWrite(a.conn)
 	if err != nil {
 		if rdb.IsConflictErr(err) {
-			return true, t.ErrDuplicate
+			return t.ErrDuplicate
 		}
-		return false, err
+		return err
 	}
-	return false, nil
+	return nil
 }
 
 // AuthDelScheme deletes an existing authentication scheme for the user.
@@ -434,31 +463,31 @@ func (a *adapter) AuthDelAllRecords(uid t.Uid) (int, error) {
 
 // Update user's authentication secret.
 func (a *adapter) AuthUpdRecord(uid t.Uid, scheme, unique string, authLvl auth.Level,
-	secret []byte, expires time.Time) (bool, error) {
+	secret []byte, expires time.Time) error {
 	// The 'unique' is used as a primary key (no other way to ensure uniqueness in RethinkDB).
 	// The primary key is immutable. If 'unique' has changed, we have to replace the old record with a new one:
 	// 1. Check if 'unique' has changed.
 	// 2. If not, execute update by 'unique'
 	// 3. If yes, first insert the new record (it may fail due to dublicate 'unique') then delete the old one.
-	var dupe bool
+
 	// Get the old 'unique'
 	cursor, err := rdb.DB(a.dbName).Table("auth").GetAllByIndex("userid", uid.String()).
 		Filter(map[string]interface{}{"scheme": scheme}).
 		Pluck("unique").Default(nil).Run(a.conn)
 	if err != nil {
-		return dupe, err
+		return err
 	}
 	defer cursor.Close()
 
 	if cursor.IsNil() {
 		// If the record is not found, don't update it
-		return dupe, t.ErrNotFound
+		return t.ErrNotFound
 	}
 	var record struct {
 		Unique string `json:"unique"`
 	}
 	if err = cursor.One(&record); err != nil {
-		return dupe, err
+		return err
 	}
 	if record.Unique == unique {
 		// Unique has not changed
@@ -469,13 +498,13 @@ func (a *adapter) AuthUpdRecord(uid t.Uid, scheme, unique string, authLvl auth.L
 				"expires": expires}).RunWrite(a.conn)
 	} else {
 		// Unique has changed. Insert-Delete.
-		dupe, err = a.AuthAddRecord(uid, scheme, unique, authLvl, secret, expires)
+		err = a.AuthAddRecord(uid, scheme, unique, authLvl, secret, expires)
 		if err == nil {
 			// We can't do much with the error here. No support for transactions :(
 			a.AuthDelScheme(uid, unique)
 		}
 	}
-	return dupe, err
+	return err
 }
 
 // Retrieve user's authentication record
@@ -742,7 +771,7 @@ func (a *adapter) UserUpdateTags(uid t.Uid, add, remove, reset []string) ([]stri
 
 // UserGetByCred returns user ID for the given validated credential.
 func (a *adapter) UserGetByCred(method, value string) (t.Uid, error) {
-	cursor, err := rdb.DB(a.dbName).Table("credentials").Get(method + ":" + value).Field("User").Run(a.conn)
+	cursor, err := rdb.DB(a.dbName).Table("credentials").Get(method + ":" + value).Field("User").Default(nil).Run(a.conn)
 	if err != nil {
 		return t.ZeroUid, err
 	}
@@ -836,7 +865,7 @@ func (a *adapter) TopicCreateP2P(initiator, invited *t.Subscription) error {
 				Merge(map[string]interface{}{
 					"CreatedAt": invited.CreatedAt,
 					"UpdatedAt": invited.UpdatedAt,
-					"ModeGive":  invited.ModeGiven})).
+					"ModeGiven": invited.ModeGiven})).
 			RunWrite(a.conn)
 		if err != nil {
 			return err
@@ -1085,7 +1114,7 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 }
 
 // OwnTopics loads a slice of topic names where the user is the owner.
-func (a *adapter) OwnTopics(uid t.Uid, opts *t.QueryOpt) ([]string, error) {
+func (a *adapter) OwnTopics(uid t.Uid) ([]string, error) {
 	cursor, err := rdb.DB(a.dbName).Table("topics").GetAllByIndex("Owner", uid.String()).
 		Filter(rdb.Row.HasFields("DeletedAt").Not()).Field("Id").Run(a.conn)
 	if err != nil {
@@ -1100,7 +1129,7 @@ func (a *adapter) OwnTopics(uid t.Uid, opts *t.QueryOpt) ([]string, error) {
 	return names, nil
 }
 
-func (a *adapter) TopicShare(shares []*t.Subscription) (int, error) {
+func (a *adapter) TopicShare(shares []*t.Subscription) error {
 	// Assign Ids.
 	for i := 0; i < len(shares); i++ {
 		shares[i].Id = shares[i].Topic + ":" + shares[i].User
@@ -1109,15 +1138,15 @@ func (a *adapter) TopicShare(shares []*t.Subscription) (int, error) {
 	// Subscription could have been marked as deleted (DeletedAt != nil). If it's marked
 	// as deleted, unmark by clearing the DeletedAt field of the old subscription and
 	// updating times and ModeGiven.
-	resp, err := rdb.DB(a.dbName).Table("subscriptions").
+	_, err := rdb.DB(a.dbName).Table("subscriptions").
 		Insert(shares, rdb.InsertOpts{Conflict: func(id, oldsub, newsub rdb.Term) interface{} {
 			return oldsub.Without("DeletedAt").Merge(map[string]interface{}{
 				"CreatedAt": newsub.Field("CreatedAt"),
 				"UpdatedAt": newsub.Field("UpdatedAt"),
-				"ModeGive":  newsub.Field("ModeGiven")})
+				"ModeGiven": newsub.Field("ModeGiven")})
 		}}).RunWrite(a.conn)
 
-	return resp.Inserted + resp.Replaced, err
+	return err
 }
 
 func (a *adapter) TopicDelete(topic string, hard bool) error {
@@ -1164,7 +1193,7 @@ func (a *adapter) TopicUpdate(topic string, update map[string]interface{}) error
 	return err
 }
 
-func (a *adapter) TopicOwnerChange(topic string, newOwner, oldOwner t.Uid) error {
+func (a *adapter) TopicOwnerChange(topic string, newOwner t.Uid) error {
 	_, err := rdb.DB(a.dbName).Table("topics").Get(topic).
 		Update(map[string]interface{}{"Owner": newOwner}).RunWrite(a.conn)
 	return err
@@ -1318,10 +1347,12 @@ func (a *adapter) SubsDelForTopic(topic string, hard bool) error {
 	return err
 }
 
-// SubsDelForUser marks all subscriptions of a given user as deleted
+// SubsDelForUser deletes or marks all subscriptions of a given user as deleted
 func (a *adapter) SubsDelForUser(user t.Uid, hard bool) error {
 	var err error
 	if hard {
+		_, err = rdb.DB(a.dbName).Table("subscriptions").GetAllByIndex("User", user.String()).
+			Delete().RunWrite(a.conn)
 	} else {
 		now := t.TimeNow()
 		update := map[string]interface{}{
@@ -1483,7 +1514,6 @@ func (a *adapter) FindTopics(req, opt []string) ([]t.Subscription, error) {
 
 // Messages
 func (a *adapter) MessageSave(msg *t.Message) error {
-	msg.SetUid(store.GetUid())
 	_, err := rdb.DB(a.dbName).Table("messages").Insert(msg).RunWrite(a.conn)
 	return err
 }
@@ -1622,7 +1652,6 @@ func (a *adapter) MessageDeleteList(topic string, toDel *t.DelMessage) error {
 		err = a.messagesHardDelete(topic)
 	} else {
 		// Only some messages are being deleted
-		toDel.SetUid(store.GetUid())
 
 		// Start with making a log entry
 		_, err = rdb.DB(a.dbName).Table("dellog").Insert(toDel).RunWrite(a.conn)
@@ -1842,16 +1871,13 @@ func (a *adapter) CredUpsert(cred *t.Credential) (bool, error) {
 		if err != nil {
 			return false, err
 		}
+		defer cursor.Close()
 		if !cursor.IsNil() {
+			// Someone has already validated this credential.
 			return false, t.ErrDuplicate
 		}
-		cursor.Close()
 
-		// If credential is not confirmed, it should not block others
-		// from attempting to validate it: make index user-unique instead of global-unique.
-		cred.Id = cred.User + ":" + cred.Id
-
-		// Deactivate all unverified records of this user and method.
+		// Deactivate all unvalidated records of this user and method.
 		_, err = tableCredentials.GetAllByIndex("User", cred.User).
 			Filter(map[string]interface{}{"Method": cred.Method, "Done": false}).Update(
 			map[string]interface{}{"DeletedAt": t.TimeNow()}).RunWrite(a.conn)
@@ -1859,20 +1885,29 @@ func (a *adapter) CredUpsert(cred *t.Credential) (bool, error) {
 			return false, err
 		}
 
-		// Assume that the record exists and try to update it: remove DeletedAt, update timestamp and response.
-		result, err := tableCredentials.Get(cred.Id).
-			Replace(rdb.Row.Without("DeletedAt").
-				Merge(map[string]interface{}{
-					"UpdatedAt": cred.UpdatedAt,
-					"Resp":      cred.Resp})).RunWrite(a.conn)
+		// If credential is not confirmed, it should not block others
+		// from attempting to validate it: make index user-unique instead of global-unique.
+		cred.Id = cred.User + ":" + cred.Id
+
+		// Check if this credential has already been added by the user.
+		cursor2, err := tableCredentials.Get(cred.Id).Run(a.conn)
 		if err != nil {
 			return false, err
 		}
-
-		// If record was updated, then all is fine.
-		if result.Updated > 0 {
+		defer cursor2.Close()
+		if !cursor2.IsNil() {
+			tableCredentials.Get(cred.Id).
+				Replace(rdb.Row.Without("DeletedAt").
+					Merge(map[string]interface{}{
+						"UpdatedAt": cred.UpdatedAt,
+						"Resp":      cred.Resp})).RunWrite(a.conn)
+			if err != nil {
+				return false, err
+			}
+			// The record was updated, all is fine.
 			return false, nil
 		}
+
 	} else {
 		// Hard-delete potentially present unvalidated credential.
 		_, err = tableCredentials.Get(cred.User + ":" + cred.Id).Delete().RunWrite(a.conn)
@@ -1888,19 +1923,6 @@ func (a *adapter) CredUpsert(cred *t.Credential) (bool, error) {
 	}
 
 	return true, err
-}
-
-// CredIsConfirmed returns true if the given credential method has been verified, false otherwise.
-func (a *adapter) CredIsConfirmed(uid t.Uid, method string) (bool, error) {
-	cursor, err := rdb.DB(a.dbName).Table("credentials").
-		GetAllByIndex("User", uid.String()).
-		Filter(map[string]interface{}{"Method": method, "Done": true}).Run(a.conn)
-	if err != nil {
-		return false, err
-	}
-	defer cursor.Close()
-
-	return !cursor.IsNil(), nil
 }
 
 // CredDel deletes credentials for the given method. If method is empty, deletes all user's credentials.
@@ -2140,5 +2162,5 @@ func isMissingDb(err error) bool {
 }
 
 func init() {
-	store.RegisterAdapter(adapterName, &adapter{})
+	store.RegisterAdapter(&adapter{})
 }

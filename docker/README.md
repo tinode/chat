@@ -106,8 +106,10 @@ You can specify the following environment variables when issuing `docker run` co
 | `AWS_REGION` | string |  | AWS Region when using `s3` media handler |
 | `AWS_S3_BUCKET` | string |  | Name of the AWS S3 bucket when using `s3` media handler |
 | `AWS_SECRET_ACCESS_KEY` | string |  | AWS [Secret Access Key](https://aws.amazon.com/blogs/security/wheres-my-secret-access-key/) when using `s3` media handler |
+| `CLUSTER_SELF` | string |  | Node name if the server is running in a Tinode cluster |
 | `DEBUG_EMAIL_VERIFICATION_CODE` | string |  | Enable dummy email verification code, e.g. `123456`. Disabled by default (empty string). |
 | `EXT_CONFIG` | string |  | Path to external config file to use instead of the built-in one. If this parameter is used all other variables except `RESET_DB`, `FCM_SENDER_ID`, `FCM_VAPID_KEY` are ignored. |
+| `EXT_STATIC_DIR` | string |  | Path to external directory containing static data (e.g. Tinode Webapp files) |
 | `FCM_CRED_FILE` | string |  | Path to json file with FCM server-side service account credentials which will be used to send push notifications. |
 | `FCM_SENDER_ID` | string |  | FCM sender ID for receiving push notifications in the web client |
 | `FCM_VAPID_KEY` | string |  | Also called 'Web Client certificate' in the FCM console. Required by the web client to receive push notifications. |
@@ -119,6 +121,7 @@ You can specify the following environment variables when issuing `docker run` co
 | `SAMPLE_DATA` | string |  _see comment_ | File with sample data to load. Default `data.json` when resetting or generating new DB, none when upgrading. Use `-` to disable |
 | `SMTP_DOMAINS` | string |  | White list of email domains; when non-empty, accept registrations with emails from these domains only (email verification). |
 | `SMTP_HOST_URL` | string | `'http://localhost:6060/'` | URL of the host where the webapp is running (email verification). |
+| `SMTP_LOGIN` | string |  | Optional login to use for authentication with the SMTP server (email verification). If login is missing, `addr-spec` part of `SMTP_SENDER` will be used: e.g. if `SMTP_SENDER` is `'"John Doe" <jdoe@example.com>'`, `jdoe@example.com` will be used as login. |
 | `SMTP_PASSWORD` | string |  | Password to use for authentication with the SMTP server (email verification). |
 | `SMTP_PORT` | number |  | Port number of the SMTP server to use for sending verification emails, e.g. `25` or `587`. |
 | `SMTP_SENDER` | string |  | [RFC 5322](https://tools.ietf.org/html/rfc5322) email address to use in the `FROM` field of verification emails and for authentication with the SMTP server, e.g. `'"John Doe" <jdoe@example.com>'`. |

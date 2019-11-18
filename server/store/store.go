@@ -29,10 +29,10 @@ type configType struct {
 	Adapters map[string]json.RawMessage `json:"adapters"`
 }
 
-func openAdapter(workerId int, jsonconf string) error {
+func openAdapter(workerId int, jsonconf json.RawMessage) error {
 	var config configType
-	if err := json.Unmarshal([]byte(jsonconf), &config); err != nil {
-		return errors.New("store: failed to parse config: " + err.Error() + "(" + jsonconf + ")")
+	if err := json.Unmarshal(jsonconf, &config); err != nil {
+		return errors.New("store: failed to parse config: " + err.Error() + "(" + string(jsonconf) + ")")
 	}
 
 	if adp == nil {
@@ -56,9 +56,9 @@ func openAdapter(workerId int, jsonconf string) error {
 		return err
 	}
 
-	var adapterConfig string
+	var adapterConfig json.RawMessage
 	if config.Adapters != nil {
-		adapterConfig = string(config.Adapters[adp.GetName()])
+		adapterConfig = config.Adapters[adp.GetName()]
 	}
 
 	return adp.Open(adapterConfig)
@@ -67,7 +67,7 @@ func openAdapter(workerId int, jsonconf string) error {
 // Open initializes the persistence system. Adapter holds a connection pool for a database instance.
 // 	 name - name of the adapter rquested in the config file
 //   jsonconf - configuration string
-func Open(workerId int, jsonconf string) error {
+func Open(workerId int, jsonconf json.RawMessage) error {
 	if err := openAdapter(workerId, jsonconf); err != nil {
 		return err
 	}
@@ -125,7 +125,7 @@ func GetDbVersion() int {
 // attempt to drop an existing database. If jsconf is nil it will assume that the adapter is
 // already open. If it's non-nil and the adapter is not open, it will use the config string
 // to open the adapter first.
-func InitDb(jsonconf string, reset bool) error {
+func InitDb(jsonconf json.RawMessage, reset bool) error {
 	if !IsOpen() {
 		if err := openAdapter(1, jsonconf); err != nil {
 			return err
@@ -137,7 +137,7 @@ func InitDb(jsonconf string, reset bool) error {
 // UpgradeDb performes an upgrade of the database to the current adapter version.
 // If jsconf is nil it will assume that the adapter is already open. If it's non-nil and the
 // adapter is not open, it will use the config string to open the adapter first.
-func UpgradeDb(jsonconf string) error {
+func UpgradeDb(jsonconf json.RawMessage) error {
 	if !IsOpen() {
 		if err := openAdapter(1, jsonconf); err != nil {
 			return err
@@ -148,7 +148,7 @@ func UpgradeDb(jsonconf string) error {
 
 // RegisterAdapter makes a persistence adapter available.
 // If Register is called twice or if the adapter is nil, it panics.
-func RegisterAdapter(name string, a adapter.Adapter) {
+func RegisterAdapter(a adapter.Adapter) {
 	if a == nil {
 		panic("store: Register adapter is nil")
 	}
@@ -253,14 +253,14 @@ func (UsersObjMapper) GetAuthUniqueRecord(scheme, unique string) (types.Uid, aut
 
 // AddAuthRecord creates a new authentication record for the given user.
 func (UsersObjMapper) AddAuthRecord(uid types.Uid, authLvl auth.Level, scheme, unique string, secret []byte,
-	expires time.Time) (bool, error) {
+	expires time.Time) error {
 
 	return adp.AuthAddRecord(uid, scheme, scheme+":"+unique, authLvl, secret, expires)
 }
 
 // UpdateAuthRecord updates authentication record with a new secret and expiration time.
 func (UsersObjMapper) UpdateAuthRecord(uid types.Uid, authLvl auth.Level, scheme, unique string,
-	secret []byte, expires time.Time) (bool, error) {
+	secret []byte, expires time.Time) error {
 
 	return adp.AuthUpdRecord(uid, scheme, scheme+":"+unique, authLvl, secret, expires)
 }
@@ -342,8 +342,8 @@ func (UsersObjMapper) GetTopicsAny(id types.Uid, opts *types.QueryOpt) ([]types.
 }
 
 // GetOwnTopics retuens a slice of group topic names where the user is the owner.
-func (UsersObjMapper) GetOwnTopics(id types.Uid, opts *types.QueryOpt) ([]string, error) {
-	return adp.OwnTopics(id, opts)
+func (UsersObjMapper) GetOwnTopics(id types.Uid) ([]string, error) {
+	return adp.OwnTopics(id)
 }
 
 // UpsertCred adds or updates a credential validation request. Return true if the record was inserted, false if updated.
@@ -392,7 +392,7 @@ var Topics TopicsObjMapper
 func (TopicsObjMapper) Create(topic *types.Topic, owner types.Uid, private interface{}) error {
 
 	topic.InitTimes()
-	topic.TouchedAt = &topic.CreatedAt
+	topic.TouchedAt = topic.CreatedAt
 	topic.Owner = owner.String()
 
 	err := adp.TopicCreate(topic)
@@ -416,9 +416,9 @@ func (TopicsObjMapper) Create(topic *types.Topic, owner types.Uid, private inter
 // CreateP2P creates a P2P topic by generating two user's subsciptions to each other.
 func (TopicsObjMapper) CreateP2P(initiator, invited *types.Subscription) error {
 	initiator.InitTimes()
-	initiator.SetTouchedAt(&initiator.CreatedAt)
+	initiator.SetTouchedAt(initiator.CreatedAt)
 	invited.InitTimes()
-	invited.SetTouchedAt((&invited.CreatedAt))
+	invited.SetTouchedAt(invited.CreatedAt)
 
 	return adp.TopicCreateP2P(initiator, invited)
 }
@@ -459,8 +459,8 @@ func (TopicsObjMapper) Update(topic string, update map[string]interface{}) error
 }
 
 // OwnerChange replaces the old topic owner with the new owner.
-func (TopicsObjMapper) OwnerChange(topic string, newOwner, oldOwner types.Uid) error {
-	return adp.TopicOwnerChange(topic, newOwner, oldOwner)
+func (TopicsObjMapper) OwnerChange(topic string, newOwner types.Uid) error {
+	return adp.TopicOwnerChange(topic, newOwner)
 }
 
 // Delete deletes topic, messages, attachments, and subscriptions.
@@ -480,8 +480,7 @@ func (SubsObjMapper) Create(subs ...*types.Subscription) error {
 		sub.InitTimes()
 	}
 
-	_, err := adp.TopicShare(subs)
-	return err
+	return adp.TopicShare(subs)
 }
 
 // Get given subscription
@@ -511,7 +510,7 @@ var Messages MessagesObjMapper
 // Save message
 func (MessagesObjMapper) Save(msg *types.Message, readBySender bool) error {
 	msg.InitTimes()
-
+	msg.SetUid(GetUid())
 	// Increment topic's or user's SeqId
 	err := adp.TopicUpdateOnMessage(msg.Topic, msg)
 	if err != nil {
@@ -572,6 +571,7 @@ func (MessagesObjMapper) DeleteList(topic string, delID int, forUser types.Uid, 
 			DelId:       delID,
 			DeletedFor:  forUser.String(),
 			SeqIdRanges: ranges}
+		toDel.SetUid(GetUid())
 		toDel.InitTimes()
 	}
 

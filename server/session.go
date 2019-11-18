@@ -39,6 +39,14 @@ const sendTimeout = time.Microsecond * 150
 
 var minSupportedVersionValue = parseVersion(minSupportedVersion)
 
+// Holds metadata on the subscription/topic hosted on a remote node.
+type RemoteSubscription struct {
+	// Hosting node.
+	node string
+	// Topic name, as specified by the client.
+	originalTopic string
+}
+
 // Session represents a single WS connection or a long polling session. A user may have multiple
 // sessions.
 type Session struct {
@@ -103,8 +111,10 @@ type Session struct {
 	// subs concurrently.
 	subsLock sync.RWMutex
 
-	// Cluster nodes to inform when the session is disconnected
-	nodes map[string]bool
+	// Map of remote topic subscriptions, indexed by topic name.
+	remoteSubs map[string]*RemoteSubscription
+	// Synchronizes access to remoteSubs.
+	remoteSubsLock sync.RWMutex
 
 	// Session ID
 	sid string
@@ -160,6 +170,27 @@ func (s *Session) unsubAll() {
 		// sub.done is the same as topic.unreg
 		sub.done <- &sessionLeave{sess: s}
 	}
+}
+
+func (s *Session) getRemoteSub(topic string) *RemoteSubscription {
+	s.remoteSubsLock.RLock()
+	defer s.remoteSubsLock.RUnlock()
+
+	return s.remoteSubs[topic]
+}
+
+func (s *Session) addRemoteSub(topic string, remoteSub *RemoteSubscription) {
+	s.remoteSubsLock.Lock()
+	defer s.remoteSubsLock.Unlock()
+
+	s.remoteSubs[topic] = remoteSub
+}
+
+func (s *Session) delRemoteSub(topic string) {
+	s.remoteSubsLock.Lock()
+	defer s.remoteSubsLock.Unlock()
+
+	delete(s.remoteSubs, topic)
 }
 
 // queueOut attempts to send a ServerComMessage to a session; if the send buffer is full,
@@ -361,9 +392,11 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 // Request to subscribe to a topic
 func (s *Session) subscribe(msg *ClientComMessage) {
 	var expanded string
+	isNewTopic := false
 	if strings.HasPrefix(msg.topic, "new") {
 		// Request to create a new named topic
 		expanded = genTopicName()
+		isNewTopic = true
 		// msg.topic = expanded
 	} else {
 		var resp *ServerComMessage
@@ -376,11 +409,20 @@ func (s *Session) subscribe(msg *ClientComMessage) {
 
 	if sub := s.getSub(expanded); sub != nil {
 		s.queueOut(InfoAlreadySubscribed(msg.id, msg.topic, msg.timestamp))
-	} else if globals.cluster.isRemoteTopic(expanded) {
+	} else if remoteNodeName := globals.cluster.nodeNameForTopicIfRemote(expanded); remoteNodeName != "" {
 		// The topic is handled by a remote node. Forward message to it.
 		if err := globals.cluster.routeToTopic(msg, expanded, s); err != nil {
 			log.Println("s.subscribe:", err, s.sid)
 			s.queueOut(ErrClusterUnreachable(msg.id, msg.topic, msg.timestamp))
+		} else {
+			var originalTopic string
+			if isNewTopic {
+				// New topics are "grp". It's okay to use expaneded.
+				originalTopic = expanded
+			} else {
+				originalTopic = msg.topic
+			}
+			s.addRemoteSub(expanded, &RemoteSubscription{node: remoteNodeName, originalTopic: originalTopic})
 		}
 	} else {
 		globals.hub.join <- &sessionJoin{
@@ -420,6 +462,8 @@ func (s *Session) leave(msg *ClientComMessage) {
 		if err := globals.cluster.routeToTopic(msg, expanded, s); err != nil {
 			log.Println("s.leave:", err, s.sid)
 			s.queueOut(ErrClusterUnreachable(msg.id, msg.topic, msg.timestamp))
+		} else {
+			s.delRemoteSub(expanded)
 		}
 	} else if !msg.Leave.Unsub {
 		// Session is not attached to the topic, wants to leave - fine, no change
@@ -480,6 +524,9 @@ func (s *Session) publish(msg *ClientComMessage) {
 			log.Println("s.publish:", err, s.sid)
 			s.queueOut(ErrClusterUnreachable(msg.id, msg.topic, msg.timestamp))
 		}
+	} else if expanded == "sys" {
+		// Publishing to "sys" topic requires no subsription.
+		globals.hub.route <- data
 	} else {
 		// Publish request received without attaching to topic first.
 		s.queueOut(ErrAttachFirst(msg.id, msg.topic, msg.timestamp))
@@ -490,6 +537,7 @@ func (s *Session) publish(msg *ClientComMessage) {
 // Client metadata
 func (s *Session) hello(msg *ClientComMessage) {
 	var params map[string]interface{}
+	var deviceIDUpdate bool
 
 	if s.ver == 0 {
 		s.ver = parseVersion(msg.Hi.Version)
@@ -501,11 +549,19 @@ func (s *Session) hello(msg *ClientComMessage) {
 		// Check version compatibility
 		if versionCompare(s.ver, minSupportedVersionValue) < 0 {
 			s.ver = 0
-			s.queueOut(ErrVersionNotSupported(msg.id, "", msg.timestamp))
+			s.queueOut(ErrVersionNotSupported(msg.id, msg.timestamp))
 			log.Println("s.hello:", "unsupported version", s.sid)
 			return
 		}
-		params = map[string]interface{}{"ver": currentVersion, "build": store.GetAdapterName() + ":" + buildstamp}
+
+		params = map[string]interface{}{
+			"ver":                currentVersion,
+			"build":              store.GetAdapterName() + ":" + buildstamp,
+			"maxMessageSize":     globals.maxMessageSize,
+			"maxSubscriberCount": globals.maxSubscriberCount,
+			"maxTagCount":        globals.maxTagCount,
+			"maxFileUploadSize":  globals.maxFileUploadSize,
+		}
 
 		// Set ua & platform in the beginning of the session.
 		// Don't change them later.
@@ -515,15 +571,25 @@ func (s *Session) hello(msg *ClientComMessage) {
 			s.platf = platformFromUA(msg.Hi.UserAgent)
 		}
 	} else if msg.Hi.Version == "" || parseVersion(msg.Hi.Version) == s.ver {
-		// Save changed device ID or Lang. Platform cannot be changed.
+		// Save changed device ID+Lang or delete earlier specified device ID.
+		// Platform cannot be changed.
 		if !s.uid.IsZero() {
-			if err := store.Devices.Update(s.uid, s.deviceID, &types.DeviceDef{
-				DeviceId: msg.Hi.DeviceID,
-				Platform: s.platf,
-				LastSeen: msg.timestamp,
-				Lang:     msg.Hi.Lang,
-			}); err != nil {
-				log.Println("s.hello:", "database error", err, s.sid)
+			var err error
+			if msg.Hi.DeviceID == types.NullValue {
+				deviceIDUpdate = true
+				err = store.Devices.Delete(s.uid, s.deviceID)
+			} else if msg.Hi.DeviceID != "" {
+				deviceIDUpdate = true
+				err = store.Devices.Update(s.uid, s.deviceID, &types.DeviceDef{
+					DeviceId: msg.Hi.DeviceID,
+					Platform: s.platf,
+					LastSeen: msg.timestamp,
+					Lang:     msg.Hi.Lang,
+				})
+			}
+
+			if err != nil {
+				log.Println("s.hello:", "device ID", err, s.sid)
 				s.queueOut(ErrUnknown(msg.id, "", msg.timestamp))
 				return
 			}
@@ -535,13 +601,17 @@ func (s *Session) hello(msg *ClientComMessage) {
 		return
 	}
 
+	if msg.Hi.DeviceID == types.NullValue {
+		msg.Hi.DeviceID = ""
+	}
 	s.deviceID = msg.Hi.DeviceID
 	s.lang = msg.Hi.Lang
 
 	var httpStatus int
 	var httpStatusText string
-	if s.proto == LPOLL {
+	if s.proto == LPOLL || deviceIDUpdate {
 		// In case of long polling StatusCreated was reported earlier.
+		// In case of deviceID update just report success.
 		httpStatus = http.StatusOK
 		httpStatusText = "ok"
 
@@ -593,11 +663,17 @@ func (s *Session) login(msg *ClientComMessage) {
 	// msg.from is ignored here
 
 	if msg.Login.Scheme == "reset" {
-		s.queueOut(decodeStoreError(s.authSecretReset(msg.Login.Secret), msg.id, "", msg.timestamp, nil))
+		if err := s.authSecretReset(msg.Login.Secret); err != nil {
+			s.queueOut(decodeStoreError(err, msg.id, "", msg.timestamp, nil))
+		} else {
+			s.queueOut(InfoAuthReset(msg.id, msg.timestamp))
+		}
 		return
 	}
 
 	if !s.uid.IsZero() {
+		// TODO: change error to notice InfoNoChange and return current user ID & auth level
+		// params := map[string]interface{}{"user": s.uid.UserId(), "authlvl": s.authLevel.String()}
 		s.queueOut(ErrAlreadyAuthenticated(msg.id, "", msg.timestamp))
 		return
 	}
@@ -667,7 +743,7 @@ func (s *Session) authSecretReset(params []byte) error {
 
 	token, _, err := store.GetLogicalAuthHandler("token").GenSecret(&auth.Rec{
 		Uid:       uid,
-		AuthLevel: auth.LevelNone,
+		AuthLevel: auth.LevelAuth,
 		Lifetime:  time.Hour * 24,
 		Features:  auth.FeatureNoLogin})
 

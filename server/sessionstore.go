@@ -63,6 +63,9 @@ func (ss *SessionStore) NewSession(conn interface{}, sid string) (*Session, int)
 		s.send = make(chan interface{}, 256) // buffered
 		s.stop = make(chan interface{}, 1)   // Buffered by 1 just to make it non-blocking
 		s.detach = make(chan string, 64)     // buffered
+		if globals.cluster != nil {
+			s.remoteSubs = make(map[string]*RemoteSubscription)
+		}
 	}
 
 	s.lastTouched = time.Now()
@@ -166,6 +169,26 @@ func (ss *SessionStore) EvictUser(uid types.Uid, skipSid string) {
 			if s.proto == LPOLL {
 				ss.lru.Remove(s.lpTracker)
 			}
+		}
+	}
+
+	statsSet("LiveSessions", int64(len(ss.sessCache)))
+}
+
+// NodeRestarted removes stale sessions from a restarted cluster node.
+//  - nodeName is the name of affected node
+//  - fingerprint is the new fingerprint of the node.
+func (ss *SessionStore) NodeRestarted(nodeName string, fingerprint int64) {
+	ss.lock.Lock()
+	defer ss.lock.Unlock()
+
+	for _, s := range ss.sessCache {
+		if s.proto != CLUSTER || s.clnode.name != nodeName {
+			continue
+		}
+		if s.clnode.fingerprint != fingerprint {
+			s.stop <- nil
+			delete(ss.sessCache, s.sid)
 		}
 	}
 

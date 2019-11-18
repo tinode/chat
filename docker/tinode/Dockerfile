@@ -11,10 +11,10 @@
 
 FROM alpine:latest
 
-ARG VERSION=0.15
+ARG VERSION=0.16.2
 ENV VERSION=$VERSION
 
-LABEL maintainer="Gene Sokolov <gene@tinode.co>"
+LABEL maintainer="Tinode Team <info@tinode.co>"
 LABEL name="TinodeChatServer"
 LABEL version=$VERSION
 

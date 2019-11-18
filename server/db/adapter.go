@@ -2,6 +2,7 @@
 package adapter
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/tinode/chat/server/auth"
@@ -14,7 +15,7 @@ type Adapter interface {
 	// General
 
 	// Open and configure the adapter
-	Open(config string) error
+	Open(config json.RawMessage) error
 	// Close the adapter
 	Close() error
 	// IsOpen checks if the adapter is ready for use
@@ -37,15 +38,15 @@ type Adapter interface {
 	// User management
 
 	// UserCreate creates user record
-	UserCreate(usr *t.User) error
+	UserCreate(user *t.User) error
 	// UserGet returns record for a given user ID
-	UserGet(id t.Uid) (*t.User, error)
+	UserGet(uid t.Uid) (*t.User, error)
 	// UserGetAll returns user records for a given list of user IDs
 	UserGetAll(ids ...t.Uid) ([]t.User, error)
 	// UserDelete deletes user record
-	UserDelete(id t.Uid, hard bool) error
+	UserDelete(uid t.Uid, hard bool) error
 	// UserGetDisabled returns IDs of users which were soft-deleted since given time.
-	UserGetDisabled(time.Time) ([]t.Uid, error)
+	UserGetDisabled(since time.Time) ([]t.Uid, error)
 	// UserUpdate updates user record
 	UserUpdate(uid t.Uid, update map[string]interface{}) error
 	// UserUpdateTags adds, removes, or resets user's tags
@@ -64,8 +65,6 @@ type Adapter interface {
 	CredGetActive(uid t.Uid, method string) (*t.Credential, error)
 	// CredGetAll returns credential records for the given user and method, validated only or all.
 	CredGetAll(uid t.Uid, method string, validatedOnly bool) ([]t.Credential, error)
-	// CredIsConfirmed returns true if the given credential method has been verified, false otherwise.
-	CredIsConfirmed(uid t.Uid, metod string) (bool, error)
 	// CredDel deletes credentials for the given method/value. If method is empty, deletes all
 	// user's credentials.
 	CredDel(uid t.Uid, method, value string) error
@@ -81,13 +80,13 @@ type Adapter interface {
 	// AuthGetRecord returns authentication record given user ID and method.
 	AuthGetRecord(user t.Uid, scheme string) (string, auth.Level, []byte, time.Time, error)
 	// AuthAddRecord creates new authentication record
-	AuthAddRecord(user t.Uid, scheme, unique string, authLvl auth.Level, secret []byte, expires time.Time) (bool, error)
+	AuthAddRecord(user t.Uid, scheme, unique string, authLvl auth.Level, secret []byte, expires time.Time) error
 	// AuthDelScheme deletes an existing authentication scheme for the user.
 	AuthDelScheme(user t.Uid, scheme string) error
 	// AuthDelAllRecords deletes all records of a given user.
 	AuthDelAllRecords(uid t.Uid) (int, error)
 	// AuthUpdRecord modifies an authentication record.
-	AuthUpdRecord(user t.Uid, scheme, unique string, authLvl auth.Level, secret []byte, expires time.Time) (bool, error)
+	AuthUpdRecord(user t.Uid, scheme, unique string, authLvl auth.Level, secret []byte, expires time.Time) error
 
 	// Topic management
 
@@ -102,9 +101,9 @@ type Adapter interface {
 	// UsersForTopic loads users' subscriptions for a given topic. Public is loaded.
 	UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt) ([]t.Subscription, error)
 	// OwnTopics loads a slice of topic names where the user is the owner.
-	OwnTopics(uid t.Uid, opts *t.QueryOpt) ([]string, error)
+	OwnTopics(uid t.Uid) ([]string, error)
 	// TopicShare creates topc subscriptions
-	TopicShare(subs []*t.Subscription) (int, error)
+	TopicShare(subs []*t.Subscription) error
 	// TopicDelete deletes topic, subscription, messages
 	TopicDelete(topic string, hard bool) error
 	// TopicUpdateOnMessage increments Topic's or User's SeqId value and updates TouchedAt timestamp.
@@ -112,7 +111,7 @@ type Adapter interface {
 	// TopicUpdate updates topic record.
 	TopicUpdate(topic string, update map[string]interface{}) error
 	// TopicOwnerChange updates topic's owner
-	TopicOwnerChange(topic string, newOwner, oldOwner t.Uid) error
+	TopicOwnerChange(topic string, newOwner t.Uid) error
 	// Topic subscriptions
 
 	// SubscriptionGet reads a subscription of a user to a topic
@@ -127,7 +126,7 @@ type Adapter interface {
 	SubsDelete(topic string, user t.Uid) error
 	// SubsDelForTopic deletes all subscriptions to the given topic
 	SubsDelForTopic(topic string, hard bool) error
-	// SubsDelForUser deletes all subscriptions of the given user
+	// SubsDelForUser deletes or marks as deleted all subscriptions of the given user.
 	SubsDelForUser(user t.Uid, hard bool) error
 
 	// Search

@@ -77,7 +77,7 @@ const (
 	defaultMaxTagCount = 16
 
 	// minTagLength is the shortest acceptable length of a tag in runes. Shorter tags are discarded.
-	minTagLength = 4
+	minTagLength = 2
 	// maxTagLength is the maximum length of a tag in runes. Longer tags are trimmed.
 	maxTagLength = 96
 
@@ -100,6 +100,8 @@ const (
 // For instance, to define the buildstamp as a timestamp of when the server was built add a
 // flag to compiler command line:
 // 		-ldflags "-X main.buildstamp=`date -u '+%Y%m%dT%H:%M:%SZ'`"
+// or to set it to git tag:
+// 		-ldflags "-X main.buildstamp=`git describe --tags`"
 var buildstamp = "undef"
 
 // CredValidator holds additional config params for a credential validator.
@@ -112,6 +114,8 @@ type credValidator struct {
 var globals struct {
 	// Topics cache and processing.
 	hub *Hub
+	// Indicator that shutdown is in progress
+	shuttingDown bool
 	// Sessions cache.
 	sessionStore *SessionStore
 	// Cluster data.
@@ -123,7 +127,7 @@ var globals struct {
 	// Runtime statistics communication channel.
 	statsUpdate chan *varUpdate
 	// Users cache communication channel.
-	usersUpdate chan *userUpdate
+	usersUpdate chan *UserCacheReq
 
 	// Credential validators.
 	validators map[string]credValidator
@@ -234,13 +238,14 @@ func main() {
 
 	var configfile = flag.String("config", "tinode.conf", "Path to config file.")
 	// Path to static content.
-	var staticPath = flag.String("static_data", defaultStaticPath, "Path to directory with static files to be served.")
+	var staticPath = flag.String("static_data", defaultStaticPath, "File path to directory with static files to be served.")
 	var listenOn = flag.String("listen", "", "Override address and port to listen on for HTTP(S) clients.")
 	var listenGrpc = flag.String("grpc_listen", "", "Override address and port to listen on for gRPC clients.")
 	var tlsEnabled = flag.Bool("tls_enabled", false, "Override config value for enabling TLS.")
 	var clusterSelf = flag.String("cluster_self", "", "Override the name of the current cluster node.")
-	var expvarPath = flag.String("expvar", "", "Override the path where runtime stats are exposed.")
+	var expvarPath = flag.String("expvar", "", "Override the URL path where runtime stats are exposed. Use '-' to disable.")
 	var pprofFile = flag.String("pprof", "", "File name to save profiling info to. Disabled if not set.")
+	var pprofUrl = flag.String("pprof_url", "", "Debugging only! URL path for exposing profiling info. Disabled if not set.")
 	flag.Parse()
 
 	*configfile = toAbsolutePath(rootpath, *configfile)
@@ -256,6 +261,21 @@ func main() {
 	if *listenOn != "" {
 		config.Listen = *listenOn
 	}
+
+	// Set up HTTP server. Must use non-default mux because of expvar.
+	mux := http.NewServeMux()
+
+	// Exposing values for statistics and monitoring.
+	evpath := *expvarPath
+	if evpath == "" {
+		evpath = config.ExpvarPath
+	}
+	statsInit(mux, evpath)
+	statsRegisterInt("Version")
+	statsSet("Version", int64(parseVersion(currentVersion)))
+
+	// Initialize serving debug profiles (optional).
+	servePprof(mux, *pprofUrl)
 
 	// Initialize cluster and receive calculated workerId.
 	// Cluster won't be started here yet.
@@ -283,7 +303,7 @@ func main() {
 		log.Printf("Profiling info saved to '%s.(cpu|mem)'", *pprofFile)
 	}
 
-	err := store.Open(workerId, string(config.Store))
+	err := store.Open(workerId, config.Store)
 	if err != nil {
 		log.Fatal("Failed to connect to DB: ", err)
 	}
@@ -477,9 +497,6 @@ func main() {
 		log.Fatal(err)
 	}
 
-	// Set up HTTP server. Must use non-default mux because of expvar.
-	mux := http.NewServeMux()
-
 	// Serve static content from the directory in -static_data flag if that's
 	// available, otherwise assume '<path-to-executable>/static'. The content is served at
 	// the path pointed by 'static_mount' in the config. If that is missing then it's
@@ -536,12 +553,6 @@ func main() {
 		// Serve json-formatted 404 for all other URLs
 		mux.HandleFunc("/", serve404)
 	}
-
-	evpath := *expvarPath
-	if evpath == "" {
-		evpath = config.ExpvarPath
-	}
-	statsInit(mux, evpath)
 
 	if err = listenAndServe(config.Listen, mux, tlsConfig, signalHandler()); err != nil {
 		log.Fatal(err)

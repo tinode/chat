@@ -21,20 +21,22 @@ import (
 
 // Request to hub to subscribe session to topic
 type sessionJoin struct {
-	// Routable (expanded) name of the topic to subscribe to
+	// Routable (expanded) name of the topic to subscribe to.
 	topic string
-	// Packet, containing request details
+	// Packet, containing request details.
 	pkt *ClientComMessage
-	// Session to subscribe
+	// Session to subscribe.
 	sess *Session
 	// True if this topic was just created.
 	// In case of p2p topics, it's true if the other user's subscription was
 	// created (as a part of new topic creation or just alone).
 	created bool
-	// True if the topic was just activated (loaded into memory)
+	// True if the topic was just activated (loaded into memory).
 	loaded bool
-	// True if this is a new subscription
+	// True if this is a new subscription.
 	newsub bool
+	// True if this topic is created internally.
+	internal bool
 }
 
 // Session wants to leave the topic
@@ -101,9 +103,6 @@ type Hub struct {
 
 	// Request to shutdown, unbuffered
 	shutdown chan chan<- bool
-
-	// Flag for indicating that system shutdown is in progress
-	isShutdownInProgress bool
 }
 
 func (h *Hub) topicGet(name string) *Topic {
@@ -137,6 +136,11 @@ func newHub() *Hub {
 	statsRegisterInt("TotalTopics")
 
 	go h.run()
+
+	if !globals.cluster.isRemoteTopic("sys") {
+		// Initialize system 'sys' topic. There is only one sys topic per cluster.
+		h.join <- &sessionJoin{topic: "sys", internal: true, pkt: &ClientComMessage{topic: "sys"}}
+	}
 
 	return h
 }
@@ -197,6 +201,11 @@ func (h *Hub) run() {
 						log.Println("hub: topic's broadcast queue is full", dst.name)
 					}
 				}
+			} else if (strings.HasPrefix(msg.rcptto, "usr") || strings.HasPrefix(msg.rcptto, "grp")) && globals.cluster.isRemoteTopic(msg.rcptto) {
+				// It is a remote topic.
+				if err := globals.cluster.routeToTopicIntraCluster(msg.rcptto, msg); err != nil {
+					log.Printf("hub: routing to '%s' failed", msg.rcptto)
+				}
 			} else if msg.Pres == nil && msg.Info == nil {
 				// Topic is unknown or offline.
 				// Pres & Info are silently ignored, all other messages are reported as invalid.
@@ -241,6 +250,8 @@ func (h *Hub) run() {
 			}
 
 		case <-h.rehash:
+			// Cluster rehashing. Some previously local topics became remote.
+			// Such topics must be shut down at this node.
 			h.topics.Range(func(_, t interface{}) bool {
 				topic := t.(*Topic)
 				if globals.cluster.isRemoteTopic(topic.name) {
@@ -249,10 +260,16 @@ func (h *Hub) run() {
 				return true
 			})
 
-		case hubdone := <-h.shutdown:
-			// mark immediately to prevent more topics being added to hub.topics
-			h.isShutdownInProgress = true
+			// Check if 'sys' topic has migrated to this node.
+			if h.topicGet("sys") == nil && !globals.cluster.isRemoteTopic("sys") {
+				// Yes, 'sys' has migrated here. Initialize it.
+				// The h.join is unbuffered. We must call from another goroutine. Otherwise deadlock.
+				go func() {
+					h.join <- &sessionJoin{topic: "sys", internal: true, pkt: &ClientComMessage{topic: "sys"}}
+				}()
+			}
 
+		case hubdone := <-h.shutdown:
 			// start cleanup process
 			topicsdone := make(chan bool)
 			topicCount := 0
@@ -432,7 +449,7 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 			statsInc("LiveTopics", -1)
 		}
 
-		// sess && msg could be nil if the topic is being killed by timer
+		// sess && msg could be nil if the topic is being killed by timer or due to rehashing.
 		if sess != nil && msg != nil {
 			sess.queueOut(NoErr(msg.id, msg.topic, now))
 		}
