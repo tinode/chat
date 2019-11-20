@@ -444,17 +444,8 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 
 			// Decrement fileuploads UseCounter
 			// First get array of attachments IDs that were used in messages of topics from topicIds
-			fileIds, err := a.db.Collection("messages").Distinct(a.ctx, "attachments", b.M{
-				"topic":       b.M{"$in": topicIds},
-				"attachments": b.M{"$exists": true},
-			})
-			if err != nil {
-				return err
-			}
 			// Then decrement the usecount field of these file records
-			_, err = a.db.Collection("fileuploads").UpdateMany(a.ctx,
-				b.M{"_id": b.M{"$in": fileIds}},
-				b.M{"$inc": b.M{"usecount": -1}})
+			err := a.fileDecrementUseCounter(b.M{"topic": b.M{"$in": topicIds}})
 			if err != nil {
 				return err
 			}
@@ -869,9 +860,7 @@ func (a *adapter) AuthGetRecord(uid t.Uid, scheme string) (string, auth.Level, [
 		Expires time.Time
 	}
 
-	filter := b.M{
-		"userid": uid.String(),
-		"scheme": scheme}
+	filter := b.M{"userid": uid.String(), "scheme": scheme}
 	findOpts := mdbopts.FindOne().SetProjection(b.M{
 		"authlvl": 1,
 		"secret":  1,
@@ -1503,10 +1492,8 @@ func (a *adapter) SubsDelete(topic string, user t.Uid) error {
 	return err
 }
 
-// SubsDelForTopic deletes all subscriptions to the given topic
-func (a *adapter) SubsDelForTopic(topic string, hard bool) error {
+func (a *adapter) subsDel(filter b.M, hard bool) error {
 	var err error
-	filter := b.M{"topic": topic}
 	if hard {
 		_, err = a.db.Collection("subscriptions").DeleteMany(a.ctx, filter)
 	} else {
@@ -1515,26 +1502,22 @@ func (a *adapter) SubsDelForTopic(topic string, hard bool) error {
 			b.M{"$set": b.M{"updatedat": now, "deletedat": now}})
 	}
 	return err
+}
+
+// SubsDelForTopic deletes all subscriptions to the given topic
+func (a *adapter) SubsDelForTopic(topic string, hard bool) error {
+	filter := b.M{"topic": topic}
+	return a.subsDel(filter, hard)
 }
 
 // SubsDelForUser deletes all subscriptions of the given user
 func (a *adapter) SubsDelForUser(user t.Uid, hard bool) error {
-	var err error
 	filter := b.M{"user": user.String()}
-	if hard {
-		_, err = a.db.Collection("subscriptions").DeleteMany(a.ctx, filter)
-	} else {
-		now := t.TimeNow()
-		_, err = a.db.Collection("subscriptions").UpdateMany(a.ctx, filter,
-			b.M{"$set": b.M{"updatedat": now, "deletedat": now}})
-	}
-	return err
+	return a.subsDel(filter, hard)
 }
 
 // Search
-
-// FindUsers searches for new contacts given a list of tags
-func (a *adapter) FindUsers(uid t.Uid, req, opt []string) ([]t.Subscription, error) {
+func (a *adapter) getFindPipeline(req, opt []string) (map[string]struct{}, b.A) {
 	index := make(map[string]struct{})
 	var allTags []interface{}
 	for _, tag := range append(req, opt...) {
@@ -1578,7 +1561,12 @@ func (a *adapter) FindUsers(uid t.Uid, req, opt []string) ([]t.Subscription, err
 			b.M{"$match": b.M{"$expr": b.M{"$ne": b.A{b.M{"$size": b.M{"$setIntersection": b.A{"$tags", reqTags}}}, 0}}}})
 	}
 
-	pipeline = append(pipeline, b.M{"$limit": a.maxResults})
+	return index, append(pipeline, b.M{"$limit": a.maxResults})
+}
+
+// FindUsers searches for new contacts given a list of tags
+func (a *adapter) FindUsers(uid t.Uid, req, opt []string) ([]t.Subscription, error) {
+	index, pipeline := a.getFindPipeline(req, opt)
 	cur, err := a.db.Collection("users").Aggregate(a.ctx, pipeline)
 	if err != nil {
 		return nil, err
@@ -1616,50 +1604,7 @@ func (a *adapter) FindUsers(uid t.Uid, req, opt []string) ([]t.Subscription, err
 
 // FindTopics searches for group topics given a list of tags
 func (a *adapter) FindTopics(req, opt []string) ([]t.Subscription, error) {
-	index := make(map[string]struct{})
-	var allTags []interface{}
-	for _, tag := range append(req, opt...) {
-		allTags = append(allTags, tag)
-		index[tag] = struct{}{}
-	}
-
-	pipeline := b.A{
-		b.M{"$match": b.M{
-			"tags":      b.M{"$in": allTags},
-			"deletedat": b.M{"$exists": false},
-		}},
-
-		b.M{"$project": b.M{"_id": 1, "access": 1, "createdat": 1, "updatedat": 1, "public": 1, "tags": 1}},
-
-		b.M{"$unwind": "$tags"},
-
-		b.M{"$match": b.M{"tags": b.M{"$in": allTags}}},
-
-		b.M{"$group": b.M{
-			"_id":              "$_id",
-			"access":           b.M{"$first": "$access"},
-			"createdat":        b.M{"$first": "$createdat"},
-			"updatedat":        b.M{"$first": "$updatedat"},
-			"public":           b.M{"$first": "$public"},
-			"tags":             b.M{"$addToSet": "$tags"},
-			"matchedTagsCount": b.M{"$sum": 1},
-		}},
-
-		b.M{"$sort": b.M{"matchedTagsCount": -1}},
-	}
-
-	if len(req) > 0 {
-		var reqTags []interface{}
-		for _, tag := range req {
-			reqTags = append(reqTags, tag)
-		}
-
-		// Filter out documents where 'tags' intersection with 'reqTags' is an empty array
-		pipeline = append(pipeline,
-			b.M{"$match": b.M{"$expr": b.M{"$ne": b.A{b.M{"$size": b.M{"$setIntersection": b.A{"$tags", reqTags}}}, 0}}}})
-	}
-
-	pipeline = append(pipeline, b.M{"$limit": a.maxResults})
+	index, pipeline := a.getFindPipeline(req, opt)
 	cur, err := a.db.Collection("topics").Aggregate(a.ctx, pipeline)
 	if err != nil {
 		return nil, err
@@ -2084,7 +2029,7 @@ func (a *adapter) FileDeleteUnused(olderThan time.Time, limit int) ([]string, er
 	return locations, err
 }
 
-// Given a select query against 'messages' table, decrement corresponding use counter in 'fileuploads' table.
+// Given a filter query against 'messages' collection, decrement corresponding use counter in 'fileuploads' table.
 func (a *adapter) fileDecrementUseCounter(msgFilter b.M) error {
 	// Copy msgFilter
 	filter := b.M{}
@@ -2093,6 +2038,9 @@ func (a *adapter) fileDecrementUseCounter(msgFilter b.M) error {
 	}
 	filter["attachments"] = b.M{"$exists": true}
 	fileIds, err := a.db.Collection("messages").Distinct(a.ctx, "attachments", filter)
+	if err != nil {
+		return err
+	}
 
 	_, err = a.db.Collection("fileuploads").UpdateMany(a.ctx,
 		b.M{"_id": b.M{"$in": fileIds}},
