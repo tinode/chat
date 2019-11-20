@@ -15,6 +15,7 @@ import (
 	"github.com/tinode/chat/server/store"
 	t "github.com/tinode/chat/server/store/types"
 	b "go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	mdb "go.mongodb.org/mongo-driver/mongo"
 	mdbopts "go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -374,7 +375,7 @@ func (a *adapter) UserGet(id t.Uid) (*t.User, error) {
 			return nil, err
 		}
 	}
-
+	user.Public = unmarshalBsonD(user.Public)
 	return &user, nil
 }
 
@@ -398,6 +399,7 @@ func (a *adapter) UserGetAll(ids ...t.Uid) ([]t.User, error) {
 		if err := cur.Decode(&user); err != nil {
 			return nil, err
 		}
+		user.Public = unmarshalBsonD(user.Public)
 		users = append(users, user)
 	}
 	return users, nil
@@ -1109,9 +1111,10 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 			sub.ObjHeader.MergeTimes(&top.ObjHeader)
 			sub.SetSeqId(top.SeqId)
 			sub.SetTouchedAt(top.TouchedAt)
+			sub.Private = unmarshalBsonD(sub.Private)
 			if t.GetTopicCat(sub.Topic) == t.TopicCatGrp {
 				// all done with a grp topic
-				sub.SetPublic(top.Public)
+				sub.SetPublic(unmarshalBsonD(top.Public))
 				subs = append(subs, sub)
 			} else {
 				// put back the updated value of a p2p subsription, will process further below
@@ -1141,7 +1144,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 			uid2 := t.ParseUid(usr.Id)
 			if sub, ok := join[uid.P2PName(uid2)]; ok {
 				sub.ObjHeader.MergeTimes(&usr.ObjHeader)
-				sub.SetPublic(usr.Public)
+				sub.SetPublic(unmarshalBsonD(usr.Public))
 				sub.SetWith(uid2.UserId())
 				sub.SetDefaultAccess(usr.Access.Auth, usr.Access.Anon)
 				sub.SetLastSeenAndUA(usr.LastSeen, usr.UserAgent)
@@ -1222,7 +1225,8 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 			}
 			if sub, ok := join[usr.Id]; ok {
 				sub.ObjHeader.MergeTimes(&usr.ObjHeader)
-				sub.SetPublic(usr.Public)
+				sub.Private = unmarshalBsonD(sub.Private)
+				sub.SetPublic(unmarshalBsonD(usr.Public))
 				subs = append(subs, sub)
 			}
 		}
@@ -1421,6 +1425,7 @@ func (a *adapter) SubsForUser(user t.Uid, keepDeleted bool, opts *t.QueryOpt) ([
 		if err := cur.Decode(&ss); err != nil {
 			return nil, err
 		}
+		ss.Private = unmarshalBsonD(ss.Private)
 		subs = append(subs, ss)
 	}
 
@@ -1460,6 +1465,7 @@ func (a *adapter) SubsForTopic(topic string, keepDeleted bool, opts *t.QueryOpt)
 		if err := cur.Decode(&ss); err != nil {
 			return nil, err
 		}
+		ss.Private = unmarshalBsonD(ss.Private)
 		subs = append(subs, ss)
 	}
 
@@ -1587,7 +1593,7 @@ func (a *adapter) FindUsers(uid t.Uid, req, opt []string) ([]t.Subscription, err
 		sub.CreatedAt = user.CreatedAt
 		sub.UpdatedAt = user.UpdatedAt
 		sub.User = user.Id
-		sub.SetPublic(user.Public)
+		sub.SetPublic(unmarshalBsonD(user.Public))
 		sub.SetDefaultAccess(user.Access.Auth, user.Access.Anon)
 		tags := make([]string, 0, 1)
 		for _, tag := range user.Tags {
@@ -1622,7 +1628,7 @@ func (a *adapter) FindTopics(req, opt []string) ([]t.Subscription, error) {
 		sub.CreatedAt = topic.CreatedAt
 		sub.UpdatedAt = topic.UpdatedAt
 		sub.User = topic.Id
-		sub.SetPublic(topic.Public)
+		sub.SetPublic(unmarshalBsonD(topic.Public))
 		sub.SetDefaultAccess(topic.Access.Auth, topic.Access.Anon)
 		tags := make([]string, 0, 1)
 		for _, tag := range topic.Tags {
@@ -1682,8 +1688,13 @@ func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.QueryOpt) (
 	defer cur.Close(a.ctx)
 
 	var msgs []t.Message
-	if err = cur.All(a.ctx, &msgs); err != nil {
-		return nil, err
+	for cur.Next(a.ctx) {
+		var msg t.Message
+		if err = cur.Decode(&msg); err != nil {
+			return nil, err
+		}
+		msg.Content = unmarshalBsonD(msg.Content)
+		msgs = append(msgs, msg)
 	}
 
 	return msgs, nil
@@ -2104,6 +2115,31 @@ func normalizeUpdateMap(update map[string]interface{}) map[string]interface{} {
 	}
 
 	return result
+}
+
+// Recursive unmarshalling of bson.D type.
+// Mongo drivers unmarshalling into interface{} creates bson.D object for maps and bson.A object for slices.
+// We need manually unmarshal them into correct type - bson.M (map[string]interface{}).
+func unmarshalBsonD(bsonObj interface{}) interface{} {
+	if obj, ok := bsonObj.(b.D); ok && len(obj) != 0 {
+		result := make(b.M, 0)
+		for k, v := range obj.Map() {
+			result[k] = unmarshalBsonD(v)
+		}
+		return result
+	} else if obj, ok := bsonObj.(primitive.Binary); ok {
+		// primitive.Binary is a struct type with Subtype and Data fields. We need only Data ([]byte)
+		return obj.Data
+	} else if obj, ok := bsonObj.(b.A); ok {
+		// in case of array of bson.D objects
+		result := make(b.A, 0)
+		for _, elem := range obj {
+			result = append(result, unmarshalBsonD(elem))
+		}
+		return result
+	}
+	// Just return value as is
+	return bsonObj
 }
 
 func copyBsonMap(mp b.M) b.M {
