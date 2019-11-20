@@ -280,6 +280,7 @@ func (t *Topic) run(hub *Hub) {
 				userData, userFound := t.perUser[from]
 				// Anyone is allowed to post to 'sys' topic.
 				if t.cat != types.TopicCatSys {
+					// If it's not 'sys' check write permission.
 					if !(userData.modeWant & userData.modeGiven).IsWriter() {
 						msg.sess.queueOut(ErrPermissionDenied(msg.id, t.original(asUid),
 							msg.timestamp))
@@ -1476,6 +1477,7 @@ func (t *Topic) replySetDesc(sess *Session, asUid types.Uid, set *MsgClientSet) 
 	}
 
 	if len(core) > 0 {
+		core["UpdatedAt"] = now
 		switch t.cat {
 		case types.TopicCatMe:
 			err = store.Users.Update(asUid, core)
@@ -1514,6 +1516,7 @@ func (t *Topic) replySetDesc(sess *Session, asUid types.Uid, set *MsgClientSet) 
 	if private, ok := sub["Private"]; ok {
 		pud := t.perUser[asUid]
 		pud.private = private
+		pud.updated = now
 		t.perUser[asUid] = pud
 	}
 
@@ -1527,6 +1530,8 @@ func (t *Topic) replySetDesc(sess *Session, asUid types.Uid, set *MsgClientSet) 
 				// He will be notified separately (see below).
 				t.presSubsOffline("upd", nilPresParams, &presFilters{excludeUser: asUid.UserId()}, sess.sid, false)
 			}
+
+			t.updated = now
 		}
 		// Notify user's other sessions.
 		t.presSingleUserOffline(asUid, "upd", nilPresParams, sess.sid, false)
@@ -1937,7 +1942,7 @@ func (t *Topic) replySetTags(sess *Session, asUid types.Uid, set *MsgClientSet) 
 		} else {
 			added, removed := stringSliceDelta(t.tags, tags)
 			if len(added) > 0 || len(removed) > 0 {
-				update := map[string]interface{}{"Tags": types.StringSlice(tags)}
+				update := map[string]interface{}{"Tags": types.StringSlice(tags), "UpdatedAt": now}
 				if t.cat == types.TopicCatMe {
 					err = store.Users.Update(asUid, update)
 				} else if t.cat == types.TopicCatGrp {
