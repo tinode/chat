@@ -34,7 +34,7 @@ const (
 	defaultHost     = "localhost:27017"
 	defaultDatabase = "tinode"
 
-	adpVersion  = 108
+	adpVersion  = 110
 	adapterName = "mongodb"
 
 	defaultMaxResults = 1024
@@ -345,7 +345,11 @@ func (a *adapter) UpgradeDb() error {
 func createSystemTopic(a *adapter) error {
 	now := t.TimeNow()
 	_, err := a.db.Collection("topics").InsertOne(a.ctx, &t.Topic{
-		ObjHeader: t.ObjHeader{Id: "sys", CreatedAt: now, UpdatedAt: now},
+		ObjHeader: t.ObjHeader{
+			Id:        "sys",
+			CreatedAt: now,
+			UpdatedAt: now},
+		TouchedAt: now,
 		Access:    t.DefaultAccess{Auth: t.ModeNone, Anon: t.ModeNone},
 		Public:    map[string]interface{}{"fn": "System"},
 	})
