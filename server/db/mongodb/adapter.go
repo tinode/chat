@@ -46,7 +46,8 @@ type configType struct {
 	ConnectTimeout int         `json:"timeout,omitempty"`
 
 	// Options separately from ClientOptions (custom options):
-	Database string `json:"database,omitempty"`
+	Database   string `json:"database,omitempty"`
+	ReplicaSet string `json:"replica_set,omitempty"`
 
 	AuthSource string `json:"auth_source,omitempty"`
 	Username   string `json:"username,omitempty"`
@@ -81,6 +82,12 @@ func (a *adapter) Open(jsonconfig json.RawMessage) error {
 		a.dbName = defaultDatabase
 	} else {
 		a.dbName = config.Database
+	}
+
+	if config.ReplicaSet == "" {
+		return errors.New("replica_set option is required")
+	} else {
+		opts.SetReplicaSet(config.ReplicaSet)
 	}
 
 	if config.Username != "" {
@@ -440,12 +447,12 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 			// 4. Delete subscriptions.
 
 			// Delete user's subscriptions in all topics.
-			if err = a.SubsDelForUser(uid, true); err != nil {
+			if err = a.subsDel(sc, b.M{"user": uid.String()}, true); err != nil {
 				return err
 			}
 
 			// Delete dellog
-			_, err = a.db.Collection("dellog").DeleteMany(a.ctx, topicFilter)
+			_, err = a.db.Collection("dellog").DeleteMany(sc, topicFilter)
 			if err != nil {
 				return err
 			}
@@ -453,45 +460,45 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 			// Decrement fileuploads UseCounter
 			// First get array of attachments IDs that were used in messages of topics from topicIds
 			// Then decrement the usecount field of these file records
-			err := a.fileDecrementUseCounter(b.M{"topic": b.M{"$in": topicIds}})
+			err := a.fileDecrementUseCounter(sc, b.M{"topic": b.M{"$in": topicIds}})
 			if err != nil {
 				return err
 			}
 
 			// Delete messages
-			_, err = a.db.Collection("messages").DeleteMany(a.ctx, topicFilter)
+			_, err = a.db.Collection("messages").DeleteMany(sc, topicFilter)
 			if err != nil {
 				return err
 			}
 
 			// Delete subscriptions
-			_, err = a.db.Collection("subscriptions").DeleteMany(a.ctx, topicFilter)
+			_, err = a.db.Collection("subscriptions").DeleteMany(sc, topicFilter)
 			if err != nil {
 				return err
 			}
 
 			// And finally delete the topics.
-			if _, err = a.db.Collection("topics").DeleteMany(a.ctx, b.M{"owner": uid.String()}); err != nil {
+			if _, err = a.db.Collection("topics").DeleteMany(sc, b.M{"owner": uid.String()}); err != nil {
 				return err
 			}
 
 			// Delete user's authentication records.
-			if _, err = a.AuthDelAllRecords(uid); err != nil {
+			if _, err = a.authDelAllRecords(sc, uid); err != nil {
 				return err
 			}
 
 			// Delete credentials.
-			if err = a.CredDel(uid, "", ""); err != nil {
+			if err = a.credDel(sc, uid, "", ""); err != nil {
 				return err
 			}
 
 			// And finally delete the user.
-			if _, err = a.db.Collection("users").DeleteOne(a.ctx, b.M{"_id": uid.String()}); err != nil {
+			if _, err = a.db.Collection("users").DeleteOne(sc, b.M{"_id": uid.String()}); err != nil {
 				return err
 			}
 		} else {
 			// Disable user's subscriptions.
-			if err = a.SubsDelForUser(uid, false); err != nil {
+			if err = a.subsDel(sc, b.M{"user": uid.String()}, false); err != nil {
 				return err
 			}
 
@@ -500,13 +507,13 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 			now := t.TimeNow()
 			disable := b.M{"$set": b.M{"deletedat": now, "updatedat": now}}
 
-			if _, err = a.db.Collection("subscriptions").UpdateMany(a.ctx, topicFilter, disable); err != nil {
+			if _, err = a.db.Collection("subscriptions").UpdateMany(sc, topicFilter, disable); err != nil {
 				return err
 			}
-			if _, err = a.db.Collection("topics").UpdateMany(a.ctx, b.M{"_id": b.M{"$in": topicIds}}, disable); err != nil {
+			if _, err = a.db.Collection("topics").UpdateMany(sc, b.M{"_id": b.M{"$in": topicIds}}, disable); err != nil {
 				return err
 			}
-			if _, err = a.db.Collection("users").UpdateMany(a.ctx, b.M{"_id": uid.String()}, disable); err != nil {
+			if _, err = a.db.Collection("users").UpdateMany(sc, b.M{"_id": uid.String()}, disable); err != nil {
 				return err
 			}
 		}
@@ -770,7 +777,7 @@ func (a *adapter) CredGetAll(uid t.Uid, method string, validatedOnly bool) ([]t.
 
 // CredDel deletes credentials for the given method/value. If method is empty, deletes all
 // user's credentials.
-func (a *adapter) CredDel(uid t.Uid, method, value string) error {
+func (a *adapter) credDel(ctx context.Context, uid t.Uid, method, value string) error {
 	credCollection := a.db.Collection("credentials")
 	filter := b.M{"user": uid.String()}
 	if method != "" {
@@ -779,7 +786,7 @@ func (a *adapter) CredDel(uid t.Uid, method, value string) error {
 			filter["value"] = value
 		}
 	} else {
-		_, err := credCollection.DeleteMany(a.ctx, filter)
+		_, err := credCollection.DeleteMany(ctx, filter)
 		return err
 	}
 
@@ -788,13 +795,17 @@ func (a *adapter) CredDel(uid t.Uid, method, value string) error {
 	hardDeleteFilter["$or"] = b.A{
 		b.M{"done": true},
 		b.M{"retries": 0}}
-	if _, err := credCollection.DeleteMany(a.ctx, hardDeleteFilter); err != nil {
+	if _, err := credCollection.DeleteMany(ctx, hardDeleteFilter); err != nil {
 		return err
 	}
 
 	// Soft-delete all other values.
-	_, err := credCollection.UpdateMany(a.ctx, filter, b.M{"$set": b.M{"deletedat": t.TimeNow()}})
+	_, err := credCollection.UpdateMany(ctx, filter, b.M{"$set": b.M{"deletedat": t.TimeNow()}})
 	return err
+}
+
+func (a *adapter) CredDel(uid t.Uid, method, value string) error {
+	return a.credDel(a.ctx, uid, method, value)
 }
 
 // CredConfirm marks given credential as validated.
@@ -911,10 +922,14 @@ func (a *adapter) AuthDelScheme(uid t.Uid, scheme string) error {
 	return err
 }
 
+func (a *adapter) authDelAllRecords(ctx context.Context, uid t.Uid) (int, error) {
+	res, err := a.db.Collection("auth").DeleteMany(ctx, b.M{"userid": uid.String()})
+	return int(res.DeletedCount), err
+}
+
 // AuthDelAllRecords deletes all records of a given user.
 func (a *adapter) AuthDelAllRecords(uid t.Uid) (int, error) {
-	res, err := a.db.Collection("auth").DeleteMany(a.ctx, b.M{"userid": uid.String()})
-	return int(res.DeletedCount), err
+	return a.authDelAllRecords(a.ctx, uid)
 }
 
 // AuthUpdRecord modifies an authentication record.
@@ -943,24 +958,10 @@ func (a *adapter) AuthUpdRecord(uid t.Uid, scheme, unique string,
 				"secret":  secret,
 				"expires": expires}})
 	} else {
-		var sess mdb.Session
-		if sess, err = a.conn.StartSession(); err != nil {
+		if err = a.AuthAddRecord(uid, scheme, unique, authLvl, secret, expires); err != nil {
 			return err
 		}
-		defer sess.EndSession(a.ctx)
-		
-		if err = sess.StartTransaction(); err != nil {
-			return err
-		}
-		if err = mdb.WithSession(a.ctx, sess, func(sc mdb.SessionContext) error {
-			if err = a.AuthAddRecord(uid, scheme, unique, authLvl, secret, expires); err != nil {
-				return err
-			}
-			if err = a.AuthDelScheme(uid, scheme); err != nil {
-				return err
-			}
-			return sess.CommitTransaction(a.ctx)
-		}); err != nil {
+		if err = a.AuthDelScheme(uid, scheme); err != nil {
 			return err
 		}
 	}
@@ -1299,36 +1300,20 @@ func (a *adapter) TopicShare(subs []*t.Subscription) error {
 	// Subscription could have been marked as deleted (DeletedAt != nil). If it's marked
 	// as deleted, unmark by clearing the DeletedAt field of the old subscription and
 	// updating times and ModeGiven.
-	var sess mdb.Session
-	var err error
-	if sess, err = a.conn.StartSession(); err != nil {
-		return err
-	}
-	if err = sess.StartTransaction(); err != nil {
-		return err
-	}
-	if err = mdb.WithSession(a.ctx, sess, func(sc mdb.SessionContext) error {
-		for _, sub := range subs {
-			_, err = a.db.Collection("subscriptions").InsertOne(a.ctx, sub)
-			if err != nil {
-				if isDuplicateErr(err) {
-					err = a.undeleteSubscription(sub)
-					if err != nil {
-						return err
-					}
-				} else {
+	for _, sub := range subs {
+		_, err := a.db.Collection("subscriptions").InsertOne(a.ctx, sub)
+		if err != nil {
+			if isDuplicateErr(err) {
+				if err = a.undeleteSubscription(sub); err != nil {
 					return err
 				}
+			} else {
+				return err
 			}
 		}
-
-		return sess.CommitTransaction(a.ctx)
-	}); err != nil {
-		return err
 	}
-	sess.EndSession(a.ctx)
 
-	return err
+	return nil
 }
 
 // TopicDelete deletes topic, subscription, messages
@@ -1504,13 +1489,13 @@ func (a *adapter) SubsDelete(topic string, user t.Uid) error {
 	return err
 }
 
-func (a *adapter) subsDel(filter b.M, hard bool) error {
+func (a *adapter) subsDel(ctx context.Context, filter b.M, hard bool) error {
 	var err error
 	if hard {
-		_, err = a.db.Collection("subscriptions").DeleteMany(a.ctx, filter)
+		_, err = a.db.Collection("subscriptions").DeleteMany(ctx, filter)
 	} else {
 		now := t.TimeNow()
-		_, err = a.db.Collection("subscriptions").UpdateMany(a.ctx, filter,
+		_, err = a.db.Collection("subscriptions").UpdateMany(ctx, filter,
 			b.M{"$set": b.M{"updatedat": now, "deletedat": now}})
 	}
 	return err
@@ -1519,13 +1504,13 @@ func (a *adapter) subsDel(filter b.M, hard bool) error {
 // SubsDelForTopic deletes all subscriptions to the given topic
 func (a *adapter) SubsDelForTopic(topic string, hard bool) error {
 	filter := b.M{"topic": topic}
-	return a.subsDel(filter, hard)
+	return a.subsDel(a.ctx, filter, hard)
 }
 
 // SubsDelForUser deletes all subscriptions of the given user
 func (a *adapter) SubsDelForUser(user t.Uid, hard bool) error {
 	filter := b.M{"user": user.String()}
-	return a.subsDel(filter, hard)
+	return a.subsDel(a.ctx, filter, hard)
 }
 
 // Search
@@ -1719,7 +1704,7 @@ func (a *adapter) messagesHardDelete(topic string) error {
 		return err
 	}
 
-	if err = a.fileDecrementUseCounter(filter); err != nil {
+	if err = a.fileDecrementUseCounter(a.ctx, filter); err != nil {
 		return err
 	}
 
@@ -1763,7 +1748,7 @@ func (a *adapter) MessageDeleteList(topic string, toDel *t.DelMessage) error {
 	}
 
 	if toDel.DeletedFor == "" {
-		if err = a.fileDecrementUseCounter(filter); err != nil {
+		if err = a.fileDecrementUseCounter(a.ctx, filter); err != nil {
 			return err
 		}
 		// Hard-delete individual messages. Message is not deleted but all fields with content
@@ -2047,19 +2032,19 @@ func (a *adapter) FileDeleteUnused(olderThan time.Time, limit int) ([]string, er
 }
 
 // Given a filter query against 'messages' collection, decrement corresponding use counter in 'fileuploads' table.
-func (a *adapter) fileDecrementUseCounter(msgFilter b.M) error {
+func (a *adapter) fileDecrementUseCounter(ctx context.Context, msgFilter b.M) error {
 	// Copy msgFilter
 	filter := b.M{}
 	for k, v := range msgFilter {
 		filter[k] = v
 	}
 	filter["attachments"] = b.M{"$exists": true}
-	fileIds, err := a.db.Collection("messages").Distinct(a.ctx, "attachments", filter)
+	fileIds, err := a.db.Collection("messages").Distinct(ctx, "attachments", filter)
 	if err != nil {
 		return err
 	}
 
-	_, err = a.db.Collection("fileuploads").UpdateMany(a.ctx,
+	_, err = a.db.Collection("fileuploads").UpdateMany(ctx,
 		b.M{"_id": b.M{"$in": fileIds}},
 		b.M{"$inc": b.M{"usecount": -1}})
 
