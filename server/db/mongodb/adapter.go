@@ -421,6 +421,8 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 	if sess, err = a.conn.StartSession(); err != nil {
 		return err
 	}
+	defer sess.EndSession(a.ctx)
+
 	if err = sess.StartTransaction(); err != nil {
 		return err
 	}
@@ -514,7 +516,6 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 	}); err != nil {
 		return err
 	}
-	sess.EndSession(a.ctx)
 
 	return err
 }
@@ -946,6 +947,8 @@ func (a *adapter) AuthUpdRecord(uid t.Uid, scheme, unique string,
 		if sess, err = a.conn.StartSession(); err != nil {
 			return err
 		}
+		defer sess.EndSession(a.ctx)
+		
 		if err = sess.StartTransaction(); err != nil {
 			return err
 		}
@@ -960,7 +963,6 @@ func (a *adapter) AuthUpdRecord(uid t.Uid, scheme, unique string,
 		}); err != nil {
 			return err
 		}
-		sess.EndSession(a.ctx)
 	}
 
 	return err
