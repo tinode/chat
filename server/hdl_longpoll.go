@@ -23,10 +23,12 @@ func (sess *Session) writeOnce(wrt http.ResponseWriter, req *http.Request) {
 	for {
 		select {
 		case msg, ok := <-sess.send:
-			if !ok {
-				log.Println("longPoll: writeOnce reading from a closed channel", sess.sid)
-			} else if err := lpWrite(wrt, msg); err != nil {
-				log.Println("longPoll: writeOnce failed", sess.sid, err)
+			if ok {
+				if len(sess.send) > sendQueueLimit {
+					log.Println("longPoll: outbound queue limit exceeded", sess.sid)
+				} else if err := lpWrite(wrt, msg); err != nil {
+					log.Println("longPoll: writeOnce failed", sess.sid, err)
+				}
 			}
 			return
 
