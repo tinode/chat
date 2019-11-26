@@ -182,6 +182,7 @@ func sendNotifications(rcpt *push.Receipt, config *configType) {
 					}
 					if config.IncludeAndroidNotification {
 						msg.Android.Notification = &fcm.AndroidNotification{
+							Tag:   rcpt.Payload.Topic,
 							Title: "New message",
 							Body:  data["content"],
 							Icon:  config.Icon,
@@ -192,9 +193,9 @@ func sendNotifications(rcpt *push.Receipt, config *configType) {
 					// iOS uses Badge to show the total unread message count.
 					badge := rcpt.To[uid].Unread
 					// Need to duplicate these in APNS.Payload.Aps.Alert so
-					// iOS may call NotificationServiceExtension (if present). 
+					// iOS may call NotificationServiceExtension (if present).
 					title := "New message"
-					body  := data["content"]
+					body := data["content"]
 					msg.APNS = &fcm.APNSConfig{
 						Payload: &fcm.APNSPayload{
 							Aps: &fcm.Aps{
