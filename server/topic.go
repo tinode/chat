@@ -21,6 +21,10 @@ import (
 	"github.com/tinode/chat/server/store/types"
 )
 
+// Time between subscription of a background session and when the notifications are sent.
+// If session unsubscribes in this time frame notifications are not sent at all.
+const deferredNotificationsTimeout = time.Second * 5
+
 // Topic is an isolated communication channel
 type Topic struct {
 	// Еxpanded/unique name of the topic.
@@ -81,21 +85,19 @@ type Topic struct {
 
 	// Inbound {data} and {pres} messages from sessions or other topics, already converted to SCM. Buffered = 256
 	broadcast chan *ServerComMessage
-
 	// Channel for receiving {get}/{set} requests, buffered = 32
 	meta chan *metaReq
-
 	// Subscribe requests from sessions, buffered = 32
 	reg chan *sessionJoin
-
 	// Unsubscribe requests from sessions, buffered = 32
 	unreg chan *sessionLeave
-
+	// Delayed presence updates from successful subscriptions, buffered = 32
+	subPres chan *sessionJoin
 	// Track the most active sessions to report User Agent changes. Buffered = 32
 	uaChange chan string
-
 	// Channel to terminate topic  -- either the topic is deleted or system is being shut down. Buffered = 1.
 	exit chan *shutDown
+
 	// Flag which tells topic to stop acception requests: hub is in the process of shutting it down
 	suspended atomicBool
 }
@@ -198,6 +200,12 @@ func (t *Topic) run(hub *Hub) {
 					log.Printf("topic[%s] subscription failed %v, sid=%s", t.name, err, sreg.sess.sid)
 				}
 			}
+		case sreg := <-t.subPres:
+			if !t.isReady() {
+				continue
+			}
+			// TODO: Check if user has already unsubscribed.
+			t.sendSubNotifications(types.ParseUserId(sreg.pkt.from), sreg)
 
 		case leave := <-t.unreg:
 			// Remove connection from topic; session may continue to function
@@ -220,44 +228,46 @@ func (t *Topic) run(hub *Hub) {
 					continue
 				}
 
-			} else {
-				// Just leaving the topic without unsubscribing
-				if t.remSession(leave.sess, asUid) {
-					pud := t.perUser[asUid]
-					pud.online--
-					switch t.cat {
-					case types.TopicCatMe:
-						mrs := t.mostRecentSession()
-						if mrs == nil {
-							// Last session
-							mrs = leave.sess
-						} else {
-							// Change UA to the most recent live session and announce it. Don't block.
-							select {
-							case t.uaChange <- mrs.userAgent:
-							default:
-							}
-						}
-						// Update user's last online timestamp & user agent
-						if err := store.Users.UpdateLastSeen(asUid, mrs.userAgent, now); err != nil {
-							log.Println(err)
-						}
-					case types.TopicCatFnd:
-						// Remove ephemeral query.
-						t.fndRemovePublic(leave.sess)
-					case types.TopicCatGrp:
-						if pud.online == 0 {
-							// User is going offline: notify online subscribers on 'me'
-							t.presSubsOnline("off", asUid.UserId(), nilPresParams,
-								&presFilters{filterIn: types.ModeRead}, "")
+			} else if t.remSession(leave.sess, asUid) {
+				// Just leaving the topic without unsubscribing if user is subscribed.
+
+				pud := t.perUser[asUid]
+				!!
+				// FIXME: decrement one or the other. Store background status in session subscription.
+				pud.online--
+				pud.background--
+				switch t.cat {
+				case types.TopicCatMe:
+					mrs := t.mostRecentSession()
+					if mrs == nil {
+						// Last session
+						mrs = leave.sess
+					} else {
+						// Change UA to the most recent live session and announce it. Don't block.
+						select {
+						case t.uaChange <- mrs.userAgent:
+						default:
 						}
 					}
-
-					t.perUser[asUid] = pud
-
-					if leave.id != "" {
-						leave.sess.queueOut(NoErr(leave.id, t.original(asUid), now))
+					// Update user's last online timestamp & user agent
+					if err := store.Users.UpdateLastSeen(asUid, mrs.userAgent, now); err != nil {
+						log.Println(err)
 					}
+				case types.TopicCatFnd:
+					// Remove ephemeral query.
+					t.fndRemovePublic(leave.sess)
+				case types.TopicCatGrp:
+					if pud.online == 0 {
+						// User is going offline: notify online subscribers on 'me'
+						t.presSubsOnline("off", asUid.UserId(), nilPresParams,
+							&presFilters{filterIn: types.ModeRead}, "")
+					}
+				}
+
+				t.perUser[asUid] = pud
+
+				if leave.id != "" {
+					leave.sess.queueOut(NoErr(leave.id, t.original(asUid), now))
 				}
 			}
 
@@ -686,6 +696,67 @@ func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 		return err
 	}
 
+	// Send notifications.
+	if msgsub.Background {
+		// Notifications are delayed.
+		go func() {
+			time.Sleep(deferredNotificationsTimeout)
+			if !t.isDeleted() {
+				t.subPres <- sreg
+			}
+		}()
+	} else {
+		// Notifications sent immediately.
+		t.sendSubNotifications(asUid, sreg)
+	}
+
+	if getWhat&constMsgMetaDesc != 0 {
+		// Send get.desc as a {meta} packet.
+		if err := t.replyGetDesc(sreg.sess, asUid, sreg.pkt.id, msgsub.Get.Desc); err != nil {
+			log.Printf("topic[%s] handleSubscription Get.Desc failed: %v sid=%s", t.name, err, sreg.sess.sid)
+		}
+	}
+
+	if getWhat&constMsgMetaSub != 0 {
+		// Send get.sub response as a separate {meta} packet
+		if err := t.replyGetSub(sreg.sess, asUid, authLevel, sreg.pkt.id, msgsub.Get.Sub); err != nil {
+			log.Printf("topic[%s] handleSubscription Get.Sub failed: %v sid=%s", t.name, err, sreg.sess.sid)
+		}
+	}
+
+	if getWhat&constMsgMetaTags != 0 {
+		// Send get.tags response as a separate {meta} packet
+		if err := t.replyGetTags(sreg.sess, asUid, sreg.pkt.id); err != nil {
+			log.Printf("topic[%s] handleSubscription Get.Tags failed: %v sid=%s", t.name, err, sreg.sess.sid)
+		}
+	}
+
+	if getWhat&constMsgMetaCred != 0 {
+		// Send get.tags response as a separate {meta} packet
+		if err := t.replyGetCreds(sreg.sess, asUid, sreg.pkt.id); err != nil {
+			log.Printf("topic[%s] handleSubscription Get.Cred failed: %v sid=%s", t.name, err, sreg.sess.sid)
+		}
+	}
+
+	if getWhat&constMsgMetaData != 0 {
+		// Send get.data response as {data} packets
+		if err := t.replyGetData(sreg.sess, asUid, sreg.pkt.id, msgsub.Get.Data); err != nil {
+			log.Printf("topic[%s] handleSubscription Get.Data failed: %v sid=%s", t.name, err, sreg.sess.sid)
+		}
+	}
+
+	if getWhat&constMsgMetaDel != 0 {
+		// Send get.del response as a separate {meta} packet
+		if err := t.replyGetDel(sreg.sess, asUid, sreg.pkt.id, msgsub.Get.Del); err != nil {
+			log.Printf("topic[%s] handleSubscription Get.Del failed: %v sid=%s", t.name, err, sreg.sess.sid)
+		}
+	}
+
+	return nil
+}
+
+// Send presence notification in response to a subscription
+func (t *Topic) sendSubNotifications(asUid types.Uid, sreg *sessionJoin) {
 	pud := t.perUser[asUid]
 
 	switch t.cat {
@@ -756,49 +827,6 @@ func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 			sreg.sess.sid, false)
 	}
 
-	if getWhat&constMsgMetaDesc != 0 {
-		// Send get.desc as a {meta} packet.
-		if err := t.replyGetDesc(sreg.sess, asUid, sreg.pkt.id, msgsub.Get.Desc); err != nil {
-			log.Printf("topic[%s] handleSubscription Get.Desc failed: %v sid=%s", t.name, err, sreg.sess.sid)
-		}
-	}
-
-	if getWhat&constMsgMetaSub != 0 {
-		// Send get.sub response as a separate {meta} packet
-		if err := t.replyGetSub(sreg.sess, asUid, authLevel, sreg.pkt.id, msgsub.Get.Sub); err != nil {
-			log.Printf("topic[%s] handleSubscription Get.Sub failed: %v sid=%s", t.name, err, sreg.sess.sid)
-		}
-	}
-
-	if getWhat&constMsgMetaTags != 0 {
-		// Send get.tags response as a separate {meta} packet
-		if err := t.replyGetTags(sreg.sess, asUid, sreg.pkt.id); err != nil {
-			log.Printf("topic[%s] handleSubscription Get.Tags failed: %v sid=%s", t.name, err, sreg.sess.sid)
-		}
-	}
-
-	if getWhat&constMsgMetaCred != 0 {
-		// Send get.tags response as a separate {meta} packet
-		if err := t.replyGetCreds(sreg.sess, asUid, sreg.pkt.id); err != nil {
-			log.Printf("topic[%s] handleSubscription Get.Cred failed: %v sid=%s", t.name, err, sreg.sess.sid)
-		}
-	}
-
-	if getWhat&constMsgMetaData != 0 {
-		// Send get.data response as {data} packets
-		if err := t.replyGetData(sreg.sess, asUid, sreg.pkt.id, msgsub.Get.Data); err != nil {
-			log.Printf("topic[%s] handleSubscription Get.Data failed: %v sid=%s", t.name, err, sreg.sess.sid)
-		}
-	}
-
-	if getWhat&constMsgMetaDel != 0 {
-		// Send get.del response as a separate {meta} packet
-		if err := t.replyGetDel(sreg.sess, asUid, sreg.pkt.id, msgsub.Get.Del); err != nil {
-			log.Printf("topic[%s] handleSubscription Get.Del failed: %v sid=%s", t.name, err, sreg.sess.sid)
-		}
-	}
-
-	return nil
 }
 
 // subCommonReply generates a response to a subscription request
@@ -876,6 +904,7 @@ func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin) error {
 
 // User requests or updates a self-subscription to a topic. Called as a
 // result of {sub} or {meta set=sub}.
+// Returns changed == true if user's accessmode has changed.
 //
 //	h 		- hub
 //	sess 	- originating session
@@ -1101,9 +1130,6 @@ func (t *Topic) requestSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Le
 		t.presSingleUserOffline(asUid, "off+dis", nilPresParams, "", false)
 	}
 
-	// The user is online in topic.
-	userData.online++
-
 	// Apply changes.
 	t.perUser[asUid] = userData
 
@@ -1141,10 +1167,15 @@ func (t *Topic) requestSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Le
 		uaChange:  t.uaChange})
 	t.addSession(sess, asUid)
 
+	// The user is online in topic.
+	userData.online++
+	t.perUser[asUid] = userData
+
 	return changed, nil
 }
 
-// approveSub processes a request to initiate an invite or approve a subscription request from another user:
+// approveSub processes a request to initiate an invite or approve a subscription request from another user.
+// Returns changed == true if user's access mode has changed.
 // Handle these cases:
 // A. Sharer or Approver is inviting another user for the first time (no prior subscription)
 // B. Sharer or Approver is re-inviting another user (adjusting modeGiven, modeWant is still Unset)
@@ -2350,6 +2381,7 @@ func (t *Topic) evictUser(uid types.Uid, unsub bool, skip string) {
 		if t.cat == types.TopicCatP2P {
 			// P2P: mark user as deleted
 			pud.online = 0
+			pud.background = 0
 			pud.deleted = true
 			t.perUser[uid] = pud
 		} else {
@@ -2361,6 +2393,7 @@ func (t *Topic) evictUser(uid types.Uid, unsub bool, skip string) {
 	} else {
 		// Clear online status
 		pud.online = 0
+		pud.background = 0
 		t.perUser[uid] = pud
 	}
 

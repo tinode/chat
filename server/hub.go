@@ -171,6 +171,7 @@ func (h *Hub) run() {
 					reg:       make(chan *sessionJoin, 32),
 					unreg:     make(chan *sessionLeave, 32),
 					meta:      make(chan *metaReq, 32),
+					subPres:   make(chan *sessionJoin, 32),
 					perUser:   make(map[types.Uid]perUserData),
 					exit:      make(chan *shutDown, 1),
 				}
