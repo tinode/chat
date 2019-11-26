@@ -187,6 +187,8 @@ message ClientSub {
 
 	// mirrors {get}
 	GetQuery get_query = 4;
+
+	bool background = 5;
 }
 
 // Unsubscribe {leave} request message
