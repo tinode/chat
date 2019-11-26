@@ -13,17 +13,28 @@ All images are available at https://hub.docker.com/r/tinode/
 
 	1. **RethinkDB**: If you've decided to use RethinkDB backend, run the official RethinkDB Docker container:
 	```
-	$ docker run --name rethinkdb --network tinode-net -d rethinkdb:2.3
+	$ docker run --name rethinkdb --network tinode-net --restart always -d rethinkdb:2.3
 	```
 	See [instructions](https://hub.docker.com/_/rethinkdb/) for more options.
 
 	2. **MySQL**: If you've decided to use MySQL backend, run the official MySQL Docker container:
 	```
-	$ docker run --name mysql --network tinode-net --env MYSQL_ALLOW_EMPTY_PASSWORD=yes -d mysql:5.7
+	$ docker run --name mysql --network tinode-net --restart always --env MYSQL_ALLOW_EMPTY_PASSWORD=yes -d mysql:5.7
 	```
 	See [instructions](https://hub.docker.com/_/mysql/) for more options. MySQL 5.7 or above is required.
 
-	The name `rethinkdb` or `mysql` in the `--name` assignment is important. It's used by other containers as a database's host name.
+	3. **MongoDB**: If you've decided to use MongoDB backend, run the official MongoDB Docker container and initialise it as single node replica set (you can change "rs0" if you wish):
+   ```
+   $ docker run --name mongodb --network tinode-net --restart always -d mongo:latest --replSet "rs0"
+   $ docker exec -it mongodb mongo
+   
+   # And inside mongo shell:
+   > rs.initiate( {"_id": "rs0", "members": [ {"_id": 0, "host": "mongodb:27017"} ]} )
+   > quit()
+   ```
+	See [instructions](https://hub.docker.com/_/mongo/) for more options. MongoDB 4.2 or above is required.
+
+	The name `rethinkdb`, `mysql` or `mongodb` in the `--name` assignment is important. It's used by other containers as a database's host name.
 
 4. Run the Tinode container for the appropriate database:
 
@@ -37,6 +48,11 @@ All images are available at https://hub.docker.com/r/tinode/
 	$ docker run -p 6060:18080 -d --name tinode-srv --network tinode-net tinode/tinode-mysql:latest
 	```
 
+	3. **MongoDB**:
+	```
+	$ docker run -p 6060:18080 -d --name tinode-srv --network tinode-net tinode/tinode-mongodb:latest
+	```
+ 
 	See [below](#supported-environment-variables) for more options.
 
 	The port mapping `-p 6060:18080` tells Docker to map container's port 18080 to host's port 6060 making server accessible at http://localhost:6060/. The container will initialize the database with test data on the first run.
@@ -44,6 +60,7 @@ All images are available at https://hub.docker.com/r/tinode/
 	You may replace `:latest` with a different tag. See all all available tags here:
 	 * [MySQL tags](https://hub.docker.com/r/tinode/tinode-mysql/tags/)
 	 * [RethinkDB tags](https://hub.docker.com/r/tinode/tinode-rethink/tags/)
+	 * [MongoDB tags](https://hub.docker.com/r/tinode/tinode-mongodb/tags/) (comming soon)
 
 5. Test the installation by pointing your browser to [http://localhost:6060/](http://localhost:6060/).
 

@@ -10,6 +10,9 @@ This utility initializes the `tinode` database and optionally loads it with samp
  - **MySQL**
   `go build -tags mysql` or `go build -i -tags mysql` to automatically install missing dependencies.
 
+ - **MongoDB**
+  `go build -tags mongodb` or `go build -i -tags mongodb` to automatically install missing dependencies.
+
 
 ## Run
 
@@ -27,8 +30,9 @@ Configuration file options:
  - `uid_key` is a base64-encoded 16 byte XTEA encryption key to (weakly) encrypt object IDs so they don't appear sequential. You probably want to use your own key in production.
  - `store_config.adapters.mysql` and `store_config.adapters.rethinkdb` are database-specific sections:
   - `database` is the name of the database to generate.
-  - `addresses` is RethinkDB's host and port number to connect to. An array of hosts can be provided as well `["host1", "host2"]`.
+  - `addresses` is RethinkDB/MongoDB's host and port number to connect to. An array of hosts can be provided as well `["host1", "host2"]`.
   - `dsn` is MySQL's Data Source Name.
+  - `replica_set` is MongoDB's Replicaset name.
 
 The `uid_key` is only used if the sample data is being loaded. It should match the key of a production server and should be kept private.
 
@@ -40,3 +44,4 @@ Avatar photos curtesy of https://www.pexels.com/ under [CC0 license](https://www
 
 * [RethinkDB schema](https://github.com/tinode/chat/tree/master/server/db/rethinkdb/schema.md)
 * [MySQL schema](https://github.com/tinode/chat/tree/master/server/db/mysql/schema.sql)
+* [MongoDB schema](https://github.com/tinode/chat/tree/master/server/db/mongodb/schema.md)

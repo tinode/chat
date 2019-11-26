@@ -64,6 +64,11 @@
 				"database": "tinode",
 				"addresses": "rethinkdb"
 			}
+			"mongodb": {
+				"database": "tinode",
+				"addresses": "mongodb",
+				"replica_set": "rs0"
+			}
 		}
 	},
 

@@ -422,10 +422,10 @@ func createSystemTopic(a *adapter) error {
 	_, err := rdb.DB(a.dbName).Table("topics").Insert(&t.Topic{
 		ObjHeader: t.ObjHeader{Id: "sys",
 			CreatedAt: now,
-			UpdatedAt: now,
-			TouchedAt: now},
-		Access: t.DefaultAccess{Auth: t.ModeNone, Anon: t.ModeNone},
-		Public: map[string]interface{}{"fn": "System"},
+			UpdatedAt: now},
+		TouchedAt: now,
+		Access:    t.DefaultAccess{Auth: t.ModeNone, Anon: t.ModeNone},
+		Public:    map[string]interface{}{"fn": "System"},
 	}).RunWrite(a.conn)
 	return err
 }

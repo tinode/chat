@@ -28,7 +28,7 @@ See [instructions](./docker/README.md)
 
 1. Install [Go environment](https://golang.org/doc/install). Make sure Go version is at least 1.9. Building with Go 1.8 or below **will fail**!
 
-2. Make sure either [RethinkDB](https://www.rethinkdb.com/docs/install/) or MySQL (or MariaDB or Percona) is installed and running. MySQL 5.7 or above is required. MySQL 5.6 or below **will not work**.
+2. Make sure either [RethinkDB](https://www.rethinkdb.com/docs/install/) or MySQL (or MariaDB or Percona) is installed and running. MySQL 5.7 or above is required. MySQL 5.6 or below **will not work**. MongoDB (v4.2 and above) also available but it is experimental on not tested in production.
 
 3. Fetch, build Tinode server and tinode-db database initializer:
  - **RethinkDb**:
@@ -41,8 +41,13 @@ See [instructions](./docker/README.md)
 	go get -tags mysql github.com/tinode/chat/server && go install -tags mysql github.com/tinode/chat/server
 	go get -tags mysql github.com/tinode/chat/tinode-db && go install -tags mysql github.com/tinode/chat/tinode-db
 	```
-
-	Note the required **`-tags rethinkdb`** or **`-tags mysql`** build option.
+ - **MongoDB**:
+	```
+	go get -tags mongodb github.com/tinode/chat/server && go install -tags mongodb github.com/tinode/chat/server
+	go get -tags mongodb github.com/tinode/chat/tinode-db && go install -tags mongodb github.com/tinode/chat/tinode-db
+	```
+ 
+	Note the required **`-tags rethinkdb`**, **`-tags mysql`** or **`-tags mongodb`** build option.
 
 	You may also optionally define `main.buildstamp` for the server by adding a build option, for instance, with a timestamp:
 	```
@@ -75,6 +80,12 @@ See [instructions](./docker/README.md)
  - **MySQL**: https://dev.mysql.com/doc/mysql-startstop-excerpt/5.7/en/programs-server.html
 	```
 	mysql.server start
+	```
+ - **MongoDB**: https://docs.mongodb.com/manual/administration/install-community/
+
+    MongoDB should run as single node replicaset. See https://docs.mongodb.com/manual/administration/replica-set-deployment/
+	```
+	mongod
 	```
 
 2. Run DB initializer

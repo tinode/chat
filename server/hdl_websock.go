@@ -79,6 +79,10 @@ func (sess *Session) writeLoop() {
 				// Channel closed.
 				return
 			}
+			if len(sess.send) > sendQueueLimit {
+				log.Println("ws: outbound queue limit exceeded", sess.sid)
+				return
+			}
 			if err := wsWrite(sess.ws, websocket.TextMessage, msg); err != nil {
 				if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure,
 					websocket.CloseNormalClosure) {

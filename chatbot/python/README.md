@@ -97,6 +97,10 @@ Quotes are read from `quotes.txt` by default. The file is plain text with one qu
 	```
 	$ docker run -p 6060:18080 -d --name tinode-srv --env PLUGIN_PYTHON_CHAT_BOT_ENABLED=true --volume botdata:/botdata --network tinode-net tinode/tinode-mysql:latest
 	```
+	3. **MongoDB**:
+	```
+	$ docker run -p 6060:18080 -d --name tinode-srv --env PLUGIN_PYTHON_CHAT_BOT_ENABLED=true --volume botdata:/botdata --network tinode-net tinode/tinode-mongodb:latest
+	```
 
 3. Run the chatbot
 	```
@@ -109,6 +113,7 @@ Quotes are read from `quotes.txt` by default. The file is plain text with one qu
 You may replace the `:latest` with a different tag. See all available tags here:
  * [Tinode-MySQL tags](https://hub.docker.com/r/tinode/tinode-mysql/tags/)
  * [Tinode-RethinkDB tags](https://hub.docker.com/r/tinode/tinode-rethink/tags/)
+ * [Tinode-MongoDB tags](https://hub.docker.com/r/tinode/tinode-mongodb/tags/)
  * [Chatbot tags](https://hub.docker.com/r/tinode/chatbot/tags/)
 
 In general try to use docker images all with the same tag.
