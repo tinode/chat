@@ -82,6 +82,8 @@ See [instructions](./docker/README.md)
 	mysql.server start
 	```
  - **MongoDB**: https://docs.mongodb.com/manual/administration/install-community/
+
+    MongoDB should run as single node replicaset. See https://docs.mongodb.com/manual/administration/replica-set-deployment/
 	```
 	mongod
 	```
