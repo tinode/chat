@@ -40,11 +40,6 @@ TinodeWeb, a single page web app, is available at https://web.tinode.co/ ([sourc
 [Tinode for iOS](https://apps.apple.com/app/reference-to-tinodios-here/id123) a.k.a. Tinodios is stable and functional ([source](https://github.com/tinode/ios)). See the screenshots below. Currently available in English, Simplified Chinese. More translations are welcome.
 
 
-### Android
-
-[Tinode for Android](https://play.google.com/store/apps/details?id=co.tinode.tindroid) a.k.a. Tindroid is stable and functional ([source](https://github.com/tinode/tindroid)). See the screenshots below.
-
-
 ## Demo/Sandbox
 
 A sandboxed demo service is available at https://sandbox.tinode.co/.
