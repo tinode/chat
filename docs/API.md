@@ -686,8 +686,9 @@ The `{sub}` message may include a `get` and `set` fields which mirror `{get}` an
 ```js
 sub: {
   id: "1a2b3",  // string, client-provided message id, optional
-  topic: "me",   // topic to be subscribed or attached to
-
+  topic: "me",  // topic to be subscribed or attached to
+  bkg: true,    // request to attach to topic is issued by an automated agent, server should delay sending
+                // presence notifications because the agent is expected to disconnect very quickly
   // Object with topic initialisation data, new topics & new
   // subscriptions only, mirrors {set} message
   set: {
