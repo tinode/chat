@@ -32,17 +32,12 @@ TinodeWeb, a single page web app, is available at https://web.tinode.co/ ([sourc
 
 ### Android
 
-[Tindroid](https://github.com/tinode/tindroid) is stable and functional. See the screenshots below. A [debug APK](https://github.com/tinode/tindroid/releases/latest) is provided for convenience. Currently available in English, Russian. More translations are welcome.
+[Tinode for Android](https://play.google.com/store/apps/details?id=co.tinode.tindroidx) a.k.a Tindroid is stable and functional ([source](https://github.com/tinode/tindroid)). See the screenshots below. A [debug APK](https://github.com/tinode/tindroid/releases/latest) is also provided for convenience. Currently available in English, Russian. More translations are welcome.
 
 
 ### iOS
 
 [Tinode for iOS](https://apps.apple.com/app/reference-to-tinodios-here/id123) a.k.a. Tinodios is stable and functional ([source](https://github.com/tinode/ios)). See the screenshots below. Currently available in English, Simplified Chinese. More translations are welcome.
-
-
-### Android
-
-[Tinode for Android](https://play.google.com/store/apps/details?id=co.tinode.tindroid) a.k.a. Tindroid is stable and functional ([source](https://github.com/tinode/tindroid)). See the screenshots below.
 
 
 ## Demo/Sandbox
