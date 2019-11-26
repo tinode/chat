@@ -166,7 +166,7 @@ func (h *Hub) run() {
 				// Topic does not exist or not loaded.
 				t = &Topic{name: sreg.topic,
 					xoriginal: sreg.pkt.topic,
-					sessions:  make(map[*Session]types.UidSlice),
+					sessions:  make(map[*Session]types.Uid),
 					broadcast: make(chan *ServerComMessage, 256),
 					reg:       make(chan *sessionJoin, 32),
 					unreg:     make(chan *sessionLeave, 32),

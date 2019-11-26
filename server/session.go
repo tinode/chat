@@ -412,6 +412,7 @@ func (s *Session) subscribe(msg *ClientComMessage) {
 		}
 	}
 
+	// Session can subscribe to topic on behalf of a single user at a time.
 	if sub := s.getSub(expanded); sub != nil {
 		s.queueOut(InfoAlreadySubscribed(msg.id, msg.topic, msg.timestamp))
 	} else if remoteNodeName := globals.cluster.nodeNameForTopicIfRemote(expanded); remoteNodeName != "" {

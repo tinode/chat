@@ -75,9 +75,9 @@ type Topic struct {
 	// The map keys are UserIds for P2P topics and grpXXX for group topics.
 	perSubs map[string]perSubsData
 
-	// Sessions attached to this topic.
-	// A session may represent more than one subsription.
-	sessions map[*Session]types.UidSlice
+	// Sessions attached to this topic. The kept here UID may not match Session.uid if session is
+	// subscribed on behalf of another user.
+	sessions map[*Session]types.Uid
 
 	// Inbound {data} and {pres} messages from sessions or other topics, already converted to SCM. Buffered = 256
 	broadcast chan *ServerComMessage
@@ -109,6 +109,8 @@ type perUserData struct {
 	updated time.Time
 
 	online int
+	// Online but defered announcement of presence.
+	background int
 
 	// Last t.lastId reported by user through {pres} as received or read
 	recvID int
@@ -177,7 +179,8 @@ func (t *Topic) run(hub *Hub) {
 			// Request to add a connection to this topic
 
 			if !t.isReady() {
-				sreg.sess.queueOut(ErrLocked(sreg.pkt.id, t.original(sreg.sess.uid), types.TimeNow()))
+				asUid := types.ParseUserId(sreg.pkt.from)
+				sreg.sess.queueOut(ErrLocked(sreg.pkt.id, t.original(asUid), types.TimeNow()))
 			} else {
 				// The topic is alive, so stop the kill timer, if it's ticking. We don't want the topic to die
 				// while processing the call
@@ -219,10 +222,8 @@ func (t *Topic) run(hub *Hub) {
 
 			} else {
 				// Just leaving the topic without unsubscribing
-				removedUids := t.remSession(leave.sess, asUid)
-
-				for _, uid := range removedUids {
-					pud := t.perUser[uid]
+				if t.remSession(leave.sess, asUid) {
+					pud := t.perUser[asUid]
 					pud.online--
 					switch t.cat {
 					case types.TopicCatMe:
@@ -238,7 +239,7 @@ func (t *Topic) run(hub *Hub) {
 							}
 						}
 						// Update user's last online timestamp & user agent
-						if err := store.Users.UpdateLastSeen(uid, mrs.userAgent, now); err != nil {
+						if err := store.Users.UpdateLastSeen(asUid, mrs.userAgent, now); err != nil {
 							log.Println(err)
 						}
 					case types.TopicCatFnd:
@@ -247,15 +248,15 @@ func (t *Topic) run(hub *Hub) {
 					case types.TopicCatGrp:
 						if pud.online == 0 {
 							// User is going offline: notify online subscribers on 'me'
-							t.presSubsOnline("off", uid.UserId(), nilPresParams,
+							t.presSubsOnline("off", asUid.UserId(), nilPresParams,
 								&presFilters{filterIn: types.ModeRead}, "")
 						}
 					}
 
-					t.perUser[uid] = pud
+					t.perUser[asUid] = pud
 
 					if leave.id != "" {
-						leave.sess.queueOut(NoErr(leave.id, t.original(uid), now))
+						leave.sess.queueOut(NoErr(leave.id, t.original(asUid), now))
 					}
 				}
 			}
@@ -350,8 +351,8 @@ func (t *Topic) run(hub *Hub) {
 					continue
 				}
 
-				uid := types.ParseUserId(msg.Info.From)
-				pud := t.perUser[uid]
+				from := types.ParseUserId(msg.Info.From)
+				pud := t.perUser[from]
 
 				// Filter out "kp" from users with no 'W' permission (or people without a subscription)
 				if msg.Info.What == "kp" && !(pud.modeGiven & pud.modeWant).IsWriter() {
@@ -389,7 +390,7 @@ func (t *Topic) run(hub *Hub) {
 						recv = pud.recvID
 					}
 
-					if err := store.Subs.Update(t.name, uid,
+					if err := store.Subs.Update(t.name, from,
 						map[string]interface{}{
 							"RecvSeqId": pud.recvID,
 							"ReadSeqId": pud.readID},
@@ -400,19 +401,19 @@ func (t *Topic) run(hub *Hub) {
 					}
 
 					// Read/recv updated: notify user's other sessions of the change
-					t.presPubMessageCount(uid, recv, read, msg.skipSid)
+					t.presPubMessageCount(from, recv, read, msg.skipSid)
 
 					// Update cached count of unread messages
-					usersUpdateUnread(uid, unread, true)
+					usersUpdateUnread(from, unread, true)
 
-					t.perUser[uid] = pud
+					t.perUser[from] = pud
 				}
 			}
 
 			// Broadcast the message. Only {data}, {pres}, {info} are broadcastable.
 			// {meta} and {ctrl} are sent to the session only
 			if msg.Data != nil || msg.Pres != nil || msg.Info != nil {
-				for sess := range t.sessions {
+				for sess, uid := range t.sessions {
 					if sess.sid == msg.skipSid {
 						continue
 					}
@@ -424,12 +425,12 @@ func (t *Topic) run(hub *Hub) {
 						}
 
 						// Notification addressed to a single user only
-						if msg.Pres.singleUser != "" && sess.uid.UserId() != msg.Pres.singleUser {
+						if msg.Pres.singleUser != "" && uid.UserId() != msg.Pres.singleUser {
 							continue
 						}
 
 						// Check presence filters
-						pud := t.perUser[sess.uid]
+						pud := t.perUser[uid]
 						// Send "gone" notification even if the topic is muted.
 						if (!(pud.modeGiven & pud.modeWant).IsPresencer() && msg.Pres.What != "gone") ||
 							(msg.Pres.filterIn != 0 && int(pud.modeGiven&pud.modeWant)&msg.Pres.filterIn == 0) ||
@@ -439,13 +440,13 @@ func (t *Topic) run(hub *Hub) {
 
 					} else {
 						// Check if the user has Read permission
-						pud := t.perUser[sess.uid]
+						pud := t.perUser[uid]
 						if !(pud.modeGiven & pud.modeWant).IsReader() {
 							continue
 						}
 
 						// Don't send key presses from one user's session to the other sessions of the same user.
-						if msg.Info != nil && msg.Info.What == "kp" && msg.Info.From == sess.uid.UserId() {
+						if msg.Info != nil && msg.Info.What == "kp" && msg.Info.From == uid.UserId() {
 							continue
 						}
 					}
@@ -454,18 +455,18 @@ func (t *Topic) run(hub *Hub) {
 						// For p2p topics topic name is dependent on receiver
 						switch {
 						case msg.Data != nil:
-							msg.Data.Topic = t.original(sess.uid)
+							msg.Data.Topic = t.original(uid)
 						case msg.Pres != nil:
-							msg.Pres.Topic = t.original(sess.uid)
+							msg.Pres.Topic = t.original(uid)
 						case msg.Info != nil:
-							msg.Info.Topic = t.original(sess.uid)
+							msg.Info.Topic = t.original(uid)
 						}
 					}
 
 					if sess.queueOut(msg) {
 						// Update device map with the device ID which should NOT receive the notification.
 						if pushRcpt != nil {
-							if addr, ok := pushRcpt.To[sess.uid]; ok {
+							if addr, ok := pushRcpt.To[uid]; ok {
 								addr.Delivered++
 								if sess.deviceID != "" {
 									// List of device IDs which already received the message. Push should
@@ -473,7 +474,7 @@ func (t *Topic) run(hub *Hub) {
 									// The same device ID may appear twice.
 									addr.Devices = append(addr.Devices, sess.deviceID)
 								}
-								pushRcpt.To[sess.uid] = addr
+								pushRcpt.To[uid] = addr
 							}
 						}
 					} else {
@@ -2367,7 +2368,7 @@ func (t *Topic) evictUser(uid types.Uid, unsub bool, skip string) {
 	msg := NoErrEvicted("", t.original(uid), now)
 	msg.Ctrl.Params = map[string]interface{}{"unsub": unsub}
 	for sess := range t.sessions {
-		if len(t.remSession(sess, uid)) > 0 {
+		if t.remSession(sess, uid) {
 			sess.detach <- t.name
 			if sess.sid != skip {
 				sess.queueOut(msg)
@@ -2645,41 +2646,23 @@ func (t *Topic) subsCount() int {
 	return len(t.perUser)
 }
 
-func (t *Topic) addSession(s *Session, user types.Uid) types.UidSlice {
-	uids := t.sessions[s]
-	if uids == nil {
-		uids = types.UidSlice{user}
-	} else {
-		uids.Add(user)
+// Add session record. 'user' may be different from s.uid.
+func (t *Topic) addSession(s *Session, user types.Uid) bool {
+	if _, ok := t.sessions[s]; ok {
+		return false
 	}
-	t.sessions[s] = uids
-	return uids
+	t.sessions[s] = user
+	return true
 }
 
-// Removes Uid from the session record. If user.IsZero() then removes all UIDs.
-// Returns a slice of removed UIDs (all, just one or nil).
-func (t *Topic) remSession(s *Session, user types.Uid) types.UidSlice {
-	uids := t.sessions[s]
-	if uids == nil {
-		return nil
-	}
-
-	if user.IsZero() {
-		// All uids are removed.
+// Removes session record if 'user' matches subscribed user.
+func (t *Topic) remSession(s *Session, user types.Uid) bool {
+	asUid := t.sessions[s]
+	if asUid == user {
 		delete(t.sessions, s)
-	} else if uids.Rem(user) {
-		// One uid is removed
-		if len(uids) > 0 {
-			t.sessions[s] = uids
-		} else {
-			delete(t.sessions, s)
-		}
-		uids = types.UidSlice{user}
-	} else {
-		// No uids removed
-		uids = nil
+		return true
 	}
-	return uids
+	return false
 }
 
 func topicCat(name string) types.TopicCat {
