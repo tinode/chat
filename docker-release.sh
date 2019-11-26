@@ -20,7 +20,7 @@ if [[ ${ver[2]} != *"-"* ]]; then
   FULLRELEASE=1
 fi
 
-dbtags=( mysql rethinkdb )
+dbtags=( mysql mongodb rethinkdb )
 
 # Read dockerhub login/password from a separate file
 source .dockerhub
