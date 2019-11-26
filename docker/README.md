@@ -13,20 +13,25 @@ All images are available at https://hub.docker.com/r/tinode/
 
 	1. **RethinkDB**: If you've decided to use RethinkDB backend, run the official RethinkDB Docker container:
 	```
-	$ docker run --name rethinkdb --network tinode-net -d rethinkdb:2.3
+	$ docker run --name rethinkdb --network tinode-net --restart always -d rethinkdb:2.3
 	```
 	See [instructions](https://hub.docker.com/_/rethinkdb/) for more options.
 
 	2. **MySQL**: If you've decided to use MySQL backend, run the official MySQL Docker container:
 	```
-	$ docker run --name mysql --network tinode-net --env MYSQL_ALLOW_EMPTY_PASSWORD=yes -d mysql:5.7
+	$ docker run --name mysql --network tinode-net --restart always --env MYSQL_ALLOW_EMPTY_PASSWORD=yes -d mysql:5.7
 	```
 	See [instructions](https://hub.docker.com/_/mysql/) for more options. MySQL 5.7 or above is required.
 
-	3. **MongoDB**: If you've decided to use MongoDB backend, run the official MongoDB Docker container:
-	```
-	$ docker run --name mongodb --network tinode-net -d mongo:latest
-	```
+	3. **MongoDB**: If you've decided to use MongoDB backend, run the official MongoDB Docker container and initialise it as single node replica set (you can change "rs0" if you wish):
+   ```
+   $ docker run --name mongodb --network tinode-net --restart always -d mongo:latest --replSet "rs0"
+   $ docker exec -it mongodb mongo
+   
+   # And inside mongo shell:
+   > rs.initiate( {"_id": "rs0", "members": [ {"_id": 0, "host": "mongodb:27017"} ]} )
+   > quit()
+   ```
 	See [instructions](https://hub.docker.com/_/mongo/) for more options. MongoDB 4.2 or above is required.
 
 	The name `rethinkdb`, `mysql` or `mongodb` in the `--name` assignment is important. It's used by other containers as a database's host name.
