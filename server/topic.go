@@ -895,7 +895,7 @@ func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin) error {
 	var err error
 	var changed bool
 	// Create new subscription or modify an existing one.
-	if changed, err = t.requestSub(h, sreg.sess, asUid, asLvl, sreg.pkt.id, mode, private); err != nil {
+	if changed, err = t.requestSub(h, sreg.sess, asUid, asLvl, sreg.pkt.id, mode, private, msgsub.Background); err != nil {
 		return err
 	}
 
@@ -930,13 +930,15 @@ func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin) error {
 // result of {sub} or {meta set=sub}.
 // Returns changed == true if user's accessmode has changed.
 //
-//	h 		- hub
-//	sess 	- originating session
-//	asUid 	- id of the user making the request
-//	asLvl	- access level of the user making the request
-//	pktID	- id of {sub} or {set} packet
-//	want	- requested access mode
-//	private	- private value to assign to the subscription
+//	h			- hub
+//	sess		- originating session
+//	asUid		- id of the user making the request
+//	asLvl		- access level of the user making the request
+//	pktID		- id of {sub} or {set} packet
+//	want		- requested access mode
+//	private		- private value to assign to the subscription
+//	background	- presence notifications are deferred
+//
 // Handle these cases:
 // A. User is trying to subscribe for the first time (no subscription)
 // B. User is already subscribed, just joining without changing anything
@@ -944,7 +946,7 @@ func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin) error {
 // D. User is already subscribed, changing modeWant
 // E. User is accepting ownership transfer (requesting ownership transfer is not permitted)
 func (t *Topic) requestSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Level,
-	pktID, want string, private interface{}) (bool, error) {
+	pktID, want string, private interface{}, background bool) (bool, error) {
 
 	now := types.TimeNow()
 	toriginal := t.original(asUid)
@@ -1191,11 +1193,11 @@ func (t *Topic) requestSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Le
 		uaChange:  t.uaChange})
 	t.addSession(sess, asUid)
 
-	// The user is online in topic.
-	// FIXME: this should not be incremented when the notification is deferred.
-	userData.online++
-	t.perUser[asUid] = userData
-
+	// The user is online in the topic. Increment the counter if notifications are not deferred.
+	if !background {
+		userData.online++
+		t.perUser[asUid] = userData
+	}
 	return changed, nil
 }
 
@@ -1877,7 +1879,7 @@ func (t *Topic) replySetSub(h *Hub, sess *Session, pkt *ClientComMessage) error 
 	var changed bool
 	if target == asUid {
 		// Request new subscription or modify own subscription
-		changed, err = t.requestSub(h, sess, asUid, asLvl, pkt.id, set.Sub.Mode, nil)
+		changed, err = t.requestSub(h, sess, asUid, asLvl, pkt.id, set.Sub.Mode, nil, false)
 	} else {
 		// Request to approve/change someone's subscription
 		changed, err = t.approveSub(h, sess, asUid, target, set)
