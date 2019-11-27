@@ -198,9 +198,10 @@ func sendNotifications(rcpt *push.Receipt, config *configType) {
 					msg.APNS = &fcm.APNSConfig{
 						Payload: &fcm.APNSPayload{
 							Aps: &fcm.Aps{
-								Badge:          &badge,
-								MutableContent: true,
-								Sound:          "default",
+								Badge:            &badge,
+								ContentAvailable: true,
+								MutableContent:   true,
+								Sound:            "default",
 								Alert: &fcm.ApsAlert{
 									Title: title,
 									Body:  body,
