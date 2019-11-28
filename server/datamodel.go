@@ -151,10 +151,14 @@ type MsgClientSub struct {
 	Id    string `json:"id,omitempty"`
 	Topic string `json:"topic"`
 
-	// mirrors {set}
+	// The subscription request is non-interactive, i.e. issued by a service on behalf of a user.
+	// This affects presence notifications.
+	Background bool `json:"bkg,omitempty"`
+
+	// Mirrors {set}.
 	Set *MsgSetQuery `json:"set,omitempty"`
 
-	// mirrors {get}
+	// Mirrors {get}.
 	Get *MsgGetQuery `json:"get,omitempty"`
 }
 

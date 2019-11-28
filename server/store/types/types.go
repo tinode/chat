@@ -214,7 +214,7 @@ func (us UidSlice) find(uid Uid) (int, bool) {
 	return idx, idx < l && us[idx] == uid
 }
 
-// Add uid to UidSlice keeping it sorted.
+// Add uid to UidSlice keeping it sorted. Duplicates are ignored.
 func (us *UidSlice) Add(uid Uid) bool {
 	idx, found := us.find(uid)
 	if found {
