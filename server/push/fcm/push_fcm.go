@@ -181,7 +181,11 @@ func sendNotifications(rcpt *push.Receipt, config *configType) {
 						Priority: "high",
 					}
 					if config.IncludeAndroidNotification {
+						// When this notification type is included and the app is not in the foreground
+						// Android won't wake up the app and won't call FirebaseMessagingService:onMessageReceived.
 						msg.Android.Notification = &fcm.AndroidNotification{
+							// Android uses Tag value to group notifications together:
+							// show just one notification per topic.
 							Tag:   rcpt.Payload.Topic,
 							Title: "New message",
 							Body:  data["content"],
