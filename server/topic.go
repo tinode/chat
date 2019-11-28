@@ -140,7 +140,7 @@ type perSubsData struct {
 	enabled bool
 }
 
-// Data related to a subscription of a sesstion to a topic.
+// Data related to a subscription of a session to a topic.
 type perSessionData struct {
 	// ID of the subscribed user (asUid); not necessarily the session owner.
 	uid types.Uid
@@ -612,6 +612,9 @@ func (t *Topic) run(hub *Hub) {
 				}
 				t.defrNotif.Remove(elem)
 				if pssd, ok := t.sessions[sreg.sess]; ok {
+					userData := t.perUser[pssd.uid]
+					userData.online++
+					t.perUser[pssd.uid] = userData
 					pssd.ref = nil
 					t.sessions[sreg.sess] = pssd
 				}
