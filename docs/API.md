@@ -277,7 +277,7 @@ User-dependent topic properties:
  * given: access permissions given to this user
 * private: an application-defined object that is unique to the current user.
 
-Topic usually have subscribers. One the the subscribers may be designated as topic owner (`O` access permission) with full access permissions. The list of subscribers can be queries with a `{get what="sub"}` message. The list of subscribers is returned in a `sub` section of a `{meta}` message.
+Topic usually have subscribers. One of the subscribers may be designated as topic owner (`O` access permission) with full access permissions. The list of subscribers can be queries with a `{get what="sub"}` message. The list of subscribers is returned in a `sub` section of a `{meta}` message.
 
 ### `me` Topic
 
