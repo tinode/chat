@@ -83,9 +83,9 @@ If you register a new account you are asked for an email address to send validat
 * Support for client-side data caching.
 * Ability to block unwanted communication server-side.
 * Anonymous users (important for use cases related to tech support over chat).
-* Android and [web](https://caniuse.com/#feat=push-api) push notifications using [FCM](https://firebase.google.com/docs/cloud-messaging/).
-* Storage and out of band transfer of large objects like video files using a local file system or Amazon S3.
-* Plugins to extend functionality like enabling chatbots.
+* Push notifications using [FCM](https://firebase.google.com/docs/cloud-messaging/).
+* Storage and out of band transfer of large objects like video files using local file system or Amazon S3.
+* Plugins to extend functionality, for example to enable chatbots.
 
 ### Planned
 
