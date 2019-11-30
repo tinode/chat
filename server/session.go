@@ -786,6 +786,7 @@ func (s *Session) onLogin(msgID string, timestamp time.Time, rec *auth.Rec, miss
 			// Authenticate the session.
 			s.uid = rec.Uid
 			s.authLvl = rec.AuthLevel
+			rec.Lifetime = 0
 		}
 		features |= auth.FeatureValidated
 
