@@ -461,7 +461,7 @@ type MsgServerPres struct {
 	// to allow different handling on the client
 	Acs *MsgAccessMode `json:"dacs,omitempty"`
 
-	// UNroutable params
+	// UNroutable params. If parameteres here change, ClusterPresExt must be updated too.
 
 	// Flag to break the reply loop
 	wantReply bool
