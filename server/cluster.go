@@ -134,7 +134,7 @@ type ClusterResp struct {
 	FromSID string
 }
 
-// ClusterPresExt encapsulates externally unroutable parameters of {pres} message which has to be sent intra-cluster.
+// ClusterPresExt encapsulates externally unroutable parameters of {pres} message which have to be sent intra-cluster.
 type ClusterPresExt struct {
 	// Flag to break the reply loop
 	WantReply bool
