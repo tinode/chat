@@ -234,7 +234,7 @@ func (t *Topic) run(hub *Hub) {
 			} else if pssd := t.remSession(leave.sess, asUid); pssd != nil {
 				// Just leaving the topic without unsubscribing if user is subscribed.
 
-				pud := t.perUser[asUid]
+				pud := t.perUser[pssd.uid]
 				if pssd.ref == nil {
 					pud.online--
 				}
@@ -267,7 +267,7 @@ func (t *Topic) run(hub *Hub) {
 					}
 				}
 
-				t.perUser[asUid] = pud
+				t.perUser[pssd.uid] = pud
 
 				if leave.id != "" {
 					leave.sess.queueOut(NoErr(leave.id, t.original(asUid), now))
@@ -1201,6 +1201,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Le
 		userData.online++
 		t.perUser[asUid] = userData
 	}
+
 	return changed, nil
 }
 
@@ -2719,7 +2720,7 @@ func (t *Topic) addSession(s *Session, asUid types.Uid) bool {
 // Removes session record if 'asUid' matches subscribed user.
 func (t *Topic) remSession(s *Session, asUid types.Uid) *perSessionData {
 	pssd := t.sessions[s]
-	if pssd.uid == asUid {
+	if pssd.uid == asUid || asUid.IsZero() {
 		// Check for deferred presence notification and cancel it if found.
 		if pssd.ref != nil {
 			t.defrNotif.Remove(pssd.ref)
