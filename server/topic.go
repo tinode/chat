@@ -345,7 +345,7 @@ func (t *Topic) run(hub *Hub) {
 					continue
 				}
 
-				what := t.presProcReq(msg.Pres.Src, msg.Pres.What, msg.Pres.wantReply)
+				what := t.presProcReq(msg.Pres.Src, msg.Pres.What, msg.Pres.WantReply)
 				if t.xoriginal != msg.Pres.Topic || what == "" {
 					// This is just a request for status, don't forward it to sessions
 					continue
@@ -433,12 +433,12 @@ func (t *Topic) run(hub *Hub) {
 
 					if msg.Pres != nil {
 						// Skip notifying - already notified on topic.
-						if msg.Pres.skipTopic != "" && sess.getSub(msg.Pres.skipTopic) != nil {
+						if msg.Pres.SkipTopic != "" && sess.getSub(msg.Pres.SkipTopic) != nil {
 							continue
 						}
 
 						// Notification addressed to a single user only
-						if msg.Pres.singleUser != "" && pssd.uid.UserId() != msg.Pres.singleUser {
+						if msg.Pres.SingleUser != "" && pssd.uid.UserId() != msg.Pres.SingleUser {
 							continue
 						}
 
@@ -446,8 +446,8 @@ func (t *Topic) run(hub *Hub) {
 						pud := t.perUser[pssd.uid]
 						// Send "gone" notification even if the topic is muted.
 						if (!(pud.modeGiven & pud.modeWant).IsPresencer() && msg.Pres.What != "gone") ||
-							(msg.Pres.filterIn != 0 && int(pud.modeGiven&pud.modeWant)&msg.Pres.filterIn == 0) ||
-							(msg.Pres.filterOut != 0 && int(pud.modeGiven&pud.modeWant)&msg.Pres.filterOut != 0) {
+							(msg.Pres.FilterIn != 0 && int(pud.modeGiven&pud.modeWant)&msg.Pres.FilterIn == 0) ||
+							(msg.Pres.FilterOut != 0 && int(pud.modeGiven&pud.modeWant)&msg.Pres.FilterOut != 0) {
 							continue
 						}
 

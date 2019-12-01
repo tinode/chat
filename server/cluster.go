@@ -414,14 +414,6 @@ func (c *Cluster) Route(msg *ClusterReq, rejected *bool) error {
 		return nil
 	}
 	msg.SrvMsg.rcptto = msg.RcptTo
-	if msg.SrvMsg.Pres != nil {
-		msg.SrvMsg.Pres.wantReply = msg.SrvPres.WantReply
-		msg.SrvMsg.Pres.filterIn = msg.SrvPres.FilterIn
-		msg.SrvMsg.Pres.filterOut = msg.SrvPres.FilterOut
-		msg.SrvMsg.Pres.skipTopic = msg.SrvPres.SkipTopic
-		msg.SrvMsg.Pres.singleUser = msg.SrvPres.SingleUser
-		msg.SrvMsg.Pres.excludeUser = msg.SrvPres.ExcludeUser
-	}
 	globals.hub.route <- msg.SrvMsg
 	return nil
 }
@@ -607,14 +599,6 @@ func (c *Cluster) routeToTopicIntraCluster(topic string, msg *ServerComMessage) 
 		Fingerprint: c.fingerprint,
 		RcptTo:      topic,
 		SrvMsg:      msg}
-	if msg.Pres != nil {
-		req.SrvPres.WantReply = msg.Pres.wantReply
-		req.SrvPres.FilterIn = msg.Pres.filterIn
-		req.SrvPres.FilterOut = msg.Pres.filterOut
-		req.SrvPres.SkipTopic = msg.Pres.skipTopic
-		req.SrvPres.SingleUser = msg.Pres.singleUser
-		req.SrvPres.ExcludeUser = msg.Pres.excludeUser
-	}
 
 	return n.route(req)
 }
