@@ -29,11 +29,15 @@ type Receipt struct {
 
 // Payload is content of the push.
 type Payload struct {
-	// Topic which received the message.
+	// Action type of the push: new message (msg), new subscription (sub), etc.
+	What string `json:"what"`
+	// If this is a silent push: perform action but do not show a notification to the user.
+	Silent bool `json:"silent"`
+	// Topic which was affected by the action.
 	Topic string `json:"topic"`
 	// Message sender 'usrXXX'
 	From string `json:"from"`
-	// Timestapm of the message.
+	// Timestamp of the message.
 	Timestamp time.Time `json:"ts"`
 	// Sequential ID of the message.
 	SeqId int `json:"seq"`
