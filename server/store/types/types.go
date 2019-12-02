@@ -933,6 +933,19 @@ type Message struct {
 	From    string
 	Head    MessageHeaders `json:"Head,omitempty" bson:",omitempty"`
 	Content interface{}
+
+	// Transient. These values are not serialized.
+	delRanges []Range
+}
+
+// SetDelRanges assigns calculated ranges of deleted seqIDs.
+func (msg *Message) SetDelRanges(dr []Range) {
+	msg.delRanges = dr
+}
+
+// SetDelRanges returns ranges of deleted seqIDs, if they were assigned to message.
+func (msg *Message) GetDelRanges() []Range {
+	return msg.delRanges
 }
 
 // Range is a range of message SeqIDs. Low end is inclusive (closed), high end is exclusive (open): [Low, Hi).

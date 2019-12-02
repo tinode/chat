@@ -1658,6 +1658,8 @@ func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.QueryOpt) (
 		if opts.Limit > 0 && opts.Limit < limit {
 			limit = opts.Limit
 		}
+		// Report the possibly changed limit to the caller.
+		opts.Limit = limit
 	}
 	filter := b.M{
 		"topic":           topic,

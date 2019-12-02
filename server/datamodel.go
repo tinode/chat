@@ -437,13 +437,14 @@ type MsgServerCtrl struct {
 // MsgServerData is a server {data} message.
 type MsgServerData struct {
 	Topic string `json:"topic"`
-	// ID of the user who originated the message as {pub}, could be empty if sent by the system
+	// ID of the user who originated the message as {pub}, could be empty if message is deleted.
 	From      string                 `json:"from,omitempty"`
 	Timestamp time.Time              `json:"ts"`
 	DeletedAt *time.Time             `json:"deleted,omitempty"`
-	SeqId     int                    `json:"seq"`
+	SeqId     int                    `json:"seq,omitempty"`
+	DelSeq    []MsgDelRange          `json:"delseq,omitempty"`
 	Head      map[string]interface{} `json:"head,omitempty"`
-	Content   interface{}            `json:"content"`
+	Content   interface{}            `json:"content,omitempty"`
 }
 
 // MsgServerPres is presence notification {pres} (authoritative update).

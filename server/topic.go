@@ -1919,9 +1919,25 @@ func (t *Topic) replyGetData(sess *Session, asUid types.Uid, id string, req *Msg
 	now := types.TimeNow()
 	toriginal := t.original(asUid)
 
-	if req != nil && (req.IfModifiedSince != nil || req.User != "" || req.Topic != "") {
-		sess.queueOut(ErrMalformed(id, toriginal, now))
-		return errors.New("invalid MsgGetOpts query")
+	// Sanitize query.
+	if req != nil {
+		if req.IfModifiedSince != nil || req.User != "" || req.Topic != "" {
+			sess.queueOut(ErrMalformed(id, toriginal, now))
+			return errors.New("MsgGetOpts query has invalid constraints")
+		}
+		if req.BeforeId == 1 || req.SinceId > t.lastID {
+			sess.queueOut(ErrMalformed(id, toriginal, now))
+			return errors.New("MsgGetOpts query bounds are out of range")
+		}
+		if req.SinceId <= 1 {
+			req.SinceId = 0
+		}
+		if req.BeforeId == 0 || req.BeforeId > t.lastID+1 {
+			req.BeforeId = t.lastID + 1
+		}
+	} else {
+		// Provide upper bound, otherwise deleted ranges cannot be inferred.
+		req = &MsgGetOpts{BeforeId: t.lastID + 1}
 	}
 
 	// Check if the user has permission to read the topic data
@@ -1937,17 +1953,26 @@ func (t *Topic) replyGetData(sess *Session, asUid types.Uid, id string, req *Msg
 		// Push the list of messages to the client as {data}.
 		// Messages are sent in reverse order than fetched from DB to make it easier for
 		// clients to process.
-		if messages != nil {
-			count = len(messages)
+		count = len(messages)
+		if count > 0 {
 			for i := count - 1; i >= 0; i-- {
 				mm := &messages[i]
-				sess.queueOut(&ServerComMessage{Data: &MsgServerData{
-					Topic:     toriginal,
-					Head:      mm.Head,
-					SeqId:     mm.SeqId,
-					From:      types.ParseUid(mm.From).UserId(),
-					Timestamp: mm.CreatedAt,
-					Content:   mm.Content}})
+				if mm.SeqId > 0 {
+					// Normal message
+					sess.queueOut(&ServerComMessage{Data: &MsgServerData{
+						Topic:     toriginal,
+						Head:      mm.Head,
+						SeqId:     mm.SeqId,
+						From:      types.ParseUid(mm.From).UserId(),
+						Timestamp: mm.CreatedAt,
+						Content:   mm.Content}})
+				} else {
+					// Indicator of deleted message range
+					sess.queueOut(&ServerComMessage{Data: &MsgServerData{
+						Topic:     toriginal,
+						DelSeq:    delrangeDeserialize(mm.GetDelRanges()),
+						Timestamp: now}})
+				}
 			}
 		}
 	}

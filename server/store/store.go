@@ -605,7 +605,63 @@ func (MessagesObjMapper) DeleteList(topic string, delID int, forUser types.Uid, 
 
 // GetAll returns multiple messages.
 func (MessagesObjMapper) GetAll(topic string, forUser types.Uid, opt *types.QueryOpt) ([]types.Message, error) {
-	return adp.MessageGetAll(topic, forUser, opt)
+	messages, err := adp.MessageGetAll(topic, forUser, opt)
+	if err != nil {
+		return nil, err
+	}
+
+	// Calculate deleted ranges. Messages must exist with continuous IDs between opt.BeforeId - 1 and opt.SinceId.
+
+	// Ranges of deleted messages, if any. Inclusive-exclusive: [low, hi).
+	var ranges []types.Range
+	count := len(messages)
+	// The messages are sorted by SeqId in descending order. Iterate from head to tail.
+	hi := opt.Before
+	for i := 0; i < count; i++ {
+		// Inclusive-exclusive: [low, hi).
+		if messages[i].SeqId != hi-1 { // 2+ difference.
+			// Previous seqId is the lowest in the gap.
+			gap := types.Range{Low: messages[i].SeqId + 1}
+			// Difference is 2+: neew explicit Hi.
+			if gap.Low != hi-1 {
+				gap.Hi = hi
+			}
+			ranges = append(ranges, gap)
+		}
+		hi = messages[i].SeqId
+	}
+
+	since := opt.Since
+	if since < 1 {
+		since = 1
+	}
+
+	minId := opt.Before
+	if count > 0 {
+		minId = messages[count-1].SeqId
+	}
+
+	// Fewer messages returned than requested: all messages are deleted between 'since' and the lowes seqId in 'messages'.
+	if count < opt.Limit && since < minId {
+		gap := types.Range{Low: since}
+		gap.Hi = minId
+		if gap.Hi == gap.Low+1 {
+			// Normalize
+			gap.Hi = 0
+		}
+		ranges = append(ranges, gap)
+	}
+
+	// Add a synthetic messages with ranges of deleted SeqIds.
+	if len(ranges) > 0 {
+		msg := types.Message{
+			Topic: topic,
+		}
+		msg.SetDelRanges(ranges)
+		messages = append(messages, msg)
+	}
+
+	return messages, nil
 }
 
 // GetDeleted returns the ranges of deleted messages and the largest DelId reported in the list.
