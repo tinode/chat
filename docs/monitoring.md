@@ -11,4 +11,4 @@ As of the time of this writing the following stats are published:
 * `TotalSessions`: the count of all sessions which were created during server's life time.
 * `LiveSessions`: the number of sessions currently live, regardless of authentication status.
 * `TotalTopics`: the count of all topics activated during servers's life time.
-* `LiveTpics`: the number of currently active topics.
+* `LiveTopics`: the number of currently active topics.
