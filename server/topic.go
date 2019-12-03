@@ -1925,7 +1925,7 @@ func (t *Topic) replyGetData(sess *Session, asUid types.Uid, id string, req *Msg
 			sess.queueOut(ErrMalformed(id, toriginal, now))
 			return errors.New("MsgGetOpts query has invalid constraints")
 		}
-		if req.BeforeId == 1 || req.SinceId > t.lastID {
+		if req.BeforeId == 1 || (req.BeforeId > 0 && req.SinceId > req.BeforeId) {
 			sess.queueOut(ErrMalformed(id, toriginal, now))
 			return errors.New("MsgGetOpts query bounds are out of range")
 		}
