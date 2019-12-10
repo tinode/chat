@@ -874,6 +874,8 @@ get: {
 Query topic description. Server responds with a `{meta}` message containing requested data. See `{meta}` for details.
 If `ims` is specified and data has not been updated, the message will skip `public` and `private` fields.
 
+See [Public and Private Fields](#public-and-private-fields) for `private` and `public` format considerations.
+
 * `{get what="sub"}`
 
 Get a list of subscribers. Server responds with a `{meta}` message containing a list of subscribers. See `{meta}` for details.
@@ -893,8 +895,6 @@ The `id` field of the data messages is not provided as it's common for data mess
 * `{get what="del"}`
 
 Query message deletion history. Server responds with a `{meta}` message containing a list of deleted message ranges.
-
-See [Public and Private Fields](#public-and-private-fields) for `private` and `public` format considerations.
 
 * `{get what="cred"}`
 
