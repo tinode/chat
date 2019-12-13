@@ -95,7 +95,7 @@ See [instructions](./docker/README.md)
 
 	DB intializer needs to be run only once per installation. See [instructions](tinode-db/README.md) for more options.
 
-3. Unpack JS client to a directory, for instance `$HOME/tinode/webapp/` by first unzipping `https://github.com/tinode/webapp/archive/master.zip` then extract `tinode.js` from `https://github.com/tinode/tinode-js/archive/master.zip` to the same directory.
+3. Unpack JS client to a directory, for instance `$HOME/tinode/webapp/` by unzipping `https://github.com/tinode/webapp/archive/master.zip` and `https://github.com/tinode/tinode-js/archive/master.zip` to the same directory.
 
 4. Run the server
 	```
