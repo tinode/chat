@@ -33,20 +33,20 @@ See [instructions](./docker/README.md)
 3. Fetch, build Tinode server and tinode-db database initializer:
  - **RethinkDb**:
 	```
-	go get -tags rethinkdb github.com/tinode/chat/server && go install -tags rethinkdb github.com/tinode/chat/server
-	go get -tags rethinkdb github.com/tinode/chat/tinode-db && go install -tags rethinkdb github.com/tinode/chat/tinode-db
+	go get -tags rethinkdb github.com/tinode/chat/server && go install -tags rethinkdb -output $GOPATH/bin/tinode github.com/tinode/chat/server
+	go get -tags rethinkdb github.com/tinode/chat/tinode-db && go install -tags rethinkdb -output $GOPATH/bin/init-db github.com/tinode/chat/tinode-db
 	```
  - **MySQL**:
 	```
-	go get -tags mysql github.com/tinode/chat/server && go install -tags mysql github.com/tinode/chat/server
-	go get -tags mysql github.com/tinode/chat/tinode-db && go install -tags mysql github.com/tinode/chat/tinode-db
+	go get -tags mysql github.com/tinode/chat/server && go install -tags mysql -output $GOPATH/bin/tinode github.com/tinode/chat/server
+	go get -tags mysql github.com/tinode/chat/tinode-db && go install -tags mysql -output $GOPATH/bin/init-db github.com/tinode/chat/tinode-db
 	```
  - **MongoDB**:
 	```
-	go get -tags mongodb github.com/tinode/chat/server && go install -tags mongodb github.com/tinode/chat/server
-	go get -tags mongodb github.com/tinode/chat/tinode-db && go install -tags mongodb github.com/tinode/chat/tinode-db
+	go get -tags mongodb github.com/tinode/chat/server && go install -tags mongodb -output $GOPATH/bin/tinode github.com/tinode/chat/server
+	go get -tags mongodb github.com/tinode/chat/tinode-db && go install -tags mongodb -output $GOPATH/bin/init-db github.com/tinode/chat/tinode-db
 	```
- 
+
 	Note the required **`-tags rethinkdb`**, **`-tags mysql`** or **`-tags mongodb`** build option.
 
 	You may also optionally define `main.buildstamp` for the server by adding a build option, for instance, with a timestamp:
@@ -64,11 +64,7 @@ See [instructions](./docker/README.md)
 	},
 ```
 
-5. Download javascript client for testing:
- - https://github.com/tinode/webapp/archive/master.zip
- - https://github.com/tinode/tinode-js/archive/master.zip
-
-6. Now that you have built the binaries, follow instructions in the _Installing from Binaries_ section for running the binaries except in step 3 the initializer is called `tinode-db` (`tinode-db.exe` on Windows), not `init-db`.
+5. Now that you have built the binaries, follow instructions in the _Running a Standalone Server_ section.
 
 ## Running a Standalone Server
 
@@ -90,25 +86,25 @@ See [instructions](./docker/README.md)
 
 2. Run DB initializer
 	```
-	$GOPATH/bin/tinode-db -config=$GOPATH/src/github.com/tinode/chat/tinode-db/tinode.conf
+	$GOPATH/bin/init-db -config=$GOPATH/src/github.com/tinode/chat/tinode-db/tinode.conf
 	```
 	add `-data=$GOPATH/src/github.com/tinode/chat/tinode-db/data.json` flag if you want sample data to be loaded:
 	```
-	$GOPATH/bin/tinode-db -config=$GOPATH/src/github.com/tinode/chat/tinode-db/tinode.conf -data=$GOPATH/src/github.com/tinode/chat/tinode-db/data.json
+	$GOPATH/bin/init-db -config=$GOPATH/src/github.com/tinode/chat/tinode-db/tinode.conf -data=$GOPATH/src/github.com/tinode/chat/tinode-db/data.json
 	```
 
 	DB intializer needs to be run only once per installation. See [instructions](tinode-db/README.md) for more options.
 
 3. Unpack JS client to a directory, for instance `$HOME/tinode/webapp/` by first unzipping `https://github.com/tinode/webapp/archive/master.zip` then extract `tinode.js` from `https://github.com/tinode/tinode-js/archive/master.zip` to the same directory.
 
-4. Run server
+4. Run the server
 	```
-	$GOPATH/bin/server -config=$GOPATH/src/github.com/tinode/chat/server/tinode.conf -static_data=$HOME/tinode/webapp/
+	$GOPATH/bin/tinode -config=$GOPATH/src/github.com/tinode/chat/server/tinode.conf -static_data=$HOME/tinode/webapp/
 	```
 
 5. Test your installation by pointing your browser to [http://localhost:6060/](http://localhost:6060/). The static files from the `-static_data` path are served at web root `/`. You can change this by editing the line `static_mount` in the config file.
 
-If you are running Tinode alongside another webserver, such as Apache or nginx, keep in mind that you need to launch the webapp from the URL served by Tinode. Otherwise it won't work.
+**Important!** If you are running Tinode alongside another webserver, such as Apache or nginx, keep in mind that you need to launch the webapp from the URL served by Tinode. Otherwise it won't work.
 
 
 ## Running a Cluster
@@ -148,8 +144,8 @@ If you are running Tinode alongside another webserver, such as Apache or nginx, 
 
 If you are testing the cluster with all nodes running on the same host, you also must override the `listen` and `grpc_listen` ports. Here is an example for launching two cluster nodes from the same host using the same config file:
 ```
-./server -config=./tinode.conf -static_data=./webapp/ -listen=:6060 -grpc_listen=:6080 -cluster_self=one &
-./server -config=./tinode.conf -static_data=./webapp/ -listen=:6061 -grpc_listen=:6081 -cluster_self=two &
+$GOPATH/bin/tinode -config=./tinode.conf -static_data=./webapp/ -listen=:6060 -grpc_listen=:6080 -cluster_self=one &
+$GOPATH/bin/tinode -config=./tinode.conf -static_data=./webapp/ -listen=:6061 -grpc_listen=:6081 -cluster_self=two &
 ```
 A bash script [run-cluster.sh](./server/run-cluster.sh) may be found useful.
 
