@@ -22,12 +22,13 @@ import (
 
 // adapter holds MongoDB connection data.
 type adapter struct {
-	conn       *mdb.Client
-	db         *mdb.Database
-	dbName     string
-	maxResults int
-	version    int
-	ctx        context.Context
+	conn            *mdb.Client
+	db              *mdb.Database
+	dbName          string
+	maxResults      int
+	version         int
+	ctx             context.Context
+	useTransactions bool
 }
 
 const (
@@ -85,9 +86,10 @@ func (a *adapter) Open(jsonconfig json.RawMessage) error {
 	}
 
 	if config.ReplicaSet == "" {
-		return errors.New("replica_set option is required")
+		log.Println("MongoDB configured as standalone or replica_set option not set. Transaction support is disabled.")
 	} else {
 		opts.SetReplicaSet(config.ReplicaSet)
+		a.useTransactions = true
 	}
 
 	if config.Username != "" {
@@ -416,6 +418,20 @@ func (a *adapter) UserGetAll(ids ...t.Uid) ([]t.User, error) {
 	return users, nil
 }
 
+func (a *adapter) maybeStartTransaction(sess mdb.Session) error {
+	if a.useTransactions {
+		return sess.StartTransaction()
+	}
+	return nil
+}
+
+func (a *adapter) maybeCommitTransaction(ctx context.Context, sess mdb.Session) error {
+	if a.useTransactions {
+		return sess.CommitTransaction(ctx)
+	}
+	return nil
+}
+
 // UserDelete deletes user record
 func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 	topicIds, err := a.db.Collection("topics").Distinct(a.ctx, "_id", b.M{"owner": uid.String()})
@@ -430,7 +446,7 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 	}
 	defer sess.EndSession(a.ctx)
 
-	if err = sess.StartTransaction(); err != nil {
+	if err = a.maybeStartTransaction(sess); err != nil {
 		return err
 	}
 	if err = mdb.WithSession(a.ctx, sess, func(sc mdb.SessionContext) error {
@@ -519,7 +535,7 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 		}
 
 		// Finally commit all changes
-		return sess.CommitTransaction(a.ctx)
+		return a.maybeCommitTransaction(sc, sess)
 	}); err != nil {
 		return err
 	}
