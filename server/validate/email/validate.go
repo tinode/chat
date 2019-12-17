@@ -147,6 +147,9 @@ func (v *validator) PreCheck(cred string, params interface{}) error {
 		return t.ErrMalformed
 	}
 
+	// Normalize email to make sure Unicode case collisions don't lead to security problems.
+	addr.Address = strings.ToLower(addr.Address)
+
 	// If a whitelist of domains is provided, make sure the email belongs to the list.
 	if len(v.Domains) > 0 {
 		// Parse email into user and domain parts.
@@ -177,6 +180,9 @@ func (v *validator) Request(user t.Uid, email, lang, resp string, tmpToken []byt
 	if resp != "" {
 		return false, t.ErrFailed
 	}
+
+	// Normalize email to make sure Unicode case collisions don't lead to security problems.
+	email = strings.ToLower(email)
 
 	token := make([]byte, base64.URLEncoding.EncodedLen(len(tmpToken)))
 	base64.URLEncoding.Encode(token, tmpToken)
@@ -211,6 +217,9 @@ func (v *validator) Request(user t.Uid, email, lang, resp string, tmpToken []byt
 
 // ResetSecret sends a message with instructions for resetting an authentication secret.
 func (v *validator) ResetSecret(email, scheme, lang string, tmpToken []byte) error {
+	// Normalize email to make sure Unicode case collisions don't lead to security problems.
+	email = strings.ToLower(email)
+
 	token := make([]byte, base64.URLEncoding.EncodedLen(len(tmpToken)))
 	base64.URLEncoding.Encode(token, tmpToken)
 	body := new(bytes.Buffer)
