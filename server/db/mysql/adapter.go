@@ -1914,7 +1914,7 @@ func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.QueryOpt) (
 	rows, err := a.db.Queryx(
 		"SELECT m.createdat,m.updatedat,m.deletedat,m.delid,m.seqid,m.topic,m.`from`,m.head,m.content"+
 			" FROM messages AS m LEFT JOIN dellog AS d"+
-			" ON d.topic=m.topic AND m.seqid BETWEEN d.low AND d.hi AND d.deletedfor=?"+
+			" ON d.topic=m.topic AND m.seqid BETWEEN d.low AND d.hi-1 AND d.deletedfor=?"+
 			" WHERE m.delid=0 AND m.topic=? AND m.seqid BETWEEN ? AND ? AND d.deletedfor IS NULL"+
 			" ORDER BY m.seqid DESC LIMIT ?",
 		unum, topic, lower, upper, limit)
@@ -1972,6 +1972,7 @@ func (a *adapter) MessageGetDeleted(topic string, forUser t.Uid, opts *t.QueryOp
 	if err != nil {
 		return nil, err
 	}
+	defer rows.Close()
 
 	var dmsgs []t.DelMessage
 	var dmsg t.DelMessage
@@ -1980,6 +1981,7 @@ func (a *adapter) MessageGetDeleted(topic string, forUser t.Uid, opts *t.QueryOp
 			dmsgs = nil
 			break
 		}
+
 		if dellog.Delid != dmsg.DelId {
 			if dmsg.DelId > 0 {
 				dmsgs = append(dmsgs, dmsg)
@@ -1988,20 +1990,22 @@ func (a *adapter) MessageGetDeleted(topic string, forUser t.Uid, opts *t.QueryOp
 			dmsg.Topic = dellog.Topic
 			if dellog.Deletedfor > 0 {
 				dmsg.DeletedFor = store.EncodeUid(dellog.Deletedfor).String()
+			} else {
+				dmsg.DeletedFor = ""
 			}
-			if dmsg.SeqIdRanges == nil {
-				dmsg.SeqIdRanges = []t.Range{}
-			}
+			dmsg.SeqIdRanges = nil
 		}
 		if dellog.Hi <= dellog.Low+1 {
 			dellog.Hi = 0
 		}
 		dmsg.SeqIdRanges = append(dmsg.SeqIdRanges, t.Range{dellog.Low, dellog.Hi})
 	}
-	if dmsg.DelId > 0 {
-		dmsgs = append(dmsgs, dmsg)
+
+	if err == nil {
+		if dmsg.DelId > 0 {
+			dmsgs = append(dmsgs, dmsg)
+		}
 	}
-	rows.Close()
 
 	return dmsgs, err
 }
