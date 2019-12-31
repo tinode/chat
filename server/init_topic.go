@@ -96,14 +96,12 @@ func topicInit(t *Topic, sreg *sessionJoin, h *Hub) {
 	statsInc("TotalTopics", 1)
 	usersRegisterTopic(t, true)
 
-	sreg.loaded = true
-
 	// Topic will check access rights, send invite to p2p user, send {ctrl} message to the initiator session
 	if !sreg.internal {
 		t.reg <- sreg
 	}
 
-	t.resume()
+	t.markNew()
 	go t.run(h)
 }
 
