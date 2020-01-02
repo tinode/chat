@@ -101,7 +101,12 @@ func topicInit(t *Topic, sreg *sessionJoin, h *Hub) {
 		t.reg <- sreg
 	}
 
-	t.markNew()
+	switch t.cat {
+	case types.TopicCatFnd, types.TopicCatSys:
+		t.markLoaded()
+	default:
+		t.markNew()
+	}
 	go t.run(h)
 }
 
