@@ -14,6 +14,7 @@ import (
 
 	jcr "github.com/DisposaBoy/JsonConfigReader"
 	_ "github.com/tinode/chat/server/db/mysql"
+	_ "github.com/tinode/chat/server/db/postgres"
 	_ "github.com/tinode/chat/server/db/rethinkdb"
 	"github.com/tinode/chat/server/store"
 )
