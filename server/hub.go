@@ -32,8 +32,6 @@ type sessionJoin struct {
 	// In case of p2p topics, it's true if the other user's subscription was
 	// created (as a part of new topic creation or just alone).
 	created bool
-	// True if the topic was just activated (loaded into memory).
-	loaded bool
 	// True if this is a new subscription.
 	newsub bool
 	// True if this topic is created internally.
@@ -177,11 +175,11 @@ func (h *Hub) run() {
 					exit:      make(chan *shutDown, 1),
 				}
 				// Topic is created in suspended state because it's not yet configured.
-				t.suspend()
+				t.markSuspended()
 				// Save topic now to prevent race condition.
 				h.topicPut(sreg.topic, t)
 
-				// Create the topic.
+				// Configure the topic.
 				go topicInit(t, sreg, h)
 
 			} else {
@@ -335,10 +333,9 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 			if t.owner == asUid || (t.cat == types.TopicCatP2P && t.subsCount() < 2) {
 				// Case 1.1.1: requester is the owner or last sub in a p2p topic
 
-				t.suspend()
-
+				oldStatus := t.markSuspended()
 				if err := store.Topics.Delete(topic, true); err != nil {
-					t.resume()
+					t.setStatus(oldStatus)
 					sess.queueOut(ErrUnknown(msg.id, msg.topic, now))
 					return err
 				}

@@ -99,11 +99,9 @@ type Topic struct {
 	// Channel to terminate topic  -- either the topic is deleted or system is being shut down. Buffered = 1.
 	exit chan *shutDown
 
-	// Flag which tells topic to stop acception requests: hub is in the process of shutting it down
-	suspended atomicBool
+	// Flag which tells topic lifecycle status: ready, suspended, marked for deletion.
+	status int32
 }
-
-type atomicBool int32
 
 // perUserData holds topic's cache of per-subscriber data
 type perUserData struct {
@@ -190,7 +188,7 @@ func (t *Topic) run(hub *Hub) {
 		case sreg := <-t.reg:
 			// Request to add a connection to this topic
 
-			if !t.isReady() {
+			if !t.isActive() {
 				asUid := types.ParseUserId(sreg.pkt.from)
 				sreg.sess.queueOut(ErrLocked(sreg.pkt.id, t.original(asUid), types.TimeNow()))
 			} else {
@@ -217,7 +215,7 @@ func (t *Topic) run(hub *Hub) {
 			// userId.IsZero() == true when the entire session is being dropped.
 			asUid := leave.userId
 
-			if !t.isReady() {
+			if !t.isActive() {
 				if !asUid.IsZero() && leave.id != "" {
 					leave.sess.queueOut(ErrLocked(leave.id, t.original(asUid), now))
 				}
@@ -285,7 +283,7 @@ func (t *Topic) run(hub *Hub) {
 			var pushRcpt *push.Receipt
 			asUid := types.ParseUserId(msg.from)
 			if msg.Data != nil {
-				if !t.isReady() {
+				if !t.isActive() {
 					msg.sess.queueOut(ErrLocked(msg.id, t.original(asUid), msg.timestamp))
 					continue
 				}
@@ -340,7 +338,7 @@ func (t *Topic) run(hub *Hub) {
 				pluginMessage(msg.Data, plgActCreate)
 
 			} else if msg.Pres != nil {
-				if !t.isReady() {
+				if !t.isActive() {
 					// Ignore presence update - topic is being deleted
 					continue
 				}
@@ -354,7 +352,7 @@ func (t *Topic) run(hub *Hub) {
 				// "what" may have changed, i.e. unset or "+command" removed ("on+en" -> "on")
 				msg.Pres.What = what
 			} else if msg.Info != nil {
-				if !t.isReady() {
+				if !t.isActive() {
 					// Ignore info messages - topic is being deleted
 					continue
 				}
@@ -597,7 +595,7 @@ func (t *Topic) run(hub *Hub) {
 
 		case <-defrNotifTimer.C:
 			// Handle deferred presence notifications from a successful service (background) subscription.
-			if !t.isReady() {
+			if !t.isActive() {
 				continue
 			}
 
@@ -727,13 +725,17 @@ func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 	}
 
 	// Send notifications.
+
+	// Some notifications are always sent immediately.
+	t.sendImmediateSubNotifications(asUid, sreg)
+
 	pssd, ok := t.sessions[sreg.sess]
 	if msgsub.Background && ok {
 		// Notifications are delayed.
 		pssd.ref = t.defrNotif.PushFront(sreg)
 		t.sessions[sreg.sess] = pssd
 	} else {
-		// Notifications sent immediately.
+		// Remaining notifications are also sent immediately.
 		t.sendSubNotifications(asUid, sreg)
 	}
 
@@ -782,39 +784,12 @@ func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 	return nil
 }
 
-// Send presence notification in response to a subscription
-func (t *Topic) sendSubNotifications(asUid types.Uid, sreg *sessionJoin) {
+// Send immediate presence notification in response to a subscription.
+// These notifications are always sent immediately even if background is requested.
+func (t *Topic) sendImmediateSubNotifications(asUid types.Uid, sreg *sessionJoin) {
 	pud := t.perUser[asUid]
 
-	switch t.cat {
-	case types.TopicCatMe:
-		// Notify user's contact that the given user is online now.
-		if sreg.loaded {
-			if err := t.loadContacts(asUid); err != nil {
-				log.Println("topic: failed to load contacts", t.name, err.Error())
-			}
-			// User online: notify users of interest without forcing response (no +en here).
-			t.presUsersOfInterest("on", sreg.sess.userAgent)
-		}
-
-	case types.TopicCatGrp:
-		// Enable notifications for a new group topic, if appropriate.
-		if sreg.loaded {
-			status := "on"
-			if (pud.modeGiven & pud.modeWant).IsPresencer() {
-				status += "+en"
-			}
-
-			// Notify topic subscribers that the topic is online now.
-			t.presSubsOffline(status, nilPresParams, nilPresFilters, "", false)
-		} else if pud.online == 1 {
-			// If this is the first session of the user in the topic.
-			// Notify other online group members that the user is online now.
-			t.presSubsOnline("on", asUid.UserId(), nilPresParams,
-				&presFilters{filterIn: types.ModeRead}, sreg.sess.sid)
-		}
-
-	case types.TopicCatP2P:
+	if t.cat == types.TopicCatP2P {
 		uid2 := t.p2pOtherUser(asUid)
 		pud2 := t.perUser[uid2]
 
@@ -853,7 +828,42 @@ func (t *Topic) sendSubNotifications(asUid types.Uid, sreg *sessionJoin) {
 				actor:  asUid.UserId()},
 			sreg.sess.sid, false)
 	}
+}
 
+// Send immediate or deferred presence notification in response to a subscription.
+func (t *Topic) sendSubNotifications(asUid types.Uid, sreg *sessionJoin) {
+	pud := t.perUser[asUid]
+
+	switch t.cat {
+	case types.TopicCatMe:
+		// Notify user's contact that the given user is online now.
+		if !t.isLoaded() {
+			t.markLoaded()
+			if err := t.loadContacts(asUid); err != nil {
+				log.Println("topic: failed to load contacts", t.name, err.Error())
+			}
+			// User online: notify users of interest without forcing response (no +en here).
+			t.presUsersOfInterest("on", sreg.sess.userAgent)
+		}
+
+	case types.TopicCatGrp:
+		// Enable notifications for a new group topic, if appropriate.
+		if !t.isLoaded() {
+			t.markLoaded()
+			status := "on"
+			if (pud.modeGiven & pud.modeWant).IsPresencer() {
+				status += "+en"
+			}
+
+			// Notify topic subscribers that the topic is online now.
+			t.presSubsOffline(status, nilPresParams, nilPresFilters, "", false)
+		} else if pud.online == 1 {
+			// If this is the first session of the user in the topic.
+			// Notify other online group members that the user is online now.
+			t.presSubsOnline("on", asUid.UserId(), nilPresParams,
+				&presFilters{filterIn: types.ModeRead}, sreg.sess.sid)
+		}
+	}
 }
 
 // subCommonReply generates a response to a subscription request
@@ -1410,7 +1420,7 @@ func (t *Topic) replyGetDesc(sess *Session, asUid types.Uid, id string, opts *Ms
 		}
 
 		if t.cat == types.TopicCatGrp && (pud.modeGiven & pud.modeWant).IsPresencer() {
-			desc.Online = len(t.sessions) > 0
+			desc.Online = t.isOnline()
 		}
 		if ifUpdated {
 			desc.Private = pud.private
@@ -1616,11 +1626,7 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 	}
 
 	userData := t.perUser[asUid]
-	// FIXME: The (t.cat != types.TopicCatMe && t.cat != types.TopicCatFnd) is unnecessary.
-	// It's here for backwards compatibility only.
-	if t.cat != types.TopicCatMe && t.cat != types.TopicCatFnd &&
-		!(userData.modeGiven & userData.modeWant).IsSharer() {
-
+	if !(userData.modeGiven & userData.modeWant).IsSharer() {
 		sess.queueOut(ErrPermissionDenied(id, t.original(asUid), now))
 		return errors.New("user does not have S permission")
 	}
@@ -2580,24 +2586,47 @@ func (t *Topic) mostRecentSession() *Session {
 	return sess
 }
 
-func (t *Topic) suspend() {
-	atomic.StoreInt32((*int32)(&t.suspended), 1)
+const (
+	// Topic is just created.
+	topicStatusNew = 0
+	// Topic is fully initialized.
+	topicStatusLoaded = 1
+	// Topic is suspended.
+	topicStatusSuspended = 2
+	// Topic is in the process of being deleted.
+	topicStatusMarkedDeleted = 3
+)
+
+func (t *Topic) markSuspended() int32 {
+	return atomic.SwapInt32((*int32)(&t.status), topicStatusSuspended)
 }
 
 func (t *Topic) markDeleted() {
-	atomic.StoreInt32((*int32)(&t.suspended), 2)
+	atomic.StoreInt32((*int32)(&t.status), topicStatusMarkedDeleted)
 }
 
-func (t *Topic) resume() {
-	atomic.StoreInt32((*int32)(&t.suspended), 0)
+func (t *Topic) markNew() {
+	atomic.StoreInt32((*int32)(&t.status), topicStatusNew)
 }
 
-func (t *Topic) isReady() bool {
-	return atomic.LoadInt32((*int32)(&t.suspended)) == 0
+func (t *Topic) markLoaded() {
+	atomic.StoreInt32((*int32)(&t.status), topicStatusLoaded)
+}
+
+func (t *Topic) setStatus(status int32) {
+	atomic.StoreInt32((*int32)(&t.status), status)
+}
+
+func (t *Topic) isActive() bool {
+	return atomic.LoadInt32((*int32)(&t.status)) <= topicStatusLoaded
+}
+
+func (t *Topic) isLoaded() bool {
+	return atomic.LoadInt32((*int32)(&t.status)) == topicStatusLoaded
 }
 
 func (t *Topic) isDeleted() bool {
-	return atomic.LoadInt32((*int32)(&t.suspended)) == 2
+	return atomic.LoadInt32((*int32)(&t.status)) == topicStatusMarkedDeleted
 }
 
 // Get topic name suitable for the given client
@@ -2719,8 +2748,7 @@ func (t *Topic) addSession(s *Session, asUid types.Uid) bool {
 
 // Removes session record if 'asUid' matches subscribed user.
 func (t *Topic) remSession(s *Session, asUid types.Uid) *perSessionData {
-	pssd := t.sessions[s]
-	if pssd.uid == asUid || asUid.IsZero() {
+	if pssd, ok := t.sessions[s]; ok && (pssd.uid == asUid || asUid.IsZero()) {
 		// Check for deferred presence notification and cancel it if found.
 		if pssd.ref != nil {
 			t.defrNotif.Remove(pssd.ref)
@@ -2729,6 +2757,17 @@ func (t *Topic) remSession(s *Session, asUid types.Uid) *perSessionData {
 		return &pssd
 	}
 	return nil
+}
+
+func (t *Topic) isOnline() bool {
+	// Some sessions may be background sessions. They should not be counted.
+	for _, pssd := range t.sessions {
+		// At least one non-background session.
+		if pssd.ref == nil {
+			return true
+		}
+	}
+	return false
 }
 
 func topicCat(name string) types.TopicCat {
