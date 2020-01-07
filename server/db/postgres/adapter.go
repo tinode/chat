@@ -566,14 +566,14 @@ func (a *adapter) UpgradeDb() error {
 }
 
 func addTags(tx *sqlx.Tx, table, keyName string, keyVal interface{}, tags []string, ignoreDups bool) error {
-
 	if len(tags) == 0 {
 		return nil
 	}
 
 	var insert *sql.Stmt
 	var err error
-	insert, err = tx.Prepare("INSERT INTO " + table + "(" + keyName + ",tag) VALUES(?,?)")
+
+	insert, err = tx.Prepare("INSERT INTO " + table + "(" + keyName + ",tag) VALUES($1, $2)")
 	if err != nil {
 		return err
 	}
@@ -627,7 +627,8 @@ func (a *adapter) UserCreate(user *t.User) error {
 	}()
 
 	decoded_uid := store.DecodeUid(user.Uid())
-	if _, err = tx.Exec("INSERT INTO users(id,createdat,updatedat,access,public,tags) VALUES(?,?,?,?,?,?)",
+
+	if _, err = tx.Exec("INSERT INTO users(id,createdat,updatedat,access,public,tags) VALUES($1,$2,$3,$4,$5,$6)",
 		decoded_uid,
 		user.CreatedAt, user.UpdatedAt,
 		user.Access, toJSON(user.Public), user.Tags); err != nil {
@@ -1099,7 +1100,7 @@ func createSubscription(tx *sqlx.Tx, sub *t.Subscription, undelete bool) error {
 	decoded_uid := store.DecodeUid(t.ParseUid(sub.User))
 	_, err := tx.Exec(
 		"INSERT INTO subscriptions(createdAt,updatedAt,deletedAt,userid,topic,modeWant,modeGiven,private) "+
-			"VALUES(?,?,NULL,?,?,?,?,?)",
+			"VALUES($1,$2,NULL,$3,$4,$5,$6,$7)",
 		sub.CreatedAt, sub.UpdatedAt, decoded_uid, sub.Topic, sub.ModeWant.String(), sub.ModeGiven.String(), jpriv)
 
 	if err != nil && isDupe(err) {
