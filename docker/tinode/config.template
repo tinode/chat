@@ -63,7 +63,7 @@
 			"rethinkdb": {
 				"database": "tinode",
 				"addresses": "rethinkdb"
-			}
+			},
 			"mongodb": {
 				"database": "tinode",
 				"addresses": "mongodb",
