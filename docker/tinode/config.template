@@ -1,5 +1,6 @@
 {
 	"listen": ":18080",
+	"api_path": "/",
 	"cache_control": 39600,
 	"static_mount": "/",
 	"grpc_listen": ":16061",
