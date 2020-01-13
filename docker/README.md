@@ -92,19 +92,23 @@ Also, the database is automatically created if missing.
 
 ### Enable push notifications
 
-Tinode uses Google Firebase Cloud Messaging (FCM) to send pushes. Follow [instructions](../docs/faq.md#q-how-to-setup-fcm-push-notifications) for obtaining the required FCM credentials.
+Tinode uses Google Firebase Cloud Messaging (FCM) to send pushes.
+Follow [instructions](../docs/faq.md#q-how-to-setup-fcm-push-notifications) for obtaining the required FCM credentials.
 
-* Download and save the file with the [FCM service account credentials](https://cloud.google.com/docs/authentication/production).
+* Download and save the [FCM service account credentials](https://cloud.google.com/docs/authentication/production) file.
 * Obtain values for `apiKey`, `messagingSenderId`, `projectId`, `appId`, `messagingVapidKey`.
-Assuming your Firebase credentials file is named `myproject-1234-firebase-adminsdk-abc12-abcdef012345.json` and it's saved at `/Users/jdoe/`, web API key is `AIRaNdOmX4ULR-X6ranDomzZ2bHdRanDomq2tbQ`, Sender ID `141421356237`, Project ID `myproject-1234`, App ID `1:141421356237:web:abc7de1234fab56cd78abc`, VAPID key (a.k.a. "Web Push certificates") is `83_Or_So_Random_Looking_Characters`, start the container with the following parameters (using MySQL container as an example):
+Assuming your Firebase credentials file is named `myproject-1234-firebase-adminsdk-abc12-abcdef012345.json`
+and it's saved at `/Users/jdoe/`, web API key is `AIRaNdOmX4ULR-X6ranDomzZ2bHdRanDomq2tbQ`, Sender ID `141421356237`,
+Project ID `myproject-1234`, App ID `1:141421356237:web:abc7de1234fab56cd78abc`, VAPID key (a.k.a. "Web Push certificates")
+is `83_Or_So_Random_Looking_Characters`, start the container with the following parameters (using MySQL container as an example):
 
 ```
 $ docker run -p 6060:18080 -d --name tinode-srv --network tinode-net \
 		-v /Users/jdoe:/fcm \
 		--env FCM_CRED_FILE=/fcm/myproject-1234-firebase-adminsdk-abc12-abcdef012345.json \
-    --env FCM_API_KEY=AIRaNdOmX4ULR-X6ranDomzZ2bHdRanDomq2tbQ
-    --env FCM_APP_ID=1:141421356237:web:abc7de1234fab56cd78abc
-    --env FCM_PROJECT_ID=myproject-1234
+		--env FCM_API_KEY=AIRaNdOmX4ULR-X6ranDomzZ2bHdRanDomq2tbQ \
+		--env FCM_APP_ID=1:141421356237:web:abc7de1234fab56cd78abc \
+		--env FCM_PROJECT_ID=myproject-1234 \
 		--env FCM_SENDER_ID=141421356237 \
 		--env FCM_VAPID_KEY=83_Or_So_Random_Looking_Characters \
 		tinode/tinode-mysql:latest
