@@ -982,7 +982,7 @@ def save_cookie(params):
 def print_server_params(params):
     servParams = []
     for p in params:
-        servParams.append(p + ": " + json.loads(params[p]))
+        servParams.append(p + ": " + str(json.loads(params[p])))
     stdoutln("\r<= Connected to server: " + "; ".join(servParams))
 
 if __name__ == '__main__':
