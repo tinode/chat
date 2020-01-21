@@ -2227,11 +2227,17 @@ func (a *adapter) DeviceGetAll(uids ...t.Uid) (map[t.Uid][]t.DeviceDef, int, err
 
 func deviceDelete(tx *sqlx.Tx, uid t.Uid, deviceID string) error {
 	var err error
+	var res sql.Result
 	if deviceID == "" {
-		_, err = tx.Exec("DELETE FROM devices WHERE userid=?", store.DecodeUid(uid))
+		res, err = tx.Exec("DELETE FROM devices WHERE userid=?", store.DecodeUid(uid))
 	} else {
-		_, err = tx.Exec("DELETE FROM devices WHERE userid=? AND hash=?", store.DecodeUid(uid), deviceHasher(deviceID))
+		res, err = tx.Exec("DELETE FROM devices WHERE userid=? AND hash=?", store.DecodeUid(uid), deviceHasher(deviceID))
 	}
+
+	if count, _ := res.RowsAffected(); count == 0 && err == nil {
+		err = t.ErrNotFound
+	}
+
 	return err
 }
 

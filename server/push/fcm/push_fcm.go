@@ -248,8 +248,11 @@ func sendNotifications(rcpt *push.Receipt, config *configType) {
 
 					if fcm.IsRegistrationTokenNotRegistered(err) {
 						// Token is no longer valid.
-						store.Devices.Delete(uid, d.DeviceId)
 						log.Println("fcm push: invalid token", err)
+						err = store.Devices.Delete(uid, d.DeviceId)
+						if err != nil {
+							log.Println("fcm push: failed to delete invalid token", err)
+						}
 					} else {
 						log.Println("fcm push:", err)
 					}
