@@ -151,10 +151,14 @@ type MsgClientSub struct {
 	Id    string `json:"id,omitempty"`
 	Topic string `json:"topic"`
 
-	// mirrors {set}
+	// The subscription request is non-interactive, i.e. issued by a service on behalf of a user.
+	// This affects presence notifications.
+	Background bool `json:"bkg,omitempty"`
+
+	// Mirrors {set}.
 	Set *MsgSetQuery `json:"set,omitempty"`
 
-	// mirrors {get}
+	// Mirrors {get}.
 	Get *MsgGetQuery `json:"get,omitempty"`
 }
 
@@ -457,25 +461,26 @@ type MsgServerPres struct {
 	// to allow different handling on the client
 	Acs *MsgAccessMode `json:"dacs,omitempty"`
 
-	// UNroutable params
+	// UNroutable params. All marked with `json:"-"` to exclude from json marshalling.
+	// They are still serialized for intra-cluster communication.
 
 	// Flag to break the reply loop
-	wantReply bool
+	WantReply bool `json:"-"`
 
 	// Additional access mode filters when senting to topic's online members. Both filter conditions must be true.
 	// send only to those who have this access mode.
-	filterIn int
+	FilterIn int `json:"-"`
 	// skip those who have this access mode.
-	filterOut int
+	FilterOut int `json:"-"`
 
 	// When sending to 'me', skip sessions subscribed to this topic
-	skipTopic string
+	SkipTopic string `json:"-"`
 
 	// Send to sessions of a single user only
-	singleUser string
+	SingleUser string `json:"-"`
 
 	// Exclude sessions of a single user
-	excludeUser string
+	ExcludeUser string `json:"-"`
 }
 
 // MsgServerMeta is a topic metadata {meta} update.

@@ -13,17 +13,28 @@ All images are available at https://hub.docker.com/r/tinode/
 
 	1. **RethinkDB**: If you've decided to use RethinkDB backend, run the official RethinkDB Docker container:
 	```
-	$ docker run --name rethinkdb --network tinode-net -d rethinkdb:2.3
+	$ docker run --name rethinkdb --network tinode-net --restart always -d rethinkdb:2.3
 	```
 	See [instructions](https://hub.docker.com/_/rethinkdb/) for more options.
 
 	2. **MySQL**: If you've decided to use MySQL backend, run the official MySQL Docker container:
 	```
-	$ docker run --name mysql --network tinode-net --env MYSQL_ALLOW_EMPTY_PASSWORD=yes -d mysql:5.7
+	$ docker run --name mysql --network tinode-net --restart always --env MYSQL_ALLOW_EMPTY_PASSWORD=yes -d mysql:5.7
 	```
 	See [instructions](https://hub.docker.com/_/mysql/) for more options. MySQL 5.7 or above is required.
 
-	The name `rethinkdb` or `mysql` in the `--name` assignment is important. It's used by other containers as a database's host name.
+	3. **MongoDB**: If you've decided to use MongoDB backend, run the official MongoDB Docker container and initialise it as single node replica set (you can change "rs0" if you wish):
+   ```
+   $ docker run --name mongodb --network tinode-net --restart always -d mongo:latest --replSet "rs0"
+   $ docker exec -it mongodb mongo
+
+   # And inside mongo shell:
+   > rs.initiate( {"_id": "rs0", "members": [ {"_id": 0, "host": "mongodb:27017"} ]} )
+   > quit()
+   ```
+	See [instructions](https://hub.docker.com/_/mongo/) for more options. MongoDB 4.2 or above is required.
+
+	The name `rethinkdb`, `mysql` or `mongodb` in the `--name` assignment is important. It's used by other containers as a database's host name.
 
 4. Run the Tinode container for the appropriate database:
 
@@ -37,6 +48,11 @@ All images are available at https://hub.docker.com/r/tinode/
 	$ docker run -p 6060:18080 -d --name tinode-srv --network tinode-net tinode/tinode-mysql:latest
 	```
 
+	3. **MongoDB**:
+	```
+	$ docker run -p 6060:18080 -d --name tinode-srv --network tinode-net tinode/tinode-mongodb:latest
+	```
+
 	See [below](#supported-environment-variables) for more options.
 
 	The port mapping `-p 6060:18080` tells Docker to map container's port 18080 to host's port 6060 making server accessible at http://localhost:6060/. The container will initialize the database with test data on the first run.
@@ -44,6 +60,7 @@ All images are available at https://hub.docker.com/r/tinode/
 	You may replace `:latest` with a different tag. See all all available tags here:
 	 * [MySQL tags](https://hub.docker.com/r/tinode/tinode-mysql/tags/)
 	 * [RethinkDB tags](https://hub.docker.com/r/tinode/tinode-rethink/tags/)
+	 * [MongoDB tags](https://hub.docker.com/r/tinode/tinode-mongodb/tags/) (comming soon)
 
 5. Test the installation by pointing your browser to [http://localhost:6060/](http://localhost:6060/).
 
@@ -75,13 +92,23 @@ Also, the database is automatically created if missing.
 
 ### Enable push notifications
 
-Download and save the file with the [FCM service account credentials](https://cloud.google.com/docs/authentication/production).
-Assuming your Firebase credentials file is named `myproject-1234-firebase-adminsdk-abc12-abcdef012345.json` and it's saved at `/Users/jdoe/`, your Sender ID is `141421356237`, and VAPID key (a.k.a. "Web Push certificates") is `83_Or_So_Random_Looking_Characters`, start the container with the following parameters (using MySQL container as an example):
+Tinode uses Google Firebase Cloud Messaging (FCM) to send pushes.
+Follow [instructions](../docs/faq.md#q-how-to-setup-fcm-push-notifications) for obtaining the required FCM credentials.
+
+* Download and save the [FCM service account credentials](https://cloud.google.com/docs/authentication/production) file.
+* Obtain values for `apiKey`, `messagingSenderId`, `projectId`, `appId`, `messagingVapidKey`.
+Assuming your Firebase credentials file is named `myproject-1234-firebase-adminsdk-abc12-abcdef012345.json`
+and it's saved at `/Users/jdoe/`, web API key is `AIRaNdOmX4ULR-X6ranDomzZ2bHdRanDomq2tbQ`, Sender ID `141421356237`,
+Project ID `myproject-1234`, App ID `1:141421356237:web:abc7de1234fab56cd78abc`, VAPID key (a.k.a. "Web Push certificates")
+is `83_Or_So_Random_Looking_Characters`, start the container with the following parameters (using MySQL container as an example):
 
 ```
 $ docker run -p 6060:18080 -d --name tinode-srv --network tinode-net \
 		-v /Users/jdoe:/fcm \
 		--env FCM_CRED_FILE=/fcm/myproject-1234-firebase-adminsdk-abc12-abcdef012345.json \
+		--env FCM_API_KEY=AIRaNdOmX4ULR-X6ranDomzZ2bHdRanDomq2tbQ \
+		--env FCM_APP_ID=1:141421356237:web:abc7de1234fab56cd78abc \
+		--env FCM_PROJECT_ID=myproject-1234 \
 		--env FCM_SENDER_ID=141421356237 \
 		--env FCM_VAPID_KEY=83_Or_So_Random_Looking_Characters \
 		tinode/tinode-mysql:latest
@@ -111,8 +138,11 @@ You can specify the following environment variables when issuing `docker run` co
 | `EXT_CONFIG` | string |  | Path to external config file to use instead of the built-in one. If this parameter is used all other variables except `RESET_DB`, `FCM_SENDER_ID`, `FCM_VAPID_KEY` are ignored. |
 | `EXT_STATIC_DIR` | string |  | Path to external directory containing static data (e.g. Tinode Webapp files) |
 | `FCM_CRED_FILE` | string |  | Path to json file with FCM server-side service account credentials which will be used to send push notifications. |
-| `FCM_SENDER_ID` | string |  | FCM sender ID for receiving push notifications in the web client |
-| `FCM_VAPID_KEY` | string |  | Also called 'Web Client certificate' in the FCM console. Required by the web client to receive push notifications. |
+| `FCM_API_KEY` | string |  | Firebase API key; required for receiving push notifications in the web client |
+| `FCM_APP_ID` | string |  | Firebase web app ID; required for receiving push notifications in the web client |
+| `FCM_PROJECT_ID` | string |  | Firebase project ID; required for receiving push notifications in the web client |
+| `FCM_SENDER_ID` | string |  | Firebase FCM sender ID; required for receiving push notifications in the web client |
+| `FCM_VAPID_KEY` | string |  | Also called 'Web Client certificate' in the FCM console; required by the web client to receive push notifications. |
 | `FCM_INCLUDE_ANDROID_NOTIFICATION` | boolean | true | If true, pushes a data + notification message, otherwise a data-only message. [More info](https://firebase.google.com/docs/cloud-messaging/concept-options). |
 | `MEDIA_HANDLER` | string | `fs` | Handler of large files, either `fs` or `s3` |
 | `MYSQL_DSN` | string | `'root@tcp(mysql)/tinode'` | MySQL [DSN](https://github.com/go-sql-driver/mysql#dsn-data-source-name). |

@@ -658,8 +658,8 @@ func usersRegisterTopic(t *Topic, add bool) {
 		return
 	}
 
-	if len(t.perUser) == 0 {
-		// me and fnd topics
+	if t.cat == types.TopicCatFnd || t.cat == types.TopicCatMe {
+		// Ignoring me and fnd topics.
 		return
 	}
 

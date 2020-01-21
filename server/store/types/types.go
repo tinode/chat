@@ -214,7 +214,7 @@ func (us UidSlice) find(uid Uid) (int, bool) {
 	return idx, idx < l && us[idx] == uid
 }
 
-// Add uid to UidSlice keeping it sorted.
+// Add uid to UidSlice keeping it sorted. Duplicates are ignored.
 func (us *UidSlice) Add(uid Uid) bool {
 	idx, found := us.find(uid)
 	if found {
@@ -297,11 +297,14 @@ func ParseP2P(p2p string) (uid1, uid2 Uid, err error) {
 
 // ObjHeader is the header shared by all stored objects.
 type ObjHeader struct {
-	Id        string // using string to get around rethinkdb's problems with unit64
+	// using string to get around rethinkdb's problems with uint64;
+	// `bson:"_id"` tag is for mongodb to use as primary key '_id'
+	// 'omitempty' causes mongodb automaticaly create "_id" field if field not set explicitly
+	Id        string `bson:"_id,omitempty"`
 	id        Uid
 	CreatedAt time.Time
 	UpdatedAt time.Time
-	DeletedAt *time.Time `json:"DeletedAt,omitempty"`
+	DeletedAt *time.Time `json:"DeletedAt,omitempty" bson:",omitempty"`
 }
 
 // Uid assigns Uid header field.
@@ -371,7 +374,7 @@ func (ss StringSlice) Value() (driver.Value, error) {
 
 // User is a representation of a DB-stored user record.
 type User struct {
-	ObjHeader
+	ObjHeader `bson:",inline"`
 
 	State int
 
@@ -392,7 +395,9 @@ type User struct {
 	Tags StringSlice
 
 	// Info on known devices, used for push notifications
-	Devices map[string]*DeviceDef
+	Devices map[string]*DeviceDef `bson:"__devices,skip,omitempty"`
+	// Same for mongodb scheme. Ignore in other db backends if its not suitable.
+	DeviceArray []*DeviceDef `json:"-" bson:"devices"`
 }
 
 // AccessMode is a definition of access mode bits.
@@ -659,7 +664,7 @@ func (da DefaultAccess) Value() (driver.Value, error) {
 
 // Credential hold data needed to validate and check validity of a credential like email or phone.
 type Credential struct {
-	ObjHeader
+	ObjHeader `bson:",inline"`
 	// Credential owner
 	User string
 	// Verification method (email, tel, captcha, etc)
@@ -676,7 +681,7 @@ type Credential struct {
 
 // Subscription to a topic
 type Subscription struct {
-	ObjHeader
+	ObjHeader `bson:",inline"`
 	// User who has relationship with the topic
 	User string
 	// Topic subscribed to
@@ -809,7 +814,7 @@ type perUserData struct {
 
 // Topic stored in database. Topic's name is Id
 type Topic struct {
-	ObjHeader
+	ObjHeader `bson:",inline"`
 
 	// Timestamp when the last message has passed through the topic
 	TouchedAt time.Time
@@ -917,16 +922,16 @@ func (mh MessageHeaders) Value() (driver.Value, error) {
 
 // Message is a stored {data} message
 type Message struct {
-	ObjHeader
+	ObjHeader `bson:",inline"`
 	// ID of the hard-delete operation
-	DelId int `json:"DelId,omitempty"`
+	DelId int `json:"DelId,omitempty" bson:",omitempty"`
 	// List of users who have marked this message as soft-deleted
-	DeletedFor []SoftDelete `json:"DeletedFor,omitempty"`
+	DeletedFor []SoftDelete `json:"DeletedFor,omitempty" bson:",omitempty"`
 	SeqId      int
 	Topic      string
 	// Sender's user ID as string (without 'usr' prefix), could be empty.
 	From    string
-	Head    MessageHeaders `json:"Head,omitempty"`
+	Head    MessageHeaders `json:"Head,omitempty" bson:",omitempty"`
 	Content interface{}
 }
 
@@ -934,7 +939,7 @@ type Message struct {
 // If the range contains just one ID, Hi is set to 0
 type Range struct {
 	Low int
-	Hi  int `json:"Hi,omitempty"`
+	Hi  int `json:"Hi,omitempty" bson:",omitempty"`
 }
 
 // RangeSorter is a helper type required by 'sort' package.
@@ -994,7 +999,7 @@ func (rs RangeSorter) Normalize() RangeSorter {
 
 // DelMessage is a log entry of a deleted message range.
 type DelMessage struct {
-	ObjHeader
+	ObjHeader   `bson:",inline"`
 	Topic       string
 	DeletedFor  string
 	DelId       int
@@ -1073,7 +1078,7 @@ const (
 
 // FileDef is a stored record of a file upload
 type FileDef struct {
-	ObjHeader
+	ObjHeader `bson:",inline"`
 	// Status of upload
 	Status int
 	// User who created the file

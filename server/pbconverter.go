@@ -241,10 +241,11 @@ func pbCliSerialize(msg *ClientComMessage) *pbx.ClientMsg {
 			Cred:   pbClientCredsSerialize(msg.Login.Cred)}}
 	case msg.Sub != nil:
 		pkt.Message = &pbx.ClientMsg_Sub{Sub: &pbx.ClientSub{
-			Id:       msg.Sub.Id,
-			Topic:    msg.Sub.Topic,
-			SetQuery: pbSetQuerySerialize(msg.Sub.Set),
-			GetQuery: pbGetQuerySerialize(msg.Sub.Get)}}
+			Id:         msg.Sub.Id,
+			Topic:      msg.Sub.Topic,
+			Background: msg.Sub.Background,
+			SetQuery:   pbSetQuerySerialize(msg.Sub.Set),
+			GetQuery:   pbGetQuerySerialize(msg.Sub.Get)}}
 	case msg.Leave != nil:
 		pkt.Message = &pbx.ClientMsg_Leave{Leave: &pbx.ClientLeave{
 			Id:    msg.Leave.Id,
@@ -338,10 +339,11 @@ func pbCliDeserialize(pkt *pbx.ClientMsg) *ClientComMessage {
 		}
 	} else if sub := pkt.GetSub(); sub != nil {
 		msg.Sub = &MsgClientSub{
-			Id:    sub.GetId(),
-			Topic: sub.GetTopic(),
-			Get:   pbGetQueryDeserialize(sub.GetGetQuery()),
-			Set:   pbSetQueryDeserialize(sub.GetSetQuery()),
+			Id:         sub.GetId(),
+			Topic:      sub.GetTopic(),
+			Background: sub.GetBackground(),
+			Get:        pbGetQueryDeserialize(sub.GetGetQuery()),
+			Set:        pbSetQueryDeserialize(sub.GetSetQuery()),
 		}
 	} else if leave := pkt.GetLeave(); leave != nil {
 		msg.Leave = &MsgClientLeave{
@@ -510,7 +512,7 @@ func pbGetQueryDeserialize(in *pbx.GetQuery) *MsgGetQuery {
 			}
 		}
 		if sub := in.GetSub(); sub != nil {
-			msg.Desc = &MsgGetOpts{
+			msg.Sub = &MsgGetOpts{
 				IfModifiedSince: int64ToTime(sub.GetIfModifiedSince()),
 				Limit:           int(sub.GetLimit()),
 			}

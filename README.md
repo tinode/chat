@@ -1,12 +1,12 @@
 # Tinode Instant Messaging Server
 
-<img src="docs/logo.svg" align="left" width=128 height=128> Instant messaging server. Backend in pure [Go](http://golang.org) (license [GPL 3.0](http://www.gnu.org/licenses/gpl-3.0.en.html)), client-side binding in Java, Javascript, and Swift, as well as [gRPC](https://grpc.io/) client support for C++, C#, Go, Java, Node, PHP, Python, Ruby, Objective-C, etc. (license [Apache 2.0](http://www.apache.org/licenses/LICENSE-2.0)). Wire transport is JSON over websocket (long polling is also available) for custom bindings, or [protobuf](https://developers.google.com/protocol-buffers/) with gRPC. Persistent storage [RethinkDB](http://rethinkdb.com/) and MySQL. A third-party [DynamoDB adapter](https://github.com/riandyrn/chat/tree/master/server/db/dynamodb) also exists. Other databases can be supported by writing custom adapters.
+<img src="docs/logo.svg" align="left" width=128 height=128> Instant messaging server. Backend in pure [Go](http://golang.org) (license [GPL 3.0](http://www.gnu.org/licenses/gpl-3.0.en.html)), client-side binding in Java, Javascript, and Swift, as well as [gRPC](https://grpc.io/) client support for C++, C#, Go, Java, Node, PHP, Python, Ruby, Objective-C, etc. (license [Apache 2.0](http://www.apache.org/licenses/LICENSE-2.0)). Wire transport is JSON over websocket (long polling is also available) for custom bindings, or [protobuf](https://developers.google.com/protocol-buffers/) with gRPC. Persistent storage [RethinkDB](http://rethinkdb.com/), MySQL and MongoDB (experimental). A third-party [DynamoDB adapter](https://github.com/riandyrn/chat/tree/master/server/db/dynamodb) also exists. Other databases can be supported by writing custom adapters.
 
 Tinode is *not* XMPP/Jabber. It is *not* compatible with XMPP. It's meant as a replacement for XMPP. On the surface, it's a lot like open source WhatsApp or Telegram.
 
 Version 0.16. This is beta-quality software: feature-complete but probably with a few bugs. Follow [instructions](INSTALL.md) to install and run or use one of the cloud services below. Read [API documentation](docs/API.md).
 
-<img src="docs/app-store.svg" style="opacity:0.35" height=36> <a href="https://play.google.com/store/apps/details?id=co.tinode.tindroidx"><img src="docs/play-store.svg" height=36></a> <a href="https://web.tinode.co/"><img src="docs/web-app.svg" height=36></a>
+<a href="https://apps.apple.com/us/app/tinode/id1483763538"><img src="docs/app-store.svg" height=36></a> <a href="https://play.google.com/store/apps/details?id=co.tinode.tindroidx"><img src="docs/play-store.svg" height=36></a> <a href="https://web.tinode.co/"><img src="docs/web-app.svg" height=36></a>
 
 ## Why?
 
@@ -32,17 +32,12 @@ TinodeWeb, a single page web app, is available at https://web.tinode.co/ ([sourc
 
 ### Android
 
-[Tindroid](https://github.com/tinode/tindroid) is stable and functional. See the screenshots below. A [debug APK](https://github.com/tinode/tindroid/releases/latest) is provided for convenience. Currently available in English, Russian. More translations are welcome.
+[Tinode for Android](https://play.google.com/store/apps/details?id=co.tinode.tindroidx) a.k.a Tindroid is stable and functional ([source](https://github.com/tinode/tindroid)). See the screenshots below. A [debug APK](https://github.com/tinode/tindroid/releases/latest) is also provided for convenience. Currently available in English, Russian. More translations are welcome.
 
 
 ### iOS
 
 [Tinode for iOS](https://apps.apple.com/app/reference-to-tinodios-here/id123) a.k.a. Tinodios is stable and functional ([source](https://github.com/tinode/ios)). See the screenshots below. Currently available in English, Simplified Chinese. More translations are welcome.
-
-
-### Android
-
-[Tinode for Android](https://play.google.com/store/apps/details?id=co.tinode.tindroid) a.k.a. Tindroid is stable and functional ([source](https://github.com/tinode/tindroid)). See the screenshots below.
 
 
 ## Demo/Sandbox
@@ -88,9 +83,9 @@ If you register a new account you are asked for an email address to send validat
 * Support for client-side data caching.
 * Ability to block unwanted communication server-side.
 * Anonymous users (important for use cases related to tech support over chat).
-* Android and [web](https://caniuse.com/#feat=push-api) push notifications using [FCM](https://firebase.google.com/docs/cloud-messaging/).
-* Storage and out of band transfer of large objects like video files using a local file system or Amazon S3.
-* Plugins to extend functionality like enabling chatbots.
+* Push notifications using [FCM](https://firebase.google.com/docs/cloud-messaging/).
+* Storage and out of band transfer of large objects like video files using local file system or Amazon S3.
+* Plugins to extend functionality, for example to enable chatbots.
 
 ### Planned
 

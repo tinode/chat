@@ -686,8 +686,9 @@ The `{sub}` message may include a `get` and `set` fields which mirror `{get}` an
 ```js
 sub: {
   id: "1a2b3",  // string, client-provided message id, optional
-  topic: "me",   // topic to be subscribed or attached to
-
+  topic: "me",  // topic to be subscribed or attached to
+  bkg: true,    // request to attach to topic is issued by an automated agent, server should delay sending
+                // presence notifications because the agent is expected to disconnect very quickly
   // Object with topic initialisation data, new topics & new
   // subscriptions only, mirrors {set} message
   set: {
@@ -873,6 +874,8 @@ get: {
 Query topic description. Server responds with a `{meta}` message containing requested data. See `{meta}` for details.
 If `ims` is specified and data has not been updated, the message will skip `public` and `private` fields.
 
+See [Public and Private Fields](#public-and-private-fields) for `private` and `public` format considerations.
+
 * `{get what="sub"}`
 
 Get a list of subscribers. Server responds with a `{meta}` message containing a list of subscribers. See `{meta}` for details.
@@ -892,8 +895,6 @@ The `id` field of the data messages is not provided as it's common for data mess
 * `{get what="del"}`
 
 Query message deletion history. Server responds with a `{meta}` message containing a list of deleted message ranges.
-
-See [Public and Private Fields](#public-and-private-fields) for `private` and `public` format considerations.
 
 * `{get what="cred"}`
 

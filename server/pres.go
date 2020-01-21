@@ -90,7 +90,7 @@ func (t *Topic) loadContacts(uid types.Uid) error {
 // "+dis" disable subscription withot removing it, the opposite of "en".
 // The "+en/rem/dis" command itself is stripped from the notification.
 func (t *Topic) presProcReq(fromUserID, what string, wantReply bool) string {
-	if !t.isReady() {
+	if !t.isActive() {
 		return ""
 	}
 
@@ -209,7 +209,7 @@ func (t *Topic) presProcReq(fromUserID, what string, wantReply bool) string {
 		globals.hub.route <- &ServerComMessage{
 			// Topic is 'me' even for group topics; group topics will use 'me' as a signal to drop the message
 			// without forwarding to sessions
-			Pres:   &MsgServerPres{Topic: "me", What: replyAs, Src: t.name, wantReply: reqReply},
+			Pres:   &MsgServerPres{Topic: "me", What: replyAs, Src: t.name, WantReply: reqReply},
 			rcptto: fromUserID}
 	}
 
@@ -225,7 +225,7 @@ func (t *Topic) presUsersOfInterest(what, ua string) {
 	// Push update to subscriptions
 	for topic := range t.perSubs {
 		globals.hub.route <- &ServerComMessage{
-			Pres:   &MsgServerPres{Topic: "me", What: what, Src: t.name, UserAgent: ua, wantReply: (what == "on")},
+			Pres:   &MsgServerPres{Topic: "me", What: what, Src: t.name, UserAgent: ua, WantReply: (what == "on")},
 			rcptto: topic}
 	}
 }
@@ -236,7 +236,7 @@ func presUsersOfInterestOffline(uid types.Uid, subs []types.Subscription, what s
 	// Push update to subscriptions
 	for _, sub := range subs {
 		globals.hub.route <- &ServerComMessage{
-			Pres:   &MsgServerPres{Topic: "me", What: what, Src: uid.UserId(), wantReply: false},
+			Pres:   &MsgServerPres{Topic: "me", What: what, Src: uid.UserId(), WantReply: false},
 			rcptto: sub.Topic}
 	}
 }
@@ -269,8 +269,8 @@ func (t *Topic) presSubsOnline(what, src string, params *presParams,
 		Pres: &MsgServerPres{Topic: t.xoriginal, What: what, Src: src,
 			Acs: params.packAcs(), AcsActor: actor, AcsTarget: target,
 			SeqId: params.seqID, DelId: params.delID, DelSeq: params.delSeq,
-			filterIn: int(pf.filterIn), filterOut: int(pf.filterOut),
-			singleUser: pf.singleUser, excludeUser: pf.excludeUser},
+			FilterIn: int(pf.filterIn), FilterOut: int(pf.filterOut),
+			SingleUser: pf.singleUser, ExcludeUser: pf.excludeUser},
 		rcptto: t.name, skipSid: skipSid}
 }
 
@@ -345,7 +345,7 @@ func (t *Topic) presSubsOffline(what string, params *presParams, filter *presFil
 			Pres: &MsgServerPres{Topic: "me", What: what, Src: t.original(uid),
 				Acs: params.packAcs(), AcsActor: actor, AcsTarget: target,
 				SeqId: params.seqID, DelId: params.delID,
-				skipTopic: skipTopic},
+				SkipTopic: skipTopic},
 			rcptto: user, skipSid: skipSid}
 	}
 }
@@ -419,7 +419,7 @@ func (t *Topic) presSingleUserOffline(uid types.Uid, what string, params *presPa
 			Pres: &MsgServerPres{Topic: "me", What: what,
 				Src: t.original(uid), SeqId: params.seqID, DelId: params.delID,
 				Acs: params.packAcs(), AcsActor: actor, AcsTarget: target, UserAgent: params.userAgent,
-				wantReply: strings.HasPrefix(what, "?unkn"), skipTopic: skipTopic},
+				WantReply: strings.HasPrefix(what, "?unkn"), SkipTopic: skipTopic},
 			rcptto: user, skipSid: skipSid}
 	}
 }

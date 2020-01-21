@@ -302,7 +302,9 @@ func (UsersObjMapper) UpdateLastSeen(uid types.Uid, userAgent string, when time.
 
 // Update is a generic user data update.
 func (UsersObjMapper) Update(uid types.Uid, update map[string]interface{}) error {
-	update["UpdatedAt"] = types.TimeNow()
+	if _, ok := update["UpdatedAt"]; !ok {
+		update["UpdatedAt"] = types.TimeNow()
+	}
 	return adp.UserUpdate(uid, update)
 }
 
@@ -454,7 +456,9 @@ func (TopicsObjMapper) GetSubsAny(topic string, opts *types.QueryOpt) ([]types.S
 
 // Update is a generic topic update.
 func (TopicsObjMapper) Update(topic string, update map[string]interface{}) error {
-	update["UpdatedAt"] = types.TimeNow()
+	if _, ok := update["UpdatedAt"]; !ok {
+		update["UpdatedAt"] = types.TimeNow()
+	}
 	return adp.TopicUpdate(topic, update)
 }
 

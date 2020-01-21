@@ -80,6 +80,10 @@ func (sess *Session) writeGrpcLoop() {
 				// channel closed
 				return
 			}
+			if len(sess.send) > sendQueueLimit {
+				log.Println("grpc: outbound queue limit exceeded", sess.sid)
+				return
+			}
 			if err := grpcWrite(sess, msg); err != nil {
 				log.Println("grpc: write", sess.sid, err)
 				return

@@ -35,7 +35,12 @@ const (
 )
 
 // Wait time before abandoning the outbound send operation.
-const sendTimeout = time.Microsecond * 150
+// Timeout is rather long to make sure it's longer than Linux preeption time:
+// https://elixir.bootlin.com/linux/latest/source/kernel/sched/fair.c#L38
+const sendTimeout = time.Millisecond * 7
+
+// Maximum number of queued messages before session is considered stale and dropped.
+const sendQueueLimit = 128
 
 var minSupportedVersionValue = parseVersion(minSupportedVersion)
 
@@ -407,6 +412,7 @@ func (s *Session) subscribe(msg *ClientComMessage) {
 		}
 	}
 
+	// Session can subscribe to topic on behalf of a single user at a time.
 	if sub := s.getSub(expanded); sub != nil {
 		s.queueOut(InfoAlreadySubscribed(msg.id, msg.topic, msg.timestamp))
 	} else if remoteNodeName := globals.cluster.nodeNameForTopicIfRemote(expanded); remoteNodeName != "" {
@@ -780,6 +786,8 @@ func (s *Session) onLogin(msgID string, timestamp time.Time, rec *auth.Rec, miss
 			// Authenticate the session.
 			s.uid = rec.Uid
 			s.authLvl = rec.AuthLevel
+			// Reset expiration time.
+			rec.Lifetime = 0
 		}
 		features |= auth.FeatureValidated
 

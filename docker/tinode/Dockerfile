@@ -11,7 +11,7 @@
 
 FROM alpine:latest
 
-ARG VERSION=0.16.2
+ARG VERSION=0.16.3
 ENV VERSION=$VERSION
 
 LABEL maintainer="Tinode Team <info@tinode.co>"
@@ -21,7 +21,9 @@ LABEL version=$VERSION
 # Build-time options.
 
 # Database selector. Builds for RethinkDB by default.
-# Alternatively use `--build-arg TARGET_DB=mysql` to build for MySQL.
+# Alternatively use
+# `--build-arg TARGET_DB=mysql` to build for MySQL or
+# `--build-arg TARGET_DB=mongodb` to build for MongoDB.
 ARG TARGET_DB=rethinkdb
 ENV TARGET_DB=$TARGET_DB
 

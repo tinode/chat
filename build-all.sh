@@ -8,7 +8,7 @@ goplat=( darwin windows linux )
 # Supported CPU architectures: amd64
 goarc=( amd64 )
 # Supported database tags
-dbtags=( mysql rethinkdb )
+dbtags=( mysql mongodb rethinkdb )
 
 for line in $@; do
   eval "$line"

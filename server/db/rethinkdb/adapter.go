@@ -28,7 +28,7 @@ const (
 	defaultHost     = "localhost:28015"
 	defaultDatabase = "tinode"
 
-	adpVersion = 109
+	adpVersion = 110
 
 	adapterName = "rethinkdb"
 
@@ -398,6 +398,17 @@ func (a *adapter) UpgradeDb() error {
 		}
 	}
 
+	if a.version == 109 {
+		// Perform database upgrade from versions 109 to version 110.
+
+		// TouchedAt is a required field now, but it's OK if it's missing.
+		// Bumping version to keep RDB in sync with MySQL versions.
+
+		if err := bumpVersion(a, 110); err != nil {
+			return err
+		}
+	}
+
 	if a.version != adpVersion {
 		return errors.New("Failed to perform database upgrade to version " + strconv.Itoa(adpVersion) +
 			". DB is still at " + strconv.Itoa(a.version))
@@ -412,8 +423,9 @@ func createSystemTopic(a *adapter) error {
 		ObjHeader: t.ObjHeader{Id: "sys",
 			CreatedAt: now,
 			UpdatedAt: now},
-		Access: t.DefaultAccess{Auth: t.ModeNone, Anon: t.ModeNone},
-		Public: map[string]interface{}{"fn": "System"},
+		TouchedAt: now,
+		Access:    t.DefaultAccess{Auth: t.ModeNone, Anon: t.ModeNone},
+		Public:    map[string]interface{}{"fn": "System"},
 	}).RunWrite(a.conn)
 	return err
 }

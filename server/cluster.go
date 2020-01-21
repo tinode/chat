@@ -122,8 +122,9 @@ type ClusterReq struct {
 	Sess *ClusterSess
 	// True if the original session has disconnected
 	SessGone bool
-	// For {pres} messages, indicates whether to break reply loop.
-	PresWantReply bool
+
+	// UNroutable components of {pres} message which have to be sent intra-cluster.
+	SrvPres ClusterPresExt
 }
 
 // ClusterResp is a Master to Proxy response message.
@@ -131,6 +132,27 @@ type ClusterResp struct {
 	Msg []byte
 	// Session ID to forward message to, if any.
 	FromSID string
+}
+
+// ClusterPresExt encapsulates externally unroutable parameters of {pres} message which have to be sent intra-cluster.
+type ClusterPresExt struct {
+	// Flag to break the reply loop
+	WantReply bool
+
+	// Additional access mode filters when senting to topic's online members. Both filter conditions must be true.
+	// send only to those who have this access mode.
+	FilterIn int
+	// skip those who have this access mode.
+	FilterOut int
+
+	// When sending to 'me', skip sessions subscribed to this topic
+	SkipTopic string
+
+	// Send to sessions of a single user only
+	SingleUser string
+
+	// Exclude sessions of a single user
+	ExcludeUser string
 }
 
 // Handle outbound node communication: read messages from the channel, forward to remote nodes.
@@ -392,9 +414,6 @@ func (c *Cluster) Route(msg *ClusterReq, rejected *bool) error {
 		return nil
 	}
 	msg.SrvMsg.rcptto = msg.RcptTo
-	if msg.SrvMsg.Pres != nil && msg.PresWantReply {
-		msg.SrvMsg.Pres.wantReply = true
-	}
 	globals.hub.route <- msg.SrvMsg
 	return nil
 }
@@ -580,9 +599,6 @@ func (c *Cluster) routeToTopicIntraCluster(topic string, msg *ServerComMessage) 
 		Fingerprint: c.fingerprint,
 		RcptTo:      topic,
 		SrvMsg:      msg}
-	if msg.Pres != nil && msg.Pres.wantReply {
-		req.PresWantReply = true
-	}
 
 	return n.route(req)
 }
