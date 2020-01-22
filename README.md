@@ -14,6 +14,9 @@ The promise of [XMPP](http://xmpp.org/) was to deliver federated instant messagi
 
 The goal of this project is to deliver on XMPP's original vision: create a modern open platform for federated instant messaging with an emphasis on mobile communication. A secondary goal is to create a decentralized IM platform that is much harder to track and block by the governments.
 
+## Installing and running
+
+See [general instructions](./INSTALL.md) or [docker-specific instructions](./docker/README.md).
 
 ## Getting support
 
