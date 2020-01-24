@@ -332,9 +332,14 @@ def accMsg(id, cmd, ignored):
     else:
         cmd.secret = b''
 
+    if cmd.suspend == True:
+        state = "suspend"
+    elif cmd.suspend == False:
+        state = "ok"
+
     cmd.public = encode_to_bytes(make_vcard(cmd.fn, cmd.photo))
     cmd.private = encode_to_bytes(cmd.private)
-    return pb.ClientMsg(acc=pb.ClientAcc(id=str(id), user_id=cmd.user,
+    return pb.ClientMsg(acc=pb.ClientAcc(id=str(id), user_id=cmd.user, state=state,
         scheme=cmd.scheme, secret=cmd.secret, login=cmd.do_login, tags=cmd.tags.split(",") if cmd.tags else None,
         desc=pb.SetDesc(default_acs=pb.DefaultAcsMode(auth=cmd.auth, anon=cmd.anon),
             public=cmd.public, private=cmd.private),
@@ -561,6 +566,7 @@ def parse_cmd(parts):
         parser.add_argument('--auth', default=None, help='default access mode for authenticated users')
         parser.add_argument('--anon', default=None, help='default access mode for anonymous users')
         parser.add_argument('--cred', default=None, help='credentials, comma separated list in method:value format, e.g. email:test@example.com,tel:12345')
+        parser.add_argument('--suspend', default=None, help='true to suspend the account, false to un-suspend')
     elif parts[0] == "del":
         parser = argparse.ArgumentParser(prog=parts[0], description='Delete message(s), subscription, topic, user')
         parser.add_argument('what', default=None, help='what to delete')
