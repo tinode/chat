@@ -10,6 +10,7 @@
 package main
 
 import (
+	"github.com/tinode/chat/github.com/tinode/chat/server/auth"
 	"container/list"
 	"log"
 	"strings"
@@ -562,6 +563,9 @@ func replyOfflineTopicGetDesc(sess *Session, topic string, msg *ClientComMessage
 		desc.CreatedAt = &suser.CreatedAt
 		desc.UpdatedAt = &suser.UpdatedAt
 		desc.Public = suser.Public
+		if sess.authLvl = auth.LevelRoot {
+			desc.State = suser.GetState()
+		}
 	}
 
 	sub, err := store.Subs.Get(topic, asUid)

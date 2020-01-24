@@ -88,6 +88,8 @@ Request and response payloads are formatted as JSON. Some of the request or resp
   "boolval": true,                  // boolean value, optional
   "strarr": ["abc", "def"],         // array of strings, optoional
   "newacc": {        // data to use for creating a new account.
+    // Optional account state.
+    state: "ok",
     // Default access mode
     "auth": "JRWPS",
     "anon": "N",
@@ -185,6 +187,7 @@ The server may optionally return a challenge as `byteval`.
     "tags": ["email:alice@example.com", "uname:alice"]
   },
   "newacc": {
+    "state": "suspended",
     "auth": "JRWPS",
     "anon": "N",
     "public": {/* see /docs/API.md#public-and-private-fields */},

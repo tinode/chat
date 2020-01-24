@@ -48,6 +48,8 @@ const (
 	ErrPermissionDenied = StoreError("denied")
 	// ErrInvalidResponse means the client's response does not match server's expectation.
 	ErrInvalidResponse = StoreError("invalid response")
+	// ErrDisabled means access to resource is disabled.
+	ErrPermissionDisabled = StoreError("disabled")
 )
 
 // Uid is a database-specific record id, suitable to be used as a primary key.
@@ -398,6 +400,40 @@ type User struct {
 	Devices map[string]*DeviceDef `bson:"__devices,skip,omitempty"`
 	// Same for mongodb scheme. Ignore in other db backends if its not suitable.
 	DeviceArray []*DeviceDef `json:"-" bson:"devices"`
+}
+
+type UserState int
+
+func (us UserState) String() {
+	switch us {
+	case UserStateOK:
+		return "ok"
+	case UserStateSuspended:
+		return "suspended"
+	}
+	return ""
+}
+
+const (
+	UserStateOK        UserState = 0
+	UserStateSuspended UserState = 1
+)
+
+func (u *User) SetState(state string) (int, error) {
+	var err error
+	switch state {
+	case "ok":
+		u.State = int(UserStateOK)
+	case "suspended":
+		u.State = int(UserStateSuspended)
+	default:
+		err = errors.New("invalide account state")
+	}
+	return u.State, err
+}
+
+func (u *User) GetState() string {
+	return UserState(u.State).String()
 }
 
 // AccessMode is a definition of access mode bits.

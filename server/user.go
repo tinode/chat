@@ -39,6 +39,23 @@ func replyCreateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 	var user types.User
 	var private interface{}
 
+	// If account state is being assigned, make sure the sender is a root user.
+	if msg.Acc.State != "" {
+		if msg.authLvl != auth.LevelRoot {
+			log.Println("create user: attempt to set account state by non-root", s.sid)
+			msg := ErrPermissionDenied(msg.id, "", msg.timestamp)
+			msg.Ctrl.Params = map[string]interface{}{"what": "state"}
+			s.queueOut(msg)
+			return
+		}
+
+		if _, err := user.SetState(msg.Acc.State); err != nil {
+			log.Println("create user: invalid account state", err, s.sid)
+			s.queueOut(ErrMalformed(msg.id, "", msg.timestamp))
+			return
+		}
+	}
+
 	// Ensure tags are unique and not restricted.
 	if tags := normalizeTags(msg.Acc.Tags); tags != nil {
 		if !restrictedTagsEqual(tags, nil, globals.immutableTagNS) {
@@ -209,6 +226,12 @@ func replyUpdateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 		return
 	}
 
+	if msg.Acc.State != "" && authLvl != auth.LevelRoot {
+		s.queueOut(ErrPermissionDenied(msg.id, "", msg.timestamp))
+		log.Println("replyUpdateUser: attempt to change account state by non-root", s.sid)
+		return
+	}
+
 	user, err := store.Users.Get(uid)
 	if user == nil && err == nil {
 		err = types.ErrNotFound
@@ -241,6 +264,13 @@ func replyUpdateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 					params = map[string]interface{}{"cred": missing}
 				}
 			}
+		}
+	} else if msg.Acc.State != "" {
+		if _, err2 := user.SetState(msg.Acc.State); err2 != nil {
+			log.Println("replyUpdateUser: invalid account state", s.sid)
+			err = types.ErrMalformed
+		} else {
+			err = store.Users.Update(uid, map[string]interface{}{"State": user.State})
 		}
 	} else {
 		err = types.ErrMalformed

@@ -39,6 +39,8 @@ type request struct {
 
 // User initialization data when creating a new user.
 type newAccount struct {
+	// Account state: normal as "ok" of "suspended".
+	State string `json:"state,omitempty"`
 	// Default access mode
 	Auth string `json:"auth,omitempty"`
 	Anon string `json:"anon,omitempty"`
@@ -183,6 +185,13 @@ func (a *authenticator) Authenticate(secret []byte) (*auth.Rec, []byte, error) {
 			Public: resp.NewAcc.Public,
 			Tags:   resp.Record.Tags,
 		}
+
+		if resp.NewAcc.State != "" {
+			if _, err := user.SetState(resp.NewAcc.State); err != nil {
+				return nil, nil, err
+			}
+		}
+
 		user.Access.Auth.UnmarshalText([]byte(resp.NewAcc.Auth))
 		user.Access.Anon.UnmarshalText([]byte(resp.NewAcc.Anon))
 		_, err = store.Users.Create(&user, resp.NewAcc.Private)

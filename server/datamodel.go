@@ -115,6 +115,8 @@ type MsgClientAcc struct {
 	Id string `json:"id,omitempty"`
 	// "newXYZ" to create a new user or UserId to update a user; default: current user.
 	User string `json:"user,omitempty"`
+	// Account state: normal, suspended.
+	State string `json:"status,omitempty"`
 	// Authentication level of the user when UserID is set and not equal to the current user.
 	// Either "", "auth" or "anon". Default: ""
 	AuthLevel string
@@ -352,6 +354,9 @@ type MsgTopicDesc struct {
 	UpdatedAt *time.Time `json:"updated,omitempty"`
 	// Timestamp of the last message
 	TouchedAt *time.Time `json:"touched,omitempty"`
+
+	// Account state, 'me' topic only.
+	State string `json:"state,omitempty"`
 
 	// If the group topic is online.
 	Online bool `json:"online,omitempty"`

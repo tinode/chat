@@ -1417,6 +1417,9 @@ func (t *Topic) replyGetDesc(sess *Session, asUid types.Uid, id string, opts *Ms
 				Want:  pud.modeWant.String(),
 				Given: pud.modeGiven.String(),
 				Mode:  (pud.modeGiven & pud.modeWant).String()}
+		} else if sess.authLvl == auth.LevelRoot {
+			// If 'me' is in memory then user account is invariable not suspended.
+			desc.State = types.UserStateOK.String()
 		}
 
 		if t.cat == types.TopicCatGrp && (pud.modeGiven & pud.modeWant).IsPresencer() {
