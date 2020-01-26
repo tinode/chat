@@ -164,7 +164,7 @@ message ClientAcc {
 	repeated ClientCred cred = 8;
 	// Authentication token used for resetting a password.
 	bytes token = 9;
-	// Account state: normal, suspended
+	// Account state: normal ("ok"), suspended
 	string state = 10;
 }
 

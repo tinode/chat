@@ -221,14 +221,15 @@ func replyUpdateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 	}
 
 	uid := types.ParseUserId(userId)
-	if uid.IsZero() || authLvl == auth.LevelNone {
-		// Either msg.Acc.User or msg.Acc.AuthLevel contains invalid data.
+	if uid.IsZero() {
+		// msg.Acc.User contains invalid data.
 		s.queueOut(ErrMalformed(msg.id, "", msg.timestamp))
-		log.Println("replyUpdateUser: either user id or auth level is missing", s.sid)
+		log.Println("replyUpdateUser: user id is invalid or missing", s.sid)
 		return
 	}
 
-	if msg.Acc.State != "" && authLvl != auth.LevelRoot {
+	// Only root can suspend accounts, including own account.
+	if msg.Acc.State != "" && s.authLvl != auth.LevelRoot {
 		s.queueOut(ErrPermissionDenied(msg.id, "", msg.timestamp))
 		log.Println("replyUpdateUser: attempt to change account state by non-root", s.sid)
 		return
@@ -246,8 +247,16 @@ func replyUpdateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 
 	var params map[string]interface{}
 	if msg.Acc.Scheme != "" {
+		log.Println("replyUpdateUser: 1", s.sid)
 		err = updateUserAuth(msg, user, rec)
 	} else if len(msg.Acc.Cred) > 0 {
+		log.Println("replyUpdateUser: 2", s.sid)
+		if authLvl == auth.LevelNone {
+			// msg.Acc.AuthLevel contains invalid data.
+			s.queueOut(ErrMalformed(msg.id, "", msg.timestamp))
+			log.Println("replyUpdateUser: auth level is missing", s.sid)
+			return
+		}
 		// Handle request to update credentials.
 		tmpToken, _, _ := store.GetLogicalAuthHandler("token").GenSecret(&auth.Rec{
 			Uid:       uid,
@@ -268,16 +277,21 @@ func replyUpdateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 			}
 		}
 	} else if msg.Acc.State != "" {
+		log.Println("replyUpdateUser: 3", s.sid)
 		var state types.ObjState
 		state, err = types.NewObjState(msg.Acc.State)
 		if err != nil {
 			log.Println("replyUpdateUser: invalid account state", s.sid)
 			err = types.ErrMalformed
-		} else {
+		} else if user.State != state {
 			user.State = state
 			err = store.Users.Update(uid, map[string]interface{}{"State": user.State})
+		} else {
+			s.queueOut(InfoNotModified(msg.id, "", msg.timestamp))
+			return
 		}
 	} else {
+		log.Println("replyUpdateUser: 4", s.sid)
 		err = types.ErrMalformed
 	}
 

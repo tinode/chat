@@ -37,7 +37,7 @@ from tinode_grpc import pb
 from tinode_grpc import pbx
 
 APP_NAME = "tn-cli"
-APP_VERSION = "1.2.1"
+APP_VERSION = "1.3.0"
 PROTOCOL_VERSION = "0"
 LIB_VERSION = pkg_resources.get_distribution("tinode_grpc").version
 GRPC_VERSION = pkg_resources.get_distribution("grpcio").version
@@ -317,25 +317,29 @@ def stdin(InputQueue):
 def hiMsg(id):
     OnCompletion[str(id)] = lambda params: print_server_params(params)
     return pb.ClientMsg(hi=pb.ClientHi(id=str(id), user_agent=APP_NAME + "/" + APP_VERSION + " (" +
-        platform.system() + "/" + platform.release() + "); gRPC-python/" + LIB_VERSION + "-" + GRPC_VERSION,
+        platform.system() + "/" + platform.release() + "); gRPC-python/" + LIB_VERSION + "+" + GRPC_VERSION,
         ver=LIB_VERSION, lang="EN"))
 
 # {acc}
 def accMsg(id, cmd, ignored):
     if cmd.uname:
+        cmd.scheme = 'basic'
         if cmd.password == None:
             cmd.password = ''
         cmd.secret = str(cmd.uname) + ":" + str(cmd.password)
 
     if cmd.secret:
+        if cmd.scheme == None:
+            cmd.scheme = 'basic'
         cmd.secret = cmd.secret.encode('utf-8')
     else:
         cmd.secret = b''
 
-    if cmd.suspend == True:
-        state = "suspend"
-    elif cmd.suspend == False:
-        state = "ok"
+    state = None
+    if cmd.suspend == 'true':
+        state = 'suspend'
+    elif cmd.suspend == 'false':
+        state = 'ok'
 
     cmd.public = encode_to_bytes(make_vcard(cmd.fn, cmd.photo))
     cmd.private = encode_to_bytes(cmd.private)
@@ -554,7 +558,7 @@ def parse_cmd(parts):
     if parts[0] == "acc":
         parser = argparse.ArgumentParser(prog=parts[0], description='Create or alter an account')
         parser.add_argument('--user', default='new', help='ID of the account to update')
-        parser.add_argument('--scheme', default='basic', help='authentication scheme, default=basic')
+        parser.add_argument('--scheme', default=None, help='authentication scheme, default=basic')
         parser.add_argument('--secret', default=None, help='secret for authentication')
         parser.add_argument('--uname', default=None, help='user name for basic authentication')
         parser.add_argument('--password', default=None, help='password for basic authentication')
