@@ -10,13 +10,13 @@
 package main
 
 import (
-	"github.com/tinode/chat/github.com/tinode/chat/server/auth"
 	"container/list"
 	"log"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/tinode/chat/server/auth"
 	"github.com/tinode/chat/server/store"
 	"github.com/tinode/chat/server/store/types"
 )
@@ -563,8 +563,8 @@ func replyOfflineTopicGetDesc(sess *Session, topic string, msg *ClientComMessage
 		desc.CreatedAt = &suser.CreatedAt
 		desc.UpdatedAt = &suser.UpdatedAt
 		desc.Public = suser.Public
-		if sess.authLvl = auth.LevelRoot {
-			desc.State = suser.GetState()
+		if sess.authLvl == auth.LevelRoot {
+			desc.State = suser.State.String()
 		}
 	}
 
@@ -575,8 +575,9 @@ func replyOfflineTopicGetDesc(sess *Session, topic string, msg *ClientComMessage
 		return
 	}
 
-	if sub != nil && sub.DeletedAt == nil {
+	if sub != nil && sub.State != types.StateDeleted {
 		desc.Private = sub.Private
+		// FIXME: suspended topics should get no AW access.
 		desc.Acs = &MsgAccessMode{
 			Want:  sub.ModeWant.String(),
 			Given: sub.ModeGiven.String(),
@@ -610,9 +611,8 @@ func replyOfflineTopicGetSub(sess *Session, topic string, msg *ClientComMessage)
 		return
 	}
 
-	sub := MsgTopicSub{DeletedAt: ssub.DeletedAt}
-
-	if ssub.DeletedAt == nil {
+	sub := MsgTopicSub{}
+	if ssub.State != types.StateDeleted {
 		sub.UpdatedAt = &ssub.UpdatedAt
 		sub.Acs = MsgAccessMode{
 			Want:  ssub.ModeWant.String(),
@@ -626,6 +626,8 @@ func replyOfflineTopicGetSub(sess *Session, topic string, msg *ClientComMessage)
 			sub.ReadSeqId = ssub.ReadSeqId
 			sub.RecvSeqId = ssub.RecvSeqId
 		}
+	} else {
+		sub.DeletedAt = ssub.StateAt
 	}
 
 	sess.queueOut(&ServerComMessage{
@@ -657,7 +659,7 @@ func replyOfflineTopicSetSub(sess *Session, topic string, msg *ClientComMessage)
 		return
 	}
 
-	if sub == nil || sub.DeletedAt != nil {
+	if sub == nil || sub.State == types.StateDeleted {
 		sess.queueOut(ErrNotFound(msg.id, msg.topic, now))
 		return
 	}

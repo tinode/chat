@@ -33,9 +33,12 @@ func genDb(data *Data) {
 	log.Println("Generating users...")
 
 	for _, uu := range data.Users {
-
+		state, err := types.NewObjState(uu.State)
+		if err != nil {
+			log.Fatal(err)
+		}
 		user := types.User{
-			State: uu.State,
+			State: state,
 			Access: types.DefaultAccess{
 				Auth: types.ModeCAuth,
 				Anon: types.ModeNone,

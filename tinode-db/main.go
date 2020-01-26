@@ -69,7 +69,7 @@ type User struct {
 	Password    string      `json:"passhash"`
 	Private     tPrivate    `json:"private"`
 	Public      vCardy      `json:"public"`
-	State       int         `json:"state"`
+	State       string      `json:"state"`
 	Status      interface{} `json:"status"`
 	AddressBook []string    `json:"addressBook"`
 	Tags        []string    `json:"tags"`

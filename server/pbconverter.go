@@ -843,12 +843,16 @@ func pbSubSliceDeserialize(subs []*pbx.TopicSub) []types.Subscription {
 		out[i] = types.Subscription{
 			ObjHeader: types.ObjHeader{
 				UpdatedAt: *int64ToTime(subs[i].GetUpdatedAt()),
-				DeletedAt: int64ToTime(subs[i].GetDeletedAt()),
 			},
 			User:    subs[i].GetUserId(),
 			Topic:   subs[i].GetTopic(),
 			DelId:   int(subs[i].GetDelId()),
 			Private: bytesToInterface(subs[i].GetPrivate()),
+		}
+		deletedAt := subs[i].GetDeletedAt()
+		if deletedAt > 0 {
+			out[i].State = types.StateDeleted
+			out[i].StateAt = int64ToTime(deletedAt)
 		}
 		out[i].SetPublic(bytesToInterface(subs[i].GetPublic()))
 		if acs := subs[i].GetAcs(); acs != nil {

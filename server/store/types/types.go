@@ -48,8 +48,6 @@ const (
 	ErrPermissionDenied = StoreError("denied")
 	// ErrInvalidResponse means the client's response does not match server's expectation.
 	ErrInvalidResponse = StoreError("invalid response")
-	// ErrDisabled means access to resource is disabled.
-	ErrPermissionDisabled = StoreError("disabled")
 )
 
 // Uid is a database-specific record id, suitable to be used as a primary key.
@@ -306,7 +304,6 @@ type ObjHeader struct {
 	id        Uid
 	CreatedAt time.Time
 	UpdatedAt time.Time
-	DeletedAt *time.Time `json:"DeletedAt,omitempty" bson:",omitempty"`
 }
 
 // Uid assigns Uid header field.
@@ -334,7 +331,6 @@ func (h *ObjHeader) InitTimes() {
 		h.CreatedAt = TimeNow()
 	}
 	h.UpdatedAt = h.CreatedAt
-	h.DeletedAt = nil
 }
 
 // MergeTimes intelligently copies time.Time variables from h2 to h.
@@ -347,15 +343,6 @@ func (h *ObjHeader) MergeTimes(h2 *ObjHeader) {
 	if h.UpdatedAt.Before(h2.UpdatedAt) {
 		h.UpdatedAt = h2.UpdatedAt
 	}
-	// Set deleted time to the latest value
-	if h2.DeletedAt != nil && (h.DeletedAt == nil || h.DeletedAt.Before(*h2.DeletedAt)) {
-		h.DeletedAt = h2.DeletedAt
-	}
-}
-
-// IsDeleted returns true if the object is deleted.
-func (h *ObjHeader) IsDeleted() bool {
-	return h.DeletedAt != nil
 }
 
 // StringSlice is defined so Scanner and Valuer can be attached to it.
@@ -374,11 +361,83 @@ func (ss StringSlice) Value() (driver.Value, error) {
 	return json.Marshal(ss)
 }
 
+// ObjState represents information on objects state,
+// such as an indication that User or Topic is suspended/soft-deleted.
+type ObjState int
+
+const (
+	StateOK        ObjState = 0
+	StateSuspended ObjState = 10
+	StateDeleted   ObjState = 20
+)
+
+// String returns string representation of ObjState.
+func (os ObjState) String() string {
+	switch os {
+	case StateOK:
+		return "ok"
+	case StateSuspended:
+		return "suspended"
+	case StateDeleted:
+		return "deleted"
+	}
+	return ""
+}
+
+// NewObjState parses string into an ObjState.
+func NewObjState(in string) (ObjState, error) {
+	in = strings.ToLower(in)
+	switch in {
+	case "", "ok":
+		return StateOK, nil
+	case "suspended":
+		return StateSuspended, nil
+	case "deleted":
+		return StateDeleted, nil
+	}
+	// This is the default.
+	return StateOK, errors.New("failed to parse object state")
+}
+
+// MarshalJSON converts ObjState to a quoted string.
+func (os ObjState) MarshalJSON() ([]byte, error) {
+	return append(append([]byte{'"'}, []byte(os.String())...), '"'), nil
+}
+
+// UnmarshalJSON reads ObjState from a quoted string.
+func (os *ObjState) UnmarshalJSON(b []byte) error {
+	if b[0] != '"' || b[len(b)-1] != '"' {
+		return errors.New("syntax error")
+	}
+	state, err := NewObjState(string(b[1 : len(b)-1]))
+	if err == nil {
+		*os = state
+	}
+	return err
+}
+
+// Scan is an implementation of sql.Scanner interface. It expects the
+// value to be a byte slice representation of an ASCII string.
+func (os *ObjState) Scan(val interface{}) error {
+	switch intval := val.(type) {
+	case int64:
+		*os = ObjState(intval)
+		return nil
+	}
+	return errors.New("data is not an int64")
+}
+
+// Value is an implementation of sql.driver.Valuer interface.
+func (os ObjState) Value() (driver.Value, error) {
+	return int64(os), nil
+}
+
 // User is a representation of a DB-stored user record.
 type User struct {
 	ObjHeader `bson:",inline"`
 
-	State int
+	State   ObjState
+	StateAt *time.Time `json:"StateAt,omitempty" bson:",omitempty"`
 
 	// Default access to user for P2P topics (used as default modeGiven)
 	Access DefaultAccess
@@ -400,40 +459,6 @@ type User struct {
 	Devices map[string]*DeviceDef `bson:"__devices,skip,omitempty"`
 	// Same for mongodb scheme. Ignore in other db backends if its not suitable.
 	DeviceArray []*DeviceDef `json:"-" bson:"devices"`
-}
-
-type UserState int
-
-func (us UserState) String() {
-	switch us {
-	case UserStateOK:
-		return "ok"
-	case UserStateSuspended:
-		return "suspended"
-	}
-	return ""
-}
-
-const (
-	UserStateOK        UserState = 0
-	UserStateSuspended UserState = 1
-)
-
-func (u *User) SetState(state string) (int, error) {
-	var err error
-	switch state {
-	case "ok":
-		u.State = int(UserStateOK)
-	case "suspended":
-		u.State = int(UserStateSuspended)
-	default:
-		err = errors.New("invalide account state")
-	}
-	return u.State, err
-}
-
-func (u *User) GetState() string {
-	return UserState(u.State).String()
 }
 
 // AccessMode is a definition of access mode bits.
@@ -722,6 +747,9 @@ type Subscription struct {
 	User string
 	// Topic subscribed to
 	Topic string
+	// State of the subscription: normal (ok), suspended, deleted
+	State   ObjState
+	StateAt *time.Time `json:"StateAt,omitempty" bson:",omitempty"`
 
 	// Values persisted through subscription soft-deletion
 
@@ -852,6 +880,10 @@ type perUserData struct {
 type Topic struct {
 	ObjHeader `bson:",inline"`
 
+	// State of the topic: normal (ok), suspended, deleted
+	State   ObjState
+	StateAt *time.Time `json:"StateAt,omitempty" bson:",omitempty"`
+
 	// Timestamp when the last message has passed through the topic
 	TouchedAt time.Time
 
@@ -959,6 +991,8 @@ func (mh MessageHeaders) Value() (driver.Value, error) {
 // Message is a stored {data} message
 type Message struct {
 	ObjHeader `bson:",inline"`
+	DeletedAt *time.Time `json:"DeletedAt,omitempty" bson:",omitempty"`
+
 	// ID of the hard-delete operation
 	DelId int `json:"DelId,omitempty" bson:",omitempty"`
 	// List of users who have marked this message as soft-deleted

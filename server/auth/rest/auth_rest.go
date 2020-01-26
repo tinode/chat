@@ -187,9 +187,11 @@ func (a *authenticator) Authenticate(secret []byte) (*auth.Rec, []byte, error) {
 		}
 
 		if resp.NewAcc.State != "" {
-			if _, err := user.SetState(resp.NewAcc.State); err != nil {
+			state, err := types.NewObjState(resp.NewAcc.State)
+			if err != nil {
 				return nil, nil, err
 			}
+			user.State = state
 		}
 
 		user.Access.Auth.UnmarshalText([]byte(resp.NewAcc.Auth))

@@ -230,7 +230,7 @@ func (a *authenticator) Authenticate(secret []byte) (*auth.Rec, []byte, error) {
 	if user == nil {
 		return nil, nil, types.ErrNotFound
 	}
-	if user.State != types.UserStateOK {
+	if user.State != types.StateOK {
 		return nil, nil, types.ErrPermissionDenied
 	}
 

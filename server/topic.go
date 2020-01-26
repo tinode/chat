@@ -1419,7 +1419,7 @@ func (t *Topic) replyGetDesc(sess *Session, asUid types.Uid, id string, opts *Ms
 				Mode:  (pud.modeGiven & pud.modeWant).String()}
 		} else if sess.authLvl == auth.LevelRoot {
 			// If 'me' is in memory then user account is invariable not suspended.
-			desc.State = types.UserStateOK.String()
+			desc.State = types.StateOK.String()
 		}
 
 		if t.cat == types.TopicCatGrp && (pud.modeGiven & pud.modeWant).IsPresencer() {
@@ -1736,7 +1736,7 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 			var sendPubPriv bool
 			var banned bool
 			var mts MsgTopicSub
-			deleted := sub.DeletedAt != nil
+			deleted := sub.State == types.StateDeleted
 
 			if ifModified.IsZero() {
 				sendPubPriv = true
@@ -1744,10 +1744,10 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 				// Skip sending deleted subscriptions if they were deleted before the cut off date.
 				// If they are freshly deleted send minimum info
 				if deleted {
-					if !sub.DeletedAt.After(ifModified) {
+					if !sub.StateAt.After(ifModified) {
 						continue
 					}
-					mts.DeletedAt = sub.DeletedAt
+					mts.DeletedAt = sub.StateAt
 				}
 				sendPubPriv = !deleted && sub.UpdatedAt.After(ifModified)
 			}

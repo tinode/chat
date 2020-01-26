@@ -307,13 +307,14 @@ message TopicDesc {
 	bytes public = 10;
 	bytes private = 11;
 	string state = 12;
+	int64 state_at = 13;
 }
 
 // MsgTopicSub: topic subscription details, sent in Meta message
 message TopicSub {
 	int64 updated_at = 1;
 	int64 deleted_at = 2;
-
+	
 	bool online = 3;
 
 	AccessMode acs = 4;
