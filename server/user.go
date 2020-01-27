@@ -277,16 +277,8 @@ func replyUpdateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 			}
 		}
 	} else if msg.Acc.State != "" {
-		log.Println("replyUpdateUser: 3", s.sid)
-		var state types.ObjState
-		state, err = types.NewObjState(msg.Acc.State)
-		if err != nil {
-			log.Println("replyUpdateUser: invalid account state", s.sid)
-			err = types.ErrMalformed
-		} else if user.State != state {
-			user.State = state
-			err = store.Users.Update(uid, map[string]interface{}{"State": user.State})
-		} else {
+		changed, err := changeUserState(s, uid, user, msg)
+		if !changed && err == nil {
 			s.queueOut(InfoNotModified(msg.id, "", msg.timestamp))
 			return
 		}
@@ -495,6 +487,22 @@ func deleteCred(uid types.Uid, authLvl auth.Level, cred *MsgCredClient) ([]strin
 		tags, _ = store.Users.UpdateTags(uid, nil, []string{cred.Method + ":" + cred.Value}, nil)
 	}
 	return tags, nil
+}
+
+func changeUserState(s *Session, uid types.Uid, user *types.User, msg *ClientComMessage) (bool, error) {
+	state, err := types.NewObjState(msg.Acc.State)
+	if err != nil {
+		log.Println("replyUpdateUser: invalid account state", s.sid)
+		return false, types.ErrMalformed
+	}
+
+	if user.State == state {
+		return false, nil
+	}
+
+	user.State = state
+	err = store.Users.Update(uid, map[string]interface{}{"State": user.State})
+	return true, err
 }
 
 // Request to delete a user:
