@@ -677,38 +677,6 @@ func (t *Topic) run(hub *Hub) {
 	}
 }
 
-// loadSubscribers loads topic subscribers, sets topic owner.
-func (t *Topic) loadSubscribers() error {
-	subs, err := store.Topics.GetSubs(t.name, nil)
-	if err != nil {
-		return err
-	}
-
-	if subs == nil {
-		return nil
-	}
-
-	for i := range subs {
-		sub := &subs[i]
-		uid := types.ParseUid(sub.User)
-		t.perUser[uid] = perUserData{
-			created:   sub.CreatedAt,
-			updated:   sub.UpdatedAt,
-			delID:     sub.DelId,
-			readID:    sub.ReadSeqId,
-			recvID:    sub.RecvSeqId,
-			private:   sub.Private,
-			modeWant:  sub.ModeWant,
-			modeGiven: sub.ModeGiven}
-
-		if (sub.ModeGiven & sub.ModeWant).IsOwner() {
-			t.owner = uid
-		}
-	}
-
-	return nil
-}
-
 // Session subscribed to a topic, created == true if topic was just created and {pres} needs to be announced
 func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 	asUid := types.ParseUserId(sreg.pkt.from)
