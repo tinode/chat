@@ -1649,6 +1649,8 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 							return errors.New("attempt to search by restricted tags")
 						}
 
+						// FIXME: normal FindSub should not return suspended users and topics.
+						// Only root should be able to find them.
 						subs, err = store.Users.FindSubs(asUid, req, opt)
 						if err != nil {
 							sess.queueOut(decodeStoreError(err, id, t.original(asUid), now, nil))

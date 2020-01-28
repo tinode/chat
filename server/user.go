@@ -489,6 +489,12 @@ func deleteCred(uid types.Uid, authLvl auth.Level, cred *MsgCredClient) ([]strin
 	return tags, nil
 }
 
+// Change user state: suspended/normal (ok).
+// 1. Disable/enable logins.
+// 2. If disabling, evict user's sessions.
+// 3. Suspend/activate p2p with the user.
+// 4. Suspend/activate grp topics where the user is the owner.
+// 5. Update user's DB record.
 func changeUserState(s *Session, uid types.Uid, user *types.User, msg *ClientComMessage) (bool, error) {
 	state, err := types.NewObjState(msg.Acc.State)
 	if err != nil {
@@ -496,9 +502,30 @@ func changeUserState(s *Session, uid types.Uid, user *types.User, msg *ClientCom
 		return false, types.ErrMalformed
 	}
 
+	// State unchanged.
 	if user.State == state {
 		return false, nil
 	}
+
+	// TODO: Disable/enable all authenticators.
+	authnames := store.GetAuthNames()
+	for _, name := range authnames {
+		log.Println("changeUserState: TODO change auth", uid.UserId(), name, state, s.sid)
+	}
+
+	if state != types.StateOK {
+		// Terminate all sessions.
+		globals.sessionStore.EvictUser(uid, "")
+	}
+
+	// Update state of all loaded in memory user's p2p & grp-owner topics.
+	done := make(chan bool)
+	globals.hub.unreg <- &topicUnreg{forUser: uid, state: state, done: done}
+	<-done
+
+	// TODO: Suspend/activate p2p with the user.
+
+	// TODO: Suspend/activate grp topics where the user is the owner.
 
 	user.State = state
 	err = store.Users.Update(uid, map[string]interface{}{"State": user.State})
@@ -567,6 +594,8 @@ func replyDelUser(s *Session, msg *ClientComMessage) {
 		} else {
 			log.Println("replyDelUser: failed to send notifications to owned topics", err, s.sid)
 		}
+
+		// TODO: suspend all P2P topics with the user.
 
 		// Delete user's records from the database.
 		if err := store.Users.Delete(uid, msg.Del.Hard); err != nil {

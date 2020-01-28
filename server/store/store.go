@@ -313,8 +313,8 @@ func (UsersObjMapper) UpdateTags(uid types.Uid, add, remove, reset []string) ([]
 	return adp.UserUpdateTags(uid, add, remove, reset)
 }
 
-// GetSubs loads a list of subscriptions for the given user. Does not load Public, does not load
-// deleted subscriptions.
+// GetSubs loads a list of subscriptions for the given user.
+// Does not load Public, does not load deleted subscriptions.
 func (UsersObjMapper) GetSubs(id types.Uid, opts *types.QueryOpt) ([]types.Subscription, error) {
 	return adp.SubsForUser(id, false, opts)
 }
@@ -443,7 +443,7 @@ func (TopicsObjMapper) GetUsersAny(topic string, opts *types.QueryOpt) ([]types.
 }
 
 // GetSubs loads a list of subscriptions to the given topic, user.Public and deleted
-// subscriptions are not loaded
+// subscriptions are not loaded. Suspended subscriptions are loaded.
 func (TopicsObjMapper) GetSubs(topic string, opts *types.QueryOpt) ([]types.Subscription, error) {
 	return adp.SubsForTopic(topic, false, opts)
 }

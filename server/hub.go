@@ -70,13 +70,13 @@ type topicUnreg struct {
 }
 
 type metaReq struct {
-	// Routable name of the topic to get info for
+	// Routable name of the topic to update or query.
 	topic string
-	// packet containing details of the Get/Set/Del request
+	// Packet containing details of the Get/Set/Del request.
 	pkt *ClientComMessage
-	// Session which originated the request
+	// Session which originated the request.
 	sess *Session
-	// what is being requested, constMsgGetInfo, constMsgGetSub, constMsgGetData
+	// What is being requested: constMsgGetInfo, constMsgGetSub, constMsgGetData, etc.
 	what int
 }
 
@@ -293,6 +293,45 @@ func (h *Hub) run() {
 
 		case <-time.After(idleSessionTimeout):
 		}
+	}
+}
+
+// Update state of all topics associated with the given user:
+// * all p2p topics with the given user
+// * group topics where the given user is the owner.
+// 'me' and fnd' are ignored here because they are direcly tied to the user object.
+func (h *Hub) topicsStateForUser(uid types.Uid, state types.ObjState, alldone chan<- bool) {
+	var done chan bool
+	if alldone != nil {
+		done = make(chan bool, 128)
+	}
+
+	count := 0
+	h.topics.Range(func(name interface{}, t interface{}) bool {
+		topic := t.(*Topic)
+		if topic.cat == types.TopicCatMe || topic.cat == types.TopicCatGrp {
+			return true
+		}
+
+		if _, isMember := topic.perUser[uid]; (topic.cat == types.TopicCatP2P && isMember) || topic.owner == uid {
+			topic.updateState(state)
+
+			// Just send to p2p topics here.
+			if topic.cat == types.TopicCatP2P && len(topic.perUser) == 2 {
+				presSingleUserOfflineOffline(topic.p2pOtherUser(uid), uid.UserId(), "gone", nilPresParams, "")
+			}
+			count++
+		}
+		return true
+	})
+
+	statsInc("LiveTopics", -count)
+
+	if alldone != nil {
+		for i := 0; i < count; i++ {
+			<-done
+		}
+		alldone <- true
 	}
 }
 
