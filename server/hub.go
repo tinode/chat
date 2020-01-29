@@ -176,7 +176,7 @@ func (h *Hub) run() {
 					exit:      make(chan *shutDown, 1),
 				}
 				// Topic is created in suspended state because it's not yet configured.
-				t.markSuspended()
+				t.markPaused()
 				// Save topic now to prevent race condition.
 				h.topicPut(sreg.topic, t)
 
@@ -373,7 +373,7 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 			if t.owner == asUid || (t.cat == types.TopicCatP2P && t.subsCount() < 2) {
 				// Case 1.1.1: requester is the owner or last sub in a p2p topic
 
-				oldStatus := t.markSuspended()
+				oldStatus := t.markPaused()
 				if err := store.Topics.Delete(topic, true); err != nil {
 					t.setStatus(oldStatus)
 					sess.queueOut(ErrUnknown(msg.id, msg.topic, now))

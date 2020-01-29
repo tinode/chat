@@ -44,6 +44,7 @@ type Topic struct {
 	// 2. route replies from the master to sessions.
 	// 3. disconnect sessions at master's request.
 	// 4. shut down the topic at master's request.
+	// 5. aggregate access permissions on behalf of attached sessions.
 	isProxy bool
 
 	// Time when the topic was first created.
@@ -2564,14 +2565,14 @@ const (
 	topicStatusNew = 0
 	// Topic is fully initialized.
 	topicStatusLoaded = 1
-	// Topic is suspended.
-	topicStatusSuspended = 2
+	// Topic is paused: packets are rejected.
+	topicStatusPaused = 2
 	// Topic is in the process of being deleted.
 	topicStatusMarkedDeleted = 3
 )
 
-func (t *Topic) markSuspended() int32 {
-	return atomic.SwapInt32((*int32)(&t.status), topicStatusSuspended)
+func (t *Topic) markPaused() int32 {
+	return atomic.SwapInt32((*int32)(&t.status), topicStatusPaused)
 }
 
 func (t *Topic) markDeleted() {
