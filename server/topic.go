@@ -1711,7 +1711,7 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 			var sendPubPriv bool
 			var banned bool
 			var mts MsgTopicSub
-			deleted := sub.State == types.StateDeleted
+			deleted := sub.DeletedAt != nil
 
 			if ifModified.IsZero() {
 				sendPubPriv = true
@@ -1719,10 +1719,10 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 				// Skip sending deleted subscriptions if they were deleted before the cut off date.
 				// If they are freshly deleted send minimum info
 				if deleted {
-					if !sub.StateAt.After(ifModified) {
+					if !sub.DeletedAt.After(ifModified) {
 						continue
 					}
-					mts.DeletedAt = sub.StateAt
+					mts.DeletedAt = sub.DeletedAt
 				}
 				sendPubPriv = !deleted && sub.UpdatedAt.After(ifModified)
 			}

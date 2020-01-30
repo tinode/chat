@@ -746,10 +746,8 @@ type Subscription struct {
 	// User who has relationship with the topic
 	User string
 	// Topic subscribed to
-	Topic string
-	// State of the subscription: normal (ok), suspended, deleted
-	State   ObjState
-	StateAt *time.Time `json:"StateAt,omitempty" bson:",omitempty"`
+	Topic     string
+	DeletedAt *time.Time `bson:",omitempty"`
 
 	// Values persisted through subscription soft-deletion
 
@@ -785,6 +783,9 @@ type Subscription struct {
 	with string
 	// P2P only. Default access: this is the mode given by the other user to this user
 	modeDefault *DefaultAccess
+
+	// Topic's or user's state.
+	state ObjState
 }
 
 // SetPublic assigns to public, otherwise not accessible from outside the package.
@@ -859,6 +860,16 @@ func (s *Subscription) SetDefaultAccess(auth, anon AccessMode) {
 // GetDefaultAccess returns default access.
 func (s *Subscription) GetDefaultAccess() *DefaultAccess {
 	return s.modeDefault
+}
+
+// GetState returns topic's or user's state.
+func (s *Subscription) GetState() ObjState {
+	return s.state
+}
+
+// SetState assigns topic's or user's state.
+func (s *Subscription) SetState(state ObjState) {
+	s.state = state
 }
 
 // Contact is a result of a search for connections

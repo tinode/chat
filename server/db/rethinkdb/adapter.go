@@ -1236,14 +1236,6 @@ func (a *adapter) SubscriptionGet(topic string, user t.Uid) (*t.Subscription, er
 	return &sub, nil
 }
 
-// Update time when the user was last attached to the topic
-func (a *adapter) SubsLastSeen(topic string, user t.Uid, lastSeen map[string]time.Time) error {
-	_, err := rdb.DB(a.dbName).Table("subscriptions").Get(topic+":"+user.String()).
-		Update(map[string]interface{}{"LastSeen": lastSeen}, rdb.UpdateOpts{Durability: "soft"}).RunWrite(a.conn)
-
-	return err
-}
-
 // SubsForUser loads a list of user's subscriptions to topics. Does NOT load Public value.
 func (a *adapter) SubsForUser(forUser t.Uid, keepDeleted bool, opts *t.QueryOpt) ([]t.Subscription, error) {
 	q := rdb.DB(a.dbName).Table("subscriptions").GetAllByIndex("User", forUser.String())

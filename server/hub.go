@@ -604,7 +604,7 @@ func replyOfflineTopicGetDesc(sess *Session, topic string, msg *ClientComMessage
 		return
 	}
 
-	if sub != nil && sub.State != types.StateDeleted {
+	if sub != nil && sub.DeletedAt == nil {
 		desc.Private = sub.Private
 		// FIXME: suspended topics should get no AW access.
 		desc.Acs = &MsgAccessMode{
@@ -641,7 +641,7 @@ func replyOfflineTopicGetSub(sess *Session, topic string, msg *ClientComMessage)
 	}
 
 	sub := MsgTopicSub{}
-	if ssub.State != types.StateDeleted {
+	if ssub.DeletedAt == nil {
 		sub.UpdatedAt = &ssub.UpdatedAt
 		sub.Acs = MsgAccessMode{
 			Want:  ssub.ModeWant.String(),
@@ -655,8 +655,6 @@ func replyOfflineTopicGetSub(sess *Session, topic string, msg *ClientComMessage)
 			sub.ReadSeqId = ssub.ReadSeqId
 			sub.RecvSeqId = ssub.RecvSeqId
 		}
-	} else {
-		sub.DeletedAt = ssub.StateAt
 	}
 
 	sess.queueOut(&ServerComMessage{
@@ -688,7 +686,7 @@ func replyOfflineTopicSetSub(sess *Session, topic string, msg *ClientComMessage)
 		return
 	}
 
-	if sub == nil || sub.State == types.StateDeleted {
+	if sub == nil || sub.DeletedAt != nil {
 		sess.queueOut(ErrNotFound(msg.id, msg.topic, now))
 		return
 	}
