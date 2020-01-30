@@ -519,9 +519,7 @@ func changeUserState(s *Session, uid types.Uid, user *types.User, msg *ClientCom
 	}
 
 	// Update state of all loaded in memory user's p2p & grp-owner topics.
-	done := make(chan bool)
-	globals.hub.unreg <- &topicUnreg{forUser: uid, state: state, done: done}
-	<-done
+	globals.hub.meta <- &metaReq{forUser: uid, state: state, sess: s}
 
 	// TODO: Suspend/activate p2p with the user.
 

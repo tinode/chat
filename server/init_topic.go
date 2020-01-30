@@ -101,12 +101,11 @@ func topicInit(t *Topic, sreg *sessionJoin, h *Hub) {
 		t.reg <- sreg
 	}
 
-	switch t.cat {
-	case types.TopicCatFnd, types.TopicCatSys:
+	t.markPaused(false)
+	if t.cat == types.TopicCatFnd || t.cat == types.TopicCatSys {
 		t.markLoaded()
-	default:
-		t.markNew()
 	}
+
 	go t.run(h)
 }
 

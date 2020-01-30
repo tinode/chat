@@ -100,7 +100,7 @@ type Topic struct {
 	// Channel to terminate topic  -- either the topic is deleted or system is being shut down. Buffered = 1.
 	exit chan *shutDown
 
-	// Flag which tells topic lifecycle status: ready, suspended, marked for deletion.
+	// Flag which tells topic lifecycle status: new, ready, paused, marked for deletion.
 	status int32
 }
 
@@ -189,7 +189,7 @@ func (t *Topic) run(hub *Hub) {
 		case sreg := <-t.reg:
 			// Request to add a connection to this topic
 
-			if !t.isActive() {
+			if t.isInactive() {
 				asUid := types.ParseUserId(sreg.pkt.from)
 				sreg.sess.queueOut(ErrLocked(sreg.pkt.id, t.original(asUid), types.TimeNow()))
 			} else {
@@ -216,7 +216,7 @@ func (t *Topic) run(hub *Hub) {
 			// userId.IsZero() == true when the entire session is being dropped.
 			asUid := leave.userId
 
-			if !t.isActive() {
+			if t.isInactive() {
 				if !asUid.IsZero() && leave.id != "" {
 					leave.sess.queueOut(ErrLocked(leave.id, t.original(asUid), now))
 				}
@@ -284,8 +284,12 @@ func (t *Topic) run(hub *Hub) {
 			var pushRcpt *push.Receipt
 			asUid := types.ParseUserId(msg.from)
 			if msg.Data != nil {
-				if !t.isActive() {
+				if t.isInactive() {
 					msg.sess.queueOut(ErrLocked(msg.id, t.original(asUid), msg.timestamp))
+					continue
+				}
+				if t.isReadOnly() {
+					msg.sess.queueOut(ErrPermissionDenied(msg.id, t.original(asUid), msg.timestamp))
 					continue
 				}
 
@@ -339,8 +343,8 @@ func (t *Topic) run(hub *Hub) {
 				pluginMessage(msg.Data, plgActCreate)
 
 			} else if msg.Pres != nil {
-				if !t.isActive() {
-					// Ignore presence update - topic is being deleted
+				if t.isInactive() {
+					// Ignore presence update - topic is paused or being deleted
 					continue
 				}
 
@@ -353,8 +357,8 @@ func (t *Topic) run(hub *Hub) {
 				// "what" may have changed, i.e. unset or "+command" removed ("on+en" -> "on")
 				msg.Pres.What = what
 			} else if msg.Info != nil {
-				if !t.isActive() {
-					// Ignore info messages - topic is being deleted
+				if t.isInactive() {
+					// Ignore info messages - topic is paused or being deleted
 					continue
 				}
 
@@ -367,7 +371,7 @@ func (t *Topic) run(hub *Hub) {
 				pud := t.perUser[from]
 
 				// Filter out "kp" from users with no 'W' permission (or people without a subscription)
-				if msg.Info.What == "kp" && !(pud.modeGiven & pud.modeWant).IsWriter() {
+				if msg.Info.What == "kp" && (!(pud.modeGiven & pud.modeWant).IsWriter() || t.isReadOnly()) {
 					continue
 				}
 
@@ -596,7 +600,7 @@ func (t *Topic) run(hub *Hub) {
 
 		case <-defrNotifTimer.C:
 			// Handle deferred presence notifications from a successful service (background) subscription.
-			if !t.isActive() {
+			if t.isInactive() {
 				continue
 			}
 
@@ -2561,46 +2565,72 @@ func (t *Topic) mostRecentSession() *Session {
 }
 
 const (
-	// Topic is just created.
-	topicStatusNew = 0
 	// Topic is fully initialized.
-	topicStatusLoaded = 1
-	// Topic is paused: packets are rejected.
-	topicStatusPaused = 2
-	// Topic is in the process of being deleted.
-	topicStatusMarkedDeleted = 3
+	topicStatusLoaded = 0x1
+	// Topic is paused: all packets are rejected.
+	topicStatusPaused = 0x2
+
+	// Topic is in the process of being deleted. This is irrecoverable.
+	topicStatusMarkedDeleted = 0x10
+	// Topic is suspended: read-only mode.
+	topicStatusReadOnly = 0x20
 )
 
-func (t *Topic) markPaused() int32 {
-	return atomic.SwapInt32((*int32)(&t.status), topicStatusPaused)
+// statusChangeBits sets or removes given bits from t.status
+func (t *Topic) statusChangeBits(bits int32, set bool) {
+	for {
+		oldStatus := atomic.LoadInt32((*int32)(&t.status))
+		newStatus := oldStatus
+		if set {
+			newStatus = newStatus | bits
+		} else {
+			newStatus = newStatus & ^bits
+		}
+		if newStatus == oldStatus {
+			break
+		}
+		if atomic.CompareAndSwapInt32((*int32)(&t.status), oldStatus, newStatus) {
+			break
+		}
+	}
 }
 
-func (t *Topic) markDeleted() {
-	atomic.StoreInt32((*int32)(&t.status), topicStatusMarkedDeleted)
-}
-
-func (t *Topic) markNew() {
-	atomic.StoreInt32((*int32)(&t.status), topicStatusNew)
-}
-
+// markLoaded indicates that topic subscribers have been loaded into memory.
 func (t *Topic) markLoaded() {
-	atomic.StoreInt32((*int32)(&t.status), topicStatusLoaded)
+	t.statusChangeBits(topicStatusLoaded, true)
 }
 
-func (t *Topic) setStatus(status int32) {
-	atomic.StoreInt32((*int32)(&t.status), status)
+// markPaused pauses or unpauses the topic. When the topic is paused all
+// messages are rejected.
+func (t *Topic) markPaused(pause bool) {
+	t.statusChangeBits(topicStatusPaused, pause)
 }
 
-func (t *Topic) isActive() bool {
-	return atomic.LoadInt32((*int32)(&t.status)) <= topicStatusLoaded
+// markDeleted marks topic as being deleted.
+func (t *Topic) markDeleted() {
+	t.statusChangeBits(topicStatusMarkedDeleted, true)
+}
+
+// markReadOnly suspends/un-suspends the topic: adds or removes the 'read-only' flag.
+func (t *Topic) markReadOnly(readOnly bool) {
+	t.statusChangeBits(topicStatusReadOnly, readOnly)
+}
+
+// isInactive checks if topic is paused or being deleted.
+func (t *Topic) isInactive() bool {
+	return (atomic.LoadInt32((*int32)(&t.status)) & (topicStatusPaused | topicStatusMarkedDeleted)) != 0
+}
+
+func (t *Topic) isReadOnly() bool {
+	return (atomic.LoadInt32((*int32)(&t.status)) & topicStatusReadOnly) != 0
 }
 
 func (t *Topic) isLoaded() bool {
-	return atomic.LoadInt32((*int32)(&t.status)) == topicStatusLoaded
+	return (atomic.LoadInt32((*int32)(&t.status)) & topicStatusLoaded) != 0
 }
 
 func (t *Topic) isDeleted() bool {
-	return atomic.LoadInt32((*int32)(&t.status)) == topicStatusMarkedDeleted
+	return (atomic.LoadInt32((*int32)(&t.status)) & topicStatusMarkedDeleted) != 0
 }
 
 // Get topic name suitable for the given client
