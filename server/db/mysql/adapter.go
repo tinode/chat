@@ -326,24 +326,23 @@ func (a *adapter) CreateDb(reset bool) error {
 	// Subscriptions
 	if _, err = tx.Exec(
 		`CREATE TABLE subscriptions(
-			id         INT NOT NULL AUTO_INCREMENT,
-			createdat  DATETIME(3) NOT NULL,
-			updatedat  DATETIME(3) NOT NULL,
-			state      SMALLINT NOT NULL DEFAULT 0,
-			stateat    DATETIME(3),
-			userid     BIGINT NOT NULL,
-			topic      CHAR(25) NOT NULL,
-			delid      INT DEFAULT 0,
-			recvseqid  INT DEFAULT 0,
-			readseqid  INT DEFAULT 0,
-			modewant   CHAR(8),
-			modegiven  CHAR(8),
-			private    JSON,
+			id        INT NOT NULL AUTO_INCREMENT,
+			createdat DATETIME(3) NOT NULL,
+			updatedat DATETIME(3) NOT NULL,
+			deletedat DATETIME(3),
+			userid    BIGINT NOT NULL,
+			topic     CHAR(25) NOT NULL,
+			delid     INT DEFAULT 0,
+			recvseqid INT DEFAULT 0,
+			readseqid INT DEFAULT 0,
+			modewant  CHAR(8),
+			modegiven CHAR(8),
+			private   JSON,
 			PRIMARY KEY(id),
 			FOREIGN KEY(userid) REFERENCES users(id),
 			UNIQUE INDEX subscriptions_topic_userid(topic, userid),
 			INDEX subscriptions_topic(topic),
-			INDEX subscriptions_state_stateat(state, stateat)
+			INDEX subscriptions_deletedat(deletedat)
 		)`); err != nil {
 		return err
 	}
@@ -564,15 +563,7 @@ func (a *adapter) UpgradeDb() error {
 		}
 
 		// Subscriptions
-		if _, err := a.db.Exec("ALTER TABLE subscriptions ADD state SMALLINT NOT NULL DEFAULT 0 AFTER updatedat"); err != nil {
-			return err
-		}
-
-		if _, err := a.db.Exec("ALTER TABLE subscriptions CHANGE deletedat stateat DATETIME(3)"); err != nil {
-			return err
-		}
-
-		if _, err := a.db.Exec("ALTER TABLE subscriptions ADD INDEX topics_state_stateat(state, stateat)"); err != nil {
+		if _, err := a.db.Exec("ALTER TABLE subscriptions ADD INDEX topics_deletedat(deletedat)"); err != nil {
 			return err
 		}
 
