@@ -247,10 +247,8 @@ func replyUpdateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 
 	var params map[string]interface{}
 	if msg.Acc.Scheme != "" {
-		log.Println("replyUpdateUser: 1", s.sid)
 		err = updateUserAuth(msg, user, rec)
 	} else if len(msg.Acc.Cred) > 0 {
-		log.Println("replyUpdateUser: 2", s.sid)
 		if authLvl == auth.LevelNone {
 			// msg.Acc.AuthLevel contains invalid data.
 			s.queueOut(ErrMalformed(msg.id, "", msg.timestamp))
@@ -277,13 +275,13 @@ func replyUpdateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 			}
 		}
 	} else if msg.Acc.State != "" {
-		changed, err := changeUserState(s, uid, user, msg)
+		var changed bool
+		changed, err = changeUserState(s, uid, user, msg)
 		if !changed && err == nil {
 			s.queueOut(InfoNotModified(msg.id, "", msg.timestamp))
 			return
 		}
 	} else {
-		log.Println("replyUpdateUser: 4", s.sid)
 		err = types.ErrMalformed
 	}
 
@@ -512,11 +510,15 @@ func changeUserState(s *Session, uid types.Uid, user *types.User, msg *ClientCom
 		globals.sessionStore.EvictUser(uid, "")
 	}
 
+	err = store.Users.UpdateState(uid, state)
+	if err != nil {
+		return false, err
+	}
+
 	// Update state of all loaded in memory user's p2p & grp-owner topics.
 	globals.hub.meta <- &metaReq{forUser: uid, state: state, sess: s}
-
 	user.State = state
-	err = store.Users.UpdateState(uid, user.State)
+
 	return true, err
 }
 

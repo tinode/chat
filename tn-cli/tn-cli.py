@@ -337,7 +337,7 @@ def accMsg(id, cmd, ignored):
 
     state = None
     if cmd.suspend == 'true':
-        state = 'suspend'
+        state = 'susp'
     elif cmd.suspend == 'false':
         state = 'ok'
 

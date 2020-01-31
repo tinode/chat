@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"hash/fnv"
-	"log"
 	"strconv"
 	"strings"
 	"time"
@@ -925,7 +924,7 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 		}
 		// Disable p2p topics with the user (p2p topic's owner is 0)
 		if _, err = tx.Exec("UPDATE topics LEFT JOIN subscriptions ON topics.name=subscriptions.topic "+
-			"SET topics.updatedat=?, topics.state=?, topics.stateat=? WHERE topics.owner=0 AND subscriptions.user=?",
+			"SET topics.updatedat=?, topics.state=?, topics.stateat=? WHERE topics.owner=0 AND subscriptions.userid=?",
 			now, t.StateDeleted, now, decoded_uid); err != nil {
 			return err
 		}
@@ -933,7 +932,7 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 		// Disable the other user's subscription to a disabled p2p topic.
 		if _, err = tx.Exec("UPDATE subscriptions AS s_one LEFT JOIN subscriptions AS s_two "+
 			"ON s_one.topic=s_two.topic "+
-			"SET s_two.updatedat=?, s_two.deletedat=? WHERE s_one.user=?",
+			"SET s_two.updatedat=?, s_two.deletedat=? WHERE s_one.userid=?",
 			now, now, decoded_uid); err != nil {
 			return err
 		}
@@ -968,7 +967,7 @@ func (a *adapter) topicStateForUser(tx *sqlx.Tx, decoded_uid int64, now time.Tim
 
 	// Change state of p2p topics with the user (p2p topic's owner is 0)
 	if _, err = tx.Exec("UPDATE topics LEFT JOIN subscriptions ON topics.name=subscriptions.topic "+
-		"SET topics.state=?, topics.stateat=? WHERE topics.owner=0 AND subscriptions.user=?",
+		"SET topics.state=?, topics.stateat=? WHERE topics.owner=0 AND subscriptions.userid=?",
 		state, now, decoded_uid); err != nil {
 		return err
 	}
@@ -992,7 +991,6 @@ func (a *adapter) UserUpdate(uid t.Uid, update map[string]interface{}) error {
 	cols, args := updateByMap(update)
 	decoded_uid := store.DecodeUid(uid)
 	args = append(args, decoded_uid)
-
 	_, err = tx.Exec("UPDATE users SET "+strings.Join(cols, ",")+" WHERE id=?", args...)
 	if err != nil {
 		return err
@@ -2373,7 +2371,6 @@ func (a *adapter) CredUpsert(cred *t.Credential) (bool, error) {
 	}
 	defer func() {
 		if err != nil {
-			log.Println("Rollback")
 			tx.Rollback()
 		}
 	}()
