@@ -25,6 +25,7 @@ func (authenticator) AddRecord(rec *auth.Rec, secret []byte) (*auth.Rec, error) 
 	if rec.AuthLevel == auth.LevelNone {
 		rec.AuthLevel = auth.LevelAnon
 	}
+	rec.State = types.StateOK
 	return rec, nil
 }
 

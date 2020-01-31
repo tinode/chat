@@ -222,18 +222,6 @@ func (a *authenticator) Authenticate(secret []byte) (*auth.Rec, []byte, error) {
 		return nil, nil, types.ErrFailed
 	}
 
-	// Check if user's account is suspended.
-	user, err := store.Users.Get(uid)
-	if err != nil {
-		return nil, nil, err
-	}
-	if user == nil {
-		return nil, nil, types.ErrNotFound
-	}
-	if user.State != types.StateOK {
-		return nil, nil, types.ErrPermissionDenied
-	}
-
 	var lifetime time.Duration
 	if !expires.IsZero() {
 		lifetime = time.Until(expires)
@@ -242,7 +230,8 @@ func (a *authenticator) Authenticate(secret []byte) (*auth.Rec, []byte, error) {
 		Uid:       uid,
 		AuthLevel: authLvl,
 		Lifetime:  lifetime,
-		Features:  0}, nil, nil
+		Features:  0,
+		State:     types.StateUndefined}, nil, nil
 }
 
 // IsUnique checks login uniqueness.

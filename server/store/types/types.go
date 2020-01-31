@@ -369,6 +369,7 @@ const (
 	StateOK        ObjState = 0
 	StateSuspended ObjState = 10
 	StateDeleted   ObjState = 20
+	StateUndefined ObjState = 30
 )
 
 // String returns string representation of ObjState.
@@ -377,9 +378,11 @@ func (os ObjState) String() string {
 	case StateOK:
 		return "ok"
 	case StateSuspended:
-		return "suspended"
+		return "susp"
 	case StateDeleted:
-		return "deleted"
+		return "del"
+	case StateUndefined:
+		return "undef"
 	}
 	return ""
 }
@@ -390,10 +393,12 @@ func NewObjState(in string) (ObjState, error) {
 	switch in {
 	case "", "ok":
 		return StateOK, nil
-	case "suspended":
+	case "susp":
 		return StateSuspended, nil
-	case "deleted":
+	case "del":
 		return StateDeleted, nil
+	case "undef":
+		return StateUndefined, nil
 	}
 	// This is the default.
 	return StateOK, errors.New("failed to parse object state")

@@ -786,7 +786,6 @@ func (a *adapter) UserGet(uid t.Uid) (*t.User, error) {
 		return nil, nil
 	}
 
-	// If user does not exist, it returns nil, nil
 	return nil, err
 }
 
@@ -947,26 +946,6 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 	}
 
 	return tx.Commit()
-}
-
-func (a *adapter) UserGetDisabled(since time.Time) ([]t.Uid, error) {
-	rows, err := a.db.Queryx("SELECT id FROM users WHERE state=? AND stateat>=?", t.StateDeleted, since)
-	if err != nil {
-		return nil, err
-	}
-
-	var uids []t.Uid
-	for rows.Next() {
-		var userId int64
-		if err = rows.Scan(&userId); err != nil {
-			uids = nil
-			break
-		}
-		uids = append(uids, store.EncodeUid(userId))
-	}
-	rows.Close()
-
-	return uids, err
 }
 
 // UserUpdate updates user object.

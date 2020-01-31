@@ -290,11 +290,6 @@ func (UsersObjMapper) Delete(id types.Uid, hard bool) error {
 	return adp.UserDelete(id, hard)
 }
 
-// GetDisabled returns user IDs which were disabled (soft-deleted) since specifid time.
-func (UsersObjMapper) GetDisabled(since time.Time) ([]types.Uid, error) {
-	return adp.UserGetDisabled(since)
-}
-
 // UpdateLastSeen updates LastSeen and UserAgent.
 func (UsersObjMapper) UpdateLastSeen(uid types.Uid, userAgent string, when time.Time) error {
 	return adp.UserUpdate(uid, map[string]interface{}{"LastSeen": when, "UserAgent": userAgent})

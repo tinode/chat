@@ -68,8 +68,9 @@ Request and response payloads are formatted as JSON. Some of the request or resp
       "authlvl": "auth",    // authentication level
       "lifetime": "10000s", // lifetime of this record
                             // see https://golang.org/pkg/time/#Duration for format.
-    	"features": 2,        // bitmap of features
-    	"tags": ["email:alice@example.com"] // Tags associated with this authentication record.
+       "features": 2,       // bitmap of features
+       "tags": ["email:alice@example.com"], // Tags associated with this authentication record.
+       "state": "ok",       // optional account state.
     }
   }
 }
@@ -88,8 +89,6 @@ Request and response payloads are formatted as JSON. Some of the request or resp
   "boolval": true,                  // boolean value, optional
   "strarr": ["abc", "def"],         // array of strings, optoional
   "newacc": {        // data to use for creating a new account.
-    // Optional account state.
-    state: "ok",
     // Default access mode
     "auth": "JRWPS",
     "anon": "N",
@@ -171,7 +170,8 @@ The server may optionally return a challenge as `byteval`.
 {
   "rec": {
     "uid": "LELEQHDWbgY",
-    "authlvl": "auth"
+    "authlvl": "auth",
+    "state": "ok"
   },
   "byteval": "9X6m3tWeBEMlDxlcFAABAAEAbVs"
 }
