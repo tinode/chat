@@ -717,28 +717,6 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 	return err
 }
 
-// UserGetDisabled returns ID of users who were soft-deleted since specified time.
-func (a *adapter) UserGetDisabled(since time.Time) ([]t.Uid, error) {
-	cursor, err := rdb.DB(a.dbName).Table("users").
-		Between(since, rdb.MaxVal, rdb.BetweenOpts{Index: "DeletedAt"}).Field("Id").Run(a.conn)
-	if err != nil {
-		return nil, err
-	}
-	defer cursor.Close()
-
-	var uids []t.Uid
-	var userId string
-	for cursor.Next(&userId) {
-		uids = append(uids, t.ParseUid(userId))
-	}
-
-	if err = cursor.Err(); err != nil {
-		return nil, err
-	}
-
-	return uids, nil
-}
-
 // UserUpdate updates user object.
 func (a *adapter) UserUpdate(uid t.Uid, update map[string]interface{}) error {
 	_, err := rdb.DB(a.dbName).Table("users").Get(uid.String()).Update(update).RunWrite(a.conn)
