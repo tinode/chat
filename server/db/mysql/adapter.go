@@ -544,7 +544,12 @@ func (a *adapter) UpgradeDb() error {
 			return err
 		}
 
-		if _, err := a.db.Exec("ALTER TABLE users ADD INDEX users_state_stateat(state, stateat)"); err != nil {
+		// Add status to formerly soft-deleted users.
+		if _, err := a.db.Exec("UPDATE users SET state=? WHERE stateat IS NOT NULL", t.StateDeleted); err != nil {
+			return err
+		}
+
+		if _, err := a.db.Exec("ALTER TABLE users ADD INDEX users_state(state)"); err != nil {
 			return err
 		}
 
@@ -557,7 +562,12 @@ func (a *adapter) UpgradeDb() error {
 			return err
 		}
 
-		if _, err := a.db.Exec("ALTER TABLE topics ADD INDEX topics_state_stateat(state, stateat)"); err != nil {
+		// Add status to formerly soft-deleted topics.
+		if _, err := a.db.Exec("UPDATE topics SET state=? WHERE stateat IS NOT NULL", t.StateDeleted); err != nil {
+			return err
+		}
+
+		if _, err := a.db.Exec("ALTER TABLE topics ADD INDEX topics_state(state)"); err != nil {
 			return err
 		}
 
@@ -1209,7 +1219,8 @@ func (a *adapter) TopicGet(topic string) (*t.Topic, error) {
 	// Fetch topic by name
 	var tt = new(t.Topic)
 	err := a.db.Get(tt,
-		"SELECT createdat,updatedat,state,stateat,touchedat,name AS id,access,owner,seqid,delid,public,tags FROM topics WHERE name=?",
+		"SELECT createdat,updatedat,state,stateat,touchedat,name AS id,access,owner,seqid,delid,public,tags "+
+			"FROM topics WHERE name=?",
 		topic)
 
 	if err != nil {
@@ -1234,7 +1245,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 		readseqid,modewant,modegiven,private FROM subscriptions WHERE userid=?`
 	args := []interface{}{store.DecodeUid(uid)}
 	if !keepDeleted {
-		// Filter out rows with state == deleted.
+		// Filter out deleted rows.
 		q += " AND deletedat IS NULL"
 	}
 

@@ -127,7 +127,7 @@ CREATE TABLE subscriptions(
 	FOREIGN KEY(userid) REFERENCES users(id),
 	UNIQUE INDEX subscriptions_topic_userid(topic, userid),
 	INDEX subscriptions_topic(topic),
-	INDEX subscriptions_state_stateat(state, stateat)
+	INDEX subscriptions_deletedat(deletedat)
 );
 
 # Messages

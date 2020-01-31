@@ -228,11 +228,11 @@ func (a *adapter) CreateDb(reset bool) error {
 	if _, err := rdb.DB(a.dbName).TableCreate("users", rdb.TableCreateOpts{PrimaryKey: "Id"}).RunWrite(a.conn); err != nil {
 		return err
 	}
-	// Create secondary index on User.DeletedAt for finding soft-deleted users
-	if _, err := rdb.DB(a.dbName).Table("users").IndexCreate("DeletedAt").RunWrite(a.conn); err != nil {
+	// Create secondary index on State for finding suspended and soft-deleted users.
+	if _, err := rdb.DB(a.dbName).Table("users").IndexCreate("State").RunWrite(a.conn); err != nil {
 		return err
 	}
-	// Create secondary index on User.Tags array so user can be found by tags
+	// Create secondary index on User.Tags array so user can be found by tags.
 	if _, err := rdb.DB(a.dbName).Table("users").IndexCreate("Tags", rdb.IndexCreateOpts{Multi: true}).RunWrite(a.conn); err != nil {
 		return err
 	}
@@ -273,6 +273,10 @@ func (a *adapter) CreateDb(reset bool) error {
 	}
 	// Secondary index on Owner field for deleting users.
 	if _, err := rdb.DB(a.dbName).Table("topics").IndexCreate("Owner").RunWrite(a.conn); err != nil {
+		return err
+	}
+	// Create secondary index on State for finding suspended and soft-deleted topics.
+	if _, err := rdb.DB(a.dbName).Table("topics").IndexCreate("State").RunWrite(a.conn); err != nil {
 		return err
 	}
 	// Secondary index on Topic.Tags array so topics can be found by tags.
@@ -405,6 +409,69 @@ func (a *adapter) UpgradeDb() error {
 		// Bumping version to keep RDB in sync with MySQL versions.
 
 		if err := bumpVersion(a, 110); err != nil {
+			return err
+		}
+	}
+
+	if a.version == 110 {
+		// Perform database upgrade from versions 110 to version 111.
+
+		// Users
+
+		// Add StatusDeleted to all deleted users as indicated by DeletedAt not being null.
+		if _, err := rdb.DB(a.dbName).Table("users").
+			Between(rdb.MinVal, rdb.MaxVal, rdb.BetweenOpts{Index: "DeletedAt"}).
+			Update(map[string]interface{}{"State": t.StateDeleted}).
+			RunWrite(a.conn); err != nil {
+			return err
+		}
+
+		// Rename DeletedAt into StateAt. Update only those rows which have defined DeletedAt.
+		if _, err := rdb.DB(a.dbName).Table("users").
+			Between(rdb.MinVal, rdb.MaxVal, rdb.BetweenOpts{Index: "DeletedAt"}).
+			Replace(func(row rdb.Term) rdb.Term {
+				return row.Without("DeletedAt").
+					Merge(map[string]interface{}{"StateAt": row.Field("DeletedAt")})
+			}); err != nil {
+			return err
+		}
+
+		// Drop secondary index DeletedAt.
+		if _, err := rdb.DB(a.dbName).Table("users").IndexDrop("DeletedAt").RunWrite(a.conn); err != nil {
+			return err
+		}
+
+		// Create secondary index on State for finding suspended and soft-deleted topics.
+		if _, err := rdb.DB(a.dbName).Table("users").IndexCreate("State").RunWrite(a.conn); err != nil {
+			return err
+		}
+
+		// Topics
+
+		// Add StateDeleted to all topics with DeletedAt not null.
+		if _, err := rdb.DB(a.dbName).Table("topics").
+			Between(rdb.MinVal, rdb.MaxVal, rdb.BetweenOpts{Index: "DeletedAt"}).
+			Update(map[string]interface{}{"State": t.StateDeleted}).
+			RunWrite(a.conn); err != nil {
+			return err
+		}
+
+		// Rename DeletedAt into StateAt. Update only those rows which have defined DeletedAt.
+		if _, err := rdb.DB(a.dbName).Table("topics").
+			Between(rdb.MinVal, rdb.MaxVal, rdb.BetweenOpts{Index: "DeletedAt"}).
+			Replace(func(row rdb.Term) rdb.Term {
+				return row.Without("DeletedAt").
+					Merge(map[string]interface{}{"StateAt": row.Field("DeletedAt")})
+			}); err != nil {
+			return err
+		}
+
+		// Create secondary index on State for finding suspended and soft-deleted topics.
+		if _, err := rdb.DB(a.dbName).Table("topics").IndexCreate("State").RunWrite(a.conn); err != nil {
+			return err
+		}
+
+		if err := bumpVersion(a, 111); err != nil {
 			return err
 		}
 	}
