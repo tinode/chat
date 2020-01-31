@@ -148,7 +148,7 @@ Each user is assigned a unique ID. The IDs are composed as `usr` followed by bas
 
 * `created`: timestamp when the user record was created
 * `updated`: timestamp of when user's `public` was last updated
-* `status`: state of the account; two states are currently defined: `ok` and `suspended`
+* `status`: state of the account
 * `username`: unique string used in `basic` authentication; username is not accessible to other users
 * `defacs`: object describing user's default access mode for peer to peer conversations with authenticated and anonymous users; see [Access control](#access-control) for details
   * `auth`: default access mode for authenticated `auth` users
@@ -157,9 +157,13 @@ Each user is assigned a unique ID. The IDs are composed as `usr` followed by bas
 * `private`: an application-defined object that is unique to the current user and accessible only by the user.
 * `tags`: [discovery](#fnd-and-tags-finding-users-and-topics) and credentials.
 
-A user account has a state. By default the state is `ok` which means the account is not restricted in any way and can be used normally. The other state is `suspended` which will prevent the user from accessing the account.
+User's account has a state. The following states are defined:
+ * `ok` (normal): the default state which means the account is not restricted in any way and can be used normally;
+ * `susp` (suspended): the user is prevented from accessing the account as well as not found through [search](#fnd-and-tags-finding-users-and-topics); the state can be assigned by the administrator and fully reversible.
+ * `del` (soft-deleted): user is marked as deleted but user's data is retained; un-deleting the user is not currenly supported.
+ * `undef` (undefined): used internally by authenticators; should not be used elsewhere.
 
-A user may maintain multiple simultaneous connections (sessions) with the server. Each session is tagged with a client-provided `User Agent` string intended to differentiate client software.
+A user may maintain multisple simultaneous connections (sessions) with the server. Each session is tagged with a client-provided `User Agent` string intended to differentiate client software.
 
 Logging out is not supported by design. If an application needs to change the user, it should open a new connection and authenticate it with the new user credentials.
 

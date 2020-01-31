@@ -697,18 +697,15 @@ func (s *Session) login(msg *ClientComMessage) {
 		return
 	}
 
-	// If authenticator did not check user state, it returns state "undef".
-	// Then the user state is checked here.
+	// If authenticator did not check user state, it returns state "undef". If so, check user state here.
 	if rec.State == types.StateUndefined {
-		// Check if user's account is suspended.
-		user, err := store.Users.Get(rec.Uid)
-		if err == nil {
-			if user == nil {
-				err = types.ErrUserNotFound
-			} else if user.State != types.StateOK {
-				err = types.ErrPermissionDenied
-			}
-		}
+		rec.State, err = userGetState(rec.Uid)
+	}
+	if err == nil && rec.State != types.StateOK {
+		err = types.ErrPermissionDenied
+	}
+
+	if err != nil {
 		log.Println("s.login: user state check failed", rec.Uid, err, s.sid)
 		s.queueOut(decodeStoreError(err, msg.id, "", msg.timestamp, nil))
 		return

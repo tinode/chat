@@ -50,7 +50,7 @@ func replyCreateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 		}
 
 		state, err := types.NewObjState(msg.Acc.State)
-		if err != nil {
+		if err != nil || state == types.StateUndefined {
 			log.Println("create user: invalid account state", err, s.sid)
 			s.queueOut(ErrMalformed(msg.id, "", msg.timestamp))
 			return
@@ -490,14 +490,14 @@ func deleteCred(uid types.Uid, authLvl auth.Level, cred *MsgCredClient) ([]strin
 }
 
 // Change user state: suspended/normal (ok).
-// 1. Disable/enable logins.
-// 2. If disabling, evict user's sessions.
+// 1. Not needed -- Disable/enable logins (state checked after login).
+// 2. If suspending, evict user's sessions. Skip this step if resuming.
 // 3. Suspend/activate p2p with the user.
 // 4. Suspend/activate grp topics where the user is the owner.
 // 5. Update user's DB record.
 func changeUserState(s *Session, uid types.Uid, user *types.User, msg *ClientComMessage) (bool, error) {
 	state, err := types.NewObjState(msg.Acc.State)
-	if err != nil {
+	if err != nil || state == types.StateUndefined {
 		log.Println("replyUpdateUser: invalid account state", s.sid)
 		return false, types.ErrMalformed
 	}
@@ -505,12 +505,6 @@ func changeUserState(s *Session, uid types.Uid, user *types.User, msg *ClientCom
 	// State unchanged.
 	if user.State == state {
 		return false, nil
-	}
-
-	// TODO: Disable/enable all authenticators.
-	authnames := store.GetAuthNames()
-	for _, name := range authnames {
-		log.Println("changeUserState: TODO change auth", uid.UserId(), name, state, s.sid)
 	}
 
 	if state != types.StateOK {
@@ -521,12 +515,8 @@ func changeUserState(s *Session, uid types.Uid, user *types.User, msg *ClientCom
 	// Update state of all loaded in memory user's p2p & grp-owner topics.
 	globals.hub.meta <- &metaReq{forUser: uid, state: state, sess: s}
 
-	// TODO: Suspend/activate p2p with the user.
-
-	// TODO: Suspend/activate grp topics where the user is the owner.
-
 	user.State = state
-	err = store.Users.Update(uid, map[string]interface{}{"State": user.State})
+	err = store.Users.UpdateState(uid, user.State)
 	return true, err
 }
 
@@ -610,6 +600,18 @@ func replyDelUser(s *Session, msg *ClientComMessage) {
 		// Evict the current session if it belongs to the deleted user.
 		s.stop <- s.serialize(NoErrEvicted("", "", msg.timestamp))
 	}
+}
+
+// Read user's state from DB.
+func userGetState(uid types.Uid) (types.ObjState, error) {
+	user, err := store.Users.Get(uid)
+	if err != nil {
+		return types.StateUndefined, err
+	}
+	if user == nil {
+		return types.StateUndefined, types.ErrUserNotFound
+	}
+	return user.State, nil
 }
 
 // UserCacheReq contains data which mutates one or more user cache entries.

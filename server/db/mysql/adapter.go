@@ -948,6 +948,34 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 	return tx.Commit()
 }
 
+// topicStateForUser is called by UserUpdate when the update contains state change.
+func (a *adapter) topicStateForUser(tx *sqlx.Tx, decoded_uid int64, now time.Time, update interface{}) error {
+	var err error
+
+	state, ok := update.(t.ObjState)
+	if !ok {
+		return t.ErrMalformed
+	}
+
+	if now.IsZero() {
+		now = t.TimeNow()
+	}
+
+	// Change state of all topics where the user is the owner.
+	if _, err = tx.Exec("UPDATE topics SET state=?, stateat=? WHERE owner=?", state, now, decoded_uid); err != nil {
+		return err
+	}
+
+	// Change state of p2p topics with the user (p2p topic's owner is 0)
+	if _, err = tx.Exec("UPDATE topics LEFT JOIN subscriptions ON topics.name=subscriptions.topic "+
+		"SET topics.state=?, topics.stateat=? WHERE topics.owner=0 AND subscriptions.user=?",
+		state, now, decoded_uid); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // UserUpdate updates user object.
 func (a *adapter) UserUpdate(uid t.Uid, update map[string]interface{}) error {
 	tx, err := a.db.Beginx()
@@ -968,6 +996,14 @@ func (a *adapter) UserUpdate(uid t.Uid, update map[string]interface{}) error {
 	_, err = tx.Exec("UPDATE users SET "+strings.Join(cols, ",")+" WHERE id=?", args...)
 	if err != nil {
 		return err
+	}
+
+	if state, ok := update["State"]; ok {
+		now, _ := update["StateAt"].(time.Time)
+		err = a.topicStateForUser(tx, decoded_uid, now, state)
+		if err != nil {
+			return err
+		}
 	}
 
 	// Tags are also stored in a separate table
