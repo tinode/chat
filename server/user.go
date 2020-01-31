@@ -50,7 +50,7 @@ func replyCreateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 		}
 
 		state, err := types.NewObjState(msg.Acc.State)
-		if err != nil || state == types.StateUndefined {
+		if err != nil || state == types.StateUndefined || state == types.StateDeleted {
 			log.Println("create user: invalid account state", err, s.sid)
 			s.queueOut(ErrMalformed(msg.id, "", msg.timestamp))
 			return
