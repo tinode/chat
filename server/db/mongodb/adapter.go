@@ -345,7 +345,7 @@ func (a *adapter) CreateDb(reset bool) error {
 	return nil
 }
 
-// TODO: UpgradeDb upgrades database to the current adapter version.
+// UpgradeDb upgrades database to the current adapter version.
 func (a *adapter) UpgradeDb() error {
 	return nil
 }
