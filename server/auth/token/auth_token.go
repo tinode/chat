@@ -124,8 +124,6 @@ func (ta *authenticator) Authenticate(token []byte) (*auth.Rec, []byte, error) {
 		return nil, nil, types.ErrExpired
 	}
 
-	// TODO: Check if the user is disabled.
-
 	return &auth.Rec{
 		Uid:       types.Uid(tl.Uid),
 		AuthLevel: auth.Level(tl.AuthLevel),
