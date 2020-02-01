@@ -2530,6 +2530,8 @@ func (t *Topic) makePushReceipt(fromUid types.Uid, data *MsgServerData) *push.Re
 	receipt := push.Receipt{
 		To: make(map[types.Uid]push.Recipient, t.subsCount()),
 		Payload: push.Payload{
+			What:      push.ActMsg,
+			Silent:    false,
 			Topic:     topic,
 			From:      data.From,
 			Timestamp: data.Timestamp,

@@ -9,6 +9,14 @@ import (
 	t "github.com/tinode/chat/server/store/types"
 )
 
+// Push actions
+const (
+	// New message.
+	ActMsg = "msg"
+	// New subscription.
+	ActSub = "sub"
+)
+
 // Recipient is a user targeted by the push.
 type Recipient struct {
 	// Count of user's connections that were live when the packet was dispatched from the server
@@ -52,7 +60,7 @@ type Handler interface {
 	// Init initializes the handler.
 	Init(jsonconf string) error
 
-	// IsReady сheckы if the handler is initialized.
+	// IsReady сhecks if the handler is initialized.
 	IsReady() bool
 
 	// Push returns a channel that the server will use to send messages to.
