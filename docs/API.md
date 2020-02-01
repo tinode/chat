@@ -14,6 +14,7 @@
 			- [Logging in](#logging-in)
 			- [Changing Authentication Parameters](#changing-authentication-parameters)
 			- [Resetting a Password, i.e. "Forgot Password"](#resetting-a-password-ie-forgot-password)
+		- [Suspending a User](#suspending-a-user)
 		- [Credential Validation](#credential-validation)
 		- [Access Control](#access-control)
 	- [Topics](#topics)
@@ -145,19 +146,27 @@ When a connection is first established, the client application can send either a
 
 Each user is assigned a unique ID. The IDs are composed as `usr` followed by base64-encoded 64-bit numeric value, e.g. `usr2il9suCbuko`. Users also have the following properties:
 
-* created: timestamp when the user record was created
-* updated: timestamp of when user's `public` was last updated
-* username: unique string used in `basic` authentication; username is not accessible to other users
-* defacs: object describing user's default access mode for peer to peer conversations with authenticated and anonymous users; see [Access control](#access-control) for details
-  * auth: default access mode for authenticated `auth` users
-  * anon: default access for anonymous `anon` users
-* public: an application-defined object that describes the user. Anyone who can query user for `public` data.
-* private: an application-defined object that is unique to the current user and accessible only by the user.
-* tags: [discovery](#fnd-and-tags-finding-users-and-topics) and credentials.
+* `created`: timestamp when the user record was created
+* `updated`: timestamp of when user's `public` was last updated
+* `status`: state of the account
+* `username`: unique string used in `basic` authentication; username is not accessible to other users
+* `defacs`: object describing user's default access mode for peer to peer conversations with authenticated and anonymous users; see [Access control](#access-control) for details
+  * `auth`: default access mode for authenticated `auth` users
+  * `anon`: default access for anonymous `anon` users
+* `public`: an application-defined object that describes the user. Anyone who can query user for `public` data.
+* `private`: an application-defined object that is unique to the current user and accessible only by the user.
+* `tags`: [discovery](#fnd-and-tags-finding-users-and-topics) and credentials.
 
-A user may maintain multiple simultaneous connections (sessions) with the server. Each session is tagged with a client-provided `User Agent` string intended to differentiate client software.
+User's account has a state. The following states are defined:
+ * `ok` (normal): the default state which means the account is not restricted in any way and can be used normally;
+ * `susp` (suspended): the user is prevented from accessing the account as well as not found through [search](#fnd-and-tags-finding-users-and-topics); the state can be assigned by the administrator and fully reversible.
+ * `del` (soft-deleted): user is marked as deleted but user's data is retained; un-deleting the user is not currenly supported.
+ * `undef` (undefined): used internally by authenticators; should not be used elsewhere.
+
+A user may maintain multisple simultaneous connections (sessions) with the server. Each session is tagged with a client-provided `User Agent` string intended to differentiate client software.
 
 Logging out is not supported by design. If an application needs to change the user, it should open a new connection and authenticate it with the new user credentials.
+
 
 ### Authentication
 
@@ -223,6 +232,21 @@ where `jdoe@example.com` is an earlier validated user's email.
 
 If the email matches the registration, the server will send a message using specified method and address with instructions for resetting the secret. The email contains a restricted security token which the user can include into an `{acc}` request with the new secret as described in [Changing Authentication Parameters](#changing-authentication-parameters).
 
+### Suspending a User
+
+User's account can be suspended by service administrator. Once the account is suspended, the user is no longer able to login and use the service.
+
+Only the `root` user may suspend the account. To suspend the account the root user sends the following message:
+```js
+acc: {
+  id: "1a2b3", // string, client-provided message id, optional
+  user: "usr2il9suCbuko", // user being affected by the change
+  status: "suspended"
+}
+```
+Sending the same message with `status: "ok"` un-suspends the account. A root user may check account status by executing `{get what="desc"}` command against user's `me` topic.
+
+
 ### Credential Validation
 
 Server may be optionally configured to require validation of certain credentials associated with the user accounts and authentication scheme. For instance, it's possible to require user to provide a unique email or a phone number, or to solve a captcha as a condition of account registration.
@@ -263,21 +287,22 @@ Access permissions can be assigned on a per-user basis by `{set}` messages.
 Topic is a named communication channel for one or more people. Topics have persistent properties. These topic properties can be queried by `{get what="desc"}` message.
 
 Topic properties independent of the user making the query:
-* created: timestamp of topic creation time
-* updated: timestamp of when topic's `public` or `private` was last updated
-* defacs: object describing topic's default access mode for authenticated and anonymous users; see [Access control](#access-control) for details
- * auth: default access mode for authenticated users
- * anon: default access for anonymous users
-* seq: integer server-issued sequential ID of the latest `{data}` message sent through the topic
-* public: an application-defined object that describes the topic. Anyone who can subscribe to topic can receive topic's `public` data.
+* `created`: timestamp of topic creation time
+* `updated`: timestamp of when topic's `public` or `private` was last updated
+* `touched`: timestamp of the last message sent to the topic
+* `defacs`: object describing topic's default access mode for authenticated and anonymous users; see [Access control](#access-control) for details
+ * `auth`: default access mode for authenticated users
+ * `anon`: default access for anonymous users
+* `seq`: integer server-issued sequential ID of the latest `{data}` message sent through the topic
+* `public`: an application-defined object that describes the topic. Anyone who can subscribe to topic can receive topic's `public` data.
 
 User-dependent topic properties:
-* acs: object describing given user's current access permissions; see [Access control](#access-control) for details
- * want: access permission requested by this user
- * given: access permissions given to this user
-* private: an application-defined object that is unique to the current user.
+* `acs`: object describing given user's current access permissions; see [Access control](#access-control) for details
+ * `want`: access permission requested by this user
+ * `given`: access permissions given to this user
+* `private`: an application-defined object that is unique to the current user.
 
-Topic usually have subscribers. One the the subscribers may be designated as topic owner (`O` access permission) with full access permissions. The list of subscribers can be queries with a `{get what="sub"}` message. The list of subscribers is returned in a `sub` section of a `{meta}` message.
+Topic usually have subscribers. One of the subscribers may be designated as topic owner (`O` access permission) with full access permissions. The list of subscribers can be queries with a `{get what="sub"}` message. The list of subscribers is returned in a `sub` section of a `{meta}` message.
 
 ### `me` Topic
 
@@ -596,6 +621,7 @@ acc: {
   user: "new", // string, "new" to create a new user, default: current user, optional
   token: "XMgS...8+BO0=", // string, authentication token to use for the request if the
                // session is not authenticated, optional
+  status: "ok", // change user's status; no default value, optional.
   scheme: "basic", // authentication scheme for this account, required;
                // "basic" and "anon" are currently supported for account creation.
   secret: base64encode("username:password"), // string, base64 encoded secret for the chosen
@@ -1082,6 +1108,8 @@ meta: {
   desc: {
     created: "2015-10-24T10:26:09.716Z",
     updated: "2015-10-24T10:26:09.716Z",
+    status: "ok", // account status; included for `me` topic only, and only if
+                  // the request is sent by a root-authenticated session.
     defacs: { // topic's default access permissions; present only if the current
               //user has 'S' permission
       auth: "JRWP", // default access for authenticated users

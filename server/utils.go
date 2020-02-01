@@ -3,10 +3,12 @@
 package main
 
 import (
+	"bufio"
 	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"path/filepath"
 	"reflect"
 	"regexp"
@@ -733,4 +735,39 @@ func mergeMaps(dst, src map[string]interface{}) (map[string]interface{}, bool) {
 	}
 
 	return dst, changed
+}
+
+// Calculate line and character position from byte offset into a file.
+func offsetToLineAndChar(r io.Reader, offset int64) (int, int, error) {
+	if offset < 0 {
+		return -1, -1, errors.New("offset value cannot be negative")
+	}
+
+	br := bufio.NewReader(r)
+
+	// Count lines and characters.
+	lnum := 1
+	cnum := 0
+	// Number of bytes consumed.
+	var count int64
+	for {
+		ch, size, err := br.ReadRune()
+		if err == io.EOF {
+			return -1, -1, errors.New("offset value too large")
+		}
+		count += int64(size)
+
+		if ch == '\n' {
+			lnum++
+			cnum = 0
+		} else {
+			cnum++
+		}
+
+		if count >= offset {
+			break
+		}
+	}
+
+	return lnum, cnum, nil
 }

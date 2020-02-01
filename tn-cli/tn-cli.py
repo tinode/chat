@@ -37,7 +37,7 @@ from tinode_grpc import pb
 from tinode_grpc import pbx
 
 APP_NAME = "tn-cli"
-APP_VERSION = "1.2.1"
+APP_VERSION = "1.3.0"
 PROTOCOL_VERSION = "0"
 LIB_VERSION = pkg_resources.get_distribution("tinode_grpc").version
 GRPC_VERSION = pkg_resources.get_distribution("grpcio").version
@@ -317,24 +317,33 @@ def stdin(InputQueue):
 def hiMsg(id):
     OnCompletion[str(id)] = lambda params: print_server_params(params)
     return pb.ClientMsg(hi=pb.ClientHi(id=str(id), user_agent=APP_NAME + "/" + APP_VERSION + " (" +
-        platform.system() + "/" + platform.release() + "); gRPC-python/" + LIB_VERSION + "-" + GRPC_VERSION,
+        platform.system() + "/" + platform.release() + "); gRPC-python/" + LIB_VERSION + "+" + GRPC_VERSION,
         ver=LIB_VERSION, lang="EN"))
 
 # {acc}
 def accMsg(id, cmd, ignored):
     if cmd.uname:
+        cmd.scheme = 'basic'
         if cmd.password == None:
             cmd.password = ''
         cmd.secret = str(cmd.uname) + ":" + str(cmd.password)
 
     if cmd.secret:
+        if cmd.scheme == None:
+            cmd.scheme = 'basic'
         cmd.secret = cmd.secret.encode('utf-8')
     else:
         cmd.secret = b''
 
+    state = None
+    if cmd.suspend == 'true':
+        state = 'susp'
+    elif cmd.suspend == 'false':
+        state = 'ok'
+
     cmd.public = encode_to_bytes(make_vcard(cmd.fn, cmd.photo))
     cmd.private = encode_to_bytes(cmd.private)
-    return pb.ClientMsg(acc=pb.ClientAcc(id=str(id), user_id=cmd.user,
+    return pb.ClientMsg(acc=pb.ClientAcc(id=str(id), user_id=cmd.user, state=state,
         scheme=cmd.scheme, secret=cmd.secret, login=cmd.do_login, tags=cmd.tags.split(",") if cmd.tags else None,
         desc=pb.SetDesc(default_acs=pb.DefaultAcsMode(auth=cmd.auth, anon=cmd.anon),
             public=cmd.public, private=cmd.private),
@@ -549,7 +558,7 @@ def parse_cmd(parts):
     if parts[0] == "acc":
         parser = argparse.ArgumentParser(prog=parts[0], description='Create or alter an account')
         parser.add_argument('--user', default='new', help='ID of the account to update')
-        parser.add_argument('--scheme', default='basic', help='authentication scheme, default=basic')
+        parser.add_argument('--scheme', default=None, help='authentication scheme, default=basic')
         parser.add_argument('--secret', default=None, help='secret for authentication')
         parser.add_argument('--uname', default=None, help='user name for basic authentication')
         parser.add_argument('--password', default=None, help='password for basic authentication')
@@ -561,6 +570,7 @@ def parse_cmd(parts):
         parser.add_argument('--auth', default=None, help='default access mode for authenticated users')
         parser.add_argument('--anon', default=None, help='default access mode for anonymous users')
         parser.add_argument('--cred', default=None, help='credentials, comma separated list in method:value format, e.g. email:test@example.com,tel:12345')
+        parser.add_argument('--suspend', default=None, help='true to suspend the account, false to un-suspend')
     elif parts[0] == "del":
         parser = argparse.ArgumentParser(prog=parts[0], description='Delete message(s), subscription, topic, user')
         parser.add_argument('what', default=None, help='what to delete')
@@ -982,7 +992,7 @@ def save_cookie(params):
 def print_server_params(params):
     servParams = []
     for p in params:
-        servParams.append(p + ": " + json.loads(params[p]))
+        servParams.append(p + ": " + str(json.loads(params[p])))
     stdoutln("\r<= Connected to server: " + "; ".join(servParams))
 
 if __name__ == '__main__':

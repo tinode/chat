@@ -39,6 +39,25 @@ func replyCreateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 	var user types.User
 	var private interface{}
 
+	// If account state is being assigned, make sure the sender is a root user.
+	if msg.Acc.State != "" {
+		if auth.Level(msg.authLvl) != auth.LevelRoot {
+			log.Println("create user: attempt to set account state by non-root", s.sid)
+			msg := ErrPermissionDenied(msg.id, "", msg.timestamp)
+			msg.Ctrl.Params = map[string]interface{}{"what": "state"}
+			s.queueOut(msg)
+			return
+		}
+
+		state, err := types.NewObjState(msg.Acc.State)
+		if err != nil || state == types.StateUndefined || state == types.StateDeleted {
+			log.Println("create user: invalid account state", err, s.sid)
+			s.queueOut(ErrMalformed(msg.id, "", msg.timestamp))
+			return
+		}
+		user.State = state
+	}
+
 	// Ensure tags are unique and not restricted.
 	if tags := normalizeTags(msg.Acc.Tags); tags != nil {
 		if !restrictedTagsEqual(tags, nil, globals.immutableTagNS) {
@@ -202,10 +221,17 @@ func replyUpdateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 	}
 
 	uid := types.ParseUserId(userId)
-	if uid.IsZero() || authLvl == auth.LevelNone {
-		// Either msg.Acc.User or msg.Acc.AuthLevel contains invalid data.
+	if uid.IsZero() {
+		// msg.Acc.User contains invalid data.
 		s.queueOut(ErrMalformed(msg.id, "", msg.timestamp))
-		log.Println("replyUpdateUser: either user id or auth level is missing", s.sid)
+		log.Println("replyUpdateUser: user id is invalid or missing", s.sid)
+		return
+	}
+
+	// Only root can suspend accounts, including own account.
+	if msg.Acc.State != "" && s.authLvl != auth.LevelRoot {
+		s.queueOut(ErrPermissionDenied(msg.id, "", msg.timestamp))
+		log.Println("replyUpdateUser: attempt to change account state by non-root", s.sid)
 		return
 	}
 
@@ -223,6 +249,12 @@ func replyUpdateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 	if msg.Acc.Scheme != "" {
 		err = updateUserAuth(msg, user, rec)
 	} else if len(msg.Acc.Cred) > 0 {
+		if authLvl == auth.LevelNone {
+			// msg.Acc.AuthLevel contains invalid data.
+			s.queueOut(ErrMalformed(msg.id, "", msg.timestamp))
+			log.Println("replyUpdateUser: auth level is missing", s.sid)
+			return
+		}
 		// Handle request to update credentials.
 		tmpToken, _, _ := store.GetLogicalAuthHandler("token").GenSecret(&auth.Rec{
 			Uid:       uid,
@@ -241,6 +273,13 @@ func replyUpdateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 					params = map[string]interface{}{"cred": missing}
 				}
 			}
+		}
+	} else if msg.Acc.State != "" {
+		var changed bool
+		changed, err = changeUserState(s, uid, user, msg)
+		if !changed && err == nil {
+			s.queueOut(InfoNotModified(msg.id, "", msg.timestamp))
+			return
 		}
 	} else {
 		err = types.ErrMalformed
@@ -448,6 +487,41 @@ func deleteCred(uid types.Uid, authLvl auth.Level, cred *MsgCredClient) ([]strin
 	return tags, nil
 }
 
+// Change user state: suspended/normal (ok).
+// 1. Not needed -- Disable/enable logins (state checked after login).
+// 2. If suspending, evict user's sessions. Skip this step if resuming.
+// 3. Suspend/activate p2p with the user.
+// 4. Suspend/activate grp topics where the user is the owner.
+// 5. Update user's DB record.
+func changeUserState(s *Session, uid types.Uid, user *types.User, msg *ClientComMessage) (bool, error) {
+	state, err := types.NewObjState(msg.Acc.State)
+	if err != nil || state == types.StateUndefined {
+		log.Println("replyUpdateUser: invalid account state", s.sid)
+		return false, types.ErrMalformed
+	}
+
+	// State unchanged.
+	if user.State == state {
+		return false, nil
+	}
+
+	if state != types.StateOK {
+		// Terminate all sessions.
+		globals.sessionStore.EvictUser(uid, "")
+	}
+
+	err = store.Users.UpdateState(uid, state)
+	if err != nil {
+		return false, err
+	}
+
+	// Update state of all loaded in memory user's p2p & grp-owner topics.
+	globals.hub.meta <- &metaReq{forUser: uid, state: state, sess: s}
+	user.State = state
+
+	return true, err
+}
+
 // Request to delete a user:
 // 1. Disable user's login
 // 2. Terminate all user's sessions except the current session.
@@ -511,6 +585,8 @@ func replyDelUser(s *Session, msg *ClientComMessage) {
 			log.Println("replyDelUser: failed to send notifications to owned topics", err, s.sid)
 		}
 
+		// TODO: suspend all P2P topics with the user.
+
 		// Delete user's records from the database.
 		if err := store.Users.Delete(uid, msg.Del.Hard); err != nil {
 			reply = decodeStoreError(err, msg.id, "", msg.timestamp, nil)
@@ -526,6 +602,18 @@ func replyDelUser(s *Session, msg *ClientComMessage) {
 		// Evict the current session if it belongs to the deleted user.
 		s.stop <- s.serialize(NoErrEvicted("", "", msg.timestamp))
 	}
+}
+
+// Read user's state from DB.
+func userGetState(uid types.Uid) (types.ObjState, error) {
+	user, err := store.Users.Get(uid)
+	if err != nil {
+		return types.StateUndefined, err
+	}
+	if user == nil {
+		return types.StateUndefined, types.ErrUserNotFound
+	}
+	return user.State, nil
 }
 
 // UserCacheReq contains data which mutates one or more user cache entries.

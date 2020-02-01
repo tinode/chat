@@ -290,11 +290,6 @@ func (UsersObjMapper) Delete(id types.Uid, hard bool) error {
 	return adp.UserDelete(id, hard)
 }
 
-// GetDisabled returns user IDs which were disabled (soft-deleted) since specifid time.
-func (UsersObjMapper) GetDisabled(since time.Time) ([]types.Uid, error) {
-	return adp.UserGetDisabled(since)
-}
-
 // UpdateLastSeen updates LastSeen and UserAgent.
 func (UsersObjMapper) UpdateLastSeen(uid types.Uid, userAgent string, when time.Time) error {
 	return adp.UserUpdate(uid, map[string]interface{}{"LastSeen": when, "UserAgent": userAgent})
@@ -313,8 +308,16 @@ func (UsersObjMapper) UpdateTags(uid types.Uid, add, remove, reset []string) ([]
 	return adp.UserUpdateTags(uid, add, remove, reset)
 }
 
-// GetSubs loads a list of subscriptions for the given user. Does not load Public, does not load
-// deleted subscriptions.
+// UpdateState changes user's state and state of some topics associated with the user.
+func (UsersObjMapper) UpdateState(uid types.Uid, state types.ObjState) error {
+	update := map[string]interface{}{
+		"State":   state,
+		"StateAt": types.TimeNow()}
+	return adp.UserUpdate(uid, update)
+}
+
+// GetSubs loads a list of subscriptions for the given user.
+// Does not load Public, does not load deleted subscriptions.
 func (UsersObjMapper) GetSubs(id types.Uid, opts *types.QueryOpt) ([]types.Subscription, error) {
 	return adp.SubsForUser(id, false, opts)
 }
@@ -443,7 +446,7 @@ func (TopicsObjMapper) GetUsersAny(topic string, opts *types.QueryOpt) ([]types.
 }
 
 // GetSubs loads a list of subscriptions to the given topic, user.Public and deleted
-// subscriptions are not loaded
+// subscriptions are not loaded. Suspended subscriptions are loaded.
 func (TopicsObjMapper) GetSubs(topic string, opts *types.QueryOpt) ([]types.Subscription, error) {
 	return adp.SubsForTopic(topic, false, opts)
 }

@@ -230,7 +230,8 @@ func (a *authenticator) Authenticate(secret []byte) (*auth.Rec, []byte, error) {
 		Uid:       uid,
 		AuthLevel: authLvl,
 		Lifetime:  lifetime,
-		Features:  0}, nil, nil
+		Features:  0,
+		State:     types.StateUndefined}, nil, nil
 }
 
 // IsUnique checks login uniqueness.

@@ -90,7 +90,7 @@ func (t *Topic) loadContacts(uid types.Uid) error {
 // "+dis" disable subscription withot removing it, the opposite of "en".
 // The "+en/rem/dis" command itself is stripped from the notification.
 func (t *Topic) presProcReq(fromUserID, what string, wantReply bool) string {
-	if !t.isActive() {
+	if t.isInactive() {
 		return ""
 	}
 

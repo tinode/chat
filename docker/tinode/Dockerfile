@@ -11,7 +11,7 @@
 
 FROM alpine:latest
 
-ARG VERSION=0.16.2
+ARG VERSION=0.16.3
 ENV VERSION=$VERSION
 
 LABEL maintainer="Tinode Team <info@tinode.co>"

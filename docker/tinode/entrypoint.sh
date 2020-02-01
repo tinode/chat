@@ -57,7 +57,15 @@ fi
 # If push notifications are enabled, generate client-side firebase config file.
 if [ ! -z "$FCM_PUSH_ENABLED" ] ; then
 	# Write client config to $STATIC_DIR/firebase-init.js
-	echo "const FIREBASE_INIT={messagingSenderId: \"$FCM_SENDER_ID\", messagingVapidKey: \"$FCM_VAPID_KEY\"};"$'\n' > $STATIC_DIR/firebase-init.js
+  cat > $STATIC_DIR/firebase-init.js <<- EOM
+const FIREBASE_INIT = {
+  apiKey: "$FCM_API_KEY",
+  appId: "$FCM_APP_ID",
+  messagingSenderId: "$FCM_SENDER_ID",
+  projectId: "$FCM_PROJECT_ID",
+  messagingVapidKey: "$FCM_VAPID_KEY"
+};
+EOM
 else
 	# Create an empty firebase-init.js
 	echo "" > $STATIC_DIR/firebase-init.js
