@@ -1683,7 +1683,7 @@ func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.QueryOpt) (
 	if upper == 0 {
 		filter["seqid"] = b.M{"$gte": lower}
 	} else {
-		filter["seqid"] = b.M{"$gte": lower, "$lte": upper}
+		filter["seqid"] = b.M{"$gte": lower, "$lt": upper}
 	}
 	findOpts := mdbopts.Find().SetSort(b.M{"topic": -1, "seqid": -1})
 	findOpts.SetLimit(int64(limit))
@@ -1820,7 +1820,7 @@ func (a *adapter) MessageGetDeleted(topic string, forUser t.Uid, opts *t.QueryOp
 	if upper == 0 {
 		filter["delid"] = b.M{"$gte": lower}
 	} else {
-		filter["delid"] = b.M{"$gte": lower, "$lte": upper}
+		filter["delid"] = b.M{"$gte": lower, "$lt": upper}
 	}
 	findOpts := mdbopts.Find().
 		SetSort(b.M{"topic": 1, "delid": 1}).
