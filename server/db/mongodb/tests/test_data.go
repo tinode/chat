@@ -308,10 +308,10 @@ func initFileDefs() {
 			CreatedAt: now,
 			UpdatedAt: now,
 		},
-		Status:    types.UploadStarted,
-		User:      users[0].Id,
-		MimeType:  "application/pdf",
-		Location:  "uploads/qwerty.pdf",
+		Status:   types.UploadStarted,
+		User:     users[0].Id,
+		MimeType: "application/pdf",
+		Location: "uploads/qwerty.pdf",
 	})
 	files = append(files, &types.FileDef{
 		ObjHeader: types.ObjHeader{
@@ -319,9 +319,9 @@ func initFileDefs() {
 			CreatedAt: now,
 			UpdatedAt: now,
 		},
-		Status:    types.UploadStarted,
-		User:      users[0].Id,
-		Location:  "uploads/asdf.txt",
+		Status:   types.UploadStarted,
+		User:     users[0].Id,
+		Location: "uploads/asdf.txt",
 	})
 }
 func initData() {
