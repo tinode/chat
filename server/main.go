@@ -193,7 +193,7 @@ type configType struct {
 	// Can be overridden from the command line, see option --listen.
 	Listen string `json:"listen"`
 	// Base URL path where the streaming and large file API calls are served, default is '/'.
-	// Can be overriden from the command line, see option --api_path.
+	// Can be overridden from the command line, see option --api_path.
 	ApiPath string `json:"api_path"`
 	// Cache-Control value for static content.
 	CacheControl int `json:"cache_control"`

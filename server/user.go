@@ -607,11 +607,11 @@ func usersPush(rcpt *push.Receipt) {
 			To:      make(map[types.Uid]push.Recipient),
 		}}
 
-		for uid, recepient := range rcpt.To {
+		for uid, recipient := range rcpt.To {
 			if globals.cluster.isRemoteTopic(uid.UserId()) {
-				remote.PushRcpt.To[uid] = recepient
+				remote.PushRcpt.To[uid] = recipient
 			} else {
-				local.PushRcpt.To[uid] = recepient
+				local.PushRcpt.To[uid] = recipient
 			}
 		}
 

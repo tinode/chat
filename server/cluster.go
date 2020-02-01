@@ -436,7 +436,7 @@ func (c *Cluster) routeUserReq(req *UserCacheReq) error {
 
 	if req.PushRcpt != nil {
 		// Request to send push notifications. Create separate packets for each affected cluster node.
-		for uid, recepient := range req.PushRcpt.To {
+		for uid, recipient := range req.PushRcpt.To {
 			n := c.nodeForTopic(uid.UserId())
 			if n == nil {
 				return errors.New("attempt to update user at a non-existent node (1)")
@@ -449,7 +449,7 @@ func (c *Cluster) routeUserReq(req *UserCacheReq) error {
 						To:      make(map[types.Uid]push.Recipient)},
 					Node: c.thisNodeName}
 			}
-			r.PushRcpt.To[uid] = recepient
+			r.PushRcpt.To[uid] = recipient
 			reqByNode[n.name] = r
 		}
 	} else if len(req.UserIdList) > 0 {
