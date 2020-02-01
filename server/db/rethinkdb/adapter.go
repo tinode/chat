@@ -28,7 +28,7 @@ const (
 	defaultHost     = "localhost:28015"
 	defaultDatabase = "tinode"
 
-	adpVersion = 110
+	adpVersion = 111
 
 	adapterName = "rethinkdb"
 
@@ -432,7 +432,8 @@ func (a *adapter) UpgradeDb() error {
 			Replace(func(row rdb.Term) rdb.Term {
 				return row.Without("DeletedAt").
 					Merge(map[string]interface{}{"StateAt": row.Field("DeletedAt")})
-			}); err != nil {
+			}).
+			RunWrite(a.conn); err != nil {
 			return err
 		}
 
@@ -456,13 +457,22 @@ func (a *adapter) UpgradeDb() error {
 			return err
 		}
 
+		// Set StateOK for all other topics.
+		if _, err := rdb.DB(a.dbName).Table("topics").
+			Filter(rdb.Row.HasFields("State").Not()).
+			Update(map[string]interface{}{"State": t.StateOK}).
+			RunWrite(a.conn); err != nil {
+			return err
+		}
+
 		// Rename DeletedAt into StateAt. Update only those rows which have defined DeletedAt.
 		if _, err := rdb.DB(a.dbName).Table("topics").
 			Between(rdb.MinVal, rdb.MaxVal, rdb.BetweenOpts{Index: "DeletedAt"}).
 			Replace(func(row rdb.Term) rdb.Term {
 				return row.Without("DeletedAt").
 					Merge(map[string]interface{}{"StateAt": row.Field("DeletedAt")})
-			}); err != nil {
+			}).
+			RunWrite(a.conn); err != nil {
 			return err
 		}
 
@@ -646,7 +656,7 @@ func (a *adapter) AuthGetUniqueRecord(unique string) (t.Uid, auth.Level, []byte,
 // UserGet fetches a single user by user id. If user is not found it returns (nil, nil)
 func (a *adapter) UserGet(uid t.Uid) (*t.User, error) {
 	cursor, err := rdb.DB(a.dbName).Table("users").GetAll(uid.String()).
-		Filter(rdb.Row.HasFields("DeletedAt").Not()).Run(a.conn)
+		Filter(rdb.Row.Field("State").Eq(t.StateDeleted).Not()).Run(a.conn)
 	if err != nil {
 		return nil, err
 	}
@@ -671,7 +681,7 @@ func (a *adapter) UserGetAll(ids ...t.Uid) ([]t.User, error) {
 
 	users := []t.User{}
 	if cursor, err := rdb.DB(a.dbName).Table("users").GetAll(uids...).
-		Filter(rdb.Row.HasFields("DeletedAt").Not()).Run(a.conn); err == nil {
+		Filter(rdb.Row.Field("State").Eq(t.StateDeleted).Not()).Run(a.conn); err == nil {
 		defer cursor.Close()
 
 		var user t.User
@@ -768,7 +778,7 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 		// Disable subscriptions for topics where the user is the owner.
 		// Disable topics where the user is the owner.
 		now := t.TimeNow()
-		disable := map[string]interface{}{"DeletedAt": now, "UpdatedAt": now}
+		disable := map[string]interface{}{"State": t.StateDeleted, "StateAt": now}
 		if _, err = rdb.DB(a.dbName).Table("topics").GetAllByIndex("Owner", uid.String()).ForEach(
 			func(topic rdb.Term) rdb.Term {
 				return rdb.Expr([]interface{}{
@@ -853,7 +863,7 @@ func (a *adapter) UserUnreadCount(uid t.Uid) (int, error) {
 		r.db("tinode").table("subscriptions").getAll("8L6HpDuF05c", {index: "User"})
 			.eqJoin("Topic", r.db("tinode").table("topics"), {index: "Id"})
 			.filter(
-				r.not(r.row.hasFields({"left": "DeletedAt"}, {"right": "DeletedAt"}))
+				r.not(r.row.hasFields({"left": "DeletedAt"}).or(r.row("right")("State").eq(20)))
 			)
 			.zip()
 			.pluck("ReadSeqId", "ModeWant", "ModeGiven", "SeqId")
@@ -862,8 +872,10 @@ func (a *adapter) UserUnreadCount(uid t.Uid) (int, error) {
 	*/
 	cursor, err := rdb.DB(a.dbName).Table("subscriptions").GetAllByIndex("User", uid.String()).
 		EqJoin("Topic", rdb.DB(a.dbName).Table("topics"), rdb.EqJoinOpts{Index: "Id"}).
-		Filter(rdb.Not(rdb.Row.HasFields(map[string]interface{}{"left": "DeletedAt"}).
-			And(rdb.Not(rdb.Row.HasFields(map[string]interface{}{"right": "DeletedAt"}))))).
+		// left: subscription; right: topic.
+		Filter(
+			rdb.Not(rdb.Row.HasFields(map[string]interface{}{"left": "DeletedAt"}).
+				Or(rdb.Row.Field("right").Field("State").Eq(t.StateDeleted)))).
 		Zip().
 		Pluck("ReadSeqId", "ModeWant", "ModeGiven", "SeqId").
 		Filter(rdb.JS("(function(row) {return (row.ModeWant & row.ModeGiven & 2) > 0;})")).
@@ -1049,7 +1061,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 	if len(usrq) > 0 {
 		q = rdb.DB(a.dbName).Table("users").GetAll(usrq...)
 		if !keepDeleted {
-			q = q.Filter(rdb.Row.HasFields("DeletedAt").Not())
+			q = q.Filter(rdb.Row.Field("State").Eq(t.StateDeleted).Not())
 		}
 		cursor, err = q.Run(a.conn)
 		if err != nil {
@@ -1127,7 +1139,7 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 
 		// Fetch users by a list of subscriptions
 		cursor, err = rdb.DB(a.dbName).Table("users").GetAll(usrq...).
-			Filter(rdb.Row.HasFields("DeletedAt").Not()).Run(a.conn)
+			Filter(rdb.Row.Field("State").Eq(t.StateDeleted).Not()).Run(a.conn)
 		if err != nil {
 			return nil, err
 		}
@@ -1173,7 +1185,7 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 // OwnTopics loads a slice of topic names where the user is the owner.
 func (a *adapter) OwnTopics(uid t.Uid) ([]string, error) {
 	cursor, err := rdb.DB(a.dbName).Table("topics").GetAllByIndex("Owner", uid.String()).
-		Filter(rdb.Row.HasFields("DeletedAt").Not()).Field("Id").Run(a.conn)
+		Filter(rdb.Row.Field("State").Eq(t.StateDeleted).Not()).Field("Id").Run(a.conn)
 	if err != nil {
 		return nil, err
 	}
@@ -1224,8 +1236,8 @@ func (a *adapter) TopicDelete(topic string, hard bool) error {
 	} else {
 		now := t.TimeNow()
 		_, err = q.Update(map[string]interface{}{
-			"UpdatedAt": now,
-			"DeletedAt": now,
+			"State":    t.StateDeleted,
+			"StatedAt": now,
 		}).RunWrite(a.conn)
 	}
 	return err
@@ -1441,7 +1453,7 @@ func (a *adapter) FindUsers(uid t.Uid, req, opt []string) ([]t.Subscription, err
 	query := rdb.DB(a.dbName).
 		Table("users").
 		GetAllByIndex("Tags", allTags...).
-		Filter(rdb.Row.HasFields("DeletedAt").Not()).
+		Filter(rdb.Row.Field("State").Eq(t.StateOK)).
 		Pluck("Id", "Access", "CreatedAt", "UpdatedAt", "Public", "Tags").
 		Group("Id").
 		Ungroup().
@@ -1509,7 +1521,7 @@ func (a *adapter) FindTopics(req, opt []string) ([]t.Subscription, error) {
 	query := rdb.DB(a.dbName).
 		Table("topics").
 		GetAllByIndex("Tags", allTags...).
-		Filter(rdb.Row.HasFields("DeletedAt").Not()).
+		Filter(rdb.Row.Field("State").Eq(t.StateOK)).
 		Pluck("Id", "Access", "CreatedAt", "UpdatedAt", "Public", "Tags").
 		Group("Id").
 		Ungroup().
