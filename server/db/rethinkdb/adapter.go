@@ -418,6 +418,13 @@ func (a *adapter) UpgradeDb() error {
 
 		// Users
 
+		// Reset previously unused field State to value StateOK.
+		if _, err := rdb.DB(a.dbName).Table("users").
+			Update(map[string]interface{}{"State": t.StateOK}).
+			RunWrite(a.conn); err != nil {
+			return err
+		}
+
 		// Add StatusDeleted to all deleted users as indicated by DeletedAt not being null.
 		if _, err := rdb.DB(a.dbName).Table("users").
 			Between(rdb.MinVal, rdb.MaxVal, rdb.BetweenOpts{Index: "DeletedAt"}).
@@ -451,7 +458,7 @@ func (a *adapter) UpgradeDb() error {
 
 		// Add StateDeleted to all topics with DeletedAt not null.
 		if _, err := rdb.DB(a.dbName).Table("topics").
-			Between(rdb.MinVal, rdb.MaxVal, rdb.BetweenOpts{Index: "DeletedAt"}).
+			Filter(rdb.Row.HasFields("DeletedAt")).
 			Update(map[string]interface{}{"State": t.StateDeleted}).
 			RunWrite(a.conn); err != nil {
 			return err
@@ -467,7 +474,7 @@ func (a *adapter) UpgradeDb() error {
 
 		// Rename DeletedAt into StateAt. Update only those rows which have defined DeletedAt.
 		if _, err := rdb.DB(a.dbName).Table("topics").
-			Between(rdb.MinVal, rdb.MaxVal, rdb.BetweenOpts{Index: "DeletedAt"}).
+			Filter(rdb.Row.HasFields("DeletedAt")).
 			Replace(func(row rdb.Term) rdb.Term {
 				return row.Without("DeletedAt").
 					Merge(map[string]interface{}{"StateAt": row.Field("DeletedAt")})

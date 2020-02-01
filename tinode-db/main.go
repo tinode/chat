@@ -47,7 +47,7 @@ User object in data.json
    "passhash": "alice123",
    "private": {"comment": "some comment 123"},
    "public": {"fn": "Alice Johnson", "photo": "alice-64.jpg", "type": "jpg"},
-   "state": 1,
+   "state": "ok",
    "authLevel": "auth",
    "status": {
      "text": "DND"
