@@ -801,9 +801,66 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 	return err
 }
 
+// topicStateForUser is called by UserUpdate when the update contains state change.
+func (a *adapter) topicStateForUser(uid t.Uid, now time.Time, update interface{}) error {
+	state, ok := update.(t.ObjState)
+	if !ok {
+		return t.ErrMalformed
+	}
+
+	if now.IsZero() {
+		now = t.TimeNow()
+	}
+
+	// Change state of all topics where the user is the owner.
+	if _, err := rdb.DB(a.dbName).Table("topics").
+		GetAllByIndex("Owner", uid.String()).
+		Filter(rdb.Row.Field("State").Eq(t.StateDeleted).Not()).
+		Update(map[string]interface{}{
+			"State":   state,
+			"StateAt": now,
+		}).RunWrite(a.conn); err != nil {
+		return err
+	}
+
+	// Change state of p2p topics with the user (p2p topic's owner is blank)
+	/*
+		r.db('tinode').table('topics').getAll(
+			r.args(
+				r.db("tinode").table("subscriptions").getAll('S8VFqRpXw5M', {index: 'User'})('Topic').coerceTo('array')
+			)
+		).update(...)
+	*/
+	if _, err := rdb.DB(a.dbName).Table("topics").
+		GetAll(rdb.Args(
+			rdb.DB(a.dbName).Table("subscriptions").GetAllByIndex("User", uid.String()).
+				Field("Topic").CoerceTo("array"))).
+		Filter(rdb.Row.Field("Owner").Eq("").And(rdb.Row.Field("State").Eq(t.StateDeleted).Not())).
+		Update(map[string]interface{}{
+			"State":   state,
+			"StateAt": now,
+		}).RunWrite(a.conn); err != nil {
+		return err
+	}
+
+	// Subscriptions don't need to be updated:
+	// subscriptions of a disabled user are not disabled and still can be manipulated.
+
+	return nil
+}
+
 // UserUpdate updates user object.
 func (a *adapter) UserUpdate(uid t.Uid, update map[string]interface{}) error {
 	_, err := rdb.DB(a.dbName).Table("users").Get(uid.String()).Update(update).RunWrite(a.conn)
+	if err != nil {
+		return err
+	}
+
+	if state, ok := update["State"]; ok {
+		now, _ := update["StateAt"].(time.Time)
+		err = a.topicStateForUser(uid, now, state)
+	}
+
 	return err
 }
 
