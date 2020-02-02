@@ -35,7 +35,7 @@ const (
 	defaultHost     = "localhost:27017"
 	defaultDatabase = "tinode"
 
-	adpVersion  = 110
+	adpVersion  = 111
 	adapterName = "mongodb"
 
 	defaultMaxResults = 1024
@@ -348,7 +348,102 @@ func (a *adapter) CreateDb(reset bool) error {
 
 // UpgradeDb upgrades database to the current adapter version.
 func (a *adapter) UpgradeDb() error {
+	bumpVersion := func(a *adapter, x int) error {
+		if err := a.updateDbVersion(x); err != nil {
+			return err
+		}
+		_, err := a.GetDbVersion()
+		return err
+	}
+
+	_, err := a.GetDbVersion()
+	if err != nil {
+		return err
+	}
+
+	if a.version == 110 {
+		// Perform database upgrade from versions 110 to version 111.
+
+		// Users
+
+		// Reset previously unused field State to value StateOK.
+		if _, err := a.db.Collection("users").UpdateMany(a.ctx,
+			b.M{},
+			b.M{"$set": b.M{"state": t.StateOK}}); err != nil {
+			return err
+		}
+
+		// Add StatusDeleted to all deleted users as indicated by DeletedAt not being null.
+		if _, err := a.db.Collection("users").UpdateMany(a.ctx,
+			b.M{"deletedat": b.M{"$ne": nil}},
+			b.M{"$set": b.M{"state": t.StateDeleted}}); err != nil {
+			return err
+		}
+
+		// Rename DeletedAt into StateAt. Update only those rows which have defined DeletedAt.
+		if _, err := a.db.Collection("users").UpdateMany(a.ctx,
+			b.M{"deletedat": b.M{"$exists": true}},
+			b.M{"$rename": b.M{"deletedat": "stateat"}}); err != nil {
+			return err
+		}
+
+		// Drop secondary index DeletedAt.
+		if _, err := a.db.Collection("users").Indexes().DropOne(a.ctx, "deletedat_1"); err != nil {
+			return err
+		}
+
+		// Create secondary index on State for finding suspended and soft-deleted topics.
+		if _, err = a.db.Collection("users").Indexes().CreateOne(a.ctx, mdb.IndexModel{Keys: b.M{"state": 1}}); err != nil {
+			return err
+		}
+
+		// Topics
+
+		// Add StateDeleted to all topics with DeletedAt not null.
+		if _, err := a.db.Collection("topics").UpdateMany(a.ctx,
+			b.M{"deletedat": b.M{"$ne": nil}},
+			b.M{"$set": b.M{"state": t.StateDeleted}}); err != nil {
+			return err
+		}
+
+		// Set StateOK for all other topics.
+		if _, err := a.db.Collection("topics").UpdateMany(a.ctx,
+			b.M{"state": b.M{"$exists": false}},
+			b.M{"$set": b.M{"state": t.StateOK}}); err != nil {
+			return err
+		}
+
+		// Rename DeletedAt into StateAt. Update only those rows which have defined DeletedAt.
+		if _, err := a.db.Collection("topics").UpdateMany(a.ctx,
+			b.M{"deletedat": b.M{"$exists": true}},
+			b.M{"$rename": b.M{"deletedat": "stateat"}}); err != nil {
+			return err
+		}
+
+		// Create secondary index on State for finding suspended and soft-deleted topics.
+		if _, err = a.db.Collection("topics").Indexes().CreateOne(a.ctx, mdb.IndexModel{Keys: b.M{"state": 1}}); err != nil {
+			return err
+		}
+
+		if err := bumpVersion(a, 111); err != nil {
+			return err
+		}
+	}
+
+	if a.version != adpVersion {
+		return errors.New("Failed to perform database upgrade to version " + strconv.Itoa(adpVersion) +
+			". DB is still at " + strconv.Itoa(a.version))
+	}
 	return nil
+}
+
+func (a *adapter) updateDbVersion(v int) error {
+	a.version = -1
+	_, err := a.db.Collection("kvmeta").UpdateOne(a.ctx,
+		b.M{"_id": "version"},
+		b.M{"$set": b.M{"value": v}},
+	)
+	return err
 }
 
 // Create system topic 'sys'.
