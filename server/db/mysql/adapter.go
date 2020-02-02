@@ -971,14 +971,15 @@ func (a *adapter) topicStateForUser(tx *sqlx.Tx, decoded_uid int64, now time.Tim
 	}
 
 	// Change state of all topics where the user is the owner.
-	if _, err = tx.Exec("UPDATE topics SET state=?, stateat=? WHERE owner=?", state, now, decoded_uid); err != nil {
+	if _, err = tx.Exec("UPDATE topics SET state=?, stateat=? WHERE owner=? AND state!=?",
+		state, now, decoded_uid, t.StateDeleted); err != nil {
 		return err
 	}
 
 	// Change state of p2p topics with the user (p2p topic's owner is 0)
 	if _, err = tx.Exec("UPDATE topics LEFT JOIN subscriptions ON topics.name=subscriptions.topic "+
-		"SET topics.state=?, topics.stateat=? WHERE topics.owner=0 AND subscriptions.userid=?",
-		state, now, decoded_uid); err != nil {
+		"SET topics.state=?, topics.stateat=? WHERE topics.owner=0 AND subscriptions.userid=? AND topic.state!=?",
+		state, now, decoded_uid, t.StateDeleted); err != nil {
 		return err
 	}
 
