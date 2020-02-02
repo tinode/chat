@@ -101,12 +101,11 @@ func topicInit(t *Topic, sreg *sessionJoin, h *Hub) {
 		t.reg <- sreg
 	}
 
-	switch t.cat {
-	case types.TopicCatFnd, types.TopicCatSys:
+	t.markPaused(false)
+	if t.cat == types.TopicCatFnd || t.cat == types.TopicCatSys {
 		t.markLoaded()
-	default:
-		t.markNew()
 	}
+
 	go t.run(h)
 }
 
@@ -625,6 +624,38 @@ func initTopicSys(t *Topic, sreg *sessionJoin) error {
 		t.touched = stopic.TouchedAt
 	}
 	t.lastID = stopic.SeqId
+
+	return nil
+}
+
+// loadSubscribers loads topic subscribers, sets topic owner.
+func (t *Topic) loadSubscribers() error {
+	subs, err := store.Topics.GetSubs(t.name, nil)
+	if err != nil {
+		return err
+	}
+
+	if subs == nil {
+		return nil
+	}
+
+	for i := range subs {
+		sub := &subs[i]
+		uid := types.ParseUid(sub.User)
+		t.perUser[uid] = perUserData{
+			created:   sub.CreatedAt,
+			updated:   sub.UpdatedAt,
+			delID:     sub.DelId,
+			readID:    sub.ReadSeqId,
+			recvID:    sub.RecvSeqId,
+			private:   sub.Private,
+			modeWant:  sub.ModeWant,
+			modeGiven: sub.ModeGiven}
+
+		if (sub.ModeGiven & sub.ModeWant).IsOwner() {
+			t.owner = uid
+		}
+	}
 
 	return nil
 }

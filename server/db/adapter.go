@@ -45,8 +45,6 @@ type Adapter interface {
 	UserGetAll(ids ...t.Uid) ([]t.User, error)
 	// UserDelete deletes user record
 	UserDelete(uid t.Uid, hard bool) error
-	// UserGetDisabled returns IDs of users which were soft-deleted since given time.
-	UserGetDisabled(since time.Time) ([]t.Uid, error)
 	// UserUpdate updates user record
 	UserUpdate(uid t.Uid, update map[string]interface{}) error
 	// UserUpdateTags adds, removes, or resets user's tags

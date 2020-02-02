@@ -226,6 +226,7 @@ func pbCliSerialize(msg *ClientComMessage) *pbx.ClientMsg {
 		pkt.Message = &pbx.ClientMsg_Acc{Acc: &pbx.ClientAcc{
 			Id:     msg.Acc.Id,
 			UserId: msg.Acc.User,
+			State:  msg.Acc.State,
 			Token:  msg.Acc.Token,
 			Scheme: msg.Acc.Scheme,
 			Secret: msg.Acc.Secret,
@@ -323,6 +324,7 @@ func pbCliDeserialize(pkt *pbx.ClientMsg) *ClientComMessage {
 		msg.Acc = &MsgClientAcc{
 			Id:     acc.GetId(),
 			User:   acc.GetUserId(),
+			State:  acc.GetState(),
 			Scheme: acc.GetScheme(),
 			Secret: acc.GetSecret(),
 			Login:  acc.GetLogin(),
@@ -714,6 +716,7 @@ func pbTopicDescSerialize(desc *MsgTopicDesc) *pbx.TopicDesc {
 		CreatedAt: timeToInt64(desc.CreatedAt),
 		UpdatedAt: timeToInt64(desc.UpdatedAt),
 		TouchedAt: timeToInt64(desc.TouchedAt),
+		State:     desc.State,
 		Defacs:    pbDefaultAcsSerialize(desc.DefaultAcs),
 		Acs:       pbAccessModeSerialize(desc.Acs),
 		SeqId:     int32(desc.SeqId),
@@ -733,6 +736,7 @@ func pbTopicDescDeserialize(desc *pbx.TopicDesc) *MsgTopicDesc {
 		CreatedAt:  int64ToTime(desc.GetCreatedAt()),
 		UpdatedAt:  int64ToTime(desc.GetUpdatedAt()),
 		TouchedAt:  int64ToTime(desc.GetTouchedAt()),
+		State:      desc.GetState(),
 		DefaultAcs: pbDefaultAcsDeserialize(desc.GetDefacs()),
 		Acs:        pbAccessModeDeserialize(desc.GetAcs()),
 		SeqId:      int(desc.SeqId),
@@ -839,12 +843,12 @@ func pbSubSliceDeserialize(subs []*pbx.TopicSub) []types.Subscription {
 		out[i] = types.Subscription{
 			ObjHeader: types.ObjHeader{
 				UpdatedAt: *int64ToTime(subs[i].GetUpdatedAt()),
-				DeletedAt: int64ToTime(subs[i].GetDeletedAt()),
 			},
-			User:    subs[i].GetUserId(),
-			Topic:   subs[i].GetTopic(),
-			DelId:   int(subs[i].GetDelId()),
-			Private: bytesToInterface(subs[i].GetPrivate()),
+			DeletedAt: int64ToTime(subs[i].GetDeletedAt()),
+			User:      subs[i].GetUserId(),
+			Topic:     subs[i].GetTopic(),
+			DelId:     int(subs[i].GetDelId()),
+			Private:   bytesToInterface(subs[i].GetPrivate()),
 		}
 		out[i].SetPublic(bytesToInterface(subs[i].GetPublic()))
 		if acs := subs[i].GetAcs(); acs != nil {

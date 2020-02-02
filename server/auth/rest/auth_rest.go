@@ -180,6 +180,7 @@ func (a *authenticator) Authenticate(secret []byte) (*auth.Rec, []byte, error) {
 		// Create account, get UID, report UID back to the server.
 
 		user := types.User{
+			State:  resp.Record.State,
 			Public: resp.NewAcc.Public,
 			Tags:   resp.Record.Tags,
 		}

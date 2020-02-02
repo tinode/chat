@@ -17,8 +17,8 @@ CREATE TABLE users(
 	id 			BIGINT NOT NULL,
 	createdat 	DATETIME(3) NOT NULL,
 	updatedat 	DATETIME(3) NOT NULL,
-	deletedat 	DATETIME(3),
-	state 		INT DEFAULT 0,
+	state 		SMALLINT NOT NULL DEFAULT 0,
+	stateat 	DATETIME(3),
 	access 		JSON,
 	lastseen 	DATETIME,
 	useragent 	VARCHAR(255) DEFAULT '',
@@ -26,7 +26,7 @@ CREATE TABLE users(
 	tags		JSON, -- Denormalized array of tags
 	
 	PRIMARY KEY(id),
-	INDEX users_deletedat(deletedat)
+	INDEX users_state_stateat(state, stateat)
 );
 
 # Indexed user tags.
@@ -53,7 +53,7 @@ CREATE TABLE devices(
 	
 	PRIMARY KEY(id),
 	FOREIGN KEY(userid) REFERENCES users(id),
-	UNIQUE INDEX devices_hash (hash)
+	UNIQUE INDEX devices_hash(hash)
 );
 
 # Authentication records for the basic authentication scheme.
@@ -62,7 +62,7 @@ CREATE TABLE auth(
 	uname	VARCHAR(32) NOT NULL,
 	userid 	BIGINT NOT NULL,
 	scheme	VARCHAR(16) NOT NULL,
-	authlvl	INT NOT NULL,
+	authlvl	SMALLINT NOT NULL,
 	secret 	VARCHAR(255) NOT NULL,
 	expires DATETIME,
 	
@@ -78,10 +78,11 @@ CREATE TABLE topics(
 	id 			INT NOT NULL AUTO_INCREMENT,
 	createdat 	DATETIME(3) NOT NULL,
 	updatedat 	DATETIME(3) NOT NULL,
-	deletedat 	DATETIME(3),
 	touchedat 	DATETIME(3),
+	state		SMALLINT NOT NULL DEFAULT 0,
+	stateat 	DATETIME(3),
 	name 		CHAR(25) NOT NULL,
-	usebt 		INT DEFAULT 0,
+	usebt 		TINYINT DEFAULT 0,
 	owner 		BIGINT NOT NULL DEFAULT 0,
 	access 		JSON,
 	seqid 		INT NOT NULL DEFAULT 0,
@@ -91,7 +92,8 @@ CREATE TABLE topics(
 	
 	PRIMARY KEY(id),
 	UNIQUE INDEX topics_name (name),
-	INDEX topics_owner(owner)
+	INDEX topics_owner(owner),
+	INDEX topics_state_stateat(state, stateat)
 );
 
 # Indexed topic tags.
@@ -123,8 +125,9 @@ CREATE TABLE subscriptions(
 	
 	PRIMARY KEY(id)	,
 	FOREIGN KEY(userid) REFERENCES users(id),
-	UNIQUE INDEX subscriptions_topic_userid (topic, userid),
-	INDEX subscriptions_topic (topic)
+	UNIQUE INDEX subscriptions_topic_userid(topic, userid),
+	INDEX subscriptions_topic(topic),
+	INDEX subscriptions_deletedat(deletedat)
 );
 
 # Messages

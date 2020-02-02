@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/tinode/chat/server/auth"
 	"github.com/tinode/chat/server/store"
 	"github.com/tinode/chat/server/store/types"
 )
@@ -69,14 +70,18 @@ type topicUnreg struct {
 }
 
 type metaReq struct {
-	// Routable name of the topic to get info for
+	// Routable name of the topic to update or query. Either topic or forUser must be defined.
 	topic string
-	// packet containing details of the Get/Set/Del request
+	// UID of the user being affected. Either topic or forUser must be defined.
+	forUser types.Uid
+	// Packet containing details of the Get/Set/Del request.
 	pkt *ClientComMessage
-	// Session which originated the request
+	// Session which originated the request.
 	sess *Session
-	// what is being requested, constMsgGetInfo, constMsgGetSub, constMsgGetData
+	// What is being requested: constMsgMetaSub, constMsgMetaDesc, constMsgMetaTags, etc.
 	what int
+	// New topic state value. Only types.StateSuspended is supported at this time.
+	state types.ObjState
 }
 
 // Hub is the core structure which holds topics.
@@ -175,7 +180,7 @@ func (h *Hub) run() {
 					exit:      make(chan *shutDown, 1),
 				}
 				// Topic is created in suspended state because it's not yet configured.
-				t.markSuspended()
+				t.markPaused(true)
 				// Save topic now to prevent race condition.
 				h.topicPut(sreg.topic, t)
 
@@ -218,20 +223,25 @@ func (h *Hub) run() {
 			}
 
 		case meta := <-h.meta:
-			// Metadata red or update from a user who is not attached to the topic.
-			if dst := h.topicGet(meta.topic); dst != nil {
-				// If topic is already in memory, pass request to the topic.
-				dst.meta <- meta
+			// Suspend/activate user's topics
+			if !meta.forUser.IsZero() {
+				go h.topicsStateForUser(meta.forUser, meta.state == types.StateSuspended)
 			} else {
-				// Topic is not in memory. Read or update the DB record and reply here.
-				if meta.pkt.Get != nil {
-					if meta.what == constMsgMetaDesc {
-						go replyOfflineTopicGetDesc(meta.sess, meta.topic, meta.pkt)
-					} else {
-						go replyOfflineTopicGetSub(meta.sess, meta.topic, meta.pkt)
+				// Metadata read or update from a user who is not attached to the topic.
+				if dst := h.topicGet(meta.topic); dst != nil {
+					// If topic is already in memory, pass request to the topic.
+					dst.meta <- meta
+				} else {
+					// Topic is not in memory. Read or update the DB record and reply here.
+					if meta.pkt.Get != nil {
+						if meta.what == constMsgMetaDesc {
+							go replyOfflineTopicGetDesc(meta.sess, meta.topic, meta.pkt)
+						} else {
+							go replyOfflineTopicGetSub(meta.sess, meta.topic, meta.pkt)
+						}
+					} else if meta.pkt.Set != nil {
+						go replyOfflineTopicSetSub(meta.sess, meta.topic, meta.pkt)
 					}
-				} else if meta.pkt.Set != nil {
-					go replyOfflineTopicSetSub(meta.sess, meta.topic, meta.pkt)
 				}
 			}
 
@@ -295,6 +305,26 @@ func (h *Hub) run() {
 	}
 }
 
+// Update state of all topics associated with the given user:
+// * all p2p topics with the given user
+// * group topics where the given user is the owner.
+// 'me' and fnd' are ignored here because they are direcly tied to the user object.
+func (h *Hub) topicsStateForUser(uid types.Uid, suspended bool) {
+	h.topics.Range(func(name interface{}, t interface{}) bool {
+		topic := t.(*Topic)
+		if topic.cat == types.TopicCatMe || topic.cat == types.TopicCatGrp {
+			return true
+		}
+
+		if _, isMember := topic.perUser[uid]; (topic.cat == types.TopicCatP2P && isMember) || topic.owner == uid {
+			topic.markReadOnly(suspended)
+
+			// Don't send "off" notification on suspension. They will be sent when the user is evicted.
+		}
+		return true
+	})
+}
+
 // topicUnreg deletes or unregisters the topic:
 //
 // Cases:
@@ -333,9 +363,9 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 			if t.owner == asUid || (t.cat == types.TopicCatP2P && t.subsCount() < 2) {
 				// Case 1.1.1: requester is the owner or last sub in a p2p topic
 
-				oldStatus := t.markSuspended()
+				t.markPaused(true)
 				if err := store.Topics.Delete(topic, true); err != nil {
-					t.setStatus(oldStatus)
+					t.markPaused(false)
 					sess.queueOut(ErrUnknown(msg.id, msg.topic, now))
 					return err
 				}
@@ -562,6 +592,9 @@ func replyOfflineTopicGetDesc(sess *Session, topic string, msg *ClientComMessage
 		desc.CreatedAt = &suser.CreatedAt
 		desc.UpdatedAt = &suser.UpdatedAt
 		desc.Public = suser.Public
+		if sess.authLvl == auth.LevelRoot {
+			desc.State = suser.State.String()
+		}
 	}
 
 	sub, err := store.Subs.Get(topic, asUid)
@@ -573,6 +606,7 @@ func replyOfflineTopicGetDesc(sess *Session, topic string, msg *ClientComMessage
 
 	if sub != nil && sub.DeletedAt == nil {
 		desc.Private = sub.Private
+		// FIXME: suspended topics should get no AW access.
 		desc.Acs = &MsgAccessMode{
 			Want:  sub.ModeWant.String(),
 			Given: sub.ModeGiven.String(),
@@ -606,8 +640,7 @@ func replyOfflineTopicGetSub(sess *Session, topic string, msg *ClientComMessage)
 		return
 	}
 
-	sub := MsgTopicSub{DeletedAt: ssub.DeletedAt}
-
+	sub := MsgTopicSub{}
 	if ssub.DeletedAt == nil {
 		sub.UpdatedAt = &ssub.UpdatedAt
 		sub.Acs = MsgAccessMode{

@@ -164,6 +164,8 @@ message ClientAcc {
 	repeated ClientCred cred = 8;
 	// Authentication token used for resetting a password.
 	bytes token = 9;
+	// Account state: normal ("ok"), suspended
+	string state = 10;
 }
 
 // Login {login} message
@@ -304,6 +306,8 @@ message TopicDesc {
 	int32 del_id = 9;
 	bytes public = 10;
 	bytes private = 11;
+	string state = 12;
+	int64 state_at = 13;
 }
 
 // MsgTopicSub: topic subscription details, sent in Meta message
