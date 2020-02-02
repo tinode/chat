@@ -24,6 +24,7 @@ except ImportError:
     import queue
 import random
 import re
+import readline
 import requests
 import shlex
 import sys
@@ -35,6 +36,11 @@ from google.protobuf import json_format
 # Import generated grpc modules
 from tinode_grpc import pb
 from tinode_grpc import pbx
+
+# `input` function.
+# In Python 2.x, the function is named `raw_input`.
+try: input = raw_input
+except NameError: pass
 
 APP_NAME = "tn-cli"
 APP_VERSION = "1.2.1"
@@ -271,12 +277,28 @@ def stdoutln(*args):
     args = args + ("\n",)
     stdout(*args)
 
+# Prints prompt and reads lines from stdin.
+def readLinesFromStdin():
+    global IsInteractive
+    if IsInteractive:
+        while True:
+            try:
+                line = input('tn> ')
+                yield line
+            except EOFError as e:
+                # Ctrl+D.
+                break
+    else:
+        # iter(...) is a workaround for a python2 bug https://bugs.python.org/issue3907
+        for cmd in iter(sys.stdin.readline, ''):
+            yield cmd
+
+
 # Stdin reads a possibly multiline input from stdin and queues it for asynchronous processing.
 def stdin(InputQueue):
     partial_input = ""
     try:
-        # iter(...) is a workaround for a python2 bug https://bugs.python.org/issue3907
-        for cmd in iter(sys.stdin.readline, ''):
+        for cmd in readLinesFromStdin():
             cmd = cmd.strip()
             # Check for continuation symbol \ in the end of the line.
             if len(cmd) > 0 and cmd[-1] == "\\":
@@ -808,7 +830,8 @@ def gen_message(scheme, secret, args):
                     return
 
                 pbMsg, cmd = serialize_cmd(inp, id, args)
-                print_prompt = IsInteractive
+                if not pbMsg and not cmd and len(inp) > 0:
+                    print_prompt = IsInteractive
                 if pbMsg != None:
                     if not IsInteractive:
                         sys.stdout.write("=> " + inp + "\n")
@@ -1036,4 +1059,5 @@ if __name__ == '__main__':
             except Exception as err:
                 printerr("Failed to read authentication cookie", err)
 
+    readline.parse_and_bind('tab: complete')
     run(args, schema, secret)
