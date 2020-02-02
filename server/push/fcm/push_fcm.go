@@ -120,10 +120,9 @@ func payloadToData(pl *push.Payload) (map[string]string, error) {
 	}
 	data["topic"] = pl.Topic
 	data["ts"] = pl.Timestamp.Format(time.RFC3339Nano)
-	// Must use "xfrom" because "from" is a reserved word.
-	// Google did not bother to document it anywhere.
+	// Must use "xfrom" because "from" is a reserved word. Google did not bother to document it anywhere.
 	data["xfrom"] = pl.From
-	if pl.SeqId > 0 {
+	if pl.What == push.ActMsg {
 		data["seq"] = strconv.Itoa(pl.SeqId)
 		data["mime"] = pl.ContentType
 		data["content"], err = drafty.ToPlainText(pl.Content)
@@ -139,9 +138,11 @@ func payloadToData(pl *push.Payload) (map[string]string, error) {
 				data["content"] = string(runes[:maxMessageLength]) + "…"
 			}
 		}
-	} else {
+	} else if pl.What == push.ActSub {
 		data["modeWant"] = pl.ModeWant.String()
 		data["modeGiven"] = pl.ModeGiven.String()
+	} else {
+		return nil, errors.New("unknown push type")
 	}
 	return data, nil
 }

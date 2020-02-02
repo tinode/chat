@@ -1297,7 +1297,7 @@ func (t *Topic) approveSub(h *Hub, sess *Session, asUid, target types.Uid, set *
 
 		// Send push notification for the new subscription.
 		pushRcpt := t.pushForSub(asUid, target, userData.modeWant, userData.modeGiven, now)
-		// TODO: maybe skip devices which were online when this event has happened.
+		// TODO: maybe skip user's devices which were online when this event has happened.
 		if pushRcpt != nil {
 			usersPush(pushRcpt)
 		}
@@ -2581,6 +2581,7 @@ func (t *Topic) pushForSub(fromUid, toUid types.Uid, want, given types.AccessMod
 			Topic:     topic,
 			From:      fromUid.UserId(),
 			Timestamp: now,
+			SeqId:     t.lastID,
 			ModeWant:  want,
 			ModeGiven: given}}
 
