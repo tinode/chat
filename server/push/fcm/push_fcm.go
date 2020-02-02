@@ -27,6 +27,9 @@ var handler Handler
 // Size of the input channel buffer.
 const defaultBuffer = 32
 
+// Maximum length of a text message in runes
+const maxMessageLength = 80
+
 // Handler represents the push handler; implements push.PushHandler interface.
 type Handler struct {
 	input  chan *push.Receipt
@@ -111,27 +114,32 @@ func payloadToData(pl *push.Payload) (map[string]string, error) {
 
 	data := make(map[string]string)
 	var err error
-	data["topic"] = pl.Topic
-	// Must use "xfrom" because "from" is a reserved word.
-	// Google did not bother to document it anywhere.
-	data["xfrom"] = pl.From
-	data["ts"] = pl.Timestamp.Format(time.RFC3339Nano)
-	data["seq"] = strconv.Itoa(pl.SeqId)
-	data["mime"] = pl.ContentType
-	data["content"], err = drafty.ToPlainText(pl.Content)
-	if err != nil {
-		return nil, err
+	data["what"] = pl.What
+	if pl.Silent {
+		data["silent"] = "true"
 	}
+	data["topic"] = pl.Topic
+	data["ts"] = pl.Timestamp.Format(time.RFC3339Nano)
+	if pl.SeqId > 0 {
+		// Must use "xfrom" because "from" is a reserved word.
+		// Google did not bother to document it anywhere.
+		data["xfrom"] = pl.From
+		data["seq"] = strconv.Itoa(pl.SeqId)
+		data["mime"] = pl.ContentType
+		data["content"], err = drafty.ToPlainText(pl.Content)
+		if err != nil {
+			return nil, err
+		}
 
-	// Trim long strings to 80 runes.
-	// Check byte length first and don't waste time converting short strings.
-	if len(data["content"]) > 80 {
-		runes := []rune(data["content"])
-		if len(runes) > 80 {
-			data["content"] = string(runes[:80]) + "…"
+		// Trim long strings to 80 runes.
+		// Check byte length first and don't waste time converting short strings.
+		if len(data["content"]) > maxMessageLength {
+			runes := []rune(data["content"])
+			if len(runes) > maxMessageLength {
+				data["content"] = string(runes[:maxMessageLength]) + "…"
+			}
 		}
 	}
-
 	return data, nil
 }
 
