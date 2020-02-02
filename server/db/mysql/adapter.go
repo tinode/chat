@@ -590,9 +590,9 @@ func (a *adapter) UpgradeDb() error {
 
 func createSystemTopic(tx *sql.Tx) error {
 	now := t.TimeNow()
-	sql := `INSERT INTO topics(createdat,updatedat,touchedat,name,access,public)
-				VALUES(?,?,?,'sys','{"Auth": "N","Anon": "N"}','{"fn": "System"}')`
-	_, err := tx.Exec(sql, now, now, now)
+	sql := `INSERT INTO topics(createdat,updatedat,state,touchedat,name,access,public)
+				VALUES(?,?,?,?,'sys','{"Auth": "N","Anon": "N"}','{"fn": "System"}')`
+	_, err := tx.Exec(sql, now, now, t.StateOK, now)
 	return err
 }
 
@@ -1121,10 +1121,10 @@ func (a *adapter) UserUnreadCount(uid t.Uid) (int, error) {
 // *****************************
 
 func (a *adapter) topicCreate(tx *sqlx.Tx, topic *t.Topic) error {
-	_, err := tx.Exec("INSERT INTO topics(createdat,updatedat,touchedat,name,owner,access,public,tags) "+
-		"VALUES(?,?,?,?,?,?,?,?)",
-		topic.CreatedAt, topic.UpdatedAt, topic.TouchedAt, topic.Id, store.DecodeUid(t.ParseUid(topic.Owner)),
-		topic.Access, toJSON(topic.Public), topic.Tags)
+	_, err := tx.Exec("INSERT INTO topics(createdat,updatedat,touchedat,state,name,owner,access,public,tags) "+
+		"VALUES(?,?,?,?,?,?,?,?,?)",
+		topic.CreatedAt, topic.UpdatedAt, topic.TouchedAt, topic.State, topic.Id,
+		store.DecodeUid(t.ParseUid(topic.Owner)), topic.Access, toJSON(topic.Public), topic.Tags)
 	if err != nil {
 		return err
 	}
