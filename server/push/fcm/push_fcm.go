@@ -27,6 +27,9 @@ var handler Handler
 // Size of the input channel buffer.
 const defaultBuffer = 32
 
+// Maximum length of a text message in runes
+const maxMessageLength = 80
+
 // Handler represents the push handler; implements push.PushHandler interface.
 type Handler struct {
 	input  chan *push.Receipt
@@ -130,10 +133,10 @@ func payloadToData(pl *push.Payload) (map[string]string, error) {
 
 		// Trim long strings to 80 runes.
 		// Check byte length first and don't waste time converting short strings.
-		if len(data["content"]) > 80 {
+		if len(data["content"]) > maxMessageLength {
 			runes := []rune(data["content"])
-			if len(runes) > 80 {
-				data["content"] = string(runes[:80]) + "…"
+			if len(runes) > maxMessageLength {
+				data["content"] = string(runes[:maxMessageLength]) + "…"
 			}
 		}
 	}
