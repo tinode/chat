@@ -927,12 +927,12 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 			now, now, decoded_uid); err != nil {
 			return err
 		}
-		// Disable all topics where the user is the owner.
+		// Disable group topics where the user is the owner.
 		if _, err = tx.Exec("UPDATE topics SET updatedat=?, state=?, stateat=? WHERE owner=?",
 			now, t.StateDeleted, now, decoded_uid); err != nil {
 			return err
 		}
-		// Disable p2p topics with the user (p2p topic's owner is 0)
+		// Disable p2p topics with the user (p2p topic's owner is 0).
 		if _, err = tx.Exec("UPDATE topics LEFT JOIN subscriptions ON topics.name=subscriptions.topic "+
 			"SET topics.updatedat=?, topics.state=?, topics.stateat=? WHERE topics.owner=0 AND subscriptions.userid=?",
 			now, t.StateDeleted, now, decoded_uid); err != nil {
@@ -981,6 +981,9 @@ func (a *adapter) topicStateForUser(tx *sqlx.Tx, decoded_uid int64, now time.Tim
 		state, now, decoded_uid); err != nil {
 		return err
 	}
+
+	// Subscriptions don't need to be updated:
+	// subscriptions of a disabled user are not disabled and still can be manipulated.
 
 	return nil
 }
@@ -1322,6 +1325,11 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 		q, topq, _ := sqlx.In(
 			"SELECT createdat,updatedat,state,stateat,touchedat,name AS id,access,seqid,delid,public,tags "+
 				"FROM topics WHERE name IN (?)", topq)
+		// Optionally skip deleted topics.
+		if !keepDeleted {
+			q += " AND state!=?"
+			topq = append(topq, t.StateDeleted)
+		}
 		q = a.db.Rebind(q)
 		rows, err = a.db.Queryx(q, topq...)
 		if err != nil {
@@ -1332,11 +1340,6 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 		for rows.Next() {
 			if err = rows.StructScan(&top); err != nil {
 				break
-			}
-
-			// Optionally skip deleted topics.
-			if !keepDeleted && top.State == t.StateDeleted {
-				continue
 			}
 
 			sub = join[top.Id]
@@ -1362,6 +1365,11 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 			"SELECT id,state,createdat,updatedat,state,stateat,access,lastseen,useragent,public,tags "+
 				"FROM users WHERE id IN (?)",
 			usrq)
+		// Optionally skip deleted users.
+		if !keepDeleted {
+			q += " AND state!=?"
+			usrq = append(usrq, t.StateDeleted)
+		}
 		rows, err = a.db.Queryx(q, usrq...)
 		if err != nil {
 			return nil, err
@@ -1371,11 +1379,6 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 		for rows.Next() {
 			if err = rows.StructScan(&usr); err != nil {
 				break
-			}
-
-			// Optionally skip deleted users.
-			if !keepDeleted && usr.State == t.StateDeleted {
-				continue
 			}
 
 			uid2 := encodeUidString(usr.Id)
