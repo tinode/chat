@@ -37,11 +37,6 @@ from google.protobuf import json_format
 from tinode_grpc import pb
 from tinode_grpc import pbx
 
-# `input` function.
-# In Python 2.x, the function is named `raw_input`.
-try: input = raw_input
-except NameError: pass
-
 APP_NAME = "tn-cli"
 APP_VERSION = "1.2.1"
 PROTOCOL_VERSION = "0"
