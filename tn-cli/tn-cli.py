@@ -80,7 +80,7 @@ InputThread = None
 
 # Detect if the tn-cli is running interactively or being piped.
 IsInteractive = sys.stdin.isatty()
-Prompt = PromptSession()
+Prompt = None
 
 # Print prompts in interactive mode only.
 def printout(*args):
@@ -892,8 +892,12 @@ def handle_ctrl(ctrl):
 def run(args, schema, secret):
     global WaitingFor
     global Variables
+    global IsInteractive
+    global Prompt
 
     try:
+        if IsInteractive:
+            Prompt = PromptSession()
         # Create secure channel with default credentials.
         channel = None
         if args.ssl:
