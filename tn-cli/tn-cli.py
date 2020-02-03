@@ -215,7 +215,7 @@ def parse_cred(cred):
         result = []
         for c in cred.split(","):
             parts = c.split(":")
-            result.append(pb.Credential(method=parts[0] if len(parts) > 0 else None,
+            result.append(pb.ClientCred(method=parts[0] if len(parts) > 0 else None,
                 value=parts[1] if len(parts) > 1 else None,
                 response=parts[2] if len(parts) > 2 else None))
 
