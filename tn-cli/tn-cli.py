@@ -1037,8 +1037,8 @@ if __name__ == '__main__':
             secret = args.login_basic
             printout("Logging in with login:password", args.login_basic)
 
-        else:
-            """Try reading the cookie file"""
+        elif IsInteractive:
+            """Interactive mode only: try reading the cookie file"""
             try:
                 schema = 'token'
                 secret = read_cookie()
