@@ -18,13 +18,13 @@ import mimetypes
 import os
 import pkg_resources
 import platform
+from prompt_toolkit import PromptSession
 try:
     import Queue as queue
 except ImportError:
     import queue
 import random
 import re
-import readline
 import requests
 import shlex
 import sys
@@ -85,6 +85,8 @@ InputThread = None
 
 # Detect if the tn-cli is running interactively or being piped.
 IsInteractive = sys.stdin.isatty()
+Prompt = PromptSession()
+
 # Print prompts in interactive mode only.
 def printout(*args):
     if IsInteractive:
@@ -283,7 +285,7 @@ def readLinesFromStdin():
     if IsInteractive:
         while True:
             try:
-                line = input('tn> ')
+                line = Prompt.prompt()
                 yield line
             except EOFError as e:
                 # Ctrl+D.
@@ -659,7 +661,11 @@ def parse_cmd(parts):
 # Parses command line into command and parameters.
 def parse_input(cmd):
     # Split line into parts using shell-like syntax.
-    parts = shlex.split(cmd, comments=True)
+    try:
+        parts = shlex.split(cmd, comments=True)
+    except Exception as err:
+        printout('Error parsing command: ', err)
+        return None
     if len(parts) == 0:
         return None
 
@@ -830,8 +836,7 @@ def gen_message(scheme, secret, args):
                     return
 
                 pbMsg, cmd = serialize_cmd(inp, id, args)
-                if not pbMsg and not cmd and len(inp) > 0:
-                    print_prompt = IsInteractive
+                print_prompt = IsInteractive
                 if pbMsg != None:
                     if not IsInteractive:
                         sys.stdout.write("=> " + inp + "\n")
@@ -1059,5 +1064,4 @@ if __name__ == '__main__':
             except Exception as err:
                 printerr("Failed to read authentication cookie", err)
 
-    readline.parse_and_bind('tab: complete')
     run(args, schema, secret)
