@@ -18,6 +18,7 @@ import mimetypes
 import os
 import pkg_resources
 import platform
+from prompt_toolkit import PromptSession
 try:
     import Queue as queue
 except ImportError:
@@ -79,6 +80,8 @@ InputThread = None
 
 # Detect if the tn-cli is running interactively or being piped.
 IsInteractive = sys.stdin.isatty()
+Prompt = None
+
 # Print prompts in interactive mode only.
 def printout(*args):
     if IsInteractive:
@@ -212,7 +215,7 @@ def parse_cred(cred):
         result = []
         for c in cred.split(","):
             parts = c.split(":")
-            result.append(pb.Credential(method=parts[0] if len(parts) > 0 else None,
+            result.append(pb.ClientCred(method=parts[0] if len(parts) > 0 else None,
                 value=parts[1] if len(parts) > 1 else None,
                 response=parts[2] if len(parts) > 2 else None))
 
@@ -271,12 +274,28 @@ def stdoutln(*args):
     args = args + ("\n",)
     stdout(*args)
 
+# Prints prompt and reads lines from stdin.
+def readLinesFromStdin():
+    global IsInteractive
+    if IsInteractive:
+        while True:
+            try:
+                line = Prompt.prompt()
+                yield line
+            except EOFError as e:
+                # Ctrl+D.
+                break
+    else:
+        # iter(...) is a workaround for a python2 bug https://bugs.python.org/issue3907
+        for cmd in iter(sys.stdin.readline, ''):
+            yield cmd
+
+
 # Stdin reads a possibly multiline input from stdin and queues it for asynchronous processing.
 def stdin(InputQueue):
     partial_input = ""
     try:
-        # iter(...) is a workaround for a python2 bug https://bugs.python.org/issue3907
-        for cmd in iter(sys.stdin.readline, ''):
+        for cmd in readLinesFromStdin():
             cmd = cmd.strip()
             # Check for continuation symbol \ in the end of the line.
             if len(cmd) > 0 and cmd[-1] == "\\":
@@ -647,7 +666,11 @@ def parse_cmd(parts):
 # Parses command line into command and parameters.
 def parse_input(cmd):
     # Split line into parts using shell-like syntax.
-    parts = shlex.split(cmd, comments=True)
+    try:
+        parts = shlex.split(cmd, comments=True)
+    except Exception as err:
+        printout('Error parsing command: ', err)
+        return None
     if len(parts) == 0:
         return None
 
@@ -879,8 +902,12 @@ def handle_ctrl(ctrl):
 def run(args, schema, secret):
     global WaitingFor
     global Variables
+    global IsInteractive
+    global Prompt
 
     try:
+        if IsInteractive:
+            Prompt = PromptSession()
         # Create secure channel with default credentials.
         channel = None
         if args.ssl:
