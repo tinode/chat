@@ -639,12 +639,54 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 	return err
 }
 
+// topicStateForUser is called by UserUpdate when the update contains state change
+func (a *adapter) topicStateForUser(uid t.Uid, now time.Time, update interface{}) error {
+	state, ok := update.(t.ObjState)
+	if !ok {
+		return t.ErrMalformed
+	}
+
+	if now.IsZero() {
+		now = t.TimeNow()
+	}
+
+	// Change state of all topics where the user is the owner.
+	if _, err := a.db.Collection("topics").UpdateMany(a.ctx,
+		b.M{"owner": uid.String(), "state": b.M{"$ne": t.StateDeleted}},
+		b.M{"$set": b.M{"state": state, "stateat": now}}); err != nil {
+		return err
+	}
+
+	// Change state of p2p topics with the user (p2p topic's owner is blank)
+	topicIds, err := a.db.Collection("subscriptions").Distinct(a.ctx, "topic", b.M{"user": uid.String()})
+	if err != nil {
+		return err
+	}
+
+	if _, err := a.db.Collection("topics").UpdateMany(a.ctx,
+		b.M{"_id": b.M{"$in": topicIds}, "owner": "", "state": b.M{"$ne": t.StateDeleted}},
+		b.M{"$set": b.M{"state": state, "stateat": now}}); err != nil {
+		return err
+	}
+	// Subscriptions don't need to be updated:
+	// subscriptions of a disabled user are not disabled and still can be manipulated.
+	return nil
+}
+
 // UserUpdate updates user record
 func (a *adapter) UserUpdate(uid t.Uid, update map[string]interface{}) error {
 	// to get round the hardcoded "UpdatedAt" key in store.Users.Update()
 	update = normalizeUpdateMap(update)
 
 	_, err := a.db.Collection("users").UpdateOne(a.ctx, b.M{"_id": uid.String()}, b.M{"$set": update})
+	if err != nil {
+		return err
+	}
+
+	if state, ok := update["state"]; ok {
+		now, _ := update["stateat"].(time.Time)
+		err = a.topicStateForUser(uid, now, state)
+	}
 	return err
 }
 
