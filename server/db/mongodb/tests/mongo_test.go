@@ -261,7 +261,7 @@ func TestUserGetByCred(t *testing.T) {
 		t.Error("result uid should be ZeroUid")
 	}
 
-	got, err = adp.UserGetByCred(creds[0].Method, creds[0].Value)
+	got, _ = adp.UserGetByCred(creds[0].Method, creds[0].Value)
 	if got != types.ParseUserId("usr"+creds[0].User) {
 		t.Error(mismatchErrorString("Uid", got, types.ParseUserId("usr"+creds[0].User)))
 	}
@@ -292,17 +292,17 @@ func TestCredGetAll(t *testing.T) {
 		t.Errorf(mismatchErrorString("Credentials length", len(got), 3))
 	}
 
-	got, err = adp.CredGetAll(types.ParseUserId("usr"+users[2].Id), "tel", false)
+	got, _ = adp.CredGetAll(types.ParseUserId("usr"+users[2].Id), "tel", false)
 	if len(got) != 2 {
 		t.Errorf(mismatchErrorString("Credentials length", len(got), 2))
 	}
 
-	got, err = adp.CredGetAll(types.ParseUserId("usr"+users[2].Id), "", true)
+	got, _ = adp.CredGetAll(types.ParseUserId("usr"+users[2].Id), "", true)
 	if len(got) != 1 {
 		t.Errorf(mismatchErrorString("Credentials length", len(got), 1))
 	}
 
-	got, err = adp.CredGetAll(types.ParseUserId("usr"+users[2].Id), "tel", true)
+	got, _ = adp.CredGetAll(types.ParseUserId("usr"+users[2].Id), "tel", true)
 	if len(got) != 1 {
 		t.Errorf(mismatchErrorString("Credentials length", len(got), 1))
 	}
@@ -553,11 +553,11 @@ func TestMessageGetAll(t *testing.T) {
 	if len(gotMsgs) != 1 {
 		t.Error(mismatchErrorString("Messages length", len(gotMsgs), 1))
 	}
-	gotMsgs, err = adp.MessageGetAll(topics[0].Id, types.ParseUserId("usr"+users[0].Id), nil)
+	gotMsgs, _ = adp.MessageGetAll(topics[0].Id, types.ParseUserId("usr"+users[0].Id), nil)
 	if len(gotMsgs) != 2 {
 		t.Error(mismatchErrorString("Messages length", len(gotMsgs), 2))
 	}
-	gotMsgs, err = adp.MessageGetAll(topics[0].Id, types.ZeroUid, nil)
+	gotMsgs, _ = adp.MessageGetAll(topics[0].Id, types.ZeroUid, nil)
 	if len(gotMsgs) != 3 {
 		t.Error(mismatchErrorString("Messages length", len(gotMsgs), 3))
 	}
@@ -612,29 +612,28 @@ func TestUserUpdateTags(t *testing.T) {
 		t.Errorf(mismatchErrorString("Tags", got, want))
 
 	}
-	got, err = adp.UserUpdateTags(types.ParseUserId("usr"+users[0].Id), nil, removeTags, nil)
+	got, _ = adp.UserUpdateTags(types.ParseUserId("usr"+users[0].Id), nil, removeTags, nil)
 	want = []string{"Alice"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf(mismatchErrorString("Tags", got, want))
 
 	}
-	got, err = adp.UserUpdateTags(types.ParseUserId("usr"+users[0].Id), nil, nil, resetTags)
+	got, _ = adp.UserUpdateTags(types.ParseUserId("usr"+users[0].Id), nil, nil, resetTags)
 	want = []string{"Alice", "tag111", "tag333"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf(mismatchErrorString("Tags", got, want))
 
 	}
-	got, err = adp.UserUpdateTags(types.ParseUserId("usr"+users[0].Id), addTags, removeTags, nil)
+	got, _ = adp.UserUpdateTags(types.ParseUserId("usr"+users[0].Id), addTags, removeTags, nil)
 	want = []string{"Alice", "tag111", "tag333"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf(mismatchErrorString("Tags", got, want))
 
 	}
-	got, err = adp.UserUpdateTags(types.ParseUserId("usr"+users[0].Id), addTags, removeTags, nil)
+	got, _ = adp.UserUpdateTags(types.ParseUserId("usr"+users[0].Id), addTags, removeTags, nil)
 	want = []string{"Alice", "tag111", "tag333"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf(mismatchErrorString("Tags", got, want))
-
 	}
 }
 
@@ -646,7 +645,7 @@ func TestCredFail(t *testing.T) {
 
 	// Check if fields updated
 	var got types.Credential
-	err = db.Collection("credentials").FindOne(ctx, b.M{
+	_ = db.Collection("credentials").FindOne(ctx, b.M{
 		"user":   creds[3].User,
 		"method": "tel",
 		"value":  creds[3].Value}).Decode(&got)
@@ -751,7 +750,7 @@ func TestTopicUpdate(t *testing.T) {
 		t.Fatal(err)
 	}
 	var got types.Topic
-	err = db.Collection("topics").FindOne(ctx, b.M{"_id": topics[0].Id}).Decode(&got)
+	_ = db.Collection("topics").FindOne(ctx, b.M{"_id": topics[0].Id}).Decode(&got)
 	if got.UpdatedAt != update["UpdatedAt"] {
 		t.Errorf(mismatchErrorString("UpdatedAt", got.UpdatedAt, update["UpdatedAt"]))
 	}
@@ -763,7 +762,7 @@ func TestTopicOwnerChange(t *testing.T) {
 		t.Fatal(err)
 	}
 	var got types.Topic
-	err = db.Collection("topics").FindOne(ctx, b.M{"_id": topics[0].Id}).Decode(&got)
+	_ = db.Collection("topics").FindOne(ctx, b.M{"_id": topics[0].Id}).Decode(&got)
 	if got.Owner != users[1].Id {
 		t.Errorf(mismatchErrorString("Owner", got.Owner, users[1].Id))
 	}
@@ -778,7 +777,7 @@ func TestSubsUpdate(t *testing.T) {
 		t.Fatal(err)
 	}
 	var got types.Subscription
-	err = db.Collection("subscriptions").FindOne(ctx, b.M{"_id": topics[0].Id + ":" + users[0].Id}).Decode(&got)
+	_ = db.Collection("subscriptions").FindOne(ctx, b.M{"_id": topics[0].Id + ":" + users[0].Id}).Decode(&got)
 	if got.UpdatedAt != update["UpdatedAt"] {
 		t.Errorf(mismatchErrorString("UpdatedAt", got.UpdatedAt, update["UpdatedAt"]))
 	}
@@ -787,7 +786,7 @@ func TestSubsUpdate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = db.Collection("subscriptions").FindOne(ctx, b.M{"topic": topics[1].Id}).Decode(&got)
+	_ = db.Collection("subscriptions").FindOne(ctx, b.M{"topic": topics[1].Id}).Decode(&got)
 	if got.UpdatedAt != update["UpdatedAt"] {
 		t.Errorf(mismatchErrorString("UpdatedAt", got.UpdatedAt, update["UpdatedAt"]))
 	}
@@ -799,7 +798,7 @@ func TestSubsDelete(t *testing.T) {
 		t.Fatal(err)
 	}
 	var got types.Subscription
-	err = db.Collection("subscriptions").FindOne(ctx, b.M{"_id": topics[1].Id + ":" + users[0].Id}).Decode(&got)
+	_ = db.Collection("subscriptions").FindOne(ctx, b.M{"_id": topics[1].Id + ":" + users[0].Id}).Decode(&got)
 	if got.DeletedAt == nil {
 		t.Errorf(mismatchErrorString("DeletedAt", got.DeletedAt, nil))
 	}
@@ -984,7 +983,7 @@ func TestAuthDelAllRecords(t *testing.T) {
 	}
 
 	// With dummy user
-	delCount, err = adp.AuthDelAllRecords(types.ParseUserId("dummyuserid"))
+	delCount, _ = adp.AuthDelAllRecords(types.ParseUserId("dummyuserid"))
 	if delCount != 0 {
 		t.Errorf(mismatchErrorString("delCount", delCount, 0))
 	}
@@ -997,7 +996,7 @@ func TestSubsDelForTopic(t *testing.T) {
 		t.Fatal(err)
 	}
 	var got types.Subscription
-	err = db.Collection("subscriptions").FindOne(ctx, b.M{"topic": topics[1].Id}).Decode(&got)
+	_ = db.Collection("subscriptions").FindOne(ctx, b.M{"topic": topics[1].Id}).Decode(&got)
 	if got.DeletedAt == nil {
 		t.Errorf(mismatchErrorString("DeletedAt", got.DeletedAt, nil))
 	}
