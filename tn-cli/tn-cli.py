@@ -367,7 +367,11 @@ def loginMsg(id, cmd, ignored):
 
     msg = pb.ClientMsg(login=pb.ClientLogin(id=str(id), scheme=cmd.scheme, secret=cmd.secret,
         cred=parse_cred(cmd.cred)))
-    OnCompletion[str(id)] = lambda params: save_cookie(params)
+
+    if cmd.no_cookie or not IsInteractive:
+        OnCompletion[str(id)] = lambda params: handle_login(params)
+    else:
+        OnCompletion[str(id)] = lambda params: save_cookie(params)
 
     return msg
 
@@ -965,12 +969,12 @@ def read_cookie():
         println("Missing or invalid cookie file '.tn-cli-cookie'", err)
         return None
 
-# Save cookie to file after successful login.
-def save_cookie(params):
+# Lambda for handling login
+def handle_login(params):
     global AuthToken
 
     if params == None:
-        return
+        return None
 
     # Protobuf map 'params' is a map which is not a python object or a dictionary. Convert it.
     nice = {}
@@ -981,9 +985,16 @@ def save_cookie(params):
 
     AuthToken = nice.get('token')
 
+    return nice
+
+# Save cookie to file after successful login.
+def save_cookie(params):
+    if params == None:
+        return
+
     try:
         cookie = open('.tn-cli-cookie', 'w')
-        json.dump(nice, cookie)
+        json.dump(handle_login(params), cookie)
         cookie.close()
     except Exception as err:
         stdoutln("Failed to save authentication cookie", err)
@@ -1008,7 +1019,8 @@ if __name__ == '__main__':
     parser.add_argument('--login-basic', help='login using basic authentication username:password')
     parser.add_argument('--login-token', help='login using token authentication')
     parser.add_argument('--login-cookie', action='store_true', help='read token from cookie file and use it for authentication')
-    parser.add_argument('--no-login', action='store_true', help='do not login even if cookie file is present')
+    parser.add_argument('--no-login', action='store_true', help='do not login even if cookie file is present; default in non-interactive (scripted) mode')
+    parser.add_argument('--no-cookie', action='store_true', help='do not save login cookie; default in non-interactive (scripted) mode')
     parser.add_argument('--api-key', default='AQEAAAABAAD_rAp4DJh05a1HAwFT3A6K', help='API key for file uploads')
     parser.add_argument('--version', action='store_true', help='print version')
     args = parser.parse_args()
