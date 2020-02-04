@@ -29,7 +29,8 @@ The client takes optional parameters:
  * `--login-basic` is the `login:password` to be authenticated with.
  * `--login-token` is the token to be authenticated with.
  * `--login-cookie` direct the client to read the token from the cookie file `.tn-cli-cookie` generated during an earlier login.
- * `--no-login` do not login even if cookie file is present.
+ * `--no-login` do not login even if cookie file is present; this is the default in non-interactive (scripted) mode.
+ * `--no-cookie` do not save cookie on successful login; this is the default in non-interactive (scripted) mode.
  * `--api-key` web API key for file uploads; default `AQEAAAABAAD_rAp4DJh05a1HAwFT3A6K`
 
 If multiple `login-XYZ` are provided, `login-cookie` is considered first, then `login-token` then `login-basic`. Authentication with token (and cookie) is much faster than with the username-password pair.
@@ -40,7 +41,7 @@ Type `<command> -h` for help
 
 See some of these commands in use in the [sample-script.txt](sample-script.txt). Try it as
 ```
-python tn-cli.py --no-login < sample-script.txt
+python tn-cli.py < sample-script.txt
 ```
 
 ### Local (non-networking)
