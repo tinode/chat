@@ -51,7 +51,7 @@ func NewExporter(server, namespace string, timeout time.Duration) *Exporter {
 		),
 		topicsLive: prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "", "topics_live_count"),
-			"Number of currenly active topics.",
+			"Number of currently active topics.",
 			nil,
 			nil,
 		),
@@ -63,7 +63,7 @@ func NewExporter(server, namespace string, timeout time.Duration) *Exporter {
 		),
 		sessionsLive: prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "", "sessions_live_count"),
-			"Number of currenly active sessions.",
+			"Number of currently active sessions.",
 			nil,
 			nil,
 		),

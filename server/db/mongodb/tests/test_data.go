@@ -7,7 +7,7 @@ import (
 	"github.com/tinode/chat/server/store/types"
 )
 
-type AuthRecord struct {
+type authRecord struct {
 	Id      string `bson:"_id"`
 	UserId  string
 	Scheme  string
@@ -19,7 +19,7 @@ type AuthRecord struct {
 var uGen types.UidGenerator
 var users []*types.User
 var creds []*types.Credential
-var recs []AuthRecord
+var recs []authRecord
 var topics []*types.Topic
 var subs []*types.Subscription
 var msgs []*types.Message
@@ -96,7 +96,7 @@ func initCreds() {
 	creds[3].UpdatedAt = now.Add(-10 * time.Minute)
 }
 func initAuthRecords() {
-	recs = append(recs, AuthRecord{
+	recs = append(recs, authRecord{
 		Id:      "basic:alice",
 		UserId:  users[0].Id,
 		Scheme:  "basic",
@@ -104,7 +104,7 @@ func initAuthRecords() {
 		Secret:  []byte{'a', 'l', 'i', 'c', 'e'},
 		Expires: now.Add(24 * time.Hour),
 	})
-	recs = append(recs, AuthRecord{
+	recs = append(recs, authRecord{
 		Id:      "basic:bob",
 		UserId:  users[1].Id,
 		Scheme:  "basic",
@@ -308,10 +308,10 @@ func initFileDefs() {
 			CreatedAt: now,
 			UpdatedAt: now,
 		},
-		Status:    types.UploadStarted,
-		User:      users[0].Id,
-		MimeType:  "application/pdf",
-		Location:  "uploads/qwerty.pdf",
+		Status:   types.UploadStarted,
+		User:     users[0].Id,
+		MimeType: "application/pdf",
+		Location: "uploads/qwerty.pdf",
 	})
 	files = append(files, &types.FileDef{
 		ObjHeader: types.ObjHeader{
@@ -319,9 +319,9 @@ func initFileDefs() {
 			CreatedAt: now,
 			UpdatedAt: now,
 		},
-		Status:    types.UploadStarted,
-		User:      users[0].Id,
-		Location:  "uploads/asdf.txt",
+		Status:   types.UploadStarted,
+		User:     users[0].Id,
+		Location: "uploads/asdf.txt",
 	})
 }
 func initData() {

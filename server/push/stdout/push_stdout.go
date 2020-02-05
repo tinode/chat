@@ -1,6 +1,5 @@
 // Package stdout is a sample implementation of a push plugin.
 // If enabled, it writes every notification to stdout.
-
 package stdout
 
 import (

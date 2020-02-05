@@ -9,11 +9,11 @@ Fields:
 * `_id` user id, primary key
 * `createdat` timestamp when the user was created
 * `updatedat` timestamp when user metadata was updated
-* `deletedat` currently unused
 * `access` user's default access level for peer-to-peer topics
     * `auth`, `anon` default permissions for authenticated and anonymous users
 * `public` application-defined data
-* `state` currently unused
+* `state` account state: normal (ok), suspended, soft-deleted
+* `stateat` timestamp when the state was last updated or NULL
 * `lastseen` timestamp when the user was last online
 * `useragent` client User-Agent used when last online
 * `tags` unique strings for user discovery
@@ -36,8 +36,9 @@ Sample:
     "anon": 0 ,
     "auth": 47
   } ,
-  "createdat": "2019-10-11T12:13:14.522Z" ,
-  "deletedat": null ,
+  "createdat": "2019-10-11T12:13:14.522Z" , 
+  "state": 0,
+  "stateat": null ,
   "devices": null ,
   "_id": "7yUCHniegrM" ,
   "lastseen": "2019-10-11T12:13:14.522Z" ,
@@ -91,12 +92,12 @@ Fields:
  * `_id` name of the topic, primary key
  * `createdat` topic creation time
  * `updatedat` timestamp of the last change to topic metadata
- * `deletedat` currently unused
  * `access` stores topic's default access permissions
     * `auth`, `anon` permissions for authenticated and anonymous users respectively
  * `owner` ID of the user who owns the topic
  * `public` application-defined data
- * `state` currently unused
+ * `state` topic state: normal (ok), suspended, soft-deleted
+ * `stateat` timestamp when the state was last updated or NULL
  * `seqid` sequential ID of the last message
  * `delid` topic-sequential ID of the deletion operation
  * `usebt` currently unused
@@ -126,7 +127,8 @@ Sample:
    }
  } ,
  "seqid": 14,
- "state": 0 ,
+ "state": 0,
+ "stateat": null,
  "updatedat": "2019-10-11T12:13:14.522Z" ,
  "usebt": false
 }

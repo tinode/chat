@@ -44,7 +44,7 @@ const sendQueueLimit = 128
 
 var minSupportedVersionValue = parseVersion(minSupportedVersion)
 
-// Holds metadata on the subscription/topic hosted on a remote node.
+// RemoteSubscription holds metadata on the subscription/topic hosted on a remote node.
 type RemoteSubscription struct {
 	// Hosting node.
 	node string

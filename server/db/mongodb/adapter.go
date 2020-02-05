@@ -35,7 +35,7 @@ const (
 	defaultHost     = "localhost:27017"
 	defaultDatabase = "tinode"
 
-	adpVersion  = 110
+	adpVersion  = 111
 	adapterName = "mongodb"
 
 	defaultMaxResults = 1024
@@ -198,10 +198,6 @@ func (a *adapter) SetMaxResults(val int) error {
 	return nil
 }
 
-func getIdxOpts(field string) mdb.IndexModel {
-	return mdb.IndexModel{Keys: b.M{field: 1}}
-}
-
 // CreateDb creates the database optionally dropping an existing database first.
 func (a *adapter) CreateDb(reset bool) error {
 	if reset {
@@ -220,12 +216,12 @@ func (a *adapter) CreateDb(reset bool) error {
 		IndexOpts  mdb.IndexModel
 	}{
 		// Users
-		// Index on 'user.deletedat' for finding soft-deleted users
+		// Index on 'user.state' for finding suspended and soft-deleted users.
 		{
 			Collection: "users",
-			Field:      "deletedat",
+			Field:      "state",
 		},
-		// Index on 'user.tags' array so user can be found by tags
+		// Index on 'user.tags' array so user can be found by tags.
 		{
 			Collection: "users",
 			Field:      "tags",
@@ -264,6 +260,11 @@ func (a *adapter) CreateDb(reset bool) error {
 		{
 			Collection: "topics",
 			Field:      "owner",
+		},
+		// Index on 'state' for finding suspended and soft-deleted topics.
+		{
+			Collection: "topics",
+			Field:      "state",
 		},
 		// Index on 'topic.tags' array so topics can be found by tags.
 		// These tags are not unique as opposite to 'user.tags'.
@@ -347,7 +348,102 @@ func (a *adapter) CreateDb(reset bool) error {
 
 // UpgradeDb upgrades database to the current adapter version.
 func (a *adapter) UpgradeDb() error {
+	bumpVersion := func(a *adapter, x int) error {
+		if err := a.updateDbVersion(x); err != nil {
+			return err
+		}
+		_, err := a.GetDbVersion()
+		return err
+	}
+
+	_, err := a.GetDbVersion()
+	if err != nil {
+		return err
+	}
+
+	if a.version == 110 {
+		// Perform database upgrade from versions 110 to version 111.
+
+		// Users
+
+		// Reset previously unused field State to value StateOK.
+		if _, err := a.db.Collection("users").UpdateMany(a.ctx,
+			b.M{},
+			b.M{"$set": b.M{"state": t.StateOK}}); err != nil {
+			return err
+		}
+
+		// Add StatusDeleted to all deleted users as indicated by DeletedAt not being null.
+		if _, err := a.db.Collection("users").UpdateMany(a.ctx,
+			b.M{"deletedat": b.M{"$ne": nil}},
+			b.M{"$set": b.M{"state": t.StateDeleted}}); err != nil {
+			return err
+		}
+
+		// Rename DeletedAt into StateAt. Update only those rows which have defined DeletedAt.
+		if _, err := a.db.Collection("users").UpdateMany(a.ctx,
+			b.M{"deletedat": b.M{"$exists": true}},
+			b.M{"$rename": b.M{"deletedat": "stateat"}}); err != nil {
+			return err
+		}
+
+		// Drop secondary index DeletedAt.
+		if _, err := a.db.Collection("users").Indexes().DropOne(a.ctx, "deletedat_1"); err != nil {
+			return err
+		}
+
+		// Create secondary index on State for finding suspended and soft-deleted topics.
+		if _, err = a.db.Collection("users").Indexes().CreateOne(a.ctx, mdb.IndexModel{Keys: b.M{"state": 1}}); err != nil {
+			return err
+		}
+
+		// Topics
+
+		// Add StateDeleted to all topics with DeletedAt not null.
+		if _, err := a.db.Collection("topics").UpdateMany(a.ctx,
+			b.M{"deletedat": b.M{"$ne": nil}},
+			b.M{"$set": b.M{"state": t.StateDeleted}}); err != nil {
+			return err
+		}
+
+		// Set StateOK for all other topics.
+		if _, err := a.db.Collection("topics").UpdateMany(a.ctx,
+			b.M{"state": b.M{"$exists": false}},
+			b.M{"$set": b.M{"state": t.StateOK}}); err != nil {
+			return err
+		}
+
+		// Rename DeletedAt into StateAt. Update only those rows which have defined DeletedAt.
+		if _, err := a.db.Collection("topics").UpdateMany(a.ctx,
+			b.M{"deletedat": b.M{"$exists": true}},
+			b.M{"$rename": b.M{"deletedat": "stateat"}}); err != nil {
+			return err
+		}
+
+		// Create secondary index on State for finding suspended and soft-deleted topics.
+		if _, err = a.db.Collection("topics").Indexes().CreateOne(a.ctx, mdb.IndexModel{Keys: b.M{"state": 1}}); err != nil {
+			return err
+		}
+
+		if err := bumpVersion(a, 111); err != nil {
+			return err
+		}
+	}
+
+	if a.version != adpVersion {
+		return errors.New("Failed to perform database upgrade to version " + strconv.Itoa(adpVersion) +
+			". DB is still at " + strconv.Itoa(a.version))
+	}
 	return nil
+}
+
+func (a *adapter) updateDbVersion(v int) error {
+	a.version = -1
+	_, err := a.db.Collection("kvmeta").UpdateOne(a.ctx,
+		b.M{"_id": "version"},
+		b.M{"$set": b.M{"value": v}},
+	)
+	return err
 }
 
 // Create system topic 'sys'.
@@ -380,7 +476,7 @@ func (a *adapter) UserCreate(usr *t.User) error {
 func (a *adapter) UserGet(id t.Uid) (*t.User, error) {
 	var user t.User
 
-	filter := b.M{"_id": id.String(), "deletedat": b.M{"$exists": false}}
+	filter := b.M{"_id": id.String(), "state": b.M{"$ne": t.StateDeleted}}
 	if err := a.db.Collection("users").FindOne(a.ctx, filter).Decode(&user); err != nil {
 		if err == mdb.ErrNoDocuments { // User not found
 			return nil, nil
@@ -400,7 +496,7 @@ func (a *adapter) UserGetAll(ids ...t.Uid) ([]t.User, error) {
 	}
 
 	var users []t.User
-	filter := b.M{"_id": b.M{"$in": uids}, "deletedat": b.M{"$exists": false}}
+	filter := b.M{"_id": b.M{"$in": uids}, "state": b.M{"$ne": t.StateDeleted}}
 	cur, err := a.db.Collection("users").Find(a.ctx, filter)
 	if err != nil {
 		return nil, err
@@ -521,7 +617,7 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 			// Disable subscriptions for topics where the user is the owner.
 			// Disable topics where the user is the owner.
 			now := t.TimeNow()
-			disable := b.M{"$set": b.M{"deletedat": now, "updatedat": now}}
+			disable := b.M{"$set": b.M{"state": t.StateDeleted, "stateat": now}}
 
 			if _, err = a.db.Collection("subscriptions").UpdateMany(sc, topicFilter, disable); err != nil {
 				return err
@@ -543,12 +639,54 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 	return err
 }
 
+// topicStateForUser is called by UserUpdate when the update contains state change
+func (a *adapter) topicStateForUser(uid t.Uid, now time.Time, update interface{}) error {
+	state, ok := update.(t.ObjState)
+	if !ok {
+		return t.ErrMalformed
+	}
+
+	if now.IsZero() {
+		now = t.TimeNow()
+	}
+
+	// Change state of all topics where the user is the owner.
+	if _, err := a.db.Collection("topics").UpdateMany(a.ctx,
+		b.M{"owner": uid.String(), "state": b.M{"$ne": t.StateDeleted}},
+		b.M{"$set": b.M{"state": state, "stateat": now}}); err != nil {
+		return err
+	}
+
+	// Change state of p2p topics with the user (p2p topic's owner is blank)
+	topicIds, err := a.db.Collection("subscriptions").Distinct(a.ctx, "topic", b.M{"user": uid.String()})
+	if err != nil {
+		return err
+	}
+
+	if _, err := a.db.Collection("topics").UpdateMany(a.ctx,
+		b.M{"_id": b.M{"$in": topicIds}, "owner": "", "state": b.M{"$ne": t.StateDeleted}},
+		b.M{"$set": b.M{"state": state, "stateat": now}}); err != nil {
+		return err
+	}
+	// Subscriptions don't need to be updated:
+	// subscriptions of a disabled user are not disabled and still can be manipulated.
+	return nil
+}
+
 // UserUpdate updates user record
 func (a *adapter) UserUpdate(uid t.Uid, update map[string]interface{}) error {
 	// to get round the hardcoded "UpdatedAt" key in store.Users.Update()
 	update = normalizeUpdateMap(update)
 
 	_, err := a.db.Collection("users").UpdateOne(a.ctx, b.M{"_id": uid.String()}, b.M{"$set": update})
+	if err != nil {
+		return err
+	}
+
+	if state, ok := update["state"]; ok {
+		now, _ := update["stateat"].(time.Time)
+		err = a.topicStateForUser(uid, now, state)
+	}
 	return err
 }
 
@@ -625,6 +763,7 @@ func (a *adapter) UserUnreadCount(uid t.Uid) (int, error) {
 
 		b.M{"$match": b.M{
 			"deletedat": b.M{"$exists": false},
+			"state":     b.M{"$ne": t.StateDeleted},
 			// Filter by access mode
 			"modewant":  b.M{"$bitsAllSet": b.A{1}},
 			"modegiven": b.M{"$bitsAllSet": b.A{1}}}},
@@ -1130,7 +1269,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 	if len(usrq) > 0 {
 		filter := b.M{"_id": b.M{"$in": usrq}}
 		if !keepDeleted {
-			filter["deletedat"] = b.M{"$exists": false}
+			filter["state"] = b.M{"$ne": t.StateDeleted}
 		}
 		cur, err = a.db.Collection("users").Find(a.ctx, filter)
 		if err != nil {
@@ -1214,8 +1353,8 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 
 		// Fetch users by a list of subscriptions
 		cur, err = a.db.Collection("users").Find(a.ctx, b.M{
-			"_id":       b.M{"$in": usrq},
-			"deletedat": b.M{"$exists": false}})
+			"_id":   b.M{"$in": usrq},
+			"state": b.M{"$ne": t.StateDeleted}})
 		if err != nil {
 			return nil, err
 		}
@@ -1264,7 +1403,7 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 
 // OwnTopics loads a slice of topic names where the user is the owner.
 func (a *adapter) OwnTopics(uid t.Uid) ([]string, error) {
-	filter := b.M{"owner": uid.String(), "deletedat": b.M{"$exists": false}}
+	filter := b.M{"owner": uid.String(), "state": b.M{"$ne": t.StateDeleted}}
 	findOpts := mdbopts.Find().SetProjection(b.M{"_id": 1})
 	cur, err := a.db.Collection("topics").Find(a.ctx, filter, findOpts)
 	if err != nil {
@@ -1330,8 +1469,8 @@ func (a *adapter) TopicDelete(topic string, hard bool) error {
 	} else {
 		now := t.TimeNow()
 		_, err = a.db.Collection("topics").UpdateOne(a.ctx, filter, b.M{"$set": b.M{
-			"updatedat": now,
-			"deletedat": now,
+			"state":   t.StateDeleted,
+			"stateat": now,
 		}})
 	}
 	return err
@@ -1519,8 +1658,8 @@ func (a *adapter) getFindPipeline(req, opt []string) (map[string]struct{}, b.A) 
 
 	pipeline := b.A{
 		b.M{"$match": b.M{
-			"tags":      b.M{"$in": allTags},
-			"deletedat": b.M{"$exists": false},
+			"tags":  b.M{"$in": allTags},
+			"state": b.M{"$ne": t.StateDeleted},
 		}},
 
 		b.M{"$project": b.M{"_id": 1, "access": 1, "createdat": 1, "updatedat": 1, "public": 1, "tags": 1}},
@@ -1662,7 +1801,7 @@ func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.QueryOpt) (
 	if upper == 0 {
 		filter["seqid"] = b.M{"$gte": lower}
 	} else {
-		filter["seqid"] = b.M{"$gte": lower, "$lte": upper}
+		filter["seqid"] = b.M{"$gte": lower, "$lt": upper}
 	}
 	findOpts := mdbopts.Find().SetSort(b.M{"topic": -1, "seqid": -1})
 	findOpts.SetLimit(int64(limit))
@@ -1799,7 +1938,7 @@ func (a *adapter) MessageGetDeleted(topic string, forUser t.Uid, opts *t.QueryOp
 	if upper == 0 {
 		filter["delid"] = b.M{"$gte": lower}
 	} else {
-		filter["delid"] = b.M{"$gte": lower, "$lte": upper}
+		filter["delid"] = b.M{"$gte": lower, "$lt": upper}
 	}
 	findOpts := mdbopts.Find().
 		SetSort(b.M{"topic": 1, "delid": 1}).

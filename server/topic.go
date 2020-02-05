@@ -1213,6 +1213,12 @@ func (t *Topic) approveSub(h *Hub, sess *Session, asUid, target types.Uid, set *
 		return false, errors.New("topic access denied; approver has no permission")
 	}
 
+	// Check if topic is suspended.
+	if t.isReadOnly() {
+		sess.queueOut(ErrPermissionDenied(set.Id, toriginal, now))
+		return false, errors.New("topic is suspended")
+	}
+
 	hostMode = userData.modeGiven & userData.modeWant
 
 	// Parse the access mode granted
@@ -1267,6 +1273,9 @@ func (t *Topic) approveSub(h *Hub, sess *Session, asUid, target types.Uid, set *
 		} else if user == nil {
 			sess.queueOut(ErrUserNotFound(set.Id, toriginal, now))
 			return false, errors.New("user not found")
+		} else if user.State != types.StateOK {
+			sess.queueOut(ErrPermissionDenied(set.Id, toriginal, now))
+			return false, errors.New("user is suspended")
 		} else {
 			// Don't ask by default for more permissions than the granted ones.
 			modeWant = user.Access.Auth & modeGiven
