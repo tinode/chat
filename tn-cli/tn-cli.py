@@ -369,7 +369,7 @@ def accMsg(id, cmd, ignored):
         cred=parse_cred(cmd.cred)), on_behalf_of=DefaultUser)
 
 # {login}
-def loginMsg(id, cmd, ignored):
+def loginMsg(id, cmd, args):
     if cmd.secret == None:
         if cmd.uname == None:
             cmd.uname = ''
@@ -387,7 +387,7 @@ def loginMsg(id, cmd, ignored):
     msg = pb.ClientMsg(login=pb.ClientLogin(id=str(id), scheme=cmd.scheme, secret=cmd.secret,
         cred=parse_cred(cmd.cred)))
 
-    if cmd.no_cookie or not IsInteractive:
+    if args.no_cookie or not IsInteractive:
         OnCompletion[str(id)] = lambda params: handle_login(params)
     else:
         OnCompletion[str(id)] = lambda params: save_cookie(params)

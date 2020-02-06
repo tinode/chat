@@ -43,16 +43,25 @@ type Payload struct {
 	Silent bool `json:"silent"`
 	// Topic which was affected by the action.
 	Topic string `json:"topic"`
+	// Timestamp of the action.
+	Timestamp time.Time `json:"ts"`
+
+	// {data} notification.
+
 	// Message sender 'usrXXX'
 	From string `json:"from"`
-	// Timestamp of the message.
-	Timestamp time.Time `json:"ts"`
 	// Sequential ID of the message.
 	SeqId int `json:"seq"`
 	// MIME-Type of the message content, text/x-drafty or text/plain
 	ContentType string `json:"mime"`
 	// Actual Data.Content of the message, if requested
 	Content interface{} `json:"content,omitempty"`
+
+	// New subscription notification
+
+	// Access mode when notifying of new subscriptions.
+	ModeWant  t.AccessMode `json:"want,omitempty"`
+	ModeGiven t.AccessMode `json:"given,omitempty"`
 }
 
 // Handler is an interface which must be implemented by handlers.
