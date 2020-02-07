@@ -1,7 +1,6 @@
+// Package anon provides authentication without credentials. Most useful for customer support.
+// Anonymous authentication is used only at the account creation time.
 package anon
-
-// Authentication without credentials. Most useful for customer support.
-// Anonymous authentication is used only at account creation time.
 
 import (
 	"time"

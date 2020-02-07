@@ -1,3 +1,4 @@
+// Package types provides data types for persisting objects in the databases.
 package types
 
 import (

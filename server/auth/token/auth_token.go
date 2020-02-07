@@ -1,6 +1,5 @@
+// Package token implements authentication by HMAC-signed security token.
 package token
-
-// Authentication by HMAC-signed security token.
 
 import (
 	"bytes"

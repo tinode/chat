@@ -1,5 +1,6 @@
 // +build mysql
 
+// Package mysql is a database adapter for MySQL.
 package mysql
 
 import (

@@ -1,5 +1,4 @@
 // Interface which must be implemented by media upload/download handlers.
-
 package media
 
 import (

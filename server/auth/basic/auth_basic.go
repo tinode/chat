@@ -1,6 +1,5 @@
+// Package basic is an authenticator by login-password.
 package basic
-
-// Authentication by login-password.
 
 import (
 	"encoding/json"

@@ -1,5 +1,4 @@
-// This email validator can send email through an SMTP server
-
+// Package email is a credential validator which uses an external SMTP server.
 package email
 
 import (

@@ -316,6 +316,6 @@ Server may enforce certain tag namespaces to be restricted, i.e. not editable by
 #### Sample response
 ```json
 {
-	"strarr": ["basic", "email", "tel"]
+  "strarr": ["basic", "email", "tel"]
 }
 ```

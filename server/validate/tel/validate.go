@@ -1,3 +1,4 @@
+// Package tel is an incomplete implementation of SMS or voice credential validator.
 package tel
 
 import (

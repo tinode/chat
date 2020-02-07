@@ -1,3 +1,4 @@
+// Package store provides methods for registering and accessing database adapters.
 package store
 
 import (

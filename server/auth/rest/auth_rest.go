@@ -1,6 +1,5 @@
+// Package REST provides authentication by calling a separate process over REST API.
 package rest
-
-// Authentication by calling a separate process over REST API.
 
 import (
 	"bytes"
