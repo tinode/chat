@@ -852,7 +852,8 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 
 	if hard {
 		// Delete user's devices
-		if err = deviceDelete(tx, uid, ""); err != nil {
+		// t.ErrNotFound = user has no devices.
+		if err = deviceDelete(tx, uid, ""); err != nil && err != t.ErrNotFound {
 			return err
 		}
 
@@ -979,7 +980,7 @@ func (a *adapter) topicStateForUser(tx *sqlx.Tx, decoded_uid int64, now time.Tim
 
 	// Change state of p2p topics with the user (p2p topic's owner is 0)
 	if _, err = tx.Exec("UPDATE topics LEFT JOIN subscriptions ON topics.name=subscriptions.topic "+
-		"SET topics.state=?, topics.stateat=? WHERE topics.owner=0 AND subscriptions.userid=? AND topic.state!=?",
+		"SET topics.state=?, topics.stateat=? WHERE topics.owner=0 AND subscriptions.userid=? AND topics.state!=?",
 		state, now, decoded_uid, t.StateDeleted); err != nil {
 		return err
 	}
