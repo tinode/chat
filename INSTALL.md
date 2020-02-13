@@ -33,18 +33,18 @@ See [instructions](./docker/README.md)
 3. Fetch, build Tinode server and tinode-db database initializer:
  - **RethinkDb**:
 	```
-	go get -tags rethinkdb github.com/tinode/chat/server && go install -tags rethinkdb -output $GOPATH/bin/tinode github.com/tinode/chat/server
-	go get -tags rethinkdb github.com/tinode/chat/tinode-db && go install -tags rethinkdb -output $GOPATH/bin/init-db github.com/tinode/chat/tinode-db
+	go get -tags rethinkdb github.com/tinode/chat/server && go build -tags rethinkdb -o $GOPATH/bin/tinode github.com/tinode/chat/server
+	go get -tags rethinkdb github.com/tinode/chat/tinode-db && go build -tags rethinkdb -o $GOPATH/bin/init-db github.com/tinode/chat/tinode-db
 	```
  - **MySQL**:
 	```
-	go get -tags mysql github.com/tinode/chat/server && go install -tags mysql -output $GOPATH/bin/tinode github.com/tinode/chat/server
-	go get -tags mysql github.com/tinode/chat/tinode-db && go install -tags mysql -output $GOPATH/bin/init-db github.com/tinode/chat/tinode-db
+	go get -tags mysql github.com/tinode/chat/server && go build -tags mysql -o $GOPATH/bin/tinode github.com/tinode/chat/server
+	go get -tags mysql github.com/tinode/chat/tinode-db && go build -tags mysql -o $GOPATH/bin/init-db github.com/tinode/chat/tinode-db
 	```
  - **MongoDB**:
 	```
-	go get -tags mongodb github.com/tinode/chat/server && go install -tags mongodb -output $GOPATH/bin/tinode github.com/tinode/chat/server
-	go get -tags mongodb github.com/tinode/chat/tinode-db && go install -tags mongodb -output $GOPATH/bin/init-db github.com/tinode/chat/tinode-db
+	go get -tags mongodb github.com/tinode/chat/server && go build -tags mongodb -o $GOPATH/bin/tinode github.com/tinode/chat/server
+	go get -tags mongodb github.com/tinode/chat/tinode-db && go build -tags mongodb -o $GOPATH/bin/init-db github.com/tinode/chat/tinode-db
 	```
 
 	Note the required **`-tags rethinkdb`**, **`-tags mysql`** or **`-tags mongodb`** build option.
