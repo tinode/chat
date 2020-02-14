@@ -27,7 +27,7 @@ See [general instructions](./INSTALL.md) or [docker-specific instructions](./doc
 
 ## Public service
 
-A [public Tinode service](https://web.tinode.co/) is now available. You can register and use it just like any other instant messenger. Keep in mind that demo accounts present in [sandbox](https://sandbox.tinode.co/) are not available in the public service. You must register an account using valid email in order to use the service.
+A [public Tinode service](https://web.tinode.co/) is now available. You can use it just like any other instant messenger. Keep in mind that demo accounts present in [sandbox](https://sandbox.tinode.co/) are not available in the public service. You must register an account using valid email in order to use the service.
 
 ### Web
 
