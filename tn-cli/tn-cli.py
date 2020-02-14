@@ -30,11 +30,6 @@ import time
 
 from google.protobuf import json_format
 
-try:
-    import macros
-except ImportError:
-    macros = None
-
 # Import generated grpc modules
 from tinode_grpc import pb
 from tinode_grpc import pbx
@@ -1011,6 +1006,7 @@ if __name__ == '__main__':
     parser.add_argument('--no-login', action='store_true', help='do not login even if cookie file is present; default in non-interactive (scripted) mode')
     parser.add_argument('--no-cookie', action='store_true', help='do not save login cookie; default in non-interactive (scripted) mode')
     parser.add_argument('--api-key', default='AQEAAAABAAD_rAp4DJh05a1HAwFT3A6K', help='API key for file uploads')
+    parser.add_argument('--load-macros', default='./macros.py', help='path to macro module to load')
     parser.add_argument('--version', action='store_true', help='print version')
     args = parser.parse_args()
 
@@ -1046,5 +1042,8 @@ if __name__ == '__main__':
                 printout("Logging in with cookie file")
             except Exception as err:
                 printerr("Failed to read authentication cookie", err)
+
+    # Attempt to load the macro file if available.
+    macros = imp.load_source('macros', args.load_macros) if args.load_macros else None
 
     run(args, schema, secret)

@@ -4,8 +4,8 @@
 #
 # The script performs the following:
 #
-#  - Logs in as Xena (user has root privileges)
 #  - Creates a new user Test User with useradd
+#  - Logs in as Xena (user has root privileges)
 #  - Changes Test User's name to 'Test User 1'
 #  - Modifies Test User's default anon acs to JR with chacs
 #  - Sets Test User's password to test456
@@ -15,6 +15,8 @@
 #  - Sends a message to Alice
 
 # Create user 'Test User'
+# .must directive ensures the command succeeds (in case of failure, the script execution stops.
+# $user is the variable that will hold the result of the command execution.
 .must $user useradd --name 'Test User' --password test123 --comment test0 \
   --cred email:test@example.com --avatar ./test-128.jpg --tags test,test-user \
   --auth=JRWPA --anon=JW test
@@ -22,7 +24,7 @@
 # Login as xena.
 .must $xena login --scheme=basic --secret=xena:xena123
 
-# Change test's publis name.
+# Change test's public name.
 .must usermod $user.params[user] --name 'Test User 1'
 
 # Change test's anon acs.
