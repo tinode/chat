@@ -1,0 +1,46 @@
+# This script shows what can be done with tn-cli macros. Run it as
+#
+#   python tn-cli.py --no-login < sample-macro-script.txt
+#
+# The script performs the following:
+#
+#  - Logs in as Xena (user has root privileges)
+#  - Creates a new user Test User with useradd
+#  - Changes Test User's name to 'Test User 1'
+#  - Modifies Test User's default anon acs to JR with chacs
+#  - Sets Test User's password to test456
+#  - Deletes Test User with userdel
+#  - Uses resolve to locate user Alice
+#  - Subscribes to Alice
+#  - Sends a message to Alice
+
+# Create user 'Test User'
+.must $user useradd --name 'Test User' --password test123 --comment test0 \
+  --cred email:test@example.com --avatar ./test-128.jpg --tags test,test-user \
+  --auth=JRWPA --anon=JW test
+
+# Login as xena.
+.must $xena login --scheme=basic --secret=xena:xena123
+
+# Change test's publis name.
+.must usermod $user.params[user] --name 'Test User 1'
+
+# Change test's anon acs.
+must chacs $user.params[user] --anon=JR
+
+# Set test's password to test456.
+passwd $user.params[user] -P test456
+
+# Delete test user.
+.must userdel $user.params[user] --hard
+
+# Find Alice.
+.must $alice resolve alice
+
+# Subscribe to Alice
+.must sub $alice.sub[0].user_id
+
+# Send a plain text message to Alice (async)
+pub $alice.sub[0].user_id 'Hello, Alice'
+
+.sleep 2000

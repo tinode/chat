@@ -10,6 +10,7 @@ import base64
 import grpc
 import json
 from PIL import Image
+import imp
 try:
     from io import BytesIO as memory_io
 except ImportError:
@@ -29,7 +30,10 @@ import time
 
 from google.protobuf import json_format
 
-import macros
+try:
+    import macros
+except ImportError:
+    macros = None
 
 # Import generated grpc modules
 from tinode_grpc import pb
@@ -616,7 +620,7 @@ def parse_cmd(parts):
     elif parts[0] == "upload":
         parser = argparse.ArgumentParser(prog=parts[0], description='Upload file out of band')
         parser.add_argument('filename', help='name of the file to upload')
-    else:
+    elif macros:
         parser = macros.parse_macro(parts)
     return parser
 
@@ -689,10 +693,11 @@ def parse_input(cmd):
         printout("\tusermod\t- modify user account")
         printout("\n\tType <command> -h for help")
 
-        printout("\nMacro commands:")
-        for key in sorted(macros.Macros):
-            macro = macros.Macros[key]
-            printout("\t%s\t- %s" % (macro.name(), macro.description()))
+        if macros:
+            printout("\nMacro commands:")
+            for key in sorted(macros.Macros):
+                macro = macros.Macros[key]
+                printout("\t%s\t- %s" % (macro.name(), macro.description()))
         return None
 
     try:
@@ -762,7 +767,7 @@ def serialize_cmd(string, id, args):
 
         elif cmd.cmd in messages:
             return messages[cmd.cmd](id, derefVals(cmd), args), cmd
-        elif cmd.cmd in macros.Macros:
+        elif macros and cmd.cmd in macros.Macros:
             return True, macros.Macros[cmd.cmd].run(id, derefVals(cmd), args)
 
         else:

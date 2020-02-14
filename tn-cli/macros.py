@@ -83,21 +83,20 @@ class Usermod(Macro):
                 new_cmd += ' --suspend false'
             return [new_cmd]
         # Change VCard.
-        set_cmd = 'set me'
+        varname = cmd.varname if hasattr(cmd, 'varname') and cmd.varname else '$temp'
+        set_cmd = '.must ' + varname + ' set me'
         if cmd.name:
             set_cmd += ' --fn="%s"' % cmd.name
         if cmd.avatar:
             set_cmd += ' --photo="%s"' % cmd.avatar
         if cmd.comment:
             set_cmd += ' --private="%s"' % cmd.comment
-        if tn_globals.DefaultUser:
-            old_user = tn_globals.DefaultUser
-        else:
-            old_user = ''
+        old_user = tn_globals.DefaultUser if tn_globals.DefaultUser else ''
         return ['.use --user %s' % cmd.userid,
-                '.must sub me', set_cmd,
+                '.must sub me',
+                set_cmd,
                 '.must leave me',
-                '.use --user \'%s\'' % old_user]
+                '.use --user "%s"' % old_user]
 
 
 class Resolve(Macro):
@@ -116,11 +115,12 @@ class Resolve(Macro):
         if not cmd.login:
             return None
 
+        varname = cmd.varname if hasattr(cmd, 'varname') and cmd.varname else '$temp'
         return ['.must sub fnd',
                 '.must set fnd --public=basic:%s' % cmd.login,
-                '.must $userid get fnd --sub',
+                '.must %s get fnd --sub' % varname,
                 '.must leave fnd',
-                '.log $userid.sub[0].user_id']
+                '.log %s.sub[0].user_id' % varname]
 
 
 class Passwd(Macro):
@@ -159,13 +159,13 @@ class Useradd(Macro):
     def add_parser_args(self):
         self.parser.add_argument('login', help='User login')
         self.parser.add_argument('-P', '--password', help='Password')
-        self.parser.add_argument('--cred', help='C')
-        self.parser.add_argument('--name', help='C')
-        self.parser.add_argument('--comment', help='C')
-        self.parser.add_argument('--tags', help='C')
-        self.parser.add_argument('--avatar', help='C')
-        self.parser.add_argument('--auth', help='C')
-        self.parser.add_argument('--anon', help='C')
+        self.parser.add_argument('--cred', help='List of comma-separated credentials in format "(email|tel):value1,(email|tel):value2,..."')
+        self.parser.add_argument('--name', help='Public name of the user')
+        self.parser.add_argument('--comment', help='Private comment')
+        self.parser.add_argument('--tags', help='Comma-separated list of tags')
+        self.parser.add_argument('--avatar', help='Path to avatar file')
+        self.parser.add_argument('--auth', help='Default auth acs')
+        self.parser.add_argument('--anon', help='Default anon acs')
 
     def expand(self, id, cmd, args):
         if not cmd.login:
@@ -176,19 +176,20 @@ class Useradd(Macro):
         if not cmd.cred:
             stdoutln("Must specify at least one credential: --cred.")
             return None
-        new_cmd = 'acc --scheme basic --secret=%s:%s --cred=%s' % (cmd.login, cmd.password, cmd.cred)
+        varname = cmd.varname if hasattr(cmd, 'varname') and cmd.varname else '$temp'
+        new_cmd = '.must ' + varname + ' acc --scheme basic --secret="%s:%s" --cred="%s"' % (cmd.login, cmd.password, cmd.cred)
         if cmd.name:
-            new_cmd += ' --fn=%s' % cmd.name
+            new_cmd += ' --fn="%s"' % cmd.name
         if cmd.comment:
-            new_cmd += ' --private=%s' % cmd.comment
+            new_cmd += ' --private="%s"' % cmd.comment
         if cmd.tags:
-            new_cmd += ' --tags=%s' % cmd.tags
+            new_cmd += ' --tags="%s"' % cmd.tags
         if cmd.avatar:
-            new_cmd += ' --photo=%s' % cmd.avatar
+            new_cmd += ' --photo="%s"' % cmd.avatar
         if cmd.auth:
-            new_cmd += ' --auth=%s' % cmd.auth
+            new_cmd += ' --auth="%s"' % cmd.auth
         if cmd.anon:
-            new_cmd += ' --anon=%s' % cmd.anon
+            new_cmd += ' --anon="%s"' % cmd.anon
         return [new_cmd]
 
 
@@ -199,12 +200,12 @@ class Chacs(Macro):
         return "chacs"
 
     def description(self):
-        return "Change default permissions/acs for a user"
+        return "Change default permissions/acs for a user (requires root privileges)"
 
     def add_parser_args(self):
         self.parser.add_argument('userid', help='User id')
-        self.parser.add_argument('--auth', help='C')
-        self.parser.add_argument('--anon', help='C')
+        self.parser.add_argument('--auth', help='New auth acs value')
+        self.parser.add_argument('--anon', help='New anon acs value')
 
     def expand(self, id, cmd, args):
         if not cmd.userid:
@@ -217,14 +218,33 @@ class Chacs(Macro):
             set_cmd += ' --auth=%s' % cmd.auth
         if cmd.anon:
             set_cmd += ' --anon=%s' % cmd.anon
-        if tn_globals.DefaultUser:
-            old_user = tn_globals.DefaultUser
-        else:
-            old_user = ''
+        old_user = tn_globals.DefaultUser if tn_globals.DefaultUser else ''
         return ['.use --user %s' % cmd.userid,
-                '.must sub me', set_cmd,
+                '.must sub me',
+                set_cmd,
                 '.must leave me',
-                '.use --user \'%s\'' % old_user]
+                '.use --user "%s"' % old_user]
+
+class Userdel(Macro):
+    """Deletes a user account."""
+
+    def name(self):
+        return "userdel"
+
+    def description(self):
+        return "Delete user account (requires root privileges)"
+
+    def add_parser_args(self):
+        self.parser.add_argument('userid', help='User id')
+        self.parser.add_argument('--hard', action='store_true', help='Hard delete')
+
+    def expand(self, id, cmd, args):
+        if not cmd.userid:
+            return None
+        del_cmd = 'del user --user %s' % cmd.userid
+        if cmd.hard:
+            del_cmd += ' --hard'
+        return [del_cmd]
 
 
 def parse_macro(parts):
@@ -237,4 +257,4 @@ def parse_macro(parts):
     return macro.parser
 
 
-Macros = {x.name(): x for x in [Usermod(), Resolve(), Passwd(), Useradd(), Chacs()]}
+Macros = {x.name(): x for x in [Usermod(), Resolve(), Passwd(), Useradd(), Chacs(), Userdel()]}
