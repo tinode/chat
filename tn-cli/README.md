@@ -32,6 +32,7 @@ The client takes optional parameters:
  * `--no-login` do not login even if cookie file is present; this is the default in non-interactive (scripted) mode.
  * `--no-cookie` do not save cookie on successful login; this is the default in non-interactive (scripted) mode.
  * `--api-key` web API key for file uploads; default `AQEAAAABAAD_rAp4DJh05a1HAwFT3A6K`
+ * `--load-macros` path to a macro file.
 
 If multiple `login-XYZ` are provided, `login-cookie` is considered first, then `login-token` then `login-basic`. Authentication with token (and cookie) is much faster than with the username-password pair.
 
@@ -69,6 +70,20 @@ python tn-cli.py < sample-script.txt
 ### HTTP requests
 
 * `upload` - upload file out of band
+
+### Macros
+
+Macros are high-level wrappers for series of gRPC calls. Currently, the following macros are [available](macros.py):
+
+* `chacs` - change default permissions/acs for a user (requires root privileges)
+* `passwd` - set user's password (requires root privileges)
+* `resolve` - resolve login and print the corresponding user id
+* `useradd` - create a new user account
+* `userdel` - delete user account (requires root privileges)
+* `usermod` - modify user account (requires root privileges)
+
+You can define your own macros in [macros.py](macros.py) or create a separate python module (you can load it via `--load-macros`).
+Refer to [macros.py](macros.py) for examples.
 
 ## Connecting to secure (HTTPS) server
 

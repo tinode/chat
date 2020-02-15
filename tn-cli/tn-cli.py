@@ -10,6 +10,7 @@ import base64
 import grpc
 import json
 from PIL import Image
+import imp
 try:
     from io import BytesIO as memory_io
 except ImportError:
@@ -19,10 +20,6 @@ import os
 import pkg_resources
 import platform
 from prompt_toolkit import PromptSession
-try:
-    import Queue as queue
-except ImportError:
-    import queue
 import random
 import re
 import requests
@@ -36,6 +33,11 @@ from google.protobuf import json_format
 # Import generated grpc modules
 from tinode_grpc import pb
 from tinode_grpc import pbx
+
+import tn_globals
+from tn_globals import printerr
+from tn_globals import printout
+from tn_globals import stdoutln
 
 APP_NAME = "tn-cli"
 APP_VERSION = "1.3.0"
@@ -64,37 +66,6 @@ os.environ["GRPC_SSL_CIPHER_SUITES"] = "HIGH+ECDSA"
 # os.environ["GRPC_TRACE"] = "all"
 # os.environ["GRPC_VERBOSITY"] = "INFO"
 
-# Dictionary wich contains lambdas to be executed when server {ctrl} response is received.
-OnCompletion = {}
-
-# Outstanding request for a synchronous message.
-WaitingFor = None
-
-# Last obtained authentication token
-AuthToken = ''
-
-# IO queues and a thread for asynchronous input/output
-InputQueue = queue.Queue()
-OutputQueue = queue.Queue()
-InputThread = None
-
-# Detect if the tn-cli is running interactively or being piped.
-IsInteractive = sys.stdin.isatty()
-Prompt = None
-
-# Print prompts in interactive mode only.
-def printout(*args):
-    if IsInteractive:
-        print(*args)
-
-def printerr(*args):
-    text = ""
-    for a in args:
-        text = text + str(a) + " "
-    # Strip just the spaces here, don't strip the newline or tabs.
-    text = text.strip(" ")
-    if text:
-        sys.stderr.write(text + "\n")
 
 # Python is retarded.
 class dotdict(dict):
@@ -103,12 +74,6 @@ class dotdict(dict):
     __setattr__ = dict.__setitem__
     __delattr__ = dict.__delitem__
 
-# Default values for user and topic
-DefaultUser = None
-DefaultTopic = None
-
-# Variables: results of command execution
-Variables = {}
 
 # Pack user's name and avatar into a vcard.
 def make_vcard(fn, photofile):
@@ -228,9 +193,9 @@ def getVar(path):
         return path
 
     parts = path.split('.')
-    if parts[0] not in Variables:
+    if parts[0] not in tn_globals.Variables:
         return None
-    var = Variables[parts[0]]
+    var = tn_globals.Variables[parts[0]]
     if len(parts) > 1:
         parts = parts[1:]
         reIndex = re.compile(r"(\w+)\[(\w+)\]")
@@ -257,30 +222,13 @@ def derefVals(cmd):
                 setattr(cmd, key, getVar(val))
     return cmd
 
-# Support for asynchronous input-output to/from stdin/stdout
-
-# Stdout asynchronously writes to sys.stdout
-def stdout(*args):
-    text = ""
-    for a in args:
-        text = text + str(a) + " "
-    # Strip just the spaces here, don't strip the newline or tabs.
-    text = text.strip(" ")
-    if text:
-        OutputQueue.put(text)
-
-# Stdoutln asynchronously writes to sys.stdout and adds a new line to input.
-def stdoutln(*args):
-    args = args + ("\n",)
-    stdout(*args)
 
 # Prints prompt and reads lines from stdin.
 def readLinesFromStdin():
-    global IsInteractive
-    if IsInteractive:
+    if tn_globals.IsInteractive:
         while True:
             try:
-                line = Prompt.prompt()
+                line = tn_globals.Prompt.prompt()
                 yield line
             except EOFError as e:
                 # Ctrl+D.
@@ -306,7 +254,7 @@ def stdin(InputQueue):
                     else:
                         partial_input = cmd
 
-                if IsInteractive:
+                if tn_globals.IsInteractive:
                     sys.stdout.write("... ")
                     sys.stdout.flush()
 
@@ -316,11 +264,11 @@ def stdin(InputQueue):
             if partial_input:
                 if cmd:
                     partial_input += " " + cmd
-                InputQueue.put(partial_input)
+                InputQueue.append(partial_input)
                 partial_input = ""
                 continue
 
-            InputQueue.put(cmd)
+            InputQueue.append(cmd)
 
             # Stop processing input
             if cmd == 'exit' or cmd == 'quit' or cmd == '.exit' or cmd == '.quit':
@@ -329,12 +277,12 @@ def stdin(InputQueue):
     except Exception as ex:
         printerr("Exception in stdin", ex)
 
-    InputQueue.put("exit")
+    InputQueue.append("exit")
 
 # Constructing individual messages
 # {hi}
 def hiMsg(id):
-    OnCompletion[str(id)] = lambda params: print_server_params(params)
+    tn_globals.OnCompletion[str(id)] = lambda params: print_server_params(params)
     return pb.ClientMsg(hi=pb.ClientHi(id=str(id), user_agent=APP_NAME + "/" + APP_VERSION + " (" +
         platform.system() + "/" + platform.release() + "); gRPC-python/" + LIB_VERSION + "+" + GRPC_VERSION,
         ver=LIB_VERSION, lang="EN"))
@@ -366,7 +314,7 @@ def accMsg(id, cmd, ignored):
         scheme=cmd.scheme, secret=cmd.secret, login=cmd.do_login, tags=cmd.tags.split(",") if cmd.tags else None,
         desc=pb.SetDesc(default_acs=pb.DefaultAcsMode(auth=cmd.auth, anon=cmd.anon),
             public=cmd.public, private=cmd.private),
-        cred=parse_cred(cmd.cred)), on_behalf_of=DefaultUser)
+        cred=parse_cred(cmd.cred)), on_behalf_of=tn_globals.DefaultUser)
 
 # {login}
 def loginMsg(id, cmd, args):
@@ -387,19 +335,19 @@ def loginMsg(id, cmd, args):
     msg = pb.ClientMsg(login=pb.ClientLogin(id=str(id), scheme=cmd.scheme, secret=cmd.secret,
         cred=parse_cred(cmd.cred)))
 
-    if args.no_cookie or not IsInteractive:
-        OnCompletion[str(id)] = lambda params: handle_login(params)
+    if args.no_cookie or not tn_globals.IsInteractive:
+        tn_globals.OnCompletion[str(id)] = lambda params: handle_login(params)
     else:
-        OnCompletion[str(id)] = lambda params: save_cookie(params)
+        tn_globals.OnCompletion[str(id)] = lambda params: save_cookie(params)
 
     return msg
 
 # {sub}
 def subMsg(id, cmd, ignored):
     if not cmd.topic:
-        cmd.topic = DefaultTopic
+        cmd.topic = tn_globals.DefaultTopic
     if cmd.get_query:
-        cmd.get_query = pb.GetQuery(what=cmd.get_query.split(",").join(" "))
+        cmd.get_query = pb.GetQuery(what=" ".join(cmd.get_query.split(",")))
     cmd.public = encode_to_bytes(make_vcard(cmd.fn, cmd.photo))
     cmd.private = encode_to_bytes(cmd.private)
     return pb.ClientMsg(sub=pb.ClientSub(id=str(id), topic=cmd.topic,
@@ -407,18 +355,18 @@ def subMsg(id, cmd, ignored):
             desc=pb.SetDesc(public=cmd.public, private=cmd.private,
                 default_acs=pb.DefaultAcsMode(auth=cmd.auth, anon=cmd.anon)),
             sub=pb.SetSub(mode=cmd.mode),
-            tags=cmd.tags.split(",") if cmd.tags else None), get_query=cmd.get_query), on_behalf_of=DefaultUser)
+            tags=cmd.tags.split(",") if cmd.tags else None), get_query=cmd.get_query), on_behalf_of=tn_globals.DefaultUser)
 
 # {leave}
 def leaveMsg(id, cmd, ignored):
     if not cmd.topic:
-        cmd.topic = DefaultTopic
-    return pb.ClientMsg(leave=pb.ClientLeave(id=str(id), topic=cmd.topic, unsub=cmd.unsub), on_behalf_of=DefaultUser)
+        cmd.topic = tn_globals.DefaultTopic
+    return pb.ClientMsg(leave=pb.ClientLeave(id=str(id), topic=cmd.topic, unsub=cmd.unsub), on_behalf_of=tn_globals.DefaultUser)
 
 # {pub}
 def pubMsg(id, cmd, ignored):
     if not cmd.topic:
-        cmd.topic = DefaultTopic
+        cmd.topic = tn_globals.DefaultTopic
 
     head = {}
     if cmd.drafty or cmd.image or cmd.attachment:
@@ -439,12 +387,12 @@ def pubMsg(id, cmd, ignored):
         return None
 
     return pb.ClientMsg(pub=pb.ClientPub(id=str(id), topic=cmd.topic, no_echo=True,
-        head=head, content=encode_to_bytes(content)), on_behalf_of=DefaultUser)
+        head=head, content=encode_to_bytes(content)), on_behalf_of=tn_globals.DefaultUser)
 
 # {get}
 def getMsg(id, cmd, ignored):
     if not cmd.topic:
-        cmd.topic = DefaultTopic
+        cmd.topic = tn_globals.DefaultTopic
 
     what = []
     if cmd.desc:
@@ -456,12 +404,12 @@ def getMsg(id, cmd, ignored):
     if cmd.data:
         what.append("data")
     return pb.ClientMsg(get=pb.ClientGet(id=str(id), topic=cmd.topic,
-        query=pb.GetQuery(what=" ".join(what))), on_behalf_of=DefaultUser)
+        query=pb.GetQuery(what=" ".join(what))), on_behalf_of=tn_globals.DefaultUser)
 
 # {set}
 def setMsg(id, cmd, ignored):
     if not cmd.topic:
-        cmd.topic = DefaultTopic
+        cmd.topic = tn_globals.DefaultTopic
 
     if cmd.public == None:
         cmd.public = encode_to_bytes(make_vcard(cmd.fn, cmd.photo))
@@ -473,7 +421,7 @@ def setMsg(id, cmd, ignored):
             desc=pb.SetDesc(default_acs=pb.DefaultAcsMode(auth=cmd.auth, anon=cmd.anon),
                 public=cmd.public, private=cmd.private),
         sub=pb.SetSub(user_id=cmd.user, mode=cmd.mode),
-        tags=cmd.tags.split(",") if cmd.tags else None)), on_behalf_of=DefaultUser)
+        tags=cmd.tags.split(",") if cmd.tags else None)), on_behalf_of=tn_globals.DefaultUser)
 
 # {del}
 def delMsg(id, cmd, ignored):
@@ -481,8 +429,8 @@ def delMsg(id, cmd, ignored):
         stdoutln("Must specify what to delete")
         return None
 
-    cmd.topic = cmd.topic if cmd.topic else DefaultTopic
-    cmd.user = cmd.user if cmd.user else DefaultUser
+    cmd.topic = cmd.topic if cmd.topic else tn_globals.DefaultTopic
+    cmd.user = cmd.user if cmd.user else tn_globals.DefaultUser
     enum_what = None
     before = None
     seq_list = None
@@ -518,7 +466,7 @@ def delMsg(id, cmd, ignored):
         stdoutln("Unrecognized delete option '", cmd.what, "'")
         return None
 
-    msg = pb.ClientMsg(on_behalf_of=DefaultUser)
+    msg = pb.ClientMsg(on_behalf_of=tn_globals.DefaultUser)
     # Field named 'del' conflicts with the keyword 'del. This is a work around.
     xdel = getattr(msg, 'del')
     """
@@ -541,7 +489,7 @@ def delMsg(id, cmd, ignored):
 # {note}
 def noteMsg(id, cmd, ignored):
     if not cmd.topic:
-        cmd.topic = DefaultTopic
+        cmd.topic = tn_globals.DefaultTopic
 
     enum_what = None
     if cmd.what == 'kp':
@@ -553,7 +501,7 @@ def noteMsg(id, cmd, ignored):
     elif what == 'recv':
         enum_what = pb.RECV
         cmd.seq = int(cmd.seq)
-    return pb.ClientMsg(note=pb.ClientNote(topic=cmd.topic, what=enum_what, seq_id=cmd.seq), on_behalf_of=DefaultUser)
+    return pb.ClientMsg(note=pb.ClientNote(topic=cmd.topic, what=enum_what, seq_id=cmd.seq), on_behalf_of=tn_globals.DefaultUser)
 
 # Upload file out of band over HTTP(S) (not gRPC).
 def upload(id, cmd, args):
@@ -563,7 +511,7 @@ def upload(id, cmd, args):
             scheme + '://' + args.web_host + '/v' + PROTOCOL_VERSION + '/file/u/',
             headers = {
                 'X-Tinode-APIKey': args.api_key,
-                'X-Tinode-Auth': 'Token ' + AuthToken,
+                'X-Tinode-Auth': 'Token ' + tn_globals.AuthToken,
                 'User-Agent': APP_NAME + " " + APP_VERSION + "/" + LIB_VERSION
             },
             data = {'id': id},
@@ -574,6 +522,8 @@ def upload(id, cmd, args):
         stdoutln("Failed to upload '{0}'".format(cmd.filename), ex)
 
     return None
+
+
 
 # Given an array of parts, parse commands and arguments
 def parse_cmd(parts):
@@ -665,6 +615,8 @@ def parse_cmd(parts):
     elif parts[0] == "upload":
         parser = argparse.ArgumentParser(prog=parts[0], description='Upload file out of band')
         parser.add_argument('filename', help='name of the file to upload')
+    elif macros:
+        parser = macros.parse_macro(parts)
     return parser
 
 # Parses command line into command and parameters.
@@ -733,7 +685,14 @@ def parse_input(cmd):
         printout("\tset\t- update topic metadata")
         printout("\tsub\t- subscribe to topic")
         printout("\tupload\t- upload file out of band")
+        printout("\tusermod\t- modify user account")
         printout("\n\tType <command> -h for help")
+
+        if macros:
+            printout("\nMacro commands:")
+            for key in sorted(macros.Macros):
+                macro = macros.Macros[key]
+                printout("\t%s\t- %s" % (macro.name(), macro.description()))
         return None
 
     try:
@@ -761,7 +720,7 @@ def serialize_cmd(string, id, args):
         "get": getMsg,
         "set": setMsg,
         "del": delMsg,
-        "note": noteMsg
+        "note": noteMsg,
     }
     try:
         # Convert string into a dictionary
@@ -776,13 +735,17 @@ def serialize_cmd(string, id, args):
 
         elif cmd.cmd == ".use":
             if cmd.user != "unchanged":
-                global DefaultUser
-                DefaultUser = cmd.user
-                stdoutln("Default user='" + DefaultUser + "'")
+                if cmd.user:
+                    tn_globals.DefaultUser = cmd.user
+                else:
+                    tn_globals.DefaultUser = None
+                stdoutln("Default user='" + cmd.user + "'")
             if cmd.topic != "unchanged":
-                global DefaultTopic
-                DefaultTopic = cmd.topic
-                stdoutln("Default topic='" + DefaultTopic + "'")
+                if cmd.topic:
+                    tn_globals.DefaultTopic = cmd.topic
+                else:
+                    tn_globals.DefaultTopic = None
+                stdoutln("Default topic='" + cmd.topic + "'")
             return None, None
 
         elif cmd.cmd == ".sleep":
@@ -799,6 +762,8 @@ def serialize_cmd(string, id, args):
 
         elif cmd.cmd in messages:
             return messages[cmd.cmd](id, derefVals(cmd), args), cmd
+        elif macros and cmd.cmd in macros.Macros:
+            return True, macros.Macros[cmd.cmd].run(id, derefVals(cmd), args)
 
         else:
             stdoutln("Error: unrecognized: '{0}'".format(cmd.cmd))
@@ -812,16 +777,13 @@ def serialize_cmd(string, id, args):
 def gen_message(scheme, secret, args):
     """Client message generator: reads user input as string,
     converts to pb.ClientMsg, and yields"""
-    global InputThread
-    global WaitingFor
-
     random.seed()
     id = random.randint(10000,60000)
 
     # Asynchronous input-output
-    InputThread = threading.Thread(target=stdin, args=(InputQueue,))
-    InputThread.daemon = True
-    InputThread.start()
+    tn_globals.InputThread = threading.Thread(target=stdin, args=(tn_globals.InputQueue,))
+    tn_globals.InputThread.daemon = True
+    tn_globals.InputThread.start()
 
     yield hiMsg(id)
 
@@ -837,42 +799,46 @@ def gen_message(scheme, secret, args):
 
     while True:
         try:
-            if not WaitingFor and not InputQueue.empty():
+            if not tn_globals.WaitingFor and tn_globals.InputQueue:
                 id += 1
-                inp = InputQueue.get()
+                inp = tn_globals.InputQueue.popleft()
 
                 if inp == 'exit' or inp == 'quit' or inp == '.exit' or inp == '.quit':
                     return
 
                 pbMsg, cmd = serialize_cmd(inp, id, args)
-                print_prompt = IsInteractive
+                print_prompt = tn_globals.IsInteractive
+                if isinstance(cmd, list):
+                    # Push the expanded macro back on the command queue.
+                    tn_globals.InputQueue.extendleft(reversed(cmd))
+                    continue
                 if pbMsg != None:
-                    if not IsInteractive:
+                    if not tn_globals.IsInteractive:
                         sys.stdout.write("=> " + inp + "\n")
                         sys.stdout.flush()
 
                     if cmd.synchronous:
                         cmd.await_ts = time.time()
                         cmd.await_id = str(id)
-                        WaitingFor = cmd
+                        tn_globals.WaitingFor = cmd
 
                     if not hasattr(cmd, 'no_yield'):
                         yield pbMsg
 
-            elif not OutputQueue.empty():
-                sys.stdout.write("\r<= "+OutputQueue.get())
+            elif not tn_globals.OutputQueue.empty():
+                sys.stdout.write("\r<= "+tn_globals.OutputQueue.get())
                 sys.stdout.flush()
-                print_prompt = IsInteractive
+                print_prompt = tn_globals.IsInteractive
 
             else:
                 if print_prompt:
                     sys.stdout.write("tn> ")
                     sys.stdout.flush()
                     print_prompt = False
-                if WaitingFor:
-                    if time.time() - WaitingFor.await_ts > AWAIT_TIMEOUT:
-                        stdoutln("Timeout while waiting for '{0}' response".format(WaitingFor.cmd))
-                        WaitingFor = None
+                if tn_globals.WaitingFor:
+                    if time.time() - tn_globals.WaitingFor.await_ts > AWAIT_TIMEOUT:
+                        stdoutln("Timeout while waiting for '{0}' response".format(tn_globals.WaitingFor.cmd))
+                        tn_globals.WaitingFor = None
 
                 time.sleep(0.1)
 
@@ -882,21 +848,19 @@ def gen_message(scheme, secret, args):
 
 # Handle {ctrl} server response
 def handle_ctrl(ctrl):
-    global WaitingFor
-
     # Run code on command completion
-    func = OnCompletion.get(ctrl.id)
+    func = tn_globals.OnCompletion.get(ctrl.id)
     if func:
-        del OnCompletion[ctrl.id]
+        del tn_globals.OnCompletion[ctrl.id]
         if ctrl.code >= 200 and ctrl.code < 400:
             func(ctrl.params)
 
-    if WaitingFor and WaitingFor.await_id == ctrl.id:
-        if 'varname' in WaitingFor:
-            Variables[WaitingFor.varname] = ctrl
-        if WaitingFor.failOnError and ctrl.code >= 400:
+    if tn_globals.WaitingFor and tn_globals.WaitingFor.await_id == ctrl.id:
+        if 'varname' in tn_globals.WaitingFor:
+            tn_globals.Variables[tn_globals.WaitingFor.varname] = ctrl
+        if tn_globals.WaitingFor.failOnError and ctrl.code >= 400:
             raise Exception(str(ctrl.code) + " " + ctrl.text)
-        WaitingFor = None
+        tn_globals.WaitingFor = None
 
     topic = " (" + str(ctrl.topic) + ")" if ctrl.topic else ""
     stdoutln("\r<= " + str(ctrl.code) + " " + ctrl.text + topic)
@@ -904,14 +868,9 @@ def handle_ctrl(ctrl):
 
 # The main processing loop: send messages to server, receive responses.
 def run(args, schema, secret):
-    global WaitingFor
-    global Variables
-    global IsInteractive
-    global Prompt
-
     try:
-        if IsInteractive:
-            Prompt = PromptSession()
+        if tn_globals.IsInteractive:
+            tn_globals.Prompt = PromptSession()
         # Create secure channel with default credentials.
         channel = None
         if args.ssl:
@@ -940,10 +899,10 @@ def run(args, schema, secret):
                     what.append("tags")
                 stdoutln("\r<= meta " + ",".join(what) + " " + msg.meta.topic)
 
-                if WaitingFor and WaitingFor.await_id == msg.meta.id:
-                    if 'varname' in WaitingFor:
-                        Variables[WaitingFor.varname] = msg.meta
-                    WaitingFor = None
+                if tn_globals.WaitingFor and tn_globals.WaitingFor.await_id == msg.meta.id:
+                    if 'varname' in tn_globals.WaitingFor:
+                        tn_globals.Variables[tn_globals.WaitingFor.varname] = msg.meta
+                    tn_globals.WaitingFor = None
 
             elif msg.HasField("data"):
                 stdoutln("\n\rFrom: " + msg.data.from_user_id)
@@ -981,8 +940,8 @@ def run(args, schema, secret):
     finally:
         printout('Shutting down...')
         channel.close()
-        if InputThread != None:
-            InputThread.join(0.3)
+        if tn_globals.InputThread != None:
+            tn_globals.InputThread.join(0.3)
 
 # Read cookie file for logging in with the cookie.
 def read_cookie():
@@ -998,8 +957,6 @@ def read_cookie():
 
 # Lambda for handling login
 def handle_login(params):
-    global AuthToken
-
     if params == None:
         return None
 
@@ -1010,7 +967,7 @@ def handle_login(params):
 
     stdoutln("Authenticated as", nice.get('user'))
 
-    AuthToken = nice.get('token')
+    tn_globals.AuthToken = nice.get('token')
 
     return nice
 
@@ -1049,6 +1006,7 @@ if __name__ == '__main__':
     parser.add_argument('--no-login', action='store_true', help='do not login even if cookie file is present; default in non-interactive (scripted) mode')
     parser.add_argument('--no-cookie', action='store_true', help='do not save login cookie; default in non-interactive (scripted) mode')
     parser.add_argument('--api-key', default='AQEAAAABAAD_rAp4DJh05a1HAwFT3A6K', help='API key for file uploads')
+    parser.add_argument('--load-macros', default='./macros.py', help='path to macro module to load')
     parser.add_argument('--version', action='store_true', help='print version')
     args = parser.parse_args()
 
@@ -1076,7 +1034,7 @@ if __name__ == '__main__':
             secret = args.login_basic
             printout("Logging in with login:password", args.login_basic)
 
-        elif IsInteractive:
+        elif tn_globals.IsInteractive:
             """Interactive mode only: try reading the cookie file"""
             try:
                 schema = 'token'
@@ -1084,5 +1042,8 @@ if __name__ == '__main__':
                 printout("Logging in with cookie file")
             except Exception as err:
                 printerr("Failed to read authentication cookie", err)
+
+    # Attempt to load the macro file if available.
+    macros = imp.load_source('macros', args.load_macros) if args.load_macros else None
 
     run(args, schema, secret)
