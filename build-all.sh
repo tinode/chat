@@ -158,6 +158,7 @@ mkdir -p ./releases/tmp
 
 cp ${GOSRC}/chat/chatbot/python/chatbot.py ./releases/tmp
 cp ${GOSRC}/chat/chatbot/python/quotes.txt ./releases/tmp
+cp ${GOSRC}/chat/chatbot/python/requirements.txt ./releases/tmp
 
 tar -C ${GOSRC}/chat/releases/tmp -zcf ./releases/${version}/py-chatbot.tar.gz .
 pushd ./releases/tmp > /dev/null
@@ -170,7 +171,8 @@ echo "Packaging tn-cli..."
 rm -fR ./releases/tmp
 mkdir -p ./releases/tmp
 
-cp ${GOSRC}/chat/tn-cli/tn-cli.py ./releases/tmp
+cp ${GOSRC}/chat/tn-cli/*.py ./releases/tmp
+cp ${GOSRC}/chat/tn-cli/requirements.txt ./releases/tmp
 
 tar -C ${GOSRC}/chat/releases/tmp -zcf ./releases/${version}/tn-cli.tar.gz .
 pushd ./releases/tmp > /dev/null
