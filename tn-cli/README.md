@@ -76,11 +76,13 @@ python tn-cli.py < sample-script.txt
 Macros are high-level wrappers for series of gRPC calls. Currently, the following macros are [available](macros.py):
 
 * `chacs` - change default permissions/acs for a user (requires root privileges)
+* `chcred` - add or delete a credential for a user (requires root privileges)
 * `passwd` - set user's password (requires root privileges)
 * `resolve` - resolve login and print the corresponding user id
 * `useradd` - create a new user account
 * `userdel` - delete user account (requires root privileges)
 * `usermod` - modify user account (requires root privileges)
+* `vcard` - print user's public and private info (requires root privileges)
 
 You can define your own macros in [macros.py](macros.py) or create a separate python module (you can load it via `--load-macros`).
 Refer to [macros.py](macros.py) for examples.
