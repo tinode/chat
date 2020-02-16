@@ -3,4 +3,4 @@ grpcio>=1.19.0
 Pillow>=5.4.1
 requests>=2.21.0
 tinode-grpc>=0.16.0
-prompt_toolkit>=3.0.3
+prompt_toolkit>=2.0.10
