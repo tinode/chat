@@ -10,7 +10,6 @@ import base64
 import grpc
 import json
 from PIL import Image
-import imp
 try:
     from io import BytesIO as memory_io
 except ImportError:
@@ -1073,6 +1072,7 @@ if __name__ == '__main__':
                 printerr("Failed to read authentication cookie", err)
 
     # Attempt to load the macro file if available.
-    macros = imp.load_source('macros', args.load_macros) if args.load_macros else None
+    import importlib
+    macros = importlib.import_module('macros', args.load_macros) if args.load_macros else None
 
     run(args, schema, secret)
