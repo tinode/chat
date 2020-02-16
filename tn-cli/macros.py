@@ -247,6 +247,73 @@ class Userdel(Macro):
         return [del_cmd]
 
 
+class Chcred(Macro):
+    """Adds, deletes or validates credentials for a user account."""
+
+    def name(self):
+        return "chcred"
+
+    def description(self):
+        return "Add/delete/validate credentials (requires root privileges)"
+
+    def add_parser_args(self):
+        self.parser.add_argument('userid', help='User id')
+        self.parser.add_argument('cred', help='Affected credential in formt method:value, e.g. email: abc@example.com, tel:17771112233')
+        self.parser.add_argument('--add', action='store_true', help='Add credential')
+        self.parser.add_argument('--rm', action='store_true', help='Delete credential')
+        self.parser.add_argument('--validate', action='store_true', help='Validate credential')
+
+    def expand(self, id, cmd, args):
+        if not cmd.userid:
+            return None
+        if not cmd.cred:
+            stdoutln('Must specify cred')
+            return None
+
+        num_actions = (1 if cmd.add else 0) + (1 if cmd.rm else 0) + (1 if cmd.validate else 0)
+        if num_actions == 0 or num_actions > 1:
+            stdoutln('Must specify exactly one action: --add, --rm, --validate')
+            return None
+        if cmd.add:
+            cred_cmd = '.must set me --cred %s' % cmd.cred
+        if cmd.rm:
+            cred_cmd = '.must del --topic me --cred %s cred' % cmd.cred
+
+        old_user = tn_globals.DefaultUser if tn_globals.DefaultUser else ''
+        return ['.use --user %s' % cmd.userid,
+                '.must sub me',
+                cred_cmd,
+                '.must leave me',
+                '.use --user "%s"' % old_user]
+
+
+class VCard(Macro):
+    """Prints user's VCard."""
+
+    def name(self):
+        return "vcard"
+
+    def description(self):
+        return "Print user's VCard for a user (requires root privileges)"
+
+    def add_parser_args(self):
+        self.parser.add_argument('userid', help='User id')
+        self.parser.add_argument('--what', choices=['desc', 'cred'], required=True, help='Type of data to print (desc - public/private data, cred - list of credentials.')
+
+    def expand(self, id, cmd, args):
+        if not cmd.userid:
+            return None
+
+        varname = cmd.varname if hasattr(cmd, 'varname') and cmd.varname else '$temp'
+        old_user = tn_globals.DefaultUser if tn_globals.DefaultUser else ''
+        return ['.use --user %s' % cmd.userid,
+                '.must sub me',
+                '.must %s get me --%s' % (varname, cmd.what),
+                '.must leave me',
+                '.use --user "%s"' % old_user,
+                '.log %s' % varname]
+
+
 def parse_macro(parts):
     """Attempts to find a parser for the provided sequence of tokens."""
     global Macros
@@ -257,4 +324,4 @@ def parse_macro(parts):
     return macro.parser
 
 
-Macros = {x.name(): x for x in [Usermod(), Resolve(), Passwd(), Useradd(), Chacs(), Userdel()]}
+Macros = {x.name(): x for x in [Usermod(), Resolve(), Passwd(), Useradd(), Chacs(), Userdel(), Chcred(), VCard()]}

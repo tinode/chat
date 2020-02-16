@@ -66,6 +66,9 @@ os.environ["GRPC_SSL_CIPHER_SUITES"] = "HIGH+ECDSA"
 # os.environ["GRPC_TRACE"] = "all"
 # os.environ["GRPC_VERBOSITY"] = "INFO"
 
+# Regex to match and parse subscripted entries in variable paths.
+RE_INDEX = re.compile(r"(\w+)\[(\w+)\]")
+
 
 # Python is retarded.
 class dotdict(dict):
@@ -198,10 +201,9 @@ def getVar(path):
     var = tn_globals.Variables[parts[0]]
     if len(parts) > 1:
         parts = parts[1:]
-        reIndex = re.compile(r"(\w+)\[(\w+)\]")
         for p in parts:
             x = None
-            m = reIndex.match(p)
+            m = RE_INDEX.match(p)
             if m:
                 p = m.group(1)
                 if m.group(2).isdigit():
@@ -403,6 +405,8 @@ def getMsg(id, cmd, ignored):
         what.append("tags")
     if cmd.data:
         what.append("data")
+    if cmd.cred:
+        what.append("cred")
     return pb.ClientMsg(get=pb.ClientGet(id=str(id), topic=cmd.topic,
         query=pb.GetQuery(what=" ".join(what))), on_behalf_of=tn_globals.DefaultUser)
 
@@ -416,12 +420,20 @@ def setMsg(id, cmd, ignored):
     else:
         cmd.public = encode_to_bytes(cmd.public)
     cmd.private = encode_to_bytes(cmd.private)
+    cred = parse_cred(cmd.cred)
+    if cred:
+        if len(cred) > 1:
+            stdoutln('Warning: multiple credentials specified. Will use only the first one.')
+        cred = cred[0]
+
+    print('seting cred', cred)
     return pb.ClientMsg(set=pb.ClientSet(id=str(id), topic=cmd.topic,
         query=pb.SetQuery(
             desc=pb.SetDesc(default_acs=pb.DefaultAcsMode(auth=cmd.auth, anon=cmd.anon),
                 public=cmd.public, private=cmd.private),
         sub=pb.SetSub(user_id=cmd.user, mode=cmd.mode),
-        tags=cmd.tags.split(",") if cmd.tags else None)), on_behalf_of=tn_globals.DefaultUser)
+        tags=cmd.tags.split(",") if cmd.tags else None,
+        cred=cred)), on_behalf_of=tn_globals.DefaultUser)
 
 # {del}
 def delMsg(id, cmd, ignored):
@@ -434,6 +446,7 @@ def delMsg(id, cmd, ignored):
     enum_what = None
     before = None
     seq_list = None
+    cred = None
     if cmd.what == 'msg':
         if not cmd.topic:
             stdoutln("Must specify topic to delete messages")
@@ -462,6 +475,17 @@ def delMsg(id, cmd, ignored):
         enum_what = pb.ClientDel.USER
         cmd.topic = None
 
+    elif cmd.what == 'cred':
+        if cmd.topic != 'me':
+            stdoutln("Topic must be 'me'")
+            return None
+        cred = parse_cred(cmd.cred)
+        if cred is None:
+            stdoutln("Topic must be 'me'")
+            return None
+        cred = cred[0]
+        enum_what = pb.ClientDel.CRED
+
     else:
         stdoutln("Unrecognized delete option '", cmd.what, "'")
         return None
@@ -483,6 +507,8 @@ def delMsg(id, cmd, ignored):
         xdel.user_id = cmd.user
     if cmd.topic != None:
         xdel.topic = cmd.topic
+    if cred != None:
+        xdel.cred.MergeFrom(cred)
 
     return msg
 
@@ -551,6 +577,7 @@ def parse_cmd(parts):
         parser.add_argument('--user', default=None, help='either delete this user or a subscription with this user')
         parser.add_argument('--seq', default=None, help='"all" or comma separated list of message IDs to delete')
         parser.add_argument('--hard', action='store_true', help='request to hard-delete')
+        parser.add_argument('--cred', help='credential to delete in method:value format, e.g. email:test@example.com, tel:12345')
     elif parts[0] == "login":
         parser = argparse.ArgumentParser(prog=parts[0], description='Authenticate current session')
         parser.add_argument('secret', nargs='?', default=argparse.SUPPRESS, help='secret for authentication')
@@ -594,6 +621,7 @@ def parse_cmd(parts):
         parser.add_argument('--sub', action='store_true', help='query topic subscriptions')
         parser.add_argument('--tags', action='store_true', help='query topic tags')
         parser.add_argument('--data', action='store_true', help='query topic messages')
+        parser.add_argument('--cred', action='store_true', help='query account credentials')
     elif parts[0] == "set":
         parser = argparse.ArgumentParser(prog=parts[0], description='Update topic metadata')
         parser.add_argument('topic', help='topic to update')
@@ -606,6 +634,7 @@ def parse_cmd(parts):
         parser.add_argument('--user', help='ID of the account to update')
         parser.add_argument('--mode', help='new value of access mode')
         parser.add_argument('--tags', help='tags for topic discovery, comma separated list without spaces')
+        parser.add_argument('--cred', help='credential to add in method:value format, e.g. email:test@example.com, tel:12345')
     elif parts[0] == "note":
         parser = argparse.ArgumentParser(prog=parts[0], description='Send notification to topic, ex "note kp"')
         parser.add_argument('topic', help='topic to notify')
