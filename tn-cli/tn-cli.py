@@ -68,6 +68,8 @@ os.environ["GRPC_SSL_CIPHER_SUITES"] = "HIGH+ECDSA"
 # Regex to match and parse subscripted entries in variable paths.
 RE_INDEX = re.compile(r"(\w+)\[(\w+)\]")
 
+# Macros module (may be None).
+macros = None
 
 # Python is retarded.
 class dotdict(dict):
@@ -1072,7 +1074,9 @@ if __name__ == '__main__':
                 printerr("Failed to read authentication cookie", err)
 
     # Attempt to load the macro file if available.
-    import importlib
-    macros = importlib.import_module('macros', args.load_macros) if args.load_macros else None
+    macros = None
+    if args.load_macros:
+        import importlib
+        macros = importlib.import_module('macros', args.load_macros) if args.load_macros else None
 
     run(args, schema, secret)
