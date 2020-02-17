@@ -39,7 +39,7 @@ from tn_globals import printout
 from tn_globals import stdoutln
 
 APP_NAME = "tn-cli"
-APP_VERSION = "1.3.0"
+APP_VERSION = "1.4.0"
 PROTOCOL_VERSION = "0"
 LIB_VERSION = pkg_resources.get_distribution("tinode_grpc").version
 GRPC_VERSION = pkg_resources.get_distribution("grpcio").version
