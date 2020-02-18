@@ -761,6 +761,15 @@ func (s *Session) authSecretReset(params []byte) error {
 		return types.ErrNotFound
 	}
 
+	login, _, _, _, err := store.Users.GetAuthRecord(uid, authScheme)
+	if err != nil {
+		return err
+	}
+	// User does not have a record matching the authentication scheme.
+	if login == "" {
+		return types.ErrNotFound
+	}
+
 	token, _, err := store.GetLogicalAuthHandler("token").GenSecret(&auth.Rec{
 		Uid:       uid,
 		AuthLevel: auth.LevelAuth,
@@ -771,7 +780,7 @@ func (s *Session) authSecretReset(params []byte) error {
 		return err
 	}
 
-	return validator.ResetSecret(credValue, authScheme, s.lang, token)
+	return validator.ResetSecret(credValue, authScheme, s.lang, login, token)
 }
 
 // onLogin performs steps after successful authentication.

@@ -215,7 +215,7 @@ func (v *validator) Request(user t.Uid, email, lang, resp string, tmpToken []byt
 }
 
 // ResetSecret sends a message with instructions for resetting an authentication secret.
-func (v *validator) ResetSecret(email, scheme, lang string, tmpToken []byte) error {
+func (v *validator) ResetSecret(email, scheme, lang, login string, tmpToken []byte) error {
 	// Normalize email to make sure Unicode case collisions don't lead to security problems.
 	email = strings.ToLower(email)
 
@@ -223,12 +223,14 @@ func (v *validator) ResetSecret(email, scheme, lang string, tmpToken []byte) err
 	base64.URLEncoding.Encode(token, tmpToken)
 	body := new(bytes.Buffer)
 	if err := v.htmlResetTempl.Execute(body, map[string]interface{}{
+    "Login":   login,
 		"Token":   string(token),
 		"Scheme":  scheme,
 		"HostUrl": v.HostUrl}); err != nil {
 		return err
 	}
 
+  log.Println("email = " + string(body.Bytes()))
 	// Send email without blocking. Email sending may take long time.
 	go v.send(email, v.ResetSubject, string(body.Bytes()))
 
