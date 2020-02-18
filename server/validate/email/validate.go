@@ -230,7 +230,6 @@ func (v *validator) ResetSecret(email, scheme, lang, login string, tmpToken []by
 		return err
 	}
 
-  log.Println("email = " + string(body.Bytes()))
 	// Send email without blocking. Email sending may take long time.
 	go v.send(email, v.ResetSubject, string(body.Bytes()))
 
