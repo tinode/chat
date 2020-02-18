@@ -223,7 +223,7 @@ func (v *validator) ResetSecret(email, scheme, lang, login string, tmpToken []by
 	base64.URLEncoding.Encode(token, tmpToken)
 	body := new(bytes.Buffer)
 	if err := v.htmlResetTempl.Execute(body, map[string]interface{}{
-    "Login":   login,
+		"Login":   login,
 		"Token":   string(token),
 		"Scheme":  scheme,
 		"HostUrl": v.HostUrl}); err != nil {
