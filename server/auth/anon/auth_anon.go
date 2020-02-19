@@ -60,7 +60,7 @@ func (authenticator) RestrictedTags() ([]string, error) {
 
 // GetResetParams returns authenticator parameters passed to password reset handler
 // (none for anonymous).
-func (authenticator) GetResetParams(uid types.Uid, authScheme string) (map[string]interface{}, error) {
+func (authenticator) GetResetParams(uid types.Uid) (map[string]interface{}, error) {
 	return nil, nil
 }
 

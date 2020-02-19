@@ -222,8 +222,14 @@ func (v *validator) ResetSecret(email, scheme, lang string, tmpToken []byte, par
 	token := make([]byte, base64.URLEncoding.EncodedLen(len(tmpToken)))
 	base64.URLEncoding.Encode(token, tmpToken)
 	body := new(bytes.Buffer)
-	login, ok := params["login"].(string)
-	if !ok || login == "" {
+	var login string
+	if params != nil {
+		var ok bool
+		login, ok = params["login"].(string)
+		if !ok || login == "" {
+			login = "-"
+		}
+	} else {
 		login = "-"
 	}
 	if err := v.htmlResetTempl.Execute(body, map[string]interface{}{

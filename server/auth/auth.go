@@ -236,7 +236,7 @@ type AuthHandler interface {
 	RestrictedTags() ([]string, error)
 
   // GetResetParams returns authenticator parameters passed to password reset handler
-  // for the provided user id and authentication scheme.
+  // for the provided user id.
   // Returns: map of params.
-	GetResetParams(uid types.Uid, authScheme string) (map[string]interface{}, error)
+	GetResetParams(uid types.Uid) (map[string]interface{}, error)
 }

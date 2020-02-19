@@ -762,7 +762,7 @@ func (s *Session) authSecretReset(params []byte) error {
 		return types.ErrNotFound
 	}
 
-	resetParams, err := hdl.GetResetParams(uid, authScheme)
+	resetParams, err := hdl.GetResetParams(uid)
 	if err != nil {
 		return err
 	}
