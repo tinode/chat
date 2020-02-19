@@ -172,6 +172,12 @@ func (authenticator) RestrictedTags() ([]string, error) {
 	return nil, nil
 }
 
+// GetResetParams returns authenticator parameters passed to password reset handler
+// (none for token).
+func (authenticator) GetResetParams(uid types.Uid, authScheme string) (map[string]interface{}, error) {
+	return nil, nil
+}
+
 func init() {
 	store.RegisterAuthScheme("token", &authenticator{})
 }

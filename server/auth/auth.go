@@ -234,4 +234,9 @@ type AuthHandler interface {
 
 	// RestrictedTags returns the tag namespaces which are restricted by this authenticator.
 	RestrictedTags() ([]string, error)
+
+  // GetResetParams returns authenticator parameters passed to password reset handler
+  // for the provided user id and authentication scheme.
+  // Returns: map of params.
+	GetResetParams(uid types.Uid, authScheme string) (map[string]interface{}, error)
 }

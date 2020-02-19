@@ -27,9 +27,9 @@ type Validator interface {
 	//   cred: address to use for the message.
 	//   scheme: authentication scheme being reset.
 	//   lang: human language as reported in the session.
-	//   login: user login.
 	//   tmpToken: temporary authentication token
-	ResetSecret(cred, scheme, lang, login string, tmpToken []byte) error
+	//   params: authentication params.
+	ResetSecret(cred, scheme, lang string, tmpToken []byte, params map[string]interface{}) error
 
 	// Check checks validity of user's response.
 	// Returns the value of validated credential on success.

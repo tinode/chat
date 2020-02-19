@@ -746,7 +746,8 @@ func (s *Session) authSecretReset(params []byte) error {
 
 	// Technically we don't need to check it here, but we are going to mail the 'authName' string to the user.
 	// We have to make sure it does not contain any exploits. This is the simplest check.
-	if hdl := store.GetLogicalAuthHandler(authScheme); hdl == nil {
+	hdl := store.GetLogicalAuthHandler(authScheme)
+	if hdl == nil {
 		return types.ErrUnsupported
 	}
 	validator := store.GetValidator(credMethod)
@@ -761,13 +762,9 @@ func (s *Session) authSecretReset(params []byte) error {
 		return types.ErrNotFound
 	}
 
-	login, _, _, _, err := store.Users.GetAuthRecord(uid, authScheme)
+	resetParams, err := hdl.GetResetParams(uid, authScheme)
 	if err != nil {
 		return err
-	}
-	// User does not have a record matching the authentication scheme.
-	if login == "" {
-		return types.ErrNotFound
 	}
 
 	token, _, err := store.GetLogicalAuthHandler("token").GenSecret(&auth.Rec{
@@ -780,7 +777,7 @@ func (s *Session) authSecretReset(params []byte) error {
 		return err
 	}
 
-	return validator.ResetSecret(credValue, authScheme, s.lang, login, token)
+	return validator.ResetSecret(credValue, authScheme, s.lang, token, resetParams)
 }
 
 // onLogin performs steps after successful authentication.

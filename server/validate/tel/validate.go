@@ -38,7 +38,7 @@ func (*validator) Request(user t.Uid, cred, lang, resp string, tmpToken []byte) 
 }
 
 // ResetSecret sends a message with instructions for resetting an authentication secret.
-func (*validator) ResetSecret(cred, scheme, lang, login string, tmpToken []byte) error {
+func (*validator) ResetSecret(cred, scheme, lang string, tmpToken []byte, params map[string]interface{}) error {
 	// TODO: send SMS with rest instructions.
 	return nil
 }
