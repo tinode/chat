@@ -24,24 +24,35 @@ import (
 
 // Validator configuration.
 type validator struct {
-	HostUrl             string   `json:"host_url"`
-	ValidationTemplFile string   `json:"validation_body_templ"`
-	ResetTemplFile      string   `json:"reset_body_templ"`
-	ValidationSubject   string   `json:"validation_subject"`
-	ResetSubject        string   `json:"reset_subject"`
-	SendFrom            string   `json:"sender"`
-	Login               string   `json:"login"`
-	SenderPassword      string   `json:"sender_password"`
-	DebugResponse       string   `json:"debug_response"`
-	MaxRetries          int      `json:"max_retries"`
-	SMTPAddr            string   `json:"smtp_server"`
-	SMTPPort            string   `json:"smtp_port"`
-	Domains             []string `json:"domains"`
+	// Base URL of the web client.
+	HostUrl string `json:"host_url"`
+	// List of languages supported by templates
+	Languages []string `json:"languages"`
+	// Path to email validation templates, either a template itself or a literal string.
+	ValidationTemplFile string `json:"validation_templ"`
+	// Path to password rest templates.
+	ResetTemplFile string `json:"reset_templ"`
+	// Sender email.
+	SendFrom string `json:"sender"`
+	// Login to use for SMTP authentication.
+	Login string `json:"login"`
+	// Password to use for SMTP authentication.
+	SenderPassword string `json:"sender_password"`
+	// Optional response which bypasses the validation.
+	DebugResponse string `json:"debug_response"`
+	// Number of validation attempts before email is locked.
+	MaxRetries int `json:"max_retries"`
+	// Address of the SMTP server.
+	SMTPAddr string `json:"smtp_server"`
+	// Posrt of the SMTP server.
+	SMTPPort string `json:"smtp_port"`
+	// Optional whitelist of email domains accepted for registration.
+	Domains []string `json:"domains"`
 
-	htmlValidationTempl *ht.Template
-	htmlResetTempl      *ht.Template
-	auth                smtp.Auth
-	senderEmail         string
+	validationTempl map[string]*ht.Template
+	resetTempl      map[string]*ht.Template
+	auth            smtp.Auth
+	senderEmail     string
 }
 
 const (
@@ -57,6 +68,27 @@ const (
 	codeLength   = 6
 	maxCodeValue = 1000000
 )
+
+func resolveTemplatePath(path string) string {
+	// If a relative path is provided, try to resolve it relative to the exec file location,
+	// not whatever directory the user is in.
+	if !filepath.IsAbs(path) {
+		basepath, err := os.Executable()
+		if err == nil {
+			path = filepath.Join(filepath.Dir(basepath), path)
+		}
+	}
+	return path
+}
+
+func findTempleFile(path *ht.Template, lang string) (*ht.Template, error) {
+	var path bytes.Buffer
+	err = validationPathTempl.Execute(path, map[string]interface{}{"Language": lang})
+	if err != nil {
+		return nil, err
+	}
+	return ht.ParseFiles(string(path.Bytes()))
+}
 
 // Init: initialize validator.
 func (v *validator) Init(jsonconf string) error {
@@ -79,28 +111,39 @@ func (v *validator) Init(jsonconf string) error {
 		v.auth = smtp.PlainAuth("", v.senderEmail, v.SenderPassword, v.SMTPAddr)
 	}
 
-	// If a relative path is provided, try to resolve it relative to the exec file location,
-	// not whatever directory the user is in.
-	if !filepath.IsAbs(v.ValidationTemplFile) {
-		basepath, err := os.Executable()
-		if err == nil {
-			v.ValidationTemplFile = filepath.Join(filepath.Dir(basepath), v.ValidationTemplFile)
-		}
-	}
-	if !filepath.IsAbs(v.ResetTemplFile) {
-		basepath, err := os.Executable()
-		if err == nil {
-			v.ResetTemplFile = filepath.Join(filepath.Dir(basepath), v.ResetTemplFile)
-		}
+	// Resolve optionally internationalized email templates.
+
+	// If user has provided no languages, use "-" as default language.
+	if len(v.Languages) == 0 {
+		v.Languages = append(v.Languages, "-")
 	}
 
-	v.htmlValidationTempl, err = ht.ParseFiles(v.ValidationTemplFile)
+	// Optionally resolve paths against the location of this executable file.
+	v.ValidationTemplFile = resolveTemplatePath(v.ValidationTemplFile)
+	v.ResetTemplFile = resolveTemplatePath(v.ValidationTemplFile)
+
+	// Paths to templates could be templates themselves: they may be language-dependent.
+	var validationPathTempl, resetPathTempl *ht.Template
+	validationPathTempl, err = ht.New("validation").Parse(v.ValidationTemplFile)
 	if err != nil {
 		return err
 	}
-	v.htmlResetTempl, err = ht.ParseFiles(v.ResetTemplFile)
+	resetPathTempl, err = ht.New("reset").Parse(v.ResetTemplFile)
 	if err != nil {
 		return err
+	}
+
+	// Find actual content templates for each defined language.
+	for _, lang := range v.Languages {
+		v.validationTempl[lang], err = findTempleFile(validationPathTempl, lang)
+		if err != nil {
+			return err
+		}
+
+		v.resetTempl[lang], err = findTempleFile(resetPathTempl, lang)
+		if err != nil {
+			return err
+		}
 	}
 
 	// Initialize random number generator.
