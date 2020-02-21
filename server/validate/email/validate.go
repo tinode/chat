@@ -224,13 +224,7 @@ func (v *validator) ResetSecret(email, scheme, lang string, tmpToken []byte, par
 	body := new(bytes.Buffer)
 	var login string
 	if params != nil {
-		var ok bool
-		login, ok = params["login"].(string)
-		if !ok || login == "" {
-			login = "-"
-		}
-	} else {
-		login = "-"
+		login = params["login"].(string)
 	}
 	if err := v.htmlResetTempl.Execute(body, map[string]interface{}{
 		"Login":   login,
