@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
+	qp "mime/quotedprintable"
 	"net/mail"
 	"net/smtp"
 	"net/url"
@@ -430,25 +431,40 @@ func (v *validator) send(to string, content *emailContent) error {
 
 	if content.html == "" {
 		// Plain text message
-		message.WriteString("Content-Type: text/plain; charset=\"UTF-8\"; format=flowed; delsp=yes\r\n\r\n")
-		message.WriteString(content.plain)
+		message.WriteString("Content-Type: text/plain; charset=\"UTF-8\"; format=flowed; delsp=yes\r\n")
+		message.WriteString("Content-Transfer-Encoding: base64\r\n\r\n")
+		b64 := base64.NewEncoder(base64.StdEncoding, message)
+		b64.Write([]byte(content.plain))
+		b64.Close()
 	} else if content.plain == "" {
 		// HTML-formatted message
-		message.WriteString("Content-Type: text/html; charset=\"UTF-8\";\r\n\r\n")
-		message.WriteString(content.html)
+		message.WriteString("Content-Type: text/html; charset=\"UTF-8\"\r\n")
+		message.WriteString("Content-Transfer-Encoding: quoted-printable\r\n\r\n")
+		qpw := qp.NewWriter(message)
+		qpw.Write([]byte(content.html))
+		qpw.Close()
 	} else {
 		// Multipart-alternative message includes both HTML and plain text components.
 		boundary := randomBoundary()
 		message.WriteString("Content-Type: multipart/alternative; boundary=\"" + boundary + "\"\r\n\r\n")
 
 		message.WriteString("--" + boundary + "\r\n")
-		message.WriteString("Content-Type: text/plain; charset=\"UTF-8\"; format=flowed; delsp=yes\r\n\r\n")
-		message.WriteString(content.plain)
+		message.WriteString("Content-Type: text/plain; charset=\"UTF-8\"; format=flowed; delsp=yes\r\n")
+		message.WriteString("Content-Transfer-Encoding: base64\r\n\r\n")
+		b64 := base64.NewEncoder(base64.StdEncoding, message)
+		b64.Write([]byte(content.plain))
+		b64.Close()
+
 		message.WriteString("\r\n")
 
 		message.WriteString("--" + boundary + "\r\n")
 		message.WriteString("Content-Type: text/html; charset=\"UTF-8\"\r\n")
-		message.WriteString(content.html)
+		message.WriteString("Content-Transfer-Encoding: quoted-printable\r\n\r\n")
+		qpw := qp.NewWriter(message)
+		qpw.Write([]byte(content.html))
+		qpw.Close()
+
+		message.WriteString("\r\n--" + boundary + "--")
 	}
 	message.WriteString("\r\n")
 
