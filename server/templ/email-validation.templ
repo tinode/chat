@@ -2,13 +2,12 @@
   This template defines content of the email sent to users as a request to confirm registration email address.
   See https://golang.org/pkg/text/template/ for syntax.
 
-  The template must contain the followingparts parts:
+  The template must contain the following parts parts:
    - 'subject': Subject line of an email message
-   - 'body': Content of the email mesaage; content type is unspecified.
-   - 'body_html': HTML content of the message. A header "Content-type: text/html" will be added.
-   - 'body_plain': plain text content of the message. A header "Content-type: text/plain" will be added.
+   - One or both of the following:
+     - 'body_html': HTML content of the message. A header "Content-type: text/html" will be added.
+     - 'body_plain': plain text content of the message. A header "Content-type: text/plain" will be added.
 
-   If either body_html or body_plain is included, 'body' will be ignored.
    If both body_html and body_plain are included, both will be sent as parts of 'multipart/alternative' message.
 */}}
 

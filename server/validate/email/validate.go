@@ -6,7 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	ht "html/template"
+	"fmt"
 	"log"
 	"math/rand"
 	"net/mail"
@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	textt "text/template"
 	"time"
 
 	"github.com/tinode/chat/server/store"
@@ -50,8 +51,8 @@ type validator struct {
 	// Optional whitelist of email domains accepted for registration.
 	Domains []string `json:"domains"`
 
-	validationTempl map[i18n.Tag]*ht.Template
-	resetTempl      map[i18n.Tag]*ht.Template
+	validationTempl map[i18n.Tag]*textt.Template
+	resetTempl      map[i18n.Tag]*textt.Template
 	auth            smtp.Auth
 	senderEmail     string
 	langTags        []i18n.Tag
@@ -84,13 +85,61 @@ func resolveTemplatePath(path string) string {
 	return path
 }
 
-func findTempleFile(pathTempl *ht.Template, lang string) (*ht.Template, error) {
-	path := bytes.Buffer{}
-	err := pathTempl.Execute(&path, map[string]interface{}{"Language": lang})
+func readTemplateFile(pathTempl *textt.Template, lang string) (*textt.Template, string, error) {
+	buffer := bytes.Buffer{}
+	err := pathTempl.Execute(&buffer, map[string]interface{}{"Language": lang})
+	path := string(buffer.Bytes())
 	if err != nil {
+		return nil, path, fmt.Errorf("reading %s: %w", path, err)
+	}
+
+	templ, err := textt.ParseFiles(path)
+	return templ, path, err
+}
+
+// Check if the template contains all required parts.
+func isTemplateValid(templ *textt.Template) error {
+	if templ.Lookup("subject") == nil {
+		return errors.New("template invalid: 'subject' not found")
+	}
+	if templ.Lookup("body_plain") == nil && templ.Lookup("body_html") == nil {
+		return errors.New("template invalid: neither of 'body_plain', 'body_html' is found")
+	}
+	return nil
+}
+
+type emailContent struct {
+	subject string
+	html    string
+	plain   string
+}
+
+func executeTemplate(template *textt.Template, params map[string]interface{}) (*emailContent, error) {
+	var content emailContent
+
+	buffer := new(bytes.Buffer)
+	if err := template.Lookup("subject").Execute(buffer, params); err != nil {
 		return nil, err
 	}
-	return ht.ParseFiles(string(path.Bytes()))
+	content.subject = string(buffer.Bytes())
+
+	buffer.Reset()
+	if templBody := template.Lookup("body_plain"); templBody != nil {
+		if err := templBody.Execute(buffer, params); err != nil {
+			return nil, err
+		}
+		content.plain = string(buffer.Bytes())
+		buffer.Reset()
+	}
+	if templBody := template.Lookup("body_html"); templBody != nil {
+		if err := templBody.Execute(buffer, params); err != nil {
+			return nil, err
+		}
+		content.html = string(buffer.Bytes())
+		buffer.Reset()
+	}
+
+	return &content, nil
 }
 
 // Init: initialize validator.
@@ -119,16 +168,17 @@ func (v *validator) Init(jsonconf string) error {
 	v.ResetTemplFile = resolveTemplatePath(v.ValidationTemplFile)
 
 	// Paths to templates could be templates themselves: they may be language-dependent.
-	var validationPathTempl, resetPathTempl *ht.Template
-	validationPathTempl, err = ht.New("validation").Parse(v.ValidationTemplFile)
+	var validationPathTempl, resetPathTempl *textt.Template
+	validationPathTempl, err = textt.New("validation").Parse(v.ValidationTemplFile)
 	if err != nil {
 		return err
 	}
-	resetPathTempl, err = ht.New("reset").Parse(v.ResetTemplFile)
+	resetPathTempl, err = textt.New("reset").Parse(v.ResetTemplFile)
 	if err != nil {
 		return err
 	}
 
+	var path string
 	if len(v.Languages) > 0 {
 		// Find actual content templates for each defined language.
 		for _, lang := range v.Languages {
@@ -137,27 +187,37 @@ func (v *validator) Init(jsonconf string) error {
 				return err
 			}
 			v.langTags = append(v.langTags, tag)
-			v.validationTempl[tag], err = findTempleFile(validationPathTempl, lang)
-			if err != nil {
+			if v.validationTempl[tag], path, err = readTemplateFile(validationPathTempl, lang); err != nil {
 				return err
 			}
+			if err = isTemplateValid(v.validationTempl[tag]); err != nil {
+				return fmt.Errorf("parsing %s: %w", path, err)
+			}
 
-			v.resetTempl[tag], err = findTempleFile(resetPathTempl, lang)
-			if err != nil {
+			if v.resetTempl[tag], path, err = readTemplateFile(resetPathTempl, lang); err != nil {
 				return err
+			}
+			if err = isTemplateValid(v.resetTempl[tag]); err != nil {
+				return fmt.Errorf("parsing %s: %w", path, err)
 			}
 		}
 		v.langMatcher = i18n.NewMatcher(v.langTags, nil)
 	} else {
-		// No language support. Use defaults.
-		v.validationTempl[i18n.Und], err = findTempleFile(validationPathTempl, "")
+		// No i18n support. Use defaults.
+		v.validationTempl[i18n.Und], path, err = readTemplateFile(validationPathTempl, "")
 		if err != nil {
 			return err
 		}
+		if err = isTemplateValid(v.validationTempl[i18n.Und]); err != nil {
+			return fmt.Errorf("parsing %s: %w", path, err)
+		}
 
-		v.resetTempl[i18n.Und], err = findTempleFile(resetPathTempl, "")
+		v.resetTempl[i18n.Und], path, err = readTemplateFile(resetPathTempl, "")
 		if err != nil {
 			return err
+		}
+		if err = isTemplateValid(v.resetTempl[i18n.Und]); err != nil {
+			return fmt.Errorf("parsing %s: %w", path, err)
 		}
 	}
 
@@ -248,7 +308,7 @@ func (v *validator) Request(user t.Uid, email, lang, resp string, tmpToken []byt
 	resp = strconv.FormatInt(int64(rand.Intn(maxCodeValue)), 10)
 	resp = strings.Repeat("0", codeLength-len(resp)) + resp
 
-	var template *ht.Template
+	var template *textt.Template
 	if v.langMatcher != nil {
 		tag, _ := i18n.MatchStrings(v.langMatcher, lang)
 		template = v.validationTempl[tag]
@@ -256,11 +316,11 @@ func (v *validator) Request(user t.Uid, email, lang, resp string, tmpToken []byt
 		template = v.validationTempl[i18n.Und]
 	}
 
-	body := new(bytes.Buffer)
-	if err := template.Execute(body, map[string]interface{}{
+	content, err := executeTemplate(template, map[string]interface{}{
 		"Token":   string(token),
 		"Code":    resp,
-		"HostUrl": v.HostUrl}); err != nil {
+		"HostUrl": v.HostUrl})
+	if err != nil {
 		return false, err
 	}
 
@@ -275,7 +335,7 @@ func (v *validator) Request(user t.Uid, email, lang, resp string, tmpToken []byt
 	}
 
 	// Send email without blocking. Email sending may take long time.
-	go v.send(email, v.ValidationSubject, string(body.Bytes()))
+	go v.send(email, content)
 
 	return isNew, nil
 }
@@ -287,16 +347,25 @@ func (v *validator) ResetSecret(email, scheme, lang string, tmpToken []byte) err
 
 	token := make([]byte, base64.URLEncoding.EncodedLen(len(tmpToken)))
 	base64.URLEncoding.Encode(token, tmpToken)
-	body := new(bytes.Buffer)
-	if err := v.htmlResetTempl.Execute(body, map[string]interface{}{
+
+	var template *textt.Template
+	if v.langMatcher != nil {
+		tag, _ := i18n.MatchStrings(v.langMatcher, lang)
+		template = v.resetTempl[tag]
+	} else {
+		template = v.resetTempl[i18n.Und]
+	}
+
+	content, err := executeTemplate(template, map[string]interface{}{
 		"Token":   string(token),
 		"Scheme":  scheme,
-		"HostUrl": v.HostUrl}); err != nil {
+		"HostUrl": v.HostUrl})
+	if err != nil {
 		return err
 	}
 
 	// Send email without blocking. Email sending may take long time.
-	go v.send(email, v.ResetSubject, string(body.Bytes()))
+	go v.send(email, content)
 
 	return nil
 }
@@ -349,21 +418,52 @@ func (v *validator) Remove(user t.Uid, value string) error {
 // See here how to send email from Amazon SES:
 // https://docs.aws.amazon.com/sdk-for-go/api/service/ses/#example_SES_SendEmail_shared00
 // -
-// Here are instructions for Google cloud:
-// https://cloud.google.com/appengine/docs/standard/go/mail/sending-receiving-with-mail-api
-func (v *validator) send(to, subj, body string) error {
-	err := smtp.SendMail(v.SMTPAddr+":"+v.SMTPPort, v.auth, v.senderEmail, []string{to},
-		[]byte("From: "+v.SendFrom+
-			"\nTo: "+to+
-			"\nSubject: "+subj+
-			"\nMIME-version: 1.0;\nContent-Type: text/html; charset=\"UTF-8\";\n\n"+
-			body))
+// Mailjet and SendGrid have some free email limits.
+func (v *validator) send(to string, content *emailContent) error {
+	message := &bytes.Buffer{}
 
+	// Common headers.
+	fmt.Fprintf(message, "From: %s\r\n", v.SendFrom)
+	fmt.Fprintf(message, "To: %s\r\n", to)
+	fmt.Fprintf(message, "Subject: %s\r\n", content.subject)
+	message.WriteString("MIME-version: 1.0;\r\n")
+
+	if content.html == "" {
+		// Plain text message
+		message.WriteString("Content-Type: text/plain; charset=\"UTF-8\"; format=flowed; delsp=yes\r\n\r\n")
+		message.WriteString(content.plain)
+	} else if content.plain == "" {
+		// HTML-formatted message
+		message.WriteString("Content-Type: text/html; charset=\"UTF-8\";\r\n\r\n")
+		message.WriteString(content.html)
+	} else {
+		// Multipart-alternative message includes both HTML and plain text components.
+		boundary := randomBoundary()
+		message.WriteString("Content-Type: multipart/alternative; boundary=\"" + boundary + "\"\r\n\r\n")
+
+		message.WriteString("--" + boundary + "\r\n")
+		message.WriteString("Content-Type: text/plain; charset=\"UTF-8\"; format=flowed; delsp=yes\r\n\r\n")
+		message.WriteString(content.plain)
+		message.WriteString("\r\n")
+
+		message.WriteString("--" + boundary + "\r\n")
+		message.WriteString("Content-Type: text/html; charset=\"UTF-8\"\r\n")
+		message.WriteString(content.html)
+	}
+	message.WriteString("\r\n")
+
+	err := smtp.SendMail(v.SMTPAddr+":"+v.SMTPPort, v.auth, v.senderEmail, []string{to}, message.Bytes())
 	if err != nil {
 		log.Println("SMTP error", to, err)
 	}
 
 	return err
+}
+
+func randomBoundary() string {
+	var buf [30]byte
+	rand.Read(buf[:])
+	return fmt.Sprintf("%x", buf[:])
 }
 
 func init() {
