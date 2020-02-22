@@ -433,9 +433,9 @@ func (v *validator) send(to string, content *emailContent) error {
 		// Plain text message
 		message.WriteString("Content-Type: text/plain; charset=\"UTF-8\"; format=flowed; delsp=yes\r\n")
 		message.WriteString("Content-Transfer-Encoding: base64\r\n\r\n")
-		b64 := base64.NewEncoder(base64.StdEncoding, message)
-		b64.Write([]byte(content.plain))
-		b64.Close()
+		b64w := base64.NewEncoder(base64.StdEncoding, message)
+		b64w.Write([]byte(content.plain))
+		b64w.Close()
 	} else if content.plain == "" {
 		// HTML-formatted message
 		message.WriteString("Content-Type: text/html; charset=\"UTF-8\"\r\n")
@@ -451,9 +451,9 @@ func (v *validator) send(to string, content *emailContent) error {
 		message.WriteString("--" + boundary + "\r\n")
 		message.WriteString("Content-Type: text/plain; charset=\"UTF-8\"; format=flowed; delsp=yes\r\n")
 		message.WriteString("Content-Transfer-Encoding: base64\r\n\r\n")
-		b64 := base64.NewEncoder(base64.StdEncoding, message)
-		b64.Write([]byte(content.plain))
-		b64.Close()
+		b64w := base64.NewEncoder(base64.StdEncoding, message)
+		b64w.Write([]byte(content.plain))
+		b64w.Close()
 
 		message.WriteString("\r\n")
 
@@ -477,9 +477,9 @@ func (v *validator) send(to string, content *emailContent) error {
 }
 
 func randomBoundary() string {
-	var buf [30]byte
+	var buf [24]byte
 	rand.Read(buf[:])
-	return fmt.Sprintf("%x", buf[:])
+	return fmt.Sprintf("tinode--%x", buf[:])
 }
 
 func init() {
