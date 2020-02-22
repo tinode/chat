@@ -20,6 +20,7 @@ import (
 
 	"github.com/tinode/chat/server/store"
 	t "github.com/tinode/chat/server/store/types"
+	i18n "golang.org/x/text/language"
 )
 
 // Validator configuration.
@@ -49,10 +50,12 @@ type validator struct {
 	// Optional whitelist of email domains accepted for registration.
 	Domains []string `json:"domains"`
 
-	validationTempl map[string]*ht.Template
-	resetTempl      map[string]*ht.Template
+	validationTempl map[i18n.Tag]*ht.Template
+	resetTempl      map[i18n.Tag]*ht.Template
 	auth            smtp.Auth
 	senderEmail     string
+	langTags        []i18n.Tag
+	langMatcher     i18n.Matcher
 }
 
 const (
@@ -81,9 +84,9 @@ func resolveTemplatePath(path string) string {
 	return path
 }
 
-func findTempleFile(path *ht.Template, lang string) (*ht.Template, error) {
-	var path bytes.Buffer
-	err = validationPathTempl.Execute(path, map[string]interface{}{"Language": lang})
+func findTempleFile(pathTempl *ht.Template, lang string) (*ht.Template, error) {
+	path := bytes.Buffer{}
+	err := pathTempl.Execute(&path, map[string]interface{}{"Language": lang})
 	if err != nil {
 		return nil, err
 	}
@@ -111,13 +114,6 @@ func (v *validator) Init(jsonconf string) error {
 		v.auth = smtp.PlainAuth("", v.senderEmail, v.SenderPassword, v.SMTPAddr)
 	}
 
-	// Resolve optionally internationalized email templates.
-
-	// If user has provided no languages, use "-" as default language.
-	if len(v.Languages) == 0 {
-		v.Languages = append(v.Languages, "-")
-	}
-
 	// Optionally resolve paths against the location of this executable file.
 	v.ValidationTemplFile = resolveTemplatePath(v.ValidationTemplFile)
 	v.ResetTemplFile = resolveTemplatePath(v.ValidationTemplFile)
@@ -133,14 +129,33 @@ func (v *validator) Init(jsonconf string) error {
 		return err
 	}
 
-	// Find actual content templates for each defined language.
-	for _, lang := range v.Languages {
-		v.validationTempl[lang], err = findTempleFile(validationPathTempl, lang)
+	if len(v.Languages) > 0 {
+		// Find actual content templates for each defined language.
+		for _, lang := range v.Languages {
+			tag, err := i18n.Parse(lang)
+			if err != nil {
+				return err
+			}
+			v.langTags = append(v.langTags, tag)
+			v.validationTempl[tag], err = findTempleFile(validationPathTempl, lang)
+			if err != nil {
+				return err
+			}
+
+			v.resetTempl[tag], err = findTempleFile(resetPathTempl, lang)
+			if err != nil {
+				return err
+			}
+		}
+		v.langMatcher = i18n.NewMatcher(v.langTags, nil)
+	} else {
+		// No language support. Use defaults.
+		v.validationTempl[i18n.Und], err = findTempleFile(validationPathTempl, "")
 		if err != nil {
 			return err
 		}
 
-		v.resetTempl[lang], err = findTempleFile(resetPathTempl, lang)
+		v.resetTempl[i18n.Und], err = findTempleFile(resetPathTempl, "")
 		if err != nil {
 			return err
 		}
@@ -233,8 +248,16 @@ func (v *validator) Request(user t.Uid, email, lang, resp string, tmpToken []byt
 	resp = strconv.FormatInt(int64(rand.Intn(maxCodeValue)), 10)
 	resp = strings.Repeat("0", codeLength-len(resp)) + resp
 
+	var template *ht.Template
+	if v.langMatcher != nil {
+		tag, _ := i18n.MatchStrings(v.langMatcher, lang)
+		template = v.validationTempl[tag]
+	} else {
+		template = v.validationTempl[i18n.Und]
+	}
+
 	body := new(bytes.Buffer)
-	if err := v.htmlValidationTempl.Execute(body, map[string]interface{}{
+	if err := template.Execute(body, map[string]interface{}{
 		"Token":   string(token),
 		"Code":    resp,
 		"HostUrl": v.HostUrl}); err != nil {
