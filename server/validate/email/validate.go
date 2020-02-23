@@ -29,13 +29,13 @@ import (
 type validator struct {
 	// Base URL of the web client.
 	HostUrl string `json:"host_url"`
-	// List of languages supported by templates
+	// List of languages supported by templates.
 	Languages []string `json:"languages"`
 	// Path to email validation templates, either a template itself or a literal string.
 	ValidationTemplFile string `json:"validation_templ"`
 	// Path to templates for resetting the authentication secret.
 	ResetTemplFile string `json:"reset_secret_templ"`
-	// Sender email.
+	// Sender RFC 5322 email address.
 	SendFrom string `json:"sender"`
 	// Login to use for SMTP authentication.
 	Login string `json:"login"`
@@ -47,7 +47,7 @@ type validator struct {
 	MaxRetries int `json:"max_retries"`
 	// Address of the SMTP server.
 	SMTPAddr string `json:"smtp_server"`
-	// Posrt of the SMTP server.
+	// Port of the SMTP server.
 	SMTPPort string `json:"smtp_port"`
 	// Optional whitelist of email domains accepted for registration.
 	Domains []string `json:"domains"`
