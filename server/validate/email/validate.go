@@ -342,7 +342,7 @@ func (v *validator) Request(user t.Uid, email, lang, resp string, tmpToken []byt
 }
 
 // ResetSecret sends a message with instructions for resetting an authentication secret.
-func (v *validator) ResetSecret(email, scheme, lang string, tmpToken []byte) error {
+func (v *validator) ResetSecret(email, scheme, lang string, tmpToken []byte, params map[string]interface{}) error {
 	// Normalize email to make sure Unicode case collisions don't lead to security problems.
 	email = strings.ToLower(email)
 
@@ -357,7 +357,14 @@ func (v *validator) ResetSecret(email, scheme, lang string, tmpToken []byte) err
 		template = v.resetTempl[i18n.Und]
 	}
 
+	var login string
+	if params != nil {
+		// Invariant: params["login"] is a string. Will panic if the invariant doesn't hold.
+		login = params["login"].(string)
+	}
+
 	content, err := executeTemplate(template, map[string]interface{}{
+		"Login":   login,
 		"Token":   string(token),
 		"Scheme":  scheme,
 		"HostUrl": v.HostUrl})
