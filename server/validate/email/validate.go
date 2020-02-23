@@ -33,8 +33,8 @@ type validator struct {
 	Languages []string `json:"languages"`
 	// Path to email validation templates, either a template itself or a literal string.
 	ValidationTemplFile string `json:"validation_templ"`
-	// Path to password rest templates.
-	ResetTemplFile string `json:"reset_templ"`
+	// Path to templates for resetting the authentication secret.
+	ResetTemplFile string `json:"reset_secret_templ"`
 	// Sender email.
 	SendFrom string `json:"sender"`
 	// Login to use for SMTP authentication.
@@ -52,11 +52,12 @@ type validator struct {
 	// Optional whitelist of email domains accepted for registration.
 	Domains []string `json:"domains"`
 
-	validationTempl map[i18n.Tag]*textt.Template
-	resetTempl      map[i18n.Tag]*textt.Template
+	// Must use index into language array instead of language tags because language.Matcher is brain damaged:
+	// https://github.com/golang/go/issues/24211
+	validationTempl map[int]*textt.Template
+	resetTempl      map[int]*textt.Template
 	auth            smtp.Auth
 	senderEmail     string
-	langTags        []i18n.Tag
 	langMatcher     i18n.Matcher
 }
 
@@ -181,43 +182,47 @@ func (v *validator) Init(jsonconf string) error {
 
 	var path string
 	if len(v.Languages) > 0 {
+		v.validationTempl = make(map[int]*textt.Template, len(v.Languages))
+		v.resetTempl = make(map[int]*textt.Template, len(v.Languages))
+
+		var langTags []i18n.Tag
 		// Find actual content templates for each defined language.
-		for _, lang := range v.Languages {
+		for idx, lang := range v.Languages {
 			tag, err := i18n.Parse(lang)
 			if err != nil {
 				return err
 			}
-			v.langTags = append(v.langTags, tag)
-			if v.validationTempl[tag], path, err = readTemplateFile(validationPathTempl, lang); err != nil {
+			langTags = append(langTags, tag)
+			if v.validationTempl[idx], path, err = readTemplateFile(validationPathTempl, lang); err != nil {
 				return err
 			}
-			if err = isTemplateValid(v.validationTempl[tag]); err != nil {
+			if err = isTemplateValid(v.validationTempl[idx]); err != nil {
 				return fmt.Errorf("parsing %s: %w", path, err)
 			}
 
-			if v.resetTempl[tag], path, err = readTemplateFile(resetPathTempl, lang); err != nil {
+			if v.resetTempl[idx], path, err = readTemplateFile(resetPathTempl, lang); err != nil {
 				return err
 			}
-			if err = isTemplateValid(v.resetTempl[tag]); err != nil {
+			if err = isTemplateValid(v.resetTempl[idx]); err != nil {
 				return fmt.Errorf("parsing %s: %w", path, err)
 			}
 		}
-		v.langMatcher = i18n.NewMatcher(v.langTags, nil)
+		v.langMatcher = i18n.NewMatcher(langTags)
 	} else {
 		// No i18n support. Use defaults.
-		v.validationTempl[i18n.Und], path, err = readTemplateFile(validationPathTempl, "")
+		v.validationTempl[0], path, err = readTemplateFile(validationPathTempl, "")
 		if err != nil {
 			return err
 		}
-		if err = isTemplateValid(v.validationTempl[i18n.Und]); err != nil {
+		if err = isTemplateValid(v.validationTempl[0]); err != nil {
 			return fmt.Errorf("parsing %s: %w", path, err)
 		}
 
-		v.resetTempl[i18n.Und], path, err = readTemplateFile(resetPathTempl, "")
+		v.resetTempl[0], path, err = readTemplateFile(resetPathTempl, "")
 		if err != nil {
 			return err
 		}
-		if err = isTemplateValid(v.resetTempl[i18n.Und]); err != nil {
+		if err = isTemplateValid(v.resetTempl[0]); err != nil {
 			return fmt.Errorf("parsing %s: %w", path, err)
 		}
 	}
@@ -311,10 +316,10 @@ func (v *validator) Request(user t.Uid, email, lang, resp string, tmpToken []byt
 
 	var template *textt.Template
 	if v.langMatcher != nil {
-		tag, _ := i18n.MatchStrings(v.langMatcher, lang)
-		template = v.validationTempl[tag]
+		_, idx := i18n.MatchStrings(v.langMatcher, lang)
+		template = v.validationTempl[idx]
 	} else {
-		template = v.validationTempl[i18n.Und]
+		template = v.validationTempl[0]
 	}
 
 	content, err := executeTemplate(template, map[string]interface{}{
@@ -351,10 +356,10 @@ func (v *validator) ResetSecret(email, scheme, lang string, tmpToken []byte, par
 
 	var template *textt.Template
 	if v.langMatcher != nil {
-		tag, _ := i18n.MatchStrings(v.langMatcher, lang)
-		template = v.resetTempl[tag]
+		_, idx := i18n.MatchStrings(v.langMatcher, lang)
+		template = v.resetTempl[idx]
 	} else {
-		template = v.resetTempl[i18n.Und]
+		template = v.resetTempl[0]
 	}
 
 	var login string
