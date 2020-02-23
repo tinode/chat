@@ -215,14 +215,20 @@ func (v *validator) Request(user t.Uid, email, lang, resp string, tmpToken []byt
 }
 
 // ResetSecret sends a message with instructions for resetting an authentication secret.
-func (v *validator) ResetSecret(email, scheme, lang string, tmpToken []byte) error {
+func (v *validator) ResetSecret(email, scheme, lang string, tmpToken []byte, params map[string]interface{}) error {
 	// Normalize email to make sure Unicode case collisions don't lead to security problems.
 	email = strings.ToLower(email)
 
 	token := make([]byte, base64.URLEncoding.EncodedLen(len(tmpToken)))
 	base64.URLEncoding.Encode(token, tmpToken)
 	body := new(bytes.Buffer)
+	var login string
+	if params != nil {
+		// Invariant: params["login"] is a string. Will panic if the invariant doesn't hold.
+		login = params["login"].(string)
+	}
 	if err := v.htmlResetTempl.Execute(body, map[string]interface{}{
+		"Login":   login,
 		"Token":   string(token),
 		"Scheme":  scheme,
 		"HostUrl": v.HostUrl}); err != nil {

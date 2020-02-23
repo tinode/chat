@@ -274,6 +274,22 @@ func (a *authenticator) RestrictedTags() ([]string, error) {
 	return tags, nil
 }
 
+// GetResetParams returns authenticator parameters passed to password reset handler.
+func (a *authenticator) GetResetParams(uid types.Uid) (map[string]interface{}, error) {
+	login, _, _, _, err := store.Users.GetAuthRecord(uid, a.name)
+	if err != nil {
+		return nil, err
+	}
+	// User does not have a record matching the authentication scheme.
+	if login == "" {
+		return nil, types.ErrNotFound
+	}
+
+	params := make(map[string]interface{})
+	params["login"] = login
+	return params, nil
+}
+
 func init() {
 	store.RegisterAuthScheme("basic", &authenticator{})
 }
