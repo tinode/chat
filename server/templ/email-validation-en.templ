@@ -1,4 +1,6 @@
 {{/*
+  ENGLISH
+
   This template defines content of the email sent to users as a request to confirm registration email address.
   See https://golang.org/pkg/text/template/ for syntax.
 
@@ -37,4 +39,24 @@ and enter the following code:</p>
 
 </body>
 </html>
+{{- end}}
+
+{{define "body_plain" -}}
+
+Hello.
+
+You're receiving this message because someone used your email to register at Tinode ({{.HostUrl}}).
+
+Click the link {{.HostUrl}}#cred?method=email&code={{.Code}}&token={{.Token}} to confirm or go to {{.HostUrl}}#cred?what=email
+and enter the following code:
+
+	{{.Code}}
+
+You may need to enter login and password.
+
+If you did not register at Tinode just ignore this message.
+
+Tinode Team
+https://tinode.co/
+
 {{- end}}
