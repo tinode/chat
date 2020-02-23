@@ -1935,11 +1935,9 @@ func (t *Topic) replyGetData(sess *Session, asUid types.Uid, id string, req *Msg
 		}
 
 		// Push the list of messages to the client as {data}.
-		// Messages are sent in reverse order than fetched from DB to make it easier for
-		// clients to process.
 		if messages != nil {
 			count = len(messages)
-			for i := count - 1; i >= 0; i-- {
+			for i, _ := range messages {
 				mm := &messages[i]
 				sess.queueOut(&ServerComMessage{Data: &MsgServerData{
 					Topic:     toriginal,
