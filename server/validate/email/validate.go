@@ -224,6 +224,7 @@ func (v *validator) ResetSecret(email, scheme, lang string, tmpToken []byte, par
 	body := new(bytes.Buffer)
 	var login string
 	if params != nil {
+		// Invariant: params["login"] is a string. Will panic if the invariant doesn't hold.
 		login = params["login"].(string)
 	}
 	if err := v.htmlResetTempl.Execute(body, map[string]interface{}{
