@@ -107,10 +107,10 @@ func readTemplateFile(pathTempl *textt.Template, lang string) (*textt.Template, 
 // Check if the template contains all required parts.
 func isTemplateValid(templ *textt.Template) error {
 	if templ.Lookup(emailSubject) == nil {
-		return errors.New("template invalid: 'subject' not found")
+		return fmt.Errorf("template invalid: '%s' not found", emailSubject)
 	}
 	if templ.Lookup(emailBodyPlain) == nil && templ.Lookup(emailBodyHTML) == nil {
-		return errors.New("template invalid: neither of 'body_plain', 'body_html' is found")
+		return fmt.Errorf("template invalid: neither of '%s', '%s' is found", emailBodyPlain, emailBodyHTML)
 	}
 	return nil
 }
