@@ -1055,28 +1055,28 @@ func (t *Topic) requestSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Le
 				// Ownership transfer
 				ownerChange = modeWant.IsOwner() && !userData.modeWant.IsOwner()
 
-				// The owner should be able to grant himself any access permissions
-				// If ownership transfer is rejected don't upgrade
+				// The owner should be able to grant himself any access permissions.
+				// If ownership transfer is rejected don't upgrade.
 				if modeWant.IsOwner() && !userData.modeGiven.BetterEqual(modeWant) {
 					userData.modeGiven |= modeWant
 				}
 			} else if modeWant.IsOwner() {
-				// Ownership transfer can only be initiated by the owner
+				// Ownership transfer can only be initiated by the owner.
 				sess.queueOut(ErrPermissionDenied(pktID, toriginal, now))
 				return changed, errors.New("non-owner cannot request ownership transfer")
-			} else if userData.modeGiven.IsAdmin() && modeWant.IsAdmin() {
-				// The Admin should be able to grant any permissions except ownership (checked previously) &
-				// hard-deleting messages.
+			} else if t.cat == types.TopicCatGrp && userData.modeGiven.IsAdmin() && modeWant.IsAdmin() {
+				// A group topic Admin should be able to grant himself any permissions except
+				// ownership (checked previously) & hard-deleting messages.
 				if !userData.modeGiven.BetterEqual(modeWant & ^types.ModeDelete) {
 					userData.modeGiven |= (modeWant & ^types.ModeDelete)
 				}
 			}
 
 			if t.cat == types.TopicCatP2P {
-				// For P2P topics ignore requests for 'D'. Otherwise it will generate a useless announcement
+				// For P2P topics ignore requests for 'D'. Otherwise it will generate a useless announcement.
 				modeWant = (modeWant & types.ModeCP2P) | types.ModeApprove
 			} else if t.cat == types.TopicCatSys {
-				//
+				// Anyone can always write to Sys topic.
 				modeWant &= (modeWant & types.ModeCSys) | types.ModeWrite
 			}
 		}
