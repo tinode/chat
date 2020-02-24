@@ -54,8 +54,8 @@ type validator struct {
 
 	// Must use index into language array instead of language tags because language.Matcher is brain damaged:
 	// https://github.com/golang/go/issues/24211
-	validationTempl map[int]*textt.Template
-	resetTempl      map[int]*textt.Template
+	validationTempl []*textt.Template
+	resetTempl      []*textt.Template
 	auth            smtp.Auth
 	senderEmail     string
 	langMatcher     i18n.Matcher
@@ -73,6 +73,11 @@ const (
 	// codeLength = log10(maxCodeValue)
 	codeLength   = 6
 	maxCodeValue = 1000000
+
+	// Email template parts
+	emailSubject   = "subject"
+	emailBodyPlain = "body_plain"
+	emailBodyHTML  = "body_html"
 )
 
 func resolveTemplatePath(path string) string {
@@ -101,10 +106,10 @@ func readTemplateFile(pathTempl *textt.Template, lang string) (*textt.Template, 
 
 // Check if the template contains all required parts.
 func isTemplateValid(templ *textt.Template) error {
-	if templ.Lookup("subject") == nil {
+	if templ.Lookup(emailSubject) == nil {
 		return errors.New("template invalid: 'subject' not found")
 	}
-	if templ.Lookup("body_plain") == nil && templ.Lookup("body_html") == nil {
+	if templ.Lookup(emailBodyPlain) == nil && templ.Lookup(emailBodyHTML) == nil {
 		return errors.New("template invalid: neither of 'body_plain', 'body_html' is found")
 	}
 	return nil
@@ -118,27 +123,28 @@ type emailContent struct {
 
 func executeTemplate(template *textt.Template, params map[string]interface{}) (*emailContent, error) {
 	var content emailContent
+	var err error
 
 	buffer := new(bytes.Buffer)
-	if err := template.Lookup("subject").Execute(buffer, params); err != nil {
+
+	execComponent := func(name string) (string, error) {
+		buffer.Reset()
+		if templBody := template.Lookup(name); templBody != nil {
+			if err := templBody.Execute(buffer, params); err != nil {
+				return "", err
+			}
+		}
+		return string(buffer.Bytes()), nil
+	}
+
+	if content.subject, err = execComponent(emailSubject); err != nil {
 		return nil, err
 	}
-	content.subject = string(buffer.Bytes())
-
-	buffer.Reset()
-	if templBody := template.Lookup("body_plain"); templBody != nil {
-		if err := templBody.Execute(buffer, params); err != nil {
-			return nil, err
-		}
-		content.plain = string(buffer.Bytes())
-		buffer.Reset()
+	if content.plain, err = execComponent(emailBodyPlain); err != nil {
+		return nil, err
 	}
-	if templBody := template.Lookup("body_html"); templBody != nil {
-		if err := templBody.Execute(buffer, params); err != nil {
-			return nil, err
-		}
-		content.html = string(buffer.Bytes())
-		buffer.Reset()
+	if content.html, err = execComponent(emailBodyHTML); err != nil {
+		return nil, err
 	}
 
 	return &content, nil
@@ -182,9 +188,8 @@ func (v *validator) Init(jsonconf string) error {
 
 	var path string
 	if len(v.Languages) > 0 {
-		v.validationTempl = make(map[int]*textt.Template, len(v.Languages))
-		v.resetTempl = make(map[int]*textt.Template, len(v.Languages))
-
+		v.validationTempl = make([]*textt.Template, len(v.Languages))
+		v.resetTempl = make([]*textt.Template, len(v.Languages))
 		var langTags []i18n.Tag
 		// Find actual content templates for each defined language.
 		for idx, lang := range v.Languages {
@@ -209,6 +214,8 @@ func (v *validator) Init(jsonconf string) error {
 		}
 		v.langMatcher = i18n.NewMatcher(langTags)
 	} else {
+		v.validationTempl = make([]*textt.Template, 1)
+		v.resetTempl = make([]*textt.Template, 1)
 		// No i18n support. Use defaults.
 		v.validationTempl[0], path, err = readTemplateFile(validationPathTempl, "")
 		if err != nil {
