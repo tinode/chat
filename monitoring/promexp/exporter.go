@@ -11,6 +11,9 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
+// TODO: refactor this class to keep Prometheus-specific bits
+// separate from scraping.
+
 // Exporter collects metrics from a tinode server.
 type Exporter struct {
 	address   string
@@ -115,22 +118,25 @@ func (e *Exporter) Describe(ch chan<- *prometheus.Desc) {
 	ch <- e.malloced
 }
 
-// Collect fetches statistics from the configured Tinode instance, and
-// delivers them as Prometheus metrics. It implements prometheus.Collector.
-func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
+// Scrape the target Tinode server and decode the response.
+func (e *Exporter) Scrape() (map[string]interface{}, error) {
 	resp, err := http.Get(e.address)
 	if err != nil {
-		ch <- prometheus.MustNewConstMetric(e.up, prometheus.GaugeValue, 0)
 		log.Println("Failed to connect to server", err)
-		return
+		return nil, err
 	}
 	defer resp.Body.Close()
 
-	up := float64(1)
-
 	var stats map[string]interface{}
 	err = json.NewDecoder(resp.Body).Decode(&stats)
-	if err != nil {
+	return stats, err
+}
+
+// Collect fetches statistics from the configured Tinode instance, and
+// delivers them as Prometheus metrics. It implements prometheus.Collector.
+func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
+	up := float64(1)
+	if stats, err := e.Scrape(); err != nil {
 		log.Println("Failed to fetch or parse response", err)
 		up = 0
 	} else {
@@ -142,8 +148,23 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 	ch <- prometheus.MustNewConstMetric(e.up, prometheus.GaugeValue, up)
 }
 
-func (e *Exporter) parseStats(ch chan<- prometheus.Metric, stats map[string]interface{}) error {
+// CollectRaw gathers all metrics from the configured Tinode instance,
+// and returns them as a map.
+func (e *Exporter) CollectRaw() (map[string]float64, error) {
+	if stats, err := e.Scrape(); err != nil {
+		log.Println("Failed to fetch or parse response", err)
+		return nil, err
+	} else {
+		if metrics, err := e.parseStatsRaw(stats); err != nil {
+			return nil, err
+		} else {
+			metrics["up"] = 1
+			return metrics, nil
+		}
+	}
+}
 
+func (e *Exporter) parseStats(ch chan<- prometheus.Metric, stats map[string]interface{}) error {
 	err := firstError(
 		e.parseAndUpdate(ch, e.version, prometheus.GaugeValue, stats, "Version"),
 		e.parseAndUpdate(ch, e.topicsLive, prometheus.GaugeValue, stats, "LiveTopics"),
@@ -159,20 +180,39 @@ func (e *Exporter) parseStats(ch chan<- prometheus.Metric, stats map[string]inte
 	return err
 }
 
+func (e *Exporter) parseStatsRaw(stats map[string]interface{}) (map[string]float64, error) {
+	keys := [...]string{"Version", "LiveTopics", "TotalTopics", "LiveSessions", "ClusterLeader", "TotalClusterNodes", "LiveClusterNodes", "memstats.Allocs"}
+	metrics := make(map[string]float64)
+	for _, key := range keys {
+		if val, err := e.parseMetric(stats, key); err == nil {
+			metrics[key] = val
+		} else {
+			return nil, err
+		}
+	}
+	return metrics, nil
+}
+
 func (e *Exporter) parseAndUpdate(ch chan<- prometheus.Metric, desc *prometheus.Desc, valueType prometheus.ValueType,
 	stats map[string]interface{}, key string) error {
+	if v, err := e.parseMetric(stats, key); err == nil {
+		ch <- prometheus.MustNewConstMetric(desc, valueType, v)
+		return nil
+	} else {
+		return err
+  }
+}
 
+func (e *Exporter) parseMetric(stats map[string]interface{}, key string) (float64, error) {
 	v, err := parseNumeric(stats, key)
 
 	if err == errKeyNotFound {
-		return nil
+		return 0, nil
 	}
 	if err != nil {
-		return err
+		return 0, err
 	}
-
-	ch <- prometheus.MustNewConstMetric(desc, valueType, v)
-	return nil
+	return v, nil
 }
 
 func firstError(errs ...error) error {

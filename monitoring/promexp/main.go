@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"flag"
+	"fmt"
 	"log"
 	"net/http"
 	"time"
@@ -21,20 +23,37 @@ func main() {
 	log.Printf("Tinode metrics exporter for Prometheus")
 
 	var (
-		tinodeAddr  = flag.String("tinode_addr", "http://localhost:6060/stats/expvar", "Address of the Tinode instance to scrape")
-		namespace   = flag.String("namespace", "tinode", "Namespace for metrics '<namespace>_...'")
-		listenAt    = flag.String("listen_at", ":6222", "Host name and port to serve collected metrics at.")
-		metricsPath = flag.String("metrics_path", "/metrics", "Path under which to expose metrics.")
-		timeout     = flag.Int("timeout", 15, "Tinode connection timeout in seconds")
+		tinodeAddr   = flag.String("tinode_addr", "http://localhost:6060/stats/expvar", "Address of the Tinode instance to scrape")
+		namespace    = flag.String("namespace", "tinode", "Namespace for metrics '<namespace>_...'")
+		listenAt     = flag.String("listen_at", ":6222", "Host name and port to serve collected metrics at.")
+		metricsPath  = flag.String("metrics_path", "/metrics", "Path under which to expose metrics.")
+		timeout      = flag.Int("timeout", 15, "Tinode connection timeout in seconds")
+
+		pushAddr     = flag.String("push_addr", "http://localhost:9999/api/v2/write", "Address of push target server where the data gets sent")
+		organization = flag.String("organization", "test", "Organization to push metrics as.")
+		bucket       = flag.String("bucket", "test", "Storage bucket to store data in.")
+		authToken    = flag.String("auth_token", "", "Push authentication token.")
 	)
 	flag.Parse()
 
 	if *metricsPath == "/" {
 		log.Fatal("Serving metrics from / is not supported")
 	}
+	if *organization == "" {
+		log.Fatal("Must specify --organization")
+	}
+	if *authToken == "" {
+		log.Fatal("Must specify --auth_token")
+	}
+	if *bucket == "" {
+		log.Fatal("Must specify --bucket")
+	}
+	targetAddress := fmt.Sprintf("%s?org=%s&bucket=%s", *pushAddr, *organization, *bucket)
+	tokenHeader := fmt.Sprintf("Token %s", *authToken)
 
+	exporter := NewExporter(*tinodeAddr, *namespace, time.Duration(*timeout)*time.Second)
 	registry := prometheus.NewRegistry()
-	registry.MustRegister(NewExporter(*tinodeAddr, *namespace, time.Duration(*timeout)*time.Second))
+	registry.MustRegister(exporter)
 	http.Handle(*metricsPath,
 		promhttp.InstrumentMetricHandler(
 			registry,
@@ -55,6 +74,36 @@ func main() {
 <p><a href="` + *metricsPath + `">Metrics</a></p>
 <h2>Build</h2>
 <pre>` + version.Info() + ` ` + version.BuildContext() + `</pre>
+</body></html>`))
+	})
+
+	// Forces a data push.
+	http.HandleFunc("/push", func(w http.ResponseWriter, r *http.Request) {
+		var msg string
+		if metrics, err := exporter.CollectRaw(); err == nil {
+			b := new(bytes.Buffer)
+			ts := time.Now().UnixNano()
+			for k, v := range metrics {
+				fmt.Fprintf(b, "%s value=%f %d\n", k, v, ts)
+			}
+			reqBody := b.String()
+			if req, err := http.NewRequest("POST", targetAddress, bytes.NewReader([]byte(reqBody))); err == nil {
+				req.Header.Add("Authorization", tokenHeader)
+				if resp, err := http.DefaultClient.Do(req); err != nil {
+					msg = "Fail: " + err.Error()
+				} else {
+					msg = "ok - " + resp.Status
+				}
+			} else {
+				msg = "Fail: " + err.Error()
+			}
+		} else {
+			msg = "Fail: " + err.Error()
+		}
+
+		w.Write([]byte(`<html><head><title>Tinode Push</title></head><body>
+<h1>Tinode Push</h1>
+<pre>` + msg + `</pre>
 </body></html>`))
 	})
 
