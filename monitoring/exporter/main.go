@@ -1,17 +1,22 @@
 package main
 
 import (
-	"bytes"
 	"flag"
-	"fmt"
 	"log"
 	"net/http"
-	"net/url"
+	"strings"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/prometheus/common/version"
+)
+
+type MonitoringService int
+
+const (
+	Prometheus MonitoringService = 1
+	InfluxDB   MonitoringService = 2
 )
 
 type promHTTPLogger struct{}
@@ -20,108 +25,127 @@ func (l promHTTPLogger) Println(v ...interface{}) {
 	log.Println(v...)
 }
 
-func formPushTargetAddress(baseAddr, organization, bucket string) string {
-	url, err := url.ParseRequestURI(baseAddr)
-	if err != nil {
-		log.Fatal("Invalid push_addr", err)
-	}
-	q := url.Query()
-	q.Add("org", organization)
-	q.Add("bucket", bucket)
-	url.RawQuery = q.Encode()
-	return url.String()
-}
-
 func main() {
 	log.Printf("Tinode metrics exporter.")
 
 	var (
+		serveFor     = flag.String("serve_for", "influxdb", "Monitoring service to gather metrics for. Available: influxdb, prometheus.")
 		tinodeAddr   = flag.String("tinode_addr", "http://localhost:6060/stats/expvar", "Address of the Tinode instance to scrape.")
-		namespace    = flag.String("namespace", "tinode", "Namespace for metrics '<namespace>_...'")
-		listenAt     = flag.String("listen_at", ":6222", "Host name and port to serve collected metrics at.")
-		metricsPath  = flag.String("metrics_path", "/metrics", "Path under which to expose metrics.")
-		timeout      = flag.Int("timeout", 15, "Tinode connection timeout in seconds.")
+		listenAt     = flag.String("listen_at", ":6222", "Host name and port to run webservice serve on.")
+		metricList   = flag.String("metric_list", "Version,LiveTopics,TotalTopics,LiveSessions,ClusterLeader,TotalClusterNodes,LiveClusterNodes,memstats.Allocs", "Comma-separated list of metrics to scrape and export.")
+
+		// Prometheus-specific arguments.
+		promNamespace    = flag.String("prom_namespace", "tinode", "Prometheus namespace for metrics '<namespace>_...'")
+		promMetricsPath  = flag.String("prom_metrics_path", "/metrics", "Path under which to expose metrics for Prometheus scrapes.")
+		promTimeout      = flag.Int("prom_timeout", 15, "Tinode connection timeout in seconds in response to Prometheus scrapes.")
 
 		// InfluxDB-specific arguments.
-		pushAddr     = flag.String("push_addr", "http://localhost:9999/api/v2/write", "Address of push target server where the data gets sent.")
-		organization = flag.String("organization", "test", "Organization to push metrics as.")
-		bucket       = flag.String("bucket", "test", "Storage bucket to store data in.")
-		authToken    = flag.String("auth_token", "", "Push authentication token.")
+		influxPushAddr     = flag.String("influx_push_addr", "http://localhost:9999/api/v2/write", "Address of InfluxDB target server where the data gets sent.")
+		influxOrganization = flag.String("influx_organization", "test", "InfluxDB organization to push metrics as.")
+		influxBucket       = flag.String("influx_bucket", "test", "InfluxDB storage bucket to store data in.")
+		influxAuthToken    = flag.String("influx_auth_token", "", "InfluxDB authentication token.")
+		influxPushInterval = flag.Int("influx_push_interval", 30, "InfluxDB push interval in seconds.")
 	)
 	flag.Parse()
 
-	if *metricsPath == "/" {
-		log.Fatal("Serving metrics from / is not supported")
+	var service MonitoringService
+	if *serveFor == "prometheus" {
+		service = Prometheus
+	} else if *serveFor == "influxdb" {
+		service = InfluxDB
+	} else {
+		log.Fatal("Invalid monitoring service:" + *serveFor + "; must be either \"prometheus\" or \"influxdb\"")
 	}
-	if *organization == "" {
-		log.Fatal("Must specify --organization")
+	// Validate flags.
+	switch service {
+	case Prometheus:
+		if *promMetricsPath == "/" {
+			log.Fatal("Serving metrics from / is not supported")
+		}
+	case InfluxDB:
+		if *influxOrganization == "" {
+			log.Fatal("Must specify --influx_organization")
+		}
+		if *influxAuthToken == "" {
+			log.Fatal("Must specify --influx_auth_token")
+		}
+		if *influxBucket == "" {
+			log.Fatal("Must specify --influx_bucket")
+		}
 	}
-	if *authToken == "" {
-		log.Fatal("Must specify --auth_token")
-	}
-	if *bucket == "" {
-		log.Fatal("Must specify --bucket")
-	}
-	targetAddress := formPushTargetAddress(*pushAddr, *organization, *bucket)
-	tokenHeader := fmt.Sprintf("Token %s", *authToken)
-
-	exporter := NewExporter(*tinodeAddr, *namespace, time.Duration(*timeout)*time.Second)
-	registry := prometheus.NewRegistry()
-	registry.MustRegister(exporter)
-	http.Handle(*metricsPath,
-		promhttp.InstrumentMetricHandler(
-			registry,
-			promhttp.HandlerFor(
-				registry,
-				promhttp.HandlerOpts{
-					ErrorLog: &promHTTPLogger{},
-					Timeout:  time.Duration(*timeout) * time.Second,
-				},
-			),
-		),
-	)
 
 	// Index page at web root.
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		var servingPath string
+		switch service {
+		case Prometheus:
+			servingPath = "<p>Prometheus exporter path: <a href='" + *promMetricsPath + "'>Metrics</a></p>"
+		case InfluxDB:
+			servingPath = "<p>InfluxDB push path: <a href='/push'>Push</a></p>"
+		}
+
 		w.Write([]byte(`<html><head><title>Tinode Exporter</title></head><body>
 <h1>Tinode Exporter</h1>
-<p><a href="` + *metricsPath + `">Metrics</a></p>
-<h2>Build</h2>
+<p>Server type` + *serveFor + `</p>` + servingPath +
+`<h2>Build</h2>
 <pre>` + version.Info() + ` ` + version.BuildContext() + `</pre>
 </body></html>`))
 	})
 
-	// Forces a data push.
-	http.HandleFunc("/push", func(w http.ResponseWriter, r *http.Request) {
-		var msg string
-		if metrics, err := exporter.CollectRaw(); err == nil {
-			b := new(bytes.Buffer)
-			ts := time.Now().UnixNano()
-			for k, v := range metrics {
-				fmt.Fprintf(b, "%s value=%f %d\n", k, v, ts)
-			}
-			if req, err := http.NewRequest("POST", targetAddress, b); err == nil {
-				req.Header.Add("Authorization", tokenHeader)
-				if resp, err := http.DefaultClient.Do(req); err != nil {
-					msg = "Fail: " + err.Error()
-				} else {
-					msg = "ok - " + resp.Status
-					resp.Body.Close()
+	metrics := strings.Split(*metricList, ",")
+	scraper := Scraper{address: *tinodeAddr, metrics: metrics}
+	// Create exporters.
+	switch service {
+	case Prometheus:
+		promExporter := NewPromExporter(*tinodeAddr, *promNamespace, time.Duration(*promTimeout)*time.Second, &scraper)
+		registry := prometheus.NewRegistry()
+		registry.MustRegister(promExporter)
+		http.Handle(*promMetricsPath,
+			promhttp.InstrumentMetricHandler(
+				registry,
+				promhttp.HandlerFor(
+					registry,
+					promhttp.HandlerOpts{
+						ErrorLog: &promHTTPLogger{},
+						Timeout:  time.Duration(*promTimeout) * time.Second,
+					},
+				),
+			),
+		)
+	case InfluxDB:
+		influxDBExporter := NewInfluxDBExporter(*influxPushAddr, *influxOrganization, *influxBucket, *influxAuthToken, &scraper)
+		if *influxPushInterval > 0 {
+			go func() {
+				interval := time.Duration(*influxPushInterval) * time.Second
+				ch := time.Tick(interval)
+				for {
+					if _, ok := <-ch; ok {
+						influxDBExporter.Push()
+					} else {
+						return
+					}
 				}
-			} else {
-				msg = "Fail: " + err.Error()
-			}
+			}()
 		} else {
-			msg = "Fail: " + err.Error()
+			log.Println("InfluxDB push interval is zero. Will not push data automatically.")
 		}
+		// Forces a data push.
+		http.HandleFunc("/push", func(w http.ResponseWriter, r *http.Request) {
+			var msg string
+			if http_status, err := influxDBExporter.Push(); err == nil {
+				msg = "ok - " + http_status
+			} else {
+				msg = "fail - " + err.Error()
+			}
 
-		w.Write([]byte(`<html><head><title>Tinode Push</title></head><body>
+			w.Write([]byte(`<html><head><title>Tinode Push</title></head><body>
 <h1>Tinode Push</h1>
 <pre>` + msg + `</pre>
 </body></html>`))
-	})
+		})
+	}
 
 	log.Println("Reading Tinode expvar from", *tinodeAddr)
-	log.Printf("Serving metrics at %s%s", *listenAt, *metricsPath)
+	log.Printf("Serving metrics at %s. Server type %s", *listenAt, *serveFor)
 	log.Fatalln(http.ListenAndServe(*listenAt, nil))
 }
