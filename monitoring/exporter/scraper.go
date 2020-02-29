@@ -47,7 +47,6 @@ func (s *Scraper) Scrape() (map[string]interface{}, error) {
 }
 
 func (s *Scraper) parseStatsRaw(stats map[string]interface{}) (map[string]float64, error) {
-	//keys := [...]string{"Version", "LiveTopics", "TotalTopics", "LiveSessions", "ClusterLeader", "TotalClusterNodes", "LiveClusterNodes", "memstats.Allocs"}
 	metrics := make(map[string]float64)
 	for _, key := range s.metrics {
 		if val, err := parseMetric(stats, key); err == nil {
