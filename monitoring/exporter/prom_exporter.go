@@ -1,21 +1,19 @@
 package main
 
 import (
-	"encoding/json"
-	"errors"
 	"log"
-	"net/http"
-	"strings"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-// Exporter collects metrics from a tinode server.
-type Exporter struct {
+// PromExporter collects metrics in Prometheus format from a Tinode server.
+type PromExporter struct {
 	address   string
 	timeout   time.Duration
 	namespace string
+
+	scraper   *Scraper
 
 	up               *prometheus.Desc
 	version          *prometheus.Desc
@@ -29,14 +27,13 @@ type Exporter struct {
 	malloced         *prometheus.Desc
 }
 
-var errKeyNotFound = errors.New("key not found")
-
-// NewExporter returns an initialized exporter.
-func NewExporter(server, namespace string, timeout time.Duration) *Exporter {
-	return &Exporter{
+// NewPromExporter returns an initialized Prometheus exporter.
+func NewPromExporter(server, namespace string, timeout time.Duration, scraper *Scraper) *PromExporter {
+	return &PromExporter{
 		address:   server,
 		timeout:   timeout,
 		namespace: namespace,
+		scraper:   scraper,
 		up: prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "", "up"),
 			"If tinode instance is reachable.",
@@ -102,7 +99,7 @@ func NewExporter(server, namespace string, timeout time.Duration) *Exporter {
 
 // Describe describes all the metrics exported by the memcached exporter. It
 // implements prometheus.Collector.
-func (e *Exporter) Describe(ch chan<- *prometheus.Desc) {
+func (e *PromExporter) Describe(ch chan<- *prometheus.Desc) {
 	ch <- e.up
 	ch <- e.version
 	ch <- e.topicsLive
@@ -117,20 +114,9 @@ func (e *Exporter) Describe(ch chan<- *prometheus.Desc) {
 
 // Collect fetches statistics from the configured Tinode instance, and
 // delivers them as Prometheus metrics. It implements prometheus.Collector.
-func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
-	resp, err := http.Get(e.address)
-	if err != nil {
-		ch <- prometheus.MustNewConstMetric(e.up, prometheus.GaugeValue, 0)
-		log.Println("Failed to connect to server", err)
-		return
-	}
-	defer resp.Body.Close()
-
+func (e *PromExporter) Collect(ch chan<- prometheus.Metric) {
 	up := float64(1)
-
-	var stats map[string]interface{}
-	err = json.NewDecoder(resp.Body).Decode(&stats)
-	if err != nil {
+	if stats, err := e.scraper.Scrape(); err != nil {
 		log.Println("Failed to fetch or parse response", err)
 		up = 0
 	} else {
@@ -142,8 +128,7 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 	ch <- prometheus.MustNewConstMetric(e.up, prometheus.GaugeValue, up)
 }
 
-func (e *Exporter) parseStats(ch chan<- prometheus.Metric, stats map[string]interface{}) error {
-
+func (e *PromExporter) parseStats(ch chan<- prometheus.Metric, stats map[string]interface{}) error {
 	err := firstError(
 		e.parseAndUpdate(ch, e.version, prometheus.GaugeValue, stats, "Version"),
 		e.parseAndUpdate(ch, e.topicsLive, prometheus.GaugeValue, stats, "LiveTopics"),
@@ -159,20 +144,14 @@ func (e *Exporter) parseStats(ch chan<- prometheus.Metric, stats map[string]inte
 	return err
 }
 
-func (e *Exporter) parseAndUpdate(ch chan<- prometheus.Metric, desc *prometheus.Desc, valueType prometheus.ValueType,
+func (e *PromExporter) parseAndUpdate(ch chan<- prometheus.Metric, desc *prometheus.Desc, valueType prometheus.ValueType,
 	stats map[string]interface{}, key string) error {
-
-	v, err := parseNumeric(stats, key)
-
-	if err == errKeyNotFound {
+	if v, err := parseMetric(stats, key); err == nil {
+		ch <- prometheus.MustNewConstMetric(desc, valueType, v)
 		return nil
-	}
-	if err != nil {
+	} else {
 		return err
-	}
-
-	ch <- prometheus.MustNewConstMetric(desc, valueType, v)
-	return nil
+  }
 }
 
 func firstError(errs ...error) error {
@@ -182,31 +161,4 @@ func firstError(errs ...error) error {
 		}
 	}
 	return nil
-}
-
-func parseNumeric(stats map[string]interface{}, path string) (float64, error) {
-	parts := strings.Split(path, ".")
-	var value interface{}
-	var found bool
-	value = stats
-	for i := 0; i < len(parts); i++ {
-		subset, ok := value.(map[string]interface{})
-		if !ok {
-			log.Println("Invalid key path:", path)
-			return 0, errKeyNotFound
-		}
-		value, found = subset[parts[i]]
-		if !found {
-			log.Println("Invalid key path:", path, "(", parts[i], ")")
-			return 0, errKeyNotFound
-		}
-	}
-
-	floatval, ok := value.(float64)
-	if !ok {
-		log.Println("Value at path is not a float64:", path, value)
-		return 0, errKeyNotFound
-	}
-
-	return floatval, nil
 }
