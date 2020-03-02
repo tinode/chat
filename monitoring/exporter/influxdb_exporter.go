@@ -19,9 +19,9 @@ type InfluxDBExporter struct {
 }
 
 // NewInfluxDBExporter returns an initialized InfluxDB exporter.
-func NewInfluxDBExporter(pushBaseAddress, organization, bucket, token string, scraper *Scraper) *InfluxDBExporter{
-	targetAddress := formPushTargetAddress(pushBaseAddress, organization, bucket)
-	tokenHeader   := fmt.Sprintf("Token %s", token)
+func NewInfluxDBExporter(influxDBVersion, pushBaseAddress, organization, bucket, token string, scraper *Scraper) *InfluxDBExporter{
+	targetAddress := formPushTargetAddress(influxDBVersion, pushBaseAddress, organization, bucket)
+	tokenHeader   := formAuthorizationHeaderValue(influxDBVersion, token)
 	return &InfluxDBExporter{
 		targetAddress: targetAddress,
 		organization:  organization,
@@ -55,14 +55,39 @@ func (e *InfluxDBExporter) Push() (string, error) {
 	return resp.Status, nil
 }
 
-func formPushTargetAddress(baseAddr, organization, bucket string) string {
+func formPushTargetAddress(influxDBVersion, baseAddr, organization, bucket string) string {
 	url, err := url.ParseRequestURI(baseAddr)
 	if err != nil {
 		log.Fatal("Invalid push_addr", err)
 	}
+	// Url format
+	// - in 2.0: /api/v2/write?org=organization&bucket=bucket
+	// - in 1.7: /write?db=organization
+	organizationParamName := "org"
+	bucketParamName := "bucket"
+	if influxDBVersion == "2.0" {
+		url.Path = "/api/v2/write"
+	} else if influxDBVersion == "1.7" {
+		url.Path = "/write"
+		organizationParamName = "db"
+		// Concept of explicit bucket in 1.7 is absent.
+		bucketParamName = ""
+	}
 	q := url.Query()
-	q.Add("org", organization)
-	q.Add("bucket", bucket)
+	q.Add(organizationParamName, organization)
+	if bucketParamName != "" {
+		q.Add(bucketParamName, bucket)
+	}
 	url.RawQuery = q.Encode()
 	return url.String()
+}
+
+func formAuthorizationHeaderValue(influxDBVersion, token string) string {
+	// Authorization header has value
+	// - in 2.0: Token <token>
+	// - in 1.7: Bearer <token>
+	if influxDBVersion == "2.0" {
+		return fmt.Sprintf("Token %s", token)
+	}
+	return fmt.Sprintf("Bearer %s", token)
 }
