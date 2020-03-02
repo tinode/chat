@@ -40,9 +40,10 @@ func main() {
 		promTimeout      = flag.Int("prom_timeout", 15, "Tinode connection timeout in seconds in response to Prometheus scrapes.")
 
 		// InfluxDB-specific arguments.
-		influxPushAddr     = flag.String("influx_push_addr", "http://localhost:9999/api/v2/write", "Address of InfluxDB target server where the data gets sent.")
+		influxPushAddr     = flag.String("influx_push_addr", "http://localhost:9999/", "Address of InfluxDB target server where the data gets sent.")
+		influxDBVersion    = flag.String("influx_db_version", "1.7", "Version of InfluxDB (only 1.7 and 2.0 are supported).")
 		influxOrganization = flag.String("influx_organization", "test", "InfluxDB organization to push metrics as.")
-		influxBucket       = flag.String("influx_bucket", "test", "InfluxDB storage bucket to store data in.")
+		influxBucket       = flag.String("influx_bucket", "test", "InfluxDB storage bucket to store data in (used only in InfluxDB 2.0).")
 		influxAuthToken    = flag.String("influx_auth_token", "", "InfluxDB authentication token.")
 		influxPushInterval = flag.Int("influx_push_interval", 30, "InfluxDB push interval in seconds.")
 	)
@@ -71,6 +72,9 @@ func main() {
 		}
 		if *influxBucket == "" {
 			log.Fatal("Must specify --influx_bucket")
+		}
+		if *influxDBVersion != "1.7" && *influxDBVersion != "2.0" {
+			log.Fatal("Please, set --influx_db_version to either 1.7 or 2.0")
 		}
 	}
 
@@ -113,7 +117,7 @@ func main() {
 			),
 		)
 	case InfluxDB:
-		influxDBExporter := NewInfluxDBExporter(*influxPushAddr, *influxOrganization, *influxBucket, *influxAuthToken, &scraper)
+		influxDBExporter := NewInfluxDBExporter(*influxDBVersion, *influxPushAddr, *influxOrganization, *influxBucket, *influxAuthToken, &scraper)
 		if *influxPushInterval > 0 {
 			go func() {
 				interval := time.Duration(*influxPushInterval) * time.Second
