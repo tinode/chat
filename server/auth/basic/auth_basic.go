@@ -62,7 +62,7 @@ func parseSecret(bsecret []byte) (uname, password string, err error) {
 }
 
 // Init initializes the basic authenticator.
-func (a *authenticator) Init(jsonconf, name string) error {
+func (a *authenticator) Init(jsonconf json.RawMessage, name string) error {
 	if name == "" {
 		return errors.New("auth_basic: authenticator name cannot be blank")
 	}
@@ -79,8 +79,8 @@ func (a *authenticator) Init(jsonconf, name string) error {
 	}
 
 	var config configType
-	if err := json.Unmarshal([]byte(jsonconf), &config); err != nil {
-		return errors.New("auth_basic: failed to parse config: " + err.Error() + "(" + jsonconf + ")")
+	if err := json.Unmarshal(jsonconf, &config); err != nil {
+		return errors.New("auth_basic: failed to parse config: " + err.Error() + "(" + string(jsonconf) + ")")
 	}
 	a.name = name
 	a.addToTags = config.AddToTags

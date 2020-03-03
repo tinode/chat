@@ -39,7 +39,7 @@ type tokenLayout struct {
 }
 
 // Init initializes the authenticator: parses the config and sets salt, serial number and lifetime.
-func (ta *authenticator) Init(jsonconf, name string) error {
+func (ta *authenticator) Init(jsonconf json.RawMessage, name string) error {
 	if ta.name != "" {
 		return errors.New("auth_token: already initialized as " + ta.name + "; " + name)
 	}
@@ -53,8 +53,8 @@ func (ta *authenticator) Init(jsonconf, name string) error {
 		ExpireIn int `json:"expire_in"`
 	}
 	var config configType
-	if err := json.Unmarshal([]byte(jsonconf), &config); err != nil {
-		return errors.New("auth_token: failed to parse config: " + err.Error() + "(" + jsonconf + ")")
+	if err := json.Unmarshal(jsonconf, &config); err != nil {
+		return errors.New("auth_token: failed to parse config: " + err.Error() + "(" + string(jsonconf) + ")")
 	}
 
 	if len(config.Key) < sha256.Size {

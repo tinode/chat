@@ -66,7 +66,7 @@ type response struct {
 }
 
 // Init initializes the handler.
-func (a *authenticator) Init(jsonconf, name string) error {
+func (a *authenticator) Init(jsonconf json.RawMessage, name string) error {
 	if a.name != "" {
 		return errors.New("auth_rest: already initialized as " + a.name + "; " + name)
 	}
@@ -81,9 +81,9 @@ func (a *authenticator) Init(jsonconf, name string) error {
 	}
 
 	var config configType
-	err := json.Unmarshal([]byte(jsonconf), &config)
+	err := json.Unmarshal(jsonconf, &config)
 	if err != nil {
-		return errors.New("auth_rest: failed to parse config: " + err.Error() + "(" + jsonconf + ")")
+		return errors.New("auth_rest: failed to parse config: " + err.Error() + "(" + string(jsonconf) + ")")
 	}
 
 	serverUrl, err := url.Parse(config.ServerUrl)

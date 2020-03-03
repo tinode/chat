@@ -26,7 +26,7 @@ func genDb(data *Data) {
 
 	// Add authentication record
 	authHandler := store.GetAuthHandler("basic")
-	authHandler.Init(`{"add_to_tags": true}`, "basic")
+	authHandler.Init([]byte(`{"add_to_tags": true}`), "basic")
 
 	nameIndex := make(map[string]string, len(data.Users))
 

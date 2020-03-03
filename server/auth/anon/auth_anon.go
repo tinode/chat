@@ -3,6 +3,7 @@
 package anon
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/tinode/chat/server/auth"
@@ -14,7 +15,7 @@ import (
 type authenticator struct{}
 
 // Init is a noop, always returns success.
-func (authenticator) Init(_, _ string) error {
+func (authenticator) Init(_ json.RawMessage, _ string) error {
 	return nil
 }
 
