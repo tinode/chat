@@ -34,6 +34,7 @@ func main() {
 		tinodeAddr   = flag.String("tinode_addr", "http://localhost:6060/stats/expvar", "Address of the Tinode instance to scrape.")
 		listenAt     = flag.String("listen_at", ":6222", "Host name and port to listen for incoming requests on.")
 		metricList   = flag.String("metric_list", "Version,LiveTopics,TotalTopics,LiveSessions,ClusterLeader,TotalClusterNodes,LiveClusterNodes,memstats.Alloc", "Comma-separated list of metrics to scrape and export.")
+		instance     = flag.String("instance", "exporter", "Exporter instance name.")
 
 		// Prometheus-specific arguments.
 		promNamespace    = flag.String("prom_namespace", "tinode", "Prometheus namespace for metrics '<namespace>_...'")
@@ -121,7 +122,7 @@ func main() {
 		)
 	case InfluxDB:
 		serverTypeString = fmt.Sprintf("%s, version %s", *serveFor, *influxDBVersion)
-		influxDBExporter := NewInfluxDBExporter(*influxDBVersion, *influxPushAddr, *influxOrganization, *influxBucket, *influxAuthToken, &scraper)
+		influxDBExporter := NewInfluxDBExporter(*influxDBVersion, *influxPushAddr, *influxOrganization, *influxBucket, *influxAuthToken, *instance, &scraper)
 		if *influxPushInterval > 0 {
 			go func() {
 				interval := time.Duration(*influxPushInterval) * time.Second
