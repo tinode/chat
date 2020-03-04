@@ -156,6 +156,6 @@ func main() {
 	}
 
 	log.Println("Reading Tinode expvar from", *tinodeAddr)
-	log.Printf("Serving metrics at %s. Server type %s", *listenAt, serverTypeString)
+	log.Printf("Exporter running at %s. Server type %s", *listenAt, serverTypeString)
 	log.Fatalln(http.ListenAndServe(*listenAt, nil))
 }
