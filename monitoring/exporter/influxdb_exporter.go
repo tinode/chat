@@ -28,7 +28,7 @@ func NewInfluxDBExporter(influxDBVersion, pushBaseAddress, organization, bucket,
 		organization:  organization,
 		bucket:        bucket,
 		tokenHeader:   tokenHeader,
-		instance:     instance,
+		instance:      instance,
 		scraper:       scraper,
 	}
 }
