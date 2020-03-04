@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -32,7 +33,7 @@ func main() {
 		serveFor     = flag.String("serve_for", "influxdb", "Monitoring service to gather metrics for. Available: influxdb, prometheus.")
 		tinodeAddr   = flag.String("tinode_addr", "http://localhost:6060/stats/expvar", "Address of the Tinode instance to scrape.")
 		listenAt     = flag.String("listen_at", ":6222", "Host name and port to listen for incoming requests on.")
-		metricList   = flag.String("metric_list", "Version,LiveTopics,TotalTopics,LiveSessions,ClusterLeader,TotalClusterNodes,LiveClusterNodes,memstats.Allocs", "Comma-separated list of metrics to scrape and export.")
+		metricList   = flag.String("metric_list", "Version,LiveTopics,TotalTopics,LiveSessions,ClusterLeader,TotalClusterNodes,LiveClusterNodes,memstats.Alloc", "Comma-separated list of metrics to scrape and export.")
 
 		// Prometheus-specific arguments.
 		promNamespace    = flag.String("prom_namespace", "tinode", "Prometheus namespace for metrics '<namespace>_...'")
@@ -40,7 +41,7 @@ func main() {
 		promTimeout      = flag.Int("prom_timeout", 15, "Tinode connection timeout in seconds in response to Prometheus scrapes.")
 
 		// InfluxDB-specific arguments.
-		influxPushAddr     = flag.String("influx_push_addr", "http://localhost:9999/", "Address of InfluxDB target server where the data gets sent.")
+		influxPushAddr     = flag.String("influx_push_addr", "http://localhost:9999/write", "Address of InfluxDB target server where the data gets sent.")
 		influxDBVersion    = flag.String("influx_db_version", "1.7", "Version of InfluxDB (only 1.7 and 2.0 are supported).")
 		influxOrganization = flag.String("influx_organization", "test", "InfluxDB organization to push metrics as.")
 		influxBucket       = flag.String("influx_bucket", "test", "InfluxDB storage bucket to store data in (used only in InfluxDB 2.0).")
@@ -98,9 +99,11 @@ func main() {
 
 	metrics := strings.Split(*metricList, ",")
 	scraper := Scraper{address: *tinodeAddr, metrics: metrics}
+	var serverTypeString string
 	// Create exporters.
 	switch service {
 	case Prometheus:
+		serverTypeString = *serveFor
 		promExporter := NewPromExporter(*tinodeAddr, *promNamespace, time.Duration(*promTimeout)*time.Second, &scraper)
 		registry := prometheus.NewRegistry()
 		registry.MustRegister(promExporter)
@@ -117,6 +120,7 @@ func main() {
 			),
 		)
 	case InfluxDB:
+		serverTypeString = fmt.Sprintf("%s, version %s", *serveFor, *influxDBVersion)
 		influxDBExporter := NewInfluxDBExporter(*influxDBVersion, *influxPushAddr, *influxOrganization, *influxBucket, *influxAuthToken, &scraper)
 		if *influxPushInterval > 0 {
 			go func() {
@@ -124,7 +128,9 @@ func main() {
 				ch := time.Tick(interval)
 				for {
 					if _, ok := <-ch; ok {
-						influxDBExporter.Push()
+						if status, err := influxDBExporter.Push(); err != nil {
+							log.Printf("InfluxDB push failed (status '%s'), error: %s", status, err.Error())
+						}
 					} else {
 						return
 					}
@@ -150,6 +156,6 @@ func main() {
 	}
 
 	log.Println("Reading Tinode expvar from", *tinodeAddr)
-	log.Printf("Serving metrics at %s. Server type %s", *listenAt, *serveFor)
+	log.Printf("Exporter running at %s. Server type %s", *listenAt, serverTypeString)
 	log.Fatalln(http.ListenAndServe(*listenAt, nil))
 }

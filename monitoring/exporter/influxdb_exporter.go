@@ -65,10 +65,7 @@ func formPushTargetAddress(influxDBVersion, baseAddr, organization, bucket strin
 	// - in 1.7: /write?db=organization
 	organizationParamName := "org"
 	bucketParamName := "bucket"
-	if influxDBVersion == "2.0" {
-		url.Path = "/api/v2/write"
-	} else if influxDBVersion == "1.7" {
-		url.Path = "/write"
+	if influxDBVersion == "1.7" {
 		organizationParamName = "db"
 		// Concept of explicit bucket in 1.7 is absent.
 		bucketParamName = ""
