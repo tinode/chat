@@ -15,11 +15,12 @@ type InfluxDBExporter struct {
 	organization  string
 	bucket        string
 	tokenHeader   string
+	instance      string
 	scraper       *Scraper
 }
 
 // NewInfluxDBExporter returns an initialized InfluxDB exporter.
-func NewInfluxDBExporter(influxDBVersion, pushBaseAddress, organization, bucket, token string, scraper *Scraper) *InfluxDBExporter{
+func NewInfluxDBExporter(influxDBVersion, pushBaseAddress, organization, bucket, token, instance string, scraper *Scraper) *InfluxDBExporter{
 	targetAddress := formPushTargetAddress(influxDBVersion, pushBaseAddress, organization, bucket)
 	tokenHeader   := formAuthorizationHeaderValue(influxDBVersion, token)
 	return &InfluxDBExporter{
@@ -27,6 +28,7 @@ func NewInfluxDBExporter(influxDBVersion, pushBaseAddress, organization, bucket,
 		organization:  organization,
 		bucket:        bucket,
 		tokenHeader:   tokenHeader,
+		instance:      instance,
 		scraper:       scraper,
 	}
 }
@@ -40,7 +42,7 @@ func (e *InfluxDBExporter) Push() (string, error) {
 	b := new(bytes.Buffer)
 	ts := time.Now().UnixNano()
 	for k, v := range metrics {
-		fmt.Fprintf(b, "%s value=%f %d\n", k, v, ts)
+		fmt.Fprintf(b, "%s,instance=%s value=%f %d\n", k, e.instance, v, ts)
 	}
 	req, err := http.NewRequest("POST", e.targetAddress, b)
 	if err != nil {
