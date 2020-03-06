@@ -297,7 +297,7 @@ func main() {
 	}
 	statsInit(mux, evpath)
 	statsRegisterInt("Version")
-	statsSet("Version", int64(parseVersion(currentVersion)))
+	statsSet("Version", base10Version(parseVersion(currentVersion)))
 
 	// Initialize serving debug profiles (optional).
 	servePprof(mux, *pprofUrl)

@@ -366,10 +366,22 @@ func parseVersion(vers string) int {
 
 	if dot2 > 0 {
 		minor, err = strconv.Atoi(vers[:dot2])
-		// Ignoring the error here
-		trailer, _ = strconv.Atoi(vers[dot2+1:])
 	} else if len(vers) > 0 {
 		minor, err = strconv.Atoi(vers)
+	}
+	if err != nil {
+		return 0
+	}
+
+	vers = vers[dot2+1:]
+	end := strings.IndexFunc(vers, func(r rune) bool {
+		return !unicode.IsDigit(r)
+	})
+
+	if end > 0 {
+		trailer, err = strconv.Atoi(vers[:end])
+	} else if len(vers) > 0 {
+		trailer, err = strconv.Atoi(vers)
 	}
 	if err != nil {
 		return 0
@@ -380,6 +392,14 @@ func parseVersion(vers string) int {
 	}
 
 	return (major << 16) | (minor << 8) | trailer
+}
+
+// Version as a base-10 number as opposite to hex. Used by monitoring.
+func base10Version(hex int) int64 {
+	major := hex >> 16 & 0xFF
+	minor := hex >> 8 & 0xFF
+	trailer := hex & 0xFF
+	return int64(major*10000 + minor*100 + trailer)
 }
 
 func versionToString(vers int) string {
