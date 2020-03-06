@@ -215,7 +215,7 @@ func (a *authenticator) Authenticate(secret []byte) (*auth.Rec, []byte, error) {
 		return nil, nil, types.ErrExpired
 	}
 
-	err = bcrypt.CompareHashAndPassword([]byte(passhash), []byte(password))
+	err = bcrypt.CompareHashAndPassword(passhash, []byte(password))
 	if err != nil {
 		// Invalid password
 		return nil, nil, types.ErrFailed
