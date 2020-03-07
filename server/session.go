@@ -58,25 +58,25 @@ type Session struct {
 	// protocol - NONE (unset), WEBSOCK, LPOLL, CLUSTER, GRPC
 	proto int
 
-	// Websocket. Set only for websocket sessions
+	// Websocket. Set only for websocket sessions.
 	ws *websocket.Conn
 
-	// Pointer to session's record in sessionStore. Set only for Long Poll sessions
+	// Pointer to session's record in sessionStore. Set only for Long Poll sessions.
 	lpTracker *list.Element
 
-	// gRPC handle. Set only for gRPC clients
+	// gRPC handle. Set only for gRPC clients.
 	grpcnode pbx.Node_MessageLoopServer
 
-	// Reference to the cluster node where the session has originated. Set only for cluster RPC sessions
+	// Reference to the cluster node where the session has originated. Set only for cluster RPC (proxied) sessions.
 	clnode *ClusterNode
 
-	// IP address of the client. For long polling this is the IP of the last poll
+	// IP address of the client. For long polling this is the IP of the last poll.
 	remoteAddr string
 
-	// User agent, a string provived by an authenticated client in {login} packet
+	// User agent, a string provived by an authenticated client in {login} packet.
 	userAgent string
 
-	// Protocol version of the client: ((major & 0xff) << 8) | (minor & 0xff)
+	// Protocol version of the client: ((major & 0xff) << 8) | (minor & 0xff).
 	ver int
 
 	// Device ID of the client
@@ -163,6 +163,10 @@ func (s *Session) delSub(topic string) {
 	defer s.subsLock.Unlock()
 
 	delete(s.subs, topic)
+}
+
+func (s *Session) countSub() int {
+	return len(s.subs)
 }
 
 // Inform topics that the session is being terminated.

@@ -252,7 +252,7 @@ func (c *Cluster) run() {
 
 	// Count of missed pings from the leader.
 	missed := 0
-	// Don't rehash immediately on the first ping. If this node just came onlyne, leader will
+	// Don't rehash immediately on the first ping. If this node just came online, leader will
 	// account it on the next ping. Otherwise it will be rehashing twice.
 	rehashSkipped := false
 
