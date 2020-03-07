@@ -394,7 +394,7 @@ func parseVersion(vers string) int {
 	return (major << 16) | (minor << 8) | trailer
 }
 
-// Version as a base-10 number as opposite to hex. Used by monitoring.
+// Version as a base-10 number. Used by monitoring.
 func base10Version(hex int) int64 {
 	major := hex >> 16 & 0xFF
 	minor := hex >> 8 & 0xFF
