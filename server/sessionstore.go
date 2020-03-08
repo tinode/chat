@@ -90,7 +90,8 @@ func (ss *SessionStore) NewSession(conn interface{}, sid string) (*Session, int)
 
 	ss.sessCache[s.sid] = &s
 
-	// Expire stale long polling sessions.
+	// Expire stale long polling sessions: ss.lru contains only long polling sessions.
+	// If ss.lru is empty this is a noop.
 	var expired []*Session
 	expire := s.lastTouched.Add(-ss.lifeTime)
 	for elem := ss.lru.Back(); elem != nil; elem = ss.lru.Back() {

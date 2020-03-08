@@ -279,7 +279,6 @@ func (n *ClusterNode) callAsync(proc string, msg, resp interface{}, done chan *r
 
 // Proxy forwards message to master
 func (n *ClusterNode) forward(msg *ClusterReq) error {
-	// log.Printf("cluster: forwarding request to node '%s'", n.name)
 	msg.Node = globals.cluster.thisNodeName
 	var rejected bool
 	err := n.call("Cluster.Master", msg, &rejected)
@@ -291,14 +290,12 @@ func (n *ClusterNode) forward(msg *ClusterReq) error {
 
 // Master responds to proxy
 func (n *ClusterNode) respond(msg *ClusterResp) error {
-	// log.Printf("cluster: replying to node '%s'", n.name)
 	var unused bool
 	return n.call("Cluster.Proxy", msg, &unused)
 }
 
 // Routes the message within the cluster.
 func (n *ClusterNode) route(msg *ClusterReq) error {
-	// log.Printf("cluster: routing message for topic '%s' to node '%s'", msg.RcptTo, n.name)
 	var unused bool
 	return n.call("Cluster.Route", msg, &unused)
 }
@@ -329,8 +326,6 @@ type Cluster struct {
 // dispatch the message to it like it came from a normal ws/lp connection.
 // Called by a remote node.
 func (c *Cluster) Master(msg *ClusterReq, rejected *bool) error {
-	// log.Printf("cluster: Master request received from node '%s'", msg.Node)
-
 	// Find the local session associated with the given remote session.
 	sess := globals.sessionStore.Get(msg.Sess.Sid)
 
@@ -408,8 +403,6 @@ func (Cluster) Proxy(msg *ClusterResp, unused *bool) error {
 // Route endpoint receives intra-cluster messages (e.g. pres) destined for the nodes hosting topic.
 // Called by Hub.route channel consumer.
 func (c *Cluster) Route(msg *ClusterReq, rejected *bool) error {
-	// log.Printf("cluster: node '%s' received route request for topic '%s' from node '%s'", c.thisNodeName, msg.RcptTo, msg.Node)
-
 	*rejected = false
 	if msg.Signature != c.ring.Signature() {
 		log.Println("cluster Route: session signature mismatch", msg.Sess.Sid)
@@ -432,7 +425,6 @@ func (c *Cluster) Route(msg *ClusterReq, rejected *bool) error {
 
 // UserCacheUpdate endpoint receives updates to user's cached values as well as sends push notifications.
 func (c *Cluster) UserCacheUpdate(msg *UserCacheReq, rejected *bool) error {
-	// log.Printf("cluster: node '%s' received user cache update from node '%s'", c.thisNodeName, msg.Node)
 	usersRequestFromCluster(msg)
 	return nil
 }
