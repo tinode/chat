@@ -9,6 +9,7 @@ import (
 	"expvar"
 	"log"
 	"net/http"
+	"time"
 )
 
 type varUpdate struct {
@@ -28,6 +29,11 @@ func statsInit(mux *http.ServeMux, path string) {
 
 	mux.Handle(path, expvar.Handler())
 	globals.statsUpdate = make(chan *varUpdate, 1024)
+
+	start := time.Now()
+	expvar.Publish("Uptime", expvar.Func(func() interface{} {
+		return time.Since(start).Seconds()
+	}))
 
 	go statsUpdater()
 

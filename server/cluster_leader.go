@@ -238,7 +238,7 @@ func (c *Cluster) electLeader() {
 	}
 
 	if voteCount >= expectVotes {
-		// Current node elected as the leader
+		// Current node elected as the leader.
 		c.fo.leader = c.thisNodeName
 		statsSet("ClusterLeader", 1)
 		log.Printf("'%s' elected self as a new leader", c.thisNodeName)
@@ -252,7 +252,7 @@ func (c *Cluster) run() {
 
 	// Count of missed pings from the leader.
 	missed := 0
-	// Don't rehash immediately on the first ping. If this node just came onlyne, leader will
+	// Don't rehash immediately on the first ping. If this node just came online, leader will
 	// account it on the next ping. Otherwise it will be rehashing twice.
 	rehashSkipped := false
 
@@ -267,7 +267,7 @@ func (c *Cluster) run() {
 				// The counter will be reset to zero when the ping is received.
 				missed++
 				if missed >= c.fo.voteTimeout {
-					// Elect the leader
+					// Leader is gone, initiate election of a new leader.
 					missed = 0
 					c.electLeader()
 				}
@@ -296,6 +296,9 @@ func (c *Cluster) run() {
 				c.fo.leader = ping.Leader
 			}
 
+			// This ping is from a leader, consequently this node is not the leader.
+			statsSet("ClusterLeader", 0)
+
 			missed = 0
 			if ping.Signature != c.ring.Signature() {
 				if rehashSkipped {
@@ -318,6 +321,8 @@ func (c *Cluster) run() {
 				log.Printf("Voting YES for %s, my term %d, vote term %d", vreq.req.Node, c.fo.term, vreq.req.Term)
 				c.fo.term = vreq.req.Term
 				c.fo.leader = ""
+				// Election means these is no leader yet.
+				statsSet("ClusterLeader", 0)
 				vreq.resp <- ClusterVoteResponse{Result: true, Term: c.fo.term}
 			} else {
 				// This node has voted already or stale election, reject.
