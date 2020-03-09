@@ -46,8 +46,13 @@ See [instructions](./docker/README.md)
 	go get -tags mongodb github.com/tinode/chat/server && go build -tags mongodb -o $GOPATH/bin/tinode github.com/tinode/chat/server
 	go get -tags mongodb github.com/tinode/chat/tinode-db && go build -tags mongodb -o $GOPATH/bin/init-db github.com/tinode/chat/tinode-db
 	```
+ - **All** (bundle all the above DB adapters):
+	```
+	go get -tags all github.com/tinode/chat/server && go build -tags all -o $GOPATH/bin/tinode github.com/tinode/chat/server
+	go get -tags all github.com/tinode/chat/tinode-db && go build -tags all -o $GOPATH/bin/init-db github.com/tinode/chat/tinode-db
+	```
 
-	Note the required **`-tags rethinkdb`**, **`-tags mysql`** or **`-tags mongodb`** build option.
+	Note the required **`-tags rethinkdb`**, **`-tags mysql`**, **`-tags mongodb`** or **`-tags all`** build option.
 
 	You may also optionally define `main.buildstamp` for the server by adding a build option, for instance, with a timestamp:
 	```
@@ -64,7 +69,16 @@ See [instructions](./docker/README.md)
 	},
 ```
 
-5. Now that you have built the binaries, follow instructions in the _Running a Standalone Server_ section.
+5. If you bundling all available DB adapters in the Tinode binary, make sure you specify the adapter name in your `tinode.conf`. E.g. you want to run Tinode with MySQL:
+```js
+	"store_config: {
+		...
+		"adapter_name": "mysql",
+		...
+	},
+```
+
+6. Now that you have built the binaries, follow instructions in the _Running a Standalone Server_ section.
 
 ## Running a Standalone Server
 

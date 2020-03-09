@@ -239,9 +239,9 @@ func main() {
 	// Absolute paths are left unchanged.
 	rootpath, _ := filepath.Split(executable)
 
-	log.Printf("Server v%s:%s:%s; db: '%s'; pid %d; %d process(es)",
+	log.Printf("Server v%s:%s:%s; pid %d; %d process(es)",
 		currentVersion, executable, buildstamp,
-		store.GetAdapterName(), os.Getpid(), runtime.GOMAXPROCS(runtime.NumCPU()))
+		os.Getpid(), runtime.GOMAXPROCS(runtime.NumCPU()))
 
 	var configfile = flag.String("config", "tinode.conf", "Path to config file.")
 	// Path to static content.
@@ -332,6 +332,7 @@ func main() {
 	if err != nil {
 		log.Fatal("Failed to connect to DB: ", err)
 	}
+	log.Println("DB adapter", store.GetAdapterName())
 	defer func() {
 		store.Close()
 		log.Println("Closed database connection(s)")

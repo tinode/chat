@@ -1,4 +1,4 @@
-// +build mysql
+// +build mysql all
 
 // Package mysql is a database adapter for MySQL.
 package mysql

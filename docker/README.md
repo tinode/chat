@@ -9,7 +9,7 @@ All images are available at https://hub.docker.com/r/tinode/
 	$ docker network create tinode-net
 	```
 
-3. Decide which database backend you want to use: RethinkDB or MySQL. Run the selected database container, attaching it to `tinode-net` network:
+3. Decide which database backend you want to use: RethinkDB, MySQL or MongoDB. Run the selected database container, attaching it to `tinode-net` network:
 
 	1. **RethinkDB**: If you've decided to use RethinkDB backend, run the official RethinkDB Docker container:
 	```
@@ -53,6 +53,11 @@ All images are available at https://hub.docker.com/r/tinode/
 	$ docker run -p 6060:18080 -d --name tinode-srv --network tinode-net tinode/tinode-mongodb:latest
 	```
 
+	You can also run Tinode with the `tinode/tinode-all` image (which has all of the above DB adapters compiled in). You will need to specify the database adapter using the `ADAPTER_NAME` environment variable. E.g. for `mysql`, the command line will look like
+	```
+	$ docker run -p 6060:18080 -d -e ADAPTER_NAME mysql --name tinode-srv --network tinode-net tinode/tinode-all:latest
+	```
+
 	See [below](#supported-environment-variables) for more options.
 
 	The port mapping `-p 6060:18080` tells Docker to map container's port 18080 to host's port 6060 making server accessible at http://localhost:6060/. The container will initialize the database with test data on the first run.
@@ -61,6 +66,7 @@ All images are available at https://hub.docker.com/r/tinode/
 	 * [MySQL tags](https://hub.docker.com/r/tinode/tinode-mysql/tags/)
 	 * [RethinkDB tags](https://hub.docker.com/r/tinode/tinode-rethink/tags/)
 	 * [MongoDB tags](https://hub.docker.com/r/tinode/tinode-mongodb/tags/) (comming soon)
+	 * [All bundle tags](https://hub.docker.com/r/tinode/tinode-all/tags/) (comming soon)
 
 5. Test the installation by pointing your browser to [http://localhost:6060/](http://localhost:6060/).
 
@@ -127,6 +133,7 @@ You can specify the following environment variables when issuing `docker run` co
 
 | Variable | Type | Default | Function |
 | --- | --- | --- | --- |
+| `ADAPTER_NAME` | string |  | DB adapter name (use with `tinode/tinode-all` container only) |
 | `AUTH_TOKEN_KEY` | string | `wfaY2RgF2S1OQI/ZlK+LS​rp1KB2jwAdGAIHQ7JZn+Kc=` | base64-encoded 32 random bytes used as salt for authentication tokens. |
 | `AWS_ACCESS_KEY_ID` | string |  | AWS Access Key ID when using `s3` media handler |
 | `AWS_CORS_ORIGINS` | string | `["*"]` | Allowed origins ([CORS](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Access-Control-Allow-Origin)) URL for downloads. Generally use your server URL and its aliases. |

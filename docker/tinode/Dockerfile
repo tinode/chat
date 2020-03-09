@@ -78,6 +78,9 @@ ENV FCM_PUSH_ENABLED=false
 # Enable Android-specific notifications by default.
 ENV FCM_INCLUDE_ANDROID_NOTIFICATION=true
 
+# Use the default adapter.
+ENV ADAPTER_NAME=""
+
 # Install root certificates, they are needed for email validator to work
 # with the TLS SMTP servers like Gmail. Also add bash and grep.
 RUN apk update && \

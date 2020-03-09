@@ -1,4 +1,4 @@
-// +build rethinkdb
+// +build rethinkdb all
 
 // Package rethinkdb s a database adapter for RethinkDB.
 package rethinkdb

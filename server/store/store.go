@@ -4,6 +4,7 @@ package store
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"sort"
 	"strings"
 	"time"
@@ -16,6 +17,7 @@ import (
 )
 
 var adp adapter.Adapter
+var availableAdapters map[string]adapter.Adapter = make(map[string]adapter.Adapter)
 var mediaHandler media.Handler
 
 // Unique ID generator
@@ -26,6 +28,10 @@ type configType struct {
 	UidKey []byte `json:"uid_key"`
 	// Maximum number of results to return from adapter.
 	MaxResults int `json:"max_results"`
+	// DB adapter name to use. Should be one of these specified in `Adapters`.
+	// If empty and `Adapters` contains only one record, the server will default
+	// to this only record in `Adapters`.
+	AdapterName string `json:"adapter_name"`
 	// Configurations for individual adapters.
 	Adapters map[string]json.RawMessage `json:"adapters"`
 }
@@ -37,7 +43,22 @@ func openAdapter(workerId int, jsonconf json.RawMessage) error {
 	}
 
 	if adp == nil {
-		return errors.New("store: database adapter is missing")
+		if len(config.AdapterName) > 0 {
+			// Adapter name specified explicitly.
+			if ad, ok := availableAdapters[config.AdapterName]; ok {
+				adp = ad
+			} else {
+				return errors.New("store: " + config.AdapterName + " adapter is not available in this binary")
+			}
+		} else if len(availableAdapters) == 1 {
+			// Attempt to default to the only entry in availableAdapters.
+			for _, v := range availableAdapters {
+				adp = v
+			}
+			log.Println("store: db adapter not specified explicitly; using", adp.GetName())
+		} else {
+			return errors.New("store: db adapter is neither specified explicitly nor can be deduced from the available adapters")
+		}
 	}
 
 	if adp.IsOpen() {
@@ -154,11 +175,11 @@ func RegisterAdapter(a adapter.Adapter) {
 		panic("store: Register adapter is nil")
 	}
 
-	if adp != nil {
-		panic("store: adapter '" + adp.GetName() + "' is already registered")
+	adapterName := a.GetName()
+	if _, ok := availableAdapters[adapterName]; ok {
+		panic("store: adapter '" + adapterName + "' is already registered")
 	}
-
-	adp = a
+	availableAdapters[adapterName] = a
 }
 
 // GetUid generates a unique ID suitable for use as a primary key.
