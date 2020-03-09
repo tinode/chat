@@ -48,8 +48,8 @@ See [instructions](./docker/README.md)
 	```
  - **All** (bundle all the above DB adapters):
 	```
-	go get -tags all github.com/tinode/chat/server && go build -tags all -o $GOPATH/bin/tinode github.com/tinode/chat/server
-	go get -tags all github.com/tinode/chat/tinode-db && go build -tags all -o $GOPATH/bin/init-db github.com/tinode/chat/tinode-db
+	go get -tags "mysql rethinkdb mongodb" github.com/tinode/chat/server && go build -tags "mysql rethinkdb mongodb" -o $GOPATH/bin/tinode github.com/tinode/chat/server
+	go get -tags "mysql rethinkdb mongodb" github.com/tinode/chat/tinode-db && go build -tags "mysql rethinkdb mongodb" -o $GOPATH/bin/init-db github.com/tinode/chat/tinode-db
 	```
 
 	Note the required **`-tags rethinkdb`**, **`-tags mysql`**, **`-tags mongodb`** or **`-tags all`** build option.
@@ -73,7 +73,7 @@ See [instructions](./docker/README.md)
 ```js
 	"store_config: {
 		...
-		"adapter_name": "mysql",
+		"use_adapter": "mysql",
 		...
 	},
 ```

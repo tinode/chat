@@ -2,6 +2,17 @@
 
 # Publish Tinode docker images
 
+function containerName() {
+  if [ "$1" == "alldbs" ]; then
+    # For alldbs, container name is simply tinode.
+    local name="tinode"
+  else
+    # Otherwise, tinode-$dbtag.
+    local name="tinode-${dbtag}"
+  fi
+  echo $name
+}
+
 for line in $@; do
   eval "$line"
 done
@@ -31,15 +42,16 @@ docker login -u $user -p $pass
 # Remove earlier builds
 for dbtag in "${dbtags[@]}"
 do
+  name="$(containerName $dbtag)"
   if [ -n "$FULLRELEASE" ]; then
     curl -u $user:$pass -i -X DELETE \
-      https://cloud.docker.com/v2/repositories/tinode/tinode-${dbtag}/tags/latest/
+      https://cloud.docker.com/v2/repositories/tinode/${name}/tags/latest/
 
     curl -u $user:$pass -i -X DELETE \
-      https://cloud.docker.com/v2/repositories/tinode/tinode-${dbtag}/tags/${ver[0]}.${ver[1]}/
+      https://cloud.docker.com/v2/repositories/tinode/${name}/tags/${ver[0]}.${ver[1]}/
   fi
   curl -u $user:$pass -i -X DELETE \
-    https://cloud.docker.com/v2/repositories/tinode/tinode-${dbtag}/tags/${ver[0]}.${ver[1]}.${ver[2]}/
+    https://cloud.docker.com/v2/repositories/tinode/${name}/tags/${ver[0]}.${ver[1]}.${ver[2]}/
 done
 
 if [ -n "$FULLRELEASE" ]; then
@@ -54,12 +66,13 @@ curl -u $user:$pass -i -X DELETE \
 # Deploy images for various DB backends
 for dbtag in "${dbtags[@]}"
 do
+  name="$(containerName $dbtag)"
   # Deploy tagged image
   if [ -n "$FULLRELEASE" ]; then
-    docker push tinode/tinode-${dbtag}:latest
-    docker push tinode/tinode-${dbtag}:"${ver[0]}.${ver[1]}"
+    docker push tinode/${name}:latest
+    docker push tinode/${name}:"${ver[0]}.${ver[1]}"
   fi
-  docker push tinode/tinode-${dbtag}:"${ver[0]}.${ver[1]}.${ver[2]}"
+  docker push tinode/${name}:"${ver[0]}.${ver[1]}.${ver[2]}"
 done
 
 # Deploy chatbot images

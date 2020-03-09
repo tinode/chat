@@ -1,4 +1,4 @@
-// +build mongodb all
+// +build mongodb
 
 // Package mongodb is a database adapter for MongoDB.
 package mongodb

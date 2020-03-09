@@ -4,7 +4,6 @@ package store
 import (
 	"encoding/json"
 	"errors"
-	"log"
 	"sort"
 	"strings"
 	"time"
@@ -29,9 +28,7 @@ type configType struct {
 	// Maximum number of results to return from adapter.
 	MaxResults int `json:"max_results"`
 	// DB adapter name to use. Should be one of these specified in `Adapters`.
-	// If empty and `Adapters` contains only one record, the server will default
-	// to this only record in `Adapters`.
-	AdapterName string `json:"adapter_name"`
+	UseAdapter string `json:"use_adapter"`
 	// Configurations for individual adapters.
 	Adapters map[string]json.RawMessage `json:"adapters"`
 }
@@ -43,21 +40,15 @@ func openAdapter(workerId int, jsonconf json.RawMessage) error {
 	}
 
 	if adp == nil {
-		if len(config.AdapterName) > 0 {
+		if len(config.UseAdapter) > 0 {
 			// Adapter name specified explicitly.
-			if ad, ok := availableAdapters[config.AdapterName]; ok {
+			if ad, ok := availableAdapters[config.UseAdapter]; ok {
 				adp = ad
 			} else {
-				return errors.New("store: " + config.AdapterName + " adapter is not available in this binary")
+				return errors.New("store: " + config.UseAdapter + " adapter is not available in this binary")
 			}
-		} else if len(availableAdapters) == 1 {
-			// Attempt to default to the only entry in availableAdapters.
-			for _, v := range availableAdapters {
-				adp = v
-			}
-			log.Println("store: db adapter not specified explicitly; using", adp.GetName())
 		} else {
-			return errors.New("store: db adapter is neither specified explicitly nor can be deduced from the available adapters")
+			return errors.New("store: db adapter is not specified. Please set `store_config.use_adapter` in `tinode.conf`")
 		}
 	}
 
