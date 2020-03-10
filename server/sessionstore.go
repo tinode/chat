@@ -39,7 +39,16 @@ type SessionStore struct {
 func (ss *SessionStore) NewSession(conn interface{}, sid string) (*Session, int) {
 	var s Session
 
-	s.sid = sid
+	if sid == "" {
+		s.sid = store.GetUidString()
+	} else {
+		s.sid = sid
+	}
+
+	if _, found := ss.sessCache[s.sid]; found {
+		// TODO: change to panic or log.Fatal
+		log.Println("ERROR! duplicate session ID", s.sid)
+	}
 
 	switch c := conn.(type) {
 	case *websocket.Conn:
@@ -63,41 +72,42 @@ func (ss *SessionStore) NewSession(conn interface{}, sid string) (*Session, int)
 		s.send = make(chan interface{}, sendQueueLimit+32) // buffered
 		s.stop = make(chan interface{}, 1)                 // Buffered by 1 just to make it non-blocking
 		s.detach = make(chan string, 64)                   // buffered
-		if globals.cluster != nil {
+
+		if globals.cluster != nil && s.proto != CLUSTER {
+			// This is only useful when running as a cluster and only for non-proxied sessions.
 			s.remoteSubs = make(map[string]*RemoteSubscription)
 		}
 	}
 
 	s.lastTouched = time.Now()
-	if s.sid == "" {
-		s.sid = store.GetUidString()
-	}
 
 	ss.lock.Lock()
 
-	ss.sessCache[s.sid] = &s
-	count := len(ss.sessCache)
-	var expired []*Session
 	if s.proto == LPOLL {
 		// Only LP sessions need to be sorted by last active
 		s.lpTracker = ss.lru.PushFront(&s)
-
-		// Remove expired sessions
-		expire := s.lastTouched.Add(-ss.lifeTime)
-		for elem := ss.lru.Back(); elem != nil; elem = ss.lru.Back() {
-			sess := elem.Value.(*Session)
-			if sess.lastTouched.Before(expire) {
-				ss.lru.Remove(elem)
-				delete(ss.sessCache, sess.sid)
-				expired = append(expired, sess)
-			} else {
-				break // don't need to traverse further
-			}
-		}
-		count -= len(expired)
 	}
+
+	ss.sessCache[s.sid] = &s
+
+	// Expire stale long polling sessions: ss.lru contains only long polling sessions.
+	// If ss.lru is empty this is a noop.
+	var expired []*Session
+	expire := s.lastTouched.Add(-ss.lifeTime)
+	for elem := ss.lru.Back(); elem != nil; elem = ss.lru.Back() {
+		sess := elem.Value.(*Session)
+		if sess.lastTouched.Before(expire) {
+			ss.lru.Remove(elem)
+			delete(ss.sessCache, sess.sid)
+			expired = append(expired, sess)
+		} else {
+			break // don't need to traverse further
+		}
+	}
+
 	ss.lock.Unlock()
 
+	// Deleting long polling sessions.
 	for _, sess := range expired {
 		// This locks the session. Thus cleaning up outside of the
 		// sessionStore lock. Otherwise deadlock.
@@ -107,7 +117,7 @@ func (ss *SessionStore) NewSession(conn interface{}, sid string) (*Session, int)
 	statsSet("LiveSessions", int64(len(ss.sessCache)))
 	statsInc("TotalSessions", 1)
 
-	return &s, count
+	return &s, len(ss.sessCache)
 }
 
 // Get fetches a session from store by session ID.
