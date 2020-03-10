@@ -52,7 +52,7 @@ See [instructions](./docker/README.md)
 	go get -tags "mysql rethinkdb mongodb" github.com/tinode/chat/tinode-db && go build -tags "mysql rethinkdb mongodb" -o $GOPATH/bin/init-db github.com/tinode/chat/tinode-db
 	```
 
-	Note the required **`-tags rethinkdb`**, **`-tags mysql`**, **`-tags mongodb`** or **`-tags all`** build option.
+	Note the required **`-tags rethinkdb`**, **`-tags mysql`** or **`-tags mongodb`** build option.
 
 	You may also optionally define `main.buildstamp` for the server by adding a build option, for instance, with a timestamp:
 	```
@@ -69,7 +69,7 @@ See [instructions](./docker/README.md)
 	},
 ```
 
-5. If you bundling all available DB adapters in the Tinode binary, make sure you specify the adapter name in your `tinode.conf`. E.g. you want to run Tinode with MySQL:
+5. Make sure you specify the adapter name in your `tinode.conf`. E.g. you want to run Tinode with MySQL:
 ```js
 	"store_config: {
 		...

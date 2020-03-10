@@ -16,7 +16,7 @@ import (
 )
 
 var adp adapter.Adapter
-var availableAdapters map[string]adapter.Adapter = make(map[string]adapter.Adapter)
+var availableAdapters = make(map[string]adapter.Adapter)
 var mediaHandler media.Handler
 
 // Unique ID generator
