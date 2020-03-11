@@ -4,7 +4,6 @@ package store
 import (
 	"encoding/json"
 	"errors"
-	"log"
 	"sort"
 	"strings"
 	"time"
@@ -53,7 +52,6 @@ func openAdapter(workerId int, jsonconf json.RawMessage) error {
 			for _, v := range availableAdapters {
 				adp = v
 			}
-			log.Println("store: db adapter not specified explicitly; using", adp.GetName())
 		} else {
 			return errors.New("store: db adapter is not specified. Please set `store_config.use_adapter` in `tinode.conf`")
 		}
