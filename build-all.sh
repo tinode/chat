@@ -5,7 +5,6 @@
 # If directory ./server/static exists, it's asumed to contain
 # TinodeWeb and then it's also copied and archived.
 
-
 # Check if gox is installed. Abort otherwise.
 command -v gox >/dev/null 2>&1 || {
   echo >&2 "This script requires https://github.com/mitchellh/gox. Please install it before running."; exit 1;
@@ -16,7 +15,8 @@ goplat=( darwin windows linux )
 # Supported CPU architectures: amd64
 goarc=( amd64 )
 # Supported database tags
-dbtags=( mysql mongodb rethinkdb )
+dbadapters=( mysql mongodb rethinkdb )
+dbtags=( ${dbadapters[@]} alldbs )
 
 for line in $@; do
   eval "$line"
@@ -58,12 +58,18 @@ do
       rm -f $GOPATH/bin/tinode
       rm -f $GOPATH/bin/init-db
       # Build tinode server and database initializer for RethinkDb and MySQL.
+      # For 'alldbs' tag, we compile in all available DB adapters.
+      if [ "$dbtag" = "alldbs" ]; then
+        buildtag="${dbadapters[@]}"
+      else
+        buildtag=$dbtag
+      fi
       gox -osarch="${plat}/${arc}" \
         -ldflags "-s -w -X main.buildstamp=`git describe --tags`" \
-        -tags ${dbtag} -output $GOPATH/bin/tinode ./server > /dev/null
+        -tags "${buildtag}" -output $GOPATH/bin/tinode ./server > /dev/null
       gox -osarch="${plat}/${arc}" \
         -ldflags "-s -w" \
-        -tags ${dbtag} -output $GOPATH/bin/init-db ./tinode-db > /dev/null
+        -tags "${buildtag}" -output $GOPATH/bin/init-db ./tinode-db > /dev/null
 
       # Tar on Mac is inflexible about directories. Let's just copy release files to
       # one directory.

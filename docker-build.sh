@@ -21,16 +21,24 @@ if [[ ${ver[2]} != *"-"* ]]; then
   FULLRELEASE=1
 fi
 
-dbtags=( mysql mongodb rethinkdb )
+dbtags=( mysql mongodb rethinkdb alldbs )
 
 # Build an images for various DB backends
 for dbtag in "${dbtags[@]}"
 do
-  rmitags="tinode/tinode-${dbtag}:${ver[0]}.${ver[1]}.${ver[2]}"
-  buildtags="--tag tinode/tinode-${dbtag}:${ver[0]}.${ver[1]}.${ver[2]}"
+  if [ "$dbtag" == "alldbs" ]; then
+    # For alldbs, container name is tinode/tinode.
+    name="tiniode/tinode"
+  else
+    # Otherwise, tinode/tinode-$dbtag.
+    name="tinode/tinode-${dbtag}"
+  fi
+  separator=
+  rmitags="${name}:${ver[0]}.${ver[1]}.${ver[2]}"
+  buildtags="--tag ${name}:${ver[0]}.${ver[1]}.${ver[2]}"
   if [ -n "$FULLRELEASE" ]; then
-    rmitags="${rmitags} tinode/tinode-${dbtag}:latest tinode/tinode-${dbtag}:${ver[0]}.${ver[1]}"
-    buildtags="${buildtags} --tag tinode/tinode-${dbtag}:latest --tag tinode/tinode-${dbtag}:${ver[0]}.${ver[1]}"
+    rmitags="${rmitags} ${name}:latest ${name}:${ver[0]}.${ver[1]}"
+    buildtags="${buildtags} --tag ${name}:latest --tag ${name}:${ver[0]}.${ver[1]}"
   fi
   docker rmi ${rmitags}
   docker build --build-arg VERSION=$tag --build-arg TARGET_DB=${dbtag} ${buildtags} docker/tinode

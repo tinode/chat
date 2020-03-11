@@ -9,7 +9,7 @@ All images are available at https://hub.docker.com/r/tinode/
 	$ docker network create tinode-net
 	```
 
-3. Decide which database backend you want to use: RethinkDB or MySQL. Run the selected database container, attaching it to `tinode-net` network:
+3. Decide which database backend you want to use: RethinkDB, MySQL or MongoDB. Run the selected database container, attaching it to `tinode-net` network:
 
 	1. **RethinkDB**: If you've decided to use RethinkDB backend, run the official RethinkDB Docker container:
 	```
@@ -53,6 +53,11 @@ All images are available at https://hub.docker.com/r/tinode/
 	$ docker run -p 6060:18080 -d --name tinode-srv --network tinode-net tinode/tinode-mongodb:latest
 	```
 
+	You can also run Tinode with the `tinode/tinode` image (which has all of the above DB adapters compiled in). You will need to specify the database adapter via `STORE_USE_ADAPTER` environment variable. E.g. for `mysql`, the command line will look like
+	```
+	$ docker run -p 6060:18080 -d -e STORE_USE_ADAPTER mysql --name tinode-srv --network tinode-net tinode/tinode:latest
+	```
+
 	See [below](#supported-environment-variables) for more options.
 
 	The port mapping `-p 6060:18080` tells Docker to map container's port 18080 to host's port 6060 making server accessible at http://localhost:6060/. The container will initialize the database with test data on the first run.
@@ -60,7 +65,8 @@ All images are available at https://hub.docker.com/r/tinode/
 	You may replace `:latest` with a different tag. See all all available tags here:
 	 * [MySQL tags](https://hub.docker.com/r/tinode/tinode-mysql/tags/)
 	 * [RethinkDB tags](https://hub.docker.com/r/tinode/tinode-rethink/tags/)
-	 * [MongoDB tags](https://hub.docker.com/r/tinode/tinode-mongodb/tags/) (comming soon)
+	 * [MongoDB tags](https://hub.docker.com/r/tinode/tinode-mongodb/tags/)
+	 * [All bundle tags](https://hub.docker.com/r/tinode/tinode/tags/) (comming soon)
 
 5. Test the installation by pointing your browser to [http://localhost:6060/](http://localhost:6060/).
 
@@ -156,6 +162,7 @@ You can specify the following environment variables when issuing `docker run` co
 | `SMTP_PORT` | number |  | Port number of the SMTP server to use for sending verification emails, e.g. `25` or `587`. |
 | `SMTP_SENDER` | string |  | [RFC 5322](https://tools.ietf.org/html/rfc5322) email address to use in the `FROM` field of verification emails and for authentication with the SMTP server, e.g. `'"John Doe" <jdoe@example.com>'`. |
 | `SMTP_SERVER` | string |  | Name of the SMTP server to use for sending verification emails, e.g. `smtp.gmail.com`. If SMTP_SERVER is not defined, email verification will be disabled. |
+| `STORE_USE_ADAPTER` | string |  | DB adapter name (specify with `tinode/tinode` container only) |
 | `TLS_CONTACT_ADDRESS` | string |  | Optional email to use as contact for [LetsEncrypt](https://letsencrypt.org/) certificates, e.g. `jdoe@example.com`. |
 | `TLS_DOMAIN_NAME` | string |  | If non-empty, enables TLS (http**s**) and configures domain name of your container, e.g. `www.example.com`. In order for TLS to work you have to expose your HTTPS port to the Internet and correctly configure DNS. It WILL FAIL with `localhost` or unroutable IPs. |
 | `UID_ENCRYPTION_KEY` | string | `la6YsO+bNX/+XIkOqc5Svw==` | base64-encoded 16 random bytes used as an encryption key for user IDs. |
