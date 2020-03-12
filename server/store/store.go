@@ -48,7 +48,7 @@ func openAdapter(workerId int, jsonconf json.RawMessage) error {
 				return errors.New("store: " + config.UseAdapter + " adapter is not available in this binary")
 			}
 		} else if len(availableAdapters) == 1 {
-			// Attempt to default to the only entry in availableAdapters.
+			// Default to the only entry in availableAdapters.
 			for _, v := range availableAdapters {
 				adp = v
 			}
