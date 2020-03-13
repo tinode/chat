@@ -1670,8 +1670,7 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 							return errors.New("attempt to search by restricted tags")
 						}
 
-						// FIXME: normal FindSub should not return suspended users and topics.
-						// Only root should be able to find them.
+						// FIXME: allow root to find suspended users and topics.
 						subs, err = store.Users.FindSubs(asUid, req, opt)
 						if err != nil {
 							sess.queueOut(decodeStoreError(err, id, t.original(asUid), now, nil))
@@ -1819,13 +1818,20 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 					mts.Acs.Mode = (sub.ModeGiven & sub.ModeWant).String()
 					mts.Acs.Want = sub.ModeWant.String()
 					mts.Acs.Given = sub.ModeGiven.String()
-				} else if defacs := sub.GetDefaultAccess(); defacs != nil {
+				} else {
 					// Topic 'fnd'
-					switch authLevel {
-					case auth.LevelAnon:
-						mts.Acs.Mode = defacs.Anon.String()
-					case auth.LevelAuth, auth.LevelRoot:
-						mts.Acs.Mode = defacs.Auth.String()
+					// sub.ModeXXX may be defined by the plugin.
+					if sub.ModeGiven.IsDefined() && sub.ModeWant.IsDefined() {
+						mts.Acs.Mode = (sub.ModeGiven & sub.ModeWant).String()
+						mts.Acs.Want = sub.ModeWant.String()
+						mts.Acs.Given = sub.ModeGiven.String()
+					} else if defacs := sub.GetDefaultAccess(); defacs != nil {
+						switch authLevel {
+						case auth.LevelAnon:
+							mts.Acs.Mode = defacs.Anon.String()
+						case auth.LevelAuth, auth.LevelRoot:
+							mts.Acs.Mode = defacs.Auth.String()
+						}
 					}
 				}
 

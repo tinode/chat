@@ -350,7 +350,15 @@ func (UsersObjMapper) FindSubs(id types.Uid, required, optional []string) ([]typ
 	if err != nil {
 		return nil, err
 	}
-	return append(usubs, tsubs...), nil
+
+	allSubs := append(usubs, tsubs...)
+	for i, _ := range allSubs {
+		// Indicate that the returned access modes are not 'N', but rather undefined.
+		allSubs[i].ModeGiven = types.ModeUnset
+		allSubs[i].ModeWant = types.ModeUnset
+	}
+
+	return allSubs, nil
 }
 
 // GetTopics load a list of user's subscriptions with Public field copied to subscription
