@@ -1,5 +1,7 @@
 // Package fcm implements push notification plugin for Google FCM backend.
 // Push notifications for Android, iOS and web clients are sent through Google's Firebase Cloud Messaging service.
+// Package fcm is push notification plugin using Google FCM.
+// https://firebase.google.com/docs/cloud-messaging
 package fcm
 
 import (

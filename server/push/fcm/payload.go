@@ -1,3 +1,5 @@
+// Package fcm is push notification plugin using Google FCM.
+// https://firebase.google.com/docs/cloud-messaging
 package fcm
 
 import (
@@ -260,7 +262,7 @@ func PrepareNotifications(rcpt *push.Receipt, config *AndroidConfig) []messageDa
 						Body:  body,
 					}
 				}
-        messages = append(messages, messageData{Uid: uid, DeviceId: d.DeviceId, Message: &msg})
+				messages = append(messages, messageData{Uid: uid, DeviceId: d.DeviceId, Message: &msg})
 			}
 		}
 	}
