@@ -28,7 +28,7 @@ for dbtag in "${dbtags[@]}"
 do
   if [ "$dbtag" == "alldbs" ]; then
     # For alldbs, container name is tinode/tinode.
-    name="tiniode/tinode"
+    name="tinode/tinode"
   else
     # Otherwise, tinode/tinode-$dbtag.
     name="tinode/tinode-${dbtag}"
