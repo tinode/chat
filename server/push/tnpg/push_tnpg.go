@@ -67,7 +67,7 @@ func postMessage(body []byte, config *configType) (int, string, error) {
 		return -1, "", err
 	}
 	defer resp.Body.Close()
-  return resp.StatusCode, resp.Status, nil
+	return resp.StatusCode, resp.Status, nil
 }
 
 func sendPushes(rcpt *push.Receipt, config *configType) {
@@ -80,17 +80,18 @@ func sendPushes(rcpt *push.Receipt, config *configType) {
 	// 1. Send multiple payloads in one request.
 	// 2. Compress payloads.
 	for _, m := range messages {
-    msg, err := json.Marshal(m.Message)
+		msg, err := json.Marshal(m.Message)
 		if err != nil {
-      log.Println("tnpg push: cannot serialize message", err)
+			log.Println("tnpg push: cannot serialize message", err)
 			return
 		}
-    if code, status, err := postMessage(msg, config); err != nil {
-      log.Println("tnpg push failed:", err)
-    } else if code >= 300 {
-      log.Println("tnpg push rejected:", status, err)
-      break
-    }
+		if code, status, err := postMessage(msg, config); err != nil {
+			log.Println("tnpg push failed:", err)
+			break
+		} else if code >= 300 {
+			log.Println("tnpg push rejected:", status, err)
+			break
+		}
 	}
 }
 
