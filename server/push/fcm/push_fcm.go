@@ -7,16 +7,12 @@ import (
 	"encoding/json"
 	"errors"
 	"log"
-	"strconv"
-	"time"
 
 	fbase "firebase.google.com/go"
 	fcm "firebase.google.com/go/messaging"
 
-	"github.com/tinode/chat/server/drafty"
 	"github.com/tinode/chat/server/push"
 	"github.com/tinode/chat/server/store"
-	t "github.com/tinode/chat/server/store/types"
 
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/option"
@@ -37,112 +33,13 @@ type Handler struct {
 	client *fcm.Client
 }
 
-// Configuration of AndroidNotification payload.
-type androidConfig struct {
-	Enabled bool `json:"enabled,omitempty"`
-	// Common defauls for all push types.
-	androidPayload
-	// Configs for specific push types.
-	Msg androidPayload `json:"msg,omitempty"`
-	Sub androidPayload `json:"msg,omitempty"`
-}
-
-func (ac *androidConfig) getTitleLocKey(what string) string {
-	var title string
-	if what == push.ActMsg {
-		title = ac.Msg.TitleLocKey
-	} else if what == push.ActSub {
-		title = ac.Sub.TitleLocKey
-	}
-	if title == "" {
-		title = ac.androidPayload.TitleLocKey
-	}
-	return title
-}
-
-func (ac *androidConfig) getTitle(what string) string {
-	var title string
-	if what == push.ActMsg {
-		title = ac.Msg.Title
-	} else if what == push.ActSub {
-		title = ac.Sub.Title
-	}
-	if title == "" {
-		title = ac.androidPayload.Title
-	}
-	return title
-}
-
-func (ac *androidConfig) getBodyLocKey(what string) string {
-	var body string
-	if what == push.ActMsg {
-		body = ac.Msg.BodyLocKey
-	} else if what == push.ActSub {
-		body = ac.Sub.BodyLocKey
-	}
-	if body == "" {
-		body = ac.androidPayload.BodyLocKey
-	}
-	return body
-}
-
-func (ac *androidConfig) getBody(what string) string {
-	var body string
-	if what == push.ActMsg {
-		body = ac.Msg.Body
-	} else if what == push.ActSub {
-		body = ac.Sub.Body
-	}
-	if body == "" {
-		body = ac.androidPayload.Body
-	}
-	return body
-}
-
-func (ac *androidConfig) getIcon(what string) string {
-	var icon string
-	if what == push.ActMsg {
-		icon = ac.Msg.Icon
-	} else if what == push.ActSub {
-		icon = ac.Sub.Icon
-	}
-	if icon == "" {
-		icon = ac.androidPayload.Icon
-	}
-	return icon
-}
-
-func (ac *androidConfig) getIconColor(what string) string {
-	var color string
-	if what == push.ActMsg {
-		color = ac.Msg.IconColor
-	} else if what == push.ActSub {
-		color = ac.Sub.IconColor
-	}
-	if color == "" {
-		color = ac.androidPayload.IconColor
-	}
-	return color
-}
-
-// Payload to be sent for a specific notification type.
-type androidPayload struct {
-	TitleLocKey string `json:"title_loc_key,omitempty"`
-	Title       string `json:"title,omitempty"`
-	BodyLocKey  string `json:"body_loc_key,omitempty"`
-	Body        string `json:"body,omitempty"`
-	Icon        string `json:"icon,omitempty"`
-	IconColor   string `json:"icon_color,omitempty"`
-	ClickAction string `json:"click_action,omitempty"`
-}
-
 type configType struct {
 	Enabled         bool            `json:"enabled"`
 	Buffer          int             `json:"buffer"`
 	Credentials     json.RawMessage `json:"credentials"`
 	CredentialsFile string          `json:"credentials_file"`
 	TimeToLive      uint            `json:"time_to_live,omitempty"`
-	Android         androidConfig   `json:"android,omitempty"`
+	Android         AndroidConfig   `json:"android,omitempty"`
 }
 
 // Init initializes the push handler
@@ -206,176 +103,41 @@ func (Handler) Init(jsonconf string) error {
 
 func sendNotifications(rcpt *push.Receipt, config *configType) {
 	ctx := context.Background()
-
-	data, _ := payloadToData(&rcpt.Payload)
-	if data == nil {
-		log.Println("fcm push: could not parse payload")
+	messages := PrepareNotifications(rcpt, &config.Android)
+	if messages == nil {
 		return
 	}
 
-	// List of UIDs for querying the database
-	uids := make([]t.Uid, len(rcpt.To))
-	skipDevices := make(map[string]bool)
-	i := 0
-	for uid, to := range rcpt.To {
-		uids[i] = uid
-		i++
-
-		// Some devices were online and received the message. Skip them.
-		for _, deviceID := range to.Devices {
-			skipDevices[deviceID] = true
-		}
-	}
-
-	devices, count, err := store.Devices.GetAll(uids...)
-	if err != nil {
-		log.Println("fcm push: db error", err)
-		return
-	}
-	if count == 0 {
-		return
-	}
-
-	var titlelc, title, bodylc, body, icon, color string
-	if config.Android.Enabled {
-		titlelc = config.Android.getTitleLocKey(rcpt.Payload.What)
-		title = config.Android.getTitle(rcpt.Payload.What)
-		bodylc = config.Android.getBodyLocKey(rcpt.Payload.What)
-		body = config.Android.getBody(rcpt.Payload.What)
-		if body == "$content" {
-			body = data["content"]
-		}
-		icon = config.Android.getIcon(rcpt.Payload.What)
-		color = config.Android.getIconColor(rcpt.Payload.What)
-	}
-
-	for uid, devList := range devices {
-		for i := range devList {
-			d := &devList[i]
-			if _, ok := skipDevices[d.DeviceId]; !ok && d.DeviceId != "" {
-				msg := fcm.Message{
-					Token: d.DeviceId,
-					Data:  data,
-				}
-
-				if d.Platform == "android" {
-					msg.Android = &fcm.AndroidConfig{
-						Priority: "high",
-					}
-					if config.Android.Enabled {
-						// When this notification type is included and the app is not in the foreground
-						// Android won't wake up the app and won't call FirebaseMessagingService:onMessageReceived.
-						// See dicussion: https://github.com/firebase/quickstart-js/issues/71
-						msg.Android.Notification = &fcm.AndroidNotification{
-							// Android uses Tag value to group notifications together:
-							// show just one notification per topic.
-							Tag:         rcpt.Payload.Topic,
-							TitleLocKey: titlelc,
-							Title:       title,
-							BodyLocKey:  bodylc,
-							Body:        body,
-							Icon:        icon,
-							Color:       color,
-						}
-					}
-				} else if d.Platform == "ios" {
-					// iOS uses Badge to show the total unread message count.
-					badge := rcpt.To[uid].Unread
-					// Need to duplicate these in APNS.Payload.Aps.Alert so
-					// iOS may call NotificationServiceExtension (if present).
-					title := "New message"
-					body := data["content"]
-					msg.APNS = &fcm.APNSConfig{
-						Payload: &fcm.APNSPayload{
-							Aps: &fcm.Aps{
-								Badge:            &badge,
-								ContentAvailable: true,
-								MutableContent:   true,
-								Sound:            "default",
-								Alert: &fcm.ApsAlert{
-									Title: title,
-									Body:  body,
-								},
-							},
-						},
-					}
-					msg.Notification = &fcm.Notification{
-						Title: title,
-						Body:  body,
-					}
-				}
-
-				_, err := handler.client.Send(ctx, &msg)
-				if err != nil {
-					if fcm.IsMessageRateExceeded(err) ||
-						fcm.IsServerUnavailable(err) ||
-						fcm.IsInternal(err) ||
-						fcm.IsUnknown(err) {
-						// Transient errors. Stop sending this batch.
-						log.Println("fcm transient failure", err)
-						return
-					}
-
-					if fcm.IsMismatchedCredential(err) || fcm.IsInvalidArgument(err) {
-						// Config errors
-						log.Println("fcm push: failed", err)
-						return
-					}
-
-					if fcm.IsRegistrationTokenNotRegistered(err) {
-						// Token is no longer valid.
-						log.Println("fcm push: invalid token", err)
-						err = store.Devices.Delete(uid, d.DeviceId)
-						if err != nil {
-							log.Println("fcm push: failed to delete invalid token", err)
-						}
-					} else {
-						log.Println("fcm push:", err)
-					}
-				}
-			}
-		}
-	}
-}
-
-func payloadToData(pl *push.Payload) (map[string]string, error) {
-	if pl == nil {
-		return nil, nil
-	}
-
-	data := make(map[string]string)
-	var err error
-	data["what"] = pl.What
-	if pl.Silent {
-		data["silent"] = "true"
-	}
-	data["topic"] = pl.Topic
-	data["ts"] = pl.Timestamp.Format(time.RFC3339Nano)
-	// Must use "xfrom" because "from" is a reserved word. Google did not bother to document it anywhere.
-	data["xfrom"] = pl.From
-	if pl.What == push.ActMsg {
-		data["seq"] = strconv.Itoa(pl.SeqId)
-		data["mime"] = pl.ContentType
-		data["content"], err = drafty.ToPlainText(pl.Content)
+	for _, m := range messages {
+		_, err := handler.client.Send(ctx, m.Message)
 		if err != nil {
-			return nil, err
-		}
+			if fcm.IsMessageRateExceeded(err) ||
+				fcm.IsServerUnavailable(err) ||
+				fcm.IsInternal(err) ||
+				fcm.IsUnknown(err) {
+				// Transient errors. Stop sending this batch.
+				log.Println("fcm transient failure", err)
+				return
+			}
 
-		// Trim long strings to 80 runes.
-		// Check byte length first and don't waste time converting short strings.
-		if len(data["content"]) > maxMessageLength {
-			runes := []rune(data["content"])
-			if len(runes) > maxMessageLength {
-				data["content"] = string(runes[:maxMessageLength]) + "…"
+			if fcm.IsMismatchedCredential(err) || fcm.IsInvalidArgument(err) {
+				// Config errors
+				log.Println("fcm push: failed", err)
+				return
+			}
+
+			if fcm.IsRegistrationTokenNotRegistered(err) {
+				// Token is no longer valid.
+				log.Println("fcm push: invalid token", err)
+				err = store.Devices.Delete(m.Uid, m.DeviceId)
+				if err != nil {
+					log.Println("fcm push: failed to delete invalid token", err)
+				}
+			} else {
+				log.Println("fcm push:", err)
 			}
 		}
-	} else if pl.What == push.ActSub {
-		data["modeWant"] = pl.ModeWant.String()
-		data["modeGiven"] = pl.ModeGiven.String()
-	} else {
-		return nil, errors.New("unknown push type")
 	}
-	return data, nil
 }
 
 // IsReady checks if the push handler has been initialized.
