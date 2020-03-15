@@ -6,7 +6,6 @@ import (
 	"compress/gzip"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -96,11 +95,7 @@ func sendPushes(rcpt *push.Receipt, config *configType) {
 		return
 	}
 
-	messageMap := make(map[string]interface{})
-	for i, m := range messages {
-		messageMap[fmt.Sprintf("message-%d", i)] = m
-	}
-	msgs, err := json.Marshal(messageMap)
+	msgs, err := json.Marshal(messages)
 	if err != nil {
 		log.Println("tnpg push: cannot serialize push messages -", err)
 		return
