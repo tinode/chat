@@ -95,7 +95,11 @@ func sendPushes(rcpt *push.Receipt, config *configType) {
 		return
 	}
 
-	msgs, err := json.Marshal(messages)
+	var payloads []interface{}
+	for _, m := range messages {
+		payloads = append(payloads, m.Message)
+	}
+	msgs, err := json.Marshal(payloads)
 	if err != nil {
 		log.Println("tnpg push: cannot serialize push messages -", err)
 		return
