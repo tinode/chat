@@ -1,5 +1,3 @@
-// Package fcm is push notification plugin using Google FCM.
-// https://firebase.google.com/docs/cloud-messaging
 package fcm
 
 import (

@@ -307,7 +307,7 @@ type ClientComMessage struct {
 
 	// Message ID denormalized
 	id string
-	// Topic denormalized
+	// Un-routable (original) topic name denormalized from XXX.Topic.
 	topic string
 	// Sender's UserId as string
 	from string
