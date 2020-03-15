@@ -3,14 +3,19 @@ package tnpg
 
 import (
 	"bytes"
+	"compress/gzip"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"log"
 	"net/http"
 
 	"github.com/tinode/chat/server/push"
 	"github.com/tinode/chat/server/push/fcm"
 )
+
+const targetAddress = "https://pushgw.tinode.co/push"
 
 var handler Handler
 
@@ -20,11 +25,11 @@ type Handler struct {
 }
 
 type configType struct {
-	Enabled       bool `json:"enabled"`
-	Buffer        int  `json:"buffer"`
-	TargetAddress string `json:"target_address"`
-	AuthToken     string `json:"auth_token"`
-	Android       fcm.AndroidConfig   `json:"android,omitempty"`
+	Enabled          bool `json:"enabled"`
+	Buffer           int  `json:"buffer"`
+	CompressPayloads bool `json:"compress_payloads"`
+	AuthToken        string `json:"auth_token"`
+	Android          fcm.AndroidConfig `json:"android,omitempty"`
 }
 
 // Init initializes the handler
@@ -56,12 +61,27 @@ func (Handler) Init(jsonconf string) error {
 }
 
 func postMessage(body []byte, config *configType) (int, string, error) {
-	reader := bytes.NewReader(body)
-	req, err := http.NewRequest("POST", config.TargetAddress, reader)
+	var reader io.Reader
+	if config.CompressPayloads {
+		var buf bytes.Buffer
+		gz := gzip.NewWriter(&buf)
+		if _, err := gz.Write(body); err != nil {
+			return -1, "", err
+		}
+		gz.Close()
+		reader = &buf
+	} else {
+		reader = bytes.NewReader(body)
+	}
+	req, err := http.NewRequest("POST", targetAddress, reader)
 	if err != nil {
 		return -1, "", err
 	}
 	req.Header.Add("Authorization", config.AuthToken)
+	req.Header.Set("Content-Type", "application/json; charset=utf-8")
+	if config.CompressPayloads {
+		req.Header.Add("Content-Encoding", "gzip")
+	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return -1, "", err
@@ -76,22 +96,19 @@ func sendPushes(rcpt *push.Receipt, config *configType) {
 		return
 	}
 
-	// TODO:
-	// 1. Send multiple payloads in one request.
-	// 2. Compress payloads.
-	for _, m := range messages {
-		msg, err := json.Marshal(m.Message)
-		if err != nil {
-			log.Println("tnpg push: cannot serialize message", err)
-			return
-		}
-		if code, status, err := postMessage(msg, config); err != nil {
-			log.Println("tnpg push failed:", err)
-			break
-		} else if code >= 300 {
-			log.Println("tnpg push rejected:", status, err)
-			break
-		}
+	messageMap := make(map[string]interface{})
+	for i, m := range messages {
+		messageMap[fmt.Sprintf("message-%d", i)] = m
+	}
+	msgs, err := json.Marshal(messageMap)
+	if err != nil {
+		log.Println("tnpg push: cannot serialize push messages -", err)
+		return
+	}
+	if code, status, err := postMessage(msgs, config); err != nil {
+		log.Println("tnpg push failed:", err)
+	} else if code >= 300 {
+		log.Println("tnpg push rejected:", status, err)
 	}
 }
 
