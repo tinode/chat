@@ -6,7 +6,6 @@ import (
 	"compress/gzip"
 	"encoding/json"
 	"errors"
-	"io"
 	"log"
 	"net/http"
 
@@ -59,20 +58,16 @@ func (Handler) Init(jsonconf string) error {
 	return nil
 }
 
-func postMessage(body []byte, config *configType) (int, string, error) {
-	var reader io.Reader
+func postMessage(body interface{}, config *configType) (int, string, error) {
+	buf := new(bytes.Buffer)
 	if config.CompressPayloads {
-		var buf bytes.Buffer
-		gz := gzip.NewWriter(&buf)
-		if _, err := gz.Write(body); err != nil {
-			return -1, "", err
-		}
+		gz := gzip.NewWriter(buf)
+		json.NewEncoder(gz).Encode(body)
 		gz.Close()
-		reader = &buf
 	} else {
-		reader = bytes.NewReader(body)
+		json.NewEncoder(buf).Encode(body)
 	}
-	req, err := http.NewRequest("POST", targetAddress, reader)
+	req, err := http.NewRequest("POST", targetAddress, buf)
 	if err != nil {
 		return -1, "", err
 	}
@@ -99,12 +94,7 @@ func sendPushes(rcpt *push.Receipt, config *configType) {
 	for _, m := range messages {
 		payloads = append(payloads, m.Message)
 	}
-	msgs, err := json.Marshal(payloads)
-	if err != nil {
-		log.Println("tnpg push: cannot serialize push messages -", err)
-		return
-	}
-	if code, status, err := postMessage(msgs, config); err != nil {
+	if code, status, err := postMessage(payloads, config); err != nil {
 		log.Println("tnpg push failed:", err)
 	} else if code >= 300 {
 		log.Println("tnpg push rejected:", status, err)
