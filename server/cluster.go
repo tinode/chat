@@ -323,7 +323,7 @@ type Cluster struct {
 
 // Master at topic's master node receives C2S messages from topic's proxy nodes.
 // The message is treated like it came from a session: find or create a session locally,
-// dispatch the message to it like it came from a normal ws/lp connection.
+// dispatch the message to it like it came from a normal ws/lp/gRPC connection.
 // Called by a remote node.
 func (c *Cluster) Master(msg *ClusterReq, rejected *bool) error {
 	// Find the local session associated with the given remote session.
@@ -521,6 +521,21 @@ func (c *Cluster) isRemoteTopic(topic string) bool {
 		return false
 	}
 	return c.ring.Get(topic) != c.thisNodeName
+}
+
+// genLocalTopicName is just like genTopicName(), but the generated name belongs to the current cluster node.
+func (c *Cluster) genLocalTopicName() string {
+	topic := genTopicName()
+	if c == nil {
+		// Cluster not initialized, all topics are local
+		return topic
+	}
+
+	// FIXME: if cluster is large it may become too inefficient.
+	for c.ring.Get(topic) != c.thisNodeName {
+		topic = genTopicName()
+	}
+	return topic
 }
 
 // Returns remote node name where the topic is hosted.

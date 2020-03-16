@@ -403,10 +403,10 @@ func (s *Session) subscribe(msg *ClientComMessage) {
 	var expanded string
 	isNewTopic := false
 	if strings.HasPrefix(msg.topic, "new") {
-		// Request to create a new named topic
-		expanded = genTopicName()
+		// Request to create a new named topic.
+		// If we are in a cluster, make sure the new topic belongs to the current node.
+		expanded = globals.cluster.genLocalTopicName()
 		isNewTopic = true
-		// msg.topic = expanded
 	} else {
 		var resp *ServerComMessage
 		expanded, resp = s.expandTopicName(msg)
