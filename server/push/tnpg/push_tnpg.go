@@ -13,7 +13,10 @@ import (
 	"github.com/tinode/chat/server/push/fcm"
 )
 
-const baseTargetAddress = "https://pushgw.tinode.co/push/"
+const (
+	baseTargetAddress = "https://pushgw.tinode.co/push/"
+	batchSize         = 100
+)
 
 var handler Handler
 
@@ -26,7 +29,6 @@ type configType struct {
 	Enabled          bool   `json:"enabled"`
 	Buffer           int    `json:"buffer"`
 	CompressPayloads bool   `json:"compress_payloads"`
-	BatchSize        int    `json:"batch_size"`
 	User             string `json:"user"`
 	AuthToken        string `json:"auth_token"`
 	Android          fcm.AndroidConfig `json:"android,omitempty"`
@@ -41,10 +43,6 @@ func (Handler) Init(jsonconf string) error {
 
 	if !config.Enabled {
 		return nil
-	}
-
-	if config.BatchSize <= 0 {
-		return errors.New("push.tnpg.batch_size should be greater than zero.")
 	}
 
 	if len(config.User) == 0 {
@@ -102,8 +100,8 @@ func sendPushes(rcpt *push.Receipt, config *configType) {
 	}
 
 	n := len(messages)
-	for i := 0; i < n; i += config.BatchSize {
-		upper := i + config.BatchSize
+	for i := 0; i < n; i += batchSize {
+		upper := i + batchSize
 		if upper > n {
 			upper = n
 		}
