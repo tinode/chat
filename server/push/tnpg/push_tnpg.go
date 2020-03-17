@@ -13,7 +13,7 @@ import (
 	"github.com/tinode/chat/server/push/fcm"
 )
 
-const targetAddress = "https://pushgw.tinode.co/push"
+const baseTargetAddress = "https://pushgw.tinode.co/push/"
 
 var handler Handler
 
@@ -23,10 +23,11 @@ type Handler struct {
 }
 
 type configType struct {
-	Enabled          bool `json:"enabled"`
-	Buffer           int  `json:"buffer"`
-	CompressPayloads bool `json:"compress_payloads"`
-	BatchSize        int  `json:"batch_size"`
+	Enabled          bool   `json:"enabled"`
+	Buffer           int    `json:"buffer"`
+	CompressPayloads bool   `json:"compress_payloads"`
+	BatchSize        int    `json:"batch_size"`
+	User             string `json:"user"`
 	AuthToken        string `json:"auth_token"`
 	Android          fcm.AndroidConfig `json:"android,omitempty"`
 }
@@ -44,6 +45,10 @@ func (Handler) Init(jsonconf string) error {
 
 	if config.BatchSize <= 0 {
 		return errors.New("push.tnpg.batch_size should be greater than zero.")
+	}
+
+	if len(config.User) == 0 {
+		return errors.New("push.tnpg.user not specified.")
 	}
 
 	handler.input = make(chan *push.Receipt, config.Buffer)
@@ -72,11 +77,12 @@ func postMessage(body interface{}, config *configType) (int, string, error) {
 	} else {
 		json.NewEncoder(buf).Encode(body)
 	}
+	targetAddress := baseTargetAddress + config.User
 	req, err := http.NewRequest("POST", targetAddress, buf)
 	if err != nil {
 		return -1, "", err
 	}
-	req.Header.Add("Authorization", config.AuthToken)
+	req.Header.Add("Authorization", "Bearer " + config.AuthToken)
 	req.Header.Set("Content-Type", "application/json; charset=utf-8")
 	if config.CompressPayloads {
 		req.Header.Add("Content-Encoding", "gzip")
