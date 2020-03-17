@@ -26,6 +26,7 @@ type configType struct {
 	Enabled          bool `json:"enabled"`
 	Buffer           int  `json:"buffer"`
 	CompressPayloads bool `json:"compress_payloads"`
+	BatchSize        int  `json:"batch_size"`
 	AuthToken        string `json:"auth_token"`
 	Android          fcm.AndroidConfig `json:"android,omitempty"`
 }
@@ -39,6 +40,10 @@ func (Handler) Init(jsonconf string) error {
 
 	if !config.Enabled {
 		return nil
+	}
+
+	if config.BatchSize <= 0 {
+		return errors.New("push.tnpg.batch_size should be greater than zero.")
 	}
 
 	handler.input = make(chan *push.Receipt, config.Buffer)
@@ -90,14 +95,23 @@ func sendPushes(rcpt *push.Receipt, config *configType) {
 		return
 	}
 
-	var payloads []interface{}
-	for _, m := range messages {
-		payloads = append(payloads, m.Message)
-	}
-	if code, status, err := postMessage(payloads, config); err != nil {
-		log.Println("tnpg push failed:", err)
-	} else if code >= 300 {
-		log.Println("tnpg push rejected:", status, err)
+	n := len(messages)
+	for i := 0; i < n; i += config.BatchSize {
+		upper := i + config.BatchSize
+		if upper > n {
+			upper = n
+		}
+		var payloads []interface{}
+		for j := i; j < upper; j++ {
+			payloads = append(payloads, messages[j].Message)
+		}
+		if code, status, err := postMessage(payloads, config); err != nil {
+			log.Println("tnpg push failed:", err)
+			break
+		} else if code >= 300 {
+			log.Println("tnpg push rejected:", status, err)
+			break
+		}
 	}
 }
 
