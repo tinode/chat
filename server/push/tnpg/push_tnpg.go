@@ -13,7 +13,10 @@ import (
 	"github.com/tinode/chat/server/push/fcm"
 )
 
-const targetAddress = "https://pushgw.tinode.co/push"
+const (
+	baseTargetAddress = "https://pushgw.tinode.co/push/"
+	batchSize         = 100
+)
 
 var handler Handler
 
@@ -23,9 +26,10 @@ type Handler struct {
 }
 
 type configType struct {
-	Enabled          bool `json:"enabled"`
-	Buffer           int  `json:"buffer"`
-	CompressPayloads bool `json:"compress_payloads"`
+	Enabled          bool   `json:"enabled"`
+	Buffer           int    `json:"buffer"`
+	CompressPayloads bool   `json:"compress_payloads"`
+	User             string `json:"user"`
 	AuthToken        string `json:"auth_token"`
 	Android          fcm.AndroidConfig `json:"android,omitempty"`
 }
@@ -39,6 +43,10 @@ func (Handler) Init(jsonconf string) error {
 
 	if !config.Enabled {
 		return nil
+	}
+
+	if len(config.User) == 0 {
+		return errors.New("push.tnpg.user not specified.")
 	}
 
 	handler.input = make(chan *push.Receipt, config.Buffer)
@@ -67,11 +75,12 @@ func postMessage(body interface{}, config *configType) (int, string, error) {
 	} else {
 		json.NewEncoder(buf).Encode(body)
 	}
+	targetAddress := baseTargetAddress + config.User
 	req, err := http.NewRequest("POST", targetAddress, buf)
 	if err != nil {
 		return -1, "", err
 	}
-	req.Header.Add("Authorization", config.AuthToken)
+	req.Header.Add("Authorization", "Bearer " + config.AuthToken)
 	req.Header.Set("Content-Type", "application/json; charset=utf-8")
 	if config.CompressPayloads {
 		req.Header.Add("Content-Encoding", "gzip")
@@ -90,14 +99,23 @@ func sendPushes(rcpt *push.Receipt, config *configType) {
 		return
 	}
 
-	var payloads []interface{}
-	for _, m := range messages {
-		payloads = append(payloads, m.Message)
-	}
-	if code, status, err := postMessage(payloads, config); err != nil {
-		log.Println("tnpg push failed:", err)
-	} else if code >= 300 {
-		log.Println("tnpg push rejected:", status, err)
+	n := len(messages)
+	for i := 0; i < n; i += batchSize {
+		upper := i + batchSize
+		if upper > n {
+			upper = n
+		}
+		var payloads []interface{}
+		for j := i; j < upper; j++ {
+			payloads = append(payloads, messages[j].Message)
+		}
+		if code, status, err := postMessage(payloads, config); err != nil {
+			log.Println("tnpg push failed:", err)
+			break
+		} else if code >= 300 {
+			log.Println("tnpg push rejected:", status, err)
+			break
+		}
 	}
 }
 
