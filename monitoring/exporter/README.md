@@ -12,23 +12,24 @@ Exporters are expected to run next to (pair with) Tinode servers: one Exporter p
 Currently, the Exporter is fully configured via command line flags. There are three sets of flags:
 
 ### Common flags
-* `serve_for` specifies which monitoring service the Exporter will gather metrics for.
-* `tinode_addr` is the address where the Tinode instance publishes `expvar` data to scrape.
-* `listen_at` is the hostname to bind to for serving the metrics.
-* `instance` is the Exporter instance name (it may be exported to the upstream backend).
-* `metric_list` is a comma-separated list of metrics to export.
+* `serve_for` specifies which monitoring service the Exporter will gather metrics for; accepted values: `influxdb`, `prometheus`; default: `influxdb`.
+* `tinode_addr` is the address where the Tinode instance publishes `expvar` data to scrape; default: `http://localhost:6060/stats/expvar`.
+* `listen_at` is the hostname to bind to for serving the metrics; default: `:6222`.
+* `instance` is the Exporter instance name (it may be exported to the upstream backend); default: `exporter`.
+* `metric_list` is a comma-separated list of metrics to export; default: `Version,LiveTopics,TotalTopics,LiveSessions,ClusterLeader,TotalClusterNodes,LiveClusterNodes,memstats.Alloc`.
 
 ### Prometheus
-* `prom_namespace` is a prefix to use for metrics names. If you are monitoring multiple tinode instances you may want to use different namespaces.
-* `prom_metrics_path` is the path under which to expose the metrics for scraping.
+* `prom_namespace` is a prefix to use for metrics names. If you are monitoring multiple tinode instances you may want to use different namespaces; default: `tinode`.
+* `prom_metrics_path` is the path under which to expose the metrics for scraping; default: `/metrics`.
+* `prom_timeout` is the Tinode connection timeout in seconds in response to Prometheus scrapes; default: `15`.
 
 ### InfluxDB
-* `influx_push_addr` is the address of InfluxDB target server where the data gets sent.
-* `influx_db_version` is the version of InfluxDB (only 1.7 and 2.0 are supported).
-* `influx_organization` specifies InfluxDB organization to push metrics as.
-* `influx_bucket` is the name of InfluxDB storage bucket to store data in (used only in InfluxDB 2.0).
-* `influx_auth_token` - InfluxDB authentication token.
-* `influx_push_interval` - InfluxDB push interval in seconds.
+* `influx_push_addr` is the address of InfluxDB target server where the data gets sent; default: `http://localhost:9999/write`.
+* `influx_db_version` is the version of InfluxDB (only 1.7 and 2.0 are supported); default: `1.7`.
+* `influx_organization` specifies InfluxDB organization to push metrics as; default: `test`;
+* `influx_bucket` is the name of InfluxDB storage bucket to store data in (used only in InfluxDB 2.0); default: `test`.
+* `influx_auth_token` - InfluxDB authentication token; no default value.
+* `influx_push_interval` - InfluxDB push interval in seconds; default: `30`.
 
 ## Examples
 Run Prometheus Exporter as
