@@ -95,11 +95,13 @@ func (ah *awshandler) Init(jsconf string) error {
 	// Check if the bucket exists, create one if not.
 	_, err = ah.svc.CreateBucket(&s3.CreateBucketInput{Bucket: aws.String(ah.conf.BucketName)})
 	if err != nil {
-		// Bucket exists or a genuine error.
-		if aerr, ok := err.(awserr.Error); !ok ||
-			(aerr.Code() != s3.ErrCodeBucketAlreadyExists &&
-				aerr.Code() != s3.ErrCodeBucketAlreadyOwnedByYou) {
-			return err
+		// Check if bucket already exists or a genuine error.
+		if aerr, ok := err.(awserr.Error); ok {
+			if aerr.Code() == s3.ErrCodeBucketAlreadyExists ||
+				aerr.Code() == s3.ErrCodeBucketAlreadyOwnedByYou {
+				// Clear benign error
+				err = nil
+			}
 		}
 	} else {
 		// This is a new bucket.
