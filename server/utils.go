@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"path/filepath"
 	"reflect"
 	"regexp"
@@ -778,4 +779,20 @@ func offsetToLineAndChar(r io.Reader, offset int64) (int, int, error) {
 	}
 
 	return lnum, cnum, nil
+}
+
+// netListener creates net.Listener for tcp and unix domains:
+// if addr is is in the form "unix:/run/tinode.sock" it's a unix socket, otherwise TCP host:port.
+func netListener(addr string) (net.Listener, error) {
+	addrParts := strings.SplitN(addr, ":", 2)
+	if len(addrParts) == 2 && addrParts[0] == "unix" {
+		return net.Listen("unix", addrParts[1])
+	}
+	return net.Listen("tcp", addr)
+}
+
+// Check if specified address is a unix socket like "unix:/run/tinode.sock".
+func isUnixAddr(addr string) bool {
+	addrParts := strings.SplitN(addr, ":", 2)
+	return len(addrParts) == 2 && addrParts[0] == "unix"
 }

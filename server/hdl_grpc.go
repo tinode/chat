@@ -13,7 +13,6 @@ import (
 	"crypto/tls"
 	"io"
 	"log"
-	"net"
 	"time"
 
 	"github.com/tinode/chat/pbx"
@@ -115,7 +114,7 @@ func serveGrpc(addr string, kaEnabled bool, tlsConf *tls.Config) (*grpc.Server, 
 		return nil, nil
 	}
 
-	lis, err := net.Listen("tcp", addr)
+	lis, err := netListener(addr)
 	if err != nil {
 		return nil, err
 	}
