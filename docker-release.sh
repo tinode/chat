@@ -63,6 +63,15 @@ fi
 curl -u $user:$pass -i -X DELETE \
   https://hub.docker.com/v2/repositories/tinode/chatbot/tags/${ver[0]}.${ver[1]}.${ver[2]}/
 
+if [ -n "$FULLRELEASE" ]; then
+  curl -u $user:$pass -i -X DELETE \
+    https://hub.docker.com/v2/repositories/tinode/exporter/tags/latest/
+  curl -u $user:$pass -i -X DELETE \
+    https://hub.docker.com/v2/repositories/tinode/exporter/tags/${ver[0]}.${ver[1]}/
+fi
+curl -u $user:$pass -i -X DELETE \
+  https://hub.docker.com/v2/repositories/tinode/exporter/tags/${ver[0]}.${ver[1]}.${ver[2]}/
+
 # Deploy images for various DB backends
 for dbtag in "${dbtags[@]}"
 do
@@ -81,5 +90,12 @@ if [ -n "$FULLRELEASE" ]; then
   docker push tinode/chatbot:"${ver[0]}.${ver[1]}"
 fi
 docker push tinode/chatbot:"${ver[0]}.${ver[1]}.${ver[2]}"
+
+# Deploy exporter images
+if [ -n "$FULLRELEASE" ]; then
+  docker push tinode/exporter:latest
+  docker push tinode/exporter:"${ver[0]}.${ver[1]}"
+fi
+docker push tinode/exporter:"${ver[0]}.${ver[1]}.${ver[2]}"
 
 docker logout
