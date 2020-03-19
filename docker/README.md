@@ -174,7 +174,7 @@ $ openssl rand -base64 <desired length>
 
 ## Metrics Exporter
 
-See [monitoring/exporter/README](../../monitoring/exporter/README.md) for information on the Exporter.
+See [monitoring/exporter/README](../monitoring/exporter/README.md) for information on the Exporter.
 Container is also available as a part of the Tinode docker distribution: `tinode/exporter`.
 Run it with
 
