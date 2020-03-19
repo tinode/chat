@@ -126,7 +126,6 @@ See [instructions](../chatbot/python/).
 
 The chatbot password is generated only when the database is initialized or reset. It's saved to `/botdata` directory in the container. If you want to keep the data available between container changes, such as image upgrades, make sure the `/botdata` is a mounted volume (i.e. you always launch the container with `--volume botdata:/botdata` option).
 
-
 ## Supported environment variables
 
 You can specify the following environment variables when issuing `docker run` command:
@@ -172,3 +171,32 @@ A convenient way to generate a desired number of random bytes and base64-encode 
 ```
 $ openssl rand -base64 <desired length>
 ```
+
+## Metrics Exporter
+
+See [monitoring/exporter/README](../../monitoring/exporter/README.md) for information on the Exporter.
+Container is also available as a part of the Tinode docker distribution: `tinode/exporter`.
+Run it with
+
+```
+$ docker run -p 6222:6222 -d --name tinode-exporter --network tinode-net \
+		--env SERVE_FOR=<prometheus|influxdb> \
+    --env TINODE_ADDR=<tinode metrics endpoint> \
+    --env LISTEN_AT=":6222" \
+    ... <monitoring service specific vars> \
+		tinode/exporter:latest
+```
+
+Available variables:
+| Variable | Type | Default | Function |
+| --- | --- | --- | --- |
+| `SERVE_FOR` | string | `` | Either `prometheus` or `influxdb` |
+| `TINODE_ADDR` | string | `http://localhost/stats/expvar/` | Tinode metrics path |
+| `LISTEN_AT` | string | `:6222` | Exporter web server host and port |
+| `INFLUXDB_VERSION` | string | `1.7` | InfluxDB version (`1.7` or `2.0`) |
+| `INFLUXDB_ORGANIZATION` | string | `org` | InfluxDB organization |
+| `INFLUXDB_PUSH_INTERVAL` | int | `60` | Exporter's metrics push interval in seconds |
+| `INFLUXDB_PUSH_ADDRESS` | string | `https://mon.tinode.co/intake` | InfluxDB backend url |
+| `INFLUXDB_AUTH_TOKEN` | string | `Your-token` | InfluxDB auth token |
+| `PROM_NAMESPACE` | string | `tinode` | Prometheus namespace |
+| `PROM_METRICS_PATH` | string | `/metrics` | Exporter webserver path that Prometheus server scrapes |
