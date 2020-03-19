@@ -181,21 +181,21 @@ Run it with
 ```
 $ docker run -p 6222:6222 -d --name tinode-exporter --network tinode-net \
 		--env SERVE_FOR=<prometheus|influxdb> \
-    --env TINODE_ADDR=<tinode metrics endpoint> \
-    --env LISTEN_AT=":6222" \
-    ... <monitoring service specific vars> \
+		--env TINODE_ADDR=<tinode metrics endpoint> \
+		--env LISTEN_AT=":6222" \
+		... <monitoring service specific vars> \
 		tinode/exporter:latest
 ```
 
 Available variables:
 | Variable | Type | Default | Function |
 | --- | --- | --- | --- |
-| `SERVE_FOR` | string | `` | Either `prometheus` or `influxdb` |
+| `SERVE_FOR` | string | `` | Monitoring service: `prometheus` or `influxdb` |
 | `TINODE_ADDR` | string | `http://localhost/stats/expvar/` | Tinode metrics path |
 | `LISTEN_AT` | string | `:6222` | Exporter web server host and port |
 | `INFLUXDB_VERSION` | string | `1.7` | InfluxDB version (`1.7` or `2.0`) |
 | `INFLUXDB_ORGANIZATION` | string | `org` | InfluxDB organization |
-| `INFLUXDB_PUSH_INTERVAL` | int | `60` | Exporter's metrics push interval in seconds |
+| `INFLUXDB_PUSH_INTERVAL` | int | `60` | Exporter metrics push interval in seconds |
 | `INFLUXDB_PUSH_ADDRESS` | string | `https://mon.tinode.co/intake` | InfluxDB backend url |
 | `INFLUXDB_AUTH_TOKEN` | string | `Your-token` | InfluxDB auth token |
 | `PROM_NAMESPACE` | string | `tinode` | Prometheus namespace |
