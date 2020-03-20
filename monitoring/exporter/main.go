@@ -20,6 +20,11 @@ const (
 	InfluxDB   MonitoringService = 2
 )
 
+const (
+	// Minimum interval between InfluxDB pushes in seconds.
+	minPushInterval = 10
+)
+
 type promHTTPLogger struct{}
 
 func (l promHTTPLogger) Println(v ...interface{}) {
@@ -40,16 +45,16 @@ func main() {
 	log.Printf("Tinode metrics exporter.")
 
 	var (
-		serveFor     = flag.String("serve_for", "influxdb", "Monitoring service to gather metrics for. Available: influxdb, prometheus.")
-		tinodeAddr   = flag.String("tinode_addr", "http://localhost:6060/stats/expvar", "Address of the Tinode instance to scrape.")
-		listenAt     = flag.String("listen_at", ":6222", "Host name and port to listen for incoming requests on.")
-		metricList   = flag.String("metric_list", "Version,LiveTopics,TotalTopics,LiveSessions,ClusterLeader,TotalClusterNodes,LiveClusterNodes,memstats.Alloc", "Comma-separated list of metrics to scrape and export.")
-		instance     = flag.String("instance", "exporter", "Exporter instance name.")
+		serveFor   = flag.String("serve_for", "influxdb", "Monitoring service to gather metrics for. Available: influxdb, prometheus.")
+		tinodeAddr = flag.String("tinode_addr", "http://localhost:6060/stats/expvar", "Address of the Tinode instance to scrape.")
+		listenAt   = flag.String("listen_at", ":6222", "Host name and port to listen for incoming requests on.")
+		metricList = flag.String("metric_list", "Version,LiveTopics,TotalTopics,LiveSessions,ClusterLeader,TotalClusterNodes,LiveClusterNodes,memstats.Alloc", "Comma-separated list of metrics to scrape and export.")
+		instance   = flag.String("instance", "exporter", "Exporter instance name.")
 
 		// Prometheus-specific arguments.
-		promNamespace    = flag.String("prom_namespace", "tinode", "Prometheus namespace for metrics '<namespace>_...'")
-		promMetricsPath  = flag.String("prom_metrics_path", "/metrics", "Path under which to expose metrics for Prometheus scrapes.")
-		promTimeout      = flag.Int("prom_timeout", 15, "Tinode connection timeout in seconds in response to Prometheus scrapes.")
+		promNamespace   = flag.String("prom_namespace", "tinode", "Prometheus namespace for metrics '<namespace>_...'")
+		promMetricsPath = flag.String("prom_metrics_path", "/metrics", "Path under which to expose metrics for Prometheus scrapes.")
+		promTimeout     = flag.Int("prom_timeout", 15, "Tinode connection timeout in seconds in response to Prometheus scrapes.")
 
 		// InfluxDB-specific arguments.
 		influxPushAddr     = flag.String("influx_push_addr", "http://localhost:9999/write", "Address of InfluxDB target server where the data gets sent.")
@@ -88,6 +93,10 @@ func main() {
 		if *influxDBVersion != "1.7" && *influxDBVersion != "2.0" {
 			log.Fatal("Please, set --influx_db_version to either 1.7 or 2.0")
 		}
+		if *influxPushInterval > 0 && *influxPushInterval < minPushInterval {
+			*influxPushInterval = minPushInterval
+			log.Println("The --influx_push_interval is too low, reset to", minPushInterval)
+		}
 	}
 
 	// Index page at web root.
@@ -103,7 +112,7 @@ func main() {
 		w.Write([]byte(`<html><head><title>Tinode Exporter</title></head><body>
 <h1>Tinode Exporter</h1>
 <p>Server type` + *serveFor + `</p>` + servingPath +
-`<h2>Build</h2>
+			`<h2>Build</h2>
 <pre>` + version.Info() + ` ` + version.BuildContext() + `</pre>
 </body></html>`))
 	})
