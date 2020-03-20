@@ -13,10 +13,17 @@ function check_vars() {
   done
 }
 
+# Make sure the system uses /etc/hosts when resolving domain names
+# (needed for docker-compose's `extra_hosts` param to work correctly).
+# See https://github.com/gliderlabs/docker-alpine/issues/367,
+# https://github.com/golang/go/issues/35305 for details.
 echo "hosts: files dns" > /etc/nsswitch.conf
 
+# Accept http requests at.
+LISTEN_AT=":6222"
+
 # Required env vars.
-common_vars=( TINODE_ADDR INSTANCE LISTEN_AT SERVE_FOR )
+common_vars=( TINODE_ADDR INSTANCE SERVE_FOR )
 
 influx_varnames=( INFLUXDB_VERSION INFLUXDB_ORGANIZATION INFLUXDB_PUSH_INTERVAL \
   INFLUXDB_PUSH_ADDRESS INFLUXDB_AUTH_TOKEN )
