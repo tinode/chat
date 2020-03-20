@@ -71,8 +71,56 @@ else
 	echo "" > $STATIC_DIR/firebase-init.js
 fi
 
-# Initialize the database if it has not been initialized yet or if data reset/upgrade has been requested.
-./init-db --reset=${RESET_DB} --upgrade=${UPGRADE_DB} --config=${CONFIG} --data=${SAMPLE_DATA} | grep "usr;tino;" > /botdata/tino-password
+if [ ! -z "$IOS_UNIV_LINKS_APP_ID" ] ; then
+	# Write config to $STATIC_DIR/apple-app-site-association config file.
+  # See https://developer.apple.com/library/archive/documentation/General/Conceptual/AppSearch/UniversalLinks.html for details.
+	cat > $STATIC_DIR/apple-app-site-association <<- EOM
+{
+    "applinks": {
+        "apps": [],
+        "details": [
+            {
+                "appID": "$IOS_UNIV_LINKS_APP_ID",
+                "paths": [ "*" ]
+            }
+        ]
+    }
+}
+EOM
+fi
+
+run_init_db=false
+run_tinode=false
+case "$SERVICES_TO_RUN" in
+"init-db")
+  run_init_db=true
+  ;;
+"tinode")
+  run_tinode=true
+  ;;
+"both")
+  run_init_db=true
+  run_tinode=true
+  ;;
+*)
+  echo "Invalid val for SERVICES_TO_RUN env var. Can be either 'init-db' or 'tinode' or 'both'."
+  exit 1
+  ;;
+esac
+
+echo "Will run init-db: ${run_init_db}, tinode: ${run_tinode}"
+
+touch /botdata/tino-password
+
+if [ "$run_init_db" == "true" ]; then
+  # Initialize the database if it has not been initialized yet or if data reset/upgrade has been requested.
+  ./init-db --reset=${RESET_DB} --upgrade=${UPGRADE_DB} --config=${CONFIG} | grep "usr;tino;" > /botdata/tino-password
+fi
+
+if [ "$run_tinode" != "true" ]; then
+  # If we don't want to run tinode, we are done.
+  exit 0
+fi
 
 if [ -s /botdata/tino-password ] ; then
 	# Convert Tino's authentication credentials into a cookie file.
@@ -89,5 +137,22 @@ args=("--config=${CONFIG}" "--static_data=$STATIC_DIR")
 if [ ! -z "$CLUSTER_SELF" ] ; then
   args+=("--cluster_self=$CLUSTER_SELF")
 fi
+if [ ! -z "$PPROF_URL" ] ; then
+  args+=("--pprof_url=$PPROF_URL")
+fi
+
+# Create the log directory (/var/log/tinode-`current timestamp`).
+# And symlink /var/log/tinode-latest to it.
+runid=tinode-`date +%s`
+logdir=/var/log/$runid
+mkdir -p $logdir
+if [ -d /var/log/tinode-latest ]; then
+  rm /var/log/tinode-latest
+fi
+pushd .
+cd /var/log
+ln -s $runid tinode-latest
+popd
+
 # Run the tinode server.
-./tinode "${args[@]}" 2> /var/log/tinode.log
+./tinode "${args[@]}" 2> $logdir/tinode.log

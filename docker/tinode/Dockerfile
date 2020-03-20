@@ -24,10 +24,14 @@ LABEL version=$VERSION
 # Alternatively use
 # `--build-arg TARGET_DB=mysql` to build for MySQL or
 # `--build-arg TARGET_DB=mongodb` to build for MongoDB.
+# `--build-arg TARGET_DB=alldbs` to build a generic Tinode docker image.
 ARG TARGET_DB=rethinkdb
 ENV TARGET_DB=$TARGET_DB
 
 # Runtime options.
+
+# Specifies what jobs to run: init-db, tinode or both.
+ENV SERVICES_TO_RUN='both'
 
 # An option to reset database.
 ENV RESET_DB=false
