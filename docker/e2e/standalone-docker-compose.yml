@@ -74,6 +74,8 @@ services:
     environment:
       << : *tinode-env-vars
       "SERVICES_TO_RUN": "init-db"
+      # Comment out this line if you don't want sample data loaded.
+      "SAMPLE_DATA": "data.json"
       "UPGRADE_DB": "false"
 
   # Run this only when you need to upgrade Tinode database to a newer version.
