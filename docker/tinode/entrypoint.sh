@@ -113,8 +113,13 @@ echo "Will run init-db: ${run_init_db}, tinode: ${run_tinode}"
 touch /botdata/tino-password
 
 if [ "$run_init_db" == "true" ]; then
+  init_args=("--reset=${RESET_DB}" "--upgrade=${UPGRADE_DB}" "--config=${CONFIG}")
+  # Maybe load sample data?
+  if [ ! -z "$SAMPLE_DATA" ] ; then
+    init_args+=("--data=$SAMPLE_DATA")
+  fi
   # Initialize the database if it has not been initialized yet or if data reset/upgrade has been requested.
-  ./init-db --reset=${RESET_DB} --upgrade=${UPGRADE_DB} --config=${CONFIG} | grep "usr;tino;" > /botdata/tino-password
+  ./init-db "${init_args[@]}" | grep "usr;tino;" > /botdata/tino-password
 fi
 
 if [ "$run_tinode" != "true" ]; then
