@@ -22,6 +22,8 @@ const (
 	defaultClusterReconnect = 200 * time.Millisecond
 	// Number of replicas in ringhash
 	clusterHashReplicas = 20
+	// Period for running health check on cluster session: terminate sessions with no subscriptions.
+	clusterSessionCleanup = 5 * time.Second
 )
 
 type clusterNodeConfig struct {
@@ -744,6 +746,8 @@ func (sess *Session) rpcWriteLoop() {
 		sess.unsubAll()
 	}()
 
+	heartBeat := time.NewTimer(clusterSessionCleanup)
+
 	for {
 		select {
 		case msg, ok := <-sess.send:
@@ -768,6 +772,7 @@ func (sess *Session) rpcWriteLoop() {
 		case topic := <-sess.detach:
 			sess.delSub(topic)
 
+		case <-heartBeat.C:
 			// All proxied subsriptions are gone, this session is no longer needed.
 			if sess.countSub() == 0 {
 				return
