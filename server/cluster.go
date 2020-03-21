@@ -746,6 +746,7 @@ func (sess *Session) rpcWriteLoop() {
 		sess.unsubAll()
 	}()
 
+	// Timer which checks for orphaned nodes.
 	heartBeat := time.NewTimer(clusterSessionCleanup)
 
 	for {
@@ -883,6 +884,14 @@ func (c *Cluster) invalidateRemoteSubs() {
 			}
 		}
 		s.remoteSubsLock.Unlock()
+		// FIXME:
+		// This is problematic for two reasons:
+		// 1. We don't really know if subscription contained in s.remoteSubs actually exists.
+		// We only know that {sub} packet was sent to the remote node and it was delivered.
+		// 2. The {pres what=term} is sent on 'me' topic but we don't know if the session is
+		// subscribed to 'me' topic. The correct way of doing it is to send to those online
+		// in the topic on topic itsef, to those offline on their 'me' topic. In general
+		// the 'presTermDirect' should not exist.
 		s.presTermDirect(topicsToTerminate)
 	}
 }

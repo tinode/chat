@@ -117,6 +117,7 @@ type Session struct {
 	subsLock sync.RWMutex
 
 	// Map of remote topic subscriptions, indexed by topic name.
+	// It does not contain actual subscriptions but rather "maybe subscriptions".
 	remoteSubs map[string]*RemoteSubscription
 	// Synchronizes access to remoteSubs.
 	remoteSubsLock sync.RWMutex
@@ -432,6 +433,7 @@ func (s *Session) subscribe(msg *ClientComMessage) {
 			} else {
 				originalTopic = msg.topic
 			}
+			// FIXME: we don't really know if subscription was successful.
 			s.addRemoteSub(expanded, &RemoteSubscription{node: remoteNodeName, originalTopic: originalTopic})
 		}
 	} else {
@@ -473,6 +475,7 @@ func (s *Session) leave(msg *ClientComMessage) {
 			log.Println("s.leave:", err, s.sid)
 			s.queueOut(ErrClusterUnreachable(msg.id, msg.topic, msg.timestamp))
 		} else {
+			// FIXME: we don't really know if leave succeeded.
 			s.delRemoteSub(expanded)
 		}
 	} else if !msg.Leave.Unsub {
