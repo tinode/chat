@@ -51,6 +51,7 @@ r.db("tinode").table("auth").get("basic:login-of-the-user-to-make-root").update(
 ```
 * MySQL:
 ```sql
+USE 'tinode';
 UPDATE auth SET authlvl=30 WHERE uname='basic:login-of-the-user-to-make-root';
 ```
 The test database has a stock user `xena` which has root access.
