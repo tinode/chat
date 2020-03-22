@@ -225,11 +225,20 @@ func main() {
 		// Upgrade DB from one version to another.
 		err = store.UpgradeDb(config.StoreConfig)
 		if err == nil {
-			log.Println("Database successfully upgraded")
+			log.Println("Database successfully upgraded. All done.")
 		}
 	} else {
 		// Reset or create DB
 		err = store.InitDb(config.StoreConfig, true)
+		if err == nil {
+			var action string
+			if *reset {
+				action = "reset"
+			} else {
+				action = "initialized"
+			}
+			log.Println("Database ", action, ". All done.")
+		}
 	}
 
 	if err != nil {

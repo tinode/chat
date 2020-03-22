@@ -153,7 +153,7 @@ You can specify the following environment variables when issuing `docker run` co
 | `MYSQL_DSN` | string | `'root@tcp(mysql)/tinode'` | MySQL [DSN](https://github.com/go-sql-driver/mysql#dsn-data-source-name). |
 | `PLUGIN_PYTHON_CHAT_BOT_ENABLED` | bool | `false` | Enable calling into the plugin provided by Python chatbot |
 | `RESET_DB` | bool | `false` | Drop and recreate the database. |
-| `SAMPLE_DATA` | string |  _see comment_ | File with sample data to load. Default `data.json` when resetting or generating new DB, none when upgrading. Use `-` to disable |
+| `SAMPLE_DATA` | string |  _see comment_ | File with sample data to load. Default `data.json` when resetting or generating new DB, none when upgrading. Use `` (empty string) to disable |
 | `SMTP_DOMAINS` | string |  | White list of email domains; when non-empty, accept registrations with emails from these domains only (email verification). |
 | `SMTP_HOST_URL` | string | `'http://localhost:6060/'` | URL of the host where the webapp is running (email verification). |
 | `SMTP_LOGIN` | string |  | Optional login to use for authentication with the SMTP server (email verification). If login is missing, `addr-spec` part of `SMTP_SENDER` will be used: e.g. if `SMTP_SENDER` is `'"John Doe" <jdoe@example.com>'`, `jdoe@example.com` will be used as login. |

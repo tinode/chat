@@ -40,8 +40,8 @@ ENV RESET_DB=false
 ENV UPGRADE_DB=false
 
 # Load sample data to database from data.json.
-ARG DEFAULT_SAMPLE_DATA=data.json
-ENV SAMPLE_DATA=
+ARG SAMPLE_DATA=data.json
+ENV SAMPLE_DATA=$SAMPLE_DATA
 
 # The MySQL DSN connection.
 ENV MYSQL_DSN='root@tcp(mysql)/tinode'
@@ -102,6 +102,7 @@ RUN tar -xzf tinode-$TARGET_DB.linux-amd64.tar.gz \
 	&& rm tinode-$TARGET_DB.linux-amd64.tar.gz
 
 # Copy config template to the container.
+COPY init-db .
 COPY config.template .
 COPY entrypoint.sh .
 
