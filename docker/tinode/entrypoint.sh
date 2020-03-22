@@ -110,7 +110,7 @@ if [ ! -z "$SAMPLE_DATA" ] ; then
 	grep "usr;tino;" $init_stdout > /botdata/tino-password
 fi
 
-# Check if the last line in the output contains the magic string.
+# Check if the init-db output contains the magic string.
 grep -q "All done" $init_stderr
 if [ $? != 0 ]; then
 	echo "Database could not be set up correctly. Quitting."
