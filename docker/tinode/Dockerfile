@@ -102,7 +102,6 @@ RUN tar -xzf tinode-$TARGET_DB.linux-amd64.tar.gz \
 	&& rm tinode-$TARGET_DB.linux-amd64.tar.gz
 
 # Copy config template to the container.
-COPY init-db .
 COPY config.template .
 COPY entrypoint.sh .
 

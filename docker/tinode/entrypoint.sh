@@ -49,7 +49,7 @@ else
   STATIC_DIR="./static"
 fi
 
-# Load default sample data when generating or resetting the database.
+# Do not load data when upgrading database.
 if [[ "$UPGRADE_DB" = "true" ]] ; then
 	SAMPLE_DATA=""
 fi
@@ -100,7 +100,7 @@ init_stderr=./init-db-stderr.txt
 ./init-db "${init_args[@]}" 1>$init_stdout 2>$init_stderr
 init_result=$?
 cat $init_stderr >&2
-if [ $init_result != 0 ]; then
+if [ $init_result -ne 0 ]; then
 	echo "./init-db failed. Quitting."
 	exit 1
 fi
@@ -112,7 +112,7 @@ fi
 
 # Check if the init-db output contains the magic string.
 grep -q "All done" $init_stderr
-if [ $? != 0 ]; then
+if [ $? -ne 0 ]; then
 	echo "Database could not be set up correctly. Quitting."
 	exit 1
 fi
