@@ -1,3 +1,6 @@
+// +build mysql
+
+// Package postgres is a database adapter for Postgres
 package postgres
 
 import (
@@ -18,6 +21,7 @@ import (
 	t "github.com/tinode/chat/server/store/types"
 )
 
+// adapter holds Postges connection data.
 type adapter struct {
 	db     *sqlx.DB
 	dsn    string
@@ -45,10 +49,8 @@ type configType struct {
 
 // Open initializes database session
 func (a *adapter) Open(jsonconfig string) error {
-	fmt.Println("Json Config", jsonconfig)
-
 	if a.db != nil {
-		return errors.New("postgres Adapter is already connected")
+		return errors.New("postgres adapter is already connected")
 	}
 
 	var err error
@@ -223,9 +225,9 @@ func (a *adapter) CreateDb(reset bool) error {
 	if _, err = tx.Exec(
 		`CREATE TABLE users(
 			id        BIGINT NOT NULL,
-			createdat timestamp NOT NULL,
-			updatedat timestamp NOT NULL,
-			deletedat timestamp,
+			createdat TIMESTAMP NOT NULL,
+			updatedat TIMESTAMP NOT NULL,
+			deletedat TIMESTAMP,
 			state     INT DEFAULT 0,
 			access    JSON,
 			lastseen  TIMESTAMP,
@@ -238,7 +240,7 @@ func (a *adapter) CreateDb(reset bool) error {
 	}
 
 	fmt.Println("users created")
-	if _, err = tx.Exec(`CREATE INDEX users_deletedat ON users(deletedat);`); err != nil {
+	if _, err = tx.Exec(`CREATE INDEX users_deletedat ON users(deletedat)`); err != nil {
 		return err
 	}
 	fmt.Println("user tags created")
@@ -257,8 +259,7 @@ func (a *adapter) CreateDb(reset bool) error {
 	}
 
 	if _, err = tx.Exec(
-		`CREATE INDEX usertags_tag on usertags(
-		tag)`); err != nil {
+		`CREATE INDEX usertags_tag ON usertags(tag)`); err != nil {
 		return err
 	}
 
@@ -322,9 +323,7 @@ func (a *adapter) CreateDb(reset bool) error {
 	}
 
 	fmt.Println("topics created:")
-	if _, err = tx.Exec(
-		`CREATE INDEX topics_owners ON TOPICS(
-		owner)`); err != nil {
+	if _, err = tx.Exec(`CREATE INDEX topics_owners ON topics(owner)`); err != nil {
 		return err
 	}
 
@@ -342,10 +341,7 @@ func (a *adapter) CreateDb(reset bool) error {
 		return err
 	}
 
-	if _, err = tx.Exec(
-		`CREATE INDEX topictags_tag on topictags(
-			tag
-		)`); err != nil {
+	if _, err = tx.Exec(`CREATE INDEX topictags_tag ON topictags(tag)`); err != nil {
 		return err
 	}
 
@@ -373,10 +369,7 @@ func (a *adapter) CreateDb(reset bool) error {
 	}
 
 	fmt.Println("crating subscription index")
-	if _, err = tx.Exec(
-		`CREATE INDEX subscriptions_topic on subscriptions(
-			topic
-			)`); err != nil {
+	if _, err = tx.Exec(`CREATE INDEX subscriptions_topic ON subscriptions(topic)`); err != nil {
 		return err
 	}
 
@@ -416,31 +409,19 @@ func (a *adapter) CreateDb(reset bool) error {
 		);`); err != nil {
 		return err
 	}
-	fmt.Println("creating dellog index 1")
-	if _, err = tx.Exec(
-		`CREATE INDEX dellog_topic_delid_deletedfor on dellog(
-			topic, delid, deletedfor
-		)`); err != nil {
+
+	if _, err = tx.Exec(`CREATE INDEX dellog_topic_delid_deletedfor ON dellog(topic, delid, deletedfor)`); err != nil {
 		return err
 	}
 
-	fmt.Println("creating dellog index 2")
-	if _, err = tx.Exec(
-		`CREATE INDEX dellog_topic_deletedfor_low_hi on dellog(
-			topic, deletedfor, low, hi
-		)`); err != nil {
-		return err
-	}
-	fmt.Println("creating dellog index 3")
-
-	if _, err = tx.Exec(
-		`CREATE INDEX dellog_deletedfor on dellog(
-			deletedfor
-		)`); err != nil {
+	if _, err = tx.Exec(`CREATE INDEX dellog_topic_deletedfor_low_hi ON dellog(topic, deletedfor, low, hi)`); err != nil {
 		return err
 	}
 
-	fmt.Println("creating credentials")
+	if _, err = tx.Exec(`CREATE INDEX dellog_deletedfor ON dellog(deletedfor)`); err != nil {
+		return err
+	}
+
 	// User credentials
 	if _, err = tx.Exec(
 		`CREATE TABLE credentials(
@@ -512,56 +493,7 @@ func (a *adapter) CreateDb(reset bool) error {
 }
 
 func (a *adapter) UpgradeDb() error {
-	if _, err := a.GetDbVersion(); err != nil {
-		return err
-	}
-
-	if a.version == 106 {
-		// Perform database upgrade from version 106 to version 107.
-
-		if _, err := a.db.Exec("CREATE UNIQUE INDEX usertags_userid_tag ON usertags(userid, tag)"); err != nil {
-			return err
-		}
-
-		if _, err := a.db.Exec("CREATE UNIQUE INDEX topictags_userid_tag ON topictags(topic, tag)"); err != nil {
-			return err
-		}
-
-		if _, err := a.db.Exec("ALTER TABLE credentials ADD deletedat TIMESTAMP AFTER updatedat"); err != nil {
-			return err
-		}
-
-		if err := a.updateDbVersion(107); err != nil {
-			return err
-		}
-
-		if _, err := a.GetDbVersion(); err != nil {
-			return err
-		}
-	}
-
-	if a.version == 107 {
-		// Perform database upgrade from version 107 to version 108.
-
-		// Replace default user access JRWPA with JRWPAS.
-		if _, err := a.db.Exec(`UPDATE users SET access=JSON_REPLACE(access, '$.Auth', 'JRWPAS')
-			WHERE CAST(JSON_EXTRACT(access, '$.Auth') AS CHAR) LIKE '"JRWPA"'`); err != nil {
-			return err
-		}
-
-		if err := a.updateDbVersion(108); err != nil {
-			return err
-		}
-
-		if _, err := a.GetDbVersion(); err != nil {
-			return err
-		}
-	}
-
-	if a.version != adpVersion {
-		return errors.New("Failed to perform database upgrade to version " + strconv.Itoa(adpVersion) +
-			". DB is still at " + strconv.Itoa(a.version))
-	}
+	//  Postgress adapter does not exist for older versions and consequently does not need to support the upgrades.
 	return nil
 }
 
@@ -1935,7 +1867,7 @@ func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.QueryOpt) (
 	rows, err := a.db.Queryx(
 		"SELECT m.createdat,m.updatedat,m.deletedat,m.delid,m.seqid,m.topic,m.`from`,m.head,m.content"+
 			" FROM messages AS m LEFT JOIN dellog AS d"+
-			" ON d.topic=m.topic AND m.seqid BETWEEN d.low AND d.hi AND d.deletedfor=?"+
+			" ON d.topic=m.topic AND m.seqid BETWEEN d.low AND d.hi-1 AND d.deletedfor=?"+
 			" WHERE m.delid=0 AND m.topic=? AND m.seqid BETWEEN ? AND ? AND d.deletedfor IS NULL"+
 			" ORDER BY m.seqid DESC LIMIT ?",
 		unum, topic, lower, upper, limit)
