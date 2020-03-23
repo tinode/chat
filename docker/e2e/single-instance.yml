@@ -83,6 +83,9 @@ services:
       - "6060:18080"
     environment:
       << : *tinode-env-vars
+      # Uncomment the lines below if you wish to upgrade or reset the database.
+      # "UPGRADE_DB": "true"
+      # "RESET_DB": "true"
 
   # Monitoring.
   # Exporters are paired with tinode instances.
