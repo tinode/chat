@@ -89,6 +89,16 @@ if [ ! -z "$IOS_UNIV_LINKS_APP_ID" ] ; then
 EOM
 fi
 
+# Wait for database if needed.
+if [ ! -z "$WAIT_FOR" ] ; then
+	IFS=':' read -ra DB <<< "$WAIT_FOR"
+	if [ ${#DB[@]} -ne 2 ]; then
+		echo "\$WAIT_FOR (${WAIT_FOR}) env var should be in form HOST:PORT"
+		exit 1
+	fi
+	until nc -z -v -w5 ${DB[0]} ${DB[1]}; do echo "waiting for ${WAIT_FOR}..."; sleep 5; done
+fi
+
 run_init_db=false
 run_tinode=false
 case "$SERVICES_TO_RUN" in

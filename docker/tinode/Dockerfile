@@ -33,6 +33,10 @@ ENV TARGET_DB=$TARGET_DB
 # Specifies what jobs to run: init-db, tinode or both.
 ENV SERVICES_TO_RUN='both'
 
+# Specifies the database host:port pair to wait for before running Tinode.
+# Ignored if empty.
+ENV WAIT_FOR=
+
 # An option to reset database.
 ENV RESET_DB=false
 

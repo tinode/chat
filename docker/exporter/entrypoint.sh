@@ -61,4 +61,14 @@ case "$SERVE_FOR" in
   ;;
 esac
 
+# Wait for Tinode server if needed.
+if [ ! -z "$WAIT_FOR" ] ; then
+	IFS=':' read -ra TND <<< "$WAIT_FOR"
+	if [ ${#TND[@]} -ne 2 ]; then
+		echo "\$WAIT_FOR (${WAIT_FOR}) env var should be in form HOST:PORT"
+		exit 1
+	fi
+	until nc -z -v -w5 ${TND[0]} ${TND[1]}; do echo "waiting for ${WAIT_FOR}..."; sleep 5; done
+fi
+
 ./exporter "${args[@]}"
