@@ -17,19 +17,21 @@ x-tinode:
 x-tinode-env-vars: &tinode-env-vars
   "STORE_USE_ADAPTER": "mysql"
   "DEFAULT_SAMPLE_DATA": ""
-  "FCM_PUSH_ENABLED": "false"
-  # "FCM_API_KEY": "<your key>"
-  # "FCM_APP_ID": "<your app id>"
-  # "FCM_PROJECT_ID": "<your project if>"
-  # "FCM_SENDER_ID": <your sender id>
-  # "FCM_VAPID_KEY": "<your vapid key>"
-  # "IOS_UNIV_LINKS_APP_ID": "<ios universal links app id>"
   "PPROF_URL": "/pprof"
-  # Run tinode server only.
-  "SERVICES_TO_RUN": "tinode"
   # You can provide your own tinode config by setting EXT_CONFIG env var and binding your configuration file to
   # "EXT_CONFIG": "/etc/tinode/tinode.conf"
   "WAIT_FOR": "mysql:3306"
+  # Web client push notifications.
+  # Modify as appropriate.
+  # To enable Tinode server push notifications, please refer to the "push" section of your tinode.conf.
+  "FCM_PUSH_ENABLED": "true"
+  "FCM_API_KEY": "AIzaSyD6X4ULR-RUsobvs1zZ2bHdJuPz39q2tbQ"
+  "FCM_APP_ID": "1:114126160546:web:aca6ea2981feb81fb44dfb"
+  "FCM_PROJECT_ID": "tinode-1000"
+  "FCM_SENDER_ID": 114126160546
+  "FCM_VAPID_KEY": "BOgQVPOMzIMXUpsYGpbVkZoEBc0ifKY_f2kSU5DNDGYI6i6CoKqqxDd7w7PJ3FaGRBgVGJffldETumOx831jl58"
+  # iOS app universal links configuration.
+  # "IOS_UNIV_LINKS_APP_ID": "<ios universal links app id>"
 
 x-exporter-env-vars: &exporter-env-vars
   "TINODE_ADDR": "http://tinode.host:18080/stats/expvar/"
