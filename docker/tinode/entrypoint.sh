@@ -95,12 +95,9 @@ if [ ! -z "$SAMPLE_DATA" ] ; then
 	init_args+=("--data=$SAMPLE_DATA")
 fi
 init_stdout=./init-db-stdout.txt
-init_stderr=./init-db-stderr.txt
 # Initialize the database if it has not been initialized yet or if data reset/upgrade has been requested.
-./init-db "${init_args[@]}" 1>$init_stdout 2>$init_stderr
-init_result=$?
-cat $init_stderr >&2
-if [ $init_result -ne 0 ]; then
+./init-db "${init_args[@]}" 1>$init_stdout
+if [ $? -ne 0 ]; then
 	echo "./init-db failed. Quitting."
 	exit 1
 fi
@@ -108,13 +105,6 @@ fi
 # If sample data was provided, try to find Tino password.
 if [ ! -z "$SAMPLE_DATA" ] ; then
 	grep "usr;tino;" $init_stdout > /botdata/tino-password
-fi
-
-# Check if the init-db output contains the magic string.
-grep -q "All done" $init_stderr
-if [ $? -ne 0 ]; then
-	echo "Database could not be set up correctly. Quitting."
-	exit 1
 fi
 
 if [ -s /botdata/tino-password ] ; then
