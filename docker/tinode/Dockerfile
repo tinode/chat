@@ -86,6 +86,18 @@ ENV FCM_PUSH_ENABLED=false
 # Enable Android-specific notifications by default.
 ENV FCM_INCLUDE_ANDROID_NOTIFICATION=true
 
+# Disable push notifications via Tinode Push Gateway.
+ENV TNPG_PUSH_ENABLED=false
+
+# Tinode Push Gateway authentication token.
+ENV TNPG_AUTH_TOKEN=
+
+# Tinode Push Gateway user name.
+ENV TNPG_USER=
+
+# Enable Tinode Push Gateway request payload compression.
+ENV TNPG_COMPRESS_PAYLOADS=true
+
 # Use the target db by default.
 # When TARGET_DB is "alldbs", it is the user's responsibility
 # to set STORE_USE_ADAPTER to the desired db adapter correctly.

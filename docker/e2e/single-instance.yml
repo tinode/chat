@@ -21,11 +21,14 @@ x-tinode-env-vars: &tinode-env-vars
   # You can provide your own tinode config by setting EXT_CONFIG env var and binding your configuration file to
   # "EXT_CONFIG": "/etc/tinode/tinode.conf"
   "WAIT_FOR": "mysql:3306"
-  # Web client push notifications.
+  # Push notifications.
   # Modify as appropriate.
-  # To enable Tinode server push notifications, please refer to the "push" section of your tinode.conf.
-  "FCM_PUSH_ENABLED": "false"
+  # Tinode Push Gateway configuration.
+  "TNPG_PUSH_ENABLED": "false"
+  # "TNPG_USER": "<user name>"
+  # "TNPG_AUTH_TOKEN": "<token>"
   # FCM specific server configuration.
+  "FCM_PUSH_ENABLED": "false"
   # "FCM_CRED_FILE": "<path to FCM credentials file>"
   # "FCM_INCLUDE_ANDROID_NOTIFICATION": false
   #

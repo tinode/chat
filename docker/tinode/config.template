@@ -106,6 +106,15 @@
 
 	"push": [
 		{
+			"name":"tnpg",
+			"config": {
+				"enabled": $TNPG_PUSH_ENABLED,
+				"auth_token": "$TNPG_AUTH_TOKEN",
+				"user": "$TNPG_USER",
+				"compress_payloads": $TNPG_COMPRESS_PAYLOADS
+			}
+		},
+		{
 			"name":"fcm",
 			"config": {
 				"enabled": $FCM_PUSH_ENABLED,
