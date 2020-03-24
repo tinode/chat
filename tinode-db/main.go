@@ -177,11 +177,11 @@ func main() {
 	if *datafile != "" && *datafile != "-" {
 		raw, err := ioutil.ReadFile(*datafile)
 		if err != nil {
-			log.Fatal("Failed to parse data:", err)
+			log.Fatal("Failed to read sample data file:", err)
 		}
 		err = json.Unmarshal(raw, &data)
 		if err != nil {
-			log.Fatal(err)
+			log.Fatal("Failed to parse sample data:", err)
 		}
 	}
 
@@ -218,18 +218,27 @@ func main() {
 		log.Println("Database reset requested")
 	} else {
 		log.Println("Database exists, DB version is correct. All done.")
-		return
+		os.Exit(0)
 	}
 
 	if *upgrade {
 		// Upgrade DB from one version to another.
 		err = store.UpgradeDb(config.StoreConfig)
 		if err == nil {
-			log.Println("Database successfully upgraded")
+			log.Println("Database successfully upgraded.")
 		}
 	} else {
 		// Reset or create DB
 		err = store.InitDb(config.StoreConfig, true)
+		if err == nil {
+			var action string
+			if *reset {
+				action = "reset"
+			} else {
+				action = "initialized"
+			}
+			log.Println("Database ", action)
+		}
 	}
 
 	if err != nil {
@@ -237,4 +246,5 @@ func main() {
 	}
 
 	genDb(&data)
+	os.Exit(0)
 }
