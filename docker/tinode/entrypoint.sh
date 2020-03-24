@@ -51,7 +51,7 @@ fi
 
 # Do not load data when upgrading database.
 if [[ "$UPGRADE_DB" = "true" ]] ; then
-	SAMPLE_DATA=""
+	SAMPLE_DATA=
 fi
 
 # If push notifications are enabled, generate client-side firebase config file.
@@ -89,11 +89,7 @@ if [ ! -z "$IOS_UNIV_LINKS_APP_ID" ] ; then
 EOM
 fi
 
-init_args=("--reset=${RESET_DB}" "--upgrade=${UPGRADE_DB}" "--config=${CONFIG}")
-# Maybe load sample data?
-if [ ! -z "$SAMPLE_DATA" ] ; then
-	init_args+=("--data=$SAMPLE_DATA")
-fi
+init_args=("--reset=${RESET_DB}" "--upgrade=${UPGRADE_DB}" "--config=${CONFIG}" "--data=$SAMPLE_DATA")
 init_stdout=./init-db-stdout.txt
 # Initialize the database if it has not been initialized yet or if data reset/upgrade has been requested.
 ./init-db "${init_args[@]}" 1>$init_stdout
@@ -116,28 +112,7 @@ if [ -s /botdata/tino-password ] ; then
 	./credentials.sh /botdata/.tn-cookie < /botdata/tino-password
 fi
 
-args=("--config=${CONFIG}" "--static_data=$STATIC_DIR")
-
-# Maybe set node name in the cluster.
-if [ ! -z "$CLUSTER_SELF" ] ; then
-	args+=("--cluster_self=$CLUSTER_SELF")
-fi
-if [ ! -z "$PPROF_URL" ] ; then
-	args+=("--pprof_url=$PPROF_URL")
-fi
-
-# Create the log directory (/var/log/tinode-`current timestamp`).
-# And symlink /var/log/tinode-latest to it.
-runid=tinode-`date +%s`
-logdir=/var/log/$runid
-mkdir -p $logdir
-if [ -d /var/log/tinode-latest ]; then
-	rm /var/log/tinode-latest
-fi
-pushd .
-cd /var/log
-ln -s $runid tinode-latest
-popd
+args=("--config=${CONFIG}" "--static_data=$STATIC_DIR" "--cluster_self=$CLUSTER_SELF" "--pprof_url=$PPROF_URL")
 
 # Run the tinode server.
-./tinode "${args[@]}" 2> $logdir/tinode.log
+./tinode "${args[@]}" 2> /var/log/tinode.log
