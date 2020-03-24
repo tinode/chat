@@ -49,9 +49,9 @@ else
   STATIC_DIR="./static"
 fi
 
-# Load default sample data when generating or resetting the database.
-if [[ -z "$SAMPLE_DATA" && "$UPGRADE_DB" = "false" ]] ; then
-	SAMPLE_DATA="$DEFAULT_SAMPLE_DATA"
+# Do not load data when upgrading database.
+if [[ "$UPGRADE_DB" = "true" ]] ; then
+	SAMPLE_DATA=
 fi
 
 # If push notifications are enabled, generate client-side firebase config file.
@@ -89,42 +89,18 @@ if [ ! -z "$IOS_UNIV_LINKS_APP_ID" ] ; then
 EOM
 fi
 
-run_init_db=false
-run_tinode=false
-case "$SERVICES_TO_RUN" in
-"init-db")
-  run_init_db=true
-  ;;
-"tinode")
-  run_tinode=true
-  ;;
-"both")
-  run_init_db=true
-  run_tinode=true
-  ;;
-*)
-  echo "Invalid val for SERVICES_TO_RUN env var. Can be either 'init-db' or 'tinode' or 'both'."
-  exit 1
-  ;;
-esac
-
-echo "Will run init-db: ${run_init_db}, tinode: ${run_tinode}"
-
-touch /botdata/tino-password
-
-if [ "$run_init_db" == "true" ]; then
-  init_args=("--reset=${RESET_DB}" "--upgrade=${UPGRADE_DB}" "--config=${CONFIG}")
-  # Maybe load sample data?
-  if [ ! -z "$SAMPLE_DATA" ] ; then
-    init_args+=("--data=$SAMPLE_DATA")
-  fi
-  # Initialize the database if it has not been initialized yet or if data reset/upgrade has been requested.
-  ./init-db "${init_args[@]}" | grep "usr;tino;" > /botdata/tino-password
+init_args=("--reset=${RESET_DB}" "--upgrade=${UPGRADE_DB}" "--config=${CONFIG}" "--data=$SAMPLE_DATA")
+init_stdout=./init-db-stdout.txt
+# Initialize the database if it has not been initialized yet or if data reset/upgrade has been requested.
+./init-db "${init_args[@]}" 1>$init_stdout
+if [ $? -ne 0 ]; then
+	echo "./init-db failed. Quitting."
+	exit 1
 fi
 
-if [ "$run_tinode" != "true" ]; then
-  # If we don't want to run tinode, we are done.
-  exit 0
+# If sample data was provided, try to find Tino password.
+if [ ! -z "$SAMPLE_DATA" ] ; then
+	grep "usr;tino;" $init_stdout > /botdata/tino-password
 fi
 
 if [ -s /botdata/tino-password ] ; then
@@ -136,28 +112,7 @@ if [ -s /botdata/tino-password ] ; then
 	./credentials.sh /botdata/.tn-cookie < /botdata/tino-password
 fi
 
-args=("--config=${CONFIG}" "--static_data=$STATIC_DIR")
-
-# Maybe set node name in the cluster.
-if [ ! -z "$CLUSTER_SELF" ] ; then
-  args+=("--cluster_self=$CLUSTER_SELF")
-fi
-if [ ! -z "$PPROF_URL" ] ; then
-  args+=("--pprof_url=$PPROF_URL")
-fi
-
-# Create the log directory (/var/log/tinode-`current timestamp`).
-# And symlink /var/log/tinode-latest to it.
-runid=tinode-`date +%s`
-logdir=/var/log/$runid
-mkdir -p $logdir
-if [ -d /var/log/tinode-latest ]; then
-  rm /var/log/tinode-latest
-fi
-pushd .
-cd /var/log
-ln -s $runid tinode-latest
-popd
+args=("--config=${CONFIG}" "--static_data=$STATIC_DIR" "--cluster_self=$CLUSTER_SELF" "--pprof_url=$PPROF_URL")
 
 # Run the tinode server.
-./tinode "${args[@]}" 2> $logdir/tinode.log
+./tinode "${args[@]}" 2>> /var/log/tinode.log
