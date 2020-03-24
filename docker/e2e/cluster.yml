@@ -24,18 +24,25 @@ x-exporter:
 x-tinode-env-vars: &tinode-env-vars
   "STORE_USE_ADAPTER": "mysql"
   "DEFAULT_SAMPLE_DATA": ""
-  "FCM_PUSH_ENABLED": "false"
-  # "FCM_API_KEY": "<your key>"
-  # "FCM_APP_ID": "<your app id>"
-  # "FCM_PROJECT_ID": "<your project if>"
-  # "FCM_SENDER_ID": <your sender id>
-  # "FCM_VAPID_KEY": "<your vapid key>"
-  # "IOS_UNIV_LINKS_APP_ID": "<ios universal links app id>"
   "PPROF_URL": "/pprof"
-  # Run tinode server only.
-  "SERVICES_TO_RUN": "tinode"
   # You can provide your own tinode config by setting EXT_CONFIG env var and binding your configuration file to
   # "EXT_CONFIG": "/etc/tinode/tinode.conf"
+  "WAIT_FOR": "mysql:3306"
+  # Web client push notifications.
+  # Modify as appropriate.
+  # To enable Tinode server push notifications, please refer to the "push" section of your tinode.conf.
+  "FCM_PUSH_ENABLED": "false"
+  # "FCM_CRED_FILE": "<path to FCM credentials file>"
+  # "FCM_INCLUDE_ANDROID_NOTIFICATION": false
+  #
+  # FCM Web client configuration.
+  "FCM_API_KEY": "AIzaSyD6X4ULR-RUsobvs1zZ2bHdJuPz39q2tbQ"
+  "FCM_APP_ID": "1:114126160546:web:aca6ea2981feb81fb44dfb"
+  "FCM_PROJECT_ID": "tinode-1000"
+  "FCM_SENDER_ID": 114126160546
+  "FCM_VAPID_KEY": "BOgQVPOMzIMXUpsYGpbVkZoEBc0ifKY_f2kSU5DNDGYI6i6CoKqqxDd7w7PJ3FaGRBgVGJffldETumOx831jl58"
+  # iOS app universal links configuration.
+  # "IOS_UNIV_LINKS_APP_ID": "<ios universal links app id>"
 
 x-exporter-env-vars: &exporter-env-vars
   "TINODE_ADDR": "http://tinode.host:18080/stats/expvar/"
@@ -43,6 +50,7 @@ x-exporter-env-vars: &exporter-env-vars
   "SERVE_FOR": "prometheus"
   "PROM_NAMESPACE": "tinode"
   "PROM_METRICS_PATH": "/metrics"
+  #
   # InfluxDB configation:
   # "SERVE_FOR": "influxdb"
   # "INFLUXDB_VERSION": 1.7
@@ -69,34 +77,6 @@ services:
       timeout: 5s
       retries: 10
 
-  # Run this only when you need to initialize Tinode database.
-  init-db:
-    << : *tinode-base
-    container_name: init-db
-    hostname: init-db
-    restart: "no"
-    networks:
-      internal:
-        ipv4_address: 172.19.0.2
-    environment:
-      << : *tinode-env-vars
-      "SERVICES_TO_RUN": "init-db"
-      "UPGRADE_DB": "false"
-
-  # Run this only when you need to upgrade Tinode database to a newer version.
-  upgrade-db:
-    << : *tinode-base
-    container_name: upgrade-db
-    hostname: upgrade-db
-    restart: "no"
-    networks:
-      internal:
-        ipv4_address: 172.19.0.2
-    environment:
-      << : *tinode-env-vars
-      "SERVICES_TO_RUN": "init-db"
-      "UPGRADE_DB": "true"
-
   # Tinode servers.
   tinode-0:
     << : *tinode-base
@@ -107,7 +87,7 @@ services:
         ipv4_address: 172.19.0.5
     # You can mount your volumes as necessary:
     # volumes:
-    #   # E.g. external config.
+    #   # E.g. external config (assuming EXT_CONFIG is set).
     #   - <path to your tinode.conf>:/etc/tinode/tinode.conf
     #   # Logs directory.
     #   - <path to your tinode-0 logs directory>:/var/log
@@ -116,6 +96,9 @@ services:
     environment:
       << : *tinode-env-vars
       "CLUSTER_SELF": "tinode-0"
+      # Uncomment the lines below if you wish to upgrade or reset the database.
+      # "UPGRADE_DB": "true"
+      # "RESET_DB": "true"
 
   tinode-1:
     << : *tinode-base
@@ -126,7 +109,7 @@ services:
         ipv4_address: 172.19.0.6
     # You can mount your volumes as necessary:
     # volumes:
-    #   # E.g. external config.
+    #   # E.g. external config (assuming EXT_CONFIG is set).
     #   - <path to your tinode.conf>:/etc/tinode/tinode.conf
     #   # Logs directory.
     #   - <path to your tinode-1 logs directory>:/var/log
@@ -135,6 +118,7 @@ services:
     environment:
       << : *tinode-env-vars
       "CLUSTER_SELF": "tinode-1"
+      "WAIT_FOR": "tinode-0:18080"
 
   tinode-2:
     << : *tinode-base
@@ -145,7 +129,7 @@ services:
         ipv4_address: 172.19.0.7
     # You can mount your volumes as necessary:
     # volumes:
-    #   # E.g. external config.
+    #   # E.g. external config (assuming EXT_CONFIG is set).
     #   - <path to your tinode.conf>:/etc/tinode/tinode.conf
     #   # Logs directory.
     #   - <path to your tinode-2 logs directory>:/var/log
@@ -154,6 +138,7 @@ services:
     environment:
       << : *tinode-env-vars
       "CLUSTER_SELF": "tinode-2"
+      "WAIT_FOR": "tinode-0:18080"
 
   # Monitoring.
   # Exporters are paired with tinode instances.
@@ -168,6 +153,7 @@ services:
     environment:
       << : *exporter-env-vars
       "INSTANCE": "tinode-exp-0"
+      "WAIT_FOR": "tinode-0:18080"
     extra_hosts:
       - "tinode.host:172.19.0.5"
 
@@ -182,6 +168,7 @@ services:
     environment:
       << : *exporter-env-vars
       "INSTANCE": "tinode-exp-1"
+      "WAIT_FOR": "tinode-1:18080"
     extra_hosts:
       - "tinode.host:172.19.0.6"
 
@@ -196,6 +183,7 @@ services:
     environment:
       << : *exporter-env-vars
       "INSTANCE": "tinode-exp-2"
+      "WAIT_FOR": "tinode-2:18080"
     extra_hosts:
       - "tinode.host:172.19.0.7"
 
