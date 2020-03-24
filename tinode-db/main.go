@@ -246,4 +246,5 @@ func main() {
 	}
 
 	genDb(&data)
+	os.Exit(0)
 }
