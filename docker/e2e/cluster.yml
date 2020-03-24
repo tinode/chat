@@ -31,7 +31,11 @@ x-tinode-env-vars: &tinode-env-vars
   # Web client push notifications.
   # Modify as appropriate.
   # To enable Tinode server push notifications, please refer to the "push" section of your tinode.conf.
-  "FCM_PUSH_ENABLED": "true"
+  "FCM_PUSH_ENABLED": "false"
+  # "FCM_CRED_FILE": "<path to FCM credentials file>"
+  # "FCM_INCLUDE_ANDROID_NOTIFICATION": false
+  #
+  # FCM Web client configuration.
   "FCM_API_KEY": "AIzaSyD6X4ULR-RUsobvs1zZ2bHdJuPz39q2tbQ"
   "FCM_APP_ID": "1:114126160546:web:aca6ea2981feb81fb44dfb"
   "FCM_PROJECT_ID": "tinode-1000"
