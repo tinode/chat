@@ -10,7 +10,7 @@ version: '3.4'
 x-tinode:
   &tinode-base
   depends_on:
-    - mysql
+    - db
   image: tinode/tinode:latest
   restart: always
 
@@ -43,20 +43,20 @@ x-tinode-env-vars: &tinode-env-vars
 
 x-exporter-env-vars: &exporter-env-vars
   "TINODE_ADDR": "http://tinode.host:18080/stats/expvar/"
-  # Prometheus configuration:
-  "SERVE_FOR": "prometheus"
-  "PROM_NAMESPACE": "tinode"
-  "PROM_METRICS_PATH": "/metrics"
   # InfluxDB configation:
-  # "SERVE_FOR": "influxdb"
-  # "INFLUXDB_VERSION": 1.7
-  # "INFLUXDB_ORGANIZATION": "<your organization>"
-  # "INFLUXDB_PUSH_INTERVAL": 30
-  # "INFLUXDB_PUSH_ADDRESS": "https://mon.tinode.co/intake"
-  # "INFLUXDB_AUTH_TOKEN": "abcdef"
+  "SERVE_FOR": "influxdb"
+  "INFLUXDB_VERSION": 1.7
+  "INFLUXDB_ORGANIZATION": "<your organization>"
+  "INFLUXDB_PUSH_INTERVAL": 30
+  "INFLUXDB_PUSH_ADDRESS": "https://mon.tinode.co/intake"
+  "INFLUXDB_AUTH_TOKEN": "<auth token>"
+  # Prometheus configuration:
+  # "SERVE_FOR": "prometheus"
+  # "PROM_NAMESPACE": "tinode"
+  # "PROM_METRICS_PATH": "/metrics"
 
 services:
-  mysql:
+  db:
     image: mysql:5.7
     container_name: mysql
     restart: always
@@ -78,8 +78,6 @@ services:
     << : *tinode-base
     container_name: tinode-0
     hostname: tinode-0
-    depends_on:
-      - mysql
     networks:
       internal:
         ipv4_address: 172.19.0.5
