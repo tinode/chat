@@ -113,7 +113,19 @@ func topicInit(t *Topic, sreg *sessionJoin, h *Hub) {
 func initTopicMe(t *Topic, sreg *sessionJoin) error {
 	t.cat = types.TopicCatMe
 
-	user, err := store.Users.Get(sreg.sess.uid)
+	uid := types.ParseUserId(t.name)
+	if uid.IsZero() {
+		// Log out the session
+		sreg.sess.uid = types.ZeroUid
+		log.Println("malformed topic name (sub me): ", t.name, sreg.sess.sid)
+		return types.ErrMalformed
+	}
+	if uid != sreg.sess.uid && sreg.sess.authLvl != auth.LevelRoot {
+		sreg.sess.uid = types.ZeroUid
+		log.Println("initTopicMe: attempt to subscribe to another account by non-root", sreg.sess)
+		return types.ErrPermissionDenied
+	}
+	user, err := store.Users.Get(uid)
 	if err != nil {
 		// Log out the session
 		sreg.sess.uid = types.ZeroUid
