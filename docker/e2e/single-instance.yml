@@ -60,9 +60,6 @@ services:
     image: mysql:5.7
     container_name: mysql
     restart: always
-    networks:
-      internal:
-        ipv4_address: 172.19.0.3
     # Use your own volume.
     # volumes:
     #   - <mysql directory in your file system>:/var/lib/mysql
@@ -78,9 +75,6 @@ services:
     << : *tinode-base
     container_name: tinode-0
     hostname: tinode-0
-    networks:
-      internal:
-        ipv4_address: 172.19.0.5
     # You can mount your volumes as necessary:
     # volumes:
     #   # E.g. external config (assuming EXT_CONFIG is set).
@@ -104,21 +98,8 @@ services:
       - tinode-0
     image: tinode/exporter:latest
     restart: always
-    networks:
-      internal:
-    ports:
-      - "6222:6222"
+    links:
+      - tinode-0:tinode.host
     environment:
       << : *exporter-env-vars
-      # Remove?
-      "INSTANCE": "tinode-exp-0"
       "WAIT_FOR": "tinode-0:18080"
-    extra_hosts:
-      - "tinode.host:172.19.0.5"
-
-networks:
-  internal:
-    ipam:
-      driver: default
-      config:
-        - subnet: "172.19.0.0/24"

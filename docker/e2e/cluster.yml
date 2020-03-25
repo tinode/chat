@@ -18,8 +18,6 @@ x-exporter:
   &exporter-base
   image: tinode/exporter:latest
   restart: always
-  networks:
-    internal:
 
 x-tinode-env-vars: &tinode-env-vars
   "STORE_USE_ADAPTER": "mysql"
@@ -67,9 +65,6 @@ services:
     image: mysql:5.7
     container_name: mysql
     restart: always
-    networks:
-      internal:
-        ipv4_address: 172.19.0.3
     # Use your own volume.
     # volumes:
     #   - <mysql directory in your file system>:/var/lib/mysql
@@ -85,9 +80,6 @@ services:
     << : *tinode-base
     container_name: tinode-0
     hostname: tinode-0
-    networks:
-      internal:
-        ipv4_address: 172.19.0.5
     # You can mount your volumes as necessary:
     # volumes:
     #   # E.g. external config (assuming EXT_CONFIG is set).
@@ -107,9 +99,6 @@ services:
     << : *tinode-base
     container_name: tinode-1
     hostname: tinode-1
-    networks:
-      internal:
-        ipv4_address: 172.19.0.6
     # You can mount your volumes as necessary:
     # volumes:
     #   # E.g. external config (assuming EXT_CONFIG is set).
@@ -127,9 +116,6 @@ services:
     << : *tinode-base
     container_name: tinode-2
     hostname: tinode-2
-    networks:
-      internal:
-        ipv4_address: 172.19.0.7
     # You can mount your volumes as necessary:
     # volumes:
     #   # E.g. external config (assuming EXT_CONFIG is set).
@@ -152,13 +138,13 @@ services:
     depends_on:
       - tinode-0
     ports:
-      - "6222:6222"
+      - 6222:6222
+    links:
+      - tinode-0:tinode.host
     environment:
       << : *exporter-env-vars
-      "INSTANCE": "tinode-exp-0"
+      "INSTANCE": "tinode-0"
       "WAIT_FOR": "tinode-0:18080"
-    extra_hosts:
-      - "tinode.host:172.19.0.5"
 
   exporter-1:
     << : *exporter-base
@@ -167,13 +153,13 @@ services:
     depends_on:
       - tinode-1
     ports:
-      - "6223:6222"
+      - 6223:6222
+    links:
+      - tinode-1:tinode.host
     environment:
       << : *exporter-env-vars
-      "INSTANCE": "tinode-exp-1"
+      "INSTANCE": "tinode-1"
       "WAIT_FOR": "tinode-1:18080"
-    extra_hosts:
-      - "tinode.host:172.19.0.6"
 
   exporter-2:
     << : *exporter-base
@@ -182,17 +168,10 @@ services:
     depends_on:
       - tinode-2
     ports:
-      - "6224:6222"
+      - 6224:6222
+    links:
+      - tinode-2:tinode.host
     environment:
       << : *exporter-env-vars
-      "INSTANCE": "tinode-exp-2"
+      "INSTANCE": "tinode-2"
       "WAIT_FOR": "tinode-2:18080"
-    extra_hosts:
-      - "tinode.host:172.19.0.7"
-
-networks:
-  internal:
-    ipam:
-      driver: default
-      config:
-        - subnet: "172.19.0.0/24"
