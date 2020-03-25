@@ -8,6 +8,7 @@ LABEL name="TinodeMetricExporter"
 LABEL version=$VERSION
 
 ENV SERVE_FOR=""
+ENV WAIT_FOR=""
 
 ENV TINODE_ADDR=http://localhost/stats/expvar/
 ENV INSTANCE="exporter-instance"

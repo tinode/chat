@@ -89,25 +89,31 @@ def make_vcard(fn, photofile):
             card['fn'] = fn.strip()
 
         if photofile != None:
-            try:
-                f = open(photofile, 'rb')
-                # File extension is used as a file type
-                mimetype = mimetypes.guess_type(photofile)
-                if mimetype[0]:
-                    mimetype = mimetype[0].split("/")[1]
-                else:
-                    mimetype = 'jpeg'
-                data = base64.b64encode(f.read())
-                # python3 fix.
-                if type(data) is not str:
-                    data = data.decode()
+            if photofile == '':
+                # Delete the avatar.
                 card['photo'] = {
-                    'data': data,
-                    'type': mimetype
+                    'data': '␡'
                 }
-                f.close()
-            except IOError as err:
-                stdoutln("Error opening '" + photofile + "':", err)
+            else:
+                try:
+                    f = open(photofile, 'rb')
+                    # File extension is used as a file type
+                    mimetype = mimetypes.guess_type(photofile)
+                    if mimetype[0]:
+                        mimetype = mimetype[0].split("/")[1]
+                    else:
+                        mimetype = 'jpeg'
+                    data = base64.b64encode(f.read())
+                    # python3 fix.
+                    if type(data) is not str:
+                        data = data.decode()
+                    card['photo'] = {
+                        'data': data,
+                        'type': mimetype
+                    }
+                    f.close()
+                except IOError as err:
+                    stdoutln("Error opening '" + photofile + "':", err)
 
     return card
 

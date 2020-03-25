@@ -33,6 +33,10 @@ ENV TARGET_DB=$TARGET_DB
 # Specifies what jobs to run: init-db, tinode or both.
 ENV SERVICES_TO_RUN='both'
 
+# Specifies the database host:port pair to wait for before running Tinode.
+# Ignored if empty.
+ENV WAIT_FOR=
+
 # An option to reset database.
 ENV RESET_DB=false
 
@@ -81,6 +85,18 @@ ENV FCM_PUSH_ENABLED=false
 
 # Enable Android-specific notifications by default.
 ENV FCM_INCLUDE_ANDROID_NOTIFICATION=true
+
+# Disable push notifications via Tinode Push Gateway.
+ENV TNPG_PUSH_ENABLED=false
+
+# Tinode Push Gateway authentication token.
+ENV TNPG_AUTH_TOKEN=
+
+# Tinode Push Gateway user name.
+ENV TNPG_USER=
+
+# Enable Tinode Push Gateway request payload compression.
+ENV TNPG_COMPRESS_PAYLOADS=true
 
 # Use the target db by default.
 # When TARGET_DB is "alldbs", it is the user's responsibility
