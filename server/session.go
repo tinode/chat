@@ -287,7 +287,7 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 		s.queueOut(ErrMalformed("", "", msg.timestamp))
 		log.Println("malformed msg.from: ", msg.from, s.sid)
 		return
-  }
+	}
 
 	var resp *ServerComMessage
 	if msg, resp = pluginFireHose(s, msg); resp != nil {
