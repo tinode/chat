@@ -89,10 +89,10 @@ def make_vcard(fn, photofile):
             card['fn'] = fn.strip()
 
         if photofile != None:
-            if photofile == '␡':
+            if photofile == '':
                 # Delete the avatar.
                 card['photo'] = {
-                    'data': photofile
+                    'data': '␡'
                 }
             else:
                 try:
