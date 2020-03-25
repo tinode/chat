@@ -285,7 +285,7 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 		return
 	} else if fromUid := types.ParseUserId(msg.from); fromUid.IsZero() {
 		s.queueOut(ErrMalformed("", "", msg.timestamp))
-		log.Println("malformed msg.from: ", msg.from, s.sid)
+		log.Println("s.dispatch: malformed msg.from: ", msg.from, s.sid)
 		return
 	}
 
