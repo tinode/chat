@@ -283,6 +283,10 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 		s.queueOut(ErrPermissionDenied("", "", msg.timestamp))
 		log.Println("s.dispatch: non-root asigned msg.from", s.sid)
 		return
+	} else if fromUid := types.ParseUserId(msg.from); fromUid.IsZero() {
+		s.queueOut(ErrMalformed("", "", msg.timestamp))
+		log.Println("malformed msg.from: ", msg.from, s.sid)
+		return
 	}
 
 	var resp *ServerComMessage

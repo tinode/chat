@@ -113,7 +113,8 @@ func topicInit(t *Topic, sreg *sessionJoin, h *Hub) {
 func initTopicMe(t *Topic, sreg *sessionJoin) error {
 	t.cat = types.TopicCatMe
 
-	user, err := store.Users.Get(sreg.sess.uid)
+	uid := types.ParseUserId(t.name)
+	user, err := store.Users.Get(uid)
 	if err != nil {
 		// Log out the session
 		sreg.sess.uid = types.ZeroUid
