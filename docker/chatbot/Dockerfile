@@ -1,11 +1,12 @@
 # Dockerfile builds an image with a chatbot (Tino) for Tinode.
 
-FROM python:3.7-alpine
+FROM python:3.7-slim
 
 ARG VERSION=0.16
 ARG LOGIN_AS=
 ARG TINODE_HOST=tinode-srv:6061
 ENV VERSION=$VERSION
+ARG BINVERS=$VERSION
 
 LABEL maintainer="Tinode Team <info@tinode.co>"
 LABEL name="TinodeChatbot"
@@ -19,7 +20,7 @@ WORKDIR /usr/src/bot
 # VOLUME /botdata
 
 # Get tarball with the chatbot code and data.
-ADD https://github.com/tinode/chat/releases/download/v$VERSION/py-chatbot.tar.gz .
+ADD https://github.com/tinode/chat/releases/download/v${BINVERS}/py-chatbot.tar.gz .
 # Unpack chatbot, delete archive
 RUN tar -xzf py-chatbot.tar.gz \
 	&& rm py-chatbot.tar.gz
