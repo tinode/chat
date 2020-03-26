@@ -1,0 +1,39 @@
+version: '3.4'
+
+x-rethinkdb-tinode-env-vars: &rethinkdb-tinode-env-vars
+  "STORE_USE_ADAPTER": "rethinkdb"
+
+x-rethinkdb-exporter-env-vars: &rethinkdb-exporter-env-vars
+  "SERVE_FOR": "influxdb"
+
+services:
+  db:
+    image: rethinkdb:2.4.0
+    container_name: rethinkdb
+    healthcheck:
+      test: ["CMD", "curl -f http://localhost:8080/ || exit 1"]
+
+  tinode-0:
+    environment:
+      << : *rethinkdb-tinode-env-vars
+      "WAIT_FOR": "rethinkdb:8080"
+
+  tinode-1:
+    environment:
+      << : *rethinkdb-tinode-env-vars
+
+  tinode-2:
+    environment:
+      << : *rethinkdb-tinode-env-vars
+
+  exporter-0:
+    environment:
+      << : *rethinkdb-exporter-env-vars
+
+  exporter-1:
+    environment:
+      << : *rethinkdb-exporter-env-vars
+
+  exporter-2:
+    environment:
+      << : *rethinkdb-exporter-env-vars
