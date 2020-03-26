@@ -430,7 +430,7 @@ func (a *adapter) CreateDb(reset bool) error {
 			synthetic VARCHAR(192) NOT NULL,
 			userid    BIGINT NOT NULL,
 			resp      VARCHAR(255),
-			done      smallint NOT NULL DEFAULT 0,
+			done      boolean NOT NULL DEFAULT false,
 			retries   INT NOT NULL DEFAULT 0,
 			PRIMARY KEY(id),
 			CONSTRAINT credentials_uniqueness UNIQUE(synthetic),
