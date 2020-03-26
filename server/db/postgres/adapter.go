@@ -2563,7 +2563,7 @@ func isMissingDb(err error) bool {
 // Convert to JSON before storing to JSON field.
 func toJSON(src interface{}) []byte {
 	if src == nil {
-		return nil
+		return []byte("null")
 	}
 
 	jval, _ := json.Marshal(src)
