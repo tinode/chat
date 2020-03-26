@@ -21,17 +21,16 @@ const (
 var handler Handler
 
 type Handler struct {
-	input       chan *push.Receipt
-	stop        chan bool
+	input chan *push.Receipt
+	stop  chan bool
 }
 
 type configType struct {
-	Enabled          bool   `json:"enabled"`
-	Buffer           int    `json:"buffer"`
-	CompressPayloads bool   `json:"compress_payloads"`
-	User             string `json:"user"`
-	AuthToken        string `json:"auth_token"`
-	Android          fcm.AndroidConfig `json:"android,omitempty"`
+	Enabled   bool              `json:"enabled"`
+	Buffer    int               `json:"buffer"`
+	User      string            `json:"user"`
+	AuthToken string            `json:"auth_token"`
+	Android   fcm.AndroidConfig `json:"android,omitempty"`
 }
 
 // Init initializes the handler
@@ -68,23 +67,18 @@ func (Handler) Init(jsonconf string) error {
 
 func postMessage(body interface{}, config *configType) (int, string, error) {
 	buf := new(bytes.Buffer)
-	if config.CompressPayloads {
-		gz := gzip.NewWriter(buf)
-		json.NewEncoder(gz).Encode(body)
-		gz.Close()
-	} else {
-		json.NewEncoder(buf).Encode(body)
-	}
+	gz := gzip.NewWriter(buf)
+	json.NewEncoder(gz).Encode(body)
+	gz.Close()
 	targetAddress := baseTargetAddress + config.User
 	req, err := http.NewRequest("POST", targetAddress, buf)
 	if err != nil {
 		return -1, "", err
 	}
-	req.Header.Add("Authorization", "Bearer " + config.AuthToken)
+	req.Header.Add("Authorization", "Bearer "+config.AuthToken)
 	req.Header.Set("Content-Type", "application/json; charset=utf-8")
-	if config.CompressPayloads {
-		req.Header.Add("Content-Encoding", "gzip")
-	}
+	req.Header.Add("Content-Encoding", "gzip")
+
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return -1, "", err

@@ -96,10 +96,10 @@ if [ ! -z "$WAIT_FOR" ] ; then
 		echo "\$WAIT_FOR (${WAIT_FOR}) env var should be in form HOST:PORT"
 		exit 1
 	fi
-	until nc -z -v -w5 ${DB[0]} ${DB[1]}; do echo "waiting for ${WAIT_FOR}..."; sleep 5; done
+	until nc -z -v -w5 ${DB[0]} ${DB[1]}; do echo "waiting for ${WAIT_FOR}..."; sleep 3; done
 fi
 
-init_args=("--reset=${RESET_DB}" "--upgrade=${UPGRADE_DB}" "--config=${CONFIG}" "--data=$SAMPLE_DATA")
+init_args=("--reset=${RESET_DB}" "--upgrade=${UPGRADE_DB}" "--config=${CONFIG}" "--data=${SAMPLE_DATA}")
 init_stdout=./init-db-stdout.txt
 # Initialize the database if it has not been initialized yet or if data reset/upgrade has been requested.
 ./init-db "${init_args[@]}" 1>$init_stdout
@@ -115,7 +115,6 @@ fi
 
 if [ -s /botdata/tino-password ] ; then
 	# Convert Tino's authentication credentials into a cookie file.
-	# The cookie file is also used to check if database has been initialized.
 
 	# /botdata/tino-password could be empty if DB was not updated. In such a case the
 	# /botdata/.tn-cookie will not be modified.
