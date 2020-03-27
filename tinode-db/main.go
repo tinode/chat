@@ -176,11 +176,11 @@ func main() {
 	if *datafile != "" && *datafile != "-" {
 		raw, err := ioutil.ReadFile(*datafile)
 		if err != nil {
-			log.Fatal("Failed to read sample data file:", err)
+			log.Fatalln("Failed to read sample data file:", err)
 		}
 		err = json.Unmarshal(raw, &data)
 		if err != nil {
-			log.Fatal("Failed to parse sample data:", err)
+			log.Fatalln("Failed to parse sample data:", err)
 		}
 	}
 
@@ -189,9 +189,9 @@ func main() {
 
 	var config configType
 	if file, err := os.Open(*conffile); err != nil {
-		log.Fatal("Failed to read config file:", err)
+		log.Fatalln("Failed to read config file:", err)
 	} else if err = json.NewDecoder(jcr.New(file)).Decode(&config); err != nil {
-		log.Fatal("Failed to parse config file:", err)
+		log.Fatalln("Failed to parse config file:", err)
 	}
 
 	err := store.Open(1, config.StoreConfig)
@@ -206,14 +206,14 @@ func main() {
 			msg := "Wrong DB version: expected " + strconv.Itoa(store.GetAdapterVersion()) + ", got " +
 				strconv.Itoa(store.GetDbVersion()) + "."
 			if *reset {
-				log.Println(msg + " Dropping and recreating the database.")
+				log.Println(msg, "Dropping and recreating the database.")
 			} else if *upgrade {
-				log.Println(msg + " Upgrading the database.")
+				log.Println(msg, "Upgrading the database.")
 			} else {
-				log.Fatal(msg + " Use --reset to reset, --upgrade to upgrade.")
+				log.Fatalln(msg, "Use --reset to reset, --upgrade to upgrade.")
 			}
 		} else {
-			log.Fatal("Failed to init DB adapter:", err)
+			log.Fatalln("Failed to init DB adapter:", err)
 		}
 	} else if *reset {
 		log.Println("Database reset requested")
@@ -238,18 +238,18 @@ func main() {
 			} else {
 				action = "initialized"
 			}
-			log.Println("Database ", action)
+			log.Println("Database", action)
 		}
 	}
 
 	if err != nil {
-		log.Fatal("Failed to init DB:", err)
+		log.Fatalln("Failed to init DB:", err)
 	}
 
 	if !*upgrade {
 		genDb(&data)
 	} else if len(data.Users) > 0 {
-		log.Println("Sample data was ignored. All done.")
+		log.Println("Sample data ignored. All done.")
 	}
 	os.Exit(0)
 }
