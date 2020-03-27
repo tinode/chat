@@ -48,11 +48,11 @@ Request and response payloads are formatted as JSON. Some of the request or resp
 {
   // ServerUrl is the URL of the authentication server to call.
   "server_url": "http://127.0.0.1:5000/",
-  // Server may create new accounts.
+  // Authentication server is allowed to create new accounts.
   "allow_new_accounts": true,
   // Use separate endpoints, i.e. add request name to serverUrl path when making requests:
   // http://127.0.0.1:5000/add
-  "use_separae_endpoints": true
+  "use_separate_endpoints": true
 }
 ```
 
