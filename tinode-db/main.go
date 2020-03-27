@@ -245,6 +245,10 @@ func main() {
 		log.Fatal("Failed to init DB:", err)
 	}
 
-	genDb(&data)
+	if !*upgrade {
+		genDb(&data)
+	} else {
+		log.Println("Sample data was ignored. All done.")
+  }
 	os.Exit(0)
 }
