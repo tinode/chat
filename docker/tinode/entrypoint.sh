@@ -76,15 +76,15 @@ if [ ! -z "$IOS_UNIV_LINKS_APP_ID" ] ; then
   # See https://developer.apple.com/library/archive/documentation/General/Conceptual/AppSearch/UniversalLinks.html for details.
 	cat > $STATIC_DIR/apple-app-site-association <<- EOM
 {
-    "applinks": {
-        "apps": [],
-        "details": [
-            {
-                "appID": "$IOS_UNIV_LINKS_APP_ID",
-                "paths": [ "*" ]
-            }
-        ]
-    }
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appID": "$IOS_UNIV_LINKS_APP_ID",
+        "paths": [ "*" ]
+      }
+    ]
+  }
 }
 EOM
 fi
@@ -99,10 +99,9 @@ if [ ! -z "$WAIT_FOR" ] ; then
 	until nc -z -v -w5 ${DB[0]} ${DB[1]}; do echo "waiting for ${WAIT_FOR}..."; sleep 3; done
 fi
 
-init_args=("--reset=${RESET_DB}" "--upgrade=${UPGRADE_DB}" "--config=${CONFIG}" "--data=${SAMPLE_DATA}")
-init_stdout=./init-db-stdout.txt
 # Initialize the database if it has not been initialized yet or if data reset/upgrade has been requested.
-./init-db "${init_args[@]}" 1>$init_stdout
+init_stdout=./init-db-stdout.txt
+./init-db --reset=${RESET_DB} --upgrade=${UPGRADE_DB} --config=${CONFIG} --data=${SAMPLE_DATA} 1>${init_stdout}
 if [ $? -ne 0 ]; then
 	echo "./init-db failed. Quitting."
 	exit 1
