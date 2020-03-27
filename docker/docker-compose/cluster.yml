@@ -91,9 +91,8 @@ services:
     environment:
       << : *tinode-env-vars
       "CLUSTER_SELF": "tinode-0"
-      # Uncomment the lines below if you wish to upgrade or reset the database.
-      # "UPGRADE_DB": "true"
-      # "RESET_DB": "true"
+      "RESET_DB": ${RESET_DB:-false}
+      "UPGRADE_DB": ${UPGRADE_DB:-false}
 
   tinode-1:
     << : *tinode-base
