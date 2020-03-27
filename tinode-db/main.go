@@ -245,6 +245,8 @@ func main() {
 		log.Fatal("Failed to init DB:", err)
 	}
 
-	genDb(&data)
+	if !*upgrade {
+		genDb(&data)
+	}
 	os.Exit(0)
 }
