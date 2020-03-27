@@ -44,16 +44,33 @@ Request and response payloads are formatted as JSON. Some of the request or resp
 
 ## Configuration
 
-```js
-{
-  // ServerUrl is the URL of the authentication server to call.
-  "server_url": "http://127.0.0.1:5000/",
-  // Authentication server is allowed to create new accounts.
-  "allow_new_accounts": true,
-  // Use separate endpoints, i.e. add request name to serverUrl path when making requests:
-  // http://127.0.0.1:5000/add
-  "use_separate_endpoints": true
-}
+Add the following section to the `auth_config` in [tinode.conf](../../tinode.conf): 
+
+```json
+...
+"auth_config": {
+  ...
+  "myveryownauth": {
+    // ServerUrl is the URL of the authentication server to call.
+    "server_url": "http://127.0.0.1:5000/",
+    // Authentication server is allowed to create new accounts.
+    "allow_new_accounts": true,
+    // Use separate endpoints, i.e. add request name to serverUrl path when making requests:
+    // http://127.0.0.1:5000/add
+    "use_separate_endpoints": true
+  },
+  ...
+},
+```
+The name `myveryownauth` is completely arbitrary, but your client has to be configured to use it. If you want to use your
+config **instead** of stock `basic` (login-password) authentication, then add a logical renaming:
+```
+...
+"auth_config": {
+  "logical_names": ["myveryownauth:basic", "basic:"],
+  "myveryownauth": { ... },
+},
+...
 ```
 
 ## Request
