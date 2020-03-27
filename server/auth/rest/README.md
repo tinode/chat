@@ -46,7 +46,7 @@ Request and response payloads are formatted as JSON. Some of the request or resp
 
 Add the following section to the `auth_config` in [tinode.conf](../../tinode.conf): 
 
-```json
+```js
 ...
 "auth_config": {
   ...
@@ -64,11 +64,12 @@ Add the following section to the `auth_config` in [tinode.conf](../../tinode.con
 ```
 The name `myveryownauth` is completely arbitrary, but your client has to be configured to use it. If you want to use your
 config **instead** of stock `basic` (login-password) authentication, then add a logical renaming:
-```
+```js
 ...
 "auth_config": {
   "logical_names": ["myveryownauth:basic", "basic:"],
   "myveryownauth": { ... },
+  ...
 },
 ...
 ```
