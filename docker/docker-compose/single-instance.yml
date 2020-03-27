@@ -1,10 +1,10 @@
-# Reference configuration for a simple 3-node Tinode cluster.
+# Reference configuration for a simple Tinode server.
 # Includes:
 # * Mysql database
-# * 3 Tinode servers
-# * 3 exporters
+# * Tinode server
+# * Tinode exporters
 
-version: '3.4'
+version: '3.7'
 
 # Base Tinode template.
 x-tinode:
@@ -12,11 +12,6 @@ x-tinode:
   depends_on:
     - db
   image: tinode/tinode:latest
-  restart: always
-
-x-exporter:
-  &exporter-base
-  image: tinode/exporter:latest
   restart: always
 
 x-tinode-env-vars: &tinode-env-vars
@@ -75,7 +70,7 @@ services:
       timeout: 5s
       retries: 10
 
-  # Tinode servers.
+  # Tinode.
   tinode-0:
     << : *tinode-base
     container_name: tinode-0
@@ -90,92 +85,23 @@ services:
       - "6060:18080"
     environment:
       << : *tinode-env-vars
-      "CLUSTER_SELF": "tinode-0"
       # Uncomment the lines below if you wish to upgrade or reset the database.
       # "UPGRADE_DB": "true"
       # "RESET_DB": "true"
 
-  tinode-1:
-    << : *tinode-base
-    container_name: tinode-1
-    hostname: tinode-1
-    # You can mount your volumes as necessary:
-    # volumes:
-    #   # E.g. external config (assuming EXT_CONFIG is set).
-    #   - <path to your tinode.conf>:/etc/tinode/tinode.conf
-    #   # Logs directory.
-    #   - <path to your tinode-1 logs directory>:/var/log
-    ports:
-      - "6061:18080"
-    environment:
-      << : *tinode-env-vars
-      "CLUSTER_SELF": "tinode-1"
-      # Wait for tinode-0, not the database since
-      # we let tinode-0 perform all database initialization and upgrade work.
-      "WAIT_FOR": "tinode-0:18080"
-
-  tinode-2:
-    << : *tinode-base
-    container_name: tinode-2
-    hostname: tinode-2
-    # You can mount your volumes as necessary:
-    # volumes:
-    #   # E.g. external config (assuming EXT_CONFIG is set).
-    #   - <path to your tinode.conf>:/etc/tinode/tinode.conf
-    #   # Logs directory.
-    #   - <path to your tinode-2 logs directory>:/var/log
-    ports:
-      - "6062:18080"
-    environment:
-      << : *tinode-env-vars
-      "CLUSTER_SELF": "tinode-2"
-      # Wait for tinode-0, not the database since
-      # we let tinode-0 perform all database initialization and upgrade work.
-      "WAIT_FOR": "tinode-0:18080"
-
   # Monitoring.
   # Exporters are paired with tinode instances.
   exporter-0:
-    << : *exporter-base
     container_name: exporter-0
     hostname: exporter-0
     depends_on:
       - tinode-0
+    image: tinode/exporter:latest
+    restart: always
     ports:
-      - 6222:6222
+      - "6222:6222"
     links:
       - tinode-0:tinode.host
     environment:
       << : *exporter-env-vars
-      "INSTANCE": "tinode-0"
       "WAIT_FOR": "tinode-0:18080"
-
-  exporter-1:
-    << : *exporter-base
-    container_name: exporter-1
-    hostname: exporter-1
-    depends_on:
-      - tinode-1
-    ports:
-      - 6223:6222
-    links:
-      - tinode-1:tinode.host
-    environment:
-      << : *exporter-env-vars
-      "INSTANCE": "tinode-1"
-      "WAIT_FOR": "tinode-1:18080"
-
-  exporter-2:
-    << : *exporter-base
-    container_name: exporter-2
-    hostname: exporter-2
-    depends_on:
-      - tinode-2
-    ports:
-      - 6224:6222
-    links:
-      - tinode-2:tinode.host
-    environment:
-      << : *exporter-env-vars
-      "INSTANCE": "tinode-2"
-      "WAIT_FOR": "tinode-2:18080"

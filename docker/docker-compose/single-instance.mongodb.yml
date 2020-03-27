@@ -1,10 +1,7 @@
-version: '3.4'
+version: '3.7'
 
 x-mongodb-tinode-env-vars: &mongodb-tinode-env-vars
   "STORE_USE_ADAPTER": "mongodb"
-
-x-mongodb-exporter-env-vars: &mongodb-exporter-env-vars
-  "SERVE_FOR": "influxdb"
 
 services:
   db:
@@ -31,7 +28,3 @@ services:
     environment:
       << : *mongodb-tinode-env-vars
       "WAIT_FOR": "mongodb:27017"
-
-  exporter-0:
-    environment:
-      << : *mongodb-exporter-env-vars
