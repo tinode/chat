@@ -165,7 +165,6 @@ func getPassword(n int) string {
 }
 
 func main() {
-	log.Println("Initializing", store.GetAdapterName(), store.GetAdapterVersion())
 	var reset = flag.Bool("reset", false, "force database reset")
 	var upgrade = flag.Bool("upgrade", false, "perform database version upgrade")
 	var datafile = flag.String("data", "", "name of file with sample data to load")
@@ -197,6 +196,8 @@ func main() {
 
 	err := store.Open(1, config.StoreConfig)
 	defer store.Close()
+
+	log.Println("Initializing", store.GetAdapterName(), store.GetAdapterVersion())
 
 	if err != nil {
 		if strings.Contains(err.Error(), "Database not initialized") {
