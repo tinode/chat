@@ -167,6 +167,7 @@ func getPassword(n int) string {
 func main() {
 	var reset = flag.Bool("reset", false, "force database reset")
 	var upgrade = flag.Bool("upgrade", false, "perform database version upgrade")
+	var noInit = flag.Bool("no_init", false, "check that database exists but don't create if missing")
 	var datafile = flag.String("data", "", "name of file with sample data to load")
 	var conffile = flag.String("config", "./tinode.conf", "config of the database connection")
 
@@ -197,10 +198,13 @@ func main() {
 	err := store.Open(1, config.StoreConfig)
 	defer store.Close()
 
-	log.Println("Initializing", store.GetAdapterName(), store.GetAdapterVersion())
+	log.Println("Database", store.GetAdapterName(), store.GetAdapterVersion())
 
 	if err != nil {
 		if strings.Contains(err.Error(), "Database not initialized") {
+			if *noInit {
+				log.Fatalln("Database not found.")
+			}
 			log.Println("Database not found. Creating.")
 		} else if strings.Contains(err.Error(), "Invalid database version") {
 			msg := "Wrong DB version: expected " + strconv.Itoa(store.GetAdapterVersion()) + ", got " +

@@ -11,7 +11,7 @@
 
 FROM alpine:latest
 
-ARG VERSION=0.16.4
+ARG VERSION=0.16
 ENV VERSION=$VERSION
 
 LABEL maintainer="Tinode Team <info@tinode.co>"
@@ -39,6 +39,9 @@ ENV RESET_DB=false
 
 # An option to upgrade database.
 ENV UPGRADE_DB=false
+
+# Don't initialize database if it's missing
+ENV NO_DB_INIT=false
 
 # Load sample data to database from data.json.
 ARG SAMPLE_DATA=data.json
@@ -104,16 +107,16 @@ RUN apk update && \
 
 WORKDIR /opt/tinode
 
+# Copy config template to the container.
+COPY config.template .
+COPY entrypoint.sh .
+
 # Get the desired Tinode build.
 ADD https://github.com/tinode/chat/releases/download/v$VERSION/tinode-$TARGET_DB.linux-amd64.tar.gz .
 
 # Unpack the Tinode archive.
 RUN tar -xzf tinode-$TARGET_DB.linux-amd64.tar.gz \
 	&& rm tinode-$TARGET_DB.linux-amd64.tar.gz
-
-# Copy config template to the container.
-COPY config.template .
-COPY entrypoint.sh .
 
 # Create directory for chatbot data.
 RUN mkdir /botdata

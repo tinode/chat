@@ -111,6 +111,7 @@ services:
       # Wait for tinode-0, not the database since
       # we let tinode-0 perform all database initialization and upgrade work.
       "WAIT_FOR": "tinode-0:18080"
+      "NO_DB_INIT": "true"
 
   tinode-2:
     << : *tinode-base
@@ -130,6 +131,7 @@ services:
       # Wait for tinode-0, not the database since
       # we let tinode-0 perform all database initialization and upgrade work.
       "WAIT_FOR": "tinode-0:18080"
+      "NO_DB_INIT": "true"
 
   # Monitoring.
   # Exporters are paired with tinode instances.

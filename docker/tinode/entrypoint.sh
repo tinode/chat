@@ -101,7 +101,13 @@ fi
 
 # Initialize the database if it has not been initialized yet or if data reset/upgrade has been requested.
 init_stdout=./init-db-stdout.txt
-./init-db --reset=${RESET_DB} --upgrade=${UPGRADE_DB} --config=${CONFIG} --data=${SAMPLE_DATA} 1>${init_stdout}
+./init-db \
+	--reset=${RESET_DB} \
+	--upgrade=${UPGRADE_DB} \
+	--config=${CONFIG} \
+	--data=${SAMPLE_DATA} \
+	--no_int=${NO_DB_INIT}
+	1>${init_stdout}
 if [ $? -ne 0 ]; then
 	echo "./init-db failed. Quitting."
 	exit 1
