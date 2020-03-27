@@ -16,7 +16,6 @@ x-tinode:
 
 x-tinode-env-vars: &tinode-env-vars
   "STORE_USE_ADAPTER": "mysql"
-  "DEFAULT_SAMPLE_DATA": ""
   "PPROF_URL": "/pprof"
   # You can provide your own tinode config by setting EXT_CONFIG env var and binding your configuration file to
   # "EXT_CONFIG": "/etc/tinode/tinode.conf"
