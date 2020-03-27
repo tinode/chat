@@ -247,6 +247,8 @@ func main() {
 
 	if !*upgrade {
 		genDb(&data)
-	}
+	} else {
+		log.Println("Sample data was ignored. All done.")
+  }
 	os.Exit(0)
 }
