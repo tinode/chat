@@ -44,9 +44,9 @@ fi
 # If external static dir is defined, use it.
 # Otherwise, fall back to "./static".
 if [ ! -z "$EXT_STATIC_DIR" ] ; then
-  STATIC_DIR=$EXT_STATIC_DIR
+	STATIC_DIR=$EXT_STATIC_DIR
 else
-  STATIC_DIR="./static"
+	STATIC_DIR="./static"
 fi
 
 # Do not load data when upgrading database.
@@ -57,7 +57,7 @@ fi
 # If push notifications are enabled, generate client-side firebase config file.
 if [ ! -z "$FCM_PUSH_ENABLED" ] ; then
 	# Write client config to $STATIC_DIR/firebase-init.js
-  cat > $STATIC_DIR/firebase-init.js <<- EOM
+	cat > $STATIC_DIR/firebase-init.js <<- EOM
 const FIREBASE_INIT = {
   apiKey: "$FCM_API_KEY",
   appId: "$FCM_APP_ID",
@@ -73,7 +73,7 @@ fi
 
 if [ ! -z "$IOS_UNIV_LINKS_APP_ID" ] ; then
 	# Write config to $STATIC_DIR/apple-app-site-association config file.
-  # See https://developer.apple.com/library/archive/documentation/General/Conceptual/AppSearch/UniversalLinks.html for details.
+	# See https://developer.apple.com/library/archive/documentation/General/Conceptual/AppSearch/UniversalLinks.html for details.
 	cat > $STATIC_DIR/apple-app-site-association <<- EOM
 {
   "applinks": {
