@@ -4,7 +4,7 @@
 # * Tinode server
 # * Tinode exporters
 
-version: '3.4'
+version: '3.7'
 
 # Base Tinode template.
 x-tinode:
@@ -98,6 +98,8 @@ services:
       - tinode-0
     image: tinode/exporter:latest
     restart: always
+    ports:
+      - "6222:6222"
     links:
       - tinode-0:tinode.host
     environment:

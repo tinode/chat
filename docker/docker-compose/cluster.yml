@@ -4,7 +4,7 @@
 # * 3 Tinode servers
 # * 3 exporters
 
-version: '3.4'
+version: '3.7'
 
 # Base Tinode template.
 x-tinode:
@@ -110,6 +110,8 @@ services:
     environment:
       << : *tinode-env-vars
       "CLUSTER_SELF": "tinode-1"
+      # Wait for tinode-0, not the database since
+      # we let tinode-0 perform all database initialization and upgrade work.
       "WAIT_FOR": "tinode-0:18080"
 
   tinode-2:
@@ -127,6 +129,8 @@ services:
     environment:
       << : *tinode-env-vars
       "CLUSTER_SELF": "tinode-2"
+      # Wait for tinode-0, not the database since
+      # we let tinode-0 perform all database initialization and upgrade work.
       "WAIT_FOR": "tinode-0:18080"
 
   # Monitoring.
