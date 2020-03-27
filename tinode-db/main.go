@@ -249,6 +249,6 @@ func main() {
 		genDb(&data)
 	} else {
 		log.Println("Sample data was ignored. All done.")
-  }
+	}
 	os.Exit(0)
 }
