@@ -11,7 +11,7 @@
 
 FROM alpine:latest
 
-ARG VERSION=0.16.3
+ARG VERSION=0.16.4
 ENV VERSION=$VERSION
 
 LABEL maintainer="Tinode Team <info@tinode.co>"
@@ -29,9 +29,6 @@ ARG TARGET_DB=rethinkdb
 ENV TARGET_DB=$TARGET_DB
 
 # Runtime options.
-
-# Specifies what jobs to run: init-db, tinode or both.
-ENV SERVICES_TO_RUN='both'
 
 # Specifies the database host:port pair to wait for before running Tinode.
 # Ignored if empty.
@@ -94,9 +91,6 @@ ENV TNPG_AUTH_TOKEN=
 
 # Tinode Push Gateway user name.
 ENV TNPG_USER=
-
-# Enable Tinode Push Gateway request payload compression.
-ENV TNPG_COMPRESS_PAYLOADS=true
 
 # Use the target db by default.
 # When TARGET_DB is "alldbs", it is the user's responsibility
