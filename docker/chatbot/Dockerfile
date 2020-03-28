@@ -29,7 +29,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Use docker's command line parameter `-e LOGIN_AS=user:password` to login as someone other than Tino.
 
-CMD python chatbot.py --login-basic=${LOGIN_AS} --login-cookie=/botdata/.tn-cookie --host=${TINODE_HOST} > /var/log/chatbot.log
+CMD python chatbot.py --login-basic=${LOGIN_AS} --login-cookie=/botdata/.tn-cookie --host=${TINODE_HOST} >> /var/log/chatbot.log
 
 # Plugin port
 EXPOSE 40051
