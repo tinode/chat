@@ -10,6 +10,10 @@ def git_version():
         line = line[1:]
     if '-rc' in line:
         line = line.replace('-rc', 'rc')
+    if '-beta' in line:
+        line = line.replace('-beta', 'b')
+    if '-alpha' in line:
+        line = line.replace('-alpha', 'a')
     if '-' in line:
         parts = line.split('-')
         line = parts[0] + '.post' + parts[1]
