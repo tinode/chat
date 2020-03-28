@@ -349,7 +349,7 @@ if __name__ == '__main__':
     purpose = "Tino, Tinode's chatbot."
     print(purpose)
     parser = argparse.ArgumentParser(description=purpose)
-    parser.add_argument('--host', default='localhost:6061', help='address of Tinode server gRPC endpoint')
+    parser.add_argument('--host', default='localhost:16060', help='address of Tinode server gRPC endpoint')
     parser.add_argument('--ssl', action='store_true', help='use SSL to connect to the server')
     parser.add_argument('--ssl-host', help='SSL host name to use instead of default (useful for connecting to localhost)')
     parser.add_argument('--listen', default='0.0.0.0:40051', help='address to listen on for incoming Plugin API calls')

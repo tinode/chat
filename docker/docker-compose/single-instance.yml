@@ -41,7 +41,7 @@ x-tinode-env-vars: &tinode-env-vars
   # "IOS_UNIV_LINKS_APP_ID": "<ios universal links app id>"
 
 x-exporter-env-vars: &exporter-env-vars
-  "TINODE_ADDR": "http://tinode.host:18080/stats/expvar/"
+  "TINODE_ADDR": "http://tinode.host:6060/stats/expvar/"
   # InfluxDB configation:
   "SERVE_FOR": "influxdb"
   "INFLUXDB_VERSION": 1.7
@@ -81,7 +81,7 @@ services:
     #   # Logs directory.
     #   - <path to your tinode-0 logs directory>:/var/log
     ports:
-      - "6060:18080"
+      - "6060:6060"
     environment:
       << : *tinode-env-vars
       "RESET_DB": ${RESET_DB:-false}
@@ -102,4 +102,4 @@ services:
       - tinode-0:tinode.host
     environment:
       << : *exporter-env-vars
-      "WAIT_FOR": "tinode-0:18080"
+      "WAIT_FOR": "tinode-0:6060"

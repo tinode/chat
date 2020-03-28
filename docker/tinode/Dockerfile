@@ -130,4 +130,4 @@ RUN chmod +x credentials.sh
 ENTRYPOINT ./entrypoint.sh
 
 # HTTP, gRPC, cluster ports
-EXPOSE 6060 16060 12000-12002
+EXPOSE 6060 16060 12000-12003
