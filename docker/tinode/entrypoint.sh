@@ -111,7 +111,7 @@ init_stdout=./init-db-stdout.txt
 	--upgrade=${UPGRADE_DB} \
 	--config=${CONFIG} \
 	--data=${SAMPLE_DATA} \
-	--no_init=${NO_DB_INIT}
+	--no_init=${NO_DB_INIT} \
 	1>${init_stdout}
 if [ $? -ne 0 ]; then
 	echo "./init-db failed. Quitting."
