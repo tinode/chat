@@ -15,6 +15,11 @@ else
 	# Remove the old config.
 	rm -f working.config
 
+	# The 'alldbs' is not a valid adapter name.
+	if [ "$TARGET_DB" = "alldbs" ] ; then
+		TARGET_DB=
+	fi
+
 	# Enable email verification if $SMTP_SERVER is defined.
 	if [ ! -z "$SMTP_SERVER" ] ; then
 		EMAIL_VERIFICATION_REQUIRED='"auth"'
@@ -50,7 +55,7 @@ else
 fi
 
 # Do not load data when upgrading database.
-if [[ "$UPGRADE_DB" = "true" ]] ; then
+if [ "$UPGRADE_DB" = "true" ] ; then
 	SAMPLE_DATA=
 fi
 

@@ -40,7 +40,7 @@ ENV RESET_DB=false
 # An option to upgrade database.
 ENV UPGRADE_DB=false
 
-# Don't initialize database if it's missing
+# Option to skip DB initialization when it's missing.
 ENV NO_DB_INIT=false
 
 # Load sample data to database from data.json.
