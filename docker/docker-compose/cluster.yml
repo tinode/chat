@@ -86,7 +86,7 @@ services:
     #   # Logs directory.
     #   - <path to your tinode-0 logs directory>:/var/log
     ports:
-      - "6060:18080"
+      - "6060:6060"
     environment:
       << : *tinode-env-vars
       "CLUSTER_SELF": "tinode-0"
@@ -104,13 +104,13 @@ services:
     #   # Logs directory.
     #   - <path to your tinode-1 logs directory>:/var/log
     ports:
-      - "6061:18080"
+      - "6061:6060"
     environment:
       << : *tinode-env-vars
       "CLUSTER_SELF": "tinode-1"
       # Wait for tinode-0, not the database since
       # we let tinode-0 perform all database initialization and upgrade work.
-      "WAIT_FOR": "tinode-0:18080"
+      "WAIT_FOR": "tinode-0:6060"
       "NO_DB_INIT": "true"
 
   tinode-2:
@@ -124,13 +124,13 @@ services:
     #   # Logs directory.
     #   - <path to your tinode-2 logs directory>:/var/log
     ports:
-      - "6062:18080"
+      - "6062:6060"
     environment:
       << : *tinode-env-vars
       "CLUSTER_SELF": "tinode-2"
       # Wait for tinode-0, not the database since
       # we let tinode-0 perform all database initialization and upgrade work.
-      "WAIT_FOR": "tinode-0:18080"
+      "WAIT_FOR": "tinode-0:6060"
       "NO_DB_INIT": "true"
 
   # Monitoring.
@@ -148,7 +148,7 @@ services:
     environment:
       << : *exporter-env-vars
       "INSTANCE": "tinode-0"
-      "WAIT_FOR": "tinode-0:18080"
+      "WAIT_FOR": "tinode-0:6060"
 
   exporter-1:
     << : *exporter-base
@@ -163,7 +163,7 @@ services:
     environment:
       << : *exporter-env-vars
       "INSTANCE": "tinode-1"
-      "WAIT_FOR": "tinode-1:18080"
+      "WAIT_FOR": "tinode-1:6060"
 
   exporter-2:
     << : *exporter-base
@@ -178,4 +178,4 @@ services:
     environment:
       << : *exporter-env-vars
       "INSTANCE": "tinode-2"
-      "WAIT_FOR": "tinode-2:18080"
+      "WAIT_FOR": "tinode-2:6060"

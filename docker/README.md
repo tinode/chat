@@ -40,17 +40,17 @@ All images are available at https://hub.docker.com/r/tinode/
 
 	1. **RethinkDB**:
 	```
-	$ docker run -p 6060:18080 -d --name tinode-srv --network tinode-net tinode/tinode-rethinkdb:latest
+	$ docker run -p 6060:6060 -d --name tinode-srv --network tinode-net tinode/tinode-rethinkdb:latest
 	```
 
 	2. **MySQL**:
 	```
-	$ docker run -p 6060:18080 -d --name tinode-srv --network tinode-net tinode/tinode-mysql:latest
+	$ docker run -p 6060:6060 -d --name tinode-srv --network tinode-net tinode/tinode-mysql:latest
 	```
 
 	3. **MongoDB**:
 	```
-	$ docker run -p 6060:18080 -d --name tinode-srv --network tinode-net tinode/tinode-mongodb:latest
+	$ docker run -p 6060:6060 -d --name tinode-srv --network tinode-net tinode/tinode-mongodb:latest
 	```
 
 	You can also run Tinode with the `tinode/tinode` image (which has all of the above DB adapters compiled in). You will need to specify the database adapter via `STORE_USE_ADAPTER` environment variable. E.g. for `mysql`, the command line will look like
@@ -76,7 +76,7 @@ All images are available at https://hub.docker.com/r/tinode/
 
 The container comes with a built-in config file which can be customized with values from the environment variables (see [Supported environment variables](#supported_environment_variables) below). If changes are extensive it may be more convenient to replace the built-in config file with a custom one. In that case map the config file located on your host (e.g. `/users/jdoe/new_tinode.conf`) to container (e.g. `/tinode.conf`) using [Docker volumes](https://docs.docker.com/storage/volumes/) `--volume /users/jdoe/new_tinode.conf:/tinode.conf` then instruct the container to use the new config `--env EXT_CONFIG=/tinode.conf`:
 ```
-$ docker run -p 6060:18080 -d --name tinode-srv --network tinode-net \
+$ docker run -p 6060:6060 -d --name tinode-srv --network tinode-net \
 		--volume /users/jdoe/new_tinode.conf:/tinode.conf \
 		--env EXT_CONFIG=/tinode.conf \
 		tinode/tinode-mysql:latest
@@ -109,7 +109,7 @@ Project ID `myproject-1234`, App ID `1:141421356237:web:abc7de1234fab56cd78abc`,
 is `83_Or_So_Random_Looking_Characters`, start the container with the following parameters (using MySQL container as an example):
 
 ```
-$ docker run -p 6060:18080 -d --name tinode-srv --network tinode-net \
+$ docker run -p 6060:6060 -d --name tinode-srv --network tinode-net \
 		-v /Users/jdoe:/fcm \
 		--env FCM_CRED_FILE=/fcm/myproject-1234-firebase-adminsdk-abc12-abcdef012345.json \
 		--env FCM_API_KEY=AIRaNdOmX4ULR-X6ranDomzZ2bHdRanDomq2tbQ \

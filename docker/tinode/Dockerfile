@@ -1,9 +1,9 @@
 # Docker file builds an image with a tinode chat server.
-# The server exposes port 18080.
-# In order to run the image you have to link it to a running RethinkDB container
-# (assuming it's named 'rethinkdb') and map the port where the tinode server accepts connections:
 #
-# $ docker run -p 6060:18080 -d --link rethinkdb \
+# In order to run the image you have to link it to a running database container. For example, to 
+# to use RethinkDB (named 'rethinkdb') and map the port where the tinode server accepts connections:
+#
+# $ docker run -p 6060:6060 -d --link rethinkdb \
 #	--env UID_ENCRYPTION_KEY=base64+encoded+16+bytes= \
 #	--env API_KEY_SALT=base64+encoded+32+bytes \
 #	--env AUTH_TOKEN_KEY=base64+encoded+32+bytes \
@@ -13,6 +13,7 @@ FROM alpine:latest
 
 ARG VERSION=0.16
 ENV VERSION=$VERSION
+ARG BINVERS=$VERSION
 
 LABEL maintainer="Tinode Team <info@tinode.co>"
 LABEL name="TinodeChatServer"
@@ -112,7 +113,7 @@ COPY config.template .
 COPY entrypoint.sh .
 
 # Get the desired Tinode build.
-ADD https://github.com/tinode/chat/releases/download/v$VERSION/tinode-$TARGET_DB.linux-amd64.tar.gz .
+ADD https://github.com/tinode/chat/releases/download/v$BINVERS/tinode-$TARGET_DB.linux-amd64.tar.gz .
 
 # Unpack the Tinode archive.
 RUN tar -xzf tinode-$TARGET_DB.linux-amd64.tar.gz \
@@ -128,5 +129,5 @@ RUN chmod +x credentials.sh
 # Generate config from template and run the server.
 ENTRYPOINT ./entrypoint.sh
 
-# HTTP and gRPC ports
-EXPOSE 18080 16061
+# HTTP, gRPC, cluster ports
+EXPOSE 6060 16060 12000-12002

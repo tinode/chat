@@ -1,9 +1,9 @@
 {
-	"listen": ":18080",
+	"listen": ":6060",
 	"api_path": "/",
 	"cache_control": 39600,
 	"static_mount": "/",
-	"grpc_listen": ":16061",
+	"grpc_listen": ":16060",
 	"api_key_salt": "$API_KEY_SALT",
 	"max_message_size": 4194304,
 	"max_subscriber_count": 32,
@@ -145,9 +145,9 @@
 		"self": "",
 		"nodes": [
 			// Name and TCP address of each node.
-			{"name": "tinode-0", "addr": "tinode-0:12001"},
-			{"name": "tinode-1", "addr": "tinode-1:12002"},
-			{"name": "tinode-2", "addr": "tinode-2:12003"}
+			{"name": "tinode-0", "addr": "tinode-0:12000"},
+			{"name": "tinode-1", "addr": "tinode-1:12001"},
+			{"name": "tinode-2", "addr": "tinode-2:12002"}
 		],
 		"failover": {
 			"enabled": true,
