@@ -39,39 +39,6 @@ source .dockerhub
 # Login to docker hub
 docker login -u $user -p $pass
 
-# Remove earlier builds
-for dbtag in "${dbtags[@]}"
-do
-  name="$(containerName $dbtag)"
-  if [ -n "$FULLRELEASE" ]; then
-    curl -u $user:$pass -i -X DELETE \
-      https://hub.docker.com/v2/repositories/tinode/${name}/tags/latest/
-
-    curl -u $user:$pass -i -X DELETE \
-      https://hub.docker.com/v2/repositories/tinode/${name}/tags/${ver[0]}.${ver[1]}/
-  fi
-  curl -u $user:$pass -i -X DELETE \
-    https://hub.docker.com/v2/repositories/tinode/${name}/tags/${ver[0]}.${ver[1]}.${ver[2]}/
-done
-
-if [ -n "$FULLRELEASE" ]; then
-  curl -u $user:$pass -i -X DELETE \
-    https://hub.docker.com/v2/repositories/tinode/chatbot/tags/latest/
-  curl -u $user:$pass -i -X DELETE \
-    https://hub.docker.com/v2/repositories/tinode/chatbot/tags/${ver[0]}.${ver[1]}/
-fi
-curl -u $user:$pass -i -X DELETE \
-  https://hub.docker.com/v2/repositories/tinode/chatbot/tags/${ver[0]}.${ver[1]}.${ver[2]}/
-
-if [ -n "$FULLRELEASE" ]; then
-  curl -u $user:$pass -i -X DELETE \
-    https://hub.docker.com/v2/repositories/tinode/exporter/tags/latest/
-  curl -u $user:$pass -i -X DELETE \
-    https://hub.docker.com/v2/repositories/tinode/exporter/tags/${ver[0]}.${ver[1]}/
-fi
-curl -u $user:$pass -i -X DELETE \
-  https://hub.docker.com/v2/repositories/tinode/exporter/tags/${ver[0]}.${ver[1]}.${ver[2]}/
-
 # Deploy images for various DB backends
 for dbtag in "${dbtags[@]}"
 do
