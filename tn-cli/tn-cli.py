@@ -1032,8 +1032,8 @@ if __name__ == '__main__':
     purpose = "Tinode command line client. Version " + version + "."
 
     parser = argparse.ArgumentParser(description=purpose)
-    parser.add_argument('--host', default='localhost:6061', help='address of Tinode gRPC server')
-    parser.add_argument('--web-host', default='localhost:6060', help='address of Tinode web server')
+    parser.add_argument('--host', default='localhost:16060', help='address of Tinode gRPC server')
+    parser.add_argument('--web-host', default='localhost:6060', help='address of Tinode web server (for file uploads)')
     parser.add_argument('--ssl', action='store_true', help='connect to server over secure connection')
     parser.add_argument('--ssl-host', help='SSL host name to use instead of default (useful for connecting to localhost)')
     parser.add_argument('--login-basic', help='login using basic authentication username:password')
