@@ -131,7 +131,8 @@ type ClusterReq struct {
 
 // ClusterResp is a Master to Proxy response message.
 type ClusterResp struct {
-	Msg []byte
+	// Server message with the response.
+	SrvMsg *ServerComMessage
 	// Session ID to forward message to, if any.
 	FromSID string
 }
@@ -392,7 +393,7 @@ func (Cluster) Proxy(msg *ClusterResp, unused *bool) error {
 	// This cluster member received a response from topic owner to be forwarded to a session
 	// Find appropriate session, send the message to it
 	if sess := globals.sessionStore.Get(msg.FromSID); sess != nil {
-		if !sess.queueOutBytes(msg.Msg) {
+		if !sess.queueOut(msg.SrvMsg) {
 			log.Println("cluster.Proxy: timeout")
 		}
 	} else {
@@ -758,15 +759,14 @@ func (sess *Session) rpcWriteLoop() {
 			}
 			// The error is returned if the remote node is down. Which means the remote
 			// session is also disconnected.
-			if err := sess.clnode.respond(&ClusterResp{Msg: msg.([]byte), FromSID: sess.sid}); err != nil {
-
+			if err := sess.clnode.respond(&ClusterResp{SrvMsg: msg.(*ServerComMessage), FromSID: sess.sid}); err != nil {
 				log.Println("cluster sess.writeRPC: " + err.Error())
 				return
 			}
 		case msg := <-sess.stop:
 			// Shutdown is requested, don't care if the message is delivered
 			if msg != nil {
-				sess.clnode.respond(&ClusterResp{Msg: msg.([]byte), FromSID: sess.sid})
+				sess.clnode.respond(&ClusterResp{SrvMsg: msg.(*ServerComMessage), FromSID: sess.sid})
 			}
 			return
 

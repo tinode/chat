@@ -1062,6 +1062,12 @@ func (s *Session) serialize(msg *ServerComMessage) interface{} {
 	if s.proto == GRPC {
 		return pbServSerialize(msg)
 	}
+
+	if s.proto == CLUSTER {
+		// No need to serialize the message to bytes within the cluster.
+		return msg
+	}
+
 	out, _ := json.Marshal(msg)
 	return out
 }
