@@ -20,14 +20,18 @@ import sys
 import time
 
 import grpc
+from google.protobuf.json_format import MessageToDict
 
 # Import generated grpc modules
 from tinode_grpc import pb
 from tinode_grpc import pbx
 
 APP_NAME = "Tino-chatbot"
-APP_VERSION = "1.1.3"
+APP_VERSION = "1.2.0"
 LIB_VERSION = pkg_resources.get_distribution("tinode_grpc").version
+
+# Maximum length of string to log. Shorten longer strings.
+MAX_LOG_LEN = 64
 
 # User ID of the current user
 botUID = None
@@ -42,16 +46,29 @@ os.environ["GRPC_SSL_CIPHER_SUITES"] = "HIGH+ECDSA"
 def add_future(tid, bundle):
     onCompletion[tid] = bundle
 
+# Shorten long strings for logging.
+class StrLogger(json.JSONEncoder):
+    def default(self, obj):
+        if type(obj) == str and len(obj) > MAX_LOG_LEN:
+            return '<' + len(obj) + ', bytes: ' + obj[:12] + '...' + obj[-12:] + '>'
+        return super(StrLogger, self).default(obj)
+
 # Resolve or reject the future
 def exec_future(tid, code, text, params):
     bundle = onCompletion.get(tid)
     if bundle != None:
         del onCompletion[tid]
-        if code >= 200 and code < 400:
-            arg = bundle.get('arg')
-            bundle.get('action')(arg, params)
-        else:
-            print("Error:", code, text)
+        try:
+            if code >= 200 and code < 400:
+                arg = bundle.get('arg')
+                bundle.get('onsuccess')(arg, params)
+            else:
+                print("Error: {} {} ({})".format(code, text, tid))
+                onerror = bundle.get('onerror')
+                if onerror:
+                    onerror(bundle.get('arg'), {'code': code, 'text': text})
+        except Exception as err:
+            print("Error handling server response", err)
 
 # List of active subscriptions
 subscriptions = {}
@@ -60,6 +77,16 @@ def add_subscription(topic):
 
 def del_subscription(topic):
     subscriptions.pop(topic, None)
+
+def subscription_failed(topic, errcode):
+    if topic == 'me':
+        # Failed 'me' subscription means the bot is disfunctional. Break the loop and retry in a few seconds.
+        client_post(None)
+
+def login_error(unused, errcode):
+    # Check for 409 "already authenticated".
+    if errcode.get('code') != 409:
+        exit(1)
 
 def server_version(params):
     if params == None:
@@ -109,7 +136,7 @@ def client_generate():
         msg = queue_out.get()
         if msg == None:
             return
-        # print("out:", msg)
+        print("out: ", json.dumps(MessageToDict(msg), cls=StrLogger))
         yield msg
 
 def client_post(msg):
@@ -126,7 +153,7 @@ def client_reset():
 def hello():
     tid = next_id()
     add_future(tid, {
-        'action': lambda unused, params: server_version(params),
+        'onsuccess': lambda unused, params: server_version(params),
     })
     return pb.ClientMsg(hi=pb.ClientHi(id=tid, user_agent=APP_NAME + "/" + APP_VERSION + " (" +
         platform.system() + "/" + platform.release() + "); gRPC-python/" + LIB_VERSION,
@@ -136,7 +163,8 @@ def login(cookie_file_name, scheme, secret):
     tid = next_id()
     add_future(tid, {
         'arg': cookie_file_name,
-        'action': lambda fname, params: on_login(fname, params),
+        'onsuccess': lambda fname, params: on_login(fname, params),
+        'onerror': lambda unused, errcode: login_error(unused, errcode),
     })
     return pb.ClientMsg(login=pb.ClientLogin(id=tid, scheme=scheme, secret=secret))
 
@@ -144,7 +172,8 @@ def subscribe(topic):
     tid = next_id()
     add_future(tid, {
         'arg': topic,
-        'action': lambda topicName, unused: add_subscription(topicName),
+        'onsuccess': lambda topicName, unused: add_subscription(topicName),
+        'onerror': lambda topicName, errcode: subscription_failed(topicName, errcode),
     })
     return pb.ClientMsg(sub=pb.ClientSub(id=tid, topic=topic))
 
@@ -152,7 +181,7 @@ def leave(topic):
     tid = next_id()
     add_future(tid, {
         'arg': topic,
-        'action': lambda topicName, unused: del_subscription(topicName)
+        'onsuccess': lambda topicName, unused: del_subscription(topicName)
     })
     return pb.ClientMsg(leave=pb.ClientLeave(id=tid, topic=topic))
 
@@ -200,7 +229,8 @@ def client_message_loop(stream):
     try:
         # Read server responses
         for msg in stream:
-            # print("in:", msg)
+            print("in: ", json.dumps(MessageToDict(msg), cls=StrLogger))
+
             if msg.HasField("ctrl"):
                 # Run code on command completion
                 exec_future(msg.ctrl.id, msg.ctrl.code, msg.ctrl.text, msg.ctrl.params)
