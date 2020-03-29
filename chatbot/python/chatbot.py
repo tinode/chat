@@ -80,8 +80,12 @@ def del_subscription(topic):
 
 def subscription_failed(topic, errcode):
     if topic == 'me':
-        # Failed 'me' subscription means the bot is disfunctional. Break the loop and retry in a few seconds.
-        client_post(None)
+        # Failed 'me' subscription means the bot is disfunctional.
+        if errcode.get('code') == 502:
+            # Cluster unreachable. Break the loop and retry in a few seconds.
+            client_post(None)
+        else:
+            exit(1)
 
 def login_error(unused, errcode):
     # Check for 409 "already authenticated".
