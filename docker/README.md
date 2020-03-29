@@ -55,12 +55,12 @@ All images are available at https://hub.docker.com/r/tinode/
 
 	You can also run Tinode with the `tinode/tinode` image (which has all of the above DB adapters compiled in). You will need to specify the database adapter via `STORE_USE_ADAPTER` environment variable. E.g. for `mysql`, the command line will look like
 	```
-	$ docker run -p 6060:18080 -d -e STORE_USE_ADAPTER mysql --name tinode-srv --network tinode-net tinode/tinode:latest
+	$ docker run -p 6060:6060 -d -e STORE_USE_ADAPTER mysql --name tinode-srv --network tinode-net tinode/tinode:latest
 	```
 
 	See [below](#supported-environment-variables) for more options.
 
-	The port mapping `-p 6060:18080` tells Docker to map container's port 18080 to host's port 6060 making server accessible at http://localhost:6060/. The container will initialize the database with test data on the first run.
+	The port mapping `-p 5678:1234` tells Docker to map container's port 1234 to host's port 5678 making server accessible at http://localhost:5678/. The container will initialize the database with test data on the first run.
 
 	You may replace `:latest` with a different tag. See all all available tags here:
 	 * [MySQL tags](https://hub.docker.com/r/tinode/tinode-mysql/tags/)
