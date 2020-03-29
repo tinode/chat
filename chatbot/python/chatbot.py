@@ -6,6 +6,7 @@ from __future__ import print_function
 import argparse
 import base64
 from concurrent import futures
+from datetime import datetime
 import json
 import os
 import pkg_resources
@@ -42,16 +43,19 @@ onCompletion = {}
 # This is needed for gRPC ssl to work correctly.
 os.environ["GRPC_SSL_CIPHER_SUITES"] = "HIGH+ECDSA"
 
+def log(*args):
+    print(datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3], *args)
+
 # Add bundle for future execution
 def add_future(tid, bundle):
     onCompletion[tid] = bundle
 
 # Shorten long strings for logging.
-class StrLogger(json.JSONEncoder):
+class JsonHelper(json.JSONEncoder):
     def default(self, obj):
         if type(obj) == str and len(obj) > MAX_LOG_LEN:
             return '<' + len(obj) + ', bytes: ' + obj[:12] + '...' + obj[-12:] + '>'
-        return super(StrLogger, self).default(obj)
+        return super(JsonHelper, self).default(obj)
 
 # Resolve or reject the future
 def exec_future(tid, code, text, params):
@@ -63,12 +67,12 @@ def exec_future(tid, code, text, params):
                 arg = bundle.get('arg')
                 bundle.get('onsuccess')(arg, params)
             else:
-                print("Error: {} {} ({})".format(code, text, tid))
+                log("Error: {} {} ({})".format(code, text, tid))
                 onerror = bundle.get('onerror')
                 if onerror:
                     onerror(bundle.get('arg'), {'code': code, 'text': text})
         except Exception as err:
-            print("Error handling server response", err)
+            log("Error handling server response", err)
 
 # List of active subscriptions
 subscriptions = {}
@@ -95,7 +99,7 @@ def login_error(unused, errcode):
 def server_version(params):
     if params == None:
         return
-    print("Server:", params['build'].decode('ascii'), params['ver'].decode('ascii'))
+    log("Server:", params['build'].decode('ascii'), params['ver'].decode('ascii'))
 
 def next_id():
     next_id.tid += 1
@@ -129,7 +133,7 @@ class Plugin(pbx.PluginServicer):
         else:
             action = "unknown"
 
-        print("Account", action, ":", acc_event.user_id, acc_event.public)
+        log("Account", action, ":", acc_event.user_id, acc_event.public)
 
         return pb.Unused()
 
@@ -140,7 +144,7 @@ def client_generate():
         msg = queue_out.get()
         if msg == None:
             return
-        print("out: ", json.dumps(MessageToDict(msg), cls=StrLogger))
+        log("out:", json.dumps(MessageToDict(msg), cls=JsonHelper))
         yield msg
 
 def client_post(msg):
@@ -204,12 +208,12 @@ def init_server(listen):
     server.add_insecure_port(listen)
     server.start()
 
-    print("Plugin server running at '"+listen+"'")
+    log("Plugin server running at '"+listen+"'")
 
     return server
 
 def init_client(addr, schema, secret, cookie_file_name, secure, ssl_host):
-    print("Connecting to", "secure" if secure else "", "server at", addr,
+    log("Connecting to", "secure" if secure else "", "server at", addr,
         "SNI="+ssl_host if ssl_host else "")
 
     channel = None
@@ -233,14 +237,15 @@ def client_message_loop(stream):
     try:
         # Read server responses
         for msg in stream:
-            print("in: ", json.dumps(MessageToDict(msg), cls=StrLogger))
+            log(datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3],
+                "in:", json.dumps(MessageToDict(msg), cls=JsonHelper))
 
             if msg.HasField("ctrl"):
                 # Run code on command completion
                 exec_future(msg.ctrl.id, msg.ctrl.code, msg.ctrl.text, msg.ctrl.params)
 
             elif msg.HasField("data"):
-                # print("message from:", msg.data.from_user_id)
+                # log("message from:", msg.data.from_user_id)
 
                 # Protection against the bot talking to self from another session.
                 if msg.data.from_user_id != botUID:
@@ -253,7 +258,7 @@ def client_message_loop(stream):
                     client_post(publish(msg.data.topic, next_quote()))
 
             elif msg.HasField("pres"):
-                # print("presence:", msg.pres.topic, msg.pres.what)
+                # log("presence:", msg.pres.topic, msg.pres.what)
                 # Wait for peers to appear online and subscribe to their topics
                 if msg.pres.topic == 'me':
                     if (msg.pres.what == pb.ServerPres.ON or msg.pres.what == pb.ServerPres.MSG) \
@@ -267,7 +272,7 @@ def client_message_loop(stream):
                 pass
 
     except grpc._channel._Rendezvous as err:
-        print("Disconnected:", err)
+        log("Disconnected:", err)
 
 def read_auth_cookie(cookie_file_name):
     """Read authentication token from a file"""
@@ -306,7 +311,7 @@ def on_login(cookie_file_name, params):
         json.dump(nice, cookie)
         cookie.close()
     except Exception as err:
-        print("Failed to save authentication cookie", err)
+        log("Failed to save authentication cookie", err)
 
 def load_quotes(file_name):
     with open(file_name) as f:
@@ -323,25 +328,25 @@ def run(args):
         """Use token to login"""
         schema = 'token'
         secret = args.login_token.encode('acsii')
-        print("Logging in with token", args.login_token)
+        log("Logging in with token", args.login_token)
 
     elif args.login_basic:
         """Use username:password"""
         schema = 'basic'
         secret = args.login_basic.encode('utf-8')
-        print("Logging in with login:password", args.login_basic)
+        log("Logging in with login:password", args.login_basic)
 
     else:
         """Try reading the cookie file"""
         try:
             schema, secret = read_auth_cookie(args.login_cookie)
-            print("Logging in with cookie file", args.login_cookie)
+            log("Logging in with cookie file", args.login_cookie)
         except Exception as err:
-            print("Failed to read authentication cookie", err)
+            log("Failed to read authentication cookie", err)
 
     if schema:
         # Load random quotes from file
-        print("Loaded {} quotes".format(load_quotes(args.quotes)))
+        log("Loaded {} quotes".format(load_quotes(args.quotes)))
 
         # Start Plugin server
         server = init_server(args.listen)
@@ -351,7 +356,7 @@ def run(args):
 
         # Setup closure for graceful termination
         def exit_gracefully(signo, stack_frame):
-            print("Terminated with signal", signo)
+            log("Terminated with signal", signo)
             server.stop(0)
             client.cancel()
             sys.exit(0)
@@ -373,7 +378,7 @@ def run(args):
         client.cancel()
 
     else:
-        print("Error: authentication scheme not defined")
+        log("Error: authentication scheme not defined")
 
 
 if __name__ == '__main__':
@@ -381,7 +386,7 @@ if __name__ == '__main__':
     random.seed()
 
     purpose = "Tino, Tinode's chatbot."
-    print(purpose)
+    log(purpose)
     parser = argparse.ArgumentParser(description=purpose)
     parser.add_argument('--host', default='localhost:16060', help='address of Tinode server gRPC endpoint')
     parser.add_argument('--ssl', action='store_true', help='use SSL to connect to the server')
