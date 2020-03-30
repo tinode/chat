@@ -1,3 +1,5 @@
+# If you are not reporting a bug or requesting a feature, please post to https://groups.google.com/d/forum/tinode instead.
+
 ### Subject of the issue
 Describe your issue here.
 
@@ -12,7 +14,7 @@ Describe your issue here.
   * platform (Windows, Mac, Linux etc)
   * version of tinode server, e.g. `0.15.2-rc3`
   * database backend
-  
+
 #### Client-side
 - [ ] TinodeWeb/tinodejs: javascript client
   * Browser make and version.
