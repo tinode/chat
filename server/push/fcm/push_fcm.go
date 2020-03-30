@@ -22,11 +22,13 @@ import (
 
 var handler Handler
 
-// Size of the input channel buffer.
-const defaultBuffer = 32
+const (
+	// Size of the input channel buffer.
+	bufferSize = 1024
 
-// Maximum length of a text message in runes
-const maxMessageLength = 80
+	// Maximum length of a text message in runes
+	maxMessageLength = 80
+)
 
 // Handler represents the push handler; implements push.PushHandler interface.
 type Handler struct {
@@ -37,7 +39,6 @@ type Handler struct {
 
 type configType struct {
 	Enabled         bool            `json:"enabled"`
-	Buffer          int             `json:"buffer"`
 	Credentials     json.RawMessage `json:"credentials"`
 	CredentialsFile string          `json:"credentials_file"`
 	TimeToLive      uint            `json:"time_to_live,omitempty"`
@@ -82,11 +83,7 @@ func (Handler) Init(jsonconf string) error {
 		return err
 	}
 
-	if config.Buffer <= 0 {
-		config.Buffer = defaultBuffer
-	}
-
-	handler.input = make(chan *push.Receipt, config.Buffer)
+	handler.input = make(chan *push.Receipt, bufferSize)
 	handler.stop = make(chan bool, 1)
 
 	go func() {

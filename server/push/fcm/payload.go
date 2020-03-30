@@ -192,7 +192,7 @@ func PrepareNotifications(rcpt *push.Receipt, config *AndroidConfig) []messageDa
 	}
 
 	var titlelc, title, bodylc, body, icon, color string
-	if config.Enabled {
+	if config != nil && config.Enabled {
 		titlelc = config.getTitleLocKey(rcpt.Payload.What)
 		title = config.getTitle(rcpt.Payload.What)
 		bodylc = config.getBodyLocKey(rcpt.Payload.What)
@@ -218,7 +218,7 @@ func PrepareNotifications(rcpt *push.Receipt, config *AndroidConfig) []messageDa
 					msg.Android = &fcm.AndroidConfig{
 						Priority: "high",
 					}
-					if config.Enabled {
+					if config != nil && config.Enabled {
 						// When this notification type is included and the app is not in the foreground
 						// Android won't wake up the app and won't call FirebaseMessagingService:onMessageReceived.
 						// See dicussion: https://github.com/firebase/quickstart-js/issues/71

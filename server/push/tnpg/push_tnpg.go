@@ -16,6 +16,7 @@ import (
 const (
 	baseTargetAddress = "https://pushgw.tinode.co/push/"
 	batchSize         = 100
+	bufferSize        = 1024
 )
 
 var handler Handler
@@ -26,11 +27,9 @@ type Handler struct {
 }
 
 type configType struct {
-	Enabled   bool              `json:"enabled"`
-	Buffer    int               `json:"buffer"`
-	User      string            `json:"user"`
-	AuthToken string            `json:"auth_token"`
-	Android   fcm.AndroidConfig `json:"android,omitempty"`
+	Enabled   bool   `json:"enabled"`
+	OrgName   string `json:"org"`
+	AuthToken string `json:"token"`
 }
 
 // Init initializes the handler
@@ -44,11 +43,11 @@ func (Handler) Init(jsonconf string) error {
 		return nil
 	}
 
-	if len(config.User) == 0 {
-		return errors.New("push.tnpg.user not specified.")
+	if config.OrgName == "" {
+		return errors.New("push.tnpg.org not specified.")
 	}
 
-	handler.input = make(chan *push.Receipt, config.Buffer)
+	handler.input = make(chan *push.Receipt, bufferSize)
 	handler.stop = make(chan bool, 1)
 
 	go func() {
@@ -70,7 +69,7 @@ func postMessage(body interface{}, config *configType) (int, string, error) {
 	gz := gzip.NewWriter(buf)
 	json.NewEncoder(gz).Encode(body)
 	gz.Close()
-	targetAddress := baseTargetAddress + config.User
+	targetAddress := baseTargetAddress + config.OrgName
 	req, err := http.NewRequest("POST", targetAddress, buf)
 	if err != nil {
 		return -1, "", err
@@ -88,7 +87,7 @@ func postMessage(body interface{}, config *configType) (int, string, error) {
 }
 
 func sendPushes(rcpt *push.Receipt, config *configType) {
-	messages := fcm.PrepareNotifications(rcpt, &config.Android)
+	messages := fcm.PrepareNotifications(rcpt, nil)
 	if messages == nil {
 		return
 	}

@@ -14,8 +14,36 @@ docker cp name-of-the-container:/var/log/tinode.log ./tinode.log
 
 Alternatively, you can instruct the docker container to save the logs to a directory on the host by mapping a host directory to `/var/log/` in the container. Add `-v /where/to/save/logs:/var/log` to the `docker run` command.
 
-### Q: How to setup FCM push notifications?<br/>
-**A**: Enabling push notifications requires two steps:
+
+### Q: What are the options for enabling push notifications?<br/>
+**A**: You can use Tinode Push Gateway (TNPG) or you can use Google FCM:
+ * _Tinode Push Gateway_ requires minimum configuration changes by sending pushes on behalf of Tinode.
+ * _Google FCM_ does not rely on Tinode infrastructure for pushes but requires you to recompile mobile apps (iOS and Android).
+
+### Q: How to setup push notifications with Tinode Push Gateway?<br/>
+**A**: Enabling TNPG push notifications requires two steps:
+ * register at console.tinode.co and obtain a TNPG token
+ * configure server with the token
+
+#### Obtain TNPG token
+1. Register at https://console.tinode.co and create an organization.
+2. Get the TPNG token from the _On premise_ section by following the instructions there.
+
+#### Configuring the server
+
+Update the server config [`tinode.conf`](../server/tinode.conf#L384), section `"push"` -> `"name": "tnpg"`:
+```js
+{
+  "enabled": true,
+  "org": "test", // name of the organization you registered at console.tinode.co
+  "token": "SoMe_LonG.RaNDoM-StRiNg.123" // authentication token obtained from console.tinode.co
+}
+```
+Make sure the `fcm` section is disabled `"enabled": false`.
+
+
+### Q: How to setup push notifications with Google FCM?<br/>
+**A**: Enabling FCM push notifications requires the following steps:
  * enable push sending from the server
  * enable receiving pushes in the clients
 
@@ -30,9 +58,9 @@ Alternatively, you can instruct the docker container to save the logs to a direc
 4. Update [TinodeWeb](/tinode/webapp/) config [`firebase-init.js`](https://github.com/tinode/webapp/blob/master/firebase-init.js): update `apiKey`, `messagingSenderId`, `projectId`, `appId`, `messagingVapidKey`. See more info at https://github.com/tinode/webapp/#push_notifications
 
 #### iOS and Android
-1. If you are using an Android client, add `google-services.json` to [Tindroid](/tinode/tindroid/) by following instructions at https://developers.google.com/android/guides/google-services-plugin and recompile the client.
+1. If you are using an Android client, add `google-services.json` to [Tindroid](/tinode/tindroid/) by following instructions at https://developers.google.com/android/guides/google-services-plugin and recompile the client. You may also optionally submit it to Google Play Store.
 See more info at https://github.com/tinode/tindroid/#push_notifications
-2. If you are using an iOS client, add `GoogleService-Info.plist` to [Tinodios](/tinode/ios/) by following instructions at https://firebase.google.com/docs/cloud-messaging/ios/client) and recompile the client.
+2. If you are using an iOS client, add `GoogleService-Info.plist` to [Tinodios](/tinode/ios/) by following instructions at https://firebase.google.com/docs/cloud-messaging/ios/client) and recompile the client. You may optionally submit the app to Apple AppStore.
 See more info at https://github.com/tinode/ios/#push_notifications
 
 
