@@ -699,8 +699,8 @@ func clusterInit(configString json.RawMessage, self *string) int {
 
 	gob.Register([]interface{}{})
 	gob.Register(map[string]interface{}{})
-	gob.Register(map[string]int)
-	gob.Register(map[string]string)
+	gob.Register(map[string]int{})
+	gob.Register(map[string]string{})
 
 	globals.cluster = &Cluster{
 		thisNodeName: thisName,
