@@ -92,13 +92,28 @@ func (ah *awshandler) Init(jsconf string) error {
 	// Create S3 service client
 	ah.svc = s3.New(sess)
 
-	// Check if the bucket exists, create one if not.
+	// Check if bucket already exists.
+	_, err = ah.svc.HeadBucket(&s3.HeadBucketInput{Bucket: aws.String(ah.conf.BucketName)})
+	if err == nil {
+		// Bucket exists
+		return nil
+	}
+
+	if aerr, ok := err.(awserr.Error); !ok || aerr.Code() != s3.ErrCodeNoSuchBucket {
+		// Hard error.
+		return err
+	}
+
+	// Bucket does not exist. Create one.
 	_, err = ah.svc.CreateBucket(&s3.CreateBucketInput{Bucket: aws.String(ah.conf.BucketName)})
 	if err != nil {
-		// Check if bucket already exists or a genuine error.
+		// Check if someone has already created a bucket (possible in a cluster).
 		if aerr, ok := err.(awserr.Error); ok {
 			if aerr.Code() == s3.ErrCodeBucketAlreadyExists ||
-				aerr.Code() == s3.ErrCodeBucketAlreadyOwnedByYou {
+				aerr.Code() == s3.ErrCodeBucketAlreadyOwnedByYou ||
+				// Someone is already creating this bucket:
+				// OperationAborted: A conflicting conditional operation is currently in progress against this resource.
+				aerr.Code() == "OperationAborted" {
 				// Clear benign error
 				err = nil
 			}
