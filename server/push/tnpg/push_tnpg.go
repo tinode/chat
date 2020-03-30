@@ -22,8 +22,9 @@ const (
 var handler Handler
 
 type Handler struct {
-	input chan *push.Receipt
-	stop  chan bool
+	input   chan *push.Receipt
+	stop    chan bool
+	postUrl string
 }
 
 type configType struct {
@@ -47,6 +48,7 @@ func (Handler) Init(jsonconf string) error {
 		return errors.New("push.tnpg.org not specified.")
 	}
 
+	handler.postUrl = baseTargetAddress + config.OrgName
 	handler.input = make(chan *push.Receipt, bufferSize)
 	handler.stop = make(chan bool, 1)
 
@@ -69,8 +71,8 @@ func postMessage(body interface{}, config *configType) (int, string, error) {
 	gz := gzip.NewWriter(buf)
 	json.NewEncoder(gz).Encode(body)
 	gz.Close()
-	targetAddress := baseTargetAddress + config.OrgName
-	req, err := http.NewRequest("POST", targetAddress, buf)
+
+	req, err := http.NewRequest("POST", handler.postUrl, buf)
 	if err != nil {
 		return -1, "", err
 	}

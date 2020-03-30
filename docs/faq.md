@@ -64,10 +64,10 @@ See more info at https://github.com/tinode/tindroid/#push_notifications
 See more info at https://github.com/tinode/ios/#push_notifications
 
 
-### Q: How can new users be added to Tinode?<br/>
+### Q: How to add new users?<br/>
 **A**: There are three ways to create accounts:
 * A user can create a new account using one of the applications (web, Android, iOS).
-* A new account can be created using [tn-cli](../tn-cli/) (`acc` command). The process can be scripted.
+* A new account can be created using [tn-cli](../tn-cli/) (`acc` command or `useradd` macro). The process can be scripted.
 * If the user already exists in an external database, the Tinode account can be automatically created on the first login using the [rest authenticator](../server/auth/rest/).
 
 
