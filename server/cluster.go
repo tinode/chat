@@ -699,6 +699,8 @@ func clusterInit(configString json.RawMessage, self *string) int {
 
 	gob.Register([]interface{}{})
 	gob.Register(map[string]interface{}{})
+	gob.Register(map[string]int)
+	gob.Register(map[string]string)
 
 	globals.cluster = &Cluster{
 		thisNodeName: thisName,
@@ -760,7 +762,7 @@ func (sess *Session) rpcWriteLoop() {
 			// The error is returned if the remote node is down. Which means the remote
 			// session is also disconnected.
 			if err := sess.clnode.respond(&ClusterResp{SrvMsg: msg.(*ServerComMessage), FromSID: sess.sid}); err != nil {
-				log.Println("cluster sess.writeRPC: " + err.Error())
+				log.Println("cluster: sess.writeRPC: " + err.Error())
 				return
 			}
 		case msg := <-sess.stop:
