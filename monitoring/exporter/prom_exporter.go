@@ -13,7 +13,7 @@ type PromExporter struct {
 	timeout   time.Duration
 	namespace string
 
-	scraper   *Scraper
+	scraper *Scraper
 
 	up               *prometheus.Desc
 	version          *prometheus.Desc
@@ -151,7 +151,7 @@ func (e *PromExporter) parseAndUpdate(ch chan<- prometheus.Metric, desc *prometh
 		return nil
 	} else {
 		return err
-  }
+	}
 }
 
 func firstError(errs ...error) error {

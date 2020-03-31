@@ -2,8 +2,8 @@ package main
 
 import (
 	"bytes"
-	"log"
 	"fmt"
+	"log"
 	"net/http"
 	"net/url"
 	"time"
@@ -20,9 +20,9 @@ type InfluxDBExporter struct {
 }
 
 // NewInfluxDBExporter returns an initialized InfluxDB exporter.
-func NewInfluxDBExporter(influxDBVersion, pushBaseAddress, organization, bucket, token, instance string, scraper *Scraper) *InfluxDBExporter{
+func NewInfluxDBExporter(influxDBVersion, pushBaseAddress, organization, bucket, token, instance string, scraper *Scraper) *InfluxDBExporter {
 	targetAddress := formPushTargetAddress(influxDBVersion, pushBaseAddress, organization, bucket)
-	tokenHeader   := formAuthorizationHeaderValue(influxDBVersion, token)
+	tokenHeader := formAuthorizationHeaderValue(influxDBVersion, token)
 	return &InfluxDBExporter{
 		targetAddress: targetAddress,
 		organization:  organization,
