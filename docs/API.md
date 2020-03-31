@@ -28,7 +28,6 @@
 		- [`sys` Topic](#sys-topic)
 	- [Using Server-Issued Message IDs](#using-server-issued-message-ids)
 	- [User Agent and Presence Notifications](#user-agent-and-presence-notifications)
-	- [Push Notifications Support](#push-notifications-support)
 	- [Public and Private Fields](#public-and-private-fields)
 		- [Public](#public)
 		- [Private](#private)
@@ -37,6 +36,9 @@
 		- [Uploading](#uploading)
 		- [Downloading](#downloading)
 	- [Push Notifications](#push-notifications)
+		- [Tinode Push Gateway](#tinode-push-gateway)
+		- [Google FCM](#google-fcm)
+		- [Stdout](#stdout)
 	- [Messages](#messages)
 		- [Client to Server Messages](#client-to-server-messages)
 			- [`{hi}`](#hi)
@@ -576,7 +578,7 @@ Tinode Push Gateway (TNPG) is a proprietary Tinode service which sends push noti
 
 ### Google FCM
 
-[Google FCM](https://firebase.google.com/docs/cloud-messaging/) supports Android with [Play Services](https://developers.google.com/android/guides/overview), iPhone and iPad devices, and all major web browsers excluding Safari. In order to use FCM mobile clients (iOS, Android) must be recompiled with credentials obtained from Google.
+[Google FCM](https://firebase.google.com/docs/cloud-messaging/) supports Android with [Play Services](https://developers.google.com/android/guides/overview), iPhone and iPad devices, and all major web browsers excluding Safari. In order to use FCM mobile clients (iOS, Android) must be recompiled with credentials obtained from Google. See [instructions](../server/push/fcm/) for details.
 
 ### Stdout
 
