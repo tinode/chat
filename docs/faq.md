@@ -22,24 +22,9 @@ Alternatively, you can instruct the docker container to save the logs to a direc
 
 ### Q: How to setup push notifications with Tinode Push Gateway?<br/>
 **A**: Enabling TNPG push notifications requires two steps:
- * register at console.tinode.co and obtain a TNPG token
- * configure server with the token
-
-#### Obtain TNPG token
-1. Register at https://console.tinode.co and create an organization.
-2. Get the TPNG token from the _On premise_ section by following the instructions there.
-
-#### Configuring the server
-
-Update the server config [`tinode.conf`](../server/tinode.conf#L384), section `"push"` -> `"name": "tnpg"`:
-```js
-{
-  "enabled": true,
-  "org": "test", // name of the organization you registered at console.tinode.co
-  "token": "SoMe_LonG.RaNDoM-StRiNg.123" // authentication token obtained from console.tinode.co
-}
-```
-Make sure the `fcm` section is disabled `"enabled": false`.
+ * register at console.tinode.co and obtain a TNPG token.
+ * configure server with the token.
+See detailed instructions [here](../server/push/tnpg/).
 
 
 ### Q: How to setup push notifications with Google FCM?<br/>
