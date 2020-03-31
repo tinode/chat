@@ -62,7 +62,7 @@ Add the following section to the `auth_config` in [tinode.conf](../../tinode.con
   ...
 },
 ```
-If you want to use your authenticator **instead** of stock `basic` (login-password) authentication, then add a logical renaming:
+If you want to use your authenticator **instead** of stock `basic` (login-password) authentication, add a logical renaming:
 ```js
 ...
 "auth_config": {
