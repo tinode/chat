@@ -1,4 +1,4 @@
-// Package REST provides authentication by calling a separate process over REST API.
+// Package rest provides authentication by calling a separate process over REST API (technically JSON RPC, not REST).
 package rest
 
 import (

@@ -367,9 +367,13 @@ func (ss StringSlice) Value() (driver.Value, error) {
 type ObjState int
 
 const (
-	StateOK        ObjState = 0
+	// StateOK indicates normal user or topic.
+	StateOK ObjState = 0
+	// StateSuspended indicates suspended user or topic.
 	StateSuspended ObjState = 10
-	StateDeleted   ObjState = 20
+	// StateDeleted indicates soft-deleted user or topic.
+	StateDeleted ObjState = 20
+	// StateUndefined indicates state which has not been set explicitly.
 	StateUndefined ObjState = 30
 )
 
