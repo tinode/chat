@@ -22,10 +22,10 @@ import (
 	"strings"
 	"time"
 
-	// For stripping comments from JSON config
-	jcr "github.com/DisposaBoy/JsonConfigReader"
-
 	gh "github.com/gorilla/handlers"
+
+	// For stripping comments from JSON config
+	jcr "github.com/tinode/jsonco"
 
 	// Authenticators
 	"github.com/tinode/chat/server/auth"
@@ -264,17 +264,15 @@ func main() {
 	if file, err := os.Open(*configfile); err != nil {
 		log.Fatal("Failed to read config file: ", err)
 	} else {
-		if err = json.NewDecoder(jcr.New(file)).Decode(&config); err != nil {
-			// Need to reset file to start in order to convert byte offset to line number and character position.
-			// Ignore possible error: can't use it anyway.
-			file.Seek(0, 0)
+		jr := jcr.New(file)
+		if err = json.NewDecoder(jr).Decode(&config); err != nil {
 			switch jerr := err.(type) {
 			case *json.UnmarshalTypeError:
-				lnum, cnum, _ := offsetToLineAndChar(file, jerr.Offset)
+				lnum, cnum, _ := jr.LineAndChar(jerr.Offset)
 				log.Fatalf("Unmarshall error in config file in %s at %d:%d (offset %d bytes): %s",
 					jerr.Field, lnum, cnum, jerr.Offset, jerr.Error())
 			case *json.SyntaxError:
-				lnum, cnum, _ := offsetToLineAndChar(file, jerr.Offset)
+				lnum, cnum, _ := jr.LineAndChar(jerr.Offset)
 				log.Fatalf("Syntax error in config file at %d:%d (offset %d bytes): %s",
 					lnum, cnum, jerr.Offset, jerr.Error())
 			default:

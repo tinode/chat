@@ -4,7 +4,6 @@ go 1.14
 
 require (
 	firebase.google.com/go v3.12.0+incompatible
-	github.com/DisposaBoy/JsonConfigReader v0.0.0-20171218180944-5ea4d0ddac55
 	github.com/aws/aws-sdk-go v1.29.29
 	github.com/bitly/go-hostpool v0.1.0 // indirect
 	github.com/bmizerany/assert v0.0.0-20160611221934-b7ed37b82869 // indirect
@@ -16,6 +15,7 @@ require (
 	github.com/jmoiron/sqlx v1.2.0
 	github.com/prometheus/client_golang v1.5.1
 	github.com/prometheus/common v0.9.1
+	github.com/tinode/jsonco v1.0.0
 	github.com/tinode/snowflake v1.0.0
 	go.mongodb.org/mongo-driver v1.3.1
 	golang.org/x/crypto v0.0.0-20200320181102-891825fb96df

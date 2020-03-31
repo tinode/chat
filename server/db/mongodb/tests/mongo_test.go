@@ -19,10 +19,10 @@ import (
 	"testing"
 	"time"
 
-	jcr "github.com/DisposaBoy/JsonConfigReader"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	adapter "github.com/tinode/chat/server/db"
+	jcr "github.com/tinode/jsonco"
 	b "go.mongodb.org/mongo-driver/bson"
 	mdb "go.mongodb.org/mongo-driver/mongo"
 	mdbopts "go.mongodb.org/mongo-driver/mongo/options"

@@ -5,8 +5,6 @@ cloud.google.com/go v0.38.0/go.mod h1:990N+gfupTy94rShfmMCWGDn0LpTmnzTp2qbd1dvSR
 firebase.google.com/go v3.12.0+incompatible h1:q70KCp/J0oOL8kJ8oV2j3646kV4TB8Y5IvxXC0WT1bo=
 firebase.google.com/go v3.12.0+incompatible/go.mod h1:xlah6XbEyW6tbfSklcfe5FHJIwjt8toICdV5Wh9ptHs=
 github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
-github.com/DisposaBoy/JsonConfigReader v0.0.0-20171218180944-5ea4d0ddac55 h1:jbGlDKdzAZ92NzK65hUP98ri0/r50vVVvmZsFP/nIqo=
-github.com/DisposaBoy/JsonConfigReader v0.0.0-20171218180944-5ea4d0ddac55/go.mod h1:GCzqZQHydohgVLSIqRKZeTt8IGb1Y4NaFfim3H40uUI=
 github.com/alecthomas/template v0.0.0-20160405071501-a0175ee3bccc/go.mod h1:LOuyumcjzFXgccqObfd/Ljyb9UuFJ6TxHnclSeseNhc=
 github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751/go.mod h1:LOuyumcjzFXgccqObfd/Ljyb9UuFJ6TxHnclSeseNhc=
 github.com/alecthomas/units v0.0.0-20151022065526-2efee857e7cf/go.mod h1:ybxpYRFXyAe+OPACYpWeL0wqObRcbAqCMya13uyzqw0=
@@ -185,6 +183,8 @@ github.com/stretchr/testify v1.4.0 h1:2E4SXV/wtOkTonXsotYi4li6zVWxYlZuYNCXe9XRJy
 github.com/stretchr/testify v1.4.0/go.mod h1:j7eGeouHqKxXV5pUuKE4zz7dFj8WfuZ+81PSLYec5m4=
 github.com/tidwall/pretty v1.0.0 h1:HsD+QiTn7sK6flMKIvNmpqz1qrpP3Ps6jOKIKMooyg4=
 github.com/tidwall/pretty v1.0.0/go.mod h1:XNkn88O1ChpSDQmQeStsy+sBenx6DDtFZJxhVysOjyk=
+github.com/tinode/jsonco v1.0.0 h1:zVcpjzDvjuA1G+HLrckI5EiiRyq9jgV3x37OQl6e5FE=
+github.com/tinode/jsonco v1.0.0/go.mod h1:Bnavu3302Qfn2pILMNwASkelodgeew3IvDrbdzU84u8=
 github.com/tinode/snowflake v1.0.0 h1:YciQ9ZKn1TrnvpS8yZErt044XJaxWVtR9aMO9rOZVOE=
 github.com/tinode/snowflake v1.0.0/go.mod h1:5JiaCe3o7QdDeyRcAeZBGVghwRS+ygt2CF/hxmAoptQ=
 github.com/xdg/scram v0.0.0-20180814205039-7eeb5667e42c h1:u40Z8hqBAAQyv+vATcGgV0YCnDjqSL7/q/JyPhhJSPk=

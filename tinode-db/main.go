@@ -12,11 +12,11 @@ import (
 	"strings"
 	"time"
 
-	jcr "github.com/DisposaBoy/JsonConfigReader"
 	_ "github.com/tinode/chat/server/db/mongodb"
 	_ "github.com/tinode/chat/server/db/mysql"
 	_ "github.com/tinode/chat/server/db/rethinkdb"
 	"github.com/tinode/chat/server/store"
+	jcr "github.com/tinode/jsonco"
 )
 
 type configType struct {
@@ -191,8 +191,22 @@ func main() {
 	var config configType
 	if file, err := os.Open(*conffile); err != nil {
 		log.Fatalln("Failed to read config file:", err)
-	} else if err = json.NewDecoder(jcr.New(file)).Decode(&config); err != nil {
-		log.Fatalln("Failed to parse config file:", err)
+	} else {
+		jr := jcr.New(file)
+		if err = json.NewDecoder(jr).Decode(&config); err != nil {
+			switch jerr := err.(type) {
+			case *json.UnmarshalTypeError:
+				lnum, cnum, _ := jr.LineAndChar(jerr.Offset)
+				log.Fatalf("Unmarshall error in config file in %s at %d:%d (offset %d bytes): %s",
+					jerr.Field, lnum, cnum, jerr.Offset, jerr.Error())
+			case *json.SyntaxError:
+				lnum, cnum, _ := jr.LineAndChar(jerr.Offset)
+				log.Fatalf("Syntax error in config file at %d:%d (offset %d bytes): %s",
+					lnum, cnum, jerr.Offset, jerr.Error())
+			default:
+				log.Fatal("Failed to parse config file: ", err)
+			}
+		}
 	}
 
 	err := store.Open(1, config.StoreConfig)
