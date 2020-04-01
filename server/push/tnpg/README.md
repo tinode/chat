@@ -14,7 +14,7 @@ TNPG solves this problem by allowing you to send push notifications on behalf of
 1. Register at https://console.tinode.co and create an organization.
 2. Get the TPNG token from the _On premise_ section by following the instructions there.
 
-### Configuring the server
+### Configure the server
 
 Update the server config [`tinode.conf`](../server/tinode.conf#L384), section `"push"` -> `"name": "tnpg"`:
 ```js

@@ -1084,7 +1084,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Le
 		// If user has not requested a new access mode, provide one by default.
 		if modeWant == types.ModeUnset {
 			// If the user has self-banned before, un-self-ban. Otherwise do not make a change.
-			if !userData.modeWant.IsJoiner() {
+			if !oldWant.IsJoiner() {
 				log.Println("No J permissions before")
 				// Set permissions NO WORSE than default, but possibly better (admin or owner banned himself).
 				userData.modeWant = userData.modeGiven | t.accessFor(asLvl)
@@ -1137,9 +1137,13 @@ func (t *Topic) requestSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Le
 	}
 
 	// If topic is being muted, send "off" notification and disable updates.
-	// DO it before applying the new permissions.
+	// Do it before applying the new permissions.
 	if (oldWant & oldGiven).IsPresencer() && !(userData.modeWant & userData.modeGiven).IsPresencer() {
-		t.presSingleUserOffline(asUid, "off+dis", nilPresParams, "", false)
+		if t.cat == types.TopicCatMe {
+			t.presUsersOfInterest("off+dis", t.userAgent)
+		} else {
+			t.presSingleUserOffline(asUid, "off+dis", nilPresParams, "", false)
+		}
 	}
 
 	// Apply changes.
@@ -1401,13 +1405,13 @@ func (t *Topic) replyGetDesc(sess *Session, asUid types.Uid, id string, opts *Ms
 				Anon: t.accessAnon.String()}
 		}
 
-		if t.cat != types.TopicCatMe {
-			desc.Acs = &MsgAccessMode{
-				Want:  pud.modeWant.String(),
-				Given: pud.modeGiven.String(),
-				Mode:  (pud.modeGiven & pud.modeWant).String()}
-		} else if sess.authLvl == auth.LevelRoot {
-			// If 'me' is in memory then user account is invariable not suspended.
+		desc.Acs = &MsgAccessMode{
+			Want:  pud.modeWant.String(),
+			Given: pud.modeGiven.String(),
+			Mode:  (pud.modeGiven & pud.modeWant).String()}
+
+		if t.cat == types.TopicCatMe && sess.authLvl == auth.LevelRoot {
+			// If 'me' is in memory then user account is invariably not suspended.
 			desc.State = types.StateOK.String()
 		}
 
@@ -2527,8 +2531,13 @@ func (t *Topic) notifySubChange(uid, actor types.Uid, oldWant, oldGiven,
 	} else if (newWant & newGiven).IsPresencer() && !(oldWant & oldGiven).IsPresencer() {
 		// Subscription un-muted.
 
-		// Notify subscriber of topic's online status.
-		t.presSingleUserOffline(uid, "?unkn+en", nilPresParams, "", false)
+		if t.cat == types.TopicCatMe {
+			// User is visible online now, notify subscribers.
+			t.presUsersOfInterest("on+en", t.userAgent)
+		} else {
+			// Notify subscriber of topic's online status.
+			t.presSingleUserOffline(uid, "?unkn+en", nilPresParams, "", false)
+		}
 	}
 
 	// Notify requester's other sessions that permissions have changed.
