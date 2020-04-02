@@ -198,7 +198,7 @@ func (t *Topic) presProcReq(fromUserID, what string, wantReply bool) string {
 		}
 	}
 
-	// log.Println("in-what:", debugWhat, "out-what", what, "from:", fromUserID, "to:", t.name, "reply:", replyAs)
+	// log.Println("out-what", what, "from:", fromUserID, "to:", t.name, "reply:", replyAs)
 
 	// If requester's online status has not changed, do not reply, otherwise an endless loop will happen.
 	// wantReply is needed to ensure unnecessary {pres} is not sent:
@@ -222,11 +222,25 @@ func (t *Topic) presProcReq(fromUserID, what string, wantReply bool) string {
 // Case C: user agent change, "ua", ua
 // Case D: User updated 'public', "upd"
 func (t *Topic) presUsersOfInterest(what, ua string) {
+	parts := strings.Split(what, "+")
+	wantReply := parts[0] == "on"
+	goOffline := len(parts) > 1 && parts[1] == "dis"
+
 	// Push update to subscriptions
-	for topic := range t.perSubs {
+	for topic, psd := range t.perSubs {
 		globals.hub.route <- &ServerComMessage{
-			Pres:   &MsgServerPres{Topic: "me", What: what, Src: t.name, UserAgent: ua, WantReply: (what == "on")},
+			Pres: &MsgServerPres{
+				Topic:     "me",
+				What:      what,
+				Src:       t.name,
+				UserAgent: ua,
+				WantReply: wantReply},
 			rcptto: topic}
+
+		if psd.online && goOffline {
+			psd.online = false
+			t.perSubs[topic] = psd
+		}
 	}
 }
 

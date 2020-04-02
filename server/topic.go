@@ -2531,12 +2531,12 @@ func (t *Topic) notifySubChange(uid, actor types.Uid, oldWant, oldGiven,
 	} else if (newWant & newGiven).IsPresencer() && !(oldWant & oldGiven).IsPresencer() {
 		// Subscription un-muted.
 
-		if t.cat == types.TopicCatMe {
+		// Notify subscriber of topic's online status.
+		if t.cat == types.TopicCatGrp {
+			t.presSingleUserOffline(uid, "?unkn+en", nilPresParams, "", false)
+		} else if t.cat == types.TopicCatMe {
 			// User is visible online now, notify subscribers.
 			t.presUsersOfInterest("on+en", t.userAgent)
-		} else {
-			// Notify subscriber of topic's online status.
-			t.presSingleUserOffline(uid, "?unkn+en", nilPresParams, "", false)
 		}
 	}
 

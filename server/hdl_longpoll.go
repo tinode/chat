@@ -91,7 +91,6 @@ func (sess *Session) readOnce(wrt http.ResponseWriter, req *http.Request) (int, 
 //   - if payload exists, process it and close
 //  - if sid is not empty but there is no session, report an error
 func serveLongPoll(wrt http.ResponseWriter, req *http.Request) {
-
 	now := time.Now().UTC().Round(time.Millisecond)
 
 	// Use the lowest common denominator - this is a legacy handler after all (otherwise would use application/json)
@@ -138,7 +137,6 @@ func serveLongPoll(wrt http.ResponseWriter, req *http.Request) {
 		enc.Encode(pkt)
 
 		return
-
 	}
 
 	// Existing session
