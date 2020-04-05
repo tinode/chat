@@ -173,7 +173,7 @@ func (v *validator) Init(jsonconf string) error {
 
 	// Optionally resolve paths against the location of this executable file.
 	v.ValidationTemplFile = resolveTemplatePath(v.ValidationTemplFile)
-	v.ResetTemplFile = resolveTemplatePath(v.ValidationTemplFile)
+	v.ResetTemplFile = resolveTemplatePath(v.ResetTemplFile)
 
 	// Paths to templates could be templates themselves: they may be language-dependent.
 	var validationPathTempl, resetPathTempl *textt.Template
