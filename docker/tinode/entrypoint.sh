@@ -35,6 +35,10 @@ else
 		FCM_PUSH_ENABLED=true
 	fi
 
+	if [ ! -z "$TNPG_AUTH_TOKEN" ] ; then
+		TNPG_PUSH_ENABLED=true
+	fi
+
 	# Generate a new 'working.config' from template and environment
 	while IFS='' read -r line || [[ -n $line ]] ; do
 		while [[ "$line" =~ (\$[A-Z_][A-Z_0-9]*) ]] ; do
@@ -60,7 +64,7 @@ if [ "$UPGRADE_DB" = "true" ] ; then
 fi
 
 # If push notifications are enabled, generate client-side firebase config file.
-if [ ! -z "$FCM_PUSH_ENABLED" ] ; then
+if [ ! -z "$FCM_PUSH_ENABLED" ] || [ ! -z "$TNPG_PUSH_ENABLED" ] ; then
 	# Write client config to $STATIC_DIR/firebase-init.js
 	cat > $STATIC_DIR/firebase-init.js <<- EOM
 const FIREBASE_INIT = {

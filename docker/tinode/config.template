@@ -109,15 +109,14 @@
 			"name":"tnpg",
 			"config": {
 				"enabled": $TNPG_PUSH_ENABLED,
-				"auth_token": "$TNPG_AUTH_TOKEN",
-				"user": "$TNPG_USER"
+				"token": "$TNPG_AUTH_TOKEN",
+				"org": "$TNPG_USER"
 			}
 		},
 		{
 			"name":"fcm",
 			"config": {
 				"enabled": $FCM_PUSH_ENABLED,
-				"buffer": 1024,
 				"project_id": "$FCM_PROJECT_ID",
 				"credentials_file": "$FCM_CRED_FILE",
 				"time_to_live": 3600,
