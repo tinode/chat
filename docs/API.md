@@ -628,6 +628,8 @@ The user agent `ua` is expected to follow [RFC 7231 section 5.5.3](http://tools.
 
 Message `{acc}` creates users or updates `tags` or authentication credentials `scheme` and `secret` of exiting users. To create a new user set `user` to the string `new` optionally followed by any character sequence, e.g. `newr15gsr`. Either authenticated or anonymous session can send an `{acc}` message to create a new user. To update authentication data or validate a credential of the current user leave `user` unset.
 
+The `{acc}` message **cannot** be used to modify `desc` of an existing user. Update user's `me` topic instead.
+
 ```js
 acc: {
   id: "1a2b3", // string, client-provided message id, optional
@@ -656,7 +658,7 @@ acc: {
   ],
 
   desc: {  // object, user initialisation data closely matching that of table
-           // initialisation; optional
+           // initialisation; used only when creating an account; optional
     defacs: {
       auth: "JRWS", // string, default access mode for peer to peer conversations
                    // between this user and other authenticated users
