@@ -191,7 +191,8 @@ func (t *Topic) run(hub *Hub) {
 
 			if t.isInactive() {
 				asUid := types.ParseUserId(sreg.pkt.from)
-				sreg.sess.queueOut(ErrLocked(sreg.pkt.id, t.original(asUid), types.TimeNow()))
+				sreg.sess.queueOutWithOverrides(
+					ErrLocked(sreg.pkt.id, t.original(asUid), types.TimeNow()), sreg.sessOverrides)
 			} else {
 				// The topic is alive, so stop the kill timer, if it's ticking. We don't want the topic to die
 				// while processing the call
@@ -518,33 +519,33 @@ func (t *Topic) run(hub *Hub) {
 			case meta.pkt.Get != nil:
 				// Get request
 				if meta.what&constMsgMetaDesc != 0 {
-					if err := t.replyGetDesc(meta.sess, asUid, meta.pkt.Get.Id, meta.pkt.Get.Desc); err != nil {
+					if err := t.replyGetDesc(meta.sess, asUid, meta.pkt.Get.Id, meta.pkt.Get.Desc, nil); err != nil {
 						log.Printf("topic[%s] meta.Get.Desc failed: %s", t.name, err)
 					}
 				}
 				if meta.what&constMsgMetaSub != 0 {
-					if err := t.replyGetSub(meta.sess, asUid, authLevel, meta.pkt.Get.Id, meta.pkt.Get.Sub); err != nil {
+					if err := t.replyGetSub(meta.sess, asUid, authLevel, meta.pkt.Get.Id, meta.pkt.Get.Sub, nil); err != nil {
 						log.Printf("topic[%s] meta.Get.Sub failed: %s", t.name, err)
 					}
 				}
 				if meta.what&constMsgMetaData != 0 {
-					if err := t.replyGetData(meta.sess, asUid, meta.pkt.Get.Id, meta.pkt.Get.Data); err != nil {
+					if err := t.replyGetData(meta.sess, asUid, meta.pkt.Get.Id, meta.pkt.Get.Data, nil); err != nil {
 						log.Printf("topic[%s] meta.Get.Data failed: %s", t.name, err)
 					}
 				}
 				if meta.what&constMsgMetaDel != 0 {
-					if err := t.replyGetDel(meta.sess, asUid, meta.pkt.Get.Id, meta.pkt.Get.Del); err != nil {
+					if err := t.replyGetDel(meta.sess, asUid, meta.pkt.Get.Id, meta.pkt.Get.Del, nil); err != nil {
 						log.Printf("topic[%s] meta.Get.Del failed: %s", t.name, err)
 					}
 				}
 				if meta.what&constMsgMetaTags != 0 {
-					if err := t.replyGetTags(meta.sess, asUid, meta.pkt.Get.Id); err != nil {
+					if err := t.replyGetTags(meta.sess, asUid, meta.pkt.Get.Id, nil); err != nil {
 						log.Printf("topic[%s] meta.Get.Tags failed: %s", t.name, err)
 					}
 				}
 				if meta.what&constMsgMetaCred != 0 {
 					log.Printf("topic[%s] handle getCred", t.name)
-					if err := t.replyGetCreds(meta.sess, asUid, meta.pkt.Get.Id); err != nil {
+					if err := t.replyGetCreds(meta.sess, asUid, meta.pkt.Get.Id, nil); err != nil {
 						log.Printf("topic[%s] meta.Get.Creds failed: %s", t.name, err)
 					}
 				}
@@ -714,42 +715,42 @@ func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 
 	if getWhat&constMsgMetaDesc != 0 {
 		// Send get.desc as a {meta} packet.
-		if err := t.replyGetDesc(sreg.sess, asUid, sreg.pkt.id, msgsub.Get.Desc); err != nil {
+		if err := t.replyGetDesc(sreg.sess, asUid, sreg.pkt.id, msgsub.Get.Desc, sreg.sessOverrides); err != nil {
 			log.Printf("topic[%s] handleSubscription Get.Desc failed: %v sid=%s", t.name, err, sreg.sess.sid)
 		}
 	}
 
 	if getWhat&constMsgMetaSub != 0 {
 		// Send get.sub response as a separate {meta} packet
-		if err := t.replyGetSub(sreg.sess, asUid, authLevel, sreg.pkt.id, msgsub.Get.Sub); err != nil {
+		if err := t.replyGetSub(sreg.sess, asUid, authLevel, sreg.pkt.id, msgsub.Get.Sub, sreg.sessOverrides); err != nil {
 			log.Printf("topic[%s] handleSubscription Get.Sub failed: %v sid=%s", t.name, err, sreg.sess.sid)
 		}
 	}
 
 	if getWhat&constMsgMetaTags != 0 {
 		// Send get.tags response as a separate {meta} packet
-		if err := t.replyGetTags(sreg.sess, asUid, sreg.pkt.id); err != nil {
+		if err := t.replyGetTags(sreg.sess, asUid, sreg.pkt.id, sreg.sessOverrides); err != nil {
 			log.Printf("topic[%s] handleSubscription Get.Tags failed: %v sid=%s", t.name, err, sreg.sess.sid)
 		}
 	}
 
 	if getWhat&constMsgMetaCred != 0 {
 		// Send get.tags response as a separate {meta} packet
-		if err := t.replyGetCreds(sreg.sess, asUid, sreg.pkt.id); err != nil {
+		if err := t.replyGetCreds(sreg.sess, asUid, sreg.pkt.id, sreg.sessOverrides); err != nil {
 			log.Printf("topic[%s] handleSubscription Get.Cred failed: %v sid=%s", t.name, err, sreg.sess.sid)
 		}
 	}
 
 	if getWhat&constMsgMetaData != 0 {
 		// Send get.data response as {data} packets
-		if err := t.replyGetData(sreg.sess, asUid, sreg.pkt.id, msgsub.Get.Data); err != nil {
+		if err := t.replyGetData(sreg.sess, asUid, sreg.pkt.id, msgsub.Get.Data, sreg.sessOverrides); err != nil {
 			log.Printf("topic[%s] handleSubscription Get.Data failed: %v sid=%s", t.name, err, sreg.sess.sid)
 		}
 	}
 
 	if getWhat&constMsgMetaDel != 0 {
 		// Send get.del response as a separate {meta} packet
-		if err := t.replyGetDel(sreg.sess, asUid, sreg.pkt.id, msgsub.Get.Del); err != nil {
+		if err := t.replyGetDel(sreg.sess, asUid, sreg.pkt.id, msgsub.Get.Del, sreg.sessOverrides); err != nil {
 			log.Printf("topic[%s] handleSubscription Get.Del failed: %v sid=%s", t.name, err, sreg.sess.sid)
 		}
 	}
@@ -866,7 +867,7 @@ func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin) error {
 	if msgsub.Set != nil {
 		if msgsub.Set.Sub != nil {
 			if msgsub.Set.Sub.User != "" {
-				sreg.sess.queueOut(ErrMalformed(sreg.pkt.id, toriginal, now))
+				sreg.sess.queueOutWithOverrides(ErrMalformed(sreg.pkt.id, toriginal, now), sreg.sessOverrides)
 				return errors.New("user id must not be specified")
 			}
 
@@ -881,7 +882,8 @@ func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin) error {
 	var err error
 	var changed bool
 	// Create new subscription or modify an existing one.
-	if changed, err = t.requestSub(h, sreg.sess, asUid, asLvl, sreg.pkt.id, mode, private, msgsub.Background); err != nil {
+	if changed, err = t.requestSub(
+		h, sreg.sess, asUid, asLvl, sreg.pkt.id, mode, private, msgsub.Background, sreg.sessOverrides); err != nil {
 		return err
 	}
 
@@ -907,7 +909,8 @@ func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin) error {
 		params = nil
 	}
 
-	sreg.sess.queueOut(NoErrParams(sreg.pkt.id, toriginal, now, params))
+	sreg.sess.queueOutWithOverrides(
+		NoErrParams(sreg.pkt.id, toriginal, now, params), sreg.sessOverrides)
 
 	return nil
 }
@@ -916,14 +919,15 @@ func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin) error {
 // result of {sub} or {meta set=sub}.
 // Returns changed == true if user's accessmode has changed.
 //
-//	h			- hub
-//	sess		- originating session
-//	asUid		- id of the user making the request
-//	asLvl		- access level of the user making the request
-//	pktID		- id of {sub} or {set} packet
-//	want		- requested access mode
-//	private		- private value to assign to the subscription
-//	background	- presence notifications are deferred
+//	h							- hub
+//	sess					- originating session
+//	asUid					- id of the user making the request
+//	asLvl					- access level of the user making the request
+//	pktID					- id of {sub} or {set} packet
+//	want					- requested access mode
+//	private				- private value to assign to the subscription
+//	background   	- presence notifications are deferred
+//	sessOverrides - session param overrides
 //
 // Handle these cases:
 // A. User is trying to subscribe for the first time (no subscription)
@@ -932,7 +936,7 @@ func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin) error {
 // D. User is already subscribed, changing modeWant
 // E. User is accepting ownership transfer (requesting ownership transfer is not permitted)
 func (t *Topic) requestSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Level,
-	pktID, want string, private interface{}, background bool) (bool, error) {
+	pktID, want string, private interface{}, background bool, sessOverrides *sessionOverrides) (bool, error) {
 
 	now := types.TimeNow()
 	toriginal := t.original(asUid)
@@ -947,7 +951,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Le
 	modeWant := types.ModeUnset
 	if want != "" {
 		if err := modeWant.UnmarshalText([]byte(want)); err != nil {
-			sess.queueOut(ErrMalformed(pktID, toriginal, now))
+			sess.queueOutWithOverrides(ErrMalformed(pktID, toriginal, now), sessOverrides)
 			return changed, err
 		}
 	}
@@ -956,10 +960,9 @@ func (t *Topic) requestSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Le
 	// It could be an actual subscription (IsJoiner() == true) or a ban (IsJoiner() == false)
 	userData, existingSub := t.perUser[asUid]
 	if !existingSub || userData.deleted {
-
 		// Check if the max number of subscriptions is already reached.
 		if t.cat == types.TopicCatGrp && t.subsCount() >= globals.maxSubscriberCount {
-			sess.queueOut(ErrPolicy(pktID, toriginal, now))
+			sess.queueOutWithOverrides(ErrPolicy(pktID, toriginal, now), sessOverrides)
 			return changed, errors.New("max subscription count exceeded")
 		}
 
@@ -974,7 +977,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Le
 			userData.modeWant = (userData.modeWant & types.ModeCP2P) | types.ModeApprove
 		} else if t.cat == types.TopicCatSys {
 			if asLvl != auth.LevelRoot {
-				sess.queueOut(ErrPermissionDenied(pktID, toriginal, now))
+				sess.queueOutWithOverrides(ErrPermissionDenied(pktID, toriginal, now), sessOverrides)
 				return changed, errors.New("subscription to 'sys' topic requires root access level")
 			}
 
@@ -1014,7 +1017,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Le
 		}
 
 		if err := store.Subs.Create(sub); err != nil {
-			sess.queueOut(ErrUnknown(pktID, toriginal, now))
+			sess.queueOutWithOverrides(ErrUnknown(pktID, toriginal, now), sessOverrides)
 			return changed, err
 		}
 
@@ -1048,7 +1051,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Le
 
 				// Make sure the current owner cannot unset the owner flag or ban himself
 				if t.owner == asUid && (!modeWant.IsOwner() || !modeWant.IsJoiner()) {
-					sess.queueOut(ErrPermissionDenied(pktID, toriginal, now))
+					sess.queueOutWithOverrides(ErrPermissionDenied(pktID, toriginal, now), sessOverrides)
 					return changed, errors.New("cannot unset ownership or self-ban the owner")
 				}
 
@@ -1111,7 +1114,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Le
 		}
 		if len(update) > 0 {
 			if err := store.Subs.Update(t.name, asUid, update, true); err != nil {
-				sess.queueOut(ErrUnknown(pktID, toriginal, now))
+				sess.queueOutWithOverrides(ErrUnknown(pktID, toriginal, now), sessOverrides)
 				return false, err
 			}
 			changed = true
@@ -1171,7 +1174,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Le
 
 	} else if !userData.modeGiven.IsJoiner() {
 		// User was banned
-		sess.queueOut(ErrPermissionDenied(pktID, toriginal, now))
+		sess.queueOutWithOverrides(ErrPermissionDenied(pktID, toriginal, now), sessOverrides)
 		return changed, errors.New("topic access denied; user is banned")
 	}
 
@@ -1358,11 +1361,11 @@ func (t *Topic) approveSub(h *Hub, sess *Session, asUid, target types.Uid, set *
 }
 
 // replyGetDesc is a response to a get.desc request on a topic, sent to just the session as a {meta} packet
-func (t *Topic) replyGetDesc(sess *Session, asUid types.Uid, id string, opts *MsgGetOpts) error {
+func (t *Topic) replyGetDesc(sess *Session, asUid types.Uid, id string, opts *MsgGetOpts, sessOverrides *sessionOverrides) error {
 	now := types.TimeNow()
 
 	if opts != nil && (opts.User != "" || opts.Limit != 0) {
-		sess.queueOut(ErrMalformed(id, t.original(asUid), now))
+		sess.queueOutWithOverrides(ErrMalformed(id, t.original(asUid), now), sessOverrides)
 		return errors.New("invalid GetDesc query")
 	}
 
@@ -1440,12 +1443,12 @@ func (t *Topic) replyGetDesc(sess *Session, asUid types.Uid, id string, opts *Ms
 		}
 	}
 
-	sess.queueOut(&ServerComMessage{
+	sess.queueOutWithOverrides(&ServerComMessage{
 		Meta: &MsgServerMeta{
 			Id:        id,
 			Topic:     t.original(asUid),
 			Desc:      desc,
-			Timestamp: &now}})
+			Timestamp: &now}}, sessOverrides)
 
 	return nil
 }
@@ -1613,17 +1616,17 @@ func (t *Topic) replySetDesc(sess *Session, asUid types.Uid, set *MsgClientSet) 
 
 // replyGetSub is a response to a get.sub request on a topic - load a list of subscriptions/subscribers,
 // send it just to the session as a {meta} packet
-func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level, id string, req *MsgGetOpts) error {
+func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level, id string, req *MsgGetOpts, sessOverrides *sessionOverrides) error {
 	now := types.TimeNow()
 
 	if req != nil && (req.SinceId != 0 || req.BeforeId != 0) {
-		sess.queueOut(ErrMalformed(id, t.original(asUid), now))
+		sess.queueOutWithOverrides(ErrMalformed(id, t.original(asUid), now), sessOverrides)
 		return errors.New("invalid MsgGetOpts query")
 	}
 
 	userData := t.perUser[asUid]
 	if !(userData.modeGiven & userData.modeWant).IsSharer() {
-		sess.queueOut(ErrPermissionDenied(id, t.original(asUid), now))
+		sess.queueOutWithOverrides(ErrPermissionDenied(id, t.original(asUid), now), sessOverrides)
 		return errors.New("user does not have S permission")
 	}
 
@@ -1670,25 +1673,25 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 							globals.maskedTagNS))
 
 						if len(restr) > 0 {
-							sess.queueOut(ErrPermissionDenied(id, t.original(asUid), now))
+							sess.queueOutWithOverrides(ErrPermissionDenied(id, t.original(asUid), now), sessOverrides)
 							return errors.New("attempt to search by restricted tags")
 						}
 
 						// FIXME: allow root to find suspended users and topics.
 						subs, err = store.Users.FindSubs(asUid, req, opt)
 						if err != nil {
-							sess.queueOut(decodeStoreError(err, id, t.original(asUid), now, nil))
+							sess.queueOutWithOverrides(decodeStoreError(err, id, t.original(asUid), now, nil), sessOverrides)
 							return err
 						}
 
 					} else {
 						// Query string is empty.
-						sess.queueOut(ErrMalformed(id, t.original(asUid), now))
+						sess.queueOutWithOverrides(ErrMalformed(id, t.original(asUid), now), sessOverrides)
 						return errors.New("empty search query")
 					}
 				} else {
 					// Query parsing error. Report it externally as a generic ErrMalformed.
-					sess.queueOut(ErrMalformed(id, t.original(asUid), now))
+					sess.queueOutWithOverrides(ErrMalformed(id, t.original(asUid), now), sessOverrides)
 					return errors.New("failed to parse search query; " + err.Error())
 				}
 			}
@@ -1715,7 +1718,7 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 	}
 
 	if err != nil {
-		sess.queueOut(decodeStoreError(err, id, t.original(asUid), now, nil))
+		sess.queueOutWithOverrides(decodeStoreError(err, id, t.original(asUid), now, nil), sessOverrides)
 		return err
 	}
 
@@ -1857,10 +1860,10 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 
 			meta.Sub = append(meta.Sub, mts)
 		}
-		sess.queueOut(&ServerComMessage{Meta: meta})
+		sess.queueOutWithOverrides(&ServerComMessage{Meta: meta}, sessOverrides)
 	} else {
 		// Inform the client that there are no subscriptions.
-		sess.queueOut(NoErrParams(id, t.original(asUid), now, map[string]interface{}{"what": "sub"}))
+		sess.queueOutWithOverrides(NoErrParams(id, t.original(asUid), now, map[string]interface{}{"what": "sub"}), sessOverrides)
 	}
 
 	return nil
@@ -1893,7 +1896,7 @@ func (t *Topic) replySetSub(h *Hub, sess *Session, pkt *ClientComMessage) error 
 	var changed bool
 	if target == asUid {
 		// Request new subscription or modify own subscription
-		changed, err = t.requestSub(h, sess, asUid, asLvl, pkt.id, set.Sub.Mode, nil, false)
+		changed, err = t.requestSub(h, sess, asUid, asLvl, pkt.id, set.Sub.Mode, nil, false, nil)
 	} else {
 		// Request to approve/change someone's subscription
 		changed, err = t.approveSub(h, sess, asUid, target, set)
@@ -1925,12 +1928,12 @@ func (t *Topic) replySetSub(h *Hub, sess *Session, pkt *ClientComMessage) error 
 
 // replyGetData is a response to a get.data request - load a list of stored messages, send them to session as {data}
 // response goes to a single session rather than all sessions in a topic
-func (t *Topic) replyGetData(sess *Session, asUid types.Uid, id string, req *MsgGetOpts) error {
+func (t *Topic) replyGetData(sess *Session, asUid types.Uid, id string, req *MsgGetOpts, sessOverrides *sessionOverrides) error {
 	now := types.TimeNow()
 	toriginal := t.original(asUid)
 
 	if req != nil && (req.IfModifiedSince != nil || req.User != "" || req.Topic != "") {
-		sess.queueOut(ErrMalformed(id, toriginal, now))
+		sess.queueOutWithOverrides(ErrMalformed(id, toriginal, now), sessOverrides)
 		return errors.New("invalid MsgGetOpts query")
 	}
 
@@ -1940,7 +1943,7 @@ func (t *Topic) replyGetData(sess *Session, asUid types.Uid, id string, req *Msg
 		// Read messages from DB
 		messages, err := store.Messages.GetAll(t.name, asUid, msgOpts2storeOpts(req))
 		if err != nil {
-			sess.queueOut(ErrUnknown(id, toriginal, now))
+			sess.queueOutWithOverrides(ErrUnknown(id, toriginal, now), sessOverrides)
 			return err
 		}
 
@@ -1949,44 +1952,44 @@ func (t *Topic) replyGetData(sess *Session, asUid types.Uid, id string, req *Msg
 			count = len(messages)
 			for i := range messages {
 				mm := &messages[i]
-				sess.queueOut(&ServerComMessage{Data: &MsgServerData{
+				sess.queueOutWithOverrides(&ServerComMessage{Data: &MsgServerData{
 					Topic:     toriginal,
 					Head:      mm.Head,
 					SeqId:     mm.SeqId,
 					From:      types.ParseUid(mm.From).UserId(),
 					Timestamp: mm.CreatedAt,
-					Content:   mm.Content}})
+					Content:   mm.Content}}, sessOverrides)
 			}
 		}
 	}
 
 	// Inform the requester that all the data has been served.
-	sess.queueOut(NoErrParams(id, toriginal, now, map[string]interface{}{"what": "data", "count": count}))
+	sess.queueOutWithOverrides(NoErrParams(id, toriginal, now, map[string]interface{}{"what": "data", "count": count}), sessOverrides)
 
 	return nil
 }
 
 // replyGetTags returns topic's tags - tokens used for discovery.
-func (t *Topic) replyGetTags(sess *Session, asUid types.Uid, id string) error {
+func (t *Topic) replyGetTags(sess *Session, asUid types.Uid, id string, sessOverrides *sessionOverrides) error {
 	now := types.TimeNow()
 
 	if t.cat != types.TopicCatMe && t.cat != types.TopicCatGrp {
-		sess.queueOut(ErrOperationNotAllowed(id, t.original(asUid), now))
+		sess.queueOutWithOverrides(ErrOperationNotAllowed(id, t.original(asUid), now), sessOverrides)
 		return errors.New("invalid topic category for getting tags")
 	}
 	if t.cat == types.TopicCatGrp && t.owner != asUid {
-		sess.queueOut(ErrPermissionDenied(id, t.original(asUid), now))
+		sess.queueOutWithOverrides(ErrPermissionDenied(id, t.original(asUid), now), sessOverrides)
 		return errors.New("request for tags from non-owner")
 	}
 
 	if len(t.tags) > 0 {
-		sess.queueOut(&ServerComMessage{
-			Meta: &MsgServerMeta{Id: id, Topic: t.original(asUid), Timestamp: &now, Tags: t.tags}})
+		sess.queueOutWithOverrides(&ServerComMessage{
+			Meta: &MsgServerMeta{Id: id, Topic: t.original(asUid), Timestamp: &now, Tags: t.tags}}, sessOverrides)
 		return nil
 	}
 
 	// Inform the requester that there are no tags.
-	sess.queueOut(NoErrParams(id, t.original(asUid), now, map[string]string{"what": "tags"}))
+	sess.queueOutWithOverrides(NoErrParams(id, t.original(asUid), now, map[string]string{"what": "tags"}), sessOverrides)
 
 	return nil
 }
@@ -2049,17 +2052,17 @@ func (t *Topic) replySetTags(sess *Session, asUid types.Uid, set *MsgClientSet) 
 }
 
 // replyGetCreds returns user's credentials such as email and phone numbers.
-func (t *Topic) replyGetCreds(sess *Session, asUid types.Uid, id string) error {
+func (t *Topic) replyGetCreds(sess *Session, asUid types.Uid, id string, sessOverrides *sessionOverrides) error {
 	now := types.TimeNow()
 
 	if t.cat != types.TopicCatMe {
-		sess.queueOut(ErrOperationNotAllowed(id, t.original(asUid), now))
+		sess.queueOutWithOverrides(ErrOperationNotAllowed(id, t.original(asUid), now), sessOverrides)
 		return errors.New("invalid topic category for getting credentials")
 	}
 
 	screds, err := store.Users.GetAllCreds(asUid, "", false)
 	if err != nil {
-		sess.queueOut(decodeStoreError(err, id, t.original(asUid), now, nil))
+		sess.queueOutWithOverrides(decodeStoreError(err, id, t.original(asUid), now, nil), sessOverrides)
 		return err
 	}
 
@@ -2068,13 +2071,13 @@ func (t *Topic) replyGetCreds(sess *Session, asUid types.Uid, id string) error {
 		for i, sc := range screds {
 			creds[i] = &MsgCredServer{Method: sc.Method, Value: sc.Value, Done: sc.Done}
 		}
-		sess.queueOut(&ServerComMessage{
-			Meta: &MsgServerMeta{Id: id, Topic: t.original(asUid), Timestamp: &now, Cred: creds}})
+		sess.queueOutWithOverrides(&ServerComMessage{
+			Meta: &MsgServerMeta{Id: id, Topic: t.original(asUid), Timestamp: &now, Cred: creds}}, sessOverrides)
 		return nil
 	}
 
 	// Inform the requester that there are no credentials.
-	sess.queueOut(NoErrParams(id, t.original(asUid), now, map[string]string{"what": "creds"}))
+	sess.queueOutWithOverrides(NoErrParams(id, t.original(asUid), now, map[string]string{"what": "creds"}), sessOverrides)
 
 	return nil
 }
@@ -2117,12 +2120,12 @@ func (t *Topic) replySetCred(sess *Session, asUid types.Uid, authLevel auth.Leve
 // replyGetDel is a response to a get[what=del] request: load a list of deleted message ids, send them to
 // a session as {meta}
 // response goes to a single session rather than all sessions in a topic
-func (t *Topic) replyGetDel(sess *Session, asUid types.Uid, id string, req *MsgGetOpts) error {
+func (t *Topic) replyGetDel(sess *Session, asUid types.Uid, id string, req *MsgGetOpts, sessOverrides *sessionOverrides) error {
 	now := types.TimeNow()
 	toriginal := t.original(asUid)
 
 	if req != nil && (req.IfModifiedSince != nil || req.User != "" || req.Topic != "") {
-		sess.queueOut(ErrMalformed(id, toriginal, now))
+		sess.queueOutWithOverrides(ErrMalformed(id, toriginal, now), sessOverrides)
 		return errors.New("invalid MsgGetOpts query")
 	}
 
@@ -2130,23 +2133,23 @@ func (t *Topic) replyGetDel(sess *Session, asUid types.Uid, id string, req *MsgG
 	if userData := t.perUser[asUid]; (userData.modeGiven & userData.modeWant).IsReader() {
 		ranges, delID, err := store.Messages.GetDeleted(t.name, asUid, msgOpts2storeOpts(req))
 		if err != nil {
-			sess.queueOut(ErrUnknown(id, toriginal, now))
+			sess.queueOutWithOverrides(ErrUnknown(id, toriginal, now), sessOverrides)
 			return err
 		}
 
 		if len(ranges) > 0 {
-			sess.queueOut(&ServerComMessage{Meta: &MsgServerMeta{
+			sess.queueOutWithOverrides(&ServerComMessage{Meta: &MsgServerMeta{
 				Id:    id,
 				Topic: toriginal,
 				Del: &MsgDelValues{
 					DelId:  delID,
 					DelSeq: delrangeDeserialize(ranges)},
-				Timestamp: &now}})
+				Timestamp: &now}}, sessOverrides)
 			return nil
 		}
 	}
 
-	sess.queueOut(NoErrParams(id, toriginal, now, map[string]string{"what": "del"}))
+	sess.queueOutWithOverrides(NoErrParams(id, toriginal, now, map[string]string{"what": "del"}), sessOverrides)
 
 	return nil
 }
