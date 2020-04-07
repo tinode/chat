@@ -1624,11 +1624,11 @@ func (a *adapter) SubsUpdate(topic string, user t.Uid, update map[string]interfa
 	}()
 
 	cols, args := updateByMap(update)
-	q := "UPDATE subscriptions SET " + strings.Join(cols, ",") + " WHERE topic=$1"
+	q := "UPDATE subscriptions SET " + strings.Join(cols, ",") + " WHERE topic=?"
 	args = append(args, topic)
 	if !user.IsZero() {
 		// Update just one topic subscription
-		q += " AND userid=$2"
+		q += " AND userid=?"
 		args = append(args, store.DecodeUid(user))
 	}
 
