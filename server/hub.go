@@ -37,6 +37,9 @@ type sessionJoin struct {
 	newsub bool
 	// True if this topic is created internally.
 	internal bool
+
+	// Session param overrides. Used for handling remote topic requests.
+	sessOverrides *sessionOverrides
 }
 
 // Session wants to leave the topic
