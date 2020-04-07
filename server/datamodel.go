@@ -519,8 +519,9 @@ type MsgServerInfo struct {
 }
 
 // Session parameter overrides.
+// Used when by the remote topic masters to impersonate multiple proxied sessions.
 type sessionOverrides struct {
-	// Target session id.
+	// Proxied session id.
 	sid string
 }
 
