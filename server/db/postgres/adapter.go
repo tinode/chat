@@ -117,7 +117,7 @@ func (a *adapter) GetDbVersion() (int, error) {
 	}
 
 	var vers int
-	err := a.db.Get(&vers, "SELECT `value` FROM kvmeta WHERE `key`='version'")
+	err := a.db.Get(&vers, "SELECT value FROM kvmeta WHERE key='version'")
 	if err != nil {
 		if isMissingDb(err) || err == sql.ErrNoRows {
 			err = errors.New("Database not initialized")
@@ -182,11 +182,13 @@ func (a *adapter) CreateDb(reset bool) error {
 	// Don't care if it does not close cleanly.
 	a.db.Close()
 
-	// This DSN has been parsed before and produced no error, not checking for errors here.
+	// Clear database name
+	startIndex := strings.LastIndex(a.dsn, "/") + 1
+	endIndex := strings.Index(a.dsn, "?")
+	newDsn := strings.Replace(a.dsn, "/"+a.dsn[startIndex:endIndex], "", 1)
 
-	fmt.Println("opening new connection in createdb")
-	a.db, err = sqlx.Connect("postgres", a.dsn)
-	if err !=nil {
+	a.db, err = sqlx.Open("postgres", newDsn)
+	if err != nil {
 		return err
 	}
 
@@ -206,8 +208,7 @@ func (a *adapter) CreateDb(reset bool) error {
 	fmt.Println(result)
 	a.db.Close()
 
-	dsn := strings.Replace(a.dsn, "$", "/"+a.dbName+"$", 1)
-	a.db, err = sqlx.Connect("postgres", dsn)
+	a.db, err = sqlx.Connect("postgres", a.dsn)
 	if err != nil {
 		return err
 	}
@@ -215,8 +216,8 @@ func (a *adapter) CreateDb(reset bool) error {
 	if tx, err = a.db.Begin(); err != nil {
 		return err
 	}
+
 	fmt.Println("connected")
-	fmt.Println(result)
 
 	if _, err = tx.Exec(
 		`CREATE TABLE users(
@@ -1109,13 +1110,15 @@ func (a *adapter) TopicGet(topic string) (*t.Topic, error) {
 // Reads and denormalizes Public value.
 func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) ([]t.Subscription, error) {
 	// Fetch user's subscriptions
+	queryVar := 1
 	q := `SELECT createdat,updatedat,deletedat,topic,delid,recvseqid,
-		readseqid,modewant,modegiven,private FROM subscriptions WHERE userid=$1`
+		readseqid,modewant,modegiven,private FROM subscriptions WHERE userid=$` + strconv.Itoa(queryVar)
 	args := []interface{}{store.DecodeUid(uid)}
 	if !keepDeleted {
 		// Filter out rows with defined DeletedAt
 		q += " AND deletedat IS NULL"
 	}
+	queryVar++
 
 	limit := a.maxResults
 	if opts != nil {
@@ -1123,15 +1126,16 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 		// Those unmodified will be stripped of Public & Private.
 
 		if opts.Topic != "" {
-			q += " AND topic=?"
+			q += " AND topic=$" + strconv.Itoa(queryVar)
 			args = append(args, opts.Topic)
+			queryVar++
 		}
 		if opts.Limit > 0 && opts.Limit < limit {
 			limit = opts.Limit
 		}
 	}
 
-	q += " LIMIT ?"
+	q += " LIMIT $" + strconv.Itoa(queryVar)
 	args = append(args, limit)
 
 	rows, err := a.db.Queryx(q, args...)
@@ -1260,6 +1264,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt) ([]t.Subscription, error) {
 	tcat := t.GetTopicCat(topic)
 
+	queryVar := 1
 	// Fetch all subscribed users. The number of users is not large
 	q := `SELECT s.createdat,s.updatedat,s.deletedat,s.userid,s.topic,s.delid,s.recvseqid,
 		s.readseqid,s.modewant,s.modegiven,u.public,s.private
@@ -1287,7 +1292,8 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 		if !opts.User.IsZero() {
 			// For p2p topics we have to fetch both users otherwise public cannot be swapped.
 			if tcat != t.TopicCatP2P {
-				q += " AND s.userid=?"
+				queryVar++
+				q += " AND s.userid=$" + strconv.Itoa(queryVar)
 				args = append(args, store.DecodeUid(opts.User))
 			}
 			oneUser = opts.User
@@ -1296,7 +1302,8 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 			limit = opts.Limit
 		}
 	}
-	q += " LIMIT ?"
+	queryVar++
+	q += " LIMIT $" + strconv.Itoa(queryVar)
 	args = append(args, limit)
 
 	rows, err := a.db.Queryx(q, args...)
@@ -1516,8 +1523,10 @@ func (a *adapter) SubsLastSeen(topic string, user t.Uid, lastSeen map[string]tim
 // SubsForUser loads a list of user's subscriptions to topics. Does NOT load Public value.
 // TODO: this is used only for presence notifications, no need to load Private either.
 func (a *adapter) SubsForUser(forUser t.Uid, keepDeleted bool, opts *t.QueryOpt) ([]t.Subscription, error) {
+	queryVar := 1
 	q := `SELECT createdat,updatedat,deletedat,userid AS user,topic,delid,recvseqid,
 		readseqid,modewant,modegiven,private FROM subscriptions WHERE userid=$1`
+	queryVar++
 	args := []interface{}{store.DecodeUid(forUser)}
 
 	if !keepDeleted {
@@ -1530,14 +1539,15 @@ func (a *adapter) SubsForUser(forUser t.Uid, keepDeleted bool, opts *t.QueryOpt)
 		// Those unmodified will be stripped of Public & Private.
 
 		if opts.Topic != "" {
-			q += " AND topic=?"
+			q += " AND topic=$" + strconv.Itoa(queryVar)
 			args = append(args, opts.Topic)
+			queryVar++
 		}
 		if opts.Limit > 0 && opts.Limit < limit {
 			limit = opts.Limit
 		}
 	}
-	q += " LIMIT ?"
+	q += " LIMIT $" + strconv.Itoa(queryVar)
 	args = append(args, limit)
 
 	rows, err := a.db.Queryx(q, args...)
@@ -1564,10 +1574,10 @@ func (a *adapter) SubsForUser(forUser t.Uid, keepDeleted bool, opts *t.QueryOpt)
 // The difference between UsersForTopic vs SubsForTopic is that the former loads user.public,
 // the latter does not.
 func (a *adapter) SubsForTopic(topic string, keepDeleted bool, opts *t.QueryOpt) ([]t.Subscription, error) {
+	queryVar := 1
 	q := `SELECT createdat,updatedat,deletedat,userid AS user,topic,delid,recvseqid,
-		readseqid,modewant,modegiven,private FROM subscriptions WHERE topic=?`
+		readseqid,modewant,modegiven,private FROM subscriptions WHERE topic=$1`
 	args := []interface{}{topic}
-
 	if !keepDeleted {
 		// Filter out rows where DeletedAt is defined
 		q += " AND deletedAt IS NULL"
@@ -1578,7 +1588,8 @@ func (a *adapter) SubsForTopic(topic string, keepDeleted bool, opts *t.QueryOpt)
 		// Those unmodified will be stripped of Public & Private.
 
 		if !opts.User.IsZero() {
-			q += " AND userid=?"
+			queryVar++
+			q += " AND userid=$" + strconv.Itoa(queryVar)
 			args = append(args, store.DecodeUid(opts.User))
 		}
 		if opts.Limit > 0 && opts.Limit < limit {
@@ -1586,7 +1597,8 @@ func (a *adapter) SubsForTopic(topic string, keepDeleted bool, opts *t.QueryOpt)
 		}
 	}
 
-	q += " LIMIT ?"
+	queryVar++
+	q += " LIMIT $" + strconv.Itoa(queryVar)
 	args = append(args, limit)
 
 	rows, err := a.db.Queryx(q, args...)
@@ -1624,11 +1636,12 @@ func (a *adapter) SubsUpdate(topic string, user t.Uid, update map[string]interfa
 	}()
 
 	cols, args := updateByMap(update)
-	q := "UPDATE subscriptions SET " + strings.Join(cols, ",") + " WHERE topic=?"
+	updateLen := len(update)
+	q := "UPDATE subscriptions SET " + strings.Join(cols, ",") + " WHERE topic=$" + strconv.Itoa(updateLen+1)
 	args = append(args, topic)
 	if !user.IsZero() {
 		// Update just one topic subscription
-		q += " AND userid=?"
+		q += " AND userid=$" + strconv.Itoa(updateLen+2)
 		args = append(args, store.DecodeUid(user))
 	}
 
@@ -1713,16 +1726,29 @@ func (a *adapter) FindUsers(uid t.Uid, req, opt []string) ([]t.Subscription, err
 
 	query := "SELECT u.id,u.createdat,u.updatedat,u.access,u.public,u.tags,COUNT(*) AS matches " +
 		"FROM users AS u LEFT JOIN usertags AS t ON t.userid=u.id " +
-		"WHERE t.tag IN (?" + strings.Repeat(",?", len(req)+len(opt)-1) + ") AND u.deletedat IS NULL " +
+		"WHERE t.tag IN ("
+	queryVar := len(req) + len(opt)
+	for i := 1; i <= queryVar; i++ {
+		query += "$" + strconv.Itoa(i) + ","
+	}
+
+	query = strings.TrimRight(query, ",")
+	query += ") AND u.deletedat IS NULL " +
 		"GROUP BY u.id,u.createdat,u.updatedat,u.public,u.tags "
 	if len(req) > 0 {
-		query += "HAVING COUNT(t.tag IN (?" + strings.Repeat(",?", len(req)-1) + ") OR NULL)>=? "
+		query += "HAVING COUNT(t.tag IN ("
 		for _, tag := range req {
+			queryVar++
+			query += "$" + strconv.Itoa(queryVar) + ","
 			args = append(args, tag)
 		}
+		query = strings.TrimRight(query, ",")
+		queryVar++
+		query += ") OR NULL)>=$" + strconv.Itoa(queryVar)
 		args = append(args, len(req))
 	}
-	query += "ORDER BY matches DESC LIMIT ?"
+	queryVar++
+	query += "ORDER BY matches DESC LIMIT $" + strconv.Itoa(queryVar)
 
 	// Get users matched by tags, sort by number of matches from high to low.
 	rows, err := a.db.Queryx(query, append(args, a.maxResults)...)
@@ -1779,16 +1805,32 @@ func (a *adapter) FindTopics(req, opt []string) ([]t.Subscription, error) {
 
 	query := "SELECT t.name AS topic,t.createdat,t.updatedat,t.access,t.public,t.tags,COUNT(*) AS matches " +
 		"FROM topics AS t LEFT JOIN topictags AS tt ON t.name=tt.topic " +
-		"WHERE tt.tag IN (?" + strings.Repeat(",?", len(req)+len(opt)-1) + ") AND t.deletedat IS NULL " +
+		"WHERE tt.tag IN ("
+
+	queryVar := len(req) + len(opt)
+	for i := 1; i <= queryVar; i++ {
+		query += "$" + strconv.Itoa(i) + ","
+	}
+
+	query = strings.TrimRight(query, ",")
+	query += ") AND t.deletedat IS NULL " +
 		"GROUP BY t.name,t.createdat,t.updatedat,t.public,t.tags "
+
 	if len(req) > 0 {
-		query += "HAVING COUNT(tt.tag IN (?" + strings.Repeat(",?", len(req)-1) + ") OR NULL)>=? "
+		query += "HAVING COUNT(tt.tag IN ("
 		for _, tag := range append(req) {
+			queryVar++
+			query += "$" + strconv.Itoa(queryVar) + ","
 			args = append(args, tag)
 		}
+
+		query = strings.TrimRight(query, ",")
+		queryVar++
+		query += ") OR NULL)>= $" + strconv.Itoa(queryVar)
 		args = append(args, len(req))
 	}
-	query += "ORDER BY matches DESC LIMIT ?"
+	queryVar++
+	query += "ORDER BY matches DESC LIMIT $" + strconv.Itoa(queryVar)
 	rows, err := a.db.Queryx(query, append(args, a.maxResults)...)
 
 	if err != nil {
@@ -1829,8 +1871,8 @@ func (a *adapter) FindTopics(req, opt []string) ([]t.Subscription, error) {
 
 // Messages
 func (a *adapter) MessageSave(msg *t.Message) error {
-	res, err := a.db.Exec(
-		"INSERT INTO messages(createdAt,updatedAt,seqid,topic,`from`,head,content) VALUES($1,$2,$3,$4,$5,$6,$7)",
+	res, err := a.db.Exec(`INSERT INTO messages(createdAt,updatedAt,seqid,topic,"from",head,content)
+  VALUES($1,$2,$3,$4,$5,$6,$7)`,
 		msg.CreatedAt, msg.UpdatedAt, msg.SeqId, msg.Topic,
 		store.DecodeUid(t.ParseUid(msg.From)), msg.Head, toJSON(msg.Content))
 	if err == nil {
@@ -1988,9 +2030,10 @@ func messageDeleteList(tx *sqlx.Tx, topic string, toDel *t.DelMessage) error {
 			}
 		}
 
+		queryVar := 0
 		if err == nil && toDel.DeletedFor == "" {
 			// Hard-deleting messages requires updates to the messages table
-			where := "m.topic=? AND "
+			where := "m.topic=$1 AND "
 			args := []interface{}{topic}
 			if len(toDel.SeqIdRanges) > 1 || toDel.SeqIdRanges[0].Hi == 0 {
 				for _, r := range toDel.SeqIdRanges {
@@ -2003,12 +2046,20 @@ func messageDeleteList(tx *sqlx.Tx, topic string, toDel *t.DelMessage) error {
 					}
 				}
 
-				where += "m.seqid IN (?" + strings.Repeat(",?", seqCount-1) + ")"
+				where += "m.seqid IN ("
+				for i := 0; i < seqCount; i++ {
+					queryVar++
+					where += "$" + strconv.Itoa(queryVar) + ","
+				}
+				where = strings.TrimRight(where, ",")
+				where += ")"
 			} else {
 				// Optimizing for a special case of single range low..hi.
-				where += "m.seqid BETWEEN ? AND ?"
+
+				where += "m.seqid BETWEEN $2 AND $3"
 				// MySQL's BETWEEN is inclusive-inclusive thus decrement Hi by 1.
 				args = append(args, toDel.SeqIdRanges[0].Low, toDel.SeqIdRanges[0].Hi-1)
+				queryVar += 2
 			}
 			where += " AND m.deletedAt IS NULL"
 
@@ -2018,7 +2069,11 @@ func messageDeleteList(tx *sqlx.Tx, topic string, toDel *t.DelMessage) error {
 				return err
 			}
 
-			_, err = tx.Exec("UPDATE messages AS m SET m.deletedAt=?,m.delId=?,m.head=NULL,m.content=NULL WHERE "+
+			for i := 1; i <= queryVar; i++ {
+				where = strings.Replace(where, "$"+strconv.Itoa(i), "$"+strconv.Itoa(i+2), 1)
+			}
+
+			_, err = tx.Exec("UPDATE messages AS m SET m.deletedAt=$1,m.delId=$2,m.head=NULL,m.content=NULL WHERE "+
 				where,
 				append([]interface{}{t.TimeNow(), toDel.DelId}, args...)...)
 		}
@@ -2053,7 +2108,7 @@ func (a *adapter) MessageAttachments(msgId t.Uid, fids []string) error {
 	var values []string
 	strNow := t.TimeNow().Format("2006-01-02T15:04:05.999")
 	// createdat,fileid,msgid
-	val := "VALUES('" + strNow + "',?," + strconv.FormatInt(int64(msgId), 10) + ")"
+	val := "VALUES('" + strNow + "',$1," + strconv.FormatInt(int64(msgId), 10) + ")"
 	for _, fid := range fids {
 		id := t.ParseUid(fid)
 		if id.IsZero() {
@@ -2081,8 +2136,14 @@ func (a *adapter) MessageAttachments(msgId t.Uid, fids []string) error {
 		return err
 	}
 
-	_, err = tx.Exec("UPDATE fileuploads SET updatedat='"+strNow+"' WHERE id IN (?"+
-		strings.Repeat(",?", len(args)-1)+")", args...)
+	query := "UPDATE fileuploads SET updatedat='" + strNow + "' WHERE id IN ("
+
+	for i := 1; i <= len(args); i++ {
+		query += "$" + strconv.Itoa(i) + ","
+	}
+	query = strings.TrimRight(query, ",")
+
+	_, err = tx.Exec(query, args...)
 	if err != nil {
 		return err
 	}
@@ -2298,15 +2359,18 @@ func (a *adapter) CredIsConfirmed(uid t.Uid, method string) (bool, error) {
 // (otherwise it could be used to circumvent the limit on validation attempts).
 // 2.2 In that case mark it as soft-deleted.
 func credDel(tx *sqlx.Tx, uid t.Uid, method, value string) error {
-	constraints := " WHERE userid=?"
+	constraints := " WHERE userid=$1"
+	queryVar := 1
 	args := []interface{}{store.DecodeUid(uid)}
 
 	if method != "" {
-		constraints += " AND method=?"
+		queryVar++
+		constraints += " AND method=$" + strconv.Itoa(queryVar)
 		args = append(args, method)
 
 		if value != "" {
-			constraints += " AND value=?"
+			queryVar++
+			constraints += " AND value=$" + strconv.Itoa(queryVar)
 			args = append(args, value)
 		}
 	}
@@ -2321,9 +2385,12 @@ func credDel(tx *sqlx.Tx, uid t.Uid, method, value string) error {
 		return err
 	}
 
+	for i := 1; i <= queryVar; i++ {
+		constraints = strings.Replace(constraints, "$"+strconv.Itoa(i), "$"+strconv.Itoa(i+1), 1)
+	}
 	// Case 2.2
 	args = append([]interface{}{t.TimeNow()}, args...)
-	_, err := tx.Exec("UPDATE credentials SET deletedat=?"+constraints, args...)
+	_, err := tx.Exec("UPDATE credentials SET deletedat=$1"+constraints, args...)
 
 	return err
 }
@@ -2394,10 +2461,12 @@ func (a *adapter) CredGetActive(uid t.Uid, method string) (*t.Credential, error)
 
 // CredGetAll returns credential records for the given user and method, all or validated only.
 func (a *adapter) CredGetAll(uid t.Uid, method string, validatedOnly bool) ([]t.Credential, error) {
-	query := "SELECT createdat,updatedat,method,value,resp,done,retries FROM credentials WHERE userid=? AND deletedat IS NULL"
+	query := "SELECT createdat,updatedat,method,value,resp,done,retries FROM credentials WHERE userid=$1 AND deletedat IS NULL"
+	queryVar := 1
 	args := []interface{}{store.DecodeUid(uid)}
 	if method != "" {
-		query += " AND method=?"
+		queryVar++
+		query += " AND method=$" + strconv.Itoa(queryVar)
 		args = append(args, method)
 	}
 	if validatedOnly {
@@ -2493,13 +2562,16 @@ func (a *adapter) FileDeleteUnused(olderThan time.Time, limit int) ([]string, er
 	}()
 
 	query := "SELECT fu.id,fu.location FROM fileuploads AS fu LEFT JOIN filemsglinks AS fml ON fml.fileid=fu.id WHERE fml.id IS NULL "
+	queryVar := 0
 	var args []interface{}
 	if !olderThan.IsZero() {
-		query += "AND fu.updatedat<? "
+		queryVar++
+		query += "AND fu.updatedat<$" + strconv.Itoa(queryVar) + " "
 		args = append(args, olderThan)
 	}
 	if limit > 0 {
-		query += "LIMIT ?"
+		queryVar++
+		query += "LIMIT $" + strconv.Itoa(queryVar)
 		args = append(args, limit)
 	}
 
@@ -2596,13 +2668,15 @@ func decodeUidString(str string) int64 {
 
 // Convert update to a list of columns and arguments.
 func updateByMap(update map[string]interface{}) (cols []string, args []interface{}) {
+	index := 1
 	for col, arg := range update {
 		col = strings.ToLower(col)
 		if col == "public" || col == "private" {
 			arg = toJSON(arg)
 		}
-		cols = append(cols, col+"=?")
+		cols = append(cols, col+"=$"+strconv.Itoa(index))
 		args = append(args, arg)
+		index++
 	}
 	return
 }
