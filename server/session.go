@@ -219,6 +219,12 @@ func (s *Session) queueOut(msg *ServerComMessage) bool {
 	return true
 }
 
+// queueOut attempts to send a message with the overrides on the outgoing message.
+func (s *Session) queueOutWithOverrides(msg *ServerComMessage, sessOverrides *sessionOverrides) bool {
+	msg.sessOverrides = sessOverrides
+	return s.queueOut(msg)
+}
+
 // queueOutBytes attempts to send a ServerComMessage already serialized to []byte.
 // If the send buffer is full, timeout is `sendTimeout`.
 func (s *Session) queueOutBytes(data []byte) bool {

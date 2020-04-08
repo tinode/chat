@@ -518,6 +518,13 @@ type MsgServerInfo struct {
 	SeqId int `json:"seq,omitempty"`
 }
 
+// Session parameter overrides.
+// Used by the remote topic masters to impersonate multiple proxied sessions.
+type sessionOverrides struct {
+	// Proxied session id.
+	sid string
+}
+
 // ServerComMessage is a wrapper for server-side messages.
 type ServerComMessage struct {
 	Ctrl *MsgServerCtrl `json:"ctrl,omitempty"`
@@ -536,6 +543,8 @@ type ServerComMessage struct {
 	from string
 	// Originating session to send an aknowledgement to. Could be nil.
 	sess *Session
+	// Session parameter overrides. Used when a topic is hosted remotely. Could be nil.
+	sessOverrides *sessionOverrides
 	// Should the packet be sent to the original session? SessionID to skip.
 	skipSid string
 }
