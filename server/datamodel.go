@@ -519,7 +519,7 @@ type MsgServerInfo struct {
 }
 
 // Session parameter overrides.
-// Used when by the remote topic masters to impersonate multiple proxied sessions.
+// Used by the remote topic masters to impersonate multiple proxied sessions.
 type sessionOverrides struct {
 	// Proxied session id.
 	sid string
