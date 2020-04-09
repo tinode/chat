@@ -523,6 +523,8 @@ type MsgServerInfo struct {
 type sessionOverrides struct {
 	// Proxied session id.
 	sid string
+	// Topic id the session represents.
+	rcptTo string
 }
 
 // ServerComMessage is a wrapper for server-side messages.
