@@ -412,12 +412,10 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 // Request to subscribe to a topic
 func (s *Session) subscribe(msg *ClientComMessage) {
 	var expanded string
-	isNewTopic := false
 	if strings.HasPrefix(msg.topic, "new") {
 		// Request to create a new named topic.
 		// If we are in a cluster, make sure the new topic belongs to the current node.
 		expanded = globals.cluster.genLocalTopicName()
-		isNewTopic = true
 	} else {
 		var resp *ServerComMessage
 		expanded, resp = s.expandTopicName(msg)
@@ -430,22 +428,6 @@ func (s *Session) subscribe(msg *ClientComMessage) {
 	// Session can subscribe to topic on behalf of a single user at a time.
 	if sub := s.getSub(expanded); sub != nil {
 		s.queueOut(InfoAlreadySubscribed(msg.id, msg.topic, msg.timestamp))
-	} else if remoteNodeName := globals.cluster.nodeNameForTopicIfRemote(expanded); remoteNodeName != "" {
-		// The topic is handled by a remote node. Forward message to it.
-		if err := globals.cluster.routeToTopic(msg, expanded, s); err != nil {
-			log.Println("s.subscribe:", err, s.sid)
-			s.queueOut(ErrClusterUnreachable(msg.id, msg.topic, msg.timestamp))
-		} else {
-			var originalTopic string
-			if isNewTopic {
-				// New topics are "grp". It's okay to use expaneded.
-				originalTopic = expanded
-			} else {
-				originalTopic = msg.topic
-			}
-			// FIXME: we don't really know if subscription was successful.
-			s.addRemoteSub(expanded, &RemoteSubscription{node: remoteNodeName, originalTopic: originalTopic})
-		}
 	} else {
 		globals.hub.join <- &sessionJoin{
 			topic: expanded,

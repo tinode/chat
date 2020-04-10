@@ -52,7 +52,7 @@ func topicInit(t *Topic, sreg *sessionJoin, h *Hub) {
 		h.topicDel(sreg.topic)
 
 		log.Println("hub: failed to load or create topic:", sreg.topic, err)
-		sreg.sess.queueOut(decodeStoreError(err, sreg.pkt.id, t.xoriginal, timestamp, nil))
+		sreg.sess.queueOutWithOverrides(decodeStoreError(err, sreg.pkt.id, t.xoriginal, timestamp, nil), sreg.sessOverrides)
 
 		// Re-queue pending requests to join the topic.
 		for len(t.reg) > 0 {
@@ -63,15 +63,15 @@ func topicInit(t *Topic, sreg *sessionJoin, h *Hub) {
 		// Reject all other pending requests
 		for len(t.broadcast) > 0 {
 			msg := <-t.broadcast
-			msg.sess.queueOut(ErrLocked(msg.id, t.xoriginal, timestamp))
+			msg.sess.queueOutWithOverrides(ErrLocked(msg.id, t.xoriginal, timestamp), sreg.sessOverrides)
 		}
 		for len(t.unreg) > 0 {
 			msg := <-t.unreg
-			msg.sess.queueOut(ErrLocked(msg.id, t.xoriginal, timestamp))
+			msg.sess.queueOutWithOverrides(ErrLocked(msg.id, t.xoriginal, timestamp), sreg.sessOverrides)
 		}
 		for len(t.meta) > 0 {
 			msg := <-t.meta
-			msg.sess.queueOut(ErrLocked(msg.pkt.id, t.xoriginal, timestamp))
+			msg.sess.queueOutWithOverrides(ErrLocked(msg.pkt.id, t.xoriginal, timestamp), sreg.sessOverrides)
 		}
 		if len(t.exit) > 0 {
 			msg := <-t.exit

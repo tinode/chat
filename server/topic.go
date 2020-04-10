@@ -99,6 +99,8 @@ type Topic struct {
 	uaChange chan string
 	// Channel to terminate topic  -- either the topic is deleted or system is being shut down. Buffered = 1.
 	exit chan *shutDown
+	// Channel to receive topic master responses (used only by proxy topics).
+	proxy chan *ClusterResp
 
 	// Flag which tells topic lifecycle status: new, ready, paused, marked for deletion.
 	status int32
@@ -171,6 +173,68 @@ var nilPresParams = &presParams{}
 var nilPresFilters = &presFilters{}
 
 func (t *Topic) run(hub *Hub) {
+	if !t.isProxy {
+		t.runLocal(hub)
+	} else {
+		t.runProxy(hub)
+	}
+}
+
+func (t *Topic) runProxy(hub *Hub) {
+	// TODO: add kill timer.
+	for {
+		select {
+		case sreg := <-t.reg:
+			// Request to add a connection to this topic
+			if t.isInactive() {
+				asUid := types.ParseUserId(sreg.pkt.from)
+				sreg.sess.queueOut(ErrLocked(sreg.pkt.id, t.original(asUid), types.TimeNow()))
+			} else {
+				log.Printf("topic[%s] reg %+v", t.name, sreg)
+				msg := &ProxyTopicData{
+					JoinReq: &ProxyJoin{
+						Created:  sreg.created,
+						Newsub:   sreg.newsub,
+						Internal: sreg.internal,
+					},
+				}
+				log.Println("sessionJoin pkt = ", sreg.pkt, sreg.topic)
+				// Response (ctrl message) will be handled when it's received via the proxy channel.
+				if err := globals.cluster.routeToTopicMaster(sreg.pkt, msg, t.name, sreg.sess); err != nil {
+					log.Println("proxy topic: route join request from proxy to master failed:", err)
+				}
+			}
+		case leave := <-t.unreg:
+			// Remove connection from topic; session may continue to function
+			log.Printf("t[%s] leave %+v", t.name, leave)
+		case msg := <-t.broadcast:
+			// Content message intended for broadcasting to recipients
+			log.Printf("t[%s] broadcast %+v", t.name, msg)
+		case meta := <-t.meta:
+			// Request to get/set topic metadata
+			log.Printf("t[%s] meta %+v", t.name, meta)
+		case ua := <-t.uaChange:
+			// Process an update to user agent from one of the sessions
+			log.Printf("t[%s] uaChange %+v", t.name, ua)
+
+		case msg := <-t.proxy:
+			if sess := globals.sessionStore.Get(msg.FromSID); sess != nil {
+				if !sess.queueOut(msg.SrvMsg) {
+					log.Println("topic proxy: timeout")
+				}
+			} else {
+				log.Println("topic proxy: response for unknown session", msg.FromSID)
+			}
+		case sd := <-t.exit:
+			log.Printf("t[%s] exit %+v", t.name, sd)
+			//case <-killTimer.C:
+			//	// Topic timeout
+			//	hub.unreg <- &topicUnreg{topic: t.name}
+		}
+	}
+}
+
+func (t *Topic) runLocal(hub *Hub) {
 	// Kills topic after a period of inactivity.
 	keepAlive := idleTopicTimeout
 	killTimer := time.NewTimer(time.Hour)
@@ -673,6 +737,12 @@ func (t *Topic) run(hub *Hub) {
 			}
 
 			usersRegisterTopic(t, false)
+
+			if t.isProxy {
+				if err := globals.cluster.topicProxyGone(t.name); err != nil {
+					log.Printf("topic proxy shutdown [%s]: failed to notify master - %s", t.name, err)
+				}
+			}
 
 			// Report completion back to sender, if 'done' is not nil.
 			if sd.done != nil {

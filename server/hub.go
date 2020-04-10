@@ -173,6 +173,8 @@ func (h *Hub) run() {
 				// Topic does not exist or not loaded.
 				t = &Topic{name: sreg.topic,
 					xoriginal: sreg.pkt.topic,
+					// Indicates a proxy topic.
+					isProxy:   globals.cluster.isRemoteTopic(sreg.topic),
 					sessions:  make(map[*Session]perSessionData),
 					broadcast: make(chan *ServerComMessage, 256),
 					reg:       make(chan *sessionJoin, 32),
@@ -181,6 +183,9 @@ func (h *Hub) run() {
 					defrNotif: new(list.List),
 					perUser:   make(map[types.Uid]perUserData),
 					exit:      make(chan *shutDown, 1),
+				}
+				if t.isProxy {
+					t.proxy = make(chan *ClusterResp, 32)
 				}
 				// Topic is created in suspended state because it's not yet configured.
 				t.markPaused(true)
