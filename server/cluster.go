@@ -125,8 +125,9 @@ type ClusterReq struct {
 	RcptTo string
 	// Originating session
 	Sess *ClusterSess
-	// True if the original session has disconnected
-	SessGone bool
+	// True if either the original topic (when proxying topics) is gone or
+	// the original session (when proxying sessions) has disconnected
+	Done bool
 
 	// UNroutable components of {pres} message which have to be sent intra-cluster.
 	SrvPres ClusterPresExt
@@ -323,7 +324,7 @@ func (n *ClusterNode) forwardToTopicMaster(msg *ClusterReq) error {
 	var rejected bool
 	err := n.call("Cluster.TopicMaster", msg, &rejected)
 	if err == nil && rejected {
-		err = errors.New("cluster: master2 node out of sync")
+		err = errors.New("cluster: topic master node out of sync")
 	}
 	return err
 }
@@ -375,7 +376,7 @@ func (c *Cluster) Master(msg *ClusterReq, rejected *bool) error {
 	// Find the local session associated with the given remote session.
 	sess := globals.sessionStore.Get(msg.Sess.Sid)
 
-	if msg.SessGone {
+	if msg.Done {
 		// Original session has disconnected. Tear down the local proxied session.
 		if sess != nil {
 			sess.stop <- nil
@@ -432,10 +433,11 @@ func (c *Cluster) Master(msg *ClusterReq, rejected *bool) error {
 func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 	*rejected = false
 
-	sid := "topic-proxy-" + msg.RcptTo + "-" + msg.Node
+	sid := msg.RcptTo + "-" + msg.Node
 	sess := globals.sessionStore.Get(sid)
-	if msg.SessGone {
-		// Original session has disconnected. Tear down the local proxied session.
+	if msg.Done {
+		// Original topic is gone. Tear down the local auxiliary session
+		// (the master topic will dissapear as well).
 		if sess != nil {
 			sess.stop <- nil
 		}
@@ -447,15 +449,14 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 		return nil
 	}
 	if msg.TopicMsg == nil {
-		log.Println("cluster TopicMaster: nil topic message", msg.RcptTo)
-		*rejected = true
-		return nil
+		panic("cluster TopicMaster: nil topic message - topic " + msg.RcptTo)
 	}
 	node := globals.cluster.nodes[msg.Node]
 	if node == nil {
 		log.Println("cluster TopicMaster: request from an unknown node", msg.Node)
 		return nil
 	}
+	// TODO: reexamine this code. We may not need the entire session passed here for processing requests.
 	if msg.Sess == nil {
 		log.Println("cluster TopicMaster: session params missing", msg.RcptTo)
 		*rejected = true
@@ -792,7 +793,7 @@ func (c *Cluster) sessionGone(sess *Session) error {
 				&ClusterReq{
 					Node:        c.thisNodeName,
 					Fingerprint: c.fingerprint,
-					SessGone:    true,
+					Done:        true,
 					Sess: &ClusterSess{
 						Uid:        sess.uid,
 						RemoteAddr: sess.remoteAddr,
@@ -819,7 +820,7 @@ func (c *Cluster) topicProxyGone(topicName string) error {
 	}
 
 	req := c.getClusterReq(nil, nil, topicName, nil)
-	req.SessGone = true
+	req.Done = true
 	return n.forwardToTopicMaster(req)
 }
 
@@ -1078,8 +1079,7 @@ func (sess *Session) topicProxyWriteLoop() {
 			}
 			srvMsg := msg.(*ServerComMessage)
 			if srvMsg.sessOverrides == nil {
-				log.Println("cluster: proxy session overrides not specified - ", sess.sid)
-				continue
+				panic("cluster: proxy session overrides not specified - " + sess.sid)
 			}
 			var sid string
 			if srvMsg.sessOverrides.sid == "" {

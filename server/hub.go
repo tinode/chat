@@ -174,7 +174,7 @@ func (h *Hub) run() {
 				t = &Topic{name: sreg.topic,
 					xoriginal: sreg.pkt.topic,
 					// Indicates a proxy topic.
-					isProxy:   globals.cluster != nil && globals.cluster.isRemoteTopic(sreg.topic),
+					isProxy:   globals.cluster.isRemoteTopic(sreg.topic),
 					sessions:  make(map[*Session]perSessionData),
 					broadcast: make(chan *ServerComMessage, 256),
 					reg:       make(chan *sessionJoin, 32),
