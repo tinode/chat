@@ -168,8 +168,9 @@ type ClusterPresExt struct {
 type ProxyTopicData struct {
 	// Join (subscribe) request.
 	JoinReq *ProxyJoin
+	// Broadcast (publish, etc.) request.
+	BroadcastReq *ProxyBroadcast
 	// MetaReq      *ProxyMeta
-	// BroadcastReq *ProxyBroadcast
 	// LeaveReq     *ProxyLeave
 }
 
@@ -183,6 +184,18 @@ type ProxyJoin struct {
 	Newsub bool
 	// True if this topic is created internally.
 	Internal bool
+}
+
+// ProxyBroadcast contains topic broadcast request parameters.
+type ProxyBroadcast struct {
+	// Original request message id.
+	Id        string
+	// User ID of the sender of the original message.
+	From      string
+	// Timestamp for consistency of timestamps in {ctrl} messages.
+	Timestamp time.Time
+	// Should the packet be sent to the original session? SessionID to skip.
+	SkipSid   string
 }
 
 // Handle outbound node communication: read messages from the channel, forward to remote nodes.
@@ -473,9 +486,10 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 		go sess.topicProxyWriteLoop()
 	}
 
-	if msg.TopicMsg.JoinReq != nil {
+	switch {
+	case msg.TopicMsg.JoinReq != nil:
 		if msg.Sess.Uid > 0 {
-			log.Println("setting uid = ", msg.Sess.Uid)
+			log.Println("join setting uid = ", msg.Sess.Uid)
 			msg.CliMsg.from = msg.Sess.Uid.UserId()
 		}
 		msg.CliMsg.topic = msg.CliMsg.Sub.Topic
@@ -494,7 +508,23 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 			},
 		}
 		globals.hub.join <- sessionJoin
-	} else {
+	case msg.TopicMsg.BroadcastReq != nil:
+		if msg.SrvMsg == nil {
+			panic("cluster: topic proxy broadcast request has no data message")
+		}
+		msg.SrvMsg.id = msg.TopicMsg.BroadcastReq.Id
+		msg.SrvMsg.from = msg.TopicMsg.BroadcastReq.From
+		msg.SrvMsg.timestamp = msg.TopicMsg.BroadcastReq.Timestamp
+		msg.SrvMsg.rcptto = msg.RcptTo
+		msg.SrvMsg.sessOverrides = &sessionOverrides{
+			sid:    msg.Sess.Sid,
+			rcptTo: msg.RcptTo,
+		}
+		msg.SrvMsg.sess = sess
+		msg.SrvMsg.skipSid = msg.TopicMsg.BroadcastReq.SkipSid
+		globals.hub.route <- msg.SrvMsg
+
+	default:
 		log.Println("cluster TopicMaster: malformed", msg.RcptTo)
 		*rejected = true
 	}
@@ -696,12 +726,13 @@ func (c *Cluster) isPartitioned() bool {
 	return (len(c.nodes)+1)/2 >= len(c.fo.activeNodes)
 }
 
-func (c *Cluster) getClusterReq(msg *ClientComMessage, topicMsg *ProxyTopicData, topic string, sess *Session) *ClusterReq {
+func (c *Cluster) getClusterReq(cliMsg *ClientComMessage, srvMsg *ServerComMessage, topicMsg *ProxyTopicData, topic string, sess *Session) *ClusterReq {
 	req := &ClusterReq{
 		Node:        c.thisNodeName,
 		Signature:   c.ring.Signature(),
 		Fingerprint: c.fingerprint,
-		CliMsg:      msg,
+		CliMsg:      cliMsg,
+		SrvMsg:      srvMsg,
 		TopicMsg:    topicMsg,
 		RcptTo:      topic,
 	}
@@ -718,8 +749,8 @@ func (c *Cluster) getClusterReq(msg *ClientComMessage, topicMsg *ProxyTopicData,
 			Sid:        sess.sid}
 		if sess.authLvl == auth.LevelRoot {
 			// Assign these values only when the sender is root
-			req.OnBehalfOf = msg.from
-			req.AuthLvl = msg.authLvl
+			req.OnBehalfOf = cliMsg.from
+			req.AuthLvl = cliMsg.authLvl
 		}
 	}
 	return req
@@ -737,19 +768,19 @@ func (c *Cluster) routeToTopic(msg *ClientComMessage, topic string, sess *Sessio
 		log.Printf("No remote subscription (yet) for topic '%s', sid '%s'", topic, sess.sid)
 	}
 
-	req := c.getClusterReq(msg, nil, topic, sess)
+	req := c.getClusterReq(msg, nil, nil, topic, sess)
 	return n.forward(req)
 }
 
 // Forward client request message from the Topic Proxy to the Topic Master (cluster node which owns the topic)
-func (c *Cluster) routeToTopicMaster(msg *ClientComMessage, topicMsg *ProxyTopicData, topic string, sess *Session) error {
+func (c *Cluster) routeToTopicMaster(cliMsg *ClientComMessage, srvMsg *ServerComMessage, topicMsg *ProxyTopicData, topic string, sess *Session) error {
 	// Find the cluster node which owns the topic, then forward to it.
 	n := c.nodeForTopic(topic)
 	if n == nil {
 		return errors.New("node for topic not found")
 	}
 
-	req := c.getClusterReq(msg, topicMsg, topic, sess)
+	req := c.getClusterReq(cliMsg, srvMsg, topicMsg, topic, sess)
 	return n.forwardToTopicMaster(req)
 }
 
@@ -819,7 +850,7 @@ func (c *Cluster) topicProxyGone(topicName string) error {
 		return errors.New("node for topic not found")
 	}
 
-	req := c.getClusterReq(nil, nil, topicName, nil)
+	req := c.getClusterReq(nil, nil, nil, topicName, nil)
 	req.Done = true
 	return n.forwardToTopicMaster(req)
 }

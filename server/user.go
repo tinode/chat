@@ -311,8 +311,10 @@ func updateUserAuth(msg *ClientComMessage, user *types.User, rec *auth.Rec) erro
 		}
 
 		// Tags may have been changed by authhdl.UpdateRecord, reset them.
-		// Can't do much with the error here, so ignoring it.
-		store.Users.UpdateTags(user.Uid(), nil, nil, rec.Tags)
+		// Can't do much with the error here, logging it but not returning.
+		if _, err = store.Users.UpdateTags(user.Uid(), nil, nil, rec.Tags); err != nil {
+			log.Println("updateUserAuth tags update failed:", err)
+		}
 		return nil
 	}
 
@@ -322,9 +324,8 @@ func updateUserAuth(msg *ClientComMessage, user *types.User, rec *auth.Rec) erro
 
 // addCreds adds new credentials and re-send validation request for existing ones. It also adds credential-defined
 // tags if necessary.
-// Returns methods validated in this call only, full set of tags.
-func addCreds(uid types.Uid, creds []MsgCredClient, tags []string, lang string,
-	tmpToken []byte) ([]string, []string, error) {
+// Returns methods validated in this call only. Returns either a full set of tags or nil for tags when tags are unchanged.
+func addCreds(uid types.Uid, creds []MsgCredClient, extraTags []string, lang string, tmpToken []byte) ([]string, []string, error) {
 	var validated []string
 	for i := range creds {
 		cr := &creds[i]
@@ -346,20 +347,27 @@ func addCreds(uid types.Uid, creds []MsgCredClient, tags []string, lang string,
 
 			// Generate tags for these confirmed credentials.
 			if globals.validators[cr.Method].addToTags {
-				tags = append(tags, cr.Method+":"+cr.Value)
+				extraTags = append(extraTags, cr.Method+":"+cr.Value)
 			}
 		}
 	}
 
 	// Save tags potentially changed by the validator.
-	if len(tags) > 0 {
-		tags, _ = store.Users.UpdateTags(uid, tags, nil, nil)
+	if len(extraTags) > 0 {
+		if utags, err := store.Users.UpdateTags(uid, extraTags, nil, nil); err != nil {
+			extraTags = utags
+		} else {
+			log.Println("add cred tags update failed:", err)
+		}
+	} else {
+		extraTags = nil
 	}
-	return validated, tags, nil
+	return validated, extraTags, nil
 }
 
 // validatedCreds returns the list of validated credentials including those validated in this call.
-// Returns all validated methods including those validated earlier and now, full set of tags.
+// Returns all validated methods including those validated earlier and now.
+// Returns either a full set of tags or nil for tags if tags are unchanged.
 func validatedCreds(uid types.Uid, authLvl auth.Level, creds []MsgCredClient, errorOnFail bool) ([]string, []string, error) {
 
 	// Check if credential validation is required.
@@ -417,7 +425,14 @@ func validatedCreds(uid types.Uid, authLvl auth.Level, creds []MsgCredClient, er
 	var tags []string
 	if len(tagsToAdd) > 0 {
 		// Save update to tags
-		tags, _ = store.Users.UpdateTags(uid, tagsToAdd, nil, nil)
+		if utags, err := store.Users.UpdateTags(uid, tagsToAdd, nil, nil); err == nil {
+			tags = utags
+		} else {
+			log.Println("validated creds tags update failed:", err)
+			tags = nil
+		}
+	} else {
+		tags = nil
 	}
 
 	var validated []string
@@ -429,6 +444,7 @@ func validatedCreds(uid types.Uid, authLvl auth.Level, creds []MsgCredClient, er
 }
 
 // deleteCred deletes user's credential.
+// Returns full set of remaining tags or nil if tags are unchanged.
 func deleteCred(uid types.Uid, authLvl auth.Level, cred *MsgCredClient) ([]string, error) {
 	vld := store.GetValidator(cred.Method)
 	if vld == nil || cred.Value == "" {
@@ -447,7 +463,6 @@ func deleteCred(uid types.Uid, authLvl auth.Level, cred *MsgCredClient) ([]strin
 
 	// If credential is required, make sure the method remains validated even after this credential is deleted.
 	if isRequired {
-
 		// There could be multiple validated credentials for the same method thus we are getting a map with count
 		// for each method.
 
@@ -457,10 +472,10 @@ func deleteCred(uid types.Uid, authLvl auth.Level, cred *MsgCredClient) ([]strin
 			return nil, err
 		}
 
-		// Check if it's OK to delete: there is another validated value.
+		// Check if it's OK to delete: there is another validated value or this value is not validated in the first place.
 		var okTodelete bool
 		for _, cr := range allCreds {
-			if cr.Done && cr.Value != cred.Value {
+			if (cr.Done && cr.Value != cred.Value) || (!cr.Done && cr.Value == cred.Value) {
 				okTodelete = true
 				break
 			}
@@ -482,8 +497,16 @@ func deleteCred(uid types.Uid, authLvl auth.Level, cred *MsgCredClient) ([]strin
 	var tags []string
 	if globals.validators[cred.Method].addToTags {
 		// This error should not be returned to user.
-		tags, _ = store.Users.UpdateTags(uid, nil, []string{cred.Method + ":" + cred.Value}, nil)
+		if utags, err := store.Users.UpdateTags(uid, nil, []string{cred.Method + ":" + cred.Value}, nil); err == nil {
+			tags = utags
+		} else {
+			log.Println("delete cred: failed to update tags:", err)
+			tags = nil
+		}
+	} else {
+		tags = nil
 	}
+
 	return tags, nil
 }
 

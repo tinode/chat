@@ -889,16 +889,20 @@ func (a *adapter) UserUpdateTags(uid t.Uid, add, remove, reset []string) ([]stri
 		return nil, err
 	}
 
-	// Get the new tags
-	cursor, err := q.Field("Tags").Run(a.conn)
+	// Get the new tags.
+	// Using Pluck instead of Field because of https://github.com/rethinkdb/rethinkdb-go/issues/486
+	cursor, err := q.Pluck("Tags").Run(a.conn)
 	if err != nil {
 		return nil, err
 	}
 	defer cursor.Close()
 
-	var tags []string
-	err = cursor.One(&tags)
-	return tags, err
+	var tagsField struct{ Tags []string }
+	err = cursor.One(&tagsField)
+	if err != nil {
+		return nil, err
+	}
+	return tagsField.Tags, nil
 }
 
 // UserGetByCred returns user ID for the given validated credential.
