@@ -190,7 +190,7 @@ type ProxyJoin struct {
 type ProxyBroadcast struct {
 	// Original request message id.
 	Id        string
-	// To: topic.
+	// User ID of the sender of the original message.
 	From      string
 	// Timestamp for consistency of timestamps in {ctrl} messages.
 	Timestamp time.Time
