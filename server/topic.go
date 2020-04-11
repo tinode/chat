@@ -2201,7 +2201,7 @@ func (t *Topic) replySetCred(sess *Session, asUid types.Uid, authLevel auth.Leve
 		_, tags, err = addCreds(asUid, creds, nil, sess.lang, tmpToken)
 	}
 
-	if err == nil && len(tags) > 0 {
+	if tags != nil {
 		t.tags = tags
 		t.presSubsOnline("tags", "", nilPresParams, nilPresFilters, "")
 	}
@@ -2384,11 +2384,19 @@ func (t *Topic) replyDelCred(h *Hub, sess *Session, asUid types.Uid, authLvl aut
 		sess.queueOut(ErrPermissionDenied(del.Id, t.original(asUid), now))
 		return errors.New("del.cred: invalid topic category")
 	}
+	if del.Cred == nil || del.Cred.Method == "" {
+		sess.queueOut(ErrMalformed(del.Id, t.original(asUid), now))
+		return errors.New("del.cred: missing method")
+	}
 
 	tags, err := deleteCred(asUid, authLvl, del.Cred)
-	if err == nil {
-		t.tags = tags
-		t.presSubsOnline("tags", "", nilPresParams, nilPresFilters, "")
+	if tags != nil {
+		// Check if anything has been actuallt removed.
+		_, removed := stringSliceDelta(t.tags, tags)
+		if len(removed) > 0 {
+			t.tags = tags
+			t.presSubsOnline("tags", "", nilPresParams, nilPresFilters, "")
+		}
 	}
 	sess.queueOut(decodeStoreError(err, del.Id, del.Topic, now, nil))
 	return err
