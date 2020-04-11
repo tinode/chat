@@ -200,7 +200,7 @@ func (t *Topic) runProxy(hub *Hub) {
 				}
 				log.Println("sessionJoin pkt = ", sreg.pkt, sreg.topic)
 				// Response (ctrl message) will be handled when it's received via the proxy channel.
-				if err := globals.cluster.routeToTopicMaster(sreg.pkt, msg, t.name, sreg.sess); err != nil {
+				if err := globals.cluster.routeToTopicMaster(sreg.pkt, nil, msg, t.name, sreg.sess); err != nil {
 					log.Println("proxy topic: route join request from proxy to master failed:", err)
 				}
 			}
@@ -210,6 +210,17 @@ func (t *Topic) runProxy(hub *Hub) {
 		case msg := <-t.broadcast:
 			// Content message intended for broadcasting to recipients
 			log.Printf("t[%s] broadcast %+v", t.name, msg)
+			brdc := &ProxyTopicData{
+				BroadcastReq: &ProxyBroadcast{
+					Id:        msg.id,
+					From:      msg.from,
+					Timestamp: msg.timestamp,
+					SkipSid:   msg.skipSid,
+				},
+			}
+			if err := globals.cluster.routeToTopicMaster(nil, msg, brdc, t.name, msg.sess); err != nil {
+				log.Println("proxy topic: route broadcast request from proxy to master failed:", err)
+			}
 		case meta := <-t.meta:
 			// Request to get/set topic metadata
 			log.Printf("t[%s] meta %+v", t.name, meta)
@@ -219,6 +230,18 @@ func (t *Topic) runProxy(hub *Hub) {
 
 		case msg := <-t.proxy:
 			if sess := globals.sessionStore.Get(msg.FromSID); sess != nil {
+        // NOTE: This is a hack. Proxy topics should add references between sessions and themselves
+        // only in response to previously sent join messages.
+        // This will be removed in follow-up PRs.
+				if msg.SrvMsg != nil && msg.SrvMsg.Ctrl != nil && msg.SrvMsg.Ctrl.Code < 300 {
+					if t.addSession(sess, sess.uid) {
+						sess.addSub(t.name, &Subscription{
+							broadcast: t.broadcast,
+							done:      t.unreg,
+							meta:      t.meta,
+							uaChange:  t.uaChange})
+					}
+				}
 				if !sess.queueOut(msg.SrvMsg) {
 					log.Println("topic proxy: timeout")
 				}
@@ -350,11 +373,12 @@ func (t *Topic) runLocal(hub *Hub) {
 			asUid := types.ParseUserId(msg.from)
 			if msg.Data != nil {
 				if t.isInactive() {
-					msg.sess.queueOut(ErrLocked(msg.id, t.original(asUid), msg.timestamp))
+					msg.sess.queueOutWithOverrides(ErrLocked(msg.id, t.original(asUid), msg.timestamp), msg.sessOverrides)
 					continue
 				}
 				if t.isReadOnly() {
-					msg.sess.queueOut(ErrPermissionDenied(msg.id, t.original(asUid), msg.timestamp))
+					msg.sess.queueOutWithOverrides(ErrPermissionDenied(msg.id, t.original(asUid), msg.timestamp),
+                                         msg.sessOverrides)
 					continue
 				}
 
@@ -364,8 +388,8 @@ func (t *Topic) runLocal(hub *Hub) {
 				if t.cat != types.TopicCatSys {
 					// If it's not 'sys' check write permission.
 					if !(userData.modeWant & userData.modeGiven).IsWriter() {
-						msg.sess.queueOut(ErrPermissionDenied(msg.id, t.original(asUid),
-							msg.timestamp))
+						msg.sess.queueOutWithOverrides(ErrPermissionDenied(msg.id, t.original(asUid),
+							msg.timestamp), msg.sessOverrides)
 						continue
 					}
 				}
@@ -379,7 +403,7 @@ func (t *Topic) runLocal(hub *Hub) {
 					Content:   msg.Data.Content}, (userData.modeGiven & userData.modeWant).IsReader()); err != nil {
 
 					log.Printf("topic[%s]: failed to save message: %v", t.name, err)
-					msg.sess.queueOut(ErrUnknown(msg.id, t.original(asUid), msg.timestamp))
+					msg.sess.queueOutWithOverrides(ErrUnknown(msg.id, t.original(asUid), msg.timestamp), msg.sessOverrides)
 
 					continue
 				}
@@ -395,7 +419,7 @@ func (t *Topic) runLocal(hub *Hub) {
 				if msg.id != "" {
 					reply := NoErrAccepted(msg.id, t.original(asUid), msg.timestamp)
 					reply.Ctrl.Params = map[string]int{"seq": t.lastID}
-					msg.sess.queueOut(reply)
+					msg.sess.queueOutWithOverrides(reply, msg.sessOverrides)
 				}
 
 				pushRcpt = t.pushForData(from, msg.Data)
@@ -544,7 +568,7 @@ func (t *Topic) runLocal(hub *Hub) {
 						}
 					}
 
-					if sess.queueOut(msg) {
+					if sess.queueOutWithOverrides(msg, msg.sessOverrides) {
 						// Update device map with the device ID which should NOT receive the notification.
 						if pushRcpt != nil {
 							if addr, ok := pushRcpt.To[pssd.uid]; ok {
