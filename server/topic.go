@@ -224,6 +224,14 @@ func (t *Topic) runProxy(hub *Hub) {
 		case meta := <-t.meta:
 			// Request to get/set topic metadata
 			log.Printf("t[%s] meta %+v", t.name, meta)
+			req := &ProxyTopicData{
+				MetaReq: &ProxyMeta{
+					What: meta.what,
+				},
+			}
+			if err := globals.cluster.routeToTopicMaster(meta.pkt, nil, req, t.name, meta.sess); err != nil {
+				log.Println("proxy topic: route broadcast request from proxy to master failed:", err)
+			}
 		case ua := <-t.uaChange:
 			// Process an update to user agent from one of the sessions
 			log.Printf("t[%s] uaChange %+v", t.name, ua)

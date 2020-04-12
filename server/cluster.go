@@ -170,7 +170,8 @@ type ProxyTopicData struct {
 	JoinReq *ProxyJoin
 	// Broadcast (publish, etc.) request.
 	BroadcastReq *ProxyBroadcast
-	// MetaReq      *ProxyMeta
+	// Meta request.
+	MetaReq      *ProxyMeta
 	// LeaveReq     *ProxyLeave
 }
 
@@ -196,6 +197,11 @@ type ProxyBroadcast struct {
 	Timestamp time.Time
 	// Should the packet be sent to the original session? SessionID to skip.
 	SkipSid   string
+}
+
+type ProxyMeta struct {
+	// What is being requested: sub, desc, tags, etc.
+	What int
 }
 
 // Handle outbound node communication: read messages from the channel, forward to remote nodes.
@@ -508,6 +514,20 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 			},
 		}
 		globals.hub.join <- sessionJoin
+	case msg.TopicMsg.MetaReq != nil:
+		if msg.Sess.Uid > 0 {
+			log.Println("join setting uid = ", msg.Sess.Uid)
+			msg.CliMsg.from = msg.Sess.Uid.UserId()
+		}
+		msg.CliMsg.authLvl = int(msg.Sess.AuthLvl)
+		req := &metaReq{
+			topic:   msg.RcptTo,
+			pkt:     msg.CliMsg,
+			sess:    sess,
+			what:    msg.TopicMsg.MetaReq.What}
+		log.Printf("cluster: meta request %+v %+v", req, req.pkt)
+		globals.hub.meta <- req
+
 	case msg.TopicMsg.BroadcastReq != nil:
 		if msg.SrvMsg == nil {
 			panic("cluster: topic proxy broadcast request has no data message")
