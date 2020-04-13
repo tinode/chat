@@ -475,11 +475,18 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 		log.Println("cluster TopicMaster: request from an unknown node", msg.Node)
 		return nil
 	}
-	// TODO: reexamine this code. We may not need the entire session passed here for processing requests.
+	var uid types.Uid
+	var origSid string
+	var authLvl auth.Level
 	if msg.Sess == nil {
-		log.Println("cluster TopicMaster: session params missing", msg.RcptTo)
-		*rejected = true
-		return nil
+		// Sess can be empty for pres messages.
+		uid = types.ZeroUid
+		origSid = ""
+		authLvl = auth.LevelNone
+	} else {
+		uid = msg.Sess.Uid
+		origSid = msg.Sess.Sid
+		authLvl = msg.Sess.AuthLvl
 	}
 
 	// Create a new session if needed.
@@ -489,14 +496,14 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 		sess, count = globals.sessionStore.NewSession(node, sid)
 
 		log.Println("cluster: topic proxy channel started", sid, count)
-		go sess.topicProxyWriteLoop()
+		go sess.topicProxyWriteLoop(msg.RcptTo)
 	}
 
 	switch {
 	case msg.TopicMsg.JoinReq != nil:
-		if msg.Sess.Uid > 0 {
-			log.Println("join setting uid = ", msg.Sess.Uid)
-			msg.CliMsg.from = msg.Sess.Uid.UserId()
+		if uid > 0 {
+			log.Println("join setting uid = ", uid)
+			msg.CliMsg.from = uid.UserId()
 		}
 		msg.CliMsg.topic = msg.CliMsg.Sub.Topic
 		msg.CliMsg.id = msg.CliMsg.Sub.Id
@@ -509,22 +516,28 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 			internal: msg.TopicMsg.JoinReq.Internal,
 			// Impersonate the original session.
 			sessOverrides: &sessionOverrides{
-				sid:    msg.Sess.Sid,
+				sid:    origSid,
 				rcptTo: msg.RcptTo,
 			},
 		}
 		globals.hub.join <- sessionJoin
 	case msg.TopicMsg.MetaReq != nil:
-		if msg.Sess.Uid > 0 {
-			log.Println("join setting uid = ", msg.Sess.Uid)
-			msg.CliMsg.from = msg.Sess.Uid.UserId()
+		if uid > 0 {
+			log.Println("join setting uid = ", uid)
+			msg.CliMsg.from = uid.UserId()
 		}
-		msg.CliMsg.authLvl = int(msg.Sess.AuthLvl)
+		msg.CliMsg.authLvl = int(authLvl)
 		req := &metaReq{
-			topic:   msg.RcptTo,
-			pkt:     msg.CliMsg,
-			sess:    sess,
-			what:    msg.TopicMsg.MetaReq.What}
+			topic:    msg.RcptTo,
+			pkt:      msg.CliMsg,
+			sess:     sess,
+			what:     msg.TopicMsg.MetaReq.What,
+			// Impersonate the original session.
+			sessOverrides: &sessionOverrides{
+				sid:    origSid,
+				rcptTo: msg.RcptTo,
+			},
+		}
 		log.Printf("cluster: meta request %+v %+v", req, req.pkt)
 		globals.hub.meta <- req
 
@@ -537,7 +550,7 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 		msg.SrvMsg.timestamp = msg.TopicMsg.BroadcastReq.Timestamp
 		msg.SrvMsg.rcptto = msg.RcptTo
 		msg.SrvMsg.sessOverrides = &sessionOverrides{
-			sid:    msg.Sess.Sid,
+			sid:    origSid,
 			rcptTo: msg.RcptTo,
 		}
 		msg.SrvMsg.sess = sess
@@ -569,11 +582,8 @@ func (Cluster) Proxy(msg *ClusterResp, unused *bool) error {
 }
 
 func (Cluster) TopicProxy(msg *ClusterResp, unused *bool) error {
-	log.Printf("TopicProxy --> %s %+v", msg.FromSID, msg.SrvMsg)
-
 	// This cluster member received a response from the topic master to be forwarded to the topic.
 	// Find appropriate topic, send the message to it.
-	log.Printf("cluster: master response for topic %+v", msg)
 	if t := globals.hub.topicGet(msg.RcptTo); t != nil {
 		t.proxy <- msg
 	} else {
@@ -1114,7 +1124,7 @@ func (c *Cluster) invalidateRemoteSubs() {
 	}
 }
 
-func (sess *Session) topicProxyWriteLoop() {
+func (sess *Session) topicProxyWriteLoop(forTopic string) {
 	defer func() {
 		sess.closeRPC()
 		globals.sessionStore.Delete(sess)
@@ -1129,17 +1139,19 @@ func (sess *Session) topicProxyWriteLoop() {
 				return
 			}
 			srvMsg := msg.(*ServerComMessage)
-			if srvMsg.sessOverrides == nil {
-				panic("cluster: proxy session overrides not specified - " + sess.sid)
-			}
-			var sid string
-			if srvMsg.sessOverrides.sid == "" {
-				sid = sess.sid
+			var sid, rcptTo string
+			if srvMsg.sessOverrides == nil || srvMsg.sessOverrides.sid == "" {
+				// It is a broadcast.
+				rcptTo  = forTopic
+				sid = "*"
 			} else {
+				// Reply to a specific session.
 				sid = srvMsg.sessOverrides.sid
+				rcptTo = srvMsg.sessOverrides.rcptTo
 			}
-			if err := sess.clnode.respondToTopicProxy(&ClusterResp{SrvMsg: srvMsg, FromSID: sid, RcptTo: srvMsg.sessOverrides.rcptTo}); err != nil {
-				log.Println("cluster: sess.topicProxyWrite: " + err.Error())
+
+			if err := sess.clnode.respondToTopicProxy(&ClusterResp{SrvMsg: srvMsg, FromSID: sid, RcptTo: rcptTo}); err != nil {
+				log.Printf("cluster tp [%s]: sess.topicProxyWrite: %s", sess.sid, err.Error())
 				return
 			}
 		case msg := <-sess.stop:
