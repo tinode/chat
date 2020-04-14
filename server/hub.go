@@ -206,7 +206,8 @@ func (h *Hub) run() {
 						log.Println("hub: topic's broadcast queue is full", dst.name)
 					}
 				}
-			} else if (strings.HasPrefix(msg.rcptto, "usr") || strings.HasPrefix(msg.rcptto, "grp")) && globals.cluster.isRemoteTopic(msg.rcptto) {
+			} else if (strings.HasPrefix(msg.rcptto, "usr") || strings.HasPrefix(msg.rcptto, "grp")) &&
+				globals.cluster.isRemoteTopic(msg.rcptto) {
 				// It is a remote topic.
 				if err := globals.cluster.routeToTopicIntraCluster(msg.rcptto, msg); err != nil {
 					log.Printf("hub: routing to '%s' failed", msg.rcptto)
@@ -364,7 +365,7 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 				// Case 1.1.1: requester is the owner or last sub in a p2p topic
 
 				t.markPaused(true)
-				if err := store.Topics.Delete(topic, true); err != nil {
+				if err := store.Topics.Delete(topic, msg.Del.Hard); err != nil {
 					t.markPaused(false)
 					sess.queueOut(ErrUnknown(msg.id, msg.topic, now))
 					return err
@@ -422,7 +423,7 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 
 				if tcat == types.TopicCatP2P && len(subs) < 2 {
 					// This is a P2P topic and fewer than 2 subscriptions, delete the entire topic
-					if err := store.Topics.Delete(topic, true); err != nil {
+					if err := store.Topics.Delete(topic, msg.Del.Hard); err != nil {
 						sess.queueOut(ErrUnknown(msg.id, msg.topic, now))
 						return err
 					}
@@ -454,7 +455,7 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 			} else {
 				// Case 1.2.1.1: owner, delete the group topic from db.
 				// Only group topics have owners.
-				if err := store.Topics.Delete(topic, true); err != nil {
+				if err := store.Topics.Delete(topic, msg.Del.Hard); err != nil {
 					sess.queueOut(ErrUnknown(msg.id, msg.topic, now))
 					return err
 				}
