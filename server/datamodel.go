@@ -525,6 +525,8 @@ type sessionOverrides struct {
 	sid string
 	// Topic id the session represents.
 	rcptTo string
+	// Incoming request pointer. Set for topic proxy requests.
+	origReq interface{}
 }
 
 // ServerComMessage is a wrapper for server-side messages.

@@ -141,6 +141,8 @@ type ClusterResp struct {
 	FromSID string
 	// Expanded (routable) topic name
 	RcptTo string
+	// Response to a topic proxy request.
+	ProxyResp *ProxyResponse
 }
 
 // ClusterPresExt encapsulates externally unroutable parameters of {pres} message which have to be sent intra-cluster.
@@ -167,7 +169,7 @@ type ClusterPresExt struct {
 // ProxyTopicData combines topic proxy to master request params.
 type ProxyTopicData struct {
 	// Join (subscribe) request.
-	JoinReq *ProxyJoin
+	JoinReq      *ProxyJoin
 	// Broadcast (publish, etc.) request.
 	BroadcastReq *ProxyBroadcast
 	// Meta request.
@@ -202,6 +204,21 @@ type ProxyBroadcast struct {
 type ProxyMeta struct {
 	// What is being requested: sub, desc, tags, etc.
 	What int
+}
+
+// Proxy request types.
+const (
+	ProxyRequestJoin      = 1
+	ProxyRequestMeta      = 2
+	ProxyRequestBroadcast = 3
+)
+
+// ProxyResponse contains various parameters sent back by the topic master in response a topic proxy request.
+type ProxyResponse struct {
+	// Request type.
+	OrigRequestType int
+	// SessionID to skip. Set for broadcast requests.
+	SkipSid         string
 }
 
 // Handle outbound node communication: read messages from the channel, forward to remote nodes.
@@ -516,8 +533,9 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 			internal: msg.TopicMsg.JoinReq.Internal,
 			// Impersonate the original session.
 			sessOverrides: &sessionOverrides{
-				sid:    origSid,
-				rcptTo: msg.RcptTo,
+				sid:     origSid,
+				rcptTo:  msg.RcptTo,
+				origReq: msg.TopicMsg.JoinReq,
 			},
 		}
 		globals.hub.join <- sessionJoin
@@ -534,8 +552,9 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 			what:     msg.TopicMsg.MetaReq.What,
 			// Impersonate the original session.
 			sessOverrides: &sessionOverrides{
-				sid:    origSid,
-				rcptTo: msg.RcptTo,
+				sid:     origSid,
+				rcptTo:  msg.RcptTo,
+				origReq: msg.TopicMsg.MetaReq,
 			},
 		}
 		log.Printf("cluster: meta request %+v %+v", req, req.pkt)
@@ -550,8 +569,9 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 		msg.SrvMsg.timestamp = msg.TopicMsg.BroadcastReq.Timestamp
 		msg.SrvMsg.rcptto = msg.RcptTo
 		msg.SrvMsg.sessOverrides = &sessionOverrides{
-			sid:    origSid,
-			rcptTo: msg.RcptTo,
+			sid:     origSid,
+			rcptTo:  msg.RcptTo,
+			origReq: msg.TopicMsg.BroadcastReq,
 		}
 		msg.SrvMsg.sess = sess
 		msg.SrvMsg.skipSid = msg.TopicMsg.BroadcastReq.SkipSid
@@ -1139,18 +1159,36 @@ func (sess *Session) topicProxyWriteLoop(forTopic string) {
 				return
 			}
 			srvMsg := msg.(*ServerComMessage)
-			var sid, rcptTo string
-			if srvMsg.sessOverrides == nil || srvMsg.sessOverrides.sid == "" {
-				// It is a broadcast.
-				rcptTo  = forTopic
-				sid = "*"
-			} else {
+
+			response := &ClusterResp{
+				SrvMsg: srvMsg,
+				ProxyResp: &ProxyResponse{},
+			}
+			copyParamsFromSession := false
+			if srvMsg.sessOverrides != nil {
+				switch v := srvMsg.sessOverrides.origReq.(type) {
+				case nil:
+					log.Println("origReq is nil")
+				case *ProxyJoin:
+					response.ProxyResp.OrigRequestType = ProxyRequestJoin
+				case *ProxyBroadcast:
+					response.ProxyResp.OrigRequestType = ProxyRequestBroadcast
+					response.ProxyResp.SkipSid = v.SkipSid
+				case *ProxyMeta:
+					response.ProxyResp.OrigRequestType = ProxyRequestMeta
+				}
+				copyParamsFromSession = srvMsg.sessOverrides.sid != ""
+			}
+			if copyParamsFromSession {
 				// Reply to a specific session.
-				sid = srvMsg.sessOverrides.sid
-				rcptTo = srvMsg.sessOverrides.rcptTo
+				response.FromSID = srvMsg.sessOverrides.sid
+				response.RcptTo = srvMsg.sessOverrides.rcptTo
+			} else {
+				response.RcptTo  = forTopic
+				response.FromSID = "*"
 			}
 
-			if err := sess.clnode.respondToTopicProxy(&ClusterResp{SrvMsg: srvMsg, FromSID: sid, RcptTo: rcptTo}); err != nil {
+			if err := sess.clnode.respondToTopicProxy(response); err != nil {
 				log.Printf("cluster tp [%s]: sess.topicProxyWrite: %s", sess.sid, err.Error())
 				return
 			}
