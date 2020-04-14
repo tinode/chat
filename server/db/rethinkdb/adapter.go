@@ -1112,8 +1112,9 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 		for cursor.Next(&top) {
 			sub = join[top.Id]
 			sub.ObjHeader.MergeTimes(&top.ObjHeader)
-			sub.SetSeqId(top.SeqId)
+			sub.SetState(top.State)
 			sub.SetTouchedAt(top.TouchedAt)
+			sub.SetSeqId(top.SeqId)
 			if t.GetTopicCat(sub.Topic) == t.TopicCatGrp {
 				// all done with a grp topic
 				sub.SetPublic(top.Public)
@@ -1142,6 +1143,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 			uid2 := t.ParseUid(usr.Id)
 			if sub, ok := join[uid.P2PName(uid2)]; ok {
 				sub.ObjHeader.MergeTimes(&usr.ObjHeader)
+				sub.SetState(usr.State)
 				sub.SetPublic(usr.Public)
 				sub.SetWith(uid2.UserId())
 				sub.SetDefaultAccess(usr.Access.Auth, usr.Access.Anon)

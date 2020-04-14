@@ -299,9 +299,8 @@ func ParseP2P(p2p string) (uid1, uid2 Uid, err error) {
 // ObjHeader is the header shared by all stored objects.
 type ObjHeader struct {
 	// using string to get around rethinkdb's problems with uint64;
-	// `bson:"_id"` tag is for mongodb to use as primary key '_id'
-	// 'omitempty' causes mongodb automaticaly create "_id" field if field not set explicitly
-	Id        string `bson:"_id,omitempty"`
+	// `bson:"_id"` tag is for mongodb to use as primary key '_id'.
+	Id        string `bson:"_id"`
 	id        Uid
 	CreatedAt time.Time
 	UpdatedAt time.Time

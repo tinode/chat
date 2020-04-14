@@ -576,8 +576,8 @@ func (t *Topic) runLocal(hub *Hub) {
 
 						// Check presence filters
 						pud := t.perUser[pssd.uid]
-						// Send "gone" notification even if the topic is muted.
-						if (!(pud.modeGiven & pud.modeWant).IsPresencer() && msg.Pres.What != "gone") ||
+						// Send "gone" and "acs" notifications even if the topic is muted.
+						if (!(pud.modeGiven & pud.modeWant).IsPresencer() && msg.Pres.What != "gone" && msg.Pres.What != "acs") ||
 							(msg.Pres.FilterIn != 0 && int(pud.modeGiven&pud.modeWant)&msg.Pres.FilterIn == 0) ||
 							(msg.Pres.FilterOut != 0 && int(pud.modeGiven&pud.modeWant)&msg.Pres.FilterOut != 0) {
 							continue
