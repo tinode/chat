@@ -2418,7 +2418,7 @@ func (t *Topic) replyDelCred(h *Hub, sess *Session, asUid types.Uid, authLvl aut
 
 	tags, err := deleteCred(asUid, authLvl, del.Cred)
 	if tags != nil {
-		// Check if anything has been actuallt removed.
+		// Check if anything has been actually removed.
 		_, removed := stringSliceDelta(t.tags, tags)
 		if len(removed) > 0 {
 			t.tags = tags
