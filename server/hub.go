@@ -85,6 +85,9 @@ type metaReq struct {
 	what int
 	// New topic state value. Only types.StateSuspended is supported at this time.
 	state types.ObjState
+
+	// Session param overrides. Used for handling remote topic requests.
+	sessOverrides *sessionOverrides
 }
 
 // Hub is the core structure which holds topics.
