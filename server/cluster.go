@@ -518,7 +518,7 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 
 	switch {
 	case msg.TopicMsg.JoinReq != nil:
-		if uid > 0 {
+		if !uid.IsZero() {
 			log.Println("join setting uid = ", uid)
 			msg.CliMsg.from = uid.UserId()
 		}
