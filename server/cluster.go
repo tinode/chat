@@ -408,13 +408,21 @@ func (Cluster) Proxy(msg *ClusterResp, unused *bool) error {
 func (c *Cluster) Route(msg *ClusterReq, rejected *bool) error {
 	*rejected = false
 	if msg.Signature != c.ring.Signature() {
-		log.Println("cluster Route: session signature mismatch", msg.Sess.Sid)
+		sid := ""
+		if msg.Sess != nil {
+			sid = msg.Sess.Sid
+		}
+		log.Println("cluster Route: session signature mismatch", sid)
 		*rejected = true
 		return nil
 	}
 	if msg.SrvMsg == nil {
+		sid := ""
+		if msg.Sess != nil {
+			sid = msg.Sess.Sid
+		}
 		// TODO: maybe panic here.
-		log.Println("cluster Route: nil server message", msg.Sess.Sid)
+		log.Println("cluster Route: nil server message", sid)
 		*rejected = true
 		return nil
 	}
@@ -606,7 +614,7 @@ func (c *Cluster) routeToTopic(msg *ClientComMessage, topic string, sess *Sessio
 }
 
 // Forward server response message to the node that owns topic.
-func (c *Cluster) routeToTopicIntraCluster(topic string, msg *ServerComMessage) error {
+func (c *Cluster) routeToTopicIntraCluster(topic string, msg *ServerComMessage, sess *Session) error {
 	n := c.nodeForTopic(topic)
 	if n == nil {
 		return errors.New("node for topic not found (intra)")
@@ -617,8 +625,12 @@ func (c *Cluster) routeToTopicIntraCluster(topic string, msg *ServerComMessage) 
 		Signature:   c.ring.Signature(),
 		Fingerprint: c.fingerprint,
 		RcptTo:      topic,
-		SrvMsg:      msg}
+		SrvMsg:      msg,
+	}
 
+	if sess != nil {
+		req.Sess = &ClusterSess{Sid: sess.sid}
+	}
 	return n.route(req)
 }
 

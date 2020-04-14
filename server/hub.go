@@ -209,7 +209,7 @@ func (h *Hub) run() {
 			} else if (strings.HasPrefix(msg.rcptto, "usr") || strings.HasPrefix(msg.rcptto, "grp")) &&
 				globals.cluster.isRemoteTopic(msg.rcptto) {
 				// It is a remote topic.
-				if err := globals.cluster.routeToTopicIntraCluster(msg.rcptto, msg); err != nil {
+				if err := globals.cluster.routeToTopicIntraCluster(msg.rcptto, msg, msg.sess); err != nil {
 					log.Printf("hub: routing to '%s' failed", msg.rcptto)
 				}
 			} else if msg.Pres == nil && msg.Info == nil {
