@@ -237,23 +237,28 @@ func (t *Topic) runProxy(hub *Hub) {
 			log.Printf("t[%s] uaChange %+v", t.name, ua)
 
 		case msg := <-t.proxy:
-			log.Printf("proxy topic [%s] msg: sid[%s] = %+v", t.name, msg.FromSID, msg.SrvMsg)
+			log.Printf("proxy topic [%s] msg: sid[%s] = %+v | proxyresp = %+v", t.name, msg.FromSID, msg.SrvMsg, msg.ProxyResp)
 			if msg.FromSID == "*" {
 				// It is a broadcast.
+				msg.SrvMsg.skipSid = msg.ProxyResp.SkipSid
 				t.proxyFanoutBroadcast(msg.SrvMsg)
 			} else if sess := globals.sessionStore.Get(msg.FromSID); sess != nil {
-        // NOTE: This is a hack. Proxy topics should add references between sessions and themselves
-        // only in response to previously sent join messages.
-        // This will be removed in follow-up PRs.
-				if msg.SrvMsg != nil && msg.SrvMsg.Ctrl != nil && msg.SrvMsg.Ctrl.Code < 300 {
-					if t.addSession(sess, sess.uid) {
-						sess.addSub(t.name, &Subscription{
-							broadcast: t.broadcast,
-							done:      t.unreg,
-							meta:      t.meta,
-							uaChange:  t.uaChange})
+				switch msg.ProxyResp.OrigRequestType {
+				case ProxyRequestJoin:
+					if msg.SrvMsg != nil && msg.SrvMsg.Ctrl != nil && msg.SrvMsg.Ctrl.Code < 300 {
+						if t.addSession(sess, sess.uid) {
+							sess.addSub(t.name, &Subscription{
+								broadcast: t.broadcast,
+								done:      t.unreg,
+								meta:      t.meta,
+								uaChange:  t.uaChange})
+						}
 					}
-				}
+				case ProxyRequestBroadcast:
+				case ProxyRequestMeta:
+				default:
+					log.Printf("proxy topic [%s] received response referencing unknown request type %d", t.name, msg.ProxyResp.OrigRequestType)
+        }
 				if !sess.queueOut(msg.SrvMsg) {
 					log.Println("topic proxy: timeout")
 				}
@@ -271,6 +276,9 @@ func (t *Topic) runProxy(hub *Hub) {
 
 func (t *Topic) proxyFanoutBroadcast(msg *ServerComMessage) {
 	for sess, _ := range t.sessions {
+		if sess.sid == msg.skipSid {
+			continue
+		}
 		log.Printf("broadcast fanout [%s] to %s", t.name, sess.sid)
 		if sess.queueOut(msg) {
 			// TODO: push notifications.
@@ -539,8 +547,14 @@ func (t *Topic) runLocal(hub *Hub) {
 				}
 			}
 
-			// Clear session overrides (broadcast is not a reply to a specific session).
-			msg.sessOverrides = nil
+			var broadcastSessOverrides *sessionOverrides
+			if msg.sessOverrides != nil {
+			  // Broadcast is not a reply to a specific session.
+				// Hence, we do not set session specific params.
+				broadcastSessOverrides = &sessionOverrides{
+					origReq: msg.sessOverrides.origReq,
+				}
+			}
 			// Broadcast the message. Only {data}, {pres}, {info} are broadcastable.
 			// {meta} and {ctrl} are sent to the session only
 			if msg.Data != nil || msg.Pres != nil || msg.Info != nil {
@@ -594,7 +608,7 @@ func (t *Topic) runLocal(hub *Hub) {
 						}
 					}
 
-					if sess.queueOut(msg) {
+					if sess.queueOutWithOverrides(msg, broadcastSessOverrides) {
 						// Update device map with the device ID which should NOT receive the notification.
 						if pushRcpt != nil {
 							if addr, ok := pushRcpt.To[pssd.uid]; ok {
