@@ -125,6 +125,9 @@ type Session struct {
 	// Session ID
 	sid string
 
+	// Indicates whether this session is used as a local interface for a remote proxy topic.
+	isProxy bool
+
 	// Needed for long polling and grpc.
 	lock sync.Mutex
 }

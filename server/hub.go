@@ -50,6 +50,8 @@ type sessionLeave struct {
 	topic string
 	// Session which initiated the request
 	sess *Session
+	// The session is a special session for a remote proxy topic.
+	terminateRemoteSession bool
 	// Leave and unsubscribe
 	unsub bool
 	// ID of originating request, if any

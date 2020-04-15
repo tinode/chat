@@ -174,7 +174,7 @@ type ProxyTopicData struct {
 	BroadcastReq *ProxyBroadcast
 	// Meta request.
 	MetaReq      *ProxyMeta
-	// LeaveReq     *ProxyLeave
+	LeaveReq     *ProxyLeave
 }
 
 // ProxyJoin contains topic join request parameters.
@@ -206,11 +206,20 @@ type ProxyMeta struct {
 	What int
 }
 
+type ProxyLeave struct {
+	Id string
+	Topic string
+	UserId types.Uid
+	Unsub bool
+	TerminateRemoteSession bool
+}
+
 // Proxy request types.
 const (
 	ProxyRequestJoin      = 1
-	ProxyRequestMeta      = 2
-	ProxyRequestBroadcast = 3
+	ProxyRequestLeave     = 2
+	ProxyRequestMeta      = 3
+	ProxyRequestBroadcast = 4
 )
 
 // ProxyResponse contains various parameters sent back by the topic master in response a topic proxy request.
@@ -511,6 +520,7 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 		// If the session is not found, create it.
 		var count int
 		sess, count = globals.sessionStore.NewSession(node, sid)
+    sess.isProxy = true
 
 		log.Println("cluster: topic proxy channel started", sid, count)
 		go sess.topicProxyWriteLoop(msg.RcptTo)
@@ -539,8 +549,22 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 			},
 		}
 		globals.hub.join <- sessionJoin
+	case msg.TopicMsg.LeaveReq != nil:
+		if t := globals.hub.topicGet(msg.TopicMsg.LeaveReq.Topic); t != nil {
+			leave := &sessionLeave{
+				//
+				id: msg.TopicMsg.LeaveReq.Id,
+				userId: msg.TopicMsg.LeaveReq.UserId,
+				unsub: msg.TopicMsg.LeaveReq.Unsub,
+				terminateRemoteSession: msg.TopicMsg.LeaveReq.TerminateRemoteSession,
+			}
+			t.unreg <- leave
+		} else {
+			log.Printf("cluster: leave request for unknown topic %s", msg.TopicMsg.LeaveReq.Topic)
+		}
+
 	case msg.TopicMsg.MetaReq != nil:
-		if uid > 0 {
+		if !uid.IsZero() {
 			log.Println("join setting uid = ", uid)
 			msg.CliMsg.from = uid.UserId()
 		}
@@ -1183,6 +1207,8 @@ func (sess *Session) topicProxyWriteLoop(forTopic string) {
 					log.Println("origReq is nil")
 				case *ProxyJoin:
 					response.ProxyResp.OrigRequestType = ProxyRequestJoin
+				case *ProxyLeave:
+					response.ProxyResp.OrigRequestType = ProxyRequestLeave
 				case *ProxyBroadcast:
 					response.ProxyResp.OrigRequestType = ProxyRequestBroadcast
 					response.ProxyResp.SkipSid = v.SkipSid
