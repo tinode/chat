@@ -905,7 +905,7 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 		}
 
 		// Delete all credentials.
-		if err = credDel(tx, uid, "", ""); err != nil {
+		if err = credDel(tx, uid, "", ""); err != nil && err != t.ErrNotFound {
 			return err
 		}
 
@@ -2342,8 +2342,10 @@ func deviceDelete(tx *sqlx.Tx, uid t.Uid, deviceID string) error {
 		res, err = tx.Exec("DELETE FROM devices WHERE userid=? AND hash=?", store.DecodeUid(uid), deviceHasher(deviceID))
 	}
 
-	if count, _ := res.RowsAffected(); count == 0 && err == nil {
-		err = t.ErrNotFound
+	if err == nil {
+		if count, _ := res.RowsAffected(); count == 0 {
+			err = t.ErrNotFound
+		}
 	}
 
 	return err
@@ -2465,19 +2467,36 @@ func credDel(tx *sqlx.Tx, uid t.Uid, method, value string) error {
 		}
 	}
 
+	var err error
+	var res sql.Result
 	if method == "" {
-		_, err := tx.Exec("DELETE FROM credentials"+constraints, args...)
+		// Case 1
+		res, err = tx.Exec("DELETE FROM credentials"+constraints, args...)
+		if err == nil {
+			if count, _ := res.RowsAffected(); count == 0 {
+				err = t.ErrNotFound
+			}
+		}
 		return err
 	}
 
 	// Case 2.1
-	if _, err := tx.Exec("DELETE FROM credentials"+constraints+" AND (done=true OR retries=0)", args...); err != nil {
+	res, err = tx.Exec("DELETE FROM credentials"+constraints+" AND (done=true OR retries=0)", args...)
+	if err != nil {
 		return err
+	}
+	if count, _ := res.RowsAffected(); count > 0 {
+		return nil
 	}
 
 	// Case 2.2
 	args = append([]interface{}{t.TimeNow()}, args...)
-	_, err := tx.Exec("UPDATE credentials SET deletedat=?"+constraints, args...)
+	res, err = tx.Exec("UPDATE credentials SET deletedat=?"+constraints, args...)
+	if err == nil {
+		if count, _ := res.RowsAffected(); count >= 0 {
+			err = t.ErrNotFound
+		}
+	}
 
 	return err
 }

@@ -2299,13 +2299,14 @@ func (t *Topic) replyDelCred(h *Hub, sess *Session, asUid types.Uid, authLvl aut
 		if len(removed) > 0 {
 			t.tags = tags
 			t.presSubsOnline("tags", "", nilPresParams, nilPresFilters, "")
-			sess.queueOut(decodeStoreError(err, del.Id, del.Topic, now, nil))
-		} else {
-			sess.queueOut(InfoNoAction(del.Id, del.Topic, now))
 		}
-	} else {
-		sess.queueOut(decodeStoreError(err, del.Id, del.Topic, now, nil))
+	} else if err == nil {
+		sess.queueOut(InfoNoAction(del.Id, del.Topic, now))
+		return nil
 	}
+
+	sess.queueOut(decodeStoreError(err, del.Id, del.Topic, now, nil))
+
 	return err
 }
 
