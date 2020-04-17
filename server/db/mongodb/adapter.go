@@ -601,7 +601,7 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 			}
 
 			// Delete credentials.
-			if err = a.credDel(sc, uid, "", ""); err != nil {
+			if err = a.credDel(sc, uid, "", ""); err != nil && err != t.ErrNotFound {
 				return err
 			}
 
@@ -921,7 +921,12 @@ func (a *adapter) credDel(ctx context.Context, uid t.Uid, method, value string) 
 			filter["value"] = value
 		}
 	} else {
-		_, err := credCollection.DeleteMany(ctx, filter)
+		res, err := credCollection.DeleteMany(ctx, filter)
+		if err == nil {
+			if res.DeletedCount == 0 {
+				err = t.ErrNotFound
+			}
+		}
 		return err
 	}
 
@@ -930,12 +935,21 @@ func (a *adapter) credDel(ctx context.Context, uid t.Uid, method, value string) 
 	hardDeleteFilter["$or"] = b.A{
 		b.M{"done": true},
 		b.M{"retries": 0}}
-	if _, err := credCollection.DeleteMany(ctx, hardDeleteFilter); err != nil {
+	res, err := credCollection.DeleteMany(ctx, hardDeleteFilter)
+	if err != nil {
 		return err
+	}
+	if res.DeletedCount > 0 {
+		return nil
 	}
 
 	// Soft-delete all other values.
-	_, err := credCollection.UpdateMany(ctx, filter, b.M{"$set": b.M{"deletedat": t.TimeNow()}})
+	res, err = credCollection.UpdateMany(ctx, filter, b.M{"$set": b.M{"deletedat": t.TimeNow()}})
+	if err == nil {
+		if res.DeletedCount == 0 {
+			err = t.ErrNotFound
+		}
+	}
 	return err
 }
 

@@ -772,7 +772,7 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 		}
 
 		// Delete credentials.
-		if err = a.CredDel(uid, "", ""); err != nil {
+		if err = a.CredDel(uid, "", ""); err != nil && err != t.ErrNotFound {
 			return err
 		}
 		// And finally delete the user.
@@ -2069,18 +2069,31 @@ func (a *adapter) CredDel(uid t.Uid, method, value string) error {
 	}
 
 	if method == "" {
-		_, err := q.Delete().RunWrite(a.conn)
+		res, err := q.Delete().RunWrite(a.conn)
+		if err == nil {
+			if res.Deleted == 0 {
+				err = t.ErrNotFound
+			}
+		}
 		return err
 	}
 
 	// Hard-delete all confirmed values or values with no attempts at confirmation.
-	_, err := q.Filter(rdb.Or(rdb.Row.Field("Done").Eq(true), rdb.Row.Field("Retries").Eq(0))).Delete().RunWrite(a.conn)
+	res, err := q.Filter(rdb.Or(rdb.Row.Field("Done").Eq(true), rdb.Row.Field("Retries").Eq(0))).Delete().RunWrite(a.conn)
 	if err != nil {
 		return err
 	}
+	if res.Deleted > 0 {
+		return nil
+	}
 
 	// Soft-delete all other values.
-	_, err = q.Update(map[string]interface{}{"DeletedAt": t.TimeNow()}).RunWrite(a.conn)
+	res, err = q.Update(map[string]interface{}{"DeletedAt": t.TimeNow()}).RunWrite(a.conn)
+	if err == nil {
+		if res.Deleted == 0 {
+			err = t.ErrNotFound
+		}
+	}
 	return err
 }
 

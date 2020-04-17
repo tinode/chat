@@ -2489,6 +2489,9 @@ func (t *Topic) replyDelCred(h *Hub, sess *Session, asUid types.Uid, authLvl aut
 			t.tags = tags
 			t.presSubsOnline("tags", "", nilPresParams, nilPresFilters, "")
 		}
+	} else if err == nil {
+		sess.queueOutWithOverrides(InfoNoAction(del.Id, del.Topic, now), sessOverrides)
+		return nil
 	}
 	sess.queueOutWithOverrides(decodeStoreError(err, del.Id, del.Topic, now, nil), sessOverrides)
 	return err

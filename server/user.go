@@ -490,6 +490,10 @@ func deleteCred(uid types.Uid, authLvl auth.Level, cred *MsgCredClient) ([]strin
 	// The credential is either not required or more than one credential is validated for the given method.
 	err := vld.Remove(uid, cred.Value)
 	if err != nil {
+		if err == types.ErrNotFound {
+			// Credential is not deleted because it's not found
+			err = nil
+		}
 		return nil, err
 	}
 
