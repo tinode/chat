@@ -125,9 +125,6 @@ type Session struct {
 	// Session ID
 	sid string
 
-	// Indicates whether this session is used as a local interface for a remote proxy topic.
-	isProxy bool
-
 	// Needed for long polling and grpc.
 	lock sync.Mutex
 }
@@ -204,6 +201,11 @@ func (s *Session) delRemoteSub(topic string) {
 	defer s.remoteSubsLock.Unlock()
 
 	delete(s.remoteSubs, topic)
+}
+
+// Indicates whether this session is used as a local interface for a remote proxy topic.
+func (s *Session) isProxy() bool {
+  return s.proto == CLUSTER
 }
 
 // queueOut attempts to send a ServerComMessage to a session; if the send buffer is full,

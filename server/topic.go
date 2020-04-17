@@ -258,10 +258,11 @@ func (t *Topic) runProxy(hub *Hub) {
 				// It is a broadcast.
 				msg.SrvMsg.skipSid = msg.ProxyResp.SkipSid
 				t.proxyFanoutBroadcast(msg.SrvMsg)
-			} else if sess := globals.sessionStore.Get(msg.FromSID); sess != nil {
+			} else {
+				sess := globals.sessionStore.Get(msg.FromSID)
 				switch msg.ProxyResp.OrigRequestType {
 				case ProxyRequestJoin:
-					if msg.SrvMsg != nil && msg.SrvMsg.Ctrl != nil {
+					if sess != nil && msg.SrvMsg != nil && msg.SrvMsg.Ctrl != nil {
 						if msg.SrvMsg.Ctrl.Code < 300 {
 							if t.addSession(sess, sess.uid) {
 								sess.addSub(t.name, &Subscription{
@@ -272,17 +273,27 @@ func (t *Topic) runProxy(hub *Hub) {
 							}
 				      killTimer.Stop()
 						} else {
-						  killTimer.Reset(keepAlive)
+							if len(t.sessions) == 0 {
+								killTimer.Reset(keepAlive)
+							}
 						}
 					}
 				case ProxyRequestBroadcast:
 				case ProxyRequestMeta:
 				case ProxyRequestLeave:
-					if msg.SrvMsg != nil && msg.SrvMsg.Ctrl != nil && msg.SrvMsg.Ctrl.Code < 300 {
-						log.Printf("proxy topic [%s]: session %p unsubscribed", t.name, sess)
-						t.remSession(sess, types.ZeroUid)
-						if len(t.sessions) == 0 {
-							killTimer.Reset(keepAlive)
+					log.Printf("proxy topic [%s]: session %p unsubscribed", t.name, sess)
+					if msg.SrvMsg != nil && msg.SrvMsg.Ctrl != nil {
+						log.Printf("proxy topic [%s]: ctrl msg = %+v", t.name, msg.SrvMsg.Ctrl)
+						if msg.SrvMsg.Ctrl.Code < 300 {
+							if sess != nil {
+								t.remSession(sess, sess.uid)
+							}
+							// Enable kill timer if
+							// A. There are no more session attached to this topic.
+							// B. The last remaining session is already deleted.
+							if len(t.sessions) == 0 || (sess == nil && len(t.sessions) == 1) {
+								killTimer.Reset(keepAlive)
+							}
 						}
 					}
 				default:
@@ -291,8 +302,6 @@ func (t *Topic) runProxy(hub *Hub) {
 				if !sess.queueOut(msg.SrvMsg) {
 					log.Println("topic proxy: timeout")
 				}
-			} else {
-				log.Println("topic proxy: response for unknown session", msg.FromSID)
 			}
 		case sd := <-t.exit:
 			log.Printf("t[%s] exit %+v", t.name, sd)
@@ -393,17 +402,17 @@ func (t *Topic) runLocal(hub *Hub) {
 					continue
 				}
 
-			} else if pssd := t.maybeRemoveSession(leave.sess, asUid, /*doRemove=*/!leave.sess.isProxy || leave.terminateProxyConnection); pssd != nil {
+			} else if pssd := t.maybeRemoveSession(leave.sess, asUid, /*doRemove=*/!leave.sess.isProxy() || leave.terminateProxyConnection); pssd != nil || leave.sess.isProxy() {
 				// Just leaving the topic without unsubscribing if user is subscribed.
 
 				var uid types.Uid
-				if t.isProxy {
+				if leave.sess.isProxy() {
 					uid = asUid
 				} else {
 					uid = pssd.uid
 				}
 				pud := t.perUser[uid]
-				if pssd.ref == nil {
+				if pssd == nil || pssd.ref == nil {
 					pud.online--
 				}
 
@@ -438,7 +447,7 @@ func (t *Topic) runLocal(hub *Hub) {
 				t.perUser[uid] = pud
 
 				// Always respond to proxy topics.
-				if leave.id != "" || leave.sess.isProxy {
+				if leave.id != "" || leave.sess.isProxy() {
 					leave.sess.queueOutWithOverrides(NoErr(leave.id, t.original(asUid), now), leave.sessOverrides)
 				}
 			}
@@ -1359,13 +1368,13 @@ func (t *Topic) requestSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Le
 	// Subscription successfully created. Link topic to session.
 	// Note that sessions that serve as an interface between proxy topics and their masters (proxy sessions)
 	// may have only one subscription, that is, to its master topic.
-	if !sess.isProxy || sess.countSub() == 0 {
+	if !sess.isProxy() || sess.countSub() == 0 {
 		sess.addSub(t.name, &Subscription{
 			broadcast: t.broadcast,
 			done:      t.unreg,
 			meta:      t.meta,
 			uaChange:  t.uaChange})
-		if sess.isProxy {
+		if sess.isProxy() {
 			t.addSession(sess, types.ZeroUid)
 		} else {
 			t.addSession(sess, asUid)
@@ -3014,7 +3023,7 @@ func (t *Topic) addSession(s *Session, asUid types.Uid) bool {
 // * 'asUid' matches subscribed user.
 // * or 's' is a proxy session for a proxy-master topic connection.
 func (t *Topic) maybeRemoveSession(s *Session, asUid types.Uid, doRemove bool) *perSessionData {
-	if pssd, ok := t.sessions[s]; ok && (s.isProxy || pssd.uid == asUid || asUid.IsZero()) {
+	if pssd, ok := t.sessions[s]; ok && (s.isProxy() || pssd.uid == asUid || asUid.IsZero()) {
 		if doRemove {
 			// Check for deferred presence notification and cancel it if found.
 			if pssd.ref != nil {

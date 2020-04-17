@@ -526,7 +526,6 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 		// If the session is not found, create it.
 		var count int
 		sess, count = globals.sessionStore.NewSession(node, sid)
-    sess.isProxy = true
 
 		log.Println("cluster: topic proxy channel started", sid, count)
 		go sess.topicProxyWriteLoop(msg.RcptTo)
@@ -1216,7 +1215,7 @@ func (sess *Session) topicProxyWriteLoop(forTopic string) {
 			if srvMsg.sessOverrides != nil {
 				switch req := srvMsg.sessOverrides.origReq.(type) {
 				case nil:
-					log.Println("origReq is nil")
+					panic("cluster: origReq is nil in session overrides")
 				case *ProxyJoin:
 					response.ProxyResp.OrigRequestType = ProxyRequestJoin
 				case *ProxyLeave:
