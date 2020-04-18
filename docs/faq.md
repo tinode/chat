@@ -68,3 +68,7 @@ USE 'tinode';
 UPDATE auth SET authlvl=30 WHERE uname='basic:login-of-the-user-to-make-root';
 ```
 The test database has a stock user `xena` which has root access.
+
+
+### Q: Once the number of connection reaches about 1000 per node, all kinds of problems start. Is this a bug?<br/>
+**A**: It is likely not a bug. To ensure good server performance Linux limits the total number of open file descriptors (live network connections, open files) for each process at the kernel level. The default limit is usually 1024. There are other possible restrictions on the number of file descriptors. The problems you are experiencing are likely caused by exceeding one of the OS limits. Please seek assistance of a system administrator.

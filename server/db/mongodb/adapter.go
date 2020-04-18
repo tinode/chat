@@ -935,18 +935,16 @@ func (a *adapter) credDel(ctx context.Context, uid t.Uid, method, value string) 
 	hardDeleteFilter["$or"] = b.A{
 		b.M{"done": true},
 		b.M{"retries": 0}}
-	res, err := credCollection.DeleteMany(ctx, hardDeleteFilter)
-	if err != nil {
+	if res, err := credCollection.DeleteMany(ctx, hardDeleteFilter); err != nil {
 		return err
-	}
-	if res.DeletedCount > 0 {
+	} else if res.DeletedCount > 0 {
 		return nil
 	}
 
 	// Soft-delete all other values.
-	res, err = credCollection.UpdateMany(ctx, filter, b.M{"$set": b.M{"deletedat": t.TimeNow()}})
+	res, err := credCollection.UpdateMany(ctx, filter, b.M{"$set": b.M{"deletedat": t.TimeNow()}})
 	if err == nil {
-		if res.DeletedCount == 0 {
+		if res.ModifiedCount == 0 {
 			err = t.ErrNotFound
 		}
 	}
