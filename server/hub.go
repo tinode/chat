@@ -50,10 +50,15 @@ type sessionLeave struct {
 	topic string
 	// Session which initiated the request
 	sess *Session
+	// Should the proxy-master topic connection be terminated
+	terminateProxyConnection bool
 	// Leave and unsubscribe
 	unsub bool
 	// ID of originating request, if any
 	id string
+
+	// Session param overrides. Used for handling remote (proxy-master) topic requests.
+	sessOverrides *sessionOverrides
 }
 
 // Request to hub to remove the topic

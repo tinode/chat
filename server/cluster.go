@@ -174,7 +174,8 @@ type ProxyTopicData struct {
 	BroadcastReq *ProxyBroadcast
 	// Meta request.
 	MetaReq      *ProxyMeta
-	// LeaveReq     *ProxyLeave
+	// Leave (unsubscribe) request.
+	LeaveReq     *ProxyLeave
 }
 
 // ProxyJoin contains topic join request parameters.
@@ -182,9 +183,9 @@ type ProxyJoin struct {
 	// True if this topic was just created.
 	// In case of p2p topics, it's true if the other user's subscription was
 	// created (as a part of new topic creation or just alone).
-	Created bool
+	Created  bool
 	// True if this is a new subscription.
-	Newsub bool
+	Newsub   bool
 	// True if this topic is created internally.
 	Internal bool
 }
@@ -201,16 +202,30 @@ type ProxyBroadcast struct {
 	SkipSid   string
 }
 
+// ProxyMeta contains meta (get, sub) request parameters.
 type ProxyMeta struct {
 	// What is being requested: sub, desc, tags, etc.
 	What int
 }
 
+// ProxyLeave contains unsubscribe request params.
+type ProxyLeave struct {
+	// Id of the incoming leave request.
+	Id                       string
+	// User ID of the user sent the request.
+	UserId                   types.Uid
+	// Leave and unsubscribe.
+	Unsub                    bool
+	// Terminate proxy connection to the master topic.
+	TerminateProxyConnection bool
+}
+
 // Proxy request types.
 const (
 	ProxyRequestJoin      = 1
-	ProxyRequestMeta      = 2
-	ProxyRequestBroadcast = 3
+	ProxyRequestLeave     = 2
+	ProxyRequestMeta      = 3
+	ProxyRequestBroadcast = 4
 )
 
 // ProxyResponse contains various parameters sent back by the topic master in response a topic proxy request.
@@ -539,8 +554,28 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 			},
 		}
 		globals.hub.join <- sessionJoin
+	case msg.TopicMsg.LeaveReq != nil:
+		if t := globals.hub.topicGet(msg.RcptTo); t != nil {
+			leave := &sessionLeave{
+				id: msg.TopicMsg.LeaveReq.Id,
+				userId: msg.TopicMsg.LeaveReq.UserId,
+				unsub: msg.TopicMsg.LeaveReq.Unsub,
+				terminateProxyConnection: msg.TopicMsg.LeaveReq.TerminateProxyConnection,
+				sess: sess,
+				sessOverrides: &sessionOverrides{
+					sid:     origSid,
+					rcptTo:  msg.RcptTo,
+					origReq: msg.TopicMsg.LeaveReq,
+				},
+			}
+			log.Printf("processing session leave for sid '%s', full req = %+v", origSid, leave)
+			t.unreg <- leave
+		} else {
+			log.Printf("cluster: leave request for unknown topic %s", msg.RcptTo)
+		}
+
 	case msg.TopicMsg.MetaReq != nil:
-		if uid > 0 {
+		if !uid.IsZero() {
 			log.Println("join setting uid = ", uid)
 			msg.CliMsg.from = uid.UserId()
 		}
@@ -1178,14 +1213,20 @@ func (sess *Session) topicProxyWriteLoop(forTopic string) {
 			}
 			copyParamsFromSession := false
 			if srvMsg.sessOverrides != nil {
-				switch v := srvMsg.sessOverrides.origReq.(type) {
+				switch req := srvMsg.sessOverrides.origReq.(type) {
 				case nil:
-					log.Println("origReq is nil")
+					panic("cluster: origReq is nil in session overrides")
 				case *ProxyJoin:
 					response.ProxyResp.OrigRequestType = ProxyRequestJoin
+				case *ProxyLeave:
+					response.ProxyResp.OrigRequestType = ProxyRequestLeave
+					if req.TerminateProxyConnection {
+						log.Printf("session [%s]: terminating upon client request", srvMsg.sessOverrides.sid)
+						sess.detach <- forTopic
+					}
 				case *ProxyBroadcast:
 					response.ProxyResp.OrigRequestType = ProxyRequestBroadcast
-					response.ProxyResp.SkipSid = v.SkipSid
+					response.ProxyResp.SkipSid = req.SkipSid
 				case *ProxyMeta:
 					response.ProxyResp.OrigRequestType = ProxyRequestMeta
 				}

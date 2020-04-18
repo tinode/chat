@@ -203,6 +203,11 @@ func (s *Session) delRemoteSub(topic string) {
 	delete(s.remoteSubs, topic)
 }
 
+// Indicates whether this session is used as a local interface for a remote proxy topic.
+func (s *Session) isProxy() bool {
+  return s.proto == CLUSTER
+}
+
 // queueOut attempts to send a ServerComMessage to a session; if the send buffer is full,
 // timeout is `sendTimeout`.
 func (s *Session) queueOut(msg *ServerComMessage) bool {
