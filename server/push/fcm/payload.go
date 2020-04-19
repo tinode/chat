@@ -113,7 +113,8 @@ type androidPayload struct {
 	ClickAction string `json:"click_action,omitempty"`
 }
 
-type messageData struct {
+// MessageData adds user ID and device token to push message. This is needed for error handling.
+type MessageData struct {
 	Uid      t.Uid
 	DeviceId string
 	Message  *fcm.Message
@@ -123,7 +124,6 @@ func payloadToData(pl *push.Payload) (map[string]string, error) {
 	if pl == nil {
 		return nil, nil
 	}
-
 	data := make(map[string]string)
 	var err error
 	data["what"] = pl.What
@@ -161,7 +161,7 @@ func payloadToData(pl *push.Payload) (map[string]string, error) {
 
 // PrepareNotifications creates notification payloads ready to be posted
 // to push notification server for the provided receipt.
-func PrepareNotifications(rcpt *push.Receipt, config *AndroidConfig) []messageData {
+func PrepareNotifications(rcpt *push.Receipt, config *AndroidConfig) []MessageData {
 	data, _ := payloadToData(&rcpt.Payload)
 	if data == nil {
 		log.Println("fcm push: could not parse payload")
@@ -170,15 +170,15 @@ func PrepareNotifications(rcpt *push.Receipt, config *AndroidConfig) []messageDa
 
 	// List of UIDs for querying the database
 	uids := make([]t.Uid, len(rcpt.To))
-	skipDevices := make(map[string]bool)
+	// These devices were online in the topic when the message was sent.
+	skipDevices := make(map[string]struct{})
 	i := 0
 	for uid, to := range rcpt.To {
 		uids[i] = uid
 		i++
-
 		// Some devices were online and received the message. Skip them.
 		for _, deviceID := range to.Devices {
-			skipDevices[deviceID] = true
+			skipDevices[deviceID] = struct{}{}
 		}
 	}
 
@@ -204,7 +204,7 @@ func PrepareNotifications(rcpt *push.Receipt, config *AndroidConfig) []messageDa
 		color = config.getIconColor(rcpt.Payload.What)
 	}
 
-	var messages []messageData
+	var messages []MessageData
 	for uid, devList := range devices {
 		for i := range devList {
 			d := &devList[i]
@@ -260,7 +260,7 @@ func PrepareNotifications(rcpt *push.Receipt, config *AndroidConfig) []messageDa
 						Body:  body,
 					}
 				}
-				messages = append(messages, messageData{Uid: uid, DeviceId: d.DeviceId, Message: &msg})
+				messages = append(messages, MessageData{Uid: uid, DeviceId: d.DeviceId, Message: &msg})
 			}
 		}
 	}

@@ -483,7 +483,11 @@ func (t *Topic) run(hub *Hub) {
 						// Update device map with the device ID which should NOT receive the notification.
 						if pushRcpt != nil {
 							if addr, ok := pushRcpt.To[pssd.uid]; ok {
-								addr.Delivered++
+								if pssd.ref == nil {
+									// Count foreground sessions only, background sessions are automated
+									// and should not affect pushes to other devices.
+									addr.Delivered++
+								}
 								if sess.deviceID != "" {
 									// List of device IDs which already received the message. Push should
 									// skip them.
@@ -2584,10 +2588,11 @@ func (t *Topic) pushForData(fromUid types.Uid, data *MsgServerData) *push.Receip
 
 	for uid := range t.perUser {
 		// Send only to those who have notifications enabled, exclude the originating user.
-		if uid != fromUid &&
-			(t.perUser[uid].modeWant & t.perUser[uid].modeGiven).IsPresencer() &&
-			!t.perUser[uid].deleted {
-
+		if uid == fromUid {
+			continue
+		}
+		mode := t.perUser[uid].modeWant & t.perUser[uid].modeGiven
+		if mode.IsPresencer() && mode.IsReader() && !t.perUser[uid].deleted {
 			receipt.To[uid] = push.Recipient{}
 		}
 	}
