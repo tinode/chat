@@ -77,6 +77,13 @@ type Topic struct {
 
 	// Topic's per-subscriber data
 	perUser map[types.Uid]perUserData
+	// Union of permissions across all users (used by proxy sessions with uid = 0).
+	// These are used by master topics only (in the proxy-master topic context)
+	// as a coarse-grained attempt to perform acs checks since proxy sessions "impersonate"
+	// multiple normal sessions (uids) which may have different uids.
+	modeWantUnion  types.AccessMode
+	modeGivenUnion types.AccessMode
+
 	// User's contact list (not nil for 'me' topic only).
 	// The map keys are UserIds for P2P topics and grpXXX for group topics.
 	perSubs map[string]perSubsData
@@ -225,7 +232,6 @@ func (t *Topic) runProxy(hub *Hub) {
 			}
 		case msg := <-t.broadcast:
 			// Content message intended for broadcasting to recipients
-			log.Printf("t[%s] broadcast %+v", t.name, msg)
 			brdc := &ProxyTopicData{
 				BroadcastReq: &ProxyBroadcast{
 					Id:        msg.id,
@@ -234,6 +240,7 @@ func (t *Topic) runProxy(hub *Hub) {
 					SkipSid:   msg.skipSid,
 				},
 			}
+			log.Printf("t[%s] broadcast %+v %+v", t.name, msg, brdc.BroadcastReq)
 			if err := globals.cluster.routeToTopicMaster(nil, msg, brdc, t.name, msg.sess); err != nil {
 				log.Println("proxy topic: route broadcast request from proxy to master failed:", err)
 			}
@@ -326,11 +333,22 @@ func (t *Topic) runProxy(hub *Hub) {
 	}
 }
 
+// proxyFanoutBroadcast broadcasts msg to all sessions attached to this topic.
 func (t *Topic) proxyFanoutBroadcast(msg *ServerComMessage) {
-	for sess, _ := range t.sessions {
+	for sess, pssd := range t.sessions {
 		if sess.sid == msg.skipSid {
 			continue
 		}
+		if msg.Pres != nil {
+			if !t.passesPresenceFilters(msg, pssd.uid) {
+				continue
+			}
+		} else if msg.Data != nil {
+			if !t.userIsReader(pssd.uid) {
+				continue
+			}
+		}
+		t.maybeFixTopicName(msg, pssd.uid)
 		log.Printf("broadcast fanout [%s] to %s", t.name, sess.sid)
 		if sess.queueOut(msg) {
 			// TODO: push notifications.
@@ -339,6 +357,61 @@ func (t *Topic) proxyFanoutBroadcast(msg *ServerComMessage) {
 			t.unreg <- &sessionLeave{sess: sess}
 		}
 	}
+}
+
+// getPerUserAcs returns `want` and `given` permissions for the given user id.
+func (t *Topic) getPerUserAcs(uid types.Uid) (types.AccessMode, types.AccessMode) {
+	if uid.IsZero() {
+		// For zero uids (typically for proxy sessions), return the union of all permissions.
+		return t.modeWantUnion, t.modeGivenUnion
+	} else {
+		pud := t.perUser[uid]
+		return pud.modeWant, pud.modeGiven
+	}
+}
+
+// passesPresenceFilters applies presence filters to `msg`
+// depending on per-user want and given acls for the provided `uid`.
+func (t *Topic) passesPresenceFilters(msg *ServerComMessage, uid types.Uid) bool {
+	modeWant, modeGiven := t.getPerUserAcs(uid)
+	// "gone" and "acs" notifications are sent even if the topic is muted.
+	return ((modeGiven & modeWant).IsPresencer() || msg.Pres.What == "gone" || msg.Pres.What == "acs") &&
+					(msg.Pres.FilterIn == 0 || int(modeGiven&modeWant)&msg.Pres.FilterIn != 0) &&
+					(msg.Pres.FilterOut == 0 || int(modeGiven&modeWant)&msg.Pres.FilterOut == 0)
+}
+
+// userIsReader returns true if the user (specified by `uid`) may read the given topic.
+func (t *Topic) userIsReader(uid types.Uid) bool {
+	modeWant, modeGiven := t.getPerUserAcs(uid)
+	return (modeGiven & modeWant).IsReader()
+}
+
+// maybeFixTopicName sets the topic field in `msg` depending on the uid.
+func (t *Topic) maybeFixTopicName(msg *ServerComMessage, uid types.Uid) {
+	if !uid.IsZero() && t.cat == types.TopicCatP2P {
+		// For p2p topics topic name is dependent on receiver.
+		// For zero uids we don't know the proper topic name, though.
+		switch {
+		case msg.Data != nil:
+			msg.Data.Topic = t.original(uid)
+		case msg.Pres != nil:
+			msg.Pres.Topic = t.original(uid)
+		case msg.Info != nil:
+			msg.Info.Topic = t.original(uid)
+		}
+	}
+}
+
+// computePerUserAcsUnion computes want and given permissions unions over all topic's subscribers.
+func (t *Topic) computePerUserAcsUnion() {
+	wantUnion  := types.ModeNone
+	givenUnion := types.ModeNone
+	for _, pud := range t.perUser {
+		wantUnion = wantUnion|pud.modeWant
+		givenUnion = givenUnion|pud.modeGiven
+	}
+	t.modeWantUnion = wantUnion
+	t.modeGivenUnion = givenUnion
 }
 
 func (t *Topic) runLocal(hub *Hub) {
@@ -634,18 +707,13 @@ func (t *Topic) runLocal(hub *Hub) {
 						}
 
 						// Check presence filters
-						pud := t.perUser[pssd.uid]
-						// Send "gone" and "acs" notifications even if the topic is muted.
-						if (!(pud.modeGiven & pud.modeWant).IsPresencer() && msg.Pres.What != "gone" && msg.Pres.What != "acs") ||
-							(msg.Pres.FilterIn != 0 && int(pud.modeGiven&pud.modeWant)&msg.Pres.FilterIn == 0) ||
-							(msg.Pres.FilterOut != 0 && int(pud.modeGiven&pud.modeWant)&msg.Pres.FilterOut != 0) {
+						if !t.passesPresenceFilters(msg, pssd.uid) {
 							continue
 						}
 
 					} else {
 						// Check if the user has Read permission
-						pud := t.perUser[pssd.uid]
-						if !(pud.modeGiven & pud.modeWant).IsReader() {
+						if !t.userIsReader(pssd.uid) {
 							continue
 						}
 
@@ -655,17 +723,8 @@ func (t *Topic) runLocal(hub *Hub) {
 						}
 					}
 
-					if t.cat == types.TopicCatP2P {
-						// For p2p topics topic name is dependent on receiver
-						switch {
-						case msg.Data != nil:
-							msg.Data.Topic = t.original(pssd.uid)
-						case msg.Pres != nil:
-							msg.Pres.Topic = t.original(pssd.uid)
-						case msg.Info != nil:
-							msg.Info.Topic = t.original(pssd.uid)
-						}
-					}
+					// Topic name may be different depending on the user to which the `sess` belongs.
+					t.maybeFixTopicName(msg, pssd.uid)
 
 					if sess.queueOutWithOverrides(msg, broadcastSessOverrides) {
 						// Update device map with the device ID which should NOT receive the notification.
@@ -1506,6 +1565,7 @@ func (t *Topic) approveSub(h *Hub, sess *Session, asUid, target types.Uid, set *
 			private:   nil,
 		}
 		t.perUser[target] = userData
+		t.computePerUserAcsUnion()
 
 		// Cache user's record
 		usersRegisterUser(target, true)
@@ -2153,7 +2213,8 @@ func (t *Topic) replyGetData(sess *Session, asUid types.Uid, id string, req *Msg
 				mm := &messages[i]
 				sess.queueOutWithOverrides(&ServerComMessage{Data: &MsgServerData{
 					Topic:     toriginal,
-					Head:      mm.Head,
+					
+          :      mm.Head,
 					SeqId:     mm.SeqId,
 					From:      types.ParseUid(mm.From).UserId(),
 					Timestamp: mm.CreatedAt,
@@ -2638,6 +2699,7 @@ func (t *Topic) evictUser(uid types.Uid, unsub bool, skip string) {
 		} else {
 			// Grp: delete per-user data
 			delete(t.perUser, uid)
+			t.computePerUserAcsUnion()
 
 			usersRegisterUser(uid, false)
 		}

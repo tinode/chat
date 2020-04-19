@@ -205,7 +205,7 @@ func (s *Session) delRemoteSub(topic string) {
 
 // Indicates whether this session is used as a local interface for a remote proxy topic.
 func (s *Session) isProxy() bool {
-  return s.proto == CLUSTER
+	return s.proto == CLUSTER
 }
 
 // queueOut attempts to send a ServerComMessage to a session; if the send buffer is full,
@@ -995,10 +995,10 @@ func (s *Session) note(msg *ClientComMessage) {
 			From:  msg.from,
 			What:  msg.Note.What,
 			SeqId: msg.Note.SeqId,
-		}, rcptto: expanded, timestamp: msg.timestamp, skipSid: s.sid}
-	} else if globals.cluster.isRemoteTopic(expanded) {
-		// The topic is handled by a remote node. Forward message to it.
-		globals.cluster.routeToTopic(msg, expanded, s)
+		}, rcptto: expanded, from: msg.from, timestamp: msg.timestamp, skipSid: s.sid}
+	} else {
+		s.queueOut(ErrAttachFirst(msg.id, msg.topic, msg.timestamp))
+		log.Println("s.note: note to invalid topic - must subscribe first", msg.Note.What, s.sid)
 	}
 }
 

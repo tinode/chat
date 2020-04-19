@@ -605,12 +605,13 @@ func (src *ServerComMessage) copy() *ServerComMessage {
 		return nil
 	}
 	dst := &ServerComMessage{
-		id:        src.id,
-		rcptto:    src.rcptto,
-		timestamp: src.timestamp,
-		from:      src.from,
-		sess:      src.sess,
-		skipSid:   src.skipSid,
+		id:            src.id,
+		rcptto:        src.rcptto,
+		timestamp:     src.timestamp,
+		from:          src.from,
+		sess:          src.sess,
+		skipSid:       src.skipSid,
+		sessOverrides: src.sessOverrides,
 	}
 
 	dst.Ctrl = src.Ctrl.copy()
