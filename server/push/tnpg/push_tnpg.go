@@ -34,13 +34,13 @@ type configType struct {
 	AuthToken string `json:"token"`
 }
 
-type TNPGResponse struct {
+type tnpgResponse struct {
 	MessageID    string `json:"msg_id,omitempty"`
 	ErrorCode    string `json:"errcode,omitempty"`
 	ErrorMessage string `json:"errmsg,omitempty"`
 }
 
-type BatchResponse struct {
+type batchResponse struct {
 	// Number of successfully sent messages.
 	SuccessCount int `json:"sent_count"`
 	// Number of failures.
@@ -49,7 +49,7 @@ type BatchResponse struct {
 	FatalCode    string `json:"errcode,omitempty"`
 	FatalMessage string `json:"errmsg,omitempty"`
 	// Individual reponses in the same order as messages. Could be nil if the entire batch failed.
-	Responses []*TNPGResponse `json:"resp,omitempty"`
+	Responses []*tnpgResponse `json:"resp,omitempty"`
 
 	// Local values
 	httpCode   int
@@ -102,7 +102,7 @@ func (Handler) Init(jsonconf string) error {
 	return nil
 }
 
-func postMessage(body interface{}, config *configType) (*BatchResponse, error) {
+func postMessage(body interface{}, config *configType) (*batchResponse, error) {
 	buf := new(bytes.Buffer)
 	gzw := gzip.NewWriter(buf)
 	err := json.NewEncoder(gzw).Encode(body)
@@ -124,7 +124,7 @@ func postMessage(body interface{}, config *configType) (*BatchResponse, error) {
 		return nil, err
 	}
 
-	var batch BatchResponse
+	var batch batchResponse
 	gzr, err := gzip.NewReader(resp.Body)
 	if err == nil {
 		err = json.NewDecoder(gzr).Decode(&batch)
@@ -175,7 +175,7 @@ func sendPushes(rcpt *push.Receipt, config *configType) {
 	}
 }
 
-func handleResponse(batch *BatchResponse, messages []fcm.MessageData) {
+func handleResponse(batch *batchResponse, messages []fcm.MessageData) {
 	if batch.FailureCount <= 0 {
 		return
 	}
