@@ -439,6 +439,15 @@ type MsgServerCtrl struct {
 	Timestamp time.Time `json:"ts"`
 }
 
+// Deep-shallow copy.
+func (src *MsgServerCtrl) copy() *MsgServerCtrl {
+	if src == nil {
+		return nil
+	}
+	dst := *src
+	return &dst
+}
+
 // MsgServerData is a server {data} message.
 type MsgServerData struct {
 	Topic string `json:"topic"`
@@ -449,6 +458,15 @@ type MsgServerData struct {
 	SeqId     int                    `json:"seq"`
 	Head      map[string]interface{} `json:"head,omitempty"`
 	Content   interface{}            `json:"content"`
+}
+
+// Deep-shallow copy.
+func (src *MsgServerData) copy() *MsgServerData {
+	if src == nil {
+		return nil
+	}
+	dst := *src
+	return &dst
 }
 
 // MsgServerPres is presence notification {pres} (authoritative update).
@@ -488,6 +506,15 @@ type MsgServerPres struct {
 	ExcludeUser string `json:"-"`
 }
 
+// Deep-shallow copy.
+func (src *MsgServerPres) copy() *MsgServerPres {
+	if src == nil {
+		return nil
+	}
+	dst := *src
+	return &dst
+}
+
 // MsgServerMeta is a topic metadata {meta} update.
 type MsgServerMeta struct {
 	Id    string `json:"id,omitempty"`
@@ -505,6 +532,15 @@ type MsgServerMeta struct {
 	Tags []string `json:"tags,omitempty"`
 	// Account credentials, 'me' only.
 	Cred []*MsgCredServer `json:"cred,omitempty"`
+}
+
+// Deep-shallow copy of meta message. Deep copy of Id and Topic fields, shallow copy of payload.
+func (src *MsgServerMeta) copy() *MsgServerMeta {
+	if src == nil {
+		return nil
+	}
+	dst := *src
+	return &dst
 }
 
 // MsgServerInfo is the server-side copy of MsgClientNote with From added (non-authoritative).
@@ -529,6 +565,15 @@ type sessionOverrides struct {
 	origReq interface{}
 }
 
+// Deep copy
+func (src *MsgServerInfo) copy() *MsgServerInfo {
+	if src == nil {
+		return nil
+	}
+	dst := *src
+	return &dst
+}
+
 // ServerComMessage is a wrapper for server-side messages.
 type ServerComMessage struct {
 	Ctrl *MsgServerCtrl `json:"ctrl,omitempty"`
@@ -551,6 +596,30 @@ type ServerComMessage struct {
 	sessOverrides *sessionOverrides
 	// Should the packet be sent to the original session? SessionID to skip.
 	skipSid string
+}
+
+// Deep-shallow copy of ServerComMessage. Deep copy of service fields,
+// shallow copy of session and payload.
+func (src *ServerComMessage) copy() *ServerComMessage {
+	if src == nil {
+		return nil
+	}
+	dst := &ServerComMessage{
+		id:        src.id,
+		rcptto:    src.rcptto,
+		timestamp: src.timestamp,
+		from:      src.from,
+		sess:      src.sess,
+		skipSid:   src.skipSid,
+	}
+
+	dst.Ctrl = src.Ctrl.copy()
+	dst.Data = src.Data.copy()
+	dst.Meta = src.Meta.copy()
+	dst.Pres = src.Pres.copy()
+	dst.Info = src.Info.copy()
+
+	return dst
 }
 
 // Generators of server-side error messages {ctrl}.
