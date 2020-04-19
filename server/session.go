@@ -1064,8 +1064,9 @@ func (s *Session) serialize(msg *ServerComMessage) interface{} {
 	}
 
 	if s.proto == CLUSTER {
-		// No need to serialize the message to bytes within the cluster.
-		return msg
+		// No need to serialize the message to bytes within the cluster,
+		// but we have to create a copy because the original msg can be mutated.
+		return msg.copy()
 	}
 
 	out, _ := json.Marshal(msg)
