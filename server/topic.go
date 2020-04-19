@@ -78,6 +78,9 @@ type Topic struct {
 	// Topic's per-subscriber data
 	perUser map[types.Uid]perUserData
 	// Union of permissions across all users (used by proxy sessions with uid = 0).
+	// These are used by master topics only (in the proxy-master topic context)
+	// as a coarse-grained attempt to perform acs checks since proxy sessions "impersonate"
+	// multiple normal sessions (uids) which may have different uids.
 	modeWantUnion  types.AccessMode
 	modeGivenUnion types.AccessMode
 
@@ -356,8 +359,8 @@ func (t *Topic) proxyFanoutBroadcast(msg *ServerComMessage) {
 	}
 }
 
-// getPerUserACLs returns `want` and `given` permissions for the given user id.
-func (t *Topic) getPerUserACLs(uid types.Uid) (types.AccessMode, types.AccessMode) {
+// getPerUserAcs returns `want` and `given` permissions for the given user id.
+func (t *Topic) getPerUserAcs(uid types.Uid) (types.AccessMode, types.AccessMode) {
 	if uid.IsZero() {
 		// For zero uids (typically for proxy sessions), return the union of all permissions.
 		return t.modeWantUnion, t.modeGivenUnion
@@ -370,7 +373,7 @@ func (t *Topic) getPerUserACLs(uid types.Uid) (types.AccessMode, types.AccessMod
 // passesPresenceFilters applies presence filters to `msg`
 // depending on per-user want and given acls for the provided `uid`.
 func (t *Topic) passesPresenceFilters(msg *ServerComMessage, uid types.Uid) bool {
-	modeWant, modeGiven := t.getPerUserACLs(uid)
+	modeWant, modeGiven := t.getPerUserAcs(uid)
 	// "gone" and "acs" notifications are sent even if the topic is muted.
 	return ((modeGiven & modeWant).IsPresencer() || msg.Pres.What == "gone" || msg.Pres.What == "acs") &&
 					(msg.Pres.FilterIn == 0 || int(modeGiven&modeWant)&msg.Pres.FilterIn != 0) &&
@@ -379,7 +382,7 @@ func (t *Topic) passesPresenceFilters(msg *ServerComMessage, uid types.Uid) bool
 
 // userIsReader returns true if the user (specified by `uid`) may read the given topic.
 func (t *Topic) userIsReader(uid types.Uid) bool {
-	modeWant, modeGiven := t.getPerUserACLs(uid)
+	modeWant, modeGiven := t.getPerUserAcs(uid)
 	return (modeGiven & modeWant).IsReader()
 }
 
@@ -399,8 +402,8 @@ func (t *Topic) maybeFixTopicName(msg *ServerComMessage, uid types.Uid) {
 	}
 }
 
-// computePerUserACLUnion computes want and given permissions unions over all topic's subscribers.
-func (t *Topic) computePerUserACLUnion() {
+// computePerUserAcsUnion computes want and given permissions unions over all topic's subscribers.
+func (t *Topic) computePerUserAcsUnion() {
 	wantUnion  := types.ModeNone
 	givenUnion := types.ModeNone
 	for _, pud := range t.perUser {
@@ -1562,7 +1565,7 @@ func (t *Topic) approveSub(h *Hub, sess *Session, asUid, target types.Uid, set *
 			private:   nil,
 		}
 		t.perUser[target] = userData
-		t.computePerUserACLUnion()
+		t.computePerUserAcsUnion()
 
 		// Cache user's record
 		usersRegisterUser(target, true)
@@ -2695,7 +2698,7 @@ func (t *Topic) evictUser(uid types.Uid, unsub bool, skip string) {
 		} else {
 			// Grp: delete per-user data
 			delete(t.perUser, uid)
-			t.computePerUserACLUnion()
+			t.computePerUserAcsUnion()
 
 			usersRegisterUser(uid, false)
 		}

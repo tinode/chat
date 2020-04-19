@@ -205,9 +205,6 @@ func (s *Session) delRemoteSub(topic string) {
 
 // Indicates whether this session is used as a local interface for a remote proxy topic.
 func (s *Session) isProxy() bool {
-	if s == nil {
-		return false
-	}
 	return s.proto == CLUSTER
 }
 
