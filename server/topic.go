@@ -2213,7 +2213,8 @@ func (t *Topic) replyGetData(sess *Session, asUid types.Uid, id string, req *Msg
 				mm := &messages[i]
 				sess.queueOutWithOverrides(&ServerComMessage{Data: &MsgServerData{
 					Topic:     toriginal,
-					Head:      mm.Head,
+					
+          :      mm.Head,
 					SeqId:     mm.SeqId,
 					From:      types.ParseUid(mm.From).UserId(),
 					Timestamp: mm.CreatedAt,
