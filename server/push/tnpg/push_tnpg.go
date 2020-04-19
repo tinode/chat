@@ -11,6 +11,7 @@ import (
 
 	"github.com/tinode/chat/server/push"
 	"github.com/tinode/chat/server/push/fcm"
+	"github.com/tinode/chat/server/store"
 )
 
 const (
@@ -32,6 +33,41 @@ type configType struct {
 	OrgName   string `json:"org"`
 	AuthToken string `json:"token"`
 }
+
+type tnpgResponse struct {
+	MessageID    string `json:"msg_id,omitempty"`
+	ErrorCode    string `json:"errcode,omitempty"`
+	ErrorMessage string `json:"errmsg,omitempty"`
+}
+
+type batchResponse struct {
+	// Number of successfully sent messages.
+	SuccessCount int `json:"sent_count"`
+	// Number of failures.
+	FailureCount int `json:"fail_count"`
+	// Error code and message if the entire batch failed.
+	FatalCode    string `json:"errcode,omitempty"`
+	FatalMessage string `json:"errmsg,omitempty"`
+	// Individual reponses in the same order as messages. Could be nil if the entire batch failed.
+	Responses []*tnpgResponse `json:"resp,omitempty"`
+
+	// Local values
+	httpCode   int
+	httpStatus string
+}
+
+// Error codes copied from https://github.com/firebase/firebase-admin-go/blob/master/messaging/messaging.go
+const (
+	internalError                  = "internal-error"
+	invalidAPNSCredentials         = "invalid-apns-credentials"
+	invalidArgument                = "invalid-argument"
+	messageRateExceeded            = "message-rate-exceeded"
+	mismatchedCredential           = "mismatched-credential"
+	registrationTokenNotRegistered = "registration-token-not-registered"
+	serverUnavailable              = "server-unavailable"
+	tooManyTopics                  = "too-many-topics"
+	unknownError                   = "unknown-error"
+)
 
 // Init initializes the handler
 func (Handler) Init(jsonconf string) error {
@@ -66,15 +102,18 @@ func (Handler) Init(jsonconf string) error {
 	return nil
 }
 
-func postMessage(body interface{}, config *configType) (int, string, error) {
+func postMessage(body interface{}, config *configType) (*batchResponse, error) {
 	buf := new(bytes.Buffer)
-	gz := gzip.NewWriter(buf)
-	json.NewEncoder(gz).Encode(body)
-	gz.Close()
+	gzw := gzip.NewWriter(buf)
+	err := json.NewEncoder(gzw).Encode(body)
+	gzw.Close()
+	if err != nil {
+		return nil, err
+	}
 
 	req, err := http.NewRequest("POST", handler.postUrl, buf)
 	if err != nil {
-		return -1, "", err
+		return nil, err
 	}
 	req.Header.Add("Authorization", "Bearer "+config.AuthToken)
 	req.Header.Set("Content-Type", "application/json; charset=utf-8")
@@ -82,10 +121,26 @@ func postMessage(body interface{}, config *configType) (int, string, error) {
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return -1, "", err
+		return nil, err
 	}
-	defer resp.Body.Close()
-	return resp.StatusCode, resp.Status, nil
+
+	var batch batchResponse
+	gzr, err := gzip.NewReader(resp.Body)
+	if err == nil {
+		err = json.NewDecoder(gzr).Decode(&batch)
+		gzr.Close()
+	}
+	resp.Body.Close()
+
+	if err != nil {
+		// Just log the error, but don't report it to caller. The push succeeded.
+		log.Println("tnpg failed to decode response", err)
+	}
+
+	batch.httpCode = resp.StatusCode
+	batch.httpStatus = resp.Status
+
+	return &batch, nil
 }
 
 func sendPushes(rcpt *push.Receipt, config *configType) {
@@ -104,12 +159,46 @@ func sendPushes(rcpt *push.Receipt, config *configType) {
 		for j := i; j < upper; j++ {
 			payloads = append(payloads, messages[j].Message)
 		}
-		if code, status, err := postMessage(payloads, config); err != nil {
+		if resp, err := postMessage(payloads, config); err != nil {
 			log.Println("tnpg push failed:", err)
 			break
-		} else if code >= 300 {
-			log.Println("tnpg push rejected:", status, err)
+		} else if resp.httpCode >= 300 {
+			log.Println("tnpg push rejected:", resp.httpStatus)
 			break
+		} else if resp.FatalCode != "" {
+			log.Println("tnpg push failed:", resp.FatalMessage)
+			break
+		} else {
+			// Check for expired tokens and other errors.
+			handleResponse(resp, messages[i:upper])
+		}
+	}
+}
+
+func handleResponse(batch *batchResponse, messages []fcm.MessageData) {
+	if batch.FailureCount <= 0 {
+		return
+	}
+
+	for i, resp := range batch.Responses {
+		switch resp.ErrorCode {
+		case "": // no error
+		case messageRateExceeded, serverUnavailable, internalError, unknownError:
+			// Transient errors. Stop sending this batch.
+			log.Println("tnpg transient failure", resp.ErrorMessage)
+			return
+		case mismatchedCredential, invalidArgument:
+			// Config errors
+			log.Println("tnpg invalid config", resp.ErrorMessage)
+			return
+		case registrationTokenNotRegistered:
+			// Token is no longer valid.
+			log.Println("tnpg invalid token", resp.ErrorMessage)
+			if err := store.Devices.Delete(messages[i].Uid, messages[i].DeviceId); err != nil {
+				log.Println("tnpg: failed to delete invalid token", err)
+			}
+		default:
+			log.Println("tnpg returned error", resp.ErrorMessage)
 		}
 	}
 }
