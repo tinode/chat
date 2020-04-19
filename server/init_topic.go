@@ -81,6 +81,8 @@ func topicInit(t *Topic, sreg *sessionJoin, h *Hub) {
 		return
 	}
 
+	t.computePerUserACLUnion()
+
 	// prevent newly initialized topics to go live while shutdown in progress
 	if globals.shuttingDown {
 		h.topicDel(sreg.topic)
