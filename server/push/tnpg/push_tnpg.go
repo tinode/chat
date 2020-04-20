@@ -6,8 +6,10 @@ import (
 	"compress/gzip"
 	"encoding/json"
 	"errors"
+	"io"
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/tinode/chat/server/push"
 	"github.com/tinode/chat/server/push/fcm"
@@ -118,6 +120,7 @@ func postMessage(body interface{}, config *configType) (*batchResponse, error) {
 	req.Header.Add("Authorization", "Bearer "+config.AuthToken)
 	req.Header.Set("Content-Type", "application/json; charset=utf-8")
 	req.Header.Add("Content-Encoding", "gzip")
+	req.Header.Add("Accept-Encoding", "gzip")
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -125,10 +128,18 @@ func postMessage(body interface{}, config *configType) (*batchResponse, error) {
 	}
 
 	var batch batchResponse
-	gzr, err := gzip.NewReader(resp.Body)
+	var reader io.ReadCloser
+	if strings.Contains(resp.Header.Get("Content-Encoding"), "gzip") {
+		reader, err = gzip.NewReader(resp.Body)
+		if err == nil {
+			defer reader.Close()
+		}
+	} else {
+		reader = resp.Body
+	}
+
 	if err == nil {
-		err = json.NewDecoder(gzr).Decode(&batch)
-		gzr.Close()
+		err = json.NewDecoder(reader).Decode(&batch)
 	}
 	resp.Body.Close()
 
