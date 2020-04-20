@@ -108,10 +108,9 @@ ENV TNPG_ORG=
 ENV STORE_USE_ADAPTER=$TARGET_DB
 
 # Install root certificates, they are needed for email validator to work
-# with the TLS SMTP servers like Gmail. Also add bash and grep.
+# with the TLS SMTP servers like Gmail or Mailjet. Also add bash and grep.
 RUN apk update && \
-	apk add --no-cache ca-certificates bash grep && \
-	update-ca-certificates
+	apk add --no-cache ca-certificates bash grep
 
 WORKDIR /opt/tinode
 

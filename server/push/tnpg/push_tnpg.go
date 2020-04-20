@@ -171,7 +171,7 @@ func sendPushes(rcpt *push.Receipt, config *configType) {
 			payloads = append(payloads, messages[j].Message)
 		}
 		if resp, err := postMessage(payloads, config); err != nil {
-			log.Println("tnpg push failed:", err)
+			log.Println("tnpg push request failed:", err)
 			break
 		} else if resp.httpCode >= 300 {
 			log.Println("tnpg push rejected:", resp.httpStatus)
