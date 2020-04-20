@@ -1,6 +1,6 @@
 # Dockerfile builds an image with a chatbot (Tino) for Tinode.
 
-FROM python:3.7-slim
+FROM python:3.8-slim
 
 ARG VERSION=0.16
 ARG LOGIN_AS=

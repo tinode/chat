@@ -1,4 +1,4 @@
-FROM alpine:latest
+FROM alpine:3.11
 
 ARG VERSION=0.16.4
 ENV VERSION=$VERSION
