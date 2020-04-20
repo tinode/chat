@@ -1157,36 +1157,23 @@ func (c *Cluster) rehash(nodes []string) []string {
 	return ringKeys
 }
 
-// Iterates over sessions hosted on this node and for each session
+// invalidateProxySubs iterates over sessions proxied on this node and for each session
 // sends "{pres term}" to all displayed topics.
 // Called immediately after Cluster.rehash().
-func (c *Cluster) invalidateRemoteSubs() {
-	globals.sessionStore.lock.Lock()
-	defer globals.sessionStore.lock.Unlock()
-
-	for _, s := range globals.sessionStore.sessCache {
-		if s.proto == CLUSTER || len(s.remoteSubs) == 0 {
-			continue
+func (c *Cluster) invalidateProxySubs() {
+	sessions := make(map[*Session][]string)
+	globals.hub.topics.Range(func(_, v interface{}) bool {
+		topic := v.(*Topic)
+		if !topic.isProxy || topic.masterNode == c.ring.Get(topic.name) {
+			// Topic either isn't a proxy or hasn't moved. Continue.
+			return true
 		}
-		s.remoteSubsLock.Lock()
-		var topicsToTerminate []string
-		for topic, remSub := range s.remoteSubs {
-			if remSub.node != c.ring.Get(topic) {
-				if remSub.originalTopic != "" {
-					topicsToTerminate = append(topicsToTerminate, remSub.originalTopic)
-				}
-				delete(s.remoteSubs, topic)
-			}
+		for s, _ := range topic.sessions {
+			sessions[s] = append(sessions[s], topic.name)
 		}
-		s.remoteSubsLock.Unlock()
-		// FIXME:
-		// This is problematic for two reasons:
-		// 1. We don't really know if subscription contained in s.remoteSubs actually exists.
-		// We only know that {sub} packet was sent to the remote node and it was delivered.
-		// 2. The {pres what=term} is sent on 'me' topic but we don't know if the session is
-		// subscribed to 'me' topic. The correct way of doing it is to send to those online
-		// in the topic on topic itsef, to those offline on their 'me' topic. In general
-		// the 'presTermDirect' should not exist.
+		return true
+	})
+	for s, topicsToTerminate := range sessions {
 		s.presTermDirect(topicsToTerminate)
 	}
 }

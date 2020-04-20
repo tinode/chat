@@ -194,6 +194,7 @@ func (h *Hub) run() {
 				}
 				if t.isProxy {
 					t.proxy = make(chan *ClusterResp, 32)
+					t.masterNode = globals.cluster.ring.Get(t.name)
 				}
 				// Topic is created in suspended state because it's not yet configured.
 				t.markPaused(true)
@@ -281,7 +282,7 @@ func (h *Hub) run() {
 			// Such topics must be shut down at this node.
 			h.topics.Range(func(_, t interface{}) bool {
 				topic := t.(*Topic)
-				if globals.cluster.isRemoteTopic(topic.name) {
+				if !topic.isProxy && globals.cluster.isRemoteTopic(topic.name) {
 					h.topicUnreg(nil, topic.name, nil, StopRehashing)
 				}
 				return true
