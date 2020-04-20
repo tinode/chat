@@ -45,10 +45,11 @@ func (ss *SessionStore) NewSession(conn interface{}, sid string) (*Session, int)
 		s.sid = sid
 	}
 
+	ss.lock.Lock()
 	if _, found := ss.sessCache[s.sid]; found {
-		// TODO: change to panic or log.Fatal
-		log.Println("ERROR! duplicate session ID", s.sid)
+		log.Fatalln("ERROR! duplicate session ID", s.sid)
 	}
+	ss.lock.Unlock()
 
 	switch c := conn.(type) {
 	case *websocket.Conn:
