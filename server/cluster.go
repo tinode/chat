@@ -1160,6 +1160,7 @@ func (c *Cluster) rehash(nodes []string) []string {
 // invalidateProxySubs iterates over sessions proxied on this node and for each session
 // sends "{pres term}" to all displayed topics.
 // Called immediately after Cluster.rehash().
+// TODO: consider resubscribing to the new master topics instead of forcing sessions to resubscribe.
 func (c *Cluster) invalidateProxySubs() {
 	sessions := make(map[*Session][]string)
 	globals.hub.topics.Range(func(_, v interface{}) bool {
