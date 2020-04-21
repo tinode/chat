@@ -255,12 +255,19 @@ func (t *Topic) runProxy(hub *Hub) {
 				},
 			}
 			if err := globals.cluster.routeToTopicMaster(meta.pkt, nil, req, t.name, meta.sess); err != nil {
-				log.Println("proxy topic: route broadcast request from proxy to master failed:", err)
+				log.Println("proxy topic: route meta request from proxy to master failed:", err)
 			}
 		case ua := <-t.uaChange:
 			// Process an update to user agent from one of the sessions
 			log.Printf("t[%s] uaChange %+v", t.name, ua)
-
+			req := &ProxyTopicData{
+				UAChangeReq: &ProxyUAChange{
+					UserAgent: ua,
+				},
+			}
+			if err := globals.cluster.routeToTopicMaster(nil, nil, req, t.name, nil); err != nil {
+				log.Println("proxy topic: route ua change request from proxy to master failed:", err)
+			}
 		case msg := <-t.proxy:
 			log.Printf("proxy topic [%s] msg: sid[%s] = %+v | proxyresp = %+v", t.name, msg.FromSID, msg.SrvMsg, msg.ProxyResp)
 			if msg.FromSID == "*" {

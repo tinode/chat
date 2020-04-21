@@ -176,6 +176,8 @@ type ProxyTopicData struct {
 	MetaReq      *ProxyMeta
 	// Leave (unsubscribe) request.
 	LeaveReq     *ProxyLeave
+	// User agent change request.
+	UAChangeReq  *ProxyUAChange
 }
 
 // ProxyJoin contains topic join request parameters.
@@ -218,6 +220,12 @@ type ProxyLeave struct {
 	Unsub                    bool
 	// Terminate proxy connection to the master topic.
 	TerminateProxyConnection bool
+}
+
+// ProxyUAChange contains user agent change request params.
+type ProxyUAChange struct {
+	// User agent string.
+	UserAgent string
 }
 
 // Proxy request types.
@@ -611,6 +619,13 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 		msg.SrvMsg.sess = sess
 		msg.SrvMsg.skipSid = msg.TopicMsg.BroadcastReq.SkipSid
 		globals.hub.route <- msg.SrvMsg
+
+	case msg.TopicMsg.UAChangeReq != nil:
+		if t := globals.hub.topicGet(msg.RcptTo); t != nil {
+			t.uaChange <- msg.TopicMsg.UAChangeReq.UserAgent
+		} else {
+			log.Printf("cluster: UA change request for unknown topic %s", msg.RcptTo)
+		}
 
 	default:
 		log.Println("cluster TopicMaster: malformed", msg.RcptTo)
