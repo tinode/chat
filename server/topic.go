@@ -46,6 +46,8 @@ type Topic struct {
 	// 4. shut down the topic at master's request.
 	// 5. aggregate access permissions on behalf of attached sessions.
 	isProxy bool
+	// Name of the master node for this topic if isProxy is true.
+	masterNode string
 
 	// Time when the topic was first created.
 	created time.Time
@@ -2213,8 +2215,7 @@ func (t *Topic) replyGetData(sess *Session, asUid types.Uid, id string, req *Msg
 				mm := &messages[i]
 				sess.queueOutWithOverrides(&ServerComMessage{Data: &MsgServerData{
 					Topic:     toriginal,
-					
-          :      mm.Head,
+					Head:      mm.Head,
 					SeqId:     mm.SeqId,
 					From:      types.ParseUid(mm.From).UserId(),
 					Timestamp: mm.CreatedAt,

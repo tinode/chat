@@ -288,14 +288,31 @@ func (t *Topic) presSubsOnline(what, src string, params *presParams,
 		rcptto: t.name, skipSid: skipSid}
 }
 
+// userIsPresencer returns true if the user (specified by `uid`) may receive presence notifications.
+func (t *Topic) userIsPresencer(uid types.Uid) bool {
+	var want, given types.AccessMode
+	if uid.IsZero() {
+		// For zero uids (typically for proxy sessions), return the union of all permissions.
+		want = t.modeWantUnion
+		given = t.modeGivenUnion
+	} else {
+		pud := t.perUser[uid]
+		if pud.deleted {
+			return false
+		}
+		want = pud.modeWant
+		given = pud.modeGiven
+	}
+	return (want & given).IsPresencer()
+}
+
 // Send presence notification to attached sessions directly, without routing though topic.
 func (t *Topic) presSubsOnlineDirect(what string) {
 	msg := &ServerComMessage{Pres: &MsgServerPres{Topic: t.xoriginal, What: what}}
 
 	for sess := range t.sessions {
 		// Check presence filters
-		pud := t.perUser[sess.uid]
-		if pud.deleted || (!(pud.modeGiven & pud.modeWant).IsPresencer() && what != "gone" && what != "acs") {
+		if !t.userIsPresencer(sess.uid) && what != "gone" && what != "acs"{
 			continue
 		}
 
@@ -303,7 +320,7 @@ func (t *Topic) presSubsOnlineDirect(what string) {
 			// For p2p topics topic name is dependent on receiver.
 			// It's OK to change the pointer here because the message will be serialized in queueOut
 			// before being placed into channel.
-			msg.Pres.Topic = t.original(sess.uid)
+			t.maybeFixTopicName(msg, sess.uid)
 		}
 		sess.queueOut(msg)
 	}
@@ -490,8 +507,7 @@ func (t *Topic) presPubMessageDelete(uid types.Uid, delID int, list []MsgDelRang
 	}
 
 	// This check is only needed for V.1, but it does not hurt V.2. Let's do it here for both.
-	pud := t.perUser[uid]
-	if !(pud.modeGiven & pud.modeWant).IsPresencer() || pud.deleted {
+	if !t.userIsPresencer(uid) {
 		return
 	}
 
