@@ -1860,6 +1860,7 @@ func (a *adapter) SubsDelForUser(user t.Uid, hard bool) error {
 func (a *adapter) FindUsers(uid t.Uid, req, opt []string) ([]t.Subscription, error) {
 	index := make(map[string]struct{})
 	var args []interface{}
+	args = append(args, t.StateOK)
 	for _, tag := range append(req, opt...) {
 		args = append(args, tag)
 		index[tag] = struct{}{}
@@ -1869,7 +1870,6 @@ func (a *adapter) FindUsers(uid t.Uid, req, opt []string) ([]t.Subscription, err
 		"FROM users AS u LEFT JOIN usertags AS t ON t.userid=u.id " +
 		"WHERE u.state=? AND t.tag IN (?" + strings.Repeat(",?", len(req)+len(opt)-1) + ") " +
 		"GROUP BY u.id,u.createdat,u.updatedat,u.public,u.tags "
-	args = append(args, t.StateOK)
 	if len(req) > 0 {
 		query += "HAVING COUNT(t.tag IN (?" + strings.Repeat(",?", len(req)-1) + ") OR NULL)>=? "
 		for _, tag := range req {
@@ -1927,6 +1927,7 @@ func (a *adapter) FindUsers(uid t.Uid, req, opt []string) ([]t.Subscription, err
 func (a *adapter) FindTopics(req, opt []string) ([]t.Subscription, error) {
 	index := make(map[string]struct{})
 	var args []interface{}
+	args = append(args, t.StateOK)
 	for _, tag := range append(req, opt...) {
 		args = append(args, tag)
 		index[tag] = struct{}{}
@@ -1936,7 +1937,6 @@ func (a *adapter) FindTopics(req, opt []string) ([]t.Subscription, error) {
 		"FROM topics AS t LEFT JOIN topictags AS tt ON t.name=tt.topic " +
 		"WHERE t.state=? AND tt.tag IN (?" + strings.Repeat(",?", len(req)+len(opt)-1) + ") " +
 		"GROUP BY t.name,t.createdat,t.updatedat,t.public,t.tags "
-	args = append(args, t.StateOK)
 	if len(req) > 0 {
 		query += "HAVING COUNT(tt.tag IN (?" + strings.Repeat(",?", len(req)-1) + ") OR NULL)>=? "
 		for _, tag := range append(req) {
