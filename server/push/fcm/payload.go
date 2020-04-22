@@ -122,7 +122,7 @@ type MessageData struct {
 
 func payloadToData(pl *push.Payload) (map[string]string, error) {
 	if pl == nil {
-		return nil, nil
+		return nil, errors.New("empty push payload")
 	}
 	data := make(map[string]string)
 	var err error
@@ -159,12 +159,20 @@ func payloadToData(pl *push.Payload) (map[string]string, error) {
 	return data, nil
 }
 
+func clonePayload(src map[string]string) map[string]string {
+	dst := make(map[string]string, len(src))
+	for key, val := range src {
+		dst[key] = val
+	}
+	return dst
+}
+
 // PrepareNotifications creates notification payloads ready to be posted
 // to push notification server for the provided receipt.
 func PrepareNotifications(rcpt *push.Receipt, config *AndroidConfig) []MessageData {
-	data, _ := payloadToData(&rcpt.Payload)
-	if data == nil {
-		log.Println("fcm push: could not parse payload")
+	data, err := payloadToData(&rcpt.Payload)
+	if err != nil {
+		log.Println("fcm push: could not parse payload;", err)
 		return nil
 	}
 
@@ -206,12 +214,18 @@ func PrepareNotifications(rcpt *push.Receipt, config *AndroidConfig) []MessageDa
 
 	var messages []MessageData
 	for uid, devList := range devices {
+		userData := data
+		if rcpt.To[uid].Delivered > 0 {
+			// Silence the push for user who have received the data interactively.
+			userData = clonePayload(data)
+			userData["silent"] = "true"
+		}
 		for i := range devList {
 			d := &devList[i]
 			if _, ok := skipDevices[d.DeviceId]; !ok && d.DeviceId != "" {
 				msg := fcm.Message{
 					Token: d.DeviceId,
-					Data:  data,
+					Data:  userData,
 				}
 
 				if d.Platform == "android" {
@@ -240,7 +254,7 @@ func PrepareNotifications(rcpt *push.Receipt, config *AndroidConfig) []MessageDa
 					// Need to duplicate these in APNS.Payload.Aps.Alert so
 					// iOS may call NotificationServiceExtension (if present).
 					title := "New message"
-					body := data["content"]
+					body := userData["content"]
 					msg.APNS = &fcm.APNSConfig{
 						Payload: &fcm.APNSPayload{
 							Aps: &fcm.Aps{
