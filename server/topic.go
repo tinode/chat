@@ -942,6 +942,16 @@ func (t *Topic) runLocal(hub *Hub) {
 	}
 }
 
+// sidFromSessionOrOverrides returns sesssion id from session overrides (if provided)
+// otherwise from session.
+func sidFromSessionOrOverrides(sess *Session, sessOverrides *sessionOverrides) string {
+	if sessOverrides != nil {
+		return sessOverrides.sid
+	} else {
+		return sess.sid
+	}
+}
+
 // Session subscribed to a topic, created == true if topic was just created and {pres} needs to be announced
 func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 	asUid := types.ParseUserId(sreg.pkt.from)
@@ -1422,7 +1432,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Le
 			// Increment unread count
 			usersUpdateUnread(asUid, t.lastID-userData.readID, true)
 		}
-		t.notifySubChange(asUid, asUid, oldWant, oldGiven, userData.modeWant, userData.modeGiven, sess.sid)
+		t.notifySubChange(asUid, asUid, oldWant, oldGiven, userData.modeWant, userData.modeGiven, sidFromSessionOrOverrides(sess, sessOverrides))
 	}
 
 	if !userData.modeWant.IsJoiner() {
@@ -1468,7 +1478,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Le
 // A. Sharer or Approver is inviting another user for the first time (no prior subscription)
 // B. Sharer or Approver is re-inviting another user (adjusting modeGiven, modeWant is still Unset)
 // C. Approver is changing modeGiven for another user, modeWant != Unset
-func (t *Topic) approveSub(h *Hub, sess *Session, asUid, target types.Uid, set *MsgClientSet) (bool, error) {
+func (t *Topic) approveSub(h *Hub, sess *Session, asUid, target types.Uid, set *MsgClientSet, sessOverrides *sessionOverrides) (bool, error) {
 
 	now := types.TimeNow()
 	toriginal := t.original(asUid)
@@ -1620,8 +1630,7 @@ func (t *Topic) approveSub(h *Hub, sess *Session, asUid, target types.Uid, set *
 			// Increment unread count
 			usersUpdateUnread(target, t.lastID-userData.readID, true)
 		}
-
-		t.notifySubChange(target, asUid, oldWant, oldGiven, userData.modeWant, userData.modeGiven, sess.sid)
+		t.notifySubChange(target, asUid, oldWant, oldGiven, userData.modeWant, userData.modeGiven, sidFromSessionOrOverrides(sess, sessOverrides))
 		changed = true
 	}
 
@@ -2167,7 +2176,7 @@ func (t *Topic) replySetSub(h *Hub, sess *Session, pkt *ClientComMessage, sessOv
 		changed, err = t.requestSub(h, sess, asUid, asLvl, pkt.id, set.Sub.Mode, nil, false, nil)
 	} else {
 		// Request to approve/change someone's subscription
-		changed, err = t.approveSub(h, sess, asUid, target, set)
+		changed, err = t.approveSub(h, sess, asUid, target, set, sessOverrides)
 	}
 	if err != nil {
 		return err
@@ -2642,7 +2651,7 @@ func (t *Topic) replyDelSub(h *Hub, sess *Session, asUid types.Uid, del *MsgClie
 	}
 
 	// ModeUnset signifies deleted subscription as opposite to ModeNone - no access.
-	t.notifySubChange(uid, asUid, pud.modeWant, pud.modeGiven, types.ModeUnset, types.ModeUnset, sess.sid)
+	t.notifySubChange(uid, asUid, pud.modeWant, pud.modeGiven, types.ModeUnset, types.ModeUnset, sidFromSessionOrOverrides(sess, sessOverrides))
 
 	t.evictUser(uid, true, "")
 
@@ -2685,7 +2694,7 @@ func (t *Topic) replyLeaveUnsub(h *Hub, sess *Session, asUid types.Uid, id strin
 	}
 
 	// Send notifications.
-	t.notifySubChange(asUid, asUid, pud.modeWant, pud.modeGiven, types.ModeUnset, types.ModeUnset, sess.sid)
+	t.notifySubChange(asUid, asUid, pud.modeWant, pud.modeGiven, types.ModeUnset, types.ModeUnset, sidFromSessionOrOverrides(sess, sessOverrides))
 	// Evict all user's sessions, clear cached data, send notifications.
 	t.evictUser(asUid, true, sess.sid)
 
