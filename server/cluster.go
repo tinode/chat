@@ -588,6 +588,16 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 			msg.CliMsg.from = uid.UserId()
 		}
 		msg.CliMsg.authLvl = int(authLvl)
+		switch {
+		case msg.CliMsg.Get != nil:
+			msg.CliMsg.id = msg.CliMsg.Get.Id
+			msg.CliMsg.topic = msg.CliMsg.Get.Topic
+		case msg.CliMsg.Set != nil:
+			msg.CliMsg.id = msg.CliMsg.Set.Id
+			msg.CliMsg.topic = msg.CliMsg.Set.Topic
+		default:
+			log.Panic("cluster: topic proxy meta request must container either Get or Set field")
+		}
 		req := &metaReq{
 			topic:    msg.RcptTo,
 			pkt:      msg.CliMsg,
@@ -1009,6 +1019,7 @@ func clusterInit(configString json.RawMessage, self *string) int {
 	gob.Register(map[string]interface{}{})
 	gob.Register(map[string]int{})
 	gob.Register(map[string]string{})
+	gob.Register(MsgAccessMode{})
 
 	globals.cluster = &Cluster{
 		thisNodeName: thisName,
