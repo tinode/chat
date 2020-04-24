@@ -219,11 +219,21 @@ func (t *Topic) runProxy(hub *Hub) {
 		case leave := <-t.unreg:
 			// Remove connection from topic; session may continue to function
 			log.Printf("t[%s] leave %+v", t.name, leave)
+			asUid := leave.userId
+			// Explicitly specify user id because the proxy session hosts multiple client sessions.
+			if leave.userId.IsZero() {
+				if pssd, ok := t.sessions[leave.sess]; ok {
+					asUid = pssd.uid
+				} else {
+					log.Println("proxy topic: leave request sent for unknown session")
+					continue
+				}
+			}
 			msg := &ClientComMessage{}
 			proxyLeave := &ProxyTopicData{
 				LeaveReq: &ProxyLeave{
 					Id: leave.id,
-					UserId: leave.userId,
+					UserId: asUid,
 					Unsub: leave.unsub,
 					// Terminate connection to master topic if explicitly asked to do so or it's the last remaining session.
 					TerminateProxyConnection: leave.terminateProxyConnection || len(t.sessions) == 1,
@@ -493,9 +503,16 @@ func (t *Topic) runLocal(hub *Hub) {
 				} else {
 					uid = pssd.uid
 				}
-				pud := t.perUser[uid]
-				if pssd == nil || pssd.ref == nil {
-					pud.online--
+				// uid may be zero when a proxy session is trying to terminate (it called unsubAll).
+				proxyTerminating := uid.IsZero()
+				var pud perUserData
+				if !proxyTerminating {
+					pud = t.perUser[uid]
+					if pssd == nil || pssd.ref == nil {
+						pud.online--
+					}
+				} else if !leave.sess.isProxy() {
+					log.Panic("cannot determine uid: leave req = ", leave)
 				}
 
 				switch t.cat {
@@ -512,21 +529,25 @@ func (t *Topic) runLocal(hub *Hub) {
 						}
 					}
 					// Update user's last online timestamp & user agent
-					if err := store.Users.UpdateLastSeen(asUid, mrs.userAgent, now); err != nil {
-						log.Println(err)
+					if !proxyTerminating {
+						if err := store.Users.UpdateLastSeen(asUid, mrs.userAgent, now); err != nil {
+							log.Println(err)
+						}
 					}
 				case types.TopicCatFnd:
 					// Remove ephemeral query.
 					t.fndRemovePublic(leave.sess)
 				case types.TopicCatGrp:
-					if pud.online == 0 {
+					if !proxyTerminating && pud.online == 0 {
 						// User is going offline: notify online subscribers on 'me'
 						t.presSubsOnline("off", asUid.UserId(), nilPresParams,
 							&presFilters{filterIn: types.ModeRead}, "")
 					}
 				}
 
-				t.perUser[uid] = pud
+				if !proxyTerminating {
+					t.perUser[uid] = pud
+				}
 
 				// Always respond to proxy topics.
 				if leave.id != "" || leave.sess.isProxy() {
