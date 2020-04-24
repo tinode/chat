@@ -584,7 +584,7 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 
 	case msg.TopicMsg.MetaReq != nil:
 		if !uid.IsZero() {
-			log.Println("join setting uid = ", uid)
+			log.Println("meta setting uid = ", uid)
 			msg.CliMsg.from = uid.UserId()
 		}
 		msg.CliMsg.authLvl = int(authLvl)
@@ -1245,6 +1245,15 @@ func (sess *Session) topicProxyWriteLoop(forTopic string) {
 					response.ProxyResp.OrigRequestType = ProxyRequestMeta
 				}
 				copyParamsFromSession = srvMsg.sessOverrides.sid != ""
+			} else {
+				// Copy skipSid.
+				if srvMsg.Pres == nil {
+					// Only presence notifications may come not as a response to a client request.
+					log.Panic("cluster: message must be accompanied by the originating session information: ", srvMsg)
+				}
+				if srvMsg.skipSid != "" {
+					response.ProxyResp.SkipSid = srvMsg.skipSid
+				}
 			}
 			if copyParamsFromSession {
 				// Reply to a specific session.
