@@ -466,15 +466,6 @@ func (s *Session) leave(msg *ClientComMessage) {
 				unsub:  msg.Leave.Unsub,
 				id:     msg.id}
 		}
-	} else if globals.cluster.isRemoteTopic(expanded) {
-		// The topic is handled by a remote node. Forward message to it.
-		if err := globals.cluster.routeToTopic(msg, expanded, s); err != nil {
-			log.Println("s.leave:", err, s.sid)
-			s.queueOut(ErrClusterUnreachable(msg.id, msg.topic, msg.timestamp))
-		} else {
-			// FIXME: we don't really know if leave succeeded.
-			s.delRemoteSub(expanded)
-		}
 	} else if !msg.Leave.Unsub {
 		// Session is not attached to the topic, wants to leave - fine, no change
 		s.queueOut(InfoNotJoined(msg.id, msg.topic, msg.timestamp))

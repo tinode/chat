@@ -229,14 +229,18 @@ func (t *Topic) runProxy(hub *Hub) {
 					continue
 				}
 			}
+			// Remove the session from the topic without waiting for a response from the master node
+			// because by the time the response arrives this session may be already gone from the session store
+			// and we won't be able to find and remove it by its sid.
+			t.remSession(leave.sess, asUid)
 			msg := &ClientComMessage{}
 			proxyLeave := &ProxyTopicData{
 				LeaveReq: &ProxyLeave{
 					Id: leave.id,
 					UserId: asUid,
 					Unsub: leave.unsub,
-					// Terminate connection to master topic if explicitly asked to do so or it's the last remaining session.
-					TerminateProxyConnection: leave.terminateProxyConnection || len(t.sessions) == 1,
+					// Terminate connection to master topic if explicitly asked to do so or all sessions are gone.
+					TerminateProxyConnection: leave.terminateProxyConnection || len(t.sessions) == 0,
 				},
 			}
 			if err := globals.cluster.routeToTopicMaster(msg, nil, proxyLeave, t.name, leave.sess); err != nil {
@@ -314,10 +318,8 @@ func (t *Topic) runProxy(hub *Hub) {
 							if sess != nil {
 								t.remSession(sess, sess.uid)
 							}
-							// Enable kill timer if
-							// A. There are no more session attached to this topic.
-							// B. The last remaining session is already deleted.
-							if len(t.sessions) == 0 || (sess == nil && len(t.sessions) == 1) {
+							// All sessions are gone. Start the kill timer.
+							if len(t.sessions) == 0 {
 								killTimer.Reset(keepAlive)
 							}
 						}
@@ -549,8 +551,9 @@ func (t *Topic) runLocal(hub *Hub) {
 					t.perUser[uid] = pud
 				}
 
-				// Always respond to proxy topics.
-				if leave.id != "" || leave.sess.isProxy() {
+				// Respond if either the request contains an id
+				// or a proxy session is responding to a client request without an id (!proxyTerminating).
+				if leave.id != "" || (leave.sess.isProxy() && !proxyTerminating) {
 					leave.sess.queueOutWithOverrides(NoErr(leave.id, t.original(asUid), now), leave.sessOverrides)
 				}
 			}
