@@ -1251,9 +1251,7 @@ func (sess *Session) topicProxyWriteLoop(forTopic string) {
 					// Only presence notifications may come not as a response to a client request.
 					log.Panic("cluster: message must be accompanied by the originating session information: ", srvMsg)
 				}
-				if srvMsg.skipSid != "" {
-					response.ProxyResp.SkipSid = srvMsg.skipSid
-				}
+				response.ProxyResp.SkipSid = srvMsg.skipSid
 			}
 			if copyParamsFromSession {
 				// Reply to a specific session.

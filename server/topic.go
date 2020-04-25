@@ -221,7 +221,7 @@ func (t *Topic) runProxy(hub *Hub) {
 			log.Printf("t[%s] leave %+v", t.name, leave)
 			asUid := leave.userId
 			// Explicitly specify user id because the proxy session hosts multiple client sessions.
-			if leave.userId.IsZero() {
+			if asUid.IsZero() {
 				if pssd, ok := t.sessions[leave.sess]; ok {
 					asUid = pssd.uid
 				} else {
@@ -530,7 +530,7 @@ func (t *Topic) runLocal(hub *Hub) {
 					}
 					// Update user's last online timestamp & user agent
 					if !proxyTerminating {
-						if err := store.Users.UpdateLastSeen(asUid, mrs.userAgent, now); err != nil {
+						if err := store.Users.UpdateLastSeen(uid, mrs.userAgent, now); err != nil {
 							log.Println(err)
 						}
 					}
