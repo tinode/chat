@@ -1247,9 +1247,9 @@ func (sess *Session) topicProxyWriteLoop(forTopic string) {
 				copyParamsFromSession = srvMsg.sessOverrides.sid != ""
 			} else {
 				// Copy skipSid.
-				if srvMsg.Pres == nil {
-					// Only presence notifications may come not as a response to a client request.
-					log.Panic("cluster: message must be accompanied by the originating session information: ", srvMsg)
+				if srvMsg.Data == nil && srvMsg.Pres == nil && srvMsg.Info == nil {
+					// Only broadcast messages (data, pres, info) may come not as a response to a client request.
+					log.Panic("cluster: only broadcast messages may not contain session overrides: ", srvMsg)
 				}
 				response.ProxyResp.SkipSid = srvMsg.skipSid
 			}
