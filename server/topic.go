@@ -239,7 +239,7 @@ func (t *Topic) runProxy(hub *Hub) {
 					Id: leave.id,
 					UserId: asUid,
 					Unsub: leave.unsub,
-					// Terminate connection to master topic if explicitly asked to do so or it's the last remaining session.
+					// Terminate connection to master topic if explicitly asked to do so or all sessions are gone.
 					TerminateProxyConnection: leave.terminateProxyConnection || len(t.sessions) == 0,
 				},
 			}
@@ -551,7 +551,8 @@ func (t *Topic) runLocal(hub *Hub) {
 					t.perUser[uid] = pud
 				}
 
-				// Always respond to proxy topics.
+				// Respond if either the request contains an id
+				// or a proxy session is responding to a client request without an id (!proxyTerminating).
 				if leave.id != "" || (leave.sess.isProxy() && !proxyTerminating) {
 					leave.sess.queueOutWithOverrides(NoErr(leave.id, t.original(asUid), now), leave.sessOverrides)
 				}
