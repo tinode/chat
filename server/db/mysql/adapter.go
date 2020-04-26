@@ -2216,7 +2216,7 @@ func (a *adapter) MessageAttachments(msgId t.Uid, fids []string) error {
 	var values []string
 	strNow := t.TimeNow().Format("2006-01-02T15:04:05.999")
 	// createdat,fileid,msgid
-	val := "VALUES('" + strNow + "',?," + strconv.FormatInt(int64(msgId), 10) + ")"
+	val := "('" + strNow + "',?," + strconv.FormatInt(int64(msgId), 10) + ")"
 	for _, fid := range fids {
 		id := t.ParseUid(fid)
 		if id.IsZero() {
@@ -2239,7 +2239,7 @@ func (a *adapter) MessageAttachments(msgId t.Uid, fids []string) error {
 		}
 	}()
 
-	_, err = a.db.Exec("INSERT INTO filemsglinks(createdat,fileid,msgid) "+strings.Join(values, ","), args...)
+	_, err = a.db.Exec("INSERT INTO filemsglinks(createdat,fileid,msgid) VALUES "+strings.Join(values, ","), args...)
 	if err != nil {
 		return err
 	}
