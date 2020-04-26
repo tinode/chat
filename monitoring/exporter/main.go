@@ -16,8 +16,8 @@ import (
 type monitoringService int
 
 const (
-	Prometheus monitoringService = 1
-	InfluxDB   monitoringService = 2
+	promService   monitoringService = 1
+	influxService monitoringService = 2
 )
 
 const (
@@ -80,19 +80,19 @@ func main() {
 
 	var service monitoringService
 	if *serveFor == "prometheus" {
-		service = Prometheus
+		service = promService
 	} else if *serveFor == "influxdb" {
-		service = InfluxDB
+		service = influxService
 	} else {
 		log.Fatal("Invalid monitoring service:" + *serveFor + "; must be either \"prometheus\" or \"influxdb\"")
 	}
 	// Validate flags.
 	switch service {
-	case Prometheus:
+	case promService:
 		if *promMetricsPath == "/" {
 			log.Fatal("Serving metrics from / is not supported")
 		}
-	case InfluxDB:
+	case influxService:
 		if *influxOrganization == "" {
 			log.Fatal("Must specify --influx_organization")
 		}
@@ -115,9 +115,9 @@ func main() {
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		var servingPath string
 		switch service {
-		case Prometheus:
+		case promService:
 			servingPath = "<p>Prometheus exporter path: <a href='" + *promMetricsPath + "'>Metrics</a></p>"
-		case InfluxDB:
+		case influxService:
 			servingPath = "<p>InfluxDB push path: <a href='/push'>Push</a></p>"
 		}
 
@@ -137,7 +137,7 @@ func main() {
 	var serverTypeString string
 	// Create exporters.
 	switch service {
-	case Prometheus:
+	case promService:
 		serverTypeString = *serveFor
 		promExporter := NewPromExporter(*tinodeAddr, *promNamespace, time.Duration(*promTimeout)*time.Second, &scraper)
 		registry := prometheus.NewRegistry()
@@ -154,7 +154,7 @@ func main() {
 				),
 			),
 		)
-	case InfluxDB:
+	case influxService:
 		serverTypeString = fmt.Sprintf("%s, version %s", *serveFor, *influxDBVersion)
 		influxDBExporter := NewInfluxDBExporter(*influxDBVersion, *influxPushAddr, *influxOrganization, *influxBucket,
 			*influxAuthToken, *instance, &scraper)
