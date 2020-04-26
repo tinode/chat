@@ -24,6 +24,7 @@ const (
 
 var handler Handler
 
+// Handler represents state of TNPG push client.
 type Handler struct {
 	input   chan *push.Receipt
 	stop    chan bool

@@ -13,11 +13,11 @@ import (
 	"github.com/prometheus/common/version"
 )
 
-type MonitoringService int
+type monitoringService int
 
 const (
-	Prometheus MonitoringService = 1
-	InfluxDB   MonitoringService = 2
+	Prometheus monitoringService = 1
+	InfluxDB   monitoringService = 2
 )
 
 const (
@@ -78,7 +78,7 @@ func main() {
 	)
 	flag.Parse()
 
-	var service MonitoringService
+	var service monitoringService
 	if *serveFor == "prometheus" {
 		service = Prometheus
 	} else if *serveFor == "influxdb" {

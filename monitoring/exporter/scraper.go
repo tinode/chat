@@ -19,17 +19,17 @@ var errKeyNotFound = errors.New("key not found")
 // CollectRaw gathers all metrics from the configured Tinode instance,
 // and returns them as a map.
 func (s *Scraper) CollectRaw() (map[string]float64, error) {
-	if stats, err := s.Scrape(); err != nil {
+	stats, err := s.Scrape()
+	if err != nil {
 		log.Println("Failed to fetch or parse response", err)
 		return nil, err
-	} else {
-		if metrics, err := s.parseStatsRaw(stats); err != nil {
-			return nil, err
-		} else {
-			metrics["up"] = 1
-			return metrics, nil
-		}
 	}
+	metrics, err := s.parseStatsRaw(stats)
+	if err != nil {
+		return nil, err
+	}
+	metrics["up"] = 1
+	return metrics, nil
 }
 
 // Scrape fetches the data from Tinode server using HTTP GET then decodes the response.
