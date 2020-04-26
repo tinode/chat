@@ -75,19 +75,19 @@ CREATE TABLE auth(
 
 # Topics
 CREATE TABLE topics(
-	id 			INT NOT NULL AUTO_INCREMENT,
+	id			INT NOT NULL AUTO_INCREMENT,
 	createdat 	DATETIME(3) NOT NULL,
 	updatedat 	DATETIME(3) NOT NULL,
 	touchedat 	DATETIME(3),
 	state		SMALLINT NOT NULL DEFAULT 0,
-	stateat 	DATETIME(3),
-	name 		CHAR(25) NOT NULL,
-	usebt 		TINYINT DEFAULT 0,
-	owner 		BIGINT NOT NULL DEFAULT 0,
-	access 		JSON,
-	seqid 		INT NOT NULL DEFAULT 0,
-	delid 		INT DEFAULT 0,
-	public 		JSON,
+	stateat		DATETIME(3),
+	name		CHAR(25) NOT NULL,
+	usebt		TINYINT DEFAULT 0,
+	owner		BIGINT NOT NULL DEFAULT 0,
+	access		JSON,
+	seqid		INT NOT NULL DEFAULT 0,
+	delid		INT DEFAULT 0,
+	public		JSON,
 	tags		JSON, -- Denormalized array of tags
 	
 	PRIMARY KEY(id),
@@ -110,18 +110,18 @@ CREATE TABLE topictags(
 
 # Subscriptions
 CREATE TABLE subscriptions(
-	id 			INT NOT NULL AUTO_INCREMENT,
-	createdat 	DATETIME(3) NOT NULL,
-	updatedat 	DATETIME(3) NOT NULL,
-	deletedat 	DATETIME(3),
-	userid 		BIGINT NOT NULL,
-	topic 		CHAR(25) NOT NULL,
-	delid      INT DEFAULT 0,
-	recvseqid  INT DEFAULT 0,
-	readseqid  INT DEFAULT 0,
+	id			INT NOT NULL AUTO_INCREMENT,
+	createdat	DATETIME(3) NOT NULL,
+	updatedat	DATETIME(3) NOT NULL,
+	deletedat	DATETIME(3),
+	userid		BIGINT NOT NULL,
+	topic		CHAR(25) NOT NULL,
+	delid		INT DEFAULT 0,
+	recvseqid	INT DEFAULT 0,
+	readseqid	INT DEFAULT 0,
 	modewant	CHAR(8),
-	modegiven  	CHAR(8),
-	private 	JSON,
+	modegiven	CHAR(8),
+	private		JSON,
 	
 	PRIMARY KEY(id)	,
 	FOREIGN KEY(userid) REFERENCES users(id),
