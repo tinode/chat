@@ -92,34 +92,53 @@ func (ah *awshandler) Init(jsconf string) error {
 	// Create S3 service client
 	ah.svc = s3.New(sess)
 
-	// Check if the bucket exists, create one if not.
+	// Check if bucket already exists.
+	_, err = ah.svc.HeadBucket(&s3.HeadBucketInput{Bucket: aws.String(ah.conf.BucketName)})
+	if err == nil {
+		// Bucket exists
+		return nil
+	}
+
+	if aerr, ok := err.(awserr.Error); !ok || aerr.Code() != s3.ErrCodeNoSuchBucket {
+		// Hard error.
+		return err
+	}
+
+	// Bucket does not exist. Create one.
 	_, err = ah.svc.CreateBucket(&s3.CreateBucketInput{Bucket: aws.String(ah.conf.BucketName)})
 	if err != nil {
-		if aerr, ok := err.(awserr.Error); !ok ||
-			(aerr.Code() != s3.ErrCodeBucketAlreadyExists &&
-				aerr.Code() != s3.ErrCodeBucketAlreadyOwnedByYou) {
-			return err
+		// Check if someone has already created a bucket (possible in a cluster).
+		if aerr, ok := err.(awserr.Error); ok {
+			if aerr.Code() == s3.ErrCodeBucketAlreadyExists ||
+				aerr.Code() == s3.ErrCodeBucketAlreadyOwnedByYou ||
+				// Someone is already creating this bucket:
+				// OperationAborted: A conflicting conditional operation is currently in progress against this resource.
+				aerr.Code() == "OperationAborted" {
+				// Clear benign error
+				err = nil
+			}
 		}
-	}
+	} else {
+		// This is a new bucket.
 
-	// The following serves two purposes:
-	// 1. Setup CORS policy to be able to serve media directly from S3.
-	// 2. Verify that the bucket is accessible to the current user.
-	origins := ah.conf.CorsOrigins
-	if len(origins) == 0 {
-		origins = append(origins, "*")
+		// The following serves two purposes:
+		// 1. Setup CORS policy to be able to serve media directly from S3.
+		// 2. Verify that the bucket is accessible to the current user.
+		origins := ah.conf.CorsOrigins
+		if len(origins) == 0 {
+			origins = append(origins, "*")
+		}
+		_, err = ah.svc.PutBucketCors(&s3.PutBucketCorsInput{
+			Bucket: aws.String(ah.conf.BucketName),
+			CORSConfiguration: &s3.CORSConfiguration{
+				CORSRules: []*s3.CORSRule{{
+					AllowedMethods: aws.StringSlice([]string{http.MethodGet, http.MethodHead}),
+					AllowedOrigins: aws.StringSlice(origins),
+					AllowedHeaders: aws.StringSlice([]string{"*"}),
+				}},
+			},
+		})
 	}
-	_, err = ah.svc.PutBucketCors(&s3.PutBucketCorsInput{
-		Bucket: aws.String(ah.conf.BucketName),
-		CORSConfiguration: &s3.CORSConfiguration{
-			CORSRules: []*s3.CORSRule{{
-				AllowedMethods: aws.StringSlice([]string{http.MethodGet, http.MethodHead}),
-				AllowedOrigins: aws.StringSlice(origins),
-				AllowedHeaders: aws.StringSlice([]string{"*"}),
-			}},
-		},
-	})
-
 	return err
 }
 

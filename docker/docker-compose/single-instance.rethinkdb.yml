@@ -1,0 +1,16 @@
+version: '3.7'
+
+x-rethinkdb-tinode-env-vars: &rethinkdb-tinode-env-vars
+  "STORE_USE_ADAPTER": "rethinkdb"
+
+services:
+  db:
+    image: rethinkdb:2.4.0
+    container_name: rethinkdb
+    healthcheck:
+      test: ["CMD", "curl -f http://localhost:8080/ || exit 1"]
+
+  tinode-0:
+    environment:
+      << : *rethinkdb-tinode-env-vars
+      "WAIT_FOR": "rethinkdb:8080"

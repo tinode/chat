@@ -28,7 +28,6 @@
 		- [`sys` Topic](#sys-topic)
 	- [Using Server-Issued Message IDs](#using-server-issued-message-ids)
 	- [User Agent and Presence Notifications](#user-agent-and-presence-notifications)
-	- [Push Notifications Support](#push-notifications-support)
 	- [Public and Private Fields](#public-and-private-fields)
 		- [Public](#public)
 		- [Private](#private)
@@ -37,6 +36,9 @@
 		- [Uploading](#uploading)
 		- [Downloading](#downloading)
 	- [Push Notifications](#push-notifications)
+		- [Tinode Push Gateway](#tinode-push-gateway)
+		- [Google FCM](#google-fcm)
+		- [Stdout](#stdout)
 	- [Messages](#messages)
 		- [Client to Server Messages](#client-to-server-messages)
 			- [`{hi}`](#hi)
@@ -410,10 +412,6 @@ A user is reported as being online when one or more of user's sessions are attac
 
 An empty `ua=""` _user agent_ is not reported. I.e. if user attaches to `me` with non-empty _user agent_ then does so with an empty one, the change is not reported. An empty _user agent_ may be disallowed in the future.
 
-## Push Notifications Support
-
-Tinode supports mobile push notifications though compile-time plugins. The channel published by the plugin receives a copy of every data message which was attempted to be delivered. The server supports [Google FCM](https://firebase.google.com/docs/cloud-messaging/) out of the box.
-
 ## Public and Private Fields
 
 Topics and subscriptions have `public` and `private` fields. Generally, the fields are application-defined. The server does not enforce any particular structure of these fields except for `fnd` topic. At the same time, client software should use the same format for interoperability reasons.
@@ -560,17 +558,32 @@ _Important!_ As a security measure, the client should not send security credenti
 
 ## Push Notifications
 
-Tinode uses compile-time adapters for handling push notifications. The server comes with [Google FCM](https://firebase.google.com/docs/cloud-messaging/) and `stdout` adapters. FCM supports all major mobile platforms except Chinese flavor of Android. Any type of push notifications can be handled by writing an appropriate adapter. The payload of the notification from the FCM adapter is the following:
+Tinode uses compile-time adapters for handling push notifications. The server comes with [Tinode Push Gateway](../server/push/tnpg/), [Google FCM](https://firebase.google.com/docs/cloud-messaging/), and `stdout` adapters. Tinode Push Gateway and Google FCM support Android with [Play Services](https://developers.google.com/android/guides/overview) (may not be supported by some Chinese phones), iOS devices and all major web browsers excluding Safari. The `stdout` adapter does not actually send push notifications. It's mostly useful for debugging, testing and logging. Other types of push notifications such as [TPNS](https://intl.cloud.tencent.com/product/tpns) can be handled by writing appropriate adapters.
+
+If you are writing a custom plugin, the notification payload is the following:
 ```js
 {
   topic: "grpnG99YhENiQU", // Topic which received the message.
   xfrom: "usr2il9suCbuko", // ID of the user who sent the message.
   ts: "2019-01-06T18:07:30.038Z", // message timestamp in RFC3339 format.
   seq: "1234", // sequential ID of the message (integer value sent as text).
-  mime: "text/x-drafty", // message MIME-Type.
+  mime: "text/x-drafty", // optional message MIME-Type.
   content: "Lorem ipsum dolor sit amet, consectetur adipisci", // The first 80 characters of the message content as plain text.
 }
 ```
+
+### Tinode Push Gateway
+
+Tinode Push Gateway (TNPG) is a proprietary Tinode service which sends push notifications on behalf of Tinode. Internally it uses Google FCM and as such supports the same platforms as FCM. The main advantage of using TNPG over FCM is simplicity of configuration: mobile clients do not need to be recompiled, all is needed is a [configuration update](../server/push/tnpg/) on a server.
+
+### Google FCM
+
+[Google FCM](https://firebase.google.com/docs/cloud-messaging/) supports Android with [Play Services](https://developers.google.com/android/guides/overview), iPhone and iPad devices, and all major web browsers excluding Safari. In order to use FCM mobile clients (iOS, Android) must be recompiled with credentials obtained from Google. See [instructions](../server/push/fcm/) for details.
+
+### Stdout
+
+The `stdout` adapter is mostly useful for debugging and logging. It writes push payload to `STDOUT` where it can be redirected to file or read by some other process.
+
 
 ## Messages
 
@@ -615,6 +628,8 @@ The user agent `ua` is expected to follow [RFC 7231 section 5.5.3](http://tools.
 
 Message `{acc}` creates users or updates `tags` or authentication credentials `scheme` and `secret` of exiting users. To create a new user set `user` to the string `new` optionally followed by any character sequence, e.g. `newr15gsr`. Either authenticated or anonymous session can send an `{acc}` message to create a new user. To update authentication data or validate a credential of the current user leave `user` unset.
 
+The `{acc}` message **cannot** be used to modify `desc` or `cred` of an existing user. Update user's `me` topic instead.
+
 ```js
 acc: {
   id: "1a2b3", // string, client-provided message id, optional
@@ -643,7 +658,7 @@ acc: {
   ],
 
   desc: {  // object, user initialisation data closely matching that of table
-           // initialisation; optional
+           // initialisation; used only when creating an account; optional
     defacs: {
       auth: "JRWS", // string, default access mode for peer to peer conversations
                    // between this user and other authenticated users

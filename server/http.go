@@ -13,6 +13,7 @@ import (
 	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"log"
 	"net"
 	"net/http"
@@ -34,7 +35,6 @@ func listenAndServe(addr string, mux *http.ServeMux, tlfConf *tls.Config, stop <
 	httpdone := make(chan bool)
 
 	server := &http.Server{
-		Addr:    addr,
 		Handler: mux,
 	}
 
@@ -45,24 +45,38 @@ func listenAndServe(addr string, mux *http.ServeMux, tlfConf *tls.Config, stop <
 		if server.TLSConfig != nil {
 			// If port is not specified, use default https port (443),
 			// otherwise it will default to 80
-			if server.Addr == "" {
-				server.Addr = ":https"
+			if addr == "" {
+				addr = ":https"
 			}
 
 			if globals.tlsRedirectHTTP != "" {
-				log.Printf("Redirecting connections from HTTP at [%s] to HTTPS at [%s]",
-					globals.tlsRedirectHTTP, server.Addr)
+				// Serving redirects from a unix socket or to a unix socket makes no sense.
+				if isUnixAddr(globals.tlsRedirectHTTP) || isUnixAddr(addr) {
+					err = errors.New("HTTP to HTTPS redirect: unix sockets not supported.")
+				} else {
+					log.Printf("Redirecting connections from HTTP at [%s] to HTTPS at [%s]",
+						globals.tlsRedirectHTTP, addr)
 
-				// This is a second HTTP server listenning on a different port.
-				go http.ListenAndServe(globals.tlsRedirectHTTP, tlsRedirect(server.Addr))
+					// This is a second HTTP server listenning on a different port.
+					go http.ListenAndServe(globals.tlsRedirectHTTP, tlsRedirect(addr))
+				}
 			}
 
-			log.Printf("Listening for client HTTPS connections on [%s]", server.Addr)
-			err = server.ListenAndServeTLS("", "")
+			if err == nil {
+				log.Printf("Listening for client HTTPS connections on [%s]", addr)
+				lis, err := netListener(addr)
+				if err == nil {
+					err = server.ServeTLS(lis, "", "")
+				}
+			}
 		} else {
-			log.Printf("Listening for client HTTP connections on [%s]", server.Addr)
-			err = server.ListenAndServe()
+			log.Printf("Listening for client HTTP connections on [%s]", addr)
+			lis, err := netListener(addr)
+			if err == nil {
+				err = server.Serve(lis)
+			}
 		}
+
 		if err != nil {
 			if globals.shuttingDown {
 				log.Println("HTTP server: stopped")

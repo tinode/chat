@@ -44,16 +44,33 @@ Request and response payloads are formatted as JSON. Some of the request or resp
 
 ## Configuration
 
+Add the following section to the `auth_config` in [tinode.conf](../../tinode.conf):
+
 ```js
-{
-  // ServerUrl is the URL of the authentication server to call.
-  "server_url": "http://127.0.0.1:5000/",
-  // Server may create new accounts.
-  "allow_new_accounts": true,
-  // Use separate endpoints, i.e. add request name to serverUrl path when making requests:
-  // http://127.0.0.1:5000/add
-  "use_separae_endpoints": true
-}
+...
+"auth_config": {
+  ...
+  "rest": {
+    // ServerUrl is the URL of the authentication server to call.
+    "server_url": "http://127.0.0.1:5000/",
+    // Authentication server is allowed to create new accounts.
+    "allow_new_accounts": true,
+    // Use separate endpoints, i.e. add request name to serverUrl path when making requests:
+    // http://127.0.0.1:5000/add
+    "use_separate_endpoints": true
+  },
+  ...
+},
+```
+If you want to use your authenticator **instead** of stock `basic` (login-password) authentication, add a logical renaming:
+```js
+...
+"auth_config": {
+  "logical_names": ["basic:rest"],
+  "rest": { ... },
+  ...
+},
+...
 ```
 
 ## Request

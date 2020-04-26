@@ -352,7 +352,7 @@ func (UsersObjMapper) FindSubs(id types.Uid, required, optional []string) ([]typ
 	}
 
 	allSubs := append(usubs, tsubs...)
-	for i, _ := range allSubs {
+	for i := range allSubs {
 		// Indicate that the returned access modes are not 'N', but rather undefined.
 		allSubs[i].ModeGiven = types.ModeUnset
 		allSubs[i].ModeWant = types.ModeUnset

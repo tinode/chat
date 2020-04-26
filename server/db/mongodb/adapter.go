@@ -601,7 +601,7 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 			}
 
 			// Delete credentials.
-			if err = a.credDel(sc, uid, "", ""); err != nil {
+			if err = a.credDel(sc, uid, "", ""); err != nil && err != t.ErrNotFound {
 				return err
 			}
 
@@ -921,7 +921,12 @@ func (a *adapter) credDel(ctx context.Context, uid t.Uid, method, value string) 
 			filter["value"] = value
 		}
 	} else {
-		_, err := credCollection.DeleteMany(ctx, filter)
+		res, err := credCollection.DeleteMany(ctx, filter)
+		if err == nil {
+			if res.DeletedCount == 0 {
+				err = t.ErrNotFound
+			}
+		}
 		return err
 	}
 
@@ -930,12 +935,19 @@ func (a *adapter) credDel(ctx context.Context, uid t.Uid, method, value string) 
 	hardDeleteFilter["$or"] = b.A{
 		b.M{"done": true},
 		b.M{"retries": 0}}
-	if _, err := credCollection.DeleteMany(ctx, hardDeleteFilter); err != nil {
+	if res, err := credCollection.DeleteMany(ctx, hardDeleteFilter); err != nil {
 		return err
+	} else if res.DeletedCount > 0 {
+		return nil
 	}
 
 	// Soft-delete all other values.
-	_, err := credCollection.UpdateMany(ctx, filter, b.M{"$set": b.M{"deletedat": t.TimeNow()}})
+	res, err := credCollection.UpdateMany(ctx, filter, b.M{"$set": b.M{"deletedat": t.TimeNow()}})
+	if err == nil {
+		if res.ModifiedCount == 0 {
+			err = t.ErrNotFound
+		}
+	}
 	return err
 }
 
@@ -1228,6 +1240,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 		} else {
 			topq = append(topq, sub.Topic)
 		}
+		sub.Private = unmarshalBsonD(sub.Private)
 		join[sub.Topic] = sub
 	}
 	cur.Close(a.ctx)
@@ -1251,9 +1264,9 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 			}
 			sub = join[top.Id]
 			sub.ObjHeader.MergeTimes(&top.ObjHeader)
-			sub.SetSeqId(top.SeqId)
+			sub.SetState(top.State)
 			sub.SetTouchedAt(top.TouchedAt)
-			sub.Private = unmarshalBsonD(sub.Private)
+			sub.SetSeqId(top.SeqId)
 			if t.GetTopicCat(sub.Topic) == t.TopicCatGrp {
 				// all done with a grp topic
 				sub.SetPublic(unmarshalBsonD(top.Public))
@@ -1286,6 +1299,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 			uid2 := t.ParseUid(usr.Id)
 			if sub, ok := join[uid.P2PName(uid2)]; ok {
 				sub.ObjHeader.MergeTimes(&usr.ObjHeader)
+				sub.SetState(usr.State)
 				sub.SetPublic(unmarshalBsonD(usr.Public))
 				sub.SetWith(uid2.UserId())
 				sub.SetDefaultAccess(usr.Access.Auth, usr.Access.Anon)

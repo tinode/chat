@@ -28,7 +28,7 @@
 .must usermod $user.params[user] --name 'Test User 1'
 
 # Change test's anon acs.
-must chacs $user.params[user] --anon=JR
+.must chacs $user.params[user] --anon=JR
 
 # Set test's password to test456.
 passwd $user.params[user] -P test456

@@ -75,9 +75,9 @@ When you register a new account you are asked for an email address to send valid
 * Persistent message store, paginated message history.
 * Javascript bindings with no external dependencies.
 * Java bindings (dependencies: [Jackson](https://github.com/FasterXML/jackson), [Java-Websocket](https://github.com/TooTallNate/Java-WebSocket)). Suitable for Android but with no Android SDK dependencies.
-* Websocket, long polling, and [gRPC](https://grpc.io/) over TCP transports.
+* Websocket, long polling, and [gRPC](https://grpc.io/) over TCP or Unix sockets.
 * JSON or [protobuf version 3](https://developers.google.com/protocol-buffers/) wire protocols.
-* [TLS](https://en.wikipedia.org/wiki/Transport_Layer_Security) with [Letsencrypt](https://letsencrypt.org/) or conventional certificates.
+* Optional built-in [TLS](https://en.wikipedia.org/wiki/Transport_Layer_Security) with [Letsencrypt](https://letsencrypt.org/) or conventional certificates.
 * User search/discovery.
 * Rich formatting of messages, markdown-style: \*style\* &rarr; **style**.
 * Inline images and file attachments.
@@ -86,9 +86,9 @@ When you register a new account you are asked for an email address to send valid
 * Support for client-side data caching.
 * Ability to block unwanted communication server-side.
 * Anonymous users (important for use cases related to tech support over chat).
-* Push notifications using [FCM](https://firebase.google.com/docs/cloud-messaging/).
+* Push notifications using [FCM](https://firebase.google.com/docs/cloud-messaging/) or [TNPG](server/push/tnpg/).
 * Storage and out of band transfer of large objects like video files using local file system or Amazon S3.
-* Plugins to extend functionality, for example to enable chatbots.
+* Plugins to extend functionality, for example, to enable chatbots.
 
 ### Planned
 

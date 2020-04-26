@@ -1,0 +1,38 @@
+version: '3.7'
+
+x-mongodb-tinode-env-vars: &mongodb-tinode-env-vars
+  "STORE_USE_ADAPTER": "mongodb"
+
+services:
+  db:
+    image: mongo:4.2.3
+    container_name: mongodb
+    entrypoint: [ "/usr/bin/mongod", "--bind_ip_all", "--replSet", "rs0" ]
+    healthcheck:
+      test: ["CMD", "curl -f http://localhost:28017/ || exit 1"]
+
+  # Initializes MongoDb replicaset.
+  initdb:
+    image: mongo:4.2.3
+    container_name: initdb
+    depends_on:
+      - db
+    command: >
+      bash -c "echo 'Starting replica set initialize';
+      until mongo --host mongodb --eval 'print(\"waited for connection\")'; do sleep 2; done;
+      echo 'Connection finished';
+      echo 'Creating replica set';
+      echo \"rs.initiate({'_id': 'rs0', "members": [ {'_id': 0, 'host': 'mongodb:27017'} ]})\" | mongo --host mongodb"
+
+  tinode-0:
+    environment:
+      << : *mongodb-tinode-env-vars
+      "WAIT_FOR": "mongodb:27017"
+
+  tinode-1:
+    environment:
+      << : *mongodb-tinode-env-vars
+
+  tinode-2:
+    environment:
+      << : *mongodb-tinode-env-vars

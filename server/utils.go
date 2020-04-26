@@ -3,12 +3,11 @@
 package main
 
 import (
-	"bufio"
 	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
+	"net"
 	"path/filepath"
 	"reflect"
 	"regexp"
@@ -745,37 +744,18 @@ func mergeMaps(dst, src map[string]interface{}) (map[string]interface{}, bool) {
 	return dst, changed
 }
 
-// Calculate line and character position from byte offset into a file.
-func offsetToLineAndChar(r io.Reader, offset int64) (int, int, error) {
-	if offset < 0 {
-		return -1, -1, errors.New("offset value cannot be negative")
+// netListener creates net.Listener for tcp and unix domains:
+// if addr is is in the form "unix:/run/tinode.sock" it's a unix socket, otherwise TCP host:port.
+func netListener(addr string) (net.Listener, error) {
+	addrParts := strings.SplitN(addr, ":", 2)
+	if len(addrParts) == 2 && addrParts[0] == "unix" {
+		return net.Listen("unix", addrParts[1])
 	}
+	return net.Listen("tcp", addr)
+}
 
-	br := bufio.NewReader(r)
-
-	// Count lines and characters.
-	lnum := 1
-	cnum := 0
-	// Number of bytes consumed.
-	var count int64
-	for {
-		ch, size, err := br.ReadRune()
-		if err == io.EOF {
-			return -1, -1, errors.New("offset value too large")
-		}
-		count += int64(size)
-
-		if ch == '\n' {
-			lnum++
-			cnum = 0
-		} else {
-			cnum++
-		}
-
-		if count >= offset {
-			break
-		}
-	}
-
-	return lnum, cnum, nil
+// Check if specified address is a unix socket like "unix:/run/tinode.sock".
+func isUnixAddr(addr string) bool {
+	addrParts := strings.SplitN(addr, ":", 2)
+	return len(addrParts) == 2 && addrParts[0] == "unix"
 }

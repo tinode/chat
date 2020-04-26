@@ -1,0 +1,181 @@
+# Reference configuration for a simple 3-node Tinode cluster.
+# Includes:
+# * Mysql database
+# * 3 Tinode servers
+# * 3 exporters
+
+version: '3.7'
+
+# Base Tinode template.
+x-tinode:
+  &tinode-base
+  depends_on:
+    - db
+  image: tinode/tinode:latest
+  restart: always
+
+x-exporter:
+  &exporter-base
+  image: tinode/exporter:latest
+  restart: always
+
+x-tinode-env-vars: &tinode-env-vars
+  "STORE_USE_ADAPTER": "mysql"
+  "PPROF_URL": "/pprof"
+  # You can provide your own tinode config by setting EXT_CONFIG env var and binding your configuration file to
+  # "EXT_CONFIG": "/etc/tinode/tinode.conf"
+  "WAIT_FOR": "mysql:3306"
+  # Push notifications.
+  # Modify as appropriate.
+  # Tinode Push Gateway configuration.
+  "TNPG_PUSH_ENABLED": "false"
+  # "TNPG_USER": "<user name>"
+  # "TNPG_AUTH_TOKEN": "<token>"
+  # FCM specific server configuration.
+  "FCM_PUSH_ENABLED": "false"
+  # "FCM_CRED_FILE": "<path to FCM credentials file>"
+  # "FCM_INCLUDE_ANDROID_NOTIFICATION": false
+  #
+  # FCM Web client configuration.
+  "FCM_API_KEY": "AIzaSyD6X4ULR-RUsobvs1zZ2bHdJuPz39q2tbQ"
+  "FCM_APP_ID": "1:114126160546:web:aca6ea2981feb81fb44dfb"
+  "FCM_PROJECT_ID": "tinode-1000"
+  "FCM_SENDER_ID": 114126160546
+  "FCM_VAPID_KEY": "BOgQVPOMzIMXUpsYGpbVkZoEBc0ifKY_f2kSU5DNDGYI6i6CoKqqxDd7w7PJ3FaGRBgVGJffldETumOx831jl58"
+  # iOS app universal links configuration.
+  # "IOS_UNIV_LINKS_APP_ID": "<ios universal links app id>"
+
+x-exporter-env-vars: &exporter-env-vars
+  "TINODE_ADDR": "http://tinode.host:18080/stats/expvar/"
+  # InfluxDB configation:
+  "SERVE_FOR": "influxdb"
+  "INFLUXDB_VERSION": 1.7
+  "INFLUXDB_ORGANIZATION": "<your organization>"
+  "INFLUXDB_PUSH_INTERVAL": 30
+  "INFLUXDB_PUSH_ADDRESS": "https://mon.tinode.co/intake"
+  "INFLUXDB_AUTH_TOKEN": "<auth token>"
+  # Prometheus configuration:
+  # "SERVE_FOR": "prometheus"
+  # "PROM_NAMESPACE": "tinode"
+  # "PROM_METRICS_PATH": "/metrics"
+
+services:
+  db:
+    image: mysql:5.7
+    container_name: mysql
+    restart: always
+    # Use your own volume.
+    # volumes:
+    #   - <mysql directory in your file system>:/var/lib/mysql
+    environment:
+      - MYSQL_ALLOW_EMPTY_PASSWORD=yes
+    healthcheck:
+      test: ["CMD", "mysqladmin" ,"ping", "-h", "localhost"]
+      timeout: 5s
+      retries: 10
+
+  # Tinode servers.
+  tinode-0:
+    << : *tinode-base
+    container_name: tinode-0
+    hostname: tinode-0
+    # You can mount your volumes as necessary:
+    # volumes:
+    #   # E.g. external config (assuming EXT_CONFIG is set).
+    #   - <path to your tinode.conf>:/etc/tinode/tinode.conf
+    #   # Logs directory.
+    #   - <path to your tinode-0 logs directory>:/var/log
+    ports:
+      - "6060:6060"
+    environment:
+      << : *tinode-env-vars
+      "CLUSTER_SELF": "tinode-0"
+      "RESET_DB": ${RESET_DB:-false}
+      "UPGRADE_DB": ${UPGRADE_DB:-false}
+
+  tinode-1:
+    << : *tinode-base
+    container_name: tinode-1
+    hostname: tinode-1
+    # You can mount your volumes as necessary:
+    # volumes:
+    #   # E.g. external config (assuming EXT_CONFIG is set).
+    #   - <path to your tinode.conf>:/etc/tinode/tinode.conf
+    #   # Logs directory.
+    #   - <path to your tinode-1 logs directory>:/var/log
+    ports:
+      - "6061:6060"
+    environment:
+      << : *tinode-env-vars
+      "CLUSTER_SELF": "tinode-1"
+      # Wait for tinode-0, not the database since
+      # we let tinode-0 perform all database initialization and upgrade work.
+      "WAIT_FOR": "tinode-0:6060"
+      "NO_DB_INIT": "true"
+
+  tinode-2:
+    << : *tinode-base
+    container_name: tinode-2
+    hostname: tinode-2
+    # You can mount your volumes as necessary:
+    # volumes:
+    #   # E.g. external config (assuming EXT_CONFIG is set).
+    #   - <path to your tinode.conf>:/etc/tinode/tinode.conf
+    #   # Logs directory.
+    #   - <path to your tinode-2 logs directory>:/var/log
+    ports:
+      - "6062:6060"
+    environment:
+      << : *tinode-env-vars
+      "CLUSTER_SELF": "tinode-2"
+      # Wait for tinode-0, not the database since
+      # we let tinode-0 perform all database initialization and upgrade work.
+      "WAIT_FOR": "tinode-0:6060"
+      "NO_DB_INIT": "true"
+
+  # Monitoring.
+  # Exporters are paired with tinode instances.
+  exporter-0:
+    << : *exporter-base
+    container_name: exporter-0
+    hostname: exporter-0
+    depends_on:
+      - tinode-0
+    ports:
+      - 6222:6222
+    links:
+      - tinode-0:tinode.host
+    environment:
+      << : *exporter-env-vars
+      "INSTANCE": "tinode-0"
+      "WAIT_FOR": "tinode-0:6060"
+
+  exporter-1:
+    << : *exporter-base
+    container_name: exporter-1
+    hostname: exporter-1
+    depends_on:
+      - tinode-1
+    ports:
+      - 6223:6222
+    links:
+      - tinode-1:tinode.host
+    environment:
+      << : *exporter-env-vars
+      "INSTANCE": "tinode-1"
+      "WAIT_FOR": "tinode-1:6060"
+
+  exporter-2:
+    << : *exporter-base
+    container_name: exporter-2
+    hostname: exporter-2
+    depends_on:
+      - tinode-2
+    ports:
+      - 6224:6222
+    links:
+      - tinode-2:tinode.host
+    environment:
+      << : *exporter-env-vars
+      "INSTANCE": "tinode-2"
+      "WAIT_FOR": "tinode-2:6060"

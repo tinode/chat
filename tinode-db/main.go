@@ -12,11 +12,11 @@ import (
 	"strings"
 	"time"
 
-	jcr "github.com/DisposaBoy/JsonConfigReader"
 	_ "github.com/tinode/chat/server/db/mongodb"
 	_ "github.com/tinode/chat/server/db/mysql"
 	_ "github.com/tinode/chat/server/db/rethinkdb"
 	"github.com/tinode/chat/server/store"
+	jcr "github.com/tinode/jsonco"
 )
 
 type configType struct {
@@ -165,9 +165,9 @@ func getPassword(n int) string {
 }
 
 func main() {
-	log.Println("Initializing", store.GetAdapterName(), store.GetAdapterVersion())
 	var reset = flag.Bool("reset", false, "force database reset")
 	var upgrade = flag.Bool("upgrade", false, "perform database version upgrade")
+	var noInit = flag.Bool("no_init", false, "check that database exists but don't create if missing")
 	var datafile = flag.String("data", "", "name of file with sample data to load")
 	var conffile = flag.String("config", "./tinode.conf", "config of the database connection")
 
@@ -177,11 +177,11 @@ func main() {
 	if *datafile != "" && *datafile != "-" {
 		raw, err := ioutil.ReadFile(*datafile)
 		if err != nil {
-			log.Fatal("Failed to parse data:", err)
+			log.Fatalln("Failed to read sample data file:", err)
 		}
 		err = json.Unmarshal(raw, &data)
 		if err != nil {
-			log.Fatal(err)
+			log.Fatalln("Failed to parse sample data:", err)
 		}
 	}
 
@@ -190,51 +190,84 @@ func main() {
 
 	var config configType
 	if file, err := os.Open(*conffile); err != nil {
-		log.Fatal("Failed to read config file:", err)
-	} else if err = json.NewDecoder(jcr.New(file)).Decode(&config); err != nil {
-		log.Fatal("Failed to parse config file:", err)
+		log.Fatalln("Failed to read config file:", err)
+	} else {
+		jr := jcr.New(file)
+		if err = json.NewDecoder(jr).Decode(&config); err != nil {
+			switch jerr := err.(type) {
+			case *json.UnmarshalTypeError:
+				lnum, cnum, _ := jr.LineAndChar(jerr.Offset)
+				log.Fatalf("Unmarshall error in config file in %s at %d:%d (offset %d bytes): %s",
+					jerr.Field, lnum, cnum, jerr.Offset, jerr.Error())
+			case *json.SyntaxError:
+				lnum, cnum, _ := jr.LineAndChar(jerr.Offset)
+				log.Fatalf("Syntax error in config file at %d:%d (offset %d bytes): %s",
+					lnum, cnum, jerr.Offset, jerr.Error())
+			default:
+				log.Fatal("Failed to parse config file: ", err)
+			}
+		}
 	}
 
 	err := store.Open(1, config.StoreConfig)
 	defer store.Close()
 
+	log.Println("Database", store.GetAdapterName(), store.GetAdapterVersion())
+
 	if err != nil {
 		if strings.Contains(err.Error(), "Database not initialized") {
+			if *noInit {
+				log.Fatalln("Database not found.")
+			}
 			log.Println("Database not found. Creating.")
 		} else if strings.Contains(err.Error(), "Invalid database version") {
 			msg := "Wrong DB version: expected " + strconv.Itoa(store.GetAdapterVersion()) + ", got " +
 				strconv.Itoa(store.GetDbVersion()) + "."
 			if *reset {
-				log.Println(msg + " Dropping and recreating the database.")
+				log.Println(msg, "Dropping and recreating the database.")
 			} else if *upgrade {
-				log.Println(msg + " Upgrading the database.")
+				log.Println(msg, "Upgrading the database.")
 			} else {
-				log.Fatal(msg + " Use --reset to reset, --upgrade to upgrade.")
+				log.Fatalln(msg, "Use --reset to reset, --upgrade to upgrade.")
 			}
 		} else {
-			log.Fatal("Failed to init DB adapter:", err)
+			log.Fatalln("Failed to init DB adapter:", err)
 		}
 	} else if *reset {
 		log.Println("Database reset requested")
 	} else {
 		log.Println("Database exists, DB version is correct. All done.")
-		return
+		os.Exit(0)
 	}
 
 	if *upgrade {
 		// Upgrade DB from one version to another.
 		err = store.UpgradeDb(config.StoreConfig)
 		if err == nil {
-			log.Println("Database successfully upgraded")
+			log.Println("Database successfully upgraded.")
 		}
 	} else {
 		// Reset or create DB
 		err = store.InitDb(config.StoreConfig, true)
+		if err == nil {
+			var action string
+			if *reset {
+				action = "reset"
+			} else {
+				action = "initialized"
+			}
+			log.Println("Database", action)
+		}
 	}
 
 	if err != nil {
-		log.Fatal("Failed to init DB:", err)
+		log.Fatalln("Failed to init DB:", err)
 	}
 
-	genDb(&data)
+	if !*upgrade {
+		genDb(&data)
+	} else if len(data.Users) > 0 {
+		log.Println("Sample data ignored. All done.")
+	}
+	os.Exit(0)
 }

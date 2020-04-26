@@ -1,0 +1,105 @@
+# Reference configuration for a simple Tinode server.
+# Includes:
+# * Mysql database
+# * Tinode server
+# * Tinode exporters
+
+version: '3.7'
+
+# Base Tinode template.
+x-tinode:
+  &tinode-base
+  depends_on:
+    - db
+  image: tinode/tinode:latest
+  restart: always
+
+x-tinode-env-vars: &tinode-env-vars
+  "STORE_USE_ADAPTER": "mysql"
+  "PPROF_URL": "/pprof"
+  # You can provide your own tinode config by setting EXT_CONFIG env var and binding your configuration file to
+  # "EXT_CONFIG": "/etc/tinode/tinode.conf"
+  "WAIT_FOR": "mysql:3306"
+  # Push notifications.
+  # Modify as appropriate.
+  # Tinode Push Gateway configuration.
+  "TNPG_PUSH_ENABLED": "false"
+  # "TNPG_USER": "<user name>"
+  # "TNPG_AUTH_TOKEN": "<token>"
+  # FCM specific server configuration.
+  "FCM_PUSH_ENABLED": "false"
+  # "FCM_CRED_FILE": "<path to FCM credentials file>"
+  # "FCM_INCLUDE_ANDROID_NOTIFICATION": false
+  #
+  # FCM Web client configuration.
+  "FCM_API_KEY": "AIzaSyD6X4ULR-RUsobvs1zZ2bHdJuPz39q2tbQ"
+  "FCM_APP_ID": "1:114126160546:web:aca6ea2981feb81fb44dfb"
+  "FCM_PROJECT_ID": "tinode-1000"
+  "FCM_SENDER_ID": 114126160546
+  "FCM_VAPID_KEY": "BOgQVPOMzIMXUpsYGpbVkZoEBc0ifKY_f2kSU5DNDGYI6i6CoKqqxDd7w7PJ3FaGRBgVGJffldETumOx831jl58"
+  # iOS app universal links configuration.
+  # "IOS_UNIV_LINKS_APP_ID": "<ios universal links app id>"
+
+x-exporter-env-vars: &exporter-env-vars
+  "TINODE_ADDR": "http://tinode.host:6060/stats/expvar/"
+  # InfluxDB configation:
+  "SERVE_FOR": "influxdb"
+  "INFLUXDB_VERSION": 1.7
+  "INFLUXDB_ORGANIZATION": "<your organization>"
+  "INFLUXDB_PUSH_INTERVAL": 30
+  "INFLUXDB_PUSH_ADDRESS": "https://mon.tinode.co/intake"
+  "INFLUXDB_AUTH_TOKEN": "<auth token>"
+  # Prometheus configuration:
+  # "SERVE_FOR": "prometheus"
+  # "PROM_NAMESPACE": "tinode"
+  # "PROM_METRICS_PATH": "/metrics"
+
+services:
+  db:
+    image: mysql:5.7
+    container_name: mysql
+    restart: always
+    # Use your own volume.
+    # volumes:
+    #   - <mysql directory in your file system>:/var/lib/mysql
+    environment:
+      - MYSQL_ALLOW_EMPTY_PASSWORD=yes
+    healthcheck:
+      test: ["CMD", "mysqladmin" ,"ping", "-h", "localhost"]
+      timeout: 5s
+      retries: 10
+
+  # Tinode.
+  tinode-0:
+    << : *tinode-base
+    container_name: tinode-0
+    hostname: tinode-0
+    # You can mount your volumes as necessary:
+    # volumes:
+    #   # E.g. external config (assuming EXT_CONFIG is set).
+    #   - <path to your tinode.conf>:/etc/tinode/tinode.conf
+    #   # Logs directory.
+    #   - <path to your tinode-0 logs directory>:/var/log
+    ports:
+      - "6060:6060"
+    environment:
+      << : *tinode-env-vars
+      "RESET_DB": ${RESET_DB:-false}
+      "UPGRADE_DB": ${UPGRADE_DB:-false}
+
+  # Monitoring.
+  # Exporters are paired with tinode instances.
+  exporter-0:
+    container_name: exporter-0
+    hostname: exporter-0
+    depends_on:
+      - tinode-0
+    image: tinode/exporter:latest
+    restart: always
+    ports:
+      - "6222:6222"
+    links:
+      - tinode-0:tinode.host
+    environment:
+      << : *exporter-env-vars
+      "WAIT_FOR": "tinode-0:6060"

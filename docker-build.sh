@@ -28,7 +28,7 @@ for dbtag in "${dbtags[@]}"
 do
   if [ "$dbtag" == "alldbs" ]; then
     # For alldbs, container name is tinode/tinode.
-    name="tiniode/tinode"
+    name="tinode/tinode"
   else
     # Otherwise, tinode/tinode-$dbtag.
     name="tinode/tinode-${dbtag}"
@@ -53,3 +53,13 @@ if [ -n "$FULLRELEASE" ]; then
 fi
 docker rmi ${rmitags}
 docker build --build-arg VERSION=$tag ${buildtags} docker/chatbot
+
+# Build exporter image
+buildtags="--tag tinode/exporter:${ver[0]}.${ver[1]}.${ver[2]}"
+rmitags="tinode/exporter:${ver[0]}.${ver[1]}.${ver[2]}"
+if [ -n "$FULLRELEASE" ]; then
+  rmitags="${rmitags} tinode/exporter:latest tinode/exporter:${ver[0]}.${ver[1]}"
+  buildtags="${buildtags}  --tag tinode/exporter:latest --tag tinode/exporter:${ver[0]}.${ver[1]}"
+fi
+docker rmi ${rmitags}
+docker build --build-arg VERSION=$tag ${buildtags} docker/exporter

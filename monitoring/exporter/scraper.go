@@ -10,8 +10,8 @@ import (
 
 // Scraper collects metrics from a tinode server.
 type Scraper struct {
-	address   string
-	metrics   []string
+	address string
+	metrics []string
 }
 
 var errKeyNotFound = errors.New("key not found")

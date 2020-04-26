@@ -905,7 +905,7 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 		}
 
 		// Delete all credentials.
-		if err = credDel(tx, uid, "", ""); err != nil {
+		if err = credDel(tx, uid, "", ""); err != nil && err != t.ErrNotFound {
 			return err
 		}
 
@@ -1860,6 +1860,7 @@ func (a *adapter) SubsDelForUser(user t.Uid, hard bool) error {
 func (a *adapter) FindUsers(uid t.Uid, req, opt []string) ([]t.Subscription, error) {
 	index := make(map[string]struct{})
 	var args []interface{}
+	args = append(args, t.StateOK)
 	for _, tag := range append(req, opt...) {
 		args = append(args, tag)
 		index[tag] = struct{}{}
@@ -1869,7 +1870,6 @@ func (a *adapter) FindUsers(uid t.Uid, req, opt []string) ([]t.Subscription, err
 		"FROM users AS u LEFT JOIN usertags AS t ON t.userid=u.id " +
 		"WHERE u.state=? AND t.tag IN (?" + strings.Repeat(",?", len(req)+len(opt)-1) + ") " +
 		"GROUP BY u.id,u.createdat,u.updatedat,u.public,u.tags "
-	args = append(args, t.StateOK)
 	if len(req) > 0 {
 		query += "HAVING COUNT(t.tag IN (?" + strings.Repeat(",?", len(req)-1) + ") OR NULL)>=? "
 		for _, tag := range req {
@@ -1927,6 +1927,7 @@ func (a *adapter) FindUsers(uid t.Uid, req, opt []string) ([]t.Subscription, err
 func (a *adapter) FindTopics(req, opt []string) ([]t.Subscription, error) {
 	index := make(map[string]struct{})
 	var args []interface{}
+	args = append(args, t.StateOK)
 	for _, tag := range append(req, opt...) {
 		args = append(args, tag)
 		index[tag] = struct{}{}
@@ -1936,7 +1937,6 @@ func (a *adapter) FindTopics(req, opt []string) ([]t.Subscription, error) {
 		"FROM topics AS t LEFT JOIN topictags AS tt ON t.name=tt.topic " +
 		"WHERE t.state=? AND tt.tag IN (?" + strings.Repeat(",?", len(req)+len(opt)-1) + ") " +
 		"GROUP BY t.name,t.createdat,t.updatedat,t.public,t.tags "
-	args = append(args, t.StateOK)
 	if len(req) > 0 {
 		query += "HAVING COUNT(tt.tag IN (?" + strings.Repeat(",?", len(req)-1) + ") OR NULL)>=? "
 		for _, tag := range append(req) {
@@ -2342,8 +2342,10 @@ func deviceDelete(tx *sqlx.Tx, uid t.Uid, deviceID string) error {
 		res, err = tx.Exec("DELETE FROM devices WHERE userid=? AND hash=?", store.DecodeUid(uid), deviceHasher(deviceID))
 	}
 
-	if count, _ := res.RowsAffected(); count == 0 && err == nil {
-		err = t.ErrNotFound
+	if err == nil {
+		if count, _ := res.RowsAffected(); count == 0 {
+			err = t.ErrNotFound
+		}
 	}
 
 	return err
@@ -2465,19 +2467,36 @@ func credDel(tx *sqlx.Tx, uid t.Uid, method, value string) error {
 		}
 	}
 
+	var err error
+	var res sql.Result
 	if method == "" {
-		_, err := tx.Exec("DELETE FROM credentials"+constraints, args...)
+		// Case 1
+		res, err = tx.Exec("DELETE FROM credentials"+constraints, args...)
+		if err == nil {
+			if count, _ := res.RowsAffected(); count == 0 {
+				err = t.ErrNotFound
+			}
+		}
 		return err
 	}
 
 	// Case 2.1
-	if _, err := tx.Exec("DELETE FROM credentials"+constraints+" AND (done=true OR retries=0)", args...); err != nil {
+	res, err = tx.Exec("DELETE FROM credentials"+constraints+" AND (done=true OR retries=0)", args...)
+	if err != nil {
 		return err
+	}
+	if count, _ := res.RowsAffected(); count > 0 {
+		return nil
 	}
 
 	// Case 2.2
 	args = append([]interface{}{t.TimeNow()}, args...)
-	_, err := tx.Exec("UPDATE credentials SET deletedat=?"+constraints, args...)
+	res, err = tx.Exec("UPDATE credentials SET deletedat=?"+constraints, args...)
+	if err == nil {
+		if count, _ := res.RowsAffected(); count >= 0 {
+			err = t.ErrNotFound
+		}
+	}
 
 	return err
 }

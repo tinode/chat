@@ -89,25 +89,31 @@ def make_vcard(fn, photofile):
             card['fn'] = fn.strip()
 
         if photofile != None:
-            try:
-                f = open(photofile, 'rb')
-                # File extension is used as a file type
-                mimetype = mimetypes.guess_type(photofile)
-                if mimetype[0]:
-                    mimetype = mimetype[0].split("/")[1]
-                else:
-                    mimetype = 'jpeg'
-                data = base64.b64encode(f.read())
-                # python3 fix.
-                if type(data) is not str:
-                    data = data.decode()
+            if photofile == '':
+                # Delete the avatar.
                 card['photo'] = {
-                    'data': data,
-                    'type': mimetype
+                    'data': '␡'
                 }
-                f.close()
-            except IOError as err:
-                stdoutln("Error opening '" + photofile + "':", err)
+            else:
+                try:
+                    f = open(photofile, 'rb')
+                    # File extension is used as a file type
+                    mimetype = mimetypes.guess_type(photofile)
+                    if mimetype[0]:
+                        mimetype = mimetype[0].split("/")[1]
+                    else:
+                        mimetype = 'jpeg'
+                    data = base64.b64encode(f.read())
+                    # python3 fix.
+                    if type(data) is not str:
+                        data = data.decode()
+                    card['photo'] = {
+                        'data': data,
+                        'type': mimetype
+                    }
+                    f.close()
+                except IOError as err:
+                    stdoutln("Error opening '" + photofile + "':", err)
 
     return card
 
@@ -1026,8 +1032,8 @@ if __name__ == '__main__':
     purpose = "Tinode command line client. Version " + version + "."
 
     parser = argparse.ArgumentParser(description=purpose)
-    parser.add_argument('--host', default='localhost:6061', help='address of Tinode gRPC server')
-    parser.add_argument('--web-host', default='localhost:6060', help='address of Tinode web server')
+    parser.add_argument('--host', default='localhost:16060', help='address of Tinode gRPC server')
+    parser.add_argument('--web-host', default='localhost:6060', help='address of Tinode web server (for file uploads)')
     parser.add_argument('--ssl', action='store_true', help='connect to server over secure connection')
     parser.add_argument('--ssl-host', help='SSL host name to use instead of default (useful for connecting to localhost)')
     parser.add_argument('--login-basic', help='login using basic authentication username:password')

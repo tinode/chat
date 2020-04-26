@@ -85,11 +85,11 @@ class Usermod(Macro):
         # Change VCard.
         varname = cmd.varname if hasattr(cmd, 'varname') and cmd.varname else '$temp'
         set_cmd = '.must ' + varname + ' set me'
-        if cmd.name:
+        if cmd.name is not None:
             set_cmd += ' --fn="%s"' % cmd.name
-        if cmd.avatar:
+        if cmd.avatar is not None:
             set_cmd += ' --photo="%s"' % cmd.avatar
-        if cmd.comment:
+        if cmd.comment is not None:
             set_cmd += ' --private="%s"' % cmd.comment
         old_user = tn_globals.DefaultUser if tn_globals.DefaultUser else ''
         return ['.use --user %s' % cmd.userid,

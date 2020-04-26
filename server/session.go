@@ -117,6 +117,7 @@ type Session struct {
 	subsLock sync.RWMutex
 
 	// Map of remote topic subscriptions, indexed by topic name.
+	// It does not contain actual subscriptions but rather "maybe subscriptions".
 	remoteSubs map[string]*RemoteSubscription
 	// Synchronizes access to remoteSubs.
 	remoteSubsLock sync.RWMutex
@@ -282,6 +283,10 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 		s.queueOut(ErrPermissionDenied("", "", msg.timestamp))
 		log.Println("s.dispatch: non-root asigned msg.from", s.sid)
 		return
+	} else if fromUid := types.ParseUserId(msg.from); fromUid.IsZero() {
+		s.queueOut(ErrMalformed("", "", msg.timestamp))
+		log.Println("s.dispatch: malformed msg.from: ", msg.from, s.sid)
+		return
 	}
 
 	var resp *ServerComMessage
@@ -403,10 +408,10 @@ func (s *Session) subscribe(msg *ClientComMessage) {
 	var expanded string
 	isNewTopic := false
 	if strings.HasPrefix(msg.topic, "new") {
-		// Request to create a new named topic
-		expanded = genTopicName()
+		// Request to create a new named topic.
+		// If we are in a cluster, make sure the new topic belongs to the current node.
+		expanded = globals.cluster.genLocalTopicName()
 		isNewTopic = true
-		// msg.topic = expanded
 	} else {
 		var resp *ServerComMessage
 		expanded, resp = s.expandTopicName(msg)
@@ -432,6 +437,7 @@ func (s *Session) subscribe(msg *ClientComMessage) {
 			} else {
 				originalTopic = msg.topic
 			}
+			// FIXME: we don't really know if subscription was successful.
 			s.addRemoteSub(expanded, &RemoteSubscription{node: remoteNodeName, originalTopic: originalTopic})
 		}
 	} else {
@@ -473,6 +479,7 @@ func (s *Session) leave(msg *ClientComMessage) {
 			log.Println("s.leave:", err, s.sid)
 			s.queueOut(ErrClusterUnreachable(msg.id, msg.topic, msg.timestamp))
 		} else {
+			// FIXME: we don't really know if leave succeeded.
 			s.delRemoteSub(expanded)
 		}
 	} else if !msg.Leave.Unsub {
@@ -1055,6 +1062,13 @@ func (s *Session) serialize(msg *ServerComMessage) interface{} {
 	if s.proto == GRPC {
 		return pbServSerialize(msg)
 	}
+
+	if s.proto == CLUSTER {
+		// No need to serialize the message to bytes within the cluster,
+		// but we have to create a copy because the original msg can be mutated.
+		return msg.copy()
+	}
+
 	out, _ := json.Marshal(msg)
 	return out
 }

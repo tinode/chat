@@ -447,8 +447,8 @@ func (t *Topic) run(hub *Hub) {
 
 						// Check presence filters
 						pud := t.perUser[pssd.uid]
-						// Send "gone" notification even if the topic is muted.
-						if (!(pud.modeGiven & pud.modeWant).IsPresencer() && msg.Pres.What != "gone") ||
+						// Send "gone" and "acs" notifications even if the topic is muted.
+						if (!(pud.modeGiven & pud.modeWant).IsPresencer() && msg.Pres.What != "gone" && msg.Pres.What != "acs") ||
 							(msg.Pres.FilterIn != 0 && int(pud.modeGiven&pud.modeWant)&msg.Pres.FilterIn == 0) ||
 							(msg.Pres.FilterOut != 0 && int(pud.modeGiven&pud.modeWant)&msg.Pres.FilterOut != 0) {
 							continue
@@ -483,7 +483,11 @@ func (t *Topic) run(hub *Hub) {
 						// Update device map with the device ID which should NOT receive the notification.
 						if pushRcpt != nil {
 							if addr, ok := pushRcpt.To[pssd.uid]; ok {
-								addr.Delivered++
+								if pssd.ref == nil {
+									// Count foreground sessions only, background sessions are automated
+									// and should not affect pushes to other devices.
+									addr.Delivered++
+								}
 								if sess.deviceID != "" {
 									// List of device IDs which already received the message. Push should
 									// skip them.
@@ -1084,7 +1088,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Le
 		// If user has not requested a new access mode, provide one by default.
 		if modeWant == types.ModeUnset {
 			// If the user has self-banned before, un-self-ban. Otherwise do not make a change.
-			if !userData.modeWant.IsJoiner() {
+			if !oldWant.IsJoiner() {
 				log.Println("No J permissions before")
 				// Set permissions NO WORSE than default, but possibly better (admin or owner banned himself).
 				userData.modeWant = userData.modeGiven | t.accessFor(asLvl)
@@ -1137,9 +1141,13 @@ func (t *Topic) requestSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Le
 	}
 
 	// If topic is being muted, send "off" notification and disable updates.
-	// DO it before applying the new permissions.
+	// Do it before applying the new permissions.
 	if (oldWant & oldGiven).IsPresencer() && !(userData.modeWant & userData.modeGiven).IsPresencer() {
-		t.presSingleUserOffline(asUid, "off+dis", nilPresParams, "", false)
+		if t.cat == types.TopicCatMe {
+			t.presUsersOfInterest("off+dis", t.userAgent)
+		} else {
+			t.presSingleUserOffline(asUid, "off+dis", nilPresParams, "", false)
+		}
 	}
 
 	// Apply changes.
@@ -1363,7 +1371,7 @@ func (t *Topic) replyGetDesc(sess *Session, asUid types.Uid, id string, opts *Ms
 	}
 
 	// Check if user requested modified data
-	ifUpdated := (opts == nil || opts.IfModifiedSince == nil || opts.IfModifiedSince.Before(t.updated))
+	ifUpdated := opts == nil || opts.IfModifiedSince == nil || opts.IfModifiedSince.Before(t.updated)
 
 	desc := &MsgTopicDesc{}
 	if !ifUpdated {
@@ -1401,13 +1409,13 @@ func (t *Topic) replyGetDesc(sess *Session, asUid types.Uid, id string, opts *Ms
 				Anon: t.accessAnon.String()}
 		}
 
-		if t.cat != types.TopicCatMe {
-			desc.Acs = &MsgAccessMode{
-				Want:  pud.modeWant.String(),
-				Given: pud.modeGiven.String(),
-				Mode:  (pud.modeGiven & pud.modeWant).String()}
-		} else if sess.authLvl == auth.LevelRoot {
-			// If 'me' is in memory then user account is invariable not suspended.
+		desc.Acs = &MsgAccessMode{
+			Want:  pud.modeWant.String(),
+			Given: pud.modeGiven.String(),
+			Mode:  (pud.modeGiven & pud.modeWant).String()}
+
+		if t.cat == types.TopicCatMe && sess.authLvl == auth.LevelRoot {
+			// If 'me' is in memory then user account is invariably not suspended.
 			desc.State = types.StateOK.String()
 		}
 
@@ -1943,7 +1951,7 @@ func (t *Topic) replyGetData(sess *Session, asUid types.Uid, id string, req *Msg
 		// Push the list of messages to the client as {data}.
 		if messages != nil {
 			count = len(messages)
-			for i, _ := range messages {
+			for i := range messages {
 				mm := &messages[i]
 				sess.queueOut(&ServerComMessage{Data: &MsgServerData{
 					Topic:     toriginal,
@@ -2100,7 +2108,7 @@ func (t *Topic) replySetCred(sess *Session, asUid types.Uid, authLevel auth.Leve
 		_, tags, err = addCreds(asUid, creds, nil, sess.lang, tmpToken)
 	}
 
-	if err == nil && len(tags) > 0 {
+	if tags != nil {
 		t.tags = tags
 		t.presSubsOnline("tags", "", nilPresParams, nilPresFilters, "")
 	}
@@ -2283,13 +2291,26 @@ func (t *Topic) replyDelCred(h *Hub, sess *Session, asUid types.Uid, authLvl aut
 		sess.queueOut(ErrPermissionDenied(del.Id, t.original(asUid), now))
 		return errors.New("del.cred: invalid topic category")
 	}
+	if del.Cred == nil || del.Cred.Method == "" {
+		sess.queueOut(ErrMalformed(del.Id, t.original(asUid), now))
+		return errors.New("del.cred: missing method")
+	}
 
 	tags, err := deleteCred(asUid, authLvl, del.Cred)
-	if err == nil {
-		t.tags = tags
-		t.presSubsOnline("tags", "", nilPresParams, nilPresFilters, "")
+	if tags != nil {
+		// Check if anything has been actually removed.
+		_, removed := stringSliceDelta(t.tags, tags)
+		if len(removed) > 0 {
+			t.tags = tags
+			t.presSubsOnline("tags", "", nilPresParams, nilPresFilters, "")
+		}
+	} else if err == nil {
+		sess.queueOut(InfoNoAction(del.Id, del.Topic, now))
+		return nil
 	}
+
 	sess.queueOut(decodeStoreError(err, del.Id, del.Topic, now, nil))
+
 	return err
 }
 
@@ -2528,7 +2549,12 @@ func (t *Topic) notifySubChange(uid, actor types.Uid, oldWant, oldGiven,
 		// Subscription un-muted.
 
 		// Notify subscriber of topic's online status.
-		t.presSingleUserOffline(uid, "?unkn+en", nilPresParams, "", false)
+		if t.cat == types.TopicCatGrp {
+			t.presSingleUserOffline(uid, "?unkn+en", nilPresParams, "", false)
+		} else if t.cat == types.TopicCatMe {
+			// User is visible online now, notify subscribers.
+			t.presUsersOfInterest("on+en", t.userAgent)
+		}
 	}
 
 	// Notify requester's other sessions that permissions have changed.
@@ -2562,10 +2588,11 @@ func (t *Topic) pushForData(fromUid types.Uid, data *MsgServerData) *push.Receip
 
 	for uid := range t.perUser {
 		// Send only to those who have notifications enabled, exclude the originating user.
-		if uid != fromUid &&
-			(t.perUser[uid].modeWant & t.perUser[uid].modeGiven).IsPresencer() &&
-			!t.perUser[uid].deleted {
-
+		if uid == fromUid {
+			continue
+		}
+		mode := t.perUser[uid].modeWant & t.perUser[uid].modeGiven
+		if mode.IsPresencer() && mode.IsReader() && !t.perUser[uid].deleted {
 			receipt.To[uid] = push.Recipient{}
 		}
 	}

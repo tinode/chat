@@ -2,10 +2,12 @@ package main
 
 import (
 	"bytes"
-	"log"
 	"fmt"
+	"io/ioutil"
+	"log"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 )
 
@@ -20,9 +22,11 @@ type InfluxDBExporter struct {
 }
 
 // NewInfluxDBExporter returns an initialized InfluxDB exporter.
-func NewInfluxDBExporter(influxDBVersion, pushBaseAddress, organization, bucket, token, instance string, scraper *Scraper) *InfluxDBExporter{
+func NewInfluxDBExporter(influxDBVersion, pushBaseAddress, organization,
+	bucket, token, instance string, scraper *Scraper) *InfluxDBExporter {
+
 	targetAddress := formPushTargetAddress(influxDBVersion, pushBaseAddress, organization, bucket)
-	tokenHeader   := formAuthorizationHeaderValue(influxDBVersion, token)
+	tokenHeader := formAuthorizationHeaderValue(influxDBVersion, token)
 	return &InfluxDBExporter{
 		targetAddress: targetAddress,
 		organization:  organization,
@@ -34,10 +38,10 @@ func NewInfluxDBExporter(influxDBVersion, pushBaseAddress, organization, bucket,
 }
 
 // Push scrapes metrics from Tinode server and pushes these metrics to InfluxDB.
-func (e *InfluxDBExporter) Push() (string, error) {
+func (e *InfluxDBExporter) Push() error {
 	metrics, err := e.scraper.CollectRaw()
 	if err != nil {
-		return "", err
+		return err
 	}
 	b := new(bytes.Buffer)
 	ts := time.Now().UnixNano()
@@ -46,15 +50,26 @@ func (e *InfluxDBExporter) Push() (string, error) {
 	}
 	req, err := http.NewRequest("POST", e.targetAddress, b)
 	if err != nil {
-		return "", err
+		return err
 	}
 	req.Header.Add("Authorization", e.tokenHeader)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return "", err
+		return err
 	}
 	defer resp.Body.Close()
-	return resp.Status, nil
+
+	if resp.StatusCode >= 400 {
+		var body string
+		if rb, err := ioutil.ReadAll(resp.Body); err != nil {
+			body = err.Error()
+		} else {
+			body = strings.TrimSpace(string(rb))
+		}
+
+		return fmt.Errorf("HTTP %s: %s", resp.Status, body)
+	}
+	return nil
 }
 
 func formPushTargetAddress(influxDBVersion, baseAddr, organization, bucket string) string {
