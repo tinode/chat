@@ -161,6 +161,9 @@ var globals struct {
 
 	// Maximum allowed upload size.
 	maxFileUploadSize int64
+
+	// Prioritise X-Forwarded-For header as the source of IP address of the client.
+	useXForwardedFor bool
 }
 
 type validatorConfig struct {
@@ -221,6 +224,9 @@ type configType struct {
 	MaxTagCount int `json:"max_tag_count"`
 	// URL path for exposing runtime stats. Disabled if the path is blank.
 	ExpvarPath string `json:"expvar"`
+	// Take IP address of the client from HTTP header 'X-Forwarded-For'.
+	// Useful when tinode is behind a proxy. If missing, fallback to default RemoteAddr.
+	UseXForwardedFor bool `json:"use_x_forwarded_for"`
 
 	// Configs for subsystems
 	Cluster   json.RawMessage             `json:"cluster_config"`
@@ -458,6 +464,8 @@ func main() {
 	if globals.maxTagCount <= 0 {
 		globals.maxTagCount = defaultMaxTagCount
 	}
+
+	globals.useXForwardedFor = config.UseXForwardedFor
 
 	if config.Media != nil {
 		if config.Media.UseHandler == "" {

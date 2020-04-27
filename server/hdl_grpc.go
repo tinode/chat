@@ -19,6 +19,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/keepalive"
+	"google.golang.org/grpc/peer"
 )
 
 type grpcNodeServer struct {
@@ -34,7 +35,11 @@ func (sess *Session) closeGrpc() {
 
 // Equivalent of starting a new session and a read loop in one
 func (*grpcNodeServer) MessageLoop(stream pbx.Node_MessageLoopServer) error {
-	sess, _ := globals.sessionStore.NewSession(stream, "")
+	sess, count := globals.sessionStore.NewSession(stream, "")
+	if p, ok := peer.FromContext(stream.Context()); ok {
+		sess.remoteAddr = p.Addr.String()
+	}
+	log.Println("grpc: session started", sess.sid, sess.remoteAddr, count)
 
 	defer func() {
 		sess.closeGrpc()

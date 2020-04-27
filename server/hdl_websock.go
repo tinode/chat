@@ -47,7 +47,6 @@ func (sess *Session) readLoop() {
 		sess.ws.SetReadDeadline(time.Now().Add(pongWait))
 		return nil
 	})
-	sess.remoteAddr = sess.ws.RemoteAddr().String()
 
 	for {
 		// Read a ClientComMessage
@@ -159,8 +158,14 @@ func serveWebSocket(wrt http.ResponseWriter, req *http.Request) {
 	}
 
 	sess, count := globals.sessionStore.NewSession(ws, "")
+	if globals.useXForwardedFor {
+		sess.remoteAddr = req.Header.Get("X-Forwarded-For")
+	}
+	if sess.remoteAddr == "" {
+		sess.remoteAddr = req.RemoteAddr
+	}
 
-	log.Println("ws: session started", sess.sid, count)
+	log.Println("ws: session started", sess.sid, sess.remoteAddr, count)
 
 	// Do work in goroutines to return from serveWebSocket() to release file pointers.
 	// Otherwise "too many open files" will happen.
