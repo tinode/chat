@@ -146,12 +146,12 @@ func (e *PromExporter) parseStats(ch chan<- prometheus.Metric, stats map[string]
 
 func (e *PromExporter) parseAndUpdate(ch chan<- prometheus.Metric, desc *prometheus.Desc, valueType prometheus.ValueType,
 	stats map[string]interface{}, key string) error {
-	if v, err := parseMetric(stats, key); err == nil {
-		ch <- prometheus.MustNewConstMetric(desc, valueType, v)
-		return nil
-	} else {
+	v, err := parseMetric(stats, key)
+	if err != nil {
 		return err
 	}
+	ch <- prometheus.MustNewConstMetric(desc, valueType, v)
+	return nil
 }
 
 func firstError(errs ...error) error {

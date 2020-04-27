@@ -64,14 +64,16 @@ func listenAndServe(addr string, mux *http.ServeMux, tlfConf *tls.Config, stop <
 
 			if err == nil {
 				log.Printf("Listening for client HTTPS connections on [%s]", addr)
-				lis, err := netListener(addr)
+				var lis net.Listener
+				lis, err = netListener(addr)
 				if err == nil {
 					err = server.ServeTLS(lis, "", "")
 				}
 			}
 		} else {
 			log.Printf("Listening for client HTTP connections on [%s]", addr)
-			lis, err := netListener(addr)
+			var lis net.Listener
+			lis, err = netListener(addr)
 			if err == nil {
 				err = server.Serve(lis)
 			}

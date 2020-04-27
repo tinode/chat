@@ -14,10 +14,10 @@ import (
 	t "github.com/tinode/chat/server/store/types"
 )
 
-// Configuration of AndroidNotification payload.
+// AndroidConfig is the configuration of AndroidNotification payload.
 type AndroidConfig struct {
 	Enabled bool `json:"enabled,omitempty"`
-	// Common defauls for all push types.
+	// Common defaults for all push types.
 	androidPayload
 	// Configs for specific push types.
 	Msg androidPayload `json:"msg,omitempty"`

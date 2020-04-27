@@ -1,4 +1,4 @@
-// Interface which must be implemented by media upload/download handlers.
+// Package media defines an interface which must be implemented by media upload/download handlers.
 package media
 
 import (
