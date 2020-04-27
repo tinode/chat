@@ -284,6 +284,11 @@ func (t *Topic) runProxy(hub *Hub) {
 			}
 		case msg := <-t.proxy:
 			log.Printf("proxy topic [%s] msg: sid[%s] = %+v | proxyresp = %+v", t.name, msg.FromSID, msg.SrvMsg, msg.ProxyResp)
+
+			if msg.SrvMsg.Pres != nil && msg.SrvMsg.Pres.What == "acs" && msg.SrvMsg.Pres.Acs != nil {
+				// If the server changed acs on this topic, update the internal state.
+				t.updateAcsFromPresMsg(msg.SrvMsg.Pres)
+			}
 			if msg.FromSID == "*" {
 				// It is a broadcast.
 				msg.SrvMsg.skipSid = msg.ProxyResp.SkipSid
@@ -377,6 +382,26 @@ func (t *Topic) proxyFanoutBroadcast(msg *ServerComMessage) {
 			log.Printf("topic[%s]: connection stuck, detaching", t.name)
 			t.unreg <- &sessionLeave{sess: sess}
 		}
+	}
+}
+
+func (t *Topic) updateAcsFromPresMsg(pres *MsgServerPres) {
+	uid := types.ParseUserId(pres.Src)
+	dacs := pres.Acs
+	if pud, ok := t.perUser[uid]; !uid.IsZero() && ok {
+		if dacs.Want != "" {
+			if err := pud.modeWant.ApplyDelta(dacs.Want); err != nil {
+				log.Println("proxy topic: could not process acs change - want: ", err)
+			}
+		}
+		if dacs.Given != "" {
+			if err := pud.modeGiven.ApplyDelta(dacs.Given); err != nil {
+				log.Println("proxy topic: could not process acs change - given: ", err)
+			}
+		}
+		t.perUser[uid] = pud
+	} else {
+		log.Println("proxy topic received acs change for unknown user ", pres.Src)
 	}
 }
 
