@@ -572,7 +572,7 @@ Loop:
 // UnmarshalText parses access mode string as byte slice.
 // Does not change the mode if the string is empty or invalid.
 func (m *AccessMode) UnmarshalText(b []byte) error {
-  m0, err := DecodeAcs(b)
+	m0, err := DecodeAcs(b)
 	if err != nil {
 		return err
 	}
@@ -678,7 +678,7 @@ func (m *AccessMode) ApplyDelta(delta string) error {
 	var actions, acsDeltas []string
 	acceptAction := true
 	j := -1
-  for i := 0; i < len(delta); i++ {
+	for i := 0; i < len(delta); i++ {
 		switch delta[i] {
 		case '+':
 			fallthrough
