@@ -595,6 +595,9 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 		case msg.CliMsg.Set != nil:
 			msg.CliMsg.id = msg.CliMsg.Set.Id
 			msg.CliMsg.topic = msg.CliMsg.Set.Topic
+		case msg.CliMsg.Del != nil:
+			msg.CliMsg.id = msg.CliMsg.Del.Id
+			msg.CliMsg.topic = msg.CliMsg.Del.Topic
 		default:
 			log.Panic("cluster: topic proxy meta request must container either Get or Set field")
 		}
@@ -1249,7 +1252,7 @@ func (sess *Session) topicProxyWriteLoop(forTopic string) {
 				// Copy skipSid.
 				if srvMsg.Data == nil && srvMsg.Pres == nil && srvMsg.Info == nil {
 					// Only broadcast messages (data, pres, info) may come not as a response to a client request.
-					log.Panic("cluster: only broadcast messages may not contain session overrides: ", srvMsg)
+					log.Panicf("cluster: only broadcast messages may not contain session overrides: %+v", srvMsg)
 				}
 				response.ProxyResp.SkipSid = srvMsg.skipSid
 			}
