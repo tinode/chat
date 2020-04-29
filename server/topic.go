@@ -11,6 +11,7 @@ package main
 import (
 	"container/list"
 	"errors"
+	"net/http"
 	"log"
 	"sort"
 	"sync/atomic"
@@ -292,7 +293,16 @@ func (t *Topic) runProxy(hub *Hub) {
 			if msg.FromSID == "*" {
 				// It is a broadcast.
 				msg.SrvMsg.skipSid = msg.ProxyResp.SkipSid
-				t.proxyFanoutBroadcast(msg.SrvMsg)
+				msg.SrvMsg.uid = msg.ProxyResp.Uid
+				switch {
+				case msg.SrvMsg.Pres != nil || msg.SrvMsg.Data != nil || msg.SrvMsg.Info != nil:
+					// Regular broadcast.
+					t.proxyFanoutBroadcast(msg.SrvMsg)
+				case msg.SrvMsg.Ctrl != nil:
+					// Ctrl broadcast. E.g. for user eviction.
+					t.handleCtrlBroadcast(msg.SrvMsg)
+				default:
+				}
 			} else {
 				sess := globals.sessionStore.Get(msg.FromSID)
 				switch msg.ProxyResp.OrigRequestType {
@@ -315,7 +325,6 @@ func (t *Topic) runProxy(hub *Hub) {
 					}
 				case ProxyRequestBroadcast:
 				case ProxyRequestMeta:
-					// TODO: handle evictUser ctrl messages.
 				case ProxyRequestLeave:
 					log.Printf("proxy topic [%s]: session %p unsubscribed", t.name, sess)
 					if msg.SrvMsg != nil && msg.SrvMsg.Ctrl != nil {
@@ -382,6 +391,24 @@ func (t *Topic) proxyFanoutBroadcast(msg *ServerComMessage) {
 		} else {
 			log.Printf("topic[%s]: connection stuck, detaching", t.name)
 			t.unreg <- &sessionLeave{sess: sess}
+		}
+	}
+}
+
+// handleCtrlBroadcast broadcasts a ctrl command to certain sessions attached to this topic.
+func (t *Topic) handleCtrlBroadcast(msg *ServerComMessage) {
+	if msg.Ctrl.Code == http.StatusResetContent && msg.Ctrl.Text == "evicted" {
+		// We received a ctrl command for evicting a user.
+		if msg.uid.IsZero() {
+			log.Panicf("topic[%s]: proxy received evict message with empty uid", t.name)
+		}
+		for sess := range t.sessions {
+			if t.remSession(sess, msg.uid) != nil {
+				sess.detach <- t.name
+				if sess.sid != msg.skipSid {
+					sess.queueOut(msg)
+				}
+			}
 		}
 	}
 }
@@ -1487,7 +1514,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Le
 
 	if !userData.modeWant.IsJoiner() {
 		// The user is self-banning from the topic. Re-subscription will unban.
-		t.evictUser(asUid, false, "", sessOverrides)
+		t.evictUser(asUid, false, "")
 		// The callee will send NoErrOK
 		return changed, nil
 
@@ -2703,7 +2730,7 @@ func (t *Topic) replyDelSub(h *Hub, sess *Session, asUid types.Uid, del *MsgClie
 	// ModeUnset signifies deleted subscription as opposite to ModeNone - no access.
 	t.notifySubChange(uid, asUid, pud.modeWant, pud.modeGiven, types.ModeUnset, types.ModeUnset, sidFromSessionOrOverrides(sess, sessOverrides))
 
-	t.evictUser(uid, true, "", sessOverrides)
+	t.evictUser(uid, true, "")
 
 	return nil
 }
@@ -2747,13 +2774,13 @@ func (t *Topic) replyLeaveUnsub(h *Hub, sess *Session, asUid types.Uid, id strin
 	skipSid := sidFromSessionOrOverrides(sess, sessOverrides)
 	t.notifySubChange(asUid, asUid, pud.modeWant, pud.modeGiven, types.ModeUnset, types.ModeUnset, skipSid)
 	// Evict all user's sessions, clear cached data, send notifications.
-	t.evictUser(asUid, true, skipSid, sessOverrides)
+	t.evictUser(asUid, true, skipSid)
 
 	return nil
 }
 
 // evictUser evicts all given user's sessions from the topic and clears user's cached data, if appropriate.
-func (t *Topic) evictUser(uid types.Uid, unsub bool, skip string, sessOverrides *sessionOverrides) {
+func (t *Topic) evictUser(uid types.Uid, unsub bool, skip string) {
 	now := types.TimeNow()
 	pud := t.perUser[uid]
 
@@ -2780,11 +2807,16 @@ func (t *Topic) evictUser(uid types.Uid, unsub bool, skip string, sessOverrides 
 	// Detach all user's sessions
 	msg := NoErrEvicted("", t.original(uid), now)
 	msg.Ctrl.Params = map[string]interface{}{"unsub": unsub}
+	msg.skipSid = skip
+	msg.uid = uid
 	for sess := range t.sessions {
-		if t.remSession(sess, uid) != nil {
-			sess.detach <- t.name
+		isProxy := sess.isProxy()
+		if isProxy || t.remSession(sess, uid) != nil {
+			if !isProxy {
+				sess.detach <- t.name
+			}
 			if sess.sid != skip {
-				sess.queueOutWithOverrides(msg, sessOverrides)
+				sess.queueOut(msg)
 			}
 		}
 	}

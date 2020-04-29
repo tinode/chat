@@ -12,6 +12,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/tinode/chat/server/store/types"
 )
 
 // MsgGetOpts defines Get query parameters.
@@ -596,6 +598,8 @@ type ServerComMessage struct {
 	sessOverrides *sessionOverrides
 	// Should the packet be sent to the original session? SessionID to skip.
 	skipSid string
+	// User id affected by this message.
+	uid types.Uid
 }
 
 // Deep-shallow copy of ServerComMessage. Deep copy of service fields,
@@ -612,6 +616,7 @@ func (src *ServerComMessage) copy() *ServerComMessage {
 		sess:          src.sess,
 		skipSid:       src.skipSid,
 		sessOverrides: src.sessOverrides,
+		uid:           src.uid,
 	}
 
 	dst.Ctrl = src.Ctrl.copy()

@@ -242,6 +242,8 @@ type ProxyResponse struct {
 	OrigRequestType int
 	// SessionID to skip. Set for broadcast requests.
 	SkipSid         string
+	// User id of the affected user.
+	Uid             types.Uid
 }
 
 // Handle outbound node communication: read messages from the channel, forward to remote nodes.
@@ -1250,11 +1252,12 @@ func (sess *Session) topicProxyWriteLoop(forTopic string) {
 				copyParamsFromSession = srvMsg.sessOverrides.sid != ""
 			} else {
 				// Copy skipSid.
-				if srvMsg.Data == nil && srvMsg.Pres == nil && srvMsg.Info == nil {
+				if srvMsg.Ctrl == nil && srvMsg.Data == nil && srvMsg.Pres == nil && srvMsg.Info == nil {
 					// Only broadcast messages (data, pres, info) may come not as a response to a client request.
 					log.Panicf("cluster: only broadcast messages may not contain session overrides: %+v", srvMsg)
 				}
 				response.ProxyResp.SkipSid = srvMsg.skipSid
+				response.ProxyResp.Uid = srvMsg.uid
 			}
 			if copyParamsFromSession {
 				// Reply to a specific session.
