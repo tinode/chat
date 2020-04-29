@@ -315,6 +315,7 @@ func (t *Topic) runProxy(hub *Hub) {
 					}
 				case ProxyRequestBroadcast:
 				case ProxyRequestMeta:
+					// TODO: handle evictUser ctrl messages.
 				case ProxyRequestLeave:
 					log.Printf("proxy topic [%s]: session %p unsubscribed", t.name, sess)
 					if msg.SrvMsg != nil && msg.SrvMsg.Ctrl != nil {
@@ -1486,7 +1487,7 @@ func (t *Topic) requestSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Le
 
 	if !userData.modeWant.IsJoiner() {
 		// The user is self-banning from the topic. Re-subscription will unban.
-		t.evictUser(asUid, false, "")
+		t.evictUser(asUid, false, "", sessOverrides)
 		// The callee will send NoErrOK
 		return changed, nil
 
@@ -2553,7 +2554,7 @@ func (t *Topic) replyDelMsg(sess *Session, asUid types.Uid, del *MsgClientDel, s
 	}
 
 	if err = store.Messages.DeleteList(t.name, t.delID+1, forUser, ranges); err != nil {
-		sess.queueOut(ErrUnknown(del.Id, t.original(asUid), now))
+		sess.queueOutWithOverrides(ErrUnknown(del.Id, t.original(asUid), now), sessOverrides)
 		return err
 	}
 
@@ -2702,7 +2703,7 @@ func (t *Topic) replyDelSub(h *Hub, sess *Session, asUid types.Uid, del *MsgClie
 	// ModeUnset signifies deleted subscription as opposite to ModeNone - no access.
 	t.notifySubChange(uid, asUid, pud.modeWant, pud.modeGiven, types.ModeUnset, types.ModeUnset, sidFromSessionOrOverrides(sess, sessOverrides))
 
-	t.evictUser(uid, true, "")
+	t.evictUser(uid, true, "", sessOverrides)
 
 	return nil
 }
@@ -2743,15 +2744,16 @@ func (t *Topic) replyLeaveUnsub(h *Hub, sess *Session, asUid types.Uid, id strin
 	}
 
 	// Send notifications.
-	t.notifySubChange(asUid, asUid, pud.modeWant, pud.modeGiven, types.ModeUnset, types.ModeUnset, sidFromSessionOrOverrides(sess, sessOverrides))
+	skipSid := sidFromSessionOrOverrides(sess, sessOverrides)
+	t.notifySubChange(asUid, asUid, pud.modeWant, pud.modeGiven, types.ModeUnset, types.ModeUnset, skipSid)
 	// Evict all user's sessions, clear cached data, send notifications.
-	t.evictUser(asUid, true, sess.sid)
+	t.evictUser(asUid, true, skipSid, sessOverrides)
 
 	return nil
 }
 
 // evictUser evicts all given user's sessions from the topic and clears user's cached data, if appropriate.
-func (t *Topic) evictUser(uid types.Uid, unsub bool, skip string) {
+func (t *Topic) evictUser(uid types.Uid, unsub bool, skip string, sessOverrides *sessionOverrides) {
 	now := types.TimeNow()
 	pud := t.perUser[uid]
 
@@ -2782,7 +2784,7 @@ func (t *Topic) evictUser(uid types.Uid, unsub bool, skip string) {
 		if t.remSession(sess, uid) != nil {
 			sess.detach <- t.name
 			if sess.sid != skip {
-				sess.queueOut(msg)
+				sess.queueOutWithOverrides(msg, sessOverrides)
 			}
 		}
 	}
