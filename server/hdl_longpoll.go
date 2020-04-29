@@ -152,7 +152,6 @@ func serveLongPoll(wrt http.ResponseWriter, req *http.Request) {
 
 	addr := lpRemoteAddr(req)
 	if sess.remoteAddr != addr {
-		// FIXME: this is a (benign?) race condition. Lock session before.
 		sess.remoteAddr = addr
 		log.Println("longPoll: remote address changed", sid, addr)
 	}
