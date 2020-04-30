@@ -189,13 +189,23 @@ func (uid Uid) PrefixId(prefix string) string {
 	return prefix + uid.String()
 }
 
-// ParseUserId parses user ID of the form "usrXXXXXX"
-func ParseUserId(s string) Uid {
+// ParseUserIdIgnoringPrefix parses user ID of the form "<prefix>XXXXXX"
+func ParseUserIdIgnoringPrefix(s string, prefix string) Uid {
 	var uid Uid
-	if strings.HasPrefix(s, "usr") {
-		(&uid).UnmarshalText([]byte(s)[3:])
+	if strings.HasPrefix(s, prefix) {
+		(&uid).UnmarshalText([]byte(s)[len(prefix):])
 	}
 	return uid
+}
+
+// ParseUserId parses user ID of the form "usrXXXXXX"
+func ParseUserId(s string) Uid {
+	return ParseUserIdIgnoringPrefix(s, "usr")
+}
+
+// ParseUserIdFnd parses user ID of the form "fndXXXXXX"
+func ParseUserIdFnd(s string) Uid {
+	return ParseUserIdIgnoringPrefix(s, "fnd")
 }
 
 // UidSlice is a slice of Uids sorted in ascending order.

@@ -161,11 +161,18 @@ func initTopicMe(t *Topic, sreg *sessionJoin) error {
 func initTopicFnd(t *Topic, sreg *sessionJoin) error {
 	t.cat = types.TopicCatFnd
 
-	user, err := store.Users.Get(sreg.sess.uid)
+	uid := types.ParseUserIdFnd(t.name)
+	if uid.IsZero() {
+		return types.ErrNotFound
+	}
+
+	user, err := store.Users.Get(uid)
 	if err != nil {
 		return err
 	} else if user == nil {
-		sreg.sess.uid = types.ZeroUid
+		if !sreg.sess.isProxy() {
+			sreg.sess.uid = types.ZeroUid
+		}
 		return types.ErrNotFound
 	}
 
