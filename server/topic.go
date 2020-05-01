@@ -413,23 +413,50 @@ func (t *Topic) handleCtrlBroadcast(msg *ServerComMessage) {
 	}
 }
 
+// updateAcsFromPresMsg modifies user acs in Topic's perUser struct based on the data in `pres`.
 func (t *Topic) updateAcsFromPresMsg(pres *MsgServerPres) {
 	uid := types.ParseUserId(pres.Src)
 	dacs := pres.Acs
-	if pud, ok := t.perUser[uid]; !uid.IsZero() && ok {
+	if uid.IsZero() {
+		log.Printf("proxy topic[%s]: received acs change for invalid user id '%s'", t.name, pres.Src)
+		return
+	}
+	if pud, ok := t.perUser[uid]; ok {
+		// Existing user. Update.
 		if dacs.Want != "" {
 			if err := pud.modeWant.ApplyDelta(dacs.Want); err != nil {
-				log.Println("proxy topic: could not process acs change - want: ", err)
+				log.Printf("proxy topic[%s]: could not process acs change - want: %+v", t.name, err)
 			}
 		}
 		if dacs.Given != "" {
 			if err := pud.modeGiven.ApplyDelta(dacs.Given); err != nil {
-				log.Println("proxy topic: could not process acs change - given: ", err)
+				log.Printf("proxy topic[%s]: could not process acs change - given: %+v", t.name, err)
 			}
 		}
 		t.perUser[uid] = pud
 	} else {
-		log.Println("proxy topic received acs change for unknown user ", pres.Src)
+		// New user. Create an entry in Topic's perUser.
+		want  := types.ModeNone
+		given := types.ModeNone
+
+		if dacs.Want != "" {
+			if err := want.UnmarshalText([]byte(dacs.Want)); err != nil {
+				log.Printf("proxy topic [%s]: invalid acs change - want '%s'", t.name, dacs.Want)
+				return
+			}
+		}
+		if dacs.Given != "" {
+			if err := given.UnmarshalText([]byte(dacs.Given)); err != nil {
+				log.Printf("proxy topic [%s]: invalid acs change - given '%s'", t.name, dacs.Given)
+				return
+			}
+		}
+
+		// We only check permissions on the proxy topic. The rest of bookkeeping is done on the master.
+		t.perUser[uid] = perUserData{
+			modeWant:  want,
+			modeGiven: given,
+		}
 	}
 }
 
