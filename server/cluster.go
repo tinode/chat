@@ -374,7 +374,7 @@ func (c *Cluster) Master(msg *ClusterReq, rejected *bool) error {
 		sess.platf = msg.Sess.Platform
 
 		// Dispatch remote message to a local session.
-		msg.CliMsg.from = msg.OnBehalfOf
+		msg.CliMsg.asUser = msg.OnBehalfOf
 		msg.CliMsg.authLvl = msg.AuthLvl
 		sess.dispatch(msg.CliMsg)
 	} else {
@@ -605,7 +605,7 @@ func (c *Cluster) routeToTopic(msg *ClientComMessage, topic string, sess *Sessio
 
 	if sess.authLvl == auth.LevelRoot {
 		// Assign these values only when the sender is root
-		req.OnBehalfOf = msg.from
+		req.OnBehalfOf = msg.asUser
 		req.AuthLvl = msg.authLvl
 	}
 
