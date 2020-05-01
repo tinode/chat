@@ -190,7 +190,7 @@ func (t *Topic) run(hub *Hub) {
 			// Request to add a connection to this topic
 
 			if t.isInactive() {
-				asUid := types.ParseUserId(sreg.pkt.from)
+				asUid := types.ParseUserId(sreg.pkt.asUser)
 				sreg.sess.queueOut(ErrLocked(sreg.pkt.id, t.original(asUid), types.TimeNow()))
 			} else {
 				// The topic is alive, so stop the kill timer, if it's ticking. We don't want the topic to die
@@ -282,7 +282,7 @@ func (t *Topic) run(hub *Hub) {
 			// Content message intended for broadcasting to recipients
 
 			var pushRcpt *push.Receipt
-			asUid := types.ParseUserId(msg.from)
+			asUid := types.ParseUserId(msg.asUser)
 			if msg.Data != nil {
 				if t.isInactive() {
 					msg.sess.queueOut(ErrLocked(msg.id, t.original(asUid), msg.timestamp))
@@ -293,8 +293,8 @@ func (t *Topic) run(hub *Hub) {
 					continue
 				}
 
-				from := types.ParseUserId(msg.Data.From)
-				userData, userFound := t.perUser[from]
+				asUser := types.ParseUserId(msg.Data.From)
+				userData, userFound := t.perUser[asUser]
 				// Anyone is allowed to post to 'sys' topic.
 				if t.cat != types.TopicCatSys {
 					// If it's not 'sys' check write permission.
@@ -309,7 +309,7 @@ func (t *Topic) run(hub *Hub) {
 					ObjHeader: types.ObjHeader{CreatedAt: msg.Data.Timestamp},
 					SeqId:     t.lastID + 1,
 					Topic:     t.name,
-					From:      from.String(),
+					From:      asUser.String(),
 					Head:      msg.Data.Head,
 					Content:   msg.Data.Content}, (userData.modeGiven & userData.modeWant).IsReader()); err != nil {
 
@@ -325,7 +325,7 @@ func (t *Topic) run(hub *Hub) {
 				if userFound {
 					userData.readID = t.lastID
 					userData.readID = t.lastID
-					t.perUser[from] = userData
+					t.perUser[asUser] = userData
 				}
 				if msg.id != "" {
 					reply := NoErrAccepted(msg.id, t.original(asUid), msg.timestamp)
@@ -333,7 +333,7 @@ func (t *Topic) run(hub *Hub) {
 					msg.sess.queueOut(reply)
 				}
 
-				pushRcpt = t.pushForData(from, msg.Data)
+				pushRcpt = t.pushForData(asUser, msg.Data)
 
 				// Message sent: notify offline 'R' subscrbers on 'me'
 				t.presSubsOffline("msg", &presParams{seqID: t.lastID, actor: msg.Data.From},
@@ -367,8 +367,8 @@ func (t *Topic) run(hub *Hub) {
 					continue
 				}
 
-				from := types.ParseUserId(msg.Info.From)
-				pud := t.perUser[from]
+				asUser := types.ParseUserId(msg.Info.From)
+				pud := t.perUser[asUser]
 
 				// Filter out "kp" from users with no 'W' permission (or people without a subscription)
 				if msg.Info.What == "kp" && (!(pud.modeGiven & pud.modeWant).IsWriter() || t.isReadOnly()) {
@@ -406,7 +406,7 @@ func (t *Topic) run(hub *Hub) {
 						recv = pud.recvID
 					}
 
-					if err := store.Subs.Update(t.name, from,
+					if err := store.Subs.Update(t.name, asUser,
 						map[string]interface{}{
 							"RecvSeqId": pud.recvID,
 							"ReadSeqId": pud.readID},
@@ -417,12 +417,12 @@ func (t *Topic) run(hub *Hub) {
 					}
 
 					// Read/recv updated: notify user's other sessions of the change
-					t.presPubMessageCount(from, recv, read, msg.skipSid)
+					t.presPubMessageCount(asUser, recv, read, msg.skipSid)
 
 					// Update cached count of unread messages
-					usersUpdateUnread(from, unread, true)
+					usersUpdateUnread(asUser, unread, true)
 
-					t.perUser[from] = pud
+					t.perUser[asUser] = pud
 				}
 			}
 
@@ -516,7 +516,7 @@ func (t *Topic) run(hub *Hub) {
 
 		case meta := <-t.meta:
 			// Request to get/set topic metadata
-			asUid := types.ParseUserId(meta.pkt.from)
+			asUid := types.ParseUserId(meta.pkt.asUser)
 			authLevel := auth.Level(meta.pkt.authLvl)
 			switch {
 			case meta.pkt.Get != nil:
@@ -625,7 +625,7 @@ func (t *Topic) run(hub *Hub) {
 					pssd.ref = nil
 					t.sessions[sreg.sess] = pssd
 				}
-				t.sendSubNotifications(types.ParseUserId(sreg.pkt.from), sreg)
+				t.sendSubNotifications(types.ParseUserId(sreg.pkt.asUser), sreg)
 			}
 
 		case <-uaTimer.C:
@@ -688,7 +688,7 @@ func (t *Topic) run(hub *Hub) {
 
 // Session subscribed to a topic, created == true if topic was just created and {pres} needs to be announced
 func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
-	asUid := types.ParseUserId(sreg.pkt.from)
+	asUid := types.ParseUserId(sreg.pkt.asUser)
 	authLevel := auth.Level(sreg.pkt.authLvl)
 
 	msgsub := sreg.pkt.Sub
@@ -855,7 +855,7 @@ func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin) error {
 	}
 
 	msgsub := sreg.pkt.Sub
-	asUid := types.ParseUserId(sreg.pkt.from)
+	asUid := types.ParseUserId(sreg.pkt.asUser)
 	asLvl := auth.Level(sreg.pkt.authLvl)
 	toriginal := t.original(asUid)
 
@@ -1876,7 +1876,7 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 func (t *Topic) replySetSub(h *Hub, sess *Session, pkt *ClientComMessage) error {
 	now := types.TimeNow()
 
-	asUid := types.ParseUserId(pkt.from)
+	asUid := types.ParseUserId(pkt.asUser)
 	asLvl := auth.Level(pkt.authLvl)
 	set := pkt.Set
 	toriginal := t.original(asUid)

@@ -195,14 +195,14 @@ func replyUpdateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 		log.Println("replyUpdateUser: not a new account and not authenticated", s.sid)
 		s.queueOut(ErrPermissionDenied(msg.id, "", msg.timestamp))
 		return
-	} else if msg.from != "" && rec != nil {
+	} else if msg.asUser != "" && rec != nil {
 		// Two UIDs: one from msg.from, one from token. Ambigous, reject.
 		log.Println("replyUpdateUser: got both authenticated session and token", s.sid)
 		s.queueOut(ErrMalformed(msg.id, "", msg.timestamp))
 		return
 	}
 
-	userId := msg.from
+	userId := msg.asUser
 	authLvl := auth.Level(msg.authLvl)
 	if rec != nil {
 		userId = rec.Uid.UserId()
