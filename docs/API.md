@@ -860,7 +860,7 @@ The unique message ID should be formed as `<topic_name>:<seqId>` whenever possib
 
 #### `{get}`
 
-Query topic for metadata, such as description or a list of subscribers, or query message history.
+Query topic for metadata, such as description or a list of subscribers, or query message history. The requester must be [subscribed and attached](#sub) to the topic to receive the full response. Some limited `desc` and `sub` information is available without being attached.
 
 ```js
 get: {
@@ -915,6 +915,8 @@ get: {
 Query topic description. Server responds with a `{meta}` message containing requested data. See `{meta}` for details.
 If `ims` is specified and data has not been updated, the message will skip `public` and `private` fields.
 
+Limited information is available without [attaching](#sub) to topic first.
+
 See [Public and Private Fields](#public-and-private-fields) for `private` and `public` format considerations.
 
 * `{get what="sub"}`
@@ -922,6 +924,8 @@ See [Public and Private Fields](#public-and-private-fields) for `private` and `p
 Get a list of subscribers. Server responds with a `{meta}` message containing a list of subscribers. See `{meta}` for details.
 For `me` topic the request returns a list of user's subscriptions. If `ims` is specified and data has not been updated,
 responds with a `{ctrl}` "not modified" message.
+
+Only user's own subscription is returned without [attaching](#sub) to topic first.
 
 * `{get what="tags"}`
 
@@ -943,7 +947,7 @@ Query [credentials](#credentail-validation). Server responds with a `{meta}` mes
 
 #### `{set}`
 
-Update topic metadata, delete messages or topic.
+Update topic metadata, delete messages or topic. The requester is generally expected to be [subscribed and attached](#sub) to the topic. Only `desc.private` and requester's `sub.mode` can be updated without attaching first.
 
 ```js
 set: {
