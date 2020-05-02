@@ -649,7 +649,7 @@ func replyOfflineTopicGetSub(sess *Session, topic string, msg *ClientComMessage)
 			Given: ssub.ModeGiven.String(),
 			Mode:  (ssub.ModeGiven & ssub.ModeWant).String()}
 		sub.Private = ssub.Private
-		sub.User = ssub.User
+		sub.User = types.ParseUid(ssub.User).UserId()
 
 		if (ssub.ModeGiven & ssub.ModeWant).IsReader() && (ssub.ModeWant & ssub.ModeGiven).IsJoiner() {
 			sub.DelId = ssub.DelId
