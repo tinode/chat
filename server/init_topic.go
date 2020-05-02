@@ -161,7 +161,7 @@ func initTopicMe(t *Topic, sreg *sessionJoin) error {
 func initTopicFnd(t *Topic, sreg *sessionJoin) error {
 	t.cat = types.TopicCatFnd
 
-	uid := types.ParseUserId(sreg.pkt.from)
+	uid := types.ParseUserId(sreg.pkt.asUser)
 	if uid.IsZero() {
 		return types.ErrNotFound
 	}
