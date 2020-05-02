@@ -39,7 +39,7 @@ from tn_globals import stdoutln
 from tn_globals import to_json
 
 APP_NAME = "tn-cli"
-APP_VERSION = "1.4.0"
+APP_VERSION = "1.4.1"
 PROTOCOL_VERSION = "0"
 LIB_VERSION = pkg_resources.get_distribution("tinode_grpc").version
 GRPC_VERSION = pkg_resources.get_distribution("grpcio").version
@@ -1055,7 +1055,7 @@ if __name__ == '__main__':
     parser.add_argument('--api-key', default='AQEAAAABAAD_rAp4DJh05a1HAwFT3A6K', help='API key for file uploads')
     parser.add_argument('--load-macros', default='./macros.py', help='path to macro module to load')
     parser.add_argument('--version', action='store_true', help='print version')
-    parser.add_argument('--verbose', action='store_true', help='verbose output: print full JSON representation of messages')
+    parser.add_argument('--verbose', action='store_true', help='log full JSON representation of all messages')
 
     args = parser.parse_args()
 

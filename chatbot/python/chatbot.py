@@ -32,7 +32,7 @@ if sys.version_info[0] >= 3:
     unicode = str
 
 APP_NAME = "Tino-chatbot"
-APP_VERSION = "1.2.0"
+APP_VERSION = "1.2.1"
 LIB_VERSION = pkg_resources.get_distribution("tinode_grpc").version
 
 # Maximum length of string to log. Shorten longer strings.
