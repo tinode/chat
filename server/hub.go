@@ -229,20 +229,14 @@ func (h *Hub) run() {
 				go h.topicsStateForUser(meta.forUser, meta.state == types.StateSuspended)
 			} else {
 				// Metadata read or update from a user who is not attached to the topic.
-				if dst := h.topicGet(meta.topic); dst != nil {
-					// If topic is already in memory, pass request to the topic.
-					dst.meta <- meta
-				} else {
-					// Topic is not in memory. Read or update the DB record and reply here.
-					if meta.pkt.Get != nil {
-						if meta.what == constMsgMetaDesc {
-							go replyOfflineTopicGetDesc(meta.sess, meta.topic, meta.pkt)
-						} else {
-							go replyOfflineTopicGetSub(meta.sess, meta.topic, meta.pkt)
-						}
-					} else if meta.pkt.Set != nil {
-						go replyOfflineTopicSetSub(meta.sess, meta.topic, meta.pkt)
+				if meta.pkt.Get != nil {
+					if meta.what == constMsgMetaDesc {
+						go replyOfflineTopicGetDesc(meta.sess, meta.topic, meta.pkt)
+					} else {
+						go replyOfflineTopicGetSub(meta.sess, meta.topic, meta.pkt)
 					}
+				} else if meta.pkt.Set != nil {
+					go replyOfflineTopicSetSub(meta.sess, meta.topic, meta.pkt)
 				}
 			}
 
