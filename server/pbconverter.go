@@ -302,7 +302,7 @@ func pbCliSerialize(msg *ClientComMessage) *pbx.ClientMsg {
 		return nil
 	}
 
-	pkt.OnBehalfOf = msg.from
+	pkt.OnBehalfOf = msg.asUser
 	pkt.AuthLevel = pbx.AuthLevel(msg.authLvl)
 
 	return &pkt
@@ -409,7 +409,7 @@ func pbCliDeserialize(pkt *pbx.ClientMsg) *ClientComMessage {
 		}
 	}
 
-	msg.from = pkt.GetOnBehalfOf()
+	msg.asUser = pkt.GetOnBehalfOf()
 	msg.authLvl = int(pkt.GetAuthLevel())
 
 	return &msg
