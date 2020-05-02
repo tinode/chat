@@ -169,15 +169,15 @@ type ClusterPresExt struct {
 // ProxyTopicData combines topic proxy to master request params.
 type ProxyTopicData struct {
 	// Join (subscribe) request.
-	JoinReq      *ProxyJoin
+	JoinReq *ProxyJoin
 	// Broadcast (publish, etc.) request.
 	BroadcastReq *ProxyBroadcast
 	// Meta request.
-	MetaReq      *ProxyMeta
+	MetaReq *ProxyMeta
 	// Leave (unsubscribe) request.
-	LeaveReq     *ProxyLeave
+	LeaveReq *ProxyLeave
 	// User agent change request.
-	UAChangeReq  *ProxyUAChange
+	UAChangeReq *ProxyUAChange
 }
 
 // ProxyJoin contains topic join request parameters.
@@ -185,9 +185,9 @@ type ProxyJoin struct {
 	// True if this topic was just created.
 	// In case of p2p topics, it's true if the other user's subscription was
 	// created (as a part of new topic creation or just alone).
-	Created  bool
+	Created bool
 	// True if this is a new subscription.
-	Newsub   bool
+	Newsub bool
 	// True if this topic is created internally.
 	Internal bool
 }
@@ -195,13 +195,13 @@ type ProxyJoin struct {
 // ProxyBroadcast contains topic broadcast request parameters.
 type ProxyBroadcast struct {
 	// Original request message id.
-	Id        string
+	Id string
 	// User ID of the sender of the original message.
-	From      string
+	From string
 	// Timestamp for consistency of timestamps in {ctrl} messages.
 	Timestamp time.Time
 	// Should the packet be sent to the original session? SessionID to skip.
-	SkipSid   string
+	SkipSid string
 }
 
 // ProxyMeta contains meta (get, sub) request parameters.
@@ -213,11 +213,11 @@ type ProxyMeta struct {
 // ProxyLeave contains unsubscribe request params.
 type ProxyLeave struct {
 	// Id of the incoming leave request.
-	Id                       string
+	Id string
 	// User ID of the user sent the request.
-	UserId                   types.Uid
+	UserId types.Uid
 	// Leave and unsubscribe.
-	Unsub                    bool
+	Unsub bool
 	// Terminate proxy connection to the master topic.
 	TerminateProxyConnection bool
 }
@@ -241,9 +241,9 @@ type ProxyResponse struct {
 	// Request type.
 	OrigRequestType int
 	// SessionID to skip. Set for broadcast requests.
-	SkipSid         string
+	SkipSid string
 	// User id of the affected user.
-	Uid             types.Uid
+	Uid types.Uid
 }
 
 // Handle outbound node communication: read messages from the channel, forward to remote nodes.
@@ -567,11 +567,11 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 	case msg.TopicMsg.LeaveReq != nil:
 		if t := globals.hub.topicGet(msg.RcptTo); t != nil {
 			leave := &sessionLeave{
-				id: msg.TopicMsg.LeaveReq.Id,
-				userId: msg.TopicMsg.LeaveReq.UserId,
-				unsub: msg.TopicMsg.LeaveReq.Unsub,
+				id:                       msg.TopicMsg.LeaveReq.Id,
+				userId:                   msg.TopicMsg.LeaveReq.UserId,
+				unsub:                    msg.TopicMsg.LeaveReq.Unsub,
 				terminateProxyConnection: msg.TopicMsg.LeaveReq.TerminateProxyConnection,
-				sess: sess,
+				sess:                     sess,
 				sessOverrides: &sessionOverrides{
 					sid:     origSid,
 					rcptTo:  msg.RcptTo,
@@ -604,10 +604,10 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 			log.Panic("cluster: topic proxy meta request must container either Get or Set field")
 		}
 		req := &metaReq{
-			topic:    msg.RcptTo,
-			pkt:      msg.CliMsg,
-			sess:     sess,
-			what:     msg.TopicMsg.MetaReq.What,
+			topic: msg.RcptTo,
+			pkt:   msg.CliMsg,
+			sess:  sess,
+			what:  msg.TopicMsg.MetaReq.What,
 			// Impersonate the original session.
 			sessOverrides: &sessionOverrides{
 				sid:     origSid,
@@ -1227,7 +1227,7 @@ func (sess *Session) topicProxyWriteLoop(forTopic string) {
 			srvMsg := msg.(*ServerComMessage)
 
 			response := &ClusterResp{
-				SrvMsg: srvMsg,
+				SrvMsg:    srvMsg,
 				ProxyResp: &ProxyResponse{},
 			}
 			copyParamsFromSession := false
@@ -1264,7 +1264,7 @@ func (sess *Session) topicProxyWriteLoop(forTopic string) {
 				response.FromSID = srvMsg.sessOverrides.sid
 				response.RcptTo = srvMsg.sessOverrides.rcptTo
 			} else {
-				response.RcptTo  = forTopic
+				response.RcptTo = forTopic
 				response.FromSID = "*"
 			}
 

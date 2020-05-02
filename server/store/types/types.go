@@ -685,7 +685,7 @@ func (m *AccessMode) ApplyDelta(delta string) error {
 		return nil
 	}
 	m0 := *m
-	for next := 0; next + 1 < len(delta) && next >= 0; {
+	for next := 0; next+1 < len(delta) && next >= 0; {
 		ch := delta[next]
 		end := strings.IndexAny(delta[next+1:], "+-")
 		var chunk string

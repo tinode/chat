@@ -312,7 +312,7 @@ func (t *Topic) presSubsOnlineDirect(what string) {
 
 	for sess := range t.sessions {
 		// Check presence filters
-		if !t.userIsPresencer(sess.uid) && what != "gone" && what != "acs"{
+		if !t.userIsPresencer(sess.uid) && what != "gone" && what != "acs" {
 			continue
 		}
 
