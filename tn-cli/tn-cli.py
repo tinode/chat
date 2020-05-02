@@ -699,36 +699,40 @@ def parse_input(cmd):
         parser = argparse.ArgumentParser(prog=parts[0], description='Pause execution')
         parser.add_argument('millis', type=int, help='milliseconds to wait')
 
+    elif parts[0] == ".verbose":
+        parser = argparse.ArgumentParser(prog=parts[0], description='Toggle logging verbosity')
+
     else:
         parser = parse_cmd(parts)
 
     if not parser:
         printout("Unrecognized:", parts[0])
         printout("Possible commands:")
-        printout("\t.await\t- wait for completion of an operation")
-        printout("\t.exit\t- exit the program (also .quit)")
-        printout("\t.log\t- write value of a variable to stdout")
-        printout("\t.must\t- wait for completion of an operation, terminate on failure")
-        printout("\t.sleep\t- pause execution")
-        printout("\t.use\t- set default user (on_behalf_of) or topic")
-        printout("\tacc\t- create or alter an account")
-        printout("\tdel\t- delete message(s), topic, subscription, or user")
-        printout("\tget\t- query topic for metadata or messages")
-        printout("\tleave\t- detach or unsubscribe from topic")
-        printout("\tlogin\t- authenticate current session")
-        printout("\tnote\t- send a notification")
-        printout("\tpub\t- post message to topic")
-        printout("\tset\t- update topic metadata")
-        printout("\tsub\t- subscribe to topic")
-        printout("\tupload\t- upload file out of band")
-        printout("\tusermod\t- modify user account")
+        printout("\t.await\t\t- wait for completion of an operation")
+        printout("\t.exit\t\t- exit the program (also .quit)")
+        printout("\t.log\t\t- write value of a variable to stdout")
+        printout("\t.must\t\t- wait for completion of an operation, terminate on failure")
+        printout("\t.sleep\t\t- pause execution")
+        printout("\t.use\t\t- set default user (on_behalf_of) or topic")
+        printout("\t.verbose\t- toggle logging verbosity on/off")
+        printout("\tacc\t\t- create or alter an account")
+        printout("\tdel\t\t- delete message(s), topic, subscription, or user")
+        printout("\tget\t\t- query topic for metadata or messages")
+        printout("\tleave\t\t- detach or unsubscribe from topic")
+        printout("\tlogin\t\t- authenticate current session")
+        printout("\tnote\t\t- send a notification")
+        printout("\tpub\t\t- post message to topic")
+        printout("\tset\t\t- update topic metadata")
+        printout("\tsub\t\t- subscribe to topic")
+        printout("\tupload\t\t- upload file out of band")
+        printout("\tusermod\t\t- modify user account")
         printout("\n\tType <command> -h for help")
 
         if macros:
             printout("\nMacro commands:")
             for key in sorted(macros.Macros):
                 macro = macros.Macros[key]
-                printout("\t%s\t- %s" % (macro.name(), macro.description()))
+                printout("\t%s\t\t- %s" % (macro.name(), macro.description()))
         return None
 
     try:
@@ -789,6 +793,11 @@ def serialize_cmd(string, id, args):
             time.sleep(cmd.millis/1000.)
             return None, None
 
+        elif cmd.cmd == ".verbose":
+            tn_globals.Verbose = not tn_globals.Verbose
+            stdoutln("Logging is {}".format("verbose" if tn_globals.Verbose else "normal"))
+            return None, None
+
         elif cmd.cmd == "upload":
             # Start async upload
             upload_thread = threading.Thread(target=upload, args=(id, derefVals(cmd), args), name="Uploader_"+cmd.filename)
@@ -802,7 +811,7 @@ def serialize_cmd(string, id, args):
             return True, macros.Macros[cmd.cmd].run(id, derefVals(cmd), args)
 
         else:
-            stdoutln("Error: unrecognized: '{0}'".format(cmd.cmd))
+            stdoutln("Error: unrecognized: '{}'".format(cmd.cmd))
             return None, None
 
     except Exception as err:
