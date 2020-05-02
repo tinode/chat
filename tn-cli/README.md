@@ -33,6 +33,7 @@ The client takes optional parameters:
  * `--no-cookie` do not save cookie on successful login; this is the default in non-interactive (scripted) mode.
  * `--api-key` web API key for file uploads; default `AQEAAAABAAD_rAp4DJh05a1HAwFT3A6K`
  * `--load-macros` path to a macro file.
+ * `--verbose` log incoming and outgoing messages as JSON.
 
 If multiple `login-XYZ` are provided, `login-cookie` is considered first, then `login-token` then `login-basic`. Authentication with token (and cookie) is much faster than with the username-password pair.
 
@@ -53,7 +54,8 @@ python tn-cli.py < sample-script.txt
 * `.must` - issue a gRPC call and wait for completion, optionally assign result to a variable; raise an exception if result is not a success.
 * `.quit` - terminate execution and exit the CLI; also `.exit`.
 * `.sleep` - suspend the process for a number of milliseconds.
-* `.use` - set default user (on_behalf_of user) or topic
+* `.use` - set default user (on_behalf_of user) or topic.
+* `.verbose` - toggle logging verbosity.
 
 ### gRPC calls
 
