@@ -200,7 +200,7 @@ func (t *Topic) runProxy(hub *Hub) {
 		case sreg := <-t.reg:
 			// Request to add a connection to this topic
 			if t.isInactive() {
-				asUid := types.ParseUserId(sreg.pkt.from)
+				asUid := types.ParseUserId(sreg.pkt.asUser)
 				sreg.sess.queueOut(ErrLocked(sreg.pkt.id, t.original(asUid), types.TimeNow()))
 			} else {
 				log.Printf("topic[%s] reg %+v", t.name, sreg)
@@ -252,7 +252,7 @@ func (t *Topic) runProxy(hub *Hub) {
 			brdc := &ProxyTopicData{
 				BroadcastReq: &ProxyBroadcast{
 					Id:        msg.id,
-					From:      msg.from,
+					From:      msg.asUser,
 					Timestamp: msg.timestamp,
 					SkipSid:   msg.skipSid,
 				},
@@ -413,24 +413,30 @@ func (t *Topic) handleCtrlBroadcast(msg *ServerComMessage) {
 	}
 }
 
+// updateAcsFromPresMsg modifies user acs in Topic's perUser struct based on the data in `pres`.
 func (t *Topic) updateAcsFromPresMsg(pres *MsgServerPres) {
 	uid := types.ParseUserId(pres.Src)
 	dacs := pres.Acs
-	if pud, ok := t.perUser[uid]; !uid.IsZero() && ok {
-		if dacs.Want != "" {
-			if err := pud.modeWant.ApplyDelta(dacs.Want); err != nil {
-				log.Println("proxy topic: could not process acs change - want: ", err)
-			}
-		}
-		if dacs.Given != "" {
-			if err := pud.modeGiven.ApplyDelta(dacs.Given); err != nil {
-				log.Println("proxy topic: could not process acs change - given: ", err)
-			}
-		}
-		t.perUser[uid] = pud
-	} else {
-		log.Println("proxy topic received acs change for unknown user ", pres.Src)
+	if uid.IsZero() {
+		log.Printf("proxy topic[%s]: received acs change for invalid user id '%s'", t.name, pres.Src)
+		return
 	}
+
+	// We don't care if t.perUser[uid] exists or not.
+	// If it does not exist, pud is initialized with blanks,
+	// otherwise we read pud with existing values.
+	// I.e. if found/if not found is not needed.
+	pud := t.perUser[uid]
+	if err := pud.modeWant.ApplyMutation(dacs.Want); err != nil {
+		// report error, return
+		log.Printf("proxy topic[%s]: could not process acs change - want: %+v", t.name, err)
+	}
+	if err := pud.modeGiven.ApplyMutation(dacs.Given); err != nil {
+		// report error, return
+		log.Printf("proxy topic[%s]: could not process acs change - given: %+v", t.name, err)
+	}
+	// Update existing or add new.
+	t.perUser[uid] = pud
 }
 
 // getPerUserAcs returns `want` and `given` permissions for the given user id.

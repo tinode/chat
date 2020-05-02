@@ -986,7 +986,7 @@ func (s *Session) note(msg *ClientComMessage) {
 			From:  msg.asUser,
 			What:  msg.Note.What,
 			SeqId: msg.Note.SeqId,
-		}, rcptto: expanded, from: msg.from, timestamp: msg.timestamp, skipSid: s.sid}
+		}, rcptto: expanded, asUser: msg.asUser, timestamp: msg.timestamp, skipSid: s.sid}
 	} else {
 		s.queueOut(ErrAttachFirst(msg.id, msg.topic, msg.timestamp))
 		log.Println("s.note: note to invalid topic - must subscribe first", msg.Note.What, s.sid)

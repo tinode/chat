@@ -545,7 +545,7 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 	case msg.TopicMsg.JoinReq != nil:
 		if !uid.IsZero() {
 			log.Println("join setting uid = ", uid)
-			msg.CliMsg.from = uid.UserId()
+			msg.CliMsg.asUser = uid.UserId()
 		}
 		msg.CliMsg.topic = msg.CliMsg.Sub.Topic
 		msg.CliMsg.id = msg.CliMsg.Sub.Id
@@ -587,7 +587,7 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 	case msg.TopicMsg.MetaReq != nil:
 		if !uid.IsZero() {
 			log.Println("meta setting uid = ", uid)
-			msg.CliMsg.from = uid.UserId()
+			msg.CliMsg.asUser = uid.UserId()
 		}
 		msg.CliMsg.authLvl = int(authLvl)
 		switch {
@@ -623,7 +623,7 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 			panic("cluster: topic proxy broadcast request has no data message")
 		}
 		msg.SrvMsg.id = msg.TopicMsg.BroadcastReq.Id
-		msg.SrvMsg.from = msg.TopicMsg.BroadcastReq.From
+		msg.SrvMsg.asUser = msg.TopicMsg.BroadcastReq.From
 		msg.SrvMsg.timestamp = msg.TopicMsg.BroadcastReq.Timestamp
 		msg.SrvMsg.rcptto = msg.RcptTo
 		msg.SrvMsg.sessOverrides = &sessionOverrides{
@@ -872,7 +872,7 @@ func (c *Cluster) getClusterReq(cliMsg *ClientComMessage, srvMsg *ServerComMessa
 			Sid:        sess.sid}
 		if sess.authLvl == auth.LevelRoot {
 			// Assign these values only when the sender is root
-			req.OnBehalfOf = cliMsg.from
+			req.OnBehalfOf = cliMsg.asUser
 			req.AuthLvl = cliMsg.authLvl
 		}
 	}
