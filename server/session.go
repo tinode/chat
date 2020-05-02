@@ -275,17 +275,17 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 	s.lastAction = types.TimeNow()
 	msg.timestamp = s.lastAction
 
-	if msg.from == "" {
-		msg.from = s.uid.UserId()
+	if msg.asUser == "" {
+		msg.asUser = s.uid.UserId()
 		msg.authLvl = int(s.authLvl)
 	} else if s.authLvl != auth.LevelRoot {
 		// Only root user can set non-default msg.from && msg.authLvl values.
 		s.queueOut(ErrPermissionDenied("", "", msg.timestamp))
 		log.Println("s.dispatch: non-root asigned msg.from", s.sid)
 		return
-	} else if fromUid := types.ParseUserId(msg.from); fromUid.IsZero() {
+	} else if fromUid := types.ParseUserId(msg.asUser); fromUid.IsZero() {
 		s.queueOut(ErrMalformed("", "", msg.timestamp))
-		log.Println("s.dispatch: malformed msg.from: ", msg.from, s.sid)
+		log.Println("s.dispatch: malformed msg.from: ", msg.asUser, s.sid)
 		return
 	}
 
@@ -317,7 +317,7 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 	// Check if user is logged in
 	checkUser := func(m *ClientComMessage, handler func(*ClientComMessage)) func(*ClientComMessage) {
 		return func(m *ClientComMessage) {
-			if msg.from == "" {
+			if msg.asUser == "" {
 				log.Println("s.dispatch: authentication required", s.sid)
 				s.queueOut(ErrAuthRequired(m.id, m.topic, msg.timestamp))
 				return
@@ -395,8 +395,8 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 	handler(msg)
 
 	// Notify 'me' topic that this session is currently active
-	if uaRefresh && msg.from != "" && s.userAgent != "" {
-		if sub := s.getSub(msg.from); sub != nil {
+	if uaRefresh && msg.asUser != "" && s.userAgent != "" {
+		if sub := s.getSub(msg.asUser); sub != nil {
 			// The chan is buffered. If the buffer is exhaused, the session will wait for 'me' to become available
 			sub.uaChange <- s.userAgent
 		}
@@ -467,7 +467,7 @@ func (s *Session) leave(msg *ClientComMessage) {
 			// Unlink from topic, topic will send a reply.
 			s.delSub(expanded)
 			sub.done <- &sessionLeave{
-				userId: types.ParseUserId(msg.from),
+				userId: types.ParseUserId(msg.asUser),
 				topic:  msg.topic,
 				sess:   s,
 				unsub:  msg.Leave.Unsub,
@@ -503,7 +503,7 @@ func (s *Session) publish(msg *ClientComMessage) {
 	}
 
 	// Add "sender" header if the message is sent on behalf of another user.
-	if msg.from != s.uid.UserId() {
+	if msg.asUser != s.uid.UserId() {
 		if msg.Pub.Head == nil {
 			msg.Pub.Head = make(map[string]interface{})
 		}
@@ -518,7 +518,7 @@ func (s *Session) publish(msg *ClientComMessage) {
 
 	data := &ServerComMessage{Data: &MsgServerData{
 		Topic:     msg.topic,
-		From:      msg.from,
+		From:      msg.asUser,
 		Timestamp: msg.timestamp,
 		Head:      msg.Pub.Head,
 		Content:   msg.Pub.Content},
@@ -527,7 +527,7 @@ func (s *Session) publish(msg *ClientComMessage) {
 		sess:      s,
 		id:        msg.id,
 		timestamp: msg.timestamp,
-		from:      msg.from}
+		asUser:    msg.asUser}
 	if msg.Pub.NoEcho {
 		data.skipSid = s.sid
 	}
@@ -980,7 +980,7 @@ func (s *Session) del(msg *ClientComMessage) {
 // Not reporting any errors
 func (s *Session) note(msg *ClientComMessage) {
 
-	if s.ver == 0 || msg.from == "" {
+	if s.ver == 0 || msg.asUser == "" {
 		// Silently ignore the message: have not received {hi} or don't know who sent the message.
 		return
 	}
@@ -1009,7 +1009,7 @@ func (s *Session) note(msg *ClientComMessage) {
 		// Pings can be sent to subscribed topics only
 		sub.broadcast <- &ServerComMessage{Info: &MsgServerInfo{
 			Topic: msg.topic,
-			From:  msg.from,
+			From:  msg.asUser,
 			What:  msg.Note.What,
 			SeqId: msg.Note.SeqId,
 		}, rcptto: expanded, timestamp: msg.timestamp, skipSid: s.sid}
@@ -1034,12 +1034,12 @@ func (s *Session) expandTopicName(msg *ClientComMessage) (string, *ServerComMess
 	// Expanded name of the topic to route to i.e. rcptto: or s.subs[routeTo]
 	var routeTo string
 	if msg.topic == "me" {
-		routeTo = msg.from
+		routeTo = msg.asUser
 	} else if msg.topic == "fnd" {
-		routeTo = types.ParseUserId(msg.from).FndName()
+		routeTo = types.ParseUserId(msg.asUser).FndName()
 	} else if strings.HasPrefix(msg.topic, "usr") {
 		// p2p topic
-		uid1 := types.ParseUserId(msg.from)
+		uid1 := types.ParseUserId(msg.asUser)
 		uid2 := types.ParseUserId(msg.topic)
 		if uid2.IsZero() {
 			// Ensure the user id is valid

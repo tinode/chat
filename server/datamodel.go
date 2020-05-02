@@ -310,7 +310,7 @@ type ClientComMessage struct {
 	// Un-routable (original) topic name denormalized from XXX.Topic.
 	topic string
 	// Sender's UserId as string
-	from string
+	asUser string
 	// Sender's authentication level
 	authLvl int
 	// Timestamp when this message was received by the server
@@ -578,7 +578,7 @@ type ServerComMessage struct {
 	// timestamp for consistency of timestamps in {ctrl} messages
 	timestamp time.Time
 	// User ID of the sender of the original message.
-	from string
+	asUser string
 	// Originating session to send an aknowledgement to. Could be nil.
 	sess *Session
 	// Should the packet be sent to the original session? SessionID to skip.
@@ -595,7 +595,7 @@ func (src *ServerComMessage) copy() *ServerComMessage {
 		id:        src.id,
 		rcptto:    src.rcptto,
 		timestamp: src.timestamp,
-		from:      src.from,
+		asUser:    src.asUser,
 		sess:      src.sess,
 		skipSid:   src.skipSid,
 	}
