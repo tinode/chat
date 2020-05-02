@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# coding=utf-8
 
 """Python implementation of Tinode command line client using gRPC."""
 
@@ -27,8 +28,6 @@ import sys
 import threading
 import time
 
-from google.protobuf import json_format
-
 # Import generated grpc modules
 from tinode_grpc import pb
 from tinode_grpc import pbx
@@ -37,6 +36,7 @@ import tn_globals
 from tn_globals import printerr
 from tn_globals import printout
 from tn_globals import stdoutln
+from tn_globals import to_json
 
 APP_NAME = "tn-cli"
 APP_VERSION = "1.4.0"
@@ -821,7 +821,10 @@ def gen_message(scheme, secret, args):
     tn_globals.InputThread.daemon = True
     tn_globals.InputThread.start()
 
-    yield hiMsg(id)
+    msg = hiMsg(id)
+    if tn_globals.Verbose:
+        stdoutln("\r=> " + to_json(msg))
+    yield msg
 
     if scheme != None:
         id += 1
@@ -829,7 +832,10 @@ def gen_message(scheme, secret, args):
         setattr(login, 'scheme', scheme)
         setattr(login, 'secret', secret)
         setattr(login, 'cred', None)
-        yield loginMsg(id, login, args)
+        msg = loginMsg(id, login, args)
+        if tn_globals.Verbose:
+            stdoutln("\r=> " + to_json(msg))
+        yield msg
 
     print_prompt = True
 
@@ -859,6 +865,8 @@ def gen_message(scheme, secret, args):
                         tn_globals.WaitingFor = cmd
 
                     if not hasattr(cmd, 'no_yield'):
+                        if tn_globals.Verbose:
+                            stdoutln("\r=> " + to_json(pbMsg))
                         yield pbMsg
 
             elif not tn_globals.OutputQueue.empty():
@@ -920,6 +928,9 @@ def run(args, schema, secret):
 
         # Read server responses
         for msg in stream:
+            if tn_globals.Verbose:
+                stdoutln("\r<= " + to_json(msg))
+
             if msg.HasField("ctrl"):
                 handle_ctrl(msg.ctrl)
 
@@ -1044,11 +1055,16 @@ if __name__ == '__main__':
     parser.add_argument('--api-key', default='AQEAAAABAAD_rAp4DJh05a1HAwFT3A6K', help='API key for file uploads')
     parser.add_argument('--load-macros', default='./macros.py', help='path to macro module to load')
     parser.add_argument('--version', action='store_true', help='print version')
+    parser.add_argument('--verbose', action='store_true', help='verbose output: print full JSON representation of messages')
+
     args = parser.parse_args()
 
     if args.version:
         printout(version)
         exit()
+
+    if args.verbose:
+        tn_globals.Verbose = True
 
     printout(purpose)
     printout("Secure server" if args.ssl else "Server", "at '"+args.host+"'",

@@ -27,6 +27,10 @@ from google.protobuf.json_format import MessageToDict
 from tinode_grpc import pb
 from tinode_grpc import pbx
 
+# For compatibility with python2
+if sys.version_info[0] >= 3:
+    unicode = str
+
 APP_NAME = "Tino-chatbot"
 APP_VERSION = "1.2.0"
 LIB_VERSION = pkg_resources.get_distribution("tinode_grpc").version
@@ -51,11 +55,20 @@ def add_future(tid, bundle):
     onCompletion[tid] = bundle
 
 # Shorten long strings for logging.
-class JsonHelper(json.JSONEncoder):
-    def default(self, obj):
-        if type(obj) == str and len(obj) > MAX_LOG_LEN:
-            return '<' + len(obj) + ', bytes: ' + obj[:12] + '...' + obj[-12:] + '>'
-        return super(JsonHelper, self).default(obj)
+def clip_long_string(obj):
+    if isinstance(obj, unicode) or isinstance(obj, str):
+        if len(obj) > MAX_LOG_LEN:
+            return '<' + str(len(obj)) + ' bytes: ' + obj[:12] + '...' + obj[-12:] + '>'
+        return obj
+    elif isinstance(obj, (list, tuple)):
+        return [clip_long_string(item) for item in obj]
+    elif isinstance(obj, dict):
+        return dict((key, clip_long_string(val)) for key, val in obj.items())
+    else:
+        return obj
+
+def to_json(msg):
+    return json.dumps(clip_long_string(MessageToDict(msg)))
 
 # Resolve or reject the future
 def exec_future(tid, code, text, params):
@@ -144,7 +157,7 @@ def client_generate():
         msg = queue_out.get()
         if msg == None:
             return
-        log("out:", json.dumps(MessageToDict(msg), cls=JsonHelper))
+        log("out:", to_json(msg)
         yield msg
 
 def client_post(msg):
@@ -237,8 +250,7 @@ def client_message_loop(stream):
     try:
         # Read server responses
         for msg in stream:
-            log(datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3],
-                "in:", json.dumps(MessageToDict(msg), cls=JsonHelper))
+            log(datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3], "in:", to_json(msg))
 
             if msg.HasField("ctrl"):
                 # Run code on command completion
