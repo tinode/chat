@@ -89,15 +89,15 @@ func (ac *AndroidConfig) getIcon(what string) string {
 	return icon
 }
 
-func (ac *AndroidConfig) getIconColor(what string) string {
+func (ac *AndroidConfig) getColor(what string) string {
 	var color string
 	if what == push.ActMsg {
-		color = ac.Msg.IconColor
+		color = ac.Msg.Color
 	} else if what == push.ActSub {
-		color = ac.Sub.IconColor
+		color = ac.Sub.Color
 	}
 	if color == "" {
-		color = ac.androidPayload.IconColor
+		color = ac.androidPayload.Color
 	}
 	return color
 }
@@ -109,7 +109,7 @@ type androidPayload struct {
 	BodyLocKey  string `json:"body_loc_key,omitempty"`
 	Body        string `json:"body,omitempty"`
 	Icon        string `json:"icon,omitempty"`
-	IconColor   string `json:"icon_color,omitempty"`
+	Color       string `json:"color,omitempty"`
 	ClickAction string `json:"click_action,omitempty"`
 }
 
@@ -209,7 +209,7 @@ func PrepareNotifications(rcpt *push.Receipt, config *AndroidConfig) []MessageDa
 			body = data["content"]
 		}
 		icon = config.getIcon(rcpt.Payload.What)
-		color = config.getIconColor(rcpt.Payload.What)
+		color = config.getColor(rcpt.Payload.What)
 	}
 
 	var messages []MessageData
@@ -240,6 +240,8 @@ func PrepareNotifications(rcpt *push.Receipt, config *AndroidConfig) []MessageDa
 							// Android uses Tag value to group notifications together:
 							// show just one notification per topic.
 							Tag:         rcpt.Payload.Topic,
+							Priority:    fcm.PriorityHigh,
+							Visibility:  fcm.VisibilityPrivate,
 							TitleLocKey: titlelc,
 							Title:       title,
 							BodyLocKey:  bodylc,

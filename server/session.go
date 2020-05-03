@@ -848,12 +848,12 @@ func (s *Session) get(msg *ClientComMessage) {
 		log.Println("s.get: invalid Get message action", msg.Get.What)
 	} else if sub != nil {
 		sub.meta <- meta
-	} else if meta.what&(constMsgMetaData|constMsgMetaDel|constMsgMetaTags) != 0 {
-		log.Println("s.get: subscribe first to get=", msg.Get.What)
-		s.queueOut(ErrPermissionDenied(msg.id, msg.topic, msg.timestamp))
-	} else {
+	} else if meta.what&(constMsgMetaDesc|constMsgMetaSub) != 0 {
 		// Request some minimal info from a topic not currently attached to.
 		globals.hub.meta <- meta
+	} else {
+		log.Println("s.get: subscribe first to get=", msg.Get.What)
+		s.queueOut(ErrPermissionDenied(msg.id, msg.topic, msg.timestamp))
 	}
 }
 

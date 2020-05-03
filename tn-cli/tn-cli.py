@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# coding=utf-8
 
 """Python implementation of Tinode command line client using gRPC."""
 
@@ -27,8 +28,6 @@ import sys
 import threading
 import time
 
-from google.protobuf import json_format
-
 # Import generated grpc modules
 from tinode_grpc import pb
 from tinode_grpc import pbx
@@ -37,9 +36,10 @@ import tn_globals
 from tn_globals import printerr
 from tn_globals import printout
 from tn_globals import stdoutln
+from tn_globals import to_json
 
 APP_NAME = "tn-cli"
-APP_VERSION = "1.4.0"
+APP_VERSION = "1.4.1"
 PROTOCOL_VERSION = "0"
 LIB_VERSION = pkg_resources.get_distribution("tinode_grpc").version
 GRPC_VERSION = pkg_resources.get_distribution("grpcio").version
@@ -699,36 +699,40 @@ def parse_input(cmd):
         parser = argparse.ArgumentParser(prog=parts[0], description='Pause execution')
         parser.add_argument('millis', type=int, help='milliseconds to wait')
 
+    elif parts[0] == ".verbose":
+        parser = argparse.ArgumentParser(prog=parts[0], description='Toggle logging verbosity')
+
     else:
         parser = parse_cmd(parts)
 
     if not parser:
         printout("Unrecognized:", parts[0])
         printout("Possible commands:")
-        printout("\t.await\t- wait for completion of an operation")
-        printout("\t.exit\t- exit the program (also .quit)")
-        printout("\t.log\t- write value of a variable to stdout")
-        printout("\t.must\t- wait for completion of an operation, terminate on failure")
-        printout("\t.sleep\t- pause execution")
-        printout("\t.use\t- set default user (on_behalf_of) or topic")
-        printout("\tacc\t- create or alter an account")
-        printout("\tdel\t- delete message(s), topic, subscription, or user")
-        printout("\tget\t- query topic for metadata or messages")
-        printout("\tleave\t- detach or unsubscribe from topic")
-        printout("\tlogin\t- authenticate current session")
-        printout("\tnote\t- send a notification")
-        printout("\tpub\t- post message to topic")
-        printout("\tset\t- update topic metadata")
-        printout("\tsub\t- subscribe to topic")
-        printout("\tupload\t- upload file out of band")
-        printout("\tusermod\t- modify user account")
+        printout("\t.await\t\t- wait for completion of an operation")
+        printout("\t.exit\t\t- exit the program (also .quit)")
+        printout("\t.log\t\t- write value of a variable to stdout")
+        printout("\t.must\t\t- wait for completion of an operation, terminate on failure")
+        printout("\t.sleep\t\t- pause execution")
+        printout("\t.use\t\t- set default user (on_behalf_of) or topic")
+        printout("\t.verbose\t- toggle logging verbosity on/off")
+        printout("\tacc\t\t- create or alter an account")
+        printout("\tdel\t\t- delete message(s), topic, subscription, or user")
+        printout("\tget\t\t- query topic for metadata or messages")
+        printout("\tleave\t\t- detach or unsubscribe from topic")
+        printout("\tlogin\t\t- authenticate current session")
+        printout("\tnote\t\t- send a notification")
+        printout("\tpub\t\t- post message to topic")
+        printout("\tset\t\t- update topic metadata")
+        printout("\tsub\t\t- subscribe to topic")
+        printout("\tupload\t\t- upload file out of band")
+        printout("\tusermod\t\t- modify user account")
         printout("\n\tType <command> -h for help")
 
         if macros:
             printout("\nMacro commands:")
             for key in sorted(macros.Macros):
                 macro = macros.Macros[key]
-                printout("\t%s\t- %s" % (macro.name(), macro.description()))
+                printout("\t%s\t\t- %s" % (macro.name(), macro.description()))
         return None
 
     try:
@@ -789,6 +793,11 @@ def serialize_cmd(string, id, args):
             time.sleep(cmd.millis/1000.)
             return None, None
 
+        elif cmd.cmd == ".verbose":
+            tn_globals.Verbose = not tn_globals.Verbose
+            stdoutln("Logging is {}".format("verbose" if tn_globals.Verbose else "normal"))
+            return None, None
+
         elif cmd.cmd == "upload":
             # Start async upload
             upload_thread = threading.Thread(target=upload, args=(id, derefVals(cmd), args), name="Uploader_"+cmd.filename)
@@ -802,7 +811,7 @@ def serialize_cmd(string, id, args):
             return True, macros.Macros[cmd.cmd].run(id, derefVals(cmd), args)
 
         else:
-            stdoutln("Error: unrecognized: '{0}'".format(cmd.cmd))
+            stdoutln("Error: unrecognized: '{}'".format(cmd.cmd))
             return None, None
 
     except Exception as err:
@@ -821,7 +830,10 @@ def gen_message(scheme, secret, args):
     tn_globals.InputThread.daemon = True
     tn_globals.InputThread.start()
 
-    yield hiMsg(id)
+    msg = hiMsg(id)
+    if tn_globals.Verbose:
+        stdoutln("\r=> " + to_json(msg))
+    yield msg
 
     if scheme != None:
         id += 1
@@ -829,7 +841,10 @@ def gen_message(scheme, secret, args):
         setattr(login, 'scheme', scheme)
         setattr(login, 'secret', secret)
         setattr(login, 'cred', None)
-        yield loginMsg(id, login, args)
+        msg = loginMsg(id, login, args)
+        if tn_globals.Verbose:
+            stdoutln("\r=> " + to_json(msg))
+        yield msg
 
     print_prompt = True
 
@@ -859,6 +874,8 @@ def gen_message(scheme, secret, args):
                         tn_globals.WaitingFor = cmd
 
                     if not hasattr(cmd, 'no_yield'):
+                        if tn_globals.Verbose:
+                            stdoutln("\r=> " + to_json(pbMsg))
                         yield pbMsg
 
             elif not tn_globals.OutputQueue.empty():
@@ -920,6 +937,9 @@ def run(args, schema, secret):
 
         # Read server responses
         for msg in stream:
+            if tn_globals.Verbose:
+                stdoutln("\r<= " + to_json(msg))
+
             if msg.HasField("ctrl"):
                 handle_ctrl(msg.ctrl)
 
@@ -1044,11 +1064,16 @@ if __name__ == '__main__':
     parser.add_argument('--api-key', default='AQEAAAABAAD_rAp4DJh05a1HAwFT3A6K', help='API key for file uploads')
     parser.add_argument('--load-macros', default='./macros.py', help='path to macro module to load')
     parser.add_argument('--version', action='store_true', help='print version')
+    parser.add_argument('--verbose', action='store_true', help='log full JSON representation of all messages')
+
     args = parser.parse_args()
 
     if args.version:
         printout(version)
         exit()
+
+    if args.verbose:
+        tn_globals.Verbose = True
 
     printout(purpose)
     printout("Secure server" if args.ssl else "Server", "at '"+args.host+"'",
