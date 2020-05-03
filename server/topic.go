@@ -11,8 +11,8 @@ package main
 import (
 	"container/list"
 	"errors"
-	"net/http"
 	"log"
+	"net/http"
 	"sort"
 	"sync/atomic"
 	"time"
@@ -237,9 +237,9 @@ func (t *Topic) runProxy(hub *Hub) {
 			msg := &ClientComMessage{}
 			proxyLeave := &ProxyTopicData{
 				LeaveReq: &ProxyLeave{
-					Id: leave.id,
+					Id:     leave.id,
 					UserId: asUid,
-					Unsub: leave.unsub,
+					Unsub:  leave.unsub,
 					// Terminate connection to master topic if explicitly asked to do so or all sessions are gone.
 					TerminateProxyConnection: leave.terminateProxyConnection || len(t.sessions) == 0,
 				},
@@ -316,7 +316,7 @@ func (t *Topic) runProxy(hub *Hub) {
 									meta:      t.meta,
 									uaChange:  t.uaChange})
 							}
-				      killTimer.Stop()
+							killTimer.Stop()
 						} else {
 							if len(t.sessions) == 0 {
 								killTimer.Reset(keepAlive)
@@ -422,18 +422,15 @@ func (t *Topic) updateAcsFromPresMsg(pres *MsgServerPres) {
 		return
 	}
 
-	// We don't care if t.perUser[uid] exists or not.
-	// If it does not exist, pud is initialized with blanks,
-	// otherwise we read pud with existing values.
-	// I.e. if found/if not found is not needed.
+	// If t.perUser[uid] does not exist, pud is initialized with blanks, otherwise it gets existing values.
 	pud := t.perUser[uid]
 	if err := pud.modeWant.ApplyMutation(dacs.Want); err != nil {
-		// report error, return
 		log.Printf("proxy topic[%s]: could not process acs change - want: %+v", t.name, err)
+		return
 	}
 	if err := pud.modeGiven.ApplyMutation(dacs.Given); err != nil {
-		// report error, return
 		log.Printf("proxy topic[%s]: could not process acs change - given: %+v", t.name, err)
+		return
 	}
 	// Update existing or add new.
 	t.perUser[uid] = pud
@@ -456,8 +453,8 @@ func (t *Topic) passesPresenceFilters(msg *ServerComMessage, uid types.Uid) bool
 	modeWant, modeGiven := t.getPerUserAcs(uid)
 	// "gone" and "acs" notifications are sent even if the topic is muted.
 	return ((modeGiven & modeWant).IsPresencer() || msg.Pres.What == "gone" || msg.Pres.What == "acs") &&
-					(msg.Pres.FilterIn == 0 || int(modeGiven&modeWant)&msg.Pres.FilterIn != 0) &&
-					(msg.Pres.FilterOut == 0 || int(modeGiven&modeWant)&msg.Pres.FilterOut == 0)
+		(msg.Pres.FilterIn == 0 || int(modeGiven&modeWant)&msg.Pres.FilterIn != 0) &&
+		(msg.Pres.FilterOut == 0 || int(modeGiven&modeWant)&msg.Pres.FilterOut == 0)
 }
 
 // userIsReader returns true if the user (specified by `uid`) may read the given topic.
@@ -484,11 +481,11 @@ func (t *Topic) maybeFixTopicName(msg *ServerComMessage, uid types.Uid) {
 
 // computePerUserAcsUnion computes want and given permissions unions over all topic's subscribers.
 func (t *Topic) computePerUserAcsUnion() {
-	wantUnion  := types.ModeNone
+	wantUnion := types.ModeNone
 	givenUnion := types.ModeNone
 	for _, pud := range t.perUser {
-		wantUnion = wantUnion|pud.modeWant
-		givenUnion = givenUnion|pud.modeGiven
+		wantUnion = wantUnion | pud.modeWant
+		givenUnion = givenUnion | pud.modeGiven
 	}
 	t.modeWantUnion = wantUnion
 	t.modeGivenUnion = givenUnion
@@ -555,7 +552,7 @@ func (t *Topic) runLocal(hub *Hub) {
 					continue
 				}
 
-			} else if pssd := t.maybeRemoveSession(leave.sess, asUid, /*doRemove=*/!leave.sess.isProxy() || leave.terminateProxyConnection); pssd != nil || leave.sess.isProxy() {
+			} else if pssd := t.maybeRemoveSession(leave.sess, asUid /*doRemove=*/, !leave.sess.isProxy() || leave.terminateProxyConnection); pssd != nil || leave.sess.isProxy() {
 				// Just leaving the topic without unsubscribing if user is subscribed.
 
 				var uid types.Uid
@@ -634,7 +631,7 @@ func (t *Topic) runLocal(hub *Hub) {
 				}
 				if t.isReadOnly() {
 					msg.sess.queueOutWithOverrides(ErrPermissionDenied(msg.id, t.original(asUid), msg.timestamp),
-                                         msg.sessOverrides)
+						msg.sessOverrides)
 					continue
 				}
 
@@ -773,7 +770,7 @@ func (t *Topic) runLocal(hub *Hub) {
 
 			var broadcastSessOverrides *sessionOverrides
 			if msg.sessOverrides != nil {
-			  // Broadcast is not a reply to a specific session.
+				// Broadcast is not a reply to a specific session.
 				// Hence, we do not set session specific params.
 				broadcastSessOverrides = &sessionOverrides{
 					origReq: msg.sessOverrides.origReq,
