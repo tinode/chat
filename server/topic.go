@@ -815,25 +815,7 @@ func (t *Topic) runLocal(hub *Hub) {
 					// Topic name may be different depending on the user to which the `sess` belongs.
 					t.maybeFixTopicName(msg, pssd.uid)
 
-					if sess.queueOutWithOverrides(msg, broadcastSessOverrides) {
-						// Update device map with the device ID which should NOT receive the notification.
-						if pushRcpt != nil {
-							if addr, ok := pushRcpt.To[pssd.uid]; ok {
-								if pssd.ref == nil {
-									// Count foreground sessions only, background sessions are automated
-									// and should not affect pushes to other devices.
-									addr.Delivered++
-								}
-								if sess.deviceID != "" {
-									// List of device IDs which already received the message. Push should
-									// skip them.
-									// The same device ID may appear twice.
-									addr.Devices = append(addr.Devices, sess.deviceID)
-								}
-								pushRcpt.To[pssd.uid] = addr
-							}
-						}
-					} else {
+					if !sess.queueOutWithOverrides(msg, broadcastSessOverrides) {
 						log.Printf("topic[%s]: connection stuck, detaching", t.name)
 						// The whole session is being dropped, so sessionLeave.userId is not set.
 						t.unreg <- &sessionLeave{sess: sess}
@@ -2947,14 +2929,18 @@ func (t *Topic) pushForData(fromUid types.Uid, data *MsgServerData) *push.Receip
 			ContentType: contentType,
 			Content:     data.Content}}
 
-	for uid := range t.perUser {
+	for uid, pud := range t.perUser {
 		// Send only to those who have notifications enabled, exclude the originating user.
 		if uid == fromUid {
 			continue
 		}
-		mode := t.perUser[uid].modeWant & t.perUser[uid].modeGiven
-		if mode.IsPresencer() && mode.IsReader() && !t.perUser[uid].deleted {
-			receipt.To[uid] = push.Recipient{}
+		mode := pud.modeWant & pud.modeGiven
+		if mode.IsPresencer() && mode.IsReader() && !pud.deleted {
+			receipt.To[uid] = push.Recipient{
+				// Number of sessions this data message will be delivered to.
+				// Push notifications sent to users with non-zero online sessions will be marked silent.
+				Delivered: pud.online,
+      }
 		}
 	}
 	if len(receipt.To) > 0 {
