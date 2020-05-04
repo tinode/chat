@@ -180,6 +180,7 @@ func (c *Cluster) sendPings() {
 		c.fo.activeNodes = activeNodes
 		c.rehash(activeNodes)
 		c.invalidateProxySubs()
+		c.garbageCollectProxySessions(activeNodes)
 
 		log.Println("cluster: initiating failover rehash for nodes", activeNodes)
 		globals.hub.rehash <- true
@@ -306,6 +307,7 @@ func (c *Cluster) run() {
 						ping.Leader, ping.Nodes, ping.Signature, c.ring.Signature())
 					c.rehash(ping.Nodes)
 					c.invalidateProxySubs()
+					c.garbageCollectProxySessions(ping.Nodes)
 					rehashSkipped = false
 
 					globals.hub.rehash <- true

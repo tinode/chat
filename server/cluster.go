@@ -1210,6 +1210,41 @@ func (c *Cluster) invalidateProxySubs() {
 	}
 }
 
+// garbageCollectProxySessions terminates all orphaned proxy sessions
+// (whose origin nodes are gone).
+func (c *Cluster) garbageCollectProxySessions(activeNodes []string) {
+	sessions := make(map[*Session]*Topic)
+	activeNodeMap := make(map[string]bool)
+	for _, n := range activeNodes {
+		activeNodeMap[n] = true
+	}
+	globals.hub.topics.Range(func(_, v interface{}) bool {
+		topic := v.(*Topic)
+		if topic.isProxy {
+			// Topic is a proxy. Continue.
+			return true
+		}
+		for s := range topic.sessions {
+			if s.isProxy() {
+				if _, originActive := activeNodeMap[s.clnode.name]; !originActive {
+					// Session's origin is no longer active.
+					sessions[s] = topic
+				}
+			}
+		}
+		return true
+	})
+	// Unsubscribe orphaned sessions from their master topics.
+	// Stop orphaned sessions.
+	for s, t := range sessions {
+		t.unreg <- &sessionLeave{
+			terminateProxyConnection: true,
+			sess:                     s,
+		}
+		s.stop <- nil
+	}
+}
+
 func (sess *Session) topicProxyWriteLoop(forTopic string) {
 	defer func() {
 		sess.closeRPC()
