@@ -642,7 +642,10 @@ func replyOfflineTopicGetSub(sess *Session, topic string, msg *ClientComMessage)
 			Want:  ssub.ModeWant.String(),
 			Given: ssub.ModeGiven.String(),
 			Mode:  (ssub.ModeGiven & ssub.ModeWant).String()}
-		sub.Private = ssub.Private
+		// Fnd is asymmetric: desc.private is a string, but sub.private is a []string.
+		if types.GetTopicCat(topic) != types.TopicCatFnd {
+			sub.Private = ssub.Private
+		}
 		sub.User = types.ParseUid(ssub.User).UserId()
 
 		if (ssub.ModeGiven & ssub.ModeWant).IsReader() && (ssub.ModeWant & ssub.ModeGiven).IsJoiner() {
