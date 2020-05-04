@@ -1226,8 +1226,7 @@ func (c *Cluster) garbageCollectProxySessions(activeNodes []string) {
 		}
 		for s := range topic.sessions {
 			if s.isProxy() {
-				_, originActive := activeNodeMap[s.clnode.name]
-				if !originActive {
+				if _, originActive := activeNodeMap[s.clnode.name]; !originActive {
 					// Session's origin is no longer active.
 					sessions[s] = topic
 				}
@@ -1238,11 +1237,10 @@ func (c *Cluster) garbageCollectProxySessions(activeNodes []string) {
 	// Unsubscribe orphaned sessions from their master topics.
 	// Stop orphaned sessions.
 	for s, t := range sessions {
-		leave := &sessionLeave{
+		t.unreg <- &sessionLeave{
 			terminateProxyConnection: true,
 			sess:                     s,
 		}
-		t.unreg <- leave
 		s.stop <- nil
 	}
 }
