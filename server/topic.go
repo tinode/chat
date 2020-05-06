@@ -325,7 +325,7 @@ func (t *Topic) runProxy(hub *Hub) {
 									done:      t.unreg,
 									meta:      t.meta,
 									uaChange:  t.uaChange})
-								if bkg, found := msg.ProxyResp.Params["background"]; found && bkg.(bool) {
+								if msg.ProxyResp.IsBackground {
 									// It's a background session.
 									// Make a fake sessionJoin packet and add it to deferred notification list.
 									// We only need a timestamp and a pointer to the session

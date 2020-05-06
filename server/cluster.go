@@ -246,8 +246,8 @@ type ProxyResponse struct {
 	SkipSid string
 	// User id of the affected user.
 	Uid types.Uid
-	// Response params.
-	Params map[string]interface{}
+	// It is a response to a request from a background session.
+	IsBackground bool
 }
 
 // Handle outbound node communication: read messages from the channel, forward to remote nodes.
@@ -1277,8 +1277,7 @@ func (sess *Session) topicProxyWriteLoop(forTopic string) {
 				case *ProxyJoin:
 					response.ProxyResp.OrigRequestType = ProxyRequestJoin
 					if req.Background {
-						response.ProxyResp.Params = make(map[string]interface{})
-						response.ProxyResp.Params["background"] = true
+						response.ProxyResp.IsBackground = true
 					}
 				case *ProxyLeave:
 					response.ProxyResp.OrigRequestType = ProxyRequestLeave
