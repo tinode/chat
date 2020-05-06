@@ -252,7 +252,7 @@ func (t *Topic) run(hub *Hub) {
 						}
 					}
 					// Update user's last online timestamp & user agent
-					if err := store.Users.UpdateLastSeen(asUid, mrs.userAgent, now); err != nil {
+					if err := store.Users.UpdateLastSeen(pssd.uid, mrs.userAgent, now); err != nil {
 						log.Println(err)
 					}
 				case types.TopicCatFnd:
@@ -261,7 +261,7 @@ func (t *Topic) run(hub *Hub) {
 				case types.TopicCatGrp:
 					if pud.online == 0 {
 						// User is going offline: notify online subscribers on 'me'
-						t.presSubsOnline("off", asUid.UserId(), nilPresParams,
+						t.presSubsOnline("off", pssd.uid.UserId(), nilPresParams,
 							&presFilters{filterIn: types.ModeRead}, "")
 					}
 				}
@@ -1784,7 +1784,7 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 					}
 
 					lastSeen := sub.GetLastSeen()
-					if !lastSeen.IsZero() {
+					if !lastSeen.IsZero() && !mts.Online {
 						mts.LastSeen = &MsgLastSeenInfo{
 							When:      &lastSeen,
 							UserAgent: sub.GetUserAgent()}
