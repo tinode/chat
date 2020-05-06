@@ -27,7 +27,7 @@ type configType struct {
 	UidKey []byte `json:"uid_key"`
 	// Maximum number of results to return from adapter.
 	MaxResults int `json:"max_results"`
-	// DB adapter name to use. Should be one of these specified in `Adapters`.
+	// DB adapter name to use. Should be one of those specified in `Adapters`.
 	UseAdapter string `json:"use_adapter"`
 	// Configurations for individual adapters.
 	Adapters map[string]json.RawMessage `json:"adapters"`
@@ -313,7 +313,7 @@ func (UsersObjMapper) UpdateLastSeen(uid types.Uid, userAgent string, when time.
 	return adp.UserUpdate(uid, map[string]interface{}{"LastSeen": when, "UserAgent": userAgent})
 }
 
-// Update is a generic user data update.
+// Update is a general-purpose update of user data.
 func (UsersObjMapper) Update(uid types.Uid, update map[string]interface{}) error {
 	if _, ok := update["UpdatedAt"]; !ok {
 		update["UpdatedAt"] = types.TimeNow()

@@ -190,6 +190,8 @@ type ProxyJoin struct {
 	Newsub bool
 	// True if this topic is created internally.
 	Internal bool
+	// True if it's a background join request.
+	Background bool
 }
 
 // ProxyBroadcast contains topic broadcast request parameters.
@@ -244,6 +246,8 @@ type ProxyResponse struct {
 	SkipSid string
 	// User id of the affected user.
 	Uid types.Uid
+	// It is a response to a request from a background session.
+	IsBackground bool
 }
 
 // Handle outbound node communication: read messages from the channel, forward to remote nodes.
@@ -1272,6 +1276,9 @@ func (sess *Session) topicProxyWriteLoop(forTopic string) {
 					panic("cluster: origReq is nil in session overrides")
 				case *ProxyJoin:
 					response.ProxyResp.OrigRequestType = ProxyRequestJoin
+					if req.Background {
+						response.ProxyResp.IsBackground = true
+					}
 				case *ProxyLeave:
 					response.ProxyResp.OrigRequestType = ProxyRequestLeave
 					if req.TerminateProxyConnection {

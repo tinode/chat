@@ -195,6 +195,10 @@ func (t *Topic) runProxy(hub *Hub) {
 	keepAlive := idleTopicTimeout
 	killTimer := time.NewTimer(time.Hour)
 	killTimer.Stop()
+
+	// Ticker for deferred presence notifications.
+	defrNotifTimer := time.NewTimer(time.Millisecond * 500)
+
 	for {
 		select {
 		case sreg := <-t.reg:
@@ -206,9 +210,10 @@ func (t *Topic) runProxy(hub *Hub) {
 				log.Printf("topic[%s] reg %+v", t.name, sreg)
 				msg := &ProxyTopicData{
 					JoinReq: &ProxyJoin{
-						Created:  sreg.created,
-						Newsub:   sreg.newsub,
-						Internal: sreg.internal,
+						Created:    sreg.created,
+						Newsub:     sreg.newsub,
+						Internal:   sreg.internal,
+						Background: sreg.pkt.Sub.Background,
 					},
 				}
 				log.Println("sessionJoin pkt = ", sreg.pkt, sreg.topic)
@@ -217,6 +222,7 @@ func (t *Topic) runProxy(hub *Hub) {
 					log.Println("proxy topic: route join request from proxy to master failed:", err)
 				}
 			}
+
 		case leave := <-t.unreg:
 			// Remove connection from topic; session may continue to function
 			log.Printf("t[%s] leave %+v", t.name, leave)
@@ -247,6 +253,7 @@ func (t *Topic) runProxy(hub *Hub) {
 			if err := globals.cluster.routeToTopicMaster(msg, nil, proxyLeave, t.name, leave.sess); err != nil {
 				log.Println("proxy topic: route broadcast request from proxy to master failed:", err)
 			}
+
 		case msg := <-t.broadcast:
 			// Content message intended for broadcasting to recipients
 			brdc := &ProxyTopicData{
@@ -261,6 +268,7 @@ func (t *Topic) runProxy(hub *Hub) {
 			if err := globals.cluster.routeToTopicMaster(nil, msg, brdc, t.name, msg.sess); err != nil {
 				log.Println("proxy topic: route broadcast request from proxy to master failed:", err)
 			}
+
 		case meta := <-t.meta:
 			// Request to get/set topic metadata
 			log.Printf("t[%s] meta %+v", t.name, meta)
@@ -272,6 +280,7 @@ func (t *Topic) runProxy(hub *Hub) {
 			if err := globals.cluster.routeToTopicMaster(meta.pkt, nil, req, t.name, meta.sess); err != nil {
 				log.Println("proxy topic: route meta request from proxy to master failed:", err)
 			}
+
 		case ua := <-t.uaChange:
 			// Process an update to user agent from one of the sessions
 			log.Printf("t[%s] uaChange %+v", t.name, ua)
@@ -283,6 +292,7 @@ func (t *Topic) runProxy(hub *Hub) {
 			if err := globals.cluster.routeToTopicMaster(nil, nil, req, t.name, nil); err != nil {
 				log.Println("proxy topic: route ua change request from proxy to master failed:", err)
 			}
+
 		case msg := <-t.proxy:
 			log.Printf("proxy topic [%s] msg: sid[%s] = %+v | proxyresp = %+v", t.name, msg.FromSID, msg.SrvMsg, msg.ProxyResp)
 
@@ -315,6 +325,21 @@ func (t *Topic) runProxy(hub *Hub) {
 									done:      t.unreg,
 									meta:      t.meta,
 									uaChange:  t.uaChange})
+								if msg.ProxyResp.IsBackground {
+									// It's a background session.
+									// Make a fake sessionJoin packet and add it to deferred notification list.
+									// We only need a timestamp and a pointer to the session
+									// in order for deferred notification processing to work correctly.
+									sreg := &sessionJoin{
+										sess: sess,
+										pkt: &ClientComMessage{
+											timestamp: types.TimeNow(),
+										},
+									}
+									pssd, _ := t.sessions[sess]
+									pssd.ref = t.defrNotif.PushFront(sreg)
+									t.sessions[sreg.sess] = pssd
+								}
 							}
 							killTimer.Stop()
 						} else {
@@ -346,6 +371,7 @@ func (t *Topic) runProxy(hub *Hub) {
 					log.Println("topic proxy: timeout")
 				}
 			}
+
 		case sd := <-t.exit:
 			log.Printf("t[%s] exit %+v", t.name, sd)
 			// Tell sessions to remove the topic
@@ -362,9 +388,13 @@ func (t *Topic) runProxy(hub *Hub) {
 				sd.done <- true
 			}
 			return
+
 		case <-killTimer.C:
 			// Topic timeout
 			hub.unreg <- &topicUnreg{topic: t.name}
+
+		case <-defrNotifTimer.C:
+			t.onDeferredNotificationTimer()
 		}
 	}
 }
@@ -598,7 +628,7 @@ func (t *Topic) runLocal(hub *Hub) {
 				case types.TopicCatGrp:
 					if !proxyTerminating && pud.online == 0 {
 						// User is going offline: notify online subscribers on 'me'
-						t.presSubsOnline("off", asUid.UserId(), nilPresParams,
+						t.presSubsOnline("off", pssd.uid.UserId(), nilPresParams,
 							&presFilters{filterIn: types.ModeRead}, "")
 					}
 				}
@@ -921,30 +951,7 @@ func (t *Topic) runLocal(hub *Hub) {
 			uaTimer.Reset(uaTimerDelay)
 
 		case <-defrNotifTimer.C:
-			// Handle deferred presence notifications from a successful service (background) subscription.
-			if t.isInactive() {
-				continue
-			}
-
-			// Process events older than this timestamp.
-			expiration := time.Now().Add(-deferredNotificationsTimeout)
-			// Iterate through the list until all sufficiently old events are processed.
-			for elem := t.defrNotif.Back(); elem != nil; elem = t.defrNotif.Back() {
-				sreg := elem.Value.(*sessionJoin)
-				if expiration.Before(sreg.pkt.timestamp) {
-					// All done. Remaining events are newer.
-					break
-				}
-				t.defrNotif.Remove(elem)
-				if pssd, ok := t.sessions[sreg.sess]; ok {
-					userData := t.perUser[pssd.uid]
-					userData.online++
-					t.perUser[pssd.uid] = userData
-					pssd.ref = nil
-					t.sessions[sreg.sess] = pssd
-				}
-				t.sendSubNotifications(types.ParseUserId(sreg.pkt.asUser), sreg)
-			}
+			t.onDeferredNotificationTimer()
 
 		case <-uaTimer.C:
 			// Publish user agent changes after a delay
@@ -1004,6 +1011,55 @@ func (t *Topic) runLocal(hub *Hub) {
 	}
 }
 
+// sendDeferredNotifications updates perUser accounting and fires due
+// deferred notifications for the provided sessions.
+func (t *Topic) sendDeferredNotifications(joinReqs []*sessionJoin) {
+	for _, sreg := range joinReqs {
+		uid := types.ParseUserId(sreg.pkt.asUser)
+		if !t.isProxy {
+			pud := t.perUser[uid]
+			pud.online++
+			t.perUser[uid] = pud
+		}
+		t.sendSubNotifications(uid, sreg)
+	}
+}
+
+// onDeferredNotificationTimer removes all due deferred notifications sessions
+// from the notifications queue and for each of these sessions:
+// * For regular topics, sends all due notifications.
+// * For proxy topics, routes the deferred notification requests to the master topic.
+func (t *Topic) onDeferredNotificationTimer() {
+	// Handle deferred presence notifications from a successful service (background) subscription.
+	if t.isInactive() {
+		return
+	}
+
+	// Process events older than this timestamp.
+	expiration := time.Now().Add(-deferredNotificationsTimeout)
+	var joinReqs []*sessionJoin
+	// Iterate through the list until all sufficiently old events are processed.
+	for elem := t.defrNotif.Back(); elem != nil; elem = t.defrNotif.Back() {
+		sreg := elem.Value.(*sessionJoin)
+		if expiration.Before(sreg.pkt.timestamp) {
+			// All done. Remaining events are newer.
+			break
+		}
+		t.defrNotif.Remove(elem)
+		if pssd, ok := t.sessions[sreg.sess]; ok && pssd.ref != nil {
+			pssd.ref = nil
+			t.sessions[sreg.sess] = pssd
+			joinReqs = append(joinReqs, sreg)
+		}
+	}
+	if t.isProxy {
+		// TODO: route expired background sessions to the master topic.
+		// t.routeToMasterTopic(joinReqs)
+	} else {
+		t.sendDeferredNotifications(joinReqs)
+	}
+}
+
 // sidFromSessionOrOverrides returns sesssion id from session overrides (if provided)
 // otherwise from session.
 func sidFromSessionOrOverrides(sess *Session, sessOverrides *sessionOverrides) string {
@@ -1037,7 +1093,9 @@ func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 	pssd, ok := t.sessions[sreg.sess]
 	if msgsub.Background && ok {
 		// Notifications are delayed.
-		pssd.ref = t.defrNotif.PushFront(sreg)
+		if !sreg.sess.isProxy() {
+			pssd.ref = t.defrNotif.PushFront(sreg)
+		}
 		t.sessions[sreg.sess] = pssd
 	} else {
 		// Remaining notifications are also sent immediately.
@@ -2122,7 +2180,7 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 					}
 
 					lastSeen := sub.GetLastSeen()
-					if !lastSeen.IsZero() {
+					if !lastSeen.IsZero() && !mts.Online {
 						mts.LastSeen = &MsgLastSeenInfo{
 							When:      &lastSeen,
 							UserAgent: sub.GetUserAgent()}
