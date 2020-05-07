@@ -1148,6 +1148,7 @@ func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 }
 
 // Send immediate presence notification in response to a subscription.
+// Send push notification to the P2P counterpart.
 // These notifications are always sent immediately even if background is requested.
 func (t *Topic) sendImmediateSubNotifications(asUid types.Uid, sreg *sessionJoin) {
 	pud := t.perUser[asUid]
@@ -1178,6 +1179,11 @@ func (t *Topic) sendImmediateSubNotifications(asUid types.Uid, sreg *sessionJoin
 				status += "+en"
 			}
 			t.presSingleUserOffline(uid2, status, nilPresParams, "", false)
+
+			// Also send a push notification to the other user.
+			if pushRcpt := t.pushForSub(asUid, uid2, pud2.modeWant, pud2.modeGiven, types.TimeNow()); pushRcpt != nil {
+				usersPush(pushRcpt)
+			}
 		}
 	}
 
@@ -1247,8 +1253,8 @@ func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin) error {
 
 	if !sreg.newsub && (t.cat == types.TopicCatP2P || t.cat == types.TopicCatGrp || t.cat == types.TopicCatSys) {
 		// Check if this is a new subscription.
-		_, found := t.perUser[asUid]
-		sreg.newsub = !found
+		pud, found := t.perUser[asUid]
+		sreg.newsub = !found || pud.deleted
 	}
 
 	var private interface{}
@@ -1710,14 +1716,12 @@ func (t *Topic) approveSub(h *Hub, sess *Session, asUid, target types.Uid, set *
 		usersRegisterUser(target, true)
 
 		// Send push notification for the new subscription.
-		pushRcpt := t.pushForSub(asUid, target, userData.modeWant, userData.modeGiven, now)
-		// TODO: maybe skip user's devices which were online when this event has happened.
-		if pushRcpt != nil {
+		if pushRcpt := t.pushForSub(asUid, target, userData.modeWant, userData.modeGiven, now); pushRcpt != nil {
+			// TODO: maybe skip user's devices which were online when this event has happened.
 			usersPush(pushRcpt)
 		}
 	} else {
 		// Action on an existing subscription: re-invite, change existing permission, confirm/decline request.
-
 		oldGiven = userData.modeGiven
 		oldWant = userData.modeWant
 
@@ -1741,6 +1745,8 @@ func (t *Topic) approveSub(h *Hub, sess *Session, asUid, target types.Uid, set *
 	// Access mode has changed.
 	var changed bool
 	if oldGiven != userData.modeGiven {
+		changed = true
+
 		oldReader := (oldWant & oldGiven).IsReader()
 		newReader := (userData.modeWant & userData.modeGiven).IsReader()
 		if oldReader && !newReader {
@@ -1751,7 +1757,11 @@ func (t *Topic) approveSub(h *Hub, sess *Session, asUid, target types.Uid, set *
 			usersUpdateUnread(target, t.lastID-userData.readID, true)
 		}
 		t.notifySubChange(target, asUid, oldWant, oldGiven, userData.modeWant, userData.modeGiven, sidFromSessionOrOverrides(sess, sessOverrides))
-		changed = true
+	}
+
+	if !userData.modeGiven.IsJoiner() {
+		// The user is banned from the topic.
+		t.evictUser(target, false, "")
 	}
 
 	return changed, nil

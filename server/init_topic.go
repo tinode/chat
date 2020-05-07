@@ -437,7 +437,7 @@ func initTopicP2P(t *Topic, sreg *sessionJoin) error {
 			}
 		}
 
-		// Publics is already swapped
+		// Publics are already swapped.
 		userData.public = sub1.GetPublic()
 		userData.topicName = userID2.UserId()
 		userData.modeWant = sub1.ModeWant
