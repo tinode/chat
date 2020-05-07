@@ -178,6 +178,8 @@ type ProxyTopicData struct {
 	LeaveReq *ProxyLeave
 	// User agent change request.
 	UAChangeReq *ProxyUAChange
+	// Send deferred notifications request.
+	DefrNotifReq *ProxyDeferredNotifications
 }
 
 // ProxyJoin contains topic join request parameters.
@@ -190,8 +192,6 @@ type ProxyJoin struct {
 	Newsub bool
 	// True if this topic is created internally.
 	Internal bool
-	// True if it's a background join request.
-	Background bool
 }
 
 // ProxyBroadcast contains topic broadcast request parameters.
@@ -228,6 +228,19 @@ type ProxyLeave struct {
 type ProxyUAChange struct {
 	// User agent string.
 	UserAgent string
+}
+
+// ProxyDeferredSession represents a background session
+// for which we want to send deferred notifications.
+type ProxyDeferredSession struct {
+	// User this session represents.
+	AsUser string
+}
+
+// ProxyDeferredNotifications contains a list of sessions
+// for which deferred notifications will be sent.
+type ProxyDeferredNotifications struct {
+	SendNotificationRequests []*ProxyDeferredSession
 }
 
 // Proxy request types.
@@ -530,7 +543,11 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 		origSid = ""
 		authLvl = auth.LevelNone
 	} else {
-		uid = msg.Sess.Uid
+		if msg.OnBehalfOf != "" {
+			uid = types.ParseUserId(msg.OnBehalfOf)
+		} else {
+			uid = msg.Sess.Uid
+		}
 		origSid = msg.Sess.Sid
 		authLvl = msg.Sess.AuthLvl
 	}
@@ -565,17 +582,18 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 				sid:     origSid,
 				rcptTo:  msg.RcptTo,
 				origReq: msg.TopicMsg.JoinReq,
+				cliMsg:  msg.CliMsg,
 			},
 		}
 		globals.hub.join <- sessionJoin
 	case msg.TopicMsg.LeaveReq != nil:
 		if t := globals.hub.topicGet(msg.RcptTo); t != nil {
 			leave := &sessionLeave{
-				id:                       msg.TopicMsg.LeaveReq.Id,
-				userId:                   msg.TopicMsg.LeaveReq.UserId,
-				unsub:                    msg.TopicMsg.LeaveReq.Unsub,
+				id:     msg.TopicMsg.LeaveReq.Id,
+				userId: msg.TopicMsg.LeaveReq.UserId,
+				unsub:  msg.TopicMsg.LeaveReq.Unsub,
 				terminateProxyConnection: msg.TopicMsg.LeaveReq.TerminateProxyConnection,
-				sess:                     sess,
+				sess: sess,
 				sessOverrides: &sessionOverrides{
 					sid:     origSid,
 					rcptTo:  msg.RcptTo,
@@ -644,6 +662,14 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 			t.uaChange <- msg.TopicMsg.UAChangeReq.UserAgent
 		} else {
 			log.Printf("cluster: UA change request for unknown topic %s", msg.RcptTo)
+		}
+
+	case msg.TopicMsg.DefrNotifReq != nil:
+		if t := globals.hub.topicGet(msg.RcptTo); t != nil {
+			// TODO: process request.
+			log.Printf("cluster: handling deferred notif req = %+v", msg.TopicMsg.DefrNotifReq.SendNotificationRequests)
+		} else {
+			log.Printf("cluster: deferred notifications request for unknown topic %s", msg.RcptTo)
 		}
 
 	default:
@@ -1243,7 +1269,7 @@ func (c *Cluster) garbageCollectProxySessions(activeNodes []string) {
 	for s, t := range sessions {
 		t.unreg <- &sessionLeave{
 			terminateProxyConnection: true,
-			sess:                     s,
+			sess: s,
 		}
 		s.stop <- nil
 	}
@@ -1276,9 +1302,10 @@ func (sess *Session) topicProxyWriteLoop(forTopic string) {
 					panic("cluster: origReq is nil in session overrides")
 				case *ProxyJoin:
 					response.ProxyResp.OrigRequestType = ProxyRequestJoin
-					if req.Background {
+					if srvMsg.sessOverrides.cliMsg.Sub.Background {
 						response.ProxyResp.IsBackground = true
 					}
+					response.ProxyResp.Uid = types.ParseUserId(srvMsg.sessOverrides.cliMsg.asUser)
 				case *ProxyLeave:
 					response.ProxyResp.OrigRequestType = ProxyRequestLeave
 					if req.TerminateProxyConnection {

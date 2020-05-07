@@ -210,10 +210,9 @@ func (t *Topic) runProxy(hub *Hub) {
 				log.Printf("topic[%s] reg %+v", t.name, sreg)
 				msg := &ProxyTopicData{
 					JoinReq: &ProxyJoin{
-						Created:    sreg.created,
-						Newsub:     sreg.newsub,
-						Internal:   sreg.internal,
-						Background: sreg.pkt.Sub.Background,
+						Created:  sreg.created,
+						Newsub:   sreg.newsub,
+						Internal: sreg.internal,
 					},
 				}
 				log.Println("sessionJoin pkt = ", sreg.pkt, sreg.topic)
@@ -319,7 +318,7 @@ func (t *Topic) runProxy(hub *Hub) {
 				case ProxyRequestJoin:
 					if sess != nil && msg.SrvMsg != nil && msg.SrvMsg.Ctrl != nil {
 						if msg.SrvMsg.Ctrl.Code < 300 {
-							if t.addSession(sess, sess.uid) {
+							if t.addSession(sess, msg.ProxyResp.Uid) {
 								sess.addSub(t.name, &Subscription{
 									broadcast: t.broadcast,
 									done:      t.unreg,
@@ -333,6 +332,7 @@ func (t *Topic) runProxy(hub *Hub) {
 									sreg := &sessionJoin{
 										sess: sess,
 										pkt: &ClientComMessage{
+											asUser:    msg.ProxyResp.Uid.UserId(),
 											timestamp: types.TimeNow(),
 										},
 									}
@@ -416,9 +416,7 @@ func (t *Topic) proxyFanoutBroadcast(msg *ServerComMessage) {
 		}
 		t.maybeFixTopicName(msg, pssd.uid)
 		log.Printf("broadcast fanout [%s] to %s", t.name, sess.sid)
-		if sess.queueOut(msg) {
-			// TODO: push notifications.
-		} else {
+		if !sess.queueOut(msg) {
 			log.Printf("topic[%s]: connection stuck, detaching", t.name)
 			t.unreg <- &sessionLeave{sess: sess}
 		}
@@ -1025,6 +1023,25 @@ func (t *Topic) sendDeferredNotifications(joinReqs []*sessionJoin) {
 	}
 }
 
+// routeDeferredNotificationsToMaster forwards deferred notification requests to the master topic.
+func (t *Topic) routeDeferredNotificationsToMaster(joinReqs []*sessionJoin) {
+	var sendReqs []*ProxyDeferredSession
+	for _, sreg := range joinReqs {
+		s := &ProxyDeferredSession{
+			AsUser: sreg.pkt.asUser,
+		}
+		sendReqs = append(sendReqs, s)
+	}
+	msg := &ProxyTopicData{
+		DefrNotifReq: &ProxyDeferredNotifications{
+			SendNotificationRequests: sendReqs,
+		},
+	}
+	if err := globals.cluster.routeToTopicMaster(nil, nil, msg, t.name, nil); err != nil {
+		log.Println("proxy topic: deferred notifications request from proxy to master failed:", err)
+	}
+}
+
 // onDeferredNotificationTimer removes all due deferred notifications sessions
 // from the notifications queue and for each of these sessions:
 // * For regular topics, sends all due notifications.
@@ -1055,6 +1072,7 @@ func (t *Topic) onDeferredNotificationTimer() {
 	if t.isProxy {
 		// TODO: route expired background sessions to the master topic.
 		// t.routeToMasterTopic(joinReqs)
+		t.routeDeferredNotificationsToMaster(joinReqs)
 	} else {
 		t.sendDeferredNotifications(joinReqs)
 	}
@@ -1230,7 +1248,8 @@ func (t *Topic) sendSubNotifications(asUid types.Uid, sreg *sessionJoin) {
 			// If this is the first session of the user in the topic.
 			// Notify other online group members that the user is online now.
 			t.presSubsOnline("on", asUid.UserId(), nilPresParams,
-				&presFilters{filterIn: types.ModeRead}, sreg.sess.sid)
+				&presFilters{filterIn: types.ModeRead},
+				sidFromSessionOrOverrides(sreg.sess, sreg.sessOverrides))
 		}
 	}
 }
@@ -3008,7 +3027,7 @@ func (t *Topic) pushForData(fromUid types.Uid, data *MsgServerData) *push.Receip
 				// Number of sessions this data message will be delivered to.
 				// Push notifications sent to users with non-zero online sessions will be marked silent.
 				Delivered: pud.online,
-      }
+			}
 		}
 	}
 	if len(receipt.To) > 0 {

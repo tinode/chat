@@ -563,8 +563,12 @@ type sessionOverrides struct {
 	sid string
 	// Topic id the session represents.
 	rcptTo string
-	// Incoming request pointer. Set for topic proxy requests.
+	// User agent of the original session.
+	userAgent string
+	// Incoming proxy topic request pointer. Set for topic proxy requests.
 	origReq interface{}
+	// Original client request.
+	cliMsg *ClientComMessage
 }
 
 // Deep copy
