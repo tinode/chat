@@ -210,9 +210,9 @@ func (t *Topic) runProxy(hub *Hub) {
 				log.Printf("topic[%s] reg %+v", t.name, sreg)
 				msg := &ProxyTopicData{
 					JoinReq: &ProxyJoin{
-						Created:    sreg.created,
-						Newsub:     sreg.newsub,
-						Internal:   sreg.internal,
+						Created:  sreg.created,
+						Newsub:   sreg.newsub,
+						Internal: sreg.internal,
 					},
 				}
 				log.Println("sessionJoin pkt = ", sreg.pkt, sreg.topic)
@@ -3027,7 +3027,7 @@ func (t *Topic) pushForData(fromUid types.Uid, data *MsgServerData) *push.Receip
 				// Number of sessions this data message will be delivered to.
 				// Push notifications sent to users with non-zero online sessions will be marked silent.
 				Delivered: pud.online,
-      }
+			}
 		}
 	}
 	if len(receipt.To) > 0 {

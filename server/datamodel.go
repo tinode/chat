@@ -567,7 +567,7 @@ type sessionOverrides struct {
 	userAgent string
 	// Incoming proxy topic request pointer. Set for topic proxy requests.
 	origReq interface{}
-  // Original client request.
+	// Original client request.
 	cliMsg *ClientComMessage
 }
 

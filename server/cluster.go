@@ -234,7 +234,7 @@ type ProxyUAChange struct {
 // for which we want to send deferred notifications.
 type ProxyDeferredSession struct {
 	// User this session represents.
-	AsUser    string
+	AsUser string
 }
 
 // ProxyDeferredNotifications contains a list of sessions
@@ -589,11 +589,11 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 	case msg.TopicMsg.LeaveReq != nil:
 		if t := globals.hub.topicGet(msg.RcptTo); t != nil {
 			leave := &sessionLeave{
-				id:                       msg.TopicMsg.LeaveReq.Id,
-				userId:                   msg.TopicMsg.LeaveReq.UserId,
-				unsub:                    msg.TopicMsg.LeaveReq.Unsub,
+				id:     msg.TopicMsg.LeaveReq.Id,
+				userId: msg.TopicMsg.LeaveReq.UserId,
+				unsub:  msg.TopicMsg.LeaveReq.Unsub,
 				terminateProxyConnection: msg.TopicMsg.LeaveReq.TerminateProxyConnection,
-				sess:                     sess,
+				sess: sess,
 				sessOverrides: &sessionOverrides{
 					sid:     origSid,
 					rcptTo:  msg.RcptTo,
@@ -1269,7 +1269,7 @@ func (c *Cluster) garbageCollectProxySessions(activeNodes []string) {
 	for s, t := range sessions {
 		t.unreg <- &sessionLeave{
 			terminateProxyConnection: true,
-			sess:                     s,
+			sess: s,
 		}
 		s.stop <- nil
 	}
