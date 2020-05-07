@@ -189,7 +189,6 @@ func PrepareNotifications(rcpt *push.Receipt, config *AndroidConfig) []MessageDa
 			skipDevices[deviceID] = struct{}{}
 		}
 	}
-
 	devices, count, err := store.Devices.GetAll(uids...)
 	if err != nil {
 		log.Println("fcm push: db error", err)

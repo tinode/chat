@@ -1320,7 +1320,6 @@ func (t *Topic) approveSub(h *Hub, sess *Session, asUid, target types.Uid, set *
 		}
 	} else {
 		// Action on an existing subscription: re-invite, change existing permission, confirm/decline request.
-
 		oldGiven = userData.modeGiven
 		oldWant = userData.modeWant
 
@@ -1344,6 +1343,8 @@ func (t *Topic) approveSub(h *Hub, sess *Session, asUid, target types.Uid, set *
 	// Access mode has changed.
 	var changed bool
 	if oldGiven != userData.modeGiven {
+		changed = true
+
 		oldReader := (oldWant & oldGiven).IsReader()
 		newReader := (userData.modeWant & userData.modeGiven).IsReader()
 		if oldReader && !newReader {
@@ -1355,7 +1356,11 @@ func (t *Topic) approveSub(h *Hub, sess *Session, asUid, target types.Uid, set *
 		}
 
 		t.notifySubChange(target, asUid, oldWant, oldGiven, userData.modeWant, userData.modeGiven, sess.sid)
-		changed = true
+	}
+
+	if !userData.modeGiven.IsJoiner() {
+		// The user is banned from the topic.
+		t.evictUser(target, false, "")
 	}
 
 	return changed, nil
