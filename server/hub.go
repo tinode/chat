@@ -192,9 +192,15 @@ func (h *Hub) run() {
 					perUser:   make(map[types.Uid]perUserData),
 					exit:      make(chan *shutDown, 1),
 				}
-				if t.isProxy {
-					t.proxy = make(chan *ClusterResp, 32)
-					t.masterNode = globals.cluster.ring.Get(t.name)
+				if globals.cluster != nil {
+					if t.isProxy {
+						t.proxy = make(chan *ClusterResp, 32)
+						t.masterNode = globals.cluster.ring.Get(t.name)
+					} else {
+						// It's a master topic. Make a channel for handling
+            // direct messages from the proxy.
+						t.master = make(chan interface{}, 8)
+					}
 				}
 				// Topic is created in suspended state because it's not yet configured.
 				t.markPaused(true)
