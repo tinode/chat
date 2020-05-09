@@ -111,6 +111,8 @@ type Topic struct {
 	exit chan *shutDown
 	// Channel to receive topic master responses (used only by proxy topics).
 	proxy chan *ClusterResp
+	// Channel to receive topic proxy service requests, e.g. sending deferred notifications.
+	master chan interface{}
 
 	// Flag which tells topic lifecycle status: new, ready, paused, marked for deletion.
 	status int32
@@ -197,7 +199,7 @@ func (t *Topic) runProxy(hub *Hub) {
 	killTimer.Stop()
 
 	// Ticker for deferred presence notifications.
-	defrNotifTimer := time.NewTimer(time.Millisecond * 500)
+	defrNotifTimer := time.NewTicker(time.Millisecond * 500)
 
 	for {
 		select {
@@ -952,6 +954,16 @@ func (t *Topic) runLocal(hub *Hub) {
 			currentUA = ua
 			uaTimer.Reset(uaTimerDelay)
 
+		case payload := <-t.master:
+			// Direct communication from proxy to master.
+			switch msg := payload.(type) {
+			case []*sessionJoin:
+				// Deferred notifications request.
+				t.sendDeferredNotifications(msg)
+			default:
+				log.Panicf("topic[%s] unrecognized master topic service request: %+v", msg)
+			}
+
 		case <-defrNotifTimer.C:
 			t.onDeferredNotificationTimer()
 
@@ -1032,7 +1044,9 @@ func (t *Topic) routeDeferredNotificationsToMaster(joinReqs []*sessionJoin) {
 	var sendReqs []*ProxyDeferredSession
 	for _, sreg := range joinReqs {
 		s := &ProxyDeferredSession{
-			AsUser: sreg.pkt.asUser,
+			AsUser:    sreg.pkt.asUser,
+			Sid:       sreg.sess.sid,
+			UserAgent: sreg.sess.userAgent,
 		}
 		sendReqs = append(sendReqs, s)
 	}
@@ -1073,9 +1087,10 @@ func (t *Topic) onDeferredNotificationTimer() {
 			joinReqs = append(joinReqs, sreg)
 		}
 	}
+	if len(joinReqs) == 0 {
+		return
+	}
 	if t.isProxy {
-		// TODO: route expired background sessions to the master topic.
-		// t.routeToMasterTopic(joinReqs)
 		t.routeDeferredNotificationsToMaster(joinReqs)
 	} else {
 		t.sendDeferredNotifications(joinReqs)
@@ -1234,7 +1249,13 @@ func (t *Topic) sendSubNotifications(asUid types.Uid, sreg *sessionJoin) {
 				log.Println("topic: failed to load contacts", t.name, err.Error())
 			}
 			// User online: notify users of interest without forcing response (no +en here).
-			t.presUsersOfInterest("on", sreg.sess.userAgent)
+			var userAgent string
+			if sreg.sessOverrides != nil {
+				userAgent = sreg.sessOverrides.userAgent
+			} else {
+				userAgent = sreg.sess.userAgent
+			}
+			t.presUsersOfInterest("on", userAgent)
 		}
 
 	case types.TopicCatGrp:

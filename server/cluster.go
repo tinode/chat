@@ -235,6 +235,10 @@ type ProxyUAChange struct {
 type ProxyDeferredSession struct {
 	// User this session represents.
 	AsUser string
+	// Session id.
+	Sid string
+	// Session user agent.
+	UserAgent string
 }
 
 // ProxyDeferredNotifications contains a list of sessions
@@ -666,8 +670,22 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 
 	case msg.TopicMsg.DefrNotifReq != nil:
 		if t := globals.hub.topicGet(msg.RcptTo); t != nil {
-			// TODO: process request.
-			log.Printf("cluster: handling deferred notif req = %+v", msg.TopicMsg.DefrNotifReq.SendNotificationRequests)
+			var notifReqs []*sessionJoin
+			for _, req := range msg.TopicMsg.DefrNotifReq.SendNotificationRequests {
+				// Create fake sessoinJoin requests (that's the interface that the code
+				// that sends notifications wants.
+				s := &sessionJoin{
+					pkt: &ClientComMessage{
+						asUser: req.AsUser,
+					},
+					sessOverrides: &sessionOverrides{
+						sid:       req.Sid,
+						userAgent: req.UserAgent,
+					},
+				}
+				notifReqs = append(notifReqs, s)
+			}
+			t.master <- notifReqs
 		} else {
 			log.Printf("cluster: deferred notifications request for unknown topic %s", msg.RcptTo)
 		}
