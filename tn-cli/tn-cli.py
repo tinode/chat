@@ -364,7 +364,8 @@ def subMsg(id, cmd, ignored):
             desc=pb.SetDesc(public=cmd.public, private=cmd.private,
                 default_acs=pb.DefaultAcsMode(auth=cmd.auth, anon=cmd.anon)),
             sub=pb.SetSub(mode=cmd.mode),
-            tags=cmd.tags.split(",") if cmd.tags else None), get_query=cmd.get_query), on_behalf_of=tn_globals.DefaultUser)
+            tags=cmd.tags.split(",") if cmd.tags else None),
+        get_query=cmd.get_query, background=cmd.bkg), on_behalf_of=tn_globals.DefaultUser)
 
 # {leave}
 def leaveMsg(id, cmd, ignored):
@@ -605,6 +606,7 @@ def parse_cmd(parts):
         parser.add_argument('--mode', default=None, help='new value of access mode')
         parser.add_argument('--tags', default=None, help='tags for topic discovery, comma separated list without spaces')
         parser.add_argument('--get-query', default=None, help='query for topic metadata or messages, comma separated list without spaces')
+        parser.add_argument('--bkg', action='store_true', help='subscribe without immediate announcement of presence')
     elif parts[0] == "leave":
         parser = argparse.ArgumentParser(prog=parts[0], description='Detach or unsubscribe from topic')
         parser.add_argument('topic', nargs='?', default=argparse.SUPPRESS, help='topic to detach from')
