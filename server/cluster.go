@@ -675,7 +675,7 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 				// Create fake sessoinJoin requests (that's the interface that the code
 				// that sends notifications wants.
 				s := &sessionJoin{
-					pkt:      &ClientComMessage{
+					pkt: &ClientComMessage{
 						asUser: req.AsUser,
 					},
 					sessOverrides: &sessionOverrides{

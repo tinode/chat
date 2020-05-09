@@ -198,7 +198,7 @@ func (h *Hub) run() {
 						t.masterNode = globals.cluster.ring.Get(t.name)
 					} else {
 						// It's a master topic. Make a channel for handling
-            // direct messages from the proxy.
+						// direct messages from the proxy.
 						t.master = make(chan interface{}, 8)
 					}
 				}
