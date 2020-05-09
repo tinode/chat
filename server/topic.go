@@ -818,8 +818,12 @@ func (t *Topic) runLocal(hub *Hub) {
 							continue
 						}
 
-						// Notification addressed to a single user only
+						// Notification addressed to a single user only.
 						if msg.Pres.SingleUser != "" && pssd.uid.UserId() != msg.Pres.SingleUser {
+							continue
+						}
+						// Notification should skip a single user.
+						if msg.Pres.ExcludeUser != "" && pssd.uid.UserId() == msg.Pres.ExcludeUser {
 							continue
 						}
 
@@ -989,7 +993,7 @@ func (t *Topic) runLocal(hub *Hub) {
 			} else if sd.reason == StopRehashing {
 				// Must send individual messages to sessions because normal sending through the topic's
 				// broadcast channel won't work - it will be shut down too soon.
-				t.presSubsOnlineDirect("term")
+				t.presSubsOnlineDirect("term", nilPresParams, nilPresFilters, "")
 			}
 			// In case of a system shutdown don't bother with notifications. They won't be delivered anyway.
 
@@ -1296,7 +1300,7 @@ func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin) error {
 	var err error
 	var changed bool
 	// Create new subscription or modify an existing one.
-	if changed, err = t.requestSub(
+	if changed, err = t.thisUserSub(
 		h, sreg.sess, asUid, asLvl, sreg.pkt.id, mode, private, msgsub.Background, sreg.sessOverrides); err != nil {
 		return err
 	}
@@ -1349,7 +1353,7 @@ func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin) error {
 // C. User is responding to an earlier invite (modeWant was "N" in subscription)
 // D. User is already subscribed, changing modeWant
 // E. User is accepting ownership transfer (requesting ownership transfer is not permitted)
-func (t *Topic) requestSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Level,
+func (t *Topic) thisUserSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Level,
 	pktID, want string, private interface{}, background bool, sessOverrides *sessionOverrides) (bool, error) {
 
 	now := types.TimeNow()
@@ -1617,13 +1621,13 @@ func (t *Topic) requestSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Le
 	return changed, nil
 }
 
-// approveSub processes a request to initiate an invite or approve a subscription request from another user.
+// anotherUserSub processes a request to initiate an invite or approve a subscription request from another user.
 // Returns changed == true if user's access mode has changed.
 // Handle these cases:
 // A. Sharer or Approver is inviting another user for the first time (no prior subscription)
 // B. Sharer or Approver is re-inviting another user (adjusting modeGiven, modeWant is still Unset)
 // C. Approver is changing modeGiven for another user, modeWant != Unset
-func (t *Topic) approveSub(h *Hub, sess *Session, asUid, target types.Uid, set *MsgClientSet, sessOverrides *sessionOverrides) (bool, error) {
+func (t *Topic) anotherUserSub(h *Hub, sess *Session, asUid, target types.Uid, set *MsgClientSet, sessOverrides *sessionOverrides) (bool, error) {
 
 	now := types.TimeNow()
 	toriginal := t.original(asUid)
@@ -2322,10 +2326,10 @@ func (t *Topic) replySetSub(h *Hub, sess *Session, pkt *ClientComMessage, sessOv
 	var changed bool
 	if target == asUid {
 		// Request new subscription or modify own subscription
-		changed, err = t.requestSub(h, sess, asUid, asLvl, pkt.id, set.Sub.Mode, nil, false, nil)
+		changed, err = t.thisUserSub(h, sess, asUid, asLvl, pkt.id, set.Sub.Mode, nil, false, nil)
 	} else {
 		// Request to approve/change someone's subscription
-		changed, err = t.approveSub(h, sess, asUid, target, set, sessOverrides)
+		changed, err = t.anotherUserSub(h, sess, asUid, target, set, sessOverrides)
 	}
 	if err != nil {
 		return err
@@ -2898,12 +2902,19 @@ func (t *Topic) evictUser(uid types.Uid, unsub bool, skip string) {
 // 1. New subscription
 // 2. Deleted subscription
 // 3. Permissions changed
-func (t *Topic) notifySubChange(uid, actor types.Uid, oldWant, oldGiven,
-	newWant, newGiven types.AccessMode, skip string) {
+// Sending to
+// (a) Topic admis online on topic itself.
+// (b) Topic admins offline on 'me' if approval is needed.
+// (c) If subscription is deleted, 'gone' to target.
+// (d) 'off' to topic members online if deleted or muted.
+// (e) To target user.
+func (t *Topic) notifySubChange(uid, actor types.Uid,
+	oldWant, oldGiven, newWant, newGiven types.AccessMode, skip string) {
 
 	unsub := newWant == types.ModeUnset || newGiven == types.ModeUnset
 
 	target := uid.UserId()
+
 	dWant := types.ModeNone.String()
 	if newWant.IsDefined() {
 		if oldWant.IsDefined() && !oldWant.IsZero() {
@@ -2927,19 +2938,19 @@ func (t *Topic) notifySubChange(uid, actor types.Uid, oldWant, oldGiven,
 		dWant:  dWant,
 		dGiven: dGiven}
 
+	filter := &presFilters{
+		filterIn:    types.ModeCSharer,
+		excludeUser: target}
+
 	// Announce the change in permissions to the admins who are online in the topic, exclude the target
 	// and exclude the actor's session.
-	t.presSubsOnline("acs", target, params,
-		&presFilters{filterIn: types.ModeCSharer, excludeUser: target},
-		skip)
+	t.presSubsOnline("acs", target, params, filter, skip)
 
 	// If it's a new subscription or if the user asked for permissions in excess of what was granted,
 	// announce the request to topic admins on 'me' so they can approve the request. The notification
 	// is not sent to the target user or the actor's session.
 	if newWant.BetterThan(newGiven) || oldWant == types.ModeNone {
-		t.presSubsOffline("acs", params,
-			&presFilters{filterIn: types.ModeCSharer, excludeUser: target},
-			skip, true)
+		t.presSubsOffline("acs", params, filter, skip, true)
 	}
 
 	// Handling of muting/unmuting.
@@ -2956,11 +2967,7 @@ func (t *Topic) notifySubChange(uid, actor types.Uid, oldWant, oldGiven,
 			presSingleUserOfflineOffline(uid2, target, "off", nilPresParams, "")
 		} else if t.cat == types.TopicCatGrp {
 			// Notify all sharers that the user is offline now.
-			t.presSubsOnline("off", uid.UserId(), nilPresParams,
-				&presFilters{
-					filterIn:    types.ModeCSharer,
-					excludeUser: target},
-				skip)
+			t.presSubsOnline("off", uid.UserId(), nilPresParams, filter, skip)
 		}
 	} else if !(newWant & newGiven).IsPresencer() && (oldWant & oldGiven).IsPresencer() {
 		// Subscription just muted.
@@ -2987,9 +2994,12 @@ func (t *Topic) notifySubChange(uid, actor types.Uid, oldWant, oldGiven,
 		}
 	}
 
-	// Notify requester's other sessions that permissions have changed.
+	// Notify target that permissions have changed.
 	if !unsub {
-		t.presSingleUserOffline(uid, "acs", params, skip, false)
+		// Notify sessions online in the topic.
+		t.presSubsOnlineDirect("acs", params, &presFilters{singleUser: target}, skip)
+		// Notify target's other sessions on 'me'.
+		t.presSingleUserOffline(uid, "acs", params, skip, true)
 	}
 }
 

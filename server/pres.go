@@ -265,8 +265,7 @@ func presUsersOfInterestOffline(uid types.Uid, subs []types.Subscription, what s
 // Case M: Topic unaccessible (cluster failure), "left" to everyone currently online
 // Case V.2: Messages soft deleted, "del" to one user only
 // Case W.2: Messages hard-deleted, "del"
-func (t *Topic) presSubsOnline(what, src string, params *presParams,
-	pf *presFilters, skipSid string) {
+func (t *Topic) presSubsOnline(what, src string, params *presParams, filter *presFilters, skipSid string) {
 
 	// If affected user is the same as the user making the change, clear 'who'
 	actor := params.actor
@@ -283,8 +282,8 @@ func (t *Topic) presSubsOnline(what, src string, params *presParams,
 		Pres: &MsgServerPres{Topic: t.xoriginal, What: what, Src: src,
 			Acs: params.packAcs(), AcsActor: actor, AcsTarget: target,
 			SeqId: params.seqID, DelId: params.delID, DelSeq: params.delSeq,
-			FilterIn: int(pf.filterIn), FilterOut: int(pf.filterOut),
-			SingleUser: pf.singleUser, ExcludeUser: pf.excludeUser},
+			FilterIn: int(filter.filterIn), FilterOut: int(filter.filterOut),
+			SingleUser: filter.singleUser, ExcludeUser: filter.excludeUser},
 		rcptto: t.name, skipSid: skipSid}
 }
 
@@ -306,14 +305,31 @@ func (t *Topic) userIsPresencer(uid types.Uid) bool {
 	return (want & given).IsPresencer()
 }
 
-// Send presence notification to attached sessions directly, without routing though topic.
-func (t *Topic) presSubsOnlineDirect(what string) {
-	msg := &ServerComMessage{Pres: &MsgServerPres{Topic: t.xoriginal, What: what}}
+// Send notification to attached sessions directly, without routing though topic.
+// This is needed because the session(s) may be already disconnected by the time it's routed through topic.
+func (t *Topic) presSubsOnlineDirect(what string, params *presParams, filter *presFilters, skipSid string) {
+	msg := &ServerComMessage{
+		Pres: &MsgServerPres{Topic: t.xoriginal, What: what, Acs: params.packAcs(),
+			SeqId: params.seqID, DelId: params.delID, DelSeq: params.delSeq}}
 
 	for sess := range t.sessions {
-		// Check presence filters
-		if !t.userIsPresencer(sess.uid) && what != "gone" && what != "acs" {
+		if skipSid == sess.sid {
 			continue
+		}
+
+		pud := t.perUser[sess.uid]
+		// Check presence filters
+		if pud.deleted || (what != "acs" && what != "gone" && !presOfflineFilter(pud.modeGiven&pud.modeWant, filter)) {
+			continue
+		}
+
+		if filter != nil {
+			if filter.singleUser != "" && filter.singleUser != sess.uid.UserId() {
+				continue
+			}
+			if filter.excludeUser != "" && filter.excludeUser == sess.uid.UserId() {
+				continue
+			}
 		}
 
 		if t.cat == types.TopicCatP2P {
@@ -376,6 +392,8 @@ func (t *Topic) presSubsOffline(what string, params *presParams, filter *presFil
 			Pres: &MsgServerPres{Topic: "me", What: what, Src: t.original(uid),
 				Acs: params.packAcs(), AcsActor: actor, AcsTarget: target,
 				SeqId: params.seqID, DelId: params.delID,
+				FilterIn: int(filter.filterIn), FilterOut: int(filter.filterOut),
+				SingleUser: filter.singleUser, ExcludeUser: filter.excludeUser,
 				SkipTopic: skipTopic},
 			rcptto: user, skipSid: skipSid}
 	}
@@ -523,8 +541,6 @@ func (t *Topic) presPubMessageDelete(uid types.Uid, delID int, list []MsgDelRang
 
 // Filter by permissions: mode.IsPresencer() AND mode has at least some
 // bits specified in 'filter' (or filter is ModeNone).
-//
-// Filtering must happen here because receiving 'me' has no access to sender's permissions.
 func presOfflineFilter(mode types.AccessMode, pf *presFilters) bool {
 	return mode.IsPresencer() &&
 		(pf == nil ||
