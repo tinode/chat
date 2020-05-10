@@ -337,7 +337,7 @@ func (t *Topic) run(hub *Hub) {
 
 				// Message sent: notify offline 'R' subscrbers on 'me'
 				t.presSubsOffline("msg", &presParams{seqID: t.lastID, actor: msg.Data.From},
-					&presFilters{filterIn: types.ModeRead}, "", true)
+					&presFilters{filterIn: types.ModeRead}, nilPresFilters, "", true)
 
 				// Tell the plugins that a message was accepted for delivery
 				pluginMessage(msg.Data, plgActCreate)
@@ -648,7 +648,7 @@ func (t *Topic) run(hub *Hub) {
 				uaTimer.Stop()
 				t.presUsersOfInterest("off", currentUA)
 			} else if t.cat == types.TopicCatGrp {
-				t.presSubsOffline("off", nilPresParams, nilPresFilters, "", false)
+				t.presSubsOffline("off", nilPresParams, nilPresFilters, nilPresFilters, "", false)
 			}
 
 		case sd := <-t.exit:
@@ -660,7 +660,7 @@ func (t *Topic) run(hub *Hub) {
 
 			if sd.reason == StopDeleted {
 				if t.cat == types.TopicCatGrp {
-					t.presSubsOffline("gone", nilPresParams, nilPresFilters, "", false)
+					t.presSubsOffline("gone", nilPresParams, nilPresFilters, nilPresFilters, "", false)
 				}
 				// P2P users get "off+remove" earlier in the process
 
@@ -843,7 +843,7 @@ func (t *Topic) sendSubNotifications(asUid types.Uid, sreg *sessionJoin) {
 			}
 
 			// Notify topic subscribers that the topic is online now.
-			t.presSubsOffline(status, nilPresParams, nilPresFilters, "", false)
+			t.presSubsOffline(status, nilPresParams, nilPresFilters, nilPresFilters, "", false)
 		} else if pud.online == 1 {
 			// If this is the first session of the user in the topic.
 			// Notify other online group members that the user is online now.
@@ -1615,7 +1615,8 @@ func (t *Topic) replySetDesc(sess *Session, asUid types.Uid, set *MsgClientSet) 
 			} else {
 				// Notify all subscribers on 'me' except the user who made the change.
 				// He will be notified separately (see below).
-				t.presSubsOffline("upd", nilPresParams, &presFilters{excludeUser: asUid.UserId()}, sess.sid, false)
+				filter := &presFilters{excludeUser: asUid.UserId()}
+				t.presSubsOffline("upd", nilPresParams, filter, filter, sess.sid, false)
 			}
 
 			t.updated = now
@@ -2258,7 +2259,7 @@ func (t *Topic) replyDelMsg(sess *Session, asUid types.Uid, del *MsgClientDel) e
 		params := &presParams{delID: t.delID, delSeq: dr, actor: asUid.UserId()}
 		filters := &presFilters{filterIn: types.ModeRead}
 		t.presSubsOnline("del", params.actor, params, filters, sess.sid)
-		t.presSubsOffline("del", params, filters, sess.sid, true)
+		t.presSubsOffline("del", params, filters, nilPresFilters, sess.sid, true)
 	} else {
 		pud := t.perUser[asUid]
 		pud.delID = t.delID
@@ -2483,7 +2484,7 @@ func (t *Topic) evictUser(uid types.Uid, unsub bool, skip string) {
 // 2. Deleted subscription
 // 3. Permissions changed
 // Sending to
-// (a) Topic admis online on topic itself.
+// (a) Topic admins online on topic itself.
 // (b) Topic admins offline on 'me' if approval is needed.
 // (c) If subscription is deleted, 'gone' to target.
 // (d) 'off' to topic members online if deleted or muted.
@@ -2530,7 +2531,7 @@ func (t *Topic) notifySubChange(uid, actor types.Uid,
 	// announce the request to topic admins on 'me' so they can approve the request. The notification
 	// is not sent to the target user or the actor's session.
 	if newWant.BetterThan(newGiven) || oldWant == types.ModeNone {
-		t.presSubsOffline("acs", params, filter, skip, true)
+		t.presSubsOffline("acs", params, filter, filter, skip, true)
 	}
 
 	// Handling of muting/unmuting.
