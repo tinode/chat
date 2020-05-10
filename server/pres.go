@@ -363,7 +363,8 @@ func (s *Session) presTermDirect(subs []string) {
 // Case L.4: Admin altered GIVEN, "acs" to admins
 // Case T: message sent, "msg" to all with 'R'
 // Case W.1: messages hard-deleted, "del" to all with 'R'
-func (t *Topic) presSubsOffline(what string, params *presParams, filter *presFilters,
+func (t *Topic) presSubsOffline(what string, params *presParams,
+	filterSource *presFilters, filterTarget *presFilters,
 	skipSid string, offlineOnly bool) {
 
 	var skipTopic string
@@ -371,9 +372,9 @@ func (t *Topic) presSubsOffline(what string, params *presParams, filter *presFil
 		skipTopic = t.name
 	}
 
-	for uid := range t.perUser {
-		if t.perUser[uid].deleted || (what != "acs" && what != "gone" &&
-			!presOfflineFilter(t.perUser[uid].modeGiven&t.perUser[uid].modeWant, filter)) {
+	for uid, pud := range t.perUser {
+		if pud.deleted || (what != "acs" && what != "gone" &&
+			!presOfflineFilter(pud.modeGiven&pud.modeWant, filterSource)) {
 			continue
 		}
 
@@ -392,8 +393,8 @@ func (t *Topic) presSubsOffline(what string, params *presParams, filter *presFil
 			Pres: &MsgServerPres{Topic: "me", What: what, Src: t.original(uid),
 				Acs: params.packAcs(), AcsActor: actor, AcsTarget: target,
 				SeqId: params.seqID, DelId: params.delID,
-				FilterIn: int(filter.filterIn), FilterOut: int(filter.filterOut),
-				SingleUser: filter.singleUser, ExcludeUser: filter.excludeUser,
+				FilterIn: int(filterTarget.filterIn), FilterOut: int(filterTarget.filterOut),
+				SingleUser: filterTarget.singleUser, ExcludeUser: filterTarget.excludeUser,
 				SkipTopic: skipTopic},
 			rcptto: user, skipSid: skipSid}
 	}
