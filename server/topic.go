@@ -2484,7 +2484,7 @@ func (t *Topic) evictUser(uid types.Uid, unsub bool, skip string) {
 // 2. Deleted subscription
 // 3. Permissions changed
 // Sending to
-// (a) Topic admis online on topic itself.
+// (a) Topic admins online on topic itself.
 // (b) Topic admins offline on 'me' if approval is needed.
 // (c) If subscription is deleted, 'gone' to target.
 // (d) 'off' to topic members online if deleted or muted.
