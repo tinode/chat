@@ -8,6 +8,7 @@
 		- [WebSocket](#websocket)
 		- [Long Polling](#long-polling)
 		- [Out of Band Large Files](#out-of-band-large-files)
+		- [Running Behind a Reverse Proxy](#running-behind-a-reverse-proxy)
 	- [Users](#users)
 		- [Authentication](#authentication)
 			- [Creating an Account](#creating-an-account)
@@ -139,6 +140,10 @@ Server allows connections from all origins, i.e. `Access-Control-Allow-Origin: *
 ### Out of Band Large Files
 
 Large files are sent out of band using `HTTP POST` as `Content-Type: multipart/form-data`. See [below](#out-of-band-handling-of-large-files) for details.
+
+### Running Behind a Reverse Proxy
+
+Tinode server can be set up to run behind a reverse proxy, such as NGINX. For efficiency it can accept client connections from Unix sockets by setting `listen` and/or `grpc_listen` config parameters to the path of the Unix socket file, e.g. `unix:/run/tinode.sock`. The server may also be configured to read peer's IP address from `X-Forwarded-For` HTTP header by setting `use_x_forwarded_for` config parameter to `true`.
 
 ## Users
 
