@@ -199,7 +199,7 @@ func (h *Hub) run() {
 					} else {
 						// It's a master topic. Make a channel for handling
 						// direct messages from the proxy.
-						t.master = make(chan interface{}, 8)
+						t.master = make(chan *topicMasterRequest, 8)
 					}
 				}
 				// Topic is created in suspended state because it's not yet configured.

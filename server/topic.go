@@ -112,7 +112,7 @@ type Topic struct {
 	// Channel to receive topic master responses (used only by proxy topics).
 	proxy chan *ClusterResp
 	// Channel to receive topic proxy service requests, e.g. sending deferred notifications.
-	master chan interface{}
+	master chan *topicMasterRequest
 
 	// Flag which tells topic lifecycle status: new, ready, paused, marked for deletion.
 	status int32
@@ -179,6 +179,15 @@ type shutDown struct {
 	done chan<- bool
 	// Topic is being deleted as opposite to total system shutdown
 	reason int
+}
+
+// Direct communication from proxy topic to master and service requests.
+type topicMasterRequest struct {
+	// Deferred notifications request (list of sessions to notify).
+	deferredNotificationsRequest []*sessionJoin
+	// List of proxied user ids and the counts of proxied origin sessions for each uid.
+	// Required for accounting.
+	proxySessionCleanUp map[types.Uid]int
 }
 
 var nilPresParams = &presParams{}
@@ -519,6 +528,19 @@ func (t *Topic) computePerUserAcsUnion() {
 	}
 	t.modeWantUnion = wantUnion
 	t.modeGivenUnion = givenUnion
+}
+
+// fixUpUserCounts decrements online counts for the provided user ids.
+func (t *Topic) fixUpUserCounts(userCounts map[types.Uid]int) {
+	for uid, decrementBy := range userCounts {
+		if pud, ok := t.perUser[uid]; ok {
+			pud.online -= decrementBy
+			t.perUser[uid] = pud
+			if pud.online < 0 {
+				log.Printf("topic[%s]: invalid online count for user %s", t.name, uid)
+			}
+		}
+	}
 }
 
 func (t *Topic) runLocal(hub *Hub) {
@@ -954,12 +976,14 @@ func (t *Topic) runLocal(hub *Hub) {
 			currentUA = ua
 			uaTimer.Reset(uaTimerDelay)
 
-		case payload := <-t.master:
+		case msg := <-t.master:
 			// Direct communication from proxy to master.
-			switch msg := payload.(type) {
-			case []*sessionJoin:
+			switch {
+			case msg.deferredNotificationsRequest != nil:
 				// Deferred notifications request.
-				t.sendDeferredNotifications(msg)
+				t.sendDeferredNotifications(msg.deferredNotificationsRequest)
+			case msg.proxySessionCleanUp != nil:
+				t.fixUpUserCounts(msg.proxySessionCleanUp)
 			default:
 				log.Panicf("topic[%s] unrecognized master topic service request: %+v", msg)
 			}

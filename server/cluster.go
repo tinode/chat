@@ -685,7 +685,7 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 				}
 				notifReqs = append(notifReqs, s)
 			}
-			t.master <- notifReqs
+			t.master <- &topicMasterRequest{deferredNotificationsRequest: notifReqs}
 		} else {
 			log.Printf("cluster: deferred notifications request for unknown topic %s", msg.RcptTo)
 		}
@@ -927,22 +927,6 @@ func (c *Cluster) getClusterReq(cliMsg *ClientComMessage, srvMsg *ServerComMessa
 	return req
 }
 
-// Forward client request message from the Session Proxy to the Master (cluster node which owns the topic)
-func (c *Cluster) routeToTopic(msg *ClientComMessage, topic string, sess *Session) error {
-	// Find the cluster node which owns the topic, then forward to it.
-	n := c.nodeForTopic(topic)
-	if n == nil {
-		return errors.New("node for topic not found")
-	}
-
-	if sess.getRemoteSub(topic) == nil {
-		log.Printf("No remote subscription (yet) for topic '%s', sid '%s'", topic, sess.sid)
-	}
-
-	req := c.getClusterReq(msg, nil, nil, topic, sess)
-	return n.forward(req)
-}
-
 // Forward client request message from the Topic Proxy to the Topic Master (cluster node which owns the topic)
 func (c *Cluster) routeToTopicMaster(cliMsg *ClientComMessage, srvMsg *ServerComMessage, topicMsg *ProxyTopicData, topic string, sess *Session) error {
 	// Find the cluster node which owns the topic, then forward to it.
@@ -974,43 +958,6 @@ func (c *Cluster) routeToTopicIntraCluster(topic string, msg *ServerComMessage, 
 		req.Sess = &ClusterSess{Sid: sess.sid}
 	}
 	return n.route(req)
-}
-
-// Session terminated at origin. Inform remote Master nodes that the session is gone.
-func (c *Cluster) sessionGone(sess *Session) error {
-	if c == nil {
-		return nil
-	}
-
-	notifiedNodes := make(map[string]bool)
-
-	sess.remoteSubsLock.RLock()
-	defer sess.remoteSubsLock.RUnlock()
-
-	for _, remSub := range sess.remoteSubs {
-		nodeName := remSub.node
-		if notifiedNodes[nodeName] {
-			continue
-		}
-		notifiedNodes[nodeName] = true
-		n := c.nodes[nodeName]
-		if n != nil {
-			if err := n.forward(
-				&ClusterReq{
-					Node:        c.thisNodeName,
-					Fingerprint: c.fingerprint,
-					Done:        true,
-					Sess: &ClusterSess{
-						Uid:        sess.uid,
-						RemoteAddr: sess.remoteAddr,
-						UserAgent:  sess.userAgent,
-						Ver:        sess.ver,
-						Sid:        sess.sid}}); err != nil {
-				log.Printf("cluster: remote session shutdown failure: node '%s', error: '%s'", nodeName, err)
-			}
-		}
-	}
-	return nil
 }
 
 // Topic proxy terminated. Inform remote Master node that the proxy is gone.
@@ -1293,11 +1240,27 @@ func (c *Cluster) garbageCollectProxySessions(activeNodes []string) {
 	}
 }
 
+// cleanUpRemoteSubs adjusts online user counts in the master (proxied) topic
+// for a leaving proxy session.
+func (sess *Session) cleanUpRemoteSessions(topicName string) {
+	uidCounts := make(map[types.Uid]int)
+	for _, uid := range sess.remoteSessions {
+		uidCounts[uid]++
+	}
+	if t := globals.hub.topicGet(topicName); t != nil {
+		t.master <- &topicMasterRequest{proxySessionCleanUp: uidCounts}
+	} else {
+		log.Printf("cluster: remote subscription clean up unknown topic %s", topicName)
+	}
+}
+
+// topicProxyWriteLoop implements proxy session event loop.
 func (sess *Session) topicProxyWriteLoop(forTopic string) {
 	defer func() {
 		sess.closeRPC()
 		globals.sessionStore.Delete(sess)
 		sess.unsubAll()
+		sess.cleanUpRemoteSessions(forTopic)
 	}()
 
 	for {
@@ -1324,8 +1287,10 @@ func (sess *Session) topicProxyWriteLoop(forTopic string) {
 						response.ProxyResp.IsBackground = true
 					}
 					response.ProxyResp.Uid = types.ParseUserId(srvMsg.sessOverrides.cliMsg.asUser)
+					sess.addRemoteSession(srvMsg.sessOverrides.sid, response.ProxyResp.Uid)
 				case *ProxyLeave:
 					response.ProxyResp.OrigRequestType = ProxyRequestLeave
+					sess.delRemoteSession(srvMsg.sessOverrides.sid)
 					if req.TerminateProxyConnection {
 						log.Printf("session [%s]: terminating upon client request", srvMsg.sessOverrides.sid)
 						sess.detach <- forTopic
