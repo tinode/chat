@@ -8,6 +8,7 @@
 		- [WebSocket](#websocket)
 		- [Long Polling](#long-polling)
 		- [Out of Band Large Files](#out-of-band-large-files)
+		- [Running Behind a Reverse Proxy](#running-behind-a-reverse-proxy)
 	- [Users](#users)
 		- [Authentication](#authentication)
 			- [Creating an Account](#creating-an-account)
@@ -124,6 +125,8 @@ Once the connection is opened, the client must issue a `{hi}` message to the ser
 
 See definition of the gRPC API in the [proto file](../pbx/model.proto). gRPC API has slightly more functionality than the API described in this document: it allows the `root` user to send messages on behalf of other users as well as delete users.
 
+The `bytes` fields in protobuf messages expect JSON-encoded UTF-8 content. For example, a string should be quoted before being converted to bytes as UTF-8: `[]byte("\"some string\"")` (Go), `'"another string"'.encode('utf-8')` (Python 3).
+
 ### WebSocket
 
 Messages are sent in text frames, one message per frame. Binary frames are reserved for future use. By default server allows connections with any value in the `Origin` header.
@@ -137,6 +140,10 @@ Server allows connections from all origins, i.e. `Access-Control-Allow-Origin: *
 ### Out of Band Large Files
 
 Large files are sent out of band using `HTTP POST` as `Content-Type: multipart/form-data`. See [below](#out-of-band-handling-of-large-files) for details.
+
+### Running Behind a Reverse Proxy
+
+Tinode server can be set up to run behind a reverse proxy, such as NGINX. For efficiency it can accept client connections from Unix sockets by setting `listen` and/or `grpc_listen` config parameters to the path of the Unix socket file, e.g. `unix:/run/tinode.sock`. The server may also be configured to read peer's IP address from `X-Forwarded-For` HTTP header by setting `use_x_forwarded_for` config parameter to `true`.
 
 ## Users
 
