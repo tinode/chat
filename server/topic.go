@@ -1615,9 +1615,8 @@ func (t *Topic) replySetDesc(sess *Session, asUid types.Uid, set *MsgClientSet) 
 			} else {
 				// Notify all subscribers on 'me' except the user who made the change.
 				// He will be notified separately (see below).
-				t.presSubsOffline("upd", nilPresParams,
-					&presFilters{excludeUser: asUid.UserId()}, nilPresFilters,
-					sess.sid, false)
+				filter := &presFilters{excludeUser: asUid.UserId()}
+				t.presSubsOffline("upd", nilPresParams, filter, filter, sess.sid, false)
 			}
 
 			t.updated = now
