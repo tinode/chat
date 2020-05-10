@@ -124,7 +124,7 @@ Once the connection is opened, the client must issue a `{hi}` message to the ser
 
 See definition of the gRPC API in the [proto file](../pbx/model.proto). gRPC API has slightly more functionality than the API described in this document: it allows the `root` user to send messages on behalf of other users as well as delete users.
 
-Note: When encoding simple strings like `person@example.com` to bytes, like for [finding users and topics](#fnd-and-tags-finding-users-and-topics), serialize it to JSON first (i.e., send it as a quoted string). Likewise, when receiving a generic bytes object from the server, deserialize it from JSON first.
+The `bytes` fields in protobuf messages expect JSON-encoded UTF-8 content. For example, a string should be quoted before being converted to bytes as UTF-8: `[]byte("\"some string\"")` (Go), `'"another string"'.encode('utf-8')` (Python 3).
 
 ### WebSocket
 
