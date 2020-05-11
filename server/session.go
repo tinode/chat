@@ -176,9 +176,9 @@ func (s *Session) unsubAll() {
 // Represents a proxied (remote) session.
 type remoteSession struct {
 	// User id of the proxied session.
-  uid types.Uid
+	uid types.Uid
 	// Whether the proxied session is background.
-  isBackground bool
+	isBackground bool
 }
 
 func (s *Session) addRemoteSession(sid string, rs *remoteSession) {

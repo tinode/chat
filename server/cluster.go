@@ -1311,7 +1311,7 @@ func (sess *Session) topicProxyWriteLoop(forTopic string) {
 					}
 					response.ProxyResp.Uid = types.ParseUserId(srvMsg.sessOverrides.cliMsg.asUser)
 					sess.addRemoteSession(srvMsg.sessOverrides.sid, &remoteSession{
-						uid: response.ProxyResp.Uid,
+						uid:          response.ProxyResp.Uid,
 						isBackground: response.ProxyResp.IsBackground})
 				case *ProxyLeave:
 					response.ProxyResp.OrigRequestType = ProxyRequestLeave
