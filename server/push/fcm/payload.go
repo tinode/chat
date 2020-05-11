@@ -246,6 +246,7 @@ func PrepareNotifications(rcpt *push.Receipt, config *AndroidConfig) []MessageDa
 							Body:        body,
 							Icon:        icon,
 							Color:       color,
+							ClickAction: config.ClickAction,
 						}
 					}
 				} else if d.Platform == "ios" {
