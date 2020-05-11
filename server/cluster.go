@@ -685,6 +685,8 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 				}
 				notifReqs = append(notifReqs, s)
 			}
+
+			sess.markRemoteSessionsForeground(notifReqs)
 			t.master <- &topicMasterRequest{deferredNotificationsRequest: notifReqs}
 		} else {
 			log.Printf("cluster: deferred notifications request for unknown topic %s", msg.RcptTo)
@@ -696,6 +698,22 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 	}
 
 	return nil
+}
+
+// markRemoteSessionsForeground marks currently tracked remote session
+// as non-background to ensure proper subscribed user accounting in the master topic.
+func (s *Session) markRemoteSessionsForeground(notifReqs []*sessionJoin) {
+	s.remoteSessionsLock.Lock()
+	defer s.remoteSessionsLock.Unlock()
+	for _, req := range notifReqs {
+		sid := req.sessOverrides.sid
+		if rs, ok := s.remoteSessions[sid]; ok {
+			rs.isBackground = false
+			s.remoteSessions[sid] = rs
+		} else {
+			log.Printf("cluster: deferred notifications request for unknown session %s", sid)
+		}
+	}
 }
 
 // Proxy receives messages from the master node addressed to a specific local session.
@@ -1243,9 +1261,14 @@ func (c *Cluster) garbageCollectProxySessions(activeNodes []string) {
 // cleanUpRemoteSubs adjusts online user counts in the master (proxied) topic
 // for a leaving proxy session.
 func (sess *Session) cleanUpRemoteSessions(topicName string) {
+	sess.remoteSessionsLock.Lock()
+	defer sess.remoteSessionsLock.Unlock()
 	uidCounts := make(map[types.Uid]int)
-	for _, uid := range sess.remoteSessions {
-		uidCounts[uid]++
+	for _, rs := range sess.remoteSessions {
+		if !rs.isBackground {
+			// Only non-background sessions are counted as online.
+			uidCounts[rs.uid]++
+		}
 	}
 	if t := globals.hub.topicGet(topicName); t != nil {
 		t.master <- &topicMasterRequest{proxySessionCleanUp: uidCounts}
@@ -1287,7 +1310,9 @@ func (sess *Session) topicProxyWriteLoop(forTopic string) {
 						response.ProxyResp.IsBackground = true
 					}
 					response.ProxyResp.Uid = types.ParseUserId(srvMsg.sessOverrides.cliMsg.asUser)
-					sess.addRemoteSession(srvMsg.sessOverrides.sid, response.ProxyResp.Uid)
+					sess.addRemoteSession(srvMsg.sessOverrides.sid, &remoteSession{
+						uid: response.ProxyResp.Uid,
+						isBackground: response.ProxyResp.IsBackground})
 				case *ProxyLeave:
 					response.ProxyResp.OrigRequestType = ProxyRequestLeave
 					sess.delRemoteSession(srvMsg.sessOverrides.sid)

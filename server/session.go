@@ -109,7 +109,9 @@ type Session struct {
 	subsLock sync.RWMutex
 
 	// Map of remote (origin) sessions to user ids these sessions represent.
-	remoteSessions map[string]types.Uid
+	remoteSessions map[string]*remoteSession
+	// Synchronizes access to remoteSessions.
+	remoteSessionsLock sync.RWMutex
 
 	// Session ID
 	sid string
@@ -171,11 +173,23 @@ func (s *Session) unsubAll() {
 	}
 }
 
-func (s *Session) addRemoteSession(sid string, uid types.Uid) {
-	s.remoteSessions[sid] = uid
+// Represents a proxied (remote) session.
+type remoteSession struct {
+	// User id of the proxied session.
+  uid types.Uid
+	// Whether the proxied session is background.
+  isBackground bool
+}
+
+func (s *Session) addRemoteSession(sid string, rs *remoteSession) {
+	s.remoteSessionsLock.Lock()
+	defer s.remoteSessionsLock.Unlock()
+	s.remoteSessions[sid] = rs
 }
 
 func (s *Session) delRemoteSession(sid string) {
+	s.remoteSessionsLock.Lock()
+	defer s.remoteSessionsLock.Unlock()
 	delete(s.remoteSessions, sid)
 }
 

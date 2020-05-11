@@ -75,8 +75,7 @@ func (ss *SessionStore) NewSession(conn interface{}, sid string) (*Session, int)
 		s.detach = make(chan string, 64)                   // buffered
 
 		if s.proto == CLUSTER {
-			// This is only useful when running as a cluster and only for non-proxied sessions.
-			s.remoteSessions = make(map[string]types.Uid)
+			s.remoteSessions = make(map[string]*remoteSession)
 		}
 	}
 
