@@ -74,9 +74,8 @@ func (ss *SessionStore) NewSession(conn interface{}, sid string) (*Session, int)
 		s.stop = make(chan interface{}, 1)                 // Buffered by 1 just to make it non-blocking
 		s.detach = make(chan string, 64)                   // buffered
 
-		if globals.cluster != nil && s.proto != CLUSTER {
-			// This is only useful when running as a cluster and only for non-proxied sessions.
-			s.remoteSubs = make(map[string]*RemoteSubscription)
+		if s.proto == CLUSTER {
+			s.remoteSessions = make(map[string]*remoteSession)
 		}
 	}
 

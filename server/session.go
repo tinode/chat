@@ -44,14 +44,6 @@ const sendQueueLimit = 128
 
 var minSupportedVersionValue = parseVersion(minSupportedVersion)
 
-// RemoteSubscription holds metadata on the subscription/topic hosted on a remote node.
-type RemoteSubscription struct {
-	// Hosting node.
-	node string
-	// Topic name, as specified by the client.
-	originalTopic string
-}
-
 // Session represents a single WS connection or a long polling session. A user may have multiple
 // sessions.
 type Session struct {
@@ -116,11 +108,10 @@ type Session struct {
 	// subs concurrently.
 	subsLock sync.RWMutex
 
-	// Map of remote topic subscriptions, indexed by topic name.
-	// It does not contain actual subscriptions but rather "maybe subscriptions".
-	remoteSubs map[string]*RemoteSubscription
-	// Synchronizes access to remoteSubs.
-	remoteSubsLock sync.RWMutex
+	// Map of remote (origin) sessions to user ids these sessions represent.
+	remoteSessions map[string]*remoteSession
+	// Synchronizes access to remoteSessions.
+	remoteSessionsLock sync.RWMutex
 
 	// Session ID
 	sid string
@@ -147,9 +138,8 @@ type Subscription struct {
 
 func (s *Session) addSub(topic string, sub *Subscription) {
 	s.subsLock.Lock()
-	defer s.subsLock.Unlock()
-
 	s.subs[topic] = sub
+	s.subsLock.Unlock()
 }
 
 func (s *Session) getSub(topic string) *Subscription {
@@ -161,9 +151,8 @@ func (s *Session) getSub(topic string) *Subscription {
 
 func (s *Session) delSub(topic string) {
 	s.subsLock.Lock()
-	defer s.subsLock.Unlock()
-
 	delete(s.subs, topic)
+	s.subsLock.Unlock()
 }
 
 func (s *Session) countSub() int {
@@ -182,25 +171,24 @@ func (s *Session) unsubAll() {
 	}
 }
 
-func (s *Session) getRemoteSub(topic string) *RemoteSubscription {
-	s.remoteSubsLock.RLock()
-	defer s.remoteSubsLock.RUnlock()
-
-	return s.remoteSubs[topic]
+// Represents a proxied (remote) session.
+type remoteSession struct {
+	// User id of the proxied session.
+	uid types.Uid
+	// Whether the proxied session is background.
+	isBackground bool
 }
 
-func (s *Session) addRemoteSub(topic string, remoteSub *RemoteSubscription) {
-	s.remoteSubsLock.Lock()
-	defer s.remoteSubsLock.Unlock()
-
-	s.remoteSubs[topic] = remoteSub
+func (s *Session) addRemoteSession(sid string, rs *remoteSession) {
+	s.remoteSessionsLock.Lock()
+	s.remoteSessions[sid] = rs
+	s.remoteSessionsLock.Unlock()
 }
 
-func (s *Session) delRemoteSub(topic string) {
-	s.remoteSubsLock.Lock()
-	defer s.remoteSubsLock.Unlock()
-
-	delete(s.remoteSubs, topic)
+func (s *Session) delRemoteSession(sid string) {
+	s.remoteSessionsLock.Lock()
+	delete(s.remoteSessions, sid)
+	s.remoteSessionsLock.Unlock()
 }
 
 // Indicates whether this session is used as a local interface for a remote proxy topic.
@@ -250,7 +238,6 @@ func (s *Session) cleanUp(expired bool) {
 	if !expired {
 		globals.sessionStore.Delete(s)
 	}
-	globals.cluster.sessionGone(s)
 	s.unsubAll()
 }
 
@@ -515,16 +502,9 @@ func (s *Session) publish(msg *ClientComMessage) {
 	if msg.Pub.NoEcho {
 		data.skipSid = s.sid
 	}
-
 	if sub := s.getSub(expanded); sub != nil {
 		// This is a post to a subscribed topic. The message is sent to the topic only
 		sub.broadcast <- data
-	} else if globals.cluster.isRemoteTopic(expanded) {
-		// The topic is handled by a remote node. Forward message to it.
-		if err := globals.cluster.routeToTopic(msg, expanded, s); err != nil {
-			log.Println("s.publish:", err, s.sid)
-			s.queueOut(ErrClusterUnreachable(msg.id, msg.topic, msg.timestamp))
-		}
 	} else if expanded == "sys" {
 		// Publishing to "sys" topic requires no subsription.
 		globals.hub.route <- data
@@ -920,7 +900,6 @@ func (s *Session) del(msg *ClientComMessage) {
 		log.Println("s.del: invalid Del action", msg.Del.What, s.sid)
 		return
 	}
-
 	sub := s.getSub(expanded)
 	if sub != nil && what != constMsgDelTopic {
 		// Session is attached, deleting subscription or messages. Send to topic.
@@ -930,11 +909,6 @@ func (s *Session) del(msg *ClientComMessage) {
 			sess:  s,
 			what:  what}
 
-	} else if sub == nil && globals.cluster.isRemoteTopic(expanded) {
-		// The topic is handled by a remote node. Forward message to it.
-		if err := globals.cluster.routeToTopic(msg, expanded, s); err != nil {
-			s.queueOut(ErrClusterUnreachable(msg.id, msg.topic, msg.timestamp))
-		}
 	} else if what == constMsgDelTopic {
 		// Deleting topic: for sessions attached or not attached, send request to hub first.
 		// Hub will forward to topic, if appropriate.
