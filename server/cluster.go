@@ -1262,7 +1262,6 @@ func (c *Cluster) garbageCollectProxySessions(activeNodes []string) {
 // for a leaving proxy session.
 func (sess *Session) cleanUpRemoteSessions(topicName string) {
 	sess.remoteSessionsLock.Lock()
-	defer sess.remoteSessionsLock.Unlock()
 	uidCounts := make(map[types.Uid]int)
 	for _, rs := range sess.remoteSessions {
 		if !rs.isBackground {
@@ -1270,6 +1269,7 @@ func (sess *Session) cleanUpRemoteSessions(topicName string) {
 			uidCounts[rs.uid]++
 		}
 	}
+	sess.remoteSessionsLock.Unlock()
 	if t := globals.hub.topicGet(topicName); t != nil {
 		t.master <- &topicMasterRequest{proxySessionCleanUp: uidCounts}
 	} else {

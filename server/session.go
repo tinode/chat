@@ -138,9 +138,8 @@ type Subscription struct {
 
 func (s *Session) addSub(topic string, sub *Subscription) {
 	s.subsLock.Lock()
-	defer s.subsLock.Unlock()
-
 	s.subs[topic] = sub
+	s.subsLock.Unlock()
 }
 
 func (s *Session) getSub(topic string) *Subscription {
@@ -152,9 +151,8 @@ func (s *Session) getSub(topic string) *Subscription {
 
 func (s *Session) delSub(topic string) {
 	s.subsLock.Lock()
-	defer s.subsLock.Unlock()
-
 	delete(s.subs, topic)
+	s.subsLock.Unlock()
 }
 
 func (s *Session) countSub() int {
@@ -183,14 +181,14 @@ type remoteSession struct {
 
 func (s *Session) addRemoteSession(sid string, rs *remoteSession) {
 	s.remoteSessionsLock.Lock()
-	defer s.remoteSessionsLock.Unlock()
 	s.remoteSessions[sid] = rs
+	s.remoteSessionsLock.Unlock()
 }
 
 func (s *Session) delRemoteSession(sid string) {
 	s.remoteSessionsLock.Lock()
-	defer s.remoteSessionsLock.Unlock()
 	delete(s.remoteSessions, sid)
+	s.remoteSessionsLock.Unlock()
 }
 
 // Indicates whether this session is used as a local interface for a remote proxy topic.
