@@ -1528,7 +1528,7 @@ func (t *Topic) thisUserSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.L
 				}
 			} else if modeWant.IsOwner() {
 				// Ownership transfer can only be initiated by the owner.
-				sess.queueOut(ErrPermissionDenied(pktID, toriginal, now))
+				sess.queueOutWithOverrides(ErrPermissionDenied(pktID, toriginal, now), sessOverrides)
 				return changed, errors.New("non-owner cannot request ownership transfer")
 			} else if t.cat == types.TopicCatGrp && userData.modeGiven.IsAdmin() && modeWant.IsAdmin() {
 				// A group topic Admin should be able to grant himself any permissions except
@@ -1687,13 +1687,13 @@ func (t *Topic) anotherUserSub(h *Hub, sess *Session, asUid, target types.Uid, s
 	// Check if approver actually has permission to manage sharing
 	userData, ok := t.perUser[asUid]
 	if !ok || !(userData.modeGiven & userData.modeWant).IsSharer() {
-		sess.queueOut(ErrPermissionDenied(set.Id, toriginal, now))
+		sess.queueOutWithOverrides(ErrPermissionDenied(set.Id, toriginal, now), sessOverrides)
 		return false, errors.New("topic access denied; approver has no permission")
 	}
 
 	// Check if topic is suspended.
 	if t.isReadOnly() {
-		sess.queueOut(ErrPermissionDenied(set.Id, toriginal, now))
+		sess.queueOutWithOverrides(ErrPermissionDenied(set.Id, toriginal, now), sessOverrides)
 		return false, errors.New("topic is suspended")
 	}
 
@@ -1703,7 +1703,7 @@ func (t *Topic) anotherUserSub(h *Hub, sess *Session, asUid, target types.Uid, s
 	modeGiven := types.ModeUnset
 	if set.Sub.Mode != "" {
 		if err := modeGiven.UnmarshalText([]byte(set.Sub.Mode)); err != nil {
-			sess.queueOut(ErrMalformed(set.Id, toriginal, now))
+			sess.queueOutWithOverrides(ErrMalformed(set.Id, toriginal, now), sessOverrides)
 			return false, err
 		}
 
@@ -1716,13 +1716,13 @@ func (t *Topic) anotherUserSub(h *Hub, sess *Session, asUid, target types.Uid, s
 
 	// Make sure only the owner & approvers can set non-default access mode
 	if modeGiven != types.ModeUnset && !hostMode.IsAdmin() {
-		sess.queueOut(ErrPermissionDenied(set.Id, toriginal, now))
+		sess.queueOutWithOverrides(ErrPermissionDenied(set.Id, toriginal, now), sessOverrides)
 		return false, errors.New("sharer cannot set explicit modeGiven")
 	}
 
 	// Make sure no one but the owner can do an ownership transfer
 	if modeGiven.IsOwner() && t.owner != asUid {
-		sess.queueOut(ErrPermissionDenied(set.Id, toriginal, now))
+		sess.queueOutWithOverrides(ErrPermissionDenied(set.Id, toriginal, now), sessOverrides)
 		return false, errors.New("attempt to transfer ownership by non-owner")
 	}
 
@@ -1733,7 +1733,7 @@ func (t *Topic) anotherUserSub(h *Hub, sess *Session, asUid, target types.Uid, s
 
 		// Check if the max number of subscriptions is already reached.
 		if t.cat == types.TopicCatGrp && t.subsCount() >= globals.maxSubscriberCount {
-			sess.queueOut(ErrPolicy(set.Id, toriginal, now))
+			sess.queueOutWithOverrides(ErrPolicy(set.Id, toriginal, now), sessOverrides)
 			return false, errors.New("max subscription count exceeded")
 		}
 
@@ -1746,13 +1746,13 @@ func (t *Topic) anotherUserSub(h *Hub, sess *Session, asUid, target types.Uid, s
 		// Get user's default access mode to be used as modeWant
 		var modeWant types.AccessMode
 		if user, err := store.Users.Get(target); err != nil {
-			sess.queueOut(ErrUnknown(set.Id, toriginal, now))
+			sess.queueOutWithOverrides(ErrUnknown(set.Id, toriginal, now), sessOverrides)
 			return false, err
 		} else if user == nil {
-			sess.queueOut(ErrUserNotFound(set.Id, toriginal, now))
+			sess.queueOutWithOverrides(ErrUserNotFound(set.Id, toriginal, now), sessOverrides)
 			return false, errors.New("user not found")
 		} else if user.State != types.StateOK {
-			sess.queueOut(ErrPermissionDenied(set.Id, toriginal, now))
+			sess.queueOutWithOverrides(ErrPermissionDenied(set.Id, toriginal, now), sessOverrides)
 			return false, errors.New("user is suspended")
 		} else {
 			// Don't ask by default for more permissions than the granted ones.
@@ -1768,7 +1768,7 @@ func (t *Topic) anotherUserSub(h *Hub, sess *Session, asUid, target types.Uid, s
 		}
 
 		if err := store.Subs.Create(sub); err != nil {
-			sess.queueOut(ErrUnknown(set.Id, toriginal, now))
+			sess.queueOutWithOverrides(ErrUnknown(set.Id, toriginal, now), sessOverrides)
 			return false, err
 		}
 
@@ -2372,7 +2372,7 @@ func (t *Topic) replySetSub(h *Hub, sess *Session, pkt *ClientComMessage, sessOv
 	var changed bool
 	if target == asUid {
 		// Request new subscription or modify own subscription
-		changed, err = t.thisUserSub(h, sess, asUid, asLvl, pkt.id, set.Sub.Mode, nil, false, nil)
+		changed, err = t.thisUserSub(h, sess, asUid, asLvl, pkt.id, set.Sub.Mode, nil, false, sessOverrides)
 	} else {
 		// Request to approve/change someone's subscription
 		changed, err = t.anotherUserSub(h, sess, asUid, target, set, sessOverrides)

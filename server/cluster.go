@@ -642,7 +642,11 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 			},
 		}
 		log.Printf("cluster: meta request %+v %+v", req, req.pkt)
-		globals.hub.meta <- req
+		if t := globals.hub.topicGet(msg.RcptTo); t != nil {
+			t.meta <- req
+		} else {
+			log.Printf("cluster: meta request for unknown topic %s", msg.RcptTo)
+		}
 
 	case msg.TopicMsg.BroadcastReq != nil:
 		if msg.SrvMsg == nil {
