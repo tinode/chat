@@ -7,7 +7,8 @@ assignees: ''
 
 ---
 
-# If you are not reporting a bug, please post to https://groups.google.com/d/forum/tinode instead.
+**If you are not reporting a bug, please post to https://groups.google.com/d/forum/tinode instead.**
+---
 
 ### Subject of the issue
 Describe your issue here.

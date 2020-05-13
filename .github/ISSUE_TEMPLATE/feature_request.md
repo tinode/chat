@@ -7,7 +7,8 @@ assignees: ''
 
 ---
 
-# If you are not requesting a feature, please post to https://groups.google.com/d/forum/tinode instead.
+**If you are not requesting a feature, please post to https://groups.google.com/d/forum/tinode instead.**
+---
 
 **Is your feature request related to a problem? Please describe.**
 A clear and concise description of what the problem is. Ex. I'm always frustrated when [...]
