@@ -287,8 +287,7 @@ func (h *Hub) run() {
 				// 1. Master topic has moved out to another node.
 				// 2. Proxy topic is running on a new master node
 				//    (i.e. the master topic has moved to this node).
-				isRemote := globals.cluster.isRemoteTopic(topic.name)
-				if (!topic.isProxy && isRemote) || (topic.isProxy && !isRemote) {
+				if topic.isProxy != globals.cluster.isRemoteTopic(topic.name) {
 					h.topicUnreg(nil, topic.name, nil, StopRehashing)
 				}
 				return true
