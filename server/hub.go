@@ -278,11 +278,16 @@ func (h *Hub) run() {
 			}
 
 		case <-h.rehash:
-			// Cluster rehashing. Some previously local topics became remote.
+			// Cluster rehashing. Some previously local topics became remote,
+			// and the other way round.
 			// Such topics must be shut down at this node.
 			h.topics.Range(func(_, t interface{}) bool {
 				topic := t.(*Topic)
-				if !topic.isProxy && globals.cluster.isRemoteTopic(topic.name) {
+				// Handle two cases:
+				// 1. Master topic has moved out to another node.
+				// 2. Proxy topic is running on a new master node
+				//    (i.e. the master topic has moved to this node).
+				if topic.isProxy != globals.cluster.isRemoteTopic(topic.name) {
 					h.topicUnreg(nil, topic.name, nil, StopRehashing)
 				}
 				return true
