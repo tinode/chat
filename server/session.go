@@ -305,7 +305,7 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 		return func(m *ClientComMessage) {
 			if s.ver == 0 {
 				log.Println("s.dispatch: {hi} is missing", s.sid)
-				s.queueOut(ErrCommandOutOfSequence(m.id, m.topic, m.timestamp))
+				s.queueOut(ErrCommandOutOfSequence(m.id, m.original, m.timestamp))
 				return
 			}
 			handler(m)
@@ -317,7 +317,7 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 		return func(m *ClientComMessage) {
 			if msg.asUser == "" {
 				log.Println("s.dispatch: authentication required", s.sid)
-				s.queueOut(ErrAuthRequired(m.id, m.topic, msg.timestamp))
+				s.queueOut(ErrAuthRequired(m.id, m.original, msg.timestamp))
 				return
 			}
 			handler(m)
@@ -328,19 +328,19 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 	case msg.Pub != nil:
 		handler = checkVers(msg, checkUser(msg, s.publish))
 		msg.id = msg.Pub.Id
-		msg.topic = msg.Pub.Topic
+		msg.original = msg.Pub.Topic
 		uaRefresh = true
 
 	case msg.Sub != nil:
 		handler = checkVers(msg, checkUser(msg, s.subscribe))
 		msg.id = msg.Sub.Id
-		msg.topic = msg.Sub.Topic
+		msg.original = msg.Sub.Topic
 		uaRefresh = true
 
 	case msg.Leave != nil:
 		handler = checkVers(msg, checkUser(msg, s.leave))
 		msg.id = msg.Leave.Id
-		msg.topic = msg.Leave.Topic
+		msg.original = msg.Leave.Topic
 
 	case msg.Hi != nil:
 		handler = s.hello
@@ -353,19 +353,19 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 	case msg.Get != nil:
 		handler = checkVers(msg, checkUser(msg, s.get))
 		msg.id = msg.Get.Id
-		msg.topic = msg.Get.Topic
+		msg.original = msg.Get.Topic
 		uaRefresh = true
 
 	case msg.Set != nil:
 		handler = checkVers(msg, checkUser(msg, s.set))
 		msg.id = msg.Set.Id
-		msg.topic = msg.Set.Topic
+		msg.original = msg.Set.Topic
 		uaRefresh = true
 
 	case msg.Del != nil:
 		handler = checkVers(msg, checkUser(msg, s.del))
 		msg.id = msg.Del.Id
-		msg.topic = msg.Del.Topic
+		msg.original = msg.Del.Topic
 
 	case msg.Acc != nil:
 		handler = checkVers(msg, s.acc)
@@ -373,7 +373,7 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 
 	case msg.Note != nil:
 		handler = s.note
-		msg.topic = msg.Note.Topic
+		msg.original = msg.Note.Topic
 		uaRefresh = true
 
 	default:
@@ -386,7 +386,7 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 	if globals.cluster.isPartitioned() {
 		// The cluster is partitioned due to network or other failure and this node is a part of the smaller partition.
 		// In order to avoid data inconsistency across the cluster we must reject all requests.
-		s.queueOut(ErrClusterUnreachable(msg.id, msg.topic, msg.timestamp))
+		s.queueOut(ErrClusterUnreachable(msg.id, msg.original, msg.timestamp))
 		return
 	}
 
@@ -403,14 +403,13 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 
 // Request to subscribe to a topic
 func (s *Session) subscribe(msg *ClientComMessage) {
-	var expanded string
-	if strings.HasPrefix(msg.topic, "new") {
+	if strings.HasPrefix(msg.original, "new") {
 		// Request to create a new named topic.
 		// If we are in a cluster, make sure the new topic belongs to the current node.
-		expanded = globals.cluster.genLocalTopicName()
+		msg.rcptTo = globals.cluster.genLocalTopicName()
 	} else {
 		var resp *ServerComMessage
-		expanded, resp = s.expandTopicName(msg)
+		msg.rcptTo, resp = s.expandTopicName(msg)
 		if resp != nil {
 			s.queueOut(resp)
 			return
@@ -418,13 +417,12 @@ func (s *Session) subscribe(msg *ClientComMessage) {
 	}
 
 	// Session can subscribe to topic on behalf of a single user at a time.
-	if sub := s.getSub(expanded); sub != nil {
-		s.queueOut(InfoAlreadySubscribed(msg.id, msg.topic, msg.timestamp))
+	if sub := s.getSub(msg.rcptTo); sub != nil {
+		s.queueOut(InfoAlreadySubscribed(msg.id, msg.original, msg.timestamp))
 	} else {
 		globals.hub.join <- &sessionJoin{
-			topic: expanded,
-			pkt:   msg,
-			sess:  s}
+			pkt:  msg,
+			sess: s}
 		// Hub will send Ctrl success/failure packets back to session
 	}
 }
@@ -432,42 +430,44 @@ func (s *Session) subscribe(msg *ClientComMessage) {
 // Leave/Unsubscribe a topic
 func (s *Session) leave(msg *ClientComMessage) {
 	// Expand topic name
-	expanded, resp := s.expandTopicName(msg)
+	var resp *ServerComMessage
+	msg.rcptTo, resp = s.expandTopicName(msg)
 	if resp != nil {
 		s.queueOut(resp)
 		return
 	}
 
-	if sub := s.getSub(expanded); sub != nil {
+	if sub := s.getSub(msg.rcptTo); sub != nil {
 		// Session is attached to the topic.
-		if (msg.topic == "me" || msg.topic == "fnd") && msg.Leave.Unsub {
+		if (msg.original == "me" || msg.original == "fnd") && msg.Leave.Unsub {
 			// User should not unsubscribe from 'me' or 'find'. Just leaving is fine.
-			s.queueOut(ErrPermissionDenied(msg.id, msg.topic, msg.timestamp))
+			s.queueOut(ErrPermissionDenied(msg.id, msg.original, msg.timestamp))
 		} else {
 			// Unlink from topic, topic will send a reply.
-			s.delSub(expanded)
+			s.delSub(msg.rcptTo)
 			sub.done <- &sessionLeave{
 				userId: types.ParseUserId(msg.asUser),
-				topic:  msg.topic,
+				topic:  msg.original,
 				sess:   s,
 				unsub:  msg.Leave.Unsub,
 				id:     msg.id}
 		}
 	} else if !msg.Leave.Unsub {
 		// Session is not attached to the topic, wants to leave - fine, no change
-		s.queueOut(InfoNotJoined(msg.id, msg.topic, msg.timestamp))
+		s.queueOut(InfoNotJoined(msg.id, msg.original, msg.timestamp))
 	} else {
 		// Session wants to unsubscribe from the topic it did not join
 		// FIXME(gene): allow topic to unsubscribe without joining first; send to hub to unsub
 		log.Println("s.leave:", "must attach first", s.sid)
-		s.queueOut(ErrAttachFirst(msg.id, msg.topic, msg.timestamp))
+		s.queueOut(ErrAttachFirst(msg.id, msg.original, msg.timestamp))
 	}
 }
 
 // Broadcast a message to all topic subscribers
 func (s *Session) publish(msg *ClientComMessage) {
 	// TODO(gene): Check for repeated messages with the same ID
-	expanded, resp := s.expandTopicName(msg)
+	var resp *ServerComMessage
+	msg.rcptTo, resp = s.expandTopicName(msg)
 	if resp != nil {
 		s.queueOut(resp)
 		return
@@ -488,13 +488,13 @@ func (s *Session) publish(msg *ClientComMessage) {
 	}
 
 	data := &ServerComMessage{Data: &MsgServerData{
-		Topic:     msg.topic,
+		Topic:     msg.original,
 		From:      msg.asUser,
 		Timestamp: msg.timestamp,
 		Head:      msg.Pub.Head,
 		Content:   msg.Pub.Content},
 		// Unroutable values.
-		rcptto:    expanded,
+		rcptto:    msg.rcptTo,
 		sess:      s,
 		id:        msg.id,
 		timestamp: msg.timestamp,
@@ -502,15 +502,15 @@ func (s *Session) publish(msg *ClientComMessage) {
 	if msg.Pub.NoEcho {
 		data.skipSid = s.sid
 	}
-	if sub := s.getSub(expanded); sub != nil {
+	if sub := s.getSub(msg.rcptTo); sub != nil {
 		// This is a post to a subscribed topic. The message is sent to the topic only
 		sub.broadcast <- data
-	} else if expanded == "sys" {
+	} else if msg.rcptTo == "sys" {
 		// Publishing to "sys" topic requires no subsription.
 		globals.hub.route <- data
 	} else {
 		// Publish request received without attaching to topic first.
-		s.queueOut(ErrAttachFirst(msg.id, msg.topic, msg.timestamp))
+		s.queueOut(ErrAttachFirst(msg.id, msg.original, msg.timestamp))
 		log.Println("s.publish:", "must attach first", s.sid)
 	}
 }
@@ -810,21 +810,22 @@ func (s *Session) onLogin(msgID string, timestamp time.Time, rec *auth.Rec, miss
 
 func (s *Session) get(msg *ClientComMessage) {
 	// Expand topic name.
-	expanded, resp := s.expandTopicName(msg)
+	var resp *ServerComMessage
+	msg.rcptTo, resp = s.expandTopicName(msg)
 	if resp != nil {
 		s.queueOut(resp)
 		return
 	}
 
-	sub := s.getSub(expanded)
+	sub := s.getSub(msg.rcptTo)
 	meta := &metaReq{
-		topic: expanded,
+		topic: msg.rcptTo,
 		pkt:   msg,
 		sess:  s,
 		what:  parseMsgClientMeta(msg.Get.What)}
 
 	if meta.what == 0 {
-		s.queueOut(ErrMalformed(msg.id, msg.topic, msg.timestamp))
+		s.queueOut(ErrMalformed(msg.id, msg.original, msg.timestamp))
 		log.Println("s.get: invalid Get message action", msg.Get.What)
 	} else if sub != nil {
 		sub.meta <- meta
@@ -833,20 +834,21 @@ func (s *Session) get(msg *ClientComMessage) {
 		globals.hub.meta <- meta
 	} else {
 		log.Println("s.get: subscribe first to get=", msg.Get.What)
-		s.queueOut(ErrPermissionDenied(msg.id, msg.topic, msg.timestamp))
+		s.queueOut(ErrPermissionDenied(msg.id, msg.original, msg.timestamp))
 	}
 }
 
 func (s *Session) set(msg *ClientComMessage) {
 	// Expand topic name.
-	expanded, resp := s.expandTopicName(msg)
+	var resp *ServerComMessage
+	msg.rcptTo, resp = s.expandTopicName(msg)
 	if resp != nil {
 		s.queueOut(resp)
 		return
 	}
 
 	meta := &metaReq{
-		topic: expanded,
+		topic: msg.rcptTo,
 		pkt:   msg,
 		sess:  s}
 
@@ -864,13 +866,13 @@ func (s *Session) set(msg *ClientComMessage) {
 	}
 
 	if meta.what == 0 {
-		s.queueOut(ErrMalformed(msg.id, msg.topic, msg.timestamp))
+		s.queueOut(ErrMalformed(msg.id, msg.original, msg.timestamp))
 		log.Println("s.set: nil Set action")
-	} else if sub := s.getSub(expanded); sub != nil {
+	} else if sub := s.getSub(msg.rcptTo); sub != nil {
 		sub.meta <- meta
 	} else if meta.what&constMsgMetaTags != 0 {
 		log.Println("s.set: can Set tags for subscribed topics only")
-		s.queueOut(ErrPermissionDenied(msg.id, msg.topic, msg.timestamp))
+		s.queueOut(ErrPermissionDenied(msg.id, msg.original, msg.timestamp))
 	} else {
 		// Some minor updates are possible without the subscription.
 		globals.hub.meta <- meta
@@ -889,22 +891,23 @@ func (s *Session) del(msg *ClientComMessage) {
 	// Delete something other than user: topic, subscription, message(s)
 
 	// Expand topic name and validate request.
-	expanded, resp := s.expandTopicName(msg)
+	var resp *ServerComMessage
+	msg.rcptTo, resp = s.expandTopicName(msg)
 	if resp != nil {
 		s.queueOut(resp)
 		return
 	}
 
 	if what == 0 {
-		s.queueOut(ErrMalformed(msg.id, msg.topic, msg.timestamp))
+		s.queueOut(ErrMalformed(msg.id, msg.original, msg.timestamp))
 		log.Println("s.del: invalid Del action", msg.Del.What, s.sid)
 		return
 	}
-	sub := s.getSub(expanded)
+	sub := s.getSub(msg.rcptTo)
 	if sub != nil && what != constMsgDelTopic {
 		// Session is attached, deleting subscription or messages. Send to topic.
 		sub.meta <- &metaReq{
-			topic: expanded,
+			topic: msg.rcptTo,
 			pkt:   msg,
 			sess:  s,
 			what:  what}
@@ -913,13 +916,13 @@ func (s *Session) del(msg *ClientComMessage) {
 		// Deleting topic: for sessions attached or not attached, send request to hub first.
 		// Hub will forward to topic, if appropriate.
 		globals.hub.unreg <- &topicUnreg{
-			topic: expanded,
+			topic: msg.rcptTo,
 			pkt:   msg,
 			sess:  s,
 			del:   true}
 	} else {
 		// Must join the topic to delete messages or subscriptions.
-		s.queueOut(ErrAttachFirst(msg.id, msg.topic, msg.timestamp))
+		s.queueOut(ErrAttachFirst(msg.id, msg.original, msg.timestamp))
 		log.Println("s.del: invalid Del action while unsubbed", msg.Del.What, s.sid)
 	}
 }
@@ -934,7 +937,8 @@ func (s *Session) note(msg *ClientComMessage) {
 	}
 
 	// Expand topic name and validate request.
-	expanded, resp := s.expandTopicName(msg)
+	var resp *ServerComMessage
+	msg.rcptTo, resp = s.expandTopicName(msg)
 	if resp != nil {
 		// Silently ignoring the message
 		return
@@ -953,16 +957,16 @@ func (s *Session) note(msg *ClientComMessage) {
 		return
 	}
 
-	if sub := s.getSub(expanded); sub != nil {
+	if sub := s.getSub(msg.rcptTo); sub != nil {
 		// Pings can be sent to subscribed topics only
 		sub.broadcast <- &ServerComMessage{Info: &MsgServerInfo{
-			Topic: msg.topic,
+			Topic: msg.original,
 			From:  msg.asUser,
 			What:  msg.Note.What,
 			SeqId: msg.Note.SeqId,
-		}, rcptto: expanded, asUser: msg.asUser, timestamp: msg.timestamp, skipSid: s.sid}
+		}, rcptto: msg.rcptTo, asUser: msg.asUser, timestamp: msg.timestamp, skipSid: s.sid}
 	} else {
-		s.queueOut(ErrAttachFirst(msg.id, msg.topic, msg.timestamp))
+		s.queueOut(ErrAttachFirst(msg.id, msg.original, msg.timestamp))
 		log.Println("s.note: note to invalid topic - must subscribe first", msg.Note.What, s.sid)
 	}
 }
@@ -974,33 +978,33 @@ func (s *Session) note(msg *ClientComMessage) {
 //   err: *ServerComMessage with an error to return to the sender
 func (s *Session) expandTopicName(msg *ClientComMessage) (string, *ServerComMessage) {
 
-	if msg.topic == "" {
+	if msg.original == "" {
 		log.Println("s.etn: empty topic name", s.sid)
 		return "", ErrMalformed(msg.id, "", msg.timestamp)
 	}
 
 	// Expanded name of the topic to route to i.e. rcptto: or s.subs[routeTo]
 	var routeTo string
-	if msg.topic == "me" {
+	if msg.original == "me" {
 		routeTo = msg.asUser
-	} else if msg.topic == "fnd" {
+	} else if msg.original == "fnd" {
 		routeTo = types.ParseUserId(msg.asUser).FndName()
-	} else if strings.HasPrefix(msg.topic, "usr") {
+	} else if strings.HasPrefix(msg.original, "usr") {
 		// p2p topic
 		uid1 := types.ParseUserId(msg.asUser)
-		uid2 := types.ParseUserId(msg.topic)
+		uid2 := types.ParseUserId(msg.original)
 		if uid2.IsZero() {
 			// Ensure the user id is valid
 			log.Println("s.etn: failed to parse p2p topic name", s.sid)
-			return "", ErrMalformed(msg.id, msg.topic, msg.timestamp)
+			return "", ErrMalformed(msg.id, msg.original, msg.timestamp)
 		} else if uid2 == uid1 {
 			// Use 'me' to access self-topic
 			log.Println("s.etn: invalid p2p self-subscription", s.sid)
-			return "", ErrPermissionDenied(msg.id, msg.topic, msg.timestamp)
+			return "", ErrPermissionDenied(msg.id, msg.original, msg.timestamp)
 		}
 		routeTo = uid1.P2PName(uid2)
 	} else {
-		routeTo = msg.topic
+		routeTo = msg.original
 	}
 
 	return routeTo, nil

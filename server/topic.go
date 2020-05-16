@@ -218,7 +218,6 @@ func (t *Topic) runProxy(hub *Hub) {
 				asUid := types.ParseUserId(sreg.pkt.asUser)
 				sreg.sess.queueOut(ErrLocked(sreg.pkt.id, t.original(asUid), types.TimeNow()))
 			} else {
-				log.Printf("topic[%s] reg %+v", t.name, sreg)
 				msg := &ProxyTopicData{
 					JoinReq: &ProxyJoin{
 						Created:  sreg.created,
@@ -226,7 +225,6 @@ func (t *Topic) runProxy(hub *Hub) {
 						Internal: sreg.internal,
 					},
 				}
-				log.Println("sessionJoin pkt = ", sreg.pkt, sreg.topic)
 				// Response (ctrl message) will be handled when it's received via the proxy channel.
 				if err := globals.cluster.routeToTopicMaster(sreg.pkt, nil, msg, t.name, sreg.sess); err != nil {
 					log.Println("proxy topic: route join request from proxy to master failed:", err)
@@ -1363,8 +1361,8 @@ func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin) error {
 
 	// When a group topic is created, it's given a temporary name by the client.
 	// Then this name changes. Report back the original name here.
-	if sreg.created && sreg.pkt.topic != toriginal {
-		params["tmpname"] = sreg.pkt.topic
+	if sreg.created && sreg.pkt.original != toriginal {
+		params["tmpname"] = sreg.pkt.original
 	}
 
 	if len(params) == 0 {

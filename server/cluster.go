@@ -548,10 +548,9 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 			log.Println("join setting uid = ", uid)
 			msg.CliMsg.asUser = uid.UserId()
 		}
-		msg.CliMsg.topic = msg.CliMsg.Sub.Topic
+		msg.CliMsg.original = msg.CliMsg.Sub.Topic
 		msg.CliMsg.id = msg.CliMsg.Sub.Id
 		sessionJoin := &sessionJoin{
-			topic:    msg.RcptTo,
 			pkt:      msg.CliMsg,
 			sess:     sess,
 			created:  msg.TopicMsg.JoinReq.Created,
@@ -596,13 +595,13 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 		switch {
 		case msg.CliMsg.Get != nil:
 			msg.CliMsg.id = msg.CliMsg.Get.Id
-			msg.CliMsg.topic = msg.CliMsg.Get.Topic
+			msg.CliMsg.original = msg.CliMsg.Get.Topic
 		case msg.CliMsg.Set != nil:
 			msg.CliMsg.id = msg.CliMsg.Set.Id
-			msg.CliMsg.topic = msg.CliMsg.Set.Topic
+			msg.CliMsg.original = msg.CliMsg.Set.Topic
 		case msg.CliMsg.Del != nil:
 			msg.CliMsg.id = msg.CliMsg.Del.Id
-			msg.CliMsg.topic = msg.CliMsg.Del.Topic
+			msg.CliMsg.original = msg.CliMsg.Del.Topic
 		default:
 			log.Panic("cluster: topic proxy meta request must container either Get or Set field")
 		}

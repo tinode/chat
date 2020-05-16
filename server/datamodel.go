@@ -310,7 +310,9 @@ type ClientComMessage struct {
 	// Message ID denormalized
 	id string
 	// Un-routable (original) topic name denormalized from XXX.Topic.
-	topic string
+	original string
+	// Routable (expanded) topic name
+	rcptTo string
 	// Sender's UserId as string
 	asUser string
 	// Sender's authentication level
@@ -561,15 +563,16 @@ type MsgServerInfo struct {
 type sessionOverrides struct {
 	// Proxied session id.
 	sid string
-	// Topic id the session represents.
+	// Topic name affected by the original request.
 	rcptTo string
 	// User agent of the original session.
 	userAgent string
-	// Incoming proxy topic request pointer. Set for topic proxy requests.
+	// Incoming proxy topic request pointer. Set for topic proxy requests. One of
+	// *ProxyJoin, *ProxyLeave, *ProxyBroadcast, *ProxyMeta.
 	origReq interface{}
 	// User represented by this session.
 	asUser string
-	// The session was a background session.
+	// The original request was a background subscription.
 	isBackground bool
 }
 
@@ -592,9 +595,9 @@ type ServerComMessage struct {
 
 	// MsgServerData has no Id field, copying it here for use in {ctrl} aknowledgements
 	id string
-	// to: topic
+	// Routable (expanded) name of the topic.
 	rcptto string
-	// timestamp for consistency of timestamps in {ctrl} messages
+	// Timestamp for consistency of timestamps in {ctrl} messages
 	timestamp time.Time
 	// User ID of the sender of the original message.
 	asUser string
