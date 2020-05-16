@@ -916,10 +916,9 @@ func (s *Session) del(msg *ClientComMessage) {
 		// Deleting topic: for sessions attached or not attached, send request to hub first.
 		// Hub will forward to topic, if appropriate.
 		globals.hub.unreg <- &topicUnreg{
-			topic: msg.rcptTo,
-			pkt:   msg,
-			sess:  s,
-			del:   true}
+			pkt:  msg,
+			sess: s,
+			del:  true}
 	} else {
 		// Must join the topic to delete messages or subscriptions.
 		s.queueOut(ErrAttachFirst(msg.id, msg.original, msg.timestamp))

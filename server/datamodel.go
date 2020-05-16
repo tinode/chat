@@ -500,13 +500,13 @@ type MsgServerPres struct {
 	// skip those who have this access mode.
 	FilterOut int `json:"-"`
 
-	// When sending to 'me', skip sessions subscribed to this topic
+	// When sending to 'me', skip sessions subscribed to this topic.
 	SkipTopic string `json:"-"`
 
-	// Send to sessions of a single user only
+	// Send to sessions of a single user only.
 	SingleUser string `json:"-"`
 
-	// Exclude sessions of a single user
+	// Exclude sessions of a single user.
 	ExcludeUser string `json:"-"`
 }
 

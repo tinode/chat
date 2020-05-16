@@ -25,15 +25,16 @@ import (
 type sessionJoin struct {
 	// Packet, containing request details.
 	pkt *ClientComMessage
-	// Session to subscribe.
+	// Session to attach to topic.
 	sess *Session
-	// True if this topic was just created.
+
+	// True if this subscription created a new topic.
 	// In case of p2p topics, it's true if the other user's subscription was
 	// created (as a part of new topic creation or just alone).
 	created bool
 	// True if this is a new subscription.
 	newsub bool
-	// True if this topic is created internally.
+	// True if this is an internal request.
 	internal bool
 
 	// Session param overrides. Used for handling remote topic requests.
