@@ -128,9 +128,6 @@ type ClusterReq struct {
 	// True if either the original topic (when proxying topics) is gone or
 	// the original session (when proxying sessions) has disconnected
 	Done bool
-
-	// UNroutable components of {pres} message which have to be sent intra-cluster.
-	SrvPres ClusterPresExt
 }
 
 // ClusterResp is a Master to Proxy response message.
@@ -143,27 +140,6 @@ type ClusterResp struct {
 	RcptTo string
 	// Response to a topic proxy request.
 	ProxyResp *ProxyResponse
-}
-
-// ClusterPresExt encapsulates externally unroutable parameters of {pres} message which have to be sent intra-cluster.
-type ClusterPresExt struct {
-	// Flag to break the reply loop
-	WantReply bool
-
-	// Additional access mode filters when senting to topic's online members. Both filter conditions must be true.
-	// send only to those who have this access mode.
-	FilterIn int
-	// skip those who have this access mode.
-	FilterOut int
-
-	// When sending to 'me', skip sessions subscribed to this topic
-	SkipTopic string
-
-	// Send to sessions of a single user only
-	SingleUser string
-
-	// Exclude sessions of a single user
-	ExcludeUser string
 }
 
 // ProxyTopicData combines topic proxy to master request params.
@@ -593,11 +569,11 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 	case msg.TopicMsg.LeaveReq != nil:
 		if t := globals.hub.topicGet(msg.RcptTo); t != nil {
 			leave := &sessionLeave{
-				id:     msg.TopicMsg.LeaveReq.Id,
-				userId: msg.TopicMsg.LeaveReq.UserId,
-				unsub:  msg.TopicMsg.LeaveReq.Unsub,
+				id:                       msg.TopicMsg.LeaveReq.Id,
+				userId:                   msg.TopicMsg.LeaveReq.UserId,
+				unsub:                    msg.TopicMsg.LeaveReq.Unsub,
 				terminateProxyConnection: msg.TopicMsg.LeaveReq.TerminateProxyConnection,
-				sess: sess,
+				sess:                     sess,
 				sessOverrides: &sessionOverrides{
 					sid:     origSid,
 					rcptTo:  msg.RcptTo,
@@ -919,7 +895,8 @@ func (c *Cluster) isPartitioned() bool {
 	return (len(c.nodes)+1)/2 >= len(c.fo.activeNodes)
 }
 
-func (c *Cluster) getClusterReq(cliMsg *ClientComMessage, srvMsg *ServerComMessage, topicMsg *ProxyTopicData, topic string, sess *Session) *ClusterReq {
+func (c *Cluster) getClusterReq(cliMsg *ClientComMessage, srvMsg *ServerComMessage,
+	topicMsg *ProxyTopicData, topic string, sess *Session) *ClusterReq {
 	req := &ClusterReq{
 		Node:        c.thisNodeName,
 		Signature:   c.ring.Signature(),
@@ -950,7 +927,8 @@ func (c *Cluster) getClusterReq(cliMsg *ClientComMessage, srvMsg *ServerComMessa
 }
 
 // Forward client request message from the Topic Proxy to the Topic Master (cluster node which owns the topic)
-func (c *Cluster) routeToTopicMaster(cliMsg *ClientComMessage, srvMsg *ServerComMessage, topicMsg *ProxyTopicData, topic string, sess *Session) error {
+func (c *Cluster) routeToTopicMaster(cliMsg *ClientComMessage, srvMsg *ServerComMessage,
+	topicMsg *ProxyTopicData, topic string, sess *Session) error {
 	// Find the cluster node which owns the topic, then forward to it.
 	n := c.nodeForTopic(topic)
 	if n == nil {
@@ -1256,7 +1234,7 @@ func (c *Cluster) garbageCollectProxySessions(activeNodes []string) {
 	for s, t := range sessions {
 		t.unreg <- &sessionLeave{
 			terminateProxyConnection: true,
-			sess: s,
+			sess:                     s,
 		}
 		s.stop <- nil
 	}
