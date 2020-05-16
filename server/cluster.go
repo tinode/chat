@@ -559,10 +559,11 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 			internal: msg.TopicMsg.JoinReq.Internal,
 			// Impersonate the original session.
 			sessOverrides: &sessionOverrides{
-				sid:     origSid,
-				rcptTo:  msg.RcptTo,
-				origReq: msg.TopicMsg.JoinReq,
-				cliMsg:  msg.CliMsg,
+				sid:          origSid,
+				rcptTo:       msg.RcptTo,
+				origReq:      msg.TopicMsg.JoinReq,
+				asUser:       msg.CliMsg.asUser,
+				isBackground: msg.CliMsg.Sub.Background,
 			},
 		}
 		globals.hub.join <- sessionJoin
@@ -1288,10 +1289,8 @@ func (sess *Session) topicProxyWriteLoop(forTopic string) {
 					panic("cluster: origReq is nil in session overrides")
 				case *ProxyJoin:
 					response.ProxyResp.OrigRequestType = ProxyRequestJoin
-					if srvMsg.sessOverrides.cliMsg.Sub.Background {
-						response.ProxyResp.IsBackground = true
-					}
-					response.ProxyResp.Uid = types.ParseUserId(srvMsg.sessOverrides.cliMsg.asUser)
+					response.ProxyResp.IsBackground = srvMsg.sessOverrides.isBackground
+					response.ProxyResp.Uid = types.ParseUserId(srvMsg.sessOverrides.asUser)
 					sess.addRemoteSession(srvMsg.sessOverrides.sid, &remoteSession{
 						uid:          response.ProxyResp.Uid,
 						isBackground: response.ProxyResp.IsBackground})
