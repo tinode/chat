@@ -115,11 +115,6 @@ type ClusterReq struct {
 	// Topic message. Set for topic proxy to topic master requests.
 	TopicMsg *ProxyTopicMessage
 
-	// Root user may send messages on behalf of other users.
-	OnBehalfOf string
-	// AuthLevel of the user specified by root.
-	AuthLvl int
-
 	// Expanded (routable) topic name
 	RcptTo string
 	// Originating session
@@ -472,8 +467,6 @@ func (c *Cluster) Master(msg *ClusterReq, rejected *bool) error {
 		sess.platf = msg.Sess.Platform
 
 		// Dispatch remote message to a local session.
-		msg.CliMsg.asUser = msg.OnBehalfOf
-		msg.CliMsg.authLvl = msg.AuthLvl
 		sess.dispatch(msg.CliMsg)
 	} else {
 		log.Println("cluster Master: session signature mismatch", msg.Sess.Sid)
@@ -510,22 +503,10 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 		log.Println("cluster TopicMaster: request from an unknown node", msg.Node)
 		return nil
 	}
-	var uid types.Uid
 	var origSid string
-	var authLvl auth.Level
-	if msg.Sess == nil {
+	if msg.Sess != nil {
 		// Sess can be empty for pres messages.
-		uid = types.ZeroUid
-		origSid = ""
-		authLvl = auth.LevelNone
-	} else {
-		if msg.OnBehalfOf != "" {
-			uid = types.ParseUserId(msg.OnBehalfOf)
-		} else {
-			uid = msg.Sess.Uid
-		}
 		origSid = msg.Sess.Sid
-		authLvl = msg.Sess.AuthLvl
 	}
 
 	// Create a new session if needed.
@@ -540,10 +521,6 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 
 	switch {
 	case msg.TopicMsg.JoinReq != nil:
-		if !uid.IsZero() {
-			log.Println("join setting uid = ", uid)
-			msg.CliMsg.asUser = uid.UserId()
-		}
 		pktsub := msg.CliMsg.Sub
 		sessionJoin := &sessionJoin{
 			pkt:      msg.CliMsg,
@@ -556,7 +533,7 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 				sid:          origSid,
 				rcptTo:       msg.RcptTo,
 				origReq:      msg.TopicMsg.JoinReq,
-				asUser:       msg.CliMsg.asUser,
+				asUser:       msg.CliMsg.AsUser,
 				isBackground: pktsub.Background,
 			},
 		}
@@ -582,12 +559,6 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 		}
 
 	case msg.TopicMsg.MetaReq != nil:
-		if !uid.IsZero() {
-			log.Println("meta setting uid = ", uid)
-			msg.CliMsg.asUser = uid.UserId()
-		}
-		msg.CliMsg.authLvl = int(authLvl)
-
 		req := &metaReq{
 			pkt:  msg.CliMsg,
 			sess: sess,
@@ -638,7 +609,7 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 				// that sends notifications wants.
 				s := &sessionJoin{
 					pkt: &ClientComMessage{
-						asUser: req.AsUser,
+						AsUser: req.AsUser,
 					},
 					sessOverrides: &sessionOverrides{
 						sid:       req.Sid,
@@ -899,11 +870,6 @@ func (c *Cluster) getClusterReq(cliMsg *ClientComMessage, srvMsg *ServerComMessa
 			DeviceID:   sess.deviceID,
 			Platform:   sess.platf,
 			Sid:        sess.sid}
-		if sess.authLvl == auth.LevelRoot {
-			// Assign these values only when the sender is root
-			req.OnBehalfOf = cliMsg.asUser
-			req.AuthLvl = cliMsg.authLvl
-		}
 	}
 	return req
 }

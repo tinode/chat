@@ -41,7 +41,7 @@ func replyCreateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 
 	// If account state is being assigned, make sure the sender is a root user.
 	if msg.Acc.State != "" {
-		if auth.Level(msg.authLvl) != auth.LevelRoot {
+		if auth.Level(msg.AuthLvl) != auth.LevelRoot {
 			log.Println("create user: attempt to set account state by non-root", s.sid)
 			msg := ErrPermissionDenied(msg.Id, "", msg.timestamp)
 			msg.Ctrl.Params = map[string]interface{}{"what": "state"}
@@ -195,15 +195,15 @@ func replyUpdateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 		log.Println("replyUpdateUser: not a new account and not authenticated", s.sid)
 		s.queueOut(ErrPermissionDenied(msg.Id, "", msg.timestamp))
 		return
-	} else if msg.asUser != "" && rec != nil {
+	} else if msg.AsUser != "" && rec != nil {
 		// Two UIDs: one from msg.from, one from token. Ambigous, reject.
 		log.Println("replyUpdateUser: got both authenticated session and token", s.sid)
 		s.queueOut(ErrMalformed(msg.Id, "", msg.timestamp))
 		return
 	}
 
-	userId := msg.asUser
-	authLvl := auth.Level(msg.authLvl)
+	userId := msg.AsUser
+	authLvl := auth.Level(msg.AuthLvl)
 	if rec != nil {
 		userId = rec.Uid.UserId()
 		authLvl = rec.AuthLevel

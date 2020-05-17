@@ -215,7 +215,7 @@ func (t *Topic) runProxy(hub *Hub) {
 		case sreg := <-t.reg:
 			// Request to add a connection to this topic
 			if t.isInactive() {
-				asUid := types.ParseUserId(sreg.pkt.asUser)
+				asUid := types.ParseUserId(sreg.pkt.AsUser)
 				sreg.sess.queueOut(ErrLocked(sreg.pkt.Id, t.original(asUid), types.TimeNow()))
 			} else {
 				msg := &ProxyTopicMessage{
@@ -338,7 +338,7 @@ func (t *Topic) runProxy(hub *Hub) {
 									sreg := &sessionJoin{
 										sess: sess,
 										pkt: &ClientComMessage{
-											asUser:    msg.Uid.UserId(),
+											AsUser:    msg.Uid.UserId(),
 											timestamp: types.TimeNow(),
 										},
 									}
@@ -558,7 +558,7 @@ func (t *Topic) runLocal(hub *Hub) {
 			// Request to add a connection to this topic
 
 			if t.isInactive() {
-				asUid := types.ParseUserId(sreg.pkt.asUser)
+				asUid := types.ParseUserId(sreg.pkt.AsUser)
 				sreg.sess.queueOutWithOverrides(
 					ErrLocked(sreg.pkt.Id, t.original(asUid), types.TimeNow()), sreg.sessOverrides)
 			} else {
@@ -885,8 +885,8 @@ func (t *Topic) runLocal(hub *Hub) {
 
 		case meta := <-t.meta:
 			// Request to get/set topic metadata
-			asUid := types.ParseUserId(meta.pkt.asUser)
-			authLevel := auth.Level(meta.pkt.authLvl)
+			asUid := types.ParseUserId(meta.pkt.AsUser)
+			authLevel := auth.Level(meta.pkt.AuthLvl)
 			switch {
 			case meta.pkt.Get != nil:
 				// Get request
@@ -1048,7 +1048,7 @@ func (t *Topic) runLocal(hub *Hub) {
 // deferred notifications for the provided sessions.
 func (t *Topic) sendDeferredNotifications(joinReqs []*sessionJoin) {
 	for _, sreg := range joinReqs {
-		uid := types.ParseUserId(sreg.pkt.asUser)
+		uid := types.ParseUserId(sreg.pkt.AsUser)
 		if !t.isProxy {
 			pud := t.perUser[uid]
 			pud.online++
@@ -1063,7 +1063,7 @@ func (t *Topic) routeDeferredNotificationsToMaster(joinReqs []*sessionJoin) {
 	var sendReqs []*ProxyDeferredSession
 	for _, sreg := range joinReqs {
 		s := &ProxyDeferredSession{
-			AsUser:    sreg.pkt.asUser,
+			AsUser:    sreg.pkt.AsUser,
 			Sid:       sreg.sess.sid,
 			UserAgent: sreg.sess.userAgent,
 		}
@@ -1128,8 +1128,8 @@ func sidFromSessionOrOverrides(sess *Session, sessOverrides *sessionOverrides) s
 
 // Session subscribed to a topic, created == true if topic was just created and {pres} needs to be announced
 func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
-	asUid := types.ParseUserId(sreg.pkt.asUser)
-	authLevel := auth.Level(sreg.pkt.authLvl)
+	asUid := types.ParseUserId(sreg.pkt.AsUser)
+	authLevel := auth.Level(sreg.pkt.AuthLvl)
 
 	msgsub := sreg.pkt.Sub
 	getWhat := 0
@@ -1310,8 +1310,8 @@ func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin) error {
 	}
 
 	msgsub := sreg.pkt.Sub
-	asUid := types.ParseUserId(sreg.pkt.asUser)
-	asLvl := auth.Level(sreg.pkt.authLvl)
+	asUid := types.ParseUserId(sreg.pkt.AsUser)
+	asLvl := auth.Level(sreg.pkt.AuthLvl)
 	toriginal := t.original(asUid)
 
 	if !sreg.newsub && (t.cat == types.TopicCatP2P || t.cat == types.TopicCatGrp || t.cat == types.TopicCatSys) {
@@ -2346,8 +2346,8 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 func (t *Topic) replySetSub(h *Hub, sess *Session, pkt *ClientComMessage, sessOverrides *sessionOverrides) error {
 	now := types.TimeNow()
 
-	asUid := types.ParseUserId(pkt.asUser)
-	asLvl := auth.Level(pkt.authLvl)
+	asUid := types.ParseUserId(pkt.AsUser)
+	asLvl := auth.Level(pkt.AuthLvl)
 	set := pkt.Set
 	toriginal := t.original(asUid)
 

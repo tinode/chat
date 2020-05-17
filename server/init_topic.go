@@ -161,7 +161,7 @@ func initTopicMe(t *Topic, sreg *sessionJoin) error {
 func initTopicFnd(t *Topic, sreg *sessionJoin) error {
 	t.cat = types.TopicCatFnd
 
-	uid := types.ParseUserId(sreg.pkt.asUser)
+	uid := types.ParseUserId(sreg.pkt.AsUser)
 	if uid.IsZero() {
 		return types.ErrNotFound
 	}
@@ -275,7 +275,7 @@ func initTopicP2P(t *Topic, sreg *sessionJoin) error {
 
 		// Fetching records for both users.
 		// Requester.
-		userID1 := types.ParseUserId(sreg.pkt.asUser)
+		userID1 := types.ParseUserId(sreg.pkt.AsUser)
 		// The other user.
 		userID2 := types.ParseUserId(t.xoriginal)
 		// User index: u1 - requester, u2 - responder, the other user
@@ -347,7 +347,7 @@ func initTopicP2P(t *Topic, sreg *sessionJoin) error {
 		if sub1 == nil {
 
 			// Set user1's ModeGiven from user2's default values
-			userData.modeGiven = selectAccessMode(auth.Level(sreg.pkt.authLvl),
+			userData.modeGiven = selectAccessMode(auth.Level(sreg.pkt.AuthLvl),
 				users[u2].Access.Anon,
 				users[u2].Access.Auth,
 				types.ModeCP2P)
@@ -402,7 +402,7 @@ func initTopicP2P(t *Topic, sreg *sessionJoin) error {
 
 		if !user1only {
 			// sub2 is being created, assign sub2.modeWant to what user2 gave to user1 (sub1.modeGiven)
-			sub2.ModeWant = selectAccessMode(auth.Level(sreg.pkt.authLvl),
+			sub2.ModeWant = selectAccessMode(auth.Level(sreg.pkt.AuthLvl),
 				users[u2].Access.Anon,
 				users[u2].Access.Auth,
 				types.ModeCP2P)
@@ -472,7 +472,7 @@ func initTopicNewGrp(t *Topic, sreg *sessionJoin) error {
 	t.cat = types.TopicCatGrp
 
 	// Generic topics have parameters stored in the topic object
-	t.owner = types.ParseUserId(sreg.pkt.asUser)
+	t.owner = types.ParseUserId(sreg.pkt.AsUser)
 
 	t.accessAuth = getDefaultAccess(t.cat, true)
 	t.accessAnon = getDefaultAccess(t.cat, false)

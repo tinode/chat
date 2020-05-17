@@ -314,11 +314,11 @@ type ClientComMessage struct {
 	// Un-routable (original) topic name denormalized from XXX.Topic.
 	Original string `json:"-"`
 	// Routable (expanded) topic name.
-	RcptTo string
+	RcptTo string `json:"-"`
 	// Sender's UserId as string.
-	asUser string
+	AsUser string `json:"-"`
 	// Sender's authentication level.
-	authLvl int
+	AuthLvl int `json:"-"`
 	// Timestamp when this message was received by the server.
 	timestamp time.Time
 }

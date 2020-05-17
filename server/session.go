@@ -273,17 +273,17 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 	s.lastAction = types.TimeNow()
 	msg.timestamp = s.lastAction
 
-	if msg.asUser == "" {
-		msg.asUser = s.uid.UserId()
-		msg.authLvl = int(s.authLvl)
+	if msg.AsUser == "" {
+		msg.AsUser = s.uid.UserId()
+		msg.AuthLvl = int(s.authLvl)
 	} else if s.authLvl != auth.LevelRoot {
 		// Only root user can set non-default msg.from && msg.authLvl values.
 		s.queueOut(ErrPermissionDenied("", "", msg.timestamp))
 		log.Println("s.dispatch: non-root asigned msg.from", s.sid)
 		return
-	} else if fromUid := types.ParseUserId(msg.asUser); fromUid.IsZero() {
+	} else if fromUid := types.ParseUserId(msg.AsUser); fromUid.IsZero() {
 		s.queueOut(ErrMalformed("", "", msg.timestamp))
-		log.Println("s.dispatch: malformed msg.from: ", msg.asUser, s.sid)
+		log.Println("s.dispatch: malformed msg.from: ", msg.AsUser, s.sid)
 		return
 	}
 
@@ -315,7 +315,7 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 	// Check if user is logged in
 	checkUser := func(m *ClientComMessage, handler func(*ClientComMessage)) func(*ClientComMessage) {
 		return func(m *ClientComMessage) {
-			if msg.asUser == "" {
+			if msg.AsUser == "" {
 				log.Println("s.dispatch: authentication required", s.sid)
 				s.queueOut(ErrAuthRequired(m.Id, m.Original, msg.timestamp))
 				return
@@ -393,8 +393,8 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 	handler(msg)
 
 	// Notify 'me' topic that this session is currently active
-	if uaRefresh && msg.asUser != "" && s.userAgent != "" {
-		if sub := s.getSub(msg.asUser); sub != nil {
+	if uaRefresh && msg.AsUser != "" && s.userAgent != "" {
+		if sub := s.getSub(msg.AsUser); sub != nil {
 			// The chan is buffered. If the buffer is exhaused, the session will wait for 'me' to become available
 			sub.uaChange <- s.userAgent
 		}
@@ -446,7 +446,7 @@ func (s *Session) leave(msg *ClientComMessage) {
 			// Unlink from topic, topic will send a reply.
 			s.delSub(msg.RcptTo)
 			sub.done <- &sessionLeave{
-				userId:   types.ParseUserId(msg.asUser),
+				userId:   types.ParseUserId(msg.AsUser),
 				original: msg.Original,
 				sess:     s,
 				unsub:    msg.Leave.Unsub,
@@ -474,7 +474,7 @@ func (s *Session) publish(msg *ClientComMessage) {
 	}
 
 	// Add "sender" header if the message is sent on behalf of another user.
-	if msg.asUser != s.uid.UserId() {
+	if msg.AsUser != s.uid.UserId() {
 		if msg.Pub.Head == nil {
 			msg.Pub.Head = make(map[string]interface{})
 		}
@@ -489,7 +489,7 @@ func (s *Session) publish(msg *ClientComMessage) {
 
 	data := &ServerComMessage{Data: &MsgServerData{
 		Topic:     msg.Original,
-		From:      msg.asUser,
+		From:      msg.AsUser,
 		Timestamp: msg.timestamp,
 		Head:      msg.Pub.Head,
 		Content:   msg.Pub.Content},
@@ -498,7 +498,7 @@ func (s *Session) publish(msg *ClientComMessage) {
 		sess:      s,
 		id:        msg.Id,
 		timestamp: msg.timestamp,
-		asUser:    msg.asUser}
+		asUser:    msg.AsUser}
 	if msg.Pub.NoEcho {
 		data.skipSid = s.sid
 	}
@@ -927,7 +927,7 @@ func (s *Session) del(msg *ClientComMessage) {
 // Not reporting any errors
 func (s *Session) note(msg *ClientComMessage) {
 
-	if s.ver == 0 || msg.asUser == "" {
+	if s.ver == 0 || msg.AsUser == "" {
 		// Silently ignore the message: have not received {hi} or don't know who sent the message.
 		return
 	}
@@ -957,10 +957,10 @@ func (s *Session) note(msg *ClientComMessage) {
 		// Pings can be sent to subscribed topics only
 		sub.broadcast <- &ServerComMessage{Info: &MsgServerInfo{
 			Topic: msg.Original,
-			From:  msg.asUser,
+			From:  msg.AsUser,
 			What:  msg.Note.What,
 			SeqId: msg.Note.SeqId,
-		}, rcptto: msg.RcptTo, asUser: msg.asUser, timestamp: msg.timestamp, skipSid: s.sid}
+		}, rcptto: msg.RcptTo, asUser: msg.AsUser, timestamp: msg.timestamp, skipSid: s.sid}
 	} else {
 		s.queueOut(ErrAttachFirst(msg.Id, msg.Original, msg.timestamp))
 		log.Println("s.note: note to invalid topic - must subscribe first", msg.Note.What, s.sid)
@@ -982,12 +982,12 @@ func (s *Session) expandTopicName(msg *ClientComMessage) (string, *ServerComMess
 	// Expanded name of the topic to route to i.e. rcptto: or s.subs[routeTo]
 	var routeTo string
 	if msg.Original == "me" {
-		routeTo = msg.asUser
+		routeTo = msg.AsUser
 	} else if msg.Original == "fnd" {
-		routeTo = types.ParseUserId(msg.asUser).FndName()
+		routeTo = types.ParseUserId(msg.AsUser).FndName()
 	} else if strings.HasPrefix(msg.Original, "usr") {
 		// p2p topic
-		uid1 := types.ParseUserId(msg.asUser)
+		uid1 := types.ParseUserId(msg.AsUser)
 		uid2 := types.ParseUserId(msg.Original)
 		if uid2.IsZero() {
 			// Ensure the user id is valid
