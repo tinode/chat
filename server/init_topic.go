@@ -49,10 +49,10 @@ func topicInit(t *Topic, sreg *sessionJoin, h *Hub) {
 	// Failed to create or load the topic.
 	if err != nil {
 		// Remove topic from cache to prevent hub from forwarding more messages to it.
-		h.topicDel(sreg.pkt.rcptTo)
+		h.topicDel(sreg.pkt.RcptTo)
 
-		log.Println("init_topic: failed to load or create topic:", sreg.pkt.rcptTo, err)
-		sreg.sess.queueOutWithOverrides(decodeStoreError(err, sreg.pkt.id, t.xoriginal, timestamp, nil), sreg.sessOverrides)
+		log.Println("init_topic: failed to load or create topic:", sreg.pkt.RcptTo, err)
+		sreg.sess.queueOutWithOverrides(decodeStoreError(err, sreg.pkt.Id, t.xoriginal, timestamp, nil), sreg.sessOverrides)
 
 		// Re-queue pending requests to join the topic.
 		for len(t.reg) > 0 {
@@ -71,7 +71,7 @@ func topicInit(t *Topic, sreg *sessionJoin, h *Hub) {
 		}
 		for len(t.meta) > 0 {
 			msg := <-t.meta
-			msg.sess.queueOutWithOverrides(ErrLocked(msg.pkt.id, t.xoriginal, timestamp), sreg.sessOverrides)
+			msg.sess.queueOutWithOverrides(ErrLocked(msg.pkt.Id, t.xoriginal, timestamp), sreg.sessOverrides)
 		}
 		if len(t.exit) > 0 {
 			msg := <-t.exit
@@ -85,7 +85,7 @@ func topicInit(t *Topic, sreg *sessionJoin, h *Hub) {
 
 	// prevent newly initialized topics to go live while shutdown in progress
 	if globals.shuttingDown {
-		h.topicDel(sreg.pkt.rcptTo)
+		h.topicDel(sreg.pkt.RcptTo)
 		return
 	}
 
@@ -547,7 +547,7 @@ func initTopicNewGrp(t *Topic, sreg *sessionJoin) error {
 	// t.lastId & t.delId are not set for new topics
 
 	stopic := &types.Topic{
-		ObjHeader: types.ObjHeader{Id: sreg.pkt.rcptTo, CreatedAt: timestamp},
+		ObjHeader: types.ObjHeader{Id: sreg.pkt.RcptTo, CreatedAt: timestamp},
 		Access:    types.DefaultAccess{Auth: t.accessAuth, Anon: t.accessAnon},
 		Tags:      tags,
 		Public:    t.public}

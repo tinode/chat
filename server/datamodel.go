@@ -307,12 +307,14 @@ type ClientComMessage struct {
 	Del   *MsgClientDel   `json:"del"`
 	Note  *MsgClientNote  `json:"note"`
 
+	// Internal fields, routed only within the cluster.
+
 	// Message ID denormalized
-	id string
+	Id string `json:"-"`
 	// Un-routable (original) topic name denormalized from XXX.Topic.
-	original string
+	Original string `json:"-"`
 	// Routable (expanded) topic name.
-	rcptTo string
+	RcptTo string
 	// Sender's UserId as string.
 	asUser string
 	// Sender's authentication level.

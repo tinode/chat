@@ -216,7 +216,7 @@ func (t *Topic) runProxy(hub *Hub) {
 			// Request to add a connection to this topic
 			if t.isInactive() {
 				asUid := types.ParseUserId(sreg.pkt.asUser)
-				sreg.sess.queueOut(ErrLocked(sreg.pkt.id, t.original(asUid), types.TimeNow()))
+				sreg.sess.queueOut(ErrLocked(sreg.pkt.Id, t.original(asUid), types.TimeNow()))
 			} else {
 				msg := &ProxyTopicMessage{
 					JoinReq: &ProxyJoin{
@@ -560,7 +560,7 @@ func (t *Topic) runLocal(hub *Hub) {
 			if t.isInactive() {
 				asUid := types.ParseUserId(sreg.pkt.asUser)
 				sreg.sess.queueOutWithOverrides(
-					ErrLocked(sreg.pkt.id, t.original(asUid), types.TimeNow()), sreg.sessOverrides)
+					ErrLocked(sreg.pkt.Id, t.original(asUid), types.TimeNow()), sreg.sessOverrides)
 			} else {
 				// The topic is alive, so stop the kill timer, if it's ticking. We don't want the topic to die
 				// while processing the call
@@ -1160,42 +1160,42 @@ func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 
 	if getWhat&constMsgMetaDesc != 0 {
 		// Send get.desc as a {meta} packet.
-		if err := t.replyGetDesc(sreg.sess, asUid, sreg.pkt.id, msgsub.Get.Desc, sreg.sessOverrides); err != nil {
+		if err := t.replyGetDesc(sreg.sess, asUid, sreg.pkt.Id, msgsub.Get.Desc, sreg.sessOverrides); err != nil {
 			log.Printf("topic[%s] handleSubscription Get.Desc failed: %v sid=%s", t.name, err, sreg.sess.sid)
 		}
 	}
 
 	if getWhat&constMsgMetaSub != 0 {
 		// Send get.sub response as a separate {meta} packet
-		if err := t.replyGetSub(sreg.sess, asUid, authLevel, sreg.pkt.id, msgsub.Get.Sub, sreg.sessOverrides); err != nil {
+		if err := t.replyGetSub(sreg.sess, asUid, authLevel, sreg.pkt.Id, msgsub.Get.Sub, sreg.sessOverrides); err != nil {
 			log.Printf("topic[%s] handleSubscription Get.Sub failed: %v sid=%s", t.name, err, sreg.sess.sid)
 		}
 	}
 
 	if getWhat&constMsgMetaTags != 0 {
 		// Send get.tags response as a separate {meta} packet
-		if err := t.replyGetTags(sreg.sess, asUid, sreg.pkt.id, sreg.sessOverrides); err != nil {
+		if err := t.replyGetTags(sreg.sess, asUid, sreg.pkt.Id, sreg.sessOverrides); err != nil {
 			log.Printf("topic[%s] handleSubscription Get.Tags failed: %v sid=%s", t.name, err, sreg.sess.sid)
 		}
 	}
 
 	if getWhat&constMsgMetaCred != 0 {
 		// Send get.tags response as a separate {meta} packet
-		if err := t.replyGetCreds(sreg.sess, asUid, sreg.pkt.id, sreg.sessOverrides); err != nil {
+		if err := t.replyGetCreds(sreg.sess, asUid, sreg.pkt.Id, sreg.sessOverrides); err != nil {
 			log.Printf("topic[%s] handleSubscription Get.Cred failed: %v sid=%s", t.name, err, sreg.sess.sid)
 		}
 	}
 
 	if getWhat&constMsgMetaData != 0 {
 		// Send get.data response as {data} packets
-		if err := t.replyGetData(sreg.sess, asUid, sreg.pkt.id, msgsub.Get.Data, sreg.sessOverrides); err != nil {
+		if err := t.replyGetData(sreg.sess, asUid, sreg.pkt.Id, msgsub.Get.Data, sreg.sessOverrides); err != nil {
 			log.Printf("topic[%s] handleSubscription Get.Data failed: %v sid=%s", t.name, err, sreg.sess.sid)
 		}
 	}
 
 	if getWhat&constMsgMetaDel != 0 {
 		// Send get.del response as a separate {meta} packet
-		if err := t.replyGetDel(sreg.sess, asUid, sreg.pkt.id, msgsub.Get.Del, sreg.sessOverrides); err != nil {
+		if err := t.replyGetDel(sreg.sess, asUid, sreg.pkt.Id, msgsub.Get.Del, sreg.sessOverrides); err != nil {
 			log.Printf("topic[%s] handleSubscription Get.Del failed: %v sid=%s", t.name, err, sreg.sess.sid)
 		}
 	}
@@ -1325,7 +1325,7 @@ func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin) error {
 	if msgsub.Set != nil {
 		if msgsub.Set.Sub != nil {
 			if msgsub.Set.Sub.User != "" {
-				sreg.sess.queueOutWithOverrides(ErrMalformed(sreg.pkt.id, toriginal, now), sreg.sessOverrides)
+				sreg.sess.queueOutWithOverrides(ErrMalformed(sreg.pkt.Id, toriginal, now), sreg.sessOverrides)
 				return errors.New("user id must not be specified")
 			}
 
@@ -1341,7 +1341,7 @@ func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin) error {
 	var changed bool
 	// Create new subscription or modify an existing one.
 	if changed, err = t.thisUserSub(
-		h, sreg.sess, asUid, asLvl, sreg.pkt.id, mode, private, msgsub.Background, sreg.sessOverrides); err != nil {
+		h, sreg.sess, asUid, asLvl, sreg.pkt.Id, mode, private, msgsub.Background, sreg.sessOverrides); err != nil {
 		return err
 	}
 
@@ -1358,8 +1358,8 @@ func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin) error {
 
 	// When a group topic is created, it's given a temporary name by the client.
 	// Then this name changes. Report back the original name here.
-	if sreg.created && sreg.pkt.original != toriginal {
-		params["tmpname"] = sreg.pkt.original
+	if sreg.created && sreg.pkt.Original != toriginal {
+		params["tmpname"] = sreg.pkt.Original
 	}
 
 	if len(params) == 0 {
@@ -1368,7 +1368,7 @@ func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin) error {
 	}
 
 	sreg.sess.queueOutWithOverrides(
-		NoErrParams(sreg.pkt.id, toriginal, now, params), sreg.sessOverrides)
+		NoErrParams(sreg.pkt.Id, toriginal, now, params), sreg.sessOverrides)
 
 	return nil
 }
@@ -2354,7 +2354,7 @@ func (t *Topic) replySetSub(h *Hub, sess *Session, pkt *ClientComMessage, sessOv
 	var target types.Uid
 	if target = types.ParseUserId(set.Sub.User); target.IsZero() && set.Sub.User != "" {
 		// Invalid user ID
-		sess.queueOutWithOverrides(ErrMalformed(pkt.id, toriginal, now), sessOverrides)
+		sess.queueOutWithOverrides(ErrMalformed(pkt.Id, toriginal, now), sessOverrides)
 		return errors.New("invalid user id")
 	}
 
@@ -2367,7 +2367,7 @@ func (t *Topic) replySetSub(h *Hub, sess *Session, pkt *ClientComMessage, sessOv
 	var changed bool
 	if target == asUid {
 		// Request new subscription or modify own subscription
-		changed, err = t.thisUserSub(h, sess, asUid, asLvl, pkt.id, set.Sub.Mode, nil, false, sessOverrides)
+		changed, err = t.thisUserSub(h, sess, asUid, asLvl, pkt.Id, set.Sub.Mode, nil, false, sessOverrides)
 	} else {
 		// Request to approve/change someone's subscription
 		changed, err = t.anotherUserSub(h, sess, asUid, target, set, sessOverrides)
@@ -2387,9 +2387,9 @@ func (t *Topic) replySetSub(h *Hub, sess *Session, pkt *ClientComMessage, sessOv
 		if target != asUid {
 			params["user"] = target.UserId()
 		}
-		resp = NoErrParams(pkt.id, toriginal, now, params)
+		resp = NoErrParams(pkt.Id, toriginal, now, params)
 	} else {
-		resp = InfoNotModified(pkt.id, toriginal, now)
+		resp = InfoNotModified(pkt.Id, toriginal, now)
 	}
 
 	sess.queueOutWithOverrides(resp, sessOverrides)

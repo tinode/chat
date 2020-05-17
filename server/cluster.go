@@ -545,9 +545,6 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 			msg.CliMsg.asUser = uid.UserId()
 		}
 		pktsub := msg.CliMsg.Sub
-		msg.CliMsg.rcptTo = msg.RcptTo
-		msg.CliMsg.original = pktsub.Topic
-		msg.CliMsg.id = pktsub.Id
 		sessionJoin := &sessionJoin{
 			pkt:      msg.CliMsg,
 			sess:     sess,
@@ -590,20 +587,7 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 			msg.CliMsg.asUser = uid.UserId()
 		}
 		msg.CliMsg.authLvl = int(authLvl)
-		msg.CliMsg.rcptTo = msg.RcptTo
-		switch {
-		case msg.CliMsg.Get != nil:
-			msg.CliMsg.id = msg.CliMsg.Get.Id
-			msg.CliMsg.original = msg.CliMsg.Get.Topic
-		case msg.CliMsg.Set != nil:
-			msg.CliMsg.id = msg.CliMsg.Set.Id
-			msg.CliMsg.original = msg.CliMsg.Set.Topic
-		case msg.CliMsg.Del != nil:
-			msg.CliMsg.id = msg.CliMsg.Del.Id
-			msg.CliMsg.original = msg.CliMsg.Del.Topic
-		default:
-			log.Panic("cluster: topic proxy meta request must container either Get or Set field")
-		}
+
 		req := &metaReq{
 			pkt:  msg.CliMsg,
 			sess: sess,
