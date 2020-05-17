@@ -49,9 +49,9 @@ func topicInit(t *Topic, sreg *sessionJoin, h *Hub) {
 	// Failed to create or load the topic.
 	if err != nil {
 		// Remove topic from cache to prevent hub from forwarding more messages to it.
-		h.topicDel(sreg.topic)
+		h.topicDel(sreg.pkt.rcptTo)
 
-		log.Println("hub: failed to load or create topic:", sreg.topic, err)
+		log.Println("hub: failed to load or create topic:", sreg.pkt.rcptTo, err)
 		sreg.sess.queueOutWithOverrides(decodeStoreError(err, sreg.pkt.id, t.xoriginal, timestamp, nil), sreg.sessOverrides)
 
 		// Re-queue pending requests to join the topic.
@@ -85,7 +85,7 @@ func topicInit(t *Topic, sreg *sessionJoin, h *Hub) {
 
 	// prevent newly initialized topics to go live while shutdown in progress
 	if globals.shuttingDown {
-		h.topicDel(sreg.topic)
+		h.topicDel(sreg.pkt.rcptTo)
 		return
 	}
 
@@ -547,7 +547,7 @@ func initTopicNewGrp(t *Topic, sreg *sessionJoin) error {
 	// t.lastId & t.delId are not set for new topics
 
 	stopic := &types.Topic{
-		ObjHeader: types.ObjHeader{Id: sreg.topic, CreatedAt: timestamp},
+		ObjHeader: types.ObjHeader{Id: sreg.pkt.rcptTo, CreatedAt: timestamp},
 		Access:    types.DefaultAccess{Auth: t.accessAuth, Anon: t.accessAnon},
 		Tags:      tags,
 		Public:    t.public}

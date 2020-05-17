@@ -218,15 +218,13 @@ func (t *Topic) runProxy(hub *Hub) {
 				asUid := types.ParseUserId(sreg.pkt.asUser)
 				sreg.sess.queueOut(ErrLocked(sreg.pkt.id, t.original(asUid), types.TimeNow()))
 			} else {
-				log.Printf("topic[%s] reg %+v", t.name, sreg)
-				msg := &ProxyTopicData{
+				msg := &ProxyTopicMessage{
 					JoinReq: &ProxyJoin{
 						Created:  sreg.created,
 						Newsub:   sreg.newsub,
 						Internal: sreg.internal,
 					},
 				}
-				log.Println("sessionJoin pkt = ", sreg.pkt, sreg.topic)
 				// Response (ctrl message) will be handled when it's received via the proxy channel.
 				if err := globals.cluster.routeToTopicMaster(sreg.pkt, nil, msg, t.name, sreg.sess); err != nil {
 					log.Println("proxy topic: route join request from proxy to master failed:", err)
@@ -251,7 +249,7 @@ func (t *Topic) runProxy(hub *Hub) {
 			// and we won't be able to find and remove it by its sid.
 			t.remSession(leave.sess, asUid)
 			msg := &ClientComMessage{}
-			proxyLeave := &ProxyTopicData{
+			proxyLeave := &ProxyTopicMessage{
 				LeaveReq: &ProxyLeave{
 					Id:     leave.id,
 					UserId: asUid,
@@ -266,7 +264,7 @@ func (t *Topic) runProxy(hub *Hub) {
 
 		case msg := <-t.broadcast:
 			// Content message intended for broadcasting to recipients
-			brdc := &ProxyTopicData{
+			brdc := &ProxyTopicMessage{
 				BroadcastReq: &ProxyBroadcast{
 					Id:        msg.id,
 					From:      msg.asUser,
@@ -282,7 +280,7 @@ func (t *Topic) runProxy(hub *Hub) {
 		case meta := <-t.meta:
 			// Request to get/set topic metadata
 			log.Printf("t[%s] meta %+v", t.name, meta)
-			req := &ProxyTopicData{
+			req := &ProxyTopicMessage{
 				MetaReq: &ProxyMeta{
 					What: meta.what,
 				},
@@ -293,8 +291,7 @@ func (t *Topic) runProxy(hub *Hub) {
 
 		case ua := <-t.uaChange:
 			// Process an update to user agent from one of the sessions
-			log.Printf("t[%s] uaChange %+v", t.name, ua)
-			req := &ProxyTopicData{
+			req := &ProxyTopicMessage{
 				UAChangeReq: &ProxyUAChange{
 					UserAgent: ua,
 				},
@@ -304,16 +301,14 @@ func (t *Topic) runProxy(hub *Hub) {
 			}
 
 		case msg := <-t.proxy:
-			log.Printf("proxy topic [%s] msg: sid[%s] = %+v | proxyresp = %+v", t.name, msg.FromSID, msg.SrvMsg, msg.ProxyResp)
-
 			if msg.SrvMsg.Pres != nil && msg.SrvMsg.Pres.What == "acs" && msg.SrvMsg.Pres.Acs != nil {
 				// If the server changed acs on this topic, update the internal state.
 				t.updateAcsFromPresMsg(msg.SrvMsg.Pres)
 			}
 			if msg.FromSID == "*" {
 				// It is a broadcast.
-				msg.SrvMsg.skipSid = msg.ProxyResp.SkipSid
-				msg.SrvMsg.uid = msg.ProxyResp.Uid
+				msg.SrvMsg.skipSid = msg.SkipSid
+				msg.SrvMsg.uid = msg.Uid
 				switch {
 				case msg.SrvMsg.Pres != nil || msg.SrvMsg.Data != nil || msg.SrvMsg.Info != nil:
 					// Regular broadcast.
@@ -325,17 +320,17 @@ func (t *Topic) runProxy(hub *Hub) {
 				}
 			} else {
 				sess := globals.sessionStore.Get(msg.FromSID)
-				switch msg.ProxyResp.OrigRequestType {
+				switch msg.OrigRequestType {
 				case ProxyRequestJoin:
 					if sess != nil && msg.SrvMsg != nil && msg.SrvMsg.Ctrl != nil {
 						if msg.SrvMsg.Ctrl.Code < 300 {
-							if t.addSession(sess, msg.ProxyResp.Uid) {
+							if t.addSession(sess, msg.Uid) {
 								sess.addSub(t.name, &Subscription{
 									broadcast: t.broadcast,
 									done:      t.unreg,
 									meta:      t.meta,
 									uaChange:  t.uaChange})
-								if msg.ProxyResp.IsBackground {
+								if msg.IsBackground {
 									// It's a background session.
 									// Make a fake sessionJoin packet and add it to deferred notification list.
 									// We only need a timestamp and a pointer to the session
@@ -343,7 +338,7 @@ func (t *Topic) runProxy(hub *Hub) {
 									sreg := &sessionJoin{
 										sess: sess,
 										pkt: &ClientComMessage{
-											asUser:    msg.ProxyResp.Uid.UserId(),
+											asUser:    msg.Uid.UserId(),
 											timestamp: types.TimeNow(),
 										},
 									}
@@ -376,7 +371,7 @@ func (t *Topic) runProxy(hub *Hub) {
 						}
 					}
 				default:
-					log.Printf("proxy topic [%s] received response referencing unknown request type %d", t.name, msg.ProxyResp.OrigRequestType)
+					log.Printf("proxy topic [%s] received response referencing unknown request type %d", t.name, msg.OrigRequestType)
 				}
 				if !sess.queueOut(msg.SrvMsg) {
 					log.Println("topic proxy: timeout")
@@ -1074,7 +1069,7 @@ func (t *Topic) routeDeferredNotificationsToMaster(joinReqs []*sessionJoin) {
 		}
 		sendReqs = append(sendReqs, s)
 	}
-	msg := &ProxyTopicData{
+	msg := &ProxyTopicMessage{
 		DefrNotifReq: &ProxyDeferredNotifications{
 			SendNotificationRequests: sendReqs,
 		},
@@ -1363,8 +1358,8 @@ func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin) error {
 
 	// When a group topic is created, it's given a temporary name by the client.
 	// Then this name changes. Report back the original name here.
-	if sreg.created && sreg.pkt.topic != toriginal {
-		params["tmpname"] = sreg.pkt.topic
+	if sreg.created && sreg.pkt.original != toriginal {
+		params["tmpname"] = sreg.pkt.original
 	}
 
 	if len(params) == 0 {

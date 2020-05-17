@@ -114,7 +114,7 @@ type ClusterReq struct {
 	SrvMsg *ServerComMessage
 	// Topic message.
 	// Set for topic proxy to topic master requests.
-	TopicMsg *ProxyTopicData
+	TopicMsg *ProxyTopicMessage
 
 	// Root user may send messages on behalf of other users.
 	OnBehalfOf string
@@ -138,12 +138,21 @@ type ClusterResp struct {
 	FromSID string
 	// Expanded (routable) topic name
 	RcptTo string
-	// Response to a topic proxy request.
-	ProxyResp *ProxyResponse
+
+	// Various parameters sent back by the topic master in response a topic proxy request.
+
+	// Request type.
+	OrigRequestType int
+	// SessionID to skip. Set for broadcast requests.
+	SkipSid string
+	// ID of the affected user.
+	Uid types.Uid
+	// It is a response to a request from a background session.
+	IsBackground bool
 }
 
-// ProxyTopicData combines topic proxy to master request params.
-type ProxyTopicData struct {
+// ProxyTopicMessage combines topic proxy to master request params.
+type ProxyTopicMessage struct {
 	// Join (subscribe) request.
 	JoinReq *ProxyJoin
 	// Broadcast (publish, etc.) request.
@@ -230,18 +239,6 @@ const (
 	ProxyRequestMeta      = 3
 	ProxyRequestBroadcast = 4
 )
-
-// ProxyResponse contains various parameters sent back by the topic master in response a topic proxy request.
-type ProxyResponse struct {
-	// Request type.
-	OrigRequestType int
-	// SessionID to skip. Set for broadcast requests.
-	SkipSid string
-	// User id of the affected user.
-	Uid types.Uid
-	// It is a response to a request from a background session.
-	IsBackground bool
-}
 
 // Handle outbound node communication: read messages from the channel, forward to remote nodes.
 // FIXME(gene): this will drain the outbound queue in case of a failure: all unprocessed messages will be dropped.
@@ -548,10 +545,10 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 			log.Println("join setting uid = ", uid)
 			msg.CliMsg.asUser = uid.UserId()
 		}
-		msg.CliMsg.topic = msg.CliMsg.Sub.Topic
-		msg.CliMsg.id = msg.CliMsg.Sub.Id
+		pktsub := msg.CliMsg.Sub
+		msg.CliMsg.original = pktsub.Topic
+		msg.CliMsg.id = pktsub.Id
 		sessionJoin := &sessionJoin{
-			topic:    msg.RcptTo,
 			pkt:      msg.CliMsg,
 			sess:     sess,
 			created:  msg.TopicMsg.JoinReq.Created,
@@ -559,10 +556,11 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 			internal: msg.TopicMsg.JoinReq.Internal,
 			// Impersonate the original session.
 			sessOverrides: &sessionOverrides{
-				sid:     origSid,
-				rcptTo:  msg.RcptTo,
-				origReq: msg.TopicMsg.JoinReq,
-				cliMsg:  msg.CliMsg,
+				sid:          origSid,
+				rcptTo:       msg.RcptTo,
+				origReq:      msg.TopicMsg.JoinReq,
+				asUser:       msg.CliMsg.asUser,
+				isBackground: pktsub.Background,
 			},
 		}
 		globals.hub.join <- sessionJoin
@@ -595,13 +593,13 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 		switch {
 		case msg.CliMsg.Get != nil:
 			msg.CliMsg.id = msg.CliMsg.Get.Id
-			msg.CliMsg.topic = msg.CliMsg.Get.Topic
+			msg.CliMsg.original = msg.CliMsg.Get.Topic
 		case msg.CliMsg.Set != nil:
 			msg.CliMsg.id = msg.CliMsg.Set.Id
-			msg.CliMsg.topic = msg.CliMsg.Set.Topic
+			msg.CliMsg.original = msg.CliMsg.Set.Topic
 		case msg.CliMsg.Del != nil:
 			msg.CliMsg.id = msg.CliMsg.Del.Id
-			msg.CliMsg.topic = msg.CliMsg.Del.Topic
+			msg.CliMsg.original = msg.CliMsg.Del.Topic
 		default:
 			log.Panic("cluster: topic proxy meta request must container either Get or Set field")
 		}
@@ -896,7 +894,7 @@ func (c *Cluster) isPartitioned() bool {
 }
 
 func (c *Cluster) getClusterReq(cliMsg *ClientComMessage, srvMsg *ServerComMessage,
-	topicMsg *ProxyTopicData, topic string, sess *Session) *ClusterReq {
+	topicMsg *ProxyTopicMessage, topic string, sess *Session) *ClusterReq {
 	req := &ClusterReq{
 		Node:        c.thisNodeName,
 		Signature:   c.ring.Signature(),
@@ -928,7 +926,7 @@ func (c *Cluster) getClusterReq(cliMsg *ClientComMessage, srvMsg *ServerComMessa
 
 // Forward client request message from the Topic Proxy to the Topic Master (cluster node which owns the topic)
 func (c *Cluster) routeToTopicMaster(cliMsg *ClientComMessage, srvMsg *ServerComMessage,
-	topicMsg *ProxyTopicData, topic string, sess *Session) error {
+	topicMsg *ProxyTopicMessage, topic string, sess *Session) error {
 	// Find the cluster node which owns the topic, then forward to it.
 	n := c.nodeForTopic(topic)
 	if n == nil {
@@ -1277,36 +1275,31 @@ func (sess *Session) topicProxyWriteLoop(forTopic string) {
 			}
 			srvMsg := msg.(*ServerComMessage)
 
-			response := &ClusterResp{
-				SrvMsg:    srvMsg,
-				ProxyResp: &ProxyResponse{},
-			}
+			response := &ClusterResp{SrvMsg: srvMsg}
 			copyParamsFromSession := false
 			if srvMsg.sessOverrides != nil {
 				switch req := srvMsg.sessOverrides.origReq.(type) {
 				case nil:
 					panic("cluster: origReq is nil in session overrides")
 				case *ProxyJoin:
-					response.ProxyResp.OrigRequestType = ProxyRequestJoin
-					if srvMsg.sessOverrides.cliMsg.Sub.Background {
-						response.ProxyResp.IsBackground = true
-					}
-					response.ProxyResp.Uid = types.ParseUserId(srvMsg.sessOverrides.cliMsg.asUser)
+					response.OrigRequestType = ProxyRequestJoin
+					response.IsBackground = srvMsg.sessOverrides.isBackground
+					response.Uid = types.ParseUserId(srvMsg.sessOverrides.asUser)
 					sess.addRemoteSession(srvMsg.sessOverrides.sid, &remoteSession{
-						uid:          response.ProxyResp.Uid,
-						isBackground: response.ProxyResp.IsBackground})
+						uid:          response.Uid,
+						isBackground: response.IsBackground})
 				case *ProxyLeave:
-					response.ProxyResp.OrigRequestType = ProxyRequestLeave
+					response.OrigRequestType = ProxyRequestLeave
 					sess.delRemoteSession(srvMsg.sessOverrides.sid)
 					if req.TerminateProxyConnection {
 						log.Printf("session [%s]: terminating upon client request", srvMsg.sessOverrides.sid)
 						sess.detach <- forTopic
 					}
 				case *ProxyBroadcast:
-					response.ProxyResp.OrigRequestType = ProxyRequestBroadcast
-					response.ProxyResp.SkipSid = req.SkipSid
+					response.OrigRequestType = ProxyRequestBroadcast
+					response.SkipSid = req.SkipSid
 				case *ProxyMeta:
-					response.ProxyResp.OrigRequestType = ProxyRequestMeta
+					response.OrigRequestType = ProxyRequestMeta
 				}
 				copyParamsFromSession = srvMsg.sessOverrides.sid != ""
 			} else {
@@ -1315,8 +1308,8 @@ func (sess *Session) topicProxyWriteLoop(forTopic string) {
 					// Only broadcast messages (data, pres, info) may come not as a response to a client request.
 					log.Panicf("cluster: only broadcast messages may not contain session overrides: %+v", srvMsg)
 				}
-				response.ProxyResp.SkipSid = srvMsg.skipSid
-				response.ProxyResp.Uid = srvMsg.uid
+				response.SkipSid = srvMsg.skipSid
+				response.Uid = srvMsg.uid
 			}
 			if copyParamsFromSession {
 				// Reply to a specific session.

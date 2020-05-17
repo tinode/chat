@@ -23,19 +23,18 @@ import (
 
 // Request to hub to subscribe session to topic
 type sessionJoin struct {
-	// Routable (expanded) name of the topic to subscribe to.
-	topic string
 	// Packet, containing request details.
 	pkt *ClientComMessage
-	// Session to subscribe.
+	// Session to attach to topic.
 	sess *Session
-	// True if this topic was just created.
+
+	// True if this subscription created a new topic.
 	// In case of p2p topics, it's true if the other user's subscription was
 	// created (as a part of new topic creation or just alone).
 	created bool
 	// True if this is a new subscription.
 	newsub bool
-	// True if this topic is created internally.
+	// True if this is an internal request.
 	internal bool
 
 	// Session param overrides. Used for handling remote topic requests.
@@ -154,7 +153,7 @@ func newHub() *Hub {
 
 	if !globals.cluster.isRemoteTopic("sys") {
 		// Initialize system 'sys' topic. There is only one sys topic per cluster.
-		h.join <- &sessionJoin{topic: "sys", internal: true, pkt: &ClientComMessage{topic: "sys"}}
+		h.join <- &sessionJoin{internal: true, pkt: &ClientComMessage{rcptTo: "sys", original: "sys"}}
 	}
 
 	return h
@@ -176,13 +175,13 @@ func (h *Hub) run() {
 			// 3. Attach session to the topic
 
 			// Is the topic already loaded?
-			t := h.topicGet(sreg.topic)
+			t := h.topicGet(sreg.pkt.rcptTo)
 			if t == nil {
 				// Topic does not exist or not loaded.
-				t = &Topic{name: sreg.topic,
-					xoriginal: sreg.pkt.topic,
+				t = &Topic{name: sreg.pkt.rcptTo,
+					xoriginal: sreg.pkt.original,
 					// Indicates a proxy topic.
-					isProxy:   globals.cluster.isRemoteTopic(sreg.topic),
+					isProxy:   globals.cluster.isRemoteTopic(sreg.pkt.rcptTo),
 					sessions:  make(map[*Session]perSessionData),
 					broadcast: make(chan *ServerComMessage, 256),
 					reg:       make(chan *sessionJoin, 32),
@@ -205,7 +204,7 @@ func (h *Hub) run() {
 				// Topic is created in suspended state because it's not yet configured.
 				t.markPaused(true)
 				// Save topic now to prevent race condition.
-				h.topicPut(sreg.topic, t)
+				h.topicPut(sreg.pkt.rcptTo, t)
 
 				// Configure the topic.
 				go topicInit(t, sreg, h)
@@ -298,7 +297,7 @@ func (h *Hub) run() {
 				// Yes, 'sys' has migrated here. Initialize it.
 				// The h.join is unbuffered. We must call from another goroutine. Otherwise deadlock.
 				go func() {
-					h.join <- &sessionJoin{topic: "sys", internal: true, pkt: &ClientComMessage{topic: "sys"}}
+					h.join <- &sessionJoin{internal: true, pkt: &ClientComMessage{rcptTo: "sys", original: "sys"}}
 				}()
 			}
 
@@ -389,11 +388,11 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 				t.markPaused(true)
 				if err := store.Topics.Delete(topic, msg.Del.Hard); err != nil {
 					t.markPaused(false)
-					sess.queueOut(ErrUnknown(msg.id, msg.topic, now))
+					sess.queueOut(ErrUnknown(msg.id, msg.original, now))
 					return err
 				}
 
-				sess.queueOut(NoErr(msg.id, msg.topic, now))
+				sess.queueOut(NoErr(msg.id, msg.original, now))
 
 				h.topicDel(topic)
 				t.markDeleted()
@@ -415,12 +414,12 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 			// Get all subscribers: we need to know how many are left and notify them.
 			subs, err := store.Topics.GetSubs(topic, nil)
 			if err != nil {
-				sess.queueOut(ErrUnknown(msg.id, msg.topic, now))
+				sess.queueOut(ErrUnknown(msg.id, msg.original, now))
 				return err
 			}
 
 			if len(subs) == 0 {
-				sess.queueOut(InfoNoAction(msg.id, msg.topic, now))
+				sess.queueOut(InfoNoAction(msg.id, msg.original, now))
 				return nil
 			}
 
@@ -435,7 +434,7 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 
 			if sub == nil {
 				// If user has no subscription, tell him all is fine
-				sess.queueOut(InfoNoAction(msg.id, msg.topic, now))
+				sess.queueOut(InfoNoAction(msg.id, msg.original, now))
 				return nil
 			}
 
@@ -446,7 +445,7 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 				if tcat == types.TopicCatP2P && len(subs) < 2 {
 					// This is a P2P topic and fewer than 2 subscriptions, delete the entire topic
 					if err := store.Topics.Delete(topic, msg.Del.Hard); err != nil {
-						sess.queueOut(ErrUnknown(msg.id, msg.topic, now))
+						sess.queueOut(ErrUnknown(msg.id, msg.original, now))
 						return err
 					}
 
@@ -454,19 +453,19 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 					// Not P2P or more than 1 subscription left.
 					// Delete user's own subscription only
 					if err == types.ErrNotFound {
-						sess.queueOut(InfoNoAction(msg.id, msg.topic, now))
+						sess.queueOut(InfoNoAction(msg.id, msg.original, now))
 						err = nil
 					} else {
-						sess.queueOut(ErrUnknown(msg.id, msg.topic, now))
+						sess.queueOut(ErrUnknown(msg.id, msg.original, now))
 					}
 					return err
 				}
 
 				// Notify user's other sessions that the subscription is gone
-				presSingleUserOfflineOffline(asUid, msg.topic, "gone", nilPresParams, sess.sid)
+				presSingleUserOfflineOffline(asUid, msg.original, "gone", nilPresParams, sess.sid)
 				if tcat == types.TopicCatP2P && len(subs) == 2 {
 					uname1 := asUid.UserId()
-					uid2 := types.ParseUserId(msg.topic)
+					uid2 := types.ParseUserId(msg.original)
 					// Tell user1 to stop sending updates to user2 without passing change to user1's sessions.
 					presSingleUserOfflineOffline(asUid, uid2.UserId(), "?none+rem", nilPresParams, "")
 					// Don't change the online status of user1, just ask user2 to stop notification exchange.
@@ -478,15 +477,15 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 				// Case 1.2.1.1: owner, delete the group topic from db.
 				// Only group topics have owners.
 				if err := store.Topics.Delete(topic, msg.Del.Hard); err != nil {
-					sess.queueOut(ErrUnknown(msg.id, msg.topic, now))
+					sess.queueOut(ErrUnknown(msg.id, msg.original, now))
 					return err
 				}
 
 				// Notify subscribers that the group topic is gone.
-				presSubsOfflineOffline(msg.topic, tcat, subs, "gone", &presParams{}, sess.sid)
+				presSubsOfflineOffline(msg.original, tcat, subs, "gone", &presParams{}, sess.sid)
 			}
 
-			sess.queueOut(NoErr(msg.id, msg.topic, now))
+			sess.queueOut(NoErr(msg.id, msg.original, now))
 		}
 
 	} else {
@@ -503,7 +502,7 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 
 		// sess && msg could be nil if the topic is being killed by timer or due to rehashing.
 		if sess != nil && msg != nil {
-			sess.queueOut(NoErr(msg.id, msg.topic, now))
+			sess.queueOut(NoErr(msg.id, msg.original, now))
 		}
 	}
 
@@ -563,11 +562,11 @@ func replyOfflineTopicGetDesc(sess *Session, topic string, msg *ClientComMessage
 		stopic, err := store.Topics.Get(topic)
 		if err != nil {
 			log.Println("replyOfflineTopicGetDesc", err)
-			sess.queueOut(decodeStoreError(err, msg.id, msg.topic, now, nil))
+			sess.queueOut(decodeStoreError(err, msg.id, msg.original, now, nil))
 			return
 		}
 		if stopic == nil {
-			sess.queueOut(ErrTopicNotFound(msg.id, msg.topic, now))
+			sess.queueOut(ErrTopicNotFound(msg.id, msg.original, now))
 			return
 		}
 
@@ -599,17 +598,17 @@ func replyOfflineTopicGetDesc(sess *Session, topic string, msg *ClientComMessage
 
 		if uid.IsZero() {
 			log.Println("replyOfflineTopicGetDesc: malformed p2p topic name")
-			sess.queueOut(ErrMalformed(msg.id, msg.topic, now))
+			sess.queueOut(ErrMalformed(msg.id, msg.original, now))
 			return
 		}
 
 		suser, err := store.Users.Get(uid)
 		if err != nil {
-			sess.queueOut(decodeStoreError(err, msg.id, msg.topic, now, nil))
+			sess.queueOut(decodeStoreError(err, msg.id, msg.original, now, nil))
 			return
 		}
 		if suser == nil {
-			sess.queueOut(ErrUserNotFound(msg.id, msg.topic, now))
+			sess.queueOut(ErrUserNotFound(msg.id, msg.original, now))
 			return
 		}
 		desc.CreatedAt = &suser.CreatedAt
@@ -623,7 +622,7 @@ func replyOfflineTopicGetDesc(sess *Session, topic string, msg *ClientComMessage
 	sub, err := store.Subs.Get(topic, asUid)
 	if err != nil {
 		log.Println("replyOfflineTopicGetDesc:", err)
-		sess.queueOut(decodeStoreError(err, msg.id, msg.topic, now, nil))
+		sess.queueOut(decodeStoreError(err, msg.id, msg.original, now, nil))
 		return
 	}
 
@@ -637,7 +636,7 @@ func replyOfflineTopicGetDesc(sess *Session, topic string, msg *ClientComMessage
 	}
 
 	sess.queueOut(&ServerComMessage{
-		Meta: &MsgServerMeta{Id: msg.id, Topic: msg.topic, Timestamp: &now, Desc: desc}})
+		Meta: &MsgServerMeta{Id: msg.id, Topic: msg.original, Timestamp: &now, Desc: desc}})
 }
 
 // replyOfflineTopicGetSub reads user's subscription from the database.
@@ -647,19 +646,19 @@ func replyOfflineTopicGetSub(sess *Session, topic string, msg *ClientComMessage)
 	now := types.TimeNow()
 
 	if msg.Get.Sub != nil && msg.Get.Sub.User != "" && msg.Get.Sub.User != msg.asUser {
-		sess.queueOut(ErrPermissionDenied(msg.id, msg.topic, now))
+		sess.queueOut(ErrPermissionDenied(msg.id, msg.original, now))
 		return
 	}
 
 	ssub, err := store.Subs.Get(topic, types.ParseUserId(msg.asUser))
 	if err != nil {
 		log.Println("replyOfflineTopicGetSub:", err)
-		sess.queueOut(decodeStoreError(err, msg.id, msg.topic, now, nil))
+		sess.queueOut(decodeStoreError(err, msg.id, msg.original, now, nil))
 		return
 	}
 
 	if ssub == nil {
-		sess.queueOut(ErrNotFound(msg.id, msg.topic, now))
+		sess.queueOut(ErrNotFound(msg.id, msg.original, now))
 		return
 	}
 
@@ -684,7 +683,7 @@ func replyOfflineTopicGetSub(sess *Session, topic string, msg *ClientComMessage)
 	}
 
 	sess.queueOut(&ServerComMessage{
-		Meta: &MsgServerMeta{Id: msg.id, Topic: msg.topic, Timestamp: &now, Sub: []MsgTopicSub{sub}}})
+		Meta: &MsgServerMeta{Id: msg.id, Topic: msg.original, Timestamp: &now, Sub: []MsgTopicSub{sub}}})
 }
 
 // replyOfflineTopicSetSub updates Desc.Private and Sub.Mode when the topic is not loaded in memory.
@@ -694,12 +693,12 @@ func replyOfflineTopicSetSub(sess *Session, topic string, msg *ClientComMessage)
 	now := types.TimeNow()
 
 	if (msg.Set.Desc == nil || msg.Set.Desc.Private == nil) && (msg.Set.Sub == nil || msg.Set.Sub.Mode == "") {
-		sess.queueOut(InfoNotModified(msg.id, msg.topic, now))
+		sess.queueOut(InfoNotModified(msg.id, msg.original, now))
 		return
 	}
 
 	if msg.Set.Sub != nil && msg.Set.Sub.User != "" && msg.Set.Sub.User != msg.asUser {
-		sess.queueOut(ErrPermissionDenied(msg.id, msg.topic, now))
+		sess.queueOut(ErrPermissionDenied(msg.id, msg.original, now))
 		return
 	}
 
@@ -708,12 +707,12 @@ func replyOfflineTopicSetSub(sess *Session, topic string, msg *ClientComMessage)
 	sub, err := store.Subs.Get(topic, asUid)
 	if err != nil {
 		log.Println("replyOfflineTopicSetSub get sub:", err)
-		sess.queueOut(decodeStoreError(err, msg.id, msg.topic, now, nil))
+		sess.queueOut(decodeStoreError(err, msg.id, msg.original, now, nil))
 		return
 	}
 
 	if sub == nil || sub.DeletedAt != nil {
-		sess.queueOut(ErrNotFound(msg.id, msg.topic, now))
+		sess.queueOut(ErrNotFound(msg.id, msg.original, now))
 		return
 	}
 
@@ -731,13 +730,13 @@ func replyOfflineTopicSetSub(sess *Session, topic string, msg *ClientComMessage)
 		var modeWant types.AccessMode
 		if err = modeWant.UnmarshalText([]byte(msg.Set.Sub.Mode)); err != nil {
 			log.Println("replyOfflineTopicSetSub mode:", err)
-			sess.queueOut(decodeStoreError(err, msg.id, msg.topic, now, nil))
+			sess.queueOut(decodeStoreError(err, msg.id, msg.original, now, nil))
 			return
 		}
 
 		if modeWant.IsOwner() != sub.ModeWant.IsOwner() {
 			// No ownership changes here.
-			sess.queueOut(ErrPermissionDenied(msg.id, msg.topic, now))
+			sess.queueOut(ErrPermissionDenied(msg.id, msg.original, now))
 			return
 		}
 
@@ -758,7 +757,7 @@ func replyOfflineTopicSetSub(sess *Session, topic string, msg *ClientComMessage)
 		err = store.Subs.Update(topic, asUid, update, true)
 		if err != nil {
 			log.Println("replyOfflineTopicSetSub update:", err)
-			sess.queueOut(decodeStoreError(err, msg.id, msg.topic, now, nil))
+			sess.queueOut(decodeStoreError(err, msg.id, msg.original, now, nil))
 		} else {
 			var params interface{}
 			if update["ModeWant"] != nil {
@@ -767,9 +766,9 @@ func replyOfflineTopicSetSub(sess *Session, topic string, msg *ClientComMessage)
 					Want:  sub.ModeWant.String(),
 					Mode:  (sub.ModeGiven & sub.ModeWant).String()}}
 			}
-			sess.queueOut(NoErrParams(msg.id, msg.topic, now, params))
+			sess.queueOut(NoErrParams(msg.id, msg.original, now, params))
 		}
 	} else {
-		sess.queueOut(InfoNotModified(msg.id, msg.topic, now))
+		sess.queueOut(InfoNotModified(msg.id, msg.original, now))
 	}
 }
