@@ -51,7 +51,7 @@ func topicInit(t *Topic, sreg *sessionJoin, h *Hub) {
 		// Remove topic from cache to prevent hub from forwarding more messages to it.
 		h.topicDel(sreg.pkt.rcptTo)
 
-		log.Println("hub: failed to load or create topic:", sreg.pkt.rcptTo, err)
+		log.Println("int_topic: failed to load or create topic:", sreg.pkt.rcptTo, err)
 		sreg.sess.queueOutWithOverrides(decodeStoreError(err, sreg.pkt.id, t.xoriginal, timestamp, nil), sreg.sessOverrides)
 
 		// Re-queue pending requests to join the topic.

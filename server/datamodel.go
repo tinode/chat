@@ -597,7 +597,7 @@ type ServerComMessage struct {
 	id string
 	// Routable (expanded) name of the topic.
 	rcptto string
-	// Timestamp for consistency of timestamps in {ctrl} messages
+	// Timestamp for consistency of timestamps in {ctrl} messages.
 	timestamp time.Time
 	// User ID of the sender of the original message.
 	asUser string
@@ -605,7 +605,7 @@ type ServerComMessage struct {
 	sess *Session
 	// Session parameter overrides. Used when a topic is hosted remotely. Could be nil.
 	sessOverrides *sessionOverrides
-	// Should the packet be sent to the original session? SessionID to skip.
+	// Should the packet be sent to the original session? Session ID to skip.
 	skipSid string
 	// User id affected by this message.
 	uid types.Uid

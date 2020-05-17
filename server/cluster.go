@@ -112,8 +112,7 @@ type ClusterReq struct {
 	CliMsg *ClientComMessage
 	// Message to be routed. Set for intra-cluster route requests.
 	SrvMsg *ServerComMessage
-	// Topic message.
-	// Set for topic proxy to topic master requests.
+	// Topic message. Set for topic proxy to topic master requests.
 	TopicMsg *ProxyTopicMessage
 
 	// Root user may send messages on behalf of other users.
@@ -546,6 +545,7 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 			msg.CliMsg.asUser = uid.UserId()
 		}
 		pktsub := msg.CliMsg.Sub
+		msg.CliMsg.rcptTo = msg.RcptTo
 		msg.CliMsg.original = pktsub.Topic
 		msg.CliMsg.id = pktsub.Id
 		sessionJoin := &sessionJoin{
@@ -590,6 +590,7 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 			msg.CliMsg.asUser = uid.UserId()
 		}
 		msg.CliMsg.authLvl = int(authLvl)
+		msg.CliMsg.rcptTo = msg.RcptTo
 		switch {
 		case msg.CliMsg.Get != nil:
 			msg.CliMsg.id = msg.CliMsg.Get.Id
