@@ -110,7 +110,7 @@ type ClusterReq struct {
 
 	// Client message. Set for C2S requests.
 	CliMsg *ClientComMessage
-	// Message to be routed. Set for route requests.
+	// Message to be routed. Set for intra-cluster route requests.
 	SrvMsg *ServerComMessage
 	// Topic message.
 	// Set for topic proxy to topic master requests.
@@ -604,10 +604,9 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 			log.Panic("cluster: topic proxy meta request must container either Get or Set field")
 		}
 		req := &metaReq{
-			topic: msg.RcptTo,
-			pkt:   msg.CliMsg,
-			sess:  sess,
-			what:  msg.TopicMsg.MetaReq.What,
+			pkt:  msg.CliMsg,
+			sess: sess,
+			what: msg.TopicMsg.MetaReq.What,
 			// Impersonate the original session.
 			sessOverrides: &sessionOverrides{
 				sid:     origSid,
@@ -1079,7 +1078,7 @@ func (sess *Session) rpcWriteLoop() {
 			// The error is returned if the remote node is down. Which means the remote
 			// session is also disconnected.
 			if err := sess.clnode.respond(&ClusterResp{SrvMsg: msg.(*ServerComMessage), FromSID: sess.sid}); err != nil {
-				log.Println("cluster: sess.writeRPC: " + err.Error())
+				log.Println("cluster: sess.writeRPC:", err)
 				return
 			}
 		case msg := <-sess.stop:

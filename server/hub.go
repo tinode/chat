@@ -46,7 +46,7 @@ type sessionLeave struct {
 	// User ID of the user sent the request
 	userId types.Uid
 	// Topic to report success of failure on
-	topic string
+	original string
 	// Session which initiated the request
 	sess *Session
 	// Should the proxy-master topic connection be terminated
@@ -63,7 +63,7 @@ type sessionLeave struct {
 // Request to hub to remove the topic
 type topicUnreg struct {
 	// Routable name of the topic to drop
-	topic string
+	rcptTo string
 	// UID of the user being deleted
 	forUser types.Uid
 	// Session making the request, could be nil
@@ -77,9 +77,7 @@ type topicUnreg struct {
 }
 
 type metaReq struct {
-	// Routable name of the topic to update or query. Either topic or forUser must be defined.
-	topic string
-	// UID of the user being affected. Either topic or forUser must be defined.
+	// UID of the user being affected. Could be zero.
 	forUser types.Uid
 	// Packet containing details of the Get/Set/Del request.
 	pkt *ClientComMessage
@@ -253,12 +251,12 @@ func (h *Hub) run() {
 				// Metadata read or update from a user who is not attached to the topic.
 				if meta.pkt.Get != nil {
 					if meta.what == constMsgMetaDesc {
-						go replyOfflineTopicGetDesc(meta.sess, meta.topic, meta.pkt)
+						go replyOfflineTopicGetDesc(meta.sess, meta.pkt)
 					} else {
-						go replyOfflineTopicGetSub(meta.sess, meta.topic, meta.pkt)
+						go replyOfflineTopicGetSub(meta.sess, meta.pkt)
 					}
 				} else if meta.pkt.Set != nil {
-					go replyOfflineTopicSetSub(meta.sess, meta.topic, meta.pkt)
+					go replyOfflineTopicSetSub(meta.sess, meta.pkt)
 				}
 			}
 
@@ -269,7 +267,7 @@ func (h *Hub) run() {
 			}
 			if unreg.forUser.IsZero() {
 				// The topic is being garbage collected or deleted.
-				if err := h.topicUnreg(unreg.sess, unreg.topic, unreg.pkt, reason); err != nil {
+				if err := h.topicUnreg(unreg.sess, unreg.rcptTo, unreg.pkt, reason); err != nil {
 					log.Println("hub.topicUnreg failed:", err)
 				}
 			} else {
@@ -401,10 +399,9 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 			} else {
 				// Case 1.1.2: requester is NOT the owner
 				t.meta <- &metaReq{
-					topic: topic,
-					pkt:   msg,
-					sess:  sess,
-					what:  constMsgDelTopic}
+					pkt:  msg,
+					sess: sess,
+					what: constMsgDelTopic}
 			}
 
 		} else {
@@ -553,9 +550,10 @@ func (h *Hub) stopTopicsForUser(uid types.Uid, reason int, alldone chan<- bool) 
 
 // replyOfflineTopicGetDesc reads a minimal topic Desc from the database.
 // The requester may or maynot be subscribed to the topic.
-func replyOfflineTopicGetDesc(sess *Session, topic string, msg *ClientComMessage) {
+func replyOfflineTopicGetDesc(sess *Session, msg *ClientComMessage) {
 	now := types.TimeNow()
 	desc := &MsgTopicDesc{}
+	topic := msg.rcptTo
 	asUid := types.ParseUserId(msg.asUser)
 
 	if strings.HasPrefix(topic, "grp") {
@@ -642,8 +640,9 @@ func replyOfflineTopicGetDesc(sess *Session, topic string, msg *ClientComMessage
 // replyOfflineTopicGetSub reads user's subscription from the database.
 // Only own subscription is available.
 // The requester must be subscribed but need not be attached.
-func replyOfflineTopicGetSub(sess *Session, topic string, msg *ClientComMessage) {
+func replyOfflineTopicGetSub(sess *Session, msg *ClientComMessage) {
 	now := types.TimeNow()
+	topic := msg.rcptTo
 
 	if msg.Get.Sub != nil && msg.Get.Sub.User != "" && msg.Get.Sub.User != msg.asUser {
 		sess.queueOut(ErrPermissionDenied(msg.id, msg.original, now))
@@ -689,8 +688,9 @@ func replyOfflineTopicGetSub(sess *Session, topic string, msg *ClientComMessage)
 // replyOfflineTopicSetSub updates Desc.Private and Sub.Mode when the topic is not loaded in memory.
 // Only Private and Mode are updated and only for the requester. The requester must be subscribed to the
 // topic but does not need to be attached.
-func replyOfflineTopicSetSub(sess *Session, topic string, msg *ClientComMessage) {
+func replyOfflineTopicSetSub(sess *Session, msg *ClientComMessage) {
 	now := types.TimeNow()
+	topic := msg.rcptTo
 
 	if (msg.Set.Desc == nil || msg.Set.Desc.Private == nil) && (msg.Set.Sub == nil || msg.Set.Sub.Mode == "") {
 		sess.queueOut(InfoNotModified(msg.id, msg.original, now))

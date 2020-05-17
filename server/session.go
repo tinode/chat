@@ -446,11 +446,11 @@ func (s *Session) leave(msg *ClientComMessage) {
 			// Unlink from topic, topic will send a reply.
 			s.delSub(msg.rcptTo)
 			sub.done <- &sessionLeave{
-				userId: types.ParseUserId(msg.asUser),
-				topic:  msg.original,
-				sess:   s,
-				unsub:  msg.Leave.Unsub,
-				id:     msg.id}
+				userId:   types.ParseUserId(msg.asUser),
+				original: msg.original,
+				sess:     s,
+				unsub:    msg.Leave.Unsub,
+				id:       msg.id}
 		}
 	} else if !msg.Leave.Unsub {
 		// Session is not attached to the topic, wants to leave - fine, no change
@@ -819,10 +819,9 @@ func (s *Session) get(msg *ClientComMessage) {
 
 	sub := s.getSub(msg.rcptTo)
 	meta := &metaReq{
-		topic: msg.rcptTo,
-		pkt:   msg,
-		sess:  s,
-		what:  parseMsgClientMeta(msg.Get.What)}
+		pkt:  msg,
+		sess: s,
+		what: parseMsgClientMeta(msg.Get.What)}
 
 	if meta.what == 0 {
 		s.queueOut(ErrMalformed(msg.id, msg.original, msg.timestamp))
@@ -848,9 +847,8 @@ func (s *Session) set(msg *ClientComMessage) {
 	}
 
 	meta := &metaReq{
-		topic: msg.rcptTo,
-		pkt:   msg,
-		sess:  s}
+		pkt:  msg,
+		sess: s}
 
 	if msg.Set.Desc != nil {
 		meta.what = constMsgMetaDesc
@@ -907,10 +905,9 @@ func (s *Session) del(msg *ClientComMessage) {
 	if sub != nil && what != constMsgDelTopic {
 		// Session is attached, deleting subscription or messages. Send to topic.
 		sub.meta <- &metaReq{
-			topic: msg.rcptTo,
-			pkt:   msg,
-			sess:  s,
-			what:  what}
+			pkt:  msg,
+			sess: s,
+			what: what}
 
 	} else if what == constMsgDelTopic {
 		// Deleting topic: for sessions attached or not attached, send request to hub first.

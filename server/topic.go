@@ -397,7 +397,7 @@ func (t *Topic) runProxy(hub *Hub) {
 
 		case <-killTimer.C:
 			// Topic timeout
-			hub.unreg <- &topicUnreg{topic: t.name}
+			hub.unreg <- &topicUnreg{rcptTo: t.name}
 
 		case <-defrNotifTimer.C:
 			t.onDeferredNotificationTimer()
@@ -996,7 +996,7 @@ func (t *Topic) runLocal(hub *Hub) {
 
 		case <-killTimer.C:
 			// Topic timeout
-			hub.unreg <- &topicUnreg{topic: t.name}
+			hub.unreg <- &topicUnreg{rcptTo: t.name}
 			defrNotifTimer.Stop()
 			if t.cat == types.TopicCatMe {
 				uaTimer.Stop()

@@ -311,13 +311,13 @@ type ClientComMessage struct {
 	id string
 	// Un-routable (original) topic name denormalized from XXX.Topic.
 	original string
-	// Routable (expanded) topic name
+	// Routable (expanded) topic name.
 	rcptTo string
-	// Sender's UserId as string
+	// Sender's UserId as string.
 	asUser string
-	// Sender's authentication level
+	// Sender's authentication level.
 	authLvl int
-	// Timestamp when this message was received by the server
+	// Timestamp when this message was received by the server.
 	timestamp time.Time
 }
 
