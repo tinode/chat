@@ -284,7 +284,7 @@ func (t *Topic) presSubsOnline(what, src string, params *presParams, filter *pre
 			SeqId: params.seqID, DelId: params.delID, DelSeq: params.delSeq,
 			FilterIn: int(filter.filterIn), FilterOut: int(filter.filterOut),
 			SingleUser: filter.singleUser, ExcludeUser: filter.excludeUser},
-		RcptTo: t.name, skipSid: skipSid}
+		RcptTo: t.name, SkipSid: skipSid}
 }
 
 // userIsPresencer returns true if the user (specified by `uid`) may receive presence notifications.
@@ -396,7 +396,7 @@ func (t *Topic) presSubsOffline(what string, params *presParams,
 				FilterIn: int(filterTarget.filterIn), FilterOut: int(filterTarget.filterOut),
 				SingleUser: filterTarget.singleUser, ExcludeUser: filterTarget.excludeUser,
 				SkipTopic: skipTopic},
-			RcptTo: user, skipSid: skipSid}
+			RcptTo: user, SkipSid: skipSid}
 	}
 }
 
@@ -434,7 +434,7 @@ func presSubsOfflineOffline(topic string, cat types.TopicCat, subs []types.Subsc
 			Pres: &MsgServerPres{Topic: "me", What: what, Src: original,
 				Acs: params.packAcs(), AcsActor: actor, AcsTarget: target,
 				SeqId: params.seqID, DelId: params.delID},
-			RcptTo: user, skipSid: skipSid}
+			RcptTo: user, SkipSid: skipSid}
 	}
 }
 
@@ -470,7 +470,7 @@ func (t *Topic) presSingleUserOffline(uid types.Uid, what string, params *presPa
 				Src: t.original(uid), SeqId: params.seqID, DelId: params.delID,
 				Acs: params.packAcs(), AcsActor: actor, AcsTarget: target, UserAgent: params.userAgent,
 				WantReply: strings.HasPrefix(what, "?unkn"), SkipTopic: skipTopic},
-			RcptTo: user, skipSid: skipSid}
+			RcptTo: user, SkipSid: skipSid}
 	}
 }
 
@@ -493,7 +493,7 @@ func presSingleUserOfflineOffline(uid types.Uid, original, what string, params *
 		Pres: &MsgServerPres{Topic: "me", What: what,
 			Src: original, SeqId: params.seqID, DelId: params.delID,
 			Acs: params.packAcs(), AcsActor: actor, AcsTarget: target},
-		RcptTo: uid.UserId(), skipSid: skipSid}
+		RcptTo: uid.UserId(), SkipSid: skipSid}
 }
 
 // Let other sessions of a given user know what messages are now received/read

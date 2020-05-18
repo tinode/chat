@@ -164,6 +164,15 @@ type MsgClientSub struct {
 
 	// Mirrors {get}.
 	Get *MsgGetQuery `json:"get,omitempty"`
+
+	// Intra-cluster fields.
+
+	// True if this subscription created a new topic.
+	// In case of p2p topics, it's true if the other user's subscription was
+	// created (as a part of new topic creation or just alone).
+	Created bool `json:"-"`
+	// True if this is a new subscription.
+	Newsub bool `json:"-"`
 }
 
 const (
@@ -605,10 +614,11 @@ type ServerComMessage struct {
 	sess *Session
 	// Deserialized ID of the originating session.
 	OrigSid string `json:"-"`
+	// Session ID to skip when sendng packet to sessions. Used to skip sending to original session.
+	// Should be either empty or equal to OrigSid.
+	SkipSid string `json:"-"`
 	// Session parameter overrides. Used when a topic is hosted remotely. Could be nil.
 	sessOverrides *sessionOverrides
-	// Should the packet be sent to the original session? Session ID to skip.
-	skipSid string
 	// User id affected by this message.
 	uid types.Uid
 }
@@ -626,7 +636,7 @@ func (src *ServerComMessage) copy() *ServerComMessage {
 		Timestamp:     src.Timestamp,
 		sess:          src.sess,
 		OrigSid:       src.OrigSid,
-		skipSid:       src.skipSid,
+		SkipSid:       src.SkipSid,
 		sessOverrides: src.sessOverrides,
 		uid:           src.uid,
 	}

@@ -392,7 +392,7 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 
 	handler(msg)
 
-	// Notify 'me' topic that this session is currently active
+	// Notify 'me' topic that this session is currently activeю
 	if uaRefresh && msg.AsUser != "" && s.userAgent != "" {
 		if sub := s.getSub(msg.AsUser); sub != nil {
 			// The chan is buffered. If the buffer is exhaused, the session will wait for 'me' to become available
@@ -446,11 +446,10 @@ func (s *Session) leave(msg *ClientComMessage) {
 			// Unlink from topic, topic will send a reply.
 			s.delSub(msg.RcptTo)
 			sub.done <- &sessionLeave{
-				userId:   types.ParseUserId(msg.AsUser),
-				original: msg.Original,
-				sess:     s,
-				unsub:    msg.Leave.Unsub,
-				id:       msg.Id}
+				userId: types.ParseUserId(msg.AsUser),
+				sess:   s,
+				unsub:  msg.Leave.Unsub,
+				id:     msg.Id}
 		}
 	} else if !msg.Leave.Unsub {
 		// Session is not attached to the topic, wants to leave - fine, no change
@@ -501,7 +500,7 @@ func (s *Session) publish(msg *ClientComMessage) {
 		sess:      s,
 		OrigSid:   s.sid}
 	if msg.Pub.NoEcho {
-		data.skipSid = s.sid
+		data.SkipSid = s.sid
 	}
 	if sub := s.getSub(msg.RcptTo); sub != nil {
 		// This is a post to a subscribed topic. The message is sent to the topic only
@@ -961,7 +960,7 @@ func (s *Session) note(msg *ClientComMessage) {
 			From:  msg.AsUser,
 			What:  msg.Note.What,
 			SeqId: msg.Note.SeqId,
-		}, RcptTo: msg.RcptTo, AsUser: msg.AsUser, Timestamp: msg.timestamp, skipSid: s.sid}
+		}, RcptTo: msg.RcptTo, AsUser: msg.AsUser, Timestamp: msg.timestamp, SkipSid: s.sid}
 	} else {
 		s.queueOut(ErrAttachFirst(msg.Id, msg.Original, msg.timestamp))
 		log.Println("s.note: note to invalid topic - must subscribe first", msg.Note.What, s.sid)

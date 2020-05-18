@@ -28,12 +28,6 @@ type sessionJoin struct {
 	// Session to attach to topic.
 	sess *Session
 
-	// True if this subscription created a new topic.
-	// In case of p2p topics, it's true if the other user's subscription was
-	// created (as a part of new topic creation or just alone).
-	created bool
-	// True if this is a new subscription.
-	newsub bool
 	// True if this is an internal request.
 	internal bool
 
@@ -47,8 +41,6 @@ type sessionLeave struct {
 	id string
 	// User ID of the user sent the request
 	userId types.Uid
-	// Topic to report success of failure on
-	original string
 	// Session which initiated the request
 	sess *Session
 	// Leave and unsubscribe

@@ -137,8 +137,6 @@ type ClusterResp struct {
 
 	// Original request type.
 	OrigRequestType int
-	// Session ID to skip. Set for broadcast requests.
-	SkipSid string
 	// ID of the affected user.
 	Uid types.Uid
 	// It is a response to a request from a background session.
@@ -163,21 +161,12 @@ type ProxyTopicMessage struct {
 
 // ProxyJoin contains topic join request parameters.
 type ProxyJoin struct {
-	// True if this topic was just created.
-	// In case of p2p topics, it's true if the other user's subscription was
-	// created (as a part of new topic creation or just alone).
-	Created bool
-	// True if this is a new subscription.
-	Newsub bool
 	// True if this topic is created internally.
 	Internal bool
 }
 
 // ProxyBroadcast contains topic broadcast request parameters.
-type ProxyBroadcast struct {
-	// Should the packet be sent to the original session? SessionID to skip.
-	SkipSid string
-}
+type ProxyBroadcast struct{}
 
 // ProxyMeta contains meta (get, sub) request parameters.
 type ProxyMeta struct {
@@ -520,8 +509,6 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 		sessionJoin := &sessionJoin{
 			pkt:      msg.CliMsg,
 			sess:     sess,
-			created:  msg.TopicMsg.JoinReq.Created,
-			newsub:   msg.TopicMsg.JoinReq.Newsub,
 			internal: msg.TopicMsg.JoinReq.Internal,
 			// Impersonate the original session.
 			sessOverrides: &sessionOverrides{
@@ -578,7 +565,6 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 			origReq: msg.TopicMsg.BroadcastReq,
 		}
 		msg.SrvMsg.sess = sess
-		msg.SrvMsg.skipSid = msg.TopicMsg.BroadcastReq.SkipSid
 		globals.hub.route <- msg.SrvMsg
 
 	case msg.TopicMsg.UAChangeReq != nil:
@@ -1209,35 +1195,33 @@ func (sess *Session) topicProxyWriteLoop(forTopic string) {
 					response.OrigRequestType = ProxyRequestJoin
 					response.IsBackground = srvMsg.sessOverrides.isBackground
 					response.Uid = types.ParseUserId(srvMsg.AsUser)
-					sess.addRemoteSession(srvMsg.sessOverrides.sid, &remoteSession{
+					sess.addRemoteSession(srvMsg.OrigSid, &remoteSession{
 						uid:          response.Uid,
 						isBackground: response.IsBackground})
 				case *ProxyLeave:
 					response.OrigRequestType = ProxyRequestLeave
-					sess.delRemoteSession(srvMsg.sessOverrides.sid)
+					sess.delRemoteSession(srvMsg.OrigSid)
 					if req.TerminateProxyConnection {
-						log.Printf("session [%s]: terminating upon client request", srvMsg.sessOverrides.sid)
+						log.Printf("session [%s]: terminating upon client request", srvMsg.OrigSid)
 						sess.detach <- forTopic
 					}
 				case *ProxyBroadcast:
 					response.OrigRequestType = ProxyRequestBroadcast
-					response.SkipSid = req.SkipSid
 				case *ProxyMeta:
 					response.OrigRequestType = ProxyRequestMeta
 				}
-				copyParamsFromSession = srvMsg.sessOverrides.sid != ""
+				copyParamsFromSession = srvMsg.OrigSid != ""
 			} else {
 				// Copy skipSid.
 				if srvMsg.Ctrl == nil && srvMsg.Data == nil && srvMsg.Pres == nil && srvMsg.Info == nil {
 					// Only broadcast messages (data, pres, info) may come not as a response to a client request.
 					log.Panicf("cluster: only broadcast messages may not contain session overrides: %+v", srvMsg)
 				}
-				response.SkipSid = srvMsg.skipSid
 				response.Uid = srvMsg.uid
 			}
 			if copyParamsFromSession {
 				// Reply to a specific session.
-				response.FromSID = srvMsg.sessOverrides.sid
+				response.FromSID = srvMsg.OrigSid
 				response.RcptTo = srvMsg.RcptTo
 			} else {
 				response.RcptTo = forTopic

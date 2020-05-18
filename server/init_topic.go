@@ -338,7 +338,7 @@ func initTopicP2P(t *Topic, sreg *sessionJoin) error {
 			sub2.SetPublic(users[u1].Public)
 
 			// Mark the entire topic as new.
-			sreg.created = true
+			pktsub.Created = true
 		}
 
 		// Requester's subscription is missing:
@@ -397,7 +397,7 @@ func initTopicP2P(t *Topic, sreg *sessionJoin) error {
 			sub1.SetPublic(users[u2].Public)
 
 			// Mark this subscription as new
-			sreg.newsub = true
+			pktsub.Newsub = true
 		}
 
 		if !user1only {
@@ -560,8 +560,8 @@ func initTopicNewGrp(t *Topic, sreg *sessionJoin) error {
 	}
 
 	t.xoriginal = t.name // keeping 'new' as original has no value to the client
-	sreg.created = true
-	sreg.newsub = true
+	pktsub.Created = true
+	pktsub.Newsub = true
 
 	return nil
 }

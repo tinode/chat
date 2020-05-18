@@ -226,8 +226,6 @@ func (t *Topic) runProxy(hub *Hub) {
 			} else {
 				msg := &ProxyTopicMessage{
 					JoinReq: &ProxyJoin{
-						Created:  sreg.created,
-						Newsub:   sreg.newsub,
 						Internal: sreg.internal,
 					},
 				}
@@ -271,9 +269,7 @@ func (t *Topic) runProxy(hub *Hub) {
 		case msg := <-t.broadcast:
 			// Content message intended for broadcasting to recipients
 			brdc := &ProxyTopicMessage{
-				BroadcastReq: &ProxyBroadcast{
-					SkipSid: msg.skipSid,
-				},
+				BroadcastReq: &ProxyBroadcast{},
 			}
 			log.Printf("t[%s] broadcast %+v %+v", t.name, msg, brdc.BroadcastReq)
 			if err := globals.cluster.routeToTopicMaster(nil, msg, brdc, t.name, msg.sess); err != nil {
@@ -310,7 +306,6 @@ func (t *Topic) runProxy(hub *Hub) {
 			}
 			if msg.FromSID == "*" {
 				// It is a broadcast.
-				msg.SrvMsg.skipSid = msg.SkipSid
 				msg.SrvMsg.uid = msg.Uid
 				switch {
 				case msg.SrvMsg.Pres != nil || msg.SrvMsg.Data != nil || msg.SrvMsg.Info != nil:
@@ -411,7 +406,7 @@ func (t *Topic) runProxy(hub *Hub) {
 // proxyFanoutBroadcast broadcasts msg to all sessions attached to this topic.
 func (t *Topic) proxyFanoutBroadcast(msg *ServerComMessage) {
 	for sess, pssd := range t.sessions {
-		if sess.sid == msg.skipSid {
+		if sess.sid == msg.SkipSid {
 			continue
 		}
 		if msg.Pres != nil {
@@ -442,7 +437,7 @@ func (t *Topic) handleCtrlBroadcast(msg *ServerComMessage) {
 		for sess := range t.sessions {
 			if t.remSession(sess, msg.uid) != nil {
 				sess.detach <- t.name
-				if sess.sid != msg.skipSid {
+				if sess.sid != msg.SkipSid {
 					sess.queueOut(msg)
 				}
 			}
@@ -569,7 +564,7 @@ func (t *Topic) runLocal(hub *Hub) {
 				// while processing the call
 				killTimer.Stop()
 				if err := t.handleSubscription(hub, sreg); err == nil {
-					if sreg.created {
+					if sreg.pkt.Sub.Created {
 						// Call plugins with the new topic
 						pluginTopic(t, plgActCreate)
 					}
@@ -809,7 +804,7 @@ func (t *Topic) runLocal(hub *Hub) {
 					}
 
 					// Read/recv updated: notify user's other sessions of the change
-					t.presPubMessageCount(asUser, recv, read, msg.skipSid)
+					t.presPubMessageCount(asUser, recv, read, msg.SkipSid)
 
 					// Update cached count of unread messages
 					usersUpdateUnread(asUser, unread, true)
@@ -830,7 +825,7 @@ func (t *Topic) runLocal(hub *Hub) {
 			// {meta} and {ctrl} are sent to the session only
 			if msg.Data != nil || msg.Pres != nil || msg.Info != nil {
 				for sess, pssd := range t.sessions {
-					if sess.sid == msg.skipSid {
+					if sess.sid == msg.SkipSid {
 						continue
 					}
 
@@ -1228,14 +1223,14 @@ func (t *Topic) sendImmediateSubNotifications(asUid types.Uid, sreg *sessionJoin
 		pud2 := t.perUser[uid2]
 
 		// Inform the other user that the topic was just created.
-		if sreg.created {
+		if sreg.pkt.Sub.Created {
 			t.presSingleUserOffline(uid2, "acs", &presParams{
 				dWant:  pud2.modeWant.String(),
 				dGiven: pud2.modeGiven.String(),
 				actor:  asUid.UserId()}, "", false)
 		}
 
-		if sreg.newsub {
+		if sreg.pkt.Sub.Newsub {
 			// Notify current user's 'me' topic to accept notifications from user2
 			t.presSingleUserOffline(asUid, "?none+en", nilPresParams, "", false)
 
@@ -1258,7 +1253,7 @@ func (t *Topic) sendImmediateSubNotifications(asUid types.Uid, sreg *sessionJoin
 	}
 
 	// newsub could be true only for p2p and group topics, no need to check topic category explicitly.
-	if sreg.newsub {
+	if sreg.pkt.Sub.Newsub {
 		// Notify creator's other sessions that the subscription (or the entire topic) was created.
 		t.presSingleUserOffline(asUid, "acs",
 			&presParams{
@@ -1268,17 +1263,6 @@ func (t *Topic) sendImmediateSubNotifications(asUid types.Uid, sreg *sessionJoin
 			sreg.sess.sid, false)
 	}
 }
-
-/*
-	var userAgent string
-	if sreg.sessOverrides != nil {
-		userAgent = sreg.sessOverrides.userAgent
-	} else {
-		userAgent = sreg.sess.userAgent
-	}
-
-	sid = sidFromSessionOrOverrides(sreg.sess, sreg.sessOverrides)
-*/
 
 // Send immediate or deferred presence notification in response to a subscription.
 func (t *Topic) sendSubNotifications(asUid types.Uid, sid, userAgent string) {
@@ -1319,23 +1303,25 @@ func (t *Topic) sendSubNotifications(asUid types.Uid, sid, userAgent string) {
 // subCommonReply generates a response to a subscription request
 func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin) error {
 	// The topic is already initialized by the Hub
-	var now time.Time
+
+	msgsub := sreg.pkt.Sub
+
 	// For newly created topics report topic creation time.
-	if sreg.created {
+	var now time.Time
+	if msgsub.Created {
 		now = t.updated
 	} else {
 		now = types.TimeNow()
 	}
 
-	msgsub := sreg.pkt.Sub
 	asUid := types.ParseUserId(sreg.pkt.AsUser)
 	asLvl := auth.Level(sreg.pkt.AuthLvl)
 	toriginal := t.original(asUid)
 
-	if !sreg.newsub && (t.cat == types.TopicCatP2P || t.cat == types.TopicCatGrp || t.cat == types.TopicCatSys) {
+	if !msgsub.Newsub && (t.cat == types.TopicCatP2P || t.cat == types.TopicCatGrp || t.cat == types.TopicCatSys) {
 		// Check if this is a new subscription.
 		pud, found := t.perUser[asUid]
-		sreg.newsub = !found || pud.deleted
+		msgsub.Newsub = !found || pud.deleted
 	}
 
 	var private interface{}
@@ -1376,7 +1362,7 @@ func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin) error {
 
 	// When a group topic is created, it's given a temporary name by the client.
 	// Then this name changes. Report back the original name here.
-	if sreg.created && sreg.pkt.Original != toriginal {
+	if msgsub.Created && sreg.pkt.Original != toriginal {
 		params["tmpname"] = sreg.pkt.Original
 	}
 
@@ -2944,7 +2930,7 @@ func (t *Topic) evictUser(uid types.Uid, unsub bool, skip string) {
 	// Detach all user's sessions
 	msg := NoErrEvicted("", t.original(uid), now)
 	msg.Ctrl.Params = map[string]interface{}{"unsub": unsub}
-	msg.skipSid = skip
+	msg.SkipSid = skip
 	msg.uid = uid
 	for sess := range t.sessions {
 		isProxy := sess.isProxy()
