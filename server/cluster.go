@@ -160,10 +160,7 @@ type ProxyTopicMessage struct {
 }
 
 // ProxyJoin contains topic join request parameters.
-type ProxyJoin struct {
-	// True if this topic is created internally.
-	Internal bool
-}
+type ProxyJoin struct{}
 
 // ProxyBroadcast contains topic broadcast request parameters.
 type ProxyBroadcast struct{}
@@ -507,9 +504,8 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 	case msg.TopicMsg.JoinReq != nil:
 		pktsub := msg.CliMsg.Sub
 		sessionJoin := &sessionJoin{
-			pkt:      msg.CliMsg,
-			sess:     sess,
-			internal: msg.TopicMsg.JoinReq.Internal,
+			pkt:  msg.CliMsg,
+			sess: sess,
 			// Impersonate the original session.
 			sessOverrides: &sessionOverrides{
 				sid:          origSid,

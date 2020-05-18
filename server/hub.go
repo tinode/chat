@@ -23,13 +23,10 @@ import (
 
 // Request to hub to subscribe session to topic
 type sessionJoin struct {
-	// Packet, containing request details.
+	// Message, containing request details.
 	pkt *ClientComMessage
 	// Session to attach to topic.
 	sess *Session
-
-	// True if this is an internal request.
-	internal bool
 
 	// Session param overrides. Used for handling remote topic requests.
 	sessOverrides *sessionOverrides
@@ -143,7 +140,7 @@ func newHub() *Hub {
 
 	if !globals.cluster.isRemoteTopic("sys") {
 		// Initialize system 'sys' topic. There is only one sys topic per cluster.
-		h.join <- &sessionJoin{internal: true, pkt: &ClientComMessage{RcptTo: "sys", Original: "sys"}}
+		h.join <- &sessionJoin{pkt: &ClientComMessage{RcptTo: "sys", Original: "sys"}}
 	}
 
 	return h
@@ -287,7 +284,7 @@ func (h *Hub) run() {
 				// Yes, 'sys' has migrated here. Initialize it.
 				// The h.join is unbuffered. We must call from another goroutine. Otherwise deadlock.
 				go func() {
-					h.join <- &sessionJoin{internal: true, pkt: &ClientComMessage{RcptTo: "sys", Original: "sys"}}
+					h.join <- &sessionJoin{pkt: &ClientComMessage{RcptTo: "sys", Original: "sys"}}
 				}()
 			}
 

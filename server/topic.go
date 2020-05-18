@@ -225,9 +225,7 @@ func (t *Topic) runProxy(hub *Hub) {
 				sreg.sess.queueOut(ErrLocked(sreg.pkt.Id, t.original(asUid), types.TimeNow()))
 			} else {
 				msg := &ProxyTopicMessage{
-					JoinReq: &ProxyJoin{
-						Internal: sreg.internal,
-					},
+					JoinReq: &ProxyJoin{},
 				}
 				// Response (ctrl message) will be handled when it's received via the proxy channel.
 				if err := globals.cluster.routeToTopicMaster(sreg.pkt, nil, msg, t.name, sreg.sess); err != nil {
