@@ -1103,7 +1103,7 @@ func (t *Topic) onDeferredNotificationTimer() {
 			dn = append(dn, deferredNotification{
 				uid:       types.ParseUserId(sreg.pkt.AsUser),
 				sid:       sidFromSessionOrOverrides(sreg.sess, sreg.sessOverrides),
-				userAgent: userAgentFromSessionOrOverrides(sreg.sess, sreg.sessOverrides)})
+				userAgent: sreg.userAgent})
 		}
 	}
 	if len(dn) == 0 {
@@ -1123,15 +1123,6 @@ func sidFromSessionOrOverrides(sess *Session, sessOverrides *sessionOverrides) s
 		return sessOverrides.sid
 	}
 	return sess.sid
-}
-
-// userAgentFromSessionOrOverrides returns User Agent string from session overrides (if provided)
-// otherwise from session.
-func userAgentFromSessionOrOverrides1(sess *Session, sessOverrides *sessionOverrides) string {
-	if sessOverrides != nil {
-		return sessOverrides.userAgent
-	}
-	return sess.userAgent
 }
 
 // Session subscribed to a topic, created == true if topic was just created and {pres} needs to be announced
@@ -1163,8 +1154,7 @@ func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 		t.sessions[sreg.sess] = pssd
 	} else {
 		// Remaining notifications are also sent immediately.
-		t.sendSubNotifications(asUid, sidFromSessionOrOverrides(sreg.sess, sreg.sessOverrides),
-			userAgentFromSessionOrOverrides(sreg.sess, sreg.sessOverrides))
+		t.sendSubNotifications(asUid, sidFromSessionOrOverrides(sreg.sess, sreg.sessOverrides), sreg.userAgent)
 	}
 
 	if getWhat&constMsgMetaDesc != 0 {
