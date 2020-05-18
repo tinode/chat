@@ -833,6 +833,11 @@ func (c *Cluster) getClusterReq(cliMsg *ClientComMessage, srvMsg *ServerComMessa
 // Forward client request message from the Topic Proxy to the Topic Master (cluster node which owns the topic)
 func (c *Cluster) routeToTopicMaster(cliMsg *ClientComMessage, srvMsg *ServerComMessage,
 	topicMsg *ProxyTopicMessage, topic string, sess *Session) error {
+	if c == nil {
+		// Cluster may be nil due to shutdown.
+		return nil
+	}
+
 	// Find the cluster node which owns the topic, then forward to it.
 	n := c.nodeForTopic(topic)
 	if n == nil {
@@ -845,6 +850,11 @@ func (c *Cluster) routeToTopicMaster(cliMsg *ClientComMessage, srvMsg *ServerCom
 
 // Forward server response message to the node that owns topic.
 func (c *Cluster) routeToTopicIntraCluster(topic string, msg *ServerComMessage, sess *Session) error {
+	if c == nil {
+		// Cluster may be nil due to shutdown.
+		return nil
+	}
+
 	n := c.nodeForTopic(topic)
 	if n == nil {
 		return errors.New("node for topic not found (intra)")
@@ -867,6 +877,7 @@ func (c *Cluster) routeToTopicIntraCluster(topic string, msg *ServerComMessage, 
 // Topic proxy terminated. Inform remote Master node that the proxy is gone.
 func (c *Cluster) topicProxyGone(topicName string) error {
 	if c == nil {
+		// Cluster may be nil due to shutdown.
 		return nil
 	}
 
