@@ -163,6 +163,8 @@ type ProxyTopicMessage struct {
 type ProxyJoin struct {
 	// Subscription was in background.
 	IsBackground bool
+	// User Agent which issued this request.
+	UserAgent string
 }
 
 // ProxyBroadcast contains topic broadcast request parameters.
@@ -509,6 +511,7 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 			pkt:          msg.CliMsg,
 			sess:         sess,
 			isBackground: msg.CliMsg.Sub.Background,
+			userAgent:    msg.TopicMsg.JoinReq.UserAgent,
 			// Impersonate the original session.
 			sessOverrides: &sessionOverrides{
 				sid:     origSid,

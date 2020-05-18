@@ -227,6 +227,7 @@ func (t *Topic) runProxy(hub *Hub) {
 				msg := &ProxyTopicMessage{
 					JoinReq: &ProxyJoin{
 						IsBackground: sreg.isBackground,
+						UserAgent:    sreg.userAgent,
 					},
 				}
 				// Response (ctrl message) will be handled when it's received via the proxy channel.

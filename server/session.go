@@ -421,8 +421,9 @@ func (s *Session) subscribe(msg *ClientComMessage) {
 		s.queueOut(InfoAlreadySubscribed(msg.Id, msg.Original, msg.timestamp))
 	} else {
 		globals.hub.join <- &sessionJoin{
-			pkt:  msg,
-			sess: s}
+			pkt:       msg,
+			sess:      s,
+			userAgent: s.userAgent}
 		// Hub will send Ctrl success/failure packets back to session
 	}
 }
