@@ -494,11 +494,12 @@ func (s *Session) publish(msg *ClientComMessage) {
 		Head:      msg.Pub.Head,
 		Content:   msg.Pub.Content},
 		// Internal-only values.
-		sess:      s,
 		Id:        msg.Id,
 		RcptTo:    msg.RcptTo,
 		AsUser:    msg.AsUser,
-		Timestamp: msg.timestamp}
+		Timestamp: msg.timestamp,
+		sess:      s,
+		OrigSid:   s.sid}
 	if msg.Pub.NoEcho {
 		data.skipSid = s.sid
 	}

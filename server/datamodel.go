@@ -603,8 +603,10 @@ type ServerComMessage struct {
 	Timestamp time.Time `json:"-"`
 	// Originating session to send an aknowledgement to. Could be nil.
 	sess *Session
+	// Deserialized ID of the originating session.
+	OrigSid string `json:"-"`
 	// Session parameter overrides. Used when a topic is hosted remotely. Could be nil.
-	// sessOverrides *sessionOverrides
+	sessOverrides *sessionOverrides
 	// Should the packet be sent to the original session? Session ID to skip.
 	skipSid string
 	// User id affected by this message.
@@ -623,6 +625,7 @@ func (src *ServerComMessage) copy() *ServerComMessage {
 		AsUser:        src.AsUser,
 		Timestamp:     src.Timestamp,
 		sess:          src.sess,
+		OrigSid:       src.OrigSid,
 		skipSid:       src.skipSid,
 		sessOverrides: src.sessOverrides,
 		uid:           src.uid,
