@@ -210,7 +210,7 @@ func (t *Topic) presProcReq(fromUserID, what string, wantReply bool) string {
 			// Topic is 'me' even for group topics; group topics will use 'me' as a signal to drop the message
 			// without forwarding to sessions
 			Pres:   &MsgServerPres{Topic: "me", What: replyAs, Src: t.name, WantReply: reqReply},
-			rcptto: fromUserID}
+			RcptTo: fromUserID}
 	}
 
 	return what
@@ -235,7 +235,7 @@ func (t *Topic) presUsersOfInterest(what, ua string) {
 				Src:       t.name,
 				UserAgent: ua,
 				WantReply: wantReply},
-			rcptto: topic}
+			RcptTo: topic}
 
 		if psd.online && goOffline {
 			psd.online = false
@@ -251,7 +251,7 @@ func presUsersOfInterestOffline(uid types.Uid, subs []types.Subscription, what s
 	for _, sub := range subs {
 		globals.hub.route <- &ServerComMessage{
 			Pres:   &MsgServerPres{Topic: "me", What: what, Src: uid.UserId(), WantReply: false},
-			rcptto: sub.Topic}
+			RcptTo: sub.Topic}
 	}
 }
 
@@ -284,7 +284,7 @@ func (t *Topic) presSubsOnline(what, src string, params *presParams, filter *pre
 			SeqId: params.seqID, DelId: params.delID, DelSeq: params.delSeq,
 			FilterIn: int(filter.filterIn), FilterOut: int(filter.filterOut),
 			SingleUser: filter.singleUser, ExcludeUser: filter.excludeUser},
-		rcptto: t.name, skipSid: skipSid}
+		RcptTo: t.name, skipSid: skipSid}
 }
 
 // userIsPresencer returns true if the user (specified by `uid`) may receive presence notifications.
@@ -396,7 +396,7 @@ func (t *Topic) presSubsOffline(what string, params *presParams,
 				FilterIn: int(filterTarget.filterIn), FilterOut: int(filterTarget.filterOut),
 				SingleUser: filterTarget.singleUser, ExcludeUser: filterTarget.excludeUser,
 				SkipTopic: skipTopic},
-			rcptto: user, skipSid: skipSid}
+			RcptTo: user, skipSid: skipSid}
 	}
 }
 
@@ -434,7 +434,7 @@ func presSubsOfflineOffline(topic string, cat types.TopicCat, subs []types.Subsc
 			Pres: &MsgServerPres{Topic: "me", What: what, Src: original,
 				Acs: params.packAcs(), AcsActor: actor, AcsTarget: target,
 				SeqId: params.seqID, DelId: params.delID},
-			rcptto: user, skipSid: skipSid}
+			RcptTo: user, skipSid: skipSid}
 	}
 }
 
@@ -470,7 +470,7 @@ func (t *Topic) presSingleUserOffline(uid types.Uid, what string, params *presPa
 				Src: t.original(uid), SeqId: params.seqID, DelId: params.delID,
 				Acs: params.packAcs(), AcsActor: actor, AcsTarget: target, UserAgent: params.userAgent,
 				WantReply: strings.HasPrefix(what, "?unkn"), SkipTopic: skipTopic},
-			rcptto: user, skipSid: skipSid}
+			RcptTo: user, skipSid: skipSid}
 	}
 }
 
@@ -493,7 +493,7 @@ func presSingleUserOfflineOffline(uid types.Uid, original, what string, params *
 		Pres: &MsgServerPres{Topic: "me", What: what,
 			Src: original, SeqId: params.seqID, DelId: params.delID,
 			Acs: params.packAcs(), AcsActor: actor, AcsTarget: target},
-		rcptto: uid.UserId(), skipSid: skipSid}
+		RcptTo: uid.UserId(), skipSid: skipSid}
 }
 
 // Let other sessions of a given user know what messages are now received/read

@@ -266,10 +266,7 @@ func (t *Topic) runProxy(hub *Hub) {
 			// Content message intended for broadcasting to recipients
 			brdc := &ProxyTopicMessage{
 				BroadcastReq: &ProxyBroadcast{
-					Id:        msg.id,
-					From:      msg.asUser,
-					Timestamp: msg.timestamp,
-					SkipSid:   msg.skipSid,
+					SkipSid: msg.skipSid,
 				},
 			}
 			log.Printf("t[%s] broadcast %+v %+v", t.name, msg, brdc.BroadcastReq)
@@ -670,14 +667,14 @@ func (t *Topic) runLocal(hub *Hub) {
 			// Content message intended for broadcasting to recipients
 
 			var pushRcpt *push.Receipt
-			asUid := types.ParseUserId(msg.asUser)
+			asUid := types.ParseUserId(msg.AsUser)
 			if msg.Data != nil {
 				if t.isInactive() {
-					msg.sess.queueOutWithOverrides(ErrLocked(msg.id, t.original(asUid), msg.timestamp), msg.sessOverrides)
+					msg.sess.queueOutWithOverrides(ErrLocked(msg.Id, t.original(asUid), msg.Timestamp), msg.sessOverrides)
 					continue
 				}
 				if t.isReadOnly() {
-					msg.sess.queueOutWithOverrides(ErrPermissionDenied(msg.id, t.original(asUid), msg.timestamp),
+					msg.sess.queueOutWithOverrides(ErrPermissionDenied(msg.Id, t.original(asUid), msg.Timestamp),
 						msg.sessOverrides)
 					continue
 				}
@@ -688,8 +685,8 @@ func (t *Topic) runLocal(hub *Hub) {
 				if t.cat != types.TopicCatSys {
 					// If it's not 'sys' check write permission.
 					if !(userData.modeWant & userData.modeGiven).IsWriter() {
-						msg.sess.queueOutWithOverrides(ErrPermissionDenied(msg.id, t.original(asUid),
-							msg.timestamp), msg.sessOverrides)
+						msg.sess.queueOutWithOverrides(ErrPermissionDenied(msg.Id, t.original(asUid),
+							msg.Timestamp), msg.sessOverrides)
 						continue
 					}
 				}
@@ -703,7 +700,7 @@ func (t *Topic) runLocal(hub *Hub) {
 					Content:   msg.Data.Content}, (userData.modeGiven & userData.modeWant).IsReader()); err != nil {
 
 					log.Printf("topic[%s]: failed to save message: %v", t.name, err)
-					msg.sess.queueOutWithOverrides(ErrUnknown(msg.id, t.original(asUid), msg.timestamp), msg.sessOverrides)
+					msg.sess.queueOutWithOverrides(ErrUnknown(msg.Id, t.original(asUid), msg.Timestamp), msg.sessOverrides)
 
 					continue
 				}
@@ -716,8 +713,8 @@ func (t *Topic) runLocal(hub *Hub) {
 					userData.readID = t.lastID
 					t.perUser[asUser] = userData
 				}
-				if msg.id != "" {
-					reply := NoErrAccepted(msg.id, t.original(asUid), msg.timestamp)
+				if msg.Id != "" {
+					reply := NoErrAccepted(msg.Id, t.original(asUid), msg.Timestamp)
 					reply.Ctrl.Params = map[string]int{"seq": t.lastID}
 					msg.sess.queueOutWithOverrides(reply, msg.sessOverrides)
 				}

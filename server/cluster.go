@@ -133,11 +133,11 @@ type ClusterResp struct {
 	// Expanded (routable) topic name
 	RcptTo string
 
-	// Various parameters sent back by the topic master in response a topic proxy request.
+	// Parameters sent back by the topic master in response a topic proxy request.
 
-	// Request type.
+	// Original request type.
 	OrigRequestType int
-	// SessionID to skip. Set for broadcast requests.
+	// Session ID to skip. Set for broadcast requests.
 	SkipSid string
 	// ID of the affected user.
 	Uid types.Uid
@@ -175,12 +175,6 @@ type ProxyJoin struct {
 
 // ProxyBroadcast contains topic broadcast request parameters.
 type ProxyBroadcast struct {
-	// Original request message id.
-	Id string
-	// User ID of the sender of the original message.
-	From string
-	// Timestamp for consistency of timestamps in {ctrl} messages.
-	Timestamp time.Time
 	// Should the packet be sent to the original session? SessionID to skip.
 	SkipSid string
 }
@@ -531,13 +525,12 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 			// Impersonate the original session.
 			sessOverrides: &sessionOverrides{
 				sid:          origSid,
-				rcptTo:       msg.RcptTo,
 				origReq:      msg.TopicMsg.JoinReq,
-				asUser:       msg.CliMsg.AsUser,
 				isBackground: pktsub.Background,
 			},
 		}
 		globals.hub.join <- sessionJoin
+
 	case msg.TopicMsg.LeaveReq != nil:
 		if t := globals.hub.topicGet(msg.RcptTo); t != nil {
 			leave := &sessionLeave{
@@ -548,7 +541,6 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 				sess:                     sess,
 				sessOverrides: &sessionOverrides{
 					sid:     origSid,
-					rcptTo:  msg.RcptTo,
 					origReq: msg.TopicMsg.LeaveReq,
 				},
 			}
@@ -566,7 +558,6 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 			// Impersonate the original session.
 			sessOverrides: &sessionOverrides{
 				sid:     origSid,
-				rcptTo:  msg.RcptTo,
 				origReq: msg.TopicMsg.MetaReq,
 			},
 		}
@@ -581,13 +572,8 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 		if msg.SrvMsg == nil {
 			panic("cluster: topic proxy broadcast request has no data message")
 		}
-		msg.SrvMsg.id = msg.TopicMsg.BroadcastReq.Id
-		msg.SrvMsg.asUser = msg.TopicMsg.BroadcastReq.From
-		msg.SrvMsg.timestamp = msg.TopicMsg.BroadcastReq.Timestamp
-		msg.SrvMsg.rcptto = msg.RcptTo
 		msg.SrvMsg.sessOverrides = &sessionOverrides{
 			sid:     origSid,
-			rcptTo:  msg.RcptTo,
 			origReq: msg.TopicMsg.BroadcastReq,
 		}
 		msg.SrvMsg.sess = sess
@@ -700,7 +686,6 @@ func (c *Cluster) Route(msg *ClusterReq, rejected *bool) error {
 		*rejected = true
 		return nil
 	}
-	msg.SrvMsg.rcptto = msg.RcptTo
 	globals.hub.route <- msg.SrvMsg
 	return nil
 }
@@ -1234,7 +1219,7 @@ func (sess *Session) topicProxyWriteLoop(forTopic string) {
 				case *ProxyJoin:
 					response.OrigRequestType = ProxyRequestJoin
 					response.IsBackground = srvMsg.sessOverrides.isBackground
-					response.Uid = types.ParseUserId(srvMsg.sessOverrides.asUser)
+					response.Uid = types.ParseUserId(srvMsg.AsUser)
 					sess.addRemoteSession(srvMsg.sessOverrides.sid, &remoteSession{
 						uid:          response.Uid,
 						isBackground: response.IsBackground})
@@ -1264,7 +1249,7 @@ func (sess *Session) topicProxyWriteLoop(forTopic string) {
 			if copyParamsFromSession {
 				// Reply to a specific session.
 				response.FromSID = srvMsg.sessOverrides.sid
-				response.RcptTo = srvMsg.sessOverrides.rcptTo
+				response.RcptTo = srvMsg.RcptTo
 			} else {
 				response.RcptTo = forTopic
 				response.FromSID = "*"

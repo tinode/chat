@@ -43,18 +43,18 @@ type sessionJoin struct {
 
 // Session wants to leave the topic
 type sessionLeave struct {
+	// ID of originating request, if any
+	id string
 	// User ID of the user sent the request
 	userId types.Uid
 	// Topic to report success of failure on
 	original string
 	// Session which initiated the request
 	sess *Session
-	// Should the proxy-master topic connection be terminated
-	terminateProxyConnection bool
 	// Leave and unsubscribe
 	unsub bool
-	// ID of originating request, if any
-	id string
+	// Should the proxy-master topic connection be terminated
+	terminateProxyConnection bool
 
 	// Session param overrides. Used for handling remote (proxy-master) topic requests.
 	sessOverrides *sessionOverrides
@@ -217,7 +217,7 @@ func (h *Hub) run() {
 			// This is a message from a connection not subscribed to topic
 			// Route incoming message to topic if topic permits such routing
 
-			if dst := h.topicGet(msg.rcptto); dst != nil {
+			if dst := h.topicGet(msg.RcptTo); dst != nil {
 				// Everything is OK, sending packet to known topic
 				if dst.broadcast != nil {
 					select {
@@ -226,11 +226,11 @@ func (h *Hub) run() {
 						log.Println("hub: topic's broadcast queue is full", dst.name)
 					}
 				}
-			} else if (strings.HasPrefix(msg.rcptto, "usr") || strings.HasPrefix(msg.rcptto, "grp")) &&
-				globals.cluster.isRemoteTopic(msg.rcptto) {
+			} else if (strings.HasPrefix(msg.RcptTo, "usr") || strings.HasPrefix(msg.RcptTo, "grp")) &&
+				globals.cluster.isRemoteTopic(msg.RcptTo) {
 				// It is a remote topic.
-				if err := globals.cluster.routeToTopicIntraCluster(msg.rcptto, msg, msg.sess); err != nil {
-					log.Printf("hub: routing to '%s' failed", msg.rcptto)
+				if err := globals.cluster.routeToTopicIntraCluster(msg.RcptTo, msg, msg.sess); err != nil {
+					log.Printf("hub: routing to '%s' failed", msg.RcptTo)
 				}
 			} else if msg.Pres == nil && msg.Info == nil {
 				// Topic is unknown or offline.
@@ -238,9 +238,9 @@ func (h *Hub) run() {
 
 				// TODO(gene): validate topic name, discarding invalid topics
 
-				log.Printf("Hub. Topic[%s] is unknown or offline", msg.rcptto)
+				log.Printf("Hub. Topic[%s] is unknown or offline", msg.RcptTo)
 
-				msg.sess.queueOut(NoErrAccepted(msg.id, msg.rcptto, types.TimeNow()))
+				msg.sess.queueOut(NoErrAccepted(msg.Id, msg.RcptTo, types.TimeNow()))
 			}
 
 		case meta := <-h.meta:

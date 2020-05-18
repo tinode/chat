@@ -560,24 +560,6 @@ type MsgServerInfo struct {
 	SeqId int `json:"seq,omitempty"`
 }
 
-// Session parameter overrides.
-// Used by the remote topic masters to impersonate multiple proxied sessions.
-type sessionOverrides struct {
-	// Proxied session id.
-	sid string
-	// Topic name affected by the original request.
-	rcptTo string
-	// User agent of the original session.
-	userAgent string
-	// Incoming proxy topic request pointer. Set for topic proxy requests. One of
-	// *ProxyJoin, *ProxyLeave, *ProxyBroadcast, *ProxyMeta.
-	origReq interface{}
-	// User represented by this session.
-	asUser string
-	// The original request was a background subscription.
-	isBackground bool
-}
-
 // Deep copy
 func (src *MsgServerInfo) copy() *MsgServerInfo {
 	if src == nil {
@@ -585,6 +567,20 @@ func (src *MsgServerInfo) copy() *MsgServerInfo {
 	}
 	dst := *src
 	return &dst
+}
+
+// Session parameter overrides.
+// Used by the remote topic masters to impersonate multiple proxied sessions.
+type sessionOverrides struct {
+	// Proxied session id.
+	sid string
+	// User agent of the original session.
+	userAgent string
+	// Incoming proxy topic request pointer. Set for topic proxy requests. One of
+	// *ProxyJoin, *ProxyLeave, *ProxyBroadcast, *ProxyMeta.
+	origReq interface{}
+	// The original request was a background subscription.
+	isBackground bool
 }
 
 // ServerComMessage is a wrapper for server-side messages.
@@ -595,18 +591,20 @@ type ServerComMessage struct {
 	Pres *MsgServerPres `json:"pres,omitempty"`
 	Info *MsgServerInfo `json:"info,omitempty"`
 
+	// Internal fields.
+
 	// MsgServerData has no Id field, copying it here for use in {ctrl} aknowledgements
-	id string
+	Id string `json:"-"`
 	// Routable (expanded) name of the topic.
-	rcptto string
-	// Timestamp for consistency of timestamps in {ctrl} messages.
-	timestamp time.Time
+	RcptTo string `json:"-"`
 	// User ID of the sender of the original message.
-	asUser string
+	AsUser string `json:"-"`
+	// Timestamp for consistency of timestamps in {ctrl} messages.
+	Timestamp time.Time `json:"-"`
 	// Originating session to send an aknowledgement to. Could be nil.
 	sess *Session
 	// Session parameter overrides. Used when a topic is hosted remotely. Could be nil.
-	sessOverrides *sessionOverrides
+	// sessOverrides *sessionOverrides
 	// Should the packet be sent to the original session? Session ID to skip.
 	skipSid string
 	// User id affected by this message.
@@ -620,10 +618,10 @@ func (src *ServerComMessage) copy() *ServerComMessage {
 		return nil
 	}
 	dst := &ServerComMessage{
-		id:            src.id,
-		rcptto:        src.rcptto,
-		timestamp:     src.timestamp,
-		asUser:        src.asUser,
+		Id:            src.Id,
+		RcptTo:        src.RcptTo,
+		AsUser:        src.AsUser,
+		Timestamp:     src.Timestamp,
 		sess:          src.sess,
 		skipSid:       src.skipSid,
 		sessOverrides: src.sessOverrides,

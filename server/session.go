@@ -493,12 +493,12 @@ func (s *Session) publish(msg *ClientComMessage) {
 		Timestamp: msg.timestamp,
 		Head:      msg.Pub.Head,
 		Content:   msg.Pub.Content},
-		// Unroutable values.
-		rcptto:    msg.RcptTo,
+		// Internal-only values.
 		sess:      s,
-		id:        msg.Id,
-		timestamp: msg.timestamp,
-		asUser:    msg.AsUser}
+		Id:        msg.Id,
+		RcptTo:    msg.RcptTo,
+		AsUser:    msg.AsUser,
+		Timestamp: msg.timestamp}
 	if msg.Pub.NoEcho {
 		data.skipSid = s.sid
 	}
@@ -960,7 +960,7 @@ func (s *Session) note(msg *ClientComMessage) {
 			From:  msg.AsUser,
 			What:  msg.Note.What,
 			SeqId: msg.Note.SeqId,
-		}, rcptto: msg.RcptTo, asUser: msg.AsUser, timestamp: msg.timestamp, skipSid: s.sid}
+		}, RcptTo: msg.RcptTo, AsUser: msg.AsUser, Timestamp: msg.timestamp, skipSid: s.sid}
 	} else {
 		s.queueOut(ErrAttachFirst(msg.Id, msg.Original, msg.timestamp))
 		log.Println("s.note: note to invalid topic - must subscribe first", msg.Note.What, s.sid)

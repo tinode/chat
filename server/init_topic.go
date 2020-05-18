@@ -63,7 +63,7 @@ func topicInit(t *Topic, sreg *sessionJoin, h *Hub) {
 		// Reject all other pending requests
 		for len(t.broadcast) > 0 {
 			msg := <-t.broadcast
-			msg.sess.queueOutWithOverrides(ErrLocked(msg.id, t.xoriginal, timestamp), sreg.sessOverrides)
+			msg.sess.queueOutWithOverrides(ErrLocked(msg.Id, t.xoriginal, timestamp), sreg.sessOverrides)
 		}
 		for len(t.unreg) > 0 {
 			msg := <-t.unreg
