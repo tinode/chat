@@ -5,14 +5,16 @@
 # Names of cluster nodes
 ALL_NODE_NAMES=( one two three )
 # Port where the first node will listen for client connections over http
-HTTP_BASE_PORT=6080
+HTTP_BASE_PORT=6060
 # Port where the first node will listen for gRPC intra-cluster connections.
 GRPC_BASE_PORT=16060
 
-# Assign command line parameters to variables.
-# for line in $@; do
-#  eval "$line"
-#done
+USAGE="Usage: $0 [ --config <path_to_tinode.conf> ] {start|stop}"
+
+if [ "$#" -lt "1" ]; then
+  echo $USAGE
+  exit 1
+fi
 
 while [[ $# -gt 0 ]]; do
   key="$1"
@@ -30,7 +32,7 @@ while [[ $# -gt 0 ]]; do
         TINODE_CONF="tinode.conf"
       fi
 
-      echo "HTTP ports 6080-6082, gRPC ports 16060-16062, config ${config}"
+      echo "HTTP ports 6060-6062, gRPC ports 16060-16062, config ${config}"
 
       HTTP_PORT=$HTTP_BASE_PORT
       GRPC_PORT=$GRPC_BASE_PORT
@@ -60,7 +62,7 @@ while [[ $# -gt 0 ]]; do
       exit 0
       ;;
     *)
-      echo $"Usage: $0 {start|stop} [ --config <path_to_tinode.conf> ]"
+      echo $USAGE
       exit 1
   esac
 done

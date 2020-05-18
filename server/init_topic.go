@@ -49,10 +49,10 @@ func topicInit(t *Topic, sreg *sessionJoin, h *Hub) {
 	// Failed to create or load the topic.
 	if err != nil {
 		// Remove topic from cache to prevent hub from forwarding more messages to it.
-		h.topicDel(sreg.pkt.rcptTo)
+		h.topicDel(sreg.pkt.RcptTo)
 
-		log.Println("hub: failed to load or create topic:", sreg.pkt.rcptTo, err)
-		sreg.sess.queueOutWithOverrides(decodeStoreError(err, sreg.pkt.id, t.xoriginal, timestamp, nil), sreg.sessOverrides)
+		log.Println("init_topic: failed to load or create topic:", sreg.pkt.RcptTo, err)
+		sreg.sess.queueOutWithOverrides(decodeStoreError(err, sreg.pkt.Id, t.xoriginal, timestamp, nil), sreg.sessOverrides)
 
 		// Re-queue pending requests to join the topic.
 		for len(t.reg) > 0 {
@@ -71,7 +71,7 @@ func topicInit(t *Topic, sreg *sessionJoin, h *Hub) {
 		}
 		for len(t.meta) > 0 {
 			msg := <-t.meta
-			msg.sess.queueOutWithOverrides(ErrLocked(msg.pkt.id, t.xoriginal, timestamp), sreg.sessOverrides)
+			msg.sess.queueOutWithOverrides(ErrLocked(msg.pkt.Id, t.xoriginal, timestamp), sreg.sessOverrides)
 		}
 		if len(t.exit) > 0 {
 			msg := <-t.exit
@@ -85,7 +85,7 @@ func topicInit(t *Topic, sreg *sessionJoin, h *Hub) {
 
 	// prevent newly initialized topics to go live while shutdown in progress
 	if globals.shuttingDown {
-		h.topicDel(sreg.pkt.rcptTo)
+		h.topicDel(sreg.pkt.RcptTo)
 		return
 	}
 
@@ -161,7 +161,7 @@ func initTopicMe(t *Topic, sreg *sessionJoin) error {
 func initTopicFnd(t *Topic, sreg *sessionJoin) error {
 	t.cat = types.TopicCatFnd
 
-	uid := types.ParseUserId(sreg.pkt.asUser)
+	uid := types.ParseUserId(sreg.pkt.AsUser)
 	if uid.IsZero() {
 		return types.ErrNotFound
 	}
@@ -275,7 +275,7 @@ func initTopicP2P(t *Topic, sreg *sessionJoin) error {
 
 		// Fetching records for both users.
 		// Requester.
-		userID1 := types.ParseUserId(sreg.pkt.asUser)
+		userID1 := types.ParseUserId(sreg.pkt.AsUser)
 		// The other user.
 		userID2 := types.ParseUserId(t.xoriginal)
 		// User index: u1 - requester, u2 - responder, the other user
@@ -347,7 +347,7 @@ func initTopicP2P(t *Topic, sreg *sessionJoin) error {
 		if sub1 == nil {
 
 			// Set user1's ModeGiven from user2's default values
-			userData.modeGiven = selectAccessMode(auth.Level(sreg.pkt.authLvl),
+			userData.modeGiven = selectAccessMode(auth.Level(sreg.pkt.AuthLvl),
 				users[u2].Access.Anon,
 				users[u2].Access.Auth,
 				types.ModeCP2P)
@@ -402,7 +402,7 @@ func initTopicP2P(t *Topic, sreg *sessionJoin) error {
 
 		if !user1only {
 			// sub2 is being created, assign sub2.modeWant to what user2 gave to user1 (sub1.modeGiven)
-			sub2.ModeWant = selectAccessMode(auth.Level(sreg.pkt.authLvl),
+			sub2.ModeWant = selectAccessMode(auth.Level(sreg.pkt.AuthLvl),
 				users[u2].Access.Anon,
 				users[u2].Access.Auth,
 				types.ModeCP2P)
@@ -472,7 +472,7 @@ func initTopicNewGrp(t *Topic, sreg *sessionJoin) error {
 	t.cat = types.TopicCatGrp
 
 	// Generic topics have parameters stored in the topic object
-	t.owner = types.ParseUserId(sreg.pkt.asUser)
+	t.owner = types.ParseUserId(sreg.pkt.AsUser)
 
 	t.accessAuth = getDefaultAccess(t.cat, true)
 	t.accessAnon = getDefaultAccess(t.cat, false)
@@ -547,7 +547,7 @@ func initTopicNewGrp(t *Topic, sreg *sessionJoin) error {
 	// t.lastId & t.delId are not set for new topics
 
 	stopic := &types.Topic{
-		ObjHeader: types.ObjHeader{Id: sreg.pkt.rcptTo, CreatedAt: timestamp},
+		ObjHeader: types.ObjHeader{Id: sreg.pkt.RcptTo, CreatedAt: timestamp},
 		Access:    types.DefaultAccess{Auth: t.accessAuth, Anon: t.accessAnon},
 		Tags:      tags,
 		Public:    t.public}

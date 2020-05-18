@@ -307,17 +307,19 @@ type ClientComMessage struct {
 	Del   *MsgClientDel   `json:"del"`
 	Note  *MsgClientNote  `json:"note"`
 
+	// Internal fields, routed only within the cluster.
+
 	// Message ID denormalized
-	id string
+	Id string `json:"-"`
 	// Un-routable (original) topic name denormalized from XXX.Topic.
-	original string
-	// Routable (expanded) topic name
-	rcptTo string
-	// Sender's UserId as string
-	asUser string
-	// Sender's authentication level
-	authLvl int
-	// Timestamp when this message was received by the server
+	Original string `json:"-"`
+	// Routable (expanded) topic name.
+	RcptTo string `json:"-"`
+	// Sender's UserId as string.
+	AsUser string `json:"-"`
+	// Sender's authentication level.
+	AuthLvl int `json:"-"`
+	// Timestamp when this message was received by the server.
 	timestamp time.Time
 }
 
@@ -597,7 +599,7 @@ type ServerComMessage struct {
 	id string
 	// Routable (expanded) name of the topic.
 	rcptto string
-	// Timestamp for consistency of timestamps in {ctrl} messages
+	// Timestamp for consistency of timestamps in {ctrl} messages.
 	timestamp time.Time
 	// User ID of the sender of the original message.
 	asUser string
@@ -605,7 +607,7 @@ type ServerComMessage struct {
 	sess *Session
 	// Session parameter overrides. Used when a topic is hosted remotely. Could be nil.
 	sessOverrides *sessionOverrides
-	// Should the packet be sent to the original session? SessionID to skip.
+	// Should the packet be sent to the original session? Session ID to skip.
 	skipSid string
 	// User id affected by this message.
 	uid types.Uid

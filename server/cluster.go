@@ -110,16 +110,10 @@ type ClusterReq struct {
 
 	// Client message. Set for C2S requests.
 	CliMsg *ClientComMessage
-	// Message to be routed. Set for route requests.
+	// Message to be routed. Set for intra-cluster route requests.
 	SrvMsg *ServerComMessage
-	// Topic message.
-	// Set for topic proxy to topic master requests.
+	// Topic message. Set for topic proxy to topic master requests.
 	TopicMsg *ProxyTopicMessage
-
-	// Root user may send messages on behalf of other users.
-	OnBehalfOf string
-	// AuthLevel of the user specified by root.
-	AuthLvl int
 
 	// Expanded (routable) topic name
 	RcptTo string
@@ -473,8 +467,6 @@ func (c *Cluster) Master(msg *ClusterReq, rejected *bool) error {
 		sess.platf = msg.Sess.Platform
 
 		// Dispatch remote message to a local session.
-		msg.CliMsg.asUser = msg.OnBehalfOf
-		msg.CliMsg.authLvl = msg.AuthLvl
 		sess.dispatch(msg.CliMsg)
 	} else {
 		log.Println("cluster Master: session signature mismatch", msg.Sess.Sid)
@@ -511,22 +503,10 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 		log.Println("cluster TopicMaster: request from an unknown node", msg.Node)
 		return nil
 	}
-	var uid types.Uid
 	var origSid string
-	var authLvl auth.Level
-	if msg.Sess == nil {
+	if msg.Sess != nil {
 		// Sess can be empty for pres messages.
-		uid = types.ZeroUid
-		origSid = ""
-		authLvl = auth.LevelNone
-	} else {
-		if msg.OnBehalfOf != "" {
-			uid = types.ParseUserId(msg.OnBehalfOf)
-		} else {
-			uid = msg.Sess.Uid
-		}
 		origSid = msg.Sess.Sid
-		authLvl = msg.Sess.AuthLvl
 	}
 
 	// Create a new session if needed.
@@ -541,13 +521,7 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 
 	switch {
 	case msg.TopicMsg.JoinReq != nil:
-		if !uid.IsZero() {
-			log.Println("join setting uid = ", uid)
-			msg.CliMsg.asUser = uid.UserId()
-		}
 		pktsub := msg.CliMsg.Sub
-		msg.CliMsg.original = pktsub.Topic
-		msg.CliMsg.id = pktsub.Id
 		sessionJoin := &sessionJoin{
 			pkt:      msg.CliMsg,
 			sess:     sess,
@@ -559,7 +533,7 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 				sid:          origSid,
 				rcptTo:       msg.RcptTo,
 				origReq:      msg.TopicMsg.JoinReq,
-				asUser:       msg.CliMsg.asUser,
+				asUser:       msg.CliMsg.AsUser,
 				isBackground: pktsub.Background,
 			},
 		}
@@ -585,29 +559,10 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 		}
 
 	case msg.TopicMsg.MetaReq != nil:
-		if !uid.IsZero() {
-			log.Println("meta setting uid = ", uid)
-			msg.CliMsg.asUser = uid.UserId()
-		}
-		msg.CliMsg.authLvl = int(authLvl)
-		switch {
-		case msg.CliMsg.Get != nil:
-			msg.CliMsg.id = msg.CliMsg.Get.Id
-			msg.CliMsg.original = msg.CliMsg.Get.Topic
-		case msg.CliMsg.Set != nil:
-			msg.CliMsg.id = msg.CliMsg.Set.Id
-			msg.CliMsg.original = msg.CliMsg.Set.Topic
-		case msg.CliMsg.Del != nil:
-			msg.CliMsg.id = msg.CliMsg.Del.Id
-			msg.CliMsg.original = msg.CliMsg.Del.Topic
-		default:
-			log.Panic("cluster: topic proxy meta request must container either Get or Set field")
-		}
 		req := &metaReq{
-			topic: msg.RcptTo,
-			pkt:   msg.CliMsg,
-			sess:  sess,
-			what:  msg.TopicMsg.MetaReq.What,
+			pkt:  msg.CliMsg,
+			sess: sess,
+			what: msg.TopicMsg.MetaReq.What,
 			// Impersonate the original session.
 			sessOverrides: &sessionOverrides{
 				sid:     origSid,
@@ -654,7 +609,7 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 				// that sends notifications wants.
 				s := &sessionJoin{
 					pkt: &ClientComMessage{
-						asUser: req.AsUser,
+						AsUser: req.AsUser,
 					},
 					sessOverrides: &sessionOverrides{
 						sid:       req.Sid,
@@ -915,11 +870,6 @@ func (c *Cluster) getClusterReq(cliMsg *ClientComMessage, srvMsg *ServerComMessa
 			DeviceID:   sess.deviceID,
 			Platform:   sess.platf,
 			Sid:        sess.sid}
-		if sess.authLvl == auth.LevelRoot {
-			// Assign these values only when the sender is root
-			req.OnBehalfOf = cliMsg.asUser
-			req.AuthLvl = cliMsg.authLvl
-		}
 	}
 	return req
 }
@@ -1079,7 +1029,7 @@ func (sess *Session) rpcWriteLoop() {
 			// The error is returned if the remote node is down. Which means the remote
 			// session is also disconnected.
 			if err := sess.clnode.respond(&ClusterResp{SrvMsg: msg.(*ServerComMessage), FromSID: sess.sid}); err != nil {
-				log.Println("cluster: sess.writeRPC: " + err.Error())
+				log.Println("cluster: sess.writeRPC:", err)
 				return
 			}
 		case msg := <-sess.stop:
