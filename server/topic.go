@@ -225,7 +225,9 @@ func (t *Topic) runProxy(hub *Hub) {
 				sreg.sess.queueOut(ErrLocked(sreg.pkt.Id, t.original(asUid), types.TimeNow()))
 			} else {
 				msg := &ProxyTopicMessage{
-					JoinReq: &ProxyJoin{},
+					JoinReq: &ProxyJoin{
+						IsBackground: sreg.isBackground,
+					},
 				}
 				// Response (ctrl message) will be handled when it's received via the proxy channel.
 				if err := globals.cluster.routeToTopicMaster(sreg.pkt, nil, msg, t.name, sreg.sess); err != nil {
@@ -1125,7 +1127,7 @@ func sidFromSessionOrOverrides(sess *Session, sessOverrides *sessionOverrides) s
 
 // userAgentFromSessionOrOverrides returns User Agent string from session overrides (if provided)
 // otherwise from session.
-func userAgentFromSessionOrOverrides(sess *Session, sessOverrides *sessionOverrides) string {
+func userAgentFromSessionOrOverrides1(sess *Session, sessOverrides *sessionOverrides) string {
 	if sessOverrides != nil {
 		return sessOverrides.userAgent
 	}

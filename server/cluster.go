@@ -160,7 +160,10 @@ type ProxyTopicMessage struct {
 }
 
 // ProxyJoin contains topic join request parameters.
-type ProxyJoin struct{}
+type ProxyJoin struct {
+	// Subscription was in background.
+	IsBackground bool
+}
 
 // ProxyBroadcast contains topic broadcast request parameters.
 type ProxyBroadcast struct{}
@@ -502,15 +505,14 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 
 	switch {
 	case msg.TopicMsg.JoinReq != nil:
-		pktsub := msg.CliMsg.Sub
 		sessionJoin := &sessionJoin{
-			pkt:  msg.CliMsg,
-			sess: sess,
+			pkt:          msg.CliMsg,
+			sess:         sess,
+			isBackground: msg.CliMsg.Sub.Background,
 			// Impersonate the original session.
 			sessOverrides: &sessionOverrides{
-				sid:          origSid,
-				origReq:      msg.TopicMsg.JoinReq,
-				isBackground: pktsub.Background,
+				sid:     origSid,
+				origReq: msg.TopicMsg.JoinReq,
 			},
 		}
 		globals.hub.join <- sessionJoin
@@ -1200,7 +1202,7 @@ func (sess *Session) topicProxyWriteLoop(forTopic string) {
 					panic("cluster: origReq is nil in session overrides")
 				case *ProxyJoin:
 					response.OrigRequestType = ProxyRequestJoin
-					response.IsBackground = srvMsg.sessOverrides.isBackground
+					response.IsBackground = req.IsBackground
 					response.Uid = types.ParseUserId(srvMsg.AsUser)
 					sess.addRemoteSession(srvMsg.OrigSid, &remoteSession{
 						uid:          response.Uid,

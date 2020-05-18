@@ -28,6 +28,9 @@ type sessionJoin struct {
 	// Session to attach to topic.
 	sess *Session
 
+	// Subscription was in background
+	isBackground bool
+
 	// Session param overrides. Used for handling remote topic requests.
 	sessOverrides *sessionOverrides
 }

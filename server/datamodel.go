@@ -584,12 +584,10 @@ type sessionOverrides struct {
 	// Proxied session id.
 	sid string
 	// User agent of the original session.
-	userAgent string
+	// userAgent string
 	// Incoming proxy topic request pointer. Set for topic proxy requests. One of
 	// *ProxyJoin, *ProxyLeave, *ProxyBroadcast, *ProxyMeta.
 	origReq interface{}
-	// The original request was a background subscription.
-	isBackground bool
 }
 
 // ServerComMessage is a wrapper for server-side messages.
