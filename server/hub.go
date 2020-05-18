@@ -51,14 +51,14 @@ type sessionLeave struct {
 
 // Request to hub to remove the topic
 type topicUnreg struct {
+	// Original request, could be nil
+	pkt *ClientComMessage
+	// Session making the request, could be nil
+	sess *Session
 	// Routable name of the topic to drop
 	rcptTo string
 	// UID of the user being deleted
 	forUser types.Uid
-	// Session making the request, could be nil
-	sess *Session
-	// Original request, could be nil
-	pkt *ClientComMessage
 	// Unregister then delete the topic
 	del bool
 	// Channel for reporting operation completion when deleting topics for a user
@@ -66,12 +66,12 @@ type topicUnreg struct {
 }
 
 type metaReq struct {
-	// UID of the user being affected. Could be zero.
-	forUser types.Uid
 	// Packet containing details of the Get/Set/Del request.
 	pkt *ClientComMessage
 	// Session which originated the request.
 	sess *Session
+	// UID of the user being affected. Could be zero.
+	forUser types.Uid
 	// What is being requested: constMsgMetaSub, constMsgMetaDesc, constMsgMetaTags, etc.
 	what int
 	// New topic state value. Only types.StateSuspended is supported at this time.
@@ -96,11 +96,11 @@ type Hub struct {
 	// Remove topic from hub, possibly deleting it afterwards, unbuffered
 	unreg chan *topicUnreg
 
-	// Cluster request to rehash topics, unbuffered
-	rehash chan bool
-
 	// Process get.info requests for topic not subscribed to, buffered 128
 	meta chan *metaReq
+
+	// Cluster request to rehash topics, unbuffered
+	rehash chan bool
 
 	// Request to shutdown, unbuffered
 	shutdown chan chan<- bool
