@@ -181,11 +181,17 @@ type shutDown struct {
 	reason int
 }
 
+type deferredNotification struct {
+	uid       types.Uid
+	sid       string
+	userAgent string
+}
+
 // Direct communication from proxy topic to master and service requests.
 type topicMasterRequest struct {
 	// Deferred notifications request (list of sessions to notify).
-	deferredNotificationsRequest []*sessionJoin
-	// List of proxied user ids and the counts of proxied origin sessions for each uid.
+	deferredNotificationsRequest []deferredNotification
+	// List of proxied user IDs and the counts of proxied origin sessions for each uid.
 	// Required for accounting.
 	proxySessionCleanUp map[types.Uid]int
 }
@@ -1041,28 +1047,27 @@ func (t *Topic) runLocal(hub *Hub) {
 	}
 }
 
-// sendDeferredNotifications updates perUser accounting and fires due
+// sendDeferredNotifications updates perUser online status accounting and fires due
 // deferred notifications for the provided sessions.
-func (t *Topic) sendDeferredNotifications(joinReqs []*sessionJoin) {
-	for _, sreg := range joinReqs {
-		uid := types.ParseUserId(sreg.pkt.AsUser)
+func (t *Topic) sendDeferredNotifications(dn []deferredNotification) {
+	for i := range dn {
 		if !t.isProxy {
-			pud := t.perUser[uid]
+			pud := t.perUser[dn[i].uid]
 			pud.online++
-			t.perUser[uid] = pud
+			t.perUser[dn[i].uid] = pud
 		}
-		t.sendSubNotifications(uid, sreg)
+		t.sendSubNotifications(dn[i].uid, dn[i].sid, dn[i].userAgent)
 	}
 }
 
 // routeDeferredNotificationsToMaster forwards deferred notification requests to the master topic.
-func (t *Topic) routeDeferredNotificationsToMaster(joinReqs []*sessionJoin) {
+func (t *Topic) routeDeferredNotificationsToMaster(dn []deferredNotification) {
 	var sendReqs []*ProxyDeferredSession
-	for _, sreg := range joinReqs {
+	for i := range dn {
 		s := &ProxyDeferredSession{
-			AsUser:    sreg.pkt.AsUser,
-			Sid:       sreg.sess.sid,
-			UserAgent: sreg.sess.userAgent,
+			AsUser:    dn[i].uid.UserId(),
+			Sid:       dn[i].sid,
+			UserAgent: dn[i].userAgent,
 		}
 		sendReqs = append(sendReqs, s)
 	}
@@ -1088,7 +1093,7 @@ func (t *Topic) onDeferredNotificationTimer() {
 
 	// Process events older than this timestamp.
 	expiration := time.Now().Add(-deferredNotificationsTimeout)
-	var joinReqs []*sessionJoin
+	var dn []deferredNotification
 	// Iterate through the list until all sufficiently old events are processed.
 	for elem := t.defrNotif.Back(); elem != nil; elem = t.defrNotif.Back() {
 		sreg := elem.Value.(*sessionJoin)
@@ -1100,27 +1105,38 @@ func (t *Topic) onDeferredNotificationTimer() {
 		if pssd, ok := t.sessions[sreg.sess]; ok && pssd.ref != nil {
 			pssd.ref = nil
 			t.sessions[sreg.sess] = pssd
-			joinReqs = append(joinReqs, sreg)
+			dn = append(dn, deferredNotification{
+				uid:       types.ParseUserId(sreg.pkt.AsUser),
+				sid:       sidFromSessionOrOverrides(sreg.sess, sreg.sessOverrides),
+				userAgent: userAgentFromSessionOrOverrides(sreg.sess, sreg.sessOverrides)})
 		}
 	}
-	if len(joinReqs) == 0 {
+	if len(dn) == 0 {
 		return
 	}
 	if t.isProxy {
-		t.routeDeferredNotificationsToMaster(joinReqs)
+		t.routeDeferredNotificationsToMaster(dn)
 	} else {
-		t.sendDeferredNotifications(joinReqs)
+		t.sendDeferredNotifications(dn)
 	}
 }
 
-// sidFromSessionOrOverrides returns sesssion id from session overrides (if provided)
+// sidFromSessionOrOverrides returns session id from session overrides (if provided)
 // otherwise from session.
 func sidFromSessionOrOverrides(sess *Session, sessOverrides *sessionOverrides) string {
 	if sessOverrides != nil {
 		return sessOverrides.sid
-	} else {
-		return sess.sid
 	}
+	return sess.sid
+}
+
+// userAgentFromSessionOrOverrides returns User Agent string from session overrides (if provided)
+// otherwise from session.
+func userAgentFromSessionOrOverrides(sess *Session, sessOverrides *sessionOverrides) string {
+	if sessOverrides != nil {
+		return sessOverrides.userAgent
+	}
+	return sess.userAgent
 }
 
 // Session subscribed to a topic, created == true if topic was just created and {pres} needs to be announced
@@ -1152,7 +1168,8 @@ func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 		t.sessions[sreg.sess] = pssd
 	} else {
 		// Remaining notifications are also sent immediately.
-		t.sendSubNotifications(asUid, sreg)
+		t.sendSubNotifications(asUid, sidFromSessionOrOverrides(sreg.sess, sreg.sessOverrides),
+			userAgentFromSessionOrOverrides(sreg.sess, sreg.sessOverrides))
 	}
 
 	if getWhat&constMsgMetaDesc != 0 {
@@ -1252,8 +1269,19 @@ func (t *Topic) sendImmediateSubNotifications(asUid types.Uid, sreg *sessionJoin
 	}
 }
 
+/*
+	var userAgent string
+	if sreg.sessOverrides != nil {
+		userAgent = sreg.sessOverrides.userAgent
+	} else {
+		userAgent = sreg.sess.userAgent
+	}
+
+	sid = sidFromSessionOrOverrides(sreg.sess, sreg.sessOverrides)
+*/
+
 // Send immediate or deferred presence notification in response to a subscription.
-func (t *Topic) sendSubNotifications(asUid types.Uid, sreg *sessionJoin) {
+func (t *Topic) sendSubNotifications(asUid types.Uid, sid, userAgent string) {
 	pud := t.perUser[asUid]
 
 	switch t.cat {
@@ -1265,12 +1293,6 @@ func (t *Topic) sendSubNotifications(asUid types.Uid, sreg *sessionJoin) {
 				log.Println("topic: failed to load contacts", t.name, err.Error())
 			}
 			// User online: notify users of interest without forcing response (no +en here).
-			var userAgent string
-			if sreg.sessOverrides != nil {
-				userAgent = sreg.sessOverrides.userAgent
-			} else {
-				userAgent = sreg.sess.userAgent
-			}
 			t.presUsersOfInterest("on", userAgent)
 		}
 
@@ -1289,8 +1311,7 @@ func (t *Topic) sendSubNotifications(asUid types.Uid, sreg *sessionJoin) {
 			// If this is the first session of the user in the topic.
 			// Notify other online group members that the user is online now.
 			t.presSubsOnline("on", asUid.UserId(), nilPresParams,
-				&presFilters{filterIn: types.ModeRead},
-				sidFromSessionOrOverrides(sreg.sess, sreg.sessOverrides))
+				&presFilters{filterIn: types.ModeRead}, sid)
 		}
 	}
 }
@@ -1816,7 +1837,8 @@ func (t *Topic) anotherUserSub(h *Hub, sess *Session, asUid, target types.Uid, s
 			// Increment unread count
 			usersUpdateUnread(target, t.lastID-userData.readID, true)
 		}
-		t.notifySubChange(target, asUid, oldWant, oldGiven, userData.modeWant, userData.modeGiven, sidFromSessionOrOverrides(sess, sessOverrides))
+		t.notifySubChange(target, asUid, oldWant, oldGiven, userData.modeWant, userData.modeGiven,
+			sidFromSessionOrOverrides(sess, sessOverrides))
 	}
 
 	if !userData.modeGiven.IsJoiner() {
@@ -2842,7 +2864,8 @@ func (t *Topic) replyDelSub(h *Hub, sess *Session, asUid types.Uid, del *MsgClie
 	}
 
 	// ModeUnset signifies deleted subscription as opposite to ModeNone - no access.
-	t.notifySubChange(uid, asUid, pud.modeWant, pud.modeGiven, types.ModeUnset, types.ModeUnset, sidFromSessionOrOverrides(sess, sessOverrides))
+	t.notifySubChange(uid, asUid, pud.modeWant, pud.modeGiven, types.ModeUnset, types.ModeUnset,
+		sidFromSessionOrOverrides(sess, sessOverrides))
 
 	t.evictUser(uid, true, "")
 

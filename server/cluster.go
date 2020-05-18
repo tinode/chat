@@ -471,6 +471,7 @@ func (c *Cluster) Master(msg *ClusterReq, rejected *bool) error {
 	return nil
 }
 
+// TopicMaster handles requests sent by proxy topic to master topic.
 func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 	*rejected = false
 
@@ -589,20 +590,9 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 
 	case msg.TopicMsg.DefrNotifReq != nil:
 		if t := globals.hub.topicGet(msg.RcptTo); t != nil {
-			var notifReqs []*sessionJoin
-			for _, req := range msg.TopicMsg.DefrNotifReq.SendNotificationRequests {
-				// Create fake sessoinJoin requests (that's the interface that the code
-				// that sends notifications wants.
-				s := &sessionJoin{
-					pkt: &ClientComMessage{
-						AsUser: req.AsUser,
-					},
-					sessOverrides: &sessionOverrides{
-						sid:       req.Sid,
-						userAgent: req.UserAgent,
-					},
-				}
-				notifReqs = append(notifReqs, s)
+			notifReqs := make([]deferredNotification, len(msg.TopicMsg.DefrNotifReq.SendNotificationRequests))
+			for i, req := range msg.TopicMsg.DefrNotifReq.SendNotificationRequests {
+				notifReqs[i] = deferredNotification{uid: types.ParseUserId(req.AsUser), sid: req.Sid, userAgent: req.UserAgent}
 			}
 
 			sess.markRemoteSessionsForeground(notifReqs)
@@ -619,18 +609,17 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 	return nil
 }
 
-// markRemoteSessionsForeground marks currently tracked remote session
+// markRemoteSessionsForeground marks currently tracked remote sessions
 // as non-background to ensure proper subscribed user accounting in the master topic.
-func (s *Session) markRemoteSessionsForeground(notifReqs []*sessionJoin) {
+func (s *Session) markRemoteSessionsForeground(dn []deferredNotification) {
 	s.remoteSessionsLock.Lock()
 	defer s.remoteSessionsLock.Unlock()
-	for _, req := range notifReqs {
-		sid := req.sessOverrides.sid
-		if rs, ok := s.remoteSessions[sid]; ok {
+	for i := range dn {
+		if rs, ok := s.remoteSessions[dn[i].sid]; ok {
 			rs.isBackground = false
-			s.remoteSessions[sid] = rs
+			s.remoteSessions[dn[i].sid] = rs
 		} else {
-			log.Printf("cluster: deferred notifications request for unknown session %s", sid)
+			log.Printf("cluster: deferred notifications request for unknown session %s", dn[i].sid)
 		}
 	}
 }
