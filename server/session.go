@@ -287,6 +287,11 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 		return
 	}
 
+	// Save ID of the originating session.
+	if msg.OrgSid == "" {
+		msg.OrgSid = s.sid
+	}
+
 	var resp *ServerComMessage
 	if msg, resp = pluginFireHose(s, msg); resp != nil {
 		// Plugin provided a response. No further processing is needed.

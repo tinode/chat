@@ -305,7 +305,7 @@ func (t *Topic) runProxy(hub *Hub) {
 				// If the server changed acs on this topic, update the internal state.
 				t.updateAcsFromPresMsg(msg.SrvMsg.Pres)
 			}
-			if msg.FromSID == "*" {
+			if msg.OrigSid == "*" {
 				// It is a broadcast.
 				msg.SrvMsg.uid = msg.Uid
 				switch {
@@ -318,7 +318,7 @@ func (t *Topic) runProxy(hub *Hub) {
 				default:
 				}
 			} else {
-				sess := globals.sessionStore.Get(msg.FromSID)
+				sess := globals.sessionStore.Get(msg.OrigSid)
 				switch msg.OrigRequestType {
 				case ProxyRequestJoin:
 					if sess != nil && msg.SrvMsg != nil && msg.SrvMsg.Ctrl != nil {
@@ -555,7 +555,6 @@ func (t *Topic) runLocal(hub *Hub) {
 		select {
 		case sreg := <-t.reg:
 			// Request to add a connection to this topic
-
 			if t.isInactive() {
 				asUid := types.ParseUserId(sreg.pkt.AsUser)
 				sreg.sess.queueOutWithOverrides(
@@ -565,6 +564,7 @@ func (t *Topic) runLocal(hub *Hub) {
 				// while processing the call
 				killTimer.Stop()
 				if err := t.handleSubscription(hub, sreg); err == nil {
+					log.Println("hub: handleSubscription success", sreg.pkt.Sub)
 					if sreg.pkt.Sub.Created {
 						// Call plugins with the new topic
 						pluginTopic(t, plgActCreate)
@@ -1157,6 +1157,8 @@ func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 		// Remaining notifications are also sent immediately.
 		t.sendSubNotifications(asUid, sidFromSessionOrOverrides(sreg.sess, sreg.sessOverrides), sreg.userAgent)
 	}
+
+	log.Println("Notifications sent to", sreg.sess.sid, sidFromSessionOrOverrides(sreg.sess, sreg.sessOverrides))
 
 	if getWhat&constMsgMetaDesc != 0 {
 		// Send get.desc as a {meta} packet.

@@ -128,8 +128,8 @@ type ClusterReq struct {
 type ClusterResp struct {
 	// Server message with the response.
 	SrvMsg *ServerComMessage
-	// Session ID to forward message to, if any.
-	FromSID string
+	// Originating session ID to forward response to, if any.
+	OrigSid string
 	// Expanded (routable) topic name
 	RcptTo string
 
@@ -341,6 +341,7 @@ func (n *ClusterNode) callAsync(proc string, msg, resp interface{}, done chan *r
 	return call
 }
 
+/*
 // Proxy forwards message to master
 func (n *ClusterNode) forward(msg *ClusterReq) error {
 	msg.Node = globals.cluster.thisNodeName
@@ -351,7 +352,7 @@ func (n *ClusterNode) forward(msg *ClusterReq) error {
 	}
 	return err
 }
-
+*/
 // Topic proxy forwards message to topic master
 func (n *ClusterNode) forwardToTopicMaster(msg *ClusterReq) error {
 	msg.Node = globals.cluster.thisNodeName
@@ -363,11 +364,13 @@ func (n *ClusterNode) forwardToTopicMaster(msg *ClusterReq) error {
 	return err
 }
 
+/*
 // Master responds to proxy
 func (n *ClusterNode) respond(msg *ClusterResp) error {
 	var unused bool
 	return n.call("Cluster.Proxy", msg, &unused)
 }
+*/
 
 // Topic master responds to topic proxy
 func (n *ClusterNode) respondToTopicProxy(msg *ClusterResp) error {
@@ -402,11 +405,14 @@ type Cluster struct {
 	fo *clusterFailover
 }
 
+/*
 // Master at topic's master node receives C2S messages from topic's proxy nodes.
 // The message is treated like it came from a session: find or create a session locally,
 // dispatch the message to it like it came from a normal ws/lp/gRPC connection.
 // Called by a remote node.
 func (c *Cluster) Master(msg *ClusterReq, rejected *bool) error {
+	log.Println("Cluster.Master() is still being used")
+
 	// Find the local session associated with the given remote session.
 	sess := globals.sessionStore.Get(msg.Sess.Sid)
 
@@ -461,6 +467,7 @@ func (c *Cluster) Master(msg *ClusterReq, rejected *bool) error {
 
 	return nil
 }
+*/
 
 // TopicMaster handles requests sent by proxy topic to master topic.
 func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
@@ -507,7 +514,7 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 
 	switch {
 	case msg.TopicMsg.JoinReq != nil:
-		sessionJoin := &sessionJoin{
+		joinReq := &sessionJoin{
 			pkt:          msg.CliMsg,
 			sess:         sess,
 			isBackground: msg.CliMsg.Sub.Background,
@@ -515,10 +522,12 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 			// Impersonate the original session.
 			sessOverrides: &sessionOverrides{
 				sid:     origSid,
+				rcptTo:  msg.RcptTo,
 				origReq: msg.TopicMsg.JoinReq,
 			},
 		}
-		globals.hub.join <- sessionJoin
+		log.Printf("cluster: master subscription request %+v\n", joinReq)
+		globals.hub.join <- joinReq
 
 	case msg.TopicMsg.LeaveReq != nil:
 		if t := globals.hub.topicGet(msg.RcptTo); t != nil {
@@ -530,6 +539,7 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 				sess:                     sess,
 				sessOverrides: &sessionOverrides{
 					sid:     origSid,
+					rcptTo:  msg.RcptTo,
 					origReq: msg.TopicMsg.LeaveReq,
 				},
 			}
@@ -547,6 +557,7 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 			// Impersonate the original session.
 			sessOverrides: &sessionOverrides{
 				sid:     origSid,
+				rcptTo:  msg.RcptTo,
 				origReq: msg.TopicMsg.MetaReq,
 			},
 		}
@@ -563,6 +574,7 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 		}
 		msg.SrvMsg.sessOverrides = &sessionOverrides{
 			sid:     origSid,
+			rcptTo:  msg.RcptTo,
 			origReq: msg.TopicMsg.BroadcastReq,
 		}
 		msg.SrvMsg.sess = sess
@@ -611,21 +623,25 @@ func (s *Session) markRemoteSessionsForeground(dn []deferredNotification) {
 	}
 }
 
+/*
 // Proxy receives messages from the master node addressed to a specific local session.
 // Called by Session.writeRPC
 func (Cluster) Proxy(msg *ClusterResp, unused *bool) error {
+	log.Println("Cluster.Proxy is still being used.")
 	// This cluster member received a response from topic owner to be forwarded to a session
 	// Find appropriate session, send the message to it
-	if sess := globals.sessionStore.Get(msg.FromSID); sess != nil {
+	if sess := globals.sessionStore.Get(msg.OrigSid); sess != nil {
 		if !sess.queueOut(msg.SrvMsg) {
 			log.Println("cluster.Proxy: timeout")
 		}
 	} else {
-		log.Println("cluster: master response for unknown session", msg.FromSID)
+		log.Println("cluster: master response for unknown session", msg.OrigSid)
 	}
 
 	return nil
 }
+
+*/
 
 func (Cluster) TopicProxy(msg *ClusterResp, unused *bool) error {
 	// This cluster member received a response from the topic master to be forwarded to the topic.
@@ -979,6 +995,7 @@ func clusterInit(configString json.RawMessage, self *string) int {
 	return workerId
 }
 
+/*
 // This is a session handler at a master node: forward messages from the master to the session origin.
 func (sess *Session) rpcWriteLoop() {
 	// There is no readLoop for RPC, delete the session here
@@ -1000,14 +1017,14 @@ func (sess *Session) rpcWriteLoop() {
 			}
 			// The error is returned if the remote node is down. Which means the remote
 			// session is also disconnected.
-			if err := sess.clnode.respond(&ClusterResp{SrvMsg: msg.(*ServerComMessage), FromSID: sess.sid}); err != nil {
+			if err := sess.clnode.respond(&ClusterResp{SrvMsg: msg.(*ServerComMessage), OrigSid: sess.sid}); err != nil {
 				log.Println("cluster: sess.writeRPC:", err)
 				return
 			}
 		case msg := <-sess.stop:
 			// Shutdown is requested, don't care if the message is delivered
 			if msg != nil {
-				sess.clnode.respond(&ClusterResp{SrvMsg: msg.(*ServerComMessage), FromSID: sess.sid})
+				sess.clnode.respond(&ClusterResp{SrvMsg: msg.(*ServerComMessage), OrigSid: sess.sid})
 			}
 			return
 
@@ -1022,6 +1039,7 @@ func (sess *Session) rpcWriteLoop() {
 		}
 	}
 }
+*/
 
 // Proxied session is being closed at the Master node
 func (sess *Session) closeRPC() {
@@ -1231,13 +1249,16 @@ func (sess *Session) topicProxyWriteLoop(forTopic string) {
 				}
 				response.Uid = srvMsg.uid
 			}
+
 			if copyParamsFromSession {
 				// Reply to a specific session.
-				response.FromSID = srvMsg.OrigSid
+				response.OrigSid = srvMsg.OrigSid
+				srvMsg.RcptTo = srvMsg.sessOverrides.rcptTo
 				response.RcptTo = srvMsg.RcptTo
 			} else {
 				response.RcptTo = forTopic
-				response.FromSID = "*"
+				srvMsg.RcptTo = forTopic
+				response.OrigSid = "*"
 			}
 
 			if err := sess.clnode.respondToTopicProxy(response); err != nil {

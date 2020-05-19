@@ -99,6 +99,7 @@ func topicInit(t *Topic, sreg *sessionJoin, h *Hub) {
 	usersRegisterTopic(t, true)
 
 	// Topic will check access rights, send invite to p2p user, send {ctrl} message to the initiator session
+	log.Println("hub: topic initialized", sreg)
 	if sreg.pkt.Sub != nil {
 		t.reg <- sreg
 	}

@@ -328,6 +328,8 @@ type ClientComMessage struct {
 	AsUser string `json:"-"`
 	// Sender's authentication level.
 	AuthLvl int `json:"-"`
+	// ID of the originating session.
+	OrgSid string `json"-"`
 	// Timestamp when this message was received by the server.
 	timestamp time.Time
 }
@@ -583,8 +585,8 @@ func (src *MsgServerInfo) copy() *MsgServerInfo {
 type sessionOverrides struct {
 	// Proxied session id.
 	sid string
-	// User agent of the original session.
-	// userAgent string
+	// Routable topic name
+	rcptTo string
 	// Incoming proxy topic request pointer. Set for topic proxy requests. One of
 	// *ProxyJoin, *ProxyLeave, *ProxyBroadcast, *ProxyMeta.
 	origReq interface{}
