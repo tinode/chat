@@ -32,7 +32,7 @@ type sessionJoin struct {
 	isBackground bool
 
 	// User Agent which issued this request
-	userAgent string
+	//userAgent string
 
 	// Session param overrides. Used for handling remote topic requests.
 	sessOverrides *sessionOverrides

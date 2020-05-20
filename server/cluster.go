@@ -163,8 +163,6 @@ type ProxyTopicMessage struct {
 type ProxyJoin struct {
 	// Subscription was in background.
 	IsBackground bool
-	// User Agent which issued this request.
-	UserAgent string
 }
 
 // ProxyBroadcast contains topic broadcast request parameters.
@@ -389,7 +387,7 @@ type Cluster struct {
 func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 	*rejected = false
 
-	// One multiplexing session per proxy topic per node.
+	// Master maintains one multiplexing session per proxy topic per node.
 	msid := msg.RcptTo + "-" + msg.Node
 	msess := globals.sessionStore.Get(msid)
 	if msg.Done {
@@ -405,28 +403,35 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 		*rejected = true
 		return nil
 	}
-	if msg.TopicMsg == nil {
-		panic("cluster TopicMaster: nil topic message - topic " + msg.RcptTo)
-	}
 	node := globals.cluster.nodes[msg.Node]
 	if node == nil {
 		log.Println("cluster TopicMaster: request from an unknown node", msg.Node)
 		return nil
 	}
-	var origSid string
-	if msg.Sess != nil {
-		// Sess can be empty for pres messages.
-		origSid = msg.Sess.Sid
-	}
 
-	// Create a new session if needed.
+	// Create a new multiplexing session if needed.
 	if msess == nil {
 		// If the session is not found, create it.
 		var count int
 		msess, count = globals.sessionStore.NewSession(node, msid)
 
-		log.Println("cluster: topic proxy channel started", msid, count)
-		go msess.topicProxyWriteLoop(msg.RcptTo)
+		log.Println("cluster: multiplexing session started", msid, count)
+		go msess.clusterWriteLoop(msg.RcptTo)
+	}
+
+	// This is a local copy of a remote session.
+	var sess *Session
+	// Sess is nil for user agent changes and deferred presence notification requests.
+	if msg.Sess != nil {
+		// We only need some session info. No need to copy everything.
+		sess := &Session{
+			proto:      CLUSTER,
+			clnode:     msess.clnode,
+			sid:        msg.Sess.Sid,
+			userAgent:  msg.Sess.UserAgent,
+			remoteAddr: msg.Sess.RemoteAddr,
+			lang:       msg.Sess.Lang,
+		}
 	}
 
 	switch {
@@ -435,10 +440,8 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 			pkt:          msg.CliMsg,
 			sess:         sess,
 			isBackground: msg.CliMsg.Sub.Background,
-			userAgent:    msg.TopicMsg.JoinReq.UserAgent,
 			// Impersonate the original session.
 			sessOverrides: &sessionOverrides{
-				sid:     origSid,
 				rcptTo:  msg.RcptTo,
 				origReq: msg.TopicMsg.JoinReq,
 			},
@@ -455,12 +458,11 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 				terminateProxyConnection: msg.TopicMsg.LeaveReq.TerminateProxyConnection,
 				sess:                     sess,
 				sessOverrides: &sessionOverrides{
-					sid:     origSid,
 					rcptTo:  msg.RcptTo,
 					origReq: msg.TopicMsg.LeaveReq,
 				},
 			}
-			log.Printf("processing session leave for sid '%s', full req = %+v", origSid, leave)
+			log.Printf("processing session leave for sid '%s', full req = %+v", sess.sid, leave)
 			t.unreg <- leave
 		} else {
 			log.Printf("cluster: leave request for unknown topic %s", msg.RcptTo)
@@ -473,7 +475,6 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 			what: msg.TopicMsg.MetaReq.What,
 			// Impersonate the original session.
 			sessOverrides: &sessionOverrides{
-				sid:     origSid,
 				rcptTo:  msg.RcptTo,
 				origReq: msg.TopicMsg.MetaReq,
 			},
@@ -490,7 +491,6 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 			panic("cluster: topic proxy broadcast request has no data message")
 		}
 		msg.SrvMsg.sessOverrides = &sessionOverrides{
-			sid:     origSid,
 			rcptTo:  msg.RcptTo,
 			origReq: msg.TopicMsg.BroadcastReq,
 		}
@@ -511,7 +511,7 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 				notifReqs[i] = deferredNotification{uid: types.ParseUserId(req.AsUser), sid: req.Sid, userAgent: req.UserAgent}
 			}
 
-			sess.markRemoteSessionsForeground(notifReqs)
+			msess.markRemoteSessionsForeground(notifReqs)
 			t.master <- &topicMasterRequest{deferredNotificationsRequest: notifReqs}
 		} else {
 			log.Printf("cluster: deferred notifications request for unknown topic %s", msg.RcptTo)
@@ -723,7 +723,7 @@ func (c *Cluster) isPartitioned() bool {
 	return (len(c.nodes)+1)/2 >= len(c.fo.activeNodes)
 }
 
-func (Cluster) getClusterReq(cliMsg *ClientComMessage, srvMsg *ServerComMessage,
+func (c *Cluster) makeClusterReq(cliMsg *ClientComMessage, srvMsg *ServerComMessage,
 	topicMsg *ProxyTopicMessage, topic string, sess *Session) *ClusterReq {
 	req := &ClusterReq{
 		Node:        c.thisNodeName,
@@ -763,7 +763,7 @@ func (c *Cluster) routeToTopicMaster(cliMsg *ClientComMessage, srvMsg *ServerCom
 		return errors.New("node for topic not found")
 	}
 
-	req := c.getClusterReq(cliMsg, srvMsg, topicMsg, topic, sess)
+	req := c.makeClusterReq(cliMsg, srvMsg, topicMsg, topic, sess)
 	return n.proxyToMaster(req)
 }
 
@@ -806,7 +806,7 @@ func (c *Cluster) topicProxyGone(topicName string) error {
 		return errors.New("node for topic not found")
 	}
 
-	req := c.getClusterReq(nil, nil, nil, topicName, nil)
+	req := c.makeClusterReq(nil, nil, nil, topicName, nil)
 	req.Done = true
 	return n.proxyToMaster(req)
 }
@@ -892,52 +892,6 @@ func clusterInit(configString json.RawMessage, self *string) int {
 
 	return workerId
 }
-
-/*
-// This is a session handler at a master node: forward messages from the master to the session origin.
-func (sess *Session) rpcWriteLoop() {
-	// There is no readLoop for RPC, delete the session here
-	defer func() {
-		sess.closeRPC()
-		globals.sessionStore.Delete(sess)
-		sess.unsubAll()
-	}()
-
-	// Timer which checks for orphaned nodes.
-	heartBeat := time.NewTimer(clusterSessionCleanup)
-
-	for {
-		select {
-		case msg, ok := <-sess.send:
-			if !ok || sess.clnode.endpoint == nil {
-				// channel closed
-				return
-			}
-			// The error is returned if the remote node is down. Which means the remote
-			// session is also disconnected.
-			if err := sess.clnode.respond(&ClusterResp{SrvMsg: msg.(*ServerComMessage), OrigSid: sess.sid}); err != nil {
-				log.Println("cluster: sess.writeRPC:", err)
-				return
-			}
-		case msg := <-sess.stop:
-			// Shutdown is requested, don't care if the message is delivered
-			if msg != nil {
-				sess.clnode.respond(&ClusterResp{SrvMsg: msg.(*ServerComMessage), OrigSid: sess.sid})
-			}
-			return
-
-		case topic := <-sess.detach:
-			sess.delSub(topic)
-
-		case <-heartBeat.C:
-			// All proxied subsriptions are gone, this session is no longer needed.
-			if sess.countSub() == 0 {
-				return
-			}
-		}
-	}
-}
-*/
 
 // Proxied session is being closed at the Master node
 func (sess *Session) closeRPC() {
@@ -1095,8 +1049,8 @@ func (sess *Session) cleanUpRemoteSessions(topicName string) {
 	}
 }
 
-// topicProxyWriteLoop implements proxy session event loop.
-func (sess *Session) topicProxyWriteLoop(forTopic string) {
+// clusterWriteLoop implements write loop for proxy session at a node which hosts master topic.
+func (sess *Session) clusterWriteLoop(forTopic string) {
 	defer func() {
 		sess.closeRPC()
 		globals.sessionStore.Delete(sess)
@@ -1123,12 +1077,12 @@ func (sess *Session) topicProxyWriteLoop(forTopic string) {
 					response.OrigRequestType = ProxyRequestJoin
 					response.IsBackground = req.IsBackground
 					response.Uid = types.ParseUserId(srvMsg.AsUser)
-					sess.addRemoteSession(srvMsg.OrigSid, &remoteSession{
+					sess.addRemoteSession(srvMsg.sess.sid, &remoteSession{
 						uid:          response.Uid,
 						isBackground: response.IsBackground})
 				case *ProxyLeave:
 					response.OrigRequestType = ProxyRequestLeave
-					sess.delRemoteSession(srvMsg.OrigSid)
+					sess.delRemoteSession(srvMsg.sess.sid)
 					if req.TerminateProxyConnection {
 						log.Printf("session [%s]: terminating upon client request", srvMsg.OrigSid)
 						sess.detach <- forTopic
@@ -1138,7 +1092,7 @@ func (sess *Session) topicProxyWriteLoop(forTopic string) {
 				case *ProxyMeta:
 					response.OrigRequestType = ProxyRequestMeta
 				}
-				copyParamsFromSession = srvMsg.OrigSid != ""
+				copyParamsFromSession = srvMsg.sess.sid != ""
 			} else {
 				// Copy skipSid.
 				if srvMsg.Ctrl == nil && srvMsg.Data == nil && srvMsg.Pres == nil && srvMsg.Info == nil {

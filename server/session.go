@@ -59,7 +59,7 @@ type Session struct {
 	// gRPC handle. Set only for gRPC clients.
 	grpcnode pbx.Node_MessageLoopServer
 
-	// Reference to the cluster node where the session has originated. Set only for cluster RPC (proxied) sessions.
+	// Reference to the cluster node where the session has originated. Set only for cluster RPC sessions.
 	clnode *ClusterNode
 
 	// IP address of the client. For long polling this is the IP of the last poll.
@@ -196,7 +196,7 @@ func (s *Session) isProxy() bool {
 	return s.proto == CLUSTER
 }
 
-// queueOut attempts to send a ServerComMessage to a session; if the send buffer is full,
+// queueOut attempts to send a ServerComMessage to a session write loop; if the send buffer is full,
 // timeout is `sendTimeout`.
 func (s *Session) queueOut(msg *ServerComMessage) bool {
 	if s == nil {
@@ -210,12 +210,6 @@ func (s *Session) queueOut(msg *ServerComMessage) bool {
 		return false
 	}
 	return true
-}
-
-// queueOut attempts to send a message with the overrides on the outgoing message.
-func (s *Session) queueOutWithOverrides(msg *ServerComMessage, sessOverrides *sessionOverrides) bool {
-	msg.sessOverrides = sessOverrides
-	return s.queueOut(msg)
 }
 
 // queueOutBytes attempts to send a ServerComMessage already serialized to []byte.
@@ -285,11 +279,6 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 		s.queueOut(ErrMalformed("", "", msg.timestamp))
 		log.Println("s.dispatch: malformed msg.from: ", msg.AsUser, s.sid)
 		return
-	}
-
-	// Save ID of the originating session.
-	if msg.OrgSid == "" {
-		msg.OrgSid = s.sid
 	}
 
 	var resp *ServerComMessage
@@ -426,9 +415,8 @@ func (s *Session) subscribe(msg *ClientComMessage) {
 		s.queueOut(InfoAlreadySubscribed(msg.Id, msg.Original, msg.timestamp))
 	} else {
 		globals.hub.join <- &sessionJoin{
-			pkt:       msg,
-			sess:      s,
-			userAgent: s.userAgent}
+			pkt:  msg,
+			sess: s}
 		// Hub will send Ctrl success/failure packets back to session
 	}
 }
@@ -503,8 +491,7 @@ func (s *Session) publish(msg *ClientComMessage) {
 		RcptTo:    msg.RcptTo,
 		AsUser:    msg.AsUser,
 		Timestamp: msg.timestamp,
-		sess:      s,
-		OrigSid:   s.sid}
+		sess:      s}
 	if msg.Pub.NoEcho {
 		data.SkipSid = s.sid
 	}
@@ -1020,6 +1007,9 @@ func (s *Session) serialize(msg *ServerComMessage) interface{} {
 	if s.proto == CLUSTER {
 		// No need to serialize the message to bytes within the cluster,
 		// but we have to create a copy because the original msg can be mutated.
+		// In case of a cluster, s.send belongs to a multiplexing write loop.
+		// We need to pass a copy of the actual session.
+		msg.sess = s
 		return msg.copy()
 	}
 

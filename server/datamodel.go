@@ -328,8 +328,6 @@ type ClientComMessage struct {
 	AsUser string `json:"-"`
 	// Sender's authentication level.
 	AuthLvl int `json:"-"`
-	// ID of the originating session.
-	OrgSid string `json"-"`
 	// Timestamp when this message was received by the server.
 	timestamp time.Time
 }
@@ -612,10 +610,8 @@ type ServerComMessage struct {
 	Timestamp time.Time `json:"-"`
 	// Originating session to send an aknowledgement to. Could be nil.
 	sess *Session
-	// Deserialized ID of the originating session.
-	OrigSid string `json:"-"`
 	// Session ID to skip when sendng packet to sessions. Used to skip sending to original session.
-	// Should be either empty or equal to OrigSid.
+	// Could be either empty.
 	SkipSid string `json:"-"`
 	// Session parameter overrides. Used when a topic is hosted remotely. Could be nil.
 	sessOverrides *sessionOverrides
@@ -635,7 +631,6 @@ func (src *ServerComMessage) copy() *ServerComMessage {
 		AsUser:        src.AsUser,
 		Timestamp:     src.Timestamp,
 		sess:          src.sess,
-		OrigSid:       src.OrigSid,
 		SkipSid:       src.SkipSid,
 		sessOverrides: src.sessOverrides,
 		uid:           src.uid,
