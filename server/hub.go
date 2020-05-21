@@ -28,12 +28,6 @@ type sessionJoin struct {
 	// Session to attach to topic.
 	sess *Session
 
-	// Subscription was in background
-	isBackground bool
-
-	// User Agent which issued this request
-	//userAgent string
-
 	// Session param overrides. Used for handling remote topic requests.
 	sessOverrides *sessionOverrides
 }
@@ -129,7 +123,7 @@ func (h *Hub) topicDel(name string) {
 
 func newHub() *Hub {
 	var h = &Hub{
-		topics: &sync.Map{}, //make(map[string]*Topic),
+		topics: &sync.Map{},
 		// this needs to be buffered - hub generates invites and adds them to this queue
 		route:    make(chan *ServerComMessage, 4096),
 		join:     make(chan *sessionJoin),

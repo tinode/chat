@@ -119,9 +119,29 @@ type ClusterReq struct {
 	RcptTo string
 	// Originating session
 	Sess *ClusterSess
-	// True if either the original topic (when proxying topics) is gone or
-	// the original session (when proxying sessions) has disconnected
+	// True when the original topic is gone
 	Done bool
+}
+
+// ClusterRoute is intra-cluster routing request message.
+type ClusterRoute struct {
+	// Name of the node sending this request
+	Node string
+
+	// Ring hash signature of the node sending this request
+	// Signature must match the signature of the receiver, otherwise the
+	// Cluster is desynchronized.
+	Signature string
+
+	// Fingerprint of the node sending this request.
+	// Fingerprint changes when the node is restarted.
+	Fingerprint int64
+
+	// Message to be routed. Set for intra-cluster route requests.
+	SrvMsg *ServerComMessage
+
+	// Originating session
+	Sess *ClusterSess
 }
 
 // ClusterResp is a Master to Proxy response message.
@@ -187,10 +207,7 @@ type ProxyLeave struct {
 }
 
 // ProxyUAChange contains user agent change request params.
-type ProxyUAChange struct {
-	// User agent string.
-	UserAgent string
-}
+type ProxyUAChange struct{}
 
 // ProxyDeferredSession represents a background session
 // for which we want to send deferred notifications.
@@ -211,10 +228,12 @@ type ProxyDeferredNotifications struct {
 
 // Proxy request types.
 const (
-	ProxyRequestJoin      = 1
-	ProxyRequestLeave     = 2
-	ProxyRequestMeta      = 3
-	ProxyRequestBroadcast = 4
+	ProxyReqJoin = iota + 1
+	ProxyReqLeave
+	ProxyReqMeta
+	ProxyReqBroadcast
+	ProxyReqUAChange
+	ProxyReqBkgNotif
 )
 
 // Handle outbound node communication: read messages from the channel, forward to remote nodes.
@@ -357,7 +376,7 @@ func (n *ClusterNode) masterToProxy(msg *ClusterResp) error {
 }
 
 // route routes server message within the cluster.
-func (n *ClusterNode) route(msg *ClusterReq) error {
+func (n *ClusterNode) route(msg *ClusterRoute) error {
 	var unused bool
 	return n.call("Cluster.Route", msg, &unused)
 }
@@ -424,7 +443,7 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 	// Sess is nil for user agent changes and deferred presence notification requests.
 	if msg.Sess != nil {
 		// We only need some session info. No need to copy everything.
-		sess := &Session{
+		sess = &Session{
 			proto:      CLUSTER,
 			clnode:     msess.clnode,
 			sid:        msg.Sess.Sid,
@@ -437,9 +456,8 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 	switch {
 	case msg.TopicMsg.JoinReq != nil:
 		joinReq := &sessionJoin{
-			pkt:          msg.CliMsg,
-			sess:         sess,
-			isBackground: msg.CliMsg.Sub.Background,
+			pkt:  msg.CliMsg,
+			sess: sess,
 			// Impersonate the original session.
 			sessOverrides: &sessionOverrides{
 				rcptTo:  msg.RcptTo,
@@ -506,13 +524,13 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 
 	case msg.TopicMsg.DefrNotifReq != nil:
 		if t := globals.hub.topicGet(msg.RcptTo); t != nil {
-			notifReqs := make([]deferredNotification, len(msg.TopicMsg.DefrNotifReq.SendNotificationRequests))
+			notifs := make([]*deferredNotification, len(msg.TopicMsg.DefrNotifReq.SendNotificationRequests))
 			for i, req := range msg.TopicMsg.DefrNotifReq.SendNotificationRequests {
-				notifReqs[i] = deferredNotification{uid: types.ParseUserId(req.AsUser), sid: req.Sid, userAgent: req.UserAgent}
+				notifs[i] = &deferredNotification{uid: types.ParseUserId(req.AsUser), sid: req.Sid, userAgent: req.UserAgent}
 			}
 
-			msess.markRemoteSessionsForeground(notifReqs)
-			t.master <- &topicMasterRequest{deferredNotificationsRequest: notifReqs}
+			msess.markRemoteSessionsForeground(notifs)
+			t.master <- &topicMasterRequest{deferredNotificationsRequest: notifs}
 		} else {
 			log.Printf("cluster: deferred notifications request for unknown topic %s", msg.RcptTo)
 		}
@@ -538,9 +556,9 @@ func (Cluster) TopicProxy(msg *ClusterResp, unused *bool) error {
 	return nil
 }
 
-// Route endpoint receives intra-cluster messages destined for the nodes hosting topic.
+// Route endpoint receives intra-cluster messages destined for the nodes hosting the topic.
 // Called by Hub.route channel consumer for messages send without attaching to topic first.
-func (c *Cluster) Route(msg *ClusterReq, rejected *bool) error {
+func (c *Cluster) Route(msg *ClusterRoute, rejected *bool) error {
 	*rejected = false
 	if msg.Signature != c.ring.Signature() {
 		sid := ""
@@ -567,15 +585,15 @@ func (c *Cluster) Route(msg *ClusterReq, rejected *bool) error {
 
 // markRemoteSessionsForeground marks currently tracked remote sessions
 // as non-background to ensure proper subscribed user accounting in the master topic.
-func (s *Session) markRemoteSessionsForeground(dn []deferredNotification) {
+func (s *Session) markRemoteSessionsForeground(notifs []*deferredNotification) {
 	s.remoteSessionsLock.Lock()
 	defer s.remoteSessionsLock.Unlock()
-	for i := range dn {
-		if rs, ok := s.remoteSessions[dn[i].sid]; ok {
+	for _, dn := range notifs {
+		if rs, ok := s.remoteSessions[dn.sid]; ok {
 			rs.isBackground = false
-			s.remoteSessions[dn[i].sid] = rs
+			s.remoteSessions[dn.sid] = rs
 		} else {
-			log.Printf("cluster: deferred notifications request for unknown session %s", dn[i].sid)
+			log.Printf("cluster: deferred notifications request for unknown session %s", dn.sid)
 		}
 	}
 }
@@ -779,18 +797,17 @@ func (c *Cluster) routeToTopicIntraCluster(topic string, msg *ServerComMessage, 
 		return errors.New("node for topic not found (intra)")
 	}
 
-	req := &ClusterReq{
+	route := &ClusterRoute{
 		Node:        c.thisNodeName,
 		Signature:   c.ring.Signature(),
 		Fingerprint: c.fingerprint,
-		RcptTo:      topic,
 		SrvMsg:      msg,
 	}
 
 	if sess != nil {
-		req.Sess = &ClusterSess{Sid: sess.sid}
+		route.Sess = &ClusterSess{Sid: sess.sid}
 	}
-	return n.route(req)
+	return n.route(route)
 }
 
 // Topic proxy terminated. Inform remote Master node that the proxy is gone.
@@ -1050,6 +1067,7 @@ func (sess *Session) cleanUpRemoteSessions(topicName string) {
 }
 
 // clusterWriteLoop implements write loop for proxy session at a node which hosts master topic.
+// The session is a multiplexing session, i.e. it handles requests for multile sessions at origin.
 func (sess *Session) clusterWriteLoop(forTopic string) {
 	defer func() {
 		sess.closeRPC()
@@ -1069,28 +1087,28 @@ func (sess *Session) clusterWriteLoop(forTopic string) {
 
 			response := &ClusterResp{SrvMsg: srvMsg}
 			copyParamsFromSession := false
-			if srvMsg.sessOverrides != nil {
+			if srvMsg.sess != nil {
 				switch req := srvMsg.sessOverrides.origReq.(type) {
 				case nil:
 					panic("cluster: origReq is nil in session overrides")
 				case *ProxyJoin:
-					response.OrigRequestType = ProxyRequestJoin
+					response.OrigRequestType = ProxyReqJoin
 					response.IsBackground = req.IsBackground
 					response.Uid = types.ParseUserId(srvMsg.AsUser)
 					sess.addRemoteSession(srvMsg.sess.sid, &remoteSession{
 						uid:          response.Uid,
 						isBackground: response.IsBackground})
 				case *ProxyLeave:
-					response.OrigRequestType = ProxyRequestLeave
+					response.OrigRequestType = ProxyReqLeave
 					sess.delRemoteSession(srvMsg.sess.sid)
 					if req.TerminateProxyConnection {
-						log.Printf("session [%s]: terminating upon client request", srvMsg.OrigSid)
+						log.Printf("session [%s]: terminating upon client request", srvMsg.sess.sid)
 						sess.detach <- forTopic
 					}
 				case *ProxyBroadcast:
-					response.OrigRequestType = ProxyRequestBroadcast
+					response.OrigRequestType = ProxyReqBroadcast
 				case *ProxyMeta:
-					response.OrigRequestType = ProxyRequestMeta
+					response.OrigRequestType = ProxyReqMeta
 				}
 				copyParamsFromSession = srvMsg.sess.sid != ""
 			} else {
@@ -1104,7 +1122,7 @@ func (sess *Session) clusterWriteLoop(forTopic string) {
 
 			if copyParamsFromSession {
 				// Reply to a specific session.
-				response.OrigSid = srvMsg.OrigSid
+				response.OrigSid = srvMsg.sess.sid
 				srvMsg.RcptTo = srvMsg.sessOverrides.rcptTo
 				response.RcptTo = srvMsg.RcptTo
 			} else {
@@ -1119,7 +1137,8 @@ func (sess *Session) clusterWriteLoop(forTopic string) {
 			}
 		case msg := <-sess.stop:
 			if msg != nil {
-				log.Println("sess stop", msg.(*ServerComMessage), " to ", sess.clnode.endpoint, " from ", sess.sid)
+				log.Println("clusterWriteLoop stop", msg.(*ServerComMessage),
+					"to", sess.clnode.endpoint, "from", sess.sid)
 			}
 			return
 

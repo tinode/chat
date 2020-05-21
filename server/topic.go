@@ -12,7 +12,6 @@ import (
 	"container/list"
 	"errors"
 	"log"
-	"net/http"
 	"sort"
 	"sync/atomic"
 	"time"
@@ -95,6 +94,7 @@ type Topic struct {
 	// subscribed on behalf of another user.
 	sessions map[*Session]perSessionData
 	// Queue of delayed presence updates from successful service (background) subscriptions.
+	// Contains pointers to deferredNotification struct.
 	defrNotif *list.List
 
 	// Inbound {data} and {pres} messages from sessions or other topics, already converted to SCM. Buffered = 256
@@ -181,19 +181,13 @@ type shutDown struct {
 	reason int
 }
 
+// Deferred online notification description
 type deferredNotification struct {
-	uid       types.Uid
 	sid       string
 	userAgent string
-}
-
-// Direct communication from proxy topic to master and service requests.
-type topicMasterRequest struct {
-	// Deferred notifications request (list of sessions to notify).
-	deferredNotificationsRequest []deferredNotification
-	// List of proxied user IDs and the counts of proxied origin sessions for each uid.
-	// Required for accounting.
-	proxySessionCleanUp map[types.Uid]int
+	uid       types.Uid
+	timestamp time.Time
+	sess      *Session
 }
 
 var nilPresParams = &presParams{}
@@ -205,267 +199,6 @@ func (t *Topic) run(hub *Hub) {
 	} else {
 		t.runProxy(hub)
 	}
-}
-
-func (t *Topic) runProxy(hub *Hub) {
-	// Kills topic after a period of inactivity.
-	keepAlive := idleTopicTimeout
-	killTimer := time.NewTimer(time.Hour)
-	killTimer.Stop()
-
-	// Ticker for deferred presence notifications.
-	defrNotifTimer := time.NewTicker(time.Millisecond * 500)
-
-	for {
-		select {
-		case sreg := <-t.reg:
-			// Request to add a connection to this topic
-			if t.isInactive() {
-				asUid := types.ParseUserId(sreg.pkt.AsUser)
-				sreg.sess.queueOut(ErrLocked(sreg.pkt.Id, t.original(asUid), types.TimeNow()))
-			} else {
-				msg := &ProxyTopicMessage{
-					JoinReq: &ProxyJoin{
-						IsBackground: sreg.isBackground,
-					},
-				}
-				// Response (ctrl message) will be handled when it's received via the proxy channel.
-				if err := globals.cluster.routeToTopicMaster(sreg.pkt, nil, msg, t.name, sreg.sess); err != nil {
-					log.Println("proxy topic: route join request from proxy to master failed:", err)
-				}
-			}
-
-		case leave := <-t.unreg:
-			// Remove connection from topic; session may continue to function
-			log.Printf("t[%s] leave %+v", t.name, leave)
-			asUid := leave.userId
-			// Explicitly specify user id because the proxy session hosts multiple client sessions.
-			if asUid.IsZero() {
-				if pssd, ok := t.sessions[leave.sess]; ok {
-					asUid = pssd.uid
-				} else {
-					log.Println("proxy topic: leave request sent for unknown session")
-					continue
-				}
-			}
-			// Remove the session from the topic without waiting for a response from the master node
-			// because by the time the response arrives this session may be already gone from the session store
-			// and we won't be able to find and remove it by its sid.
-			t.remSession(leave.sess, asUid)
-			msg := &ClientComMessage{}
-			proxyLeave := &ProxyTopicMessage{
-				LeaveReq: &ProxyLeave{
-					Id:     leave.id,
-					UserId: asUid,
-					Unsub:  leave.unsub,
-					// Terminate connection to master topic if explicitly asked to do so or all sessions are gone.
-					TerminateProxyConnection: leave.terminateProxyConnection || len(t.sessions) == 0,
-				},
-			}
-			if err := globals.cluster.routeToTopicMaster(msg, nil, proxyLeave, t.name, leave.sess); err != nil {
-				log.Println("proxy topic: route broadcast request from proxy to master failed:", err)
-			}
-
-		case msg := <-t.broadcast:
-			// Content message intended for broadcasting to recipients
-			brdc := &ProxyTopicMessage{
-				BroadcastReq: &ProxyBroadcast{},
-			}
-			log.Printf("t[%s] broadcast %+v %+v", t.name, msg, brdc.BroadcastReq)
-			if err := globals.cluster.routeToTopicMaster(nil, msg, brdc, t.name, msg.sess); err != nil {
-				log.Println("proxy topic: route broadcast request from proxy to master failed:", err)
-			}
-
-		case meta := <-t.meta:
-			// Request to get/set topic metadata
-			log.Printf("t[%s] meta %+v", t.name, meta)
-			req := &ProxyTopicMessage{
-				MetaReq: &ProxyMeta{
-					What: meta.what,
-				},
-			}
-			if err := globals.cluster.routeToTopicMaster(meta.pkt, nil, req, t.name, meta.sess); err != nil {
-				log.Println("proxy topic: route meta request from proxy to master failed:", err)
-			}
-
-		case ua := <-t.uaChange:
-			// Process an update to user agent from one of the sessions
-			req := &ProxyTopicMessage{
-				UAChangeReq: &ProxyUAChange{
-					UserAgent: ua,
-				},
-			}
-			if err := globals.cluster.routeToTopicMaster(nil, nil, req, t.name, nil); err != nil {
-				log.Println("proxy topic: route ua change request from proxy to master failed:", err)
-			}
-
-		case msg := <-t.proxy:
-			if msg.SrvMsg.Pres != nil && msg.SrvMsg.Pres.What == "acs" && msg.SrvMsg.Pres.Acs != nil {
-				// If the server changed acs on this topic, update the internal state.
-				t.updateAcsFromPresMsg(msg.SrvMsg.Pres)
-			}
-			if msg.OrigSid == "*" {
-				// It is a broadcast.
-				msg.SrvMsg.uid = msg.Uid
-				switch {
-				case msg.SrvMsg.Pres != nil || msg.SrvMsg.Data != nil || msg.SrvMsg.Info != nil:
-					// Regular broadcast.
-					t.proxyFanoutBroadcast(msg.SrvMsg)
-				case msg.SrvMsg.Ctrl != nil:
-					// Ctrl broadcast. E.g. for user eviction.
-					t.handleCtrlBroadcast(msg.SrvMsg)
-				default:
-				}
-			} else {
-				sess := globals.sessionStore.Get(msg.OrigSid)
-				switch msg.OrigRequestType {
-				case ProxyRequestJoin:
-					if sess != nil && msg.SrvMsg != nil && msg.SrvMsg.Ctrl != nil {
-						if msg.SrvMsg.Ctrl.Code < 300 {
-							if t.addSession(sess, msg.Uid) {
-								sess.addSub(t.name, &Subscription{
-									broadcast: t.broadcast,
-									done:      t.unreg,
-									meta:      t.meta,
-									uaChange:  t.uaChange})
-								if msg.IsBackground {
-									// It's a background session.
-									// Make a fake sessionJoin packet and add it to deferred notification list.
-									// We only need a timestamp and a pointer to the session
-									// in order for deferred notification processing to work correctly.
-									sreg := &sessionJoin{
-										sess: sess,
-										pkt: &ClientComMessage{
-											AsUser:    msg.Uid.UserId(),
-											timestamp: types.TimeNow(),
-										},
-									}
-									pssd, _ := t.sessions[sess]
-									pssd.ref = t.defrNotif.PushFront(sreg)
-									t.sessions[sreg.sess] = pssd
-								}
-							}
-							killTimer.Stop()
-						} else {
-							if len(t.sessions) == 0 {
-								killTimer.Reset(keepAlive)
-							}
-						}
-					}
-				case ProxyRequestBroadcast:
-				case ProxyRequestMeta:
-				case ProxyRequestLeave:
-					log.Printf("proxy topic [%s]: session %p unsubscribed", t.name, sess)
-					if msg.SrvMsg != nil && msg.SrvMsg.Ctrl != nil {
-						log.Printf("proxy topic [%s]: ctrl msg = %+v", t.name, msg.SrvMsg.Ctrl)
-						if msg.SrvMsg.Ctrl.Code < 300 {
-							if sess != nil {
-								t.remSession(sess, sess.uid)
-							}
-							// All sessions are gone. Start the kill timer.
-							if len(t.sessions) == 0 {
-								killTimer.Reset(keepAlive)
-							}
-						}
-					}
-				default:
-					log.Printf("proxy topic [%s] received response referencing unknown request type %d", t.name, msg.OrigRequestType)
-				}
-				if !sess.queueOut(msg.SrvMsg) {
-					log.Println("topic proxy: timeout")
-				}
-			}
-
-		case sd := <-t.exit:
-			log.Printf("t[%s] exit %+v", t.name, sd)
-			// Tell sessions to remove the topic
-			for s := range t.sessions {
-				s.detach <- t.name
-			}
-			if t.isProxy {
-				if err := globals.cluster.topicProxyGone(t.name); err != nil {
-					log.Printf("topic proxy shutdown [%s]: failed to notify master - %s", t.name, err)
-				}
-			}
-			// Report completion back to sender, if 'done' is not nil.
-			if sd.done != nil {
-				sd.done <- true
-			}
-			return
-
-		case <-killTimer.C:
-			// Topic timeout
-			hub.unreg <- &topicUnreg{rcptTo: t.name}
-
-		case <-defrNotifTimer.C:
-			t.onDeferredNotificationTimer()
-		}
-	}
-}
-
-// proxyFanoutBroadcast broadcasts msg to all sessions attached to this topic.
-func (t *Topic) proxyFanoutBroadcast(msg *ServerComMessage) {
-	for sess, pssd := range t.sessions {
-		if sess.sid == msg.SkipSid {
-			continue
-		}
-		if msg.Pres != nil {
-			if !t.passesPresenceFilters(msg, pssd.uid) {
-				continue
-			}
-		} else if msg.Data != nil {
-			if !t.userIsReader(pssd.uid) {
-				continue
-			}
-		}
-		t.maybeFixTopicName(msg, pssd.uid)
-		log.Printf("broadcast fanout [%s] to %s", t.name, sess.sid)
-		if !sess.queueOut(msg) {
-			log.Printf("topic[%s]: connection stuck, detaching", t.name)
-			t.unreg <- &sessionLeave{sess: sess}
-		}
-	}
-}
-
-// handleCtrlBroadcast broadcasts a ctrl command to certain sessions attached to this topic.
-func (t *Topic) handleCtrlBroadcast(msg *ServerComMessage) {
-	if msg.Ctrl.Code == http.StatusResetContent && msg.Ctrl.Text == "evicted" {
-		// We received a ctrl command for evicting a user.
-		if msg.uid.IsZero() {
-			log.Panicf("topic[%s]: proxy received evict message with empty uid", t.name)
-		}
-		for sess := range t.sessions {
-			if t.remSession(sess, msg.uid) != nil {
-				sess.detach <- t.name
-				if sess.sid != msg.SkipSid {
-					sess.queueOut(msg)
-				}
-			}
-		}
-	}
-}
-
-// updateAcsFromPresMsg modifies user acs in Topic's perUser struct based on the data in `pres`.
-func (t *Topic) updateAcsFromPresMsg(pres *MsgServerPres) {
-	uid := types.ParseUserId(pres.Src)
-	dacs := pres.Acs
-	if uid.IsZero() {
-		log.Printf("proxy topic[%s]: received acs change for invalid user id '%s'", t.name, pres.Src)
-		return
-	}
-
-	// If t.perUser[uid] does not exist, pud is initialized with blanks, otherwise it gets existing values.
-	pud := t.perUser[uid]
-	if err := pud.modeWant.ApplyMutation(dacs.Want); err != nil {
-		log.Printf("proxy topic[%s]: could not process acs change - want: %+v", t.name, err)
-		return
-	}
-	if err := pud.modeGiven.ApplyMutation(dacs.Given); err != nil {
-		log.Printf("proxy topic[%s]: could not process acs change - given: %+v", t.name, err)
-		return
-	}
-	// Update existing or add new.
-	t.perUser[uid] = pud
 }
 
 // getPerUserAcs returns `want` and `given` permissions for the given user id.
@@ -1032,89 +765,6 @@ func (t *Topic) runLocal(hub *Hub) {
 	}
 }
 
-// sendDeferredNotifications updates perUser online status accounting and fires due
-// deferred notifications for the provided sessions.
-func (t *Topic) sendDeferredNotifications(dn []deferredNotification) {
-	for i := range dn {
-		if !t.isProxy {
-			pud := t.perUser[dn[i].uid]
-			pud.online++
-			t.perUser[dn[i].uid] = pud
-		}
-		t.sendSubNotifications(dn[i].uid, dn[i].sid, dn[i].userAgent)
-	}
-}
-
-// routeDeferredNotificationsToMaster forwards deferred notification requests to the master topic.
-func (t *Topic) routeDeferredNotificationsToMaster(dn []deferredNotification) {
-	var sendReqs []*ProxyDeferredSession
-	for i := range dn {
-		s := &ProxyDeferredSession{
-			AsUser:    dn[i].uid.UserId(),
-			Sid:       dn[i].sid,
-			UserAgent: dn[i].userAgent,
-		}
-		sendReqs = append(sendReqs, s)
-	}
-	msg := &ProxyTopicMessage{
-		DefrNotifReq: &ProxyDeferredNotifications{
-			SendNotificationRequests: sendReqs,
-		},
-	}
-	if err := globals.cluster.routeToTopicMaster(nil, nil, msg, t.name, nil); err != nil {
-		log.Println("proxy topic: deferred notifications request from proxy to master failed:", err)
-	}
-}
-
-// onDeferredNotificationTimer removes all due deferred notifications sessions
-// from the notifications queue and for each of these sessions:
-// * For regular topics, sends all due notifications.
-// * For proxy topics, routes the deferred notification requests to the master topic.
-func (t *Topic) onDeferredNotificationTimer() {
-	// Handle deferred presence notifications from a successful service (background) subscription.
-	if t.isInactive() {
-		return
-	}
-
-	// Process events older than this timestamp.
-	expiration := time.Now().Add(-deferredNotificationsTimeout)
-	var dn []deferredNotification
-	// Iterate through the list until all sufficiently old events are processed.
-	for elem := t.defrNotif.Back(); elem != nil; elem = t.defrNotif.Back() {
-		sreg := elem.Value.(*sessionJoin)
-		if expiration.Before(sreg.pkt.timestamp) {
-			// All done. Remaining events are newer.
-			break
-		}
-		t.defrNotif.Remove(elem)
-		if pssd, ok := t.sessions[sreg.sess]; ok && pssd.ref != nil {
-			pssd.ref = nil
-			t.sessions[sreg.sess] = pssd
-			dn = append(dn, deferredNotification{
-				uid:       types.ParseUserId(sreg.pkt.AsUser),
-				sid:       sidFromSessionOrOverrides(sreg.sess, sreg.sessOverrides),
-				userAgent: sreg.sess.userAgent})
-		}
-	}
-	if len(dn) == 0 {
-		return
-	}
-	if t.isProxy {
-		t.routeDeferredNotificationsToMaster(dn)
-	} else {
-		t.sendDeferredNotifications(dn)
-	}
-}
-
-// sidFromSessionOrOverrides returns session id from session overrides (if provided)
-// otherwise from session.
-func sidFromSessionOrOverrides(sess *Session, sessOverrides *sessionOverrides) string {
-	if sessOverrides != nil {
-		return sessOverrides.sid
-	}
-	return sess.sid
-}
-
 // Session subscribed to a topic, created == true if topic was just created and {pres} needs to be announced
 func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 	asUid := types.ParseUserId(sreg.pkt.AsUser)
@@ -1139,7 +789,11 @@ func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 	if msgsub.Background && ok {
 		// Notifications are delayed.
 		if !sreg.sess.isProxy() {
-			pssd.ref = t.defrNotif.PushFront(sreg)
+			pssd.ref = t.defrNotif.PushFront(&deferredNotification{
+				sess:      sreg.sess,
+				timestamp: sreg.pkt.timestamp,
+				uid:       types.ParseUserId(sreg.pkt.AsUser),
+			})
 		}
 		t.sessions[sreg.sess] = pssd
 	} else {
@@ -1190,6 +844,58 @@ func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 	}
 
 	return nil
+}
+
+// onDeferredNotificationTimer removes all due deferred notifications sessions
+// from the notifications queue and for each of these sessions:
+// * For regular topics, sends all due notifications.
+// * For proxy topics, routes the deferred notification requests to the master topic.
+func (t *Topic) onDeferredNotificationTimer() {
+	// Handle deferred presence notifications from a successful service (background) subscription.
+	if t.isInactive() {
+		return
+	}
+
+	// Process events older than this timestamp.
+	expiration := time.Now().Add(-deferredNotificationsTimeout)
+	var notifs []*deferredNotification
+	// Iterate through the list until all sufficiently old events are processed.
+	for elem := t.defrNotif.Back(); elem != nil; elem = t.defrNotif.Back() {
+		dn := elem.Value.(*deferredNotification)
+		if expiration.Before(dn.timestamp) {
+			// All done. Remaining events are newer.
+			break
+		}
+		t.defrNotif.Remove(elem)
+		dn.sid = dn.sess.sid
+		dn.userAgent = dn.sess.userAgent
+		if pssd, ok := t.sessions[dn.sess]; ok && pssd.ref != nil {
+			pssd.ref = nil
+			t.sessions[dn.sess] = pssd
+			notifs = append(notifs, dn)
+		}
+	}
+	if len(notifs) == 0 {
+		return
+	}
+	if t.isProxy {
+		t.routeDeferredNotificationsToMaster(notifs)
+	} else {
+		t.sendDeferredNotifications(notifs)
+	}
+}
+
+// sendDeferredNotifications updates perUser online status accounting and fires due
+// deferred notifications for the provided sessions.
+func (t *Topic) sendDeferredNotifications(notifs []*deferredNotification) {
+	for _, dn := range notifs {
+		if !t.isProxy {
+			pud := t.perUser[dn.uid]
+			pud.online++
+			t.perUser[dn.uid] = pud
+		}
+		t.sendSubNotifications(dn.uid, dn.sid, dn.userAgent)
+	}
 }
 
 // Send immediate presence notification in response to a subscription.
