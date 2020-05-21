@@ -48,7 +48,7 @@ func (t *Topic) runProxy(hub *Hub) {
 			}
 
 		case leave := <-t.unreg:
-			// Remove connection from topic; session may continue to function
+			// Detach session from topic; session may continue to function.
 			log.Printf("t[%s] leave %+v", t.name, leave)
 			asUid := leave.userId
 			// Explicitly specify user id because the proxy session hosts multiple client sessions.
@@ -104,11 +104,9 @@ func (t *Topic) runProxy(hub *Hub) {
 			if t.cat == types.TopicCatMe {
 				// Process an update to user agent from one of the sessions.
 				req := &ProxyTopicMessage{
-					UAChangeReq: &ProxyUAChange{
-						UserAgent: ua,
-					},
+					UAChangeReq: &ProxyUAChange{},
 				}
-				if err := globals.cluster.routeToTopicMaster(nil, nil, req, t.name, nil); err != nil {
+				if err := globals.cluster.routeToTopicMaster(nil, nil, req, t.name, &Session{userAgent: ua}); err != nil {
 					log.Println("proxy topic: route ua change request from proxy to master failed:", err)
 				}
 			}

@@ -26,6 +26,18 @@ const (
 	clusterSessionCleanup = 5 * time.Second
 )
 
+type ProxyReqType int
+
+// Proxy request types.
+const (
+	ProxyReqJoin ProxyReqType = iota + 1
+	ProxyReqLeave
+	ProxyReqMeta
+	ProxyReqBroadcast
+	ProxyReqUAChange
+	ProxyReqBkgNotif
+)
+
 type clusterNodeConfig struct {
 	Name string `json:"name"`
 	Addr string `json:"addr"`
@@ -156,7 +168,7 @@ type ClusterResp struct {
 	// Parameters sent back by the topic master in response a topic proxy request.
 
 	// Original request type.
-	OrigRequestType int
+	OrigRequestType ProxyReqType
 	// ID of the affected user.
 	Uid types.Uid
 	// It is a response to a request from a background session.
@@ -225,16 +237,6 @@ type ProxyDeferredSession struct {
 type ProxyDeferredNotifications struct {
 	SendNotificationRequests []*ProxyDeferredSession
 }
-
-// Proxy request types.
-const (
-	ProxyReqJoin = iota + 1
-	ProxyReqLeave
-	ProxyReqMeta
-	ProxyReqBroadcast
-	ProxyReqUAChange
-	ProxyReqBkgNotif
-)
 
 // Handle outbound node communication: read messages from the channel, forward to remote nodes.
 // FIXME(gene): this will drain the outbound queue in case of a failure: all unprocessed messages will be dropped.
@@ -460,7 +462,6 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 			sess: sess,
 			// Impersonate the original session.
 			sessOverrides: &sessionOverrides{
-				rcptTo:  msg.RcptTo,
 				origReq: msg.TopicMsg.JoinReq,
 			},
 		}
@@ -476,7 +477,6 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 				terminateProxyConnection: msg.TopicMsg.LeaveReq.TerminateProxyConnection,
 				sess:                     sess,
 				sessOverrides: &sessionOverrides{
-					rcptTo:  msg.RcptTo,
 					origReq: msg.TopicMsg.LeaveReq,
 				},
 			}
@@ -493,7 +493,6 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 			what: msg.TopicMsg.MetaReq.What,
 			// Impersonate the original session.
 			sessOverrides: &sessionOverrides{
-				rcptTo:  msg.RcptTo,
 				origReq: msg.TopicMsg.MetaReq,
 			},
 		}
@@ -509,7 +508,6 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 			panic("cluster: topic proxy broadcast request has no data message")
 		}
 		msg.SrvMsg.sessOverrides = &sessionOverrides{
-			rcptTo:  msg.RcptTo,
 			origReq: msg.TopicMsg.BroadcastReq,
 		}
 		msg.SrvMsg.sess = sess
@@ -517,7 +515,7 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 
 	case msg.TopicMsg.UAChangeReq != nil:
 		if t := globals.hub.topicGet(msg.RcptTo); t != nil {
-			t.uaChange <- msg.TopicMsg.UAChangeReq.UserAgent
+			t.uaChange <- sess.userAgent
 		} else {
 			log.Printf("cluster: UA change request for unknown topic %s", msg.RcptTo)
 		}
@@ -1086,7 +1084,6 @@ func (sess *Session) clusterWriteLoop(forTopic string) {
 			srvMsg := msg.(*ServerComMessage)
 
 			response := &ClusterResp{SrvMsg: srvMsg}
-			copyParamsFromSession := false
 			if srvMsg.sess != nil {
 				switch req := srvMsg.sessOverrides.origReq.(type) {
 				case nil:
@@ -1110,7 +1107,7 @@ func (sess *Session) clusterWriteLoop(forTopic string) {
 				case *ProxyMeta:
 					response.OrigRequestType = ProxyReqMeta
 				}
-				copyParamsFromSession = srvMsg.sess.sid != ""
+				response.OrigSid = srvMsg.sess.sid
 			} else {
 				// Copy skipSid.
 				if srvMsg.Ctrl == nil && srvMsg.Data == nil && srvMsg.Pres == nil && srvMsg.Info == nil {
@@ -1118,18 +1115,11 @@ func (sess *Session) clusterWriteLoop(forTopic string) {
 					log.Panicf("cluster: only broadcast messages may not contain session overrides: %+v", srvMsg)
 				}
 				response.Uid = srvMsg.uid
-			}
-
-			if copyParamsFromSession {
-				// Reply to a specific session.
-				response.OrigSid = srvMsg.sess.sid
-				srvMsg.RcptTo = srvMsg.sessOverrides.rcptTo
-				response.RcptTo = srvMsg.RcptTo
-			} else {
-				response.RcptTo = forTopic
-				srvMsg.RcptTo = forTopic
 				response.OrigSid = "*"
 			}
+
+			srvMsg.RcptTo = forTopic
+			response.RcptTo = forTopic
 
 			if err := sess.clnode.masterToProxy(response); err != nil {
 				log.Printf("cluster tp [%s]: sess.topicProxyWrite: %s", sess.sid, err.Error())

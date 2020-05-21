@@ -581,10 +581,6 @@ func (src *MsgServerInfo) copy() *MsgServerInfo {
 // Session parameter overrides.
 // Used by the remote topic masters to impersonate multiple proxied sessions.
 type sessionOverrides struct {
-	// Proxied session id.
-	sid string
-	// Routable topic name
-	rcptTo string
 	// Incoming proxy topic request pointer. Set for topic proxy requests. One of
 	// *ProxyJoin, *ProxyLeave, *ProxyBroadcast, *ProxyMeta.
 	origReq interface{}

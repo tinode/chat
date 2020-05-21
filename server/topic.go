@@ -329,7 +329,7 @@ func (t *Topic) runLocal(hub *Hub) {
 					continue
 				}
 
-			} else if pssd := t.maybeRemoveSession(leave.sess, asUid /*doRemove=*/, !leave.sess.isProxy() ||
+			} else if pssd := t.maybeRemoveSession(leave.sess, asUid /* doRemove */, !leave.sess.isProxy() ||
 				leave.terminateProxyConnection); pssd != nil || leave.sess.isProxy() {
 				// Just leaving the topic without unsubscribing if user is subscribed.
 
