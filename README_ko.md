@@ -67,7 +67,7 @@ alice, bob, carol, dave, frank 중 하나로 로그인할 수 있습니다. 비�
 
 ### 지원 기능
 
-* [Android](https://github.com/tinode/tindroid/), [iOS](https://github.com/tinode/ios), [web](https://github.com/tinode/webapp/), 그리ㄱ고 [command line](tn-cli/) 클라이언트.
+* [Android](https://github.com/tinode/tindroid/), [iOS](https://github.com/tinode/ios), [web](https://github.com/tinode/webapp/), 그리고 [command line](tn-cli/) 클라이언트.
 * 1대1 메시징.
 * 모든 구성원의 접근 권한을 가진 그룹 메시징을 개별적으로 관리한다. 최대 구성원 수는 설정할 수 있다(기본적으로 128명).
 * 다양한 작업에 대한 권한을 가진 항목 액세스 제어
@@ -113,7 +113,7 @@ alice, bob, carol, dave, frank 중 하나로 로그인할 수 있습니다. 비�
 
 ## 스크린샷
 
-### [Android](https://github.com/tinode/tindroid/)
+### [안드로이드](https://github.com/tinode/tindroid/)
 
 <p align="center">
 <img src="docs/android-contacts.png" alt="Android screenshot: list of chats" width=270 /> <img src="docs/android-chat.png" alt="Android screenshot: one conversation" width=270 />
@@ -125,13 +125,13 @@ alice, bob, carol, dave, frank 중 하나로 로그인할 수 있습니다. 비�
 <img src="docs/ios-contacts.png" alt="iOS screenshot: list of chats" width=207 /> <img src="docs/ios-chat.png" alt="iOS screenshot: one conversation" width=207 /> <img src="docs/ios-account.png" alt="iOS screenshot: account settings" width="207" />
 </p>
 
-### [Desktop Web](https://github.com/tinode/webapp/)
+### [데스크탑 웹](https://github.com/tinode/webapp/)
 
 <p align="center">
   <img src="docs/web-desktop-2.png" alt="Desktop web: full app" width=866 />
 </p>
 
-### [Mobile Web](https://github.com/tinode/webapp/)
+### [모바일 웹](https://github.com/tinode/webapp/)
 
 <p align="center">
   <kbd><img src="docs/web-mob-contacts-1.png" alt="Mobile web: contacts" width=323 /></kbd> <kbd><img src="docs/web-mob-chat-1.png" alt="Mobile web: chat" width=323 /></kbd> <kbd><img src="docs/web-mob-info-1.png" alt="Mobile web: topic info" width=323 /></kbd> <kbd><img src="docs/web-mob-new-chat-1.png" alt="Mobile web: start new 1:1 chat" width=323 /></kbd>
