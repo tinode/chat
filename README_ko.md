@@ -90,7 +90,7 @@ alice, bob, carol, dave, frank 중 하나로 로그인할 수 있습니다. 비�
 * 익명 사용자(대화 중 기술 지원 관련 사용 사례에 중요성).
 * [FCM](https://firebase.google.com/docs/cloud-messaging/) 또는 [TNPG](server/push/tnpg/)를 사용하여 알림을 푸시.
 * 로컬 파일 시스템 또는 Amazon S3를 사용하여 비디오 파일과 같은 대형 오브젝트의 저장 및 대역 외 전송.
-* 	챗봇을 활성화하기 위해 기능을 확장하는 플러그인.
+* 챗봇을 활성화하기 위해 기능을 확장하는 플러그인.
 
 ### 계획
 
