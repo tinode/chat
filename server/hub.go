@@ -34,16 +34,12 @@ type sessionJoin struct {
 
 // Session wants to leave the topic
 type sessionLeave struct {
-	// ID of originating request, if any
-	id string
-	// User ID of the user sent the request
-	userId types.Uid
+	// Message, containing request details. Could be nil.
+	pkt *ClientComMessage
 	// Session which initiated the request
 	sess *Session
-	// Leave and unsubscribe
-	unsub bool
 	// Should the proxy-master topic connection be terminated
-	terminateProxyConnection bool
+	// terminateProxyConnection bool
 
 	// Session param overrides. Used for handling remote (proxy-master) topic requests.
 	sessOverrides *sessionOverrides

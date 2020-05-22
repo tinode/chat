@@ -32,17 +32,17 @@ func (t *Topic) runProxy(hub *Hub) {
 
 	for {
 		select {
-		case sreg := <-t.reg:
+		case join := <-t.reg:
 			// Request to add a connection to this topic
 			if t.isInactive() {
-				asUid := types.ParseUserId(sreg.pkt.AsUser)
-				sreg.sess.queueOut(ErrLocked(sreg.pkt.Id, t.original(asUid), types.TimeNow()))
+				asUid := types.ParseUserId(join.pkt.AsUser)
+				join.sess.queueOut(ErrLocked(join.pkt.Id, t.original(asUid), types.TimeNow()))
 			} else {
-				msg := &ProxyTopicMessage{
+				ptm := &ProxyTopicMessage{
 					JoinReq: &ProxyJoin{},
 				}
 				// Response (ctrl message) will be handled when it's received via the proxy channel.
-				if err := globals.cluster.routeToTopicMaster(sreg.pkt, nil, msg, t.name, sreg.sess); err != nil {
+				if err := globals.cluster.routeToTopicMaster(join.pkt, nil, ptm, t.name, join.sess); err != nil {
 					log.Println("proxy topic: route join request from proxy to master failed:", err)
 				}
 			}
@@ -50,7 +50,11 @@ func (t *Topic) runProxy(hub *Hub) {
 		case leave := <-t.unreg:
 			// Detach session from topic; session may continue to function.
 			log.Printf("t[%s] leave %+v", t.name, leave)
-			asUid := leave.userId
+			var asUid types.Uid
+			if leave.pkt != nil {
+				asUid = types.ParseUserId(leave.pkt.AsUser)
+			}
+
 			// Explicitly specify user id because the proxy session hosts multiple client sessions.
 			if asUid.IsZero() {
 				if pssd, ok := t.sessions[leave.sess]; ok {
@@ -64,17 +68,10 @@ func (t *Topic) runProxy(hub *Hub) {
 			// because by the time the response arrives this session may be already gone from the session store
 			// and we won't be able to find and remove it by its sid.
 			t.remSession(leave.sess, asUid)
-			msg := &ClientComMessage{}
-			proxyLeave := &ProxyTopicMessage{
-				LeaveReq: &ProxyLeave{
-					Id:     leave.id,
-					UserId: asUid,
-					Unsub:  leave.unsub,
-					// Terminate connection to master topic if explicitly asked to do so or all sessions are gone.
-					TerminateProxyConnection: leave.terminateProxyConnection || len(t.sessions) == 0,
-				},
+			plm := &ProxyTopicMessage{
+				LeaveReq: &ProxyLeave{},
 			}
-			if err := globals.cluster.routeToTopicMaster(msg, nil, proxyLeave, t.name, leave.sess); err != nil {
+			if err := globals.cluster.routeToTopicMaster(leave.pkt, nil, plm, t.name, leave.sess); err != nil {
 				log.Println("proxy topic: route broadcast request from proxy to master failed:", err)
 			}
 

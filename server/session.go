@@ -440,10 +440,8 @@ func (s *Session) leave(msg *ClientComMessage) {
 			// Unlink from topic, topic will send a reply.
 			s.delSub(msg.RcptTo)
 			sub.done <- &sessionLeave{
-				userId: types.ParseUserId(msg.AsUser),
-				sess:   s,
-				unsub:  msg.Leave.Unsub,
-				id:     msg.Id}
+				pkt:  msg,
+				sess: s}
 		}
 	} else if !msg.Leave.Unsub {
 		// Session is not attached to the topic, wants to leave - fine, no change

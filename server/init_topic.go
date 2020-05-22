@@ -67,7 +67,9 @@ func topicInit(t *Topic, sreg *sessionJoin, h *Hub) {
 		}
 		for len(t.unreg) > 0 {
 			msg := <-t.unreg
-			msg.sess.queueOut(ErrLocked(msg.id, t.xoriginal, timestamp))
+			if msg.pkt != nil {
+				msg.sess.queueOut(ErrLocked(msg.pkt.Id, t.xoriginal, timestamp))
+			}
 		}
 		for len(t.meta) > 0 {
 			msg := <-t.meta

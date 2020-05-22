@@ -18,17 +18,17 @@ import (
 )
 
 const (
-	// Default timeout before attempting to reconnect to a node
+	// Default timeout before attempting to reconnect to a node.
 	defaultClusterReconnect = 200 * time.Millisecond
-	// Number of replicas in ringhash
+	// Number of replicas in ringhash.
 	clusterHashReplicas = 20
 	// Period for running health check on cluster session: terminate sessions with no subscriptions.
 	clusterSessionCleanup = 5 * time.Second
 )
 
+// ProxyReqType is the type of proxy requests.
 type ProxyReqType int
 
-// Proxy request types.
 const (
 	ProxyReqJoin ProxyReqType = iota + 1
 	ProxyReqLeave
@@ -131,8 +131,8 @@ type ClusterReq struct {
 	RcptTo string
 	// Originating session
 	Sess *ClusterSess
-	// True when the original topic is gone
-	Done bool
+	// True when the topic proxy is gone.
+	Gone bool
 }
 
 // ClusterRoute is intra-cluster routing request message.
@@ -208,14 +208,8 @@ type ProxyMeta struct {
 
 // ProxyLeave contains unsubscribe request params.
 type ProxyLeave struct {
-	// Id of the incoming leave request.
-	Id string
-	// User ID of the user sent the request.
-	UserId types.Uid
-	// Leave and unsubscribe.
-	Unsub bool
 	// Terminate proxy connection to the master topic.
-	TerminateProxyConnection bool
+	// TerminateProxyConnection bool
 }
 
 // ProxyUAChange contains user agent change request params.
@@ -411,9 +405,9 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 	// Master maintains one multiplexing session per proxy topic per node.
 	msid := msg.RcptTo + "-" + msg.Node
 	msess := globals.sessionStore.Get(msid)
-	if msg.Done {
+	if msg.Gone {
 		// Proxy topic is gone. Tear down the local auxiliary session.
-		// If it was the last session, master topic will be torn down as well.
+		// If it was the last session, master topic will shut down as well.
 		if msess != nil {
 			msess.stop <- nil
 		}
@@ -457,7 +451,7 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 
 	switch {
 	case msg.TopicMsg.JoinReq != nil:
-		joinReq := &sessionJoin{
+		join := &sessionJoin{
 			pkt:  msg.CliMsg,
 			sess: sess,
 			// Impersonate the original session.
@@ -465,17 +459,14 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 				origReq: msg.TopicMsg.JoinReq,
 			},
 		}
-		log.Printf("cluster: master subscription request %+v\n", joinReq)
-		globals.hub.join <- joinReq
+		log.Printf("cluster: master subscription request %+v\n", join)
+		globals.hub.join <- join
 
 	case msg.TopicMsg.LeaveReq != nil:
 		if t := globals.hub.topicGet(msg.RcptTo); t != nil {
 			leave := &sessionLeave{
-				id:                       msg.TopicMsg.LeaveReq.Id,
-				userId:                   msg.TopicMsg.LeaveReq.UserId,
-				unsub:                    msg.TopicMsg.LeaveReq.Unsub,
-				terminateProxyConnection: msg.TopicMsg.LeaveReq.TerminateProxyConnection,
-				sess:                     sess,
+				pkt:  msg.CliMsg,
+				sess: sess,
 				sessOverrides: &sessionOverrides{
 					origReq: msg.TopicMsg.LeaveReq,
 				},
@@ -487,7 +478,7 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 		}
 
 	case msg.TopicMsg.MetaReq != nil:
-		req := &metaReq{
+		meta := &metaReq{
 			pkt:  msg.CliMsg,
 			sess: sess,
 			what: msg.TopicMsg.MetaReq.What,
@@ -496,9 +487,9 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 				origReq: msg.TopicMsg.MetaReq,
 			},
 		}
-		log.Printf("cluster: meta request %+v %+v", req, req.pkt)
+		log.Printf("cluster: meta request %+v %+v", meta, meta.pkt)
 		if t := globals.hub.topicGet(msg.RcptTo); t != nil {
-			t.meta <- req
+			t.meta <- meta
 		} else {
 			log.Printf("cluster: meta request for unknown topic %s", msg.RcptTo)
 		}
@@ -822,7 +813,7 @@ func (c *Cluster) topicProxyGone(topicName string) error {
 	}
 
 	req := c.makeClusterReq(nil, nil, nil, topicName, nil)
-	req.Done = true
+	req.Gone = true
 	return n.proxyToMaster(req)
 }
 
@@ -1011,12 +1002,12 @@ func (c *Cluster) invalidateProxySubs() {
 }
 
 // garbageCollectProxySessions terminates all orphaned proxy sessions
-// (whose origin nodes are gone).
+// at a master node. The session is orphaned when the origin node is gone.
 func (c *Cluster) garbageCollectProxySessions(activeNodes []string) {
 	sessions := make(map[*Session]*Topic)
-	activeNodeMap := make(map[string]bool)
+	activeNodeMap := make(map[string]struct{})
 	for _, n := range activeNodes {
-		activeNodeMap[n] = true
+		activeNodeMap[n] = struct{}{}
 	}
 	globals.hub.topics.Range(func(_, v interface{}) bool {
 		topic := v.(*Topic)
@@ -1037,10 +1028,7 @@ func (c *Cluster) garbageCollectProxySessions(activeNodes []string) {
 	// Unsubscribe orphaned sessions from their master topics.
 	// Stop orphaned sessions.
 	for s, t := range sessions {
-		t.unreg <- &sessionLeave{
-			terminateProxyConnection: true,
-			sess:                     s,
-		}
+		t.unreg <- &sessionLeave{sess: s}
 		s.stop <- nil
 	}
 }
@@ -1098,10 +1086,6 @@ func (sess *Session) clusterWriteLoop(forTopic string) {
 				case *ProxyLeave:
 					response.OrigRequestType = ProxyReqLeave
 					sess.delRemoteSession(srvMsg.sess.sid)
-					if req.TerminateProxyConnection {
-						log.Printf("session [%s]: terminating upon client request", srvMsg.sess.sid)
-						sess.detach <- forTopic
-					}
 				case *ProxyBroadcast:
 					response.OrigRequestType = ProxyReqBroadcast
 				case *ProxyMeta:

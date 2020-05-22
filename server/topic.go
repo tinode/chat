@@ -313,18 +313,21 @@ func (t *Topic) runLocal(hub *Hub) {
 			now := types.TimeNow()
 
 			// userId.IsZero() == true when the entire session is being dropped.
-			asUid := leave.userId
+			var asUid types.Uid
+			if leave.pkt != nil {
+				asUid = types.ParseUserId(leave.pkt.AsUser)
+			}
 
 			if t.isInactive() {
-				if !asUid.IsZero() && leave.id != "" {
-					leave.sess.queueOut(ErrLocked(leave.id, t.original(asUid), now))
+				if !asUid.IsZero() && leave.pkt != nil {
+					leave.sess.queueOut(ErrLocked(leave.pkt.Id, t.original(asUid), now))
 				}
 				continue
 
-			} else if leave.unsub {
+			} else if leave.pkt != nil && leave.pkt.Leave.Unsub {
 				// User wants to leave and unsubscribe.
 				// asUid must not be Zero.
-				if err := t.replyLeaveUnsub(hub, leave.sess, asUid, leave.id); err != nil {
+				if err := t.replyLeaveUnsub(hub, leave.sess, asUid, leave.pkt.Id); err != nil {
 					log.Println("failed to unsub", err, leave.sess.sid)
 					continue
 				}
@@ -387,8 +390,8 @@ func (t *Topic) runLocal(hub *Hub) {
 
 				// Respond if either the request contains an id
 				// or a proxy session is responding to a client request without an id (!proxyTerminating).
-				if leave.id != "" || (leave.sess.isProxy() && !proxyTerminating) {
-					leave.sess.queueOut(NoErr(leave.id, t.original(asUid), now))
+				if leave.pkt != nil || (leave.sess.isProxy() && !proxyTerminating) {
+					leave.sess.queueOut(NoErr(leave.pkt.Id, t.original(asUid), now))
 				}
 			}
 
@@ -2614,9 +2617,8 @@ func (t *Topic) evictUser(uid types.Uid, unsub bool, skip string) {
 	msg.SkipSid = skip
 	msg.uid = uid
 	for sess := range t.sessions {
-		isProxy := sess.isProxy()
-		if isProxy || t.remSession(sess, uid) != nil {
-			if !isProxy {
+		if sess.isProxy() || t.remSession(sess, uid) != nil {
+			if !sess.isProxy() {
 				sess.detach <- t.name
 			}
 			if sess.sid != skip {
@@ -3000,9 +3002,10 @@ func (t *Topic) addSession(s *Session, asUid types.Uid) bool {
 	return true
 }
 
-// Removes session record if 'doRemove' is true and either:
-// * 'asUid' matches subscribed user.
-// * or 's' is a proxy session for a proxy-master topic connection.
+// Disconnects session from topic if 'doRemove' is true and either one of the following is true:
+// * `asUid` is zero
+// * `asUid` matches subscribed user.
+// * `s` is a proxy session for a proxy-master topic connection.
 func (t *Topic) maybeRemoveSession(s *Session, asUid types.Uid, doRemove bool) *perSessionData {
 	if pssd, ok := t.sessions[s]; ok && (s.isProxy() || pssd.uid == asUid || asUid.IsZero()) {
 		if doRemove {
