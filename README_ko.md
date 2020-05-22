@@ -43,11 +43,10 @@ Tindroid라고 불리는 [안드로이드 버전의 Tinode](https://play.google.
 
 ### iOS
 
-Tinodios라고 불리는 [iOS 버전의 Tinode](https://apps.apple.com/app/reference-to-tinodios-here/id123) 안정적으로 가동됩니다.([원본])(https://github.com/tinode/ios)). 아래에 있는 스크린샷을 참고하세요. 현재 영어와 중국어 간체를 지원합니다. 더 많은 번역을 환영합니다.
+Tinodios라고 불리는 [iOS 버전의 Tinode](https://apps.apple.com/app/reference-to-tinodios-here/id123) 안정적으로 가동됩니다.([원본](https://github.com/tinode/ios)). 아래에 있는 스크린샷을 참고하세요. 현재 영어와 중국어 간체를 지원합니다. 더 많은 번역을 환영합니다.
 
 
 ## 데모/샌드박스
-
 샌드박스 데모 버전은 https://sandbox.tinode.co/ 에서 이용 가능합니다.
 
 alice, bob, carol, dave, frank 중 하나로 로그인할 수 있습니다. 비밀번호는 <이름>123으로 예를 들어, alice의 비밀번호는 alice123입니다. 사용자 이름을 맨 앞에쓴 <이름>@example.com 형식의 이메일이나 +17025550001 부터 +17025550009의 전화번호를 이용해서 다른 사용자들을 찾을 수 있습니다.
