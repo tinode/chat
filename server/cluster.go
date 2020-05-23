@@ -396,8 +396,12 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 	if msg.Sess != nil {
 		// We only need some session info. No need to copy everything.
 		sess = &Session{
-			proto:      CLUSTER,
-			clnode:     msess.clnode,
+			proto: PROXY,
+			// Use shared values from the multiplexing session.
+			subsLock: msess.subsLock,
+			subs:     msess.subs,
+			send:     msess.send,
+			// Local parameters specific to this session.
 			sid:        msg.Sess.Sid,
 			userAgent:  msg.Sess.UserAgent,
 			remoteAddr: msg.Sess.RemoteAddr,
@@ -854,7 +858,7 @@ func clusterInit(configString json.RawMessage, self *string) int {
 
 // Proxied session is being closed at the Master node
 func (sess *Session) closeRPC() {
-	if sess.proto == CLUSTER {
+	if sess.proto == MULTIPLEX {
 		log.Println("cluster: session proxy closed", sess.sid)
 	}
 }
@@ -969,7 +973,7 @@ func (c *Cluster) garbageCollectProxySessions(activeNodes []string) {
 			return true
 		}
 		for s := range topic.sessions {
-			if s.isProxy() {
+			if s.isMultiplex() {
 				if _, originActive := activeNodeMap[s.clnode.name]; !originActive {
 					// Session's origin is no longer active.
 					sessions[s] = topic

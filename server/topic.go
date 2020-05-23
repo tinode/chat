@@ -285,18 +285,18 @@ func (t *Topic) runLocal(hub *Hub) {
 
 	for {
 		select {
-		case sreg := <-t.reg:
+		case join := <-t.reg:
 			// Request to add a connection to this topic
 			if t.isInactive() {
-				asUid := types.ParseUserId(sreg.pkt.AsUser)
-				sreg.sess.queueOut(ErrLocked(sreg.pkt.Id, t.original(asUid), types.TimeNow()))
+				asUid := types.ParseUserId(join.pkt.AsUser)
+				join.sess.queueOut(ErrLocked(join.pkt.Id, t.original(asUid), types.TimeNow()))
 			} else {
 				// The topic is alive, so stop the kill timer, if it's ticking. We don't want the topic to die
 				// while processing the call
 				killTimer.Stop()
-				if err := t.handleSubscription(hub, sreg); err == nil {
-					log.Println("hub: handleSubscription success", sreg.pkt.Sub)
-					if sreg.pkt.Sub.Created {
+				if err := t.handleSubscription(hub, join); err == nil {
+					log.Println("hub: handleSubscription success", join.pkt.Sub)
+					if join.pkt.Sub.Created {
 						// Call plugins with the new topic
 						pluginTopic(t, plgActCreate)
 					}
@@ -305,7 +305,7 @@ func (t *Topic) runLocal(hub *Hub) {
 						// Failed to subscribe, the topic is still inactive
 						killTimer.Reset(keepAlive)
 					}
-					log.Printf("topic[%s] subscription failed %v, sid=%s", t.name, err, sreg.sess.sid)
+					log.Printf("topic[%s] subscription failed %v, sid=%s", t.name, err, join.sess.sid)
 				}
 			}
 		case leave := <-t.unreg:
@@ -332,11 +332,11 @@ func (t *Topic) runLocal(hub *Hub) {
 					continue
 				}
 
-			} else if pssd := t.remSession(leave.sess, asUid); pssd != nil || leave.sess.isProxy() {
+			} else if pssd := t.remSession(leave.sess, asUid); pssd != nil || leave.sess.isMultiplex() {
 				// Just leaving the topic without unsubscribing if user is subscribed.
 
 				var uid types.Uid
-				if leave.sess.isProxy() {
+				if leave.sess.isMultiplex() {
 					uid = asUid
 				} else {
 					uid = pssd.uid
@@ -349,7 +349,7 @@ func (t *Topic) runLocal(hub *Hub) {
 					if pssd == nil || pssd.ref == nil {
 						pud.online--
 					}
-				} else if !leave.sess.isProxy() {
+				} else if !leave.sess.isMultiplex() {
 					log.Panic("cannot determine uid: leave req = ", leave)
 				}
 
@@ -389,7 +389,7 @@ func (t *Topic) runLocal(hub *Hub) {
 
 				// Respond if either the request contains an id
 				// or a proxy session is responding to a client request without an id (!proxyTerminating).
-				if leave.pkt != nil || (leave.sess.isProxy() && !proxyTerminating) {
+				if leave.pkt != nil || (leave.sess.isMultiplex() && !proxyTerminating) {
 					leave.sess.queueOut(NoErr(leave.pkt.Id, t.original(asUid), now))
 				}
 			}
@@ -790,7 +790,7 @@ func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
 	pssd, ok := t.sessions[sreg.sess]
 	if msgsub.Background && ok {
 		// Notifications are delayed.
-		if !sreg.sess.isProxy() {
+		if !sreg.sess.isMultiplex() {
 			pssd.ref = t.defrNotif.PushFront(&deferredNotification{
 				sess:      sreg.sess,
 				timestamp: sreg.pkt.timestamp,
@@ -1330,13 +1330,13 @@ func (t *Topic) thisUserSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.L
 	// Subscription successfully created. Link topic to session.
 	// Note that sessions that serve as an interface between proxy topics and their masters (proxy sessions)
 	// may have only one subscription, that is, to its master topic.
-	if !sess.isProxy() || sess.countSub() == 0 {
+	if !sess.isMultiplex() || sess.countSub() == 0 {
 		sess.addSub(t.name, &Subscription{
 			broadcast: t.broadcast,
 			done:      t.unreg,
 			meta:      t.meta,
 			uaChange:  t.uaChange})
-		if sess.isProxy() {
+		if sess.isMultiplex() {
 			t.addSession(sess, types.ZeroUid)
 		} else {
 			t.addSession(sess, asUid)
@@ -2620,7 +2620,7 @@ func (t *Topic) evictUser(uid types.Uid, unsub bool, skip string) {
 	msg.SkipSid = skip
 	msg.uid = uid
 	for sess := range t.sessions {
-		if removed := t.remSession(sess, uid) != nil; sess.isProxy() || removed {
+		if removed := t.remSession(sess, uid) != nil; sess.isMultiplex() || removed {
 			if removed {
 				sess.detach <- t.name
 			}
@@ -3010,8 +3010,8 @@ func (t *Topic) addSession(s *Session, asUid types.Uid) bool {
 // * `asUid` matches subscribed user.
 // * `s` is a proxy session for a proxy-master topic connection and asUid is zero.
 func (t *Topic) remSession(s *Session, asUid types.Uid) *perSessionData {
-	if pssd, ok := t.sessions[s]; ok && (s.isProxy() || pssd.uid == asUid || asUid.IsZero()) {
-		if !s.isProxy() || asUid.IsZero() {
+	if pssd, ok := t.sessions[s]; ok && (s.isMultiplex() || pssd.uid == asUid || asUid.IsZero()) {
+		if !s.isMultiplex() || asUid.IsZero() {
 			// Check for deferred presence notification and cancel it if found.
 			if pssd.ref != nil {
 				t.defrNotif.Remove(pssd.ref)

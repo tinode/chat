@@ -28,10 +28,16 @@ import (
 // Wire transport
 const (
 	NONE = iota
+	// Websocket connection
 	WEBSOCK
+	// Long polling connection
 	LPOLL
+	// gRPC connection
 	GRPC
-	CLUSTER
+	// Temporary session used as a proxy at master node.
+	PROXY
+	// Multiplexing session reprsenting a connection from proxy topic to master.
+	MULTIPLEX
 )
 
 // Wait time before abandoning the outbound send operation.
@@ -198,9 +204,9 @@ func (s *Session) delRemoteSession(sid string) {
 	s.remoteSessionsLock.Unlock()
 }
 
-// Indicates whether this session is used as a local interface for a remote proxy topic.
-func (s *Session) isProxy() bool {
-	return s.proto == CLUSTER
+// Indicates whether this session is a local interface for a remote proxy topic.
+func (s *Session) isMultiplex() bool {
+	return s.proto == MULTIPLEX
 }
 
 // queueOut attempts to send a ServerComMessage to a session write loop; if the send buffer is full,
@@ -952,12 +958,17 @@ func (s *Session) note(msg *ClientComMessage) {
 
 	if sub := s.getSub(msg.RcptTo); sub != nil {
 		// Pings can be sent to subscribed topics only
-		sub.broadcast <- &ServerComMessage{Info: &MsgServerInfo{
-			Topic: msg.Original,
-			From:  msg.AsUser,
-			What:  msg.Note.What,
-			SeqId: msg.Note.SeqId,
-		}, RcptTo: msg.RcptTo, AsUser: msg.AsUser, Timestamp: msg.timestamp, SkipSid: s.sid}
+		sub.broadcast <- &ServerComMessage{
+			Info: &MsgServerInfo{
+				Topic: msg.Original,
+				From:  msg.AsUser,
+				What:  msg.Note.What,
+				SeqId: msg.Note.SeqId},
+			RcptTo:    msg.RcptTo,
+			AsUser:    msg.AsUser,
+			Timestamp: msg.timestamp,
+			SkipSid:   s.sid,
+			sess:      s}
 	} else {
 		s.queueOut(ErrAttachFirst(msg.Id, msg.Original, msg.timestamp))
 		log.Println("s.note: note to invalid topic - must subscribe first", msg.Note.What, s.sid)
@@ -1008,7 +1019,7 @@ func (s *Session) serialize(msg *ServerComMessage) interface{} {
 		return pbServSerialize(msg)
 	}
 
-	if s.proto == CLUSTER {
+	if s.proto == PROXY {
 		// No need to serialize the message to bytes within the cluster,
 		// but we have to create a copy because the original msg can be mutated.
 		// In case of a cluster, s.send belongs to a multiplexing write loop.

@@ -133,7 +133,7 @@ func (h *Hub) run() {
 
 	for {
 		select {
-		case sreg := <-h.join:
+		case join := <-h.join:
 			// Handle a subscription request:
 			// 1. Init topic
 			// 1.1 If a new topic is requested, create it
@@ -145,13 +145,13 @@ func (h *Hub) run() {
 			// 3. Attach session to the topic
 
 			// Is the topic already loaded?
-			t := h.topicGet(sreg.pkt.RcptTo)
+			t := h.topicGet(join.pkt.RcptTo)
 			if t == nil {
 				// Topic does not exist or not loaded.
-				t = &Topic{name: sreg.pkt.RcptTo,
-					xoriginal: sreg.pkt.Original,
+				t = &Topic{name: join.pkt.RcptTo,
+					xoriginal: join.pkt.Original,
 					// Indicates a proxy topic.
-					isProxy:   globals.cluster.isRemoteTopic(sreg.pkt.RcptTo),
+					isProxy:   globals.cluster.isRemoteTopic(join.pkt.RcptTo),
 					sessions:  make(map[*Session]perSessionData),
 					broadcast: make(chan *ServerComMessage, 256),
 					reg:       make(chan *sessionJoin, 32),
@@ -174,15 +174,15 @@ func (h *Hub) run() {
 				// Topic is created in suspended state because it's not yet configured.
 				t.markPaused(true)
 				// Save topic now to prevent race condition.
-				h.topicPut(sreg.pkt.RcptTo, t)
+				h.topicPut(join.pkt.RcptTo, t)
 
 				// Configure the topic.
-				go topicInit(t, sreg, h)
+				go topicInit(t, join, h)
 
 			} else {
 				// Topic found.
 				// Topic will check access rights and send appropriate {ctrl}
-				t.reg <- sreg
+				t.reg <- join
 			}
 
 		case msg := <-h.route:

@@ -173,7 +173,7 @@ func initTopicFnd(t *Topic, sreg *sessionJoin) error {
 	if err != nil {
 		return err
 	} else if user == nil {
-		if !sreg.sess.isProxy() {
+		if !sreg.sess.isMultiplex() {
 			sreg.sess.uid = types.ZeroUid
 		}
 		return types.ErrNotFound
