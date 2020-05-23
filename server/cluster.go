@@ -120,12 +120,15 @@ type ClusterReq struct {
 	// Fingerprint changes when the node is restarted.
 	Fingerprint int64
 
+	// Type of request.
+	ReqType ProxyReqType
+
 	// Client message. Set for C2S requests.
 	CliMsg *ClientComMessage
 	// Message to be routed. Set for intra-cluster route requests.
 	SrvMsg *ServerComMessage
-	// Topic message. Set for topic proxy to topic master requests.
-	TopicMsg *ProxyTopicMessage
+	// Deferred notifications.
+	DefrNotifications []*ProxyDeferredSession
 
 	// Expanded (routable) topic name
 	RcptTo string
@@ -168,52 +171,10 @@ type ClusterResp struct {
 	// Parameters sent back by the topic master in response a topic proxy request.
 
 	// Original request type.
-	OrigRequestType ProxyReqType
-	// ID of the affected user.
-	Uid types.Uid
-	// It is a response to a request from a background session.
+	OrigReqType ProxyReqType
+	// It is a response to a background subscription request.
 	IsBackground bool
 }
-
-// ProxyTopicMessage combines topic proxy to master request params.
-type ProxyTopicMessage struct {
-	// Join (subscribe) request.
-	JoinReq *ProxyJoin
-	// Broadcast (publish, etc.) request.
-	BroadcastReq *ProxyBroadcast
-	// Meta request.
-	MetaReq *ProxyMeta
-	// Leave (unsubscribe) request.
-	LeaveReq *ProxyLeave
-	// User agent change request.
-	UAChangeReq *ProxyUAChange
-	// Send deferred notifications request.
-	DefrNotifReq *ProxyDeferredNotifications
-}
-
-// ProxyJoin contains topic join request parameters.
-type ProxyJoin struct {
-	// Subscription was in background.
-	IsBackground bool
-}
-
-// ProxyBroadcast contains topic broadcast request parameters.
-type ProxyBroadcast struct{}
-
-// ProxyMeta contains meta (get, sub) request parameters.
-type ProxyMeta struct {
-	// What is being requested: sub, desc, tags, etc.
-	What int
-}
-
-// ProxyLeave contains unsubscribe request params.
-type ProxyLeave struct {
-	// Terminate proxy connection to the master topic.
-	// TerminateProxyConnection bool
-}
-
-// ProxyUAChange contains user agent change request params.
-type ProxyUAChange struct{}
 
 // ProxyDeferredSession represents a background session
 // for which we want to send deferred notifications.
@@ -224,12 +185,6 @@ type ProxyDeferredSession struct {
 	Sid string
 	// Session user agent.
 	UserAgent string
-}
-
-// ProxyDeferredNotifications contains a list of sessions
-// for which deferred notifications will be sent.
-type ProxyDeferredNotifications struct {
-	SendNotificationRequests []*ProxyDeferredSession
 }
 
 // Handle outbound node communication: read messages from the channel, forward to remote nodes.
@@ -413,6 +368,7 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 		}
 		return nil
 	}
+
 	if msg.Signature != c.ring.Signature() {
 		log.Println("cluster TopicMaster: session signature mismatch", msg.RcptTo)
 		*rejected = true
@@ -446,75 +402,61 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 			userAgent:  msg.Sess.UserAgent,
 			remoteAddr: msg.Sess.RemoteAddr,
 			lang:       msg.Sess.Lang,
+			proxyReq:   msg.ReqType,
 		}
 	}
 
-	switch {
-	case msg.TopicMsg.JoinReq != nil:
+	switch msg.ReqType {
+	case ProxyReqJoin:
+		log.Println("cluster: master subscription request", msid, sess.sid)
+		sess.background = msg.CliMsg.Sub.Background
 		join := &sessionJoin{
 			pkt:  msg.CliMsg,
 			sess: sess,
-			// Impersonate the original session.
-			sessOverrides: &sessionOverrides{
-				origReq: msg.TopicMsg.JoinReq,
-			},
 		}
-		log.Printf("cluster: master subscription request %+v\n", join)
 		globals.hub.join <- join
 
-	case msg.TopicMsg.LeaveReq != nil:
+	case ProxyReqLeave:
 		if t := globals.hub.topicGet(msg.RcptTo); t != nil {
-			leave := &sessionLeave{
+			log.Printf("cluster: leave req", msid, sess.sid)
+			t.unreg <- &sessionLeave{
 				pkt:  msg.CliMsg,
 				sess: sess,
-				sessOverrides: &sessionOverrides{
-					origReq: msg.TopicMsg.LeaveReq,
-				},
 			}
-			log.Printf("processing session leave for sid '%s', full req = %+v", sess.sid, leave)
-			t.unreg <- leave
 		} else {
 			log.Printf("cluster: leave request for unknown topic %s", msg.RcptTo)
 		}
 
-	case msg.TopicMsg.MetaReq != nil:
-		meta := &metaReq{
-			pkt:  msg.CliMsg,
-			sess: sess,
-			what: msg.TopicMsg.MetaReq.What,
-			// Impersonate the original session.
-			sessOverrides: &sessionOverrides{
-				origReq: msg.TopicMsg.MetaReq,
-			},
-		}
-		log.Printf("cluster: meta request %+v %+v", meta, meta.pkt)
+	case ProxyReqMeta:
+		log.Println("cluster: meta request", msid, sess.sid, msg.CliMsg.MetaWhat)
 		if t := globals.hub.topicGet(msg.RcptTo); t != nil {
-			t.meta <- meta
+			t.meta <- &metaReq{
+				pkt:  msg.CliMsg,
+				sess: sess,
+			}
 		} else {
 			log.Printf("cluster: meta request for unknown topic %s", msg.RcptTo)
 		}
 
-	case msg.TopicMsg.BroadcastReq != nil:
+	case ProxyReqBroadcast:
+		log.Println("cluster: broadcast request", msid, sess.sid)
 		if msg.SrvMsg == nil {
 			panic("cluster: topic proxy broadcast request has no data message")
-		}
-		msg.SrvMsg.sessOverrides = &sessionOverrides{
-			origReq: msg.TopicMsg.BroadcastReq,
 		}
 		msg.SrvMsg.sess = sess
 		globals.hub.route <- msg.SrvMsg
 
-	case msg.TopicMsg.UAChangeReq != nil:
+	case ProxyReqUAChange:
 		if t := globals.hub.topicGet(msg.RcptTo); t != nil {
 			t.uaChange <- sess.userAgent
 		} else {
 			log.Printf("cluster: UA change request for unknown topic %s", msg.RcptTo)
 		}
 
-	case msg.TopicMsg.DefrNotifReq != nil:
+	case ProxyReqBkgNotif:
 		if t := globals.hub.topicGet(msg.RcptTo); t != nil {
-			notifs := make([]*deferredNotification, len(msg.TopicMsg.DefrNotifReq.SendNotificationRequests))
-			for i, req := range msg.TopicMsg.DefrNotifReq.SendNotificationRequests {
+			notifs := make([]*deferredNotification, len(msg.DefrNotifications))
+			for i, req := range msg.DefrNotifications {
 				notifs[i] = &deferredNotification{uid: types.ParseUserId(req.AsUser), sid: req.Sid, userAgent: req.UserAgent}
 			}
 
@@ -525,7 +467,7 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 		}
 
 	default:
-		log.Println("cluster TopicMaster: malformed", msg.RcptTo)
+		log.Println("cluster: unknown request type", msg.ReqType, msg.RcptTo)
 		*rejected = true
 	}
 
@@ -537,6 +479,7 @@ func (Cluster) TopicProxy(msg *ClusterResp, unused *bool) error {
 	// This cluster member received a response from the topic master to be forwarded to the topic.
 	// Find appropriate topic, send the message to it.
 	if t := globals.hub.topicGet(msg.RcptTo); t != nil {
+		msg.SrvMsg.uid = types.ParseUserId(msg.SrvMsg.AsUser)
 		t.proxy <- msg
 	} else {
 		log.Println("cluster: unknown topic name", msg.RcptTo)
@@ -730,17 +673,28 @@ func (c *Cluster) isPartitioned() bool {
 	return (len(c.nodes)+1)/2 >= len(c.fo.activeNodes)
 }
 
-func (c *Cluster) makeClusterReq(cliMsg *ClientComMessage, srvMsg *ServerComMessage,
-	topicMsg *ProxyTopicMessage, topic string, sess *Session) *ClusterReq {
+func (c *Cluster) makeClusterReq(reqType ProxyReqType, payload interface{}, topic string, sess *Session) *ClusterReq {
 	req := &ClusterReq{
 		Node:        c.thisNodeName,
 		Signature:   c.ring.Signature(),
 		Fingerprint: c.fingerprint,
-		CliMsg:      cliMsg,
-		SrvMsg:      srvMsg,
-		TopicMsg:    topicMsg,
+		ReqType:     reqType,
 		RcptTo:      topic,
 	}
+
+	switch pl := payload.(type) {
+	case *ClientComMessage:
+		req.CliMsg = pl
+	case *ServerComMessage:
+		req.SrvMsg = pl
+	case []*ProxyDeferredSession:
+		req.DefrNotifications = pl
+	case nil:
+	// do nothing
+	default:
+		panic("cluster: unknown payload in makeClusterReq")
+	}
+
 	if sess != nil {
 		req.Sess = &ClusterSess{
 			Uid:        sess.uid,
@@ -757,8 +711,7 @@ func (c *Cluster) makeClusterReq(cliMsg *ClientComMessage, srvMsg *ServerComMess
 }
 
 // Forward client request message from the Topic Proxy to the Topic Master (cluster node which owns the topic)
-func (c *Cluster) routeToTopicMaster(cliMsg *ClientComMessage, srvMsg *ServerComMessage,
-	topicMsg *ProxyTopicMessage, topic string, sess *Session) error {
+func (c *Cluster) routeToTopicMaster(reqType ProxyReqType, payload interface{}, topic string, sess *Session) error {
 	if c == nil {
 		// Cluster may be nil due to shutdown.
 		return nil
@@ -770,7 +723,7 @@ func (c *Cluster) routeToTopicMaster(cliMsg *ClientComMessage, srvMsg *ServerCom
 		return errors.New("node for topic not found")
 	}
 
-	req := c.makeClusterReq(cliMsg, srvMsg, topicMsg, topic, sess)
+	req := c.makeClusterReq(reqType, payload, topic, sess)
 	return n.proxyToMaster(req)
 }
 
@@ -812,7 +765,7 @@ func (c *Cluster) topicProxyGone(topicName string) error {
 		return errors.New("node for topic not found")
 	}
 
-	req := c.makeClusterReq(nil, nil, nil, topicName, nil)
+	req := c.makeClusterReq(ProxyReqLeave, nil, topicName, nil)
 	req.Gone = true
 	return n.proxyToMaster(req)
 }
@@ -1073,32 +1026,26 @@ func (sess *Session) clusterWriteLoop(forTopic string) {
 
 			response := &ClusterResp{SrvMsg: srvMsg}
 			if srvMsg.sess != nil {
-				switch req := srvMsg.sessOverrides.origReq.(type) {
-				case nil:
-					panic("cluster: origReq is nil in session overrides")
-				case *ProxyJoin:
-					response.OrigRequestType = ProxyReqJoin
-					response.IsBackground = req.IsBackground
-					response.Uid = types.ParseUserId(srvMsg.AsUser)
-					sess.addRemoteSession(srvMsg.sess.sid, &remoteSession{
-						uid:          response.Uid,
-						isBackground: response.IsBackground})
-				case *ProxyLeave:
-					response.OrigRequestType = ProxyReqLeave
-					sess.delRemoteSession(srvMsg.sess.sid)
-				case *ProxyBroadcast:
-					response.OrigRequestType = ProxyReqBroadcast
-				case *ProxyMeta:
-					response.OrigRequestType = ProxyReqMeta
-				}
+				response.OrigReqType = srvMsg.sess.proxyReq
 				response.OrigSid = srvMsg.sess.sid
+				switch srvMsg.sess.proxyReq {
+				case ProxyReqJoin:
+					response.IsBackground = sess.background
+					sess.addRemoteSession(srvMsg.sess.sid, &remoteSession{
+						uid:          srvMsg.uid,
+						isBackground: response.IsBackground})
+				case ProxyReqLeave:
+					sess.delRemoteSession(srvMsg.sess.sid)
+				case ProxyReqBroadcast, ProxyReqMeta:
+				default:
+					panic("cluster: unknown request type in clusterWriteLoop")
+				}
 			} else {
 				// Copy skipSid.
 				if srvMsg.Ctrl == nil && srvMsg.Data == nil && srvMsg.Pres == nil && srvMsg.Info == nil {
 					// Only broadcast messages (data, pres, info) may come not as a response to a client request.
 					log.Panicf("cluster: only broadcast messages may not contain session overrides: %+v", srvMsg)
 				}
-				response.Uid = srvMsg.uid
 				response.OrigSid = "*"
 			}
 

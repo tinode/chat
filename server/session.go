@@ -50,6 +50,9 @@ type Session struct {
 	// protocol - NONE (unset), WEBSOCK, LPOLL, CLUSTER, GRPC
 	proto int
 
+	// Session ID
+	sid string
+
 	// Websocket. Set only for websocket sessions.
 	ws *websocket.Conn
 
@@ -113,11 +116,15 @@ type Session struct {
 	// Synchronizes access to remoteSessions.
 	remoteSessionsLock sync.RWMutex
 
-	// Session ID
-	sid string
-
 	// Needed for long polling and grpc.
 	lock sync.Mutex
+
+	// Fields used only in cluster mode by topic master node.
+
+	// Type of proxy to master request being handled.
+	proxyReq ProxyReqType
+	// Background subscription
+	background bool
 }
 
 // Subscription is a mapper of sessions to topics.
@@ -808,18 +815,19 @@ func (s *Session) get(msg *ClientComMessage) {
 		return
 	}
 
+	msg.MetaWhat = parseMsgClientMeta(msg.Get.What)
+
 	sub := s.getSub(msg.RcptTo)
 	meta := &metaReq{
 		pkt:  msg,
-		sess: s,
-		what: parseMsgClientMeta(msg.Get.What)}
+		sess: s}
 
-	if meta.what == 0 {
+	if meta.pkt.MetaWhat == 0 {
 		s.queueOut(ErrMalformed(msg.Id, msg.Original, msg.timestamp))
 		log.Println("s.get: invalid Get message action", msg.Get.What)
 	} else if sub != nil {
 		sub.meta <- meta
-	} else if meta.what&(constMsgMetaDesc|constMsgMetaSub) != 0 {
+	} else if meta.pkt.MetaWhat&(constMsgMetaDesc|constMsgMetaSub) != 0 {
 		// Request some minimal info from a topic not currently attached to.
 		globals.hub.meta <- meta
 	} else {
@@ -842,24 +850,24 @@ func (s *Session) set(msg *ClientComMessage) {
 		sess: s}
 
 	if msg.Set.Desc != nil {
-		meta.what = constMsgMetaDesc
+		meta.pkt.MetaWhat = constMsgMetaDesc
 	}
 	if msg.Set.Sub != nil {
-		meta.what |= constMsgMetaSub
+		meta.pkt.MetaWhat |= constMsgMetaSub
 	}
 	if msg.Set.Tags != nil {
-		meta.what |= constMsgMetaTags
+		meta.pkt.MetaWhat |= constMsgMetaTags
 	}
 	if msg.Set.Cred != nil {
-		meta.what |= constMsgMetaCred
+		meta.pkt.MetaWhat |= constMsgMetaCred
 	}
 
-	if meta.what == 0 {
+	if meta.pkt.MetaWhat == 0 {
 		s.queueOut(ErrMalformed(msg.Id, msg.Original, msg.timestamp))
 		log.Println("s.set: nil Set action")
 	} else if sub := s.getSub(msg.RcptTo); sub != nil {
 		sub.meta <- meta
-	} else if meta.what&constMsgMetaTags != 0 {
+	} else if meta.pkt.MetaWhat&constMsgMetaTags != 0 {
 		log.Println("s.set: can Set tags for subscribed topics only")
 		s.queueOut(ErrPermissionDenied(msg.Id, msg.Original, msg.timestamp))
 	} else {
@@ -869,10 +877,10 @@ func (s *Session) set(msg *ClientComMessage) {
 }
 
 func (s *Session) del(msg *ClientComMessage) {
-	what := parseMsgClientDel(msg.Del.What)
+	msg.MetaWhat = parseMsgClientDel(msg.Del.What)
 
 	// Delete user
-	if what == constMsgDelUser {
+	if msg.MetaWhat == constMsgDelUser {
 		replyDelUser(s, msg)
 		return
 	}
@@ -887,20 +895,18 @@ func (s *Session) del(msg *ClientComMessage) {
 		return
 	}
 
-	if what == 0 {
+	if msg.MetaWhat == 0 {
 		s.queueOut(ErrMalformed(msg.Id, msg.Original, msg.timestamp))
 		log.Println("s.del: invalid Del action", msg.Del.What, s.sid)
 		return
 	}
 	sub := s.getSub(msg.RcptTo)
-	if sub != nil && what != constMsgDelTopic {
+	if sub != nil && msg.MetaWhat != constMsgDelTopic {
 		// Session is attached, deleting subscription or messages. Send to topic.
 		sub.meta <- &metaReq{
 			pkt:  msg,
-			sess: s,
-			what: what}
-
-	} else if what == constMsgDelTopic {
+			sess: s}
+	} else if msg.MetaWhat == constMsgDelTopic {
 		// Deleting topic: for sessions attached or not attached, send request to hub first.
 		// Hub will forward to topic, if appropriate.
 		globals.hub.unreg <- &topicUnreg{

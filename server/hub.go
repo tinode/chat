@@ -27,9 +27,6 @@ type sessionJoin struct {
 	pkt *ClientComMessage
 	// Session to attach to topic.
 	sess *Session
-
-	// Session param overrides. Used for handling remote topic requests.
-	sessOverrides *sessionOverrides
 }
 
 // Session wants to leave the topic
@@ -38,11 +35,6 @@ type sessionLeave struct {
 	pkt *ClientComMessage
 	// Session which initiated the request
 	sess *Session
-	// Should the proxy-master topic connection be terminated
-	// terminateProxyConnection bool
-
-	// Session param overrides. Used for handling remote (proxy-master) topic requests.
-	sessOverrides *sessionOverrides
 }
 
 // Request to hub to remove the topic
@@ -68,13 +60,8 @@ type metaReq struct {
 	sess *Session
 	// UID of the user being affected. Could be zero.
 	forUser types.Uid
-	// What is being requested: constMsgMetaSub, constMsgMetaDesc, constMsgMetaTags, etc.
-	what int
 	// New topic state value. Only types.StateSuspended is supported at this time.
 	state types.ObjState
-
-	// Session param overrides. Used for handling remote topic requests.
-	sessOverrides *sessionOverrides
 }
 
 // Hub is the core structure which holds topics.
@@ -235,7 +222,7 @@ func (h *Hub) run() {
 			} else {
 				// Metadata read or update from a user who is not attached to the topic.
 				if meta.pkt.Get != nil {
-					if meta.what == constMsgMetaDesc {
+					if meta.pkt.MetaWhat == constMsgMetaDesc {
 						go replyOfflineTopicGetDesc(meta.sess, meta.pkt)
 					} else {
 						go replyOfflineTopicGetSub(meta.sess, meta.pkt)
@@ -383,10 +370,10 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 				statsInc("LiveTopics", -1)
 			} else {
 				// Case 1.1.2: requester is NOT the owner
+				msg.MetaWhat = constMsgDelTopic
 				t.meta <- &metaReq{
 					pkt:  msg,
-					sess: sess,
-					what: constMsgDelTopic}
+					sess: sess}
 			}
 
 		} else {

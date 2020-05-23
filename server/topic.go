@@ -271,7 +271,7 @@ func (t *Topic) fixUpUserCounts(userCounts map[types.Uid]int) {
 
 func (t *Topic) runLocal(hub *Hub) {
 	// Kills topic after a period of inactivity.
-	keepAlive := idleTopicTimeout
+	keepAlive := idleMasterTopicTimeout
 	killTimer := time.NewTimer(time.Hour)
 	killTimer.Stop()
 
@@ -332,8 +332,7 @@ func (t *Topic) runLocal(hub *Hub) {
 					continue
 				}
 
-			} else if pssd := t.maybeRemoveSession(leave.sess, asUid /* doRemove */, !leave.sess.isProxy() ||
-				leave.terminateProxyConnection); pssd != nil || leave.sess.isProxy() {
+			} else if pssd := t.remSession(leave.sess, asUid); pssd != nil || leave.sess.isProxy() {
 				// Just leaving the topic without unsubscribing if user is subscribed.
 
 				var uid types.Uid
@@ -614,32 +613,32 @@ func (t *Topic) runLocal(hub *Hub) {
 			switch {
 			case meta.pkt.Get != nil:
 				// Get request
-				if meta.what&constMsgMetaDesc != 0 {
+				if meta.pkt.MetaWhat&constMsgMetaDesc != 0 {
 					if err := t.replyGetDesc(meta.sess, asUid, meta.pkt.Get.Id, meta.pkt.Get.Desc); err != nil {
 						log.Printf("topic[%s] meta.Get.Desc failed: %s", t.name, err)
 					}
 				}
-				if meta.what&constMsgMetaSub != 0 {
+				if meta.pkt.MetaWhat&constMsgMetaSub != 0 {
 					if err := t.replyGetSub(meta.sess, asUid, authLevel, meta.pkt.Get.Id, meta.pkt.Get.Sub); err != nil {
 						log.Printf("topic[%s] meta.Get.Sub failed: %s", t.name, err)
 					}
 				}
-				if meta.what&constMsgMetaData != 0 {
+				if meta.pkt.MetaWhat&constMsgMetaData != 0 {
 					if err := t.replyGetData(meta.sess, asUid, meta.pkt.Get.Id, meta.pkt.Get.Data); err != nil {
 						log.Printf("topic[%s] meta.Get.Data failed: %s", t.name, err)
 					}
 				}
-				if meta.what&constMsgMetaDel != 0 {
+				if meta.pkt.MetaWhat&constMsgMetaDel != 0 {
 					if err := t.replyGetDel(meta.sess, asUid, meta.pkt.Get.Id, meta.pkt.Get.Del); err != nil {
 						log.Printf("topic[%s] meta.Get.Del failed: %s", t.name, err)
 					}
 				}
-				if meta.what&constMsgMetaTags != 0 {
+				if meta.pkt.MetaWhat&constMsgMetaTags != 0 {
 					if err := t.replyGetTags(meta.sess, asUid, meta.pkt.Get.Id); err != nil {
 						log.Printf("topic[%s] meta.Get.Tags failed: %s", t.name, err)
 					}
 				}
-				if meta.what&constMsgMetaCred != 0 {
+				if meta.pkt.MetaWhat&constMsgMetaCred != 0 {
 					log.Printf("topic[%s] handle getCred", t.name)
 					if err := t.replyGetCreds(meta.sess, asUid, meta.pkt.Get.Id); err != nil {
 						log.Printf("topic[%s] meta.Get.Creds failed: %s", t.name, err)
@@ -648,7 +647,7 @@ func (t *Topic) runLocal(hub *Hub) {
 
 			case meta.pkt.Set != nil:
 				// Set request
-				if meta.what&constMsgMetaDesc != 0 {
+				if meta.pkt.MetaWhat&constMsgMetaDesc != 0 {
 					if err := t.replySetDesc(meta.sess, asUid, meta.pkt.Set); err == nil {
 						// Notify plugins of the update
 						pluginTopic(t, plgActUpd)
@@ -656,17 +655,17 @@ func (t *Topic) runLocal(hub *Hub) {
 						log.Printf("topic[%s] meta.Set.Desc failed: %v", t.name, err)
 					}
 				}
-				if meta.what&constMsgMetaSub != 0 {
+				if meta.pkt.MetaWhat&constMsgMetaSub != 0 {
 					if err := t.replySetSub(hub, meta.sess, meta.pkt); err != nil {
 						log.Printf("topic[%s] meta.Set.Sub failed: %v", t.name, err)
 					}
 				}
-				if meta.what&constMsgMetaTags != 0 {
+				if meta.pkt.MetaWhat&constMsgMetaTags != 0 {
 					if err := t.replySetTags(meta.sess, asUid, meta.pkt.Set); err != nil {
 						log.Printf("topic[%s] meta.Set.Tags failed: %v", t.name, err)
 					}
 				}
-				if meta.what&constMsgMetaCred != 0 {
+				if meta.pkt.MetaWhat&constMsgMetaCred != 0 {
 					if err := t.replySetCred(meta.sess, asUid, authLevel, meta.pkt.Set); err != nil {
 						log.Printf("topic[%s] meta.Set.Cred failed: %v", t.name, err)
 					}
@@ -675,7 +674,7 @@ func (t *Topic) runLocal(hub *Hub) {
 			case meta.pkt.Del != nil:
 				// Del request
 				var err error
-				switch meta.what {
+				switch meta.pkt.MetaWhat {
 				case constMsgDelMsg:
 					err = t.replyDelMsg(meta.sess, asUid, meta.pkt.Del)
 				case constMsgDelSub:
@@ -2546,6 +2545,10 @@ func (t *Topic) replyDelSub(h *Hub, sess *Session, asUid types.Uid, del *MsgClie
 func (t *Topic) replyLeaveUnsub(h *Hub, sess *Session, asUid types.Uid, id string) error {
 	now := types.TimeNow()
 
+	if asUid.IsZero() {
+		panic("replyLeaveUnsub: zero asUid")
+	}
+
 	if t.owner == asUid {
 		if id != "" {
 			sess.queueOut(ErrPermissionDenied(id, t.original(asUid), now))
@@ -2617,8 +2620,8 @@ func (t *Topic) evictUser(uid types.Uid, unsub bool, skip string) {
 	msg.SkipSid = skip
 	msg.uid = uid
 	for sess := range t.sessions {
-		if sess.isProxy() || t.remSession(sess, uid) != nil {
-			if !sess.isProxy() {
+		if removed := t.remSession(sess, uid) != nil; sess.isProxy() || removed {
+			if removed {
 				sess.detach <- t.name
 			}
 			if sess.sid != skip {
@@ -3002,13 +3005,13 @@ func (t *Topic) addSession(s *Session, asUid types.Uid) bool {
 	return true
 }
 
-// Disconnects session from topic if 'doRemove' is true and either one of the following is true:
+// Disconnects session from topic if either one of the following is true:
 // * `asUid` is zero
 // * `asUid` matches subscribed user.
-// * `s` is a proxy session for a proxy-master topic connection.
-func (t *Topic) maybeRemoveSession(s *Session, asUid types.Uid, doRemove bool) *perSessionData {
+// * `s` is a proxy session for a proxy-master topic connection and asUid is zero.
+func (t *Topic) remSession(s *Session, asUid types.Uid) *perSessionData {
 	if pssd, ok := t.sessions[s]; ok && (s.isProxy() || pssd.uid == asUid || asUid.IsZero()) {
-		if doRemove {
+		if !s.isProxy() || asUid.IsZero() {
 			// Check for deferred presence notification and cancel it if found.
 			if pssd.ref != nil {
 				t.defrNotif.Remove(pssd.ref)
@@ -3018,11 +3021,6 @@ func (t *Topic) maybeRemoveSession(s *Session, asUid types.Uid, doRemove bool) *
 		return &pssd
 	}
 	return nil
-}
-
-// Removes session record if 'asUid' matches subscribed user.
-func (t *Topic) remSession(s *Session, asUid types.Uid) *perSessionData {
-	return t.maybeRemoveSession(s, asUid, true)
 }
 
 func (t *Topic) isOnline() bool {

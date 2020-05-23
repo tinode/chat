@@ -65,8 +65,10 @@ const (
 
 	// idleSessionTimeout defines duration of being idle before terminating a session.
 	idleSessionTimeout = time.Second * 55
-	// idleTopicTimeout defines now long to keep topic alive after the last session detached.
-	idleTopicTimeout = time.Second * 5
+	// idleMasterTopicTimeout defines now long to keep master topic alive after the last session detached.
+	idleMasterTopicTimeout = time.Second * 4
+	// Same as above but shut down the proxy topic sooner. Otherwise master topic would be kept alive for too long.
+	idleProxyTopicTimeout = time.Second * 2
 
 	// defaultMaxMessageSize is the default maximum message size
 	defaultMaxMessageSize = 1 << 19 // 512K

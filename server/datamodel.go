@@ -155,8 +155,9 @@ type MsgClientSub struct {
 	Id    string `json:"id,omitempty"`
 	Topic string `json:"topic"`
 
-	// The subscription request is non-interactive, i.e. issued by a service on behalf of a user.
-	// This affects presence notifications.
+	// The subscription request is non-interactive, i.e. issued by a service. This affects presence notifications.
+	// TODO: Move to {hi}. Let session declare itself a background session for all subscriptions.
+	// It would simplify things a lot.
 	Background bool `json:"bkg,omitempty"`
 
 	// Mirrors {set}.
@@ -328,6 +329,8 @@ type ClientComMessage struct {
 	AsUser string `json:"-"`
 	// Sender's authentication level.
 	AuthLvl int `json:"-"`
+	// Denormalized 'what' field of meta messages (set, get, del).
+	MetaWhat int `json:"-"`
 	// Timestamp when this message was received by the server.
 	timestamp time.Time
 }
@@ -578,14 +581,6 @@ func (src *MsgServerInfo) copy() *MsgServerInfo {
 	return &dst
 }
 
-// Session parameter overrides.
-// Used by the remote topic masters to impersonate multiple proxied sessions.
-type sessionOverrides struct {
-	// Incoming proxy topic request pointer. Set for topic proxy requests. One of
-	// *ProxyJoin, *ProxyLeave, *ProxyBroadcast, *ProxyMeta.
-	origReq interface{}
-}
-
 // ServerComMessage is a wrapper for server-side messages.
 type ServerComMessage struct {
 	Ctrl *MsgServerCtrl `json:"ctrl,omitempty"`
@@ -609,8 +604,6 @@ type ServerComMessage struct {
 	// Session ID to skip when sendng packet to sessions. Used to skip sending to original session.
 	// Could be either empty.
 	SkipSid string `json:"-"`
-	// Session parameter overrides. Used when a topic is hosted remotely. Could be nil.
-	sessOverrides *sessionOverrides
 	// User id affected by this message.
 	uid types.Uid
 }
@@ -622,14 +615,13 @@ func (src *ServerComMessage) copy() *ServerComMessage {
 		return nil
 	}
 	dst := &ServerComMessage{
-		Id:            src.Id,
-		RcptTo:        src.RcptTo,
-		AsUser:        src.AsUser,
-		Timestamp:     src.Timestamp,
-		sess:          src.sess,
-		SkipSid:       src.SkipSid,
-		sessOverrides: src.sessOverrides,
-		uid:           src.uid,
+		Id:        src.Id,
+		RcptTo:    src.RcptTo,
+		AsUser:    src.AsUser,
+		Timestamp: src.Timestamp,
+		sess:      src.sess,
+		SkipSid:   src.SkipSid,
+		uid:       src.uid,
 	}
 
 	dst.Ctrl = src.Ctrl.copy()

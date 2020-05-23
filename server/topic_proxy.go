@@ -38,11 +38,8 @@ func (t *Topic) runProxy(hub *Hub) {
 				asUid := types.ParseUserId(join.pkt.AsUser)
 				join.sess.queueOut(ErrLocked(join.pkt.Id, t.original(asUid), types.TimeNow()))
 			} else {
-				ptm := &ProxyTopicMessage{
-					JoinReq: &ProxyJoin{},
-				}
 				// Response (ctrl message) will be handled when it's received via the proxy channel.
-				if err := globals.cluster.routeToTopicMaster(join.pkt, nil, ptm, t.name, join.sess); err != nil {
+				if err := globals.cluster.routeToTopicMaster(ProxyReqJoin, join.pkt, t.name, join.sess); err != nil {
 					log.Println("proxy topic: route join request from proxy to master failed:", err)
 				}
 			}
@@ -68,42 +65,29 @@ func (t *Topic) runProxy(hub *Hub) {
 			// because by the time the response arrives this session may be already gone from the session store
 			// and we won't be able to find and remove it by its sid.
 			t.remSession(leave.sess, asUid)
-			plm := &ProxyTopicMessage{
-				LeaveReq: &ProxyLeave{},
-			}
-			if err := globals.cluster.routeToTopicMaster(leave.pkt, nil, plm, t.name, leave.sess); err != nil {
+			if err := globals.cluster.routeToTopicMaster(ProxyReqLeave, leave.pkt, t.name, leave.sess); err != nil {
 				log.Println("proxy topic: route broadcast request from proxy to master failed:", err)
 			}
 
 		case msg := <-t.broadcast:
 			// Content message intended for broadcasting to recipients
-			brdc := &ProxyTopicMessage{
-				BroadcastReq: &ProxyBroadcast{},
-			}
-			log.Printf("t[%s] broadcast %+v %+v", t.name, msg, brdc.BroadcastReq)
-			if err := globals.cluster.routeToTopicMaster(nil, msg, brdc, t.name, msg.sess); err != nil {
+			log.Printf("t[%s] broadcast %+v %+v", t.name, msg)
+			if err := globals.cluster.routeToTopicMaster(ProxyReqBroadcast, msg, t.name, msg.sess); err != nil {
 				log.Println("proxy topic: route broadcast request from proxy to master failed:", err)
 			}
 
 		case meta := <-t.meta:
 			// Request to get/set topic metadata
 			log.Printf("t[%s] meta %+v", t.name, meta)
-			req := &ProxyTopicMessage{
-				MetaReq: &ProxyMeta{
-					What: meta.what,
-				},
-			}
-			if err := globals.cluster.routeToTopicMaster(meta.pkt, nil, req, t.name, meta.sess); err != nil {
+			if err := globals.cluster.routeToTopicMaster(ProxyReqMeta, meta.pkt, t.name, meta.sess); err != nil {
 				log.Println("proxy topic: route meta request from proxy to master failed:", err)
 			}
 
 		case ua := <-t.uaChange:
 			if t.cat == types.TopicCatMe {
 				// Process an update to user agent from one of the sessions.
-				req := &ProxyTopicMessage{
-					UAChangeReq: &ProxyUAChange{},
-				}
-				if err := globals.cluster.routeToTopicMaster(nil, nil, req, t.name, &Session{userAgent: ua}); err != nil {
+				if err := globals.cluster.routeToTopicMaster(ProxyReqUAChange, nil, t.name,
+					&Session{userAgent: ua}); err != nil {
 					log.Println("proxy topic: route ua change request from proxy to master failed:", err)
 				}
 			}
@@ -140,7 +124,7 @@ func (t *Topic) runProxy(hub *Hub) {
 
 func (t *Topic) proxyMasterResponse(msg *ClusterResp, killTimer *time.Timer) {
 	// Kills topic after a period of inactivity.
-	keepAlive := idleTopicTimeout
+	keepAlive := idleProxyTopicTimeout
 
 	if msg.SrvMsg.Pres != nil && msg.SrvMsg.Pres.What == "acs" && msg.SrvMsg.Pres.Acs != nil {
 		// If the server changed acs on this topic, update the internal state.
@@ -148,7 +132,7 @@ func (t *Topic) proxyMasterResponse(msg *ClusterResp, killTimer *time.Timer) {
 	}
 	if msg.OrigSid == "*" {
 		// It is a broadcast.
-		msg.SrvMsg.uid = msg.Uid
+		msg.SrvMsg.uid = types.ParseUserId(msg.SrvMsg.AsUser)
 		switch {
 		case msg.SrvMsg.Pres != nil || msg.SrvMsg.Data != nil || msg.SrvMsg.Info != nil:
 			// Regular broadcast.
@@ -160,11 +144,11 @@ func (t *Topic) proxyMasterResponse(msg *ClusterResp, killTimer *time.Timer) {
 		}
 	} else {
 		sess := globals.sessionStore.Get(msg.OrigSid)
-		switch msg.OrigRequestType {
+		switch msg.OrigReqType {
 		case ProxyReqJoin:
 			if sess != nil && msg.SrvMsg != nil && msg.SrvMsg.Ctrl != nil {
 				if msg.SrvMsg.Ctrl.Code < 300 {
-					if t.addSession(sess, msg.Uid) {
+					if t.addSession(sess, msg.SrvMsg.uid) {
 						sess.addSub(t.name, &Subscription{
 							broadcast: t.broadcast,
 							done:      t.unreg,
@@ -175,7 +159,7 @@ func (t *Topic) proxyMasterResponse(msg *ClusterResp, killTimer *time.Timer) {
 							pssd, _ := t.sessions[sess]
 							pssd.ref = t.defrNotif.PushFront(&deferredNotification{
 								sess:      sess,
-								uid:       msg.Uid,
+								uid:       msg.SrvMsg.uid,
 								timestamp: msg.SrvMsg.Timestamp,
 							})
 							t.sessions[sess] = pssd
@@ -207,7 +191,8 @@ func (t *Topic) proxyMasterResponse(msg *ClusterResp, killTimer *time.Timer) {
 				}
 			}
 		default:
-			log.Printf("proxy topic [%s] received response referencing unknown request type %d", t.name, msg.OrigRequestType)
+			log.Printf("proxy topic [%s] received response referencing unknown request type %d",
+				t.name, msg.OrigReqType)
 		}
 		if !sess.queueOut(msg.SrvMsg) {
 			log.Println("topic proxy: timeout")
@@ -291,12 +276,8 @@ func (t *Topic) routeDeferredNotificationsToMaster(notifs []*deferredNotificatio
 		}
 		sendReqs = append(sendReqs, s)
 	}
-	msg := &ProxyTopicMessage{
-		DefrNotifReq: &ProxyDeferredNotifications{
-			SendNotificationRequests: sendReqs,
-		},
-	}
-	if err := globals.cluster.routeToTopicMaster(nil, nil, msg, t.name, nil); err != nil {
+
+	if err := globals.cluster.routeToTopicMaster(ProxyReqBkgNotif, sendReqs, t.name, nil); err != nil {
 		log.Println("proxy topic: deferred notifications request from proxy to master failed:", err)
 	}
 }
