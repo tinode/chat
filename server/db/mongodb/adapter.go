@@ -118,10 +118,6 @@ func (a *adapter) Open(jsonconfig json.RawMessage) error {
 	}
 
 	if config.UseTLS {
-		log.Println(config.UseTLS,
-			config.InsecureSkipVerify,
-			config.TlsCertFile,
-			config.TlsPrivateKey)
 		tlsConfig := tls.Config{
 			InsecureSkipVerify: config.InsecureSkipVerify,
 		}
