@@ -205,8 +205,14 @@ func (s *Session) delRemoteSession(sid string) {
 }
 
 // Indicates whether this session is a local interface for a remote proxy topic.
+// It multiplexes multiple sessions.
 func (s *Session) isMultiplex() bool {
 	return s.proto == MULTIPLEX
+}
+
+// Indicates whether this session is a short-lived proxy for a remote session.
+func (s *Session) isProxy() bool {
+	return s.proto == PROXY
 }
 
 // queueOut attempts to send a ServerComMessage to a session write loop; if the send buffer is full,

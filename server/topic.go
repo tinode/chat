@@ -331,16 +331,18 @@ func (t *Topic) runLocal(hub *Hub) {
 					log.Println("failed to unsub", err, leave.sess.sid)
 					continue
 				}
-
-			} else if pssd := t.remSession(leave.sess, asUid); pssd != nil || leave.sess.isMultiplex() {
-				// Just leaving the topic without unsubscribing if user is subscribed.
+			} else if pssd := t.remSession(leave.sess, asUid); pssd != nil || leave.sess.isProxy() {
+				// Just leaving the topic without unsubscribing.
 
 				var uid types.Uid
-				if leave.sess.isMultiplex() {
+				if leave.sess.isProxy() {
 					uid = asUid
 				} else {
 					uid = pssd.uid
 				}
+
+				log.Println("topic leave 2", pssd, leave.sess.isProxy(), uid)
+
 				// uid may be zero when a proxy session is trying to terminate (it called unsubAll).
 				proxyTerminating := uid.IsZero()
 				var pud perUserData
@@ -350,7 +352,7 @@ func (t *Topic) runLocal(hub *Hub) {
 						pud.online--
 					}
 				} else if !leave.sess.isMultiplex() {
-					log.Panic("cannot determine uid: leave req = ", leave)
+					log.Panic("cannot determine uid: leave req=", leave)
 				}
 
 				switch t.cat {
@@ -768,80 +770,80 @@ func (t *Topic) runLocal(hub *Hub) {
 }
 
 // Session subscribed to a topic, created == true if topic was just created and {pres} needs to be announced
-func (t *Topic) handleSubscription(h *Hub, sreg *sessionJoin) error {
-	asUid := types.ParseUserId(sreg.pkt.AsUser)
-	authLevel := auth.Level(sreg.pkt.AuthLvl)
+func (t *Topic) handleSubscription(h *Hub, join *sessionJoin) error {
+	asUid := types.ParseUserId(join.pkt.AsUser)
+	authLevel := auth.Level(join.pkt.AuthLvl)
 
-	msgsub := sreg.pkt.Sub
+	msgsub := join.pkt.Sub
 	getWhat := 0
 	if msgsub.Get != nil {
 		getWhat = parseMsgClientMeta(msgsub.Get.What)
 	}
 
-	if err := t.subCommonReply(h, sreg); err != nil {
+	if err := t.subCommonReply(h, join); err != nil {
 		return err
 	}
 
 	// Send notifications.
 
 	// Some notifications are always sent immediately.
-	t.sendImmediateSubNotifications(asUid, sreg)
+	t.sendImmediateSubNotifications(asUid, join)
 
-	pssd, ok := t.sessions[sreg.sess]
+	pssd, ok := t.sessions[join.sess]
 	if msgsub.Background && ok {
 		// Notifications are delayed.
-		if !sreg.sess.isMultiplex() {
+		if !join.sess.isProxy() /* FIXME: refactor to skip in case of multiplexing session. */ {
 			pssd.ref = t.defrNotif.PushFront(&deferredNotification{
-				sess:      sreg.sess,
-				timestamp: sreg.pkt.timestamp,
-				uid:       types.ParseUserId(sreg.pkt.AsUser),
+				sess:      join.sess,
+				timestamp: join.pkt.timestamp,
+				uid:       types.ParseUserId(join.pkt.AsUser),
 			})
 		}
-		t.sessions[sreg.sess] = pssd
+		t.sessions[join.sess] = pssd
 	} else {
 		// Remaining notifications are also sent immediately.
-		t.sendSubNotifications(asUid, sreg.sess.sid, sreg.sess.userAgent)
+		t.sendSubNotifications(asUid, join.sess.sid, join.sess.userAgent)
 	}
 
 	if getWhat&constMsgMetaDesc != 0 {
 		// Send get.desc as a {meta} packet.
-		if err := t.replyGetDesc(sreg.sess, asUid, sreg.pkt.Id, msgsub.Get.Desc); err != nil {
-			log.Printf("topic[%s] handleSubscription Get.Desc failed: %v sid=%s", t.name, err, sreg.sess.sid)
+		if err := t.replyGetDesc(join.sess, asUid, join.pkt.Id, msgsub.Get.Desc); err != nil {
+			log.Printf("topic[%s] handleSubscription Get.Desc failed: %v sid=%s", t.name, err, join.sess.sid)
 		}
 	}
 
 	if getWhat&constMsgMetaSub != 0 {
 		// Send get.sub response as a separate {meta} packet
-		if err := t.replyGetSub(sreg.sess, asUid, authLevel, sreg.pkt.Id, msgsub.Get.Sub); err != nil {
-			log.Printf("topic[%s] handleSubscription Get.Sub failed: %v sid=%s", t.name, err, sreg.sess.sid)
+		if err := t.replyGetSub(join.sess, asUid, authLevel, join.pkt.Id, msgsub.Get.Sub); err != nil {
+			log.Printf("topic[%s] handleSubscription Get.Sub failed: %v sid=%s", t.name, err, join.sess.sid)
 		}
 	}
 
 	if getWhat&constMsgMetaTags != 0 {
 		// Send get.tags response as a separate {meta} packet
-		if err := t.replyGetTags(sreg.sess, asUid, sreg.pkt.Id); err != nil {
-			log.Printf("topic[%s] handleSubscription Get.Tags failed: %v sid=%s", t.name, err, sreg.sess.sid)
+		if err := t.replyGetTags(join.sess, asUid, join.pkt.Id); err != nil {
+			log.Printf("topic[%s] handleSubscription Get.Tags failed: %v sid=%s", t.name, err, join.sess.sid)
 		}
 	}
 
 	if getWhat&constMsgMetaCred != 0 {
 		// Send get.tags response as a separate {meta} packet
-		if err := t.replyGetCreds(sreg.sess, asUid, sreg.pkt.Id); err != nil {
-			log.Printf("topic[%s] handleSubscription Get.Cred failed: %v sid=%s", t.name, err, sreg.sess.sid)
+		if err := t.replyGetCreds(join.sess, asUid, join.pkt.Id); err != nil {
+			log.Printf("topic[%s] handleSubscription Get.Cred failed: %v sid=%s", t.name, err, join.sess.sid)
 		}
 	}
 
 	if getWhat&constMsgMetaData != 0 {
 		// Send get.data response as {data} packets
-		if err := t.replyGetData(sreg.sess, asUid, sreg.pkt.Id, msgsub.Get.Data); err != nil {
-			log.Printf("topic[%s] handleSubscription Get.Data failed: %v sid=%s", t.name, err, sreg.sess.sid)
+		if err := t.replyGetData(join.sess, asUid, join.pkt.Id, msgsub.Get.Data); err != nil {
+			log.Printf("topic[%s] handleSubscription Get.Data failed: %v sid=%s", t.name, err, join.sess.sid)
 		}
 	}
 
 	if getWhat&constMsgMetaDel != 0 {
 		// Send get.del response as a separate {meta} packet
-		if err := t.replyGetDel(sreg.sess, asUid, sreg.pkt.Id, msgsub.Get.Del); err != nil {
-			log.Printf("topic[%s] handleSubscription Get.Del failed: %v sid=%s", t.name, err, sreg.sess.sid)
+		if err := t.replyGetDel(join.sess, asUid, join.pkt.Id, msgsub.Get.Del); err != nil {
+			log.Printf("topic[%s] handleSubscription Get.Del failed: %v sid=%s", t.name, err, join.sess.sid)
 		}
 	}
 
@@ -3006,18 +3008,15 @@ func (t *Topic) addSession(s *Session, asUid types.Uid) bool {
 }
 
 // Disconnects session from topic if either one of the following is true:
-// * `asUid` is zero
-// * `asUid` matches subscribed user.
-// * `s` is a proxy session for a proxy-master topic connection and asUid is zero.
+// * `s` is an ordinary session AND (`asUid` is zero OR `asUid` matches subscribed user).
+// It's called for the multiplexing session only when it's actually removed.
 func (t *Topic) remSession(s *Session, asUid types.Uid) *perSessionData {
-	if pssd, ok := t.sessions[s]; ok && (s.isMultiplex() || pssd.uid == asUid || asUid.IsZero()) {
-		if !s.isMultiplex() || asUid.IsZero() {
-			// Check for deferred presence notification and cancel it if found.
-			if pssd.ref != nil {
-				t.defrNotif.Remove(pssd.ref)
-			}
-			delete(t.sessions, s)
+	if pssd, ok := t.sessions[s]; ok && (pssd.uid == asUid || asUid.IsZero()) {
+		// Check for deferred presence notification and cancel it if found.
+		if pssd.ref != nil {
+			t.defrNotif.Remove(pssd.ref)
 		}
+		delete(t.sessions, s)
 		return &pssd
 	}
 	return nil

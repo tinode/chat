@@ -52,7 +52,8 @@ func (t *Topic) runProxy(hub *Hub) {
 				asUid = types.ParseUserId(leave.pkt.AsUser)
 			}
 
-			// Explicitly specify user id because the proxy session hosts multiple client sessions.
+			// FIXME: The old comment is probably not true: Explicitly specify user id because the proxy session
+			// hosts multiple client sessions.
 			if asUid.IsZero() {
 				if pssd, ok := t.sessions[leave.sess]; ok {
 					asUid = pssd.uid
@@ -122,6 +123,7 @@ func (t *Topic) runProxy(hub *Hub) {
 	}
 }
 
+// Master topic response to a request from the proxy session.
 func (t *Topic) proxyMasterResponse(msg *ClusterResp, killTimer *time.Timer) {
 	// Kills topic after a period of inactivity.
 	keepAlive := idleProxyTopicTimeout

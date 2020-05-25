@@ -422,7 +422,7 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 
 	case ProxyReqLeave:
 		if t := globals.hub.topicGet(msg.RcptTo); t != nil {
-			log.Printf("cluster: leave req", msid, sess.sid)
+			log.Println("cluster: leave req", msid, sess.sid)
 			t.unreg <- &sessionLeave{
 				pkt:  msg.CliMsg,
 				sess: sess,
