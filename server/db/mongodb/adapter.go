@@ -5,6 +5,7 @@ package mongodb
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"log"
@@ -54,6 +55,11 @@ type configType struct {
 	AuthSource string `json:"auth_source,omitempty"`
 	Username   string `json:"username,omitempty"`
 	Password   string `json:"password,omitempty"`
+
+	UseTLS             bool   `json:"tls,omitempty"`
+	TlsCertFile        string `json:"tls_cert_file,omitempty"`
+	TlsPrivateKey      string `json:"tls_private_key,omitempty"`
+	InsecureSkipVerify bool   `json:"tls_skip_verify,omitempty"`
 }
 
 // Open initializes mongodb session
@@ -109,6 +115,27 @@ func (a *adapter) Open(jsonconfig json.RawMessage) error {
 				Password:      config.Password,
 				PasswordSet:   passwordSet,
 			})
+	}
+
+	if config.UseTLS {
+		log.Println(config.UseTLS,
+			config.InsecureSkipVerify,
+			config.TlsCertFile,
+			config.TlsPrivateKey)
+		tlsConfig := tls.Config{
+			InsecureSkipVerify: config.InsecureSkipVerify,
+		}
+
+		if config.TlsCertFile != "" {
+			cert, err := tls.LoadX509KeyPair(config.TlsCertFile, config.TlsPrivateKey)
+			if err != nil {
+				return err
+			}
+
+			tlsConfig.Certificates = append(tlsConfig.Certificates, cert)
+		}
+
+		opts.SetTLSConfig(&tlsConfig)
 	}
 
 	if a.maxResults <= 0 {
