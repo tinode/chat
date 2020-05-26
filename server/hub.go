@@ -10,7 +10,6 @@
 package main
 
 import (
-	"container/list"
 	"log"
 	"strings"
 	"sync"
@@ -157,7 +156,6 @@ func (h *Hub) run() {
 					reg:       make(chan *sessionJoin, 32),
 					unreg:     make(chan *sessionLeave, 32),
 					meta:      make(chan *metaReq, 32),
-					defrNotif: new(list.List),
 					perUser:   make(map[types.Uid]perUserData),
 					exit:      make(chan *shutDown, 1),
 				}
@@ -168,7 +166,7 @@ func (h *Hub) run() {
 					} else {
 						// It's a master topic. Make a channel for handling
 						// direct messages from the proxy.
-						t.master = make(chan *topicMasterRequest, 8)
+						t.master = make(chan *ClusterSessUpdate, 8)
 					}
 				}
 				// Topic is created in suspended state because it's not yet configured.

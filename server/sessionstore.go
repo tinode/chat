@@ -74,6 +74,9 @@ func (ss *SessionStore) NewSession(conn interface{}, sid string) (*Session, int)
 		s.stop = make(chan interface{}, 1)                 // Buffered by 1 just to make it non-blocking
 		s.detach = make(chan string, 64)                   // buffered
 
+		s.bkgTimer = time.NewTimer(time.Hour)
+		s.bkgTimer.Stop()
+
 		if s.proto == MULTIPLEX {
 			s.remoteSessions = make(map[string]*remoteSession)
 		}

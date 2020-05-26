@@ -9,7 +9,6 @@
 package main
 
 import (
-	"container/list"
 	"errors"
 	"log"
 	"sort"
@@ -22,10 +21,6 @@ import (
 	"github.com/tinode/chat/server/store/types"
 )
 
-// Time between subscription of a background session and when the notifications are sent.
-// If session unsubscribes in this time frame notifications are not sent at all.
-const deferredNotificationsTimeout = time.Second * 5
-
 // Topic is an isolated communication channel
 type Topic struct {
 	// Еxpanded/unique name of the topic.
@@ -37,7 +32,6 @@ type Topic struct {
 	// Topic category
 	cat types.TopicCat
 
-	// TODO(gene): currently unused
 	// If isProxy == true, the actual topic is hosted by another cluster member.
 	// The topic should:
 	// 1. forward all messages to master
@@ -93,9 +87,6 @@ type Topic struct {
 	// Sessions attached to this topic. The UID kept here may not match Session.uid if session is
 	// subscribed on behalf of another user.
 	sessions map[*Session]perSessionData
-	// Queue of delayed presence updates from successful service (background) subscriptions.
-	// Contains pointers to deferredNotification struct.
-	defrNotif *list.List
 
 	// Inbound {data} and {pres} messages from sessions or other topics, already converted to SCM. Buffered = 256
 	broadcast chan *ServerComMessage
@@ -105,14 +96,14 @@ type Topic struct {
 	reg chan *sessionJoin
 	// Unsubscribe requests from sessions, buffered = 32
 	unreg chan *sessionLeave
-	// Track the most active sessions to report User Agent changes. Buffered = 32
-	uaChange chan string
+	// Session updates: background sessions coming online, User Agent changes. Buffered = 32
+	supd chan *sessionUpdate
 	// Channel to terminate topic  -- either the topic is deleted or system is being shut down. Buffered = 1.
 	exit chan *shutDown
 	// Channel to receive topic master responses (used only by proxy topics).
 	proxy chan *ClusterResp
 	// Channel to receive topic proxy service requests, e.g. sending deferred notifications.
-	master chan *topicMasterRequest
+	master chan *ClusterSessUpdate
 
 	// Flag which tells topic lifecycle status: new, ready, paused, marked for deletion.
 	status int32
@@ -156,9 +147,8 @@ type perSubsData struct {
 // Data related to a subscription of a session to a topic.
 type perSessionData struct {
 	// ID of the subscribed user (asUid); not necessarily the session owner.
+	// Could be zero for multiplexed sesssions in cluster.
 	uid types.Uid
-	// Reference to a list bucket with deferred notification or nil if no notifications are deferred.
-	ref *list.Element
 }
 
 // Reasons why topic is being shut down.
@@ -181,13 +171,11 @@ type shutDown struct {
 	reason int
 }
 
-// Deferred online notification description
-type deferredNotification struct {
-	sid       string
-	userAgent string
-	uid       types.Uid
-	timestamp time.Time
+// Session update: user agent change or background session becoming normal.
+// If sess is nil then user agent change, otherwise bg to fg update.
+type sessionUpdate struct {
 	sess      *Session
+	userAgent string
 }
 
 var nilPresParams = &presParams{}
@@ -348,7 +336,7 @@ func (t *Topic) runLocal(hub *Hub) {
 				var pud perUserData
 				if !proxyTerminating {
 					pud = t.perUser[uid]
-					if pssd == nil || pssd.ref == nil {
+					if pssd == nil || !leave.sess.background {
 						pud.online--
 					}
 				} else if !leave.sess.isMultiplex() {
@@ -364,7 +352,7 @@ func (t *Topic) runLocal(hub *Hub) {
 					} else {
 						// Change UA to the most recent live session and announce it. Don't block.
 						select {
-						case t.uaChange <- mrs.userAgent:
+						case t.supd <- &sessionUpdate{userAgent: mrs.userAgent}:
 						default:
 						}
 					}
@@ -691,25 +679,31 @@ func (t *Topic) runLocal(hub *Hub) {
 					log.Printf("topic[%s] meta.Del failed: %v", t.name, err)
 				}
 			}
-		case ua := <-t.uaChange:
-			// Process an update to user agent from one of the sessions
-			currentUA = ua
-			uaTimer.Reset(uaTimerDelay)
-
-		case msg := <-t.master:
-			// Direct communication from proxy to master.
-			switch {
-			case msg.deferredNotificationsRequest != nil:
-				// Deferred notifications request.
-				t.sendDeferredNotifications(msg.deferredNotificationsRequest)
-			case msg.proxySessionCleanUp != nil:
-				t.fixUpUserCounts(msg.proxySessionCleanUp)
-			default:
-				log.Panicf("topic[%s] unrecognized master topic service request: %+v", msg)
+		case upd := <-t.supd:
+			if upd.sess != nil {
+				// 'me' & 'grp' only. Background session timed out and came online.
+				t.sessToForeground(upd.sess, types.ZeroUid)
+			} else if currentUA != upd.userAgent {
+				if t.cat != types.TopicCatMe {
+					log.Panicln("invalid topic category in UA update", t.name)
+				}
+				// 'me' only. Process an update to user agent from one of the sessions.
+				currentUA = upd.userAgent
+				uaTimer.Reset(uaTimerDelay)
 			}
 
-		case <-defrNotifTimer.C:
-			t.onDeferredNotificationTimer()
+		case <-t.master:
+			log.Println("msg := <-t.master is unused")
+			/*
+				FIXME: this should be handled through session update.
+
+				// Direct communication from proxy to master.
+				if msg.proxySessionCleanUp != nil {
+					t.fixUpUserCounts(msg.proxySessionCleanUp)
+				} else {
+					log.Panicf("topic[%s] unrecognized master topic service request: %+v", msg)
+				}
+			*/
 
 		case <-uaTimer.C:
 			// Publish user agent changes after a delay
@@ -789,19 +783,8 @@ func (t *Topic) handleSubscription(h *Hub, join *sessionJoin) error {
 	// Some notifications are always sent immediately.
 	t.sendImmediateSubNotifications(asUid, join)
 
-	pssd, ok := t.sessions[join.sess]
-	if msgsub.Background && ok {
-		// Notifications are delayed.
-		if !join.sess.isProxy() /* FIXME: refactor to skip in case of multiplexing session. */ {
-			pssd.ref = t.defrNotif.PushFront(&deferredNotification{
-				sess:      join.sess,
-				timestamp: join.pkt.timestamp,
-				uid:       types.ParseUserId(join.pkt.AsUser),
-			})
-		}
-		t.sessions[join.sess] = pssd
-	} else {
-		// Remaining notifications are also sent immediately.
+	if !join.sess.background {
+		// Remaining notifications are also sent immediately for foreground sessions.
 		t.sendSubNotifications(asUid, join.sess.sid, join.sess.userAgent)
 	}
 
@@ -850,55 +833,23 @@ func (t *Topic) handleSubscription(h *Hub, join *sessionJoin) error {
 	return nil
 }
 
-// onDeferredNotificationTimer removes all due deferred notifications sessions
-// from the notifications queue and for each of these sessions:
-// * For regular topics, sends all due notifications.
-// * For proxy topics, routes the deferred notification requests to the master topic.
-func (t *Topic) onDeferredNotificationTimer() {
-	// Handle deferred presence notifications from a successful service (background) subscription.
-	if t.isInactive() {
-		return
-	}
-
-	// Process events older than this timestamp.
-	expiration := time.Now().Add(-deferredNotificationsTimeout)
-	var notifs []*deferredNotification
-	// Iterate through the list until all sufficiently old events are processed.
-	for elem := t.defrNotif.Back(); elem != nil; elem = t.defrNotif.Back() {
-		dn := elem.Value.(*deferredNotification)
-		if expiration.Before(dn.timestamp) {
-			// All done. Remaining events are newer.
-			break
-		}
-		t.defrNotif.Remove(elem)
-		dn.sid = dn.sess.sid
-		dn.userAgent = dn.sess.userAgent
-		if pssd, ok := t.sessions[dn.sess]; ok && pssd.ref != nil {
-			pssd.ref = nil
-			t.sessions[dn.sess] = pssd
-			notifs = append(notifs, dn)
-		}
-	}
-	if len(notifs) == 0 {
-		return
-	}
-	if t.isProxy {
-		t.routeDeferredNotificationsToMaster(notifs)
-	} else {
-		t.sendDeferredNotifications(notifs)
-	}
-}
-
-// sendDeferredNotifications updates perUser online status accounting and fires due
-// deferred notifications for the provided sessions.
-func (t *Topic) sendDeferredNotifications(notifs []*deferredNotification) {
-	for _, dn := range notifs {
-		if !t.isProxy {
-			pud := t.perUser[dn.uid]
+// sessToForeground updates perUser online status accounting and fires due
+// deferred notifications for the provided session.
+// If asUid is specified, the subscribed UID is checked, otherwise user ID is picked from subscription.
+func (t *Topic) sessToForeground(sess *Session, asUid types.Uid) {
+	if !t.isProxy {
+		if pssd, ok := t.sessions[sess]; ok && (pssd.uid == asUid || asUid.IsZero()) {
+			pud := t.perUser[pssd.uid]
 			pud.online++
-			t.perUser[dn.uid] = pud
+			t.perUser[pssd.uid] = pud
+			asUid = pssd.uid
+		} else {
+			log.Println("topic: subscription not found or uid mismatch", t.name, asUid, sess.sid)
+			asUid = types.ZeroUid
 		}
-		t.sendSubNotifications(dn.uid, dn.sid, dn.userAgent)
+	}
+	if !asUid.IsZero() {
+		t.sendSubNotifications(asUid, sess.sid, sess.userAgent)
 	}
 }
 
@@ -991,10 +942,10 @@ func (t *Topic) sendSubNotifications(asUid types.Uid, sid, userAgent string) {
 }
 
 // subCommonReply generates a response to a subscription request
-func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin) error {
+func (t *Topic) subCommonReply(h *Hub, join *sessionJoin) error {
 	// The topic is already initialized by the Hub
 
-	msgsub := sreg.pkt.Sub
+	msgsub := join.pkt.Sub
 
 	// For newly created topics report topic creation time.
 	var now time.Time
@@ -1004,8 +955,8 @@ func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin) error {
 		now = types.TimeNow()
 	}
 
-	asUid := types.ParseUserId(sreg.pkt.AsUser)
-	asLvl := auth.Level(sreg.pkt.AuthLvl)
+	asUid := types.ParseUserId(join.pkt.AsUser)
+	asLvl := auth.Level(join.pkt.AuthLvl)
 	toriginal := t.original(asUid)
 
 	if !msgsub.Newsub && (t.cat == types.TopicCatP2P || t.cat == types.TopicCatGrp || t.cat == types.TopicCatSys) {
@@ -1019,7 +970,7 @@ func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin) error {
 	if msgsub.Set != nil {
 		if msgsub.Set.Sub != nil {
 			if msgsub.Set.Sub.User != "" {
-				sreg.sess.queueOut(ErrMalformed(sreg.pkt.Id, toriginal, now))
+				join.sess.queueOut(ErrMalformed(join.pkt.Id, toriginal, now))
 				return errors.New("user id must not be specified")
 			}
 
@@ -1034,8 +985,7 @@ func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin) error {
 	var err error
 	var changed bool
 	// Create new subscription or modify an existing one.
-	if changed, err = t.thisUserSub(
-		h, sreg.sess, asUid, asLvl, sreg.pkt.Id, mode, private, msgsub.Background); err != nil {
+	if changed, err = t.thisUserSub(h, join.sess, asUid, asLvl, join.pkt.Id, mode, private); err != nil {
 		return err
 	}
 
@@ -1052,8 +1002,8 @@ func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin) error {
 
 	// When a group topic is created, it's given a temporary name by the client.
 	// Then this name changes. Report back the original name here.
-	if msgsub.Created && sreg.pkt.Original != toriginal {
-		params["tmpname"] = sreg.pkt.Original
+	if msgsub.Created && join.pkt.Original != toriginal {
+		params["tmpname"] = join.pkt.Original
 	}
 
 	if len(params) == 0 {
@@ -1061,7 +1011,7 @@ func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin) error {
 		params = nil
 	}
 
-	sreg.sess.queueOut(NoErrParams(sreg.pkt.Id, toriginal, now, params))
+	join.sess.queueOut(NoErrParams(join.pkt.Id, toriginal, now, params))
 
 	return nil
 }
@@ -1087,7 +1037,7 @@ func (t *Topic) subCommonReply(h *Hub, sreg *sessionJoin) error {
 // D. User is already subscribed, changing modeWant
 // E. User is accepting ownership transfer (requesting ownership transfer is not permitted)
 func (t *Topic) thisUserSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Level,
-	pktID, want string, private interface{}, background bool) (bool, error) {
+	pktID, want string, private interface{}) (bool, error) {
 
 	now := types.TimeNow()
 	toriginal := t.original(asUid)
@@ -1337,7 +1287,7 @@ func (t *Topic) thisUserSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.L
 			broadcast: t.broadcast,
 			done:      t.unreg,
 			meta:      t.meta,
-			uaChange:  t.uaChange})
+			supd:      t.supd})
 		if sess.isMultiplex() {
 			t.addSession(sess, types.ZeroUid)
 		} else {
@@ -1346,7 +1296,7 @@ func (t *Topic) thisUserSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.L
 	}
 
 	// The user is online in the topic. Increment the counter if notifications are not deferred.
-	if !background {
+	if !sess.background {
 		userData.online++
 		t.perUser[asUid] = userData
 	}
@@ -2059,7 +2009,7 @@ func (t *Topic) replySetSub(h *Hub, sess *Session, pkt *ClientComMessage) error 
 	var changed bool
 	if target == asUid {
 		// Request new subscription or modify own subscription
-		changed, err = t.thisUserSub(h, sess, asUid, asLvl, pkt.Id, set.Sub.Mode, nil, false)
+		changed, err = t.thisUserSub(h, sess, asUid, asLvl, pkt.Id, set.Sub.Mode, nil)
 	} else {
 		// Request to approve/change someone's subscription
 		changed, err = t.anotherUserSub(h, sess, asUid, target, set)
@@ -3012,10 +2962,6 @@ func (t *Topic) addSession(s *Session, asUid types.Uid) bool {
 // It's called for the multiplexing session only when it's actually removed.
 func (t *Topic) remSession(s *Session, asUid types.Uid) *perSessionData {
 	if pssd, ok := t.sessions[s]; ok && (pssd.uid == asUid || asUid.IsZero()) {
-		// Check for deferred presence notification and cancel it if found.
-		if pssd.ref != nil {
-			t.defrNotif.Remove(pssd.ref)
-		}
 		delete(t.sessions, s)
 		return &pssd
 	}
@@ -3024,9 +2970,9 @@ func (t *Topic) remSession(s *Session, asUid types.Uid) *perSessionData {
 
 func (t *Topic) isOnline() bool {
 	// Some sessions may be background sessions. They should not be counted.
-	for _, pssd := range t.sessions {
+	for sess := range t.sessions {
 		// At least one non-background session.
-		if pssd.ref == nil {
+		if !sess.background {
 			return true
 		}
 	}

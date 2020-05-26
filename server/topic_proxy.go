@@ -16,8 +16,6 @@ import (
 
 // Direct communication from proxy topic to master and service requests.
 type topicMasterRequest struct {
-	// Deferred notifications request (list of sessions to notify).
-	deferredNotificationsRequest []*deferredNotification
 	// List of proxied user IDs and the counts of proxied origin sessions for each uid.
 	// Required for accounting.
 	proxySessionCleanUp map[types.Uid]int
@@ -26,9 +24,6 @@ type topicMasterRequest struct {
 func (t *Topic) runProxy(hub *Hub) {
 	killTimer := time.NewTimer(time.Hour)
 	killTimer.Stop()
-
-	// Ticker for deferred presence notifications.
-	defrNotifTimer := time.NewTicker(time.Millisecond * 500)
 
 	for {
 		select {
@@ -84,13 +79,25 @@ func (t *Topic) runProxy(hub *Hub) {
 				log.Println("proxy topic: route meta request from proxy to master failed:", err)
 			}
 
-		case ua := <-t.uaChange:
-			if t.cat == types.TopicCatMe {
-				// Process an update to user agent from one of the sessions.
-				if err := globals.cluster.routeToTopicMaster(ProxyReqUAChange, nil, t.name,
-					&Session{userAgent: ua}); err != nil {
-					log.Println("proxy topic: route ua change request from proxy to master failed:", err)
+		case upd := <-t.supd:
+			// Either an update to 'me' user agent from one of the sessions or
+			// background session comes to foreground.
+			req := ProxyReqMeUserAgent
+			tmpSess := &Session{userAgent: upd.userAgent}
+			if upd.sess != nil {
+				// Subscribed user may not match session user. Find out who is subscribed
+				pssd, ok := t.sessions[upd.sess]
+				if !ok {
+					log.Println("proxy topic: sess update request from detached session")
+					continue
 				}
+				req = ProxyReqBgSession
+				tmpSess.uid = pssd.uid
+				tmpSess.sid = upd.sess.sid
+				tmpSess.userAgent = upd.sess.userAgent
+			}
+			if err := globals.cluster.routeToTopicMaster(req, nil, t.name, tmpSess); err != nil {
+				log.Println("proxy topic: route sess update request from proxy to master failed:", err)
 			}
 
 		case msg := <-t.proxy:
@@ -116,14 +123,11 @@ func (t *Topic) runProxy(hub *Hub) {
 		case <-killTimer.C:
 			// Topic timeout
 			hub.unreg <- &topicUnreg{rcptTo: t.name}
-
-		case <-defrNotifTimer.C:
-			t.onDeferredNotificationTimer()
 		}
 	}
 }
 
-// Master topic response to a request from the proxy session.
+// Proxy topic handler of a master topic response to earlier request.
 func (t *Topic) proxyMasterResponse(msg *ClusterResp, killTimer *time.Timer) {
 	// Kills topic after a period of inactivity.
 	keepAlive := idleProxyTopicTimeout
@@ -149,23 +153,14 @@ func (t *Topic) proxyMasterResponse(msg *ClusterResp, killTimer *time.Timer) {
 		switch msg.OrigReqType {
 		case ProxyReqJoin:
 			if sess != nil && msg.SrvMsg != nil && msg.SrvMsg.Ctrl != nil {
+				// Successful subscriptions.
 				if msg.SrvMsg.Ctrl.Code < 300 {
 					if t.addSession(sess, msg.SrvMsg.uid) {
 						sess.addSub(t.name, &Subscription{
 							broadcast: t.broadcast,
 							done:      t.unreg,
 							meta:      t.meta,
-							uaChange:  t.uaChange})
-						if msg.IsBackground {
-							// It's a background session. Add deferred notification.
-							pssd, _ := t.sessions[sess]
-							pssd.ref = t.defrNotif.PushFront(&deferredNotification{
-								sess:      sess,
-								uid:       msg.SrvMsg.uid,
-								timestamp: msg.SrvMsg.Timestamp,
-							})
-							t.sessions[sess] = pssd
-						}
+							supd:      t.supd})
 					}
 					killTimer.Stop()
 				} else {
@@ -192,8 +187,9 @@ func (t *Topic) proxyMasterResponse(msg *ClusterResp, killTimer *time.Timer) {
 					}
 				}
 			}
+
 		default:
-			log.Printf("proxy topic [%s] received response referencing unknown request type %d",
+			log.Printf("proxy topic [%s] received response referencing unexpected request type %d",
 				t.name, msg.OrigReqType)
 		}
 		if !sess.queueOut(msg.SrvMsg) {
@@ -265,21 +261,4 @@ func (t *Topic) updateAcsFromPresMsg(pres *MsgServerPres) {
 	}
 	// Update existing or add new.
 	t.perUser[uid] = pud
-}
-
-// routeDeferredNotificationsToMaster forwards deferred notification requests to the master topic.
-func (t *Topic) routeDeferredNotificationsToMaster(notifs []*deferredNotification) {
-	var sendReqs []*ProxyDeferredSession
-	for _, dn := range notifs {
-		s := &ProxyDeferredSession{
-			AsUser:    dn.uid.UserId(),
-			Sid:       dn.sid,
-			UserAgent: dn.userAgent,
-		}
-		sendReqs = append(sendReqs, s)
-	}
-
-	if err := globals.cluster.routeToTopicMaster(ProxyReqBkgNotif, sendReqs, t.name, nil); err != nil {
-		log.Println("proxy topic: deferred notifications request from proxy to master failed:", err)
-	}
 }

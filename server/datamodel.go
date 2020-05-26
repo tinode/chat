@@ -109,6 +109,8 @@ type MsgClientHi struct {
 	Lang string `json:"lang,omitempty"`
 	// Platform code: ios, android, web.
 	Platform string `json:"platf,omitempty"`
+	// Session is initially in non-iteractive, i.e. issued by a service. Presence notifications are delayed.
+	Background bool `json:"bkg,omitempty"`
 }
 
 // MsgClientAcc is an {acc} message for creating or updating a user account.
@@ -154,11 +156,6 @@ type MsgClientLogin struct {
 type MsgClientSub struct {
 	Id    string `json:"id,omitempty"`
 	Topic string `json:"topic"`
-
-	// The subscription request is non-interactive, i.e. issued by a service. This affects presence notifications.
-	// TODO: Move to {hi}. Let session declare itself a background session for all subscriptions.
-	// It would simplify things a lot.
-	Background bool `json:"bkg,omitempty"`
 
 	// Mirrors {set}.
 	Set *MsgSetQuery `json:"set,omitempty"`

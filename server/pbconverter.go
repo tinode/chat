@@ -216,12 +216,13 @@ func pbCliSerialize(msg *ClientComMessage) *pbx.ClientMsg {
 	switch {
 	case msg.Hi != nil:
 		pkt.Message = &pbx.ClientMsg_Hi{Hi: &pbx.ClientHi{
-			Id:        msg.Hi.Id,
-			UserAgent: msg.Hi.UserAgent,
-			Ver:       msg.Hi.Version,
-			DeviceId:  msg.Hi.DeviceID,
-			Platform:  msg.Hi.Platform,
-			Lang:      msg.Hi.Lang}}
+			Id:         msg.Hi.Id,
+			UserAgent:  msg.Hi.UserAgent,
+			Ver:        msg.Hi.Version,
+			DeviceId:   msg.Hi.DeviceID,
+			Platform:   msg.Hi.Platform,
+			Lang:       msg.Hi.Lang,
+			Background: msg.Hi.Background}}
 	case msg.Acc != nil:
 		pkt.Message = &pbx.ClientMsg_Acc{Acc: &pbx.ClientAcc{
 			Id:     msg.Acc.Id,
@@ -242,11 +243,10 @@ func pbCliSerialize(msg *ClientComMessage) *pbx.ClientMsg {
 			Cred:   pbClientCredsSerialize(msg.Login.Cred)}}
 	case msg.Sub != nil:
 		pkt.Message = &pbx.ClientMsg_Sub{Sub: &pbx.ClientSub{
-			Id:         msg.Sub.Id,
-			Topic:      msg.Sub.Topic,
-			Background: msg.Sub.Background,
-			SetQuery:   pbSetQuerySerialize(msg.Sub.Set),
-			GetQuery:   pbGetQuerySerialize(msg.Sub.Get)}}
+			Id:       msg.Sub.Id,
+			Topic:    msg.Sub.Topic,
+			SetQuery: pbSetQuerySerialize(msg.Sub.Set),
+			GetQuery: pbGetQuerySerialize(msg.Sub.Get)}}
 	case msg.Leave != nil:
 		pkt.Message = &pbx.ClientMsg_Leave{Leave: &pbx.ClientLeave{
 			Id:    msg.Leave.Id,
@@ -313,12 +313,13 @@ func pbCliDeserialize(pkt *pbx.ClientMsg) *ClientComMessage {
 	var msg ClientComMessage
 	if hi := pkt.GetHi(); hi != nil {
 		msg.Hi = &MsgClientHi{
-			Id:        hi.GetId(),
-			UserAgent: hi.GetUserAgent(),
-			Version:   hi.GetVer(),
-			DeviceID:  hi.GetDeviceId(),
-			Platform:  hi.GetPlatform(),
-			Lang:      hi.GetLang(),
+			Id:         hi.GetId(),
+			UserAgent:  hi.GetUserAgent(),
+			Version:    hi.GetVer(),
+			DeviceID:   hi.GetDeviceId(),
+			Platform:   hi.GetPlatform(),
+			Lang:       hi.GetLang(),
+			Background: hi.GetBackground(),
 		}
 	} else if acc := pkt.GetAcc(); acc != nil {
 		msg.Acc = &MsgClientAcc{
@@ -341,11 +342,10 @@ func pbCliDeserialize(pkt *pbx.ClientMsg) *ClientComMessage {
 		}
 	} else if sub := pkt.GetSub(); sub != nil {
 		msg.Sub = &MsgClientSub{
-			Id:         sub.GetId(),
-			Topic:      sub.GetTopic(),
-			Background: sub.GetBackground(),
-			Get:        pbGetQueryDeserialize(sub.GetGetQuery()),
-			Set:        pbSetQueryDeserialize(sub.GetSetQuery()),
+			Id:    sub.GetId(),
+			Topic: sub.GetTopic(),
+			Get:   pbGetQueryDeserialize(sub.GetGetQuery()),
+			Set:   pbSetQueryDeserialize(sub.GetSetQuery()),
 		}
 	} else if leave := pkt.GetLeave(); leave != nil {
 		msg.Leave = &MsgClientLeave{

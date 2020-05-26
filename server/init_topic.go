@@ -152,8 +152,8 @@ func initTopicMe(t *Topic, sreg *sessionJoin) error {
 
 	// Initiate User Agent with the UA of the creating session to report it later
 	t.userAgent = sreg.sess.userAgent
-	// Initialize channel for receiving user agent updates
-	t.uaChange = make(chan string, 32)
+	// Initialize channel for receiving user agent and session online updates.
+	t.supd = make(chan *sessionUpdate, 32)
 	// Allocate storage for contacts.
 	t.perSubs = make(map[string]perSubsData)
 
@@ -603,6 +603,9 @@ func initTopicGrp(t *Topic, sreg *sessionJoin) error {
 	}
 	t.lastID = stopic.SeqId
 	t.delID = stopic.DelId
+
+	// Initialize channel for receiving session online updates.
+	t.supd = make(chan *sessionUpdate, 32)
 
 	return nil
 }

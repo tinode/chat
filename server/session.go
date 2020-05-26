@@ -48,6 +48,10 @@ const sendTimeout = time.Millisecond * 7
 // Maximum number of queued messages before session is considered stale and dropped.
 const sendQueueLimit = 128
 
+// Time given to a background session to terminate to avoid tiggering presence notifications.
+// If session terminates (or unsubscribes from topic) in this time frame notifications are not sent at all.
+const deferredNotificationsTimeout = time.Second * 5
+
 var minSupportedVersionValue = parseVersion(minSupportedVersion)
 
 // Session represents a single WS connection or a long polling session. A user may have multiple
@@ -99,6 +103,11 @@ type Session struct {
 	// Time when the session received any packer from client
 	lastAction time.Time
 
+	// Background session: subscription presence notifications and online status are delayed.
+	background bool
+	// Timer which triggers after some seconds to mark background session as foreground.
+	bkgTimer *time.Timer
+
 	// Outbound mesages, buffered.
 	// The content must be serialized in format suitable for the session.
 	send chan interface{}
@@ -117,7 +126,7 @@ type Session struct {
 	// subs concurrently.
 	subsLock sync.RWMutex
 
-	// Map of remote (origin) sessions to user ids these sessions represent.
+	// FIXME: get rid of it. Map of remote (origin) sessions to user ids these sessions represent.
 	remoteSessions map[string]*remoteSession
 	// Synchronizes access to remoteSessions.
 	remoteSessionsLock sync.RWMutex
@@ -125,12 +134,10 @@ type Session struct {
 	// Needed for long polling and grpc.
 	lock sync.Mutex
 
-	// Fields used only in cluster mode by topic master node.
+	// Field used only in cluster mode by topic master node.
 
 	// Type of proxy to master request being handled.
 	proxyReq ProxyReqType
-	// Background subscription
-	background bool
 }
 
 // Subscription is a mapper of sessions to topics.
@@ -145,8 +152,8 @@ type Subscription struct {
 	// Channel to send {meta} requests, copy of Topic.meta
 	meta chan<- *metaReq
 
-	// Channel to ping topic with session's user agent
-	uaChange chan<- string
+	// Channel to ping topic with session's updates
+	supd chan<- *sessionUpdate
 }
 
 func (s *Session) addSub(topic string, sub *Subscription) {
@@ -247,10 +254,14 @@ func (s *Session) queueOutBytes(data []byte) bool {
 	return true
 }
 
+// cleanUp is called when the session is terminated to perform resource cleanup.
 func (s *Session) cleanUp(expired bool) {
 	if !expired {
 		globals.sessionStore.Delete(s)
 	}
+
+	s.background = false
+	s.bkgTimer.Stop()
 	s.unsubAll()
 }
 
@@ -405,11 +416,11 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 
 	handler(msg)
 
-	// Notify 'me' topic that this session is currently activeю
+	// Notify 'me' topic that this session is currently active.
 	if uaRefresh && msg.AsUser != "" && s.userAgent != "" {
 		if sub := s.getSub(msg.AsUser); sub != nil {
 			// The chan is buffered. If the buffer is exhaused, the session will wait for 'me' to become available
-			sub.uaChange <- s.userAgent
+			sub.supd <- &sessionUpdate{userAgent: s.userAgent}
 		}
 	}
 }
@@ -560,6 +571,10 @@ func (s *Session) hello(msg *ClientComMessage) {
 		s.platf = msg.Hi.Platform
 		if s.platf == "" {
 			s.platf = platformFromUA(msg.Hi.UserAgent)
+		}
+		// This is a background session. Start a timer.
+		if msg.Hi.Background {
+			s.bkgTimer.Reset(deferredNotificationsTimeout)
 		}
 	} else if msg.Hi.Version == "" || parseVersion(msg.Hi.Version) == s.ver {
 		// Save changed device ID+Lang or delete earlier specified device ID.
@@ -1036,4 +1051,17 @@ func (s *Session) serialize(msg *ServerComMessage) interface{} {
 
 	out, _ := json.Marshal(msg)
 	return out
+}
+
+// onBackgroundTimer markes background session as foreground and informs topics it's subscribed to.
+func (s *Session) onBackgroundTimer() {
+	s.subsLock.RLock()
+	defer s.subsLock.RUnlock()
+
+	update := &sessionUpdate{sess: s}
+	for _, sub := range s.subs {
+		if sub.supd != nil {
+			sub.supd <- update
+		}
+	}
 }

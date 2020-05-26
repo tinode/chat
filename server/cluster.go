@@ -34,8 +34,8 @@ const (
 	ProxyReqLeave
 	ProxyReqMeta
 	ProxyReqBroadcast
-	ProxyReqUAChange
-	ProxyReqBkgNotif
+	ProxyReqBgSession
+	ProxyReqMeUserAgent
 )
 
 type clusterNodeConfig struct {
@@ -104,6 +104,20 @@ type ClusterSess struct {
 
 	// Session ID
 	Sid string
+
+	// Background session
+	Background bool
+}
+
+// ClusterSessionUpdate represents a request to update a session.
+// User Agnet change or background session comes to foreground.
+type ClusterSessUpdate struct {
+	// User this session represents.
+	Uid types.Uid
+	// Session id.
+	Sid string
+	// Session user agent.
+	UserAgent string
 }
 
 // ClusterReq is either a Proxy to Master or Topic Proxy to Topic Master or intra-cluster routing request message.
@@ -127,8 +141,6 @@ type ClusterReq struct {
 	CliMsg *ClientComMessage
 	// Message to be routed. Set for intra-cluster route requests.
 	SrvMsg *ServerComMessage
-	// Deferred notifications.
-	DefrNotifications []*ProxyDeferredSession
 
 	// Expanded (routable) topic name
 	RcptTo string
@@ -172,19 +184,6 @@ type ClusterResp struct {
 
 	// Original request type.
 	OrigReqType ProxyReqType
-	// It is a response to a background subscription request.
-	IsBackground bool
-}
-
-// ProxyDeferredSession represents a background session
-// for which we want to send deferred notifications.
-type ProxyDeferredSession struct {
-	// User this session represents.
-	AsUser string
-	// Session id.
-	Sid string
-	// Session user agent.
-	UserAgent string
 }
 
 // Handle outbound node communication: read messages from the channel, forward to remote nodes.
@@ -407,13 +406,13 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 			remoteAddr: msg.Sess.RemoteAddr,
 			lang:       msg.Sess.Lang,
 			proxyReq:   msg.ReqType,
+			background: msg.Sess.Background,
 		}
 	}
 
 	switch msg.ReqType {
 	case ProxyReqJoin:
 		log.Println("cluster: master subscription request", msid, sess.sid)
-		sess.background = msg.CliMsg.Sub.Background
 		join := &sessionJoin{
 			pkt:  msg.CliMsg,
 			sess: sess,
@@ -450,24 +449,20 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 		msg.SrvMsg.sess = sess
 		globals.hub.route <- msg.SrvMsg
 
-	case ProxyReqUAChange:
+	case ProxyReqBgSession, ProxyReqMeUserAgent:
 		if t := globals.hub.topicGet(msg.RcptTo); t != nil {
-			t.uaChange <- sess.userAgent
-		} else {
-			log.Printf("cluster: UA change request for unknown topic %s", msg.RcptTo)
-		}
-
-	case ProxyReqBkgNotif:
-		if t := globals.hub.topicGet(msg.RcptTo); t != nil {
-			notifs := make([]*deferredNotification, len(msg.DefrNotifications))
-			for i, req := range msg.DefrNotifications {
-				notifs[i] = &deferredNotification{uid: types.ParseUserId(req.AsUser), sid: req.Sid, userAgent: req.UserAgent}
+			if t.supd == nil {
+				log.Panicln("cluster: invalid topic category in session update", t.name, msg.ReqType)
 			}
-
-			msess.markRemoteSessionsForeground(notifs)
-			t.master <- &topicMasterRequest{deferredNotificationsRequest: notifs}
+			su := &sessionUpdate{}
+			if msg.ReqType == ProxyReqBgSession {
+				su.sess = sess
+			} else {
+				su.userAgent = sess.userAgent
+			}
+			t.supd <- su
 		} else {
-			log.Printf("cluster: deferred notifications request for unknown topic %s", msg.RcptTo)
+			log.Println("cluster: sesison update for unknown topic", msg.RcptTo, msg.ReqType)
 		}
 
 	default:
@@ -521,16 +516,15 @@ func (c *Cluster) Route(msg *ClusterRoute, rejected *bool) error {
 
 // markRemoteSessionsForeground marks currently tracked remote sessions
 // as non-background to ensure proper subscribed user accounting in the master topic.
-func (s *Session) markRemoteSessionsForeground(notifs []*deferredNotification) {
+func (s *Session) markRemoteSessionForeground(uid types.Uid, sid, userAgent string) {
 	s.remoteSessionsLock.Lock()
 	defer s.remoteSessionsLock.Unlock()
-	for _, dn := range notifs {
-		if rs, ok := s.remoteSessions[dn.sid]; ok {
-			rs.isBackground = false
-			s.remoteSessions[dn.sid] = rs
-		} else {
-			log.Printf("cluster: deferred notifications request for unknown session %s", dn.sid)
-		}
+
+	if rs, ok := s.remoteSessions[sid]; ok {
+		rs.isBackground = false
+		s.remoteSessions[sid] = rs
+	} else {
+		log.Printf("cluster: deferred notifications request for unknown session %s", sid)
 	}
 }
 
@@ -691,8 +685,6 @@ func (c *Cluster) makeClusterReq(reqType ProxyReqType, payload interface{}, topi
 		req.CliMsg = pl
 	case *ServerComMessage:
 		req.SrvMsg = pl
-	case []*ProxyDeferredSession:
-		req.DefrNotifications = pl
 	case nil:
 	// do nothing
 	default:
@@ -709,7 +701,8 @@ func (c *Cluster) makeClusterReq(reqType ProxyReqType, payload interface{}, topi
 			Lang:       sess.lang,
 			DeviceID:   sess.deviceID,
 			Platform:   sess.platf,
-			Sid:        sess.sid}
+			Sid:        sess.sid,
+			Background: sess.background}
 	}
 	return req
 }
@@ -1003,14 +996,16 @@ func (sess *Session) cleanUpRemoteSessions(topicName string) {
 	}
 	sess.remoteSessionsLock.Unlock()
 	if t := globals.hub.topicGet(topicName); t != nil {
-		t.master <- &topicMasterRequest{proxySessionCleanUp: uidCounts}
+		// FIXME: this shoud be removed
+		// t.master <- &topicMasterRequest{proxySessionCleanUp: uidCounts}
+		log.Println("cluster: cleanUpRemoteSessions not implemented")
 	} else {
 		log.Printf("cluster: remote subscription clean up unknown topic %s", topicName)
 	}
 }
 
-// clusterWriteLoop implements write loop for proxy session at a node which hosts master topic.
-// The session is a multiplexing session, i.e. it handles requests for multile sessions at origin.
+// clusterWriteLoop implements write loop for multiplexing (proxy) session at a node which hosts master topic.
+// The session is a multiplexing session, i.e. it handles requests for multiple sessions at origin.
 func (sess *Session) clusterWriteLoop(forTopic string) {
 	defer func() {
 		sess.closeRPC()
@@ -1034,12 +1029,9 @@ func (sess *Session) clusterWriteLoop(forTopic string) {
 				response.OrigSid = srvMsg.sess.sid
 				switch srvMsg.sess.proxyReq {
 				case ProxyReqJoin:
-					response.IsBackground = sess.background
-					sess.addRemoteSession(srvMsg.sess.sid, &remoteSession{
-						uid:          srvMsg.uid,
-						isBackground: response.IsBackground})
+					//sess.addRemoteSession(srvMsg.sess.sid, &remoteSession{uid: srvMsg.uid,isBackground: response.IsBackground})
 				case ProxyReqLeave:
-					sess.delRemoteSession(srvMsg.sess.sid)
+					//sess.delRemoteSession(srvMsg.sess.sid)
 				case ProxyReqBroadcast, ProxyReqMeta:
 				default:
 					panic("cluster: unknown request type in clusterWriteLoop")
