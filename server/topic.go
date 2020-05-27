@@ -147,7 +147,7 @@ type perSubsData struct {
 // Data related to a subscription of a session to a topic.
 type perSessionData struct {
 	// ID of the subscribed user (asUid); not necessarily the session owner.
-	// Could be zero for multiplexed sesssions in cluster.
+	// Could be zero for multiplexed sessions in cluster.
 	uid types.Uid
 }
 
@@ -540,48 +540,51 @@ func (t *Topic) runLocal(hub *Hub) {
 			// {meta} and {ctrl} are sent to the session only
 			if msg.Data != nil || msg.Pres != nil || msg.Info != nil {
 				for sess, pssd := range t.sessions {
-					if sess.sid == msg.SkipSid {
-						continue
+					if !sess.isMultiplex() { // Send all messages to multiplexing session.
+						if sess.sid == msg.SkipSid {
+							continue
+						}
+
+						if msg.Pres != nil {
+							// Skip notifying - already notified on topic.
+							// Don't check multiplexing sessions.
+							if msg.Pres.SkipTopic != "" || sess.getSub(msg.Pres.SkipTopic) != nil {
+								continue
+							}
+
+							// Notification addressed to a single user only.
+							if msg.Pres.SingleUser != "" && pssd.uid.UserId() != msg.Pres.SingleUser {
+								continue
+							}
+							// Notification should skip a single user.
+							if msg.Pres.ExcludeUser != "" && pssd.uid.UserId() == msg.Pres.ExcludeUser {
+								continue
+							}
+
+							// Check presence filters
+							if !t.passesPresenceFilters(msg, pssd.uid) {
+								continue
+							}
+
+						} else {
+							// Check if the user has Read permission
+							if !t.userIsReader(pssd.uid) {
+								continue
+							}
+
+							// Don't send key presses from one user's session to the other sessions of the same user.
+							if msg.Info != nil && msg.Info.What == "kp" && msg.Info.From == pssd.uid.UserId() {
+								continue
+							}
+						}
+
+						// Topic name may be different depending on the user to which the `sess` belongs.
+						t.maybeFixTopicName(msg, pssd.uid)
 					}
-
-					if msg.Pres != nil {
-						// Skip notifying - already notified on topic.
-						if msg.Pres.SkipTopic != "" && sess.getSub(msg.Pres.SkipTopic) != nil {
-							continue
-						}
-
-						// Notification addressed to a single user only.
-						if msg.Pres.SingleUser != "" && pssd.uid.UserId() != msg.Pres.SingleUser {
-							continue
-						}
-						// Notification should skip a single user.
-						if msg.Pres.ExcludeUser != "" && pssd.uid.UserId() == msg.Pres.ExcludeUser {
-							continue
-						}
-
-						// Check presence filters
-						if !t.passesPresenceFilters(msg, pssd.uid) {
-							continue
-						}
-
-					} else {
-						// Check if the user has Read permission
-						if !t.userIsReader(pssd.uid) {
-							continue
-						}
-
-						// Don't send key presses from one user's session to the other sessions of the same user.
-						if msg.Info != nil && msg.Info.What == "kp" && msg.Info.From == pssd.uid.UserId() {
-							continue
-						}
-					}
-
-					// Topic name may be different depending on the user to which the `sess` belongs.
-					t.maybeFixTopicName(msg, pssd.uid)
 
 					if !sess.queueOut(msg) {
-						log.Printf("topic[%s]: connection stuck, detaching", t.name)
-						// The whole session is being dropped, so sessionLeave.userId is not set.
+						log.Println("topic: connection stuck, detaching", t.name, sess.sid)
+						// The whole session is being dropped, so sessionLeave.pkt is not set.
 						t.unreg <- &sessionLeave{sess: sess}
 					}
 				}
@@ -2571,13 +2574,13 @@ func (t *Topic) evictUser(uid types.Uid, unsub bool, skip string) {
 	msg.Ctrl.Params = map[string]interface{}{"unsub": unsub}
 	msg.SkipSid = skip
 	msg.uid = uid
-	for sess := range t.sessions {
-		if removed := t.remSession(sess, uid) != nil; sess.isMultiplex() || removed {
+	for s := range t.sessions {
+		if removed := t.remSession(s, uid) != nil; s.isMultiplex() || removed {
 			if removed {
-				sess.detach <- t.name
+				s.detach <- t.name
 			}
-			if sess.sid != skip {
-				sess.queueOut(msg)
+			if s.sid != skip {
+				s.queueOut(msg)
 			}
 		}
 	}
@@ -2759,6 +2762,7 @@ func (t *Topic) pushForSub(fromUid, toUid types.Uid, want, given types.AccessMod
 	return &receipt
 }
 
+// FIXME: this won't work correctly with multiplexing sessions.
 func (t *Topic) mostRecentSession() *Session {
 	var sess *Session
 	var latest time.Time
@@ -2948,8 +2952,14 @@ func (t *Topic) subsCount() int {
 	return len(t.perUser)
 }
 
-// Add session record. 'user' may be different from s.uid.
-func (t *Topic) addSession(s *Session, asUid types.Uid) bool {
+// Add session record. 'user' may be different from sess.uid.
+func (t *Topic) addSession(sess *Session, asUid types.Uid) bool {
+	s := sess
+	if sess.multi != nil {
+		s = s.multi
+		// Multiplexing session does not have a specific Uid.
+		asUid = types.ZeroUid
+	}
 	if _, ok := t.sessions[s]; ok {
 		return false
 	}
@@ -2960,7 +2970,11 @@ func (t *Topic) addSession(s *Session, asUid types.Uid) bool {
 // Disconnects session from topic if either one of the following is true:
 // * `s` is an ordinary session AND (`asUid` is zero OR `asUid` matches subscribed user).
 // It's called for the multiplexing session only when it's actually removed.
-func (t *Topic) remSession(s *Session, asUid types.Uid) *perSessionData {
+func (t *Topic) remSession(sess *Session, asUid types.Uid) *perSessionData {
+	s := sess
+	if sess.multi != nil {
+		s = s.multi
+	}
 	if pssd, ok := t.sessions[s]; ok && (pssd.uid == asUid || asUid.IsZero()) {
 		delete(t.sessions, s)
 		return &pssd
@@ -2968,11 +2982,12 @@ func (t *Topic) remSession(s *Session, asUid types.Uid) *perSessionData {
 	return nil
 }
 
+// FIXME: this does not work correctly with multiplexing sessions.
 func (t *Topic) isOnline() bool {
 	// Some sessions may be background sessions. They should not be counted.
-	for sess := range t.sessions {
+	for s := range t.sessions {
 		// At least one non-background session.
-		if !sess.background {
+		if !s.background {
 			return true
 		}
 	}

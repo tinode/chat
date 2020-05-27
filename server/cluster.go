@@ -396,10 +396,8 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 		// We only need some session info. No need to copy everything.
 		sess = &Session{
 			proto: PROXY,
-			// Use shared values from the multiplexing session.
-			subsLock: msess.subsLock,
-			subs:     msess.subs,
-			send:     msess.send,
+			// Multiplexing session which actually handles the communication.
+			multi: msess,
 			// Local parameters specific to this session.
 			sid:        msg.Sess.Sid,
 			userAgent:  msg.Sess.UserAgent,
@@ -443,9 +441,6 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 
 	case ProxyReqBroadcast:
 		log.Println("cluster: broadcast request", msid, sess.sid)
-		if msg.SrvMsg == nil {
-			panic("cluster: topic proxy broadcast request has no data message")
-		}
 		msg.SrvMsg.sess = sess
 		globals.hub.route <- msg.SrvMsg
 
@@ -941,7 +936,7 @@ func (c *Cluster) invalidateProxySubs() {
 			// Topic either isn't a proxy or hasn't moved. Continue.
 			return true
 		}
-		for s, _ := range topic.sessions {
+		for s := range topic.sessions {
 			sessions[s] = append(sessions[s], topic.name)
 		}
 		return true
@@ -953,6 +948,7 @@ func (c *Cluster) invalidateProxySubs() {
 
 // garbageCollectProxySessions terminates all orphaned proxy sessions
 // at a master node. The session is orphaned when the origin node is gone.
+// FIXME: keep list of multipliexing sessions in node.
 func (c *Cluster) garbageCollectProxySessions(activeNodes []string) {
 	sessions := make(map[*Session]*Topic)
 	activeNodeMap := make(map[string]struct{})

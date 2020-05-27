@@ -25,21 +25,6 @@ import (
 	"github.com/tinode/chat/server/store/types"
 )
 
-// Wire transport
-const (
-	NONE = iota
-	// Websocket connection
-	WEBSOCK
-	// Long polling connection
-	LPOLL
-	// gRPC connection
-	GRPC
-	// Temporary session used as a proxy at master node.
-	PROXY
-	// Multiplexing session reprsenting a connection from proxy topic to master.
-	MULTIPLEX
-)
-
 // Wait time before abandoning the outbound send operation.
 // Timeout is rather long to make sure it's longer than Linux preeption time:
 // https://elixir.bootlin.com/linux/latest/source/kernel/sched/fair.c#L38
@@ -54,11 +39,28 @@ const deferredNotificationsTimeout = time.Second * 5
 
 var minSupportedVersionValue = parseVersion(minSupportedVersion)
 
+// Wire transport
+type SessionProto int
+
+const (
+	NONE SessionProto = iota
+	// Websocket connection
+	WEBSOCK
+	// Long polling connection
+	LPOLL
+	// gRPC connection
+	GRPC
+	// Temporary session used as a proxy at master node.
+	PROXY
+	// Multiplexing session reprsenting a connection from proxy topic to master.
+	MULTIPLEX
+)
+
 // Session represents a single WS connection or a long polling session. A user may have multiple
 // sessions.
 type Session struct {
-	// protocol - NONE (unset), WEBSOCK, LPOLL, CLUSTER, GRPC
-	proto int
+	// protocol - NONE (unset), WEBSOCK, LPOLL, GRPC, PROXY, MULTIPLEX
+	proto SessionProto
 
 	// Session ID
 	sid string
@@ -74,6 +76,9 @@ type Session struct {
 
 	// Reference to the cluster node where the session has originated. Set only for cluster RPC sessions.
 	clnode *ClusterNode
+
+	// Reference to multiplexing session. Set only for proxy sessions.
+	multi *Session
 
 	// IP address of the client. For long polling this is the IP of the last poll.
 	remoteAddr string
@@ -91,10 +96,11 @@ type Session struct {
 	// Human language of the client
 	lang string
 
-	// ID of the current user or 0
+	// ID of the current user. Could be zero if session is not authenticated
+	// or for multiplexing sessions.
 	uid types.Uid
 
-	// Authentication level - NONE (unset), ANON, AUTH, ROOT
+	// Authentication level - NONE (unset), ANON, AUTH, ROOT.
 	authLvl auth.Level
 
 	// Time when the long polling session was last refreshed
@@ -116,7 +122,8 @@ type Session struct {
 	// Content in the same format as for 'send'
 	stop chan interface{}
 
-	// detach - channel for detaching session from topic, buffered
+	// detach - channel for detaching session from topic, buffered.
+	// Content is topic name to detach from.
 	detach chan string
 
 	// Map of topic subscriptions, indexed by topic name.
@@ -126,7 +133,8 @@ type Session struct {
 	// subs concurrently.
 	subsLock sync.RWMutex
 
-	// FIXME: get rid of it. Map of remote (origin) sessions to user ids these sessions represent.
+	// FIXME: get rid of it.
+	// Map of remote (origin) sessions to user ids these sessions represent.
 	remoteSessions map[string]*remoteSession
 	// Synchronizes access to remoteSessions.
 	remoteSessionsLock sync.RWMutex
@@ -157,12 +165,18 @@ type Subscription struct {
 }
 
 func (s *Session) addSub(topic string, sub *Subscription) {
+	if s.multi != nil {
+		s.multi.addSub(topic, sub)
+		return
+	}
 	s.subsLock.Lock()
 	s.subs[topic] = sub
 	s.subsLock.Unlock()
 }
 
 func (s *Session) getSub(topic string) *Subscription {
+	// Don't check s.multi here. Let it panic if called for proxy session.
+
 	s.subsLock.RLock()
 	defer s.subsLock.RUnlock()
 
@@ -170,23 +184,31 @@ func (s *Session) getSub(topic string) *Subscription {
 }
 
 func (s *Session) delSub(topic string) {
+	if s.multi != nil {
+		s.multi.delSub(topic)
+		return
+	}
 	s.subsLock.Lock()
 	delete(s.subs, topic)
 	s.subsLock.Unlock()
 }
 
 func (s *Session) countSub() int {
+	if s.multi != nil {
+		return s.multi.countSub()
+	}
 	return len(s.subs)
 }
 
 // Inform topics that the session is being terminated.
-// sessionLeave.userId is not set because the whole session is being dropped.
+// No need to check for s.multi because it's not called for PROXY sessions.
 func (s *Session) unsubAll() {
 	s.subsLock.RLock()
 	defer s.subsLock.RUnlock()
 
 	for _, sub := range s.subs {
 		// sub.done is the same as topic.unreg
+		// Leave message is not set because the whole session is being dropped.
 		sub.done <- &sessionLeave{sess: s}
 	}
 }
@@ -226,7 +248,12 @@ func (s *Session) isProxy() bool {
 // timeout is `sendTimeout`.
 func (s *Session) queueOut(msg *ServerComMessage) bool {
 	if s == nil {
-		return true
+		log.Println("s.queueOut: attempt to send on nil session")
+		return false
+	}
+
+	if s.multi != nil {
+		return s.multi.queueOut(msg)
 	}
 
 	select {

@@ -312,33 +312,35 @@ func (t *Topic) presSubsOnlineDirect(what string, params *presParams, filter *pr
 		Pres: &MsgServerPres{Topic: t.xoriginal, What: what, Acs: params.packAcs(),
 			SeqId: params.seqID, DelId: params.delID, DelSeq: params.delSeq}}
 
-	for sess := range t.sessions {
-		if skipSid == sess.sid {
-			continue
-		}
-
-		pud := t.perUser[sess.uid]
-		// Check presence filters
-		if pud.deleted || (what != "acs" && what != "gone" && !presOfflineFilter(pud.modeGiven&pud.modeWant, filter)) {
-			continue
-		}
-
-		if filter != nil {
-			if filter.singleUser != "" && filter.singleUser != sess.uid.UserId() {
+	for s, pssd := range t.sessions {
+		if !s.isMultiplex() {
+			if skipSid == s.sid {
 				continue
 			}
-			if filter.excludeUser != "" && filter.excludeUser == sess.uid.UserId() {
+
+			pud := t.perUser[pssd.uid]
+			// Check presence filters
+			if pud.deleted || (what != "acs" && what != "gone" && !presOfflineFilter(pud.modeGiven&pud.modeWant, filter)) {
 				continue
 			}
-		}
 
-		if t.cat == types.TopicCatP2P {
-			// For p2p topics topic name is dependent on receiver.
-			// It's OK to change the pointer here because the message will be serialized in queueOut
-			// before being placed into channel.
-			t.maybeFixTopicName(msg, sess.uid)
+			if filter != nil {
+				if filter.singleUser != "" && filter.singleUser != pssd.uid.UserId() {
+					continue
+				}
+				if filter.excludeUser != "" && filter.excludeUser == pssd.uid.UserId() {
+					continue
+				}
+			}
+
+			if t.cat == types.TopicCatP2P {
+				// For p2p topics topic name is dependent on receiver.
+				// It's OK to change the pointer here because the message will be serialized in queueOut
+				// before being placed into the channel.
+				t.maybeFixTopicName(msg, pssd.uid)
+			}
 		}
-		sess.queueOut(msg)
+		s.queueOut(msg)
 	}
 }
 

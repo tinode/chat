@@ -47,7 +47,7 @@ func (t *Topic) runProxy(hub *Hub) {
 				asUid = types.ParseUserId(leave.pkt.AsUser)
 			}
 
-			// FIXME: The old comment is probably not true: Explicitly specify user id because the proxy session
+			// FIXME: The old comment is probably not true: Explicitly specify user ID because the proxy session
 			// hosts multiple client sessions.
 			if asUid.IsZero() {
 				if pssd, ok := t.sessions[leave.sess]; ok {
@@ -104,16 +104,16 @@ func (t *Topic) runProxy(hub *Hub) {
 			t.proxyMasterResponse(msg, killTimer)
 
 		case sd := <-t.exit:
-			log.Printf("t[%s] exit %+v", t.name, sd)
+			log.Printf("topic_proxy[%s] exit %+v", t.name, sd)
 			// Tell sessions to remove the topic
 			for s := range t.sessions {
 				s.detach <- t.name
 			}
-			if t.isProxy {
-				if err := globals.cluster.topicProxyGone(t.name); err != nil {
-					log.Printf("topic proxy shutdown [%s]: failed to notify master - %s", t.name, err)
-				}
+
+			if err := globals.cluster.topicProxyGone(t.name); err != nil {
+				log.Printf("topic proxy shutdown [%s]: failed to notify master - %s", t.name, err)
 			}
+
 			// Report completion back to sender, if 'done' is not nil.
 			if sd.done != nil {
 				sd.done <- true

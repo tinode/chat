@@ -195,6 +195,8 @@ func (h *Hub) run() {
 					default:
 						log.Println("hub: topic's broadcast queue is full", dst.name)
 					}
+				} else {
+					log.Println("hub: invalid topic category for broadcast", dst.name)
 				}
 			} else if (strings.HasPrefix(msg.RcptTo, "usr") || strings.HasPrefix(msg.RcptTo, "grp")) &&
 				globals.cluster.isRemoteTopic(msg.RcptTo) {

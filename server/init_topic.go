@@ -18,29 +18,29 @@ import (
 )
 
 // topicInit reads an existing topic from database or creates a new topic
-func topicInit(t *Topic, sreg *sessionJoin, h *Hub) {
+func topicInit(t *Topic, join *sessionJoin, h *Hub) {
 	timestamp := types.TimeNow()
 
 	var err error
 	switch {
 	case t.xoriginal == "me":
 		// Request to load a 'me' topic. The topic always exists, the subscription is never new.
-		err = initTopicMe(t, sreg)
+		err = initTopicMe(t, join)
 	case t.xoriginal == "fnd":
 		// Request to load a 'find' topic. The topic always exists, the subscription is never new.
-		err = initTopicFnd(t, sreg)
+		err = initTopicFnd(t, join)
 	case strings.HasPrefix(t.xoriginal, "usr") || strings.HasPrefix(t.xoriginal, "p2p"):
 		// Request to load an existing or create a new p2p topic, then attach to it.
-		err = initTopicP2P(t, sreg)
+		err = initTopicP2P(t, join)
 	case strings.HasPrefix(t.xoriginal, "new"):
 		// Processing request to create a new group topic
-		err = initTopicNewGrp(t, sreg)
+		err = initTopicNewGrp(t, join)
 	case strings.HasPrefix(t.xoriginal, "grp"):
 		// Load existing group topic
-		err = initTopicGrp(t, sreg)
+		err = initTopicGrp(t, join)
 	case t.xoriginal == "sys":
 		// Initialize system topic.
-		err = initTopicSys(t, sreg)
+		err = initTopicSys(t, join)
 	default:
 		// Unrecognized topic name
 		err = types.ErrTopicNotFound
@@ -49,10 +49,10 @@ func topicInit(t *Topic, sreg *sessionJoin, h *Hub) {
 	// Failed to create or load the topic.
 	if err != nil {
 		// Remove topic from cache to prevent hub from forwarding more messages to it.
-		h.topicDel(sreg.pkt.RcptTo)
+		h.topicDel(join.pkt.RcptTo)
 
-		log.Println("init_topic: failed to load or create topic:", sreg.pkt.RcptTo, err)
-		sreg.sess.queueOut(decodeStoreError(err, sreg.pkt.Id, t.xoriginal, timestamp, nil))
+		log.Println("init_topic: failed to load or create topic:", join.pkt.RcptTo, err)
+		join.sess.queueOut(decodeStoreError(err, join.pkt.Id, t.xoriginal, timestamp, nil))
 
 		// Re-queue pending requests to join the topic.
 		for len(t.reg) > 0 {
@@ -87,7 +87,7 @@ func topicInit(t *Topic, sreg *sessionJoin, h *Hub) {
 
 	// prevent newly initialized topics to go live while shutdown in progress
 	if globals.shuttingDown {
-		h.topicDel(sreg.pkt.RcptTo)
+		h.topicDel(join.pkt.RcptTo)
 		return
 	}
 
@@ -101,9 +101,9 @@ func topicInit(t *Topic, sreg *sessionJoin, h *Hub) {
 	usersRegisterTopic(t, true)
 
 	// Topic will check access rights, send invite to p2p user, send {ctrl} message to the initiator session
-	log.Println("hub: topic initialized", sreg)
-	if sreg.pkt.Sub != nil {
-		t.reg <- sreg
+	log.Println("topic_init: initialized", join.pkt.RcptTo)
+	if join.pkt.Sub != nil {
+		t.reg <- join
 	}
 
 	t.markPaused(false)
