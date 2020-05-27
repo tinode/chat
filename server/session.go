@@ -253,6 +253,8 @@ func (s *Session) queueOut(msg *ServerComMessage) bool {
 	}
 
 	if s.multi != nil {
+		// In case of a cluster we need to pass a copy of the actual session.
+		msg.sess = s
 		return s.multi.queueOut(msg)
 	}
 
@@ -1067,12 +1069,9 @@ func (s *Session) serialize(msg *ServerComMessage) interface{} {
 		return pbServSerialize(msg)
 	}
 
-	if s.proto == PROXY {
+	if s.proto == MULTIPLEX {
 		// No need to serialize the message to bytes within the cluster,
 		// but we have to create a copy because the original msg can be mutated.
-		// In case of a cluster, s.send belongs to a multiplexing write loop.
-		// We need to pass a copy of the actual session.
-		msg.sess = s
 		return msg.copy()
 	}
 

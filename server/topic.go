@@ -368,7 +368,7 @@ func (t *Topic) runLocal(hub *Hub) {
 				case types.TopicCatGrp:
 					if !proxyTerminating && pud.online == 0 {
 						// User is going offline: notify online subscribers on 'me'
-						t.presSubsOnline("off", pssd.uid.UserId(), nilPresParams,
+						t.presSubsOnline("off", uid.UserId(), nilPresParams,
 							&presFilters{filterIn: types.ModeRead}, "")
 					}
 				}
