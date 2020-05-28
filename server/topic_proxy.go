@@ -132,7 +132,7 @@ func (t *Topic) proxyMasterResponse(msg *ClusterResp, killTimer *time.Timer) {
 	// Kills topic after a period of inactivity.
 	keepAlive := idleProxyTopicTimeout
 
-	log.Printf("topic_proxy: master response %+v %+v\n", msg, msg.SrvMsg)
+	log.Printf("topic_proxy: master response %+v id='%s'\n", msg, msg.SrvMsg.Id)
 
 	if msg.SrvMsg.Pres != nil && msg.SrvMsg.Pres.What == "acs" && msg.SrvMsg.Pres.Acs != nil {
 		// If the server changed acs on this topic, update the internal state.
@@ -162,14 +162,19 @@ func (t *Topic) proxyMasterResponse(msg *ClusterResp, killTimer *time.Timer) {
 				// FIXME: if session is gone, let the master topic know.
 				log.Println("topic_proxy: session not found; already terminated?")
 			} else if msg.SrvMsg.Ctrl != nil {
-				// Successful subscriptions.
+				// Subscription result.
 				if msg.SrvMsg.Ctrl.Code < 300 {
+					log.Println("topic_proxy: subscription: adding session to topic",
+						t.name, sess.sid, sess.proto, msg.SrvMsg.uid.UserId())
+					// Successful subscriptions.
 					if t.addSession(sess, msg.SrvMsg.uid) {
 						sess.addSub(t.name, &Subscription{
 							broadcast: t.broadcast,
 							done:      t.unreg,
 							meta:      t.meta,
 							supd:      t.supd})
+					} else {
+						log.Println("topic_proxy: failed to attach session to topic")
 					}
 					killTimer.Stop()
 				} else if len(t.sessions) == 0 {

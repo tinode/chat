@@ -202,7 +202,9 @@ func (h *Hub) run() {
 			} else if (strings.HasPrefix(msg.RcptTo, "usr") || strings.HasPrefix(msg.RcptTo, "grp")) &&
 				globals.cluster.isRemoteTopic(msg.RcptTo) {
 				// It is a remote topic.
-				log.Printf("hub: ERROR! master topic does not exist at expected node %+v", msg)
+				if msg.Pres == nil {
+					log.Printf("hub: ERROR! master topic does not exist at expected node %+v", msg)
+				}
 				if err := globals.cluster.routeToTopicIntraCluster(msg.RcptTo, msg, msg.sess); err != nil {
 					log.Printf("hub: routing to '%s' failed", msg.RcptTo)
 				}

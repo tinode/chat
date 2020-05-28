@@ -645,7 +645,7 @@ func NoErrParams(id, topic string, ts time.Time, params interface{}) *ServerComM
 		Text:      "ok",
 		Topic:     topic,
 		Params:    params,
-		Timestamp: ts}}
+		Timestamp: ts}, Id: id}
 }
 
 // NoErrCreated indicated successful creation of an object (201).
@@ -655,7 +655,7 @@ func NoErrCreated(id, topic string, ts time.Time) *ServerComMessage {
 		Code:      http.StatusCreated, // 201
 		Text:      "created",
 		Topic:     topic,
-		Timestamp: ts}}
+		Timestamp: ts}, Id: id}
 }
 
 // NoErrAccepted indicates request was accepted but not perocessed yet (202).
@@ -665,7 +665,7 @@ func NoErrAccepted(id, topic string, ts time.Time) *ServerComMessage {
 		Code:      http.StatusAccepted, // 202
 		Text:      "accepted",
 		Topic:     topic,
-		Timestamp: ts}}
+		Timestamp: ts}, Id: id}
 }
 
 // NoErrEvicted indicates that the user was disconnected from topic for no fault of the user (205).
@@ -675,7 +675,7 @@ func NoErrEvicted(id, topic string, ts time.Time) *ServerComMessage {
 		Code:      http.StatusResetContent, // 205
 		Text:      "evicted",
 		Topic:     topic,
-		Timestamp: ts}}
+		Timestamp: ts}, Id: id}
 }
 
 // NoErrShutdown means user was disconnected from topic because system shutdown is in progress (205).
@@ -694,7 +694,7 @@ func InfoValidateCredentials(id string, ts time.Time) *ServerComMessage {
 		Id:        id,
 		Code:      http.StatusMultipleChoices, // 300
 		Text:      "validate credentials",
-		Timestamp: ts}}
+		Timestamp: ts}, Id: id}
 }
 
 // InfoChallenge requires user to respond to presented challenge before login can be completed (300).
@@ -704,7 +704,7 @@ func InfoChallenge(id string, ts time.Time, challenge []byte) *ServerComMessage 
 		Code:      http.StatusMultipleChoices, // 300
 		Text:      "challenge",
 		Params:    map[string]interface{}{"challenge": challenge},
-		Timestamp: ts}}
+		Timestamp: ts}, Id: id}
 }
 
 // InfoAuthReset is sent in response to request to reset authentication when it was completed but login was not performed (301).
@@ -713,7 +713,7 @@ func InfoAuthReset(id string, ts time.Time) *ServerComMessage {
 		Id:        id,
 		Code:      http.StatusMovedPermanently, // 301
 		Text:      "auth reset",
-		Timestamp: ts}}
+		Timestamp: ts}, Id: id}
 }
 
 // InfoAlreadySubscribed response means request to subscribe was ignored because user is already subscribed (304).
@@ -723,7 +723,7 @@ func InfoAlreadySubscribed(id, topic string, ts time.Time) *ServerComMessage {
 		Code:      http.StatusNotModified, // 304
 		Text:      "already subscribed",
 		Topic:     topic,
-		Timestamp: ts}}
+		Timestamp: ts}, Id: id}
 }
 
 // InfoNotJoined response means request to leave was ignored because user was not subscribed (304).
@@ -733,7 +733,7 @@ func InfoNotJoined(id, topic string, ts time.Time) *ServerComMessage {
 		Code:      http.StatusNotModified, // 304
 		Text:      "not joined",
 		Topic:     topic,
-		Timestamp: ts}}
+		Timestamp: ts}, Id: id}
 }
 
 // InfoNoAction response means request was ignored because the object was already in the desired state (304).
@@ -743,7 +743,7 @@ func InfoNoAction(id, topic string, ts time.Time) *ServerComMessage {
 		Code:      http.StatusNotModified, // 304
 		Text:      "no action",
 		Topic:     topic,
-		Timestamp: ts}}
+		Timestamp: ts}, Id: id}
 }
 
 // InfoNotModified response means update request was a noop (304).
@@ -753,7 +753,7 @@ func InfoNotModified(id, topic string, ts time.Time) *ServerComMessage {
 		Code:      http.StatusNotModified, // 304
 		Text:      "not modified",
 		Topic:     topic,
-		Timestamp: ts}}
+		Timestamp: ts}, Id: id}
 }
 
 // InfoFound redirects to a new resource (307).
@@ -763,7 +763,7 @@ func InfoFound(id, topic string, ts time.Time) *ServerComMessage {
 		Code:      http.StatusTemporaryRedirect, // 307
 		Text:      "found",
 		Topic:     topic,
-		Timestamp: ts}}
+		Timestamp: ts}, Id: id}
 }
 
 // 4xx Errors
@@ -775,7 +775,7 @@ func ErrMalformed(id, topic string, ts time.Time) *ServerComMessage {
 		Code:      http.StatusBadRequest, // 400
 		Text:      "malformed",
 		Topic:     topic,
-		Timestamp: ts}}
+		Timestamp: ts}, Id: id}
 }
 
 // ErrAuthRequired authentication required  - user must authenticate first (401).
@@ -785,7 +785,7 @@ func ErrAuthRequired(id, topic string, ts time.Time) *ServerComMessage {
 		Code:      http.StatusUnauthorized, // 401
 		Text:      "authentication required",
 		Topic:     topic,
-		Timestamp: ts}}
+		Timestamp: ts}, Id: id}
 }
 
 // ErrAuthFailed authentication failed (401).
@@ -795,7 +795,7 @@ func ErrAuthFailed(id, topic string, ts time.Time) *ServerComMessage {
 		Code:      http.StatusUnauthorized, // 401
 		Text:      "authentication failed",
 		Topic:     topic,
-		Timestamp: ts}}
+		Timestamp: ts}, Id: id}
 }
 
 // ErrAuthUnknownScheme authentication scheme is unrecognized or invalid (401).
@@ -805,7 +805,7 @@ func ErrAuthUnknownScheme(id, topic string, ts time.Time) *ServerComMessage {
 		Code:      http.StatusUnauthorized, // 401
 		Text:      "unknown authentication scheme",
 		Topic:     topic,
-		Timestamp: ts}}
+		Timestamp: ts}, Id: id}
 }
 
 // ErrPermissionDenied user is authenticated but operation is not permitted (403).
@@ -815,7 +815,7 @@ func ErrPermissionDenied(id, topic string, ts time.Time) *ServerComMessage {
 		Code:      http.StatusForbidden, // 403
 		Text:      "permission denied",
 		Topic:     topic,
-		Timestamp: ts}}
+		Timestamp: ts}, Id: id}
 }
 
 // ErrAPIKeyRequired  valid API key is required (403).
@@ -841,7 +841,7 @@ func ErrTopicNotFound(id, topic string, ts time.Time) *ServerComMessage {
 		Code:      http.StatusNotFound,
 		Text:      "topic not found", // 404
 		Topic:     topic,
-		Timestamp: ts}}
+		Timestamp: ts}, Id: id}
 }
 
 // ErrUserNotFound user is not found (404).
@@ -851,7 +851,7 @@ func ErrUserNotFound(id, topic string, ts time.Time) *ServerComMessage {
 		Code:      http.StatusNotFound, // 404
 		Text:      "user not found",
 		Topic:     topic,
-		Timestamp: ts}}
+		Timestamp: ts}, Id: id}
 }
 
 // ErrNotFound is an error for missing objects other than user or topic (404).
@@ -861,7 +861,7 @@ func ErrNotFound(id, topic string, ts time.Time) *ServerComMessage {
 		Code:      http.StatusNotFound, // 404
 		Text:      "not found",
 		Topic:     topic,
-		Timestamp: ts}}
+		Timestamp: ts}, Id: id}
 }
 
 // ErrOperationNotAllowed a valid operation is not permitted in this context (405).
@@ -871,7 +871,7 @@ func ErrOperationNotAllowed(id, topic string, ts time.Time) *ServerComMessage {
 		Code:      http.StatusMethodNotAllowed, // 405
 		Text:      "operation or method not allowed",
 		Topic:     topic,
-		Timestamp: ts}}
+		Timestamp: ts}, Id: id}
 }
 
 // ErrInvalidResponse indicates that the client's response in invalid (406).
@@ -881,7 +881,7 @@ func ErrInvalidResponse(id, topic string, ts time.Time) *ServerComMessage {
 		Code:      http.StatusNotAcceptable, // 406
 		Text:      "invalid response",
 		Topic:     topic,
-		Timestamp: ts}}
+		Timestamp: ts}, Id: id}
 }
 
 // ErrAlreadyAuthenticated invalid attempt to authenticate an already authenticated session
@@ -892,7 +892,7 @@ func ErrAlreadyAuthenticated(id, topic string, ts time.Time) *ServerComMessage {
 		Code:      http.StatusConflict, // 409
 		Text:      "already authenticated",
 		Topic:     topic,
-		Timestamp: ts}}
+		Timestamp: ts}, Id: id}
 }
 
 // ErrDuplicateCredential attempt to create a duplicate credential (409).
@@ -902,7 +902,7 @@ func ErrDuplicateCredential(id, topic string, ts time.Time) *ServerComMessage {
 		Code:      http.StatusConflict, // 409
 		Text:      "duplicate credential",
 		Topic:     topic,
-		Timestamp: ts}}
+		Timestamp: ts}, Id: id}
 }
 
 // ErrAttachFirst must attach to topic first (409).
@@ -912,7 +912,7 @@ func ErrAttachFirst(id, topic string, ts time.Time) *ServerComMessage {
 		Code:      http.StatusConflict, // 409
 		Text:      "must attach first",
 		Topic:     topic,
-		Timestamp: ts}}
+		Timestamp: ts}, Id: id}
 }
 
 // ErrAlreadyExists the object already exists (409).
@@ -922,7 +922,7 @@ func ErrAlreadyExists(id, topic string, ts time.Time) *ServerComMessage {
 		Code:      http.StatusConflict, // 409
 		Text:      "already exists",
 		Topic:     topic,
-		Timestamp: ts}}
+		Timestamp: ts}, Id: id}
 }
 
 // ErrCommandOutOfSequence invalid sequence of comments, i.e. attempt to {sub} before {hi} (409).
@@ -931,7 +931,7 @@ func ErrCommandOutOfSequence(id, unused string, ts time.Time) *ServerComMessage 
 		Id:        id,
 		Code:      http.StatusConflict, // 409
 		Text:      "command out of sequence",
-		Timestamp: ts}}
+		Timestamp: ts}, Id: id}
 }
 
 // ErrGone topic deleted or user banned (410).
@@ -941,7 +941,7 @@ func ErrGone(id, topic string, ts time.Time) *ServerComMessage {
 		Code:      http.StatusGone, // 410
 		Text:      "gone",
 		Topic:     topic,
-		Timestamp: ts}}
+		Timestamp: ts}, Id: id}
 }
 
 // ErrTooLarge packet or request size exceeded the limit (413).
@@ -951,7 +951,7 @@ func ErrTooLarge(id, topic string, ts time.Time) *ServerComMessage {
 		Code:      http.StatusRequestEntityTooLarge, // 413
 		Text:      "too large",
 		Topic:     topic,
-		Timestamp: ts}}
+		Timestamp: ts}, Id: id}
 }
 
 // ErrPolicy request violates a policy (e.g. password is too weak or too many subscribers) (422).
@@ -961,7 +961,7 @@ func ErrPolicy(id, topic string, ts time.Time) *ServerComMessage {
 		Code:      http.StatusUnprocessableEntity, // 422
 		Text:      "policy violation",
 		Topic:     topic,
-		Timestamp: ts}}
+		Timestamp: ts}, Id: id}
 }
 
 // ErrLocked operation rejected because the topic is being deleted (423).
@@ -971,7 +971,7 @@ func ErrLocked(id, topic string, ts time.Time) *ServerComMessage {
 		Code:      http.StatusLocked, // 423
 		Text:      "locked",
 		Topic:     topic,
-		Timestamp: ts}}
+		Timestamp: ts}, Id: id}
 }
 
 // ErrUnknown database or other server error (500).
@@ -981,7 +981,7 @@ func ErrUnknown(id, topic string, ts time.Time) *ServerComMessage {
 		Code:      http.StatusInternalServerError, // 500
 		Text:      "internal error",
 		Topic:     topic,
-		Timestamp: ts}}
+		Timestamp: ts}, Id: id}
 }
 
 // ErrNotImplemented feature not implemented (501).
@@ -991,7 +991,7 @@ func ErrNotImplemented(id, topic string, ts time.Time) *ServerComMessage {
 		Code:      http.StatusNotImplemented, // 501
 		Text:      "not implemented",
 		Topic:     topic,
-		Timestamp: ts}}
+		Timestamp: ts}, Id: id}
 }
 
 // ErrClusterUnreachable in-cluster communication has failed (502).
@@ -1001,7 +1001,7 @@ func ErrClusterUnreachable(id, topic string, ts time.Time) *ServerComMessage {
 		Code:      http.StatusBadGateway, // 502
 		Text:      "cluster unreachable",
 		Topic:     topic,
-		Timestamp: ts}}
+		Timestamp: ts}, Id: id}
 }
 
 // ErrVersionNotSupported invalid (too low) protocol version (505).
@@ -1010,5 +1010,5 @@ func ErrVersionNotSupported(id string, ts time.Time) *ServerComMessage {
 		Id:        id,
 		Code:      http.StatusHTTPVersionNotSupported, // 505
 		Text:      "version not supported",
-		Timestamp: ts}}
+		Timestamp: ts}, Id: id}
 }

@@ -440,7 +440,8 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 		}
 
 	case ProxyReqBroadcast:
-		log.Println("cluster: broadcast request", msid, sess.sid)
+		// sess could be nil
+		log.Println("cluster: broadcast request", msid, sess)
 		msg.SrvMsg.sess = sess
 		globals.hub.route <- msg.SrvMsg
 
@@ -1018,9 +1019,10 @@ func (sess *Session) clusterWriteLoop(forTopic string) {
 				return
 			}
 			srvMsg := msg.(*ServerComMessage)
-
 			response := &ClusterResp{SrvMsg: srvMsg}
 			if srvMsg.sess != nil {
+				log.Printf("clusterWriteLoop: session is present %+v\n", srvMsg)
+
 				response.OrigReqType = srvMsg.sess.proxyReq
 				response.OrigSid = srvMsg.sess.sid
 				switch srvMsg.sess.proxyReq {
@@ -1035,6 +1037,8 @@ func (sess *Session) clusterWriteLoop(forTopic string) {
 					panic("cluster: unknown request type in clusterWriteLoop")
 				}
 			} else {
+				log.Printf("clusterWriteLoop: session is NIL %+v\n", srvMsg)
+
 				if srvMsg.Ctrl == nil && srvMsg.Data == nil && srvMsg.Pres == nil && srvMsg.Info == nil {
 					// Only broadcast messages (data, pres, info) may come not as a response to a client request.
 					log.Panicf("cluster: only broadcast messages may not contain session overrides: %+v", srvMsg)

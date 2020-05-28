@@ -332,14 +332,13 @@ func (t *Topic) runLocal(hub *Hub) {
 				log.Println("topic leave 2", pssd, leave.sess.isProxy(), uid)
 
 				// uid may be zero when a proxy session is trying to terminate (it called unsubAll).
-				proxyTerminating := uid.IsZero()
 				var pud perUserData
-				if !proxyTerminating {
+				if !uid.IsZero() {
 					pud = t.perUser[uid]
 					if pssd == nil || !leave.sess.background {
 						pud.online--
 					}
-				} else if !leave.sess.isMultiplex() {
+				} else if !leave.sess.isProxy() {
 					log.Panic("cannot determine uid: leave req=", leave)
 				}
 
@@ -357,7 +356,7 @@ func (t *Topic) runLocal(hub *Hub) {
 						}
 					}
 					// Update user's last online timestamp & user agent
-					if !proxyTerminating {
+					if !uid.IsZero() {
 						if err := store.Users.UpdateLastSeen(uid, mrs.userAgent, now); err != nil {
 							log.Println(err)
 						}
@@ -366,21 +365,21 @@ func (t *Topic) runLocal(hub *Hub) {
 					// Remove ephemeral query.
 					t.fndRemovePublic(leave.sess)
 				case types.TopicCatGrp:
-					if !proxyTerminating && pud.online == 0 {
+					if !uid.IsZero() && pud.online == 0 {
 						// User is going offline: notify online subscribers on 'me'
 						t.presSubsOnline("off", uid.UserId(), nilPresParams,
 							&presFilters{filterIn: types.ModeRead}, "")
 					}
 				}
 
-				if !proxyTerminating {
+				if !uid.IsZero() {
 					t.perUser[uid] = pud
 				}
 
 				// Respond if either the request contains an id
-				// or a proxy session is responding to a client request without an id (!proxyTerminating).
-				if leave.pkt != nil || (leave.sess.isMultiplex() && !proxyTerminating) {
-					leave.sess.queueOut(NoErr(leave.pkt.Id, t.original(asUid), now))
+				// or a proxy session is responding to a client request without an id.
+				if leave.pkt != nil && (!uid.IsZero() || leave.sess.isProxy()) {
+					leave.sess.queueOut(NoErr(leave.pkt.Id, t.original(uid), now))
 				}
 			}
 
@@ -2930,7 +2929,7 @@ func (t *Topic) fndSetPublic(sess *Session, public interface{}) bool {
 
 }
 
-// Remove per-session value of fnd.Public
+// Remove per-session value of fnd.Public.
 func (t *Topic) fndRemovePublic(sess *Session) {
 	if t.cat == types.TopicCatFnd {
 		if t.public == nil {
@@ -2972,6 +2971,7 @@ func (t *Topic) addSession(sess *Session, asUid types.Uid) bool {
 		asUid = types.ZeroUid
 	}
 	if _, ok := t.sessions[s]; ok {
+		log.Println("addSession: session already added", t.name, s.proto, s.sid)
 		return false
 	}
 	t.sessions[s] = perSessionData{uid: asUid}

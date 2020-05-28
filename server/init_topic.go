@@ -63,7 +63,9 @@ func topicInit(t *Topic, join *sessionJoin, h *Hub) {
 		// Reject all other pending requests
 		for len(t.broadcast) > 0 {
 			msg := <-t.broadcast
-			msg.sess.queueOut(ErrLocked(msg.Id, t.xoriginal, timestamp))
+			if msg.Id != "" {
+				msg.sess.queueOut(ErrLocked(msg.Id, t.xoriginal, timestamp))
+			}
 		}
 		for len(t.unreg) > 0 {
 			msg := <-t.unreg
@@ -73,7 +75,9 @@ func topicInit(t *Topic, join *sessionJoin, h *Hub) {
 		}
 		for len(t.meta) > 0 {
 			msg := <-t.meta
-			msg.sess.queueOut(ErrLocked(msg.pkt.Id, t.xoriginal, timestamp))
+			if msg.pkt.Id != "" {
+				msg.sess.queueOut(ErrLocked(msg.pkt.Id, t.xoriginal, timestamp))
+			}
 		}
 		if len(t.exit) > 0 {
 			msg := <-t.exit
