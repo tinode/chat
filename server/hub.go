@@ -185,9 +185,10 @@ func (h *Hub) run() {
 
 		case msg := <-h.route:
 			// This is a message from a connection not subscribed to topic
-			// Route incoming message to topic if topic permits such routing
+			// Route incoming message to topic if topic permits such routing.
 
 			if dst := h.topicGet(msg.RcptTo); dst != nil {
+				log.Println("hub: sending broadcast to active topic", dst.isProxy, msg.RcptTo)
 				// Everything is OK, sending packet to known topic
 				if dst.broadcast != nil {
 					select {
@@ -201,6 +202,7 @@ func (h *Hub) run() {
 			} else if (strings.HasPrefix(msg.RcptTo, "usr") || strings.HasPrefix(msg.RcptTo, "grp")) &&
 				globals.cluster.isRemoteTopic(msg.RcptTo) {
 				// It is a remote topic.
+				log.Printf("hub: ERROR! master topic does not exist at expected node %+v", msg)
 				if err := globals.cluster.routeToTopicIntraCluster(msg.RcptTo, msg, msg.sess); err != nil {
 					log.Printf("hub: routing to '%s' failed", msg.RcptTo)
 				}

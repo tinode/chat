@@ -132,27 +132,36 @@ func (t *Topic) proxyMasterResponse(msg *ClusterResp, killTimer *time.Timer) {
 	// Kills topic after a period of inactivity.
 	keepAlive := idleProxyTopicTimeout
 
+	log.Printf("topic_proxy: master response %+v %+v\n", msg, msg.SrvMsg)
+
 	if msg.SrvMsg.Pres != nil && msg.SrvMsg.Pres.What == "acs" && msg.SrvMsg.Pres.Acs != nil {
 		// If the server changed acs on this topic, update the internal state.
 		t.updateAcsFromPresMsg(msg.SrvMsg.Pres)
 	}
 	if msg.OrigSid == "*" {
+		log.Println("topic_proxy: broadcast OrigSid='*'")
 		// It is a broadcast.
 		msg.SrvMsg.uid = types.ParseUserId(msg.SrvMsg.AsUser)
 		switch {
 		case msg.SrvMsg.Pres != nil || msg.SrvMsg.Data != nil || msg.SrvMsg.Info != nil:
 			// Regular broadcast.
-			t.proxyFanoutBroadcast(msg.SrvMsg)
+			t.handleBroadcast(msg.SrvMsg)
+			// t.deprecated_proxyFanoutBroadcast(msg.SrvMsg)
 		case msg.SrvMsg.Ctrl != nil:
 			// Ctrl broadcast. E.g. for user eviction.
 			t.proxyCtrlBroadcast(msg.SrvMsg)
 		default:
 		}
 	} else {
+		log.Println("topic_proxy: session response", msg.OrigSid)
+
 		sess := globals.sessionStore.Get(msg.OrigSid)
 		switch msg.OrigReqType {
 		case ProxyReqJoin:
-			if sess != nil && msg.SrvMsg != nil && msg.SrvMsg.Ctrl != nil {
+			if sess == nil {
+				// FIXME: if session is gone, let the master topic know.
+				log.Println("topic_proxy: session not found; already terminated?")
+			} else if msg.SrvMsg.Ctrl != nil {
 				// Successful subscriptions.
 				if msg.SrvMsg.Ctrl.Code < 300 {
 					if t.addSession(sess, msg.SrvMsg.uid) {
@@ -163,16 +172,12 @@ func (t *Topic) proxyMasterResponse(msg *ClusterResp, killTimer *time.Timer) {
 							supd:      t.supd})
 					}
 					killTimer.Stop()
-				} else {
-					if len(t.sessions) == 0 {
-						killTimer.Reset(keepAlive)
-					}
+				} else if len(t.sessions) == 0 {
+					killTimer.Reset(keepAlive)
 				}
 			}
-		case ProxyReqBroadcast:
-			// do nothing
-		case ProxyReqMeta:
-			// do nothing
+		case ProxyReqBroadcast, ProxyReqMeta:
+			// no processing
 		case ProxyReqLeave:
 			log.Printf("proxy topic [%s]: session %p unsubscribed", t.name, sess)
 			if msg.SrvMsg != nil && msg.SrvMsg.Ctrl != nil {
@@ -199,7 +204,7 @@ func (t *Topic) proxyMasterResponse(msg *ClusterResp, killTimer *time.Timer) {
 }
 
 // proxyFanoutBroadcast broadcasts msg to all sessions attached to this topic.
-func (t *Topic) proxyFanoutBroadcast(msg *ServerComMessage) {
+func (t *Topic) deprecated_proxyFanoutBroadcast(msg *ServerComMessage) {
 	for sess, pssd := range t.sessions {
 		if sess.sid == msg.SkipSid {
 			continue

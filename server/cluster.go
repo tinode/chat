@@ -1028,12 +1028,13 @@ func (sess *Session) clusterWriteLoop(forTopic string) {
 					//sess.addRemoteSession(srvMsg.sess.sid, &remoteSession{uid: srvMsg.uid,isBackground: response.IsBackground})
 				case ProxyReqLeave:
 					//sess.delRemoteSession(srvMsg.sess.sid)
-				case ProxyReqBroadcast, ProxyReqMeta:
+				case ProxyReqBroadcast:
+					response.OrigSid = "*"
+				case ProxyReqMeta:
 				default:
 					panic("cluster: unknown request type in clusterWriteLoop")
 				}
 			} else {
-				// Copy skipSid.
 				if srvMsg.Ctrl == nil && srvMsg.Data == nil && srvMsg.Pres == nil && srvMsg.Info == nil {
 					// Only broadcast messages (data, pres, info) may come not as a response to a client request.
 					log.Panicf("cluster: only broadcast messages may not contain session overrides: %+v", srvMsg)

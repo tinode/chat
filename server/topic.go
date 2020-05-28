@@ -391,213 +391,7 @@ func (t *Topic) runLocal(hub *Hub) {
 
 		case msg := <-t.broadcast:
 			// Content message intended for broadcasting to recipients
-
-			var pushRcpt *push.Receipt
-			asUid := types.ParseUserId(msg.AsUser)
-			if msg.Data != nil {
-				if t.isInactive() {
-					msg.sess.queueOut(ErrLocked(msg.Id, t.original(asUid), msg.Timestamp))
-					continue
-				}
-				if t.isReadOnly() {
-					msg.sess.queueOut(ErrPermissionDenied(msg.Id, t.original(asUid), msg.Timestamp))
-					continue
-				}
-
-				asUser := types.ParseUserId(msg.Data.From)
-				userData, userFound := t.perUser[asUser]
-				// Anyone is allowed to post to 'sys' topic.
-				if t.cat != types.TopicCatSys {
-					// If it's not 'sys' check write permission.
-					if !(userData.modeWant & userData.modeGiven).IsWriter() {
-						msg.sess.queueOut(ErrPermissionDenied(msg.Id, t.original(asUid), msg.Timestamp))
-						continue
-					}
-				}
-
-				if err := store.Messages.Save(&types.Message{
-					ObjHeader: types.ObjHeader{CreatedAt: msg.Data.Timestamp},
-					SeqId:     t.lastID + 1,
-					Topic:     t.name,
-					From:      asUser.String(),
-					Head:      msg.Data.Head,
-					Content:   msg.Data.Content}, (userData.modeGiven & userData.modeWant).IsReader()); err != nil {
-
-					log.Printf("topic[%s]: failed to save message: %v", t.name, err)
-					msg.sess.queueOut(ErrUnknown(msg.Id, t.original(asUid), msg.Timestamp))
-
-					continue
-				}
-
-				t.lastID++
-				t.touched = msg.Data.Timestamp
-				msg.Data.SeqId = t.lastID
-				if userFound {
-					userData.readID = t.lastID
-					userData.readID = t.lastID
-					t.perUser[asUser] = userData
-				}
-				if msg.Id != "" {
-					reply := NoErrAccepted(msg.Id, t.original(asUid), msg.Timestamp)
-					reply.Ctrl.Params = map[string]int{"seq": t.lastID}
-					msg.sess.queueOut(reply)
-				}
-
-				pushRcpt = t.pushForData(asUser, msg.Data)
-
-				// Message sent: notify offline 'R' subscrbers on 'me'
-				t.presSubsOffline("msg", &presParams{seqID: t.lastID, actor: msg.Data.From},
-					&presFilters{filterIn: types.ModeRead}, nilPresFilters, "", true)
-
-				// Tell the plugins that a message was accepted for delivery
-				pluginMessage(msg.Data, plgActCreate)
-
-			} else if msg.Pres != nil {
-				if t.isInactive() {
-					// Ignore presence update - topic is paused or being deleted
-					continue
-				}
-
-				what := t.presProcReq(msg.Pres.Src, msg.Pres.What, msg.Pres.WantReply)
-				if t.xoriginal != msg.Pres.Topic || what == "" {
-					// This is just a request for status, don't forward it to sessions
-					continue
-				}
-
-				// "what" may have changed, i.e. unset or "+command" removed ("on+en" -> "on")
-				msg.Pres.What = what
-			} else if msg.Info != nil {
-				if t.isInactive() {
-					// Ignore info messages - topic is paused or being deleted
-					continue
-				}
-
-				if msg.Info.SeqId > t.lastID {
-					// Drop bogus read notification
-					continue
-				}
-
-				asUser := types.ParseUserId(msg.Info.From)
-				pud := t.perUser[asUser]
-
-				// Filter out "kp" from users with no 'W' permission (or people without a subscription)
-				if msg.Info.What == "kp" && (!(pud.modeGiven & pud.modeWant).IsWriter() || t.isReadOnly()) {
-					continue
-				}
-
-				if msg.Info.What == "read" || msg.Info.What == "recv" {
-					// Filter out "read/recv" from users with no 'R' permission (or people without a subscription)
-					if !(pud.modeGiven & pud.modeWant).IsReader() {
-						continue
-					}
-
-					var read, recv, unread int
-					if msg.Info.What == "read" {
-						if msg.Info.SeqId > pud.readID {
-							// The number of unread messages has decreased, negative value
-							unread = pud.readID - msg.Info.SeqId
-							pud.readID = msg.Info.SeqId
-							read = pud.readID
-						} else {
-							// No need to report stale or bogus read status
-							continue
-						}
-					} else if msg.Info.What == "recv" {
-						if msg.Info.SeqId > pud.recvID {
-							pud.recvID = msg.Info.SeqId
-							recv = pud.recvID
-						} else {
-							continue
-						}
-					}
-
-					if pud.readID > pud.recvID {
-						pud.recvID = pud.readID
-						recv = pud.recvID
-					}
-
-					if err := store.Subs.Update(t.name, asUser,
-						map[string]interface{}{
-							"RecvSeqId": pud.recvID,
-							"ReadSeqId": pud.readID},
-						false); err != nil {
-
-						log.Printf("topic[%s]: failed to update SeqRead/Recv counter: %v", t.name, err)
-						continue
-					}
-
-					// Read/recv updated: notify user's other sessions of the change
-					t.presPubMessageCount(asUser, recv, read, msg.SkipSid)
-
-					// Update cached count of unread messages
-					usersUpdateUnread(asUser, unread, true)
-
-					t.perUser[asUser] = pud
-				}
-			}
-
-			// Broadcast the message. Only {data}, {pres}, {info} are broadcastable.
-			// {meta} and {ctrl} are sent to the session only
-			if msg.Data != nil || msg.Pres != nil || msg.Info != nil {
-				for sess, pssd := range t.sessions {
-					if !sess.isMultiplex() { // Send all messages to multiplexing session.
-						if sess.sid == msg.SkipSid {
-							continue
-						}
-
-						if msg.Pres != nil {
-							// Skip notifying - already notified on topic.
-							// Don't check multiplexing sessions.
-							if msg.Pres.SkipTopic != "" || sess.getSub(msg.Pres.SkipTopic) != nil {
-								continue
-							}
-
-							// Notification addressed to a single user only.
-							if msg.Pres.SingleUser != "" && pssd.uid.UserId() != msg.Pres.SingleUser {
-								continue
-							}
-							// Notification should skip a single user.
-							if msg.Pres.ExcludeUser != "" && pssd.uid.UserId() == msg.Pres.ExcludeUser {
-								continue
-							}
-
-							// Check presence filters
-							if !t.passesPresenceFilters(msg, pssd.uid) {
-								continue
-							}
-
-						} else {
-							// Check if the user has Read permission
-							if !t.userIsReader(pssd.uid) {
-								continue
-							}
-
-							// Don't send key presses from one user's session to the other sessions of the same user.
-							if msg.Info != nil && msg.Info.What == "kp" && msg.Info.From == pssd.uid.UserId() {
-								continue
-							}
-						}
-
-						// Topic name may be different depending on the user to which the `sess` belongs.
-						t.maybeFixTopicName(msg, pssd.uid)
-					}
-
-					if !sess.queueOut(msg) {
-						log.Println("topic: connection stuck, detaching", t.name, sess.sid)
-						// The whole session is being dropped, so sessionLeave.pkt is not set.
-						t.unreg <- &sessionLeave{sess: sess}
-					}
-				}
-
-				if pushRcpt != nil {
-					// usersPush will update unread message count and send push notification.
-					usersPush(pushRcpt)
-				}
-
-			} else {
-				// TODO(gene): remove this
-				log.Panic("topic: wrong message type for broadcasting", t.name)
-			}
+			t.handleBroadcast(msg)
 
 		case meta := <-t.meta:
 			// Request to get/set topic metadata
@@ -777,7 +571,7 @@ func (t *Topic) handleSubscription(h *Hub, join *sessionJoin) error {
 		getWhat = parseMsgClientMeta(msgsub.Get.What)
 	}
 
-	if err := t.subCommonReply(h, join); err != nil {
+	if err := t.subscriptionReply(h, join); err != nil {
 		return err
 	}
 
@@ -944,8 +738,225 @@ func (t *Topic) sendSubNotifications(asUid types.Uid, sid, userAgent string) {
 	}
 }
 
-// subCommonReply generates a response to a subscription request
-func (t *Topic) subCommonReply(h *Hub, join *sessionJoin) error {
+// handleBroadcast fans out broadcastable messages to recepients in topic and proxy_topic.
+func (t *Topic) handleBroadcast(msg *ServerComMessage) {
+	log.Println("topic: handleBroadcast", t.name, t.isProxy)
+
+	var pushRcpt *push.Receipt
+	asUid := types.ParseUserId(msg.AsUser)
+	if msg.Data != nil {
+		if t.isInactive() {
+			msg.sess.queueOut(ErrLocked(msg.Id, t.original(asUid), msg.Timestamp))
+			return
+		}
+		if t.isReadOnly() {
+			msg.sess.queueOut(ErrPermissionDenied(msg.Id, t.original(asUid), msg.Timestamp))
+			return
+		}
+
+		asUser := types.ParseUserId(msg.Data.From)
+		userData, userFound := t.perUser[asUser]
+		// Anyone is allowed to post to 'sys' topic.
+		if t.cat != types.TopicCatSys {
+			// If it's not 'sys' check write permission.
+			if !(userData.modeWant & userData.modeGiven).IsWriter() {
+				msg.sess.queueOut(ErrPermissionDenied(msg.Id, t.original(asUid), msg.Timestamp))
+				return
+			}
+		}
+
+		if err := store.Messages.Save(&types.Message{
+			ObjHeader: types.ObjHeader{CreatedAt: msg.Data.Timestamp},
+			SeqId:     t.lastID + 1,
+			Topic:     t.name,
+			From:      asUser.String(),
+			Head:      msg.Data.Head,
+			Content:   msg.Data.Content}, (userData.modeGiven & userData.modeWant).IsReader()); err != nil {
+
+			log.Printf("topic[%s]: failed to save message: %v", t.name, err)
+			msg.sess.queueOut(ErrUnknown(msg.Id, t.original(asUid), msg.Timestamp))
+
+			return
+		}
+
+		t.lastID++
+		t.touched = msg.Data.Timestamp
+		msg.Data.SeqId = t.lastID
+		if userFound {
+			userData.readID = t.lastID
+			userData.readID = t.lastID
+			t.perUser[asUser] = userData
+		}
+		if msg.Id != "" {
+			reply := NoErrAccepted(msg.Id, t.original(asUid), msg.Timestamp)
+			reply.Ctrl.Params = map[string]int{"seq": t.lastID}
+			msg.sess.queueOut(reply)
+		}
+
+		pushRcpt = t.pushForData(asUser, msg.Data)
+
+		// Message sent: notify offline 'R' subscrbers on 'me'
+		t.presSubsOffline("msg", &presParams{seqID: t.lastID, actor: msg.Data.From},
+			&presFilters{filterIn: types.ModeRead}, nilPresFilters, "", true)
+
+		// Tell the plugins that a message was accepted for delivery
+		pluginMessage(msg.Data, plgActCreate)
+
+	} else if msg.Pres != nil {
+		if t.isInactive() {
+			// Ignore presence update - topic is paused or being deleted
+			return
+		}
+
+		what := t.presProcReq(msg.Pres.Src, msg.Pres.What, msg.Pres.WantReply)
+		if t.xoriginal != msg.Pres.Topic || what == "" {
+			// This is just a request for status, don't forward it to sessions
+			return
+		}
+
+		// "what" may have changed, i.e. unset or "+command" removed ("on+en" -> "on")
+		msg.Pres.What = what
+	} else if msg.Info != nil {
+		if t.isInactive() {
+			// Ignore info messages - topic is paused or being deleted
+			return
+		}
+
+		if msg.Info.SeqId > t.lastID {
+			// Drop bogus read notification
+			return
+		}
+
+		asUser := types.ParseUserId(msg.Info.From)
+		pud := t.perUser[asUser]
+
+		// Filter out "kp" from users with no 'W' permission (or people without a subscription)
+		if msg.Info.What == "kp" && (!(pud.modeGiven & pud.modeWant).IsWriter() || t.isReadOnly()) {
+			return
+		}
+
+		if msg.Info.What == "read" || msg.Info.What == "recv" {
+			// Filter out "read/recv" from users with no 'R' permission (or people without a subscription)
+			if !(pud.modeGiven & pud.modeWant).IsReader() {
+				return
+			}
+
+			var read, recv, unread int
+			if msg.Info.What == "read" {
+				if msg.Info.SeqId > pud.readID {
+					// The number of unread messages has decreased, negative value
+					unread = pud.readID - msg.Info.SeqId
+					pud.readID = msg.Info.SeqId
+					read = pud.readID
+				} else {
+					// No need to report stale or bogus read status
+					return
+				}
+			} else if msg.Info.What == "recv" {
+				if msg.Info.SeqId > pud.recvID {
+					pud.recvID = msg.Info.SeqId
+					recv = pud.recvID
+				} else {
+					return
+				}
+			}
+
+			if pud.readID > pud.recvID {
+				pud.recvID = pud.readID
+				recv = pud.recvID
+			}
+
+			if err := store.Subs.Update(t.name, asUser,
+				map[string]interface{}{
+					"RecvSeqId": pud.recvID,
+					"ReadSeqId": pud.readID},
+				false); err != nil {
+
+				log.Printf("topic[%s]: failed to update SeqRead/Recv counter: %v", t.name, err)
+				return
+			}
+
+			// Read/recv updated: notify user's other sessions of the change
+			t.presPubMessageCount(asUser, recv, read, msg.SkipSid)
+
+			// Update cached count of unread messages
+			usersUpdateUnread(asUser, unread, true)
+
+			t.perUser[asUser] = pud
+		}
+	}
+
+	// Broadcast the message. Only {data}, {pres}, {info} are broadcastable.
+	// {meta} and {ctrl} are sent to the session only
+	if msg.Data != nil || msg.Pres != nil || msg.Info != nil {
+		if t.isProxy && msg.Info != nil {
+			log.Printf("proxy got info %+v\n", msg.Info)
+		}
+		for sess, pssd := range t.sessions {
+			if t.isProxy && msg.Info != nil {
+				log.Println("sending to session", sess.isMultiplex(), sess.sid, msg.SkipSid)
+			}
+			if !sess.isMultiplex() { // Send all messages to multiplexing session.
+				if sess.sid == msg.SkipSid {
+					return
+				}
+
+				if msg.Pres != nil {
+					// Skip notifying - already notified on topic.
+					// Don't check multiplexing sessions.
+					if msg.Pres.SkipTopic != "" || sess.getSub(msg.Pres.SkipTopic) != nil {
+						return
+					}
+
+					// Notification addressed to a single user only.
+					if msg.Pres.SingleUser != "" && pssd.uid.UserId() != msg.Pres.SingleUser {
+						return
+					}
+					// Notification should skip a single user.
+					if msg.Pres.ExcludeUser != "" && pssd.uid.UserId() == msg.Pres.ExcludeUser {
+						return
+					}
+
+					// Check presence filters
+					if !t.passesPresenceFilters(msg, pssd.uid) {
+						return
+					}
+
+				} else {
+					// Check if the user has Read permission
+					if !t.userIsReader(pssd.uid) {
+						return
+					}
+
+					// Don't send key presses from one user's session to the other sessions of the same user.
+					if msg.Info != nil && msg.Info.What == "kp" && msg.Info.From == pssd.uid.UserId() {
+						return
+					}
+				}
+
+				// Topic name may be different depending on the user to which the `sess` belongs.
+				t.maybeFixTopicName(msg, pssd.uid)
+			}
+
+			if !sess.queueOut(msg) {
+				log.Println("topic: connection stuck, detaching", t.name, sess.sid)
+				// The whole session is being dropped, so sessionLeave.pkt is not set.
+				t.unreg <- &sessionLeave{sess: sess}
+			}
+		}
+
+		if pushRcpt != nil {
+			// usersPush will update unread message count and send push notification.
+			usersPush(pushRcpt)
+		}
+	} else {
+		// TODO(gene): remove this
+		log.Panic("topic: wrong message type for broadcasting", t.name)
+	}
+}
+
+// subscriptionReply generates a response to a subscription request
+func (t *Topic) subscriptionReply(h *Hub, join *sessionJoin) error {
 	// The topic is already initialized by the Hub
 
 	msgsub := join.pkt.Sub
