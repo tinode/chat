@@ -764,42 +764,47 @@ func (t *Topic) handleBroadcast(msg *ServerComMessage) {
 			}
 		}
 
-		if err := store.Messages.Save(&types.Message{
-			ObjHeader: types.ObjHeader{CreatedAt: msg.Data.Timestamp},
-			SeqId:     t.lastID + 1,
-			Topic:     t.name,
-			From:      asUser.String(),
-			Head:      msg.Data.Head,
-			Content:   msg.Data.Content}, (userData.modeGiven & userData.modeWant).IsReader()); err != nil {
+		if !t.isProxy {
+			if err := store.Messages.Save(&types.Message{
+				ObjHeader: types.ObjHeader{CreatedAt: msg.Data.Timestamp},
+				SeqId:     t.lastID + 1,
+				Topic:     t.name,
+				From:      asUser.String(),
+				Head:      msg.Data.Head,
+				Content:   msg.Data.Content}, (userData.modeGiven & userData.modeWant).IsReader()); err != nil {
 
-			log.Printf("topic[%s]: failed to save message: %v", t.name, err)
-			msg.sess.queueOut(ErrUnknown(msg.Id, t.original(asUid), msg.Timestamp))
+				log.Printf("topic[%s]: failed to save message: %v", t.name, err)
+				msg.sess.queueOut(ErrUnknown(msg.Id, t.original(asUid), msg.Timestamp))
 
-			return
+				return
+			}
+
+			t.lastID++
+			t.touched = msg.Data.Timestamp
+			msg.Data.SeqId = t.lastID
+			if userFound {
+				userData.readID = t.lastID
+				userData.readID = t.lastID
+				t.perUser[asUser] = userData
+			}
 		}
 
-		t.lastID++
-		t.touched = msg.Data.Timestamp
-		msg.Data.SeqId = t.lastID
-		if userFound {
-			userData.readID = t.lastID
-			userData.readID = t.lastID
-			t.perUser[asUser] = userData
-		}
 		if msg.Id != "" {
 			reply := NoErrAccepted(msg.Id, t.original(asUid), msg.Timestamp)
 			reply.Ctrl.Params = map[string]int{"seq": t.lastID}
 			msg.sess.queueOut(reply)
 		}
 
-		pushRcpt = t.pushForData(asUser, msg.Data)
+		if !t.isProxy {
+			pushRcpt = t.pushForData(asUser, msg.Data)
 
-		// Message sent: notify offline 'R' subscrbers on 'me'
-		t.presSubsOffline("msg", &presParams{seqID: t.lastID, actor: msg.Data.From},
-			&presFilters{filterIn: types.ModeRead}, nilPresFilters, "", true)
+			// Message sent: notify offline 'R' subscrbers on 'me'
+			t.presSubsOffline("msg", &presParams{seqID: t.lastID, actor: msg.Data.From},
+				&presFilters{filterIn: types.ModeRead}, nilPresFilters, "", true)
 
-		// Tell the plugins that a message was accepted for delivery
-		pluginMessage(msg.Data, plgActCreate)
+			// Tell the plugins that a message was accepted for delivery
+			pluginMessage(msg.Data, plgActCreate)
+		}
 
 	} else if msg.Pres != nil {
 		if t.isInactive() {
@@ -944,7 +949,7 @@ func (t *Topic) handleBroadcast(msg *ServerComMessage) {
 			}
 		}
 
-		if pushRcpt != nil {
+		if !t.isProxy && pushRcpt != nil {
 			// usersPush will update unread message count and send push notification.
 			usersPush(pushRcpt)
 		}
