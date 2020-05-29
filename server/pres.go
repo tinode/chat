@@ -333,12 +333,10 @@ func (t *Topic) presSubsOnlineDirect(what string, params *presParams, filter *pr
 				}
 			}
 
-			if t.cat == types.TopicCatP2P {
-				// For p2p topics topic name is dependent on receiver.
-				// It's OK to change the pointer here because the message will be serialized in queueOut
-				// before being placed into the channel.
-				t.maybeFixTopicName(msg, pssd.uid)
-			}
+			// For p2p topics topic name is dependent on receiver.
+			// It's OK to change the pointer here because the message will be serialized in queueOut
+			// before being placed into the channel.
+			t.maybeFixTopicName(msg, pssd.uid)
 		}
 		s.queueOut(msg)
 	}

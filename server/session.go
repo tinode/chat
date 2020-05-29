@@ -221,6 +221,7 @@ type remoteSession struct {
 	isBackground bool
 }
 
+/*
 func (s *Session) addRemoteSession(sid string, rs *remoteSession) {
 	s.remoteSessionsLock.Lock()
 	s.remoteSessions[sid] = rs
@@ -232,7 +233,7 @@ func (s *Session) delRemoteSession(sid string) {
 	delete(s.remoteSessions, sid)
 	s.remoteSessionsLock.Unlock()
 }
-
+*/
 // Indicates whether this session is a local interface for a remote proxy topic.
 // It multiplexes multiple sessions.
 func (s *Session) isMultiplex() bool {
@@ -244,14 +245,14 @@ func (s *Session) isProxy() bool {
 	return s.proto == PROXY
 }
 
+// Clsuter session: either a proxy or a multiplexing session.
+func (s *Session) isCluster() bool {
+	return s.isProxy() || s.isMultiplex()
+}
+
 // queueOut attempts to send a ServerComMessage to a session write loop; if the send buffer is full,
 // timeout is `sendTimeout`.
 func (s *Session) queueOut(msg *ServerComMessage) bool {
-	if s == nil {
-		log.Println("s.queueOut: attempt to send on nil session")
-		return false
-	}
-
 	if s.multi != nil {
 		// In case of a cluster we need to pass a copy of the actual session.
 		msg.sess = s

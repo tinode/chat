@@ -188,7 +188,8 @@ func (h *Hub) run() {
 			// Route incoming message to topic if topic permits such routing.
 
 			if dst := h.topicGet(msg.RcptTo); dst != nil {
-				log.Println("hub: sending broadcast to active topic", dst.isProxy, msg.RcptTo)
+				log.Println("hub: sending broadcast to active topic, node=",
+					globals.cluster.thisNodeName, "isProxy=", dst.isProxy, "topic=", msg.RcptTo, "msg=", msg)
 				// Everything is OK, sending packet to known topic
 				if dst.broadcast != nil {
 					select {

@@ -67,7 +67,7 @@ func (t *Topic) runProxy(hub *Hub) {
 
 		case msg := <-t.broadcast:
 			// Content message intended for broadcasting to recipients
-			log.Printf("t[%s] broadcast %+v", t.name, msg)
+			log.Printf("node[%s] tproxy[%s] broadcast msg=%s", globals.cluster.thisNodeName, t.name, msg.describe())
 			if err := globals.cluster.routeToTopicMaster(ProxyReqBroadcast, msg, t.name, msg.sess); err != nil {
 				log.Println("proxy topic: route broadcast request from proxy to master failed:", err)
 			}
@@ -132,16 +132,17 @@ func (t *Topic) proxyMasterResponse(msg *ClusterResp, killTimer *time.Timer) {
 	// Kills topic after a period of inactivity.
 	keepAlive := idleProxyTopicTimeout
 
-	log.Printf("topic_proxy: master response %+v id='%s'\n", msg, msg.SrvMsg.Id)
+	log.Println("tproxy: master response", "node=", globals.cluster.thisNodeName,
+		"msg=", msg.SrvMsg.describe(), "id=", msg.SrvMsg.Id, "user=", msg.SrvMsg.AsUser)
 
 	if msg.SrvMsg.Pres != nil && msg.SrvMsg.Pres.What == "acs" && msg.SrvMsg.Pres.Acs != nil {
 		// If the server changed acs on this topic, update the internal state.
 		t.updateAcsFromPresMsg(msg.SrvMsg.Pres)
 	}
+
 	if msg.OrigSid == "*" {
 		log.Println("topic_proxy: broadcast OrigSid='*'")
 		// It is a broadcast.
-		msg.SrvMsg.uid = types.ParseUserId(msg.SrvMsg.AsUser)
 		switch {
 		case msg.SrvMsg.Pres != nil || msg.SrvMsg.Data != nil || msg.SrvMsg.Info != nil:
 			// Regular broadcast.
@@ -153,7 +154,7 @@ func (t *Topic) proxyMasterResponse(msg *ClusterResp, killTimer *time.Timer) {
 		default:
 		}
 	} else {
-		log.Println("topic_proxy: session response", msg.OrigSid)
+		log.Println("topic_proxy: session response", msg.OrigSid, msg.SrvMsg.AsUser)
 
 		sess := globals.sessionStore.Get(msg.OrigSid)
 		switch msg.OrigReqType {
@@ -165,7 +166,7 @@ func (t *Topic) proxyMasterResponse(msg *ClusterResp, killTimer *time.Timer) {
 				// Subscription result.
 				if msg.SrvMsg.Ctrl.Code < 300 {
 					log.Println("topic_proxy: subscription: adding session to topic",
-						t.name, sess.sid, sess.proto, msg.SrvMsg.uid.UserId())
+						t.name, sess.sid, sess.proto, "user=", msg.SrvMsg.uid.UserId())
 					// Successful subscriptions.
 					if t.addSession(sess, msg.SrvMsg.uid) {
 						sess.addSub(t.name, &Subscription{
@@ -186,7 +187,7 @@ func (t *Topic) proxyMasterResponse(msg *ClusterResp, killTimer *time.Timer) {
 		case ProxyReqLeave:
 			log.Printf("proxy topic [%s]: session %p unsubscribed", t.name, sess)
 			if msg.SrvMsg != nil && msg.SrvMsg.Ctrl != nil {
-				log.Printf("proxy topic [%s]: ctrl msg = %+v", t.name, msg.SrvMsg.Ctrl)
+				log.Printf("proxy topic [%s]: msg=%s", t.name, msg.SrvMsg.Ctrl.describe())
 				if msg.SrvMsg.Ctrl.Code < 300 {
 					if sess != nil {
 						t.remSession(sess, sess.uid)

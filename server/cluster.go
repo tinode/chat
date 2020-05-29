@@ -405,6 +405,7 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 			lang:       msg.Sess.Lang,
 			proxyReq:   msg.ReqType,
 			background: msg.Sess.Background,
+			uid:        msg.Sess.Uid,
 		}
 	}
 
@@ -441,7 +442,8 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 
 	case ProxyReqBroadcast:
 		// sess could be nil
-		log.Println("cluster: broadcast request", msid, sess)
+		log.Println("cluster: master broadcast request at", globals.cluster.thisNodeName,
+			"from", msid, "sess is nil?", sess != nil)
 		msg.SrvMsg.sess = sess
 		globals.hub.route <- msg.SrvMsg
 
@@ -676,11 +678,15 @@ func (c *Cluster) makeClusterReq(reqType ProxyReqType, payload interface{}, topi
 		RcptTo:      topic,
 	}
 
+	var uid types.Uid
+
 	switch pl := payload.(type) {
 	case *ClientComMessage:
 		req.CliMsg = pl
+		uid = types.ParseUserId(req.CliMsg.AsUser)
 	case *ServerComMessage:
 		req.SrvMsg = pl
+		uid = types.ParseUserId(req.SrvMsg.AsUser)
 	case nil:
 	// do nothing
 	default:
@@ -688,8 +694,12 @@ func (c *Cluster) makeClusterReq(reqType ProxyReqType, payload interface{}, topi
 	}
 
 	if sess != nil {
+		if uid.IsZero() {
+			uid = sess.uid
+		}
+
 		req.Sess = &ClusterSess{
-			Uid:        sess.uid,
+			Uid:        uid,
 			AuthLvl:    sess.authLvl,
 			RemoteAddr: sess.remoteAddr,
 			UserAgent:  sess.userAgent,
@@ -1020,30 +1030,29 @@ func (sess *Session) clusterWriteLoop(forTopic string) {
 			}
 			srvMsg := msg.(*ServerComMessage)
 			response := &ClusterResp{SrvMsg: srvMsg}
-			if srvMsg.sess != nil {
-				log.Printf("clusterWriteLoop: session is present %+v\n", srvMsg)
+			if srvMsg.sess == nil {
+				log.Println("clusterWriteLoop: session is NIL, msg=", srvMsg.describe())
+				response.OrigSid = "*"
+			} else {
+				log.Println("clusterWriteLoop: session is present, msg=", srvMsg.describe())
 
 				response.OrigReqType = srvMsg.sess.proxyReq
 				response.OrigSid = srvMsg.sess.sid
+				srvMsg.AsUser = srvMsg.sess.uid.UserId()
+
 				switch srvMsg.sess.proxyReq {
 				case ProxyReqJoin:
 					//sess.addRemoteSession(srvMsg.sess.sid, &remoteSession{uid: srvMsg.uid,isBackground: response.IsBackground})
 				case ProxyReqLeave:
 					//sess.delRemoteSession(srvMsg.sess.sid)
 				case ProxyReqBroadcast:
-					response.OrigSid = "*"
+					if srvMsg.Data != nil || srvMsg.Pres != nil || srvMsg.Info != nil {
+						response.OrigSid = "*"
+					}
 				case ProxyReqMeta:
 				default:
 					panic("cluster: unknown request type in clusterWriteLoop")
 				}
-			} else {
-				log.Printf("clusterWriteLoop: session is NIL %+v\n", srvMsg)
-
-				if srvMsg.Ctrl == nil && srvMsg.Data == nil && srvMsg.Pres == nil && srvMsg.Info == nil {
-					// Only broadcast messages (data, pres, info) may come not as a response to a client request.
-					log.Panicf("cluster: only broadcast messages may not contain session overrides: %+v", srvMsg)
-				}
-				response.OrigSid = "*"
 			}
 
 			srvMsg.RcptTo = forTopic
@@ -1055,6 +1064,7 @@ func (sess *Session) clusterWriteLoop(forTopic string) {
 			}
 		case msg := <-sess.stop:
 			if msg != nil {
+				// FIXME: not clear if it should be forwarded to proxy.
 				log.Println("clusterWriteLoop stop", msg.(*ServerComMessage),
 					"to", sess.clnode.endpoint, "from", sess.sid)
 			}

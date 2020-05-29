@@ -9,7 +9,9 @@ package main
  *****************************************************************************/
 
 import (
+	"encoding/json"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -363,6 +365,20 @@ type MsgAccessMode struct {
 	Mode string `json:"mode,omitempty"`
 }
 
+func (src *MsgAccessMode) describe() string {
+	var s string
+	if src.Want != "" {
+		s = " w=" + src.Want
+	}
+	if src.Given != "" {
+		s += " g=" + src.Given
+	}
+	if src.Mode != "" {
+		s += " m=" + src.Mode
+	}
+	return s
+}
+
 // MsgTopicDesc is a topic description, S2C in Meta message.
 type MsgTopicDesc struct {
 	CreatedAt *time.Time `json:"created,omitempty"`
@@ -388,6 +404,36 @@ type MsgTopicDesc struct {
 	Public interface{} `json:"public,omitempty"`
 	// Per-subscription private data
 	Private interface{} `json:"private,omitempty"`
+}
+
+func (src *MsgTopicDesc) describe() string {
+	var s string
+	if src.State != "" {
+		s = " state=" + src.State
+	}
+	s += " online=" + strconv.FormatBool(src.Online)
+	if src.Acs != nil {
+		s += " acs={" + src.Acs.describe() + "}"
+	}
+	if src.SeqId != 0 {
+		s += " seq=" + strconv.Itoa(src.SeqId)
+	}
+	if src.ReadSeqId != 0 {
+		s += " read=" + strconv.Itoa(src.ReadSeqId)
+	}
+	if src.RecvSeqId != 0 {
+		s += " recv=" + strconv.Itoa(src.RecvSeqId)
+	}
+	if src.DelId != 0 {
+		s += " clear=" + strconv.Itoa(src.DelId)
+	}
+	if src.Public != nil {
+		s += " pub='...'"
+	}
+	if src.Private != nil {
+		s += " priv='...'"
+	}
+	return s
 }
 
 // MsgTopicSub is topic subscription details, sent in Meta message.
@@ -463,6 +509,10 @@ func (src *MsgServerCtrl) copy() *MsgServerCtrl {
 	return &dst
 }
 
+func (src *MsgServerCtrl) describe() string {
+	return src.Topic + " id=" + src.Id + " code=" + strconv.Itoa(src.Code) + " txt=" + src.Text
+}
+
 // MsgServerData is a server {data} message.
 type MsgServerData struct {
 	Topic string `json:"topic"`
@@ -482,6 +532,19 @@ func (src *MsgServerData) copy() *MsgServerData {
 	}
 	dst := *src
 	return &dst
+}
+
+func (src *MsgServerData) describe() string {
+	s := src.Topic + " from=" + src.From + " seq=" + strconv.Itoa(src.SeqId)
+	if src.DeletedAt != nil {
+		s += " deleted"
+	} else {
+		if src.Head != nil {
+			s += " head=..."
+		}
+		s += " content='...'"
+	}
+	return s
 }
 
 // MsgServerPres is presence notification {pres} (authoritative update).
@@ -530,6 +593,39 @@ func (src *MsgServerPres) copy() *MsgServerPres {
 	return &dst
 }
 
+func (src *MsgServerPres) describe() string {
+	s := src.Topic
+	if src.Src != "" {
+		s += " src=" + src.Src
+	}
+	if src.What != "" {
+		s += " what=" + src.What
+	}
+	if src.UserAgent != "" {
+		s += " ua=" + src.UserAgent
+	}
+	if src.SeqId != 0 {
+		s += " seq=" + strconv.Itoa(src.SeqId)
+	}
+	if src.DelId != 0 {
+		s += " clear=" + strconv.Itoa(src.DelId)
+	}
+	if src.DelSeq != nil {
+		s += " delseq"
+	}
+	if src.AcsTarget != "" {
+		s += " tgt=" + src.AcsTarget
+	}
+	if src.AcsActor != "" {
+		s += " actor=" + src.AcsActor
+	}
+	if src.Acs != nil {
+		s += " dacs=" + src.Acs.describe()
+	}
+
+	return s
+}
+
 // MsgServerMeta is a topic metadata {meta} update.
 type MsgServerMeta struct {
 	Id    string `json:"id,omitempty"`
@@ -558,6 +654,30 @@ func (src *MsgServerMeta) copy() *MsgServerMeta {
 	return &dst
 }
 
+func (src *MsgServerMeta) describe() string {
+	s := src.Topic + " id=" + src.Id
+
+	if src.Desc != nil {
+		s += " desc={" + src.Desc.describe() + "}"
+	}
+	if src.Sub != nil {
+		x, _ := json.Marshal(src.Sub)
+		s += " sub={" + string(x) + "}"
+	}
+	if src.Del != nil {
+		x, _ := json.Marshal(src.Del)
+		s += " del={" + string(x) + "}"
+	}
+	if src.Tags != nil {
+		s += " tags=[" + strings.Join(src.Tags, ",") + "]"
+	}
+	if src.Cred != nil {
+		x, _ := json.Marshal(src.Cred)
+		s += " cred=[" + string(x) + "]"
+	}
+	return s
+}
+
 // MsgServerInfo is the server-side copy of MsgClientNote with From added (non-authoritative).
 type MsgServerInfo struct {
 	Topic string `json:"topic"`
@@ -576,6 +696,15 @@ func (src *MsgServerInfo) copy() *MsgServerInfo {
 	}
 	dst := *src
 	return &dst
+}
+
+// Basic description
+func (src *MsgServerInfo) describe() string {
+	s := src.Topic + " what=" + src.What + " from=" + src.From
+	if src.SeqId > 0 {
+		s += " seq=" + strconv.Itoa(src.SeqId)
+	}
+	return s
 }
 
 // ServerComMessage is a wrapper for server-side messages.
@@ -628,6 +757,27 @@ func (src *ServerComMessage) copy() *ServerComMessage {
 	dst.Info = src.Info.copy()
 
 	return dst
+}
+
+func (src *ServerComMessage) describe() string {
+	if src == nil {
+		return "-"
+	}
+
+	switch {
+	case src.Ctrl != nil:
+		return "{ctrl " + src.Ctrl.describe() + "}"
+	case src.Data != nil:
+		return "{data " + src.Data.describe() + "}"
+	case src.Meta != nil:
+		return "{meta " + src.Meta.describe() + "}"
+	case src.Pres != nil:
+		return "{pres " + src.Pres.describe() + "}"
+	case src.Info != nil:
+		return "{info " + src.Info.describe() + "}"
+	default:
+		return "{nil}"
+	}
 }
 
 // Generators of server-side error messages {ctrl}.

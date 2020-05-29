@@ -329,7 +329,9 @@ func (t *Topic) runLocal(hub *Hub) {
 					uid = pssd.uid
 				}
 
-				log.Println("topic leave 2", pssd, leave.sess.isProxy(), uid)
+				if leave.sess.isCluster() {
+					log.Println("topic leave 2", pssd, leave.sess.isProxy(), uid)
+				}
 
 				// uid may be zero when a proxy session is trying to terminate (it called unsubAll).
 				var pud perUserData
@@ -338,7 +340,7 @@ func (t *Topic) runLocal(hub *Hub) {
 					if pssd == nil || !leave.sess.background {
 						pud.online--
 					}
-				} else if !leave.sess.isProxy() {
+				} else if !leave.sess.isCluster() {
 					log.Panic("cannot determine uid: leave req=", leave)
 				}
 
@@ -378,7 +380,7 @@ func (t *Topic) runLocal(hub *Hub) {
 
 				// Respond if either the request contains an id
 				// or a proxy session is responding to a client request without an id.
-				if leave.pkt != nil && (!uid.IsZero() || leave.sess.isProxy()) {
+				if leave.pkt != nil && (!uid.IsZero() || leave.sess.isCluster()) {
 					leave.sess.queueOut(NoErr(leave.pkt.Id, t.original(uid), now))
 				}
 			}
@@ -739,15 +741,19 @@ func (t *Topic) sendSubNotifications(asUid types.Uid, sid, userAgent string) {
 
 // handleBroadcast fans out broadcastable messages to recepients in topic and proxy_topic.
 func (t *Topic) handleBroadcast(msg *ServerComMessage) {
-	log.Println("topic: handleBroadcast", t.name, t.isProxy)
+	log.Println("topic: handleBroadcast, node=", globals.cluster.thisNodeName, "topic=", t.name, "isPrioxy=", t.isProxy, "msg=", msg.describe())
+
+	asUid := types.ParseUserId(msg.AsUser)
+	if t.isInactive() {
+		// Ignore broadcast - topic is paused or being deleted.
+		if msg.Data != nil {
+			msg.sess.queueOut(ErrLocked(msg.Id, t.original(asUid), msg.Timestamp))
+		}
+		return
+	}
 
 	var pushRcpt *push.Receipt
-	asUid := types.ParseUserId(msg.AsUser)
 	if msg.Data != nil {
-		if t.isInactive() {
-			msg.sess.queueOut(ErrLocked(msg.Id, t.original(asUid), msg.Timestamp))
-			return
-		}
 		if t.isReadOnly() {
 			msg.sess.queueOut(ErrPermissionDenied(msg.Id, t.original(asUid), msg.Timestamp))
 			return
@@ -764,7 +770,10 @@ func (t *Topic) handleBroadcast(msg *ServerComMessage) {
 			}
 		}
 
-		if !t.isProxy {
+		if t.isProxy {
+			t.lastID = msg.Data.SeqId
+		} else {
+			// Save to DB at master topic.
 			if err := store.Messages.Save(&types.Message{
 				ObjHeader: types.ObjHeader{CreatedAt: msg.Data.Timestamp},
 				SeqId:     t.lastID + 1,
@@ -782,14 +791,15 @@ func (t *Topic) handleBroadcast(msg *ServerComMessage) {
 			t.lastID++
 			t.touched = msg.Data.Timestamp
 			msg.Data.SeqId = t.lastID
-			if userFound {
-				userData.readID = t.lastID
-				userData.readID = t.lastID
-				t.perUser[asUser] = userData
-			}
 		}
 
-		if msg.Id != "" {
+		if userFound {
+			userData.readID = t.lastID
+			userData.readID = t.lastID
+			t.perUser[asUser] = userData
+		}
+
+		if msg.Id != "" && msg.sess != nil {
 			reply := NoErrAccepted(msg.Id, t.original(asUid), msg.Timestamp)
 			reply.Ctrl.Params = map[string]int{"seq": t.lastID}
 			msg.sess.queueOut(reply)
@@ -798,7 +808,7 @@ func (t *Topic) handleBroadcast(msg *ServerComMessage) {
 		if !t.isProxy {
 			pushRcpt = t.pushForData(asUser, msg.Data)
 
-			// Message sent: notify offline 'R' subscrbers on 'me'
+			// Message sent: notify offline 'R' subscrbers on 'me'.
 			t.presSubsOffline("msg", &presParams{seqID: t.lastID, actor: msg.Data.From},
 				&presFilters{filterIn: types.ModeRead}, nilPresFilters, "", true)
 
@@ -807,11 +817,6 @@ func (t *Topic) handleBroadcast(msg *ServerComMessage) {
 		}
 
 	} else if msg.Pres != nil {
-		if t.isInactive() {
-			// Ignore presence update - topic is paused or being deleted
-			return
-		}
-
 		what := t.presProcReq(msg.Pres.Src, msg.Pres.What, msg.Pres.WantReply)
 		if t.xoriginal != msg.Pres.Topic || what == "" {
 			// This is just a request for status, don't forward it to sessions
@@ -821,11 +826,6 @@ func (t *Topic) handleBroadcast(msg *ServerComMessage) {
 		// "what" may have changed, i.e. unset or "+command" removed ("on+en" -> "on")
 		msg.Pres.What = what
 	} else if msg.Info != nil {
-		if t.isInactive() {
-			// Ignore info messages - topic is paused or being deleted
-			return
-		}
-
 		if msg.Info.SeqId > t.lastID {
 			// Drop bogus read notification
 			return
@@ -870,93 +870,101 @@ func (t *Topic) handleBroadcast(msg *ServerComMessage) {
 				recv = pud.recvID
 			}
 
-			if err := store.Subs.Update(t.name, asUser,
-				map[string]interface{}{
-					"RecvSeqId": pud.recvID,
-					"ReadSeqId": pud.readID},
-				false); err != nil {
+			if !t.isProxy {
+				if err := store.Subs.Update(t.name, asUser,
+					map[string]interface{}{
+						"RecvSeqId": pud.recvID,
+						"ReadSeqId": pud.readID},
+					false); err != nil {
 
-				log.Printf("topic[%s]: failed to update SeqRead/Recv counter: %v", t.name, err)
-				return
-			}
-
-			// Read/recv updated: notify user's other sessions of the change
-			t.presPubMessageCount(asUser, recv, read, msg.SkipSid)
-
-			// Update cached count of unread messages
-			usersUpdateUnread(asUser, unread, true)
-
-			t.perUser[asUser] = pud
-		}
-	}
-
-	// Broadcast the message. Only {data}, {pres}, {info} are broadcastable.
-	// {meta} and {ctrl} are sent to the session only
-	if msg.Data != nil || msg.Pres != nil || msg.Info != nil {
-		if t.isProxy && msg.Info != nil {
-			log.Printf("proxy got info %+v\n", msg.Info)
-		}
-		for sess, pssd := range t.sessions {
-			if t.isProxy && msg.Info != nil {
-				log.Println("sending to session", sess.isMultiplex(), sess.sid, msg.SkipSid)
-			}
-			if !sess.isMultiplex() { // Send all messages to multiplexing session.
-				if sess.sid == msg.SkipSid {
+					log.Printf("topic[%s]: failed to update SeqRead/Recv counter: %v", t.name, err)
 					return
 				}
 
-				if msg.Pres != nil {
-					// Skip notifying - already notified on topic.
-					// Don't check multiplexing sessions.
-					if msg.Pres.SkipTopic != "" || sess.getSub(msg.Pres.SkipTopic) != nil {
-						return
-					}
+				// Read/recv updated: notify user's other sessions of the change
+				t.presPubMessageCount(asUser, recv, read, msg.SkipSid)
 
-					// Notification addressed to a single user only.
-					if msg.Pres.SingleUser != "" && pssd.uid.UserId() != msg.Pres.SingleUser {
-						return
-					}
-					// Notification should skip a single user.
-					if msg.Pres.ExcludeUser != "" && pssd.uid.UserId() == msg.Pres.ExcludeUser {
-						return
-					}
-
-					// Check presence filters
-					if !t.passesPresenceFilters(msg, pssd.uid) {
-						return
-					}
-
-				} else {
-					// Check if the user has Read permission
-					if !t.userIsReader(pssd.uid) {
-						return
-					}
-
-					// Don't send key presses from one user's session to the other sessions of the same user.
-					if msg.Info != nil && msg.Info.What == "kp" && msg.Info.From == pssd.uid.UserId() {
-						return
-					}
-				}
-
-				// Topic name may be different depending on the user to which the `sess` belongs.
-				t.maybeFixTopicName(msg, pssd.uid)
+				// Update cached count of unread messages
+				usersUpdateUnread(asUser, unread, true)
 			}
 
-			if !sess.queueOut(msg) {
-				log.Println("topic: connection stuck, detaching", t.name, sess.sid)
-				// The whole session is being dropped, so sessionLeave.pkt is not set.
-				t.unreg <- &sessionLeave{sess: sess}
-			}
-		}
-
-		if !t.isProxy && pushRcpt != nil {
-			// usersPush will update unread message count and send push notification.
-			usersPush(pushRcpt)
+			t.perUser[asUser] = pud
 		}
 	} else {
 		// TODO(gene): remove this
 		log.Panic("topic: wrong message type for broadcasting", t.name)
 	}
+
+	if t.isProxy && msg.Info != nil {
+		log.Println("proxy got info=", msg.Info.describe())
+	}
+
+	// Broadcast the message. Only {data}, {pres}, {info} are broadcastable.
+	// {meta} and {ctrl} are sent to the session only
+	for sess, pssd := range t.sessions {
+		if t.isProxy {
+			log.Println("sending to session", sess.isProxy(), sess.isMultiplex(), sess.sid, msg.SkipSid, pssd.uid)
+		}
+		if !sess.isMultiplex() { // Send all messages to multiplexing session.
+			if sess.sid == msg.SkipSid {
+				return
+			}
+
+			if msg.Pres != nil {
+				// Skip notifying - already notified on topic.
+				// Don't check multiplexing sessions.
+				if msg.Pres.SkipTopic != "" || sess.getSub(msg.Pres.SkipTopic) != nil {
+					return
+				}
+
+				// Notification addressed to a single user only.
+				if msg.Pres.SingleUser != "" && pssd.uid.UserId() != msg.Pres.SingleUser {
+					return
+				}
+				// Notification should skip a single user.
+				if msg.Pres.ExcludeUser != "" && pssd.uid.UserId() == msg.Pres.ExcludeUser {
+					return
+				}
+
+				// Check presence filters
+				if !t.passesPresenceFilters(msg, pssd.uid) {
+					return
+				}
+
+			} else {
+				// Check if the user has Read permission
+				if !t.userIsReader(pssd.uid) {
+					return
+				}
+
+				// Don't send key presses from one user's session to the other sessions of the same user.
+				if msg.Info != nil && msg.Info.What == "kp" && msg.Info.From == pssd.uid.UserId() {
+					return
+				}
+			}
+		}
+
+		// Topic name may be different depending on the user to which the `sess` belongs.
+		if t.isProxy {
+			log.Println("before fix", msg.describe(), pssd.uid)
+		}
+		t.maybeFixTopicName(msg, pssd.uid)
+		if t.isProxy {
+			log.Println("afterr fix", msg.describe())
+		}
+
+		if !sess.queueOut(msg) {
+			log.Println("topic: connection stuck, detaching", t.name, sess.sid)
+			// The whole session is being dropped, so sessionLeave.pkt is not set.
+			t.unreg <- &sessionLeave{sess: sess}
+		}
+	}
+
+	if !t.isProxy && pushRcpt != nil {
+		// usersPush will update unread message count and send push notification.
+		usersPush(pushRcpt)
+	}
+
 }
 
 // subscriptionReply generates a response to a subscription request
