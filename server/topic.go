@@ -741,7 +741,8 @@ func (t *Topic) sendSubNotifications(asUid types.Uid, sid, userAgent string) {
 
 // handleBroadcast fans out broadcastable messages to recepients in topic and proxy_topic.
 func (t *Topic) handleBroadcast(msg *ServerComMessage) {
-	log.Println("topic: handleBroadcast, node=", globals.cluster.thisNodeName, "topic=", t.name, "isPrioxy=", t.isProxy, "msg=", msg.describe())
+	log.Println("topic: handleBroadcast, node=", globals.cluster.thisNodeName,
+		"topic=", t.name, "isPrioxy=", t.isProxy, "sub count=", t.subsCount(), "msg=", msg.describe())
 
 	asUid := types.ParseUserId(msg.AsUser)
 	if t.isInactive() {
@@ -903,43 +904,44 @@ func (t *Topic) handleBroadcast(msg *ServerComMessage) {
 	// {meta} and {ctrl} are sent to the session only
 	for sess, pssd := range t.sessions {
 		if t.isProxy {
-			log.Println("sending to session", sess.isProxy(), sess.isMultiplex(), sess.sid, msg.SkipSid, pssd.uid)
+			log.Println("sending to session", "sess proxy=", sess.isProxy(), "multi=", sess.isMultiplex(),
+				"sid=", sess.sid, "skipsid=", msg.SkipSid, "subs uid=", pssd.uid)
 		}
 		if !sess.isMultiplex() { // Send all messages to multiplexing session.
 			if sess.sid == msg.SkipSid {
-				return
+				continue
 			}
 
 			if msg.Pres != nil {
 				// Skip notifying - already notified on topic.
 				// Don't check multiplexing sessions.
 				if msg.Pres.SkipTopic != "" || sess.getSub(msg.Pres.SkipTopic) != nil {
-					return
+					continue
 				}
 
 				// Notification addressed to a single user only.
 				if msg.Pres.SingleUser != "" && pssd.uid.UserId() != msg.Pres.SingleUser {
-					return
+					continue
 				}
 				// Notification should skip a single user.
 				if msg.Pres.ExcludeUser != "" && pssd.uid.UserId() == msg.Pres.ExcludeUser {
-					return
+					continue
 				}
 
 				// Check presence filters
 				if !t.passesPresenceFilters(msg, pssd.uid) {
-					return
+					continue
 				}
 
 			} else {
 				// Check if the user has Read permission
 				if !t.userIsReader(pssd.uid) {
-					return
+					continue
 				}
 
 				// Don't send key presses from one user's session to the other sessions of the same user.
 				if msg.Info != nil && msg.Info.What == "kp" && msg.Info.From == pssd.uid.UserId() {
-					return
+					continue
 				}
 			}
 		}
