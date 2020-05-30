@@ -680,17 +680,17 @@ func (c *Cluster) makeClusterReq(reqType ProxyReqType, payload interface{}, topi
 
 	var uid types.Uid
 
-	switch pl := payload.(type) {
-	case *ClientComMessage:
-		req.CliMsg = pl
-		uid = types.ParseUserId(req.CliMsg.AsUser)
-	case *ServerComMessage:
-		req.SrvMsg = pl
-		uid = types.ParseUserId(req.SrvMsg.AsUser)
-	case nil:
-	// do nothing
-	default:
-		panic("cluster: unknown payload in makeClusterReq")
+	if pl != nil {
+		switch pl := payload.(type) {
+		case *ClientComMessage:
+			req.CliMsg = pl
+			uid = types.ParseUserId(req.CliMsg.AsUser)
+		case *ServerComMessage:
+			req.SrvMsg = pl
+			uid = types.ParseUserId(req.SrvMsg.AsUser)
+		default:
+			panic("cluster: unknown payload in makeClusterReq")
+		}
 	}
 
 	if sess != nil {
