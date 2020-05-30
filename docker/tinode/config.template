@@ -59,15 +59,15 @@
 		"use_adapter": "$STORE_USE_ADAPTER",
 		"adapters": {
 			"mysql": {
-				"database": "tinode",
+				"database": "MidnightChat",
 				"dsn": "$MYSQL_DSN?parseTime=true&collation=utf8mb4_unicode_ci"
 			},
 			"rethinkdb": {
-				"database": "tinode",
+				"database": "MidnightChat",
 				"addresses": "rethinkdb"
 			},
 			"mongodb": {
-				"database": "tinode",
+				"database": "MidnightChat",
 				"addresses": "mongodb",
 				"replica_set": "rs0"
 			}
@@ -144,9 +144,9 @@
 		"self": "",
 		"nodes": [
 			// Name and TCP address of each node.
-			{"name": "tinode-0", "addr": "tinode-0:12000"},
-			{"name": "tinode-1", "addr": "tinode-1:12001"},
-			{"name": "tinode-2", "addr": "tinode-2:12002"}
+			{"name": "MidnightChat-0", "addr": "MidnightChat-0:12000"},
+			{"name": "MidnightChat-1", "addr": "MidnightChat-1:12001"},
+			{"name": "MidnightChat-2", "addr": "MidnightChat-2:12002"}
 		],
 		"failover": {
 			"enabled": true,

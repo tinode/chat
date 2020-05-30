@@ -5,14 +5,14 @@ with open('README.md', 'r') as fh:
     long_description = fh.read()
 
 setuptools.setup(
-    name="tinode-chatbot",
+    name="MidnightChat-chatbot",
     version=git_version(),
-    author="Tinode Authors",
-    author_email="info@tinode.co",
-    description="Tinode demo chatbot.",
+    author="MidnightChat Authors",
+    author_email="info@MidnightChat.co",
+    description="MidnightChat demo chatbot.",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/tinode/chat",
+    url="https://github.com/MidnightChat/chat",
     packages=setuptools.find_packages(),
     install_requires=['grpcio>=1.15.0'],
     classifiers=(

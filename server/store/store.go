@@ -8,11 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tinode/chat/server/auth"
-	"github.com/tinode/chat/server/db"
-	"github.com/tinode/chat/server/media"
-	"github.com/tinode/chat/server/store/types"
-	"github.com/tinode/chat/server/validate"
+	"github.com/MidnightChat/chat/server/auth"
+	"github.com/MidnightChat/chat/server/media"
+	"github.com/MidnightChat/chat/server/store/types"
+	"github.com/MidnightChat/chat/server/validate"
 )
 
 var adp adapter.Adapter
@@ -53,7 +52,7 @@ func openAdapter(workerId int, jsonconf json.RawMessage) error {
 				adp = v
 			}
 		} else {
-			return errors.New("store: db adapter is not specified. Please set `store_config.use_adapter` in `tinode.conf`")
+			return errors.New("store: db adapter is not specified. Please set `store_config.use_adapter` in `MidnightChat.conf`")
 		}
 	}
 

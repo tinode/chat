@@ -1,8 +1,8 @@
 # Protocol Buffer and gRPC definitions
 
-Definitions for Tinode [gRPC](https://grpc.io/) client and plugins.
+Definitions for MidnightChat [gRPC](https://grpc.io/) client and plugins.
 
-Tinode gRPC clients must implement rpc service `Node`, Tinode plugins `Plugin`.
+MidnightChat gRPC clients must implement rpc service `Node`, MidnightChat plugins `Plugin`.
 
 Generated `Go` and `Python` code is included. For a sample `Python` implementation of a command line client see [tn-cli](../tn-cli/).
 For a partial plugin implementation see [chatbot](../chatbot/).

@@ -7,7 +7,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-// PromExporter collects metrics in Prometheus format from a Tinode server.
+// PromExporter collects metrics in Prometheus format from a MidnightChat server.
 type PromExporter struct {
 	address   string
 	timeout   time.Duration
@@ -36,13 +36,13 @@ func NewPromExporter(server, namespace string, timeout time.Duration, scraper *S
 		scraper:   scraper,
 		up: prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "", "up"),
-			"If tinode instance is reachable.",
+			"If MidnightChat instance is reachable.",
 			nil,
 			nil,
 		),
 		version: prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "", "version"),
-			"The version of this tinode instance.",
+			"The version of this MidnightChat instance.",
 			nil,
 			nil,
 		),
@@ -112,7 +112,7 @@ func (e *PromExporter) Describe(ch chan<- *prometheus.Desc) {
 	ch <- e.malloced
 }
 
-// Collect fetches statistics from the configured Tinode instance, and
+// Collect fetches statistics from the configured MidnightChat instance, and
 // delivers them as Prometheus metrics. It implements prometheus.Collector.
 func (e *PromExporter) Collect(ch chan<- prometheus.Metric) {
 	up := float64(1)

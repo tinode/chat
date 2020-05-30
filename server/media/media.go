@@ -6,7 +6,7 @@ import (
 	"path"
 	"strings"
 
-	"github.com/tinode/chat/server/store/types"
+	"github.com/MidnightChat/chat/server/store/types"
 )
 
 // ReadSeekCloser must be implemented by the media being downloaded.

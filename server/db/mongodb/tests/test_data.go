@@ -3,8 +3,8 @@ package tests
 import (
 	"time"
 
-	"github.com/tinode/chat/server/auth"
-	"github.com/tinode/chat/server/store/types"
+	"github.com/MidnightChat/chat/server/auth"
+	"github.com/MidnightChat/chat/server/store/types"
 )
 
 type authRecord struct {
@@ -39,7 +39,7 @@ func initUsers() {
 		ObjHeader: types.ObjHeader{
 			Id: "9AVDamaNCRY",
 		},
-		UserAgent: "Tinode Web v111.222.333",
+		UserAgent: "MidnightChat Web v111.222.333",
 		Tags:      []string{"bob"},
 	})
 	users = append(users, &types.User{

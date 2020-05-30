@@ -1,19 +1,19 @@
 # Drafty: Rich Message Format
 
-Drafty is a text format used by Tinode to style messages. The intent of Drafty is to be expressive just enough without opening too many possibilities for security issues. One may think of it as JSON-encapsulated [markdown](https://en.wikipedia.org/wiki/Markdown). Drafty is influenced by FB's [draft.js](https://draftjs.org/) specification. As of the time of this writing [Javascript](https://github.com/tinode/tinode-js/blob/master/src/drafty.js), [Java](https://github.com/tinode/tindroid/blob/master/tinodesdk/src/main/java/co/tinode/tinodesdk/model/Drafty.java) and [Swift](https://github.com/tinode/ios/blob/master/TinodeSDK/model/Drafty.swift) implementations exist. A [Go implementation](https://github.com/tinode/chat/blob/master/server/drafty/drafty.go) can convert Drafy to plain text.
+Drafty is a text format used by MidnightChat to style messages. The intent of Drafty is to be expressive just enough without opening too many possibilities for security issues. One may think of it as JSON-encapsulated [markdown](https://en.wikipedia.org/wiki/Markdown). Drafty is influenced by FB's [draft.js](https://draftjs.org/) specification. As of the time of this writing [Javascript](https://github.com/MidnightChat/MidnightChat-js/blob/master/src/drafty.js), [Java](https://github.com/MidnightChat/tindroid/blob/master/MidnightChatsdk/src/main/java/co/MidnightChat/MidnightChatsdk/model/Drafty.java) and [Swift](https://github.com/MidnightChat/ios/blob/master/MidnightChatSDK/model/Drafty.swift) implementations exist. A [Go implementation](https://github.com/MidnightChat/chat/blob/master/server/drafty/drafty.go) can convert Drafy to plain text.
 
 ## Example
 
 > this is **bold**, `code` and _italic_, ~~strike~~<br/>
 >  combined **bold and _italic_**<br/>
->  an url: https://www.example.com/abc#fragment and another _[https://web.tinode.co](https://web.tinode.co)_<br/>
+>  an url: https://www.example.com/abc#fragment and another _[https://web.MidnightChat.co](https://web.MidnightChat.co)_<br/>
 >  this is a [@mention](#) and a [#hashtag](#) in a string<br/>
 > second [#hashtag](#)<br/>
 
 Sample Drafty-JSON representation of the text above:
 ```js
 {
-   "txt":  "this is bold, code and italic, strike combined bold and italic an url: https://www.example.com/abc#fragment and another www.tinode.co this is a @mention and a #hashtag in a string second #hashtag",
+   "txt":  "this is bold, code and italic, strike combined bold and italic an url: https://www.example.com/abc#fragment and another www.MidnightChat.co this is a @mention and a #hashtag in a string second #hashtag",
    "fmt": [
        { "at":8, "len":4,"tp":"ST" },{ "at":14, "len":4, "tp":"CO" },{ "at":23, "len":6, "tp":"EM"},
        { "at":31, "len":6, "tp":"DL" },{ "tp":"BR", "len":1, "at":37 },{ "at":56, "len":6, "tp":"EM" },
@@ -24,7 +24,7 @@ Sample Drafty-JSON representation of the text above:
    ],
    "ent": [
        { "tp":"LN", "data":{ "url":"https://www.example.com/abc#fragment" } },
-       { "tp":"LN", "data":{ "url":"http://www.tinode.co" } },
+       { "tp":"LN", "data":{ "url":"http://www.MidnightChat.co" } },
        { "tp":"MN", "data":{ "val":"mention" } },
        { "tp":"HT", "data":{ "val":"hashtag" } }
    ]
@@ -53,8 +53,8 @@ If `tp` is provided, it means the style is a basic text decoration:
  * `HD`: hidden text.
 
 If key is provided, it's a 0-based index into the `ent` field which contains an entity definition such as an image or an URL:
- * `LN`: link (URL) [https://api.tinode.co](https://api.tinode.co)
- * `MN`: mention such as [@tinode](#)
+ * `LN`: link (URL) [https://api.MidnightChat.co](https://api.MidnightChat.co)
+ * `MN`: mention such as [@MidnightChat](#)
  * `HT`: hashtag, e.g. [#hashtag](#)
  * `IM`: inline image
  * `EX`: generic attachment
@@ -131,7 +131,7 @@ _IMPORTANT Security Consideration_: the `url` field may be maliciously construct
   "data": {
     "mime": "image/png",
     "val": "Rt53jUU...iVBORw0KGgoA==",
-    "ref": "https://api.tinode.co/file/s/abcdef12345.jpg",
+    "ref": "https://api.MidnightChat.co/file/s/abcdef12345.jpg",
     "width": 512,
     "height": 512,
     "name": "sample_image.png",
@@ -166,7 +166,7 @@ _IMPORTANT Security Consideration_: the `val` and `ref` fields may contain malic
   "data": {
     "mime", "text/plain",
     "val", "Q3l0aG9uPT0w...PT00LjAuMAo=",
-    "ref": "https://api.tinode.co/file/s/abcdef12345.txt",
+    "ref": "https://api.MidnightChat.co/file/s/abcdef12345.txt",
     "name", "requirements.txt",
     "size": 1234
   }
@@ -195,10 +195,10 @@ Mention `data` contains a single `val` field with ID of the mentioned user:
 { "tp":"MN", "data":{ "val":"usrFsk73jYRR" } }
 ```
 
-#### `HT`: hashtag, e.g. [#tinode](#)
+#### `HT`: hashtag, e.g. [#MidnightChat](#)
 Hashtag `data` contains a single `val` field with the hashtag value which the client software needs to interpret, for instance it could be a search term:
 ```js
-{ "tp":"HT", "data":{ "val":"tinode" } }
+{ "tp":"HT", "data":{ "val":"MidnightChat" } }
 ```
 
 #### `BN`: interactive button

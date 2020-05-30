@@ -42,13 +42,13 @@ func (l promHTTPLogger) Println(v ...interface{}) {
 var buildstamp = "undef"
 
 func main() {
-	log.Printf("Tinode metrics exporter.")
+	log.Printf("MidnightChat metrics exporter.")
 
 	var (
 		serveFor = flag.String("serve_for", "influxdb",
 			"Monitoring service to gather metrics for. Available: influxdb, prometheus.")
-		tinodeAddr = flag.String("tinode_addr", "http://localhost:6060/stats/expvar",
-			"Address of the Tinode instance to scrape.")
+		MidnightChatAddr = flag.String("MidnightChat_addr", "http://localhost:6060/stats/expvar",
+			"Address of the MidnightChat instance to scrape.")
 		listenAt = flag.String("listen_at", ":6222",
 			"Host name and port to listen for incoming requests on.")
 		metricList = flag.String("metric_list",
@@ -58,9 +58,9 @@ func main() {
 			"Exporter instance name.")
 
 		// Prometheus-specific arguments.
-		promNamespace   = flag.String("prom_namespace", "tinode", "Prometheus namespace for metrics '<namespace>_...'")
+		promNamespace   = flag.String("prom_namespace", "MidnightChat", "Prometheus namespace for metrics '<namespace>_...'")
 		promMetricsPath = flag.String("prom_metrics_path", "/metrics", "Path under which to expose metrics for Prometheus scrapes.")
-		promTimeout     = flag.Int("prom_timeout", 15, "Tinode connection timeout in seconds in response to Prometheus scrapes.")
+		promTimeout     = flag.Int("prom_timeout", 15, "MidnightChat connection timeout in seconds in response to Prometheus scrapes.")
 
 		// InfluxDB-specific arguments.
 		influxPushAddr = flag.String("influx_push_addr", "http://localhost:9999/write",
@@ -121,8 +121,8 @@ func main() {
 			servingPath = "<p>InfluxDB push path: <a href='/push'>Push</a></p>"
 		}
 
-		w.Write([]byte(`<html><head><title>Tinode Exporter</title></head><body>
-<h1>Tinode Exporter</h1>
+		w.Write([]byte(`<html><head><title>MidnightChat Exporter</title></head><body>
+<h1>MidnightChat Exporter</h1>
 <p>Server type` + *serveFor + `</p>` + servingPath +
 			`<h2>Build</h2>
 <pre>` + version.Info() + ` ` + version.BuildContext() + `</pre>
@@ -133,13 +133,13 @@ func main() {
 	for i, m := range metrics {
 		metrics[i] = strings.TrimSpace(m)
 	}
-	scraper := Scraper{address: *tinodeAddr, metrics: metrics}
+	scraper := Scraper{address: *MidnightChatAddr, metrics: metrics}
 	var serverTypeString string
 	// Create exporters.
 	switch service {
 	case promService:
 		serverTypeString = *serveFor
-		promExporter := NewPromExporter(*tinodeAddr, *promNamespace, time.Duration(*promTimeout)*time.Second, &scraper)
+		promExporter := NewPromExporter(*MidnightChatAddr, *promNamespace, time.Duration(*promTimeout)*time.Second, &scraper)
 		registry := prometheus.NewRegistry()
 		registry.MustRegister(promExporter)
 		http.Handle(*promMetricsPath,
@@ -184,14 +184,14 @@ func main() {
 				msg = err.Error()
 			}
 
-			w.Write([]byte(`<html><head><title>Tinode Push</title></head><body>
-<h1>Tinode Push</h1>
+			w.Write([]byte(`<html><head><title>MidnightChat Push</title></head><body>
+<h1>MidnightChat Push</h1>
 <pre>` + msg + `</pre>
 </body></html>`))
 		})
 	}
 
-	log.Println("Reading Tinode expvar from", *tinodeAddr)
+	log.Println("Reading MidnightChat expvar from", *MidnightChatAddr)
 	log.Printf("Exporter running at %s. Server type %s", *listenAt, serverTypeString)
 	log.Fatalln(http.ListenAndServe(*listenAt, nil))
 }

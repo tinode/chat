@@ -16,10 +16,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/tinode/chat/server/auth"
-	"github.com/tinode/chat/server/push"
-	"github.com/tinode/chat/server/store"
-	"github.com/tinode/chat/server/store/types"
+	"github.com/MidnightChat/chat/server/auth"
+	"github.com/MidnightChat/chat/server/push"
+	"github.com/MidnightChat/chat/server/store"
+	"github.com/MidnightChat/chat/server/store/types"
 )
 
 // Time between subscription of a background session and when the notifications are sent.

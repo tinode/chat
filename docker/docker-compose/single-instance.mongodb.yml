@@ -1,6 +1,6 @@
 version: '3.7'
 
-x-mongodb-tinode-env-vars: &mongodb-tinode-env-vars
+x-mongodb-MidnightChat-env-vars: &mongodb-MidnightChat-env-vars
   "STORE_USE_ADAPTER": "mongodb"
 
 services:
@@ -24,7 +24,7 @@ services:
       echo 'Creating replica set';
       echo \"rs.initiate({'_id': 'rs0', "members": [ {'_id': 0, 'host': 'mongodb:27017'} ]})\" | mongo --host mongodb"
 
-  tinode-0:
+  MidnightChat-0:
     environment:
-      << : *mongodb-tinode-env-vars
+      << : *mongodb-MidnightChat-env-vars
       "WAIT_FOR": "mongodb:27017"

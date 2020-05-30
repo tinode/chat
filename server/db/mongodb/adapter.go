@@ -12,9 +12,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tinode/chat/server/auth"
-	"github.com/tinode/chat/server/store"
-	t "github.com/tinode/chat/server/store/types"
+	"github.com/MidnightChat/chat/server/auth"
+	"github.com/MidnightChat/chat/server/store"
+	t "github.com/MidnightChat/chat/server/store/types"
 	b "go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	mdb "go.mongodb.org/mongo-driver/mongo"
@@ -34,7 +34,7 @@ type adapter struct {
 
 const (
 	defaultHost     = "localhost:27017"
-	defaultDatabase = "tinode"
+	defaultDatabase = "MidnightChat"
 
 	adpVersion  = 111
 	adapterName = "mongodb"

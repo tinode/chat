@@ -7,8 +7,8 @@ import (
 	"log"
 	"time"
 
-	"github.com/tinode/chat/pbx"
-	"github.com/tinode/chat/server/store/types"
+	"github.com/MidnightChat/chat/pbx"
+	"github.com/MidnightChat/chat/server/store/types"
 )
 
 func pbServCtrlSerialize(ctrl *MsgServerCtrl) *pbx.ServerMsg_Ctrl {

@@ -2,7 +2,7 @@
 package validate
 
 import (
-	t "github.com/tinode/chat/server/store/types"
+	t "github.com/MidnightChat/chat/server/store/types"
 )
 
 // Validator handles validation of user's credentials, like email or phone.

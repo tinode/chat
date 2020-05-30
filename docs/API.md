@@ -36,7 +36,7 @@
 		- [Uploading](#uploading)
 		- [Downloading](#downloading)
 	- [Push Notifications](#push-notifications)
-		- [Tinode Push Gateway](#tinode-push-gateway)
+		- [MidnightChat Push Gateway](#MidnightChat-push-gateway)
 		- [Google FCM](#google-fcm)
 		- [Stdout](#stdout)
 	- [Messages](#messages)
@@ -64,7 +64,7 @@
 
 ## How it Works?
 
-Tinode is an IM router and a store. Conceptually it loosely follows a publish-subscribe model.
+MidnightChat is an IM router and a store. Conceptually it loosely follows a publish-subscribe model.
 
 Server connects sessions, users, and topics. Session is a network connection between a client application and the server. User represents a human being who connects to the server with a session. Topic is a named communication channel which routes content between sessions.
 
@@ -111,7 +111,7 @@ When the client establishes a connection to the server over HTTP(S), such as ove
  * `/v0/file/s` for serving files (downloads)
 
 `v0` denotes API version (currently zero). Every HTTP(S) request must include the API key. The server checks for the API key in the following order:
-* HTTP header `X-Tinode-APIKey`
+* HTTP header `X-MidnightChat-APIKey`
 * URL query parameter `apikey` (/v0/file/s/abcdefg.jpeg?apikey=...)
 * Form value `apikey`
 * Cookie `apikey`
@@ -280,7 +280,7 @@ User's access to a topic is defined by two sets of permissions: user's desired p
 
 Topic's default access is established at the topic creation time by `{sub.desc.defacs}` and can be subsequently modified by `{set}` messages. Default access is defined for two categories of users: authenticated and anonymous. This value is applied as a default "given" permission to all new subscriptions.
 
-Client may replace explicit permissions in `{sub}` and `{set}` messages with an empty string to tell Tinode to use default permissions. If client specifies no default access permissions at topic creation time, authenticated users will receive a `RWP` permission, anonymous users will receive an empty permission which means every subscription request must be explicitly approved by the topic manager.
+Client may replace explicit permissions in `{sub}` and `{set}` messages with an empty string to tell MidnightChat to use default permissions. If client specifies no default access permissions at topic creation time, authenticated users will receive a `RWP` permission, anonymous users will receive an empty permission which means every subscription request must be explicitly approved by the topic manager.
 
 Access permissions can be assigned on a per-user basis by `{set}` messages.
 
@@ -348,7 +348,7 @@ Topic `fnd` is read-only. `{pub}` messages to `fnd` are rejected.
 
 #### Query Language
 
-Tinode query language is used to define search queries for finding users and topics. The query is a string containing tags separated by spaces or commas. Tags are strings - individual query terms which are matched against user's or topic's tags. The tags can be written in an RTL language but the query as a whole is parsed left to right. Spaces are treated as the `AND` operator, commas (as well as commas preceded and/or followed by a space) as the `OR` operator. The order of operators is ignored: all `AND` tags are grouped together, all `OR` tags are grouped together. `OR` takes precedence over `AND`: if a tag is preceded of followed by a comma, it's an `OR` tag, otherwise an `AND`. For example, `a AND b OR c` is rewritten as `(b OR c) AND a`.
+MidnightChat query language is used to define search queries for finding users and topics. The query is a string containing tags separated by spaces or commas. Tags are strings - individual query terms which are matched against user's or topic's tags. The tags can be written in an RTL language but the query as a whole is parsed left to right. Spaces are treated as the `AND` operator, commas (as well as commas preceded and/or followed by a space) as the `OR` operator. The order of operators is ignored: all `AND` tags are grouped together, all `OR` tags are grouped together. `OR` takes precedence over `AND`: if a tag is preceded of followed by a comma, it's an `OR` tag, otherwise an `AND`. For example, `a AND b OR c` is rewritten as `(b OR c) AND a`.
 
 Tags containing spaces or commas must be enclosed in double quotes (`"`, `\u0022`): i.e. `"abc, def"` is treated as a single token `abc, def`. Tags must start with a Unicode letter or digit. Tags must not contain the double quote (`"`, `\u0022`).
 
@@ -380,7 +380,7 @@ The incremental update request is processed left to right. It may contain the sa
 
 Peer to peer (P2P) topics represent communication channels between strictly two users. The name of the topic is different for each of the two participants. Each of them sees the name of the topic as the user ID of the other participant: `usr` followed by base64 URL-encoded ID of the user. For example, if two users `usrOj0B3-gSBSs` and `usrIU_LOVwRNsc` start a P2P topic, the first one will see it as `usrIU_LOVwRNsc`, the second as `usrOj0B3-gSBSs`. The P2P topic has no owner.
 
-A P2P topic is created by one user subscribing to topic with the name equal to the ID of the other user. For instance, user `usrOj0B3-gSBSs` can establish a P2P topic with user `usrIU_LOVwRNsc` by sending a `{sub topic="usrIU_LOVwRNsc"}`. Tinode will respond with a `{ctrl}` packet with the name of the newly created topic as described above. The other user will receive a `{pres}` message on `me` topic with updated access permissions.
+A P2P topic is created by one user subscribing to topic with the name equal to the ID of the other user. For instance, user `usrOj0B3-gSBSs` can establish a P2P topic with user `usrIU_LOVwRNsc` by sending a `{sub topic="usrIU_LOVwRNsc"}`. MidnightChat will respond with a `{ctrl}` packet with the name of the newly created topic as described above. The other user will receive a `{pres}` message on `me` topic with updated access permissions.
 
 The 'public' parameter of P2P topics is user-dependent. For instance a P2P topic between users A and B would show user A's 'public' to user B and vice versa. If a user updates 'public', all user's P2P topics will automatically update 'public' too.
 
@@ -390,7 +390,7 @@ The 'private' parameter of a P2P topic is defined by each participant individual
 
 Group topics represent communication channels between multiple users. The name of a group topic is `grp` followed by a string of characters from base64 URL-encoding set. No other assumptions can be made about internal structure or length of the group name.
 
-A group topic is created by sending a `{sub}` message with the topic field set to string `new` optionally followed by any characters, e.g. `new` or `newAbC123` are equivalent. Tinode will respond with a `{ctrl}` message with the name of the newly created topic, i.e. `{sub topic="new"}` is replied with `{ctrl topic="grpmiKBkQVXnm3P"}`. If topic creation fails, the error is reported on the original topic name, i.e. `new` or `newAbC123`. The user who created the topic becomes topic owner. Ownership can be transferred to another user with a `{set}` message but one user must remain the owner at all times.
+A group topic is created by sending a `{sub}` message with the topic field set to string `new` optionally followed by any characters, e.g. `new` or `newAbC123` are equivalent. MidnightChat will respond with a `{ctrl}` message with the name of the newly created topic, i.e. `{sub topic="new"}` is replied with `{ctrl topic="grpmiKBkQVXnm3P"}`. If topic creation fails, the error is reported on the original topic name, i.e. `new` or `newAbC123`. The user who created the topic becomes topic owner. Ownership can be transferred to another user with a `{set}` message but one user must remain the owner at all times.
 
 A user joining or leaving the topic generates a `{pres}` message to all other users who are currently in the joined state with the topic.
 
@@ -400,7 +400,7 @@ The `sys` topic serves as an always available channel of communication with the 
 
 ## Using Server-Issued Message IDs
 
-Tinode provides basic support for client-side caching of `{data}` messages in the form of server-issued sequential message IDs. The client may request the last message id from the topic by issuing a `{get what="desc"}` message. If the returned ID is greater than the ID of the latest received message, the client knows that the topic has unread messages and their count. The client may fetch these messages using `{get what="data"}` message. The client may also paginate history retrieval by using message IDs.
+MidnightChat provides basic support for client-side caching of `{data}` messages in the form of server-issued sequential message IDs. The client may request the last message id from the topic by issuing a `{get what="desc"}` message. If the returned ID is greater than the ID of the latest received message, the client knows that the topic has unread messages and their count. The client may fetch these messages using `{get what="data"}` message. The client may also paginate history retrieval by using message IDs.
 
 ## User Agent and Presence Notifications
 
@@ -446,7 +446,7 @@ vcard: {
   impp: [
     {
       type: "OTHER",
-      uri: "tinode:usrRkDVe0PYDOo", // string, email address
+      uri: "MidnightChat:usrRkDVe0PYDOo", // string, email address
     }, ...
   ], // array of objects, list of user's IM handles
   photo: {
@@ -489,7 +489,7 @@ Large files create problems when sent in-band for multiple reasons:
  * limits on database storage as in-band messages are stored in database fields
  * in-band messages must be downloaded completely as a part of downloading chat history
 
-Tinode provides two endpoints for handling large files: `/v0/file/u` for uploading files and `v0/file/s` for downloading. The endpoints require the client to provide both [API key](#connecting-to-the-server) and login credentials. The server checks credentials in the following order:
+MidnightChat provides two endpoints for handling large files: `/v0/file/u` for uploading files and `v0/file/s` for downloading. The endpoints require the client to provide both [API key](#connecting-to-the-server) and login credentials. The server checks credentials in the following order:
 
 **Login credentials**
  * HTTP header `Authorization` (https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Authorization)
@@ -513,7 +513,7 @@ ctrl: {
 ```
 If `307 Temporary Redirect` is returned, the client must retry the upload at the provided URL. The URL returned in `307` response should be used for just this one upload. All subsequent uploads should try the default URL first.
 
-The `ctrl.params.url` contains the path to the uploaded file at the current server. It could be either the full path like `/v0/file/s/mfHLxDWFhfU.pdf`, a relative path like `./mfHLxDWFhfU.pdf`, or just the file name `mfHLxDWFhfU.pdf`. Anything but the full path is interpreted against the default *download* endpoint `/v0/file/s/`. For instance, if `mfHLxDWFhfU.pdf` is returned then the file is located at `http(s)://current-tinode-server/v0/file/s/mfHLxDWFhfU.pdf`.
+The `ctrl.params.url` contains the path to the uploaded file at the current server. It could be either the full path like `/v0/file/s/mfHLxDWFhfU.pdf`, a relative path like `./mfHLxDWFhfU.pdf`, or just the file name `mfHLxDWFhfU.pdf`. Anything but the full path is interpreted against the default *download* endpoint `/v0/file/s/`. For instance, if `mfHLxDWFhfU.pdf` is returned then the file is located at `http(s)://current-MidnightChat-server/v0/file/s/mfHLxDWFhfU.pdf`.
 
 Once the URL of the file is received, either immediately or after following the redirect, the client may use the URL to send a `{pub}` message with the uploaded file as an attachment. The URL should be used to produce a [Drafty](./drafty.md)-formatted `pub.content` field and also should be referenced in the `pub.head.attachments`:
 
@@ -548,17 +548,17 @@ pub: {
 }
 ```
 
-It's important to list the URLs in the `head.attachments` field. Tinode server uses this field to maintain the uploaded file's use counter. Once the counter drops to zero for the given file (for instance, because a message with the shared URL was deleted or because the client failed to include the URL in the `head.attachments` field), the server will garbage collect the file. Only relative URLs should be used. Absolute URLs in the `head.attachments` field are ignored. The URL value is expected to be the `ctrl.params.url` returned in response to upload.
+It's important to list the URLs in the `head.attachments` field. MidnightChat server uses this field to maintain the uploaded file's use counter. Once the counter drops to zero for the given file (for instance, because a message with the shared URL was deleted or because the client failed to include the URL in the `head.attachments` field), the server will garbage collect the file. Only relative URLs should be used. Absolute URLs in the `head.attachments` field are ignored. The URL value is expected to be the `ctrl.params.url` returned in response to upload.
 
 ### Downloading
 
-The serving endpoint `/v0/file/s` serves files in response to HTTP GET requests. The client must evaluate relative URLs against this endpoint, i.e. if it receives a URL `mfHLxDWFhfU.pdf` or `./mfHLxDWFhfU.pdf` it should interpret it as a path `/v0/file/s/mfHLxDWFhfU.pdf` at the current Tinode HTTP server.
+The serving endpoint `/v0/file/s` serves files in response to HTTP GET requests. The client must evaluate relative URLs against this endpoint, i.e. if it receives a URL `mfHLxDWFhfU.pdf` or `./mfHLxDWFhfU.pdf` it should interpret it as a path `/v0/file/s/mfHLxDWFhfU.pdf` at the current MidnightChat HTTP server.
 
 _Important!_ As a security measure, the client should not send security credentials if the download URL is absolute and leads to another server.
 
 ## Push Notifications
 
-Tinode uses compile-time adapters for handling push notifications. The server comes with [Tinode Push Gateway](../server/push/tnpg/), [Google FCM](https://firebase.google.com/docs/cloud-messaging/), and `stdout` adapters. Tinode Push Gateway and Google FCM support Android with [Play Services](https://developers.google.com/android/guides/overview) (may not be supported by some Chinese phones), iOS devices and all major web browsers excluding Safari. The `stdout` adapter does not actually send push notifications. It's mostly useful for debugging, testing and logging. Other types of push notifications such as [TPNS](https://intl.cloud.tencent.com/product/tpns) can be handled by writing appropriate adapters.
+MidnightChat uses compile-time adapters for handling push notifications. The server comes with [MidnightChat Push Gateway](../server/push/tnpg/), [Google FCM](https://firebase.google.com/docs/cloud-messaging/), and `stdout` adapters. MidnightChat Push Gateway and Google FCM support Android with [Play Services](https://developers.google.com/android/guides/overview) (may not be supported by some Chinese phones), iOS devices and all major web browsers excluding Safari. The `stdout` adapter does not actually send push notifications. It's mostly useful for debugging, testing and logging. Other types of push notifications such as [TPNS](https://intl.cloud.tencent.com/product/tpns) can be handled by writing appropriate adapters.
 
 If you are writing a custom plugin, the notification payload is the following:
 ```js
@@ -572,9 +572,9 @@ If you are writing a custom plugin, the notification payload is the following:
 }
 ```
 
-### Tinode Push Gateway
+### MidnightChat Push Gateway
 
-Tinode Push Gateway (TNPG) is a proprietary Tinode service which sends push notifications on behalf of Tinode. Internally it uses Google FCM and as such supports the same platforms as FCM. The main advantage of using TNPG over FCM is simplicity of configuration: mobile clients do not need to be recompiled, all is needed is a [configuration update](../server/push/tnpg/) on a server.
+MidnightChat Push Gateway (TNPG) is a proprietary MidnightChat service which sends push notifications on behalf of MidnightChat. Internally it uses Google FCM and as such supports the same platforms as FCM. The main advantage of using TNPG over FCM is simplicity of configuration: mobile clients do not need to be recompiled, all is needed is a [configuration update](../server/push/tnpg/) on a server.
 
 ### Google FCM
 
@@ -1053,7 +1053,7 @@ The following actions are currently recognised:
 
 The `read` and `recv` notifications may optionally include `unread` value which is the total count of unread messages as determined by this client. The per-user `unread` count is maintained by the server: it's incremented when new `{data}` messages are sent to user and reset to the values reported by the `{note unread=...}` message. The `unread` value is never decremented by the server. The value is included in push notifications to be shown on a badge on iOS:
 <p align="center">
-  <img src="./ios-pill-128.png" alt="Tinode iOS icon with a pill counter" width=64 height=64 />
+  <img src="./ios-pill-128.png" alt="MidnightChat iOS icon with a pill counter" width=64 height=64 />
 </p>
 
 
@@ -1191,7 +1191,7 @@ meta: {
       seen: { // object, if this is a P2P topic, info on when the peer was last
               //online
         when: "2015-10-24T10:26:09.716Z", // timestamp
-        ua: "Tinode/1.0 (Android 5.1)" // string, user agent of peer's client
+        ua: "MidnightChat/1.0 (Android 5.1)" // string, user agent of peer's client
       }
     },
     ...
@@ -1216,7 +1216,7 @@ meta: {
 
 #### `{pres}`
 
-Tinode uses `{pres}` message to inform clients of important events. A separate [document](https://docs.google.com/spreadsheets/d/e/2PACX-1vStUDHb7DPrD8tF5eANLu4YIjRkqta8KOhLvcj2precsjqR40eDHvJnnuuS3bw-NcWsP1QKc7GSTYuX/pubhtml?gid=1959642482&single=true) explains all possible use cases.
+MidnightChat uses `{pres}` message to inform clients of important events. A separate [document](https://docs.google.com/spreadsheets/d/e/2PACX-1vStUDHb7DPrD8tF5eANLu4YIjRkqta8KOhLvcj2precsjqR40eDHvJnnuuS3bw-NcWsP1QKc7GSTYuX/pubhtml?gid=1959642482&single=true) explains all possible use cases.
 
 ```js
 pres: {
@@ -1228,7 +1228,7 @@ pres: {
   clear: 15, // integer, "what" is "del", an update to the delete transaction ID.
   delseq: [{low: 123}, {low: 126, hi: 136}], // array of ranges, "what" is "del",
              // ranges of IDs of deleted messages, optional
-  ua: "Tinode/1.0 (Android 2.2)", // string, a User Agent string identifying client
+  ua: "MidnightChat/1.0 (Android 2.2)", // string, a User Agent string identifying client
              // software if "what" is "on" or "ua", optional
   act: "usr2il9suCbuko",  // string, user who performed the action, optional
   tgt: "usrRkDVe0PYDOo",  // string, user affected by the action, optional

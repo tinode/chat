@@ -1,6 +1,6 @@
-# Utility to initialize or upgrade `tinode` DB
+# Utility to initialize or upgrade `MidnightChat` DB
 
-This utility initializes the `tinode` database (or upgrades an existing DB from an earlier version) and optionally loads it with data. To force database reset use command line option `--reset=true`.
+This utility initializes the `MidnightChat` database (or upgrades an existing DB from an earlier version) and optionally loads it with data. To force database reset use command line option `--reset=true`.
 
 ## Build the package:
 
@@ -18,13 +18,13 @@ This utility initializes the `tinode` database (or upgrades an existing DB from 
 
 Run from the command line.
 
-`tinode-db [parameters]`
+`MidnightChat-db [parameters]`
 
 Command line parameters:
  - `--reset`: delete the database then re-create it in a blank state; it has no effect if the database does not exist.
  - `--upgrade`: upgrade database from an earlier version retaining all the data; make sure to backup the DB before upgrading.
- - `--data=FILENAME`: fill `tinode` database with data from the provided file. See [data.json](data.json).
- - `--config=FILENAME`: load configuration from FILENAME. Example config is included as [tinode.conf](tinode.conf).
+ - `--data=FILENAME`: fill `MidnightChat` database with data from the provided file. See [data.json](data.json).
+ - `--config=FILENAME`: load configuration from FILENAME. Example config is included as [MidnightChat.conf](MidnightChat.conf).
 
 
 Configuration file options:
@@ -43,6 +43,6 @@ Avatar photos curtesy of https://www.pexels.com/ under [CC0 license](https://www
 
 ## Links:
 
-* [RethinkDB schema](https://github.com/tinode/chat/tree/master/server/db/rethinkdb/schema.md)
-* [MySQL schema](https://github.com/tinode/chat/tree/master/server/db/mysql/schema.sql)
-* [MongoDB schema](https://github.com/tinode/chat/tree/master/server/db/mongodb/schema.md)
+* [RethinkDB schema](https://github.com/MidnightChat/chat/tree/master/server/db/rethinkdb/schema.md)
+* [MySQL schema](https://github.com/MidnightChat/chat/tree/master/server/db/mysql/schema.sql)
+* [MongoDB schema](https://github.com/MidnightChat/chat/tree/master/server/db/mongodb/schema.md)

@@ -1,7 +1,7 @@
 #!/usr/bin/python
 
-# Sample Tinode REST/JSON-RPC authentication service.
-# See https://github.com/tinode/chat/rest-auth for details.
+# Sample MidnightChat REST/JSON-RPC authentication service.
+# See https://github.com/MidnightChat/chat/rest-auth for details.
 
 from flask import Flask, jsonify, make_response, request
 import base64
@@ -17,8 +17,8 @@ def parse_secret(ecoded_secret):
 
 @app.route('/')
 def index():
-    return 'Sample Tinode REST/JSON-RPC authentication service. '+\
-        'See <a href="https://github.com/tinode/chat/rest-auth/">https://github.com/tinode/chat/rest-auth/</a> for details.'
+    return 'Sample MidnightChat REST/JSON-RPC authentication service. '+\
+        'See <a href="https://github.com/MidnightChat/chat/rest-auth/">https://github.com/MidnightChat/chat/rest-auth/</a> for details.'
 
 @app.route('/add', methods=['POST'])
 def add():
@@ -43,7 +43,7 @@ def auth():
                 }
             })
         else:
-            # This is the first login. Tell Tinode to create a new account.
+            # This is the first login. Tell MidnightChat to create a new account.
             return jsonify({
                 'rec': {
                     'authlvl': dummy_data[uname]['authlvl'],
@@ -119,7 +119,7 @@ def not_found(error):
 
 if __name__ == '__main__':
     # Load previously saved dummy data. Dummy data contains
-    # tinode user id <-> user name mapping and data for account creation.
+    # MidnightChat user id <-> user name mapping and data for account creation.
     with open('dummy_data.json') as infile:
         dummy_data = json.load(infile)
     app.run(debug=True)

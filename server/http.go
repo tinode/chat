@@ -25,8 +25,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/tinode/chat/server/store"
-	"github.com/tinode/chat/server/store/types"
+	"github.com/MidnightChat/chat/server/store"
+	"github.com/MidnightChat/chat/server/store/types"
 )
 
 func listenAndServe(addr string, mux *http.ServeMux, tlfConf *tls.Config, stop <-chan bool) error {
@@ -270,7 +270,7 @@ func cacheControlHandler(maxAge int, handler http.Handler) http.Handler {
 // Get API key from an HTTP request.
 func getAPIKey(req *http.Request) string {
 	// Check header.
-	apikey := req.Header.Get("X-Tinode-APIKey")
+	apikey := req.Header.Get("X-MidnightChat-APIKey")
 
 	// Check URL query parameters.
 	if apikey == "" {
@@ -294,8 +294,8 @@ func getAPIKey(req *http.Request) string {
 // Extracts authorization credentials from an HTTP request.
 // Returns authentication method and secret.
 func getHttpAuth(req *http.Request) (method, secret string) {
-	// Check X-Tinode-Auth header.
-	if parts := strings.Split(req.Header.Get("X-Tinode-Auth"), " "); len(parts) == 2 {
+	// Check X-MidnightChat-Auth header.
+	if parts := strings.Split(req.Header.Get("X-MidnightChat-Auth"), " "); len(parts) == 2 {
 		method, secret = parts[0], parts[1]
 		return
 	}

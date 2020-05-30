@@ -1,4 +1,4 @@
-"""Python implementation of a Tinode chatbot."""
+"""Python implementation of a MidnightChat chatbot."""
 
 # For compatibility between python 2 and 3
 from __future__ import print_function
@@ -24,12 +24,12 @@ import grpc
 from google.protobuf.json_format import MessageToDict
 
 # Import generated grpc modules
-from tinode_grpc import pb
-from tinode_grpc import pbx
+from MidnightChat_grpc import pb
+from MidnightChat_grpc import pbx
 
 APP_NAME = "Tino-chatbot"
 APP_VERSION = "1.2.0"
-LIB_VERSION = pkg_resources.get_distribution("tinode_grpc").version
+LIB_VERSION = pkg_resources.get_distribution("MidnightChat_grpc").version
 
 # Maximum length of string to log. Shorten longer strings.
 MAX_LOG_LEN = 64
@@ -202,7 +202,7 @@ def note_read(topic, seq):
     return pb.ClientMsg(note=pb.ClientNote(topic=topic, what=pb.READ, seq_id=seq))
 
 def init_server(listen):
-    # Launch plugin server: acception connection(s) from the Tinode server.
+    # Launch plugin server: acception connection(s) from the MidnightChat server.
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=16))
     pbx.add_PluginServicer_to_server(Plugin(), server)
     server.add_insecure_port(listen)
@@ -385,10 +385,10 @@ if __name__ == '__main__':
     """Parse command-line arguments. Extract server host name, listen address, authentication scheme"""
     random.seed()
 
-    purpose = "Tino, Tinode's chatbot."
+    purpose = "Tino, MidnightChat's chatbot."
     log(purpose)
     parser = argparse.ArgumentParser(description=purpose)
-    parser.add_argument('--host', default='localhost:16060', help='address of Tinode server gRPC endpoint')
+    parser.add_argument('--host', default='localhost:16060', help='address of MidnightChat server gRPC endpoint')
     parser.add_argument('--ssl', action='store_true', help='use SSL to connect to the server')
     parser.add_argument('--ssl-host', help='SSL host name to use instead of default (useful for connecting to localhost)')
     parser.add_argument('--listen', default='0.0.0.0:40051', help='address to listen on for incoming Plugin API calls')

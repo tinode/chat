@@ -1,19 +1,19 @@
-# Installing Tinode
+# Installing MidnightChat
 
 ## Installing from Binaries
 
-1. Visit the [Releases page](https://github.com/tinode/chat/releases/), choose the latest or otherwise the most suitable release. From the list of binaries download the one for your database and platform. Once the binary is downloaded, unpack it to a directory of your choosing, `cd` to that directory.
+1. Visit the [Releases page](https://github.com/MidnightChat/chat/releases/), choose the latest or otherwise the most suitable release. From the list of binaries download the one for your database and platform. Once the binary is downloaded, unpack it to a directory of your choosing, `cd` to that directory.
 
-2. Make sure your database is running. Make sure it's configured to accept connections from `localhost`. In case of MySQL, Tinode will try to connect as `root` without the password. See notes below (_Building from Source_, section 4) on how to configure Tinode to use a different user or a password. MySQL 5.7 or above is required. MySQL 5.6 or below **will not work**.
+2. Make sure your database is running. Make sure it's configured to accept connections from `localhost`. In case of MySQL, MidnightChat will try to connect as `root` without the password. See notes below (_Building from Source_, section 4) on how to configure MidnightChat to use a different user or a password. MySQL 5.7 or above is required. MySQL 5.6 or below **will not work**.
 
 3. Run the database initializer `init-db` (or `init-db.exe` on Windows):
 	```
 	./init-db -data=data.json
 	```
 
-4. Run the `tinode` (or `tinode.exe` on Windows) server. It will work without any parameters.
+4. Run the `MidnightChat` (or `MidnightChat.exe` on Windows) server. It will work without any parameters.
 	```
-	./tinode
+	./MidnightChat
 	```
 
 5. Test your installation by pointing your browser to http://localhost:6060/
@@ -30,26 +30,26 @@ See [instructions](./docker/README.md)
 
 2. Make sure either [RethinkDB](https://www.rethinkdb.com/docs/install/) or MySQL (or MariaDB or Percona) is installed and running. MySQL 5.7 or above is required. MySQL 5.6 or below **will not work**. MongoDB (v4.2 and above) also available but it is experimental on not tested in production.
 
-3. Fetch, build Tinode server and tinode-db database initializer:
+3. Fetch, build MidnightChat server and MidnightChat-db database initializer:
  - **RethinkDb**:
 	```
-	go get -tags rethinkdb github.com/tinode/chat/server && go build -tags rethinkdb -o $GOPATH/bin/tinode github.com/tinode/chat/server
-	go get -tags rethinkdb github.com/tinode/chat/tinode-db && go build -tags rethinkdb -o $GOPATH/bin/init-db github.com/tinode/chat/tinode-db
+	go get -tags rethinkdb github.com/MidnightChat/chat/server && go build -tags rethinkdb -o $GOPATH/bin/MidnightChat github.com/MidnightChat/chat/server
+	go get -tags rethinkdb github.com/MidnightChat/chat/MidnightChat-db && go build -tags rethinkdb -o $GOPATH/bin/init-db github.com/MidnightChat/chat/MidnightChat-db
 	```
  - **MySQL**:
 	```
-	go get -tags mysql github.com/tinode/chat/server && go build -tags mysql -o $GOPATH/bin/tinode github.com/tinode/chat/server
-	go get -tags mysql github.com/tinode/chat/tinode-db && go build -tags mysql -o $GOPATH/bin/init-db github.com/tinode/chat/tinode-db
+	go get -tags mysql github.com/MidnightChat/chat/server && go build -tags mysql -o $GOPATH/bin/MidnightChat github.com/MidnightChat/chat/server
+	go get -tags mysql github.com/MidnightChat/chat/MidnightChat-db && go build -tags mysql -o $GOPATH/bin/init-db github.com/MidnightChat/chat/MidnightChat-db
 	```
  - **MongoDB**:
 	```
-	go get -tags mongodb github.com/tinode/chat/server && go build -tags mongodb -o $GOPATH/bin/tinode github.com/tinode/chat/server
-	go get -tags mongodb github.com/tinode/chat/tinode-db && go build -tags mongodb -o $GOPATH/bin/init-db github.com/tinode/chat/tinode-db
+	go get -tags mongodb github.com/MidnightChat/chat/server && go build -tags mongodb -o $GOPATH/bin/MidnightChat github.com/MidnightChat/chat/server
+	go get -tags mongodb github.com/MidnightChat/chat/MidnightChat-db && go build -tags mongodb -o $GOPATH/bin/init-db github.com/MidnightChat/chat/MidnightChat-db
 	```
  - **All** (bundle all the above DB adapters):
 	```
-	go get -tags "mysql rethinkdb mongodb" github.com/tinode/chat/server && go build -tags "mysql rethinkdb mongodb" -o $GOPATH/bin/tinode github.com/tinode/chat/server
-	go get -tags "mysql rethinkdb mongodb" github.com/tinode/chat/tinode-db && go build -tags "mysql rethinkdb mongodb" -o $GOPATH/bin/init-db github.com/tinode/chat/tinode-db
+	go get -tags "mysql rethinkdb mongodb" github.com/MidnightChat/chat/server && go build -tags "mysql rethinkdb mongodb" -o $GOPATH/bin/MidnightChat github.com/MidnightChat/chat/server
+	go get -tags "mysql rethinkdb mongodb" github.com/MidnightChat/chat/MidnightChat-db && go build -tags "mysql rethinkdb mongodb" -o $GOPATH/bin/init-db github.com/MidnightChat/chat/MidnightChat-db
 	```
 
 	Note the required **`-tags rethinkdb`**, **`-tags mysql`** or **`-tags mongodb`** build option.
@@ -61,15 +61,15 @@ See [instructions](./docker/README.md)
 	The value of `buildstamp` will be sent by the server to the clients.
 
 
-4. Open `tinode.conf`. Check that the database connection parameters are correct for your database. If you are using MySQL make sure [DSN](https://github.com/go-sql-driver/mysql#dsn-data-source-name) in `"mysql"` section is appropriate for your MySQL installation. Option `parseTime=true` is required.
+4. Open `MidnightChat.conf`. Check that the database connection parameters are correct for your database. If you are using MySQL make sure [DSN](https://github.com/go-sql-driver/mysql#dsn-data-source-name) in `"mysql"` section is appropriate for your MySQL installation. Option `parseTime=true` is required.
 ```js
 	"mysql": {
-		"dsn": "root@tcp(localhost)/tinode?parseTime=true",
-		"database": "tinode"
+		"dsn": "root@tcp(localhost)/MidnightChat?parseTime=true",
+		"database": "MidnightChat"
 	},
 ```
 
-5. Make sure you specify the adapter name in your `tinode.conf`. E.g. you want to run Tinode with MySQL:
+5. Make sure you specify the adapter name in your `MidnightChat.conf`. E.g. you want to run MidnightChat with MySQL:
 ```js
 	"store_config: {
 		...
@@ -100,25 +100,25 @@ See [instructions](./docker/README.md)
 
 2. Run DB initializer
 	```
-	$GOPATH/bin/init-db -config=$GOPATH/src/github.com/tinode/chat/tinode-db/tinode.conf
+	$GOPATH/bin/init-db -config=$GOPATH/src/github.com/MidnightChat/chat/MidnightChat-db/MidnightChat.conf
 	```
-	add `-data=$GOPATH/src/github.com/tinode/chat/tinode-db/data.json` flag if you want sample data to be loaded:
+	add `-data=$GOPATH/src/github.com/MidnightChat/chat/MidnightChat-db/data.json` flag if you want sample data to be loaded:
 	```
-	$GOPATH/bin/init-db -config=$GOPATH/src/github.com/tinode/chat/tinode-db/tinode.conf -data=$GOPATH/src/github.com/tinode/chat/tinode-db/data.json
+	$GOPATH/bin/init-db -config=$GOPATH/src/github.com/MidnightChat/chat/MidnightChat-db/MidnightChat.conf -data=$GOPATH/src/github.com/MidnightChat/chat/MidnightChat-db/data.json
 	```
 
-	DB intializer needs to be run only once per installation. See [instructions](tinode-db/README.md) for more options.
+	DB intializer needs to be run only once per installation. See [instructions](MidnightChat-db/README.md) for more options.
 
-3. Unpack JS client to a directory, for instance `$HOME/tinode/webapp/` by unzipping `https://github.com/tinode/webapp/archive/master.zip` and `https://github.com/tinode/tinode-js/archive/master.zip` to the same directory.
+3. Unpack JS client to a directory, for instance `$HOME/MidnightChat/webapp/` by unzipping `https://github.com/MidnightChat/webapp/archive/master.zip` and `https://github.com/MidnightChat/MidnightChat-js/archive/master.zip` to the same directory.
 
 4. Run the server
 	```
-	$GOPATH/bin/tinode -config=$GOPATH/src/github.com/tinode/chat/server/tinode.conf -static_data=$HOME/tinode/webapp/
+	$GOPATH/bin/MidnightChat -config=$GOPATH/src/github.com/MidnightChat/chat/server/MidnightChat.conf -static_data=$HOME/MidnightChat/webapp/
 	```
 
 5. Test your installation by pointing your browser to [http://localhost:6060/](http://localhost:6060/). The static files from the `-static_data` path are served at web root `/`. You can change this by editing the line `static_mount` in the config file.
 
-**Important!** If you are running Tinode alongside another webserver, such as Apache or nginx, keep in mind that you need to launch the webapp from the URL served by Tinode. Otherwise it won't work.
+**Important!** If you are running MidnightChat alongside another webserver, such as Apache or nginx, keep in mind that you need to launch the webapp from the URL served by MidnightChat. Otherwise it won't work.
 
 
 ## Running a Cluster
@@ -158,8 +158,8 @@ See [instructions](./docker/README.md)
 
 If you are testing the cluster with all nodes running on the same host, you also must override the `listen` and `grpc_listen` ports. Here is an example for launching two cluster nodes from the same host using the same config file:
 ```
-$GOPATH/bin/tinode -config=./tinode.conf -static_data=./webapp/ -listen=:6060 -grpc_listen=:6080 -cluster_self=one &
-$GOPATH/bin/tinode -config=./tinode.conf -static_data=./webapp/ -listen=:6061 -grpc_listen=:6081 -cluster_self=two &
+$GOPATH/bin/MidnightChat -config=./MidnightChat.conf -static_data=./webapp/ -listen=:6060 -grpc_listen=:6080 -cluster_self=one &
+$GOPATH/bin/MidnightChat -config=./MidnightChat.conf -static_data=./webapp/ -listen=:6061 -grpc_listen=:6081 -cluster_self=two &
 ```
 A bash script [run-cluster.sh](./server/run-cluster.sh) may be found useful.
 
@@ -174,10 +174,10 @@ There is [no clean way](https://github.com/golang/go/issues/227) to daemonize a 
 Specific note for [nohup](https://en.wikipedia.org/wiki/Nohup) users: an `exit` must be issued immediately after `nohup` call to close the foreground session cleanly:
 
 ```
-nohup $GOPATH/bin/server -config=$GOPATH/src/github.com/tinode/chat/server/tinode.conf -static_data=$HOME/tinode/webapp/ &
+nohup $GOPATH/bin/server -config=$GOPATH/src/github.com/MidnightChat/chat/server/MidnightChat.conf -static_data=$HOME/MidnightChat/webapp/ &
 exit
 ```
 
 Otherwise `SIGHUP` may be received by the server if the shell connection is broken before the ssh session has terminated (indicated by `Connection to XXX.XXX.XXX.XXX port 22: Broken pipe`). In such a case the server will shutdown because `SIGHUP` is intercepted by the server and interpreted as a shutdown request.
 
-For more details see https://github.com/tinode/chat/issues/25.
+For more details see https://github.com/MidnightChat/chat/issues/25.

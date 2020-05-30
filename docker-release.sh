@@ -1,14 +1,14 @@
 #!/bin/bash
 
-# Publish Tinode docker images
+# Publish MidnightChat docker images
 
 function containerName() {
   if [ "$1" == "alldbs" ]; then
-    # For alldbs, container name is simply tinode.
-    local name="tinode"
+    # For alldbs, container name is simply MidnightChat.
+    local name="MidnightChat"
   else
-    # Otherwise, tinode-$dbtag.
-    local name="tinode-${dbtag}"
+    # Otherwise, MidnightChat-$dbtag.
+    local name="MidnightChat-${dbtag}"
   fi
   echo $name
 }
@@ -45,24 +45,24 @@ do
   name="$(containerName $dbtag)"
   # Deploy tagged image
   if [ -n "$FULLRELEASE" ]; then
-    docker push tinode/${name}:latest
-    docker push tinode/${name}:"${ver[0]}.${ver[1]}"
+    docker push MidnightChat/${name}:latest
+    docker push MidnightChat/${name}:"${ver[0]}.${ver[1]}"
   fi
-  docker push tinode/${name}:"${ver[0]}.${ver[1]}.${ver[2]}"
+  docker push MidnightChat/${name}:"${ver[0]}.${ver[1]}.${ver[2]}"
 done
 
 # Deploy chatbot images
 if [ -n "$FULLRELEASE" ]; then
-  docker push tinode/chatbot:latest
-  docker push tinode/chatbot:"${ver[0]}.${ver[1]}"
+  docker push MidnightChat/chatbot:latest
+  docker push MidnightChat/chatbot:"${ver[0]}.${ver[1]}"
 fi
-docker push tinode/chatbot:"${ver[0]}.${ver[1]}.${ver[2]}"
+docker push MidnightChat/chatbot:"${ver[0]}.${ver[1]}.${ver[2]}"
 
 # Deploy exporter images
 if [ -n "$FULLRELEASE" ]; then
-  docker push tinode/exporter:latest
-  docker push tinode/exporter:"${ver[0]}.${ver[1]}"
+  docker push MidnightChat/exporter:latest
+  docker push MidnightChat/exporter:"${ver[0]}.${ver[1]}"
 fi
-docker push tinode/exporter:"${ver[0]}.${ver[1]}.${ver[2]}"
+docker push MidnightChat/exporter:"${ver[0]}.${ver[1]}.${ver[2]}"
 
 docker logout

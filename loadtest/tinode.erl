@@ -1,10 +1,10 @@
-%% Support module for Tinode load testing with Tsung.
+%% Support module for MidnightChat load testing with Tsung.
 %% Compile using erlc then copy resulting .beam to
 %% /usr/local/lib/erlang/lib/tsung-1.7.0/ebin/
 %% Alternatively you can just leave it in the current
 %% directory.
 
--module(tinode).
+-module(MidnightChat).
 -export([rand_user_secret/1]).
 
 %% Produces a secret for use in basic login.

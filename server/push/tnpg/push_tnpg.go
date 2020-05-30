@@ -1,4 +1,4 @@
-// Package tnpg implements push notification plugin for Tinode Push Gateway.
+// Package tnpg implements push notification plugin for MidnightChat Push Gateway.
 package tnpg
 
 import (
@@ -11,13 +11,13 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/tinode/chat/server/push"
-	"github.com/tinode/chat/server/push/fcm"
-	"github.com/tinode/chat/server/store"
+	"github.com/MidnightChat/chat/server/push"
+	"github.com/MidnightChat/chat/server/push/fcm"
+	"github.com/MidnightChat/chat/server/store"
 )
 
 const (
-	baseTargetAddress = "https://pushgw.tinode.co/push/"
+	baseTargetAddress = "https://pushgw.MidnightChat.co/push/"
 	batchSize         = 100
 	bufferSize        = 1024
 )

@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-"""Python implementation of Tinode command line client using gRPC."""
+"""Python implementation of MidnightChat command line client using gRPC."""
 
 # To make print() compatible between p2 and p3
 from __future__ import print_function
@@ -30,8 +30,8 @@ import time
 from google.protobuf import json_format
 
 # Import generated grpc modules
-from tinode_grpc import pb
-from tinode_grpc import pbx
+from MidnightChat_grpc import pb
+from MidnightChat_grpc import pbx
 
 import tn_globals
 from tn_globals import printerr
@@ -41,7 +41,7 @@ from tn_globals import stdoutln
 APP_NAME = "tn-cli"
 APP_VERSION = "1.4.0"
 PROTOCOL_VERSION = "0"
-LIB_VERSION = pkg_resources.get_distribution("tinode_grpc").version
+LIB_VERSION = pkg_resources.get_distribution("MidnightChat_grpc").version
 GRPC_VERSION = pkg_resources.get_distribution("grpcio").version
 
 # Maximum in-band (included directly into the message) attachment size which fits into
@@ -543,8 +543,8 @@ def upload(id, cmd, args):
         result = requests.post(
             scheme + '://' + args.web_host + '/v' + PROTOCOL_VERSION + '/file/u/',
             headers = {
-                'X-Tinode-APIKey': args.api_key,
-                'X-Tinode-Auth': 'Token ' + tn_globals.AuthToken,
+                'X-MidnightChat-APIKey': args.api_key,
+                'X-MidnightChat-Auth': 'Token ' + tn_globals.AuthToken,
                 'User-Agent': APP_NAME + " " + APP_VERSION + "/" + LIB_VERSION
             },
             data = {'id': id},
@@ -1029,11 +1029,11 @@ def print_server_params(params):
 if __name__ == '__main__':
     """Parse command-line arguments. Extract host name and authentication scheme, if one is provided"""
     version = APP_VERSION + "/" + LIB_VERSION + "; gRPC/" + GRPC_VERSION
-    purpose = "Tinode command line client. Version " + version + "."
+    purpose = "MidnightChat command line client. Version " + version + "."
 
     parser = argparse.ArgumentParser(description=purpose)
-    parser.add_argument('--host', default='localhost:16060', help='address of Tinode gRPC server')
-    parser.add_argument('--web-host', default='localhost:6060', help='address of Tinode web server (for file uploads)')
+    parser.add_argument('--host', default='localhost:16060', help='address of MidnightChat gRPC server')
+    parser.add_argument('--web-host', default='localhost:6060', help='address of MidnightChat web server (for file uploads)')
     parser.add_argument('--ssl', action='store_true', help='connect to server over secure connection')
     parser.add_argument('--ssl-host', help='SSL host name to use instead of default (useful for connecting to localhost)')
     parser.add_argument('--login-basic', help='login using basic authentication username:password')

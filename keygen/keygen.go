@@ -76,7 +76,7 @@ func generate(sequence, isRoot int, hmacSaltB64 string) int {
 			return 1
 		}
 	}
-	// Make sure the salt is base64std encoded: tinode.conf requires std encoding.
+	// Make sure the salt is base64std encoded: MidnightChat.conf requires std encoding.
 	hmacSaltB64 = base64.StdEncoding.EncodeToString(hmacSalt)
 
 	// [1:algorithm version][4:appid][2:key sequence][1:isRoot]

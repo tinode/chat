@@ -23,7 +23,7 @@ echo "hosts: files dns" > /etc/nsswitch.conf
 LISTEN_AT=":6222"
 
 # Required env vars.
-common_vars=( TINODE_ADDR INSTANCE SERVE_FOR )
+common_vars=( MidnightChat_ADDR INSTANCE SERVE_FOR )
 
 influx_varnames=( INFLUXDB_VERSION INFLUXDB_ORGANIZATION INFLUXDB_PUSH_INTERVAL \
   INFLUXDB_PUSH_ADDRESS INFLUXDB_AUTH_TOKEN )
@@ -33,7 +33,7 @@ prometheus_varnames=( PROM_NAMESPACE PROM_METRICS_PATH )
 check_vars "${common_vars[@]}"
 
 # Common arguments.
-args=("--tinode_addr=${TINODE_ADDR}" "--instance=${INSTANCE}" "--listen_at=${LISTEN_AT}" "--serve_for=${SERVE_FOR}")
+args=("--MidnightChat_addr=${MidnightChat_ADDR}" "--instance=${INSTANCE}" "--listen_at=${LISTEN_AT}" "--serve_for=${SERVE_FOR}")
 
 # Platform-specific arguments.
 case "$SERVE_FOR" in
@@ -61,7 +61,7 @@ case "$SERVE_FOR" in
   ;;
 esac
 
-# Wait for Tinode server if needed.
+# Wait for MidnightChat server if needed.
 if [ ! -z "$WAIT_FOR" ] ; then
 	IFS=':' read -ra TND <<< "$WAIT_FOR"
 	if [ ${#TND[@]} -ne 2 ]; then

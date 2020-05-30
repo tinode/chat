@@ -1,6 +1,6 @@
 # RethinkDB Database Schema
 
-## Database `tinode`
+## Database `MidnightChat`
 
 ### Table `users`
 Stores user accounts
@@ -56,7 +56,7 @@ Sample:
     "tel:17025550001"
   ] ,
   "UpdatedAt": Mon Jul 24 2017 11:16:38 GMT+00:00 ,
-  "UserAgent": "TinodeWeb/0.13 (MacIntel) tinodejs/0.13"
+  "UserAgent": "MidnightChatWeb/0.13 (MacIntel) MidnightChatjs/0.13"
 }
 ```
 

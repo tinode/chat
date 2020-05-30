@@ -28,7 +28,7 @@ fi
 
 echo "Releasing exporter $version"
 
-GOSRC=${GOPATH}/src/github.com/tinode
+GOSRC=${GOPATH}/src/github.com/MidnightChat
 
 pushd ${GOSRC}/chat > /dev/null
 

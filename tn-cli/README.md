@@ -1,6 +1,6 @@
-# Command Line Client for Tinode
+# Command Line Client for MidnightChat
 
-This is a scriptable command line chat client. It's written in Python and can be used to extend Tinode using [gRPC](https://grpc.io) [API](../pbx/).
+This is a scriptable command line chat client. It's written in Python and can be used to extend MidnightChat using [gRPC](https://grpc.io) [API](../pbx/).
 
 Python 2.7 or 3.4+ is required. PIP 9.0.1 or newer is required.
 
@@ -14,16 +14,16 @@ Run the client from the command line:
 python tn-cli.py --login-basic=alice:alice123
 ```
 
-If you are updating an existent installation, make sure the `tinode_grpc` version matches the [server](../server/) version. Upgrade `tinode_grpc` if needed:
+If you are updating an existent installation, make sure the `MidnightChat_grpc` version matches the [server](../server/) version. Upgrade `MidnightChat_grpc` if needed:
 ```
-python -m pip install --upgrade tinode_grpc==X.XX.XX
+python -m pip install --upgrade MidnightChat_grpc==X.XX.XX
 ```
 where `X.XX.XX` is the version number which must match the server version number.
 
 The client takes optional parameters:
 
  * `--host` is the address of the gRPC server to connect to; default `localhost:16060`.
- * `--web-host` is the address of Tinode web server, used for file uploads only; default `localhost:6060`.
+ * `--web-host` is the address of MidnightChat web server, used for file uploads only; default `localhost:6060`.
  * `--ssl` the server requires a secure connection (SSL)
  * `--ssl-host` the domain name to use for SNI if different from the `--host` domain name.
  * `--login-basic` is the `login:password` to be authenticated with.

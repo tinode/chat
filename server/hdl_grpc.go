@@ -15,7 +15,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/tinode/chat/pbx"
+	"github.com/MidnightChat/chat/pbx"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/keepalive"

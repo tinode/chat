@@ -11,9 +11,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tinode/chat/server/auth"
-	"github.com/tinode/chat/server/store"
-	t "github.com/tinode/chat/server/store/types"
+	"github.com/MidnightChat/chat/server/auth"
+	"github.com/MidnightChat/chat/server/store"
+	t "github.com/MidnightChat/chat/server/store/types"
 	rdb "gopkg.in/rethinkdb/rethinkdb-go.v5"
 )
 
@@ -27,7 +27,7 @@ type adapter struct {
 
 const (
 	defaultHost     = "localhost:28015"
-	defaultDatabase = "tinode"
+	defaultDatabase = "MidnightChat"
 
 	adpVersion = 111
 
@@ -826,9 +826,9 @@ func (a *adapter) topicStateForUser(uid t.Uid, now time.Time, update interface{}
 
 	// Change state of p2p topics with the user (p2p topic's owner is blank)
 	/*
-		r.db('tinode').table('topics').getAll(
+		r.db('MidnightChat').table('topics').getAll(
 			r.args(
-				r.db("tinode").table("subscriptions").getAll('S8VFqRpXw5M', {index: 'User'})('Topic').coerceTo('array')
+				r.db("MidnightChat").table("subscriptions").getAll('S8VFqRpXw5M', {index: 'User'})('Topic').coerceTo('array')
 			)
 		).update(...)
 	*/
@@ -929,8 +929,8 @@ func (a *adapter) UserGetByCred(method, value string) (t.Uid, error) {
 // the R permission.
 func (a *adapter) UserUnreadCount(uid t.Uid) (int, error) {
 	/*
-		r.db("tinode").table("subscriptions").getAll("8L6HpDuF05c", {index: "User"})
-			.eqJoin("Topic", r.db("tinode").table("topics"), {index: "Id"})
+		r.db("MidnightChat").table("subscriptions").getAll("8L6HpDuF05c", {index: "User"})
+			.eqJoin("Topic", r.db("MidnightChat").table("topics"), {index: "Id"})
 			.filter(
 				r.not(r.row.hasFields({"left": "DeletedAt"}).or(r.row("right")("State").eq(20)))
 			)
@@ -1509,7 +1509,7 @@ func (a *adapter) FindUsers(uid t.Uid, req, opt []string) ([]t.Subscription, err
 	// Query for selecting matches where every group includes at least one required match (restricting search to
 	// group members).
 	/*
-		r.db('tinode').
+		r.db('MidnightChat').
 			table('users').
 			getAll(<all tags here>, {index: "Tags"}).
 			pluck("Id", "Access", "CreatedAt", "UpdatedAt", "Public", "Tags").

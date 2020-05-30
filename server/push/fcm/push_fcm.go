@@ -13,8 +13,8 @@ import (
 	fbase "firebase.google.com/go"
 	fcm "firebase.google.com/go/messaging"
 
-	"github.com/tinode/chat/server/push"
-	"github.com/tinode/chat/server/store"
+	"github.com/MidnightChat/chat/server/push"
+	"github.com/MidnightChat/chat/server/store"
 
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/option"

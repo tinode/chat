@@ -16,9 +16,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/tinode/chat/server/auth"
-	"github.com/tinode/chat/server/store"
-	"github.com/tinode/chat/server/store/types"
+	"github.com/MidnightChat/chat/server/auth"
+	"github.com/MidnightChat/chat/server/store"
+	"github.com/MidnightChat/chat/server/store/types"
 )
 
 // Request to hub to subscribe session to topic

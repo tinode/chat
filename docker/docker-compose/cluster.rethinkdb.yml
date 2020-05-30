@@ -1,6 +1,6 @@
 version: '3.7'
 
-x-rethinkdb-tinode-env-vars: &rethinkdb-tinode-env-vars
+x-rethinkdb-MidnightChat-env-vars: &rethinkdb-MidnightChat-env-vars
   "STORE_USE_ADAPTER": "rethinkdb"
 
 services:
@@ -10,15 +10,15 @@ services:
     healthcheck:
       test: ["CMD", "curl -f http://localhost:8080/ || exit 1"]
 
-  tinode-0:
+  MidnightChat-0:
     environment:
-      << : *rethinkdb-tinode-env-vars
+      << : *rethinkdb-MidnightChat-env-vars
       "WAIT_FOR": "rethinkdb:8080"
 
-  tinode-1:
+  MidnightChat-1:
     environment:
-      << : *rethinkdb-tinode-env-vars
+      << : *rethinkdb-MidnightChat-env-vars
 
-  tinode-2:
+  MidnightChat-2:
     environment:
-      << : *rethinkdb-tinode-env-vars
+      << : *rethinkdb-MidnightChat-env-vars

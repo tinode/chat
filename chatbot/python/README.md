@@ -1,20 +1,20 @@
-# Tinode Chatbot
+# MidnightChat Chatbot
 
-This is a simple chatbot for Tinode using [gRPC API](../../pbx/). It's written in Python as a demonstration
+This is a simple chatbot for MidnightChat using [gRPC API](../../pbx/). It's written in Python as a demonstration
 that the API is language-independent.
 
 The chat bot subscribes to events stream using Plugin API and logs in as a regular user. The event stream API is used to listen for creation of new accounts. When a new account is created, the bot initiates a p2p topic with the new user. Then it listens for messages sent to the topic and responds to each with a random quote from `quotes.txt` file.
 
-Generated files are provided for convenience in a [separate folder](../../py_grpc/tinode_grpc). You may re-generate them if needed:
+Generated files are provided for convenience in a [separate folder](../../py_grpc/MidnightChat_grpc). You may re-generate them if needed:
 ```
 python -m pip install grpcio-tools
 python -m grpc_tools.protoc -../../pbx --python_out=. --grpc_python_out=. ../../pbx/model.proto
 ```
 
-Chatbot expects gRPC binding to be provided as `tinode-grpc`. If you want to use them locally, first copy `model_pb2.py` and `model_pb2_grpc.py` to the same folder as `chatbot.py` then find the lines
+Chatbot expects gRPC binding to be provided as `MidnightChat-grpc`. If you want to use them locally, first copy `model_pb2.py` and `model_pb2_grpc.py` to the same folder as `chatbot.py` then find the lines
 ```
-from tinode_grpc import pb
-from tinode_grpc import pbx
+from MidnightChat_grpc import pb
+from MidnightChat_grpc import pbx
 ```
 in `chatbot.py` and replace them with
 ```
@@ -52,12 +52,12 @@ $ OSError: [Errno 1] Operation not permitted: '/tmp/pip-qwTLbI-uninstall/System/
 ```
 You can work around this using:
 ```
-$ python -m pip install tinode_grpc --ignore-installed
+$ python -m pip install MidnightChat_grpc --ignore-installed
 ```
 
 ### Run the chatbot
 
-Start the [tinode server](../../INSTALL.md) first. Then start the chatbot with credentials of the user you want to be your bot, `alice` in this example:
+Start the [MidnightChat server](../../INSTALL.md) first. Then start the chatbot with credentials of the user you want to be your bot, `alice` in this example:
 ```
 python chatbot.py --login-basic=alice:alice123
 ```
@@ -86,34 +86,34 @@ Quotes are read from `quotes.txt` by default. The file is plain text with one qu
 
 **Warning!** Although the chatbot itself is less than 11KB, the chatbot Docker image is 175MB: the `:slim` Python 3 image is about 140MB, gRPC adds another ~30MB.
 
-1. Follow [instructions](../../docker/README.md) to build and run dockerized Tinode chat server up to and including _step 3_.
+1. Follow [instructions](../../docker/README.md) to build and run dockerized MidnightChat chat server up to and including _step 3_.
 
 2. In _step 4_ run the server adding `--env PLUGIN_PYTHON_CHAT_BOT_ENABLED=true` and `--volume botdata:/botdata` to the command line:
 	1. **RethinkDB**:
 	```
-	$ docker run -p 6060:18080 -d --name tinode-srv --env PLUGIN_PYTHON_CHAT_BOT_ENABLED=true --volume botdata:/botdata --network tinode-net tinode/tinode-rethink:latest
+	$ docker run -p 6060:18080 -d --name MidnightChat-srv --env PLUGIN_PYTHON_CHAT_BOT_ENABLED=true --volume botdata:/botdata --network MidnightChat-net MidnightChat/MidnightChat-rethink:latest
 	```
 	2. **MySQL**:
 	```
-	$ docker run -p 6060:18080 -d --name tinode-srv --env PLUGIN_PYTHON_CHAT_BOT_ENABLED=true --volume botdata:/botdata --network tinode-net tinode/tinode-mysql:latest
+	$ docker run -p 6060:18080 -d --name MidnightChat-srv --env PLUGIN_PYTHON_CHAT_BOT_ENABLED=true --volume botdata:/botdata --network MidnightChat-net MidnightChat/MidnightChat-mysql:latest
 	```
 	3. **MongoDB**:
 	```
-	$ docker run -p 6060:18080 -d --name tinode-srv --env PLUGIN_PYTHON_CHAT_BOT_ENABLED=true --volume botdata:/botdata --network tinode-net tinode/tinode-mongodb:latest
+	$ docker run -p 6060:18080 -d --name MidnightChat-srv --env PLUGIN_PYTHON_CHAT_BOT_ENABLED=true --volume botdata:/botdata --network MidnightChat-net MidnightChat/MidnightChat-mongodb:latest
 	```
 
 3. Run the chatbot
 	```
-	$ docker run -d --name tino-chatbot --network tinode-net --volume botdata:/botdata tinode/chatbot:latest
+	$ docker run -d --name tino-chatbot --network MidnightChat-net --volume botdata:/botdata MidnightChat/chatbot:latest
 	```
 
 4. Test that the bot is functional by pointing your browser to http://localhost:6060/, login and talk to user `Tino`. The user should respond to every message with a random quote.
 
 
 You may replace the `:latest` with a different tag. See all available tags here:
- * [Tinode-MySQL tags](https://hub.docker.com/r/tinode/tinode-mysql/tags/)
- * [Tinode-RethinkDB tags](https://hub.docker.com/r/tinode/tinode-rethink/tags/)
- * [Tinode-MongoDB tags](https://hub.docker.com/r/tinode/tinode-mongodb/tags/)
- * [Chatbot tags](https://hub.docker.com/r/tinode/chatbot/tags/)
+ * [MidnightChat-MySQL tags](https://hub.docker.com/r/MidnightChat/MidnightChat-mysql/tags/)
+ * [MidnightChat-RethinkDB tags](https://hub.docker.com/r/MidnightChat/MidnightChat-rethink/tags/)
+ * [MidnightChat-MongoDB tags](https://hub.docker.com/r/MidnightChat/MidnightChat-mongodb/tags/)
+ * [Chatbot tags](https://hub.docker.com/r/MidnightChat/chatbot/tags/)
 
 In general try to use docker images all with the same tag.

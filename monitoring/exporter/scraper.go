@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-// Scraper collects metrics from a tinode server.
+// Scraper collects metrics from a MidnightChat server.
 type Scraper struct {
 	address string
 	metrics []string
@@ -16,7 +16,7 @@ type Scraper struct {
 
 var errKeyNotFound = errors.New("key not found")
 
-// CollectRaw gathers all metrics from the configured Tinode instance,
+// CollectRaw gathers all metrics from the configured MidnightChat instance,
 // and returns them as a map.
 func (s *Scraper) CollectRaw() (map[string]float64, error) {
 	stats, err := s.Scrape()
@@ -32,7 +32,7 @@ func (s *Scraper) CollectRaw() (map[string]float64, error) {
 	return metrics, nil
 }
 
-// Scrape fetches the data from Tinode server using HTTP GET then decodes the response.
+// Scrape fetches the data from MidnightChat server using HTTP GET then decodes the response.
 func (s *Scraper) Scrape() (map[string]interface{}, error) {
 	resp, err := http.Get(s.address)
 	if err != nil {

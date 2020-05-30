@@ -18,11 +18,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/MidnightChat/chat/pbx"
+	"github.com/MidnightChat/chat/server/auth"
+	"github.com/MidnightChat/chat/server/store"
+	"github.com/MidnightChat/chat/server/store/types"
 	"github.com/gorilla/websocket"
-	"github.com/tinode/chat/pbx"
-	"github.com/tinode/chat/server/auth"
-	"github.com/tinode/chat/server/store"
-	"github.com/tinode/chat/server/store/types"
 )
 
 // Wire transport

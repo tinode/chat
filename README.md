@@ -1,12 +1,12 @@
-# Tinode Instant Messaging Server
+# MidnightChat Instant Messaging Server
 
 <img src="docs/logo.svg" align="left" width=128 height=128> Instant messaging server. Backend in pure [Go](http://golang.org) (license [GPL 3.0](http://www.gnu.org/licenses/gpl-3.0.en.html)), client-side binding in Java, Javascript, and Swift, as well as [gRPC](https://grpc.io/) client support for C++, C#, Go, Java, Node, PHP, Python, Ruby, Objective-C, etc. (license [Apache 2.0](http://www.apache.org/licenses/LICENSE-2.0)). Wire transport is JSON over websocket (long polling is also available) for custom bindings, or [protobuf](https://developers.google.com/protocol-buffers/) with gRPC. Persistent storage [RethinkDB](http://rethinkdb.com/), MySQL and MongoDB (experimental). A third-party unsupported [DynamoDB adapter](https://github.com/riandyrn/chat/tree/master/server/db/dynamodb) also exists. Other databases can be supported by writing custom adapters.
 
-Tinode is *not* XMPP/Jabber. It is *not* compatible with XMPP. It's meant as a replacement for XMPP. On the surface, it's a lot like open source WhatsApp or Telegram.
+MidnightChat is *not* XMPP/Jabber. It is *not* compatible with XMPP. It's meant as a replacement for XMPP. On the surface, it's a lot like open source WhatsApp or Telegram.
 
 Version 0.16. This is beta-quality software: feature-complete but probably with a few bugs. Follow [instructions](INSTALL.md) to install and run or use one of the cloud services below. Read [API documentation](docs/API.md).
 
-<a href="https://apps.apple.com/us/app/tinode/id1483763538"><img src="docs/app-store.svg" height=36></a> <a href="https://play.google.com/store/apps/details?id=co.tinode.tindroidx"><img src="docs/play-store.svg" height=36></a> <a href="https://web.tinode.co/"><img src="docs/web-app.svg" height=36></a>
+<a href="https://apps.apple.com/us/app/MidnightChat/id1483763538"><img src="docs/app-store.svg" height=36></a> <a href="https://play.google.com/store/apps/details?id=co.MidnightChat.tindroidx"><img src="docs/play-store.svg" height=36></a> <a href="https://web.MidnightChat.co/"><img src="docs/web-app.svg" height=36></a>
 
 ## Why?
 
@@ -21,31 +21,31 @@ See [general instructions](./INSTALL.md) or [docker-specific instructions](./doc
 ## Getting support
 
 * Read [API documentation](docs/API.md) and [FAQ](docs/faq.md).
-* For support, general questions, discussions post to [https://groups.google.com/d/forum/tinode](https://groups.google.com/d/forum/tinode).
-* For bugs and feature requests [open an issue](https://github.com/tinode/chat/issues/new).
+* For support, general questions, discussions post to [https://groups.google.com/d/forum/MidnightChat](https://groups.google.com/d/forum/MidnightChat).
+* For bugs and feature requests [open an issue](https://github.com/MidnightChat/chat/issues/new).
 
 
 ## Public service
 
-A [public Tinode service](https://web.tinode.co/) is now available. You can use it just like any other instant messenger. Keep in mind that demo accounts present in [sandbox](https://sandbox.tinode.co/) are not available in the public service. You must register an account using valid email in order to use the service.
+A [public MidnightChat service](https://web.MidnightChat.co/) is now available. You can use it just like any other instant messenger. Keep in mind that demo accounts present in [sandbox](https://sandbox.MidnightChat.co/) are not available in the public service. You must register an account using valid email in order to use the service.
 
 ### Web
 
-TinodeWeb, a single page web app, is available at https://web.tinode.co/ ([source](https://github.com/tinode/webapp/)). See screenshots below. Currently available in English, Simplified Chinese, Russian. More translations are welcome.
+MidnightChatWeb, a single page web app, is available at https://web.MidnightChat.co/ ([source](https://github.com/MidnightChat/webapp/)). See screenshots below. Currently available in English, Simplified Chinese, Russian. More translations are welcome.
 
 ### Android
 
-[Tinode for Android](https://play.google.com/store/apps/details?id=co.tinode.tindroidx) a.k.a Tindroid is stable and functional ([source](https://github.com/tinode/tindroid)). See the screenshots below. A [debug APK](https://github.com/tinode/tindroid/releases/latest) is also provided for convenience. Currently available in English, Simplified Chinese, Russian. More translations are welcome.
+[MidnightChat for Android](https://play.google.com/store/apps/details?id=co.MidnightChat.tindroidx) a.k.a Tindroid is stable and functional ([source](https://github.com/MidnightChat/tindroid)). See the screenshots below. A [debug APK](https://github.com/MidnightChat/tindroid/releases/latest) is also provided for convenience. Currently available in English, Simplified Chinese, Russian. More translations are welcome.
 
 
 ### iOS
 
-[Tinode for iOS](https://apps.apple.com/app/reference-to-tinodios-here/id123) a.k.a. Tinodios is stable and functional ([source](https://github.com/tinode/ios)). See the screenshots below. Currently available in English, Simplified Chinese. More translations are welcome.
+[MidnightChat for iOS](https://apps.apple.com/app/reference-to-tinodios-here/id123) a.k.a. Tinodios is stable and functional ([source](https://github.com/MidnightChat/ios)). See the screenshots below. Currently available in English, Simplified Chinese. More translations are welcome.
 
 
 ## Demo/Sandbox
 
-A sandboxed demo service is available at https://sandbox.tinode.co/.
+A sandboxed demo service is available at https://sandbox.MidnightChat.co/.
 
 Log in as one of `alice`, `bob`, `carol`, `dave`, `frank`. Password is `<login>123`, e.g. login for `alice` is `alice123`. You can discover other users by email or phone by prefixing them with `email:` or `tel:` respectively. Emails are `<login>@example.com`, e.g. `alice@example.com`, phones are `+17025550001` through `+17025550009`.
 
@@ -55,17 +55,17 @@ When you register a new account you are asked for an email address to send valid
 
 * The sandbox server is reset (all data wiped) every night at 3:15am Pacific time. An error message `User not found or offline` means the server was reset while you were connected. If you see it on the web, reload and relogin. On Android log out and re-login. If the database was changed, delete the app then reinstall.
 * Sandbox user `Tino` is a [basic chatbot](./chatbot) which responds with a [random quote](http://fortunes.cat-v.org/) to any message.
-* As generally accepted, when you register a new account you are asked for an email address. The server will send an email with a verification code to that address and you can use it to validate the account. To make things easier for testing, the server will also accept `123456` as a verification code. Remove line `"debug_response": "123456"` from `tinode.conf` to disable this option.
+* As generally accepted, when you register a new account you are asked for an email address. The server will send an email with a verification code to that address and you can use it to validate the account. To make things easier for testing, the server will also accept `123456` as a verification code. Remove line `"debug_response": "123456"` from `MidnightChat.conf` to disable this option.
 * The sandbox server is configured to use [ACME](https://letsencrypt.org/) TLS [implementation](https://godoc.org/golang.org/x/crypto/acme) with hard-coded requirement for [SNI](https://en.wikipedia.org/wiki/Server_Name_Indication). If you are unable to connect then the most likely reason is your TLS client's missing support for SNI. Use a different client.
-* The default web app loads a single minified javascript bundle and minified CSS. The un-minified version is also available at https://sandbox.tinode.co/index-dev.html
-* [Docker images](https://hub.docker.com/u/tinode/) with the same demo are available.
+* The default web app loads a single minified javascript bundle and minified CSS. The un-minified version is also available at https://sandbox.MidnightChat.co/index-dev.html
+* [Docker images](https://hub.docker.com/u/MidnightChat/) with the same demo are available.
 * You are welcome to test your client software against the sandbox, hack it, etc. No DDoS-ing though please.
 
 ## Features
 
 ### Supported
 
-* [Android](https://github.com/tinode/tindroid/), [iOS](https://github.com/tinode/ios), [web](https://github.com/tinode/webapp/), and [command line](tn-cli/) clients.
+* [Android](https://github.com/MidnightChat/tindroid/), [iOS](https://github.com/MidnightChat/ios), [web](https://github.com/MidnightChat/webapp/), and [command line](tn-cli/) clients.
 * One-on-one messaging.
 * Group messaging with every member's access permissions managed individually. The maximum number of members is configurable (128 by default).
 * Topic access control with permissions for various actions.
@@ -111,25 +111,25 @@ All client software has support for internationalization. Translations are provi
 
 ## Screenshots
 
-### [Android](https://github.com/tinode/tindroid/)
+### [Android](https://github.com/MidnightChat/tindroid/)
 
 <p align="center">
 <img src="docs/android-contacts.png" alt="Android screenshot: list of chats" width=270 /> <img src="docs/android-chat.png" alt="Android screenshot: one conversation" width=270 />
 </p>
 
-### [iOS](https://github.com/tinode/ios)
+### [iOS](https://github.com/MidnightChat/ios)
 
 <p align="center">
 <img src="docs/ios-contacts.png" alt="iOS screenshot: list of chats" width=207 /> <img src="docs/ios-chat.png" alt="iOS screenshot: one conversation" width=207 /> <img src="docs/ios-account.png" alt="iOS screenshot: account settings" width="207" />
 </p>
 
-### [Desktop Web](https://github.com/tinode/webapp/)
+### [Desktop Web](https://github.com/MidnightChat/webapp/)
 
 <p align="center">
   <img src="docs/web-desktop-2.png" alt="Desktop web: full app" width=866 />
 </p>
 
-### [Mobile Web](https://github.com/tinode/webapp/)
+### [Mobile Web](https://github.com/MidnightChat/webapp/)
 
 <p align="center">
   <kbd><img src="docs/web-mob-contacts-1.png" alt="Mobile web: contacts" width=323 /></kbd> <kbd><img src="docs/web-mob-chat-1.png" alt="Mobile web: chat" width=323 /></kbd> <kbd><img src="docs/web-mob-info-1.png" alt="Mobile web: topic info" width=323 /></kbd> <kbd><img src="docs/web-mob-new-chat-1.png" alt="Mobile web: start new 1:1 chat" width=323 /></kbd>

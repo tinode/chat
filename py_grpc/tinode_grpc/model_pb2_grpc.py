@@ -93,9 +93,9 @@ class PluginServicer(object):
   """
 
   def FireHose(self, request, context):
-    """This plugin method is called by Tinode server for every message received from the clients. The
+    """This plugin method is called by MidnightChat server for every message received from the clients. The
     method returns a ServerCtrl message. Non-zero ServerCtrl.code indicates that no further
-    processing is needed. The Tinode server will generate a {ctrl} message from the returned ServerCtrl
+    processing is needed. The MidnightChat server will generate a {ctrl} message from the returned ServerCtrl
     and forward it to the client session.
     ServerCtrl.code equals to 0 instructs the server to continue with default processing of the client message.
     """
@@ -112,7 +112,7 @@ class PluginServicer(object):
     raise NotImplementedError('Method not implemented!')
 
   def Account(self, request, context):
-    """The following methods are for the Tinode server to report individual events.
+    """The following methods are for the MidnightChat server to report individual events.
 
     Account created, updated or deleted
     """

@@ -1,6 +1,6 @@
 # MongoDB Database Schema
 
-## Database `tinode`
+## Database `MidnightChat`
 
 ### Table `users`
 Stores user accounts
@@ -55,7 +55,7 @@ Sample:
     "tel:17025550001"
   ] ,
   "updatedat": "2019-10-11T12:13:14.522Z",
-  "useragent": "TinodeWeb/0.13 (MacIntel) tinodejs/0.13"
+  "useragent": "MidnightChatWeb/0.13 (MacIntel) MidnightChatjs/0.13"
 }
 ```
 

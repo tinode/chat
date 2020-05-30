@@ -340,8 +340,8 @@
       {"at": 14, "len": 2, "key": 1}
     ],
     "ent": [
-      {"tp": "BN", "data": {"name": "ok", "act": "url", "ref": "https://github.com/tinode/chat/?key=val"}},
-      {"tp": "BN", "data": {"name": "ok2", "act": "url", "ref": "https://github.com/tinode/chat"}}
+      {"tp": "BN", "data": {"name": "ok", "act": "url", "ref": "https://github.com/MidnightChat/chat/?key=val"}},
+      {"tp": "BN", "data": {"name": "ok2", "act": "url", "ref": "https://github.com/MidnightChat/chat"}}
     ]
   }
 ]

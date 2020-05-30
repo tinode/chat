@@ -1,4 +1,4 @@
-"""Tinode command line macro definitions."""
+"""MidnightChat command line macro definitions."""
 
 import argparse
 import tn_globals
@@ -29,7 +29,7 @@ class Macro:
         pass
 
     def expand(self, id, cmd, args):
-        """Expands the macro to a list of basic Tinode CLI commands."""
+        """Expands the macro to a list of basic MidnightChat CLI commands."""
         pass
 
     def run(self, id, cmd, args):

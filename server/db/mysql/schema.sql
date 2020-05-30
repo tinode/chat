@@ -1,8 +1,8 @@
-DROP DATABASE IF EXISTS tinode;
+DROP DATABASE IF EXISTS MidnightChat;
 
-CREATE DATABASE tinode CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE DATABASE MidnightChat CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
-USE tinode;
+USE MidnightChat;
 
 
 CREATE TABLE kvmeta(

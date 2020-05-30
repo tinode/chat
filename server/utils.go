@@ -18,8 +18,8 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/tinode/chat/server/auth"
-	"github.com/tinode/chat/server/store/types"
+	"github.com/MidnightChat/chat/server/auth"
+	"github.com/MidnightChat/chat/server/store/types"
 
 	"golang.org/x/crypto/acme/autocert"
 )
@@ -593,7 +593,7 @@ func platformFromUA(ua string) string {
 			return "android"
 		}
 		return ""
-	case strings.Contains(ua, "tinodejs"):
+	case strings.Contains(ua, "MidnightChatjs"):
 		return "web"
 	case strings.Contains(ua, "tindroid"):
 		return "android"
@@ -745,7 +745,7 @@ func mergeMaps(dst, src map[string]interface{}) (map[string]interface{}, bool) {
 }
 
 // netListener creates net.Listener for tcp and unix domains:
-// if addr is is in the form "unix:/run/tinode.sock" it's a unix socket, otherwise TCP host:port.
+// if addr is is in the form "unix:/run/MidnightChat.sock" it's a unix socket, otherwise TCP host:port.
 func netListener(addr string) (net.Listener, error) {
 	addrParts := strings.SplitN(addr, ":", 2)
 	if len(addrParts) == 2 && addrParts[0] == "unix" {
@@ -754,7 +754,7 @@ func netListener(addr string) (net.Listener, error) {
 	return net.Listen("tcp", addr)
 }
 
-// Check if specified address is a unix socket like "unix:/run/tinode.sock".
+// Check if specified address is a unix socket like "unix:/run/MidnightChat.sock".
 func isUnixAddr(addr string) bool {
 	addrParts := strings.SplitN(addr, ":", 2)
 	return len(addrParts) == 2 && addrParts[0] == "unix"

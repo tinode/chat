@@ -1,6 +1,6 @@
 # REST or JSON-RPC authenticator
 
-This authenticator permits authentication of Tinode users and creation of Tinode accounts using a separate process as a source of truth. For instance, if accounts are managed by corporate LDAP, this service allows handling of Tinode authentication using the same LDAP service.
+This authenticator permits authentication of MidnightChat users and creation of MidnightChat accounts using a separate process as a source of truth. For instance, if accounts are managed by corporate LDAP, this service allows handling of MidnightChat authentication using the same LDAP service.
 
 This authenticator calls a designated authentication service over HTTP(S) POST. A skeleton implementation of a server is provided for reference at [rest-auth](../../../rest-auth/). The requests may be handled either by a single endpoint or by separate per-request endpoints.
 
@@ -20,7 +20,7 @@ Request and response payloads are formatted as JSON. Some of the request or resp
 		- [`auth` Request for authentication](#auth-request-for-authentication)
 			- [Sample request](#sample-request)
 			- [Sample response when the account already exists (optional challenge included)](#sample-response-when-the-account-already-exists-optional-challenge-included)
-			- [Sample response when the account needs to be created by Tinode](#sample-response-when-the-account-needs-to-be-created-by-tinode)
+			- [Sample response when the account needs to be created by MidnightChat](#sample-response-when-the-account-needs-to-be-created-by-MidnightChat)
 		- [`checkunique` Checks if provided authentication record is unique.](#checkunique-checks-if-provided-authentication-record-is-unique)
 			- [Sample request](#sample-request)
 			- [Sample response](#sample-response)
@@ -44,7 +44,7 @@ Request and response payloads are formatted as JSON. Some of the request or resp
 
 ## Configuration
 
-Add the following section to the `auth_config` in [tinode.conf](../../tinode.conf):
+Add the following section to the `auth_config` in [MidnightChat.conf](../../MidnightChat.conf):
 
 ```js
 ...
@@ -171,7 +171,7 @@ This endpoint requests server to add a new authentication record. This endpoint 
 
 ### `auth` Request for authentication
 
-Request to authenticate a user. Client (Tinode) provides a secret, authentication server responds with a user record. If this is a very first login and the server manages the accounts, the server may return `newacc` object which will be used by client (Tinode) to create the account.
+Request to authenticate a user. Client (MidnightChat) provides a secret, authentication server responds with a user record. If this is a very first login and the server manages the accounts, the server may return `newacc` object which will be used by client (MidnightChat) to create the account.
 The server may optionally return a challenge as `byteval`.
 
 #### Sample request
@@ -194,7 +194,7 @@ The server may optionally return a challenge as `byteval`.
 }
 ```
 
-#### Sample response when the account needs to be created by Tinode
+#### Sample response when the account needs to be created by MidnightChat
 ```js
 {
   "rec": {
@@ -278,7 +278,7 @@ If accounts are managed by the server, the server should respond with an error `
 
 ### `link` Requests server to link new account ID to authentication record.
 
-If server requested Tinode to create a new account, this endpoint is used to link the new Tinode user ID with the server's authentication record. If linking was successful, the server should respond with a non-empty json.
+If server requested MidnightChat to create a new account, this endpoint is used to link the new MidnightChat user ID with the server's authentication record. If linking was successful, the server should respond with a non-empty json.
 
 #### Sample request
 ```json

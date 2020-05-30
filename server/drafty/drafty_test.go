@@ -14,12 +14,12 @@ func TestToPlainText(t *testing.T) {
 		`{
 			"ent":[{"data":{"url":"https://www.youtube.com/watch?v=dQw4w9WgXcQ"},"tp":"LN"}],
 			"fmt":[{"len":22}],
-			"txt":"https://api.tinode.co/"
+			"txt":"https://api.MidnightChat.co/"
 		}`,
 		`{
-			"ent":[{"data":{"url":"https://api.tinode.co/"},"tp":"LN"}],
+			"ent":[{"data":{"url":"https://api.MidnightChat.co/"},"tp":"LN"}],
 			"fmt":[{"len":22}],
-			"txt":"https://api.tinode.co/"
+			"txt":"https://api.MidnightChat.co/"
 		}`,
 		`{
 			"ent":[{"data":{"height":213,"mime":"image/jpeg","name":"roses.jpg","val":"<38992, bytes: ...>","width":638},"tp":"IM"}],
@@ -37,8 +37,8 @@ func TestToPlainText(t *testing.T) {
 	}
 	expect := []string{
 		"[FILE 'hello.jpg']",
-		"[https://api.tinode.co/](https://www.youtube.com/watch?v=dQw4w9WgXcQ)",
-		"https://api.tinode.co/",
+		"[https://api.MidnightChat.co/](https://www.youtube.com/watch?v=dQw4w9WgXcQ)",
+		"https://api.MidnightChat.co/",
 		"[IMAGE 'roses.jpg']",
 		"This *text* is _formatted_ and ~deleted *too*~",
 		"*мультибайтовый* _юникод_",

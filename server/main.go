@@ -25,36 +25,36 @@ import (
 	gh "github.com/gorilla/handlers"
 
 	// For stripping comments from JSON config
-	jcr "github.com/tinode/jsonco"
+	jcr "github.com/MidnightChat/jsonco"
 
 	// Authenticators
-	"github.com/tinode/chat/server/auth"
-	_ "github.com/tinode/chat/server/auth/anon"
-	_ "github.com/tinode/chat/server/auth/basic"
-	_ "github.com/tinode/chat/server/auth/rest"
-	_ "github.com/tinode/chat/server/auth/token"
+	"github.com/MidnightChat/chat/server/auth"
+	_ "github.com/MidnightChat/chat/server/auth/anon"
+	_ "github.com/MidnightChat/chat/server/auth/basic"
+	_ "github.com/MidnightChat/chat/server/auth/rest"
+	_ "github.com/MidnightChat/chat/server/auth/token"
 
 	// Database backends
-	_ "github.com/tinode/chat/server/db/mongodb"
-	_ "github.com/tinode/chat/server/db/mysql"
-	_ "github.com/tinode/chat/server/db/rethinkdb"
+	_ "github.com/MidnightChat/chat/server/db/mongodb"
+	_ "github.com/MidnightChat/chat/server/db/mysql"
+	_ "github.com/MidnightChat/chat/server/db/rethinkdb"
 
 	// Push notifications
-	"github.com/tinode/chat/server/push"
-	_ "github.com/tinode/chat/server/push/fcm"
-	_ "github.com/tinode/chat/server/push/stdout"
-	_ "github.com/tinode/chat/server/push/tnpg"
+	"github.com/MidnightChat/chat/server/push"
+	_ "github.com/MidnightChat/chat/server/push/fcm"
+	_ "github.com/MidnightChat/chat/server/push/stdout"
+	_ "github.com/MidnightChat/chat/server/push/tnpg"
 
-	"github.com/tinode/chat/server/store"
+	"github.com/MidnightChat/chat/server/store"
 
 	// Credential validators
-	_ "github.com/tinode/chat/server/validate/email"
-	_ "github.com/tinode/chat/server/validate/tel"
+	_ "github.com/MidnightChat/chat/server/validate/email"
+	_ "github.com/MidnightChat/chat/server/validate/tel"
 	"google.golang.org/grpc"
 
 	// File upload handlers
-	_ "github.com/tinode/chat/server/media/fs"
-	_ "github.com/tinode/chat/server/media/s3"
+	_ "github.com/MidnightChat/chat/server/media/fs"
+	_ "github.com/MidnightChat/chat/server/media/s3"
 )
 
 const (
@@ -204,7 +204,7 @@ type configType struct {
 	// Enable handling of gRPC keepalives https://github.com/grpc/grpc/blob/master/doc/keepalive.md
 	// This sets server's GRPC_ARG_KEEPALIVE_TIME_MS to 60 seconds instead of the default 2 hours.
 	GrpcKeepalive bool `json:"grpc_keepalive_enabled"`
-	// URL path for mounting the directory with static files (usually TinodeWeb).
+	// URL path for mounting the directory with static files (usually MidnightChatWeb).
 	StaticMount string `json:"static_mount"`
 	// Local path to static files. All files in this path are made accessible by HTTP.
 	StaticData string `json:"static_data"`
@@ -244,7 +244,7 @@ func main() {
 		currentVersion, executable, buildstamp,
 		os.Getpid(), runtime.GOMAXPROCS(runtime.NumCPU()))
 
-	var configfile = flag.String("config", "tinode.conf", "Path to config file.")
+	var configfile = flag.String("config", "MidnightChat.conf", "Path to config file.")
 	// Path to static content.
 	var staticPath = flag.String("static_data", defaultStaticPath, "File path to directory with static files to be served.")
 	var listenOn = flag.String("listen", "", "Override address and port to listen on for HTTP(S) clients.")

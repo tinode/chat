@@ -2,8 +2,8 @@
 package tel
 
 import (
-	"github.com/tinode/chat/server/store"
-	t "github.com/tinode/chat/server/store/types"
+	"github.com/MidnightChat/chat/server/store"
+	t "github.com/MidnightChat/chat/server/store/types"
 )
 
 const validatorName = "tel"

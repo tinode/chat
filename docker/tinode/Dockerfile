@@ -1,13 +1,13 @@
-# Docker file builds an image with a tinode chat server.
+# Docker file builds an image with a MidnightChat chat server.
 #
 # In order to run the image you have to link it to a running database container. For example, to
-# to use RethinkDB (named 'rethinkdb') and map the port where the tinode server accepts connections:
+# to use RethinkDB (named 'rethinkdb') and map the port where the MidnightChat server accepts connections:
 #
 # $ docker run -p 6060:6060 -d --link rethinkdb \
 #	--env UID_ENCRYPTION_KEY=base64+encoded+16+bytes= \
 #	--env API_KEY_SALT=base64+encoded+32+bytes \
 #	--env AUTH_TOKEN_KEY=base64+encoded+32+bytes \
-#	tinode-server
+#	MidnightChat-server
 
 FROM alpine:3.11
 
@@ -15,8 +15,8 @@ ARG VERSION=0.16
 ENV VERSION=$VERSION
 ARG BINVERS=$VERSION
 
-LABEL maintainer="Tinode Team <info@tinode.co>"
-LABEL name="TinodeChatServer"
+LABEL maintainer="MidnightChat Team <info@MidnightChat.co>"
+LABEL name="MidnightChatChatServer"
 LABEL version=$VERSION
 
 # Build-time options.
@@ -25,13 +25,13 @@ LABEL version=$VERSION
 # Alternatively use
 # `--build-arg TARGET_DB=mysql` to build for MySQL or
 # `--build-arg TARGET_DB=mongodb` to build for MongoDB.
-# `--build-arg TARGET_DB=alldbs` to build a generic Tinode docker image.
+# `--build-arg TARGET_DB=alldbs` to build a generic MidnightChat docker image.
 ARG TARGET_DB=rethinkdb
 ENV TARGET_DB=$TARGET_DB
 
 # Runtime options.
 
-# Specifies the database host:port pair to wait for before running Tinode.
+# Specifies the database host:port pair to wait for before running MidnightChat.
 # Ignored if empty.
 ENV WAIT_FOR=
 
@@ -49,7 +49,7 @@ ARG SAMPLE_DATA=data.json
 ENV SAMPLE_DATA=$SAMPLE_DATA
 
 # The MySQL DSN connection.
-ENV MYSQL_DSN='root@tcp(mysql)/tinode'
+ENV MYSQL_DSN='root@tcp(mysql)/MidnightChat'
 
 # Disable chatbot plugin by default.
 ENV PLUGIN_PYTHON_CHAT_BOT_ENABLED=false
@@ -93,13 +93,13 @@ ENV FCM_VAPID_KEY=
 # Enable Android-specific notifications by default.
 ENV FCM_INCLUDE_ANDROID_NOTIFICATION=true
 
-# Disable push notifications via Tinode Push Gateway.
+# Disable push notifications via MidnightChat Push Gateway.
 ENV TNPG_PUSH_ENABLED=false
 
-# Tinode Push Gateway authentication token.
+# MidnightChat Push Gateway authentication token.
 ENV TNPG_AUTH_TOKEN=
 
-# Tinode Push Gateway organization name as registered at console.tinode.co
+# MidnightChat Push Gateway organization name as registered at console.MidnightChat.co
 ENV TNPG_ORG=
 
 # Use the target db by default.
@@ -112,18 +112,18 @@ ENV STORE_USE_ADAPTER=$TARGET_DB
 RUN apk update && \
 	apk add --no-cache ca-certificates bash grep
 
-WORKDIR /opt/tinode
+WORKDIR /opt/MidnightChat
 
 # Copy config template to the container.
 COPY config.template .
 COPY entrypoint.sh .
 
-# Get the desired Tinode build.
-ADD https://github.com/tinode/chat/releases/download/v$BINVERS/tinode-$TARGET_DB.linux-amd64.tar.gz .
+# Get the desired MidnightChat build.
+ADD https://github.com/MidnightChat/chat/releases/download/v$BINVERS/MidnightChat-$TARGET_DB.linux-amd64.tar.gz .
 
-# Unpack the Tinode archive.
-RUN tar -xzf tinode-$TARGET_DB.linux-amd64.tar.gz \
-	&& rm tinode-$TARGET_DB.linux-amd64.tar.gz
+# Unpack the MidnightChat archive.
+RUN tar -xzf MidnightChat-$TARGET_DB.linux-amd64.tar.gz \
+	&& rm MidnightChat-$TARGET_DB.linux-amd64.tar.gz
 
 # Create directory for chatbot data.
 RUN mkdir /botdata

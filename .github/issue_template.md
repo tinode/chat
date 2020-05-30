@@ -1,4 +1,4 @@
-# If you are not reporting a bug or requesting a feature, please post to https://groups.google.com/d/forum/tinode instead.
+# If you are not reporting a bug or requesting a feature, please post to https://groups.google.com/d/forum/MidnightChat instead.
 
 ### Subject of the issue
 Describe your issue here.
@@ -9,14 +9,14 @@ Describe your issue here.
 
 ### Your environment
 #### Server-side
-- [ ] api.tinode.co
+- [ ] api.MidnightChat.co
 - [ ] Your own setup:
   * platform (Windows, Mac, Linux etc)
-  * version of tinode server, e.g. `0.15.2-rc3`
+  * version of MidnightChat server, e.g. `0.15.2-rc3`
   * database backend
 
 #### Client-side
-- [ ] TinodeWeb/tinodejs: javascript client
+- [ ] MidnightChatWeb/MidnightChatjs: javascript client
   * Browser make and version.
 - [ ] Tindroid: Android app
   * Android API level (e.g. 25).

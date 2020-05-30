@@ -12,11 +12,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/MidnightChat/chat/server/auth"
+	"github.com/MidnightChat/chat/server/store"
+	t "github.com/MidnightChat/chat/server/store/types"
 	ms "github.com/go-sql-driver/mysql"
 	"github.com/jmoiron/sqlx"
-	"github.com/tinode/chat/server/auth"
-	"github.com/tinode/chat/server/store"
-	t "github.com/tinode/chat/server/store/types"
 )
 
 // adapter holds MySQL connection data.
@@ -30,8 +30,8 @@ type adapter struct {
 }
 
 const (
-	defaultDSN      = "root:@tcp(localhost:3306)/tinode?parseTime=true"
-	defaultDatabase = "tinode"
+	defaultDSN      = "root:@tcp(localhost:3306)/MidnightChat?parseTime=true"
+	defaultDatabase = "MidnightChat"
 
 	adpVersion = 111
 
@@ -2009,7 +2009,7 @@ func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.QueryOpt) (
 			lower = opts.Since
 		}
 		if opts.Before > 0 {
-			// MySQL BETWEEN is inclusive-inclusive, Tinode API requires inclusive-exclusive, thus -1
+			// MySQL BETWEEN is inclusive-inclusive, MidnightChat API requires inclusive-exclusive, thus -1
 			upper = opts.Before - 1
 		}
 

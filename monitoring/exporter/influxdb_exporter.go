@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-// InfluxDBExporter collects metrics from a Tinode server and pushes them to InfluxDB.
+// InfluxDBExporter collects metrics from a MidnightChat server and pushes them to InfluxDB.
 type InfluxDBExporter struct {
 	targetAddress string
 	organization  string
@@ -37,7 +37,7 @@ func NewInfluxDBExporter(influxDBVersion, pushBaseAddress, organization,
 	}
 }
 
-// Push scrapes metrics from Tinode server and pushes these metrics to InfluxDB.
+// Push scrapes metrics from MidnightChat server and pushes these metrics to InfluxDB.
 func (e *InfluxDBExporter) Push() error {
 	metrics, err := e.scraper.CollectRaw()
 	if err != nil {

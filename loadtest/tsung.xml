@@ -23,7 +23,7 @@
 
       <request subst="true">
         <websocket type="connect" path="/v0/channels?apikey=AQEAAAABAAD_rAp4DJh05a1HAwFT3A6K">
-          <!--http_header name="X-Tinode-APIKey" value="AQEAAAABAAD_rAp4DJh05a1HAwFT3A6K"/-->
+          <!--http_header name="X-MidnightChat-APIKey" value="AQEAAAABAAD_rAp4DJh05a1HAwFT3A6K"/-->
         </websocket>
       </request>
 
@@ -32,7 +32,7 @@
       </request>
 
       <request subst="true">
-        <websocket type="message">{"login":{"id":"%%_baseid%%02","scheme":"basic","secret":"%%tinode:rand_user_secret%%"}}</websocket>
+        <websocket type="message">{"login":{"id":"%%_baseid%%02","scheme":"basic","secret":"%%MidnightChat:rand_user_secret%%"}}</websocket>
       </request>
 
       <request subst="true">

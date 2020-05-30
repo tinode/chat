@@ -20,8 +20,8 @@ import (
 	textt "text/template"
 	"time"
 
-	"github.com/tinode/chat/server/store"
-	t "github.com/tinode/chat/server/store/types"
+	"github.com/MidnightChat/chat/server/store"
+	t "github.com/MidnightChat/chat/server/store/types"
 	i18n "golang.org/x/text/language"
 )
 
@@ -498,7 +498,7 @@ func (v *validator) send(to string, content *emailContent) error {
 func randomBoundary() string {
 	var buf [24]byte
 	rand.Read(buf[:])
-	return fmt.Sprintf("tinode--%x", buf[:])
+	return fmt.Sprintf("MidnightChat--%x", buf[:])
 }
 
 func init() {

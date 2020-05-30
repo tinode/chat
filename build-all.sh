@@ -3,7 +3,7 @@
 # Cross-compiling script using https://github.com/mitchellh/gox
 # This scripts build and archives binaries and supporting files.
 # If directory ./server/static exists, it's asumed to contain
-# TinodeWeb and then it's also copied and archived.
+# MidnightChatWeb and then it's also copied and archived.
 
 # Check if gox is installed. Abort otherwise.
 command -v gox >/dev/null 2>&1 || {
@@ -32,7 +32,7 @@ fi
 
 echo "Releasing $version"
 
-GOSRC=${GOPATH}/src/github.com/tinode
+GOSRC=${GOPATH}/src/github.com/MidnightChat
 
 pushd ${GOSRC}/chat > /dev/null
 
@@ -55,9 +55,9 @@ do
       echo "Building ${dbtag}-${plat}/${arc}..."
 
       # Remove previous builds
-      rm -f $GOPATH/bin/tinode
+      rm -f $GOPATH/bin/MidnightChat
       rm -f $GOPATH/bin/init-db
-      # Build tinode server and database initializer for RethinkDb and MySQL.
+      # Build MidnightChat server and database initializer for RethinkDb and MySQL.
       # For 'alldbs' tag, we compile in all available DB adapters.
       if [ "$dbtag" = "alldbs" ]; then
         buildtag="${dbadapters[@]}"
@@ -66,10 +66,10 @@ do
       fi
       gox -osarch="${plat}/${arc}" \
         -ldflags "-s -w -X main.buildstamp=`git describe --tags`" \
-        -tags "${buildtag}" -output $GOPATH/bin/tinode ./server > /dev/null
+        -tags "${buildtag}" -output $GOPATH/bin/MidnightChat ./server > /dev/null
       gox -osarch="${plat}/${arc}" \
         -ldflags "-s -w" \
-        -tags "${buildtag}" -output $GOPATH/bin/init-db ./tinode-db > /dev/null
+        -tags "${buildtag}" -output $GOPATH/bin/init-db ./MidnightChat-db > /dev/null
 
       # Tar on Mac is inflexible about directories. Let's just copy release files to
       # one directory.
@@ -77,13 +77,13 @@ do
       mkdir -p ./releases/tmp/templ
 
       # Copy templates and database initialization files
-      cp ./server/tinode.conf ./releases/tmp
+      cp ./server/MidnightChat.conf ./releases/tmp
       cp ./server/templ/*.templ ./releases/tmp/templ
-      cp ./tinode-db/data.json ./releases/tmp
-      cp ./tinode-db/*.jpg ./releases/tmp
-      cp ./tinode-db/credentials.sh ./releases/tmp
+      cp ./MidnightChat-db/data.json ./releases/tmp
+      cp ./MidnightChat-db/*.jpg ./releases/tmp
+      cp ./MidnightChat-db/credentials.sh ./releases/tmp
 
-      # Create directories for and copy TinodeWeb files.
+      # Create directories for and copy MidnightChatWeb files.
       if [[ -d ./server/static ]]
       then
         mkdir -p ./releases/tmp/static/img
@@ -104,21 +104,21 @@ do
         # Create empty FCM client-side config.
         echo > ./releases/tmp/static/firebase-init.js
       else
-        echo "TinodeWeb not found, skipping"
+        echo "MidnightChatWeb not found, skipping"
       fi
 
       # Build archive. All platforms but Windows use tar for archiving. Windows uses zip.
       if [ "$plat" = "windows" ]; then
         # Copy binaries
-        cp $GOPATH/bin/tinode.exe ./releases/tmp
+        cp $GOPATH/bin/MidnightChat.exe ./releases/tmp
         cp $GOPATH/bin/init-db.exe ./releases/tmp
         cp $GOPATH/bin/keygen.exe ./releases/tmp
 
         # Remove possibly existing archive.
-        rm -f ./releases/${version}/tinode-${dbtag}."${plat}-${arc}".zip
+        rm -f ./releases/${version}/MidnightChat-${dbtag}."${plat}-${arc}".zip
         # Generate a new one
         pushd ./releases/tmp > /dev/null
-        zip -q -r ../${version}/tinode-${dbtag}."${plat}-${arc}".zip ./*
+        zip -q -r ../${version}/MidnightChat-${dbtag}."${plat}-${arc}".zip ./*
         popd > /dev/null
       else
         plat2=$plat
@@ -127,30 +127,30 @@ do
           plat2=mac
         fi
         # Copy binaries
-        cp $GOPATH/bin/tinode ./releases/tmp
+        cp $GOPATH/bin/MidnightChat ./releases/tmp
         cp $GOPATH/bin/init-db ./releases/tmp
         cp $GOPATH/bin/keygen ./releases/tmp
 
         # Remove possibly existing archive.
-        rm -f ./releases/${version}/tinode-${dbtag}."${plat2}-${arc}".tar.gz
+        rm -f ./releases/${version}/MidnightChat-${dbtag}."${plat2}-${arc}".tar.gz
         # Generate a new one
-        tar -C ${GOSRC}/chat/releases/tmp -zcf ./releases/${version}/tinode-${dbtag}."${plat2}-${arc}".tar.gz .
+        tar -C ${GOSRC}/chat/releases/tmp -zcf ./releases/${version}/MidnightChat-${dbtag}."${plat2}-${arc}".tar.gz .
       fi
     done
   done
 done
 
 # Need to rebuild the linux-rethink binary without stripping debug info.
-echo "Building the binary for web.tinode.co"
+echo "Building the binary for web.MidnightChat.co"
 
-rm -f $GOPATH/bin/tinode
+rm -f $GOPATH/bin/MidnightChat
 rm -f $GOPATH/bin/init-db
 
 gox -osarch=linux/amd64 \
   -ldflags "-X main.buildstamp=`git describe --tags`" \
-  -tags rethinkdb -output $GOPATH/bin/tinode ./server > /dev/null
+  -tags rethinkdb -output $GOPATH/bin/MidnightChat ./server > /dev/null
 gox -osarch=linux/amd64 \
-  -tags rethinkdb -output $GOPATH/bin/init-db ./tinode-db > /dev/null
+  -tags rethinkdb -output $GOPATH/bin/init-db ./MidnightChat-db > /dev/null
 
 # Build chatbot release
 echo "Building python code..."

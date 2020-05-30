@@ -1,4 +1,4 @@
-"""Global objects for Tinode command line client."""
+"""Global objects for MidnightChat command line client."""
 # To make print() compatible between p2 and p3
 from __future__ import print_function
 

@@ -1,13 +1,13 @@
-# Tinode Metric Exporter
+# MidnightChat Metric Exporter
 
-This is a simple service which reads JSON monitoring data exposed by Tinode server using [expvar](https://golang.org/pkg/expvar/) and re-publishes it in other formats. Currently the supported formats are:
+This is a simple service which reads JSON monitoring data exposed by MidnightChat server using [expvar](https://golang.org/pkg/expvar/) and re-publishes it in other formats. Currently the supported formats are:
 
 * [InfluxDB](https://www.influxdata.com/) [exporter](https://docs.influxdata.com/influxdb/v1.7/tools/api/#write-http-endpoint) **pushes** data to its target backend. This is the default mode.
 * [Prometheus](https://prometheus.io/) [exporter](https://prometheus.io/docs/instrumenting/exporters/) which exports data in [prometheus format](https://prometheus.io/docs/concepts/data_model/). The Prometheus monitoring service is expected to **pull/scrape** data from the  exporter.
 
 ## Usage
 
-Exporters are intended to run next to (pair with) Tinode servers: one Exporter per one Tinode server, i.e. a single Exporter provides metrics from a single Tinode server. 
+Exporters are intended to run next to (pair with) MidnightChat servers: one Exporter per one MidnightChat server, i.e. a single Exporter provides metrics from a single MidnightChat server. 
 
 ## Configuration
 
@@ -15,7 +15,7 @@ The exporters are configured by command-line flags:
 
 ### Common flags
 * `serve_for` specifies which monitoring service the Exporter will gather metrics for; accepted values: `influxdb`, `prometheus`; default: `influxdb`.
-* `tinode_addr` is the address where the Tinode instance publishes `expvar` data to scrape; default: `http://localhost:6060/stats/expvar`.
+* `MidnightChat_addr` is the address where the MidnightChat instance publishes `expvar` data to scrape; default: `http://localhost:6060/stats/expvar`.
 * `listen_at` is the hostname to bind to for serving the metrics; default: `:6222`.
 * `instance` is the Exporter instance name (it may be exported to the upstream backend); default: `exporter`.
 * `metric_list` is a comma-separated list of metrics to export; default: `Version,LiveTopics,TotalTopics,LiveSessions,ClusterLeader,TotalClusterNodes,LiveClusterNodes,memstats.Alloc`.
@@ -34,7 +34,7 @@ Run InfluxDB Exporter as
 ```
 ./exporter \
     --serve_for=influxdb \
-    --tinode_addr=http://localhost:6060/stats/expvar \
+    --MidnightChat_addr=http://localhost:6060/stats/expvar \
     --listen_at=:6222 \
     --instance=exp-0 \
     --influx_push_addr=http://my-influxdb-backend.net/write \
@@ -48,19 +48,19 @@ This exporter will push the collected metrics to the specified backend once ever
 
 
 ### Prometheus
-* `prom_namespace` is a prefix to use for metrics names. If you are monitoring multiple tinode instances you may want to use different namespaces; default: `tinode`.
+* `prom_namespace` is a prefix to use for metrics names. If you are monitoring multiple MidnightChat instances you may want to use different namespaces; default: `MidnightChat`.
 * `prom_metrics_path` is the path under which to expose the metrics for scraping; default: `/metrics`.
-* `prom_timeout` is the Tinode connection timeout in seconds in response to Prometheus scrapes; default: `15`.
+* `prom_timeout` is the MidnightChat connection timeout in seconds in response to Prometheus scrapes; default: `15`.
 
 #### Example
 Run Prometheus Exporter as
 ```
 ./exporter \
     --serve_for=prometheus \
-    --tinode_addr=http://localhost:6060/stats/expvar \
+    --MidnightChat_addr=http://localhost:6060/stats/expvar \
     --listen_at=:6222 \
     --instance=exp-0 \
-    --prom_namespace=tinode \
+    --prom_namespace=MidnightChat \
     --prom_metrics_path=/metrics \
     --prom_timeout=15
 ```

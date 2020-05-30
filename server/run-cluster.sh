@@ -25,9 +25,9 @@ while [[ $# -gt 0 ]]; do
       ;;
     start)
       if [ ! -z "$config" ] ; then
-        TINODE_CONF=$config
+        MidnightChat_CONF=$config
       else
-        TINODE_CONF="tinode.conf"
+        MidnightChat_CONF="MidnightChat.conf"
       fi
 
       echo "HTTP ports 6080-6082, gRPC ports 16060-16062, config ${config}"
@@ -37,10 +37,10 @@ while [[ $# -gt 0 ]]; do
       for NODE_NAME in "${ALL_NODE_NAMES[@]}"
       do
         # Start the node
-        ./server -config=${TINODE_CONF} -cluster_self=${NODE_NAME} -listen=:${HTTP_PORT} -grpc_listen=:${GRPC_PORT} &
+        ./server -config=${MidnightChat_CONF} -cluster_self=${NODE_NAME} -listen=:${HTTP_PORT} -grpc_listen=:${GRPC_PORT} &
         # Save PID of the node to a temp file.
         # /var/tmp/ does not requre root access.
-        echo $!> "/var/tmp/tinode-${NODE_NAME}.pid"
+        echo $!> "/var/tmp/MidnightChat-${NODE_NAME}.pid"
         # Increment ports for the next node.
         HTTP_PORT=$((HTTP_PORT+1))
         GRPC_PORT=$((GRPC_PORT+1))
@@ -53,14 +53,14 @@ while [[ $# -gt 0 ]]; do
       for NODE_NAME in "${ALL_NODE_NAMES[@]}"
       do
         # Read PIDs of running nodes from temp files and kill them.
-        kill `cat /var/tmp/tinode-${NODE_NAME}.pid`
+        kill `cat /var/tmp/MidnightChat-${NODE_NAME}.pid`
         # Clean up: delete temp files.
-        rm "/var/tmp/tinode-${NODE_NAME}.pid"
+        rm "/var/tmp/MidnightChat-${NODE_NAME}.pid"
       done
       exit 0
       ;;
     *)
-      echo $"Usage: $0 {start|stop} [ --config <path_to_tinode.conf> ]"
+      echo $"Usage: $0 {start|stop} [ --config <path_to_MidnightChat.conf> ]"
       exit 1
   esac
 done

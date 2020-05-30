@@ -1,6 +1,6 @@
-# Monitoring Tinode server
+# Monitoring MidnightChat server
 
-Tinode server can optionally expose runtime statistics as a json document at a configurable HTTP(S) endpoint. The feature is enabled by adding a string parameter `expvar` to the config file. The value of the `expvar` is the URL path pointing to the location where the variables are served. In addition to the config file, the feature can be enabled from the command line by adding an `--expvar` parameter. The feature is disabled if the value of `expvar` is an empty string `""` or a dash `"-"`. A non-blank value of the command line parameter overrides the config file value.
+MidnightChat server can optionally expose runtime statistics as a json document at a configurable HTTP(S) endpoint. The feature is enabled by adding a string parameter `expvar` to the config file. The value of the `expvar` is the URL path pointing to the location where the variables are served. In addition to the config file, the feature can be enabled from the command line by adding an `--expvar` parameter. The feature is disabled if the value of `expvar` is an empty string `""` or a dash `"-"`. A non-blank value of the command line parameter overrides the config file value.
 
 The feature is enabled in the default config file to publish stats at `/debug/vars`.
 
