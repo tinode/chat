@@ -133,7 +133,7 @@ func (t *Topic) proxyMasterResponse(msg *ClusterResp, killTimer *time.Timer) {
 	keepAlive := idleProxyTopicTimeout
 
 	log.Println("tproxy: master response", "node=", globals.cluster.thisNodeName,
-		"msg=", msg.SrvMsg.describe(), "id=", msg.SrvMsg.Id, "user=", msg.SrvMsg.AsUser)
+		"msg=", msg.SrvMsg.describe(), " topic=", msg.RcptTo, "id=", msg.SrvMsg.Id, "user=", msg.SrvMsg.AsUser)
 
 	if msg.SrvMsg.Pres != nil && msg.SrvMsg.Pres.What == "acs" && msg.SrvMsg.Pres.Acs != nil {
 		// If the server changed acs on this topic, update the internal state.

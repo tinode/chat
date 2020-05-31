@@ -345,6 +345,10 @@ type MsgLastSeenInfo struct {
 	UserAgent string `json:"ua,omitempty"`
 }
 
+func (src *MsgLastSeenInfo) describe() string {
+	return "'" + src.UserAgent + "' @ " + src.When.String()
+}
+
 // MsgCredServer is an account credential such as email or phone number.
 type MsgCredServer struct {
 	// Credential type, i.e. `email` or `tel`.
@@ -368,7 +372,7 @@ type MsgAccessMode struct {
 func (src *MsgAccessMode) describe() string {
 	var s string
 	if src.Want != "" {
-		s = " w=" + src.Want
+		s = "w=" + src.Want
 	}
 	if src.Given != "" {
 		s += " g=" + src.Given
@@ -376,7 +380,7 @@ func (src *MsgAccessMode) describe() string {
 	if src.Mode != "" {
 		s += " m=" + src.Mode
 	}
-	return s
+	return strings.TrimSpace(s)
 }
 
 // MsgTopicDesc is a topic description, S2C in Meta message.
@@ -481,6 +485,33 @@ type MsgTopicSub struct {
 
 	// Other user's last online timestamp & user agent
 	LastSeen *MsgLastSeenInfo `json:"seen,omitempty"`
+}
+
+func (src *MsgTopicSub) describe() string {
+	s := src.Topic + ":" + src.User + " online=" + strconv.FormatBool(src.Online) + " acs=" + src.Acs.describe()
+
+	if src.SeqId != 0 {
+		s += " seq=" + strconv.Itoa(src.SeqId)
+	}
+	if src.ReadSeqId != 0 {
+		s += " read=" + strconv.Itoa(src.ReadSeqId)
+	}
+	if src.RecvSeqId != 0 {
+		s += " recv=" + strconv.Itoa(src.RecvSeqId)
+	}
+	if src.DelId != 0 {
+		s += " clear=" + strconv.Itoa(src.DelId)
+	}
+	if src.Public != nil {
+		s += " pub='...'"
+	}
+	if src.Private != nil {
+		s += " priv='...'"
+	}
+	if src.LastSeen != nil {
+		s += " seen={" + src.LastSeen.describe() + "}"
+	}
+	return s
 }
 
 // MsgDelValues describes request to delete messages.
@@ -661,8 +692,11 @@ func (src *MsgServerMeta) describe() string {
 		s += " desc={" + src.Desc.describe() + "}"
 	}
 	if src.Sub != nil {
-		x, _ := json.Marshal(src.Sub)
-		s += " sub={" + string(x) + "}"
+		var x []string
+		for _, sub := range src.Sub {
+			x = append(x, sub.describe())
+		}
+		s += " sub=[{" + strings.Join(x, "},{") + "}]"
 	}
 	if src.Del != nil {
 		x, _ := json.Marshal(src.Del)

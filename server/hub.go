@@ -189,7 +189,7 @@ func (h *Hub) run() {
 
 			if dst := h.topicGet(msg.RcptTo); dst != nil {
 				log.Println("hub: sending broadcast to active topic, node=",
-					globals.cluster.thisNodeName, "isProxy=", dst.isProxy, "topic=", msg.RcptTo, "msg=", msg)
+					globals.cluster.thisNodeName, "isProxy=", dst.isProxy, "topic=", msg.RcptTo, "msg=", msg.describe())
 				// Everything is OK, sending packet to known topic
 				if dst.broadcast != nil {
 					select {

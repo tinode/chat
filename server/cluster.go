@@ -680,7 +680,7 @@ func (c *Cluster) makeClusterReq(reqType ProxyReqType, payload interface{}, topi
 
 	var uid types.Uid
 
-	if pl != nil {
+	if payload != nil {
 		switch pl := payload.(type) {
 		case *ClientComMessage:
 			req.CliMsg = pl

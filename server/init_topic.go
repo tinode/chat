@@ -158,8 +158,11 @@ func initTopicMe(t *Topic, sreg *sessionJoin) error {
 	t.userAgent = sreg.sess.userAgent
 	// Initialize channel for receiving user agent and session online updates.
 	t.supd = make(chan *sessionUpdate, 32)
-	// Allocate storage for contacts.
-	t.perSubs = make(map[string]perSubsData)
+
+	if !t.isProxy {
+		// Allocate storage for contacts.
+		t.perSubs = make(map[string]perSubsData)
+	}
 
 	return nil
 }

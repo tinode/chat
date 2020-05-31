@@ -94,6 +94,12 @@ func (t *Topic) presProcReq(fromUserID, what string, wantReply bool) string {
 		return ""
 	}
 
+	if t.isProxy {
+		// Pass through on proxy: there is no point in maintaining peer status
+		// at the proxy, it's an exact replica of the master.
+		return what
+	}
+
 	var reqReply, onlineUpdate bool
 
 	online := &onlineUpdate

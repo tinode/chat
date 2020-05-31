@@ -204,6 +204,7 @@ func (t *Topic) getPerUserAcs(uid types.Uid) (types.AccessMode, types.AccessMode
 // depending on per-user want and given acls for the provided `uid`.
 func (t *Topic) passesPresenceFilters(msg *ServerComMessage, uid types.Uid) bool {
 	modeWant, modeGiven := t.getPerUserAcs(uid)
+	log.Println("passesPresenceFilters", modeWant.String(), modeGiven.String())
 	// "gone" and "acs" notifications are sent even if the topic is muted.
 	return ((modeGiven & modeWant).IsPresencer() || msg.Pres.What == "gone" || msg.Pres.What == "acs") &&
 		(msg.Pres.FilterIn == 0 || int(modeGiven&modeWant)&msg.Pres.FilterIn != 0) &&
@@ -283,7 +284,7 @@ func (t *Topic) runLocal(hub *Hub) {
 				// while processing the call
 				killTimer.Stop()
 				if err := t.handleSubscription(hub, join); err == nil {
-					log.Println("hub: handleSubscription success", join.pkt.Sub)
+					log.Println("topic: handleSubscription success", join.pkt.Sub)
 					if join.pkt.Sub.Created {
 						// Call plugins with the new topic
 						pluginTopic(t, plgActCreate)
