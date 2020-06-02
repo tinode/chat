@@ -133,12 +133,6 @@ type Session struct {
 	// subs concurrently.
 	subsLock sync.RWMutex
 
-	// FIXME: get rid of it.
-	// Map of remote (origin) sessions to user ids these sessions represent.
-	remoteSessions map[string]*remoteSession
-	// Synchronizes access to remoteSessions.
-	remoteSessionsLock sync.RWMutex
-
 	// Needed for long polling and grpc.
 	lock sync.Mutex
 
@@ -170,7 +164,14 @@ func (s *Session) addSub(topic string, sub *Subscription) {
 		return
 	}
 	s.subsLock.Lock()
-	s.subs[topic] = sub
+
+	// Sessions that serve as an interface between proxy topics and their masters (proxy sessions)
+	// may have only one subscription, that is, to its master topic.
+	// Normal sessions may be subscribed to multiple topics.
+
+	if !s.isMultiplex() || s.countSub() == 0 {
+		s.subs[topic] = sub
+	}
 	s.subsLock.Unlock()
 }
 

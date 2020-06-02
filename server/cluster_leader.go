@@ -169,10 +169,12 @@ func (c *Cluster) sendPings() {
 	}
 
 	if rehash {
-		var activeNodes []string
+		var activeNodes, failedNodes []string
 		for _, node := range c.nodes {
 			if node.failCount < c.fo.nodeFailCountLimit {
 				activeNodes = append(activeNodes, node.name)
+			} else {
+				failedNodes = append(failedNodes, node.name)
 			}
 		}
 		activeNodes = append(activeNodes, c.thisNodeName)
@@ -180,7 +182,7 @@ func (c *Cluster) sendPings() {
 		c.fo.activeNodes = activeNodes
 		c.rehash(activeNodes)
 		c.invalidateProxySubs()
-		c.garbageCollectProxySessions(activeNodes)
+		c.garbageCollectProxySessions(failedNodes)
 
 		log.Println("cluster: initiating failover rehash for nodes", activeNodes)
 		globals.hub.rehash <- true

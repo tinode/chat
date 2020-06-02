@@ -168,15 +168,13 @@ func (t *Topic) proxyMasterResponse(msg *ClusterResp, killTimer *time.Timer) {
 					log.Println("topic_proxy: subscription: adding session to topic",
 						t.name, sess.sid, sess.proto, "user=", msg.SrvMsg.uid.UserId())
 					// Successful subscriptions.
-					if t.addSession(sess, msg.SrvMsg.uid) {
-						sess.addSub(t.name, &Subscription{
-							broadcast: t.broadcast,
-							done:      t.unreg,
-							meta:      t.meta,
-							supd:      t.supd})
-					} else {
-						log.Println("topic_proxy: failed to attach session to topic")
-					}
+					t.addSession(sess, msg.SrvMsg.uid)
+					sess.addSub(t.name, &Subscription{
+						broadcast: t.broadcast,
+						done:      t.unreg,
+						meta:      t.meta,
+						supd:      t.supd})
+
 					killTimer.Stop()
 				} else if len(t.sessions) == 0 {
 					killTimer.Reset(keepAlive)

@@ -74,6 +74,9 @@ type ClusterNode struct {
 
 	// Channel for shutting down the runner; buffered, 1
 	done chan bool
+
+	// IDs of multiplexing sessions belonging to this node.
+	msess map[string]struct{}
 }
 
 // ClusterSess is a basic info on a remote session where the message was created.
@@ -356,15 +359,24 @@ type Cluster struct {
 func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 	*rejected = false
 
+	node := globals.cluster.nodes[msg.Node]
+	if node == nil {
+		log.Println("cluster TopicMaster: request from an unknown node", msg.Node)
+		return nil
+	}
+
 	// Master maintains one multiplexing session per proxy topic per node.
 	msid := msg.RcptTo + "-" + msg.Node
 	msess := globals.sessionStore.Get(msid)
+
 	if msg.Gone {
 		// Proxy topic is gone. Tear down the local auxiliary session.
 		// If it was the last session, master topic will shut down as well.
 		if msess != nil {
 			msess.stop <- nil
+			delete(node.msess, msid)
 		}
+
 		return nil
 	}
 
@@ -373,17 +385,13 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 		*rejected = true
 		return nil
 	}
-	node := globals.cluster.nodes[msg.Node]
-	if node == nil {
-		log.Println("cluster TopicMaster: request from an unknown node", msg.Node)
-		return nil
-	}
 
 	// Create a new multiplexing session if needed.
 	if msess == nil {
 		// If the session is not found, create it.
 		var count int
 		msess, count = globals.sessionStore.NewSession(node, msid)
+		node.msess[msid] = struct{}{}
 
 		log.Println("cluster: multiplexing session started", msid, count)
 		go msess.clusterWriteLoop(msg.RcptTo)
@@ -510,20 +518,6 @@ func (c *Cluster) Route(msg *ClusterRoute, rejected *bool) error {
 	}
 	globals.hub.route <- msg.SrvMsg
 	return nil
-}
-
-// markRemoteSessionsForeground marks currently tracked remote sessions
-// as non-background to ensure proper subscribed user accounting in the master topic.
-func (s *Session) markRemoteSessionForeground(uid types.Uid, sid, userAgent string) {
-	s.remoteSessionsLock.Lock()
-	defer s.remoteSessionsLock.Unlock()
-
-	if rs, ok := s.remoteSessions[sid]; ok {
-		rs.isBackground = false
-		s.remoteSessions[sid] = rs
-	} else {
-		log.Printf("cluster: deferred notifications request for unknown session %s", sid)
-	}
 }
 
 // User cache & push notifications management. These are calls received by the Master from Proxy.
@@ -835,7 +829,8 @@ func clusterInit(configString json.RawMessage, self *string) int {
 		globals.cluster.nodes[host.Name] = &ClusterNode{
 			address: host.Addr,
 			name:    host.Name,
-			done:    make(chan bool, 1)}
+			done:    make(chan bool, 1),
+			msess:   make(map[string]struct{})}
 	}
 
 	if len(globals.cluster.nodes) == 0 {
@@ -959,55 +954,15 @@ func (c *Cluster) invalidateProxySubs() {
 
 // garbageCollectProxySessions terminates all orphaned proxy sessions
 // at a master node. The session is orphaned when the origin node is gone.
-// FIXME: keep list of multipliexing sessions in node.
-func (c *Cluster) garbageCollectProxySessions(activeNodes []string) {
-	sessions := make(map[*Session]*Topic)
-	activeNodeMap := make(map[string]struct{})
-	for _, n := range activeNodes {
-		activeNodeMap[n] = struct{}{}
-	}
-	globals.hub.topics.Range(func(_, v interface{}) bool {
-		topic := v.(*Topic)
-		if topic.isProxy {
-			// Topic is a proxy. Continue.
-			return true
-		}
-		for s := range topic.sessions {
-			if s.isMultiplex() {
-				if _, originActive := activeNodeMap[s.clnode.name]; !originActive {
-					// Session's origin is no longer active.
-					sessions[s] = topic
-				}
+func (c *Cluster) garbageCollectProxySessions(failedNodes []string) {
+	for _, node := range failedNodes {
+		// Iterate sessions of a failed node
+		for sid := range globals.cluster.nodes[node].msess {
+			if sess := globals.sessionStore.Get(sid); sess != nil {
+				sess.stop <- nil
 			}
 		}
-		return true
-	})
-	// Unsubscribe orphaned sessions from their master topics.
-	// Stop orphaned sessions.
-	for s, t := range sessions {
-		t.unreg <- &sessionLeave{sess: s}
-		s.stop <- nil
-	}
-}
-
-// cleanUpRemoteSubs adjusts online user counts in the master (proxied) topic
-// for a leaving proxy session.
-func (sess *Session) cleanUpRemoteSessions(topicName string) {
-	sess.remoteSessionsLock.Lock()
-	uidCounts := make(map[types.Uid]int)
-	for _, rs := range sess.remoteSessions {
-		if !rs.isBackground {
-			// Only non-background sessions are counted as online.
-			uidCounts[rs.uid]++
-		}
-	}
-	sess.remoteSessionsLock.Unlock()
-	if t := globals.hub.topicGet(topicName); t != nil {
-		// FIXME: this shoud be removed
-		// t.master <- &topicMasterRequest{proxySessionCleanUp: uidCounts}
-		log.Println("cluster: cleanUpRemoteSessions not implemented")
-	} else {
-		log.Printf("cluster: remote subscription clean up unknown topic %s", topicName)
+		globals.cluster.nodes[node].msess = nil
 	}
 }
 
@@ -1018,7 +973,6 @@ func (sess *Session) clusterWriteLoop(forTopic string) {
 		sess.closeRPC()
 		globals.sessionStore.Delete(sess)
 		sess.unsubAll()
-		sess.cleanUpRemoteSessions(forTopic)
 	}()
 
 	for {

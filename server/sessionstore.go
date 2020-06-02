@@ -76,10 +76,6 @@ func (ss *SessionStore) NewSession(conn interface{}, sid string) (*Session, int)
 
 		s.bkgTimer = time.NewTimer(time.Hour)
 		s.bkgTimer.Stop()
-
-		if s.proto == MULTIPLEX {
-			s.remoteSessions = make(map[string]*remoteSession)
-		}
 	}
 
 	s.lastTouched = time.Now()

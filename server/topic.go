@@ -149,6 +149,8 @@ type perSessionData struct {
 	// ID of the subscribed user (asUid); not necessarily the session owner.
 	// Could be zero for multiplexed sessions in cluster.
 	uid types.Uid
+	// IDs of subscribed users in a multiplexing session.
+	muids []types.Uid
 }
 
 // Reasons why topic is being shut down.
@@ -307,6 +309,16 @@ func (t *Topic) runLocal(hub *Hub) {
 				asUid = types.ParseUserId(leave.pkt.AsUser)
 			}
 
+			/*
+				FIXME: this should be handled through session update.
+
+				// Direct communication from proxy to master.
+				if msg.proxySessionCleanUp != nil {
+					t.fixUpUserCounts(msg.proxySessionCleanUp)
+				} else {
+					log.Panicf("topic[%s] unrecognized master topic service request: %+v", msg)
+				}
+			*/
 			if t.isInactive() {
 				if !asUid.IsZero() && leave.pkt != nil {
 					leave.sess.queueOut(ErrLocked(leave.pkt.Id, t.original(asUid), now))
@@ -325,21 +337,27 @@ func (t *Topic) runLocal(hub *Hub) {
 
 				var uid types.Uid
 				if leave.sess.isProxy() {
+					// Multiplexing session, multiple UIDs.
 					uid = asUid
 				} else {
+					// Simple session, single UID.
 					uid = pssd.uid
-				}
-
-				if leave.sess.isCluster() {
-					log.Println("topic leave 2", pssd, leave.sess.isProxy(), uid)
 				}
 
 				// uid may be zero when a proxy session is trying to terminate (it called unsubAll).
 				var pud perUserData
 				if !uid.IsZero() {
 					pud = t.perUser[uid]
-					if pssd == nil || !leave.sess.background {
+					if !leave.sess.background {
 						pud.online--
+					}
+				} else if len(pssd.muids) > 0 {
+					// Multiplexing session is dropped.
+					// Using new 'uid' and 'pud' variables.
+					for _, uid := range pssd.muids {
+						pud := t.perUser[uid]
+						pud.online--
+						t.perUser[uid] = pud
 					}
 				} else if !leave.sess.isCluster() {
 					log.Panic("cannot determine uid: leave req=", leave)
@@ -358,20 +376,34 @@ func (t *Topic) runLocal(hub *Hub) {
 						default:
 						}
 					}
-					// Update user's last online timestamp & user agent
-					if !uid.IsZero() {
-						if err := store.Users.UpdateLastSeen(uid, mrs.userAgent, now); err != nil {
-							log.Println(err)
-						}
+
+					meUid := uid
+					if meUid.IsZero() {
+						// The entire multiplexing session is being dropped. Need to find owner's UID.
+						// May panic only if pssd.muids is empty, but it should not be empty at this point.
+						meUid = pssd.muids[0]
+					}
+					// Update user's last online timestamp & user agent. Only one user can be subscribed to 'me' topic.
+					if err := store.Users.UpdateLastSeen(meUid, mrs.userAgent, now); err != nil {
+						log.Println(err)
 					}
 				case types.TopicCatFnd:
+					// FIXME: this does not work correctly in case of a multiplexing query.
 					// Remove ephemeral query.
 					t.fndRemovePublic(leave.sess)
 				case types.TopicCatGrp:
-					if !uid.IsZero() && pud.online == 0 {
-						// User is going offline: notify online subscribers on 'me'
-						t.presSubsOnline("off", uid.UserId(), nilPresParams,
-							&presFilters{filterIn: types.ModeRead}, "")
+					// Topic is going offline: notify online subscribers on 'me'.
+					readFilter := &presFilters{filterIn: types.ModeRead}
+					if !uid.IsZero() {
+						if pud.online == 0 {
+							t.presSubsOnline("off", uid.UserId(), nilPresParams, readFilter, "")
+						}
+					} else if len(pssd.muids) > 0 {
+						for _, uid := range pssd.muids {
+							if t.perUser[uid].online == 0 {
+								t.presSubsOnline("off", uid.UserId(), nilPresParams, readFilter, "")
+							}
+						}
 					}
 				}
 
@@ -481,7 +513,7 @@ func (t *Topic) runLocal(hub *Hub) {
 		case upd := <-t.supd:
 			if upd.sess != nil {
 				// 'me' & 'grp' only. Background session timed out and came online.
-				t.sessToForeground(upd.sess, types.ZeroUid)
+				t.sessToForeground(upd.sess)
 			} else if currentUA != upd.userAgent {
 				if t.cat != types.TopicCatMe {
 					log.Panicln("invalid topic category in UA update", t.name)
@@ -490,19 +522,6 @@ func (t *Topic) runLocal(hub *Hub) {
 				currentUA = upd.userAgent
 				uaTimer.Reset(uaTimerDelay)
 			}
-
-		case <-t.master:
-			log.Println("msg := <-t.master is unused")
-			/*
-				FIXME: this should be handled through session update.
-
-				// Direct communication from proxy to master.
-				if msg.proxySessionCleanUp != nil {
-					t.fixUpUserCounts(msg.proxySessionCleanUp)
-				} else {
-					log.Panicf("topic[%s] unrecognized master topic service request: %+v", msg)
-				}
-			*/
 
 		case <-uaTimer.C:
 			// Publish user agent changes after a delay
@@ -634,21 +653,26 @@ func (t *Topic) handleSubscription(h *Hub, join *sessionJoin) error {
 
 // sessToForeground updates perUser online status accounting and fires due
 // deferred notifications for the provided session.
-// If asUid is specified, the subscribed UID is checked, otherwise user ID is picked from subscription.
-func (t *Topic) sessToForeground(sess *Session, asUid types.Uid) {
-	if !t.isProxy {
-		if pssd, ok := t.sessions[sess]; ok && (pssd.uid == asUid || asUid.IsZero()) {
-			pud := t.perUser[pssd.uid]
-			pud.online++
-			t.perUser[pssd.uid] = pud
-			asUid = pssd.uid
-		} else {
-			log.Println("topic: subscription not found or uid mismatch", t.name, asUid, sess.sid)
-			asUid = types.ZeroUid
-		}
+func (t *Topic) sessToForeground(sess *Session) {
+	s := sess
+	if s.multi != nil {
+		s = s.multi
 	}
-	if !asUid.IsZero() {
-		t.sendSubNotifications(asUid, sess.sid, sess.userAgent)
+
+	if pssd, ok := t.sessions[s]; ok {
+		uid := pssd.uid
+		if s.isMultiplex() {
+			// If 's' is a multiplexing session, then sess is a proxy and it contains correct UID.
+			// Add UID to the list of online users.
+			uid := sess.uid
+			pssd.muids = append(pssd.muids, uid)
+		}
+		// Mark user as online
+		pud := t.perUser[uid]
+		pud.online++
+		t.perUser[uid] = pud
+
+		t.sendSubNotifications(uid, sess.sid, sess.userAgent)
 	}
 }
 
@@ -1309,20 +1333,12 @@ func (t *Topic) thisUserSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.L
 	}
 
 	// Subscription successfully created. Link topic to session.
-	// Note that sessions that serve as an interface between proxy topics and their masters (proxy sessions)
-	// may have only one subscription, that is, to its master topic.
-	if !sess.isMultiplex() || sess.countSub() == 0 {
-		sess.addSub(t.name, &Subscription{
-			broadcast: t.broadcast,
-			done:      t.unreg,
-			meta:      t.meta,
-			supd:      t.supd})
-		if sess.isMultiplex() {
-			t.addSession(sess, types.ZeroUid)
-		} else {
-			t.addSession(sess, asUid)
-		}
-	}
+	sess.addSub(t.name, &Subscription{
+		broadcast: t.broadcast,
+		done:      t.unreg,
+		meta:      t.meta,
+		supd:      t.supd})
+	t.addSession(sess, asUid)
 
 	// The user is online in the topic. Increment the counter if notifications are not deferred.
 	if !sess.background {
@@ -2947,17 +2963,16 @@ func (t *Topic) fndSetPublic(sess *Session, public interface{}) bool {
 
 // Remove per-session value of fnd.Public.
 func (t *Topic) fndRemovePublic(sess *Session) {
-	if t.cat == types.TopicCatFnd {
-		if t.public == nil {
-			return
-		}
-		if pubmap, ok := t.public.(map[string]interface{}); ok {
-			delete(pubmap, sess.sid)
-			return
-		}
-		panic("Invalid Fnd.Public type")
+	if t.public == nil {
+		return
 	}
-	panic("Not Fnd topic")
+	// FIXME: case of a multiplexing session won't work correctly.
+	// Maybe handle it at the proxy topic.
+	if pubmap, ok := t.public.(map[string]interface{}); ok {
+		delete(pubmap, sess.sid)
+		return
+	}
+	panic("Invalid Fnd.Public type")
 }
 
 func (t *Topic) accessFor(authLvl auth.Level) types.AccessMode {
@@ -2979,41 +2994,69 @@ func (t *Topic) subsCount() int {
 }
 
 // Add session record. 'user' may be different from sess.uid.
-func (t *Topic) addSession(sess *Session, asUid types.Uid) bool {
+func (t *Topic) addSession(sess *Session, asUid types.Uid) {
 	s := sess
 	if sess.multi != nil {
 		s = s.multi
-		// Multiplexing session does not have a specific Uid.
-		asUid = types.ZeroUid
 	}
-	if _, ok := t.sessions[s]; ok {
-		log.Println("addSession: session already added", t.name, s.proto, s.sid)
-		return false
+
+	if pssd, ok := t.sessions[s]; ok {
+		// Subscription already exists.
+		if s.isMultiplex() && !sess.background {
+			// This slice is expected to be relatively short.
+			// Not doing anything fancy here like maps or sorting.
+			pssd.muids = append(pssd.muids, asUid)
+		}
+		// Maybe panic here.
+		return
 	}
-	t.sessions[s] = perSessionData{uid: asUid}
-	return true
+
+	if s.isMultiplex() {
+		if sess.background {
+			t.sessions[s] = perSessionData{}
+		} else {
+			t.sessions[s] = perSessionData{muids: []types.Uid{asUid}}
+		}
+	} else {
+		t.sessions[s] = perSessionData{uid: asUid}
+	}
 }
 
 // Disconnects session from topic if either one of the following is true:
-// * `s` is an ordinary session AND (`asUid` is zero OR `asUid` matches subscribed user).
-// It's called for the multiplexing session only when it's actually removed.
+// * 's' is an ordinary session AND ('asUid' is zero OR 'asUid' matches subscribed user).
+// * 's' is a multiplexing session and it's being dropped all together ('asUid' is zero ).
+// If 's' is a multiplexing session and asUid is not zero, it's removed from the list of session
+// users 'muids'.
 func (t *Topic) remSession(sess *Session, asUid types.Uid) *perSessionData {
 	s := sess
 	if sess.multi != nil {
 		s = s.multi
 	}
-	if pssd, ok := t.sessions[s]; ok && (pssd.uid == asUid || asUid.IsZero()) {
-		delete(t.sessions, s)
-		return &pssd
+	pssd, ok := t.sessions[s]
+	if ok {
+		if pssd.uid == asUid || asUid.IsZero() {
+			delete(t.sessions, s)
+			return &pssd
+		}
+		for i := range pssd.muids {
+			if pssd.muids[i] == asUid {
+				pssd.muids[i] = pssd.muids[len(pssd.muids)-1]
+				pssd.muids = pssd.muids[:len(pssd.muids)-1]
+				t.sessions[s] = pssd
+				break
+			}
+		}
 	}
 	return nil
 }
 
-// FIXME: this does not work correctly with multiplexing sessions.
+// Check if topic has any online (non-background) users.
 func (t *Topic) isOnline() bool {
-	// Some sessions may be background sessions. They should not be counted.
-	for s := range t.sessions {
-		// At least one non-background session.
+	// Find at least one non-background session.
+	for s, pssd := range t.sessions {
+		if s.isMultiplex() && len(pssd.muids) > 0 {
+			return true
+		}
 		if !s.background {
 			return true
 		}
