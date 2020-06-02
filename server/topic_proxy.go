@@ -14,13 +14,6 @@ import (
 	"github.com/tinode/chat/server/store/types"
 )
 
-// Direct communication from proxy topic to master and service requests.
-type topicMasterRequest struct {
-	// List of proxied user IDs and the counts of proxied origin sessions for each uid.
-	// Required for accounting.
-	proxySessionCleanUp map[types.Uid]int
-}
-
 func (t *Topic) runProxy(hub *Hub) {
 	killTimer := time.NewTimer(time.Hour)
 	killTimer.Stop()
