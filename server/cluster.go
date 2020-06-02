@@ -954,15 +954,21 @@ func (c *Cluster) invalidateProxySubs() {
 
 // garbageCollectProxySessions terminates all orphaned proxy sessions
 // at a master node. The session is orphaned when the origin node is gone.
-func (c *Cluster) garbageCollectProxySessions(failedNodes []string) {
+func (c *Cluster) garbageCollectProxySessions(activeNodes []string) {
+	allNodes := []string{c.thisNodeName}
+	for name := range c.nodes {
+		allNodes = append(allNodes, name)
+	}
+	_, failedNodes := stringSliceDelta(allNodes, activeNodes)
 	for _, node := range failedNodes {
 		// Iterate sessions of a failed node
-		for sid := range globals.cluster.nodes[node].msess {
+		msess := globals.cluster.nodes[node].msess
+		globals.cluster.nodes[node].msess = make(map[string]struct{})
+		for sid := range msess {
 			if sess := globals.sessionStore.Get(sid); sess != nil {
 				sess.stop <- nil
 			}
 		}
-		globals.cluster.nodes[node].msess = nil
 	}
 }
 
