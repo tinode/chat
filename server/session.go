@@ -222,19 +222,6 @@ type remoteSession struct {
 	isBackground bool
 }
 
-/*
-func (s *Session) addRemoteSession(sid string, rs *remoteSession) {
-	s.remoteSessionsLock.Lock()
-	s.remoteSessions[sid] = rs
-	s.remoteSessionsLock.Unlock()
-}
-
-func (s *Session) delRemoteSession(sid string) {
-	s.remoteSessionsLock.Lock()
-	delete(s.remoteSessions, sid)
-	s.remoteSessionsLock.Unlock()
-}
-*/
 // Indicates whether this session is a local interface for a remote proxy topic.
 // It multiplexes multiple sessions.
 func (s *Session) isMultiplex() bool {
@@ -246,7 +233,7 @@ func (s *Session) isProxy() bool {
 	return s.proto == PROXY
 }
 
-// Clsuter session: either a proxy or a multiplexing session.
+// Cluster session: either a proxy or a multiplexing session.
 func (s *Session) isCluster() bool {
 	return s.isProxy() || s.isMultiplex()
 }
@@ -1081,7 +1068,7 @@ func (s *Session) serialize(msg *ServerComMessage) interface{} {
 	return out
 }
 
-// onBackgroundTimer markes background session as foreground and informs topics it's subscribed to.
+// onBackgroundTimer marks background session as foreground and informs topics it's subscribed to.
 func (s *Session) onBackgroundTimer() {
 	s.subsLock.RLock()
 	defer s.subsLock.RUnlock()

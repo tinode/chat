@@ -113,7 +113,7 @@ type ClusterSess struct {
 }
 
 // ClusterSessionUpdate represents a request to update a session.
-// User Agnet change or background session comes to foreground.
+// User Agent change or background session comes to foreground.
 type ClusterSessUpdate struct {
 	// User this session represents.
 	Uid types.Uid
@@ -1001,10 +1001,8 @@ func (sess *Session) clusterWriteLoop(forTopic string) {
 				srvMsg.AsUser = srvMsg.sess.uid.UserId()
 
 				switch srvMsg.sess.proxyReq {
-				case ProxyReqJoin:
-					//sess.addRemoteSession(srvMsg.sess.sid, &remoteSession{uid: srvMsg.uid,isBackground: response.IsBackground})
-				case ProxyReqLeave:
-					//sess.delRemoteSession(srvMsg.sess.sid)
+				case ProxyReqJoin, ProxyReqLeave:
+				// FIXME: check if we need to do anything here.
 				case ProxyReqBroadcast:
 					if srvMsg.Data != nil || srvMsg.Pres != nil || srvMsg.Info != nil {
 						response.OrigSid = "*"
