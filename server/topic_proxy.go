@@ -134,7 +134,7 @@ func (t *Topic) proxyMasterResponse(msg *ClusterResp, killTimer *time.Timer) {
 	}
 
 	if msg.OrigSid == "*" {
-		log.Println("topic_proxy: broadcast OrigSid='*'")
+		log.Println("tproxy: broadcast OrigSid='*'", "node=", globals.cluster.thisNodeName)
 		// It is a broadcast.
 		switch {
 		case msg.SrvMsg.Pres != nil || msg.SrvMsg.Data != nil || msg.SrvMsg.Info != nil:

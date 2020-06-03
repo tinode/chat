@@ -767,7 +767,7 @@ func (t *Topic) sendSubNotifications(asUid types.Uid, sid, userAgent string) {
 // handleBroadcast fans out broadcastable messages to recepients in topic and proxy_topic.
 func (t *Topic) handleBroadcast(msg *ServerComMessage) {
 	log.Println("topic: handleBroadcast, node=", globals.cluster.thisNodeName,
-		"topic=", t.name, "isPrioxy=", t.isProxy, "sub count=", t.subsCount(), "msg=", msg.describe())
+		"topic=", t.name, "isProxy=", t.isProxy, "sub_count=", t.subsCount(), "msg=", msg.describe())
 
 	asUid := types.ParseUserId(msg.AsUser)
 	if t.isInactive() {
@@ -929,32 +929,37 @@ func (t *Topic) handleBroadcast(msg *ServerComMessage) {
 	// {meta} and {ctrl} are sent to the session only
 	for sess, pssd := range t.sessions {
 		if t.isProxy {
-			log.Println("sending to session", "sess proxy=", sess.isProxy(), "multi=", sess.isMultiplex(),
-				"sid=", sess.sid, "skipsid=", msg.SkipSid, "subs uid=", pssd.uid)
+			log.Println("sending to session", "sess_proxy=", sess.isProxy(), "multi=", sess.isMultiplex(),
+				"sid=", sess.sid, "skipsid=", msg.SkipSid, "subs_uid=", pssd.uid)
 		}
 		if !sess.isMultiplex() { // Send all messages to multiplexing session.
 			if sess.sid == msg.SkipSid {
+				log.Println("sending to session, skipped due to SID")
 				continue
 			}
 
 			if msg.Pres != nil {
 				// Skip notifying - already notified on topic.
 				// Don't check multiplexing sessions.
-				if msg.Pres.SkipTopic != "" || sess.getSub(msg.Pres.SkipTopic) != nil {
+				if msg.Pres.SkipTopic != "" && sess.getSub(msg.Pres.SkipTopic) != nil {
+					log.Println("sending to session, skipped due to being subscribed to topic")
 					continue
 				}
 
 				// Notification addressed to a single user only.
 				if msg.Pres.SingleUser != "" && pssd.uid.UserId() != msg.Pres.SingleUser {
+					log.Println("sending to session, skipped due to single user mismatch")
 					continue
 				}
 				// Notification should skip a single user.
 				if msg.Pres.ExcludeUser != "" && pssd.uid.UserId() == msg.Pres.ExcludeUser {
+					log.Println("sending to session, skipped due to excluding user filter")
 					continue
 				}
 
 				// Check presence filters
 				if !t.passesPresenceFilters(msg, pssd.uid) {
+					log.Println("sending to session, skipped due to failed filter")
 					continue
 				}
 
@@ -972,14 +977,8 @@ func (t *Topic) handleBroadcast(msg *ServerComMessage) {
 		}
 
 		// Topic name may be different depending on the user to which the `sess` belongs.
-		if t.isProxy {
-			log.Println("before fix", msg.describe(), pssd.uid)
-		}
 		t.maybeFixTopicName(msg, pssd.uid)
-		if t.isProxy {
-			log.Println("afterr fix", msg.describe())
-		}
-
+		log.Println("sending to session, queueOut, msg=", msg.describe())
 		if !sess.queueOut(msg) {
 			log.Println("topic: connection stuck, detaching", t.name, sess.sid)
 			// The whole session is being dropped, so sessionLeave.pkt is not set.
