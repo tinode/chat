@@ -1001,13 +1001,12 @@ func (sess *Session) clusterWriteLoop(forTopic string) {
 				srvMsg.AsUser = srvMsg.sess.uid.UserId()
 
 				switch srvMsg.sess.proxyReq {
-				case ProxyReqJoin, ProxyReqLeave:
-				// FIXME: check if we need to do anything here.
+				case ProxyReqJoin, ProxyReqLeave, ProxyReqMeta:
+				// Do nothing
 				case ProxyReqBroadcast:
 					if srvMsg.Data != nil || srvMsg.Pres != nil || srvMsg.Info != nil {
 						response.OrigSid = "*"
 					}
-				case ProxyReqMeta:
 				default:
 					panic("cluster: unknown request type in clusterWriteLoop")
 				}
