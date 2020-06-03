@@ -38,17 +38,17 @@ type sessionLeave struct {
 
 // Request to hub to remove the topic
 type topicUnreg struct {
-	// Original request, could be nil
+	// Original request, could be nil,
 	pkt *ClientComMessage
-	// Session making the request, could be nil
+	// Session making the request, could be nil.
 	sess *Session
-	// Routable name of the topic to drop
+	// Routable name of the topic to drop. Duplicated here because pkt could be nil.
 	rcptTo string
-	// UID of the user being deleted
+	// UID of the user being deleted. Duplicated here because pkt could be nil.
 	forUser types.Uid
-	// Unregister then delete the topic
+	// Unregister then delete the topic.
 	del bool
-	// Channel for reporting operation completion when deleting topics for a user
+	// Channel for reporting operation completion when deleting topics for a user.
 	done chan<- bool
 }
 
