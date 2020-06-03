@@ -674,17 +674,22 @@ func (c *Cluster) makeClusterReq(reqType ProxyReqType, payload interface{}, topi
 
 	var uid types.Uid
 
-	if payload != nil {
-		switch pl := payload.(type) {
-		case *ClientComMessage:
+	switch pl := payload.(type) {
+	case *ClientComMessage:
+		if pl != nil {
+			// See here why pl could be nil even if we have an explicit nil case:
+			// https://golang.org/doc/faq#nil_error
 			req.CliMsg = pl
 			uid = types.ParseUserId(req.CliMsg.AsUser)
-		case *ServerComMessage:
+		}
+	case *ServerComMessage:
+		if pl != nil {
 			req.SrvMsg = pl
 			uid = types.ParseUserId(req.SrvMsg.AsUser)
-		default:
-			panic("cluster: unknown payload in makeClusterReq")
 		}
+	case nil:
+	default:
+		panic("cluster: unknown payload in makeClusterReq")
 	}
 
 	if sess != nil {
