@@ -32,6 +32,12 @@ func (sess *Session) writeOnce(wrt http.ResponseWriter, req *http.Request) {
 			}
 			return
 
+		case <-sess.bkgTimer.C:
+			if sess.background {
+				sess.background = false
+				sess.onBackgroundTimer()
+			}
+
 		case msg := <-sess.stop:
 			// Request to close the session. Make it unavailable.
 			globals.sessionStore.Delete(sess)

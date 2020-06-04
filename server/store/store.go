@@ -223,7 +223,7 @@ func (UsersObjMapper) Create(user *types.User, private interface{}) (*types.User
 		return nil, err
 	}
 
-	// Create user's subscription to 'me' && 'find'. These topics are ephemeral, the topic object need not to be
+	// Create user's subscription to 'me' && 'fnd'. These topics are ephemeral, the topic object need not to be
 	// inserted.
 	err = Subs.Create(
 		&types.Subscription{

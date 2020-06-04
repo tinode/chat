@@ -59,25 +59,22 @@ func (ss *SessionStore) NewSession(conn interface{}, sid string) (*Session, int)
 		s.proto = LPOLL
 		// no need to store c for long polling, it changes with every request
 	case *ClusterNode:
-		s.proto = CLUSTER
+		s.proto = MULTIPLEX
 		s.clnode = c
 	case pbx.Node_MessageLoopServer:
 		s.proto = GRPC
 		s.grpcnode = c
 	default:
-		s.proto = NONE
+		log.Panicln("session: unknown connection type", conn)
 	}
 
-	if s.proto != NONE {
-		s.subs = make(map[string]*Subscription)
-		s.send = make(chan interface{}, sendQueueLimit+32) // buffered
-		s.stop = make(chan interface{}, 1)                 // Buffered by 1 just to make it non-blocking
-		s.detach = make(chan string, 64)                   // buffered
+	s.subs = make(map[string]*Subscription)
+	s.send = make(chan interface{}, sendQueueLimit+32) // buffered
+	s.stop = make(chan interface{}, 1)                 // Buffered by 1 just to make it non-blocking
+	s.detach = make(chan string, 64)                   // buffered
 
-		if s.proto == CLUSTER {
-			s.remoteSessions = make(map[string]*remoteSession)
-		}
-	}
+	s.bkgTimer = time.NewTimer(time.Hour)
+	s.bkgTimer.Stop()
 
 	s.lastTouched = time.Now()
 
@@ -158,7 +155,7 @@ func (ss *SessionStore) Shutdown() {
 
 	shutdown := NoErrShutdown(types.TimeNow())
 	for _, s := range ss.sessCache {
-		if s.stop != nil && s.proto != CLUSTER {
+		if s.stop != nil && s.proto != MULTIPLEX {
 			s.stop <- s.serialize(shutdown)
 		}
 	}
@@ -193,7 +190,7 @@ func (ss *SessionStore) NodeRestarted(nodeName string, fingerprint int64) {
 	defer ss.lock.Unlock()
 
 	for _, s := range ss.sessCache {
-		if s.proto != CLUSTER || s.clnode.name != nodeName {
+		if s.proto != MULTIPLEX || s.clnode.name != nodeName {
 			continue
 		}
 		if s.clnode.fingerprint != fingerprint {

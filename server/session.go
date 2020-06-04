@@ -25,15 +25,6 @@ import (
 	"github.com/tinode/chat/server/store/types"
 )
 
-// Wire transport
-const (
-	NONE = iota
-	WEBSOCK
-	LPOLL
-	GRPC
-	CLUSTER
-)
-
 // Wait time before abandoning the outbound send operation.
 // Timeout is rather long to make sure it's longer than Linux preeption time:
 // https://elixir.bootlin.com/linux/latest/source/kernel/sched/fair.c#L38
@@ -42,13 +33,37 @@ const sendTimeout = time.Millisecond * 7
 // Maximum number of queued messages before session is considered stale and dropped.
 const sendQueueLimit = 128
 
+// Time given to a background session to terminate to avoid tiggering presence notifications.
+// If session terminates (or unsubscribes from topic) in this time frame notifications are not sent at all.
+const deferredNotificationsTimeout = time.Second * 5
+
 var minSupportedVersionValue = parseVersion(minSupportedVersion)
+
+// Wire transport
+type SessionProto int
+
+const (
+	NONE SessionProto = iota
+	// Websocket connection
+	WEBSOCK
+	// Long polling connection
+	LPOLL
+	// gRPC connection
+	GRPC
+	// Temporary session used as a proxy at master node.
+	PROXY
+	// Multiplexing session reprsenting a connection from proxy topic to master.
+	MULTIPLEX
+)
 
 // Session represents a single WS connection or a long polling session. A user may have multiple
 // sessions.
 type Session struct {
-	// protocol - NONE (unset), WEBSOCK, LPOLL, CLUSTER, GRPC
-	proto int
+	// protocol - NONE (unset), WEBSOCK, LPOLL, GRPC, PROXY, MULTIPLEX
+	proto SessionProto
+
+	// Session ID
+	sid string
 
 	// Websocket. Set only for websocket sessions.
 	ws *websocket.Conn
@@ -59,8 +74,11 @@ type Session struct {
 	// gRPC handle. Set only for gRPC clients.
 	grpcnode pbx.Node_MessageLoopServer
 
-	// Reference to the cluster node where the session has originated. Set only for cluster RPC (proxied) sessions.
+	// Reference to the cluster node where the session has originated. Set only for cluster RPC sessions.
 	clnode *ClusterNode
+
+	// Reference to multiplexing session. Set only for proxy sessions.
+	multi *Session
 
 	// IP address of the client. For long polling this is the IP of the last poll.
 	remoteAddr string
@@ -78,10 +96,11 @@ type Session struct {
 	// Human language of the client
 	lang string
 
-	// ID of the current user or 0
+	// ID of the current user. Could be zero if session is not authenticated
+	// or for multiplexing sessions.
 	uid types.Uid
 
-	// Authentication level - NONE (unset), ANON, AUTH, ROOT
+	// Authentication level - NONE (unset), ANON, AUTH, ROOT.
 	authLvl auth.Level
 
 	// Time when the long polling session was last refreshed
@@ -89,6 +108,11 @@ type Session struct {
 
 	// Time when the session received any packer from client
 	lastAction time.Time
+
+	// Background session: subscription presence notifications and online status are delayed.
+	background bool
+	// Timer which triggers after some seconds to mark background session as foreground.
+	bkgTimer *time.Timer
 
 	// Outbound mesages, buffered.
 	// The content must be serialized in format suitable for the session.
@@ -98,7 +122,8 @@ type Session struct {
 	// Content in the same format as for 'send'
 	stop chan interface{}
 
-	// detach - channel for detaching session from topic, buffered
+	// detach - channel for detaching session from topic, buffered.
+	// Content is topic name to detach from.
 	detach chan string
 
 	// Map of topic subscriptions, indexed by topic name.
@@ -108,16 +133,13 @@ type Session struct {
 	// subs concurrently.
 	subsLock sync.RWMutex
 
-	// Map of remote (origin) sessions to user ids these sessions represent.
-	remoteSessions map[string]*remoteSession
-	// Synchronizes access to remoteSessions.
-	remoteSessionsLock sync.RWMutex
-
-	// Session ID
-	sid string
-
 	// Needed for long polling and grpc.
 	lock sync.Mutex
+
+	// Field used only in cluster mode by topic master node.
+
+	// Type of proxy to master request being handled.
+	proxyReq ProxyReqType
 }
 
 // Subscription is a mapper of sessions to topics.
@@ -132,17 +154,30 @@ type Subscription struct {
 	// Channel to send {meta} requests, copy of Topic.meta
 	meta chan<- *metaReq
 
-	// Channel to ping topic with session's user agent
-	uaChange chan<- string
+	// Channel to ping topic with session's updates
+	supd chan<- *sessionUpdate
 }
 
 func (s *Session) addSub(topic string, sub *Subscription) {
+	if s.multi != nil {
+		s.multi.addSub(topic, sub)
+		return
+	}
 	s.subsLock.Lock()
-	s.subs[topic] = sub
+
+	// Sessions that serve as an interface between proxy topics and their masters (proxy sessions)
+	// may have only one subscription, that is, to its master topic.
+	// Normal sessions may be subscribed to multiple topics.
+
+	if !s.isMultiplex() || s.countSub() == 0 {
+		s.subs[topic] = sub
+	}
 	s.subsLock.Unlock()
 }
 
 func (s *Session) getSub(topic string) *Subscription {
+	// Don't check s.multi here. Let it panic if called for proxy session.
+
 	s.subsLock.RLock()
 	defer s.subsLock.RUnlock()
 
@@ -150,23 +185,31 @@ func (s *Session) getSub(topic string) *Subscription {
 }
 
 func (s *Session) delSub(topic string) {
+	if s.multi != nil {
+		s.multi.delSub(topic)
+		return
+	}
 	s.subsLock.Lock()
 	delete(s.subs, topic)
 	s.subsLock.Unlock()
 }
 
 func (s *Session) countSub() int {
+	if s.multi != nil {
+		return s.multi.countSub()
+	}
 	return len(s.subs)
 }
 
 // Inform topics that the session is being terminated.
-// sessionLeave.userId is not set because the whole session is being dropped.
+// No need to check for s.multi because it's not called for PROXY sessions.
 func (s *Session) unsubAll() {
 	s.subsLock.RLock()
 	defer s.subsLock.RUnlock()
 
 	for _, sub := range s.subs {
 		// sub.done is the same as topic.unreg
+		// Leave message is not set because the whole session is being dropped.
 		sub.done <- &sessionLeave{sess: s}
 	}
 }
@@ -179,28 +222,29 @@ type remoteSession struct {
 	isBackground bool
 }
 
-func (s *Session) addRemoteSession(sid string, rs *remoteSession) {
-	s.remoteSessionsLock.Lock()
-	s.remoteSessions[sid] = rs
-	s.remoteSessionsLock.Unlock()
+// Indicates whether this session is a local interface for a remote proxy topic.
+// It multiplexes multiple sessions.
+func (s *Session) isMultiplex() bool {
+	return s.proto == MULTIPLEX
 }
 
-func (s *Session) delRemoteSession(sid string) {
-	s.remoteSessionsLock.Lock()
-	delete(s.remoteSessions, sid)
-	s.remoteSessionsLock.Unlock()
-}
-
-// Indicates whether this session is used as a local interface for a remote proxy topic.
+// Indicates whether this session is a short-lived proxy for a remote session.
 func (s *Session) isProxy() bool {
-	return s.proto == CLUSTER
+	return s.proto == PROXY
 }
 
-// queueOut attempts to send a ServerComMessage to a session; if the send buffer is full,
+// Cluster session: either a proxy or a multiplexing session.
+func (s *Session) isCluster() bool {
+	return s.isProxy() || s.isMultiplex()
+}
+
+// queueOut attempts to send a ServerComMessage to a session write loop; if the send buffer is full,
 // timeout is `sendTimeout`.
 func (s *Session) queueOut(msg *ServerComMessage) bool {
-	if s == nil {
-		return true
+	if s.multi != nil {
+		// In case of a cluster we need to pass a copy of the actual session.
+		msg.sess = s
+		return s.multi.queueOut(msg)
 	}
 
 	select {
@@ -210,12 +254,6 @@ func (s *Session) queueOut(msg *ServerComMessage) bool {
 		return false
 	}
 	return true
-}
-
-// queueOut attempts to send a message with the overrides on the outgoing message.
-func (s *Session) queueOutWithOverrides(msg *ServerComMessage, sessOverrides *sessionOverrides) bool {
-	msg.sessOverrides = sessOverrides
-	return s.queueOut(msg)
 }
 
 // queueOutBytes attempts to send a ServerComMessage already serialized to []byte.
@@ -234,10 +272,14 @@ func (s *Session) queueOutBytes(data []byte) bool {
 	return true
 }
 
+// cleanUp is called when the session is terminated to perform resource cleanup.
 func (s *Session) cleanUp(expired bool) {
 	if !expired {
 		globals.sessionStore.Delete(s)
 	}
+
+	s.background = false
+	s.bkgTimer.Stop()
 	s.unsubAll()
 }
 
@@ -392,11 +434,11 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 
 	handler(msg)
 
-	// Notify 'me' topic that this session is currently active
+	// Notify 'me' topic that this session is currently active.
 	if uaRefresh && msg.AsUser != "" && s.userAgent != "" {
 		if sub := s.getSub(msg.AsUser); sub != nil {
 			// The chan is buffered. If the buffer is exhaused, the session will wait for 'me' to become available
-			sub.uaChange <- s.userAgent
+			sub.supd <- &sessionUpdate{userAgent: s.userAgent}
 		}
 	}
 }
@@ -446,11 +488,8 @@ func (s *Session) leave(msg *ClientComMessage) {
 			// Unlink from topic, topic will send a reply.
 			s.delSub(msg.RcptTo)
 			sub.done <- &sessionLeave{
-				userId:   types.ParseUserId(msg.AsUser),
-				original: msg.Original,
-				sess:     s,
-				unsub:    msg.Leave.Unsub,
-				id:       msg.Id}
+				pkt:  msg,
+				sess: s}
 		}
 	} else if !msg.Leave.Unsub {
 		// Session is not attached to the topic, wants to leave - fine, no change
@@ -493,14 +532,14 @@ func (s *Session) publish(msg *ClientComMessage) {
 		Timestamp: msg.timestamp,
 		Head:      msg.Pub.Head,
 		Content:   msg.Pub.Content},
-		// Unroutable values.
-		rcptto:    msg.RcptTo,
-		sess:      s,
-		id:        msg.Id,
-		timestamp: msg.timestamp,
-		asUser:    msg.AsUser}
+		// Internal-only values.
+		Id:        msg.Id,
+		RcptTo:    msg.RcptTo,
+		AsUser:    msg.AsUser,
+		Timestamp: msg.timestamp,
+		sess:      s}
 	if msg.Pub.NoEcho {
-		data.skipSid = s.sid
+		data.SkipSid = s.sid
 	}
 	if sub := s.getSub(msg.RcptTo); sub != nil {
 		// This is a post to a subscribed topic. The message is sent to the topic only
@@ -550,6 +589,10 @@ func (s *Session) hello(msg *ClientComMessage) {
 		s.platf = msg.Hi.Platform
 		if s.platf == "" {
 			s.platf = platformFromUA(msg.Hi.UserAgent)
+		}
+		// This is a background session. Start a timer.
+		if msg.Hi.Background {
+			s.bkgTimer.Reset(deferredNotificationsTimeout)
 		}
 	} else if msg.Hi.Version == "" || parseVersion(msg.Hi.Version) == s.ver {
 		// Save changed device ID+Lang or delete earlier specified device ID.
@@ -817,18 +860,19 @@ func (s *Session) get(msg *ClientComMessage) {
 		return
 	}
 
+	msg.MetaWhat = parseMsgClientMeta(msg.Get.What)
+
 	sub := s.getSub(msg.RcptTo)
 	meta := &metaReq{
 		pkt:  msg,
-		sess: s,
-		what: parseMsgClientMeta(msg.Get.What)}
+		sess: s}
 
-	if meta.what == 0 {
+	if meta.pkt.MetaWhat == 0 {
 		s.queueOut(ErrMalformed(msg.Id, msg.Original, msg.timestamp))
 		log.Println("s.get: invalid Get message action", msg.Get.What)
 	} else if sub != nil {
 		sub.meta <- meta
-	} else if meta.what&(constMsgMetaDesc|constMsgMetaSub) != 0 {
+	} else if meta.pkt.MetaWhat&(constMsgMetaDesc|constMsgMetaSub) != 0 {
 		// Request some minimal info from a topic not currently attached to.
 		globals.hub.meta <- meta
 	} else {
@@ -851,24 +895,24 @@ func (s *Session) set(msg *ClientComMessage) {
 		sess: s}
 
 	if msg.Set.Desc != nil {
-		meta.what = constMsgMetaDesc
+		meta.pkt.MetaWhat = constMsgMetaDesc
 	}
 	if msg.Set.Sub != nil {
-		meta.what |= constMsgMetaSub
+		meta.pkt.MetaWhat |= constMsgMetaSub
 	}
 	if msg.Set.Tags != nil {
-		meta.what |= constMsgMetaTags
+		meta.pkt.MetaWhat |= constMsgMetaTags
 	}
 	if msg.Set.Cred != nil {
-		meta.what |= constMsgMetaCred
+		meta.pkt.MetaWhat |= constMsgMetaCred
 	}
 
-	if meta.what == 0 {
+	if meta.pkt.MetaWhat == 0 {
 		s.queueOut(ErrMalformed(msg.Id, msg.Original, msg.timestamp))
 		log.Println("s.set: nil Set action")
 	} else if sub := s.getSub(msg.RcptTo); sub != nil {
 		sub.meta <- meta
-	} else if meta.what&constMsgMetaTags != 0 {
+	} else if meta.pkt.MetaWhat&constMsgMetaTags != 0 {
 		log.Println("s.set: can Set tags for subscribed topics only")
 		s.queueOut(ErrPermissionDenied(msg.Id, msg.Original, msg.timestamp))
 	} else {
@@ -878,10 +922,10 @@ func (s *Session) set(msg *ClientComMessage) {
 }
 
 func (s *Session) del(msg *ClientComMessage) {
-	what := parseMsgClientDel(msg.Del.What)
+	msg.MetaWhat = parseMsgClientDel(msg.Del.What)
 
 	// Delete user
-	if what == constMsgDelUser {
+	if msg.MetaWhat == constMsgDelUser {
 		replyDelUser(s, msg)
 		return
 	}
@@ -896,20 +940,18 @@ func (s *Session) del(msg *ClientComMessage) {
 		return
 	}
 
-	if what == 0 {
+	if msg.MetaWhat == 0 {
 		s.queueOut(ErrMalformed(msg.Id, msg.Original, msg.timestamp))
 		log.Println("s.del: invalid Del action", msg.Del.What, s.sid)
 		return
 	}
 	sub := s.getSub(msg.RcptTo)
-	if sub != nil && what != constMsgDelTopic {
+	if sub != nil && msg.MetaWhat != constMsgDelTopic {
 		// Session is attached, deleting subscription or messages. Send to topic.
 		sub.meta <- &metaReq{
 			pkt:  msg,
-			sess: s,
-			what: what}
-
-	} else if what == constMsgDelTopic {
+			sess: s}
+	} else if msg.MetaWhat == constMsgDelTopic {
 		// Deleting topic: for sessions attached or not attached, send request to hub first.
 		// Hub will forward to topic, if appropriate.
 		globals.hub.unreg <- &topicUnreg{
@@ -955,12 +997,17 @@ func (s *Session) note(msg *ClientComMessage) {
 
 	if sub := s.getSub(msg.RcptTo); sub != nil {
 		// Pings can be sent to subscribed topics only
-		sub.broadcast <- &ServerComMessage{Info: &MsgServerInfo{
-			Topic: msg.Original,
-			From:  msg.AsUser,
-			What:  msg.Note.What,
-			SeqId: msg.Note.SeqId,
-		}, rcptto: msg.RcptTo, asUser: msg.AsUser, timestamp: msg.timestamp, skipSid: s.sid}
+		sub.broadcast <- &ServerComMessage{
+			Info: &MsgServerInfo{
+				Topic: msg.Original,
+				From:  msg.AsUser,
+				What:  msg.Note.What,
+				SeqId: msg.Note.SeqId},
+			RcptTo:    msg.RcptTo,
+			AsUser:    msg.AsUser,
+			Timestamp: msg.timestamp,
+			SkipSid:   s.sid,
+			sess:      s}
 	} else {
 		s.queueOut(ErrAttachFirst(msg.Id, msg.Original, msg.timestamp))
 		log.Println("s.note: note to invalid topic - must subscribe first", msg.Note.What, s.sid)
@@ -1011,7 +1058,7 @@ func (s *Session) serialize(msg *ServerComMessage) interface{} {
 		return pbServSerialize(msg)
 	}
 
-	if s.proto == CLUSTER {
+	if s.proto == MULTIPLEX {
 		// No need to serialize the message to bytes within the cluster,
 		// but we have to create a copy because the original msg can be mutated.
 		return msg.copy()
@@ -1019,4 +1066,17 @@ func (s *Session) serialize(msg *ServerComMessage) interface{} {
 
 	out, _ := json.Marshal(msg)
 	return out
+}
+
+// onBackgroundTimer marks background session as foreground and informs topics it's subscribed to.
+func (s *Session) onBackgroundTimer() {
+	s.subsLock.RLock()
+	defer s.subsLock.RUnlock()
+
+	update := &sessionUpdate{sess: s}
+	for _, sub := range s.subs {
+		if sub.supd != nil {
+			sub.supd <- update
+		}
+	}
 }

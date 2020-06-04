@@ -143,6 +143,7 @@ message ClientHi {
 	string device_id = 4;
 	string lang = 5;
 	string platform = 6;
+	bool background = 7;
 }
 
 // User creation message {acc}
@@ -189,8 +190,6 @@ message ClientSub {
 
 	// mirrors {get}
 	GetQuery get_query = 4;
-
-	bool background = 5;
 }
 
 // Unsubscribe {leave} request message

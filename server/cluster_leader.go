@@ -142,6 +142,7 @@ func (c *Cluster) Vote(vreq *ClusterVoteRequest, response *ClusterVoteResponse) 
 	return nil
 }
 
+// Cluster leader checks health of other nodes.
 func (c *Cluster) sendPings() {
 	rehash := false
 
@@ -169,14 +170,12 @@ func (c *Cluster) sendPings() {
 	}
 
 	if rehash {
-		var activeNodes []string
+		activeNodes := []string{c.thisNodeName}
 		for _, node := range c.nodes {
 			if node.failCount < c.fo.nodeFailCountLimit {
 				activeNodes = append(activeNodes, node.name)
 			}
 		}
-		activeNodes = append(activeNodes, c.thisNodeName)
-
 		c.fo.activeNodes = activeNodes
 		c.rehash(activeNodes)
 		c.invalidateProxySubs()

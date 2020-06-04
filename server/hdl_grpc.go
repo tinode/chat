@@ -92,6 +92,13 @@ func (sess *Session) writeGrpcLoop() {
 				log.Println("grpc: write", sess.sid, err)
 				return
 			}
+
+		case <-sess.bkgTimer.C:
+			if sess.background {
+				sess.background = false
+				sess.onBackgroundTimer()
+			}
+
 		case msg := <-sess.stop:
 			// Shutdown requested, don't care if the message is delivered
 			if msg != nil {

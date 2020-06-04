@@ -10,7 +10,6 @@
 package main
 
 import (
-	"container/list"
 	"log"
 	"strings"
 	"sync"
@@ -23,73 +22,45 @@ import (
 
 // Request to hub to subscribe session to topic
 type sessionJoin struct {
-	// Packet, containing request details.
+	// Message, containing request details.
 	pkt *ClientComMessage
 	// Session to attach to topic.
 	sess *Session
-
-	// True if this subscription created a new topic.
-	// In case of p2p topics, it's true if the other user's subscription was
-	// created (as a part of new topic creation or just alone).
-	created bool
-	// True if this is a new subscription.
-	newsub bool
-	// True if this is an internal request.
-	internal bool
-
-	// Session param overrides. Used for handling remote topic requests.
-	sessOverrides *sessionOverrides
 }
 
 // Session wants to leave the topic
 type sessionLeave struct {
-	// User ID of the user sent the request
-	userId types.Uid
-	// Topic to report success of failure on
-	original string
+	// Message, containing request details. Could be nil.
+	pkt *ClientComMessage
 	// Session which initiated the request
 	sess *Session
-	// Should the proxy-master topic connection be terminated
-	terminateProxyConnection bool
-	// Leave and unsubscribe
-	unsub bool
-	// ID of originating request, if any
-	id string
-
-	// Session param overrides. Used for handling remote (proxy-master) topic requests.
-	sessOverrides *sessionOverrides
 }
 
 // Request to hub to remove the topic
 type topicUnreg struct {
-	// Routable name of the topic to drop
-	rcptTo string
-	// UID of the user being deleted
-	forUser types.Uid
-	// Session making the request, could be nil
-	sess *Session
-	// Original request, could be nil
+	// Original request, could be nil,
 	pkt *ClientComMessage
-	// Unregister then delete the topic
+	// Session making the request, could be nil.
+	sess *Session
+	// Routable name of the topic to drop. Duplicated here because pkt could be nil.
+	rcptTo string
+	// UID of the user being deleted. Duplicated here because pkt could be nil.
+	forUser types.Uid
+	// Unregister then delete the topic.
 	del bool
-	// Channel for reporting operation completion when deleting topics for a user
+	// Channel for reporting operation completion when deleting topics for a user.
 	done chan<- bool
 }
 
 type metaReq struct {
-	// UID of the user being affected. Could be zero.
-	forUser types.Uid
 	// Packet containing details of the Get/Set/Del request.
 	pkt *ClientComMessage
 	// Session which originated the request.
 	sess *Session
-	// What is being requested: constMsgMetaSub, constMsgMetaDesc, constMsgMetaTags, etc.
-	what int
+	// UID of the user being affected. Could be zero.
+	forUser types.Uid
 	// New topic state value. Only types.StateSuspended is supported at this time.
 	state types.ObjState
-
-	// Session param overrides. Used for handling remote topic requests.
-	sessOverrides *sessionOverrides
 }
 
 // Hub is the core structure which holds topics.
@@ -107,11 +78,11 @@ type Hub struct {
 	// Remove topic from hub, possibly deleting it afterwards, unbuffered
 	unreg chan *topicUnreg
 
-	// Cluster request to rehash topics, unbuffered
-	rehash chan bool
-
 	// Process get.info requests for topic not subscribed to, buffered 128
 	meta chan *metaReq
+
+	// Cluster request to rehash topics, unbuffered
+	rehash chan bool
 
 	// Request to shutdown, unbuffered
 	shutdown chan chan<- bool
@@ -134,7 +105,7 @@ func (h *Hub) topicDel(name string) {
 
 func newHub() *Hub {
 	var h = &Hub{
-		topics: &sync.Map{}, //make(map[string]*Topic),
+		topics: &sync.Map{},
 		// this needs to be buffered - hub generates invites and adds them to this queue
 		route:    make(chan *ServerComMessage, 4096),
 		join:     make(chan *sessionJoin),
@@ -151,7 +122,7 @@ func newHub() *Hub {
 
 	if !globals.cluster.isRemoteTopic("sys") {
 		// Initialize system 'sys' topic. There is only one sys topic per cluster.
-		h.join <- &sessionJoin{internal: true, pkt: &ClientComMessage{RcptTo: "sys", Original: "sys"}}
+		h.join <- &sessionJoin{pkt: &ClientComMessage{RcptTo: "sys", Original: "sys"}}
 	}
 
 	return h
@@ -161,7 +132,7 @@ func (h *Hub) run() {
 
 	for {
 		select {
-		case sreg := <-h.join:
+		case join := <-h.join:
 			// Handle a subscription request:
 			// 1. Init topic
 			// 1.1 If a new topic is requested, create it
@@ -173,19 +144,18 @@ func (h *Hub) run() {
 			// 3. Attach session to the topic
 
 			// Is the topic already loaded?
-			t := h.topicGet(sreg.pkt.RcptTo)
+			t := h.topicGet(join.pkt.RcptTo)
 			if t == nil {
 				// Topic does not exist or not loaded.
-				t = &Topic{name: sreg.pkt.RcptTo,
-					xoriginal: sreg.pkt.Original,
+				t = &Topic{name: join.pkt.RcptTo,
+					xoriginal: join.pkt.Original,
 					// Indicates a proxy topic.
-					isProxy:   globals.cluster.isRemoteTopic(sreg.pkt.RcptTo),
+					isProxy:   globals.cluster.isRemoteTopic(join.pkt.RcptTo),
 					sessions:  make(map[*Session]perSessionData),
 					broadcast: make(chan *ServerComMessage, 256),
 					reg:       make(chan *sessionJoin, 32),
 					unreg:     make(chan *sessionLeave, 32),
 					meta:      make(chan *metaReq, 32),
-					defrNotif: new(list.List),
 					perUser:   make(map[types.Uid]perUserData),
 					exit:      make(chan *shutDown, 1),
 				}
@@ -196,28 +166,30 @@ func (h *Hub) run() {
 					} else {
 						// It's a master topic. Make a channel for handling
 						// direct messages from the proxy.
-						t.master = make(chan *topicMasterRequest, 8)
+						t.master = make(chan *ClusterSessUpdate, 8)
 					}
 				}
 				// Topic is created in suspended state because it's not yet configured.
 				t.markPaused(true)
 				// Save topic now to prevent race condition.
-				h.topicPut(sreg.pkt.RcptTo, t)
+				h.topicPut(join.pkt.RcptTo, t)
 
 				// Configure the topic.
-				go topicInit(t, sreg, h)
+				go topicInit(t, join, h)
 
 			} else {
 				// Topic found.
 				// Topic will check access rights and send appropriate {ctrl}
-				t.reg <- sreg
+				t.reg <- join
 			}
 
 		case msg := <-h.route:
 			// This is a message from a connection not subscribed to topic
-			// Route incoming message to topic if topic permits such routing
+			// Route incoming message to topic if topic permits such routing.
 
-			if dst := h.topicGet(msg.rcptto); dst != nil {
+			if dst := h.topicGet(msg.RcptTo); dst != nil {
+				log.Println("hub: sending broadcast to active topic, node=",
+					globals.cluster.thisNodeName, "isProxy=", dst.isProxy, "topic=", msg.RcptTo, "msg=", msg.describe())
 				// Everything is OK, sending packet to known topic
 				if dst.broadcast != nil {
 					select {
@@ -225,12 +197,14 @@ func (h *Hub) run() {
 					default:
 						log.Println("hub: topic's broadcast queue is full", dst.name)
 					}
+				} else {
+					log.Println("hub: invalid topic category for broadcast", dst.name)
 				}
-			} else if (strings.HasPrefix(msg.rcptto, "usr") || strings.HasPrefix(msg.rcptto, "grp")) &&
-				globals.cluster.isRemoteTopic(msg.rcptto) {
+			} else if (strings.HasPrefix(msg.RcptTo, "usr") || strings.HasPrefix(msg.RcptTo, "grp")) &&
+				globals.cluster.isRemoteTopic(msg.RcptTo) {
 				// It is a remote topic.
-				if err := globals.cluster.routeToTopicIntraCluster(msg.rcptto, msg, msg.sess); err != nil {
-					log.Printf("hub: routing to '%s' failed", msg.rcptto)
+				if err := globals.cluster.routeToTopicIntraCluster(msg.RcptTo, msg, msg.sess); err != nil {
+					log.Printf("hub: routing to '%s' failed", msg.RcptTo)
 				}
 			} else if msg.Pres == nil && msg.Info == nil {
 				// Topic is unknown or offline.
@@ -238,9 +212,9 @@ func (h *Hub) run() {
 
 				// TODO(gene): validate topic name, discarding invalid topics
 
-				log.Printf("Hub. Topic[%s] is unknown or offline", msg.rcptto)
+				log.Printf("Hub. Topic[%s] is unknown or offline", msg.RcptTo)
 
-				msg.sess.queueOut(NoErrAccepted(msg.id, msg.rcptto, types.TimeNow()))
+				msg.sess.queueOut(NoErrAccepted(msg.Id, msg.RcptTo, types.TimeNow()))
 			}
 
 		case meta := <-h.meta:
@@ -250,7 +224,7 @@ func (h *Hub) run() {
 			} else {
 				// Metadata read or update from a user who is not attached to the topic.
 				if meta.pkt.Get != nil {
-					if meta.what == constMsgMetaDesc {
+					if meta.pkt.MetaWhat == constMsgMetaDesc {
 						go replyOfflineTopicGetDesc(meta.sess, meta.pkt)
 					} else {
 						go replyOfflineTopicGetSub(meta.sess, meta.pkt)
@@ -295,7 +269,7 @@ func (h *Hub) run() {
 				// Yes, 'sys' has migrated here. Initialize it.
 				// The h.join is unbuffered. We must call from another goroutine. Otherwise deadlock.
 				go func() {
-					h.join <- &sessionJoin{internal: true, pkt: &ClientComMessage{RcptTo: "sys", Original: "sys"}}
+					h.join <- &sessionJoin{pkt: &ClientComMessage{RcptTo: "sys", Original: "sys"}}
 				}()
 			}
 
@@ -398,10 +372,10 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 				statsInc("LiveTopics", -1)
 			} else {
 				// Case 1.1.2: requester is NOT the owner
+				msg.MetaWhat = constMsgDelTopic
 				t.meta <- &metaReq{
 					pkt:  msg,
-					sess: sess,
-					what: constMsgDelTopic}
+					sess: sess}
 			}
 
 		} else {
