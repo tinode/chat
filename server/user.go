@@ -588,6 +588,9 @@ func replyDelUser(s *Session, msg *ClientComMessage) {
 
 		// Terminate all sessions. Skip the current session so the requester gets a response.
 		globals.sessionStore.EvictUser(uid, s.sid)
+		// Remove user from cache
+		usersRemoveUser(uid)
+		// TODO: announce to cluster that the user is deleted.
 
 		// Stop topics where the user is the owner and p2p topics.
 		done := make(chan bool)
@@ -627,7 +630,13 @@ func replyDelUser(s *Session, msg *ClientComMessage) {
 
 	if s.uid == uid {
 		// Evict the current session if it belongs to the deleted user.
-		s.stop <- s.serialize(NoErrEvicted("", "", msg.timestamp))
+		evict := NoErrEvicted("", "", msg.timestamp)
+		evict.AsUser = uid.UserId()
+		if s.multi != nil {
+			s.multi.stop <- s.multi.serialize(evict)
+		} else {
+			s.stop <- s.serialize(evict)
+		}
 	}
 }
 
@@ -648,7 +657,8 @@ type UserCacheReq struct {
 	// Name of the node sending this request in case of cluster. Not set otherwise.
 	Node string
 
-	// UserId is set when count of unread messages is updated for a single user.
+	// UserId is set when count of unread messages is updated for a single user or
+	// when the user is being deleted.
 	UserId types.Uid
 	// UserIdList  is set when subscription count is updated for users of a topic.
 	UserIdList []types.Uid
@@ -657,6 +667,8 @@ type UserCacheReq struct {
 	// In case of set UserId: treat Unread count as an increment as opposite to the final value.
 	// In case of set UserIdList: intement (Inc == true) or decrement subscription count by one.
 	Inc bool
+	// User is being deleted, remove user from cache.
+	Gone bool
 
 	// Optional push notification
 	PushRcpt *push.Receipt
@@ -746,6 +758,7 @@ func usersPush(rcpt *push.Receipt) {
 }
 
 // Start tracking a single user. Used for cache management.
+// 'add' increments/decrements user's count of subscribed topics.
 func usersRegisterUser(uid types.Uid, add bool) {
 	if globals.usersUpdate == nil {
 		return
@@ -762,6 +775,26 @@ func usersRegisterUser(uid types.Uid, add bool) {
 		case globals.usersUpdate <- upd:
 		default:
 		}
+	}
+}
+
+// Stop tracking user and remove him from cache.
+func usersRemoveUser(uid types.Uid) {
+	if globals.usersUpdate == nil {
+		return
+	}
+
+	upd := &UserCacheReq{UserId: uid, Gone: true}
+	if !globals.cluster.isRemoteTopic(uid.UserId()) {
+		select {
+		case globals.usersUpdate <- upd:
+		default:
+		}
+	}
+
+	if globals.cluster != nil {
+		// Announce to cluster even if the user is local.
+		globals.cluster.routeUserReq(upd)
 	}
 }
 
@@ -897,7 +930,12 @@ func userUpdater() {
 					log.Println("ERROR: request to unregister user which has not been registered", uid)
 				}
 			}
+			continue
+		}
 
+		if upd.Gone {
+			// User is being deleted
+			delete(usersCache, upd.UserId)
 			continue
 		}
 

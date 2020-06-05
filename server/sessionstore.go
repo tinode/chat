@@ -155,10 +155,12 @@ func (ss *SessionStore) Shutdown() {
 
 	shutdown := NoErrShutdown(types.TimeNow())
 	for _, s := range ss.sessCache {
-		if s.stop != nil && s.proto != MULTIPLEX {
+		if !s.isMultiplex() {
 			s.stop <- s.serialize(shutdown)
 		}
 	}
+
+	// TODO: Consider broadcasting shutdown to other cluster nodes.
 
 	log.Printf("SessionStore shut down, sessions terminated: %d", len(ss.sessCache))
 }
@@ -168,9 +170,11 @@ func (ss *SessionStore) EvictUser(uid types.Uid, skipSid string) {
 	ss.lock.Lock()
 	defer ss.lock.Unlock()
 
+	// FIXME: this probably needs to be optimized. This may take very long time if the node hosts 100000 sessions.
 	evicted := NoErrEvicted("", "", types.TimeNow())
+	evicted.AsUser = uid.UserId()
 	for _, s := range ss.sessCache {
-		if s.uid == uid && s.stop != nil && s.sid != skipSid {
+		if s.uid == uid && !s.isMultiplex() && s.sid != skipSid {
 			s.stop <- s.serialize(evicted)
 			delete(ss.sessCache, s.sid)
 			if s.proto == LPOLL {
@@ -190,7 +194,7 @@ func (ss *SessionStore) NodeRestarted(nodeName string, fingerprint int64) {
 	defer ss.lock.Unlock()
 
 	for _, s := range ss.sessCache {
-		if s.proto != MULTIPLEX || s.clnode.name != nodeName {
+		if !s.isMultiplex() || s.clnode.name != nodeName {
 			continue
 		}
 		if s.clnode.fingerprint != fingerprint {
