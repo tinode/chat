@@ -627,15 +627,10 @@ func replyDelUser(s *Session, msg *ClientComMessage) {
 
 	s.queueOut(reply)
 
-	if s.uid == uid {
+	if s.uid == uid && s.multi == nil {
 		// Evict the current session if it belongs to the deleted user.
-		evict := NoErrEvicted("", "", msg.timestamp)
-		evict.AsUser = uid.UserId()
-		if s.multi != nil {
-			s.multi.stop <- s.multi.serialize(evict)
-		} else {
-			s.stop <- s.serialize(evict)
-		}
+		// No need to send it to multiplexing session: remote node will be notified separately.
+		s.stop <- s.serialize(NoErrEvicted("", "", msg.timestamp))
 	}
 }
 
