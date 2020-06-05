@@ -588,9 +588,8 @@ func replyDelUser(s *Session, msg *ClientComMessage) {
 
 		// Terminate all sessions. Skip the current session so the requester gets a response.
 		globals.sessionStore.EvictUser(uid, s.sid)
-		// Remove user from cache
+		// Remove user from cache and announce to cluster that the user is deleted.
 		usersRemoveUser(uid)
-		// TODO: announce to cluster that the user is deleted.
 
 		// Stop topics where the user is the owner and p2p topics.
 		done := make(chan bool)
