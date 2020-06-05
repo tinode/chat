@@ -934,7 +934,7 @@ func userUpdater() {
 		}
 
 		if upd.Gone {
-			// User is being deleted
+			// User is being deleted. Don't care if there is a record.
 			delete(usersCache, upd.UserId)
 			continue
 		}

@@ -1036,10 +1036,11 @@ func (sess *Session) clusterWriteLoop(forTopic string) {
 				// Terminating multiplexing session.
 				return
 			}
-			// A session of a remote user is being terminated.
-			// FIXME: not clear if it should be forwarded to proxy.
-			log.Println("clusterWriteLoop stop", msg.(*ServerComMessage),
-				"to", sess.clnode.endpoint, "from", sess.sid)
+
+			// There are two cases of msg != nil:
+			//  * user is being deleted
+			//  * node shutdown
+			// In both cases the msg does not need to be forwarded to the proxy.
 
 		case <-sess.detach:
 			return
