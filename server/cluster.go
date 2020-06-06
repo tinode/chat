@@ -251,7 +251,7 @@ func (n *ClusterNode) call(proc string, msg, resp interface{}) error {
 	}
 
 	if err := n.endpoint.Call(proc, msg, resp); err != nil {
-		log.Printf("cluster: call failed to '%s' [%s]", n.name, err)
+		log.Println("cluster: call failed", n.name, err)
 
 		n.lock.Lock()
 		if n.connected {
@@ -419,7 +419,6 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 
 	switch msg.ReqType {
 	case ProxyReqJoin:
-		log.Println("cluster: master subscription request", msid, sess.sid)
 		join := &sessionJoin{
 			pkt:  msg.CliMsg,
 			sess: sess,
@@ -428,30 +427,26 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 
 	case ProxyReqLeave:
 		if t := globals.hub.topicGet(msg.RcptTo); t != nil {
-			log.Println("cluster: leave req", msid, sess.sid)
 			t.unreg <- &sessionLeave{
 				pkt:  msg.CliMsg,
 				sess: sess,
 			}
 		} else {
-			log.Printf("cluster: leave request for unknown topic %s", msg.RcptTo)
+			log.Println("cluster: leave request for unknown topic", msg.RcptTo)
 		}
 
 	case ProxyReqMeta:
-		log.Println("cluster: meta request", msid, sess.sid, msg.CliMsg.MetaWhat)
 		if t := globals.hub.topicGet(msg.RcptTo); t != nil {
 			t.meta <- &metaReq{
 				pkt:  msg.CliMsg,
 				sess: sess,
 			}
 		} else {
-			log.Printf("cluster: meta request for unknown topic %s", msg.RcptTo)
+			log.Println("cluster: meta request for unknown topic", msg.RcptTo)
 		}
 
 	case ProxyReqBroadcast:
 		// sess could be nil
-		log.Println("cluster: master broadcast request at", globals.cluster.thisNodeName,
-			"from", msid, "sess is nil?", sess != nil)
 		msg.SrvMsg.sess = sess
 		globals.hub.route <- msg.SrvMsg
 
@@ -487,7 +482,7 @@ func (Cluster) TopicProxy(msg *ClusterResp, unused *bool) error {
 		msg.SrvMsg.uid = types.ParseUserId(msg.SrvMsg.AsUser)
 		t.proxy <- msg
 	} else {
-		log.Println("cluster: unknown topic name", msg.RcptTo)
+		log.Println("cluster: master response for unknown topic", msg.RcptTo)
 	}
 
 	return nil
@@ -525,6 +520,16 @@ func (c *Cluster) Route(msg *ClusterRoute, rejected *bool) error {
 
 // UserCacheUpdate endpoint receives updates to user's cached values as well as sends push notifications.
 func (c *Cluster) UserCacheUpdate(msg *UserCacheReq, rejected *bool) error {
+	if msg.Gone {
+		// User is deleted. Evict all user's sessions.
+		globals.sessionStore.EvictUser(msg.UserId, "")
+
+		if globals.cluster.isRemoteTopic(msg.UserId.UserId()) {
+			// No need to delete user's cache if user is remote.
+			return nil
+		}
+	}
+
 	usersRequestFromCluster(msg)
 	return nil
 }
@@ -554,7 +559,7 @@ func (c *Cluster) routeUserReq(req *UserCacheReq) error {
 			reqByNode[n.name] = r
 		}
 	} else if len(req.UserIdList) > 0 {
-		// Request to add/remove user from cache.
+		// Request to add/remove some users from cache.
 		for _, uid := range req.UserIdList {
 			n := c.nodeForTopic(uid.UserId())
 			if n == nil {
@@ -567,6 +572,12 @@ func (c *Cluster) routeUserReq(req *UserCacheReq) error {
 			r.UserIdList = append(r.UserIdList, uid)
 			reqByNode[n.name] = r
 		}
+	} else if req.Gone {
+		// Message that the user is deleted is sent to all nodes.
+		r := &UserCacheReq{Node: c.thisNodeName, UserIdList: req.UserIdList, Gone: true}
+		for _, n := range c.nodes {
+			reqByNode[n.name] = r
+		}
 	}
 
 	if len(reqByNode) > 0 {
@@ -575,7 +586,7 @@ func (c *Cluster) routeUserReq(req *UserCacheReq) error {
 			var rejected bool
 			err := n.call("Cluster.UserCacheUpdate", r, &rejected)
 			if rejected {
-				err = errors.New("cluster: master node out of sync")
+				err = errors.New("master node out of sync")
 			}
 			if err != nil {
 				return err
@@ -593,7 +604,7 @@ func (c *Cluster) routeUserReq(req *UserCacheReq) error {
 	var rejected bool
 	err := n.call("Cluster.UserCacheUpdate", req, &rejected)
 	if rejected {
-		err = errors.New("cluster: master node out of sync")
+		err = errors.New("master node out of sync")
 	}
 	return err
 }
@@ -631,7 +642,7 @@ func (c *Cluster) genLocalTopicName() string {
 		return topic
 	}
 
-	// FIXME: if cluster is large it may become too inefficient.
+	// TODO: if cluster is large it may become too inefficient.
 	for c.ring.Get(topic) != c.thisNodeName {
 		topic = genTopicName()
 	}
@@ -790,7 +801,7 @@ func clusterInit(configString json.RawMessage, self *string) int {
 
 	// This is a standalone server, not initializing
 	if len(configString) == 0 {
-		log.Println("Running as a standalone server.")
+		log.Println("Cluster: running as a standalone server.")
 		return 1
 	}
 
@@ -806,8 +817,7 @@ func clusterInit(configString json.RawMessage, self *string) int {
 
 	// Name of the current node is not specified - disable clustering
 	if thisName == "" {
-		log.Println("Running as a standalone server.")
-		return 1
+		log.Fatal("Cluster: name of the current node is not specified.")
 	}
 
 	gob.Register([]interface{}{})
@@ -840,7 +850,7 @@ func clusterInit(configString json.RawMessage, self *string) int {
 
 	if len(globals.cluster.nodes) == 0 {
 		// Cluster needs at least two nodes.
-		log.Fatal("Invalid cluster size: 1")
+		log.Fatal("Cluster: invalid cluster size: 1")
 	}
 
 	if !globals.cluster.failoverInit(config.Failover) {
@@ -857,7 +867,7 @@ func clusterInit(configString json.RawMessage, self *string) int {
 
 // Proxied session is being closed at the Master node
 func (sess *Session) closeRPC() {
-	if sess.proto == MULTIPLEX {
+	if sess.isMultiplex() {
 		log.Println("cluster: session proxy closed", sess.sid)
 	}
 }
@@ -890,7 +900,7 @@ func (c *Cluster) start() {
 
 	go rpc.Accept(c.inbound)
 
-	log.Printf("Cluster of %d nodes initialized, node '%s' listening on [%s]", len(globals.cluster.nodes)+1,
+	log.Printf("Cluster of %d nodes initialized, node '%s' is listening on [%s]", len(globals.cluster.nodes)+1,
 		globals.cluster.thisNodeName, c.listenOn)
 }
 
@@ -996,11 +1006,8 @@ func (sess *Session) clusterWriteLoop(forTopic string) {
 			srvMsg := msg.(*ServerComMessage)
 			response := &ClusterResp{SrvMsg: srvMsg}
 			if srvMsg.sess == nil {
-				log.Println("clusterWriteLoop: session is NIL, msg=", srvMsg.describe())
 				response.OrigSid = "*"
 			} else {
-				log.Println("clusterWriteLoop: session is present, msg=", srvMsg.describe())
-
 				response.OrigReqType = srvMsg.sess.proxyReq
 				response.OrigSid = srvMsg.sess.sid
 				srvMsg.AsUser = srvMsg.sess.uid.UserId()
@@ -1021,16 +1028,19 @@ func (sess *Session) clusterWriteLoop(forTopic string) {
 			response.RcptTo = forTopic
 
 			if err := sess.clnode.masterToProxy(response); err != nil {
-				log.Printf("cluster tp [%s]: sess.topicProxyWrite: %s", sess.sid, err.Error())
+				log.Printf("cluster master: write failed", sess.sid, err.Error())
 				return
 			}
 		case msg := <-sess.stop:
-			if msg != nil {
-				// FIXME: not clear if it should be forwarded to proxy.
-				log.Println("clusterWriteLoop stop", msg.(*ServerComMessage),
-					"to", sess.clnode.endpoint, "from", sess.sid)
+			if msg == nil {
+				// Terminating multiplexing session.
+				return
 			}
-			return
+
+			// There are two cases of msg != nil:
+			//  * user is being deleted
+			//  * node shutdown
+			// In both cases the msg does not need to be forwarded to the proxy.
 
 		case <-sess.detach:
 			return
