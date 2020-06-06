@@ -34,6 +34,7 @@ The client takes optional parameters:
  * `--api-key` web API key for file uploads; default `AQEAAAABAAD_rAp4DJh05a1HAwFT3A6K`
  * `--load-macros` path to a macro file.
  * `--verbose` log incoming and outgoing messages as JSON.
+ * `--background` start interactive session in background; non-interactive sessions are always started in background.
 
 If multiple `login-XYZ` are provided, `login-cookie` is considered first, then `login-token` then `login-basic`. Authentication with token (and cookie) is much faster than with the username-password pair.
 
