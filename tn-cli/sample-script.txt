@@ -5,7 +5,7 @@
 # The script performs the following:
 #
 #  - Creates a new user Test User
-#  - Uses fnd to locate user Alice
+#  - Uses 'fnd' topic to locate user Alice
 #  - Subscribes Test User to Alice
 #  - Sends typing notification to Alice
 #  - Sends a message to Alice

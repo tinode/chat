@@ -39,7 +39,7 @@ from tn_globals import stdoutln
 from tn_globals import to_json
 
 APP_NAME = "tn-cli"
-APP_VERSION = "1.4.1"
+APP_VERSION = "1.5.0"
 PROTOCOL_VERSION = "0"
 LIB_VERSION = pkg_resources.get_distribution("tinode_grpc").version
 GRPC_VERSION = pkg_resources.get_distribution("grpcio").version
@@ -290,11 +290,11 @@ def stdin(InputQueue):
 
 # Constructing individual messages
 # {hi}
-def hiMsg(id):
+def hiMsg(id, background):
     tn_globals.OnCompletion[str(id)] = lambda params: print_server_params(params)
     return pb.ClientMsg(hi=pb.ClientHi(id=str(id), user_agent=APP_NAME + "/" + APP_VERSION + " (" +
         platform.system() + "/" + platform.release() + "); gRPC-python/" + LIB_VERSION + "+" + GRPC_VERSION,
-        ver=LIB_VERSION, lang="EN"))
+        ver=LIB_VERSION, lang="EN", background=background))
 
 # {acc}
 def accMsg(id, cmd, ignored):
@@ -365,7 +365,7 @@ def subMsg(id, cmd, ignored):
                 default_acs=pb.DefaultAcsMode(auth=cmd.auth, anon=cmd.anon)),
             sub=pb.SetSub(mode=cmd.mode),
             tags=cmd.tags.split(",") if cmd.tags else None),
-        get_query=cmd.get_query, background=cmd.bkg), on_behalf_of=tn_globals.DefaultUser)
+        get_query=cmd.get_query), on_behalf_of=tn_globals.DefaultUser)
 
 # {leave}
 def leaveMsg(id, cmd, ignored):
@@ -606,7 +606,6 @@ def parse_cmd(parts):
         parser.add_argument('--mode', default=None, help='new value of access mode')
         parser.add_argument('--tags', default=None, help='tags for topic discovery, comma separated list without spaces')
         parser.add_argument('--get-query', default=None, help='query for topic metadata or messages, comma separated list without spaces')
-        parser.add_argument('--bkg', action='store_true', help='subscribe without immediate announcement of presence')
     elif parts[0] == "leave":
         parser = argparse.ArgumentParser(prog=parts[0], description='Detach or unsubscribe from topic')
         parser.add_argument('topic', nargs='?', default=argparse.SUPPRESS, help='topic to detach from')
@@ -832,7 +831,7 @@ def gen_message(scheme, secret, args):
     tn_globals.InputThread.daemon = True
     tn_globals.InputThread.start()
 
-    msg = hiMsg(id)
+    msg = hiMsg(id, args.background)
     if tn_globals.Verbose:
         stdoutln("\r=> " + to_json(msg))
     yield msg
@@ -1067,6 +1066,7 @@ if __name__ == '__main__':
     parser.add_argument('--load-macros', default='./macros.py', help='path to macro module to load')
     parser.add_argument('--version', action='store_true', help='print version')
     parser.add_argument('--verbose', action='store_true', help='log full JSON representation of all messages')
+    parser.add_argument('--background', action='store_const', const=True, help='start interactive sessionin background (non-intractive is always in background)')
 
     args = parser.parse_args()
 
@@ -1111,5 +1111,10 @@ if __name__ == '__main__':
     if args.load_macros:
         import importlib
         macros = importlib.import_module('macros', args.load_macros) if args.load_macros else None
+
+    # Check if background session is specified explicitly. If not set it to
+    # True for non-interactive sessions.
+    if args.background is None and not tn_globals.IsInteractive:
+        args.background = True
 
     run(args, schema, secret)
