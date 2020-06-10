@@ -815,9 +815,10 @@ func clusterInit(configString json.RawMessage, self *string) int {
 		thisName = config.ThisName
 	}
 
-	// Name of the current node is not specified - disable clustering
+	// Name of the current node is not specified: clustering disabled.
 	if thisName == "" {
-		log.Fatal("Cluster: name of the current node is not specified.")
+		log.Println("Cluster: running as a standalone server.")
+		return 1
 	}
 
 	gob.Register([]interface{}{})

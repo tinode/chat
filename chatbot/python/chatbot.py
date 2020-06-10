@@ -157,7 +157,7 @@ def client_generate():
         msg = queue_out.get()
         if msg == None:
             return
-        log("out:", to_json(msg)
+        log("out:", to_json(msg))
         yield msg
 
 def client_post(msg):
