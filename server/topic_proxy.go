@@ -200,31 +200,7 @@ func (t *Topic) proxyMasterResponse(msg *ClusterResp, killTimer *time.Timer) {
 	}
 }
 
-// proxyFanoutBroadcast broadcasts msg to all sessions attached to this topic.
-func (t *Topic) deprecated_proxyFanoutBroadcast(msg *ServerComMessage) {
-	for sess, pssd := range t.sessions {
-		if sess.sid == msg.SkipSid {
-			continue
-		}
-		if msg.Pres != nil {
-			if !t.passesPresenceFilters(msg, pssd.uid) {
-				continue
-			}
-		} else if msg.Data != nil {
-			if !t.userIsReader(pssd.uid) {
-				continue
-			}
-		}
-		t.maybeFixTopicName(msg, pssd.uid)
-		log.Printf("broadcast fanout [%s] to %s", t.name, sess.sid)
-		if !sess.queueOut(msg) {
-			log.Printf("topic[%s]: connection stuck, detaching", t.name)
-			t.unreg <- &sessionLeave{sess: sess}
-		}
-	}
-}
-
-// proxyCtrlBroadcast broadcasts a ctrl command to certain sessions attached to this topic.
+// proxyCtrlBroadcast broadcasts a ctrl command to certain sessions attached to this proxy topic.
 func (t *Topic) proxyCtrlBroadcast(msg *ServerComMessage) {
 	if msg.Ctrl.Code == http.StatusResetContent && msg.Ctrl.Text == "evicted" {
 		// We received a ctrl command for evicting a user.
@@ -232,7 +208,8 @@ func (t *Topic) proxyCtrlBroadcast(msg *ServerComMessage) {
 			log.Panicf("topic[%s]: proxy received evict message with empty uid", t.name)
 		}
 		for sess := range t.sessions {
-			if t.remSession(sess, msg.uid) != nil {
+			// Proxy topic may only have ordinary sessions. No multiplexing or proxy sessions here.
+			if _, removed := t.remSession(sess, msg.uid); removed {
 				sess.detach <- t.name
 				if sess.sid != msg.SkipSid {
 					sess.queueOut(msg)

@@ -463,7 +463,7 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 			}
 			t.supd <- su
 		} else {
-			log.Println("cluster: sesison update for unknown topic", msg.RcptTo, msg.ReqType)
+			log.Println("cluster: session update for unknown topic", msg.RcptTo, msg.ReqType)
 		}
 
 	default:
@@ -1014,14 +1014,14 @@ func (sess *Session) clusterWriteLoop(forTopic string) {
 				srvMsg.AsUser = srvMsg.sess.uid.UserId()
 
 				switch srvMsg.sess.proxyReq {
-				case ProxyReqJoin, ProxyReqLeave, ProxyReqMeta:
+				case ProxyReqJoin, ProxyReqLeave, ProxyReqMeta, ProxyReqBgSession:
 				// Do nothing
 				case ProxyReqBroadcast:
 					if srvMsg.Data != nil || srvMsg.Pres != nil || srvMsg.Info != nil {
 						response.OrigSid = "*"
 					}
 				default:
-					panic("cluster: unknown request type in clusterWriteLoop")
+					log.Panic("cluster: unknown request type in clusterWriteLoop ", srvMsg.sess.proxyReq)
 				}
 			}
 

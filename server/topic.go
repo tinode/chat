@@ -309,16 +309,6 @@ func (t *Topic) runLocal(hub *Hub) {
 				asUid = types.ParseUserId(leave.pkt.AsUser)
 			}
 
-			/*
-				FIXME: this should be handled through session update.
-
-				// Direct communication from proxy to master.
-				if msg.proxySessionCleanUp != nil {
-					t.fixUpUserCounts(msg.proxySessionCleanUp)
-				} else {
-					log.Panicf("topic[%s] unrecognized master topic service request: %+v", msg)
-				}
-			*/
 			if t.isInactive() {
 				if !asUid.IsZero() && leave.pkt != nil {
 					leave.sess.queueOut(ErrLocked(leave.pkt.Id, t.original(asUid), now))
@@ -332,7 +322,7 @@ func (t *Topic) runLocal(hub *Hub) {
 					log.Println("failed to unsub", err, leave.sess.sid)
 					continue
 				}
-			} else if pssd := t.remSession(leave.sess, asUid); pssd != nil || leave.sess.isProxy() {
+			} else if pssd, _ := t.remSession(leave.sess, asUid); pssd != nil {
 				// Just leaving the topic without unsubscribing.
 
 				var uid types.Uid
@@ -344,15 +334,16 @@ func (t *Topic) runLocal(hub *Hub) {
 					uid = pssd.uid
 				}
 
-				// uid may be zero when a proxy session is trying to terminate (it called unsubAll).
 				var pud perUserData
+				// uid may be zero when a proxy session is trying to terminate (it called unsubAll).
 				if !uid.IsZero() {
+					// UID not zero: one user removed.
 					pud = t.perUser[uid]
 					if !leave.sess.background {
 						pud.online--
 					}
 				} else if len(pssd.muids) > 0 {
-					// Multiplexing session is dropped.
+					// UID is zero: multiplexing session is dropped alltogether.
 					// Using new 'uid' and 'pud' variables.
 					for _, uid := range pssd.muids {
 						pud := t.perUser[uid]
@@ -409,12 +400,11 @@ func (t *Topic) runLocal(hub *Hub) {
 
 				if !uid.IsZero() {
 					t.perUser[uid] = pud
-				}
 
-				// Respond if either the request contains an id
-				// or a proxy session is responding to a client request without an id.
-				if leave.pkt != nil && (!uid.IsZero() || leave.sess.isCluster()) {
-					leave.sess.queueOut(NoErr(leave.pkt.Id, t.original(uid), now))
+					// Respond if contains an id.
+					if leave.pkt != nil {
+						leave.sess.queueOut(NoErr(leave.pkt.Id, t.original(uid), now))
+					}
 				}
 			}
 
@@ -932,34 +922,36 @@ func (t *Topic) handleBroadcast(msg *ServerComMessage) {
 			log.Println("sending to session", "sess_proxy=", sess.isProxy(), "multi=", sess.isMultiplex(),
 				"sid=", sess.sid, "skipsid=", msg.SkipSid, "subs_uid=", pssd.uid)
 		}
-		if !sess.isMultiplex() { // Send all messages to multiplexing session.
+
+		// Send all messages to multiplexing session.
+		if !sess.isMultiplex() {
+
 			if sess.sid == msg.SkipSid {
-				log.Println("sending to session, skipped due to SID")
+				log.Println("not sending to session, skipped due to SID")
 				continue
 			}
 
 			if msg.Pres != nil {
 				// Skip notifying - already notified on topic.
-				// Don't check multiplexing sessions.
 				if msg.Pres.SkipTopic != "" && sess.getSub(msg.Pres.SkipTopic) != nil {
-					log.Println("sending to session, skipped due to being subscribed to topic")
+					log.Println("not sending to session, skipped due to being subscribed to topic")
 					continue
 				}
 
 				// Notification addressed to a single user only.
 				if msg.Pres.SingleUser != "" && pssd.uid.UserId() != msg.Pres.SingleUser {
-					log.Println("sending to session, skipped due to single user mismatch")
+					log.Println("not sending to session, skipped due to single user mismatch")
 					continue
 				}
 				// Notification should skip a single user.
 				if msg.Pres.ExcludeUser != "" && pssd.uid.UserId() == msg.Pres.ExcludeUser {
-					log.Println("sending to session, skipped due to excluding user filter")
+					log.Println("not sending to session, skipped due to excluding user filter")
 					continue
 				}
 
 				// Check presence filters
 				if !t.passesPresenceFilters(msg, pssd.uid) {
-					log.Println("sending to session, skipped due to failed filter")
+					log.Println("not sending to session, skipped due to failed filter")
 					continue
 				}
 
@@ -2616,7 +2608,7 @@ func (t *Topic) evictUser(uid types.Uid, unsub bool, skip string) {
 	msg.SkipSid = skip
 	msg.uid = uid
 	for s := range t.sessions {
-		if removed := t.remSession(s, uid) != nil; s.isMultiplex() || removed {
+		if pssd, removed := t.remSession(s, uid); pssd != nil {
 			if removed {
 				s.detach <- t.name
 			}
@@ -3026,27 +3018,33 @@ func (t *Topic) addSession(sess *Session, asUid types.Uid) {
 // * 's' is a multiplexing session and it's being dropped all together ('asUid' is zero ).
 // If 's' is a multiplexing session and asUid is not zero, it's removed from the list of session
 // users 'muids'.
-func (t *Topic) remSession(sess *Session, asUid types.Uid) *perSessionData {
+// Returns perSessionData if it was found and true if session was actually detached from topic.
+func (t *Topic) remSession(sess *Session, asUid types.Uid) (*perSessionData, bool) {
 	s := sess
 	if sess.multi != nil {
 		s = s.multi
 	}
 	pssd, ok := t.sessions[s]
-	if ok {
-		if pssd.uid == asUid || asUid.IsZero() {
-			delete(t.sessions, s)
-			return &pssd
-		}
-		for i := range pssd.muids {
-			if pssd.muids[i] == asUid {
-				pssd.muids[i] = pssd.muids[len(pssd.muids)-1]
-				pssd.muids = pssd.muids[:len(pssd.muids)-1]
-				t.sessions[s] = pssd
-				break
-			}
+	if !ok {
+		// Session not found at all.
+		return nil, false
+	}
+
+	if pssd.uid == asUid || asUid.IsZero() {
+		delete(t.sessions, s)
+		return &pssd, true
+	}
+
+	for i := range pssd.muids {
+		if pssd.muids[i] == asUid {
+			pssd.muids[i] = pssd.muids[len(pssd.muids)-1]
+			pssd.muids = pssd.muids[:len(pssd.muids)-1]
+			t.sessions[s] = pssd
+			return &pssd, false
 		}
 	}
-	return nil
+
+	return nil, false
 }
 
 // Check if topic has any online (non-background) users.
