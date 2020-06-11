@@ -30,7 +30,8 @@ const (
 type ProxyReqType int
 
 const (
-	ProxyReqJoin ProxyReqType = iota + 1
+	ProxyReqNone ProxyReqType = iota
+	ProxyReqJoin
 	ProxyReqLeave
 	ProxyReqMeta
 	ProxyReqBroadcast
@@ -1014,14 +1015,16 @@ func (sess *Session) clusterWriteLoop(forTopic string) {
 				srvMsg.AsUser = srvMsg.sess.uid.UserId()
 
 				switch srvMsg.sess.proxyReq {
-				case ProxyReqJoin, ProxyReqLeave, ProxyReqMeta, ProxyReqBgSession:
+				case ProxyReqJoin, ProxyReqLeave, ProxyReqMeta, ProxyReqBgSession, ProxyReqMeUserAgent:
 				// Do nothing
 				case ProxyReqBroadcast:
 					if srvMsg.Data != nil || srvMsg.Pres != nil || srvMsg.Info != nil {
 						response.OrigSid = "*"
 					}
+				case ProxyReqNone:
+					log.Println("cluster: request type not set in clusterWriteLoop")
 				default:
-					log.Panic("cluster: unknown request type in clusterWriteLoop ", srvMsg.sess.proxyReq)
+					log.Panicln("cluster: unknown request type in clusterWriteLoop", srvMsg.sess.proxyReq)
 				}
 			}
 
