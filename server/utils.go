@@ -20,11 +20,13 @@ import (
 
 	"github.com/tinode/chat/server/auth"
 	"github.com/tinode/chat/server/store/types"
+	"github.com/ttacon/libphonenumber"
 
 	"golang.org/x/crypto/acme/autocert"
 )
 
 var tagPrefixRegexp = regexp.MustCompile(`^([a-z]\w{0,5}):\S`)
+var emailRegexp = regexp.MustCompile("^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$")
 
 const nullValue = "\u2421"
 
@@ -397,6 +399,41 @@ func versionToString(vers int) string {
 	return str
 }
 
+// rewriteToken attempts to match the original token
+// against the email, telephone number or login patterns.
+// On success, prepends the token with the corresponding prefix.
+func rewriteToken(orig string) string {
+	if orig == "" || strings.HasPrefix(orig, "basic:") ||
+			strings.HasPrefix(orig, "email:") || strings.HasPrefix(orig, "tel:") {
+		return orig
+	}
+	// Is it email?
+	if emailRegexp.MatchString(orig) {
+		return "email:" + orig
+	}
+	// TODO: pass region as a param.
+	if num, err := libphonenumber.Parse(orig, "US"); err == nil {
+		// It's a phone number.
+		return "tel:" + libphonenumber.Format(num, libphonenumber.E164)
+	}
+	// Does it look like a username/login?
+	runes := []rune(orig)
+	if len(runes) >= 3 && unicode.IsLetter(runes[0]) {
+		// Check if the remaining chars are letters or digits.
+		ok := true
+		for i := 1; i < len(runes); i++ {
+			if !unicode.IsLetter(runes[i]) && !unicode.IsDigit(runes[i]) {
+				ok = false
+				break
+			}
+		}
+		if ok {
+			return "basic:" + orig
+		}
+	}
+	return orig
+}
+
 // Parser for search queries. The query may contain non-ASCII
 // characters, i.e. length of string in bytes != length of string in runes.
 // Returns AND tags (all must be present in every result), OR tags (one or more present), error.
@@ -522,7 +559,9 @@ func parseSearchQuery(query string) ([]string, []string, error) {
 			}
 			// Add token if non-empty.
 			if start < end {
-				out = append(out, token{val: query[start:end], op: op})
+				tok := rewriteToken(query[start:end])
+				out = append(out, token{val: tok, op: op})
+				// TODO: if the rewrite did happen, add the original token as an OR.
 			}
 			ctx.start = i
 			ctx.preOp = ctx.postOp
