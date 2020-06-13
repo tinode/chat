@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/mail"
 	"path/filepath"
 	"reflect"
 	"regexp"
@@ -20,13 +21,12 @@ import (
 
 	"github.com/tinode/chat/server/auth"
 	"github.com/tinode/chat/server/store/types"
-	"github.com/ttacon/libphonenumber"
+	"github.com/nyaruka/phonenumbers"
 
 	"golang.org/x/crypto/acme/autocert"
 )
 
 var tagPrefixRegexp = regexp.MustCompile(`^([a-z]\w{0,5}):\S`)
-var emailRegexp = regexp.MustCompile("^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$")
 
 const nullValue = "\u2421"
 
@@ -403,20 +403,25 @@ func versionToString(vers int) string {
 // against the email, telephone number or login patterns.
 // On success, prepends the token with the corresponding prefix.
 func rewriteToken(orig string) string {
-	if orig == "" || strings.HasPrefix(orig, "basic:") ||
-			strings.HasPrefix(orig, "email:") || strings.HasPrefix(orig, "tel:") {
+	if orig == "" || tagPrefixRegexp.MatchString(orig) {
+		// It either empty or already has a prefix. E.g. basic:alice.
 		return orig
 	}
 	// Is it email?
-	if emailRegexp.MatchString(orig) {
+	if r, err := mail.ParseAddress(orig); err == nil && r.Address == orig {
 		return "email:" + orig
 	}
 	// TODO: pass region as a param.
-	if num, err := libphonenumber.Parse(orig, "US"); err == nil {
+	// 1. As provided by the client (e.g. as specified or inferred
+	//    from client's phone number or location).
+	// 2. Use value from .conf file.
+	// 3. Fallback to US as a last resort.
+	if num, err := phonenumbers.Parse(orig, "US"); err == nil {
 		// It's a phone number.
-		return "tel:" + libphonenumber.Format(num, libphonenumber.E164)
+		return "tel:" + phonenumbers.Format(num, phonenumbers.E164)
 	}
 	// Does it look like a username/login?
+	// TODO: use configured authenticators to check if orig may a valid user name.
 	runes := []rune(orig)
 	if len(runes) >= 3 && unicode.IsLetter(runes[0]) {
 		// Check if the remaining chars are letters or digits.
