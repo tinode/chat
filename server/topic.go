@@ -756,7 +756,7 @@ func (t *Topic) sendSubNotifications(asUid types.Uid, sid, userAgent string) {
 
 // handleBroadcast fans out broadcastable messages to recepients in topic and proxy_topic.
 func (t *Topic) handleBroadcast(msg *ServerComMessage) {
-	log.Println("topic: handleBroadcast, node=", globals.cluster.thisNodeName,
+	log.Println("topic: handleBroadcast, node=",
 		"topic=", t.name, "isProxy=", t.isProxy, "sub_count=", t.subsCount(), "msg=", msg.describe())
 
 	asUid := types.ParseUserId(msg.AsUser)

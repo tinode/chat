@@ -150,12 +150,15 @@ func (t *Topic) proxyMasterResponse(msg *ClusterResp, killTimer *time.Timer) {
 		log.Println("topic_proxy: session response", msg.OrigSid, msg.SrvMsg.AsUser)
 
 		sess := globals.sessionStore.Get(msg.OrigSid)
+		if sess == nil {
+			log.Println("topic_proxy: session not found; already terminated?")
+		}
 		switch msg.OrigReqType {
 		case ProxyReqJoin:
-			if sess == nil {
-				// FIXME: if session is gone, let the master topic know.
-				log.Println("topic_proxy: session not found; already terminated?")
-			} else if msg.SrvMsg.Ctrl != nil {
+			if sess != nil && msg.SrvMsg.Ctrl != nil {
+				// TODO: do we need to let the master topic know that the subscription is not longer valid
+				// or is it already informed by the session when it terminated?
+
 				// Subscription result.
 				if msg.SrvMsg.Ctrl.Code < 300 {
 					log.Println("topic_proxy: subscription: adding session to topic",
@@ -194,7 +197,8 @@ func (t *Topic) proxyMasterResponse(msg *ClusterResp, killTimer *time.Timer) {
 			log.Printf("proxy topic [%s] received response referencing unexpected request type %d",
 				t.name, msg.OrigReqType)
 		}
-		if !sess.queueOut(msg.SrvMsg) {
+
+		if sess != nil && !sess.queueOut(msg.SrvMsg) {
 			log.Println("topic proxy: timeout")
 		}
 	}
