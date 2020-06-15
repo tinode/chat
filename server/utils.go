@@ -27,6 +27,7 @@ import (
 )
 
 var tagPrefixRegexp = regexp.MustCompile(`^([a-z]\w{0,5}):\S`)
+var alnumPrefixRegexp = regexp.MustCompile(`^[[:alnum:]]+:\S`)
 
 const nullValue = "\u2421"
 
@@ -403,7 +404,7 @@ func versionToString(vers int) string {
 // against the email, telephone number or login patterns.
 // On success, prepends the token with the corresponding prefix.
 func rewriteToken(orig string) string {
-	if orig == "" || tagPrefixRegexp.MatchString(orig) {
+	if orig == "" || alnumPrefixRegexp.MatchString(orig) {
 		// It either empty or already has a prefix. E.g. basic:alice.
 		return orig
 	}
