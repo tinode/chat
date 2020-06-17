@@ -162,7 +162,7 @@ func (ss *SessionStore) Shutdown() {
 
 	// TODO: Consider broadcasting shutdown to other cluster nodes.
 
-	log.Printf("SessionStore shut down, sessions terminated: %d", len(ss.sessCache))
+	log.Println("SessionStore shut down, sessions terminated:", len(ss.sessCache))
 }
 
 // EvictUser terminates all sessions of a given user.

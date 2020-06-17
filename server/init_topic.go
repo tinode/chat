@@ -105,7 +105,6 @@ func topicInit(t *Topic, join *sessionJoin, h *Hub) {
 	usersRegisterTopic(t, true)
 
 	// Topic will check access rights, send invite to p2p user, send {ctrl} message to the initiator session
-	log.Println("topic_init: initialized proxy=", t.isProxy, t.name)
 	if join.pkt.Sub != nil {
 		t.reg <- join
 	}
