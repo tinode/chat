@@ -206,7 +206,6 @@ func (t *Topic) getPerUserAcs(uid types.Uid) (types.AccessMode, types.AccessMode
 // depending on per-user want and given acls for the provided `uid`.
 func (t *Topic) passesPresenceFilters(msg *ServerComMessage, uid types.Uid) bool {
 	modeWant, modeGiven := t.getPerUserAcs(uid)
-	log.Println("passesPresenceFilters", modeWant.String(), modeGiven.String())
 	// "gone" and "acs" notifications are sent even if the topic is muted.
 	return ((modeGiven & modeWant).IsPresencer() || msg.Pres.What == "gone" || msg.Pres.What == "acs") &&
 		(msg.Pres.FilterIn == 0 || int(modeGiven&modeWant)&msg.Pres.FilterIn != 0) &&
@@ -286,7 +285,6 @@ func (t *Topic) runLocal(hub *Hub) {
 				// while processing the call
 				killTimer.Stop()
 				if err := t.handleSubscription(hub, join); err == nil {
-					log.Println("topic: handleSubscription success", join.pkt.Sub)
 					if join.pkt.Sub.Created {
 						// Call plugins with the new topic
 						pluginTopic(t, plgActCreate)
@@ -756,9 +754,6 @@ func (t *Topic) sendSubNotifications(asUid types.Uid, sid, userAgent string) {
 
 // handleBroadcast fans out broadcastable messages to recepients in topic and proxy_topic.
 func (t *Topic) handleBroadcast(msg *ServerComMessage) {
-	log.Println("topic: handleBroadcast, node=",
-		"topic=", t.name, "isProxy=", t.isProxy, "sub_count=", t.subsCount(), "msg=", msg.describe())
-
 	asUid := types.ParseUserId(msg.AsUser)
 	if t.isInactive() {
 		// Ignore broadcast - topic is paused or being deleted.
@@ -911,47 +906,33 @@ func (t *Topic) handleBroadcast(msg *ServerComMessage) {
 		log.Panic("topic: wrong message type for broadcasting", t.name)
 	}
 
-	if t.isProxy && msg.Info != nil {
-		log.Println("proxy got info=", msg.Info.describe())
-	}
-
 	// Broadcast the message. Only {data}, {pres}, {info} are broadcastable.
 	// {meta} and {ctrl} are sent to the session only
 	for sess, pssd := range t.sessions {
-		if t.isProxy {
-			log.Println("sending to session", "sess_proxy=", sess.isProxy(), "multi=", sess.isMultiplex(),
-				"sid=", sess.sid, "skipsid=", msg.SkipSid, "subs_uid=", pssd.uid)
-		}
-
 		// Send all messages to multiplexing session.
 		if !sess.isMultiplex() {
 
 			if sess.sid == msg.SkipSid {
-				log.Println("not sending to session, skipped due to SID")
 				continue
 			}
 
 			if msg.Pres != nil {
 				// Skip notifying - already notified on topic.
 				if msg.Pres.SkipTopic != "" && sess.getSub(msg.Pres.SkipTopic) != nil {
-					log.Println("not sending to session, skipped due to being subscribed to topic")
 					continue
 				}
 
 				// Notification addressed to a single user only.
 				if msg.Pres.SingleUser != "" && pssd.uid.UserId() != msg.Pres.SingleUser {
-					log.Println("not sending to session, skipped due to single user mismatch")
 					continue
 				}
 				// Notification should skip a single user.
 				if msg.Pres.ExcludeUser != "" && pssd.uid.UserId() == msg.Pres.ExcludeUser {
-					log.Println("not sending to session, skipped due to excluding user filter")
 					continue
 				}
 
 				// Check presence filters
 				if !t.passesPresenceFilters(msg, pssd.uid) {
-					log.Println("not sending to session, skipped due to failed filter")
 					continue
 				}
 
@@ -970,7 +951,6 @@ func (t *Topic) handleBroadcast(msg *ServerComMessage) {
 
 		// Topic name may be different depending on the user to which the `sess` belongs.
 		t.maybeFixTopicName(msg, pssd.uid)
-		log.Println("sending to session, queueOut, msg=", msg.describe())
 		if !sess.queueOut(msg) {
 			log.Println("topic: connection stuck, detaching", t.name, sess.sid)
 			// The whole session is being dropped, so sessionLeave.pkt is not set.
@@ -1233,7 +1213,6 @@ func (t *Topic) thisUserSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.L
 		if modeWant == types.ModeUnset {
 			// If the user has self-banned before, un-self-ban. Otherwise do not make a change.
 			if !oldWant.IsJoiner() {
-				log.Println("No J permissions before")
 				// Set permissions NO WORSE than default, but possibly better (admin or owner banned himself).
 				userData.modeWant = userData.modeGiven | t.accessFor(asLvl)
 			}
@@ -1529,9 +1508,7 @@ func (t *Topic) replyGetDesc(sess *Session, asUid types.Uid, id string, opts *Ms
 	}
 
 	pud, full := t.perUser[asUid]
-	if t.cat == types.TopicCatP2P && !full {
-		log.Println("missing p2p subscription in getDesc")
-	}
+
 	if t.cat == types.TopicCatMe {
 		full = true
 	}
