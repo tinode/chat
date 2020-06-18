@@ -66,16 +66,22 @@ When you register a new account you are asked for an email address to send valid
 
 ### Supported
 
-* [Android](https://github.com/tinode/tindroid/), [iOS](https://github.com/tinode/ios), [web](https://github.com/tinode/webapp/), and [command line](tn-cli/) clients.
+* Multiple platforms:
+ * [Android](https://github.com/tinode/tindroid/)
+ * [iOS](https://github.com/tinode/ios)
+ * [web](https://github.com/tinode/webapp/)
+ * [command line](tn-cli/) clients.
 * One-on-one messaging.
 * Group messaging with every member's access permissions managed individually. The maximum number of members is configurable (128 by default).
-* Topic access control with permissions for various actions.
-* Server-generated presence notifications for people, topics.
+* Flexible access control with permissions for various actions.
+* Server-generated presence notifications for people, group conversations.
 * Support for custom authentication backends.
 * Sharded clustering with failover.
-* Persistent message store, paginated message history.
-* Javascript bindings with no external dependencies.
-* Java bindings (dependencies: [Jackson](https://github.com/FasterXML/jackson), [Java-Websocket](https://github.com/TooTallNate/Java-WebSocket)). Suitable for Android but with no Android SDK dependencies.
+* Bindings for various programming languages:
+ * Javascript with no external dependencies.
+ * Java with dependencies on [Jackson](https://github.com/FasterXML/jackson) and [Java-Websocket](https://github.com/TooTallNate/Java-WebSocket)). Suitable for Android but with no Android SDK dependencies.
+ * Swift with dependency on [SwiftWebSocket](https://github.com/tidwall/SwiftWebSocket).
+ * Nine other languages using [gRPC](https://grpc.io/docs/languages/).
 * Websocket, long polling, and [gRPC](https://grpc.io/) over TCP or Unix sockets.
 * JSON or [protobuf version 3](https://developers.google.com/protocol-buffers/) wire protocols.
 * Optional built-in [TLS](https://en.wikipedia.org/wiki/Transport_Layer_Security) with [Letsencrypt](https://letsencrypt.org/) or conventional certificates.
@@ -95,13 +101,13 @@ When you register a new account you are asked for an email address to send valid
 
 * [Federation](https://en.wikipedia.org/wiki/Federation_(information_technology)).
 * End to end encryption with [OTR](https://en.wikipedia.org/wiki/Off-the-Record_Messaging) for one-on-one messaging and undecided method for group messaging.
-* Group messaging with an unlimited number (or hundreds of thousands) of members with bearer token access control.
+* Channels with an unlimited number (or hundreds of thousands) of members with bearer token access control.
 * Hot standby.
 * Different levels of message persistence (from strict persistence to "store until delivered" to purely ephemeral messaging).
 
 ### Translations
 
-All client software has support for internationalization. Translations are provided for English, Simplified Chinese, Russian (except iOS). More translations are welcome. Particularly interested in Spanish, Arabic, German, Persian, Indonesian, Portuguese, Hindi, Bengali.
+All client software has support for internationalization. Translations are provided for English, Simplified Chinese, Russian (except iOS), Spanish, Korean (except iOS). More translations are welcome. Particularly interested in Arabic, German, Persian, Indonesian, Portuguese, Hindi, Bengali.
 
 ## Third-Party Licenses
 
