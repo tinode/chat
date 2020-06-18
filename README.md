@@ -67,10 +67,10 @@ When you register a new account you are asked for an email address to send valid
 ### Supported
 
 * Multiple platforms:
- * [Android](https://github.com/tinode/tindroid/)
- * [iOS](https://github.com/tinode/ios)
- * [web](https://github.com/tinode/webapp/)
- * [command line](tn-cli/) clients.
+  * [Android](https://github.com/tinode/tindroid/)
+  * [iOS](https://github.com/tinode/ios)
+  * [web](https://github.com/tinode/webapp/)
+  * [command line](tn-cli/) clients.
 * One-on-one messaging.
 * Group messaging with every member's access permissions managed individually. The maximum number of members is configurable (128 by default).
 * Flexible access control with permissions for various actions.
@@ -78,10 +78,10 @@ When you register a new account you are asked for an email address to send valid
 * Support for custom authentication backends.
 * Sharded clustering with failover.
 * Bindings for various programming languages:
- * Javascript with no external dependencies.
- * Java with dependencies on [Jackson](https://github.com/FasterXML/jackson) and [Java-Websocket](https://github.com/TooTallNate/Java-WebSocket)). Suitable for Android but with no Android SDK dependencies.
- * Swift with dependency on [SwiftWebSocket](https://github.com/tidwall/SwiftWebSocket).
- * Nine other languages using [gRPC](https://grpc.io/docs/languages/).
+  * Javascript with no external dependencies.
+  * Java with dependencies on [Jackson](https://github.com/FasterXML/jackson) and [Java-Websocket](https://github.com/TooTallNate/Java-WebSocket)). Suitable for Android but with no Android SDK dependencies.
+  * Swift with dependency on [SwiftWebSocket](https://github.com/tidwall/SwiftWebSocket).
+  * Nine other languages using [gRPC](https://grpc.io/docs/languages/).
 * Websocket, long polling, and [gRPC](https://grpc.io/) over TCP or Unix sockets.
 * JSON or [protobuf version 3](https://developers.google.com/protocol-buffers/) wire protocols.
 * Optional built-in [TLS](https://en.wikipedia.org/wiki/Transport_Layer_Security) with [Letsencrypt](https://letsencrypt.org/) or conventional certificates.
