@@ -1686,10 +1686,14 @@ func (a *adapter) SubsDelForUser(user t.Uid, hard bool) error {
 }
 
 // Search
-func (a *adapter) getFindPipeline(req, opt []string) (map[string]struct{}, b.A) {
+func (a *adapter) getFindPipeline(req [][]string, opt []string) (map[string]struct{}, b.A) {
+	var allReq []string
+	for _, el := range req {
+		allReq = append(allReq, el...)
+	}
 	index := make(map[string]struct{})
 	var allTags []interface{}
-	for _, tag := range append(req, opt...) {
+	for _, tag := range append(allReq, opt...) {
 		allTags = append(allTags, tag)
 		index[tag] = struct{}{}
 	}
@@ -1719,22 +1723,24 @@ func (a *adapter) getFindPipeline(req, opt []string) (map[string]struct{}, b.A) 
 		b.M{"$sort": b.M{"matchedTagsCount": -1}},
 	}
 
-	if len(req) > 0 {
-		var reqTags []interface{}
-		for _, tag := range req {
-			reqTags = append(reqTags, tag)
-		}
+	if len(allReq) > 0 {
+		for _, l := range req {
+			var reqTags []interface{}
+			for _, tag := range l {
+				reqTags = append(reqTags, tag)
+			}
 
-		// Filter out documents where 'tags' intersection with 'reqTags' is an empty array
-		pipeline = append(pipeline,
-			b.M{"$match": b.M{"$expr": b.M{"$ne": b.A{b.M{"$size": b.M{"$setIntersection": b.A{"$tags", reqTags}}}, 0}}}})
+			// Filter out documents where 'tags' intersection with 'reqTags' is an empty array
+			pipeline = append(pipeline,
+				b.M{"$match": b.M{"$expr": b.M{"$ne": b.A{b.M{"$size": b.M{"$setIntersection": b.A{"$tags", reqTags}}}, 0}}}})
+		}
 	}
 
 	return index, append(pipeline, b.M{"$limit": a.maxResults})
 }
 
 // FindUsers searches for new contacts given a list of tags
-func (a *adapter) FindUsers(uid t.Uid, req, opt []string) ([]t.Subscription, error) {
+func (a *adapter) FindUsers(uid t.Uid, req [][]string, opt []string) ([]t.Subscription, error) {
 	index, pipeline := a.getFindPipeline(req, opt)
 	cur, err := a.db.Collection("users").Aggregate(a.ctx, pipeline)
 	if err != nil {
@@ -1772,7 +1778,7 @@ func (a *adapter) FindUsers(uid t.Uid, req, opt []string) ([]t.Subscription, err
 }
 
 // FindTopics searches for group topics given a list of tags
-func (a *adapter) FindTopics(req, opt []string) ([]t.Subscription, error) {
+func (a *adapter) FindTopics(req [][]string, opt []string) ([]t.Subscription, error) {
 	index, pipeline := a.getFindPipeline(req, opt)
 	cur, err := a.db.Collection("topics").Aggregate(a.ctx, pipeline)
 	if err != nil {

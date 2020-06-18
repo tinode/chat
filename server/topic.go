@@ -1791,11 +1791,16 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 		if query, ok := raw.(string); ok && len(query) > 0 {
 			query, subs, err = pluginFind(asUid, query)
 			if err == nil && subs == nil && query != "" {
-				var req, opt []string
+				var req [][]string
+				var opt []string
 				if req, opt, err = parseSearchQuery(query); err == nil {
 					if len(req) > 0 || len(opt) > 0 {
 						// Check if the query contains terms that the user is not allowed to use.
-						restr, _ := stringSliceDelta(t.tags, filterRestrictedTags(append(req, opt...),
+						var allReq []string
+						for _, l := range req {
+							allReq = append(allReq, l...)
+						}
+						restr, _ := stringSliceDelta(t.tags, filterRestrictedTags(append(allReq, opt...),
 							globals.maskedTagNS))
 
 						if len(restr) > 0 {

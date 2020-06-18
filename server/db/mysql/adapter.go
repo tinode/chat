@@ -1857,25 +1857,40 @@ func (a *adapter) SubsDelForUser(user t.Uid, hard bool) error {
 
 // Returns a list of users who match given tags, such as "email:jdoe@example.com" or "tel:+18003287448".
 // Searching the 'users.Tags' for the given tags using respective index.
-func (a *adapter) FindUsers(uid t.Uid, req, opt []string) ([]t.Subscription, error) {
+func (a *adapter) FindUsers(uid t.Uid, req [][]string, opt []string) ([]t.Subscription, error) {
 	index := make(map[string]struct{})
 	var args []interface{}
 	args = append(args, t.StateOK)
-	for _, tag := range append(req, opt...) {
+	var allReq []string
+	for _, el := range req {
+		allReq = append(allReq, el...)
+	}
+	for _, tag := range append(allReq, opt...) {
 		args = append(args, tag)
 		index[tag] = struct{}{}
 	}
 
 	query := "SELECT u.id,u.createdat,u.updatedat,u.access,u.public,u.tags,COUNT(*) AS matches " +
 		"FROM users AS u LEFT JOIN usertags AS t ON t.userid=u.id " +
-		"WHERE u.state=? AND t.tag IN (?" + strings.Repeat(",?", len(req)+len(opt)-1) + ") " +
+		"WHERE u.state=? AND t.tag IN (?" + strings.Repeat(",?", len(allReq)+len(opt)-1) + ") " +
 		"GROUP BY u.id,u.createdat,u.updatedat,u.public,u.tags "
-	if len(req) > 0 {
-		query += "HAVING COUNT(t.tag IN (?" + strings.Repeat(",?", len(req)-1) + ") OR NULL)>=? "
-		for _, tag := range req {
-			args = append(args, tag)
+	if len(allReq) > 0 {
+		query += "HAVING"
+		first := true
+		for _, reqDisjunction := range req {
+			if len(reqDisjunction) > 0 {
+				if !first {
+					query += " AND"
+				} else {
+					first = false
+				}
+				// At least one of the tags must be present.
+				query += " COUNT(t.tag IN (?" + strings.Repeat(",?", len(reqDisjunction)-1) + ") OR NULL)>=1 "
+				for _, tag := range reqDisjunction {
+					args = append(args, tag)
+				}
+			}
 		}
-		args = append(args, len(req))
 	}
 	query += "ORDER BY matches DESC LIMIT ?"
 
@@ -1924,25 +1939,40 @@ func (a *adapter) FindUsers(uid t.Uid, req, opt []string) ([]t.Subscription, err
 
 // Returns a list of topics with matching tags.
 // Searching the 'topics.Tags' for the given tags using respective index.
-func (a *adapter) FindTopics(req, opt []string) ([]t.Subscription, error) {
+func (a *adapter) FindTopics(req [][]string, opt []string) ([]t.Subscription, error) {
 	index := make(map[string]struct{})
 	var args []interface{}
 	args = append(args, t.StateOK)
-	for _, tag := range append(req, opt...) {
+	var allReq []string
+	for _, el := range req {
+		allReq = append(allReq, el...)
+	}
+	for _, tag := range append(allReq, opt...) {
 		args = append(args, tag)
 		index[tag] = struct{}{}
 	}
 
 	query := "SELECT t.name AS topic,t.createdat,t.updatedat,t.access,t.public,t.tags,COUNT(*) AS matches " +
 		"FROM topics AS t LEFT JOIN topictags AS tt ON t.name=tt.topic " +
-		"WHERE t.state=? AND tt.tag IN (?" + strings.Repeat(",?", len(req)+len(opt)-1) + ") " +
+		"WHERE t.state=? AND tt.tag IN (?" + strings.Repeat(",?", len(allReq)+len(opt)-1) + ") " +
 		"GROUP BY t.name,t.createdat,t.updatedat,t.public,t.tags "
-	if len(req) > 0 {
-		query += "HAVING COUNT(tt.tag IN (?" + strings.Repeat(",?", len(req)-1) + ") OR NULL)>=? "
-		for _, tag := range append(req) {
-			args = append(args, tag)
+	if len(allReq) > 0 {
+		query += "HAVING"
+		first := true
+		for _, reqDisjunction := range req {
+			if len(reqDisjunction) > 0 {
+				if !first {
+					query += " AND"
+				} else {
+					first = false
+				}
+				// At least one of the tags must be present.
+				query += " COUNT(tt.tag IN (?" + strings.Repeat(",?", len(reqDisjunction)-1) + ") OR NULL)>=1 "
+				for _, tag := range reqDisjunction {
+					args = append(args, tag)
+				}
+			}
 		}
-		args = append(args, len(req))
 	}
 	query += "ORDER BY matches DESC LIMIT ?"
 	rows, err := a.db.Queryx(query, append(args, a.maxResults)...)

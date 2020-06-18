@@ -442,8 +442,9 @@ func rewriteToken(orig string) string {
 
 // Parser for search queries. The query may contain non-ASCII
 // characters, i.e. length of string in bytes != length of string in runes.
-// Returns AND tags (all must be present in every result), OR tags (one or more present), error.
-func parseSearchQuery(query string) ([]string, []string, error) {
+// Returns AND of ORs of tags (at least one of each sublist must be present in every result),
+// OR tags (one or more present), error.
+func parseSearchQuery(query string) ([][]string, []string, error) {
 	const (
 		NONE = iota
 		QUO
@@ -455,6 +456,7 @@ func parseSearchQuery(query string) ([]string, []string, error) {
 	type token struct {
 		op  int
 		val string
+		rewrittenVal string
 	}
 	type context struct {
 		// Pre-token operand
@@ -565,9 +567,13 @@ func parseSearchQuery(query string) ([]string, []string, error) {
 			}
 			// Add token if non-empty.
 			if start < end {
-				tok := rewriteToken(query[start:end])
-				out = append(out, token{val: tok, op: op})
-				// TODO: if the rewrite did happen, add the original token as an OR.
+				original := query[start:end]
+				rewritten := rewriteToken(original)
+				t := token{val: original, op: op}
+				if rewritten != original {
+					t.rewrittenVal = rewritten
+				}
+				out = append(out, t)
 			}
 			ctx.start = i
 			ctx.preOp = ctx.postOp
@@ -583,13 +589,22 @@ func parseSearchQuery(query string) ([]string, []string, error) {
 	}
 
 	// Convert tokens to two string slices.
-	var and, or []string
+	var and [][]string
+	var or []string
 	for _, t := range out {
 		switch t.op {
 		case AND:
-			and = append(and, t.val)
+			var terms []string
+			terms = append(terms, t.val)
+			if len(t.rewrittenVal) > 0 {
+				terms = append(terms, t.rewrittenVal)
+			}
+			and = append(and, terms)
 		case OR:
 			or = append(or, t.val)
+			if len(t.rewrittenVal) > 0 {
+				or = append(or, t.rewrittenVal)
+			}
 		}
 	}
 	return and, or, nil
