@@ -4,7 +4,7 @@
 
 Tinode는 XMPP/ Jabber 가 아닙니다. Tinode는 XMPP와 호환되지 않습니다. XMPP를 대체하기 위한 것입니다. 표면적으로는 오픈소스 WhatsApp 또는 Telegram과 매우 유사합니다.
 
-버전 0.16은 베타 급 소프트웨어입니다. 기능은 완전하지만 몇 가지 버그가 있습니다. 아래 클라우드 서비스 중 하나를 설치 및 실행하거나 사용하려면 [지시사항](INSTALL.md)을 따르십시오. [API 설명서](docs/API.md)를 읽으십시오. 
+버전 0.16은 베타 급 소프트웨어입니다. 기능은 완전하지만 몇 가지 버그가 있습니다. 아래 클라우드 서비스 중 하나를 설치 및 실행하거나 사용하려면 [지시사항](INSTALL.md)을 따르십시오. [API 설명서](docs/API.md)를 읽으십시오.
 
 <a href="https://apps.apple.com/us/app/tinode/id1483763538"><img src="docs/app-store.svg" height=36></a> <a href="https://play.google.com/store/apps/details?id=co.tinode.tindroidx"><img src="docs/play-store.svg" height=36></a> <a href="https://web.tinode.co/"><img src="docs/web-app.svg" height=36></a>
 
@@ -122,7 +122,7 @@ alice, bob, carol, dave, frank 중 하나로 로그인할 수 있습니다. 비�
 ### [iOS](https://github.com/tinode/ios)
 
 <p align="center">
-<img src="docs/ios-contacts.png" alt="iOS screenshot: list of chats" width=207 /> <img src="docs/ios-chat.png" alt="iOS screenshot: one conversation" width=207 /> <img src="docs/ios-account.png" alt="iOS screenshot: account settings" width="207" />
+<img src="docs/ios-contacts.png" alt="iOS screenshot: list of chats" width=207 /> <img src="docs/ios-chat.png" alt="iOS screenshot: one conversation" width=207 /> <img src="docs/ios-acc-personal.png" alt="iOS screenshot: account settings" width="207" />
 </p>
 
 ### [데스크탑 웹](https://github.com/tinode/webapp/)
