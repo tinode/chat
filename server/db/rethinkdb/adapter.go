@@ -1501,10 +1501,7 @@ func (a *adapter) SubsDelForUser(user t.Uid, hard bool) error {
 // Searching the 'users.Tags' for the given tags using respective index.
 func (a *adapter) FindUsers(uid t.Uid, req [][]string, opt []string) ([]t.Subscription, error) {
 	index := make(map[string]struct{})
-	var allReq []string
-	for _, el := range req {
-		allReq = append(allReq, el...)
-	}
+	allReq := t.FlattenDoubleSlice(req)
 	var allTags []interface{}
 	for _, tag := range append(allReq, opt...) {
 		allTags = append(allTags, tag)
@@ -1538,16 +1535,14 @@ func (a *adapter) FindUsers(uid t.Uid, req [][]string, opt []string) ([]t.Subscr
 				Merge(map[string]interface{}{"MatchedTagsCount": row.Field("reduction").Count()})
 		})
 
-	if len(allReq) > 0 {
-		for _, l := range req {
-			var reqTags []interface{}
-			for _, tag := range l {
-				reqTags = append(reqTags, tag)
-			}
-			query = query.Filter(func(row rdb.Term) rdb.Term {
-				return row.Field("Tags").SetIntersection(reqTags).Count().Ne(0)
-			})
+	for _, l := range req {
+		var reqTags []interface{}
+		for _, tag := range l {
+			reqTags = append(reqTags, tag)
 		}
+		query = query.Filter(func(row rdb.Term) rdb.Term {
+			return row.Field("Tags").SetIntersection(reqTags).Count().Ne(0)
+		})
 	}
 	cursor, err := query.OrderBy(rdb.Desc("MatchedTagsCount")).Limit(a.maxResults).Run(a.conn)
 	if err != nil {

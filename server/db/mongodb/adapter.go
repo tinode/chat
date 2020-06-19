@@ -1687,10 +1687,7 @@ func (a *adapter) SubsDelForUser(user t.Uid, hard bool) error {
 
 // Search
 func (a *adapter) getFindPipeline(req [][]string, opt []string) (map[string]struct{}, b.A) {
-	var allReq []string
-	for _, el := range req {
-		allReq = append(allReq, el...)
-	}
+	allReq := t.FlattenDoubleSlice(req)
 	index := make(map[string]struct{})
 	var allTags []interface{}
 	for _, tag := range append(allReq, opt...) {
@@ -1723,17 +1720,15 @@ func (a *adapter) getFindPipeline(req [][]string, opt []string) (map[string]stru
 		b.M{"$sort": b.M{"matchedTagsCount": -1}},
 	}
 
-	if len(allReq) > 0 {
-		for _, l := range req {
-			var reqTags []interface{}
-			for _, tag := range l {
-				reqTags = append(reqTags, tag)
-			}
-
-			// Filter out documents where 'tags' intersection with 'reqTags' is an empty array
-			pipeline = append(pipeline,
-				b.M{"$match": b.M{"$expr": b.M{"$ne": b.A{b.M{"$size": b.M{"$setIntersection": b.A{"$tags", reqTags}}}, 0}}}})
+	for _, l := range req {
+		var reqTags []interface{}
+		for _, tag := range l {
+			reqTags = append(reqTags, tag)
 		}
+
+		// Filter out documents where 'tags' intersection with 'reqTags' is an empty array
+		pipeline = append(pipeline,
+			b.M{"$match": b.M{"$expr": b.M{"$ne": b.A{b.M{"$size": b.M{"$setIntersection": b.A{"$tags", reqTags}}}, 0}}}})
 	}
 
 	return index, append(pipeline, b.M{"$limit": a.maxResults})

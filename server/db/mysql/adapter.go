@@ -1861,10 +1861,7 @@ func (a *adapter) FindUsers(uid t.Uid, req [][]string, opt []string) ([]t.Subscr
 	index := make(map[string]struct{})
 	var args []interface{}
 	args = append(args, t.StateOK)
-	var allReq []string
-	for _, el := range req {
-		allReq = append(allReq, el...)
-	}
+	allReq := t.FlattenDoubleSlice(req)
 	for _, tag := range append(allReq, opt...) {
 		args = append(args, tag)
 		index[tag] = struct{}{}

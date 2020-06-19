@@ -1796,10 +1796,7 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 				if req, opt, err = parseSearchQuery(query); err == nil {
 					if len(req) > 0 || len(opt) > 0 {
 						// Check if the query contains terms that the user is not allowed to use.
-						var allReq []string
-						for _, l := range req {
-							allReq = append(allReq, l...)
-						}
+						allReq := types.FlattenDoubleSlice(req)
 						restr, _ := stringSliceDelta(t.tags, filterRestrictedTags(append(allReq, opt...),
 							globals.maskedTagNS))
 
