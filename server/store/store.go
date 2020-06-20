@@ -341,7 +341,10 @@ func (UsersObjMapper) GetSubs(id types.Uid, opts *types.QueryOpt) ([]types.Subsc
 }
 
 // FindSubs find a list of users and topics for the given tags. Results are formatted as subscriptions.
-func (UsersObjMapper) FindSubs(id types.Uid, required, optional []string) ([]types.Subscription, error) {
+// `required` specifies an AND of ORs for required terms:
+// at least one element of every sublist in `required` must be present in the object's tags list.
+// `optional` specifies a list of optional terms.
+func (UsersObjMapper) FindSubs(id types.Uid, required [][]string, optional []string) ([]types.Subscription, error) {
 	usubs, err := adp.FindUsers(id, required, optional)
 	if err != nil {
 		return nil, err
