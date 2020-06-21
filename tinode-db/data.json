@@ -84,7 +84,7 @@
    "passhash": "frank123",
    "private": {"comment": "things, not stuff"},
    "public": {"fn": "Frank Singer"},
-   "state": "susp",
+   "state": "ok",
    "status": "singing!",
    "username": "frank",
    "addressBook": ["email:bob@example.com", "email:carol@example.com", "email:dave@example.com",
