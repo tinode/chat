@@ -434,7 +434,6 @@ def setMsg(id, cmd, ignored):
             stdoutln('Warning: multiple credentials specified. Will use only the first one.')
         cred = cred[0]
 
-    print('seting cred', cred)
     return pb.ClientMsg(set=pb.ClientSet(id=str(id), topic=cmd.topic,
         query=pb.SetQuery(
             desc=pb.SetDesc(default_acs=pb.DefaultAcsMode(auth=cmd.auth, anon=cmd.anon),

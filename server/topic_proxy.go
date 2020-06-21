@@ -59,7 +59,6 @@ func (t *Topic) runProxy(hub *Hub) {
 
 		case msg := <-t.broadcast:
 			// Content message intended for broadcasting to recipients
-			log.Printf("node[%s] tproxy[%s] broadcast msg=%s", globals.cluster.thisNodeName, t.name, msg.describe())
 			if err := globals.cluster.routeToTopicMaster(ProxyReqBroadcast, msg, t.name, msg.sess); err != nil {
 				log.Println("proxy topic: route broadcast request from proxy to master failed:", err)
 			}
