@@ -1793,7 +1793,7 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 			if err == nil && subs == nil && query != "" {
 				var req [][]string
 				var opt []string
-				if req, opt, err = parseSearchQuery(query); err == nil {
+				if req, opt, err = parseSearchQuery(query, sess.countryCode); err == nil {
 					if len(req) > 0 || len(opt) > 0 {
 						// Check if the query contains terms that the user is not allowed to use.
 						allReq := types.FlattenDoubleSlice(req)

@@ -99,6 +99,10 @@ const (
 
 	// Local path to static content
 	defaultStaticPath = "static"
+
+	// Default country code to fall back to if the "default_country_code" field
+	// isn't specified in the config.
+	defaultCountryCode = "US"
 )
 
 // Build version number defined by the compiler:
@@ -166,6 +170,9 @@ var globals struct {
 
 	// Prioritise X-Forwarded-For header as the source of IP address of the client.
 	useXForwardedFor bool
+
+	// Country code to assign to sessions by default.
+	defaultCountryCode string
 }
 
 type validatorConfig struct {
@@ -229,6 +236,9 @@ type configType struct {
 	// Take IP address of the client from HTTP header 'X-Forwarded-For'.
 	// Useful when tinode is behind a proxy. If missing, fallback to default RemoteAddr.
 	UseXForwardedFor bool `json:"use_x_forwarded_for"`
+	// 2-letter country code to assign to sessions by default when the country isn't specified
+	// by the client explicitly and it's impossible to infer it.
+	DefaultCountryCode string `json:"default_country_code"`
 
 	// Configs for subsystems
 	Cluster   json.RawMessage             `json:"cluster_config"`
@@ -468,6 +478,10 @@ func main() {
 	}
 
 	globals.useXForwardedFor = config.UseXForwardedFor
+	globals.defaultCountryCode = config.DefaultCountryCode
+	if globals.defaultCountryCode == "" {
+		globals.defaultCountryCode = defaultCountryCode
+	}
 
 	if config.Media != nil {
 		if config.Media.UseHandler == "" {
