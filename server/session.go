@@ -641,6 +641,11 @@ func (s *Session) hello(msg *ClientComMessage) {
 		}
 	}
 	if s.countryCode == "" {
+		if len(s.lang) > 2 {
+			// Logging strings longer than 2 b/c language.Parse(XX) always succeeds
+			// returning confidence Low.
+			log.Println("s.hello:", "could not parse locale ", s.lang)
+		}
 		s.countryCode = globals.defaultCountryCode
 	}
 

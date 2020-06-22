@@ -236,8 +236,9 @@ type configType struct {
 	// Take IP address of the client from HTTP header 'X-Forwarded-For'.
 	// Useful when tinode is behind a proxy. If missing, fallback to default RemoteAddr.
 	UseXForwardedFor bool `json:"use_x_forwarded_for"`
-	// 2-letter country code to assign to sessions by default when the country isn't specified
-	// by the client explicitly and it's impossible to infer it.
+	// 2-letter country code (ISO 3166-1 alpha-2) to assign to sessions by default
+	// when the country isn't specified by the client explicitly and
+	// it's impossible to infer it.
 	DefaultCountryCode string `json:"default_country_code"`
 
 	// Configs for subsystems
