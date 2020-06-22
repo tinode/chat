@@ -116,7 +116,9 @@ alice, bob, carol, dave, frank 중 하나로 로그인할 수 있습니다. 비�
 ### [안드로이드](https://github.com/tinode/tindroid/)
 
 <p align="center">
-<img src="docs/android-contacts.png" alt="Android screenshot: list of chats" width=270 /> <img src="docs/android-chat.png" alt="Android screenshot: one conversation" width=270 />
+<img src="docs/android-contacts.png" alt="Android screenshot: list of chats" width=270 />
+<img src="docs/android-chat.png" alt="Android screenshot: one conversation" width=270 />
+<img src="docs/android-account.png" alt="Android screenshot: account settings" width=270 />
 </p>
 
 ### [iOS](https://github.com/tinode/ios)

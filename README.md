@@ -121,7 +121,9 @@ All client software has support for internationalization. Translations are provi
 ### [Android](https://github.com/tinode/tindroid/)
 
 <p align="center">
-<img src="docs/android-contacts.png" alt="Android screenshot: list of chats" width=270 /> <img src="docs/android-chat.png" alt="Android screenshot: one conversation" width=270 />
+<img src="docs/android-contacts.png" alt="Android screenshot: list of chats" width=270 />
+<img src="docs/android-chat.png" alt="Android screenshot: one conversation" width=270 />
+<img src="docs/android-account.png" alt="Android screenshot: account settings" width=270 />
 </p>
 
 ### [iOS](https://github.com/tinode/ios)
