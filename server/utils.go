@@ -403,7 +403,7 @@ func versionToString(vers int) string {
 // rewriteToken attempts to match the original token
 // against the email, telephone number or login patterns.
 // On success, prepends the token with the corresponding prefix.
-func rewriteToken(orig string) string {
+func rewriteToken(orig, countryCode string) string {
 	if orig == "" || alnumPrefixRegexp.MatchString(orig) {
 		// It either empty or already has a prefix. E.g. basic:alice.
 		return orig
@@ -417,7 +417,7 @@ func rewriteToken(orig string) string {
 	//    from client's phone number or location).
 	// 2. Use value from .conf file.
 	// 3. Fallback to US as a last resort.
-	if num, err := phonenumbers.Parse(orig, "US"); err == nil {
+	if num, err := phonenumbers.Parse(orig, countryCode); err == nil {
 		// It's a phone number.
 		return "tel:" + phonenumbers.Format(num, phonenumbers.E164)
 	}
@@ -444,7 +444,7 @@ func rewriteToken(orig string) string {
 // characters, i.e. length of string in bytes != length of string in runes.
 // Returns AND of ORs of tags (at least one of each sublist must be present in every result),
 // OR tags (one or more present), error.
-func parseSearchQuery(query string) ([][]string, []string, error) {
+func parseSearchQuery(query, countryCode string) ([][]string, []string, error) {
 	const (
 		NONE = iota
 		QUO
@@ -568,7 +568,7 @@ func parseSearchQuery(query string) ([][]string, []string, error) {
 			// Add token if non-empty.
 			if start < end {
 				original := query[start:end]
-				rewritten := rewriteToken(original)
+				rewritten := rewriteToken(original, countryCode)
 				t := token{val: original, op: op}
 				if rewritten != original {
 					t.rewrittenVal = rewritten

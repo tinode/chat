@@ -23,6 +23,8 @@ import (
 	"github.com/tinode/chat/server/auth"
 	"github.com/tinode/chat/server/store"
 	"github.com/tinode/chat/server/store/types"
+
+	"golang.org/x/text/language"
 )
 
 // Wait time before abandoning the outbound send operation.
@@ -95,6 +97,8 @@ type Session struct {
 	platf string
 	// Human language of the client
 	lang string
+	// Country code of the client
+	countryCode string
 
 	// ID of the current user. Could be zero if session is not authenticated
 	// or for multiplexing sessions.
@@ -630,6 +634,20 @@ func (s *Session) hello(msg *ClientComMessage) {
 	}
 	s.deviceID = msg.Hi.DeviceID
 	s.lang = msg.Hi.Lang
+	// Try to deduce the country from the locale.
+	if tag, err := language.Parse(s.lang); err == nil {
+		if region, conf := tag.Region(); region.IsCountry() && conf >= language.High {
+			s.countryCode = region.String()
+		}
+	}
+	if s.countryCode == "" {
+		if len(s.lang) > 2 {
+			// Logging strings longer than 2 b/c language.Parse(XX) always succeeds
+			// returning confidence Low.
+			log.Println("s.hello:", "could not parse locale ", s.lang)
+		}
+		s.countryCode = globals.defaultCountryCode
+	}
 
 	var httpStatus int
 	var httpStatusText string
