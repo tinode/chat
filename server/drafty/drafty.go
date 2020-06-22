@@ -169,7 +169,7 @@ func formatter(tp string, data map[string]interface{}, value string) string {
 	case "ST", "EM", "DL", "CO":
 		return tags[tp].dec + value + tags[tp].dec
 	case "LN":
-		url := data["url"].(string)
+		url, _ := data["url"].(string)
 		if url != value {
 			return "[" + value + "](" + url + ")"
 		}
