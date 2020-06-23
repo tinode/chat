@@ -141,7 +141,7 @@ All client software has support for internationalization. Translations are provi
 ### [Mobile Web](https://github.com/tinode/webapp/)
 
 <p align="center">
-  <kbd><img src="docs/web-mob-contacts-1.png" alt="Mobile web: contacts" width=333 /></kbd> <kbd><img src="docs/web-mob-chat-1.png" alt="Mobile web: chat" width=333 /></kbd> <kbd><img src="docs/web-mob-info-1.png" alt="Mobile web: topic info" width=333 /></kbd> <kbd><img src="docs/web-mob-new-chat-1.png" alt="Mobile web: start new 1:1 chat" width=333 /></kbd>
+  <img src="docs/web-mob-contacts-1.png" alt="Mobile web: contacts" width=333 /> <img src="docs/web-mob-chat-1.png" alt="Mobile web: chat" width=333 /> <img src="docs/web-mob-info-1.png" alt="Mobile web: topic info" width=333 /> <img src="docs/web-mob-new-chat-1.png" alt="Mobile web: start new 1:1 chat" width=333 />
 </p>
 
 
