@@ -39,20 +39,22 @@ const deferredNotificationsTimeout = time.Second * 5
 
 var minSupportedVersionValue = parseVersion(minSupportedVersion)
 
-// Wire transport
+// SessionProto is the type of the wire transport.
 type SessionProto int
 
+// Constants defining individual types of wire transports.
 const (
+	// NONE is undefined/not set.
 	NONE SessionProto = iota
-	// Websocket connection
+	// WEBSOCK represents websocket connection.
 	WEBSOCK
-	// Long polling connection
+	// LPOLL represents a long polling connection.
 	LPOLL
-	// gRPC connection
+	// GRPC is a gRPC connection
 	GRPC
-	// Temporary session used as a proxy at master node.
+	// PROXY is temporary session used as a proxy at master node.
 	PROXY
-	// Multiplexing session reprsenting a connection from proxy topic to master.
+	// MULTIPLEX is a multiplexing session reprsenting a connection from proxy topic to master.
 	MULTIPLEX
 )
 

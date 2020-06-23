@@ -29,6 +29,7 @@ const (
 // ProxyReqType is the type of proxy requests.
 type ProxyReqType int
 
+// Individual request types
 const (
 	ProxyReqNone ProxyReqType = iota
 	ProxyReqJoin
@@ -113,7 +114,7 @@ type ClusterSess struct {
 	Background bool
 }
 
-// ClusterSessionUpdate represents a request to update a session.
+// ClusterSessUpdate represents a request to update a session.
 // User Agent change or background session comes to foreground.
 type ClusterSessUpdate struct {
 	// User this session represents.
