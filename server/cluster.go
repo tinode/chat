@@ -1018,12 +1018,13 @@ func (sess *Session) clusterWriteLoop(forTopic string) {
 				switch srvMsg.sess.proxyReq {
 				case ProxyReqJoin, ProxyReqLeave, ProxyReqMeta, ProxyReqBgSession, ProxyReqMeUserAgent:
 				// Do nothing
-				case ProxyReqBroadcast:
+				case ProxyReqBroadcast, ProxyReqNone:
 					if srvMsg.Data != nil || srvMsg.Pres != nil || srvMsg.Info != nil {
 						response.OrigSid = "*"
+					} else {
+						log.Println("cluster: request type not set in clusterWriteLoop", sess.sid,
+							srvMsg.describe(), "src_sid:", srvMsg.sess.sid)
 					}
-				case ProxyReqNone:
-					log.Println("cluster: request type not set in clusterWriteLoop")
 				default:
 					log.Panicln("cluster: unknown request type in clusterWriteLoop", srvMsg.sess.proxyReq)
 				}
