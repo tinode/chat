@@ -930,11 +930,11 @@ func (s *Session) set(msg *ClientComMessage) {
 		log.Println("s.set: nil Set action")
 	} else if sub := s.getSub(msg.RcptTo); sub != nil {
 		sub.meta <- meta
-	} else if meta.pkt.MetaWhat&constMsgMetaTags != 0 {
-		log.Println("s.set: can Set tags for subscribed topics only")
+	} else if meta.pkt.MetaWhat&(constMsgMetaTags|constMsgMetaCred) != 0 {
+		log.Println("s.set: can Set tags/creds for subscribed topics only", meta.pkt.MetaWhat)
 		s.queueOut(ErrPermissionDenied(msg.Id, msg.Original, msg.timestamp))
 	} else {
-		// Some minor updates are possible without the subscription.
+		// Desc.Private and Sub updates are possible without the subscription.
 		globals.hub.meta <- meta
 	}
 }
