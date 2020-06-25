@@ -107,7 +107,7 @@ When you register a new account you are asked for an email address to send valid
 
 ### Translations
 
-All client software has support for internationalization. Translations are provided for English, Simplified Chinese, Russian (except iOS), Spanish, Korean (except iOS). More translations are welcome. Particularly interested in Arabic, German, Persian, Indonesian, Portuguese, Hindi, Bengali.
+All client software has support for internationalization. Translations are provided for English, Simplified Chinese, Russian (except iOS), Spanish, Korean (except iOS). More translations are welcome. Particularly interested in Arabic, Vietnamese, German, Persian, Indonesian, Portuguese, Hindi, Bengali.
 
 ## Third-Party Licenses
 
