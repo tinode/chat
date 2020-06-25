@@ -196,10 +196,9 @@ func (t *Topic) getPerUserAcs(uid types.Uid) (types.AccessMode, types.AccessMode
 	if uid.IsZero() {
 		// For zero uids (typically for proxy sessions), return the union of all permissions.
 		return t.modeWantUnion, t.modeGivenUnion
-	} else {
-		pud := t.perUser[uid]
-		return pud.modeWant, pud.modeGiven
 	}
+	pud := t.perUser[uid]
+	return pud.modeWant, pud.modeGiven
 }
 
 // passesPresenceFilters applies presence filters to `msg`
@@ -341,7 +340,7 @@ func (t *Topic) runLocal(hub *Hub) {
 						pud.online--
 					}
 				} else if len(pssd.muids) > 0 {
-					// UID is zero: multiplexing session is dropped alltogether.
+					// UID is zero: multiplexing session is dropped altogether.
 					// Using new 'uid' and 'pud' variables.
 					for _, uid := range pssd.muids {
 						pud := t.perUser[uid]
@@ -752,7 +751,7 @@ func (t *Topic) sendSubNotifications(asUid types.Uid, sid, userAgent string) {
 	}
 }
 
-// handleBroadcast fans out broadcastable messages to recepients in topic and proxy_topic.
+// handleBroadcast fans out broadcastable messages to recipients in topic and proxy_topic.
 func (t *Topic) handleBroadcast(msg *ServerComMessage) {
 	asUid := types.ParseUserId(msg.AsUser)
 	if t.isInactive() {

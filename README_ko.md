@@ -130,13 +130,13 @@ alice, bob, carol, dave, frank 중 하나로 로그인할 수 있습니다. 비�
 ### [데스크탑 웹](https://github.com/tinode/webapp/)
 
 <p align="center">
-  <img src="docs/web-desktop-2.png" alt="Desktop web: full app" width=866 />
+  <img src="docs/web-desktop-2.png" alt="Desktop web: full app" width=810 />
 </p>
 
 ### [모바일 웹](https://github.com/tinode/webapp/)
 
 <p align="center">
-  <kbd><img src="docs/web-mob-contacts-1.png" alt="Mobile web: contacts" width=323 /></kbd> <kbd><img src="docs/web-mob-chat-1.png" alt="Mobile web: chat" width=323 /></kbd> <kbd><img src="docs/web-mob-info-1.png" alt="Mobile web: topic info" width=323 /></kbd> <kbd><img src="docs/web-mob-new-chat-1.png" alt="Mobile web: start new 1:1 chat" width=323 /></kbd>
+  <img src="docs/web-mob-contacts-1.png" alt="Mobile web: contacts" width=250 /> <img src="docs/web-mob-chat-1.png" alt="Mobile web: chat" width=250 /> <img src="docs/web-mob-info-1.png" alt="Mobile web: topic info" width=250 />
 </p>
 
 

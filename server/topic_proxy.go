@@ -65,7 +65,6 @@ func (t *Topic) runProxy(hub *Hub) {
 
 		case meta := <-t.meta:
 			// Request to get/set topic metadata
-			log.Printf("t[%s] meta %+v", t.name, meta)
 			if err := globals.cluster.routeToTopicMaster(ProxyReqMeta, meta.pkt, t.name, meta.sess); err != nil {
 				log.Println("proxy topic: route meta request from proxy to master failed:", err)
 			}

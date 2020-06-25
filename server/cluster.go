@@ -29,6 +29,7 @@ const (
 // ProxyReqType is the type of proxy requests.
 type ProxyReqType int
 
+// Individual request types
 const (
 	ProxyReqNone ProxyReqType = iota
 	ProxyReqJoin
@@ -115,7 +116,7 @@ type ClusterSess struct {
 	Background bool
 }
 
-// ClusterSessionUpdate represents a request to update a session.
+// ClusterSessUpdate represents a request to update a session.
 // User Agent change or background session comes to foreground.
 type ClusterSessUpdate struct {
 	// User this session represents.
@@ -1021,12 +1022,13 @@ func (sess *Session) clusterWriteLoop(forTopic string) {
 				switch srvMsg.sess.proxyReq {
 				case ProxyReqJoin, ProxyReqLeave, ProxyReqMeta, ProxyReqBgSession, ProxyReqMeUserAgent:
 				// Do nothing
-				case ProxyReqBroadcast:
+				case ProxyReqBroadcast, ProxyReqNone:
 					if srvMsg.Data != nil || srvMsg.Pres != nil || srvMsg.Info != nil {
 						response.OrigSid = "*"
+					} else {
+						log.Println("cluster: request type not set in clusterWriteLoop", sess.sid,
+							srvMsg.describe(), "src_sid:", srvMsg.sess.sid)
 					}
-				case ProxyReqNone:
-					log.Println("cluster: request type not set in clusterWriteLoop")
 				default:
 					log.Panicln("cluster: unknown request type in clusterWriteLoop", srvMsg.sess.proxyReq)
 				}
