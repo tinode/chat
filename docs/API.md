@@ -23,6 +23,7 @@
 		- [`fnd` and Tags: Finding Users and Topics](#fnd-and-tags-finding-users-and-topics)
 			- [Query Language](#query-language)
 			- [Incremental Updates to Queries](#incremental-updates-to-queries)
+			- [Query Rewrite](#query-rewrite)
 			- [Possible Use Cases](#possible-use-cases)
 		- [Peer to Peer Topics](#peer-to-peer-topics)
 		- [Group Topics](#group-topics)
@@ -337,9 +338,9 @@ Message `{get what="data"}` to `me` is rejected.
 
 Topic `fnd` is automatically created for every user at the account creation time. It serves as an endpoint for discovering other users and group topics.
 
-Users and group topics can be discovered by optional `tags`. Tags are optionally assigned at the topic or user creation time then can be updated by using `{set what="tags"}` against a `fnd` or a group topic.
+Users and group topics can be discovered by optional `tags`. Tags are optionally assigned at the topic or user creation time then can be updated by using `{set what="tags"}` against a `me` or a group topic.
 
-A tag is an arbitrary case-insensitive Unicode string (forced to lowercase) starting with a Unicode letter or digit. `Tags` must not contain the double quote `"`, `\u0022` but may contain spaces. `Tags` may have a prefix which serves as a namespace. The prefix is a string followed by a colon `:`, ex. prefixed phone tag `tel:14155551212` or prefixed email tag `email:alice@example.com`. Some prefixed `tags` are optionally enforced to be unique. In that case only one user or topic may have such a tag. Certain `tags` may be forced to be immutable to the user, i.e. user's attempts to add or remove an immutable tag will be rejected by the server.
+A tag is an arbitrary case-insensitive Unicode string (forced to lowercase) starting with a Unicode letter or digit. `Tags` must not contain the double quote `"`, `\u0022` but may contain spaces. `Tags` may have a prefix which serves as a namespace. The prefix is a string followed by a colon `:`, ex. prefixed phone tag `tel:+14155551212` or prefixed email tag `email:alice@example.com`. Some prefixed `tags` are optionally enforced to be unique. In that case only one user or topic may have such a tag. Certain `tags` may be forced to be immutable to the user, i.e. user's attempts to add or remove an immutable tag will be rejected by the server.
 
 The `tags` are indexed server-side and used in user and topic discovery. Search returns users and topics sorted by the number of matched tags in descending order.
 
@@ -368,9 +369,13 @@ Tags containing spaces or commas must be enclosed in double quotes (`"`, `\u0022
 
 #### Incremental Updates to Queries
 
-Queries, particularly `fnd.private` could be arbitrarily large, limited only by the message size and by the underlying database. Instead of rewriting the entire query to add or remove a tag, tag can be added or removed incrementally.
+Queries, particularly `fnd.private` could be arbitrarily large, limited only by the limits on the message size and by the underlying database limits of query size. Instead of rewriting the entire query to add or remove a tag, tag can be added or removed incrementally.
 
-The incremental update request is processed left to right. It may contain the same tag multiple times, i.e. `-tag+tag` is a valid request.
+The incremental update request is processed left to right. It may contain the same tag multiple times, i.e. `-a_tag+a_tag` is a valid request.
+
+#### Query Rewrite
+
+Finding users by login, phone or email requires query terms to be written with tags, i.e. `email:alice@example.com` instead of `alice@example.com`. This may present a problem to end users because it requires them to learn the query language. Tinode solves this problem by implementing _query rewrite_ on the server: if query term does not contain a tag, server rewrites it by adding the tag also keeping the original term (terms with tags are left intact). All terms that look like email, for instance, `alice@example.com` are rewritten to `email:alice@example.com OR alice@example.com`. Terms which look like phone numbers are converted to [E.164](https://en.wikipedia.org/wiki/E.164) and also rewritten as `tel:+14155551212 OR +14155551212`. All other untagged terms are rewritten as logins: `basic:alice OR alice`.
 
 #### Possible Use Cases
 * Restricting users to organisations.
