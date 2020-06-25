@@ -100,6 +100,8 @@ type ClusterSess struct {
 
 	// Human language of the client
 	Lang string
+	// Country of the client
+	CountryCode string
 
 	// Device ID
 	DeviceID string
@@ -409,13 +411,14 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 			// Multiplexing session which actually handles the communication.
 			multi: msess,
 			// Local parameters specific to this session.
-			sid:        msg.Sess.Sid,
-			userAgent:  msg.Sess.UserAgent,
-			remoteAddr: msg.Sess.RemoteAddr,
-			lang:       msg.Sess.Lang,
-			proxyReq:   msg.ReqType,
-			background: msg.Sess.Background,
-			uid:        msg.Sess.Uid,
+			sid:         msg.Sess.Sid,
+			userAgent:   msg.Sess.UserAgent,
+			remoteAddr:  msg.Sess.RemoteAddr,
+			lang:        msg.Sess.Lang,
+			countryCode: msg.Sess.CountryCode,
+			proxyReq:    msg.ReqType,
+			background:  msg.Sess.Background,
+			uid:         msg.Sess.Uid,
 		}
 	}
 
@@ -711,16 +714,17 @@ func (c *Cluster) makeClusterReq(reqType ProxyReqType, payload interface{}, topi
 		}
 
 		req.Sess = &ClusterSess{
-			Uid:        uid,
-			AuthLvl:    sess.authLvl,
-			RemoteAddr: sess.remoteAddr,
-			UserAgent:  sess.userAgent,
-			Ver:        sess.ver,
-			Lang:       sess.lang,
-			DeviceID:   sess.deviceID,
-			Platform:   sess.platf,
-			Sid:        sess.sid,
-			Background: sess.background}
+			Uid:         uid,
+			AuthLvl:     sess.authLvl,
+			RemoteAddr:  sess.remoteAddr,
+			UserAgent:   sess.userAgent,
+			Ver:         sess.ver,
+			Lang:        sess.lang,
+			CountryCode: sess.countryCode,
+			DeviceID:    sess.deviceID,
+			Platform:    sess.platf,
+			Sid:         sess.sid,
+			Background:  sess.background}
 	}
 	return req
 }

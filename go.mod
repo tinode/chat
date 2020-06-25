@@ -13,6 +13,7 @@ require (
 	github.com/gorilla/handlers v1.4.2
 	github.com/gorilla/websocket v1.4.2
 	github.com/jmoiron/sqlx v1.2.0
+	github.com/nyaruka/phonenumbers v1.0.56
 	github.com/prometheus/client_golang v1.5.1
 	github.com/prometheus/common v0.9.1
 	github.com/tinode/jsonco v1.0.0

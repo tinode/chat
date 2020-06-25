@@ -1244,3 +1244,12 @@ type FileDef struct {
 	// Internal file location, i.e. path on disk or an S3 blob address.
 	Location string
 }
+
+// Turns 2d slice into a 1d slice.
+func FlattenDoubleSlice(data [][]string) []string {
+	var result []string
+	for _, el := range data {
+		result = append(result, el...)
+	}
+	return result
+}

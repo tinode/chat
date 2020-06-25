@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/mail"
 	"path/filepath"
 	"reflect"
 	"regexp"
@@ -20,11 +21,13 @@ import (
 
 	"github.com/tinode/chat/server/auth"
 	"github.com/tinode/chat/server/store/types"
+	"github.com/nyaruka/phonenumbers"
 
 	"golang.org/x/crypto/acme/autocert"
 )
 
 var tagPrefixRegexp = regexp.MustCompile(`^([a-z]\w{0,5}):\S`)
+var alnumPrefixRegexp = regexp.MustCompile(`^[[:alnum:]]+:\S`)
 
 const nullValue = "\u2421"
 
@@ -397,10 +400,51 @@ func versionToString(vers int) string {
 	return str
 }
 
+// rewriteToken attempts to match the original token
+// against the email, telephone number or login patterns.
+// On success, prepends the token with the corresponding prefix.
+func rewriteToken(orig, countryCode string) string {
+	if orig == "" || alnumPrefixRegexp.MatchString(orig) {
+		// It either empty or already has a prefix. E.g. basic:alice.
+		return orig
+	}
+	// Is it email?
+	if r, err := mail.ParseAddress(orig); err == nil && r.Address == orig {
+		return "email:" + orig
+	}
+	// TODO: pass region as a param.
+	// 1. As provided by the client (e.g. as specified or inferred
+	//    from client's phone number or location).
+	// 2. Use value from .conf file.
+	// 3. Fallback to US as a last resort.
+	if num, err := phonenumbers.Parse(orig, countryCode); err == nil {
+		// It's a phone number.
+		return "tel:" + phonenumbers.Format(num, phonenumbers.E164)
+	}
+	// Does it look like a username/login?
+	// TODO: use configured authenticators to check if orig may a valid user name.
+	runes := []rune(orig)
+	if len(runes) >= 3 && unicode.IsLetter(runes[0]) {
+		// Check if the remaining chars are letters or digits.
+		ok := true
+		for i := 1; i < len(runes); i++ {
+			if !unicode.IsLetter(runes[i]) && !unicode.IsDigit(runes[i]) {
+				ok = false
+				break
+			}
+		}
+		if ok {
+			return "basic:" + orig
+		}
+	}
+	return orig
+}
+
 // Parser for search queries. The query may contain non-ASCII
 // characters, i.e. length of string in bytes != length of string in runes.
-// Returns AND tags (all must be present in every result), OR tags (one or more present), error.
-func parseSearchQuery(query string) ([]string, []string, error) {
+// Returns AND of ORs of tags (at least one of each sublist must be present in every result),
+// OR tags (one or more present), error.
+func parseSearchQuery(query, countryCode string) ([][]string, []string, error) {
 	const (
 		NONE = iota
 		QUO
@@ -412,6 +456,7 @@ func parseSearchQuery(query string) ([]string, []string, error) {
 	type token struct {
 		op  int
 		val string
+		rewrittenVal string
 	}
 	type context struct {
 		// Pre-token operand
@@ -522,7 +567,13 @@ func parseSearchQuery(query string) ([]string, []string, error) {
 			}
 			// Add token if non-empty.
 			if start < end {
-				out = append(out, token{val: query[start:end], op: op})
+				original := query[start:end]
+				rewritten := rewriteToken(original, countryCode)
+				t := token{val: original, op: op}
+				if rewritten != original {
+					t.rewrittenVal = rewritten
+				}
+				out = append(out, t)
 			}
 			ctx.start = i
 			ctx.preOp = ctx.postOp
@@ -538,13 +589,22 @@ func parseSearchQuery(query string) ([]string, []string, error) {
 	}
 
 	// Convert tokens to two string slices.
-	var and, or []string
+	var and [][]string
+	var or []string
 	for _, t := range out {
 		switch t.op {
 		case AND:
-			and = append(and, t.val)
+			var terms []string
+			terms = append(terms, t.val)
+			if len(t.rewrittenVal) > 0 {
+				terms = append(terms, t.rewrittenVal)
+			}
+			and = append(and, terms)
 		case OR:
 			or = append(or, t.val)
+			if len(t.rewrittenVal) > 0 {
+				or = append(or, t.rewrittenVal)
+			}
 		}
 	}
 	return and, or, nil
