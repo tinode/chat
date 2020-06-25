@@ -1025,7 +1025,7 @@ func (sess *Session) clusterWriteLoop(forTopic string) {
 				case ProxyReqBroadcast, ProxyReqNone:
 					if srvMsg.Data != nil || srvMsg.Pres != nil || srvMsg.Info != nil {
 						response.OrigSid = "*"
-					} else {
+					} else if srvMsg.Ctrl == nil {
 						log.Println("cluster: request type not set in clusterWriteLoop", sess.sid,
 							srvMsg.describe(), "src_sid:", srvMsg.sess.sid)
 					}
