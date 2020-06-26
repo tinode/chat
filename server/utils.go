@@ -19,15 +19,24 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/nyaruka/phonenumbers"
 	"github.com/tinode/chat/server/auth"
 	"github.com/tinode/chat/server/store/types"
-	"github.com/nyaruka/phonenumbers"
 
 	"golang.org/x/crypto/acme/autocert"
 )
 
-var tagPrefixRegexp = regexp.MustCompile(`^([a-z]\w{0,5}):\S`)
-var alnumPrefixRegexp = regexp.MustCompile(`^[[:alnum:]]+:\S`)
+// Tag with prefix:
+// * prefix starts starts with an ASCII letter, contains ASCII letters, numbers, from 2 to 16 chars.
+// * tag body starts and ends with a non-space Unicode character, has 2 or more characters, otherwise not restricted.
+var tagPrefixRegexp = regexp.MustCompile(`^([a-z]\w{1,15}):(\S.*\S)$`)
+
+// Generic tag: starts and ends with a non-space Unicode character, has 2 or more characters, otherwise not restricted.
+var tagRegexp = regexp.MustCompile(`^\S.*\S$`)
+
+// Token suitable as a login: 3-16 chars, starts with a Unicode letter (class L) and contains Unicode letters (L),
+// numbers (N) and underscore.
+var basicLoginName = regexp.MustCompile(`^\pL[_\pL\pN]{2,16}$`)
 
 const nullValue = "\u2421"
 
@@ -195,23 +204,38 @@ func credentialMethods(creds []MsgCredClient) []string {
 	return out
 }
 
+// isValidTag checks tag for validity: if tag contains a colon ':' then the prefix before the colon
+// must start with an ASCII letter and contain only ASCII letters, numbers and underscores.
+// The tag body may contain any combination of unicode letters, numbers, underscores and spaces.
+// The tag cannot start with a '+' or '-', cannot start or end with a space.
+func isValidTag(tag string) bool {
+	// Check if tag has a prefix.
+	if parts := tagPrefixRegexp.FindStringSubmatch(tag); len(parts) == 3 {
+		return true
+	}
+	return tagRegexp.MatchString(tag)
+}
+
 // Take a slice of tags, return a slice of restricted namespace tags contained in the input.
 // Tags to filter, restricted namespaces to filter.
 func filterRestrictedTags(tags []string, namespaces map[string]bool) []string {
 	var out []string
-	if len(namespaces) > 0 && len(tags) > 0 {
-		for _, s := range tags {
-			parts := tagPrefixRegexp.FindStringSubmatch(s)
+	if len(namespaces) == 0 {
+		return out
+	}
 
-			if len(parts) < 2 {
-				continue
-			}
+	for _, s := range tags {
+		parts := tagPrefixRegexp.FindStringSubmatch(s)
 
-			if namespaces[parts[1]] {
-				out = append(out, s)
-			}
+		if len(parts) < 2 {
+			continue
+		}
+
+		if namespaces[parts[1]] {
+			out = append(out, s)
 		}
 	}
+
 	return out
 }
 
@@ -404,8 +428,8 @@ func versionToString(vers int) string {
 // against the email, telephone number or login patterns.
 // On success, prepends the token with the corresponding prefix.
 func rewriteToken(orig, countryCode string) string {
-	if orig == "" || alnumPrefixRegexp.MatchString(orig) {
-		// It either empty or already has a prefix. E.g. basic:alice.
+	if orig == "" || tagPrefixRegexp.MatchString(orig) {
+		// It is either empty or already has a prefix e.g. basic:alice.
 		return orig
 	}
 	// Is it email?
@@ -422,28 +446,19 @@ func rewriteToken(orig, countryCode string) string {
 		return "tel:" + phonenumbers.Format(num, phonenumbers.E164)
 	}
 	// Does it look like a username/login?
-	// TODO: use configured authenticators to check if orig may a valid user name.
-	runes := []rune(orig)
-	if len(runes) >= 3 && unicode.IsLetter(runes[0]) {
-		// Check if the remaining chars are letters or digits.
-		ok := true
-		for i := 1; i < len(runes); i++ {
-			if !unicode.IsLetter(runes[i]) && !unicode.IsDigit(runes[i]) {
-				ok = false
-				break
-			}
-		}
-		if ok {
-			return "basic:" + orig
-		}
+	// TODO: use configured authenticators to check if orig is a valid user name.
+	if basicLoginName.MatchString(orig) {
+		return "basic:" + orig
 	}
 	return orig
 }
 
 // Parser for search queries. The query may contain non-ASCII
 // characters, i.e. length of string in bytes != length of string in runes.
-// Returns AND of ORs of tags (at least one of each sublist must be present in every result),
-// OR tags (one or more present), error.
+// Returns
+// * required tags: AND of ORs of tags (at least one of each subset must be present in every result),
+// * optional tags
+// * error.
 func parseSearchQuery(query, countryCode string) ([][]string, []string, error) {
 	const (
 		NONE = iota
@@ -454,8 +469,8 @@ func parseSearchQuery(query, countryCode string) ([][]string, []string, error) {
 		ORD
 	)
 	type token struct {
-		op  int
-		val string
+		op           int
+		val          string
 		rewrittenVal string
 	}
 	type context struct {
