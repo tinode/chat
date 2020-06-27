@@ -29,14 +29,14 @@ import (
 // Tag with prefix:
 // * prefix starts starts with an ASCII letter, contains ASCII letters, numbers, from 2 to 16 chars.
 // * tag body starts and ends with a non-space Unicode character, has 2 or more characters, otherwise not restricted.
-var tagPrefixRegexp = regexp.MustCompile(`^([a-z]\w{1,15}):(\S.*\S)$`)
+var prefixedTagRegexp = regexp.MustCompile(`^([a-z]\w{1,15}):(\S.*\S)$`)
 
 // Generic tag: starts and ends with a non-space Unicode character, has 2 or more characters, otherwise not restricted.
 var tagRegexp = regexp.MustCompile(`^\S.*\S$`)
 
 // Token suitable as a login: 3-16 chars, starts with a Unicode letter (class L) and contains Unicode letters (L),
 // numbers (N) and underscore.
-var basicLoginName = regexp.MustCompile(`^\pL[_\pL\pN]{2,16}$`)
+var basicLoginName = regexp.MustCompile(`^\pL[_\pL\pN]{2,15}$`)
 
 const nullValue = "\u2421"
 
@@ -210,7 +210,7 @@ func credentialMethods(creds []MsgCredClient) []string {
 // The tag cannot start with a '+' or '-', cannot start or end with a space.
 func isValidTag(tag string) bool {
 	// Check if tag has a prefix.
-	if parts := tagPrefixRegexp.FindStringSubmatch(tag); len(parts) == 3 {
+	if prefixedTagRegexp.MatchString(tag) {
 		return true
 	}
 	return tagRegexp.MatchString(tag)
@@ -225,7 +225,7 @@ func filterRestrictedTags(tags []string, namespaces map[string]bool) []string {
 	}
 
 	for _, s := range tags {
-		parts := tagPrefixRegexp.FindStringSubmatch(s)
+		parts := prefixedTagRegexp.FindStringSubmatch(s)
 
 		if len(parts) < 2 {
 			continue
@@ -428,8 +428,8 @@ func versionToString(vers int) string {
 // against the email, telephone number or login patterns.
 // On success, prepends the token with the corresponding prefix.
 func rewriteToken(orig, countryCode string) string {
-	if orig == "" || tagPrefixRegexp.MatchString(orig) {
-		// It is either empty or already has a prefix e.g. basic:alice.
+	if orig == "" || prefixedTagRegexp.MatchString(orig) {
+		// It's either empty or already has a prefix e.g. basic:alice.
 		return orig
 	}
 	// Is it email?
