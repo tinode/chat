@@ -382,6 +382,9 @@ func main() {
 				log.Fatalln("Failed get restricted tag namespaces", name+":", err)
 			}
 			for _, tag := range tags {
+				if strings.Contains(tag, ":") {
+					log.Fatalln("tags restricted by auth handler should not contain character ':'", tag)
+				}
 				globals.immutableTagNS[tag] = true
 			}
 		}
@@ -393,7 +396,7 @@ func main() {
 		// The namespace can be restricted even if the validator is disabled.
 		if vconf.AddToTags {
 			if strings.Contains(name, ":") {
-				log.Fatal("acc_validation names should not contain character ':'")
+				log.Fatalln("acc_validation names should not contain character ':'", name)
 			}
 			globals.immutableTagNS[name] = true
 		}
@@ -442,7 +445,7 @@ func main() {
 	globals.maskedTagNS = make(map[string]bool, len(config.MaskedTagNamespaces))
 	for _, tag := range config.MaskedTagNamespaces {
 		if strings.Contains(tag, ":") {
-			log.Fatal("masked_tags namespaces should not contain character ':'")
+			log.Fatal("masked_tags namespaces should not contain character ':'", tag)
 		}
 		globals.maskedTagNS[tag] = true
 	}
