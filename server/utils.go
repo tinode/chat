@@ -392,18 +392,6 @@ func versionToString(vers int) string {
 
 // Tag handling
 
-// isValidTag checks tag for validity: if tag contains a colon ':' then the prefix before the colon
-// must start with an ASCII letter and contain only ASCII letters, numbers and underscores.
-// The tag body may contain any combination of unicode letters, numbers, underscores and spaces.
-// The tag cannot start with a '+' or '-', cannot start or end with a space.
-func isValidTag(tag string) bool {
-	// Check if tag has a prefix.
-	if prefixedTagRegexp.MatchString(tag) {
-		return true
-	}
-	return tagRegexp.MatchString(tag)
-}
-
 // Take a slice of tags, return a slice of restricted namespace tags contained in the input.
 // Tags to filter, restricted namespaces to filter.
 func filterRestrictedTags(tags []string, namespaces map[string]bool) []string {
@@ -434,7 +422,7 @@ func filterRestrictedTags(tags []string, namespaces map[string]bool) []string {
 // 1. As provided by the client (e.g. as specified or inferred from client's phone number or location).
 // 2. Use value from the .conf file.
 // 3. Fallback to US as a last resort.
-func rewriteToken(orig, countryCode string, withLogin bool) string {
+func rewriteTag(orig, countryCode string, withLogin bool) string {
 	// Check if the tag already has a prefix e.g. basic:alice.
 	if prefixedTagRegexp.MatchString(orig) {
 		return orig
@@ -595,7 +583,7 @@ func parseSearchQuery(query, countryCode string, withLogin bool) ([][]string, []
 			// Add token if non-empty.
 			if start < end {
 				original := strings.ToLower(query[start:end])
-				rewritten := rewriteToken(original, countryCode, withLogin)
+				rewritten := rewriteTag(original, countryCode, withLogin)
 				// The 'rewritten' equals to "" means the token is invalid.
 				if rewritten != "" {
 					t := token{val: original, op: op}
