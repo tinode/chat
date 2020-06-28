@@ -1782,8 +1782,10 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 		}
 	case types.TopicCatFnd:
 		// Select public or private query. Public has priority.
+		rewriteLogin := true
 		raw := t.fndGetPublic(sess)
 		if raw == nil {
+			rewriteLogin = false
 			raw = userData.private
 		}
 
@@ -1792,7 +1794,7 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 			if err == nil && subs == nil && query != "" {
 				var req [][]string
 				var opt []string
-				if req, opt, err = parseSearchQuery(query, sess.countryCode); err == nil {
+				if req, opt, err = parseSearchQuery(query, sess.countryCode, rewriteLogin); err == nil {
 					if len(req) > 0 || len(opt) > 0 {
 						// Check if the query contains terms that the user is not allowed to use.
 						allReq := types.FlattenDoubleSlice(req)

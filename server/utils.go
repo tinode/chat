@@ -27,13 +27,13 @@ import (
 )
 
 // Tag with prefix:
-// * prefix starts with an ASCII letter, contains ASCII letters, numbers, from 2 to 16 chars.
+// * prefix starts with an ASCII letter, contains ASCII letters, numbers, from 2 to 16 chars
 // * tag body may contain Unicode letters and numbres, as well as the following symbols: +-.!?#@_
-// tag body can be 1 to maxTagLength (96) chars long.
-var prefixedTagRegexp = regexp.MustCompile(`^([a-z]\w{1,15}):[-_+.!?#\pL\pN]{1,96}$`)
+// Tag body can be up to maxTagLength (96) chars long.
+var prefixedTagRegexp = regexp.MustCompile(`^([a-z]\w{1,15}):[-_+.!?#@\pL\pN]{1,96}$`)
 
 // Generic tag: the same restrictions as tag body.
-var tagRegexp = regexp.MustCompile(`^[-_+.!?#\pL\pN]{1,96}$`)
+var tagRegexp = regexp.MustCompile(`^[-_+.!?#@\pL\pN]{1,96}$`)
 
 // Token suitable as a login: 3-16 chars, starts with a Unicode letter (class L) and contains Unicode letters (L),
 // numbers (N) and underscore.
@@ -465,13 +465,13 @@ func rewriteToken(orig, countryCode string, withLogin bool) string {
 	return ""
 }
 
-// Parser for search queries. The query may contain non-ASCII
-// characters, i.e. length of string in bytes != length of string in runes.
+// Parser for search queries. The query may contain non-ASCII characters,
+// i.e. length of string in bytes != length of string in runes.
 // Returns
 // * required tags: AND of ORs of tags (at least one of each subset must be present in every result),
 // * optional tags
 // * error.
-func parseSearchQuery(query, countryCode string) ([][]string, []string, error) {
+func parseSearchQuery(query, countryCode string, withLogin bool) ([][]string, []string, error) {
 	const (
 		NONE = iota
 		QUO
@@ -595,7 +595,7 @@ func parseSearchQuery(query, countryCode string) ([][]string, []string, error) {
 			// Add token if non-empty.
 			if start < end {
 				original := strings.ToLower(query[start:end])
-				rewritten := rewriteToken(original, countryCode, true)
+				rewritten := rewriteToken(original, countryCode, withLogin)
 				// The 'rewritten' equals to "" means the token is invalid.
 				if rewritten != "" {
 					t := token{val: original, op: op}
