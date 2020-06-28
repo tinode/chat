@@ -27,12 +27,13 @@ import (
 )
 
 // Tag with prefix:
-// * prefix starts starts with an ASCII letter, contains ASCII letters, numbers, from 2 to 16 chars.
-// * tag body starts and ends with a non-space Unicode character, has 2 or more characters, otherwise not restricted.
-var prefixedTagRegexp = regexp.MustCompile(`^([a-z]\w{1,15}):(\S.*\S)$`)
+// * prefix starts with an ASCII letter, contains ASCII letters, numbers, from 2 to 16 chars.
+// * tag body may contain Unicode letters and numbres, as well as the following symbols: +-.!?#@_
+// tag body can be 1 to maxTagLength (96) chars long.
+var prefixedTagRegexp = regexp.MustCompile(`^([a-z]\w{1,15}):[-_+.!?#\pL\pN]{1,96}$`)
 
-// Generic tag: starts and ends with a non-space Unicode character, has 2 or more characters, otherwise not restricted.
-var tagRegexp = regexp.MustCompile(`^\S.*\S$`)
+// Generic tag: the same restrictions as tag body.
+var tagRegexp = regexp.MustCompile(`^[-_+.!?#\pL\pN]{1,96}$`)
 
 // Token suitable as a login: 3-16 chars, starts with a Unicode letter (class L) and contains Unicode letters (L),
 // numbers (N) and underscore.
@@ -201,41 +202,6 @@ func credentialMethods(creds []MsgCredClient) []string {
 	for i := range creds {
 		out = append(out, creds[i].Method)
 	}
-	return out
-}
-
-// isValidTag checks tag for validity: if tag contains a colon ':' then the prefix before the colon
-// must start with an ASCII letter and contain only ASCII letters, numbers and underscores.
-// The tag body may contain any combination of unicode letters, numbers, underscores and spaces.
-// The tag cannot start with a '+' or '-', cannot start or end with a space.
-func isValidTag(tag string) bool {
-	// Check if tag has a prefix.
-	if prefixedTagRegexp.MatchString(tag) {
-		return true
-	}
-	return tagRegexp.MatchString(tag)
-}
-
-// Take a slice of tags, return a slice of restricted namespace tags contained in the input.
-// Tags to filter, restricted namespaces to filter.
-func filterRestrictedTags(tags []string, namespaces map[string]bool) []string {
-	var out []string
-	if len(namespaces) == 0 {
-		return out
-	}
-
-	for _, s := range tags {
-		parts := prefixedTagRegexp.FindStringSubmatch(s)
-
-		if len(parts) < 2 {
-			continue
-		}
-
-		if namespaces[parts[1]] {
-			out = append(out, s)
-		}
-	}
-
 	return out
 }
 
@@ -424,33 +390,79 @@ func versionToString(vers int) string {
 	return str
 }
 
-// rewriteToken attempts to match the original token
-// against the email, telephone number or login patterns.
-// On success, prepends the token with the corresponding prefix.
-func rewriteToken(orig, countryCode string) string {
-	if orig == "" || prefixedTagRegexp.MatchString(orig) {
-		// It's either empty or already has a prefix e.g. basic:alice.
+// Tag handling
+
+// isValidTag checks tag for validity: if tag contains a colon ':' then the prefix before the colon
+// must start with an ASCII letter and contain only ASCII letters, numbers and underscores.
+// The tag body may contain any combination of unicode letters, numbers, underscores and spaces.
+// The tag cannot start with a '+' or '-', cannot start or end with a space.
+func isValidTag(tag string) bool {
+	// Check if tag has a prefix.
+	if prefixedTagRegexp.MatchString(tag) {
+		return true
+	}
+	return tagRegexp.MatchString(tag)
+}
+
+// Take a slice of tags, return a slice of restricted namespace tags contained in the input.
+// Tags to filter, restricted namespaces to filter.
+func filterRestrictedTags(tags []string, namespaces map[string]bool) []string {
+	var out []string
+	if len(namespaces) == 0 {
+		return out
+	}
+
+	for _, s := range tags {
+		parts := prefixedTagRegexp.FindStringSubmatch(s)
+
+		if len(parts) < 2 {
+			continue
+		}
+
+		if namespaces[parts[1]] {
+			out = append(out, s)
+		}
+	}
+
+	return out
+}
+
+// rewriteToken attempts to match the original token against the email, telephone number and optionally login patterns.
+// The tag is expected to be converted to lowercase.
+// On success, it prepends the token with the corresponding prefix. It returns an empty string if the tag is invalid.
+// TODO: better handling of countryCode:
+// 1. As provided by the client (e.g. as specified or inferred from client's phone number or location).
+// 2. Use value from the .conf file.
+// 3. Fallback to US as a last resort.
+func rewriteToken(orig, countryCode string, withLogin bool) string {
+	// Check if the tag already has a prefix e.g. basic:alice.
+	if prefixedTagRegexp.MatchString(orig) {
 		return orig
 	}
+
 	// Is it email?
-	if r, err := mail.ParseAddress(orig); err == nil && r.Address == orig {
-		return "email:" + orig
+	if addr, err := mail.ParseAddress(orig); err == nil {
+		if len([]rune(addr.Address)) < maxTagLength && addr.Address == orig {
+			return "email:" + orig
+		}
+		return ""
 	}
-	// TODO: pass region as a param.
-	// 1. As provided by the client (e.g. as specified or inferred
-	//    from client's phone number or location).
-	// 2. Use value from .conf file.
-	// 3. Fallback to US as a last resort.
+
 	if num, err := phonenumbers.Parse(orig, countryCode); err == nil {
-		// It's a phone number.
+		// It's a phone number. Not checking the length because phone numbers cannot be that long.
 		return "tel:" + phonenumbers.Format(num, phonenumbers.E164)
 	}
+
 	// Does it look like a username/login?
 	// TODO: use configured authenticators to check if orig is a valid user name.
-	if basicLoginName.MatchString(orig) {
+	if withLogin && basicLoginName.MatchString(orig) {
 		return "basic:" + orig
 	}
-	return orig
+
+	if tagRegexp.MatchString(orig) {
+		return orig
+	}
+	return ""
 }
 
 // Parser for search queries. The query may contain non-ASCII
@@ -582,13 +594,16 @@ func parseSearchQuery(query, countryCode string) ([][]string, []string, error) {
 			}
 			// Add token if non-empty.
 			if start < end {
-				original := query[start:end]
-				rewritten := rewriteToken(original, countryCode)
-				t := token{val: original, op: op}
-				if rewritten != original {
-					t.rewrittenVal = rewritten
+				original := strings.ToLower(query[start:end])
+				rewritten := rewriteToken(original, countryCode, true)
+				// The 'rewritten' equals to "" means the token is invalid.
+				if rewritten != "" {
+					t := token{val: original, op: op}
+					if rewritten != original {
+						t.rewrittenVal = rewritten
+					}
+					out = append(out, t)
 				}
-				out = append(out, t)
 			}
 			ctx.start = i
 			ctx.preOp = ctx.postOp
