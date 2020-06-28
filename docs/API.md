@@ -338,7 +338,7 @@ Message `{get what="data"}` to `me` is rejected.
 
 Topic `fnd` is automatically created for every user at the account creation time. It serves as an endpoint for discovering other users and group topics. Users and group topics can be discovered by `tags`. Tags are optionally assigned at the topic or user creation time then can be updated by using `{set what="tags"}` against a `me` or a group topic.
 
-A tag is an arbitrary case-insensitive Unicode string (forced to lowercase on the server) up to 96 characters long which may contain characters from `Letter` and `Number` Unicode [classes/categories](https://en.wikipedia.org/wiki/Unicode_character_property#General_Category) as well as any of the the following ASCII characters: `_`, `.`, `+`, `-`, `@`, `#`, `!`, `?`.
+A tag is an arbitrary case-insensitive Unicode string (forced to lowercase on the server) up to 96 characters long which may contain characters from `Letter` and `Number` Unicode [classes/categories](https://en.wikipedia.org/wiki/Unicode_character_property#General_Category) as well as any of the following ASCII characters: `_`, `.`, `+`, `-`, `@`, `#`, `!`, `?`.
 
 Tag may have a prefix which serves as a namespace. The prefix is a 2-16 character string which starts with a letter [a-z] and may contain ASCII letters and numbers followed by a colon `:`, ex. prefixed phone tag `tel:+14155551212` or prefixed email tag `email:alice@example.com`. Some prefixed tags are optionally enforced to be unique. In that case only one user or topic may have such a tag. Certain tags may be forced to be immutable to the user, i.e. user's attempts to add or remove an immutable tag will be rejected by the server.
 

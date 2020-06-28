@@ -28,7 +28,7 @@ import (
 
 // Tag with prefix:
 // * prefix starts with an ASCII letter, contains ASCII letters, numbers, from 2 to 16 chars
-// * tag body may contain Unicode letters and numbres, as well as the following symbols: +-.!?#@_
+// * tag body may contain Unicode letters and numbers, as well as the following symbols: +-.!?#@_
 // Tag body can be up to maxTagLength (96) chars long.
 var prefixedTagRegexp = regexp.MustCompile(`^([a-z]\w{1,15}):[-_+.!?#@\pL\pN]{1,96}$`)
 
