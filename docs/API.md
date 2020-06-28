@@ -336,13 +336,13 @@ Message `{get what="data"}` to `me` is rejected.
 
 ### `fnd` and Tags: Finding Users and Topics
 
-Topic `fnd` is automatically created for every user at the account creation time. It serves as an endpoint for discovering other users and group topics.
+Topic `fnd` is automatically created for every user at the account creation time. It serves as an endpoint for discovering other users and group topics. Users and group topics can be discovered by `tags`. Tags are optionally assigned at the topic or user creation time then can be updated by using `{set what="tags"}` against a `me` or a group topic.
 
-Users and group topics can be discovered by optional `tags`. Tags are optionally assigned at the topic or user creation time then can be updated by using `{set what="tags"}` against a `me` or a group topic.
+A tag is an arbitrary case-insensitive Unicode string (forced to lowercase on the server) up to 96 characters long which may contain characters from `Letter` and `Number` Unicode [classes/categories](https://en.wikipedia.org/wiki/Unicode_character_property#General_Category) as well as any of the the following ASCII characters: `_`, `.`, `+`, `-`, `@`, `#`, `!`, `?`.
 
-A tag is an arbitrary case-insensitive Unicode string (forced to lowercase) starting with a Unicode letter or digit. `Tags` must not contain the double quote `"`, `\u0022` but may contain spaces. `Tags` may have a prefix which serves as a namespace. The prefix is a string followed by a colon `:`, ex. prefixed phone tag `tel:+14155551212` or prefixed email tag `email:alice@example.com`. Some prefixed `tags` are optionally enforced to be unique. In that case only one user or topic may have such a tag. Certain `tags` may be forced to be immutable to the user, i.e. user's attempts to add or remove an immutable tag will be rejected by the server.
+Tag may have a prefix which serves as a namespace. The prefix is a 2-16 character string which starts with a letter [a-z] and may contain ASCII letters and numbers followed by a colon `:`, ex. prefixed phone tag `tel:+14155551212` or prefixed email tag `email:alice@example.com`. Some prefixed tags are optionally enforced to be unique. In that case only one user or topic may have such a tag. Certain tags may be forced to be immutable to the user, i.e. user's attempts to add or remove an immutable tag will be rejected by the server.
 
-The `tags` are indexed server-side and used in user and topic discovery. Search returns users and topics sorted by the number of matched tags in descending order.
+The tags are indexed server-side and used in user and topic discovery. Search returns users and topics sorted by the number of matched tags in descending order.
 
 In order to find users or topics, a user sets either `public` or `private` parameter of the `fnd` topic to a search query (see [Query language](#query-language)) then issues a `{get topic="fnd" what="sub"}` request. If both `public` and `private` are set, the `public` query is used. The `private` query is persisted across sessions and devices, i.e. all user's sessions see the same `private` query. The value of the `public` query is ephemeral, i.e. it's not saved to database and not shared between user's sessions. The `private` query is intended for large queries which do not change often, such as finding matches for everyone in user's contact list on a mobile phone. The `public` query is intended to be short and specific, such as finding some topic or a user who is not in the contact list.
 
@@ -350,15 +350,15 @@ The system responds with a `{meta}` message with the `sub` section listing detai
 
 Topic `fnd` is read-only. `{pub}` messages to `fnd` are rejected.
 
-(The following functionality is not implemented yet) When a new user registers with tags matching the given query, the `fnd` topic will receive `{pres}` notification for the new user.
+_CURRENTLY UNSUPPORTED_ When a new user registers with tags matching the given query, the `fnd` topic will receive `{pres}` notification for the new user.
 
 [Plugins](../pbx) support `Find` service which can be used to replace default search with a custom one.
 
 #### Query Language
 
-Tinode query language is used to define search queries for finding users and topics. The query is a string containing tags separated by spaces or commas. Tags are strings - individual query terms which are matched against user's or topic's tags. The tags can be written in an RTL language but the query as a whole is parsed left to right. Spaces are treated as the `AND` operator, commas (as well as commas preceded and/or followed by a space) as the `OR` operator. The order of operators is ignored: all `AND` tags are grouped together, all `OR` tags are grouped together. `OR` takes precedence over `AND`: if a tag is preceded of followed by a comma, it's an `OR` tag, otherwise an `AND`. For example, `a AND b OR c` is rewritten as `(b OR c) AND a`.
+Tinode query language is used to define search queries for finding users and topics. The query is a string containing atomic terms separated by spaces or commas. The individual query terms are matched against user's or topic's tags. The individual terms may be written in an RTL language but the query as a whole is parsed left to right. Spaces are treated as the `AND` operator, commas (as well as commas preceded and/or followed by a space) as the `OR` operator. The order of operators is ignored: all `AND` tags are grouped together, all `OR` tags are grouped together. `OR` takes precedence over `AND`: if a tag is preceded of followed by a comma, it's an `OR` tag, otherwise an `AND`. For example, `aaa bbb, ccc` (`aaa AND bbb OR ccc`) is interpreted as `(bbb OR ccc) AND aaa`.
 
-Tags containing spaces or commas must be enclosed in double quotes (`"`, `\u0022`): i.e. `"abc, def"` is treated as a single token `abc, def`. Tags must start with a Unicode letter or digit. Tags must not contain the double quote (`"`, `\u0022`).
+Query terms containing spaces must convert spaces to underscores ` ` -> `_`.
 
 **Some examples:**
 * `flowers`: find topics or users which contain tag `flowers`.
@@ -369,13 +369,13 @@ Tags containing spaces or commas must be enclosed in double quotes (`"`, `\u0022
 
 #### Incremental Updates to Queries
 
-Queries, particularly `fnd.private` could be arbitrarily large, limited only by the limits on the message size and by the underlying database limits of query size. Instead of rewriting the entire query to add or remove a tag, tag can be added or removed incrementally.
+_CURRENTLY UNSUPPORTED_ Queries, particularly `fnd.private` could be arbitrarily large, limited only by the limits on the message size, and by the limits on the query size in the underlying database. Instead of rewriting the entire query to add or remove a term, terms can be added or removed incrementally.
 
-The incremental update request is processed left to right. It may contain the same tag multiple times, i.e. `-a_tag+a_tag` is a valid request.
+The incremental update request is processed left to right. It may contain the same term multiple times, i.e. `-a_tag+a_tag` is a valid request.
 
 #### Query Rewrite
 
-Finding users by login, phone or email requires query terms to be written with tags, i.e. `email:alice@example.com` instead of `alice@example.com`. This may present a problem to end users because it requires them to learn the query language. Tinode solves this problem by implementing _query rewrite_ on the server: if query term does not contain a tag, server rewrites it by adding the tag also keeping the original term (terms with tags are left intact). All terms that look like email, for instance, `alice@example.com` are rewritten to `email:alice@example.com OR alice@example.com`. Terms which look like phone numbers are converted to [E.164](https://en.wikipedia.org/wiki/E.164) and also rewritten as `tel:+14155551212 OR +14155551212`. All other untagged terms are rewritten as logins: `basic:alice OR alice`.
+Finding users by login, phone or email requires query terms to be written with prefixes, i.e. `email:alice@example.com` instead of `alice@example.com`. This may present a problem to end users because it requires them to learn the query language. Tinode solves this problem by implementing _query rewrite_ on the server: if query term (tag) does not contain a prefix, server rewrites it by adding the appropriate prefix. In queries to `fn.public` the original term is also kept (query `alice@example.com` is rewritten as `email:alice@example.com OR alice@example.com`), in queries to `fn.private` only the rewritten term is kept (`alice@example.com` is rewritten as `email:alice@example.com`). All terms that look like email, for instance, `alice@example.com` are rewritten to `email:alice@example.com OR alice@example.com`. Terms which look like phone numbers are converted to [E.164](https://en.wikipedia.org/wiki/E.164) and also rewritten as `tel:+14155551212 OR +14155551212`. In addition, in queries to `fn.public` all other unprefixed terms which look like logins are rewritten as logins: `alice` -> `basic:alice OR alice`.
 
 #### Possible Use Cases
 * Restricting users to organisations.
