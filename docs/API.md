@@ -377,10 +377,10 @@ The incremental update request is processed left to right. It may contain the sa
 
 Finding users by login, phone or email requires query terms to be written with prefixes, i.e. `email:alice@example.com` instead of `alice@example.com`. This may present a problem to end users because it requires them to learn the query language. Tinode solves this problem by implementing _query rewrite_ on the server: if query term (tag) does not contain a prefix, server rewrites it by adding the appropriate prefix. In queries to `fnd.public` the original term is also kept (query `alice@example.com` is rewritten as `email:alice@example.com OR alice@example.com`), in queries to `fnd.private` only the rewritten term is kept (`alice@example.com` is rewritten as `email:alice@example.com`). All terms that look like email, for instance, `alice@example.com` are rewritten to `email:alice@example.com OR alice@example.com`. Terms which look like phone numbers are converted to [E.164](https://en.wikipedia.org/wiki/E.164) and also rewritten as `tel:+14155551212 OR +14155551212`. In addition, in queries to `fnd.public` all other unprefixed terms which look like logins are rewritten as logins: `alice` -> `basic:alice OR alice`.
 
-As described above, tags which look like phone numbers are converted to E.164 format. Such conversion requires a country code. The following logic is used when converting phone number tags to E.164:
-* If the tag already contains a country code prefix, it's used as is: `+1(415)555-1212` -> `+14155551212`.
+As described above, tags which look like phone numbers are converted to E.164 format. Such conversion requires an ISO 3166-1 alpha-2 country code. The following logic is used when converting phone number tags to E.164:
+* If the tag already contains a country calling code, it's used as is: `+1(415)555-1212` -> `+14155551212`.
 * If the tag has no prefix, country code is taken from the locale value set by the client in `lang` field of the `{hi}` message.
-* If client has not provided the code, the country code is taken from `default_country_code` field of the `tinode.conf`.
+* If client has not provided the code in the `hi.lang`, the country code is taken from `default_country_code` field of the `tinode.conf`.
 * If no `default_country_code` is set in `tinode.conf`, `US` country code is used.
 
 #### Possible Use Cases
