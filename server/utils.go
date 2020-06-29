@@ -418,10 +418,7 @@ func filterRestrictedTags(tags []string, namespaces map[string]bool) []string {
 // rewriteToken attempts to match the original token against the email, telephone number and optionally login patterns.
 // The tag is expected to be converted to lowercase.
 // On success, it prepends the token with the corresponding prefix. It returns an empty string if the tag is invalid.
-// TODO: better handling of countryCode:
-// 1. As provided by the client (e.g. as specified or inferred from client's phone number or location).
-// 2. Use value from the .conf file.
-// 3. Fallback to US as a last resort.
+// TODO: consider inferring country code from user location.
 func rewriteTag(orig, countryCode string, withLogin bool) string {
 	// Check if the tag already has a prefix e.g. basic:alice.
 	if prefixedTagRegexp.MatchString(orig) {
@@ -433,6 +430,7 @@ func rewriteTag(orig, countryCode string, withLogin bool) string {
 		if len([]rune(addr.Address)) < maxTagLength && addr.Address == orig {
 			return "email:" + orig
 		}
+		log.Println("failed to rewrite email tag", orig)
 		return ""
 	}
 
@@ -450,6 +448,9 @@ func rewriteTag(orig, countryCode string, withLogin bool) string {
 	if tagRegexp.MatchString(orig) {
 		return orig
 	}
+
+	log.Printf("invalid generic tag '%s'", orig)
+
 	return ""
 }
 
