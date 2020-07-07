@@ -975,6 +975,7 @@ func (s *Session) del(msg *ClientComMessage) {
 		// Deleting topic: for sessions attached or not attached, send request to hub first.
 		// Hub will forward to topic, if appropriate.
 		globals.hub.unreg <- &topicUnreg{
+			rcptTo: msg.RcptTo,
 			pkt:  msg,
 			sess: s,
 			del:  true}

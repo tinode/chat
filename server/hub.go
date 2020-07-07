@@ -304,7 +304,7 @@ func (h *Hub) run() {
 func (h *Hub) topicsStateForUser(uid types.Uid, suspended bool) {
 	h.topics.Range(func(name interface{}, t interface{}) bool {
 		topic := t.(*Topic)
-		if topic.cat == types.TopicCatMe || topic.cat == types.TopicCatGrp {
+		if topic.cat == types.TopicCatMe || topic.cat == types.TopicCatFnd {
 			return true
 		}
 
