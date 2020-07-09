@@ -20,7 +20,6 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/nyaruka/phonenumbers"
 	"github.com/tinode/chat/server/auth"
 	"github.com/tinode/chat/server/store/types"
 

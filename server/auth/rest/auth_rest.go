@@ -229,7 +229,7 @@ func (a *authenticator) DelRecords(uid types.Uid) error {
 	return err
 }
 
-// RestrictedTags returns tag namespaces restricted by the server.
+// RestrictedTags returns tag namespaces (prefixes, such as prefix:login) restricted by the server.
 func (a *authenticator) RestrictedTags() ([]string, error) {
 	resp, err := a.callEndpoint("rtagns", nil, nil)
 	if err != nil {

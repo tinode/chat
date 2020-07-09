@@ -266,15 +266,16 @@ func (v *validator) Init(jsonconf string) error {
 }
 
 // PreCheck validates the credential and parameters without sending an email.
-func (v *validator) PreCheck(cred string, params interface{}) error {
+// If the credential is valid, it's returned with an appropriate prefix.
+func (v *validator) PreCheck(cred string, _ map[string]interface{}) (string, error) {
 	if len(cred) > maxEmailLength {
-		return t.ErrMalformed
+		return "", t.ErrMalformed
 	}
 
 	// The email must be plain user@domain.
 	addr, err := mail.ParseAddress(cred)
 	if err != nil || addr.Address != cred {
-		return t.ErrMalformed
+		return "", t.ErrMalformed
 	}
 
 	// Normalize email to make sure Unicode case collisions don't lead to security problems.
@@ -285,7 +286,7 @@ func (v *validator) PreCheck(cred string, params interface{}) error {
 		// Parse email into user and domain parts.
 		parts := strings.Split(addr.Address, "@")
 		if len(parts) != 2 {
-			return t.ErrMalformed
+			return "", t.ErrMalformed
 		}
 
 		var found bool
@@ -297,11 +298,11 @@ func (v *validator) PreCheck(cred string, params interface{}) error {
 		}
 
 		if !found {
-			return t.ErrPolicy
+			return "", t.ErrPolicy
 		}
 	}
 
-	return nil
+	return validatorName + ":" + addr.Address, nil
 }
 
 // Send a request for confirmation to the user: makes a record in DB  and nothing else.

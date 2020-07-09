@@ -2,6 +2,7 @@
 package tel
 
 import (
+	"github.com/nyaruka/phonenumbers"
 	"github.com/tinode/chat/server/store"
 	t "github.com/tinode/chat/server/store/types"
 )
@@ -25,10 +26,17 @@ func (v *validator) Init(jsonconf string) error {
 }
 
 // PreCheck validates the credential and parameters without sending an SMS or making the call.
-func (*validator) PreCheck(cred string, params interface{}) error {
-	// TODO: Check phone format. Format phone for E.164
-	// TODO: Check phone uniqueness
-	return nil
+// If credential is valid it's formatted and prefixed with a tag namespace.
+func (*validator) PreCheck(cred string, params map[string]interface{}) (string, error) {
+	countryCode, ok := params["countryCode"].(string)
+	if !ok {
+		countryCode = "US"
+	}
+	if num, err := phonenumbers.Parse(cred, countryCode); err == nil {
+		// It's a phone number. Not checking the length because phone numbers cannot be that long.
+		return validatorName + ":" + phonenumbers.Format(num, phonenumbers.E164), nil
+	}
+	return "", t.ErrMalformed
 }
 
 // Request sends a request for confirmation to the user: makes a record in DB  and nothing else.

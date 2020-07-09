@@ -12,7 +12,8 @@ type Validator interface {
 
 	// PreCheck pre-validates the credential without sending an actual request for validation:
 	// check uniqueness (if appropriate), format, etc
-	PreCheck(cred string, params interface{}) error
+	// Returns normalized credential prefixed with an appropriate namespace prefix.
+	PreCheck(cred string, params map[string]interface{}) (string, error)
 
 	// Request sends a request for confirmation to the user. Returns true if it's a new credential,
 	// false if it re-sent request for an existing unconfirmed credential.

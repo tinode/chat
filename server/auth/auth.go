@@ -233,7 +233,7 @@ type AuthHandler interface {
 	// DelRecords deletes (or disables) all authentication records for the given user.
 	DelRecords(uid types.Uid) error
 
-	// RestrictedTags returns the tag namespaces which are restricted by this authenticator.
+	// RestrictedTags returns the tag namespaces (prefixes) which are restricted by this authenticator.
 	RestrictedTags() ([]string, error)
 
 	// GetResetParams returns authenticator parameters passed to password reset handler
