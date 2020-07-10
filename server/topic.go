@@ -1246,6 +1246,7 @@ func (t *Topic) thisUserSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.L
 		// No transactions in RethinkDB, but two owners are better than none
 		if ownerChange {
 			oldOwnerData := t.perUser[t.owner]
+			oldOwnerOldWant, oldOwnerOldGiven := oldOwnerData.modeWant, oldOwnerData.modeGiven
 			oldOwnerData.modeGiven = (oldOwnerData.modeGiven & ^types.ModeOwner)
 			oldOwnerData.modeWant = (oldOwnerData.modeWant & ^types.ModeOwner)
 			if err := store.Subs.Update(t.name, t.owner,
@@ -1258,6 +1259,8 @@ func (t *Topic) thisUserSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.L
 				return changed, err
 			}
 			t.perUser[t.owner] = oldOwnerData
+			// Send presence notifications
+			t.notifySubChange(t.owner, asUid, oldOwnerOldWant, oldOwnerOldGiven, oldOwnerData.modeWant, oldOwnerData.modeGiven, "")
 			t.owner = asUid
 		}
 	}
