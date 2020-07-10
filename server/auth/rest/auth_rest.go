@@ -251,10 +251,14 @@ func (a *authenticator) DelRecords(uid types.Uid) error {
 // RestrictedTags returns tag namespaces (prefixes, such as prefix:login) restricted by the server.
 func (a *authenticator) RestrictedTags() ([]string, error) {
 	if a.rTagNS != nil {
+		// Using cached prefixes.
 		ns := make([]string, len(a.rTagNS))
+		// Returning a copy to prevent accidental modification of server-provided tags.
 		copy(ns, a.rTagNS)
 		return ns, nil
 	}
+
+	// First time use, fetch prefixes from the server.
 	resp, err := a.callEndpoint("rtagns", nil, nil)
 	if err != nil {
 		return nil, err
