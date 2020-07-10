@@ -921,7 +921,7 @@ func pbClientCredSerialize(in *MsgCredClient) *pbx.ClientCred {
 		Method:   in.Method,
 		Value:    in.Value,
 		Response: in.Response,
-		Params:   interfaceToBytes(in.Params)}
+		Params:   interfaceMapToByteMap(in.Params)}
 
 }
 
@@ -947,7 +947,7 @@ func pbClientCredDeserialize(in *pbx.ClientCred) *MsgCredClient {
 		Method:   in.GetMethod(),
 		Value:    in.GetValue(),
 		Response: in.GetResponse(),
-		Params:   bytesToInterface(in.GetParams())}
+		Params:   byteMapToInterfaceMap(in.GetParams())}
 }
 
 func pbClientCredsDeserialize(in []*pbx.ClientCred) []MsgCredClient {

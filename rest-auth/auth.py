@@ -106,8 +106,8 @@ def upd():
 
 @app.route('/rtagns', methods=['POST'])
 def rtags():
-    # Return dummy namespace "rest" and "email"
-    return jsonify({'strarr': ['rest', 'email']})
+    # Return dummy namespace "rest" and "email", let client check logins by regular expression.
+    return jsonify({'strarr': ['rest', 'email'], 'byteval': base64.b64encode('^[a-z0-9_]{3,8}$')})
 
 @app.errorhandler(404)
 def not_found(error):

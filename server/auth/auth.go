@@ -223,6 +223,10 @@ type AuthHandler interface {
 	// Returns: user auth record, challenge, error.
 	Authenticate(secret []byte) (*Rec, []byte, error)
 
+	// AsTag converts search token into prefixed tag or an empty string if it
+	// cannot be represented as a prefixed tag.
+	AsTag(token string) string
+
 	// IsUnique verifies if the provided secret can be considered unique by the auth scheme
 	// E.g. if login is unique.
 	IsUnique(secret []byte) (bool, error)

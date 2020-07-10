@@ -73,7 +73,7 @@ type MsgCredClient struct {
 	// Verification response
 	Response string `json:"resp,omitempty"`
 	// Request parameters, such as preferences. Passed to valiator without interpretation.
-	Params interface{} `json:"params,omitempty"`
+	Params map[string]interface{} `json:"params,omitempty"`
 }
 
 // MsgSetQuery is an update to topic metadata: Desc, subscriptions, or tags.

@@ -76,7 +76,7 @@ func replyCreateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 	for i := range creds {
 		cr := &creds[i]
 		vld := store.GetValidator(cr.Method)
-		if err := vld.PreCheck(cr.Value, cr.Params); err != nil {
+		if _, err := vld.PreCheck(cr.Value, cr.Params); err != nil {
 			log.Println("create user: failed credential pre-check", cr, err, s.sid)
 			s.queueOut(decodeStoreError(err, msg.Id, "", msg.timestamp,
 				map[string]interface{}{"what": cr.Method}))
