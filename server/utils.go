@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"log"
 	"net"
-	"net/mail"
 	"path/filepath"
 	"reflect"
 	"regexp"
@@ -20,8 +19,8 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/nyaruka/phonenumbers"
 	"github.com/tinode/chat/server/auth"
+	"github.com/tinode/chat/server/store"
 	"github.com/tinode/chat/server/store/types"
 
 	"golang.org/x/crypto/acme/autocert"
@@ -35,10 +34,6 @@ var prefixedTagRegexp = regexp.MustCompile(`^([a-z]\w{1,15}):[-_+.!?#@\pL\pN]{1,
 
 // Generic tag: the same restrictions as tag body.
 var tagRegexp = regexp.MustCompile(`^[-_+.!?#@\pL\pN]{1,96}$`)
-
-// Token suitable as a login: 3-16 chars, starts with a Unicode letter (class L) and contains Unicode letters (L),
-// numbers (N) and underscore.
-var basicLoginName = regexp.MustCompile(`^\pL[_\pL\pN]{2,15}$`)
 
 const nullValue = "\u2421"
 
@@ -426,24 +421,26 @@ func rewriteTag(orig, countryCode string, withLogin bool) string {
 		return orig
 	}
 
-	// Is it email?
-	if addr, err := mail.ParseAddress(orig); err == nil {
-		if len([]rune(addr.Address)) < maxTagLength && addr.Address == orig {
-			return "email:" + orig
+	// Check if token can be rewritten by any of the validators
+	param := map[string]interface{}{"countryCode": countryCode}
+	for name, conf := range globals.validators {
+		if conf.addToTags {
+			val := store.GetValidator(name)
+			if tag, _ := val.PreCheck(orig, param); tag != "" {
+				return tag
+			}
 		}
-		log.Println("failed to rewrite email tag", orig)
-		return ""
 	}
 
-	if num, err := phonenumbers.Parse(orig, countryCode); err == nil {
-		// It's a phone number. Not checking the length because phone numbers cannot be that long.
-		return "tel:" + phonenumbers.Format(num, phonenumbers.E164)
-	}
-
-	// Does it look like a username/login?
-	// TODO: use configured authenticators to check if orig is a valid user name.
-	if withLogin && basicLoginName.MatchString(orig) {
-		return "basic:" + orig
+	// Try authenticators now.
+	if withLogin {
+		auths := store.GetAuthNames()
+		for _, name := range auths {
+			auth := store.GetAuthHandler(name)
+			if tag := auth.AsTag(orig); tag != "" {
+				return tag
+			}
+		}
 	}
 
 	if tagRegexp.MatchString(orig) {

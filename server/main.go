@@ -379,7 +379,7 @@ func main() {
 			}
 			tags, err := authhdl.RestrictedTags()
 			if err != nil {
-				log.Fatalln("Failed get restricted tag namespaces", name+":", err)
+				log.Fatalln("Failed get restricted tag namespaces (prefixes)", name+":", err)
 			}
 			for _, tag := range tags {
 				if strings.Contains(tag, ":") {

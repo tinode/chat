@@ -39,6 +39,11 @@ func (authenticator) Authenticate(secret []byte) (*auth.Rec, []byte, error) {
 	return nil, nil, types.ErrUnsupported
 }
 
+// AsTag is not supported, will produce an empty string.
+func (authenticator) AsTag(token string) string {
+	return ""
+}
+
 // IsUnique for a noop. Anonymous login does not use secret, any secret is fine.
 func (authenticator) IsUnique(secret []byte) (bool, error) {
 	return true, nil

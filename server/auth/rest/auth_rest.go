@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"errors"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
@@ -26,6 +28,10 @@ type authenticator struct {
 	allowNewAccounts bool
 	// Use separate endpoints, i.e. add request name to serverUrl path when making requests.
 	useSeparateEndpoints bool
+	// Cache of restricted tag prefixes (namespaces).
+	rTagNS []string
+	// Optional regex pattern for checking tokens.
+	reToken *regexp.Regexp
 }
 
 // Request to the server.
@@ -202,6 +208,19 @@ func (a *authenticator) Authenticate(secret []byte) (*auth.Rec, []byte, error) {
 	return resp.Record, resp.ByteVal, nil
 }
 
+// AsTag converts search token into prefixed tag or an empty string if it
+// cannot be represented as a prefixed tag.
+func (a *authenticator) AsTag(token string) string {
+	if len(a.rTagNS) > 0 {
+		if a.reToken != nil && !a.reToken.MatchString(token) {
+			return ""
+		}
+		// No validation or passed validation.
+		return a.rTagNS[0] + ":" + token
+	}
+	return ""
+}
+
 // IsUnique verifies if the provided secret can be considered unique by the auth scheme
 // E.g. if login is unique.
 func (a *authenticator) IsUnique(secret []byte) (bool, error) {
@@ -229,13 +248,30 @@ func (a *authenticator) DelRecords(uid types.Uid) error {
 	return err
 }
 
-// RestrictedTags returns tag namespaces restricted by the server.
+// RestrictedTags returns tag namespaces (prefixes, such as prefix:login) restricted by the server.
 func (a *authenticator) RestrictedTags() ([]string, error) {
+	if a.rTagNS != nil {
+		// Using cached prefixes.
+		ns := make([]string, len(a.rTagNS))
+		// Returning a copy to prevent accidental modification of server-provided tags.
+		copy(ns, a.rTagNS)
+		return ns, nil
+	}
+
+	// First time use, fetch prefixes from the server.
 	resp, err := a.callEndpoint("rtagns", nil, nil)
 	if err != nil {
 		return nil, err
 	}
 
+	// Save valid result to cache.
+	a.rTagNS = resp.StrSliceVal
+	if len(resp.ByteVal) > 0 {
+		a.reToken, err = regexp.Compile(string(resp.ByteVal))
+		if err != nil {
+			log.Println("rest_auth: invalid token regexp", string(resp.ByteVal))
+		}
+	}
 	return resp.StrSliceVal, nil
 }
 

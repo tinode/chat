@@ -4,6 +4,7 @@ package basic
 import (
 	"encoding/json"
 	"errors"
+	"regexp"
 	"strings"
 	"time"
 
@@ -16,11 +17,15 @@ import (
 
 // Define default constraints on login and password
 const (
-	defaultMinLoginLength = 1
+	defaultMinLoginLength = 2
 	defaultMaxLoginLength = 32
 
 	defaultMinPasswordLength = 3
 )
+
+// Token suitable as a login: starts with a Unicode letter (class L) and contains Unicode letters (L),
+// numbers (N) and underscore.
+var loginPattern = regexp.MustCompile(`^\pL[_\pL\pN]+$`)
 
 // authenticator is the type to map authentication methods to.
 type authenticator struct {
@@ -32,7 +37,8 @@ type authenticator struct {
 }
 
 func (a *authenticator) checkLoginPolicy(uname string) error {
-	if len([]rune(uname)) < a.minLoginLength || len([]rune(uname)) > defaultMaxLoginLength {
+	rlogin := []rune(uname)
+	if len(rlogin) < a.minLoginLength || len(rlogin) > defaultMaxLoginLength || !loginPattern.MatchString(uname) {
 		return types.ErrPolicy
 	}
 
@@ -233,6 +239,19 @@ func (a *authenticator) Authenticate(secret []byte) (*auth.Rec, []byte, error) {
 		State:     types.StateUndefined}, nil, nil
 }
 
+// AsTag convert search token into a prefixed tag, if possible.
+func (a *authenticator) AsTag(token string) string {
+	if !a.addToTags {
+		return ""
+	}
+
+	if err := a.checkLoginPolicy(token); err != nil {
+		return ""
+	}
+
+	return a.name + ":" + token
+}
+
 // IsUnique checks login uniqueness.
 func (a *authenticator) IsUnique(secret []byte) (bool, error) {
 	uname, _, err := parseSecret(secret)
@@ -265,13 +284,13 @@ func (a *authenticator) DelRecords(uid types.Uid) error {
 	return store.Users.DelAuthRecords(uid, a.name)
 }
 
-// RestrictedTags returns tag namespaces restricted in this config.
+// RestrictedTags returns tag namespaces (prefixes) restricted by this adapter.
 func (a *authenticator) RestrictedTags() ([]string, error) {
-	var tags []string
+	var prefix []string
 	if a.addToTags {
-		tags = []string{a.name}
+		prefix = []string{a.name}
 	}
-	return tags, nil
+	return prefix, nil
 }
 
 // GetResetParams returns authenticator parameters passed to password reset handler.

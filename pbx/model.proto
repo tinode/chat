@@ -82,8 +82,8 @@ message ClientCred {
 	string value = 2;
 	// Verification response
 	string response = 3;
-	// Request parameters, such as preferences.
-	bytes params = 4;
+	// Request parameters, such as preferences or country code.
+	map<string, bytes> params = 4;
 }
 
 // SetDesc: C2S in set.what == "desc" and sub.init message

@@ -157,6 +157,11 @@ func (ta *authenticator) GenSecret(rec *auth.Rec) ([]byte, time.Time, error) {
 	return buf.Bytes(), expires, nil
 }
 
+// AsTag is not supported, will produce an empty string.
+func (authenticator) AsTag(token string) string {
+	return ""
+}
+
 // IsUnique is not supported, will produce an error.
 func (authenticator) IsUnique(token []byte) (bool, error) {
 	return false, types.ErrUnsupported
