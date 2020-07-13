@@ -1995,7 +1995,7 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 		sess.queueOut(&ServerComMessage{Meta: meta})
 	} else {
 		// Inform the client that there are no subscriptions.
-		sess.queueOut(NoErrParams(id, t.original(asUid), now, map[string]interface{}{"what": "sub"}))
+		sess.queueOut(NoContentParams(id, t.original(asUid), now, map[string]interface{}{"what": "sub"}))
 	}
 
 	return nil
@@ -2121,7 +2121,7 @@ func (t *Topic) replyGetTags(sess *Session, asUid types.Uid, id string) error {
 	}
 
 	// Inform the requester that there are no tags.
-	sess.queueOut(NoErrParams(id, t.original(asUid), now, map[string]string{"what": "tags"}))
+	sess.queueOut(NoContentParams(id, t.original(asUid), now, map[string]string{"what": "tags"}))
 
 	return nil
 }
@@ -2209,7 +2209,7 @@ func (t *Topic) replyGetCreds(sess *Session, asUid types.Uid, id string) error {
 	}
 
 	// Inform the requester that there are no credentials.
-	sess.queueOut(NoErrParams(id, t.original(asUid), now, map[string]string{"what": "creds"}))
+	sess.queueOut(NoContentParams(id, t.original(asUid), now, map[string]string{"what": "creds"}))
 
 	return nil
 }
@@ -2281,7 +2281,7 @@ func (t *Topic) replyGetDel(sess *Session, asUid types.Uid, id string, req *MsgG
 		}
 	}
 
-	sess.queueOut(NoErrParams(id, toriginal, now, map[string]string{"what": "del"}))
+	sess.queueOut(NoContentParams(id, toriginal, now, map[string]string{"what": "del"}))
 
 	return nil
 }
