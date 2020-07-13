@@ -37,7 +37,8 @@ const (
 
 	adapterName = "mysql"
 
-	defaultMaxResults = 1024
+	// This is capped by the Session's send queue limit (128).
+	defaultMaxResults = 100
 )
 
 type configType struct {

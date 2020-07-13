@@ -40,7 +40,8 @@ const (
 	adpVersion  = 111
 	adapterName = "mongodb"
 
-	defaultMaxResults = 1024
+	// This is capped by the Session's send queue limit (128).
+	defaultMaxResults = 100
 )
 
 // See https://godoc.org/go.mongodb.org/mongo-driver/mongo/options#ClientOptions for explanations.

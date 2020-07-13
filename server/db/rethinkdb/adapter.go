@@ -33,7 +33,8 @@ const (
 
 	adapterName = "rethinkdb"
 
-	defaultMaxResults = 1024
+	// This is capped by the Session's send queue limit (128).
+	defaultMaxResults = 100
 )
 
 // See https://godoc.org/github.com/rethinkdb/rethinkdb-go#ConnectOpts for explanations.
