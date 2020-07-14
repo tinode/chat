@@ -585,6 +585,8 @@ func (s *Session) hello(msg *ClientComMessage) {
 			"build":              store.GetAdapterName() + ":" + buildstamp,
 			"maxMessageSize":     globals.maxMessageSize,
 			"maxSubscriberCount": globals.maxSubscriberCount,
+			"minTagLength":       minTagLength,
+			"maxTagLength":       maxTagLength,
 			"maxTagCount":        globals.maxTagCount,
 			"maxFileUploadSize":  globals.maxFileUploadSize,
 		}
@@ -976,9 +978,9 @@ func (s *Session) del(msg *ClientComMessage) {
 		// Hub will forward to topic, if appropriate.
 		globals.hub.unreg <- &topicUnreg{
 			rcptTo: msg.RcptTo,
-			pkt:  msg,
-			sess: s,
-			del:  true}
+			pkt:    msg,
+			sess:   s,
+			del:    true}
 	} else {
 		// Must join the topic to delete messages or subscriptions.
 		s.queueOut(ErrAttachFirst(msg.Id, msg.Original, msg.timestamp))
