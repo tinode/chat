@@ -24,13 +24,16 @@ import (
 
 // adapter holds MongoDB connection data.
 type adapter struct {
-	conn            *mdb.Client
-	db              *mdb.Database
-	dbName          string
-	maxResults      int
-	version         int
-	ctx             context.Context
-	useTransactions bool
+	conn              *mdb.Client
+	db                *mdb.Database
+	dbName            string
+	// Maximum number of records to return
+	maxResults        int
+	// Maximum number of message records to return
+	maxMessageResults int
+	version           int
+	ctx               context.Context
+	useTransactions   bool
 }
 
 const (
@@ -137,6 +140,10 @@ func (a *adapter) Open(jsonconfig json.RawMessage) error {
 
 	if a.maxResults <= 0 {
 		a.maxResults = defaultMaxResults
+	}
+
+	if a.maxMessageResults <= 0 {
+		a.maxMessageResults = defaultMaxMessageResults
 	}
 
 	a.ctx = context.Background()
@@ -1818,7 +1825,7 @@ func (a *adapter) MessageSave(msg *t.Message) error {
 
 // MessageGetAll returns messages matching the query
 func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.QueryOpt) ([]t.Message, error) {
-	var limit = a.maxResults
+	var limit = a.maxMessageResults
 	var lower, upper int
 	requester := forUser.String()
 	if opts != nil {
@@ -1956,7 +1963,7 @@ func (a *adapter) MessageDeleteList(topic string, toDel *t.DelMessage) error {
 
 // MessageGetDeleted returns a list of deleted message Ids.
 func (a *adapter) MessageGetDeleted(topic string, forUser t.Uid, opts *t.QueryOpt) ([]t.DelMessage, error) {
-	var limit = a.maxResults
+	var limit = a.maxMessageResults
 	var lower, upper int
 	if opts != nil {
 		if opts.Since > 0 {

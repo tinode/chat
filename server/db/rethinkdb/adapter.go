@@ -19,10 +19,13 @@ import (
 
 // adapter holds RethinkDb connection data.
 type adapter struct {
-	conn       *rdb.Session
-	dbName     string
-	maxResults int
-	version    int
+	conn              *rdb.Session
+	dbName            string
+	// Maximum number of records to return
+	maxResults        int
+	// Maximum number of message records to return
+	maxMessageResults int
+	version           int
 }
 
 const (
@@ -33,8 +36,9 @@ const (
 
 	adapterName = "rethinkdb"
 
+	defaultMaxResults = 1024
 	// This is capped by the Session's send queue limit (128).
-	defaultMaxResults = 100
+	defaultMaxMessageResults = 100
 )
 
 // See https://godoc.org/github.com/rethinkdb/rethinkdb-go#ConnectOpts for explanations.
@@ -89,6 +93,10 @@ func (a *adapter) Open(jsonconfig json.RawMessage) error {
 
 	if a.maxResults <= 0 {
 		a.maxResults = defaultMaxResults
+	}
+
+	if a.maxMessageResults <= 0 {
+		a.maxMessageResults = defaultMaxMessageResults
 	}
 
 	opts.Database = a.dbName
@@ -1660,7 +1668,7 @@ func (a *adapter) MessageSave(msg *t.Message) error {
 
 func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.QueryOpt) ([]t.Message, error) {
 
-	var limit = a.maxResults
+	var limit = a.maxMessageResults
 	var lower, upper interface{}
 
 	upper = rdb.MaxVal
@@ -1712,7 +1720,7 @@ func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.QueryOpt) (
 
 // Get ranges of deleted messages
 func (a *adapter) MessageGetDeleted(topic string, forUser t.Uid, opts *t.QueryOpt) ([]t.DelMessage, error) {
-	var limit = a.maxResults
+	var limit = a.maxMessageResults
 	var lower, upper interface{}
 
 	upper = rdb.MaxVal

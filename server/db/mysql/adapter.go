@@ -21,12 +21,14 @@ import (
 
 // adapter holds MySQL connection data.
 type adapter struct {
-	db     *sqlx.DB
-	dsn    string
-	dbName string
+	db                *sqlx.DB
+	dsn               string
+	dbName            string
 	// Maximum number of records to return
-	maxResults int
-	version    int
+	maxResults        int
+	// Maximum number of message records to return
+	maxMessageResults int
+	version           int
 }
 
 const (
@@ -37,8 +39,9 @@ const (
 
 	adapterName = "mysql"
 
+	defaultMaxResults = 1024
 	// This is capped by the Session's send queue limit (128).
-	defaultMaxResults = 100
+	defaultMaxMessageResults = 100
 )
 
 type configType struct {
@@ -71,6 +74,10 @@ func (a *adapter) Open(jsonconfig json.RawMessage) error {
 
 	if a.maxResults <= 0 {
 		a.maxResults = defaultMaxResults
+	}
+
+	if a.maxMessageResults <= 0 {
+		a.maxMessageResults = defaultMaxMessageResults
 	}
 
 	// This just initializes the driver but does not open the network connection.
@@ -2028,7 +2035,7 @@ func (a *adapter) MessageSave(msg *t.Message) error {
 }
 
 func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.QueryOpt) ([]t.Message, error) {
-	var limit = a.maxResults
+	var limit = a.maxMessageResults
 	var lower = 0
 	var upper = 1<<31 - 1
 
@@ -2083,7 +2090,7 @@ var dellog struct {
 
 // Get ranges of deleted messages
 func (a *adapter) MessageGetDeleted(topic string, forUser t.Uid, opts *t.QueryOpt) ([]t.DelMessage, error) {
-	var limit = a.maxResults
+	var limit = a.maxMessageResults
 	var lower = 0
 	var upper = 1<<31 - 1
 
