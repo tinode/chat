@@ -2090,7 +2090,7 @@ var dellog struct {
 
 // Get ranges of deleted messages
 func (a *adapter) MessageGetDeleted(topic string, forUser t.Uid, opts *t.QueryOpt) ([]t.DelMessage, error) {
-	var limit = a.maxMessageResults
+	var limit = a.maxResults
 	var lower = 0
 	var upper = 1<<31 - 1
 

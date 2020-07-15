@@ -43,8 +43,9 @@ const (
 	adpVersion  = 111
 	adapterName = "mongodb"
 
+	defaultMaxResults = 1024
 	// This is capped by the Session's send queue limit (128).
-	defaultMaxResults = 100
+	defaultMaxMessageResults = 100
 )
 
 // See https://godoc.org/go.mongodb.org/mongo-driver/mongo/options#ClientOptions for explanations.
@@ -1963,7 +1964,7 @@ func (a *adapter) MessageDeleteList(topic string, toDel *t.DelMessage) error {
 
 // MessageGetDeleted returns a list of deleted message Ids.
 func (a *adapter) MessageGetDeleted(topic string, forUser t.Uid, opts *t.QueryOpt) ([]t.DelMessage, error) {
-	var limit = a.maxMessageResults
+	var limit = a.maxResults
 	var lower, upper int
 	if opts != nil {
 		if opts.Since > 0 {

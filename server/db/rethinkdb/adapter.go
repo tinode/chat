@@ -1720,7 +1720,7 @@ func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.QueryOpt) (
 
 // Get ranges of deleted messages
 func (a *adapter) MessageGetDeleted(topic string, forUser t.Uid, opts *t.QueryOpt) ([]t.DelMessage, error) {
-	var limit = a.maxMessageResults
+	var limit = a.maxResults
 	var lower, upper interface{}
 
 	upper = rdb.MaxVal
