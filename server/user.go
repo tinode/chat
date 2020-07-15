@@ -354,7 +354,7 @@ func addCreds(uid types.Uid, creds []MsgCredClient, extraTags []string, lang str
 
 	// Save tags potentially changed by the validator.
 	if len(extraTags) > 0 {
-		if utags, err := store.Users.UpdateTags(uid, extraTags, nil, nil); err != nil {
+		if utags, err := store.Users.UpdateTags(uid, extraTags, nil, nil); err == nil {
 			extraTags = utags
 		} else {
 			log.Println("add cred tags update failed:", err)
