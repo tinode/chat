@@ -727,8 +727,8 @@ func (a *adapter) AuthUpdRecord(uid t.Uid, scheme, unique string, authLvl auth.L
 		exp = &expires
 	}
 
-	_, err := a.db.Exec("UPDATE auth SET uname=?,authLvl=?,secret=?,expires=? WHERE uname=?",
-		unique, authLvl, secret, exp, unique)
+	_, err := a.db.Exec("UPDATE auth SET uname=?,authLvl=?,secret=?,expires=? WHERE userid=? AND scheme=?",
+		unique, authLvl, secret, exp, store.DecodeUid(uid), scheme)
 	if isDupe(err) {
 		return t.ErrDuplicate
 	}
