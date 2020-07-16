@@ -24,13 +24,16 @@ import (
 
 // adapter holds MongoDB connection data.
 type adapter struct {
-	conn            *mdb.Client
-	db              *mdb.Database
-	dbName          string
-	maxResults      int
-	version         int
-	ctx             context.Context
-	useTransactions bool
+	conn              *mdb.Client
+	db                *mdb.Database
+	dbName            string
+	// Maximum number of records to return
+	maxResults        int
+	// Maximum number of message records to return
+	maxMessageResults int
+	version           int
+	ctx               context.Context
+	useTransactions   bool
 }
 
 const (
@@ -41,6 +44,8 @@ const (
 	adapterName = "mongodb"
 
 	defaultMaxResults = 1024
+	// This is capped by the Session's send queue limit (128).
+	defaultMaxMessageResults = 100
 )
 
 // See https://godoc.org/go.mongodb.org/mongo-driver/mongo/options#ClientOptions for explanations.
@@ -136,6 +141,10 @@ func (a *adapter) Open(jsonconfig json.RawMessage) error {
 
 	if a.maxResults <= 0 {
 		a.maxResults = defaultMaxResults
+	}
+
+	if a.maxMessageResults <= 0 {
+		a.maxMessageResults = defaultMaxMessageResults
 	}
 
 	a.ctx = context.Background()
@@ -1817,7 +1826,7 @@ func (a *adapter) MessageSave(msg *t.Message) error {
 
 // MessageGetAll returns messages matching the query
 func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.QueryOpt) ([]t.Message, error) {
-	var limit = a.maxResults
+	var limit = a.maxMessageResults
 	var lower, upper int
 	requester := forUser.String()
 	if opts != nil {
