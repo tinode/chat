@@ -43,28 +43,41 @@
 
       <request subst="true">
         <!--
-        Pick the second topic from response.
+        Response looks like:
 
         {"meta":{"id":"106691","topic":"me","ts":"2018-07-25T18:14:24.433Z","sub":[
           {"updated":"2018-07-16T01:29:25.016Z","acs":{"given":47,"want":47,"mode":47},"topic":"grpOZcxbbwE7Hc","touched":"2018-07-16T17:32:12.48Z","seq":3},{"updated":"2018-07-16T01:35:25.016Z","acs":{"given":47,"want":47,"mode":47},"topic":"grpz6jDYiygVkI","touched":"2018-07-16T17:30:32.165Z","seq":22},{"updated":"2018-07-16T02:05:25.019Z","acs":{"given":47,"want":47,"mode":47},"topic":"grp8efPpvZoUQ4","touched":"2018-07-16T17:24:34.946Z","seq":1},{"updated":"2018-07-15T17:23:25.002Z","acs":{"given":31,"want":31,"mode":31},"topic":"usrlF7rSfaEx9c","touched":"2018-07-16T17:28:42.07Z","seq":9},{"updated":"2018-07-15T23:23:25.008Z","acs":{"given":16,"want":31,"mode":16},"topic":"usrddg3AFqzeEQ"},{"updated":"2018-07-15T23:53:25.009Z","acs":{"given":31,"want":31,"mode":31},"topic":"usrR6qq94MxLZ0","touched":"2018-07-16T17:30:03.93Z","seq":11},{"updated":"2018-07-15T23:56:25.01Z","acs":{"given":31,"want":31,"mode":31},"topic":"usriUhihEisbH8","touched":"2018-07-16T17:26:20.401Z","seq":9}]}}
         -->
-        <dyn_variable name="topic" jsonpath="meta.sub[1].topic"/>
+        <dyn_variable name="subs" jsonpath="meta.sub[*].topic"/>
         <websocket type="message" frame="text">{"get":{"id":"%%_baseid%%04","topic":"me","what":"sub"}}</websocket>
       </request>
 
-      <thinktime value="3" random="true"></thinktime>
+      <!-- main loop -->
+      <for from="1" to="100" incr="1" var="ctr">
+        <!-- Iterate over subscriptions -->
+        <foreach name="topicx" in="subs">
+          <thinktime value="3" random="true"></thinktime>
 
-      <request subst="true">
-        <websocket type="message" frame="text">{"sub":{"id":"%%_baseid%%05","topic":"%%_topic%%","get":{"what":"desc sub data del"}}}</websocket>
-      </request>
+          <request subst="true">
+            <websocket type="message" frame="text">{"sub":{"id":"%%_baseid%%%%_topicx%%%%_ctr%%05","topic":"%%_topicx%%","get":{"what":"desc sub data del"}}}</websocket>
+          </request>
 
-      <for from="1" to="5" incr="1" var="counter">
-        <thinktime min="2" max="10" random="true"></thinktime>
+          <for from="1" to="50" incr="1" var="counter">
+            <thinktime min="2" max="10" random="true"></thinktime>
 
-        <request subst="true">
-          <websocket type="message" frame="text">{"pub":{"id":"%%_baseid%%06","topic":"%%_topic%%","content":"This is a Tsung test %%_baseid%% %%_counter%%"}}</websocket>
-        </request>
+            <request subst="true">
+              <websocket type="message" frame="text">{"pub":{"id":"%%_baseid%%%%_topicx%%%%_ctr%%06%%_counter%%","topic":"%%_topicx%%","content":"This is a Tsung test %%_baseid%% %%_counter%%"}}</websocket>
+            </request>
+          </for>
+
+          <request subst="true">
+            <websocket type="message" frame="text">{"leave":{"id":"%%_baseid%%%%_topicx%%%%_ctr%%07","topic":"%%_topicx%%"}}</websocket>
+          </request>
+
+        </foreach>
       </for>
+      <!-- end main loop -->
+
       <request>
         <websocket type="close"></websocket>
       </request>
