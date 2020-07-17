@@ -1128,11 +1128,9 @@ func (a *adapter) AuthUpdRecord(uid t.Uid, scheme, unique string,
 				"secret":  secret,
 				"expires": expires}})
 	} else {
-		if err = a.AuthAddRecord(uid, scheme, unique, authLvl, secret, expires); err != nil {
-			return err
-		}
-		if err = a.AuthDelScheme(uid, scheme); err != nil {
-			return err
+		err = a.AuthAddRecord(uid, scheme, unique, authLvl, secret, expires)
+		if err == nil {
+			a.AuthDelScheme(uid, scheme)
 		}
 	}
 
