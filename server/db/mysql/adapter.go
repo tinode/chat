@@ -21,11 +21,11 @@ import (
 
 // adapter holds MySQL connection data.
 type adapter struct {
-	db                *sqlx.DB
-	dsn               string
-	dbName            string
+	db     *sqlx.DB
+	dsn    string
+	dbName string
 	// Maximum number of records to return
-	maxResults        int
+	maxResults int
 	// Maximum number of message records to return
 	maxMessageResults int
 	version           int

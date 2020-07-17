@@ -24,11 +24,11 @@ import (
 
 // adapter holds MongoDB connection data.
 type adapter struct {
-	conn              *mdb.Client
-	db                *mdb.Database
-	dbName            string
+	conn   *mdb.Client
+	db     *mdb.Database
+	dbName string
 	// Maximum number of records to return
-	maxResults        int
+	maxResults int
 	// Maximum number of message records to return
 	maxMessageResults int
 	version           int

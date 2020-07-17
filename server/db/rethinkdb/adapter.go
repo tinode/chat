@@ -19,10 +19,10 @@ import (
 
 // adapter holds RethinkDb connection data.
 type adapter struct {
-	conn              *rdb.Session
-	dbName            string
+	conn   *rdb.Session
+	dbName string
 	// Maximum number of records to return
-	maxResults        int
+	maxResults int
 	// Maximum number of message records to return
 	maxMessageResults int
 	version           int
