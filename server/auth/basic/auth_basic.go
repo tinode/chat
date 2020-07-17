@@ -167,6 +167,11 @@ func (a *authenticator) UpdateRecord(rec *auth.Rec, secret []byte) (*auth.Rec, e
 		uname = login
 	} else if err = a.checkLoginPolicy(uname); err != nil {
 		return nil, err
+	} else if uid, _, _, _, err := store.Users.GetAuthUniqueRecord(a.name, uname); err != nil {
+		return nil, err
+	} else if !uid.IsZero() {
+		// The (new) user name already exists. Report an error.
+		return nil, types.ErrDuplicate
 	}
 
 	if err = a.checkPasswordPolicy(password); err != nil {
