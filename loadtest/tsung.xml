@@ -59,19 +59,19 @@
           <thinktime value="3" random="true"></thinktime>
 
           <request subst="true">
-            <websocket type="message" frame="text">{"sub":{"id":"%%_baseid%%%%_topicx%%%%_ctr%%05","topic":"%%_topicx%%","get":{"what":"desc sub data del"}}}</websocket>
+            <websocket type="message" frame="text">{"sub":{"id":"%%_baseid%%%%_topicx%%%%_ctr%%","topic":"%%_topicx%%","get":{"what":"desc sub data del"}}}</websocket>
           </request>
 
           <for from="1" to="50" incr="1" var="counter">
             <thinktime min="2" max="10" random="true"></thinktime>
 
             <request subst="true">
-              <websocket type="message" frame="text">{"pub":{"id":"%%_baseid%%%%_topicx%%%%_ctr%%06%%_counter%%","topic":"%%_topicx%%","content":"This is a Tsung test %%_baseid%% %%_counter%%"}}</websocket>
+              <websocket type="message" frame="text">{"pub":{"id":"%%_baseid%%%%_topicx%%%%_ctr%%%%_counter%%","topic":"%%_topicx%%","content":"This is a Tsung test %%_baseid%% %%_counter%%"}}</websocket>
             </request>
           </for>
 
           <request subst="true">
-            <websocket type="message" frame="text">{"leave":{"id":"%%_baseid%%%%_topicx%%%%_ctr%%07","topic":"%%_topicx%%"}}</websocket>
+            <websocket type="message" frame="text">{"leave":{"id":"%%_baseid%%%%_topicx%%%%_ctr%%","topic":"%%_topicx%%"}}</websocket>
           </request>
 
         </foreach>
