@@ -852,7 +852,7 @@ func NoErrAccepted(id, topic string, ts time.Time) *ServerComMessage {
 		Timestamp: ts}, Id: id}
 }
 
-// NoContent indicates request was processed but resulted in no content (204).
+// NoContentParams indicates request was processed but resulted in no content (204).
 func NoContentParams(id, topic string, ts time.Time, params interface{}) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,

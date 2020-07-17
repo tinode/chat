@@ -1245,7 +1245,7 @@ type FileDef struct {
 	Location string
 }
 
-// Turns 2d slice into a 1d slice.
+// FlattenDoubleSlice turns 2d slice into a 1d slice.
 func FlattenDoubleSlice(data [][]string) []string {
 	var result []string
 	for _, el := range data {
