@@ -58,6 +58,7 @@ func (*grpcNodeServer) MessageLoop(stream pbx.Node_MessageLoopServer) error {
 			return err
 		}
 		log.Println("grpc in:", truncateStringIfTooLong(in.String()), sess.sid)
+		statsInc("IncomingMessagesGrpcTotal", 1)
 		sess.dispatch(pbCliDeserialize(in))
 
 		sess.lock.Lock()
@@ -88,6 +89,7 @@ func (sess *Session) writeGrpcLoop() {
 				log.Println("grpc: outbound queue limit exceeded", sess.sid)
 				return
 			}
+			statsInc("OutgoingMessagesGrpcTotal", 1)
 			if err := grpcWrite(sess, msg); err != nil {
 				log.Println("grpc: write", sess.sid, err)
 				return

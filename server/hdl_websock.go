@@ -58,6 +58,7 @@ func (sess *Session) readLoop() {
 			}
 			return
 		}
+		statsInc("IncomingMessagesWebsockTotal", 1)
 		sess.dispatchRaw(raw)
 	}
 }
@@ -82,6 +83,7 @@ func (sess *Session) writeLoop() {
 				log.Println("ws: outbound queue limit exceeded", sess.sid)
 				return
 			}
+			statsInc("OutgoingMessagesWebsockTotal", 1)
 			if err := wsWrite(sess.ws, websocket.TextMessage, msg); err != nil {
 				if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure,
 					websocket.CloseNormalClosure) {
