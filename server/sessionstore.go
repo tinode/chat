@@ -218,17 +218,5 @@ func NewSessionStore(lifetime time.Duration) *SessionStore {
 	statsRegisterInt("LiveSessions")
 	statsRegisterInt("TotalSessions")
 
-	statsRegisterInt("IncomingMessagesWebsockTotal")
-	statsRegisterInt("OutgoingMessagesWebsockTotal")
-
-	statsRegisterInt("IncomingMessagesLongpollTotal")
-	statsRegisterInt("OutgoingMessagesLongpollTotal")
-
-	statsRegisterInt("IncomingMessagesGrpcTotal")
-	statsRegisterInt("OutgoingMessagesGrpcTotal")
-
-	statsRegisterInt("FileDownloadsTotal")
-	statsRegisterInt("FileUploadsTotal")
-
 	return ss
 }
