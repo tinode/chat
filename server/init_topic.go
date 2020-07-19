@@ -33,11 +33,14 @@ func topicInit(t *Topic, join *sessionJoin, h *Hub) {
 		// Request to load an existing or create a new p2p topic, then attach to it.
 		err = initTopicP2P(t, join)
 	case strings.HasPrefix(t.xoriginal, "new"):
-		// Processing request to create a new group topic
+		// Processing request to create a new group topic or a channel.
 		err = initTopicNewGrp(t, join)
 	case strings.HasPrefix(t.xoriginal, "grp"):
-		// Load existing group topic
-		err = initTopicGrp(t, join)
+		// Load existing group topic.
+		err = initTopicGrpChn(t, join, false)
+	case strings.HasPrefix(t.xoriginal, "chn"):
+		// Load existing channel.
+		err = initTopicGrpChn(t, join, true)
 	case t.xoriginal == "sys":
 		// Initialize system topic.
 		err = initTopicSys(t, join)
@@ -577,8 +580,12 @@ func initTopicNewGrp(t *Topic, sreg *sessionJoin) error {
 
 // Initialize existing group topic. There is a race condition
 // when two users attempt to load the same topic at the same time.
-func initTopicGrp(t *Topic, sreg *sessionJoin) error {
-	t.cat = types.TopicCatGrp
+func initTopicGrpChn(t *Topic, sreg *sessionJoin, isChan bool) error {
+	if isChan {
+		t.cat = types.TopicCatChn
+	} else {
+		t.cat = types.TopicCatGrp
+	}
 
 	// TODO(gene): check and validate topic name
 	stopic, err := store.Topics.Get(t.name)
