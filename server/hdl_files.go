@@ -26,6 +26,7 @@ func largeFileServe(wrt http.ResponseWriter, req *http.Request) {
 	now := types.TimeNow()
 	enc := json.NewEncoder(wrt)
 	mh := store.GetMediaHandler()
+	statsInc("FileDownloadsTotal", 1)
 
 	writeHttpResponse := func(msg *ServerComMessage, err error) {
 		// Gorilla CompressHandler requires Content-Type to be set.
@@ -96,6 +97,7 @@ func largeFileUpload(wrt http.ResponseWriter, req *http.Request) {
 	now := types.TimeNow()
 	enc := json.NewEncoder(wrt)
 	mh := store.GetMediaHandler()
+	statsInc("FileUploadsTotal", 1)
 
 	writeHttpResponse := func(msg *ServerComMessage, err error) {
 		// Gorilla CompressHandler requires Content-Type to be set.

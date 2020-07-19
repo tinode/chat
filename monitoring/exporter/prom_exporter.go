@@ -15,16 +15,29 @@ type PromExporter struct {
 
 	scraper *Scraper
 
-	up               *prometheus.Desc
-	version          *prometheus.Desc
-	topicsLive       *prometheus.Desc
-	topicsTotal      *prometheus.Desc
-	sessionsLive     *prometheus.Desc
-	sessionsTotal    *prometheus.Desc
-	clusterLeader    *prometheus.Desc
-	clusterSize      *prometheus.Desc
-	clusterNodesLive *prometheus.Desc
-	malloced         *prometheus.Desc
+	up                            *prometheus.Desc
+	version                       *prometheus.Desc
+	topicsLive                    *prometheus.Desc
+	topicsTotal                   *prometheus.Desc
+	sessionsLive                  *prometheus.Desc
+	sessionsTotal                 *prometheus.Desc
+
+	incomingMessagesWebsockTotal  *prometheus.Desc
+	outgoingMessagesWebsockTotal  *prometheus.Desc
+
+	incomingMessagesLongpollTotal *prometheus.Desc
+	outgoingMessagesLongpollTotal *prometheus.Desc
+
+	incomingMessagesGrpcTotal     *prometheus.Desc
+	outgoingMessagesGrpcTotal     *prometheus.Desc
+
+	fileDownloadsTotal            *prometheus.Desc
+	fileUploadsTotal              *prometheus.Desc
+
+	clusterLeader                 *prometheus.Desc
+	clusterSize                   *prometheus.Desc
+	clusterNodesLive              *prometheus.Desc
+	malloced                      *prometheus.Desc
 }
 
 // NewPromExporter returns an initialized Prometheus exporter.
@@ -70,6 +83,54 @@ func NewPromExporter(server, namespace string, timeout time.Duration, scraper *S
 			nil,
 			nil,
 		),
+		incomingMessagesWebsockTotal: prometheus.NewDesc(
+			prometheus.BuildFQName(namespace, "", "incoming_messages_websock_total"),
+			"Total number of incoming messages via websocket.",
+			nil,
+			nil,
+		),
+		outgoingMessagesWebsockTotal: prometheus.NewDesc(
+			prometheus.BuildFQName(namespace, "", "outgoing_messages_websock_total"),
+			"Total number of outgoiing messages via websocket.",
+			nil,
+			nil,
+		),
+		incomingMessagesLongpollTotal: prometheus.NewDesc(
+			prometheus.BuildFQName(namespace, "", "incoming_messages_longpoll_total"),
+			"Total number of incoming messages via longpoll.",
+			nil,
+			nil,
+		),
+		outgoingMessagesLongpollTotal: prometheus.NewDesc(
+			prometheus.BuildFQName(namespace, "", "outgoing_messages_longpoll_total"),
+			"Total number of outgoiing messages via longpoll.",
+			nil,
+			nil,
+		),
+		incomingMessagesGrpcTotal: prometheus.NewDesc(
+			prometheus.BuildFQName(namespace, "", "incoming_messages_grpc_total"),
+			"Total number of incoming messages via grpc.",
+			nil,
+			nil,
+		),
+		outgoingMessagesGrpcTotal: prometheus.NewDesc(
+			prometheus.BuildFQName(namespace, "", "outgoing_messages_grpc_total"),
+			"Total number of outgoiing messages via grpc.",
+			nil,
+			nil,
+		),
+		fileDownloadsTotal: prometheus.NewDesc(
+			prometheus.BuildFQName(namespace, "", "file_downloads_total"),
+			"Total number of large file downloads.",
+			nil,
+			nil,
+		),
+		fileUploadsTotal: prometheus.NewDesc(
+			prometheus.BuildFQName(namespace, "", "file_uploads_total"),
+			"Total number of large file uploads.",
+			nil,
+			nil,
+		),
 		clusterLeader: prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "", "cluster_leader"),
 			"If this cluster node is the cluster leader.",
@@ -106,6 +167,19 @@ func (e *PromExporter) Describe(ch chan<- *prometheus.Desc) {
 	ch <- e.topicsTotal
 	ch <- e.sessionsLive
 	ch <- e.sessionsTotal
+
+	ch <- e.incomingMessagesWebsockTotal
+	ch <- e.outgoingMessagesWebsockTotal
+
+	ch <- e.incomingMessagesLongpollTotal
+	ch <- e.outgoingMessagesLongpollTotal
+
+	ch <- e.incomingMessagesGrpcTotal
+	ch <- e.outgoingMessagesGrpcTotal
+
+	ch <- e.fileDownloadsTotal
+	ch <- e.fileUploadsTotal
+
 	ch <- e.clusterLeader
 	ch <- e.clusterSize
 	ch <- e.clusterNodesLive
@@ -135,6 +209,19 @@ func (e *PromExporter) parseStats(ch chan<- prometheus.Metric, stats map[string]
 		e.parseAndUpdate(ch, e.topicsTotal, prometheus.CounterValue, stats, "TotalTopics"),
 		e.parseAndUpdate(ch, e.sessionsLive, prometheus.GaugeValue, stats, "LiveSessions"),
 		e.parseAndUpdate(ch, e.sessionsTotal, prometheus.CounterValue, stats, "TotalSessions"),
+
+		e.parseAndUpdate(ch, e.incomingMessagesWebsockTotal, prometheus.CounterValue, stats, "IncomingMessagesWebsockTotal"),
+		e.parseAndUpdate(ch, e.outgoingMessagesWebsockTotal, prometheus.CounterValue, stats, "OutgoingMessagesWebsockTotal"),
+
+		e.parseAndUpdate(ch, e.incomingMessagesLongpollTotal, prometheus.CounterValue, stats, "IncomingMessagesLongpollTotal"),
+		e.parseAndUpdate(ch, e.outgoingMessagesLongpollTotal, prometheus.CounterValue, stats, "OutgoingMessagesLongpollTotal"),
+
+		e.parseAndUpdate(ch, e.incomingMessagesGrpcTotal, prometheus.CounterValue, stats, "IncomingMessagesGrpcTotal"),
+		e.parseAndUpdate(ch, e.outgoingMessagesGrpcTotal, prometheus.CounterValue, stats, "OutgoingMessagesGrpcTotal"),
+
+		e.parseAndUpdate(ch, e.fileDownloadsTotal, prometheus.CounterValue, stats, "FileDownloadsTotal"),
+		e.parseAndUpdate(ch, e.fileUploadsTotal, prometheus.CounterValue, stats, "FileUploadsTotal"),
+
 		e.parseAndUpdate(ch, e.clusterLeader, prometheus.GaugeValue, stats, "ClusterLeader"),
 		e.parseAndUpdate(ch, e.clusterSize, prometheus.GaugeValue, stats, "TotalClusterNodes"),
 		e.parseAndUpdate(ch, e.clusterNodesLive, prometheus.GaugeValue, stats, "LiveClusterNodes"),
