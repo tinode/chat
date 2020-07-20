@@ -1607,7 +1607,7 @@ func (a *adapter) FindTopics(req [][]string, opt []string) ([]t.Subscription, er
 		Table("topics").
 		GetAllByIndex("Tags", allTags...).
 		Filter(rdb.Row.Field("State").Eq(t.StateOK)).
-		Pluck("Id", "Access", "CreatedAt", "UpdatedAt", "Public", "Tags").
+		Pluck("Id", "Access", "CreatedAt", "UpdatedAt", "UseBt", "Public", "Tags").
 		Group("Id").
 		Ungroup().
 		Map(func(row rdb.Term) rdb.Term {
@@ -1640,7 +1640,11 @@ func (a *adapter) FindTopics(req [][]string, opt []string) ([]t.Subscription, er
 	for cursor.Next(&topic) {
 		sub.CreatedAt = topic.CreatedAt
 		sub.UpdatedAt = topic.UpdatedAt
-		sub.Topic = topic.Id
+		if topic.UseBt {
+			sub.Topic = t.ChnFromGrp(topic.Id)
+		} else {
+			sub.Topic = topic.Id
+		}
 		sub.SetPublic(topic.Public)
 		sub.SetDefaultAccess(topic.Access.Auth, topic.Access.Anon)
 		tags := make([]string, 0, 1)

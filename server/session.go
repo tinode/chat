@@ -1060,17 +1060,17 @@ func (s *Session) expandTopicName(msg *ClientComMessage) (string, *ServerComMess
 		uid1 := types.ParseUserId(msg.AsUser)
 		uid2 := types.ParseUserId(msg.Original)
 		if uid2.IsZero() {
-			// Ensure the user id is valid
+			// Ensure the user id is valid.
 			log.Println("s.etn: failed to parse p2p topic name", s.sid)
 			return "", ErrMalformed(msg.Id, msg.Original, msg.timestamp)
 		} else if uid2 == uid1 {
-			// Use 'me' to access self-topic
+			// Use 'me' to access self-topic.
 			log.Println("s.etn: invalid p2p self-subscription", s.sid)
 			return "", ErrPermissionDenied(msg.Id, msg.Original, msg.timestamp)
 		}
 		routeTo = uid1.P2PName(uid2)
-	} else if strings.HasPrefix(msg.Original, "chn") {
-		routeTo = strings.Replace(msg.Original, "chn", "grp", 1)
+	} else if tmp := types.GrpFromChn(msg.Original); tmp != "" {
+		routeTo = tmp
 	} else {
 		routeTo = msg.Original
 	}
