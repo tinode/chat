@@ -118,6 +118,18 @@ func newHub() *Hub {
 	statsRegisterInt("LiveTopics")
 	statsRegisterInt("TotalTopics")
 
+	statsRegisterInt("IncomingMessagesWebsockTotal")
+	statsRegisterInt("OutgoingMessagesWebsockTotal")
+
+	statsRegisterInt("IncomingMessagesLongpollTotal")
+	statsRegisterInt("OutgoingMessagesLongpollTotal")
+
+	statsRegisterInt("IncomingMessagesGrpcTotal")
+	statsRegisterInt("OutgoingMessagesGrpcTotal")
+
+	statsRegisterInt("FileDownloadsTotal")
+	statsRegisterInt("FileUploadsTotal")
+
 	go h.run()
 
 	if !globals.cluster.isRemoteTopic("sys") {
