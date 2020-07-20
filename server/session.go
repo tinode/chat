@@ -451,8 +451,8 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 
 // Request to subscribe to a topic
 func (s *Session) subscribe(msg *ClientComMessage) {
-	if strings.HasPrefix(msg.Original, "new") {
-		// Request to create a new named topic.
+	if strings.HasPrefix(msg.Original, "new") || strings.HasPrefix(msg.Original, "nch") {
+		// Request to create a new group topic.
 		// If we are in a cluster, make sure the new topic belongs to the current node.
 		msg.RcptTo = globals.cluster.genLocalTopicName()
 	} else {
@@ -1069,6 +1069,8 @@ func (s *Session) expandTopicName(msg *ClientComMessage) (string, *ServerComMess
 			return "", ErrPermissionDenied(msg.Id, msg.Original, msg.timestamp)
 		}
 		routeTo = uid1.P2PName(uid2)
+	} else if strings.HasPrefix(msg.Original, "chn") {
+		routeTo = strings.Replace(msg.Original, "chn", "grp", 1)
 	} else {
 		routeTo = msg.Original
 	}

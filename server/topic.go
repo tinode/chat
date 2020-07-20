@@ -32,6 +32,9 @@ type Topic struct {
 	// Topic category
 	cat types.TopicCat
 
+	// Channel functionality is enabled for the group topic.
+	isChan bool
+
 	// If isProxy == true, the actual topic is hosted by another cluster member.
 	// The topic should:
 	// 1. forward all messages to master

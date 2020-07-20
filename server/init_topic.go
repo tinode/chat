@@ -33,14 +33,14 @@ func topicInit(t *Topic, join *sessionJoin, h *Hub) {
 		// Request to load an existing or create a new p2p topic, then attach to it.
 		err = initTopicP2P(t, join)
 	case strings.HasPrefix(t.xoriginal, "new"):
-		// Processing request to create a new group topic or a channel.
-		err = initTopicNewGrp(t, join)
-	case strings.HasPrefix(t.xoriginal, "grp"):
-		// Load existing group topic.
-		err = initTopicGrpChn(t, join, false)
-	case strings.HasPrefix(t.xoriginal, "chn"):
-		// Load existing channel.
-		err = initTopicGrpChn(t, join, true)
+		// Processing request to create a new group topic.
+		err = initTopicNewGrp(t, join, false)
+	case strings.HasPrefix(t.xoriginal, "nch"):
+		// Processing request to create a new channel.
+		err = initTopicNewGrp(t, join, true)
+	case strings.HasPrefix(t.xoriginal, "grp") || strings.HasPrefix(t.xoriginal, "chn"):
+		// Load existing group topic (or channel).
+		err = initTopicGrp(t, join)
 	case t.xoriginal == "sys":
 		// Initialize system topic.
 		err = initTopicSys(t, join)
@@ -477,7 +477,7 @@ func initTopicP2P(t *Topic, sreg *sessionJoin) error {
 }
 
 // Create a new group topic
-func initTopicNewGrp(t *Topic, sreg *sessionJoin) error {
+func initTopicNewGrp(t *Topic, sreg *sessionJoin, isChan bool) error {
 	timestamp := types.TimeNow()
 	pktsub := sreg.pkt.Sub
 
@@ -486,8 +486,14 @@ func initTopicNewGrp(t *Topic, sreg *sessionJoin) error {
 	// Generic topics have parameters stored in the topic object
 	t.owner = types.ParseUserId(sreg.pkt.AsUser)
 
-	t.accessAuth = getDefaultAccess(t.cat, true)
-	t.accessAnon = getDefaultAccess(t.cat, false)
+	if isChan {
+		// The channel is not accessible by default.
+		t.accessAuth = types.ModeNone
+		t.accessAnon = types.ModeNone
+	} else {
+		t.accessAuth = getDefaultAccess(t.cat, true)
+		t.accessAnon = getDefaultAccess(t.cat, false)
+	}
 
 	// Owner/creator gets full access to the topic. Owner may change the default modeWant through 'set'.
 	userData := perUserData{
@@ -562,6 +568,7 @@ func initTopicNewGrp(t *Topic, sreg *sessionJoin) error {
 		ObjHeader: types.ObjHeader{Id: sreg.pkt.RcptTo, CreatedAt: timestamp},
 		Access:    types.DefaultAccess{Auth: t.accessAuth, Anon: t.accessAnon},
 		Tags:      tags,
+		UseBt:     isChan,
 		Public:    t.public}
 
 	// store.Topics.Create will add a subscription record for the topic creator
@@ -578,14 +585,10 @@ func initTopicNewGrp(t *Topic, sreg *sessionJoin) error {
 	return nil
 }
 
-// Initialize existing group topic. There is a race condition
-// when two users attempt to load the same topic at the same time.
-func initTopicGrpChn(t *Topic, sreg *sessionJoin, isChan bool) error {
-	if isChan {
-		t.cat = types.TopicCatChn
-	} else {
-		t.cat = types.TopicCatGrp
-	}
+// Initialize existing group topic. There is a race condition when two users attempt to load
+// the same topic at the same time. It's prevented at hub level.
+func initTopicGrp(t *Topic, sreg *sessionJoin) error {
+	t.cat = types.TopicCatGrp
 
 	// TODO(gene): check and validate topic name
 	stopic, err := store.Topics.Get(t.name)
@@ -598,6 +601,8 @@ func initTopicGrpChn(t *Topic, sreg *sessionJoin, isChan bool) error {
 	if err = t.loadSubscribers(); err != nil {
 		return err
 	}
+
+	t.isChan = stopic.UseBt
 
 	// t.owner is set by loadSubscriptions
 
