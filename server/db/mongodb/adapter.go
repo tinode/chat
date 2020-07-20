@@ -1250,7 +1250,9 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 		if err = cur.Decode(&sub); err != nil {
 			return nil, err
 		}
-		tcat := t.GetTopicCat(sub.Topic)
+
+		tname := sub.Topic
+		tcat := t.GetTopicCat(tname)
 
 		// skip 'me' or 'fnd' subscription
 		if tcat == t.TopicCatMe || tcat == t.TopicCatFnd {
@@ -1264,14 +1266,16 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 			} else {
 				usrq = append(usrq, uid1.String())
 			}
-			topq = append(topq, sub.Topic)
+			topq = append(topq, tname)
 
 			// grp subscription
 		} else {
-			topq = append(topq, sub.Topic)
+			// Convert channel names to topic names.
+			tname = t.GrpFromChn(tname)
+			topq = append(topq, tname)
 		}
 		sub.Private = unmarshalBsonD(sub.Private)
-		join[sub.Topic] = sub
+		join[tname] = sub
 	}
 	cur.Close(a.ctx)
 
@@ -1798,7 +1802,11 @@ func (a *adapter) FindTopics(req [][]string, opt []string) ([]t.Subscription, er
 
 		sub.CreatedAt = topic.CreatedAt
 		sub.UpdatedAt = topic.UpdatedAt
-		sub.User = topic.Id
+		if topic.UseBt {
+			sub.Topic = t.ChnFromGrp(topic.Id)
+		} else {
+			sub.Topic = topic.Id
+		}
 		sub.SetPublic(unmarshalBsonD(topic.Public))
 		sub.SetDefaultAccess(topic.Access.Auth, topic.Access.Anon)
 		tags := make([]string, 0, 1)

@@ -198,24 +198,24 @@ func ParseUserId(s string) Uid {
 	return uid
 }
 
-// ChnFromGrp converts group topic name to corresponding channel name.
-func ChnFromGrp(grp string) string {
+// GrpToChn converts group topic name to corresponding channel name.
+func GrpToChn(grp string) string {
 	if strings.HasPrefix(grp, "grp") {
 		return strings.Replace(grp, "grp", "chn", 1)
 	}
-	// Remove unchanged if it's a channel already.
+	// Return unchanged if it's a channel already.
 	if strings.HasPrefix(grp, "chn") {
 		return grp
 	}
 	return ""
 }
 
-// GrpFromChn gets group topic name from channel name.
-func GrpFromChn(chn string) string {
+// ChnToGrp gets group topic name from channel name.
+func ChnToGrp(chn string) string {
 	if strings.HasPrefix(chn, "chn") {
 		return strings.Replace(chn, "chn", "grp", 1)
 	}
-	// Remove unchanged if it's a group already.
+	// Return unchanged if it's a group already.
 	if strings.HasPrefix(chn, "grp") {
 		return chn
 	}

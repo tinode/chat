@@ -1069,7 +1069,7 @@ func (s *Session) expandTopicName(msg *ClientComMessage) (string, *ServerComMess
 			return "", ErrPermissionDenied(msg.Id, msg.Original, msg.timestamp)
 		}
 		routeTo = uid1.P2PName(uid2)
-	} else if tmp := types.GrpFromChn(msg.Original); tmp != "" {
+	} else if tmp := types.ChnToGrp(msg.Original); tmp != "" {
 		routeTo = tmp
 	} else {
 		routeTo = msg.Original

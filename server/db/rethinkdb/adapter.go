@@ -1081,7 +1081,8 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 	topq := make([]interface{}, 0, 16)
 	usrq := make([]interface{}, 0, 16)
 	for cursor.Next(&sub) {
-		tcat := t.GetTopicCat(sub.Topic)
+		tname := sub.Topic
+		tcat := t.GetTopicCat(tname)
 
 		// 'me' or 'fnd' subscription, skip
 		if tcat == t.TopicCatMe || tcat == t.TopicCatFnd {
@@ -1095,13 +1096,15 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 			} else {
 				usrq = append(usrq, uid1.String())
 			}
-			topq = append(topq, sub.Topic)
+			topq = append(topq, tname)
 
 			// grp subscription
 		} else {
-			topq = append(topq, sub.Topic)
+			// Convert channel names to topic names.
+			tname = t.ChnToGrp(sub.Topic)
+			topq = append(topq, tname)
 		}
-		join[sub.Topic] = sub
+		join[tname] = sub
 	}
 	cursor.Close()
 
@@ -1641,7 +1644,7 @@ func (a *adapter) FindTopics(req [][]string, opt []string) ([]t.Subscription, er
 		sub.CreatedAt = topic.CreatedAt
 		sub.UpdatedAt = topic.UpdatedAt
 		if topic.UseBt {
-			sub.Topic = t.ChnFromGrp(topic.Id)
+			sub.Topic = t.GrpToChn(topic.Id)
 		} else {
 			sub.Topic = topic.Id
 		}
