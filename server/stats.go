@@ -9,6 +9,7 @@ import (
 	"expvar"
 	"log"
 	"net/http"
+	"runtime"
 	"time"
 )
 
@@ -33,6 +34,9 @@ func statsInit(mux *http.ServeMux, path string) {
 	start := time.Now()
 	expvar.Publish("Uptime", expvar.Func(func() interface{} {
 		return time.Since(start).Seconds()
+	}))
+	expvar.Publish("NumGoroutines", expvar.Func(func() interface{} {
+		return runtime.NumGoroutine()
 	}))
 
 	go statsUpdater()
