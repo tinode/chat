@@ -482,6 +482,7 @@ func initTopicNewGrp(t *Topic, sreg *sessionJoin, isChan bool) error {
 	pktsub := sreg.pkt.Sub
 
 	t.cat = types.TopicCatGrp
+	t.isChan = isChan
 
 	// Generic topics have parameters stored in the topic object
 	t.owner = types.ParseUserId(sreg.pkt.AsUser)
@@ -578,7 +579,7 @@ func initTopicNewGrp(t *Topic, sreg *sessionJoin, isChan bool) error {
 		return err
 	}
 
-	t.xoriginal = t.name // keeping 'new' as original has no value to the client
+	t.xoriginal = t.name // keeping 'new' or 'nch' as original has no value to the client
 	pktsub.Created = true
 	pktsub.Newsub = true
 

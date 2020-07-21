@@ -985,7 +985,6 @@ func (t *Topic) subscriptionReply(h *Hub, join *sessionJoin) error {
 
 	asUid := types.ParseUserId(join.pkt.AsUser)
 	asLvl := auth.Level(join.pkt.AuthLvl)
-	toriginal := t.original(asUid)
 
 	if !msgsub.Newsub && (t.cat == types.TopicCatP2P || t.cat == types.TopicCatGrp || t.cat == types.TopicCatSys) {
 		// Check if this is a new subscription.
@@ -998,10 +997,9 @@ func (t *Topic) subscriptionReply(h *Hub, join *sessionJoin) error {
 	if msgsub.Set != nil {
 		if msgsub.Set.Sub != nil {
 			if msgsub.Set.Sub.User != "" {
-				join.sess.queueOut(ErrMalformed(join.pkt.Id, toriginal, now))
+				join.sess.queueOut(ErrMalformed(join.pkt.Id, join.pkt.Original, now))
 				return errors.New("user id must not be specified")
 			}
-
 			mode = msgsub.Set.Sub.Mode
 		}
 
@@ -1017,6 +1015,7 @@ func (t *Topic) subscriptionReply(h *Hub, join *sessionJoin) error {
 		return err
 	}
 
+	toriginal := t.original(asUid)
 	params := map[string]interface{}{}
 
 	if changed {
@@ -2867,15 +2866,20 @@ func (t *Topic) isDeleted() bool {
 
 // Get topic name suitable for the given client
 func (t *Topic) original(uid types.Uid) string {
-	if t.cat != types.TopicCatP2P {
-		return t.xoriginal
+	if t.cat == types.TopicCatP2P {
+		if pud, ok := t.perUser[uid]; ok {
+			return pud.topicName
+		}
+		panic("Invalid P2P topic")
 	}
 
-	if pud, ok := t.perUser[uid]; ok {
-		return pud.topicName
+	if t.cat == types.TopicCatGrp && t.isChan {
+		if _, ok := t.perUser[uid]; !ok {
+			// This is a channel reader.
+			return types.GrpToChn(t.xoriginal)
+		}
 	}
-
-	panic("Invalid P2P topic")
+	return t.xoriginal
 }
 
 // Get ID of the other user in a P2P topic
@@ -3049,6 +3053,7 @@ func (t *Topic) isOnline() bool {
 	return false
 }
 
+// Infer topic category from name.
 func topicCat(name string) types.TopicCat {
 	return types.GetTopicCat(name)
 }
@@ -3056,4 +3061,9 @@ func topicCat(name string) types.TopicCat {
 // Generate random string as a name of the group topic
 func genTopicName() string {
 	return "grp" + store.GetUidString()
+}
+
+// Check if group topic is referenced as a channel.
+func isChannel(name string) bool {
+	return strings.HasPrefix(name, "chn")
 }
