@@ -985,7 +985,6 @@ func (t *Topic) subscriptionReply(h *Hub, join *sessionJoin) error {
 	}
 
 	asUid := types.ParseUserId(join.pkt.AsUser)
-	asLvl := auth.Level(join.pkt.AuthLvl)
 
 	if !msgsub.Newsub && (t.cat == types.TopicCatP2P || t.cat == types.TopicCatGrp || t.cat == types.TopicCatSys) {
 		// Check if this is a new subscription.
@@ -1012,7 +1011,7 @@ func (t *Topic) subscriptionReply(h *Hub, join *sessionJoin) error {
 	var err error
 	var changed bool
 	// Create new subscription or modify an existing one.
-	if changed, err = t.thisUserSub(h, join, asUid, mode, private); err != nil {
+	if changed, err = t.thisUserSub(h, join.sess, join.pkt, asUid, mode, private); err != nil {
 		return err
 	}
 
@@ -1050,8 +1049,8 @@ func (t *Topic) subscriptionReply(h *Hub, join *sessionJoin) error {
 //
 //	h				- hub
 //	sess			- originating session
+//	pkt				- client message which triggered this request
 //	asUid			- id of the user making the request
-//	asLvl			- access level of the user making the request
 //	want			- requested access mode
 //	private			- private value to assign to the subscription
 //	background		- presence notifications are deferred
@@ -1064,14 +1063,13 @@ func (t *Topic) subscriptionReply(h *Hub, join *sessionJoin) error {
 // D. User is already subscribed, changing modeWant.
 // E. User is accepting ownership transfer (requesting ownership transfer is not permitted).
 // In case of a group topic the user may be a reader or a full subscriber.
-func (t *Topic) thisUserSub(h *Hub, join *sessionJoin, asUid types.Uid, want string,
+func (t *Topic) thisUserSub(h *Hub, sess *Session, pkt *ClientComMessage, asUid types.Uid, want string,
 	private interface{}) (bool, error) {
 
 	now := types.TimeNow()
 
-	sess := join.sess
-	pktID := join.pkt.Id
-	asLvl := auth.Level(join.pkt.AuthLvl)
+	pktID := pkt.Id
+	asLvl := auth.Level(pkt.AuthLvl)
 
 	var changed bool
 
@@ -1083,7 +1081,7 @@ func (t *Topic) thisUserSub(h *Hub, join *sessionJoin, asUid types.Uid, want str
 	modeWant := types.ModeUnset
 	if want != "" {
 		if err := modeWant.UnmarshalText([]byte(want)); err != nil {
-			sess.queueOut(ErrMalformed(pktID, join.pkt.Original, now))
+			sess.queueOut(ErrMalformed(pktID, pkt.Original, now))
 			return changed, err
 		}
 	}
@@ -2018,7 +2016,6 @@ func (t *Topic) replySetSub(h *Hub, sess *Session, pkt *ClientComMessage) error 
 	now := types.TimeNow()
 
 	asUid := types.ParseUserId(pkt.AsUser)
-	asLvl := auth.Level(pkt.AuthLvl)
 	set := pkt.Set
 	toriginal := t.original(asUid)
 
@@ -2038,7 +2035,7 @@ func (t *Topic) replySetSub(h *Hub, sess *Session, pkt *ClientComMessage) error 
 	var changed bool
 	if target == asUid {
 		// Request new subscription or modify own subscription
-		changed, err = t.thisUserSub(h, sess, asUid, asLvl, pkt.Id, set.Sub.Mode, nil)
+		changed, err = t.thisUserSub(h, sess, pkt, asUid, set.Sub.Mode, nil)
 	} else {
 		// Request to approve/change someone's subscription
 		changed, err = t.anotherUserSub(h, sess, asUid, target, set)

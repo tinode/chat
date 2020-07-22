@@ -449,7 +449,7 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 	}
 }
 
-// Request to subscribe to a topic
+// Request to subscribe to a topic.
 func (s *Session) subscribe(msg *ClientComMessage) {
 	if strings.HasPrefix(msg.Original, "new") || strings.HasPrefix(msg.Original, "nch") {
 		// Request to create a new group/channel topic.

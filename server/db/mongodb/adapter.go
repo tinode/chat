@@ -1803,7 +1803,7 @@ func (a *adapter) FindTopics(req [][]string, opt []string) ([]t.Subscription, er
 		sub.CreatedAt = topic.CreatedAt
 		sub.UpdatedAt = topic.UpdatedAt
 		if topic.UseBt {
-			sub.Topic = t.ChnFromGrp(topic.Id)
+			sub.Topic = t.GrpToChn(topic.Id)
 		} else {
 			sub.Topic = topic.Id
 		}
