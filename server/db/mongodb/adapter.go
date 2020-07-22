@@ -1271,7 +1271,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 			// grp subscription
 		} else {
 			// Convert channel names to topic names.
-			tname = t.GrpFromChn(tname)
+			tname = t.ChnToGrp(tname)
 			topq = append(topq, tname)
 		}
 		sub.Private = unmarshalBsonD(sub.Private)

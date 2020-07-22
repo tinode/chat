@@ -1133,7 +1133,7 @@ func (a *adapter) UserUnreadCount(uid t.Uid) (int, error) {
 
 func (a *adapter) topicCreate(tx *sqlx.Tx, topic *t.Topic) error {
 	_, err := tx.Exec("INSERT INTO topics(createdat,updatedat,touchedat,state,name,usebt,owner,access,public,tags) "+
-		"VALUES(?,?,?,?,?,?,?,?,?)",
+		"VALUES(?,?,?,?,?,?,?,?,?,?)",
 		topic.CreatedAt, topic.UpdatedAt, topic.TouchedAt, topic.State, topic.Id, topic.UseBt,
 		store.DecodeUid(t.ParseUid(topic.Owner)), topic.Access, toJSON(topic.Public), topic.Tags)
 	if err != nil {
@@ -1317,7 +1317,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 			// grp subscription
 		} else {
 			// Convert channel names to topic names.
-			tname = t.GrpFromChn(tname)
+			tname = t.ChnToGrp(tname)
 			topq = append(topq, tname)
 		}
 		sub.Private = fromJSON(sub.Private)
@@ -2004,7 +2004,7 @@ func (a *adapter) FindTopics(req [][]string, opt []string) ([]t.Subscription, er
 		}
 
 		if isChan != 0 {
-			sub.Topic = t.ChnFromGrp(sub.Topic)
+			sub.Topic = t.GrpToChn(sub.Topic)
 		}
 		sub.SetPublic(fromJSON(public))
 		sub.SetDefaultAccess(access.Auth, access.Anon)

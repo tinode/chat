@@ -414,11 +414,11 @@ A group topic is created by sending a `{sub}` message with the topic field set t
 
 A `channel` topic is different from the non-channel group topic in the following ways:
 
- * Channel-enabled topic is created by sending `{sub topic="nch"}`. Sending `{sub topic="new"}` will create a group topic without enabling channel functionality.
+ * Channel topic is created by sending `{sub topic="nch"}`. Sending `{sub topic="new"}` will create a group topic without enabling channel functionality.
  * Sending `{sub topic="chnAbC123"}` will create a `reader` subscription to a channel. A non-channel topic will reject such subscription request.
  * When searching for topics using [`fnd`](#fnd-and-tags-finding-users-and-topics), channels will show addresses with `chn` prefixes, non-channel topic will show with `grp` prefixes.
  * Default permissions for a channel and non-channel group topics are different: channel group topic grants no permissions at all.
- * A subscriber joining or leaving the topic generates a `{pres}` message to all other subscribers who are currently in the joined state with the topic and have appropriate permissions. Reader joining or leaving the channel generates no `{pres}` message.
+ * A subscriber joining or leaving the topic (regular or channel-enabled) generates a `{pres}` message to all other subscribers who are currently in the joined state with the topic and have appropriate permissions. Reader joining or leaving the channel generates no `{pres}` message.
 
 ### `sys` Topic
 

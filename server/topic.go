@@ -12,6 +12,7 @@ import (
 	"errors"
 	"log"
 	"sort"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -1011,13 +1012,11 @@ func (t *Topic) subscriptionReply(h *Hub, join *sessionJoin) error {
 	var err error
 	var changed bool
 	// Create new subscription or modify an existing one.
-	if changed, err = t.thisUserSub(h, join.sess, asUid, asLvl, join.pkt.Id, mode, private); err != nil {
+	if changed, err = t.thisUserSub(h, join, asUid, mode, private); err != nil {
 		return err
 	}
 
-	toriginal := t.original(asUid)
 	params := map[string]interface{}{}
-
 	if changed {
 		pud := t.perUser[asUid]
 		// Report back the assigned access mode.
@@ -1026,6 +1025,8 @@ func (t *Topic) subscriptionReply(h *Hub, join *sessionJoin) error {
 			Want:  pud.modeWant.String(),
 			Mode:  (pud.modeGiven & pud.modeWant).String()}
 	}
+
+	toriginal := t.original(asUid)
 
 	// When a group topic is created, it's given a temporary name by the client.
 	// Then this name changes. Report back the original name here.
@@ -1045,29 +1046,32 @@ func (t *Topic) subscriptionReply(h *Hub, join *sessionJoin) error {
 
 // User requests or updates a self-subscription to a topic. Called as a
 // result of {sub} or {meta set=sub}.
-// Returns changed == true if user's accessmode has changed.
+// Returns changed == true if user's access mode has changed.
 //
-//	h							- hub
-//	sess					- originating session
-//	asUid					- id of the user making the request
-//	asLvl					- access level of the user making the request
-//	pktID					- id of {sub} or {set} packet
-//	want					- requested access mode
-//	private				- private value to assign to the subscription
-//	background   	- presence notifications are deferred
-//	sessOverrides - session param overrides
+//	h				- hub
+//	sess			- originating session
+//	asUid			- id of the user making the request
+//	asLvl			- access level of the user making the request
+//	want			- requested access mode
+//	private			- private value to assign to the subscription
+//	background		- presence notifications are deferred
+//	sessOverrides	- session param overrides
 //
 // Handle these cases:
-// A. User is trying to subscribe for the first time (no subscription)
-// B. User is already subscribed, just joining without changing anything
-// C. User is responding to an earlier invite (modeWant was "N" in subscription)
-// D. User is already subscribed, changing modeWant
-// E. User is accepting ownership transfer (requesting ownership transfer is not permitted)
-func (t *Topic) thisUserSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.Level,
-	pktID, want string, private interface{}) (bool, error) {
+// A. User is trying to subscribe for the first time (no subscription).
+// B. User is already subscribed, just joining without changing anything.
+// C. User is responding to an earlier invite (modeWant was "N" in subscription).
+// D. User is already subscribed, changing modeWant.
+// E. User is accepting ownership transfer (requesting ownership transfer is not permitted).
+// In case of a group topic the user may be a reader or a full subscriber.
+func (t *Topic) thisUserSub(h *Hub, join *sessionJoin, asUid types.Uid, want string,
+	private interface{}) (bool, error) {
 
 	now := types.TimeNow()
-	toriginal := t.original(asUid)
+
+	sess := join.sess
+	pktID := join.pkt.Id
+	asLvl := auth.Level(join.pkt.AuthLvl)
 
 	var changed bool
 
@@ -1079,10 +1083,12 @@ func (t *Topic) thisUserSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.L
 	modeWant := types.ModeUnset
 	if want != "" {
 		if err := modeWant.UnmarshalText([]byte(want)); err != nil {
-			sess.queueOut(ErrMalformed(pktID, toriginal, now))
+			sess.queueOut(ErrMalformed(pktID, join.pkt.Original, now))
 			return changed, err
 		}
 	}
+
+	toriginal := t.original(asUid)
 
 	// Check if it's an attempt at a new subscription to the topic.
 	// It could be an actual subscription (IsJoiner() == true) or a ban (IsJoiner() == false)
