@@ -1049,15 +1049,16 @@ func (t *Topic) subscriptionReply(h *Hub, join *sessionJoin) error {
 //
 //	h				- hub
 //	sess			- originating session
-//	pkt				- client message which triggered this request
+//	pkt				- client message which triggered this request (sub or set)
 //	asUid			- id of the user making the request
 //	want			- requested access mode
 //	private			- private value to assign to the subscription
 //	background		- presence notifications are deferred
-//	sessOverrides	- session param overrides
 //
 // Handle these cases:
 // A. User is trying to subscribe for the first time (no subscription).
+// A.1 Reder is subscribeing to channel.
+// A.2 Reader is joining the channel.
 // B. User is already subscribed, just joining without changing anything.
 // C. User is responding to an earlier invite (modeWant was "N" in subscription).
 // D. User is already subscribed, changing modeWant.
@@ -1068,10 +1069,16 @@ func (t *Topic) thisUserSub(h *Hub, sess *Session, pkt *ClientComMessage, asUid 
 
 	now := types.TimeNow()
 
-	pktID := pkt.Id
-	asLvl := auth.Level(pkt.AuthLvl)
-
 	var changed bool
+
+	isChanSub := isChannel(pkt.Original)
+	if isChanSub && !t.isChan {
+		// User should not be able to address non-channel topic as channel.
+		sess.queueOut(ErrNotFound(pkt.Id, pkt.Original, now))
+		return changed, types.ErrNotFound
+	}
+
+	asLvl := auth.Level(pkt.AuthLvl)
 
 	// Access mode values as they were before this request was processed.
 	oldWant := types.ModeNone
@@ -1081,7 +1088,7 @@ func (t *Topic) thisUserSub(h *Hub, sess *Session, pkt *ClientComMessage, asUid 
 	modeWant := types.ModeUnset
 	if want != "" {
 		if err := modeWant.UnmarshalText([]byte(want)); err != nil {
-			sess.queueOut(ErrMalformed(pktID, pkt.Original, now))
+			sess.queueOut(ErrMalformed(pkt.Id, pkt.Original, now))
 			return changed, err
 		}
 	}
@@ -1092,9 +1099,11 @@ func (t *Topic) thisUserSub(h *Hub, sess *Session, pkt *ClientComMessage, asUid 
 	// It could be an actual subscription (IsJoiner() == true) or a ban (IsJoiner() == false)
 	userData, existingSub := t.perUser[asUid]
 	if !existingSub || userData.deleted {
+		// New subscription or a channel reader, either new or existing.
+
 		// Check if the max number of subscriptions is already reached.
-		if t.cat == types.TopicCatGrp && t.subsCount() >= globals.maxSubscriberCount {
-			sess.queueOut(ErrPolicy(pktID, toriginal, now))
+		if t.cat == types.TopicCatGrp && !isChanSub && t.subsCount() >= globals.maxSubscriberCount {
+			sess.queueOut(ErrPolicy(pkt.Id, toriginal, now))
 			return changed, errors.New("max subscription count exceeded")
 		}
 
@@ -1109,7 +1118,7 @@ func (t *Topic) thisUserSub(h *Hub, sess *Session, pkt *ClientComMessage, asUid 
 			userData.modeWant = (userData.modeWant & types.ModeCP2P) | types.ModeApprove
 		} else if t.cat == types.TopicCatSys {
 			if asLvl != auth.LevelRoot {
-				sess.queueOut(ErrPermissionDenied(pktID, toriginal, now))
+				sess.queueOut(ErrPermissionDenied(pkt.Id, toriginal, now))
 				return changed, errors.New("subscription to 'sys' topic requires root access level")
 			}
 
@@ -1119,7 +1128,7 @@ func (t *Topic) thisUserSub(h *Hub, sess *Session, pkt *ClientComMessage, asUid 
 			if modeWant != types.ModeUnset {
 				userData.modeWant = (modeWant & types.ModeCSys) | types.ModeWrite
 			}
-		} else {
+		} else if !isChanSub {
 			// For non-p2p & non-sys topics access is given as default access
 			userData.modeGiven = t.accessFor(asLvl)
 
@@ -1131,7 +1140,7 @@ func (t *Topic) thisUserSub(h *Hub, sess *Session, pkt *ClientComMessage, asUid 
 			}
 		}
 
-		// Undelete
+		// Undelete.
 		userData.deleted = false
 
 		if isNullValue(private) {
@@ -1139,24 +1148,45 @@ func (t *Topic) thisUserSub(h *Hub, sess *Session, pkt *ClientComMessage, asUid 
 		}
 		userData.private = private
 
-		// Add subscription to database
-		sub := &types.Subscription{
-			User:      asUid.String(),
-			Topic:     t.name,
-			ModeWant:  userData.modeWant,
-			ModeGiven: userData.modeGiven,
-			Private:   userData.private,
+		tname := t.name
+		var sub *types.Subscription
+		if isChanSub {
+			// Check if user is already subscribed.
+			var err error
+			sub, err = store.Subs.Get(pkt.Original, asUid)
+			if err != nil {
+				sess.queueOut(ErrUnknown(pkt.Id, toriginal, now))
+				return changed, err
+			}
+			tname = pkt.Original
+			userData.modeWant = types.ModeCChn
+			oldWant = types.ModeCChn
+			userData.modeGiven = types.ModeCChn
+			oldGiven = types.ModeCChn
 		}
 
-		if err := store.Subs.Create(sub); err != nil {
-			sess.queueOut(ErrUnknown(pktID, toriginal, now))
-			return changed, err
+		// Add subscription to database, if missing.
+		if sub == nil {
+			sub = &types.Subscription{
+				User:      asUid.String(),
+				Topic:     tname,
+				ModeWant:  userData.modeWant,
+				ModeGiven: userData.modeGiven,
+				Private:   userData.private,
+			}
+
+			if err := store.Subs.Create(sub); err != nil {
+				sess.queueOut(ErrUnknown(pkt.Id, toriginal, now))
+				return changed, err
+			}
+
+			changed = true
 		}
 
-		changed = true
-
-		// Add user to cache.
-		usersRegisterUser(asUid, true)
+		if !isChanSub {
+			// Add subscribed user to cache.
+			usersRegisterUser(asUid, true)
+		}
 
 		// Notify plugins of a new subscription
 		pluginSubscription(sub, plgActCreate)
@@ -1183,7 +1213,7 @@ func (t *Topic) thisUserSub(h *Hub, sess *Session, pkt *ClientComMessage, asUid 
 
 				// Make sure the current owner cannot unset the owner flag or ban himself
 				if t.owner == asUid && (!modeWant.IsOwner() || !modeWant.IsJoiner()) {
-					sess.queueOut(ErrPermissionDenied(pktID, toriginal, now))
+					sess.queueOut(ErrPermissionDenied(pkt.Id, toriginal, now))
 					return changed, errors.New("cannot unset ownership or self-ban the owner")
 				}
 
@@ -1197,7 +1227,7 @@ func (t *Topic) thisUserSub(h *Hub, sess *Session, pkt *ClientComMessage, asUid 
 				}
 			} else if modeWant.IsOwner() {
 				// Ownership transfer can only be initiated by the owner.
-				sess.queueOut(ErrPermissionDenied(pktID, toriginal, now))
+				sess.queueOut(ErrPermissionDenied(pkt.Id, toriginal, now))
 				return changed, errors.New("non-owner cannot request ownership transfer")
 			} else if t.cat == types.TopicCatGrp && userData.modeGiven.IsAdmin() && modeWant.IsAdmin() {
 				// A group topic Admin should be able to grant himself any permissions except
@@ -1245,7 +1275,7 @@ func (t *Topic) thisUserSub(h *Hub, sess *Session, pkt *ClientComMessage, asUid 
 		}
 		if len(update) > 0 {
 			if err := store.Subs.Update(t.name, asUid, update, true); err != nil {
-				sess.queueOut(ErrUnknown(pktID, toriginal, now))
+				sess.queueOut(ErrUnknown(pkt.Id, toriginal, now))
 				return false, err
 			}
 			changed = true
@@ -1273,43 +1303,46 @@ func (t *Topic) thisUserSub(h *Hub, sess *Session, pkt *ClientComMessage, asUid 
 		}
 	}
 
-	// If topic is being muted, send "off" notification and disable updates.
-	// Do it before applying the new permissions.
-	if (oldWant & oldGiven).IsPresencer() && !(userData.modeWant & userData.modeGiven).IsPresencer() {
-		if t.cat == types.TopicCatMe {
-			t.presUsersOfInterest("off+dis", t.userAgent)
-		} else {
-			t.presSingleUserOffline(asUid, "off+dis", nilPresParams, "", false)
+	if !isChanSub {
+
+		// If topic is being muted, send "off" notification and disable updates.
+		// Do it before applying the new permissions.
+		if (oldWant & oldGiven).IsPresencer() && !(userData.modeWant & userData.modeGiven).IsPresencer() {
+			if t.cat == types.TopicCatMe {
+				t.presUsersOfInterest("off+dis", t.userAgent)
+			} else {
+				t.presSingleUserOffline(asUid, "off+dis", nilPresParams, "", false)
+			}
 		}
-	}
 
-	// Apply changes.
-	t.perUser[asUid] = userData
+		// Apply changes.
+		t.perUser[asUid] = userData
 
-	// Send presence notifications and update cached unread count.
-	if oldWant != userData.modeWant || oldGiven != userData.modeGiven {
-		oldReader := (oldWant & oldGiven).IsReader()
-		newReader := (userData.modeWant & userData.modeGiven).IsReader()
-		if oldReader && !newReader {
-			// Decrement unread count
-			usersUpdateUnread(asUid, userData.readID-t.lastID, true)
-		} else if !oldReader && newReader {
-			// Increment unread count
-			usersUpdateUnread(asUid, t.lastID-userData.readID, true)
+		// Send presence notifications and update cached unread count.
+		if oldWant != userData.modeWant || oldGiven != userData.modeGiven {
+			oldReader := (oldWant & oldGiven).IsReader()
+			newReader := (userData.modeWant & userData.modeGiven).IsReader()
+			if oldReader && !newReader {
+				// Decrement unread count
+				usersUpdateUnread(asUid, userData.readID-t.lastID, true)
+			} else if !oldReader && newReader {
+				// Increment unread count
+				usersUpdateUnread(asUid, t.lastID-userData.readID, true)
+			}
+			t.notifySubChange(asUid, asUid, oldWant, oldGiven, userData.modeWant, userData.modeGiven, sess.sid)
 		}
-		t.notifySubChange(asUid, asUid, oldWant, oldGiven, userData.modeWant, userData.modeGiven, sess.sid)
-	}
 
-	if !userData.modeWant.IsJoiner() {
-		// The user is self-banning from the topic. Re-subscription will unban.
-		t.evictUser(asUid, false, "")
-		// The callee will send NoErrOK
-		return changed, nil
+		if !userData.modeWant.IsJoiner() {
+			// The user is self-banning from the topic. Re-subscription will unban.
+			t.evictUser(asUid, false, "")
+			// The callee will send NoErrOK
+			return changed, nil
 
-	} else if !userData.modeGiven.IsJoiner() {
-		// User was banned
-		sess.queueOut(ErrPermissionDenied(pktID, toriginal, now))
-		return changed, errors.New("topic access denied; user is banned")
+		} else if !userData.modeGiven.IsJoiner() {
+			// User was banned
+			sess.queueOut(ErrPermissionDenied(pkt.Id, toriginal, now))
+			return changed, errors.New("topic access denied; user is banned")
+		}
 	}
 
 	// Subscription successfully created. Link topic to session.
@@ -1321,7 +1354,7 @@ func (t *Topic) thisUserSub(h *Hub, sess *Session, pkt *ClientComMessage, asUid 
 	t.addSession(sess, asUid)
 
 	// The user is online in the topic. Increment the counter if notifications are not deferred.
-	if !sess.background {
+	if !sess.background && !isChanSub {
 		userData.online++
 		t.perUser[asUid] = userData
 	}
@@ -1335,10 +1368,10 @@ func (t *Topic) thisUserSub(h *Hub, sess *Session, pkt *ClientComMessage, asUid 
 // A. Sharer or Approver is inviting another user for the first time (no prior subscription)
 // B. Sharer or Approver is re-inviting another user (adjusting modeGiven, modeWant is still Unset)
 // C. Approver is changing modeGiven for another user, modeWant != Unset
-func (t *Topic) anotherUserSub(h *Hub, sess *Session, asUid, target types.Uid, set *MsgClientSet) (bool, error) {
+func (t *Topic) anotherUserSub(h *Hub, sess *Session, asUid, target types.Uid, pkt *ClientComMessage) (bool, error) {
 
 	now := types.TimeNow()
-	toriginal := t.original(asUid)
+	set := pkt.Set
 
 	// Access mode values as they were before this request was processed.
 	oldWant := types.ModeUnset
@@ -1350,13 +1383,24 @@ func (t *Topic) anotherUserSub(h *Hub, sess *Session, asUid, target types.Uid, s
 	// Check if approver actually has permission to manage sharing
 	userData, ok := t.perUser[asUid]
 	if !ok || !(userData.modeGiven & userData.modeWant).IsSharer() {
-		sess.queueOut(ErrPermissionDenied(set.Id, toriginal, now))
+		sess.queueOut(ErrPermissionDenied(set.Id, pkt.Original, now))
 		return false, errors.New("topic access denied; approver has no permission")
+	}
+
+	if isChannel(pkt.Original) == t.isChan {
+		// TODO: need to implement promoting reader to subscriber.
+		// Just reject for now.
+		sess.queueOut(ErrPermissionDenied(pkt.Id, pkt.Original, now))
+		return false, errors.New("topic access denied: cannot subscribe reader to channel")
+	} else {
+		// User should not be able to address non-channel topic as channel.
+		sess.queueOut(ErrNotFound(pkt.Id, pkt.Original, now))
+		return false, types.ErrNotFound
 	}
 
 	// Check if topic is suspended.
 	if t.isReadOnly() {
-		sess.queueOut(ErrPermissionDenied(set.Id, toriginal, now))
+		sess.queueOut(ErrPermissionDenied(pkt.Id, pkt.Original, now))
 		return false, errors.New("topic is suspended")
 	}
 
@@ -1366,7 +1410,7 @@ func (t *Topic) anotherUserSub(h *Hub, sess *Session, asUid, target types.Uid, s
 	modeGiven := types.ModeUnset
 	if set.Sub.Mode != "" {
 		if err := modeGiven.UnmarshalText([]byte(set.Sub.Mode)); err != nil {
-			sess.queueOut(ErrMalformed(set.Id, toriginal, now))
+			sess.queueOut(ErrMalformed(pkt.Id, pkt.Original, now))
 			return false, err
 		}
 
@@ -1379,13 +1423,13 @@ func (t *Topic) anotherUserSub(h *Hub, sess *Session, asUid, target types.Uid, s
 
 	// Make sure only the owner & approvers can set non-default access mode
 	if modeGiven != types.ModeUnset && !hostMode.IsAdmin() {
-		sess.queueOut(ErrPermissionDenied(set.Id, toriginal, now))
+		sess.queueOut(ErrPermissionDenied(pkt.Id, pkt.Original, now))
 		return false, errors.New("sharer cannot set explicit modeGiven")
 	}
 
 	// Make sure no one but the owner can do an ownership transfer
 	if modeGiven.IsOwner() && t.owner != asUid {
-		sess.queueOut(ErrPermissionDenied(set.Id, toriginal, now))
+		sess.queueOut(ErrPermissionDenied(pkt.Id, pkt.Original, now))
 		return false, errors.New("attempt to transfer ownership by non-owner")
 	}
 
@@ -1395,7 +1439,7 @@ func (t *Topic) anotherUserSub(h *Hub, sess *Session, asUid, target types.Uid, s
 	if !existingSub {
 		// Check if the max number of subscriptions is already reached.
 		if t.cat == types.TopicCatGrp && t.subsCount() >= globals.maxSubscriberCount {
-			sess.queueOut(ErrPolicy(set.Id, toriginal, now))
+			sess.queueOut(ErrPolicy(pkt.Id, pkt.Original, now))
 			return false, errors.New("max subscription count exceeded")
 		}
 
@@ -1408,13 +1452,13 @@ func (t *Topic) anotherUserSub(h *Hub, sess *Session, asUid, target types.Uid, s
 		// Get user's default access mode to be used as modeWant
 		var modeWant types.AccessMode
 		if user, err := store.Users.Get(target); err != nil {
-			sess.queueOut(ErrUnknown(set.Id, toriginal, now))
+			sess.queueOut(ErrUnknown(pkt.Id, pkt.Original, now))
 			return false, err
 		} else if user == nil {
-			sess.queueOut(ErrUserNotFound(set.Id, toriginal, now))
+			sess.queueOut(ErrUserNotFound(pkt.Id, pkt.Original, now))
 			return false, errors.New("user not found")
 		} else if user.State != types.StateOK {
-			sess.queueOut(ErrPermissionDenied(set.Id, toriginal, now))
+			sess.queueOut(ErrPermissionDenied(pkt.Id, pkt.Original, now))
 			return false, errors.New("user is suspended")
 		} else {
 			// Don't ask by default for more permissions than the granted ones.
@@ -1430,7 +1474,7 @@ func (t *Topic) anotherUserSub(h *Hub, sess *Session, asUid, target types.Uid, s
 		}
 
 		if err := store.Subs.Create(sub); err != nil {
-			sess.queueOut(ErrUnknown(set.Id, toriginal, now))
+			sess.queueOut(ErrUnknown(pkt.Id, pkt.Original, now))
 			return false, err
 		}
 
@@ -2038,7 +2082,7 @@ func (t *Topic) replySetSub(h *Hub, sess *Session, pkt *ClientComMessage) error 
 		changed, err = t.thisUserSub(h, sess, pkt, asUid, set.Sub.Mode, nil)
 	} else {
 		// Request to approve/change someone's subscription
-		changed, err = t.anotherUserSub(h, sess, asUid, target, set)
+		changed, err = t.anotherUserSub(h, sess, asUid, target, pkt)
 	}
 	if err != nil {
 		return err
