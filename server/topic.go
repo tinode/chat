@@ -1387,15 +1387,17 @@ func (t *Topic) anotherUserSub(h *Hub, sess *Session, asUid, target types.Uid, p
 		return false, errors.New("topic access denied; approver has no permission")
 	}
 
-	if isChannel(pkt.Original) == t.isChan {
-		// TODO: need to implement promoting reader to subscriber.
-		// Just reject for now.
-		sess.queueOut(ErrPermissionDenied(pkt.Id, pkt.Original, now))
-		return false, errors.New("topic access denied: cannot subscribe reader to channel")
-	} else {
-		// User should not be able to address non-channel topic as channel.
-		sess.queueOut(ErrNotFound(pkt.Id, pkt.Original, now))
-		return false, types.ErrNotFound
+	if isChannel(pkt.Original) {
+		if t.isChan {
+			// TODO: need to implement promoting reader to subscriber.
+			// Just reject for now.
+			sess.queueOut(ErrPermissionDenied(pkt.Id, pkt.Original, now))
+			return false, errors.New("topic access denied: cannot subscribe reader to channel")
+		} else {
+			// User should not be able to address non-channel topic as channel.
+			sess.queueOut(ErrNotFound(pkt.Id, pkt.Original, now))
+			return false, types.ErrNotFound
+		}
 	}
 
 	// Check if topic is suspended.
