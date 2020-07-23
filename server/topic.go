@@ -1128,7 +1128,12 @@ func (t *Topic) thisUserSub(h *Hub, sess *Session, pkt *ClientComMessage, asUid 
 			if modeWant != types.ModeUnset {
 				userData.modeWant = (modeWant & types.ModeCSys) | types.ModeWrite
 			}
-		} else if !isChanSub {
+		} else if isChanSub {
+			oldWant = types.ModeCChn
+			oldGiven = types.ModeCChn
+			userData.modeWant = types.ModeCChn
+			userData.modeGiven = types.ModeCChn
+		} else {
 			// For non-p2p & non-sys topics access is given as default access
 			userData.modeGiven = t.accessFor(asLvl)
 
@@ -1159,10 +1164,6 @@ func (t *Topic) thisUserSub(h *Hub, sess *Session, pkt *ClientComMessage, asUid 
 				return changed, err
 			}
 			tname = pkt.Original
-			userData.modeWant = types.ModeCChn
-			oldWant = types.ModeCChn
-			userData.modeGiven = types.ModeCChn
-			oldGiven = types.ModeCChn
 		}
 
 		// Add subscription to database, if missing.
