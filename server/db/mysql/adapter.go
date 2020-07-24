@@ -297,7 +297,7 @@ func (a *adapter) CreateDb(reset bool) error {
 			stateat   DATETIME(3),
 			touchedat DATETIME(3),
 			name      CHAR(25) NOT NULL,
-			usebt     INT DEFAULT 0,
+			usebt     TINYINT DEFAULT 0,
 			owner     BIGINT NOT NULL DEFAULT 0,
 			access    JSON,
 			seqid     INT NOT NULL DEFAULT 0,
@@ -1132,9 +1132,9 @@ func (a *adapter) UserUnreadCount(uid t.Uid) (int, error) {
 // *****************************
 
 func (a *adapter) topicCreate(tx *sqlx.Tx, topic *t.Topic) error {
-	_, err := tx.Exec("INSERT INTO topics(createdat,updatedat,touchedat,state,name,owner,access,public,tags) "+
-		"VALUES(?,?,?,?,?,?,?,?,?)",
-		topic.CreatedAt, topic.UpdatedAt, topic.TouchedAt, topic.State, topic.Id,
+	_, err := tx.Exec("INSERT INTO topics(createdat,updatedat,touchedat,state,name,usebt,owner,access,public,tags) "+
+		"VALUES(?,?,?,?,?,?,?,?,?,?)",
+		topic.CreatedAt, topic.UpdatedAt, topic.TouchedAt, topic.State, topic.Id, topic.UseBt,
 		store.DecodeUid(t.ParseUid(topic.Owner)), topic.Access, toJSON(topic.Public), topic.Tags)
 	if err != nil {
 		return err
@@ -1233,7 +1233,7 @@ func (a *adapter) TopicGet(topic string) (*t.Topic, error) {
 	// Fetch topic by name
 	var tt = new(t.Topic)
 	err := a.db.Get(tt,
-		"SELECT createdat,updatedat,state,stateat,touchedat,name AS id,access,owner,seqid,delid,public,tags "+
+		"SELECT createdat,updatedat,state,stateat,touchedat,name AS id,usebt,access,owner,seqid,delid,public,tags "+
 			"FROM topics WHERE name=?",
 		topic)
 
@@ -1296,8 +1296,9 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 			break
 		}
 
+		tname := sub.Topic
 		sub.User = uid.String()
-		tcat := t.GetTopicCat(sub.Topic)
+		tcat := t.GetTopicCat(tname)
 
 		// 'me' or 'fnd' subscription, skip
 		if tcat == t.TopicCatMe || tcat == t.TopicCatFnd {
@@ -1305,20 +1306,22 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 
 			// p2p subscription, find the other user to get user.Public
 		} else if tcat == t.TopicCatP2P {
-			uid1, uid2, _ := t.ParseP2P(sub.Topic)
+			uid1, uid2, _ := t.ParseP2P(tname)
 			if uid1 == uid {
 				usrq = append(usrq, store.DecodeUid(uid2))
 			} else {
 				usrq = append(usrq, store.DecodeUid(uid1))
 			}
-			topq = append(topq, sub.Topic)
+			topq = append(topq, tname)
 
 			// grp subscription
 		} else {
-			topq = append(topq, sub.Topic)
+			// Convert channel names to topic names.
+			tname = t.ChnToGrp(tname)
+			topq = append(topq, tname)
 		}
 		sub.Private = fromJSON(sub.Private)
-		join[sub.Topic] = sub
+		join[tname] = sub
 	}
 	rows.Close()
 
@@ -1334,7 +1337,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 	if len(topq) > 0 {
 		// Fetch grp & p2p topics
 		q, topq, _ := sqlx.In(
-			"SELECT createdat,updatedat,state,stateat,touchedat,name AS id,access,seqid,delid,public,tags "+
+			"SELECT createdat,updatedat,state,stateat,touchedat,name AS id,usebt,access,seqid,delid,public,tags "+
 				"FROM topics WHERE name IN (?)", topq)
 		// Optionally skip deleted topics.
 		if !keepDeleted {
@@ -1957,10 +1960,10 @@ func (a *adapter) FindTopics(req [][]string, opt []string) ([]t.Subscription, er
 		index[tag] = struct{}{}
 	}
 
-	query := "SELECT t.name AS topic,t.createdat,t.updatedat,t.access,t.public,t.tags,COUNT(*) AS matches " +
+	query := "SELECT t.name AS topic,t.createdat,t.updatedat,t.usebt,t.access,t.public,t.tags,COUNT(*) AS matches " +
 		"FROM topics AS t LEFT JOIN topictags AS tt ON t.name=tt.topic " +
 		"WHERE t.state=? AND tt.tag IN (?" + strings.Repeat(",?", len(allReq)+len(opt)-1) + ") " +
-		"GROUP BY t.name,t.createdat,t.updatedat,t.public,t.tags "
+		"GROUP BY t.name,t.createdat,t.updatedat,t.usebt,t.access,t.public,t.tags "
 	if len(allReq) > 0 {
 		query += "HAVING"
 		first := true
@@ -1990,14 +1993,19 @@ func (a *adapter) FindTopics(req [][]string, opt []string) ([]t.Subscription, er
 	var public interface{}
 	var topicTags t.StringSlice
 	var ignored int
+	var isChan int
 	var sub t.Subscription
 	var subs []t.Subscription
 	for rows.Next() {
-		if err = rows.Scan(&sub.Topic, &sub.CreatedAt, &sub.UpdatedAt, &access, &public, &topicTags, &ignored); err != nil {
+		if err = rows.Scan(&sub.Topic, &sub.CreatedAt, &sub.UpdatedAt, &isChan, &access,
+			&public, &topicTags, &ignored); err != nil {
 			subs = nil
 			break
 		}
 
+		if isChan != 0 {
+			sub.Topic = t.GrpToChn(sub.Topic)
+		}
 		sub.SetPublic(fromJSON(public))
 		sub.SetDefaultAccess(access.Auth, access.Anon)
 		foundTags := make([]string, 0, 1)

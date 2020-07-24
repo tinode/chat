@@ -406,11 +406,19 @@ The 'private' parameter of a P2P topic is defined by each participant individual
 
 ### Group Topics
 
-Group topics represent communication channels between multiple users. The name of a group topic is `grp` followed by a string of characters from base64 URL-encoding set. No other assumptions can be made about internal structure or length of the group name.
+Group topic represents a communication channel between multiple users. The name of a group topic is `grp` or `chn` followed by a string of characters from base64 URL-encoding set. No other assumptions can be made about internal structure or length of the group name.
 
-A group topic is created by sending a `{sub}` message with the topic field set to string `new` optionally followed by any characters, e.g. `new` or `newAbC123` are equivalent. Tinode will respond with a `{ctrl}` message with the name of the newly created topic, i.e. `{sub topic="new"}` is replied with `{ctrl topic="grpmiKBkQVXnm3P"}`. If topic creation fails, the error is reported on the original topic name, i.e. `new` or `newAbC123`. The user who created the topic becomes topic owner. Ownership can be transferred to another user with a `{set}` message but one user must remain the owner at all times.
+Group topics support limited number of subscribers (controlled by a `max_subscriber_count` parameter in configuration file) with access permissions of each subscriber managed individually. Group topics may also be enabled to support any number of read-only users - `readers`. All `readers` have the same access permissions. Group topics with enabled `readers` are called `channels`.
 
-A user joining or leaving the topic generates a `{pres}` message to all other users who are currently in the joined state with the topic.
+A group topic is created by sending a `{sub}` message with the topic field set to string `new` or `nch` optionally followed by any characters, e.g. `new` or `newAbC123` are equivalent. Tinode will respond with a `{ctrl}` message with the name of the newly created topic, i.e. `{sub topic="new"}` is replied with `{ctrl topic="grpmiKBkQVXnm3P"}`. If topic creation fails, the error is reported on the original topic name, i.e. `new` or `newAbC123`. The user who created the topic becomes topic owner. Ownership can be transferred to another user with a `{set}` message but one user must remain the owner at all times.
+
+A `channel` topic is different from the non-channel group topic in the following ways:
+
+ * Channel topic is created by sending `{sub topic="nch"}`. Sending `{sub topic="new"}` will create a group topic without enabling channel functionality.
+ * Sending `{sub topic="chnAbC123"}` will create a `reader` subscription to a channel. A non-channel topic will reject such subscription request.
+ * When searching for topics using [`fnd`](#fnd-and-tags-finding-users-and-topics), channels will show addresses with `chn` prefixes, non-channel topic will show with `grp` prefixes.
+ * Default permissions for a channel and non-channel group topics are different: channel group topic grants no permissions at all.
+ * A subscriber joining or leaving the topic (regular or channel-enabled) generates a `{pres}` message to all other subscribers who are currently in the joined state with the topic and have appropriate permissions. Reader joining or leaving the channel generates no `{pres}` message.
 
 ### `sys` Topic
 

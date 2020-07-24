@@ -198,6 +198,30 @@ func ParseUserId(s string) Uid {
 	return uid
 }
 
+// GrpToChn converts group topic name to corresponding channel name.
+func GrpToChn(grp string) string {
+	if strings.HasPrefix(grp, "grp") {
+		return strings.Replace(grp, "grp", "chn", 1)
+	}
+	// Return unchanged if it's a channel already.
+	if strings.HasPrefix(grp, "chn") {
+		return grp
+	}
+	return ""
+}
+
+// ChnToGrp gets group topic name from channel name.
+func ChnToGrp(chn string) string {
+	if strings.HasPrefix(chn, "chn") {
+		return strings.Replace(chn, "chn", "grp", 1)
+	}
+	// Return unchanged if it's a group already.
+	if strings.HasPrefix(chn, "grp") {
+		return chn
+	}
+	return ""
+}
+
 // UidSlice is a slice of Uids sorted in ascending order.
 type UidSlice []Uid
 
@@ -502,6 +526,8 @@ const (
 	ModeCReadOnly = ModeJoin | ModeRead
 	// Access to 'sys' topic by a root user ("JRWPD", 79, 0x4F)
 	ModeCSys = ModeJoin | ModeRead | ModeWrite | ModePres | ModeDelete
+	// Public access mode to a channel (JR, 0x3).
+	ModeCChn = ModeJoin | ModeRead
 
 	// Admin: user who can modify access mode ("OA", dec: 144, hex: 0x90)
 	ModeCAdmin = ModeOwner | ModeApprove
@@ -1196,7 +1222,7 @@ func GetTopicCat(name string) TopicCat {
 		return TopicCatMe
 	case "p2p":
 		return TopicCatP2P
-	case "grp":
+	case "grp", "chn":
 		return TopicCatGrp
 	case "fnd":
 		return TopicCatFnd
