@@ -881,6 +881,16 @@ func NoErrShutdown(ts time.Time) *ServerComMessage {
 		Timestamp: ts}}
 }
 
+// NoErrDelivered means requested content has been delivered (208).
+func NoErrDeliveredParams(ts time.Time, topic string, params interface{}) *ServerComMessage {
+	return &ServerComMessage{Ctrl: &MsgServerCtrl{
+		Code:      http.StatusAlreadyReported, // 208
+		Text:      "delivered",
+		Topic:     topic,
+		Params:    params,
+		Timestamp: ts}}
+}
+
 // 3xx
 
 // InfoValidateCredentials requires user to confirm credentials before going forward (300).

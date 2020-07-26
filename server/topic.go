@@ -306,10 +306,10 @@ func (t *Topic) runLocal(hub *Hub) {
 
 			// userId.IsZero() == true when the entire session is being dropped.
 			var asUid types.Uid
-			var isChan bool
+			var asChan bool
 			if leave.pkt != nil {
 				asUid = types.ParseUserId(leave.pkt.AsUser)
-				isChan = isChannel(leave.pkt.Original)
+				asChan = isChannel(leave.pkt.Original)
 			}
 
 			if t.isInactive() {
@@ -317,7 +317,7 @@ func (t *Topic) runLocal(hub *Hub) {
 					leave.sess.queueOut(ErrLocked(leave.pkt.Id, t.original(asUid), now))
 				}
 				continue
-			} else if isChan && !t.isChan {
+			} else if asChan && !t.isChan {
 				if leave.pkt != nil {
 					// Group topic cannot be addressed as channel unless channel functionality is enabled.
 					leave.sess.queueOut(ErrNotFound(leave.pkt.Id, t.original(asUid), now))
@@ -330,7 +330,7 @@ func (t *Topic) runLocal(hub *Hub) {
 					log.Println("failed to unsub", err, leave.sess.sid)
 					continue
 				}
-			} else if pssd, _ := t.remSession(leave.sess, asUid); !isChan && pssd != nil {
+			} else if pssd, _ := t.remSession(leave.sess, asUid); !asChan && pssd != nil {
 				// Just leaving the topic without unsubscribing.
 
 				var uid types.Uid
@@ -1030,6 +1030,11 @@ func (t *Topic) subscriptionReply(h *Hub, join *sessionJoin) error {
 			Given: pud.modeGiven.String(),
 			Want:  pud.modeWant.String(),
 			Mode:  (pud.modeGiven & pud.modeWant).String()}
+	} else if isChannel(join.pkt.Original) {
+		params["acs"] = &MsgAccessMode{
+			Given: types.ModeCChn.String()
+			Want:  types.ModeCChn.String()
+			Mode: types.ModeCChn.String()}
 	}
 
 	toriginal := t.original(asUid)
@@ -2159,7 +2164,11 @@ func (t *Topic) replyGetData(sess *Session, asUid types.Uid, id string, req *Msg
 	}
 
 	// Inform the requester that all the data has been served.
-	sess.queueOut(NoErrParams(id, toriginal, now, map[string]interface{}{"what": "data", "count": count}))
+	if count == 0 {
+		sess.queueOut(NoContentParams(id, toriginal, now, map[string]interface{}{"what": "data"}))
+	} else {
+		sess.queueOut(NoErrDeliveredParams(id, toriginal, now, map[string]interface{}{"what": "data", "count": count}))
+	}
 
 	return nil
 }
