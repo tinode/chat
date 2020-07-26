@@ -71,11 +71,11 @@ When you register a new account you are asked for an email address to send valid
   * [iOS](https://github.com/tinode/ios)
   * [Web](https://github.com/tinode/webapp/)
   * Scriptable [command line](tn-cli/)
-* One-on-one messaging.
-* Group messaging with every member's access permissions managed individually. The maximum number of members is configurable (128 by default).
+* One-on-one and group messaging.
+* Channels with an unlimited number (or hundreds of thousands) of members.
 * Sharded clustering with failover.
 * Flexible access control with permissions for various actions.
-* Server-generated presence notifications for people, group conversations.
+* Server-generated presence notifications for people, group chats.
 * Support for custom authentication backends.
 * Bindings for various programming languages:
   * Javascript with no external dependencies.
@@ -93,7 +93,6 @@ When you register a new account you are asked for an email address to send valid
 * Support for client-side data caching.
 * Ability to block unwanted communication server-side.
 * Anonymous users (important for use cases related to tech support over chat).
-* Push notifications using [FCM](https://firebase.google.com/docs/cloud-messaging/) or [TNPG](server/push/tnpg/).
 * Storage and out of band transfer of large objects like video files using local file system or Amazon S3.
 * Plugins to extend functionality, for example, to enable chatbots.
 
@@ -101,7 +100,6 @@ When you register a new account you are asked for an email address to send valid
 
 * [Federation](https://en.wikipedia.org/wiki/Federation_(information_technology)).
 * End to end encryption with [OTR](https://en.wikipedia.org/wiki/Off-the-Record_Messaging) for one-on-one messaging and undecided method for group messaging.
-* Channels with an unlimited number (or hundreds of thousands) of members with bearer token access control.
 * Hot standby.
 * Different levels of message persistence (from strict persistence to "store until delivered" to purely ephemeral messaging).
 

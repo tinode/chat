@@ -1024,17 +1024,19 @@ func (t *Topic) subscriptionReply(h *Hub, join *sessionJoin) error {
 
 	params := map[string]interface{}{}
 	if changed {
-		pud := t.perUser[asUid]
-		// Report back the assigned access mode.
-		params["acs"] = &MsgAccessMode{
-			Given: pud.modeGiven.String(),
-			Want:  pud.modeWant.String(),
-			Mode:  (pud.modeGiven & pud.modeWant).String()}
-	} else if isChannel(join.pkt.Original) {
-		params["acs"] = &MsgAccessMode{
-			Given: types.ModeCChn.String()
-			Want:  types.ModeCChn.String()
-			Mode: types.ModeCChn.String()}
+		if isChannel(join.pkt.Original) {
+			params["acs"] = &MsgAccessMode{
+				Given: types.ModeCChn.String(),
+				Want:  types.ModeCChn.String(),
+				Mode:  types.ModeCChn.String()}
+		} else {
+			pud := t.perUser[asUid]
+			// Report back the assigned access mode.
+			params["acs"] = &MsgAccessMode{
+				Given: pud.modeGiven.String(),
+				Want:  pud.modeWant.String(),
+				Mode:  (pud.modeGiven & pud.modeWant).String()}
+		}
 	}
 
 	toriginal := t.original(asUid)
@@ -1317,7 +1319,6 @@ func (t *Topic) thisUserSub(h *Hub, sess *Session, pkt *ClientComMessage, asUid 
 	}
 
 	if !isChanSub {
-
 		// If topic is being muted, send "off" notification and disable updates.
 		// Do it before applying the new permissions.
 		if (oldWant & oldGiven).IsPresencer() && !(userData.modeWant & userData.modeGiven).IsPresencer() {
@@ -2137,9 +2138,11 @@ func (t *Topic) replyGetData(sess *Session, asUid types.Uid, id string, req *Msg
 		return errors.New("invalid MsgGetOpts query")
 	}
 
+	asChan := isChannel(toriginal)
+
 	// Check if the user has permission to read the topic data
 	count := 0
-	if userData := t.perUser[asUid]; (userData.modeGiven & userData.modeWant).IsReader() {
+	if userData := t.perUser[asUid]; (userData.modeGiven & userData.modeWant).IsReader() || asChan {
 		// Read messages from DB
 		messages, err := store.Messages.GetAll(t.name, asUid, msgOpts2storeOpts(req))
 		if err != nil {
@@ -2152,11 +2155,16 @@ func (t *Topic) replyGetData(sess *Session, asUid types.Uid, id string, req *Msg
 			count = len(messages)
 			for i := range messages {
 				mm := &messages[i]
+				from := ""
+				if !asChan {
+					// Don't show sender for channel readers
+					from = types.ParseUid(mm.From).UserId()
+				}
 				sess.queueOut(&ServerComMessage{Data: &MsgServerData{
 					Topic:     toriginal,
 					Head:      mm.Head,
 					SeqId:     mm.SeqId,
-					From:      types.ParseUid(mm.From).UserId(),
+					From:      from,
 					Timestamp: mm.CreatedAt,
 					Content:   mm.Content}})
 			}
@@ -2334,7 +2342,7 @@ func (t *Topic) replyGetDel(sess *Session, asUid types.Uid, id string, req *MsgG
 	}
 
 	// Check if the user has permission to read the topic data and the request is valid
-	if userData := t.perUser[asUid]; (userData.modeGiven & userData.modeWant).IsReader() {
+	if userData := t.perUser[asUid]; (userData.modeGiven & userData.modeWant).IsReader() || isChannel(toriginal) {
 		ranges, delID, err := store.Messages.GetDeleted(t.name, asUid, msgOpts2storeOpts(req))
 		if err != nil {
 			sess.queueOut(ErrUnknown(id, toriginal, now))
