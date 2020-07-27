@@ -20,6 +20,10 @@ import (
 	"github.com/tinode/chat/server/store/types"
 )
 
+// Request latency distribution bounds (in milliseconds).
+// "var" because Go does not support array constants.
+var RequestLatencyDistribution = [...]float64 {1, 2, 3, 4, 5, 6, 8, 10, 13, 16, 20, 25, 30, 40, 50, 65, 80, 100, 130, 160, 200, 250, 300, 400, 500, 650, 800, 1000, 2000, 5000, 10000, 20000, 50000, 100000,}
+
 // Request to hub to subscribe session to topic
 type sessionJoin struct {
 	// Message, containing request details.
@@ -129,6 +133,8 @@ func newHub() *Hub {
 
 	statsRegisterInt("FileDownloadsTotal")
 	statsRegisterInt("FileUploadsTotal")
+
+	statsRegisterHistogram("RequestLatency", RequestLatencyDistribution[:]...)
 
 	go h.run()
 

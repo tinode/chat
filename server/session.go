@@ -253,6 +253,12 @@ func (s *Session) queueOut(msg *ServerComMessage) bool {
 		return s.multi.queueOut(msg)
 	}
 
+	// Record latency only on {ctrl} messages and end-user sessions.
+	if msg.Ctrl != nil && msg.Id != "" && !msg.Ctrl.Timestamp.IsZero() && !s.isCluster() {
+		duration := time.Since(msg.Ctrl.Timestamp).Milliseconds()
+		statsAddSample("RequestLatency", float64(duration))
+	}
+
 	select {
 	case s.send <- s.serialize(msg):
 	case <-time.After(sendTimeout):
