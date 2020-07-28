@@ -11,6 +11,7 @@ import (
 	"log"
 	"net/http"
 	"runtime"
+	"sort"
 	"time"
 )
 
@@ -27,25 +28,13 @@ type histogram struct {
 
 func (h *histogram) addSample(v float64) {
 	h.Count++
-	var count *int64
-	var i int
-	var b float64
-	for i, b = range h.Bounds {
-		if v < b {
-			count = &h.CountPerBucket[i]
-			break
-		}
-	}
-	if count == nil { // Last bucket.
-		i = len(h.Bounds)
-		count = &h.CountPerBucket[i]
-	}
-	*count++
+	idx := sort.SearchFloat64s(h.Bounds, v)
+	h.CountPerBucket[idx]++
 }
 
 func (h *histogram) String() string {
-	if r, err := json.Marshal(*h); err == nil {
-		return string(r[:])
+	if r, err := json.Marshal(h); err == nil {
+		return string(r)
 	} else {
 		return ""
 	}
@@ -89,7 +78,7 @@ func statsRegisterInt(name string) {
 
 // Register histogram variable. `bounds` specifies histogram buckets/bins
 // (see comment next to the `histogram` struct definition).
-func statsRegisterHistogram(name string, bounds ...float64) {
+func statsRegisterHistogram(name string, bounds []float64) {
   numBuckets := len(bounds) + 1
 	expvar.Publish(name, &histogram{
 		CountPerBucket: make([]int64, numBuckets),
@@ -117,7 +106,7 @@ func statsInc(name string, val int) {
 }
 
 // Async publish a value (add a sample) to a histogram variable.
-func statsAddSample(name string, val float64) {
+func statsAddHistSample(name string, val float64) {
 	if globals.statsUpdate != nil {
 		select {
 		case globals.statsUpdate <- &varUpdate{varname: name, value: val}:

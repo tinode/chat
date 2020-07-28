@@ -256,7 +256,7 @@ func (s *Session) queueOut(msg *ServerComMessage) bool {
 	// Record latency only on {ctrl} messages and end-user sessions.
 	if msg.Ctrl != nil && msg.Id != "" && !msg.Ctrl.Timestamp.IsZero() && !s.isCluster() {
 		duration := time.Since(msg.Ctrl.Timestamp).Milliseconds()
-		statsAddSample("RequestLatency", float64(duration))
+		statsAddHistSample("RequestLatency", float64(duration))
 	}
 
 	select {
