@@ -331,7 +331,7 @@ type ClientComMessage struct {
 	// Denormalized 'what' field of meta messages (set, get, del).
 	MetaWhat int `json:"-"`
 	// Timestamp when this message was received by the server.
-	timestamp time.Time
+	Timestamp time.Time `json:"-"`
 }
 
 /////////////////////////////////////////////////////////////
@@ -757,7 +757,8 @@ type ServerComMessage struct {
 	RcptTo string `json:"-"`
 	// User ID of the sender of the original message.
 	AsUser string `json:"-"`
-	// Timestamp for consistency of timestamps in {ctrl} messages.
+	// Timestamp for consistency of timestamps in {ctrl} messages
+	// (corresponds to originating client message receipt timestamp).
 	Timestamp time.Time `json:"-"`
 	// Originating session to send an aknowledgement to. Could be nil.
 	sess *Session
