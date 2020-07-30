@@ -142,7 +142,7 @@ func serveLongPoll(wrt http.ResponseWriter, req *http.Request) {
 		log.Println("longPoll: session started", sess.sid, sess.remoteAddr, count)
 
 		wrt.WriteHeader(http.StatusCreated)
-		pkt := NoErrCreated(req.FormValue("id"), "", now)
+		pkt := NoErrCreated(req.FormValue("id"), "", now, now)
 		pkt.Ctrl.Params = map[string]string{
 			"sid": sess.sid,
 		}
@@ -176,7 +176,7 @@ func serveLongPoll(wrt http.ResponseWriter, req *http.Request) {
 			} else {
 				wrt.WriteHeader(http.StatusBadRequest)
 			}
-			enc.Encode(ErrMalformed(req.FormValue("id"), "", now))
+			enc.Encode(ErrMalformed(req.FormValue("id"), "", now, now))
 		}
 		return
 	}
