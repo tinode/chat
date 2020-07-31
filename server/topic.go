@@ -1072,8 +1072,6 @@ func (t *Topic) subscriptionReply(h *Hub, join *sessionJoin) error {
 
 	toriginal := t.original(asUid)
 
-	log.Println("subscriptionReply", toriginal, join.pkt.Original)
-
 	// When a group topic is created, it's given a temporary name by the client.
 	// Then this name changes. Report back the original name here.
 	if msgsub.Created && join.pkt.Original != toriginal {
@@ -1146,7 +1144,6 @@ func (t *Topic) thisUserSub(h *Hub, sess *Session, pkt *ClientComMessage, asUid 
 	// It could be an actual subscription (IsJoiner() == true) or a ban (IsJoiner() == false)
 	userData, existingSub := t.perUser[asUid]
 	if !existingSub || userData.deleted {
-		log.Println("thisUserSub new sub or chan, toriginal=", toriginal, isChanSub)
 		// New subscription or a channel reader, either new or existing.
 
 		// Check if the max number of subscriptions is already reached.
