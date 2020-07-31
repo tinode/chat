@@ -306,8 +306,10 @@ func (t *Topic) runLocal(hub *Hub) {
 
 			// userId.IsZero() == true when the entire session is being dropped.
 			var asUid types.Uid
+			var asChan bool
 			if leave.pkt != nil {
 				asUid = types.ParseUserId(leave.pkt.AsUser)
+				asChan = isChannel(leave.pkt.Original)
 			}
 
 			if t.isInactive() {
@@ -315,15 +317,20 @@ func (t *Topic) runLocal(hub *Hub) {
 					leave.sess.queueOut(ErrLocked(leave.pkt.Id, t.original(asUid), now))
 				}
 				continue
-
+			} else if asChan && !t.isChan {
+				if leave.pkt != nil {
+					// Group topic cannot be addressed as channel unless channel functionality is enabled.
+					leave.sess.queueOut(ErrNotFound(leave.pkt.Id, t.original(asUid), now))
+				}
+				continue
 			} else if leave.pkt != nil && leave.pkt.Leave.Unsub {
 				// User wants to leave and unsubscribe.
 				// asUid must not be Zero.
-				if err := t.replyLeaveUnsub(hub, leave.sess, asUid, leave.pkt.Id); err != nil {
+				if err := t.replyLeaveUnsub(hub, leave.sess, leave.pkt, asUid); err != nil {
 					log.Println("failed to unsub", err, leave.sess.sid)
 					continue
 				}
-			} else if pssd, _ := t.remSession(leave.sess, asUid); pssd != nil {
+			} else if pssd, _ := t.remSession(leave.sess, asUid); !asChan && pssd != nil {
 				// Just leaving the topic without unsubscribing.
 
 				var uid types.Uid
@@ -494,7 +501,7 @@ func (t *Topic) runLocal(hub *Hub) {
 				case constMsgDelSub:
 					err = t.replyDelSub(hub, meta.sess, asUid, meta.pkt.Del)
 				case constMsgDelTopic:
-					err = t.replyDelTopic(hub, meta.sess, asUid, meta.pkt.Del)
+					err = t.replyDelTopic(hub, meta.sess, asUid, meta.pkt)
 				case constMsgDelCred:
 					err = t.replyDelCred(hub, meta.sess, asUid, authLevel, meta.pkt.Del)
 				}
@@ -1023,6 +1030,11 @@ func (t *Topic) subscriptionReply(h *Hub, join *sessionJoin) error {
 			Given: pud.modeGiven.String(),
 			Want:  pud.modeWant.String(),
 			Mode:  (pud.modeGiven & pud.modeWant).String()}
+	} else if isChannel(join.pkt.Original) {
+		params["acs"] = &MsgAccessMode{
+			Given: types.ModeCChn.String()
+			Want:  types.ModeCChn.String()
+			Mode: types.ModeCChn.String()}
 	}
 
 	toriginal := t.original(asUid)
@@ -2019,6 +2031,8 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 						mts.Acs.Mode = (sub.ModeGiven & sub.ModeWant).String()
 						mts.Acs.Want = sub.ModeWant.String()
 						mts.Acs.Given = sub.ModeGiven.String()
+					} else if isChannel(sub.Topic) {
+						mts.Acs.Mode = types.ModeCChn.String()
 					} else if defacs := sub.GetDefaultAccess(); defacs != nil {
 						switch authLevel {
 						case auth.LevelAnon:
@@ -2150,7 +2164,11 @@ func (t *Topic) replyGetData(sess *Session, asUid types.Uid, id string, req *Msg
 	}
 
 	// Inform the requester that all the data has been served.
-	sess.queueOut(NoErrParams(id, toriginal, now, map[string]interface{}{"what": "data", "count": count}))
+	if count == 0 {
+		sess.queueOut(NoContentParams(id, toriginal, now, map[string]interface{}{"what": "data"}))
+	} else {
+		sess.queueOut(NoErrDeliveredParams(id, toriginal, now, map[string]interface{}{"what": "data", "count": count}))
+	}
 
 	return nil
 }
@@ -2455,11 +2473,11 @@ func (t *Topic) replyDelMsg(sess *Session, asUid types.Uid, del *MsgClientDel) e
 // 2.1.1 Check if the other subscription still exists, if so, treat request as {leave unreg=true}
 // 2.1.2 If the other subscription does not exist, delete topic
 // 2.2 If this is not a p2p topic, treat it as {leave unreg=true}
-func (t *Topic) replyDelTopic(h *Hub, sess *Session, asUid types.Uid, del *MsgClientDel) error {
+func (t *Topic) replyDelTopic(h *Hub, sess *Session, asUid types.Uid, pkt *ClientComMessage) error {
 	if t.owner != asUid {
 		// Cases 2.1.1 and 2.2
 		if t.cat != types.TopicCatP2P || t.subsCount() == 2 {
-			return t.replyLeaveUnsub(h, sess, asUid, del.Id)
+			return t.replyLeaveUnsub(h, sess, pkt, asUid)
 		}
 	}
 
@@ -2567,7 +2585,8 @@ func (t *Topic) replyDelSub(h *Hub, sess *Session, asUid types.Uid, del *MsgClie
 	return nil
 }
 
-func (t *Topic) replyLeaveUnsub(h *Hub, sess *Session, asUid types.Uid, id string) error {
+// replyLeaveUnsub is request to unsubscribe user and detach all user's sessions from topic.
+func (t *Topic) replyLeaveUnsub(h *Hub, sess *Session, pkt *ClientComMessage, asUid types.Uid) error {
 	now := types.TimeNow()
 
 	if asUid.IsZero() {
@@ -2575,39 +2594,59 @@ func (t *Topic) replyLeaveUnsub(h *Hub, sess *Session, asUid types.Uid, id strin
 	}
 
 	if t.owner == asUid {
-		if id != "" {
-			sess.queueOut(ErrPermissionDenied(id, t.original(asUid), now))
+		if pkt != nil {
+			sess.queueOut(ErrPermissionDenied(pkt.Id, t.original(asUid), now))
 		}
 		return errors.New("replyLeaveUnsub: owner cannot unsubscribe")
 	}
 
+	isChan := t.isChan && pkt != nil && isChannel(pkt.Original)
+
 	// Delete user's subscription from the database.
-	if err := store.Subs.Delete(t.name, asUid); err != nil {
+	var err error
+	if pkt == nil && t.isChan {
+		// Must try to unsubscribe both: as subscriber and as reader.
+		err = store.Subs.Delete(t.name, asUid)
 		if err == types.ErrNotFound {
-			if id != "" {
-				sess.queueOut(InfoNoAction(id, t.original(asUid), now))
+			err = store.Subs.Delete(types.GrpToChn(t.name), asUid)
+			isChan = true
+		}
+	} else if isChan {
+		// Handle channel reader.
+		err = store.Subs.Delete(types.GrpToChn(t.name), asUid)
+	} else {
+		// Handle subscriber.
+		err = store.Subs.Delete(t.name, asUid)
+	}
+
+	if err != nil {
+		if err == types.ErrNotFound {
+			if pkt != nil {
+				sess.queueOut(InfoNoAction(pkt.Id, t.original(asUid), now))
 			}
 			err = nil
-		} else if id != "" {
-			sess.queueOut(ErrUnknown(id, t.original(asUid), now))
+		} else if pkt != nil {
+			sess.queueOut(ErrUnknown(pkt.Id, t.original(asUid), now))
 		}
-
 		return err
 	}
 
-	if id != "" {
-		sess.queueOut(NoErr(id, t.original(asUid), now))
+	if pkt != nil {
+		sess.queueOut(NoErr(pkt.Id, t.original(asUid), now))
 	}
 
-	pud := t.perUser[asUid]
+	if !isChan {
+		pud := t.perUser[asUid]
 
-	// Update cached unread count: negative value
-	if (pud.modeWant & pud.modeGiven).IsReader() {
-		usersUpdateUnread(asUid, pud.readID-t.lastID, true)
+		// Update cached unread count: negative value
+		if (pud.modeWant & pud.modeGiven).IsReader() {
+			usersUpdateUnread(asUid, pud.readID-t.lastID, true)
+		}
+
+		// Send notifications.
+		t.notifySubChange(asUid, asUid, pud.modeWant, pud.modeGiven, types.ModeUnset, types.ModeUnset, sess.sid)
 	}
 
-	// Send notifications.
-	t.notifySubChange(asUid, asUid, pud.modeWant, pud.modeGiven, types.ModeUnset, types.ModeUnset, sess.sid)
 	// Evict all user's sessions, clear cached data, send notifications.
 	t.evictUser(asUid, true, sess.sid)
 
