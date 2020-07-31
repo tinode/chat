@@ -84,13 +84,11 @@ When you register a new account you are asked for an email address to send valid
   * C/C++, C#, Python, PHP, Ruby and other languages using [gRPC](https://grpc.io/docs/languages/).
 * Websocket, long polling, and [gRPC](https://grpc.io/) over TCP or Unix sockets.
 * JSON or [protobuf version 3](https://developers.google.com/protocol-buffers/) wire protocols.
-* Optional built-in [TLS](https://en.wikipedia.org/wiki/Transport_Layer_Security) with [Letsencrypt](https://letsencrypt.org/) or conventional certificates.
 * User search/discovery.
-* Rich formatting of messages, markdown-style: \*style\* &rarr; **style**.
-* Inline images and file attachments.
+* Rich formatting of messages markdown-style: \*style\* &rarr; **style**.
+* Inline images, file attachments.
 * Forms and templated responses suitable for chatbots.
 * Message status notifications: message delivery to server; received and read notifications; typing notifications.
-* Support for client-side data caching.
 * Ability to block unwanted communication server-side.
 * Anonymous users (important for use cases related to tech support over chat).
 * Storage and out of band transfer of large objects like video files using local file system or Amazon S3.
@@ -100,6 +98,9 @@ When you register a new account you are asked for an email address to send valid
 
 * [Federation](https://en.wikipedia.org/wiki/Federation_(information_technology)).
 * End to end encryption with [OTR](https://en.wikipedia.org/wiki/Off-the-Record_Messaging) for one-on-one messaging and undecided method for group messaging.
+* Replying and forwarding messages.
+* Voice and video messages, location sharing.
+* Previews of attached videos, documents, links.
 * Hot standby.
 * Different levels of message persistence (from strict persistence to "store until delivered" to purely ephemeral messaging).
 
