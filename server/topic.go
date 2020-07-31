@@ -337,8 +337,18 @@ func (t *Topic) runLocal(hub *Hub) {
 					log.Println("failed to unsub", err, leave.sess.sid)
 					continue
 				}
-			} else if pssd, _ := t.remSession(leave.sess, asUid); !asChan && pssd != nil {
+			} else if pssd, _ := t.remSession(leave.sess, asUid); pssd != nil && !pssd.isChanSub {
 				// Just leaving the topic without unsubscribing.
+				log.Println("leaving", asUid, asChan, leave.sess.sid)
+
+				if asChan {
+					// Cannot address non-channel subscription as channel.
+					if leave.pkt != nil {
+						// Group topic cannot be addressed as channel unless channel functionality is enabled.
+						leave.sess.queueOut(ErrNotFound(leave.pkt.Id, leave.pkt.Original, now))
+					}
+					continue
+				}
 
 				var uid types.Uid
 				if leave.sess.isProxy() {
@@ -666,7 +676,7 @@ func (t *Topic) sessToForeground(sess *Session) {
 		s = s.multi
 	}
 
-	if pssd, ok := t.sessions[s]; ok {
+	if pssd, ok := t.sessions[s]; ok && !pssd.isChanSub {
 		uid := pssd.uid
 		if s.isMultiplex() {
 			// If 's' is a multiplexing session, then sess is a proxy and it contains correct UID.
@@ -917,7 +927,6 @@ func (t *Topic) handleBroadcast(msg *ServerComMessage) {
 				// Update cached count of unread messages
 				usersUpdateUnread(asUser, unread, true)
 			}
-
 			t.perUser[asUser] = pud
 		}
 	} else {
@@ -956,13 +965,18 @@ func (t *Topic) handleBroadcast(msg *ServerComMessage) {
 				}
 
 			} else {
-				// Check if the user has Read permission or is channel reader.
+				// Check if the user has Read permission or is a channel reader.
 				if !t.userIsReader(pssd.uid) && !pssd.isChanSub {
 					continue
 				}
 
+				// Don't send read receipts and key presses to channel readers.
+				if msg.Info != nil && pssd.isChanSub {
+					continue
+				}
+
 				// Don't send key presses from one user's session to the other sessions of the same user.
-				if !pssd.isChanSub && msg.Info != nil && msg.Info.What == "kp" && msg.Info.From == pssd.uid.UserId() {
+				if msg.Info != nil && msg.Info.What == "kp" && msg.Info.From == pssd.uid.UserId() {
 					continue
 				}
 			}
@@ -1054,6 +1068,8 @@ func (t *Topic) subscriptionReply(h *Hub, join *sessionJoin) error {
 
 	toriginal := t.original(asUid)
 
+	log.Println("subscriptionReply", toriginal, join.pkt.Original)
+
 	// When a group topic is created, it's given a temporary name by the client.
 	// Then this name changes. Report back the original name here.
 	if msgsub.Created && join.pkt.Original != toriginal {
@@ -1126,6 +1142,7 @@ func (t *Topic) thisUserSub(h *Hub, sess *Session, pkt *ClientComMessage, asUid 
 	// It could be an actual subscription (IsJoiner() == true) or a ban (IsJoiner() == false)
 	userData, existingSub := t.perUser[asUid]
 	if !existingSub || userData.deleted {
+		log.Println("thisUserSub new sub or chan, toriginal=", toriginal, isChanSub)
 		// New subscription or a channel reader, either new or existing.
 
 		// Check if the max number of subscriptions is already reached.
@@ -1211,16 +1228,23 @@ func (t *Topic) thisUserSub(h *Hub, sess *Session, pkt *ClientComMessage, asUid 
 			changed = true
 		}
 
-		if !isChanSub {
+		if isChanSub {
+			pluginSubscription(sub, plgActUpd)
+		} else {
 			// Add subscribed user to cache.
 			usersRegisterUser(asUid, true)
+			// Notify plugins of a new subscription
+			pluginSubscription(sub, plgActCreate)
 		}
-
-		// Notify plugins of a new subscription
-		pluginSubscription(sub, plgActCreate)
 
 	} else {
 		// Process update to existing subscription. It could be an incomplete subscription for a new topic.
+
+		// If user is already a normal subscriber he cannot address topic as a channel.
+		if isChanSub {
+			sess.queueOut(ErrNotFound(pkt.Id, pkt.Original, now))
+			return changed, types.ErrNotFound
+		}
 
 		var ownerChange bool
 
@@ -1540,7 +1564,6 @@ func (t *Topic) anotherUserSub(h *Hub, sess *Session, asUid, target types.Uid, p
 				map[string]interface{}{"ModeGiven": modeGiven}, false); err != nil {
 				return false, err
 			}
-
 			t.perUser[target] = userData
 		}
 	}
@@ -2607,6 +2630,7 @@ func (t *Topic) replyDelSub(h *Hub, sess *Session, asUid types.Uid, del *MsgClie
 }
 
 // replyLeaveUnsub is request to unsubscribe user and detach all user's sessions from topic.
+// FIXME: if grp subscription does not exist, replyLeaveUnsub will replace grpXXX with chnXXX.
 func (t *Topic) replyLeaveUnsub(h *Hub, sess *Session, pkt *ClientComMessage, asUid types.Uid) error {
 	now := types.TimeNow()
 
@@ -2677,7 +2701,7 @@ func (t *Topic) replyLeaveUnsub(h *Hub, sess *Session, pkt *ClientComMessage, as
 // evictUser evicts all given user's sessions from the topic and clears user's cached data, if appropriate.
 func (t *Topic) evictUser(uid types.Uid, unsub bool, skip string) {
 	now := types.TimeNow()
-	pud := t.perUser[uid]
+	pud, ok := t.perUser[uid]
 
 	// Detach user from topic
 	if unsub {
@@ -2686,14 +2710,14 @@ func (t *Topic) evictUser(uid types.Uid, unsub bool, skip string) {
 			pud.online = 0
 			pud.deleted = true
 			t.perUser[uid] = pud
-		} else {
+		} else if ok {
 			// Grp: delete per-user data
 			delete(t.perUser, uid)
 			t.computePerUserAcsUnion()
 
 			usersRegisterUser(uid, false)
 		}
-	} else {
+	} else if ok {
 		// Clear online status
 		pud.online = 0
 		t.perUser[uid] = pud
