@@ -337,12 +337,16 @@ func (t *Topic) runLocal(hub *Hub) {
 					log.Println("failed to unsub", err, leave.sess.sid)
 					continue
 				}
-			} else if pssd, _ := t.remSession(leave.sess, asUid); pssd != nil && !pssd.isChanSub {
-				// Just leaving the topic without unsubscribing.
-				log.Println("leaving", asUid, asChan, leave.sess.sid)
+			} else if pssd, _ := t.remSession(leave.sess, asUid); pssd != nil {
+				if pssd.isChanSub && asChan {
+					if leave.pkt != nil {
+						leave.sess.queueOut(NoErr(leave.pkt.Id, leave.pkt.Original, now))
+					}
+					continue
+				}
 
-				if asChan {
-					// Cannot address non-channel subscription as channel.
+				if pssd.isChanSub != asChan {
+					// Cannot address non-channel subscription as channel and vice versa.
 					if leave.pkt != nil {
 						// Group topic cannot be addressed as channel unless channel functionality is enabled.
 						leave.sess.queueOut(ErrNotFound(leave.pkt.Id, leave.pkt.Original, now))
