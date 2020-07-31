@@ -153,6 +153,8 @@ type perSessionData struct {
 	// ID of the subscribed user (asUid); not necessarily the session owner.
 	// Could be zero for multiplexed sessions in cluster.
 	uid types.Uid
+	// This is a channel subscription
+	isChanSub bool
 	// IDs of subscribed users in a multiplexing session.
 	muids []types.Uid
 }
@@ -223,9 +225,14 @@ func (t *Topic) userIsReader(uid types.Uid) bool {
 
 // maybeFixTopicName sets the topic field in `msg` depending on the uid.
 func (t *Topic) maybeFixTopicName(msg *ServerComMessage, uid types.Uid) {
-	if !uid.IsZero() && t.cat == types.TopicCatP2P {
+	// For zero uids we don't know the proper topic name.
+	if uid.IsZero() {
+		return
+	}
+
+	if t.cat == types.TopicCatP2P || (t.cat == types.TopicCatGrp && t.isChan) {
 		// For p2p topics topic name is dependent on receiver.
-		// For zero uids we don't know the proper topic name, though.
+		// Channel topics may be presented as grpXXX or chnXXX.
 		switch {
 		case msg.Data != nil:
 			msg.Data.Topic = t.original(uid)
@@ -949,13 +956,13 @@ func (t *Topic) handleBroadcast(msg *ServerComMessage) {
 				}
 
 			} else {
-				// Check if the user has Read permission
-				if !t.userIsReader(pssd.uid) {
+				// Check if the user has Read permission or is channel reader.
+				if !t.userIsReader(pssd.uid) && !pssd.isChanSub {
 					continue
 				}
 
 				// Don't send key presses from one user's session to the other sessions of the same user.
-				if msg.Info != nil && msg.Info.What == "kp" && msg.Info.From == pssd.uid.UserId() {
+				if !pssd.isChanSub && msg.Info != nil && msg.Info.What == "kp" && msg.Info.From == pssd.uid.UserId() {
 					continue
 				}
 			}
@@ -963,6 +970,12 @@ func (t *Topic) handleBroadcast(msg *ServerComMessage) {
 
 		// Topic name may be different depending on the user to which the `sess` belongs.
 		t.maybeFixTopicName(msg, pssd.uid)
+
+		// Send channel messages anonymously.
+		if pssd.isChanSub && msg.Data != nil {
+			msg.Data.From = ""
+		}
+		// Send message to session.
 		if !sess.queueOut(msg) {
 			log.Println("topic: connection stuck, detaching", t.name, sess.sid)
 			// The whole session is being dropped, so sessionLeave.pkt is not set.
@@ -1049,10 +1062,10 @@ func (t *Topic) subscriptionReply(h *Hub, join *sessionJoin) error {
 
 	if len(params) == 0 {
 		// Don't send empty params '{}'
-		params = nil
+		join.sess.queueOut(NoErr(join.pkt.Id, toriginal, now))
+	} else {
+		join.sess.queueOut(NoErrParams(join.pkt.Id, toriginal, now, params))
 	}
-
-	join.sess.queueOut(NoErrParams(join.pkt.Id, toriginal, now, params))
 
 	return nil
 }
@@ -1365,7 +1378,7 @@ func (t *Topic) thisUserSub(h *Hub, sess *Session, pkt *ClientComMessage, asUid 
 		done:      t.unreg,
 		meta:      t.meta,
 		supd:      t.supd})
-	t.addSession(sess, asUid)
+	t.addSession(sess, asUid, isChanSub)
 
 	// The user is online in the topic. Increment the counter if notifications are not deferred.
 	if !sess.background && !isChanSub {
@@ -3074,7 +3087,7 @@ func (t *Topic) subsCount() int {
 }
 
 // Add session record. 'user' may be different from sess.uid.
-func (t *Topic) addSession(sess *Session, asUid types.Uid) {
+func (t *Topic) addSession(sess *Session, asUid types.Uid, isChanSub bool) {
 	s := sess
 	if sess.multi != nil {
 		s = s.multi
@@ -3098,7 +3111,7 @@ func (t *Topic) addSession(sess *Session, asUid types.Uid) {
 			t.sessions[s] = perSessionData{muids: []types.Uid{asUid}}
 		}
 	} else {
-		t.sessions[s] = perSessionData{uid: asUid}
+		t.sessions[s] = perSessionData{uid: asUid, isChanSub: isChanSub}
 	}
 }
 
