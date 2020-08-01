@@ -31,7 +31,7 @@ func replyCreateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 	// Check if login is unique.
 	if ok, err := authhdl.IsUnique(msg.Acc.Secret); !ok {
 		log.Println("create user: auth secret is not unique", err, s.sid)
-		s.queueOut(decodeStoreError(err, msg.Id, "", msg.Timestamp, msg.Timestamp,
+		s.queueOut(decodeStoreError(err, msg.Id, "", msg.Timestamp,
 			map[string]interface{}{"what": "auth"}))
 		return
 	}
@@ -78,7 +78,7 @@ func replyCreateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 		vld := store.GetValidator(cr.Method)
 		if _, err := vld.PreCheck(cr.Value, cr.Params); err != nil {
 			log.Println("create user: failed credential pre-check", cr, err, s.sid)
-			s.queueOut(decodeStoreError(err, msg.Id, "", msg.Timestamp, msg.Timestamp,
+			s.queueOut(decodeStoreError(err, msg.Id, "", msg.Timestamp,
 				map[string]interface{}{"what": cr.Method}))
 			return
 		}
@@ -127,7 +127,7 @@ func replyCreateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 		log.Println("create user: add auth record failed", err, s.sid)
 		// Attempt to delete incomplete user record
 		store.Users.Delete(user.Uid(), false)
-		s.queueOut(decodeStoreError(err, msg.Id, "", msg.Timestamp, msg.Timestamp, nil))
+		s.queueOut(decodeStoreError(err, msg.Id, "", msg.Timestamp, nil))
 		return
 	}
 
@@ -138,7 +138,7 @@ func replyCreateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 		// Attempt to delete incomplete user record
 		store.Users.Delete(user.Uid(), false)
 		_, missing := stringSliceDelta(globals.authValidators[rec.AuthLevel], credentialMethods(creds))
-		s.queueOut(decodeStoreError(types.ErrPolicy, msg.Id, "", msg.Timestamp, msg.Timestamp,
+		s.queueOut(decodeStoreError(types.ErrPolicy, msg.Id, "", msg.Timestamp,
 			map[string]interface{}{"creds": missing}))
 		return
 	}
@@ -154,7 +154,7 @@ func replyCreateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 		// Delete incomplete user record.
 		store.Users.Delete(user.Uid(), false)
 		log.Println("create user: failed to save or validate credential", err, s.sid)
-		s.queueOut(decodeStoreError(err, msg.Id, "", msg.Timestamp, msg.Timestamp, nil))
+		s.queueOut(decodeStoreError(err, msg.Id, "", msg.Timestamp, nil))
 		return
 	}
 
@@ -241,7 +241,7 @@ func replyUpdateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 	}
 	if err != nil {
 		log.Println("replyUpdateUser: failed to fetch user from DB", err, s.sid)
-		s.queueOut(decodeStoreError(err, msg.Id, "", msg.Timestamp, msg.Timestamp, nil))
+		s.queueOut(decodeStoreError(err, msg.Id, "", msg.Timestamp, nil))
 		return
 	}
 
@@ -287,7 +287,7 @@ func replyUpdateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 
 	if err != nil {
 		log.Println("replyUpdateUser: failed to update user", err, s.sid)
-		s.queueOut(decodeStoreError(err, msg.Id, "", msg.Timestamp, msg.Timestamp, nil))
+		s.queueOut(decodeStoreError(err, msg.Id, "", msg.Timestamp, nil))
 		return
 	}
 
@@ -618,7 +618,7 @@ func replyDelUser(s *Session, msg *ClientComMessage) {
 
 		// Delete user's records from the database.
 		if err := store.Users.Delete(uid, msg.Del.Hard); err != nil {
-			reply = decodeStoreError(err, msg.Id, "", msg.Timestamp, msg.Timestamp, nil)
+			reply = decodeStoreError(err, msg.Id, "", msg.Timestamp, nil)
 			log.Println("replyDelUser: failed to delete user", err, s.sid)
 		} else {
 			reply = NoErr(msg.Id, "", msg.Timestamp)

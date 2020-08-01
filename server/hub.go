@@ -550,7 +550,7 @@ func replyOfflineTopicGetDesc(sess *Session, msg *ClientComMessage) {
 		stopic, err := store.Topics.Get(topic)
 		if err != nil {
 			log.Println("replyOfflineTopicGetDesc", err)
-			sess.queueOut(decodeStoreError(err, msg.Id, msg.Original, now, msg.Timestamp, nil))
+			sess.queueOut(decodeStoreErrorExplicitTs(err, msg.Id, msg.Original, now, msg.Timestamp, nil))
 			return
 		}
 		if stopic == nil {
@@ -592,7 +592,7 @@ func replyOfflineTopicGetDesc(sess *Session, msg *ClientComMessage) {
 
 		suser, err := store.Users.Get(uid)
 		if err != nil {
-			sess.queueOut(decodeStoreError(err, msg.Id, msg.Original, now, msg.Timestamp, nil))
+			sess.queueOut(decodeStoreErrorExplicitTs(err, msg.Id, msg.Original, now, msg.Timestamp, nil))
 			return
 		}
 		if suser == nil {
@@ -610,7 +610,7 @@ func replyOfflineTopicGetDesc(sess *Session, msg *ClientComMessage) {
 	sub, err := store.Subs.Get(topic, asUid)
 	if err != nil {
 		log.Println("replyOfflineTopicGetDesc:", err)
-		sess.queueOut(decodeStoreError(err, msg.Id, msg.Original, now, msg.Timestamp, nil))
+		sess.queueOut(decodeStoreErrorExplicitTs(err, msg.Id, msg.Original, now, msg.Timestamp, nil))
 		return
 	}
 
@@ -641,7 +641,7 @@ func replyOfflineTopicGetSub(sess *Session, msg *ClientComMessage) {
 	ssub, err := store.Subs.Get(msg.RcptTo, types.ParseUserId(msg.AsUser))
 	if err != nil {
 		log.Println("replyOfflineTopicGetSub:", err)
-		sess.queueOut(decodeStoreError(err, msg.Id, msg.Original, now, msg.Timestamp, nil))
+		sess.queueOut(decodeStoreErrorExplicitTs(err, msg.Id, msg.Original, now, msg.Timestamp, nil))
 		return
 	}
 
@@ -695,7 +695,7 @@ func replyOfflineTopicSetSub(sess *Session, msg *ClientComMessage) {
 	sub, err := store.Subs.Get(msg.RcptTo, asUid)
 	if err != nil {
 		log.Println("replyOfflineTopicSetSub get sub:", err)
-		sess.queueOut(decodeStoreError(err, msg.Id, msg.Original, now, msg.Timestamp, nil))
+		sess.queueOut(decodeStoreErrorExplicitTs(err, msg.Id, msg.Original, now, msg.Timestamp, nil))
 		return
 	}
 
@@ -718,7 +718,7 @@ func replyOfflineTopicSetSub(sess *Session, msg *ClientComMessage) {
 		var modeWant types.AccessMode
 		if err = modeWant.UnmarshalText([]byte(msg.Set.Sub.Mode)); err != nil {
 			log.Println("replyOfflineTopicSetSub mode:", err)
-			sess.queueOut(decodeStoreError(err, msg.Id, msg.Original, now, msg.Timestamp, nil))
+			sess.queueOut(decodeStoreErrorExplicitTs(err, msg.Id, msg.Original, now, msg.Timestamp, nil))
 			return
 		}
 
@@ -745,7 +745,7 @@ func replyOfflineTopicSetSub(sess *Session, msg *ClientComMessage) {
 		err = store.Subs.Update(msg.RcptTo, asUid, update, true)
 		if err != nil {
 			log.Println("replyOfflineTopicSetSub update:", err)
-			sess.queueOut(decodeStoreError(err, msg.Id, msg.Original, now, msg.Timestamp, nil))
+			sess.queueOut(decodeStoreErrorExplicitTs(err, msg.Id, msg.Original, now, msg.Timestamp, nil))
 		} else {
 			var params interface{}
 			if update["ModeWant"] != nil {

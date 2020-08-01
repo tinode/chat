@@ -52,7 +52,7 @@ func topicInit(t *Topic, join *sessionJoin, h *Hub) {
 		h.topicDel(join.pkt.RcptTo)
 
 		log.Println("init_topic: failed to load or create topic:", join.pkt.RcptTo, err)
-		join.sess.queueOut(decodeStoreError(err, join.pkt.Id, t.xoriginal, timestamp, join.pkt.Timestamp, nil))
+		join.sess.queueOut(decodeStoreErrorExplicitTs(err, join.pkt.Id, t.xoriginal, timestamp, join.pkt.Timestamp, nil))
 
 		// Re-queue pending requests to join the topic.
 		for len(t.reg) > 0 {

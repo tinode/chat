@@ -47,7 +47,7 @@ func largeFileServe(wrt http.ResponseWriter, req *http.Request) {
 	// Check authorization: either auth information or SID must be present
 	uid, challenge, err := authHttpRequest(req)
 	if err != nil {
-		writeHttpResponse(decodeStoreError(err, "", "", now, now, nil), err)
+		writeHttpResponse(decodeStoreError(err, "", "", now, nil), err)
 		return
 	}
 	if challenge != nil {
@@ -70,13 +70,13 @@ func largeFileServe(wrt http.ResponseWriter, req *http.Request) {
 		log.Println("media serve redirected", redirTo)
 		return
 	} else if err != nil {
-		writeHttpResponse(decodeStoreError(err, "", "", now, now, nil), err)
+		writeHttpResponse(decodeStoreError(err, "", "", now, nil), err)
 		return
 	}
 
 	fd, rsc, err := mh.Download(req.URL.String())
 	if err != nil {
-		writeHttpResponse(decodeStoreError(err, "", "", now, now, nil), err)
+		writeHttpResponse(decodeStoreError(err, "", "", now, nil), err)
 		return
 	}
 
@@ -129,7 +129,7 @@ func largeFileUpload(wrt http.ResponseWriter, req *http.Request) {
 	// Check authorization: either auth information or SID must be present
 	uid, challenge, err := authHttpRequest(req)
 	if err != nil {
-		writeHttpResponse(decodeStoreError(err, msgID, "", now, now, nil), err)
+		writeHttpResponse(decodeStoreError(err, msgID, "", now, nil), err)
 		return
 	}
 	if challenge != nil {
@@ -152,7 +152,7 @@ func largeFileUpload(wrt http.ResponseWriter, req *http.Request) {
 		log.Println("media upload redirected", redirTo)
 		return
 	} else if err != nil {
-		writeHttpResponse(decodeStoreError(err, "", "", now, now, nil), err)
+		writeHttpResponse(decodeStoreError(err, "", "", now, nil), err)
 		return
 	}
 
@@ -184,7 +184,7 @@ func largeFileUpload(wrt http.ResponseWriter, req *http.Request) {
 
 	url, err := mh.Upload(&fdef, file)
 	if err != nil {
-		writeHttpResponse(decodeStoreError(err, msgID, "", now, now, nil), err)
+		writeHttpResponse(decodeStoreError(err, msgID, "", now, nil), err)
 		return
 	}
 

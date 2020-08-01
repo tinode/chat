@@ -225,7 +225,12 @@ func isNullValue(i interface{}) bool {
 	return false
 }
 
-func decodeStoreError(err error, id, topic string, serverTs, incomingReqTs time.Time,
+func decodeStoreError(err error, id, topic string, ts time.Time,
+	params map[string]interface{}) *ServerComMessage {
+	return decodeStoreErrorExplicitTs(err, id, topic, ts, ts, params)
+}
+
+func decodeStoreErrorExplicitTs(err error, id, topic string, serverTs, incomingReqTs time.Time,
 	params map[string]interface{}) *ServerComMessage {
 
 	var errmsg *ServerComMessage
