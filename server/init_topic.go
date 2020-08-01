@@ -626,6 +626,8 @@ func initTopicGrp(t *Topic, sreg *sessionJoin) error {
 	// Initialize channel for receiving session online updates.
 	t.supd = make(chan *sessionUpdate, 32)
 
+	t.xoriginal = t.name // topic may have been loaded by a channel reader; make sure it's grpXXX, not chnXXX.
+
 	return nil
 }
 

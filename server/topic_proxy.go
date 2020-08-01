@@ -151,7 +151,7 @@ func (t *Topic) proxyMasterResponse(msg *ClusterResp, killTimer *time.Timer) {
 				// Subscription result.
 				if msg.SrvMsg.Ctrl.Code < 300 {
 					// Successful subscriptions.
-					t.addSession(sess, msg.SrvMsg.uid)
+					t.addSession(sess, msg.SrvMsg.uid, isChannel(msg.SrvMsg.Ctrl.Topic))
 					sess.addSub(t.name, &Subscription{
 						broadcast: t.broadcast,
 						done:      t.unreg,

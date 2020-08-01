@@ -882,13 +882,14 @@ func NoErrShutdown(ts time.Time) *ServerComMessage {
 }
 
 // NoErrDelivered means requested content has been delivered (208).
-func NoErrDeliveredParams(ts time.Time, topic string, params interface{}) *ServerComMessage {
+func NoErrDeliveredParams(id, topic string, ts time.Time, params interface{}) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
+		Id:        id,
 		Code:      http.StatusAlreadyReported, // 208
 		Text:      "delivered",
 		Topic:     topic,
 		Params:    params,
-		Timestamp: ts}}
+		Timestamp: ts}, Id: id}
 }
 
 // 3xx
