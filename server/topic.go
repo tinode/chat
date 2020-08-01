@@ -278,7 +278,7 @@ func (t *Topic) runLocal(hub *Hub) {
 			// Request to add a connection to this topic
 			if t.isInactive() {
 				asUid := types.ParseUserId(join.pkt.AsUser)
-				join.sess.queueOut(ErrLocked(join.pkt.Id, t.original(asUid), types.TimeNow(), join.pkt.Timestamp))
+				join.sess.queueOut(ErrLockedExplicitTs(join.pkt.Id, t.original(asUid), types.TimeNow(), join.pkt.Timestamp))
 			} else {
 				// The topic is alive, so stop the kill timer, if it's ticking. We don't want the topic to die
 				// while processing the call
@@ -308,7 +308,7 @@ func (t *Topic) runLocal(hub *Hub) {
 
 			if t.isInactive() {
 				if !asUid.IsZero() && leave.pkt != nil {
-					leave.sess.queueOut(ErrLocked(leave.pkt.Id, t.original(asUid), now, leave.pkt.Timestamp))
+					leave.sess.queueOut(ErrLockedExplicitTs(leave.pkt.Id, t.original(asUid), now, leave.pkt.Timestamp))
 				}
 				continue
 
@@ -402,7 +402,7 @@ func (t *Topic) runLocal(hub *Hub) {
 
 					// Respond if contains an id.
 					if leave.pkt != nil {
-						leave.sess.queueOut(NoErr(leave.pkt.Id, t.original(uid), now, leave.pkt.Timestamp))
+						leave.sess.queueOut(NoErrExplicitTs(leave.pkt.Id, t.original(uid), now, leave.pkt.Timestamp))
 					}
 				}
 			}
@@ -759,7 +759,7 @@ func (t *Topic) handleBroadcast(msg *ServerComMessage) {
 	if t.isInactive() {
 		// Ignore broadcast - topic is paused or being deleted.
 		if msg.Data != nil {
-			msg.sess.queueOut(ErrLocked(msg.Id, t.original(asUid), msg.Timestamp, msg.Timestamp))
+			msg.sess.queueOut(ErrLocked(msg.Id, t.original(asUid), msg.Timestamp))
 		}
 		return
 	}
@@ -767,7 +767,7 @@ func (t *Topic) handleBroadcast(msg *ServerComMessage) {
 	var pushRcpt *push.Receipt
 	if msg.Data != nil {
 		if t.isReadOnly() {
-			msg.sess.queueOut(ErrPermissionDenied(msg.Id, t.original(asUid), msg.Timestamp, msg.Timestamp))
+			msg.sess.queueOut(ErrPermissionDenied(msg.Id, t.original(asUid), msg.Timestamp))
 			return
 		}
 
@@ -777,7 +777,7 @@ func (t *Topic) handleBroadcast(msg *ServerComMessage) {
 		if t.cat != types.TopicCatSys {
 			// If it's not 'sys' check write permission.
 			if !(userData.modeWant & userData.modeGiven).IsWriter() {
-				msg.sess.queueOut(ErrPermissionDenied(msg.Id, t.original(asUid), msg.Timestamp, msg.Timestamp))
+				msg.sess.queueOut(ErrPermissionDenied(msg.Id, t.original(asUid), msg.Timestamp))
 				return
 			}
 		}
@@ -795,7 +795,7 @@ func (t *Topic) handleBroadcast(msg *ServerComMessage) {
 				Content:   msg.Data.Content}, (userData.modeGiven & userData.modeWant).IsReader()); err != nil {
 
 				log.Printf("topic[%s]: failed to save message: %v", t.name, err)
-				msg.sess.queueOut(ErrUnknown(msg.Id, t.original(asUid), msg.Timestamp, msg.Timestamp))
+				msg.sess.queueOut(ErrUnknown(msg.Id, t.original(asUid), msg.Timestamp))
 
 				return
 			}
@@ -812,7 +812,7 @@ func (t *Topic) handleBroadcast(msg *ServerComMessage) {
 		}
 
 		if msg.Id != "" && msg.sess != nil {
-			reply := NoErrAccepted(msg.Id, t.original(asUid), msg.Timestamp, msg.Timestamp)
+			reply := NoErrAccepted(msg.Id, t.original(asUid), msg.Timestamp)
 			reply.Ctrl.Params = map[string]int{"seq": t.lastID}
 			msg.sess.queueOut(reply)
 		}
@@ -995,7 +995,7 @@ func (t *Topic) subscriptionReply(h *Hub, join *sessionJoin) error {
 	if msgsub.Set != nil {
 		if msgsub.Set.Sub != nil {
 			if msgsub.Set.Sub.User != "" {
-				join.sess.queueOut(ErrMalformed(join.pkt.Id, toriginal, now, join.pkt.Timestamp))
+				join.sess.queueOut(ErrMalformedExplicitTs(join.pkt.Id, toriginal, now, join.pkt.Timestamp))
 				return errors.New("user id must not be specified")
 			}
 
@@ -1036,7 +1036,7 @@ func (t *Topic) subscriptionReply(h *Hub, join *sessionJoin) error {
 		params = nil
 	}
 
-	join.sess.queueOut(NoErrParams(join.pkt.Id, toriginal, now, join.pkt.Timestamp, params))
+	join.sess.queueOut(NoErrParamsExplicitTs(join.pkt.Id, toriginal, now, join.pkt.Timestamp, params))
 
 	return nil
 }
@@ -1077,7 +1077,7 @@ func (t *Topic) thisUserSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.L
 	modeWant := types.ModeUnset
 	if want != "" {
 		if err := modeWant.UnmarshalText([]byte(want)); err != nil {
-			sess.queueOut(ErrMalformed(pktID, toriginal, now, incomingReqTs))
+			sess.queueOut(ErrMalformedExplicitTs(pktID, toriginal, now, incomingReqTs))
 			return changed, err
 		}
 	}
@@ -1088,7 +1088,7 @@ func (t *Topic) thisUserSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.L
 	if !existingSub || userData.deleted {
 		// Check if the max number of subscriptions is already reached.
 		if t.cat == types.TopicCatGrp && t.subsCount() >= globals.maxSubscriberCount {
-			sess.queueOut(ErrPolicy(pktID, toriginal, now, now))
+			sess.queueOut(ErrPolicy(pktID, toriginal, now))
 			return changed, errors.New("max subscription count exceeded")
 		}
 
@@ -1103,7 +1103,7 @@ func (t *Topic) thisUserSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.L
 			userData.modeWant = (userData.modeWant & types.ModeCP2P) | types.ModeApprove
 		} else if t.cat == types.TopicCatSys {
 			if asLvl != auth.LevelRoot {
-				sess.queueOut(ErrPermissionDenied(pktID, toriginal, now, incomingReqTs))
+				sess.queueOut(ErrPermissionDeniedExplicitTs(pktID, toriginal, now, incomingReqTs))
 				return changed, errors.New("subscription to 'sys' topic requires root access level")
 			}
 
@@ -1143,7 +1143,7 @@ func (t *Topic) thisUserSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.L
 		}
 
 		if err := store.Subs.Create(sub); err != nil {
-			sess.queueOut(ErrUnknown(pktID, toriginal, now, incomingReqTs))
+			sess.queueOut(ErrUnknownExplicitTs(pktID, toriginal, now, incomingReqTs))
 			return changed, err
 		}
 
@@ -1177,7 +1177,7 @@ func (t *Topic) thisUserSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.L
 
 				// Make sure the current owner cannot unset the owner flag or ban himself
 				if t.owner == asUid && (!modeWant.IsOwner() || !modeWant.IsJoiner()) {
-					sess.queueOut(ErrPermissionDenied(pktID, toriginal, now, incomingReqTs))
+					sess.queueOut(ErrPermissionDeniedExplicitTs(pktID, toriginal, now, incomingReqTs))
 					return changed, errors.New("cannot unset ownership or self-ban the owner")
 				}
 
@@ -1191,7 +1191,7 @@ func (t *Topic) thisUserSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.L
 				}
 			} else if modeWant.IsOwner() {
 				// Ownership transfer can only be initiated by the owner.
-				sess.queueOut(ErrPermissionDenied(pktID, toriginal, now, incomingReqTs))
+				sess.queueOut(ErrPermissionDeniedExplicitTs(pktID, toriginal, now, incomingReqTs))
 				return changed, errors.New("non-owner cannot request ownership transfer")
 			} else if t.cat == types.TopicCatGrp && userData.modeGiven.IsAdmin() && modeWant.IsAdmin() {
 				// A group topic Admin should be able to grant himself any permissions except
@@ -1239,7 +1239,7 @@ func (t *Topic) thisUserSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.L
 		}
 		if len(update) > 0 {
 			if err := store.Subs.Update(t.name, asUid, update, true); err != nil {
-				sess.queueOut(ErrUnknown(pktID, toriginal, now, incomingReqTs))
+				sess.queueOut(ErrUnknownExplicitTs(pktID, toriginal, now, incomingReqTs))
 				return false, err
 			}
 			changed = true
@@ -1302,7 +1302,7 @@ func (t *Topic) thisUserSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.L
 
 	} else if !userData.modeGiven.IsJoiner() {
 		// User was banned
-		sess.queueOut(ErrPermissionDenied(pktID, toriginal, now, incomingReqTs))
+		sess.queueOut(ErrPermissionDeniedExplicitTs(pktID, toriginal, now, incomingReqTs))
 		return changed, errors.New("topic access denied; user is banned")
 	}
 
@@ -1344,13 +1344,13 @@ func (t *Topic) anotherUserSub(h *Hub, sess *Session, asUid, target types.Uid, i
 	// Check if approver actually has permission to manage sharing
 	userData, ok := t.perUser[asUid]
 	if !ok || !(userData.modeGiven & userData.modeWant).IsSharer() {
-		sess.queueOut(ErrPermissionDenied(set.Id, toriginal, now, incomingReqTs))
+		sess.queueOut(ErrPermissionDeniedExplicitTs(set.Id, toriginal, now, incomingReqTs))
 		return false, errors.New("topic access denied; approver has no permission")
 	}
 
 	// Check if topic is suspended.
 	if t.isReadOnly() {
-		sess.queueOut(ErrPermissionDenied(set.Id, toriginal, now, incomingReqTs))
+		sess.queueOut(ErrPermissionDeniedExplicitTs(set.Id, toriginal, now, incomingReqTs))
 		return false, errors.New("topic is suspended")
 	}
 
@@ -1360,7 +1360,7 @@ func (t *Topic) anotherUserSub(h *Hub, sess *Session, asUid, target types.Uid, i
 	modeGiven := types.ModeUnset
 	if set.Sub.Mode != "" {
 		if err := modeGiven.UnmarshalText([]byte(set.Sub.Mode)); err != nil {
-			sess.queueOut(ErrMalformed(set.Id, toriginal, now, incomingReqTs))
+			sess.queueOut(ErrMalformedExplicitTs(set.Id, toriginal, now, incomingReqTs))
 			return false, err
 		}
 
@@ -1373,13 +1373,13 @@ func (t *Topic) anotherUserSub(h *Hub, sess *Session, asUid, target types.Uid, i
 
 	// Make sure only the owner & approvers can set non-default access mode
 	if modeGiven != types.ModeUnset && !hostMode.IsAdmin() {
-		sess.queueOut(ErrPermissionDenied(set.Id, toriginal, now, incomingReqTs))
+		sess.queueOut(ErrPermissionDeniedExplicitTs(set.Id, toriginal, now, incomingReqTs))
 		return false, errors.New("sharer cannot set explicit modeGiven")
 	}
 
 	// Make sure no one but the owner can do an ownership transfer
 	if modeGiven.IsOwner() && t.owner != asUid {
-		sess.queueOut(ErrPermissionDenied(set.Id, toriginal, now, incomingReqTs))
+		sess.queueOut(ErrPermissionDeniedExplicitTs(set.Id, toriginal, now, incomingReqTs))
 		return false, errors.New("attempt to transfer ownership by non-owner")
 	}
 
@@ -1389,7 +1389,7 @@ func (t *Topic) anotherUserSub(h *Hub, sess *Session, asUid, target types.Uid, i
 	if !existingSub {
 		// Check if the max number of subscriptions is already reached.
 		if t.cat == types.TopicCatGrp && t.subsCount() >= globals.maxSubscriberCount {
-			sess.queueOut(ErrPolicy(set.Id, toriginal, now, now))
+			sess.queueOut(ErrPolicy(set.Id, toriginal, now))
 			return false, errors.New("max subscription count exceeded")
 		}
 
@@ -1402,13 +1402,13 @@ func (t *Topic) anotherUserSub(h *Hub, sess *Session, asUid, target types.Uid, i
 		// Get user's default access mode to be used as modeWant
 		var modeWant types.AccessMode
 		if user, err := store.Users.Get(target); err != nil {
-			sess.queueOut(ErrUnknown(set.Id, toriginal, now, incomingReqTs))
+			sess.queueOut(ErrUnknownExplicitTs(set.Id, toriginal, now, incomingReqTs))
 			return false, err
 		} else if user == nil {
 			sess.queueOut(ErrUserNotFound(set.Id, toriginal, now, incomingReqTs))
 			return false, errors.New("user not found")
 		} else if user.State != types.StateOK {
-			sess.queueOut(ErrPermissionDenied(set.Id, toriginal, now, incomingReqTs))
+			sess.queueOut(ErrPermissionDeniedExplicitTs(set.Id, toriginal, now, incomingReqTs))
 			return false, errors.New("user is suspended")
 		} else {
 			// Don't ask by default for more permissions than the granted ones.
@@ -1424,7 +1424,7 @@ func (t *Topic) anotherUserSub(h *Hub, sess *Session, asUid, target types.Uid, i
 		}
 
 		if err := store.Subs.Create(sub); err != nil {
-			sess.queueOut(ErrUnknown(set.Id, toriginal, now, incomingReqTs))
+			sess.queueOut(ErrUnknownExplicitTs(set.Id, toriginal, now, incomingReqTs))
 			return false, err
 		}
 
@@ -1496,7 +1496,7 @@ func (t *Topic) replyGetDesc(sess *Session, asUid types.Uid, id string, incoming
 	now := types.TimeNow()
 
 	if opts != nil && (opts.User != "" || opts.Limit != 0) {
-		sess.queueOut(ErrMalformed(id, t.original(asUid), now, incomingReqTs))
+		sess.queueOut(ErrMalformedExplicitTs(id, t.original(asUid), now, incomingReqTs))
 		return errors.New("invalid GetDesc query")
 	}
 
@@ -1654,7 +1654,7 @@ func (t *Topic) replySetDesc(sess *Session, asUid types.Uid, incomingReqTs time.
 		case types.TopicCatP2P:
 			// Reject direct changes to P2P topics.
 			if set.Desc.Public != nil || set.Desc.DefaultAcs != nil {
-				sess.queueOut(ErrPermissionDenied(set.Id, set.Topic, now, incomingReqTs))
+				sess.queueOut(ErrPermissionDeniedExplicitTs(set.Id, set.Topic, now, incomingReqTs))
 				return errors.New("incorrect attempt to change metadata of a p2p topic")
 			}
 		case types.TopicCatGrp:
@@ -1664,13 +1664,13 @@ func (t *Topic) replySetDesc(sess *Session, asUid types.Uid, incomingReqTs time.
 				sendCommon = assignGenericValues(core, "Public", t.public, set.Desc.Public)
 			} else if set.Desc.DefaultAcs != nil || set.Desc.Public != nil {
 				// This is a request from non-owner
-				sess.queueOut(ErrPermissionDenied(set.Id, set.Topic, now, incomingReqTs))
+				sess.queueOut(ErrPermissionDeniedExplicitTs(set.Id, set.Topic, now, incomingReqTs))
 				return errors.New("attempt to change public or permissions by non-owner")
 			}
 		}
 
 		if err != nil {
-			sess.queueOut(ErrMalformed(set.Id, set.Topic, now, incomingReqTs))
+			sess.queueOut(ErrMalformedExplicitTs(set.Id, set.Topic, now, incomingReqTs))
 			return err
 		}
 
@@ -1693,10 +1693,10 @@ func (t *Topic) replySetDesc(sess *Session, asUid types.Uid, incomingReqTs time.
 	}
 
 	if err != nil {
-		sess.queueOut(ErrUnknown(set.Id, set.Topic, now, incomingReqTs))
+		sess.queueOut(ErrUnknownExplicitTs(set.Id, set.Topic, now, incomingReqTs))
 		return err
 	} else if len(core)+len(sub) == 0 {
-		sess.queueOut(InfoNotModified(set.Id, set.Topic, now, incomingReqTs))
+		sess.queueOut(InfoNotModifiedExplicitTs(set.Id, set.Topic, now, incomingReqTs))
 		return errors.New("{set} generated no update to DB")
 	}
 
@@ -1739,7 +1739,7 @@ func (t *Topic) replySetDesc(sess *Session, asUid types.Uid, incomingReqTs time.
 		t.presSingleUserOffline(asUid, "upd", nilPresParams, sess.sid, false)
 	}
 
-	sess.queueOut(NoErr(set.Id, set.Topic, now, incomingReqTs))
+	sess.queueOut(NoErrExplicitTs(set.Id, set.Topic, now, incomingReqTs))
 
 	return nil
 }
@@ -1750,13 +1750,13 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 	now := types.TimeNow()
 
 	if req != nil && (req.SinceId != 0 || req.BeforeId != 0) {
-		sess.queueOut(ErrMalformed(id, t.original(asUid), now, incomingReqTs))
+		sess.queueOut(ErrMalformedExplicitTs(id, t.original(asUid), now, incomingReqTs))
 		return errors.New("invalid MsgGetOpts query")
 	}
 
 	userData := t.perUser[asUid]
 	if !(userData.modeGiven & userData.modeWant).IsSharer() {
-		sess.queueOut(ErrPermissionDenied(id, t.original(asUid), now, incomingReqTs))
+		sess.queueOut(ErrPermissionDeniedExplicitTs(id, t.original(asUid), now, incomingReqTs))
 		return errors.New("user does not have S permission")
 	}
 
@@ -1807,7 +1807,7 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 							globals.maskedTagNS))
 
 						if len(restr) > 0 {
-							sess.queueOut(ErrPermissionDenied(id, t.original(asUid), now, incomingReqTs))
+							sess.queueOut(ErrPermissionDeniedExplicitTs(id, t.original(asUid), now, incomingReqTs))
 							return errors.New("attempt to search by restricted tags")
 						}
 
@@ -1820,12 +1820,12 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 
 					} else {
 						// Query string is empty.
-						sess.queueOut(ErrMalformed(id, t.original(asUid), now, incomingReqTs))
+						sess.queueOut(ErrMalformedExplicitTs(id, t.original(asUid), now, incomingReqTs))
 						return errors.New("empty search query")
 					}
 				} else {
 					// Query parsing error. Report it externally as a generic ErrMalformed.
-					sess.queueOut(ErrMalformed(id, t.original(asUid), now, incomingReqTs))
+					sess.queueOut(ErrMalformedExplicitTs(id, t.original(asUid), now, incomingReqTs))
 					return errors.New("failed to parse search query; " + err.Error())
 				}
 			}
@@ -2017,7 +2017,7 @@ func (t *Topic) replySetSub(h *Hub, sess *Session, pkt *ClientComMessage) error 
 	var target types.Uid
 	if target = types.ParseUserId(set.Sub.User); target.IsZero() && set.Sub.User != "" {
 		// Invalid user ID
-		sess.queueOut(ErrMalformed(pkt.Id, toriginal, now, pkt.Timestamp))
+		sess.queueOut(ErrMalformedExplicitTs(pkt.Id, toriginal, now, pkt.Timestamp))
 		return errors.New("invalid user id")
 	}
 
@@ -2050,9 +2050,9 @@ func (t *Topic) replySetSub(h *Hub, sess *Session, pkt *ClientComMessage) error 
 		if target != asUid {
 			params["user"] = target.UserId()
 		}
-		resp = NoErrParams(pkt.Id, toriginal, now, pkt.Timestamp, params)
+		resp = NoErrParamsExplicitTs(pkt.Id, toriginal, now, pkt.Timestamp, params)
 	} else {
-		resp = InfoNotModified(pkt.Id, toriginal, now, pkt.Timestamp)
+		resp = InfoNotModifiedExplicitTs(pkt.Id, toriginal, now, pkt.Timestamp)
 	}
 
 	sess.queueOut(resp)
@@ -2067,7 +2067,7 @@ func (t *Topic) replyGetData(sess *Session, asUid types.Uid, id string, incoming
 	toriginal := t.original(asUid)
 
 	if req != nil && (req.IfModifiedSince != nil || req.User != "" || req.Topic != "") {
-		sess.queueOut(ErrMalformed(id, toriginal, now, incomingReqTs))
+		sess.queueOut(ErrMalformedExplicitTs(id, toriginal, now, incomingReqTs))
 		return errors.New("invalid MsgGetOpts query")
 	}
 
@@ -2077,7 +2077,7 @@ func (t *Topic) replyGetData(sess *Session, asUid types.Uid, id string, incoming
 		// Read messages from DB
 		messages, err := store.Messages.GetAll(t.name, asUid, msgOpts2storeOpts(req))
 		if err != nil {
-			sess.queueOut(ErrUnknown(id, toriginal, now, incomingReqTs))
+			sess.queueOut(ErrUnknownExplicitTs(id, toriginal, now, incomingReqTs))
 			return err
 		}
 
@@ -2098,7 +2098,7 @@ func (t *Topic) replyGetData(sess *Session, asUid types.Uid, id string, incoming
 	}
 
 	// Inform the requester that all the data has been served.
-	sess.queueOut(NoErrParams(id, toriginal, now, incomingReqTs, map[string]interface{}{"what": "data", "count": count}))
+	sess.queueOut(NoErrParamsExplicitTs(id, toriginal, now, incomingReqTs, map[string]interface{}{"what": "data", "count": count}))
 
 	return nil
 }
@@ -2108,11 +2108,11 @@ func (t *Topic) replyGetTags(sess *Session, asUid types.Uid, id string, incoming
 	now := types.TimeNow()
 
 	if t.cat != types.TopicCatMe && t.cat != types.TopicCatGrp {
-		sess.queueOut(ErrOperationNotAllowed(id, t.original(asUid), now, incomingReqTs))
+		sess.queueOut(ErrOperationNotAllowedExplicitTs(id, t.original(asUid), now, incomingReqTs))
 		return errors.New("invalid topic category for getting tags")
 	}
 	if t.cat == types.TopicCatGrp && t.owner != asUid {
-		sess.queueOut(ErrPermissionDenied(id, t.original(asUid), now, incomingReqTs))
+		sess.queueOut(ErrPermissionDeniedExplicitTs(id, t.original(asUid), now, incomingReqTs))
 		return errors.New("request for tags from non-owner")
 	}
 
@@ -2136,17 +2136,17 @@ func (t *Topic) replySetTags(sess *Session, asUid types.Uid, incomingReqTs time.
 	now := types.TimeNow()
 
 	if t.cat != types.TopicCatMe && t.cat != types.TopicCatGrp {
-		resp = ErrOperationNotAllowed(set.Id, t.original(asUid), now, incomingReqTs)
+		resp = ErrOperationNotAllowedExplicitTs(set.Id, t.original(asUid), now, incomingReqTs)
 		err = errors.New("invalid topic category to assign tags")
 
 	} else if t.cat == types.TopicCatGrp && t.owner != asUid {
-		resp = ErrPermissionDenied(set.Id, t.original(asUid), now, incomingReqTs)
+		resp = ErrPermissionDeniedExplicitTs(set.Id, t.original(asUid), now, incomingReqTs)
 		err = errors.New("tags update by non-owner")
 
 	} else if tags := normalizeTags(set.Tags); tags != nil {
 		if !restrictedTagsEqual(t.tags, tags, globals.immutableTagNS) {
 			err = errors.New("attempt to mutate restricted tags")
-			resp = ErrPermissionDenied(set.Id, t.original(asUid), now, incomingReqTs)
+			resp = ErrPermissionDeniedExplicitTs(set.Id, t.original(asUid), now, incomingReqTs)
 		} else {
 			added, removed := stringSliceDelta(t.tags, tags)
 			if len(added) > 0 || len(removed) > 0 {
@@ -2158,7 +2158,7 @@ func (t *Topic) replySetTags(sess *Session, asUid types.Uid, incomingReqTs time.
 				}
 
 				if err != nil {
-					resp = ErrUnknown(set.Id, t.original(asUid), now, incomingReqTs)
+					resp = ErrUnknownExplicitTs(set.Id, t.original(asUid), now, incomingReqTs)
 				} else {
 					t.tags = tags
 					t.presSubsOnline("tags", "", nilPresParams, &presFilters{singleUser: asUid.UserId()}, "")
@@ -2170,14 +2170,14 @@ func (t *Topic) replySetTags(sess *Session, asUid types.Uid, incomingReqTs time.
 					if len(removed) > 0 {
 						params["removed"] = len(removed)
 					}
-					resp = NoErrParams(set.Id, t.original(asUid), now, incomingReqTs, params)
+					resp = NoErrParamsExplicitTs(set.Id, t.original(asUid), now, incomingReqTs, params)
 				}
 			} else {
-				resp = InfoNotModified(set.Id, t.original(asUid), now, incomingReqTs)
+				resp = InfoNotModifiedExplicitTs(set.Id, t.original(asUid), now, incomingReqTs)
 			}
 		}
 	} else {
-		resp = InfoNotModified(set.Id, t.original(asUid), now, incomingReqTs)
+		resp = InfoNotModifiedExplicitTs(set.Id, t.original(asUid), now, incomingReqTs)
 	}
 
 	sess.queueOut(resp)
@@ -2190,7 +2190,7 @@ func (t *Topic) replyGetCreds(sess *Session, asUid types.Uid, id string, incomin
 	now := types.TimeNow()
 
 	if t.cat != types.TopicCatMe {
-		sess.queueOut(ErrOperationNotAllowed(id, t.original(asUid), now, incomingReqTs))
+		sess.queueOut(ErrOperationNotAllowedExplicitTs(id, t.original(asUid), now, incomingReqTs))
 		return errors.New("invalid topic category for getting credentials")
 	}
 
@@ -2221,7 +2221,7 @@ func (t *Topic) replySetCred(sess *Session, asUid types.Uid, incomingReqTs time.
 
 	now := types.TimeNow()
 	if t.cat != types.TopicCatMe {
-		sess.queueOut(ErrOperationNotAllowed(set.Id, t.original(asUid), now, incomingReqTs))
+		sess.queueOut(ErrOperationNotAllowedExplicitTs(set.Id, t.original(asUid), now, incomingReqTs))
 		return errors.New("invalid topic category for updating credentials")
 	}
 
@@ -2259,7 +2259,7 @@ func (t *Topic) replyGetDel(sess *Session, asUid types.Uid, id string, incomingR
 	toriginal := t.original(asUid)
 
 	if req != nil && (req.IfModifiedSince != nil || req.User != "" || req.Topic != "") {
-		sess.queueOut(ErrMalformed(id, toriginal, now, incomingReqTs))
+		sess.queueOut(ErrMalformedExplicitTs(id, toriginal, now, incomingReqTs))
 		return errors.New("invalid MsgGetOpts query")
 	}
 
@@ -2267,7 +2267,7 @@ func (t *Topic) replyGetDel(sess *Session, asUid types.Uid, id string, incomingR
 	if userData := t.perUser[asUid]; (userData.modeGiven & userData.modeWant).IsReader() {
 		ranges, delID, err := store.Messages.GetDeleted(t.name, asUid, msgOpts2storeOpts(req))
 		if err != nil {
-			sess.queueOut(ErrUnknown(id, toriginal, now, incomingReqTs))
+			sess.queueOut(ErrUnknownExplicitTs(id, toriginal, now, incomingReqTs))
 			return err
 		}
 
@@ -2299,7 +2299,7 @@ func (t *Topic) replyDelMsg(sess *Session, asUid types.Uid, incomingReqTs time.T
 		// User must have an R permission: if the user cannot read messages, he has
 		// no business of deleting them.
 		if !(pud.modeGiven & pud.modeWant).IsReader() {
-			sess.queueOut(ErrPermissionDenied(del.Id, t.original(asUid), now, incomingReqTs))
+			sess.queueOut(ErrPermissionDeniedExplicitTs(del.Id, t.original(asUid), now, incomingReqTs))
 			return errors.New("del.msg: permission denied")
 		}
 
@@ -2351,7 +2351,7 @@ func (t *Topic) replyDelMsg(sess *Session, asUid types.Uid, incomingReqTs time.T
 	}
 
 	if err != nil {
-		sess.queueOut(ErrMalformed(del.Id, t.original(asUid), now, incomingReqTs))
+		sess.queueOut(ErrMalformedExplicitTs(del.Id, t.original(asUid), now, incomingReqTs))
 		return err
 	}
 
@@ -2361,7 +2361,7 @@ func (t *Topic) replyDelMsg(sess *Session, asUid types.Uid, incomingReqTs time.T
 	}
 
 	if err = store.Messages.DeleteList(t.name, t.delID+1, forUser, ranges); err != nil {
-		sess.queueOut(ErrUnknown(del.Id, t.original(asUid), now, incomingReqTs))
+		sess.queueOut(ErrUnknownExplicitTs(del.Id, t.original(asUid), now, incomingReqTs))
 		return err
 	}
 
@@ -2387,7 +2387,7 @@ func (t *Topic) replyDelMsg(sess *Session, asUid types.Uid, incomingReqTs time.T
 		t.presPubMessageDelete(asUid, t.delID, dr, sess.sid)
 	}
 
-	sess.queueOut(NoErrParams(del.Id, t.original(asUid), now, incomingReqTs, map[string]int{"del": t.delID}))
+	sess.queueOut(NoErrParamsExplicitTs(del.Id, t.original(asUid), now, incomingReqTs, map[string]int{"del": t.delID}))
 
 	return nil
 }
@@ -2421,11 +2421,11 @@ func (t *Topic) replyDelCred(h *Hub, sess *Session, asUid types.Uid, incomingReq
 	now := types.TimeNow()
 
 	if t.cat != types.TopicCatMe {
-		sess.queueOut(ErrPermissionDenied(del.Id, t.original(asUid), now, incomingReqTs))
+		sess.queueOut(ErrPermissionDeniedExplicitTs(del.Id, t.original(asUid), now, incomingReqTs))
 		return errors.New("del.cred: invalid topic category")
 	}
 	if del.Cred == nil || del.Cred.Method == "" {
-		sess.queueOut(ErrMalformed(del.Id, t.original(asUid), now, incomingReqTs))
+		sess.queueOut(ErrMalformedExplicitTs(del.Id, t.original(asUid), now, incomingReqTs))
 		return errors.New("del.cred: missing method")
 	}
 
@@ -2466,7 +2466,7 @@ func (t *Topic) replyDelSub(h *Hub, sess *Session, asUid types.Uid, incomingReqT
 	}
 
 	if err != nil {
-		sess.queueOut(ErrPermissionDenied(del.Id, t.original(asUid), now, incomingReqTs))
+		sess.queueOut(ErrPermissionDeniedExplicitTs(del.Id, t.original(asUid), now, incomingReqTs))
 		return err
 	}
 
@@ -2486,7 +2486,7 @@ func (t *Topic) replyDelSub(h *Hub, sess *Session, asUid types.Uid, incomingReqT
 	}
 
 	if err != nil {
-		sess.queueOut(ErrPermissionDenied(del.Id, t.original(asUid), now, incomingReqTs))
+		sess.queueOut(ErrPermissionDeniedExplicitTs(del.Id, t.original(asUid), now, incomingReqTs))
 		return err
 	}
 
@@ -2495,11 +2495,11 @@ func (t *Topic) replyDelSub(h *Hub, sess *Session, asUid types.Uid, incomingReqT
 		if err == types.ErrNotFound {
 			sess.queueOut(InfoNoAction(del.Id, t.original(asUid), now, incomingReqTs))
 		} else {
-			sess.queueOut(ErrUnknown(del.Id, t.original(asUid), now, incomingReqTs))
+			sess.queueOut(ErrUnknownExplicitTs(del.Id, t.original(asUid), now, incomingReqTs))
 			return err
 		}
 	} else {
-		sess.queueOut(NoErr(del.Id, t.original(asUid), now, incomingReqTs))
+		sess.queueOut(NoErrExplicitTs(del.Id, t.original(asUid), now, incomingReqTs))
 	}
 
 	// Update cached unread count: negative value
@@ -2524,7 +2524,7 @@ func (t *Topic) replyLeaveUnsub(h *Hub, sess *Session, asUid types.Uid, id strin
 
 	if t.owner == asUid {
 		if id != "" {
-			sess.queueOut(ErrPermissionDenied(id, t.original(asUid), now, incomingReqTs))
+			sess.queueOut(ErrPermissionDeniedExplicitTs(id, t.original(asUid), now, incomingReqTs))
 		}
 		return errors.New("replyLeaveUnsub: owner cannot unsubscribe")
 	}
@@ -2537,14 +2537,14 @@ func (t *Topic) replyLeaveUnsub(h *Hub, sess *Session, asUid types.Uid, id strin
 			}
 			err = nil
 		} else if id != "" {
-			sess.queueOut(ErrUnknown(id, t.original(asUid), now, incomingReqTs))
+			sess.queueOut(ErrUnknownExplicitTs(id, t.original(asUid), now, incomingReqTs))
 		}
 
 		return err
 	}
 
 	if id != "" {
-		sess.queueOut(NoErr(id, t.original(asUid), now, incomingReqTs))
+		sess.queueOut(NoErrExplicitTs(id, t.original(asUid), now, incomingReqTs))
 	}
 
 	pud := t.perUser[asUid]

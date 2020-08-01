@@ -231,19 +231,19 @@ func decodeStoreError(err error, id, topic string, serverTs, incomingReqTs time.
 	var errmsg *ServerComMessage
 
 	if err == nil {
-		errmsg = NoErr(id, topic, serverTs, incomingReqTs)
+		errmsg = NoErrExplicitTs(id, topic, serverTs, incomingReqTs)
 	} else if storeErr, ok := err.(types.StoreError); !ok {
-		errmsg = ErrUnknown(id, topic, serverTs, incomingReqTs)
+		errmsg = ErrUnknownExplicitTs(id, topic, serverTs, incomingReqTs)
 	} else {
 		switch storeErr {
 		case types.ErrInternal:
-			errmsg = ErrUnknown(id, topic, serverTs, incomingReqTs)
+			errmsg = ErrUnknownExplicitTs(id, topic, serverTs, incomingReqTs)
 		case types.ErrMalformed:
-			errmsg = ErrMalformed(id, topic, serverTs, incomingReqTs)
+			errmsg = ErrMalformedExplicitTs(id, topic, serverTs, incomingReqTs)
 		case types.ErrFailed:
 			errmsg = ErrAuthFailed(id, topic, serverTs, incomingReqTs)
 		case types.ErrPermissionDenied:
-			errmsg = ErrPermissionDenied(id, topic, serverTs, incomingReqTs)
+			errmsg = ErrPermissionDeniedExplicitTs(id, topic, serverTs, incomingReqTs)
 		case types.ErrDuplicate:
 			errmsg = ErrDuplicateCredential(id, topic, serverTs, incomingReqTs)
 		case types.ErrUnsupported:
@@ -251,9 +251,9 @@ func decodeStoreError(err error, id, topic string, serverTs, incomingReqTs time.
 		case types.ErrExpired:
 			errmsg = ErrAuthFailed(id, topic, serverTs, incomingReqTs)
 		case types.ErrPolicy:
-			errmsg = ErrPolicy(id, topic, serverTs, incomingReqTs)
+			errmsg = ErrPolicyExplicitTs(id, topic, serverTs, incomingReqTs)
 		case types.ErrCredentials:
-			errmsg = InfoValidateCredentials(id, serverTs, incomingReqTs)
+			errmsg = InfoValidateCredentialsExplicitTs(id, serverTs, incomingReqTs)
 		case types.ErrUserNotFound:
 			errmsg = ErrUserNotFound(id, topic, serverTs, incomingReqTs)
 		case types.ErrTopicNotFound:
@@ -263,7 +263,7 @@ func decodeStoreError(err error, id, topic string, serverTs, incomingReqTs time.
 		case types.ErrInvalidResponse:
 			errmsg = ErrInvalidResponse(id, topic, serverTs, incomingReqTs)
 		default:
-			errmsg = ErrUnknown(id, topic, serverTs, incomingReqTs)
+			errmsg = ErrUnknownExplicitTs(id, topic, serverTs, incomingReqTs)
 		}
 	}
 

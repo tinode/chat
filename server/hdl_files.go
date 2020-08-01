@@ -51,12 +51,12 @@ func largeFileServe(wrt http.ResponseWriter, req *http.Request) {
 		return
 	}
 	if challenge != nil {
-		writeHttpResponse(InfoChallenge("", now, now, challenge), nil)
+		writeHttpResponse(InfoChallenge("", now, challenge), nil)
 		return
 	}
 	if uid.IsZero() {
 		// Not authenticated
-		writeHttpResponse(ErrAuthRequired("", "", now, now), nil)
+		writeHttpResponse(ErrAuthRequired("", "", now), nil)
 		return
 	}
 
@@ -66,7 +66,7 @@ func largeFileServe(wrt http.ResponseWriter, req *http.Request) {
 		wrt.Header().Set("Content-Type", "application/json; charset=utf-8")
 		wrt.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 		wrt.WriteHeader(http.StatusTemporaryRedirect)
-		enc.Encode(InfoFound("", "", now, now))
+		enc.Encode(InfoFound("", "", now))
 		log.Println("media serve redirected", redirTo)
 		return
 	} else if err != nil {
@@ -110,7 +110,7 @@ func largeFileUpload(wrt http.ResponseWriter, req *http.Request) {
 
 	// Check if this is a POST or a PUT request.
 	if req.Method != http.MethodPost && req.Method != http.MethodPut {
-		writeHttpResponse(ErrOperationNotAllowed("", "", now, now), errors.New("method '"+req.Method+"' not allowed"))
+		writeHttpResponse(ErrOperationNotAllowed("", "", now), errors.New("method '"+req.Method+"' not allowed"))
 		return
 	}
 
@@ -133,12 +133,12 @@ func largeFileUpload(wrt http.ResponseWriter, req *http.Request) {
 		return
 	}
 	if challenge != nil {
-		writeHttpResponse(InfoChallenge(msgID, now, now, challenge), nil)
+		writeHttpResponse(InfoChallenge(msgID, now, challenge), nil)
 		return
 	}
 	if uid.IsZero() {
 		// Not authenticated
-		writeHttpResponse(ErrAuthRequired(msgID, "", now, now), nil)
+		writeHttpResponse(ErrAuthRequired(msgID, "", now), nil)
 		return
 	}
 
@@ -147,7 +147,7 @@ func largeFileUpload(wrt http.ResponseWriter, req *http.Request) {
 		wrt.Header().Set("Location", redirTo)
 		wrt.Header().Set("Content-Type", "application/json; charset=utf-8")
 		wrt.WriteHeader(http.StatusTemporaryRedirect)
-		enc.Encode(InfoFound("", "", now, now))
+		enc.Encode(InfoFound("", "", now))
 
 		log.Println("media upload redirected", redirTo)
 		return
@@ -159,9 +159,9 @@ func largeFileUpload(wrt http.ResponseWriter, req *http.Request) {
 	file, _, err := req.FormFile("file")
 	if err != nil {
 		if strings.Contains(err.Error(), "request body too large") {
-			writeHttpResponse(ErrTooLarge(msgID, "", now, now), err)
+			writeHttpResponse(ErrTooLarge(msgID, "", now), err)
 		} else {
-			writeHttpResponse(ErrMalformed(msgID, "", now, now), err)
+			writeHttpResponse(ErrMalformed(msgID, "", now), err)
 		}
 		return
 	}
@@ -172,13 +172,13 @@ func largeFileUpload(wrt http.ResponseWriter, req *http.Request) {
 
 	buff := make([]byte, 512)
 	if _, err = file.Read(buff); err != nil {
-		writeHttpResponse(ErrUnknown(msgID, "", now, now), err)
+		writeHttpResponse(ErrUnknown(msgID, "", now), err)
 		return
 	}
 
 	fdef.MimeType = http.DetectContentType(buff)
 	if _, err = file.Seek(0, io.SeekStart); err != nil {
-		writeHttpResponse(ErrUnknown(msgID, "", now, now), err)
+		writeHttpResponse(ErrUnknown(msgID, "", now), err)
 		return
 	}
 
@@ -188,7 +188,7 @@ func largeFileUpload(wrt http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	writeHttpResponse(NoErrParams(msgID, "", now, now, map[string]string{"url": url}), nil)
+	writeHttpResponse(NoErrParams(msgID, "", now, map[string]string{"url": url}), nil)
 }
 
 func largeFileRunGarbageCollection(period time.Duration, block int) chan<- bool {

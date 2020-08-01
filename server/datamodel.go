@@ -818,12 +818,24 @@ func (src *ServerComMessage) describe() string {
 // Generators of server-side error messages {ctrl}.
 
 // NoErr indicates successful completion (200)
-func NoErr(id, topic string, serverTs, incomingReqTs time.Time) *ServerComMessage {
-	return NoErrParams(id, topic, serverTs, incomingReqTs, nil)
+func NoErr(id, topic string, ts time.Time) *ServerComMessage {
+	return NoErrParams(id, topic, ts, nil)
+}
+
+// NoErr indicates successful completion
+// with explicit server and incoming request timestamps (200)
+func NoErrExplicitTs(id, topic string, serverTs, incomingReqTs time.Time) *ServerComMessage {
+	return NoErrParamsExplicitTs(id, topic, serverTs, incomingReqTs, nil)
 }
 
 // NoErrParams indicates successful completion with additional parameters (200)
-func NoErrParams(id, topic string, serverTs, incomingReqTs time.Time, params interface{}) *ServerComMessage {
+func NoErrParams(id, topic string, ts time.Time, params interface{}) *ServerComMessage {
+	return NoErrParamsExplicitTs(id, topic, ts, ts, params)
+}
+
+// NoErrParamsExplicitTs indicates successful completion with additional parameters
+// and explicit server and incoming request timestamps (200)
+func NoErrParamsExplicitTs(id, topic string, serverTs, incomingReqTs time.Time, params interface{}) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
 		Code:      http.StatusOK, // 200
@@ -834,17 +846,23 @@ func NoErrParams(id, topic string, serverTs, incomingReqTs time.Time, params int
 }
 
 // NoErrCreated indicated successful creation of an object (201).
-func NoErrCreated(id, topic string, serverTs, incomingReqTs time.Time) *ServerComMessage {
+func NoErrCreated(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
 		Code:      http.StatusCreated, // 201
 		Text:      "created",
 		Topic:     topic,
-		Timestamp: serverTs}, Id: id, Timestamp: incomingReqTs}
+		Timestamp: ts}, Id: id, Timestamp: ts}
 }
 
 // NoErrAccepted indicates request was accepted but not perocessed yet (202).
-func NoErrAccepted(id, topic string, serverTs, incomingReqTs time.Time) *ServerComMessage {
+func NoErrAccepted(id, topic string, ts time.Time) *ServerComMessage {
+	return NoErrAcceptedExplicitTs(id, topic, ts, ts)
+}
+
+// NoErrAccepted indicates request was accepted but not perocessed yet
+// with explicit server and incoming request timestamps (202).
+func NoErrAcceptedExplicitTs(id, topic string, serverTs, incomingReqTs time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
 		Code:      http.StatusAccepted, // 202
@@ -885,7 +903,13 @@ func NoErrShutdown(ts time.Time) *ServerComMessage {
 // 3xx
 
 // InfoValidateCredentials requires user to confirm credentials before going forward (300).
-func InfoValidateCredentials(id string, serverTs, incomingReqTs time.Time) *ServerComMessage {
+func InfoValidateCredentials(id string, ts time.Time) *ServerComMessage {
+	return InfoValidateCredentialsExplicitTs(id, ts, ts)
+}
+
+// InfoValidateCredentials requires user to confirm credentials before going forward
+// with explicit server and incoming request timestamps (300).
+func InfoValidateCredentialsExplicitTs(id string, serverTs, incomingReqTs time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
 		Code:      http.StatusMultipleChoices, // 300
@@ -894,45 +918,46 @@ func InfoValidateCredentials(id string, serverTs, incomingReqTs time.Time) *Serv
 }
 
 // InfoChallenge requires user to respond to presented challenge before login can be completed (300).
-func InfoChallenge(id string, serverTs, incomingReqTs time.Time, challenge []byte) *ServerComMessage {
+func InfoChallenge(id string, ts time.Time, challenge []byte) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
 		Code:      http.StatusMultipleChoices, // 300
 		Text:      "challenge",
 		Params:    map[string]interface{}{"challenge": challenge},
-		Timestamp: serverTs}, Id: id, Timestamp: incomingReqTs}
+		Timestamp: ts}, Id: id, Timestamp: ts}
 }
 
 // InfoAuthReset is sent in response to request to reset authentication when it was completed but login was not performed (301).
-func InfoAuthReset(id string, serverTs, incomingReqTs time.Time) *ServerComMessage {
+func InfoAuthReset(id string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
 		Code:      http.StatusMovedPermanently, // 301
 		Text:      "auth reset",
-		Timestamp: serverTs}, Id: id, Timestamp: incomingReqTs}
+		Timestamp: ts}, Id: id, Timestamp: ts}
 }
 
 // InfoAlreadySubscribed response means request to subscribe was ignored because user is already subscribed (304).
-func InfoAlreadySubscribed(id, topic string, serverTs, incomingReqTs time.Time) *ServerComMessage {
+func InfoAlreadySubscribed(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
 		Code:      http.StatusNotModified, // 304
 		Text:      "already subscribed",
 		Topic:     topic,
-		Timestamp: serverTs}, Id: id, Timestamp: incomingReqTs}
+		Timestamp: ts}, Id: id, Timestamp: ts}
 }
 
 // InfoNotJoined response means request to leave was ignored because user was not subscribed (304).
-func InfoNotJoined(id, topic string, serverTs, incomingReqTs time.Time) *ServerComMessage {
+func InfoNotJoined(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
 		Code:      http.StatusNotModified, // 304
 		Text:      "not joined",
 		Topic:     topic,
-		Timestamp: serverTs}, Id: id, Timestamp: incomingReqTs}
+		Timestamp: ts}, Id: id, Timestamp: ts}
 }
 
-// InfoNoAction response means request was ignored because the object was already in the desired state (304).
+// InfoNoAction response means request was ignored because the object was already in the desired state
+// with explicit server and incoming request timestamps (304).
 func InfoNoAction(id, topic string, serverTs, incomingReqTs time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
@@ -943,7 +968,13 @@ func InfoNoAction(id, topic string, serverTs, incomingReqTs time.Time) *ServerCo
 }
 
 // InfoNotModified response means update request was a noop (304).
-func InfoNotModified(id, topic string, serverTs, incomingReqTs time.Time) *ServerComMessage {
+func InfoNotModified(id, topic string, ts time.Time) *ServerComMessage {
+	return InfoNotModifiedExplicitTs(id, topic, ts, ts)
+}
+
+// InfoNotModifiedExplicitTs response means update request was a noop
+// with explicit server and incoming request timestamps (304).
+func InfoNotModifiedExplicitTs(id, topic string, serverTs, incomingReqTs time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
 		Code:      http.StatusNotModified, // 304
@@ -953,19 +984,25 @@ func InfoNotModified(id, topic string, serverTs, incomingReqTs time.Time) *Serve
 }
 
 // InfoFound redirects to a new resource (307).
-func InfoFound(id, topic string, serverTs, incomingReqTs time.Time) *ServerComMessage {
+func InfoFound(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
 		Code:      http.StatusTemporaryRedirect, // 307
 		Text:      "found",
 		Topic:     topic,
-		Timestamp: serverTs}, Id: id, Timestamp: incomingReqTs}
+		Timestamp: ts}, Id: id, Timestamp: ts}
 }
 
 // 4xx Errors
 
 // ErrMalformed request malformed (400).
-func ErrMalformed(id, topic string, serverTs, incomingReqTs time.Time) *ServerComMessage {
+func ErrMalformed(id, topic string, ts time.Time) *ServerComMessage {
+	return ErrMalformedExplicitTs(id, topic, ts, ts)
+}
+
+// ErrMalformed request malformed
+// with explicit server and incoming request timestamps (400).
+func ErrMalformedExplicitTs(id, topic string, serverTs, incomingReqTs time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
 		Code:      http.StatusBadRequest, // 400
@@ -975,16 +1012,17 @@ func ErrMalformed(id, topic string, serverTs, incomingReqTs time.Time) *ServerCo
 }
 
 // ErrAuthRequired authentication required  - user must authenticate first (401).
-func ErrAuthRequired(id, topic string, serverTs, incomingReqTs time.Time) *ServerComMessage {
+func ErrAuthRequired(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
 		Code:      http.StatusUnauthorized, // 401
 		Text:      "authentication required",
 		Topic:     topic,
-		Timestamp: serverTs}, Id: id, Timestamp: incomingReqTs}
+		Timestamp: ts}, Id: id, Timestamp: ts}
 }
 
-// ErrAuthFailed authentication failed (401).
+// ErrAuthFailed authentication failed
+// with explicit server and incoming request timestamps (400).
 func ErrAuthFailed(id, topic string, serverTs, incomingReqTs time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
@@ -995,17 +1033,23 @@ func ErrAuthFailed(id, topic string, serverTs, incomingReqTs time.Time) *ServerC
 }
 
 // ErrAuthUnknownScheme authentication scheme is unrecognized or invalid (401).
-func ErrAuthUnknownScheme(id, topic string, serverTs, incomingReqTs time.Time) *ServerComMessage {
+func ErrAuthUnknownScheme(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
 		Code:      http.StatusUnauthorized, // 401
 		Text:      "unknown authentication scheme",
 		Topic:     topic,
-		Timestamp: serverTs}, Id: id, Timestamp: incomingReqTs}
+		Timestamp: ts}, Id: id, Timestamp: ts}
 }
 
 // ErrPermissionDenied user is authenticated but operation is not permitted (403).
-func ErrPermissionDenied(id, topic string, serverTs, incomingReqTs time.Time) *ServerComMessage {
+func ErrPermissionDenied(id, topic string, ts time.Time) *ServerComMessage {
+	return ErrPermissionDeniedExplicitTs(id, topic, ts, ts)
+}
+
+// ErrPermissionDenied user is authenticated but operation is not permitted
+// with explicit server and incoming request timestamps (403).
+func ErrPermissionDeniedExplicitTs(id, topic string, serverTs, incomingReqTs time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
 		Code:      http.StatusForbidden, // 403
@@ -1030,7 +1074,8 @@ func ErrSessionNotFound(ts time.Time) *ServerComMessage {
 		Timestamp: ts}}
 }
 
-// ErrTopicNotFound topic is not found (404).
+// ErrTopicNotFound topic is not found
+// with explicit server and incoming request timestamps (404).
 func ErrTopicNotFound(id, topic string, serverTs, incomingReqTs time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
@@ -1040,7 +1085,8 @@ func ErrTopicNotFound(id, topic string, serverTs, incomingReqTs time.Time) *Serv
 		Timestamp: serverTs}, Id: id, Timestamp: incomingReqTs}
 }
 
-// ErrUserNotFound user is not found (404).
+// ErrUserNotFound user is not found
+// with explicit server and incoming request timestamps (404).
 func ErrUserNotFound(id, topic string, serverTs, incomingReqTs time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
@@ -1050,7 +1096,8 @@ func ErrUserNotFound(id, topic string, serverTs, incomingReqTs time.Time) *Serve
 		Timestamp: serverTs}, Id: id, Timestamp: incomingReqTs}
 }
 
-// ErrNotFound is an error for missing objects other than user or topic (404).
+// ErrNotFound is an error for missing objects other than user or topic
+// with explicit server and incoming request timestamps (404).
 func ErrNotFound(id, topic string, serverTs, incomingReqTs time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
@@ -1061,7 +1108,13 @@ func ErrNotFound(id, topic string, serverTs, incomingReqTs time.Time) *ServerCom
 }
 
 // ErrOperationNotAllowed a valid operation is not permitted in this context (405).
-func ErrOperationNotAllowed(id, topic string, serverTs, incomingReqTs time.Time) *ServerComMessage {
+func ErrOperationNotAllowed(id, topic string, ts time.Time) *ServerComMessage {
+	return ErrOperationNotAllowedExplicitTs(id, topic, ts, ts)
+}
+
+// ErrOperationNotAllowed a valid operation is not permitted in this context
+// with explicit server and incoming request timestamps (405).
+func ErrOperationNotAllowedExplicitTs(id, topic string, serverTs, incomingReqTs time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
 		Code:      http.StatusMethodNotAllowed, // 405
@@ -1070,7 +1123,8 @@ func ErrOperationNotAllowed(id, topic string, serverTs, incomingReqTs time.Time)
 		Timestamp: serverTs}, Id: id, Timestamp: incomingReqTs}
 }
 
-// ErrInvalidResponse indicates that the client's response in invalid (406).
+// ErrInvalidResponse indicates that the client's response in invalid
+// with explicit server and incoming request timestamps (406).
 func ErrInvalidResponse(id, topic string, serverTs, incomingReqTs time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
@@ -1082,16 +1136,17 @@ func ErrInvalidResponse(id, topic string, serverTs, incomingReqTs time.Time) *Se
 
 // ErrAlreadyAuthenticated invalid attempt to authenticate an already authenticated session
 // Switching users is not supported (409).
-func ErrAlreadyAuthenticated(id, topic string, serverTs, incomingReqTs time.Time) *ServerComMessage {
+func ErrAlreadyAuthenticated(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
 		Code:      http.StatusConflict, // 409
 		Text:      "already authenticated",
 		Topic:     topic,
-		Timestamp: serverTs}, Id: id, Timestamp: incomingReqTs}
+		Timestamp: ts}, Id: id, Timestamp: ts}
 }
 
-// ErrDuplicateCredential attempt to create a duplicate credential (409).
+// ErrDuplicateCredential attempt to create a duplicate credential
+// with explicit server and incoming request timestamps (409).
 func ErrDuplicateCredential(id, topic string, serverTs, incomingReqTs time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
@@ -1102,56 +1157,62 @@ func ErrDuplicateCredential(id, topic string, serverTs, incomingReqTs time.Time)
 }
 
 // ErrAttachFirst must attach to topic first (409).
-func ErrAttachFirst(id, topic string, serverTs, incomingReqTs time.Time) *ServerComMessage {
+func ErrAttachFirst(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
 		Code:      http.StatusConflict, // 409
 		Text:      "must attach first",
 		Topic:     topic,
-		Timestamp: serverTs}, Id: id, Timestamp: incomingReqTs}
+		Timestamp: ts}, Id: id, Timestamp: ts}
 }
 
 // ErrAlreadyExists the object already exists (409).
-func ErrAlreadyExists(id, topic string, serverTs, incomingReqTs time.Time) *ServerComMessage {
+func ErrAlreadyExists(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
 		Code:      http.StatusConflict, // 409
 		Text:      "already exists",
 		Topic:     topic,
-		Timestamp: serverTs}, Id: id, Timestamp: incomingReqTs}
+		Timestamp: ts}, Id: id, Timestamp: ts}
 }
 
 // ErrCommandOutOfSequence invalid sequence of comments, i.e. attempt to {sub} before {hi} (409).
-func ErrCommandOutOfSequence(id, unused string, serverTs, incomingReqTs time.Time) *ServerComMessage {
+func ErrCommandOutOfSequence(id, unused string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
 		Code:      http.StatusConflict, // 409
 		Text:      "command out of sequence",
-		Timestamp: serverTs}, Id: id, Timestamp: incomingReqTs}
+		Timestamp: ts}, Id: id, Timestamp: ts}
 }
 
 // ErrGone topic deleted or user banned (410).
-func ErrGone(id, topic string, serverTs, incomingReqTs time.Time) *ServerComMessage {
+func ErrGone(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
 		Code:      http.StatusGone, // 410
 		Text:      "gone",
 		Topic:     topic,
-		Timestamp: serverTs}, Id: id, Timestamp: incomingReqTs}
+		Timestamp: ts}, Id: id, Timestamp: ts}
 }
 
 // ErrTooLarge packet or request size exceeded the limit (413).
-func ErrTooLarge(id, topic string, serverTs, incomingReqTs time.Time) *ServerComMessage {
+func ErrTooLarge(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
 		Code:      http.StatusRequestEntityTooLarge, // 413
 		Text:      "too large",
 		Topic:     topic,
-		Timestamp: serverTs}, Id: id, Timestamp: incomingReqTs}
+		Timestamp: ts}, Id: id, Timestamp: ts}
 }
 
 // ErrPolicy request violates a policy (e.g. password is too weak or too many subscribers) (422).
-func ErrPolicy(id, topic string, serverTs, incomingReqTs time.Time) *ServerComMessage {
+func ErrPolicy(id, topic string, ts time.Time) *ServerComMessage {
+	return ErrPolicyExplicitTs(id, topic, ts, ts)
+}
+
+// ErrPolicy request violates a policy (e.g. password is too weak or too many subscribers)
+// with explicit server and incoming request timestamps (422).
+func ErrPolicyExplicitTs(id, topic string, serverTs, incomingReqTs time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
 		Code:      http.StatusUnprocessableEntity, // 422
@@ -1161,7 +1222,13 @@ func ErrPolicy(id, topic string, serverTs, incomingReqTs time.Time) *ServerComMe
 }
 
 // ErrLocked operation rejected because the topic is being deleted (423).
-func ErrLocked(id, topic string, serverTs, incomingReqTs time.Time) *ServerComMessage {
+func ErrLocked(id, topic string, ts time.Time) *ServerComMessage {
+	return ErrLockedExplicitTs(id, topic, ts, ts)
+}
+
+// ErrLocked operation rejected because the topic is being deleted
+// with explicit server and incoming request timestamps (423).
+func ErrLockedExplicitTs(id, topic string, serverTs, incomingReqTs time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
 		Code:      http.StatusLocked, // 423
@@ -1171,7 +1238,13 @@ func ErrLocked(id, topic string, serverTs, incomingReqTs time.Time) *ServerComMe
 }
 
 // ErrUnknown database or other server error (500).
-func ErrUnknown(id, topic string, serverTs, incomingReqTs time.Time) *ServerComMessage {
+func ErrUnknown(id, topic string, ts time.Time) *ServerComMessage {
+	return ErrUnknownExplicitTs(id, topic, ts, ts)
+}
+
+// ErrUnknown database or other server error
+// with explicit server and incoming request timestamps (500).
+func ErrUnknownExplicitTs(id, topic string, serverTs, incomingReqTs time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
 		Code:      http.StatusInternalServerError, // 500
@@ -1180,7 +1253,8 @@ func ErrUnknown(id, topic string, serverTs, incomingReqTs time.Time) *ServerComM
 		Timestamp: serverTs}, Id: id, Timestamp: incomingReqTs}
 }
 
-// ErrNotImplemented feature not implemented (501).
+// ErrNotImplemented feature not implemented
+// with explicit server and incoming request timestamps (501).
 func ErrNotImplemented(id, topic string, serverTs, incomingReqTs time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
@@ -1191,20 +1265,20 @@ func ErrNotImplemented(id, topic string, serverTs, incomingReqTs time.Time) *Ser
 }
 
 // ErrClusterUnreachable in-cluster communication has failed (502).
-func ErrClusterUnreachable(id, topic string, serverTs, incomingReqTs time.Time) *ServerComMessage {
+func ErrClusterUnreachable(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
 		Code:      http.StatusBadGateway, // 502
 		Text:      "cluster unreachable",
 		Topic:     topic,
-		Timestamp: serverTs}, Id: id, Timestamp: incomingReqTs}
+		Timestamp: ts}, Id: id, Timestamp: ts}
 }
 
 // ErrVersionNotSupported invalid (too low) protocol version (505).
-func ErrVersionNotSupported(id string, serverTs, incomingReqTs time.Time) *ServerComMessage {
+func ErrVersionNotSupported(id string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
 		Code:      http.StatusHTTPVersionNotSupported, // 505
 		Text:      "version not supported",
-		Timestamp: serverTs}, Id: id, Timestamp: incomingReqTs}
+		Timestamp: ts}, Id: id, Timestamp: ts}
 }
