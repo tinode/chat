@@ -376,11 +376,11 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 				t.markPaused(true)
 				if err := store.Topics.Delete(topic, msg.Del.Hard); err != nil {
 					t.markPaused(false)
-					sess.queueOut(ErrUnknownExplicitTs(msg.Id, msg.Original, now, msg.Timestamp))
+					sess.queueOut(ErrUnknownReply(msg, now))
 					return err
 				}
 
-				sess.queueOut(NoErrExplicitTs(msg.Id, msg.Original, now, msg.Timestamp))
+				sess.queueOut(NoErrReply(msg, now))
 
 				h.topicDel(topic)
 				t.markDeleted()
@@ -401,12 +401,12 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 			// Get all subscribers: we need to know how many are left and notify them.
 			subs, err := store.Topics.GetSubs(topic, nil)
 			if err != nil {
-				sess.queueOut(ErrUnknownExplicitTs(msg.Id, msg.Original, now, msg.Timestamp))
+				sess.queueOut(ErrUnknownReply(msg, now))
 				return err
 			}
 
 			if len(subs) == 0 {
-				sess.queueOut(InfoNoAction(msg.Id, msg.Original, now, msg.Timestamp))
+				sess.queueOut(InfoNoActionReply(msg, now))
 				return nil
 			}
 
@@ -432,7 +432,7 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 				if tcat == types.TopicCatP2P && len(subs) < 2 {
 					// This is a P2P topic and fewer than 2 subscriptions, delete the entire topic
 					if err := store.Topics.Delete(topic, msg.Del.Hard); err != nil {
-						sess.queueOut(ErrUnknownExplicitTs(msg.Id, msg.Original, now, msg.Timestamp))
+						sess.queueOut(ErrUnknownReply(msg, now))
 						return err
 					}
 
@@ -440,10 +440,10 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 					// Not P2P or more than 1 subscription left.
 					// Delete user's own subscription only
 					if err == types.ErrNotFound {
-						sess.queueOut(InfoNoAction(msg.Id, msg.Original, now, msg.Timestamp))
+						sess.queueOut(InfoNoActionReply(msg, now))
 						err = nil
 					} else {
-						sess.queueOut(ErrUnknownExplicitTs(msg.Id, msg.Original, now, msg.Timestamp))
+						sess.queueOut(ErrUnknownReply(msg, now))
 					}
 					return err
 				}
@@ -464,7 +464,7 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 				// Case 1.2.1.1: owner, delete the group topic from db.
 				// Only group topics have owners.
 				if err := store.Topics.Delete(topic, msg.Del.Hard); err != nil {
-					sess.queueOut(ErrUnknownExplicitTs(msg.Id, msg.Original, now, msg.Timestamp))
+					sess.queueOut(ErrUnknownReply(msg, now))
 					return err
 				}
 
@@ -472,7 +472,7 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 				presSubsOfflineOffline(msg.Original, tcat, subs, "gone", &presParams{}, sess.sid)
 			}
 
-			sess.queueOut(NoErrExplicitTs(msg.Id, msg.Original, now, msg.Timestamp))
+			sess.queueOut(NoErrReply(msg, now))
 		}
 
 	} else {
@@ -489,7 +489,7 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 
 		// sess && msg could be nil if the topic is being killed by timer or due to rehashing.
 		if sess != nil && msg != nil {
-			sess.queueOut(NoErrExplicitTs(msg.Id, msg.Original, now, msg.Timestamp))
+			sess.queueOut(NoErrReply(msg, now))
 		}
 	}
 
@@ -554,7 +554,7 @@ func replyOfflineTopicGetDesc(sess *Session, msg *ClientComMessage) {
 			return
 		}
 		if stopic == nil {
-			sess.queueOut(ErrTopicNotFound(msg.Id, msg.Original, now, msg.Timestamp))
+			sess.queueOut(ErrTopicNotFoundReply(msg, now))
 			return
 		}
 
@@ -586,7 +586,7 @@ func replyOfflineTopicGetDesc(sess *Session, msg *ClientComMessage) {
 
 		if uid.IsZero() {
 			log.Println("replyOfflineTopicGetDesc: malformed p2p topic name")
-			sess.queueOut(ErrMalformedExplicitTs(msg.Id, msg.Original, now, msg.Timestamp))
+			sess.queueOut(ErrMalformedReply(msg, now))
 			return
 		}
 
@@ -596,7 +596,7 @@ func replyOfflineTopicGetDesc(sess *Session, msg *ClientComMessage) {
 			return
 		}
 		if suser == nil {
-			sess.queueOut(ErrUserNotFound(msg.Id, msg.Original, now, msg.Timestamp))
+			sess.queueOut(ErrUserNotFoundReply(msg, now))
 			return
 		}
 		desc.CreatedAt = &suser.CreatedAt
@@ -634,7 +634,7 @@ func replyOfflineTopicGetSub(sess *Session, msg *ClientComMessage) {
 	now := types.TimeNow()
 
 	if msg.Get.Sub != nil && msg.Get.Sub.User != "" && msg.Get.Sub.User != msg.AsUser {
-		sess.queueOut(ErrPermissionDeniedExplicitTs(msg.Id, msg.Original, now, msg.Timestamp))
+		sess.queueOut(ErrPermissionDeniedReply(msg, now))
 		return
 	}
 
@@ -681,12 +681,12 @@ func replyOfflineTopicSetSub(sess *Session, msg *ClientComMessage) {
 	now := types.TimeNow()
 
 	if (msg.Set.Desc == nil || msg.Set.Desc.Private == nil) && (msg.Set.Sub == nil || msg.Set.Sub.Mode == "") {
-		sess.queueOut(InfoNotModifiedExplicitTs(msg.Id, msg.Original, now, msg.Timestamp))
+		sess.queueOut(InfoNotModifiedReply(msg, now))
 		return
 	}
 
 	if msg.Set.Sub != nil && msg.Set.Sub.User != "" && msg.Set.Sub.User != msg.AsUser {
-		sess.queueOut(ErrPermissionDeniedExplicitTs(msg.Id, msg.Original, now, msg.Timestamp))
+		sess.queueOut(ErrPermissionDeniedReply(msg, now))
 		return
 	}
 
@@ -724,7 +724,7 @@ func replyOfflineTopicSetSub(sess *Session, msg *ClientComMessage) {
 
 		if modeWant.IsOwner() != sub.ModeWant.IsOwner() {
 			// No ownership changes here.
-			sess.queueOut(ErrPermissionDeniedExplicitTs(msg.Id, msg.Original, now, msg.Timestamp))
+			sess.queueOut(ErrPermissionDeniedReply(msg, now))
 			return
 		}
 
@@ -754,9 +754,9 @@ func replyOfflineTopicSetSub(sess *Session, msg *ClientComMessage) {
 					Want:  sub.ModeWant.String(),
 					Mode:  (sub.ModeGiven & sub.ModeWant).String()}}
 			}
-			sess.queueOut(NoErrParamsExplicitTs(msg.Id, msg.Original, now, msg.Timestamp, params))
+			sess.queueOut(NoErrParamsReply(msg, now, params))
 		}
 	} else {
-		sess.queueOut(InfoNotModifiedExplicitTs(msg.Id, msg.Original, now, msg.Timestamp))
+		sess.queueOut(InfoNotModifiedReply(msg, now))
 	}
 }

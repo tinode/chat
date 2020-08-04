@@ -70,13 +70,13 @@ func topicInit(t *Topic, join *sessionJoin, h *Hub) {
 		for len(t.unreg) > 0 {
 			msg := <-t.unreg
 			if msg.pkt != nil {
-				msg.sess.queueOut(ErrLockedExplicitTs(msg.pkt.Id, t.xoriginal, timestamp, join.pkt.Timestamp))
+				msg.sess.queueOut(ErrLockedReply(msg.pkt, timestamp))
 			}
 		}
 		for len(t.meta) > 0 {
 			msg := <-t.meta
 			if msg.pkt.Id != "" {
-				msg.sess.queueOut(ErrLockedExplicitTs(msg.pkt.Id, t.xoriginal, timestamp, join.pkt.Timestamp))
+				msg.sess.queueOut(ErrLockedReply(msg.pkt, timestamp))
 			}
 		}
 		if len(t.exit) > 0 {

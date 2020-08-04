@@ -828,6 +828,11 @@ func NoErrExplicitTs(id, topic string, serverTs, incomingReqTs time.Time) *Serve
 	return NoErrParamsExplicitTs(id, topic, serverTs, incomingReqTs, nil)
 }
 
+// NoErrReply indicates successful completion as a reply to a client message (200).
+func NoErrReply(msg *ClientComMessage, ts time.Time) *ServerComMessage {
+	return NoErrExplicitTs(msg.Id, msg.Original, msg.Timestamp, ts)
+}
+
 // NoErrParams indicates successful completion with additional parameters (200)
 func NoErrParams(id, topic string, ts time.Time, params interface{}) *ServerComMessage {
 	return NoErrParamsExplicitTs(id, topic, ts, ts, params)
@@ -843,6 +848,12 @@ func NoErrParamsExplicitTs(id, topic string, serverTs, incomingReqTs time.Time, 
 		Topic:     topic,
 		Params:    params,
 		Timestamp: serverTs}, Id: id, Timestamp: incomingReqTs}
+}
+
+// NoErrParamsReply indicates successful completion with additional parameters
+// and explicit server and incoming request timestamps (200)
+func NoErrParamsReply(msg *ClientComMessage, ts time.Time, params interface{}) *ServerComMessage {
+	return NoErrParamsExplicitTs(msg.Id, msg.Original, ts, msg.Timestamp, params)
 }
 
 // NoErrCreated indicated successful creation of an object (201).
@@ -880,6 +891,12 @@ func NoContentParams(id, topic string, serverTs, incomingReqTs time.Time, params
 		Topic:     topic,
 		Params:    params,
 		Timestamp: serverTs}, Id: id, Timestamp: incomingReqTs}
+}
+
+// NoContentParamsReply indicates request was processed but resulted in no content
+// in response to a client request (204).
+func NoContentParamsReply(msg *ClientComMessage, ts time.Time, params interface{}) *ServerComMessage {
+	return NoContentParams(msg.Id, msg.Original, ts, msg.Timestamp, params)
 }
 
 // NoErrEvicted indicates that the user was disconnected from topic for no fault of the user (205).
@@ -967,9 +984,21 @@ func InfoNoAction(id, topic string, serverTs, incomingReqTs time.Time) *ServerCo
 		Timestamp: serverTs}, Id: id, Timestamp: incomingReqTs}
 }
 
+// InfoNoActionReply response means request was ignored because the object was already in the desired state
+// in response to a client request (304).
+func InfoNoActionReply(msg *ClientComMessage, ts time.Time) *ServerComMessage {
+	return InfoNoAction(msg.Id, msg.Original, ts, msg.Timestamp)
+}
+
 // InfoNotModified response means update request was a noop (304).
 func InfoNotModified(id, topic string, ts time.Time) *ServerComMessage {
 	return InfoNotModifiedExplicitTs(id, topic, ts, ts)
+}
+
+// InfoNotModifiedReply response means update request was a noop 
+// in response to a client request (304).
+func InfoNotModifiedReply(msg *ClientComMessage, ts time.Time) *ServerComMessage {
+	return InfoNotModifiedExplicitTs(msg.Id, msg.Original, ts, msg.Timestamp)
 }
 
 // InfoNotModifiedExplicitTs response means update request was a noop
@@ -1000,6 +1029,12 @@ func ErrMalformed(id, topic string, ts time.Time) *ServerComMessage {
 	return ErrMalformedExplicitTs(id, topic, ts, ts)
 }
 
+// ErrMalformedReply request malformed
+// in response to a client request (400).
+func ErrMalformedReply(msg *ClientComMessage, ts time.Time) *ServerComMessage {
+	return ErrMalformedExplicitTs(msg.Id, msg.Original, ts, msg.Timestamp)
+}
+
 // ErrMalformed request malformed
 // with explicit server and incoming request timestamps (400).
 func ErrMalformedExplicitTs(id, topic string, serverTs, incomingReqTs time.Time) *ServerComMessage {
@@ -1019,6 +1054,12 @@ func ErrAuthRequired(id, topic string, ts time.Time) *ServerComMessage {
 		Text:      "authentication required",
 		Topic:     topic,
 		Timestamp: ts}, Id: id, Timestamp: ts}
+}
+
+// ErrAuthRequiredReply authentication required  - user must authenticate first
+// in response to a client request (401).
+func ErrAuthRequiredReply(msg *ClientComMessage) *ServerComMessage {
+	return ErrAuthRequired(msg.Id, msg.Original, msg.Timestamp)
 }
 
 // ErrAuthFailed authentication failed
@@ -1058,6 +1099,12 @@ func ErrPermissionDeniedExplicitTs(id, topic string, serverTs, incomingReqTs tim
 		Timestamp: serverTs}, Id: id, Timestamp: incomingReqTs}
 }
 
+// ErrPermissionDeniedReply user is authenticated but operation is not permitted
+// with explicit server and incoming request timestamps in response to a client request (403).
+func ErrPermissionDeniedReply(msg *ClientComMessage, ts time.Time) *ServerComMessage {
+	return ErrPermissionDeniedExplicitTs(msg.Id, msg.Original, ts, msg.Timestamp)
+}
+
 // ErrAPIKeyRequired  valid API key is required (403).
 func ErrAPIKeyRequired(ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
@@ -1085,6 +1132,13 @@ func ErrTopicNotFound(id, topic string, serverTs, incomingReqTs time.Time) *Serv
 		Timestamp: serverTs}, Id: id, Timestamp: incomingReqTs}
 }
 
+// ErrTopicNotFoundReply topic is not found
+// with explicit server and incoming request timestamps
+// in response to a client request (404).
+func ErrTopicNotFoundReply(msg *ClientComMessage, ts time.Time) *ServerComMessage {
+	return ErrTopicNotFound(msg.Id, msg.Original, ts, msg.Timestamp)
+}
+
 // ErrUserNotFound user is not found
 // with explicit server and incoming request timestamps (404).
 func ErrUserNotFound(id, topic string, serverTs, incomingReqTs time.Time) *ServerComMessage {
@@ -1096,6 +1150,12 @@ func ErrUserNotFound(id, topic string, serverTs, incomingReqTs time.Time) *Serve
 		Timestamp: serverTs}, Id: id, Timestamp: incomingReqTs}
 }
 
+// ErrUserNotFoundReply user is not found
+// with explicit server and incoming request timestamps in response to a client request (404).
+func ErrUserNotFoundReply(msg *ClientComMessage, ts time.Time) *ServerComMessage {
+	return ErrUserNotFound(msg.Id, msg.Original, ts, msg.Timestamp)
+}
+
 // ErrNotFound is an error for missing objects other than user or topic
 // with explicit server and incoming request timestamps (404).
 func ErrNotFound(id, topic string, serverTs, incomingReqTs time.Time) *ServerComMessage {
@@ -1105,6 +1165,12 @@ func ErrNotFound(id, topic string, serverTs, incomingReqTs time.Time) *ServerCom
 		Text:      "not found",
 		Topic:     topic,
 		Timestamp: serverTs}, Id: id, Timestamp: incomingReqTs}
+}
+
+// ErrNotFoundReply is an error for missing objects other than user or topic
+// with explicit server and incoming request timestamps in response to a client request (404).
+func ErrNotFoundReply(msg *ClientComMessage, ts time.Time) *ServerComMessage {
+	return ErrNotFound(msg.Id, msg.Original, ts, msg.Timestamp)
 }
 
 // ErrOperationNotAllowed a valid operation is not permitted in this context (405).
@@ -1121,6 +1187,12 @@ func ErrOperationNotAllowedExplicitTs(id, topic string, serverTs, incomingReqTs 
 		Text:      "operation or method not allowed",
 		Topic:     topic,
 		Timestamp: serverTs}, Id: id, Timestamp: incomingReqTs}
+}
+
+// ErrOperationNotAllowedReply a valid operation is not permitted in this context
+// with explicit server and incoming request timestamps (405).
+func ErrOperationNotAllowedReply(msg *ClientComMessage, ts time.Time) *ServerComMessage {
+	return ErrOperationNotAllowedExplicitTs(msg.Id, msg.Original, ts, msg.Timestamp)
 }
 
 // ErrInvalidResponse indicates that the client's response in invalid
@@ -1157,13 +1229,13 @@ func ErrDuplicateCredential(id, topic string, serverTs, incomingReqTs time.Time)
 }
 
 // ErrAttachFirst must attach to topic first (409).
-func ErrAttachFirst(id, topic string, ts time.Time) *ServerComMessage {
+func ErrAttachFirst(msg *ClientComMessage) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
-		Id:        id,
+		Id:        msg.Id,
 		Code:      http.StatusConflict, // 409
 		Text:      "must attach first",
-		Topic:     topic,
-		Timestamp: ts}, Id: id, Timestamp: ts}
+		Topic:     msg.Original,
+		Timestamp: msg.Timestamp}, Id: msg.Id, Timestamp: msg.Timestamp}
 }
 
 // ErrAlreadyExists the object already exists (409).
@@ -1221,6 +1293,12 @@ func ErrPolicyExplicitTs(id, topic string, serverTs, incomingReqTs time.Time) *S
 		Timestamp: serverTs}, Id: id, Timestamp: incomingReqTs}
 }
 
+// ErrPolicyReply request violates a policy (e.g. password is too weak or too many subscribers)
+// with explicit server and incoming request timestamps in response to a client request (422).
+func ErrPolicyReply(msg *ClientComMessage, ts time.Time) *ServerComMessage {
+	return ErrPolicyExplicitTs(msg.Id, msg.Original, ts, msg.Timestamp)
+}
+
 // ErrLocked operation rejected because the topic is being deleted (423).
 func ErrLocked(id, topic string, ts time.Time) *ServerComMessage {
 	return ErrLockedExplicitTs(id, topic, ts, ts)
@@ -1237,6 +1315,12 @@ func ErrLockedExplicitTs(id, topic string, serverTs, incomingReqTs time.Time) *S
 		Timestamp: serverTs}, Id: id, Timestamp: incomingReqTs}
 }
 
+// ErrLockedReply operation rejected because the topic is being deleted
+// with explicit server and incoming request timestamps in response to a client request (423).
+func ErrLockedReply(msg *ClientComMessage, ts time.Time) *ServerComMessage {
+	return ErrLockedExplicitTs(msg.Id, msg.Original, ts, msg.Timestamp)
+}
+
 // ErrUnknown database or other server error (500).
 func ErrUnknown(id, topic string, ts time.Time) *ServerComMessage {
 	return ErrUnknownExplicitTs(id, topic, ts, ts)
@@ -1251,6 +1335,11 @@ func ErrUnknownExplicitTs(id, topic string, serverTs, incomingReqTs time.Time) *
 		Text:      "internal error",
 		Topic:     topic,
 		Timestamp: serverTs}, Id: id, Timestamp: incomingReqTs}
+}
+
+// ErrUnknownReply database or other server error in response to a client request (500).
+func ErrUnknownReply(msg *ClientComMessage, ts time.Time) *ServerComMessage {
+	return ErrUnknownExplicitTs(msg.Id, msg.Original, ts, msg.Timestamp)
 }
 
 // ErrNotImplemented feature not implemented

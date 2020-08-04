@@ -372,7 +372,7 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 		return func(m *ClientComMessage) {
 			if msg.AsUser == "" {
 				log.Println("s.dispatch: authentication required", s.sid)
-				s.queueOut(ErrAuthRequired(m.Id, m.Original, msg.Timestamp))
+				s.queueOut(ErrAuthRequiredReply(m))
 				return
 			}
 			handler(m)
@@ -496,7 +496,7 @@ func (s *Session) leave(msg *ClientComMessage) {
 		// Session is attached to the topic.
 		if (msg.Original == "me" || msg.Original == "fnd") && msg.Leave.Unsub {
 			// User should not unsubscribe from 'me' or 'find'. Just leaving is fine.
-			s.queueOut(ErrPermissionDenied(msg.Id, msg.Original, msg.Timestamp))
+			s.queueOut(ErrPermissionDeniedReply(msg, msg.Timestamp))
 		} else {
 			// Unlink from topic, topic will send a reply.
 			s.delSub(msg.RcptTo)
@@ -511,7 +511,7 @@ func (s *Session) leave(msg *ClientComMessage) {
 		// Session wants to unsubscribe from the topic it did not join
 		// FIXME(gene): allow topic to unsubscribe without joining first; send to hub to unsub
 		log.Println("s.leave:", "must attach first", s.sid)
-		s.queueOut(ErrAttachFirst(msg.Id, msg.Original, msg.Timestamp))
+		s.queueOut(ErrAttachFirst(msg))
 	}
 }
 
@@ -562,7 +562,7 @@ func (s *Session) publish(msg *ClientComMessage) {
 		globals.hub.route <- data
 	} else {
 		// Publish request received without attaching to topic first.
-		s.queueOut(ErrAttachFirst(msg.Id, msg.Original, msg.Timestamp))
+		s.queueOut(ErrAttachFirst(msg))
 		log.Println("s.publish:", "must attach first", s.sid)
 	}
 }
@@ -897,7 +897,7 @@ func (s *Session) get(msg *ClientComMessage) {
 		sess: s}
 
 	if meta.pkt.MetaWhat == 0 {
-		s.queueOut(ErrMalformed(msg.Id, msg.Original, msg.Timestamp))
+		s.queueOut(ErrMalformedReply(msg, msg.Timestamp))
 		log.Println("s.get: invalid Get message action", msg.Get.What)
 	} else if sub != nil {
 		sub.meta <- meta
@@ -906,7 +906,7 @@ func (s *Session) get(msg *ClientComMessage) {
 		globals.hub.meta <- meta
 	} else {
 		log.Println("s.get: subscribe first to get=", msg.Get.What)
-		s.queueOut(ErrPermissionDenied(msg.Id, msg.Original, msg.Timestamp))
+		s.queueOut(ErrPermissionDeniedReply(msg, msg.Timestamp))
 	}
 }
 
@@ -937,13 +937,13 @@ func (s *Session) set(msg *ClientComMessage) {
 	}
 
 	if meta.pkt.MetaWhat == 0 {
-		s.queueOut(ErrMalformed(msg.Id, msg.Original, msg.Timestamp))
+		s.queueOut(ErrMalformedReply(msg, msg.Timestamp))
 		log.Println("s.set: nil Set action")
 	} else if sub := s.getSub(msg.RcptTo); sub != nil {
 		sub.meta <- meta
 	} else if meta.pkt.MetaWhat&(constMsgMetaTags|constMsgMetaCred) != 0 {
 		log.Println("s.set: can Set tags/creds for subscribed topics only", meta.pkt.MetaWhat)
-		s.queueOut(ErrPermissionDenied(msg.Id, msg.Original, msg.Timestamp))
+		s.queueOut(ErrPermissionDeniedReply(msg, msg.Timestamp))
 	} else {
 		// Desc.Private and Sub updates are possible without the subscription.
 		globals.hub.meta <- meta
@@ -970,7 +970,7 @@ func (s *Session) del(msg *ClientComMessage) {
 	}
 
 	if msg.MetaWhat == 0 {
-		s.queueOut(ErrMalformed(msg.Id, msg.Original, msg.Timestamp))
+		s.queueOut(ErrMalformedReply(msg, msg.Timestamp))
 		log.Println("s.del: invalid Del action", msg.Del.What, s.sid)
 		return
 	}
@@ -990,7 +990,7 @@ func (s *Session) del(msg *ClientComMessage) {
 			del:    true}
 	} else {
 		// Must join the topic to delete messages or subscriptions.
-		s.queueOut(ErrAttachFirst(msg.Id, msg.Original, msg.Timestamp))
+		s.queueOut(ErrAttachFirst(msg))
 		log.Println("s.del: invalid Del action while unsubbed", msg.Del.What, s.sid)
 	}
 }
@@ -1039,7 +1039,7 @@ func (s *Session) note(msg *ClientComMessage) {
 			SkipSid:   s.sid,
 			sess:      s}
 	} else {
-		s.queueOut(ErrAttachFirst(msg.Id, msg.Original, msg.Timestamp))
+		s.queueOut(ErrAttachFirst(msg))
 		log.Println("s.note: note to invalid topic - must subscribe first", msg.Note.What, s.sid)
 	}
 }
@@ -1073,7 +1073,7 @@ func (s *Session) expandTopicName(msg *ClientComMessage) (string, *ServerComMess
 		} else if uid2 == uid1 {
 			// Use 'me' to access self-topic
 			log.Println("s.etn: invalid p2p self-subscription", s.sid)
-			return "", ErrPermissionDenied(msg.Id, msg.Original, msg.Timestamp)
+			return "", ErrPermissionDeniedReply(msg, msg.Timestamp)
 		}
 		routeTo = uid1.P2PName(uid2)
 	} else {
