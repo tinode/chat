@@ -830,7 +830,7 @@ func NoErrExplicitTs(id, topic string, serverTs, incomingReqTs time.Time) *Serve
 
 // NoErrReply indicates successful completion as a reply to a client message (200).
 func NoErrReply(msg *ClientComMessage, ts time.Time) *ServerComMessage {
-	return NoErrExplicitTs(msg.Id, msg.Original, msg.Timestamp, ts)
+	return NoErrExplicitTs(msg.Id, msg.Original, ts, msg.Timestamp)
 }
 
 // NoErrParams indicates successful completion with additional parameters (200)
@@ -1047,19 +1047,19 @@ func ErrMalformedExplicitTs(id, topic string, serverTs, incomingReqTs time.Time)
 }
 
 // ErrAuthRequired authentication required  - user must authenticate first (401).
-func ErrAuthRequired(id, topic string, ts time.Time) *ServerComMessage {
+func ErrAuthRequired(id, topic string, serverTs, incomingReqTs time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
 		Code:      http.StatusUnauthorized, // 401
 		Text:      "authentication required",
 		Topic:     topic,
-		Timestamp: ts}, Id: id, Timestamp: ts}
+		Timestamp: serverTs}, Id: id, Timestamp: incomingReqTs}
 }
 
 // ErrAuthRequiredReply authentication required  - user must authenticate first
 // in response to a client request (401).
-func ErrAuthRequiredReply(msg *ClientComMessage) *ServerComMessage {
-	return ErrAuthRequired(msg.Id, msg.Original, msg.Timestamp)
+func ErrAuthRequiredReply(msg *ClientComMessage, ts time.Time) *ServerComMessage {
+	return ErrAuthRequired(msg.Id, msg.Original, ts, msg.Timestamp)
 }
 
 // ErrAuthFailed authentication failed
@@ -1228,14 +1228,14 @@ func ErrDuplicateCredential(id, topic string, serverTs, incomingReqTs time.Time)
 		Timestamp: serverTs}, Id: id, Timestamp: incomingReqTs}
 }
 
-// ErrAttachFirst must attach to topic first (409).
-func ErrAttachFirst(msg *ClientComMessage) *ServerComMessage {
+// ErrAttachFirst must attach to topic first in response to a client message (409).
+func ErrAttachFirst(msg *ClientComMessage, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        msg.Id,
 		Code:      http.StatusConflict, // 409
 		Text:      "must attach first",
 		Topic:     msg.Original,
-		Timestamp: msg.Timestamp}, Id: msg.Id, Timestamp: msg.Timestamp}
+		Timestamp: ts}, Id: msg.Id, Timestamp: msg.Timestamp}
 }
 
 // ErrAlreadyExists the object already exists (409).

@@ -2205,7 +2205,7 @@ func (t *Topic) replyGetCreds(sess *Session, asUid types.Uid, msg *ClientComMess
 
 	screds, err := store.Users.GetAllCreds(asUid, "", false)
 	if err != nil {
-		sess.queueOut(decodeStoreErrorExplicitTs(err, id, t.original(asUid), now, msg.Timestamp, nil))
+		sess.queueOut(decodeStoreErrorExplicitTs(err, id, msg.Original, now, msg.Timestamp, nil))
 		return err
 	}
 
@@ -2266,7 +2266,7 @@ func (t *Topic) replySetCred(sess *Session, asUid types.Uid, authLevel auth.Leve
 // replyGetDel is a response to a get[what=del] request: load a list of deleted message ids, send them to
 // a session as {meta}
 // response goes to a single session rather than all sessions in a topic
-func (t *Topic) replyGetDel(sess *Session, asUid types.Uid, /*id string, incomingReqTs time.Time, req *MsgGetOpts*/msg *ClientComMessage) error {
+func (t *Topic) replyGetDel(sess *Session, asUid types.Uid, msg *ClientComMessage) error {
 	now := types.TimeNow()
 	toriginal := t.original(asUid)
 
@@ -2305,7 +2305,7 @@ func (t *Topic) replyGetDel(sess *Session, asUid types.Uid, /*id string, incomin
 }
 
 // replyDelMsg deletes (soft or hard) messages in response to del.msg packet.
-func (t *Topic) replyDelMsg(sess *Session, asUid types.Uid, /*incomingReqTs time.Time, del *MsgClientDel*/msg *ClientComMessage) error {
+func (t *Topic) replyDelMsg(sess *Session, asUid types.Uid, msg *ClientComMessage) error {
 	now := types.TimeNow()
 	incomingReqTs := msg.Timestamp
 	del := msg.Del

@@ -372,7 +372,7 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 		return func(m *ClientComMessage) {
 			if msg.AsUser == "" {
 				log.Println("s.dispatch: authentication required", s.sid)
-				s.queueOut(ErrAuthRequiredReply(m))
+				s.queueOut(ErrAuthRequiredReply(m, m.Timestamp))
 				return
 			}
 			handler(m)
@@ -511,7 +511,7 @@ func (s *Session) leave(msg *ClientComMessage) {
 		// Session wants to unsubscribe from the topic it did not join
 		// FIXME(gene): allow topic to unsubscribe without joining first; send to hub to unsub
 		log.Println("s.leave:", "must attach first", s.sid)
-		s.queueOut(ErrAttachFirst(msg))
+		s.queueOut(ErrAttachFirst(msg, msg.Timestamp))
 	}
 }
 
@@ -562,7 +562,7 @@ func (s *Session) publish(msg *ClientComMessage) {
 		globals.hub.route <- data
 	} else {
 		// Publish request received without attaching to topic first.
-		s.queueOut(ErrAttachFirst(msg))
+		s.queueOut(ErrAttachFirst(msg, msg.Timestamp))
 		log.Println("s.publish:", "must attach first", s.sid)
 	}
 }
@@ -990,7 +990,7 @@ func (s *Session) del(msg *ClientComMessage) {
 			del:    true}
 	} else {
 		// Must join the topic to delete messages or subscriptions.
-		s.queueOut(ErrAttachFirst(msg))
+		s.queueOut(ErrAttachFirst(msg, msg.Timestamp))
 		log.Println("s.del: invalid Del action while unsubbed", msg.Del.What, s.sid)
 	}
 }
@@ -1039,7 +1039,7 @@ func (s *Session) note(msg *ClientComMessage) {
 			SkipSid:   s.sid,
 			sess:      s}
 	} else {
-		s.queueOut(ErrAttachFirst(msg))
+		s.queueOut(ErrAttachFirst(msg, msg.Timestamp))
 		log.Println("s.note: note to invalid topic - must subscribe first", msg.Note.What, s.sid)
 	}
 }
