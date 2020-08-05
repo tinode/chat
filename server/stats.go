@@ -79,7 +79,7 @@ func statsRegisterInt(name string) {
 // Register histogram variable. `bounds` specifies histogram buckets/bins
 // (see comment next to the `histogram` struct definition).
 func statsRegisterHistogram(name string, bounds []float64) {
-  numBuckets := len(bounds) + 1
+	numBuckets := len(bounds) + 1
 	expvar.Publish(name, &histogram{
 		CountPerBucket: make([]int64, numBuckets),
 		Bounds:         bounds})

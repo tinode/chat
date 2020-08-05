@@ -23,8 +23,7 @@ func (t *Topic) runProxy(hub *Hub) {
 		case join := <-t.reg:
 			// Request to add a connection to this topic
 			if t.isInactive() {
-				asUid := types.ParseUserId(join.pkt.AsUser)
-				join.sess.queueOut(ErrLocked(join.pkt.Id, t.original(asUid), types.TimeNow()))
+				join.sess.queueOut(ErrLockedReply(join.pkt, types.TimeNow()))
 			} else {
 				// Response (ctrl message) will be handled when it's received via the proxy channel.
 				if err := globals.cluster.routeToTopicMaster(ProxyReqJoin, join.pkt, t.name, join.sess); err != nil {

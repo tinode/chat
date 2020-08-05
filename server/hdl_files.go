@@ -56,7 +56,7 @@ func largeFileServe(wrt http.ResponseWriter, req *http.Request) {
 	}
 	if uid.IsZero() {
 		// Not authenticated
-		writeHttpResponse(ErrAuthRequired("", "", now), nil)
+		writeHttpResponse(ErrAuthRequired("", "", now, now), nil)
 		return
 	}
 
@@ -138,7 +138,7 @@ func largeFileUpload(wrt http.ResponseWriter, req *http.Request) {
 	}
 	if uid.IsZero() {
 		// Not authenticated
-		writeHttpResponse(ErrAuthRequired(msgID, "", now), nil)
+		writeHttpResponse(ErrAuthRequired(msgID, "", now, now), nil)
 		return
 	}
 
