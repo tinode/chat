@@ -259,8 +259,10 @@ func (s *Session) queueOut(msg *ServerComMessage) bool {
 		statsAddHistSample("RequestLatency", float64(duration))
 	}
 
+	data := s.serialize(msg)
+	statsAddHistSample("OutgoingMessageSize", float64(len(data.([]byte))))
 	select {
-	case s.send <- s.serialize(msg):
+	case s.send <- data:
 	case <-time.After(sendTimeout):
 		log.Println("s.queueOut: timeout", s.sid)
 		return false
