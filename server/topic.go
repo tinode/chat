@@ -1052,6 +1052,23 @@ func (t *Topic) subscriptionReply(h *Hub, join *sessionJoin) error {
 		return err
 	}
 
+	isChanSub := isChannel(join.pkt.Original)
+
+	// Subscription successfully created. Link topic to session.
+	join.sess.addSub(t.name, &Subscription{
+		broadcast: t.broadcast,
+		done:      t.unreg,
+		meta:      t.meta,
+		supd:      t.supd})
+	t.addSession(join.sess, asUid, isChanSub)
+
+	// The user is online in the topic. Increment the counter if notifications are not deferred.
+	if !join.sess.background && !isChanSub {
+		userData := t.perUser[asUid]
+		userData.online++
+		t.perUser[asUid] = userData
+	}
+
 	params := map[string]interface{}{}
 	if changed {
 		if isChannel(join.pkt.Original) {
@@ -1394,20 +1411,6 @@ func (t *Topic) thisUserSub(h *Hub, sess *Session, pkt *ClientComMessage, asUid 
 			sess.queueOut(ErrPermissionDeniedReply(pkt, now))
 			return changed, errors.New("topic access denied; user is banned")
 		}
-	}
-
-	// Subscription successfully created. Link topic to session.
-	sess.addSub(t.name, &Subscription{
-		broadcast: t.broadcast,
-		done:      t.unreg,
-		meta:      t.meta,
-		supd:      t.supd})
-	t.addSession(sess, asUid, isChanSub)
-
-	// The user is online in the topic. Increment the counter if notifications are not deferred.
-	if !sess.background && !isChanSub {
-		userData.online++
-		t.perUser[asUid] = userData
 	}
 
 	return changed, nil
