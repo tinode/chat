@@ -1013,6 +1013,21 @@ func (t *Topic) subscriptionReply(h *Hub, join *sessionJoin) error {
 		return err
 	}
 
+	// Subscription successfully created. Link topic to session.
+	join.sess.addSub(t.name, &Subscription{
+		broadcast: t.broadcast,
+		done:      t.unreg,
+		meta:      t.meta,
+		supd:      t.supd})
+	t.addSession(join.sess, asUid)
+
+	// The user is online in the topic. Increment the counter if notifications are not deferred.
+	if !join.sess.background {
+		userData := t.perUser[asUid]
+		userData.online++
+		t.perUser[asUid] = userData
+	}
+
 	params := map[string]interface{}{}
 
 	if changed {
@@ -1302,20 +1317,6 @@ func (t *Topic) thisUserSub(h *Hub, sess *Session, asUid types.Uid, asLvl auth.L
 		// User was banned
 		sess.queueOut(ErrPermissionDeniedReply(msg, now))
 		return changed, errors.New("topic access denied; user is banned")
-	}
-
-	// Subscription successfully created. Link topic to session.
-	sess.addSub(t.name, &Subscription{
-		broadcast: t.broadcast,
-		done:      t.unreg,
-		meta:      t.meta,
-		supd:      t.supd})
-	t.addSession(sess, asUid)
-
-	// The user is online in the topic. Increment the counter if notifications are not deferred.
-	if !sess.background {
-		userData.online++
-		t.perUser[asUid] = userData
 	}
 
 	return changed, nil
@@ -2034,7 +2035,7 @@ func (t *Topic) replySetSub(h *Hub, sess *Session, pkt *ClientComMessage) error 
 	var changed bool
 	if target == asUid {
 		// Request new subscription or modify own subscription
-		changed, err = t.thisUserSub(h, sess, asUid, asLvl, /*pkt.Id*/ set.Sub.Mode, pkt, nil)
+		changed, err = t.thisUserSub(h, sess, asUid, asLvl /*pkt.Id*/, set.Sub.Mode, pkt, nil)
 	} else {
 		// Request to approve/change someone's subscription
 		changed, err = t.anotherUserSub(h, sess, asUid, target, pkt)
@@ -2109,7 +2110,7 @@ func (t *Topic) replyGetData(sess *Session, asUid types.Uid, msg *ClientComMessa
 }
 
 // replyGetTags returns topic's tags - tokens used for discovery.
-func (t *Topic) replyGetTags(sess *Session, asUid types.Uid, msg *ClientComMessage/*, id string, incomingReqTs time.Time*/) error {
+func (t *Topic) replyGetTags(sess *Session, asUid types.Uid, msg *ClientComMessage /*, id string, incomingReqTs time.Time*/) error {
 	now := types.TimeNow()
 	id := msg.Id
 
@@ -2135,7 +2136,7 @@ func (t *Topic) replyGetTags(sess *Session, asUid types.Uid, msg *ClientComMessa
 }
 
 // replySetTags updates topic's tags - tokens used for discovery.
-func (t *Topic) replySetTags(sess *Session, asUid types.Uid, msg *ClientComMessage/*incomingReqTs time.Time, set *MsgClientSet*/) error {
+func (t *Topic) replySetTags(sess *Session, asUid types.Uid, msg *ClientComMessage /*incomingReqTs time.Time, set *MsgClientSet*/) error {
 	var resp *ServerComMessage
 	var err error
 	incomingReqTs := msg.Timestamp
@@ -2196,7 +2197,7 @@ func (t *Topic) replySetTags(sess *Session, asUid types.Uid, msg *ClientComMessa
 // replyGetCreds returns user's credentials such as email and phone numbers.
 func (t *Topic) replyGetCreds(sess *Session, asUid types.Uid, msg *ClientComMessage) error {
 	now := types.TimeNow()
-  id := msg.Id
+	id := msg.Id
 
 	if t.cat != types.TopicCatMe {
 		sess.queueOut(ErrOperationNotAllowedReply(msg, now))
@@ -2435,7 +2436,7 @@ func (t *Topic) replyDelTopic(h *Hub, sess *Session, asUid types.Uid, msg *Clien
 }
 
 // Delete credential
-func (t *Topic) replyDelCred(h *Hub, sess *Session, asUid types.Uid,  authLvl auth.Level, msg *ClientComMessage) error {
+func (t *Topic) replyDelCred(h *Hub, sess *Session, asUid types.Uid, authLvl auth.Level, msg *ClientComMessage) error {
 	now := types.TimeNow()
 	incomingReqTs := msg.Timestamp
 	del := msg.Del
