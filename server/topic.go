@@ -423,22 +423,22 @@ func (t *Topic) runLocal(hub *Hub) {
 			case meta.pkt.Get != nil:
 				// Get request
 				if meta.pkt.MetaWhat&constMsgMetaDesc != 0 {
-					if err := t.replyGetDesc(meta.sess, asUid, meta.pkt); err != nil {
+					if err := t.replyGetDesc(meta.sess, asUid, meta.pkt.Get.Desc, meta.pkt); err != nil {
 						log.Printf("topic[%s] meta.Get.Desc failed: %s", t.name, err)
 					}
 				}
 				if meta.pkt.MetaWhat&constMsgMetaSub != 0 {
-					if err := t.replyGetSub(meta.sess, asUid, authLevel, meta.pkt); err != nil {
+					if err := t.replyGetSub(meta.sess, asUid, authLevel, meta.pkt.Get.Sub, meta.pkt); err != nil {
 						log.Printf("topic[%s] meta.Get.Sub failed: %s", t.name, err)
 					}
 				}
 				if meta.pkt.MetaWhat&constMsgMetaData != 0 {
-					if err := t.replyGetData(meta.sess, asUid, meta.pkt); err != nil {
+					if err := t.replyGetData(meta.sess, asUid, meta.pkt.Get.Data, meta.pkt); err != nil {
 						log.Printf("topic[%s] meta.Get.Data failed: %s", t.name, err)
 					}
 				}
 				if meta.pkt.MetaWhat&constMsgMetaDel != 0 {
-					if err := t.replyGetDel(meta.sess, asUid, meta.pkt); err != nil {
+					if err := t.replyGetDel(meta.sess, asUid, meta.pkt.Get.Del, meta.pkt); err != nil {
 						log.Printf("topic[%s] meta.Get.Del failed: %s", t.name, err)
 					}
 				}
@@ -596,14 +596,14 @@ func (t *Topic) handleSubscription(h *Hub, join *sessionJoin) error {
 
 	if getWhat&constMsgMetaDesc != 0 {
 		// Send get.desc as a {meta} packet.
-		if err := t.replyGetDesc(join.sess, asUid, join.pkt); err != nil {
+		if err := t.replyGetDesc(join.sess, asUid, msgsub.Get.Desc, join.pkt); err != nil {
 			log.Printf("topic[%s] handleSubscription Get.Desc failed: %v sid=%s", t.name, err, join.sess.sid)
 		}
 	}
 
 	if getWhat&constMsgMetaSub != 0 {
 		// Send get.sub response as a separate {meta} packet
-		if err := t.replyGetSub(join.sess, asUid, authLevel, join.pkt); err != nil {
+		if err := t.replyGetSub(join.sess, asUid, authLevel, msgsub.Get.Sub, join.pkt); err != nil {
 			log.Printf("topic[%s] handleSubscription Get.Sub failed: %v sid=%s", t.name, err, join.sess.sid)
 		}
 	}
@@ -624,14 +624,14 @@ func (t *Topic) handleSubscription(h *Hub, join *sessionJoin) error {
 
 	if getWhat&constMsgMetaData != 0 {
 		// Send get.data response as {data} packets
-		if err := t.replyGetData(join.sess, asUid, join.pkt); err != nil {
+		if err := t.replyGetData(join.sess, asUid, msgsub.Get.Data, join.pkt); err != nil {
 			log.Printf("topic[%s] handleSubscription Get.Data failed: %v sid=%s", t.name, err, join.sess.sid)
 		}
 	}
 
 	if getWhat&constMsgMetaDel != 0 {
 		// Send get.del response as a separate {meta} packet
-		if err := t.replyGetDel(join.sess, asUid, join.pkt); err != nil {
+		if err := t.replyGetDel(join.sess, asUid, msgsub.Get.Del, join.pkt); err != nil {
 			log.Printf("topic[%s] handleSubscription Get.Del failed: %v sid=%s", t.name, err, join.sess.sid)
 		}
 	}
@@ -1491,10 +1491,9 @@ func (t *Topic) anotherUserSub(h *Hub, sess *Session, asUid, target types.Uid, m
 }
 
 // replyGetDesc is a response to a get.desc request on a topic, sent to just the session as a {meta} packet
-func (t *Topic) replyGetDesc(sess *Session, asUid types.Uid, msg *ClientComMessage) error {
+func (t *Topic) replyGetDesc(sess *Session, asUid types.Uid, opts *MsgGetOpts, msg *ClientComMessage) error {
 	now := types.TimeNow()
 	id := msg.Id
-	opts := msg.Sub.Get.Desc
 
 	if opts != nil && (opts.User != "" || opts.Limit != 0) {
 		sess.queueOut(ErrMalformedReply(msg, now))
@@ -1748,11 +1747,10 @@ func (t *Topic) replySetDesc(sess *Session, asUid types.Uid, msg *ClientComMessa
 
 // replyGetSub is a response to a get.sub request on a topic - load a list of subscriptions/subscribers,
 // send it just to the session as a {meta} packet
-func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level, msg *ClientComMessage) error {
+func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level, req *MsgGetOpts, msg *ClientComMessage) error {
 	now := types.TimeNow()
 	id := msg.Id
 	incomingReqTs := msg.Timestamp
-	req := msg.Sub.Get.Sub
 
 	if req != nil && (req.SinceId != 0 || req.BeforeId != 0) {
 		sess.queueOut(ErrMalformedReply(msg, now))
@@ -2017,7 +2015,6 @@ func (t *Topic) replySetSub(h *Hub, sess *Session, pkt *ClientComMessage) error 
 	asUid := types.ParseUserId(pkt.AsUser)
 	asLvl := auth.Level(pkt.AuthLvl)
 	set := pkt.Set
-	toriginal := t.original(asUid)
 
 	var target types.Uid
 	if target = types.ParseUserId(set.Sub.User); target.IsZero() && set.Sub.User != "" {
@@ -2055,7 +2052,7 @@ func (t *Topic) replySetSub(h *Hub, sess *Session, pkt *ClientComMessage) error 
 		if target != asUid {
 			params["user"] = target.UserId()
 		}
-		resp = NoErrParamsExplicitTs(pkt.Id, toriginal, now, pkt.Timestamp, params)
+		resp = NoErrParamsReply(pkt, now, params)
 	} else {
 		resp = InfoNotModifiedReply(pkt, now)
 	}
@@ -2067,10 +2064,9 @@ func (t *Topic) replySetSub(h *Hub, sess *Session, pkt *ClientComMessage) error 
 
 // replyGetData is a response to a get.data request - load a list of stored messages, send them to session as {data}
 // response goes to a single session rather than all sessions in a topic
-func (t *Topic) replyGetData(sess *Session, asUid types.Uid, msg *ClientComMessage) error {
+func (t *Topic) replyGetData(sess *Session, asUid types.Uid, req *MsgGetOpts, msg *ClientComMessage) error {
 	now := types.TimeNow()
 	toriginal := t.original(asUid)
-	req := msg.Sub.Get.Data
 
 	if req != nil && (req.IfModifiedSince != nil || req.User != "" || req.Topic != "") {
 		sess.queueOut(ErrMalformedReply(msg, now))
@@ -2110,9 +2106,8 @@ func (t *Topic) replyGetData(sess *Session, asUid types.Uid, msg *ClientComMessa
 }
 
 // replyGetTags returns topic's tags - tokens used for discovery.
-func (t *Topic) replyGetTags(sess *Session, asUid types.Uid, msg *ClientComMessage /*, id string, incomingReqTs time.Time*/) error {
+func (t *Topic) replyGetTags(sess *Session, asUid types.Uid, msg *ClientComMessage) error {
 	now := types.TimeNow()
-	id := msg.Id
 
 	if t.cat != types.TopicCatMe && t.cat != types.TopicCatGrp {
 		sess.queueOut(ErrOperationNotAllowedReply(msg, now))
@@ -2125,7 +2120,7 @@ func (t *Topic) replyGetTags(sess *Session, asUid types.Uid, msg *ClientComMessa
 
 	if len(t.tags) > 0 {
 		sess.queueOut(&ServerComMessage{
-			Meta: &MsgServerMeta{Id: id, Topic: t.original(asUid), Timestamp: &now, Tags: t.tags}})
+			Meta: &MsgServerMeta{Id: msg.Id, Topic: t.original(asUid), Timestamp: &now, Tags: t.tags}})
 		return nil
 	}
 
@@ -2136,10 +2131,9 @@ func (t *Topic) replyGetTags(sess *Session, asUid types.Uid, msg *ClientComMessa
 }
 
 // replySetTags updates topic's tags - tokens used for discovery.
-func (t *Topic) replySetTags(sess *Session, asUid types.Uid, msg *ClientComMessage /*incomingReqTs time.Time, set *MsgClientSet*/) error {
+func (t *Topic) replySetTags(sess *Session, asUid types.Uid, msg *ClientComMessage) error {
 	var resp *ServerComMessage
 	var err error
-	incomingReqTs := msg.Timestamp
 	set := msg.Set
 
 	now := types.TimeNow()
@@ -2179,7 +2173,7 @@ func (t *Topic) replySetTags(sess *Session, asUid types.Uid, msg *ClientComMessa
 					if len(removed) > 0 {
 						params["removed"] = len(removed)
 					}
-					resp = NoErrParamsExplicitTs(set.Id, t.original(asUid), now, incomingReqTs, params)
+					resp = NoErrParamsReply(msg, now, params)
 				}
 			} else {
 				resp = InfoNotModifiedReply(msg, now)
@@ -2267,13 +2261,12 @@ func (t *Topic) replySetCred(sess *Session, asUid types.Uid, authLevel auth.Leve
 // replyGetDel is a response to a get[what=del] request: load a list of deleted message ids, send them to
 // a session as {meta}
 // response goes to a single session rather than all sessions in a topic
-func (t *Topic) replyGetDel(sess *Session, asUid types.Uid, msg *ClientComMessage) error {
+func (t *Topic) replyGetDel(sess *Session, asUid types.Uid, req *MsgGetOpts, msg *ClientComMessage) error {
 	now := types.TimeNow()
 	toriginal := t.original(asUid)
 
 	id := msg.Id
 	incomingReqTs := msg.Timestamp
-	req := msg.Sub.Get.Del
 
 	if req != nil && (req.IfModifiedSince != nil || req.User != "" || req.Topic != "") {
 		sess.queueOut(ErrMalformedReply(msg, now))
@@ -2308,7 +2301,6 @@ func (t *Topic) replyGetDel(sess *Session, asUid types.Uid, msg *ClientComMessag
 // replyDelMsg deletes (soft or hard) messages in response to del.msg packet.
 func (t *Topic) replyDelMsg(sess *Session, asUid types.Uid, msg *ClientComMessage) error {
 	now := types.TimeNow()
-	incomingReqTs := msg.Timestamp
 	del := msg.Del
 
 	var err error
@@ -2406,7 +2398,7 @@ func (t *Topic) replyDelMsg(sess *Session, asUid types.Uid, msg *ClientComMessag
 		t.presPubMessageDelete(asUid, t.delID, dr, sess.sid)
 	}
 
-	sess.queueOut(NoErrParamsExplicitTs(del.Id, t.original(asUid), now, incomingReqTs, map[string]int{"del": t.delID}))
+	sess.queueOut(NoErrParamsReply(msg, now, map[string]int{"del": t.delID}))
 
 	return nil
 }
