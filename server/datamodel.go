@@ -599,7 +599,7 @@ type MsgServerPres struct {
 	// Flag to break the reply loop
 	WantReply bool `json:"-"`
 
-	// Additional access mode filters when senting to topic's online members. Both filter conditions must be true.
+	// Additional access mode filters when sending to topic's online members. Both filter conditions must be true.
 	// send only to those who have this access mode.
 	FilterIn int `json:"-"`
 	// skip those who have this access mode.

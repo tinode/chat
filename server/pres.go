@@ -232,9 +232,20 @@ func (t *Topic) presUsersOfInterest(what, ua string) {
 
 	// Push update to subscriptions
 	for topic, psd := range t.perSubs {
+		// P2P contacts are notified on 'me', group topics are notified on proper topic name.
+		notifyOn := "me"
+		if what == "upd" || what == "ua" {
+			if !psd.online {
+				// Skip "upd" and "ua" notifications if the contact is offline.
+				continue
+			}
+			if types.GetTopicCat(topic) == types.TopicCatGrp {
+				notifyOn = topic
+			}
+		}
 		globals.hub.route <- &ServerComMessage{
 			Pres: &MsgServerPres{
-				Topic:     "me",
+				Topic:     notifyOn,
 				What:      what,
 				Src:       t.name,
 				UserAgent: ua,

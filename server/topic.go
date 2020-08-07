@@ -209,12 +209,12 @@ func (t *Topic) getPerUserAcs(uid types.Uid) (types.AccessMode, types.AccessMode
 
 // passesPresenceFilters applies presence filters to `msg`
 // depending on per-user want and given acls for the provided `uid`.
-func (t *Topic) passesPresenceFilters(msg *ServerComMessage, uid types.Uid) bool {
+func (t *Topic) passesPresenceFilters(pres *MsgServerPres, uid types.Uid) bool {
 	modeWant, modeGiven := t.getPerUserAcs(uid)
 	// "gone" and "acs" notifications are sent even if the topic is muted.
-	return ((modeGiven & modeWant).IsPresencer() || msg.Pres.What == "gone" || msg.Pres.What == "acs") &&
-		(msg.Pres.FilterIn == 0 || int(modeGiven&modeWant)&msg.Pres.FilterIn != 0) &&
-		(msg.Pres.FilterOut == 0 || int(modeGiven&modeWant)&msg.Pres.FilterOut == 0)
+	return ((modeGiven & modeWant).IsPresencer() || pres.What == "gone" || pres.What == "acs") &&
+		(pres.FilterIn == 0 || int(modeGiven&modeWant)&pres.FilterIn != 0) &&
+		(pres.FilterOut == 0 || int(modeGiven&modeWant)&pres.FilterOut == 0)
 }
 
 // userIsReader returns true if the user (specified by `uid`) may read the given topic.
@@ -942,7 +942,6 @@ func (t *Topic) handleBroadcast(msg *ServerComMessage) {
 	for sess, pssd := range t.sessions {
 		// Send all messages to multiplexing session.
 		if !sess.isMultiplex() {
-
 			if sess.sid == msg.SkipSid {
 				continue
 			}
@@ -963,7 +962,7 @@ func (t *Topic) handleBroadcast(msg *ServerComMessage) {
 				}
 
 				// Check presence filters
-				if !t.passesPresenceFilters(msg, pssd.uid) {
+				if !t.passesPresenceFilters(msg.Pres, pssd.uid) {
 					continue
 				}
 
@@ -1835,9 +1834,9 @@ func (t *Topic) replySetDesc(sess *Session, asUid types.Uid, msg *ClientComMessa
 			if t.cat == types.TopicCatMe {
 				t.presUsersOfInterest("upd", "")
 			} else {
-				// Notify all subscribers on 'me' except the user who made the change.
-				// He will be notified separately (see below).
-				filter := &presFilters{excludeUser: asUid.UserId()}
+				// Notify all subscribers on 'me' except the user who made the change and blocked users.
+				// The user who made the change will be notified separately (see below).
+				filter := &presFilters{excludeUser: asUid.UserId(), filterIn: types.ModeJoin}
 				t.presSubsOffline("upd", nilPresParams, filter, filter, sess.sid, false)
 			}
 
@@ -1858,7 +1857,12 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 	now := types.TimeNow()
 	id := msg.Id
 	incomingReqTs := msg.Timestamp
-	req := msg.Sub.Get.Sub
+	var req *MsgGetOpts
+	if msg.Sub != nil {
+		req = msg.Sub.Get.Sub
+	} else {
+		req = msg.Get.Sub
+	}
 
 	if req != nil && (req.SinceId != 0 || req.BeforeId != 0) {
 		sess.queueOut(ErrMalformedReply(msg, now))
