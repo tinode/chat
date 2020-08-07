@@ -51,11 +51,17 @@
         <dyn_variable name="subs" jsonpath="meta.sub[*].topic"/>
         <websocket type="message" frame="text">{"get":{"id":"%%_baseid%%04","topic":"me","what":"sub"}}</websocket>
       </request>
+      <setdynvars sourcetype="eval"
+            code="fun({Pid,DynVars})->
+                      {ok,Subs}=ts_dynvars:lookup(subs,DynVars),
+                      tinode:shuffle(Subs) end.">
+        <var name="shuffled_subs" />
+      </setdynvars>
 
       <!-- main loop -->
       <for from="1" to="100" incr="1" var="ctr">
         <!-- Iterate over subscriptions -->
-        <foreach name="topicx" in="subs">
+        <foreach name="topicx" in="shuffled_subs">
           <thinktime value="3" random="true"></thinktime>
 
           <request subst="true">
