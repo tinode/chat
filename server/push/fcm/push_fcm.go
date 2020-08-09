@@ -150,6 +150,11 @@ func (Handler) Push() chan<- *push.Receipt {
 	return handler.input
 }
 
+// Channel returns a channel for subscribing/unsubscribing devices to FCM topics.
+func (Handler) Channel() chan<- *push.ChannelReq {
+	return nil
+}
+
 // Stop shuts down the handler
 func (Handler) Stop() {
 	handler.stop <- true

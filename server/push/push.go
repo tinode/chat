@@ -37,6 +37,16 @@ type Receipt struct {
 	Payload Payload `json:"payload"`
 }
 
+// ChannelReq is a request to subscribe/unsubscribe device IDs to channel (FCM topic).
+type ChannelReq struct {
+	// Channel to subscribe to or unsubscribe from.
+	Channel string `json:"channel"`
+	// Devices to subscribe or unsubscribe.
+	Devices []string `json:"devices"`
+	// Unsub is set to true to unsubscribe devices, otherwise subscribe them.
+	Unsub bool `json:"unsub"`
+}
+
 // Payload is content of the push.
 type Payload struct {
 	// Action type of the push: new message (msg), new subscription (sub), etc.
@@ -77,6 +87,9 @@ type Handler interface {
 	// Push returns a channel that the server will use to send messages to.
 	// The message will be dropped if the channel blocks.
 	Push() chan<- *Receipt
+
+	// Subscribe/unsubscribe device from FCM topic (channel).
+	Channel() chan<- *ChannelReq
 
 	// Stop terminates the handler's worker and stops sending pushes.
 	Stop()
