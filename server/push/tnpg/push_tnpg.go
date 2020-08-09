@@ -157,7 +157,7 @@ func postMessage(body interface{}, config *configType) (*batchResponse, error) {
 
 func sendPushes(rcpt *push.Receipt, config *configType) {
 	messages := fcm.PrepareNotifications(rcpt, nil)
-	if messages == nil {
+	if len(messages) == 0 {
 		return
 	}
 

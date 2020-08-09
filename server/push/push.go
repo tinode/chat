@@ -29,9 +29,11 @@ type Recipient struct {
 
 // Receipt is the push payload with a list of recipients.
 type Receipt struct {
-	// List of recipients, including those who did not receive the message
+	// List of individual recipients, including those who did not receive the message.
 	To map[t.Uid]Recipient `json:"to"`
-	// Actual content to be delivered to the client
+	// Push topic for group notifications.
+	Channel string `json:"channel"`
+	// Actual content to be delivered to the client.
 	Payload Payload `json:"payload"`
 }
 

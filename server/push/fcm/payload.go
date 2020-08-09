@@ -207,7 +207,7 @@ func PrepareNotifications(rcpt *push.Receipt, config *AndroidConfig) []MessageDa
 		log.Println("fcm push: db error", err)
 		return nil
 	}
-	if count == 0 {
+	if count == 0 && rcpt.Channel == "" {
 		return nil
 	}
 
@@ -225,6 +225,46 @@ func PrepareNotifications(rcpt *push.Receipt, config *AndroidConfig) []MessageDa
 		clickAction = config.getClickAction(rcpt.Payload.What)
 	}
 
+	androidNotification := func(msg *fcm.Message) {
+		// When this notification type is included and the app is not in the foreground
+		// Android won't wake up the app and won't call FirebaseMessagingService:onMessageReceived.
+		// See dicussion: https://github.com/firebase/quickstart-js/issues/71
+		if config != nil && config.Enabled {
+			msg.Android.Notification = &fcm.AndroidNotification{
+				// Android uses Tag value to group notifications together:
+				// show just one notification per topic.
+				Tag:         rcpt.Payload.Topic,
+				Priority:    fcm.PriorityHigh,
+				Visibility:  fcm.VisibilityPrivate,
+				TitleLocKey: titlelc,
+				Title:       title,
+				BodyLocKey:  bodylc,
+				Body:        body,
+				Icon:        icon,
+				Color:       color,
+				ClickAction: clickAction,
+			}
+		}
+	}
+
+	apnsNotification := func(msg *fcm.Message) {
+		msg.APNS = &fcm.APNSConfig{
+			Payload: &fcm.APNSPayload{
+				Aps: &fcm.Aps{
+					ContentAvailable: true,
+					MutableContent:   true,
+					Sound:            "default",
+					// Need to duplicate these in APNS.Payload.Aps.Alert so
+					// iOS may call NotificationServiceExtension (if present).
+					Alert: &fcm.ApsAlert{
+						Title: title,
+						Body:  body,
+					},
+				},
+			},
+		}
+	}
+
 	var messages []MessageData
 	for uid, devList := range devices {
 		userData := data
@@ -239,60 +279,48 @@ func PrepareNotifications(rcpt *push.Receipt, config *AndroidConfig) []MessageDa
 				msg := fcm.Message{
 					Token: d.DeviceId,
 					Data:  userData,
+					Notification: &fcm.Notification{
+						Title: title,
+						Body:  body,
+					},
 				}
 
 				if d.Platform == "android" {
 					msg.Android = &fcm.AndroidConfig{
 						Priority: "high",
 					}
-					if config != nil && config.Enabled {
-						// When this notification type is included and the app is not in the foreground
-						// Android won't wake up the app and won't call FirebaseMessagingService:onMessageReceived.
-						// See dicussion: https://github.com/firebase/quickstart-js/issues/71
-						msg.Android.Notification = &fcm.AndroidNotification{
-							// Android uses Tag value to group notifications together:
-							// show just one notification per topic.
-							Tag:         rcpt.Payload.Topic,
-							Priority:    fcm.PriorityHigh,
-							Visibility:  fcm.VisibilityPrivate,
-							TitleLocKey: titlelc,
-							Title:       title,
-							BodyLocKey:  bodylc,
-							Body:        body,
-							Icon:        icon,
-							Color:       color,
-							ClickAction: clickAction,
-						}
-					}
+					androidNotification(&msg)
 				} else if d.Platform == "ios" {
+					apnsNotification(&msg)
 					// iOS uses Badge to show the total unread message count.
 					badge := rcpt.To[uid].Unread
-					// Need to duplicate these in APNS.Payload.Aps.Alert so
-					// iOS may call NotificationServiceExtension (if present).
-					title := "New message"
-					body := userData["content"]
-					msg.APNS = &fcm.APNSConfig{
-						Payload: &fcm.APNSPayload{
-							Aps: &fcm.Aps{
-								Badge:            &badge,
-								ContentAvailable: true,
-								MutableContent:   true,
-								Sound:            "default",
-								Alert: &fcm.ApsAlert{
-									Title: title,
-									Body:  body,
-								},
-							},
-						},
-					}
-					msg.Notification = &fcm.Notification{
-						Title: title,
-						Body:  body,
-					}
+					msg.APNS.Payload.Aps.Badge = &badge
 				}
 				messages = append(messages, MessageData{Uid: uid, DeviceId: d.DeviceId, Message: &msg})
 			}
 		}
 	}
+
+	if rcpt.Channel != "" {
+		topic := rcpt.Channel
+		userData := clonePayload(data)
+		userData["topic"] = topic
+		msg := fcm.Message{
+			Topic: topic,
+			Data:  userData,
+			Notification: &fcm.Notification{
+				Title: title,
+				Body:  body,
+			},
+		}
+
+		msg.Android = &fcm.AndroidConfig{
+			Priority: "normal",
+		}
+		androidNotification(&msg)
+		apnsNotification(&msg)
+		messages = append(messages, MessageData{Message: &msg})
+	}
+
 	return messages
 }

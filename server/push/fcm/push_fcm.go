@@ -103,7 +103,7 @@ func (Handler) Init(jsonconf string) error {
 func sendNotifications(rcpt *push.Receipt, config *configType) {
 	ctx := context.Background()
 	messages := PrepareNotifications(rcpt, &config.Android)
-	if messages == nil {
+	if len(messages) == 0 {
 		return
 	}
 
