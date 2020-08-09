@@ -5,7 +5,7 @@
 %% directory.
 
 -module(tinode).
--export([rand_user_secret/1]).
+-export([rand_user_secret/1, shuffle/1]).
 
 %% Produces a secret for use in basic login.
 rand_user_secret({Pid, DynData}) ->
@@ -22,3 +22,8 @@ get_rand_secret() ->
       5 -> "eve:eve123";
       6 -> "frank:frank123"
   end.
+
+%% Shuffles a list randomly.
+shuffle(L) ->
+  RandomList=[{rand:uniform(), X} || X <- L],
+  [X || {_,X} <- lists:sort(RandomList)].
