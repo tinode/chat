@@ -28,7 +28,7 @@ shuffle(L) ->
   RandomList=[{rand:uniform(), X} || X <- L],
   [X || {_,X} <- lists:sort(RandomList)].
 
-%% Reads previously cached token for the specified user.
+%% Reads previously cached auth token for the specified user.
 read_token(Uid) ->
   {ok, LogDir} = application:get_env(tsung_controller, log_dir_real),
   case file:read_file(filename:join(LogDir, Uid)) of
