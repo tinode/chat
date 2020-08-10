@@ -39,6 +39,8 @@ type Receipt struct {
 
 // ChannelReq is a request to subscribe/unsubscribe device IDs to channel (FCM topic).
 type ChannelReq struct {
+	// Uid is the id of the user making request
+	Uid types.Uid
 	// Channel to subscribe to or unsubscribe from.
 	Channel string `json:"channel"`
 	// Devices to subscribe or unsubscribe.
@@ -136,7 +138,7 @@ func Init(jsconfig string) error {
 	return nil
 }
 
-// Push a single message
+// Push a single message to devices.
 func Push(msg *Receipt) {
 	if handlers == nil {
 		return
@@ -150,6 +152,25 @@ func Push(msg *Receipt) {
 		// Push without delay or skip
 		select {
 		case hnd.Push() <- msg:
+		default:
+		}
+	}
+}
+
+// ChannelSub handles a channel (FCM topic) subscription/unsubscription request.
+func ChannelSub(msg *ChannelReq) {
+	if handlers == nil {
+		return
+	}
+
+	for _, hnd := range handlers {
+		if !hnd.IsReady() {
+			continue
+		}
+
+		// Send without delay or skip.
+		select {
+		case hnd.Channel() <- msg:
 		default:
 		}
 	}

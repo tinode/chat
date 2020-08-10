@@ -19,6 +19,7 @@ const defaultBuffer = 32
 type stdoutPush struct {
 	initialized bool
 	input       chan *push.Receipt
+	channel     chan *push.ChannelReq
 	stop        chan bool
 }
 
@@ -51,12 +52,15 @@ func (stdoutPush) Init(jsonconf string) error {
 	}
 
 	handler.input = make(chan *push.Receipt, config.Buffer)
+	handler.channel = make(chan *push.ChannelReq, config.Buffer)
 	handler.stop = make(chan bool, 1)
 
 	go func() {
 		for {
 			select {
 			case msg := <-handler.input:
+				fmt.Fprintln(os.Stdout, msg)
+			case msg := <-handler.channel:
 				fmt.Fprintln(os.Stdout, msg)
 			case <-handler.stop:
 				return
@@ -76,6 +80,12 @@ func (stdoutPush) IsReady() bool {
 // If the adapter blocks, the message will be dropped.
 func (stdoutPush) Push() chan<- *push.Receipt {
 	return handler.input
+}
+
+// Channel returns a channel that caller can use to subscribe/unsubscribe devices to channels (FCM topics).
+// If the adapter blocks, the message will be dropped.
+func (stdoutPush) Channel() chan<- *push.ChannelReq {
+	return handler.channel
 }
 
 // Stop terminates the handler's worker and stops sending pushes.

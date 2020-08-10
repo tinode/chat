@@ -27,6 +27,7 @@ var handler Handler
 // Handler represents state of TNPG push client.
 type Handler struct {
 	input   chan *push.Receipt
+	channel chan *push.ChannelReq
 	stop    chan bool
 	postUrl string
 }
@@ -89,6 +90,7 @@ func (Handler) Init(jsonconf string) error {
 
 	handler.postUrl = baseTargetAddress + config.OrgName
 	handler.input = make(chan *push.Receipt, bufferSize)
+	handler.channel = make(chan *push.ChannelReq, bufferSize)
 	handler.stop = make(chan bool, 1)
 
 	go func() {
@@ -96,6 +98,8 @@ func (Handler) Init(jsonconf string) error {
 			select {
 			case rcpt := <-handler.input:
 				go sendPushes(rcpt, &config)
+			case sub := <-handler.channel:
+				go processSubscription(sub)
 			case <-handler.stop:
 				return
 			}
@@ -185,6 +189,23 @@ func sendPushes(rcpt *push.Receipt, config *configType) {
 			handleResponse(resp, messages[i:upper])
 		}
 	}
+}
+
+func processSubscription(req *push.ChannelReq) {
+	if resp, err := postMessage(payloads, config); err != nil {
+		log.Println("tnpg channel sub request failed:", err)
+		break
+	} else if resp.httpCode >= 300 {
+		log.Println("tnpg channel sub rejected:", resp.httpStatus)
+		break
+	} else if resp.FatalCode != "" {
+		log.Println("tnpg channel sub failed:", resp.FatalMessage)
+		break
+	} else {
+		// Check for expired tokens and other errors.
+		handleResponse(resp, messages[i:upper])
+	}
+
 }
 
 func handleResponse(batch *batchResponse, messages []fcm.MessageData) {

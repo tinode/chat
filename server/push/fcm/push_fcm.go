@@ -15,6 +15,7 @@ import (
 
 	"github.com/tinode/chat/server/push"
 	"github.com/tinode/chat/server/store"
+	"github.com/tinode/chat/server/store/types"
 
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/option"
@@ -32,9 +33,10 @@ const (
 
 // Handler represents the push handler; implements push.PushHandler interface.
 type Handler struct {
-	input  chan *push.Receipt
-	stop   chan bool
-	client *fcm.Client
+	input   chan *push.Receipt
+	channel chan *push.ChannelReq
+	stop    chan bool
+	client  *fcm.Client
 }
 
 type configType struct {
@@ -84,6 +86,7 @@ func (Handler) Init(jsonconf string) error {
 	}
 
 	handler.input = make(chan *push.Receipt, bufferSize)
+	handler.channel = make(chan *push.ChannelReq, bufferSize)
 	handler.stop = make(chan bool, 1)
 
 	go func() {
@@ -91,6 +94,8 @@ func (Handler) Init(jsonconf string) error {
 			select {
 			case rcpt := <-handler.input:
 				go sendNotifications(rcpt, &config)
+			case sub := <-handler.channel:
+				go processSubscription(sub)
 			case <-handler.stop:
 				return
 			}
@@ -101,42 +106,73 @@ func (Handler) Init(jsonconf string) error {
 }
 
 func sendNotifications(rcpt *push.Receipt, config *configType) {
-	ctx := context.Background()
 	messages := PrepareNotifications(rcpt, &config.Android)
 	if len(messages) == 0 {
 		return
 	}
 
+	ctx := context.Background()
 	for _, m := range messages {
 		_, err := handler.client.Send(ctx, m.Message)
 		if err != nil {
-			if fcm.IsMessageRateExceeded(err) ||
-				fcm.IsServerUnavailable(err) ||
-				fcm.IsInternal(err) ||
-				fcm.IsUnknown(err) {
-				// Transient errors. Stop sending this batch.
-				log.Println("fcm transient failure", err)
+			if handlePushError(err, m.Uid, m.DeviceId) {
 				return
-			}
-
-			if fcm.IsMismatchedCredential(err) || fcm.IsInvalidArgument(err) {
-				// Config errors
-				log.Println("fcm push: failed", err)
-				return
-			}
-
-			if fcm.IsRegistrationTokenNotRegistered(err) {
-				// Token is no longer valid.
-				log.Println("fcm push: invalid token", err)
-				err = store.Devices.Delete(m.Uid, m.DeviceId)
-				if err != nil {
-					log.Println("fcm push: failed to delete invalid token", err)
-				}
-			} else {
-				log.Println("fcm push:", err)
 			}
 		}
 	}
+}
+
+func processSubscription(req *push.ChannelReq) {
+	if len(req.Devices) == 0 {
+		return
+	}
+
+	ctx := context.Background()
+
+	var err error
+	var resp *fcm.TopicManagementResponse
+	if req.Unsub {
+		resp, err = handler.client.UnsubscribeFromTopic(ctx, req.Devices, req.Channel)
+	} else {
+		resp, err = handler.client.SubscribeToTopic(ctx, req.Devices, req.Channel)
+	}
+
+	if err != nil {
+		handlePushError(err)
+	} else {
+
+	}
+}
+
+// handlePushError processes error returned by a call to FCM.
+// returns true to stop further processing of other messages.
+func handlePushError(err error, uid types.Uid, deviceId string) bool {
+	if fcm.IsMessageRateExceeded(err) ||
+		fcm.IsServerUnavailable(err) ||
+		fcm.IsInternal(err) ||
+		fcm.IsUnknown(err) {
+		// Transient errors. Stop sending this batch.
+		log.Println("fcm transient failure", err)
+		return true
+	}
+
+	if fcm.IsMismatchedCredential(err) || fcm.IsInvalidArgument(err) {
+		// Config errors
+		log.Println("fcm push: failed", err)
+		return true
+	}
+
+	if fcm.IsRegistrationTokenNotRegistered(err) {
+		// Token is no longer valid.
+		log.Println("fcm push: invalid token", err)
+		err = store.Devices.Delete(uid, deviceId)
+		if err != nil {
+			log.Println("fcm push: failed to delete invalid token", err)
+		}
+	} else {
+		log.Println("fcm push:", err)
+	}
+	return false
 }
 
 // IsReady checks if the push handler has been initialized.
@@ -152,7 +188,7 @@ func (Handler) Push() chan<- *push.Receipt {
 
 // Channel returns a channel for subscribing/unsubscribing devices to FCM topics.
 func (Handler) Channel() chan<- *push.ChannelReq {
-	return nil
+	return handler.channel
 }
 
 // Stop shuts down the handler
