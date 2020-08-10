@@ -11,7 +11,7 @@
 
   <load>
     <arrivalphase phase="1" duration="120" unit="second">
-      <users maxnumber="100" arrivalrate="1" unit="second" />
+      <users maxnumber="1500" arrivalrate="10" unit="second" />
     </arrivalphase>
   </load>
 
@@ -31,9 +31,49 @@
         <websocket type="message">{"hi":{"id":"%%_baseid%%01","ver":"0.15","ua":"Tsung-Loadtest/1.0; tsung/1.7.0"}}</websocket>
       </request>
 
-      <request subst="true">
-        <websocket type="message">{"login":{"id":"%%_baseid%%02","scheme":"basic","secret":"%%tinode:rand_user_secret%%"}}</websocket>
-      </request>
+      <!-- Randomly pick a user. -->
+      <setdynvars sourcetype="eval"
+        code='fun({Pid, DynVars}) ->
+                    tinode:rand_user_secret({Pid, DynVars})
+                  end.'>
+        <var name="secret" />
+      </setdynvars>
+
+      <!-- Read auth token from the cache. -->
+      <setdynvars sourcetype="eval"
+        code='fun({Pid, DynVars}) ->
+                    {ok, Secret} = ts_dynvars:lookup(secret, DynVars),
+                    tinode:read_token(Secret)
+                  end.'>
+        <var name="token" />
+      </setdynvars>
+
+      <!-- Token present. Authenticate with it. -->
+      <if var="token" neq="">
+        <request subst="true">
+          <match do="abort" when="nomatch">{"ctrl":.*"code":200.*}</match>
+          <websocket type="message">{"login":{"id":"%%_baseid%%02","scheme":"token","secret":"%%_token%%"}}</websocket>
+        </request>
+      </if>
+
+      <!-- else log in with user name and password. -->
+      <if var="token" eq="">
+        <request subst="true">
+          <match do="abort" when="nomatch">{"ctrl":.*"code":200.*}</match>
+          <dyn_variable name="token" re='^{"ctrl":.*"token":"([-A-Za-z0-9+\/=]+={0,3})".*}$'/>
+          <websocket type="message">{"login":{"id":"%%_baseid%%02","scheme":"basic","secret":"%%_secret%%"}}</websocket>
+        </request>
+
+        <!-- Save token in the cache. -->
+        <setdynvars sourcetype="eval"
+          code='fun({_, DynVars}) ->
+                      {ok, Token} = ts_dynvars:lookup(token, DynVars),
+                      {ok, Secret} = ts_dynvars:lookup(secret, DynVars),
+                      tinode:cache_token(Secret, Token)
+                    end.'>
+          <var name="dummy" />
+        </setdynvars>
+      </if>
 
       <request subst="true">
         <websocket type="message" frame="text">{"sub":{"id":"%%_baseid%%03","topic":"me","get":{"what":"desc"}}}</websocket>
