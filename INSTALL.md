@@ -129,7 +129,7 @@ See [instructions](./docker/README.md)
 
 ## Running a Cluster
 
-- Install and run the database, run DB initializer, unpack JS files as described in the previous section. Both MySQL and RethinkDB supports [cluster](https://www.mysql.com/products/cluster/) [mode](https://www.rethinkdb.com/docs/start-a-server/#a-rethinkdb-cluster-using-multiple-machines). You may consider it for added resiliency.
+- Install and run the database, run DB initializer, unpack JS files, and link or copy template directory as described in the previous section. Both MySQL and RethinkDB supports [cluster](https://www.mysql.com/products/cluster/) [mode](https://www.rethinkdb.com/docs/start-a-server/#a-rethinkdb-cluster-using-multiple-machines). You may consider it for added resiliency.
 
 - Cluster expects at least two nodes. A minimum of three nodes is recommended.
 
