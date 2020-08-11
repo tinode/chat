@@ -67,10 +67,15 @@ const (
 	invalidArgument                = "invalid-argument"
 	messageRateExceeded            = "message-rate-exceeded"
 	mismatchedCredential           = "mismatched-credential"
+	quotaExceeded                  = "quota-exceeded"
 	registrationTokenNotRegistered = "registration-token-not-registered"
+	senderIDMismatch               = "sender-id-mismatch"
 	serverUnavailable              = "server-unavailable"
+	thirdPartyAuthError            = "third-party-auth-error"
 	tooManyTopics                  = "too-many-topics"
+	unavailableError               = "unavailable-error"
 	unknownError                   = "unknown-error"
+	unregisteredError              = "unregistered-error"
 )
 
 // Init initializes the handler
@@ -161,9 +166,6 @@ func postMessage(body interface{}, config *configType) (*batchResponse, error) {
 
 func sendPushes(rcpt *push.Receipt, config *configType) {
 	messages := fcm.PrepareNotifications(rcpt, nil)
-	if len(messages) == 0 {
-		return
-	}
 
 	n := len(messages)
 	for i := 0; i < n; i += batchSize {
@@ -216,15 +218,15 @@ func handleResponse(batch *batchResponse, messages []fcm.MessageData) {
 	for i, resp := range batch.Responses {
 		switch resp.ErrorCode {
 		case "": // no error
-		case messageRateExceeded, serverUnavailable, internalError, unknownError:
+		case messageRateExceeded, quotaExceeded, serverUnavailable, unavailableError, internalError, unknownError:
 			// Transient errors. Stop sending this batch.
 			log.Println("tnpg transient failure", resp.ErrorMessage)
 			return
-		case mismatchedCredential, invalidArgument:
+		case mismatchedCredential, invalidArgument, senderIDMismatch, thirdPartyAuthError, invalidAPNSCredentials:
 			// Config errors
 			log.Println("tnpg invalid config", resp.ErrorMessage)
 			return
-		case registrationTokenNotRegistered:
+		case registrationTokenNotRegistered, unregisteredError:
 			// Token is no longer valid.
 			log.Println("tnpg invalid token", resp.ErrorMessage)
 			if err := store.Devices.Delete(messages[i].Uid, messages[i].DeviceId); err != nil {

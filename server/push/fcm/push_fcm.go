@@ -27,7 +27,14 @@ const (
 	// Size of the input channel buffer.
 	bufferSize = 1024
 
-	// Maximum length of a text message in runes
+	// The number of push messages sent in one batch. FCM constant.
+	pushBatchSize = 100
+
+	// The number of sub/unsub requests sent in one batch. FCM constant.
+	subBatchSize = 1000
+
+	// Maximum length of a text message in runes. The message is clipped if length is exceeded.
+	// TODO: implement intelligent clipping of Drafty messages.
 	maxMessageLength = 80
 )
 
@@ -107,17 +114,31 @@ func (Handler) Init(jsonconf string) error {
 
 func sendNotifications(rcpt *push.Receipt, config *configType) {
 	messages := PrepareNotifications(rcpt, &config.Android)
-	if len(messages) == 0 {
+	n := len(messages)
+	if n == 0 {
 		return
 	}
 
 	ctx := context.Background()
-	for _, m := range messages {
-		_, err := handler.client.Send(ctx, m.Message)
+	for i := 0; i < n; i += pushBatchSize {
+		upper := i + pushBatchSize
+		if upper > n {
+			upper = n
+		}
+		var batch []*fcm.Message
+		for j := i; j < upper; j++ {
+			batch = append(batch, messages[j].Message)
+		}
+		resp, err := handler.client.SendAll(ctx, batch)
 		if err != nil {
-			if handlePushError(err, m.Uid, m.DeviceId) {
-				return
-			}
+			// Complete failure.
+			log.Println("fcm SendAll failed", err)
+			break
+		}
+
+		// Check for partial failure.
+		if handlePushErrors(resp, messages[i:upper]) {
+			break
 		}
 	}
 }
@@ -127,26 +148,53 @@ func processSubscription(req *push.ChannelReq) {
 		return
 	}
 
-	ctx := context.Background()
+	if len(req.Devices) > subBatchSize {
+		req.Devices = req.Devices[0:subBatchSize]
+	}
 
 	var err error
 	var resp *fcm.TopicManagementResponse
 	if req.Unsub {
-		resp, err = handler.client.UnsubscribeFromTopic(ctx, req.Devices, req.Channel)
+		resp, err = handler.client.UnsubscribeFromTopic(context.Background(), req.Devices, req.Channel)
 	} else {
-		resp, err = handler.client.SubscribeToTopic(ctx, req.Devices, req.Channel)
+		resp, err = handler.client.SubscribeToTopic(context.Background(), req.Devices, req.Channel)
 	}
-
 	if err != nil {
-		handlePushError(err)
+		// Complete failure.
+		log.Println("fcm sub or upsub failed", req.Unsub, err)
 	} else {
-
+		// Check for partial failure.
+		handleSubErrors(resp, req.Uid, req.Devices)
 	}
 }
 
-// handlePushError processes error returned by a call to FCM.
+// handlePushError processes errors returned by a call to fcm.SendAll.
 // returns true to stop further processing of other messages.
-func handlePushError(err error, uid types.Uid, deviceId string) bool {
+func handlePushErrors(response *fcm.BatchResponse, batch []MessageData) bool {
+	if response.FailureCount <= 0 {
+		return false
+	}
+
+	for i, resp := range response.Responses {
+		if handleFcmError(resp.Error, batch[i].Uid, batch[i].DeviceId) {
+			return true
+		}
+	}
+	return false
+}
+
+func handleSubErrors(response *fcm.TopicManagementResponse, uid types.Uid, devices []string) {
+	if response.FailureCount <= 0 {
+		return
+	}
+
+	for _, errinfo := range response.Errors {
+		// FCM documentation sucks. There is no list of possible errors so no action can be taken but logging.
+		log.Println("fcm sub/unsub error", errinfo.Reason, uid, devices[errinfo.Index])
+	}
+}
+
+func handleFcmError(err error, uid types.Uid, deviceId string) bool {
 	if fcm.IsMessageRateExceeded(err) ||
 		fcm.IsServerUnavailable(err) ||
 		fcm.IsInternal(err) ||
@@ -155,22 +203,21 @@ func handlePushError(err error, uid types.Uid, deviceId string) bool {
 		log.Println("fcm transient failure", err)
 		return true
 	}
-
 	if fcm.IsMismatchedCredential(err) || fcm.IsInvalidArgument(err) {
 		// Config errors
-		log.Println("fcm push: failed", err)
+		log.Println("fcm: request failed", err)
 		return true
 	}
 
 	if fcm.IsRegistrationTokenNotRegistered(err) {
 		// Token is no longer valid.
-		log.Println("fcm push: invalid token", err)
-		err = store.Devices.Delete(uid, deviceId)
-		if err != nil {
-			log.Println("fcm push: failed to delete invalid token", err)
+		log.Println("fcm: invalid token", uid, err)
+		if err := store.Devices.Delete(uid, deviceId); err != nil {
+			log.Println("fcm: failed to delete invalid token", err)
 		}
 	} else {
-		log.Println("fcm push:", err)
+		// All other errors are treated as non-fatal.
+		log.Println("fcm error:", err)
 	}
 	return false
 }

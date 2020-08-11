@@ -16,6 +16,7 @@ require (
 	github.com/prometheus/common v0.9.1
 	github.com/tinode/jsonco v1.0.0
 	github.com/tinode/snowflake v1.0.0
+	go.etcd.io/bbolt v1.3.5 // indirect
 	go.mongodb.org/mongo-driver v1.3.1
 	golang.org/x/crypto v0.0.0-20200320181102-891825fb96df
 	golang.org/x/net v0.0.0-20200320220750-118fecf932d8
