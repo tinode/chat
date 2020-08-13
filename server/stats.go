@@ -22,12 +22,14 @@ import (
 //     [Bounds[i-1], +inf) for i = length
 type histogram struct {
 	Count          int64     `json:"count"`
+	Sum            float64   `json:"sum"`
 	CountPerBucket []int64   `json:"count_per_bucket"`
 	Bounds         []float64 `json:"bounds"`
 }
 
 func (h *histogram) addSample(v float64) {
 	h.Count++
+	h.Sum += v
 	idx := sort.SearchFloat64s(h.Bounds, v)
 	h.CountPerBucket[idx]++
 }
