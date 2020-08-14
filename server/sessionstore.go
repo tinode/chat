@@ -156,7 +156,8 @@ func (ss *SessionStore) Shutdown() {
 	shutdown := NoErrShutdown(types.TimeNow())
 	for _, s := range ss.sessCache {
 		if !s.isMultiplex() {
-			s.stop <- s.serialize(shutdown)
+			_, data := s.serialize(shutdown)
+			s.stop <- data
 		}
 	}
 
@@ -175,7 +176,8 @@ func (ss *SessionStore) EvictUser(uid types.Uid, skipSid string) {
 	evicted.AsUser = uid.UserId()
 	for _, s := range ss.sessCache {
 		if s.uid == uid && !s.isMultiplex() && s.sid != skipSid {
-			s.stop <- s.serialize(evicted)
+			_, data := s.serialize(evicted)
+			s.stop <- data
 			delete(ss.sessCache, s.sid)
 			if s.proto == LPOLL {
 				ss.lru.Remove(s.lpTracker)
