@@ -22,6 +22,8 @@ type PromExporter struct {
 	sessionsLive                  *prometheus.Desc
 	sessionsTotal                 *prometheus.Desc
 
+	numGoroutines                 *prometheus.Desc
+
 	incomingMessagesWebsockTotal  *prometheus.Desc
 	outgoingMessagesWebsockTotal  *prometheus.Desc
 
@@ -38,6 +40,8 @@ type PromExporter struct {
 	clusterSize                   *prometheus.Desc
 	clusterNodesLive              *prometheus.Desc
 	malloced                      *prometheus.Desc
+	requestLatencyMsCount         *prometheus.Desc
+	outgoingMessageBytesCount     *prometheus.Desc
 }
 
 // NewPromExporter returns an initialized Prometheus exporter.
@@ -80,6 +84,12 @@ func NewPromExporter(server, namespace string, timeout time.Duration, scraper *S
 		sessionsTotal: prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "", "sessions_total"),
 			"Total number of sessions since instance start.",
+			nil,
+			nil,
+		),
+		numGoroutines: prometheus.NewDesc(
+			prometheus.BuildFQName(namespace, "", "num_goroutines"),
+			"Number of currently spawned goroutines.",
 			nil,
 			nil,
 		),
@@ -155,6 +165,18 @@ func NewPromExporter(server, namespace string, timeout time.Duration, scraper *S
 			nil,
 			nil,
 		),
+		requestLatencyMsCount: prometheus.NewDesc(
+			prometheus.BuildFQName(namespace, "", "request_latency_ms_count"),
+			"Request latency histogram (in ms).",
+			nil,
+			nil,
+		),
+		outgoingMessageBytesCount: prometheus.NewDesc(
+			prometheus.BuildFQName(namespace, "", "outgoing_message_bytes"),
+			"Response size histogram (in bytes).",
+			nil,
+			nil,
+		),
 	}
 }
 
@@ -167,6 +189,7 @@ func (e *PromExporter) Describe(ch chan<- *prometheus.Desc) {
 	ch <- e.topicsTotal
 	ch <- e.sessionsLive
 	ch <- e.sessionsTotal
+	ch <- e.numGoroutines
 
 	ch <- e.incomingMessagesWebsockTotal
 	ch <- e.outgoingMessagesWebsockTotal
@@ -184,6 +207,9 @@ func (e *PromExporter) Describe(ch chan<- *prometheus.Desc) {
 	ch <- e.clusterSize
 	ch <- e.clusterNodesLive
 	ch <- e.malloced
+
+	ch <- e.requestLatencyMsCount
+	ch <- e.outgoingMessageBytesCount
 }
 
 // Collect fetches statistics from the configured Tinode instance, and
@@ -209,6 +235,7 @@ func (e *PromExporter) parseStats(ch chan<- prometheus.Metric, stats map[string]
 		e.parseAndUpdate(ch, e.topicsTotal, prometheus.CounterValue, stats, "TotalTopics"),
 		e.parseAndUpdate(ch, e.sessionsLive, prometheus.GaugeValue, stats, "LiveSessions"),
 		e.parseAndUpdate(ch, e.sessionsTotal, prometheus.CounterValue, stats, "TotalSessions"),
+		e.parseAndUpdate(ch, e.numGoroutines, prometheus.GaugeValue, stats, "NumGoroutines"),
 
 		e.parseAndUpdate(ch, e.incomingMessagesWebsockTotal, prometheus.CounterValue, stats, "IncomingMessagesWebsockTotal"),
 		e.parseAndUpdate(ch, e.outgoingMessagesWebsockTotal, prometheus.CounterValue, stats, "OutgoingMessagesWebsockTotal"),
@@ -226,6 +253,9 @@ func (e *PromExporter) parseStats(ch chan<- prometheus.Metric, stats map[string]
 		e.parseAndUpdate(ch, e.clusterSize, prometheus.GaugeValue, stats, "TotalClusterNodes"),
 		e.parseAndUpdate(ch, e.clusterNodesLive, prometheus.GaugeValue, stats, "LiveClusterNodes"),
 		e.parseAndUpdate(ch, e.malloced, prometheus.GaugeValue, stats, "memstats.Alloc"),
+
+		e.parseAndUpdateHisto(ch, e.requestLatencyMsCount, stats, "RequestLatency"),
+		e.parseAndUpdateHisto(ch, e.outgoingMessageBytesCount, stats, "OutgoingMessageSize"),
 	)
 
 	return err
@@ -238,6 +268,16 @@ func (e *PromExporter) parseAndUpdate(ch chan<- prometheus.Metric, desc *prometh
 		return err
 	}
 	ch <- prometheus.MustNewConstMetric(desc, valueType, v)
+	return nil
+}
+
+func (e *PromExporter) parseAndUpdateHisto(ch chan<- prometheus.Metric, desc *prometheus.Desc,
+	stats map[string]interface{}, key string) error {
+	count, sum, buckets, err := parseHisto(stats, key)
+	if err != nil {
+		return err
+	}
+	ch <- prometheus.MustNewConstHistogram(desc, count, sum, buckets)
 	return nil
 }
 

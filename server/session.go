@@ -259,8 +259,10 @@ func (s *Session) queueOut(msg *ServerComMessage) bool {
 		statsAddHistSample("RequestLatency", float64(duration))
 	}
 
-	data := s.serialize(msg)
-	statsAddHistSample("OutgoingMessageSize", float64(len(data.([]byte))))
+	dataSize, data := s.serialize(msg)
+	if dataSize >= 0 {
+		statsAddHistSample("OutgoingMessageSize", float64(dataSize))
+	}
 	select {
 	case s.send <- data:
 	case <-time.After(sendTimeout):
@@ -1087,19 +1089,21 @@ func (s *Session) expandTopicName(msg *ClientComMessage) (string, *ServerComMess
 	return routeTo, nil
 }
 
-func (s *Session) serialize(msg *ServerComMessage) interface{} {
+func (s *Session) serialize(msg *ServerComMessage) (int, interface{}) {
 	if s.proto == GRPC {
-		return pbServSerialize(msg)
+		msg := pbServSerialize(msg)
+		// TODO: calculate and return the size of `msg`.
+		return -1, msg
 	}
 
 	if s.proto == MULTIPLEX {
 		// No need to serialize the message to bytes within the cluster,
 		// but we have to create a copy because the original msg can be mutated.
-		return msg.copy()
+		return -1, msg.copy()
 	}
 
 	out, _ := json.Marshal(msg)
-	return out
+	return len(out), out
 }
 
 // onBackgroundTimer marks background session as foreground and informs topics it's subscribed to.
