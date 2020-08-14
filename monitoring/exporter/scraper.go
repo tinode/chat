@@ -71,7 +71,11 @@ func parseMetric(stats map[string]interface{}, key string) (float64, error) {
 	return v, nil
 }
 
+// Extracts a simple histogram from `stats` and returns a cumulative histogram
+// corresponding to the simple histogram.
+// Returns: (count, sum, buckets, error) tuple.
 func parseHisto(stats map[string]interface{}, key string) (uint64, float64, map[float64]uint64, error) {
+	// Histogram is presented as a json with the predefined fields: count, sum, count_per_bucket, bounds.
 	count, err := parseNumeric(stats, key + ".count")
 	if err != nil {
 		return 0, 0.0, nil, err
@@ -101,6 +105,7 @@ func parseHisto(stats map[string]interface{}, key string) (uint64, float64, map[
 	return uint64(count), sum, result, nil
 }
 
+// Extracts a list of numerics from `stats` for the given path.
 func parseList(stats map[string]interface{}, path string) ([]float64, error) {
 	value, err := parseValue(stats, path)
 	if err != nil {
@@ -118,6 +123,7 @@ func parseList(stats map[string]interface{}, path string) ([]float64, error) {
 	return result, nil
 }
 
+// Extracts a numeric from `stats` for the given path.
 func parseNumeric(stats map[string]interface{}, path string) (float64, error) {
 	value, err := parseValue(stats, path)
 	if err != nil {
@@ -131,6 +137,7 @@ func parseNumeric(stats map[string]interface{}, path string) (float64, error) {
 	return floatval, nil
 }
 
+// Extracts a value from `stats` for the given path.
 func parseValue(stats map[string]interface{}, path string) (interface{}, error) {
 	parts := strings.Split(path, ".")
 	var value interface{}
