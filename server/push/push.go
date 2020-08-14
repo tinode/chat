@@ -40,7 +40,7 @@ type Receipt struct {
 // ChannelReq is a request to subscribe/unsubscribe device IDs to channel (FCM topic).
 type ChannelReq struct {
 	// Uid is the id of the user making request
-	Uid t.Uid
+	Uid t.Uid `json:"-"`
 	// Channel to subscribe to or unsubscribe from.
 	Channel string `json:"channel"`
 	// Devices to subscribe or unsubscribe.

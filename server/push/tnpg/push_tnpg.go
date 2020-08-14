@@ -39,9 +39,13 @@ type configType struct {
 }
 
 type tnpgResponse struct {
+	// Push message response only.
 	MessageID    string `json:"msg_id,omitempty"`
-	ErrorCode    string `json:"errcode,omitempty"`
 	ErrorMessage string `json:"errmsg,omitempty"`
+	// Channel sub/unsub response only.
+	Index int `json:"index,omitempty"`
+	// Both push and sub/unsub response.
+	ErrorCode string `json:"errcode,omitempty"`
 }
 
 type batchResponse struct {
@@ -104,7 +108,7 @@ func (Handler) Init(jsonconf string) error {
 			case rcpt := <-handler.input:
 				go sendPushes(rcpt, &config)
 			case sub := <-handler.channel:
-				go processSubscription(sub)
+				go processSubscription(sub, &config)
 			case <-handler.stop:
 				return
 			}
@@ -177,40 +181,43 @@ func sendPushes(rcpt *push.Receipt, config *configType) {
 		for j := i; j < upper; j++ {
 			payloads = append(payloads, messages[j].Message)
 		}
-		if resp, err := postMessage(payloads, config); err != nil {
+		resp, err := postMessage(payloads, config)
+		if err != nil {
 			log.Println("tnpg push request failed:", err)
 			break
-		} else if resp.httpCode >= 300 {
+		}
+		if resp.httpCode >= 300 {
 			log.Println("tnpg push rejected:", resp.httpStatus)
 			break
-		} else if resp.FatalCode != "" {
+		}
+		if resp.FatalCode != "" {
 			log.Println("tnpg push failed:", resp.FatalMessage)
 			break
-		} else {
-			// Check for expired tokens and other errors.
-			handleResponse(resp, messages[i:upper])
 		}
-	}
-}
-
-func processSubscription(req *push.ChannelReq) {
-	if resp, err := postMessage(payloads, config); err != nil {
-		log.Println("tnpg channel sub request failed:", err)
-		break
-	} else if resp.httpCode >= 300 {
-		log.Println("tnpg channel sub rejected:", resp.httpStatus)
-		break
-	} else if resp.FatalCode != "" {
-		log.Println("tnpg channel sub failed:", resp.FatalMessage)
-		break
-	} else {
 		// Check for expired tokens and other errors.
-		handleResponse(resp, messages[i:upper])
+		handlePushResponse(resp, messages[i:upper])
 	}
-
 }
 
-func handleResponse(batch *batchResponse, messages []fcm.MessageData) {
+func processSubscription(req *push.ChannelReq, config *configType) {
+	resp, err := postMessage(req, config)
+	if err != nil {
+		log.Println("tnpg channel sub request failed:", err)
+		return
+	}
+	if resp.httpCode >= 300 {
+		log.Println("tnpg channel sub rejected:", resp.httpStatus)
+		return
+	}
+	if resp.FatalCode != "" {
+		log.Println("tnpg channel sub failed:", resp.FatalMessage)
+		return
+	}
+	// Check for expired tokens and other errors.
+	handleSubResponse(resp, req)
+}
+
+func handlePushResponse(batch *batchResponse, messages []fcm.MessageData) {
 	if batch.FailureCount <= 0 {
 		return
 	}
@@ -220,21 +227,32 @@ func handleResponse(batch *batchResponse, messages []fcm.MessageData) {
 		case "": // no error
 		case messageRateExceeded, quotaExceeded, serverUnavailable, unavailableError, internalError, unknownError:
 			// Transient errors. Stop sending this batch.
-			log.Println("tnpg transient failure", resp.ErrorMessage)
+			log.Println("tnpg: transient failure", resp.ErrorMessage)
 			return
 		case mismatchedCredential, invalidArgument, senderIDMismatch, thirdPartyAuthError, invalidAPNSCredentials:
 			// Config errors
-			log.Println("tnpg invalid config", resp.ErrorMessage)
+			log.Println("tnpg: invalid config", resp.ErrorMessage)
 			return
 		case registrationTokenNotRegistered, unregisteredError:
 			// Token is no longer valid.
-			log.Println("tnpg invalid token", resp.ErrorMessage)
+			log.Println("tnpg: invalid token", resp.ErrorMessage)
 			if err := store.Devices.Delete(messages[i].Uid, messages[i].DeviceId); err != nil {
 				log.Println("tnpg: failed to delete invalid token", err)
 			}
 		default:
-			log.Println("tnpg returned error", resp.ErrorMessage)
+			log.Println("tnpg: unrecognized error", resp.ErrorMessage)
 		}
+	}
+}
+
+func handleSubResponse(batch *batchResponse, req *push.ChannelReq) {
+	if batch.FailureCount <= 0 {
+		return
+	}
+
+	for _, resp := range batch.Responses {
+		// FCM documentation sucks. There is no list of possible errors so no action can be taken but logging.
+		log.Println("fcm sub/unsub error", resp.ErrorCode, req.Uid, req.Devices[resp.Index])
 	}
 }
 
@@ -247,6 +265,12 @@ func (Handler) IsReady() bool {
 // If the adapter blocks, the message will be dropped.
 func (Handler) Push() chan<- *push.Receipt {
 	return handler.input
+}
+
+// Push returns a channel that the server will use to send messages to.
+// If the adapter blocks, the message will be dropped.
+func (Handler) Channel() chan<- *push.ChannelReq {
+	return handler.channel
 }
 
 // Stop terminates the handler's worker and stops sending pushes.
