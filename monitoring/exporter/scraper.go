@@ -15,6 +15,7 @@ type Scraper struct {
 }
 
 var errKeyNotFound = errors.New("key not found")
+var errMalformed = errors.New("input malformed")
 
 // CollectRaw gathers all metrics from the configured Tinode instance,
 // and returns them as a map.
@@ -70,7 +71,74 @@ func parseMetric(stats map[string]interface{}, key string) (float64, error) {
 	return v, nil
 }
 
+// Extracts a simple histogram from `stats` and returns a cumulative histogram
+// corresponding to the simple histogram.
+// Returns: (count, sum, buckets, error) tuple.
+func parseHisto(stats map[string]interface{}, key string) (uint64, float64, map[float64]uint64, error) {
+	// Histogram is presented as a json with the predefined fields: count, sum, count_per_bucket, bounds.
+	count, err := parseNumeric(stats, key + ".count")
+	if err != nil {
+		return 0, 0.0, nil, err
+	}
+	sum, err := parseNumeric(stats, key + ".sum")
+	if err != nil {
+		return 0, 0.0, nil, err
+	}
+	buckets, err := parseList(stats, key + ".count_per_bucket")
+	if err != nil {
+		return 0, 0.0, nil, err
+	}
+	bounds, err := parseList(stats, key + ".bounds")
+	if err != nil {
+		return 0, 0.0, nil, err
+	}
+	n := len(buckets)
+	if n != len(bounds) + 1 {
+		return 0, 0.0, nil, errMalformed
+	}
+	result := make(map[float64]uint64)
+	s := uint64(0)
+	for i, v := range bounds {
+		s += uint64(buckets[i])
+		result[v] = s
+	}
+	return uint64(count), sum, result, nil
+}
+
+// Extracts a list of numerics from `stats` for the given path.
+func parseList(stats map[string]interface{}, path string) ([]float64, error) {
+	value, err := parseValue(stats, path)
+	if err != nil {
+		return nil, err
+	}
+	listval, ok := value.([]interface{})
+	if !ok {
+		log.Println("Value at path is not a float64 array:", path, value)
+		return nil, errMalformed
+	}
+	result := []float64{}
+	for _, v := range listval {
+		result = append(result, v.(float64))
+	}
+	return result, nil
+}
+
+// Extracts a numeric from `stats` for the given path.
 func parseNumeric(stats map[string]interface{}, path string) (float64, error) {
+	value, err := parseValue(stats, path)
+	if err != nil {
+		return 0, err
+	}
+	floatval, ok := value.(float64)
+	if !ok {
+		log.Println("Value at path is not a float64:", path, value)
+		return 0, errKeyNotFound
+	}
+	return floatval, nil
+}
+
+// Extracts a value from `stats` for the given path.
+func parseValue(stats map[string]interface{}, path string) (interface{}, error) {
 	parts := strings.Split(path, ".")
 	var value interface{}
 	var found bool
@@ -88,11 +156,5 @@ func parseNumeric(stats map[string]interface{}, path string) (float64, error) {
 		}
 	}
 
-	floatval, ok := value.(float64)
-	if !ok {
-		log.Println("Value at path is not a float64:", path, value)
-		return 0, errKeyNotFound
-	}
-
-	return floatval, nil
+	return value, nil
 }
