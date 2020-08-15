@@ -137,7 +137,7 @@ func sendNotifications(rcpt *push.Receipt, config *configType) {
 		}
 
 		// Check for partial failure.
-		if handlePushErrors(resp, messages[i:upper]) {
+		if !handlePushErrors(resp, messages[i:upper]) {
 			break
 		}
 	}
@@ -169,18 +169,18 @@ func processSubscription(req *push.ChannelReq) {
 }
 
 // handlePushError processes errors returned by a call to fcm.SendAll.
-// returns true to stop further processing of other messages.
+// returns false to stop further processing of other messages.
 func handlePushErrors(response *fcm.BatchResponse, batch []MessageData) bool {
 	if response.FailureCount <= 0 {
-		return false
+		return true
 	}
 
 	for i, resp := range response.Responses {
-		if handleFcmError(resp.Error, batch[i].Uid, batch[i].DeviceId) {
-			return true
+		if !handleFcmError(resp.Error, batch[i].Uid, batch[i].DeviceId) {
+			return false
 		}
 	}
-	return false
+	return true
 }
 
 func handleSubErrors(response *fcm.TopicManagementResponse, uid types.Uid, devices []string) {
@@ -201,12 +201,12 @@ func handleFcmError(err error, uid types.Uid, deviceId string) bool {
 		fcm.IsUnknown(err) {
 		// Transient errors. Stop sending this batch.
 		log.Println("fcm transient failure", err)
-		return true
+		return false
 	}
 	if fcm.IsMismatchedCredential(err) || fcm.IsInvalidArgument(err) {
 		// Config errors
 		log.Println("fcm: request failed", err)
-		return true
+		return false
 	}
 
 	if fcm.IsRegistrationTokenNotRegistered(err) {
@@ -219,7 +219,7 @@ func handleFcmError(err error, uid types.Uid, deviceId string) bool {
 		// All other errors are treated as non-fatal.
 		log.Println("fcm error:", err)
 	}
-	return false
+	return true
 }
 
 // IsReady checks if the push handler has been initialized.
