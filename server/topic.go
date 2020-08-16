@@ -1003,7 +1003,6 @@ func (t *Topic) handleBroadcast(msg *ServerComMessage) {
 		// usersPush will update unread message count and send push notification.
 		usersPush(pushRcpt)
 	}
-
 }
 
 // subscriptionReply generates a response to a subscription request
@@ -2892,6 +2891,10 @@ func (t *Topic) pushForData(fromUid types.Uid, data *MsgServerData) *push.Receip
 			ContentType: contentType,
 			Content:     data.Content}}
 
+	if t.isChan {
+		receipt.Channel = types.GrpToChn(t.xoriginal)
+	}
+
 	for uid, pud := range t.perUser {
 		// Send only to those who have notifications enabled, exclude the originating user.
 		if uid == fromUid {
@@ -2906,7 +2909,7 @@ func (t *Topic) pushForData(fromUid types.Uid, data *MsgServerData) *push.Receip
 			}
 		}
 	}
-	if len(receipt.To) > 0 {
+	if len(receipt.To) > 0 || receipt.Channel != "" {
 		return &receipt
 	}
 	// If there are no recipient there is no need to send the push notification.

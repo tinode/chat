@@ -150,7 +150,6 @@ func processSubscription(req *push.ChannelReq) {
 
 	if len(req.Devices) > subBatchSize {
 		// It's extremely unlikely for a single user to have this many devices.
-		// Just clipping the list.
 		req.Devices = req.Devices[0:subBatchSize]
 	}
 

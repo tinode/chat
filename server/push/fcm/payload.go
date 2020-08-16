@@ -190,23 +190,30 @@ func PrepareNotifications(rcpt *push.Receipt, config *AndroidConfig) []MessageDa
 		return nil
 	}
 
-	// List of UIDs for querying the database
-	uids := make([]t.Uid, len(rcpt.To))
-	// These devices were online in the topic when the message was sent.
+	// Device IDs to send pushes to.
+	var devices map[t.Uid][]t.DeviceDef
+	// Count of device IDs to push to.
+	var count int
+	// Devices which were online in the topic when the message was sent.
 	skipDevices := make(map[string]struct{})
-	i := 0
-	for uid, to := range rcpt.To {
-		uids[i] = uid
-		i++
-		// Some devices were online and received the message. Skip them.
-		for _, deviceID := range to.Devices {
-			skipDevices[deviceID] = struct{}{}
+	if len(rcpt.To) > 0 {
+		// List of UIDs for querying the database
+
+		uids := make([]t.Uid, len(rcpt.To))
+		i := 0
+		for uid, to := range rcpt.To {
+			uids[i] = uid
+			i++
+			// Some devices were online and received the message. Skip them.
+			for _, deviceID := range to.Devices {
+				skipDevices[deviceID] = struct{}{}
+			}
 		}
-	}
-	devices, count, err := store.Devices.GetAll(uids...)
-	if err != nil {
-		log.Println("fcm push: db error", err)
-		return nil
+		devices, count, err = store.Devices.GetAll(uids...)
+		if err != nil {
+			log.Println("fcm push: db error", err)
+			return nil
+		}
 	}
 	if count == 0 && rcpt.Channel == "" {
 		return nil
