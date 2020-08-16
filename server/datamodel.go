@@ -1326,8 +1326,8 @@ func ErrLockedExplicitTs(id, topic string, serverTs, incomingReqTs time.Time) *S
 		Timestamp: serverTs}, Id: id, Timestamp: incomingReqTs}
 }
 
-// ErrLockedReply operation rejected because the topic is being deleted
-// with explicit server and incoming request timestamps in response to a client request (423).
+// ErrLockedReply operation rejected because the topic is being deleted with explicit server and
+// incoming request timestamps in response to a client request (423).
 func ErrLockedReply(msg *ClientComMessage, ts time.Time) *ServerComMessage {
 	return ErrLockedExplicitTs(msg.Id, msg.Original, ts, msg.Timestamp)
 }
@@ -1337,8 +1337,7 @@ func ErrUnknown(id, topic string, ts time.Time) *ServerComMessage {
 	return ErrUnknownExplicitTs(id, topic, ts, ts)
 }
 
-// ErrUnknown database or other server error
-// with explicit server and incoming request timestamps (500).
+// ErrUnknown database or other server error with explicit server and incoming request timestamps (500).
 func ErrUnknownExplicitTs(id, topic string, serverTs, incomingReqTs time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
@@ -1353,8 +1352,8 @@ func ErrUnknownReply(msg *ClientComMessage, ts time.Time) *ServerComMessage {
 	return ErrUnknownExplicitTs(msg.Id, msg.Original, ts, msg.Timestamp)
 }
 
-// ErrNotImplemented feature not implemented
-// with explicit server and incoming request timestamps (501).
+// ErrNotImplemented feature not implemented with explicit server and incoming request timestamps (501).
+// TODO: consider changing status code to 4XX.
 func ErrNotImplemented(id, topic string, serverTs, incomingReqTs time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,

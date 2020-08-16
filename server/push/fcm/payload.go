@@ -128,7 +128,8 @@ type androidPayload struct {
 
 // MessageData adds user ID and device token to push message. This is needed for error handling.
 type MessageData struct {
-	Uid      t.Uid
+	Uid t.Uid
+	// FCM device token.
 	DeviceId string
 	Message  *fcm.Message
 }
