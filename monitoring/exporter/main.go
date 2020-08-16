@@ -31,6 +31,14 @@ func (l promHTTPLogger) Println(v ...interface{}) {
 	log.Println(v...)
 }
 
+func parseMetricList(list string) []string {
+	metrics := strings.Split(list, ",")
+	for i, m := range metrics {
+		metrics[i] = strings.TrimSpace(m)
+	}
+	return metrics
+}
+
 // Build version number defined by the compiler:
 // 		-ldflags "-X main.buildstamp=value_to_assign_to_buildstamp"
 // Reported to clients in response to {hi} message.
@@ -53,7 +61,10 @@ func main() {
 			"Host name and port to listen for incoming requests on.")
 		metricList = flag.String("metric_list",
 			"Version,LiveTopics,TotalTopics,LiveSessions,ClusterLeader,TotalClusterNodes,LiveClusterNodes,memstats.Alloc",
-			"Comma-separated list of metrics to scrape and export.")
+			"Comma-separated list of numeric metrics to scrape and export.")
+		histoMetricList = flag.String("histo_metric_list",
+			"RequestLatency,OutgoingMessageSize",
+			"Comma-separated list of histogram metrics to scrape and export.")
 		instance = flag.String("instance", "exporter",
 			"Exporter instance name.")
 
@@ -129,11 +140,9 @@ func main() {
 </body></html>`))
 	})
 
-	metrics := strings.Split(*metricList, ",")
-	for i, m := range metrics {
-		metrics[i] = strings.TrimSpace(m)
-	}
-	scraper := Scraper{address: *tinodeAddr, metrics: metrics}
+	metrics := parseMetricList(*metricList)
+	histoMetrics := parseMetricList(*histoMetricList)
+	scraper := Scraper{address: *tinodeAddr, simpleMetrics: metrics, histogramMetrics: histoMetrics}
 	var serverTypeString string
 	// Create exporters.
 	switch service {

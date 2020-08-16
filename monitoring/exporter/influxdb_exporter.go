@@ -46,7 +46,18 @@ func (e *InfluxDBExporter) Push() error {
 	b := new(bytes.Buffer)
 	ts := time.Now().UnixNano()
 	for k, v := range metrics {
-		fmt.Fprintf(b, "%s,instance=%s value=%f %d\n", k, e.instance, v, ts)
+		switch val := v.(type) {
+		case float64:
+			fmt.Fprintf(b, "%s,instance=%s value=%f %d\n", k, e.instance, val, ts)
+		case *histogram:
+			fmt.Fprintf(b, "%s,instance=%s count=%d %d\n", k, e.instance, val.count, ts)
+			fmt.Fprintf(b, "%s,instance=%s sum=%f %d\n", k, e.instance, val.sum, ts)
+			for bucket, count := range val.buckets {
+				fmt.Fprintf(b, "%s,instance=%s le=%f,value=%d %d\n", k, e.instance, bucket, count, ts)
+			}
+		default:
+			log.Panicln("Invalid metric type: ", v)
+		}
 	}
 	req, err := http.NewRequest("POST", e.targetAddress, b)
 	if err != nil {
