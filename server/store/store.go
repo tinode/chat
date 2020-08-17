@@ -822,7 +822,8 @@ func (DeviceMapper) Update(uid types.Uid, oldDeviceID string, dev *types.DeviceD
 	return nil
 }
 
-// GetAll returns all known device IDS for a given list of user IDs.
+// GetAll returns all known device IDs for a given list of user IDs.
+// The second return parameter is the count of found device IDs.
 func (DeviceMapper) GetAll(uid ...types.Uid) (map[types.Uid][]types.DeviceDef, int, error) {
 	return adp.DeviceGetAll(uid...)
 }

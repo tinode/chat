@@ -696,8 +696,17 @@ func (t *Topic) sessToForeground(sess *Session) {
 	}
 }
 
+// Subscribe or unsubscribe user to/from FCM topic (channel).
+func (t *Topic) channelSubUnsub(uid types.Uid, unsub bool) {
+	push.ChannelSub(&push.ChannelReq{
+		Uid:     uid,
+		Channel: types.GrpToChn(t.name),
+		Unsub:   unsub})
+}
+
 // Send immediate presence notification in response to a subscription.
 // Send push notification to the P2P counterpart.
+// In case of a new channel subscription subscribe user to an FCM topic.
 // These notifications are always sent immediately even if background is requested.
 func (t *Topic) sendImmediateSubNotifications(asUid types.Uid, sreg *sessionJoin) {
 	pud := t.perUser[asUid]
@@ -745,6 +754,10 @@ func (t *Topic) sendImmediateSubNotifications(asUid types.Uid, sreg *sessionJoin
 				dGiven: pud.modeGiven.String(),
 				actor:  asUid.UserId()},
 			sreg.sess.sid, false)
+
+		if t.isChan && isChannel(sreg.pkt.Original) {
+			t.channelSubUnsub(asUid, false)
+		}
 	}
 }
 
@@ -1069,7 +1082,7 @@ func (t *Topic) subscriptionReply(h *Hub, join *sessionJoin) error {
 
 	params := map[string]interface{}{}
 	if changed {
-		if isChannel(join.pkt.Original) {
+		if isChanSub {
 			params["acs"] = &MsgAccessMode{
 				Given: types.ModeCChn.String(),
 				Want:  types.ModeCChn.String(),
@@ -1364,7 +1377,7 @@ func (t *Topic) thisUserSub(h *Hub, sess *Session, pkt *ClientComMessage, asUid 
 				return changed, err
 			}
 			t.perUser[t.owner] = oldOwnerData
-			// Send presence notifications
+			// Send presence notifications.
 			t.notifySubChange(t.owner, asUid, oldOwnerOldWant, oldOwnerOldGiven, oldOwnerData.modeWant, oldOwnerData.modeGiven, "")
 			t.owner = asUid
 		}
@@ -2711,8 +2724,11 @@ func (t *Topic) replyLeaveUnsub(h *Hub, sess *Session, pkt *ClientComMessage, as
 			usersUpdateUnread(asUid, pud.readID-t.lastID, true)
 		}
 
-		// Send notifications.
+		// Send prsence notifictions to admins, other users, and user's other sessions.
 		t.notifySubChange(asUid, asUid, pud.modeWant, pud.modeGiven, types.ModeUnset, types.ModeUnset, sess.sid)
+	} else {
+		// Unsubscribe user's devices from the channel (FCM topic).
+		t.channelSubUnsub(asUid, true)
 	}
 
 	// Evict all user's sessions, clear cached data, send notifications.
@@ -3226,5 +3242,5 @@ func genTopicName() string {
 
 // Check if group topic is referenced as a channel.
 func isChannel(name string) bool {
-	return strings.HasPrefix(name, "chn")
+	return strings.HasPrefix(name, "chn") || strings.HasPrefix(name, "nch")
 }

@@ -38,6 +38,13 @@ type configType struct {
 	AuthToken string `json:"token"`
 }
 
+// subUnsubReq is a request to subscribe/unsubscribe device IDs to channel (FCM topic).
+type subUnsubReq struct {
+	Channel string   `json:"channel"`
+	Devices []string `json:"devices"`
+	Unsub   bool     `json:"unsub"`
+}
+
 type tnpgResponse struct {
 	// Push message response only.
 	MessageID    string `json:"msg_id,omitempty"`
@@ -200,7 +207,16 @@ func sendPushes(rcpt *push.Receipt, config *configType) {
 }
 
 func processSubscription(req *push.ChannelReq, config *configType) {
-	resp, err := postMessage(req, config)
+	su := subUnsubReq{
+		Devices: fcm.DevicesForUser(req.Uid),
+		Channel: req.Channel,
+		Unsub:   req.Unsub,
+	}
+	if len(su.Devices) == 0 {
+		return
+	}
+
+	resp, err := postMessage(&su, config)
 	if err != nil {
 		log.Println("tnpg channel sub request failed:", err)
 		return
@@ -214,7 +230,7 @@ func processSubscription(req *push.ChannelReq, config *configType) {
 		return
 	}
 	// Check for expired tokens and other errors.
-	handleSubResponse(resp, req)
+	handleSubResponse(resp, req, su.Devices)
 }
 
 func handlePushResponse(batch *batchResponse, messages []fcm.MessageData) {
@@ -245,14 +261,14 @@ func handlePushResponse(batch *batchResponse, messages []fcm.MessageData) {
 	}
 }
 
-func handleSubResponse(batch *batchResponse, req *push.ChannelReq) {
+func handleSubResponse(batch *batchResponse, req *push.ChannelReq, devices []string) {
 	if batch.FailureCount <= 0 {
 		return
 	}
 
 	for _, resp := range batch.Responses {
 		// FCM documentation sucks. There is no list of possible errors so no action can be taken but logging.
-		log.Println("fcm sub/unsub error", resp.ErrorCode, req.Uid, req.Devices[resp.Index])
+		log.Println("fcm sub/unsub error", resp.ErrorCode, req.Uid, devices[resp.Index])
 	}
 }
 

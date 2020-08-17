@@ -332,3 +332,22 @@ func PrepareNotifications(rcpt *push.Receipt, config *AndroidConfig) []MessageDa
 
 	return messages
 }
+
+// DevicesForUser loads device IDs of the given user.
+func DevicesForUser(uid t.Uid) []string {
+	ddef, count, err := store.Devices.GetAll(uid)
+	if err != nil {
+		log.Println("fcm devices for user: db error", err)
+		return nil
+	}
+
+	if count == 0 {
+		return nil
+	}
+
+	devices := make([]string, count)
+	for i, dd := range ddef[uid] {
+		devices[i] = dd.DeviceId
+	}
+	return devices
+}
