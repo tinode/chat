@@ -315,7 +315,12 @@ func (t *Topic) runLocal(hub *Hub) {
 			var asChan bool
 			if leave.pkt != nil {
 				asUid = types.ParseUserId(leave.pkt.AsUser)
-				asChan = isChannel(leave.pkt.Original)
+				var err error
+				asChan, err = t.verifyChannelAccess(leave.pkt.Original)
+				if err != nil {
+					// Group topic cannot be addressed as channel unless channel functionality is enabled.
+					leave.sess.queueOut(ErrNotFoundReply(leave.pkt, now))
+				}
 			}
 
 			if t.isInactive() {
@@ -1143,8 +1148,8 @@ func (t *Topic) thisUserSub(h *Hub, sess *Session, pkt *ClientComMessage, asUid 
 
 	var changed bool
 
-	isChanSub := isChannel(pkt.Original)
-	if isChanSub && !t.isChan {
+	isChanSub, err := t.verifyChannelAccess(pkt.Original)
+	if err != nil {
 		// User should not be able to address non-channel topic as channel.
 		sess.queueOut(ErrNotFoundReply(pkt, now))
 		return changed, types.ErrNotFound
@@ -1201,8 +1206,6 @@ func (t *Topic) thisUserSub(h *Hub, sess *Session, pkt *ClientComMessage, asUid 
 				userData.modeWant = (modeWant & types.ModeCSys) | types.ModeWrite
 			}
 		} else if isChanSub {
-			oldWant = types.ModeCChn
-			oldGiven = types.ModeCChn
 			userData.modeWant = types.ModeCChn
 			userData.modeGiven = types.ModeCChn
 		} else {
@@ -1235,6 +1238,7 @@ func (t *Topic) thisUserSub(h *Hub, sess *Session, pkt *ClientComMessage, asUid 
 				sess.queueOut(ErrUnknown(pkt.Id, toriginal, now))
 				return changed, err
 			}
+
 			tname = pkt.Original
 		}
 
@@ -1254,10 +1258,17 @@ func (t *Topic) thisUserSub(h *Hub, sess *Session, pkt *ClientComMessage, asUid 
 			}
 
 			changed = true
+		} else {
+			oldWant = sub.ModeWant
+			oldGiven = sub.ModeGiven
 		}
 
 		if isChanSub {
-			pluginSubscription(sub, plgActUpd)
+			if changed {
+				pluginSubscription(sub, plgActCreate)
+			} else {
+				pluginSubscription(sub, plgActUpd)
+			}
 		} else {
 			// Add subscribed user to cache.
 			usersRegisterUser(asUid, true)
@@ -1378,7 +1389,8 @@ func (t *Topic) thisUserSub(h *Hub, sess *Session, pkt *ClientComMessage, asUid 
 			}
 			t.perUser[t.owner] = oldOwnerData
 			// Send presence notifications.
-			t.notifySubChange(t.owner, asUid, oldOwnerOldWant, oldOwnerOldGiven, oldOwnerData.modeWant, oldOwnerData.modeGiven, "")
+			t.notifySubChange(t.owner, asUid, false,
+				oldOwnerOldWant, oldOwnerOldGiven, oldOwnerData.modeWant, oldOwnerData.modeGiven, "")
 			t.owner = asUid
 		}
 	}
@@ -1396,11 +1408,13 @@ func (t *Topic) thisUserSub(h *Hub, sess *Session, pkt *ClientComMessage, asUid 
 
 		// Apply changes.
 		t.perUser[asUid] = userData
+	}
 
-		// Send presence notifications and update cached unread count.
-		if oldWant != userData.modeWant || oldGiven != userData.modeGiven {
-			oldReader := (oldWant & oldGiven).IsReader()
-			newReader := (userData.modeWant & userData.modeGiven).IsReader()
+	// Send presence notifications and update cached unread count.
+	if oldWant != userData.modeWant || oldGiven != userData.modeGiven {
+		oldReader := (oldWant & oldGiven).IsReader()
+		newReader := (userData.modeWant & userData.modeGiven).IsReader()
+		if !isChanSub {
 			if oldReader && !newReader {
 				// Decrement unread count
 				usersUpdateUnread(asUid, userData.readID-t.lastID, true)
@@ -1408,20 +1422,21 @@ func (t *Topic) thisUserSub(h *Hub, sess *Session, pkt *ClientComMessage, asUid 
 				// Increment unread count
 				usersUpdateUnread(asUid, t.lastID-userData.readID, true)
 			}
-			t.notifySubChange(asUid, asUid, oldWant, oldGiven, userData.modeWant, userData.modeGiven, sess.sid)
 		}
 
-		if !userData.modeWant.IsJoiner() {
-			// The user is self-banning from the topic. Re-subscription will unban.
-			t.evictUser(asUid, false, "")
-			// The callee will send NoErrOK
-			return changed, nil
+		t.notifySubChange(asUid, asUid, isChanSub, oldWant, oldGiven, userData.modeWant, userData.modeGiven, sess.sid)
+	}
 
-		} else if !userData.modeGiven.IsJoiner() {
-			// User was banned
-			sess.queueOut(ErrPermissionDeniedReply(pkt, now))
-			return changed, errors.New("topic access denied; user is banned")
-		}
+	if !userData.modeWant.IsJoiner() {
+		// The user is self-banning from the topic. Re-subscription will unban.
+		t.evictUser(asUid, false, "")
+		// The callee will send NoErrOK
+		return changed, nil
+
+	} else if !userData.modeGiven.IsJoiner() {
+		// User was banned
+		sess.queueOut(ErrPermissionDeniedReply(pkt, now))
+		return changed, errors.New("topic access denied; user is banned")
 	}
 
 	return changed, nil
@@ -1452,17 +1467,16 @@ func (t *Topic) anotherUserSub(h *Hub, sess *Session, asUid, target types.Uid, p
 		return false, errors.New("topic access denied; approver has no permission")
 	}
 
-	if isChannel(pkt.Original) {
-		if t.isChan {
-			// TODO: need to implement promoting reader to subscriber.
-			// Just reject for now.
-			sess.queueOut(ErrPermissionDeniedReply(pkt, now))
-			return false, errors.New("topic access denied: cannot subscribe reader to channel")
-		} else {
-			// User should not be able to address non-channel topic as channel.
-			sess.queueOut(ErrNotFoundReply(pkt, now))
-			return false, types.ErrNotFound
-		}
+	asChan, err := t.verifyChannelAccess(pkt.Original)
+	if asChan {
+		// TODO: need to implement promoting reader to subscriber.
+		// Just reject for now.
+		sess.queueOut(ErrPermissionDeniedReply(pkt, now))
+		return false, errors.New("topic access denied: cannot subscribe reader to channel")
+	} else if err != nil {
+		// User should not be able to address non-channel topic as channel.
+		sess.queueOut(ErrNotFoundReply(pkt, now))
+		return false, types.ErrNotFound
 	}
 
 	// Check if topic is suspended.
@@ -1596,7 +1610,8 @@ func (t *Topic) anotherUserSub(h *Hub, sess *Session, asUid, target types.Uid, p
 			// Increment unread count
 			usersUpdateUnread(target, t.lastID-userData.readID, true)
 		}
-		t.notifySubChange(target, asUid, oldWant, oldGiven, userData.modeWant, userData.modeGiven, sess.sid)
+		t.notifySubChange(target, asUid, false,
+			oldWant, oldGiven, userData.modeWant, userData.modeGiven, sess.sid)
 	}
 
 	if !userData.modeGiven.IsJoiner() {
@@ -2197,7 +2212,12 @@ func (t *Topic) replyGetData(sess *Session, asUid types.Uid, req *MsgGetOpts, ms
 		return errors.New("invalid MsgGetOpts query")
 	}
 
-	asChan := isChannel(toriginal)
+	asChan, err := t.verifyChannelAccess(toriginal)
+	if err != nil {
+		// User should not be able to address non-channel topic as channel.
+		sess.queueOut(ErrNotFoundReply(msg, now))
+		return types.ErrNotFound
+	}
 
 	// Check if the user has permission to read the topic data
 	count := 0
@@ -2404,13 +2424,20 @@ func (t *Topic) replyGetDel(sess *Session, asUid types.Uid, req *MsgGetOpts, msg
 	id := msg.Id
 	incomingReqTs := msg.Timestamp
 
+	asChan, err := t.verifyChannelAccess(toriginal)
+	if err != nil {
+		// User should not be able to address non-channel topic as channel.
+		sess.queueOut(ErrNotFoundReply(msg, now))
+		return types.ErrNotFound
+	}
+
 	if req != nil && (req.IfModifiedSince != nil || req.User != "" || req.Topic != "") {
 		sess.queueOut(ErrMalformedReply(msg, now))
 		return errors.New("invalid MsgGetOpts query")
 	}
 
 	// Check if the user has permission to read the topic data and the request is valid
-	if userData := t.perUser[asUid]; (userData.modeGiven & userData.modeWant).IsReader() || isChannel(toriginal) {
+	if userData := t.perUser[asUid]; (userData.modeGiven & userData.modeWant).IsReader() || asChan {
 		ranges, delID, err := store.Messages.GetDeleted(t.name, asUid, msgOpts2storeOpts(req))
 		if err != nil {
 			sess.queueOut(ErrUnknownReply(msg, now))
@@ -2594,12 +2621,21 @@ func (t *Topic) replyDelCred(h *Hub, sess *Session, asUid types.Uid, authLvl aut
 	return err
 }
 
-// Delete subscription
+// Delete subscription.
 func (t *Topic) replyDelSub(h *Hub, sess *Session, asUid types.Uid, msg *ClientComMessage) error {
 	now := types.TimeNow()
 	del := msg.Del
 
-	var err error
+	asChan, err := t.verifyChannelAccess(msg.Original)
+	if asChan {
+		// Don't allow channel readers to delete self-subscription. Use leave-unsub or del-topic.
+		sess.queueOut(ErrPermissionDeniedReply(msg, now))
+		return errors.New("channel access denied: cannot delete subscription")
+	} else if err != nil {
+		// User should not be able to address non-channel topic as channel.
+		sess.queueOut(ErrNotFoundReply(msg, now))
+		return types.ErrNotFound
+	}
 
 	// Get ID of the affected user
 	uid := types.ParseUserId(del.User)
@@ -2658,7 +2694,8 @@ func (t *Topic) replyDelSub(h *Hub, sess *Session, asUid types.Uid, msg *ClientC
 	}
 
 	// ModeUnset signifies deleted subscription as opposite to ModeNone - no access.
-	t.notifySubChange(uid, asUid, pud.modeWant, pud.modeGiven, types.ModeUnset, types.ModeUnset, sess.sid)
+	t.notifySubChange(uid, asUid, false,
+		pud.modeWant, pud.modeGiven, types.ModeUnset, types.ModeUnset, sess.sid)
 
 	t.evictUser(uid, true, "")
 
@@ -2681,18 +2718,25 @@ func (t *Topic) replyLeaveUnsub(h *Hub, sess *Session, pkt *ClientComMessage, as
 		return errors.New("replyLeaveUnsub: owner cannot unsubscribe")
 	}
 
-	isChan := t.isChan && pkt != nil && isChannel(pkt.Original)
+	var err error
+	var asChan bool
+	if pkt != nil {
+		asChan, err = t.verifyChannelAccess(pkt.Original)
+		if err != nil {
+			sess.queueOut(ErrNotFoundReply(pkt, now))
+			return errors.New("replyLeaveUnsub: incorrect addressing of channel")
+		}
+	}
 
 	// Delete user's subscription from the database.
-	var err error
 	if pkt == nil && t.isChan {
 		// Must try to unsubscribe both: as subscriber and as reader.
 		err = store.Subs.Delete(t.name, asUid)
 		if err == types.ErrNotFound {
 			err = store.Subs.Delete(types.GrpToChn(t.name), asUid)
-			isChan = true
+			asChan = true
 		}
-	} else if isChan {
+	} else if asChan {
 		// Handle channel reader.
 		err = store.Subs.Delete(types.GrpToChn(t.name), asUid)
 	} else {
@@ -2716,20 +2760,25 @@ func (t *Topic) replyLeaveUnsub(h *Hub, sess *Session, pkt *ClientComMessage, as
 		sess.queueOut(NoErrReply(pkt, now))
 	}
 
-	if !isChan {
+	var oldWant types.AccessMode
+	var oldGiven types.AccessMode
+	if !asChan {
 		pud := t.perUser[asUid]
 
 		// Update cached unread count: negative value
 		if (pud.modeWant & pud.modeGiven).IsReader() {
 			usersUpdateUnread(asUid, pud.readID-t.lastID, true)
 		}
-
-		// Send prsence notifictions to admins, other users, and user's other sessions.
-		t.notifySubChange(asUid, asUid, pud.modeWant, pud.modeGiven, types.ModeUnset, types.ModeUnset, sess.sid)
+		oldWant, oldGiven = pud.modeWant, pud.modeGiven
 	} else {
+		oldWant, oldGiven = types.ModeCChn, types.ModeCChn
 		// Unsubscribe user's devices from the channel (FCM topic).
 		t.channelSubUnsub(asUid, true)
+
 	}
+
+	// Send prsence notifictions to admins, other users, and user's other sessions.
+	t.notifySubChange(asUid, asUid, asChan, oldWant, oldGiven, types.ModeUnset, types.ModeUnset, sess.sid)
 
 	// Evict all user's sessions, clear cached data, send notifications.
 	t.evictUser(asUid, true, sess.sid)
@@ -2789,7 +2838,7 @@ func (t *Topic) evictUser(uid types.Uid, unsub bool, skip string) {
 // (c) If subscription is deleted, 'gone' to target.
 // (d) 'off' to topic members online if deleted or muted.
 // (e) To target user.
-func (t *Topic) notifySubChange(uid, actor types.Uid,
+func (t *Topic) notifySubChange(uid, actor types.Uid, isChan bool,
 	oldWant, oldGiven, newWant, newGiven types.AccessMode, skip string) {
 
 	unsub := newWant == types.ModeUnset || newGiven == types.ModeUnset
@@ -2846,7 +2895,7 @@ func (t *Topic) notifySubChange(uid, actor types.Uid,
 			t.presSingleUserOffline(uid, "gone", nilPresParams, skip, false)
 			// Tell user2 that user1 is offline but let him keep sending updates in case user1 resubscribes.
 			presSingleUserOfflineOffline(uid2, target, "off", nilPresParams, "")
-		} else if t.cat == types.TopicCatGrp {
+		} else if t.cat == types.TopicCatGrp && !isChan {
 			// Notify all sharers that the user is offline now.
 			t.presSubsOnline("off", uid.UserId(), nilPresParams, filter, skip)
 		}
@@ -2855,7 +2904,7 @@ func (t *Topic) notifySubChange(uid, actor types.Uid,
 		var source string
 		if t.cat == types.TopicCatP2P {
 			source = t.p2pOtherUser(uid).UserId()
-		} else if t.cat == types.TopicCatGrp {
+		} else if t.cat == types.TopicCatGrp && !isChan {
 			source = t.name
 		}
 		if source != "" {
@@ -2867,7 +2916,7 @@ func (t *Topic) notifySubChange(uid, actor types.Uid,
 		// Subscription un-muted.
 
 		// Notify subscriber of topic's online status.
-		if t.cat == types.TopicCatGrp {
+		if t.cat == types.TopicCatGrp && !isChan {
 			t.presSingleUserOffline(uid, "?unkn+en", nilPresParams, "", false)
 		} else if t.cat == types.TopicCatMe {
 			// User is visible online now, notify subscribers.
@@ -3228,6 +3277,18 @@ func (t *Topic) isOnline() bool {
 		}
 	}
 	return false
+}
+
+// Verifies if topic can be access by the given name.
+// Returns true if access is for channel, false if not and error if access is invalid.
+func (t *Topic) verifyChannelAccess(asTopic string) (bool, error) {
+	if isChannel(asTopic) {
+		if t.isChan {
+			return true, nil
+		}
+		return false, types.ErrNotFound
+	}
+	return false, nil
 }
 
 // Infer topic category from name.
