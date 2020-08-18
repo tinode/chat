@@ -18,7 +18,8 @@ import (
 
 const (
 	baseTargetAddress = "https://pushgw.tinode.co/push/"
-	batchSize         = 100
+	pushBatchSize     = 100
+	subBatchSize      = 1000
 	bufferSize        = 1024
 )
 
@@ -179,8 +180,8 @@ func sendPushes(rcpt *push.Receipt, config *configType) {
 	messages := fcm.PrepareNotifications(rcpt, nil)
 
 	n := len(messages)
-	for i := 0; i < n; i += batchSize {
-		upper := i + batchSize
+	for i := 0; i < n; i += pushBatchSize {
+		upper := i + pushBatchSize
 		if upper > n {
 			upper = n
 		}
@@ -214,6 +215,11 @@ func processSubscription(req *push.ChannelReq, config *configType) {
 	}
 	if len(su.Devices) == 0 {
 		return
+	}
+	if len(su.Devices) > subBatchSize {
+		// It's extremely unlikely for a single user to have this many devices.
+		su.Devices = su.Devices[0:subBatchSize]
+		log.Println("tnpg: user has more than", subBatchSize, "devices")
 	}
 
 	resp, err := postMessage(&su, config)

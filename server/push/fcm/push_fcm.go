@@ -152,6 +152,7 @@ func processSubscription(req *push.ChannelReq) {
 	if len(devices) > subBatchSize {
 		// It's extremely unlikely for a single user to have this many devices.
 		devices = devices[0:subBatchSize]
+		log.Println("fcm: user has more than", subBatchSize, "devices")
 	}
 
 	var err error
@@ -163,7 +164,7 @@ func processSubscription(req *push.ChannelReq) {
 	}
 	if err != nil {
 		// Complete failure.
-		log.Println("fcm sub or upsub failed", req.Unsub, err)
+		log.Println("fcm: sub or upsub failed", req.Unsub, err)
 	} else {
 		// Check for partial failure.
 		handleSubErrors(resp, req.Uid, devices)
