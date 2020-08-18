@@ -219,7 +219,7 @@ func processSubscription(req *push.ChannelReq, config *configType) {
 	if len(su.Devices) > subBatchSize {
 		// It's extremely unlikely for a single user to have this many devices.
 		su.Devices = su.Devices[0:subBatchSize]
-		log.Println("tnpg: user has more than", subBatchSize, "devices")
+		log.Println("tnpg: user", req.Uid.UserId(), "has more than", subBatchSize, "devices")
 	}
 
 	resp, err := postMessage(&su, config)

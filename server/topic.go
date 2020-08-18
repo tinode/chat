@@ -3282,13 +3282,13 @@ func (t *Topic) isOnline() bool {
 // Verifies if topic can be access by the given name.
 // Returns true if access is for channel, false if not and error if access is invalid.
 func (t *Topic) verifyChannelAccess(asTopic string) (bool, error) {
-	if isChannel(asTopic) {
-		if t.isChan {
-			return true, nil
-		}
-		return false, types.ErrNotFound
+	if !isChannel(asTopic) {
+		return false, nil
 	}
-	return false, nil
+	if t.isChan {
+		return true, nil
+	}
+	return false, types.ErrNotFound
 }
 
 // Infer topic category from name.

@@ -152,7 +152,7 @@ func processSubscription(req *push.ChannelReq) {
 	if len(devices) > subBatchSize {
 		// It's extremely unlikely for a single user to have this many devices.
 		devices = devices[0:subBatchSize]
-		log.Println("fcm: user has more than", subBatchSize, "devices")
+		log.Println("fcm: user", req.Uid.UserId(), "has more than", subBatchSize, "devices")
 	}
 
 	var err error
