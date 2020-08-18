@@ -144,29 +144,30 @@ func sendNotifications(rcpt *push.Receipt, config *configType) {
 }
 
 func processSubscription(req *push.ChannelReq) {
-	if len(req.Devices) == 0 {
+	devices := DevicesForUser(req.Uid)
+	if len(devices) == 0 {
 		return
 	}
 
-	if len(req.Devices) > subBatchSize {
+	if len(devices) > subBatchSize {
 		// It's extremely unlikely for a single user to have this many devices.
-		// Just clipping the list.
-		req.Devices = req.Devices[0:subBatchSize]
+		devices = devices[0:subBatchSize]
+		log.Println("fcm: user", req.Uid.UserId(), "has more than", subBatchSize, "devices")
 	}
 
 	var err error
 	var resp *fcm.TopicManagementResponse
 	if req.Unsub {
-		resp, err = handler.client.UnsubscribeFromTopic(context.Background(), req.Devices, req.Channel)
+		resp, err = handler.client.UnsubscribeFromTopic(context.Background(), devices, req.Channel)
 	} else {
-		resp, err = handler.client.SubscribeToTopic(context.Background(), req.Devices, req.Channel)
+		resp, err = handler.client.SubscribeToTopic(context.Background(), devices, req.Channel)
 	}
 	if err != nil {
 		// Complete failure.
-		log.Println("fcm sub or upsub failed", req.Unsub, err)
+		log.Println("fcm: sub or upsub failed", req.Unsub, err)
 	} else {
 		// Check for partial failure.
-		handleSubErrors(resp, req.Uid, req.Devices)
+		handleSubErrors(resp, req.Uid, devices)
 	}
 }
 

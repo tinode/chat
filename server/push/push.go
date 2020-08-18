@@ -43,8 +43,6 @@ type ChannelReq struct {
 	Uid t.Uid `json:"-"`
 	// Channel to subscribe to or unsubscribe from.
 	Channel string `json:"channel"`
-	// Devices to subscribe or unsubscribe.
-	Devices []string `json:"devices"`
 	// Unsub is set to true to unsubscribe devices, otherwise subscribe them.
 	Unsub bool `json:"unsub"`
 }

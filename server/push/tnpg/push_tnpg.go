@@ -18,7 +18,8 @@ import (
 
 const (
 	baseTargetAddress = "https://pushgw.tinode.co/push/"
-	batchSize         = 100
+	pushBatchSize     = 100
+	subBatchSize      = 1000
 	bufferSize        = 1024
 )
 
@@ -36,6 +37,13 @@ type configType struct {
 	Enabled   bool   `json:"enabled"`
 	OrgName   string `json:"org"`
 	AuthToken string `json:"token"`
+}
+
+// subUnsubReq is a request to subscribe/unsubscribe device IDs to channel (FCM topic).
+type subUnsubReq struct {
+	Channel string   `json:"channel"`
+	Devices []string `json:"devices"`
+	Unsub   bool     `json:"unsub"`
 }
 
 type tnpgResponse struct {
@@ -172,8 +180,8 @@ func sendPushes(rcpt *push.Receipt, config *configType) {
 	messages := fcm.PrepareNotifications(rcpt, nil)
 
 	n := len(messages)
-	for i := 0; i < n; i += batchSize {
-		upper := i + batchSize
+	for i := 0; i < n; i += pushBatchSize {
+		upper := i + pushBatchSize
 		if upper > n {
 			upper = n
 		}
@@ -200,7 +208,21 @@ func sendPushes(rcpt *push.Receipt, config *configType) {
 }
 
 func processSubscription(req *push.ChannelReq, config *configType) {
-	resp, err := postMessage(req, config)
+	su := subUnsubReq{
+		Devices: fcm.DevicesForUser(req.Uid),
+		Channel: req.Channel,
+		Unsub:   req.Unsub,
+	}
+	if len(su.Devices) == 0 {
+		return
+	}
+	if len(su.Devices) > subBatchSize {
+		// It's extremely unlikely for a single user to have this many devices.
+		su.Devices = su.Devices[0:subBatchSize]
+		log.Println("tnpg: user", req.Uid.UserId(), "has more than", subBatchSize, "devices")
+	}
+
+	resp, err := postMessage(&su, config)
 	if err != nil {
 		log.Println("tnpg channel sub request failed:", err)
 		return
@@ -214,7 +236,7 @@ func processSubscription(req *push.ChannelReq, config *configType) {
 		return
 	}
 	// Check for expired tokens and other errors.
-	handleSubResponse(resp, req)
+	handleSubResponse(resp, req, su.Devices)
 }
 
 func handlePushResponse(batch *batchResponse, messages []fcm.MessageData) {
@@ -245,14 +267,14 @@ func handlePushResponse(batch *batchResponse, messages []fcm.MessageData) {
 	}
 }
 
-func handleSubResponse(batch *batchResponse, req *push.ChannelReq) {
+func handleSubResponse(batch *batchResponse, req *push.ChannelReq, devices []string) {
 	if batch.FailureCount <= 0 {
 		return
 	}
 
 	for _, resp := range batch.Responses {
 		// FCM documentation sucks. There is no list of possible errors so no action can be taken but logging.
-		log.Println("fcm sub/unsub error", resp.ErrorCode, req.Uid, req.Devices[resp.Index])
+		log.Println("fcm sub/unsub error", resp.ErrorCode, req.Uid, devices[resp.Index])
 	}
 }
 
