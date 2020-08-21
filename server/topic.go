@@ -702,11 +702,11 @@ func (t *Topic) sessToForeground(sess *Session) {
 }
 
 // Subscribe or unsubscribe user to/from FCM topic (channel).
-func (t *Topic) channelSubUnsub(uid types.Uid, unsub bool) {
+func (t *Topic) channelSubUnsub(uid types.Uid, sub bool) {
 	push.ChannelSub(&push.ChannelReq{
 		Uid:     uid,
 		Channel: types.GrpToChn(t.name),
-		Unsub:   unsub})
+		Unsub:   !sub})
 }
 
 // Send immediate presence notification in response to a subscription.
@@ -761,7 +761,7 @@ func (t *Topic) sendImmediateSubNotifications(asUid types.Uid, sreg *sessionJoin
 			sreg.sess.sid, false)
 
 		if t.isChan && isChannel(sreg.pkt.Original) {
-			t.channelSubUnsub(asUid, false)
+			t.channelSubUnsub(asUid, true)
 		}
 	}
 }
@@ -1068,7 +1068,7 @@ func (t *Topic) subscriptionReply(h *Hub, join *sessionJoin) error {
 		return err
 	}
 
-	isChanSub := isChannel(join.pkt.Original)
+	asChan := isChannel(join.pkt.Original)
 
 	// Subscription successfully created. Link topic to session.
 	join.sess.addSub(t.name, &Subscription{
@@ -1076,10 +1076,10 @@ func (t *Topic) subscriptionReply(h *Hub, join *sessionJoin) error {
 		done:      t.unreg,
 		meta:      t.meta,
 		supd:      t.supd})
-	t.addSession(join.sess, asUid, isChanSub)
+	t.addSession(join.sess, asUid, asChan)
 
 	// The user is online in the topic. Increment the counter if notifications are not deferred.
-	if !join.sess.background && !isChanSub {
+	if !join.sess.background && !asChan {
 		userData := t.perUser[asUid]
 		userData.online++
 		t.perUser[asUid] = userData
@@ -1087,7 +1087,7 @@ func (t *Topic) subscriptionReply(h *Hub, join *sessionJoin) error {
 
 	params := map[string]interface{}{}
 	if changed {
-		if isChanSub {
+		if asChan {
 			params["acs"] = &MsgAccessMode{
 				Given: types.ModeCChn.String(),
 				Want:  types.ModeCChn.String(),
@@ -1148,7 +1148,7 @@ func (t *Topic) thisUserSub(h *Hub, sess *Session, pkt *ClientComMessage, asUid 
 
 	var changed bool
 
-	isChanSub, err := t.verifyChannelAccess(pkt.Original)
+	asChan, err := t.verifyChannelAccess(pkt.Original)
 	if err != nil {
 		// User should not be able to address non-channel topic as channel.
 		sess.queueOut(ErrNotFoundReply(pkt, now))
@@ -1172,18 +1172,20 @@ func (t *Topic) thisUserSub(h *Hub, sess *Session, pkt *ClientComMessage, asUid 
 
 	toriginal := t.original(asUid)
 
-	// Check if it's an attempt at a new subscription to the topic.
-	// It could be an actual subscription (IsJoiner() == true) or a ban (IsJoiner() == false)
+	// Check if it's an attempt at a new subscription to the topic / a channel reader (channel readers are not cached).
+	// It could be an actual subscription (IsJoiner() == true) or a ban (IsJoiner() == false).
 	userData, existingSub := t.perUser[asUid]
 	if !existingSub || userData.deleted {
 		// New subscription or a channel reader, either new or existing.
 
 		// Check if the max number of subscriptions is already reached.
-		if t.cat == types.TopicCatGrp && !isChanSub && t.subsCount() >= globals.maxSubscriberCount {
+		if t.cat == types.TopicCatGrp && !asChan && t.subsCount() >= globals.maxSubscriberCount {
 			sess.queueOut(ErrPolicyReply(pkt, now))
 			return changed, errors.New("max subscription count exceeded")
 		}
 
+		var sub *types.Subscription
+		tname := t.name
 		if t.cat == types.TopicCatP2P {
 			// P2P could be here only if it was previously deleted. I.e. existingSub is always true for P2P.
 			if modeWant != types.ModeUnset {
@@ -1203,13 +1205,40 @@ func (t *Topic) thisUserSub(h *Hub, sess *Session, pkt *ClientComMessage, asUid 
 			userData.modeWant = types.ModeCSys
 			userData.modeGiven = types.ModeCSys
 			if modeWant != types.ModeUnset {
-				userData.modeWant = (modeWant & types.ModeCSys) | types.ModeWrite
+				userData.modeWant = (modeWant & types.ModeCSys) | types.ModeWrite | types.ModeJoin
 			}
-		} else if isChanSub {
-			userData.modeWant = types.ModeCChn
+		} else if asChan {
+			// Check if user is already subscribed.
+			sub, err = store.Subs.Get(pkt.Original, asUid)
+			if err != nil {
+				sess.queueOut(ErrUnknown(pkt.Id, toriginal, now))
+				return changed, err
+			}
+
+			// Given mode is immutable.
+			oldGiven = types.ModeCChn
 			userData.modeGiven = types.ModeCChn
+
+			if sub != nil {
+				// Subscription exists, read old access mode.
+				oldWant = sub.ModeWant
+			} else {
+				// Subscription not found, use default.
+				oldWant = types.ModeCChn
+			}
+
+			if modeWant != types.ModeUnset {
+				// New access mode is explicitly assigned.
+				userData.modeWant = (modeWant & types.ModeCChn) | types.ModeRead | types.ModeJoin
+			} else {
+				// Default: unchanged.
+				userData.modeWant = oldWant
+			}
+
+			// User is subscribed to chnXXX, not grpXXX.
+			tname = pkt.Original
 		} else {
-			// For non-p2p & non-sys topics access is given as default access
+			// For all other topics access is given as default access.
 			userData.modeGiven = t.accessFor(asLvl)
 
 			if modeWant == types.ModeUnset {
@@ -1228,20 +1257,6 @@ func (t *Topic) thisUserSub(h *Hub, sess *Session, pkt *ClientComMessage, asUid 
 		}
 		userData.private = private
 
-		tname := t.name
-		var sub *types.Subscription
-		if isChanSub {
-			// Check if user is already subscribed.
-			var err error
-			sub, err = store.Subs.Get(pkt.Original, asUid)
-			if err != nil {
-				sess.queueOut(ErrUnknown(pkt.Id, toriginal, now))
-				return changed, err
-			}
-
-			tname = pkt.Original
-		}
-
 		// Add subscription to database, if missing.
 		if sub == nil {
 			sub = &types.Subscription{
@@ -1258,12 +1273,21 @@ func (t *Topic) thisUserSub(h *Hub, sess *Session, pkt *ClientComMessage, asUid 
 			}
 
 			changed = true
-		} else {
-			oldWant = sub.ModeWant
-			oldGiven = sub.ModeGiven
+		} else if asChan && userData.modeWant != oldWant {
+			// Channel reader changed access mode, save changed mode to db.
+			if err := store.Subs.Update(tname, asUid,
+				map[string]interface{}{"ModeWant": userData.modeWant}, true); err != nil {
+				sess.queueOut(ErrUnknownReply(pkt, now))
+				return false, err
+			}
+
+			// Enable or disable fcm push notifications for the subsciption.
+			t.channelSubUnsub(asUid, userData.modeWant.IsPresencer())
+
+			changed = true
 		}
 
-		if isChanSub {
+		if asChan {
 			if changed {
 				pluginSubscription(sub, plgActCreate)
 			} else {
@@ -1280,7 +1304,9 @@ func (t *Topic) thisUserSub(h *Hub, sess *Session, pkt *ClientComMessage, asUid 
 		// Process update to existing subscription. It could be an incomplete subscription for a new topic.
 
 		// If user is already a normal subscriber he cannot address topic as a channel.
-		if isChanSub {
+		// If this happens it's a bug. Maybe replace with a panic.
+		if asChan {
+			log.Println("SHOULD NOT HAPPEN! Channel subscription is found in cache", t.name)
 			sess.queueOut(ErrNotFoundReply(pkt, now))
 			return changed, types.ErrNotFound
 		}
@@ -1395,7 +1421,7 @@ func (t *Topic) thisUserSub(h *Hub, sess *Session, pkt *ClientComMessage, asUid 
 		}
 	}
 
-	if !isChanSub {
+	if !asChan {
 		// If topic is being muted, send "off" notification and disable updates.
 		// Do it before applying the new permissions.
 		if (oldWant & oldGiven).IsPresencer() && !(userData.modeWant & userData.modeGiven).IsPresencer() {
@@ -1414,7 +1440,7 @@ func (t *Topic) thisUserSub(h *Hub, sess *Session, pkt *ClientComMessage, asUid 
 	if oldWant != userData.modeWant || oldGiven != userData.modeGiven {
 		oldReader := (oldWant & oldGiven).IsReader()
 		newReader := (userData.modeWant & userData.modeGiven).IsReader()
-		if !isChanSub {
+		if !asChan {
 			if oldReader && !newReader {
 				// Decrement unread count
 				usersUpdateUnread(asUid, userData.readID-t.lastID, true)
@@ -1424,7 +1450,8 @@ func (t *Topic) thisUserSub(h *Hub, sess *Session, pkt *ClientComMessage, asUid 
 			}
 		}
 
-		t.notifySubChange(asUid, asUid, isChanSub, oldWant, oldGiven, userData.modeWant, userData.modeGiven, sess.sid)
+		// Notify user of the changes in access mode.
+		t.notifySubChange(asUid, asUid, asChan, oldWant, oldGiven, userData.modeWant, userData.modeGiven, sess.sid)
 	}
 
 	if !userData.modeWant.IsJoiner() {
@@ -2773,8 +2800,7 @@ func (t *Topic) replyLeaveUnsub(h *Hub, sess *Session, pkt *ClientComMessage, as
 	} else {
 		oldWant, oldGiven = types.ModeCChn, types.ModeCChn
 		// Unsubscribe user's devices from the channel (FCM topic).
-		t.channelSubUnsub(asUid, true)
-
+		t.channelSubUnsub(asUid, false)
 	}
 
 	// Send prsence notifictions to admins, other users, and user's other sessions.
