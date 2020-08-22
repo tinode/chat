@@ -263,7 +263,7 @@ func (e *PromExporter) parseStats(ch chan<- prometheus.Metric, stats map[string]
 
 func (e *PromExporter) parseAndUpdate(ch chan<- prometheus.Metric, desc *prometheus.Desc, valueType prometheus.ValueType,
 	stats map[string]interface{}, key string) error {
-	v, err := parseMetric(stats, key)
+	v, err := parseNumeric(stats, key)
 	if err != nil {
 		return err
 	}
@@ -273,11 +273,11 @@ func (e *PromExporter) parseAndUpdate(ch chan<- prometheus.Metric, desc *prometh
 
 func (e *PromExporter) parseAndUpdateHisto(ch chan<- prometheus.Metric, desc *prometheus.Desc,
 	stats map[string]interface{}, key string) error {
-	count, sum, buckets, err := parseHisto(stats, key)
+	h, err := parseHisto(stats, key)
 	if err != nil {
 		return err
 	}
-	ch <- prometheus.MustNewConstHistogram(desc, count, sum, buckets)
+	ch <- prometheus.MustNewConstHistogram(desc, h.count, h.sum, h.buckets)
 	return nil
 }
 
