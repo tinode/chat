@@ -40,7 +40,7 @@ func (s *Scraper) CollectRaw() (map[string]interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
-	metrics["up"] = float64(1)
+	metrics["up"] = 1.0
 	return metrics, nil
 }
 
