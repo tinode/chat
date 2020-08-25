@@ -3328,6 +3328,7 @@ func genTopicName() string {
 }
 
 // Check if group topic is referenced as a channel.
+// "nch" should not be considered a channel because it can only be used by the topic owner at the time of creation.
 func isChannel(name string) bool {
-	return strings.HasPrefix(name, "chn") || strings.HasPrefix(name, "nch")
+	return strings.HasPrefix(name, "chn")
 }
