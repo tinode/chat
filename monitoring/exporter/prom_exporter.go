@@ -36,6 +36,11 @@ type PromExporter struct {
 	fileDownloadsTotal            *prometheus.Desc
 	fileUploadsTotal              *prometheus.Desc
 
+	ctrlCodesTotal2xx             *prometheus.Desc
+	ctrlCodesTotal3xx             *prometheus.Desc
+	ctrlCodesTotal4xx             *prometheus.Desc
+	ctrlCodesTotal5xx             *prometheus.Desc
+
 	clusterLeader                 *prometheus.Desc
 	clusterSize                   *prometheus.Desc
 	clusterNodesLive              *prometheus.Desc
@@ -141,6 +146,30 @@ func NewPromExporter(server, namespace string, timeout time.Duration, scraper *S
 			nil,
 			nil,
 		),
+		ctrlCodesTotal2xx: prometheus.NewDesc(
+			prometheus.BuildFQName(namespace, "", "ctrl_codes_total_2xx"),
+			"Total number of 2xx ctrl response codes.",
+			nil,
+			nil,
+		),
+		ctrlCodesTotal3xx: prometheus.NewDesc(
+			prometheus.BuildFQName(namespace, "", "ctrl_codes_total_3xx"),
+			"Total number of 3xx ctrl response codes.",
+			nil,
+			nil,
+		),
+		ctrlCodesTotal4xx: prometheus.NewDesc(
+			prometheus.BuildFQName(namespace, "", "ctrl_codes_total_4xx"),
+			"Total number of 4xx ctrl response codes.",
+			nil,
+			nil,
+		),
+		ctrlCodesTotal5xx: prometheus.NewDesc(
+			prometheus.BuildFQName(namespace, "", "ctrl_codes_total_5xx"),
+			"Total number of 5xx ctrl response codes.",
+			nil,
+			nil,
+		),
 		clusterLeader: prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "", "cluster_leader"),
 			"If this cluster node is the cluster leader.",
@@ -203,6 +232,11 @@ func (e *PromExporter) Describe(ch chan<- *prometheus.Desc) {
 	ch <- e.fileDownloadsTotal
 	ch <- e.fileUploadsTotal
 
+	ch <- e.ctrlCodesTotal2xx
+	ch <- e.ctrlCodesTotal3xx
+	ch <- e.ctrlCodesTotal4xx
+	ch <- e.ctrlCodesTotal5xx
+
 	ch <- e.clusterLeader
 	ch <- e.clusterSize
 	ch <- e.clusterNodesLive
@@ -248,6 +282,11 @@ func (e *PromExporter) parseStats(ch chan<- prometheus.Metric, stats map[string]
 
 		e.parseAndUpdate(ch, e.fileDownloadsTotal, prometheus.CounterValue, stats, "FileDownloadsTotal"),
 		e.parseAndUpdate(ch, e.fileUploadsTotal, prometheus.CounterValue, stats, "FileUploadsTotal"),
+
+		e.parseAndUpdate(ch, e.ctrlCodesTotal2xx, prometheus.CounterValue, stats, "CtrlCodesTotal2xx"),
+		e.parseAndUpdate(ch, e.ctrlCodesTotal3xx, prometheus.CounterValue, stats, "CtrlCodesTotal3xx"),
+		e.parseAndUpdate(ch, e.ctrlCodesTotal4xx, prometheus.CounterValue, stats, "CtrlCodesTotal4xx"),
+		e.parseAndUpdate(ch, e.ctrlCodesTotal5xx, prometheus.CounterValue, stats, "CtrlCodesTotal5xx"),
 
 		e.parseAndUpdate(ch, e.clusterLeader, prometheus.GaugeValue, stats, "ClusterLeader"),
 		e.parseAndUpdate(ch, e.clusterSize, prometheus.GaugeValue, stats, "TotalClusterNodes"),
