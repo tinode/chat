@@ -254,9 +254,23 @@ func (s *Session) queueOut(msg *ServerComMessage) bool {
 	}
 
 	// Record latency only on {ctrl} messages and end-user sessions.
-	if msg.Ctrl != nil && msg.Id != "" && !msg.Ctrl.Timestamp.IsZero() && !s.isCluster() {
-		duration := time.Since(msg.Ctrl.Timestamp).Milliseconds()
-		statsAddHistSample("RequestLatency", float64(duration))
+	if msg.Ctrl != nil && msg.Id != "" {
+		if !msg.Ctrl.Timestamp.IsZero() && !s.isCluster() {
+			duration := time.Since(msg.Ctrl.Timestamp).Milliseconds()
+			statsAddHistSample("RequestLatency", float64(duration))
+		}
+		switch msg.Ctrl.Code / 100 {
+		case 2:
+			statsInc("CtrlCodesTotal2xx", 1)
+		case 3:
+			statsInc("CtrlCodesTotal3xx", 1)
+		case 4:
+			statsInc("CtrlCodesTotal4xx", 1)
+		case 5:
+			statsInc("CtrlCodesTotal5xx", 1)
+		default:
+			log.Println("Invalid response code: ", msg.Ctrl.Code)
+		}
 	}
 
 	dataSize, data := s.serialize(msg)

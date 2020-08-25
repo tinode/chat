@@ -136,6 +136,11 @@ func newHub() *Hub {
 	statsRegisterInt("FileDownloadsTotal")
 	statsRegisterInt("FileUploadsTotal")
 
+	statsRegisterInt("CtrlCodesTotal2xx")
+	statsRegisterInt("CtrlCodesTotal3xx")
+	statsRegisterInt("CtrlCodesTotal4xx")
+	statsRegisterInt("CtrlCodesTotal5xx")
+
 	statsRegisterHistogram("RequestLatency", RequestLatencyDistribution)
 	statsRegisterHistogram("OutgoingMessageSize", OutgoingMessageSizeDistribution)
 
