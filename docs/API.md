@@ -281,12 +281,12 @@ User's access to a topic is defined by two sets of permissions: user's desired p
 * Read: `R`, permission to receive `{data}` packets
 * Write: `W`, permission to `{pub}` to topic
 * Presence: `P`, permission to receive presence updates `{pres}`
-* Approve: `A`, permission to approve requests to join a topic; a user with such permission is topic's manager
+* Approve: `A`, permission to approve requests to join a topic, remove and ban members; a user with such permission is topic's administrator
 * Sharing: `S`, permission to invite other people to join the topic
 * Delete: `D`, permission to hard-delete messages; only owners can completely delete topics
-* Owner: `O`, user is the topic owner; topic may have a single owner only; some topics have no owner
+* Owner: `O`, user is the topic owner; the owner can assign any other permission to any topic member, change topic description, delete topic; topic may have a single owner only; some topics have no owner
 
-Topic's default access is established at the topic creation time by `{sub.desc.defacs}` and can be subsequently modified by `{set}` messages. Default access is defined for two categories of users: authenticated and anonymous. This value is applied as a default "given" permission to all new subscriptions.
+Topic's default access is established at the topic creation time by `{sub.desc.defacs}` and can be subsequently modified by the owner by sending `{set}` messages. Default access is defined for two categories of users: authenticated and anonymous. This value is applied as a default "given" permission to all new subscriptions.
 
 Client may replace explicit permissions in `{sub}` and `{set}` messages with an empty string to tell Tinode to use default permissions. If client specifies no default access permissions at topic creation time, authenticated users will receive a `RWP` permission, anonymous users will receive an empty permission which means every subscription request must be explicitly approved by the topic manager.
 
