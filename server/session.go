@@ -12,6 +12,7 @@ package main
 import (
 	"container/list"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -259,16 +260,9 @@ func (s *Session) queueOut(msg *ServerComMessage) bool {
 			duration := time.Since(msg.Ctrl.Timestamp).Milliseconds()
 			statsAddHistSample("RequestLatency", float64(duration))
 		}
-		switch msg.Ctrl.Code / 100 {
-		case 2:
-			statsInc("CtrlCodesTotal2xx", 1)
-		case 3:
-			statsInc("CtrlCodesTotal3xx", 1)
-		case 4:
-			statsInc("CtrlCodesTotal4xx", 1)
-		case 5:
-			statsInc("CtrlCodesTotal5xx", 1)
-		default:
+		if 200 <= msg.Ctrl.Code && msg.Ctrl.Code < 600 {
+			statsInc(fmt.Sprintf("CtrlCodesTotal%dxx", msg.Ctrl.Code / 100), 1)
+		} else {
 			log.Println("Invalid response code: ", msg.Ctrl.Code)
 		}
 	}
