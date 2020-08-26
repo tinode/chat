@@ -2463,8 +2463,9 @@ func (t *Topic) replyGetDel(sess *Session, asUid types.Uid, req *MsgGetOpts, msg
 		return errors.New("invalid MsgGetOpts query")
 	}
 
-	// Check if the user has permission to read the topic data and the request is valid
-	if userData := t.perUser[asUid]; (userData.modeGiven & userData.modeWant).IsReader() || asChan {
+	// Check if the user has permission to read the topic data and the request is valid.
+	// Don't permit channel readers access deleted messages because they cannot delete messages.
+	if userData := t.perUser[asUid]; (userData.modeGiven & userData.modeWant).IsReader() && !asChan {
 		ranges, delID, err := store.Messages.GetDeleted(t.name, asUid, msgOpts2storeOpts(req))
 		if err != nil {
 			sess.queueOut(ErrUnknownReply(msg, now))
@@ -2491,9 +2492,19 @@ func (t *Topic) replyGetDel(sess *Session, asUid types.Uid, req *MsgGetOpts, msg
 // replyDelMsg deletes (soft or hard) messages in response to del.msg packet.
 func (t *Topic) replyDelMsg(sess *Session, asUid types.Uid, msg *ClientComMessage) error {
 	now := types.TimeNow()
-	del := msg.Del
 
-	var err error
+	asChan, err := t.verifyChannelAccess(toriginal)
+	if err != nil {
+		// User should not be able to address non-channel topic as channel.
+		sess.queueOut(ErrNotFoundReply(msg, now))
+		return types.ErrNotFound
+	} else if asChan {
+		// Do not allow channel readers delete messages.
+		sess.queueOut(ErrOperationNotAllowedReply(msg, now))
+		return errors.New("channel readers cannot delete messages")
+	}
+
+	del := msg.Del
 
 	pud := t.perUser[asUid]
 	if !(pud.modeGiven & pud.modeWant).IsDeleter() {
@@ -3328,7 +3339,8 @@ func genTopicName() string {
 }
 
 // Check if group topic is referenced as a channel.
-// "nch" should not be considered a channel because it can only be used by the topic owner at the time of creation.
+// The "nch" should not be considered a channel reference because it can only be used by the topic owner at the time of
+// group topic creation.
 func isChannel(name string) bool {
 	return strings.HasPrefix(name, "chn")
 }
