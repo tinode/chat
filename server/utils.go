@@ -225,45 +225,50 @@ func isNullValue(i interface{}) bool {
 	return false
 }
 
-func decodeStoreError(err error, id, topic string, timestamp time.Time,
+func decodeStoreError(err error, id, topic string, ts time.Time,
+	params map[string]interface{}) *ServerComMessage {
+	return decodeStoreErrorExplicitTs(err, id, topic, ts, ts, params)
+}
+
+func decodeStoreErrorExplicitTs(err error, id, topic string, serverTs, incomingReqTs time.Time,
 	params map[string]interface{}) *ServerComMessage {
 
 	var errmsg *ServerComMessage
 
 	if err == nil {
-		errmsg = NoErr(id, topic, timestamp)
+		errmsg = NoErrExplicitTs(id, topic, serverTs, incomingReqTs)
 	} else if storeErr, ok := err.(types.StoreError); !ok {
-		errmsg = ErrUnknown(id, topic, timestamp)
+		errmsg = ErrUnknownExplicitTs(id, topic, serverTs, incomingReqTs)
 	} else {
 		switch storeErr {
 		case types.ErrInternal:
-			errmsg = ErrUnknown(id, topic, timestamp)
+			errmsg = ErrUnknownExplicitTs(id, topic, serverTs, incomingReqTs)
 		case types.ErrMalformed:
-			errmsg = ErrMalformed(id, topic, timestamp)
+			errmsg = ErrMalformedExplicitTs(id, topic, serverTs, incomingReqTs)
 		case types.ErrFailed:
-			errmsg = ErrAuthFailed(id, topic, timestamp)
+			errmsg = ErrAuthFailed(id, topic, serverTs, incomingReqTs)
 		case types.ErrPermissionDenied:
-			errmsg = ErrPermissionDenied(id, topic, timestamp)
+			errmsg = ErrPermissionDeniedExplicitTs(id, topic, serverTs, incomingReqTs)
 		case types.ErrDuplicate:
-			errmsg = ErrDuplicateCredential(id, topic, timestamp)
+			errmsg = ErrDuplicateCredential(id, topic, serverTs, incomingReqTs)
 		case types.ErrUnsupported:
-			errmsg = ErrNotImplemented(id, topic, timestamp)
+			errmsg = ErrNotImplemented(id, topic, serverTs, incomingReqTs)
 		case types.ErrExpired:
-			errmsg = ErrAuthFailed(id, topic, timestamp)
+			errmsg = ErrAuthFailed(id, topic, serverTs, incomingReqTs)
 		case types.ErrPolicy:
-			errmsg = ErrPolicy(id, topic, timestamp)
+			errmsg = ErrPolicyExplicitTs(id, topic, serverTs, incomingReqTs)
 		case types.ErrCredentials:
-			errmsg = InfoValidateCredentials(id, timestamp)
+			errmsg = InfoValidateCredentialsExplicitTs(id, serverTs, incomingReqTs)
 		case types.ErrUserNotFound:
-			errmsg = ErrUserNotFound(id, topic, timestamp)
+			errmsg = ErrUserNotFound(id, topic, serverTs, incomingReqTs)
 		case types.ErrTopicNotFound:
-			errmsg = ErrTopicNotFound(id, topic, timestamp)
+			errmsg = ErrTopicNotFound(id, topic, serverTs, incomingReqTs)
 		case types.ErrNotFound:
-			errmsg = ErrNotFound(id, topic, timestamp)
+			errmsg = ErrNotFound(id, topic, serverTs, incomingReqTs)
 		case types.ErrInvalidResponse:
-			errmsg = ErrInvalidResponse(id, topic, timestamp)
+			errmsg = ErrInvalidResponse(id, topic, serverTs, incomingReqTs)
 		default:
-			errmsg = ErrUnknown(id, topic, timestamp)
+			errmsg = ErrUnknownExplicitTs(id, topic, serverTs, incomingReqTs)
 		}
 	}
 

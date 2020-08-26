@@ -281,12 +281,12 @@ User's access to a topic is defined by two sets of permissions: user's desired p
 * Read: `R`, permission to receive `{data}` packets
 * Write: `W`, permission to `{pub}` to topic
 * Presence: `P`, permission to receive presence updates `{pres}`
-* Approve: `A`, permission to approve requests to join a topic; a user with such permission is topic's manager
+* Approve: `A`, permission to approve requests to join a topic, remove and ban members; a user with such permission is topic's administrator
 * Sharing: `S`, permission to invite other people to join the topic
 * Delete: `D`, permission to hard-delete messages; only owners can completely delete topics
-* Owner: `O`, user is the topic owner; topic may have a single owner only; some topics have no owner
+* Owner: `O`, user is the topic owner; the owner can assign any other permission to any topic member, change topic description, delete topic; topic may have a single owner only; some topics have no owner
 
-Topic's default access is established at the topic creation time by `{sub.desc.defacs}` and can be subsequently modified by `{set}` messages. Default access is defined for two categories of users: authenticated and anonymous. This value is applied as a default "given" permission to all new subscriptions.
+Topic's default access is established at the topic creation time by `{sub.desc.defacs}` and can be subsequently modified by the owner by sending `{set}` messages. Default access is defined for two categories of users: authenticated and anonymous. This value is applied as a default "given" permission to all new subscriptions.
 
 Client may replace explicit permissions in `{sub}` and `{set}` messages with an empty string to tell Tinode to use default permissions. If client specifies no default access permissions at topic creation time, authenticated users will receive a `RWP` permission, anonymous users will receive an empty permission which means every subscription request must be explicitly approved by the topic manager.
 
@@ -406,11 +406,20 @@ The 'private' parameter of a P2P topic is defined by each participant individual
 
 ### Group Topics
 
-Group topics represent communication channels between multiple users. The name of a group topic is `grp` followed by a string of characters from base64 URL-encoding set. No other assumptions can be made about internal structure or length of the group name.
+Group topic represents a communication channel between multiple users. The name of a group topic is `grp` or `chn` followed by a string of characters from base64 URL-encoding set. No other assumptions can be made about internal structure or length of the group name.
 
-A group topic is created by sending a `{sub}` message with the topic field set to string `new` optionally followed by any characters, e.g. `new` or `newAbC123` are equivalent. Tinode will respond with a `{ctrl}` message with the name of the newly created topic, i.e. `{sub topic="new"}` is replied with `{ctrl topic="grpmiKBkQVXnm3P"}`. If topic creation fails, the error is reported on the original topic name, i.e. `new` or `newAbC123`. The user who created the topic becomes topic owner. Ownership can be transferred to another user with a `{set}` message but one user must remain the owner at all times.
+Group topics support limited number of subscribers (controlled by a `max_subscriber_count` parameter in configuration file) with access permissions of each subscriber managed individually. Group topics may also be enabled to support any number of read-only users - `readers`. All `readers` have the same access permissions. Group topics with enabled `readers` are called `channels`.
 
-A user joining or leaving the topic generates a `{pres}` message to all other users who are currently in the joined state with the topic.
+A group topic is created by sending a `{sub}` message with the topic field set to string `new` or `nch` optionally followed by any characters, e.g. `new` or `newAbC123` are equivalent. Tinode will respond with a `{ctrl}` message with the name of the newly created topic, i.e. `{sub topic="new"}` is replied with `{ctrl topic="grpmiKBkQVXnm3P"}`. If topic creation fails, the error is reported on the original topic name, i.e. `new` or `newAbC123`. The user who created the topic becomes topic owner. Ownership can be transferred to another user with a `{set}` message but one user must remain the owner at all times.
+
+A `channel` topic is different from the non-channel group topic in the following ways:
+
+ * Channel topic is created by sending `{sub topic="nch"}`. Sending `{sub topic="new"}` will create a group topic without enabling channel functionality.
+ * Sending `{sub topic="chnAbC123"}` will create a `reader` subscription to a channel. A non-channel topic will reject such subscription request.
+ * When searching for topics using [`fnd`](#fnd-and-tags-finding-users-and-topics), channels will show addresses with `chn` prefixes, non-channel topic will show with `grp` prefixes.
+ * Messages received by readers on channels have no `From` field. Normal subscribers will receive messages with `From` containing ID of the sender.
+ * Default permissions for a channel and non-channel group topics are different: channel group topic grants no permissions at all.
+ * A subscriber joining or leaving the topic (regular or channel-enabled) generates a `{pres}` message to all other subscribers who are currently in the joined state with the topic and have appropriate permissions. Reader joining or leaving the channel generates no `{pres}` message.
 
 ### `sys` Topic
 
