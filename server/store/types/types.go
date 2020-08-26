@@ -526,8 +526,8 @@ const (
 	ModeCReadOnly = ModeJoin | ModeRead
 	// Access to 'sys' topic by a root user ("JRWPD", 79, 0x4F)
 	ModeCSys = ModeJoin | ModeRead | ModeWrite | ModePres | ModeDelete
-	// Public access mode to a channel (JR, 0x3).
-	ModeCChn = ModeJoin | ModeRead
+	// Public access mode to a channel (JRP, 11, 0xB).
+	ModeCChn = ModeJoin | ModeRead | ModePres
 
 	// Admin: user who can modify access mode ("OA", dec: 144, hex: 0x90)
 	ModeCAdmin = ModeOwner | ModeApprove
