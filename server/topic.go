@@ -2442,7 +2442,7 @@ func (t *Topic) replyGetDel(sess *Session, asUid types.Uid, req *MsgGetOpts, msg
 	id := msg.Id
 	incomingReqTs := msg.Timestamp
 
-	asChan, err := t.verifyChannelAccess(toriginal)
+	asChan, err := t.verifyChannelAccess(msg.Original)
 	if err != nil {
 		// User should not be able to address non-channel topic as channel.
 		sess.queueOut(ErrNotFoundReply(msg, now))
@@ -2455,8 +2455,7 @@ func (t *Topic) replyGetDel(sess *Session, asUid types.Uid, req *MsgGetOpts, msg
 	}
 
 	// Check if the user has permission to read the topic data and the request is valid.
-	// Don't permit channel readers access deleted messages because they cannot delete messages.
-	if userData := t.perUser[asUid]; (userData.modeGiven & userData.modeWant).IsReader() && !asChan {
+	if userData := t.perUser[asUid]; asChan || (userData.modeGiven & userData.modeWant).IsReader() {
 		ranges, delID, err := store.Messages.GetDeleted(t.name, asUid, msgOpts2storeOpts(req))
 		if err != nil {
 			sess.queueOut(ErrUnknownReply(msg, now))
