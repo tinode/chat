@@ -105,6 +105,7 @@
           <thinktime value="3" random="true"></thinktime>
 
           <request subst="true">
+            <match do="abort" when="nomatch">{"ctrl":.*"code":200.*}</match>
             <websocket type="message" frame="text">{"sub":{"id":"%%_baseid%%%%_topicx%%%%_ctr%%","topic":"%%_topicx%%","get":{"what":"desc sub data del"}}}</websocket>
           </request>
 
