@@ -12,6 +12,7 @@ package main
 import (
 	"container/list"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -254,9 +255,16 @@ func (s *Session) queueOut(msg *ServerComMessage) bool {
 	}
 
 	// Record latency only on {ctrl} messages and end-user sessions.
-	if msg.Ctrl != nil && msg.Id != "" && !msg.Ctrl.Timestamp.IsZero() && !s.isCluster() {
-		duration := time.Since(msg.Ctrl.Timestamp).Milliseconds()
-		statsAddHistSample("RequestLatency", float64(duration))
+	if msg.Ctrl != nil && msg.Id != "" {
+		if !msg.Ctrl.Timestamp.IsZero() && !s.isCluster() {
+			duration := time.Since(msg.Ctrl.Timestamp).Milliseconds()
+			statsAddHistSample("RequestLatency", float64(duration))
+		}
+		if 200 <= msg.Ctrl.Code && msg.Ctrl.Code < 600 {
+			statsInc(fmt.Sprintf("CtrlCodesTotal%dxx", msg.Ctrl.Code / 100), 1)
+		} else {
+			log.Println("Invalid response code: ", msg.Ctrl.Code)
+		}
 	}
 
 	dataSize, data := s.serialize(msg)

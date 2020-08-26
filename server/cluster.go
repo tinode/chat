@@ -378,7 +378,9 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 		// If it was the last session, master topic will shut down as well.
 		if msess != nil {
 			msess.stop <- nil
+			node.lock.Lock()
 			delete(node.msess, msid)
+			node.lock.Unlock()
 		}
 
 		return nil
@@ -395,7 +397,9 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 		// If the session is not found, create it.
 		var count int
 		msess, count = globals.sessionStore.NewSession(node, msid)
+		node.lock.Lock()
 		node.msess[msid] = struct{}{}
+		node.lock.Unlock()
 
 		log.Println("cluster: multiplexing session started", msid, count)
 		go msess.clusterWriteLoop(msg.RcptTo)
@@ -984,8 +988,11 @@ func (c *Cluster) garbageCollectProxySessions(activeNodes []string) {
 	_, failedNodes := stringSliceDelta(allNodes, activeNodes)
 	for _, node := range failedNodes {
 		// Iterate sessions of a failed node
-		msess := globals.cluster.nodes[node].msess
-		globals.cluster.nodes[node].msess = make(map[string]struct{})
+		n := globals.cluster.nodes[node]
+		n.lock.Lock()
+		msess := n.msess
+		n.msess = make(map[string]struct{})
+		n.lock.Unlock()
 		for sid := range msess {
 			if sess := globals.sessionStore.Get(sid); sess != nil {
 				sess.stop <- nil
