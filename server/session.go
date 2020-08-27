@@ -305,6 +305,8 @@ func (s *Session) cleanUp(expired bool) {
 	s.background = false
 	s.bkgTimer.Stop()
 	s.unsubAll()
+	// Stop the write loop.
+	s.stop <- nil
 }
 
 // Message received, convert bytes to ClientComMessage and dispatch
