@@ -1087,8 +1087,9 @@ func (t *Topic) subscriptionReply(h *Hub, join *sessionJoin) error {
 
 	params := map[string]interface{}{}
 	// Report back the assigned access mode.
-	params["acs"] = modeChanged
-
+	if modeChanged != nil {
+		params["acs"] = modeChanged
+	}
 	toriginal := t.original(asUid)
 
 	// When a group topic is created, it's given a temporary name by the client.
