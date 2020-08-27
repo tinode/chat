@@ -114,8 +114,8 @@ func newHub() *Hub {
 		topics: &sync.Map{},
 		// this needs to be buffered - hub generates invites and adds them to this queue
 		route:    make(chan *ServerComMessage, 4096),
-		join:     make(chan *sessionJoin),
-		unreg:    make(chan *topicUnreg),
+		join:     make(chan *sessionJoin, 32),
+		unreg:    make(chan *topicUnreg, 32),
 		rehash:   make(chan bool),
 		meta:     make(chan *metaReq, 128),
 		shutdown: make(chan chan<- bool),
