@@ -78,10 +78,10 @@ type Hub struct {
 	// Channel for routing messages between topics, buffered at 4096
 	route chan *ServerComMessage
 
-	// subscribe session to topic, possibly creating a new topic, unbuffered
+	// subscribe session to topic, possibly creating a new topic, buffered at 32
 	join chan *sessionJoin
 
-	// Remove topic from hub, possibly deleting it afterwards, unbuffered
+	// Remove topic from hub, possibly deleting it afterwards, buffered at 32
 	unreg chan *topicUnreg
 
 	// Process get.info requests for topic not subscribed to, buffered 128
