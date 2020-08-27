@@ -146,6 +146,7 @@ func genDb(data *Data) {
 				Auth: accessAuth,
 				Anon: accessAnon,
 			},
+			UseBt:  gt.Channel,
 			Tags:   gt.Tags,
 			Public: parsePublic(&gt.Public, data.datapath)}
 		var owner types.Uid
@@ -234,9 +235,14 @@ func genDb(data *Data) {
 	log.Println("Generating group subscriptions...")
 
 	for _, ss := range data.Groupsubs {
-
-		want := types.ModeCPublic
-		given := types.ModeCPublic
+		var want, given types.AccessMode
+		if ss.AsChan {
+			want = types.ModeCChn
+			given = types.ModeCChn
+		} else {
+			want = types.ModeCPublic
+			given = types.ModeCPublic
+		}
 		if ss.Want != "" {
 			if err := want.UnmarshalText([]byte(ss.Want)); err != nil {
 				log.Fatal(err)
@@ -247,11 +253,14 @@ func genDb(data *Data) {
 				log.Fatal(err)
 			}
 		}
-
+		tname := nameIndex[ss.Topic]
+		if ss.AsChan {
+			tname = types.GrpToChn(tname)
+		}
 		if err = store.Subs.Create(&types.Subscription{
 			ObjHeader: types.ObjHeader{CreatedAt: getCreatedTime(ss.CreatedAt)},
 			User:      nameIndex[ss.User],
-			Topic:     nameIndex[ss.Topic],
+			Topic:     tname,
 			ModeWant:  want,
 			ModeGiven: given,
 			Private:   ss.Private}); err != nil {
@@ -288,6 +297,10 @@ func genDb(data *Data) {
 				var topic string
 				var from types.Uid
 				if subIdx < len(data.Groupsubs) {
+					if data.Groupsubs[subIdx].AsChan {
+						// Channel readers should not have any published messages.
+						continue
+					}
 					topic = nameIndex[data.Groupsubs[subIdx].Topic]
 					from = types.ParseUid(nameIndex[data.Groupsubs[subIdx].User])
 				} else {

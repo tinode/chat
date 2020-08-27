@@ -72,7 +72,7 @@ When you register a new account you are asked for an email address to send valid
   * [Web](https://github.com/tinode/webapp/)
   * Scriptable [command line](tn-cli/)
 * One-on-one and group messaging.
-* Channels with an unlimited number (or hundreds of thousands) of members.
+* Channels with an unlimited number of members.
 * Sharded clustering with failover.
 * Flexible access control with permissions for various actions.
 * Server-generated presence notifications for people, group chats.

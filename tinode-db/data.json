@@ -148,6 +148,15 @@
    "tags": ["support","public"],
    "public": {"fn": "Support", "photo": "support-128.jpg", "type": "jpg"},
    "access": {"auth": "JRWP", "anon": "JW"}
+  },
+  {
+   "createdAt": "-122h",
+   "name": "*BACDF",
+   "owner": "bob",
+   "channel": true,
+   "tags": ["coffee","channel"],
+   "public": {"fn": "Coffee Channel", "photo": "chan-128.jpg", "type": "jpg"},
+   "access": {"auth": "N", "anon": "N"}
   }
  ],
  "p2psubs": [
@@ -253,6 +262,29 @@
    "private": {"comment": "I'm not the owner, Frank is"},
    "topic": "*BF",
    "user": "bob"
+  },
+  {
+   "createdAt": "-111.2h",
+   "topic": "*BACDF",
+   "user": "alice"
+  },
+  {
+   "createdAt": "-111.1h",
+   "topic": "*BACDF",
+   "asChan": true,
+   "user": "carol"
+  },
+  {
+   "createdAt": "-111.0h",
+   "topic": "*BACDF",
+   "asChan": true,
+   "user": "dave"
+  },
+  {
+   "createdAt": "-110.8h",
+   "topic": "*BACDF",
+   "asChan": true,
+   "user": "frank"
   }
  ],
  "messages": [

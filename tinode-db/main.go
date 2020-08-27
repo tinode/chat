@@ -81,12 +81,14 @@ GroupTopic object in data.json
    "createdAt": "-128h",
    "name": "*ABC",
    "owner": "carol",
+   "channel": true,
    "public": {"fn": "Let's talk about flowers", "photo": "abc-64.jpg", "type": "jpg"}
 */
 type GroupTopic struct {
 	CreatedAt    string    `json:"createdAt"`
 	Name         string    `json:"name"`
 	Owner        string    `json:"owner"`
+	Channel      bool      `json:"channel"`
 	Public       vCardy    `json:"public"`
 	Access       DefAccess `json:"access"`
 	Tags         []string  `json:"tags"`
@@ -99,16 +101,17 @@ GroupSub object in data.json
  "createdAt": "-112h",
  "private": "My super cool group topic",
  "topic": "*ABC",
- "user": "alice"
+ "user": "alice",
+ "asChan: false,
  "want": "JRWPSA",
- "have": "JRWP",
- "tags": ["super cool", "super", "cool"],
+ "have": "JRWP"
 */
 type GroupSub struct {
 	CreatedAt string   `json:"createdAt"`
 	Private   tPrivate `json:"private"`
 	Topic     string   `json:"topic"`
 	User      string   `json:"user"`
+	AsChan    bool     `json:"asChan"`
 	Want      string   `json:"want"`
 	Have      string   `json:"have"`
 }
