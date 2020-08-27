@@ -45,7 +45,9 @@ func (sess *Session) writeOnce(wrt http.ResponseWriter, req *http.Request) {
 			// Request to close the session. Make it unavailable.
 			globals.sessionStore.Delete(sess)
 			// Don't care if lpWrite fails.
-			lpWrite(wrt, msg)
+			if msg != nil {
+				lpWrite(wrt, msg)
+			}
 			return
 
 		case topic := <-sess.detach:

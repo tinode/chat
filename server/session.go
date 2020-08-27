@@ -261,7 +261,7 @@ func (s *Session) queueOut(msg *ServerComMessage) bool {
 			statsAddHistSample("RequestLatency", float64(duration))
 		}
 		if 200 <= msg.Ctrl.Code && msg.Ctrl.Code < 600 {
-			statsInc(fmt.Sprintf("CtrlCodesTotal%dxx", msg.Ctrl.Code / 100), 1)
+			statsInc(fmt.Sprintf("CtrlCodesTotal%dxx", msg.Ctrl.Code/100), 1)
 		} else {
 			log.Println("Invalid response code: ", msg.Ctrl.Code)
 		}
@@ -305,6 +305,8 @@ func (s *Session) cleanUp(expired bool) {
 	s.background = false
 	s.bkgTimer.Stop()
 	s.unsubAll()
+	// Stop the write loop.
+	s.stop <- nil
 }
 
 // Message received, convert bytes to ClientComMessage and dispatch
@@ -487,9 +489,15 @@ func (s *Session) subscribe(msg *ClientComMessage) {
 	if sub := s.getSub(msg.RcptTo); sub != nil {
 		s.queueOut(InfoAlreadySubscribed(msg.Id, msg.Original, msg.Timestamp))
 	} else {
-		globals.hub.join <- &sessionJoin{
+		select {
+		case globals.hub.join <- &sessionJoin{
 			pkt:  msg,
-			sess: s}
+			sess: s}:
+		default:
+			// Reply with a 500 to the user.
+			s.queueOut(ErrUnknownReply(msg, msg.Timestamp))
+			log.Println("s.subscribe: join queue full, topic ", msg.RcptTo, s.sid)
+		}
 		// Hub will send Ctrl success/failure packets back to session
 	}
 }
