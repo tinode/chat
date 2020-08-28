@@ -39,7 +39,7 @@ from tn_globals import stdoutln
 from tn_globals import to_json
 
 APP_NAME = "tn-cli"
-APP_VERSION = "1.5.0"
+APP_VERSION = "1.5.1"
 PROTOCOL_VERSION = "0"
 LIB_VERSION = pkg_resources.get_distribution("tinode_grpc").version
 GRPC_VERSION = pkg_resources.get_distribution("grpcio").version
@@ -971,17 +971,17 @@ def run(args, schema, secret):
                 stdoutln(json.loads(msg.data.content))
 
             elif msg.HasField("pres"):
-                pass
+                # 'ON', 'OFF', 'UA', 'UPD', 'GONE', 'ACS', 'TERM', 'MSG', 'READ', 'RECV', 'DEL', 'TAGS'
+                what = pb.ServerPres.What.Name(msg.pres.what)
+                stdoutln("\r<= pres " + what + " " + msg.pres.topic)
 
             elif msg.HasField("info"):
-                what = "unknown"
-                if msg.info.what == pb.READ:
-                    what = "read"
-                elif msg.info.what == pb.RECV:
-                    what = "recv"
-                elif msg.info.what == pb.KP:
-                    what = "kp"
-                stdoutln("\rMessage #" + str(msg.info.seq_id) + " " + what +
+                switcher = {
+                    pb.READ: 'READ',
+                    pb.RECV: 'RECV',
+                    pb.KP: 'KP'
+                }
+                stdoutln("\rMessage #" + str(msg.info.seq_id) + " " + switcher.get(msg.info.what, "unknown") +
                     " by " + msg.info.from_user_id + "; topic=" + msg.info.topic + " (" + msg.topic + ")")
 
             else:

@@ -29,10 +29,22 @@ type Recipient struct {
 
 // Receipt is the push payload with a list of recipients.
 type Receipt struct {
-	// List of recipients, including those who did not receive the message
+	// List of individual recipients, including those who did not receive the message.
 	To map[t.Uid]Recipient `json:"to"`
-	// Actual content to be delivered to the client
+	// Push topic for group notifications.
+	Channel string `json:"channel"`
+	// Actual content to be delivered to the client.
 	Payload Payload `json:"payload"`
+}
+
+// ChannelReq is a request to subscribe/unsubscribe device IDs to channel (FCM topic).
+type ChannelReq struct {
+	// Uid is the id of the user making request
+	Uid t.Uid `json:"-"`
+	// Channel to subscribe to or unsubscribe from.
+	Channel string `json:"channel"`
+	// Unsub is set to true to unsubscribe devices, otherwise subscribe them.
+	Unsub bool `json:"unsub"`
 }
 
 // Payload is content of the push.
@@ -75,6 +87,9 @@ type Handler interface {
 	// Push returns a channel that the server will use to send messages to.
 	// The message will be dropped if the channel blocks.
 	Push() chan<- *Receipt
+
+	// Subscribe/unsubscribe device from FCM topic (channel).
+	Channel() chan<- *ChannelReq
 
 	// Stop terminates the handler's worker and stops sending pushes.
 	Stop()
@@ -121,7 +136,7 @@ func Init(jsconfig string) error {
 	return nil
 }
 
-// Push a single message
+// Push a single message to devices.
 func Push(msg *Receipt) {
 	if handlers == nil {
 		return
@@ -135,6 +150,25 @@ func Push(msg *Receipt) {
 		// Push without delay or skip
 		select {
 		case hnd.Push() <- msg:
+		default:
+		}
+	}
+}
+
+// ChannelSub handles a channel (FCM topic) subscription/unsubscription request.
+func ChannelSub(msg *ChannelReq) {
+	if handlers == nil {
+		return
+	}
+
+	for _, hnd := range handlers {
+		if !hnd.IsReady() {
+			continue
+		}
+
+		// Send without delay or skip.
+		select {
+		case hnd.Channel() <- msg:
 		default:
 		}
 	}

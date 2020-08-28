@@ -470,10 +470,10 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 	}
 }
 
-// Request to subscribe to a topic
+// Request to subscribe to a topic.
 func (s *Session) subscribe(msg *ClientComMessage) {
-	if strings.HasPrefix(msg.Original, "new") {
-		// Request to create a new named topic.
+	if strings.HasPrefix(msg.Original, "new") || strings.HasPrefix(msg.Original, "nch") {
+		// Request to create a new group/channel topic.
 		// If we are in a cluster, make sure the new topic belongs to the current node.
 		msg.RcptTo = globals.cluster.genLocalTopicName()
 	} else {
@@ -1087,15 +1087,17 @@ func (s *Session) expandTopicName(msg *ClientComMessage) (string, *ServerComMess
 		uid1 := types.ParseUserId(msg.AsUser)
 		uid2 := types.ParseUserId(msg.Original)
 		if uid2.IsZero() {
-			// Ensure the user id is valid
+			// Ensure the user id is valid.
 			log.Println("s.etn: failed to parse p2p topic name", s.sid)
 			return "", ErrMalformed(msg.Id, msg.Original, msg.Timestamp)
 		} else if uid2 == uid1 {
-			// Use 'me' to access self-topic
+			// Use 'me' to access self-topic.
 			log.Println("s.etn: invalid p2p self-subscription", s.sid)
 			return "", ErrPermissionDeniedReply(msg, msg.Timestamp)
 		}
 		routeTo = uid1.P2PName(uid2)
+	} else if tmp := types.ChnToGrp(msg.Original); tmp != "" {
+		routeTo = tmp
 	} else {
 		routeTo = msg.Original
 	}

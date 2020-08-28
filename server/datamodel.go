@@ -599,7 +599,7 @@ type MsgServerPres struct {
 	// Flag to break the reply loop
 	WantReply bool `json:"-"`
 
-	// Additional access mode filters when senting to topic's online members. Both filter conditions must be true.
+	// Additional access mode filters when sending to topic's online members. Both filter conditions must be true.
 	// send only to those who have this access mode.
 	FilterIn int `json:"-"`
 	// skip those who have this access mode.
@@ -917,6 +917,17 @@ func NoErrShutdown(ts time.Time) *ServerComMessage {
 		Timestamp: ts}}
 }
 
+// NoErrDelivered means requested content has been delivered (208).
+func NoErrDeliveredParams(id, topic string, ts time.Time, params interface{}) *ServerComMessage {
+	return &ServerComMessage{Ctrl: &MsgServerCtrl{
+		Id:        id,
+		Code:      http.StatusAlreadyReported, // 208
+		Text:      "delivered",
+		Topic:     topic,
+		Params:    params,
+		Timestamp: ts}, Id: id}
+}
+
 // 3xx
 
 // InfoValidateCredentials requires user to confirm credentials before going forward (300).
@@ -995,7 +1006,7 @@ func InfoNotModified(id, topic string, ts time.Time) *ServerComMessage {
 	return InfoNotModifiedExplicitTs(id, topic, ts, ts)
 }
 
-// InfoNotModifiedReply response means update request was a noop 
+// InfoNotModifiedReply response means update request was a noop
 // in response to a client request (304).
 func InfoNotModifiedReply(msg *ClientComMessage, ts time.Time) *ServerComMessage {
 	return InfoNotModifiedExplicitTs(msg.Id, msg.Original, ts, msg.Timestamp)
@@ -1315,8 +1326,8 @@ func ErrLockedExplicitTs(id, topic string, serverTs, incomingReqTs time.Time) *S
 		Timestamp: serverTs}, Id: id, Timestamp: incomingReqTs}
 }
 
-// ErrLockedReply operation rejected because the topic is being deleted
-// with explicit server and incoming request timestamps in response to a client request (423).
+// ErrLockedReply operation rejected because the topic is being deleted with explicit server and
+// incoming request timestamps in response to a client request (423).
 func ErrLockedReply(msg *ClientComMessage, ts time.Time) *ServerComMessage {
 	return ErrLockedExplicitTs(msg.Id, msg.Original, ts, msg.Timestamp)
 }
@@ -1326,8 +1337,7 @@ func ErrUnknown(id, topic string, ts time.Time) *ServerComMessage {
 	return ErrUnknownExplicitTs(id, topic, ts, ts)
 }
 
-// ErrUnknown database or other server error
-// with explicit server and incoming request timestamps (500).
+// ErrUnknown database or other server error with explicit server and incoming request timestamps (500).
 func ErrUnknownExplicitTs(id, topic string, serverTs, incomingReqTs time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
@@ -1342,8 +1352,8 @@ func ErrUnknownReply(msg *ClientComMessage, ts time.Time) *ServerComMessage {
 	return ErrUnknownExplicitTs(msg.Id, msg.Original, ts, msg.Timestamp)
 }
 
-// ErrNotImplemented feature not implemented
-// with explicit server and incoming request timestamps (501).
+// ErrNotImplemented feature not implemented with explicit server and incoming request timestamps (501).
+// TODO: consider changing status code to 4XX.
 func ErrNotImplemented(id, topic string, serverTs, incomingReqTs time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,

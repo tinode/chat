@@ -722,10 +722,12 @@ func usersPush(rcpt *push.Receipt) {
 	if globals.cluster != nil {
 		local = &UserCacheReq{PushRcpt: &push.Receipt{
 			Payload: rcpt.Payload,
+			Channel: rcpt.Channel,
 			To:      make(map[types.Uid]push.Recipient),
 		}}
 		remote := &UserCacheReq{PushRcpt: &push.Receipt{
 			Payload: rcpt.Payload,
+			Channel: rcpt.Channel,
 			To:      make(map[types.Uid]push.Recipient),
 		}}
 
@@ -737,14 +739,14 @@ func usersPush(rcpt *push.Receipt) {
 			}
 		}
 
-		if len(remote.PushRcpt.To) > 0 {
+		if len(remote.PushRcpt.To) > 0 || remote.PushRcpt.Channel != "" {
 			globals.cluster.routeUserReq(remote)
 		}
 	} else {
 		local = &UserCacheReq{PushRcpt: rcpt}
 	}
 
-	if len(local.PushRcpt.To) > 0 {
+	if len(local.PushRcpt.To) > 0 || local.PushRcpt.Channel != "" {
 		select {
 		case globals.usersUpdate <- local:
 		default:
@@ -895,7 +897,6 @@ func userUpdater() {
 					upd.PushRcpt.To[uid] = rcptTo
 				}
 			}
-
 			push.Push(upd.PushRcpt)
 			continue
 		}
