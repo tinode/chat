@@ -55,6 +55,10 @@ func (t *Topic) runProxy(hub *Hub) {
 			if err := globals.cluster.routeToTopicMaster(ProxyReqLeave, leave.pkt, t.name, leave.sess); err != nil {
 				log.Println("proxy topic: route broadcast request from proxy to master failed:", err)
 			}
+			if len(t.sessions) == 0 {
+				// No more sessions attached. Start the countdown.
+				killTimer.Reset(idleProxyTopicTimeout)
+			}
 
 		case msg := <-t.broadcast:
 			// Content message intended for broadcasting to recipients
@@ -170,10 +174,10 @@ func (t *Topic) proxyMasterResponse(msg *ClusterResp, killTimer *time.Timer) {
 					if sess != nil {
 						t.remSession(sess, sess.uid)
 					}
-					// All sessions are gone. Start the kill timer.
-					if len(t.sessions) == 0 {
-						killTimer.Reset(keepAlive)
-					}
+				}
+				// All sessions are gone. Start the kill timer.
+				if len(t.sessions) == 0 {
+					killTimer.Reset(keepAlive)
 				}
 			}
 
