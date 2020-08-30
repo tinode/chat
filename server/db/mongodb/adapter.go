@@ -89,7 +89,15 @@ func (a *adapter) Open(jsonconfig json.RawMessage) error {
 		opts.SetHosts([]string{defaultHost})
 	} else if host, ok := config.Addresses.(string); ok {
 		opts.SetHosts([]string{host})
-	} else if hosts, ok := config.Addresses.([]string); ok {
+	} else if ihosts, ok := config.Addresses.([]interface{}); ok && len(ihosts) > 0 {
+		hosts := make([]string, len(ihosts))
+		for i, ih := range ihosts {
+			h, ok := ih.(string)
+			if !ok || h == "" {
+				return errors.New("adapter mongodb invalid config.Addresses value")
+			}
+			hosts[i] = h
+		}
 		opts.SetHosts(hosts)
 	} else {
 		return errors.New("adapter mongodb failed to parse config.Addresses")
