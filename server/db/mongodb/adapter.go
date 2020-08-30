@@ -46,6 +46,9 @@ const (
 	defaultMaxResults = 1024
 	// This is capped by the Session's send queue limit (128).
 	defaultMaxMessageResults = 100
+
+	defaultAuthMechanism = "SCRAM-SHA-256"
+	defaultAuthSource    = "admin"
 )
 
 // See https://godoc.org/go.mongodb.org/mongo-driver/mongo/options#ClientOptions for explanations.
@@ -57,9 +60,10 @@ type configType struct {
 	Database   string `json:"database,omitempty"`
 	ReplicaSet string `json:"replica_set,omitempty"`
 
-	AuthSource string `json:"auth_source,omitempty"`
-	Username   string `json:"username,omitempty"`
-	Password   string `json:"password,omitempty"`
+	AuthMechanism string `json:"auth_mechanism,omitempty"`
+	AuthSource    string `json:"auth_source,omitempty"`
+	Username      string `json:"username,omitempty"`
+	Password      string `json:"password,omitempty"`
 
 	UseTLS             bool   `json:"tls,omitempty"`
 	TlsCertFile        string `json:"tls_cert_file,omitempty"`
@@ -105,16 +109,19 @@ func (a *adapter) Open(jsonconfig json.RawMessage) error {
 	}
 
 	if config.Username != "" {
-		var passwordSet bool
-		if config.AuthSource == "" {
-			config.AuthSource = "admin"
+		if config.AuthMechanism == "" {
+			config.AuthMechanism = defaultAuthMechanism
 		}
+		if config.AuthSource == "" {
+			config.AuthSource = defaultAuthSource
+		}
+		var passwordSet bool
 		if config.Password != "" {
 			passwordSet = true
 		}
 		opts.SetAuth(
 			mdbopts.Credential{
-				AuthMechanism: "SCRAM-SHA-256",
+				AuthMechanism: config.AuthMechanism,
 				AuthSource:    config.AuthSource,
 				Username:      config.Username,
 				Password:      config.Password,
