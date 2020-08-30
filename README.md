@@ -72,16 +72,16 @@ When you register a new account you are asked for an email address to send valid
   * [Web](https://github.com/tinode/webapp/)
   * Scriptable [command line](tn-cli/)
 * One-on-one and group messaging.
-* Channels with an unlimited number of members.
+* Channels with an unlimited number of read-only subscribers.
 * Sharded clustering with failover.
-* Flexible access control with permissions for various actions.
+* Granular access control with permissions for various actions.
 * Server-generated presence notifications for people, group chats.
 * Support for custom authentication backends.
 * Bindings for various programming languages:
   * Javascript with no external dependencies.
   * Java with dependencies on [Jackson](https://github.com/FasterXML/jackson) and [Java-Websocket](https://github.com/TooTallNate/Java-WebSocket). Suitable for Android but with no Android SDK dependencies.
   * Swift with dependency on [SwiftWebSocket](https://github.com/tidwall/SwiftWebSocket).
-  * C/C++, C#, Python, PHP, Ruby and other languages using [gRPC](https://grpc.io/docs/languages/).
+  * C/C++, C#, Go, Python, PHP, Ruby and many other languages using [gRPC](https://grpc.io/docs/languages/).
 * Websocket, long polling, and [gRPC](https://grpc.io/) over TCP or Unix sockets.
 * JSON or [protobuf version 3](https://developers.google.com/protocol-buffers/) wire protocols.
 * User search/discovery.
