@@ -307,141 +307,7 @@ func (t *Topic) runLocal(hub *Hub) {
 				}
 			}
 		case leave := <-t.unreg:
-			// Remove connection from topic; session may continue to function
-			now := types.TimeNow()
-
-			// userId.IsZero() == true when the entire session is being dropped.
-			var asUid types.Uid
-			var asChan bool
-			if leave.pkt != nil {
-				asUid = types.ParseUserId(leave.pkt.AsUser)
-				var err error
-				asChan, err = t.verifyChannelAccess(leave.pkt.Original)
-				if err != nil {
-					// Group topic cannot be addressed as channel unless channel functionality is enabled.
-					leave.sess.queueOut(ErrNotFoundReply(leave.pkt, now))
-				}
-			}
-
-			if t.isInactive() {
-				if !asUid.IsZero() && leave.pkt != nil {
-					leave.sess.queueOut(ErrLockedReply(leave.pkt, now))
-				}
-				continue
-			} else if asChan && !t.isChan {
-				if leave.pkt != nil {
-					// Group topic cannot be addressed as channel unless channel functionality is enabled.
-					leave.sess.queueOut(ErrNotFoundReply(leave.pkt, now))
-				}
-				continue
-			} else if leave.pkt != nil && leave.pkt.Leave.Unsub {
-				// User wants to leave and unsubscribe.
-				// asUid must not be Zero.
-				if err := t.replyLeaveUnsub(hub, leave.sess, leave.pkt, asUid); err != nil {
-					log.Println("failed to unsub", err, leave.sess.sid)
-					continue
-				}
-			} else if pssd, _ := t.remSession(leave.sess, asUid); pssd != nil {
-				if pssd.isChanSub && asChan {
-					if leave.pkt != nil {
-						leave.sess.queueOut(NoErr(leave.pkt.Id, leave.pkt.Original, now))
-					}
-					continue
-				}
-
-				if pssd.isChanSub != asChan {
-					// Cannot address non-channel subscription as channel and vice versa.
-					if leave.pkt != nil {
-						// Group topic cannot be addressed as channel unless channel functionality is enabled.
-						leave.sess.queueOut(ErrNotFoundReply(leave.pkt, now))
-					}
-					continue
-				}
-
-				var uid types.Uid
-				if leave.sess.isProxy() {
-					// Multiplexing session, multiple UIDs.
-					uid = asUid
-				} else {
-					// Simple session, single UID.
-					uid = pssd.uid
-				}
-
-				var pud perUserData
-				// uid may be zero when a proxy session is trying to terminate (it called unsubAll).
-				if !uid.IsZero() {
-					// UID not zero: one user removed.
-					pud = t.perUser[uid]
-					if !leave.sess.background {
-						pud.online--
-					}
-				} else if len(pssd.muids) > 0 {
-					// UID is zero: multiplexing session is dropped altogether.
-					// Using new 'uid' and 'pud' variables.
-					for _, uid := range pssd.muids {
-						pud := t.perUser[uid]
-						pud.online--
-						t.perUser[uid] = pud
-					}
-				} else if !leave.sess.isCluster() {
-					log.Panic("cannot determine uid: leave req=", leave)
-				}
-
-				switch t.cat {
-				case types.TopicCatMe:
-					mrs := t.mostRecentSession()
-					if mrs == nil {
-						// Last session
-						mrs = leave.sess
-					} else {
-						// Change UA to the most recent live session and announce it. Don't block.
-						select {
-						case t.supd <- &sessionUpdate{userAgent: mrs.userAgent}:
-						default:
-						}
-					}
-
-					meUid := uid
-					if meUid.IsZero() && len(pssd.muids) > 0 {
-						// The entire multiplexing session is being dropped. Need to find owner's UID.
-						// len(pssd.muids) could be zero if the session was a background session.
-						meUid = pssd.muids[0]
-					}
-					if !meUid.IsZero() {
-						// Update user's last online timestamp & user agent. Only one user can be subscribed to 'me' topic.
-						if err := store.Users.UpdateLastSeen(meUid, mrs.userAgent, now); err != nil {
-							log.Println(err)
-						}
-					}
-				case types.TopicCatFnd:
-					// FIXME: this does not work correctly in case of a multiplexing query.
-					// Remove ephemeral query.
-					t.fndRemovePublic(leave.sess)
-				case types.TopicCatGrp:
-					// Topic is going offline: notify online subscribers on 'me'.
-					readFilter := &presFilters{filterIn: types.ModeRead}
-					if !uid.IsZero() {
-						if pud.online == 0 {
-							t.presSubsOnline("off", uid.UserId(), nilPresParams, readFilter, "")
-						}
-					} else if len(pssd.muids) > 0 {
-						for _, uid := range pssd.muids {
-							if t.perUser[uid].online == 0 {
-								t.presSubsOnline("off", uid.UserId(), nilPresParams, readFilter, "")
-							}
-						}
-					}
-				}
-
-				if !uid.IsZero() {
-					t.perUser[uid] = pud
-
-					// Respond if contains an id.
-					if leave.pkt != nil {
-						leave.sess.queueOut(NoErrReply(leave.pkt, now))
-					}
-				}
-			}
+			t.handleLeaveRequest(hub, leave)
 
 			// If there are no more subscriptions to this topic, start a kill timer
 			if len(t.sessions) == 0 && t.cat != types.TopicCatSys {
@@ -674,6 +540,145 @@ func (t *Topic) handleSubscription(h *Hub, join *sessionJoin) error {
 	}
 
 	return nil
+}
+
+// handleLeaveRequest processes a session leave request.
+func (t *Topic) handleLeaveRequest(hub *Hub, leave *sessionLeave) {
+	// Remove connection from topic; session may continue to function
+	now := types.TimeNow()
+
+	// userId.IsZero() == true when the entire session is being dropped.
+	var asUid types.Uid
+	var asChan bool
+	if leave.pkt != nil {
+		asUid = types.ParseUserId(leave.pkt.AsUser)
+		var err error
+		asChan, err = t.verifyChannelAccess(leave.pkt.Original)
+		if err != nil {
+			// Group topic cannot be addressed as channel unless channel functionality is enabled.
+			leave.sess.queueOut(ErrNotFoundReply(leave.pkt, now))
+		}
+	}
+
+	if t.isInactive() {
+		if !asUid.IsZero() && leave.pkt != nil {
+			leave.sess.queueOut(ErrLockedReply(leave.pkt, now))
+		}
+		return
+	} else if asChan && !t.isChan {
+		if leave.pkt != nil {
+			// Group topic cannot be addressed as channel unless channel functionality is enabled.
+			leave.sess.queueOut(ErrNotFoundReply(leave.pkt, now))
+		}
+		return
+	} else if leave.pkt != nil && leave.pkt.Leave.Unsub {
+		// User wants to leave and unsubscribe.
+		// asUid must not be Zero.
+		if err := t.replyLeaveUnsub(hub, leave.sess, leave.pkt, asUid); err != nil {
+			log.Println("failed to unsub", err, leave.sess.sid)
+			return
+		}
+	} else if pssd, _ := t.remSession(leave.sess, asUid); pssd != nil {
+		if pssd.isChanSub && asChan {
+			if leave.pkt != nil {
+				leave.sess.queueOut(NoErr(leave.pkt.Id, leave.pkt.Original, now))
+			}
+			return
+		}
+
+		if pssd.isChanSub != asChan {
+			// Cannot address non-channel subscription as channel and vice versa.
+			if leave.pkt != nil {
+				// Group topic cannot be addressed as channel unless channel functionality is enabled.
+				leave.sess.queueOut(ErrNotFoundReply(leave.pkt, now))
+			}
+			return
+		}
+
+		var uid types.Uid
+		if leave.sess.isProxy() {
+			// Multiplexing session, multiple UIDs.
+			uid = asUid
+		} else {
+			// Simple session, single UID.
+			uid = pssd.uid
+		}
+
+		var pud perUserData
+		// uid may be zero when a proxy session is trying to terminate (it called unsubAll).
+		if !uid.IsZero() {
+			// UID not zero: one user removed.
+			pud = t.perUser[uid]
+			if !leave.sess.background {
+				pud.online--
+			}
+		} else if len(pssd.muids) > 0 {
+			// UID is zero: multiplexing session is dropped altogether.
+			// Using new 'uid' and 'pud' variables.
+			for _, uid := range pssd.muids {
+				pud := t.perUser[uid]
+				pud.online--
+				t.perUser[uid] = pud
+			}
+		} else if !leave.sess.isCluster() {
+			log.Panic("cannot determine uid: leave req=", leave)
+		}
+
+		switch t.cat {
+		case types.TopicCatMe:
+			mrs := t.mostRecentSession()
+			if mrs == nil {
+				// Last session
+				mrs = leave.sess
+			} else {
+				// Change UA to the most recent live session and announce it. Don't block.
+				select {
+				case t.supd <- &sessionUpdate{userAgent: mrs.userAgent}:
+				default:
+				}
+			}
+
+			meUid := uid
+			if meUid.IsZero() && len(pssd.muids) > 0 {
+				// The entire multiplexing session is being dropped. Need to find owner's UID.
+				// len(pssd.muids) could be zero if the session was a background session.
+				meUid = pssd.muids[0]
+			}
+			if !meUid.IsZero() {
+				// Update user's last online timestamp & user agent. Only one user can be subscribed to 'me' topic.
+				if err := store.Users.UpdateLastSeen(meUid, mrs.userAgent, now); err != nil {
+					log.Println(err)
+				}
+			}
+		case types.TopicCatFnd:
+			// FIXME: this does not work correctly in case of a multiplexing query.
+			// Remove ephemeral query.
+			t.fndRemovePublic(leave.sess)
+		case types.TopicCatGrp:
+			// Topic is going offline: notify online subscribers on 'me'.
+			readFilter := &presFilters{filterIn: types.ModeRead}
+			if !uid.IsZero() {
+				if pud.online == 0 {
+					t.presSubsOnline("off", uid.UserId(), nilPresParams, readFilter, "")
+				}
+			} else if len(pssd.muids) > 0 {
+				for _, uid := range pssd.muids {
+					if t.perUser[uid].online == 0 {
+						t.presSubsOnline("off", uid.UserId(), nilPresParams, readFilter, "")
+					}
+				}
+			}
+		}
+
+		if !uid.IsZero() {
+			t.perUser[uid] = pud
+
+			// Respond if contains an id.
+			if leave.pkt != nil {
+				leave.sess.queueOut(NoErrReply(leave.pkt, now))
+			}
+		}
+	}
 }
 
 // sessToForeground updates perUser online status accounting and fires due
