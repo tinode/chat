@@ -24,7 +24,7 @@ type MsgGetOpts struct {
 	User string `json:"user,omitempty"`
 	// Optional topic name to return result(s) for one topic.
 	Topic string `json:"topic,omitempty"`
-	// Return results modified dince this timespamp.
+	// Return results modified since this timespamp.
 	IfModifiedSince *time.Time `json:"ims,omitempty"`
 	// Load messages/ranges with IDs equal or greater than this (inclusive or closed)
 	SinceId int `json:"since,omitempty"`
