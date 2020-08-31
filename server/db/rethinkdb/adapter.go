@@ -79,7 +79,15 @@ func (a *adapter) Open(jsonconfig json.RawMessage) error {
 		opts.Address = defaultHost
 	} else if host, ok := config.Addresses.(string); ok {
 		opts.Address = host
-	} else if hosts, ok := config.Addresses.([]string); ok {
+	} else if ihosts, ok := config.Addresses.([]interface{}); ok && len(ihosts) > 0 {
+		hosts := make([]string, len(ihosts))
+		for i, ih := range ihosts {
+			h, ok := ih.(string)
+			if !ok || h == "" {
+				return errors.New("adapter rethinkdb invalid config.Addresses value")
+			}
+			hosts[i] = h
+		}
 		opts.Addresses = hosts
 	} else {
 		return errors.New("adapter rethinkdb failed to parse config.Addresses")
