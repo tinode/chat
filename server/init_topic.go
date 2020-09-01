@@ -19,6 +19,14 @@ import (
 
 // topicInit reads an existing topic from database or creates a new topic
 func topicInit(t *Topic, join *sessionJoin, h *Hub) {
+	var subscribeReqIssued bool
+	defer func() {
+		if !subscribeReqIssued && join.pkt.Sub != nil {
+			// If it was a client initiated subscribe request and we failed it.
+			join.sess.inflightReqs.Done()
+		}
+	}()
+
 	timestamp := types.TimeNow()
 
 	var err error
@@ -109,6 +117,7 @@ func topicInit(t *Topic, join *sessionJoin, h *Hub) {
 
 	// Topic will check access rights, send invite to p2p user, send {ctrl} message to the initiator session
 	if join.pkt.Sub != nil {
+		subscribeReqIssued = true
 		t.reg <- join
 	}
 

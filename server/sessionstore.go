@@ -76,6 +76,8 @@ func (ss *SessionStore) NewSession(conn interface{}, sid string) (*Session, int)
 	s.bkgTimer = time.NewTimer(time.Hour)
 	s.bkgTimer.Stop()
 
+	s.inflightReqs = &sync.WaitGroup{}
+
 	s.lastTouched = time.Now()
 
 	ss.lock.Lock()

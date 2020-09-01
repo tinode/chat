@@ -306,8 +306,13 @@ func (t *Topic) runLocal(hub *Hub) {
 					log.Printf("topic[%s] subscription failed %v, sid=%s", t.name, err, join.sess.sid)
 				}
 			}
+			join.sess.inflightReqs.Done()
 		case leave := <-t.unreg:
 			t.handleLeaveRequest(hub, leave)
+			if leave.pkt != nil {
+				// If it's a client initiated request.
+				leave.sess.inflightReqs.Done()
+			}
 
 			// If there are no more subscriptions to this topic, start a kill timer
 			if len(t.sessions) == 0 && t.cat != types.TopicCatSys {
