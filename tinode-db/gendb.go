@@ -237,8 +237,8 @@ func genDb(data *Data) {
 	for _, ss := range data.Groupsubs {
 		var want, given types.AccessMode
 		if ss.AsChan {
-			want = types.ModeCChn
-			given = types.ModeCChn
+			want = types.ModeCChnReader
+			given = types.ModeCChnReader
 		} else {
 			want = types.ModeCPublic
 			given = types.ModeCPublic

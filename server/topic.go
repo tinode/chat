@@ -1207,20 +1207,20 @@ func (t *Topic) thisUserSub(h *Hub, sess *Session, pkt *ClientComMessage, asUid 
 			}
 
 			// Given mode is immutable.
-			oldGiven = types.ModeCChn
-			userData.modeGiven = types.ModeCChn
+			oldGiven = types.ModeCChnReader
+			userData.modeGiven = types.ModeCChnReader
 
 			if sub != nil {
 				// Subscription exists, read old access mode.
 				oldWant = sub.ModeWant
 			} else {
 				// Subscription not found, use default.
-				oldWant = types.ModeCChn
+				oldWant = types.ModeCChnReader
 			}
 
 			if modeWant != types.ModeUnset {
 				// New access mode is explicitly assigned.
-				userData.modeWant = (modeWant & types.ModeCChn) | types.ModeRead | types.ModeJoin
+				userData.modeWant = (modeWant & types.ModeCChnReader) | types.ModeRead | types.ModeJoin
 			} else {
 				// Default: unchanged.
 				userData.modeWant = oldWant
@@ -1551,6 +1551,8 @@ func (t *Topic) anotherUserSub(h *Hub, sess *Session, asUid, target types.Uid,
 			// Request to use default access mode for the new subscriptions.
 			// Assuming LevelAuth. Approver should use non-default access if that is not suitable.
 			modeGiven = t.accessFor(auth.LevelAuth)
+			// Enable new subscription even if default is no joiner.
+			modeGiven |= types.ModeJoin
 		}
 
 		// Get user's default access mode to be used as modeWant
@@ -2136,7 +2138,7 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 						mts.Acs.Want = sub.ModeWant.String()
 						mts.Acs.Given = sub.ModeGiven.String()
 					} else if isChannel(sub.Topic) {
-						mts.Acs.Mode = types.ModeCChn.String()
+						mts.Acs.Mode = types.ModeCChnReader.String()
 					} else if defacs := sub.GetDefaultAccess(); defacs != nil {
 						switch authLevel {
 						case auth.LevelAnon:
@@ -2805,7 +2807,7 @@ func (t *Topic) replyLeaveUnsub(h *Hub, sess *Session, pkt *ClientComMessage, as
 		}
 		oldWant, oldGiven = pud.modeWant, pud.modeGiven
 	} else {
-		oldWant, oldGiven = types.ModeCChn, types.ModeCChn
+		oldWant, oldGiven = types.ModeCChnReader, types.ModeCChnReader
 		// Unsubscribe user's devices from the channel (FCM topic).
 		t.channelSubUnsub(asUid, false)
 	}
@@ -3218,7 +3220,7 @@ func (t *Topic) fndRemovePublic(sess *Session) {
 }
 
 func (t *Topic) accessFor(authLvl auth.Level) types.AccessMode {
-	return selectAccessMode(authLvl, t.accessAnon, t.accessAuth, getDefaultAccess(t.cat, true))
+	return selectAccessMode(authLvl, t.accessAnon, t.accessAuth, getDefaultAccess(t.cat, true, false))
 }
 
 // subsCount returns the number of topic subsribers

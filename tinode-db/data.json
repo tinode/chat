@@ -156,7 +156,7 @@
    "channel": true,
    "tags": ["coffee","channel"],
    "public": {"fn": "Coffee Channel", "photo": "chan-128.jpg", "type": "jpg"},
-   "access": {"auth": "N", "anon": "N"}
+   "access": {"auth": "RWPD", "anon": "N"}
   }
  ],
  "p2psubs": [
