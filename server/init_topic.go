@@ -198,8 +198,8 @@ func initTopicFnd(t *Topic, sreg *sessionJoin) error {
 	}
 
 	// Make sure no one can join the topic.
-	t.accessAuth = getDefaultAccess(t.cat, true)
-	t.accessAnon = getDefaultAccess(t.cat, false)
+	t.accessAuth = getDefaultAccess(t.cat, true, false)
+	t.accessAnon = getDefaultAccess(t.cat, false, false)
 
 	if err = t.loadSubscribers(); err != nil {
 		return err
@@ -496,14 +496,8 @@ func initTopicNewGrp(t *Topic, sreg *sessionJoin, isChan bool) error {
 	// Generic topics have parameters stored in the topic object
 	t.owner = types.ParseUserId(sreg.pkt.AsUser)
 
-	if isChan {
-		// The channel is not accessible by default.
-		t.accessAuth = types.ModeNone
-		t.accessAnon = types.ModeNone
-	} else {
-		t.accessAuth = getDefaultAccess(t.cat, true)
-		t.accessAnon = getDefaultAccess(t.cat, false)
-	}
+	t.accessAuth = getDefaultAccess(t.cat, true, isChan)
+	t.accessAnon = getDefaultAccess(t.cat, false, isChan)
 
 	// Owner/creator gets full access to the topic. Owner may change the default modeWant through 'set'.
 	userData := perUserData{
