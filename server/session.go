@@ -123,6 +123,9 @@ type Session struct {
 
 	// Number of subscribe/unsubscribe requests in fligth.
 	inflightReqs *sync.WaitGroup
+	// Synchronizes access to session store in cluster mode: 
+	// subscribe/unsubscribe replies are asynchronous.
+	sessionStoreLock sync.Mutex
 
 	// Outbound mesages, buffered.
 	// The content must be serialized in format suitable for the session.
@@ -303,7 +306,9 @@ func (s *Session) queueOutBytes(data []byte) bool {
 func (s *Session) cleanUp(expired bool) {
 	s.inflightReqs.Wait()
 	if !expired {
+		s.sessionStoreLock.Lock()
 		globals.sessionStore.Delete(s)
+		s.sessionStoreLock.Unlock()
 	}
 
 	s.background = false

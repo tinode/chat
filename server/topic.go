@@ -306,10 +306,12 @@ func (t *Topic) runLocal(hub *Hub) {
 					log.Printf("topic[%s] subscription failed %v, sid=%s", t.name, err, join.sess.sid)
 				}
 			}
-			join.sess.inflightReqs.Done()
+			if join.sess.inflightReqs != nil {
+				join.sess.inflightReqs.Done()
+			}
 		case leave := <-t.unreg:
 			t.handleLeaveRequest(hub, leave)
-			if leave.pkt != nil {
+			if leave.pkt != nil && leave.sess.inflightReqs != nil {
 				// If it's a client initiated request.
 				leave.sess.inflightReqs.Done()
 			}

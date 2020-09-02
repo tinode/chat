@@ -21,7 +21,7 @@ import (
 func topicInit(t *Topic, join *sessionJoin, h *Hub) {
 	var subscribeReqIssued bool
 	defer func() {
-		if !subscribeReqIssued && join.pkt.Sub != nil {
+		if !subscribeReqIssued && join.pkt.Sub != nil && join.sess.inflightReqs != nil {
 			// If it was a client initiated subscribe request and we failed it.
 			join.sess.inflightReqs.Done()
 		}
