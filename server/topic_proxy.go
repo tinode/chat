@@ -35,7 +35,9 @@ func (t *Topic) runProxy(hub *Hub) {
 			}
 
 		case leave := <-t.unreg:
-			t.handleProxyLeaveRequest(leave, killTimer)
+			if !t.handleProxyLeaveRequest(leave, killTimer) {
+				log.Println("Failed to update proxy topic state for leave request", s.sid)
+      }
 			if leave.pkt != nil && leave.sess.inflightReqs != nil {
 				// If it's a client initiated request.
 				leave.sess.inflightReqs.Done()
@@ -100,7 +102,10 @@ func (t *Topic) runProxy(hub *Hub) {
 	}
 }
 
-func (t *Topic) handleProxyLeaveRequest(leave *sessionLeave, killTimer *time.Timer) {
+// Takes a session leave request, forwards it to the topic master and
+// modifies the local state accordingly.
+// Returns whether the operation was successful.
+func (t *Topic) handleProxyLeaveRequest(leave *sessionLeave, killTimer *time.Timer) bool {
 	// Detach session from topic; session may continue to function.
 	var asUid types.Uid
 	if leave.pkt != nil {
@@ -114,13 +119,13 @@ func (t *Topic) handleProxyLeaveRequest(leave *sessionLeave, killTimer *time.Tim
 			asUid = pssd.uid
 		} else {
 			log.Println("proxy topic: leave request sent for unknown session")
-			return
+			return false
 		}
 	}
 	// Remove the session from the topic without waiting for a response from the master node
 	// because by the time the response arrives this session may be already gone from the session store
 	// and we won't be able to find and remove it by its sid.
-	t.remSession(leave.sess, asUid)
+	_, result := t.remSession(leave.sess, asUid)
 	if err := globals.cluster.routeToTopicMaster(ProxyReqLeave, leave.pkt, t.name, leave.sess); err != nil {
 		log.Println("proxy topic: route broadcast request from proxy to master failed:", err)
 	}
@@ -128,6 +133,7 @@ func (t *Topic) handleProxyLeaveRequest(leave *sessionLeave, killTimer *time.Tim
 		// No more sessions attached. Start the countdown.
 		killTimer.Reset(idleProxyTopicTimeout)
 	}
+	return result
 }
 
 // Proxy topic handler of a master topic response to earlier request.
