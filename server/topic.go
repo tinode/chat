@@ -1291,11 +1291,10 @@ func (t *Topic) thisUserSub(h *Hub, sess *Session, pkt *ClientComMessage, asUid 
 	} else {
 		// Process update to existing subscription. It could be an incomplete subscription for a new topic.
 
-		// If user is already a normal subscriber he cannot address topic as a channel.
-		// If this happens it's a bug. Maybe replace with a panic.
 		if asChan {
-			log.Println("SHOULD NOT HAPPEN! Channel subscription is found in cache", t.name)
-			sess.queueOut(ErrNotFoundReply(pkt, now))
+			// A normal subscriber is trying to access topic as a channel.
+			// Direct the subscriber to use non-channel topic name.
+			sess.queueOut(InfoUseOtherReply(pkt, t.name, now))
 			return nil, types.ErrNotFound
 		}
 
@@ -3314,7 +3313,7 @@ func (t *Topic) isOnline() bool {
 	return false
 }
 
-// Verifies if topic can be access by the given name.
+// Verifies if topic can be access by the given name: access any topic as non-channel, access channel as channel.
 // Returns true if access is for channel, false if not and error if access is invalid.
 func (t *Topic) verifyChannelAccess(asTopic string) (bool, error) {
 	if !isChannel(asTopic) {
