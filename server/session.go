@@ -121,6 +121,12 @@ type Session struct {
 	// Timer which triggers after some seconds to mark background session as foreground.
 	bkgTimer *time.Timer
 
+	// Number of subscribe/unsubscribe requests in fligth.
+	inflightReqs *sync.WaitGroup
+	// Synchronizes access to session store in cluster mode: 
+	// subscribe/unsubscribe replies are asynchronous.
+	sessionStoreLock sync.Mutex
+
 	// Outbound mesages, buffered.
 	// The content must be serialized in format suitable for the session.
 	send chan interface{}
@@ -298,8 +304,11 @@ func (s *Session) queueOutBytes(data []byte) bool {
 
 // cleanUp is called when the session is terminated to perform resource cleanup.
 func (s *Session) cleanUp(expired bool) {
+	s.inflightReqs.Wait()
 	if !expired {
+		s.sessionStoreLock.Lock()
 		globals.sessionStore.Delete(s)
+		s.sessionStoreLock.Unlock()
 	}
 
 	s.background = false
@@ -489,6 +498,7 @@ func (s *Session) subscribe(msg *ClientComMessage) {
 	if sub := s.getSub(msg.RcptTo); sub != nil {
 		s.queueOut(InfoAlreadySubscribed(msg.Id, msg.Original, msg.Timestamp))
 	} else {
+		s.inflightReqs.Add(1)
 		select {
 		case globals.hub.join <- &sessionJoin{
 			pkt:  msg,
@@ -496,6 +506,7 @@ func (s *Session) subscribe(msg *ClientComMessage) {
 		default:
 			// Reply with a 500 to the user.
 			s.queueOut(ErrUnknownReply(msg, msg.Timestamp))
+			s.inflightReqs.Done()
 			log.Println("s.subscribe: join queue full, topic ", msg.RcptTo, s.sid)
 		}
 		// Hub will send Ctrl success/failure packets back to session
@@ -520,6 +531,7 @@ func (s *Session) leave(msg *ClientComMessage) {
 		} else {
 			// Unlink from topic, topic will send a reply.
 			s.delSub(msg.RcptTo)
+			s.inflightReqs.Add(1)
 			sub.done <- &sessionLeave{
 				pkt:  msg,
 				sess: s}
