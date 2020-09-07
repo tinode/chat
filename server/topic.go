@@ -1668,6 +1668,12 @@ func (t *Topic) replyGetDesc(sess *Session, asUid types.Uid, opts *MsgGetOpts, m
 		return errors.New("invalid GetDesc query")
 	}
 
+	if _, err := t.verifyChannelAccess(msg.Original); err != nil {
+		// User should not be able to address non-channel topic as channel.
+		sess.queueOut(ErrNotFoundReply(msg, now))
+		return types.ErrNotFound
+	}
+
 	// Check if user requested modified data
 	ifUpdated := opts == nil || opts.IfModifiedSince == nil || opts.IfModifiedSince.Before(t.updated)
 
@@ -1756,6 +1762,13 @@ func (t *Topic) replySetDesc(sess *Session, asUid types.Uid, msg *ClientComMessa
 	now := types.TimeNow()
 	set := msg.Set
 
+	asChan, err := t.verifyChannelAccess(msg.Original)
+	if err != nil {
+		// User should not be able to address non-channel topic as channel.
+		sess.queueOut(ErrNotFoundReply(msg, now))
+		return types.ErrNotFound
+	}
+
 	assignAccess := func(upd map[string]interface{}, mode *MsgDefaultAcsMode) error {
 		if mode == nil {
 			return nil
@@ -1800,15 +1813,14 @@ func (t *Topic) replySetDesc(sess *Session, asUid types.Uid, msg *ClientComMessa
 		return
 	}
 
-	var err error
 	// DefaultAccess and/or Public have chanegd
 	var sendCommon bool
 	// Private has changed
 	var sendPriv bool
 
-	// Change to the main object
+	// Change to the main object (user or topic).
 	core := make(map[string]interface{})
-	// Change to subscription
+	// Change to subscription.
 	sub := make(map[string]interface{})
 	if set.Desc != nil {
 		switch t.cat {
@@ -1846,6 +1858,11 @@ func (t *Topic) replySetDesc(sess *Session, asUid types.Uid, msg *ClientComMessa
 		sendPriv = assignGenericValues(sub, "Private", t.perUser[asUid].private, set.Desc.Private)
 	}
 
+	if len(core)+len(sub) == 0 {
+		sess.queueOut(InfoNotModifiedReply(msg, now))
+		return errors.New("{set} generated no update to DB")
+	}
+
 	if len(core) > 0 {
 		core["UpdatedAt"] = now
 		switch t.cat {
@@ -1858,15 +1875,16 @@ func (t *Topic) replySetDesc(sess *Session, asUid types.Uid, msg *ClientComMessa
 		}
 	}
 	if err == nil && len(sub) > 0 {
-		err = store.Subs.Update(t.name, asUid, sub, true)
+		tname := t.name
+		if asChan {
+			tname = types.GrpToChn(tname)
+		}
+		err = store.Subs.Update(tname, asUid, sub, true)
 	}
 
 	if err != nil {
 		sess.queueOut(ErrUnknownReply(msg, now))
 		return err
-	} else if len(core)+len(sub) == 0 {
-		sess.queueOut(InfoNotModifiedReply(msg, now))
-		return errors.New("{set} generated no update to DB")
 	}
 
 	// Update values cached in the topic object
@@ -1883,7 +1901,8 @@ func (t *Topic) replySetDesc(sess *Session, asUid types.Uid, msg *ClientComMessa
 		// Assign per-session fnd.Public.
 		t.fndSetPublic(sess, core["Public"])
 	}
-	if private, ok := sub["Private"]; ok {
+
+	if private, ok := sub["Private"]; ok && !asChan {
 		pud := t.perUser[asUid]
 		pud.private = private
 		pud.updated = now
@@ -1929,6 +1948,12 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 	if req != nil && (req.SinceId != 0 || req.BeforeId != 0) {
 		sess.queueOut(ErrMalformedReply(msg, now))
 		return errors.New("invalid MsgGetOpts query")
+	}
+
+	if _, err := t.verifyChannelAccess(msg.Original); err != nil {
+		// User should not be able to address non-channel topic as channel.
+		sess.queueOut(ErrNotFoundReply(msg, now))
+		return types.ErrNotFound
 	}
 
 	userData := t.perUser[asUid]
@@ -2191,6 +2216,12 @@ func (t *Topic) replySetSub(h *Hub, sess *Session, pkt *ClientComMessage) error 
 	asUid := types.ParseUserId(pkt.AsUser)
 	set := pkt.Set
 
+	if _, err := t.verifyChannelAccess(pkt.Original); err != nil {
+		// User should not be able to address non-channel topic as channel.
+		sess.queueOut(ErrNotFoundReply(pkt, now))
+		return types.ErrNotFound
+	}
+
 	var target types.Uid
 	if target = types.ParseUserId(set.Sub.User); target.IsZero() && set.Sub.User != "" {
 		// Invalid user ID
@@ -2297,6 +2328,11 @@ func (t *Topic) replyGetData(sess *Session, asUid types.Uid, req *MsgGetOpts, ms
 func (t *Topic) replyGetTags(sess *Session, asUid types.Uid, msg *ClientComMessage) error {
 	now := types.TimeNow()
 
+	if _, err := t.verifyChannelAccess(msg.Original); err != nil {
+		// User should not be able to address non-channel topic as channel.
+		sess.queueOut(ErrNotFoundReply(msg, now))
+		return types.ErrNotFound
+	}
 	if t.cat != types.TopicCatMe && t.cat != types.TopicCatGrp {
 		sess.queueOut(ErrOperationNotAllowedReply(msg, now))
 		return errors.New("invalid topic category for getting tags")
@@ -2326,7 +2362,12 @@ func (t *Topic) replySetTags(sess *Session, asUid types.Uid, msg *ClientComMessa
 
 	now := types.TimeNow()
 
-	if t.cat != types.TopicCatMe && t.cat != types.TopicCatGrp {
+	if _, err := t.verifyChannelAccess(msg.Original); err != nil {
+		// User should not be able to address non-channel topic as channel.
+		resp = ErrNotFoundReply(msg, now)
+		err = types.ErrNotFound
+
+	} else if t.cat != types.TopicCatMe && t.cat != types.TopicCatGrp {
 		resp = ErrOperationNotAllowedReply(msg, now)
 		err = errors.New("invalid topic category to assign tags")
 
@@ -2502,7 +2543,8 @@ func (t *Topic) replyDelMsg(sess *Session, asUid types.Uid, msg *ClientComMessag
 		// User should not be able to address non-channel topic as channel.
 		sess.queueOut(ErrNotFoundReply(msg, now))
 		return types.ErrNotFound
-	} else if asChan {
+	}
+	if asChan {
 		// Do not allow channel readers delete messages.
 		sess.queueOut(ErrOperationNotAllowedReply(msg, now))
 		return errors.New("channel readers cannot delete messages")
@@ -2619,11 +2661,11 @@ func (t *Topic) replyDelMsg(sess *Session, asUid types.Uid, msg *ClientComMessag
 // 2.1.1 Check if the other subscription still exists, if so, treat request as {leave unreg=true}
 // 2.1.2 If the other subscription does not exist, delete topic
 // 2.2 If this is not a p2p topic, treat it as {leave unreg=true}
-func (t *Topic) replyDelTopic(h *Hub, sess *Session, asUid types.Uid, pkt *ClientComMessage) error {
+func (t *Topic) replyDelTopic(h *Hub, sess *Session, asUid types.Uid, msg *ClientComMessage) error {
 	if t.owner != asUid {
 		// Cases 2.1.1 and 2.2
 		if t.cat != types.TopicCatP2P || t.subsCount() == 2 {
-			return t.replyLeaveUnsub(h, sess, pkt, asUid)
+			return t.replyLeaveUnsub(h, sess, msg, asUid)
 		}
 	}
 
@@ -2669,14 +2711,15 @@ func (t *Topic) replyDelSub(h *Hub, sess *Session, asUid types.Uid, msg *ClientC
 	del := msg.Del
 
 	asChan, err := t.verifyChannelAccess(msg.Original)
+	if err != nil {
+		// User should not be able to address non-channel topic as channel.
+		sess.queueOut(ErrNotFoundReply(msg, now))
+		return types.ErrNotFound
+	}
 	if asChan {
 		// Don't allow channel readers to delete self-subscription. Use leave-unsub or del-topic.
 		sess.queueOut(ErrPermissionDeniedReply(msg, now))
 		return errors.New("channel access denied: cannot delete subscription")
-	} else if err != nil {
-		// User should not be able to address non-channel topic as channel.
-		sess.queueOut(ErrNotFoundReply(msg, now))
-		return types.ErrNotFound
 	}
 
 	// Get ID of the affected user
@@ -2746,7 +2789,7 @@ func (t *Topic) replyDelSub(h *Hub, sess *Session, asUid types.Uid, msg *ClientC
 
 // replyLeaveUnsub is request to unsubscribe user and detach all user's sessions from topic.
 // FIXME: if grp subscription does not exist, replyLeaveUnsub will replace grpXXX with chnXXX.
-func (t *Topic) replyLeaveUnsub(h *Hub, sess *Session, pkt *ClientComMessage, asUid types.Uid) error {
+func (t *Topic) replyLeaveUnsub(h *Hub, sess *Session, msg *ClientComMessage, asUid types.Uid) error {
 	now := types.TimeNow()
 
 	if asUid.IsZero() {
@@ -2754,24 +2797,24 @@ func (t *Topic) replyLeaveUnsub(h *Hub, sess *Session, pkt *ClientComMessage, as
 	}
 
 	if t.owner == asUid {
-		if pkt != nil {
-			sess.queueOut(ErrPermissionDeniedReply(pkt, now))
+		if msg != nil {
+			sess.queueOut(ErrPermissionDeniedReply(msg, now))
 		}
 		return errors.New("replyLeaveUnsub: owner cannot unsubscribe")
 	}
 
 	var err error
 	var asChan bool
-	if pkt != nil {
-		asChan, err = t.verifyChannelAccess(pkt.Original)
+	if msg != nil {
+		asChan, err = t.verifyChannelAccess(msg.Original)
 		if err != nil {
-			sess.queueOut(ErrNotFoundReply(pkt, now))
+			sess.queueOut(ErrNotFoundReply(msg, now))
 			return errors.New("replyLeaveUnsub: incorrect addressing of channel")
 		}
 	}
 
 	// Delete user's subscription from the database.
-	if pkt == nil && t.isChan {
+	if msg == nil && t.isChan {
 		// Must try to unsubscribe both: as subscriber and as reader.
 		err = store.Subs.Delete(t.name, asUid)
 		if err == types.ErrNotFound {
@@ -2788,18 +2831,18 @@ func (t *Topic) replyLeaveUnsub(h *Hub, sess *Session, pkt *ClientComMessage, as
 
 	if err != nil {
 		if err == types.ErrNotFound {
-			if pkt != nil {
-				sess.queueOut(InfoNoActionReply(pkt, now))
+			if msg != nil {
+				sess.queueOut(InfoNoActionReply(msg, now))
 			}
 			err = nil
-		} else if pkt != nil {
-			sess.queueOut(ErrUnknownReply(pkt, now))
+		} else if msg != nil {
+			sess.queueOut(ErrUnknownReply(msg, now))
 		}
 		return err
 	}
 
-	if pkt != nil {
-		sess.queueOut(NoErrReply(pkt, now))
+	if msg != nil {
+		sess.queueOut(NoErrReply(msg, now))
 	}
 
 	var oldWant types.AccessMode
