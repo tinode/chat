@@ -128,8 +128,6 @@ func (t *Topic) handleProxyLeaveRequest(leave *sessionLeave, killTimer *time.Tim
 	if leave.pkt == nil {
 		// Explicitly specify the uid because the master multiplex session needs to know which
 		// of its multiple hosted sessions to delete.
-		// Make a copy of the request in order to keep the original request intact
-		// (otherwise, it may break things).
 		pkt = &ClientComMessage{
 			AsUser: asUid.UserId(),
 			Leave:  &MsgClientLeave{},
