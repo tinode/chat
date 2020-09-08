@@ -126,6 +126,19 @@ func (t *Topic) handleProxyLeaveRequest(leave *sessionLeave, killTimer *time.Tim
 	// because by the time the response arrives this session may be already gone from the session store
 	// and we won't be able to find and remove it by its sid.
 	_, result := t.remSession(leave.sess, asUid)
+	if leave.pkt == nil {
+		// Explicitly specify the uid because the master multiplex session needs to know which
+		// of its multiple hosted sessions to delete.
+		// Make a copy of the request.
+		leaveCopy := &sessionLeave{
+			sess: leave.sess,
+			pkt: &ClientComMessage{
+				AsUser: asUid.UserId(),
+				Leave:  &MsgClientLeave{},
+			},
+		}
+		leave = leaveCopy
+	}
 	if err := globals.cluster.routeToTopicMaster(ProxyReqLeave, leave.pkt, t.name, leave.sess); err != nil {
 		log.Println("proxy topic: route broadcast request from proxy to master failed:", err)
 	}

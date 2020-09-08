@@ -90,7 +90,7 @@ type Topic struct {
 
 	// Sessions attached to this topic. The UID kept here may not match Session.uid if session is
 	// subscribed on behalf of another user.
-	sessions map[*Session]perSessionData
+	sessions map[*Session]*perSessionData
 
 	// Inbound {data} and {pres} messages from sessions or other topics, already converted to SCM. Buffered = 256
 	broadcast chan *ServerComMessage
@@ -3264,12 +3264,12 @@ func (t *Topic) addSession(sess *Session, asUid types.Uid, isChanSub bool) {
 
 	if s.isMultiplex() {
 		if sess.background {
-			t.sessions[s] = perSessionData{}
+			t.sessions[s] = &perSessionData{}
 		} else {
-			t.sessions[s] = perSessionData{muids: []types.Uid{asUid}}
+			t.sessions[s] = &perSessionData{muids: []types.Uid{asUid}}
 		}
 	} else {
-		t.sessions[s] = perSessionData{uid: asUid, isChanSub: isChanSub}
+		t.sessions[s] = &perSessionData{uid: asUid, isChanSub: isChanSub}
 	}
 }
 
@@ -3292,7 +3292,7 @@ func (t *Topic) remSession(sess *Session, asUid types.Uid) (*perSessionData, boo
 
 	if pssd.uid == asUid || asUid.IsZero() {
 		delete(t.sessions, s)
-		return &pssd, true
+		return pssd, true
 	}
 
 	for i := range pssd.muids {
@@ -3300,7 +3300,7 @@ func (t *Topic) remSession(sess *Session, asUid types.Uid) (*perSessionData, boo
 			pssd.muids[i] = pssd.muids[len(pssd.muids)-1]
 			pssd.muids = pssd.muids[:len(pssd.muids)-1]
 			t.sessions[s] = pssd
-			return &pssd, false
+			return pssd, false
 		}
 	}
 
