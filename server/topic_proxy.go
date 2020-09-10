@@ -112,8 +112,6 @@ func (t *Topic) handleProxyLeaveRequest(leave *sessionLeave, killTimer *time.Tim
 		asUid = types.ParseUserId(leave.pkt.AsUser)
 	}
 
-	// FIXME: The old comment is probably not true: Explicitly specify user ID because the proxy session
-	// hosts multiple client sessions.
 	if asUid.IsZero() {
 		if pssd, ok := t.sessions[leave.sess]; ok {
 			asUid = pssd.uid
@@ -126,7 +124,18 @@ func (t *Topic) handleProxyLeaveRequest(leave *sessionLeave, killTimer *time.Tim
 	// because by the time the response arrives this session may be already gone from the session store
 	// and we won't be able to find and remove it by its sid.
 	_, result := t.remSession(leave.sess, asUid)
-	if err := globals.cluster.routeToTopicMaster(ProxyReqLeave, leave.pkt, t.name, leave.sess); err != nil {
+	var pkt *ClientComMessage
+	if leave.pkt == nil {
+		// Explicitly specify the uid because the master multiplex session needs to know which
+		// of its multiple hosted sessions to delete.
+		pkt = &ClientComMessage{
+			AsUser: asUid.UserId(),
+			Leave:  &MsgClientLeave{},
+		}
+	} else {
+		pkt = leave.pkt
+	}
+	if err := globals.cluster.routeToTopicMaster(ProxyReqLeave, pkt, t.name, leave.sess); err != nil {
 		log.Println("proxy topic: route broadcast request from proxy to master failed:", err)
 	}
 	if len(t.sessions) == 0 {
