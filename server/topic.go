@@ -3333,6 +3333,7 @@ func (t *Topic) addSession(sess *Session, asUid types.Uid, isChanSub bool) {
 			// This slice is expected to be relatively short.
 			// Not doing anything fancy here like maps or sorting.
 			pssd.muids = append(pssd.muids, asUid)
+			t.sessions[s] = pssd
 		}
 		// Maybe panic here.
 		return
