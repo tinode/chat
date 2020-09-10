@@ -180,7 +180,7 @@ func (h *Hub) run() {
 					xoriginal: join.pkt.Original,
 					// Indicates a proxy topic.
 					isProxy:   globals.cluster.isRemoteTopic(join.pkt.RcptTo),
-					sessions:  make(map[*Session]*perSessionData),
+					sessions:  make(map[*Session]perSessionData),
 					broadcast: make(chan *ServerComMessage, 256),
 					reg:       make(chan *sessionJoin, 32),
 					unreg:     make(chan *sessionLeave, 32),
