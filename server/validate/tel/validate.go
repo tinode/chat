@@ -32,9 +32,15 @@ func (*validator) PreCheck(cred string, params map[string]interface{}) (string, 
 	if !ok {
 		countryCode = "US"
 	}
-	if num, err := phonenumbers.Parse(cred, countryCode); err == nil {
-		// It's a phone number. Not checking the length because phone numbers cannot be that long.
-		return validatorName + ":" + phonenumbers.Format(num, phonenumbers.E164), nil
+
+	// Libphonenumber is broken by design: Parse will try to extract the number from any text.
+	if phonenumbers.VALID_PHONE_NUMBER_PATTERN.MatchString(cred) {
+		if num, err := phonenumbers.Parse(cred, countryCode); err == nil {
+			// It's a phone number. Not checking the length because phone numbers cannot be that long.
+			if phonenumbers.IsValidNumber(num) {
+				return validatorName + ":" + phonenumbers.Format(num, phonenumbers.E164), nil
+			}
+		}
 	}
 	return "", t.ErrMalformed
 }

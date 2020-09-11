@@ -335,7 +335,7 @@ func (t *Topic) presSubsOnlineDirect(what string, params *presParams, filter *pr
 
 			pud := t.perUser[pssd.uid]
 			// Check presence filters
-			if pud.deleted || (what != "acs" && what != "gone" && !presOfflineFilter(pud.modeGiven&pud.modeWant, filter)) {
+			if pud.deleted || (!presShouldBypassMode(what) && !presOfflineFilter(pud.modeGiven&pud.modeWant, filter)) {
 				continue
 			}
 
@@ -387,8 +387,7 @@ func (t *Topic) presSubsOffline(what string, params *presParams,
 	}
 
 	for uid, pud := range t.perUser {
-		if pud.deleted || (what != "acs" && what != "gone" &&
-			!presOfflineFilter(pud.modeGiven&pud.modeWant, filterSource)) {
+		if pud.deleted || (!presShouldBypassMode(what) && !presOfflineFilter(pud.modeGiven&pud.modeWant, filterSource)) {
 			continue
 		}
 
@@ -424,7 +423,7 @@ func presSubsOfflineOffline(topic string, cat types.TopicCat, subs []types.Subsc
 		sub := &subs[i]
 		// Let "acs" and "gone" through regardless of 'P'. Don't check for deleted subscriptions:
 		// they are not passed here.
-		if what != "acs" && what != "gone" && !presOfflineFilter(sub.ModeWant&sub.ModeGiven, nil) {
+		if !presShouldBypassMode(what) && !presOfflineFilter(sub.ModeWant&sub.ModeGiven, nil) {
 			continue
 		}
 
@@ -458,15 +457,17 @@ func presSubsOfflineOffline(topic string, cat types.TopicCat, subs []types.Subsc
 // Case L.2: Sharer altered GIVEN (inludes invite, eviction)
 // Case U: read/recv notification
 // Case V.1: messages soft-deleted
-func (t *Topic) presSingleUserOffline(uid types.Uid, what string, params *presParams, skipSid string, offlineOnly bool) {
+func (t *Topic) presSingleUserOffline(uid types.Uid, mode types.AccessMode,
+	what string, params *presParams, skipSid string,
+	offlineOnly bool) {
+
 	var skipTopic string
 	if offlineOnly {
 		skipTopic = t.name
 	}
 
-	if pud, ok := t.perUser[uid]; ok && !pud.deleted &&
-		// Send access change notification regardless of P permission.
-		(what == "acs" || what == "gone" || presOfflineFilter(pud.modeGiven&pud.modeWant, nil)) {
+	// ModeInvalid means the user is deleted (pud.deleted == true)
+	if mode != types.ModeInvalid && (presShouldBypassMode(what) || presOfflineFilter(mode, nil)) {
 
 		user := uid.UserId()
 		actor := params.actor
@@ -512,7 +513,7 @@ func presSingleUserOfflineOffline(uid types.Uid, original, what string, params *
 
 // Let other sessions of a given user know what messages are now received/read
 // Cases U
-func (t *Topic) presPubMessageCount(uid types.Uid, recv, read int, skip string) {
+func (t *Topic) presPubMessageCount(uid types.Uid, mode types.AccessMode, recv, read int, skip string) {
 	var what string
 	var seq int
 	if read > 0 {
@@ -527,13 +528,13 @@ func (t *Topic) presPubMessageCount(uid types.Uid, recv, read int, skip string) 
 		// Announce to user's other sessions on 'me' only if they are not attached to this topic.
 		// Attached topics will receive an {info}
 
-		t.presSingleUserOffline(uid, what, &presParams{seqID: seq}, skip, true)
+		t.presSingleUserOffline(uid, mode, what, &presParams{seqID: seq}, skip, true)
 	}
 }
 
 // Let other sessions of a given user know that messages are now deleted
 // Cases V.1, V.2
-func (t *Topic) presPubMessageDelete(uid types.Uid, delID int, list []MsgDelRange, skip string) {
+func (t *Topic) presPubMessageDelete(uid types.Uid, mode types.AccessMode, delID int, list []MsgDelRange, skip string) {
 	if len(list) == 0 && delID <= 0 {
 		log.Printf("Case V.1, V.2: topic[%s] invalid request - missing payload", t.name)
 		return
@@ -551,7 +552,7 @@ func (t *Topic) presPubMessageDelete(uid types.Uid, delID int, list []MsgDelRang
 	t.presSubsOnline("del", user, params, &presFilters{singleUser: user}, skip)
 
 	// Case V.1
-	t.presSingleUserOffline(uid, "del", params, skip, true)
+	t.presSingleUserOffline(uid, mode, "del", params, skip, true)
 }
 
 // Filter by permissions: mode.IsPresencer() AND mode has at least some
@@ -561,4 +562,9 @@ func presOfflineFilter(mode types.AccessMode, pf *presFilters) bool {
 		(pf == nil ||
 			((pf.filterIn == types.ModeNone || mode&pf.filterIn != 0) &&
 				(pf.filterOut == types.ModeNone || mode&pf.filterOut == 0)))
+}
+
+// presShouldBypassMode checks if notification of type 'what' should be sent regardless of access permissions.
+func presShouldBypassMode(what string) bool {
+	return what == "acs" || what == "gone" || what == "upd"
 }

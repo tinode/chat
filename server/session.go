@@ -123,7 +123,7 @@ type Session struct {
 
 	// Number of subscribe/unsubscribe requests in fligth.
 	inflightReqs *sync.WaitGroup
-	// Synchronizes access to session store in cluster mode: 
+	// Synchronizes access to session store in cluster mode:
 	// subscribe/unsubscribe replies are asynchronous.
 	sessionStoreLock sync.Mutex
 

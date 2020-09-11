@@ -267,6 +267,8 @@ func decodeStoreErrorExplicitTs(err error, id, topic string, serverTs, incomingR
 			errmsg = ErrNotFound(id, topic, serverTs, incomingReqTs)
 		case types.ErrInvalidResponse:
 			errmsg = ErrInvalidResponse(id, topic, serverTs, incomingReqTs)
+		case types.ErrRedirected:
+			errmsg = InfoUseOther(id, topic, params["topic"].(string), serverTs, incomingReqTs)
 		default:
 			errmsg = ErrUnknownExplicitTs(id, topic, serverTs, incomingReqTs)
 		}

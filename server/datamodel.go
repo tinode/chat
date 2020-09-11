@@ -964,6 +964,22 @@ func InfoAuthReset(id string, ts time.Time) *ServerComMessage {
 		Timestamp: ts}, Id: id, Timestamp: ts}
 }
 
+// InfoUseOther is a response to a subscription request redirecting client to another topic (303).
+func InfoUseOther(id, topic, other string, serverTs, incomingReqTs time.Time) *ServerComMessage {
+	return &ServerComMessage{Ctrl: &MsgServerCtrl{
+		Id:        id,
+		Code:      http.StatusSeeOther, // 303
+		Text:      "use other",
+		Topic:     topic,
+		Params:    map[string]string{"topic": other},
+		Timestamp: serverTs}, Id: id, Timestamp: incomingReqTs}
+}
+
+// InfoUseOtherReply is a response to a subscription request redirecting client to another topic (303).
+func InfoUseOtherReply(msg *ClientComMessage, other string, ts time.Time) *ServerComMessage {
+	return InfoUseOther(msg.Id, msg.Original, other, ts, msg.Timestamp)
+}
+
 // InfoAlreadySubscribed response means request to subscribe was ignored because user is already subscribed (304).
 func InfoAlreadySubscribed(id, topic string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{

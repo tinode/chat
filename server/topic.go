@@ -92,7 +92,7 @@ type Topic struct {
 	// subscribed on behalf of another user.
 	sessions map[*Session]perSessionData
 
-	// Inbound {data} and {pres} messages from sessions or other topics, already converted to SCM. Buffered = 256
+	// Requests to broadcast messages from sessions or other topics. Buffered = 256
 	broadcast chan *ServerComMessage
 	// Channel for receiving {get}/{set} requests, buffered = 32
 	meta chan *metaReq
@@ -483,6 +483,7 @@ func (t *Topic) runLocal(hub *Hub) {
 func (t *Topic) handleSubscription(h *Hub, join *sessionJoin) error {
 	asUid := types.ParseUserId(join.pkt.AsUser)
 	authLevel := auth.Level(join.pkt.AuthLvl)
+	asChan := isChannel(join.pkt.Original)
 
 	msgsub := join.pkt.Sub
 	getWhat := 0
@@ -490,18 +491,8 @@ func (t *Topic) handleSubscription(h *Hub, join *sessionJoin) error {
 		getWhat = parseMsgClientMeta(msgsub.Get.What)
 	}
 
-	if err := t.subscriptionReply(h, join); err != nil {
+	if err := t.subscriptionReply(h, asChan, join); err != nil {
 		return err
-	}
-
-	// Send notifications.
-
-	// Some notifications are always sent immediately.
-	t.sendImmediateSubNotifications(asUid, join)
-
-	if !join.sess.background {
-		// Remaining notifications are also sent immediately for foreground sessions.
-		t.sendSubNotifications(asUid, join.sess.sid, join.sess.userAgent)
 	}
 
 	if getWhat&constMsgMetaDesc != 0 {
@@ -725,16 +716,22 @@ func (t *Topic) channelSubUnsub(uid types.Uid, sub bool) {
 // Send push notification to the P2P counterpart.
 // In case of a new channel subscription subscribe user to an FCM topic.
 // These notifications are always sent immediately even if background is requested.
-func (t *Topic) sendImmediateSubNotifications(asUid types.Uid, sreg *sessionJoin) {
-	pud := t.perUser[asUid]
+func (t *Topic) sendImmediateSubNotifications(asUid types.Uid, acs *MsgAccessMode, sreg *sessionJoin) {
+	modeWant, _ := types.ParseAcs([]byte(acs.Want))
+	modeGiven, _ := types.ParseAcs([]byte(acs.Given))
+	mode := modeWant & modeGiven
 
 	if t.cat == types.TopicCatP2P {
 		uid2 := t.p2pOtherUser(asUid)
 		pud2 := t.perUser[uid2]
+		mode2 := pud2.modeGiven & pud2.modeWant
+		if pud2.deleted {
+			mode2 = types.ModeInvalid
+		}
 
 		// Inform the other user that the topic was just created.
 		if sreg.pkt.Sub.Created {
-			t.presSingleUserOffline(uid2, "acs", &presParams{
+			t.presSingleUserOffline(uid2, mode2, "acs", &presParams{
 				dWant:  pud2.modeWant.String(),
 				dGiven: pud2.modeGiven.String(),
 				actor:  asUid.UserId()}, "", false)
@@ -742,18 +739,18 @@ func (t *Topic) sendImmediateSubNotifications(asUid types.Uid, sreg *sessionJoin
 
 		if sreg.pkt.Sub.Newsub {
 			// Notify current user's 'me' topic to accept notifications from user2
-			t.presSingleUserOffline(asUid, "?none+en", nilPresParams, "", false)
+			t.presSingleUserOffline(asUid, mode, "?none+en", nilPresParams, "", false)
 
 			// Initiate exchange of 'online' status with the other user.
 			// We don't know if the current user is online in the 'me' topic,
 			// so sending an '?unkn' status to user2. His 'me' topic
 			// will reply with user2's status and request an actual status from user1.
 			status := "?unkn"
-			if (pud2.modeGiven & pud2.modeWant).IsPresencer() {
+			if mode2.IsPresencer() {
 				// If user2 should receive notifications, enable it.
 				status += "+en"
 			}
-			t.presSingleUserOffline(uid2, status, nilPresParams, "", false)
+			t.presSingleUserOffline(uid2, mode2, status, nilPresParams, "", false)
 
 			// Also send a push notification to the other user.
 			if pushRcpt := t.pushForSub(asUid, uid2, pud2.modeWant, pud2.modeGiven, types.TimeNow()); pushRcpt != nil {
@@ -765,10 +762,10 @@ func (t *Topic) sendImmediateSubNotifications(asUid types.Uid, sreg *sessionJoin
 	// newsub could be true only for p2p and group topics, no need to check topic category explicitly.
 	if sreg.pkt.Sub.Newsub {
 		// Notify creator's other sessions that the subscription (or the entire topic) was created.
-		t.presSingleUserOffline(asUid, "acs",
+		t.presSingleUserOffline(asUid, mode, "acs",
 			&presParams{
-				dWant:  pud.modeWant.String(),
-				dGiven: pud.modeGiven.String(),
+				dWant:  acs.Want,
+				dGiven: acs.Given,
 				actor:  asUid.UserId()},
 			sreg.sess.sid, false)
 
@@ -779,9 +776,8 @@ func (t *Topic) sendImmediateSubNotifications(asUid types.Uid, sreg *sessionJoin
 }
 
 // Send immediate or deferred presence notification in response to a subscription.
+// Not used by channels.
 func (t *Topic) sendSubNotifications(asUid types.Uid, sid, userAgent string) {
-	pud := t.perUser[asUid]
-
 	switch t.cat {
 	case types.TopicCatMe:
 		// Notify user's contact that the given user is online now.
@@ -795,6 +791,8 @@ func (t *Topic) sendSubNotifications(asUid types.Uid, sid, userAgent string) {
 		}
 
 	case types.TopicCatGrp:
+		pud := t.perUser[asUid]
+
 		// Enable notifications for a new group topic, if appropriate.
 		if !t.isLoaded() {
 			t.markLoaded()
@@ -906,15 +904,19 @@ func (t *Topic) handleBroadcast(msg *ServerComMessage) {
 
 		asUser := types.ParseUserId(msg.Info.From)
 		pud := t.perUser[asUser]
+		mode := pud.modeGiven & pud.modeWant
+		if pud.deleted {
+			mode = types.ModeInvalid
+		}
 
 		// Filter out "kp" from users with no 'W' permission (or people without a subscription)
-		if msg.Info.What == "kp" && (!(pud.modeGiven & pud.modeWant).IsWriter() || t.isReadOnly()) {
+		if msg.Info.What == "kp" && (!mode.IsWriter() || t.isReadOnly()) {
 			return
 		}
 
 		if msg.Info.What == "read" || msg.Info.What == "recv" {
 			// Filter out "read/recv" from users with no 'R' permission (or people without a subscription)
-			if !(pud.modeGiven & pud.modeWant).IsReader() {
+			if !mode.IsReader() {
 				return
 			}
 
@@ -955,7 +957,7 @@ func (t *Topic) handleBroadcast(msg *ServerComMessage) {
 				}
 
 				// Read/recv updated: notify user's other sessions of the change
-				t.presPubMessageCount(asUser, recv, read, msg.SkipSid)
+				t.presPubMessageCount(asUser, mode, recv, read, msg.SkipSid)
 
 				// Update cached count of unread messages
 				usersUpdateUnread(asUser, unread, true)
@@ -1036,7 +1038,7 @@ func (t *Topic) handleBroadcast(msg *ServerComMessage) {
 }
 
 // subscriptionReply generates a response to a subscription request
-func (t *Topic) subscriptionReply(h *Hub, join *sessionJoin) error {
+func (t *Topic) subscriptionReply(h *Hub, asChan bool, join *sessionJoin) error {
 	// The topic is already initialized by the Hub
 
 	msgsub := join.pkt.Sub
@@ -1080,8 +1082,6 @@ func (t *Topic) subscriptionReply(h *Hub, join *sessionJoin) error {
 		return err
 	}
 
-	asChan := isChannel(join.pkt.Original)
-
 	// Subscription successfully created. Link topic to session.
 	join.sess.addSub(t.name, &Subscription{
 		broadcast: t.broadcast,
@@ -1115,6 +1115,16 @@ func (t *Topic) subscriptionReply(h *Hub, join *sessionJoin) error {
 		join.sess.queueOut(NoErr(join.pkt.Id, toriginal, now))
 	} else {
 		join.sess.queueOut(NoErrParams(join.pkt.Id, toriginal, now, params))
+	}
+
+	// Some notifications are always sent immediately.
+	if modeChanged != nil {
+		t.sendImmediateSubNotifications(asUid, modeChanged, join)
+	}
+
+	if !join.sess.background && !asChan {
+		// Other notifications are also sent immediately for foreground sessions.
+		t.sendSubNotifications(asUid, join.sess.sid, join.sess.userAgent)
 	}
 
 	return nil
@@ -1298,11 +1308,10 @@ func (t *Topic) thisUserSub(h *Hub, sess *Session, pkt *ClientComMessage, asUid 
 	} else {
 		// Process update to existing subscription. It could be an incomplete subscription for a new topic.
 
-		// If user is already a normal subscriber he cannot address topic as a channel.
-		// If this happens it's a bug. Maybe replace with a panic.
 		if asChan {
-			log.Println("SHOULD NOT HAPPEN! Channel subscription is found in cache", t.name)
-			sess.queueOut(ErrNotFoundReply(pkt, now))
+			// A normal subscriber is trying to access topic as a channel.
+			// Direct the subscriber to use non-channel topic name.
+			sess.queueOut(InfoUseOtherReply(pkt, t.name, now))
 			return nil, types.ErrNotFound
 		}
 
@@ -1422,7 +1431,8 @@ func (t *Topic) thisUserSub(h *Hub, sess *Session, pkt *ClientComMessage, asUid 
 			if t.cat == types.TopicCatMe {
 				t.presUsersOfInterest("off+dis", t.userAgent)
 			} else {
-				t.presSingleUserOffline(asUid, "off+dis", nilPresParams, "", false)
+				t.presSingleUserOffline(asUid, userData.modeWant&userData.modeGiven,
+					"off+dis", nilPresParams, "", false)
 			}
 		}
 
@@ -1669,6 +1679,13 @@ func (t *Topic) replyGetDesc(sess *Session, asUid types.Uid, opts *MsgGetOpts, m
 		return errors.New("invalid GetDesc query")
 	}
 
+	asChan, err := t.verifyChannelAccess(msg.Original)
+	if err != nil {
+		// User should not be able to address non-channel topic as channel.
+		sess.queueOut(ErrNotFoundReply(msg, now))
+		return types.ErrNotFound
+	}
+
 	// Check if user requested modified data
 	ifUpdated := opts == nil || opts.IfModifiedSince == nil || opts.IfModifiedSince.Before(t.updated)
 
@@ -1739,12 +1756,32 @@ func (t *Topic) replyGetDesc(sess *Session, asUid types.Uid, opts *MsgGetOpts, m
 			// Send some sane value of touched.
 			desc.TouchedAt = &t.updated
 		}
+	} else if asChan {
+		desc.SeqId = t.lastID
+		if !t.touched.IsZero() {
+			desc.TouchedAt = &t.touched
+		}
+		// Fetch subscription data from DB for channel readers.
+		sub, _ := store.Subs.Get(msg.Original, asUid)
+		// Ignoring the error: it's not useful here.
+		if sub != nil {
+			desc.Acs = &MsgAccessMode{
+				Want:  sub.ModeWant.String(),
+				Given: sub.ModeWant.String(),
+				Mode:  (sub.ModeGiven & sub.ModeWant).String()}
+			if ifUpdated {
+				desc.Private = sub.Private
+			}
+			desc.DelId = max(sub.DelId, t.delID)
+			desc.ReadSeqId = sub.ReadSeqId
+			desc.RecvSeqId = max(sub.RecvSeqId, sub.ReadSeqId)
+		}
 	}
 
 	sess.queueOut(&ServerComMessage{
 		Meta: &MsgServerMeta{
 			Id:        id,
-			Topic:     t.original(asUid),
+			Topic:     msg.Original,
 			Desc:      desc,
 			Timestamp: &now}})
 
@@ -1756,6 +1793,13 @@ func (t *Topic) replyGetDesc(sess *Session, asUid types.Uid, opts *MsgGetOpts, m
 func (t *Topic) replySetDesc(sess *Session, asUid types.Uid, msg *ClientComMessage) error {
 	now := types.TimeNow()
 	set := msg.Set
+
+	asChan, err := t.verifyChannelAccess(msg.Original)
+	if err != nil {
+		// User should not be able to address non-channel topic as channel.
+		sess.queueOut(ErrNotFoundReply(msg, now))
+		return types.ErrNotFound
+	}
 
 	assignAccess := func(upd map[string]interface{}, mode *MsgDefaultAcsMode) error {
 		if mode == nil {
@@ -1801,15 +1845,14 @@ func (t *Topic) replySetDesc(sess *Session, asUid types.Uid, msg *ClientComMessa
 		return
 	}
 
-	var err error
 	// DefaultAccess and/or Public have chanegd
 	var sendCommon bool
 	// Private has changed
 	var sendPriv bool
 
-	// Change to the main object
+	// Change to the main object (user or topic).
 	core := make(map[string]interface{})
-	// Change to subscription
+	// Change to subscription.
 	sub := make(map[string]interface{})
 	if set.Desc != nil {
 		switch t.cat {
@@ -1847,6 +1890,11 @@ func (t *Topic) replySetDesc(sess *Session, asUid types.Uid, msg *ClientComMessa
 		sendPriv = assignGenericValues(sub, "Private", t.perUser[asUid].private, set.Desc.Private)
 	}
 
+	if len(core)+len(sub) == 0 {
+		sess.queueOut(InfoNotModifiedReply(msg, now))
+		return errors.New("{set} generated no update to DB")
+	}
+
 	if len(core) > 0 {
 		core["UpdatedAt"] = now
 		switch t.cat {
@@ -1859,15 +1907,16 @@ func (t *Topic) replySetDesc(sess *Session, asUid types.Uid, msg *ClientComMessa
 		}
 	}
 	if err == nil && len(sub) > 0 {
-		err = store.Subs.Update(t.name, asUid, sub, true)
+		tname := t.name
+		if asChan {
+			tname = types.GrpToChn(tname)
+		}
+		err = store.Subs.Update(tname, asUid, sub, true)
 	}
 
 	if err != nil {
 		sess.queueOut(ErrUnknownReply(msg, now))
 		return err
-	} else if len(core)+len(sub) == 0 {
-		sess.queueOut(InfoNotModifiedReply(msg, now))
-		return errors.New("{set} generated no update to DB")
 	}
 
 	// Update values cached in the topic object
@@ -1884,11 +1933,14 @@ func (t *Topic) replySetDesc(sess *Session, asUid types.Uid, msg *ClientComMessa
 		// Assign per-session fnd.Public.
 		t.fndSetPublic(sess, core["Public"])
 	}
-	if private, ok := sub["Private"]; ok {
+
+	mode := types.ModeNone
+	if private, ok := sub["Private"]; ok && !asChan {
 		pud := t.perUser[asUid]
 		pud.private = private
 		pud.updated = now
 		t.perUser[asUid] = pud
+		mode = pud.modeGiven & pud.modeWant
 	}
 
 	if sendCommon || sendPriv {
@@ -1906,7 +1958,7 @@ func (t *Topic) replySetDesc(sess *Session, asUid types.Uid, msg *ClientComMessa
 			t.updated = now
 		}
 		// Notify user's other sessions.
-		t.presSingleUserOffline(asUid, "upd", nilPresParams, sess.sid, false)
+		t.presSingleUserOffline(asUid, mode, "upd", nilPresParams, sess.sid, false)
 	}
 
 	sess.queueOut(NoErrReply(msg, now))
@@ -1930,6 +1982,12 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 	if req != nil && (req.SinceId != 0 || req.BeforeId != 0) {
 		sess.queueOut(ErrMalformedReply(msg, now))
 		return errors.New("invalid MsgGetOpts query")
+	}
+
+	if _, err := t.verifyChannelAccess(msg.Original); err != nil {
+		// User should not be able to address non-channel topic as channel.
+		sess.queueOut(ErrNotFoundReply(msg, now))
+		return types.ErrNotFound
 	}
 
 	userData := t.perUser[asUid]
@@ -2192,6 +2250,12 @@ func (t *Topic) replySetSub(h *Hub, sess *Session, pkt *ClientComMessage) error 
 	asUid := types.ParseUserId(pkt.AsUser)
 	set := pkt.Set
 
+	if _, err := t.verifyChannelAccess(pkt.Original); err != nil {
+		// User should not be able to address non-channel topic as channel.
+		sess.queueOut(ErrNotFoundReply(pkt, now))
+		return types.ErrNotFound
+	}
+
 	var target types.Uid
 	if target = types.ParseUserId(set.Sub.User); target.IsZero() && set.Sub.User != "" {
 		// Invalid user ID
@@ -2298,6 +2362,11 @@ func (t *Topic) replyGetData(sess *Session, asUid types.Uid, req *MsgGetOpts, ms
 func (t *Topic) replyGetTags(sess *Session, asUid types.Uid, msg *ClientComMessage) error {
 	now := types.TimeNow()
 
+	if _, err := t.verifyChannelAccess(msg.Original); err != nil {
+		// User should not be able to address non-channel topic as channel.
+		sess.queueOut(ErrNotFoundReply(msg, now))
+		return types.ErrNotFound
+	}
 	if t.cat != types.TopicCatMe && t.cat != types.TopicCatGrp {
 		sess.queueOut(ErrOperationNotAllowedReply(msg, now))
 		return errors.New("invalid topic category for getting tags")
@@ -2327,7 +2396,12 @@ func (t *Topic) replySetTags(sess *Session, asUid types.Uid, msg *ClientComMessa
 
 	now := types.TimeNow()
 
-	if t.cat != types.TopicCatMe && t.cat != types.TopicCatGrp {
+	if _, err := t.verifyChannelAccess(msg.Original); err != nil {
+		// User should not be able to address non-channel topic as channel.
+		resp = ErrNotFoundReply(msg, now)
+		err = types.ErrNotFound
+
+	} else if t.cat != types.TopicCatMe && t.cat != types.TopicCatGrp {
 		resp = ErrOperationNotAllowedReply(msg, now)
 		err = errors.New("invalid topic category to assign tags")
 
@@ -2503,7 +2577,8 @@ func (t *Topic) replyDelMsg(sess *Session, asUid types.Uid, msg *ClientComMessag
 		// User should not be able to address non-channel topic as channel.
 		sess.queueOut(ErrNotFoundReply(msg, now))
 		return types.ErrNotFound
-	} else if asChan {
+	}
+	if asChan {
 		// Do not allow channel readers delete messages.
 		sess.queueOut(ErrOperationNotAllowedReply(msg, now))
 		return errors.New("channel readers cannot delete messages")
@@ -2601,7 +2676,7 @@ func (t *Topic) replyDelMsg(sess *Session, asUid types.Uid, msg *ClientComMessag
 		t.perUser[asUid] = pud
 
 		// Notify user's other sessions
-		t.presPubMessageDelete(asUid, t.delID, dr, sess.sid)
+		t.presPubMessageDelete(asUid, pud.modeGiven&pud.modeWant, t.delID, dr, sess.sid)
 	}
 
 	sess.queueOut(NoErrParamsReply(msg, now, map[string]int{"del": t.delID}))
@@ -2620,11 +2695,11 @@ func (t *Topic) replyDelMsg(sess *Session, asUid types.Uid, msg *ClientComMessag
 // 2.1.1 Check if the other subscription still exists, if so, treat request as {leave unreg=true}
 // 2.1.2 If the other subscription does not exist, delete topic
 // 2.2 If this is not a p2p topic, treat it as {leave unreg=true}
-func (t *Topic) replyDelTopic(h *Hub, sess *Session, asUid types.Uid, pkt *ClientComMessage) error {
+func (t *Topic) replyDelTopic(h *Hub, sess *Session, asUid types.Uid, msg *ClientComMessage) error {
 	if t.owner != asUid {
 		// Cases 2.1.1 and 2.2
 		if t.cat != types.TopicCatP2P || t.subsCount() == 2 {
-			return t.replyLeaveUnsub(h, sess, pkt, asUid)
+			return t.replyLeaveUnsub(h, sess, msg, asUid)
 		}
 	}
 
@@ -2670,14 +2745,15 @@ func (t *Topic) replyDelSub(h *Hub, sess *Session, asUid types.Uid, msg *ClientC
 	del := msg.Del
 
 	asChan, err := t.verifyChannelAccess(msg.Original)
+	if err != nil {
+		// User should not be able to address non-channel topic as channel.
+		sess.queueOut(ErrNotFoundReply(msg, now))
+		return types.ErrNotFound
+	}
 	if asChan {
 		// Don't allow channel readers to delete self-subscription. Use leave-unsub or del-topic.
 		sess.queueOut(ErrPermissionDeniedReply(msg, now))
 		return errors.New("channel access denied: cannot delete subscription")
-	} else if err != nil {
-		// User should not be able to address non-channel topic as channel.
-		sess.queueOut(ErrNotFoundReply(msg, now))
-		return types.ErrNotFound
 	}
 
 	// Get ID of the affected user
@@ -2747,7 +2823,7 @@ func (t *Topic) replyDelSub(h *Hub, sess *Session, asUid types.Uid, msg *ClientC
 
 // replyLeaveUnsub is request to unsubscribe user and detach all user's sessions from topic.
 // FIXME: if grp subscription does not exist, replyLeaveUnsub will replace grpXXX with chnXXX.
-func (t *Topic) replyLeaveUnsub(h *Hub, sess *Session, pkt *ClientComMessage, asUid types.Uid) error {
+func (t *Topic) replyLeaveUnsub(h *Hub, sess *Session, msg *ClientComMessage, asUid types.Uid) error {
 	now := types.TimeNow()
 
 	if asUid.IsZero() {
@@ -2755,24 +2831,24 @@ func (t *Topic) replyLeaveUnsub(h *Hub, sess *Session, pkt *ClientComMessage, as
 	}
 
 	if t.owner == asUid {
-		if pkt != nil {
-			sess.queueOut(ErrPermissionDeniedReply(pkt, now))
+		if msg != nil {
+			sess.queueOut(ErrPermissionDeniedReply(msg, now))
 		}
 		return errors.New("replyLeaveUnsub: owner cannot unsubscribe")
 	}
 
 	var err error
 	var asChan bool
-	if pkt != nil {
-		asChan, err = t.verifyChannelAccess(pkt.Original)
+	if msg != nil {
+		asChan, err = t.verifyChannelAccess(msg.Original)
 		if err != nil {
-			sess.queueOut(ErrNotFoundReply(pkt, now))
+			sess.queueOut(ErrNotFoundReply(msg, now))
 			return errors.New("replyLeaveUnsub: incorrect addressing of channel")
 		}
 	}
 
 	// Delete user's subscription from the database.
-	if pkt == nil && t.isChan {
+	if msg == nil && t.isChan {
 		// Must try to unsubscribe both: as subscriber and as reader.
 		err = store.Subs.Delete(t.name, asUid)
 		if err == types.ErrNotFound {
@@ -2789,18 +2865,18 @@ func (t *Topic) replyLeaveUnsub(h *Hub, sess *Session, pkt *ClientComMessage, as
 
 	if err != nil {
 		if err == types.ErrNotFound {
-			if pkt != nil {
-				sess.queueOut(InfoNoActionReply(pkt, now))
+			if msg != nil {
+				sess.queueOut(InfoNoActionReply(msg, now))
 			}
 			err = nil
-		} else if pkt != nil {
-			sess.queueOut(ErrUnknownReply(pkt, now))
+		} else if msg != nil {
+			sess.queueOut(ErrUnknownReply(msg, now))
 		}
 		return err
 	}
 
-	if pkt != nil {
-		sess.queueOut(NoErrReply(pkt, now))
+	if msg != nil {
+		sess.queueOut(NoErrReply(msg, now))
 	}
 
 	var oldWant types.AccessMode
@@ -2934,7 +3010,7 @@ func (t *Topic) notifySubChange(uid, actor types.Uid, isChan bool,
 		if t.cat == types.TopicCatP2P {
 			uid2 := t.p2pOtherUser(uid)
 			// Remove user1's subscription to user2 and notify user1's other sessions that he is gone.
-			t.presSingleUserOffline(uid, "gone", nilPresParams, skip, false)
+			t.presSingleUserOffline(uid, newWant&newGiven, "gone", nilPresParams, skip, false)
 			// Tell user2 that user1 is offline but let him keep sending updates in case user1 resubscribes.
 			presSingleUserOfflineOffline(uid2, target, "off", nilPresParams, "")
 		} else if t.cat == types.TopicCatGrp && !isChan {
@@ -2959,7 +3035,7 @@ func (t *Topic) notifySubChange(uid, actor types.Uid, isChan bool,
 
 		// Notify subscriber of topic's online status.
 		if t.cat == types.TopicCatGrp && !isChan {
-			t.presSingleUserOffline(uid, "?unkn+en", nilPresParams, "", false)
+			t.presSingleUserOffline(uid, newWant&newGiven, "?unkn+en", nilPresParams, "", false)
 		} else if t.cat == types.TopicCatMe {
 			// User is visible online now, notify subscribers.
 			t.presUsersOfInterest("on+en", t.userAgent)
@@ -2971,7 +3047,7 @@ func (t *Topic) notifySubChange(uid, actor types.Uid, isChan bool,
 		// Notify sessions online in the topic.
 		t.presSubsOnlineDirect("acs", params, &presFilters{singleUser: target}, skip)
 		// Notify target's other sessions on 'me'.
-		t.presSingleUserOffline(uid, "acs", params, skip, true)
+		t.presSingleUserOffline(uid, newWant&newGiven, "acs", params, skip, true)
 	}
 }
 
@@ -3322,7 +3398,7 @@ func (t *Topic) isOnline() bool {
 	return false
 }
 
-// Verifies if topic can be access by the given name.
+// Verifies if topic can be access by the given name: access any topic as non-channel, access channel as channel.
 // Returns true if access is for channel, false if not and error if access is invalid.
 func (t *Topic) verifyChannelAccess(asTopic string) (bool, error) {
 	if !isChannel(asTopic) {
