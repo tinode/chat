@@ -37,7 +37,7 @@ func (t *Topic) runProxy(hub *Hub) {
 		case leave := <-t.unreg:
 			if !t.handleProxyLeaveRequest(leave, killTimer) {
 				log.Println("Failed to update proxy topic state for leave request", leave.sess.sid)
-      }
+			}
 			if leave.pkt != nil && leave.sess.inflightReqs != nil {
 				// If it's a client initiated request.
 				leave.sess.inflightReqs.Done()
