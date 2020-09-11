@@ -49,6 +49,8 @@ const (
 	ErrPermissionDenied = StoreError("denied")
 	// ErrInvalidResponse means the client's response does not match server's expectation.
 	ErrInvalidResponse = StoreError("invalid response")
+	// ErrRedirected means the subscription request was redirected to another topic.
+	ErrRedirected = StoreError("redirected")
 )
 
 // Uid is a database-specific record id, suitable to be used as a primary key.
