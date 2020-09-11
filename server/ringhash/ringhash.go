@@ -4,6 +4,7 @@ package ringhash
 
 import (
 	"encoding/ascii85"
+	"hash/crc32"
 	"hash/fnv"
 	"log"
 	"sort"
@@ -51,7 +52,7 @@ func New(replicas int, fn Hash) *Ring {
 	}
 	if ring.hashfunc == nil {
 		ring.hashfunc = func(data []byte) uint32 {
-			hash := fnv.New32a()
+			hash := crc32.NewIEEE()
 			hash.Write(data)
 			return hash.Sum32()
 		}
