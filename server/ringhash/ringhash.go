@@ -44,7 +44,7 @@ type Ring struct {
 }
 
 // New initializes an empty ringhash with the given number of replicas and a hash function.
-// If the hash function is nil, fnv.New32a() is used.
+// If the hash function is nil, crc32.NewIEEE() is used.
 func New(replicas int, fn Hash) *Ring {
 	ring := &Ring{
 		replicas: replicas,
