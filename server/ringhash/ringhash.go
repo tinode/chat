@@ -4,6 +4,7 @@ package ringhash
 
 import (
 	"encoding/ascii85"
+	"hash/crc32"
 	"hash/fnv"
 	"log"
 	"sort"
@@ -43,7 +44,7 @@ type Ring struct {
 }
 
 // New initializes an empty ringhash with the given number of replicas and a hash function.
-// If the hash function is nil, fnv.New32a() is used.
+// If the hash function is nil, crc32.NewIEEE() is used.
 func New(replicas int, fn Hash) *Ring {
 	ring := &Ring{
 		replicas: replicas,
@@ -51,7 +52,7 @@ func New(replicas int, fn Hash) *Ring {
 	}
 	if ring.hashfunc == nil {
 		ring.hashfunc = func(data []byte) uint32 {
-			hash := fnv.New32a()
+			hash := crc32.NewIEEE()
 			hash.Write(data)
 			return hash.Sum32()
 		}
