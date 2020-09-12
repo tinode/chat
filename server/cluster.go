@@ -79,6 +79,15 @@ type ClusterNode struct {
 
 	// IDs of multiplexing sessions belonging to this node.
 	msess map[string]struct{}
+
+	// Default channel for receiving responses to RPC calls issued by this node.
+	rpcDone chan *rpc.Call
+}
+
+func (n *ClusterNode) asyncRpcLoop() {
+	for call := range n.rpcDone {
+		n.handleRpcResponse(call)
+	}
 }
 
 // ClusterSess is a basic info on a remote session where the message was created.
@@ -271,6 +280,20 @@ func (n *ClusterNode) call(proc string, msg, resp interface{}) error {
 	return nil
 }
 
+func (n *ClusterNode) handleRpcResponse(call *rpc.Call) {
+	if call.Error != nil {
+		log.Printf("cluster: %s call failed: %s", call.ServiceMethod, call.Error)
+		n.lock.Lock()
+		if n.connected {
+			n.endpoint.Close()
+			n.connected = false
+			statsInc("LiveClusterNodes", -1)
+			go n.reconnect()
+		}
+		n.lock.Unlock()
+	}
+}
+
 func (n *ClusterNode) callAsync(proc string, msg, resp interface{}, done chan *rpc.Call) *rpc.Call {
 	if done != nil && cap(done) == 0 {
 		log.Panic("cluster: RPC done channel is unbuffered")
@@ -290,26 +313,23 @@ func (n *ClusterNode) callAsync(proc string, msg, resp interface{}, done chan *r
 		return call
 	}
 
-	myDone := make(chan *rpc.Call, 1)
-	go func() {
-		call := <-myDone
-		if call.Error != nil {
-			n.lock.Lock()
-			if n.connected {
-				n.endpoint.Close()
-				n.connected = false
-				statsInc("LiveClusterNodes", -1)
-				go n.reconnect()
+	var responseChan chan *rpc.Call
+	if done != nil {
+		// Make a separate response callback if we need to notify the caller.
+		myDone := make(chan *rpc.Call, 1)
+		go func() {
+			call := <-myDone
+			n.handleRpcResponse(call)
+			if done != nil {
+				done <- call
 			}
-			n.lock.Unlock()
-		}
+		}()
+		responseChan = myDone
+	} else {
+		responseChan = n.rpcDone
+	}
 
-		if done != nil {
-			done <- call
-		}
-	}()
-
-	call := n.endpoint.Go(proc, msg, resp, myDone)
+	call := n.endpoint.Go(proc, msg, resp, responseChan)
 	call.Done = done
 
 	return call
@@ -330,6 +350,16 @@ func (n *ClusterNode) proxyToMaster(msg *ClusterReq) error {
 func (n *ClusterNode) masterToProxy(msg *ClusterResp) error {
 	var unused bool
 	return n.call("Cluster.TopicProxy", msg, &unused)
+}
+
+// masterToProxyAsync forwards response from topic master to topic proxy
+// in a fire-and-forget manner.
+func (n *ClusterNode) masterToProxyAsync(msg *ClusterResp) error {
+	var unused bool
+	if c := n.callAsync("Cluster.TopicProxy", msg, &unused, nil); c.Error != nil {
+		return c.Error
+	}
+	return nil
 }
 
 // route routes server message within the cluster.
@@ -357,6 +387,13 @@ type Cluster struct {
 
 	// Failover parameters. Could be nil if failover is not enabled
 	fo *clusterFailover
+
+	// Thread pool to use for running proxy session (write) event processing logic.
+	// The number of proxy sessions grows as O(number of topics x number of cluster nodes).
+	// In large Tinode deployments (10s of thousands of topics, tens of nodes),
+	// running a separate event processing goroutine for each proxy session
+	// leads to a rather large memory usage and excessive scheduling overhead.
+	proxyEventQueue *ThreadPool
 }
 
 // TopicMaster is a gRPC endpoint which receives requests sent by proxy topic to master topic.
@@ -377,7 +414,7 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 		// Proxy topic is gone. Tear down the local auxiliary session.
 		// If it was the last session, master topic will shut down as well.
 		if msess != nil {
-			msess.stop <- nil
+			msess.stopSession(nil)
 			node.lock.Lock()
 			delete(node.msess, msid)
 			node.lock.Unlock()
@@ -402,7 +439,7 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 		node.lock.Unlock()
 
 		log.Println("cluster: multiplexing session started", msid, count)
-		go msess.clusterWriteLoop(msg.RcptTo)
+		msess.proxiedTopic = msg.RcptTo
 	}
 
 	// This is a local copy of a remote session.
@@ -840,7 +877,9 @@ func clusterInit(configString json.RawMessage, self *string) int {
 	globals.cluster = &Cluster{
 		thisNodeName: thisName,
 		fingerprint:  time.Now().Unix(),
-		nodes:        make(map[string]*ClusterNode)}
+		nodes:        make(map[string]*ClusterNode),
+		// TODO: make number of workers configurable.
+		proxyEventQueue: NewThreadPool(20)}
 
 	var nodeNames []string
 	for _, host := range config.Nodes {
@@ -898,6 +937,8 @@ func (c *Cluster) start() {
 
 	for _, n := range c.nodes {
 		go n.reconnect()
+		n.rpcDone = make(chan *rpc.Call, len(c.nodes)*50)
+		go n.asyncRpcLoop()
 	}
 
 	if c.fo != nil {
@@ -919,6 +960,11 @@ func (c *Cluster) shutdown() {
 	if globals.cluster == nil {
 		return
 	}
+	for _, n := range c.nodes {
+		close(n.rpcDone)
+	}
+
+	globals.cluster.proxyEventQueue.Stop()
 	globals.cluster = nil
 
 	c.inbound.Close()
@@ -995,7 +1041,7 @@ func (c *Cluster) garbageCollectProxySessions(activeNodes []string) {
 		n.lock.Unlock()
 		for sid := range msess {
 			if sess := globals.sessionStore.Get(sid); sess != nil {
-				sess.stop <- nil
+				sess.stopSession(nil)
 			}
 		}
 	}
@@ -1004,10 +1050,13 @@ func (c *Cluster) garbageCollectProxySessions(activeNodes []string) {
 // clusterWriteLoop implements write loop for multiplexing (proxy) session at a node which hosts master topic.
 // The session is a multiplexing session, i.e. it handles requests for multiple sessions at origin.
 func (sess *Session) clusterWriteLoop(forTopic string) {
+	terminate := true
 	defer func() {
-		sess.closeRPC()
-		globals.sessionStore.Delete(sess)
-		sess.unsubAll()
+		if terminate {
+			sess.closeRPC()
+			globals.sessionStore.Delete(sess)
+			sess.unsubAll()
+		}
 	}()
 
 	for {
@@ -1044,11 +1093,12 @@ func (sess *Session) clusterWriteLoop(forTopic string) {
 			srvMsg.RcptTo = forTopic
 			response.RcptTo = forTopic
 
-			if err := sess.clnode.masterToProxy(response); err != nil {
+			if err := sess.clnode.masterToProxyAsync(response); err != nil {
 				log.Printf("cluster master: write failed", sess.sid, err.Error())
 				return
 			}
 		case msg := <-sess.stop:
+			log.Println("cluster: stop msg received - multi sid", sess.sid)
 			if msg == nil {
 				// Terminating multiplexing session.
 				return
@@ -1060,6 +1110,10 @@ func (sess *Session) clusterWriteLoop(forTopic string) {
 			// In both cases the msg does not need to be forwarded to the proxy.
 
 		case <-sess.detach:
+			log.Println("cluster: detach msg received", sess.sid)
+			return
+		default:
+			terminate = false
 			return
 		}
 	}

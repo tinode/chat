@@ -465,7 +465,7 @@ func (t *Topic) runLocal(hub *Hub) {
 
 			// Tell sessions to remove the topic
 			for s := range t.sessions {
-				s.detach <- t.name
+				s.detachSession(t.name)
 			}
 
 			usersRegisterTopic(t, false)
@@ -2937,7 +2937,7 @@ func (t *Topic) evictUser(uid types.Uid, unsub bool, skip string) {
 	for s := range t.sessions {
 		if pssd, removed := t.remSession(s, uid); pssd != nil {
 			if removed {
-				s.detach <- t.name
+				s.detachSession(t.name)
 			}
 			if s.sid != skip {
 				s.queueOut(msg)

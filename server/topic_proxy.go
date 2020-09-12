@@ -37,7 +37,7 @@ func (t *Topic) runProxy(hub *Hub) {
 		case leave := <-t.unreg:
 			if !t.handleProxyLeaveRequest(leave, killTimer) {
 				log.Println("Failed to update proxy topic state for leave request", leave.sess.sid)
-      }
+			}
 			if leave.pkt != nil && leave.sess.inflightReqs != nil {
 				// If it's a client initiated request.
 				leave.sess.inflightReqs.Done()
@@ -82,7 +82,7 @@ func (t *Topic) runProxy(hub *Hub) {
 		case sd := <-t.exit:
 			// Tell sessions to remove the topic
 			for s := range t.sessions {
-				s.detach <- t.name
+				s.detachSession(t.name)
 			}
 
 			if err := globals.cluster.topicProxyGone(t.name); err != nil {
@@ -169,7 +169,7 @@ func (t *Topic) proxyMasterResponse(msg *ClusterResp, killTimer *time.Timer) {
 	} else {
 		sess := globals.sessionStore.Get(msg.OrigSid)
 		if sess == nil {
-			log.Println("topic_proxy: session not found; already terminated?")
+			log.Println("topic_proxy: session not found; already terminated?", msg.OrigSid)
 		}
 		switch msg.OrigReqType {
 		case ProxyReqJoin:
@@ -233,7 +233,7 @@ func (t *Topic) proxyCtrlBroadcast(msg *ServerComMessage) {
 		for sess := range t.sessions {
 			// Proxy topic may only have ordinary sessions. No multiplexing or proxy sessions here.
 			if _, removed := t.remSession(sess, msg.uid); removed {
-				sess.detach <- t.name
+				sess.detachSession(t.name)
 				if sess.sid != msg.SkipSid {
 					sess.queueOut(msg)
 				}
