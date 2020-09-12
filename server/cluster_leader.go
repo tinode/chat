@@ -178,8 +178,8 @@ func (c *Cluster) sendHealthChecks() {
 		}
 		c.fo.activeNodes = activeNodes
 		c.rehash(activeNodes)
-		c.invalidateProxySubs()
-		c.garbageCollectProxySessions(activeNodes)
+		c.invalidateProxySubs("")
+		c.gcProxySessions(activeNodes)
 
 		log.Println("cluster: initiating failover rehash for nodes", activeNodes)
 		globals.hub.rehash <- true
@@ -305,8 +305,8 @@ func (c *Cluster) run() {
 					log.Println("cluster: rehashing at a request of",
 						health.Leader, health.Nodes, health.Signature, c.ring.Signature())
 					c.rehash(health.Nodes)
-					c.invalidateProxySubs()
-					c.garbageCollectProxySessions(health.Nodes)
+					c.invalidateProxySubs("")
+					c.gcProxySessions(health.Nodes)
 					rehashSkipped = false
 
 					globals.hub.rehash <- true
