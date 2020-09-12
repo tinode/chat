@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/tinode/chat/server/auth"
+	"github.com/tinode/chat/server/concurrency"
 	"github.com/tinode/chat/server/push"
 	rh "github.com/tinode/chat/server/ringhash"
 	"github.com/tinode/chat/server/store/types"
@@ -393,7 +394,7 @@ type Cluster struct {
 	// In large Tinode deployments (10s of thousands of topics, tens of nodes),
 	// running a separate event processing goroutine for each proxy session
 	// leads to a rather large memory usage and excessive scheduling overhead.
-	proxyEventQueue *ThreadPool
+	proxyEventQueue *concurrency.GoRoutinePool
 }
 
 // TopicMaster is a gRPC endpoint which receives requests sent by proxy topic to master topic.
@@ -875,11 +876,11 @@ func clusterInit(configString json.RawMessage, self *string) int {
 	gob.Register(MsgAccessMode{})
 
 	globals.cluster = &Cluster{
-		thisNodeName: thisName,
-		fingerprint:  time.Now().Unix(),
-		nodes:        make(map[string]*ClusterNode),
+		thisNodeName:    thisName,
+		fingerprint:     time.Now().Unix(),
+		nodes:           make(map[string]*ClusterNode),
 		// TODO: make number of workers configurable.
-		proxyEventQueue: NewThreadPool(20)}
+		proxyEventQueue: concurrency.NewGoRoutinePool(20)}
 
 	var nodeNames []string
 	for _, host := range config.Nodes {
