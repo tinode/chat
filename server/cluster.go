@@ -569,7 +569,7 @@ func (c *Cluster) Ping(ping *ClusterPing, unused *bool) error {
 	if node.fingerprint == 0 {
 		// This is the first connection to remote node.
 		node.fingerprint = ping.Fingerprint
-	} else if node.fingerprint == ping.Fingerprint {
+	} else if node.fingerprint != ping.Fingerprint {
 		// Remote node restarted.
 		node.fingerprint = ping.Fingerprint
 		c.invalidateProxySubs(ping.Node)
