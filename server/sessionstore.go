@@ -159,7 +159,7 @@ func (ss *SessionStore) Shutdown() {
 	for _, s := range ss.sessCache {
 		if !s.isMultiplex() {
 			_, data := s.serialize(shutdown)
-			s.stop <- data
+			s.stopSession(data)
 		}
 	}
 
@@ -179,7 +179,7 @@ func (ss *SessionStore) EvictUser(uid types.Uid, skipSid string) {
 	for _, s := range ss.sessCache {
 		if s.uid == uid && !s.isMultiplex() && s.sid != skipSid {
 			_, data := s.serialize(evicted)
-			s.stop <- data
+			s.stopSession(data)
 			delete(ss.sessCache, s.sid)
 			if s.proto == LPOLL {
 				ss.lru.Remove(s.lpTracker)
@@ -202,7 +202,7 @@ func (ss *SessionStore) NodeRestarted(nodeName string, fingerprint int64) {
 			continue
 		}
 		if s.clnode.fingerprint != fingerprint {
-			s.stop <- nil
+			s.stopSession(nil)
 			delete(ss.sessCache, s.sid)
 		}
 	}
