@@ -29,11 +29,11 @@ type clusterFailover struct {
 	// The number of heartbeats a node can fail before being declared dead
 	nodeFailCountLimit int
 
-	// Channel for processing leader pings
-	leaderPing chan *ClusterPing
-	// Channel for processing election votes
+	// Channel for processing leader health checks.
+	healthCheck chan *ClusterHealth
+	// Channel for processing election votes.
 	electionVote chan *ClusterVote
-	// Channel for stopping the failover runner
+	// Channel for stopping the failover runner.
 	done chan bool
 }
 
@@ -48,8 +48,8 @@ type clusterFailoverConfig struct {
 	NodeFailAfter int `json:"node_fail_after"`
 }
 
-// ClusterPing is content of a leader node ping to a follower node.
-type ClusterPing struct {
+// ClusterHealth is content of a leader's health check of a follower node.
+type ClusterHealth struct {
 	// Name of the leader node
 	Leader string
 	// Election term
@@ -110,7 +110,7 @@ func (c *Cluster) failoverInit(config *clusterFailoverConfig) bool {
 		heartBeat:          hb,
 		voteTimeout:        config.VoteAfter,
 		nodeFailCountLimit: config.NodeFailAfter,
-		leaderPing:         make(chan *ClusterPing, config.VoteAfter),
+		healthCheck:        make(chan *ClusterHealth, config.VoteAfter),
 		electionVote:       make(chan *ClusterVote, len(c.nodes)),
 		done:               make(chan bool, 1)}
 
@@ -119,11 +119,11 @@ func (c *Cluster) failoverInit(config *clusterFailoverConfig) bool {
 	return true
 }
 
-// Ping is called by the leader node to assert leadership and check status
+// Health is called by the leader node to assert leadership and check status
 // of the followers.
-func (c *Cluster) Ping(ping *ClusterPing, unused *bool) error {
+func (c *Cluster) Health(health *ClusterHealth, unused *bool) error {
 	select {
-	case c.fo.leaderPing <- ping:
+	case c.fo.healthCheck <- health:
 	default:
 	}
 	return nil
@@ -142,13 +142,13 @@ func (c *Cluster) Vote(vreq *ClusterVoteRequest, response *ClusterVoteResponse) 
 	return nil
 }
 
-// Cluster leader checks health of other nodes.
-func (c *Cluster) sendPings() {
+// Cluster leader checks health of follower nodes.
+func (c *Cluster) sendHealthChecks() {
 	rehash := false
 
 	for _, node := range c.nodes {
 		unused := false
-		err := node.call("Cluster.Ping", &ClusterPing{
+		err := node.call("Cluster.Health", &ClusterHealth{
 			Leader:    c.thisNodeName,
 			Term:      c.fo.term,
 			Signature: c.ring.Signature(),
@@ -178,8 +178,8 @@ func (c *Cluster) sendPings() {
 		}
 		c.fo.activeNodes = activeNodes
 		c.rehash(activeNodes)
-		c.invalidateProxySubs()
-		c.garbageCollectProxySessions(activeNodes)
+		c.invalidateProxySubs("")
+		c.gcProxySessions(activeNodes)
 
 		log.Println("cluster: initiating failover rehash for nodes", activeNodes)
 		globals.hub.rehash <- true
@@ -250,21 +250,21 @@ func (c *Cluster) run() {
 
 	ticker := time.NewTicker(c.fo.heartBeat)
 
-	// Count of missed pings from the leader.
+	// Count of missed health checks from the leader.
 	missed := 0
-	// Don't rehash immediately on the first ping. If this node just came online, leader will
-	// account it on the next ping. Otherwise it will be rehashing twice.
+	// Don't rehash immediately on the first missed health check. If this node just came online, leader will
+	// account it on the next check. Otherwise it will be rehashing twice.
 	rehashSkipped := false
 
 	for {
 		select {
 		case <-ticker.C:
 			if c.fo.leader == c.thisNodeName {
-				// I'm the leader, send pings
-				c.sendPings()
+				// I'm the leader, send the health checks to followers.
+				c.sendHealthChecks()
 			} else {
-				// Increment the number of missed pings from the leader.
-				// The counter will be reset to zero when the ping is received.
+				// Increment the number of missed health checks from the leader.
+				// The counter will be reset to zero when a health check is received.
 				missed++
 				if missed >= c.fo.voteTimeout {
 					// Leader is gone, initiate election of a new leader.
@@ -272,41 +272,41 @@ func (c *Cluster) run() {
 					c.electLeader()
 				}
 			}
-		case ping := <-c.fo.leaderPing:
-			// Ping from a leader.
+		case health := <-c.fo.healthCheck:
+			// Health check from the leader.
 
-			if ping.Term < c.fo.term {
-				// This is a ping from a stale leader. Ignore.
-				log.Println("cluster: ping from a stale leader", ping.Term, c.fo.term, ping.Leader, c.fo.leader)
+			if health.Term < c.fo.term {
+				// This is a health check from a stale leader. Ignore.
+				log.Println("cluster: health check from a stale leader", health.Term, c.fo.term, health.Leader, c.fo.leader)
 				continue
 			}
 
-			if ping.Term > c.fo.term {
-				c.fo.term = ping.Term
-				c.fo.leader = ping.Leader
+			if health.Term > c.fo.term {
+				c.fo.term = health.Term
+				c.fo.leader = health.Leader
 				log.Printf("cluster: leader '%s' elected", c.fo.leader)
-			} else if ping.Leader != c.fo.leader {
+			} else if health.Leader != c.fo.leader {
 				if c.fo.leader != "" {
 					// Wrong leader. It's a bug, should never happen!
 					log.Printf("cluster: wrong leader '%s' while expecting '%s'; term %d",
-						ping.Leader, c.fo.leader, ping.Term)
+						health.Leader, c.fo.leader, health.Term)
 				} else {
-					log.Printf("cluster: leader set to '%s'", ping.Leader)
+					log.Printf("cluster: leader set to '%s'", health.Leader)
 				}
-				c.fo.leader = ping.Leader
+				c.fo.leader = health.Leader
 			}
 
-			// This ping is from a leader, consequently this node is not the leader.
+			// This is a health check from a leader, consequently this node is not the leader.
 			statsSet("ClusterLeader", 0)
 
 			missed = 0
-			if ping.Signature != c.ring.Signature() {
+			if health.Signature != c.ring.Signature() {
 				if rehashSkipped {
 					log.Println("cluster: rehashing at a request of",
-						ping.Leader, ping.Nodes, ping.Signature, c.ring.Signature())
-					c.rehash(ping.Nodes)
-					c.invalidateProxySubs()
-					c.garbageCollectProxySessions(ping.Nodes)
+						health.Leader, health.Nodes, health.Signature, c.ring.Signature())
+					c.rehash(health.Nodes)
+					c.invalidateProxySubs("")
+					c.gcProxySessions(health.Nodes)
 					rehashSkipped = false
 
 					globals.hub.rehash <- true
