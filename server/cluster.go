@@ -916,7 +916,7 @@ func clusterInit(configString json.RawMessage, self *string) int {
 		fingerprint:     time.Now().Unix(),
 		nodes:           make(map[string]*ClusterNode),
 		// TODO: make number of workers configurable.
-		proxyEventQueue: concurrency.NewGoRoutinePool(20)}
+		proxyEventQueue: concurrency.NewGoRoutinePool(len(config.Nodes) * 5)}
 
 	var nodeNames []string
 	for _, host := range config.Nodes {
