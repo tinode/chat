@@ -51,6 +51,9 @@ type clusterConfig struct {
 	Nodes []clusterNodeConfig `json:"nodes"`
 	// Name of this cluster node
 	ThisName string `json:"self"`
+	// Size of the cluster event goroutine pool (used by topic master multiplexing sessions
+	// for forwarding events to the topic proxies).
+	NumProxyEventGoRoutines int `json:"num_proxy_event_goroutines"`
 	// Failover configuration
 	Failover *clusterFailoverConfig
 }
@@ -911,12 +914,21 @@ func clusterInit(configString json.RawMessage, self *string) int {
 	gob.Register(map[string]string{})
 	gob.Register(MsgAccessMode{})
 
+	numProxyGoRoutines := config.NumProxyEventGoRoutines
+	if numProxyGoRoutines < 0 {
+		log.Println("Cluster: invalid number of proxy event goroutines:", numProxyGoRoutines)
+		return 1
+	}
+	if numProxyGoRoutines == 0 {
+		numProxyGoRoutines = len(config.Nodes) * 5
+		log.Println("Cluster: number of proxy event goroutines not specified. Default is", numProxyGoRoutines)
+	}
+
 	globals.cluster = &Cluster{
 		thisNodeName:    thisName,
 		fingerprint:     time.Now().Unix(),
 		nodes:           make(map[string]*ClusterNode),
-		// TODO: make number of workers configurable.
-		proxyEventQueue: concurrency.NewGoRoutinePool(len(config.Nodes) * 5)}
+		proxyEventQueue: concurrency.NewGoRoutinePool(numProxyGoRoutines)}
 
 	var nodeNames []string
 	for _, host := range config.Nodes {

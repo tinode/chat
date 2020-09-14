@@ -148,6 +148,7 @@
 			{"name": "tinode-1", "addr": "tinode-1:12001"},
 			{"name": "tinode-2", "addr": "tinode-2:12002"}
 		],
+		"num_proxy_event_goroutines": $CLUSTER_NUM_PROXY_EVENT_GOROUTINES,
 		"failover": {
 			"enabled": true,
 			"heartbeat": 100,
