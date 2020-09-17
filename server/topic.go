@@ -3426,3 +3426,25 @@ func genTopicName() string {
 func isChannel(name string) bool {
 	return strings.HasPrefix(name, "chn")
 }
+
+// Convert expanded (routable) topic name into name suitable for sending to the user.
+// For example p2pAbCDef123 -> usrAbCDef
+func topicNameForUser(name string, uid types.Uid, isChan bool) string {
+	switch topicCat(name) {
+	case types.TopicCatMe:
+		return "me"
+	case types.TopicCatFnd:
+		return "fnd"
+	case types.TopicCatP2P:
+		uid1, uid2, _ := types.ParseP2P(name)
+		if uid == uid1 {
+			return uid2.UserId()
+		}
+		return uid1.UserId()
+	case types.TopicCatGrp:
+		if isChan {
+			return types.GrpToChn(name)
+		}
+	}
+	return name
+}

@@ -1074,8 +1074,9 @@ func (c *Cluster) invalidateProxySubs(forNode string) {
 			return true
 		}
 
-		for s := range topic.sessions {
-			sessions[s] = append(sessions[s], topic.name)
+		for s, psd := range topic.sessions {
+			// FIXME: 'me' topic must be the last one in the list for each topic.
+			sessions[s] = append(sessions[s], topicNameForUser(topic.name, psd.uid, psd.isChanSub))
 		}
 		return true
 	})
