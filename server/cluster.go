@@ -1162,7 +1162,7 @@ func (sess *Session) clusterWriteLoop(forTopic string) {
 			response.RcptTo = forTopic
 
 			if err := sess.clnode.masterToProxyAsync(response); err != nil {
-				log.Printf("cluster master: write failed", sess.sid, err.Error())
+				log.Printf("cluster: response to proxy failed \"%s\": %s", sess.sid, err.Error())
 				return
 			}
 		case msg := <-sess.stop:
