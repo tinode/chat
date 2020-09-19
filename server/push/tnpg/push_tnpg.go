@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	baseTargetAddress = "https://pushgw.tinode.co/push/"
+	baseTargetAddress = "https://pushgw.tinode.co/"
 	pushBatchSize     = 100
 	subBatchSize      = 1000
 	bufferSize        = 1024
@@ -30,7 +30,8 @@ type Handler struct {
 	input   chan *push.Receipt
 	channel chan *push.ChannelReq
 	stop    chan bool
-	postUrl string
+	pushUrl string
+	subUrl  string
 }
 
 type configType struct {
@@ -105,7 +106,8 @@ func (Handler) Init(jsonconf string) error {
 		return errors.New("push.tnpg.org not specified.")
 	}
 
-	handler.postUrl = baseTargetAddress + config.OrgName
+	handler.pushUrl = baseTargetAddress + "push/" + config.OrgName
+	handler.subUrl = baseTargetAddress + "sub/" + config.OrgName
 	handler.input = make(chan *push.Receipt, bufferSize)
 	handler.channel = make(chan *push.ChannelReq, bufferSize)
 	handler.stop = make(chan bool, 1)
@@ -126,7 +128,7 @@ func (Handler) Init(jsonconf string) error {
 	return nil
 }
 
-func postMessage(body interface{}, config *configType) (*batchResponse, error) {
+func postMessage(endpoint string, body interface{}, config *configType) (*batchResponse, error) {
 	buf := new(bytes.Buffer)
 	gzw := gzip.NewWriter(buf)
 	err := json.NewEncoder(gzw).Encode(body)
@@ -135,7 +137,7 @@ func postMessage(body interface{}, config *configType) (*batchResponse, error) {
 		return nil, err
 	}
 
-	req, err := http.NewRequest("POST", handler.postUrl, buf)
+	req, err := http.NewRequest("POST", endpoint, buf)
 	if err != nil {
 		return nil, err
 	}
@@ -189,7 +191,7 @@ func sendPushes(rcpt *push.Receipt, config *configType) {
 		for j := i; j < upper; j++ {
 			payloads = append(payloads, messages[j].Message)
 		}
-		resp, err := postMessage(payloads, config)
+		resp, err := postMessage(handler.pushUrl, payloads, config)
 		if err != nil {
 			log.Println("tnpg push request failed:", err)
 			break
@@ -222,7 +224,7 @@ func processSubscription(req *push.ChannelReq, config *configType) {
 		log.Println("tnpg: user", req.Uid.UserId(), "has more than", subBatchSize, "devices")
 	}
 
-	resp, err := postMessage(&su, config)
+	resp, err := postMessage(handler.subUrl, &su, config)
 	if err != nil {
 		log.Println("tnpg channel sub request failed:", err)
 		return
