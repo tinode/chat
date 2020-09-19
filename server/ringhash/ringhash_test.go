@@ -3,6 +3,7 @@ package ringhash
 import (
 	"fmt"
 	"hash/crc32"
+	"hash/fnv"
 	"testing"
 )
 
@@ -139,8 +140,14 @@ func TestSignature(t *testing.T) {
 		t.Errorf("Signatures must be different - different keys")
 	}
 
+	fnvHashfunc := func(data []byte) uint32 {
+		hash := fnv.New32a()
+		hash.Write(data)
+		return hash.Sum32()
+	}
+
 	ring1 = New(4, nil)
-	ring2 = New(4, crc32.ChecksumIEEE)
+	ring2 = New(4, fnvHashfunc)
 
 	ring1.Add("owl", "crow", "sparrow")
 	ring2.Add("owl", "crow", "sparrow")
