@@ -253,8 +253,10 @@ func (s *Session) isCluster() bool {
 }
 
 func (s *Session) scheduleClusterWriteLoop() {
-	globals.cluster.proxyEventQueue.Schedule(
-		func() { s.clusterWriteLoop(s.proxiedTopic) })
+	if globals.cluster != nil && globals.cluster.proxyEventQueue != nil {
+		globals.cluster.proxyEventQueue.Schedule(
+			func() { s.clusterWriteLoop(s.proxiedTopic) })
+	}
 }
 
 // queueOut attempts to send a ServerComMessage to a session write loop; if the send buffer is full,
