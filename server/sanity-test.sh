@@ -1,10 +1,5 @@
 #!/bin/bash
 
-# NCurses constants.
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-NC='\033[0m'
-
 BINARY_PATH=$GOPATH/bin
 TINODE_BINARY=$BINARY_PATH/server
 
@@ -19,19 +14,25 @@ cleanup() {
 
 # Reports failure.
 fail() {
-  printf "${RED}Tests Failed: ${@}${NC}\n"
   cleanup
+  echo "**************************************************"
+  printf "Tests Failed: ${@}\n"
+  echo "**************************************************"
   exit 1
 }
 
 # Reports success.
 pass() {
-  printf "${GREEN}OK${NC}\n"
+  cleanup
+  echo "**************************************************"
+  echo "*                       OK                       *"
+  echo "**************************************************"
+  exit 0
 }
 
 # Brings up a mysql docker container.
 setup() {
-  docker info 1>/dev/null 2>&1 || (echo "docker not running" && return 1) #fail ""
+  docker info 1>/dev/null 2>&1 || (echo "docker not running" && return 1)
   docker run -p 3306:3306 --name mysql --network tinode-net --env MYSQL_ALLOW_EMPTY_PASSWORD=yes -d mysql:5.7 || return 1
   # This fails to detect when the mysql is actually ready.
   # TODO: figure out why.
@@ -49,7 +50,7 @@ setup() {
 
 # Compiles Tinode binaries.
 build() {
-  go build -tags mysql -ldflags "-X main.buildstamp=`date -u '+%Y%m%dT%H:%M:%SZ'`" \
+  go install -tags mysql -ldflags "-X main.buildstamp=`date -u '+%Y%m%dT%H:%M:%SZ'`" \
     github.com/tinode/chat/tinode-db \
     github.com/tinode/chat/server && \
   ln -s $TINODE_BINARY
@@ -65,26 +66,38 @@ run-server() {
   ./run-cluster.sh -s "" start
 }
 
+send-requests() {
+  local port=$1
+  local id=$2
+  local outfile=$(mktemp /tmp/tinode-${id}.txt)
+  python3 ../tn-cli/tn-cli.py --host=localhost:${port} --no-login < ../tn-cli/sample-script.txt > $outfile || fail "Test script failed (instance port ${port})"
+  num_positive_responses=`grep -c '<= 20[0-9]' $outfile`
+  if [ $num_positive_responses -ne 10 ]; then fail "Instance ${port}: unexpected number of 20* responses."; fi
+  rm $outfile
+}
+
 # Catch unexpected failures, do cleanup and output an error message
 trap 'cleanup ; fail "For Unexpected Reasons"'\
   HUP INT QUIT PIPE TERM
 
 # Normal script termination.
-trap 'cleanup'\
-  EXIT
+#trap 'cleanup'\
+#  EXIT
 
+run_id=`date +%s`
 echo "+----------------------------------------------------+"
 echo "|                 Tinode sanity test.                |"
 echo "+----------------------------------------------------+"
-exit 1
+echo "Timestamp = ${run_id}"
+
 setup || fail "Test setup failed."
 build || fail "Could not build Tinode binaries"
 init-db || fail "Could not initialize Tinode database"
 run-server || fail "Could not start tinode"
 
 # Test requests.
-python3 ../tn-cli/tn-cli.py --host=localhost:16060 --no-login < ../tn-cli/sample-script.txt || fail "Test script failed (instance one)"
-python3 ../tn-cli/tn-cli.py --host=localhost:16061 --no-login < ../tn-cli/sample-script.txt || fail "Test script failed (instance two)"
-python3 ../tn-cli/tn-cli.py --host=localhost:16062 --no-login < ../tn-cli/sample-script.txt || fail "Test script failed (instance three)"
+send-requests 16060 $run_id
+send-requests 16061 $run_id
+send-requests 16062 $run_id
 
 pass
