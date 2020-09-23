@@ -25,11 +25,20 @@ while [[ $# -gt 0 ]]; do
       config=$1
       shift # value
       ;;
+    -s|--static_data)
+      static_data=$1
+      shift # value
+      ;;
     start)
       if [ ! -z "$config" ] ; then
         TINODE_CONF=$config
       else
         TINODE_CONF="tinode.conf"
+      fi
+      if [ ! -z "${static_data+x}" ] ; then
+        STATIC_DATA_DIR=$static_data
+      else
+        STATIC_DATA_DIR="static"
       fi
 
       echo "HTTP ports 6060-6062, gRPC ports 16060-16062, config ${config}"
@@ -39,7 +48,7 @@ while [[ $# -gt 0 ]]; do
       for NODE_NAME in "${ALL_NODE_NAMES[@]}"
       do
         # Start the node
-        ./server -config=${TINODE_CONF} -cluster_self=${NODE_NAME} -listen=:${HTTP_PORT} -grpc_listen=:${GRPC_PORT} &
+        ./server -config=${TINODE_CONF} -cluster_self=${NODE_NAME} -listen=:${HTTP_PORT} -grpc_listen=:${GRPC_PORT} -static_data=${STATIC_DATA_DIR} &
         # Save PID of the node to a temp file.
         # /var/tmp/ does not requre root access.
         echo $!> "/var/tmp/tinode-${NODE_NAME}.pid"
