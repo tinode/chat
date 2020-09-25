@@ -84,7 +84,6 @@ type Session struct {
 
 	// Reference to multiplexing session. Set only for proxy sessions.
 	multi        *Session
-	proxiedTopic string
 
 	// IP address of the client. For long polling this is the IP of the last poll.
 	remoteAddr string
@@ -252,24 +251,13 @@ func (s *Session) isCluster() bool {
 	return s.isProxy() || s.isMultiplex()
 }
 
-func (s *Session) scheduleClusterWriteLoop() {
-	if globals.cluster != nil && globals.cluster.proxyEventQueue != nil {
-		globals.cluster.proxyEventQueue.Schedule(
-			func() { s.clusterWriteLoop(s.proxiedTopic) })
-	}
-}
-
 // queueOut attempts to send a ServerComMessage to a session write loop; if the send buffer is full,
 // timeout is `sendTimeout`.
 func (s *Session) queueOut(msg *ServerComMessage) bool {
 	if s.multi != nil {
 		// In case of a cluster we need to pass a copy of the actual session.
 		msg.sess = s
-		if s.multi.queueOut(msg) {
-			s.multi.scheduleClusterWriteLoop()
-			return true
-		}
-		return false
+		return s.multi.queueOut(msg)
 	}
 
 	// Record latency only on {ctrl} messages and end-user sessions.
@@ -295,9 +283,6 @@ func (s *Session) queueOut(msg *ServerComMessage) bool {
 		log.Println("s.queueOut: timeout", s.sid)
 		return false
 	}
-	if s.isMultiplex() {
-		s.scheduleClusterWriteLoop()
-	}
 	return true
 }
 
@@ -314,29 +299,15 @@ func (s *Session) queueOutBytes(data []byte) bool {
 		log.Println("s.queueOutBytes: timeout", s.sid)
 		return false
 	}
-	if s.isMultiplex() {
-		s.scheduleClusterWriteLoop()
-	}
 	return true
-}
-
-func (s *Session) maybeScheduleClusterWriteLoop() {
-	if s.multi != nil {
-		s.multi.scheduleClusterWriteLoop()
-	}
-	if s.isMultiplex() {
-		s.scheduleClusterWriteLoop()
-	}
 }
 
 func (s *Session) detachSession(fromTopic string) {
 	s.detach <- fromTopic
-	s.maybeScheduleClusterWriteLoop()
 }
 
 func (s *Session) stopSession(data interface{}) {
 	s.stop <- data
-	s.maybeScheduleClusterWriteLoop()
 }
 
 // cleanUp is called when the session is terminated to perform resource cleanup.

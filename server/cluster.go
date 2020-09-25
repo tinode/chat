@@ -7,6 +7,7 @@ import (
 	"log"
 	"net"
 	"net/rpc"
+	"reflect"
 	"sort"
 	"sync"
 	"time"
@@ -458,7 +459,6 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 		node.lock.Unlock()
 
 		log.Println("cluster: multiplexing session started", msid, count)
-		msess.proxiedTopic = msg.RcptTo
 	}
 
 	// This is a local copy of a remote session.
@@ -1117,24 +1117,36 @@ func (c *Cluster) gcProxySessionsForNode(node string) {
 
 // clusterWriteLoop implements write loop for multiplexing (proxy) session at a node which hosts master topic.
 // The session is a multiplexing session, i.e. it handles requests for multiple sessions at origin.
-func (sess *Session) clusterWriteLoop(forTopic string) {
-	terminate := true
+func (t *Topic) clusterWriteLoop() {
 	defer func() {
-		if terminate {
+		for _, sess := range t.proxiedSessions {
 			sess.closeRPC()
 			globals.sessionStore.Delete(sess)
 			sess.unsubAll()
 		}
 	}()
 
+	log.Printf("topic[%s]: starting cluster write loop", t.name)
 	for {
-		select {
-		case msg, ok := <-sess.send:
+		chosen, value, ok := reflect.Select(t.proxiedChannels)
+		if !ok {
+			log.Printf("topic[%s]: clusterWriteLoop EOF - quitting", t.name)
+			return
+		}
+		if chosen == 0 {
+			// Sessions added or removed: continue.
+			continue
+		}
+		chosen--
+		sess := t.proxiedSessions[chosen / 3]
+
+		switch chosen % 3 {
+		case 0:  // sess.send channel.
 			if !ok || sess.clnode.endpoint == nil {
 				// channel closed
 				return
 			}
-			srvMsg := msg.(*ServerComMessage)
+			srvMsg := value.Interface().(*ServerComMessage)
 			response := &ClusterResp{SrvMsg: srvMsg}
 			if srvMsg.sess == nil {
 				response.OrigSid = "*"
@@ -1158,16 +1170,16 @@ func (sess *Session) clusterWriteLoop(forTopic string) {
 				}
 			}
 
-			srvMsg.RcptTo = forTopic
-			response.RcptTo = forTopic
+			srvMsg.RcptTo = t.name
+			response.RcptTo = t.name
 
 			if err := sess.clnode.masterToProxyAsync(response); err != nil {
 				log.Printf("cluster: response to proxy failed \"%s\": %s", sess.sid, err.Error())
 				return
 			}
-		case msg := <-sess.stop:
+		case 1:  // sess.stop
 			log.Println("cluster: stop msg received - multi sid", sess.sid)
-			if msg == nil {
+			if value.Interface() == nil {
 				// Terminating multiplexing session.
 				return
 			}
@@ -1176,12 +1188,8 @@ func (sess *Session) clusterWriteLoop(forTopic string) {
 			//  * user is being deleted
 			//  * node shutdown
 			// In both cases the msg does not need to be forwarded to the proxy.
-
-		case <-sess.detach:
+		case 2:  // sess.detach
 			log.Println("cluster: detach msg received", sess.sid)
-			return
-		default:
-			terminate = false
 			return
 		}
 	}
