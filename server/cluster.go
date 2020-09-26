@@ -1119,11 +1119,14 @@ func (c *Cluster) gcProxySessionsForNode(node string) {
 // attached to a master topic. This function handles all the events send from
 // the master to the original sessions hosted on other nodes.
 func (t *Topic) clusterWriteLoop() {
+	cleanUp := func(sess *Session) {
+		sess.closeRPC()
+		globals.sessionStore.Delete(sess)
+		sess.unsubAll()
+	}
 	defer func() {
 		for _, sess := range t.proxiedSessions {
-			sess.closeRPC()
-			globals.sessionStore.Delete(sess)
-			sess.unsubAll()
+			cleanUp(sess)
 		}
 	}()
 
@@ -1182,7 +1185,10 @@ func (t *Topic) clusterWriteLoop() {
 			log.Println("cluster: stop msg received - multi sid", sess.sid)
 			if value.Interface() == nil {
 				// Terminating multiplexing session.
-				return
+				cleanUp(sess)
+				if len(t.proxiedSessions) == 0 {
+					return
+				}
 			}
 
 			// There are two cases of msg != nil:
@@ -1191,7 +1197,10 @@ func (t *Topic) clusterWriteLoop() {
 			// In both cases the msg does not need to be forwarded to the proxy.
 		case 2:  // sess.detach
 			log.Println("cluster: detach msg received", sess.sid)
-			return
+			cleanUp(sess)
+			if len(t.proxiedSessions) == 0 {
+				return
+			}
 		}
 	}
 }

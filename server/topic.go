@@ -3435,7 +3435,7 @@ func (t *Topic) remSession(sess *Session, asUid types.Uid) (*perSessionData, boo
 
 	if pssd.uid == asUid || asUid.IsZero() {
 		delete(t.sessions, s)
-		if !t.remProxiedSession(s) {
+		if s.isMultiplex() && !t.remProxiedSession(s) {
 			log.Printf("topic[%s]: multiplex session %s not removed from the event loop", t.name, s.sid)
 		}
 		return &pssd, true
@@ -3446,7 +3446,12 @@ func (t *Topic) remSession(sess *Session, asUid types.Uid) (*perSessionData, boo
 			pssd.muids[i] = pssd.muids[len(pssd.muids)-1]
 			pssd.muids = pssd.muids[:len(pssd.muids)-1]
 			t.sessions[s] = pssd
-			return &pssd, false
+			if len(pssd.muids) == 0 {
+				delete(t.sessions, s)
+				return &pssd, true
+			} else {
+				return &pssd, false
+			}
 		}
 	}
 
