@@ -1115,8 +1115,9 @@ func (c *Cluster) gcProxySessionsForNode(node string) {
 	}
 }
 
-// clusterWriteLoop implements write loop for multiplexing (proxy) session at a node which hosts master topic.
-// The session is a multiplexing session, i.e. it handles requests for multiple sessions at origin.
+// clusterWriteLoop implements write loop for all multiplexing (proxy) sessions
+// attached to a master topic. This function handles all the events send from
+// the master to the original sessions hosted on other nodes.
 func (t *Topic) clusterWriteLoop() {
 	defer func() {
 		for _, sess := range t.proxiedSessions {
