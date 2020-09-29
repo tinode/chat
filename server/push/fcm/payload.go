@@ -21,7 +21,7 @@ type AndroidConfig struct {
 	androidPayload
 	// Configs for specific push types.
 	Msg androidPayload `json:"msg,omitempty"`
-	Sub androidPayload `json:"msg,omitempty"`
+	Sub androidPayload `json:"sub,omitempty"`
 }
 
 func (ac *AndroidConfig) getTitleLocKey(what string) string {
