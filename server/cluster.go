@@ -910,9 +910,9 @@ func clusterInit(configString json.RawMessage, self *string) int {
 	}
 
 	globals.cluster = &Cluster{
-		thisNodeName:    thisName,
-		fingerprint:     time.Now().Unix(),
-		nodes:           make(map[string]*ClusterNode)}
+		thisNodeName: thisName,
+		fingerprint:  time.Now().Unix(),
+		nodes:        make(map[string]*ClusterNode)}
 
 	var nodeNames []string
 	for _, host := range config.Nodes {
@@ -1125,10 +1125,10 @@ func (t *Topic) clusterWriteLoop() {
 			continue
 		}
 		chosen--
-		sess := t.proxiedSessions[chosen / 3]
+		sess := t.proxiedSessions[chosen/3]
 
 		switch chosen % 3 {
-		case 0:  // sess.send channel.
+		case 0: // sess.send channel.
 			if !ok || sess.clnode.endpoint == nil {
 				// channel closed
 				return
@@ -1164,7 +1164,7 @@ func (t *Topic) clusterWriteLoop() {
 				log.Printf("cluster: response to proxy failed \"%s\": %s", sess.sid, err.Error())
 				return
 			}
-		case 1:  // sess.stop
+		case 1: // sess.stop
 			log.Println("cluster: stop msg received - multi sid", sess.sid)
 			if value.Interface() == nil {
 				// Terminating multiplexing session.
@@ -1178,7 +1178,7 @@ func (t *Topic) clusterWriteLoop() {
 			//  * user is being deleted
 			//  * node shutdown
 			// In both cases the msg does not need to be forwarded to the proxy.
-		case 2:  // sess.detach
+		case 2: // sess.detach
 			log.Println("cluster: detach msg received", sess.sid)
 			cleanUp(sess)
 			if len(t.proxiedSessions) == 0 {

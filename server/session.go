@@ -83,7 +83,7 @@ type Session struct {
 	clnode *ClusterNode
 
 	// Reference to multiplexing session. Set only for proxy sessions.
-	multi        *Session
+	multi *Session
 
 	// IP address of the client. For long polling this is the IP of the last poll.
 	remoteAddr string

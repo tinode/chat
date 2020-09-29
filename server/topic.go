@@ -3338,7 +3338,7 @@ func (t *Topic) subsCount() int {
 func (t *Topic) addProxiedSession(s *Session) {
 	t.proxiedSessions = append(t.proxiedSessions, s)
 	if len(t.proxiedSessions) == 1 {
-		t.proxiedChannels = make([]reflect.SelectCase, 1 + 3)
+		t.proxiedChannels = make([]reflect.SelectCase, 1+3)
 		continueChan := make(chan struct{})
 		t.proxiedChannels[0] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(continueChan)}
 		t.proxiedChannels[1] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(s.send)}
@@ -3365,18 +3365,18 @@ func (t *Topic) remProxiedSession(sess *Session) bool {
 			} else {
 				n := len(t.proxiedSessions)
 				// Move last session into position i.
-				t.proxiedSessions[i] = t.proxiedSessions[n - 1]
-				t.proxiedSessions[n - 1] = nil
-				t.proxiedSessions = t.proxiedSessions[:n - 1]
+				t.proxiedSessions[i] = t.proxiedSessions[n-1]
+				t.proxiedSessions[n-1] = nil
+				t.proxiedSessions = t.proxiedSessions[:n-1]
 
 				// Move channels into position i.
 				for j := 0; j < 3; j++ {
-					to := i * 3 + 1 + j
-					from := (n - 1) * 3 + 1 + j
+					to := i*3 + 1 + j
+					from := (n-1)*3 + 1 + j
 					t.proxiedChannels[to] = t.proxiedChannels[from]
 					//t.proxiedChannels[from] = nil
 				}
-				t.proxiedChannels = t.proxiedChannels[:3 * n - 3]
+				t.proxiedChannels = t.proxiedChannels[:3*n-3]
 			}
 			interruptChan <- struct{}{}
 			return true
