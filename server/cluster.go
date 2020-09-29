@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/tinode/chat/server/auth"
-	"github.com/tinode/chat/server/concurrency"
 	"github.com/tinode/chat/server/push"
 	rh "github.com/tinode/chat/server/ringhash"
 	"github.com/tinode/chat/server/store/types"
@@ -52,9 +51,8 @@ type clusterConfig struct {
 	Nodes []clusterNodeConfig `json:"nodes"`
 	// Name of this cluster node
 	ThisName string `json:"self"`
-	// Size of the cluster event goroutine pool (used by topic master multiplexing sessions
-	// for forwarding events to the topic proxies).
-	NumProxyEventGoRoutines int `json:"num_proxy_event_goroutines"`
+	// Deprecated: this field is no longer used.
+	NumProxyEventGoRoutines int `json:"-"`
 	// Failover configuration
 	Failover *clusterFailoverConfig
 }
@@ -407,13 +405,6 @@ type Cluster struct {
 
 	// Failover parameters. Could be nil if failover is not enabled
 	fo *clusterFailover
-
-	// Thread pool to use for running proxy session (write) event processing logic.
-	// The number of proxy sessions grows as O(number of topics x number of cluster nodes).
-	// In large Tinode deployments (10s of thousands of topics, tens of nodes),
-	// running a separate event processing goroutine for each proxy session
-	// leads to a rather large memory usage and excessive scheduling overhead.
-	proxyEventQueue *concurrency.GoRoutinePool
 }
 
 // TopicMaster is a gRPC endpoint which receives requests sent by proxy topic to master topic.
@@ -914,21 +905,14 @@ func clusterInit(configString json.RawMessage, self *string) int {
 	gob.Register(map[string]string{})
 	gob.Register(MsgAccessMode{})
 
-	numProxyGoRoutines := config.NumProxyEventGoRoutines
-	if numProxyGoRoutines < 0 {
-		log.Println("Cluster: invalid number of proxy event goroutines:", numProxyGoRoutines)
-		return 1
-	}
-	if numProxyGoRoutines == 0 {
-		numProxyGoRoutines = len(config.Nodes) * 5
-		log.Println("Cluster: number of proxy event goroutines not specified. Default is", numProxyGoRoutines)
+	if config.NumProxyEventGoRoutines != 0 {
+		log.Println("Cluster config: field num_proxy_event_goroutines is deprecated.")
 	}
 
 	globals.cluster = &Cluster{
 		thisNodeName:    thisName,
 		fingerprint:     time.Now().Unix(),
-		nodes:           make(map[string]*ClusterNode),
-		proxyEventQueue: concurrency.NewGoRoutinePool(numProxyGoRoutines)}
+		nodes:           make(map[string]*ClusterNode)}
 
 	var nodeNames []string
 	for _, host := range config.Nodes {
@@ -1013,7 +997,6 @@ func (c *Cluster) shutdown() {
 		close(n.rpcDone)
 	}
 
-	globals.cluster.proxyEventQueue.Stop()
 	globals.cluster = nil
 
 	c.inbound.Close()
