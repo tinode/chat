@@ -11,6 +11,7 @@ package main
 import (
 	"errors"
 	"log"
+	"reflect"
 	"sort"
 	"strings"
 	"sync/atomic"
@@ -46,6 +47,19 @@ type Topic struct {
 	isProxy bool
 	// Name of the master node for this topic if isProxy is true.
 	masterNode string
+	// Topic runs a goroutine (clusterWriteLoop) that reads events from all proxy
+	// multiplexing sessions.
+	// List of proxied sessions.
+	proxiedSessions []*Session
+	// Proxied sessions' channels for the use in the topic's clusterWriteLoop:
+	// i-th session's channels (proxiedSessions[i]) are found at:
+	// proxiedChannels[i * 3 + 1] - send
+	// proxiedChannels[i * 3 + 2] - stop
+	// proxiedChannels[i * 3 + 3] - detach
+	//
+	// proxiedChannels[0] is a special-purpose channel necessary for interrupting
+	// clusterWriteLoop when sessions are added or removed.
+	proxiedChannels []reflect.SelectCase
 
 	// Time when the topic was first created.
 	created time.Time
@@ -3320,6 +3334,57 @@ func (t *Topic) subsCount() int {
 	return len(t.perUser)
 }
 
+// Adds a new multiplex proxied session to the topic's clusterWriteLoop.
+func (t *Topic) addProxiedSession(s *Session) {
+	t.proxiedSessions = append(t.proxiedSessions, s)
+	if len(t.proxiedSessions) == 1 {
+		t.proxiedChannels = make([]reflect.SelectCase, 1 + 3)
+		continueChan := make(chan struct{})
+		t.proxiedChannels[0] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(continueChan)}
+		t.proxiedChannels[1] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(s.send)}
+		t.proxiedChannels[2] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(s.stop)}
+		t.proxiedChannels[3] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(s.detach)}
+		go t.clusterWriteLoop()
+	} else {
+		t.proxiedChannels = append(t.proxiedChannels, reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(s.send)})
+		t.proxiedChannels = append(t.proxiedChannels, reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(s.stop)})
+		t.proxiedChannels = append(t.proxiedChannels, reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(s.detach)})
+		// Send an interrupt signal to clusterWriteLoop. New session added.
+		t.proxiedChannels[0].Chan.Interface().(chan struct{}) <- struct{}{}
+	}
+}
+
+// Removes a multiplex proxied session from the topic's clusterWriteLoop.
+func (t *Topic) remProxiedSession(sess *Session) bool {
+	for i, s := range t.proxiedSessions {
+		if sess == s {
+			interruptChan := t.proxiedChannels[0].Chan.Interface().(chan struct{})
+			if len(t.proxiedSessions) == 1 {
+				t.proxiedSessions = nil
+				t.proxiedChannels = nil
+			} else {
+				n := len(t.proxiedSessions)
+				// Move last session into position i.
+				t.proxiedSessions[i] = t.proxiedSessions[n - 1]
+				t.proxiedSessions[n - 1] = nil
+				t.proxiedSessions = t.proxiedSessions[:n - 1]
+
+				// Move channels into position i.
+				for j := 0; j < 3; j++ {
+					to := i * 3 + 1 + j
+					from := (n - 1) * 3 + 1 + j
+					t.proxiedChannels[to] = t.proxiedChannels[from]
+					//t.proxiedChannels[from] = nil
+				}
+				t.proxiedChannels = t.proxiedChannels[:3 * n - 3]
+			}
+			interruptChan <- struct{}{}
+			return true
+		}
+	}
+	return false
+}
+
 // Add session record. 'user' may be different from sess.uid.
 func (t *Topic) addSession(sess *Session, asUid types.Uid, isChanSub bool) {
 	s := sess
@@ -3345,6 +3410,7 @@ func (t *Topic) addSession(sess *Session, asUid types.Uid, isChanSub bool) {
 		} else {
 			t.sessions[s] = perSessionData{muids: []types.Uid{asUid}}
 		}
+		t.addProxiedSession(s)
 	} else {
 		t.sessions[s] = perSessionData{uid: asUid, isChanSub: isChanSub}
 	}
@@ -3369,6 +3435,9 @@ func (t *Topic) remSession(sess *Session, asUid types.Uid) (*perSessionData, boo
 
 	if pssd.uid == asUid || asUid.IsZero() {
 		delete(t.sessions, s)
+		if s.isMultiplex() && !t.remProxiedSession(s) {
+			log.Printf("topic[%s]: multiplex session %s not removed from the event loop", t.name, s.sid)
+		}
 		return &pssd, true
 	}
 
@@ -3377,7 +3446,12 @@ func (t *Topic) remSession(sess *Session, asUid types.Uid) (*perSessionData, boo
 			pssd.muids[i] = pssd.muids[len(pssd.muids)-1]
 			pssd.muids = pssd.muids[:len(pssd.muids)-1]
 			t.sessions[s] = pssd
-			return &pssd, false
+			if len(pssd.muids) == 0 {
+				delete(t.sessions, s)
+				return &pssd, true
+			} else {
+				return &pssd, false
+			}
 		}
 	}
 
