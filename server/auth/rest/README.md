@@ -36,7 +36,7 @@ Request and response payloads are formatted as JSON. Some of the request or resp
 		- [`upd` Update authentication record.](#upd-update-authentication-record)
 			- [Sample request](#sample-request)
 			- [Sample response](#sample-response)
-		- [`rtagns` Get a list of restricted tag namespaces.](#get-a-list-of-restricted-tag-namespaces)
+		- [`rtagns` Get a list of restricted tag namespaces.](#rtagns-get-a-list-of-restricted-tag-namespaces)
 			- [Sample request](#sample-request)
 			- [Sample response](#sample-response)
 
@@ -322,7 +322,7 @@ If accounts are managed by the server, the server should respond with an error `
 ### `rtagns` Get a list of restricted tag namespaces.
 
 Server may enforce certain tag namespaces (tag prefixes) to be restricted, i.e. not editable by the user.
-These are also used in Tinode discovery mechanism (e.g. searching for users, contact sync). See [API docs](../docs/API.md#fnd-and-tags-finding-users-and-topics) for details.
+These are also used in Tinode discovery mechanism (e.g. searching for users, contact sync). See [API docs](../../docs/API.md#fnd-and-tags-finding-users-and-topics) for details.
 
 The server may optionally provide a regular expression to validate search tokens before rewriting them as prefixed tags. I.e. if server allows only logins of 3-8 ASCII letters and numbers then the regexp could be `^[a-z0-9_]{3,8}$` which is base64-encoded as `XlthLXowLTlfXXszLDh9JA==`.
 
