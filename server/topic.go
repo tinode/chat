@@ -1039,9 +1039,14 @@ func (t *Topic) handleBroadcast(msg *ServerComMessage) {
 		}
 		// Send message to session.
 		if !sess.queueOut(msg) {
-			log.Println("topic: connection stuck, detaching", t.name, sess.sid)
+			log.Printf("topic[%s]: connection stuck, detaching - %s", t.name, sess.sid)
 			// The whole session is being dropped, so sessionLeave.pkt is not set.
-			t.unreg <- &sessionLeave{sess: sess}
+			// Must not block here: it may lead to a deadlock.
+			select {
+			case t.unreg <- &sessionLeave{sess: sess}:
+			default:
+				log.Printf("topic[%s]: unreg queue full - %s", t.name, sess.sid)
+			}
 		}
 	}
 
