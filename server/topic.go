@@ -2948,6 +2948,7 @@ func (t *Topic) evictUser(uid types.Uid, unsub bool, skip string) {
 	msg.Ctrl.Params = map[string]interface{}{"unsub": unsub}
 	msg.SkipSid = skip
 	msg.uid = uid
+	msg.AsUser = uid.UserId()
 	for s := range t.sessions {
 		if pssd, removed := t.remSession(s, uid); pssd != nil {
 			if removed {
