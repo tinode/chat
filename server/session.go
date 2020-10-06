@@ -353,12 +353,13 @@ func (s *Session) cleanUp(expired bool) {
 
 // Message received, convert bytes to ClientComMessage and dispatch
 func (s *Session) dispatchRaw(raw []byte) {
-	now := time.Now().UTC().Round(time.Millisecond)
+	now := types.TimeNow()
 	var msg ClientComMessage
 
 	if s.terminating {
 		log.Println("s.dispatch: message received on a terminating session", s.sid)
-		s.queueOut(ErrPermissionDenied("", "", now))
+		s.queueOut(ErrLocked("", "", now))
+		return
 	}
 
 	if len(raw) == 1 && raw[0] == 0x31 {
