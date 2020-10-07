@@ -780,7 +780,12 @@ func (s *Session) login(msg *ClientComMessage) {
 
 	rec, challenge, err := handler.Authenticate(msg.Login.Secret)
 	if err != nil {
-		s.queueOut(decodeStoreError(err, msg.Id, "", msg.Timestamp, nil))
+		resp := decodeStoreError(err, msg.Id, "", msg.Timestamp, nil)
+		if resp.Ctrl.Code >= 500 {
+			// Log internal errors
+			log.Println("s.login: internal", err, s.sid)
+		}
+		s.queueOut(resp)
 		return
 	}
 
