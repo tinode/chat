@@ -320,7 +320,6 @@ func (s *Session) stopSession(data interface{}) {
 	s.stop <- data
 }
 
-
 func (sess *Session) purgeChannels() {
 	for len(sess.send) > 0 {
 		<-sess.send
