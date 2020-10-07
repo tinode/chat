@@ -1039,9 +1039,14 @@ func (t *Topic) handleBroadcast(msg *ServerComMessage) {
 		}
 		// Send message to session.
 		if !sess.queueOut(msg) {
-			log.Println("topic: connection stuck, detaching", t.name, sess.sid)
+			log.Printf("topic[%s]: connection stuck, detaching - %s", t.name, sess.sid)
 			// The whole session is being dropped, so sessionLeave.pkt is not set.
-			t.unreg <- &sessionLeave{sess: sess}
+			// Must not block here: it may lead to a deadlock.
+			select {
+			case t.unreg <- &sessionLeave{sess: sess}:
+			default:
+				log.Printf("topic[%s]: unreg queue full - %s", t.name, sess.sid)
+			}
 		}
 	}
 
@@ -3375,9 +3380,9 @@ func (t *Topic) remProxiedSession(sess *Session) bool {
 					to := i*3 + 1 + j
 					from := (n-1)*3 + 1 + j
 					t.proxiedChannels[to] = t.proxiedChannels[from]
-					//t.proxiedChannels[from] = nil
 				}
-				t.proxiedChannels = t.proxiedChannels[:3*n-3]
+				numChans := len(t.proxiedChannels) - 3
+				t.proxiedChannels = t.proxiedChannels[:numChans]
 			}
 			interruptChan <- struct{}{}
 			return true

@@ -121,11 +121,15 @@ type Session struct {
 	// Timer which triggers after some seconds to mark background session as foreground.
 	bkgTimer *time.Timer
 
-	// Number of subscribe/unsubscribe requests in fligth.
+	// Number of subscribe/unsubscribe requests in flight.
 	inflightReqs *sync.WaitGroup
 	// Synchronizes access to session store in cluster mode:
 	// subscribe/unsubscribe replies are asynchronous.
 	sessionStoreLock sync.Mutex
+	// Indicates that the session is terminating.
+	// After this flag's been flipped to true, there must not be any more writes
+	// into the session's send channel.
+	terminating bool
 
 	// Outbound mesages, buffered.
 	// The content must be serialized in format suitable for the session.
@@ -254,6 +258,9 @@ func (s *Session) isCluster() bool {
 // queueOut attempts to send a ServerComMessage to a session write loop; if the send buffer is full,
 // timeout is `sendTimeout`.
 func (s *Session) queueOut(msg *ServerComMessage) bool {
+	if s.terminating {
+		return true
+	}
 	if s.multi != nil {
 		// In case of a cluster we need to pass a copy of the actual session.
 		msg.sess = s
@@ -279,8 +286,9 @@ func (s *Session) queueOut(msg *ServerComMessage) bool {
 	}
 	select {
 	case s.send <- data:
-	case <-time.After(sendTimeout):
-		log.Println("s.queueOut: timeout", s.sid)
+	default:
+		// Never block here since it may also block the topic's run() goroutine.
+		log.Println("s.queueOut: session's send queue full", s.sid)
 		return false
 	}
 	return true
@@ -289,29 +297,46 @@ func (s *Session) queueOut(msg *ServerComMessage) bool {
 // queueOutBytes attempts to send a ServerComMessage already serialized to []byte.
 // If the send buffer is full, timeout is `sendTimeout`.
 func (s *Session) queueOutBytes(data []byte) bool {
-	if s == nil {
+	if s == nil || s.terminating {
 		return true
 	}
 
 	select {
 	case s.send <- data:
-	case <-time.After(sendTimeout):
-		log.Println("s.queueOutBytes: timeout", s.sid)
+	default:
+		log.Println("s.queueOutBytes: session's send queue full", s.sid)
 		return false
 	}
 	return true
 }
 
 func (s *Session) detachSession(fromTopic string) {
-	s.detach <- fromTopic
+	if !s.terminating {
+		s.detach <- fromTopic
+	}
 }
 
 func (s *Session) stopSession(data interface{}) {
 	s.stop <- data
 }
 
+
+func (sess *Session) purgeChannels() {
+	for len(sess.send) > 0 {
+		<-sess.send
+	}
+	for len(sess.stop) > 0 {
+		<-sess.stop
+	}
+	for len(sess.detach) > 0 {
+		<-sess.detach
+	}
+}
+
 // cleanUp is called when the session is terminated to perform resource cleanup.
 func (s *Session) cleanUp(expired bool) {
+	s.terminating = true
+	s.purgeChannels()
 	s.inflightReqs.Wait()
 	if !expired {
 		s.sessionStoreLock.Lock()
@@ -328,7 +353,14 @@ func (s *Session) cleanUp(expired bool) {
 
 // Message received, convert bytes to ClientComMessage and dispatch
 func (s *Session) dispatchRaw(raw []byte) {
+	now := types.TimeNow()
 	var msg ClientComMessage
+
+	if s.terminating {
+		log.Println("s.dispatch: message received on a terminating session", s.sid)
+		s.queueOut(ErrLocked("", "", now))
+		return
+	}
 
 	if len(raw) == 1 && raw[0] == 0x31 {
 		// 0x31 == '1'. This is a network probe message. Respond with a '0':
@@ -347,7 +379,6 @@ func (s *Session) dispatchRaw(raw []byte) {
 	if err := json.Unmarshal(raw, &msg); err != nil {
 		// Malformed message
 		log.Println("s.dispatch", err, s.sid)
-		now := time.Now().UTC().Round(time.Millisecond)
 		s.queueOut(ErrMalformed("", "", now))
 		return
 	}
