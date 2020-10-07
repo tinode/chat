@@ -3375,9 +3375,9 @@ func (t *Topic) remProxiedSession(sess *Session) bool {
 					to := i*3 + 1 + j
 					from := (n-1)*3 + 1 + j
 					t.proxiedChannels[to] = t.proxiedChannels[from]
-					//t.proxiedChannels[from] = nil
 				}
-				t.proxiedChannels = t.proxiedChannels[:3*n-3]
+				numChans := len(t.proxiedChannels) - 3
+				t.proxiedChannels = t.proxiedChannels[:numChans]
 			}
 			interruptChan <- struct{}{}
 			return true
