@@ -117,8 +117,8 @@ func newHub() *Hub {
 		topics: &sync.Map{},
 		// this needs to be buffered - hub generates invites and adds them to this queue
 		route:    make(chan *ServerComMessage, 4096),
-		join:     make(chan *sessionJoin, 32),
-		unreg:    make(chan *topicUnreg, 32),
+		join:     make(chan *sessionJoin, 256),
+		unreg:    make(chan *topicUnreg, 256),
 		rehash:   make(chan bool),
 		meta:     make(chan *metaReq, 128),
 		shutdown: make(chan chan<- bool),
@@ -171,7 +171,6 @@ func (h *Hub) run() {
 			// 1.2.3 if it cannot be loaded (not found), fail
 			// 2. Check access rights and reject, if appropriate
 			// 3. Attach session to the topic
-
 			// Is the topic already loaded?
 			t := h.topicGet(join.pkt.RcptTo)
 			if t == nil {
@@ -182,9 +181,9 @@ func (h *Hub) run() {
 					isProxy:   globals.cluster.isRemoteTopic(join.pkt.RcptTo),
 					sessions:  make(map[*Session]perSessionData),
 					broadcast: make(chan *ServerComMessage, 256),
-					reg:       make(chan *sessionJoin, 32),
-					unreg:     make(chan *sessionLeave, 32),
-					meta:      make(chan *metaReq, 32),
+					reg:       make(chan *sessionJoin, 256),
+					unreg:     make(chan *sessionLeave, 256),
+					meta:      make(chan *metaReq, 64),
 					perUser:   make(map[types.Uid]perUserData),
 					exit:      make(chan *shutDown, 1),
 				}
@@ -209,7 +208,13 @@ func (h *Hub) run() {
 			} else {
 				// Topic found.
 				// Topic will check access rights and send appropriate {ctrl}
-				t.reg <- join
+				select {
+				case t.reg <- join:
+				default:
+					join.sess.inflightReqs.Done()
+					join.sess.queueOut(ErrServiceUnavailableReply(join.pkt, join.pkt.Timestamp))
+					log.Println("hub.join loop: topic's reg queue full", join.pkt.RcptTo, join.sess.sid, " - total queue len:", len(t.reg))
+				}
 			}
 
 		case msg := <-h.route:

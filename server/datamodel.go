@@ -1326,28 +1326,6 @@ func ErrPolicyReply(msg *ClientComMessage, ts time.Time) *ServerComMessage {
 	return ErrPolicyExplicitTs(msg.Id, msg.Original, ts, msg.Timestamp)
 }
 
-// ErrLocked operation rejected because the topic is being deleted (423).
-func ErrLocked(id, topic string, ts time.Time) *ServerComMessage {
-	return ErrLockedExplicitTs(id, topic, ts, ts)
-}
-
-// ErrLocked operation rejected because the topic is being deleted
-// with explicit server and incoming request timestamps (423).
-func ErrLockedExplicitTs(id, topic string, serverTs, incomingReqTs time.Time) *ServerComMessage {
-	return &ServerComMessage{Ctrl: &MsgServerCtrl{
-		Id:        id,
-		Code:      http.StatusLocked, // 423
-		Text:      "locked",
-		Topic:     topic,
-		Timestamp: serverTs}, Id: id, Timestamp: incomingReqTs}
-}
-
-// ErrLockedReply operation rejected because the topic is being deleted with explicit server and
-// incoming request timestamps in response to a client request (423).
-func ErrLockedReply(msg *ClientComMessage, ts time.Time) *ServerComMessage {
-	return ErrLockedExplicitTs(msg.Id, msg.Original, ts, msg.Timestamp)
-}
-
 // ErrUnknown database or other server error (500).
 func ErrUnknown(id, topic string, ts time.Time) *ServerComMessage {
 	return ErrUnknownExplicitTs(id, topic, ts, ts)
@@ -1387,6 +1365,43 @@ func ErrClusterUnreachable(id, topic string, ts time.Time) *ServerComMessage {
 		Text:      "cluster unreachable",
 		Topic:     topic,
 		Timestamp: ts}, Id: id, Timestamp: ts}
+}
+
+// ErrServiceUnavailableReply server error in response to a client request (503).
+func ErrServiceUnavailableReply(msg *ClientComMessage, ts time.Time) *ServerComMessage {
+	return ErrServiceUnavailableExplicitTs(msg.Id, msg.Original, ts, msg.Timestamp)
+}
+
+// ErrServiceUnavailableExplicitTs server error (503).
+func ErrServiceUnavailableExplicitTs(id, topic string, serverTs, incomingReqTs time.Time) *ServerComMessage {
+	return &ServerComMessage{Ctrl: &MsgServerCtrl{
+		Id:        id,
+		Code:      http.StatusServiceUnavailable, // 503
+		Text:      "service unavailable",
+		Topic:     topic,
+		Timestamp: serverTs}, Id: id, Timestamp: incomingReqTs}
+}
+
+// ErrLocked operation rejected because the topic is being deleted (503).
+func ErrLocked(id, topic string, ts time.Time) *ServerComMessage {
+	return ErrLockedExplicitTs(id, topic, ts, ts)
+}
+
+// ErrLockedReply operation rejected because the topic is being deleted with explicit server and
+// incoming request timestamps in response to a client request (503).
+func ErrLockedReply(msg *ClientComMessage, ts time.Time) *ServerComMessage {
+	return ErrLockedExplicitTs(msg.Id, msg.Original, ts, msg.Timestamp)
+}
+
+// ErrLocked operation rejected because the topic is being deleted
+// with explicit server and incoming request timestamps (503).
+func ErrLockedExplicitTs(id, topic string, serverTs, incomingReqTs time.Time) *ServerComMessage {
+	return &ServerComMessage{Ctrl: &MsgServerCtrl{
+		Id:        id,
+		Code:      http.StatusServiceUnavailable, // 503
+		Text:      "locked",
+		Topic:     topic,
+		Timestamp: serverTs}, Id: id, Timestamp: incomingReqTs}
 }
 
 // ErrVersionNotSupported invalid (too low) protocol version (505).
