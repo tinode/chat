@@ -2953,6 +2953,7 @@ func (t *Topic) evictUser(uid types.Uid, unsub bool, skip string) {
 	msg.Ctrl.Params = map[string]interface{}{"unsub": unsub}
 	msg.SkipSid = skip
 	msg.uid = uid
+	msg.AsUser = uid.UserId()
 	for s := range t.sessions {
 		if pssd, removed := t.remSession(s, uid); pssd != nil {
 			if removed {
@@ -3379,9 +3380,9 @@ func (t *Topic) remProxiedSession(sess *Session) bool {
 					to := i*3 + 1 + j
 					from := (n-1)*3 + 1 + j
 					t.proxiedChannels[to] = t.proxiedChannels[from]
-					//t.proxiedChannels[from] = nil
 				}
-				t.proxiedChannels = t.proxiedChannels[:3*n-3]
+				numChans := len(t.proxiedChannels) - 3
+				t.proxiedChannels = t.proxiedChannels[:numChans]
 			}
 			interruptChan <- struct{}{}
 			return true

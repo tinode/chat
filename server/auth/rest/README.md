@@ -278,7 +278,7 @@ If accounts are managed by the server, the server should respond with an error `
 
 ### `link` Requests server to link new account ID to authentication record.
 
-If server requested Tinode to create a new account, this endpoint is used to link the new Tinode user ID with the server's authentication record. If linking was successful, the server should respond with a non-empty json.
+If server requested Tinode to create a new account, this endpoint is used to link the new Tinode user ID with the server's authentication record. If linking is successful, the server should respond with a non-empty json.
 
 #### Sample request
 ```json
