@@ -115,7 +115,7 @@ func (a *authenticator) callEndpoint(endpoint string, rec *auth.Rec, secret []by
 	req := &request{Endpoint: endpoint, Name: a.name, Record: rec, Secret: secret}
 	content, err := json.Marshal(req)
 	if err != nil {
-		return nil, types.ErrMalformed
+		return nil, types.StoreError(err.Error())
 	}
 
 	urlToCall := a.serverUrl
@@ -128,28 +128,28 @@ func (a *authenticator) callEndpoint(endpoint string, rec *auth.Rec, secret []by
 	// Send payload to server using default HTTP client.
 	post, err := http.Post(urlToCall, "application/json", bytes.NewBuffer(content))
 	if err != nil {
-		return nil, types.ErrInternal
+		return nil, types.StoreError(err.Error())
 	}
 	defer post.Body.Close()
 
 	// Read response.
 	body, err := ioutil.ReadAll(post.Body)
 	if err != nil {
-		return nil, types.ErrInternal
+		return nil, types.StoreError(err.Error())
 	}
 
 	// Parse response.
 	var resp response
 	err = json.Unmarshal(body, &resp)
 	if err != nil {
-		return nil, types.ErrInternal
+		return nil, types.StoreError(err.Error())
 	}
 
 	if resp.Err != "" {
 		return nil, types.StoreError(resp.Err)
 	}
 
-	return &resp, err
+	return &resp, nil
 }
 
 // AddRecord adds persistent authentication record to the database.
