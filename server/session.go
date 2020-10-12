@@ -545,7 +545,7 @@ func (s *Session) subscribe(msg *ClientComMessage) {
 			// Reply with a 500 to the user.
 			s.queueOut(ErrUnknownReply(msg, msg.Timestamp))
 			s.inflightReqs.Done()
-			log.Println("s.subscribe: join queue full, topic ", msg.RcptTo, s.sid)
+			log.Println("s.subscribe: hub.join queue full, topic ", msg.RcptTo, s.sid)
 		}
 		// Hub will send Ctrl success/failure packets back to session
 	}
@@ -626,10 +626,22 @@ func (s *Session) publish(msg *ClientComMessage) {
 	}
 	if sub := s.getSub(msg.RcptTo); sub != nil {
 		// This is a post to a subscribed topic. The message is sent to the topic only
-		sub.broadcast <- data
+		select {
+		case sub.broadcast <- data:
+		default:
+			// Reply with a 500 to the user.
+			s.queueOut(ErrUnknownReply(msg, msg.Timestamp))
+			log.Println("s.publish: sub.broadcast channel full, topic ", msg.RcptTo, s.sid)
+		}
 	} else if msg.RcptTo == "sys" {
 		// Publishing to "sys" topic requires no subsription.
-		globals.hub.route <- data
+		select {
+		case globals.hub.route <- data:
+		default:
+			// Reply with a 500 to the user.
+			s.queueOut(ErrUnknownReply(msg, msg.Timestamp))
+			log.Println("s.publish: hub.route channel full", s.sid)
+		}
 	} else {
 		// Publish request received without attaching to topic first.
 		s.queueOut(ErrAttachFirst(msg, msg.Timestamp))
@@ -975,10 +987,22 @@ func (s *Session) get(msg *ClientComMessage) {
 		s.queueOut(ErrMalformedReply(msg, msg.Timestamp))
 		log.Println("s.get: invalid Get message action", msg.Get.What)
 	} else if sub != nil {
-		sub.meta <- meta
+		select {
+		case sub.meta <- meta:
+		default:
+			// Reply with a 500 to the user.
+			s.queueOut(ErrUnknownReply(msg, msg.Timestamp))
+			log.Println("s.get: sub.meta channel full, topic ", msg.RcptTo, s.sid)
+		}
 	} else if meta.pkt.MetaWhat&(constMsgMetaDesc|constMsgMetaSub) != 0 {
 		// Request some minimal info from a topic not currently attached to.
-		globals.hub.meta <- meta
+		select {
+		case globals.hub.meta <- meta:
+		default:
+			// Reply with a 500 to the user.
+			s.queueOut(ErrUnknownReply(msg, msg.Timestamp))
+			log.Println("s.get: hub.meta channel full", s.sid)
+		}
 	} else {
 		log.Println("s.get: subscribe first to get=", msg.Get.What)
 		s.queueOut(ErrPermissionDeniedReply(msg, msg.Timestamp))
@@ -1015,13 +1039,25 @@ func (s *Session) set(msg *ClientComMessage) {
 		s.queueOut(ErrMalformedReply(msg, msg.Timestamp))
 		log.Println("s.set: nil Set action")
 	} else if sub := s.getSub(msg.RcptTo); sub != nil {
-		sub.meta <- meta
+		select {
+		case sub.meta <- meta:
+		default:
+			// Reply with a 500 to the user.
+			s.queueOut(ErrUnknownReply(msg, msg.Timestamp))
+			log.Println("s.set: sub.meta channel full, topic ", msg.RcptTo, s.sid)
+		}
 	} else if meta.pkt.MetaWhat&(constMsgMetaTags|constMsgMetaCred) != 0 {
 		log.Println("s.set: can Set tags/creds for subscribed topics only", meta.pkt.MetaWhat)
 		s.queueOut(ErrPermissionDeniedReply(msg, msg.Timestamp))
 	} else {
 		// Desc.Private and Sub updates are possible without the subscription.
-		globals.hub.meta <- meta
+		select {
+		case globals.hub.meta <- meta:
+		default:
+			// Reply with a 500 to the user.
+			s.queueOut(ErrUnknownReply(msg, msg.Timestamp))
+			log.Println("s.set: hub.meta channel full", s.sid)
+		}
 	}
 }
 
@@ -1052,17 +1088,29 @@ func (s *Session) del(msg *ClientComMessage) {
 	sub := s.getSub(msg.RcptTo)
 	if sub != nil && msg.MetaWhat != constMsgDelTopic {
 		// Session is attached, deleting subscription or messages. Send to topic.
-		sub.meta <- &metaReq{
+		select {
+		case sub.meta <- &metaReq{
 			pkt:  msg,
-			sess: s}
+			sess: s}:
+		default:
+			// Reply with a 500 to the user.
+			s.queueOut(ErrUnknownReply(msg, msg.Timestamp))
+			log.Println("s.del: sub.meta channel full, topic ", msg.RcptTo, s.sid)
+		}
 	} else if msg.MetaWhat == constMsgDelTopic {
 		// Deleting topic: for sessions attached or not attached, send request to hub first.
 		// Hub will forward to topic, if appropriate.
-		globals.hub.unreg <- &topicUnreg{
+		select {
+		case globals.hub.unreg <- &topicUnreg{
 			rcptTo: msg.RcptTo,
 			pkt:    msg,
 			sess:   s,
-			del:    true}
+			del:    true}:
+		default:
+			// Reply with a 500 to the user.
+			s.queueOut(ErrUnknownReply(msg, msg.Timestamp))
+			log.Println("s.del: hub.unreg channel full", s.sid)
+		}
 	} else {
 		// Must join the topic to delete messages or subscriptions.
 		s.queueOut(ErrAttachFirst(msg, msg.Timestamp))
@@ -1102,7 +1150,8 @@ func (s *Session) note(msg *ClientComMessage) {
 
 	if sub := s.getSub(msg.RcptTo); sub != nil {
 		// Pings can be sent to subscribed topics only
-		sub.broadcast <- &ServerComMessage{
+		select {
+		case sub.broadcast <- &ServerComMessage{
 			Info: &MsgServerInfo{
 				Topic: msg.Original,
 				From:  msg.AsUser,
@@ -1112,7 +1161,12 @@ func (s *Session) note(msg *ClientComMessage) {
 			AsUser:    msg.AsUser,
 			Timestamp: msg.Timestamp,
 			SkipSid:   s.sid,
-			sess:      s}
+			sess:      s}:
+		default:
+			// Reply with a 500 to the user.
+			s.queueOut(ErrUnknownReply(msg, msg.Timestamp))
+			log.Println("s.note: sub.broacast channel full, topic ", msg.RcptTo, s.sid)
+		}
 	} else {
 		s.queueOut(ErrAttachFirst(msg, msg.Timestamp))
 		log.Println("s.note: note to invalid topic - must subscribe first", msg.Note.What, s.sid)
