@@ -258,7 +258,7 @@ func (s *Session) isCluster() bool {
 // queueOut attempts to send a ServerComMessage to a session write loop; if the send buffer is full,
 // timeout is `sendTimeout`.
 func (s *Session) queueOut(msg *ServerComMessage) bool {
-	if s.terminating {
+	if s == nil || s.terminating {
 		return true
 	}
 	if s.multi != nil {

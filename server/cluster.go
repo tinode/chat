@@ -1124,6 +1124,11 @@ func (t *Topic) clusterWriteLoop() {
 			// Sessions added or removed: continue.
 			continue
 		}
+		if len(t.proxiedSessions) == 0 {
+			log.Printf("topic[%s]: clusterWriteLoop - no more proxied sessions (num proxied channels: %d). Quitting.",
+				t.name, len(t.proxiedChannels))
+			return
+		}
 		chosen--
 		sess := t.proxiedSessions[chosen/3]
 

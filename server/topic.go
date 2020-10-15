@@ -3383,6 +3383,10 @@ func (t *Topic) remProxiedSession(sess *Session) bool {
 				}
 				numChans := len(t.proxiedChannels) - 3
 				t.proxiedChannels = t.proxiedChannels[:numChans]
+				if len(t.proxiedSessions)*3+1 != len(t.proxiedChannels) {
+					log.Panicf("topic[%s]: #proxied sessions (%d) vs #proxied channels mismatch (%d)",
+						t.name, len(t.proxiedSessions), len(t.proxiedChannels))
+				}
 			}
 			interruptChan <- struct{}{}
 			return true
