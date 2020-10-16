@@ -211,7 +211,9 @@ func (h *Hub) run() {
 				select {
 				case t.reg <- join:
 				default:
-					join.sess.inflightReqs.Done()
+					if join.sess.inflightReqs != nil {
+						join.sess.inflightReqs.Done()
+					}
 					join.sess.queueOut(ErrServiceUnavailableReply(join.pkt, join.pkt.Timestamp))
 					log.Println("hub.join loop: topic's reg queue full", join.pkt.RcptTo, join.sess.sid, " - total queue len:", len(t.reg))
 				}
