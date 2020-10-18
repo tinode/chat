@@ -19,7 +19,7 @@ Update the server config [`tinode.conf`](../../tinode.conf#L384), section `"push
 ```js
 {
   "enabled": true,
-  "org": "myorg", // name of the organization you registered at console.tinode.co
+  "org": "myorg", // Short name (URL) of the organization you registered at console.tinode.co
   "token": "SoMe_LonG.RaNDoM-StRiNg.12345" // authentication token obtained from console.tinode.co
 }
 ```
