@@ -36,7 +36,7 @@ type Handler struct {
 
 type configType struct {
 	Enabled   bool   `json:"enabled"`
-	OrgName   string `json:"org"`
+	OrgID     string `json:"org"`
 	AuthToken string `json:"token"`
 }
 
@@ -102,12 +102,16 @@ func (Handler) Init(jsonconf string) error {
 		return nil
 	}
 
-	if config.OrgName == "" {
+	config.OrgID = strings.TrimSpace(config.OrgID)
+	if config.OrgID == "" {
 		return errors.New("push.tnpg.org not specified.")
 	}
 
-	handler.pushUrl = baseTargetAddress + "push/" + config.OrgName
-	handler.subUrl = baseTargetAddress + "sub/" + config.OrgName
+	// Convert to lower case to avoid confusion.
+	config.OrgID = strings.ToLower(config.OrgID)
+
+	handler.pushUrl = baseTargetAddress + "push/" + config.OrgID
+	handler.subUrl = baseTargetAddress + "sub/" + config.OrgID
 	handler.input = make(chan *push.Receipt, bufferSize)
 	handler.channel = make(chan *push.ChannelReq, bufferSize)
 	handler.stop = make(chan bool, 1)
