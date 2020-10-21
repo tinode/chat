@@ -126,7 +126,7 @@ func (ta *authenticator) Authenticate(token []byte) (*auth.Rec, []byte, error) {
 	return &auth.Rec{
 		Uid:       types.Uid(tl.Uid),
 		AuthLevel: auth.Level(tl.AuthLevel),
-		Lifetime:  time.Until(expires),
+		Lifetime:  auth.Duration(time.Until(expires)),
 		Features:  auth.Feature(tl.Features),
 		State:     types.StateUndefined}, nil, nil
 }
@@ -135,11 +135,11 @@ func (ta *authenticator) Authenticate(token []byte) (*auth.Rec, []byte, error) {
 func (ta *authenticator) GenSecret(rec *auth.Rec) ([]byte, time.Time, error) {
 
 	if rec.Lifetime == 0 {
-		rec.Lifetime = ta.lifetime
+		rec.Lifetime = auth.Duration(ta.lifetime)
 	} else if rec.Lifetime < 0 {
 		return nil, time.Time{}, types.ErrExpired
 	}
-	expires := time.Now().Add(rec.Lifetime).UTC().Round(time.Millisecond)
+	expires := time.Now().Add(time.Duration(rec.Lifetime)).UTC().Round(time.Millisecond)
 
 	tl := tokenLayout{
 		Uid:          uint64(rec.Uid),
