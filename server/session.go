@@ -904,7 +904,7 @@ func (s *Session) authSecretReset(params []byte) error {
 	token, _, err := store.GetLogicalAuthHandler("token").GenSecret(&auth.Rec{
 		Uid:       uid,
 		AuthLevel: auth.LevelAuth,
-		Lifetime:  time.Hour * 24,
+		Lifetime:  auth.Duration(time.Hour * 24),
 		Features:  auth.FeatureNoLogin})
 
 	if err != nil {
@@ -1149,16 +1149,16 @@ func (s *Session) note(msg *ClientComMessage) {
 	}
 
 	response := &ServerComMessage{
-			Info: &MsgServerInfo{
-				Topic: msg.Original,
-				From:  msg.AsUser,
-				What:  msg.Note.What,
-				SeqId: msg.Note.SeqId},
-			RcptTo:    msg.RcptTo,
-			AsUser:    msg.AsUser,
-			Timestamp: msg.Timestamp,
-			SkipSid:   s.sid,
-			sess:      s}
+		Info: &MsgServerInfo{
+			Topic: msg.Original,
+			From:  msg.AsUser,
+			What:  msg.Note.What,
+			SeqId: msg.Note.SeqId},
+		RcptTo:    msg.RcptTo,
+		AsUser:    msg.AsUser,
+		Timestamp: msg.Timestamp,
+		SkipSid:   s.sid,
+		sess:      s}
 	if sub := s.getSub(msg.RcptTo); sub != nil {
 		// Pings can be sent to subscribed topics only
 		select {
