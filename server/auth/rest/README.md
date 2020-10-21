@@ -1,10 +1,15 @@
 # REST or JSON-RPC authenticator
 
-This authenticator permits authentication of Tinode users and creation of Tinode accounts using a separate process as a source of truth. For instance, if accounts are managed by corporate LDAP, this service allows handling of Tinode authentication using the same LDAP service.
+This authenticator permits authentication of Tinode users and creation of Tinode accounts using a separate process as a
+source of truth. For instance, if accounts are managed by corporate LDAP, this service allows handling of Tinode
+authentication using the same LDAP service.
 
-This authenticator calls a designated authentication service over HTTP(S) POST. A skeleton implementation of a server is provided for reference at [rest-auth](../../../rest-auth/). The requests may be handled either by a single endpoint or by separate per-request endpoints.
+This authenticator calls a designated authentication service over HTTP(S) POST. A skeleton implementation of a server
+is provided for reference at [rest-auth](../../../rest-auth/). The requests may be handled either by a single endpoint
+or by separate per-request endpoints.
 
-Request and response payloads are formatted as JSON. Some of the request or response fields are context-dependent and may be skipped.
+Request and response payloads are formatted as JSON. Some of the request or response fields are context-dependent and
+may be skipped.
 
 <!-- TOC depthFrom:1 depthTo:6 withLinks:1 updateOnSave:1 orderedList:0 -->
 
@@ -62,7 +67,8 @@ Add the following section to the `auth_config` in [tinode.conf](../../tinode.con
   ...
 },
 ```
-If you want to use your authenticator **instead** of stock `basic` (login-password) authentication, add a logical renaming:
+If you want to use your authenticator **instead** of stock `basic` (login-password) authentication,
+add a logical renaming:
 ```js
 ...
 "auth_config": {
@@ -83,9 +89,10 @@ If you want to use your authenticator **instead** of stock `basic` (login-passwo
     {
       "uid": "LELEQHDWbgY", // user ID, int64 base64-encoded
       "authlvl": "auth",    // authentication level
-      "lifetime": "10000s", // lifetime of this record
+      "lifetime": "10000s", // lifetime of this record in seconds or as time.Duration string;
                             // see https://golang.org/pkg/time/#Duration for format.
-       "features": 2,       // bitmap of features
+       "features": 1,       // bitmap of features as integer or as a string of feature characters:
+                            // "validated" (V) or "no login" (L)".
        "tags": ["email:alice@example.com"], // Tags associated with this authentication record.
        "state": "ok",       // optional account state.
     }
@@ -140,7 +147,8 @@ See [here](../../store/types/types.go#L24) for an up to date list of supported e
 
 ### `add` Add new authentication record
 
-This endpoint requests server to add a new authentication record. This endpoint is generally used for account creation. If accounts are managed externally, it's likely to be unused and should generally return an error `"unsupported"`.
+This endpoint requests server to add a new authentication record. This endpoint is generally used for account creation.
+If accounts are managed externally, it's likely to be unused and should generally return an error `"unsupported"`.
 
 #### Sample request
 ```json
@@ -171,8 +179,9 @@ This endpoint requests server to add a new authentication record. This endpoint 
 
 ### `auth` Request for authentication
 
-Request to authenticate a user. Client (Tinode) provides a secret, authentication server responds with a user record. If this is a very first login and the server manages the accounts, the server may return `newacc` object which will be used by client (Tinode) to create the account.
-The server may optionally return a challenge as `byteval`.
+Request to authenticate a user. Client (Tinode) provides a secret, authentication server responds with a user record.
+If this is a very first login and the server manages the accounts, the server may return `newacc` object which will
+be used by client (Tinode) to create the account. The server may optionally return a challenge as `byteval`.
 
 #### Sample request
 ```json
@@ -198,13 +207,13 @@ The server may optionally return a challenge as `byteval`.
 ```js
 {
   "rec": {
+    "state": "suspended", // Or "ok".
     "authlvl": "auth",
     "lifetime": "5000s",
     "features": 1,
     "tags": ["email:alice@example.com", "uname:alice"]
   },
   "newacc": {
-    "state": "suspended",
     "auth": "JRWPS",
     "anon": "N",
     "public": {/* see /docs/API.md#public-and-private-fields */},
@@ -215,7 +224,8 @@ The server may optionally return a challenge as `byteval`.
 
 ### `checkunique` Checks if provided authentication record is unique.
 
-Request is used for account creation. If accounts are managed by the server, the server should respond with an error `"unsupported"`.
+Request is used for account creation. If accounts are managed by the server, the server should respond with
+an error `"unsupported"`.
 
 #### Sample request
 ```json
@@ -278,7 +288,8 @@ If accounts are managed by the server, the server should respond with an error `
 
 ### `link` Requests server to link new account ID to authentication record.
 
-If server requested Tinode to create a new account, this endpoint is used to link the new Tinode user ID with the server's authentication record. If linking is successful, the server should respond with a non-empty json.
+If server requested Tinode to create a new account, this endpoint is used to link the new Tinode user ID with the
+server's authentication record. If linking is successful, the server should respond with a non-empty json.
 
 #### Sample request
 ```json
@@ -322,9 +333,12 @@ If accounts are managed by the server, the server should respond with an error `
 ### `rtagns` Get a list of restricted tag namespaces.
 
 Server may enforce certain tag namespaces (tag prefixes) to be restricted, i.e. not editable by the user.
-These are also used in Tinode discovery mechanism (e.g. searching for users, contact sync). See [API docs](/docs/API.md#fnd-and-tags-finding-users-and-topics) for details.
+These are also used in Tinode discovery mechanism (e.g. searching for users, contact sync). See
+[API docs](/docs/API.md#fnd-and-tags-finding-users-and-topics) for details.
 
-The server may optionally provide a regular expression to validate search tokens before rewriting them as prefixed tags. I.e. if server allows only logins of 3-8 ASCII letters and numbers then the regexp could be `^[a-z0-9_]{3,8}$` which is base64-encoded as `XlthLXowLTlfXXszLDh9JA==`.
+The server may optionally provide a regular expression to validate search tokens before rewriting them as prefixed tags.
+I.e. if server allows only logins of 3-8 ASCII letters and numbers then the regexp could be `^[a-z0-9_]{3,8}$`
+which is base64-encoded as `XlthLXowLTlfXXszLDh9JA==`.
 
 #### Sample request
 ```json
