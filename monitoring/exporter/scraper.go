@@ -82,24 +82,24 @@ func (s *Scraper) parseStatsRaw(stats map[string]interface{}) (map[string]interf
 // Returns: (count, sum, buckets, error) tuple.
 func parseHisto(stats map[string]interface{}, key string) (*histogram, error) {
 	// Histogram is presented as a json with the predefined fields: count, sum, count_per_bucket, bounds.
-	count, err := parseNumeric(stats, key + ".count")
+	count, err := parseNumeric(stats, key+".count")
 	if err != nil {
 		return nil, err
 	}
-	sum, err := parseNumeric(stats, key + ".sum")
+	sum, err := parseNumeric(stats, key+".sum")
 	if err != nil {
 		return nil, err
 	}
-	buckets, err := parseList(stats, key + ".count_per_bucket")
+	buckets, err := parseList(stats, key+".count_per_bucket")
 	if err != nil {
 		return nil, err
 	}
-	bounds, err := parseList(stats, key + ".bounds")
+	bounds, err := parseList(stats, key+".bounds")
 	if err != nil {
 		return nil, err
 	}
 	n := len(buckets)
-	if n != len(bounds) + 1 {
+	if n != len(bounds)+1 {
 		return nil, errMalformed
 	}
 	result := make(map[float64]uint64)

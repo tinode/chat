@@ -15,38 +15,38 @@ type PromExporter struct {
 
 	scraper *Scraper
 
-	up                            *prometheus.Desc
-	version                       *prometheus.Desc
-	topicsLive                    *prometheus.Desc
-	topicsTotal                   *prometheus.Desc
-	sessionsLive                  *prometheus.Desc
-	sessionsTotal                 *prometheus.Desc
+	up            *prometheus.Desc
+	version       *prometheus.Desc
+	topicsLive    *prometheus.Desc
+	topicsTotal   *prometheus.Desc
+	sessionsLive  *prometheus.Desc
+	sessionsTotal *prometheus.Desc
 
-	numGoroutines                 *prometheus.Desc
+	numGoroutines *prometheus.Desc
 
-	incomingMessagesWebsockTotal  *prometheus.Desc
-	outgoingMessagesWebsockTotal  *prometheus.Desc
+	incomingMessagesWebsockTotal *prometheus.Desc
+	outgoingMessagesWebsockTotal *prometheus.Desc
 
 	incomingMessagesLongpollTotal *prometheus.Desc
 	outgoingMessagesLongpollTotal *prometheus.Desc
 
-	incomingMessagesGrpcTotal     *prometheus.Desc
-	outgoingMessagesGrpcTotal     *prometheus.Desc
+	incomingMessagesGrpcTotal *prometheus.Desc
+	outgoingMessagesGrpcTotal *prometheus.Desc
 
-	fileDownloadsTotal            *prometheus.Desc
-	fileUploadsTotal              *prometheus.Desc
+	fileDownloadsTotal *prometheus.Desc
+	fileUploadsTotal   *prometheus.Desc
 
-	ctrlCodesTotal2xx             *prometheus.Desc
-	ctrlCodesTotal3xx             *prometheus.Desc
-	ctrlCodesTotal4xx             *prometheus.Desc
-	ctrlCodesTotal5xx             *prometheus.Desc
+	ctrlCodesTotal2xx *prometheus.Desc
+	ctrlCodesTotal3xx *prometheus.Desc
+	ctrlCodesTotal4xx *prometheus.Desc
+	ctrlCodesTotal5xx *prometheus.Desc
 
-	clusterLeader                 *prometheus.Desc
-	clusterSize                   *prometheus.Desc
-	clusterNodesLive              *prometheus.Desc
-	malloced                      *prometheus.Desc
-	requestLatencyMsCount         *prometheus.Desc
-	outgoingMessageBytesCount     *prometheus.Desc
+	clusterLeader             *prometheus.Desc
+	clusterSize               *prometheus.Desc
+	clusterNodesLive          *prometheus.Desc
+	malloced                  *prometheus.Desc
+	requestLatencyMsCount     *prometheus.Desc
+	outgoingMessageBytesCount *prometheus.Desc
 }
 
 // NewPromExporter returns an initialized Prometheus exporter.
