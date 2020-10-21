@@ -126,7 +126,7 @@ func (a *authenticator) AddRecord(rec *auth.Rec, secret []byte) (*auth.Rec, erro
 	}
 	var expires time.Time
 	if rec.Lifetime > 0 {
-		expires = time.Now().Add(rec.Lifetime).UTC().Round(time.Millisecond)
+		expires = time.Now().Add(time.Duration(rec.Lifetime)).UTC().Round(time.Millisecond)
 	}
 
 	authLevel := rec.AuthLevel
@@ -184,7 +184,7 @@ func (a *authenticator) UpdateRecord(rec *auth.Rec, secret []byte) (*auth.Rec, e
 	}
 	var expires time.Time
 	if rec.Lifetime > 0 {
-		expires = types.TimeNow().Add(rec.Lifetime)
+		expires = types.TimeNow().Add(time.Duration(rec.Lifetime))
 	}
 	err = store.Users.UpdateAuthRecord(rec.Uid, auth.LevelAuth, a.name, uname, passhash, expires)
 	if err != nil {
@@ -239,7 +239,7 @@ func (a *authenticator) Authenticate(secret []byte) (*auth.Rec, []byte, error) {
 	return &auth.Rec{
 		Uid:       uid,
 		AuthLevel: authLvl,
-		Lifetime:  lifetime,
+		Lifetime:  auth.Duration(lifetime),
 		Features:  0,
 		State:     types.StateUndefined}, nil, nil
 }
