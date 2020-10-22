@@ -1130,6 +1130,10 @@ func (t *Topic) clusterWriteLoop() {
 			return
 		}
 		chosen--
+		if chosen >= len(t.proxiedSessions) {
+			log.Printf("topic[%s]: clusterWriteLoop - invalid proxiedSessions index %d (num proxied sessions %d)", t.name, chosen, len(t.proxiedSessions))
+			continue
+		}
 		sess := t.proxiedSessions[chosen/3]
 
 		switch chosen % 3 {
