@@ -3363,9 +3363,9 @@ func (t *Topic) addProxiedSession(s *Session) {
 		t.proxiedChannels = make([]reflect.SelectCase, 1+3)
 		continueChan := make(chan struct{})
 		t.proxiedChannels[0] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(continueChan)}
-		t.proxiedChannels[EventSend+1] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(s.send)}
-		t.proxiedChannels[EventStop+1] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(s.stop)}
-		t.proxiedChannels[EventDetach+1] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(s.detach)}
+		t.proxiedChannels[EventSend] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(s.send)}
+		t.proxiedChannels[EventStop] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(s.stop)}
+		t.proxiedChannels[EventDetach] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(s.detach)}
 		go t.clusterWriteLoop()
 	} else {
 		t.proxiedChannels = append(t.proxiedChannels, reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(s.send)})

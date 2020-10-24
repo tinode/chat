@@ -46,11 +46,11 @@ type ProxyEventType int
 
 // Individual proxy events.
 const (
-	EventSend ProxyEventType = iota
-	EventStop
-	EventDetach
-	EventContinue
-	EventAbort
+	EventSend     ProxyEventType = 1
+	EventStop     ProxyEventType = 2
+	EventDetach   ProxyEventType = 3
+	EventContinue ProxyEventType = 4
+	EventAbort    ProxyEventType = 5
 )
 
 type clusterNodeConfig struct {
@@ -1135,7 +1135,7 @@ func (t *Topic) clusterSelectProxyEvent() (event ProxyEventType, s *Session, val
 		return EventAbort, nil, nil
 	}
 	sess := t.proxiedSessions[sessionIdx]
-	return ProxyEventType(chosen % 3), sess, &value
+	return ProxyEventType(chosen%3 + 1), sess, &value
 }
 
 // clusterWriteLoop implements write loop for all multiplexing (proxy) sessions
