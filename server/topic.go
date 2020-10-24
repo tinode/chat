@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/tinode/chat/server/auth"
+	"github.com/tinode/chat/server/concurrency"
 	"github.com/tinode/chat/server/push"
 	"github.com/tinode/chat/server/store"
 	"github.com/tinode/chat/server/store/types"
@@ -60,6 +61,9 @@ type Topic struct {
 	// proxiedChannels[0] is a special-purpose channel necessary for interrupting
 	// clusterWriteLoop when sessions are added or removed.
 	proxiedChannels []reflect.SelectCase
+	// Guards proxiedSessions and proxiedTopics (not using sync.Mutex here
+	// since we need TryLock functionality).
+	proxiedLock concurrency.SimpleMutex
 
 	// Time when the topic was first created.
 	created time.Time
@@ -3342,29 +3346,44 @@ func (t *Topic) subsCount() int {
 
 // Adds a new multiplex proxied session to the topic's clusterWriteLoop.
 func (t *Topic) addProxiedSession(s *Session) {
+	// Send an interrupt signal to clusterWriteLoop that a new session
+	// is being added and acquire the lock.
+	if len(t.proxiedChannels) > 0 {
+		interruptChan := t.proxiedChannels[0].Chan.Interface().(chan struct{})
+		for !t.proxiedLock.TryLock() {
+			interruptChan <- struct{}{}
+		}
+	} else {
+		t.proxiedLock = concurrency.NewSimpleMutex()
+		t.proxiedLock.Lock()
+	}
+	// At this point we are guaranteed to have grabbed t.proxiedLock.
 	t.proxiedSessions = append(t.proxiedSessions, s)
 	if len(t.proxiedSessions) == 1 {
 		t.proxiedChannels = make([]reflect.SelectCase, 1+3)
 		continueChan := make(chan struct{})
 		t.proxiedChannels[0] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(continueChan)}
-		t.proxiedChannels[1] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(s.send)}
-		t.proxiedChannels[2] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(s.stop)}
-		t.proxiedChannels[3] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(s.detach)}
+		t.proxiedChannels[EventSend] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(s.send)}
+		t.proxiedChannels[EventStop] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(s.stop)}
+		t.proxiedChannels[EventDetach] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(s.detach)}
 		go t.clusterWriteLoop()
 	} else {
 		t.proxiedChannels = append(t.proxiedChannels, reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(s.send)})
 		t.proxiedChannels = append(t.proxiedChannels, reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(s.stop)})
 		t.proxiedChannels = append(t.proxiedChannels, reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(s.detach)})
-		// Send an interrupt signal to clusterWriteLoop. New session added.
-		t.proxiedChannels[0].Chan.Interface().(chan struct{}) <- struct{}{}
 	}
+	t.proxiedLock.Unlock()
 }
 
 // Removes a multiplex proxied session from the topic's clusterWriteLoop.
 func (t *Topic) remProxiedSession(sess *Session) bool {
+	interruptChan := t.proxiedChannels[0].Chan.Interface().(chan struct{})
+	for !t.proxiedLock.TryLock() {
+		interruptChan <- struct{}{}
+	}
+	defer func() { t.proxiedLock.Unlock() }()
 	for i, s := range t.proxiedSessions {
 		if sess == s {
-			interruptChan := t.proxiedChannels[0].Chan.Interface().(chan struct{})
 			if len(t.proxiedSessions) == 1 {
 				t.proxiedSessions = nil
 				t.proxiedChannels = nil
@@ -3388,7 +3407,6 @@ func (t *Topic) remProxiedSession(sess *Session) bool {
 						t.name, len(t.proxiedSessions), len(t.proxiedChannels))
 				}
 			}
-			interruptChan <- struct{}{}
 			return true
 		}
 	}
