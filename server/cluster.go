@@ -30,7 +30,7 @@ const (
 // ProxyReqType is the type of proxy requests.
 type ProxyReqType int
 
-// Individual request types
+// Individual request types.
 const (
 	ProxyReqNone ProxyReqType = iota
 	ProxyReqJoin
@@ -39,6 +39,18 @@ const (
 	ProxyReqBroadcast
 	ProxyReqBgSession
 	ProxyReqMeUserAgent
+)
+
+// Proxy event types processed in the clusterWriteLoop.
+type ProxyEventType int
+
+// Individual proxy events.
+const (
+	EventSend ProxyEventType = iota
+	EventStop
+	EventDetach
+	EventContinue
+	EventAbort
 )
 
 type clusterNodeConfig struct {
@@ -1098,6 +1110,34 @@ func (c *Cluster) gcProxySessionsForNode(node string) {
 	}
 }
 
+func (t *Topic) clusterSelectProxyEvent() (event ProxyEventType, s *Session, val *reflect.Value) {
+	t.proxiedLock.Lock()
+	defer func() { t.proxiedLock.Unlock() }()
+
+	chosen, value, ok := reflect.Select(t.proxiedChannels)
+	if !ok {
+		log.Printf("topic[%s]: clusterWriteLoop EOF - quitting", t.name)
+		return EventAbort, nil, nil
+	}
+	if chosen == 0 {
+		// Sessions added or removed: continue.
+		return EventContinue, nil, nil
+	}
+	if len(t.proxiedSessions) == 0 {
+		log.Printf("topic[%s]: clusterWriteLoop - no more proxied sessions (num proxied channels: %d). Quitting.",
+			t.name, len(t.proxiedChannels))
+		return EventAbort, nil, nil
+	}
+	chosen--
+	sessionIdx := chosen / 3
+	if sessionIdx >= len(t.proxiedSessions) {
+		log.Printf("topic[%s]: clusterWriteLoop - invalid proxiedSessions index %d (num proxied sessions %d)", t.name, chosen, len(t.proxiedSessions))
+		return EventAbort, nil, nil
+	}
+	sess := t.proxiedSessions[sessionIdx]
+	return ProxyEventType(chosen % 3), sess, &value
+}
+
 // clusterWriteLoop implements write loop for all multiplexing (proxy) sessions
 // attached to a master topic. This function handles all the events send from
 // the master to the original sessions hosted on other nodes.
@@ -1115,30 +1155,11 @@ func (t *Topic) clusterWriteLoop() {
 
 	log.Printf("topic[%s]: starting cluster write loop", t.name)
 	for {
-		chosen, value, ok := reflect.Select(t.proxiedChannels)
-		if !ok {
-			log.Printf("topic[%s]: clusterWriteLoop EOF - quitting", t.name)
-			return
-		}
-		if chosen == 0 {
-			// Sessions added or removed: continue.
-			continue
-		}
-		if len(t.proxiedSessions) == 0 {
-			log.Printf("topic[%s]: clusterWriteLoop - no more proxied sessions (num proxied channels: %d). Quitting.",
-				t.name, len(t.proxiedChannels))
-			return
-		}
-		chosen--
-		if chosen >= len(t.proxiedSessions) {
-			log.Printf("topic[%s]: clusterWriteLoop - invalid proxiedSessions index %d (num proxied sessions %d)", t.name, chosen, len(t.proxiedSessions))
-			continue
-		}
-		sess := t.proxiedSessions[chosen/3]
-
-		switch chosen % 3 {
-		case 0: // sess.send channel.
-			if !ok || sess.clnode.endpoint == nil {
+		// t.m
+		event, sess, value := t.clusterSelectProxyEvent()
+		switch event {
+		case EventSend: // sess.send channel.
+			if sess.clnode.endpoint == nil {
 				// channel closed
 				return
 			}
@@ -1173,7 +1194,7 @@ func (t *Topic) clusterWriteLoop() {
 				log.Printf("cluster: response to proxy failed \"%s\": %s", sess.sid, err.Error())
 				return
 			}
-		case 1: // sess.stop
+		case EventStop: // sess.stop
 			log.Println("cluster: stop msg received - multi sid", sess.sid)
 			if value.Interface() == nil {
 				// Terminating multiplexing session.
@@ -1187,12 +1208,17 @@ func (t *Topic) clusterWriteLoop() {
 			//  * user is being deleted
 			//  * node shutdown
 			// In both cases the msg does not need to be forwarded to the proxy.
-		case 2: // sess.detach
+		case EventDetach: // sess.detach
 			log.Println("cluster: detach msg received", sess.sid)
 			cleanUp(sess)
 			if len(t.proxiedSessions) == 0 {
 				return
 			}
+		case EventContinue:
+			// Continue
+		case EventAbort:
+			// Stop the loop.
+			return
 		}
 	}
 }
