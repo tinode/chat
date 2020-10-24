@@ -39,7 +39,7 @@ from tn_globals import stdoutln
 from tn_globals import to_json
 
 APP_NAME = "tn-cli"
-APP_VERSION = "1.5.1"
+APP_VERSION = "1.5.2"
 PROTOCOL_VERSION = "0"
 LIB_VERSION = pkg_resources.get_distribution("tinode_grpc").version
 GRPC_VERSION = pkg_resources.get_distribution("grpcio").version
@@ -1008,7 +1008,7 @@ def read_cookie():
         return params.get("token")
 
     except Exception as err:
-        println("Missing or invalid cookie file '.tn-cli-cookie'", err)
+        printerr("Missing or invalid cookie file '.tn-cli-cookie'", err)
         return None
 
 # Lambda for handling login
@@ -1048,7 +1048,7 @@ def print_server_params(params):
 
 if __name__ == '__main__':
     """Parse command-line arguments. Extract host name and authentication scheme, if one is provided"""
-    version = APP_VERSION + "/" + LIB_VERSION + "; gRPC/" + GRPC_VERSION
+    version = APP_VERSION + "/" + LIB_VERSION + "; gRPC/" + GRPC_VERSION + "; Python " + platform.python_version()
     purpose = "Tinode command line client. Version " + version + "."
 
     parser = argparse.ArgumentParser(description=purpose)
@@ -1098,12 +1098,11 @@ if __name__ == '__main__':
 
         elif tn_globals.IsInteractive:
             """Interactive mode only: try reading the cookie file"""
-            try:
-                schema = 'token'
-                secret = read_cookie()
-                printout("Logging in with cookie file")
-            except Exception as err:
-                printerr("Failed to read authentication cookie", err)
+            printout("Logging in with cookie file")
+            schema = 'token'
+            secret = read_cookie()
+            if not secret:
+                schema = None
 
     # Attempt to load the macro file if available.
     macros = None
