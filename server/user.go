@@ -689,8 +689,8 @@ func usersInit() {
 
 // Shutdown users cache.
 func usersShutdown() {
-	if globals.statsUpdate != nil {
-		globals.statsUpdate <- nil
+	if globals.usersUpdate != nil {
+		globals.usersUpdate <- nil
 	}
 }
 

@@ -360,7 +360,6 @@ func (n *ClusterNode) callAsync(proc string, req, resp interface{}, done chan *r
 	}
 
 	call := n.endpoint.Go(proc, req, resp, responseChan)
-	call.Done = done
 
 	return call
 }

@@ -104,8 +104,6 @@ func (ss *SessionStore) NewSession(conn interface{}, sid string) (*Session, int)
 		}
 	}
 
-	ss.lock.Unlock()
-
 	// Deleting long polling sessions.
 	for _, sess := range expired {
 		// This locks the session. Thus cleaning up outside of the
@@ -113,10 +111,13 @@ func (ss *SessionStore) NewSession(conn interface{}, sid string) (*Session, int)
 		sess.cleanUp(true)
 	}
 
-	statsSet("LiveSessions", int64(len(ss.sessCache)))
+	numSessions := len(ss.sessCache)
+	statsSet("LiveSessions", int64(numSessions))
 	statsInc("TotalSessions", 1)
 
-	return &s, len(ss.sessCache)
+	ss.lock.Unlock()
+
+	return &s, numSessions
 }
 
 // Get fetches a session from store by session ID.
