@@ -104,18 +104,18 @@ func (ss *SessionStore) NewSession(conn interface{}, sid string) (*Session, int)
 		}
 	}
 
+	numSessions := len(ss.sessCache)
+	statsSet("LiveSessions", int64(numSessions))
+	statsInc("TotalSessions", 1)
+
+	ss.lock.Unlock()
+
 	// Deleting long polling sessions.
 	for _, sess := range expired {
 		// This locks the session. Thus cleaning up outside of the
 		// sessionStore lock. Otherwise deadlock.
 		sess.cleanUp(true)
 	}
-
-	numSessions := len(ss.sessCache)
-	statsSet("LiveSessions", int64(numSessions))
-	statsInc("TotalSessions", 1)
-
-	ss.lock.Unlock()
 
 	return &s, numSessions
 }

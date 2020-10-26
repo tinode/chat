@@ -257,21 +257,15 @@ func (s *Session) isCluster() bool {
 	return s.isProxy() || s.isMultiplex()
 }
 
-func (s *Session) unlockTerminating() {
-	if s == nil {
-		return
-	}
-	s.terminatingLock.Unlock()
-}
-
 // queueOut attempts to send a ServerComMessage to a session write loop; if the send buffer is full,
 // timeout is `sendTimeout`.
 func (s *Session) queueOut(msg *ServerComMessage) bool {
-	defer s.unlockTerminating()
-	if s != nil {
-		s.terminatingLock.Lock()
+	if s == nil {
+		return true
 	}
-	if s == nil || s.terminating {
+	s.terminatingLock.Lock()
+	defer s.terminatingLock.Unlock()
+	if s.terminating {
 		return true
 	}
 
@@ -363,7 +357,7 @@ func (s *Session) cleanUp(expired bool) {
 	s.unsubAll()
 	// Stop the write loop.
 	s.stopSession(nil)
-	s.unlockTerminating()
+	s.terminatingLock.Unlock()
 }
 
 // Message received, convert bytes to ClientComMessage and dispatch
