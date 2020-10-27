@@ -3155,10 +3155,12 @@ func (t *Topic) mostRecentSession() *Session {
 	var sess *Session
 	var latest time.Time
 	for s := range t.sessions {
+		s.lastActionLock.RLock()
 		if s.lastAction.After(latest) {
 			sess = s
 			latest = s.lastAction
 		}
+		s.lastActionLock.RUnlock()
 	}
 	return sess
 }

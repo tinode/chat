@@ -4,6 +4,7 @@ import (
 	"log"
 	"math/rand"
 	"net/rpc"
+	"sync"
 	"time"
 )
 
@@ -25,7 +26,8 @@ type clusterFailover struct {
 	voteTimeout int
 
 	// The list of nodes the leader considers active
-	activeNodes []string
+	activeNodes     []string
+	activeNodesLock sync.RWMutex
 	// The number of heartbeats a node can fail before being declared dead
 	nodeFailCountLimit int
 
@@ -176,7 +178,9 @@ func (c *Cluster) sendHealthChecks() {
 				activeNodes = append(activeNodes, node.name)
 			}
 		}
+		c.fo.activeNodesLock.Lock()
 		c.fo.activeNodes = activeNodes
+		c.fo.activeNodesLock.Unlock()
 		c.rehash(activeNodes)
 		c.invalidateProxySubs("")
 		c.gcProxySessions(activeNodes)
