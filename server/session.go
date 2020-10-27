@@ -130,6 +130,8 @@ type Session struct {
 	// After this flag's been flipped to true, there must not be any more writes
 	// into the session's send channel.
 	terminating bool
+	// Guards terminating.
+	terminatingLock sync.Mutex
 
 	// Outbound mesages, buffered.
 	// The content must be serialized in format suitable for the session.
@@ -258,9 +260,15 @@ func (s *Session) isCluster() bool {
 // queueOut attempts to send a ServerComMessage to a session write loop; if the send buffer is full,
 // timeout is `sendTimeout`.
 func (s *Session) queueOut(msg *ServerComMessage) bool {
-	if s == nil || s.terminating {
+	if s == nil {
 		return true
 	}
+	s.terminatingLock.Lock()
+	defer s.terminatingLock.Unlock()
+	if s.terminating {
+		return true
+	}
+
 	if s.multi != nil {
 		// In case of a cluster we need to pass a copy of the actual session.
 		msg.sess = s
@@ -334,6 +342,7 @@ func (sess *Session) purgeChannels() {
 
 // cleanUp is called when the session is terminated to perform resource cleanup.
 func (s *Session) cleanUp(expired bool) {
+	s.terminatingLock.Lock()
 	s.terminating = true
 	s.purgeChannels()
 	s.inflightReqs.Wait()
@@ -348,6 +357,7 @@ func (s *Session) cleanUp(expired bool) {
 	s.unsubAll()
 	// Stop the write loop.
 	s.stopSession(nil)
+	s.terminatingLock.Unlock()
 }
 
 // Message received, convert bytes to ClientComMessage and dispatch
