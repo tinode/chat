@@ -759,7 +759,11 @@ func (c *Cluster) isPartitioned() bool {
 		return false
 	}
 
-	return (len(c.nodes)+1)/2 >= len(c.fo.activeNodes)
+	c.fo.activeNodesLock.RLock()
+	result := (len(c.nodes)+1)/2 >= len(c.fo.activeNodes)
+	c.fo.activeNodesLock.RUnlock()
+
+	return result
 }
 
 func (c *Cluster) makeClusterReq(reqType ProxyReqType, payload interface{}, topic string, sess *Session) *ClusterReq {
@@ -817,6 +821,15 @@ func (c *Cluster) routeToTopicMaster(reqType ProxyReqType, payload interface{}, 
 	if c == nil {
 		// Cluster may be nil due to shutdown.
 		return nil
+	}
+	if sess != nil {
+		sess.terminatingLock.Lock()
+		// Do not let the session terminate until the call's completion.
+		defer func() { sess.terminatingLock.Unlock() }()
+		if sess.terminating {
+			// The session is terminating.
+			return nil
+		}
 	}
 
 	// Find the cluster node which owns the topic, then forward to it.
@@ -1137,6 +1150,13 @@ func (t *Topic) clusterSelectProxyEvent() (event ProxyEventType, s *Session, val
 	return ProxyEventType(chosen%3 + 1), sess, &value
 }
 
+func (t *Topic) noMoreProxiedSessions() bool {
+	t.proxiedLock.Lock()
+	numProxied := len(t.proxiedSessions)
+	t.proxiedLock.Unlock()
+	return numProxied == 0
+}
+
 // clusterWriteLoop implements write loop for all multiplexing (proxy) sessions
 // attached to a master topic. This function handles all the events send from
 // the master to the original sessions hosted on other nodes.
@@ -1198,7 +1218,7 @@ func (t *Topic) clusterWriteLoop() {
 			if value.Interface() == nil {
 				// Terminating multiplexing session.
 				cleanUp(sess)
-				if len(t.proxiedSessions) == 0 {
+				if t.noMoreProxiedSessions() {
 					return
 				}
 			}
@@ -1210,7 +1230,7 @@ func (t *Topic) clusterWriteLoop() {
 		case EventDetach: // sess.detach
 			log.Println("cluster: detach msg received", sess.sid)
 			cleanUp(sess)
-			if len(t.proxiedSessions) == 0 {
+			if t.noMoreProxiedSessions() {
 				return
 			}
 		case EventContinue:

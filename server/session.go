@@ -114,7 +114,8 @@ type Session struct {
 	lastTouched time.Time
 
 	// Time when the session received any packer from client
-	lastAction time.Time
+	lastAction     time.Time
+	lastActionLock sync.RWMutex
 
 	// Background session: subscription presence notifications and online status are delayed.
 	background bool
@@ -396,8 +397,11 @@ func (s *Session) dispatchRaw(raw []byte) {
 }
 
 func (s *Session) dispatch(msg *ClientComMessage) {
-	s.lastAction = types.TimeNow()
-	msg.Timestamp = s.lastAction
+	now := types.TimeNow()
+	s.lastActionLock.Lock()
+	s.lastAction = now
+	s.lastActionLock.Unlock()
+	msg.Timestamp = now
 
 	if msg.AsUser == "" {
 		msg.AsUser = s.uid.UserId()
