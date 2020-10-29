@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -114,8 +115,7 @@ type Session struct {
 	lastTouched time.Time
 
 	// Time when the session received any packer from client
-	lastAction     time.Time
-	lastActionLock sync.RWMutex
+	lastAction int64
 
 	// Background session: subscription presence notifications and online status are delayed.
 	background bool
@@ -398,9 +398,7 @@ func (s *Session) dispatchRaw(raw []byte) {
 
 func (s *Session) dispatch(msg *ClientComMessage) {
 	now := types.TimeNow()
-	s.lastActionLock.Lock()
-	s.lastAction = now
-	s.lastActionLock.Unlock()
+	atomic.StoreInt64(&s.lastAction, now.UnixNano())
 	msg.Timestamp = now
 
 	if msg.AsUser == "" {

@@ -3153,14 +3153,13 @@ func (t *Topic) pushForSub(fromUid, toUid types.Uid, want, given types.AccessMod
 // FIXME: this won't work correctly with multiplexing sessions.
 func (t *Topic) mostRecentSession() *Session {
 	var sess *Session
-	var latest time.Time
+	var latest int64
 	for s := range t.sessions {
-		s.lastActionLock.RLock()
-		if s.lastAction.After(latest) {
+		sessionLastAction := atomic.LoadInt64(&s.lastAction)
+		if sessionLastAction > latest {
 			sess = s
-			latest = s.lastAction
+			latest = sessionLastAction
 		}
-		s.lastActionLock.RUnlock()
 	}
 	return sess
 }
