@@ -130,9 +130,10 @@ type Session struct {
 	// Indicates that the session is terminating.
 	// After this flag's been flipped to true, there must not be any more writes
 	// into the session's send channel.
-	terminating bool
-	// Guards terminating.
-	terminatingLock sync.Mutex
+	// Read/written atomically.
+	// 0 = false
+	// 1 = true
+	terminating int32
 
 	// Outbound mesages, buffered.
 	// The content must be serialized in format suitable for the session.
@@ -264,9 +265,7 @@ func (s *Session) queueOut(msg *ServerComMessage) bool {
 	if s == nil {
 		return true
 	}
-	s.terminatingLock.Lock()
-	defer s.terminatingLock.Unlock()
-	if s.terminating {
+	if atomic.LoadInt32(&s.terminating) > 0 {
 		return true
 	}
 
@@ -306,7 +305,7 @@ func (s *Session) queueOut(msg *ServerComMessage) bool {
 // queueOutBytes attempts to send a ServerComMessage already serialized to []byte.
 // If the send buffer is full, timeout is `sendTimeout`.
 func (s *Session) queueOutBytes(data []byte) bool {
-	if s == nil || s.terminating {
+	if s == nil || atomic.LoadInt32(&s.terminating) > 0 {
 		return true
 	}
 
@@ -320,7 +319,7 @@ func (s *Session) queueOutBytes(data []byte) bool {
 }
 
 func (s *Session) detachSession(fromTopic string) {
-	if !s.terminating {
+	if atomic.LoadInt32(&s.terminating) == 0 {
 		s.detach <- fromTopic
 	}
 }
@@ -343,8 +342,7 @@ func (sess *Session) purgeChannels() {
 
 // cleanUp is called when the session is terminated to perform resource cleanup.
 func (s *Session) cleanUp(expired bool) {
-	s.terminatingLock.Lock()
-	s.terminating = true
+	atomic.StoreInt32(&s.terminating, 1)
 	s.purgeChannels()
 	s.inflightReqs.Wait()
 	if !expired {
@@ -358,7 +356,6 @@ func (s *Session) cleanUp(expired bool) {
 	s.unsubAll()
 	// Stop the write loop.
 	s.stopSession(nil)
-	s.terminatingLock.Unlock()
 }
 
 // Message received, convert bytes to ClientComMessage and dispatch
@@ -366,7 +363,7 @@ func (s *Session) dispatchRaw(raw []byte) {
 	now := types.TimeNow()
 	var msg ClientComMessage
 
-	if s.terminating {
+	if atomic.LoadInt32(&s.terminating) > 0 {
 		log.Println("s.dispatch: message received on a terminating session", s.sid)
 		s.queueOut(ErrLocked("", "", now))
 		return

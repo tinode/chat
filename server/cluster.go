@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/tinode/chat/server/auth"
@@ -823,10 +824,7 @@ func (c *Cluster) routeToTopicMaster(reqType ProxyReqType, payload interface{}, 
 		return nil
 	}
 	if sess != nil {
-		sess.terminatingLock.Lock()
-		// Do not let the session terminate until the call's completion.
-		defer func() { sess.terminatingLock.Unlock() }()
-		if sess.terminating {
+		if atomic.LoadInt32(&sess.terminating) > 0 {
 			// The session is terminating.
 			return nil
 		}
