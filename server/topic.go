@@ -3355,7 +3355,9 @@ func (t *Topic) addProxiedSession(s *Session) {
 			interruptChan <- struct{}{}
 		}
 	} else {
-		t.proxiedLock = concurrency.NewSimpleMutex()
+		if t.proxiedLock == nil {
+			t.proxiedLock = concurrency.NewSimpleMutex()
+		}
 		t.proxiedLock.Lock()
 	}
 	// At this point we are guaranteed to have grabbed t.proxiedLock.
@@ -3477,6 +3479,9 @@ func (t *Topic) remSession(sess *Session, asUid types.Uid) (*perSessionData, boo
 			t.sessions[s] = pssd
 			if len(pssd.muids) == 0 {
 				delete(t.sessions, s)
+				if s.isMultiplex() && !t.remProxiedSession(s) {
+					log.Printf("topic[%s]: multiplex session %s not removed from the event loop: no more attached uids", t.name, s.sid)
+				}
 				return &pssd, true
 			} else {
 				return &pssd, false

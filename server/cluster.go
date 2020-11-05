@@ -1124,6 +1124,9 @@ func (t *Topic) clusterSelectProxyEvent() (event ProxyEventType, s *Session, val
 	t.proxiedLock.Lock()
 	defer func() { t.proxiedLock.Unlock() }()
 
+	if len(t.proxiedSessions) == 0 {
+		return EventAbort, nil, nil
+	}
 	chosen, value, ok := reflect.Select(t.proxiedChannels)
 	if !ok {
 		log.Printf("topic[%s]: clusterWriteLoop EOF - quitting", t.name)
