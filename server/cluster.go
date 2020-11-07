@@ -491,7 +491,13 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 			pkt:  msg.CliMsg,
 			sess: sess,
 		}
-		globals.hub.join <- join
+		select {
+		case globals.hub.join <- join:
+		default:
+			// Reply with a 500 to the user.
+			sess.queueOut(ErrUnknownReply(msg.CliMsg, msg.CliMsg.Timestamp))
+			log.Println("cluster: join req failed - hub.join queue full, topic ", msg.CliMsg.RcptTo, "; orig sid ", sess.sid)
+		}
 
 	case ProxyReqLeave:
 		if t := globals.hub.topicGet(msg.RcptTo); t != nil {
@@ -505,9 +511,14 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 
 	case ProxyReqMeta:
 		if t := globals.hub.topicGet(msg.RcptTo); t != nil {
-			t.meta <- &metaReq{
-				pkt:  msg.CliMsg,
-				sess: sess,
+			select {
+			case t.meta <- &metaReq{
+					pkt:  msg.CliMsg,
+					sess: sess,
+				}:
+			default:
+				sess.queueOut(ErrUnknownReply(msg.CliMsg, msg.CliMsg.Timestamp))
+				log.Println("cluster: meta req failed - topic.meta queue full, topic ", msg.CliMsg.RcptTo, "; orig sid ", sess.sid)
 			}
 		} else {
 			log.Println("cluster: meta request for unknown topic", msg.RcptTo)
@@ -516,7 +527,11 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 	case ProxyReqBroadcast:
 		// sess could be nil
 		msg.SrvMsg.sess = sess
-		globals.hub.route <- msg.SrvMsg
+		select {
+		case globals.hub.route <- msg.SrvMsg:
+		default:
+			log.Println("cluster: route req failed - hub.route queue full")
+		}
 
 	case ProxyReqBgSession, ProxyReqMeUserAgent:
 		if t := globals.hub.topicGet(msg.RcptTo); t != nil {
