@@ -55,9 +55,12 @@ func (a *adapter) Open(jsonconfig json.RawMessage) error {
 		return errors.New("mysql adapter is already connected")
 	}
 
+	if len(jsonconfig) < 2 {
+		return errors.New("adapter mysql missing config")
+	}
+
 	var err error
 	var config configType
-
 	if err = json.Unmarshal(jsonconfig, &config); err != nil {
 		return errors.New("mysql adapter failed to parse config: " + err.Error())
 	}
