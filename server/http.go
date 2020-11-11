@@ -309,6 +309,8 @@ func getHttpAuth(req *http.Request) (method, secret string) {
 	// Check URL query parameters.
 	if method = req.URL.Query().Get("auth"); method != "" {
 		secret = req.URL.Query().Get("secret")
+		// Convert base64 URL-encoding to standard encoding.
+		secret = strings.NewReplacer("-", "+", "_", "/").Replace(secret)
 		return
 	}
 
