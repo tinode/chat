@@ -1783,6 +1783,7 @@ func (a *adapter) MessageGetDeleted(topic string, forUser t.Uid, opts *t.QueryOp
 	return dmsgs, nil
 }
 
+// Delete all messages in the topic.
 func (a *adapter) messagesHardDelete(topic string) error {
 	var err error
 
@@ -1815,6 +1816,7 @@ func (a *adapter) MessageDeleteList(topic string, toDel *t.DelMessage) error {
 	var err error
 
 	if toDel == nil {
+		// Delete all messages.
 		err = a.messagesHardDelete(topic)
 	} else {
 		// Only some messages are being deleted
