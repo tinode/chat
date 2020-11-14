@@ -1925,6 +1925,7 @@ func (a *adapter) MessageDeleteList(topic string, toDel *t.DelMessage) error {
 	var err error
 
 	if toDel == nil {
+		// No filter: delete all messages.
 		return a.messagesHardDelete(topic)
 	}
 
@@ -1945,7 +1946,7 @@ func (a *adapter) MessageDeleteList(topic string, toDel *t.DelMessage) error {
 		rangeFilter := b.A{}
 		for _, rng := range toDel.SeqIdRanges {
 			if rng.Hi == 0 {
-				rangeFilter = append(rangeFilter, b.M{"seqid": b.M{"$gte": rng.Low}})
+				rangeFilter = append(rangeFilter, b.M{"seqid": rng.Low})
 			} else {
 				rangeFilter = append(rangeFilter, b.M{"seqid": b.M{"$gte": rng.Low, "$lte": rng.Hi}})
 			}
