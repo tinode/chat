@@ -251,7 +251,7 @@ Only the `root` user may suspend the account. To suspend the account the root us
 acc: {
   id: "1a2b3", // string, client-provided message id, optional
   user: "usr2il9suCbuko", // user being affected by the change
-  status: "suspended"
+  status: "susp"
 }
 ```
 Sending the same message with `status: "ok"` un-suspends the account. A root user may check account status by executing `{get what="desc"}` command against user's `me` topic.
