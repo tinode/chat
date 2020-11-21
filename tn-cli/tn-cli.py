@@ -39,7 +39,7 @@ from tn_globals import stdoutln
 from tn_globals import to_json
 
 APP_NAME = "tn-cli"
-APP_VERSION = "1.5.2"
+APP_VERSION = "1.5.3"
 PROTOCOL_VERSION = "0"
 LIB_VERSION = pkg_resources.get_distribution("tinode_grpc").version
 GRPC_VERSION = pkg_resources.get_distribution("grpcio").version
@@ -455,15 +455,35 @@ def delMsg(id, cmd, ignored):
     seq_list = None
     cred = None
     if cmd.what == 'msg':
+        enum_what = pb.ClientDel.MSG
         if not cmd.topic:
             stdoutln("Must specify topic to delete messages")
             return None
-        enum_what = pb.ClientDel.MSG
-        cmd.user = None
-        if cmd.msglist == 'all':
-            seq_list = [pb.DelQuery(range=pb.SeqRange(low=1, hi=0x8FFFFFF))]
-        elif cmd.msglist != None:
-            seq_list = [pb.DelQuery(seq_id=int(x.strip())) for x in cmd.msglist.split(',')]
+        if cmd.user:
+            stdoutln("Unexpected '--user' parameter")
+            return None
+        if not cmd.seq:
+            stdoutln("Must specify message IDs to delete")
+            return None
+
+        if cmd.seq == 'all':
+            seq_list = [pb.SeqRange(low=1, hi=0x8FFFFFF)]
+        else:
+            # Split a list like '1,2,3,10-22' into ranges.
+            try:
+                seq_list = []
+                for item in cmd.seq.split(','):
+                    if '-' in item:
+                        low, hi = [int(x.strip()) for x in item.split('-')]
+                        if low>=hi or low<=0:
+                            stdoutln("Invalid message ID range {0}-{1}".format(low, hi))
+                            return None
+                        seq_list.append(pb.SeqRange(low=low, hi=hi))
+                    else:
+                        seq_list.append(pb.SeqRange(low=int(item.strip())))
+            except ValueError as err:
+                stdoutln("Invalid message IDs: {0}".format(err))
+                return None
 
     elif cmd.what == 'sub':
         if not cmd.user or not cmd.topic:
@@ -582,7 +602,7 @@ def parse_cmd(parts):
         parser.add_argument('what', default=None, help='what to delete')
         parser.add_argument('--topic', default=None, help='topic being affected')
         parser.add_argument('--user', default=None, help='either delete this user or a subscription with this user')
-        parser.add_argument('--seq', default=None, help='"all" or comma separated list of message IDs to delete')
+        parser.add_argument('--seq', default=None, help='"all" or a list of comma- and dash-separated message IDs to delete, e.g. "1,2,9-12"')
         parser.add_argument('--hard', action='store_true', help='request to hard-delete')
         parser.add_argument('--cred', help='credential to delete in method:value format, e.g. email:test@example.com, tel:12345')
     elif parts[0] == "login":
