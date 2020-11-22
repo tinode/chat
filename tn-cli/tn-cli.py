@@ -448,14 +448,13 @@ def delMsg(id, cmd, ignored):
         stdoutln("Must specify what to delete")
         return None
 
-    cmd.topic = cmd.topic if cmd.topic else tn_globals.DefaultTopic
-    cmd.user = cmd.user if cmd.user else tn_globals.DefaultUser
     enum_what = None
     before = None
     seq_list = None
     cred = None
     if cmd.what == 'msg':
         enum_what = pb.ClientDel.MSG
+        cmd.topic = cmd.topic if cmd.topic else tn_globals.DefaultTopic
         if not cmd.topic:
             stdoutln("Must specify topic to delete messages")
             return None
@@ -486,29 +485,43 @@ def delMsg(id, cmd, ignored):
                 return None
 
     elif cmd.what == 'sub':
+        cmd.topic = cmd.topic if cmd.topic else tn_globals.DefaultTopic
+        cmd.user = cmd.user if cmd.user else tn_globals.DefaultUser
         if not cmd.user or not cmd.topic:
             stdoutln("Must specify topic and user to delete subscription")
             return None
         enum_what = pb.ClientDel.SUB
 
     elif cmd.what == 'topic':
+        cmd.topic = cmd.topic if cmd.topic else tn_globals.DefaultTopic
+        if cmd.user:
+            stdoutln("Unexpected '--user' parameter")
+            return None
         if not cmd.topic:
             stdoutln("Must specify topic to delete")
             return None
         enum_what = pb.ClientDel.TOPIC
-        cmd.user = None
 
     elif cmd.what == 'user':
+        cmd.user = cmd.user if cmd.user else tn_globals.DefaultUser
+        if cmd.topic:
+            stdoutln("Unexpected '--topic' parameter")
+            return None
+        if not cmd.user:
+            stdoutln("Must specify user to delete")
+            return None
         enum_what = pb.ClientDel.USER
-        cmd.topic = None
 
     elif cmd.what == 'cred':
+        if cmd.user:
+            stdoutln("Unexpected '--user' parameter")
+            return None
         if cmd.topic != 'me':
             stdoutln("Topic must be 'me'")
             return None
         cred = parse_cred(cmd.cred)
         if cred is None:
-            stdoutln("Topic must be 'me'")
+            stdoutln("Failed to parse credential '{0}'".format(cmd.cred))
             return None
         cred = cred[0]
         enum_what = pb.ClientDel.CRED
