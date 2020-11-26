@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log"
 	"math/rand"
 	qp "mime/quotedprintable"
@@ -52,7 +51,9 @@ type validator struct {
 	// Port of the SMTP server.
 	SMTPPort string `json:"smtp_port"`
 	// ServerName used in SMTP HELO/EHLO command.
-	ServerName string `json:"servername"`
+	SMTPHeloHost string `json:"smtp_helo_host"`
+	// if true, skip verifying server cetificate.
+	IsSkipVerifyCert bool `json:"skip_verify_cert"`
 	// Optional whitelist of email domains accepted for registration.
 	Domains []string `json:"domains"`
 
@@ -170,9 +171,6 @@ func (v *validator) Init(jsonconf string) error {
 	// Check if login is provided explicitly. Otherwise parse Sender and use that as login for authentication.
 	if v.Login != "" {
 		v.auth = smtp.PlainAuth("", v.Login, v.SenderPassword, v.SMTPAddr)
-	} else {
-		// if unset v.Login, skip authentication
-		v.auth = nil
 	}
 
 	// Optionally resolve paths against the location of this executable file.
@@ -258,8 +256,8 @@ func (v *validator) Init(jsonconf string) error {
 		hostUrl.Path = "/"
 	}
 	v.HostUrl = hostUrl.String()
-	if v.ServerName == "" {
-		v.ServerName = hostUrl.Hostname()
+	if v.SMTPHeloHost == "" {
+		v.SMTPHeloHost = hostUrl.Hostname()
 	}
 	if v.MaxRetries == 0 {
 		v.MaxRetries = maxRetries
@@ -441,60 +439,50 @@ func (v *validator) Remove(user t.Uid, value string) error {
 }
 
 // SendMail replacement
-//
-func (v *validator) Send_Mail(rcpt []string, msg []byte) error {
+func (v *validator) sendMail(rcpt []string, msg []byte) error {
 
 	client, err := smtp.Dial(v.SMTPAddr + ":" + v.SMTPPort)
 	if err != nil {
 		return err
 	}
 	defer client.Close()
-	err = client.Hello(v.ServerName)
-	if err != nil {
+	if err = client.Hello(v.SMTPHeloHost); err != nil {
 		return err
 	}
-	istls, _ := client.Extension("starttls")
-	if istls {
-		tlsconfig := &tls.Config{
-			InsecureSkipVerify: true,
+	if istls, _ := client.Extension("STARTTLS"); istls {
+		tlsConfig := &tls.Config{
+			InsecureSkipVerify: v.IsSkipVerifyCert,
 			ServerName:         v.SMTPAddr,
 		}
-		err = client.StartTLS(tlsconfig)
-		if err != nil {
+		if err = client.StartTLS(tlsConfig); err != nil {
 			return err
 		}
 	}
-	isauth, _ := client.Extension("auth")
+	isauth, _ := client.Extension("AUTH")
 	if v.auth != nil && isauth {
 		err = client.Auth(v.auth)
 		if err != nil {
 			return err
 		}
 	}
-	err = client.Reset()
-	if err != nil {
-		return err
-	}
-	err = client.Mail(v.senderEmail)
-	if err != nil {
+	if err = client.Mail(strings.Trim(v.senderEmail, "\r\n \t")); err != nil {
 		return err
 	}
 	for _, to := range rcpt {
-		err = client.Rcpt(to)
-		if err != nil {
+		if err = client.Rcpt(strings.Trim(to, "\r\n \t")); err != nil {
 			return err
 		}
 	}
-	var w io.WriteCloser
-	w, err = client.Data()
+	w, err := client.Data()
 	if err != nil {
 		return err
 	}
-	_, err = w.Write([]byte(msg))
-	if err != nil {
+	if _, err = w.Write(msg); err != nil {
 		return err
 	}
-	w.Close()
+	if err = w.Close(); err != nil {
+		return err
+	}
 	return client.Quit()
 }
 
@@ -552,8 +540,7 @@ func (v *validator) send(to string, content *emailContent) error {
 	}
 	message.WriteString("\r\n")
 
-	// err := smtp.SendMail(v.SMTPAddr+":"+v.SMTPPort, v.auth, v.senderEmail, []string{to}, message.Bytes())
-	err := v.Send_Mail([]string{to}, message.Bytes())
+	err := v.sendMail([]string{to}, message.Bytes())
 	if err != nil {
 		log.Println("SMTP error", to, err)
 	}
