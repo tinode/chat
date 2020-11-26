@@ -52,8 +52,9 @@ type validator struct {
 	SMTPPort string `json:"smtp_port"`
 	// ServerName used in SMTP HELO/EHLO command.
 	SMTPHeloHost string `json:"smtp_helo_host"`
-	// if true, skip verifying server cetificate.
-	IsSkipVerifyCert bool `json:"skip_verify_cert"`
+	// Skip verification of the server's certificate chain and host name.
+	// In this mode, TLS is susceptible to machine-in-the-middle attacks.
+	TLSInsecureSkipVerify bool `json:"insecure_skip_verify"`
 	// Optional whitelist of email domains accepted for registration.
 	Domains []string `json:"domains"`
 
@@ -439,6 +440,7 @@ func (v *validator) Remove(user t.Uid, value string) error {
 }
 
 // SendMail replacement
+//
 func (v *validator) sendMail(rcpt []string, msg []byte) error {
 
 	client, err := smtp.Dial(v.SMTPAddr + ":" + v.SMTPPort)
@@ -451,25 +453,26 @@ func (v *validator) sendMail(rcpt []string, msg []byte) error {
 	}
 	if istls, _ := client.Extension("STARTTLS"); istls {
 		tlsConfig := &tls.Config{
-			InsecureSkipVerify: v.IsSkipVerifyCert,
+			InsecureSkipVerify: v.TLSInsecureSkipVerify,
 			ServerName:         v.SMTPAddr,
 		}
 		if err = client.StartTLS(tlsConfig); err != nil {
 			return err
 		}
 	}
-	isauth, _ := client.Extension("AUTH")
-	if v.auth != nil && isauth {
-		err = client.Auth(v.auth)
-		if err != nil {
-			return err
+	if v.auth != nil {
+		if isauth, _ := client.Extension("AUTH"); isauth {
+			err = client.Auth(v.auth)
+			if err != nil {
+				return err
+			}
 		}
 	}
-	if err = client.Mail(strings.Trim(v.senderEmail, "\r\n \t")); err != nil {
+	if err = client.Mail(strings.ReplaceAll(strings.ReplaceAll(v.senderEmail, "\r", " "), "\n", " ")); err != nil {
 		return err
 	}
 	for _, to := range rcpt {
-		if err = client.Rcpt(strings.Trim(to, "\r\n \t")); err != nil {
+		if err = client.Rcpt(strings.ReplaceAll(strings.ReplaceAll(to, "\r", " "), "\n", " ")); err != nil {
 			return err
 		}
 	}
