@@ -3,6 +3,7 @@ package email
 
 import (
 	"bytes"
+	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -49,6 +50,11 @@ type validator struct {
 	SMTPAddr string `json:"smtp_server"`
 	// Port of the SMTP server.
 	SMTPPort string `json:"smtp_port"`
+	// ServerName used in SMTP HELO/EHLO command.
+	SMTPHeloHost string `json:"smtp_helo_host"`
+	// Skip verification of the server's certificate chain and host name.
+	// In this mode, TLS is susceptible to machine-in-the-middle attacks.
+	TLSInsecureSkipVerify bool `json:"insecure_skip_verify"`
 	// Optional whitelist of email domains accepted for registration.
 	Domains []string `json:"domains"`
 
@@ -166,9 +172,6 @@ func (v *validator) Init(jsonconf string) error {
 	// Check if login is provided explicitly. Otherwise parse Sender and use that as login for authentication.
 	if v.Login != "" {
 		v.auth = smtp.PlainAuth("", v.Login, v.SenderPassword, v.SMTPAddr)
-	} else {
-		// SendFrom could be an RFC 5322 address of the form "John Doe <jdoe@example.com>". Parse it.
-		v.auth = smtp.PlainAuth("", v.senderEmail, v.SenderPassword, v.SMTPAddr)
 	}
 
 	// Optionally resolve paths against the location of this executable file.
@@ -254,7 +257,9 @@ func (v *validator) Init(jsonconf string) error {
 		hostUrl.Path = "/"
 	}
 	v.HostUrl = hostUrl.String()
-
+	if v.SMTPHeloHost == "" {
+		v.SMTPHeloHost = hostUrl.Hostname()
+	}
 	if v.MaxRetries == 0 {
 		v.MaxRetries = maxRetries
 	}
@@ -434,6 +439,56 @@ func (v *validator) Remove(user t.Uid, value string) error {
 	return store.Users.DelCred(user, validatorName, value)
 }
 
+// SendMail replacement
+//
+func (v *validator) sendMail(rcpt []string, msg []byte) error {
+
+	client, err := smtp.Dial(v.SMTPAddr + ":" + v.SMTPPort)
+	if err != nil {
+		return err
+	}
+	defer client.Close()
+	if err = client.Hello(v.SMTPHeloHost); err != nil {
+		return err
+	}
+	if istls, _ := client.Extension("STARTTLS"); istls {
+		tlsConfig := &tls.Config{
+			InsecureSkipVerify: v.TLSInsecureSkipVerify,
+			ServerName:         v.SMTPAddr,
+		}
+		if err = client.StartTLS(tlsConfig); err != nil {
+			return err
+		}
+	}
+	if v.auth != nil {
+		if isauth, _ := client.Extension("AUTH"); isauth {
+			err = client.Auth(v.auth)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	if err = client.Mail(strings.ReplaceAll(strings.ReplaceAll(v.senderEmail, "\r", " "), "\n", " ")); err != nil {
+		return err
+	}
+	for _, to := range rcpt {
+		if err = client.Rcpt(strings.ReplaceAll(strings.ReplaceAll(to, "\r", " "), "\n", " ")); err != nil {
+			return err
+		}
+	}
+	w, err := client.Data()
+	if err != nil {
+		return err
+	}
+	if _, err = w.Write(msg); err != nil {
+		return err
+	}
+	if err = w.Close(); err != nil {
+		return err
+	}
+	return client.Quit()
+}
+
 // This is a basic SMTP sender which connects to a server using login/password.
 // -
 // See here how to send email from Amazon SES:
@@ -488,7 +543,7 @@ func (v *validator) send(to string, content *emailContent) error {
 	}
 	message.WriteString("\r\n")
 
-	err := smtp.SendMail(v.SMTPAddr+":"+v.SMTPPort, v.auth, v.senderEmail, []string{to}, message.Bytes())
+	err := v.sendMail([]string{to}, message.Bytes())
 	if err != nil {
 		log.Println("SMTP error", to, err)
 	}
