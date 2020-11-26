@@ -258,7 +258,9 @@ func (v *validator) Init(jsonconf string) error {
 		hostUrl.Path = "/"
 	}
 	v.HostUrl = hostUrl.String()
-
+	if v.ServerName == "" {
+		v.ServerName = hostUrl.Hostname()
+	}
 	if v.MaxRetries == 0 {
 		v.MaxRetries = maxRetries
 	}
