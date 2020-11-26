@@ -39,7 +39,7 @@ from tn_globals import stdoutln
 from tn_globals import to_json
 
 APP_NAME = "tn-cli"
-APP_VERSION = "1.5.4"
+APP_VERSION = "1.5.5"
 PROTOCOL_VERSION = "0"
 LIB_VERSION = pkg_resources.get_distribution("tinode_grpc").version
 GRPC_VERSION = pkg_resources.get_distribution("grpcio").version
@@ -60,6 +60,13 @@ AWAIT_TIMEOUT = 5
 
 # This is needed for gRPC SSL to work correctly.
 os.environ["GRPC_SSL_CIPHER_SUITES"] = "HIGH+ECDSA"
+
+# Setup crash handler: close input reader otherwise a crash
+# makes terminal session unusable.
+def exception_hook(type, value, traceBack):
+    if tn_globals.InputThread != None:
+        tn_globals.InputThread.join(0.3)
+sys.excepthook = exception_hook
 
 # Enable the following variables for debugging.
 # os.environ["GRPC_TRACE"] = "all"
