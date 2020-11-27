@@ -1230,7 +1230,6 @@ func (t *Topic) clusterWriteLoop() {
 				return
 			}
 		case EventStop: // sess.stop
-			log.Println("cluster: stop msg received - multi sid", sess.sid)
 			if value.Interface() == nil {
 				// Terminating multiplexing session.
 				cleanUp(sess)
@@ -1244,7 +1243,6 @@ func (t *Topic) clusterWriteLoop() {
 			//  * node shutdown
 			// In both cases the msg does not need to be forwarded to the proxy.
 		case EventDetach: // sess.detach
-			log.Println("cluster: detach msg received", sess.sid)
 			cleanUp(sess)
 			if t.noMoreProxiedSessions() {
 				return
