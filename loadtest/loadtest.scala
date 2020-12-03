@@ -20,7 +20,7 @@ class Loadtest extends Simulation {
   // Auth tokens to share between sessions.
   val tokenCache : concurrent.Map[String, String] = new ConcurrentHashMap() asScala
 
-  val loginBasic =
+  val loginBasic = exitBlockOnFail {
     exec { session =>
       val uname = session("username").as[String]
       val password = session("password").as[String]
@@ -43,8 +43,9 @@ class Loadtest extends Simulation {
       tokenCache.put(uname, token)
       session
     }
+  }
 
-  val loginToken =
+  val loginToken = exitBlockOnFail {
     exec { session =>
       val uname = session("username").as[String]
       val token = tokenCache.get(uname).getOrElse("")
@@ -59,24 +60,10 @@ class Loadtest extends Simulation {
           .matching(jsonPath("$.ctrl").find.exists)
       )
     }
+  }
 
-  val scn = scenario("WebSocket")
-    .exec(ws("Connect WS").connect("/v0/channels?apikey=AQEAAAABAAD_rAp4DJh05a1HAwFT3A6K"))
-    .exec(session => session.set("id", "tn-" + session.userId))
-    .pause(1)
-    .exec {
-      ws("hi").sendText(
-        """{"hi":{"id":"afabb3","ver":"0.16","ua":"Gatling-Loadtest/1.0; gatling/1.7.0"}}"""
-      )
-    }
-    .pause(1)
-    .feed(feeder)
-    .doIfOrElse({session =>
-      val uname = session("username").as[String]
-      val token = tokenCache.get(uname)
-      token == None
-    }) { loginBasic } { loginToken }
-    .exec {
+  val subMe = exitBlockOnFail {
+    exec {
       ws("sub-me").sendText(
         """{"sub":{"id":"{id}-sub-me","topic":"me","get":{"what":"desc"}}}"""
       )
@@ -85,7 +72,10 @@ class Loadtest extends Simulation {
           .matching(jsonPath("$.meta.desc").find.exists)
       )
     }
-    .exec {
+  }
+
+  val getSubs = exitBlockOnFail {
+    exec {
       ws("get-subs").sendText(
         """{"get":{"id":"${id}-get-subs","topic":"me","what":"sub"}}"""
       )
@@ -95,35 +85,63 @@ class Loadtest extends Simulation {
           .check(jsonPath("$.meta.sub[*].topic").findAll.saveAs("subs"))
       )
     }
-    .foreach("${subs}", "sub") {
-      exec {
-        ws("sub-topic").sendText(
-          """{"sub":{"id":"${id}-sub-${sub}","topic":"${sub}","get":{"what":"desc sub data del"}}}"""
-        )
-        .await(5 seconds)(
-          ws.checkTextMessage("sub-topic-ctrl")
-            .matching(jsonPath("$.ctrl").find.exists)
-        )
-      }
-      .repeat(3, "i") {
+  }
+
+  val scn = scenario("WebSocket")
+    .exec(ws("Connect WS").connect("/v0/channels?apikey=AQEAAAABAAD_rAp4DJh05a1HAwFT3A6K"))
+    .exec(session => session.set("id", "tn-" + session.userId))
+    .pause(1)
+    .exec {
+      ws("hi").sendText(
+        """{"hi":{"id":"afabb3","ver":"0.16","ua":"Gatling-Loadtest/1.0; gatling/1.7.0"}}"""
+      )
+      .await(5 seconds)(
+        ws.checkTextMessage("hi")
+          .matching(jsonPath("$.ctrl").find.exists)
+      )
+    }
+    .pause(1)
+    .feed(feeder)
+    .doIfOrElse({session =>
+      val uname = session("username").as[String]
+      val token = tokenCache.get(uname)
+      token == None
+    }) { loginBasic } { loginToken }
+    .exec(subMe)
+    .exec(getSubs)
+    .doIf({session =>
+      session.attributes.contains("subs")
+    }) {
+      foreach("${subs}", "sub") {
         exec {
-          ws("pub-topic").sendText(
-            """{"pub":{"id":"${id}-pub-${sub}-${i}","topic":"${sub}","content":"This is a Tsung test ${i}"}}"""
+          ws("sub-topic").sendText(
+            """{"sub":{"id":"${id}-sub-${sub}","topic":"${sub}","get":{"what":"desc sub data del"}}}"""
           )
           .await(5 seconds)(
-            ws.checkTextMessage("pub-topic-ctrl")
+            ws.checkTextMessage("sub-topic-ctrl")
               .matching(jsonPath("$.ctrl").find.exists)
           )
         }
-      }
-      .exec {
-        ws("leave-topic").sendText(
-          """{"leave":{"id":"${id}-leave-${sub}","topic":"${sub}"}}"""
-        )
-        .await(5 seconds)(
-          ws.checkTextMessage("sub-topic-ctrl")
-            .matching(jsonPath("$.ctrl").find.exists)
-        )
+        .repeat(3, "i") {
+          exec {
+            ws("pub-topic").sendText(
+              """{"pub":{"id":"${id}-pub-${sub}-${i}","topic":"${sub}","content":"This is a Tsung test ${i}"}}"""
+            )
+            .await(5 seconds)(
+              ws.checkTextMessage("pub-topic-ctrl")
+                .matching(jsonPath("$.ctrl").find.exists)
+            )
+          }
+        }
+        .exec {
+          ws("leave-topic").sendText(
+            """{"leave":{"id":"${id}-leave-${sub}","topic":"${sub}"}}"""
+          )
+          .await(5 seconds)(
+            ws.checkTextMessage("sub-topic-ctrl")
+              .matching(jsonPath("$.ctrl").find.exists)
+          )
+        }
       }
     }
     .exec(ws("close-ws").close)
