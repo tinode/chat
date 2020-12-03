@@ -176,6 +176,11 @@ func (a *authenticator) Authenticate(secret []byte) (*auth.Rec, []byte, error) {
 		return nil, nil, err
 	}
 
+	// Auth record not found.
+	if resp.Record == nil {
+		return nil, nil, types.ErrFailed
+	}
+
 	// Check if server provided a user ID. If not, create a new account in the local database.
 	if resp.Record.Uid.IsZero() && a.allowNewAccounts {
 		if resp.NewAcc == nil {
