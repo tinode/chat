@@ -176,6 +176,12 @@ func (a *authenticator) Authenticate(secret []byte) (*auth.Rec, []byte, error) {
 		return nil, nil, err
 	}
 
+	// Auth record not found.
+	if resp.Record == nil {
+		log.Println("rest_auth: invalid response: missing Record")
+		return nil, nil, types.ErrInternal
+	}
+
 	// Check if server provided a user ID. If not, create a new account in the local database.
 	if resp.Record.Uid.IsZero() && a.allowNewAccounts {
 		if resp.NewAcc == nil {
