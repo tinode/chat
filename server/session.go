@@ -654,7 +654,7 @@ func (s *Session) publish(msg *ClientComMessage) {
 	} else {
 		// Publish request received without attaching to topic first.
 		s.queueOut(ErrAttachFirst(msg, msg.Timestamp))
-		log.Println("s.publish:", "must attach first", s.sid)
+		log.Printf("s.publish[%s]: must attach first %s", msg.RcptTo, s.sid)
 	}
 }
 

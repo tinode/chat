@@ -69,7 +69,8 @@ class Loadtest extends Simulation {
       )
       .await(5 seconds)(
         ws.checkTextMessage("sub-me-desc")
-          .matching(jsonPath("$.meta.desc").find.exists)
+          .matching(jsonPath("$.ctrl").find.exists)
+          .check(jsonPath("$.ctrl.code").ofType[Int].in(200 to 299))
       )
     }
   }
@@ -107,12 +108,21 @@ class Loadtest extends Simulation {
       val token = tokenCache.get(uname)
       token == None
     }) { loginBasic } { loginToken }
+    .exitHereIfFailed
     .exec(subMe)
+    .exitHereIfFailed
     .exec(getSubs)
+    .exitHereIfFailed
     .doIf({session =>
       session.attributes.contains("subs")
     }) {
-      foreach("${subs}", "sub") {
+      exec { session =>
+        // Shuffle subscriptions.
+        val subs = session("subs").as[Vector[String]]
+        val shuffled = scala.util.Random.shuffle(subs.toList)
+        session.set("subs", shuffled)
+      }
+      .foreach("${subs}", "sub") {
         exec {
           ws("sub-topic").sendText(
             """{"sub":{"id":"${id}-sub-${sub}","topic":"${sub}","get":{"what":"desc sub data del"}}}"""
@@ -120,8 +130,11 @@ class Loadtest extends Simulation {
           .await(5 seconds)(
             ws.checkTextMessage("sub-topic-ctrl")
               .matching(jsonPath("$.ctrl").find.exists)
+              .check(jsonPath("$.ctrl.code").ofType[Int].in(200 to 299))
           )
         }
+        .exitHereIfFailed
+        .pause(0, 2)
         .repeat(3, "i") {
           exec {
             ws("pub-topic").sendText(
@@ -130,9 +143,12 @@ class Loadtest extends Simulation {
             .await(5 seconds)(
               ws.checkTextMessage("pub-topic-ctrl")
                 .matching(jsonPath("$.ctrl").find.exists)
+                .check(jsonPath("$.ctrl.code").ofType[Int].in(200 to 299))
             )
           }
+          .pause(0, 3)
         }
+        .exitHereIfFailed
         .exec {
           ws("leave-topic").sendText(
             """{"leave":{"id":"${id}-leave-${sub}","topic":"${sub}"}}"""
@@ -142,9 +158,10 @@ class Loadtest extends Simulation {
               .matching(jsonPath("$.ctrl").find.exists)
           )
         }
+        .pause(0, 3)
       }
     }
     .exec(ws("close-ws").close)
 
-  setUp(scn.inject(rampUsers(5000) during (50 seconds))).protocols(httpProtocol)
+  setUp(scn.inject(rampUsers(10000) during (300 seconds))).protocols(httpProtocol)
 }
