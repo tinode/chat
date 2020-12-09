@@ -140,7 +140,7 @@ func serveLongPoll(wrt http.ResponseWriter, req *http.Request) {
 		// New session
 		var count int
 		sess, count = globals.sessionStore.NewSession(wrt, "")
-		sess.remoteAddr = lpRemoteAddr(req)
+		sess.remoteAddr = getRemoteAddr(req)
 		log.Println("longPoll: session started", sess.sid, sess.remoteAddr, count)
 
 		wrt.WriteHeader(http.StatusCreated)
@@ -162,7 +162,7 @@ func serveLongPoll(wrt http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	addr := lpRemoteAddr(req)
+	addr := getRemoteAddr(req)
 	if sess.remoteAddr != addr {
 		sess.remoteAddr = addr
 		log.Println("longPoll: remote address changed", sid, addr)
@@ -187,7 +187,7 @@ func serveLongPoll(wrt http.ResponseWriter, req *http.Request) {
 }
 
 // Obtain IP address of the client.
-func lpRemoteAddr(req *http.Request) string {
+func getRemoteAddr(req *http.Request) string {
 	var addr string
 	if globals.useXForwardedFor {
 		addr = req.Header.Get("X-Forwarded-For")

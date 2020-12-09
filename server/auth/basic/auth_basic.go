@@ -106,7 +106,7 @@ func (a *authenticator) Init(jsonconf json.RawMessage, name string) error {
 }
 
 // AddRecord adds a basic authentication record to DB.
-func (a *authenticator) AddRecord(rec *auth.Rec, secret []byte) (*auth.Rec, error) {
+func (a *authenticator) AddRecord(rec *auth.Rec, secret []byte, remoteAddr string) (*auth.Rec, error) {
 	uname, password, err := parseSecret(secret)
 	if err != nil {
 		return nil, err
@@ -147,7 +147,7 @@ func (a *authenticator) AddRecord(rec *auth.Rec, secret []byte) (*auth.Rec, erro
 }
 
 // UpdateRecord updates password for basic authentication.
-func (a *authenticator) UpdateRecord(rec *auth.Rec, secret []byte) (*auth.Rec, error) {
+func (a *authenticator) UpdateRecord(rec *auth.Rec, secret []byte, remoteAddr string) (*auth.Rec, error) {
 	uname, password, err := parseSecret(secret)
 	if err != nil {
 		return nil, err
@@ -207,7 +207,7 @@ func (a *authenticator) UpdateRecord(rec *auth.Rec, secret []byte) (*auth.Rec, e
 }
 
 // Authenticate checks login and password.
-func (a *authenticator) Authenticate(secret []byte) (*auth.Rec, []byte, error) {
+func (a *authenticator) Authenticate(secret []byte, remoteAddr string) (*auth.Rec, []byte, error) {
 	uname, password, err := parseSecret(secret)
 	if err != nil {
 		return nil, nil, err
@@ -258,7 +258,7 @@ func (a *authenticator) AsTag(token string) string {
 }
 
 // IsUnique checks login uniqueness.
-func (a *authenticator) IsUnique(secret []byte) (bool, error) {
+func (a *authenticator) IsUnique(secret []byte, remoteAddr string) (bool, error) {
 	uname, _, err := parseSecret(secret)
 	if err != nil {
 		return false, err

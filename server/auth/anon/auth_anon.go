@@ -21,7 +21,7 @@ func (authenticator) Init(_ json.RawMessage, _ string) error {
 
 // AddRecord checks authLevel and assigns default LevelAnon. Otherwise it
 // just reports success.
-func (authenticator) AddRecord(rec *auth.Rec, secret []byte) (*auth.Rec, error) {
+func (authenticator) AddRecord(rec *auth.Rec, secret []byte, remoteAddr string) (*auth.Rec, error) {
 	if rec.AuthLevel == auth.LevelNone {
 		rec.AuthLevel = auth.LevelAnon
 	}
@@ -30,12 +30,12 @@ func (authenticator) AddRecord(rec *auth.Rec, secret []byte) (*auth.Rec, error) 
 }
 
 // UpdateRecord is a noop. Just report success.
-func (authenticator) UpdateRecord(rec *auth.Rec, secret []byte) (*auth.Rec, error) {
+func (authenticator) UpdateRecord(rec *auth.Rec, secret []byte, remoteAddr string) (*auth.Rec, error) {
 	return rec, nil
 }
 
 // Authenticate is not supported. This authenticator is used only at account creation time.
-func (authenticator) Authenticate(secret []byte) (*auth.Rec, []byte, error) {
+func (authenticator) Authenticate(secret []byte, remoteAddr string) (*auth.Rec, []byte, error) {
 	return nil, nil, types.ErrUnsupported
 }
 
@@ -45,7 +45,7 @@ func (authenticator) AsTag(token string) string {
 }
 
 // IsUnique for a noop. Anonymous login does not use secret, any secret is fine.
-func (authenticator) IsUnique(secret []byte) (bool, error) {
+func (authenticator) IsUnique(secret []byte, remoteAddr string) (bool, error) {
 	return true, nil
 }
 

@@ -29,7 +29,7 @@ func replyCreateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 	}
 
 	// Check if login is unique.
-	if ok, err := authhdl.IsUnique(msg.Acc.Secret); !ok {
+	if ok, err := authhdl.IsUnique(msg.Acc.Secret, s.remoteAddr); !ok {
 		log.Println("create user: auth secret is not unique", err, s.sid)
 		s.queueOut(decodeStoreError(err, msg.Id, "", msg.Timestamp,
 			map[string]interface{}{"what": "auth"}))
@@ -124,7 +124,7 @@ func replyCreateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 	}
 
 	// Add authentication record. The authhdl.AddRecord may change tags.
-	rec, err := authhdl.AddRecord(&auth.Rec{Uid: user.Uid(), Tags: user.Tags}, msg.Acc.Secret)
+	rec, err := authhdl.AddRecord(&auth.Rec{Uid: user.Uid(), Tags: user.Tags}, msg.Acc.Secret, s.remoteAddr)
 	if err != nil {
 		log.Println("create user: add auth record failed", err, s.sid)
 		// Attempt to delete incomplete user record
@@ -249,7 +249,7 @@ func replyUpdateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 
 	var params map[string]interface{}
 	if msg.Acc.Scheme != "" {
-		err = updateUserAuth(msg, user, rec)
+		err = updateUserAuth(msg, user, rec, s.remoteAddr)
 	} else if len(msg.Acc.Cred) > 0 {
 		if authLvl == auth.LevelNone {
 			// msg.Acc.AuthLevel contains invalid data.
@@ -300,14 +300,14 @@ func replyUpdateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 }
 
 // Authentication update
-func updateUserAuth(msg *ClientComMessage, user *types.User, rec *auth.Rec) error {
+func updateUserAuth(msg *ClientComMessage, user *types.User, rec *auth.Rec, remoteAddr string) error {
 	authhdl := store.GetLogicalAuthHandler(msg.Acc.Scheme)
 	if authhdl != nil {
 		// Request to update auth of an existing account. Only basic & rest auth are currently supported
 
 		// TODO(gene): support adding new auth schemes
 
-		rec, err := authhdl.UpdateRecord(&auth.Rec{Uid: user.Uid(), Tags: user.Tags}, msg.Acc.Secret)
+		rec, err := authhdl.UpdateRecord(&auth.Rec{Uid: user.Uid(), Tags: user.Tags}, msg.Acc.Secret, remoteAddr)
 		if err != nil {
 			return err
 		}

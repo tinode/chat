@@ -73,17 +73,17 @@ func (ta *authenticator) Init(jsonconf json.RawMessage, name string) error {
 }
 
 // AddRecord is not supprted, will produce an error.
-func (authenticator) AddRecord(rec *auth.Rec, secret []byte) (*auth.Rec, error) {
+func (authenticator) AddRecord(rec *auth.Rec, secret []byte, remoteAddr string) (*auth.Rec, error) {
 	return nil, types.ErrUnsupported
 }
 
 // UpdateRecord is not supported, will produce an error.
-func (authenticator) UpdateRecord(rec *auth.Rec, secret []byte) (*auth.Rec, error) {
+func (authenticator) UpdateRecord(rec *auth.Rec, secret []byte, remoteAddr string) (*auth.Rec, error) {
 	return nil, types.ErrUnsupported
 }
 
 // Authenticate checks validity of provided token.
-func (ta *authenticator) Authenticate(token []byte) (*auth.Rec, []byte, error) {
+func (ta *authenticator) Authenticate(token []byte, remoteAddr string) (*auth.Rec, []byte, error) {
 	var tl tokenLayout
 	dataSize := binary.Size(&tl)
 	if len(token) < dataSize+sha256.Size {
@@ -163,7 +163,7 @@ func (authenticator) AsTag(token string) string {
 }
 
 // IsUnique is not supported, will produce an error.
-func (authenticator) IsUnique(token []byte) (bool, error) {
+func (authenticator) IsUnique(token []byte, remoteAddr string) (bool, error) {
 	return false, types.ErrUnsupported
 }
 
