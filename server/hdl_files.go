@@ -89,9 +89,8 @@ func largeFileServe(wrt http.ResponseWriter, req *http.Request) {
 	log.Println("media served OK")
 }
 
-// largeFileUpload receives files from client over HTTP(S) and saves them to local file
-// system.
-func largeFileUpload(wrt http.ResponseWriter, req *http.Request) {
+// largeFileReceive receives files from client over HTTP(S) and passes them to the configured media handler.
+func largeFileReceive(wrt http.ResponseWriter, req *http.Request) {
 	log.Println("Upload request", req.RequestURI)
 
 	now := types.TimeNow()
