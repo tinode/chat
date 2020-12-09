@@ -1330,7 +1330,6 @@ func (t *Topic) thisUserSub(h *Hub, sess *Session, pkt *ClientComMessage, asUid 
 
 	} else {
 		// Process update to existing subscription. It could be an incomplete subscription for a new topic.
-
 		if asChan {
 			// A normal subscriber is trying to access topic as a channel.
 			// Direct the subscriber to use non-channel topic name.
@@ -1479,9 +1478,11 @@ func (t *Topic) thisUserSub(h *Hub, sess *Session, pkt *ClientComMessage, asUid 
 			}
 		}
 
-		// Notify user of the changes in access mode.
+		// Notify actor of the changes in access mode.
 		t.notifySubChange(asUid, asUid, asChan, oldWant, oldGiven, userData.modeWant, userData.modeGiven, sess.sid)
+	}
 
+	if pkt.Sub.Newsub || oldWant != userData.modeWant || oldGiven != userData.modeGiven {
 		modeChanged = &MsgAccessMode{
 			Want:  userData.modeWant.String(),
 			Given: userData.modeGiven.String(),
