@@ -207,7 +207,7 @@ func (a *authenticator) Authenticate(secret []byte, remoteAddr string) (*auth.Re
 		resp.Record.Uid = user.Uid()
 		_, err = a.callEndpoint("link", resp.Record, secret, "")
 		if err != nil {
-			store.Users.Delete(resp.Record.Uid, false)
+			store.Users.Delete(resp.Record.Uid, true)
 			return nil, nil, err
 		}
 	}
