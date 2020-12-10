@@ -100,7 +100,7 @@ func genDb(data *Data) {
 			botAccount = uu.Username
 		}
 		if _, err := authHandler.AddRecord(&auth.Rec{Uid: user.Uid(), AuthLevel: authLevel},
-			[]byte(uu.Username+":"+passwd)); err != nil {
+			[]byte(uu.Username+":"+passwd), ""); err != nil {
 
 			log.Fatal(err)
 		}
