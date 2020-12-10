@@ -36,10 +36,11 @@ type authenticator struct {
 
 // Request to the server.
 type request struct {
-	Endpoint string    `json:"endpoint"`
-	Name     string    `json:"name"`
-	Record   *auth.Rec `json:"rec,omitempty"`
-	Secret   []byte    `json:"secret,omitempty"`
+	Endpoint   string    `json:"endpoint"`
+	Name       string    `json:"name"`
+	Record     *auth.Rec `json:"rec,omitempty"`
+	Secret     []byte    `json:"secret,omitempty"`
+	RemoteAddr string    `json:"addr,omitempty"`
 }
 
 // User initialization data when creating a new user.
@@ -110,9 +111,9 @@ func (a *authenticator) Init(jsonconf json.RawMessage, name string) error {
 }
 
 // Execute HTTP POST to the server at the specified endpoint and with the provided payload.
-func (a *authenticator) callEndpoint(endpoint string, rec *auth.Rec, secret []byte) (*response, error) {
+func (a *authenticator) callEndpoint(endpoint string, rec *auth.Rec, secret []byte, remoteAddr string) (*response, error) {
 	// Convert payload to json.
-	req := &request{Endpoint: endpoint, Name: a.name, Record: rec, Secret: secret}
+	req := &request{Endpoint: endpoint, Name: a.name, Record: rec, Secret: secret, RemoteAddr: remoteAddr}
 	content, err := json.Marshal(req)
 	if err != nil {
 		return nil, err
@@ -154,8 +155,8 @@ func (a *authenticator) callEndpoint(endpoint string, rec *auth.Rec, secret []by
 
 // AddRecord adds persistent authentication record to the database.
 // Returns: updated auth record, error
-func (a *authenticator) AddRecord(rec *auth.Rec, secret []byte) (*auth.Rec, error) {
-	resp, err := a.callEndpoint("add", rec, secret)
+func (a *authenticator) AddRecord(rec *auth.Rec, secret []byte, remoteAddr string) (*auth.Rec, error) {
+	resp, err := a.callEndpoint("add", rec, secret, remoteAddr)
 	if err != nil {
 		return nil, err
 	}
@@ -164,14 +165,14 @@ func (a *authenticator) AddRecord(rec *auth.Rec, secret []byte) (*auth.Rec, erro
 }
 
 // UpdateRecord updates existing record with new credentials.
-func (a *authenticator) UpdateRecord(rec *auth.Rec, secret []byte) (*auth.Rec, error) {
-	_, err := a.callEndpoint("upd", rec, secret)
+func (a *authenticator) UpdateRecord(rec *auth.Rec, secret []byte, remoteAddr string) (*auth.Rec, error) {
+	_, err := a.callEndpoint("upd", rec, secret, remoteAddr)
 	return rec, err
 }
 
 // Authenticate: get user record by provided secret
-func (a *authenticator) Authenticate(secret []byte) (*auth.Rec, []byte, error) {
-	resp, err := a.callEndpoint("auth", nil, secret)
+func (a *authenticator) Authenticate(secret []byte, remoteAddr string) (*auth.Rec, []byte, error) {
+	resp, err := a.callEndpoint("auth", nil, secret, remoteAddr)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -204,9 +205,9 @@ func (a *authenticator) Authenticate(secret []byte) (*auth.Rec, []byte, error) {
 
 		// Report the new UID to the server.
 		resp.Record.Uid = user.Uid()
-		_, err = a.callEndpoint("link", resp.Record, secret)
+		_, err = a.callEndpoint("link", resp.Record, secret, "")
 		if err != nil {
-			store.Users.Delete(resp.Record.Uid, false)
+			store.Users.Delete(resp.Record.Uid, true)
 			return nil, nil, err
 		}
 	}
@@ -229,8 +230,8 @@ func (a *authenticator) AsTag(token string) string {
 
 // IsUnique verifies if the provided secret can be considered unique by the auth scheme
 // E.g. if login is unique.
-func (a *authenticator) IsUnique(secret []byte) (bool, error) {
-	resp, err := a.callEndpoint("checkunique", nil, secret)
+func (a *authenticator) IsUnique(secret []byte, remoteAddr string) (bool, error) {
+	resp, err := a.callEndpoint("checkunique", nil, secret, remoteAddr)
 	if err != nil {
 		return false, err
 	}
@@ -240,7 +241,7 @@ func (a *authenticator) IsUnique(secret []byte) (bool, error) {
 
 // GenSecret generates a new secret, if appropriate.
 func (a *authenticator) GenSecret(rec *auth.Rec) ([]byte, time.Time, error) {
-	resp, err := a.callEndpoint("gen", rec, nil)
+	resp, err := a.callEndpoint("gen", rec, nil, "")
 	if err != nil {
 		return nil, time.Time{}, err
 	}
@@ -250,7 +251,7 @@ func (a *authenticator) GenSecret(rec *auth.Rec) ([]byte, time.Time, error) {
 
 // DelRecords deletes all authentication records for the given user.
 func (a *authenticator) DelRecords(uid types.Uid) error {
-	_, err := a.callEndpoint("del", &auth.Rec{Uid: uid}, nil)
+	_, err := a.callEndpoint("del", &auth.Rec{Uid: uid}, nil, "")
 	return err
 }
 
@@ -265,7 +266,7 @@ func (a *authenticator) RestrictedTags() ([]string, error) {
 	}
 
 	// First time use, fetch prefixes from the server.
-	resp, err := a.callEndpoint("rtagns", nil, nil)
+	resp, err := a.callEndpoint("rtagns", nil, nil, "")
 	if err != nil {
 		return nil, err
 	}

@@ -83,9 +83,12 @@ add a logical renaming:
 
 ```js
 {
-  "endpoint": "auth", // string, one of the endpoints as described below, optional.
-  "secret": "Ym9iOmJvYjEyMw==", // authentication secret as provided by the client.
-  "rec": {            // authentication record
+  "endpoint": "auth",       // string, one of the endpoints as described below, optional.
+  "secret": "Ym9iOmJvYjEyMw==", // authentication secret as provided by the client,
+                            // base64-encoded bytes, optional.
+  "addr": "2001:0db8:85a3:0000:0000:8a2e:0370:7334", // string, IPv4 or IPv6 address of
+                            // the client making the request, optional.
+  "rec": {    // authentication record, optional.
     {
       "uid": "LELEQHDWbgY", // user ID, int64 base64-encoded
       "authlvl": "auth",    // authentication level
@@ -155,6 +158,7 @@ If accounts are managed externally, it's likely to be unused and should generall
 {
   "endpoint": "add",
   "secret": "Ym9iOmJvYjEyMw==",
+  "addr": "111.22.33.44",
   "rec": {
     "uid": "LELEQHDWbgY",
     "lifetime": "10000s",
@@ -188,6 +192,7 @@ be used by client (Tinode) to create the account. The server may optionally retu
 {
   "endpoint": "auth",
   "secret": "Ym9iOmJvYjEyMw==",
+  "addr": "111.22.33.44"
 }
 ```
 
@@ -232,6 +237,7 @@ an error `"unsupported"`.
 {
   "endpoint": "checkunique",
   "secret": "Ym9iOmJvYjEyMw==",
+  "addr": "111.22.33.44"
 }
 ```
 
@@ -252,7 +258,7 @@ If accounts are managed by the server, the server should respond with an error `
   "endpoint": "del",
   "rec": {
     "uid": "LELEQHDWbgY",
-  },
+  }
 }
 ```
 
@@ -273,7 +279,7 @@ If accounts are managed by the server, the server should respond with an error `
   "rec": {
     "uid": "LELEQHDWbgY",
     "authlvl": "auth",
-  },
+  }
 }
 ```
 
@@ -318,10 +324,11 @@ If accounts are managed by the server, the server should respond with an error `
 {
   "endpoint": "upd",
   "secret": "Ym9iOmJvYjEyMw==",
+  "addr": "111.22.33.44",
   "rec": {
     "uid": "LELEQHDWbgY",
     "authlvl": "auth",
-  },
+  }
 }
 ```
 
