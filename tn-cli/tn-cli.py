@@ -514,9 +514,6 @@ def delMsg(id, cmd, ignored):
         if cmd.topic:
             stdoutln("Unexpected '--topic' parameter")
             return None
-        if not cmd.user:
-            stdoutln("Must specify user to delete")
-            return None
         enum_what = pb.ClientDel.USER
 
     elif cmd.what == 'cred':
