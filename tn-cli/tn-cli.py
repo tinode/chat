@@ -227,6 +227,8 @@ def getVar(path):
             var = getattr(var, p)
             if x or x == 0:
                 var = var[x]
+    if isinstance(var, bytes):
+      var = var.decode('utf-8')
     return var
 
 # Dereference values, i.e. cmd.val == $usr => cmd.val == <actual value of usr>

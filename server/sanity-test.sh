@@ -62,9 +62,16 @@ init-db() {
   $GOPATH/bin/tinode-db -config=./tinode.conf -data=../tinode-db/data.json
 }
 
+wait-for() {
+  local port=$1
+  while ! nc -z localhost $port; do
+    sleep 1
+  done
+}
+
 # Brings up a three-node Tinode cluster.
 run-server() {
-  ./run-cluster.sh -s "" start
+  ./run-cluster.sh -s "" start && wait-for 16060
 }
 
 send-requests() {
@@ -73,7 +80,7 @@ send-requests() {
   local outfile=$(mktemp /tmp/tinode-${id}.txt)
   pushd .
   cd ../tn-cli
-  python3 tn-cli.py --host=localhost:${port} --no-login < sample-script.txt > $outfile || fail "Test script failed (instance port ${port})"
+  python tn-cli.py --host=localhost:${port} --no-login < sample-script.txt > $outfile || fail "Test script failed (instance port ${port})"
   popd
   num_positive_responses=`grep -c '<= 20[0-9]' $outfile`
   if [ $num_positive_responses -ne 10 ]; then fail "Instance ${port}: unexpected number of 20* responses: ${num_positive_responses}. Log file ${outfile}"; fi
