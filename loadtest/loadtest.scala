@@ -75,6 +75,24 @@ class Loadtest extends Simulation {
     }
   }
 
+  val publish = exitBlockOnFail {
+    exec {
+      repeat(3, "i") {
+        exec {
+          ws("pub-topic").sendText(
+            """{"pub":{"id":"${id}-pub-${sub}-${i}","topic":"${sub}","content":"This is a Tsung test ${i}"}}"""
+          )
+          .await(15 seconds)(
+            ws.checkTextMessage("pub-topic-ctrl")
+              .matching(jsonPath("$.ctrl").find.exists)
+              .check(jsonPath("$.ctrl.code").ofType[Int].in(200 to 299))
+          )
+        }
+        .pause(0, 3)
+      }
+    }
+  }
+
   val getSubs = exitBlockOnFail {
     exec {
       ws("get-subs").sendText(
@@ -127,7 +145,7 @@ class Loadtest extends Simulation {
           ws("sub-topic").sendText(
             """{"sub":{"id":"${id}-sub-${sub}","topic":"${sub}","get":{"what":"desc sub data del"}}}"""
           )
-          .await(5 seconds)(
+          .await(15 seconds)(
             ws.checkTextMessage("sub-topic-ctrl")
               .matching(jsonPath("$.ctrl").find.exists)
               .check(jsonPath("$.ctrl.code").ofType[Int].in(200 to 299))
@@ -135,20 +153,10 @@ class Loadtest extends Simulation {
         }
         .exitHereIfFailed
         .pause(0, 2)
-        .repeat(3, "i") {
-          exec {
-            ws("pub-topic").sendText(
-              """{"pub":{"id":"${id}-pub-${sub}-${i}","topic":"${sub}","content":"This is a Tsung test ${i}"}}"""
-            )
-            .await(5 seconds)(
-              ws.checkTextMessage("pub-topic-ctrl")
-                .matching(jsonPath("$.ctrl").find.exists)
-                .check(jsonPath("$.ctrl.code").ofType[Int].in(200 to 299))
-            )
-          }
-          .pause(0, 3)
-        }
-        .exitHereIfFailed
+        .doIfOrElse({session =>
+          val topic = session("sub").as[String]
+          !topic.startsWith("chn")
+        }) { publish } { pause(5) }
         .exec {
           ws("leave-topic").sendText(
             """{"leave":{"id":"${id}-leave-${sub}","topic":"${sub}"}}"""
