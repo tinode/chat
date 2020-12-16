@@ -410,6 +410,9 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 		s.queueOut(ErrMalformed("", "", msg.Timestamp))
 		log.Println("s.dispatch: malformed msg.from: ", msg.AsUser, s.sid)
 		return
+	} else if auth.Level(msg.AuthLvl) == auth.LevelNone {
+		// AuthLvl is not set by caller, assign default LevelAuth.
+		msg.AuthLvl = int(auth.LevelAuth)
 	}
 
 	var resp *ServerComMessage

@@ -227,6 +227,8 @@ def getVar(path):
             var = getattr(var, p)
             if x or x == 0:
                 var = var[x]
+    if isinstance(var, bytes):
+      var = var.decode('utf-8')
     return var
 
 # Dereference values, i.e. cmd.val == $usr => cmd.val == <actual value of usr>
@@ -513,9 +515,6 @@ def delMsg(id, cmd, ignored):
         cmd.user = cmd.user if cmd.user else tn_globals.DefaultUser
         if cmd.topic:
             stdoutln("Unexpected '--topic' parameter")
-            return None
-        if not cmd.user:
-            stdoutln("Must specify user to delete")
             return None
         enum_what = pb.ClientDel.USER
 

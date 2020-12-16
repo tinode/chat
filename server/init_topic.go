@@ -299,8 +299,8 @@ func initTopicP2P(t *Topic, sreg *sessionJoin) error {
 		userID1 := types.ParseUserId(sreg.pkt.AsUser)
 		// The other user.
 		userID2 := types.ParseUserId(t.xoriginal)
-		// User index: u1 - requester, u2 - responder, the other user
 
+		// User index: u1 - requester, u2 - responder, the other user
 		var u1, u2 int
 		users, err := store.Users.GetAll(userID1, userID2)
 		if err != nil {
