@@ -1482,7 +1482,7 @@ func (t *Topic) thisUserSub(h *Hub, sess *Session, pkt *ClientComMessage, asUid 
 		t.notifySubChange(asUid, asUid, asChan, oldWant, oldGiven, userData.modeWant, userData.modeGiven, sess.sid)
 	}
 
-	if pkt.Sub.Newsub || oldWant != userData.modeWant || oldGiven != userData.modeGiven {
+	if (pkt.Sub != nil && pkt.Sub.Newsub) || oldWant != userData.modeWant || oldGiven != userData.modeGiven {
 		modeChanged = &MsgAccessMode{
 			Want:  userData.modeWant.String(),
 			Given: userData.modeGiven.String(),
