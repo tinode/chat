@@ -2451,7 +2451,7 @@ func (t *Topic) replySetTags(sess *Session, asUid types.Uid, msg *ClientComMessa
 					resp = ErrUnknownReply(msg, now)
 				} else {
 					t.tags = tags
-					t.presSubsOnline("tags", "", nilPresParams, &presFilters{singleUser: asUid.UserId()}, "")
+					t.presSubsOnline("tags", "", nilPresParams, &presFilters{singleUser: asUid.UserId()}, sess.sid)
 
 					params := make(map[string]interface{})
 					if len(added) > 0 {
