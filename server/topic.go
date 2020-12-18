@@ -1482,7 +1482,7 @@ func (t *Topic) thisUserSub(h *Hub, sess *Session, pkt *ClientComMessage, asUid 
 		t.notifySubChange(asUid, asUid, asChan, oldWant, oldGiven, userData.modeWant, userData.modeGiven, sess.sid)
 	}
 
-	if pkt.Sub.Newsub || oldWant != userData.modeWant || oldGiven != userData.modeGiven {
+	if (pkt.Sub != nil && pkt.Sub.Newsub) || oldWant != userData.modeWant || oldGiven != userData.modeGiven {
 		modeChanged = &MsgAccessMode{
 			Want:  userData.modeWant.String(),
 			Given: userData.modeGiven.String(),
@@ -2451,7 +2451,7 @@ func (t *Topic) replySetTags(sess *Session, asUid types.Uid, msg *ClientComMessa
 					resp = ErrUnknownReply(msg, now)
 				} else {
 					t.tags = tags
-					t.presSubsOnline("tags", "", nilPresParams, &presFilters{singleUser: asUid.UserId()}, "")
+					t.presSubsOnline("tags", "", nilPresParams, &presFilters{singleUser: asUid.UserId()}, sess.sid)
 
 					params := make(map[string]interface{})
 					if len(added) > 0 {
