@@ -2014,17 +2014,12 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 		return types.ErrNotFound
 	}
 
-	userData := t.perUser[asUid]
-	if !(userData.modeGiven & userData.modeWant).IsSharer() {
-		sess.queueOut(ErrPermissionDeniedReply(msg, now))
-		return errors.New("user does not have S permission")
-	}
-
 	var ifModified time.Time
 	if req != nil && req.IfModifiedSince != nil {
 		ifModified = *req.IfModifiedSince
 	}
 
+	userData := t.perUser[asUid]
 	var subs []types.Subscription
 	var err error
 
@@ -2120,6 +2115,7 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 		meta := &MsgServerMeta{Id: id, Topic: t.original(asUid), Timestamp: &now}
 		meta.Sub = make([]MsgTopicSub, 0, len(subs))
 		presencer := (userData.modeGiven & userData.modeWant).IsPresencer()
+		sharer := (userData.modeGiven & userData.modeWant).IsSharer()
 
 		for i := range subs {
 			sub := &subs[i]
@@ -2144,10 +2140,11 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 			}
 
 			uid := types.ParseUid(sub.User)
-			isReader := (sub.ModeGiven & sub.ModeWant).IsReader()
+			subMode := sub.ModeGiven & sub.ModeWant
+			isReader := subMode.IsReader()
 			if t.cat == types.TopicCatMe {
 				// Mark subscriptions that the user does not care about.
-				if !(sub.ModeWant & sub.ModeGiven).IsJoiner() {
+				if !subMode.IsJoiner() {
 					banned = true
 				}
 
@@ -2185,7 +2182,7 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 				}
 			} else {
 				// Mark subscriptions that the user does not care about.
-				if t.cat == types.TopicCatGrp && !(sub.ModeWant & sub.ModeGiven).IsJoiner() {
+				if t.cat == types.TopicCatGrp && !subMode.IsJoiner() {
 					banned = true
 				}
 
@@ -2216,14 +2213,19 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 				}
 
 				if t.cat != types.TopicCatFnd {
-					mts.Acs.Mode = (sub.ModeGiven & sub.ModeWant).String()
-					mts.Acs.Want = sub.ModeWant.String()
-					mts.Acs.Given = sub.ModeGiven.String()
+					// p2p and grp
+					if sharer || uid == asUid || subMode.IsAdmin() {
+						// If user is not a sharer, the access mode of other ordinary users if not accessible.
+						// Own and admin permissions only are visible to non-sharers.
+						mts.Acs.Mode = subMode.String()
+						mts.Acs.Want = sub.ModeWant.String()
+						mts.Acs.Given = sub.ModeGiven.String()
+					}
 				} else {
 					// Topic 'fnd'
 					// sub.ModeXXX may be defined by the plugin.
 					if sub.ModeGiven.IsDefined() && sub.ModeWant.IsDefined() {
-						mts.Acs.Mode = (sub.ModeGiven & sub.ModeWant).String()
+						mts.Acs.Mode = subMode.String()
 						mts.Acs.Want = sub.ModeWant.String()
 						mts.Acs.Given = sub.ModeGiven.String()
 					} else if isChannel(sub.Topic) {
