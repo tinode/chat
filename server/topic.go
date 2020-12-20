@@ -3013,26 +3013,27 @@ func (t *Topic) notifySubChange(uid, actor types.Uid, isChan bool,
 		dWant:  dWant,
 		dGiven: dGiven}
 
-	filter := &presFilters{
+	filterSharers := &presFilters{
 		filterIn:    types.ModeCSharer,
 		excludeUser: target}
 
 	// Announce the change in permissions to the admins who are online in the topic, exclude the target
 	// and exclude the actor's session.
-	t.presSubsOnline("acs", target, params, filter, skip)
+	t.presSubsOnline("acs", target, params, filterSharers, skip)
 
 	// If it's a new subscription or if the user asked for permissions in excess of what was granted,
 	// announce the request to topic admins on 'me' so they can approve the request. The notification
 	// is not sent to the target user or the actor's session.
 	if newWant.BetterThan(newGiven) || oldWant == types.ModeNone {
-		t.presSubsOffline("acs", params, filter, filter, skip, true)
+		t.presSubsOffline("acs", params, filterSharers, filterSharers, skip, true)
 	}
 
 	// Handling of muting/unmuting.
 	// Case A: subscription deleted.
 	// Case B: subscription muted only.
 	if unsub {
-		// Subscription deleted
+		// Subscription deleted.
+
 		// In case of a P2P topic subscribe/unsubscribe users from each other's notifications.
 		if t.cat == types.TopicCatP2P {
 			uid2 := t.p2pOtherUser(uid)
@@ -3042,35 +3043,41 @@ func (t *Topic) notifySubChange(uid, actor types.Uid, isChan bool,
 			presSingleUserOfflineOffline(uid2, target, "off", nilPresParams, "")
 		} else if t.cat == types.TopicCatGrp && !isChan {
 			// Notify all sharers that the user is offline now.
-			t.presSubsOnline("off", uid.UserId(), nilPresParams, filter, skip)
+			t.presSubsOnline("off", uid.UserId(), nilPresParams, filterSharers, skip)
+			// Notify target that the subscription is gone.
+			presSingleUserOfflineOffline(uid, t.name, "gone", nilPresParams, skip)
 		}
-	} else if !(newWant & newGiven).IsPresencer() && (oldWant & oldGiven).IsPresencer() {
-		// Subscription just muted.
-		var source string
-		if t.cat == types.TopicCatP2P {
-			source = t.p2pOtherUser(uid).UserId()
-		} else if t.cat == types.TopicCatGrp && !isChan {
-			source = t.name
-		}
-		if source != "" {
-			// Tell user1 to start discarding updates from muted topic/user.
-			presSingleUserOfflineOffline(uid, source, "off+dis", nilPresParams, "")
+	} else {
+		// Subscription altered.
+
+		if !(newWant & newGiven).IsPresencer() && (oldWant & oldGiven).IsPresencer() {
+			// Subscription just muted.
+
+			var source string
+			if t.cat == types.TopicCatP2P {
+				source = t.p2pOtherUser(uid).UserId()
+			} else if t.cat == types.TopicCatGrp && !isChan {
+				source = t.name
+			}
+			if source != "" {
+				// Tell user1 to start discarding updates from muted topic/user.
+				presSingleUserOfflineOffline(uid, source, "off+dis", nilPresParams, "")
+			}
+
+		} else if (newWant & newGiven).IsPresencer() && !(oldWant & oldGiven).IsPresencer() {
+			// Subscription un-muted.
+
+			// Notify subscriber of topic's online status.
+			if t.cat == types.TopicCatGrp && !isChan {
+				t.presSingleUserOffline(uid, newWant&newGiven, "?unkn+en", nilPresParams, "", false)
+			} else if t.cat == types.TopicCatMe {
+				// User is visible online now, notify subscribers.
+				t.presUsersOfInterest("on+en", t.userAgent)
+			}
 		}
 
-	} else if (newWant & newGiven).IsPresencer() && !(oldWant & oldGiven).IsPresencer() {
-		// Subscription un-muted.
+		// Notify target that permissions have changed.
 
-		// Notify subscriber of topic's online status.
-		if t.cat == types.TopicCatGrp && !isChan {
-			t.presSingleUserOffline(uid, newWant&newGiven, "?unkn+en", nilPresParams, "", false)
-		} else if t.cat == types.TopicCatMe {
-			// User is visible online now, notify subscribers.
-			t.presUsersOfInterest("on+en", t.userAgent)
-		}
-	}
-
-	// Notify target that permissions have changed.
-	if !unsub {
 		// Notify sessions online in the topic.
 		t.presSubsOnlineDirect("acs", params, &presFilters{singleUser: target}, skip)
 		// Notify target's other sessions on 'me'.
