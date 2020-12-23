@@ -10,12 +10,13 @@
 package main
 
 import (
-	"log"
+	//"log"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/tinode/chat/server/auth"
+	"github.com/tinode/chat/server/logs"
 	"github.com/tinode/chat/server/store"
 	"github.com/tinode/chat/server/store/types"
 )
@@ -215,7 +216,7 @@ func (h *Hub) run() {
 						join.sess.inflightReqs.Done()
 					}
 					join.sess.queueOut(ErrServiceUnavailableReply(join.pkt, join.pkt.Timestamp))
-					log.Println("hub.join loop: topic's reg queue full", join.pkt.RcptTo, join.sess.sid, " - total queue len:", len(t.reg))
+					logs.Error.Println("hub.join loop: topic's reg queue full", join.pkt.RcptTo, join.sess.sid, " - total queue len:", len(t.reg))
 				}
 			}
 
@@ -229,16 +230,16 @@ func (h *Hub) run() {
 					select {
 					case dst.broadcast <- msg:
 					default:
-						log.Println("hub: topic's broadcast queue is full", dst.name)
+						logs.Error.Println("hub: topic's broadcast queue is full", dst.name)
 					}
 				} else {
-					log.Println("hub: invalid topic category for broadcast", dst.name)
+					logs.Warning.Println("hub: invalid topic category for broadcast", dst.name)
 				}
 			} else if (strings.HasPrefix(msg.RcptTo, "usr") || strings.HasPrefix(msg.RcptTo, "grp")) &&
 				globals.cluster.isRemoteTopic(msg.RcptTo) {
 				// It is a remote topic.
 				if err := globals.cluster.routeToTopicIntraCluster(msg.RcptTo, msg, msg.sess); err != nil {
-					log.Printf("hub: routing to '%s' failed", msg.RcptTo)
+					logs.Warning.Printf("hub: routing to '%s' failed", msg.RcptTo)
 				}
 			} else if msg.Pres == nil && msg.Info == nil {
 				// Topic is unknown or offline.
@@ -246,7 +247,7 @@ func (h *Hub) run() {
 
 				// TODO(gene): validate topic name, discarding invalid topics
 
-				log.Printf("Hub. Topic[%s] is unknown or offline", msg.RcptTo)
+				logs.Info.Printf("Hub. Topic[%s] is unknown or offline", msg.RcptTo)
 
 				msg.sess.queueOut(NoErrAcceptedExplicitTs(msg.Id, msg.RcptTo, types.TimeNow(), msg.Timestamp))
 			}
@@ -276,7 +277,7 @@ func (h *Hub) run() {
 			if unreg.forUser.IsZero() {
 				// The topic is being garbage collected or deleted.
 				if err := h.topicUnreg(unreg.sess, unreg.rcptTo, unreg.pkt, reason); err != nil {
-					log.Println("hub.topicUnreg failed:", err)
+					logs.Error.Println("hub.topicUnreg failed:", err)
 				}
 			} else {
 				go h.stopTopicsForUser(unreg.forUser, reason, unreg.done)
@@ -321,7 +322,7 @@ func (h *Hub) run() {
 				<-topicsdone
 			}
 
-			log.Printf("Hub shutdown completed with %d topics", topicCount)
+			logs.Info.Printf("Hub shutdown completed with %d topics", topicCount)
 
 			// let the main goroutine know we are done with the cleanup
 			hubdone <- true
@@ -567,7 +568,7 @@ func replyOfflineTopicGetDesc(sess *Session, msg *ClientComMessage) {
 	if strings.HasPrefix(topic, "grp") {
 		stopic, err := store.Topics.Get(topic)
 		if err != nil {
-			log.Println("replyOfflineTopicGetDesc", err)
+			logs.Info.Println("replyOfflineTopicGetDesc", err)
 			sess.queueOut(decodeStoreErrorExplicitTs(err, msg.Id, msg.Original, now, msg.Timestamp, nil))
 			return
 		}
@@ -603,7 +604,7 @@ func replyOfflineTopicGetDesc(sess *Session, msg *ClientComMessage) {
 		}
 
 		if uid.IsZero() {
-			log.Println("replyOfflineTopicGetDesc: malformed p2p topic name")
+			logs.Warning.Println("replyOfflineTopicGetDesc: malformed p2p topic name")
 			sess.queueOut(ErrMalformedReply(msg, now))
 			return
 		}
@@ -627,7 +628,7 @@ func replyOfflineTopicGetDesc(sess *Session, msg *ClientComMessage) {
 
 	sub, err := store.Subs.Get(topic, asUid)
 	if err != nil {
-		log.Println("replyOfflineTopicGetDesc:", err)
+		logs.Warning.Println("replyOfflineTopicGetDesc:", err)
 		sess.queueOut(decodeStoreErrorExplicitTs(err, msg.Id, msg.Original, now, msg.Timestamp, nil))
 		return
 	}
@@ -658,7 +659,7 @@ func replyOfflineTopicGetSub(sess *Session, msg *ClientComMessage) {
 
 	ssub, err := store.Subs.Get(msg.RcptTo, types.ParseUserId(msg.AsUser))
 	if err != nil {
-		log.Println("replyOfflineTopicGetSub:", err)
+		logs.Warning.Println("replyOfflineTopicGetSub:", err)
 		sess.queueOut(decodeStoreErrorExplicitTs(err, msg.Id, msg.Original, now, msg.Timestamp, nil))
 		return
 	}
@@ -712,7 +713,7 @@ func replyOfflineTopicSetSub(sess *Session, msg *ClientComMessage) {
 
 	sub, err := store.Subs.Get(msg.RcptTo, asUid)
 	if err != nil {
-		log.Println("replyOfflineTopicSetSub get sub:", err)
+		logs.Warning.Println("replyOfflineTopicSetSub get sub:", err)
 		sess.queueOut(decodeStoreErrorExplicitTs(err, msg.Id, msg.Original, now, msg.Timestamp, nil))
 		return
 	}
@@ -735,7 +736,7 @@ func replyOfflineTopicSetSub(sess *Session, msg *ClientComMessage) {
 	if msg.Set.Sub != nil && msg.Set.Sub.Mode != "" {
 		var modeWant types.AccessMode
 		if err = modeWant.UnmarshalText([]byte(msg.Set.Sub.Mode)); err != nil {
-			log.Println("replyOfflineTopicSetSub mode:", err)
+			logs.Warning.Println("replyOfflineTopicSetSub mode:", err)
 			sess.queueOut(decodeStoreErrorExplicitTs(err, msg.Id, msg.Original, now, msg.Timestamp, nil))
 			return
 		}
@@ -762,7 +763,7 @@ func replyOfflineTopicSetSub(sess *Session, msg *ClientComMessage) {
 	if len(update) > 0 {
 		err = store.Subs.Update(msg.RcptTo, asUid, update, true)
 		if err != nil {
-			log.Println("replyOfflineTopicSetSub update:", err)
+			logs.Warning.Println("replyOfflineTopicSetSub update:", err)
 			sess.queueOut(decodeStoreErrorExplicitTs(err, msg.Id, msg.Original, now, msg.Timestamp, nil))
 		} else {
 			var params interface{}

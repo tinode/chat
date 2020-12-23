@@ -10,13 +10,13 @@ package main
 
 import (
 	"container/list"
-	"log"
 	"net/http"
 	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/tinode/chat/pbx"
+	"github.com/tinode/chat/server/logs"
 	"github.com/tinode/chat/server/store"
 	"github.com/tinode/chat/server/store/types"
 )
@@ -47,7 +47,7 @@ func (ss *SessionStore) NewSession(conn interface{}, sid string) (*Session, int)
 
 	ss.lock.Lock()
 	if _, found := ss.sessCache[s.sid]; found {
-		log.Fatalln("ERROR! duplicate session ID", s.sid)
+		logs.Error.Fatalln("ERROR! duplicate session ID", s.sid)
 	}
 	ss.lock.Unlock()
 
@@ -65,7 +65,7 @@ func (ss *SessionStore) NewSession(conn interface{}, sid string) (*Session, int)
 		s.proto = GRPC
 		s.grpcnode = c
 	default:
-		log.Panicln("session: unknown connection type", conn)
+		logs.Error.Panicln("session: unknown connection type", conn)
 	}
 
 	s.subs = make(map[string]*Subscription)
@@ -166,7 +166,7 @@ func (ss *SessionStore) Shutdown() {
 
 	// TODO: Consider broadcasting shutdown to other cluster nodes.
 
-	log.Println("SessionStore shut down, sessions terminated:", len(ss.sessCache))
+	logs.Info.Println("SessionStore shut down, sessions terminated:", len(ss.sessCache))
 }
 
 // EvictUser terminates all sessions of a given user.
