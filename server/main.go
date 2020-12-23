@@ -255,6 +255,9 @@ type configType struct {
 func main() {
 	executable, _ := os.Executable()
 
+	// Prepend log lines with file name and line number.
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
+
 	// All relative paths are resolved against the executable path, not against current working directory.
 	// Absolute paths are left unchanged.
 	rootpath, _ := filepath.Split(executable)
