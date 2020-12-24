@@ -7,8 +7,8 @@
 package logs
 
 import (
+	"io"
 	"log"
-	"os"
 	"strings"
 )
 
@@ -49,10 +49,10 @@ func parseFlags(logFlags string) int {
 }
 
 // Initializes info, warning and error loggers given the flags
-// and the output file.
-func Init(file *os.File, logFlags string) {
+// and the output.
+func Init(output io.Writer, logFlags string) {
 	flags := parseFlags(logFlags)
-	Info = log.New(os.Stdout, "I", flags)
-	Warn = log.New(os.Stdout, "W", flags)
-	Err = log.New(os.Stdout, "E", flags)
+	Info = log.New(output, "I", flags)
+	Warn = log.New(output, "W", flags)
+	Err = log.New(output, "E", flags)
 }
