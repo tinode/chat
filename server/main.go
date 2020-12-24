@@ -256,16 +256,7 @@ type configType struct {
 func main() {
 	executable, _ := os.Executable()
 
-	logs.Init()
-
-	// All relative paths are resolved against the executable path, not against current working directory.
-	// Absolute paths are left unchanged.
-	rootpath, _ := filepath.Split(executable)
-
-	logs.Info.Printf("Server v%s:%s:%s; pid %d; %d process(es)",
-		currentVersion, executable, buildstamp,
-		os.Getpid(), runtime.GOMAXPROCS(runtime.NumCPU()))
-
+	var logFlags = flag.String("log_flags", "stdFlags", "Comma-separated list of log flags (as defined in https://golang.org/pkg/log/#pkg-constants without the L prefix)")
 	var configfile = flag.String("config", "tinode.conf", "Path to config file.")
 	// Path to static content.
 	var staticPath = flag.String("static_data", defaultStaticPath, "File path to directory with static files to be served.")
@@ -278,6 +269,16 @@ func main() {
 	var pprofFile = flag.String("pprof", "", "File name to save profiling info to. Disabled if not set.")
 	var pprofUrl = flag.String("pprof_url", "", "Debugging only! URL path for exposing profiling info. Disabled if not set.")
 	flag.Parse()
+
+	logs.Init(os.Stderr, *logFlags)
+
+	// All relative paths are resolved against the executable path, not against current working directory.
+	// Absolute paths are left unchanged.
+	rootpath, _ := filepath.Split(executable)
+
+	logs.Info.Printf("Server v%s:%s:%s; pid %d; %d process(es)",
+		currentVersion, executable, buildstamp,
+		os.Getpid(), runtime.GOMAXPROCS(runtime.NumCPU()))
 
 	*configfile = toAbsolutePath(rootpath, *configfile)
 	logs.Info.Printf("Using config from '%s'", *configfile)
