@@ -34,7 +34,7 @@ func largeFileServe(wrt http.ResponseWriter, req *http.Request) {
 		wrt.WriteHeader(msg.Ctrl.Code)
 		enc.Encode(msg)
 		if err != nil {
-			logs.Warning.Println("media serve", err)
+			logs.Warn.Println("media serve", err)
 		}
 	}
 
@@ -199,7 +199,7 @@ func largeFileRunGarbageCollection(period time.Duration, block int) chan<- bool 
 			select {
 			case <-gcTimer:
 				if err := store.Files.DeleteUnused(time.Now().Add(-time.Hour), block); err != nil {
-					logs.Warning.Println("media gc:", err)
+					logs.Warn.Println("media gc:", err)
 				}
 			case <-stop:
 				return

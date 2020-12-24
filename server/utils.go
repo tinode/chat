@@ -457,7 +457,7 @@ func rewriteTag(orig, countryCode string, withLogin bool) string {
 		return orig
 	}
 
-	logs.Warning.Printf("invalid generic tag '%s'", orig)
+	logs.Warn.Printf("invalid generic tag '%s'", orig)
 
 	return ""
 }

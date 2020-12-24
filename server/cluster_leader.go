@@ -90,7 +90,7 @@ func (c *Cluster) failoverInit(config *clusterFailoverConfig) bool {
 		return false
 	}
 	if len(c.nodes) < 2 {
-		logs.Error.Printf("cluster: failover disabled; need at least 3 nodes, got %d", len(c.nodes)+1)
+		logs.Err.Printf("cluster: failover disabled; need at least 3 nodes, got %d", len(c.nodes)+1)
 		return false
 	}
 
@@ -282,7 +282,7 @@ func (c *Cluster) run() {
 
 			if health.Term < c.fo.term {
 				// This is a health check from a stale leader. Ignore.
-				logs.Warning.Println("cluster: health check from a stale leader", health.Term, c.fo.term, health.Leader, c.fo.leader)
+				logs.Warn.Println("cluster: health check from a stale leader", health.Term, c.fo.term, health.Leader, c.fo.leader)
 				continue
 			}
 
@@ -293,7 +293,7 @@ func (c *Cluster) run() {
 			} else if health.Leader != c.fo.leader {
 				if c.fo.leader != "" {
 					// Wrong leader. It's a bug, should never happen!
-					logs.Error.Printf("cluster: wrong leader '%s' while expecting '%s'; term %d",
+					logs.Err.Printf("cluster: wrong leader '%s' while expecting '%s'; term %d",
 						health.Leader, c.fo.leader, health.Term)
 				} else {
 					logs.Info.Printf("cluster: leader set to '%s'", health.Leader)

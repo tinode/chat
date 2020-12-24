@@ -285,21 +285,21 @@ func main() {
 
 	var config configType
 	if file, err := os.Open(*configfile); err != nil {
-		logs.Error.Fatal("Failed to read config file: ", err)
+		logs.Err.Fatal("Failed to read config file: ", err)
 	} else {
 		jr := jcr.New(file)
 		if err = json.NewDecoder(jr).Decode(&config); err != nil {
 			switch jerr := err.(type) {
 			case *json.UnmarshalTypeError:
 				lnum, cnum, _ := jr.LineAndChar(jerr.Offset)
-				logs.Error.Fatalf("Unmarshall error in config file in %s at %d:%d (offset %d bytes): %s",
+				logs.Err.Fatalf("Unmarshall error in config file in %s at %d:%d (offset %d bytes): %s",
 					jerr.Field, lnum, cnum, jerr.Offset, jerr.Error())
 			case *json.SyntaxError:
 				lnum, cnum, _ := jr.LineAndChar(jerr.Offset)
-				logs.Error.Fatalf("Syntax error in config file at %d:%d (offset %d bytes): %s",
+				logs.Err.Fatalf("Syntax error in config file at %d:%d (offset %d bytes): %s",
 					lnum, cnum, jerr.Offset, jerr.Error())
 			default:
-				logs.Error.Fatal("Failed to parse config file: ", err)
+				logs.Err.Fatal("Failed to parse config file: ", err)
 			}
 		}
 		file.Close()
@@ -337,13 +337,13 @@ func main() {
 
 		cpuf, err := os.Create(*pprofFile + ".cpu")
 		if err != nil {
-			logs.Error.Fatal("Failed to create CPU pprof file: ", err)
+			logs.Err.Fatal("Failed to create CPU pprof file: ", err)
 		}
 		defer cpuf.Close()
 
 		memf, err := os.Create(*pprofFile + ".mem")
 		if err != nil {
-			logs.Error.Fatal("Failed to create Mem pprof file: ", err)
+			logs.Err.Fatal("Failed to create Mem pprof file: ", err)
 		}
 		defer memf.Close()
 
@@ -356,7 +356,7 @@ func main() {
 
 	err := store.Open(workerId, config.Store)
 	if err != nil {
-		logs.Error.Fatal("Failed to connect to DB: ", err)
+		logs.Err.Fatal("Failed to connect to DB: ", err)
 	}
 	logs.Info.Println("DB adapter", store.GetAdapterName())
 	defer func() {
@@ -370,7 +370,7 @@ func main() {
 
 	err = store.InitAuthLogicalNames(config.Auth["logical_names"])
 	if err != nil {
-		logs.Error.Fatal(err)
+		logs.Err.Fatal(err)
 	}
 
 	// List of tag namespaces for user discovery which cannot be changed directly
@@ -380,18 +380,18 @@ func main() {
 	authNames := store.GetAuthNames()
 	for _, name := range authNames {
 		if authhdl := store.GetLogicalAuthHandler(name); authhdl == nil {
-			logs.Error.Fatalln("Unknown authenticator", name)
+			logs.Err.Fatalln("Unknown authenticator", name)
 		} else if jsconf := config.Auth[name]; jsconf != nil {
 			if err := authhdl.Init(jsconf, name); err != nil {
-				logs.Error.Fatalln("Failed to init auth scheme", name+":", err)
+				logs.Err.Fatalln("Failed to init auth scheme", name+":", err)
 			}
 			tags, err := authhdl.RestrictedTags()
 			if err != nil {
-				logs.Error.Fatalln("Failed get restricted tag namespaces (prefixes)", name+":", err)
+				logs.Err.Fatalln("Failed get restricted tag namespaces (prefixes)", name+":", err)
 			}
 			for _, tag := range tags {
 				if strings.Contains(tag, ":") {
-					logs.Error.Fatalln("tags restricted by auth handler should not contain character ':'", tag)
+					logs.Err.Fatalln("tags restricted by auth handler should not contain character ':'", tag)
 				}
 				globals.immutableTagNS[tag] = true
 			}
@@ -404,7 +404,7 @@ func main() {
 		// The namespace can be restricted even if the validator is disabled.
 		if vconf.AddToTags {
 			if strings.Contains(name, ":") {
-				logs.Error.Fatalln("acc_validation names should not contain character ':'", name)
+				logs.Err.Fatalln("acc_validation names should not contain character ':'", name)
 			}
 			globals.immutableTagNS[name] = true
 		}
@@ -419,7 +419,7 @@ func main() {
 			lvl := auth.ParseAuthLevel(req)
 			if lvl == auth.LevelNone {
 				if req != "" {
-					logs.Error.Fatalf("Invalid required AuthLevel '%s' in validator '%s'", req, name)
+					logs.Err.Fatalf("Invalid required AuthLevel '%s' in validator '%s'", req, name)
 				}
 				// Skip empty string
 				continue
@@ -437,9 +437,9 @@ func main() {
 		}
 
 		if val := store.GetValidator(name); val == nil {
-			logs.Error.Fatal("Config provided for an unknown validator '" + name + "'")
+			logs.Err.Fatal("Config provided for an unknown validator '" + name + "'")
 		} else if err = val.Init(string(vconf.Config)); err != nil {
-			logs.Error.Fatal("Failed to init validator '"+name+"': ", err)
+			logs.Err.Fatal("Failed to init validator '"+name+"': ", err)
 		}
 		if globals.validators == nil {
 			globals.validators = make(map[string]credValidator)
@@ -453,7 +453,7 @@ func main() {
 	globals.maskedTagNS = make(map[string]bool, len(config.MaskedTagNamespaces))
 	for _, tag := range config.MaskedTagNamespaces {
 		if strings.Contains(tag, ":") {
-			logs.Error.Fatal("masked_tags namespaces should not contain character ':'", tag)
+			logs.Err.Fatal("masked_tags namespaces should not contain character ':'", tag)
 		}
 		globals.maskedTagNS[tag] = true
 	}
@@ -506,7 +506,7 @@ func main() {
 					conf = string(params)
 				}
 				if err = store.UseMediaHandler(config.Media.UseHandler, conf); err != nil {
-					logs.Error.Fatalf("Failed to init media handler '%s': %s", config.Media.UseHandler, err)
+					logs.Err.Fatalf("Failed to init media handler '%s': %s", config.Media.UseHandler, err)
 				}
 			}
 			if config.Media.GcPeriod > 0 && config.Media.GcBlockSize > 0 {
@@ -522,7 +522,7 @@ func main() {
 
 	err = push.Init(string(config.Push))
 	if err != nil {
-		logs.Error.Fatal("Failed to initialize push notifications:", err)
+		logs.Err.Fatal("Failed to initialize push notifications:", err)
 	}
 	defer func() {
 		push.Stop()
@@ -541,7 +541,7 @@ func main() {
 
 	tlsConfig, err := parseTLSConfig(*tlsEnabled, config.TLS)
 	if err != nil {
-		logs.Error.Fatalln(err)
+		logs.Err.Fatalln(err)
 	}
 
 	// Intialize plugins
@@ -555,7 +555,7 @@ func main() {
 		*listenGrpc = config.GrpcListen
 	}
 	if globals.grpcServer, err = serveGrpc(*listenGrpc, config.GrpcKeepalive, tlsConfig); err != nil {
-		logs.Error.Fatal(err)
+		logs.Err.Fatal(err)
 	}
 
 	// Serve static content from the directory in -static_data flag if that's
@@ -567,7 +567,7 @@ func main() {
 		// Resolve path to static content.
 		*staticPath = toAbsolutePath(rootpath, *staticPath)
 		if _, err = os.Stat(*staticPath); os.IsNotExist(err) {
-			logs.Error.Fatal("Static content directory is not found", *staticPath)
+			logs.Err.Fatal("Static content directory is not found", *staticPath)
 		}
 
 		staticMountPoint = config.StaticMount
@@ -632,6 +632,6 @@ func main() {
 	}
 
 	if err = listenAndServe(config.Listen, mux, tlsConfig, signalHandler()); err != nil {
-		logs.Error.Fatal(err)
+		logs.Err.Fatal(err)
 	}
 }

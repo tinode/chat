@@ -186,7 +186,7 @@ func clonePayload(src map[string]string) map[string]string {
 func PrepareNotifications(rcpt *push.Receipt, config *AndroidConfig) []MessageData {
 	data, err := payloadToData(&rcpt.Payload)
 	if err != nil {
-		logs.Warning.Println("fcm push: could not parse payload;", err)
+		logs.Warn.Println("fcm push: could not parse payload;", err)
 		return nil
 	}
 
@@ -211,7 +211,7 @@ func PrepareNotifications(rcpt *push.Receipt, config *AndroidConfig) []MessageDa
 		}
 		devices, count, err = store.Devices.GetAll(uids...)
 		if err != nil {
-			logs.Warning.Println("fcm push: db error", err)
+			logs.Warn.Println("fcm push: db error", err)
 			return nil
 		}
 	}
@@ -337,7 +337,7 @@ func PrepareNotifications(rcpt *push.Receipt, config *AndroidConfig) []MessageDa
 func DevicesForUser(uid t.Uid) []string {
 	ddef, count, err := store.Devices.GetAll(uid)
 	if err != nil {
-		logs.Warning.Println("fcm devices for user: db error", err)
+		logs.Warn.Println("fcm devices for user: db error", err)
 		return nil
 	}
 

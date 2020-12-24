@@ -216,7 +216,7 @@ func (h *Hub) run() {
 						join.sess.inflightReqs.Done()
 					}
 					join.sess.queueOut(ErrServiceUnavailableReply(join.pkt, join.pkt.Timestamp))
-					logs.Error.Println("hub.join loop: topic's reg queue full", join.pkt.RcptTo, join.sess.sid, " - total queue len:", len(t.reg))
+					logs.Err.Println("hub.join loop: topic's reg queue full", join.pkt.RcptTo, join.sess.sid, " - total queue len:", len(t.reg))
 				}
 			}
 
@@ -230,16 +230,16 @@ func (h *Hub) run() {
 					select {
 					case dst.broadcast <- msg:
 					default:
-						logs.Error.Println("hub: topic's broadcast queue is full", dst.name)
+						logs.Err.Println("hub: topic's broadcast queue is full", dst.name)
 					}
 				} else {
-					logs.Warning.Println("hub: invalid topic category for broadcast", dst.name)
+					logs.Warn.Println("hub: invalid topic category for broadcast", dst.name)
 				}
 			} else if (strings.HasPrefix(msg.RcptTo, "usr") || strings.HasPrefix(msg.RcptTo, "grp")) &&
 				globals.cluster.isRemoteTopic(msg.RcptTo) {
 				// It is a remote topic.
 				if err := globals.cluster.routeToTopicIntraCluster(msg.RcptTo, msg, msg.sess); err != nil {
-					logs.Warning.Printf("hub: routing to '%s' failed", msg.RcptTo)
+					logs.Warn.Printf("hub: routing to '%s' failed", msg.RcptTo)
 				}
 			} else if msg.Pres == nil && msg.Info == nil {
 				// Topic is unknown or offline.
@@ -277,7 +277,7 @@ func (h *Hub) run() {
 			if unreg.forUser.IsZero() {
 				// The topic is being garbage collected or deleted.
 				if err := h.topicUnreg(unreg.sess, unreg.rcptTo, unreg.pkt, reason); err != nil {
-					logs.Error.Println("hub.topicUnreg failed:", err)
+					logs.Err.Println("hub.topicUnreg failed:", err)
 				}
 			} else {
 				go h.stopTopicsForUser(unreg.forUser, reason, unreg.done)
@@ -604,7 +604,7 @@ func replyOfflineTopicGetDesc(sess *Session, msg *ClientComMessage) {
 		}
 
 		if uid.IsZero() {
-			logs.Warning.Println("replyOfflineTopicGetDesc: malformed p2p topic name")
+			logs.Warn.Println("replyOfflineTopicGetDesc: malformed p2p topic name")
 			sess.queueOut(ErrMalformedReply(msg, now))
 			return
 		}
@@ -628,7 +628,7 @@ func replyOfflineTopicGetDesc(sess *Session, msg *ClientComMessage) {
 
 	sub, err := store.Subs.Get(topic, asUid)
 	if err != nil {
-		logs.Warning.Println("replyOfflineTopicGetDesc:", err)
+		logs.Warn.Println("replyOfflineTopicGetDesc:", err)
 		sess.queueOut(decodeStoreErrorExplicitTs(err, msg.Id, msg.Original, now, msg.Timestamp, nil))
 		return
 	}
@@ -659,7 +659,7 @@ func replyOfflineTopicGetSub(sess *Session, msg *ClientComMessage) {
 
 	ssub, err := store.Subs.Get(msg.RcptTo, types.ParseUserId(msg.AsUser))
 	if err != nil {
-		logs.Warning.Println("replyOfflineTopicGetSub:", err)
+		logs.Warn.Println("replyOfflineTopicGetSub:", err)
 		sess.queueOut(decodeStoreErrorExplicitTs(err, msg.Id, msg.Original, now, msg.Timestamp, nil))
 		return
 	}
@@ -713,7 +713,7 @@ func replyOfflineTopicSetSub(sess *Session, msg *ClientComMessage) {
 
 	sub, err := store.Subs.Get(msg.RcptTo, asUid)
 	if err != nil {
-		logs.Warning.Println("replyOfflineTopicSetSub get sub:", err)
+		logs.Warn.Println("replyOfflineTopicSetSub get sub:", err)
 		sess.queueOut(decodeStoreErrorExplicitTs(err, msg.Id, msg.Original, now, msg.Timestamp, nil))
 		return
 	}
@@ -736,7 +736,7 @@ func replyOfflineTopicSetSub(sess *Session, msg *ClientComMessage) {
 	if msg.Set.Sub != nil && msg.Set.Sub.Mode != "" {
 		var modeWant types.AccessMode
 		if err = modeWant.UnmarshalText([]byte(msg.Set.Sub.Mode)); err != nil {
-			logs.Warning.Println("replyOfflineTopicSetSub mode:", err)
+			logs.Warn.Println("replyOfflineTopicSetSub mode:", err)
 			sess.queueOut(decodeStoreErrorExplicitTs(err, msg.Id, msg.Original, now, msg.Timestamp, nil))
 			return
 		}
@@ -763,7 +763,7 @@ func replyOfflineTopicSetSub(sess *Session, msg *ClientComMessage) {
 	if len(update) > 0 {
 		err = store.Subs.Update(msg.RcptTo, asUid, update, true)
 		if err != nil {
-			logs.Warning.Println("replyOfflineTopicSetSub update:", err)
+			logs.Warn.Println("replyOfflineTopicSetSub update:", err)
 			sess.queueOut(decodeStoreErrorExplicitTs(err, msg.Id, msg.Original, now, msg.Timestamp, nil))
 		} else {
 			var params interface{}

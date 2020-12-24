@@ -149,7 +149,7 @@ func statsUpdater() {
 				val := upd.value.(float64)
 				v.addSample(val)
 			default:
-				logs.Error.Panicf("stats: unsupported expvar type %T", ev)
+				logs.Err.Panicf("stats: unsupported expvar type %T", ev)
 			}
 		} else {
 			panic("stats: update to unknown variable " + upd.varname)

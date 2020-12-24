@@ -66,7 +66,7 @@ func pbServPresSerialize(pres *MsgServerPres) *pbx.ServerMsg_Pres {
 	case "tags":
 		what = pbx.ServerPres_TAGS
 	default:
-		logs.Error.Fatal("Unknown pres.what value", pres.What)
+		logs.Err.Fatal("Unknown pres.what value", pres.What)
 	}
 	return &pbx.ServerMsg_Pres{Pres: &pbx.ServerPres{
 		Topic:        pres.Topic,
@@ -448,7 +448,7 @@ func bytesToInterface(in []byte) interface{} {
 	if len(in) > 0 {
 		err := json.Unmarshal(in, &out)
 		if err != nil {
-			logs.Warning.Println("pbx: failed to parse bytes", string(in), err)
+			logs.Warn.Println("pbx: failed to parse bytes", string(in), err)
 		}
 	}
 	return out
@@ -639,7 +639,7 @@ func pbInfoNoteWhatSerialize(what string) pbx.InfoNote {
 	case "recv":
 		out = pbx.InfoNote_RECV
 	default:
-		logs.Error.Fatal("unknown info-note.what", what)
+		logs.Err.Fatal("unknown info-note.what", what)
 	}
 	return out
 }
@@ -654,7 +654,7 @@ func pbInfoNoteWhatDeserialize(what pbx.InfoNote) string {
 	case pbx.InfoNote_RECV:
 		out = "recv"
 	default:
-		logs.Error.Fatal("unknown info-note.what", what)
+		logs.Err.Fatal("unknown info-note.what", what)
 	}
 	return out
 }

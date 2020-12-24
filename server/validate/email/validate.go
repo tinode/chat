@@ -545,7 +545,7 @@ func (v *validator) send(to string, content *emailContent) error {
 
 	err := v.sendMail([]string{to}, message.Bytes())
 	if err != nil {
-		logs.Warning.Println("SMTP error", to, err)
+		logs.Warn.Println("SMTP error", to, err)
 	}
 
 	return err

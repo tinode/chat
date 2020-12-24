@@ -535,7 +535,7 @@ func (t *Topic) presPubMessageCount(uid types.Uid, mode types.AccessMode, recv, 
 // Cases V.1, V.2
 func (t *Topic) presPubMessageDelete(uid types.Uid, mode types.AccessMode, delID int, list []MsgDelRange, skip string) {
 	if len(list) == 0 && delID <= 0 {
-		logs.Warning.Printf("Case V.1, V.2: topic[%s] invalid request - missing payload", t.name)
+		logs.Warn.Printf("Case V.1, V.2: topic[%s] invalid request - missing payload", t.name)
 		return
 	}
 

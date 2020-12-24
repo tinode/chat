@@ -189,7 +189,7 @@ func (ah *awshandler) Upload(fdef *types.FileDef, file io.ReadSeeker) (string, e
 	uploader := s3manager.NewUploaderWithClient(ah.svc)
 
 	if err = store.Files.StartUpload(fdef); err != nil {
-		logs.Warning.Println("failed to create file record", fdef.Id, err)
+		logs.Warn.Println("failed to create file record", fdef.Id, err)
 		return "", err
 	}
 

@@ -47,7 +47,7 @@ func (ss *SessionStore) NewSession(conn interface{}, sid string) (*Session, int)
 
 	ss.lock.Lock()
 	if _, found := ss.sessCache[s.sid]; found {
-		logs.Error.Fatalln("ERROR! duplicate session ID", s.sid)
+		logs.Err.Fatalln("ERROR! duplicate session ID", s.sid)
 	}
 	ss.lock.Unlock()
 
@@ -65,7 +65,7 @@ func (ss *SessionStore) NewSession(conn interface{}, sid string) (*Session, int)
 		s.proto = GRPC
 		s.grpcnode = c
 	default:
-		logs.Error.Panicln("session: unknown connection type", conn)
+		logs.Err.Panicln("session: unknown connection type", conn)
 	}
 
 	s.subs = make(map[string]*Subscription)

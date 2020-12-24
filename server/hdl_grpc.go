@@ -54,7 +54,7 @@ func (*grpcNodeServer) MessageLoop(stream pbx.Node_MessageLoopServer) error {
 			return nil
 		}
 		if err != nil {
-			logs.Error.Println("grpc: recv", sess.sid, err)
+			logs.Err.Println("grpc: recv", sess.sid, err)
 			return err
 		}
 		logs.Info.Println("grpc in:", truncateStringIfTooLong(in.String()), sess.sid)
@@ -86,12 +86,12 @@ func (sess *Session) writeGrpcLoop() {
 				return
 			}
 			if len(sess.send) > sendQueueLimit {
-				logs.Error.Println("grpc: outbound queue limit exceeded", sess.sid)
+				logs.Err.Println("grpc: outbound queue limit exceeded", sess.sid)
 				return
 			}
 			statsInc("OutgoingMessagesGrpcTotal", 1)
 			if err := grpcWrite(sess, msg); err != nil {
-				logs.Error.Println("grpc: write", sess.sid, err)
+				logs.Err.Println("grpc: write", sess.sid, err)
 				return
 			}
 
@@ -161,7 +161,7 @@ func serveGrpc(addr string, kaEnabled bool, tlsConf *tls.Config) (*grpc.Server, 
 
 	go func() {
 		if err := srv.Serve(lis); err != nil {
-			logs.Error.Println("gRPC server failed:", err)
+			logs.Err.Println("gRPC server failed:", err)
 		}
 	}()
 

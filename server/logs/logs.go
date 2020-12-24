@@ -13,9 +13,9 @@ import (
 )
 
 var (
-    Info    *log.Logger
-    Warning *log.Logger
-    Error   *log.Logger
+	Info *log.Logger
+	Warn *log.Logger
+	Err  *log.Logger
 )
 
 func parseFlags(logFlags string) int {
@@ -53,6 +53,6 @@ func parseFlags(logFlags string) int {
 func Init(file *os.File, logFlags string) {
 	flags := parseFlags(logFlags)
 	Info = log.New(os.Stdout, "I", flags)
-	Warning = log.New(os.Stdout, "W", flags)
-	Error = log.New(os.Stdout, "E", flags)
+	Warn = log.New(os.Stdout, "W", flags)
+	Err = log.New(os.Stdout, "E", flags)
 }

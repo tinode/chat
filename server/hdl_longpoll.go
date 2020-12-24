@@ -26,11 +26,11 @@ func (sess *Session) writeOnce(wrt http.ResponseWriter, req *http.Request) {
 		case msg, ok := <-sess.send:
 			if ok {
 				if len(sess.send) > sendQueueLimit {
-					logs.Error.Println("longPoll: outbound queue limit exceeded", sess.sid)
+					logs.Err.Println("longPoll: outbound queue limit exceeded", sess.sid)
 				} else {
 					statsInc("OutgoingMessagesLongpollTotal", 1)
 					if err := lpWrite(wrt, msg); err != nil {
-						logs.Error.Println("longPoll: writeOnce failed", sess.sid, err)
+						logs.Err.Println("longPoll: writeOnce failed", sess.sid, err)
 					}
 				}
 			}
@@ -59,7 +59,7 @@ func (sess *Session) writeOnce(wrt http.ResponseWriter, req *http.Request) {
 		case <-time.After(pingPeriod):
 			// just write an empty packet on timeout
 			if _, err := wrt.Write([]byte{}); err != nil {
-				logs.Error.Println("longPoll: writeOnce: timout", sess.sid, err)
+				logs.Err.Println("longPoll: writeOnce: timout", sess.sid, err)
 			}
 			return
 
@@ -157,7 +157,7 @@ func serveLongPoll(wrt http.ResponseWriter, req *http.Request) {
 	// Existing session
 	sess = globals.sessionStore.Get(sid)
 	if sess == nil {
-		logs.Warning.Println("longPoll: invalid or expired session id", sid)
+		logs.Warn.Println("longPoll: invalid or expired session id", sid)
 		wrt.WriteHeader(http.StatusForbidden)
 		enc.Encode(ErrSessionNotFound(now))
 		return
@@ -166,13 +166,13 @@ func serveLongPoll(wrt http.ResponseWriter, req *http.Request) {
 	addr := getRemoteAddr(req)
 	if sess.remoteAddr != addr {
 		sess.remoteAddr = addr
-		logs.Warning.Println("longPoll: remote address changed", sid, addr)
+		logs.Warn.Println("longPoll: remote address changed", sid, addr)
 	}
 
 	if req.ContentLength != 0 {
 		// Read payload and send it for processing.
 		if code, err := sess.readOnce(wrt, req); err != nil {
-			logs.Warning.Println("longPoll: readOnce failed", sess.sid, err)
+			logs.Warn.Println("longPoll: readOnce failed", sess.sid, err)
 			// Failed to read request, report an error, if possible
 			if code != 0 {
 				wrt.WriteHeader(code)

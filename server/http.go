@@ -83,7 +83,7 @@ func listenAndServe(addr string, mux *http.ServeMux, tlfConf *tls.Config, stop <
 			if globals.shuttingDown {
 				logs.Info.Println("HTTP server: stopped")
 			} else {
-				logs.Error.Println("HTTP server: failed", err)
+				logs.Err.Println("HTTP server: failed", err)
 			}
 		}
 		httpdone <- true
@@ -100,7 +100,7 @@ Loop:
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			if err := server.Shutdown(ctx); err != nil {
 				// failure/timeout shutting down the server gracefully
-				logs.Error.Println("HTTP server failed to terminate gracefully", err)
+				logs.Err.Println("HTTP server failed to terminate gracefully", err)
 			}
 
 			// While the server shuts down, termianate all sessions.

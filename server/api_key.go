@@ -47,11 +47,11 @@ func checkAPIKey(apikey string) (isValid, isRoot bool) {
 
 	data, err := base64.URLEncoding.DecodeString(apikey)
 	if err != nil {
-		logs.Warning.Println("failed to decode.base64 appid ", err)
+		logs.Warn.Println("failed to decode.base64 appid ", err)
 		return
 	}
 	if data[0] != 1 {
-		logs.Warning.Println("unknown appid signature algorithm ", data[0])
+		logs.Warn.Println("unknown appid signature algorithm ", data[0])
 		return
 	}
 
@@ -59,7 +59,7 @@ func checkAPIKey(apikey string) (isValid, isRoot bool) {
 	hasher.Write(data[:apikeyVersion+apikeyAppID+apikeySequence+apikeyWho])
 	check := hasher.Sum(nil)
 	if !bytes.Equal(data[apikeyVersion+apikeyAppID+apikeySequence+apikeyWho:], check) {
-		logs.Warning.Println("invalid apikey signature")
+		logs.Warn.Println("invalid apikey signature")
 		return
 	}
 
