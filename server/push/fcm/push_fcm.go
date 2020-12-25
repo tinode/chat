@@ -8,11 +8,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"log"
 
 	fbase "firebase.google.com/go"
 	fcm "firebase.google.com/go/messaging"
 
+	"github.com/tinode/chat/server/logs"
 	"github.com/tinode/chat/server/push"
 	"github.com/tinode/chat/server/store"
 	"github.com/tinode/chat/server/store/types"
@@ -132,7 +132,7 @@ func sendNotifications(rcpt *push.Receipt, config *configType) {
 		resp, err := handler.client.SendAll(ctx, batch)
 		if err != nil {
 			// Complete failure.
-			log.Println("fcm SendAll failed", err)
+			logs.Warn.Println("fcm SendAll failed", err)
 			break
 		}
 
@@ -152,7 +152,7 @@ func processSubscription(req *push.ChannelReq) {
 	if len(devices) > subBatchSize {
 		// It's extremely unlikely for a single user to have this many devices.
 		devices = devices[0:subBatchSize]
-		log.Println("fcm: user", req.Uid.UserId(), "has more than", subBatchSize, "devices")
+		logs.Warn.Println("fcm: user", req.Uid.UserId(), "has more than", subBatchSize, "devices")
 	}
 
 	var err error
@@ -164,7 +164,7 @@ func processSubscription(req *push.ChannelReq) {
 	}
 	if err != nil {
 		// Complete failure.
-		log.Println("fcm: sub or upsub failed", req.Unsub, err)
+		logs.Warn.Println("fcm: sub or upsub failed", req.Unsub, err)
 	} else {
 		// Check for partial failure.
 		handleSubErrors(resp, req.Uid, devices)
@@ -193,7 +193,7 @@ func handleSubErrors(response *fcm.TopicManagementResponse, uid types.Uid, devic
 
 	for _, errinfo := range response.Errors {
 		// FCM documentation sucks. There is no list of possible errors so no action can be taken but logging.
-		log.Println("fcm sub/unsub error", errinfo.Reason, uid, devices[errinfo.Index])
+		logs.Warn.Println("fcm sub/unsub error", errinfo.Reason, uid, devices[errinfo.Index])
 	}
 }
 
@@ -203,24 +203,24 @@ func handleFcmError(err error, uid types.Uid, deviceId string) bool {
 		fcm.IsInternal(err) ||
 		fcm.IsUnknown(err) {
 		// Transient errors. Stop sending this batch.
-		log.Println("fcm transient failure", err)
+		logs.Warn.Println("fcm transient failure", err)
 		return false
 	}
 	if fcm.IsMismatchedCredential(err) || fcm.IsInvalidArgument(err) {
 		// Config errors
-		log.Println("fcm: request failed", err)
+		logs.Warn.Println("fcm: request failed", err)
 		return false
 	}
 
 	if fcm.IsRegistrationTokenNotRegistered(err) {
 		// Token is no longer valid.
-		log.Println("fcm: invalid token", uid, err)
+		logs.Warn.Println("fcm: invalid token", uid, err)
 		if err := store.Devices.Delete(uid, deviceId); err != nil {
-			log.Println("fcm: failed to delete invalid token", err)
+			logs.Warn.Println("fcm: failed to delete invalid token", err)
 		}
 	} else {
 		// All other errors are treated as non-fatal.
-		log.Println("fcm error:", err)
+		logs.Warn.Println("fcm error:", err)
 	}
 	return true
 }

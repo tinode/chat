@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"math/rand"
 	qp "mime/quotedprintable"
 	"net/mail"
@@ -21,6 +20,7 @@ import (
 	textt "text/template"
 	"time"
 
+	"github.com/tinode/chat/server/logs"
 	"github.com/tinode/chat/server/store"
 	t "github.com/tinode/chat/server/store/types"
 	i18n "golang.org/x/text/language"
@@ -545,7 +545,7 @@ func (v *validator) send(to string, content *emailContent) error {
 
 	err := v.sendMail([]string{to}, message.Bytes())
 	if err != nil {
-		log.Println("SMTP error", to, err)
+		logs.Warn.Println("SMTP error", to, err)
 	}
 
 	return err

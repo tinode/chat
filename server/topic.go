@@ -10,7 +10,6 @@ package main
 
 import (
 	"errors"
-	"log"
 	"reflect"
 	"sort"
 	"strings"
@@ -19,6 +18,7 @@ import (
 
 	"github.com/tinode/chat/server/auth"
 	"github.com/tinode/chat/server/concurrency"
+	"github.com/tinode/chat/server/logs"
 	"github.com/tinode/chat/server/push"
 	"github.com/tinode/chat/server/store"
 	"github.com/tinode/chat/server/store/types"
@@ -281,7 +281,7 @@ func (t *Topic) fixUpUserCounts(userCounts map[types.Uid]int) {
 			pud.online -= decrementBy
 			t.perUser[uid] = pud
 			if pud.online < 0 {
-				log.Printf("topic[%s]: invalid online count for user %s", t.name, uid)
+				logs.Warn.Printf("topic[%s]: invalid online count for user %s", t.name, uid)
 			}
 		}
 	}
@@ -321,7 +321,7 @@ func (t *Topic) runLocal(hub *Hub) {
 						// Failed to subscribe, the topic is still inactive
 						killTimer.Reset(keepAlive)
 					}
-					log.Printf("topic[%s] subscription failed %v, sid=%s", t.name, err, join.sess.sid)
+					logs.Warn.Printf("topic[%s] subscription failed %v, sid=%s", t.name, err, join.sess.sid)
 				}
 			}
 			if join.sess.inflightReqs != nil {
@@ -352,33 +352,33 @@ func (t *Topic) runLocal(hub *Hub) {
 				// Get request
 				if meta.pkt.MetaWhat&constMsgMetaDesc != 0 {
 					if err := t.replyGetDesc(meta.sess, asUid, meta.pkt.Get.Desc, meta.pkt); err != nil {
-						log.Printf("topic[%s] meta.Get.Desc failed: %s", t.name, err)
+						logs.Warn.Printf("topic[%s] meta.Get.Desc failed: %s", t.name, err)
 					}
 				}
 				if meta.pkt.MetaWhat&constMsgMetaSub != 0 {
 					if err := t.replyGetSub(meta.sess, asUid, authLevel, meta.pkt); err != nil {
-						log.Printf("topic[%s] meta.Get.Sub failed: %s", t.name, err)
+						logs.Warn.Printf("topic[%s] meta.Get.Sub failed: %s", t.name, err)
 					}
 				}
 				if meta.pkt.MetaWhat&constMsgMetaData != 0 {
 					if err := t.replyGetData(meta.sess, asUid, meta.pkt.Get.Data, meta.pkt); err != nil {
-						log.Printf("topic[%s] meta.Get.Data failed: %s", t.name, err)
+						logs.Warn.Printf("topic[%s] meta.Get.Data failed: %s", t.name, err)
 					}
 				}
 				if meta.pkt.MetaWhat&constMsgMetaDel != 0 {
 					if err := t.replyGetDel(meta.sess, asUid, meta.pkt.Get.Del, meta.pkt); err != nil {
-						log.Printf("topic[%s] meta.Get.Del failed: %s", t.name, err)
+						logs.Warn.Printf("topic[%s] meta.Get.Del failed: %s", t.name, err)
 					}
 				}
 				if meta.pkt.MetaWhat&constMsgMetaTags != 0 {
 					if err := t.replyGetTags(meta.sess, asUid, meta.pkt); err != nil {
-						log.Printf("topic[%s] meta.Get.Tags failed: %s", t.name, err)
+						logs.Warn.Printf("topic[%s] meta.Get.Tags failed: %s", t.name, err)
 					}
 				}
 				if meta.pkt.MetaWhat&constMsgMetaCred != 0 {
-					log.Printf("topic[%s] handle getCred", t.name)
+					logs.Warn.Printf("topic[%s] handle getCred", t.name)
 					if err := t.replyGetCreds(meta.sess, asUid, meta.pkt); err != nil {
-						log.Printf("topic[%s] meta.Get.Creds failed: %s", t.name, err)
+						logs.Warn.Printf("topic[%s] meta.Get.Creds failed: %s", t.name, err)
 					}
 				}
 
@@ -389,22 +389,22 @@ func (t *Topic) runLocal(hub *Hub) {
 						// Notify plugins of the update
 						pluginTopic(t, plgActUpd)
 					} else {
-						log.Printf("topic[%s] meta.Set.Desc failed: %v", t.name, err)
+						logs.Warn.Printf("topic[%s] meta.Set.Desc failed: %v", t.name, err)
 					}
 				}
 				if meta.pkt.MetaWhat&constMsgMetaSub != 0 {
 					if err := t.replySetSub(hub, meta.sess, meta.pkt); err != nil {
-						log.Printf("topic[%s] meta.Set.Sub failed: %v", t.name, err)
+						logs.Warn.Printf("topic[%s] meta.Set.Sub failed: %v", t.name, err)
 					}
 				}
 				if meta.pkt.MetaWhat&constMsgMetaTags != 0 {
 					if err := t.replySetTags(meta.sess, asUid, meta.pkt); err != nil {
-						log.Printf("topic[%s] meta.Set.Tags failed: %v", t.name, err)
+						logs.Warn.Printf("topic[%s] meta.Set.Tags failed: %v", t.name, err)
 					}
 				}
 				if meta.pkt.MetaWhat&constMsgMetaCred != 0 {
 					if err := t.replySetCred(meta.sess, asUid, authLevel, meta.pkt); err != nil {
-						log.Printf("topic[%s] meta.Set.Cred failed: %v", t.name, err)
+						logs.Warn.Printf("topic[%s] meta.Set.Cred failed: %v", t.name, err)
 					}
 				}
 
@@ -423,7 +423,7 @@ func (t *Topic) runLocal(hub *Hub) {
 				}
 
 				if err != nil {
-					log.Printf("topic[%s] meta.Del failed: %v", t.name, err)
+					logs.Warn.Printf("topic[%s] meta.Del failed: %v", t.name, err)
 				}
 			}
 		case upd := <-t.supd:
@@ -432,7 +432,7 @@ func (t *Topic) runLocal(hub *Hub) {
 				t.sessToForeground(upd.sess)
 			} else if currentUA != upd.userAgent {
 				if t.cat != types.TopicCatMe {
-					log.Panicln("invalid topic category in UA update", t.name)
+					logs.Warn.Panicln("invalid topic category in UA update", t.name)
 				}
 				// 'me' only. Process an update to user agent from one of the sessions.
 				currentUA = upd.userAgent
@@ -516,42 +516,42 @@ func (t *Topic) handleSubscription(h *Hub, join *sessionJoin) error {
 	if getWhat&constMsgMetaDesc != 0 {
 		// Send get.desc as a {meta} packet.
 		if err := t.replyGetDesc(join.sess, asUid, msgsub.Get.Desc, join.pkt); err != nil {
-			log.Printf("topic[%s] handleSubscription Get.Desc failed: %v sid=%s", t.name, err, join.sess.sid)
+			logs.Warn.Printf("topic[%s] handleSubscription Get.Desc failed: %v sid=%s", t.name, err, join.sess.sid)
 		}
 	}
 
 	if getWhat&constMsgMetaSub != 0 {
 		// Send get.sub response as a separate {meta} packet
 		if err := t.replyGetSub(join.sess, asUid, authLevel, join.pkt); err != nil {
-			log.Printf("topic[%s] handleSubscription Get.Sub failed: %v sid=%s", t.name, err, join.sess.sid)
+			logs.Warn.Printf("topic[%s] handleSubscription Get.Sub failed: %v sid=%s", t.name, err, join.sess.sid)
 		}
 	}
 
 	if getWhat&constMsgMetaTags != 0 {
 		// Send get.tags response as a separate {meta} packet
 		if err := t.replyGetTags(join.sess, asUid, join.pkt); err != nil {
-			log.Printf("topic[%s] handleSubscription Get.Tags failed: %v sid=%s", t.name, err, join.sess.sid)
+			logs.Warn.Printf("topic[%s] handleSubscription Get.Tags failed: %v sid=%s", t.name, err, join.sess.sid)
 		}
 	}
 
 	if getWhat&constMsgMetaCred != 0 {
 		// Send get.tags response as a separate {meta} packet
 		if err := t.replyGetCreds(join.sess, asUid, join.pkt); err != nil {
-			log.Printf("topic[%s] handleSubscription Get.Cred failed: %v sid=%s", t.name, err, join.sess.sid)
+			logs.Warn.Printf("topic[%s] handleSubscription Get.Cred failed: %v sid=%s", t.name, err, join.sess.sid)
 		}
 	}
 
 	if getWhat&constMsgMetaData != 0 {
 		// Send get.data response as {data} packets
 		if err := t.replyGetData(join.sess, asUid, msgsub.Get.Data, join.pkt); err != nil {
-			log.Printf("topic[%s] handleSubscription Get.Data failed: %v sid=%s", t.name, err, join.sess.sid)
+			logs.Warn.Printf("topic[%s] handleSubscription Get.Data failed: %v sid=%s", t.name, err, join.sess.sid)
 		}
 	}
 
 	if getWhat&constMsgMetaDel != 0 {
 		// Send get.del response as a separate {meta} packet
 		if err := t.replyGetDel(join.sess, asUid, msgsub.Get.Del, join.pkt); err != nil {
-			log.Printf("topic[%s] handleSubscription Get.Del failed: %v sid=%s", t.name, err, join.sess.sid)
+			logs.Warn.Printf("topic[%s] handleSubscription Get.Del failed: %v sid=%s", t.name, err, join.sess.sid)
 		}
 	}
 
@@ -591,7 +591,7 @@ func (t *Topic) handleLeaveRequest(hub *Hub, leave *sessionLeave) {
 		// User wants to leave and unsubscribe.
 		// asUid must not be Zero.
 		if err := t.replyLeaveUnsub(hub, leave.sess, leave.pkt, asUid); err != nil {
-			log.Println("failed to unsub", err, leave.sess.sid)
+			logs.Err.Println("failed to unsub", err, leave.sess.sid)
 			return
 		}
 	} else if pssd, _ := t.remSession(leave.sess, asUid); pssd != nil {
@@ -637,7 +637,7 @@ func (t *Topic) handleLeaveRequest(hub *Hub, leave *sessionLeave) {
 				t.perUser[uid] = pud
 			}
 		} else if !leave.sess.isCluster() {
-			log.Panic("cannot determine uid: leave req=", leave)
+			logs.Warn.Panic("cannot determine uid: leave req=", leave)
 		}
 
 		switch t.cat {
@@ -663,7 +663,7 @@ func (t *Topic) handleLeaveRequest(hub *Hub, leave *sessionLeave) {
 			if !meUid.IsZero() {
 				// Update user's last online timestamp & user agent. Only one user can be subscribed to 'me' topic.
 				if err := store.Users.UpdateLastSeen(meUid, mrs.userAgent, now); err != nil {
-					log.Println(err)
+					logs.Warn.Println(err)
 				}
 			}
 		case types.TopicCatFnd:
@@ -802,7 +802,7 @@ func (t *Topic) sendSubNotifications(asUid types.Uid, sid, userAgent string) {
 		if !t.isLoaded() {
 			t.markLoaded()
 			if err := t.loadContacts(asUid); err != nil {
-				log.Println("topic: failed to load contacts", t.name, err.Error())
+				logs.Err.Println("topic: failed to load contacts", t.name, err.Error())
 			}
 			// User online: notify users of interest without forcing response (no +en here).
 			t.presUsersOfInterest("on", userAgent)
@@ -871,7 +871,7 @@ func (t *Topic) handleBroadcast(msg *ServerComMessage) {
 				Head:      msg.Data.Head,
 				Content:   msg.Data.Content}, (userData.modeGiven & userData.modeWant).IsReader()); err != nil {
 
-				log.Printf("topic[%s]: failed to save message: %v", t.name, err)
+				logs.Warn.Printf("topic[%s]: failed to save message: %v", t.name, err)
 				msg.sess.queueOut(ErrUnknown(msg.Id, t.original(asUid), msg.Timestamp))
 
 				return
@@ -970,7 +970,7 @@ func (t *Topic) handleBroadcast(msg *ServerComMessage) {
 						"ReadSeqId": pud.readID},
 					false); err != nil {
 
-					log.Printf("topic[%s]: failed to update SeqRead/Recv counter: %v", t.name, err)
+					logs.Warn.Printf("topic[%s]: failed to update SeqRead/Recv counter: %v", t.name, err)
 					return
 				}
 
@@ -984,7 +984,7 @@ func (t *Topic) handleBroadcast(msg *ServerComMessage) {
 		}
 	} else {
 		// TODO(gene): remove this
-		log.Panic("topic: wrong message type for broadcasting", t.name)
+		logs.Err.Panic("topic: wrong message type for broadcasting", t.name)
 	}
 
 	// Broadcast the message. Only {data}, {pres}, {info} are broadcastable.
@@ -1043,13 +1043,13 @@ func (t *Topic) handleBroadcast(msg *ServerComMessage) {
 		}
 		// Send message to session.
 		if !sess.queueOut(msg) {
-			log.Printf("topic[%s]: connection stuck, detaching - %s", t.name, sess.sid)
+			logs.Warn.Printf("topic[%s]: connection stuck, detaching - %s", t.name, sess.sid)
 			// The whole session is being dropped, so sessionLeave.pkt is not set.
 			// Must not block here: it may lead to a deadlock.
 			select {
 			case t.unreg <- &sessionLeave{sess: sess}:
 			default:
-				log.Printf("topic[%s]: unreg queue full - %s", t.name, sess.sid)
+				logs.Err.Printf("topic[%s]: unreg queue full - %s", t.name, sess.sid)
 			}
 		}
 	}
@@ -3416,7 +3416,7 @@ func (t *Topic) remProxiedSession(sess *Session) bool {
 				numChans := len(t.proxiedChannels) - 3
 				t.proxiedChannels = t.proxiedChannels[:numChans]
 				if len(t.proxiedSessions)*3+1 != len(t.proxiedChannels) {
-					log.Panicf("topic[%s]: #proxied sessions (%d) vs #proxied channels mismatch (%d)",
+					logs.Err.Panicf("topic[%s]: #proxied sessions (%d) vs #proxied channels mismatch (%d)",
 						t.name, len(t.proxiedSessions), len(t.proxiedChannels))
 				}
 			}
@@ -3477,7 +3477,7 @@ func (t *Topic) remSession(sess *Session, asUid types.Uid) (*perSessionData, boo
 	if pssd.uid == asUid || asUid.IsZero() {
 		delete(t.sessions, s)
 		if s.isMultiplex() && !t.remProxiedSession(s) {
-			log.Printf("topic[%s]: multiplex session %s not removed from the event loop", t.name, s.sid)
+			logs.Err.Printf("topic[%s]: multiplex session %s not removed from the event loop", t.name, s.sid)
 		}
 		return &pssd, true
 	}
@@ -3490,7 +3490,7 @@ func (t *Topic) remSession(sess *Session, asUid types.Uid) (*perSessionData, boo
 			if len(pssd.muids) == 0 {
 				delete(t.sessions, s)
 				if s.isMultiplex() && !t.remProxiedSession(s) {
-					log.Printf("topic[%s]: multiplex session %s not removed from the event loop: no more attached uids", t.name, s.sid)
+					logs.Err.Printf("topic[%s]: multiplex session %s not removed from the event loop: no more attached uids", t.name, s.sid)
 				}
 				return &pssd, true
 			} else {

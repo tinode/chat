@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"net"
 	"path/filepath"
 	"reflect"
@@ -20,6 +19,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/tinode/chat/server/auth"
+	"github.com/tinode/chat/server/logs"
 	"github.com/tinode/chat/server/store"
 	"github.com/tinode/chat/server/store/types"
 
@@ -457,7 +457,7 @@ func rewriteTag(orig, countryCode string, withLogin bool) string {
 		return orig
 	}
 
-	log.Printf("invalid generic tag '%s'", orig)
+	logs.Warn.Printf("invalid generic tag '%s'", orig)
 
 	return ""
 }

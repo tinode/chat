@@ -6,11 +6,12 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"net/http"
 	"path"
 	"runtime/pprof"
 	"strings"
+
+	"github.com/tinode/chat/server/logs"
 )
 
 var pprofHttpRoot string
@@ -24,7 +25,7 @@ func servePprof(mux *http.ServeMux, serveAt string) {
 	pprofHttpRoot = path.Clean("/"+serveAt) + "/"
 	mux.HandleFunc(pprofHttpRoot, profileHandler)
 
-	log.Printf("pprof: profiling info exposed at '%s'", pprofHttpRoot)
+	logs.Info.Printf("pprof: profiling info exposed at '%s'", pprofHttpRoot)
 }
 
 func profileHandler(wrt http.ResponseWriter, req *http.Request) {
