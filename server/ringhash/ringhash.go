@@ -6,9 +6,10 @@ import (
 	"encoding/ascii85"
 	"hash/crc32"
 	"hash/fnv"
-	"log"
 	"sort"
 	"strconv"
+
+	"github.com/tinode/chat/server/logs"
 )
 
 // Hash is a signature of a hash function used by the package.
@@ -128,6 +129,6 @@ func (ring *Ring) Signature() string {
 
 func (ring *Ring) dump() {
 	for _, e := range ring.keys {
-		log.Printf("key: '%s', hash=%d", e.key, e.hash)
+		logs.Info.Printf("key: '%s', hash=%d", e.key, e.hash)
 	}
 }

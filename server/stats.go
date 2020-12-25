@@ -8,11 +8,12 @@ package main
 import (
 	"encoding/json"
 	"expvar"
-	"log"
 	"net/http"
 	"runtime"
 	"sort"
 	"time"
+
+	"github.com/tinode/chat/server/logs"
 )
 
 // A simple implementation of histogram expvar.Var.
@@ -70,7 +71,7 @@ func statsInit(mux *http.ServeMux, path string) {
 
 	go statsUpdater()
 
-	log.Printf("stats: variables exposed at '%s'", path)
+	logs.Info.Printf("stats: variables exposed at '%s'", path)
 }
 
 // Register integer variable. Don't check for initialization.
@@ -148,12 +149,12 @@ func statsUpdater() {
 				val := upd.value.(float64)
 				v.addSample(val)
 			default:
-				log.Panicf("stats: unsupported expvar type %T", ev)
+				logs.Err.Panicf("stats: unsupported expvar type %T", ev)
 			}
 		} else {
 			panic("stats: update to unknown variable " + upd.varname)
 		}
 	}
 
-	log.Println("stats: shutdown")
+	logs.Info.Println("stats: shutdown")
 }

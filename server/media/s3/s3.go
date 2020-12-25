@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"log"
 	"mime"
 	"net/http"
 	"sync/atomic"
@@ -19,6 +18,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 
+	"github.com/tinode/chat/server/logs"
 	"github.com/tinode/chat/server/media"
 	"github.com/tinode/chat/server/store"
 	"github.com/tinode/chat/server/store/types"
@@ -189,7 +189,7 @@ func (ah *awshandler) Upload(fdef *types.FileDef, file io.ReadSeeker) (string, e
 	uploader := s3manager.NewUploaderWithClient(ah.svc)
 
 	if err = store.Files.StartUpload(fdef); err != nil {
-		log.Println("failed to create file record", fdef.Id, err)
+		logs.Warn.Println("failed to create file record", fdef.Id, err)
 		return "", err
 	}
 
@@ -221,7 +221,7 @@ func (ah *awshandler) Upload(fdef *types.FileDef, file io.ReadSeeker) (string, e
 		fname += ext[0]
 	}
 
-	log.Println("aws upload success ", fname, "key", key, "id", fdef.Id)
+	logs.Info.Println("aws upload success ", fname, "key", key, "id", fdef.Id)
 
 	return ah.conf.ServeURL + fname, nil
 }

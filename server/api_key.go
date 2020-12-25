@@ -13,7 +13,8 @@ import (
 	"crypto/hmac"
 	"crypto/md5"
 	"encoding/base64"
-	"log"
+
+	"github.com/tinode/chat/server/logs"
 )
 
 // Singned AppID. Composition:
@@ -46,11 +47,11 @@ func checkAPIKey(apikey string) (isValid, isRoot bool) {
 
 	data, err := base64.URLEncoding.DecodeString(apikey)
 	if err != nil {
-		log.Println("failed to decode.base64 appid ", err)
+		logs.Warn.Println("failed to decode.base64 appid ", err)
 		return
 	}
 	if data[0] != 1 {
-		log.Println("unknown appid signature algorithm ", data[0])
+		logs.Warn.Println("unknown appid signature algorithm ", data[0])
 		return
 	}
 
@@ -58,7 +59,7 @@ func checkAPIKey(apikey string) (isValid, isRoot bool) {
 	hasher.Write(data[:apikeyVersion+apikeyAppID+apikeySequence+apikeyWho])
 	check := hasher.Sum(nil)
 	if !bytes.Equal(data[apikeyVersion+apikeyAppID+apikeySequence+apikeyWho:], check) {
-		log.Println("invalid apikey signature")
+		logs.Warn.Println("invalid apikey signature")
 		return
 	}
 

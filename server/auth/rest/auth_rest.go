@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -14,6 +13,7 @@ import (
 	"time"
 
 	"github.com/tinode/chat/server/auth"
+	"github.com/tinode/chat/server/logs"
 	"github.com/tinode/chat/server/store"
 	"github.com/tinode/chat/server/store/types"
 )
@@ -179,7 +179,7 @@ func (a *authenticator) Authenticate(secret []byte, remoteAddr string) (*auth.Re
 
 	// Auth record not found.
 	if resp.Record == nil {
-		log.Println("rest_auth: invalid response: missing Record")
+		logs.Warn.Println("rest_auth: invalid response: missing Record")
 		return nil, nil, types.ErrInternal
 	}
 
@@ -276,7 +276,7 @@ func (a *authenticator) RestrictedTags() ([]string, error) {
 	if len(resp.ByteVal) > 0 {
 		a.reToken, err = regexp.Compile(string(resp.ByteVal))
 		if err != nil {
-			log.Println("rest_auth: invalid token regexp", string(resp.ByteVal))
+			logs.Warn.Println("rest_auth: invalid token regexp", string(resp.ByteVal))
 		}
 	}
 	return resp.StrSliceVal, nil

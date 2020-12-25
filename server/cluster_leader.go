@@ -1,11 +1,12 @@
 package main
 
 import (
-	"log"
 	"math/rand"
 	"net/rpc"
 	"sync"
 	"time"
+
+	"github.com/tinode/chat/server/logs"
 )
 
 // Cluster methods related to leader node election. Based on ideas from Raft protocol.
@@ -89,7 +90,7 @@ func (c *Cluster) failoverInit(config *clusterFailoverConfig) bool {
 		return false
 	}
 	if len(c.nodes) < 2 {
-		log.Printf("cluster: failover disabled; need at least 3 nodes, got %d", len(c.nodes)+1)
+		logs.Err.Printf("cluster: failover disabled; need at least 3 nodes, got %d", len(c.nodes)+1)
 		return false
 	}
 
@@ -116,7 +117,7 @@ func (c *Cluster) failoverInit(config *clusterFailoverConfig) bool {
 		electionVote:       make(chan *ClusterVote, len(c.nodes)),
 		done:               make(chan bool, 1)}
 
-	log.Println("cluster: failover mode enabled")
+	logs.Info.Println("cluster: failover mode enabled")
 
 	return true
 }
@@ -185,7 +186,7 @@ func (c *Cluster) sendHealthChecks() {
 		c.invalidateProxySubs("")
 		c.gcProxySessions(activeNodes)
 
-		log.Println("cluster: initiating failover rehash for nodes", activeNodes)
+		logs.Info.Println("cluster: initiating failover rehash for nodes", activeNodes)
 		globals.hub.rehash <- true
 	}
 }
@@ -198,7 +199,7 @@ func (c *Cluster) electLeader() {
 	// Make sure the current node does not report itself as a leader.
 	statsSet("ClusterLeader", 0)
 
-	log.Println("cluster: leading new election for term", c.fo.term)
+	logs.Info.Println("cluster: leading new election for term", c.fo.term)
 
 	nodeCount := len(c.nodes)
 	// Number of votes needed to elect the leader
@@ -245,7 +246,7 @@ func (c *Cluster) electLeader() {
 		// Current node elected as the leader.
 		c.fo.leader = c.thisNodeName
 		statsSet("ClusterLeader", 1)
-		log.Printf("'%s' elected self as a new leader", c.thisNodeName)
+		logs.Info.Printf("'%s' elected self as a new leader", c.thisNodeName)
 	}
 }
 
@@ -281,21 +282,21 @@ func (c *Cluster) run() {
 
 			if health.Term < c.fo.term {
 				// This is a health check from a stale leader. Ignore.
-				log.Println("cluster: health check from a stale leader", health.Term, c.fo.term, health.Leader, c.fo.leader)
+				logs.Warn.Println("cluster: health check from a stale leader", health.Term, c.fo.term, health.Leader, c.fo.leader)
 				continue
 			}
 
 			if health.Term > c.fo.term {
 				c.fo.term = health.Term
 				c.fo.leader = health.Leader
-				log.Printf("cluster: leader '%s' elected", c.fo.leader)
+				logs.Info.Printf("cluster: leader '%s' elected", c.fo.leader)
 			} else if health.Leader != c.fo.leader {
 				if c.fo.leader != "" {
 					// Wrong leader. It's a bug, should never happen!
-					log.Printf("cluster: wrong leader '%s' while expecting '%s'; term %d",
+					logs.Err.Printf("cluster: wrong leader '%s' while expecting '%s'; term %d",
 						health.Leader, c.fo.leader, health.Term)
 				} else {
-					log.Printf("cluster: leader set to '%s'", health.Leader)
+					logs.Info.Printf("cluster: leader set to '%s'", health.Leader)
 				}
 				c.fo.leader = health.Leader
 			}
@@ -306,7 +307,7 @@ func (c *Cluster) run() {
 			missed = 0
 			if health.Signature != c.ring.Signature() {
 				if rehashSkipped {
-					log.Println("cluster: rehashing at a request of",
+					logs.Info.Println("cluster: rehashing at a request of",
 						health.Leader, health.Nodes, health.Signature, c.ring.Signature())
 					c.rehash(health.Nodes)
 					c.invalidateProxySubs("")
@@ -323,7 +324,7 @@ func (c *Cluster) run() {
 			if c.fo.term < vreq.req.Term {
 				// This is a new election. This node has not voted yet. Vote for the requestor and
 				// clear the current leader.
-				log.Printf("Voting YES for %s, my term %d, vote term %d", vreq.req.Node, c.fo.term, vreq.req.Term)
+				logs.Info.Printf("Voting YES for %s, my term %d, vote term %d", vreq.req.Node, c.fo.term, vreq.req.Term)
 				c.fo.term = vreq.req.Term
 				c.fo.leader = ""
 				// Election means these is no leader yet.
@@ -331,7 +332,7 @@ func (c *Cluster) run() {
 				vreq.resp <- ClusterVoteResponse{Result: true, Term: c.fo.term}
 			} else {
 				// This node has voted already or stale election, reject.
-				log.Printf("Voting NO for %s, my term %d, vote term %d", vreq.req.Node, c.fo.term, vreq.req.Term)
+				logs.Info.Printf("Voting NO for %s, my term %d, vote term %d", vreq.req.Node, c.fo.term, vreq.req.Term)
 				vreq.resp <- ClusterVoteResponse{Result: false, Term: c.fo.term}
 			}
 		case <-c.fo.done:

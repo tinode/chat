@@ -9,10 +9,10 @@
 package main
 
 import (
-	"log"
 	"strings"
 
 	"github.com/tinode/chat/server/auth"
+	"github.com/tinode/chat/server/logs"
 	"github.com/tinode/chat/server/store"
 	"github.com/tinode/chat/server/store/types"
 )
@@ -62,7 +62,7 @@ func topicInit(t *Topic, join *sessionJoin, h *Hub) {
 		// Remove topic from cache to prevent hub from forwarding more messages to it.
 		h.topicDel(join.pkt.RcptTo)
 
-		log.Println("init_topic: failed to load or create topic:", join.pkt.RcptTo, err)
+		logs.Err.Println("init_topic: failed to load or create topic:", join.pkt.RcptTo, err)
 		join.sess.queueOut(decodeStoreErrorExplicitTs(err, join.pkt.Id, t.xoriginal, timestamp, join.pkt.Timestamp, nil))
 
 		// Re-queue pending requests to join the topic.
@@ -247,7 +247,7 @@ func initTopicP2P(t *Topic, sreg *sessionJoin) error {
 
 		// Case 3, fail
 		if len(subs) == 0 {
-			log.Println("hub: missing both subscriptions for '" + t.name + "' (SHOULD NEVER HAPPEN!)")
+			logs.Err.Println("hub: missing both subscriptions for '" + t.name + "' (SHOULD NEVER HAPPEN!)")
 			return types.ErrInternal
 		}
 
@@ -346,7 +346,7 @@ func initTopicP2P(t *Topic, sreg *sessionJoin) error {
 				// The other user is assumed to have auth level "Auth".
 				sub2.ModeGiven = users[u1].Access.Auth
 				if err := sub2.ModeGiven.UnmarshalText([]byte(pktsub.Set.Desc.DefaultAcs.Auth)); err != nil {
-					log.Println("hub: invalid access mode", t.xoriginal, pktsub.Set.Desc.DefaultAcs.Auth)
+					logs.Err.Println("hub: invalid access mode", t.xoriginal, pktsub.Set.Desc.DefaultAcs.Auth)
 				}
 			} else {
 				// Use user1.Auth as modeGiven for the other user
@@ -385,11 +385,11 @@ func initTopicP2P(t *Topic, sreg *sessionJoin) error {
 
 					if uid != userID1 {
 						// Report the error and ignore the value
-						log.Println("hub: setting mode for another user is not supported '" + t.name + "'")
+						logs.Err.Println("hub: setting mode for another user is not supported '" + t.name + "'")
 					} else {
 						// user1 is setting non-default modeWant
 						if err := userData.modeWant.UnmarshalText([]byte(pktsub.Set.Sub.Mode)); err != nil {
-							log.Println("hub: invalid access mode", t.xoriginal, pktsub.Set.Sub.Mode)
+							logs.Err.Println("hub: invalid access mode", t.xoriginal, pktsub.Set.Sub.Mode)
 						}
 						// Ensure sanity
 						userData.modeWant = userData.modeWant&types.ModeCP2P | types.ModeApprove
@@ -531,9 +531,9 @@ func initTopicNewGrp(t *Topic, sreg *sessionJoin, isChan bool) error {
 					} else {
 						t.accessAnon = anonMode
 					}
-					log.Println("hub: invalid access mode for topic '" + t.name + "': '" + err.Error() + "'")
+					logs.Err.Println("hub: invalid access mode for topic '" + t.name + "': '" + err.Error() + "'")
 				} else if authMode.IsOwner() || anonMode.IsOwner() {
-					log.Println("hub: OWNER default access in topic '" + t.name)
+					logs.Err.Println("hub: OWNER default access in topic '" + t.name)
 					t.accessAuth, t.accessAnon = authMode & ^types.ModeOwner, anonMode & ^types.ModeOwner
 				} else {
 					t.accessAuth, t.accessAnon = authMode, anonMode
@@ -545,7 +545,7 @@ func initTopicNewGrp(t *Topic, sreg *sessionJoin, isChan bool) error {
 		if pktsub.Set.Sub != nil && pktsub.Set.Sub.Mode != "" {
 			userData.modeWant = types.ModeCFull
 			if err := userData.modeWant.UnmarshalText([]byte(pktsub.Set.Sub.Mode)); err != nil {
-				log.Println("hub: invalid access mode", t.xoriginal, pktsub.Set.Sub.Mode)
+				logs.Err.Println("hub: invalid access mode", t.xoriginal, pktsub.Set.Sub.Mode)
 			}
 			// User must not unset ModeJoin or the owner flags
 			userData.modeWant |= types.ModeJoin | types.ModeOwner

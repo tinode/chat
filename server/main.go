@@ -13,7 +13,6 @@ package main
 import (
 	"encoding/json"
 	"flag"
-	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -38,6 +37,8 @@ import (
 	_ "github.com/tinode/chat/server/db/mongodb"
 	_ "github.com/tinode/chat/server/db/mysql"
 	_ "github.com/tinode/chat/server/db/rethinkdb"
+
+	"github.com/tinode/chat/server/logs"
 
 	// Push notifications
 	"github.com/tinode/chat/server/push"
@@ -255,17 +256,7 @@ type configType struct {
 func main() {
 	executable, _ := os.Executable()
 
-	// Prepend log lines with file name and line number.
-	log.SetFlags(log.LstdFlags | log.Lshortfile)
-
-	// All relative paths are resolved against the executable path, not against current working directory.
-	// Absolute paths are left unchanged.
-	rootpath, _ := filepath.Split(executable)
-
-	log.Printf("Server v%s:%s:%s; pid %d; %d process(es)",
-		currentVersion, executable, buildstamp,
-		os.Getpid(), runtime.GOMAXPROCS(runtime.NumCPU()))
-
+	var logFlags = flag.String("log_flags", "stdFlags", "Comma-separated list of log flags (as defined in https://golang.org/pkg/log/#pkg-constants without the L prefix)")
 	var configfile = flag.String("config", "tinode.conf", "Path to config file.")
 	// Path to static content.
 	var staticPath = flag.String("static_data", defaultStaticPath, "File path to directory with static files to be served.")
@@ -279,26 +270,36 @@ func main() {
 	var pprofUrl = flag.String("pprof_url", "", "Debugging only! URL path for exposing profiling info. Disabled if not set.")
 	flag.Parse()
 
+	logs.Init(os.Stderr, *logFlags)
+
+	// All relative paths are resolved against the executable path, not against current working directory.
+	// Absolute paths are left unchanged.
+	rootpath, _ := filepath.Split(executable)
+
+	logs.Info.Printf("Server v%s:%s:%s; pid %d; %d process(es)",
+		currentVersion, executable, buildstamp,
+		os.Getpid(), runtime.GOMAXPROCS(runtime.NumCPU()))
+
 	*configfile = toAbsolutePath(rootpath, *configfile)
-	log.Printf("Using config from '%s'", *configfile)
+	logs.Info.Printf("Using config from '%s'", *configfile)
 
 	var config configType
 	if file, err := os.Open(*configfile); err != nil {
-		log.Fatal("Failed to read config file: ", err)
+		logs.Err.Fatal("Failed to read config file: ", err)
 	} else {
 		jr := jcr.New(file)
 		if err = json.NewDecoder(jr).Decode(&config); err != nil {
 			switch jerr := err.(type) {
 			case *json.UnmarshalTypeError:
 				lnum, cnum, _ := jr.LineAndChar(jerr.Offset)
-				log.Fatalf("Unmarshall error in config file in %s at %d:%d (offset %d bytes): %s",
+				logs.Err.Fatalf("Unmarshall error in config file in %s at %d:%d (offset %d bytes): %s",
 					jerr.Field, lnum, cnum, jerr.Offset, jerr.Error())
 			case *json.SyntaxError:
 				lnum, cnum, _ := jr.LineAndChar(jerr.Offset)
-				log.Fatalf("Syntax error in config file at %d:%d (offset %d bytes): %s",
+				logs.Err.Fatalf("Syntax error in config file at %d:%d (offset %d bytes): %s",
 					lnum, cnum, jerr.Offset, jerr.Error())
 			default:
-				log.Fatal("Failed to parse config file: ", err)
+				logs.Err.Fatal("Failed to parse config file: ", err)
 			}
 		}
 		file.Close()
@@ -336,13 +337,13 @@ func main() {
 
 		cpuf, err := os.Create(*pprofFile + ".cpu")
 		if err != nil {
-			log.Fatal("Failed to create CPU pprof file: ", err)
+			logs.Err.Fatal("Failed to create CPU pprof file: ", err)
 		}
 		defer cpuf.Close()
 
 		memf, err := os.Create(*pprofFile + ".mem")
 		if err != nil {
-			log.Fatal("Failed to create Mem pprof file: ", err)
+			logs.Err.Fatal("Failed to create Mem pprof file: ", err)
 		}
 		defer memf.Close()
 
@@ -350,18 +351,18 @@ func main() {
 		defer pprof.StopCPUProfile()
 		defer pprof.WriteHeapProfile(memf)
 
-		log.Printf("Profiling info saved to '%s.(cpu|mem)'", *pprofFile)
+		logs.Info.Printf("Profiling info saved to '%s.(cpu|mem)'", *pprofFile)
 	}
 
 	err := store.Open(workerId, config.Store)
 	if err != nil {
-		log.Fatal("Failed to connect to DB: ", err)
+		logs.Err.Fatal("Failed to connect to DB: ", err)
 	}
-	log.Println("DB adapter", store.GetAdapterName())
+	logs.Info.Println("DB adapter", store.GetAdapterName())
 	defer func() {
 		store.Close()
-		log.Println("Closed database connection(s)")
-		log.Println("All done, good bye")
+		logs.Info.Println("Closed database connection(s)")
+		logs.Info.Println("All done, good bye")
 	}()
 
 	// API key signing secret
@@ -369,7 +370,7 @@ func main() {
 
 	err = store.InitAuthLogicalNames(config.Auth["logical_names"])
 	if err != nil {
-		log.Fatal(err)
+		logs.Err.Fatal(err)
 	}
 
 	// List of tag namespaces for user discovery which cannot be changed directly
@@ -379,18 +380,18 @@ func main() {
 	authNames := store.GetAuthNames()
 	for _, name := range authNames {
 		if authhdl := store.GetLogicalAuthHandler(name); authhdl == nil {
-			log.Fatalln("Unknown authenticator", name)
+			logs.Err.Fatalln("Unknown authenticator", name)
 		} else if jsconf := config.Auth[name]; jsconf != nil {
 			if err := authhdl.Init(jsconf, name); err != nil {
-				log.Fatalln("Failed to init auth scheme", name+":", err)
+				logs.Err.Fatalln("Failed to init auth scheme", name+":", err)
 			}
 			tags, err := authhdl.RestrictedTags()
 			if err != nil {
-				log.Fatalln("Failed get restricted tag namespaces (prefixes)", name+":", err)
+				logs.Err.Fatalln("Failed get restricted tag namespaces (prefixes)", name+":", err)
 			}
 			for _, tag := range tags {
 				if strings.Contains(tag, ":") {
-					log.Fatalln("tags restricted by auth handler should not contain character ':'", tag)
+					logs.Err.Fatalln("tags restricted by auth handler should not contain character ':'", tag)
 				}
 				globals.immutableTagNS[tag] = true
 			}
@@ -403,7 +404,7 @@ func main() {
 		// The namespace can be restricted even if the validator is disabled.
 		if vconf.AddToTags {
 			if strings.Contains(name, ":") {
-				log.Fatalln("acc_validation names should not contain character ':'", name)
+				logs.Err.Fatalln("acc_validation names should not contain character ':'", name)
 			}
 			globals.immutableTagNS[name] = true
 		}
@@ -418,7 +419,7 @@ func main() {
 			lvl := auth.ParseAuthLevel(req)
 			if lvl == auth.LevelNone {
 				if req != "" {
-					log.Fatalf("Invalid required AuthLevel '%s' in validator '%s'", req, name)
+					logs.Err.Fatalf("Invalid required AuthLevel '%s' in validator '%s'", req, name)
 				}
 				// Skip empty string
 				continue
@@ -436,9 +437,9 @@ func main() {
 		}
 
 		if val := store.GetValidator(name); val == nil {
-			log.Fatal("Config provided for an unknown validator '" + name + "'")
+			logs.Err.Fatal("Config provided for an unknown validator '" + name + "'")
 		} else if err = val.Init(string(vconf.Config)); err != nil {
-			log.Fatal("Failed to init validator '"+name+"': ", err)
+			logs.Err.Fatal("Failed to init validator '"+name+"': ", err)
 		}
 		if globals.validators == nil {
 			globals.validators = make(map[string]credValidator)
@@ -452,7 +453,7 @@ func main() {
 	globals.maskedTagNS = make(map[string]bool, len(config.MaskedTagNamespaces))
 	for _, tag := range config.MaskedTagNamespaces {
 		if strings.Contains(tag, ":") {
-			log.Fatal("masked_tags namespaces should not contain character ':'", tag)
+			logs.Err.Fatal("masked_tags namespaces should not contain character ':'", tag)
 		}
 		globals.maskedTagNS[tag] = true
 	}
@@ -462,14 +463,14 @@ func main() {
 		tags = append(tags, "'"+tag+"'")
 	}
 	if len(tags) > 0 {
-		log.Println("Restricted tags:", tags)
+		logs.Info.Println("Restricted tags:", tags)
 	}
 	tags = nil
 	for tag := range globals.maskedTagNS {
 		tags = append(tags, "'"+tag+"'")
 	}
 	if len(tags) > 0 {
-		log.Println("Masked tags:", tags)
+		logs.Info.Println("Masked tags:", tags)
 	}
 
 	// Maximum message size
@@ -505,7 +506,7 @@ func main() {
 					conf = string(params)
 				}
 				if err = store.UseMediaHandler(config.Media.UseHandler, conf); err != nil {
-					log.Fatalf("Failed to init media handler '%s': %s", config.Media.UseHandler, err)
+					logs.Err.Fatalf("Failed to init media handler '%s': %s", config.Media.UseHandler, err)
 				}
 			}
 			if config.Media.GcPeriod > 0 && config.Media.GcBlockSize > 0 {
@@ -513,7 +514,7 @@ func main() {
 					config.Media.GcBlockSize)
 				defer func() {
 					stopFilesGc <- true
-					log.Println("Stopped files garbage collector")
+					logs.Info.Println("Stopped files garbage collector")
 				}()
 			}
 		}
@@ -521,11 +522,11 @@ func main() {
 
 	err = push.Init(string(config.Push))
 	if err != nil {
-		log.Fatal("Failed to initialize push notifications:", err)
+		logs.Err.Fatal("Failed to initialize push notifications:", err)
 	}
 	defer func() {
 		push.Stop()
-		log.Println("Stopped push notifications")
+		logs.Info.Println("Stopped push notifications")
 	}()
 
 	// Keep inactive LP sessions for 15 seconds
@@ -540,7 +541,7 @@ func main() {
 
 	tlsConfig, err := parseTLSConfig(*tlsEnabled, config.TLS)
 	if err != nil {
-		log.Fatalln(err)
+		logs.Err.Fatalln(err)
 	}
 
 	// Intialize plugins
@@ -554,7 +555,7 @@ func main() {
 		*listenGrpc = config.GrpcListen
 	}
 	if globals.grpcServer, err = serveGrpc(*listenGrpc, config.GrpcKeepalive, tlsConfig); err != nil {
-		log.Fatal(err)
+		logs.Err.Fatal(err)
 	}
 
 	// Serve static content from the directory in -static_data flag if that's
@@ -566,7 +567,7 @@ func main() {
 		// Resolve path to static content.
 		*staticPath = toAbsolutePath(rootpath, *staticPath)
 		if _, err = os.Stat(*staticPath); os.IsNotExist(err) {
-			log.Fatal("Static content directory is not found", *staticPath)
+			logs.Err.Fatal("Static content directory is not found", *staticPath)
 		}
 
 		staticMountPoint = config.StaticMount
@@ -592,9 +593,9 @@ func main() {
 							// Remove mount point prefix
 							http.StripPrefix(staticMountPoint,
 								http.FileServer(http.Dir(*staticPath))))))))
-		log.Printf("Serving static content from '%s' at '%s'", *staticPath, staticMountPoint)
+		logs.Info.Printf("Serving static content from '%s' at '%s'", *staticPath, staticMountPoint)
 	} else {
-		log.Println("Static content is disabled")
+		logs.Info.Println("Static content is disabled")
 	}
 
 	// Configure root path for serving API calls.
@@ -611,7 +612,7 @@ func main() {
 			config.ApiPath += "/"
 		}
 	}
-	log.Printf("API served from root URL path '%s'", config.ApiPath)
+	logs.Info.Printf("API served from root URL path '%s'", config.ApiPath)
 
 	// Handle websocket clients.
 	mux.HandleFunc(config.ApiPath+"v0/channels", serveWebSocket)
@@ -622,7 +623,7 @@ func main() {
 		mux.Handle(config.ApiPath+"v0/file/u/", gh.CompressHandler(http.HandlerFunc(largeFileReceive)))
 		// Serve large files.
 		mux.Handle(config.ApiPath+"v0/file/s/", gh.CompressHandler(http.HandlerFunc(largeFileServe)))
-		log.Println("Large media handling enabled", config.Media.UseHandler)
+		logs.Info.Println("Large media handling enabled", config.Media.UseHandler)
 	}
 
 	if staticMountPoint != "/" {
@@ -631,6 +632,6 @@ func main() {
 	}
 
 	if err = listenAndServe(config.Listen, mux, tlsConfig, signalHandler()); err != nil {
-		log.Fatal(err)
+		logs.Err.Fatal(err)
 	}
 }

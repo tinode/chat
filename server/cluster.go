@@ -4,7 +4,6 @@ import (
 	"encoding/gob"
 	"encoding/json"
 	"errors"
-	"log"
 	"net"
 	"net/rpc"
 	"reflect"
@@ -14,6 +13,7 @@ import (
 	"time"
 
 	"github.com/tinode/chat/server/auth"
+	"github.com/tinode/chat/server/logs"
 	"github.com/tinode/chat/server/push"
 	rh "github.com/tinode/chat/server/ringhash"
 	"github.com/tinode/chat/server/store/types"
@@ -256,7 +256,7 @@ func (n *ClusterNode) reconnect() {
 			n.reconnecting = false
 			n.lock.Unlock()
 			statsInc("LiveClusterNodes", 1)
-			log.Println("cluster: connected to", n.name)
+			logs.Info.Println("cluster: connected to", n.name)
 			// Send this node credentials to the new node.
 			var unused bool
 			n.call("Cluster.Ping", &ClusterPing{
@@ -274,7 +274,7 @@ func (n *ClusterNode) reconnect() {
 			// Wait for timer to try to reconnect again. Do nothing if the timer is inactive.
 		case <-n.done:
 			// Shutting down
-			log.Println("cluster: shutdown started at node", n.name)
+			logs.Info.Println("cluster: shutdown started at node", n.name)
 			reconnTicker.Stop()
 			if n.endpoint != nil {
 				n.endpoint.Close()
@@ -283,7 +283,7 @@ func (n *ClusterNode) reconnect() {
 			n.connected = false
 			n.reconnecting = false
 			n.lock.Unlock()
-			log.Println("cluster: shut down completed at node", n.name)
+			logs.Info.Println("cluster: shut down completed at node", n.name)
 			return
 		}
 	}
@@ -295,7 +295,7 @@ func (n *ClusterNode) call(proc string, req, resp interface{}) error {
 	}
 
 	if err := n.endpoint.Call(proc, req, resp); err != nil {
-		log.Println("cluster: call failed", n.name, err)
+		logs.Warn.Println("cluster: call failed", n.name, err)
 
 		n.lock.Lock()
 		if n.connected {
@@ -313,7 +313,7 @@ func (n *ClusterNode) call(proc string, req, resp interface{}) error {
 
 func (n *ClusterNode) handleRpcResponse(call *rpc.Call) {
 	if call.Error != nil {
-		log.Printf("cluster: %s call failed: %s", call.ServiceMethod, call.Error)
+		logs.Warn.Printf("cluster: %s call failed: %s", call.ServiceMethod, call.Error)
 		n.lock.Lock()
 		if n.connected {
 			n.endpoint.Close()
@@ -327,7 +327,7 @@ func (n *ClusterNode) handleRpcResponse(call *rpc.Call) {
 
 func (n *ClusterNode) callAsync(proc string, req, resp interface{}, done chan *rpc.Call) *rpc.Call {
 	if done != nil && cap(done) == 0 {
-		log.Panic("cluster: RPC done channel is unbuffered")
+		logs.Err.Panic("cluster: RPC done channel is unbuffered")
 	}
 
 	if !n.connected {
@@ -425,7 +425,7 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 
 	node := c.nodes[msg.Node]
 	if node == nil {
-		log.Println("cluster TopicMaster: request from an unknown node", msg.Node)
+		logs.Warn.Println("cluster TopicMaster: request from an unknown node", msg.Node)
 		return nil
 	}
 
@@ -447,7 +447,7 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 	}
 
 	if msg.Signature != c.ring.Signature() {
-		log.Println("cluster TopicMaster: session signature mismatch", msg.RcptTo)
+		logs.Warn.Println("cluster TopicMaster: session signature mismatch", msg.RcptTo)
 		*rejected = true
 		return nil
 	}
@@ -461,7 +461,7 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 		node.msess[msid] = struct{}{}
 		node.lock.Unlock()
 
-		log.Println("cluster: multiplexing session started", msid, count)
+		logs.Info.Println("cluster: multiplexing session started", msid, count)
 	}
 
 	// This is a local copy of a remote session.
@@ -496,7 +496,7 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 		default:
 			// Reply with a 500 to the user.
 			sess.queueOut(ErrUnknownReply(msg.CliMsg, msg.CliMsg.Timestamp))
-			log.Println("cluster: join req failed - hub.join queue full, topic ", msg.CliMsg.RcptTo, "; orig sid ", sess.sid)
+			logs.Warn.Println("cluster: join req failed - hub.join queue full, topic ", msg.CliMsg.RcptTo, "; orig sid ", sess.sid)
 		}
 
 	case ProxyReqLeave:
@@ -506,7 +506,7 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 				sess: sess,
 			}
 		} else {
-			log.Println("cluster: leave request for unknown topic", msg.RcptTo)
+			logs.Warn.Println("cluster: leave request for unknown topic", msg.RcptTo)
 		}
 
 	case ProxyReqMeta:
@@ -518,10 +518,10 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 				}:
 			default:
 				sess.queueOut(ErrUnknownReply(msg.CliMsg, msg.CliMsg.Timestamp))
-				log.Println("cluster: meta req failed - topic.meta queue full, topic ", msg.CliMsg.RcptTo, "; orig sid ", sess.sid)
+				logs.Warn.Println("cluster: meta req failed - topic.meta queue full, topic ", msg.CliMsg.RcptTo, "; orig sid ", sess.sid)
 			}
 		} else {
-			log.Println("cluster: meta request for unknown topic", msg.RcptTo)
+			logs.Warn.Println("cluster: meta request for unknown topic", msg.RcptTo)
 		}
 
 	case ProxyReqBroadcast:
@@ -530,13 +530,13 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 		select {
 		case globals.hub.route <- msg.SrvMsg:
 		default:
-			log.Println("cluster: route req failed - hub.route queue full")
+			logs.Err.Println("cluster: route req failed - hub.route queue full")
 		}
 
 	case ProxyReqBgSession, ProxyReqMeUserAgent:
 		if t := globals.hub.topicGet(msg.RcptTo); t != nil {
 			if t.supd == nil {
-				log.Panicln("cluster: invalid topic category in session update", t.name, msg.ReqType)
+				logs.Err.Panicln("cluster: invalid topic category in session update", t.name, msg.ReqType)
 			}
 			su := &sessionUpdate{}
 			if msg.ReqType == ProxyReqBgSession {
@@ -546,11 +546,11 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 			}
 			t.supd <- su
 		} else {
-			log.Println("cluster: session update for unknown topic", msg.RcptTo, msg.ReqType)
+			logs.Warn.Println("cluster: session update for unknown topic", msg.RcptTo, msg.ReqType)
 		}
 
 	default:
-		log.Println("cluster: unknown request type", msg.ReqType, msg.RcptTo)
+		logs.Warn.Println("cluster: unknown request type", msg.ReqType, msg.RcptTo)
 		*rejected = true
 	}
 
@@ -565,7 +565,7 @@ func (Cluster) TopicProxy(msg *ClusterResp, unused *bool) error {
 		msg.SrvMsg.uid = types.ParseUserId(msg.SrvMsg.AsUser)
 		t.proxy <- msg
 	} else {
-		log.Println("cluster: master response for unknown topic", msg.RcptTo)
+		logs.Warn.Println("cluster: master response for unknown topic", msg.RcptTo)
 	}
 
 	return nil
@@ -580,7 +580,7 @@ func (c *Cluster) Route(msg *ClusterRoute, rejected *bool) error {
 		if msg.Sess != nil {
 			sid = msg.Sess.Sid
 		}
-		log.Println("cluster Route: session signature mismatch", sid)
+		logs.Warn.Println("cluster Route: session signature mismatch", sid)
 		*rejected = true
 		return nil
 	}
@@ -590,7 +590,7 @@ func (c *Cluster) Route(msg *ClusterRoute, rejected *bool) error {
 			sid = msg.Sess.Sid
 		}
 		// TODO: maybe panic here.
-		log.Println("cluster Route: nil server message", sid)
+		logs.Warn.Println("cluster Route: nil server message", sid)
 		*rejected = true
 		return nil
 	}
@@ -621,7 +621,7 @@ func (c *Cluster) UserCacheUpdate(msg *UserCacheReq, rejected *bool) error {
 func (c *Cluster) Ping(ping *ClusterPing, unused *bool) error {
 	node := c.nodes[ping.Node]
 	if node == nil {
-		log.Println("cluster Ping from unknown node", ping.Node)
+		logs.Warn.Println("cluster Ping from unknown node", ping.Node)
 		return nil
 	}
 
@@ -717,14 +717,14 @@ func (c *Cluster) routeUserReq(req *UserCacheReq) error {
 func (c *Cluster) nodeForTopic(topic string) *ClusterNode {
 	key := c.ring.Get(topic)
 	if key == c.thisNodeName {
-		log.Println("cluster: request to route to self")
+		logs.Err.Println("cluster: request to route to self")
 		// Do not route to self
 		return nil
 	}
 
 	node := c.nodes[key]
 	if node == nil {
-		log.Println("cluster: no node for topic", topic, key)
+		logs.Warn.Println("cluster: no node for topic", topic, key)
 	}
 	return node
 }
@@ -901,7 +901,7 @@ func (c *Cluster) topicProxyGone(topicName string) error {
 // Returns snowflake worker id
 func clusterInit(configString json.RawMessage, self *string) int {
 	if globals.cluster != nil {
-		log.Fatal("Cluster already initialized.")
+		logs.Err.Fatal("Cluster already initialized.")
 	}
 
 	// Registering variables even if it's a standalone server. Otherwise monitoring software will
@@ -916,13 +916,13 @@ func clusterInit(configString json.RawMessage, self *string) int {
 
 	// This is a standalone server, not initializing
 	if len(configString) == 0 {
-		log.Println("Cluster: running as a standalone server.")
+		logs.Info.Println("Cluster: running as a standalone server.")
 		return 1
 	}
 
 	var config clusterConfig
 	if err := json.Unmarshal(configString, &config); err != nil {
-		log.Fatal(err)
+		logs.Err.Fatal(err)
 	}
 
 	thisName := *self
@@ -932,7 +932,7 @@ func clusterInit(configString json.RawMessage, self *string) int {
 
 	// Name of the current node is not specified: clustering disabled.
 	if thisName == "" {
-		log.Println("Cluster: running as a standalone server.")
+		logs.Info.Println("Cluster: running as a standalone server.")
 		return 1
 	}
 
@@ -943,7 +943,7 @@ func clusterInit(configString json.RawMessage, self *string) int {
 	gob.Register(MsgAccessMode{})
 
 	if config.NumProxyEventGoRoutines != 0 {
-		log.Println("Cluster config: field num_proxy_event_goroutines is deprecated.")
+		logs.Warn.Println("Cluster config: field num_proxy_event_goroutines is deprecated.")
 	}
 
 	globals.cluster = &Cluster{
@@ -970,7 +970,7 @@ func clusterInit(configString json.RawMessage, self *string) int {
 
 	if len(globals.cluster.nodes) == 0 {
 		// Cluster needs at least two nodes.
-		log.Fatal("Cluster: invalid cluster size: 1")
+		logs.Err.Fatal("Cluster: invalid cluster size: 1")
 	}
 
 	if !globals.cluster.failoverInit(config.Failover) {
@@ -988,7 +988,7 @@ func clusterInit(configString json.RawMessage, self *string) int {
 // Proxied session is being closed at the Master node
 func (sess *Session) closeRPC() {
 	if sess.isMultiplex() {
-		log.Println("cluster: session proxy closed", sess.sid)
+		logs.Info.Println("cluster: session proxy closed", sess.sid)
 	}
 }
 
@@ -996,13 +996,13 @@ func (sess *Session) closeRPC() {
 func (c *Cluster) start() {
 	addr, err := net.ResolveTCPAddr("tcp", c.listenOn)
 	if err != nil {
-		log.Fatal(err)
+		logs.Err.Fatal(err)
 	}
 
 	c.inbound, err = net.ListenTCP("tcp", addr)
 
 	if err != nil {
-		log.Fatal(err)
+		logs.Err.Fatal(err)
 	}
 
 	for _, n := range c.nodes {
@@ -1017,12 +1017,12 @@ func (c *Cluster) start() {
 
 	err = rpc.Register(c)
 	if err != nil {
-		log.Fatal(err)
+		logs.Err.Fatal(err)
 	}
 
 	go rpc.Accept(c.inbound)
 
-	log.Printf("Cluster of %d nodes initialized, node '%s' is listening on [%s]", len(globals.cluster.nodes)+1,
+	logs.Info.Printf("Cluster of %d nodes initialized, node '%s' is listening on [%s]", len(globals.cluster.nodes)+1,
 		globals.cluster.thisNodeName, c.listenOn)
 }
 
@@ -1046,7 +1046,7 @@ func (c *Cluster) shutdown() {
 		n.done <- true
 	}
 
-	log.Println("Cluster shut down")
+	logs.Info.Println("Cluster shut down")
 }
 
 // Recalculate the ring hash using provided list of nodes or only nodes in a non-failed state.
@@ -1144,7 +1144,7 @@ func (t *Topic) clusterSelectProxyEvent() (event ProxyEventType, s *Session, val
 	}
 	chosen, value, ok := reflect.Select(t.proxiedChannels)
 	if !ok {
-		log.Printf("topic[%s]: clusterWriteLoop EOF - quitting", t.name)
+		logs.Warn.Printf("topic[%s]: clusterWriteLoop EOF - quitting", t.name)
 		return EventAbort, nil, nil
 	}
 	if chosen == 0 {
@@ -1152,14 +1152,14 @@ func (t *Topic) clusterSelectProxyEvent() (event ProxyEventType, s *Session, val
 		return EventContinue, nil, nil
 	}
 	if len(t.proxiedSessions) == 0 {
-		log.Printf("topic[%s]: clusterWriteLoop - no more proxied sessions (num proxied channels: %d). Quitting.",
+		logs.Info.Printf("topic[%s]: clusterWriteLoop - no more proxied sessions (num proxied channels: %d). Quitting.",
 			t.name, len(t.proxiedChannels))
 		return EventAbort, nil, nil
 	}
 	chosen--
 	sessionIdx := chosen / 3
 	if sessionIdx >= len(t.proxiedSessions) {
-		log.Printf("topic[%s]: clusterWriteLoop - invalid proxiedSessions index %d (num proxied sessions %d)", t.name, chosen, len(t.proxiedSessions))
+		logs.Err.Printf("topic[%s]: clusterWriteLoop - invalid proxiedSessions index %d (num proxied sessions %d)", t.name, chosen, len(t.proxiedSessions))
 		return EventAbort, nil, nil
 	}
 	sess := t.proxiedSessions[sessionIdx]
@@ -1188,7 +1188,7 @@ func (t *Topic) clusterWriteLoop() {
 		}
 	}()
 
-	log.Printf("topic[%s]: starting cluster write loop", t.name)
+	logs.Info.Printf("topic[%s]: starting cluster write loop", t.name)
 	for {
 		// t.m
 		event, sess, value := t.clusterSelectProxyEvent()
@@ -1214,11 +1214,11 @@ func (t *Topic) clusterWriteLoop() {
 					if srvMsg.Data != nil || srvMsg.Pres != nil || srvMsg.Info != nil {
 						response.OrigSid = "*"
 					} else if srvMsg.Ctrl == nil {
-						log.Println("cluster: request type not set in clusterWriteLoop", sess.sid,
+						logs.Warn.Println("cluster: request type not set in clusterWriteLoop", sess.sid,
 							srvMsg.describe(), "src_sid:", srvMsg.sess.sid)
 					}
 				default:
-					log.Panicln("cluster: unknown request type in clusterWriteLoop", srvMsg.sess.proxyReq)
+					logs.Err.Panicln("cluster: unknown request type in clusterWriteLoop", srvMsg.sess.proxyReq)
 				}
 			}
 
@@ -1226,7 +1226,7 @@ func (t *Topic) clusterWriteLoop() {
 			response.RcptTo = t.name
 
 			if err := sess.clnode.masterToProxyAsync(response); err != nil {
-				log.Printf("cluster: response to proxy failed \"%s\": %s", sess.sid, err.Error())
+				logs.Warn.Printf("cluster: response to proxy failed \"%s\": %s", sess.sid, err.Error())
 				return
 			}
 		case EventStop: // sess.stop

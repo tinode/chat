@@ -8,12 +8,12 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"errors"
-	"log"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/tinode/chat/server/auth"
+	"github.com/tinode/chat/server/logs"
 	"github.com/tinode/chat/server/store"
 	t "github.com/tinode/chat/server/store/types"
 	b "go.mongodb.org/mongo-driver/bson"
@@ -114,7 +114,7 @@ func (a *adapter) Open(jsonconfig json.RawMessage) error {
 	}
 
 	if config.ReplicaSet == "" {
-		log.Println("MongoDB configured as standalone or replica_set option not set. Transaction support is disabled.")
+		logs.Info.Println("MongoDB configured as standalone or replica_set option not set. Transaction support is disabled.")
 	} else {
 		opts.SetReplicaSet(config.ReplicaSet)
 		a.useTransactions = true
@@ -253,7 +253,7 @@ func (a *adapter) SetMaxResults(val int) error {
 // CreateDb creates the database optionally dropping an existing database first.
 func (a *adapter) CreateDb(reset bool) error {
 	if reset {
-		log.Print("Dropping database...")
+		logs.Info.Print("Dropping database...")
 		if err := a.db.Drop(a.ctx); err != nil {
 			return err
 		}

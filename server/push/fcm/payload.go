@@ -2,13 +2,13 @@ package fcm
 
 import (
 	"errors"
-	"log"
 	"strconv"
 	"time"
 
 	fcm "firebase.google.com/go/messaging"
 
 	"github.com/tinode/chat/server/drafty"
+	"github.com/tinode/chat/server/logs"
 	"github.com/tinode/chat/server/push"
 	"github.com/tinode/chat/server/store"
 	t "github.com/tinode/chat/server/store/types"
@@ -186,7 +186,7 @@ func clonePayload(src map[string]string) map[string]string {
 func PrepareNotifications(rcpt *push.Receipt, config *AndroidConfig) []MessageData {
 	data, err := payloadToData(&rcpt.Payload)
 	if err != nil {
-		log.Println("fcm push: could not parse payload;", err)
+		logs.Warn.Println("fcm push: could not parse payload;", err)
 		return nil
 	}
 
@@ -211,7 +211,7 @@ func PrepareNotifications(rcpt *push.Receipt, config *AndroidConfig) []MessageDa
 		}
 		devices, count, err = store.Devices.GetAll(uids...)
 		if err != nil {
-			log.Println("fcm push: db error", err)
+			logs.Warn.Println("fcm push: db error", err)
 			return nil
 		}
 	}
@@ -337,7 +337,7 @@ func PrepareNotifications(rcpt *push.Receipt, config *AndroidConfig) []MessageDa
 func DevicesForUser(uid t.Uid) []string {
 	ddef, count, err := store.Devices.GetAll(uid)
 	if err != nil {
-		log.Println("fcm devices for user: db error", err)
+		logs.Warn.Println("fcm devices for user: db error", err)
 		return nil
 	}
 
