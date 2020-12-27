@@ -21,13 +21,13 @@ import (
 	"github.com/tinode/chat/server/store/types"
 )
 
-// Request latency distribution bounds (in milliseconds).
+// RequestLatencyDistribution is an array of request latency distribution bounds (in milliseconds).
 // "var" because Go does not support array constants.
-var RequestLatencyDistribution = []float64{1, 2, 3, 4, 5, 6, 8, 10, 13, 16, 20, 25, 30, 40, 50, 65, 80, 100, 130,
+var requestLatencyDistribution = []float64{1, 2, 3, 4, 5, 6, 8, 10, 13, 16, 20, 25, 30, 40, 50, 65, 80, 100, 130,
 	160, 200, 250, 300, 400, 500, 650, 800, 1000, 2000, 5000, 10000, 20000, 50000, 100000}
 
-// Outgoing message size distribution bounds (in bytes).
-var OutgoingMessageSizeDistribution = []float64{1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 16384,
+// OutgoingMessageSizeDistribution is an array of outgoing message size distribution bounds (in bytes).
+var outgoingMessageSizeDistribution = []float64{1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 16384,
 	65536, 262144, 1048576, 4194304, 16777216, 67108864, 268435456, 1073741824, 4294967296}
 
 // Request to hub to subscribe session to topic
@@ -145,8 +145,8 @@ func newHub() *Hub {
 	statsRegisterInt("CtrlCodesTotal4xx")
 	statsRegisterInt("CtrlCodesTotal5xx")
 
-	statsRegisterHistogram("RequestLatency", RequestLatencyDistribution)
-	statsRegisterHistogram("OutgoingMessageSize", OutgoingMessageSizeDistribution)
+	statsRegisterHistogram("RequestLatency", requestLatencyDistribution)
+	statsRegisterHistogram("OutgoingMessageSize", outgoingMessageSizeDistribution)
 
 	go h.run()
 

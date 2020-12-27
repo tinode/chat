@@ -1,9 +1,4 @@
-/******************************************************************************
- *
- *  Description :
- *    Package exposes info, warning and error loggers.
- *
- *****************************************************************************/
+// Package logs exposes info, warning and error loggers.
 package logs
 
 import (
@@ -13,9 +8,12 @@ import (
 )
 
 var (
+	// Info is a logger at the 'info' logging level.
 	Info *log.Logger
+	// Warn is a logger at the 'warning' logging level.
 	Warn *log.Logger
-	Err  *log.Logger
+	// Err is a logger at the 'error' logging level.
+	Err *log.Logger
 )
 
 func parseFlags(logFlags string) int {
@@ -48,8 +46,7 @@ func parseFlags(logFlags string) int {
 	return flags
 }
 
-// Initializes info, warning and error loggers given the flags
-// and the output.
+// Init initializes info, warning and error loggers given the flags and the output.
 func Init(output io.Writer, logFlags string) {
 	flags := parseFlags(logFlags)
 	Info = log.New(output, "I", flags)

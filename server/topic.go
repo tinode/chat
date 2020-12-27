@@ -3493,9 +3493,9 @@ func (t *Topic) remSession(sess *Session, asUid types.Uid) (*perSessionData, boo
 					logs.Err.Printf("topic[%s]: multiplex session %s not removed from the event loop: no more attached uids", t.name, s.sid)
 				}
 				return &pssd, true
-			} else {
-				return &pssd, false
 			}
+
+			return &pssd, false
 		}
 	}
 
