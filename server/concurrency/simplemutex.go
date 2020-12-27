@@ -1,6 +1,3 @@
-// Package concurrency is a very simple implementation of a mutex with channels.
-// Provides TryLock functionality absent in Go's regular sync.Mutex.
-// See https://github.com/golang/go/issues/6123 for details.
 package concurrency
 
 // SimpleMutex is a channel used for locking.

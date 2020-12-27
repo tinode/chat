@@ -328,15 +328,15 @@ func (s *Session) stopSession(data interface{}) {
 	s.stop <- data
 }
 
-func (sess *Session) purgeChannels() {
-	for len(sess.send) > 0 {
-		<-sess.send
+func (s *Session) purgeChannels() {
+	for len(s.send) > 0 {
+		<-s.send
 	}
-	for len(sess.stop) > 0 {
-		<-sess.stop
+	for len(s.stop) > 0 {
+		<-s.stop
 	}
-	for len(sess.detach) > 0 {
-		<-sess.detach
+	for len(s.detach) > 0 {
+		<-s.detach
 	}
 }
 

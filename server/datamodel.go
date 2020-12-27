@@ -929,7 +929,7 @@ func NoErrDeliveredParams(id, topic string, ts time.Time, params interface{}) *S
 
 // 3xx
 
-// InfoValidateCredentials requires user to confirm credentials before going forward (300).
+// InfoValidateCredentialsExplicitTs requires user to confirm credentials before going forward (300).
 func InfoValidateCredentials(id string, ts time.Time) *ServerComMessage {
 	return InfoValidateCredentialsExplicitTs(id, ts, ts)
 }

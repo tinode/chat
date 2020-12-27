@@ -295,7 +295,7 @@ func (Handler) Push() chan<- *push.Receipt {
 	return handler.input
 }
 
-// Push returns a channel that the server will use to send messages to.
+// Channel returns a channel that the server will use to send group requests to.
 // If the adapter blocks, the message will be dropped.
 func (Handler) Channel() chan<- *push.ChannelReq {
 	return handler.channel
