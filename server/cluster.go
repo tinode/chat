@@ -6,13 +6,13 @@ import (
 	"errors"
 	"net"
 	"net/rpc"
-	"reflect"
 	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/tinode/chat/server/auth"
+	"github.com/tinode/chat/server/concurrency"
 	"github.com/tinode/chat/server/logs"
 	"github.com/tinode/chat/server/push"
 	rh "github.com/tinode/chat/server/ringhash"
@@ -417,6 +417,13 @@ type Cluster struct {
 
 	// Failover parameters. Could be nil if failover is not enabled
 	fo *clusterFailover
+
+	// Thread pool to use for running proxy session (write) event processing logic.
+	// The number of proxy sessions grows as O(number of topics x number of cluster nodes).
+	// In large Tinode deployments (10s of thousands of topics, tens of nodes),
+	// running a separate event processing goroutine for each proxy session
+	// leads to a rather large memory usage and excessive scheduling overhead.
+	proxyEventQueue *concurrency.GoRoutinePool
 }
 
 // TopicMaster is a gRPC endpoint which receives requests sent by proxy topic to master topic.
@@ -462,6 +469,7 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 		node.lock.Unlock()
 
 		logs.Info.Println("cluster: multiplexing session started", msid, count)
+		msess.proxiedTopic = msg.RcptTo
 	}
 
 	// This is a local copy of a remote session.
@@ -513,9 +521,9 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 		if t := globals.hub.topicGet(msg.RcptTo); t != nil {
 			select {
 			case t.meta <- &metaReq{
-					pkt:  msg.CliMsg,
-					sess: sess,
-				}:
+				pkt:  msg.CliMsg,
+				sess: sess,
+			}:
 			default:
 				sess.queueOut(ErrUnknownReply(msg.CliMsg, msg.CliMsg.Timestamp))
 				logs.Warn.Println("cluster: meta req failed - topic.meta queue full, topic ", msg.CliMsg.RcptTo, "; orig sid ", sess.sid)
@@ -947,9 +955,10 @@ func clusterInit(configString json.RawMessage, self *string) int {
 	}
 
 	globals.cluster = &Cluster{
-		thisNodeName: thisName,
-		fingerprint:  time.Now().Unix(),
-		nodes:        make(map[string]*ClusterNode)}
+		thisNodeName:    thisName,
+		fingerprint:     time.Now().Unix(),
+		nodes:           make(map[string]*ClusterNode),
+		proxyEventQueue: concurrency.NewGoRoutinePool(len(config.Nodes) * 5)}
 
 	var nodeNames []string
 	for _, host := range config.Nodes {
@@ -1034,6 +1043,7 @@ func (c *Cluster) shutdown() {
 		close(n.rpcDone)
 	}
 
+	globals.cluster.proxyEventQueue.Stop()
 	globals.cluster = nil
 
 	c.inbound.Close()
@@ -1135,70 +1145,26 @@ func (c *Cluster) gcProxySessionsForNode(node string) {
 	}
 }
 
-func (t *Topic) clusterSelectProxyEvent() (event ProxyEventType, s *Session, val *reflect.Value) {
-	t.proxiedLock.Lock()
-	defer func() { t.proxiedLock.Unlock() }()
-
-	if len(t.proxiedSessions) == 0 {
-		return EventAbort, nil, nil
-	}
-	chosen, value, ok := reflect.Select(t.proxiedChannels)
-	if !ok {
-		logs.Warn.Printf("topic[%s]: clusterWriteLoop EOF - quitting", t.name)
-		return EventAbort, nil, nil
-	}
-	if chosen == 0 {
-		// Sessions added or removed: continue.
-		return EventContinue, nil, nil
-	}
-	if len(t.proxiedSessions) == 0 {
-		logs.Info.Printf("topic[%s]: clusterWriteLoop - no more proxied sessions (num proxied channels: %d). Quitting.",
-			t.name, len(t.proxiedChannels))
-		return EventAbort, nil, nil
-	}
-	chosen--
-	sessionIdx := chosen / 3
-	if sessionIdx >= len(t.proxiedSessions) {
-		logs.Err.Printf("topic[%s]: clusterWriteLoop - invalid proxiedSessions index %d (num proxied sessions %d)", t.name, chosen, len(t.proxiedSessions))
-		return EventAbort, nil, nil
-	}
-	sess := t.proxiedSessions[sessionIdx]
-	return ProxyEventType(chosen%3 + 1), sess, &value
-}
-
-func (t *Topic) noMoreProxiedSessions() bool {
-	t.proxiedLock.Lock()
-	numProxied := len(t.proxiedSessions)
-	t.proxiedLock.Unlock()
-	return numProxied == 0
-}
-
-// clusterWriteLoop implements write loop for all multiplexing (proxy) sessions
-// attached to a master topic. This function handles all the events send from
-// the master to the original sessions hosted on other nodes.
-func (t *Topic) clusterWriteLoop() {
-	cleanUp := func(sess *Session) {
-		sess.closeRPC()
-		globals.sessionStore.Delete(sess)
-		sess.unsubAll()
-	}
+// clusterWriteLoop implements write loop for multiplexing (proxy) session at a node which hosts master topic.
+// The session is a multiplexing session, i.e. it handles requests for multiple sessions at origin.
+func (sess *Session) clusterWriteLoop(forTopic string) {
+	terminate := true
 	defer func() {
-		for _, sess := range t.proxiedSessions {
-			cleanUp(sess)
+		if terminate {
+			sess.closeRPC()
+			globals.sessionStore.Delete(sess)
+			sess.unsubAll()
 		}
 	}()
 
-	logs.Info.Printf("topic[%s]: starting cluster write loop", t.name)
 	for {
-		// t.m
-		event, sess, value := t.clusterSelectProxyEvent()
-		switch event {
-		case EventSend: // sess.send channel.
-			if sess.clnode.endpoint == nil {
+		select {
+		case msg, ok := <-sess.send:
+			if !ok || sess.clnode.endpoint == nil {
 				// channel closed
 				return
 			}
-			srvMsg := value.Interface().(*ServerComMessage)
+			srvMsg := msg.(*ServerComMessage)
 			response := &ClusterResp{SrvMsg: srvMsg}
 			if srvMsg.sess == nil {
 				response.OrigSid = "*"
@@ -1222,35 +1188,29 @@ func (t *Topic) clusterWriteLoop() {
 				}
 			}
 
-			srvMsg.RcptTo = t.name
-			response.RcptTo = t.name
+			srvMsg.RcptTo = forTopic
+			response.RcptTo = forTopic
 
 			if err := sess.clnode.masterToProxyAsync(response); err != nil {
 				logs.Warn.Printf("cluster: response to proxy failed \"%s\": %s", sess.sid, err.Error())
 				return
 			}
-		case EventStop: // sess.stop
-			if value.Interface() == nil {
+		case msg := <-sess.stop:
+			logs.Info.Println("cluster: stop msg received - multi sid", sess.sid)
+			if msg == nil {
 				// Terminating multiplexing session.
-				cleanUp(sess)
-				if t.noMoreProxiedSessions() {
-					return
-				}
+				return
 			}
-
 			// There are two cases of msg != nil:
 			//  * user is being deleted
 			//  * node shutdown
 			// In both cases the msg does not need to be forwarded to the proxy.
-		case EventDetach: // sess.detach
-			cleanUp(sess)
-			if t.noMoreProxiedSessions() {
-				return
-			}
-		case EventContinue:
-			// Continue
-		case EventAbort:
-			// Stop the loop.
+
+		case <-sess.detach:
+			logs.Info.Println("cluster: detach msg received", sess.sid)
+			return
+		default:
+			terminate = false
 			return
 		}
 	}
