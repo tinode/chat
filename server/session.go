@@ -339,6 +339,7 @@ func (s *Session) queueOutBytes(data []byte) bool {
 func (s *Session) maybeScheduleClusterWriteLoop() {
 	if s.multi != nil {
 		s.multi.scheduleClusterWriteLoop()
+		return
 	}
 	if s.isMultiplex() {
 		s.scheduleClusterWriteLoop()
