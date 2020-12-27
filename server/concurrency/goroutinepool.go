@@ -1,14 +1,12 @@
-/******************************************************************************
- *
- *  Description :
- *    A very basic and naive implementation of thread pool.
- *
- *****************************************************************************/
+// Package concurrency is a very simple implementation of a mutex with channels.
+// Provides TryLock functionality absent in Go's regular sync.Mutex.
+// See https://github.com/golang/go/issues/6123 for details.
 package concurrency
 
 // Task represents a work task to be run on the specified thread pool.
 type Task func()
 
+// GoRoutinePool is a pull of Go routines with associated locking mechanism.
 type GoRoutinePool struct {
 	// Work queue.
 	work chan Task

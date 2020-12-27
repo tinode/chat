@@ -2404,7 +2404,7 @@ func (t *Topic) replySetTags(sess *Session, asUid types.Uid, msg *ClientComMessa
 
 	now := types.TimeNow()
 
-	if _, err := t.verifyChannelAccess(msg.Original); err != nil {
+	if _, err = t.verifyChannelAccess(msg.Original); err != nil {
 		// User should not be able to address non-channel topic as channel.
 		resp = ErrNotFoundReply(msg, now)
 		err = types.ErrNotFound
@@ -3397,9 +3397,9 @@ func (t *Topic) remSession(sess *Session, asUid types.Uid) (*perSessionData, boo
 			if len(pssd.muids) == 0 {
 				delete(t.sessions, s)
 				return &pssd, true
-			} else {
-				return &pssd, false
 			}
+
+			return &pssd, false
 		}
 	}
 

@@ -822,8 +822,7 @@ func NoErr(id, topic string, ts time.Time) *ServerComMessage {
 	return NoErrParams(id, topic, ts, nil)
 }
 
-// NoErr indicates successful completion
-// with explicit server and incoming request timestamps (200)
+// NoErrExplicitTs indicates successful completion with explicit server and incoming request timestamps (200)
 func NoErrExplicitTs(id, topic string, serverTs, incomingReqTs time.Time) *ServerComMessage {
 	return NoErrParamsExplicitTs(id, topic, serverTs, incomingReqTs, nil)
 }
@@ -871,7 +870,7 @@ func NoErrAccepted(id, topic string, ts time.Time) *ServerComMessage {
 	return NoErrAcceptedExplicitTs(id, topic, ts, ts)
 }
 
-// NoErrAccepted indicates request was accepted but not perocessed yet
+// NoErrAcceptedExplicitTs indicates request was accepted but not perocessed yet
 // with explicit server and incoming request timestamps (202).
 func NoErrAcceptedExplicitTs(id, topic string, serverTs, incomingReqTs time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
@@ -917,7 +916,7 @@ func NoErrShutdown(ts time.Time) *ServerComMessage {
 		Timestamp: ts}}
 }
 
-// NoErrDelivered means requested content has been delivered (208).
+// NoErrDeliveredParams means requested content has been delivered (208).
 func NoErrDeliveredParams(id, topic string, ts time.Time, params interface{}) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
@@ -935,7 +934,7 @@ func InfoValidateCredentials(id string, ts time.Time) *ServerComMessage {
 	return InfoValidateCredentialsExplicitTs(id, ts, ts)
 }
 
-// InfoValidateCredentials requires user to confirm credentials before going forward
+// InfoValidateCredentialsExplicitTs requires user to confirm credentials before going forward
 // with explicit server and incoming request timestamps (300).
 func InfoValidateCredentialsExplicitTs(id string, serverTs, incomingReqTs time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
@@ -1062,8 +1061,7 @@ func ErrMalformedReply(msg *ClientComMessage, ts time.Time) *ServerComMessage {
 	return ErrMalformedExplicitTs(msg.Id, msg.Original, ts, msg.Timestamp)
 }
 
-// ErrMalformed request malformed
-// with explicit server and incoming request timestamps (400).
+// ErrMalformedExplicitTs request malformed with explicit server and incoming request timestamps (400).
 func ErrMalformedExplicitTs(id, topic string, serverTs, incomingReqTs time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
@@ -1115,7 +1113,7 @@ func ErrPermissionDenied(id, topic string, ts time.Time) *ServerComMessage {
 	return ErrPermissionDeniedExplicitTs(id, topic, ts, ts)
 }
 
-// ErrPermissionDenied user is authenticated but operation is not permitted
+// ErrPermissionDeniedExplicitTs user is authenticated but operation is not permitted
 // with explicit server and incoming request timestamps (403).
 func ErrPermissionDeniedExplicitTs(id, topic string, serverTs, incomingReqTs time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
@@ -1205,7 +1203,7 @@ func ErrOperationNotAllowed(id, topic string, ts time.Time) *ServerComMessage {
 	return ErrOperationNotAllowedExplicitTs(id, topic, ts, ts)
 }
 
-// ErrOperationNotAllowed a valid operation is not permitted in this context
+// ErrOperationNotAllowedExplicitTs a valid operation is not permitted in this context
 // with explicit server and incoming request timestamps (405).
 func ErrOperationNotAllowedExplicitTs(id, topic string, serverTs, incomingReqTs time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
@@ -1309,7 +1307,7 @@ func ErrPolicy(id, topic string, ts time.Time) *ServerComMessage {
 	return ErrPolicyExplicitTs(id, topic, ts, ts)
 }
 
-// ErrPolicy request violates a policy (e.g. password is too weak or too many subscribers)
+// ErrPolicyExplicitTs request violates a policy (e.g. password is too weak or too many subscribers)
 // with explicit server and incoming request timestamps (422).
 func ErrPolicyExplicitTs(id, topic string, serverTs, incomingReqTs time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
@@ -1331,7 +1329,7 @@ func ErrUnknown(id, topic string, ts time.Time) *ServerComMessage {
 	return ErrUnknownExplicitTs(id, topic, ts, ts)
 }
 
-// ErrUnknown database or other server error with explicit server and incoming request timestamps (500).
+// ErrUnknownExplicitTs database or other server error with explicit server and incoming request timestamps (500).
 func ErrUnknownExplicitTs(id, topic string, serverTs, incomingReqTs time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
@@ -1393,7 +1391,7 @@ func ErrLockedReply(msg *ClientComMessage, ts time.Time) *ServerComMessage {
 	return ErrLockedExplicitTs(msg.Id, msg.Original, ts, msg.Timestamp)
 }
 
-// ErrLocked operation rejected because the topic is being deleted
+// ErrLockedExplicitTs operation rejected because the topic is being deleted
 // with explicit server and incoming request timestamps (503).
 func ErrLockedExplicitTs(id, topic string, serverTs, incomingReqTs time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{

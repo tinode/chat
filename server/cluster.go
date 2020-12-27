@@ -42,7 +42,7 @@ const (
 	ProxyReqMeUserAgent
 )
 
-// Proxy event types processed in the clusterWriteLoop.
+// ProxyEventType is an enumeration of possible proxy event types processed in the clusterWriteLoop.
 type ProxyEventType int
 
 // Individual proxy events.
