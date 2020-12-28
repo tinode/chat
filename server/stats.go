@@ -38,9 +38,8 @@ func (h *histogram) addSample(v float64) {
 func (h *histogram) String() string {
 	if r, err := json.Marshal(h); err == nil {
 		return string(r)
-	} else {
-		return ""
 	}
+	return ""
 }
 
 type varUpdate struct {

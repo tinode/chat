@@ -84,7 +84,8 @@ type Session struct {
 	clnode *ClusterNode
 
 	// Reference to multiplexing session. Set only for proxy sessions.
-	multi *Session
+	multi        *Session
+	proxiedTopic string
 
 	// IP address of the client. For long polling this is the IP of the last poll.
 	remoteAddr string
@@ -259,6 +260,13 @@ func (s *Session) isCluster() bool {
 	return s.isProxy() || s.isMultiplex()
 }
 
+func (s *Session) scheduleClusterWriteLoop() {
+	if globals.cluster != nil && globals.cluster.proxyEventQueue != nil {
+		globals.cluster.proxyEventQueue.Schedule(
+			func() { s.clusterWriteLoop(s.proxiedTopic) })
+	}
+}
+
 // queueOut attempts to send a ServerComMessage to a session write loop; if the send buffer is full,
 // timeout is `sendTimeout`.
 func (s *Session) queueOut(msg *ServerComMessage) bool {
@@ -272,7 +280,11 @@ func (s *Session) queueOut(msg *ServerComMessage) bool {
 	if s.multi != nil {
 		// In case of a cluster we need to pass a copy of the actual session.
 		msg.sess = s
-		return s.multi.queueOut(msg)
+		if s.multi.queueOut(msg) {
+			s.multi.scheduleClusterWriteLoop()
+			return true
+		}
+		return false
 	}
 
 	// Record latency only on {ctrl} messages and end-user sessions.
@@ -299,6 +311,9 @@ func (s *Session) queueOut(msg *ServerComMessage) bool {
 		logs.Err.Println("s.queueOut: session's send queue full", s.sid)
 		return false
 	}
+	if s.isMultiplex() {
+		s.scheduleClusterWriteLoop()
+	}
 	return true
 }
 
@@ -315,28 +330,43 @@ func (s *Session) queueOutBytes(data []byte) bool {
 		logs.Err.Println("s.queueOutBytes: session's send queue full", s.sid)
 		return false
 	}
+	if s.isMultiplex() {
+		s.scheduleClusterWriteLoop()
+	}
 	return true
+}
+
+func (s *Session) maybeScheduleClusterWriteLoop() {
+	if s.multi != nil {
+		s.multi.scheduleClusterWriteLoop()
+		return
+	}
+	if s.isMultiplex() {
+		s.scheduleClusterWriteLoop()
+	}
 }
 
 func (s *Session) detachSession(fromTopic string) {
 	if atomic.LoadInt32(&s.terminating) == 0 {
 		s.detach <- fromTopic
+		s.maybeScheduleClusterWriteLoop()
 	}
 }
 
 func (s *Session) stopSession(data interface{}) {
 	s.stop <- data
+	s.maybeScheduleClusterWriteLoop()
 }
 
-func (sess *Session) purgeChannels() {
-	for len(sess.send) > 0 {
-		<-sess.send
+func (s *Session) purgeChannels() {
+	for len(s.send) > 0 {
+		<-s.send
 	}
-	for len(sess.stop) > 0 {
-		<-sess.stop
+	for len(s.stop) > 0 {
+		<-s.stop
 	}
-	for len(sess.detach) > 0 {
-		<-sess.detach
+	for len(s.detach) > 0 {
+		<-s.detach
 	}
 }
 
