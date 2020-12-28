@@ -111,6 +111,9 @@ type Topic struct {
 
 	// Flag which tells topic lifecycle status: new, ready, paused, marked for deletion.
 	status int32
+
+	// Countdown timer for destroying the topic when there are no more attached sessions to it.
+	killTimer *time.Timer
 }
 
 // perUserData holds topic's cache of per-subscriber data
@@ -269,11 +272,25 @@ func (t *Topic) fixUpUserCounts(userCounts map[types.Uid]int) {
 	}
 }
 
+// processLeaveRequest implements all logic following receipt of a leave
+// request via the Topic.unreg channel.
+func (t *Topic) processLeaveRequest(leave *sessionLeave) {
+	t.handleLeaveRequest(leave)
+	if leave.pkt != nil && leave.sess.inflightReqs != nil {
+		// If it's a client initiated request.
+		leave.sess.inflightReqs.Done()
+	}
+
+	// If there are no more subscriptions to this topic, start a kill timer
+	if len(t.sessions) == 0 && t.cat != types.TopicCatSys {
+		t.killTimer.Reset(idleMasterTopicTimeout)
+	}
+}
+
 func (t *Topic) runLocal(hub *Hub) {
 	// Kills topic after a period of inactivity.
-	keepAlive := idleMasterTopicTimeout
-	killTimer := time.NewTimer(time.Hour)
-	killTimer.Stop()
+	t.killTimer = time.NewTimer(time.Hour)
+	t.killTimer.Stop()
 
 	// Notifies about user agent change. 'me' only
 	uaTimer := time.NewTimer(time.Minute)
@@ -292,7 +309,7 @@ func (t *Topic) runLocal(hub *Hub) {
 			} else {
 				// The topic is alive, so stop the kill timer, if it's ticking. We don't want the topic to die
 				// while processing the call
-				killTimer.Stop()
+				t.killTimer.Stop()
 				if err := t.handleSubscription(hub, join); err == nil {
 					if join.pkt.Sub.Created {
 						// Call plugins with the new topic
@@ -301,7 +318,7 @@ func (t *Topic) runLocal(hub *Hub) {
 				} else {
 					if len(t.sessions) == 0 && t.cat != types.TopicCatSys {
 						// Failed to subscribe, the topic is still inactive
-						killTimer.Reset(keepAlive)
+						t.killTimer.Reset(idleMasterTopicTimeout)
 					}
 					logs.Warn.Printf("topic[%s] subscription failed %v, sid=%s", t.name, err, join.sess.sid)
 				}
@@ -310,16 +327,7 @@ func (t *Topic) runLocal(hub *Hub) {
 				join.sess.inflightReqs.Done()
 			}
 		case leave := <-t.unreg:
-			t.handleLeaveRequest(hub, leave)
-			if leave.pkt != nil && leave.sess.inflightReqs != nil {
-				// If it's a client initiated request.
-				leave.sess.inflightReqs.Done()
-			}
-
-			// If there are no more subscriptions to this topic, start a kill timer
-			if len(t.sessions) == 0 && t.cat != types.TopicCatSys {
-				killTimer.Reset(keepAlive)
-			}
+			t.processLeaveRequest(leave)
 
 		case msg := <-t.broadcast:
 			// Content message intended for broadcasting to recipients
@@ -429,7 +437,7 @@ func (t *Topic) runLocal(hub *Hub) {
 			t.userAgent = currentUA
 			t.presUsersOfInterest("ua", t.userAgent)
 
-		case <-killTimer.C:
+		case <-t.killTimer.C:
 			// Topic timeout
 			hub.unreg <- &topicUnreg{rcptTo: t.name}
 			defrNotifTimer.Stop()
@@ -541,7 +549,7 @@ func (t *Topic) handleSubscription(h *Hub, join *sessionJoin) error {
 }
 
 // handleLeaveRequest processes a session leave request.
-func (t *Topic) handleLeaveRequest(hub *Hub, leave *sessionLeave) {
+func (t *Topic) handleLeaveRequest(leave *sessionLeave) {
 	// Remove connection from topic; session may continue to function
 	now := types.TimeNow()
 
@@ -572,7 +580,7 @@ func (t *Topic) handleLeaveRequest(hub *Hub, leave *sessionLeave) {
 	} else if leave.pkt != nil && leave.pkt.Leave.Unsub {
 		// User wants to leave and unsubscribe.
 		// asUid must not be Zero.
-		if err := t.replyLeaveUnsub(hub, leave.sess, leave.pkt, asUid); err != nil {
+		if err := t.replyLeaveUnsub(leave.sess, leave.pkt, asUid); err != nil {
 			logs.Err.Println("failed to unsub", err, leave.sess.sid)
 			return
 		}
@@ -969,6 +977,8 @@ func (t *Topic) handleBroadcast(msg *ServerComMessage) {
 		logs.Err.Panic("topic: wrong message type for broadcasting", t.name)
 	}
 
+	// List of sessions to be dropped.
+	var dropSessions []*Session
 	// Broadcast the message. Only {data}, {pres}, {info} are broadcastable.
 	// {meta} and {ctrl} are sent to the session only
 	for sess, pssd := range t.sessions {
@@ -1026,19 +1036,19 @@ func (t *Topic) handleBroadcast(msg *ServerComMessage) {
 		// Send message to session.
 		if !sess.queueOut(msg) {
 			logs.Warn.Printf("topic[%s]: connection stuck, detaching - %s", t.name, sess.sid)
-			// The whole session is being dropped, so sessionLeave.pkt is not set.
-			// Must not block here: it may lead to a deadlock.
-			select {
-			case t.unreg <- &sessionLeave{sess: sess}:
-			default:
-				logs.Err.Printf("topic[%s]: unreg queue full - %s", t.name, sess.sid)
-			}
+			dropSessions = append(dropSessions, sess)
 		}
 	}
 
 	if !t.isProxy && pushRcpt != nil {
 		// usersPush will update unread message count and send push notification.
 		usersPush(pushRcpt)
+	}
+
+	// Drop "bad" sessions.
+	for _, sess := range dropSessions {
+		// The whole session is being dropped, so sessionLeave.pkt is not set.
+		t.processLeaveRequest(&sessionLeave{sess: sess})
 	}
 }
 
@@ -2707,7 +2717,7 @@ func (t *Topic) replyDelTopic(h *Hub, sess *Session, asUid types.Uid, msg *Clien
 	if t.owner != asUid {
 		// Cases 2.1.1 and 2.2
 		if t.cat != types.TopicCatP2P || t.subsCount() == 2 {
-			return t.replyLeaveUnsub(h, sess, msg, asUid)
+			return t.replyLeaveUnsub(sess, msg, asUid)
 		}
 	}
 
@@ -2831,7 +2841,7 @@ func (t *Topic) replyDelSub(h *Hub, sess *Session, asUid types.Uid, msg *ClientC
 
 // replyLeaveUnsub is request to unsubscribe user and detach all user's sessions from topic.
 // FIXME: if grp subscription does not exist, replyLeaveUnsub will replace grpXXX with chnXXX.
-func (t *Topic) replyLeaveUnsub(h *Hub, sess *Session, msg *ClientComMessage, asUid types.Uid) error {
+func (t *Topic) replyLeaveUnsub(sess *Session, msg *ClientComMessage, asUid types.Uid) error {
 	now := types.TimeNow()
 
 	if asUid.IsZero() {
