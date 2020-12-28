@@ -272,9 +272,9 @@ func (t *Topic) fixUpUserCounts(userCounts map[types.Uid]int) {
 	}
 }
 
-// processLeaveRequest implements all logic following receipt of a leave
+// unregisterSession implements all logic following receipt of a leave
 // request via the Topic.unreg channel.
-func (t *Topic) processLeaveRequest(leave *sessionLeave) {
+func (t *Topic) unregisterSession(leave *sessionLeave) {
 	t.handleLeaveRequest(leave)
 	if leave.pkt != nil && leave.sess.inflightReqs != nil {
 		// If it's a client initiated request.
@@ -310,7 +310,7 @@ func (t *Topic) runLocal(hub *Hub) {
 				// The topic is alive, so stop the kill timer, if it's ticking. We don't want the topic to die
 				// while processing the call
 				t.killTimer.Stop()
-				if err := t.handleSubscription(hub, join); err == nil {
+				if err := t.handleSubscription(join); err == nil {
 					if join.pkt.Sub.Created {
 						// Call plugins with the new topic
 						pluginTopic(t, plgActCreate)
@@ -327,7 +327,7 @@ func (t *Topic) runLocal(hub *Hub) {
 				join.sess.inflightReqs.Done()
 			}
 		case leave := <-t.unreg:
-			t.processLeaveRequest(leave)
+			t.unregisterSession(leave)
 
 		case msg := <-t.broadcast:
 			// Content message intended for broadcasting to recipients
@@ -383,7 +383,7 @@ func (t *Topic) runLocal(hub *Hub) {
 					}
 				}
 				if meta.pkt.MetaWhat&constMsgMetaSub != 0 {
-					if err := t.replySetSub(hub, meta.sess, meta.pkt); err != nil {
+					if err := t.replySetSub(meta.sess, meta.pkt); err != nil {
 						logs.Warn.Printf("topic[%s] meta.Set.Sub failed: %v", t.name, err)
 					}
 				}
@@ -405,11 +405,11 @@ func (t *Topic) runLocal(hub *Hub) {
 				case constMsgDelMsg:
 					err = t.replyDelMsg(meta.sess, asUid, meta.pkt)
 				case constMsgDelSub:
-					err = t.replyDelSub(hub, meta.sess, asUid, meta.pkt)
+					err = t.replyDelSub(meta.sess, asUid, meta.pkt)
 				case constMsgDelTopic:
-					err = t.replyDelTopic(hub, meta.sess, asUid, meta.pkt)
+					err = t.replyDelTopic(meta.sess, asUid, meta.pkt)
 				case constMsgDelCred:
-					err = t.replyDelCred(hub, meta.sess, asUid, authLevel, meta.pkt)
+					err = t.replyDelCred(meta.sess, asUid, authLevel, meta.pkt)
 				}
 
 				if err != nil {
@@ -488,7 +488,7 @@ func (t *Topic) runLocal(hub *Hub) {
 }
 
 // Session subscribed to a topic, created == true if topic was just created and {pres} needs to be announced
-func (t *Topic) handleSubscription(h *Hub, join *sessionJoin) error {
+func (t *Topic) handleSubscription(join *sessionJoin) error {
 	asUid := types.ParseUserId(join.pkt.AsUser)
 	authLevel := auth.Level(join.pkt.AuthLvl)
 	asChan := isChannel(join.pkt.Original)
@@ -499,7 +499,7 @@ func (t *Topic) handleSubscription(h *Hub, join *sessionJoin) error {
 		getWhat = parseMsgClientMeta(msgsub.Get.What)
 	}
 
-	if err := t.subscriptionReply(h, asChan, join); err != nil {
+	if err := t.subscriptionReply(asChan, join); err != nil {
 		return err
 	}
 
@@ -1048,12 +1048,12 @@ func (t *Topic) handleBroadcast(msg *ServerComMessage) {
 	// Drop "bad" sessions.
 	for _, sess := range dropSessions {
 		// The whole session is being dropped, so sessionLeave.pkt is not set.
-		t.processLeaveRequest(&sessionLeave{sess: sess})
+		t.unregisterSession(&sessionLeave{sess: sess})
 	}
 }
 
 // subscriptionReply generates a response to a subscription request
-func (t *Topic) subscriptionReply(h *Hub, asChan bool, join *sessionJoin) error {
+func (t *Topic) subscriptionReply(asChan bool, join *sessionJoin) error {
 	// The topic is already initialized by the Hub
 
 	msgsub := join.pkt.Sub
@@ -1093,7 +1093,7 @@ func (t *Topic) subscriptionReply(h *Hub, asChan bool, join *sessionJoin) error 
 	var err error
 	var modeChanged *MsgAccessMode
 	// Create new subscription or modify an existing one.
-	if modeChanged, err = t.thisUserSub(h, join.sess, join.pkt, asUid, mode, private); err != nil {
+	if modeChanged, err = t.thisUserSub(join.sess, join.pkt, asUid, mode, private); err != nil {
 		return err
 	}
 
@@ -1149,7 +1149,6 @@ func (t *Topic) subscriptionReply(h *Hub, asChan bool, join *sessionJoin) error 
 // result of {sub} or {meta set=sub}.
 // Returns new access mode as *MsgAccessMode if user's access mode has changed, nil otherwise.
 //
-//	h				- hub
 //	sess			- originating session
 //	pkt				- client message which triggered this request (sub or set)
 //	asUid			- id of the user making the request
@@ -1166,7 +1165,7 @@ func (t *Topic) subscriptionReply(h *Hub, asChan bool, join *sessionJoin) error 
 // D. User is already subscribed, changing modeWant.
 // E. User is accepting ownership transfer (requesting ownership transfer is not permitted).
 // In case of a group topic the user may be a reader or a full subscriber.
-func (t *Topic) thisUserSub(h *Hub, sess *Session, pkt *ClientComMessage, asUid types.Uid, want string,
+func (t *Topic) thisUserSub(sess *Session, pkt *ClientComMessage, asUid types.Uid, want string,
 	private interface{}) (*MsgAccessMode, error) {
 
 	now := types.TimeNow()
@@ -1503,7 +1502,7 @@ func (t *Topic) thisUserSub(h *Hub, sess *Session, pkt *ClientComMessage, asUid 
 // A. Sharer or Approver is inviting another user for the first time (no prior subscription)
 // B. Sharer or Approver is re-inviting another user (adjusting modeGiven, modeWant is still Unset)
 // C. Approver is changing modeGiven for another user, modeWant != Unset
-func (t *Topic) anotherUserSub(h *Hub, sess *Session, asUid, target types.Uid,
+func (t *Topic) anotherUserSub(sess *Session, asUid, target types.Uid,
 	pkt *ClientComMessage) (*MsgAccessMode, error) {
 
 	now := types.TimeNow()
@@ -2262,7 +2261,7 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 // replySetSub is a response to new subscription request or an update to a subscription {set.sub}:
 // update topic metadata cache, save/update subs, reply to the caller as {ctrl} message,
 // generate a presence notification, if appropriate.
-func (t *Topic) replySetSub(h *Hub, sess *Session, pkt *ClientComMessage) error {
+func (t *Topic) replySetSub(sess *Session, pkt *ClientComMessage) error {
 	now := types.TimeNow()
 
 	asUid := types.ParseUserId(pkt.AsUser)
@@ -2290,10 +2289,10 @@ func (t *Topic) replySetSub(h *Hub, sess *Session, pkt *ClientComMessage) error 
 	var modeChanged *MsgAccessMode
 	if target == asUid {
 		// Request new subscription or modify own subscription
-		modeChanged, err = t.thisUserSub(h, sess, pkt, asUid, set.Sub.Mode, nil)
+		modeChanged, err = t.thisUserSub(sess, pkt, asUid, set.Sub.Mode, nil)
 	} else {
 		// Request to approve/change someone's subscription
-		modeChanged, err = t.anotherUserSub(h, sess, asUid, target, pkt)
+		modeChanged, err = t.anotherUserSub(sess, asUid, target, pkt)
 	}
 	if err != nil {
 		return err
@@ -2713,7 +2712,7 @@ func (t *Topic) replyDelMsg(sess *Session, asUid types.Uid, msg *ClientComMessag
 // 2.1.1 Check if the other subscription still exists, if so, treat request as {leave unreg=true}
 // 2.1.2 If the other subscription does not exist, delete topic
 // 2.2 If this is not a p2p topic, treat it as {leave unreg=true}
-func (t *Topic) replyDelTopic(h *Hub, sess *Session, asUid types.Uid, msg *ClientComMessage) error {
+func (t *Topic) replyDelTopic(sess *Session, asUid types.Uid, msg *ClientComMessage) error {
 	if t.owner != asUid {
 		// Cases 2.1.1 and 2.2
 		if t.cat != types.TopicCatP2P || t.subsCount() == 2 {
@@ -2727,7 +2726,7 @@ func (t *Topic) replyDelTopic(h *Hub, sess *Session, asUid types.Uid, msg *Clien
 }
 
 // Delete credential
-func (t *Topic) replyDelCred(h *Hub, sess *Session, asUid types.Uid, authLvl auth.Level, msg *ClientComMessage) error {
+func (t *Topic) replyDelCred(sess *Session, asUid types.Uid, authLvl auth.Level, msg *ClientComMessage) error {
 	now := types.TimeNow()
 	incomingReqTs := msg.Timestamp
 	del := msg.Del
@@ -2758,7 +2757,7 @@ func (t *Topic) replyDelCred(h *Hub, sess *Session, asUid types.Uid, authLvl aut
 }
 
 // Delete subscription.
-func (t *Topic) replyDelSub(h *Hub, sess *Session, asUid types.Uid, msg *ClientComMessage) error {
+func (t *Topic) replyDelSub(sess *Session, asUid types.Uid, msg *ClientComMessage) error {
 	now := types.TimeNow()
 	del := msg.Del
 
