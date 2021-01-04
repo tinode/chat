@@ -413,6 +413,38 @@ func (t *Topic) presSubsOffline(what string, params *presParams,
 	}
 }
 
+// Publish {info what=read|recv} to topic subscribers's sessions currently offline in the topic, on subscriber's 'me'.
+// Group and P2P to all with 'R' & 'P' permissions.
+func (t *Topic) infoSubsOffline(from types.Uid, recv, read int, skipSid string) {
+
+	var seq int
+	var what string
+
+	if recv > 0 {
+		what = "recv"
+		seq = recv
+	} else if read > 0 {
+		what = "read"
+		seq = read
+	} else {
+		return
+	}
+
+	user := from.UserId()
+
+	for uid, pud := range t.perUser {
+		mode := pud.modeGiven & pud.modeWant
+		if pud.deleted || !mode.IsPresencer() || !mode.IsReader() {
+			continue
+		}
+
+		globals.hub.route <- &ServerComMessage{
+			Info: &MsgServerInfo{Topic: "me", Src: t.original(uid), From: user,
+				What: what, SeqId: seq, SkipTopic: t.name},
+			RcptTo: uid.UserId(), SkipSid: skipSid}
+	}
+}
+
 // Same as presSubsOffline, but the topic has not been loaded/initialized first: offline topic, offline subscribers
 func presSubsOfflineOffline(topic string, cat types.TopicCat, subs []types.Subscription, what string,
 	params *presParams, skipSid string) {

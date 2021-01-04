@@ -905,72 +905,78 @@ func (t *Topic) handleBroadcast(msg *ServerComMessage) {
 		// "what" may have changed, i.e. unset or "+command" removed ("on+en" -> "on")
 		msg.Pres.What = what
 	} else if msg.Info != nil {
-		if msg.Info.SeqId > t.lastID {
-			// Drop bogus read notification
-			return
-		}
-
-		asUser := types.ParseUserId(msg.Info.From)
-		pud := t.perUser[asUser]
-		mode := pud.modeGiven & pud.modeWant
-		if pud.deleted {
-			mode = types.ModeInvalid
-		}
-
-		// Filter out "kp" from users with no 'W' permission (or people without a subscription)
-		if msg.Info.What == "kp" && (!mode.IsWriter() || t.isReadOnly()) {
-			return
-		}
-
-		if msg.Info.What == "read" || msg.Info.What == "recv" {
-			// Filter out "read/recv" from users with no 'R' permission (or people without a subscription)
-			if !mode.IsReader() {
+		// No need to process {info} sent to 'me' topic.
+		if msg.Info.Src == "" {
+			if msg.Info.SeqId > t.lastID {
+				// Drop bogus read notification
 				return
 			}
 
-			var read, recv, unread int
-			if msg.Info.What == "read" {
-				if msg.Info.SeqId > pud.readID {
-					// The number of unread messages has decreased, negative value
-					unread = pud.readID - msg.Info.SeqId
-					pud.readID = msg.Info.SeqId
-					read = pud.readID
-				} else {
-					// No need to report stale or bogus read status
+			asUser := types.ParseUserId(msg.Info.From)
+			pud := t.perUser[asUser]
+			mode := pud.modeGiven & pud.modeWant
+			if pud.deleted {
+				mode = types.ModeInvalid
+			}
+
+			// Filter out "kp" from users with no 'W' permission (or people without a subscription)
+			if msg.Info.What == "kp" && (!mode.IsWriter() || t.isReadOnly()) {
+				return
+			}
+
+			if msg.Info.What == "read" || msg.Info.What == "recv" {
+				// Filter out "read/recv" from users with no 'R' permission (or people without a subscription)
+				if !mode.IsReader() {
 					return
 				}
-			} else if msg.Info.What == "recv" {
-				if msg.Info.SeqId > pud.recvID {
-					pud.recvID = msg.Info.SeqId
+
+				var read, recv, unread int
+				if msg.Info.What == "read" {
+					if msg.Info.SeqId > pud.readID {
+						// The number of unread messages has decreased, negative value
+						unread = pud.readID - msg.Info.SeqId
+						pud.readID = msg.Info.SeqId
+						read = pud.readID
+					} else {
+						// No need to report stale or bogus read status
+						return
+					}
+				} else if msg.Info.What == "recv" {
+					if msg.Info.SeqId > pud.recvID {
+						pud.recvID = msg.Info.SeqId
+						recv = pud.recvID
+					} else {
+						return
+					}
+				}
+
+				if pud.readID > pud.recvID {
+					pud.recvID = pud.readID
 					recv = pud.recvID
-				} else {
-					return
-				}
-			}
-
-			if pud.readID > pud.recvID {
-				pud.recvID = pud.readID
-				recv = pud.recvID
-			}
-
-			if !t.isProxy {
-				if err := store.Subs.Update(t.name, asUser,
-					map[string]interface{}{
-						"RecvSeqId": pud.recvID,
-						"ReadSeqId": pud.readID},
-					false); err != nil {
-
-					logs.Warn.Printf("topic[%s]: failed to update SeqRead/Recv counter: %v", t.name, err)
-					return
 				}
 
-				// Read/recv updated: notify user's other sessions of the change
-				t.presPubMessageCount(asUser, mode, recv, read, msg.SkipSid)
+				if !t.isProxy {
+					if err := store.Subs.Update(t.name, asUser,
+						map[string]interface{}{
+							"RecvSeqId": pud.recvID,
+							"ReadSeqId": pud.readID},
+						false); err != nil {
 
-				// Update cached count of unread messages
-				usersUpdateUnread(asUser, unread, true)
+						logs.Warn.Printf("topic[%s]: failed to update SeqRead/Recv counter: %v", t.name, err)
+						return
+					}
+
+					// Read/recv updated: notify user's other sessions of the change
+					t.presPubMessageCount(asUser, mode, recv, read, msg.SkipSid)
+
+					// Read/recv updated: notify users offline in the topic on their 'me'.
+					t.infoSubsOffline(asUser, recv, read, msg.SkipSid)
+
+					// Update cached count of unread messages
+					usersUpdateUnread(asUser, unread, true)
+				}
+				t.perUser[asUser] = pud
 			}
-			t.perUser[asUser] = pud
 		}
 	} else {
 		// TODO(gene): remove this
@@ -1009,18 +1015,26 @@ func (t *Topic) handleBroadcast(msg *ServerComMessage) {
 				}
 
 			} else {
-				// Check if the user has Read permission or is a channel reader.
-				if !t.userIsReader(pssd.uid) && !pssd.isChanSub {
-					continue
-				}
+				if msg.Info != nil {
+					// Don't forward read receipts and key presses to channel readers and those without the R permission.
+					// OK to forward with Src != "" because it's sent from another topic to 'me', permissions already
+					// checked there.
+					if msg.Info.Src == "" && (pssd.isChanSub || !t.userIsReader(pssd.uid)) {
+						continue
+					}
 
-				// Don't send read receipts and key presses to channel readers.
-				if msg.Info != nil && pssd.isChanSub {
-					continue
-				}
+					// Skip notifying - already notified on topic.
+					if msg.Info.SkipTopic != "" && sess.getSub(msg.Info.SkipTopic) != nil {
+						continue
+					}
 
-				// Don't send key presses from one user's session to the other sessions of the same user.
-				if msg.Info != nil && msg.Info.What == "kp" && msg.Info.From == pssd.uid.UserId() {
+					// Don't send key presses from one user's session to the other sessions of the same user.
+					if msg.Info.What == "kp" && msg.Info.From == pssd.uid.UserId() {
+						continue
+					}
+
+				} else if !t.userIsReader(pssd.uid) && !pssd.isChanSub {
+					// Skip {data} if the user has no Read permission and not a channel reader.
 					continue
 				}
 			}
