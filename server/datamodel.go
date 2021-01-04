@@ -720,7 +720,7 @@ type MsgServerInfo struct {
 	Src string `json:"src,omitempty"`
 	// ID of the user who originated the message.
 	From string `json:"from"`
-	// The event is being reported: "rcpt" - message received, "read" - message read, "kp" - typing notification.
+	// The event being reported: "rcpt" - message received, "read" - message read, "kp" - typing notification.
 	What string `json:"what"`
 	// Server-issued message ID being reported.
 	SeqId int `json:"seq,omitempty"`
