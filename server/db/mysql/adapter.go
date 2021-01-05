@@ -2077,7 +2077,7 @@ func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.QueryOpt) (
 		return nil, err
 	}
 
-	var msgs []t.Message
+	msgs := make([]t.Message, 0, limit)
 	for rows.Next() {
 		var msg t.Message
 		if err = rows.StructScan(&msg); err != nil {
