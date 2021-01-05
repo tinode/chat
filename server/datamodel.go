@@ -712,15 +712,24 @@ func (src *MsgServerMeta) describe() string {
 	return s
 }
 
-// MsgServerInfo is the server-side copy of MsgClientNote with From added (non-authoritative).
+// MsgServerInfo is the server-side copy of MsgClientNote with From and optionally Src added (non-authoritative).
 type MsgServerInfo struct {
+	// Topic to send event to.
 	Topic string `json:"topic"`
-	// ID of the user who originated the message
+	// Topic where the even has occured (set only when Topic='me').
+	Src string `json:"src,omitempty"`
+	// ID of the user who originated the message.
 	From string `json:"from"`
-	// what is being reported: "rcpt" - message received, "read" - message read, "kp" - typing notification
+	// The event being reported: "rcpt" - message received, "read" - message read, "kp" - typing notification.
 	What string `json:"what"`
-	// Server-issued message ID being reported
+	// Server-issued message ID being reported.
 	SeqId int `json:"seq,omitempty"`
+
+	// UNroutable params. All marked with `json:"-"` to exclude from json marshalling.
+	// They are still serialized for intra-cluster communication.
+
+	// When sending to 'me', skip sessions subscribed to this topic.
+	SkipTopic string `json:"-"`
 }
 
 // Deep copy
@@ -734,7 +743,11 @@ func (src *MsgServerInfo) copy() *MsgServerInfo {
 
 // Basic description
 func (src *MsgServerInfo) describe() string {
-	s := src.Topic + " what=" + src.What + " from=" + src.From
+	s := src.Topic
+	if src.Src != "" {
+		s += " src=" + src.Src
+	}
+	s += " what=" + src.What + " from=" + src.From
 	if src.SeqId > 0 {
 		s += " seq=" + strconv.Itoa(src.SeqId)
 	}

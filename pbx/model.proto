@@ -413,12 +413,13 @@ message ServerMeta {
 	repeated ServerCred cred = 7;
 }
 
-// {info} message: server-side copy of ClientNote with From added
+// {info} message: server-side copy of ClientNote with From and optional Src added.
 message ServerInfo {
 	string topic = 1;
 	string from_user_id = 2;
 	InfoNote what = 3;
 	int32 seq_id = 4;
+	string src = 5;
 }
 
 // Cumulative message
