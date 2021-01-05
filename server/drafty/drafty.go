@@ -26,34 +26,54 @@ func (s *span) fromMap(in interface{}) error {
 	}
 
 	s.tp, _ = m["tp"].(string)
-	s.at = intFromNumeric(m["at"])
-	s.end = s.at + intFromNumeric(m["len"])
-	if s.end < s.at {
+	var err error
+
+	s.at, err = intFromNumeric(m["at"])
+	if err != nil {
+		return err
+	}
+
+	s.end, err = intFromNumeric(m["len"])
+	if err != nil {
+		return err
+	}
+	if s.end < 0 {
 		return errInvalidContent
 	}
+	s.end += s.at
+
 	if s.tp == "" {
-		s.key = intFromNumeric(m["key"])
+		s.key, err = intFromNumeric(m["key"])
+		if err != nil {
+			return err
+		}
+		if s.key < 0 {
+			return errInvalidContent
+		}
 	}
 
 	return nil
 }
 
-func intFromNumeric(num interface{}) int {
+func intFromNumeric(num interface{}) (int, error) {
+	if num == nil {
+		return 0, nil
+	}
 	switch i := num.(type) {
 	case int:
-		return i
+		return i, nil
 	case int16:
-		return int(i)
+		return int(i), nil
 	case int32:
-		return int(i)
+		return int(i), nil
 	case int64:
-		return int(i)
+		return int(i), nil
 	case float32:
-		return int(i)
+		return int(i), nil
 	case float64:
-		return int(i)
+		return int(i), nil
 	default:
-		return 0
+		return 0, errInvalidContent
 	}
 }
 
@@ -126,19 +146,19 @@ func Preview(content interface{}, length int) (interface{}, error) {
 		runes := []rune(txt)
 		textLen = len(runes)
 		if textLen > length {
-			preview["txt"] = string(runes[:length])
+			txt = string(runes[:length])
 			textLen = length
-		} else {
-			preview["txt"] = txt
 		}
-		txt = preview["txt"].(string)
+
+		preview["txt"] = txt
 	}
 
 	if len(fmt) > 0 {
 		// Old key to new key entity mapping.
 		entRefs := make(map[int]int)
 
-		// Count styles which start within the new length of the text and save entity keys as set.
+		// Cache styles which start within the new length of the text and save entity keys as set.
+		var styles []span
 		for i := range fmt {
 			s := span{}
 			if err := s.fromMap(fmt[i]); err != nil {
@@ -146,6 +166,7 @@ func Preview(content interface{}, length int) (interface{}, error) {
 			}
 
 			if s.at < textLen {
+				styles = append(styles, s)
 				if s.tp == "" {
 					if s.key < 0 {
 						return "", errUnrecognizedContent
@@ -164,26 +185,21 @@ func Preview(content interface{}, length int) (interface{}, error) {
 		if len(entRefs) > 0 {
 			preview_ent = make([]map[string]interface{}, len(entRefs))
 		}
-		for i := range fmt {
-			old := span{}
-			// No need to check for errors: already checked earlier.
-			old.fromMap(fmt[i])
-			if old.at < textLen {
-				style := span{at: old.at, end: old.end}
-				if old.tp != "" {
-					style.tp = old.tp
-				} else if old.key >= 0 && len(ent) > old.key {
-					if key, ok := entRefs[old.key]; ok {
-						style.key = key
-						preview_ent[style.key] = copyLight(ent[old.key])
-					} else {
-						continue
-					}
+		for _, old := range styles {
+			style := span{at: old.at, end: old.end}
+			if old.tp != "" {
+				style.tp = old.tp
+			} else if old.key >= 0 && len(ent) > old.key {
+				if key, ok := entRefs[old.key]; ok {
+					style.key = key
+					preview_ent[style.key] = copyLight(ent[old.key])
 				} else {
 					continue
 				}
-				preview_fmt = append(preview_fmt, style.toMap())
+			} else {
+				continue
 			}
+			preview_fmt = append(preview_fmt, style.toMap())
 		}
 
 		if len(preview_fmt) > 0 {

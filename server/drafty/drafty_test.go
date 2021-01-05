@@ -80,9 +80,7 @@ func TestToPlainText(t *testing.T) {
 		res, err := ToPlainText(val)
 		if err != nil {
 			t.Error(err)
-		}
-
-		if res != expect[i] {
+		} else if res != expect[i] {
 			t.Errorf("%d output '%s' does not match '%s'", i, res, expect[i])
 		}
 	}
