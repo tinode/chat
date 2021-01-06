@@ -63,6 +63,23 @@ func (sess *Session) readLoop() {
 	}
 }
 
+func (sess *Session) sendMessage(msg interface{}) bool {
+	if len(sess.send) > sendQueueLimit {
+		logs.Err.Println("ws: outbound queue limit exceeded", sess.sid)
+		return false
+	}
+
+	statsInc("OutgoingMessagesWebsockTotal", 1)
+	if err := wsWrite(sess.ws, websocket.TextMessage, msg); err != nil {
+		if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure,
+			websocket.CloseNormalClosure) {
+			logs.Err.Println("ws: writeLoop", sess.sid, err)
+		}
+		return false
+	}
+	return true
+}
+
 func (sess *Session) writeLoop() {
 	ticker := time.NewTicker(pingPeriod)
 
@@ -79,17 +96,23 @@ func (sess *Session) writeLoop() {
 				// Channel closed.
 				return
 			}
-			if len(sess.send) > sendQueueLimit {
-				logs.Err.Println("ws: outbound queue limit exceeded", sess.sid)
-				return
-			}
-			statsInc("OutgoingMessagesWebsockTotal", 1)
-			if err := wsWrite(sess.ws, websocket.TextMessage, msg); err != nil {
-				if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure,
-					websocket.CloseNormalClosure) {
-					logs.Err.Println("ws: writeLoop", sess.sid, err)
+			switch v := msg.(type) {
+			case []*ServerComMessage: // batch of unserialized messages
+				for _, msg := range v {
+					w := sess.serializeAndUpdateStats(msg)
+					if !sess.sendMessage(w) {
+						return
+					}
 				}
-				return
+			case *ServerComMessage: // single unserialized message
+				w := sess.serializeAndUpdateStats(v)
+				if !sess.sendMessage(w) {
+					return
+				}
+			default: // serialized message
+				if !sess.sendMessage(v) {
+					return
+				}
 			}
 
 		case <-sess.bkgTimer.C:

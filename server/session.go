@@ -267,8 +267,61 @@ func (s *Session) scheduleClusterWriteLoop() {
 	}
 }
 
-// queueOut attempts to send a ServerComMessage to a session write loop; if the send buffer is full,
-// timeout is `sendTimeout`.
+func (s *Session) supportsMessageBatching() bool {
+	switch s.proto {
+	case WEBSOCK:
+		return true
+	case GRPC:
+		return true
+	default:
+		return false
+	}
+}
+
+// queueOut attempts to send a list of ServerComMessages to a session write loop;
+// it fails if the send buffer is full.
+func (s *Session) queueOutBatch(msgs []*ServerComMessage) bool {
+	if s == nil {
+		return true
+	}
+	if atomic.LoadInt32(&s.terminating) > 0 {
+		return true
+	}
+
+	if s.multi != nil {
+		// In case of a cluster we need to pass a copy of the actual session.
+		for i := range msgs {
+			msgs[i].sess = s
+		}
+		if s.multi.queueOutBatch(msgs) {
+			s.multi.scheduleClusterWriteLoop()
+			return true
+		}
+		return false
+	}
+
+	if s.supportsMessageBatching() {
+		select {
+		case s.send <- msgs:
+		default:
+			// Never block here since it may also block the topic's run() goroutine.
+			logs.Err.Println("s.queueOut: session's send queue2 full", s.sid)
+			return false
+		}
+		if s.isMultiplex() {
+			s.scheduleClusterWriteLoop()
+		}
+	} else {
+		for _, msg := range msgs {
+			s.queueOut(msg)
+		}
+	}
+	return true
+
+}
+
+// queueOut attempts to send a ServerComMessage to a session write loop;
+// it fails, if the send buffer is full.
 func (s *Session) queueOut(msg *ServerComMessage) bool {
 	if s == nil {
 		return true
@@ -300,12 +353,8 @@ func (s *Session) queueOut(msg *ServerComMessage) bool {
 		}
 	}
 
-	dataSize, data := s.serialize(msg)
-	if dataSize >= 0 {
-		statsAddHistSample("OutgoingMessageSize", float64(dataSize))
-	}
 	select {
-	case s.send <- data:
+	case s.send <- msg:
 	default:
 		// Never block here since it may also block the topic's run() goroutine.
 		logs.Err.Println("s.queueOut: session's send queue full", s.sid)
@@ -318,7 +367,7 @@ func (s *Session) queueOut(msg *ServerComMessage) bool {
 }
 
 // queueOutBytes attempts to send a ServerComMessage already serialized to []byte.
-// If the send buffer is full, timeout is `sendTimeout`.
+// If the send buffer is full, it fails.
 func (s *Session) queueOutBytes(data []byte) bool {
 	if s == nil || atomic.LoadInt32(&s.terminating) > 0 {
 		return true
@@ -1266,6 +1315,14 @@ func (s *Session) expandTopicName(msg *ClientComMessage) (string, *ServerComMess
 	}
 
 	return routeTo, nil
+}
+
+func (sess *Session) serializeAndUpdateStats(msg *ServerComMessage) interface{} {
+	dataSize, data := sess.serialize(msg)
+	if dataSize >= 0 {
+		statsAddHistSample("OutgoingMessageSize", float64(dataSize))
+	}
+	return data
 }
 
 func (s *Session) serialize(msg *ServerComMessage) (int, interface{}) {

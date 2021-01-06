@@ -19,19 +19,38 @@ import (
 	"github.com/tinode/chat/server/logs"
 )
 
+func (sess *Session) sendMessageLp(wrt http.ResponseWriter, msg interface{}) bool {
+	if len(sess.send) > sendQueueLimit {
+		logs.Err.Println("longPoll: outbound queue limit exceeded", sess.sid)
+		return false
+	}
+
+	statsInc("OutgoingMessagesLongpollTotal", 1)
+	if err := lpWrite(wrt, msg); err != nil {
+		logs.Err.Println("longPoll: writeOnce failed", sess.sid, err)
+		return false
+	}
+
+	return true
+}
+
 func (sess *Session) writeOnce(wrt http.ResponseWriter, req *http.Request) {
 
 	for {
 		select {
 		case msg, ok := <-sess.send:
-			if ok {
-				if len(sess.send) > sendQueueLimit {
-					logs.Err.Println("longPoll: outbound queue limit exceeded", sess.sid)
-				} else {
-					statsInc("OutgoingMessagesLongpollTotal", 1)
-					if err := lpWrite(wrt, msg); err != nil {
-						logs.Err.Println("longPoll: writeOnce failed", sess.sid, err)
-					}
+			if !ok {
+				return
+			}
+			switch v := msg.(type) {
+			case *ServerComMessage: // single unserialized message
+				w := sess.serializeAndUpdateStats(v)
+				if !sess.sendMessageLp(wrt, w) {
+					return
+				}
+			default: // serialized message
+				if !sess.sendMessageLp(wrt, v) {
+					return
 				}
 			}
 			return
