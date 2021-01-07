@@ -19,6 +19,82 @@ type span struct {
 	data map[string]interface{}
 }
 
+func (s *span) fromMap(in interface{}) error {
+	m, _ := in.(map[string]interface{})
+	if m == nil {
+		return errUnrecognizedContent
+	}
+
+	s.tp, _ = m["tp"].(string)
+	var err error
+
+	s.at, err = intFromNumeric(m["at"])
+	if err != nil {
+		return err
+	}
+
+	s.end, err = intFromNumeric(m["len"])
+	if err != nil {
+		return err
+	}
+	if s.end < 0 {
+		return errInvalidContent
+	}
+	s.end += s.at
+
+	if s.tp == "" {
+		s.key, err = intFromNumeric(m["key"])
+		if err != nil {
+			return err
+		}
+		if s.key < 0 {
+			return errInvalidContent
+		}
+	}
+
+	return nil
+}
+
+func intFromNumeric(num interface{}) (int, error) {
+	if num == nil {
+		return 0, nil
+	}
+	switch i := num.(type) {
+	case int:
+		return i, nil
+	case int16:
+		return int(i), nil
+	case int32:
+		return int(i), nil
+	case int64:
+		return int(i), nil
+	case float32:
+		return int(i), nil
+	case float64:
+		return int(i), nil
+	default:
+		return 0, errInvalidContent
+	}
+}
+
+func (s *span) toMap() map[string]interface{} {
+	out := make(map[string]interface{})
+
+	if s.tp != "" {
+		out["tp"] = s.tp
+	} else {
+		out["key"] = s.key
+	}
+	if s.at != 0 {
+		out["at"] = s.at
+	}
+	if s.end != s.at {
+		out["len"] = s.end - s.at
+	}
+
+	return out
+}
+
 type spanfmt struct {
 	dec    string
 	isVoid bool
@@ -37,7 +113,133 @@ var tags = map[string]spanfmt{
 	"EX": {"", true},
 }
 
-// ToPlainText converts message payload from Drafy format to string.
+// Preview shortens Drafty to the specified length (in runes) and removes large content from entities making them
+// suitable for a one-line preview, for example for showing in push notifications.
+func Preview(content interface{}, length int) (interface{}, error) {
+	if content == nil {
+		return "", nil
+	}
+
+	var original map[string]interface{}
+
+	switch tmp := content.(type) {
+	case string:
+		return tmp, nil
+	case map[string]interface{}:
+		original = tmp
+	default:
+		return "", errUnrecognizedContent
+	}
+
+	txt, txtOK := original["txt"].(string)
+	fmt, fmtOK := original["fmt"].([]interface{})
+	ent, entOK := original["ent"].([]interface{})
+
+	// At least one must be set.
+	if !txtOK && !fmtOK && !entOK {
+		return "", errUnrecognizedContent
+	}
+
+	var textLen int
+	preview := make(map[string]interface{})
+	if txtOK {
+		runes := []rune(txt)
+		textLen = len(runes)
+		if textLen > length {
+			txt = string(runes[:length])
+			textLen = length
+		}
+
+		preview["txt"] = txt
+	}
+
+	if len(fmt) > 0 {
+		// Old key to new key entity mapping.
+		entRefs := make(map[int]int)
+
+		// Cache styles which start within the new length of the text and save entity keys as set.
+		var styles []span
+		for i := range fmt {
+			s := span{}
+			if err := s.fromMap(fmt[i]); err != nil {
+				return "", err
+			}
+
+			if s.at < textLen {
+				styles = append(styles, s)
+				if s.tp == "" {
+					if s.key < 0 {
+						return "", errUnrecognizedContent
+					}
+
+					if _, ok := entRefs[s.key]; !ok {
+						entRefs[s.key] = len(entRefs)
+					}
+				}
+			}
+		}
+
+		// Allocate space for copying styles and entities.
+		var preview_fmt []map[string]interface{}
+		var preview_ent []map[string]interface{}
+		if len(entRefs) > 0 {
+			preview_ent = make([]map[string]interface{}, len(entRefs))
+		}
+		for _, old := range styles {
+			style := span{at: old.at, end: old.end}
+			if old.tp != "" {
+				style.tp = old.tp
+			} else if old.key >= 0 && len(ent) > old.key {
+				if key, ok := entRefs[old.key]; ok {
+					style.key = key
+					preview_ent[style.key] = copyLight(ent[old.key])
+				} else {
+					continue
+				}
+			} else {
+				continue
+			}
+			preview_fmt = append(preview_fmt, style.toMap())
+		}
+
+		if len(preview_fmt) > 0 {
+			preview["fmt"] = preview_fmt
+		}
+		if len(preview_ent) > 0 {
+			preview["ent"] = preview_ent
+		}
+	}
+
+	return preview, nil
+}
+
+var lightData = []string{"mime", "name", "width", "height", "size"}
+
+func copyLight(in interface{}) map[string]interface{} {
+	ent, ok := in.(map[string]interface{})
+	if !ok {
+		return nil
+	}
+
+	tp, _ := ent["tp"].(string)
+	data, _ := ent["data"].(map[string]interface{})
+	result := map[string]interface{}{"tp": tp}
+	var dc map[string]interface{}
+	if len(data) > 0 {
+		dc = make(map[string]interface{})
+		for _, key := range lightData {
+			if val, ok := data[key]; ok {
+				dc[key] = val
+			}
+		}
+		if len(dc) != 0 {
+			result["data"] = dc
+		}
+	}
+	return result
+}
+
+// ToPlainText converts message payload from Drafy to string.
 // If content is plain string, then it's returned unchanged. If content is not recognized
 // as either Drafy (as a map[string]interface{}) or as a string, an error is returned.
 func ToPlainText(content interface{}) (string, error) {
@@ -77,21 +279,13 @@ func ToPlainText(content interface{}) (string, error) {
 	var spans []*span
 	for i := range fmt {
 		s := span{}
-		f, _ := fmt[i].(map[string]interface{})
-		if f == nil {
-			continue
+		if err := s.fromMap(fmt[i]); err != nil {
+			return "", err
 		}
-
-		s.tp, _ = f["tp"].(string)
-		tmp, _ := f["at"].(float64)
-		s.at = int(tmp)
-		tmp, _ = f["len"].(float64)
-		s.end = s.at + int(tmp)
-		if s.end > textLen || s.end < s.at {
+		if s.end > textLen {
 			return "", errInvalidContent
 		}
-		tmp, _ = f["key"].(float64)
-		s.key = int(tmp)
+
 		// Denormalize entities into spans.
 		if s.tp == "" && entOK {
 			if s.key < 0 || s.key >= len(ent) {
