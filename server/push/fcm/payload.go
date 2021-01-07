@@ -151,18 +151,25 @@ func payloadToData(pl *push.Payload) (map[string]string, error) {
 	if pl.What == push.ActMsg {
 		data["seq"] = strconv.Itoa(pl.SeqId)
 		data["mime"] = pl.ContentType
+
+		// Convert Drafty content to plain text (clients 0.16 and below).
 		data["content"], err = drafty.ToPlainText(pl.Content)
 		if err != nil {
 			return nil, err
 		}
-
-		// Trim long strings to 80 runes.
+		// Trim long strings to 128 runes.
 		// Check byte length first and don't waste time converting short strings.
-		if len(data["content"]) > maxMessageLength {
+		if len(data["content"]) > push.MaxPayloadLength {
 			runes := []rune(data["content"])
-			if len(runes) > maxMessageLength {
-				data["content"] = string(runes[:maxMessageLength]) + "…"
+			if len(runes) > push.MaxPayloadLength {
+				data["content"] = string(runes[:push.MaxPayloadLength]) + "…"
 			}
+		}
+
+		// Rich content for clients version 0.17 and above.
+		data["rc"], err = drafty.Preview(pl.Content, push.MaxPayloadLength)
+		if err != nil {
+			return nil, err
 		}
 	} else if pl.What == push.ActSub {
 		data["modeWant"] = pl.ModeWant.String()
