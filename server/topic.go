@@ -1048,7 +1048,8 @@ func (t *Topic) handleBroadcast(msg *ServerComMessage) {
 			msg.Data.From = ""
 		}
 		// Send message to session.
-		if !sess.queueOut(msg) {
+		// Make a copy of msg since messages sent to sessions differ.
+		if !sess.queueOut(msg.copy()) {
 			logs.Warn.Printf("topic[%s]: connection stuck, detaching - %s", t.name, sess.sid)
 			dropSessions = append(dropSessions, sess)
 		}
@@ -2360,20 +2361,24 @@ func (t *Topic) replyGetData(sess *Session, asUid types.Uid, req *MsgGetOpts, ms
 		// Push the list of messages to the client as {data}.
 		if messages != nil {
 			count = len(messages)
-			for i := range messages {
-				mm := &messages[i]
-				from := ""
-				if !asChan {
-					// Don't show sender for channel readers
-					from = types.ParseUid(mm.From).UserId()
+			if count > 0 {
+				outgoingMessages := make([]*ServerComMessage, count)
+				for i := range messages {
+					mm := &messages[i]
+					from := ""
+					if !asChan {
+						// Don't show sender for channel readers
+						from = types.ParseUid(mm.From).UserId()
+					}
+					outgoingMessages[i] = &ServerComMessage{Data: &MsgServerData{
+						Topic:     toriginal,
+						Head:      mm.Head,
+						SeqId:     mm.SeqId,
+						From:      from,
+						Timestamp: mm.CreatedAt,
+						Content:   mm.Content}}
 				}
-				sess.queueOut(&ServerComMessage{Data: &MsgServerData{
-					Topic:     toriginal,
-					Head:      mm.Head,
-					SeqId:     mm.SeqId,
-					From:      from,
-					Timestamp: mm.CreatedAt,
-					Content:   mm.Content}})
+				sess.queueOutBatch(outgoingMessages)
 			}
 		}
 	}
