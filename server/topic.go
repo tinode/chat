@@ -1048,7 +1048,8 @@ func (t *Topic) handleBroadcast(msg *ServerComMessage) {
 			msg.Data.From = ""
 		}
 		// Send message to session.
-		if !sess.queueOut(msg) {
+		// Make a copy of msg since messages sent to sessions differ.
+		if !sess.queueOut(msg.copy()) {
 			logs.Warn.Printf("topic[%s]: connection stuck, detaching - %s", t.name, sess.sid)
 			dropSessions = append(dropSessions, sess)
 		}
