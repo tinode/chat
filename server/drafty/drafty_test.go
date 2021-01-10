@@ -2,13 +2,12 @@ package drafty
 
 import (
 	"encoding/json"
-	"reflect"
 	"testing"
 )
 
 var validInputs = []string{
 	`{
-		"ent":[{"data":{"mime":"image/jpeg","name":"hello.jpg","val":"<38992, bytes: ...>"},"tp":"EX"}],
+		"ent":[{"data":{"mime":"image/jpeg","name":"hello.jpg","val":"<38992, bytes: ...>","width":100, "height":80},"tp":"EX"}],
 		"fmt":[{"at":-1, "key":0}]
 	}`,
 	`{
@@ -96,50 +95,14 @@ func TestToPlainText(t *testing.T) {
 }
 
 func TestPreview(t *testing.T) {
-	expect := []map[string]interface{}{
-		map[string]interface{}{
-			"fmt": []map[string]interface{}{map[string]interface{}{"at": -1, "key": 0}},
-			"ent": []map[string]interface{}{map[string]interface{}{
-				"tp":   "EX",
-				"data": map[string]interface{}{"mime": "image/jpeg", "name": "hello.jpg"}},
-			},
-		},
-		map[string]interface{}{
-			"txt": "https://api.tin",
-			"fmt": []map[string]interface{}{map[string]interface{}{"len": 22, "key": 0}},
-			"ent": []map[string]interface{}{map[string]interface{}{"tp": "LN"}},
-		},
-		map[string]interface{}{
-			"txt": "https://api.tin",
-			"fmt": []map[string]interface{}{map[string]interface{}{"len": 22, "key": 0}},
-			"ent": []map[string]interface{}{map[string]interface{}{"tp": "LN"}},
-		},
-		map[string]interface{}{
-			"txt": " ",
-			"fmt": []map[string]interface{}{map[string]interface{}{"len": 1, "key": 0}},
-			"ent": []map[string]interface{}{map[string]interface{}{
-				"tp": "IM",
-				"data": map[string]interface{}{
-					"width":  638.0,
-					"height": 213.0,
-					"mime":   "image/jpeg",
-					"name":   "roses.jpg",
-				},
-			}},
-		},
-		map[string]interface{}{
-			"txt": "This text is fo",
-			"fmt": []map[string]interface{}{
-				map[string]interface{}{"at": 5, "len": 4, "tp": "ST"},
-				map[string]interface{}{"at": 13, "len": 9, "tp": "EM"},
-			},
-		},
-		map[string]interface{}{
-			"txt": "мультибайтовый ",
-			"fmt": []map[string]interface{}{map[string]interface{}{"tp": "ST", "len": 14}},
-		},
+	expect := []string{
+		`{"ent":[{"data":{"height":80,"mime":"image/jpeg","name":"hello.jpg","width":100},"tp":"EX"}],"fmt":[{"at":-1,"key":0}]}`,
+		`{"ent":[{"tp":"LN"}],"fmt":[{"key":0,"len":22}],"txt":"https://api.tin"}`,
+		`{"ent":[{"tp":"LN"}],"fmt":[{"key":0,"len":22}],"txt":"https://api.tin"}`,
+		`{"ent":[{"data":{"height":213,"mime":"image/jpeg","name":"roses.jpg","width":638},"tp":"IM"}],"fmt":[{"key":0,"len":1}],"txt":" "}`,
+		`{"fmt":[{"at":5,"len":4,"tp":"ST"},{"at":13,"len":9,"tp":"EM"}],"txt":"This text is fo"}`,
+		`{"fmt":[{"len":14,"tp":"ST"}],"txt":"мультибайтовый "}`,
 	}
-
 	for i := range validInputs {
 		var val interface{}
 		json.Unmarshal([]byte(validInputs[i]), &val)
@@ -148,7 +111,7 @@ func TestPreview(t *testing.T) {
 			t.Error(err)
 		}
 
-		if !reflect.DeepEqual(res, expect[i]) {
+		if res != expect[i] {
 			t.Errorf("%d output '%s' does not match '%s'", i, res, expect[i])
 		}
 	}

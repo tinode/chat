@@ -32,10 +32,6 @@ const (
 
 	// The number of sub/unsub requests sent in one batch. FCM constant.
 	subBatchSize = 1000
-
-	// Maximum length of a text message in runes. The message is clipped if length is exceeded.
-	// TODO: implement intelligent clipping of Drafty messages.
-	maxMessageLength = 80
 )
 
 // Handler represents the push handler; implements push.PushHandler interface.

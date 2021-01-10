@@ -2,6 +2,7 @@
 package drafty
 
 import (
+	"encoding/json"
 	"errors"
 	"sort"
 	"strings"
@@ -115,7 +116,7 @@ var tags = map[string]spanfmt{
 
 // Preview shortens Drafty to the specified length (in runes) and removes large content from entities making them
 // suitable for a one-line preview, for example for showing in push notifications.
-func Preview(content interface{}, length int) (interface{}, error) {
+func Preview(content interface{}, length int) (string, error) {
 	if content == nil {
 		return "", nil
 	}
@@ -210,7 +211,9 @@ func Preview(content interface{}, length int) (interface{}, error) {
 		}
 	}
 
-	return preview, nil
+	data, err := json.Marshal(preview)
+
+	return string(data), err
 }
 
 var lightData = []string{"mime", "name", "width", "height", "size"}
