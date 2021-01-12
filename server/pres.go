@@ -416,8 +416,6 @@ func (t *Topic) presSubsOffline(what string, params *presParams,
 // Publish {info what=read|recv|kp} to topic subscribers's sessions currently offline in the topic, on subscriber's 'me'.
 // Group and P2P.
 func (t *Topic) infoSubsOffline(from types.Uid, what string, seq int, skipSid string) {
-	// FIXME: disabled just for 0.16.10 release.
-	return
 
 	user := from.UserId()
 
