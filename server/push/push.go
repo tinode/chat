@@ -17,6 +17,9 @@ const (
 	ActSub = "sub"
 )
 
+// Maximum length of push payload in multibyte characters.
+const MaxPayloadLength = 128
+
 // Recipient is a user targeted by the push.
 type Recipient struct {
 	// Count of user's connections that were live when the packet was dispatched from the server

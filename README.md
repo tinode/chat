@@ -152,7 +152,7 @@ Words 'chat' and 'instant messaging' in Chinese, Russian, Persian and a few othe
 * чат мессенджер
 * インスタントメッセージ
 * 인스턴트 메신저
-* پیام‌رسانی فوری گپ
+* پیام رسان فوری
 * تراسل فوري
 * Nhắn tin tức thời
 * anlık mesajlaşma sohbet

@@ -413,22 +413,11 @@ func (t *Topic) presSubsOffline(what string, params *presParams,
 	}
 }
 
-// Publish {info what=read|recv} to topic subscribers's sessions currently offline in the topic, on subscriber's 'me'.
-// Group and P2P to all with 'R' & 'P' permissions.
-func (t *Topic) infoSubsOffline(from types.Uid, recv, read int, skipSid string) {
-
-	var seq int
-	var what string
-
-	if recv > 0 {
-		what = "recv"
-		seq = recv
-	} else if read > 0 {
-		what = "read"
-		seq = read
-	} else {
-		return
-	}
+// Publish {info what=read|recv|kp} to topic subscribers's sessions currently offline in the topic, on subscriber's 'me'.
+// Group and P2P.
+func (t *Topic) infoSubsOffline(from types.Uid, what string, seq int, skipSid string) {
+	// FIXME: disabled just for 0.16.10 release.
+	return
 
 	user := from.UserId()
 
@@ -542,9 +531,10 @@ func presSingleUserOfflineOffline(uid types.Uid, original, what string, params *
 		RcptTo: uid.UserId(), SkipSid: skipSid}
 }
 
-// Let other sessions of a given user know what messages are now received/read
+// Let other sessions of a given user know what messages are now received/read.
+// If both 'read' and 'recv' != 0 then 'read' takes precedence over 'recv'.
 // Cases U
-func (t *Topic) presPubMessageCount(uid types.Uid, mode types.AccessMode, recv, read int, skip string) {
+func (t *Topic) presPubMessageCount(uid types.Uid, mode types.AccessMode, read, recv int, skip string) {
 	var what string
 	var seq int
 	if read > 0 {

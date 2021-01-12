@@ -924,58 +924,65 @@ func (t *Topic) handleBroadcast(msg *ServerComMessage) {
 				return
 			}
 
-			if msg.Info.What == "read" || msg.Info.What == "recv" {
+			if (msg.Info.What == "read" || msg.Info.What == "recv") && !mode.IsReader() {
 				// Filter out "read/recv" from users with no 'R' permission (or people without a subscription)
-				if !mode.IsReader() {
+				return
+			}
+
+			var read, recv, unread, seq int
+			if msg.Info.What == "read" {
+				if msg.Info.SeqId <= pud.readID {
+					// No need to report stale or bogus read status.
 					return
 				}
 
-				var read, recv, unread int
-				if msg.Info.What == "read" {
-					if msg.Info.SeqId > pud.readID {
-						// The number of unread messages has decreased, negative value
-						unread = pud.readID - msg.Info.SeqId
-						pud.readID = msg.Info.SeqId
-						read = pud.readID
-					} else {
-						// No need to report stale or bogus read status
-						return
-					}
-				} else if msg.Info.What == "recv" {
-					if msg.Info.SeqId > pud.recvID {
-						pud.recvID = msg.Info.SeqId
-						recv = pud.recvID
-					} else {
-						return
-					}
-				}
-
+				// The number of unread messages has decreased, negative value.
+				unread = pud.readID - msg.Info.SeqId
+				pud.readID = msg.Info.SeqId
 				if pud.readID > pud.recvID {
 					pud.recvID = pud.readID
-					recv = pud.recvID
+				}
+				read = pud.readID
+				seq = read
+			} else if msg.Info.What == "recv" {
+				if msg.Info.SeqId <= pud.recvID {
+					// Stale or bogus recv status.
+					return
 				}
 
-				if !t.isProxy {
-					if err := store.Subs.Update(t.name, asUser,
-						map[string]interface{}{
-							"RecvSeqId": pud.recvID,
-							"ReadSeqId": pud.readID},
-						false); err != nil {
-
-						logs.Warn.Printf("topic[%s]: failed to update SeqRead/Recv counter: %v", t.name, err)
-						return
-					}
-
-					// Read/recv updated: notify user's other sessions of the change
-					t.presPubMessageCount(asUser, mode, recv, read, msg.SkipSid)
-
-					// Read/recv updated: notify users offline in the topic on their 'me'.
-					t.infoSubsOffline(asUser, recv, read, msg.SkipSid)
-
-					// Update cached count of unread messages
-					usersUpdateUnread(asUser, unread, true)
+				pud.recvID = msg.Info.SeqId
+				if pud.readID > pud.recvID {
+					pud.recvID = pud.readID
 				}
+				recv = pud.recvID
+				seq = recv
+			}
+
+			if seq > 0 && !t.isProxy {
+				if err := store.Subs.Update(t.name, asUser,
+					map[string]interface{}{
+						"RecvSeqId": pud.recvID,
+						"ReadSeqId": pud.readID},
+					false); err != nil {
+
+					logs.Warn.Printf("topic[%s]: failed to update SeqRead/Recv counter: %v", t.name, err)
+					return
+				}
+
+				// Read/recv updated: notify user's other sessions of the change
+				t.presPubMessageCount(asUser, mode, read, recv, msg.SkipSid)
+
+				// Update cached count of unread messages
+				usersUpdateUnread(asUser, unread, true)
+			}
+
+			if seq > 0 {
 				t.perUser[asUser] = pud
+			}
+
+			if !t.isProxy {
+				// Read/recv/kp: notify users offline in the topic on their 'me'.
+				t.infoSubsOffline(asUser, msg.Info.What, seq, msg.SkipSid)
 			}
 		}
 	} else {
