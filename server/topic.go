@@ -2021,7 +2021,10 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 		return errors.New("invalid MsgGetOpts query")
 	}
 
-	if _, err := t.verifyChannelAccess(msg.Original); err != nil {
+	var err error
+	var asChan bool
+
+	if asChan, err = t.verifyChannelAccess(msg.Original); err != nil {
 		// User should not be able to address non-channel topic as channel.
 		sess.queueOut(ErrNotFoundReply(msg, now))
 		return types.ErrNotFound
@@ -2034,7 +2037,6 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 
 	userData := t.perUser[asUid]
 	var subs []types.Subscription
-	var err error
 
 	switch t.cat {
 	case types.TopicCatMe:
@@ -2082,7 +2084,7 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 						// FIXME: allow root to find suspended users and topics.
 						subs, err = store.Users.FindSubs(asUid, req, opt)
 						if err != nil {
-							sess.queueOut(decodeStoreErrorExplicitTs(err, id, t.original(asUid), now, incomingReqTs, nil))
+							sess.queueOut(decodeStoreErrorExplicitTs(err, id, msg.Original, now, incomingReqTs, nil))
 							return err
 						}
 
@@ -2109,23 +2111,33 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 			subs, err = store.Topics.GetSubsAny(t.name, msgOpts2storeOpts(req))
 		}
 	case types.TopicCatGrp:
+		topicName := t.name
+		if asChan {
+			// In case of a channel allow fetching the subscription of the current user only.
+			if req == nil {
+				req = &MsgGetOpts{}
+			}
+			req.User = asUid.UserId()
+			// Channel subscribers are using chnXXX topic name rather than grpXXX.
+			topicName = msg.Original
+		}
 		// Include sub.Public.
 		if ifModified.IsZero() {
 			// No cache management. Skip deleted subscriptions.
-			subs, err = store.Topics.GetUsers(t.name, msgOpts2storeOpts(req))
+			subs, err = store.Topics.GetUsers(topicName, msgOpts2storeOpts(req))
 		} else {
 			// User manages cache. Include deleted subscriptions too.
-			subs, err = store.Topics.GetUsersAny(t.name, msgOpts2storeOpts(req))
+			subs, err = store.Topics.GetUsersAny(topicName, msgOpts2storeOpts(req))
 		}
 	}
 
 	if err != nil {
-		sess.queueOut(decodeStoreErrorExplicitTs(err, id, t.original(asUid), now, incomingReqTs, nil))
+		sess.queueOut(decodeStoreErrorExplicitTs(err, id, msg.Original, now, incomingReqTs, nil))
 		return err
 	}
 
 	if len(subs) > 0 {
-		meta := &MsgServerMeta{Id: id, Topic: t.original(asUid), Timestamp: &now}
+		meta := &MsgServerMeta{Id: id, Topic: msg.Original, Timestamp: &now}
 		meta.Sub = make([]MsgTopicSub, 0, len(subs))
 		presencer := (userData.modeGiven & userData.modeWant).IsPresencer()
 		sharer := (userData.modeGiven & userData.modeWant).IsSharer()
