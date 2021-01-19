@@ -1194,9 +1194,14 @@ func ErrUserNotFoundReply(msg *ClientComMessage, ts time.Time) *ServerComMessage
 	return ErrUserNotFound(msg.Id, msg.Original, ts, msg.Timestamp)
 }
 
-// ErrNotFound is an error for missing objects other than user or topic
+// ErrNotFoundExplicitTs is an error for missing objects other than user or topic.
+func ErrNotFound(id, topic string, ts time.Time) *ServerComMessage {
+	return ErrNotFoundExplicitTs(id, topic, ts, ts)
+}
+
+// ErrNotFoundExplicitTs is an error for missing objects other than user or topic
 // with explicit server and incoming request timestamps (404).
-func ErrNotFound(id, topic string, serverTs, incomingReqTs time.Time) *ServerComMessage {
+func ErrNotFoundExplicitTs(id, topic string, serverTs, incomingReqTs time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,
 		Code:      http.StatusNotFound, // 404
@@ -1208,7 +1213,7 @@ func ErrNotFound(id, topic string, serverTs, incomingReqTs time.Time) *ServerCom
 // ErrNotFoundReply is an error for missing objects other than user or topic
 // with explicit server and incoming request timestamps in response to a client request (404).
 func ErrNotFoundReply(msg *ClientComMessage, ts time.Time) *ServerComMessage {
-	return ErrNotFound(msg.Id, msg.Original, ts, msg.Timestamp)
+	return ErrNotFoundExplicitTs(msg.Id, msg.Original, ts, msg.Timestamp)
 }
 
 // ErrOperationNotAllowed a valid operation is not permitted in this context (405).
