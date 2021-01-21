@@ -337,26 +337,32 @@ func (t *Topic) runLocal(hub *Hub) {
 			// Request to get/set topic metadata
 			asUid := types.ParseUserId(meta.pkt.AsUser)
 			authLevel := auth.Level(meta.pkt.AuthLvl)
+			asChan, err := t.verifyChannelAccess(meta.pkt.Original)
+			if err != nil {
+				// User should not be able to address non-channel topic as channel.
+				meta.sess.queueOut(ErrNotFoundReply(meta.pkt, types.TimeNow()))
+				continue
+			}
 			switch {
 			case meta.pkt.Get != nil:
 				// Get request
 				if meta.pkt.MetaWhat&constMsgMetaDesc != 0 {
-					if err := t.replyGetDesc(meta.sess, asUid, meta.pkt.Get.Desc, meta.pkt); err != nil {
+					if err := t.replyGetDesc(meta.sess, asUid, asChan, meta.pkt.Get.Desc, meta.pkt); err != nil {
 						logs.Warn.Printf("topic[%s] meta.Get.Desc failed: %s", t.name, err)
 					}
 				}
 				if meta.pkt.MetaWhat&constMsgMetaSub != 0 {
-					if err := t.replyGetSub(meta.sess, asUid, authLevel, meta.pkt); err != nil {
+					if err := t.replyGetSub(meta.sess, asUid, authLevel, asChan, meta.pkt); err != nil {
 						logs.Warn.Printf("topic[%s] meta.Get.Sub failed: %s", t.name, err)
 					}
 				}
 				if meta.pkt.MetaWhat&constMsgMetaData != 0 {
-					if err := t.replyGetData(meta.sess, asUid, meta.pkt.Get.Data, meta.pkt); err != nil {
+					if err := t.replyGetData(meta.sess, asUid, asChan, meta.pkt.Get.Data, meta.pkt); err != nil {
 						logs.Warn.Printf("topic[%s] meta.Get.Data failed: %s", t.name, err)
 					}
 				}
 				if meta.pkt.MetaWhat&constMsgMetaDel != 0 {
-					if err := t.replyGetDel(meta.sess, asUid, meta.pkt.Get.Del, meta.pkt); err != nil {
+					if err := t.replyGetDel(meta.sess, asUid, asChan, meta.pkt.Get.Del, meta.pkt); err != nil {
 						logs.Warn.Printf("topic[%s] meta.Get.Del failed: %s", t.name, err)
 					}
 				}
@@ -375,7 +381,7 @@ func (t *Topic) runLocal(hub *Hub) {
 			case meta.pkt.Set != nil:
 				// Set request
 				if meta.pkt.MetaWhat&constMsgMetaDesc != 0 {
-					if err := t.replySetDesc(meta.sess, asUid, meta.pkt); err == nil {
+					if err := t.replySetDesc(meta.sess, asUid, asChan, meta.pkt); err == nil {
 						// Notify plugins of the update
 						pluginTopic(t, plgActUpd)
 					} else {
@@ -403,7 +409,7 @@ func (t *Topic) runLocal(hub *Hub) {
 				var err error
 				switch meta.pkt.MetaWhat {
 				case constMsgDelMsg:
-					err = t.replyDelMsg(meta.sess, asUid, meta.pkt)
+					err = t.replyDelMsg(meta.sess, asUid, asChan, meta.pkt)
 				case constMsgDelSub:
 					err = t.replyDelSub(meta.sess, asUid, meta.pkt)
 				case constMsgDelTopic:
@@ -505,14 +511,14 @@ func (t *Topic) handleSubscription(join *sessionJoin) error {
 
 	if getWhat&constMsgMetaDesc != 0 {
 		// Send get.desc as a {meta} packet.
-		if err := t.replyGetDesc(join.sess, asUid, msgsub.Get.Desc, join.pkt); err != nil {
+		if err := t.replyGetDesc(join.sess, asUid, asChan, msgsub.Get.Desc, join.pkt); err != nil {
 			logs.Warn.Printf("topic[%s] handleSubscription Get.Desc failed: %v sid=%s", t.name, err, join.sess.sid)
 		}
 	}
 
 	if getWhat&constMsgMetaSub != 0 {
 		// Send get.sub response as a separate {meta} packet
-		if err := t.replyGetSub(join.sess, asUid, authLevel, join.pkt); err != nil {
+		if err := t.replyGetSub(join.sess, asUid, authLevel, asChan, join.pkt); err != nil {
 			logs.Warn.Printf("topic[%s] handleSubscription Get.Sub failed: %v sid=%s", t.name, err, join.sess.sid)
 		}
 	}
@@ -533,14 +539,14 @@ func (t *Topic) handleSubscription(join *sessionJoin) error {
 
 	if getWhat&constMsgMetaData != 0 {
 		// Send get.data response as {data} packets
-		if err := t.replyGetData(join.sess, asUid, msgsub.Get.Data, join.pkt); err != nil {
+		if err := t.replyGetData(join.sess, asUid, asChan, msgsub.Get.Data, join.pkt); err != nil {
 			logs.Warn.Printf("topic[%s] handleSubscription Get.Data failed: %v sid=%s", t.name, err, join.sess.sid)
 		}
 	}
 
 	if getWhat&constMsgMetaDel != 0 {
 		// Send get.del response as a separate {meta} packet
-		if err := t.replyGetDel(join.sess, asUid, msgsub.Get.Del, join.pkt); err != nil {
+		if err := t.replyGetDel(join.sess, asUid, asChan, msgsub.Get.Del, join.pkt); err != nil {
 			logs.Warn.Printf("topic[%s] handleSubscription Get.Del failed: %v sid=%s", t.name, err, join.sess.sid)
 		}
 	}
@@ -912,11 +918,22 @@ func (t *Topic) handleBroadcast(msg *ServerComMessage) {
 				return
 			}
 
-			asUser := types.ParseUserId(msg.Info.From)
-			pud := t.perUser[asUser]
-			mode := pud.modeGiven & pud.modeWant
-			if pud.deleted {
-				mode = types.ModeInvalid
+			asChan, err := t.verifyChannelAccess(msg.Info.Topic)
+			if err != nil {
+				// Silently drop invalid notification.
+				return
+			}
+
+			var pud perUserData
+			var mode types.AccessMode
+			if asChan {
+				mode = types.ModeCChnReader
+			} else {
+				pud = t.perUser[asUid]
+				mode = pud.modeGiven & pud.modeWant
+				if pud.deleted {
+					mode = types.ModeInvalid
+				}
 			}
 
 			// Filter out "kp" from users with no 'W' permission (or people without a subscription)
@@ -930,60 +947,83 @@ func (t *Topic) handleBroadcast(msg *ServerComMessage) {
 			}
 
 			var read, recv, unread, seq int
-			if msg.Info.What == "read" {
-				if msg.Info.SeqId <= pud.readID {
-					// No need to report stale or bogus read status.
-					return
+			if asChan {
+				if msg.Info.What == "read" {
+					read = msg.Info.SeqId
+					seq = read
+				} else if msg.Info.What == "recv" {
+					recv = msg.Info.SeqId
+					seq = recv
 				}
+			} else {
+				if msg.Info.What == "read" {
+					if msg.Info.SeqId <= pud.readID {
+						// No need to report stale or bogus read status.
+						return
+					}
 
-				// The number of unread messages has decreased, negative value.
-				unread = pud.readID - msg.Info.SeqId
-				pud.readID = msg.Info.SeqId
-				if pud.readID > pud.recvID {
-					pud.recvID = pud.readID
-				}
-				read = pud.readID
-				seq = read
-			} else if msg.Info.What == "recv" {
-				if msg.Info.SeqId <= pud.recvID {
-					// Stale or bogus recv status.
-					return
-				}
+					// The number of unread messages has decreased, negative value.
+					unread = pud.readID - msg.Info.SeqId
+					pud.readID = msg.Info.SeqId
+					if pud.readID > pud.recvID {
+						pud.recvID = pud.readID
+					}
+					read = pud.readID
+					seq = read
+				} else if msg.Info.What == "recv" {
+					if msg.Info.SeqId <= pud.recvID {
+						// Stale or bogus recv status.
+						return
+					}
 
-				pud.recvID = msg.Info.SeqId
-				if pud.readID > pud.recvID {
-					pud.recvID = pud.readID
+					pud.recvID = msg.Info.SeqId
+					if pud.readID > pud.recvID {
+						pud.recvID = pud.readID
+					}
+					recv = pud.recvID
+					seq = recv
 				}
-				recv = pud.recvID
-				seq = recv
 			}
 
 			if seq > 0 && !t.isProxy {
-				if err := store.Subs.Update(t.name, asUser,
-					map[string]interface{}{
-						"RecvSeqId": pud.recvID,
-						"ReadSeqId": pud.readID},
-					false); err != nil {
+				topicName := t.name
+				if asChan {
+					topicName = msg.Info.Topic
+				}
 
+				upd := map[string]interface{}{}
+				if recv > 0 {
+					upd["RecvSeqId"] = recv
+				}
+				if read > 0 {
+					upd["ReadSeqId"] = read
+				}
+				if err := store.Subs.Update(topicName, asUid, upd, false); err != nil {
 					logs.Warn.Printf("topic[%s]: failed to update SeqRead/Recv counter: %v", t.name, err)
 					return
 				}
 
 				// Read/recv updated: notify user's other sessions of the change
-				t.presPubMessageCount(asUser, mode, read, recv, msg.SkipSid)
+				t.presPubMessageCount(asUid, mode, read, recv, msg.SkipSid)
 
-				// Update cached count of unread messages
-				usersUpdateUnread(asUser, unread, true)
+				// Update cached count of unread messages (for channels unread == 0)
+				usersUpdateUnread(asUid, unread, true)
+			}
+
+			if asChan {
+				// No need to forward {note} to other subscribers in channels
+				return
 			}
 
 			if seq > 0 {
-				t.perUser[asUser] = pud
+				t.perUser[asUid] = pud
 			}
 
 			if !t.isProxy {
 				// Read/recv/kp: notify users offline in the topic on their 'me'.
-				t.infoSubsOffline(asUser, msg.Info.What, seq, msg.SkipSid)
+				t.infoSubsOffline(asUid, msg.Info.What, seq, msg.SkipSid)
 			}
+
 		}
 	} else {
 		// TODO(gene): remove this
@@ -1707,20 +1747,13 @@ func (t *Topic) anotherUserSub(sess *Session, asUid, target types.Uid,
 }
 
 // replyGetDesc is a response to a get.desc request on a topic, sent to just the session as a {meta} packet
-func (t *Topic) replyGetDesc(sess *Session, asUid types.Uid, opts *MsgGetOpts, msg *ClientComMessage) error {
+func (t *Topic) replyGetDesc(sess *Session, asUid types.Uid, asChan bool, opts *MsgGetOpts, msg *ClientComMessage) error {
 	now := types.TimeNow()
 	id := msg.Id
 
 	if opts != nil && (opts.User != "" || opts.Limit != 0) {
 		sess.queueOut(ErrMalformedReply(msg, now))
 		return errors.New("invalid GetDesc query")
-	}
-
-	asChan, err := t.verifyChannelAccess(msg.Original)
-	if err != nil {
-		// User should not be able to address non-channel topic as channel.
-		sess.queueOut(ErrNotFoundReply(msg, now))
-		return types.ErrNotFound
 	}
 
 	// Check if user requested modified data
@@ -1827,16 +1860,9 @@ func (t *Topic) replyGetDesc(sess *Session, asUid types.Uid, opts *MsgGetOpts, m
 
 // replySetDesc updates topic metadata, saves it to DB,
 // replies to the caller as {ctrl} message, generates {pres} update if necessary
-func (t *Topic) replySetDesc(sess *Session, asUid types.Uid, msg *ClientComMessage) error {
+func (t *Topic) replySetDesc(sess *Session, asUid types.Uid, asChan bool, msg *ClientComMessage) error {
 	now := types.TimeNow()
 	set := msg.Set
-
-	asChan, err := t.verifyChannelAccess(msg.Original)
-	if err != nil {
-		// User should not be able to address non-channel topic as channel.
-		sess.queueOut(ErrNotFoundReply(msg, now))
-		return types.ErrNotFound
-	}
 
 	assignAccess := func(upd map[string]interface{}, mode *MsgDefaultAcsMode) error {
 		if mode == nil {
@@ -1886,6 +1912,7 @@ func (t *Topic) replySetDesc(sess *Session, asUid types.Uid, msg *ClientComMessa
 	var sendCommon bool
 	// Private has changed
 	var sendPriv bool
+	var err error
 
 	// Change to the main object (user or topic).
 	core := make(map[string]interface{})
@@ -2005,7 +2032,7 @@ func (t *Topic) replySetDesc(sess *Session, asUid types.Uid, msg *ClientComMessa
 
 // replyGetSub is a response to a get.sub request on a topic - load a list of subscriptions/subscribers,
 // send it just to the session as a {meta} packet
-func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level, msg *ClientComMessage) error {
+func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level, asChan bool, msg *ClientComMessage) error {
 	now := types.TimeNow()
 	id := msg.Id
 	incomingReqTs := msg.Timestamp
@@ -2021,11 +2048,7 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 		return errors.New("invalid MsgGetOpts query")
 	}
 
-	if _, err := t.verifyChannelAccess(msg.Original); err != nil {
-		// User should not be able to address non-channel topic as channel.
-		sess.queueOut(ErrNotFoundReply(msg, now))
-		return types.ErrNotFound
-	}
+	var err error
 
 	var ifModified time.Time
 	if req != nil && req.IfModifiedSince != nil {
@@ -2034,7 +2057,6 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 
 	userData := t.perUser[asUid]
 	var subs []types.Subscription
-	var err error
 
 	switch t.cat {
 	case types.TopicCatMe:
@@ -2082,7 +2104,7 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 						// FIXME: allow root to find suspended users and topics.
 						subs, err = store.Users.FindSubs(asUid, req, opt)
 						if err != nil {
-							sess.queueOut(decodeStoreErrorExplicitTs(err, id, t.original(asUid), now, incomingReqTs, nil))
+							sess.queueOut(decodeStoreErrorExplicitTs(err, id, msg.Original, now, incomingReqTs, nil))
 							return err
 						}
 
@@ -2109,23 +2131,33 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 			subs, err = store.Topics.GetSubsAny(t.name, msgOpts2storeOpts(req))
 		}
 	case types.TopicCatGrp:
+		topicName := t.name
+		if asChan {
+			// In case of a channel allow fetching the subscription of the current user only.
+			if req == nil {
+				req = &MsgGetOpts{}
+			}
+			req.User = asUid.UserId()
+			// Channel subscribers are using chnXXX topic name rather than grpXXX.
+			topicName = msg.Original
+		}
 		// Include sub.Public.
 		if ifModified.IsZero() {
 			// No cache management. Skip deleted subscriptions.
-			subs, err = store.Topics.GetUsers(t.name, msgOpts2storeOpts(req))
+			subs, err = store.Topics.GetUsers(topicName, msgOpts2storeOpts(req))
 		} else {
 			// User manages cache. Include deleted subscriptions too.
-			subs, err = store.Topics.GetUsersAny(t.name, msgOpts2storeOpts(req))
+			subs, err = store.Topics.GetUsersAny(topicName, msgOpts2storeOpts(req))
 		}
 	}
 
 	if err != nil {
-		sess.queueOut(decodeStoreErrorExplicitTs(err, id, t.original(asUid), now, incomingReqTs, nil))
+		sess.queueOut(decodeStoreErrorExplicitTs(err, id, msg.Original, now, incomingReqTs, nil))
 		return err
 	}
 
 	if len(subs) > 0 {
-		meta := &MsgServerMeta{Id: id, Topic: t.original(asUid), Timestamp: &now}
+		meta := &MsgServerMeta{Id: id, Topic: msg.Original, Timestamp: &now}
 		meta.Sub = make([]MsgTopicSub, 0, len(subs))
 		presencer := (userData.modeGiven & userData.modeWant).IsPresencer()
 		sharer := (userData.modeGiven & userData.modeWant).IsSharer()
@@ -2289,12 +2321,6 @@ func (t *Topic) replySetSub(sess *Session, pkt *ClientComMessage) error {
 	asUid := types.ParseUserId(pkt.AsUser)
 	set := pkt.Set
 
-	if _, err := t.verifyChannelAccess(pkt.Original); err != nil {
-		// User should not be able to address non-channel topic as channel.
-		sess.queueOut(ErrNotFoundReply(pkt, now))
-		return types.ErrNotFound
-	}
-
 	var target types.Uid
 	if target = types.ParseUserId(set.Sub.User); target.IsZero() && set.Sub.User != "" {
 		// Invalid user ID
@@ -2339,20 +2365,13 @@ func (t *Topic) replySetSub(sess *Session, pkt *ClientComMessage) error {
 
 // replyGetData is a response to a get.data request - load a list of stored messages, send them to session as {data}
 // response goes to a single session rather than all sessions in a topic
-func (t *Topic) replyGetData(sess *Session, asUid types.Uid, req *MsgGetOpts, msg *ClientComMessage) error {
+func (t *Topic) replyGetData(sess *Session, asUid types.Uid, asChan bool, req *MsgGetOpts, msg *ClientComMessage) error {
 	now := types.TimeNow()
 	toriginal := t.original(asUid)
 
 	if req != nil && (req.IfModifiedSince != nil || req.User != "" || req.Topic != "") {
 		sess.queueOut(ErrMalformedReply(msg, now))
 		return errors.New("invalid MsgGetOpts query")
-	}
-
-	asChan, err := t.verifyChannelAccess(msg.Original)
-	if err != nil {
-		// User should not be able to address non-channel topic as channel.
-		sess.queueOut(ErrNotFoundReply(msg, now))
-		return types.ErrNotFound
 	}
 
 	// Check if the user has permission to read the topic data
@@ -2405,11 +2424,6 @@ func (t *Topic) replyGetData(sess *Session, asUid types.Uid, req *MsgGetOpts, ms
 func (t *Topic) replyGetTags(sess *Session, asUid types.Uid, msg *ClientComMessage) error {
 	now := types.TimeNow()
 
-	if _, err := t.verifyChannelAccess(msg.Original); err != nil {
-		// User should not be able to address non-channel topic as channel.
-		sess.queueOut(ErrNotFoundReply(msg, now))
-		return types.ErrNotFound
-	}
 	if t.cat != types.TopicCatMe && t.cat != types.TopicCatGrp {
 		sess.queueOut(ErrOperationNotAllowedReply(msg, now))
 		return errors.New("invalid topic category for getting tags")
@@ -2439,12 +2453,7 @@ func (t *Topic) replySetTags(sess *Session, asUid types.Uid, msg *ClientComMessa
 
 	now := types.TimeNow()
 
-	if _, err = t.verifyChannelAccess(msg.Original); err != nil {
-		// User should not be able to address non-channel topic as channel.
-		resp = ErrNotFoundReply(msg, now)
-		err = types.ErrNotFound
-
-	} else if t.cat != types.TopicCatMe && t.cat != types.TopicCatGrp {
+	if t.cat != types.TopicCatMe && t.cat != types.TopicCatGrp {
 		resp = ErrOperationNotAllowedReply(msg, now)
 		err = errors.New("invalid topic category to assign tags")
 
@@ -2567,19 +2576,12 @@ func (t *Topic) replySetCred(sess *Session, asUid types.Uid, authLevel auth.Leve
 // replyGetDel is a response to a get[what=del] request: load a list of deleted message ids, send them to
 // a session as {meta}
 // response goes to a single session rather than all sessions in a topic
-func (t *Topic) replyGetDel(sess *Session, asUid types.Uid, req *MsgGetOpts, msg *ClientComMessage) error {
+func (t *Topic) replyGetDel(sess *Session, asUid types.Uid, asChan bool, req *MsgGetOpts, msg *ClientComMessage) error {
 	now := types.TimeNow()
 	toriginal := t.original(asUid)
 
 	id := msg.Id
 	incomingReqTs := msg.Timestamp
-
-	asChan, err := t.verifyChannelAccess(msg.Original)
-	if err != nil {
-		// User should not be able to address non-channel topic as channel.
-		sess.queueOut(ErrNotFoundReply(msg, now))
-		return types.ErrNotFound
-	}
 
 	if req != nil && (req.IfModifiedSince != nil || req.User != "" || req.Topic != "") {
 		sess.queueOut(ErrMalformedReply(msg, now))
@@ -2612,15 +2614,9 @@ func (t *Topic) replyGetDel(sess *Session, asUid types.Uid, req *MsgGetOpts, msg
 }
 
 // replyDelMsg deletes (soft or hard) messages in response to del.msg packet.
-func (t *Topic) replyDelMsg(sess *Session, asUid types.Uid, msg *ClientComMessage) error {
+func (t *Topic) replyDelMsg(sess *Session, asUid types.Uid, asChan bool, msg *ClientComMessage) error {
 	now := types.TimeNow()
 
-	asChan, err := t.verifyChannelAccess(msg.Original)
-	if err != nil {
-		// User should not be able to address non-channel topic as channel.
-		sess.queueOut(ErrNotFoundReply(msg, now))
-		return types.ErrNotFound
-	}
 	if asChan {
 		// Do not allow channel readers delete messages.
 		sess.queueOut(ErrOperationNotAllowedReply(msg, now))
@@ -2643,6 +2639,7 @@ func (t *Topic) replyDelMsg(sess *Session, asUid types.Uid, msg *ClientComMessag
 		del.Hard = false
 	}
 
+	var err error
 	var ranges []types.Range
 	if len(del.DelSeq) == 0 {
 		err = errors.New("del.msg: no IDs to delete")
@@ -3455,7 +3452,7 @@ func (t *Topic) isOnline() bool {
 	return false
 }
 
-// Verifies if topic can be access by the given name: access any topic as non-channel, access channel as channel.
+// Verifies if topic can be access by the provided name: access any topic as non-channel, access channel as channel.
 // Returns true if access is for channel, false if not and error if access is invalid.
 func (t *Topic) verifyChannelAccess(asTopic string) (bool, error) {
 	if !isChannel(asTopic) {

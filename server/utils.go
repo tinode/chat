@@ -264,7 +264,7 @@ func decodeStoreErrorExplicitTs(err error, id, topic string, serverTs, incomingR
 		case types.ErrTopicNotFound:
 			errmsg = ErrTopicNotFound(id, topic, serverTs, incomingReqTs)
 		case types.ErrNotFound:
-			errmsg = ErrNotFound(id, topic, serverTs, incomingReqTs)
+			errmsg = ErrNotFoundExplicitTs(id, topic, serverTs, incomingReqTs)
 		case types.ErrInvalidResponse:
 			errmsg = ErrInvalidResponse(id, topic, serverTs, incomingReqTs)
 		case types.ErrRedirected:

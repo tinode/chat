@@ -665,7 +665,7 @@ func replyOfflineTopicGetSub(sess *Session, msg *ClientComMessage) {
 	}
 
 	if ssub == nil {
-		sess.queueOut(ErrNotFound(msg.Id, msg.Original, now, msg.Timestamp))
+		sess.queueOut(ErrNotFoundExplicitTs(msg.Id, msg.Original, now, msg.Timestamp))
 		return
 	}
 
@@ -719,7 +719,7 @@ func replyOfflineTopicSetSub(sess *Session, msg *ClientComMessage) {
 	}
 
 	if sub == nil || sub.DeletedAt != nil {
-		sess.queueOut(ErrNotFound(msg.Id, msg.Original, now, msg.Timestamp))
+		sess.queueOut(ErrNotFoundExplicitTs(msg.Id, msg.Original, now, msg.Timestamp))
 		return
 	}
 

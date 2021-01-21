@@ -51,6 +51,7 @@ If `tp` is provided, it means the style is a basic text decoration:
  * `BR`: line break.
  * `RW`: logical grouping of formats, a row.
  * `HD`: hidden text.
+ * `HL`: highlighted text, such as text in a different color or with a different background; the color cannot be specified.
 
 If key is provided, it's a 0-based index into the `ent` field which contains an entity definition such as an image or an URL:
  * `LN`: link (URL) [https://api.tinode.co](https://api.tinode.co)
