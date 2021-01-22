@@ -501,7 +501,7 @@ func (a *adapter) UpgradeDb() error {
 		// Perform database upgrade from version 107 to version 108.
 
 		// Replace default user access JRWPA with JRWPAS.
-		if _, err := a.db.Exec(`UPDATE users SET access=JSON_REPLACE(access, '$.Auth', 'JRWPAS') 
+		if _, err := a.db.Exec(`UPDATE users SET access=JSON_REPLACE(access, '$.Auth', 'JRWPAS')
 			WHERE CAST(JSON_EXTRACT(access, '$.Auth') AS CHAR) LIKE '"JRWPA"'`); err != nil {
 			return err
 		}
@@ -823,12 +823,12 @@ func (a *adapter) UserGetAll(ids ...t.Uid) ([]t.User, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer rows.Close()
 
 	var user t.User
 	for rows.Next() {
-		if err = rows.StructScan(&user); err != nil {
-			users = nil
-			break
+		if err := rows.StructScan(&user); err != nil {
+			return nil, err
 		}
 
 		if user.State == t.StateDeleted {
@@ -840,7 +840,9 @@ func (a *adapter) UserGetAll(ids ...t.Uid) ([]t.User, error) {
 
 		users = append(users, user)
 	}
-	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 
 	return users, err
 }
@@ -1287,6 +1289,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 	if err != nil {
 		return nil, err
 	}
+	defer rows.Close()
 
 	// Fetch subscriptions. Two queries are needed: users table (me & p2p) and topics table (p2p and grp).
 	// Prepare a list of Separate subscriptions to users vs topics
@@ -1295,8 +1298,8 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 	topq := make([]interface{}, 0, 16)
 	usrq := make([]interface{}, 0, 16)
 	for rows.Next() {
-		if err = rows.StructScan(&sub); err != nil {
-			break
+		if err := rows.StructScan(&sub); err != nil {
+			return nil, err
 		}
 
 		tname := sub.Topic
@@ -1326,9 +1329,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 		sub.Private = fromJSON(sub.Private)
 		join[tname] = sub
 	}
-	rows.Close()
-
-	if err != nil {
+	if err := rows.Err(); err != nil {
 		return nil, err
 	}
 
@@ -1352,11 +1353,12 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 		if err != nil {
 			return nil, err
 		}
+		defer rows.Close()
 
 		var top t.Topic
 		for rows.Next() {
-			if err = rows.StructScan(&top); err != nil {
-				break
+			if err := rows.StructScan(&top); err != nil {
+				return nil, err
 			}
 
 			sub = join[top.Id]
@@ -1373,7 +1375,9 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 				join[top.Id] = sub
 			}
 		}
-		rows.Close()
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
 	}
 
 	// Fetch p2p users and join to p2p tables
@@ -1391,11 +1395,12 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 		if err != nil {
 			return nil, err
 		}
+		defer rows.Close()
 
 		var usr t.User
 		for rows.Next() {
-			if err = rows.StructScan(&usr); err != nil {
-				break
+			if err := rows.StructScan(&usr); err != nil {
+				return nil, err
 			}
 
 			uid2 := encodeUidString(usr.Id)
@@ -1409,7 +1414,9 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 				subs = append(subs, sub)
 			}
 		}
-		rows.Close()
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
 	}
 	return subs, err
 }
@@ -1423,7 +1430,7 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 	// Fetch all subscribed users. The number of users is not large
 	q := `SELECT s.createdat,s.updatedat,s.deletedat,s.userid,s.topic,s.delid,s.recvseqid,
 		s.readseqid,s.modewant,s.modegiven,u.public,s.private
-		FROM subscriptions AS s JOIN users AS u ON s.userid=u.id 
+		FROM subscriptions AS s JOIN users AS u ON s.userid=u.id
 		WHERE s.topic=?`
 	args := []interface{}{topic}
 	if !keepDeleted {
@@ -1464,18 +1471,19 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 	if err != nil {
 		return nil, err
 	}
+	defer rows.Close()
 
 	// Fetch subscriptions
 	var sub t.Subscription
 	var subs []t.Subscription
 	var public interface{}
 	for rows.Next() {
-		if err = rows.Scan(
+		if err := rows.Scan(
 			&sub.CreatedAt, &sub.UpdatedAt, &sub.DeletedAt,
 			&sub.User, &sub.Topic, &sub.DelId, &sub.RecvSeqId,
 			&sub.ReadSeqId, &sub.ModeWant, &sub.ModeGiven,
 			&public, &sub.Private); err != nil {
-			break
+			return nil, err
 		}
 
 		sub.User = encodeUidString(sub.User).String()
@@ -1483,7 +1491,9 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 		sub.SetPublic(fromJSON(public))
 		subs = append(subs, sub)
 	}
-	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 
 	if err == nil && tcat == t.TopicCatP2P && len(subs) > 0 {
 		// Swap public values of P2P topics as expected.
@@ -1518,16 +1528,19 @@ func (a *adapter) OwnTopics(uid t.Uid) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer rows.Close()
 
 	var names []string
 	var name string
 	for rows.Next() {
-		if err = rows.Scan(&name); err != nil {
-			break
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
 		}
 		names = append(names, name)
 	}
-	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 
 	return names, err
 }
@@ -1700,18 +1713,21 @@ func (a *adapter) SubsForUser(forUser t.Uid, keepDeleted bool, opts *t.QueryOpt)
 	if err != nil {
 		return nil, err
 	}
+	defer rows.Close()
 
 	var subs []t.Subscription
 	var ss t.Subscription
 	for rows.Next() {
-		if err = rows.StructScan(&ss); err != nil {
-			break
+		if err := rows.StructScan(&ss); err != nil {
+			return nil, err
 		}
 		ss.User = forUser.String()
 		ss.Private = fromJSON(ss.Private)
 		subs = append(subs, ss)
 	}
-	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 
 	return subs, err
 }
@@ -1749,19 +1765,22 @@ func (a *adapter) SubsForTopic(topic string, keepDeleted bool, opts *t.QueryOpt)
 	if err != nil {
 		return nil, err
 	}
+	defer rows.Close()
 
 	var subs []t.Subscription
 	var ss t.Subscription
 	for rows.Next() {
-		if err = rows.StructScan(&ss); err != nil {
-			break
+		if err := rows.StructScan(&ss); err != nil {
+			return nil, err
 		}
 
 		ss.User = encodeUidString(ss.User).String()
 		ss.Private = fromJSON(ss.Private)
 		subs = append(subs, ss)
 	}
-	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 
 	return subs, err
 }
@@ -1896,10 +1915,10 @@ func (a *adapter) FindUsers(uid t.Uid, req [][]string, opt []string) ([]t.Subscr
 
 	// Get users matched by tags, sort by number of matches from high to low.
 	rows, err := a.db.Queryx(query, append(args, a.maxResults)...)
-
 	if err != nil {
 		return nil, err
 	}
+	defer rows.Close()
 
 	var userId int64
 	var public interface{}
@@ -1910,9 +1929,8 @@ func (a *adapter) FindUsers(uid t.Uid, req [][]string, opt []string) ([]t.Subscr
 	var subs []t.Subscription
 	thisUser := store.DecodeUid(uid)
 	for rows.Next() {
-		if err = rows.Scan(&userId, &sub.CreatedAt, &sub.UpdatedAt, &access, &public, &userTags, &ignored); err != nil {
-			subs = nil
-			break
+		if err := rows.Scan(&userId, &sub.CreatedAt, &sub.UpdatedAt, &access, &public, &userTags, &ignored); err != nil {
+			return nil, err
 		}
 
 		if userId == thisUser {
@@ -1931,7 +1949,9 @@ func (a *adapter) FindUsers(uid t.Uid, req [][]string, opt []string) ([]t.Subscr
 		sub.Private = foundTags
 		subs = append(subs, sub)
 	}
-	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 
 	return subs, err
 
@@ -1976,10 +1996,10 @@ func (a *adapter) FindTopics(req [][]string, opt []string) ([]t.Subscription, er
 	}
 	query += "ORDER BY matches DESC LIMIT ?"
 	rows, err := a.db.Queryx(query, append(args, a.maxResults)...)
-
 	if err != nil {
 		return nil, err
 	}
+	defer rows.Close()
 
 	var access t.DefaultAccess
 	var public interface{}
@@ -1989,10 +2009,9 @@ func (a *adapter) FindTopics(req [][]string, opt []string) ([]t.Subscription, er
 	var sub t.Subscription
 	var subs []t.Subscription
 	for rows.Next() {
-		if err = rows.Scan(&sub.Topic, &sub.CreatedAt, &sub.UpdatedAt, &isChan, &access,
+		if err := rows.Scan(&sub.Topic, &sub.CreatedAt, &sub.UpdatedAt, &isChan, &access,
 			&public, &topicTags, &ignored); err != nil {
-			subs = nil
-			break
+			return nil, err
 		}
 
 		if isChan != 0 {
@@ -2009,13 +2028,11 @@ func (a *adapter) FindTopics(req [][]string, opt []string) ([]t.Subscription, er
 		sub.Private = foundTags
 		subs = append(subs, sub)
 	}
-	rows.Close()
-
-	if err != nil {
+	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	return subs, nil
 
+	return subs, nil
 }
 
 // Messages
@@ -2065,18 +2082,21 @@ func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.QueryOpt) (
 	if err != nil {
 		return nil, err
 	}
+	defer rows.Close()
 
 	msgs := make([]t.Message, 0, limit)
 	for rows.Next() {
 		var msg t.Message
-		if err = rows.StructScan(&msg); err != nil {
-			break
+		if err := rows.StructScan(&msg); err != nil {
+			return nil, err
 		}
 		msg.From = encodeUidString(msg.From).String()
 		msg.Content = fromJSON(msg.Content)
 		msgs = append(msgs, msg)
 	}
-	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return msgs, err
 }
 
@@ -2121,8 +2141,7 @@ func (a *adapter) MessageGetDeleted(topic string, forUser t.Uid, opts *t.QueryOp
 	var dmsg t.DelMessage
 	for rows.Next() {
 		if err = rows.StructScan(&dellog); err != nil {
-			dmsgs = nil
-			break
+			return nil, err
 		}
 
 		if dellog.Delid != dmsg.DelId {
@@ -2144,13 +2163,14 @@ func (a *adapter) MessageGetDeleted(topic string, forUser t.Uid, opts *t.QueryOp
 		dmsg.SeqIdRanges = append(dmsg.SeqIdRanges, t.Range{dellog.Low, dellog.Hi})
 	}
 
-	if err == nil {
-		if dmsg.DelId > 0 {
-			dmsgs = append(dmsgs, dmsg)
-		}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if dmsg.DelId > 0 {
+		dmsgs = append(dmsgs, dmsg)
 	}
 
-	return dmsgs, err
+	return dmsgs, nil
 }
 
 func messageDeleteList(tx *sqlx.Tx, topic string, toDel *t.DelMessage) error {
@@ -2337,6 +2357,7 @@ func (a *adapter) DeviceGetAll(uids ...t.Uid) (map[t.Uid][]t.DeviceDef, int, err
 	if err != nil {
 		return nil, 0, err
 	}
+	defer rows.Close()
 
 	var device struct {
 		Userid   int64
@@ -2349,8 +2370,8 @@ func (a *adapter) DeviceGetAll(uids ...t.Uid) (map[t.Uid][]t.DeviceDef, int, err
 	result := make(map[t.Uid][]t.DeviceDef)
 	count := 0
 	for rows.Next() {
-		if err = rows.StructScan(&device); err != nil {
-			break
+		if err := rows.StructScan(&device); err != nil {
+			return nil, 0, err
 		}
 		uid := store.EncodeUid(device.Userid)
 		udev := result[uid]
@@ -2363,7 +2384,9 @@ func (a *adapter) DeviceGetAll(uids ...t.Uid) (map[t.Uid][]t.DeviceDef, int, err
 		result[uid] = udev
 		count++
 	}
-	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
 
 	return result, count, err
 }
@@ -2715,21 +2738,20 @@ func (a *adapter) FileDeleteUnused(olderThan time.Time, limit int) ([]string, er
 	if err != nil {
 		return nil, err
 	}
+	defer rows.Close()
 
 	var locations []string
 	var ids []interface{}
 	for rows.Next() {
 		var id int
 		var loc string
-		if err = rows.Scan(&id, &loc); err != nil {
-			break
+		if err := rows.Scan(&id, &loc); err != nil {
+			return nil, err
 		}
 		locations = append(locations, loc)
 		ids = append(ids, id)
 	}
-	rows.Close()
-
-	if err != nil {
+	if err := rows.Err(); err != nil {
 		return nil, err
 	}
 
