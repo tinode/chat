@@ -262,6 +262,7 @@ func PrepareNotifications(rcpt *push.Receipt, config *AndroidConfig) []MessageDa
 		}
 	}
 
+	// TODO(aforge): introduce iOS push configuration (similar to Android).
 	titleIOS := "New message"
 	bodyIOS := data["content"]
 	apnsNotification := func(msg *fcm.Message) {
