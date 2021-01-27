@@ -262,6 +262,8 @@ func PrepareNotifications(rcpt *push.Receipt, config *AndroidConfig) []MessageDa
 		}
 	}
 
+	titleIOS := "New message"
+	bodyIOS := data["content"]
 	apnsNotification := func(msg *fcm.Message) {
 		msg.APNS = &fcm.APNSConfig{
 			Payload: &fcm.APNSPayload{
@@ -272,8 +274,8 @@ func PrepareNotifications(rcpt *push.Receipt, config *AndroidConfig) []MessageDa
 					// Need to duplicate these in APNS.Payload.Aps.Alert so
 					// iOS may call NotificationServiceExtension (if present).
 					Alert: &fcm.ApsAlert{
-						Title: title,
-						Body:  body,
+						Title: titleIOS,
+						Body:  bodyIOS,
 					},
 				},
 			},
