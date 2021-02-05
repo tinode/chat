@@ -48,7 +48,7 @@ type sessionLeave struct {
 
 // Request to hub to remove the topic
 type topicUnreg struct {
-	// Original request, could be nil,
+	// Original request, could be nil.
 	pkt *ClientComMessage
 	// Session making the request, could be nil.
 	sess *Session

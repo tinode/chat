@@ -826,6 +826,189 @@ func (t *Topic) sendSubNotifications(asUid types.Uid, sid, userAgent string) {
 	}
 }
 
+// Pre-rpocess {data} broadcast request.
+func (t *Topic) procDataReq(asUid types.Uid, msg *ServerComMessage) (*push.Receipt, bool) {
+	if t.isReadOnly() {
+		msg.sess.queueOut(ErrPermissionDenied(msg.Id, t.original(asUid), msg.Timestamp))
+		return nil, false
+	}
+
+	asUser := types.ParseUserId(msg.Data.From)
+	userData, userFound := t.perUser[asUser]
+	// Anyone is allowed to post to 'sys' topic.
+	if t.cat != types.TopicCatSys {
+		// If it's not 'sys' check write permission.
+		if !(userData.modeWant & userData.modeGiven).IsWriter() {
+			msg.sess.queueOut(ErrPermissionDenied(msg.Id, t.original(asUid), msg.Timestamp))
+			return nil, false
+		}
+	}
+
+	if t.isProxy {
+		t.lastID = msg.Data.SeqId
+	} else {
+		// Save to DB at master topic.
+		if err := store.Messages.Save(&types.Message{
+			ObjHeader: types.ObjHeader{CreatedAt: msg.Data.Timestamp},
+			SeqId:     t.lastID + 1,
+			Topic:     t.name,
+			From:      asUser.String(),
+			Head:      msg.Data.Head,
+			Content:   msg.Data.Content}, (userData.modeGiven & userData.modeWant).IsReader()); err != nil {
+
+			logs.Warn.Printf("topic[%s]: failed to save message: %v", t.name, err)
+			msg.sess.queueOut(ErrUnknown(msg.Id, t.original(asUid), msg.Timestamp))
+
+			return nil, false
+		}
+
+		t.lastID++
+		t.touched = msg.Data.Timestamp
+		msg.Data.SeqId = t.lastID
+	}
+
+	if userFound {
+		userData.readID = t.lastID
+		userData.readID = t.lastID
+		t.perUser[asUser] = userData
+	}
+
+	if msg.Id != "" && msg.sess != nil {
+		reply := NoErrAccepted(msg.Id, t.original(asUid), msg.Timestamp)
+		reply.Ctrl.Params = map[string]int{"seq": t.lastID}
+		msg.sess.queueOut(reply)
+	}
+
+	var pushRcpt *push.Receipt
+	if !t.isProxy {
+		pushRcpt = t.pushForData(asUser, msg.Data)
+
+		// Message sent: notify offline 'R' subscrbers on 'me'.
+		t.presSubsOffline("msg", &presParams{seqID: t.lastID, actor: msg.Data.From},
+			&presFilters{filterIn: types.ModeRead}, nilPresFilters, "", true)
+
+		// Tell the plugins that a message was accepted for delivery
+		pluginMessage(msg.Data, plgActCreate)
+	}
+	return pushRcpt, true
+}
+
+// Pre-rpocess {info} broadcast request.
+func (t *Topic) procInfoReq(asUid types.Uid, msg *ServerComMessage) bool {
+	if msg.Info.SeqId > t.lastID {
+		// Drop bogus read notification
+		return false
+	}
+
+	asChan, err := t.verifyChannelAccess(msg.Info.Topic)
+	if err != nil {
+		// Silently drop invalid notification.
+		return false
+	}
+
+	var pud perUserData
+	var mode types.AccessMode
+	if asChan {
+		mode = types.ModeCChnReader
+	} else {
+		pud = t.perUser[asUid]
+		mode = pud.modeGiven & pud.modeWant
+		if pud.deleted {
+			mode = types.ModeInvalid
+		}
+	}
+
+	// Filter out "kp" from users with no 'W' permission (or people without a subscription)
+	if msg.Info.What == "kp" && (!mode.IsWriter() || t.isReadOnly()) {
+		return false
+	}
+
+	if (msg.Info.What == "read" || msg.Info.What == "recv") && !mode.IsReader() {
+		// Filter out "read/recv" from users with no 'R' permission (or people without a subscription)
+		return false
+	}
+
+	var read, recv, unread, seq int
+	if asChan {
+		if msg.Info.What == "read" {
+			read = msg.Info.SeqId
+			seq = read
+		} else if msg.Info.What == "recv" {
+			recv = msg.Info.SeqId
+			seq = recv
+		}
+	} else {
+		if msg.Info.What == "read" {
+			if msg.Info.SeqId <= pud.readID {
+				// No need to report stale or bogus read status.
+				return false
+			}
+
+			// The number of unread messages has decreased, negative value.
+			unread = pud.readID - msg.Info.SeqId
+			pud.readID = msg.Info.SeqId
+			if pud.readID > pud.recvID {
+				pud.recvID = pud.readID
+			}
+			read = pud.readID
+			seq = read
+		} else if msg.Info.What == "recv" {
+			if msg.Info.SeqId <= pud.recvID {
+				// Stale or bogus recv status.
+				return false
+			}
+
+			pud.recvID = msg.Info.SeqId
+			if pud.readID > pud.recvID {
+				pud.recvID = pud.readID
+			}
+			recv = pud.recvID
+			seq = recv
+		}
+	}
+
+	if seq > 0 && !t.isProxy {
+		topicName := t.name
+		if asChan {
+			topicName = msg.Info.Topic
+		}
+
+		upd := map[string]interface{}{}
+		if recv > 0 {
+			upd["RecvSeqId"] = recv
+		}
+		if read > 0 {
+			upd["ReadSeqId"] = read
+		}
+		if err := store.Subs.Update(topicName, asUid, upd, false); err != nil {
+			logs.Warn.Printf("topic[%s]: failed to update SeqRead/Recv counter: %v", t.name, err)
+			return false
+		}
+
+		// Read/recv updated: notify user's other sessions of the change
+		t.presPubMessageCount(asUid, mode, read, recv, msg.SkipSid)
+
+		// Update cached count of unread messages (for channels unread == 0)
+		usersUpdateUnread(asUid, unread, true)
+	}
+
+	if asChan {
+		// No need to forward {note} to other subscribers in channels
+		return false
+	}
+
+	if seq > 0 {
+		t.perUser[asUid] = pud
+	}
+
+	if !t.isProxy {
+		// Read/recv/kp: notify users offline in the topic on their 'me'.
+		t.infoSubsOffline(asUid, msg.Info.What, seq, msg.SkipSid)
+	}
+
+	return true
+}
+
 // handleBroadcast fans out broadcastable messages to recipients in topic and proxy_topic.
 func (t *Topic) handleBroadcast(msg *ServerComMessage) {
 	asUid := types.ParseUserId(msg.AsUser)
@@ -839,70 +1022,12 @@ func (t *Topic) handleBroadcast(msg *ServerComMessage) {
 
 	var pushRcpt *push.Receipt
 	if msg.Data != nil {
-		if t.isReadOnly() {
-			msg.sess.queueOut(ErrPermissionDenied(msg.Id, t.original(asUid), msg.Timestamp))
+		var success bool
+		if pushRcpt, success = t.procDataReq(asUid, msg); !success {
 			return
 		}
-
-		asUser := types.ParseUserId(msg.Data.From)
-		userData, userFound := t.perUser[asUser]
-		// Anyone is allowed to post to 'sys' topic.
-		if t.cat != types.TopicCatSys {
-			// If it's not 'sys' check write permission.
-			if !(userData.modeWant & userData.modeGiven).IsWriter() {
-				msg.sess.queueOut(ErrPermissionDenied(msg.Id, t.original(asUid), msg.Timestamp))
-				return
-			}
-		}
-
-		if t.isProxy {
-			t.lastID = msg.Data.SeqId
-		} else {
-			// Save to DB at master topic.
-			if err := store.Messages.Save(&types.Message{
-				ObjHeader: types.ObjHeader{CreatedAt: msg.Data.Timestamp},
-				SeqId:     t.lastID + 1,
-				Topic:     t.name,
-				From:      asUser.String(),
-				Head:      msg.Data.Head,
-				Content:   msg.Data.Content}, (userData.modeGiven & userData.modeWant).IsReader()); err != nil {
-
-				logs.Warn.Printf("topic[%s]: failed to save message: %v", t.name, err)
-				msg.sess.queueOut(ErrUnknown(msg.Id, t.original(asUid), msg.Timestamp))
-
-				return
-			}
-
-			t.lastID++
-			t.touched = msg.Data.Timestamp
-			msg.Data.SeqId = t.lastID
-		}
-
-		if userFound {
-			userData.readID = t.lastID
-			userData.readID = t.lastID
-			t.perUser[asUser] = userData
-		}
-
-		if msg.Id != "" && msg.sess != nil {
-			reply := NoErrAccepted(msg.Id, t.original(asUid), msg.Timestamp)
-			reply.Ctrl.Params = map[string]int{"seq": t.lastID}
-			msg.sess.queueOut(reply)
-		}
-
-		if !t.isProxy {
-			pushRcpt = t.pushForData(asUser, msg.Data)
-
-			// Message sent: notify offline 'R' subscrbers on 'me'.
-			t.presSubsOffline("msg", &presParams{seqID: t.lastID, actor: msg.Data.From},
-				&presFilters{filterIn: types.ModeRead}, nilPresFilters, "", true)
-
-			// Tell the plugins that a message was accepted for delivery
-			pluginMessage(msg.Data, plgActCreate)
-		}
-
 	} else if msg.Pres != nil {
-		what := t.presProcReq(msg.Pres.Src, msg.Pres.What, msg.Pres.WantReply)
+		what := t.procPresReq(msg.Pres.Src, msg.Pres.What, msg.Pres.WantReply)
 		if t.xoriginal != msg.Pres.Topic || what == "" {
 			// This is just a request for status, don't forward it to sessions
 			return
@@ -913,117 +1038,9 @@ func (t *Topic) handleBroadcast(msg *ServerComMessage) {
 	} else if msg.Info != nil {
 		// No need to process {info} sent to 'me' topic.
 		if msg.Info.Src == "" {
-			if msg.Info.SeqId > t.lastID {
-				// Drop bogus read notification
+			if success := t.procInfoReq(asUid, msg); !success {
 				return
 			}
-
-			asChan, err := t.verifyChannelAccess(msg.Info.Topic)
-			if err != nil {
-				// Silently drop invalid notification.
-				return
-			}
-
-			var pud perUserData
-			var mode types.AccessMode
-			if asChan {
-				mode = types.ModeCChnReader
-			} else {
-				pud = t.perUser[asUid]
-				mode = pud.modeGiven & pud.modeWant
-				if pud.deleted {
-					mode = types.ModeInvalid
-				}
-			}
-
-			// Filter out "kp" from users with no 'W' permission (or people without a subscription)
-			if msg.Info.What == "kp" && (!mode.IsWriter() || t.isReadOnly()) {
-				return
-			}
-
-			if (msg.Info.What == "read" || msg.Info.What == "recv") && !mode.IsReader() {
-				// Filter out "read/recv" from users with no 'R' permission (or people without a subscription)
-				return
-			}
-
-			var read, recv, unread, seq int
-			if asChan {
-				if msg.Info.What == "read" {
-					read = msg.Info.SeqId
-					seq = read
-				} else if msg.Info.What == "recv" {
-					recv = msg.Info.SeqId
-					seq = recv
-				}
-			} else {
-				if msg.Info.What == "read" {
-					if msg.Info.SeqId <= pud.readID {
-						// No need to report stale or bogus read status.
-						return
-					}
-
-					// The number of unread messages has decreased, negative value.
-					unread = pud.readID - msg.Info.SeqId
-					pud.readID = msg.Info.SeqId
-					if pud.readID > pud.recvID {
-						pud.recvID = pud.readID
-					}
-					read = pud.readID
-					seq = read
-				} else if msg.Info.What == "recv" {
-					if msg.Info.SeqId <= pud.recvID {
-						// Stale or bogus recv status.
-						return
-					}
-
-					pud.recvID = msg.Info.SeqId
-					if pud.readID > pud.recvID {
-						pud.recvID = pud.readID
-					}
-					recv = pud.recvID
-					seq = recv
-				}
-			}
-
-			if seq > 0 && !t.isProxy {
-				topicName := t.name
-				if asChan {
-					topicName = msg.Info.Topic
-				}
-
-				upd := map[string]interface{}{}
-				if recv > 0 {
-					upd["RecvSeqId"] = recv
-				}
-				if read > 0 {
-					upd["ReadSeqId"] = read
-				}
-				if err := store.Subs.Update(topicName, asUid, upd, false); err != nil {
-					logs.Warn.Printf("topic[%s]: failed to update SeqRead/Recv counter: %v", t.name, err)
-					return
-				}
-
-				// Read/recv updated: notify user's other sessions of the change
-				t.presPubMessageCount(asUid, mode, read, recv, msg.SkipSid)
-
-				// Update cached count of unread messages (for channels unread == 0)
-				usersUpdateUnread(asUid, unread, true)
-			}
-
-			if asChan {
-				// No need to forward {note} to other subscribers in channels
-				return
-			}
-
-			if seq > 0 {
-				t.perUser[asUid] = pud
-			}
-
-			if !t.isProxy {
-				// Read/recv/kp: notify users offline in the topic on their 'me'.
-				t.infoSubsOffline(asUid, msg.Info.What, seq, msg.SkipSid)
-			}
-
 		}
 	} else {
 		// TODO(gene): remove this
@@ -1211,12 +1228,12 @@ func (t *Topic) subscriptionReply(asChan bool, join *sessionJoin) error {
 // result of {sub} or {meta set=sub}.
 // Returns new access mode as *MsgAccessMode if user's access mode has changed, nil otherwise.
 //
-//	sess			- originating session
-//	pkt				- client message which triggered this request (sub or set)
-//	asUid			- id of the user making the request
-//	want			- requested access mode
-//	private			- private value to assign to the subscription
-//	background		- presence notifications are deferred
+//	sess		- originating session
+//	pkt			- client message which triggered this request; {sub} or {set}
+//	asUid		- id of the user making the request
+//	want		- requested access mode
+//	private		- private value to assign to the subscription
+//	background	- presence notifications are deferred
 //
 // Handle these cases:
 // A. User is trying to subscribe for the first time (no subscription).
