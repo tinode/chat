@@ -287,6 +287,139 @@ func (t *Topic) unregisterSession(leave *sessionLeave) {
 	}
 }
 
+// registerSession handles a session join (registration) request
+// received via the Topic.reg channel.
+func (t *Topic) registerSession(join *sessionJoin) {
+	// Request to add a connection to this topic
+	if t.isInactive() {
+		join.sess.queueOut(ErrLockedReply(join.pkt, types.TimeNow()))
+	} else {
+		// The topic is alive, so stop the kill timer, if it's ticking. We don't want the topic to die
+		// while processing the call
+		t.killTimer.Stop()
+		if err := t.handleSubscription(join); err == nil {
+			if join.pkt.Sub.Created {
+				// Call plugins with the new topic
+				pluginTopic(t, plgActCreate)
+			}
+		} else {
+			if len(t.sessions) == 0 && t.cat != types.TopicCatSys {
+				// Failed to subscribe, the topic is still inactive
+				t.killTimer.Reset(idleMasterTopicTimeout)
+			}
+			logs.Warn.Printf("topic[%s] subscription failed %v, sid=%s", t.name, err, join.sess.sid)
+		}
+	}
+	if join.sess.inflightReqs != nil {
+		join.sess.inflightReqs.Done()
+	}
+}
+
+func (t *Topic) handleMetaGet(meta *metaReq, asUid types.Uid, asChan bool, authLevel auth.Level) {
+	if meta.pkt.MetaWhat&constMsgMetaDesc != 0 {
+		if err := t.replyGetDesc(meta.sess, asUid, asChan, meta.pkt.Get.Desc, meta.pkt); err != nil {
+			logs.Warn.Printf("topic[%s] meta.Get.Desc failed: %s", t.name, err)
+		}
+	}
+	if meta.pkt.MetaWhat&constMsgMetaSub != 0 {
+		if err := t.replyGetSub(meta.sess, asUid, authLevel, asChan, meta.pkt); err != nil {
+			logs.Warn.Printf("topic[%s] meta.Get.Sub failed: %s", t.name, err)
+		}
+	}
+	if meta.pkt.MetaWhat&constMsgMetaData != 0 {
+		if err := t.replyGetData(meta.sess, asUid, asChan, meta.pkt.Get.Data, meta.pkt); err != nil {
+			logs.Warn.Printf("topic[%s] meta.Get.Data failed: %s", t.name, err)
+		}
+	}
+	if meta.pkt.MetaWhat&constMsgMetaDel != 0 {
+		if err := t.replyGetDel(meta.sess, asUid, asChan, meta.pkt.Get.Del, meta.pkt); err != nil {
+			logs.Warn.Printf("topic[%s] meta.Get.Del failed: %s", t.name, err)
+		}
+	}
+	if meta.pkt.MetaWhat&constMsgMetaTags != 0 {
+		if err := t.replyGetTags(meta.sess, asUid, meta.pkt); err != nil {
+			logs.Warn.Printf("topic[%s] meta.Get.Tags failed: %s", t.name, err)
+		}
+	}
+	if meta.pkt.MetaWhat&constMsgMetaCred != 0 {
+		logs.Warn.Printf("topic[%s] handle getCred", t.name)
+		if err := t.replyGetCreds(meta.sess, asUid, meta.pkt); err != nil {
+			logs.Warn.Printf("topic[%s] meta.Get.Creds failed: %s", t.name, err)
+		}
+	}
+}
+
+func (t *Topic) handleMetaSet(meta *metaReq, asUid types.Uid, asChan bool, authLevel auth.Level) {
+	if meta.pkt.MetaWhat&constMsgMetaDesc != 0 {
+		if err := t.replySetDesc(meta.sess, asUid, asChan, meta.pkt); err == nil {
+			// Notify plugins of the update
+			pluginTopic(t, plgActUpd)
+		} else {
+			logs.Warn.Printf("topic[%s] meta.Set.Desc failed: %v", t.name, err)
+		}
+	}
+	if meta.pkt.MetaWhat&constMsgMetaSub != 0 {
+		if err := t.replySetSub(meta.sess, meta.pkt); err != nil {
+			logs.Warn.Printf("topic[%s] meta.Set.Sub failed: %v", t.name, err)
+		}
+	}
+	if meta.pkt.MetaWhat&constMsgMetaTags != 0 {
+		if err := t.replySetTags(meta.sess, asUid, meta.pkt); err != nil {
+			logs.Warn.Printf("topic[%s] meta.Set.Tags failed: %v", t.name, err)
+		}
+	}
+	if meta.pkt.MetaWhat&constMsgMetaCred != 0 {
+		if err := t.replySetCred(meta.sess, asUid, authLevel, meta.pkt); err != nil {
+			logs.Warn.Printf("topic[%s] meta.Set.Cred failed: %v", t.name, err)
+		}
+	}
+}
+
+func (t *Topic) handleMetaDel(meta *metaReq, asUid types.Uid, asChan bool, authLevel auth.Level) {
+	var err error
+	switch meta.pkt.MetaWhat {
+	case constMsgDelMsg:
+		err = t.replyDelMsg(meta.sess, asUid, asChan, meta.pkt)
+	case constMsgDelSub:
+		err = t.replyDelSub(meta.sess, asUid, meta.pkt)
+	case constMsgDelTopic:
+		err = t.replyDelTopic(meta.sess, asUid, meta.pkt)
+	case constMsgDelCred:
+		err = t.replyDelCred(meta.sess, asUid, authLevel, meta.pkt)
+	}
+
+	if err != nil {
+		logs.Warn.Printf("topic[%s] meta.Del failed: %v", t.name, err)
+	}
+}
+
+// handleMeta implements logic handling meta requests
+// received via the Topic.meta channel.
+func (t *Topic) handleMeta(meta *metaReq) {
+	// Request to get/set topic metadata
+	asUid := types.ParseUserId(meta.pkt.AsUser)
+	authLevel := auth.Level(meta.pkt.AuthLvl)
+	asChan, err := t.verifyChannelAccess(meta.pkt.Original)
+	if err != nil {
+		// User should not be able to address non-channel topic as channel.
+		meta.sess.queueOut(ErrNotFoundReply(meta.pkt, types.TimeNow()))
+		return
+	}
+	switch {
+	case meta.pkt.Get != nil:
+		// Get request
+		t.handleMetaGet(meta, asUid, asChan, authLevel)
+
+	case meta.pkt.Set != nil:
+		// Set request
+		t.handleMetaSet(meta, asUid, asChan, authLevel)
+
+	case meta.pkt.Del != nil:
+		// Del request
+		t.handleMetaDel(meta, asUid, asChan, authLevel)
+	}
+}
+
 func (t *Topic) runLocal(hub *Hub) {
 	// Kills topic after a period of inactivity.
 	t.killTimer = time.NewTimer(time.Hour)
@@ -303,29 +436,8 @@ func (t *Topic) runLocal(hub *Hub) {
 	for {
 		select {
 		case join := <-t.reg:
-			// Request to add a connection to this topic
-			if t.isInactive() {
-				join.sess.queueOut(ErrLockedReply(join.pkt, types.TimeNow()))
-			} else {
-				// The topic is alive, so stop the kill timer, if it's ticking. We don't want the topic to die
-				// while processing the call
-				t.killTimer.Stop()
-				if err := t.handleSubscription(join); err == nil {
-					if join.pkt.Sub.Created {
-						// Call plugins with the new topic
-						pluginTopic(t, plgActCreate)
-					}
-				} else {
-					if len(t.sessions) == 0 && t.cat != types.TopicCatSys {
-						// Failed to subscribe, the topic is still inactive
-						t.killTimer.Reset(idleMasterTopicTimeout)
-					}
-					logs.Warn.Printf("topic[%s] subscription failed %v, sid=%s", t.name, err, join.sess.sid)
-				}
-			}
-			if join.sess.inflightReqs != nil {
-				join.sess.inflightReqs.Done()
-			}
+			t.registerSession(join)
+
 		case leave := <-t.unreg:
 			t.unregisterSession(leave)
 
@@ -334,94 +446,8 @@ func (t *Topic) runLocal(hub *Hub) {
 			t.handleBroadcast(msg)
 
 		case meta := <-t.meta:
-			// Request to get/set topic metadata
-			asUid := types.ParseUserId(meta.pkt.AsUser)
-			authLevel := auth.Level(meta.pkt.AuthLvl)
-			asChan, err := t.verifyChannelAccess(meta.pkt.Original)
-			if err != nil {
-				// User should not be able to address non-channel topic as channel.
-				meta.sess.queueOut(ErrNotFoundReply(meta.pkt, types.TimeNow()))
-				continue
-			}
-			switch {
-			case meta.pkt.Get != nil:
-				// Get request
-				if meta.pkt.MetaWhat&constMsgMetaDesc != 0 {
-					if err := t.replyGetDesc(meta.sess, asUid, asChan, meta.pkt.Get.Desc, meta.pkt); err != nil {
-						logs.Warn.Printf("topic[%s] meta.Get.Desc failed: %s", t.name, err)
-					}
-				}
-				if meta.pkt.MetaWhat&constMsgMetaSub != 0 {
-					if err := t.replyGetSub(meta.sess, asUid, authLevel, asChan, meta.pkt); err != nil {
-						logs.Warn.Printf("topic[%s] meta.Get.Sub failed: %s", t.name, err)
-					}
-				}
-				if meta.pkt.MetaWhat&constMsgMetaData != 0 {
-					if err := t.replyGetData(meta.sess, asUid, asChan, meta.pkt.Get.Data, meta.pkt); err != nil {
-						logs.Warn.Printf("topic[%s] meta.Get.Data failed: %s", t.name, err)
-					}
-				}
-				if meta.pkt.MetaWhat&constMsgMetaDel != 0 {
-					if err := t.replyGetDel(meta.sess, asUid, asChan, meta.pkt.Get.Del, meta.pkt); err != nil {
-						logs.Warn.Printf("topic[%s] meta.Get.Del failed: %s", t.name, err)
-					}
-				}
-				if meta.pkt.MetaWhat&constMsgMetaTags != 0 {
-					if err := t.replyGetTags(meta.sess, asUid, meta.pkt); err != nil {
-						logs.Warn.Printf("topic[%s] meta.Get.Tags failed: %s", t.name, err)
-					}
-				}
-				if meta.pkt.MetaWhat&constMsgMetaCred != 0 {
-					logs.Warn.Printf("topic[%s] handle getCred", t.name)
-					if err := t.replyGetCreds(meta.sess, asUid, meta.pkt); err != nil {
-						logs.Warn.Printf("topic[%s] meta.Get.Creds failed: %s", t.name, err)
-					}
-				}
+			t.handleMeta(meta)
 
-			case meta.pkt.Set != nil:
-				// Set request
-				if meta.pkt.MetaWhat&constMsgMetaDesc != 0 {
-					if err := t.replySetDesc(meta.sess, asUid, asChan, meta.pkt); err == nil {
-						// Notify plugins of the update
-						pluginTopic(t, plgActUpd)
-					} else {
-						logs.Warn.Printf("topic[%s] meta.Set.Desc failed: %v", t.name, err)
-					}
-				}
-				if meta.pkt.MetaWhat&constMsgMetaSub != 0 {
-					if err := t.replySetSub(meta.sess, meta.pkt); err != nil {
-						logs.Warn.Printf("topic[%s] meta.Set.Sub failed: %v", t.name, err)
-					}
-				}
-				if meta.pkt.MetaWhat&constMsgMetaTags != 0 {
-					if err := t.replySetTags(meta.sess, asUid, meta.pkt); err != nil {
-						logs.Warn.Printf("topic[%s] meta.Set.Tags failed: %v", t.name, err)
-					}
-				}
-				if meta.pkt.MetaWhat&constMsgMetaCred != 0 {
-					if err := t.replySetCred(meta.sess, asUid, authLevel, meta.pkt); err != nil {
-						logs.Warn.Printf("topic[%s] meta.Set.Cred failed: %v", t.name, err)
-					}
-				}
-
-			case meta.pkt.Del != nil:
-				// Del request
-				var err error
-				switch meta.pkt.MetaWhat {
-				case constMsgDelMsg:
-					err = t.replyDelMsg(meta.sess, asUid, asChan, meta.pkt)
-				case constMsgDelSub:
-					err = t.replyDelSub(meta.sess, asUid, meta.pkt)
-				case constMsgDelTopic:
-					err = t.replyDelTopic(meta.sess, asUid, meta.pkt)
-				case constMsgDelCred:
-					err = t.replyDelCred(meta.sess, asUid, authLevel, meta.pkt)
-				}
-
-				if err != nil {
-					logs.Warn.Printf("topic[%s] meta.Del failed: %v", t.name, err)
-				}
-			}
 		case upd := <-t.supd:
 			if upd.sess != nil {
 				// 'me' & 'grp' only. Background session timed out and came online.
