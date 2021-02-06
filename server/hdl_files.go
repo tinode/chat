@@ -66,7 +66,7 @@ func largeFileServe(wrt http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// Check if media handler requests to add headers or redirects.
+	// Check if media handler redirects or adds headers.
 	headers, statusCode, err := mh.Headers(req, true)
 	if err != nil {
 		writeHttpResponse(decodeStoreError(err, "", "", now, nil), err)
@@ -87,6 +87,12 @@ func largeFileServe(wrt http.ResponseWriter, req *http.Request) {
 				Timestamp: now}})
 		}
 		logs.Info.Println("media serve completed with status", statusCode)
+		return
+	}
+
+	if req.Method == http.MethodHead || req.Method == http.MethodOptions {
+		wrt.WriteHeader(http.StatusOK)
+		logs.Info.Println("media serve completed", req.Method)
 		return
 	}
 
@@ -179,6 +185,12 @@ func largeFileReceive(wrt http.ResponseWriter, req *http.Request) {
 				Timestamp: now}})
 		}
 		logs.Info.Println("media upload completed with status", statusCode)
+		return
+	}
+
+	if req.Method == http.MethodHead || req.Method == http.MethodOptions {
+		wrt.WriteHeader(http.StatusOK)
+		logs.Info.Println("media upload completed", req.Method)
 		return
 	}
 
