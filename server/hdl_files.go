@@ -60,17 +60,33 @@ func largeFileServe(wrt http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// Check if media handler requests redirection to another service.
-	if redirTo, err := mh.Redirect(req.Method, req.URL.String()); redirTo != "" {
-		wrt.Header().Set("Location", redirTo)
-		wrt.Header().Set("Content-Type", "application/json; charset=utf-8")
-		wrt.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
-		wrt.WriteHeader(http.StatusTemporaryRedirect)
-		enc.Encode(InfoFound("", "", now))
-		logs.Info.Println("media serve redirected", redirTo)
+	// Check if this is a GET/OPTIONS/HEAD request.
+	if req.Method != http.MethodGet && req.Method != http.MethodHead && req.Method != http.MethodOptions {
+		writeHttpResponse(ErrOperationNotAllowed("", "", now), errors.New("method '"+req.Method+"' not allowed"))
 		return
-	} else if err != nil {
+	}
+
+	// Check if media handler requests to add headers or redirects.
+	headers, statusCode, err := mh.Headers(req, true)
+	if err != nil {
 		writeHttpResponse(decodeStoreError(err, "", "", now, nil), err)
+		return
+	}
+
+	for name, value := range headers {
+		wrt.Header().Set(name, value)
+	}
+
+	if statusCode != 0 {
+		// The handler requested to terminate further processing.
+		wrt.WriteHeader(statusCode)
+		if req.Method == http.MethodGet {
+			enc.Encode(&ServerComMessage{Ctrl: &MsgServerCtrl{
+				Code:      statusCode,
+				Text:      http.StatusText(statusCode),
+				Timestamp: now}})
+		}
+		logs.Info.Println("media serve completed with status", statusCode)
 		return
 	}
 
@@ -107,8 +123,9 @@ func largeFileReceive(wrt http.ResponseWriter, req *http.Request) {
 		logs.Info.Println("media upload:", msg.Ctrl.Code, msg.Ctrl.Text, "/", err)
 	}
 
-	// Check if this is a POST or a PUT request.
-	if req.Method != http.MethodPost && req.Method != http.MethodPut {
+	// Check if this is a POST/PUT/OPTIONS/HEAD request.
+	if req.Method != http.MethodPost && req.Method != http.MethodPut &&
+		req.Method != http.MethodHead && req.Method != http.MethodOptions {
 		writeHttpResponse(ErrOperationNotAllowed("", "", now), errors.New("method '"+req.Method+"' not allowed"))
 		return
 	}
@@ -142,16 +159,26 @@ func largeFileReceive(wrt http.ResponseWriter, req *http.Request) {
 	}
 
 	// Check if uploads are handled elsewhere.
-	if redirTo, err := mh.Redirect(req.Method, req.URL.String()); redirTo != "" {
-		wrt.Header().Set("Location", redirTo)
-		wrt.Header().Set("Content-Type", "application/json; charset=utf-8")
-		wrt.WriteHeader(http.StatusTemporaryRedirect)
-		enc.Encode(InfoFound("", "", now))
-
-		logs.Info.Println("media upload redirected", redirTo)
-		return
-	} else if err != nil {
+	headers, statusCode, err := mh.Headers(req, false)
+	if err != nil {
 		writeHttpResponse(decodeStoreError(err, "", "", now, nil), err)
+		return
+	}
+
+	for name, value := range headers {
+		wrt.Header().Set(name, value)
+	}
+
+	if statusCode != 0 {
+		// The handler requested to terminate further processing.
+		wrt.WriteHeader(statusCode)
+		if req.Method == http.MethodPost || req.Method == http.MethodPut {
+			enc.Encode(&ServerComMessage{Ctrl: &MsgServerCtrl{
+				Code:      statusCode,
+				Text:      http.StatusText(statusCode),
+				Timestamp: now}})
+		}
+		logs.Info.Println("media upload completed with status", statusCode)
 		return
 	}
 

@@ -141,7 +141,7 @@ func postMessage(endpoint string, body interface{}, config *configType) (*batchR
 		return nil, err
 	}
 
-	req, err := http.NewRequest("POST", endpoint, buf)
+	req, err := http.NewRequest(http.MethodPost, endpoint, buf)
 	if err != nil {
 		return nil, err
 	}

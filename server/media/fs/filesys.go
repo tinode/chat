@@ -8,6 +8,7 @@ import (
 	"errors"
 	"io"
 	"mime"
+	"net/http"
 	"os"
 	"path/filepath"
 
@@ -23,14 +24,16 @@ const (
 )
 
 type configType struct {
-	FileUploadDirectory string `json:"upload_dir"`
-	ServeURL            string `json:"serve_url"`
+	FileUploadDirectory string   `json:"upload_dir"`
+	ServeURL            string   `json:"serve_url"`
+	CorsOrigins         []string `json:"cors_origins"`
 }
 
 type fshandler struct {
 	// In case of a cluster fileUploadLocation must be accessible to all cluster members.
 	fileUploadLocation string
 	serveURL           string
+	corsOrigins        []string
 }
 
 func (fh *fshandler) Init(jsconf string) error {
@@ -55,10 +58,35 @@ func (fh *fshandler) Init(jsconf string) error {
 	return os.MkdirAll(fh.fileUploadLocation, 0777)
 }
 
-// Redirect is used when one wants to serve files from a different external server.
-func (fshandler) Redirect(method, url string) (string, error) {
-	// This handler does not use redirects.
-	return "", nil
+// Headers is used for serving CORS headers.
+func (fh *fshandler) Headers(req *http.Request, serve bool) (map[string]string, int, error) {
+	if len(fh.corsOrigins) == 0 {
+		// CORS not configured.
+		return nil, 0, nil
+	}
+
+	allowedOrigin := matchOrigin(fh.corsOrigins, req.Header.Get("Origin"))
+	if allowedOrigin == "" {
+		// CORS policy does not match the origin.
+		return nil, 0, nil
+	}
+
+	var statusCode int
+	if req.Method == http.MethodHead || req.Method == http.MethodOptions {
+		statusCode = http.StatusOK
+	}
+	var allowMethods string
+	if serve {
+		allowMethods = "GET, HEAD, OPTIONS"
+	} else {
+		allowMethods = "POST, PUT, HEAD, OPTIONS"
+	}
+	return map[string]string{
+		"Access-Control-Allow-Origin":  allowedOrigin,
+		"Access-Control-Allow-Headers": "*",
+		"Access-Control-Allow-Methods": allowMethods,
+		"Access-Control-Max-Age":       "86400",
+	}, statusCode, nil
 }
 
 // Upload processes request for file upload. The file is given as io.Reader.
@@ -161,6 +189,19 @@ func (fh *fshandler) getFileRecord(fid types.Uid) (*types.FileDef, error) {
 	return fd, nil
 }
 
+func matchOrigin(allowed []string, origin string) string {
+	if allowed[0] == "*" {
+		return "*"
+	}
+
+	for _, val := range allowed {
+		if val == origin {
+			return origin
+		}
+	}
+
+	return ""
+}
 func init() {
 	store.RegisterMediaHandler(handlerName, &fshandler{})
 }

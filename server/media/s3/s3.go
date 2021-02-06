@@ -27,6 +27,8 @@ import (
 const (
 	defaultServeURL = "/v0/file/s/"
 	handlerName     = "s3"
+	// Presign GET URLs for this number of seconds.
+	presignDuration = 120
 )
 
 type awsconfig struct {
@@ -142,41 +144,49 @@ func (ah *awshandler) Init(jsconf string) error {
 	return err
 }
 
-// Redirect is used when one wants to serve files from a different external server.
-func (ah *awshandler) Redirect(method, url string) (string, error) {
-	if method == "PUT" || method == "POST" {
-		return "", nil
+// Headers redirects GET, HEAD requests to the AWS server.
+func (ah *awshandler) Headers(req *http.Request, serve bool) (map[string]string, int, error) {
+
+	if req.Method == http.MethodPut || req.Method == http.MethodPost {
+		return nil, 0, nil
 	}
 
-	fid := ah.GetIdFromUrl(url)
+	fid := ah.GetIdFromUrl(req.URL.String())
 	if fid.IsZero() {
-		return "", types.ErrNotFound
+		return nil, 0, types.ErrNotFound
 	}
 
 	fd, err := ah.getFileRecord(fid)
 	if err != nil {
-		return "", err
+		return nil, 0, err
 	}
 
-	var req *request.Request
-	if method == "GET" {
-		req, _ = ah.svc.GetObjectRequest(&s3.GetObjectInput{
+	var awsReq *request.Request
+	if req.Method == http.MethodGet {
+		awsReq, _ = ah.svc.GetObjectRequest(&s3.GetObjectInput{
 			Bucket:              aws.String(ah.conf.BucketName),
 			Key:                 aws.String(fid.String32()),
 			ResponseContentType: aws.String(fd.MimeType),
 		})
-	} else if method == "HEAD" {
-		req, _ = ah.svc.HeadObjectRequest(&s3.HeadObjectInput{
+	} else if req.Method == http.MethodHead {
+		awsReq, _ = ah.svc.HeadObjectRequest(&s3.HeadObjectInput{
 			Bucket: aws.String(ah.conf.BucketName),
 			Key:    aws.String(fid.String32()),
 		})
 	}
 
-	if req != nil {
-		// Presign for 2 minutes.
-		return req.Presign(time.Minute * 2)
+	if awsReq != nil {
+		// Return presigned URL. The URL will stop working after a short period of time to prevent use of Tinode
+		// as a free file server.
+		url, err := awsReq.Presign(time.Second * presignDuration)
+		headers := map[string]string{
+			"Location":      url,
+			"Content-Type":  "application/json; charset=utf-8",
+			"Cache-Control": "no-cache, no-store, must-revalidate",
+		}
+		return headers, http.StatusTemporaryRedirect, err
 	}
-	return "", nil
+	return nil, 0, nil
 }
 
 // Upload processes request for a file upload. The file is given as io.Reader.

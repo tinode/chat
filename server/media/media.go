@@ -3,6 +3,7 @@ package media
 
 import (
 	"io"
+	"net/http"
 	"path"
 	"strings"
 
@@ -21,9 +22,10 @@ type Handler interface {
 	// Init initializes the media upload handler.
 	Init(jsconf string) error
 
-	// Check if redirect is required.
-	// Redirect can be used to serve files from a different external server.
-	Redirect(method, url string) (string, error)
+	// Headers checks if the handler wants to provide additional HTTP headers for the request.
+	// It could be CORS headers, redirect to serve files from another URL, cache-control headers.
+	// It returns headers as a map, HTTP status code to stop processing or 0 to continue, error.
+	Headers(req *http.Request, serve bool) (map[string]string, int, error)
 
 	// Upload processes request for file upload.
 	Upload(fdef *types.FileDef, file io.ReadSeeker) (string, error)
