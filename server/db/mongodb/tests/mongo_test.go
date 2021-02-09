@@ -227,29 +227,6 @@ func TestUserGetAll(t *testing.T) {
 	}
 }
 
-func TestUserGetDisabled(t *testing.T) {
-	// Test before deletion date
-	got, err := adp.UserGetDisabled(users[2].DeletedAt.Add(-10 * time.Hour))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(got) != 1 {
-		t.Fatal(mismatchErrorString("uids length", len(got), 1))
-	}
-	if got[0].String() != users[2].Id {
-		t.Error(mismatchErrorString("userId", got[0].String(), users[2].Id))
-	}
-
-	// Test after deletion date
-	got, err = adp.UserGetDisabled(users[2].DeletedAt.Add(10 * time.Hour))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got != nil {
-		t.Fatal(mismatchErrorString("result", got, nil))
-	}
-}
-
 func TestUserGetByCred(t *testing.T) {
 	// Test not found
 	got, err := adp.UserGetByCred("foo", "bar")
@@ -518,7 +495,7 @@ func TestSubsForTopic(t *testing.T) {
 }
 
 func TestFindUsers(t *testing.T) {
-	reqTags := []string{"alice", "bob", "carol"}
+	reqTags := [][]string{[]string{"alice", "bob", "carol"}}
 	gotSubs, err := adp.FindUsers(types.ParseUserId("usr"+users[2].Id), reqTags, nil)
 	if err != nil {
 		t.Error(err)
@@ -529,7 +506,7 @@ func TestFindUsers(t *testing.T) {
 }
 
 func TestFindTopics(t *testing.T) {
-	reqTags := []string{"travel", "qwer", "asdf", "zxcv"}
+	reqTags := [][]string{[]string{"travel", "qwer", "asdf", "zxcv"}}
 	gotSubs, err := adp.FindTopics(reqTags, nil)
 	if err != nil {
 		t.Error(err)
@@ -689,7 +666,7 @@ func TestAuthUpdRecord(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var got AuthRecord
+	var got authRecord
 	err = db.Collection("auth").FindOne(ctx, b.M{"_id": rec.Id}).Decode(&got)
 	if err != nil {
 		t.Fatal(err)
@@ -1108,7 +1085,7 @@ func TestTopicDelete(t *testing.T) {
 		if err = cur.Decode(&got); err != nil {
 			t.Error(err)
 		}
-		if got.DeletedAt == nil {
+		if got.State != types.StateDeleted {
 			t.Error("Soft delete failed:", got)
 		}
 	}
@@ -1151,7 +1128,7 @@ func TestUserDelete(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.DeletedAt == nil {
+	if got.State != types.StateDeleted {
 		t.Error("User soft delete failed", got)
 	}
 
@@ -1222,7 +1199,7 @@ func initConnectionToDb() {
 }
 
 func init() {
-	logs.Init()
+	logs.Init(os.Stderr, "stdFlags")
 	adp = backend.GetAdapter()
 	conffile := flag.String("config", "./test.conf", "config of the database connection")
 
