@@ -1023,8 +1023,8 @@ func TestMessageDeleteList(t *testing.T) {
 		if msg.SeqId == 5 && msg.DeletedFor == nil {
 			t.Error("Message with SeqID=5 should be deleted")
 		}
-		if msg.SeqId == 11 && msg.DeletedFor == nil {
-			t.Error("Message with SeqID=5 should be deleted")
+		if msg.SeqId == 11 && msg.DeletedFor != nil {
+			t.Error("Message with SeqID=11 should not be deleted")
 		}
 	}
 	//
