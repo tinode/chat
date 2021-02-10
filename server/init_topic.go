@@ -682,8 +682,6 @@ func (t *Topic) loadSubscribers() error {
 		sub := &subs[i]
 		uid := types.ParseUid(sub.User)
 		t.perUser[uid] = perUserData{
-			created:   sub.CreatedAt,
-			updated:   sub.UpdatedAt,
 			delID:     sub.DelId,
 			readID:    sub.ReadSeqId,
 			recvID:    sub.RecvSeqId,
