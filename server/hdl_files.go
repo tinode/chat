@@ -34,7 +34,7 @@ func largeFileServe(wrt http.ResponseWriter, req *http.Request) {
 		wrt.WriteHeader(msg.Ctrl.Code)
 		enc.Encode(msg)
 		if err != nil {
-			logs.Warn.Println("media serve", err)
+			logs.Warn.Println("media serve:", err)
 		}
 	}
 
@@ -86,13 +86,13 @@ func largeFileServe(wrt http.ResponseWriter, req *http.Request) {
 				Text:      http.StatusText(statusCode),
 				Timestamp: now}})
 		}
-		logs.Info.Println("media serve completed with status", statusCode)
+		logs.Info.Println("media serve: completed with status", statusCode)
 		return
 	}
 
 	if req.Method == http.MethodHead || req.Method == http.MethodOptions {
 		wrt.WriteHeader(http.StatusOK)
-		logs.Info.Println("media serve completed", req.Method)
+		logs.Info.Println("media serve: completed", req.Method)
 		return
 	}
 
@@ -108,13 +108,11 @@ func largeFileServe(wrt http.ResponseWriter, req *http.Request) {
 	wrt.Header().Set("Content-Disposition", "attachment")
 	http.ServeContent(wrt, req, "", fd.UpdatedAt, rsc)
 
-	logs.Info.Println("media served OK")
+	logs.Info.Println("media serve: OK")
 }
 
 // largeFileReceive receives files from client over HTTP(S) and passes them to the configured media handler.
 func largeFileReceive(wrt http.ResponseWriter, req *http.Request) {
-	logs.Info.Println("Upload request", req.RequestURI)
-
 	now := types.TimeNow()
 	enc := json.NewEncoder(wrt)
 	mh := store.GetMediaHandler()
@@ -184,13 +182,13 @@ func largeFileReceive(wrt http.ResponseWriter, req *http.Request) {
 				Text:      http.StatusText(statusCode),
 				Timestamp: now}})
 		}
-		logs.Info.Println("media upload completed with status", statusCode)
+		logs.Info.Println("media upload: completed with status", statusCode)
 		return
 	}
 
 	if req.Method == http.MethodHead || req.Method == http.MethodOptions {
 		wrt.WriteHeader(http.StatusOK)
-		logs.Info.Println("media upload completed", req.Method)
+		logs.Info.Println("media upload: completed", req.Method)
 		return
 	}
 
