@@ -110,7 +110,7 @@ All client software has support for internationalization. Translations are provi
 
 ## Third-Party Licenses
 
-* Demo avatars and some other graphics are from https://www.pexels.com/ under [CC0](https://www.pexels.com/photo-license/) license.
+* Demo avatars and some other graphics are from https://www.pexels.com/ under [CC0 license](https://www.pexels.com/photo-license/) and https://pixabay.com/ under their [license](https://pixabay.com/service/license/).
 * Web and Android background patterns are from http://subtlepatterns.com/ under [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/) license.
 * Android icons are from https://material.io/tools/icons/ under [Apache 2.0](https://www.apache.org/licenses/LICENSE-2.0.html) license.
 * Some iOS icons are from https://icons8.com/ under [CC BY-ND 3.0](https://icons8.com/license) license.
