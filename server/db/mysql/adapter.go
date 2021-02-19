@@ -1529,9 +1529,9 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 	return subs, err
 }
 
-// OwnTopics loads a slice of topic names where the user is the owner.
-func (a *adapter) OwnTopics(uid t.Uid) ([]string, error) {
-	rows, err := a.db.Queryx("SELECT name FROM topics WHERE owner=?", store.DecodeUid(uid))
+// topicNamesForUser reads a slice of strings using provided query.
+func (a *adapter) topicNamesForUser(uid t.Uid, sqlQuery string) ([]string, error) {
+	rows, err := a.db.Queryx(sqlQuery, store.DecodeUid(uid))
 	if err != nil {
 		return nil, err
 	}
@@ -1550,6 +1550,18 @@ func (a *adapter) OwnTopics(uid t.Uid) ([]string, error) {
 	rows.Close()
 
 	return names, err
+}
+
+// OwnTopics loads a slice of topic names where the user is the owner.
+func (a *adapter) OwnTopics(uid t.Uid) ([]string, error) {
+	return a.topicNamesForUser(uid, "SELECT name FROM topics WHERE owner=?")
+}
+
+// ChannelsForUser loads a slice of topic names where the user is a channel reader and notifications (P) are enabled.
+func (a *adapter) ChannelsForUser(uid t.Uid) ([]string, error) {
+	return a.topicNamesForUser(uid,
+		"SELECT topic FROM subscriptions WHERE owner=? AND topic LIKE 'chn%' "+
+			"AND INSTR(modewant, 'P')>0 AND INSTR(modegiven, 'P')>0 AND deletedat IS NULL")
 }
 
 func (a *adapter) TopicShare(shares []*t.Subscription) error {

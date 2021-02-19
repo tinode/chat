@@ -40,14 +40,18 @@ type Receipt struct {
 	Payload Payload `json:"payload"`
 }
 
-// ChannelReq is a request to subscribe/unsubscribe device IDs to channel (FCM topic).
+// ChannelReq is a request to subscribe/unsubscribe device ID(s) to channel(s) (FCM topic).
+// - If DeviceID is provided, it's subscribed/unsubscribed to all user's channels.
+// - If Channel is provided, then all user's devices are subscribed/unsubscribed from the channel.
 type ChannelReq struct {
-	// Uid is the id of the user making request
-	Uid t.Uid `json:"-"`
+	// Uid is the ID of the user making request.
+	Uid t.Uid
+	// DeviceID is the device-provided token in case a single device is being subscribed to all channels.
+	DeviceID string
 	// Channel to subscribe to or unsubscribe from.
-	Channel string `json:"channel"`
+	Channel string
 	// Unsub is set to true to unsubscribe devices, otherwise subscribe them.
-	Unsub bool `json:"unsub"`
+	Unsub bool
 }
 
 // Payload is content of the push.

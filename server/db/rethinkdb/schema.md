@@ -142,11 +142,11 @@ The table stores relationships between users and topics.
 
 Fields:
  * `Id` used for object retrieval
- * `CreatedAt` timestamp when the user was created
- * `UpdatedAt` timestamp when user metadata was updated
- * `DeletedAt` currently unused
+ * `CreatedAt` timestamp when the subscription was created
+ * `UpdatedAt` timestamp when the subscription was updated
+ * `DeletedAt` timestamp when the subscription was deleted
  * `ReadSeqId` id of the message last read by the user
- * `RecvSeqId` id of the message last received by user device
+ * `RecvSeqId` id of the message last received by any user device
  * `DelId` topic-sequential ID of the soft-deletion operation
  * `Topic` name of the topic subscribed to
  * `User` subscriber's user ID

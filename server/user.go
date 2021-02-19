@@ -654,6 +654,14 @@ func userGetState(uid types.Uid) (types.ObjState, error) {
 	return user.State, nil
 }
 
+// Subscribe or unsubscribe a single user's device to/from all FCM topics (channels).
+func userChannelsSubUnsub(uid types.Uid, deviceID string, sub bool) {
+	push.ChannelSub(&push.ChannelReq{
+		Uid:      uid,
+		DeviceID: deviceID,
+		Unsub:    !sub})
+}
+
 // UserCacheReq contains data which mutates one or more user cache entries.
 type UserCacheReq struct {
 	// Name of the node sending this request in case of cluster. Not set otherwise.

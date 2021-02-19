@@ -40,11 +40,14 @@ type configType struct {
 	AuthToken string `json:"token"`
 }
 
-// subUnsubReq is a request to subscribe/unsubscribe device IDs to channel (FCM topic).
+// subUnsubReq is a request to subscribe/unsubscribe device ID(s) to channel(s) (FCM topic).
+// One device to multiple channels or multiple devices to one channel.
 type subUnsubReq struct {
-	Channel string   `json:"channel"`
-	Devices []string `json:"devices"`
-	Unsub   bool     `json:"unsub"`
+	Channel  string   `json:"channel,omitempty"`
+	Channels []string `json:"channels,omitempty"`
+	Device   string   `json:"device,omitempty"`
+	Devices  []string `json:"devices,omitempty"`
+	Unsub    bool     `json:"unsub"`
 }
 
 type tnpgResponse struct {
@@ -215,13 +218,21 @@ func sendPushes(rcpt *push.Receipt, config *configType) {
 
 func processSubscription(req *push.ChannelReq, config *configType) {
 	su := subUnsubReq{
-		Devices: fcm.DevicesForUser(req.Uid),
-		Channel: req.Channel,
-		Unsub:   req.Unsub,
+		Unsub: req.Unsub,
 	}
-	if len(su.Devices) == 0 {
+
+	if req.Channel != "" {
+		su.Devices = fcm.DevicesForUser(req.Uid)
+		su.Channel = req.Channel
+	} else if req.DeviceID != "" {
+		su.Channels = fcm.ChannelsForUser(req.Uid)
+		su.Device = req.DeviceID
+	}
+
+	if (len(su.Devices) == 0 && su.Device == "") || (len(su.Channels) == 0 && su.Channel == "") {
 		return
 	}
+
 	if len(su.Devices) > subBatchSize {
 		// It's extremely unlikely for a single user to have this many devices.
 		su.Devices = su.Devices[0:subBatchSize]

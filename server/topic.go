@@ -372,7 +372,7 @@ func (t *Topic) handleMetaSet(meta *metaReq, asUid types.Uid, asChan bool, authL
 		}
 	}
 	if meta.pkt.MetaWhat&constMsgMetaSub != 0 {
-		if err := t.replySetSub(meta.sess, meta.pkt); err != nil {
+		if err := t.replySetSub(meta.sess, meta.pkt, asChan); err != nil {
 			logs.Warn.Printf("topic[%s] meta.Set.Sub failed: %v", t.name, err)
 		}
 	}
@@ -536,7 +536,12 @@ func (t *Topic) runLocal(hub *Hub) {
 func (t *Topic) handleSubscription(join *sessionJoin) error {
 	asUid := types.ParseUserId(join.pkt.AsUser)
 	authLevel := auth.Level(join.pkt.AuthLvl)
-	asChan := isChannel(join.pkt.Original)
+	asChan, err := t.verifyChannelAccess(join.pkt.Original)
+	if err != nil {
+		// User should not be able to address non-channel topic as channel.
+		join.sess.queueOut(ErrNotFoundReply(join.pkt, types.TimeNow()))
+		return err
+	}
 
 	msgsub := join.pkt.Sub
 	getWhat := 0
@@ -1199,7 +1204,7 @@ func (t *Topic) subscriptionReply(asChan bool, join *sessionJoin) error {
 	var err error
 	var modeChanged *MsgAccessMode
 	// Create new subscription or modify an existing one.
-	if modeChanged, err = t.thisUserSub(join.sess, join.pkt, asUid, mode, private); err != nil {
+	if modeChanged, err = t.thisUserSub(join.sess, join.pkt, asUid, asChan, mode, private); err != nil {
 		return err
 	}
 
@@ -1258,6 +1263,7 @@ func (t *Topic) subscriptionReply(asChan bool, join *sessionJoin) error {
 //	sess		- originating session
 //	pkt			- client message which triggered this request; {sub} or {set}
 //	asUid		- id of the user making the request
+//	asChan	- true if the user is subscribing to a channel topic
 //	want		- requested access mode
 //	private		- private value to assign to the subscription
 //	background	- presence notifications are deferred
@@ -1271,18 +1277,10 @@ func (t *Topic) subscriptionReply(asChan bool, join *sessionJoin) error {
 // D. User is already subscribed, changing modeWant.
 // E. User is accepting ownership transfer (requesting ownership transfer is not permitted).
 // In case of a group topic the user may be a reader or a full subscriber.
-func (t *Topic) thisUserSub(sess *Session, pkt *ClientComMessage, asUid types.Uid, want string,
+func (t *Topic) thisUserSub(sess *Session, pkt *ClientComMessage, asUid types.Uid, asChan bool, want string,
 	private interface{}) (*MsgAccessMode, error) {
 
 	now := types.TimeNow()
-
-	asChan, err := t.verifyChannelAccess(pkt.Original)
-	if err != nil {
-		// User should not be able to address non-channel topic as channel.
-		sess.queueOut(ErrNotFoundReply(pkt, now))
-		return nil, types.ErrNotFound
-	}
-
 	asLvl := auth.Level(pkt.AuthLvl)
 
 	// Access mode values as they were before this request was processed.
@@ -1300,6 +1298,7 @@ func (t *Topic) thisUserSub(sess *Session, pkt *ClientComMessage, asUid types.Ui
 
 	toriginal := t.original(asUid)
 
+	var err error
 	// Check if it's an attempt at a new subscription to the topic / a first connection of a channel reader
 	// (channel readers are not permanently cached).
 	// It could be an actual subscription (IsJoiner() == true) or a ban (IsJoiner() == false).
@@ -1610,7 +1609,7 @@ func (t *Topic) thisUserSub(sess *Session, pkt *ClientComMessage, asUid types.Ui
 // A. Sharer or Approver is inviting another user for the first time (no prior subscription)
 // B. Sharer or Approver is re-inviting another user (adjusting modeGiven, modeWant is still Unset)
 // C. Approver is changing modeGiven for another user, modeWant != Unset
-func (t *Topic) anotherUserSub(sess *Session, asUid, target types.Uid,
+func (t *Topic) anotherUserSub(sess *Session, asUid, target types.Uid, asChan bool,
 	pkt *ClientComMessage) (*MsgAccessMode, error) {
 
 	now := types.TimeNow()
@@ -1630,15 +1629,10 @@ func (t *Topic) anotherUserSub(sess *Session, asUid, target types.Uid,
 		return nil, errors.New("topic access denied; approver has no permission")
 	}
 
-	asChan, err := t.verifyChannelAccess(pkt.Original)
 	if asChan {
 		// TODO: need to implement promoting reader to subscriber. Rejecting for now.
 		sess.queueOut(ErrPermissionDeniedReply(pkt, now))
 		return nil, errors.New("topic access denied: cannot subscribe reader to channel")
-	} else if err != nil {
-		// User should not be able to address non-channel topic as channel.
-		sess.queueOut(ErrNotFoundReply(pkt, now))
-		return nil, types.ErrNotFound
 	}
 
 	// Check if topic is suspended.
@@ -2339,7 +2333,7 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 // replySetSub is a response to new subscription request or an update to a subscription {set.sub}:
 // update topic metadata cache, save/update subs, reply to the caller as {ctrl} message,
 // generate a presence notification, if appropriate.
-func (t *Topic) replySetSub(sess *Session, pkt *ClientComMessage) error {
+func (t *Topic) replySetSub(sess *Session, pkt *ClientComMessage, asChan bool) error {
 	now := types.TimeNow()
 
 	asUid := types.ParseUserId(pkt.AsUser)
@@ -2361,10 +2355,10 @@ func (t *Topic) replySetSub(sess *Session, pkt *ClientComMessage) error {
 	var modeChanged *MsgAccessMode
 	if target == asUid {
 		// Request new subscription or modify own subscription
-		modeChanged, err = t.thisUserSub(sess, pkt, asUid, set.Sub.Mode, nil)
+		modeChanged, err = t.thisUserSub(sess, pkt, asUid, asChan, set.Sub.Mode, nil)
 	} else {
 		// Request to approve/change someone's subscription
-		modeChanged, err = t.anotherUserSub(sess, asUid, target, pkt)
+		modeChanged, err = t.anotherUserSub(sess, asUid, target, asChan, pkt)
 	}
 	if err != nil {
 		return err
