@@ -420,6 +420,78 @@ func (t *Topic) handleMeta(meta *metaReq) {
 	}
 }
 
+func (t *Topic) handleSessionUpdate(upd *sessionUpdate, currentUA *string, uaTimer *time.Timer) {
+	if upd.sess != nil {
+		// 'me' & 'grp' only. Background session timed out and came online.
+		t.sessToForeground(upd.sess)
+	} else if *currentUA != upd.userAgent {
+		if t.cat != types.TopicCatMe {
+			logs.Warn.Panicln("invalid topic category in UA update", t.name)
+		}
+		// 'me' only. Process an update to user agent from one of the sessions.
+		*currentUA = upd.userAgent
+		uaTimer.Reset(uaTimerDelay)
+	}
+}
+
+func (t *Topic) handleUATimerEvent(currentUA string) {
+	// Publish user agent changes after a delay
+	if currentUA == "" || currentUA == t.userAgent {
+		return
+	}
+	t.userAgent = currentUA
+	t.presUsersOfInterest("ua", t.userAgent)
+}
+
+func (t *Topic) handleTopicTimeout(hub *Hub, currentUA string, uaTimer, defrNotifTimer *time.Timer) {
+	// Topic timeout
+	hub.unreg <- &topicUnreg{rcptTo: t.name}
+	defrNotifTimer.Stop()
+	if t.cat == types.TopicCatMe {
+		uaTimer.Stop()
+		t.presUsersOfInterest("off", currentUA)
+	} else if t.cat == types.TopicCatGrp {
+		t.presSubsOffline("off", nilPresParams, nilPresFilters, nilPresFilters, "", false)
+	}
+}
+
+func (t *Topic) handleTopicTermination(sd *shutDown) {
+	// Handle four cases:
+	// 1. Topic is shutting down by timer due to inactivity (reason == StopNone)
+	// 2. Topic is being deleted (reason == StopDeleted)
+	// 3. System shutdown (reason == StopShutdown, done != nil).
+	// 4. Cluster rehashing (reason == StopRehashing)
+
+	if sd.reason == StopDeleted {
+		if t.cat == types.TopicCatGrp {
+			t.presSubsOffline("gone", nilPresParams, nilPresFilters, nilPresFilters, "", false)
+		}
+		// P2P users get "off+remove" earlier in the process
+
+		// Inform plugins that the topic is deleted
+		pluginTopic(t, plgActDel)
+
+	} else if sd.reason == StopRehashing {
+		// Must send individual messages to sessions because normal sending through the topic's
+		// broadcast channel won't work - it will be shut down too soon.
+		t.presSubsOnlineDirect("term", nilPresParams, nilPresFilters, "")
+	}
+	// In case of a system shutdown don't bother with notifications. They won't be delivered anyway.
+
+	// Tell sessions to remove the topic
+	for s := range t.sessions {
+		s.detachSession(t.name)
+	}
+
+	usersRegisterTopic(t, false)
+
+	// Report completion back to sender, if 'done' is not nil.
+	if sd.done != nil {
+		sd.done <- true
+	}
+	return
+}
+
 func (t *Topic) runLocal(hub *Hub) {
 	// Kills topic after a period of inactivity.
 	t.killTimer = time.NewTimer(time.Hour)
@@ -449,72 +521,16 @@ func (t *Topic) runLocal(hub *Hub) {
 			t.handleMeta(meta)
 
 		case upd := <-t.supd:
-			if upd.sess != nil {
-				// 'me' & 'grp' only. Background session timed out and came online.
-				t.sessToForeground(upd.sess)
-			} else if currentUA != upd.userAgent {
-				if t.cat != types.TopicCatMe {
-					logs.Warn.Panicln("invalid topic category in UA update", t.name)
-				}
-				// 'me' only. Process an update to user agent from one of the sessions.
-				currentUA = upd.userAgent
-				uaTimer.Reset(uaTimerDelay)
-			}
+			t.handleSessionUpdate(upd, &currentUA, uaTimer)
 
 		case <-uaTimer.C:
-			// Publish user agent changes after a delay
-			if currentUA == "" || currentUA == t.userAgent {
-				continue
-			}
-			t.userAgent = currentUA
-			t.presUsersOfInterest("ua", t.userAgent)
+			t.handleUATimerEvent(currentUA)
 
 		case <-t.killTimer.C:
-			// Topic timeout
-			hub.unreg <- &topicUnreg{rcptTo: t.name}
-			defrNotifTimer.Stop()
-			if t.cat == types.TopicCatMe {
-				uaTimer.Stop()
-				t.presUsersOfInterest("off", currentUA)
-			} else if t.cat == types.TopicCatGrp {
-				t.presSubsOffline("off", nilPresParams, nilPresFilters, nilPresFilters, "", false)
-			}
+			t.handleTopicTimeout(hub, currentUA, uaTimer, defrNotifTimer)
 
 		case sd := <-t.exit:
-			// Handle four cases:
-			// 1. Topic is shutting down by timer due to inactivity (reason == StopNone)
-			// 2. Topic is being deleted (reason == StopDeleted)
-			// 3. System shutdown (reason == StopShutdown, done != nil).
-			// 4. Cluster rehashing (reason == StopRehashing)
-
-			if sd.reason == StopDeleted {
-				if t.cat == types.TopicCatGrp {
-					t.presSubsOffline("gone", nilPresParams, nilPresFilters, nilPresFilters, "", false)
-				}
-				// P2P users get "off+remove" earlier in the process
-
-				// Inform plugins that the topic is deleted
-				pluginTopic(t, plgActDel)
-
-			} else if sd.reason == StopRehashing {
-				// Must send individual messages to sessions because normal sending through the topic's
-				// broadcast channel won't work - it will be shut down too soon.
-				t.presSubsOnlineDirect("term", nilPresParams, nilPresFilters, "")
-			}
-			// In case of a system shutdown don't bother with notifications. They won't be delivered anyway.
-
-			// Tell sessions to remove the topic
-			for s := range t.sessions {
-				s.detachSession(t.name)
-			}
-
-			usersRegisterTopic(t, false)
-
-			// Report completion back to sender, if 'done' is not nil.
-			if sd.done != nil {
-				sd.done <- true
-			}
-			return
+			t.handleTopicTermination(sd)
 		}
 	}
 }
