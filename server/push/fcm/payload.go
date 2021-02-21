@@ -361,3 +361,13 @@ func DevicesForUser(uid t.Uid) []string {
 	}
 	return devices
 }
+
+// ChannelsForUser loads user's channel subscriptions with P permission.
+func ChannelsForUser(uid t.Uid) []string {
+	channels, err := store.Users.GetChannels(uid)
+	if err != nil {
+		logs.Warn.Println("fcm channels for user: db error", err)
+		return nil
+	}
+	return channels
+}

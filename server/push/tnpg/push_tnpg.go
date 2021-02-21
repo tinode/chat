@@ -253,7 +253,7 @@ func processSubscription(req *push.ChannelReq, config *configType) {
 		return
 	}
 	// Check for expired tokens and other errors.
-	handleSubResponse(resp, req, su.Devices)
+	handleSubResponse(resp, req, su.Devices, su.Channels)
 }
 
 func handlePushResponse(batch *batchResponse, messages []fcm.MessageData) {
@@ -284,14 +284,20 @@ func handlePushResponse(batch *batchResponse, messages []fcm.MessageData) {
 	}
 }
 
-func handleSubResponse(batch *batchResponse, req *push.ChannelReq, devices []string) {
+func handleSubResponse(batch *batchResponse, req *push.ChannelReq, devices, channels []string) {
 	if batch.FailureCount <= 0 {
 		return
 	}
 
+	var src string
 	for _, resp := range batch.Responses {
+		if len(devices) > 0 {
+			src = devices[resp.Index]
+		} else {
+			src = channels[resp.Index]
+		}
 		// FCM documentation sucks. There is no list of possible errors so no action can be taken but logging.
-		logs.Warn.Println("fcm sub/unsub error", resp.ErrorCode, req.Uid, devices[resp.Index])
+		logs.Warn.Println("fcm sub/unsub error", resp.ErrorCode, req.Uid, src)
 	}
 }
 

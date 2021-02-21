@@ -1560,7 +1560,7 @@ func (a *adapter) OwnTopics(uid t.Uid) ([]string, error) {
 // ChannelsForUser loads a slice of topic names where the user is a channel reader and notifications (P) are enabled.
 func (a *adapter) ChannelsForUser(uid t.Uid) ([]string, error) {
 	return a.topicNamesForUser(uid,
-		"SELECT topic FROM subscriptions WHERE owner=? AND topic LIKE 'chn%' "+
+		"SELECT topic FROM subscriptions WHERE userid=? AND topic LIKE 'chn%' "+
 			"AND INSTR(modewant, 'P')>0 AND INSTR(modegiven, 'P')>0 AND deletedat IS NULL")
 }
 
