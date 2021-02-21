@@ -308,7 +308,7 @@ func (t *Topic) registerSession(join *sessionJoin) {
 		join.sess.queueOut(ErrLockedReply(join.pkt, types.TimeNow()))
 	} else {
 		// The topic is alive, so stop the kill timer, if it's ticking. We don't want the topic to die
-		// while processing the call
+		// while processing the call.
 		t.killTimer.Stop()
 		if err := t.handleSubscription(join); err == nil {
 			if join.pkt.Sub.Created {
@@ -554,6 +554,7 @@ func (t *Topic) handleSubscription(join *sessionJoin) error {
 	authLevel := auth.Level(join.pkt.AuthLvl)
 	asChan, err := t.verifyChannelAccess(join.pkt.Original)
 	if err != nil {
+		logs.Info.Println("verifyChannelAccess failed")
 		// User should not be able to address non-channel topic as channel.
 		join.sess.queueOut(ErrNotFoundReply(join.pkt, types.TimeNow()))
 		return err

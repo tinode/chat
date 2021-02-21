@@ -140,8 +140,21 @@ func sendNotifications(rcpt *push.Receipt, config *configType) {
 }
 
 func processSubscription(req *push.ChannelReq) {
-	devices := DevicesForUser(req.Uid)
-	if len(devices) == 0 {
+	var channel string
+	var devices []string
+	var device string
+	var channels []string
+
+	if req.Channel != "" {
+		devices = DevicesForUser(req.Uid)
+		channel = req.Channel
+	} else if req.DeviceID != "" {
+		channels = ChannelsForUser(req.Uid)
+		device = req.DeviceID
+	}
+
+	if (len(devices) == 0 && device == "") || (len(channels) == 0 && channel == "") {
+		// No channels or devces to subscribe or unsubscribe.
 		return
 	}
 
@@ -153,18 +166,44 @@ func processSubscription(req *push.ChannelReq) {
 
 	var err error
 	var resp *fcm.TopicManagementResponse
-	if req.Unsub {
-		resp, err = handler.client.UnsubscribeFromTopic(context.Background(), devices, req.Channel)
-	} else {
-		resp, err = handler.client.SubscribeToTopic(context.Background(), devices, req.Channel)
+	if channel != "" && len(devices) > 0 {
+		if req.Unsub {
+			resp, err = handler.client.UnsubscribeFromTopic(context.Background(), devices, channel)
+		} else {
+			resp, err = handler.client.SubscribeToTopic(context.Background(), devices, channel)
+		}
+		if err != nil {
+			// Complete failure.
+			logs.Warn.Println("fcm: sub or upsub failed", req.Unsub, err)
+		} else {
+			// Check for partial failure.
+			handleSubErrors(resp, req.Uid, devices)
+		}
+		return
 	}
-	if err != nil {
-		// Complete failure.
-		logs.Warn.Println("fcm: sub or upsub failed", req.Unsub, err)
-	} else {
-		// Check for partial failure.
-		handleSubErrors(resp, req.Uid, devices)
+
+	if device != "" && len(channels) > 0 {
+		devices := []string{device}
+		for _, channel := range channels {
+			if req.Unsub {
+				resp, err = handler.client.UnsubscribeFromTopic(context.Background(), devices, channel)
+			} else {
+				resp, err = handler.client.SubscribeToTopic(context.Background(), devices, channel)
+			}
+			if err != nil {
+				// Complete failure.
+				logs.Warn.Println("fcm: sub or upsub failed", req.Unsub, err)
+				break
+			}
+			// Check for partial failure.
+			handleSubErrors(resp, req.Uid, devices)
+		}
+		return
 	}
+
+	// Invalid request: either multiple channels & multiple devices (not supported) or no channels and no devices.
+	logs.Err.Println("fcm: user", req.Uid.UserId(), "invalid combination of sub/unsub channels/devices",
+		len(devices), len(channels))
 }
 
 // handlePushError processes errors returned by a call to fcm.SendAll.
