@@ -829,7 +829,11 @@ func usersRegisterTopic(t *Topic, add bool) {
 	// send remote UIDs to other cluster nodes for processing. The UIDs may have to be
 	// sent to multiple nodes.
 	remote := &UserCacheReq{Inc: add}
-	for uid := range t.perUser {
+	for uid, pud := range t.perUser {
+		if pud.isChan {
+			// Skip channel subscribers.
+			continue
+		}
 		if globals.cluster.isRemoteTopic(uid.UserId()) {
 			remote.UserIdList = append(remote.UserIdList, uid)
 		} else {

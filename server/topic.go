@@ -554,7 +554,6 @@ func (t *Topic) handleSubscription(join *sessionJoin) error {
 	authLevel := auth.Level(join.pkt.AuthLvl)
 	asChan, err := t.verifyChannelAccess(join.pkt.Original)
 	if err != nil {
-		logs.Info.Println("verifyChannelAccess failed")
 		// User should not be able to address non-channel topic as channel.
 		join.sess.queueOut(ErrNotFoundReply(join.pkt, types.TimeNow()))
 		return err
@@ -1313,8 +1312,6 @@ func (t *Topic) thisUserSub(sess *Session, pkt *ClientComMessage, asUid types.Ui
 		}
 	}
 
-	toriginal := t.original(asUid)
-
 	var err error
 	// Check if it's an attempt at a new subscription to the topic / a first connection of a channel reader
 	// (channel readers are not permanently cached).
@@ -1358,7 +1355,7 @@ func (t *Topic) thisUserSub(sess *Session, pkt *ClientComMessage, asUid types.Ui
 			// Check if user is already subscribed.
 			sub, err = store.Subs.Get(pkt.Original, asUid)
 			if err != nil {
-				sess.queueOut(ErrUnknown(pkt.Id, toriginal, now))
+				sess.queueOut(ErrUnknown(pkt.Id, pkt.Original, now))
 				return nil, err
 			}
 
@@ -1446,7 +1443,7 @@ func (t *Topic) thisUserSub(sess *Session, pkt *ClientComMessage, asUid types.Ui
 
 	} else {
 		// Process update to existing subscription. It could be an incomplete subscription for a new topic.
-		if asChan {
+		if !userData.isChan && asChan {
 			// A normal subscriber is trying to access topic as a channel.
 			// Direct the subscriber to use non-channel topic name.
 			sess.queueOut(InfoUseOtherReply(pkt, t.name, now))
