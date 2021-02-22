@@ -967,7 +967,7 @@ func (a *adapter) UserUnreadCount(uid t.Uid) (int, error) {
 				Or(rdb.Row.Field("right").Field("State").Eq(t.StateDeleted)))).
 		Zip().
 		Pluck("ReadSeqId", "ModeWant", "ModeGiven", "SeqId").
-		Filter(rdb.JS("(function(row) {return (row.ModeWant & row.ModeGiven & 2) > 0;})")).
+		Filter(rdb.JS("(function(row) {return (row.ModeWant & row.ModeGiven & " + strconv.Itoa(int(t.ModeRead)) + ") > 0;})")).
 		Sum(func(row rdb.Term) rdb.Term { return row.Field("SeqId").Sub(row.Field("ReadSeqId")) }).
 		Run(a.conn)
 	if err != nil {
@@ -1280,6 +1280,27 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 func (a *adapter) OwnTopics(uid t.Uid) ([]string, error) {
 	cursor, err := rdb.DB(a.dbName).Table("topics").GetAllByIndex("Owner", uid.String()).
 		Filter(rdb.Row.Field("State").Eq(t.StateDeleted).Not()).Field("Id").Run(a.conn)
+	if err != nil {
+		return nil, err
+	}
+	var names []string
+	var name string
+	for cursor.Next(&name) {
+		names = append(names, name)
+	}
+	cursor.Close()
+	return names, nil
+}
+
+// ChannelsForUser loads a slice of topic names where the user is a channel reader and notifications (P) are enabled.
+func (a *adapter) ChannelsForUser(uid t.Uid) ([]string, error) {
+	cursor, err := rdb.DB(a.dbName).Table("subscriptions").
+		GetAllByIndex("User", uid.String()).
+		Filter(rdb.Row.HasFields("DeletedAt").Not()).
+		Filter(rdb.Row.Field("Topic").Match("^chn")).
+		Filter(rdb.JS("(function(row) {return (row.ModeWant & row.ModeGiven & " + strconv.Itoa(int(t.ModePres)) + ") > 0;})")).
+		Field("Topic").Run(a.conn)
+
 	if err != nil {
 		return nil, err
 	}

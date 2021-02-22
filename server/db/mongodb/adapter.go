@@ -813,8 +813,8 @@ func (a *adapter) UserUnreadCount(uid t.Uid) (int, error) {
 			"deletedat": b.M{"$exists": false},
 			"state":     b.M{"$ne": t.StateDeleted},
 			// Filter by access mode
-			"modewant":  b.M{"$bitsAllSet": b.A{1}},
-			"modegiven": b.M{"$bitsAllSet": b.A{1}}}},
+			"modewant":  b.M{"$bitsAllSet": b.A{t.ModeRead}},
+			"modegiven": b.M{"$bitsAllSet": b.A{t.ModeRead}}}},
 
 		b.M{"$group": b.M{"_id": nil, "unreadCount": b.M{"$sum": b.M{"$subtract": b.A{"$seqid", "$readseqid"}}}}},
 	}
@@ -1480,6 +1480,34 @@ func (a *adapter) OwnTopics(uid t.Uid) ([]string, error) {
 	for cur.Next(a.ctx) {
 		if err := cur.Decode(&res); err == nil {
 			names = append(names, res["_id"])
+		} else {
+			return nil, err
+		}
+	}
+	cur.Close(a.ctx)
+
+	return names, nil
+}
+
+// ChannelsForUser loads a slice of topic names where the user is a channel reader and notifications (P) are enabled.
+func (a *adapter) ChannelsForUser(uid t.Uid) ([]string, error) {
+	filter := b.M{
+		"user":      user.String(),
+		"deletedat": b.M{"$exists": false},
+		"topic":     b.M{"$regex": primitive.Regex{Pattern: "^chn"}},
+		"modewant":  b.M{"$bitsAllSet": b.A{t.ModePres}},
+		"modegiven": b.M{"$bitsAllSet": b.A{t.ModePres}}}
+	findOpts := mdbopts.Find().SetProjection(b.M{"topic": 1})
+	cur, err := a.db.Collection("subscriptions").Find(a.ctx, filter, findOpts)
+	if err != nil {
+		return nil, err
+	}
+
+	var res map[string]string
+	var names []string
+	for cur.Next(a.ctx) {
+		if err := cur.Decode(&res); err == nil {
+			names = append(names, res["topic"])
 		} else {
 			return nil, err
 		}

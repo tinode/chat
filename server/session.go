@@ -790,7 +790,7 @@ func (s *Session) hello(msg *ClientComMessage) {
 			if msg.Hi.DeviceID == types.NullValue {
 				deviceIDUpdate = true
 				err = store.Devices.Delete(s.uid, s.deviceID)
-			} else if msg.Hi.DeviceID != "" {
+			} else if msg.Hi.DeviceID != "" && s.deviceID != msg.Hi.DeviceID {
 				deviceIDUpdate = true
 				err = store.Devices.Update(s.uid, s.deviceID, &types.DeviceDef{
 					DeviceId: msg.Hi.DeviceID,
@@ -798,6 +798,8 @@ func (s *Session) hello(msg *ClientComMessage) {
 					LastSeen: msg.Timestamp,
 					Lang:     msg.Hi.Lang,
 				})
+
+				userChannelsSubUnsub(s.uid, msg.Hi.DeviceID, true)
 			}
 
 			if err != nil {

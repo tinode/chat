@@ -654,6 +654,14 @@ func userGetState(uid types.Uid) (types.ObjState, error) {
 	return user.State, nil
 }
 
+// Subscribe or unsubscribe a single user's device to/from all FCM topics (channels).
+func userChannelsSubUnsub(uid types.Uid, deviceID string, sub bool) {
+	push.ChannelSub(&push.ChannelReq{
+		Uid:      uid,
+		DeviceID: deviceID,
+		Unsub:    !sub})
+}
+
 // UserCacheReq contains data which mutates one or more user cache entries.
 type UserCacheReq struct {
 	// Name of the node sending this request in case of cluster. Not set otherwise.
@@ -821,7 +829,11 @@ func usersRegisterTopic(t *Topic, add bool) {
 	// send remote UIDs to other cluster nodes for processing. The UIDs may have to be
 	// sent to multiple nodes.
 	remote := &UserCacheReq{Inc: add}
-	for uid := range t.perUser {
+	for uid, pud := range t.perUser {
+		if pud.isChan {
+			// Skip channel subscribers.
+			continue
+		}
 		if globals.cluster.isRemoteTopic(uid.UserId()) {
 			remote.UserIdList = append(remote.UserIdList, uid)
 		} else {

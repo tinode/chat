@@ -6,7 +6,7 @@
    "tel": "+17025550001",
    "passhash": "alice123",
    "private": {"comment": "some comment 123"},
-   "public": {"fn": "Alice Johnson", "photo": "alice-64.jpg", "type": "jpg"},
+   "public": {"fn": "Alice Johnson", "photo": "alice-128.jpg", "type": "jpg"},
    "tags": ["Alice"],
    "state": "ok",
    "status": {
@@ -24,7 +24,7 @@
    "tel": "+17025550002",
    "passhash": "bob123",
    "private": {"comment": "no comments :)"},
-   "public": {"fn": "Bob Smith", "photo": "bob-64.jpg", "type": "jpg"},
+   "public": {"fn": "Bob Smith", "photo": "bob-128.jpg", "type": "jpg"},
    "state": "ok",
    "status": "stuff",
    "username": "bob",
@@ -39,7 +39,7 @@
    "tel": "+17025550003",
    "passhash": "carol123",
    "private": {"comment": "more stuff"},
-   "public": {"fn": "Carol Xmas", "photo": "carol-64.jpg", "type": "jpg"},
+   "public": {"fn": "Carol Xmas", "photo": "carol-128.jpg", "type": "jpg"},
    "state": "",
    "status": "ho ho ho",
    "username": "carol",
@@ -54,7 +54,7 @@
    "tel": "+17025550004",
    "passhash": "dave123",
    "private": {"comment": "stuff 123"},
-   "public": {"fn": "Dave Goliathsson", "photo": "dave-64.jpg", "type": "jpg"},
+   "public": {"fn": "Dave Goliathsson", "photo": "dave-128.jpg", "type": "jpg"},
    "state": "ok",
    "status": "hiding!",
    "username": "dave",
@@ -69,7 +69,7 @@
    "tel": "+17025550005",
    "passhash": "eve123",
    "private": {"comment": "apples?"},
-   "public": {"fn": "Eve Adams", "photo": "eve-64.jpg", "type": "jpg"},
+   "public": {"fn": "Eve Adams", "photo": "eve-128.jpg", "type": "jpg"},
    "state": "ok",
    "username": "eve",
    "addressBook": ["email:alice@example.com", "email:bob@example.com", "email:carol@example.com",
@@ -98,7 +98,7 @@
    "tel": "+17025550010",
    "passhash": "(random)",
    "private": {"comment": "I'm a chatbot short and stout"},
-   "public": {"fn": "Tino the Chatbot", "photo": "tino-64.jpg", "type": "jpg"},
+   "public": {"fn": "Tino the Chatbot", "photo": "tino-128.jpg", "type": "jpg"},
    "state": "",
    "status": "Chatting nonsensically",
    "username": "tino",
@@ -125,21 +125,21 @@
    "name": "*ABC",
    "owner": "carol",
    "tags": ["flower", "flowers", "flora"],
-   "public": {"fn": "Let's talk about flowers", "photo": "abc-64.jpg", "type": "jpg"}
+   "public": {"fn": "Let's talk about flowers", "photo": "abc-128.jpg", "type": "jpg"}
   },
   {
    "createdAt": "-126h",
    "name": "*ABCDEF",
    "owner": "alice",
    "tags": ["travel"],
-   "public": {"fn": "Travel, travel, travel", "photo": "abcdef-64.jpg", "type": "jpg"}
+   "public": {"fn": "Travel, travel, travel", "photo": "abcdef-128.jpg", "type": "jpg"}
   },
   {
    "createdAt": "-124h",
    "name": "*BF",
    "owner": "frank",
    "tags": ["sikrit", "secret"],
-   "public": {"fn": "Sikrit group!", "photo": "bf-64.jpg", "type": "jpg"}
+   "public": {"fn": "Sikrit group!", "photo": "bf-128.jpg", "type": "jpg"}
   },
   {
    "createdAt": "-123h",
