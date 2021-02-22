@@ -268,23 +268,6 @@ func (t *Topic) computePerUserAcsUnion() {
 	t.modeGivenUnion = givenUnion
 }
 
-// fixUpUserCounts decrements online counts for the provided user ids.
-func (t *Topic) fixUpUserCounts(userCounts map[types.Uid]int) {
-	for uid, decrementBy := range userCounts {
-		if pud, ok := t.perUser[uid]; ok {
-			pud.online -= decrementBy
-			if pud.online < 0 {
-				logs.Warn.Printf("topic[%s]: invalid online count for user %s", t.name, uid)
-			}
-			if pud.isChan && pud.online <= 0 {
-				delete(t.perUser, uid)
-			} else {
-				t.perUser[uid] = pud
-			}
-		}
-	}
-}
-
 // unregisterSession implements all logic following receipt of a leave
 // request via the Topic.unreg channel.
 func (t *Topic) unregisterSession(leave *sessionLeave) {
