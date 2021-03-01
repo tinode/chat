@@ -15,7 +15,9 @@ class Loadtest extends Simulation {
     .baseUrl("http://localhost:6060")
     .wsBaseUrl("ws://localhost:6060")
 
-  val feeder = csv("users.csv").random
+  // Input file can be set with the "accounts" java option.
+  // E.g. JAVA_OPTS="-Daccounts=/tmp/z.csv" gatling.sh -sf . -rsf . -rd "na" -s tinode.Loadtest
+  val feeder = csv(System.getProperty("accounts", "users.csv")).random
 
   // Auth tokens to share between sessions.
   val tokenCache : concurrent.Map[String, String] = new ConcurrentHashMap() asScala
@@ -48,8 +50,11 @@ class Loadtest extends Simulation {
   val loginToken = exitBlockOnFail {
     exec { session =>
       val uname = session("username").as[String]
-      val token = tokenCache.get(uname).getOrElse("")
-      session.set("token", token)
+      var token = session("token").asOption[String]
+      if (token == None) {
+        token = tokenCache.get(uname)
+      }
+      session.set("token", token.getOrElse(""))
     }
     .exec {
       ws("login-token").sendText(
@@ -123,7 +128,10 @@ class Loadtest extends Simulation {
     .feed(feeder)
     .doIfOrElse({session =>
       val uname = session("username").as[String]
-      val token = tokenCache.get(uname)
+      var token = session("token").asOption[String]
+      if (token == None) {
+        token = tokenCache.get(uname)
+      }
       token == None
     }) { loginBasic } { loginToken }
     .exitHereIfFailed
@@ -171,5 +179,7 @@ class Loadtest extends Simulation {
     }
     .exec(ws("close-ws").close)
 
-  setUp(scn.inject(rampUsers(10000) during (300 seconds))).protocols(httpProtocol)
+  val numUsers = Integer.getInteger("num_users", 10000)
+  val rampPeriod = java.lang.Long.getLong("ramp", 300L)
+  setUp(scn.inject(rampUsers(numUsers) during (rampPeriod.seconds))).protocols(httpProtocol)
 }
