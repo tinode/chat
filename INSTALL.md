@@ -1,6 +1,6 @@
 # Installing Tinode
 
-The config file [`tinode.conf`](/chat/server/tinode.conf) contains extensive instructions on configuring the server.
+The config file [`tinode.conf`](./server/tinode.conf) contains extensive instructions on configuring the server.
 
 ## Installing from Binaries
 
