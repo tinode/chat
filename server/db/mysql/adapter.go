@@ -1911,7 +1911,7 @@ func (a *adapter) FindUsers(uid t.Uid, req [][]string, opt []string) ([]t.Subscr
 	query := "SELECT u.id,u.createdat,u.updatedat,u.access,u.public,u.tags,COUNT(*) AS matches " +
 		"FROM users AS u LEFT JOIN usertags AS t ON t.userid=u.id " +
 		"WHERE u.state=? AND t.tag IN (?" + strings.Repeat(",?", len(allReq)+len(opt)-1) + ") " +
-		"GROUP BY u.id,u.createdat,u.updatedat,u.public,u.tags,u.access "
+		"GROUP BY u.id,u.createdat,u.updatedat,u.access,u.public,u.tags "
 	if len(allReq) > 0 {
 		query += "HAVING"
 		first := true
