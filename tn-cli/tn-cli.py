@@ -857,6 +857,13 @@ def serialize_cmd(string, id, args):
         stdoutln("Error in '{0}': {1}".format(cmd.cmd, err))
         return None, None
 
+def pop_from_output_queue():
+    if tn_globals.OutputQueue.empty():
+        return False
+    sys.stdout.write("\r<= "+tn_globals.OutputQueue.get())
+    sys.stdout.flush()
+    return True
+
 # Generator of protobuf messages.
 def gen_message(scheme, secret, args):
     """Client message generator: reads user input as string,
@@ -894,6 +901,9 @@ def gen_message(scheme, secret, args):
                 inp = tn_globals.InputQueue.popleft()
 
                 if inp == 'exit' or inp == 'quit' or inp == '.exit' or inp == '.quit':
+                    # Drain the output queue.
+                    while pop_from_output_queue():
+                        pass
                     return
 
                 pbMsg, cmd = serialize_cmd(inp, id, args)
@@ -918,8 +928,7 @@ def gen_message(scheme, secret, args):
                         yield pbMsg
 
             elif not tn_globals.OutputQueue.empty():
-                sys.stdout.write("\r<= "+tn_globals.OutputQueue.get())
-                sys.stdout.flush()
+                pop_from_output_queue()
                 print_prompt = tn_globals.IsInteractive
 
             else:
