@@ -125,11 +125,7 @@ class SingleTopicLoadtest extends TinodeBase {
       exec(session => session.set("sub", topic))
       .exec(subTopic)
       .exitHereIfFailed
-      .pause(0, 2)
-      .exec(publish)
-      .pause(15)
-      .exec(publish)
-      .pause(15)
+      .pause(0, 10)
       .exec(publish)
       .pause(15)
       .exec(leaveTopic)

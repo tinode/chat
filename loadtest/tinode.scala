@@ -103,7 +103,7 @@ class TinodeBase extends Simulation {
 
   val publish = exitBlockOnFail {
     exec {
-      repeat(3, "i") {
+      repeat(10, "i") {
         exec {
           ws("pub-topic").sendText(
             """{"pub":{"id":"${id}-pub-${sub}-${i}","topic":"${sub}","content":"This is a Tsung test ${i}"}}"""
@@ -114,7 +114,7 @@ class TinodeBase extends Simulation {
               .check(jsonPath("$.ctrl.code").ofType[Int].in(200 to 299))
           )
         }
-        .pause(0, 3)
+        .pause(0, 100)
       }
     }
   }
