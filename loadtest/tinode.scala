@@ -17,6 +17,10 @@ class TinodeBase extends Simulation {
 
   // Auth tokens to share between sessions.
   val tokenCache : concurrent.Map[String, String] = new ConcurrentHashMap() asScala
+  // Total number of messages to publish to a topic.
+  val publishCount = Integer.getInteger("publish_count", 10).toInt
+  // Maximum interval between publishing messages to a topic.
+  val publishInterval = Integer.getInteger("publish_interval", 100).toInt
 
   val hello = exitBlockOnFail {
     exec {
@@ -103,7 +107,7 @@ class TinodeBase extends Simulation {
 
   val publish = exitBlockOnFail {
     exec {
-      repeat(10, "i") {
+      repeat(publishCount, "i") {
         exec {
           ws("pub-topic").sendText(
             """{"pub":{"id":"${id}-pub-${sub}-${i}","topic":"${sub}","content":"This is a Tsung test ${i}"}}"""
@@ -114,7 +118,7 @@ class TinodeBase extends Simulation {
               .check(jsonPath("$.ctrl.code").ofType[Int].in(200 to 299))
           )
         }
-        .pause(0, 100)
+        .pause(0, publishInterval)
       }
     }
   }
