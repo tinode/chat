@@ -21,6 +21,10 @@ class TinodeBase extends Simulation {
   val publishCount = Integer.getInteger("publish_count", 10).toInt
   // Maximum interval between publishing messages to a topic.
   val publishInterval = Integer.getInteger("publish_interval", 100).toInt
+  // Total number of sessions.
+  val numSessions = Integer.getInteger("num_sessions", 10000)
+  // Ramp up period (0 to numSessions) in seconds.
+  val rampPeriod = java.lang.Long.getLong("ramp", 300L)
 
   val hello = exitBlockOnFail {
     exec {
