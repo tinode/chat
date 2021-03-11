@@ -58,9 +58,7 @@ class Loadtest extends TinodeBase {
     }
     .exec(ws("close-ws").close)
 
-  val numUsers = Integer.getInteger("num_users", 10000)
-  val rampPeriod = java.lang.Long.getLong("ramp", 300L)
-  setUp(scn.inject(rampUsers(numUsers) during (rampPeriod.seconds))).protocols(httpProtocol)
+  setUp(scn.inject(rampUsers(numSessions) during (rampPeriod.seconds))).protocols(httpProtocol)
 }
 
 class MeLoadtest extends TinodeBase {
@@ -88,9 +86,7 @@ class MeLoadtest extends TinodeBase {
     .pause(1000)
     .exec(ws("close-ws").close)
 
-  val numUsers = Integer.getInteger("num_users", 10000)
-  val rampPeriod = java.lang.Long.getLong("ramp", 300L)
-  setUp(scn.inject(rampUsers(numUsers) during (rampPeriod.seconds))).protocols(httpProtocol)
+  setUp(scn.inject(rampUsers(numSessions) during (rampPeriod.seconds))).protocols(httpProtocol)
 }
 
 class SingleTopicLoadtest extends TinodeBase {
@@ -125,11 +121,7 @@ class SingleTopicLoadtest extends TinodeBase {
       exec(session => session.set("sub", topic))
       .exec(subTopic)
       .exitHereIfFailed
-      .pause(0, 2)
-      .exec(publish)
-      .pause(15)
-      .exec(publish)
-      .pause(15)
+      .pause(0, 10)
       .exec(publish)
       .pause(15)
       .exec(leaveTopic)
@@ -137,7 +129,5 @@ class SingleTopicLoadtest extends TinodeBase {
     }
     .exec(ws("close-ws").close)
 
-  val numUsers = Integer.getInteger("num_users", 10000)
-  val rampPeriod = java.lang.Long.getLong("ramp", 300L)
-  setUp(scn.inject(rampUsers(numUsers) during (rampPeriod.seconds))).protocols(httpProtocol)
+  setUp(scn.inject(rampUsers(numSessions) during (rampPeriod.seconds))).protocols(httpProtocol)
 }
