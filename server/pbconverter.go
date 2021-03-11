@@ -593,39 +593,45 @@ func pbSetQuerySerialize(in *MsgSetQuery) *pbx.SetQuery {
 }
 
 func pbSetQueryDeserialize(in *pbx.SetQuery) *MsgSetQuery {
+	if in == nil {
+		return nil
+	}
+
 	var msg *MsgSetQuery
 
-	if in != nil {
+	if desc := in.GetDesc(); desc != nil {
+		msg = &MsgSetQuery{}
+		msg.Desc = pbSetDescDeserialize(desc)
+	}
 
-		if desc := in.GetDesc(); desc != nil {
-			msg = &MsgSetQuery{}
-			msg.Desc = pbSetDescDeserialize(desc)
-		}
+	if sub := in.GetSub(); sub != nil {
+		user := sub.GetUserId()
+		mode := sub.GetMode()
 
-		if sub := in.GetSub(); sub != nil {
-			user := sub.GetUserId()
-			mode := sub.GetMode()
-
-			if user != "" || mode != "" {
-				if msg == nil {
-					msg = &MsgSetQuery{}
-				}
-
-				msg.Sub = &MsgSetSub{
-					User: sub.GetUserId(),
-					Mode: sub.GetMode(),
-				}
-			}
-		}
-
-		if tags := in.GetTags(); tags != nil {
+		if user != "" || mode != "" {
 			if msg == nil {
 				msg = &MsgSetQuery{}
 			}
-			msg.Tags = in.GetTags()
-		}
 
-		msg.Cred = pbClientCredDeserialize(in.GetCred())
+			msg.Sub = &MsgSetSub{
+				User: sub.GetUserId(),
+				Mode: sub.GetMode(),
+			}
+		}
+	}
+
+	if tags := in.GetTags(); tags != nil {
+		if msg == nil {
+			msg = &MsgSetQuery{}
+		}
+		msg.Tags = tags
+	}
+
+	if cred := in.GetCred(); cred != nil {
+		if msg == nil {
+			msg = &MsgSetQuery{}
+		}
+		msg.Cred = pbClientCredDeserialize(cred)
 	}
 
 	return msg
