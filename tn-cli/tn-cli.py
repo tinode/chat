@@ -39,7 +39,7 @@ from tn_globals import stdoutln
 from tn_globals import to_json
 
 APP_NAME = "tn-cli"
-APP_VERSION = "1.5.5"
+APP_VERSION = "1.5.6"
 PROTOCOL_VERSION = "0"
 LIB_VERSION = pkg_resources.get_distribution("tinode_grpc").version
 GRPC_VERSION = pkg_resources.get_distribution("grpcio").version
@@ -815,20 +815,28 @@ def serialize_cmd(string, id, args):
         elif cmd.cmd == ".use":
             if cmd.user != "unchanged":
                 if cmd.user:
-                    tn_globals.DefaultUser = cmd.user
+                    if len(cmd.user) > 3 and cmd.user.startswith("usr"):
+                        tn_globals.DefaultUser = cmd.user
+                    else:
+                        stdoutln("Error: user ID '{}' is invalid".format(cmd.user))
                 else:
                     tn_globals.DefaultUser = None
-                stdoutln("Default user='" + cmd.user + "'")
+                stdoutln("Default user='{}'".format(tn_globals.DefaultUser))
+
             if cmd.topic != "unchanged":
                 if cmd.topic:
-                    tn_globals.DefaultTopic = cmd.topic
+                    if cmd.topic[:3] in ['me', 'fnd', 'sys', 'usr', 'grp', 'chn']:
+                        tn_globals.DefaultTopic = cmd.topic
+                    else:
+                        stdoutln("Error: topic '{}' is invalid".format(cmd.topic))
                 else:
                     tn_globals.DefaultTopic = None
-                stdoutln("Default topic='" + cmd.topic + "'")
+                stdoutln("Default topic='{}'".format(tn_globals.DefaultTopic))
+
             return None, None
 
         elif cmd.cmd == ".sleep":
-            stdoutln("Pausing for " + str(cmd.millis) + "ms...")
+            stdoutln("Pausing for {}ms...".format(cmd.millis))
             time.sleep(cmd.millis/1000.)
             return None, None
 
