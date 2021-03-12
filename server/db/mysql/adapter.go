@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"expvar"
 	"hash/fnv"
 	"strconv"
 	"strings"
@@ -45,8 +46,11 @@ const (
 )
 
 type configType struct {
-	DSN    string `json:"dsn,omitempty"`
-	DBName string `json:"database,omitempty"`
+	DSN                    string `json:"dsn,omitempty"`
+	DBName                 string `json:"database,omitempty"`
+	MaxOpenConns           int    `json:"max_open_conns,omitempty"`
+	MaxIdleConns           int    `json:"max_idle_conns,omitempty"`
+	ConnMaxLifetimeSeconds int    `json:"conn_max_lifetime_seconds,omitempty"`
 }
 
 // Open initializes database session
@@ -95,6 +99,20 @@ func (a *adapter) Open(jsonconfig json.RawMessage) error {
 		// Ignore missing database here. If we are initializing the database
 		// missing DB is OK.
 		err = nil
+	}
+	if err == nil {
+		if config.MaxOpenConns > 0 {
+			a.db.SetMaxOpenConns(config.MaxOpenConns)
+		}
+		if config.MaxIdleConns > 0 {
+			a.db.SetMaxIdleConns(config.MaxIdleConns)
+		}
+		if config.ConnMaxLifetimeSeconds > 0 {
+			a.db.SetConnMaxLifetime(time.Duration(config.ConnMaxLifetimeSeconds) * time.Second)
+		}
+		expvar.Publish("mysql.stats", expvar.Func(func() interface{} {
+			return a.db.Stats()
+		}))
 	}
 	return err
 }
