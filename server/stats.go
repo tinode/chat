@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/tinode/chat/server/logs"
+	"github.com/tinode/chat/server/store"
 )
 
 // A simple implementation of histogram expvar.Var.
@@ -71,6 +72,12 @@ func statsInit(mux *http.ServeMux, path string) {
 	go statsUpdater()
 
 	logs.Info.Printf("stats: variables exposed at '%s'", path)
+}
+
+func statsRegisterDbStats() {
+	if f := store.DbStats(); f != nil {
+		expvar.Publish("DbStats", expvar.Func(f))
+	}
 }
 
 // Register integer variable. Don't check for initialization.

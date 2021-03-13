@@ -212,6 +212,11 @@ func (adapter) Version() int {
 	return adpVersion
 }
 
+// DB connection stats object.
+func (a *adapter) Stats() interface{} {
+	return nil
+}
+
 // GetName returns string that adapter uses to register itself with store.
 func (a *adapter) GetName() string {
 	return adapterName

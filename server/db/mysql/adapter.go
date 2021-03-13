@@ -7,7 +7,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"expvar"
+	"fmt"
 	"hash/fnv"
 	"strconv"
 	"strings"
@@ -43,14 +43,19 @@ const (
 	defaultMaxResults = 1024
 	// This is capped by the Session's send queue limit (128).
 	defaultMaxMessageResults = 100
+
+	mysqlConfigErrorText = "mysql config: dsn param is deprecated. Please, specify individual connection settings separately: https://pkg.go.dev/github.com/go-sql-driver/mysql#Config"
 )
 
 type configType struct {
-	DSN                    string `json:"dsn,omitempty"`
-	DBName                 string `json:"database,omitempty"`
-	MaxOpenConns           int    `json:"max_open_conns,omitempty"`
-	MaxIdleConns           int    `json:"max_idle_conns,omitempty"`
-	ConnMaxLifetimeSeconds int    `json:"conn_max_lifetime_seconds,omitempty"`
+	ms.Config
+	// Connection pool settings.
+	MaxOpenConns           int `json:"max_open_conns,omitempty"`
+	MaxIdleConns           int `json:"max_idle_conns,omitempty"`
+	ConnMaxLifetimeSeconds int `json:"conn_max_lifetime_seconds,omitempty"`
+	// Deprecated.
+	DSN      string `json:"dsn,omitempty"`
+	Database string `json:"database,omitempty"`
 }
 
 // Open initializes database session
@@ -69,15 +74,20 @@ func (a *adapter) Open(jsonconfig json.RawMessage) error {
 		return errors.New("mysql adapter failed to parse config: " + err.Error())
 	}
 
-	a.dsn = config.DSN
-	if a.dsn == "" {
-		a.dsn = defaultDSN
+	if config.DBName == "" {
+		config.DBName = defaultDatabase
+	}
+	a.dbName = config.DBName
+
+	if config.DSN != "" {
+		return errors.New(fmt.Sprintf(mysqlConfigErrorText, "dsn"))
 	}
 
-	a.dbName = config.DBName
-	if a.dbName == "" {
-		a.dbName = defaultDatabase
+	if config.Database != "" {
+		return errors.New(fmt.Sprintf(mysqlConfigErrorText, "database"))
 	}
+
+	a.dsn = config.FormatDSN()
 
 	if a.maxResults <= 0 {
 		a.maxResults = defaultMaxResults
@@ -110,9 +120,6 @@ func (a *adapter) Open(jsonconfig json.RawMessage) error {
 		if config.ConnMaxLifetimeSeconds > 0 {
 			a.db.SetConnMaxLifetime(time.Duration(config.ConnMaxLifetimeSeconds) * time.Second)
 		}
-		expvar.Publish("mysql.stats", expvar.Func(func() interface{} {
-			return a.db.Stats()
-		}))
 	}
 	return err
 }
@@ -180,6 +187,14 @@ func (a *adapter) CheckDbVersion() error {
 // Version returns adapter version.
 func (adapter) Version() int {
 	return adpVersion
+}
+
+// DB connection stats object.
+func (a *adapter) Stats() interface{} {
+	if a.db == nil {
+		return nil
+	}
+	return a.db.Stats()
 }
 
 // GetName returns string that adapter uses to register itself with store.

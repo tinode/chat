@@ -364,6 +364,7 @@ func main() {
 		logs.Info.Println("Closed database connection(s)")
 		logs.Info.Println("All done, good bye")
 	}()
+	statsRegisterDbStats()
 
 	// API key signing secret
 	globals.apiKeySalt = config.APIKeySalt
