@@ -7,13 +7,14 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"hash/fnv"
 	"strconv"
 	"strings"
 	"time"
 
 	ms "github.com/go-sql-driver/mysql"
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/jmoiron/sqlx"
 	"github.com/tinode/chat/server/auth"
 	"github.com/tinode/chat/server/store"
@@ -43,19 +44,21 @@ const (
 	defaultMaxResults = 1024
 	// This is capped by the Session's send queue limit (128).
 	defaultMaxMessageResults = 100
-
-	mysqlConfigErrorText = "mysql config: dsn param is deprecated. Please, specify individual connection settings separately: https://pkg.go.dev/github.com/go-sql-driver/mysql#Config"
 )
 
 type configType struct {
+  // DB connection settings.
+  // Please, see https://pkg.go.dev/github.com/go-sql-driver/mysql#Config
+  // for the full list of fields.
 	ms.Config
+	// Deprecated.
+	DSN      string `json:"dsn,omitempty"`
+	Database string `json:"database,omitempty"`
+
 	// Connection pool settings.
 	MaxOpenConns           int `json:"max_open_conns,omitempty"`
 	MaxIdleConns           int `json:"max_idle_conns,omitempty"`
 	ConnMaxLifetimeSeconds int `json:"conn_max_lifetime_seconds,omitempty"`
-	// Deprecated.
-	DSN      string `json:"dsn,omitempty"`
-	Database string `json:"database,omitempty"`
 }
 
 // Open initializes database session
@@ -69,25 +72,36 @@ func (a *adapter) Open(jsonconfig json.RawMessage) error {
 	}
 
 	var err error
-	var config configType
+	defaultCfg := ms.NewConfig()
+	config := configType{Config: *defaultCfg}
 	if err = json.Unmarshal(jsonconfig, &config); err != nil {
 		return errors.New("mysql adapter failed to parse config: " + err.Error())
 	}
 
-	if config.DBName == "" {
-		config.DBName = defaultDatabase
+	locationCmp := cmp.Comparer(func(x, y time.Location) bool {
+		return x.String() == y.String()
+	})
+	if !cmp.Equal(*defaultCfg, config.Config, locationCmp, cmpopts.IgnoreUnexported(ms.Config{})) {
+		// MySql config is specified. Use it.
+		a.dbName = config.DBName
+		a.dsn = config.FormatDSN()
+		if config.DSN != "" || config.Database != "" {
+			return errors.New("mysql config: dsn and database fields are deprecated. Please, specify individual connection settings via mysql.Config: https://pkg.go.dev/github.com/go-sql-driver/mysql#Config")
+		}
+	} else {
+		// Otherwise, use DSN and Database to configure database connection.
+		// Note: this method is deprecated.
+		if config.DSN != "" {
+			a.dsn = config.DSN
+		} else {
+			a.dsn = defaultDSN
+		}
+		a.dbName = config.Database
 	}
-	a.dbName = config.DBName
 
-	if config.DSN != "" {
-		return errors.New(fmt.Sprintf(mysqlConfigErrorText, "dsn"))
+	if a.dbName == "" {
+		a.dbName = defaultDatabase
 	}
-
-	if config.Database != "" {
-		return errors.New(fmt.Sprintf(mysqlConfigErrorText, "database"))
-	}
-
-	a.dsn = config.FormatDSN()
 
 	if a.maxResults <= 0 {
 		a.maxResults = defaultMaxResults
