@@ -13,8 +13,6 @@ import (
 	"time"
 
 	ms "github.com/go-sql-driver/mysql"
-	"github.com/google/go-cmp/cmp"
-	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/jmoiron/sqlx"
 	"github.com/tinode/chat/server/auth"
 	"github.com/tinode/chat/server/store"
@@ -47,9 +45,9 @@ const (
 )
 
 type configType struct {
-  // DB connection settings.
-  // Please, see https://pkg.go.dev/github.com/go-sql-driver/mysql#Config
-  // for the full list of fields.
+	// DB connection settings.
+	// Please, see https://pkg.go.dev/github.com/go-sql-driver/mysql#Config
+	// for the full list of fields.
 	ms.Config
 	// Deprecated.
 	DSN      string `json:"dsn,omitempty"`
@@ -78,15 +76,12 @@ func (a *adapter) Open(jsonconfig json.RawMessage) error {
 		return errors.New("mysql adapter failed to parse config: " + err.Error())
 	}
 
-	locationCmp := cmp.Comparer(func(x, y time.Location) bool {
-		return x.String() == y.String()
-	})
-	if !cmp.Equal(*defaultCfg, config.Config, locationCmp, cmpopts.IgnoreUnexported(ms.Config{})) {
+	if dsn := config.FormatDSN(); dsn != defaultCfg.FormatDSN() {
 		// MySql config is specified. Use it.
 		a.dbName = config.DBName
-		a.dsn = config.FormatDSN()
+		a.dsn = dsn
 		if config.DSN != "" || config.Database != "" {
-			return errors.New("mysql config: dsn and database fields are deprecated. Please, specify individual connection settings via mysql.Config: https://pkg.go.dev/github.com/go-sql-driver/mysql#Config")
+			return errors.New("mysql config: `dsn` and `database` fields are deprecated. Please, specify individual connection settings via mysql.Config: https://pkg.go.dev/github.com/go-sql-driver/mysql#Config")
 		}
 	} else {
 		// Otherwise, use DSN and Database to configure database connection.
