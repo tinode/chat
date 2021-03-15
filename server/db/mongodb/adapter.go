@@ -231,6 +231,11 @@ func (a *adapter) Version() int {
 	return adpVersion
 }
 
+// DB connection stats object.
+func (a *adapter) Stats() interface{} {
+	return nil
+}
+
 // GetName returns the name of the adapter
 func (a *adapter) GetName() string {
 	return adapterName
@@ -1492,7 +1497,7 @@ func (a *adapter) OwnTopics(uid t.Uid) ([]string, error) {
 // ChannelsForUser loads a slice of topic names where the user is a channel reader and notifications (P) are enabled.
 func (a *adapter) ChannelsForUser(uid t.Uid) ([]string, error) {
 	filter := b.M{
-		"user":      user.String(),
+		"user":      uid.String(),
 		"deletedat": b.M{"$exists": false},
 		"topic":     b.M{"$regex": primitive.Regex{Pattern: "^chn"}},
 		"modewant":  b.M{"$bitsAllSet": b.A{t.ModePres}},
