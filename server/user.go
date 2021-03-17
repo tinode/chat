@@ -849,6 +849,7 @@ func usersRegisterTopic(t *Topic, add bool) {
 		select {
 		case globals.usersUpdate <- local:
 		default:
+			logs.Err.Println("User cache: globals.usersUpdate queue full: ", len(globals.usersUpdate))
 		}
 	}
 }
@@ -870,14 +871,14 @@ func userUpdater() {
 	unreadUpdater := func(uid types.Uid, val int, inc bool) int {
 		uce, ok := usersCache[uid]
 		if !ok {
-			logs.Err.Println("ERROR: attempt to update unread count for user who has not been loaded")
+			logs.Err.Println("ERROR: attempt to update unread count for user who has not been loaded", uid)
 			return -1
 		}
 
 		if uce.unread < 0 {
 			count, err := store.Users.GetUnreadCount(uid)
 			if err != nil {
-				logs.Warn.Println("users: failed to load unread count", err)
+				logs.Warn.Println("users: failed to load unread count for user ", uid, ": ", err)
 				return -1
 			}
 			uce.unread = count

@@ -34,6 +34,8 @@ type Adapter interface {
 	UpgradeDb() error
 	// Version returns adapter version
 	Version() int
+	// DB connection stats object.
+	Stats() interface{}
 
 	// User management
 

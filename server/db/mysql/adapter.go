@@ -45,8 +45,18 @@ const (
 )
 
 type configType struct {
-	DSN    string `json:"dsn,omitempty"`
-	DBName string `json:"database,omitempty"`
+	// DB connection settings.
+	// Please, see https://pkg.go.dev/github.com/go-sql-driver/mysql#Config
+	// for the full list of fields.
+	ms.Config
+	// Deprecated.
+	DSN      string `json:"dsn,omitempty"`
+	Database string `json:"database,omitempty"`
+
+	// Connection pool settings.
+	MaxOpenConns           int `json:"max_open_conns,omitempty"`
+	MaxIdleConns           int `json:"max_idle_conns,omitempty"`
+	ConnMaxLifetimeSeconds int `json:"conn_max_lifetime_seconds,omitempty"`
 }
 
 // Open initializes database session
@@ -60,17 +70,30 @@ func (a *adapter) Open(jsonconfig json.RawMessage) error {
 	}
 
 	var err error
-	var config configType
+	defaultCfg := ms.NewConfig()
+	config := configType{Config: *defaultCfg}
 	if err = json.Unmarshal(jsonconfig, &config); err != nil {
 		return errors.New("mysql adapter failed to parse config: " + err.Error())
 	}
 
-	a.dsn = config.DSN
-	if a.dsn == "" {
-		a.dsn = defaultDSN
+	if dsn := config.FormatDSN(); dsn != defaultCfg.FormatDSN() {
+		// MySql config is specified. Use it.
+		a.dbName = config.DBName
+		a.dsn = dsn
+		if config.DSN != "" || config.Database != "" {
+			return errors.New("mysql config: `dsn` and `database` fields are deprecated. Please, specify individual connection settings via mysql.Config: https://pkg.go.dev/github.com/go-sql-driver/mysql#Config")
+		}
+	} else {
+		// Otherwise, use DSN and Database to configure database connection.
+		// Note: this method is deprecated.
+		if config.DSN != "" {
+			a.dsn = config.DSN
+		} else {
+			a.dsn = defaultDSN
+		}
+		a.dbName = config.Database
 	}
 
-	a.dbName = config.DBName
 	if a.dbName == "" {
 		a.dbName = defaultDatabase
 	}
@@ -95,6 +118,17 @@ func (a *adapter) Open(jsonconfig json.RawMessage) error {
 		// Ignore missing database here. If we are initializing the database
 		// missing DB is OK.
 		err = nil
+	}
+	if err == nil {
+		if config.MaxOpenConns > 0 {
+			a.db.SetMaxOpenConns(config.MaxOpenConns)
+		}
+		if config.MaxIdleConns > 0 {
+			a.db.SetMaxIdleConns(config.MaxIdleConns)
+		}
+		if config.ConnMaxLifetimeSeconds > 0 {
+			a.db.SetConnMaxLifetime(time.Duration(config.ConnMaxLifetimeSeconds) * time.Second)
+		}
 	}
 	return err
 }
@@ -162,6 +196,14 @@ func (a *adapter) CheckDbVersion() error {
 // Version returns adapter version.
 func (adapter) Version() int {
 	return adpVersion
+}
+
+// DB connection stats object.
+func (a *adapter) Stats() interface{} {
+	if a.db == nil {
+		return nil
+	}
+	return a.db.Stats()
 }
 
 // GetName returns string that adapter uses to register itself with store.

@@ -206,6 +206,14 @@ func EncodeUid(id int64) types.Uid {
 	return uGen.EncodeInt64(id)
 }
 
+// Returns a callback returning db connection stats object.
+func DbStats() func() interface{} {
+	if !IsOpen() {
+		return nil
+	}
+	return adp.Stats
+}
+
 // UsersObjMapper is a users struct to hold methods for persistence mapping for the User object.
 type UsersObjMapper struct{}
 
