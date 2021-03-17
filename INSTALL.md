@@ -1,5 +1,7 @@
 # Installing Tinode
 
+The config file [`tinode.conf`](./server/tinode.conf) contains extensive instructions on configuring the server.
+
 ## Installing from Binaries
 
 1. Visit the [Releases page](https://github.com/tinode/chat/releases/), choose the latest or otherwise the most suitable release. From the list of binaries download the one for your database and platform. Once the binary is downloaded, unpack it to a directory of your choosing, `cd` to that directory.
@@ -28,7 +30,7 @@ See [instructions](./docker/README.md)
 
 1. Install [Go environment](https://golang.org/doc/install). Make sure Go version is at least 1.9. Building with Go 1.8 or below **will fail**!
 
-2. Make sure either [RethinkDB](https://www.rethinkdb.com/docs/install/) or MySQL (or MariaDB or Percona) is installed and running. MySQL 5.7 or above is required. MySQL 5.6 or below **will not work**. MongoDB (v4.2 and above) also available but it is experimental on not tested in production.
+2. Make sure either [RethinkDB](https://www.rethinkdb.com/docs/install/) or MySQL (or MariaDB or Percona) is installed and running. MySQL 5.7 or above is required. MySQL 5.6 or below **will not work**. MongoDB (v4.2 and above) is also available and stable but not tested in production.
 
 3. Fetch, build Tinode server and tinode-db database initializer:
  - **RethinkDb**:
