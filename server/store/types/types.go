@@ -589,6 +589,9 @@ Loop:
 		case 'O', 'o':
 			m0 |= ModeOwner
 		case 'N', 'n':
+			if m0 != ModeUnset {
+				return ModeUnset, errors.New("AccessMode: access N cannot be combined with any other")
+			}
 			m0 = ModeNone // N means explicitly no access, all bits cleared
 			break Loop
 		default:

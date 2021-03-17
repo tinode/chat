@@ -1207,19 +1207,28 @@ func (t *Topic) subscriptionReply(asChan bool, join *sessionJoin) error {
 		return err
 	}
 
-	// Subscription successfully created. Link topic to session.
-	join.sess.addSub(t.name, &Subscription{
-		broadcast: t.broadcast,
-		done:      t.unreg,
-		meta:      t.meta,
-		supd:      t.supd})
-	t.addSession(join.sess, asUid, asChan)
+	hasJoined := true
+	if modeChanged != nil {
+		if acs, err := types.ParseAcs([]byte(modeChanged.Mode)); err == nil {
+			hasJoined = acs.IsJoiner()
+		}
+	}
 
-	// The user is online in the topic. Increment the counter if notifications are not deferred.
-	if !join.sess.background {
-		userData := t.perUser[asUid]
-		userData.online++
-		t.perUser[asUid] = userData
+	if hasJoined {
+		// Subscription successfully created. Link topic to session.
+		join.sess.addSub(t.name, &Subscription{
+			broadcast: t.broadcast,
+			done:      t.unreg,
+			meta:      t.meta,
+			supd:      t.supd})
+		t.addSession(join.sess, asUid, asChan)
+
+		// The user is online in the topic. Increment the counter if notifications are not deferred.
+		if !join.sess.background {
+			userData := t.perUser[asUid]
+			userData.online++
+			t.perUser[asUid] = userData
+		}
 	}
 
 	params := map[string]interface{}{}
@@ -1247,7 +1256,7 @@ func (t *Topic) subscriptionReply(asChan bool, join *sessionJoin) error {
 		t.sendImmediateSubNotifications(asUid, modeChanged, join)
 	}
 
-	if !join.sess.background {
+	if !join.sess.background && hasJoined {
 		// Other notifications are also sent immediately for foreground sessions.
 		t.sendSubNotifications(asUid, join.sess.sid, join.sess.userAgent)
 	}
@@ -1262,14 +1271,14 @@ func (t *Topic) subscriptionReply(asChan bool, join *sessionJoin) error {
 //	sess		- originating session
 //	pkt			- client message which triggered this request; {sub} or {set}
 //	asUid		- id of the user making the request
-//	asChan	- true if the user is subscribing to a channel topic
+//	asChan		- true if the user is subscribing to a channel topic
 //	want		- requested access mode
 //	private		- private value to assign to the subscription
 //	background	- presence notifications are deferred
 //
 // Handle these cases:
 // A. User is trying to subscribe for the first time (no subscription).
-// A.1 Reder is subscribeing to channel.
+// A.1 Normal user is subscribing to the topic.
 // A.2 Reader is joining the channel.
 // B. User is already subscribed, just joining without changing anything.
 // C. User is responding to an earlier invite (modeWant was "N" in subscription).
@@ -1374,6 +1383,12 @@ func (t *Topic) thisUserSub(sess *Session, pkt *ClientComMessage, asUid types.Ui
 			} else {
 				userData.modeWant = modeWant
 			}
+		}
+
+		// Reject new subscription: 'given' permissions have no 'J'.
+		if !userData.modeGiven.IsJoiner() {
+			sess.queueOut(ErrPermissionDeniedReply(pkt, now))
+			return nil, errors.New("subscription rejected due to permissions")
 		}
 
 		// Undelete.
@@ -1590,8 +1605,9 @@ func (t *Topic) thisUserSub(sess *Session, pkt *ClientComMessage, asUid types.Ui
 		t.evictUser(asUid, false, "")
 		// The callee will send NoErrOK
 		return modeChanged, nil
+	}
 
-	} else if !userData.modeGiven.IsJoiner() {
+	if !userData.modeGiven.IsJoiner() {
 		// User was banned
 		sess.queueOut(ErrPermissionDeniedReply(pkt, now))
 		return nil, errors.New("topic access denied; user is banned")

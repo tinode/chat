@@ -416,9 +416,19 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 		} else {
 			// Case 1.2: topic is offline.
 
-			asUid := types.ParseUserId(msg.AsUser)
-			// Get all subscribers: we need to know how many are left and notify them.
-			subs, err := store.Topics.GetSubs(topic, nil)
+			tcat := topicCat(topic)
+			var opts *types.QueryOpt
+			if tcat == types.TopicCatGrp {
+				opts = &types.QueryOpt{User: asUid}
+				// Is user a channel subscriber? Use chnABC instead of grpABC.
+				if isChannel(msg.Original) {
+					topic = msg.Original
+				}
+			}
+
+			// For P2P topics get all subscribers: we need to know how many are left and notify them.
+			// For gourp topics (and channels) get just the user's subscription.
+			subs, err := store.Topics.GetSubs(topic, opts)
 			if err != nil {
 				sess.queueOut(ErrUnknownReply(msg, now))
 				return err
@@ -440,11 +450,10 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 
 			if sub == nil {
 				// If user has no subscription, tell him all is fine
-				sess.queueOut(InfoNoAction(msg.Id, msg.Original, now, msg.Timestamp))
+				sess.queueOut(InfoNoActionReply(msg, now))
 				return nil
 			}
 
-			tcat := topicCat(topic)
 			if !(sub.ModeGiven & sub.ModeWant).IsOwner() {
 				// Case 1.2.2.1 Not the owner, but possibly last subscription in a P2P topic.
 
