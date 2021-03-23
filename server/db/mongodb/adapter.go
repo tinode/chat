@@ -233,7 +233,15 @@ func (a *adapter) Version() int {
 
 // DB connection stats object.
 func (a *adapter) Stats() interface{} {
-	return nil
+	if a.db == nil {
+		return nil
+	}
+
+	var result bson.M
+	if err := a.db.RunCommand(a.ctx, bson.D{{"dbStats", 1}}, nil).Decode(&result); err != nil {
+		return nil
+	}
+	return result
 }
 
 // GetName returns the name of the adapter

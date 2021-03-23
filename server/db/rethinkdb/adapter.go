@@ -214,7 +214,22 @@ func (adapter) Version() int {
 
 // DB connection stats object.
 func (a *adapter) Stats() interface{} {
-	return nil
+	if a.conn == nil {
+		return nil
+	}
+
+	cursor, err := rdb.DB("rethinkdb").Table("stats").Get([]string{"cluster"}).Run(a.conn)
+	if err != nil {
+		return nil
+	}
+	defer cursor.Close()
+
+	var stats []interface{}
+	if err = cursor.All(&stats); err != nil {
+		return nil
+	}
+
+	return stats
 }
 
 // GetName returns string that adapter uses to register itself with store.
