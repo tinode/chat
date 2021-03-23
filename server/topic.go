@@ -527,6 +527,7 @@ func (t *Topic) runLocal(hub *Hub) {
 
 		case sd := <-t.exit:
 			t.handleTopicTermination(sd)
+			return
 		}
 	}
 }
