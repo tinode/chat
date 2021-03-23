@@ -218,18 +218,18 @@ func (a *adapter) Stats() interface{} {
 		return nil
 	}
 
-	cursor, err := rdb.DB("rethinkdb").Table("stats").Get([]string{"cluster"}).Run(a.conn)
+	cursor, err := rdb.DB("rethinkdb").Table("stats").Get([]string{"cluster"}).Field("query_engine").Run(a.conn)
 	if err != nil {
 		return nil
 	}
 	defer cursor.Close()
 
 	var stats []interface{}
-	if err = cursor.All(&stats); err != nil {
+	if err = cursor.All(&stats); err != nil || len(stats) < 1 {
 		return nil
 	}
 
-	return stats
+	return stats[0]
 }
 
 // GetName returns string that adapter uses to register itself with store.
