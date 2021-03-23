@@ -237,8 +237,8 @@ func (a *adapter) Stats() interface{} {
 		return nil
 	}
 
-	var result bson.M
-	if err := a.db.RunCommand(a.ctx, bson.D{{"dbStats", 1}}, nil).Decode(&result); err != nil {
+	var result b.M
+	if err := a.db.RunCommand(a.ctx, b.D{{"connPoolStats", 1}}, nil).Decode(&result); err != nil {
 		return nil
 	}
 	return result
