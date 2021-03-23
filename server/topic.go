@@ -527,6 +527,7 @@ func (t *Topic) runLocal(hub *Hub) {
 
 		case sd := <-t.exit:
 			t.handleTopicTermination(sd)
+			return
 		}
 	}
 }
@@ -1355,7 +1356,7 @@ func (t *Topic) thisUserSub(sess *Session, pkt *ClientComMessage, asUid types.Ui
 			oldGiven = types.ModeCChnReader
 			userData.modeGiven = types.ModeCChnReader
 
-			if sub != nil {
+			if sub != nil && sub.DeletedAt == nil {
 				// Subscription exists, read old access mode.
 				oldWant = sub.ModeWant
 			} else {
@@ -1400,7 +1401,7 @@ func (t *Topic) thisUserSub(sess *Session, pkt *ClientComMessage, asUid types.Ui
 		userData.private = private
 
 		// Add subscription to database, if missing.
-		if sub == nil {
+		if sub == nil || sub.DeletedAt != nil {
 			sub = &types.Subscription{
 				User:      asUid.String(),
 				Topic:     tname,
