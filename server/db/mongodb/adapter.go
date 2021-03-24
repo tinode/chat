@@ -238,10 +238,11 @@ func (a *adapter) Stats() interface{} {
 	}
 
 	var result b.M
-	if err := a.db.RunCommand(a.ctx, b.D{{"connPoolStats", 1}}, nil).Decode(&result); err != nil {
+	if err := a.db.RunCommand(a.ctx, b.D{{"serverStatus", 1}}, nil).Decode(&result); err != nil {
 		return nil
 	}
-	return result
+
+	return result["connections"]
 }
 
 // GetName returns the name of the adapter
