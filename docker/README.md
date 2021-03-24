@@ -189,6 +189,7 @@ $ docker run -p 6222:6222 -d --name tinode-exporter --network tinode-net \
 ```
 
 Available variables:
+
 | Variable | Type | Default | Function |
 | --- | --- | --- | --- |
 | `SERVE_FOR` | string | `` | Monitoring service: `prometheus` or `influxdb` |
