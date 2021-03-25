@@ -1393,7 +1393,10 @@ func (t *Topic) thisUserSub(sess *Session, pkt *ClientComMessage, asUid types.Ui
 		}
 
 		// Undelete.
-		userData.deleted = false
+		if userData.deleted {
+			userData.deleted = false
+			userData.delID, userData.readID, userData.recvID = 0, 0, 0
+		}
 
 		if isNullValue(private) {
 			private = nil
