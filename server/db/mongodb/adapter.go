@@ -1559,8 +1559,8 @@ func (a *adapter) TopicShare(subs []*t.Subscription) error {
 
 // TopicDelete deletes topic, subscription, messages
 func (a *adapter) TopicDelete(topic string, hard bool) error {
-	var err error
-	if err = a.SubsDelForTopic(topic, hard); err != nil {
+	err := a.subsDel(a.ctx, b.M{"topic": topic}, hard)
+	if err != nil {
 		return err
 	}
 
@@ -1740,18 +1740,6 @@ func (a *adapter) subsDel(ctx context.Context, filter b.M, hard bool) error {
 			b.M{"$set": b.M{"updatedat": now, "deletedat": now}})
 	}
 	return err
-}
-
-// SubsDelForTopic deletes all subscriptions to the given topic
-func (a *adapter) SubsDelForTopic(topic string, hard bool) error {
-	filter := b.M{"topic": topic}
-	return a.subsDel(a.ctx, filter, hard)
-}
-
-// SubsDelForUser deletes all subscriptions of the given user
-func (a *adapter) SubsDelForUser(user t.Uid, hard bool) error {
-	filter := b.M{"user": user.String()}
-	return a.subsDel(a.ctx, filter, hard)
 }
 
 // Search

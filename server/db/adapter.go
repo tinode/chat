@@ -126,10 +126,6 @@ type Adapter interface {
 	SubsUpdate(topic string, user t.Uid, update map[string]interface{}) error
 	// SubsDelete deletes a single subscription
 	SubsDelete(topic string, user t.Uid) error
-	// SubsDelForTopic deletes all subscriptions to the given topic
-	SubsDelForTopic(topic string, hard bool) error
-	// SubsDelForUser deletes or marks as deleted all subscriptions of the given user.
-	SubsDelForUser(user t.Uid, hard bool) error
 
 	// Search
 

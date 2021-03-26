@@ -1877,49 +1877,7 @@ func (a *adapter) SubsUpdate(topic string, user t.Uid, update map[string]interfa
 
 // SubsDelete marks subscription as deleted.
 func (a *adapter) SubsDelete(topic string, user t.Uid) error {
-	now := t.TimeNow()
-	res, err := a.db.Exec(
-		"UPDATE subscriptions SET updatedat=?,deletedat=? WHERE topic=? AND userid=? AND deletedat IS NULL",
-		now, now, topic, store.DecodeUid(user))
-	if err != nil {
-		return err
-	}
-	affected, err := res.RowsAffected()
-	if err == nil && affected == 0 {
-		err = t.ErrNotFound
-	}
-	return err
-}
-
-// SubsDelForTopic marks all subscriptions to the given topic as deleted
-func (a *adapter) SubsDelForTopic(topic string, hard bool) error {
-	var err error
-	if hard {
-		_, err = a.db.Exec("DELETE FROM subscriptions WHERE topic=?", topic)
-	} else {
-		now := t.TimeNow()
-		_, err = a.db.Exec("UPDATE subscriptions SET updatedat=?,deletedat=? WHERE topic=? AND deletedat IS NULL",
-			now, t.StateDeleted, now, topic)
-	}
-	return err
-}
-
-// subsDelForTopic marks user's subscriptions as deleted
-func subsDelForUser(tx *sqlx.Tx, user t.Uid, hard bool) error {
-	var err error
-	if hard {
-		_, err = tx.Exec("DELETE FROM subscriptions WHERE userid=?", store.DecodeUid(user))
-	} else {
-		now := t.TimeNow()
-		_, err = tx.Exec("UPDATE subscriptions SET updatedat=?,deletedat=? WHERE userid=? AND deletedat IS NULL",
-			now, now, store.DecodeUid(user))
-	}
-	return err
-}
-
-// SubsDelForTopic marks user's subscriptions as deleted
-func (a *adapter) SubsDelForUser(user t.Uid, hard bool) error {
-	tx, err := a.db.Beginx()
+	tx, err := a.db.Begin()
 	if err != nil {
 		return err
 	}
@@ -1930,12 +1888,40 @@ func (a *adapter) SubsDelForUser(user t.Uid, hard bool) error {
 		}
 	}()
 
-	if err = subsDelForUser(tx, user, hard); err != nil {
+	decoded_id := store.DecodeUid(user)
+
+	now := t.TimeNow()
+	res, err := tx.Exec(
+		"UPDATE subscriptions SET updatedat=?,deletedat=? WHERE topic=? AND userid=? AND deletedat IS NULL",
+		now, now, topic, decoded_id)
+	if err != nil {
+		return err
+	}
+	affected, err := res.RowsAffected()
+	if err == nil && affected == 0 {
+		return t.ErrNotFound
+	}
+
+	// Remove records of messages soft-deleted by this user.
+	_, err = tx.Exec("DELETE FROM dellog WHERE topic=? AND deletedfor=?", topic, decoded_id)
+	if err != nil {
 		return err
 	}
 
 	return tx.Commit()
+}
 
+// subsDelForUser marks user's subscriptions as deleted
+func subsDelForUser(tx *sqlx.Tx, user t.Uid, hard bool) error {
+	var err error
+	if hard {
+		_, err = tx.Exec("DELETE FROM subscriptions WHERE userid=?", store.DecodeUid(user))
+	} else {
+		now := t.TimeNow()
+		_, err = tx.Exec("UPDATE subscriptions SET updatedat=?,deletedat=? WHERE userid=? AND deletedat IS NULL",
+			now, now, store.DecodeUid(user))
+	}
+	return err
 }
 
 // Returns a list of users who match given tags, such as "email:jdoe@example.com" or "tel:+18003287448".

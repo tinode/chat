@@ -750,7 +750,7 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 	var err error
 	if hard {
 		// Delete user's subscriptions in all topics.
-		if err = a.SubsDelForUser(uid, true); err != nil {
+		if err = a.subsDelForUser(uid, true); err != nil {
 			return err
 		}
 		// Can't delete user's messages in all topics because we cannot notify topics of such deletion.
@@ -819,7 +819,7 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 		_, err = rdb.DB(a.dbName).Table("users").Get(uid.String()).Delete().RunWrite(a.conn)
 	} else {
 		// Disable user's subscriptions.
-		if err = a.SubsDelForUser(uid, false); err != nil {
+		if err = a.subsDelForUser(uid, false); err != nil {
 			return err
 		}
 
@@ -1355,7 +1355,7 @@ func (a *adapter) TopicShare(shares []*t.Subscription) error {
 
 func (a *adapter) TopicDelete(topic string, hard bool) error {
 	var err error
-	if err = a.SubsDelForTopic(topic, hard); err != nil {
+	if err = a.subsDelForTopic(topic, hard); err != nil {
 		return err
 	}
 
@@ -1518,17 +1518,60 @@ func (a *adapter) SubsUpdate(topic string, user t.Uid, update map[string]interfa
 // SubsDelete marks subscription as deleted.
 func (a *adapter) SubsDelete(topic string, user t.Uid) error {
 	now := t.TimeNow()
+	forUser := user.String()
+
+	// Mark subscription as deleted.
 	_, err := rdb.DB(a.dbName).Table("subscriptions").
-		Get(topic + ":" + user.String()).Update(map[string]interface{}{
+		Get(topic + ":" + forUser).Update(map[string]interface{}{
 		"UpdatedAt": now,
 		"DeletedAt": now,
 	}).RunWrite(a.conn)
-	// _, err := rdb.DB(a.dbName).Table("subscriptions").Get(topic + ":" + user.String()).Delete().RunWrite(a.conn)
-	return err
+
+	if err != nil {
+		return err
+	}
+
+	// Delete records of soft-deletions of messages by the current user.
+	resp, err := rdb.DB(a.dbName).Table("dellog").
+		// Select all log entries for the given table.
+		Between([]interface{}{topic, rdb.MinVal}, []interface{}{topic, rdb.MaxVal},
+			rdb.BetweenOpts{Index: "Topic_DelId"}).
+		// Keep entries soft-deleted for the current user only.
+		Filter(rdb.Row.Field("DeletedFor").Eq(forUser)).
+		// Delete them.
+		Delete().
+		RunWrite(a.conn)
+
+	if err != nil || resp.Deleted == 0 {
+		// Not much we can do with the error. Returning nil even on failure.
+		return nil
+	}
+
+	// Remove current user from the messages' soft-deletion lists.
+	rdb.DB(a.dbName).Table("messages").
+		// Select all messages in the given table.
+		Between([]interface{}{topic, rdb.MinVal}, []interface{}{topic, rdb.MaxVal},
+			rdb.BetweenOpts{Index: "Topic_DelId"}).
+		// Pick messages with soft-deletions of the current user.
+		Filter(func(row rdb.Term) interface{} {
+			return row.Field("DeletedFor").Default([]interface{}{}).Contains(
+				func(df rdb.Term) interface{} {
+					return df.Field("User").Eq(toDel.DeletedFor)
+				})
+		}).
+		// Update the field DeletedFor:
+		Update(map[string]interface{}{
+			// Take the array subtract all values with the current user ID.
+			"DeletedFor": rdb.Row.Field("DeletedFor").
+				SetDifference(
+					rdb.Row.Field("DeletedFor").Filter([]map[string]interface{}{"User": forUser}))}).
+		RunWrite(a.conn)
+
+	return nil
 }
 
-// SubsDelForTopic marks all subscriptions to the given topic as deleted
-func (a *adapter) SubsDelForTopic(topic string, hard bool) error {
+// subsDelForTopic marks all subscriptions to the given topic as deleted
+func (a *adapter) subsDelForTopic(topic string, hard bool) error {
 	var err error
 	q := rdb.DB(a.dbName).Table("subscriptions").GetAllByIndex("Topic", topic)
 	if hard {
@@ -1543,8 +1586,8 @@ func (a *adapter) SubsDelForTopic(topic string, hard bool) error {
 	return err
 }
 
-// SubsDelForUser deletes or marks all subscriptions of a given user as deleted
-func (a *adapter) SubsDelForUser(user t.Uid, hard bool) error {
+// subsDelForUser deletes or marks all subscriptions of a given user as deleted
+func (a *adapter) subsDelForUser(user t.Uid, hard bool) error {
 	var err error
 	if hard {
 		_, err = rdb.DB(a.dbName).Table("subscriptions").GetAllByIndex("User", user.String()).
