@@ -757,7 +757,7 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 		}
 		// Can't delete user's messages in all topics because we cannot notify topics of such deletion.
 		// Or we have to delete these messages one by one.
-		// For now, just leave the messages there marked as sent by "not found" user.
+		// For now, just leave the messages marked as sent by "not found" user.
 
 		// Delete topics where the user is the owner:
 
@@ -1533,7 +1533,7 @@ func (a *adapter) SubsDelete(topic string, user t.Uid) error {
 		return err
 	}
 
-	// Delete records of soft-deletions of messages by the current user.
+	// Delete dellog entries by the current user.
 	resp, err := rdb.DB(a.dbName).Table("dellog").
 		// Select all log entries for the given table.
 		Between([]interface{}{topic, rdb.MinVal}, []interface{}{topic, rdb.MaxVal},
@@ -1551,7 +1551,7 @@ func (a *adapter) SubsDelete(topic string, user t.Uid) error {
 
 	// Remove current user from the messages' soft-deletion lists.
 	rdb.DB(a.dbName).Table("messages").
-		// Select all messages in the given table.
+		// Select all messages in the given topic.
 		Between([]interface{}{topic, rdb.MinVal}, []interface{}{topic, rdb.MaxVal},
 			rdb.BetweenOpts{Index: "Topic_DelId"}).
 		// Pick messages with soft-deletions of the current user.
@@ -1572,7 +1572,7 @@ func (a *adapter) SubsDelete(topic string, user t.Uid) error {
 	return nil
 }
 
-// subsDelForTopic marks all subscriptions to the given topic as deleted
+// subsDelForTopic marks all subscriptions to the given topic as deleted.
 func (a *adapter) subsDelForTopic(topic string, hard bool) error {
 	var err error
 	q := rdb.DB(a.dbName).Table("subscriptions").GetAllByIndex("Topic", topic)
@@ -1589,8 +1589,50 @@ func (a *adapter) subsDelForTopic(topic string, hard bool) error {
 }
 
 // subsDelForUser deletes or marks all subscriptions of a given user as deleted
+// FIXME: Remove current user from the messages' soft-deletion lists.
 func (a *adapter) subsDelForUser(user t.Uid, hard bool) error {
 	var err error
+
+	forUser := user.String()
+
+	// Iterate over user's subscriptions.
+	_, err = rdb.DB(a.dbName).Table("subscriptions").GetAllByIndex("User", user.String()).ForEach(
+		func(sub rdb.Term) rdb.Term {
+			return rdb.Expr([]interface{}{
+				// Delete dellog
+				rdb.DB(a.dbName).Table("dellog").
+					// Select all log entries for the given table.
+					Between([]interface{}{sub.Field("Topic"), rdb.MinVal}, []interface{}{sub.Field("Topic"), rdb.MaxVal},
+						rdb.BetweenOpts{Index: "Topic_DelId"}).
+					// Keep entries soft-deleted for the current user only.
+					Filter(rdb.Row.Field("DeletedFor").Eq(forUser)).
+					// Delete them.
+					Delete(),
+				// Remove user from the messages' soft-deletion lists.
+				// FIXME: this won't work for channels.
+				rdb.DB(a.dbName).Table("messages").
+					// Select all messages in the given table.
+					Between([]interface{}{sub.Field("Topic"), rdb.MinVal}, []interface{}{sub.Field("Topic"), rdb.MaxVal},
+						rdb.BetweenOpts{Index: "Topic_DelId"}).
+					// Pick messages with soft-deletions of the current user.
+					Filter(func(row rdb.Term) interface{} {
+						return row.Field("DeletedFor").Default([]interface{}{}).Contains(
+							func(df rdb.Term) interface{} {
+								return df.Field("User").Eq(forUser)
+							})
+					}).
+					// Update the field DeletedFor:
+					Update(map[string]interface{}{
+						// Take the array, subtract all values with the current user ID.
+						"DeletedFor": rdb.Row.Field("DeletedFor").
+							SetDifference(rdb.Row.Field("DeletedFor").Filter([]map[string]interface{}{"User": forUser})),
+					})})
+		}).RunWrite(a.conn)
+
+	if err != nil {
+		return err
+	}
+
 	if hard {
 		_, err = rdb.DB(a.dbName).Table("subscriptions").GetAllByIndex("User", user.String()).
 			Delete().RunWrite(a.conn)
@@ -1603,6 +1645,7 @@ func (a *adapter) subsDelForUser(user t.Uid, hard bool) error {
 		_, err = rdb.DB(a.dbName).Table("subscriptions").GetAllByIndex("User", user.String()).
 			Update(update).RunWrite(a.conn)
 	}
+
 	return err
 }
 
