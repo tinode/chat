@@ -2990,7 +2990,9 @@ func (t *Topic) evictUser(uid types.Uid, unsub bool, skip string) {
 			delete(t.perUser, uid)
 			t.computePerUserAcsUnion()
 
-			usersRegisterUser(uid, false)
+			if !pud.isChan {
+				usersRegisterUser(uid, false)
+			}
 		}
 	} else if ok {
 		if pud.isChan {

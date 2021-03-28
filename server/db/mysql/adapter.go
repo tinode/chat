@@ -1227,16 +1227,15 @@ func createSubscription(tx *sqlx.Tx, sub *t.Subscription, undelete bool) error {
 
 	if err != nil && isDupe(err) {
 		if undelete {
-			_, err = tx.Exec("UPDATE subscriptions SET createdat=?,updatedat=?,deletedat=NULL,modeGiven=? "+
-				"WHERE topic=? AND userid=?",
+			_, err = tx.Exec("UPDATE subscriptions SET createdat=?,updatedat=?,deletedat=NULL,modeGiven=?,"+
+				"delid=0,recvseqid=0,readseqid=0 WHERE topic=? AND userid=?",
 				sub.CreatedAt, sub.UpdatedAt, sub.ModeGiven.String(), sub.Topic, decoded_uid)
 
 		} else {
-			_, err = tx.Exec(
-				"UPDATE subscriptions SET createdat=?,updatedat=?,deletedat=NULL,modeWant=?,modeGiven=?,private=? "+
-					"WHERE topic=? AND userid=?",
-				sub.CreatedAt, sub.UpdatedAt, sub.ModeWant.String(), sub.ModeGiven.String(),
-				jpriv, sub.Topic, decoded_uid)
+			_, err = tx.Exec("UPDATE subscriptions SET createdat=?,updatedat=?,deletedat=NULL,modeWant=?,modeGiven=?,"+
+				"delid=0,recvseqid=0,readseqid=0,private=? WHERE topic=? AND userid=?",
+				sub.CreatedAt, sub.UpdatedAt, sub.ModeWant.String(), sub.ModeGiven.String(), jpriv,
+				sub.Topic, decoded_uid)
 		}
 	}
 	if err == nil && isOwner {
