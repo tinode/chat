@@ -1349,7 +1349,10 @@ func (a *adapter) TopicShare(shares []*t.Subscription) error {
 			return oldsub.Without("DeletedAt").Merge(map[string]interface{}{
 				"CreatedAt": newsub.Field("CreatedAt"),
 				"UpdatedAt": newsub.Field("UpdatedAt"),
-				"ModeGiven": newsub.Field("ModeGiven")})
+				"ModeGiven": newsub.Field("ModeGiven"),
+				"DelId": 0
+				"ReadSeqId": 0,
+				"RecvSeqId": 0})
 		}}).RunWrite(a.conn)
 
 	return err

@@ -1188,7 +1188,10 @@ func (a *adapter) undeleteSubscription(sub *t.Subscription) error {
 			"$set": b.M{
 				"updatedat": sub.UpdatedAt,
 				"createdat": sub.CreatedAt,
-				"modegiven": sub.ModeGiven}})
+				"modegiven": sub.ModeGiven,
+				"delid":     0,
+				"readseqid": 0,
+				"recvseqid": 0}})
 	return err
 }
 
