@@ -34,7 +34,7 @@ type adapter struct {
 	// Single query timeout.
 	sqlTimeout time.Duration
 	// DB transaction timeout.
-	txTimeout  time.Duration
+	txTimeout time.Duration
 }
 
 const (
@@ -48,6 +48,10 @@ const (
 	defaultMaxResults = 1024
 	// This is capped by the Session's send queue limit (128).
 	defaultMaxMessageResults = 100
+
+	// If DB request timeout is specified,
+	// we allocate txTimeoutMultiplier times more time for transactions.
+	txTimeoutMultiplier = 1.5
 )
 
 type configType struct {
@@ -64,12 +68,9 @@ type configType struct {
 	MaxIdleConns           int `json:"max_idle_conns,omitempty"`
 	ConnMaxLifetimeSeconds int `json:"conn_max_lifetime_seconds,omitempty"`
 
-	// Single query timeout (in seconds).
+	// DB request timeout (in seconds).
 	// If 0 (or negative), no timeout is applied.
 	SqlTimeout int `json:"sql_timeout,omitempty"`
-	// DB Transaction timeout (in seconds).
-	// If 0 (or negative), no timeout is applied.
-	TxTimeout int `json:"tx_timeout,omitempty"`
 }
 
 func (a *adapter) getContext() (context.Context, context.CancelFunc) {
@@ -158,9 +159,8 @@ func (a *adapter) Open(jsonconfig json.RawMessage) error {
 		}
 		if config.SqlTimeout > 0 {
 			a.sqlTimeout = time.Duration(config.SqlTimeout) * time.Second
-		}
-		if config.TxTimeout > 0 {
-			a.txTimeout = time.Duration(config.TxTimeout) * time.Second
+			// We allocate txTimeoutMultiplier times sqlTimeout for transactions.
+			a.txTimeout = time.Duration(float64(config.SqlTimeout)*txTimeoutMultiplier) * time.Second
 		}
 	}
 	return err
