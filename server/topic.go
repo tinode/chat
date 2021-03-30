@@ -11,7 +11,6 @@ package main
 import (
 	"errors"
 	"sort"
-	"strings"
 	"sync/atomic"
 	"time"
 
@@ -824,7 +823,7 @@ func (t *Topic) sendImmediateSubNotifications(asUid types.Uid, acs *MsgAccessMod
 				actor:  asUid.UserId()},
 			sreg.sess.sid, false)
 
-		if t.isChan && isChannel(sreg.pkt.Original) {
+		if t.isChan && types.IsChannel(sreg.pkt.Original) {
 			t.channelSubUnsub(asUid, true)
 		}
 	}
@@ -2308,7 +2307,7 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 						mts.Acs.Mode = subMode.String()
 						mts.Acs.Want = sub.ModeWant.String()
 						mts.Acs.Given = sub.ModeGiven.String()
-					} else if isChannel(sub.Topic) {
+					} else if types.IsChannel(sub.Topic) {
 						mts.Acs.Mode = types.ModeCChnReader.String()
 					} else if defacs := sub.GetDefaultAccess(); defacs != nil {
 						switch authLevel {
@@ -3492,7 +3491,7 @@ func (t *Topic) isOnline() bool {
 // Verifies if topic can be access by the provided name: access any topic as non-channel, access channel as channel.
 // Returns true if access is for channel, false if not and error if access is invalid.
 func (t *Topic) verifyChannelAccess(asTopic string) (bool, error) {
-	if !isChannel(asTopic) {
+	if !types.IsChannel(asTopic) {
 		return false, nil
 	}
 	if t.isChan {
@@ -3509,13 +3508,6 @@ func topicCat(name string) types.TopicCat {
 // Generate random string as a name of the group topic
 func genTopicName() string {
 	return "grp" + store.GetUidString()
-}
-
-// Check if group topic is referenced as a channel.
-// The "nch" should not be considered a channel reference because it can only be used by the topic owner at the time of
-// group topic creation.
-func isChannel(name string) bool {
-	return strings.HasPrefix(name, "chn")
 }
 
 // Convert expanded (routable) topic name into name suitable for sending to the user.

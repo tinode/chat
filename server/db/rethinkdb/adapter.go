@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"hash/fnv"
+	"log"
 	"strconv"
 	"strings"
 	"time"
@@ -1350,7 +1351,7 @@ func (a *adapter) TopicShare(shares []*t.Subscription) error {
 				"CreatedAt": newsub.Field("CreatedAt"),
 				"UpdatedAt": newsub.Field("UpdatedAt"),
 				"ModeGiven": newsub.Field("ModeGiven"),
-				"DelId": 0
+				"DelId":     0,
 				"ReadSeqId": 0,
 				"RecvSeqId": 0})
 		}}).RunWrite(a.conn)
@@ -1536,6 +1537,13 @@ func (a *adapter) SubsDelete(topic string, user t.Uid) error {
 		return err
 	}
 
+	if t.IsChannel(topic) {
+		// Channel readers cannot delete messages, all done.
+		return nil
+	}
+
+	// Remove records of deleted messages.
+
 	// Delete dellog entries by the current user.
 	resp, err := rdb.DB(a.dbName).Table("dellog").
 		// Select all log entries for the given table.
@@ -1549,6 +1557,7 @@ func (a *adapter) SubsDelete(topic string, user t.Uid) error {
 
 	if err != nil || resp.Deleted == 0 {
 		// Not much we can do with the error. Returning nil even on failure.
+		log.Println("error 1", err)
 		return nil
 	}
 
@@ -1561,16 +1570,21 @@ func (a *adapter) SubsDelete(topic string, user t.Uid) error {
 		Filter(func(row rdb.Term) interface{} {
 			return row.Field("DeletedFor").Default([]interface{}{}).Contains(
 				func(df rdb.Term) interface{} {
-					return df.Field("User").Eq(toDel.DeletedFor)
+					return df.Field("User").Eq(forUser)
 				})
 		}).
 		// Update the field DeletedFor:
 		Update(map[string]interface{}{
-			// Take the array subtract all values with the current user ID.
+			// Take the DeletedFor array, subtract all values which contain current user ID in 'User' field.
 			"DeletedFor": rdb.Row.Field("DeletedFor").
 				SetDifference(
-					rdb.Row.Field("DeletedFor").Filter([]map[string]interface{}{"User": forUser}))}).
+					rdb.Row.Field("DeletedFor").
+						Filter(map[string]interface{}{"User": forUser}))}).
 		RunWrite(a.conn)
+
+	if err != nil {
+		log.Println("error 2", err)
+	}
 
 	return nil
 }
@@ -1628,7 +1642,7 @@ func (a *adapter) subsDelForUser(user t.Uid, hard bool) error {
 					Update(map[string]interface{}{
 						// Take the array, subtract all values with the current user ID.
 						"DeletedFor": rdb.Row.Field("DeletedFor").
-							SetDifference(rdb.Row.Field("DeletedFor").Filter([]map[string]interface{}{"User": forUser})),
+							SetDifference(rdb.Row.Field("DeletedFor").Filter(map[string]interface{}{"User": forUser})),
 					})})
 		}).RunWrite(a.conn)
 
@@ -1983,11 +1997,12 @@ func (a *adapter) MessageDeleteList(topic string, toDel *t.DelMessage) error {
 		if toDel.DeletedFor == "" {
 			// First decrement use counter for attachments.
 			if err = a.fileDecrementUseCounter(query); err == nil {
-				// Hard-delete individual messages. Message is not deleted but all fields with content
-				// are replaced with nulls.
-				_, err = query.Update(map[string]interface{}{
-					"DeletedAt": t.TimeNow(), "DelId": toDel.DelId, "From": nil,
-					"Head": nil, "Content": nil, "Attachments": nil}).RunWrite(a.conn)
+				// Hard-delete individual messages. Message is not deleted but all fields with personal content
+				// are removed.
+				_, err = query.Replace(rdb.Row.Without("Head", "From", "Content", "Attachments").Merge(
+					map[string]interface{}{
+						"DeletedAt": t.TimeNow(), "DelId": toDel.DelId})).
+					RunWrite(a.conn)
 			}
 
 		} else {

@@ -421,7 +421,7 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 			if tcat == types.TopicCatGrp {
 				opts = &types.QueryOpt{User: asUid}
 				// Is user a channel subscriber? Use chnABC instead of grpABC.
-				if isChannel(msg.Original) {
+				if types.IsChannel(msg.Original) {
 					topic = msg.Original
 				}
 			}
@@ -666,7 +666,7 @@ func replyOfflineTopicGetSub(sess *Session, msg *ClientComMessage) {
 	}
 
 	topicName := msg.RcptTo
-	if isChannel(msg.Original) {
+	if types.IsChannel(msg.Original) {
 		topicName = msg.Original
 	}
 
@@ -727,7 +727,7 @@ func replyOfflineTopicSetSub(sess *Session, msg *ClientComMessage) {
 	asUid := types.ParseUserId(msg.AsUser)
 
 	topicName := msg.RcptTo
-	if isChannel(msg.Original) {
+	if types.IsChannel(msg.Original) {
 		topicName = msg.Original
 	}
 

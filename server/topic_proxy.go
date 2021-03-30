@@ -183,7 +183,7 @@ func (t *Topic) proxyMasterResponse(msg *ClusterResp, killTimer *time.Timer) {
 					// Make sure the session isn't gone yet.
 					if session := globals.sessionStore.Get(msg.OrigSid); session != nil {
 						// Successful subscriptions.
-						t.addSession(session, msg.SrvMsg.uid, isChannel(msg.SrvMsg.Ctrl.Topic))
+						t.addSession(session, msg.SrvMsg.uid, types.IsChannel(msg.SrvMsg.Ctrl.Topic))
 						session.addSub(t.name, &Subscription{
 							broadcast: t.broadcast,
 							done:      t.unreg,

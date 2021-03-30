@@ -212,6 +212,13 @@ func GrpToChn(grp string) string {
 	return ""
 }
 
+// IsChannel checks if the given topic name is a reference to a channel.
+// The "nch" should not be considered a channel reference because it can only be used by the topic owner at the time of
+// group topic creation.
+func IsChannel(name string) bool {
+	return strings.HasPrefix(name, "chn")
+}
+
 // ChnToGrp gets group topic name from channel name.
 func ChnToGrp(chn string) string {
 	if strings.HasPrefix(chn, "chn") {
