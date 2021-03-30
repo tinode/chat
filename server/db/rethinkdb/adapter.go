@@ -1539,12 +1539,13 @@ func (a *adapter) SubsDelete(topic string, user t.Uid) error {
 
 	if t.IsChannel(topic) {
 		// Channel readers cannot delete messages, all done.
+		log.Println("this is a channel, all done")
 		return nil
 	}
 
 	// Remove records of deleted messages.
 
-	// Delete dellog entries by the current user.
+	// Delete dellog entries of the current user.
 	resp, err := rdb.DB(a.dbName).Table("dellog").
 		// Select all log entries for the given table.
 		Between([]interface{}{topic, rdb.MinVal}, []interface{}{topic, rdb.MaxVal},
@@ -1556,23 +1557,18 @@ func (a *adapter) SubsDelete(topic string, user t.Uid) error {
 		RunWrite(a.conn)
 
 	if err != nil || resp.Deleted == 0 {
-		// Not much we can do with the error. Returning nil even on failure.
-		log.Println("error 1", err)
+		// Either an error or nothing was deleted. Not much we can do with the error.
+		// Returning nil even on failure.
 		return nil
 	}
 
 	// Remove current user from the messages' soft-deletion lists.
-	rdb.DB(a.dbName).Table("messages").
+	_, err = rdb.DB(a.dbName).Table("messages").
 		// Select all messages in the given topic.
-		Between([]interface{}{topic, rdb.MinVal}, []interface{}{topic, rdb.MaxVal},
-			rdb.BetweenOpts{Index: "Topic_DelId"}).
-		// Pick messages with soft-deletions of the current user.
-		Filter(func(row rdb.Term) interface{} {
-			return row.Field("DeletedFor").Default([]interface{}{}).Contains(
-				func(df rdb.Term) interface{} {
-					return df.Field("User").Eq(forUser)
-				})
-		}).
+		Between(
+			[]interface{}{topic, forUser, rdb.MinVal},
+			[]interface{}{topic, forUser, rdb.MaxVal},
+			rdb.BetweenOpts{Index: "Topic_DeletedFor"}).
 		// Update the field DeletedFor:
 		Update(map[string]interface{}{
 			// Take the DeletedFor array, subtract all values which contain current user ID in 'User' field.
@@ -1613,36 +1609,34 @@ func (a *adapter) subsDelForUser(user t.Uid, hard bool) error {
 	forUser := user.String()
 
 	// Iterate over user's subscriptions.
-	_, err = rdb.DB(a.dbName).Table("subscriptions").GetAllByIndex("User", user.String()).ForEach(
+	_, err = rdb.DB(a.dbName).Table("subscriptions").GetAllByIndex("User", forUser).ForEach(
 		func(sub rdb.Term) rdb.Term {
 			return rdb.Expr([]interface{}{
 				// Delete dellog
 				rdb.DB(a.dbName).Table("dellog").
 					// Select all log entries for the given table.
-					Between([]interface{}{sub.Field("Topic"), rdb.MinVal}, []interface{}{sub.Field("Topic"), rdb.MaxVal},
+					Between(
+						[]interface{}{sub.Field("Topic"), rdb.MinVal},
+						[]interface{}{sub.Field("Topic"), rdb.MaxVal},
 						rdb.BetweenOpts{Index: "Topic_DelId"}).
 					// Keep entries soft-deleted for the current user only.
 					Filter(rdb.Row.Field("DeletedFor").Eq(forUser)).
 					// Delete them.
 					Delete(),
 				// Remove user from the messages' soft-deletion lists.
-				// FIXME: this won't work for channels.
 				rdb.DB(a.dbName).Table("messages").
-					// Select all messages in the given table.
-					Between([]interface{}{sub.Field("Topic"), rdb.MinVal}, []interface{}{sub.Field("Topic"), rdb.MaxVal},
-						rdb.BetweenOpts{Index: "Topic_DelId"}).
-					// Pick messages with soft-deletions of the current user.
-					Filter(func(row rdb.Term) interface{} {
-						return row.Field("DeletedFor").Default([]interface{}{}).Contains(
-							func(df rdb.Term) interface{} {
-								return df.Field("User").Eq(forUser)
-							})
-					}).
+					// Select user's soft-deleted messages in the current table.
+					Between(
+						[]interface{}{sub.Field("Topic"), forUser, rdb.MinVal},
+						[]interface{}{sub.Field("Topic"), forUser, rdb.MaxVal},
+						rdb.BetweenOpts{Index: "Topic_DeletedFor"}).
 					// Update the field DeletedFor:
 					Update(map[string]interface{}{
 						// Take the array, subtract all values with the current user ID.
 						"DeletedFor": rdb.Row.Field("DeletedFor").
-							SetDifference(rdb.Row.Field("DeletedFor").Filter(map[string]interface{}{"User": forUser})),
+							SetDifference(
+								rdb.Row.Field("DeletedFor").
+									Filter(map[string]interface{}{"User": forUser})),
 					})})
 		}).RunWrite(a.conn)
 
