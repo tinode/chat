@@ -31,8 +31,9 @@ type adapter struct {
 	maxMessageResults int
 	version           int
 
-	// Single query and transaction timeouts (in seconds).
+	// Single query timeout.
 	sqlTimeout time.Duration
+	// DB transaction timeout.
 	txTimeout  time.Duration
 }
 
@@ -63,10 +64,12 @@ type configType struct {
 	MaxIdleConns           int `json:"max_idle_conns,omitempty"`
 	ConnMaxLifetimeSeconds int `json:"conn_max_lifetime_seconds,omitempty"`
 
-	// Single query and transaction timeouts in seconds.
+	// Single query timeout (in seconds).
 	// If 0 (or negative), no timeout is applied.
-	SqlTimeoutSeconds int `json:"sql_timeout_seconds,omitempty"`
-	TxTimeoutSeconds  int `json:"tx_timeout_seconds,omitempty"`
+	SqlTimeout int `json:"sql_timeout,omitempty"`
+	// DB Transaction timeout (in seconds).
+	// If 0 (or negative), no timeout is applied.
+	TxTimeout int `json:"tx_timeout,omitempty"`
 }
 
 func (a *adapter) getContext() (context.Context, context.CancelFunc) {
@@ -153,11 +156,11 @@ func (a *adapter) Open(jsonconfig json.RawMessage) error {
 		if config.ConnMaxLifetimeSeconds > 0 {
 			a.db.SetConnMaxLifetime(time.Duration(config.ConnMaxLifetimeSeconds) * time.Second)
 		}
-		if config.SqlTimeoutSeconds > 0 {
-			a.sqlTimeout = time.Duration(config.SqlTimeoutSeconds) * time.Second
+		if config.SqlTimeout > 0 {
+			a.sqlTimeout = time.Duration(config.SqlTimeout) * time.Second
 		}
-		if config.TxTimeoutSeconds > 0 {
-			a.txTimeout = time.Duration(config.TxTimeoutSeconds) * time.Second
+		if config.TxTimeout > 0 {
+			a.txTimeout = time.Duration(config.TxTimeout) * time.Second
 		}
 	}
 	return err
