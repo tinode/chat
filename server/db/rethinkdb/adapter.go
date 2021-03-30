@@ -1620,7 +1620,9 @@ func (a *adapter) subsDelForUser(user t.Uid, hard bool) error {
 						[]interface{}{sub.Field("Topic"), rdb.MaxVal},
 						rdb.BetweenOpts{Index: "Topic_DelId"}).
 					// Keep entries soft-deleted for the current user only.
-					Filter(rdb.Row.Field("DeletedFor").Eq(forUser)).
+					Filter(func(dellog rdb.Term) rdb.Term {
+						return dellog.Field("DeletedFor").Eq(forUser)
+					}).
 					// Delete them.
 					Delete(),
 				// Remove user from the messages' soft-deletion lists.
@@ -1631,13 +1633,16 @@ func (a *adapter) subsDelForUser(user t.Uid, hard bool) error {
 						[]interface{}{sub.Field("Topic"), forUser, rdb.MaxVal},
 						rdb.BetweenOpts{Index: "Topic_DeletedFor"}).
 					// Update the field DeletedFor:
-					Update(map[string]interface{}{
-						// Take the array, subtract all values with the current user ID.
-						"DeletedFor": rdb.Row.Field("DeletedFor").
-							SetDifference(
-								rdb.Row.Field("DeletedFor").
-									Filter(map[string]interface{}{"User": forUser})),
-					})})
+					Update(func(msg rdb.Term) interface{} {
+						return map[string]interface{}{
+							// Take the array, subtract all values with the current user ID.
+							"DeletedFor": msg.Field("DeletedFor").
+								SetDifference(
+									msg.Field("DeletedFor").
+										Filter(map[string]interface{}{"User": forUser})),
+						}
+					}),
+			})
 		}).RunWrite(a.conn)
 
 	if err != nil {
