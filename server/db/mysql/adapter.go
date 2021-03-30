@@ -64,9 +64,13 @@ type configType struct {
 	Database string `json:"database,omitempty"`
 
 	// Connection pool settings.
-	MaxOpenConns           int `json:"max_open_conns,omitempty"`
-	MaxIdleConns           int `json:"max_idle_conns,omitempty"`
-	ConnMaxLifetimeSeconds int `json:"conn_max_lifetime_seconds,omitempty"`
+	//
+	// Maximum number of open connections to the database.
+	MaxOpenConns int `json:"max_open_conns,omitempty"`
+	// Maximum number of connections in the idle connection pool.
+	MaxIdleConns int `json:"max_idle_conns,omitempty"`
+	// Maximum amount of time a connection may be reused (in seconds).
+	ConnMaxLifetime int `json:"conn_max_lifetime,omitempty"`
 
 	// DB request timeout (in seconds).
 	// If 0 (or negative), no timeout is applied.
@@ -154,8 +158,8 @@ func (a *adapter) Open(jsonconfig json.RawMessage) error {
 		if config.MaxIdleConns > 0 {
 			a.db.SetMaxIdleConns(config.MaxIdleConns)
 		}
-		if config.ConnMaxLifetimeSeconds > 0 {
-			a.db.SetConnMaxLifetime(time.Duration(config.ConnMaxLifetimeSeconds) * time.Second)
+		if config.ConnMaxLifetime > 0 {
+			a.db.SetConnMaxLifetime(time.Duration(config.ConnMaxLifetime) * time.Second)
 		}
 		if config.SqlTimeout > 0 {
 			a.sqlTimeout = time.Duration(config.SqlTimeout) * time.Second
