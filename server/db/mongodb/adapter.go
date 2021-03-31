@@ -590,12 +590,11 @@ func (a *adapter) maybeCommitTransaction(ctx context.Context, sess mdb.Session) 
 	return nil
 }
 
-// FIXME: delete user's dellog entries
-// FIXME: delete user's markings of soft-deleted messages
-
-// UserDelete deletes user record
+// UserDelete deletes user record.
 func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
-	topicIds, err := a.db.Collection("topics").Distinct(a.ctx, "_id", b.M{"owner": uid.String()})
+	forUser := uid.String()
+	// Select topics where the user is the owner.
+	topicIds, err := a.db.Collection("topics").Distinct(sc, "_id", b.M{"owner": forUser})
 	if err != nil {
 		return err
 	}
@@ -610,53 +609,77 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 	if err = a.maybeStartTransaction(sess); err != nil {
 		return err
 	}
+
 	if err = mdb.WithSession(a.ctx, sess, func(sc mdb.SessionContext) error {
+
 		if hard {
 			// Can't delete user's messages in all topics because we cannot notify topics of such deletion.
 			// Or we have to delete these messages one by one.
 			// For now, just leave the messages there marked as sent by "not found" user.
 
 			// Delete topics where the user is the owner:
+			if len(topicIds) > 0 {
+				// 1. Delete dellog
+				// 2. Decrement fileuploads.
+				// 3. Delete all messages.
+				// 4. Delete subscriptions.
 
-			// 1. Delete dellog
-			// 2. Decrement fileuploads.
-			// 3. Delete all messages.
-			// 4. Delete subscriptions.
+				// Delete dellog entries.
+				_, err = a.db.Collection("dellog").DeleteMany(sc, topicFilter)
+				if err != nil {
+					return err
+				}
 
-			// Delete user's subscriptions in all topics.
-			if err = a.subsDelete(sc, b.M{"user": uid.String()}, true); err != nil {
-				return err
+				// Decrement fileuploads UseCounter
+				// First get array of attachments IDs that were used in messages of topics from topicIds
+				// Then decrement the usecount field of these file records
+				err := a.fileDecrementUseCounter(sc, b.M{"topic": b.M{"$in": topicIds}})
+				if err != nil {
+					return err
+				}
+
+				// Delete messages
+				_, err = a.db.Collection("messages").DeleteMany(sc, topicFilter)
+				if err != nil {
+					return err
+				}
+
+				// Delete subscriptions
+				_, err = a.db.Collection("subscriptions").DeleteMany(sc, topicFilter)
+				if err != nil {
+					return err
+				}
+
+				// And finally delete the topics.
+				if _, err = a.db.Collection("topics").DeleteMany(sc, b.M{"owner": forUser}); err != nil {
+					return err
+				}
 			}
 
-			// Delete dellog
-			_, err = a.db.Collection("dellog").DeleteMany(sc, topicFilter)
+			// Select all other topics where the user is a subscriber.
+			topicIds, err = a.db.Collection("subscriptions").Distinct(sc, "topic", b.M{"user": forUser})
 			if err != nil {
 				return err
 			}
 
-			// Decrement fileuploads UseCounter
-			// First get array of attachments IDs that were used in messages of topics from topicIds
-			// Then decrement the usecount field of these file records
-			err := a.fileDecrementUseCounter(sc, b.M{"topic": b.M{"$in": topicIds}})
-			if err != nil {
-				return err
-			}
+			if len(topicIds) > 0 {
+				// Delete user's dellog entries.
+				if _, err = a.db.Collection("dellog").DeleteMany(sc,
+					b.M{"topic": b.M{"$in": topicIds}, "deletedfor": forUser}); err != nil {
+					return err
+				}
 
-			// Delete messages
-			_, err = a.db.Collection("messages").DeleteMany(sc, topicFilter)
-			if err != nil {
-				return err
-			}
+				// Delete user's markings of soft-deleted messages
+				filter := b.M{"topic": b.M{"$in": topicIds}, "deletedfor.user": forUser}
+				if _, err = a.db.Collection("messages").
+					UpdateMany(sc, filter, b.M{"$pull": b.M{"deletedfor": b.M{"user": forUser}}}); err != nil {
+					return err
+				}
 
-			// Delete subscriptions
-			_, err = a.db.Collection("subscriptions").DeleteMany(sc, topicFilter)
-			if err != nil {
-				return err
-			}
-
-			// And finally delete the topics.
-			if _, err = a.db.Collection("topics").DeleteMany(sc, b.M{"owner": uid.String()}); err != nil {
-				return err
+				// Delete user's subscriptions in all topics.
+				if err = a.subsDelete(sc, b.M{"user": forUser}, true); err != nil {
+					return err
+				}
 			}
 
 			// Delete user's authentication records.
@@ -670,12 +693,12 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 			}
 
 			// And finally delete the user.
-			if _, err = a.db.Collection("users").DeleteOne(sc, b.M{"_id": uid.String()}); err != nil {
+			if _, err = a.db.Collection("users").DeleteOne(sc, b.M{"_id": forUser}); err != nil {
 				return err
 			}
 		} else {
 			// Disable user's subscriptions.
-			if err = a.subsDelete(sc, b.M{"user": uid.String()}, false); err != nil {
+			if err = a.subsDelete(sc, b.M{"user": forUser}, false); err != nil {
 				return err
 			}
 
@@ -690,7 +713,7 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 			if _, err = a.db.Collection("topics").UpdateMany(sc, b.M{"_id": b.M{"$in": topicIds}}, disable); err != nil {
 				return err
 			}
-			if _, err = a.db.Collection("users").UpdateMany(sc, b.M{"_id": uid.String()}, disable); err != nil {
+			if _, err = a.db.Collection("users").UpdateMany(sc, b.M{"_id": forUser}, disable); err != nil {
 				return err
 			}
 		}
@@ -1729,10 +1752,45 @@ func (a *adapter) SubsUpdate(topic string, user t.Uid, update map[string]interfa
 
 // SubsDelete deletes a single subscription
 func (a *adapter) SubsDelete(topic string, user t.Uid) error {
-	// FIXME: delete user's dellog entries
-	// FIXME: delete user's markings of soft-deleted messages
+	var sess mdb.Session
+	var err error
+	if sess, err = a.conn.StartSession(); err != nil {
+		return err
+	}
+	defer sess.EndSession(a.ctx)
 
-	return a.subsDelete(a.ctx, b.M{"_id": topic + ":" + user.String()}, false)
+	if err = a.maybeStartTransaction(sess); err != nil {
+		return err
+	}
+
+	forUser := user.String()
+
+	if err = mdb.WithSession(a.ctx, sess, func(sc mdb.SessionContext) error {
+		if err := a.subsDelete(sc, b.M{"_id": topic + ":" + forUser}, false); err != nil {
+			return err
+		}
+
+		if !t.IsChannel(topic) {
+
+			// Delete user's dellog entries.
+			if _, err = a.db.Collection("dellog").DeleteMany(sc, b.M{"topic": topic, "deletedfor": forUser}); err != nil {
+				return err
+			}
+
+			// Delete user's markings of soft-deleted messages
+			filter := b.M{"topic": topic, "deletedfor.user": forUser}
+			if _, err = a.db.Collection("messages").
+				UpdateMany(sc, filter, b.M{"$pull": b.M{"deletedfor": b.M{"user": forUser}}}); err != nil {
+				return err
+			}
+		}
+		// Commit changes.
+		return a.maybeCommitTransaction(sc, sess)
+	}); err != nil {
+		return err
+	}
+
+	return err
 }
 
 // Delete/mark deleted subscriptions.
@@ -2088,9 +2146,9 @@ func (a *adapter) MessageAttachments(msgId t.Uid, fids []string) error {
 	return err
 }
 
-// Devices (for push notifications)
+// Devices (for push notifications).
 
-// DeviceUpsert creates or updates a device record
+// DeviceUpsert creates or updates a device record.
 func (a *adapter) DeviceUpsert(uid t.Uid, dev *t.DeviceDef) error {
 	userId := uid.String()
 	var user t.User
@@ -2186,7 +2244,7 @@ func (a *adapter) DeviceGetAll(uids ...t.Uid) (map[t.Uid][]t.DeviceDef, int, err
 	return result, count, cur.Err()
 }
 
-// DeviceDelete deletes a device record
+// DeviceDelete deletes a device record (push token).
 func (a *adapter) DeviceDelete(uid t.Uid, deviceID string) error {
 	var err error
 	filter := b.M{"_id": uid.String()}
@@ -2302,7 +2360,7 @@ func (a *adapter) isDbInitialized() bool {
 	return true
 }
 
-// Required for running adapter tests.
+// GetAdapter is required for running adapter tests.
 func GetAdapter() *adapter {
 	return &adapter{}
 }
