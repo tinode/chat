@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"hash/fnv"
-	"log"
 	"strconv"
 	"strings"
 	"time"
@@ -1539,7 +1538,6 @@ func (a *adapter) SubsDelete(topic string, user t.Uid) error {
 
 	if t.IsChannel(topic) {
 		// Channel readers cannot delete messages, all done.
-		log.Println("this is a channel, all done")
 		return nil
 	}
 
@@ -1578,10 +1576,6 @@ func (a *adapter) SubsDelete(topic string, user t.Uid) error {
 						Filter(map[string]interface{}{"User": forUser}))}).
 		RunWrite(a.conn)
 
-	if err != nil {
-		log.Println("error 2", err)
-	}
-
 	return nil
 }
 
@@ -1602,7 +1596,6 @@ func (a *adapter) subsDelForTopic(topic string, hard bool) error {
 }
 
 // subsDelForUser deletes or marks all subscriptions of a given user as deleted
-// FIXME: Remove current user from the messages' soft-deletion lists.
 func (a *adapter) subsDelForUser(user t.Uid, hard bool) error {
 	var err error
 
