@@ -1333,16 +1333,15 @@ func createSubscription(tx *sqlx.Tx, sub *t.Subscription, undelete bool) error {
 
 	if err != nil && isDupe(err) {
 		if undelete {
-			_, err = tx.Exec("UPDATE subscriptions SET createdat=?,updatedat=?,deletedat=NULL,modeGiven=? "+
-				"WHERE topic=? AND userid=?",
+			_, err = tx.Exec("UPDATE subscriptions SET createdat=?,updatedat=?,deletedat=NULL,modeGiven=?,"+
+				"delid=0,recvseqid=0,readseqid=0 WHERE topic=? AND userid=?",
 				sub.CreatedAt, sub.UpdatedAt, sub.ModeGiven.String(), sub.Topic, decoded_uid)
 
 		} else {
-			_, err = tx.Exec(
-				"UPDATE subscriptions SET createdat=?,updatedat=?,deletedat=NULL,modeWant=?,modeGiven=?,private=? "+
-					"WHERE topic=? AND userid=?",
-				sub.CreatedAt, sub.UpdatedAt, sub.ModeWant.String(), sub.ModeGiven.String(),
-				jpriv, sub.Topic, decoded_uid)
+			_, err = tx.Exec("UPDATE subscriptions SET createdat=?,updatedat=?,deletedat=NULL,modeWant=?,modeGiven=?,"+
+				"delid=0,recvseqid=0,readseqid=0,private=? WHERE topic=? AND userid=?",
+				sub.CreatedAt, sub.UpdatedAt, sub.ModeWant.String(), sub.ModeGiven.String(), jpriv,
+				sub.Topic, decoded_uid)
 		}
 	}
 	if err == nil && isOwner {
@@ -2048,43 +2047,46 @@ func (a *adapter) SubsUpdate(topic string, user t.Uid, update map[string]interfa
 
 // SubsDelete marks subscription as deleted.
 func (a *adapter) SubsDelete(topic string, user t.Uid) error {
-	ctx, cancel := a.getContext()
-	if cancel != nil {
-		defer cancel()
-	}
-	now := t.TimeNow()
-	res, err := a.db.ExecContext(
-		ctx,
-		"UPDATE subscriptions SET updatedat=?,deletedat=? WHERE topic=? AND userid=? AND deletedat IS NULL",
-		now, now, topic, store.DecodeUid(user))
+	tx, err := a.db.Begin()
 	if err != nil {
 		return err
 	}
-	affected, err := res.RowsAffected()
-	if err == nil && affected == 0 {
-		err = t.ErrNotFound
-	}
-	return err
-}
 
-// SubsDelForTopic marks all subscriptions to the given topic as deleted
-func (a *adapter) SubsDelForTopic(topic string, hard bool) error {
+	defer func() {
+		if err != nil {
+			tx.Rollback()
+		}
+	}()
+
 	ctx, cancel := a.getContext()
 	if cancel != nil {
 		defer cancel()
 	}
-	var err error
-	if hard {
-		_, err = a.db.ExecContext(ctx, "DELETE FROM subscriptions WHERE topic=?", topic)
-	} else {
-		now := t.TimeNow()
-		_, err = a.db.ExecContext(ctx, "UPDATE subscriptions SET updatedat=?,deletedat=? WHERE topic=? AND deletedat IS NULL",
-			now, t.StateDeleted, now, topic)
+
+	decoded_id := store.DecodeUid(user)
+	now := t.TimeNow()
+	res, err := tx.ExecContext(ctx,
+		"UPDATE subscriptions SET updatedat=?,deletedat=? WHERE topic=? AND userid=? AND deletedat IS NULL",
+		now, now, topic, decoded_id)
+	if err != nil {
+		return err
 	}
-	return err
+
+	affected, err := res.RowsAffected()
+	if err == nil && affected == 0 {
+		return t.ErrNotFound
+	}
+
+	// Remove records of messages soft-deleted by this user.
+	_, err = tx.Exec("DELETE FROM dellog WHERE topic=? AND deletedfor=?", topic, decoded_id)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit()
 }
 
-// subsDelForTopic marks user's subscriptions as deleted
+// subsDelForUser marks user's subscriptions as deleted.
 func subsDelForUser(tx *sqlx.Tx, user t.Uid, hard bool) error {
 	var err error
 	if hard {
@@ -2097,12 +2099,13 @@ func subsDelForUser(tx *sqlx.Tx, user t.Uid, hard bool) error {
 	return err
 }
 
-// SubsDelForTopic marks user's subscriptions as deleted
+// SubsDelForUser marks user's subscriptions as deleted.
 func (a *adapter) SubsDelForUser(user t.Uid, hard bool) error {
 	ctx, cancel := a.getContextForTx()
 	if cancel != nil {
 		defer cancel()
 	}
+
 	tx, err := a.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return err

@@ -590,6 +590,9 @@ func (a *adapter) maybeCommitTransaction(ctx context.Context, sess mdb.Session) 
 	return nil
 }
 
+// FIXME: delete user's dellog entries
+// FIXME: delete user's markings of soft-deleted messages
+
 // UserDelete deletes user record
 func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 	topicIds, err := a.db.Collection("topics").Distinct(a.ctx, "_id", b.M{"owner": uid.String()})
@@ -621,7 +624,7 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 			// 4. Delete subscriptions.
 
 			// Delete user's subscriptions in all topics.
-			if err = a.subsDel(sc, b.M{"user": uid.String()}, true); err != nil {
+			if err = a.subsDelete(sc, b.M{"user": uid.String()}, true); err != nil {
 				return err
 			}
 
@@ -672,7 +675,7 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 			}
 		} else {
 			// Disable user's subscriptions.
-			if err = a.subsDel(sc, b.M{"user": uid.String()}, false); err != nil {
+			if err = a.subsDelete(sc, b.M{"user": uid.String()}, false); err != nil {
 				return err
 			}
 
@@ -1185,7 +1188,10 @@ func (a *adapter) undeleteSubscription(sub *t.Subscription) error {
 			"$set": b.M{
 				"updatedat": sub.UpdatedAt,
 				"createdat": sub.CreatedAt,
-				"modegiven": sub.ModeGiven}})
+				"modegiven": sub.ModeGiven,
+				"delid":     0,
+				"readseqid": 0,
+				"recvseqid": 0}})
 	return err
 }
 
@@ -1559,8 +1565,8 @@ func (a *adapter) TopicShare(subs []*t.Subscription) error {
 
 // TopicDelete deletes topic, subscription, messages
 func (a *adapter) TopicDelete(topic string, hard bool) error {
-	var err error
-	if err = a.SubsDelForTopic(topic, hard); err != nil {
+	err := a.subsDelete(a.ctx, b.M{"topic": topic}, hard)
+	if err != nil {
 		return err
 	}
 
@@ -1723,14 +1729,14 @@ func (a *adapter) SubsUpdate(topic string, user t.Uid, update map[string]interfa
 
 // SubsDelete deletes a single subscription
 func (a *adapter) SubsDelete(topic string, user t.Uid) error {
-	now := t.TimeNow()
-	_, err := a.db.Collection("subscriptions").UpdateOne(a.ctx,
-		b.M{"_id": topic + ":" + user.String()},
-		b.M{"$set": b.M{"updatedat": now, "deletedat": now}})
-	return err
+	// FIXME: delete user's dellog entries
+	// FIXME: delete user's markings of soft-deleted messages
+
+	return a.subsDelete(a.ctx, b.M{"_id": topic + ":" + user.String()}, false)
 }
 
-func (a *adapter) subsDel(ctx context.Context, filter b.M, hard bool) error {
+// Delete/mark deleted subscriptions.
+func (a *adapter) subsDelete(ctx context.Context, filter b.M, hard bool) error {
 	var err error
 	if hard {
 		_, err = a.db.Collection("subscriptions").DeleteMany(ctx, filter)
@@ -1740,18 +1746,6 @@ func (a *adapter) subsDel(ctx context.Context, filter b.M, hard bool) error {
 			b.M{"$set": b.M{"updatedat": now, "deletedat": now}})
 	}
 	return err
-}
-
-// SubsDelForTopic deletes all subscriptions to the given topic
-func (a *adapter) SubsDelForTopic(topic string, hard bool) error {
-	filter := b.M{"topic": topic}
-	return a.subsDel(a.ctx, filter, hard)
-}
-
-// SubsDelForUser deletes all subscriptions of the given user
-func (a *adapter) SubsDelForUser(user t.Uid, hard bool) error {
-	filter := b.M{"user": user.String()}
-	return a.subsDel(a.ctx, filter, hard)
 }
 
 // Search
