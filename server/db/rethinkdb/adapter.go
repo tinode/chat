@@ -746,8 +746,6 @@ func (a *adapter) UserGetAll(ids ...t.Uid) ([]t.User, error) {
 	return users, nil
 }
 
-// FIXME: delete user's dellog entries
-// FIXME: delete user's markings of soft-deleted messages
 func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 	var err error
 	if hard {
