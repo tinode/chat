@@ -965,28 +965,6 @@ func TestAuthDelAllRecords(t *testing.T) {
 	}
 }
 
-func TestSubsDelForTopic(t *testing.T) {
-	// Soft
-	err := adp.SubsDelForTopic(topics[1].Id, false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var got types.Subscription
-	_ = db.Collection("subscriptions").FindOne(ctx, b.M{"topic": topics[1].Id}).Decode(&got)
-	if got.DeletedAt == nil {
-		t.Errorf(mismatchErrorString("DeletedAt", got.DeletedAt, nil))
-	}
-	// Hard
-	err = adp.SubsDelForTopic(topics[1].Id, true)
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = db.Collection("subscriptions").FindOne(ctx, b.M{"topic": topics[1].Id}).Decode(&got)
-	if err != mdb.ErrNoDocuments {
-		t.Error("Sub not deleted. Err:", err)
-	}
-}
-
 func TestSubsDelForUser(t *testing.T) {
 	// Tested during TestUserDelete (both hard and soft deletions)
 }
