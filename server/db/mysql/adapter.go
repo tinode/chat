@@ -2065,7 +2065,7 @@ func (a *adapter) SubsDelete(topic string, user t.Uid) error {
 
 	decoded_id := store.DecodeUid(user)
 	now := t.TimeNow()
-	res, err := a.db.ExecContext(ctx,
+	res, err := tx.ExecContext(ctx,
 		"UPDATE subscriptions SET updatedat=?,deletedat=? WHERE topic=? AND userid=? AND deletedat IS NULL",
 		now, now, topic, decoded_id)
 	if err != nil {
