@@ -154,7 +154,7 @@ func (a *adapter) IsOpen() bool {
 	return a.conn != nil
 }
 
-// Read current database version
+// GetDbVersion returns current database version.
 func (a *adapter) GetDbVersion() (int, error) {
 	if a.version > 0 {
 		return a.version, nil
@@ -212,7 +212,7 @@ func (adapter) Version() int {
 	return adpVersion
 }
 
-// DB connection stats object.
+// Stats returns DB connection stats object.
 func (a *adapter) Stats() interface{} {
 	if a.conn == nil {
 		return nil
@@ -402,6 +402,7 @@ func (a *adapter) CreateDb(reset bool) error {
 	return nil
 }
 
+// UpgradeDb upgrades the database to the latest version.
 func (a *adapter) UpgradeDb() error {
 	bumpVersion := func(a *adapter, x int) error {
 		if err := a.updateDbVersion(x); err != nil {
@@ -562,7 +563,7 @@ func (a *adapter) UserCreate(user *t.User) error {
 	return err
 }
 
-// Add user's authentication record
+// AuthAddRecord adds user's authentication record
 func (a *adapter) AuthAddRecord(uid t.Uid, scheme, unique string, authLvl auth.Level,
 	secret []byte, expires time.Time) error {
 
@@ -598,7 +599,7 @@ func (a *adapter) AuthDelAllRecords(uid t.Uid) (int, error) {
 	return res.Deleted, err
 }
 
-// Update user's authentication secret.
+// AuthUpdRecord updates user's authentication secret.
 func (a *adapter) AuthUpdRecord(uid t.Uid, scheme, unique string, authLvl auth.Level,
 	secret []byte, expires time.Time) error {
 	// The 'unique' is used as a primary key (no other way to ensure uniqueness in RethinkDB).
@@ -644,7 +645,7 @@ func (a *adapter) AuthUpdRecord(uid t.Uid, scheme, unique string, authLvl auth.L
 	return err
 }
 
-// Retrieve user's authentication record
+// AuthGetRecord retrieves user's authentication record by user ID and scheme.
 func (a *adapter) AuthGetRecord(uid t.Uid, scheme string) (string, auth.Level, []byte, time.Time, error) {
 	// Default() is needed to prevent Pluck from returning an error
 	cursor, err := rdb.DB(a.dbName).Table("auth").GetAllByIndex("userid", uid.String()).
@@ -673,7 +674,7 @@ func (a *adapter) AuthGetRecord(uid t.Uid, scheme string) (string, auth.Level, [
 	return record.Unique, record.AuthLvl, record.Secret, record.Expires, nil
 }
 
-// Retrieve user's authentication record
+// AuthGetUniqueRecord retrieve user's authentication record by unique value (e.g. by login).
 func (a *adapter) AuthGetUniqueRecord(unique string) (t.Uid, auth.Level, []byte, time.Time, error) {
 	// Default() is needed to prevent Pluck from returning an error
 	cursor, err := rdb.DB(a.dbName).Table("auth").Get(unique).Pluck(
@@ -721,6 +722,7 @@ func (a *adapter) UserGet(uid t.Uid) (*t.User, error) {
 	return &user, nil
 }
 
+// UserGetAll fetches multiple user records by UIDs.
 func (a *adapter) UserGetAll(ids ...t.Uid) ([]t.User, error) {
 	uids := make([]interface{}, len(ids))
 	for i, id := range ids {
@@ -746,6 +748,7 @@ func (a *adapter) UserGetAll(ids ...t.Uid) ([]t.User, error) {
 	return users, nil
 }
 
+// UserDelete deletes user record.
 func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 	var err error
 	if hard {
@@ -1333,6 +1336,7 @@ func (a *adapter) ChannelsForUser(uid t.Uid) ([]string, error) {
 	return names, nil
 }
 
+// TopicShare creates topic subscriptions.
 func (a *adapter) TopicShare(shares []*t.Subscription) error {
 	// Assign Ids.
 	for i := 0; i < len(shares); i++ {
@@ -1356,6 +1360,7 @@ func (a *adapter) TopicShare(shares []*t.Subscription) error {
 	return err
 }
 
+// TopicDelete deletes topic.
 func (a *adapter) TopicDelete(topic string, hard bool) error {
 	var err error
 	if err = a.subsDelForTopic(topic, hard); err != nil {
@@ -1395,11 +1400,13 @@ func (a *adapter) TopicUpdateOnMessage(topic string, msg *t.Message) error {
 	return err
 }
 
+// TopicUpdate performs a generic topic update.
 func (a *adapter) TopicUpdate(topic string, update map[string]interface{}) error {
 	_, err := rdb.DB(a.dbName).Table("topics").Get(topic).Update(update).RunWrite(a.conn)
 	return err
 }
 
+// TopicOwnerChange changes topic's owner.
 func (a *adapter) TopicOwnerChange(topic string, newOwner t.Uid) error {
 	_, err := rdb.DB(a.dbName).Table("topics").Get(topic).
 		Update(map[string]interface{}{"Owner": newOwner}).RunWrite(a.conn)
@@ -1656,7 +1663,7 @@ func (a *adapter) subsDelForUser(user t.Uid, hard bool) error {
 	return err
 }
 
-// Returns a list of users who match given tags, such as "email:jdoe@example.com" or "tel:+18003287448".
+// FindUsers returns a list of users who match given tags, such as "email:jdoe@example.com" or "tel:+18003287448".
 // Searching the 'users.Tags' for the given tags using respective index.
 func (a *adapter) FindUsers(uid t.Uid, req [][]string, opt []string) ([]t.Subscription, error) {
 	index := make(map[string]struct{})
@@ -1740,7 +1747,7 @@ func (a *adapter) FindUsers(uid t.Uid, req [][]string, opt []string) ([]t.Subscr
 
 }
 
-// Returns a list of topics with matching tags.
+// FindTopics returns a list of topics with matching tags.
 // Searching the 'topics.Tags' for the given tags using respective index.
 func (a *adapter) FindTopics(req [][]string, opt []string) ([]t.Subscription, error) {
 	index := make(map[string]struct{})
@@ -1815,11 +1822,14 @@ func (a *adapter) FindTopics(req [][]string, opt []string) ([]t.Subscription, er
 }
 
 // Messages
+
+// MessageSave saves message to DB.
 func (a *adapter) MessageSave(msg *t.Message) error {
 	_, err := rdb.DB(a.dbName).Table("messages").Insert(msg).RunWrite(a.conn)
 	return err
 }
 
+// MessageGetAll retrieves all messages available to the given user.
 func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.QueryOpt) ([]t.Message, error) {
 
 	var limit = a.maxMessageResults
@@ -1872,7 +1882,7 @@ func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.QueryOpt) (
 	return msgs, nil
 }
 
-// Get ranges of deleted messages
+// MessageGetDeleted returns ranges of deleted messages.
 func (a *adapter) MessageGetDeleted(topic string, forUser t.Uid, opts *t.QueryOpt) ([]t.DelMessage, error) {
 	var limit = a.maxResults
 	var lower, upper interface{}
@@ -1919,7 +1929,7 @@ func (a *adapter) MessageGetDeleted(topic string, forUser t.Uid, opts *t.QueryOp
 	return dmsgs, nil
 }
 
-// Delete all messages in the topic.
+// messagesHardDelete deletes all messages in the topic.
 func (a *adapter) messagesHardDelete(topic string) error {
 	var err error
 
@@ -1946,7 +1956,7 @@ func (a *adapter) messagesHardDelete(topic string) error {
 	return err
 }
 
-// MessageDeleteList deletes messages in the given topic with seqIds from the list
+// MessageDeleteList deletes messages in the given topic with seqIds from the list.
 func (a *adapter) MessageDeleteList(topic string, toDel *t.DelMessage) error {
 	var indexVals []interface{}
 	var err error
@@ -2055,6 +2065,8 @@ func deviceHasher(deviceID string) string {
 }
 
 // Device management for push notifications
+
+// DeviceUpsert adds or updates a user's device FCM push token.
 func (a *adapter) DeviceUpsert(uid t.Uid, def *t.DeviceDef) error {
 	hash := deviceHasher(def.DeviceId)
 	user := uid.String()
@@ -2098,6 +2110,7 @@ func (a *adapter) DeviceUpsert(uid t.Uid, def *t.DeviceDef) error {
 	return err
 }
 
+// DeviceGetAll retrives a list of user's devices (push tokens).
 func (a *adapter) DeviceGetAll(uids ...t.Uid) (map[t.Uid][]t.DeviceDef, int, error) {
 	ids := make([]interface{}, len(uids))
 	for i, id := range uids {
@@ -2141,6 +2154,7 @@ func (a *adapter) DeviceGetAll(uids ...t.Uid) (map[t.Uid][]t.DeviceDef, int, err
 	return result, count, cursor.Err()
 }
 
+// DeviceDelete removes user's device (push token).
 func (a *adapter) DeviceDelete(uid t.Uid, deviceID string) error {
 	var err error
 	q := rdb.DB(a.dbName).Table("users").Get(uid.String())
@@ -2469,6 +2483,7 @@ func (a *adapter) fileDecrementUseCounter(msgQuery rdb.Term) error {
 	return err
 }
 
+// Checks if the given error is 'Database not found'.
 func isMissingDb(err error) bool {
 	if err == nil {
 		return false
