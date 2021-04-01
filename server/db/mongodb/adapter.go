@@ -115,6 +115,9 @@ func (a *adapter) Open(jsonconfig json.RawMessage) error {
 	if config.ReplicaSet != "" {
 		opts.SetReplicaSet(config.ReplicaSet)
 		a.useTransactions = true
+	} else {
+		// Retriable writes are not supported in a standalone instance.
+		opts.SetRetryWrites(false)
 	}
 
 	if config.Username != "" {
@@ -594,7 +597,7 @@ func (a *adapter) maybeCommitTransaction(ctx context.Context, sess mdb.Session) 
 func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 	forUser := uid.String()
 	// Select topics where the user is the owner.
-	topicIds, err := a.db.Collection("topics").Distinct(sc, "_id", b.M{"owner": forUser})
+	topicIds, err := a.db.Collection("topics").Distinct(a.ctx, "_id", b.M{"owner": forUser})
 	if err != nil {
 		return err
 	}
@@ -1754,6 +1757,7 @@ func (a *adapter) SubsUpdate(topic string, user t.Uid, update map[string]interfa
 func (a *adapter) SubsDelete(topic string, user t.Uid) error {
 	var sess mdb.Session
 	var err error
+
 	if sess, err = a.conn.StartSession(); err != nil {
 		return err
 	}
@@ -1773,13 +1777,13 @@ func (a *adapter) SubsDelete(topic string, user t.Uid) error {
 		if !t.IsChannel(topic) {
 
 			// Delete user's dellog entries.
-			if _, err = a.db.Collection("dellog").DeleteMany(sc, b.M{"topic": topic, "deletedfor": forUser}); err != nil {
+			if _, err := a.db.Collection("dellog").DeleteMany(sc, b.M{"topic": topic, "deletedfor": forUser}); err != nil {
 				return err
 			}
 
 			// Delete user's markings of soft-deleted messages
 			filter := b.M{"topic": topic, "deletedfor.user": forUser}
-			if _, err = a.db.Collection("messages").
+			if _, err := a.db.Collection("messages").
 				UpdateMany(sc, filter, b.M{"$pull": b.M{"deletedfor": b.M{"user": forUser}}}); err != nil {
 				return err
 			}
@@ -1790,7 +1794,7 @@ func (a *adapter) SubsDelete(topic string, user t.Uid) error {
 		return err
 	}
 
-	return err
+	return nil
 }
 
 // Delete/mark deleted subscriptions.

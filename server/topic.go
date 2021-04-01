@@ -1715,10 +1715,10 @@ func (t *Topic) anotherUserSub(sess *Session, asUid, target types.Uid, asChan bo
 		} else if user.State != types.StateOK {
 			sess.queueOut(ErrPermissionDeniedReply(pkt, now))
 			return nil, errors.New("user is suspended")
+		} else {
+			// Don't ask by default for more permissions than the granted ones.
+			modeWant = user.Access.Auth & modeGiven
 		}
-
-		// Don't ask by default for more permissions than the granted ones.
-		modeWant = user.Access.Auth & modeGiven
 
 		// Add subscription to database
 		sub := &types.Subscription{
