@@ -1900,33 +1900,12 @@ func (a *adapter) SubscriptionGet(topic string, user t.Uid) (*t.Subscription, er
 	return &sub, nil
 }
 
-// SubsForUser loads a list of user's subscriptions to topics. Does NOT load Public value.
-// TODO: this is used only for presence notifications, no need to load Private either.
-func (a *adapter) SubsForUser(forUser t.Uid, keepDeleted bool, opts *t.QueryOpt) ([]t.Subscription, error) {
+// SubsForUser loads all user's subscriptions. Does NOT load Public or Private values and does
+// not load deleted subscriptions.
+func (a *adapter) SubsForUser(forUser t.Uid) ([]t.Subscription, error) {
 	q := `SELECT createdat,updatedat,deletedat,userid AS user,topic,delid,recvseqid,
-		readseqid,modewant,modegiven,private FROM subscriptions WHERE userid=?`
-
+		readseqid,modewant,modegiven FROM subscriptions WHERE userid=? AND deletedat IS NULL`
 	args := []interface{}{store.DecodeUid(forUser)}
-	if !keepDeleted {
-		// Filter out deleted rows.
-		q += " AND deletedat IS NULL"
-	}
-
-	limit := a.maxResults // maxResults here, not maxSubscribers
-	if opts != nil {
-		// Ignore IfModifiedSince - we must return all entries
-		// Those unmodified will be stripped of Public & Private.
-
-		if opts.Topic != "" {
-			q += " AND topic=?"
-			args = append(args, opts.Topic)
-		}
-		if opts.Limit > 0 && opts.Limit < limit {
-			limit = opts.Limit
-		}
-	}
-	q += " LIMIT ?"
-	args = append(args, limit)
 
 	ctx, cancel := a.getContext()
 	if cancel != nil {
@@ -1944,7 +1923,6 @@ func (a *adapter) SubsForUser(forUser t.Uid, keepDeleted bool, opts *t.QueryOpt)
 			break
 		}
 		ss.User = forUser.String()
-		ss.Private = fromJSON(ss.Private)
 		subs = append(subs, ss)
 	}
 	if err == nil {
@@ -2374,14 +2352,6 @@ func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.QueryOpt) (
 	return msgs, err
 }
 
-var dellog struct {
-	Topic      string
-	Deletedfor int64
-	Delid      int
-	Low        int
-	Hi         int
-}
-
 // Get ranges of deleted messages
 func (a *adapter) MessageGetDeleted(topic string, forUser t.Uid, opts *t.QueryOpt) ([]t.DelMessage, error) {
 	var limit = a.maxResults
@@ -2414,9 +2384,16 @@ func (a *adapter) MessageGetDeleted(topic string, forUser t.Uid, opts *t.QueryOp
 		return nil, err
 	}
 
+	var dellog struct {
+		Topic      string
+		Deletedfor int64
+		Delid      int
+		Low        int
+		Hi         int
+	}
 	var dmsgs []t.DelMessage
+	var dmsg t.DelMessage
 	for rows.Next() {
-		var dmsg t.DelMessage
 		if err = rows.StructScan(&dellog); err != nil {
 			dmsgs = nil
 			break

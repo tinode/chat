@@ -342,10 +342,10 @@ func (UsersObjMapper) UpdateState(uid types.Uid, state types.ObjState) error {
 	return adp.UserUpdate(uid, update)
 }
 
-// GetSubs loads a list of subscriptions for the given user.
-// Does not load Public, does not load deleted subscriptions.
-func (UsersObjMapper) GetSubs(id types.Uid, opts *types.QueryOpt) ([]types.Subscription, error) {
-	return adp.SubsForUser(id, false, opts)
+// GetSubs loads *all* subscriptions for the given user.
+// Does not load Public or Private, does not load deleted subscriptions.
+func (UsersObjMapper) GetSubs(id types.Uid) ([]types.Subscription, error) {
+	return adp.SubsForUser(id)
 }
 
 // FindSubs find a list of users and topics for the given tags. Results are formatted as subscriptions.

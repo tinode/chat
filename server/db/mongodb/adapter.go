@@ -1656,28 +1656,12 @@ func (a *adapter) SubscriptionGet(topic string, user t.Uid) (*t.Subscription, er
 	return sub, nil
 }
 
-// SubsForUser gets a list of topics of interest for a given user. Does NOT load Public value.
-func (a *adapter) SubsForUser(user t.Uid, keepDeleted bool, opts *t.QueryOpt) ([]t.Subscription, error) {
-	filter := b.M{"user": user.String()}
-	if !keepDeleted {
-		filter["deletedat"] = b.M{"$exists": false}
-	}
-	limit := a.maxResults
+// SubsForUser loads all subscriptions of a given user. It does NOT load Public or Private values,
+// does not load deleted subs.
+func (a *adapter) SubsForUser(user t.Uid) ([]t.Subscription, error) {
+	filter := b.M{"user": user.String(), "deletedat": b.M{"$exists": false}}
 
-	if opts != nil {
-		// Ignore IfModifiedSince - we must return all entries
-		// Those unmodified will be stripped of Public & Private.
-
-		if opts.Topic != "" {
-			filter["topic"] = opts.Topic
-		}
-		if opts.Limit > 0 && opts.Limit < limit {
-			limit = opts.Limit
-		}
-	}
-	findOpts := new(mdbopts.FindOptions).SetLimit(int64(limit))
-
-	cur, err := a.db.Collection("subscriptions").Find(a.ctx, filter, findOpts)
+	cur, err := a.db.Collection("subscriptions").Find(a.ctx, filter)
 	if err != nil {
 		return nil, err
 	}
@@ -1689,14 +1673,14 @@ func (a *adapter) SubsForUser(user t.Uid, keepDeleted bool, opts *t.QueryOpt) ([
 		if err := cur.Decode(&ss); err != nil {
 			return nil, err
 		}
-		ss.Private = unmarshalBsonD(ss.Private)
+		ss.Private = nil
 		subs = append(subs, ss)
 	}
 
 	return subs, cur.Err()
 }
 
-// SubsForTopic gets a list of subscriptions to a given topic.. Does NOT load Public value.
+// SubsForTopic gets a list of subscriptions to a given topic. Does NOT load Public value.
 func (a *adapter) SubsForTopic(topic string, keepDeleted bool, opts *t.QueryOpt) ([]t.Subscription, error) {
 	filter := b.M{"topic": topic}
 	if !keepDeleted {
@@ -1793,7 +1777,6 @@ func (a *adapter) SubsDelete(topic string, user t.Uid) error {
 	}); err != nil {
 		return err
 	}
-
 	return nil
 }
 
