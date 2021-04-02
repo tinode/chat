@@ -950,8 +950,8 @@ func (a *adapter) UserGetAll(ids ...t.Uid) ([]t.User, error) {
 		return nil, err
 	}
 
-	var user t.User
 	for rows.Next() {
+		var user t.User
 		if err = rows.StructScan(&user); err != nil {
 			users = nil
 			break
@@ -2415,8 +2415,8 @@ func (a *adapter) MessageGetDeleted(topic string, forUser t.Uid, opts *t.QueryOp
 	}
 
 	var dmsgs []t.DelMessage
-	var dmsg t.DelMessage
 	for rows.Next() {
+		var dmsg t.DelMessage
 		if err = rows.StructScan(&dellog); err != nil {
 			dmsgs = nil
 			break
