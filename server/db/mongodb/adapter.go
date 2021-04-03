@@ -1753,7 +1753,7 @@ func (a *adapter) SubsDelete(topic string, user t.Uid) error {
 
 	forUser := user.String()
 
-	if err = mdb.WithSession(a.ctx, sess, func(sc mdb.SessionContext) error {
+	return mdb.WithSession(a.ctx, sess, func(sc mdb.SessionContext) error {
 		if err := a.subsDelete(sc, b.M{"_id": topic + ":" + forUser}, false); err != nil {
 			return err
 		}
@@ -1774,10 +1774,7 @@ func (a *adapter) SubsDelete(topic string, user t.Uid) error {
 		}
 		// Commit changes.
 		return a.maybeCommitTransaction(sc, sess)
-	}); err != nil {
-		return err
-	}
-	return nil
+	})
 }
 
 // Delete/mark deleted subscriptions.
