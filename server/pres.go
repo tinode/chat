@@ -64,7 +64,7 @@ func (t *Topic) addToPerSubs(topic string, online, enabled bool) {
 // perSubs contains (a) topics that the user wants to notify of his presence and
 // (b) those which want to receive notifications from this user.
 func (t *Topic) loadContacts(uid types.Uid) error {
-	subs, err := store.Users.GetSubs(uid, nil)
+	subs, err := store.Users.GetSubs(uid)
 	if err != nil {
 		return err
 	}
@@ -263,10 +263,10 @@ func (t *Topic) presUsersOfInterest(what, ua string) {
 // Case A: user is being deleted, "gone"
 func presUsersOfInterestOffline(uid types.Uid, subs []types.Subscription, what string) {
 	// Push update to subscriptions
-	for _, sub := range subs {
+	for i := range subs {
 		globals.hub.route <- &ServerComMessage{
 			Pres:   &MsgServerPres{Topic: "me", What: what, Src: uid.UserId(), WantReply: false},
-			RcptTo: sub.Topic}
+			RcptTo: subs[i].Topic}
 	}
 }
 

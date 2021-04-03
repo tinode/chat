@@ -118,8 +118,9 @@ type Adapter interface {
 
 	// SubscriptionGet reads a subscription of a user to a topic
 	SubscriptionGet(topic string, user t.Uid) (*t.Subscription, error)
-	// SubsForUser gets a list of topics of interest for a given user. Does NOT load Public value.
-	SubsForUser(user t.Uid, keepDeleted bool, opts *t.QueryOpt) ([]t.Subscription, error)
+	// SubsForUser loads all subscriptions of a given user. Does NOT load Public or Private values,
+	// does not load deleted subscriptions.
+	SubsForUser(user t.Uid) ([]t.Subscription, error)
 	// SubsForTopic gets a list of subscriptions to a given topic.. Does NOT load Public value.
 	SubsForTopic(topic string, keepDeleted bool, opts *t.QueryOpt) ([]t.Subscription, error)
 	// SubsUpdate updates pasrt of a subscription object. Pass nil for fields which don't need to be updated

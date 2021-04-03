@@ -604,7 +604,7 @@ func replyDelUser(s *Session, msg *ClientComMessage) {
 	<-done
 
 	// Notify users of interest that the user is gone.
-	if uoi, err := store.Users.GetSubs(uid, nil); err == nil {
+	if uoi, err := store.Users.GetSubs(uid); err == nil {
 		presUsersOfInterestOffline(uid, uoi, "gone")
 	} else {
 		logs.Warn.Println("replyDelUser: failed to send notifications to users", err, s.sid)

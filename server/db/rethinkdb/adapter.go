@@ -1438,25 +1438,14 @@ func (a *adapter) SubscriptionGet(topic string, user t.Uid) (*t.Subscription, er
 	return &sub, nil
 }
 
-// SubsForUser loads a list of user's subscriptions to topics. Does NOT load Public value.
-func (a *adapter) SubsForUser(forUser t.Uid, keepDeleted bool, opts *t.QueryOpt) ([]t.Subscription, error) {
-	q := rdb.DB(a.dbName).Table("subscriptions").GetAllByIndex("User", forUser.String())
-	if !keepDeleted {
-		q = q.Filter(rdb.Row.HasFields("DeletedAt").Not())
-	}
-	limit := a.maxResults
-	if opts != nil {
-		// Ignore IfModifiedSince - we must return all entries
-		// Those unmodified will be stripped of Public & Private.
-
-		if opts.Topic != "" {
-			q = q.Filter(rdb.Row.Field("Topic").Eq(opts.Topic))
-		}
-		if opts.Limit > 0 && opts.Limit < limit {
-			limit = opts.Limit
-		}
-	}
-	q = q.Limit(limit)
+// SubsForUser loads all user's subscriptions. Does NOT load Public or Private values and does
+// not load deleted subscriptions.
+func (a *adapter) SubsForUser(forUser t.Uid) ([]t.Subscription, error) {
+	q := rdb.DB(a.dbName).
+		Table("subscriptions").
+		GetAllByIndex("User", forUser.String()).
+		Filter(rdb.Row.HasFields("DeletedAt").Not()).
+		Without("Private")
 
 	cursor, err := q.Run(a.conn)
 	if err != nil {
