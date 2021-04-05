@@ -1437,7 +1437,7 @@ func (t *Topic) thisUserSub(sess *Session, pkt *ClientComMessage, asUid types.Ui
 			}
 		} else {
 			// Add subscribed user to cache.
-			usersRegisterUser(asUid, true)
+			usersRegisterUser(asUid, t.lastID-userData.readID, true)
 			// Notify plugins of a new subscription
 			pluginSubscription(sub, plgActCreate)
 		}
@@ -1742,7 +1742,7 @@ func (t *Topic) anotherUserSub(sess *Session, asUid, target types.Uid, asChan bo
 		t.computePerUserAcsUnion()
 
 		// Cache user's record
-		usersRegisterUser(target, true)
+		usersRegisterUser(target, t.lastID-userData.readID, true)
 
 		// Send push notification for the new subscription.
 		if pushRcpt := t.pushForSub(asUid, target, userData.modeWant, userData.modeGiven, now); pushRcpt != nil {
@@ -2990,7 +2990,7 @@ func (t *Topic) evictUser(uid types.Uid, unsub bool, skip string) {
 			t.computePerUserAcsUnion()
 
 			if !pud.isChan {
-				usersRegisterUser(uid, false)
+				usersRegisterUser(uid, -1, false)
 			}
 		}
 	} else if ok {

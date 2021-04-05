@@ -670,10 +670,13 @@ type UserCacheReq struct {
 	// UserId is set when count of unread messages is updated for a single user or
 	// when the user is being deleted.
 	UserId types.Uid
-	// UserIdList  is set when subscription count is updated for users of a topic.
-	UserIdList []types.Uid
 	// Unread count (UserId is set)
 	Unread int
+
+	// UserIdList  is set when subscription count is updated for users of a topic.
+	UserIdList []types.Uid
+	// Unread counts for users specified in UserIdList (in the same order).
+	UnreadList []int
 	// In case of set UserId: treat Unread count as an increment as opposite to the final value.
 	// In case of set UserIdList: intement (Inc == true) or decrement subscription count by one.
 	Inc bool
@@ -771,13 +774,14 @@ func usersPush(rcpt *push.Receipt) {
 
 // Start tracking a single user. Used for cache management.
 // 'add' increments/decrements user's count of subscribed topics.
-func usersRegisterUser(uid types.Uid, add bool) {
+func usersRegisterUser(uid types.Uid, unread int, add bool) {
 	if globals.usersUpdate == nil {
 		return
 	}
 
-	upd := &UserCacheReq{UserIdList: make([]types.Uid, 1), Inc: add}
+	upd := &UserCacheReq{UserIdList: make([]types.Uid, 1), UnreadList: make([]int, 1), Inc: add}
 	upd.UserIdList[0] = uid
+	upd.UnreadList[0] = unread
 
 	if globals.cluster.isRemoteTopic(uid.UserId()) {
 		// Send request to remote node which owns the user.
@@ -834,10 +838,13 @@ func usersRegisterTopic(t *Topic, add bool) {
 			// Skip channel subscribers.
 			continue
 		}
+		unread := t.lastID - pud.readID
 		if globals.cluster.isRemoteTopic(uid.UserId()) {
 			remote.UserIdList = append(remote.UserIdList, uid)
+			remote.UnreadList = append(remote.UnreadList, unread)
 		} else {
 			local.UserIdList = append(local.UserIdList, uid)
+			local.UnreadList = append(local.UnreadList, unread)
 		}
 	}
 
@@ -875,7 +882,8 @@ func userUpdater() {
 			return -1
 		}
 
-		if uce.unread < 0 {
+		if uce.unread == -1 {
+			logs.Err.Printf("users: loading unread count lazily for user %s", uid)
 			count, err := store.Users.GetUnreadCount(uid)
 			if err != nil {
 				logs.Warn.Println("users: failed to load unread count for user ", uid, ": ", err)
@@ -923,12 +931,12 @@ func userUpdater() {
 
 		// Request to add/remove user from cache.
 		if len(upd.UserIdList) > 0 {
-			for _, uid := range upd.UserIdList {
+			for i, uid := range upd.UserIdList {
 				uce, ok := usersCache[uid]
 				if upd.Inc {
-					if !ok {
-						// This is a registration of a new user.
-						// We are not loading unread count here, so set it to -1.
+					if upd.UnreadList[i] >= 0 {
+						uce.unread = upd.UnreadList[i]
+					} else {
 						uce.unread = -1
 					}
 					uce.topics++
