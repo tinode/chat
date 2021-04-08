@@ -1,6 +1,7 @@
 package main
 
 import (
+	"container/heap"
 	"time"
 
 	"github.com/tinode/chat/server/auth"
@@ -8,6 +9,14 @@ import (
 	"github.com/tinode/chat/server/push"
 	"github.com/tinode/chat/server/store"
 	"github.com/tinode/chat/server/store/types"
+)
+
+const (
+	// Unread counter update return codes.
+	// Counter not initialized, IO pending.
+	unreadUpdateIOPending = -1
+	// Counter initialization error.
+	unreadUpdateError = -2
 )
 
 // Process request for a new account.
@@ -670,13 +679,11 @@ type UserCacheReq struct {
 	// UserId is set when count of unread messages is updated for a single user or
 	// when the user is being deleted.
 	UserId types.Uid
+	// UserIdList  is set when subscription count is updated for users of a topic.
+	UserIdList []types.Uid
 	// Unread count (UserId is set)
 	Unread int
 
-	// UserIdList  is set when subscription count is updated for users of a topic.
-	UserIdList []types.Uid
-	// Unread counts for users specified in UserIdList (in the same order).
-	UnreadList []int
 	// In case of set UserId: treat Unread count as an increment as opposite to the final value.
 	// In case of set UserIdList: intement (Inc == true) or decrement subscription count by one.
 	Inc bool
@@ -692,11 +699,86 @@ type userCacheEntry struct {
 	topics int
 }
 
+// Preserved update entry kept while we read the unread counter from the DB.
+type bufferedUpdate struct {
+	val int
+	inc bool
+}
+
+// Unread counter read result.
+type ioResult struct {
+	uid types.Uid
+	val int
+	err error
+}
+
+// Represents pending push notification receipt.
+type pendingReceipt struct {
+	// Number of unread counters currently being read from the DB.
+	pendingIOs int
+	// The index is needed by update and is maintained by the heap.Interface methods.
+	index int
+	// Underlying receipt.
+	rcpt *push.Receipt
+}
+
+// Pending pushes organized as a priority queue (priority = number of pending IOs).
+// This way we can quickly discover.
+type pendingReceiptsQueue []*pendingReceipt
+
+// Heap interface methods.
+func (pq pendingReceiptsQueue) Len() int { return len(pq) }
+
+func (pq pendingReceiptsQueue) Less(i, j int) bool {
+	// We want Pop to give us the highest, not lowest, priority so we use greater than here.
+	return pq[i].pendingIOs < pq[j].pendingIOs
+}
+
+func (pq pendingReceiptsQueue) Swap(i, j int) {
+	pq[i], pq[j] = pq[j], pq[i]
+	pq[i].index = i
+	pq[j].index = j
+}
+
+func (pq *pendingReceiptsQueue) Push(x interface{}) {
+	n := len(*pq)
+	item := x.(*pendingReceipt)
+	item.index = n
+	*pq = append(*pq, item)
+}
+
+func (pq *pendingReceiptsQueue) Pop() interface{} {
+	old := *pq
+	n := len(old)
+	item := old[n-1]
+	old[n-1] = nil  // avoid memory leak
+	item.index = -1 // for safety
+	*pq = old[0 : n-1]
+	return item
+}
+
+func (pq *pendingReceiptsQueue) fix(push *pendingReceipt) {
+	heap.Fix(pq, push.index)
+}
+
 var usersCache map[types.Uid]userCacheEntry
+
+// Unread counter updates blocked by IO on per user basis. We flush them when the IO completes.
+var perUserBuffers map[types.Uid][]*bufferedUpdate
+
+// Push notification receipts blocked by IO (unread counters for some of the recepients
+// are being read from the database) on the per user basis.
+var perUserPendingReceipts map[types.Uid][]*pendingReceipt
+
+// All pending push receipts organized as a priority queue by the number of pending IOs.
+var receiptQueue pendingReceiptsQueue
 
 // Initialize users cache.
 func usersInit() {
 	usersCache = make(map[types.Uid]userCacheEntry)
+	perUserBuffers = make(map[types.Uid][]*bufferedUpdate)
+	perUserPendingReceipts = make(map[types.Uid][]*pendingReceipt)
+	receiptQueue = pendingReceiptsQueue{}
 
 	globals.usersUpdate = make(chan *UserCacheReq, 1024)
 
@@ -774,14 +856,13 @@ func usersPush(rcpt *push.Receipt) {
 
 // Start tracking a single user. Used for cache management.
 // 'add' increments/decrements user's count of subscribed topics.
-func usersRegisterUser(uid types.Uid, unread int, add bool) {
+func usersRegisterUser(uid types.Uid, add bool) {
 	if globals.usersUpdate == nil {
 		return
 	}
 
-	upd := &UserCacheReq{UserIdList: make([]types.Uid, 1), UnreadList: make([]int, 1), Inc: add}
+	upd := &UserCacheReq{UserIdList: make([]types.Uid, 1), Inc: add}
 	upd.UserIdList[0] = uid
-	upd.UnreadList[0] = unread
 
 	if globals.cluster.isRemoteTopic(uid.UserId()) {
 		// Send request to remote node which owns the user.
@@ -838,13 +919,10 @@ func usersRegisterTopic(t *Topic, add bool) {
 			// Skip channel subscribers.
 			continue
 		}
-		unread := t.lastID - pud.readID
 		if globals.cluster.isRemoteTopic(uid.UserId()) {
 			remote.UserIdList = append(remote.UserIdList, uid)
-			remote.UnreadList = append(remote.UnreadList, unread)
 		} else {
 			local.UserIdList = append(local.UserIdList, uid)
-			local.UnreadList = append(local.UnreadList, unread)
 		}
 	}
 
@@ -875,21 +953,34 @@ func usersRequestFromCluster(req *UserCacheReq) {
 
 // The go routine for processing updates to users cache.
 func userUpdater() {
+	ioDone := make(chan *ioResult, 1024)
 	unreadUpdater := func(uid types.Uid, val int, inc bool) int {
 		uce, ok := usersCache[uid]
 		if !ok {
 			logs.Err.Println("ERROR: attempt to update unread count for user who has not been loaded", uid)
-			return -1
+			return unreadUpdateError
 		}
 
-		if uce.unread == -1 {
-			logs.Err.Printf("users: loading unread count lazily for user %s", uid)
-			count, err := store.Users.GetUnreadCount(uid)
-			if err != nil {
-				logs.Warn.Println("users: failed to load unread count for user ", uid, ": ", err)
-				return -1
+		if uce.unread < 0 {
+			// Unread count not initialized yet. Maybe start a DB read?
+			if updateBuf, ioInProgress := perUserBuffers[uid]; ioInProgress {
+				// Buffer this update.
+				updateBuf = append(updateBuf, &bufferedUpdate{val: val, inc: inc})
+				perUserBuffers[uid] = updateBuf
+			} else {
+				// Read the counter from DB.
+				updateBuf = []*bufferedUpdate{}
+				perUserBuffers[uid] = updateBuf
+				go func() {
+					count, err := store.Users.GetUnreadCount(uid)
+					if err != nil {
+						logs.Warn.Println("users: failed to load unread count for user ", uid, ": ", err)
+					}
+					ioDone <- &ioResult{uid: uid, val: count, err: err}
+				}()
 			}
-			uce.unread = count
+			return unreadUpdateIOPending
+
 		} else if inc {
 			uce.unread += val
 		} else {
@@ -901,70 +992,147 @@ func userUpdater() {
 		return uce.unread
 	}
 
-	for upd := range globals.usersUpdate {
-		if globals.shuttingDown {
-			// If shutdown is in progress we don't care to process anything.
-			// ignore all calls.
-			continue
-		}
-
-		// Shutdown requested.
-		if upd == nil {
-			globals.usersUpdate = nil
-			// Dont' care to close the channel.
-			break
-		}
-
-		// Request to send push notifications.
-		if upd.PushRcpt != nil {
-			for uid, rcptTo := range upd.PushRcpt.To {
-				// Handle update
-				unread := unreadUpdater(uid, 1, true)
-				if unread >= 0 {
-					rcptTo.Unread = unread
-					upd.PushRcpt.To[uid] = rcptTo
-				}
-			}
-			push.Push(upd.PushRcpt)
-			continue
-		}
-
-		// Request to add/remove user from cache.
-		if len(upd.UserIdList) > 0 {
-			for i, uid := range upd.UserIdList {
-				uce, ok := usersCache[uid]
-				if upd.Inc {
-					if upd.UnreadList[i] >= 0 {
-						uce.unread = upd.UnreadList[i]
-					} else {
-						uce.unread = -1
-					}
-					uce.topics++
-					usersCache[uid] = uce
-				} else if ok {
-					if uce.topics > 1 {
-						uce.topics--
-						usersCache[uid] = uce
-					} else {
-						// Remove user from cache
-						delete(usersCache, uid)
+	for {
+		select {
+		case io := <-ioDone:
+			// Unread counter read has completed.
+			updateBuf, ok := perUserBuffers[io.uid]
+			logs.Warn.Printf("users: done IO for uid %s", io.uid)
+			// Stop buffering updates. New updates will be handled normally.
+			delete(perUserBuffers, io.uid)
+			if io.err == nil {
+				// Update counter.
+				count := io.val
+				if ok {
+					for _, upd := range updateBuf {
+						if upd.inc {
+							count += upd.val
+						} else {
+							count = upd.val
+						}
 					}
 				} else {
-					// BUG!
-					logs.Err.Println("ERROR: request to unregister user which has not been registered", uid)
+					logs.Warn.Println("ERROR: io didn't have an update buffer, uid ", io.uid)
 				}
+				if uce, ok := usersCache[io.uid]; ok {
+					if uce.unread >= 0 {
+						logs.Warn.Println("users: unread count double initialization, uid ", io.uid)
+					}
+					uce.unread = count
+					usersCache[io.uid] = uce
+				}
+			} else {
+				logs.Err.Printf("users: io failed for uid[%s]: %s", io.uid, io.err)
 			}
-			continue
-		}
+			// Now that the unread counter is initialized, handle pending push notification receipts.
+			// Decrease pending IO counts in pending push receipts for this user.
+			if pendingReceipts, ok := perUserPendingReceipts[io.uid]; ok {
+				for _, pp := range pendingReceipts {
+					pp.pendingIOs--
+					receiptQueue.fix(pp)
+				}
+				delete(perUserPendingReceipts, io.uid)
+			}
+			// Send ready receipts.
+			for receiptQueue.Len() > 0 && receiptQueue[0].pendingIOs == 0 {
+				rcpt := heap.Pop(&receiptQueue).(*pendingReceipt).rcpt
+				for uid, rcptTo := range rcpt.To {
+					if uce, ok := usersCache[uid]; ok && uce.unread >= 0 {
+						rcptTo.Unread = uce.unread
+						rcpt.To[uid] = rcptTo
+					}
+				}
+				logs.Warn.Printf("users: sending push: %+v", rcpt)
+				push.Push(rcpt)
+			}
+		case upd := <-globals.usersUpdate:
+			if globals.shuttingDown {
+				// If shutdown is in progress we don't care to process anything.
+				// ignore all calls.
+				continue
+			}
 
-		if upd.Gone {
-			// User is being deleted. Don't care if there is a record.
-			delete(usersCache, upd.UserId)
-			continue
-		}
+			// Shutdown requested.
+			if upd == nil {
+				globals.usersUpdate = nil
+				// Dont' care to close the channel.
+				break
+			}
 
-		// Request to update unread count.
-		unreadUpdater(upd.UserId, upd.Unread, upd.Inc)
+			// Request to send push notifications.
+			if upd.PushRcpt != nil {
+				// List of uids for which the unread count is being read from the DB.
+				pendingUsers := []types.Uid{}
+				for uid, rcptTo := range upd.PushRcpt.To {
+					// Handle update
+					unread := unreadUpdater(uid, 1, true)
+					if unread >= 0 {
+						rcptTo.Unread = unread
+						upd.PushRcpt.To[uid] = rcptTo
+					} else if unread == unreadUpdateIOPending {
+						pendingUsers = append(pendingUsers, uid)
+					}
+				}
+				if len(pendingUsers) == 0 {
+					// All data present in memory. Just send the push.
+					push.Push(upd.PushRcpt)
+				} else {
+					// We are waiting for IO. Add this receipt to the queues.
+					pp := &pendingReceipt{
+						pendingIOs: len(pendingUsers),
+						rcpt:       upd.PushRcpt,
+					}
+					logs.Warn.Printf("users: scheduling pending push rcpt: %+v", pp)
+					for _, uid := range pendingUsers {
+						var queue []*pendingReceipt
+						var ok bool
+						if queue, ok = perUserPendingReceipts[uid]; !ok {
+							queue = []*pendingReceipt{}
+						}
+						perUserPendingReceipts[uid] = append(queue, pp)
+					}
+					heap.Push(&receiptQueue, pp)
+				}
+				continue
+			}
+
+			// Request to add/remove user from cache.
+			if len(upd.UserIdList) > 0 {
+				for _, uid := range upd.UserIdList {
+					uce, ok := usersCache[uid]
+					if upd.Inc {
+						if !ok {
+							// This is a registration of a new user.
+							// We are not loading unread count here, so set it to -1.
+							uce.unread = -1
+						}
+						uce.topics++
+						usersCache[uid] = uce
+					} else if ok {
+						if uce.topics > 1 {
+							uce.topics--
+							usersCache[uid] = uce
+						} else {
+							// Remove user from cache
+							delete(usersCache, uid)
+						}
+					} else {
+						// BUG!
+						logs.Err.Println("ERROR: request to unregister user which has not been registered", uid)
+					}
+				}
+				continue
+			}
+
+			if upd.Gone {
+				// User is being deleted. Don't care if there is a record.
+				delete(usersCache, upd.UserId)
+				continue
+			}
+
+			// Request to update unread count.
+			unreadUpdater(upd.UserId, upd.Unread, upd.Inc)
+		}
 	}
 
 	logs.Info.Println("users: shutdown")
