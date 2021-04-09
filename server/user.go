@@ -723,7 +723,7 @@ type pendingReceipt struct {
 }
 
 // Pending pushes organized as a priority queue (priority = number of pending IOs).
-// This way we can quickly discover.
+// It allows to quickly discover receipts ready for sending (num pending IOs is 0).
 type pendingReceiptsQueue []*pendingReceipt
 
 // Heap interface methods.
@@ -757,29 +757,12 @@ func (pq *pendingReceiptsQueue) Pop() interface{} {
 	return item
 }
 
-func (pq *pendingReceiptsQueue) fix(push *pendingReceipt) {
-	heap.Fix(pq, push.index)
+func (pq *pendingReceiptsQueue) fix(index int) {
+	heap.Fix(pq, index)
 }
-
-var usersCache map[types.Uid]userCacheEntry
-
-// Unread counter updates blocked by IO on per user basis. We flush them when the IO completes.
-var perUserBuffers map[types.Uid][]*bufferedUpdate
-
-// Push notification receipts blocked by IO (unread counters for some of the recepients
-// are being read from the database) on the per user basis.
-var perUserPendingReceipts map[types.Uid][]*pendingReceipt
-
-// All pending push receipts organized as a priority queue by the number of pending IOs.
-var receiptQueue pendingReceiptsQueue
 
 // Initialize users cache.
 func usersInit() {
-	usersCache = make(map[types.Uid]userCacheEntry)
-	perUserBuffers = make(map[types.Uid][]*bufferedUpdate)
-	perUserPendingReceipts = make(map[types.Uid][]*pendingReceipt)
-	receiptQueue = pendingReceiptsQueue{}
-
 	globals.usersUpdate = make(chan *UserCacheReq, 1024)
 
 	go userUpdater()
@@ -953,7 +936,22 @@ func usersRequestFromCluster(req *UserCacheReq) {
 
 // The go routine for processing updates to users cache.
 func userUpdater() {
+	// Caches unread counters and numbers of topics the user's subscribed to.
+	usersCache := make(map[types.Uid]userCacheEntry)
+
+	// Unread counter updates blocked by IO on per user basis. We flush them when the IO completes.
+	perUserBuffers := make(map[types.Uid][]bufferedUpdate)
+
+	// Push notification receipts blocked by IO (unread counters for some of the recepients
+	// are being read from the database) on the per user basis.
+	perUserPendingReceipts := make(map[types.Uid][]*pendingReceipt)
+
+	// All pending push receipts organized as a priority queue by the number of pending IOs.
+	receiptQueue := pendingReceiptsQueue{}
+
+	// IO callback queue.
 	ioDone := make(chan *ioResult, 1024)
+
 	unreadUpdater := func(uid types.Uid, val int, inc bool) int {
 		uce, ok := usersCache[uid]
 		if !ok {
@@ -962,14 +960,14 @@ func userUpdater() {
 		}
 
 		if uce.unread < 0 {
-			// Unread count not initialized yet. Maybe start a DB read?
+			// Unread counter not initialized yet. Maybe start a DB read?
 			if updateBuf, ioInProgress := perUserBuffers[uid]; ioInProgress {
 				// Buffer this update.
-				updateBuf = append(updateBuf, &bufferedUpdate{val: val, inc: inc})
+				updateBuf = append(updateBuf, bufferedUpdate{val: val, inc: inc})
 				perUserBuffers[uid] = updateBuf
 			} else {
 				// Read the counter from DB.
-				updateBuf = []*bufferedUpdate{}
+				updateBuf = []bufferedUpdate{}
 				perUserBuffers[uid] = updateBuf
 				go func() {
 					count, err := store.Users.GetUnreadCount(uid)
@@ -997,7 +995,6 @@ func userUpdater() {
 		case io := <-ioDone:
 			// Unread counter read has completed.
 			updateBuf, ok := perUserBuffers[io.uid]
-			logs.Warn.Printf("users: done IO for uid %s", io.uid)
 			// Stop buffering updates. New updates will be handled normally.
 			delete(perUserBuffers, io.uid)
 			if io.err == nil {
@@ -1020,6 +1017,8 @@ func userUpdater() {
 					}
 					uce.unread = count
 					usersCache[io.uid] = uce
+				} else {
+					logs.Warn.Println("users: missing users cache entry after IO completion, uid ", io.uid)
 				}
 			} else {
 				logs.Err.Printf("users: io failed for uid[%s]: %s", io.uid, io.err)
@@ -1029,7 +1028,7 @@ func userUpdater() {
 			if pendingReceipts, ok := perUserPendingReceipts[io.uid]; ok {
 				for _, pp := range pendingReceipts {
 					pp.pendingIOs--
-					receiptQueue.fix(pp)
+					receiptQueue.fix(pp.index)
 				}
 				delete(perUserPendingReceipts, io.uid)
 			}
@@ -1042,7 +1041,6 @@ func userUpdater() {
 						rcpt.To[uid] = rcptTo
 					}
 				}
-				logs.Warn.Printf("users: sending push: %+v", rcpt)
 				push.Push(rcpt)
 			}
 		case upd := <-globals.usersUpdate:
@@ -1082,7 +1080,6 @@ func userUpdater() {
 						pendingIOs: len(pendingUsers),
 						rcpt:       upd.PushRcpt,
 					}
-					logs.Warn.Printf("users: scheduling pending push rcpt: %+v", pp)
 					for _, uid := range pendingUsers {
 						var queue []*pendingReceipt
 						var ok bool
