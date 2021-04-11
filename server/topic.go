@@ -653,6 +653,7 @@ func (t *Topic) handleLeaveRequest(leave *sessionLeave) {
 			pud = t.perUser[uid]
 			if !leave.sess.background {
 				pud.online--
+				t.perUser[uid] = pud
 			}
 		} else if len(pssd.muids) > 0 {
 			// UID is zero: multiplexing session is dropped altogether.
@@ -723,8 +724,6 @@ func (t *Topic) handleLeaveRequest(leave *sessionLeave) {
 		}
 
 		if !uid.IsZero() {
-			t.perUser[uid] = pud
-
 			// Respond if contains an id.
 			if leave.pkt != nil {
 				leave.sess.queueOut(NoErrReply(leave.pkt, now))
@@ -2896,7 +2895,6 @@ func (t *Topic) replyDelSub(sess *Session, asUid types.Uid, msg *ClientComMessag
 }
 
 // replyLeaveUnsub is request to unsubscribe user and detach all user's sessions from topic.
-// FIXME: if grp subscription does not exist, replyLeaveUnsub will replace grpXXX with chnXXX.
 func (t *Topic) replyLeaveUnsub(sess *Session, msg *ClientComMessage, asUid types.Uid) error {
 	now := types.TimeNow()
 
@@ -3168,7 +3166,7 @@ func (t *Topic) pushForData(fromUid types.Uid, data *MsgServerData) *push.Receip
 			continue
 		}
 		mode := pud.modeWant & pud.modeGiven
-		if mode.IsPresencer() && mode.IsReader() && !pud.deleted {
+		if mode.IsPresencer() && mode.IsReader() && !pud.deleted && !pud.isChan {
 			receipt.To[uid] = push.Recipient{
 				// Number of sessions this data message will be delivered to.
 				// Push notifications sent to users with non-zero online sessions will be marked silent.
