@@ -323,6 +323,8 @@ func PrepareNotifications(rcpt *push.Receipt, config *AndroidConfig) []MessageDa
 		topic := rcpt.Channel
 		userData := clonePayload(data)
 		userData["topic"] = topic
+		// Channel receiver should not know the ID of the message sender.
+		delete(userData, "xfrom")
 		msg := fcm.Message{
 			Topic: topic,
 			Data:  userData,
