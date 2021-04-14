@@ -58,8 +58,8 @@ This will be eventually packaged into a docker container.
 
 ### Experiments
 
-We have tested our single-server Tinode synthetic setup with 10000 accounts on a 2 CPU box.
+We have tested our single-server Tinode synthetic setup with 50000 accounts on a 4 CPU box in the cloud.
 As the load increases, before starting to drop:
 
-* The server can easily sustain 10000 concurrently connected sessions.
+* The server can sustain 50000 concurrently connected sessions.
 * An individual group topic was able to sustain 1500 concurrent sessions.
