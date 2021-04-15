@@ -58,7 +58,7 @@ This will be eventually packaged into a docker container.
 
 ### Experiments
 
-We have tested our single-server Tinode synthetic setup with 50000 accounts on a 4 CPU box in the cloud.
+We have tested our single-server Tinode synthetic setup with 50000 accounts on a standard `t3.xlarge` AWS box (4 vCPUs, 16GiB, 5Gbps network) with the `mysql` backend.
 As the load increases, before starting to drop:
 
 * The server can sustain 50000 concurrently connected sessions.
