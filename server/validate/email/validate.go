@@ -169,7 +169,7 @@ func (v *validator) Init(jsonconf string) error {
 	}
 	v.senderEmail = sender.Address
 
-	// Check if login is provided explicitly. Otherwise parse Sender and use that as login for authentication.
+	// Enable auth if login is provided.
 	if v.Login != "" {
 		v.auth = smtp.PlainAuth("", v.Login, v.SenderPassword, v.SMTPAddr)
 	}
