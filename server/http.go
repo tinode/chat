@@ -339,7 +339,7 @@ func authHttpRequest(req *http.Request) (types.Uid, []byte, error) {
 			return uid, nil, types.ErrMalformed
 		}
 
-		if authhdl := store.GetLogicalAuthHandler(authMethod); authhdl != nil {
+		if authhdl := store.Store.GetLogicalAuthHandler(authMethod); authhdl != nil {
 			rec, challenge, err := authhdl.Authenticate(decodedSecret[:n], getRemoteAddr(req))
 			if err != nil {
 				return uid, nil, err

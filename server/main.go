@@ -354,13 +354,13 @@ func main() {
 		logs.Info.Printf("Profiling info saved to '%s.(cpu|mem)'", *pprofFile)
 	}
 
-	err := store.Open(workerId, config.Store)
+	err := store.Store.Open(workerId, config.Store)
 	if err != nil {
 		logs.Err.Fatal("Failed to connect to DB: ", err)
 	}
-	logs.Info.Println("DB adapter", store.GetAdapterName())
+	logs.Info.Println("DB adapter", store.Store.GetAdapterName())
 	defer func() {
-		store.Close()
+		store.Store.Close()
 		logs.Info.Println("Closed database connection(s)")
 		logs.Info.Println("All done, good bye")
 	}()
@@ -378,9 +378,9 @@ func main() {
 	// by the client, e.g. 'email' or 'tel'.
 	globals.immutableTagNS = make(map[string]bool)
 
-	authNames := store.GetAuthNames()
+	authNames := store.Store.GetAuthNames()
 	for _, name := range authNames {
-		if authhdl := store.GetLogicalAuthHandler(name); authhdl == nil {
+		if authhdl := store.Store.GetLogicalAuthHandler(name); authhdl == nil {
 			logs.Err.Fatalln("Unknown authenticator", name)
 		} else if jsconf := config.Auth[name]; jsconf != nil {
 			if err := authhdl.Init(jsconf, name); err != nil {
@@ -437,7 +437,7 @@ func main() {
 			continue
 		}
 
-		if val := store.GetValidator(name); val == nil {
+		if val := store.Store.GetValidator(name); val == nil {
 			logs.Err.Fatal("Config provided for an unknown validator '" + name + "'")
 		} else if err = val.Init(string(vconf.Config)); err != nil {
 			logs.Err.Fatal("Failed to init validator '"+name+"': ", err)
@@ -506,7 +506,7 @@ func main() {
 				if params := config.Media.Handlers[config.Media.UseHandler]; params != nil {
 					conf = string(params)
 				}
-				if err = store.UseMediaHandler(config.Media.UseHandler, conf); err != nil {
+				if err = store.Store.UseMediaHandler(config.Media.UseHandler, conf); err != nil {
 					logs.Err.Fatalf("Failed to init media handler '%s': %s", config.Media.UseHandler, err)
 				}
 			}

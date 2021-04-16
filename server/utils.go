@@ -435,7 +435,7 @@ func rewriteTag(orig, countryCode string, withLogin bool) string {
 	param := map[string]interface{}{"countryCode": countryCode}
 	for name, conf := range globals.validators {
 		if conf.addToTags {
-			val := store.GetValidator(name)
+			val := store.Store.GetValidator(name)
 			if tag, _ := val.PreCheck(orig, param); tag != "" {
 				return tag
 			}
@@ -444,9 +444,9 @@ func rewriteTag(orig, countryCode string, withLogin bool) string {
 
 	// Try authenticators now.
 	if withLogin {
-		auths := store.GetAuthNames()
+		auths := store.Store.GetAuthNames()
 		for _, name := range auths {
-			auth := store.GetAuthHandler(name)
+			auth := store.Store.GetAuthHandler(name)
 			if tag := auth.AsTag(orig); tag != "" {
 				return tag
 			}

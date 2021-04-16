@@ -75,7 +75,7 @@ func statsInit(mux *http.ServeMux, path string) {
 }
 
 func statsRegisterDbStats() {
-	if f := store.DbStats(); f != nil {
+	if f := store.Store.DbStats(); f != nil {
 		expvar.Publish("DbStats", expvar.Func(f))
 	}
 }

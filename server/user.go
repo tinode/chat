@@ -29,7 +29,7 @@ func replyCreateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 	}
 
 	// Find authenticator for the requested scheme.
-	authhdl := store.GetLogicalAuthHandler(msg.Acc.Scheme)
+	authhdl := store.Store.GetLogicalAuthHandler(msg.Acc.Scheme)
 	if authhdl == nil {
 		// New accounts must have an authentication scheme
 		s.queueOut(ErrMalformed(msg.Id, "", msg.Timestamp))
@@ -84,7 +84,7 @@ func replyCreateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 	creds := normalizeCredentials(msg.Acc.Cred, true)
 	for i := range creds {
 		cr := &creds[i]
-		vld := store.GetValidator(cr.Method)
+		vld := store.Store.GetValidator(cr.Method)
 		if _, err := vld.PreCheck(cr.Value, cr.Params); err != nil {
 			logs.Warn.Println("create user: failed credential pre-check", cr, err, s.sid)
 			s.queueOut(decodeStoreError(err, msg.Id, "", msg.Timestamp,
@@ -155,7 +155,7 @@ func replyCreateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 	}
 
 	// Save credentials, update tags if necessary.
-	tmpToken, _, _ := store.GetLogicalAuthHandler("token").GenSecret(&auth.Rec{
+	tmpToken, _, _ := store.Store.GetLogicalAuthHandler("token").GenSecret(&auth.Rec{
 		Uid:       user.Uid(),
 		AuthLevel: auth.LevelNone,
 		Lifetime:  auth.Duration(time.Hour * 24),
@@ -267,7 +267,7 @@ func replyUpdateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 			return
 		}
 		// Handle request to update credentials.
-		tmpToken, _, _ := store.GetLogicalAuthHandler("token").GenSecret(&auth.Rec{
+		tmpToken, _, _ := store.Store.GetLogicalAuthHandler("token").GenSecret(&auth.Rec{
 			Uid:       uid,
 			AuthLevel: auth.LevelNone,
 			Lifetime:  auth.Duration(time.Hour * 24),
@@ -310,7 +310,7 @@ func replyUpdateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 
 // Authentication update
 func updateUserAuth(msg *ClientComMessage, user *types.User, rec *auth.Rec, remoteAddr string) error {
-	authhdl := store.GetLogicalAuthHandler(msg.Acc.Scheme)
+	authhdl := store.Store.GetLogicalAuthHandler(msg.Acc.Scheme)
 	if authhdl != nil {
 		// Request to update auth of an existing account. Only basic & rest auth are currently supported
 
@@ -340,7 +340,7 @@ func addCreds(uid types.Uid, creds []MsgCredClient, extraTags []string, lang str
 	var validated []string
 	for i := range creds {
 		cr := &creds[i]
-		vld := store.GetValidator(cr.Method)
+		vld := store.Store.GetValidator(cr.Method)
 		if vld == nil {
 			// Ignore unknown validator.
 			continue
@@ -408,7 +408,7 @@ func validatedCreds(uid types.Uid, authLvl auth.Level, creds []MsgCredClient, er
 			continue
 		}
 
-		vld := store.GetValidator(cr.Method) // No need to check for nil, unknown methods are removed earlier.
+		vld := store.Store.GetValidator(cr.Method) // No need to check for nil, unknown methods are removed earlier.
 		value, err := vld.Check(uid, cr.Response)
 		if err != nil {
 			// Check failed.
@@ -457,7 +457,7 @@ func validatedCreds(uid types.Uid, authLvl auth.Level, creds []MsgCredClient, er
 // deleteCred deletes user's credential.
 // Returns full set of remaining tags or nil if tags are unchanged.
 func deleteCred(uid types.Uid, authLvl auth.Level, cred *MsgCredClient) ([]string, error) {
-	vld := store.GetValidator(cred.Method)
+	vld := store.Store.GetValidator(cred.Method)
 	if vld == nil || cred.Value == "" {
 		// Reject invalid request: unknown validation method or missing credential value.
 		return nil, types.ErrMalformed
@@ -589,9 +589,9 @@ func replyDelUser(s *Session, msg *ClientComMessage) {
 	}
 
 	// Disable all authenticators
-	authnames := store.GetAuthNames()
+	authnames := store.Store.GetAuthNames()
 	for _, name := range authnames {
-		if err := store.GetAuthHandler(name).DelRecords(uid); err != nil {
+		if err := store.Store.GetAuthHandler(name).DelRecords(uid); err != nil {
 			// This could be completely benign, i.e. authenticator exists but not used.
 			logs.Warn.Println("replyDelUser: failed to delete auth record", uid.UserId(), name, err, s.sid)
 			if storeErr, ok := err.(types.StoreError); ok && storeErr == types.ErrUnsupported {

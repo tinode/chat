@@ -762,7 +762,7 @@ func (s *Session) hello(msg *ClientComMessage) {
 
 		params = map[string]interface{}{
 			"ver":                currentVersion,
-			"build":              store.GetAdapterName() + ":" + buildstamp,
+			"build":              store.Store.GetAdapterName() + ":" + buildstamp,
 			"maxMessageSize":     globals.maxMessageSize,
 			"maxSubscriberCount": globals.maxSubscriberCount,
 			"minTagLength":       minTagLength,
@@ -868,7 +868,7 @@ func (s *Session) acc(msg *ClientComMessage) {
 		}
 
 		var err error
-		rec, _, err = store.GetLogicalAuthHandler("token").Authenticate(msg.Acc.Token, s.remoteAddr)
+		rec, _, err = store.Store.GetLogicalAuthHandler("token").Authenticate(msg.Acc.Token, s.remoteAddr)
 		if err != nil {
 			s.queueOut(decodeStoreError(err, msg.Acc.Id, "", msg.Timestamp,
 				map[string]interface{}{"what": "auth"}))
@@ -906,7 +906,7 @@ func (s *Session) login(msg *ClientComMessage) {
 		return
 	}
 
-	handler := store.GetLogicalAuthHandler(msg.Login.Scheme)
+	handler := store.Store.GetLogicalAuthHandler(msg.Login.Scheme)
 	if handler == nil {
 		logs.Warn.Println("s.login: unknown authentication scheme", msg.Login.Scheme, s.sid)
 		s.queueOut(ErrAuthUnknownScheme(msg.Id, "", msg.Timestamp))
@@ -973,11 +973,11 @@ func (s *Session) authSecretReset(params []byte) error {
 
 	// Technically we don't need to check it here, but we are going to mail the 'authName' string to the user.
 	// We have to make sure it does not contain any exploits. This is the simplest check.
-	hdl := store.GetLogicalAuthHandler(authScheme)
+	hdl := store.Store.GetLogicalAuthHandler(authScheme)
 	if hdl == nil {
 		return types.ErrUnsupported
 	}
-	validator := store.GetValidator(credMethod)
+	validator := store.Store.GetValidator(credMethod)
 	if validator == nil {
 		return types.ErrUnsupported
 	}
@@ -994,7 +994,7 @@ func (s *Session) authSecretReset(params []byte) error {
 		return err
 	}
 
-	token, _, err := store.GetLogicalAuthHandler("token").GenSecret(&auth.Rec{
+	token, _, err := store.Store.GetLogicalAuthHandler("token").GenSecret(&auth.Rec{
 		Uid:       uid,
 		AuthLevel: auth.LevelAuth,
 		Lifetime:  auth.Duration(time.Hour * 24),
@@ -1054,7 +1054,7 @@ func (s *Session) onLogin(msgID string, timestamp time.Time, rec *auth.Rec, miss
 	// GenSecret fails only if tokenLifetime is < 0. It can't be < 0 here,
 	// otherwise login would have failed earlier.
 	rec.Features = features
-	params["token"], params["expires"], _ = store.GetLogicalAuthHandler("token").GenSecret(rec)
+	params["token"], params["expires"], _ = store.Store.GetLogicalAuthHandler("token").GenSecret(rec)
 
 	reply.Ctrl.Params = params
 	return reply

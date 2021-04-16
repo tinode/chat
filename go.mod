@@ -6,6 +6,7 @@ require (
 	firebase.google.com/go v3.12.0+incompatible
 	github.com/aws/aws-sdk-go v1.29.29
 	github.com/go-sql-driver/mysql v1.5.0
+	github.com/golang/mock v1.2.0
 	github.com/golang/protobuf v1.3.5
 	github.com/google/go-cmp v0.4.0
 	github.com/gorilla/handlers v1.4.2
