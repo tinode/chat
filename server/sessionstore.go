@@ -40,7 +40,7 @@ func (ss *SessionStore) NewSession(conn interface{}, sid string) (*Session, int)
 	var s Session
 
 	if sid == "" {
-		s.sid = store.GetUidString()
+		s.sid = store.Store.GetUidString()
 	} else {
 		s.sid = sid
 	}

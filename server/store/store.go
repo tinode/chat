@@ -82,10 +82,33 @@ func openAdapter(workerId int, jsonconf json.RawMessage) error {
 	return adp.Open(adapterConfig)
 }
 
+type StoreInterface interface{
+	Open(workerId int, jsonconf json.RawMessage) error
+	Close() error
+	IsOpen() bool
+	GetAdapterName() string
+	GetAdapterVersion() int
+	GetDbVersion() int
+	InitDb(jsonconf json.RawMessage, reset bool) error
+	UpgradeDb(jsonconf json.RawMessage) error
+	GetUid() types.Uid
+	GetUidString() string
+	DbStats() func() interface{}
+	GetAuthNames() []string
+	GetAuthHandler(name string) auth.AuthHandler
+	GetLogicalAuthHandler(name string) auth.AuthHandler
+	GetValidator(name string) validate.Validator
+	GetMediaHandler() media.Handler
+	UseMediaHandler(name, config string) error
+}
+
+var Store StoreInterface
+type StoreObj struct{}
+
 // Open initializes the persistence system. Adapter holds a connection pool for a database instance.
 // 	 name - name of the adapter rquested in the config file
 //   jsonconf - configuration string
-func Open(workerId int, jsonconf json.RawMessage) error {
+func (StoreObj) Open(workerId int, jsonconf json.RawMessage) error {
 	if err := openAdapter(workerId, jsonconf); err != nil {
 		return err
 	}
@@ -94,7 +117,7 @@ func Open(workerId int, jsonconf json.RawMessage) error {
 }
 
 // Close terminates connection to persistent storage.
-func Close() error {
+func (StoreObj) Close() error {
 	if adp.IsOpen() {
 		return adp.Close()
 	}
@@ -103,7 +126,7 @@ func Close() error {
 }
 
 // IsOpen checks if persistent storage connection has been initialized.
-func IsOpen() bool {
+func (StoreObj) IsOpen() bool {
 	if adp != nil {
 		return adp.IsOpen()
 	}
@@ -112,7 +135,7 @@ func IsOpen() bool {
 }
 
 // GetAdapterName returns the name of the current adater.
-func GetAdapterName() string {
+func (StoreObj) GetAdapterName() string {
 	if adp != nil {
 		return adp.GetName()
 	}
@@ -121,7 +144,7 @@ func GetAdapterName() string {
 }
 
 // GetAdapterVersion returns version of the current adater.
-func GetAdapterVersion() int {
+func (StoreObj) GetAdapterVersion() int {
 	if adp != nil {
 		return adp.Version()
 	}
@@ -130,7 +153,7 @@ func GetAdapterVersion() int {
 }
 
 // GetDbVersion returns version of the underlying database.
-func GetDbVersion() int {
+func (StoreObj) GetDbVersion() int {
 	if adp != nil {
 		vers, _ := adp.GetDbVersion()
 		return vers
@@ -143,8 +166,8 @@ func GetDbVersion() int {
 // attempt to drop an existing database. If jsconf is nil it will assume that the adapter is
 // already open. If it's non-nil and the adapter is not open, it will use the config string
 // to open the adapter first.
-func InitDb(jsonconf json.RawMessage, reset bool) error {
-	if !IsOpen() {
+func (s StoreObj) InitDb(jsonconf json.RawMessage, reset bool) error {
+	if !s.IsOpen() {
 		if err := openAdapter(1, jsonconf); err != nil {
 			return err
 		}
@@ -155,8 +178,8 @@ func InitDb(jsonconf json.RawMessage, reset bool) error {
 // UpgradeDb performes an upgrade of the database to the current adapter version.
 // If jsconf is nil it will assume that the adapter is already open. If it's non-nil and the
 // adapter is not open, it will use the config string to open the adapter first.
-func UpgradeDb(jsonconf json.RawMessage) error {
-	if !IsOpen() {
+func (s StoreObj) UpgradeDb(jsonconf json.RawMessage) error {
+	if !s.IsOpen() {
 		if err := openAdapter(1, jsonconf); err != nil {
 			return err
 		}
@@ -179,12 +202,12 @@ func RegisterAdapter(a adapter.Adapter) {
 }
 
 // GetUid generates a unique ID suitable for use as a primary key.
-func GetUid() types.Uid {
+func (StoreObj) GetUid() types.Uid {
 	return uGen.Get()
 }
 
 // GetUidString generate unique ID as string
-func GetUidString() string {
+func (StoreObj) GetUidString() string {
 	return uGen.GetStr()
 }
 
@@ -207,23 +230,53 @@ func EncodeUid(id int64) types.Uid {
 }
 
 // Returns a callback returning db connection stats object.
-func DbStats() func() interface{} {
-	if !IsOpen() {
+func (s StoreObj) DbStats() func() interface{} {
+	if !s.IsOpen() {
 		return nil
 	}
 	return adp.Stats
 }
 
 // UsersObjMapper is a users struct to hold methods for persistence mapping for the User object.
+type UsersObjMapperInterface interface{
+	Create(user *types.User, private interface{}) (*types.User, error)
+	GetAuthRecord(user types.Uid, scheme string) (string, auth.Level, []byte, time.Time, error)
+	GetAuthUniqueRecord(scheme, unique string) (types.Uid, auth.Level, []byte, time.Time, error)
+	AddAuthRecord(uid types.Uid, authLvl auth.Level, scheme, unique string, secret []byte, expires time.Time) error
+	UpdateAuthRecord(uid types.Uid, authLvl auth.Level, scheme, unique string, secret []byte, expires time.Time) error
+	DelAuthRecords(uid types.Uid, scheme string) error
+	Get(uid types.Uid) (*types.User, error)
+	GetAll(uid ...types.Uid) ([]types.User, error)
+	GetByCred(method, value string) (types.Uid, error)
+	Delete(id types.Uid, hard bool) error
+	UpdateLastSeen(uid types.Uid, userAgent string, when time.Time) error
+	Update(uid types.Uid, update map[string]interface{}) error
+	UpdateTags(uid types.Uid, add, remove, reset []string) ([]string, error)
+	UpdateState(uid types.Uid, state types.ObjState) error
+	GetSubs(id types.Uid) ([]types.Subscription, error)
+	FindSubs(id types.Uid, required [][]string, optional []string) ([]types.Subscription, error)
+	GetTopics(id types.Uid, opts *types.QueryOpt) ([]types.Subscription, error)
+	GetTopicsAny(id types.Uid, opts *types.QueryOpt) ([]types.Subscription, error)
+	GetOwnTopics(id types.Uid) ([]string, error)
+	GetChannels(id types.Uid) ([]string, error)
+	UpsertCred(cred *types.Credential) (bool, error)
+	ConfirmCred(id types.Uid, method string) error
+	FailCred(id types.Uid, method string) error
+	GetActiveCred(id types.Uid, method string) (*types.Credential, error)
+	GetAllCreds(id types.Uid, method string, validatedOnly bool) ([]types.Credential, error)
+	DelCred(id types.Uid, method, value string) error
+	GetUnreadCount(id types.Uid) (int, error)
+}
+
 type UsersObjMapper struct{}
 
 // Users is the ancor for storing/retrieving User objects
-var Users UsersObjMapper
+var Users UsersObjMapperInterface
 
 // Create inserts User object into a database, updates creation time and assigns UID
 func (UsersObjMapper) Create(user *types.User, private interface{}) (*types.User, error) {
 
-	user.SetUid(GetUid())
+	user.SetUid(Store.GetUid())
 	user.InitTimes()
 
 	err := adp.UserCreate(user)
@@ -430,10 +483,22 @@ func (UsersObjMapper) GetUnreadCount(id types.Uid) (int, error) {
 }
 
 // TopicsObjMapper is a struct to hold methods for persistence mapping for the topic object.
+type TopicsObjMapperInterface interface{
+	Create(topic *types.Topic, owner types.Uid, private interface{}) error
+	CreateP2P(initiator, invited *types.Subscription) error
+	Get(topic string) (*types.Topic, error)
+	GetUsers(topic string, opts *types.QueryOpt) ([]types.Subscription, error)
+	GetUsersAny(topic string, opts *types.QueryOpt) ([]types.Subscription, error)
+	GetSubs(topic string, opts *types.QueryOpt) ([]types.Subscription, error)
+	GetSubsAny(topic string, opts *types.QueryOpt) ([]types.Subscription, error)
+	Update(topic string, update map[string]interface{}) error
+	OwnerChange(topic string, newOwner types.Uid) error
+	Delete(topic string, hard bool) error
+}
 type TopicsObjMapper struct{}
 
 // Topics is an instance of TopicsObjMapper to map methods to.
-var Topics TopicsObjMapper
+var Topics TopicsObjMapperInterface
 
 // Create creates a topic and owner's subscription to it.
 func (TopicsObjMapper) Create(topic *types.Topic, owner types.Uid, private interface{}) error {
@@ -518,10 +583,16 @@ func (TopicsObjMapper) Delete(topic string, hard bool) error {
 }
 
 // SubsObjMapper is A struct to hold methods for persistence mapping for the Subscription object.
+type SubsObjMapperInterface interface {
+	Create(subs ...*types.Subscription) error
+	Get(topic string, user types.Uid) (*types.Subscription, error)
+	Update(topic string, user types.Uid, update map[string]interface{}, updateTS bool) error
+	Delete(topic string, user types.Uid) error
+}
 type SubsObjMapper struct{}
 
 // Subs is an instance of SubsObjMapper to map methods to.
-var Subs SubsObjMapper
+var Subs SubsObjMapperInterface
 
 // Create creates multiple subscriptions
 func (SubsObjMapper) Create(subs ...*types.Subscription) error {
@@ -551,15 +622,22 @@ func (SubsObjMapper) Delete(topic string, user types.Uid) error {
 }
 
 // MessagesObjMapper is a struct to hold methods for persistence mapping for the Message object.
+type MessagesObjMapperInterface interface {
+	Save(msg *types.Message, readBySender bool) error
+	DeleteList(topic string, delID int, forUser types.Uid, ranges []types.Range) error
+	GetAll(topic string, forUser types.Uid, opt *types.QueryOpt) ([]types.Message, error)
+	GetDeleted(topic string, forUser types.Uid, opt *types.QueryOpt) ([]types.Range, int, error)
+}
+
 type MessagesObjMapper struct{}
 
 // Messages is an instance of MessagesObjMapper to map methods to.
-var Messages MessagesObjMapper
+var Messages MessagesObjMapperInterface
 
 // Save message
 func (MessagesObjMapper) Save(msg *types.Message, readBySender bool) error {
 	msg.InitTimes()
-	msg.SetUid(GetUid())
+	msg.SetUid(Store.GetUid())
 	// Increment topic's or user's SeqId
 	err := adp.TopicUpdateOnMessage(msg.Topic, msg)
 	if err != nil {
@@ -620,7 +698,7 @@ func (MessagesObjMapper) DeleteList(topic string, delID int, forUser types.Uid, 
 			DelId:       delID,
 			DeletedFor:  forUser.String(),
 			SeqIdRanges: ranges}
-		toDel.SetUid(GetUid())
+		toDel.SetUid(Store.GetUid())
 		toDel.InitTimes()
 	}
 
@@ -704,7 +782,7 @@ func RegisterAuthScheme(name string, handler auth.AuthHandler) {
 
 // GetAuthNames returns all addressable auth handler names, logical and hardcoded
 // excluding those which are disabled like "basic:".
-func GetAuthNames() []string {
+func (s StoreObj) GetAuthNames() []string {
 	if len(authHandlers) == 0 {
 		return nil
 	}
@@ -719,7 +797,7 @@ func GetAuthNames() []string {
 
 	var names []string
 	for _, name := range allNames {
-		if GetLogicalAuthHandler(name) != nil {
+		if s.GetLogicalAuthHandler(name) != nil {
 			names = append(names, name)
 		}
 	}
@@ -729,13 +807,13 @@ func GetAuthNames() []string {
 }
 
 // GetAuthHandler returns an auth handler by actual hardcoded name irrspectful of logical naming.
-func GetAuthHandler(name string) auth.AuthHandler {
+func (StoreObj) GetAuthHandler(name string) auth.AuthHandler {
 	return authHandlers[strings.ToLower(name)]
 }
 
 // GetLogicalAuthHandler returns an auth handler by logical name. If there is no handler by that
 // logical name it tries to find one by the hardcoded name.
-func GetLogicalAuthHandler(name string) auth.AuthHandler {
+func (StoreObj) GetLogicalAuthHandler(name string) auth.AuthHandler {
 	name = strings.ToLower(name)
 	if len(authHandlerNames) != 0 {
 		if lname, ok := authHandlerNames[name]; ok {
@@ -809,15 +887,20 @@ func RegisterValidator(name string, v validate.Validator) {
 }
 
 // GetValidator returns registered validator by name.
-func GetValidator(name string) validate.Validator {
+func (StoreObj) GetValidator(name string) validate.Validator {
 	return validators[strings.ToLower(name)]
 }
 
 // DeviceMapper is a struct to map methods used for handling device IDs, used to generate push notifications.
+type DeviceMapperInterface interface{
+	Update(uid types.Uid, oldDeviceID string, dev *types.DeviceDef) error
+	GetAll(uid ...types.Uid) (map[types.Uid][]types.DeviceDef, int, error)
+	Delete(uid types.Uid, deviceID string) error
+}
 type DeviceMapper struct{}
 
 // Devices is an instance of DeviceMapper to map methods to.
-var Devices DeviceMapper
+var Devices DeviceMapperInterface
 
 // Update updates a device record.
 func (DeviceMapper) Update(uid types.Uid, oldDeviceID string, dev *types.DeviceDef) error {
@@ -865,12 +948,12 @@ func RegisterMediaHandler(name string, mh media.Handler) {
 }
 
 // GetMediaHandler returns default media handler.
-func GetMediaHandler() media.Handler {
+func (StoreObj) GetMediaHandler() media.Handler {
 	return mediaHandler
 }
 
 // UseMediaHandler sets specified media handler as default.
-func UseMediaHandler(name, config string) error {
+func (StoreObj) UseMediaHandler(name, config string) error {
 	mediaHandler = fileHandlers[name]
 	if mediaHandler == nil {
 		panic("UseMediaHandler: unknown handler '" + name + "'")
@@ -879,10 +962,16 @@ func UseMediaHandler(name, config string) error {
 }
 
 // FileMapper is a struct to map methods used for file handling.
+type FileMapperInterface interface{
+	StartUpload(fd *types.FileDef) error
+	FinishUpload(fid string, success bool, size int64) (*types.FileDef, error)
+	Get(fid string) (*types.FileDef, error)
+	DeleteUnused(olderThan time.Time, limit int) error
+}
 type FileMapper struct{}
 
 // Files is an instance of FileMapper to be used for handling file uploads.
-var Files FileMapper
+var Files FileMapperInterface
 
 // StartUpload records that the given user initiated a file upload
 func (FileMapper) StartUpload(fd *types.FileDef) error {
@@ -911,7 +1000,17 @@ func (FileMapper) DeleteUnused(olderThan time.Time, limit int) error {
 		return err
 	}
 	if len(toDel) > 0 {
-		return GetMediaHandler().Delete(toDel)
+		return Store.GetMediaHandler().Delete(toDel)
 	}
 	return nil
+}
+
+func init() {
+  Store = StoreObj{}
+  Users = UsersObjMapper{}
+  Topics = TopicsObjMapper{}
+  Subs = SubsObjMapper{}
+  Messages = MessagesObjMapper{}
+  Devices = DeviceMapper{}
+  Files = FileMapper{}
 }

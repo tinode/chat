@@ -2588,7 +2588,7 @@ func (t *Topic) replySetCred(sess *Session, asUid types.Uid, authLevel auth.Leve
 		_, tags, err = validatedCreds(asUid, authLevel, creds, true)
 	} else {
 		// Credential is being added or updated.
-		tmpToken, _, _ := store.GetLogicalAuthHandler("token").GenSecret(&auth.Rec{
+		tmpToken, _, _ := store.Store.GetLogicalAuthHandler("token").GenSecret(&auth.Rec{
 			Uid:       asUid,
 			AuthLevel: auth.LevelNone,
 			Lifetime:  auth.Duration(time.Hour * 24),
@@ -3505,7 +3505,7 @@ func topicCat(name string) types.TopicCat {
 
 // Generate random string as a name of the group topic
 func genTopicName() string {
-	return "grp" + store.GetUidString()
+	return "grp" + store.Store.GetUidString()
 }
 
 // Convert expanded (routable) topic name into name suitable for sending to the user.

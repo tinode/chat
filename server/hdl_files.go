@@ -25,7 +25,7 @@ import (
 func largeFileServe(wrt http.ResponseWriter, req *http.Request) {
 	now := types.TimeNow()
 	enc := json.NewEncoder(wrt)
-	mh := store.GetMediaHandler()
+	mh := store.Store.GetMediaHandler()
 	statsInc("FileDownloadsTotal", 1)
 
 	writeHttpResponse := func(msg *ServerComMessage, err error) {
@@ -115,7 +115,7 @@ func largeFileServe(wrt http.ResponseWriter, req *http.Request) {
 func largeFileReceive(wrt http.ResponseWriter, req *http.Request) {
 	now := types.TimeNow()
 	enc := json.NewEncoder(wrt)
-	mh := store.GetMediaHandler()
+	mh := store.Store.GetMediaHandler()
 	statsInc("FileUploadsTotal", 1)
 
 	writeHttpResponse := func(msg *ServerComMessage, err error) {
@@ -202,7 +202,7 @@ func largeFileReceive(wrt http.ResponseWriter, req *http.Request) {
 		return
 	}
 	fdef := types.FileDef{}
-	fdef.Id = store.GetUidString()
+	fdef.Id = store.Store.GetUidString()
 	fdef.InitTimes()
 	fdef.User = uid.String()
 
