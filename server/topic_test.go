@@ -15,6 +15,103 @@ type Responses struct {
 	messages []interface{}
 }
 
+type BroadcastDataTestHelper struct {
+	numUsers int
+	uids     []types.Uid
+
+	// Gomock controller.
+	ctrl *gomock.Controller
+
+	// Sessions.
+	sessions []*Session
+	sessWg   *sync.WaitGroup
+	// Per-session responses (i.e. what gets dumped into sessions' write loops).
+	results []*Responses
+
+	// Hub.
+	hub *Hub
+	// Messages captured from Hub.route channel on the per-user (RcptTo) basis.
+	hubMessages map[string][]*ServerComMessage
+	// For stopping hub loop.
+	hubDone chan bool
+
+	// Topic.
+	topic *Topic
+}
+
+func (b *BroadcastDataTestHelper) finish() {
+	// Stop session write loops.
+	for _, s := range b.sessions {
+		close(s.send)
+	}
+	b.sessWg.Wait()
+	// Hub loop.
+	close(b.hub.route)
+	<-b.hubDone
+}
+
+func (b *BroadcastDataTestHelper) setUp(t *testing.T, numUsers int, cat types.TopicCat, topicName string) {
+	b.numUsers = numUsers
+	b.uids = make([]types.Uid, numUsers)
+	for i := 0; i < numUsers; i++ {
+		// Can't use 0 as a valid uid.
+		b.uids[i] = types.Uid(i + 1)
+	}
+
+	b.ctrl = gomock.NewController(t)
+	// Sessions.
+	b.sessions = make([]*Session, b.numUsers)
+	b.results = make([]*Responses, b.numUsers)
+	b.sessWg = &sync.WaitGroup{}
+	for i := range b.sessions {
+		b.sessions[i] = &Session{sid: fmt.Sprintf("sid%d", i)}
+		b.sessions[i].send = make(chan interface{}, 1)
+		b.results[i] = &Responses{}
+		b.sessWg.Add(1)
+		go b.sessions[i].testWriteLoop(b.results[i], b.sessWg)
+	}
+
+	// Hub.
+	b.hub = &Hub{
+		route: make(chan *ServerComMessage, 10),
+	}
+	globals.hub = b.hub
+	b.hubMessages = make(map[string][]*ServerComMessage)
+	b.hubDone = make(chan bool)
+	go b.hub.testHubLoop(t, b.hubMessages, b.hubDone)
+
+	// Topic.
+	pu := make(map[types.Uid]perUserData)
+	ps := make(map[*Session]perSessionData)
+	for i, uid := range b.uids {
+		puData := perUserData{
+			modeWant:  types.ModeCFull,
+			modeGiven: types.ModeCFull,
+		}
+		if cat == types.TopicCatP2P {
+			puData.topicName = b.uids[i^1].UserId()
+		}
+		pu[uid] = puData
+		ps[b.sessions[i]] = perSessionData{uid: uid}
+	}
+	b.topic = &Topic{
+		name:     topicName,
+		cat:      cat,
+		status:   topicStatusLoaded,
+		perUser:  pu,
+		isProxy:  false,
+		sessions: ps,
+	}
+	if cat == types.TopicCatGrp {
+		b.topic.xoriginal = topicName
+	}
+}
+
+func (b *BroadcastDataTestHelper) tearDown() {
+	globals.hub = nil
+	b.ctrl.Finish()
+}
+
 func (s *Session) testWriteLoop(results *Responses, wg *sync.WaitGroup) {
 	for msg := range s.send {
 		results.messages = append(results.messages, msg)
@@ -34,80 +131,33 @@ func (h *Hub) testHubLoop(t *testing.T, results map[string][]*ServerComMessage, 
 }
 
 func TestHandleBroadcastDataP2P(t *testing.T) {
-	uid1 := types.Uid(1)
-	uid2 := types.Uid(2)
-
-	ctrl := gomock.NewController(t)
-	m := mock_store.NewMockMessagesObjMapperInterface(ctrl)
+	numUsers := 2
+	helper := BroadcastDataTestHelper{}
+	helper.setUp(t, numUsers, types.TopicCatP2P, "p2p-test")
+	m := mock_store.NewMockMessagesObjMapperInterface(helper.ctrl)
 	store.Messages = m
 	defer func() {
 		store.Messages = nil
-		ctrl.Finish()
+		helper.tearDown()
 	}()
 	m.EXPECT().Save(gomock.Any(), gomock.Any()).Return(nil)
 
-	ss := make([]*Session, 2)
-	messages := make([]*Responses, 2)
-	sessWg := sync.WaitGroup{}
-	for i := range ss {
-		ss[i] = &Session{sid: fmt.Sprintf("sid%d", i)}
-		ss[i].send = make(chan interface{}, 1)
-		messages[i] = &Responses{}
-		sessWg.Add(1)
-		go ss[i].testWriteLoop(messages[i], &sessWg)
-	}
-
-	h := &Hub{
-		route: make(chan *ServerComMessage, 10),
-	}
-	globals.hub = h
-	hubMessages := make(map[string][]*ServerComMessage)
-	hubDone := make(chan bool)
-	go h.testHubLoop(t, hubMessages, hubDone)
-
-	topic := Topic{
-		name:   "p2p-test",
-		cat:    types.TopicCatP2P,
-		status: topicStatusLoaded,
-		perUser: map[types.Uid]perUserData{
-			uid1: perUserData{
-				modeWant:  types.ModeCP2P,
-				modeGiven: types.ModeCP2P,
-				topicName: uid2.UserId(),
-			},
-			uid2: perUserData{
-				modeWant:  types.ModeCP2P,
-				modeGiven: types.ModeCP2P,
-				topicName: uid1.UserId(),
-			},
-		},
-		isProxy: false,
-		sessions: map[*Session]perSessionData{
-			ss[0]: perSessionData{uid: uid1},
-			ss[1]: perSessionData{uid: uid2},
-		},
-	}
+	from := helper.uids[0].UserId()
 	msg := &ServerComMessage{
-		AsUser: uid1.UserId(),
+		AsUser: from,
 		Data: &MsgServerData{
 			Topic:   "p2p",
-			From:    uid1.UserId(),
+			From:    from,
 			Content: "test",
 		},
-		sess:    ss[0],
-		SkipSid: ss[0].sid,
+		sess:    helper.sessions[0],
+		SkipSid: helper.sessions[0].sid,
 	}
-	topic.handleBroadcast(msg)
-	// Stop session write loops.
-	for _, s := range ss {
-		close(s.send)
-	}
-	sessWg.Wait()
-	// Hub loop.
-	close(h.route)
-	<-hubDone
+	helper.topic.handleBroadcast(msg)
+	helper.finish()
+
 	// Message uid1 -> uid2.
-	for i, m := range messages {
+	for i, m := range helper.results {
 		if i == 0 {
 			if len(m.messages) != 0 {
 				t.Fatalf("Uid1: expected 0 messages, got %d", len(m.messages))
@@ -125,13 +175,12 @@ func TestHandleBroadcastDataP2P(t *testing.T) {
 			}
 		}
 	}
-	// Checking presence messages routed through hub.
-	if len(hubMessages) != 2 {
-		t.Fatal("Hub.route expected exactly two recepients routed via hub.")
+	// Checking presence messages routed through huhelper.
+	if len(helper.hubMessages) != 2 {
+		t.Fatal("Huhelper.route expected exactly two recepients routed via huhelper.")
 	}
-	uids := []types.Uid{uid1, uid2}
-	for i, uid := range uids {
-		if mm, ok := hubMessages[uid.UserId()]; ok {
+	for i, uid := range helper.uids {
+		if mm, ok := helper.hubMessages[uid.UserId()]; ok {
 			if len(mm) == 1 {
 				s := mm[0]
 				if s.Pres != nil {
@@ -142,7 +191,7 @@ func TestHandleBroadcastDataP2P(t *testing.T) {
 					if p.SkipTopic != "p2p-test" {
 						t.Errorf("Uid %s: pres skip topic is expected to be 'p2p-test', got %s", uid.UserId(), p.SkipTopic)
 					}
-					expectedSrc := uids[i^1].UserId()
+					expectedSrc := helper.uids[i^1].UserId()
 					if p.Src != expectedSrc {
 						t.Errorf("Uid %s: pres.src expected: %s, found: %s", uid.UserId(), expectedSrc, p.Src)
 					}
@@ -159,63 +208,25 @@ func TestHandleBroadcastDataP2P(t *testing.T) {
 }
 
 func TestHandleBroadcastDataGroup(t *testing.T) {
+	topicName := "grp-test"
 	numUsers := 4
-	uids := make([]types.Uid, numUsers)
-	for i := 0; i < numUsers; i++ {
-		// Can't use 0 as a valid uid.
-		uids[i] = types.Uid(i + 1)
-	}
-
-	ctrl := gomock.NewController(t)
-	m := mock_store.NewMockMessagesObjMapperInterface(ctrl)
+	helper := BroadcastDataTestHelper{}
+	helper.setUp(t, numUsers, types.TopicCatGrp, topicName)
+	m := mock_store.NewMockMessagesObjMapperInterface(helper.ctrl)
 	store.Messages = m
 	defer func() {
 		store.Messages = nil
-		ctrl.Finish()
+		helper.tearDown()
 	}()
 	m.EXPECT().Save(gomock.Any(), gomock.Any()).Return(nil)
 
-	ss := make([]*Session, numUsers)
-	results := make([]*Responses, numUsers)
-	sessWg := sync.WaitGroup{}
-	for i := range ss {
-		ss[i] = &Session{sid: fmt.Sprintf("sid%d", i)}
-		ss[i].send = make(chan interface{}, 1)
-		results[i] = &Responses{}
-		sessWg.Add(1)
-		go ss[i].testWriteLoop(results[i], &sessWg)
-	}
-
-	h := &Hub{
-		route: make(chan *ServerComMessage, 10),
-	}
-	globals.hub = h
-	hubMessages := make(map[string][]*ServerComMessage)
-	hubDone := make(chan bool)
-	go h.testHubLoop(t, hubMessages, hubDone)
-
 	// User 3 isn't allowed to read.
-	perms := []types.AccessMode{types.ModeCFull, types.ModeCFull, types.ModeCFull, types.ModeJoin | types.ModeWrite | types.ModePres}
-	pu := make(map[types.Uid]perUserData)
-	ps := make(map[*Session]perSessionData)
-	for i, uid := range uids {
-		pu[uid] = perUserData{
-			modeWant:  perms[i],
-			modeGiven: perms[i],
-		}
-		ps[ss[i]] = perSessionData{uid: uid}
-	}
-	topicName := "grp-test"
-	topic := Topic{
-		name:      topicName,
-		cat:       types.TopicCatGrp,
-		status:    topicStatusLoaded,
-		perUser:   pu,
-		isProxy:   false,
-		sessions:  ps,
-		xoriginal: topicName,
-	}
-	from := uids[0].UserId()
+	pu3 := helper.topic.perUser[helper.uids[3]]
+	pu3.modeWant = types.ModeJoin | types.ModeWrite | types.ModePres
+	pu3.modeGiven = pu3.modeWant
+	helper.topic.perUser[helper.uids[3]] = pu3
+
+	from := helper.uids[0].UserId()
 	msg := &ServerComMessage{
 		AsUser: from,
 		Data: &MsgServerData{
@@ -223,29 +234,23 @@ func TestHandleBroadcastDataGroup(t *testing.T) {
 			From:    from,
 			Content: "test",
 		},
-		sess:    ss[0],
-		SkipSid: ss[0].sid,
+		sess:    helper.sessions[0],
+		SkipSid: helper.sessions[0].sid,
 	}
-	topic.handleBroadcast(msg)
-	// Stop session write loops.
-	for _, s := range ss {
-		close(s.send)
-	}
-	sessWg.Wait()
-	// Hub loop.
-	close(h.route)
-	<-hubDone
+	helper.topic.handleBroadcast(msg)
+	helper.finish()
+
 	// Message uid0 -> uid1, uid2, uid3.
 	// Uid0 is the sender.
-	if len(results[0].messages) != 0 {
-		t.Fatalf("Uid0 is the sender: expected 0 messages, got %d", len(results[0].messages))
+	if len(helper.results[0].messages) != 0 {
+		t.Fatalf("Uid0 is the sender: expected 0 messages, got %d", len(helper.results[0].messages))
 	}
 	// Uid3 is not a topic reader.
-	if len(results[3].messages) != 0 {
-		t.Fatalf("Uid3 isn't allowed to read messages: expected 0 messages, got %d", len(results[3].messages))
+	if len(helper.results[3].messages) != 0 {
+		t.Fatalf("Uid3 isn't allowed to read messages: expected 0 messages, got %d", len(helper.results[3].messages))
 	}
 	for i := 1; i < 3; i++ {
-		m := results[i]
+		m := helper.results[i]
 		if len(m.messages) != 1 {
 			t.Fatalf("Uid%d: expected 1 messages, got %d", i, len(m.messages))
 		}
@@ -258,19 +263,17 @@ func TestHandleBroadcastDataGroup(t *testing.T) {
 		}
 	}
 	// Presence messages.
-	if len(hubMessages) != 3 {
-		t.Fatal("Hub.route expected exactly three recepients routed via hub.")
+	if len(helper.hubMessages) != 3 {
+		t.Fatal("Huhelper.route expected exactly three recepients routed via huhelper.")
 	}
-	//presedUids := []types.Uid{uid1, uid2}
-	for i, uid := range uids {
+	for i, uid := range helper.uids {
 		if i == 3 {
-			//
-			if _, ok := hubMessages[uid.UserId()]; ok {
+			if _, ok := helper.hubMessages[uid.UserId()]; ok {
 				t.Errorf("Uid %s: not expected to receive pres notifications.", uid.UserId())
 			}
 			continue
 		}
-		if mm, ok := hubMessages[uid.UserId()]; ok {
+		if mm, ok := helper.hubMessages[uid.UserId()]; ok {
 			if len(mm) == 1 {
 				s := mm[0]
 				if s.Pres != nil {
@@ -297,136 +300,72 @@ func TestHandleBroadcastDataGroup(t *testing.T) {
 }
 
 func TestHandleBroadcastDataInactiveTopic(t *testing.T) {
-	uid1 := types.Uid(1)
-	uid2 := types.Uid(2)
+	numUsers := 2
+	helper := BroadcastDataTestHelper{}
+	helper.setUp(t, numUsers, types.TopicCatP2P, "p2p-test")
+	defer helper.tearDown()
 
-	ss := make([]*Session, 2)
-	messages := make([]*Responses, 2)
-	sessWg := sync.WaitGroup{}
-	for i := range ss {
-		ss[i] = &Session{sid: fmt.Sprintf("sid%d", i)}
-		ss[i].send = make(chan interface{}, 1)
-		messages[i] = &Responses{}
-		sessWg.Add(1)
-		go ss[i].testWriteLoop(messages[i], &sessWg)
-	}
-
-	h := &Hub{
-		route: make(chan *ServerComMessage, 10),
-	}
-	globals.hub = h
-	hubMessages := make(map[string][]*ServerComMessage)
-	hubDone := make(chan bool)
-	go h.testHubLoop(t, hubMessages, hubDone)
-
-	topic := Topic{
-		name:   "p2p-test",
-		cat:    types.TopicCatP2P,
-		status: topicStatusLoaded,
-		perUser: map[types.Uid]perUserData{
-			uid1: perUserData{
-				modeWant:  types.ModeCP2P,
-				modeGiven: types.ModeCP2P,
-				topicName: uid2.UserId(),
-			},
-			uid2: perUserData{
-				modeWant:  types.ModeCP2P,
-				modeGiven: types.ModeCP2P,
-				topicName: uid1.UserId(),
-			},
-		},
-		isProxy: false,
-		sessions: map[*Session]perSessionData{
-			ss[0]: perSessionData{uid: uid1},
-			ss[1]: perSessionData{uid: uid2},
-		},
-	}
+	// Make test message.
+	from := helper.uids[0].UserId()
 	msg := &ServerComMessage{
-		AsUser: uid1.UserId(),
+		AsUser: from,
 		Data: &MsgServerData{
 			Topic:   "p2p",
-			From:    uid1.UserId(),
+			From:    from,
 			Content: "test",
 		},
-		sess:    ss[0],
-		SkipSid: ss[0].sid,
+		sess:    helper.sessions[0],
+		SkipSid: helper.sessions[0].sid,
 	}
 
 	// Deactivate topic.
-	topic.markDeleted()
+	helper.topic.markDeleted()
 
-	topic.handleBroadcast(msg)
-	// Stop session write loops.
-	for _, s := range ss {
-		close(s.send)
-	}
-	sessWg.Wait()
-	// Hub loop.
-	close(h.route)
-	<-hubDone
+	helper.topic.handleBroadcast(msg)
+	helper.finish()
+
 	// Message uid1 -> uid2.
-	if len(messages[0].messages) == 1 {
-		em := messages[0].messages[0].(*ServerComMessage)
-		//if em.
+	if len(helper.results[0].messages) == 1 {
+		em := helper.results[0].messages[0].(*ServerComMessage)
 		if em.Ctrl == nil {
 			t.Fatal("User 1 is expected to receive a ctrl message")
 		}
 		if em.Ctrl.Code < 500 || em.Ctrl.Code >= 600 {
 			t.Errorf("User1: expected ctrl.code 5xx, received %d", em.Ctrl.Code)
 		}
-		//fmt.Printf("mesg = %+v", em.Ctrl)
 	} else {
-		t.Errorf("User 1 is expected to receive one message vs %d received.", len(messages[0].messages))
+		t.Errorf("User 1 is expected to receive one message vs %d received.", len(helper.results[0].messages))
 	}
-	if len(messages[1].messages) != 0 {
-		t.Errorf("User 2 is not expected to receive any messages, %d received.", len(messages[1].messages))
+	if len(helper.results[1].messages) != 0 {
+		t.Errorf("User 2 is not expected to receive any messages, %d received.", len(helper.results[1].messages))
 	}
-	// Checking presence messages routed through hub.
-	if len(hubMessages) != 0 {
-		t.Errorf("Hub.route did not expect any messages, however %d received.", len(hubMessages))
+	// Checking presence messages routed through huhelper.
+	if len(helper.hubMessages) != 0 {
+		t.Errorf("Huhelper.route did not expect any messages, however %d received.", len(helper.hubMessages))
 	}
 }
 
 func TestReplyGetDescInvalidOpts(t *testing.T) {
-	var sess Session
-	sess.send = make(chan interface{}, 10)
-	wg := sync.WaitGroup{}
-	wg.Add(1)
-	var responses Responses
-	go sess.testWriteLoop(&responses, &wg)
-
-	h := &Hub{
-		route: make(chan *ServerComMessage, 10),
-	}
-	globals.hub = h
-	hubMessages := make(map[string][]*ServerComMessage)
-	hubDone := make(chan bool)
-	go h.testHubLoop(t, hubMessages, hubDone)
-
-	topic := Topic{
-		cat: types.TopicCatMe,
-	}
+	numUsers := 1
+	helper := BroadcastDataTestHelper{}
+	helper.setUp(t, numUsers, types.TopicCatMe, "")
+	defer helper.tearDown()
 
 	msg := ClientComMessage{
 		Original: "dummy",
 	}
 	// Can't specify User in opts.
-	if err := topic.replyGetDesc(&sess, 123, false, &MsgGetOpts{User: "abcdef"}, &msg); err == nil {
+	if err := helper.topic.replyGetDesc(helper.sessions[0], 123, false, &MsgGetOpts{User: "abcdef"}, &msg); err == nil {
 		t.Error("replyGetDesc expected to error out.")
 	} else if err.Error() != "invalid GetDesc query" {
 		t.Errorf("Unexpected error: expected 'invalid GetDesc query', got '%s'", err.Error())
 	}
-	close(sess.send)
-	// Wait for the session's write loop to complete.
-	wg.Wait()
-	// Hub loop.
-	close(h.route)
-	<-hubDone
+	helper.finish()
 
-	if len(responses.messages) != 1 {
-		t.Fatalf("`responses` expected to contain 1 element, found %d", len(responses.messages))
+	if len(helper.results[0].messages) != 1 {
+		t.Fatalf("`responses` expected to contain 1 element, found %d", len(helper.results[0].messages))
 	}
-	resp := responses.messages[0].(*ServerComMessage)
+	resp := helper.results[0].messages[0].(*ServerComMessage)
 	if resp.Ctrl == nil {
 		t.Fatalf("response expected to contain a Ctrl message")
 	}
@@ -434,7 +373,7 @@ func TestReplyGetDescInvalidOpts(t *testing.T) {
 		t.Errorf("response code: expected 400, found: %d", resp.Ctrl.Code)
 	}
 	// Presence notifications.
-	if len(hubMessages) != 0 {
-		t.Errorf("Hub isn't expected to receive any messages, received %d", len(hubMessages))
+	if len(helper.hubMessages) != 0 {
+		t.Errorf("Hub isn't expected to receive any messages, received %d", len(helper.hubMessages))
 	}
 }
