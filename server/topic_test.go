@@ -2,10 +2,13 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/golang/mock/gomock"
+	"github.com/tinode/chat/server/logs"
 	"github.com/tinode/chat/server/store"
 	"github.com/tinode/chat/server/store/mock_store"
 	"github.com/tinode/chat/server/store/types"
@@ -15,7 +18,7 @@ type Responses struct {
 	messages []interface{}
 }
 
-type BroadcastDataTestHelper struct {
+type TopicTestHelper struct {
 	numUsers int
 	uids     []types.Uid
 
@@ -39,7 +42,8 @@ type BroadcastDataTestHelper struct {
 	topic *Topic
 }
 
-func (b *BroadcastDataTestHelper) finish() {
+func (b *TopicTestHelper) finish() {
+	b.topic.killTimer.Stop()
 	// Stop session write loops.
 	for _, s := range b.sessions {
 		close(s.send)
@@ -50,7 +54,19 @@ func (b *BroadcastDataTestHelper) finish() {
 	<-b.hubDone
 }
 
-func (b *BroadcastDataTestHelper) setUp(t *testing.T, numUsers int, cat types.TopicCat, topicName string) {
+func (b *TopicTestHelper) newSession(sid string, uid types.Uid) (*Session, *Responses) {
+	s := &Session{
+		sid:  sid,
+		uid:  uid,
+		subs: make(map[string]*Subscription),
+		send: make(chan interface{}, 1)}
+	r := &Responses{}
+	b.sessWg.Add(1)
+	go s.testWriteLoop(r, b.sessWg)
+	return s, r
+}
+
+func (b *TopicTestHelper) setUp(t *testing.T, numUsers int, cat types.TopicCat, topicName string, attachSessions bool) {
 	b.numUsers = numUsers
 	b.uids = make([]types.Uid, numUsers)
 	for i := 0; i < numUsers; i++ {
@@ -64,11 +80,9 @@ func (b *BroadcastDataTestHelper) setUp(t *testing.T, numUsers int, cat types.To
 	b.results = make([]*Responses, b.numUsers)
 	b.sessWg = &sync.WaitGroup{}
 	for i := range b.sessions {
-		b.sessions[i] = &Session{sid: fmt.Sprintf("sid%d", i)}
-		b.sessions[i].send = make(chan interface{}, 1)
-		b.results[i] = &Responses{}
-		b.sessWg.Add(1)
-		go b.sessions[i].testWriteLoop(b.results[i], b.sessWg)
+		s, r := b.newSession(fmt.Sprintf("sid%d", i), b.uids[i])
+		b.results[i] = r
+		b.sessions[i] = s
 	}
 
 	// Hub.
@@ -92,22 +106,25 @@ func (b *BroadcastDataTestHelper) setUp(t *testing.T, numUsers int, cat types.To
 			puData.topicName = b.uids[i^1].UserId()
 		}
 		pu[uid] = puData
-		ps[b.sessions[i]] = perSessionData{uid: uid}
+		if attachSessions {
+			ps[b.sessions[i]] = perSessionData{uid: uid}
+		}
 	}
 	b.topic = &Topic{
-		name:     topicName,
-		cat:      cat,
-		status:   topicStatusLoaded,
-		perUser:  pu,
-		isProxy:  false,
-		sessions: ps,
+		name:      topicName,
+		cat:       cat,
+		status:    topicStatusLoaded,
+		perUser:   pu,
+		isProxy:   false,
+		sessions:  ps,
+		killTimer: time.NewTimer(time.Hour),
 	}
 	if cat == types.TopicCatGrp {
 		b.topic.xoriginal = topicName
 	}
 }
 
-func (b *BroadcastDataTestHelper) tearDown() {
+func (b *TopicTestHelper) tearDown() {
 	globals.hub = nil
 	b.ctrl.Finish()
 }
@@ -132,8 +149,8 @@ func (h *Hub) testHubLoop(t *testing.T, results map[string][]*ServerComMessage, 
 
 func TestHandleBroadcastDataP2P(t *testing.T) {
 	numUsers := 2
-	helper := BroadcastDataTestHelper{}
-	helper.setUp(t, numUsers, types.TopicCatP2P, "p2p-test")
+	helper := TopicTestHelper{}
+	helper.setUp(t, numUsers, types.TopicCatP2P, "p2p-test", true)
 	m := mock_store.NewMockMessagesObjMapperInterface(helper.ctrl)
 	store.Messages = m
 	defer func() {
@@ -210,8 +227,8 @@ func TestHandleBroadcastDataP2P(t *testing.T) {
 func TestHandleBroadcastDataGroup(t *testing.T) {
 	topicName := "grp-test"
 	numUsers := 4
-	helper := BroadcastDataTestHelper{}
-	helper.setUp(t, numUsers, types.TopicCatGrp, topicName)
+	helper := TopicTestHelper{}
+	helper.setUp(t, numUsers, types.TopicCatGrp, topicName, true)
 	m := mock_store.NewMockMessagesObjMapperInterface(helper.ctrl)
 	store.Messages = m
 	defer func() {
@@ -301,8 +318,8 @@ func TestHandleBroadcastDataGroup(t *testing.T) {
 
 func TestHandleBroadcastDataInactiveTopic(t *testing.T) {
 	numUsers := 2
-	helper := BroadcastDataTestHelper{}
-	helper.setUp(t, numUsers, types.TopicCatP2P, "p2p-test")
+	helper := TopicTestHelper{}
+	helper.setUp(t, numUsers, types.TopicCatP2P, "p2p-test", true)
 	defer helper.tearDown()
 
 	// Make test message.
@@ -347,8 +364,8 @@ func TestHandleBroadcastDataInactiveTopic(t *testing.T) {
 
 func TestReplyGetDescInvalidOpts(t *testing.T) {
 	numUsers := 1
-	helper := BroadcastDataTestHelper{}
-	helper.setUp(t, numUsers, types.TopicCatMe, "")
+	helper := TopicTestHelper{}
+	helper.setUp(t, numUsers, types.TopicCatMe, "", true)
 	defer helper.tearDown()
 
 	msg := ClientComMessage{
@@ -376,4 +393,86 @@ func TestReplyGetDescInvalidOpts(t *testing.T) {
 	if len(helper.hubMessages) != 0 {
 		t.Errorf("Hub isn't expected to receive any messages, received %d", len(helper.hubMessages))
 	}
+}
+
+func TestRegisterSessionMe(t *testing.T) {
+	topicName := "usrMe"
+	numUsers := 1
+	helper := TopicTestHelper{}
+	helper.setUp(t, numUsers, types.TopicCatMe, topicName, false)
+	uu := mock_store.NewMockUsersObjMapperInterface(helper.ctrl)
+	tt := mock_store.NewMockTopicsObjMapperInterface(helper.ctrl)
+	ss := mock_store.NewMockSubsObjMapperInterface(helper.ctrl)
+	store.Users = uu
+	store.Topics = tt
+	store.Subs = ss
+	defer func() {
+		store.Users = nil
+		store.Topics = nil
+		store.Subs = nil
+		helper.tearDown()
+	}()
+	if len(helper.topic.sessions) != 0 {
+		helper.finish()
+		t.Fatalf("Initially attached sessions: expected 0 vs found %d", len(helper.topic.sessions))
+	}
+
+	uid := helper.uids[0]
+
+	// Add a couple more sessions.
+	for i := 1; i < 3; i++ {
+		s, r := helper.newSession(fmt.Sprintf("sid%d", i), uid)
+		helper.sessions = append(helper.sessions, s)
+		helper.results = append(helper.results, r)
+	}
+
+	for i, s := range helper.sessions {
+		join := &sessionJoin{
+			pkt: &ClientComMessage{
+				Sub: &MsgClientSub{
+					Id:    fmt.Sprintf("id456-%d", i),
+					Topic: "me",
+				},
+				AsUser: uid.UserId(),
+			},
+			sess: s,
+		}
+		helper.topic.registerSession(join)
+	}
+	helper.finish()
+
+	if len(helper.topic.sessions) != 3 {
+		t.Errorf("Attached sessions: expected 1, found %d", len(helper.topic.sessions))
+	}
+	for _, s := range helper.sessions {
+		if len(s.subs) != 1 {
+			t.Errorf("Session subscriptions: expected 1, found %d", len(s.subs))
+		}
+	}
+	online := helper.topic.perUser[uid].online
+	if online != 3 {
+		t.Errorf("Number of online sessions: expected 3, found %d", online)
+	}
+	// Session output.
+	for _, r := range helper.results {
+		if len(r.messages) != 1 {
+			t.Fatalf("`responses` expected to contain 1 element, found %d", len(helper.results[0].messages))
+		}
+		resp := r.messages[0].(*ServerComMessage)
+		if resp.Ctrl == nil {
+			t.Fatalf("response expected to contain a Ctrl message")
+		}
+		if resp.Ctrl.Code != 200 {
+			t.Errorf("response code: expected 200, found: %d", resp.Ctrl.Code)
+		}
+	}
+	// Presence notifications.
+	if len(helper.hubMessages) != 0 {
+		t.Errorf("Hub isn't expected to receive any messages, received %d", len(helper.hubMessages))
+	}
+}
+
+func TestMain(m *testing.M) {
+	logs.Init(os.Stderr, "stdFlags")
+	os.Exit(m.Run())
 }
