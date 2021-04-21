@@ -18,6 +18,7 @@ type Responses struct {
 	messages []interface{}
 }
 
+// Test fixture.
 type TopicTestHelper struct {
 	numUsers int
 	uids     []types.Uid
@@ -40,6 +41,12 @@ type TopicTestHelper struct {
 
 	// Topic.
 	topic *Topic
+
+	// Mock objects.
+	mm *mock_store.MockMessagesObjMapperInterface
+	uu *mock_store.MockUsersObjMapperInterface
+	tt *mock_store.MockTopicsObjMapperInterface
+	ss *mock_store.MockSubsObjMapperInterface
 }
 
 func (b *TopicTestHelper) finish() {
@@ -56,10 +63,11 @@ func (b *TopicTestHelper) finish() {
 
 func (b *TopicTestHelper) newSession(sid string, uid types.Uid) (*Session, *Responses) {
 	s := &Session{
-		sid:  sid,
-		uid:  uid,
-		subs: make(map[string]*Subscription),
-		send: make(chan interface{}, 1)}
+		sid:    sid,
+		uid:    uid,
+		subs:   make(map[string]*Subscription),
+		send:   make(chan interface{}, 10),
+		detach: make(chan string, 10)}
 	r := &Responses{}
 	b.sessWg.Add(1)
 	go s.testWriteLoop(r, b.sessWg)
@@ -74,7 +82,16 @@ func (b *TopicTestHelper) setUp(t *testing.T, numUsers int, cat types.TopicCat, 
 		b.uids[i] = types.Uid(i + 1)
 	}
 
+	// Mocks.
 	b.ctrl = gomock.NewController(t)
+	b.mm = mock_store.NewMockMessagesObjMapperInterface(b.ctrl)
+	b.uu = mock_store.NewMockUsersObjMapperInterface(b.ctrl)
+	b.tt = mock_store.NewMockTopicsObjMapperInterface(b.ctrl)
+	b.ss = mock_store.NewMockSubsObjMapperInterface(b.ctrl)
+	store.Messages = b.mm
+	store.Users = b.uu
+	store.Topics = b.tt
+	store.Subs = b.ss
 	// Sessions.
 	b.sessions = make([]*Session, b.numUsers)
 	b.results = make([]*Responses, b.numUsers)
@@ -105,10 +122,11 @@ func (b *TopicTestHelper) setUp(t *testing.T, numUsers int, cat types.TopicCat, 
 		if cat == types.TopicCatP2P {
 			puData.topicName = b.uids[i^1].UserId()
 		}
-		pu[uid] = puData
 		if attachSessions {
 			ps[b.sessions[i]] = perSessionData{uid: uid}
+			puData.online = 1
 		}
+		pu[uid] = puData
 	}
 	b.topic = &Topic{
 		name:      topicName,
@@ -121,11 +139,16 @@ func (b *TopicTestHelper) setUp(t *testing.T, numUsers int, cat types.TopicCat, 
 	}
 	if cat == types.TopicCatGrp {
 		b.topic.xoriginal = topicName
+		b.topic.owner = b.uids[0]
 	}
 }
 
 func (b *TopicTestHelper) tearDown() {
 	globals.hub = nil
+	store.Messages = nil
+	store.Users = nil
+	store.Topics = nil
+	store.Subs = nil
 	b.ctrl.Finish()
 }
 
@@ -151,13 +174,10 @@ func TestHandleBroadcastDataP2P(t *testing.T) {
 	numUsers := 2
 	helper := TopicTestHelper{}
 	helper.setUp(t, numUsers, types.TopicCatP2P, "p2p-test", true)
-	m := mock_store.NewMockMessagesObjMapperInterface(helper.ctrl)
-	store.Messages = m
 	defer func() {
-		store.Messages = nil
 		helper.tearDown()
 	}()
-	m.EXPECT().Save(gomock.Any(), gomock.Any()).Return(nil)
+	helper.mm.EXPECT().Save(gomock.Any(), gomock.Any()).Return(nil)
 
 	from := helper.uids[0].UserId()
 	msg := &ServerComMessage{
@@ -229,13 +249,11 @@ func TestHandleBroadcastDataGroup(t *testing.T) {
 	numUsers := 4
 	helper := TopicTestHelper{}
 	helper.setUp(t, numUsers, types.TopicCatGrp, topicName, true)
-	m := mock_store.NewMockMessagesObjMapperInterface(helper.ctrl)
-	store.Messages = m
 	defer func() {
 		store.Messages = nil
 		helper.tearDown()
 	}()
-	m.EXPECT().Save(gomock.Any(), gomock.Any()).Return(nil)
+	helper.mm.EXPECT().Save(gomock.Any(), gomock.Any()).Return(nil)
 
 	// User 3 isn't allowed to read.
 	pu3 := helper.topic.perUser[helper.uids[3]]
@@ -400,16 +418,7 @@ func TestRegisterSessionMe(t *testing.T) {
 	numUsers := 1
 	helper := TopicTestHelper{}
 	helper.setUp(t, numUsers, types.TopicCatMe, topicName, false)
-	uu := mock_store.NewMockUsersObjMapperInterface(helper.ctrl)
-	tt := mock_store.NewMockTopicsObjMapperInterface(helper.ctrl)
-	ss := mock_store.NewMockSubsObjMapperInterface(helper.ctrl)
-	store.Users = uu
-	store.Topics = tt
-	store.Subs = ss
 	defer func() {
-		store.Users = nil
-		store.Topics = nil
-		store.Subs = nil
 		helper.tearDown()
 	}()
 	if len(helper.topic.sessions) != 0 {
@@ -469,6 +478,254 @@ func TestRegisterSessionMe(t *testing.T) {
 	// Presence notifications.
 	if len(helper.hubMessages) != 0 {
 		t.Errorf("Hub isn't expected to receive any messages, received %d", len(helper.hubMessages))
+	}
+}
+
+func TestUnregisterSessionSimple(t *testing.T) {
+	topicName := "usrMe"
+	numUsers := 1
+	helper := TopicTestHelper{}
+	helper.setUp(t, numUsers, types.TopicCatMe, topicName /*attach=*/, true)
+	defer func() {
+		helper.tearDown()
+	}()
+
+	uid := helper.uids[0]
+	helper.uu.EXPECT().UpdateLastSeen(uid, gomock.Any(), gomock.Any()).Return(nil)
+
+	// Add a couple more sessions.
+	for i := 1; i < 3; i++ {
+		s, r := helper.newSession(fmt.Sprintf("sid%d", i), uid)
+		helper.sessions = append(helper.sessions, s)
+		helper.results = append(helper.results, r)
+		helper.topic.sessions[s] = perSessionData{uid: uid}
+		pu := helper.topic.perUser[uid]
+		pu.online++
+		helper.topic.perUser[uid] = pu
+	}
+
+	// Initial online and attach session counts.
+	if len(helper.topic.sessions) != 3 {
+		helper.finish()
+		t.Fatalf("Initially attached sessions: expected 3 vs found %d", len(helper.topic.sessions))
+	}
+	if online := helper.topic.perUser[uid].online; online != 3 {
+		t.Errorf("Number of online sessions: expected 3 vs found %d", online)
+	}
+
+	leave := &sessionLeave{
+		pkt: &ClientComMessage{
+			Leave: &MsgClientLeave{
+				Id:    "id456",
+				Topic: topicName,
+			},
+			AsUser: uid.UserId(),
+		},
+		sess: helper.sessions[0],
+	}
+	helper.topic.unregisterSession(leave)
+
+	helper.finish()
+
+	if len(helper.topic.sessions) != 2 {
+		t.Errorf("Attached sessions: expected 2, found %d", len(helper.topic.sessions))
+	}
+	if len(helper.sessions[0].subs) != 0 {
+		t.Errorf("Session subscriptions: expected 0, found %d", len(helper.sessions[0].subs))
+	}
+	if online := helper.topic.perUser[uid].online; online != 2 {
+		t.Errorf("Number of online sessions after unregistering: expected 2, found %d", online)
+	}
+	// Session output.
+	r := helper.results[0]
+	if len(r.messages) != 1 {
+		t.Fatalf("`responses` expected to contain 1 element, found %d", len(helper.results[0].messages))
+	}
+	resp := r.messages[0].(*ServerComMessage)
+	if resp.Ctrl == nil {
+		t.Fatalf("response expected to contain a Ctrl message")
+	}
+	if resp.Ctrl.Code != 200 {
+		t.Errorf("response code: expected 200, found: %d", resp.Ctrl.Code)
+	}
+	// Presence notifications.
+	if len(helper.hubMessages) != 0 {
+		t.Errorf("Hub isn't expected to receive any messages, received %d", len(helper.hubMessages))
+	}
+}
+
+func TestUnregisterSessionUnsubscribe(t *testing.T) {
+	topicName := "grpTest"
+	numUsers := 3
+	helper := TopicTestHelper{}
+	helper.setUp(t, numUsers, types.TopicCatGrp, topicName /*attach=*/, true)
+	defer func() {
+		helper.tearDown()
+	}()
+
+	uid := helper.uids[2]
+	helper.ss.EXPECT().Delete(topicName, uid).Return(nil)
+
+	// Add a couple more sessions.
+	for i := 0; i < 2; i++ {
+		s, r := helper.newSession(fmt.Sprintf("sid-uid-%d-%d", uid, i), uid)
+		helper.sessions = append(helper.sessions, s)
+		helper.results = append(helper.results, r)
+		helper.topic.sessions[s] = perSessionData{uid: uid}
+		pu := helper.topic.perUser[uid]
+		pu.online++
+		helper.topic.perUser[uid] = pu
+	}
+
+	// Initial online and attach session counts.
+	if len(helper.topic.sessions) != 5 {
+		helper.finish()
+		t.Fatalf("Initially attached sessions: expected 5 vs found %d", len(helper.topic.sessions))
+	}
+	if online := helper.topic.perUser[uid].online; online != 3 {
+		t.Errorf("Number of online sessions: expected 3 vs found %d", online)
+	}
+
+	leave := &sessionLeave{
+		pkt: &ClientComMessage{
+			Leave: &MsgClientLeave{
+				Id:    "id456",
+				Topic: topicName,
+				Unsub: true,
+			},
+			AsUser: uid.UserId(),
+		},
+		sess: helper.sessions[0],
+	}
+	helper.topic.unregisterSession(leave)
+	helper.finish()
+
+	if len(helper.topic.sessions) != 2 {
+		t.Errorf("Attached sessions: expected 2, found %d", len(helper.topic.sessions))
+	}
+	if len(helper.sessions[0].subs) != 0 {
+		t.Errorf("Session subscriptions: expected 0, found %d", len(helper.sessions[0].subs))
+	}
+	if pu, ok := helper.topic.perUser[uid]; pu.online != 0 || ok {
+		t.Errorf("Number of online sessions after unsubscribing: expected 2, found %d; perUser entry found: %t", pu.online, ok)
+	}
+	// Session output. Sessions 2, 3, 4 are the evicted/unsubscribed uid.
+	for i := 2; i < 5; i++ {
+		r := helper.results[i]
+		if len(r.messages) != 1 {
+			t.Fatalf("`responses` expected to contain 1 element, found %d", len(helper.results[0].messages))
+		}
+		resp := r.messages[0].(*ServerComMessage)
+		if resp.Ctrl == nil {
+			t.Fatalf("response expected to contain a Ctrl message")
+		}
+		if resp.Ctrl.Code != 205 {
+			t.Errorf("response code: expected 205, found: %d", resp.Ctrl.Code)
+		}
+	}
+	// Presence notifications.
+	if len(helper.hubMessages) != 2 {
+		t.Errorf("Hub messages recepients: expected 2, received %d", len(helper.hubMessages))
+	}
+	// Group presSubs.
+	if grpPres, ok := helper.hubMessages[topicName]; ok {
+		if len(grpPres) != 2 {
+			t.Fatalf("Group presence messages: expected 2, got %d", len(grpPres))
+		}
+		for _, msg := range grpPres {
+			//
+			pres := msg.Pres
+			if pres == nil {
+				t.Fatal("Presence message expected in hub output, but not found.")
+			}
+			if pres.Topic != topicName {
+				t.Errorf("Presence message topic: expected %s, found %s", topicName, pres.Topic)
+			}
+			if pres.Src != uid.UserId() {
+				t.Errorf("Presence message src: expected %s, found %s", uid.UserId(), pres.Src)
+			}
+			if pres.What != "acs" && pres.What != "off" {
+				t.Errorf("Presence message what: expected 'acs' or 'off', found %s", pres.What)
+			}
+		}
+	} else {
+		t.Errorf("Hub expected to pres recepient %s", topicName)
+	}
+	// User notification.
+	if userPres, ok := helper.hubMessages[uid.UserId()]; ok {
+		if len(userPres) != 1 {
+			t.Fatalf("User presence messages: expected 1, got %d", len(userPres))
+		}
+		pres := userPres[0].Pres
+		if pres == nil {
+			t.Fatal("Presence message expected in hub output, but not found.")
+		}
+		if pres.Topic != "me" {
+			t.Errorf("Presence message topic: expected 'me', found %s", pres.Topic)
+		}
+		if pres.Src != topicName {
+			t.Errorf("Presence message src: expected %s, found %s", topicName, pres.Src)
+		}
+		if pres.What != "gone" {
+			t.Errorf("Presence message what: expected 'gone', found %s", pres.What)
+		}
+	} else {
+		t.Errorf("Hub expected to pres recepient %s", uid.UserId())
+	}
+}
+
+func TestHandleMetaGet(t *testing.T) {
+	topicName := "usrMe"
+	numUsers := 1
+	helper := TopicTestHelper{}
+	helper.setUp(t, numUsers, types.TopicCatMe, topicName /*attach=*/, true)
+	defer func() {
+		helper.tearDown()
+	}()
+
+	uid := helper.uids[0]
+	helper.mm.EXPECT().GetAll(topicName, uid, gomock.Any()).Return([]types.Message{}, nil)
+	helper.mm.EXPECT().GetDeleted(topicName, uid, gomock.Any()).Return([]types.Range{}, 0, nil)
+	helper.uu.EXPECT().GetTopics(uid, gomock.Any()).Return([]types.Subscription{}, nil)
+
+	meta := &metaReq{
+		pkt: &ClientComMessage{
+			Get: &MsgClientGet{
+				Id:    "id456",
+				Topic: topicName,
+				MsgGetQuery: MsgGetQuery{
+					What: "desc sub data del",
+					Desc: &MsgGetOpts{},
+					Sub:  &MsgGetOpts{},
+					Data: &MsgGetOpts{},
+					Del:  &MsgGetOpts{},
+				},
+			},
+			AsUser:   uid.UserId(),
+			MetaWhat: constMsgMetaDesc | constMsgMetaSub | constMsgMetaData | constMsgMetaDel,
+		},
+		sess: helper.sessions[0],
+	}
+	helper.topic.handleMeta(meta)
+	helper.finish()
+
+	r := helper.results[0]
+	if len(r.messages) != 4 {
+		t.Errorf("Responses received: expected 4, received %d", len(r.messages))
+	}
+	for _, msg := range r.messages {
+		m := msg.(*ServerComMessage)
+		if m.Meta != nil {
+			if m.Meta.Desc == nil {
+				t.Error("Meta.Desc expected to be specified.")
+			}
+		} else if m.Ctrl == nil {
+			t.Error("Expected only meta or ctrl messages.")
+		}
+	}
+	// Presence notifications.
+	if len(helper.hubMessages) != 0 {
+		t.Errorf("Hub messages recepients: expected 0, received %d", len(helper.hubMessages))
 	}
 }
 
