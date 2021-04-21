@@ -25,7 +25,7 @@ func genDb(data *Data) {
 	}
 
 	// Add authentication record
-	authHandler := store.GetAuthHandler("basic")
+	authHandler := store.Store.GetAuthHandler("basic")
 	authHandler.Init([]byte(`{"add_to_tags": true}`), "basic")
 
 	nameIndex := make(map[string]string, len(data.Users))
@@ -92,7 +92,7 @@ func genDb(data *Data) {
 			}
 		}
 		// Add authentication record
-		authHandler := store.GetAuthHandler("basic")
+		authHandler := store.Store.GetAuthHandler("basic")
 		passwd := uu.Password
 		if passwd == "(random)" {
 			// Generate random password
