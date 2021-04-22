@@ -173,7 +173,7 @@ func (h *Hub) testHubLoop(t *testing.T, results map[string][]*ServerComMessage, 
 func TestHandleBroadcastDataP2P(t *testing.T) {
 	numUsers := 2
 	helper := TopicTestHelper{}
-	helper.setUp(t, numUsers, types.TopicCatP2P, "p2p-test", true)
+	helper.setUp(t, numUsers, types.TopicCatP2P, "p2p-test", /*attach=*/true)
 	defer func() {
 		helper.tearDown()
 	}()
@@ -248,7 +248,7 @@ func TestHandleBroadcastDataGroup(t *testing.T) {
 	topicName := "grp-test"
 	numUsers := 4
 	helper := TopicTestHelper{}
-	helper.setUp(t, numUsers, types.TopicCatGrp, topicName, true)
+	helper.setUp(t, numUsers, types.TopicCatGrp, topicName, /*attach=*/true)
 	defer func() {
 		store.Messages = nil
 		helper.tearDown()
@@ -337,7 +337,7 @@ func TestHandleBroadcastDataGroup(t *testing.T) {
 func TestHandleBroadcastDataInactiveTopic(t *testing.T) {
 	numUsers := 2
 	helper := TopicTestHelper{}
-	helper.setUp(t, numUsers, types.TopicCatP2P, "p2p-test", true)
+	helper.setUp(t, numUsers, types.TopicCatP2P, "p2p-test", /*attach=*/true)
 	defer helper.tearDown()
 
 	// Make test message.
@@ -383,7 +383,7 @@ func TestHandleBroadcastDataInactiveTopic(t *testing.T) {
 func TestReplyGetDescInvalidOpts(t *testing.T) {
 	numUsers := 1
 	helper := TopicTestHelper{}
-	helper.setUp(t, numUsers, types.TopicCatMe, "", true)
+	helper.setUp(t, numUsers, types.TopicCatMe, "", /*attach=*/true)
 	defer helper.tearDown()
 
 	msg := ClientComMessage{
@@ -417,7 +417,7 @@ func TestRegisterSessionMe(t *testing.T) {
 	topicName := "usrMe"
 	numUsers := 1
 	helper := TopicTestHelper{}
-	helper.setUp(t, numUsers, types.TopicCatMe, topicName, false)
+	helper.setUp(t, numUsers, types.TopicCatMe, topicName, /*attach=*/false)
 	defer func() {
 		helper.tearDown()
 	}()
@@ -485,7 +485,7 @@ func TestUnregisterSessionSimple(t *testing.T) {
 	topicName := "usrMe"
 	numUsers := 1
 	helper := TopicTestHelper{}
-	helper.setUp(t, numUsers, types.TopicCatMe, topicName /*attach=*/, true)
+	helper.setUp(t, numUsers, types.TopicCatMe, topicName, /*attach=*/true)
 	defer func() {
 		helper.tearDown()
 	}()
@@ -558,7 +558,7 @@ func TestUnregisterSessionUnsubscribe(t *testing.T) {
 	topicName := "grpTest"
 	numUsers := 3
 	helper := TopicTestHelper{}
-	helper.setUp(t, numUsers, types.TopicCatGrp, topicName /*attach=*/, true)
+	helper.setUp(t, numUsers, types.TopicCatGrp, topicName, /*attach=*/true)
 	defer func() {
 		helper.tearDown()
 	}()
@@ -678,7 +678,7 @@ func TestHandleMetaGet(t *testing.T) {
 	topicName := "usrMe"
 	numUsers := 1
 	helper := TopicTestHelper{}
-	helper.setUp(t, numUsers, types.TopicCatMe, topicName /*attach=*/, true)
+	helper.setUp(t, numUsers, types.TopicCatMe, topicName, /*attach=*/true)
 	defer func() {
 		helper.tearDown()
 	}()
@@ -726,6 +726,294 @@ func TestHandleMetaGet(t *testing.T) {
 	// Presence notifications.
 	if len(helper.hubMessages) != 0 {
 		t.Errorf("Hub messages recepients: expected 0, received %d", len(helper.hubMessages))
+	}
+}
+
+// Matches a subset in a superset.
+type supersetOf struct{ subset map[string]string }
+
+func SupersetOf(subset map[string]string) gomock.Matcher {
+	return &supersetOf{subset}
+}
+
+func (s *supersetOf) Matches(x interface{}) bool {
+	super := x.(map[string]interface{})
+	if super == nil {
+		return false
+	}
+	for k, v := range s.subset {
+		if x, ok := super[k]; ok {
+			val := x.(string)
+			if val != v {
+				return false
+			}
+		} else {
+			return false
+		}
+	}
+	return true
+}
+
+func (s *supersetOf) String() string {
+	return fmt.Sprintf("%+v is subset", s.subset)
+}
+
+func TestHandleMetaSetDescMePublicPrivate(t *testing.T) {
+	topicName := "usrMe"
+	numUsers := 1
+	helper := TopicTestHelper{}
+	helper.setUp(t, numUsers, types.TopicCatMe, topicName, /*attach=*/true)
+	defer func() {
+		helper.tearDown()
+	}()
+
+	uid := helper.uids[0]
+	gomock.InOrder(
+		helper.uu.EXPECT().Update(uid, SupersetOf(map[string]string{"Public": "new public"})).Return(nil),
+		helper.ss.EXPECT().Update(topicName, uid, map[string]interface{}{"Private": "new private"}, true).Return(nil),
+	)
+
+	meta := &metaReq{
+		pkt: &ClientComMessage{
+			Set: &MsgClientSet{
+				Id:    "id456",
+				Topic: topicName,
+				MsgSetQuery: MsgSetQuery{
+					Desc: &MsgSetDesc{
+						Public:  "new public",
+						Private: "new private",
+					},
+				},
+			},
+			AsUser:   uid.UserId(),
+			MetaWhat: constMsgMetaDesc,
+		},
+		sess: helper.sessions[0],
+	}
+	helper.topic.handleMeta(meta)
+	helper.finish()
+
+	r := helper.results[0]
+	if len(r.messages) != 1 {
+		t.Fatalf("Responses received: expected 1, received %d", len(r.messages))
+	}
+	msg := r.messages[0].(*ServerComMessage)
+	if msg == nil || msg.Ctrl == nil {
+		t.Fatalf("Server message expected to have a ctrl submessage: %+v", msg)
+	}
+	if msg.Ctrl.Code != 200 {
+		t.Errorf("Response code: expected 200, found %d", msg.Ctrl.Code)
+	}
+	// Presence notifications.
+	if len(helper.hubMessages) != 1 {
+		t.Fatalf("Hub messages recepients: expected 1, received %d", len(helper.hubMessages))
+	}
+	// Make sure uid's sessions are notified.
+	if userPres, ok := helper.hubMessages[uid.UserId()]; ok {
+		if len(userPres) != 1 {
+			t.Fatalf("User presence messages: expected 1, got %d", len(userPres))
+		}
+		if userPres[0].SkipSid != helper.sessions[0].sid {
+			t.Errorf("Pres notification SkipSid: %s expected vs %s found", helper.sessions[0].sid, userPres[0].SkipSid)
+		}
+		pres := userPres[0].Pres
+		if pres == nil {
+			t.Fatal("Presence message expected in hub output, but not found.")
+		}
+		if pres.Topic != "me" {
+			t.Errorf("Presence message topic: expected 'me', found %s", pres.Topic)
+		}
+		if pres.What != "upd" {
+			t.Errorf("Presence message what: expected 'upd', found %s", pres.What)
+		}
+	} else {
+		t.Errorf("Hub expected to pres recepient %s", uid.UserId())
+	}
+}
+
+func TestHandleSessionUpdateSessToForeground(t *testing.T) {
+	topicName := "usrMe"
+	numUsers := 1
+	helper := TopicTestHelper{}
+	helper.setUp(t, numUsers, types.TopicCatMe, topicName, /*attach=*/true)
+	defer func() {
+		helper.tearDown()
+	}()
+
+	uid := helper.uids[0]
+	supd := &sessionUpdate{
+		sess: helper.sessions[0],
+	}
+	var uaAgent string
+	helper.topic.handleSessionUpdate(supd, &uaAgent, nil)
+	helper.finish()
+
+	// Expect online count bumped up to 2.
+	if online := helper.topic.perUser[uid].online; online != 2 {
+		t.Errorf("online count for %s: expected 2, found %d", uid.UserId(), online)
+	}
+}
+
+func TestHandleSessionUpdateUserAgent(t *testing.T) {
+	topicName := "usrMe"
+	numUsers := 1
+	helper := TopicTestHelper{}
+	helper.setUp(t, numUsers, types.TopicCatMe, topicName, /*attach=*/true)
+	defer func() {
+		helper.tearDown()
+	}()
+
+	uid := helper.uids[0]
+	supd := &sessionUpdate{
+		userAgent: "newUA",
+	}
+	uaAgent := "oldUA"
+	timer := time.NewTimer(time.Hour)
+	helper.topic.handleSessionUpdate(supd, &uaAgent, timer)
+	helper.finish()
+
+	// online count stays 1.
+	if online := helper.topic.perUser[uid].online; online != 1 {
+		t.Errorf("online count for %s: expected 1, found %d", uid.UserId(), online)
+	}
+	if uaAgent != "newUA" {
+		t.Errorf("User agent: expected 'newUA', found '%s'", uaAgent)
+	}
+	timer.Stop()
+}
+
+func TestHandleUATimerEvent(t *testing.T) {
+	topicName := "usrMe"
+	numUsers := 1
+	helper := TopicTestHelper{}
+	helper.setUp(t, numUsers, types.TopicCatMe, topicName, /*attach=*/true)
+	defer func() {
+		helper.tearDown()
+	}()
+
+	uid := helper.uids[0]
+	helper.topic.perSubs = make(map[string]perSubsData)
+	helper.topic.perSubs[uid.UserId()] = perSubsData{online: true}
+	helper.topic.handleUATimerEvent("newUA")
+	helper.finish()
+
+	if helper.topic.userAgent != "newUA" {
+		t.Errorf("Topic's user agent: expected 'newUA', found '%s'", helper.topic.userAgent)
+	}
+	// Presence notifications.
+	if len(helper.hubMessages) != 1 {
+		t.Fatalf("Hub messages recepients: expected 1, received %d", len(helper.hubMessages))
+	}
+	// Make sure uid's sessions are notified.
+	if userPres, ok := helper.hubMessages[uid.UserId()]; ok {
+		if len(userPres) != 1 {
+			t.Fatalf("User presence messages: expected 1, got %d", len(userPres))
+		}
+		pres := userPres[0].Pres
+		if pres == nil {
+			t.Fatal("Presence message expected in hub output, but not found.")
+		}
+		if pres.Topic != "me" {
+			t.Errorf("Presence message topic: expected 'me', found '%s'", pres.Topic)
+		}
+		if pres.What != "ua" {
+			t.Errorf("Presence message what: expected 'ua', found '%s'", pres.What)
+		}
+		if pres.Src != topicName {
+			t.Errorf("Presence message src: expected '%s', found '%s'", topicName, pres.Src)
+		}
+	} else {
+		t.Errorf("Hub expected to pres recepient %s", uid.UserId())
+	}
+}
+
+func TestHandleTopicTimeout(t *testing.T) {
+	topicName := "usrMe"
+	numUsers := 1
+	helper := TopicTestHelper{}
+	helper.setUp(t, numUsers, types.TopicCatMe, topicName, /*attach=*/true)
+	defer func() {
+		helper.tearDown()
+	}()
+
+	uid := helper.uids[0]
+	helper.topic.perSubs = make(map[string]perSubsData)
+	helper.topic.perSubs[uid.UserId()] = perSubsData{online: true}
+	helper.hub.unreg = make(chan *topicUnreg, 10)
+	uaTimer := time.NewTimer(time.Hour)
+	notifTimer := time.NewTimer(time.Hour)
+	helper.topic.handleTopicTimeout(helper.hub, "newUA", uaTimer, notifTimer)
+	helper.finish()
+
+	if len(helper.hub.unreg) != 1 {
+		t.Fatalf("Hub.unreg chan must contain exactly 1 message. Found %d.", len(helper.hub.unreg))
+	}
+	unreg := <-helper.hub.unreg
+	if unreg.rcptTo != topicName {
+		t.Errorf("unreg.rcptTo: expected '%s', found '%s'", topicName, unreg.rcptTo)
+	}
+	uaTimer.Stop()
+	notifTimer.Stop()
+	// Presence notifications.
+	if len(helper.hubMessages) != 1 {
+		t.Fatalf("Hub messages recepients: expected 1, received %d", len(helper.hubMessages))
+	}
+	// Make sure uid's sessions are notified.
+	if userPres, ok := helper.hubMessages[uid.UserId()]; ok {
+		if len(userPres) != 1 {
+			t.Fatalf("User presence messages: expected 1, got %d", len(userPres))
+		}
+		pres := userPres[0].Pres
+		if pres == nil {
+			t.Fatal("Presence message expected in hub output, but not found.")
+		}
+		if pres.Topic != "me" {
+			t.Errorf("Presence message topic: expected 'me', found '%s'", pres.Topic)
+		}
+		if pres.What != "off" {
+			t.Errorf("Presence message what: expected 'off', found '%s'", pres.What)
+		}
+		if pres.Src != topicName {
+			t.Errorf("Presence message src: expected '%s', found '%s'", topicName, pres.Src)
+		}
+	} else {
+		t.Errorf("Hub expected to pres recepient %s", uid.UserId())
+	}
+}
+
+func TestHandleTopicTermination(t *testing.T) {
+	topicName := "usrMe"
+	numUsers := 1
+	helper := TopicTestHelper{}
+	helper.setUp(t, numUsers, types.TopicCatMe, topicName, /*attach=*/true)
+	defer func() {
+		helper.tearDown()
+	}()
+
+	done := make(chan bool, 1)
+	exit := &shutDown{
+		reason: StopDeleted,
+		done:   done,
+	}
+	helper.topic.handleTopicTermination(exit)
+	helper.finish()
+
+	if len(done) != 1 {
+		t.Fatal("done callback isn't invoked.")
+	}
+	<-done
+	for i, s := range helper.sessions {
+		if len(s.detach) != 1 {
+			t.Fatalf("Session %d: detach channel is empty.", i)
+		}
+		val := <-s.detach
+		if val != topicName {
+			t.Errorf("Session %d is expected to detach from topic '%s', found '%s'.", i, topicName, val)
+		}
+	}
+	// Presence notifications.
+	if len(helper.hubMessages) != 0 {
+		t.Fatalf("Hub messages recepients: expected 0, received %d", len(helper.hubMessages))
 	}
 }
 

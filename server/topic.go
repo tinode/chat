@@ -484,7 +484,6 @@ func (t *Topic) handleTopicTermination(sd *shutDown) {
 	if sd.done != nil {
 		sd.done <- true
 	}
-	return
 }
 
 func (t *Topic) runLocal(hub *Hub) {
