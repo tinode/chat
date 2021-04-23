@@ -137,6 +137,9 @@ func (b *TopicTestHelper) setUp(t *testing.T, numUsers int, cat types.TopicCat, 
 		sessions:  ps,
 		killTimer: time.NewTimer(time.Hour),
 	}
+	if cat == types.TopicCatMe {
+		b.topic.xoriginal = "me"
+	}
 	if cat == types.TopicCatGrp {
 		b.topic.xoriginal = topicName
 		b.topic.owner = b.uids[0]
@@ -173,7 +176,7 @@ func (h *Hub) testHubLoop(t *testing.T, results map[string][]*ServerComMessage, 
 func TestHandleBroadcastDataP2P(t *testing.T) {
 	numUsers := 2
 	helper := TopicTestHelper{}
-	helper.setUp(t, numUsers, types.TopicCatP2P, "p2p-test", /*attach=*/true)
+	helper.setUp(t, numUsers, types.TopicCatP2P, "p2p-test" /*attach=*/, true)
 	defer func() {
 		helper.tearDown()
 	}()
@@ -248,7 +251,7 @@ func TestHandleBroadcastDataGroup(t *testing.T) {
 	topicName := "grp-test"
 	numUsers := 4
 	helper := TopicTestHelper{}
-	helper.setUp(t, numUsers, types.TopicCatGrp, topicName, /*attach=*/true)
+	helper.setUp(t, numUsers, types.TopicCatGrp, topicName /*attach=*/, true)
 	defer func() {
 		store.Messages = nil
 		helper.tearDown()
@@ -337,7 +340,7 @@ func TestHandleBroadcastDataGroup(t *testing.T) {
 func TestHandleBroadcastDataInactiveTopic(t *testing.T) {
 	numUsers := 2
 	helper := TopicTestHelper{}
-	helper.setUp(t, numUsers, types.TopicCatP2P, "p2p-test", /*attach=*/true)
+	helper.setUp(t, numUsers, types.TopicCatP2P, "p2p-test" /*attach=*/, true)
 	defer helper.tearDown()
 
 	// Make test message.
@@ -380,10 +383,177 @@ func TestHandleBroadcastDataInactiveTopic(t *testing.T) {
 	}
 }
 
+func TestHandleBroadcastInfoP2P(t *testing.T) {
+	topicName := "usrP2P"
+	numUsers := 2
+	readId := 8
+	helper := TopicTestHelper{}
+	helper.setUp(t, numUsers, types.TopicCatP2P, topicName /*attach=*/, true)
+	defer func() {
+		helper.tearDown()
+	}()
+	// Pretend we have 10 messages.
+	helper.topic.lastID = 10
+	// uid1 notifies uid2 that uid1 has read messages up to seqid 8.
+	from := helper.uids[0]
+	to := helper.uids[1]
+
+	helper.ss.EXPECT().Update(topicName, from, map[string]interface{}{"ReadSeqId": readId}, false).Return(nil)
+
+	msg := &ServerComMessage{
+		AsUser: from.UserId(),
+		Info: &MsgServerInfo{
+			Topic: to.UserId(),
+			Src:   "",
+			From:  from.UserId(),
+			What:  "read",
+			SeqId: readId,
+		},
+		sess:    helper.sessions[0],
+		SkipSid: helper.sessions[0].sid,
+	}
+	helper.topic.handleBroadcast(msg)
+	helper.finish()
+
+	// Topic metadata.
+	if actualReadId := helper.topic.perUser[from].readID; actualReadId != readId {
+		t.Errorf("perUser[%s].readID: expected %d, found %d.", from.UserId(), readId, actualReadId)
+	}
+	// Server messages.
+	if len(helper.results[0].messages) != 0 {
+		t.Errorf("Session 0 isn't expected to receive any messages. Received %d", len(helper.results[0].messages))
+	}
+	if len(helper.results[1].messages) != 1 {
+		t.Fatalf("Session 1 is expected to receive exactly 1 message. Received %d", len(helper.results[1].messages))
+	}
+	res := helper.results[1].messages[0].(*ServerComMessage)
+	if res.Info != nil {
+		info := res.Info
+		// Topic name will be fixed (to -> from).
+		if info.Topic != from.UserId() {
+			t.Errorf("Info.Topic: expected '%s', found '%s'", to.UserId(), info.Topic)
+		}
+		if info.From != from.UserId() {
+			t.Errorf("Info.From: expected '%s', found '%s'", from.UserId(), info.From)
+		}
+		if info.What != "read" {
+			t.Errorf("Info.What: expected 'read', found '%s'", info.What)
+		}
+		if info.SeqId != readId {
+			t.Errorf("Info.SeqId: expected %d, found %d", readId, info.SeqId)
+		}
+	} else {
+		t.Error("Session message is expected to contain `info` section.")
+	}
+	// Checking presence messages routed through hub helper. These are intended for offline sessions.
+	if len(helper.hubMessages) != 2 {
+		t.Fatalf("Hubhelper.route expected exactly two recepients routed via hubhelper. Found %d", len(helper.hubMessages))
+	}
+	for i, uid := range helper.uids {
+		if routedMsgs, ok := helper.hubMessages[uid.UserId()]; ok {
+			expectedSrc := helper.uids[i^1].UserId()
+			for _, s := range routedMsgs {
+				if s.Info != nil {
+					// Info messages for offline sessions.
+					info := s.Info
+					if info.Topic != "me" {
+						t.Errorf("Uid %s: info.topic is expected to be 'me', got %s", uid.UserId(), info.Topic)
+					}
+					if info.Src != expectedSrc {
+						t.Errorf("Uid %s: info.src expected: %s, found: %s", uid.UserId(), expectedSrc, info.Src)
+					}
+					if info.What != "read" {
+						t.Error("info.what expected to be 'read'")
+					}
+					if info.SeqId != readId {
+						t.Errorf("info.seq: expected %d, found %d", readId, info.SeqId)
+					}
+				} else if s.Pres != nil {
+					// Pres messages for offline sessions.
+					pres := s.Pres
+					if pres.Topic != "me" {
+						t.Errorf("Uid %s: pres.topic is expected to be 'me', got %s", uid.UserId(), pres.Topic)
+					}
+					if pres.What != "read" {
+						t.Error("pres.what expected to be 'read'")
+					}
+					if pres.Src != expectedSrc {
+						t.Errorf("Uid %s: pres.src expected: %s, found: %s", uid.UserId(), expectedSrc, pres.Src)
+					}
+					if pres.SeqId != readId {
+						t.Errorf("pres.seq: expected %d, found %d", readId, pres.SeqId)
+					}
+				} else {
+					t.Error("Hub messages must be either `info` or `pres`.")
+				}
+			}
+		} else {
+			t.Errorf("Uid %s: no hub results found.", uid.UserId())
+		}
+	}
+}
+
+func TestHandleBroadcastPresMe(t *testing.T) {
+	topicName := "usrMe"
+	numUsers := 1
+	helper := TopicTestHelper{}
+	helper.setUp(t, numUsers, types.TopicCatMe, topicName /*attach=*/, true)
+	defer func() {
+		helper.tearDown()
+	}()
+
+	uid := helper.uids[0]
+	srcUid := types.Uid(10)
+	helper.topic.perSubs = make(map[string]perSubsData)
+	helper.topic.perSubs[srcUid.UserId()] = perSubsData{enabled: true, online: false}
+
+	msg := &ServerComMessage{
+		AsUser: uid.UserId(),
+		RcptTo: uid.UserId(),
+		Pres: &MsgServerPres{
+			Topic: "me",
+			Src:   srcUid.UserId(),
+			What:  "on",
+		},
+	}
+	helper.topic.handleBroadcast(msg)
+	helper.finish()
+
+	// Topic metadata.
+	if online := helper.topic.perSubs[srcUid.UserId()].online; !online {
+		t.Errorf("User %s is expected to be online.", srcUid.UserId())
+	}
+	// Server messages.
+	if len(helper.results[0].messages) != 1 {
+		t.Fatalf("Session 0 is expected to receive one message. Received %d.", len(helper.results[0].messages))
+	}
+	s := helper.results[0].messages[0].(*ServerComMessage)
+	if s.RcptTo != uid.UserId() {
+		t.Errorf("Message.RcptTo: expected '%s', found '%s'", uid.UserId(), s.RcptTo)
+	}
+	if s.Pres != nil {
+		pres := s.Pres
+		if pres.Topic != "me" {
+			t.Errorf("Expected to notify user on 'me' topic. Found: '%s'", pres.Topic)
+		}
+		if pres.Src != srcUid.UserId() {
+			t.Errorf("Expected notification from '%s'. Found: '%s'", srcUid.UserId(), pres.Topic)
+		}
+		if pres.What != "on" {
+			t.Errorf("Expected an online notification. Found: '%s'", pres.What)
+		}
+	} else {
+		t.Error("Message is expected to be pres.")
+	}
+	if len(helper.hubMessages) != 0 {
+		t.Errorf("Hubhelper.route isn't expected to receive messages. Received %d", len(helper.hubMessages))
+	}
+}
+
 func TestReplyGetDescInvalidOpts(t *testing.T) {
 	numUsers := 1
 	helper := TopicTestHelper{}
-	helper.setUp(t, numUsers, types.TopicCatMe, "", /*attach=*/true)
+	helper.setUp(t, numUsers, types.TopicCatMe, "" /*attach=*/, true)
 	defer helper.tearDown()
 
 	msg := ClientComMessage{
@@ -417,7 +587,7 @@ func TestRegisterSessionMe(t *testing.T) {
 	topicName := "usrMe"
 	numUsers := 1
 	helper := TopicTestHelper{}
-	helper.setUp(t, numUsers, types.TopicCatMe, topicName, /*attach=*/false)
+	helper.setUp(t, numUsers, types.TopicCatMe, topicName /*attach=*/, false)
 	defer func() {
 		helper.tearDown()
 	}()
@@ -485,7 +655,7 @@ func TestUnregisterSessionSimple(t *testing.T) {
 	topicName := "usrMe"
 	numUsers := 1
 	helper := TopicTestHelper{}
-	helper.setUp(t, numUsers, types.TopicCatMe, topicName, /*attach=*/true)
+	helper.setUp(t, numUsers, types.TopicCatMe, topicName /*attach=*/, true)
 	defer func() {
 		helper.tearDown()
 	}()
@@ -558,7 +728,7 @@ func TestUnregisterSessionUnsubscribe(t *testing.T) {
 	topicName := "grpTest"
 	numUsers := 3
 	helper := TopicTestHelper{}
-	helper.setUp(t, numUsers, types.TopicCatGrp, topicName, /*attach=*/true)
+	helper.setUp(t, numUsers, types.TopicCatGrp, topicName /*attach=*/, true)
 	defer func() {
 		helper.tearDown()
 	}()
@@ -678,7 +848,7 @@ func TestHandleMetaGet(t *testing.T) {
 	topicName := "usrMe"
 	numUsers := 1
 	helper := TopicTestHelper{}
-	helper.setUp(t, numUsers, types.TopicCatMe, topicName, /*attach=*/true)
+	helper.setUp(t, numUsers, types.TopicCatMe, topicName /*attach=*/, true)
 	defer func() {
 		helper.tearDown()
 	}()
@@ -762,7 +932,7 @@ func TestHandleMetaSetDescMePublicPrivate(t *testing.T) {
 	topicName := "usrMe"
 	numUsers := 1
 	helper := TopicTestHelper{}
-	helper.setUp(t, numUsers, types.TopicCatMe, topicName, /*attach=*/true)
+	helper.setUp(t, numUsers, types.TopicCatMe, topicName /*attach=*/, true)
 	defer func() {
 		helper.tearDown()
 	}()
@@ -835,7 +1005,7 @@ func TestHandleSessionUpdateSessToForeground(t *testing.T) {
 	topicName := "usrMe"
 	numUsers := 1
 	helper := TopicTestHelper{}
-	helper.setUp(t, numUsers, types.TopicCatMe, topicName, /*attach=*/true)
+	helper.setUp(t, numUsers, types.TopicCatMe, topicName /*attach=*/, true)
 	defer func() {
 		helper.tearDown()
 	}()
@@ -858,7 +1028,7 @@ func TestHandleSessionUpdateUserAgent(t *testing.T) {
 	topicName := "usrMe"
 	numUsers := 1
 	helper := TopicTestHelper{}
-	helper.setUp(t, numUsers, types.TopicCatMe, topicName, /*attach=*/true)
+	helper.setUp(t, numUsers, types.TopicCatMe, topicName /*attach=*/, true)
 	defer func() {
 		helper.tearDown()
 	}()
@@ -886,7 +1056,7 @@ func TestHandleUATimerEvent(t *testing.T) {
 	topicName := "usrMe"
 	numUsers := 1
 	helper := TopicTestHelper{}
-	helper.setUp(t, numUsers, types.TopicCatMe, topicName, /*attach=*/true)
+	helper.setUp(t, numUsers, types.TopicCatMe, topicName /*attach=*/, true)
 	defer func() {
 		helper.tearDown()
 	}()
@@ -931,7 +1101,7 @@ func TestHandleTopicTimeout(t *testing.T) {
 	topicName := "usrMe"
 	numUsers := 1
 	helper := TopicTestHelper{}
-	helper.setUp(t, numUsers, types.TopicCatMe, topicName, /*attach=*/true)
+	helper.setUp(t, numUsers, types.TopicCatMe, topicName /*attach=*/, true)
 	defer func() {
 		helper.tearDown()
 	}()
@@ -985,7 +1155,7 @@ func TestHandleTopicTermination(t *testing.T) {
 	topicName := "usrMe"
 	numUsers := 1
 	helper := TopicTestHelper{}
-	helper.setUp(t, numUsers, types.TopicCatMe, topicName, /*attach=*/true)
+	helper.setUp(t, numUsers, types.TopicCatMe, topicName /*attach=*/, true)
 	defer func() {
 		helper.tearDown()
 	}()
