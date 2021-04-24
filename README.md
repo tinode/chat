@@ -89,10 +89,11 @@ When you register a new account you are asked for an email address to send valid
 * Inline images, file attachments.
 * Forms and templated responses suitable for chatbots.
 * Message status notifications: message delivery to server; received and read notifications; typing notifications.
+* Most recent message preview in contact list.
 * Ability to block unwanted communication server-side.
 * Anonymous users (important for use cases related to tech support over chat).
 * Storage and out of band transfer of large objects like video files using local file system or Amazon S3.
-* Plugins to extend functionality, for example, to enable chatbots.
+* Plugins to extend functionality, for example, to support moderation or chatbots.
 
 ### Planned
 
