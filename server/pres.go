@@ -48,6 +48,8 @@ func (t *Topic) addToPerSubs(topic string, online, enabled bool) {
 		return
 	}
 
+	// TODO: maybe skip loading channel subscriptions. They can's send or receive these notifications anyway.
+
 	if uid1, uid2, err := types.ParseP2P(topic); err == nil {
 		// If this is a P2P topic, index it by second user's ID
 		if uid1.UserId() == t.name {
@@ -95,7 +97,7 @@ func (t *Topic) procPresReq(fromUserID, what string, wantReply bool) string {
 	}
 
 	if t.isProxy {
-		// Pass through on proxy: there is no point in maintaining peer status
+		// Passthrough on proxy: there is no point in maintaining peer status
 		// at the proxy, it's an exact replica of the master.
 		return what
 	}
@@ -220,7 +222,28 @@ func (t *Topic) procPresReq(fromUserID, what string, wantReply bool) string {
 	return what
 }
 
-// Publish user's update to his/her users of interest on their 'me' topic
+// Get user-specific topic name for notifying users of interest, or skip the notification.
+func notifyOnOrSkip(topic, what string, online bool) string {
+	// Don't send notifications on channels
+	if types.IsChannel(topic) {
+		return ""
+	}
+
+	// P2P contacts are notified on 'me', group topics are notified on proper topic name.
+	notifyOn := "me"
+	if what == "upd" || what == "ua" {
+		if !online {
+			// Skip "upd" and "ua" notifications if the contact is offline.
+			return ""
+		}
+		if types.GetTopicCat(topic) == types.TopicCatGrp {
+			notifyOn = topic
+		}
+	}
+	return notifyOn
+}
+
+// Publish user's update to his/her subscriptions: p2p on their 'me' topic, group topics on the topic.
 // Case A: user came online, "on", ua
 // Case B: user went offline, "off", ua
 // Case C: user agent change, "ua", ua
@@ -232,17 +255,11 @@ func (t *Topic) presUsersOfInterest(what, ua string) {
 
 	// Push update to subscriptions
 	for topic, psd := range t.perSubs {
-		// P2P contacts are notified on 'me', group topics are notified on proper topic name.
-		notifyOn := "me"
-		if what == "upd" || what == "ua" {
-			if !psd.online {
-				// Skip "upd" and "ua" notifications if the contact is offline.
-				continue
-			}
-			if types.GetTopicCat(topic) == types.TopicCatGrp {
-				notifyOn = topic
-			}
+		notifyOn := notifyOnOrSkip(topic, what, psd.online)
+		if notifyOn == "" {
+			continue
 		}
+
 		globals.hub.route <- &ServerComMessage{
 			Pres: &MsgServerPres{
 				Topic:     notifyOn,
@@ -260,12 +277,17 @@ func (t *Topic) presUsersOfInterest(what, ua string) {
 }
 
 // Publish user's update to his/her users of interest on their 'me' topic while user's 'me' topic is offline
-// Case A: user is being deleted, "gone"
+// Case A: user is being deleted, "gone".
 func presUsersOfInterestOffline(uid types.Uid, subs []types.Subscription, what string) {
 	// Push update to subscriptions
 	for i := range subs {
+		notifyOn := notifyOnOrSkip(subs[i].Topic, what, true)
+		if notifyOn == "" {
+			continue
+		}
+
 		globals.hub.route <- &ServerComMessage{
-			Pres:   &MsgServerPres{Topic: "me", What: what, Src: uid.UserId(), WantReply: false},
+			Pres:   &MsgServerPres{Topic: notifyOn, What: what, Src: uid.UserId(), WantReply: false},
 			RcptTo: subs[i].Topic}
 	}
 }
