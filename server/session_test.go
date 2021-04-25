@@ -544,3 +544,136 @@ func TestDispatchNote(t *testing.T) {
 		t.Errorf("Note messages: expected 1, received %d.", len(brdcst))
 	}
 }
+
+func TestDispatchAccNew(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	ss := mock_store.NewMockStoreInterface(ctrl)
+	uu := mock_store.NewMockUsersObjMapperInterface(ctrl)
+	aa := mock_auth.NewMockAuthHandler(ctrl)
+
+	uid := types.Uid(1)
+	store.Store = ss
+	store.Users = uu
+	defer func() {
+		store.Store = nil
+		store.Users = nil
+		ctrl.Finish()
+	}()
+
+	remoteAddr := "192.168.0.1"
+	secret := "<==auth-secret==>"
+	tags := []string{"tag1", "tag2"}
+	authRec := &auth.Rec{
+		Uid:       uid,
+		AuthLevel: auth.LevelAuth,
+		Tags:      tags,
+		State:     types.StateOK,
+	}
+	ss.EXPECT().GetLogicalAuthHandler("basic").Return(aa)
+	// This login is available.
+	aa.EXPECT().IsUnique([]byte(secret), remoteAddr).Return(true, nil)
+	uu.EXPECT().Create(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(user *types.User, private interface{}) (*types.User, error) {
+			user.SetUid(uid)
+			return user, nil
+		})
+	aa.EXPECT().AddRecord(gomock.Any(), []byte(secret), remoteAddr).Return(authRec, nil)
+
+	// Token generation.
+	ss.EXPECT().GetLogicalAuthHandler("token").Return(aa)
+	token := "<==auth-token==>"
+	aa.EXPECT().GenSecret(gomock.Any()).Return([]byte(token), time.Now(), nil)
+	uu.EXPECT().UpdateTags(uid, tags, nil, nil).Return(tags, nil)
+
+	s := &Session{
+		send:       make(chan interface{}, 10),
+		authLvl:    auth.LevelAuth,
+		ver:        16,
+		remoteAddr: remoteAddr,
+	}
+	wg := sync.WaitGroup{}
+	r := Responses{}
+	wg.Add(1)
+	go s.testWriteLoop(&r, &wg)
+
+	public := "public name"
+	msg := &ClientComMessage{
+		Acc: &MsgClientAcc{
+			Id:     "123",
+			User:   "newXYZ",
+			Scheme: "basic",
+			Secret: []byte(secret),
+			Tags:   []string{"abc", "123"},
+			Desc:   &MsgSetDesc{Public: public},
+		},
+	}
+
+	s.dispatch(msg)
+	close(s.send)
+	wg.Wait()
+
+	if len(r.messages) != 1 {
+		t.Errorf("Responses: expected 1, received %d.", len(r.messages))
+	}
+	resp := r.messages[0].(*ServerComMessage)
+	if resp == nil {
+		t.Fatal("Response must be ServerComMessage")
+	}
+	if resp.Ctrl != nil {
+		if resp.Ctrl.Id != "123" {
+			t.Errorf("Response id: expected '123', found '%s'", resp.Ctrl.Id)
+		}
+		if resp.Ctrl.Code != 201 {
+			t.Errorf("Response code: expected 201, got %d", resp.Ctrl.Code)
+		}
+		if resp.Ctrl.Params == nil {
+			t.Error("Response is expected to contain params dict.")
+		}
+		p := resp.Ctrl.Params.(map[string]interface{})
+		if respUid := string(p["user"].(string)); respUid != uid.UserId() {
+			t.Errorf("Response uid: expected '%s', found '%s'.", uid.UserId(), respUid)
+		}
+		if lvl := p["authlvl"].(string); lvl != auth.LevelAuth.String() {
+			t.Errorf("Auth level: expected '%s', found '%s'.", auth.LevelAuth.String(), lvl)
+		}
+		if desc := p["desc"].(*MsgTopicDesc); desc.Public.(string) != public {
+			t.Errorf("Public: expected '%s', found '%s'.", public, desc.Public.(string))
+		}
+	} else {
+		t.Error("Response must contain a ctrl message.")
+	}
+}
+
+func TestDispatchNoMessage(t *testing.T) {
+	remoteAddr := "192.168.0.1"
+	s := &Session{
+		send:       make(chan interface{}, 10),
+		authLvl:    auth.LevelAuth,
+		ver:        16,
+		remoteAddr: remoteAddr,
+	}
+	wg := sync.WaitGroup{}
+	r := Responses{}
+	wg.Add(1)
+	go s.testWriteLoop(&r, &wg)
+
+	msg := &ClientComMessage{}
+
+	s.dispatch(msg)
+	close(s.send)
+	wg.Wait()
+
+	if len(r.messages) != 1 {
+		t.Errorf("Responses: expected 1, received %d.", len(r.messages))
+	}
+	resp := r.messages[0].(*ServerComMessage)
+	if resp == nil {
+		t.Fatal("Response must be ServerComMessage")
+	}
+	if resp.Ctrl == nil {
+		t.Fatal("Response must contain a ctrl message.")
+	}
+	if resp.Ctrl.Code != 400 {
+		t.Errorf("Response code: expected 400, got %d", resp.Ctrl.Code)
+	}
+}
