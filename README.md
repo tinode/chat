@@ -135,13 +135,13 @@ All client software has support for internationalization. Translations are provi
 ### [Desktop Web](https://github.com/tinode/webapp/)
 
 <p align="center">
-  <img src="docs/web-desktop-2.png" alt="Desktop web: full app" width=810 />
+  <img src="docs/web-desktop.jpg" alt="Desktop web: full app" width=810 />
 </p>
 
 ### [Mobile Web](https://github.com/tinode/webapp/)
 
 <p align="center">
-  <img src="docs/web-mob-contacts-1.png" alt="Mobile web: contacts" width=250 /> <img src="docs/web-mob-chat-1.png" alt="Mobile web: chat" width=250 /> <img src="docs/web-mob-info-1.png" alt="Mobile web: topic info" width=250 />
+  <img src="docs/web-mob-contacts.png" alt="Mobile web: contacts" width=250 /> <img src="docs/web-mob-chat.png" alt="Mobile web: chat" width=250 /> <img src="docs/web-mob-info.png" alt="Mobile web: topic info" width=250 />
 </p>
 
 
