@@ -60,12 +60,16 @@ See more info at https://github.com/tinode/ios/#push_notifications
 **A**: The `root` access can be granted to a user only by executing a database query. First create or choose the user you want to promote to `root` then execute the query:
 * RethinkDB:
 ```js
-r.db("tinode").table("auth").get("basic:login-of-the-user-to-make-root").update({authLvl: 30})
+r.db('tinode').table('auth').get('basic:login-of-the-user-to-make-root').update({authLvl: 30})
 ```
 * MySQL:
 ```sql
 USE 'tinode';
 UPDATE auth SET authlvl=30 WHERE uname='basic:login-of-the-user-to-make-root';
+```
+* MongoDB:
+```js
+db.getCollection('auth').updateOne({_id: 'basic:alice'}, {$set: {authlvl: 30}})
 ```
 The test database has a stock user `xena` which has root access.
 
