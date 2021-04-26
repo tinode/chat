@@ -69,7 +69,7 @@ UPDATE auth SET authlvl=30 WHERE uname='basic:login-of-the-user-to-make-root';
 ```
 * MongoDB:
 ```js
-db.getCollection('auth').updateOne({_id: 'basic:alice'}, {$set: {authlvl: 30}})
+db.getCollection('auth').updateOne({_id: 'basic:login-of-the-user-to-make-root'}, {$set: {authlvl: 30}})
 ```
 The test database has a stock user `xena` which has root access.
 
