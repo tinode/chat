@@ -1428,9 +1428,10 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 
 	limit := a.maxResults
 	if opts != nil {
-		// Ignore IfModifiedSince - we must return all entries
-		// Those unmodified will be stripped of Public & Private.
-
+		if opts.IfModifiedSince != nil {
+			q += " AND updatedat>?"
+			args = append(args, opts.IfModifiedSince)
+		}
 		if opts.Topic != "" {
 			q += " AND topic=?"
 			args = append(args, opts.Topic)
@@ -1597,7 +1598,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 }
 
 // UsersForTopic loads users subscribed to the given topic.
-// The difference between UsersForTopic vs SubsForTopic is that the former loads user.public,
+// The difference between UsersForTopic vs SubsForTopic is that the former loads user.Public,
 // the latter does not.
 func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt) ([]t.Subscription, error) {
 	tcat := t.GetTopicCat(topic)
@@ -1624,7 +1625,7 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 	limit := a.maxResults
 	var oneUser t.Uid
 	if opts != nil {
-		// Ignore IfModifiedSince - we must return all entries
+		// Ignore IfModifiedSince: loading all entries because a topic cannot have too many subscribers.
 		// Those unmodified will be stripped of Public & Private.
 
 		if !opts.User.IsZero() {

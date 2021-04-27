@@ -1091,9 +1091,9 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 	}
 	limit := a.maxResults
 	if opts != nil {
-		// Ignore IfModifiedSince - we must return all entries
-		// Those unmodified will be stripped of Public & Private.
-
+		if opts.IfModifiedSince != nil {
+			q = q.Filter(rdb.Row.Field("UpdatedAt").Gt(opts.IfModifiedSince))
+		}
 		if opts.Topic != "" {
 			q = q.Filter(rdb.Row.Field("Topic").Eq(opts.Topic))
 		}

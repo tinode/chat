@@ -1285,9 +1285,9 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 	}
 	limit := a.maxResults
 	if opts != nil {
-		// Ignore IfModifiedSince - we must return all entries
-		// Those unmodified will be stripped of Public & Private.
-
+		if opts.IfModifiedSince != nil {
+			filter["updatedat"] = b.M{"$gt": opts.IfModifiedSince}
+		}
 		if opts.Topic != "" {
 			filter["topic"] = opts.Topic
 		}
