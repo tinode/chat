@@ -736,7 +736,7 @@ The `{sub}` packet serves the following functions:
  * attaching session to a previously subscribed topic
  * fetching topic data
 
-User creates a new group topic by sending `{sub}` packet with the `topic` field set to `"new"`. Server will create a topic and respond back to session with the name of the newly created topic.
+User creates a new group topic by sending `{sub}` packet with the `topic` field set to `new12321` (regular topic) or `nch12321` (channel) where `12321` denotes any string including an empty string. Server will create a topic and respond back to the session with the name of the newly created topic.
 
 User creates a new peer to peer topic by sending `{sub}` packet with `topic` set to peer's user ID.
 
@@ -800,17 +800,16 @@ sub: {
       ims: "2015-10-06T18:07:30.038Z" // timestamp, "if modified since" - return
               // public and private values only if at least one of them has been
               // updated after the stated timestamp, optional
-
     },
 
     // Optional parameters for {get what="sub"}
     sub: {
       ims: "2015-10-06T18:07:30.038Z", // timestamp, "if modified since" - return
-              // public and private values only if at least one of them has been
-              // updated after the stated timestamp, optional
-    user: "usr2il9suCbuko", // string, return results for a single user,
+              // only those subscriptions which have been modified after the stated
+              // timestamp, optional
+      user: "usr2il9suCbuko", // string, return results for a single user,
                             // any topic other than 'me', optional
-    topic: "usr2il9suCbuko", // string, return results for a single topic,
+      topic: "usr2il9suCbuko", // string, return results for a single topic,
                             // 'me' topic only, optional
       limit: 20 // integer, limit the number of returned objects
     },
