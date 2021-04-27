@@ -5,14 +5,15 @@
 package mock_store
 
 import (
-	json "encoding/json"
-	gomock "github.com/golang/mock/gomock"
-	auth "github.com/tinode/chat/server/auth"
-	media "github.com/tinode/chat/server/media"
-	types "github.com/tinode/chat/server/store/types"
-	validate "github.com/tinode/chat/server/validate"
-	reflect "reflect"
-	time "time"
+	"encoding/json"
+	"reflect"
+	"time"
+
+	"github.com/golang/mock/gomock"
+	"github.com/tinode/chat/server/auth"
+	"github.com/tinode/chat/server/media"
+	"github.com/tinode/chat/server/store/types"
+	"github.com/tinode/chat/server/validate"
 )
 
 // MockStoreInterface is a mock of StoreInterface interface
@@ -929,17 +930,17 @@ func (mr *MockSubsObjMapperInterfaceMockRecorder) Get(topic, user interface{}) *
 }
 
 // Update mocks base method
-func (m *MockSubsObjMapperInterface) Update(topic string, user types.Uid, update map[string]interface{}, updateTS bool) error {
+func (m *MockSubsObjMapperInterface) Update(topic string, user types.Uid, update map[string]interface{}) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Update", topic, user, update, updateTS)
+	ret := m.ctrl.Call(m, "Update", topic, user, update)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Update indicates an expected call of Update
-func (mr *MockSubsObjMapperInterfaceMockRecorder) Update(topic, user, update, updateTS interface{}) *gomock.Call {
+func (mr *MockSubsObjMapperInterfaceMockRecorder) Update(topic, user, update interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Update", reflect.TypeOf((*MockSubsObjMapperInterface)(nil).Update), topic, user, update, updateTS)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Update", reflect.TypeOf((*MockSubsObjMapperInterface)(nil).Update), topic, user, update)
 }
 
 // Delete mocks base method

@@ -1007,7 +1007,7 @@ func (t *Topic) procInfoReq(asUid types.Uid, msg *ServerComMessage) bool {
 		if read > 0 {
 			upd["ReadSeqId"] = read
 		}
-		if err := store.Subs.Update(topicName, asUid, upd, false); err != nil {
+		if err := store.Subs.Update(topicName, asUid, upd); err != nil {
 			logs.Warn.Printf("topic[%s]: failed to update SeqRead/Recv counter: %v", t.name, err)
 			return false
 		}
@@ -1418,7 +1418,7 @@ func (t *Topic) thisUserSub(sess *Session, pkt *ClientComMessage, asUid types.Ui
 		} else if asChan && userData.modeWant != oldWant {
 			// Channel reader changed access mode, save changed mode to db.
 			if err := store.Subs.Update(tname, asUid,
-				map[string]interface{}{"ModeWant": userData.modeWant}, true); err != nil {
+				map[string]interface{}{"ModeWant": userData.modeWant}); err != nil {
 				sess.queueOut(ErrUnknownReply(pkt, now))
 				return nil, err
 			}
@@ -1529,7 +1529,7 @@ func (t *Topic) thisUserSub(sess *Session, pkt *ClientComMessage, asUid types.Ui
 			update["ModeGiven"] = userData.modeGiven
 		}
 		if len(update) > 0 {
-			if err := store.Subs.Update(t.name, asUid, update, true); err != nil {
+			if err := store.Subs.Update(t.name, asUid, update); err != nil {
 				sess.queueOut(ErrUnknownReply(pkt, now))
 				return nil, err
 			}
@@ -1544,7 +1544,7 @@ func (t *Topic) thisUserSub(sess *Session, pkt *ClientComMessage, asUid types.Ui
 			if err := store.Subs.Update(t.name, t.owner,
 				map[string]interface{}{
 					"ModeWant":  oldOwnerData.modeWant,
-					"ModeGiven": oldOwnerData.modeGiven}, false); err != nil {
+					"ModeGiven": oldOwnerData.modeGiven}); err != nil {
 				return nil, err
 			}
 			if err := store.Topics.OwnerChange(t.name, asUid); err != nil {
@@ -1761,7 +1761,7 @@ func (t *Topic) anotherUserSub(sess *Session, asUid, target types.Uid, asChan bo
 
 			// Save changed value to database
 			if err := store.Subs.Update(t.name, target,
-				map[string]interface{}{"ModeGiven": modeGiven}, false); err != nil {
+				map[string]interface{}{"ModeGiven": modeGiven}); err != nil {
 				return nil, err
 			}
 			t.perUser[target] = userData
@@ -2008,7 +2008,7 @@ func (t *Topic) replySetDesc(sess *Session, asUid types.Uid, asChan bool, msg *C
 		if asChan {
 			tname = types.GrpToChn(tname)
 		}
-		err = store.Subs.Update(tname, asUid, sub, true)
+		err = store.Subs.Update(tname, asUid, sub)
 	}
 
 	if err != nil {

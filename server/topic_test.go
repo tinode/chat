@@ -398,7 +398,7 @@ func TestHandleBroadcastInfoP2P(t *testing.T) {
 	from := helper.uids[0]
 	to := helper.uids[1]
 
-	helper.ss.EXPECT().Update(topicName, from, map[string]interface{}{"ReadSeqId": readId}, false).Return(nil)
+	helper.ss.EXPECT().Update(topicName, from, map[string]interface{}{"ReadSeqId": readId}).Return(nil)
 
 	msg := &ServerComMessage{
 		AsUser: from.UserId(),
@@ -940,7 +940,7 @@ func TestHandleMetaSetDescMePublicPrivate(t *testing.T) {
 	uid := helper.uids[0]
 	gomock.InOrder(
 		helper.uu.EXPECT().Update(uid, SupersetOf(map[string]string{"Public": "new public"})).Return(nil),
-		helper.ss.EXPECT().Update(topicName, uid, map[string]interface{}{"Private": "new private"}, true).Return(nil),
+		helper.ss.EXPECT().Update(topicName, uid, map[string]interface{}{"Private": "new private"}).Return(nil),
 	)
 
 	meta := &metaReq{

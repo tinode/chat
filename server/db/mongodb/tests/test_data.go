@@ -53,7 +53,7 @@ func initUsers() {
 		user.InitTimes()
 	}
 	deletedAt := now.Add(10 * time.Minute)
-  users[2].State = types.StateDeleted
+	users[2].State = types.StateDeleted
 	users[2].StateAt = &deletedAt
 }
 func initCreds() {

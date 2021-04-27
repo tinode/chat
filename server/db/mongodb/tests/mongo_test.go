@@ -450,11 +450,7 @@ func TestSubscriptionGet(t *testing.T) {
 }
 
 func TestSubsForUser(t *testing.T) {
-	qOpts := types.QueryOpt{
-		Topic: topics[0].Id,
-		Limit: 999,
-	}
-	gotSubs, err := adp.SubsForUser(types.ParseUserId("usr"+users[0].Id), false, &qOpts)
+	gotSubs, err := adp.SubsForUser(types.ParseUserId("usr" + users[0].Id))
 	if err != nil {
 		t.Error(err)
 	}
@@ -463,7 +459,7 @@ func TestSubsForUser(t *testing.T) {
 	}
 
 	// Test not found
-	gotSubs, err = adp.SubsForUser(types.ParseUserId("dummyuserid"), false, nil)
+	gotSubs, err = adp.SubsForUser(types.ParseUserId("dummyuserid"))
 	if err != nil {
 		t.Error(err)
 	}
@@ -1178,7 +1174,7 @@ func initConnectionToDb() {
 
 func init() {
 	logs.Init(os.Stderr, "stdFlags")
-	adp = backend.GetAdapter()
+	adp = backend.GetTestAdapter()
 	conffile := flag.String("config", "./test.conf", "config of the database connection")
 
 	if file, err := os.Open(*conffile); err != nil {

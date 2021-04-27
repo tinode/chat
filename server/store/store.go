@@ -82,7 +82,7 @@ func openAdapter(workerId int, jsonconf json.RawMessage) error {
 	return adp.Open(adapterConfig)
 }
 
-type StoreInterface interface{
+type StoreInterface interface {
 	Open(workerId int, jsonconf json.RawMessage) error
 	Close() error
 	IsOpen() bool
@@ -103,6 +103,7 @@ type StoreInterface interface{
 }
 
 var Store StoreInterface
+
 type StoreObj struct{}
 
 // Open initializes the persistence system. Adapter holds a connection pool for a database instance.
@@ -238,7 +239,7 @@ func (s StoreObj) DbStats() func() interface{} {
 }
 
 // UsersObjMapper is a users struct to hold methods for persistence mapping for the User object.
-type UsersObjMapperInterface interface{
+type UsersObjMapperInterface interface {
 	Create(user *types.User, private interface{}) (*types.User, error)
 	GetAuthRecord(user types.Uid, scheme string) (string, auth.Level, []byte, time.Time, error)
 	GetAuthUniqueRecord(scheme, unique string) (types.Uid, auth.Level, []byte, time.Time, error)
@@ -483,7 +484,7 @@ func (UsersObjMapper) GetUnreadCount(id types.Uid) (int, error) {
 }
 
 // TopicsObjMapper is a struct to hold methods for persistence mapping for the topic object.
-type TopicsObjMapperInterface interface{
+type TopicsObjMapperInterface interface {
 	Create(topic *types.Topic, owner types.Uid, private interface{}) error
 	CreateP2P(initiator, invited *types.Subscription) error
 	Get(topic string) (*types.Topic, error)
@@ -586,7 +587,7 @@ func (TopicsObjMapper) Delete(topic string, hard bool) error {
 type SubsObjMapperInterface interface {
 	Create(subs ...*types.Subscription) error
 	Get(topic string, user types.Uid) (*types.Subscription, error)
-	Update(topic string, user types.Uid, update map[string]interface{}, updateTS bool) error
+	Update(topic string, user types.Uid, update map[string]interface{}) error
 	Delete(topic string, user types.Uid) error
 }
 type SubsObjMapper struct{}
@@ -609,10 +610,8 @@ func (SubsObjMapper) Get(topic string, user types.Uid) (*types.Subscription, err
 }
 
 // Update values of topic's subscriptions.
-func (SubsObjMapper) Update(topic string, user types.Uid, update map[string]interface{}, updateTS bool) error {
-	if updateTS {
-		update["UpdatedAt"] = types.TimeNow()
-	}
+func (SubsObjMapper) Update(topic string, user types.Uid, update map[string]interface{}) error {
+	update["UpdatedAt"] = types.TimeNow()
 	return adp.SubsUpdate(topic, user, update)
 }
 
@@ -892,7 +891,7 @@ func (StoreObj) GetValidator(name string) validate.Validator {
 }
 
 // DeviceMapper is a struct to map methods used for handling device IDs, used to generate push notifications.
-type DeviceMapperInterface interface{
+type DeviceMapperInterface interface {
 	Update(uid types.Uid, oldDeviceID string, dev *types.DeviceDef) error
 	GetAll(uid ...types.Uid) (map[types.Uid][]types.DeviceDef, int, error)
 	Delete(uid types.Uid, deviceID string) error
@@ -962,7 +961,7 @@ func (StoreObj) UseMediaHandler(name, config string) error {
 }
 
 // FileMapper is a struct to map methods used for file handling.
-type FileMapperInterface interface{
+type FileMapperInterface interface {
 	StartUpload(fd *types.FileDef) error
 	FinishUpload(fid string, success bool, size int64) (*types.FileDef, error)
 	Get(fid string) (*types.FileDef, error)
@@ -1006,11 +1005,11 @@ func (FileMapper) DeleteUnused(olderThan time.Time, limit int) error {
 }
 
 func init() {
-  Store = StoreObj{}
-  Users = UsersObjMapper{}
-  Topics = TopicsObjMapper{}
-  Subs = SubsObjMapper{}
-  Messages = MessagesObjMapper{}
-  Devices = DeviceMapper{}
-  Files = FileMapper{}
+	Store = StoreObj{}
+	Users = UsersObjMapper{}
+	Topics = TopicsObjMapper{}
+	Subs = SubsObjMapper{}
+	Messages = MessagesObjMapper{}
+	Devices = DeviceMapper{}
+	Files = FileMapper{}
 }
