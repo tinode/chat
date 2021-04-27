@@ -819,7 +819,7 @@ func TestHandleBroadcastInfoDbError(t *testing.T) {
 	from := helper.uids[0]
 	to := helper.uids[1]
 
-	helper.ss.EXPECT().Update(topicName, from, map[string]interface{}{"ReadSeqId": readId}, false).Return(types.ErrInternal)
+	helper.ss.EXPECT().Update(topicName, from, map[string]interface{}{"ReadSeqId": readId}).Return(types.ErrInternal)
 
 	msg := &ServerComMessage{
 		AsUser: from.UserId(),
@@ -931,7 +931,7 @@ func TestHandleBroadcastInfoChannelProcessing(t *testing.T) {
 		helper.topic.perUser[uid] = pud
 	}
 
-	helper.ss.EXPECT().Update(chanName, from, map[string]interface{}{"ReadSeqId": readId}, false).Return(nil)
+	helper.ss.EXPECT().Update(chanName, from, map[string]interface{}{"ReadSeqId": readId}).Return(nil)
 
 	msg := &ServerComMessage{
 		AsUser: from.UserId(),
