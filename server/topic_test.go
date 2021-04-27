@@ -251,7 +251,7 @@ func TestHandleBroadcastDataGroup(t *testing.T) {
 	topicName := "grp-test"
 	numUsers := 4
 	helper := TopicTestHelper{}
-	helper.setUp(t, numUsers, types.TopicCatGrp, topicName /*attach=*/, true)
+	helper.setUp(t, numUsers, types.TopicCatGrp, topicName, true)
 	defer func() {
 		store.Messages = nil
 		helper.tearDown()
@@ -275,9 +275,16 @@ func TestHandleBroadcastDataGroup(t *testing.T) {
 		sess:    helper.sessions[0],
 		SkipSid: helper.sessions[0].sid,
 	}
+
+	if helper.topic.lastID != 0 {
+		t.Errorf("Topic.lastID: expected 0, found %d", helper.topic.lastID)
+	}
 	helper.topic.handleBroadcast(msg)
 	helper.finish()
 
+	if helper.topic.lastID != 1 {
+		t.Errorf("Topic.lastID: expected 1, found %d", helper.topic.lastID)
+	}
 	// Message uid0 -> uid1, uid2, uid3.
 	// Uid0 is the sender.
 	if len(helper.results[0].messages) != 0 {
@@ -302,7 +309,7 @@ func TestHandleBroadcastDataGroup(t *testing.T) {
 	}
 	// Presence messages.
 	if len(helper.hubMessages) != 3 {
-		t.Fatal("Huhelper.route expected exactly three recepients routed via huhelper.")
+		t.Fatal("Hubhelper.route expected exactly three recepients routed via huhelper.")
 	}
 	for i, uid := range helper.uids {
 		if i == 3 {
@@ -337,10 +344,111 @@ func TestHandleBroadcastDataGroup(t *testing.T) {
 	}
 }
 
+func TestHandleBroadcastDataMissingWritePermission(t *testing.T) {
+	numUsers := 2
+	helper := TopicTestHelper{}
+	helper.setUp(t, numUsers, types.TopicCatP2P, "p2p-test", true)
+	defer helper.tearDown()
+
+	// Remove W permission for uid1.
+	uid1 := helper.uids[0]
+	pud := helper.topic.perUser[uid1]
+	pud.modeGiven = types.ModeRead | types.ModeJoin
+	helper.topic.perUser[uid1] = pud
+
+	// Make test message.
+	from := helper.uids[0].UserId()
+	msg := &ServerComMessage{
+		AsUser: from,
+		Data: &MsgServerData{
+			Topic:   "p2p",
+			From:    from,
+			Content: "test",
+		},
+		sess:    helper.sessions[0],
+		SkipSid: helper.sessions[0].sid,
+	}
+
+	helper.topic.handleBroadcast(msg)
+	helper.finish()
+
+	// Message uid1 -> uid2.
+	if len(helper.results[0].messages) == 1 {
+		em := helper.results[0].messages[0].(*ServerComMessage)
+		if em.Ctrl == nil {
+			t.Fatal("User 1 is expected to receive a ctrl message")
+		}
+		if em.Ctrl.Code < 400 || em.Ctrl.Code >= 500 {
+			t.Errorf("User1: expected ctrl.code 4xx, received %d", em.Ctrl.Code)
+		}
+	} else {
+		t.Errorf("User 1 is expected to receive one message vs %d received.", len(helper.results[0].messages))
+	}
+	if len(helper.results[1].messages) != 0 {
+		t.Errorf("User 2 is not expected to receive any messages, %d received.", len(helper.results[1].messages))
+	}
+	// Checking presence messages routed through hubhelper.
+	if len(helper.hubMessages) != 0 {
+		t.Errorf("Hubhelper.route did not expect any messages, however %d received.", len(helper.hubMessages))
+	}
+}
+
+func TestHandleBroadcastDataDbError(t *testing.T) {
+	numUsers := 2
+	helper := TopicTestHelper{}
+	helper.setUp(t, numUsers, types.TopicCatP2P, "p2p-test", true)
+	defer helper.tearDown()
+
+	// DB returns an error.
+	helper.mm.EXPECT().Save(gomock.Any(), gomock.Any()).Return(types.ErrInternal)
+
+	// Make test message.
+	from := helper.uids[0].UserId()
+	msg := &ServerComMessage{
+		AsUser: from,
+		Data: &MsgServerData{
+			Topic:   "p2p",
+			From:    from,
+			Content: "test",
+		},
+		sess:    helper.sessions[0],
+		SkipSid: helper.sessions[0].sid,
+	}
+
+	if helper.topic.lastID != 0 {
+		t.Errorf("Topic.lastID: expected 0, found %d", helper.topic.lastID)
+	}
+	helper.topic.handleBroadcast(msg)
+	helper.finish()
+
+	if helper.topic.lastID != 0 {
+		t.Errorf("Topic.lastID: expected to remain 0, found %d", helper.topic.lastID)
+	}
+	// Message uid1 -> uid2.
+	if len(helper.results[0].messages) == 1 {
+		em := helper.results[0].messages[0].(*ServerComMessage)
+		if em.Ctrl == nil {
+			t.Fatal("User 1 is expected to receive a ctrl message")
+		}
+		if em.Ctrl.Code < 500 || em.Ctrl.Code >= 600 {
+			t.Errorf("User1: expected ctrl.code 5xx, received %d", em.Ctrl.Code)
+		}
+	} else {
+		t.Errorf("User 1 is expected to receive one message vs %d received.", len(helper.results[0].messages))
+	}
+	if len(helper.results[1].messages) != 0 {
+		t.Errorf("User 2 is not expected to receive any messages, %d received.", len(helper.results[1].messages))
+	}
+	// Checking presence messages routed through hubhelper.
+	if len(helper.hubMessages) != 0 {
+		t.Errorf("Hubhelper.route did not expect any messages, however %d received.", len(helper.hubMessages))
+	}
+}
+
 func TestHandleBroadcastDataInactiveTopic(t *testing.T) {
 	numUsers := 2
 	helper := TopicTestHelper{}
-	helper.setUp(t, numUsers, types.TopicCatP2P, "p2p-test" /*attach=*/, true)
+	helper.setUp(t, numUsers, types.TopicCatP2P, "p2p-test", true)
 	defer helper.tearDown()
 
 	// Make test message.
@@ -377,9 +485,9 @@ func TestHandleBroadcastDataInactiveTopic(t *testing.T) {
 	if len(helper.results[1].messages) != 0 {
 		t.Errorf("User 2 is not expected to receive any messages, %d received.", len(helper.results[1].messages))
 	}
-	// Checking presence messages routed through huhelper.
+	// Checking presence messages routed through hubhelper.
 	if len(helper.hubMessages) != 0 {
-		t.Errorf("Huhelper.route did not expect any messages, however %d received.", len(helper.hubMessages))
+		t.Errorf("Hubhelper.route did not expect any messages, however %d received.", len(helper.hubMessages))
 	}
 }
 
@@ -388,7 +496,7 @@ func TestHandleBroadcastInfoP2P(t *testing.T) {
 	numUsers := 2
 	readId := 8
 	helper := TopicTestHelper{}
-	helper.setUp(t, numUsers, types.TopicCatP2P, topicName /*attach=*/, true)
+	helper.setUp(t, numUsers, types.TopicCatP2P, topicName, true)
 	defer func() {
 		helper.tearDown()
 	}()
@@ -490,6 +598,393 @@ func TestHandleBroadcastInfoP2P(t *testing.T) {
 		} else {
 			t.Errorf("Uid %s: no hub results found.", uid.UserId())
 		}
+	}
+}
+
+func TestHandleBroadcastInfoBogusNotification(t *testing.T) {
+	topicName := "usrP2P"
+	numUsers := 2
+	helper := TopicTestHelper{}
+	helper.setUp(t, numUsers, types.TopicCatP2P, topicName, true)
+	defer func() {
+		helper.tearDown()
+	}()
+	// Pretend we have 10 messages.
+	helper.topic.lastID = 10
+	// uid1 notifies uid2 that uid1 has read messages up to seqid 11.
+	readId := 11
+	from := helper.uids[0]
+	to := helper.uids[1]
+
+	msg := &ServerComMessage{
+		AsUser: from.UserId(),
+		Info: &MsgServerInfo{
+			Topic: to.UserId(),
+			Src:   "",
+			From:  from.UserId(),
+			What:  "read",
+			SeqId: readId,
+		},
+		sess:    helper.sessions[0],
+		SkipSid: helper.sessions[0].sid,
+	}
+	helper.topic.handleBroadcast(msg)
+	helper.finish()
+
+	// Read id should not be updated.
+	if actualReadId := helper.topic.perUser[from].readID; actualReadId != 0 {
+		t.Errorf("perUser[%s].readID: expected 0, found %d.", from.UserId(), actualReadId)
+	}
+	// Server messages.
+	for i, r := range helper.results {
+		if numMessages := len(r.messages); numMessages != 0 {
+			t.Errorf("User %d is not expected to receive any messages, %d received.", i, numMessages)
+		}
+	}
+
+	// Nothing should be routed through the hub.
+	if len(helper.hubMessages) != 0 {
+		t.Errorf("Hubhelper.route did not expect any messages, however %d received.", len(helper.hubMessages))
+	}
+}
+
+func TestHandleBroadcastInfoFilterOutRecvWithoutRPermission(t *testing.T) {
+	topicName := "usrP2P"
+	numUsers := 2
+	helper := TopicTestHelper{}
+	helper.setUp(t, numUsers, types.TopicCatP2P, topicName, true)
+	defer func() {
+		helper.tearDown()
+	}()
+	// Pretend we have 10 messages.
+	helper.topic.lastID = 10
+	// uid1 notifies uid2 that uid1 has read messages up to seqid 11.
+	readId := 8
+	from := helper.uids[0]
+	to := helper.uids[1]
+
+	// Revoke R permission from the sender.
+	pud := helper.topic.perUser[from]
+	pud.modeGiven = types.ModeWrite | types.ModeJoin
+	helper.topic.perUser[from] = pud
+
+	msg := &ServerComMessage{
+		AsUser: from.UserId(),
+		Info: &MsgServerInfo{
+			Topic: to.UserId(),
+			Src:   "",
+			From:  from.UserId(),
+			What:  "recv",
+			SeqId: readId,
+		},
+		sess:    helper.sessions[0],
+		SkipSid: helper.sessions[0].sid,
+	}
+	helper.topic.handleBroadcast(msg)
+	helper.finish()
+
+	// Read id should not be updated.
+	if actualReadId := helper.topic.perUser[from].readID; actualReadId != 0 {
+		t.Errorf("perUser[%s].readID: expected 0, found %d.", from.UserId(), actualReadId)
+	}
+	// Server messages.
+	for i, r := range helper.results {
+		if numMessages := len(r.messages); numMessages != 0 {
+			t.Errorf("User %d is not expected to receive any messages, %d received.", i, numMessages)
+		}
+	}
+
+	// Nothing should be routed through the hub.
+	if len(helper.hubMessages) != 0 {
+		t.Errorf("Hubhelper.route did not expect any messages, however %d received.", len(helper.hubMessages))
+	}
+}
+
+func TestHandleBroadcastInfoFilterOutKpWithoutWPermission(t *testing.T) {
+	topicName := "usrP2P"
+	numUsers := 2
+	helper := TopicTestHelper{}
+	helper.setUp(t, numUsers, types.TopicCatP2P, topicName, true)
+	defer func() {
+		helper.tearDown()
+	}()
+	// Pretend we have 10 messages.
+	helper.topic.lastID = 10
+	// uid1 notifies uid2 that uid1 has read messages up to seqid 11.
+	readId := 8
+	from := helper.uids[0]
+	to := helper.uids[1]
+
+	// Revoke W permission from the sender.
+	pud := helper.topic.perUser[from]
+	pud.modeGiven = types.ModeRead | types.ModeJoin
+	helper.topic.perUser[from] = pud
+
+	msg := &ServerComMessage{
+		AsUser: from.UserId(),
+		Info: &MsgServerInfo{
+			Topic: to.UserId(),
+			Src:   "",
+			From:  from.UserId(),
+			What:  "kp",
+			SeqId: readId,
+		},
+		sess:    helper.sessions[0],
+		SkipSid: helper.sessions[0].sid,
+	}
+	helper.topic.handleBroadcast(msg)
+	helper.finish()
+
+	// Read id should not be updated.
+	if actualReadId := helper.topic.perUser[from].readID; actualReadId != 0 {
+		t.Errorf("perUser[%s].readID: expected 0, found %d.", from.UserId(), actualReadId)
+	}
+	// Server messages.
+	for i, r := range helper.results {
+		if numMessages := len(r.messages); numMessages != 0 {
+			t.Errorf("User %d is not expected to receive any messages, %d received.", i, numMessages)
+		}
+	}
+
+	// Nothing should be routed through the hub.
+	if len(helper.hubMessages) != 0 {
+		t.Errorf("Hubhelper.route did not expect any messages, however %d received.", len(helper.hubMessages))
+	}
+}
+
+func TestHandleBroadcastInfoDuplicatedRead(t *testing.T) {
+	topicName := "usrP2P"
+	numUsers := 2
+	helper := TopicTestHelper{}
+	helper.setUp(t, numUsers, types.TopicCatP2P, topicName /*attach=*/, true)
+	defer func() {
+		helper.tearDown()
+	}()
+	// Pretend we have 10 messages.
+	helper.topic.lastID = 10
+	// uid1 notifies uid2 that uid1 has read messages up to seqid 11.
+	readId := 8
+	from := helper.uids[0]
+	to := helper.uids[1]
+
+	// Revoke R permission from the sender.
+	pud := helper.topic.perUser[from]
+	pud.readID = 8
+	helper.topic.perUser[from] = pud
+
+	msg := &ServerComMessage{
+		AsUser: from.UserId(),
+		Info: &MsgServerInfo{
+			Topic: to.UserId(),
+			Src:   "",
+			From:  from.UserId(),
+			What:  "read",
+			SeqId: readId,
+		},
+		sess:    helper.sessions[0],
+		SkipSid: helper.sessions[0].sid,
+	}
+	helper.topic.handleBroadcast(msg)
+	helper.finish()
+
+	// Read id should not be updated.
+	if actualReadId := helper.topic.perUser[from].readID; actualReadId != 8 {
+		t.Errorf("perUser[%s].readID: expected 8, found %d.", from.UserId(), actualReadId)
+	}
+	// Server messages.
+	for i, r := range helper.results {
+		if numMessages := len(r.messages); numMessages != 0 {
+			t.Errorf("User %d is not expected to receive any messages, %d received.", i, numMessages)
+		}
+	}
+
+	// Nothing should be routed through the hub.
+	if len(helper.hubMessages) != 0 {
+		t.Errorf("Hubhelper.route did not expect any messages, however %d received.", len(helper.hubMessages))
+	}
+}
+
+func TestHandleBroadcastInfoDbError(t *testing.T) {
+	topicName := "usrP2P"
+	numUsers := 2
+	helper := TopicTestHelper{}
+	helper.setUp(t, numUsers, types.TopicCatP2P, topicName, true)
+	defer func() {
+		helper.tearDown()
+	}()
+	// Pretend we have 10 messages.
+	helper.topic.lastID = 10
+	// uid1 notifies uid2 that uid1 has read messages up to seqid 11.
+	readId := 8
+	from := helper.uids[0]
+	to := helper.uids[1]
+
+	helper.ss.EXPECT().Update(topicName, from, map[string]interface{}{"ReadSeqId": readId}, false).Return(types.ErrInternal)
+
+	msg := &ServerComMessage{
+		AsUser: from.UserId(),
+		Info: &MsgServerInfo{
+			Topic: to.UserId(),
+			Src:   "",
+			From:  from.UserId(),
+			What:  "read",
+			SeqId: readId,
+		},
+		sess:    helper.sessions[0],
+		SkipSid: helper.sessions[0].sid,
+	}
+	helper.topic.handleBroadcast(msg)
+	helper.finish()
+
+	// Read id should not be updated.
+	if actualReadId := helper.topic.perUser[from].readID; actualReadId != 0 {
+		t.Errorf("perUser[%s].readID: expected 0, found %d.", from.UserId(), actualReadId)
+	}
+	// Server messages.
+	for i, r := range helper.results {
+		if numMessages := len(r.messages); numMessages != 0 {
+			t.Errorf("User %d is not expected to receive any messages, %d received.", i, numMessages)
+		}
+	}
+
+	// Nothing should be routed through the hub.
+	if len(helper.hubMessages) != 0 {
+		t.Errorf("Hubhelper.route did not expect any messages, however %d received.", len(helper.hubMessages))
+	}
+}
+
+func TestHandleBroadcastInfoInvalidChannelAccess(t *testing.T) {
+	topicName := "grpTest"
+	chanName := "chnTest"
+	numUsers := 3
+	helper := TopicTestHelper{}
+	helper.setUp(t, numUsers, types.TopicCatGrp, topicName, true)
+	// This is not a channel. However, we will try to handle an info message where
+	// the topic is referenced as "chn".
+	helper.topic.isChan = false
+	defer func() {
+		helper.tearDown()
+	}()
+	// Pretend we have 10 messages.
+	helper.topic.lastID = 10
+	// uid1 notifies uid2 that uid1 has read messages up to seqid 11.
+	readId := 8
+	from := helper.uids[0]
+	for i := 1; i < numUsers; i++ {
+		uid := helper.uids[i]
+		pud := helper.topic.perUser[uid]
+		pud.modeGiven = types.ModeCChnReader
+		helper.topic.perUser[uid] = pud
+	}
+
+	msg := &ServerComMessage{
+		AsUser: from.UserId(),
+		Info: &MsgServerInfo{
+			Topic: chanName,
+			Src:   "",
+			From:  from.UserId(),
+			What:  "read",
+			SeqId: readId,
+		},
+		sess:    helper.sessions[0],
+		SkipSid: helper.sessions[0].sid,
+	}
+	helper.topic.handleBroadcast(msg)
+	helper.finish()
+
+	// Read id should not be updated.
+	if actualReadId := helper.topic.perUser[from].readID; actualReadId != 0 {
+		t.Errorf("perUser[%s].readID: expected 0, found %d.", from.UserId(), actualReadId)
+	}
+	// Server messages.
+	for i, r := range helper.results {
+		if numMessages := len(r.messages); numMessages != 0 {
+			t.Errorf("User %d is not expected to receive any messages, %d received.", i, numMessages)
+		}
+	}
+	// Nothing should be routed through the hub.
+	if len(helper.hubMessages) != 0 {
+		t.Errorf("Hubhelper.route did not expect any messages, however %d received.", len(helper.hubMessages))
+	}
+}
+
+func TestHandleBroadcastInfoChannelProcessing(t *testing.T) {
+	topicName := "grpTest"
+	chanName := "chnTest"
+	numUsers := 3
+	helper := TopicTestHelper{}
+	helper.setUp(t, numUsers, types.TopicCatGrp, topicName, true)
+	helper.topic.isChan = true
+	defer func() {
+		helper.tearDown()
+	}()
+	// Pretend we have 10 messages.
+	helper.topic.lastID = 10
+	// uid1 notifies uid2 that uid1 has read messages up to seqid 11.
+	readId := 8
+	from := helper.uids[0]
+	for i := 1; i < numUsers; i++ {
+		uid := helper.uids[i]
+		pud := helper.topic.perUser[uid]
+		pud.modeGiven = types.ModeCChnReader
+		pud.isChan = true
+		helper.topic.perUser[uid] = pud
+	}
+
+	helper.ss.EXPECT().Update(chanName, from, map[string]interface{}{"ReadSeqId": readId}, false).Return(nil)
+
+	msg := &ServerComMessage{
+		AsUser: from.UserId(),
+		Info: &MsgServerInfo{
+			Topic: chanName,
+			Src:   "",
+			From:  from.UserId(),
+			What:  "read",
+			SeqId: readId,
+		},
+		sess:    helper.sessions[0],
+		SkipSid: helper.sessions[0].sid,
+	}
+	helper.topic.handleBroadcast(msg)
+	helper.finish()
+
+	// Topic metadata.
+	// We do not update read ids for channel topics.
+	if actualReadId := helper.topic.perUser[from].readID; actualReadId != 0 {
+		t.Errorf("perUser[%s].readID: expected 0, found %d.", from.UserId(), actualReadId)
+	}
+	// Server messages. Note messages aren't forwarded by channel topics.
+	for i, r := range helper.results {
+		if numMessages := len(r.messages); numMessages != 0 {
+			t.Errorf("User %d is not expected to receive any messages, %d received.", i, numMessages)
+		}
+	}
+
+	// Send a pres back to the sender.
+	if len(helper.hubMessages) != 1 {
+		t.Fatalf("Hubhelper.route did not expect any messages, however %d received.", len(helper.hubMessages))
+	}
+	if mm, ok := helper.hubMessages[from.UserId()]; ok || len(mm) != 1 {
+		s := mm[0]
+		if s.Pres != nil {
+			p := s.Pres
+			if p.Topic != "me" {
+				t.Errorf("Uid %s: pres notify on topic is expected to be 'me', got %s", from.UserId(), p.Topic)
+			}
+			if p.SkipTopic != topicName {
+				t.Errorf("Uid %s: pres skip topic is expected to be '%s', got %s", from.UserId(), topicName, p.SkipTopic)
+			}
+			if p.Src != topicName {
+				t.Errorf("Uid %s: pres.src expected: %s, found: %s", from.UserId(), topicName, p.Src)
+			}
+			if p.What != "read" {
+				t.Errorf("Uid %s: pres.what expected: 'read', found: %s", from.UserId(), p.What)
+			}
+		} else {
+			t.Errorf("Uid %s: hub message expected to be {pres}.", from.UserId())
+		}
+	} else {
+		t.Errorf("Uid %s: expected 1 hub message, got %d.", from.UserId(), len(mm))
 	}
 }
 
