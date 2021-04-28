@@ -135,11 +135,13 @@ func (b *TopicTestHelper) setUp(t *testing.T, numUsers int, cat types.TopicCat, 
 		status:     topicStatusLoaded,
 		perUser:    pu,
 		isProxy:    false,
-		accessAuth: getDefaultAccess(cat, true, false),
-		accessAnon: getDefaultAccess(cat, true, false),
 		sessions:   ps,
 		killTimer:  time.NewTimer(time.Hour),
 	}
+  if cat != types.TopicCatSys {
+		b.topic.accessAuth = getDefaultAccess(cat, true, false)
+		b.topic.accessAnon = getDefaultAccess(cat, true, false)
+  }
 	if cat == types.TopicCatMe {
 		b.topic.xoriginal = "me"
 	}
