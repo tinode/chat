@@ -1054,7 +1054,7 @@ func userUpdater() {
 			if upd == nil {
 				globals.usersUpdate = nil
 				// Dont' care to close the channel.
-				break
+				goto Exit
 			}
 
 			// Request to send push notifications.
@@ -1132,5 +1132,6 @@ func userUpdater() {
 		}
 	}
 
+Exit:
 	logs.Info.Println("users: shutdown")
 }
