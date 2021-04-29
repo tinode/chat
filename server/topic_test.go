@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"net/http"
 	"os"
 	"sync"
 	"testing"
@@ -130,18 +131,18 @@ func (b *TopicTestHelper) setUp(t *testing.T, numUsers int, cat types.TopicCat, 
 		pu[uid] = puData
 	}
 	b.topic = &Topic{
-		name:       topicName,
-		cat:        cat,
-		status:     topicStatusLoaded,
-		perUser:    pu,
-		isProxy:    false,
-		sessions:   ps,
-		killTimer:  time.NewTimer(time.Hour),
+		name:      topicName,
+		cat:       cat,
+		status:    topicStatusLoaded,
+		perUser:   pu,
+		isProxy:   false,
+		sessions:  ps,
+		killTimer: time.NewTimer(time.Hour),
 	}
-  if cat != types.TopicCatSys {
+	if cat != types.TopicCatSys {
 		b.topic.accessAuth = getDefaultAccess(cat, true, false)
 		b.topic.accessAnon = getDefaultAccess(cat, true, false)
-  }
+	}
 	if cat == types.TopicCatMe {
 		b.topic.xoriginal = "me"
 	}
@@ -1182,6 +1183,28 @@ func TestReplyGetDescInvalidOpts(t *testing.T) {
 	}
 }
 
+// Verifies ctrl codes in session outputs.
+func registerSessionVerifyOutputs(
+	sessionOutput *Responses, expectedCtrlCodes []int, t *testing.T) {
+	// Session output.
+	if len(sessionOutput.messages) == len(expectedCtrlCodes) {
+		n := len(expectedCtrlCodes)
+		for i := 0; i < n; i++ {
+			resp := sessionOutput.messages[i].(*ServerComMessage)
+			code := expectedCtrlCodes[i]
+			if resp.Ctrl != nil {
+				if resp.Ctrl.Code != code {
+					t.Errorf("response code: expected %d, found: %d", code, resp.Ctrl.Code)
+				}
+			} else {
+				t.Errorf("response %d: expected to contain a Ctrl message", i)
+			}
+		}
+	} else {
+		t.Errorf("Session output: expected %d responses, received %d", len(expectedCtrlCodes), len(sessionOutput.messages))
+	}
+}
+
 func TestRegisterSessionMe(t *testing.T) {
 	topicName := "usrMe"
 	numUsers := 1
@@ -1231,16 +1254,7 @@ func TestRegisterSessionMe(t *testing.T) {
 	}
 	// Session output.
 	for _, r := range helper.results {
-		if len(r.messages) != 1 {
-			t.Fatalf("`responses` expected to contain 1 element, found %d", len(helper.results[0].messages))
-		}
-		resp := r.messages[0].(*ServerComMessage)
-		if resp.Ctrl == nil {
-			t.Fatalf("response expected to contain a Ctrl message")
-		}
-		if resp.Ctrl.Code != 200 {
-			t.Errorf("response code: expected 200, found: %d", resp.Ctrl.Code)
-		}
+		registerSessionVerifyOutputs(r, []int{http.StatusOK}, t)
 	}
 	// Presence notifications.
 	if len(helper.hubMessages) != 0 {
@@ -1287,19 +1301,7 @@ func TestRegisterSessionInactiveTopic(t *testing.T) {
 		t.Errorf("Number of online sessions: expected 0, found %d", online)
 	}
 	// Session output.
-	r := helper.results[0]
-	if len(r.messages) == 1 {
-		resp := r.messages[0].(*ServerComMessage)
-		if resp.Ctrl != nil {
-			if resp.Ctrl.Code != 503 {
-				t.Errorf("response code: expected 503, found: %d", resp.Ctrl.Code)
-			}
-		} else {
-			t.Errorf("response expected to contain a Ctrl message")
-		}
-	} else {
-		t.Errorf("Session `responses` expected to contain 1 element, found %d", len(r.messages))
-	}
+	registerSessionVerifyOutputs(helper.results[0], []int{http.StatusServiceUnavailable}, t)
 	// Presence notifications.
 	if len(helper.hubMessages) != 0 {
 		t.Errorf("Hub isn't expected to receive any messages, received %d", len(helper.hubMessages))
@@ -1349,19 +1351,7 @@ func TestRegisterSessionUserSpecifiedInSetMessage(t *testing.T) {
 		t.Errorf("Number of online sessions: expected 0, found %d", online)
 	}
 	// Session output.
-	r := helper.results[0]
-	if len(r.messages) == 1 {
-		resp := r.messages[0].(*ServerComMessage)
-		if resp.Ctrl != nil {
-			if resp.Ctrl.Code != 400 {
-				t.Errorf("response code: expected 400, found: %d", resp.Ctrl.Code)
-			}
-		} else {
-			t.Errorf("response expected to contain a Ctrl message")
-		}
-	} else {
-		t.Errorf("Session `responses` expected to contain 1 element, found %d", len(r.messages))
-	}
+	registerSessionVerifyOutputs(helper.results[0], []int{http.StatusBadRequest}, t)
 	// Presence notifications.
 	if len(helper.hubMessages) != 0 {
 		t.Errorf("Hub isn't expected to receive any messages, received %d", len(helper.hubMessages))
@@ -1411,19 +1401,7 @@ func TestRegisterSessionInvalidWantStrInSetMessage(t *testing.T) {
 		t.Errorf("Number of online sessions: expected 0, found %d", online)
 	}
 	// Session output.
-	r := helper.results[0]
-	if len(r.messages) == 1 {
-		resp := r.messages[0].(*ServerComMessage)
-		if resp.Ctrl != nil {
-			if resp.Ctrl.Code != 400 {
-				t.Errorf("response code: expected 400, found: %d", resp.Ctrl.Code)
-			}
-		} else {
-			t.Errorf("response expected to contain a Ctrl message")
-		}
-	} else {
-		t.Errorf("Session `responses` expected to contain 1 element, found %d", len(r.messages))
-	}
+	registerSessionVerifyOutputs(helper.results[0], []int{http.StatusBadRequest}, t)
 	// Presence notifications.
 	if len(helper.hubMessages) != 0 {
 		t.Errorf("Hub isn't expected to receive any messages, received %d", len(helper.hubMessages))
@@ -1476,18 +1454,7 @@ func TestRegisterSessionMaxSubscriberCountExceeded(t *testing.T) {
 		t.Errorf("Number of online sessions: expected 0, found %d", online)
 	}
 	// Session output.
-	if len(r.messages) == 1 {
-		resp := r.messages[0].(*ServerComMessage)
-		if resp.Ctrl != nil {
-			if resp.Ctrl.Code != 422 {
-				t.Errorf("response code: expected 422, found: %d", resp.Ctrl.Code)
-			}
-		} else {
-			t.Errorf("response expected to contain a Ctrl message")
-		}
-	} else {
-		t.Errorf("Session `responses` expected to contain 1 element, found %d", len(r.messages))
-	}
+	registerSessionVerifyOutputs(r, []int{http.StatusUnprocessableEntity}, t)
 	// Presence notifications.
 	if len(helper.hubMessages) != 0 {
 		t.Errorf("Hub isn't expected to receive any messages, received %d", len(helper.hubMessages))
@@ -1536,18 +1503,7 @@ func TestRegisterSessionLowAuthLevelWithSysTopic(t *testing.T) {
 		t.Errorf("Number of online sessions: expected 0, found %d", online)
 	}
 	// Session output.
-	if len(r.messages) == 1 {
-		resp := r.messages[0].(*ServerComMessage)
-		if resp.Ctrl != nil {
-			if resp.Ctrl.Code != 403 {
-				t.Errorf("response code: expected 403, found: %d", resp.Ctrl.Code)
-			}
-		} else {
-			t.Errorf("response expected to contain a Ctrl message")
-		}
-	} else {
-		t.Errorf("Session `responses` expected to contain 1 element, found %d", len(r.messages))
-	}
+	registerSessionVerifyOutputs(r, []int{http.StatusForbidden}, t)
 	// Presence notifications.
 	if len(helper.hubMessages) != 0 {
 		t.Errorf("Hub isn't expected to receive any messages, received %d", len(helper.hubMessages))
@@ -1600,18 +1556,7 @@ func TestRegisterSessionNewChannelGetSubDbError(t *testing.T) {
 		t.Errorf("Number of online sessions: expected 0, found %d", online)
 	}
 	// Session output.
-	if len(r.messages) == 1 {
-		resp := r.messages[0].(*ServerComMessage)
-		if resp.Ctrl != nil {
-			if resp.Ctrl.Code != 500 {
-				t.Errorf("response code: expected 500, found: %d", resp.Ctrl.Code)
-			}
-		} else {
-			t.Errorf("response expected to contain a Ctrl message")
-		}
-	} else {
-		t.Errorf("Session `responses` expected to contain 1 element, found %d", len(r.messages))
-	}
+	registerSessionVerifyOutputs(r, []int{http.StatusInternalServerError}, t)
 	// Presence notifications.
 	if len(helper.hubMessages) != 0 {
 		t.Errorf("Hub isn't expected to receive any messages, received %d", len(helper.hubMessages))
@@ -1662,18 +1607,294 @@ func TestRegisterSessionCreateSubFailed(t *testing.T) {
 		t.Errorf("Number of online sessions: expected 0, found %d", online)
 	}
 	// Session output.
-	if len(r.messages) == 1 {
-		resp := r.messages[0].(*ServerComMessage)
-		if resp.Ctrl != nil {
-			if resp.Ctrl.Code != 500 {
-				t.Errorf("response code: expected 500, found: %d", resp.Ctrl.Code)
-			}
-		} else {
-			t.Errorf("response expected to contain a Ctrl message")
-		}
-	} else {
-		t.Errorf("Session `responses` expected to contain 1 element, found %d", len(r.messages))
+	registerSessionVerifyOutputs(r, []int{http.StatusInternalServerError}, t)
+	// Presence notifications.
+	if len(helper.hubMessages) != 0 {
+		t.Errorf("Hub isn't expected to receive any messages, received %d", len(helper.hubMessages))
 	}
+}
+
+func TestRegisterSessionAsChanUserNotChanSubcriber(t *testing.T) {
+	topicName := "grpTest"
+	chanName := "chnTest"
+	numUsers := 1
+	helper := TopicTestHelper{}
+	helper.setUp(t, numUsers, types.TopicCatGrp, topicName, false)
+	// The topic is a channel.
+	helper.topic.isChan = true
+	defer helper.tearDown()
+	if len(helper.topic.sessions) != 0 {
+		helper.finish()
+		t.Fatalf("Initially attached sessions: expected 0 vs found %d", len(helper.topic.sessions))
+	}
+
+	s := helper.sessions[0]
+	uid := helper.uids[0]
+	r := helper.results[0]
+
+	// User is not a channel subscriber (userData.isChan is false).
+	join := &sessionJoin{
+		pkt: &ClientComMessage{
+			Original: chanName,
+			Sub: &MsgClientSub{
+				Id:    "id456",
+				Topic: chanName,
+			},
+			AsUser:  uid.UserId(),
+			AuthLvl: int(auth.LevelAuth),
+		},
+		sess: s,
+	}
+
+	helper.topic.registerSession(join)
+	helper.finish()
+
+	if len(s.subs) != 0 {
+		t.Errorf("Session subscriptions: expected 0, found %d", len(s.subs))
+	}
+	online := helper.topic.perUser[uid].online
+	if online != 0 {
+		t.Errorf("Number of online sessions: expected 0, found %d", online)
+	}
+	// Session output. Tell the subscriber to use non-channel name.
+	registerSessionVerifyOutputs(r, []int{http.StatusSeeOther}, t)
+	// Presence notifications.
+	if len(helper.hubMessages) != 0 {
+		t.Errorf("Hub isn't expected to receive any messages, received %d", len(helper.hubMessages))
+	}
+}
+
+func TestRegisterSessionOwnerBansHimself(t *testing.T) {
+	topicName := "grpTest"
+	numUsers := 1
+	helper := TopicTestHelper{}
+	helper.setUp(t, numUsers, types.TopicCatGrp, topicName, false)
+	defer helper.tearDown()
+	if len(helper.topic.sessions) != 0 {
+		helper.finish()
+		t.Fatalf("Initially attached sessions: expected 0 vs found %d", len(helper.topic.sessions))
+	}
+
+	s := helper.sessions[0]
+	uid := helper.uids[0]
+	r := helper.results[0]
+
+	// User is the topic owner.
+	helper.topic.owner = uid
+	pud := helper.topic.perUser[uid]
+	//pud.modeWant = types.ModeRead | types.ModeWrite | types.ModeJoin
+	pud.modeGiven |= types.ModeOwner
+	helper.topic.perUser[uid] = pud
+
+	join := &sessionJoin{
+		pkt: &ClientComMessage{
+			Original: topicName,
+			Sub: &MsgClientSub{
+				Id:    "id456",
+				Topic: topicName,
+				Set: &MsgSetQuery{
+					Sub: &MsgSetSub{
+						// No O permission.
+						Mode: "JPRW",
+					},
+				},
+			},
+			AsUser:  uid.UserId(),
+			AuthLvl: int(auth.LevelAuth),
+		},
+		sess: s,
+	}
+
+	helper.topic.registerSession(join)
+	helper.finish()
+
+	if len(s.subs) != 0 {
+		t.Errorf("Session subscriptions: expected 0, found %d", len(s.subs))
+	}
+	online := helper.topic.perUser[uid].online
+	if online != 0 {
+		t.Errorf("Number of online sessions: expected 0, found %d", online)
+	}
+	// Session output.
+	registerSessionVerifyOutputs(r, []int{http.StatusForbidden}, t)
+	// Presence notifications.
+	if len(helper.hubMessages) != 0 {
+		t.Errorf("Hub isn't expected to receive any messages, received %d", len(helper.hubMessages))
+	}
+}
+
+func TestRegisterSessionInvalidOwnershipTransfer(t *testing.T) {
+	topicName := "grpTest"
+	numUsers := 2
+	helper := TopicTestHelper{}
+	helper.setUp(t, numUsers, types.TopicCatGrp, topicName, false)
+	defer helper.tearDown()
+	if len(helper.topic.sessions) != 0 {
+		helper.finish()
+		t.Fatalf("Initially attached sessions: expected 0 vs found %d", len(helper.topic.sessions))
+	}
+
+	s := helper.sessions[1]
+	uid := helper.uids[1]
+	r := helper.results[1]
+
+	// User is the topic owner.
+	pud := helper.topic.perUser[uid]
+	pud.modeWant = types.ModeCPublic
+	pud.modeGiven = types.ModeCPublic
+	helper.topic.perUser[uid] = pud
+
+	join := &sessionJoin{
+		pkt: &ClientComMessage{
+			Original: topicName,
+			Sub: &MsgClientSub{
+				Id:    "id456",
+				Topic: topicName,
+				Set: &MsgSetQuery{
+					Sub: &MsgSetSub{
+						// Want ownership.
+						Mode: "JPRWSO",
+					},
+				},
+			},
+			AsUser:  uid.UserId(),
+			AuthLvl: int(auth.LevelAuth),
+		},
+		sess: s,
+	}
+
+	helper.topic.registerSession(join)
+	helper.finish()
+
+	if len(s.subs) != 0 {
+		t.Errorf("Session subscriptions: expected 0, found %d", len(s.subs))
+	}
+	online := helper.topic.perUser[uid].online
+	if online != 0 {
+		t.Errorf("Number of online sessions: expected 0, found %d", online)
+	}
+	// Session output.
+	registerSessionVerifyOutputs(r, []int{http.StatusForbidden}, t)
+	// Presence notifications.
+	if len(helper.hubMessages) != 0 {
+		t.Errorf("Hub isn't expected to receive any messages, received %d", len(helper.hubMessages))
+	}
+}
+
+func TestRegisterSessionMetadataUpdateFails(t *testing.T) {
+	topicName := "grpTest"
+	numUsers := 2
+	helper := TopicTestHelper{}
+	helper.setUp(t, numUsers, types.TopicCatGrp, topicName, false)
+	defer helper.tearDown()
+	if len(helper.topic.sessions) != 0 {
+		helper.finish()
+		t.Fatalf("Initially attached sessions: expected 0 vs found %d", len(helper.topic.sessions))
+	}
+
+	s := helper.sessions[1]
+	uid := helper.uids[1]
+	r := helper.results[1]
+
+	pud := helper.topic.perUser[uid]
+	pud.modeWant = types.ModeCPublic
+	pud.modeGiven = types.ModeCPublic
+	helper.topic.perUser[uid] = pud
+
+	// Want ownership.
+	newWant := "JRWP"
+	join := &sessionJoin{
+		pkt: &ClientComMessage{
+			Original: topicName,
+			Sub: &MsgClientSub{
+				Id:    "id456",
+				Topic: topicName,
+				Set: &MsgSetQuery{
+					Sub: &MsgSetSub{
+						Mode: newWant,
+					},
+				},
+			},
+			AsUser:  uid.UserId(),
+			AuthLvl: int(auth.LevelAuth),
+		},
+		sess: s,
+	}
+	// DB call fails.
+	helper.ss.EXPECT().Update(topicName, uid, gomock.Any()).Return(types.ErrInternal)
+
+	helper.topic.registerSession(join)
+	helper.finish()
+
+	if len(s.subs) != 0 {
+		t.Errorf("Session subscriptions: expected 0, found %d", len(s.subs))
+	}
+	online := helper.topic.perUser[uid].online
+	if online != 0 {
+		t.Errorf("Number of online sessions: expected 0, found %d", online)
+	}
+	// Session output.
+	registerSessionVerifyOutputs(r, []int{http.StatusInternalServerError}, t)
+	// Presence notifications.
+	if len(helper.hubMessages) != 0 {
+		t.Errorf("Hub isn't expected to receive any messages, received %d", len(helper.hubMessages))
+	}
+}
+
+func TestRegisterSessionOwnerChangeDbCallFails(t *testing.T) {
+	topicName := "grpTest"
+	numUsers := 1
+	helper := TopicTestHelper{}
+	helper.setUp(t, numUsers, types.TopicCatGrp, topicName, false)
+	defer helper.tearDown()
+	if len(helper.topic.sessions) != 0 {
+		helper.finish()
+		t.Fatalf("Initially attached sessions: expected 0 vs found %d", len(helper.topic.sessions))
+	}
+
+	s := helper.sessions[0]
+	uid := helper.uids[0]
+	r := helper.results[0]
+
+	// User is the topic owner.
+	pud := helper.topic.perUser[uid]
+	pud.modeWant = types.ModeCPublic
+	helper.topic.perUser[uid] = pud
+
+	// Want ownership.
+	newWant := "JRWPASO"
+	join := &sessionJoin{
+		pkt: &ClientComMessage{
+			Original: topicName,
+			Sub: &MsgClientSub{
+				Id:    "id456",
+				Topic: topicName,
+				Set: &MsgSetQuery{
+					Sub: &MsgSetSub{
+						Mode: newWant,
+					},
+				},
+			},
+			AsUser:  uid.UserId(),
+			AuthLvl: int(auth.LevelAuth),
+		},
+		sess: s,
+	}
+	helper.ss.EXPECT().Update(topicName, uid, gomock.Any()).Return(nil).Times(2)
+	// OwnerChange call fails.
+	helper.tt.EXPECT().OwnerChange(topicName, uid).Return(types.ErrInternal)
+
+	helper.topic.registerSession(join)
+	helper.finish()
+
+	if len(s.subs) != 0 {
+		t.Errorf("Session subscriptions: expected 0, found %d", len(s.subs))
+	}
+	online := helper.topic.perUser[uid].online
+	if online != 0 {
+		t.Errorf("Number of online sessions: expected 0, found %d", online)
+	}
+	registerSessionVerifyOutputs(r, []int{}, t)
 	// Presence notifications.
 	if len(helper.hubMessages) != 0 {
 		t.Errorf("Hub isn't expected to receive any messages, received %d", len(helper.hubMessages))
