@@ -28,7 +28,7 @@ See [instructions](./docker/README.md)
 
 ## Building from Source
 
-1. Install [Go environment](https://golang.org/doc/install). Make sure Go version is at least 1.9. Building with Go 1.8 or below **will fail**!
+1. Install [Go environment](https://golang.org/doc/install). Make sure Go version is at least 1.14. Building with Go 1.13 or below **will fail**!
 
 2. Make sure either [RethinkDB](https://www.rethinkdb.com/docs/install/) or MySQL (or MariaDB or Percona) is installed and running. MySQL 5.7 or above is required. MySQL 5.6 or below **will not work**. MongoDB (v4.2 and above) is also available and stable but not tested in production.
 
