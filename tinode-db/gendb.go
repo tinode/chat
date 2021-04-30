@@ -21,6 +21,7 @@ func genDb(data *Data) {
 
 	if len(data.Users) == 0 {
 		log.Println("No data provided, stopping")
+
 		return
 	}
 
@@ -101,7 +102,6 @@ func genDb(data *Data) {
 		}
 		if _, err := authHandler.AddRecord(&auth.Rec{Uid: user.Uid(), AuthLevel: authLevel},
 			[]byte(uu.Username+":"+passwd), ""); err != nil {
-
 			log.Fatal(err)
 		}
 		nameIndex[uu.Username] = user.Id
@@ -110,7 +110,6 @@ func genDb(data *Data) {
 		if uu.AddressBook != nil && len(uu.AddressBook) > 0 {
 			if err := store.Subs.Update(user.Uid().FndName(), user.Uid(),
 				map[string]interface{}{"Private": strings.Join(uu.AddressBook, ",")}); err != nil {
-
 				log.Fatal(err)
 			}
 		}
@@ -402,6 +401,7 @@ func getCreatedTime(delta string) time.Time {
 	if err != nil && delta != "" {
 		log.Fatal("Invalid duration string", delta)
 	}
+
 	return time.Now().UTC().Round(time.Millisecond).Add(dd)
 }
 
@@ -424,8 +424,7 @@ func parsePublic(public *vCardy, path string) *vcard {
 		return nil
 	}
 
-	fname := public.Photo
-	if fname != "" {
+	if fname := public.Photo; fname != "" {
 		photo = &photoStruct{Type: public.Type}
 		dir, _ := filepath.Split(fname)
 		if dir == "" {

@@ -164,15 +164,16 @@ func getPassword(n int) string {
 	for i := range b {
 		b[i] = letters[rand.Intn(len(letters))]
 	}
+
 	return string(b)
 }
 
 func main() {
-	var reset = flag.Bool("reset", false, "force database reset")
-	var upgrade = flag.Bool("upgrade", false, "perform database version upgrade")
-	var noInit = flag.Bool("no_init", false, "check that database exists but don't create if missing")
-	var datafile = flag.String("data", "", "name of file with sample data to load")
-	var conffile = flag.String("config", "./tinode.conf", "config of the database connection")
+	reset := flag.Bool("reset", false, "force database reset")
+	upgrade := flag.Bool("upgrade", false, "perform database version upgrade")
+	noInit := flag.Bool("no_init", false, "check that database exists but don't create if missing")
+	datafile := flag.String("data", "", "name of file with sample data to load")
+	conffile := flag.String("config", "./tinode.conf", "config of the database connection")
 
 	flag.Parse()
 
