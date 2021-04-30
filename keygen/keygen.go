@@ -16,13 +16,13 @@ import (
 // Generate API key
 // Composition:
 //  [1:algorithm version][4:deprecated (used to be application ID)][2:key sequence][1:isRoot][16:signature] = 24 bytes
-// convertible to base64 without padding
-// All integers are little-endian
+// convertible to base64 without padding.
+// All integers are little-endian.
 func main() {
-	var version = flag.Int("sequence", 1, "Sequential number of the API key")
-	var isRoot = flag.Int("isroot", 0, "Is this a root API key?")
-	var apikey = flag.String("validate", "", "API key to validate")
-	var hmacSalt = flag.String("salt", "auto", "HMAC salt, 32 random bytes base64 encoded or 'auto' to generate salt")
+	version := flag.Int("sequence", 1, "Sequential number of the API key")
+	isRoot := flag.Int("isroot", 0, "Is this a root API key?")
+	apikey := flag.String("validate", "", "API key to validate")
+	hmacSalt := flag.String("salt", "auto", "HMAC salt, 32 random bytes base64 encoded or 'auto' to generate salt")
 
 	flag.Parse()
 
@@ -38,22 +38,21 @@ func main() {
 }
 
 const (
-	// APIKEY_VERSION is algorithm version
+	// APIKEY_VERSION is algorithm version.
 	APIKEY_VERSION = 1
-	// APIKEY_APPID is deprecated
+	// APIKEY_APPID is deprecated.
 	APIKEY_APPID = 4
-	// APIKEY_SEQUENCE key serial number
+	// APIKEY_SEQUENCE key serial number.
 	APIKEY_SEQUENCE = 2
-	// APIKEY_WHO is a Root user designator
+	// APIKEY_WHO is a Root user designator.
 	APIKEY_WHO = 1
-	// APIKEY_SIGNATURE is cryptographic signature
+	// APIKEY_SIGNATURE is cryptographic signature.
 	APIKEY_SIGNATURE = 16
-	// APIKEY_LENGTH is total length of the key
+	// APIKEY_LENGTH is total length of the key.
 	APIKEY_LENGTH = APIKEY_VERSION + APIKEY_APPID + APIKEY_SEQUENCE + APIKEY_WHO + APIKEY_SIGNATURE
 )
 
 func generate(sequence, isRoot int, hmacSaltB64 string) int {
-
 	var data [APIKEY_LENGTH]byte
 	var hmacSalt []byte
 
@@ -62,6 +61,7 @@ func generate(sequence, isRoot int, hmacSaltB64 string) int {
 		_, err := rand.Read(hmacSalt)
 		if err != nil {
 			log.Println("Error: Failed to generate HMAC salt", err)
+
 			return 1
 		}
 	} else {
@@ -73,6 +73,7 @@ func generate(sequence, isRoot int, hmacSaltB64 string) int {
 		}
 		if err != nil {
 			log.Println("Error: Failed to decode HMAC salt", err)
+
 			return 1
 		}
 	}
@@ -115,22 +116,25 @@ func validate(apikey string, hmacSaltB64 string) int {
 
 	hmacSalt, err := base64.URLEncoding.DecodeString(hmacSaltB64)
 	if err != nil {
-		// Try standard base64 decoding
+		// Try standard base64 decoding.
 		hmacSalt, err = base64.StdEncoding.DecodeString(hmacSaltB64)
 	}
 	if err != nil {
 		log.Println("Error: Failed to decode HMAC salt", err)
+
 		return 1
 	}
 
 	if declen := base64.URLEncoding.DecodedLen(len(apikey)); declen != APIKEY_LENGTH {
 		log.Printf("Error: Invalid key length %d, expecting %d", declen, APIKEY_LENGTH)
+
 		return 1
 	}
 
 	data, err := base64.URLEncoding.DecodeString(apikey)
 	if err != nil {
 		log.Println("Error: Failed to decode key as base64-URL-encoded", err)
+
 		return 1
 	}
 
@@ -139,15 +143,16 @@ func validate(apikey string, hmacSaltB64 string) int {
 
 	if version != 1 {
 		log.Println("Error: Unknown signature algorithm ", version)
+
 		return 1
 	}
 
 	hasher := hmac.New(md5.New, hmacSalt)
 	hasher.Write(data[:APIKEY_VERSION+APIKEY_APPID+APIKEY_SEQUENCE+APIKEY_WHO])
-	signature := hasher.Sum(nil)
 
-	if !bytes.Equal(data[APIKEY_VERSION+APIKEY_APPID+APIKEY_SEQUENCE+APIKEY_WHO:], signature) {
+	if signature := hasher.Sum(nil); !bytes.Equal(data[APIKEY_VERSION+APIKEY_APPID+APIKEY_SEQUENCE+APIKEY_WHO:], signature) {
 		log.Println("Error: Invalid signature ", data, signature)
+
 		return 1
 	}
 	// [1:algorithm version][4:deprecated][2:key sequence][1:isRoot]
@@ -162,5 +167,6 @@ func validate(apikey string, hmacSaltB64 string) int {
 	}
 
 	fmt.Printf("Valid v%d seq%d, [%s]\n", version, sequence, strIsRoot)
+
 	return 0
 }
