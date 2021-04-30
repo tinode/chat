@@ -205,7 +205,6 @@ func (h *Hub) run() {
 
 				// Configure the topic.
 				go topicInit(t, join, h)
-
 			} else {
 				// Topic found.
 				// Topic will check access rights and send appropriate {ctrl}

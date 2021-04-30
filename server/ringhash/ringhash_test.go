@@ -1,16 +1,18 @@
-package ringhash
+package ringhash_test
 
 import (
 	"fmt"
 	"hash/crc32"
 	"hash/fnv"
 	"testing"
+
+	"github.com/tinode/chat/server/ringhash"
 )
 
 func TestHashing(t *testing.T) {
 
 	// Ring with 3 elements hashed by crc32.ChecksumIEEE
-	ring := New(3, crc32.ChecksumIEEE)
+	ring := ringhash.New(3, crc32.ChecksumIEEE)
 	ring.Add("A", "B", "C")
 
 	// The ring contains:
@@ -66,8 +68,8 @@ func TestHashing(t *testing.T) {
 }
 
 func TestConsistency(t *testing.T) {
-	ring1 := New(3, nil)
-	ring2 := New(3, nil)
+	ring1 := ringhash.New(3, nil)
+	ring2 := ringhash.New(3, nil)
 
 	ring1.Add("owl", "crow", "sparrow")
 	ring2.Add("sparrow", "owl", "crow")
@@ -90,8 +92,8 @@ func TestConsistency(t *testing.T) {
 	// 0VXGN 0BGABAK
 	// 0VXGI 0BGABAL
 
-	ring1 = New(1, crc32.ChecksumIEEE)
-	ring2 = New(1, crc32.ChecksumIEEE)
+	ring1 = ringhash.New(1, crc32.ChecksumIEEE)
+	ring2 = ringhash.New(1, crc32.ChecksumIEEE)
 
 	ring1.Add("VXGD", "BGABAA", "VXGG", "BGABAB", "VXGF", "BGABAC")
 	ring2.Add("BGABAA", "VXGD", "BGABAB", "VXGG", "BGABAC", "VXGF")
@@ -110,8 +112,8 @@ func TestConsistency(t *testing.T) {
 }
 
 func TestSignature(t *testing.T) {
-	ring1 := New(4, nil)
-	ring2 := New(4, nil)
+	ring1 := ringhash.New(4, nil)
+	ring2 := ringhash.New(4, nil)
 
 	ring1.Add("owl", "crow", "sparrow")
 	ring2.Add("sparrow", "owl", "crow")
@@ -120,8 +122,8 @@ func TestSignature(t *testing.T) {
 		t.Errorf("Signatures must be identical")
 	}
 
-	ring1 = New(4, nil)
-	ring2 = New(5, nil)
+	ring1 = ringhash.New(4, nil)
+	ring2 = ringhash.New(5, nil)
 
 	ring1.Add("owl", "crow", "sparrow")
 	ring2.Add("owl", "crow", "sparrow")
@@ -130,8 +132,8 @@ func TestSignature(t *testing.T) {
 		t.Errorf("Signatures must be different - different count of replicas")
 	}
 
-	ring1 = New(4, nil)
-	ring2 = New(4, nil)
+	ring1 = ringhash.New(4, nil)
+	ring2 = ringhash.New(4, nil)
 
 	ring1.Add("owl", "crow", "sparrow")
 	ring2.Add("owl", "crow", "sparrow", "crane")
@@ -146,8 +148,8 @@ func TestSignature(t *testing.T) {
 		return hash.Sum32()
 	}
 
-	ring1 = New(4, nil)
-	ring2 = New(4, fnvHashfunc)
+	ring1 = ringhash.New(4, nil)
+	ring2 = ringhash.New(4, fnvHashfunc)
 
 	ring1.Add("owl", "crow", "sparrow")
 	ring2.Add("owl", "crow", "sparrow")
@@ -164,7 +166,7 @@ func BenchmarkGet512(b *testing.B) { benchmarkGet(b, 512) }
 
 func benchmarkGet(b *testing.B, keycount int) {
 
-	ring := New(53, nil)
+	ring := ringhash.New(53, nil)
 
 	var ids []string
 	for i := 0; i < keycount; i++ {

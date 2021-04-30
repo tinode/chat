@@ -169,7 +169,7 @@ var globals struct {
 	// Maximum allowed upload size.
 	maxFileUploadSize int64
 
-	// Prioritise X-Forwarded-For header as the source of IP address of the client.
+	// Prioritize X-Forwarded-For header as the source of IP address of the client.
 	useXForwardedFor bool
 
 	// Country code to assign to sessions by default.
@@ -545,7 +545,7 @@ func main() {
 		logs.Err.Fatalln(err)
 	}
 
-	// Intialize plugins
+	// Initialize plugins.
 	pluginsInit(config.Plugin)
 
 	// Initialize users cache

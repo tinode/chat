@@ -404,11 +404,7 @@ func (a *adapter) CreateDb(reset bool) error {
 	}
 
 	// Create system topic 'sys'.
-	if err := createSystemTopic(a); err != nil {
-		return err
-	}
-
-	return nil
+	return createSystemTopic(a)
 }
 
 // UpgradeDb upgrades database to the current adapter version.
@@ -2362,7 +2358,7 @@ func contains(s []string, e string) bool {
 	return false
 }
 
-func union(userTags []string, addTags []string) []string {
+func union(userTags, addTags []string) []string {
 	for _, tag := range addTags {
 		if !contains(userTags, tag) {
 			userTags = append(userTags, tag)
@@ -2371,7 +2367,7 @@ func union(userTags []string, addTags []string) []string {
 	return userTags
 }
 
-func diff(userTags []string, removeTags []string) []string {
+func diff(userTags, removeTags []string) []string {
 	var result []string
 	for _, tag := range userTags {
 		if !contains(removeTags, tag) {

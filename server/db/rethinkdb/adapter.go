@@ -1555,7 +1555,8 @@ func (a *adapter) SubsDelete(topic string, user t.Uid) error {
 	}
 
 	// Remove current user from the messages' soft-deletion lists.
-	_, err = rdb.DB(a.dbName).Table("messages").
+	// The possible error here is ignored.
+	rdb.DB(a.dbName).Table("messages").
 		// Select all messages in the given topic.
 		Between(
 			[]interface{}{topic, forUser, rdb.MinVal},

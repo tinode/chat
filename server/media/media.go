@@ -41,7 +41,7 @@ type Handler interface {
 }
 
 // GetIdFromUrl is a helper method for extracting file ID from a URL.
-func GetIdFromUrl(url string, serveUrl string) types.Uid {
+func GetIdFromUrl(url, serveUrl string) types.Uid {
 	dir, fname := path.Split(path.Clean(url))
 
 	if dir != "" && dir != serveUrl {

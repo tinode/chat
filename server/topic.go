@@ -744,7 +744,7 @@ func (t *Topic) sessToForeground(sess *Session) {
 		if s.isMultiplex() {
 			// If 's' is a multiplexing session, then sess is a proxy and it contains correct UID.
 			// Add UID to the list of online users.
-			uid := sess.uid
+			uid = sess.uid
 			pssd.muids = append(pssd.muids, uid)
 		}
 		// Mark user as online
@@ -1895,7 +1895,6 @@ func (t *Topic) replyGetDesc(sess *Session, asUid types.Uid, asChan bool, opts *
 // replies to the caller as {ctrl} message, generates {pres} update if necessary
 func (t *Topic) replySetDesc(sess *Session, asUid types.Uid, asChan bool, msg *ClientComMessage) error {
 	now := types.TimeNow()
-	set := msg.Set
 
 	assignAccess := func(upd map[string]interface{}, mode *MsgDefaultAcsMode) error {
 		if mode == nil {
@@ -1951,7 +1950,7 @@ func (t *Topic) replySetDesc(sess *Session, asUid types.Uid, asChan bool, msg *C
 	core := make(map[string]interface{})
 	// Change to subscription.
 	sub := make(map[string]interface{})
-	if set.Desc != nil {
+	if set := msg.Set; set.Desc != nil {
 		switch t.cat {
 		case types.TopicCatMe:
 			// Update current user

@@ -83,7 +83,7 @@ func (sess *Session) writeOnce(wrt http.ResponseWriter, req *http.Request) {
 			return
 
 		case <-req.Context().Done():
-			// HTTP request cancelled or connection lost.
+			// HTTP request canceled or connection lost.
 			return
 		}
 	}
@@ -182,8 +182,7 @@ func serveLongPoll(wrt http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	addr := getRemoteAddr(req)
-	if sess.remoteAddr != addr {
+	if addr := getRemoteAddr(req); sess.remoteAddr != addr {
 		sess.remoteAddr = addr
 		logs.Warn.Println("longPoll: remote address changed", sid, addr)
 	}

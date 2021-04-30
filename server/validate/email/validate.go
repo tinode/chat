@@ -101,7 +101,7 @@ func resolveTemplatePath(path string) string {
 func readTemplateFile(pathTempl *textt.Template, lang string) (*textt.Template, string, error) {
 	buffer := bytes.Buffer{}
 	err := pathTempl.Execute(&buffer, map[string]interface{}{"Language": lang})
-	path := string(buffer.Bytes())
+	path := buffer.String()
 	if err != nil {
 		return nil, path, fmt.Errorf("reading %s: %w", path, err)
 	}
@@ -158,8 +158,7 @@ func executeTemplate(template *textt.Template, params map[string]interface{}) (*
 
 // Init: initialize validator.
 func (v *validator) Init(jsonconf string) error {
-	var err error
-	if err = json.Unmarshal([]byte(jsonconf), v); err != nil {
+	if err := json.Unmarshal([]byte(jsonconf), v); err != nil {
 		return err
 	}
 
@@ -541,6 +540,7 @@ func (v *validator) send(to string, content *emailContent) error {
 
 		message.WriteString("\r\n--" + boundary + "--")
 	}
+
 	message.WriteString("\r\n")
 
 	err := v.sendMail([]string{to}, message.Bytes())

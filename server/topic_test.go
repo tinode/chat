@@ -221,7 +221,7 @@ func TestHandleBroadcastDataP2P(t *testing.T) {
 	}
 	// Checking presence messages routed through huhelper.
 	if len(helper.hubMessages) != 2 {
-		t.Fatal("Huhelper.route expected exactly two recepients routed via huhelper.")
+		t.Fatal("Huhelper.route expected exactly two recipients routed via huhelper.")
 	}
 	for i, uid := range helper.uids {
 		if mm, ok := helper.hubMessages[uid.UserId()]; ok {
@@ -313,7 +313,7 @@ func TestHandleBroadcastDataGroup(t *testing.T) {
 	}
 	// Presence messages.
 	if len(helper.hubMessages) != 3 {
-		t.Fatal("Hubhelper.route expected exactly three recepients routed via huhelper.")
+		t.Fatal("Hubhelper.route expected exactly three recipients routed via huhelper.")
 	}
 	for i, uid := range helper.uids {
 		if i == 3 {
@@ -2065,7 +2065,7 @@ func TestUnregisterSessionUnsubscribe(t *testing.T) {
 			}
 		}
 	} else {
-		t.Errorf("Hub expected to pres recepient %s", topicName)
+		t.Errorf("Hub expected to pres recipient %s", topicName)
 	}
 	// User notification.
 	if userPres, ok := helper.hubMessages[uid.UserId()]; ok {
@@ -2086,7 +2086,7 @@ func TestUnregisterSessionUnsubscribe(t *testing.T) {
 			t.Errorf("Presence message what: expected 'gone', found %s", pres.What)
 		}
 	} else {
-		t.Errorf("Hub expected to pres recepient %s", uid.UserId())
+		t.Errorf("Hub expected to pres recipient %s", uid.UserId())
 	}
 }
 
@@ -2239,7 +2239,7 @@ func TestHandleMetaSetDescMePublicPrivate(t *testing.T) {
 			t.Errorf("Presence message what: expected 'upd', found %s", pres.What)
 		}
 	} else {
-		t.Errorf("Hub expected to pres recepient %s", uid.UserId())
+		t.Errorf("Hub expected to pres recipient %s", uid.UserId())
 	}
 }
 

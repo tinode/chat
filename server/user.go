@@ -942,7 +942,7 @@ func userUpdater() {
 	// Unread counter updates blocked by IO on per user basis. We flush them when the IO completes.
 	perUserBuffers := make(map[types.Uid][]bufferedUpdate)
 
-	// Push notification receipts blocked by IO (unread counters for some of the recepients
+	// Push notification recipients blocked by IO (unread counters for some of the recepients
 	// are being read from the database) on the per user basis.
 	perUserPendingReceipts := make(map[types.Uid][]*pendingReceipt)
 

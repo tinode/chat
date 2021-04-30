@@ -61,7 +61,7 @@ func openAdapter(workerId int, jsonconf json.RawMessage) error {
 		return errors.New("store: connection is already opened")
 	}
 
-	// Initialise snowflake
+	// Initialize snowflake.
 	if workerId < 0 || workerId > 1023 {
 		return errors.New("store: invalid worker ID")
 	}
@@ -82,7 +82,8 @@ func openAdapter(workerId int, jsonconf json.RawMessage) error {
 	return adp.Open(adapterConfig)
 }
 
-type StoreInterface interface {
+// PersistentStorage defines methods used for interation with persistent storage.
+type PersistentStorageInterface interface {
 	Open(workerId int, jsonconf json.RawMessage) error
 	Close() error
 	IsOpen() bool
@@ -102,14 +103,15 @@ type StoreInterface interface {
 	UseMediaHandler(name, config string) error
 }
 
-var Store StoreInterface
+// Store is the main object for interacting with persistent storage.
+var Store PersistentStorageInterface
 
-type StoreObj struct{}
+type storeObj struct{}
 
 // Open initializes the persistence system. Adapter holds a connection pool for a database instance.
 // 	 name - name of the adapter rquested in the config file
 //   jsonconf - configuration string
-func (StoreObj) Open(workerId int, jsonconf json.RawMessage) error {
+func (storeObj) Open(workerId int, jsonconf json.RawMessage) error {
 	if err := openAdapter(workerId, jsonconf); err != nil {
 		return err
 	}
@@ -118,7 +120,7 @@ func (StoreObj) Open(workerId int, jsonconf json.RawMessage) error {
 }
 
 // Close terminates connection to persistent storage.
-func (StoreObj) Close() error {
+func (storeObj) Close() error {
 	if adp.IsOpen() {
 		return adp.Close()
 	}
@@ -127,7 +129,7 @@ func (StoreObj) Close() error {
 }
 
 // IsOpen checks if persistent storage connection has been initialized.
-func (StoreObj) IsOpen() bool {
+func (storeObj) IsOpen() bool {
 	if adp != nil {
 		return adp.IsOpen()
 	}
@@ -136,7 +138,7 @@ func (StoreObj) IsOpen() bool {
 }
 
 // GetAdapterName returns the name of the current adater.
-func (StoreObj) GetAdapterName() string {
+func (storeObj) GetAdapterName() string {
 	if adp != nil {
 		return adp.GetName()
 	}
@@ -145,7 +147,7 @@ func (StoreObj) GetAdapterName() string {
 }
 
 // GetAdapterVersion returns version of the current adater.
-func (StoreObj) GetAdapterVersion() int {
+func (storeObj) GetAdapterVersion() int {
 	if adp != nil {
 		return adp.Version()
 	}
@@ -154,7 +156,7 @@ func (StoreObj) GetAdapterVersion() int {
 }
 
 // GetDbVersion returns version of the underlying database.
-func (StoreObj) GetDbVersion() int {
+func (storeObj) GetDbVersion() int {
 	if adp != nil {
 		vers, _ := adp.GetDbVersion()
 		return vers
@@ -167,7 +169,7 @@ func (StoreObj) GetDbVersion() int {
 // attempt to drop an existing database. If jsconf is nil it will assume that the adapter is
 // already open. If it's non-nil and the adapter is not open, it will use the config string
 // to open the adapter first.
-func (s StoreObj) InitDb(jsonconf json.RawMessage, reset bool) error {
+func (s storeObj) InitDb(jsonconf json.RawMessage, reset bool) error {
 	if !s.IsOpen() {
 		if err := openAdapter(1, jsonconf); err != nil {
 			return err
@@ -179,7 +181,7 @@ func (s StoreObj) InitDb(jsonconf json.RawMessage, reset bool) error {
 // UpgradeDb performes an upgrade of the database to the current adapter version.
 // If jsconf is nil it will assume that the adapter is already open. If it's non-nil and the
 // adapter is not open, it will use the config string to open the adapter first.
-func (s StoreObj) UpgradeDb(jsonconf json.RawMessage) error {
+func (s storeObj) UpgradeDb(jsonconf json.RawMessage) error {
 	if !s.IsOpen() {
 		if err := openAdapter(1, jsonconf); err != nil {
 			return err
@@ -203,12 +205,12 @@ func RegisterAdapter(a adapter.Adapter) {
 }
 
 // GetUid generates a unique ID suitable for use as a primary key.
-func (StoreObj) GetUid() types.Uid {
+func (storeObj) GetUid() types.Uid {
 	return uGen.Get()
 }
 
 // GetUidString generate unique ID as string
-func (StoreObj) GetUidString() string {
+func (storeObj) GetUidString() string {
 	return uGen.GetStr()
 }
 
@@ -231,7 +233,7 @@ func EncodeUid(id int64) types.Uid {
 }
 
 // Returns a callback returning db connection stats object.
-func (s StoreObj) DbStats() func() interface{} {
+func (s storeObj) DbStats() func() interface{} {
 	if !s.IsOpen() {
 		return nil
 	}
@@ -706,7 +708,7 @@ func (MessagesObjMapper) DeleteList(topic string, delID int, forUser types.Uid, 
 		return err
 	}
 
-	// TODO: move to adapter
+	// TODO: move to adapter.
 	if delID > 0 {
 		// Record ID of the delete transaction
 		err = adp.TopicUpdate(topic, map[string]interface{}{"DelId": delID})
@@ -781,7 +783,7 @@ func RegisterAuthScheme(name string, handler auth.AuthHandler) {
 
 // GetAuthNames returns all addressable auth handler names, logical and hardcoded
 // excluding those which are disabled like "basic:".
-func (s StoreObj) GetAuthNames() []string {
+func (s storeObj) GetAuthNames() []string {
 	if len(authHandlers) == 0 {
 		return nil
 	}
@@ -806,13 +808,13 @@ func (s StoreObj) GetAuthNames() []string {
 }
 
 // GetAuthHandler returns an auth handler by actual hardcoded name irrspectful of logical naming.
-func (StoreObj) GetAuthHandler(name string) auth.AuthHandler {
+func (storeObj) GetAuthHandler(name string) auth.AuthHandler {
 	return authHandlers[strings.ToLower(name)]
 }
 
 // GetLogicalAuthHandler returns an auth handler by logical name. If there is no handler by that
 // logical name it tries to find one by the hardcoded name.
-func (StoreObj) GetLogicalAuthHandler(name string) auth.AuthHandler {
+func (storeObj) GetLogicalAuthHandler(name string) auth.AuthHandler {
 	name = strings.ToLower(name)
 	if len(authHandlerNames) != 0 {
 		if lname, ok := authHandlerNames[name]; ok {
@@ -886,7 +888,7 @@ func RegisterValidator(name string, v validate.Validator) {
 }
 
 // GetValidator returns registered validator by name.
-func (StoreObj) GetValidator(name string) validate.Validator {
+func (storeObj) GetValidator(name string) validate.Validator {
 	return validators[strings.ToLower(name)]
 }
 
@@ -947,12 +949,12 @@ func RegisterMediaHandler(name string, mh media.Handler) {
 }
 
 // GetMediaHandler returns default media handler.
-func (StoreObj) GetMediaHandler() media.Handler {
+func (storeObj) GetMediaHandler() media.Handler {
 	return mediaHandler
 }
 
 // UseMediaHandler sets specified media handler as default.
-func (StoreObj) UseMediaHandler(name, config string) error {
+func (storeObj) UseMediaHandler(name, config string) error {
 	mediaHandler = fileHandlers[name]
 	if mediaHandler == nil {
 		panic("UseMediaHandler: unknown handler '" + name + "'")
@@ -1005,7 +1007,7 @@ func (FileMapper) DeleteUnused(olderThan time.Time, limit int) error {
 }
 
 func init() {
-	Store = StoreObj{}
+	Store = storeObj{}
 	Users = UsersObjMapper{}
 	Topics = TopicsObjMapper{}
 	Subs = SubsObjMapper{}

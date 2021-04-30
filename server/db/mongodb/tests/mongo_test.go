@@ -165,8 +165,7 @@ func TestTopicCreateP2P(t *testing.T) {
 }
 
 func TestTopicShare(t *testing.T) {
-	err := adp.TopicShare(subs)
-	if err != nil {
+	if err := adp.TopicShare(subs); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -310,7 +309,7 @@ func TestAuthGetUniqueRecord(t *testing.T) {
 	}
 	if uid != types.ParseUserId("usr"+recs[0].UserId) ||
 		authLvl != recs[0].AuthLvl ||
-		bytes.Compare(secret, recs[0].Secret) != 0 ||
+		!bytes.Equal(secret, recs[0].Secret) ||
 		expires != recs[0].Expires {
 
 		got := fmt.Sprintf("%v %v %v %v", uid, authLvl, secret, expires)
@@ -332,7 +331,7 @@ func TestAuthGetRecord(t *testing.T) {
 	}
 	if recId != recs[0].Id ||
 		authLvl != recs[0].AuthLvl ||
-		bytes.Compare(secret, recs[0].Secret) != 0 ||
+		!bytes.Equal(secret, recs[0].Secret) ||
 		expires != recs[0].Expires {
 
 		got := fmt.Sprintf("%v %v %v %v", recId, authLvl, secret, expires)

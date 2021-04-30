@@ -376,12 +376,6 @@ func (n *ClusterNode) proxyToMaster(msg *ClusterReq) error {
 	return err
 }
 
-// masterToProxy forwards response from topic master to topic proxy.
-func (n *ClusterNode) masterToProxy(msg *ClusterResp) error {
-	var unused bool
-	return n.call("Cluster.TopicProxy", msg, &unused)
-}
-
 // masterToProxyAsync forwards response from topic master to topic proxy
 // in a fire-and-forget manner.
 func (n *ClusterNode) masterToProxyAsync(msg *ClusterResp) error {
@@ -759,20 +753,6 @@ func (c *Cluster) genLocalTopicName() string {
 		topic = genTopicName()
 	}
 	return topic
-}
-
-// Returns remote node name where the topic is hosted.
-// If the topic is hosted locally, returns an empty string.
-func (c *Cluster) nodeNameForTopicIfRemote(topic string) string {
-	if c == nil {
-		// Cluster not initialized, all topics are local
-		return ""
-	}
-	key := c.ring.Get(topic)
-	if key == c.thisNodeName {
-		return ""
-	}
-	return key
 }
 
 // isPartitioned checks if the cluster is partitioned due to network or other failure and if the

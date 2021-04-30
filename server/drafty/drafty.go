@@ -9,8 +9,10 @@ import (
 	"unicode/utf8"
 )
 
-var errUnrecognizedContent = errors.New("content unrecognized")
-var errInvalidContent = errors.New("invalid format")
+var (
+	errUnrecognizedContent = errors.New("content unrecognized")
+	errInvalidContent      = errors.New("invalid format")
+)
 
 type span struct {
 	tp   string

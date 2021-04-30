@@ -360,10 +360,9 @@ func parseVersionPart(vers string) int {
 // Unparceable values are replaced with zeros.
 func parseVersion(vers string) int {
 	var major, minor, patch int
-	// Remove optional "v" prefix.
-	if strings.HasPrefix(vers, "v") {
-		vers = vers[1:]
-	}
+	// Maybe remove the optional "v" prefix.
+	vers = strings.TrimPrefix(vers, "v")
+
 	// We can handle 3 parts only.
 	parts := strings.SplitN(vers, ".", 3)
 	count := len(parts)

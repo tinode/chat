@@ -62,7 +62,7 @@ const ZeroUid Uid = 0
 // NullValue is a Unicode DEL character which indicated that the value is being deleted.
 const NullValue = "\u2421"
 
-// Lengths of various Uid representations
+// Lengths of various Uid representations.
 const (
 	uidBase64Unpadded = 11
 	p2pBase64Unpadded = 22
@@ -157,14 +157,14 @@ func (uid Uid) String32() string {
 	return strings.ToLower(base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(data))
 }
 
-// ParseUid parses string NOT prefixed with anything
+// ParseUid parses string NOT prefixed with anything.
 func ParseUid(s string) Uid {
 	var uid Uid
 	uid.UnmarshalText([]byte(s))
 	return uid
 }
 
-// ParseUid32 parses base32-encoded string into Uid
+// ParseUid32 parses base32-encoded string into Uid.
 func ParseUid32(s string) Uid {
 	var uid Uid
 	if data, err := base32.StdEncoding.WithPadding(base32.NoPadding).DecodeString(s); err == nil {
@@ -173,7 +173,7 @@ func ParseUid32(s string) Uid {
 	return uid
 }
 
-// UserId converts Uid to string prefixed with 'usr', like usrXXXXX
+// UserId converts Uid to string prefixed with 'usr', like usrXXXXX.
 func (uid Uid) UserId() string {
 	return uid.PrefixId("usr")
 }
@@ -191,7 +191,7 @@ func (uid Uid) PrefixId(prefix string) string {
 	return prefix + uid.String()
 }
 
-// ParseUserId parses user ID of the form "usrXXXXXX"
+// ParseUserId parses user ID of the form "usrXXXXXX".
 func ParseUserId(s string) Uid {
 	var uid Uid
 	if strings.HasPrefix(s, "usr") {
@@ -275,13 +275,13 @@ func (us *UidSlice) Rem(uid Uid) bool {
 	return true
 }
 
-// Contains checks if the UidSlice contains the given uid
+// Contains checks if the UidSlice contains the given UID.
 func (us UidSlice) Contains(uid Uid) bool {
 	_, contains := us.find(uid)
 	return contains
 }
 
-// P2PName takes two Uids and generates a P2P topic name
+// P2PName takes two Uids and generates a P2P topic name.
 func (uid Uid) P2PName(u2 Uid) string {
 	if !uid.IsZero() && !u2.IsZero() {
 		b1, _ := uid.MarshalBinary()
@@ -562,8 +562,8 @@ func (m AccessMode) MarshalText() ([]byte, error) {
 		return nil, errors.New("AccessMode invalid")
 	}
 
-	var res = []byte{}
-	var modes = []byte{'J', 'R', 'W', 'P', 'A', 'S', 'D', 'O'}
+	res := []byte{}
+	modes := []byte{'J', 'R', 'W', 'P', 'A', 'S', 'D', 'O'}
 	for i, chr := range modes {
 		if (m & (1 << uint(i))) != 0 {
 			res = append(res, chr)
@@ -683,9 +683,8 @@ func (grant AccessMode) BetterEqual(want AccessMode) bool {
 // Zero delta is an empty string ""
 func (o AccessMode) Delta(n AccessMode) string {
 	// Removed bits, bits present in 'old' but missing in 'new' -> '-'
-	o2n := ModeBitmask & o &^ n
 	var removed string
-	if o2n > 0 {
+	if o2n := ModeBitmask & o &^ n; o2n > 0 {
 		removed = o2n.String()
 		if removed != "" {
 			removed = "-" + removed
@@ -693,9 +692,8 @@ func (o AccessMode) Delta(n AccessMode) string {
 	}
 
 	// Added bits, bits present in 'n' but missing in 'o' -> '+'
-	n2o := ModeBitmask & n &^ o
 	var added string
-	if n2o > 0 {
+	if n2o := ModeBitmask & n &^ o; n2o > 0 {
 		added = n2o.String()
 		if added != "" {
 			added = "+" + added
@@ -1164,8 +1162,7 @@ func (rs RangeSorter) Less(i, j int) bool {
 // The ranges are expected to be sorted.
 // Ranges are inclusive-inclusive, i.e. [1..3] -> 1, 2, 3.
 func (rs RangeSorter) Normalize() RangeSorter {
-	ll := rs.Len()
-	if ll > 1 {
+	if ll := rs.Len(); ll > 1 {
 		prev := 0
 		for i := 1; i < ll; i++ {
 			if rs[prev].Low == rs[i].Low {

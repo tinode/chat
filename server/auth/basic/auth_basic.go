@@ -197,6 +197,7 @@ func (a *authenticator) UpdateRecord(rec *auth.Rec, secret []byte, remoteAddr st
 		if tag == oldTag {
 			rec.Tags[i] = rec.Tags[len(rec.Tags)-1]
 			rec.Tags = rec.Tags[:len(rec.Tags)-1]
+
 			break
 		}
 	}

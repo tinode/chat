@@ -593,7 +593,7 @@ type MsgServerPres struct {
 	// to allow different handling on the client
 	Acs *MsgAccessMode `json:"dacs,omitempty"`
 
-	// UNroutable params. All marked with `json:"-"` to exclude from json marshalling.
+	// UNroutable params. All marked with `json:"-"` to exclude from json marshaling.
 	// They are still serialized for intra-cluster communication.
 
 	// Flag to break the reply loop
@@ -716,7 +716,7 @@ func (src *MsgServerMeta) describe() string {
 type MsgServerInfo struct {
 	// Topic to send event to.
 	Topic string `json:"topic"`
-	// Topic where the even has occured (set only when Topic='me').
+	// Topic where the even has occurred (set only when Topic='me').
 	Src string `json:"src,omitempty"`
 	// ID of the user who originated the message.
 	From string `json:"from"`
@@ -725,7 +725,7 @@ type MsgServerInfo struct {
 	// Server-issued message ID being reported.
 	SeqId int `json:"seq,omitempty"`
 
-	// UNroutable params. All marked with `json:"-"` to exclude from json marshalling.
+	// UNroutable params. All marked with `json:"-"` to exclude from json marshaling.
 	// They are still serialized for intra-cluster communication.
 
 	// When sending to 'me', skip sessions subscribed to this topic.

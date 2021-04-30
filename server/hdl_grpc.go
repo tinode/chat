@@ -137,8 +137,7 @@ func (sess *Session) writeGrpcLoop() {
 }
 
 func grpcWrite(sess *Session, msg interface{}) error {
-	out := sess.grpcnode
-	if out != nil {
+	if out := sess.grpcnode; out != nil {
 		// Will panic if msg is not of *pbx.ServerMsg type. This is an intentional panic.
 		return out.Send(msg.(*pbx.ServerMsg))
 	}

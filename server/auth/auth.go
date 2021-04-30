@@ -115,7 +115,7 @@ const (
 
 // MarshalText converts Feature to ASCII byte slice.
 func (f Feature) MarshalText() ([]byte, error) {
-	var res = []byte{}
+	res := []byte{}
 	for i, chr := range []byte{'V', 'L'} {
 		if (f & (1 << uint(i))) != 0 {
 			res = append(res, chr)

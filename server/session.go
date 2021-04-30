@@ -29,11 +29,6 @@ import (
 	"golang.org/x/text/language"
 )
 
-// Wait time before abandoning the outbound send operation.
-// Timeout is rather long to make sure it's longer than Linux preeption time:
-// https://elixir.bootlin.com/linux/latest/source/kernel/sched/fair.c#L38
-const sendTimeout = time.Millisecond * 7
-
 // Maximum number of queued messages before session is considered stale and dropped.
 const sendQueueLimit = 128
 
@@ -234,14 +229,6 @@ func (s *Session) unsubAll() {
 		// Leave message is not set because the whole session is being dropped.
 		sub.done <- &sessionLeave{sess: s}
 	}
-}
-
-// Represents a proxied (remote) session.
-type remoteSession struct {
-	// User id of the proxied session.
-	uid types.Uid
-	// Whether the proxied session is background.
-	isBackground bool
 }
 
 // Indicates whether this session is a local interface for a remote proxy topic.
@@ -1319,8 +1306,8 @@ func (s *Session) expandTopicName(msg *ClientComMessage) (string, *ServerComMess
 	return routeTo, nil
 }
 
-func (sess *Session) serializeAndUpdateStats(msg *ServerComMessage) interface{} {
-	dataSize, data := sess.serialize(msg)
+func (s *Session) serializeAndUpdateStats(msg *ServerComMessage) interface{} {
+	dataSize, data := s.serialize(msg)
 	if dataSize >= 0 {
 		statsAddHistSample("OutgoingMessageSize", float64(dataSize))
 	}

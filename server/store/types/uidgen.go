@@ -59,8 +59,8 @@ func getIDBuffer(ug *UidGenerator) ([]byte, error) {
 		return nil, err
 	}
 
-	var src = make([]byte, 8)
-	var dst = make([]byte, 8)
+	src := make([]byte, 8)
+	dst := make([]byte, 8)
 	binary.LittleEndian.PutUint64(src, id)
 	ug.cipher.Encrypt(dst, src)
 
@@ -72,8 +72,8 @@ func getIDBuffer(ug *UidGenerator) ([]byte, error) {
 // set is unsupported and possibly for other uses such as MySQL's recommendation
 // for sequential primary keys.
 func (ug *UidGenerator) DecodeUid(uid Uid) int64 {
-	var src = make([]byte, 8)
-	var dst = make([]byte, 8)
+	src := make([]byte, 8)
+	dst := make([]byte, 8)
 	binary.LittleEndian.PutUint64(src, uint64(uid))
 	ug.cipher.Decrypt(dst, src)
 	return int64(binary.LittleEndian.Uint64(dst))
@@ -84,8 +84,8 @@ func (ug *UidGenerator) DecodeUid(uid Uid) int64 {
 // set is unsupported  and possibly for other uses such as MySQL's recommendation
 // for sequential primary keys.
 func (ug *UidGenerator) EncodeInt64(val int64) Uid {
-	var src = make([]byte, 8)
-	var dst = make([]byte, 8)
+	src := make([]byte, 8)
+	dst := make([]byte, 8)
 	binary.LittleEndian.PutUint64(src, uint64(val))
 	ug.cipher.Encrypt(dst, src)
 	return Uid(binary.LittleEndian.Uint64(dst))
