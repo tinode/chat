@@ -1935,6 +1935,8 @@ func TestUnregisterSessionSimple(t *testing.T) {
 		t.Errorf("Number of online sessions: expected 3 vs found %d", online)
 	}
 
+	s := helper.sessions[0]
+	r := helper.results[0]
 	leave := &sessionLeave{
 		pkt: &ClientComMessage{
 			Leave: &MsgClientLeave{
@@ -1943,7 +1945,7 @@ func TestUnregisterSessionSimple(t *testing.T) {
 			},
 			AsUser: uid.UserId(),
 		},
-		sess: helper.sessions[0],
+		sess: s,
 	}
 	helper.topic.unregisterSession(leave)
 
@@ -1952,24 +1954,68 @@ func TestUnregisterSessionSimple(t *testing.T) {
 	if len(helper.topic.sessions) != 2 {
 		t.Errorf("Attached sessions: expected 2, found %d", len(helper.topic.sessions))
 	}
-	if len(helper.sessions[0].subs) != 0 {
+	if len(s.subs) != 0 {
 		t.Errorf("Session subscriptions: expected 0, found %d", len(helper.sessions[0].subs))
 	}
 	if online := helper.topic.perUser[uid].online; online != 2 {
 		t.Errorf("Number of online sessions after unregistering: expected 2, found %d", online)
 	}
 	// Session output.
+	registerSessionVerifyOutputs(t, r, []int{http.StatusOK})
+	// Presence notifications.
+	if len(helper.hubMessages) != 0 {
+		t.Errorf("Hub isn't expected to receive any messages, received %d", len(helper.hubMessages))
+	}
+}
+
+func TestUnregisterSessionInactiveTopic(t *testing.T) {
+	topicName := "usrMe"
+	numUsers := 1
+	helper := TopicTestHelper{}
+	helper.setUp(t, numUsers, types.TopicCatMe, topicName, true)
+	defer helper.tearDown()
+
+	uid := helper.uids[0]
+
+	// Initial online and attach session counts.
+	if len(helper.topic.sessions) != 1 {
+		helper.finish()
+		t.Fatalf("Initially attached sessions: expected 1 vs found %d", len(helper.topic.sessions))
+	}
+	if online := helper.topic.perUser[uid].online; online != 1 {
+		t.Errorf("Number of online sessions: expected 1 vs found %d", online)
+	}
+
+	s := helper.sessions[0]
 	r := helper.results[0]
-	if len(r.messages) != 1 {
-		t.Fatalf("`responses` expected to contain 1 element, found %d", len(helper.results[0].messages))
+	leave := &sessionLeave{
+		pkt: &ClientComMessage{
+			Leave: &MsgClientLeave{
+				Id:    "id456",
+				Topic: topicName,
+			},
+			AsUser: uid.UserId(),
+		},
+		sess: s,
 	}
-	resp := r.messages[0].(*ServerComMessage)
-	if resp.Ctrl == nil {
-		t.Fatalf("response expected to contain a Ctrl message")
+
+	// Deactivate topic.
+	helper.topic.markDeleted()
+
+	helper.topic.unregisterSession(leave)
+	helper.finish()
+
+	if len(helper.topic.sessions) != 1 {
+		t.Errorf("Attached sessions: expected 1, found %d", len(helper.topic.sessions))
 	}
-	if resp.Ctrl.Code != 200 {
-		t.Errorf("response code: expected 200, found: %d", resp.Ctrl.Code)
+	if len(s.subs) != 0 {
+		t.Errorf("Session subscriptions: expected 0, found %d", len(s.subs))
 	}
+	if online := helper.topic.perUser[uid].online; online != 1 {
+		t.Errorf("Number of online sessions after unregistering: expected 1, found %d", online)
+	}
+	// Session output.
+	registerSessionVerifyOutputs(t, r, []int{http.StatusServiceUnavailable})
 	// Presence notifications.
 	if len(helper.hubMessages) != 0 {
 		t.Errorf("Hub isn't expected to receive any messages, received %d", len(helper.hubMessages))
@@ -1980,7 +2026,7 @@ func TestUnregisterSessionUnsubscribe(t *testing.T) {
 	topicName := "grpTest"
 	numUsers := 3
 	helper := TopicTestHelper{}
-	helper.setUp(t, numUsers, types.TopicCatGrp, topicName /*attach=*/, true)
+	helper.setUp(t, numUsers, types.TopicCatGrp, topicName, true)
 	defer helper.tearDown()
 
 	uid := helper.uids[2]
@@ -2032,16 +2078,7 @@ func TestUnregisterSessionUnsubscribe(t *testing.T) {
 	// Session output. Sessions 2, 3, 4 are the evicted/unsubscribed uid.
 	for i := 2; i < 5; i++ {
 		r := helper.results[i]
-		if len(r.messages) != 1 {
-			t.Fatalf("`responses` expected to contain 1 element, found %d", len(helper.results[0].messages))
-		}
-		resp := r.messages[0].(*ServerComMessage)
-		if resp.Ctrl == nil {
-			t.Fatalf("response expected to contain a Ctrl message")
-		}
-		if resp.Ctrl.Code != 205 {
-			t.Errorf("response code: expected 205, found: %d", resp.Ctrl.Code)
-		}
+		registerSessionVerifyOutputs(t, r, []int{http.StatusResetContent})
 	}
 	// Presence notifications.
 	if len(helper.hubMessages) != 2 {
@@ -2094,11 +2131,131 @@ func TestUnregisterSessionUnsubscribe(t *testing.T) {
 	}
 }
 
+func TestUnregisterSessionOwnerCannotUnsubscribe(t *testing.T) {
+	topicName := "grpTest"
+	numUsers := 3
+	helper := TopicTestHelper{}
+	helper.setUp(t, numUsers, types.TopicCatGrp, topicName, true)
+	defer helper.tearDown()
+
+	uid := helper.uids[0]
+	s := helper.sessions[0]
+	r := helper.results[0]
+
+	leave := &sessionLeave{
+		pkt: &ClientComMessage{
+			Leave: &MsgClientLeave{
+				Id:    "id456",
+				Topic: topicName,
+				Unsub: true,
+			},
+			AsUser: uid.UserId(),
+		},
+		sess: s,
+	}
+
+	helper.topic.unregisterSession(leave)
+	helper.finish()
+
+	if len(helper.topic.sessions) != 3 {
+		t.Errorf("Attached sessions: expected 3, found %d", len(helper.topic.sessions))
+	}
+	if len(s.subs) != 0 {
+		t.Errorf("Session subscriptions: expected 0, found %d", len(helper.sessions[0].subs))
+	}
+	if online := helper.topic.perUser[uid].online; online != 1 {
+		t.Errorf("Number of online sessions after failed unsubscribing: expected 1, found %d.", online)
+	}
+	// Session output.
+	registerSessionVerifyOutputs(t, r, []int{http.StatusForbidden})
+	// Presence notifications.
+	if len(helper.hubMessages) != 0 {
+		t.Errorf("Hub messages recipients: expected 0, received %d", len(helper.hubMessages))
+	}
+}
+
+func TestUnregisterSessionUnsubDeleteCallFails(t *testing.T) {
+	topicName := "grpTest"
+	numUsers := 3
+	helper := TopicTestHelper{}
+	helper.setUp(t, numUsers, types.TopicCatGrp, topicName, true)
+	defer helper.tearDown()
+
+	// Unsubscribe user 1 (cannot unsub user 0, the owner).
+	uid := helper.uids[1]
+	s := helper.sessions[1]
+	r := helper.results[1]
+
+	leave := &sessionLeave{
+		pkt: &ClientComMessage{
+			Leave: &MsgClientLeave{
+				Id:    "id456",
+				Topic: topicName,
+				Unsub: true,
+			},
+			AsUser: uid.UserId(),
+		},
+		sess: s,
+	}
+	// DB call fails.
+	helper.ss.EXPECT().Delete(topicName, uid).Return(types.ErrInternal)
+
+	helper.topic.unregisterSession(leave)
+	helper.finish()
+
+	if len(helper.topic.sessions) != 3 {
+		t.Errorf("Attached sessions: expected 3, found %d", len(helper.topic.sessions))
+	}
+	if len(s.subs) != 0 {
+		t.Errorf("Session subscriptions: expected 0, found %d", len(helper.sessions[0].subs))
+	}
+	if online := helper.topic.perUser[uid].online; online != 1 {
+		t.Errorf("Number of online sessions after failed unsubscribing: expected 1, found %d.", online)
+	}
+	// Session output.
+	registerSessionVerifyOutputs(t, r, []int{http.StatusInternalServerError})
+	// Presence notifications.
+	if len(helper.hubMessages) != 0 {
+		t.Errorf("Hub messages recipients: expected 0, received %d", len(helper.hubMessages))
+	}
+}
+
+func TestHandleMetaChanErr(t *testing.T) {
+	topicName := "grpTest"
+	chanName := "chnTest"
+	numUsers := 3
+	helper := TopicTestHelper{}
+	defer helper.tearDown()
+	helper.setUp(t, numUsers, types.TopicCatGrp, topicName, false)
+
+	// This is not a channel. However, we will try to handle an info message where
+	// the topic is referenced as "chn".
+	helper.topic.isChan = false
+	// Empty message since this request should trigger an error anyway.
+	meta := &metaReq{
+		pkt: &ClientComMessage{
+			AsUser:   helper.uids[0].UserId(),
+			Original: chanName,
+			MetaWhat: constMsgMetaDesc | constMsgMetaSub | constMsgMetaData | constMsgMetaDel,
+		},
+		sess: helper.sessions[0],
+	}
+	helper.topic.handleMeta(meta)
+	helper.finish()
+
+	// Session output.
+	registerSessionVerifyOutputs(t, helper.results[0], []int{http.StatusNotFound})
+	// Presence notifications.
+	if len(helper.hubMessages) != 0 {
+		t.Errorf("Hub messages recipients: expected 0, received %d", len(helper.hubMessages))
+	}
+}
+
 func TestHandleMetaGet(t *testing.T) {
 	topicName := "usrMe"
 	numUsers := 1
 	helper := TopicTestHelper{}
-	helper.setUp(t, numUsers, types.TopicCatMe, topicName /*attach=*/, true)
+	helper.setUp(t, numUsers, types.TopicCatMe, topicName, true)
 	defer helper.tearDown()
 
 	uid := helper.uids[0]
