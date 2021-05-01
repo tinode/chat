@@ -91,7 +91,8 @@ func statsRegisterHistogram(name string, bounds []float64) {
 	numBuckets := len(bounds) + 1
 	expvar.Publish(name, &histogram{
 		CountPerBucket: make([]int64, numBuckets),
-		Bounds:         bounds})
+		Bounds:         bounds,
+	})
 }
 
 // Async publish int variable.
@@ -133,7 +134,6 @@ func statsShutdown() {
 
 // The go routine which actually publishes stats updates.
 func statsUpdater() {
-
 	for upd := range globals.statsUpdate {
 		if upd == nil {
 			globals.statsUpdate = nil

@@ -22,8 +22,7 @@ import (
 	"google.golang.org/grpc/peer"
 )
 
-type grpcNodeServer struct {
-}
+type grpcNodeServer struct{}
 
 func (sess *Session) closeGrpc() {
 	if sess.proto == GRPC {

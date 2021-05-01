@@ -304,8 +304,8 @@ func (s *Session) queueOutBatch(msgs []*ServerComMessage) bool {
 			s.queueOut(msg)
 		}
 	}
-	return true
 
+	return true
 }
 
 // queueOut attempts to send a ServerComMessage to a session write loop;
@@ -619,7 +619,8 @@ func (s *Session) subscribe(msg *ClientComMessage) {
 		select {
 		case globals.hub.join <- &sessionJoin{
 			pkt:  msg,
-			sess: s}:
+			sess: s,
+		}:
 		default:
 			// Reply with a 500 to the user.
 			s.queueOut(ErrUnknownReply(msg, msg.Timestamp))
@@ -651,7 +652,8 @@ func (s *Session) leave(msg *ClientComMessage) {
 			s.inflightReqs.Add(1)
 			sub.done <- &sessionLeave{
 				pkt:  msg,
-				sess: s}
+				sess: s,
+			}
 		}
 	} else if !msg.Leave.Unsub {
 		// Session is not attached to the topic, wants to leave - fine, no change
@@ -688,18 +690,21 @@ func (s *Session) publish(msg *ClientComMessage) {
 		}
 	}
 
-	data := &ServerComMessage{Data: &MsgServerData{
-		Topic:     msg.Original,
-		From:      msg.AsUser,
-		Timestamp: msg.Timestamp,
-		Head:      msg.Pub.Head,
-		Content:   msg.Pub.Content},
+	data := &ServerComMessage{
+		Data: &MsgServerData{
+			Topic:     msg.Original,
+			From:      msg.AsUser,
+			Timestamp: msg.Timestamp,
+			Head:      msg.Pub.Head,
+			Content:   msg.Pub.Content,
+		},
 		// Internal-only values.
 		Id:        msg.Id,
 		RcptTo:    msg.RcptTo,
 		AsUser:    msg.AsUser,
 		Timestamp: msg.Timestamp,
-		sess:      s}
+		sess:      s,
+	}
 	if msg.Pub.NoEcho {
 		data.SkipSid = s.sid
 	}
@@ -845,7 +850,6 @@ func (s *Session) hello(msg *ClientComMessage) {
 
 // Account creation
 func (s *Session) acc(msg *ClientComMessage) {
-
 	// If token is provided, get the user ID from it.
 	var rec *auth.Rec
 	if msg.Acc.Token != nil {
@@ -986,8 +990,8 @@ func (s *Session) authSecretReset(params []byte) error {
 		Uid:       uid,
 		AuthLevel: auth.LevelAuth,
 		Lifetime:  auth.Duration(time.Hour * 24),
-		Features:  auth.FeatureNoLogin})
-
+		Features:  auth.FeatureNoLogin,
+	})
 	if err != nil {
 		return err
 	}
@@ -997,7 +1001,6 @@ func (s *Session) authSecretReset(params []byte) error {
 
 // onLogin performs steps after successful authentication.
 func (s *Session) onLogin(msgID string, timestamp time.Time, rec *auth.Rec, missing []string) *ServerComMessage {
-
 	var reply *ServerComMessage
 	var params map[string]interface{}
 
@@ -1005,7 +1008,8 @@ func (s *Session) onLogin(msgID string, timestamp time.Time, rec *auth.Rec, miss
 
 	params = map[string]interface{}{
 		"user":    rec.Uid.UserId(),
-		"authlvl": rec.AuthLevel.String()}
+		"authlvl": rec.AuthLevel.String(),
+	}
 	if len(missing) > 0 {
 		// Some credentials are not validated yet. Respond with request for validation.
 		reply = InfoValidateCredentials(msgID, timestamp)
@@ -1062,7 +1066,8 @@ func (s *Session) get(msg *ClientComMessage) {
 	sub := s.getSub(msg.RcptTo)
 	meta := &metaReq{
 		pkt:  msg,
-		sess: s}
+		sess: s,
+	}
 
 	if meta.pkt.MetaWhat == 0 {
 		s.queueOut(ErrMalformedReply(msg, msg.Timestamp))
@@ -1101,7 +1106,8 @@ func (s *Session) set(msg *ClientComMessage) {
 
 	meta := &metaReq{
 		pkt:  msg,
-		sess: s}
+		sess: s,
+	}
 
 	if msg.Set.Desc != nil {
 		meta.pkt.MetaWhat = constMsgMetaDesc
@@ -1172,7 +1178,8 @@ func (s *Session) del(msg *ClientComMessage) {
 		select {
 		case sub.meta <- &metaReq{
 			pkt:  msg,
-			sess: s}:
+			sess: s,
+		}:
 		default:
 			// Reply with a 500 to the user.
 			s.queueOut(ErrUnknownReply(msg, msg.Timestamp))
@@ -1186,7 +1193,8 @@ func (s *Session) del(msg *ClientComMessage) {
 			rcptTo: msg.RcptTo,
 			pkt:    msg,
 			sess:   s,
-			del:    true}:
+			del:    true,
+		}:
 		default:
 			// Reply with a 500 to the user.
 			s.queueOut(ErrUnknownReply(msg, msg.Timestamp))
@@ -1202,7 +1210,6 @@ func (s *Session) del(msg *ClientComMessage) {
 // Broadcast a transient {ping} message to active topic subscribers
 // Not reporting any errors
 func (s *Session) note(msg *ClientComMessage) {
-
 	if s.ver == 0 || msg.AsUser == "" {
 		// Silently ignore the message: have not received {hi} or don't know who sent the message.
 		return
@@ -1234,12 +1241,14 @@ func (s *Session) note(msg *ClientComMessage) {
 			Topic: msg.Original,
 			From:  msg.AsUser,
 			What:  msg.Note.What,
-			SeqId: msg.Note.SeqId},
+			SeqId: msg.Note.SeqId,
+		},
 		RcptTo:    msg.RcptTo,
 		AsUser:    msg.AsUser,
 		Timestamp: msg.Timestamp,
 		SkipSid:   s.sid,
-		sess:      s}
+		sess:      s,
+	}
 	if sub := s.getSub(msg.RcptTo); sub != nil {
 		// Pings can be sent to subscribed topics only
 		select {
@@ -1272,7 +1281,6 @@ func (s *Session) note(msg *ClientComMessage) {
 //   routeTo: routable global topic name
 //   err: *ServerComMessage with an error to return to the sender
 func (s *Session) expandTopicName(msg *ClientComMessage) (string, *ServerComMessage) {
-
 	if msg.Original == "" {
 		logs.Warn.Println("s.etn: empty topic name", s.sid)
 		return "", ErrMalformed(msg.Id, "", msg.Timestamp)

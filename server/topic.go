@@ -188,8 +188,10 @@ type sessionUpdate struct {
 	userAgent string
 }
 
-var nilPresParams = &presParams{}
-var nilPresFilters = &presFilters{}
+var (
+	nilPresParams  = &presParams{}
+	nilPresFilters = &presFilters{}
+)
 
 func (t *Topic) run(hub *Hub) {
 	if !t.isProxy {
@@ -762,7 +764,8 @@ func (t *Topic) channelSubUnsub(uid types.Uid, sub bool) {
 	push.ChannelSub(&push.ChannelReq{
 		Uid:     uid,
 		Channel: types.GrpToChn(t.name),
-		Unsub:   !sub})
+		Unsub:   !sub,
+	})
 }
 
 // Send immediate presence notification in response to a subscription.
@@ -787,7 +790,8 @@ func (t *Topic) sendImmediateSubNotifications(asUid types.Uid, acs *MsgAccessMod
 			t.presSingleUserOffline(uid2, mode2, "acs", &presParams{
 				dWant:  pud2.modeWant.String(),
 				dGiven: pud2.modeGiven.String(),
-				actor:  asUid.UserId()}, "", false)
+				actor:  asUid.UserId(),
+			}, "", false)
 		}
 
 		if sreg.pkt.Sub.Newsub {
@@ -819,7 +823,8 @@ func (t *Topic) sendImmediateSubNotifications(asUid types.Uid, acs *MsgAccessMod
 			&presParams{
 				dWant:  acs.Want,
 				dGiven: acs.Given,
-				actor:  asUid.UserId()},
+				actor:  asUid.UserId(),
+			},
 			sreg.sess.sid, false)
 
 		if t.isChan && types.IsChannel(sreg.pkt.Original) {
@@ -897,7 +902,8 @@ func (t *Topic) procDataReq(asUid types.Uid, msg *ServerComMessage) (*push.Recei
 			Topic:     t.name,
 			From:      asUser.String(),
 			Head:      msg.Data.Head,
-			Content:   msg.Data.Content}, (userData.modeGiven & userData.modeWant).IsReader()); err != nil {
+			Content:   msg.Data.Content,
+		}, (userData.modeGiven & userData.modeWant).IsReader()); err != nil {
 
 			logs.Warn.Printf("topic[%s]: failed to save message: %v", t.name, err)
 			msg.sess.queueOut(ErrUnknown(msg.Id, t.original(asUid), msg.Timestamp))
@@ -1219,7 +1225,8 @@ func (t *Topic) subscriptionReply(asChan bool, join *sessionJoin) error {
 			broadcast: t.broadcast,
 			done:      t.unreg,
 			meta:      t.meta,
-			supd:      t.supd})
+			supd:      t.supd,
+		})
 		t.addSession(join.sess, asUid, asChan)
 
 		// The user is online in the topic. Increment the counter if notifications are not deferred.
@@ -1545,7 +1552,8 @@ func (t *Topic) thisUserSub(sess *Session, pkt *ClientComMessage, asUid types.Ui
 			if err := store.Subs.Update(t.name, t.owner,
 				map[string]interface{}{
 					"ModeWant":  oldOwnerData.modeWant,
-					"ModeGiven": oldOwnerData.modeGiven}); err != nil {
+					"ModeGiven": oldOwnerData.modeGiven,
+				}); err != nil {
 				return nil, err
 			}
 			if err := store.Topics.OwnerChange(t.name, asUid); err != nil {
@@ -1844,13 +1852,15 @@ func (t *Topic) replyGetDesc(sess *Session, asUid types.Uid, asChan bool, opts *
 		} else if t.cat == types.TopicCatMe || (pud.modeGiven & pud.modeWant).IsSharer() {
 			desc.DefaultAcs = &MsgDefaultAcsMode{
 				Auth: t.accessAuth.String(),
-				Anon: t.accessAnon.String()}
+				Anon: t.accessAnon.String(),
+			}
 		}
 
 		desc.Acs = &MsgAccessMode{
 			Want:  pud.modeWant.String(),
 			Given: pud.modeGiven.String(),
-			Mode:  (pud.modeGiven & pud.modeWant).String()}
+			Mode:  (pud.modeGiven & pud.modeWant).String(),
+		}
 
 		if t.cat == types.TopicCatMe && sess.authLvl == auth.LevelRoot {
 			// If 'me' is in memory then user account is invariably not suspended.
@@ -1887,7 +1897,9 @@ func (t *Topic) replyGetDesc(sess *Session, asUid types.Uid, asChan bool, opts *
 			Id:        id,
 			Topic:     msg.Original,
 			Desc:      desc,
-			Timestamp: &now}})
+			Timestamp: &now,
+		},
+	})
 
 	return nil
 }
@@ -2254,7 +2266,8 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 					if !lastSeen.IsZero() && !mts.Online {
 						mts.LastSeen = &MsgLastSeenInfo{
 							When:      &lastSeen,
-							UserAgent: sub.GetUserAgent()}
+							UserAgent: sub.GetUserAgent(),
+						}
 					}
 				}
 			} else {
@@ -2428,13 +2441,16 @@ func (t *Topic) replyGetData(sess *Session, asUid types.Uid, asChan bool, req *M
 						// Don't show sender for channel readers
 						from = types.ParseUid(mm.From).UserId()
 					}
-					outgoingMessages[i] = &ServerComMessage{Data: &MsgServerData{
-						Topic:     toriginal,
-						Head:      mm.Head,
-						SeqId:     mm.SeqId,
-						From:      from,
-						Timestamp: mm.CreatedAt,
-						Content:   mm.Content}}
+					outgoingMessages[i] = &ServerComMessage{
+						Data: &MsgServerData{
+							Topic:     toriginal,
+							Head:      mm.Head,
+							SeqId:     mm.SeqId,
+							From:      from,
+							Timestamp: mm.CreatedAt,
+							Content:   mm.Content,
+						},
+					}
 				}
 				sess.queueOutBatch(outgoingMessages)
 			}
@@ -2467,7 +2483,12 @@ func (t *Topic) replyGetTags(sess *Session, asUid types.Uid, msg *ClientComMessa
 
 	if len(t.tags) > 0 {
 		sess.queueOut(&ServerComMessage{
-			Meta: &MsgServerMeta{Id: msg.Id, Topic: t.original(asUid), Timestamp: &now, Tags: t.tags}})
+			Meta: &MsgServerMeta{
+				Id: msg.Id, Topic: t.original(asUid),
+				Timestamp: &now,
+				Tags:      t.tags,
+			},
+		})
 		return nil
 	}
 
@@ -2557,7 +2578,13 @@ func (t *Topic) replyGetCreds(sess *Session, asUid types.Uid, msg *ClientComMess
 			creds[i] = &MsgCredServer{Method: sc.Method, Value: sc.Value, Done: sc.Done}
 		}
 		sess.queueOut(&ServerComMessage{
-			Meta: &MsgServerMeta{Id: id, Topic: t.original(asUid), Timestamp: &now, Cred: creds}})
+			Meta: &MsgServerMeta{
+				Id:        id,
+				Topic:     t.original(asUid),
+				Timestamp: &now,
+				Cred:      creds,
+			},
+		})
 		return nil
 	}
 
@@ -2569,7 +2596,6 @@ func (t *Topic) replyGetCreds(sess *Session, asUid types.Uid, msg *ClientComMess
 
 // replySetCreds adds or validates user credentials such as email and phone numbers.
 func (t *Topic) replySetCred(sess *Session, asUid types.Uid, authLevel auth.Level, msg *ClientComMessage) error {
-
 	now := types.TimeNow()
 	set := msg.Set
 	incomingReqTs := msg.Timestamp
@@ -2591,7 +2617,8 @@ func (t *Topic) replySetCred(sess *Session, asUid types.Uid, authLevel auth.Leve
 			Uid:       asUid,
 			AuthLevel: auth.LevelNone,
 			Lifetime:  auth.Duration(time.Hour * 24),
-			Features:  auth.FeatureNoLogin})
+			Features:  auth.FeatureNoLogin,
+		})
 		_, tags, err = addCreds(asUid, creds, nil, sess.lang, tmpToken)
 	}
 
@@ -2629,13 +2656,17 @@ func (t *Topic) replyGetDel(sess *Session, asUid types.Uid, req *MsgGetOpts, msg
 		}
 
 		if len(ranges) > 0 {
-			sess.queueOut(&ServerComMessage{Meta: &MsgServerMeta{
-				Id:    id,
-				Topic: toriginal,
-				Del: &MsgDelValues{
-					DelId:  delID,
-					DelSeq: delrangeDeserialize(ranges)},
-				Timestamp: &now}})
+			sess.queueOut(&ServerComMessage{
+				Meta: &MsgServerMeta{
+					Id:    id,
+					Topic: toriginal,
+					Del: &MsgDelValues{
+						DelId:  delID,
+						DelSeq: delrangeDeserialize(ranges),
+					},
+					Timestamp: &now,
+				},
+			})
 			return nil
 		}
 	}
@@ -3058,11 +3089,13 @@ func (t *Topic) notifySubChange(uid, actor types.Uid, isChan bool,
 		target: target,
 		actor:  actor.UserId(),
 		dWant:  dWant,
-		dGiven: dGiven}
+		dGiven: dGiven,
+	}
 
 	filterSharers := &presFilters{
 		filterIn:    types.ModeCSharer,
-		excludeUser: target}
+		excludeUser: target,
+	}
 
 	// Announce the change in permissions to the admins who are online in the topic, exclude the target
 	// and exclude the actor's session.
@@ -3153,7 +3186,9 @@ func (t *Topic) pushForData(fromUid types.Uid, data *MsgServerData) *push.Receip
 			Timestamp:   data.Timestamp,
 			SeqId:       data.SeqId,
 			ContentType: contentType,
-			Content:     data.Content}}
+			Content:     data.Content,
+		},
+	}
 
 	if t.isChan {
 		receipt.Channel = types.GrpToChn(t.xoriginal)
@@ -3200,7 +3235,9 @@ func (t *Topic) pushForSub(fromUid, toUid types.Uid, want, given types.AccessMod
 			Timestamp: now,
 			SeqId:     t.lastID,
 			ModeWant:  want,
-			ModeGiven: given}}
+			ModeGiven: given,
+		},
+	}
 
 	receipt.To[toUid] = push.Recipient{}
 
@@ -3236,7 +3273,7 @@ const (
 // statusChangeBits sets or removes given bits from t.status
 func (t *Topic) statusChangeBits(bits int32, set bool) {
 	for {
-		oldStatus := atomic.LoadInt32((*int32)(&t.status))
+		oldStatus := atomic.LoadInt32(&t.status)
 		newStatus := oldStatus
 		if set {
 			newStatus |= bits
@@ -3246,7 +3283,7 @@ func (t *Topic) statusChangeBits(bits int32, set bool) {
 		if newStatus == oldStatus {
 			break
 		}
-		if atomic.CompareAndSwapInt32((*int32)(&t.status), oldStatus, newStatus) {
+		if atomic.CompareAndSwapInt32(&t.status, oldStatus, newStatus) {
 			break
 		}
 	}
@@ -3367,7 +3404,6 @@ func (t *Topic) fndSetPublic(sess *Session, public interface{}) bool {
 	}
 	t.public = pubmap
 	return ok
-
 }
 
 // Remove per-session value of fnd.Public.

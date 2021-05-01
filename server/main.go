@@ -448,7 +448,8 @@ func main() {
 		}
 		globals.validators[name] = credValidator{
 			requiredAuthLvl: reqLevels,
-			addToTags:       vconf.AddToTags}
+			addToTags:       vconf.AddToTags,
+		}
 	}
 
 	// Partially restricted tag namespaces

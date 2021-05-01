@@ -495,7 +495,7 @@ func parseSearchQuery(query, countryCode string, withLogin bool) ([][]string, []
 		// End of the current token
 		end int
 	}
-	var ctx = context{preOp: AND}
+	ctx := context{preOp: AND}
 	var out []token
 	var prev int
 	query = strings.TrimSpace(query)

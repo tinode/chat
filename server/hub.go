@@ -113,7 +113,7 @@ func (h *Hub) topicDel(name string) {
 }
 
 func newHub() *Hub {
-	var h = &Hub{
+	h := &Hub{
 		topics: &sync.Map{},
 		// this needs to be buffered - hub generates invites and adds them to this queue
 		route:    make(chan *ServerComMessage, 4096),
@@ -158,7 +158,6 @@ func newHub() *Hub {
 }
 
 func (h *Hub) run() {
-
 	for {
 		select {
 		case join := <-h.join:
@@ -175,7 +174,8 @@ func (h *Hub) run() {
 			t := h.topicGet(join.pkt.RcptTo)
 			if t == nil {
 				// Topic does not exist or not loaded.
-				t = &Topic{name: join.pkt.RcptTo,
+				t = &Topic{
+					name:      join.pkt.RcptTo,
 					xoriginal: join.pkt.Original,
 					// Indicates a proxy topic.
 					isProxy:   globals.cluster.isRemoteTopic(join.pkt.RcptTo),
@@ -409,9 +409,9 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 				msg.MetaWhat = constMsgDelTopic
 				t.meta <- &metaReq{
 					pkt:  msg,
-					sess: sess}
+					sess: sess,
+				}
 			}
-
 		} else {
 			// Case 1.2: topic is offline.
 
@@ -462,7 +462,6 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 						sess.queueOut(ErrUnknownReply(msg, now))
 						return err
 					}
-
 				} else if err := store.Subs.Delete(topic, asUid); err != nil {
 					// Not P2P or more than 1 subscription left.
 					// Delete user's own subscription only
@@ -591,7 +590,8 @@ func replyOfflineTopicGetDesc(sess *Session, msg *ClientComMessage) {
 		if stopic.Owner == msg.AsUser {
 			desc.DefaultAcs = &MsgDefaultAcsMode{
 				Auth: stopic.Access.Auth.String(),
-				Anon: stopic.Access.Anon.String()}
+				Anon: stopic.Access.Anon.String(),
+			}
 		}
 	} else {
 		// 'me' and p2p topics
@@ -646,11 +646,15 @@ func replyOfflineTopicGetDesc(sess *Session, msg *ClientComMessage) {
 		desc.Acs = &MsgAccessMode{
 			Want:  sub.ModeWant.String(),
 			Given: sub.ModeGiven.String(),
-			Mode:  (sub.ModeGiven & sub.ModeWant).String()}
+			Mode:  (sub.ModeGiven & sub.ModeWant).String(),
+		}
 	}
 
 	sess.queueOut(&ServerComMessage{
-		Meta: &MsgServerMeta{Id: msg.Id, Topic: msg.Original, Timestamp: &now, Desc: desc}})
+		Meta: &MsgServerMeta{
+			Id: msg.Id, Topic: msg.Original, Timestamp: &now, Desc: desc,
+		},
+	})
 }
 
 // replyOfflineTopicGetSub reads user's subscription from the database.
@@ -687,7 +691,8 @@ func replyOfflineTopicGetSub(sess *Session, msg *ClientComMessage) {
 		sub.Acs = MsgAccessMode{
 			Want:  ssub.ModeWant.String(),
 			Given: ssub.ModeGiven.String(),
-			Mode:  (ssub.ModeGiven & ssub.ModeWant).String()}
+			Mode:  (ssub.ModeGiven & ssub.ModeWant).String(),
+		}
 		// Fnd is asymmetric: desc.private is a string, but sub.private is a []string.
 		if types.GetTopicCat(msg.RcptTo) != types.TopicCatFnd {
 			sub.Private = ssub.Private
@@ -704,7 +709,10 @@ func replyOfflineTopicGetSub(sess *Session, msg *ClientComMessage) {
 	}
 
 	sess.queueOut(&ServerComMessage{
-		Meta: &MsgServerMeta{Id: msg.Id, Topic: msg.Original, Timestamp: &now, Sub: []MsgTopicSub{sub}}})
+		Meta: &MsgServerMeta{
+			Id: msg.Id, Topic: msg.Original, Timestamp: &now, Sub: []MsgTopicSub{sub},
+		},
+	})
 }
 
 // replyOfflineTopicSetSub updates Desc.Private and Sub.Mode when the topic is not loaded in memory.
@@ -787,10 +795,13 @@ func replyOfflineTopicSetSub(sess *Session, msg *ClientComMessage) {
 		} else {
 			var params interface{}
 			if update["ModeWant"] != nil {
-				params = map[string]interface{}{"acs": MsgAccessMode{
-					Given: sub.ModeGiven.String(),
-					Want:  sub.ModeWant.String(),
-					Mode:  (sub.ModeGiven & sub.ModeWant).String()}}
+				params = map[string]interface{}{
+					"acs": MsgAccessMode{
+						Given: sub.ModeGiven.String(),
+						Want:  sub.ModeWant.String(),
+						Mode:  (sub.ModeGiven & sub.ModeWant).String(),
+					},
+				}
 			}
 			sess.queueOut(NoErrParamsReply(msg, now, params))
 		}

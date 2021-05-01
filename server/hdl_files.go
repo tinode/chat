@@ -81,10 +81,13 @@ func largeFileServe(wrt http.ResponseWriter, req *http.Request) {
 		// The handler requested to terminate further processing.
 		wrt.WriteHeader(statusCode)
 		if req.Method == http.MethodGet {
-			enc.Encode(&ServerComMessage{Ctrl: &MsgServerCtrl{
-				Code:      statusCode,
-				Text:      http.StatusText(statusCode),
-				Timestamp: now}})
+			enc.Encode(&ServerComMessage{
+				Ctrl: &MsgServerCtrl{
+					Code:      statusCode,
+					Text:      http.StatusText(statusCode),
+					Timestamp: now,
+				},
+			})
 		}
 		logs.Info.Println("media serve: completed with status", statusCode)
 		return
@@ -177,10 +180,13 @@ func largeFileReceive(wrt http.ResponseWriter, req *http.Request) {
 		// The handler requested to terminate further processing.
 		wrt.WriteHeader(statusCode)
 		if req.Method == http.MethodPost || req.Method == http.MethodPut {
-			enc.Encode(&ServerComMessage{Ctrl: &MsgServerCtrl{
-				Code:      statusCode,
-				Text:      http.StatusText(statusCode),
-				Timestamp: now}})
+			enc.Encode(&ServerComMessage{
+				Ctrl: &MsgServerCtrl{
+					Code:      statusCode,
+					Text:      http.StatusText(statusCode),
+					Timestamp: now,
+				},
+			})
 		}
 		logs.Info.Println("media upload: completed with status", statusCode)
 		return

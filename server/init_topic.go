@@ -288,7 +288,6 @@ func initTopicP2P(t *Topic, sreg *sessionJoin) error {
 				readID:    subs[i].ReadSeqId,
 			}
 		}
-
 	} else {
 		// Cases 1 (new topic), 2 (one of the two subscriptions is missing: either it's a new request
 		// or the subscription was deleted)
@@ -337,7 +336,8 @@ func initTopicP2P(t *Topic, sreg *sessionJoin) error {
 			sub2 = &types.Subscription{
 				User:    userID2.String(),
 				Topic:   t.name,
-				Private: nil}
+				Private: nil,
+			}
 
 			// Assign user2's ModeGiven based on what user1 has provided.
 			// We don't know access mode for user2, assume it's Auth.
@@ -413,7 +413,8 @@ func initTopicP2P(t *Topic, sreg *sessionJoin) error {
 				Topic:     t.name,
 				ModeWant:  userData.modeWant,
 				ModeGiven: userData.modeGiven,
-				Private:   userData.private}
+				Private:   userData.private,
+			}
 			// Swap Public to match swapped Public in subs returned from store.Topics.GetSubs
 			sub1.SetPublic(users[u2].Public)
 
@@ -502,7 +503,8 @@ func initTopicNewGrp(t *Topic, sreg *sessionJoin, isChan bool) error {
 	// Owner/creator gets full access to the topic. Owner may change the default modeWant through 'set'.
 	userData := perUserData{
 		modeGiven: types.ModeCFull,
-		modeWant:  types.ModeCFull}
+		modeWant:  types.ModeCFull,
+	}
 
 	var tags []string
 	if pktsub.Set != nil {
@@ -573,7 +575,8 @@ func initTopicNewGrp(t *Topic, sreg *sessionJoin, isChan bool) error {
 		Access:    types.DefaultAccess{Auth: t.accessAuth, Anon: t.accessAnon},
 		Tags:      tags,
 		UseBt:     isChan,
-		Public:    t.public}
+		Public:    t.public,
+	}
 
 	// store.Topics.Create will add a subscription record for the topic creator
 	stopic.GiveAccess(t.owner, userData.modeWant, userData.modeGiven)
@@ -687,7 +690,8 @@ func (t *Topic) loadSubscribers() error {
 			recvID:    sub.RecvSeqId,
 			private:   sub.Private,
 			modeWant:  sub.ModeWant,
-			modeGiven: sub.ModeGiven}
+			modeGiven: sub.ModeGiven,
+		}
 
 		if (sub.ModeGiven & sub.ModeWant).IsOwner() {
 			t.owner = uid

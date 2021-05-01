@@ -15,7 +15,7 @@ import (
 // only live nodes and communicates the new list of nodes to followers. They in turn do their
 // rehashing using the new list. When the dead node is revived, rehashing happens again.
 
-// Failover config
+// Failover config.
 type clusterFailover struct {
 	// Current leader
 	leader string
@@ -115,7 +115,8 @@ func (c *Cluster) failoverInit(config *clusterFailoverConfig) bool {
 		nodeFailCountLimit: config.NodeFailAfter,
 		healthCheck:        make(chan *ClusterHealth, config.VoteAfter),
 		electionVote:       make(chan *ClusterVote, len(c.nodes)),
-		done:               make(chan bool, 1)}
+		done:               make(chan bool, 1),
+	}
 
 	logs.Info.Println("cluster: failover mode enabled")
 
@@ -138,7 +139,8 @@ func (c *Cluster) Vote(vreq *ClusterVoteRequest, response *ClusterVoteResponse) 
 
 	c.fo.electionVote <- &ClusterVote{
 		req:  vreq,
-		resp: respChan}
+		resp: respChan,
+	}
 
 	*response = <-respChan
 
@@ -151,11 +153,13 @@ func (c *Cluster) sendHealthChecks() {
 
 	for _, node := range c.nodes {
 		unused := false
-		err := node.call("Cluster.Health", &ClusterHealth{
-			Leader:    c.thisNodeName,
-			Term:      c.fo.term,
-			Signature: c.ring.Signature(),
-			Nodes:     c.fo.activeNodes}, &unused)
+		err := node.call("Cluster.Health",
+			&ClusterHealth{
+				Leader:    c.thisNodeName,
+				Term:      c.fo.term,
+				Signature: c.ring.Signature(),
+				Nodes:     c.fo.activeNodes,
+			}, &unused)
 
 		if err != nil {
 			node.failCount++
@@ -209,9 +213,11 @@ func (c *Cluster) electLeader() {
 	// Send async requests for votes to other nodes
 	for _, node := range c.nodes {
 		response := ClusterVoteResponse{}
-		node.callAsync("Cluster.Vote", &ClusterVoteRequest{
-			Node: c.thisNodeName,
-			Term: c.fo.term}, &response, done)
+		node.callAsync("Cluster.Vote",
+			&ClusterVoteRequest{
+				Node: c.thisNodeName,
+				Term: c.fo.term,
+			}, &response, done)
 	}
 
 	// Number of votes received (1 vote for self)

@@ -186,7 +186,8 @@ func (t *Topic) proxyMasterResponse(msg *ClusterResp, killTimer *time.Timer) {
 							broadcast: t.broadcast,
 							done:      t.unreg,
 							meta:      t.meta,
-							supd:      t.supd})
+							supd:      t.supd,
+						})
 					}
 					sess.sessionStoreLock.Unlock()
 

@@ -160,7 +160,8 @@ func replyCreateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 		Uid:       user.Uid(),
 		AuthLevel: auth.LevelNone,
 		Lifetime:  auth.Duration(time.Hour * 24),
-		Features:  auth.FeatureNoLogin})
+		Features:  auth.FeatureNoLogin,
+	})
 	validated, _, err := addCreds(user.Uid(), creds, rec.Tags, s.lang, tmpToken)
 	if err != nil {
 		// Delete incomplete user record.
@@ -189,9 +190,11 @@ func replyCreateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 		UpdatedAt: &user.UpdatedAt,
 		DefaultAcs: &MsgDefaultAcsMode{
 			Auth: user.Access.Auth.String(),
-			Anon: user.Access.Anon.String()},
+			Anon: user.Access.Anon.String(),
+		},
 		Public:  user.Public,
-		Private: private}
+		Private: private,
+	}
 
 	s.queueOut(reply)
 
@@ -272,7 +275,8 @@ func replyUpdateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 			Uid:       uid,
 			AuthLevel: auth.LevelNone,
 			Lifetime:  auth.Duration(time.Hour * 24),
-			Features:  auth.FeatureNoLogin})
+			Features:  auth.FeatureNoLogin,
+		})
 		_, _, err := addCreds(uid, msg.Acc.Cred, nil, s.lang, tmpToken)
 		if err == nil {
 			if allCreds, err := store.Users.GetAllCreds(uid, "", true); err != nil {
@@ -672,7 +676,8 @@ func userChannelsSubUnsub(uid types.Uid, deviceID string, sub bool) {
 	push.ChannelSub(&push.ChannelReq{
 		Uid:      uid,
 		DeviceID: deviceID,
-		Unsub:    !sub})
+		Unsub:    !sub,
+	})
 }
 
 // UserCacheReq contains data which mutates one or more user cache entries.

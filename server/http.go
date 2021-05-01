@@ -193,10 +193,13 @@ func (w *errorResponseWriter) WriteHeader(status int) {
 func (w *errorResponseWriter) Write(p []byte) (n int, err error) {
 	if w.status >= http.StatusBadRequest {
 		p, _ = json.Marshal(
-			&ServerComMessage{Ctrl: &MsgServerCtrl{
-				Timestamp: time.Now().UTC().Round(time.Millisecond),
-				Code:      w.status,
-				Text:      http.StatusText(w.status)}})
+			&ServerComMessage{
+				Ctrl: &MsgServerCtrl{
+					Timestamp: time.Now().UTC().Round(time.Millisecond),
+					Code:      w.status,
+					Text:      http.StatusText(w.status),
+				},
+			})
 	}
 	return w.ResponseWriter.Write(p)
 }
@@ -214,10 +217,13 @@ func serve404(wrt http.ResponseWriter, req *http.Request) {
 	wrt.Header().Set("Content-Type", "application/json; charset=utf-8")
 	wrt.WriteHeader(http.StatusNotFound)
 	json.NewEncoder(wrt).Encode(
-		&ServerComMessage{Ctrl: &MsgServerCtrl{
-			Timestamp: time.Now().UTC().Round(time.Millisecond),
-			Code:      http.StatusNotFound,
-			Text:      "not found"}})
+		&ServerComMessage{
+			Ctrl: &MsgServerCtrl{
+				Timestamp: time.Now().UTC().Round(time.Millisecond),
+				Code:      http.StatusNotFound,
+				Text:      "not found",
+			},
+		})
 }
 
 // Redirect HTTP requests to HTTPS

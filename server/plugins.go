@@ -337,7 +337,9 @@ func pluginGenerateClientReq(sess *Session, msg *ClientComMessage) *pbx.ClientRe
 			UserAgent:  sess.userAgent,
 			RemoteAddr: sess.remoteAddr,
 			DeviceId:   sess.deviceID,
-			Language:   sess.lang}}
+			Language:   sess.lang,
+		},
+	}
 }
 
 func pluginFireHose(sess *Session, msg *ClientComMessage) (*ClientComMessage, *ServerComMessage) {
@@ -395,12 +397,15 @@ func pluginFireHose(sess *Session, msg *ClientComMessage) (*ClientComMessage, *S
 		} else if p.failureCode != 0 {
 			// Plugin failed and it's configured to stop further processing.
 			logs.Err.Println("plugin: failed,", p.name, err)
-			return nil, &ServerComMessage{Ctrl: &MsgServerCtrl{
-				Id:        id,
-				Code:      p.failureCode,
-				Text:      p.failureText,
-				Topic:     topic,
-				Timestamp: ts}}
+			return nil, &ServerComMessage{
+				Ctrl: &MsgServerCtrl{
+					Id:        id,
+					Code:      p.failureCode,
+					Text:      p.failureText,
+					Topic:     topic,
+					Timestamp: ts,
+				},
+			}
 		} else {
 			// Plugin failed but configured to ignore failure.
 			logs.Warn.Println("plugin: failure ignored,", p.name, err)
@@ -479,7 +484,8 @@ func pluginAccount(user *types.User, action int) {
 				UserId: user.Uid().UserId(),
 				DefaultAcs: pbDefaultAcsSerialize(&MsgDefaultAcsMode{
 					Auth: user.Access.Auth.String(),
-					Anon: user.Access.Anon.String()}),
+					Anon: user.Access.Anon.String(),
+				}),
 				Public: interfaceToBytes(user.Public),
 				Tags:   user.Tags,
 			}

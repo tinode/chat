@@ -69,7 +69,8 @@ func (b *TopicTestHelper) newSession(sid string, uid types.Uid) (*Session, *Resp
 		uid:    uid,
 		subs:   make(map[string]*Subscription),
 		send:   make(chan interface{}, 10),
-		detach: make(chan string, 10)}
+		detach: make(chan string, 10),
+	}
 	r := &Responses{}
 	b.sessWg.Add(1)
 	go s.testWriteLoop(r, b.sessWg)

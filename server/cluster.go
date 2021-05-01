@@ -259,9 +259,12 @@ func (n *ClusterNode) reconnect() {
 			logs.Info.Println("cluster: connected to", n.name)
 			// Send this node credentials to the new node.
 			var unused bool
-			n.call("Cluster.Ping", &ClusterPing{
-				Node:        globals.cluster.thisNodeName,
-				Fingerprint: globals.cluster.fingerprint}, &unused)
+			n.call("Cluster.Ping",
+				&ClusterPing{
+					Node:        globals.cluster.thisNodeName,
+					Fingerprint: globals.cluster.fingerprint,
+				},
+				&unused)
 			return
 		} else if count == 0 {
 			reconnTicker = time.NewTicker(defaultClusterReconnect)
@@ -660,8 +663,10 @@ func (c *Cluster) routeUserReq(req *UserCacheReq) error {
 				r = &UserCacheReq{
 					PushRcpt: &push.Receipt{
 						Payload: req.PushRcpt.Payload,
-						To:      make(map[types.Uid]push.Recipient)},
-					Node: c.thisNodeName}
+						To:      make(map[types.Uid]push.Recipient),
+					},
+					Node: c.thisNodeName,
+				}
 			}
 			r.PushRcpt.To[uid] = recipient
 			reqByNode[n.name] = r
@@ -817,7 +822,8 @@ func (c *Cluster) makeClusterReq(reqType ProxyReqType, payload interface{}, topi
 			DeviceID:    sess.deviceID,
 			Platform:    sess.platf,
 			Sid:         sess.sid,
-			Background:  sess.background}
+			Background:  sess.background,
+		}
 	}
 	return req
 }
@@ -940,7 +946,8 @@ func clusterInit(configString json.RawMessage, self *string) int {
 		thisNodeName:    thisName,
 		fingerprint:     time.Now().Unix(),
 		nodes:           make(map[string]*ClusterNode),
-		proxyEventQueue: concurrency.NewGoRoutinePool(len(config.Nodes) * 5)}
+		proxyEventQueue: concurrency.NewGoRoutinePool(len(config.Nodes) * 5),
+	}
 
 	var nodeNames []string
 	for _, host := range config.Nodes {
@@ -956,7 +963,8 @@ func clusterInit(configString json.RawMessage, self *string) int {
 			address: host.Addr,
 			name:    host.Name,
 			done:    make(chan bool, 1),
-			msess:   make(map[string]struct{})}
+			msess:   make(map[string]struct{}),
+		}
 	}
 
 	if len(globals.cluster.nodes) == 0 {
@@ -976,7 +984,7 @@ func clusterInit(configString json.RawMessage, self *string) int {
 	return workerId
 }
 
-// Proxied session is being closed at the Master node
+// Proxied session is being closed at the Master node.
 func (sess *Session) closeRPC() {
 	if sess.isMultiplex() {
 		logs.Info.Println("cluster: session proxy closed", sess.sid)
