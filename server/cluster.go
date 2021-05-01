@@ -243,7 +243,7 @@ func (n *ClusterNode) reconnect() {
 	n.reconnecting = true
 	n.lock.Unlock()
 
-	var count = 0
+	count := 0
 	var err error
 	for {
 		// Attempt to reconnect right away
@@ -498,7 +498,8 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 		default:
 			// Reply with a 500 to the user.
 			sess.queueOut(ErrUnknownReply(msg.CliMsg, msg.CliMsg.Timestamp))
-			logs.Warn.Println("cluster: join req failed - hub.join queue full, topic ", msg.CliMsg.RcptTo, "; orig sid ", sess.sid)
+			logs.Warn.Println("cluster: join req failed - hub.join queue full, topic ", msg.CliMsg.RcptTo,
+				"; orig sid ", sess.sid)
 		}
 
 	case ProxyReqLeave:
@@ -520,7 +521,8 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 			}:
 			default:
 				sess.queueOut(ErrUnknownReply(msg.CliMsg, msg.CliMsg.Timestamp))
-				logs.Warn.Println("cluster: meta req failed - topic.meta queue full, topic ", msg.CliMsg.RcptTo, "; orig sid ", sess.sid)
+				logs.Warn.Println("cluster: meta req failed - topic.meta queue full, topic ", msg.CliMsg.RcptTo,
+					"; orig sid ", sess.sid)
 			}
 		} else {
 			logs.Warn.Println("cluster: meta request for unknown topic", msg.RcptTo)
@@ -715,7 +717,7 @@ func (c *Cluster) routeUserReq(req *UserCacheReq) error {
 	return err
 }
 
-// Given topic name, find appropriate cluster node to route message to
+// Given topic name, find appropriate cluster node to route message to.
 func (c *Cluster) nodeForTopic(topic string) *ClusterNode {
 	key := c.ring.Get(topic)
 	if key == c.thisNodeName {
@@ -820,7 +822,7 @@ func (c *Cluster) makeClusterReq(reqType ProxyReqType, payload interface{}, topi
 	return req
 }
 
-// Forward client request message from the Topic Proxy to the Topic Master (cluster node which owns the topic)
+// Forward client request message from the Topic Proxy to the Topic Master (cluster node which owns the topic).
 func (c *Cluster) routeToTopicMaster(reqType ProxyReqType, payload interface{}, topic string, sess *Session) error {
 	if c == nil {
 		// Cluster may be nil due to shutdown.
@@ -886,7 +888,7 @@ func (c *Cluster) topicProxyGone(topicName string) error {
 	return n.proxyToMaster(req)
 }
 
-// Returns snowflake worker id
+// Returns snowflake worker id.
 func clusterInit(configString json.RawMessage, self *string) int {
 	if globals.cluster != nil {
 		logs.Err.Fatal("Cluster already initialized.")

@@ -10,7 +10,6 @@
 package main
 
 import (
-	//"log"
 	"strings"
 	"sync"
 	"time"
@@ -215,7 +214,8 @@ func (h *Hub) run() {
 						join.sess.inflightReqs.Done()
 					}
 					join.sess.queueOut(ErrServiceUnavailableReply(join.pkt, join.pkt.Timestamp))
-					logs.Err.Println("hub.join loop: topic's reg queue full", join.pkt.RcptTo, join.sess.sid, " - total queue len:", len(t.reg))
+					logs.Err.Println("hub.join loop: topic's reg queue full", join.pkt.RcptTo, join.sess.sid,
+						" - total queue len:", len(t.reg))
 				}
 			}
 

@@ -48,10 +48,10 @@ func topicInit(t *Topic, join *sessionJoin, h *Hub) {
 		err = initTopicNewGrp(t, join, true)
 	case strings.HasPrefix(t.xoriginal, "grp") || strings.HasPrefix(t.xoriginal, "chn"):
 		// Load existing group topic (or channel).
-		err = initTopicGrp(t, join)
+		err = initTopicGrp(t)
 	case t.xoriginal == "sys":
 		// Initialize system topic.
-		err = initTopicSys(t, join)
+		err = initTopicSys(t)
 	default:
 		// Unrecognized topic name
 		err = types.ErrTopicNotFound
@@ -591,7 +591,7 @@ func initTopicNewGrp(t *Topic, sreg *sessionJoin, isChan bool) error {
 
 // Initialize existing group topic. There is a race condition when two users attempt to load
 // the same topic at the same time. It's prevented at hub level.
-func initTopicGrp(t *Topic, sreg *sessionJoin) error {
+func initTopicGrp(t *Topic) error {
 	t.cat = types.TopicCatGrp
 
 	// TODO(gene): check and validate topic name
@@ -635,7 +635,7 @@ func initTopicGrp(t *Topic, sreg *sessionJoin) error {
 }
 
 // Initialize system topic. System topic is a singleton, always in memory.
-func initTopicSys(t *Topic, sreg *sessionJoin) error {
+func initTopicSys(t *Topic) error {
 	t.cat = types.TopicCatSys
 
 	stopic, err := store.Topics.Get(t.name)

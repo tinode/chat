@@ -252,7 +252,6 @@ func (c *Cluster) electLeader() {
 
 // Go routine that processes calls related to leader election and maintenance.
 func (c *Cluster) run() {
-
 	ticker := time.NewTicker(c.fo.heartBeat)
 
 	// Count of missed health checks from the leader.

@@ -145,7 +145,8 @@ func replyCreateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 	// When creating an account, the user must provide all required credentials.
 	// If any are missing, reject the request.
 	if len(creds) < len(globals.authValidators[rec.AuthLevel]) {
-		logs.Warn.Println("create user: missing credentials; have:", creds, "want:", globals.authValidators[rec.AuthLevel], s.sid)
+		logs.Warn.Println("create user: missing credentials; have:", creds, "want:",
+			globals.authValidators[rec.AuthLevel], s.sid)
 		// Attempt to delete incomplete user record
 		store.Users.Delete(user.Uid(), false)
 		_, missing := stringSliceDelta(globals.authValidators[rec.AuthLevel], credentialMethods(creds))
@@ -333,10 +334,12 @@ func updateUserAuth(msg *ClientComMessage, user *types.User, rec *auth.Rec, remo
 	return types.ErrMalformed
 }
 
-// addCreds adds new credentials and re-send validation request for existing ones. It also adds credential-defined
-// tags if necessary.
-// Returns methods validated in this call only. Returns either a full set of tags or nil for tags when tags are unchanged.
-func addCreds(uid types.Uid, creds []MsgCredClient, extraTags []string, lang string, tmpToken []byte) ([]string, []string, error) {
+// addCreds adds new credentials and re-send validation request for existing ones.
+// It also adds credential-defined tags if necessary.
+// Returns methods validated in this call only. Returns either a full set of tags
+// or nil for tags when tags are unchanged.
+func addCreds(uid types.Uid, creds []MsgCredClient, extraTags []string,
+	lang string, tmpToken []byte) ([]string, []string, error) {
 	var validated []string
 	for i := range creds {
 		cr := &creds[i]
@@ -379,8 +382,8 @@ func addCreds(uid types.Uid, creds []MsgCredClient, extraTags []string, lang str
 // validatedCreds returns the list of validated credentials including those validated in this call.
 // Returns all validated methods including those validated earlier and now.
 // Returns either a full set of tags or nil for tags if tags are unchanged.
-func validatedCreds(uid types.Uid, authLvl auth.Level, creds []MsgCredClient, errorOnFail bool) ([]string, []string, error) {
-
+func validatedCreds(uid types.Uid, authLvl auth.Level, creds []MsgCredClient,
+	errorOnFail bool) ([]string, []string, error) {
 	// Check if credential validation is required.
 	if len(globals.authValidators[authLvl]) == 0 {
 		return nil, nil, nil
@@ -446,7 +449,7 @@ func validatedCreds(uid types.Uid, authLvl auth.Level, creds []MsgCredClient, er
 		tags = nil
 	}
 
-	var validated []string
+	validated := make([]string, 0, len(methods))
 	for method := range methods {
 		validated = append(validated, method)
 	}
@@ -483,7 +486,8 @@ func deleteCred(uid types.Uid, authLvl auth.Level, cred *MsgCredClient) ([]strin
 			return nil, err
 		}
 
-		// Check if it's OK to delete: there is another validated value or this value is not validated in the first place.
+		// Check if it's OK to delete: there is another validated value
+		// or this value is not validated in the first place.
 		var okTodelete bool
 		for _, cr := range allCreds {
 			if (cr.Done && cr.Value != cred.Value) || (!cr.Done && cr.Value == cred.Value) {
@@ -942,7 +946,7 @@ func userUpdater() {
 	// Unread counter updates blocked by IO on per user basis. We flush them when the IO completes.
 	perUserBuffers := make(map[types.Uid][]bufferedUpdate)
 
-	// Push notification recipients blocked by IO (unread counters for some of the recepients
+	// Push notification recipients blocked by IO (unread counters for some of the recipients
 	// are being read from the database) on the per user basis.
 	perUserPendingReceipts := make(map[types.Uid][]*pendingReceipt)
 

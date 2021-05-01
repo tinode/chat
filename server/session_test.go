@@ -455,7 +455,7 @@ func TestDispatchDelMsg(t *testing.T) {
 			Id:     "123",
 			Topic:  destUid.UserId(),
 			What:   "msg",
-			DelSeq: []MsgDelRange{MsgDelRange{LowId: 3, HiId: 4}},
+			DelSeq: []MsgDelRange{{LowId: 3, HiId: 4}},
 			Hard:   true,
 		},
 	}

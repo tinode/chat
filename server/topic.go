@@ -32,17 +32,6 @@ type Topic struct {
 	// Topic category
 	cat types.TopicCat
 
-	// Channel functionality is enabled for the group topic.
-	isChan bool
-
-	// If isProxy == true, the actual topic is hosted by another cluster member.
-	// The topic should:
-	// 1. forward all messages to master
-	// 2. route replies from the master to sessions.
-	// 3. disconnect sessions at master's request.
-	// 4. shut down the topic at master's request.
-	// 5. aggregate access permissions on behalf of attached sessions.
-	isProxy bool
 	// Name of the master node for this topic if isProxy is true.
 	masterNode string
 
@@ -111,6 +100,18 @@ type Topic struct {
 	// Flag which tells topic lifecycle status: new, ready, paused, marked for deletion.
 	status int32
 
+	// Channel functionality is enabled for the group topic.
+	isChan bool
+
+	// If isProxy == true, the actual topic is hosted by another cluster member.
+	// The topic should:
+	// 1. forward all messages to master
+	// 2. route replies from the master to sessions.
+	// 3. disconnect sessions at master's request.
+	// 4. shut down the topic at master's request.
+	// 5. aggregate access permissions on behalf of attached sessions.
+	isProxy bool
+
 	// Countdown timer for destroying the topic when there are no more attached sessions to it.
 	killTimer *time.Timer
 }
@@ -119,9 +120,6 @@ type Topic struct {
 type perUserData struct {
 	// Count of subscription online and announced (presence not deferred).
 	online int
-
-	// The user is a channel subscriber.
-	isChan bool
 
 	// Last t.lastId reported by user through {pres} as received or read
 	recvID int
@@ -138,6 +136,9 @@ type perUserData struct {
 	public    interface{}
 	topicName string
 	deleted   bool
+
+	// The user is a channel subscriber.
+	isChan bool
 }
 
 // perSubsData holds user's (on 'me' topic) cache of subscription data
@@ -253,14 +254,14 @@ func (t *Topic) computePerUserAcsUnion() {
 		if pud.isChan {
 			continue
 		}
-		wantUnion = wantUnion | pud.modeWant
-		givenUnion = givenUnion | pud.modeGiven
+		wantUnion |= pud.modeWant
+		givenUnion |= pud.modeGiven
 	}
 
 	if t.isChan {
 		// Apply standard channel permissions to channel topics.
-		wantUnion = wantUnion | types.ModeCChnReader
-		givenUnion = givenUnion | types.ModeCChnReader
+		wantUnion |= types.ModeCChnReader
+		givenUnion |= types.ModeCChnReader
 	}
 
 	t.modeWantUnion = wantUnion
@@ -2499,7 +2500,7 @@ func (t *Topic) replySetTags(sess *Session, asUid types.Uid, msg *ClientComMessa
 		} else {
 			added, removed := stringSliceDelta(t.tags, tags)
 			if len(added) > 0 || len(removed) > 0 {
-				update := map[string]interface{}{"Tags": types.StringSlice(tags), "UpdatedAt": now}
+				update := map[string]interface{}{"Tags": tags, "UpdatedAt": now}
 				if t.cat == types.TopicCatMe {
 					err = store.Users.Update(asUid, update)
 				} else if t.cat == types.TopicCatGrp {
@@ -3238,9 +3239,9 @@ func (t *Topic) statusChangeBits(bits int32, set bool) {
 		oldStatus := atomic.LoadInt32((*int32)(&t.status))
 		newStatus := oldStatus
 		if set {
-			newStatus = newStatus | bits
+			newStatus |= bits
 		} else {
-			newStatus = newStatus & ^bits
+			newStatus &= ^bits
 		}
 		if newStatus == oldStatus {
 			break
@@ -3274,19 +3275,19 @@ func (t *Topic) markReadOnly(readOnly bool) {
 
 // isInactive checks if topic is paused or being deleted.
 func (t *Topic) isInactive() bool {
-	return (atomic.LoadInt32((*int32)(&t.status)) & (topicStatusPaused | topicStatusMarkedDeleted)) != 0
+	return (atomic.LoadInt32(&t.status) & (topicStatusPaused | topicStatusMarkedDeleted)) != 0
 }
 
 func (t *Topic) isReadOnly() bool {
-	return (atomic.LoadInt32((*int32)(&t.status)) & topicStatusReadOnly) != 0
+	return (atomic.LoadInt32(&t.status) & topicStatusReadOnly) != 0
 }
 
 func (t *Topic) isLoaded() bool {
-	return (atomic.LoadInt32((*int32)(&t.status)) & topicStatusLoaded) != 0
+	return (atomic.LoadInt32(&t.status) & topicStatusLoaded) != 0
 }
 
 func (t *Topic) isDeleted() bool {
-	return (atomic.LoadInt32((*int32)(&t.status)) & topicStatusMarkedDeleted) != 0
+	return (atomic.LoadInt32(&t.status) & topicStatusMarkedDeleted) != 0
 }
 
 // Get topic name suitable for the given client

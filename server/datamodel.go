@@ -967,7 +967,8 @@ func InfoChallenge(id string, ts time.Time, challenge []byte) *ServerComMessage 
 		Timestamp: ts}, Id: id, Timestamp: ts}
 }
 
-// InfoAuthReset is sent in response to request to reset authentication when it was completed but login was not performed (301).
+// InfoAuthReset is sent in response to request to reset authentication when it was completed
+// but login was not performed (301).
 func InfoAuthReset(id string, ts time.Time) *ServerComMessage {
 	return &ServerComMessage{Ctrl: &MsgServerCtrl{
 		Id:        id,

@@ -86,7 +86,6 @@ func (sess *Session) sendMessageGrpc(msg interface{}) bool {
 }
 
 func (sess *Session) writeGrpcLoop() {
-
 	defer func() {
 		sess.closeGrpc() // exit MessageLoop
 	}()

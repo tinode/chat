@@ -256,18 +256,19 @@ type configType struct {
 func main() {
 	executable, _ := os.Executable()
 
-	var logFlags = flag.String("log_flags", "stdFlags", "Comma-separated list of log flags (as defined in https://golang.org/pkg/log/#pkg-constants without the L prefix)")
-	var configfile = flag.String("config", "tinode.conf", "Path to config file.")
+	logFlags := flag.String("log_flags", "stdFlags",
+		"Comma-separated list of log flags (as defined in https://golang.org/pkg/log/#pkg-constants without the L prefix)")
+	configfile := flag.String("config", "tinode.conf", "Path to config file.")
 	// Path to static content.
-	var staticPath = flag.String("static_data", defaultStaticPath, "File path to directory with static files to be served.")
-	var listenOn = flag.String("listen", "", "Override address and port to listen on for HTTP(S) clients.")
-	var apiPath = flag.String("api_path", "", "Override the base URL path where API is served.")
-	var listenGrpc = flag.String("grpc_listen", "", "Override address and port to listen on for gRPC clients.")
-	var tlsEnabled = flag.Bool("tls_enabled", false, "Override config value for enabling TLS.")
-	var clusterSelf = flag.String("cluster_self", "", "Override the name of the current cluster node.")
-	var expvarPath = flag.String("expvar", "", "Override the URL path where runtime stats are exposed. Use '-' to disable.")
-	var pprofFile = flag.String("pprof", "", "File name to save profiling info to. Disabled if not set.")
-	var pprofUrl = flag.String("pprof_url", "", "Debugging only! URL path for exposing profiling info. Disabled if not set.")
+	staticPath := flag.String("static_data", defaultStaticPath, "File path to directory with static files to be served.")
+	listenOn := flag.String("listen", "", "Override address and port to listen on for HTTP(S) clients.")
+	apiPath := flag.String("api_path", "", "Override the base URL path where API is served.")
+	listenGrpc := flag.String("grpc_listen", "", "Override address and port to listen on for gRPC clients.")
+	tlsEnabled := flag.Bool("tls_enabled", false, "Override config value for enabling TLS.")
+	clusterSelf := flag.String("cluster_self", "", "Override the name of the current cluster node.")
+	expvarPath := flag.String("expvar", "", "Override the URL path where runtime stats are exposed. Use '-' to disable.")
+	pprofFile := flag.String("pprof", "", "File name to save profiling info to. Disabled if not set.")
+	pprofUrl := flag.String("pprof_url", "", "Debugging only! URL path for exposing profiling info. Disabled if not set.")
 	flag.Parse()
 
 	logs.Init(os.Stderr, *logFlags)

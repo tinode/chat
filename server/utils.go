@@ -43,7 +43,7 @@ func delrangeDeserialize(in []types.Range) []MsgDelRange {
 		return nil
 	}
 
-	var out []MsgDelRange
+	out := make([]MsgDelRange, 0, len(in))
 	for _, r := range in {
 		out = append(out, MsgDelRange{LowId: r.Low, HiId: r.Hi})
 	}
@@ -194,9 +194,9 @@ func normalizeCredentials(creds []MsgCredClient, valueRequired bool) []MsgCredCl
 
 // Get a string slice with methods of credentials.
 func credentialMethods(creds []MsgCredClient) []string {
-	var out []string
+	out := make([]string, len(creds))
 	for i := range creds {
-		out = append(out, creds[i].Method)
+		out[i] = creds[i].Method
 	}
 	return out
 }
@@ -747,6 +747,7 @@ func parseTLSConfig(tlsEnabled bool, jsconfig json.RawMessage) (*tls.Config, err
 	if err != nil {
 		return nil, err
 	}
+
 	return &tls.Config{Certificates: []tls.Certificate{cert}}, nil
 }
 

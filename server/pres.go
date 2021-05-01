@@ -81,7 +81,8 @@ func (t *Topic) loadContacts(uid types.Uid) error {
 // The originating topic reports its own status in 'what' as "on", "off", "gone" or "?unkn".
 // 	"on" - requester came online
 // 	"off" - requester is offline now
-//  "?none" - anchor for "+" command: requester status is unknown, won't generate a response and isn't forwarded to clients.
+//  "?none" - anchor for "+" command: requester status is unknown, won't generate a response
+// 			and isn't forwarded to clients.
 //  "gone" - topic deleted or otherwise gone - equivalent of "off+remove"
 //	"?unkn" - requester wants to initiate online status exchange but it's own status is unknown yet. This
 //  notifications is not forwarded to users.
@@ -435,8 +436,8 @@ func (t *Topic) presSubsOffline(what string, params *presParams,
 	}
 }
 
-// Publish {info what=read|recv|kp} to topic subscribers's sessions currently offline in the topic, on subscriber's 'me'.
-// Group and P2P.
+// Publish {info what=read|recv|kp} to topic subscribers's sessions currently offline in the topic,
+// on subscriber's 'me'. Group and P2P.
 func (t *Topic) infoSubsOffline(from types.Uid, what string, seq int, skipSid string) {
 
 	user := from.UserId()

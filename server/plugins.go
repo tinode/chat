@@ -43,9 +43,10 @@ const (
 	plgTopicFnd
 	plgTopicP2P
 	plgTopicGrp
+	plgTopicSys
 	plgTopicNew
 
-	plgTopicCatMask = plgTopicMe | plgTopicFnd | plgTopicP2P | plgTopicGrp
+	plgTopicCatMask = plgTopicMe | plgTopicFnd | plgTopicP2P | plgTopicGrp | plgTopicSys
 
 	plgFilterByTopicType = 1 << iota
 	plgFilterByPacket
@@ -58,7 +59,7 @@ var (
 		"data", "meta", "pres", "info",
 	}
 
-	plgTopicCatNames = []string{"me", "fnd", "p2p", "grp", "new"}
+	plgTopicCatNames = []string{"me", "fnd", "p2p", "grp", "sys", "new"}
 )
 
 // PluginFilter is a enum which defines filtering types.

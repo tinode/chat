@@ -52,7 +52,7 @@ func listenAndServe(addr string, mux *http.ServeMux, tlfConf *tls.Config, stop <
 			if globals.tlsRedirectHTTP != "" {
 				// Serving redirects from a unix socket or to a unix socket makes no sense.
 				if isUnixAddr(globals.tlsRedirectHTTP) || isUnixAddr(addr) {
-					err = errors.New("HTTP to HTTPS redirect: unix sockets not supported.")
+					err = errors.New("HTTP to HTTPS redirect: unix sockets not supported")
 				} else {
 					logs.Info.Printf("Redirecting connections from HTTP at [%s] to HTTPS at [%s]",
 						globals.tlsRedirectHTTP, addr)

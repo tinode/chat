@@ -113,8 +113,6 @@ type Session struct {
 	// Time when the session received any packer from client
 	lastAction int64
 
-	// Background session: subscription presence notifications and online status are delayed.
-	background bool
 	// Timer which triggers after some seconds to mark background session as foreground.
 	bkgTimer *time.Timer
 
@@ -130,6 +128,9 @@ type Session struct {
 	// 0 = false
 	// 1 = true
 	terminating int32
+
+	// Background session: subscription presence notifications and online status are delayed.
+	background bool
 
 	// Outbound mesages, buffered.
 	// The content must be serialized in format suitable for the session.

@@ -77,6 +77,7 @@ func (b *TopicTestHelper) newSession(sid string, uid types.Uid) (*Session, *Resp
 }
 
 func (b *TopicTestHelper) setUp(t *testing.T, numUsers int, cat types.TopicCat, topicName string, attachSessions bool) {
+	t.Helper()
 	b.numUsers = numUsers
 	b.uids = make([]types.Uid, numUsers)
 	for i := 0; i < numUsers; i++ {
@@ -169,6 +170,7 @@ func (s *Session) testWriteLoop(results *Responses, wg *sync.WaitGroup) {
 }
 
 func (h *Hub) testHubLoop(t *testing.T, results map[string][]*ServerComMessage, done chan bool) {
+	t.Helper()
 	for msg := range h.route {
 		if msg.RcptTo == "" {
 			t.Fatal("Hub.route received a message without addressee.")
@@ -557,7 +559,7 @@ func TestHandleBroadcastInfoP2P(t *testing.T) {
 	}
 	// Checking presence messages routed through hub helper. These are intended for offline sessions.
 	if len(helper.hubMessages) != 2 {
-		t.Fatalf("Hubhelper.route expected exactly two recepients routed via hubhelper. Found %d", len(helper.hubMessages))
+		t.Fatalf("Hubhelper.route expected exactly two recipients routed via hubhelper. Found %d", len(helper.hubMessages))
 	}
 	for i, uid := range helper.uids {
 		if routedMsgs, ok := helper.hubMessages[uid.UserId()]; ok {
@@ -1079,6 +1081,7 @@ const (
 )
 
 func NoChangeInStatusTest(t *testing.T, subscriptionStatus int, what string) *TopicTestHelper {
+	t.Helper()
 	topicName := "usrMe"
 	numUsers := 1
 	helper := &TopicTestHelper{}
@@ -1184,8 +1187,8 @@ func TestReplyGetDescInvalidOpts(t *testing.T) {
 }
 
 // Verifies ctrl codes in session outputs.
-func registerSessionVerifyOutputs(
-	sessionOutput *Responses, expectedCtrlCodes []int, t *testing.T) {
+func registerSessionVerifyOutputs(t *testing.T, sessionOutput *Responses, expectedCtrlCodes []int) {
+	t.Helper()
 	// Session output.
 	if len(sessionOutput.messages) == len(expectedCtrlCodes) {
 		n := len(expectedCtrlCodes)
@@ -1201,7 +1204,8 @@ func registerSessionVerifyOutputs(
 			}
 		}
 	} else {
-		t.Errorf("Session output: expected %d responses, received %d", len(expectedCtrlCodes), len(sessionOutput.messages))
+		t.Errorf("Session output: expected %d responses, received %d", len(expectedCtrlCodes),
+			len(sessionOutput.messages))
 	}
 }
 
@@ -1254,7 +1258,7 @@ func TestRegisterSessionMe(t *testing.T) {
 	}
 	// Session output.
 	for _, r := range helper.results {
-		registerSessionVerifyOutputs(r, []int{http.StatusOK}, t)
+		registerSessionVerifyOutputs(t, r, []int{http.StatusOK})
 	}
 	// Presence notifications.
 	if len(helper.hubMessages) != 0 {
@@ -1301,7 +1305,7 @@ func TestRegisterSessionInactiveTopic(t *testing.T) {
 		t.Errorf("Number of online sessions: expected 0, found %d", online)
 	}
 	// Session output.
-	registerSessionVerifyOutputs(helper.results[0], []int{http.StatusServiceUnavailable}, t)
+	registerSessionVerifyOutputs(t, helper.results[0], []int{http.StatusServiceUnavailable})
 	// Presence notifications.
 	if len(helper.hubMessages) != 0 {
 		t.Errorf("Hub isn't expected to receive any messages, received %d", len(helper.hubMessages))
@@ -1351,7 +1355,7 @@ func TestRegisterSessionUserSpecifiedInSetMessage(t *testing.T) {
 		t.Errorf("Number of online sessions: expected 0, found %d", online)
 	}
 	// Session output.
-	registerSessionVerifyOutputs(helper.results[0], []int{http.StatusBadRequest}, t)
+	registerSessionVerifyOutputs(t, helper.results[0], []int{http.StatusBadRequest})
 	// Presence notifications.
 	if len(helper.hubMessages) != 0 {
 		t.Errorf("Hub isn't expected to receive any messages, received %d", len(helper.hubMessages))
@@ -1401,7 +1405,7 @@ func TestRegisterSessionInvalidWantStrInSetMessage(t *testing.T) {
 		t.Errorf("Number of online sessions: expected 0, found %d", online)
 	}
 	// Session output.
-	registerSessionVerifyOutputs(helper.results[0], []int{http.StatusBadRequest}, t)
+	registerSessionVerifyOutputs(t, helper.results[0], []int{http.StatusBadRequest})
 	// Presence notifications.
 	if len(helper.hubMessages) != 0 {
 		t.Errorf("Hub isn't expected to receive any messages, received %d", len(helper.hubMessages))
@@ -1454,7 +1458,7 @@ func TestRegisterSessionMaxSubscriberCountExceeded(t *testing.T) {
 		t.Errorf("Number of online sessions: expected 0, found %d", online)
 	}
 	// Session output.
-	registerSessionVerifyOutputs(r, []int{http.StatusUnprocessableEntity}, t)
+	registerSessionVerifyOutputs(t, r, []int{http.StatusUnprocessableEntity})
 	// Presence notifications.
 	if len(helper.hubMessages) != 0 {
 		t.Errorf("Hub isn't expected to receive any messages, received %d", len(helper.hubMessages))
@@ -1503,7 +1507,7 @@ func TestRegisterSessionLowAuthLevelWithSysTopic(t *testing.T) {
 		t.Errorf("Number of online sessions: expected 0, found %d", online)
 	}
 	// Session output.
-	registerSessionVerifyOutputs(r, []int{http.StatusForbidden}, t)
+	registerSessionVerifyOutputs(t, r, []int{http.StatusForbidden})
 	// Presence notifications.
 	if len(helper.hubMessages) != 0 {
 		t.Errorf("Hub isn't expected to receive any messages, received %d", len(helper.hubMessages))
@@ -1556,7 +1560,7 @@ func TestRegisterSessionNewChannelGetSubDbError(t *testing.T) {
 		t.Errorf("Number of online sessions: expected 0, found %d", online)
 	}
 	// Session output.
-	registerSessionVerifyOutputs(r, []int{http.StatusInternalServerError}, t)
+	registerSessionVerifyOutputs(t, r, []int{http.StatusInternalServerError})
 	// Presence notifications.
 	if len(helper.hubMessages) != 0 {
 		t.Errorf("Hub isn't expected to receive any messages, received %d", len(helper.hubMessages))
@@ -1607,7 +1611,7 @@ func TestRegisterSessionCreateSubFailed(t *testing.T) {
 		t.Errorf("Number of online sessions: expected 0, found %d", online)
 	}
 	// Session output.
-	registerSessionVerifyOutputs(r, []int{http.StatusInternalServerError}, t)
+	registerSessionVerifyOutputs(t, r, []int{http.StatusInternalServerError})
 	// Presence notifications.
 	if len(helper.hubMessages) != 0 {
 		t.Errorf("Hub isn't expected to receive any messages, received %d", len(helper.hubMessages))
@@ -1657,7 +1661,7 @@ func TestRegisterSessionAsChanUserNotChanSubcriber(t *testing.T) {
 		t.Errorf("Number of online sessions: expected 0, found %d", online)
 	}
 	// Session output. Tell the subscriber to use non-channel name.
-	registerSessionVerifyOutputs(r, []int{http.StatusSeeOther}, t)
+	registerSessionVerifyOutputs(t, r, []int{http.StatusSeeOther})
 	// Presence notifications.
 	if len(helper.hubMessages) != 0 {
 		t.Errorf("Hub isn't expected to receive any messages, received %d", len(helper.hubMessages))
@@ -1682,7 +1686,6 @@ func TestRegisterSessionOwnerBansHimself(t *testing.T) {
 	// User is the topic owner.
 	helper.topic.owner = uid
 	pud := helper.topic.perUser[uid]
-	//pud.modeWant = types.ModeRead | types.ModeWrite | types.ModeJoin
 	pud.modeGiven |= types.ModeOwner
 	helper.topic.perUser[uid] = pud
 
@@ -1716,7 +1719,7 @@ func TestRegisterSessionOwnerBansHimself(t *testing.T) {
 		t.Errorf("Number of online sessions: expected 0, found %d", online)
 	}
 	// Session output.
-	registerSessionVerifyOutputs(r, []int{http.StatusForbidden}, t)
+	registerSessionVerifyOutputs(t, r, []int{http.StatusForbidden})
 	// Presence notifications.
 	if len(helper.hubMessages) != 0 {
 		t.Errorf("Hub isn't expected to receive any messages, received %d", len(helper.hubMessages))
@@ -1774,7 +1777,7 @@ func TestRegisterSessionInvalidOwnershipTransfer(t *testing.T) {
 		t.Errorf("Number of online sessions: expected 0, found %d", online)
 	}
 	// Session output.
-	registerSessionVerifyOutputs(r, []int{http.StatusForbidden}, t)
+	registerSessionVerifyOutputs(t, r, []int{http.StatusForbidden})
 	// Presence notifications.
 	if len(helper.hubMessages) != 0 {
 		t.Errorf("Hub isn't expected to receive any messages, received %d", len(helper.hubMessages))
@@ -1834,7 +1837,7 @@ func TestRegisterSessionMetadataUpdateFails(t *testing.T) {
 		t.Errorf("Number of online sessions: expected 0, found %d", online)
 	}
 	// Session output.
-	registerSessionVerifyOutputs(r, []int{http.StatusInternalServerError}, t)
+	registerSessionVerifyOutputs(t, r, []int{http.StatusInternalServerError})
 	// Presence notifications.
 	if len(helper.hubMessages) != 0 {
 		t.Errorf("Hub isn't expected to receive any messages, received %d", len(helper.hubMessages))
@@ -1894,7 +1897,7 @@ func TestRegisterSessionOwnerChangeDbCallFails(t *testing.T) {
 	if online != 0 {
 		t.Errorf("Number of online sessions: expected 0, found %d", online)
 	}
-	registerSessionVerifyOutputs(r, []int{}, t)
+	registerSessionVerifyOutputs(t, r, []int{})
 	// Presence notifications.
 	if len(helper.hubMessages) != 0 {
 		t.Errorf("Hub isn't expected to receive any messages, received %d", len(helper.hubMessages))
@@ -2041,7 +2044,7 @@ func TestUnregisterSessionUnsubscribe(t *testing.T) {
 	}
 	// Presence notifications.
 	if len(helper.hubMessages) != 2 {
-		t.Errorf("Hub messages recepients: expected 2, received %d", len(helper.hubMessages))
+		t.Errorf("Hub messages recipients: expected 2, received %d", len(helper.hubMessages))
 	}
 	// Group presSubs.
 	if grpPres, ok := helper.hubMessages[topicName]; ok {
@@ -2139,7 +2142,7 @@ func TestHandleMetaGet(t *testing.T) {
 	}
 	// Presence notifications.
 	if len(helper.hubMessages) != 0 {
-		t.Errorf("Hub messages recepients: expected 0, received %d", len(helper.hubMessages))
+		t.Errorf("Hub messages recipients: expected 0, received %d", len(helper.hubMessages))
 	}
 }
 
@@ -2218,7 +2221,7 @@ func TestHandleMetaSetDescMePublicPrivate(t *testing.T) {
 	}
 	// Presence notifications.
 	if len(helper.hubMessages) != 1 {
-		t.Fatalf("Hub messages recepients: expected 1, received %d", len(helper.hubMessages))
+		t.Fatalf("Hub messages recipients: expected 1, received %d", len(helper.hubMessages))
 	}
 	// Make sure uid's sessions are notified.
 	if userPres, ok := helper.hubMessages[uid.UserId()]; ok {
@@ -2308,7 +2311,7 @@ func TestHandleUATimerEvent(t *testing.T) {
 	}
 	// Presence notifications.
 	if len(helper.hubMessages) != 1 {
-		t.Fatalf("Hub messages recepients: expected 1, received %d", len(helper.hubMessages))
+		t.Fatalf("Hub messages recipients: expected 1, received %d", len(helper.hubMessages))
 	}
 	// Make sure uid's sessions are notified.
 	if userPres, ok := helper.hubMessages[uid.UserId()]; ok {
@@ -2329,7 +2332,7 @@ func TestHandleUATimerEvent(t *testing.T) {
 			t.Errorf("Presence message src: expected '%s', found '%s'", topicName, pres.Src)
 		}
 	} else {
-		t.Errorf("Hub expected to pres recepient %s", uid.UserId())
+		t.Errorf("Hub expected to pres recipient %s", uid.UserId())
 	}
 }
 
@@ -2352,15 +2355,14 @@ func TestHandleTopicTimeout(t *testing.T) {
 	if len(helper.hub.unreg) != 1 {
 		t.Fatalf("Hub.unreg chan must contain exactly 1 message. Found %d.", len(helper.hub.unreg))
 	}
-	unreg := <-helper.hub.unreg
-	if unreg.rcptTo != topicName {
+	if unreg := <-helper.hub.unreg; unreg.rcptTo != topicName {
 		t.Errorf("unreg.rcptTo: expected '%s', found '%s'", topicName, unreg.rcptTo)
 	}
 	uaTimer.Stop()
 	notifTimer.Stop()
 	// Presence notifications.
 	if len(helper.hubMessages) != 1 {
-		t.Fatalf("Hub messages recepients: expected 1, received %d", len(helper.hubMessages))
+		t.Fatalf("Hub messages recipients: expected 1, received %d", len(helper.hubMessages))
 	}
 	// Make sure uid's sessions are notified.
 	if userPres, ok := helper.hubMessages[uid.UserId()]; ok {
@@ -2381,7 +2383,7 @@ func TestHandleTopicTimeout(t *testing.T) {
 			t.Errorf("Presence message src: expected '%s', found '%s'", topicName, pres.Src)
 		}
 	} else {
-		t.Errorf("Hub expected to pres recepient %s", uid.UserId())
+		t.Errorf("Hub expected to pres recipient %s", uid.UserId())
 	}
 }
 
@@ -2415,7 +2417,7 @@ func TestHandleTopicTermination(t *testing.T) {
 	}
 	// Presence notifications.
 	if len(helper.hubMessages) != 0 {
-		t.Fatalf("Hub messages recepients: expected 0, received %d", len(helper.hubMessages))
+		t.Fatalf("Hub messages recipients: expected 0, received %d", len(helper.hubMessages))
 	}
 }
 

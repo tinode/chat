@@ -35,7 +35,6 @@ func (sess *Session) sendMessageLp(wrt http.ResponseWriter, msg interface{}) boo
 }
 
 func (sess *Session) writeOnce(wrt http.ResponseWriter, req *http.Request) {
-
 	for {
 		select {
 		case msg, ok := <-sess.send:
