@@ -17,7 +17,7 @@ const (
 	ActSub = "sub"
 )
 
-// Maximum length of push payload in multibyte characters.
+// MaxPayloadLength is the maximum length of push payload in multibyte characters.
 const MaxPayloadLength = 128
 
 // Recipient is a user targeted by the push.

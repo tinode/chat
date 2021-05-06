@@ -183,10 +183,10 @@ func Preview(content interface{}, length int) (string, error) {
 		}
 
 		// Allocate space for copying styles and entities.
-		var preview_fmt []map[string]interface{}
-		var preview_ent []map[string]interface{}
+		var previewFmt []map[string]interface{}
+		var previewEnt []map[string]interface{}
 		if len(entRefs) > 0 {
-			preview_ent = make([]map[string]interface{}, len(entRefs))
+			previewEnt = make([]map[string]interface{}, len(entRefs))
 		}
 		for _, old := range styles {
 			style := span{at: old.at, end: old.end}
@@ -195,21 +195,21 @@ func Preview(content interface{}, length int) (string, error) {
 			} else if old.key >= 0 && len(ent) > old.key {
 				if key, ok := entRefs[old.key]; ok {
 					style.key = key
-					preview_ent[style.key] = copyLight(ent[old.key])
+					previewEnt[style.key] = copyLight(ent[old.key])
 				} else {
 					continue
 				}
 			} else {
 				continue
 			}
-			preview_fmt = append(preview_fmt, style.toMap())
+			previewFmt = append(previewFmt, style.toMap())
 		}
 
-		if len(preview_fmt) > 0 {
-			preview["fmt"] = preview_fmt
+		if len(previewFmt) > 0 {
+			preview["fmt"] = previewFmt
 		}
-		if len(preview_ent) > 0 {
-			preview["ent"] = preview_ent
+		if len(previewEnt) > 0 {
+			preview["ent"] = previewEnt
 		}
 	}
 
