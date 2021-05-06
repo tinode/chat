@@ -835,7 +835,7 @@ func TestDispatchSetMalformedWhat(t *testing.T) {
 			Id:          "123",
 			Topic:       destUid.UserId(),
 			MsgSetQuery: MsgSetQuery{
-			// No meta requests.
+				// No meta requests.
 			},
 		},
 	}
