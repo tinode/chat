@@ -445,7 +445,7 @@ Topics and subscriptions have `public` and `private` fields. Generally, the fiel
 
 ### Public
 
-The format of the `public` field in group, peer to peer, systems topics is expected to be [theCard](./thecard.md).
+The format of the `public` field in group and peer to peer topics is expected to be [theCard](./thecard.md) although only `fn` and `photo` fields are currently used by client software.
 
 The `fnd` topic expects `public` to be a string representing a [search query](#query-language)).
 
