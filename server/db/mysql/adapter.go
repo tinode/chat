@@ -41,7 +41,7 @@ const (
 	defaultDSN      = "root:@tcp(localhost:3306)/tinode?parseTime=true"
 	defaultDatabase = "tinode"
 
-	adpVersion = 111
+	adpVersion = 112
 
 	adapterName = "mysql"
 
@@ -507,7 +507,7 @@ func (a *adapter) CreateDb(reset bool) error {
 	}
 
 	// Records of uploaded files.
-	// Don't add FOREIGN KEY on userid. It's not needed and it will break user deletion.
+	// Don't change INDEX(userid) to FOREIGN KEY(userid). It will break user deletion.
 	if _, err = tx.Exec(
 		`CREATE TABLE fileuploads(
 			id        BIGINT NOT NULL,
@@ -517,8 +517,10 @@ func (a *adapter) CreateDb(reset bool) error {
 			status    INT NOT NULL,
 			mimetype  VARCHAR(255) NOT NULL,
 			size      BIGINT NOT NULL,
+			purpose   VARCHAR(4),
 			location  VARCHAR(2048) NOT NULL,
-			PRIMARY KEY(id)
+			PRIMARY KEY(id),
+			INDEX fileuploads_userid(userid)
 		)`); err != nil {
 		return err
 	}
@@ -622,7 +624,7 @@ func (a *adapter) UpgradeDb() error {
 
 	if a.version == 109 {
 		// Perform database upgrade from version 109 to version 110.
-		if _, err := a.db.Exec(`UPDATE topics SET touchedat=updatedat WHERE touchedat IS NULL`); err != nil {
+		if _, err := a.db.Exec("UPDATE topics SET touchedat=updatedat WHERE touchedat IS NULL"); err != nil {
 			return err
 		}
 
@@ -678,6 +680,20 @@ func (a *adapter) UpgradeDb() error {
 		}
 
 		if err := bumpVersion(a, 111); err != nil {
+			return err
+		}
+	}
+
+	if a.version == 111 {
+		if _, err := a.db.Exec("ALTER TABLE fileuploads ADD INDEX fileuploads_userid(userid)"); err != nil {
+			return err
+		}
+
+		if _, err := a.db.Exec("ALTER TABLE fileuploads ADD purpose VARCHAR(4) AFTER size"); err != nil {
+			return err
+		}
+
+		if err := bumpVersion(a, 112); err != nil {
 			return err
 		}
 	}
