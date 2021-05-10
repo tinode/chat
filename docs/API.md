@@ -444,44 +444,8 @@ An empty `ua=""` _user agent_ is not reported. I.e. if user attaches to `me` wit
 Topics and subscriptions have `public` and `private` fields. Generally, the fields are application-defined. The server does not enforce any particular structure of these fields except for `fnd` topic. At the same time, client software should use the same format for interoperability reasons.
 
 ### Public
-The format of the `public` field in group and peer to peer topics is expected to be a [vCard](https://en.wikipedia.org/wiki/VCard) although only `fn` and `photo` fields are currently used by client software:
 
-```js
-vcard: {
-  fn: "John Doe", // string, formatted name
-  n: {
-    surname: "Miner", // last of family name
-    given: "Coal", // first or given name
-    additional: "Diamond", // additional name, such as middle name or patronymic or nickname.
-    prefix: "Dr.", // prefix, such as honorary title or gender designation.
-    suffix: "Jr.", // suffix, such as 'Jr' or 'II'
-  }, // object, user's structured name
-  org: "Most Evil Corp", // string, name of the organisation the user belongs to.
-  title: "CEO", // string, job title
-  tel: [
-    {
-      type: "HOME", // string, optional designation
-      uri: "tel:+17025551234" // string, phone number
-    }, ...
-  ], // array of objects, list of phone numbers associated with the user
-  email: [
-    {
-      type: "WORK", // string, optional designation
-      uri: "email:alice@example.com", // string, email address
-    }, ...
-  ], // array of objects, list of user's email addresses
-  impp: [
-    {
-      type: "OTHER",
-      uri: "tinode:usrRkDVe0PYDOo", // string, email address
-    }, ...
-  ], // array of objects, list of user's IM handles
-  photo: {
-    type: "jpeg", // image type
-    data: "..." // base64-encoded binary image data
-  } // object, avatar photo. Java does not have a useful bitmap class, so keeping it as bits here.
-}
-```
+The format of the `public` field in group and peer to peer topics is expected to be [theCard](./thecard.md) although only `fn` and `photo` fields are currently used by client software.
 
 The `fnd` topic expects `public` to be a string representing a [search query](#query-language)).
 
