@@ -220,6 +220,7 @@ func IsChannel(name string) bool {
 }
 
 // ChnToGrp gets group topic name from channel name.
+// If it's a non-channel group topic, the name is returned unchanged.
 func ChnToGrp(chn string) string {
 	if strings.HasPrefix(chn, "chn") {
 		return strings.Replace(chn, "chn", "grp", 1)
