@@ -190,14 +190,16 @@ CREATE TABLE credentials(
 CREATE TABLE fileuploads(
 	id			BIGINT NOT NULL,
 	createdat	DATETIME(3) NOT NULL,
-	updatedat	DATETIME(3) NOT NULL,	
+	updatedat	DATETIME(3) NOT NULL,
 	userid		BIGINT NOT NULL,
 	status		INT NOT NULL,
 	mimetype	VARCHAR(255) NOT NULL,
 	size		BIGINT NOT NULL,
+	purpose		VARCHAR(4),
 	location	VARCHAR(2048) NOT NULL,
 	
-	PRIMARY KEY(id)
+	PRIMARY KEY(id),
+	INDEX fileuploads_userid(userid)
 );
 
 # Links between uploaded files and messages.

@@ -1068,11 +1068,14 @@ The `{note.recv}` and `{note.read}` do alter persistent state on the server. The
 note: {
   topic: "grp1XUtEhjv6HND", // string, topic to notify, required
   what: "kp", // string, one of "kp" (key press), "read" (read notification),
-              // "rcpt" (received notification), any other string will cause
-              // message to be silently ignored, required
+              // "rcpt" (received notification), "data" (form response or other structured data);
+              // any other string will cause the message to be silently ignored, required.
   seq: 123,   // integer, ID of the message being acknowledged, required for
-              // rcpt & read
-  unread: 10  // integer, client-reported total count of unread messages, optional.
+              // 'rcpt' & 'read'.
+  unread: 10, // integer, client-reported total count of unread messages, optional.
+  data: {     // object, required payload for 'data'.
+    ...
+  }
 }
 ```
 
@@ -1080,6 +1083,7 @@ The following actions are currently recognised:
  * kp: key press, i.e. a typing notification. The client should use it to indicate that the user is composing a new message.
  * recv: a `{data}` message is received by the client software but may not yet seen by user.
  * read: a `{data}` message is seen by the user. It implies `recv` as well.
+ * data: a generic packet of structured data, usually a form response.
 
 The `read` and `recv` notifications may optionally include `unread` value which is the total count of unread messages as determined by this client. The per-user `unread` count is maintained by the server: it's incremented when new `{data}` messages are sent to user and reset to the values reported by the `{note unread=...}` message. The `unread` value is never decremented by the server. The value is included in push notifications to be shown on a badge on iOS:
 <p align="center">
