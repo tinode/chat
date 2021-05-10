@@ -211,14 +211,14 @@ Hashtag `data` contains a single `val` field with the hashtag value which the cl
     "name": "confirmation",
     "act": "url",
     "val": "some-value",
-    "ref": "https://www.example.com/"
+    "ref": "https://www.example.com/path/?foo=bar"
   }
 }
 ```
 * `act`: type of action in response to button click:
   * `pub`: send a Drafty-formatted `{pub}` message to the current topic with the form data as an attachment:
   ```js
-  { "tp":"EX", "data":{ "mime":"application/json", "val": { "seq": 3, "resp":{ "confirmation": "some-value" } } } }
+  { "tp":"EX", "data":{ "mime":"application/json", "val": { "seq": 3, "resp": { "confirmation": "some-value" } } } }
   ```
   * `url`: issue an `HTTP GET` request to the URL from the `data.ref` field. The following query parameters are appended to the URL: `<name>=<val>`, `uid=<current-user-ID>`, `topic=<topic name>`, `seq=<message sequence ID>`.
   * `note`: send a `{note}` message to the current topic with `what` set to `data`.
@@ -231,6 +231,6 @@ Hashtag `data` contains a single `val` field with the hashtag value which the cl
 
 If the `name` is provided but `val` is not, `val` is assumed to be `1`. If `name` is undefined then nether `name` nor `val` are sent.
 
-The button in the example above will send an HTTP GET to https://www.example.com/?confirmation=some-value&uid=usrFsk73jYRR&topic=grpnG99YhENiQU&seq=3 assuming the current user ID is `usrFsk73jYRR`, the topic is `grpnG99YhENiQU`, and the sequence ID of message with the button is `3`.
+The button in the example above will send an HTTP GET to https://www.example.com/path/?foo=bar&confirmation=some-value&uid=usrFsk73jYRR&topic=grpnG99YhENiQU&seq=3 assuming the current user ID is `usrFsk73jYRR`, the topic is `grpnG99YhENiQU`, and the sequence ID of message with the button is `3`.
 
 _IMPORTANT Security Consideration_: the client should restrict URL scheme in the `url` field to `http` and `https` only.
