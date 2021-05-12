@@ -49,27 +49,30 @@ If `tp` is provided, it means the style is a basic text decoration:
  * `DL`: deleted or strikethrough text: ~~strikethrough~~.
  * `CO`: code or monotyped text, possibly with different background: `monotype`.
  * `BR`: line break.
- * `RW`: logical grouping of formats, a row.
+ * `RW`: logical grouping of formats, a row; may also be represented as an entity.
  * `HD`: hidden text.
  * `HL`: highlighted text, such as text in a different color or with a different background; the color cannot be specified.
+ * `FM`: form / set of fields; may also be represented as an entity.
 
-If key is provided, it's a 0-based index into the `ent` field which contains an entity definition such as an image or an URL:
- * `LN`: link (URL) [https://api.tinode.co](https://api.tinode.co)
- * `MN`: mention such as [@tinode](#)
- * `HT`: hashtag, e.g. [#hashtag](#)
- * `IM`: inline image
- * `EX`: generic attachment
- * `FM`: form / set of fields
- * `BN`: interactive button
+If key is provided, it's a 0-based index into the `ent` field which contains extended style parameters such as an image or an URL:
+ * `LN`: link (URL) [https://api.tinode.co](https://api.tinode.co).
+ * `MN`: mention such as [@tinode](#).
+ * `HT`: hashtag, e.g. [#hashtag](#).
+ * `IM`: inline image.
+ * `EX`: generic attachment.
+ * `FM`: form / set of fields; may also be represented as a basic decoration.
+ * `BN`: interactive button.
+ * `RW`: logical grouping of formats, a row; may also be represented as a basic decoration.
 
 Examples:
  * `{ "at":8, "len":4, "tp":"ST"}`: apply formatting `ST` (strong/bold) to 4 characters starting at offset 8 into `txt`.
  * `{ "at":144, "len":8, "key":2 }`: insert entity `ent[2]` into position 144, the entity spans 8 characters.
  * `{ "at":-1, "len":0, "key":4 }`: show the `ent[4]` as a file attachment, don't apply any styling to text.
 
+The clients should be able to handle missing `at`, `key`, and `len` values. Missing values are assumed to be equal to `0`.
 
 #### `FM`: a form, an ordered set or fields
-Form provides means to add paragraph-level formatting to a logical group of elements:
+Form provides means to add paragraph-level formatting to a logical group of elements. It may be represented as a text decoration or as an entity.
 <table>
 <tr><th>Do you agree?</th></tr>
 <tr><td><a href="">Yes</a></td></tr>
@@ -80,10 +83,10 @@ Form provides means to add paragraph-level formatting to a logical group of elem
 {
  "txt": "Do you agree? Yes No",
  "fmt": [
-   {"at": 0, "len": 20, "tp": "FM"},
-   {"at": 0, "len": 13, "tp": "ST"}
+   {"len": 20, "tp": "FM"}, // missing 'at' is zero: "at": 0
+   {"len": 13, "tp": "ST"}
    {"at": 13, "len": 1, "tp": "BR"},
-   {"at": 14, "len": 3, "key": 0},
+   {"at": 14, "len": 3}, // missing 'key' is zero: "key": 0
    {"at": 17, "len": 1, "tp": "BR"},
    {"at": 18, "len": 2, "key": 1},
  ],
@@ -112,6 +115,17 @@ If a `Yes` button is pressed in the example above, the client is expected to sen
  }]
 }
 ```
+
+The form may be optionally represented as an entity:
+```js
+{
+  "tp": "FM",
+  "data": {
+    "su": true
+  }
+}
+```
+The `data.su` describes how interactive form elements behave after the click. An `"su": true` indicates that the form is `single use`: the form should change after the first interaction to show that it's no longer accepting input.
 
 ### Entities `ent`
 

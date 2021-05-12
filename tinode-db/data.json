@@ -343,10 +343,10 @@
   "Concentrate and ask again",
   "Don't count on it",
   "My reply is no",
-  "My sources say no",
+  "My sources say no.",
   "Outlook not so good",
-  "Very doubtful",
-  "All your base are belong to us"
+  "Very doubtful...",
+  "All your base are belong to us."
  ],
 "forms": [
   {
@@ -359,7 +359,7 @@
     ],
     "ent": [
       {"tp": "BN", "data": {"name": "yes", "act": "pub"}},
-      {"tp": "BN", "data": {"name": "yes2", "act": "pub"}}
+      {"tp": "BN", "data": {"name": "duh", "val": "42", "act": "pub"}}
     ]
   },
   {
@@ -373,7 +373,7 @@
     ],
     "ent": [
       {"tp": "BN", "data": {"name": "ok", "act": "url", "ref": "https://github.com/tinode/chat/?key=val"}},
-      {"tp": "BN", "data": {"name": "ok2", "act": "url", "ref": "https://github.com/tinode/chat"}}
+      {"tp": "BN", "data": {"name": "oops", "val": "test", "act": "url", "ref": "https://github.com/tinode/chat"}}
     ]
   }
 ]
