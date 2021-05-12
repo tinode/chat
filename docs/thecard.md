@@ -9,15 +9,15 @@ When `JSON` is used to represent `theCard` data, it does it differently than [jC
 `theCard` is structured as an object:
 
 ```js
-vcard: {
+{
   fn: "John Doe", // string, formatted name of the person or topic.
   photo: { // object, avatar photo; either 'data' or 'ref' must be present, all other fields are optional.
-    type: "jpeg", // MIME type but with 'image/' dropped.
-    data: "Rt53jUU...iVBORw0KGgoA==", // base64-encoded binary image data
-    ref: "https://api.tinode.co/file/s/abcdef12345.jpg", // URL of the image.
+    type: "jpeg", // string, MIME type but with 'image/' dropped.
+    data: "Rt53jUU...iVBORw0KGgoA==", // string, base64-encoded binary image data
+    ref: "https://api.tinode.co/file/s/abcdef12345.jpg", // string, URL of the image.
     width: 512, // integer, image width in pixels.
     height: 512, // integer, image height in pixels.
-    size: 123456 // image size in bytes.
+    size: 123456 // integer, image size in bytes.
   },
   //
   // None of the following fields are implemented by any known client:
