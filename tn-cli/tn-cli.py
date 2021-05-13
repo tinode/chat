@@ -39,7 +39,7 @@ from tn_globals import stdoutln
 from tn_globals import to_json
 
 APP_NAME = "tn-cli"
-APP_VERSION = "1.5.6"
+APP_VERSION = "1.5.7"
 PROTOCOL_VERSION = "0"
 LIB_VERSION = pkg_resources.get_distribution("tinode_grpc").version
 GRPC_VERSION = pkg_resources.get_distribution("grpcio").version
@@ -295,7 +295,7 @@ def stdin(InputQueue):
     except Exception as ex:
         printerr("Exception in stdin", ex)
 
-    InputQueue.append("exit")
+    InputQueue.append('exit')
 
 # Constructing individual messages
 # {hi}
@@ -977,6 +977,7 @@ def handle_ctrl(ctrl):
 
 # The main processing loop: send messages to server, receive responses.
 def run(args, schema, secret):
+    failed = False
     try:
         if tn_globals.IsInteractive:
             tn_globals.Prompt = PromptSession()
@@ -1046,14 +1047,17 @@ def run(args, schema, secret):
     except grpc.RpcError as err:
         # print(err)
         printerr("gRPC failed with {0}: {1}".format(err.code(), err.details()))
+        failed = True
     except Exception as ex:
         printerr("Request failed: {0}".format(ex))
-        # print(traceback.format_exc())
+        failed = True
     finally:
         printout('Shutting down...')
         channel.close()
         if tn_globals.InputThread != None:
             tn_globals.InputThread.join(0.3)
+
+    return 1 if failed else 0
 
 # Read cookie file for logging in with the cookie.
 def read_cookie():
@@ -1171,4 +1175,4 @@ if __name__ == '__main__':
     if args.background is None and not tn_globals.IsInteractive:
         args.background = True
 
-    run(args, schema, secret)
+    sys.exit(run(args, schema, secret))
