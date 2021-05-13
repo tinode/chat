@@ -86,8 +86,8 @@ class dotdict(dict):
     __delattr__ = dict.__delitem__
 
 
-# Pack user's name and avatar into a vcard.
-def make_vcard(fn, photofile):
+# Pack user's name and avatar into a theCard.
+def makeTheCard(fn, photofile):
     card = None
 
     if (fn != None and fn.strip() != "") or photofile != None:
@@ -326,7 +326,7 @@ def accMsg(id, cmd, ignored):
     elif cmd.suspend == 'false':
         state = 'ok'
 
-    cmd.public = encode_to_bytes(make_vcard(cmd.fn, cmd.photo))
+    cmd.public = encode_to_bytes(makeTheCard(cmd.fn, cmd.photo))
     cmd.private = encode_to_bytes(cmd.private)
     return pb.ClientMsg(acc=pb.ClientAcc(id=str(id), user_id=cmd.user, state=state,
         scheme=cmd.scheme, secret=cmd.secret, login=cmd.do_login, tags=cmd.tags.split(",") if cmd.tags else None,
@@ -366,7 +366,7 @@ def subMsg(id, cmd, ignored):
         cmd.topic = tn_globals.DefaultTopic
     if cmd.get_query:
         cmd.get_query = pb.GetQuery(what=" ".join(cmd.get_query.split(",")))
-    cmd.public = encode_to_bytes(make_vcard(cmd.fn, cmd.photo))
+    cmd.public = encode_to_bytes(makeTheCard(cmd.fn, cmd.photo))
     cmd.private = encode_to_bytes(cmd.private)
     return pb.ClientMsg(sub=pb.ClientSub(id=str(id), topic=cmd.topic,
         set_query=pb.SetQuery(
@@ -433,7 +433,7 @@ def setMsg(id, cmd, ignored):
         cmd.topic = tn_globals.DefaultTopic
 
     if cmd.public == None:
-        cmd.public = encode_to_bytes(make_vcard(cmd.fn, cmd.photo))
+        cmd.public = encode_to_bytes(makeTheCard(cmd.fn, cmd.photo))
     else:
         cmd.public = encode_to_bytes(cmd.public)
     cmd.private = encode_to_bytes(cmd.private)
