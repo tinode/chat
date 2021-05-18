@@ -39,7 +39,7 @@ from tn_globals import stdoutln
 from tn_globals import to_json
 
 APP_NAME = "tn-cli"
-APP_VERSION = "1.5.7"
+APP_VERSION = "1.5.8"
 PROTOCOL_VERSION = "0"
 LIB_VERSION = pkg_resources.get_distribution("tinode_grpc").version
 GRPC_VERSION = pkg_resources.get_distribution("grpcio").version
@@ -949,7 +949,8 @@ def gen_message(scheme, secret, args):
                         stdoutln("Timeout while waiting for '{0}' response".format(tn_globals.WaitingFor.cmd))
                         tn_globals.WaitingFor = None
 
-                time.sleep(0.1)
+                if tn_globals.IsInteractive:
+                    time.sleep(0.1)
 
         except Exception as err:
             stdoutln("Exception in generator: {0}".format(err))
