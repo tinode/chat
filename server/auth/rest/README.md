@@ -56,7 +56,8 @@ Add the following section to the `auth_config` in [tinode.conf](../../tinode.con
 "auth_config": {
   ...
   "rest": {
-    // ServerUrl is the URL of the authentication server to call.
+    // ServerUrl is the URL of the authentication server to call. The URL must be absolute:
+    // it must include the scheme, such as http or https, and the host name.
     "server_url": "http://127.0.0.1:5000/",
     // Authentication server is allowed to create new accounts.
     "allow_new_accounts": true,
