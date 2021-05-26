@@ -168,7 +168,16 @@ func getPassword(n int) string {
 	return string(b)
 }
 
+func toAbsolutePath(base, path string) string {
+	if filepath.IsAbs(path) {
+		return path
+	}
+	return filepath.Clean(filepath.Join(base, path))
+}
+
 func main() {
+	executable, _ := os.Executable()
+
 	reset := flag.Bool("reset", false, "force database reset")
 	upgrade := flag.Bool("upgrade", false, "perform database version upgrade")
 	noInit := flag.Bool("no_init", false, "check that database exists but don't create if missing")
@@ -177,8 +186,13 @@ func main() {
 
 	flag.Parse()
 
+	// All relative paths are resolved against the executable path, not against current working directory.
+	// Absolute paths are left unchanged.
+	rootpath, _ := filepath.Split(executable)
+
 	var data Data
 	if *datafile != "" && *datafile != "-" {
+		*datafile = toAbsolutePath(rootpath, *datafile)
 		raw, err := ioutil.ReadFile(*datafile)
 		if err != nil {
 			log.Fatalln("Failed to read sample data file:", err)
@@ -192,6 +206,7 @@ func main() {
 	rand.Seed(time.Now().UnixNano())
 	data.datapath, _ = filepath.Split(*datafile)
 
+	*conffile = toAbsolutePath(rootpath, *conffile)
 	var config configType
 	if file, err := os.Open(*conffile); err != nil {
 		log.Fatalln("Failed to read config file:", err)
