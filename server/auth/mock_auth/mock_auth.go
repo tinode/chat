@@ -5,7 +5,7 @@
 package mock_auth
 
 import (
-	json "encoding/json"
+	json "/json"
 	gomock "github.com/golang/mock/gomock"
 	auth "github.com/tinode/chat/server/auth"
 	types "github.com/tinode/chat/server/store/types"
