@@ -276,12 +276,13 @@ func main() {
 	// All relative paths are resolved against the executable path, not against current working directory.
 	// Absolute paths are left unchanged.
 	rootpath, _ := filepath.Split(executable)
+	curwd, _ := os.Getwd()
 
 	logs.Info.Printf("Server v%s:%s:%s; pid %d; %d process(es)",
 		currentVersion, executable, buildstamp,
 		os.Getpid(), runtime.GOMAXPROCS(runtime.NumCPU()))
 
-	*configfile = toAbsolutePath(rootpath, *configfile)
+	*configfile = toAbsolutePath(curwd, *configfile)
 	logs.Info.Printf("Using config from '%s'", *configfile)
 
 	var config configType
@@ -334,7 +335,7 @@ func main() {
 	workerId := clusterInit(config.Cluster, clusterSelf)
 
 	if *pprofFile != "" {
-		*pprofFile = toAbsolutePath(rootpath, *pprofFile)
+		*pprofFile = toAbsolutePath(curwd, *pprofFile)
 
 		cpuf, err := os.Create(*pprofFile + ".cpu")
 		if err != nil {
