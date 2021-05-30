@@ -951,6 +951,8 @@ def gen_message(scheme, secret, args):
 
                 if tn_globals.IsInteractive:
                     time.sleep(0.1)
+                else:
+                    time.sleep(0.01)
 
         except Exception as err:
             stdoutln("Exception in generator: {0}".format(err))
