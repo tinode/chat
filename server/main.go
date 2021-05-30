@@ -15,7 +15,6 @@ import (
 	"flag"
 	"net/http"
 	"os"
-	"path/filepath"
 	"runtime"
 	"runtime/pprof"
 	"strings"
@@ -273,15 +272,16 @@ func main() {
 
 	logs.Init(os.Stderr, *logFlags)
 
-	// All relative paths are resolved against the executable path, not against current working directory.
-	// Absolute paths are left unchanged.
-	rootpath, _ := filepath.Split(executable)
+	curwd, err := os.Getwd()
+	if err != nil {
+		logs.Err.Fatal("Couldn't get current working directory: ", err)
+  }
 
 	logs.Info.Printf("Server v%s:%s:%s; pid %d; %d process(es)",
 		currentVersion, executable, buildstamp,
 		os.Getpid(), runtime.GOMAXPROCS(runtime.NumCPU()))
 
-	*configfile = toAbsolutePath(rootpath, *configfile)
+	*configfile = toAbsolutePath(curwd, *configfile)
 	logs.Info.Printf("Using config from '%s'", *configfile)
 
 	var config configType
@@ -334,7 +334,7 @@ func main() {
 	workerId := clusterInit(config.Cluster, clusterSelf)
 
 	if *pprofFile != "" {
-		*pprofFile = toAbsolutePath(rootpath, *pprofFile)
+		*pprofFile = toAbsolutePath(curwd, *pprofFile)
 
 		cpuf, err := os.Create(*pprofFile + ".cpu")
 		if err != nil {
@@ -355,7 +355,7 @@ func main() {
 		logs.Info.Printf("Profiling info saved to '%s.(cpu|mem)'", *pprofFile)
 	}
 
-	err := store.Store.Open(workerId, config.Store)
+	err = store.Store.Open(workerId, config.Store)
 	if err != nil {
 		logs.Err.Fatal("Failed to connect to DB: ", err)
 	}
@@ -568,7 +568,7 @@ func main() {
 	var staticMountPoint string
 	if *staticPath != "" && *staticPath != "-" {
 		// Resolve path to static content.
-		*staticPath = toAbsolutePath(rootpath, *staticPath)
+		*staticPath = toAbsolutePath(curwd, *staticPath)
 		if _, err = os.Stat(*staticPath); os.IsNotExist(err) {
 			logs.Err.Fatal("Static content directory is not found", *staticPath)
 		}
