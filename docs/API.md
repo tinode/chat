@@ -445,42 +445,7 @@ Topics and subscriptions have `public` and `private` fields. Generally, the fiel
 
 ### Public
 
-```js
-{
-  fn: "John Doe", // string, formatted name
-  n: {
-    surname: "Miner", // last of family name
-    given: "Coal", // first or given name
-    additional: "Diamond", // additional name, such as middle name or patronymic or nickname.
-    prefix: "Dr.", // prefix, such as honorary title or gender designation.
-    suffix: "Jr.", // suffix, such as 'Jr' or 'II'
-  }, // object, user's structured name
-  org: "Most Evil Corp", // string, name of the organisation the user belongs to.
-  title: "CEO", // string, job title
-  tel: [
-    {
-      type: "HOME", // string, optional designation
-      uri: "tel:+17025551234" // string, phone number
-    }, ...
-  ], // array of objects, list of phone numbers associated with the user
-  email: [
-    {
-      type: "WORK", // string, optional designation
-      uri: "email:alice@example.com", // string, email address
-    }, ...
-  ], // array of objects, list of user's email addresses
-  impp: [
-    {
-      type: "OTHER",
-      uri: "tinode:usrRkDVe0PYDOo", // string, email address
-    }, ...
-  ], // array of objects, list of user's IM handles
-  photo: {
-    type: "jpeg", // image type
-    data: "..." // base64-encoded binary image data
-  } // object, avatar photo. Java does not have a useful bitmap class, so keeping it as bits here.
-}
-```
+The format of the `public` field in group, peer to peer, systems topics is expected to be [theCard](./thecard.md).
 
 The `fnd` topic expects `public` to be a string representing a [search query](#query-language)).
 
