@@ -202,7 +202,7 @@ Compiled-in authenticator names may be changed by using `logical_names` configur
 
 When a new account is created, the user must inform the server which authentication method will be later used to gain access to this account as well as provide shared secret, if appropriate. Only `basic` and `anonymous` can be used during account creation. The `basic` requires the user to generate and send a unique login and password to the server. The `anonymous` does not exchange secrets.
 
-User may optionally set `{acc login=true}` to use the new account for immediate authentication. When `login=false` (or not set), the new account is created but the authentication status of the session which created the account remains unchanged. When `login=true` the server will attempt to authenticate the session with the new account, the response to the `{acc}` request will contain the authentication token on success. This is particularly important for the `anonymous` authentication.
+User may optionally set `{acc login=true}` to use the new account for immediate authentication. When `login=false` (or not set), the new account is created but the authentication status of the session which created the account remains unchanged. When `login=true` the server will attempt to authenticate the session with the new account, the `{ctrl}` response to the `{acc}` request will contain the authentication token on success. This is particularly important for the `anonymous` authentication because that's the only time when the authentication token can be retrieved.
 
 #### Logging in
 
@@ -447,7 +447,7 @@ Topics and subscriptions have `public` and `private` fields. Generally, the fiel
 The format of the `public` field in group and peer to peer topics is expected to be a [vCard](https://en.wikipedia.org/wiki/VCard) although only `fn` and `photo` fields are currently used by client software:
 
 ```js
-vcard: {
+{
   fn: "John Doe", // string, formatted name
   n: {
     surname: "Miner", // last of family name
@@ -660,7 +660,8 @@ The `{acc}` message **cannot** be used to modify `desc` or `cred` of an existing
 ```js
 acc: {
   id: "1a2b3", // string, client-provided message id, optional
-  user: "new", // string, "new" to create a new user, default: current user, optional
+  user: "newABC123", // string, "new" optionally followed by any characters to create a new user,
+              // default: current user, optional
   token: "XMgS...8+BO0=", // string, authentication token to use for the request if the
                // session is not authenticated, optional
   status: "ok", // change user's status; no default value, optional.
@@ -700,8 +701,7 @@ acc: {
 }
 ```
 
-Server responds with a `{ctrl}` message with `params` containing details of the new user. If `desc.defacs` is missing,
-server will assign server-default access values.
+Server responds with a `{ctrl}` message with `params` containing details of the new user account such as user ID and, in case of `login: true`, authentication token. If `desc.defacs` is missing, the server will assign server-default access permissions to new account.
 
 The only supported authentication schemes for account creation are `basic` and `anonymous`.
 
