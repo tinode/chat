@@ -410,13 +410,13 @@ type photoStruct struct {
 	Data []byte `json:"data" db:"data"`
 }
 
-type vcard struct {
+type card struct {
 	Fn    string       `json:"fn" db:"fn"`
 	Photo *photoStruct `json:"photo,omitempty" db:"photo"`
 }
 
 // {"fn": "Alice Johnson", "photo": "alice-128.jpg"}
-func parsePublic(public *vCardy, path string) *vcard {
+func parsePublic(public *theCard, path string) *card {
 	var photo *photoStruct
 	var err error
 
@@ -436,5 +436,5 @@ func parsePublic(public *vCardy, path string) *vcard {
 		}
 	}
 
-	return &vcard{Fn: public.Fn, Photo: photo}
+	return &card{Fn: public.Fn, Photo: photo}
 }
