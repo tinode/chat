@@ -277,13 +277,13 @@ func (mr *MockStoreInterfaceMockRecorder) UseMediaHandler(name, config interface
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UseMediaHandler", reflect.TypeOf((*MockStoreInterface)(nil).UseMediaHandler), name, config)
 }
 
-// MockUsersObjMapperInterface is a mock of UsersObjMapperInterface interface
+// MockUsersObjMapperInterface is a mock of UsersPersistenceInterface interface
 type MockUsersObjMapperInterface struct {
 	ctrl     *gomock.Controller
 	recorder *MockUsersObjMapperInterfaceMockRecorder
 }
 
-// MockUsersObjMapperInterfaceMockRecorder is the mock recorder for MockUsersObjMapperInterface
+// MockUsersObjMapperInterfaceMockRecorder is the mock recorder for UsersPersistenceInterface
 type MockUsersObjMapperInterfaceMockRecorder struct {
 	mock *MockUsersObjMapperInterface
 }
