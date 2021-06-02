@@ -1011,7 +1011,7 @@ func (fileMapper) Get(fid string) (*types.FileDef, error) {
 	return adp.FileGet(fid)
 }
 
-// DeleteUnused removes unused attachments.
+// DeleteUnused removes unused attachments and avatars.
 func (fileMapper) DeleteUnused(olderThan time.Time, limit int) error {
 	toDel, err := adp.FileDeleteUnused(olderThan, limit)
 	if err != nil {
