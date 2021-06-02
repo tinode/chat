@@ -257,7 +257,7 @@ func largeFileRunGarbageCollection(period time.Duration, blockSize int) chan<- b
 		for {
 			select {
 			case <-gcTimer:
-				if err := store.Files.DeleteUnused(time.Now().Add(-time.Hour), block); err != nil {
+				if err := store.Files.DeleteUnused(time.Now().Add(-time.Hour), blockSize); err != nil {
 					logs.Warn.Println("media gc:", err)
 				}
 			case <-stop:

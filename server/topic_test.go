@@ -45,10 +45,10 @@ type TopicTestHelper struct {
 	topic *Topic
 
 	// Mock objects.
-	mm *mock_store.MockMessagesObjMapperInterface
-	uu *mock_store.MockUsersObjMapperInterface
-	tt *mock_store.MockTopicsObjMapperInterface
-	ss *mock_store.MockSubsObjMapperInterface
+	mm *mock_store.MockMessagesPersistenceInterface
+	uu *mock_store.MockUsersPersistenceInterface
+	tt *mock_store.MockTopicsPersistenceInterface
+	ss *mock_store.MockSubsPersistenceInterface
 }
 
 func (b *TopicTestHelper) finish() {
@@ -88,10 +88,10 @@ func (b *TopicTestHelper) setUp(t *testing.T, numUsers int, cat types.TopicCat, 
 
 	// Mocks.
 	b.ctrl = gomock.NewController(t)
-	b.mm = mock_store.NewMockMessagesObjMapperInterface(b.ctrl)
-	b.uu = mock_store.NewMockUsersObjMapperInterface(b.ctrl)
-	b.tt = mock_store.NewMockTopicsObjMapperInterface(b.ctrl)
-	b.ss = mock_store.NewMockSubsObjMapperInterface(b.ctrl)
+	b.mm = mock_store.NewMockMessagesPersistenceInterface(b.ctrl)
+	b.uu = mock_store.NewMockUsersPersistenceInterface(b.ctrl)
+	b.tt = mock_store.NewMockTopicsPersistenceInterface(b.ctrl)
+	b.ss = mock_store.NewMockSubsPersistenceInterface(b.ctrl)
 	store.Messages = b.mm
 	store.Users = b.uu
 	store.Topics = b.tt

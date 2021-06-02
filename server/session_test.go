@@ -133,7 +133,7 @@ func TestDispatchUnsupportedVersion(t *testing.T) {
 
 func TestDispatchLogin(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	ss := mock_store.NewMockStoreInterface(ctrl)
+	ss := mock_store.NewMockPersistentStorageInterface(ctrl)
 	aa := mock_auth.NewMockAuthHandler(ctrl)
 
 	uid := types.Uid(1)
@@ -1189,8 +1189,8 @@ func TestDispatchNoteOnNonSubscribedTopic(t *testing.T) {
 
 func TestDispatchAccNew(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	ss := mock_store.NewMockStoreInterface(ctrl)
-	uu := mock_store.NewMockUsersObjMapperInterface(ctrl)
+	ss := mock_store.NewMockPersistentStorageInterface(ctrl)
+	uu := mock_store.NewMockUsersPersistenceInterface(ctrl)
 	aa := mock_auth.NewMockAuthHandler(ctrl)
 
 	uid := types.Uid(1)
