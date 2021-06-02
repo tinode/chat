@@ -814,6 +814,10 @@ func (t *Topic) sendImmediateSubNotifications(asUid types.Uid, acs *MsgAccessMod
 				usersPush(pushRcpt)
 			}
 		}
+	} else if t.cat == types.TopicCatGrp {
+		if pushRcpt := t.pushForGroupSub(asUid, types.TimeNow()); pushRcpt != nil {
+			usersPush(pushRcpt)
+		}
 	}
 
 	// newsub could be true only for p2p and group topics, no need to check topic category explicitly.
@@ -3215,8 +3219,7 @@ func (t *Topic) pushForData(fromUid types.Uid, data *MsgServerData) *push.Receip
 	return nil
 }
 
-// Prepares payload to be delivered to a mobile device as a push notification in response to a new subscription.
-func (t *Topic) pushForSub(fromUid, toUid types.Uid, want, given types.AccessMode, now time.Time) *push.Receipt {
+func (t *Topic) preparePushForSubReceipt(fromUid types.Uid, now time.Time) *push.Receipt {
 	// The `Topic` in the push receipt is `t.xoriginal` for group topics, `fromUid` for p2p topics,
 	// not the t.original(fromUid) because it's the topic name as seen by the recipient, not by the sender.
 	topic := t.xoriginal
@@ -3225,7 +3228,7 @@ func (t *Topic) pushForSub(fromUid, toUid types.Uid, want, given types.AccessMod
 	}
 
 	// Initialize the push receipt.
-	receipt := push.Receipt{
+	receipt := &push.Receipt{
 		To: make(map[types.Uid]push.Recipient, t.subsCount()),
 		Payload: push.Payload{
 			What:      push.ActSub,
@@ -3234,14 +3237,39 @@ func (t *Topic) pushForSub(fromUid, toUid types.Uid, want, given types.AccessMod
 			From:      fromUid.UserId(),
 			Timestamp: now,
 			SeqId:     t.lastID,
-			ModeWant:  want,
-			ModeGiven: given,
 		},
 	}
+	return receipt
+}
+
+// Prepares payload to be delivered to a mobile device as a push notification in response to a new subscription in a p2p topic.
+func (t *Topic) pushForSub(fromUid, toUid types.Uid, want, given types.AccessMode, now time.Time) *push.Receipt {
+	receipt := t.preparePushForSubReceipt(fromUid, now)
+	receipt.Payload.ModeWant = want
+	receipt.Payload.ModeGiven = given
 
 	receipt.To[toUid] = push.Recipient{}
 
-	return &receipt
+	return receipt
+}
+
+// Prepares payload to be delivered to a mobile device as a push notification in response to a new subscription in a group topic.
+func (t *Topic) pushForGroupSub(fromUid types.Uid, now time.Time) *push.Receipt {
+	receipt := t.preparePushForSubReceipt(fromUid, now)
+	for uid, pud := range t.perUser {
+		// Send only to those who have notifications enabled, exclude the originating user.
+		if uid == fromUid {
+			continue
+		}
+		mode := pud.modeWant & pud.modeGiven
+		if mode.IsPresencer() && mode.IsReader() && !pud.deleted && !pud.isChan {
+			receipt.To[uid] = push.Recipient{}
+		}
+	}
+	if len(receipt.To) > 0 || receipt.Channel != "" {
+		return receipt
+	}
+	return nil
 }
 
 // FIXME: this won't work correctly with multiplexing sessions.
