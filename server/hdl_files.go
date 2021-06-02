@@ -198,6 +198,20 @@ func largeFileReceive(wrt http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	// If it's a topic avatar, make sure it's valid.
+	topic := req.FormValue("topic")
+	if topic == "me" {
+		topic = uid.String()
+	} else if topic != "" {
+		if ok, err := store.Users.IsOwner(uid, topic); !ok {
+			if err == nil {
+				err = types.ErrPermissionDenied
+			}
+			writeHttpResponse(decodeStoreError(err, msgID, "", now, nil), err)
+			return
+		}
+	}
+
 	file, _, err := req.FormFile("file")
 	if err != nil {
 		if strings.Contains(err.Error(), "request body too large") {
@@ -233,8 +247,10 @@ func largeFileReceive(wrt http.ResponseWriter, req *http.Request) {
 	writeHttpResponse(NoErrParams(msgID, "", now, map[string]string{"url": url}), nil)
 }
 
-func largeFileRunGarbageCollection(period time.Duration, block int) chan<- bool {
-	// Unbuffered stop channel. Whoever stops it must wait for the process to finish.
+// largeFileRunGarbageCollection runs every 'period' and deletes up to 'blockSize' unused files.
+// Returns channel which can be used to stop the process.
+func largeFileRunGarbageCollection(period time.Duration, blockSize int) chan<- bool {
+	// Unbuffered stop channel. Whomever stops the gc must wait for the process to finish.
 	stop := make(chan bool)
 	go func() {
 		gcTimer := time.Tick(period)

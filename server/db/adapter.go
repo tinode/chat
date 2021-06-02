@@ -102,6 +102,8 @@ type Adapter interface {
 	UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt) ([]t.Subscription, error)
 	// OwnTopics loads a slice of topic names where the user is the owner.
 	OwnTopics(uid t.Uid) ([]string, error)
+	// IsOwner checks if the user is the owner of the given topic.
+	IsOwner(uid t.Uid, topic string) (bool, error)
 	// ChannelsForUser loads a slice of topic names where the user is a channel reader and notifications (P) are enabled.
 	ChannelsForUser(uid t.Uid) ([]string, error)
 	// TopicShare creates topc subscriptions

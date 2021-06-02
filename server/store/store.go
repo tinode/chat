@@ -261,6 +261,7 @@ type UsersObjMapperInterface interface {
 	GetTopics(id types.Uid, opts *types.QueryOpt) ([]types.Subscription, error)
 	GetTopicsAny(id types.Uid, opts *types.QueryOpt) ([]types.Subscription, error)
 	GetOwnTopics(id types.Uid) ([]string, error)
+	IsOwner(id types.Uid, topic string) (bool, error)
 	GetChannels(id types.Uid) ([]string, error)
 	UpsertCred(cred *types.Credential) (bool, error)
 	ConfirmCred(id types.Uid, method string) error
@@ -442,6 +443,11 @@ func (UsersObjMapper) GetTopicsAny(id types.Uid, opts *types.QueryOpt) ([]types.
 // GetOwnTopics returns a slice of group topic names where the user is the owner.
 func (UsersObjMapper) GetOwnTopics(id types.Uid) ([]string, error) {
 	return adp.OwnTopics(id)
+}
+
+// IsOwner checks if the user is the owner of the given group topic.
+func (UsersObjMapper) IsOwner(id types.Uid, topic string) (bool, error) {
+	return adp.IsOwner(id, topic)
 }
 
 // GetChannels returns a slice of group topic names where the user is a channel reader.

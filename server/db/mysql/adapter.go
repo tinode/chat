@@ -507,7 +507,6 @@ func (a *adapter) CreateDb(reset bool) error {
 	}
 
 	// Records of uploaded files.
-	// Don't change INDEX(userid) to FOREIGN KEY(userid). It will break user deletion.
 	if _, err = tx.Exec(
 		`CREATE TABLE fileuploads(
 			id        BIGINT NOT NULL,
@@ -517,10 +516,10 @@ func (a *adapter) CreateDb(reset bool) error {
 			status    INT NOT NULL,
 			mimetype  VARCHAR(255) NOT NULL,
 			size      BIGINT NOT NULL,
-			purpose   VARCHAR(4),
+			topic     VARCHAR(25),
 			location  VARCHAR(2048) NOT NULL,
 			PRIMARY KEY(id),
-			INDEX fileuploads_userid(userid)
+			INDEX fileuploads_topic(topic)
 		)`); err != nil {
 		return err
 	}
@@ -685,11 +684,11 @@ func (a *adapter) UpgradeDb() error {
 	}
 
 	if a.version == 111 {
-		if _, err := a.db.Exec("ALTER TABLE fileuploads ADD INDEX fileuploads_userid(userid)"); err != nil {
+		if _, err := a.db.Exec("ALTER TABLE fileuploads ADD topic VARCHAR(25) AFTER size"); err != nil {
 			return err
 		}
 
-		if _, err := a.db.Exec("ALTER TABLE fileuploads ADD purpose VARCHAR(4) AFTER size"); err != nil {
+		if _, err := a.db.Exec("ALTER TABLE fileuploads ADD INDEX fileuploads_topic(topic)"); err != nil {
 			return err
 		}
 
@@ -1747,6 +1746,24 @@ func (a *adapter) topicNamesForUser(uid t.Uid, sqlQuery string) ([]string, error
 // OwnTopics loads a slice of topic names where the user is the owner.
 func (a *adapter) OwnTopics(uid t.Uid) ([]string, error) {
 	return a.topicNamesForUser(uid, "SELECT name FROM topics WHERE owner=?")
+}
+
+// IsOwner checks if the user is the owner of the given topic.
+func (a *adapter) IsOwner(uid t.Uid, topic string) (bool, error) {
+	ctx, cancel := a.getContext()
+	if cancel != nil {
+		defer cancel()
+	}
+	rows, err := a.db.QueryxContext(ctx, "SELECT id FROM topics WHERE owner=? AND name=? AND state=?",
+		store.DecodeUid(uid), topic, t.StateOK)
+	if err != nil {
+		return false, err
+	}
+
+	found := rows.Next()
+	rows.Close()
+
+	return found, rows.Err()
 }
 
 // ChannelsForUser loads a slice of topic names where the user is a channel reader and notifications (P) are enabled.

@@ -195,11 +195,11 @@ CREATE TABLE fileuploads(
 	status		INT NOT NULL,
 	mimetype	VARCHAR(255) NOT NULL,
 	size		BIGINT NOT NULL,
-	purpose		VARCHAR(4),
+	topic		VARCHAR(25),
 	location	VARCHAR(2048) NOT NULL,
 	
 	PRIMARY KEY(id),
-	INDEX fileuploads_userid(userid)
+	INDEX fileuploads_userid(topic)
 );
 
 # Links between uploaded files and messages.

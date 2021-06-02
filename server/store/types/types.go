@@ -1279,6 +1279,8 @@ type FileDef struct {
 	MimeType string
 	// Size of the file in bytes.
 	Size int64
+	// Optional topic if this is a topic or user avatar.
+	Topic string
 	// Internal file location, i.e. path on disk or an S3 blob address.
 	Location string
 }
