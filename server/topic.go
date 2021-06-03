@@ -810,13 +810,16 @@ func (t *Topic) sendImmediateSubNotifications(asUid types.Uid, acs *MsgAccessMod
 			t.presSingleUserOffline(uid2, mode2, status, nilPresParams, "", false)
 
 			// Also send a push notification to the other user.
-			if pushRcpt := t.pushForSub(asUid, uid2, pud2.modeWant, pud2.modeGiven, types.TimeNow()); pushRcpt != nil {
+			if pushRcpt := t.pushForP2PSub(asUid, uid2, pud2.modeWant, pud2.modeGiven, types.TimeNow()); pushRcpt != nil {
 				usersPush(pushRcpt)
 			}
 		}
 	} else if t.cat == types.TopicCatGrp {
-		if pushRcpt := t.pushForGroupSub(asUid, types.TimeNow()); pushRcpt != nil {
-			usersPush(pushRcpt)
+		if sreg.pkt.Sub.Newsub {
+			// For new subscriptions, notify other group members.
+			if pushRcpt := t.pushForGroupSub(asUid, types.TimeNow()); pushRcpt != nil {
+				usersPush(pushRcpt)
+			}
 		}
 	}
 
@@ -1756,7 +1759,7 @@ func (t *Topic) anotherUserSub(sess *Session, asUid, target types.Uid, asChan bo
 		usersRegisterUser(target, true)
 
 		// Send push notification for the new subscription.
-		if pushRcpt := t.pushForSub(asUid, target, userData.modeWant, userData.modeGiven, now); pushRcpt != nil {
+		if pushRcpt := t.pushForP2PSub(asUid, target, userData.modeWant, userData.modeGiven, now); pushRcpt != nil {
 			// TODO: maybe skip user's devices which were online when this event has happened.
 			usersPush(pushRcpt)
 		}
@@ -3243,7 +3246,7 @@ func (t *Topic) preparePushForSubReceipt(fromUid types.Uid, now time.Time) *push
 }
 
 // Prepares payload to be delivered to a mobile device as a push notification in response to a new subscription in a p2p topic.
-func (t *Topic) pushForSub(fromUid, toUid types.Uid, want, given types.AccessMode, now time.Time) *push.Receipt {
+func (t *Topic) pushForP2PSub(fromUid, toUid types.Uid, want, given types.AccessMode, now time.Time) *push.Receipt {
 	receipt := t.preparePushForSubReceipt(fromUid, now)
 	receipt.Payload.ModeWant = want
 	receipt.Payload.ModeGiven = given
