@@ -211,11 +211,11 @@ func (ah *awshandler) Upload(fdef *types.FileDef, file io.ReadSeeker) (string, e
 	})
 
 	if err != nil {
-		store.Files.FinishUpload(fdef.Id, false, 0)
+		store.Files.FinishUpload(fdef, false, 0)
 		return "", err
 	}
 
-	fdef, err = store.Files.FinishUpload(fdef.Id, true, rc.count)
+	fdef, err = store.Files.FinishUpload(fdef, true, rc.count)
 	if err != nil {
 		// Best effort. Error ignored.
 		ah.svc.DeleteObject(&s3.DeleteObjectInput{

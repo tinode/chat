@@ -114,12 +114,12 @@ func (fh *fshandler) Upload(fdef *types.FileDef, file io.ReadSeeker) (string, er
 	size, err := io.Copy(outfile, file)
 	outfile.Close()
 	if err != nil {
-		store.Files.FinishUpload(fdef.Id, false, 0)
+		store.Files.FinishUpload(fdef, false, 0)
 		os.Remove(fdef.Location)
 		return "", err
 	}
 
-	fdef, err = store.Files.FinishUpload(fdef.Id, true, size)
+	fdef, err = store.Files.FinishUpload(fdef, true, size)
 	if err != nil {
 		os.Remove(fdef.Location)
 		return "", err

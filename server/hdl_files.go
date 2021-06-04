@@ -198,7 +198,7 @@ func largeFileReceive(wrt http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// If it's a topic avatar, make sure it's valid.
+	// If it's a topic avatar, make sure the user can upload it.
 	topic := req.FormValue("topic")
 	if topic == "me" {
 		topic = uid.String()
@@ -221,24 +221,28 @@ func largeFileReceive(wrt http.ResponseWriter, req *http.Request) {
 		}
 		return
 	}
-	fdef := types.FileDef{}
-	fdef.Id = store.Store.GetUidString()
-	fdef.InitTimes()
-	fdef.User = uid.String()
 
 	buff := make([]byte, 512)
 	if _, err = file.Read(buff); err != nil {
 		writeHttpResponse(ErrUnknown(msgID, "", now), err)
 		return
 	}
+	fdef := &types.FileDef{
+		ObjHeader: types.ObjHeader{
+			Id: store.Store.GetUidString(),
+		},
+		User:     uid.String(),
+		Topic:    topic,
+		MimeType: http.DetectContentType(buff),
+	}
+	fdef.InitTimes()
 
-	fdef.MimeType = http.DetectContentType(buff)
 	if _, err = file.Seek(0, io.SeekStart); err != nil {
 		writeHttpResponse(ErrUnknown(msgID, "", now), err)
 		return
 	}
 
-	url, err := mh.Upload(&fdef, file)
+	url, err := mh.Upload(fdef, file)
 	if err != nil {
 		writeHttpResponse(decodeStoreError(err, msgID, "", now, nil), err)
 		return

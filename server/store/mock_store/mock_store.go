@@ -1163,18 +1163,18 @@ func (mr *MockFilePersistenceInterfaceMockRecorder) DeleteUnused(olderThan, limi
 }
 
 // FinishUpload mocks base method.
-func (m *MockFilePersistenceInterface) FinishUpload(fid string, success bool, size int64) (*types.FileDef, error) {
+func (m *MockFilePersistenceInterface) FinishUpload(fd *types.FileDef, success bool, size int64) (*types.FileDef, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "FinishUpload", fid, success, size)
+	ret := m.ctrl.Call(m, "FinishUpload", fd, success, size)
 	ret0, _ := ret[0].(*types.FileDef)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // FinishUpload indicates an expected call of FinishUpload.
-func (mr *MockFilePersistenceInterfaceMockRecorder) FinishUpload(fid, success, size interface{}) *gomock.Call {
+func (mr *MockFilePersistenceInterfaceMockRecorder) FinishUpload(fd, success, size interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FinishUpload", reflect.TypeOf((*MockFilePersistenceInterface)(nil).FinishUpload), fid, success, size)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FinishUpload", reflect.TypeOf((*MockFilePersistenceInterface)(nil).FinishUpload), fd, success, size)
 }
 
 // Get mocks base method.

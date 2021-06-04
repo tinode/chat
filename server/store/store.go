@@ -980,7 +980,7 @@ func (storeObj) UseMediaHandler(name, config string) error {
 // FilePersistenceInterface is an interface wchich defines methods used for file handling (records or uploaded files).
 type FilePersistenceInterface interface {
 	StartUpload(fd *types.FileDef) error
-	FinishUpload(fid string, success bool, size int64) (*types.FileDef, error)
+	FinishUpload(fd *types.FileDef, success bool, size int64) (*types.FileDef, error)
 	Get(fid string) (*types.FileDef, error)
 	DeleteUnused(olderThan time.Time, limit int) error
 }
@@ -998,12 +998,12 @@ func (fileMapper) StartUpload(fd *types.FileDef) error {
 }
 
 // FinishUpload marks started upload as successfully finished.
-func (fileMapper) FinishUpload(fid string, success bool, size int64) (*types.FileDef, error) {
+func (fileMapper) FinishUpload(fd *types.FileDef, success bool, size int64) (*types.FileDef, error) {
 	status := types.UploadCompleted
 	if !success {
 		status = types.UploadFailed
 	}
-	return adp.FileFinishUpload(fid, status, size)
+	return adp.FileFinishUpload(fd, status, size)
 }
 
 // Get fetches a file record for a unique file id.

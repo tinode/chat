@@ -2993,35 +2993,26 @@ func (a *adapter) FileStartUpload(fd *t.FileDef) error {
 	if cancel != nil {
 		defer cancel()
 	}
-	_, err := a.db.ExecContext(ctx, "INSERT INTO fileuploads(id,createdat,updatedat,userid,status,mimetype,size,location)"+
-		" VALUES(?,?,?,?,?,?,?,?)",
+	var topic interface{}
+	if fd.Topic != "" {
+		topic = fd.Topic
+	}
+	_, err := a.db.ExecContext(ctx, "INSERT INTO fileuploads(id,createdat,updatedat,userid,status,mimetype,size,topic,location)"+
+		" VALUES(?,?,?,?,?,?,?,?,?)",
 		store.DecodeUid(fd.Uid()), fd.CreatedAt, fd.UpdatedAt,
-		store.DecodeUid(t.ParseUid(fd.User)), fd.Status, fd.MimeType, fd.Size, fd.Location)
+		store.DecodeUid(t.ParseUid(fd.User)), fd.Status, fd.MimeType, fd.Size, topic, fd.Location)
 	return err
 }
 
 // FileFinishUpload marks file upload as completed, successfully or otherwise
-func (a *adapter) FileFinishUpload(fid string, status int, size int64) (*t.FileDef, error) {
-	id := t.ParseUid(fid)
-	if id.IsZero() {
-		return nil, t.ErrMalformed
-	}
-
-	fd, err := a.FileGet(fid)
-	if err != nil {
-		return nil, err
-	}
-	if fd == nil {
-		return nil, t.ErrNotFound
-	}
-
+func (a *adapter) FileFinishUpload(fd *t.FileDef, status int, size int64) (*t.FileDef, error) {
 	ctx, cancel := a.getContext()
 	if cancel != nil {
 		defer cancel()
 	}
 	fd.UpdatedAt = t.TimeNow()
-	_, err = a.db.ExecContext(ctx, "UPDATE fileuploads SET updatedat=?,status=?,size=? WHERE id=?",
-		fd.UpdatedAt, status, size, store.DecodeUid(id))
+	_, err := a.db.ExecContext(ctx, "UPDATE fileuploads SET updatedat=?,status=?,size=? WHERE id=?",
+		fd.UpdatedAt, status, size, store.DecodeUid(fd.Uid()))
 	if err == nil {
 		fd.Status = status
 		fd.Size = size
