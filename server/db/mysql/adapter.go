@@ -507,6 +507,8 @@ func (a *adapter) CreateDb(reset bool) error {
 	}
 
 	// Records of uploaded files.
+	// Don't add FOREIGN KEY on userid. It's not needed and it will break user deletion.
+	// Using INDEX rather than FK on topic because it's either 'topics' or 'users' reference.
 	if _, err = tx.Exec(
 		`CREATE TABLE fileuploads(
 			id        BIGINT NOT NULL,
@@ -684,6 +686,7 @@ func (a *adapter) UpgradeDb() error {
 	}
 
 	if a.version == 111 {
+		// Perform database upgrade from version 111 to version 112.
 		if _, err := a.db.Exec("ALTER TABLE fileuploads ADD topic VARCHAR(25) AFTER size"); err != nil {
 			return err
 		}

@@ -242,8 +242,19 @@ func largeFileReceive(wrt http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	url, err := mh.Upload(fdef, file)
+	url, size, err := mh.Upload(fdef, file)
 	if err != nil {
+		logs.Info.Println("Upload failed", file, "key", fdef.Location, err)
+		store.Files.FinishUpload(fdef, false, 0)
+		writeHttpResponse(decodeStoreError(err, msgID, "", now, nil), err)
+		return
+	}
+
+	fdef, err = store.Files.FinishUpload(fdef, true, size)
+	if err != nil {
+		logs.Info.Println("Upload failed", file, "key", fdef.Location, err)
+		// Best effort cleanup.
+		mh.Delete([]string{fdef.Location})
 		writeHttpResponse(decodeStoreError(err, msgID, "", now, nil), err)
 		return
 	}

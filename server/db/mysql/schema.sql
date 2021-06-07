@@ -199,10 +199,10 @@ CREATE TABLE fileuploads(
 	location	VARCHAR(2048) NOT NULL,
 	
 	PRIMARY KEY(id),
-	INDEX fileuploads_userid(topic)
+	INDEX fileuploads_topic(topic)
 );
 
-# Links between uploaded files and messages.
+# Links between uploaded files and messages or topics.
 CREATE TABLE filemsglinks(
 	id			INT NOT NULL AUTO_INCREMENT,
 	createdat	DATETIME(3) NOT NULL,

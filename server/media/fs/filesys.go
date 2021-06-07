@@ -90,7 +90,7 @@ func (fh *fshandler) Headers(req *http.Request, serve bool) (map[string]string, 
 }
 
 // Upload processes request for file upload. The file is given as io.Reader.
-func (fh *fshandler) Upload(fdef *types.FileDef, file io.ReadSeeker) (string, error) {
+func (fh *fshandler) Upload(fdef *types.FileDef, file io.ReadSeeker) (string, int64, error) {
 	// FIXME: create two-three levels of nested directories. Serving from a single directory
 	// with tens of thousands of files in it will not perform well.
 
@@ -101,28 +101,21 @@ func (fh *fshandler) Upload(fdef *types.FileDef, file io.ReadSeeker) (string, er
 	outfile, err := os.Create(fdef.Location)
 	if err != nil {
 		logs.Warn.Println("Upload: failed to create file", fdef.Location, err)
-		return "", err
+		return "", 0, err
 	}
 
 	if err = store.Files.StartUpload(fdef); err != nil {
 		outfile.Close()
 		os.Remove(fdef.Location)
 		logs.Warn.Println("failed to create file record", fdef.Id, err)
-		return "", err
+		return "", 0, err
 	}
 
 	size, err := io.Copy(outfile, file)
 	outfile.Close()
 	if err != nil {
-		store.Files.FinishUpload(fdef, false, 0)
 		os.Remove(fdef.Location)
-		return "", err
-	}
-
-	fdef, err = store.Files.FinishUpload(fdef, true, size)
-	if err != nil {
-		os.Remove(fdef.Location)
-		return "", err
+		return "", 0, err
 	}
 
 	fname := fdef.Id
@@ -131,7 +124,7 @@ func (fh *fshandler) Upload(fdef *types.FileDef, file io.ReadSeeker) (string, er
 		fname += ext[0]
 	}
 
-	return fh.serveURL + fname, nil
+	return fh.serveURL + fname, size, nil
 }
 
 // Download processes request for file download.
