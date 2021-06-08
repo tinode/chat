@@ -521,7 +521,8 @@ func (a *adapter) CreateDb(reset bool) error {
 			topic     VARCHAR(25),
 			location  VARCHAR(2048) NOT NULL,
 			PRIMARY KEY(id),
-			INDEX fileuploads_topic(topic)
+			INDEX fileuploads_topic(topic),
+			INDEX fileuploads_status(status)
 		)`); err != nil {
 		return err
 	}
@@ -692,6 +693,10 @@ func (a *adapter) UpgradeDb() error {
 		}
 
 		if _, err := a.db.Exec("ALTER TABLE fileuploads ADD INDEX fileuploads_topic(topic)"); err != nil {
+			return err
+		}
+
+		if _, err := a.db.Exec("ALTER TABLE fileuploads ADD INDEX fileuploads_status(status)"); err != nil {
 			return err
 		}
 
@@ -1010,6 +1015,7 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 		}
 	}()
 
+	now := t.TimeNow()
 	decoded_uid := store.DecodeUid(uid)
 
 	if hard {
@@ -1050,9 +1056,16 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 			return err
 		}
 
-		// Delete topic tags
+		// Delete topic tags.
 		if _, err = tx.Exec("DELETE topictags FROM topictags LEFT JOIN topics ON topics.name=topictags.topic WHERE topics.owner=?",
 			decoded_uid); err != nil {
+			return err
+		}
+
+		// Mark topics' avatar for deletion.
+		if _, err = tx.Exec("UPDATE fileuploads AS fu LEFT JOIN topics AS t ON t.name=fu.topic "+
+			"SET fu.updatedat=?,fu.status=? WHERE t.owner=? AND fu.status=?",
+			now, t.UploadDeleted, decoded_uid, t.UploadCompleted); err != nil {
 			return err
 		}
 
@@ -1075,11 +1088,16 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 			return err
 		}
 
+		// Mark user's avatar for deletion.
+		if _, err = tx.Exec("UPDATE fileuploads SET updatedat=?,status=? WHERE topic=? AND status=?",
+			now, t.UploadDeleted, uid.UserId(), t.UploadCompleted); err != nil {
+			return err
+		}
+
 		if _, err = tx.Exec("DELETE FROM users WHERE id=?", decoded_uid); err != nil {
 			return err
 		}
 	} else {
-		now := t.TimeNow()
 		// Disable all user's subscriptions. That includes p2p subscriptions. No need to delete them.
 		if err = subsDelForUser(tx, uid, false); err != nil {
 			return err
@@ -3008,21 +3026,53 @@ func (a *adapter) FileStartUpload(fd *t.FileDef) error {
 }
 
 // FileFinishUpload marks file upload as completed, successfully or otherwise
-func (a *adapter) FileFinishUpload(fd *t.FileDef, status int, size int64) (*t.FileDef, error) {
+func (a *adapter) FileFinishUpload(fd *t.FileDef, success bool, size int64) (*t.FileDef, error) {
 	ctx, cancel := a.getContext()
 	if cancel != nil {
 		defer cancel()
 	}
-	fd.UpdatedAt = t.TimeNow()
-	_, err := a.db.ExecContext(ctx, "UPDATE fileuploads SET updatedat=?,status=?,size=? WHERE id=?",
-		fd.UpdatedAt, status, size, store.DecodeUid(fd.Uid()))
-	if err == nil {
-		fd.Status = status
+	tx, err := a.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err != nil {
+			tx.Rollback()
+		}
+	}()
+
+	now := t.TimeNow()
+	if success {
+		if fd.Topic != "" {
+			// Mark the old completed record for garbage collection (if present).
+			_, err = tx.ExecContext(ctx, "UPDATE fileuploads SET updatedat=?,status=? WHERE topic=? AND status=?",
+				now, t.UploadDeleted, fd.Topic, t.UploadCompleted)
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		_, err = tx.ExecContext(ctx, "UPDATE fileuploads SET updatedat=?,status=?,size=? WHERE id=?",
+			now, t.UploadCompleted, size, store.DecodeUid(fd.Uid()))
+		if err != nil {
+			return nil, err
+		}
+
+		fd.Status = t.UploadCompleted
 		fd.Size = size
 	} else {
-		fd = nil
+		// Deleting the record: there is no value in keeping it in the DB.
+		_, err = tx.ExecContext(ctx, "DELETE FROM fileuploads WHERE id=?", store.DecodeUid(fd.Uid()))
+		if err != nil {
+			return nil, err
+		}
+
+		fd.Status = t.UploadFailed
+		fd.Size = 0
 	}
-	return fd, err
+	fd.UpdatedAt = now
+
+	return fd, tx.Commit()
 }
 
 // FileGet fetches a record of a specific file
@@ -3037,7 +3087,7 @@ func (a *adapter) FileGet(fid string) (*t.FileDef, error) {
 		defer cancel()
 	}
 	var fd t.FileDef
-	err := a.db.GetContext(ctx, &fd, "SELECT id,createdat,updatedat,userid AS user,status,mimetype,size,location "+
+	err := a.db.GetContext(ctx, &fd, "SELECT id,createdat,updatedat,userid AS user,status,mimetype,size,topic,location "+
 		"FROM fileuploads WHERE id=?", store.DecodeUid(id))
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -3069,8 +3119,10 @@ func (a *adapter) FileDeleteUnused(olderThan time.Time, limit int) ([]string, er
 		}
 	}()
 
-	query := "SELECT fu.id,fu.location FROM fileuploads AS fu LEFT JOIN filemsglinks AS fml ON fml.fileid=fu.id WHERE fml.id IS NULL "
-	var args []interface{}
+	// Grbage collecting entries which as either marked as deleted, or lack message references.
+	query := "SELECT fu.id,fu.location FROM fileuploads AS fu LEFT JOIN filemsglinks AS fml ON fml.fileid=fu.id " +
+		"WHERE fml.id IS NULL OR fu.status=? "
+	args := []interface{}{t.UploadDeleted}
 	if !olderThan.IsZero() {
 		query += "AND fu.updatedat<? "
 		args = append(args, olderThan)
@@ -3093,7 +3145,9 @@ func (a *adapter) FileDeleteUnused(olderThan time.Time, limit int) ([]string, er
 		if err = rows.Scan(&id, &loc); err != nil {
 			break
 		}
-		locations = append(locations, loc)
+		if loc != "" {
+			locations = append(locations, loc)
+		}
 		ids = append(ids, id)
 	}
 	if err == nil {

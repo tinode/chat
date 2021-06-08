@@ -1266,6 +1266,8 @@ const (
 	UploadCompleted
 	// UploadFailed indicates that the upload has failed.
 	UploadFailed
+	// UploadDeleted indicates that the upload is no longer needed and can be deleted.
+	UploadDeleted
 )
 
 // FileDef is a stored record of a file upload

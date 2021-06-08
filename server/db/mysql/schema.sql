@@ -199,7 +199,8 @@ CREATE TABLE fileuploads(
 	location	VARCHAR(2048) NOT NULL,
 	
 	PRIMARY KEY(id),
-	INDEX fileuploads_topic(topic)
+	INDEX fileuploads_topic(topic),
+	INDEX fileuploads_status(status)
 );
 
 # Links between uploaded files and messages or topics.

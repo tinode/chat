@@ -13,6 +13,7 @@ package main
 import (
 	"encoding/json"
 	"flag"
+	"math/rand"
 	"net/http"
 	"os"
 	"runtime"
@@ -275,7 +276,7 @@ func main() {
 	curwd, err := os.Getwd()
 	if err != nil {
 		logs.Err.Fatal("Couldn't get current working directory: ", err)
-  }
+	}
 
 	logs.Info.Printf("Server v%s:%s:%s; pid %d; %d process(es)",
 		currentVersion, executable, buildstamp,
@@ -325,6 +326,9 @@ func main() {
 		decVersion = base10Version(parseVersion(currentVersion))
 	}
 	statsSet("Version", decVersion)
+
+	// Initialize random state
+	rand.Seed(time.Now().UnixNano())
 
 	// Initialize serving debug profiles (optional).
 	servePprof(mux, *pprofUrl)

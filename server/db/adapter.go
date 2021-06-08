@@ -165,7 +165,7 @@ type Adapter interface {
 	// FileStartUpload initializes a file upload
 	FileStartUpload(fd *t.FileDef) error
 	// FileFinishUpload marks file upload as completed, successfully or otherwise.
-	FileFinishUpload(fd *t.FileDef, status int, size int64) (*t.FileDef, error)
+	FileFinishUpload(fd *t.FileDef, success bool, size int64) (*t.FileDef, error)
 	// FileGet fetches a record of a specific file
 	FileGet(fid string) (*t.FileDef, error)
 	// FileDeleteUnused deletes records where UseCount is zero. If olderThan is non-zero, deletes

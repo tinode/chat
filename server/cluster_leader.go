@@ -103,8 +103,8 @@ func (c *Cluster) failoverInit(config *clusterFailoverConfig) bool {
 	activeNodes = append(activeNodes, c.thisNodeName)
 	c.rehash(activeNodes)
 
-	// Random heartbeat ticker: 0.75 * config.HeartBeat + random(0, 0.5 * config.HeartBeat)
-	rand.Seed(time.Now().UnixNano())
+	// Random heartbeat ticker: 0.75 * config.HeartBeat + random(0, 0.5 * config.HeartBeat).
+	// The PRNG is initialized in main.go.
 	hb := time.Duration(config.Heartbeat) * time.Millisecond
 	hb = (hb >> 1) + (hb >> 2) + time.Duration(rand.Intn(int(hb>>1)))
 

@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"math/rand"
 	"net/http"
 	"strings"
 	"time"
@@ -268,10 +269,13 @@ func largeFileRunGarbageCollection(period time.Duration, blockSize int) chan<- b
 	// Unbuffered stop channel. Whomever stops the gc must wait for the process to finish.
 	stop := make(chan bool)
 	go func() {
-		gcTimer := time.Tick(period)
+		// Add some randomness to the tick period to desynchronize runs on cluster nodes:
+		// 0.75 * period + rand(0, 0.5) * period.
+		period = (period >> 1) + (period >> 2) + time.Duration(rand.Intn(int(period>>1)))
+		gcTicker := time.Tick(period)
 		for {
 			select {
-			case <-gcTimer:
+			case <-gcTicker:
 				if err := store.Files.DeleteUnused(time.Now().Add(-time.Hour), blockSize); err != nil {
 					logs.Warn.Println("media gc:", err)
 				}

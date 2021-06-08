@@ -30,7 +30,8 @@
 		- [`sys` Topic](#sys-topic)
 	- [Using Server-Issued Message IDs](#using-server-issued-message-ids)
 	- [User Agent and Presence Notifications](#user-agent-and-presence-notifications)
-	- [Public and Private Fields](#public-and-private-fields)
+	- [Trusted, Public, and Private Fields](#trusted-public-and-private-fields)
+		- [Trusted](#trusted)
 		- [Public](#public)
 		- [Private](#private)
 	- [Format of Content](#format-of-content)
@@ -157,13 +158,14 @@ When a connection is first established, the client application can send either a
 Each user is assigned a unique ID. The IDs are composed as `usr` followed by base64-encoded 64-bit numeric value, e.g. `usr2il9suCbuko`. Users also have the following properties:
 
 * `created`: timestamp when the user record was created
-* `updated`: timestamp of when user's `public` was last updated
+* `updated`: timestamp of when user's `public` or `trusted` was last updated
 * `status`: state of the account
 * `username`: unique string used in `basic` authentication; username is not accessible to other users
 * `defacs`: object describing user's default access mode for peer to peer conversations with authenticated and anonymous users; see [Access control](#access-control) for details
   * `auth`: default access mode for authenticated `auth` users
   * `anon`: default access for anonymous `anon` users
-* `public`: an application-defined object that describes the user. Anyone who can query user for `public` data.
+* `trusted`: an application-defined object issued by the system administration. Anyone can read it but only system administrators can change it.
+* `public`: an application-defined object that describes the user. Anyone can query user for `public` data.
 * `private`: an application-defined object that is unique to the current user and accessible only by the user.
 * `tags`: [discovery](#fnd-and-tags-finding-users-and-topics) and credentials.
 
@@ -173,7 +175,7 @@ User's account has a state. The following states are defined:
  * `del` (soft-deleted): user is marked as deleted but user's data is retained; un-deleting the user is not currenly supported.
  * `undef` (undefined): used internally by authenticators; should not be used elsewhere.
 
-A user may maintain multisple simultaneous connections (sessions) with the server. Each session is tagged with a client-provided `User Agent` string intended to differentiate client software.
+A user may maintain multiple simultaneous connections (sessions) with the server. Each session is tagged with a client-provided `User Agent` string intended to differentiate client software.
 
 Logging out is not supported by design. If an application needs to change the user, it should open a new connection and authenticate it with the new user credentials.
 
@@ -298,12 +300,13 @@ Topic is a named communication channel for one or more people. Topics have persi
 
 Topic properties independent of the user making the query:
 * `created`: timestamp of topic creation time
-* `updated`: timestamp of when topic's `public` or `private` was last updated
+* `updated`: timestamp of when topic's `trusted`, `public`, or `private` was last updated
 * `touched`: timestamp of the last message sent to the topic
 * `defacs`: object describing topic's default access mode for authenticated and anonymous users; see [Access control](#access-control) for details
  * `auth`: default access mode for authenticated users
  * `anon`: default access for anonymous users
 * `seq`: integer server-issued sequential ID of the latest `{data}` message sent through the topic
+* `trusted`: an application-defined object issued by the system administrators. Anyone can read it but only administrators can change it.
 * `public`: an application-defined object that describes the topic. Anyone who can subscribe to topic can receive topic's `public` data.
 
 User-dependent topic properties:
@@ -322,7 +325,7 @@ Joining or leaving `me` generates a `{pres}` presence update sent to all users w
 
 Topic `me` is read-only. `{pub}` messages to `me` are rejected.
 
-Message `{get what="desc"}` to `me` is automatically replied with a `{meta}` message containing `desc` section with the topic parameters (see intro to [Topics](#topics) section). The `public` parameter of `me` topic is data that the user wants to show to his/her connections. Changing it changes `public` not just for the `me` topic, but also everywhere where user's `public` is shown, such as `public` of all user's peer to peer topics.
+Message `{get what="desc"}` to `me` is automatically replied with a `{meta}` message containing `desc` section with the topic parameters (see intro to [Topics](#topics) section). The `public` parameters of `me` topic is data that the user wants to show to his/her connections. Changing it changes `public` not just for the `me` topic, but also everywhere where user's `public` is shown, such as `public` of all user's peer to peer topics.
 
 Message `{get what="sub"}` to `me` is different from any other topic as it returns the list of topics that the current user is subscribed to as opposite to the expected user's subscription to `me`.
 * seq: server-issued numeric id of the last message in the topic
@@ -439,9 +442,21 @@ A user is reported as being online when one or more of user's sessions are attac
 
 An empty `ua=""` _user agent_ is not reported. I.e. if user attaches to `me` with non-empty _user agent_ then does so with an empty one, the change is not reported. An empty _user agent_ may be disallowed in the future.
 
-## Public and Private Fields
+## Trusted, Public, and Private Fields
 
-Topics and subscriptions have `public` and `private` fields. Generally, the fields are application-defined. The server does not enforce any particular structure of these fields except for `fnd` topic. At the same time, client software should use the same format for interoperability reasons.
+Topics and subscriptions have `trusted`, `public`, and `private` fields. Generally, the fields are application-defined. The server does not enforce any particular structure of these fields except for `fnd` topic. At the same time, client software should use the same format for interoperability reasons. The following sections describe the format of these fields as they are implemented by all official clients.
+
+### Trusted
+
+The format of the optional `trusted` field in group and peer to peer topics is a set of key-value pairs; `fnd` and `sys` topics do not have the `trusted`. The following keys are currently defined:
+```js
+trusted: {
+  vip: true, // boolean, an indicator of a special user or topic, such as a
+             // verified user or a staff member.
+  danger: "some comment", // string, an indicator that the user or topic are
+             // in some ways dangerous or suspicious.
+}
+```
 
 ### Public
 
@@ -471,7 +486,7 @@ Format of `content` field in `{pub}` and `{data}` is application-defined and as 
  * Plain text
  * [Drafty](./drafty.md)
 
-If Drafty is used, message header `"head": {"mime": "text/x-drafty"}` must be set.
+If Drafty is used, a message header `"head": {"mime": "text/x-drafty"}` must be set.
 
 
 ## Out-of-Band Handling of Large Files
@@ -731,6 +746,7 @@ sub: {
         anon: "N"    // string, default access for new anonymous (un-authenticated)
                      // subscribers
       }, // Default access mode for the new topic
+      trusted: { ... }, // application-defined payload assigned by the system administration
       public: { ... }, // application-defined payload to describe topic
       private: { ... } // per-user private application-defined content
     }, // object, optional
@@ -903,7 +919,7 @@ get: {
 * `{get what="desc"}`
 
 Query topic description. Server responds with a `{meta}` message containing requested data. See `{meta}` for details.
-If `ims` is specified and data has not been updated, the message will skip `public` and `private` fields.
+If `ims` is specified and data has not been updated, the message will skip `trusted`, `public`, and `private` fields.
 
 Limited information is available without [attaching](#sub) to topic first.
 
@@ -950,6 +966,7 @@ set: {
       auth: "JRWP",  // access permissions for authenticated users
       anon: "JRW" // access permissions for anonymous users
     },
+    trusted: { ... }, // application-defined payload assigned by the system administration
     public: { ... }, // application-defined payload to describe topic
     private: { ... } // per-user private application-defined content
   },
@@ -1139,6 +1156,8 @@ meta: {
     recv: 115, // integer, like 'read', but received, optional
     clear: 12, // integer, in case some messages were deleted, the greatest ID
                // of a deleted message, optional
+    trusted: { ... }, // application-defined payload assigned by the system
+                      // administration
     public: { ... }, // application-defined data that's available to all topic
                      // subscribers
     private: { ...} // application-defined data that's available to the current
@@ -1165,6 +1184,8 @@ meta: {
       recv: 315, // integer, like 'read', but received, optional.
       clear: 12, // integer, in case some messages were deleted, the greatest ID
                  // of a deleted message, optional.
+      trusted: { ... }, // application-defined payload assigned by the system
+                        // administration
       public: { ... }, // application-defined user's 'public' object, absent when
                        // querying P2P topics.
       private: { ... } // application-defined user's 'private' object.
@@ -1247,7 +1268,7 @@ info: {
   topic: "grp1XUtEhjv6HND", // string, topic affected, always present
   from: "usr2il9suCbuko", // string, id of the user who published the
                           // message, always present
-  what: "read", // string, one of "kp", "recv", "read", see client-side {note},
+  what: "read", // string, one of "kp", "recv", "read", "data", see client-side {note},
                 // always present
   seq: 123, // integer, ID of the message that client has acknowledged,
             // guaranteed 0 < read <= recv <= {ctrl.params.seq}; present for rcpt &

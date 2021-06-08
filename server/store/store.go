@@ -997,13 +997,9 @@ func (fileMapper) StartUpload(fd *types.FileDef) error {
 	return adp.FileStartUpload(fd)
 }
 
-// FinishUpload marks started upload as successfully finished.
+// FinishUpload marks started upload as successfully finished or failed.
 func (fileMapper) FinishUpload(fd *types.FileDef, success bool, size int64) (*types.FileDef, error) {
-	status := types.UploadCompleted
-	if !success {
-		status = types.UploadFailed
-	}
-	return adp.FileFinishUpload(fd, status, size)
+	return adp.FileFinishUpload(fd, success, size)
 }
 
 // Get fetches a file record for a unique file id.
