@@ -77,9 +77,9 @@ func (fh *fshandler) Headers(req *http.Request, serve bool) (map[string]string, 
 	}
 	var allowMethods string
 	if serve {
-		allowMethods = "GET, HEAD, OPTIONS"
+		allowMethods = "GET,HEAD,OPTIONS"
 	} else {
-		allowMethods = "POST, PUT, HEAD, OPTIONS"
+		allowMethods = "POST,PUT,HEAD,OPTIONS"
 	}
 	return map[string]string{
 		"Access-Control-Allow-Origin":  allowedOrigin,
