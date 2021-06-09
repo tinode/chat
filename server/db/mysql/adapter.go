@@ -1463,10 +1463,12 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 
 	limit := a.maxResults
 	if opts != nil {
-		if opts.IfModifiedSince != nil {
-			q += " AND updatedat>?"
-			args = append(args, opts.IfModifiedSince)
-		}
+		/*
+			if opts.IfModifiedSince != nil {
+				q += " AND updatedat>?"
+				args = append(args, opts.IfModifiedSince)
+			}
+		*/
 		if opts.Topic != "" {
 			q += " AND topic=?"
 			args = append(args, opts.Topic)

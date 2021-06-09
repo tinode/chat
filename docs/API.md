@@ -1245,7 +1245,7 @@ pres: {
   clear: 15, // integer, "what" is "del", an update to the delete transaction ID.
   delseq: [{low: 123}, {low: 126, hi: 136}], // array of ranges, "what" is "del",
              // ranges of IDs of deleted messages, optional
-  ua: "Tinode/1.0 (Android 2.2)", // string, a User Agent string identifying client
+  ua: "Tinode/1.0 (Android 2.2)", // string, a User Agent string identifying the client
              // software if "what" is "on" or "ua", optional
   act: "usr2il9suCbuko",  // string, user who performed the action, optional
   tgt: "usrRkDVe0PYDOo",  // string, user affected by the action, optional
