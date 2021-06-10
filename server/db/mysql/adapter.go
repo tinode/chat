@@ -1425,23 +1425,30 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 		q += " AND deletedat IS NULL"
 	}
 
-	limit := a.maxResults
+	limit := 0
 	if opts != nil {
-		if opts.IfModifiedSince != nil {
-			q += " AND updatedat>?"
-			args = append(args, opts.IfModifiedSince)
-		}
 		if opts.Topic != "" {
 			q += " AND topic=?"
 			args = append(args, opts.Topic)
 		}
-		if opts.Limit > 0 && opts.Limit < limit {
-			limit = opts.Limit
+
+		if opts.IfModifiedSince == nil {
+			// Apply the limit only when the client does not manage cache.
+			// Otherwise have to get all subscriptions and do a manual join with users/topics.
+			if opts.Limit > 0 && opts.Limit < limit {
+				limit = opts.Limit
+			} else {
+				limit = a.maxResults
+			}
 		}
+	} else {
+		limit = a.maxResults
 	}
 
-	q += " LIMIT ?"
-	args = append(args, limit)
+	if limit > 0 {
+		q += " LIMIT ?"
+		args = append(args, a.maxResults)
+	}
 
 	ctx, cancel := a.getContext()
 	if cancel != nil {
@@ -1452,8 +1459,22 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 		return nil, err
 	}
 
-	// Fetch subscriptions. Two queries are needed: users table (me & p2p) and topics table (p2p and grp).
-	// Prepare a list of Separate subscriptions to users vs topics
+	/*
+		if opts.IfModifiedSince != nil {
+			q += " AND updatedat>?"
+			args = append(args, opts.IfModifiedSince)
+		}
+
+		if opts.Limit > 0 && opts.Limit < limit {
+				limit = opts.Limit
+		}
+
+		q += " LIMIT ?"
+		args = append(args, limit)
+	*/
+
+	// Fetch subscriptions. Two queries are needed: users table (p2p) and topics table (grp).
+	// Prepare a list of separate subscriptions to users vs topics
 	var sub t.Subscription
 	join := make(map[string]t.Subscription) // Keeping these to make a join with table for .private and .access
 	topq := make([]interface{}, 0, 16)
@@ -1467,8 +1488,8 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 		sub.User = uid.String()
 		tcat := t.GetTopicCat(tname)
 
-		// 'me' or 'fnd' subscription, skip
-		if tcat == t.TopicCatMe || tcat == t.TopicCatFnd {
+		// One of 'me', 'fnd', 'sys' subscriptions, skip.
+		if tcat == t.TopicCatMe || tcat == t.TopicCatFnd || tcat == t.TopicCatSys {
 			continue
 
 			// p2p subscription, find the other user to get user.Public
@@ -1504,16 +1525,30 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 		subs = make([]t.Subscription, 0, len(join))
 	}
 
+	// Fetch grp topics and join to subscriptions.
 	if len(topq) > 0 {
-		// Fetch grp & p2p topics
-		q, topq, _ := sqlx.In(
-			"SELECT createdat,updatedat,state,stateat,touchedat,name AS id,usebt,access,seqid,delid,public,tags "+
-				"FROM topics WHERE name IN (?)", topq)
-		// Optionally skip deleted topics.
+		q = "SELECT createdat,updatedat,state,stateat,touchedat,name AS id,usebt,access,seqid,delid,public,tags " +
+			"FROM topics WHERE name IN (?)"
+		args = topq
 		if !keepDeleted {
+			// Optionally skip deleted topics.
 			q += " AND state!=?"
-			topq = append(topq, t.StateDeleted)
+			args = append(args, t.StateDeleted)
 		}
+
+		if opts != nil && opts.IfModifiedSince != nil {
+			// Use cache timestamp if provided: get newer entries only.
+			q += " AND updatedat>?"
+			args = append(args, opts.IfModifiedSince)
+
+			if limit > 0 && limit < len(topq) {
+				// No point in fetching more than the requested limit.
+				q += " ORDER BY updatedat LIMIT ?"
+				args = append(args, limit)
+			}
+		}
+
+		q, args, _ := sqlx.In(sql, args)
 		q = a.db.Rebind(q)
 
 		ctx2, cancel2 := a.getContext()
@@ -1551,7 +1586,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 		rows.Close()
 	}
 
-	// Fetch p2p users and join to p2p tables
+	// Fetch p2p users and join to p2p subscriptions.
 	if err == nil && len(usrq) > 0 {
 		q, usrq, _ := sqlx.In(
 			"SELECT id,state,createdat,updatedat,state,stateat,access,lastseen,useragent,public,tags "+
@@ -1562,6 +1597,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 			q += " AND state!=?"
 			usrq = append(usrq, t.StateDeleted)
 		}
+
 		ctx3, cancel3 := a.getContext()
 		if cancel3 != nil {
 			defer cancel3()
@@ -1593,6 +1629,11 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 		}
 		rows.Close()
 	}
+
+	if opts.IfModifiedSince == nil {
+		// TODO; Now that we fetched potentially more subscriptions than needed, we got to take those with the oldest modifications
+	}
+
 	return subs, err
 }
 
