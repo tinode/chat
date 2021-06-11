@@ -1451,7 +1451,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 
 	if limit > 0 {
 		q += " LIMIT ?"
-		args = append(args, a.maxResults)
+		args = append(args, limit)
 	}
 
 	ctx, cancel := a.getContext()
@@ -1556,7 +1556,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 
 			sub = join[top.Id]
 			// Check if sub.UpdatedAt needs to be adjusted to earlier time.
-			// top.UpdatedAt is guaranted to be after ims.
+			// top.UpdatedAt is guaranteed to be after IMS.
 			if sub.UpdatedAt.Before(ims) {
 				// Subscription has not changed recently, use topic's update timestamp.
 				sub.UpdatedAt = top.UpdatedAt
