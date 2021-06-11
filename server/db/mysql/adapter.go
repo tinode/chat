@@ -1478,8 +1478,8 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 		sub.User = uid.String()
 		tcat := t.GetTopicCat(tname)
 
-		if tcat == t.TopicCatMe || tcat == t.TopicCatFnd || tcat == t.TopicCatSys {
-			// One of 'me', 'fnd', 'sys' subscriptions, skip.
+		if tcat == t.TopicCatMe || tcat == t.TopicCatFnd {
+			// One of 'me', 'fnd' subscriptions, skip. Don't skip 'sys' subscription.
 			continue
 		} else if tcat == t.TopicCatP2P {
 			// P2P subscription, find the other user to get user.Public
@@ -1492,7 +1492,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 			topq = append(topq, tname)
 
 		} else {
-			// Group subscription. Maybe convert channel name to topic name.
+			// Group or 'sys' subscription. Maybe convert channel name to topic name.
 			tname = t.ChnToGrp(tname)
 			topq = append(topq, tname)
 		}
