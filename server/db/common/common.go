@@ -8,7 +8,7 @@ import (
 	t "github.com/tinode/chat/server/store/types"
 )
 
-// SelectEarliestUpdatedSubs selects no more than the given umber of subscriptions from the
+// SelectEarliestUpdatedSubs selects no more than the given number of subscriptions from the
 // given slice satisfying the query. When the number of subscriptions is greater than the limit,
 // the subscriptions with the earliest timestamp are selected.
 func SelectEarliestUpdatedSubs(subs []t.Subscription, opts *t.QueryOpt, maxResults int) []t.Subscription {
