@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"errors"
 	"hash/fnv"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -17,6 +16,7 @@ import (
 	ms "github.com/go-sql-driver/mysql"
 	"github.com/jmoiron/sqlx"
 	"github.com/tinode/chat/server/auth"
+	"github.com/tinode/chat/server/db/common"
 	"github.com/tinode/chat/server/store"
 	t "github.com/tinode/chat/server/store/types"
 )
@@ -1490,10 +1490,12 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 				usrq = append(usrq, store.DecodeUid(uid1))
 			}
 			topq = append(topq, tname)
-
 		} else {
-			// Group or 'sys' subscription. Maybe convert channel name to topic name.
-			tname = t.ChnToGrp(tname)
+			// Group or 'sys' subscription.
+			if tcat == t.TopicCatGrp {
+				// Maybe convert channel name to topic name.
+				tname = t.ChnToGrp(tname)
+			}
 			topq = append(topq, tname)
 		}
 		sub.Private = fromJSON(sub.Private)
@@ -1555,17 +1557,9 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 			}
 
 			sub = join[top.Id]
-			// Check if sub.UpdatedAt needs to be adjusted to earlier time.
+			// Check if sub.UpdatedAt needs to be adjusted to earlier or later time.
 			// top.UpdatedAt is guaranteed to be after IMS.
-			if sub.UpdatedAt.Before(ims) {
-				// Subscription has not changed recently, use topic's update timestamp.
-				sub.UpdatedAt = top.UpdatedAt
-			} else if sub.UpdatedAt.After(top.UpdatedAt) {
-				// Subscription changed after the topic, using earlier timestamp.
-				if !ims.IsZero() {
-					sub.UpdatedAt = top.UpdatedAt
-				}
-			}
+			sub.UpdatedAt = common.SelectEarliestUpdatedAt(sub.UpdatedAt, top.UpdatedAt, ims)
 			sub.SetState(top.State)
 			sub.SetTouchedAt(top.TouchedAt)
 			sub.SetSeqId(top.SeqId)
@@ -1590,8 +1584,8 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 		q = "SELECT id,state,createdat,updatedat,state,stateat,access,lastseen,useragent,public,tags " +
 			"FROM users WHERE id IN (?)"
 		q, args, _ = sqlx.In(q, usrq)
-		// Optionally skip deleted users.
 		if !keepDeleted {
+			// Optionally skip deleted users.
 			q += " AND state!=?"
 			args = append(args, t.StateDeleted)
 		}
@@ -1628,16 +1622,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 			uid2 := encodeUidString(usr.Id)
 			joinOn := uid.P2PName(uid2)
 			if sub, ok := join[joinOn]; ok {
-				if sub.UpdatedAt.Before(ims) {
-					// Subscription has not changed recently, use user's update timestamp.
-					sub.UpdatedAt = usr.UpdatedAt
-				} else if sub.UpdatedAt.After(usr.UpdatedAt) {
-					// Subscription changed after the user, using earlier timestamp.
-					if !ims.IsZero() {
-						sub.UpdatedAt = usr.UpdatedAt
-					}
-				}
-				sub.ObjHeader.MergeTimes(&usr.ObjHeader)
+				sub.UpdatedAt = common.SelectEarliestUpdatedAt(sub.UpdatedAt, usr.UpdatedAt, ims)
 				sub.SetState(usr.State)
 				sub.SetPublic(fromJSON(usr.Public))
 				sub.SetWith(uid2.UserId())
@@ -1657,28 +1642,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 		subs = append(subs, sub)
 	}
 
-	limit = a.maxResults
-	if opts != nil && opts.Limit > 0 && opts.Limit < limit {
-		limit = opts.Limit
-	}
-	if !ims.IsZero() || len(subs) > limit {
-		// Now that we fetched potentially more subscriptions than needed, we got to take those with the oldest modifications.
-		// Sorting in ascending order by modification time.
-		sort.Slice(subs, func(i, j int) bool {
-			return subs[i].UpdatedAt.Before(subs[j].UpdatedAt)
-		})
-		if !ims.IsZero() {
-			// Keep only those subscriptions which are newer than ims.
-			at := sort.Search(len(subs), func(i int) bool { return subs[i].UpdatedAt.After(ims) })
-			subs = subs[at:]
-		}
-		// Trim slice at the limit.
-		if len(subs) > limit {
-			subs = subs[:limit]
-		}
-	}
-
-	return subs, nil
+	return common.SelectEarliestUpdatedSubs(subs, opts, a.maxResults), nil
 }
 
 // UsersForTopic loads users subscribed to the given topic.

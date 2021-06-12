@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/tinode/chat/server/auth"
+	"github.com/tinode/chat/server/db/common"
 	"github.com/tinode/chat/server/store"
 	t "github.com/tinode/chat/server/store/types"
 	rdb "gopkg.in/rethinkdb/rethinkdb-go.v6"
@@ -1089,19 +1090,32 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 		// Filter out rows with defined DeletedAt
 		q = q.Filter(rdb.Row.HasFields("DeletedAt").Not())
 	}
-	limit := a.maxResults
+
+	limit := 0
+	ims := time.Time{}
 	if opts != nil {
-		if opts.IfModifiedSince != nil {
-			q = q.Filter(rdb.Row.Field("UpdatedAt").Gt(opts.IfModifiedSince))
-		}
 		if opts.Topic != "" {
 			q = q.Filter(rdb.Row.Field("Topic").Eq(opts.Topic))
 		}
-		if opts.Limit > 0 && opts.Limit < limit {
-			limit = opts.Limit
+
+		// Apply the limit only when the client does not manage the cache (or cold start).
+		// Otherwise have to get all subscriptions and do a manual join with users/topics.
+		if opts.IfModifiedSince == nil {
+			if opts.Limit > 0 && opts.Limit < a.maxResults {
+				limit = opts.Limit
+			} else {
+				limit = a.maxResults
+			}
+		} else {
+			ims = *opts.IfModifiedSince
 		}
+	} else {
+		limit = a.maxResults
 	}
-	q = q.Limit(limit)
+
+	if limit > 0 {
+		q = q.Limit(limit)
+	}
 
 	cursor, err := q.Run(a.conn)
 	if err != nil {
@@ -1116,14 +1130,14 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 	usrq := make([]interface{}, 0, 16)
 	for cursor.Next(&sub) {
 		tname := sub.Topic
+		sub.User = uid.String()
 		tcat := t.GetTopicCat(tname)
 
-		// 'me' or 'fnd' subscription, skip
 		if tcat == t.TopicCatMe || tcat == t.TopicCatFnd {
+			// 'me' or 'fnd' subscription, skip. Don't skip 'sys'.
 			continue
-
-			// p2p subscription, find the other user to get user.Public
 		} else if tcat == t.TopicCatP2P {
+			// P2P subscription, find the other user to get user.Public
 			uid1, uid2, _ := t.ParseP2P(sub.Topic)
 			if uid1 == uid {
 				usrq = append(usrq, uid2.String())
@@ -1131,11 +1145,12 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 				usrq = append(usrq, uid1.String())
 			}
 			topq = append(topq, tname)
-
-			// grp subscription
 		} else {
-			// Convert channel names to topic names.
-			tname = t.ChnToGrp(sub.Topic)
+			// Grp or sys subscription.
+			if tcat == t.TopicCatGrp {
+				// Maybe convert channel name to topic name.
+				tname = t.ChnToGrp(tname)
+			}
 			topq = append(topq, tname)
 		}
 		join[tname] = sub
@@ -1143,13 +1158,28 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 	cursor.Close()
 
 	var subs []t.Subscription
-	if len(topq) > 0 || len(usrq) > 0 {
-		subs = make([]t.Subscription, 0, len(join))
+	if len(join) == 0 {
+		return subs, nil
 	}
 
 	if len(topq) > 0 {
 		// Fetch grp & p2p topics
-		cursor, err = rdb.DB(a.dbName).Table("topics").GetAll(topq...).Run(a.conn)
+		q = rdb.DB(a.dbName).Table("topics").GetAll(topq...)
+		if !keepDeleted {
+			q = q.Filter(rdb.Row.Field("State").Eq(t.StateDeleted).Not())
+		}
+
+		if !ims.IsZero() {
+			// Use cache timestamp if provided: get newer entries only.
+			q = q.Filter(rdb.Row.Field("UpdatedAt").Gt(ims))
+
+			if limit > 0 && limit < len(topq) {
+				// No point in fetching more than the requested limit.
+				q = q.OrderBy("UpdatedAt").Limit(limit)
+			}
+		}
+
+		cursor, err = q.Run(a.conn)
 		if err != nil {
 			return nil, err
 		}
@@ -1157,28 +1187,39 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 		var top t.Topic
 		for cursor.Next(&top) {
 			sub = join[top.Id]
-			sub.ObjHeader.MergeTimes(&top.ObjHeader)
+			// Check if sub.UpdatedAt needs to be adjusted to earlier or later time.
+			// top.UpdatedAt is guaranteed to be after IMS if IMS is non-zero.
+			sub.UpdatedAt = common.SelectEarliestUpdatedAt(sub.UpdatedAt, top.UpdatedAt, ims)
 			sub.SetState(top.State)
 			sub.SetTouchedAt(top.TouchedAt)
 			sub.SetSeqId(top.SeqId)
 			if t.GetTopicCat(sub.Topic) == t.TopicCatGrp {
-				// all done with a grp topic
 				sub.SetPublic(top.Public)
-				subs = append(subs, sub)
-			} else {
-				// put back the updated value of a p2p subsription, will process further below
-				join[top.Id] = sub
 			}
+			// Put back the updated value of a subsription, will process further below.
+			join[top.Id] = sub
 		}
 		cursor.Close()
 	}
 
-	// Fetch p2p users and join to p2p tables
+	// Fetch p2p users and join to p2p subscriptions.
 	if len(usrq) > 0 {
 		q = rdb.DB(a.dbName).Table("users").GetAll(usrq...)
 		if !keepDeleted {
+			// Optionally skip deleted users.
 			q = q.Filter(rdb.Row.Field("State").Eq(t.StateDeleted).Not())
 		}
+
+		if !ims.IsZero() {
+			// Use cache timestamp if provided: get newer entries only.
+			q = q.Filter(rdb.Row.Field("UpdatedAt").Gt(ims))
+
+			if limit > 0 && limit < len(topq) {
+				// No point in fetching more than the requested limit.
+				q = q.OrderBy("UpdatedAt").Limit(limit)
+			}
+		}
+
 		cursor, err = q.Run(a.conn)
 		if err != nil {
 			return nil, err
@@ -1187,20 +1228,26 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 		var usr t.User
 		for cursor.Next(&usr) {
 			uid2 := t.ParseUid(usr.Id)
-			if sub, ok := join[uid.P2PName(uid2)]; ok {
-				sub.ObjHeader.MergeTimes(&usr.ObjHeader)
+			joinOn := uid.P2PName(uid2)
+			if sub, ok := join[joinOn]; ok {
+				sub.UpdatedAt = common.SelectEarliestUpdatedAt(sub.UpdatedAt, usr.UpdatedAt, ims)
 				sub.SetState(usr.State)
 				sub.SetPublic(usr.Public)
 				sub.SetWith(uid2.UserId())
 				sub.SetDefaultAccess(usr.Access.Auth, usr.Access.Anon)
 				sub.SetLastSeenAndUA(usr.LastSeen, usr.UserAgent)
-				subs = append(subs, sub)
+				join[joinOn] = sub
 			}
 		}
 		cursor.Close()
 	}
 
-	return subs, nil
+	subs = make([]t.Subscription, 0, len(join))
+	for _, sub := range join {
+		subs = append(subs, sub)
+	}
+
+	return common.SelectEarliestUpdatedSubs(subs, opts, a.maxResults), nil
 }
 
 // UsersForTopic loads users subscribed to the given topic
