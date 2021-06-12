@@ -1146,7 +1146,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 			}
 			topq = append(topq, tname)
 		} else {
-			// Grp or sys subscription.
+			// Group or sys subscription.
 			if tcat == t.TopicCatGrp {
 				// Maybe convert channel name to topic name.
 				tname = t.ChnToGrp(tname)
@@ -1155,7 +1155,12 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 		}
 		join[tname] = sub
 	}
+	err = cursor.Err()
 	cursor.Close()
+
+	if err != nil {
+		return nil, err
+	}
 
 	var subs []t.Subscription
 	if len(join) == 0 {
@@ -1199,7 +1204,12 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 			// Put back the updated value of a subsription, will process further below.
 			join[top.Id] = sub
 		}
+		err = cursor.Err()
 		cursor.Close()
+
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// Fetch p2p users and join to p2p subscriptions.
@@ -1239,7 +1249,12 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 				join[joinOn] = sub
 			}
 		}
+		err = cursor.Err()
 		cursor.Close()
+
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	subs = make([]t.Subscription, 0, len(join))

@@ -1473,7 +1473,6 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 		if err = rows.StructScan(&sub); err != nil {
 			break
 		}
-
 		tname := sub.Topic
 		sub.User = uid.String()
 		tcat := t.GetTopicCat(tname)
@@ -1573,10 +1572,10 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 			err = rows.Err()
 		}
 		rows.Close()
-	}
 
-	if err != nil {
-		return nil, err
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// Fetch p2p users and join to p2p subscriptions.
@@ -1635,6 +1634,10 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 			err = rows.Err()
 		}
 		rows.Close()
+
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	subs = make([]t.Subscription, 0, len(join))

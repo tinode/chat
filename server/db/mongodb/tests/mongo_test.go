@@ -382,7 +382,27 @@ func TestTopicsForUser(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(gotSubs) != 2 {
-		t.Errorf(mismatchErrorString("Subs length", len(gotSubs), 2))
+		t.Errorf(mismatchErrorString("Subs length (2)", len(gotSubs), 2))
+	}
+
+	qOpts.Topic = ""
+	ims := now.Add(15 * time.Minute)
+	qOpts.IfModifiedSince = &ims
+	gotSubs, err = adp.TopicsForUser(types.ParseUserId("usr"+users[0].Id), false, &qOpts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(gotSubs) != 1 {
+		t.Errorf(mismatchErrorString("Subs length (IMS)", len(gotSubs), 1))
+	}
+
+	ims = time.Now().Add(15 * time.Minute)
+	gotSubs, err = adp.TopicsForUser(types.ParseUserId("usr"+users[0].Id), false, &qOpts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(gotSubs) != 0 {
+		t.Errorf(mismatchErrorString("Subs length (IMS 2)", len(gotSubs), 0))
 	}
 }
 
@@ -453,12 +473,12 @@ func TestSubsForUser(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if len(gotSubs) != 1 {
+	if len(gotSubs) != 2 {
 		t.Errorf(mismatchErrorString("Subs length", len(gotSubs), 1))
 	}
 
 	// Test not found
-	gotSubs, err = adp.SubsForUser(types.ParseUserId("dummyuserid"))
+	gotSubs, err = adp.SubsForUser(types.ParseUserId("usr12345678"))
 	if err != nil {
 		t.Error(err)
 	}
@@ -1082,12 +1102,12 @@ func TestTopicDelete(t *testing.T) {
 }
 
 func TestFileDeleteUnused(t *testing.T) {
-	locs, err := adp.FileDeleteUnused(now.Add(1*time.Minute), 999)
+	locs, err := adp.FileDeleteUnused(time.Now().Add(1*time.Minute), 999)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(locs) == 0 {
-		t.Error(mismatchErrorString("Locations length", len(locs), 0))
+	if len(locs) != 2 {
+		t.Error(mismatchErrorString("Locations length", len(locs), 2))
 	}
 }
 
