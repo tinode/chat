@@ -97,6 +97,13 @@ type Adapter interface {
 	// TopicGet loads a single topic by name, if it exists. If the topic does not exist the call returns (nil, nil)
 	TopicGet(topic string) (*t.Topic, error)
 	// TopicsForUser loads subscriptions for a given user. Reads public value.
+	// When the 'opts.IfModifiedSince' query is not nil the subscriptions with UpdatedAt > opts.IfModifiedSince
+	// are returned, where UpdatedAt can be either a subscription, a topic, or a user update timestamp.
+	// This is need in order to support paginagion of subscriptions: get subscriptions page by page
+	// from the oldest updates to most recent:
+	// 1. Client already has subscriptions with the latest update timestamp X.
+	// 2. Client asks for N updated subscriptions since X. The server returns N with updates between X and Y.
+	// 3. Client goes to step 1 with X := Y.
 	TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) ([]t.Subscription, error)
 	// UsersForTopic loads users' subscriptions for a given topic. Public is loaded.
 	UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt) ([]t.Subscription, error)
