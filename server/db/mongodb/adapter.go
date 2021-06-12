@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/tinode/chat/server/auth"
+	"github.com/tinode/chat/server/db/common"
 	"github.com/tinode/chat/server/store"
 	t "github.com/tinode/chat/server/store/types"
 	b "go.mongodb.org/mongo-driver/bson"
@@ -1091,8 +1092,7 @@ func (a *adapter) AuthGetUniqueRecord(unique string) (t.Uid, auth.Level, []byte,
 		"secret":  1,
 		"expires": 1,
 	})
-	err := a.db.Collection("auth").FindOne(a.ctx, filter, findOpts).Decode(&record)
-	if err != nil {
+	if err := a.db.Collection("auth").FindOne(a.ctx, filter, findOpts).Decode(&record); err != nil {
 		if err == mdb.ErrNoDocuments {
 			return t.ZeroUid, 0, nil, time.Time{}, nil
 		}
@@ -1260,8 +1260,7 @@ func (a *adapter) TopicCreateP2P(initiator, invited *t.Subscription) error {
 // TopicGet loads a single topic by name, if it exists. If the topic does not exist the call returns (nil, nil)
 func (a *adapter) TopicGet(topic string) (*t.Topic, error) {
 	var tpc = new(t.Topic)
-	err := a.db.Collection("topics").FindOne(a.ctx, b.M{"_id": topic}).Decode(tpc)
-	if err != nil {
+	if err := a.db.Collection("topics").FindOne(a.ctx, b.M{"_id": topic}).Decode(tpc); err != nil {
 		if err == mdb.ErrNoDocuments {
 			return nil, nil
 		}
@@ -1271,7 +1270,8 @@ func (a *adapter) TopicGet(topic string) (*t.Topic, error) {
 	return tpc, nil
 }
 
-// TopicsForUser loads subscriptions for a given user. Reads public value.
+// TopicsForUser loads user's contact list: p2p and grp topics, except for 'me' & 'fnd' subscriptions.
+// Reads and denormalizes Public value.
 func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) ([]t.Subscription, error) {
 	// Fetch user's subscriptions
 	filter := b.M{"user": uid.String()}
@@ -1279,20 +1279,34 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 		// Filter out rows with defined deletedat
 		filter["deletedat"] = b.M{"$exists": false}
 	}
-	limit := a.maxResults
+
+	limit := 0
+	ims := time.Time{}
 	if opts != nil {
-		if opts.IfModifiedSince != nil {
-			filter["updatedat"] = b.M{"$gt": opts.IfModifiedSince}
-		}
 		if opts.Topic != "" {
 			filter["topic"] = opts.Topic
 		}
-		if opts.Limit > 0 && opts.Limit < limit {
-			limit = opts.Limit
+
+		// Apply the limit only when the client does not manage the cache (or cold start).
+		// Otherwise have to get all subscriptions and do a manual join with users/topics.
+		if opts.IfModifiedSince == nil {
+			if opts.Limit > 0 && opts.Limit < a.maxResults {
+				limit = opts.Limit
+			} else {
+				limit = a.maxResults
+			}
+		} else {
+			ims = *opts.IfModifiedSince
 		}
+	} else {
+		limit = a.maxResults
 	}
 
-	findOpts := mdbopts.Find().SetLimit(int64(limit))
+	var findOpts *mdbopts.FindOptions
+	if limit > 0 {
+		findOpts = mdbopts.Find().SetLimit(int64(limit))
+	}
+
 	cur, err := a.db.Collection("subscriptions").Find(a.ctx, filter, findOpts)
 	if err != nil {
 		return nil, err
@@ -1306,18 +1320,17 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 	usrq := make([]string, 0, 16)
 	for cur.Next(a.ctx) {
 		if err = cur.Decode(&sub); err != nil {
-			return nil, err
+			break
 		}
-
 		tname := sub.Topic
+		sub.User = uid.String()
 		tcat := t.GetTopicCat(tname)
 
-		// skip 'me' or 'fnd' subscription
 		if tcat == t.TopicCatMe || tcat == t.TopicCatFnd {
+			// Skip 'me' or 'fnd' subscription. Don't skip 'sys'.
 			continue
-
-			// p2p subscription, find the other user to get user.Public
 		} else if tcat == t.TopicCatP2P {
+			// P2P subscription, find the other user to get user.Public
 			uid1, uid2, _ := t.ParseP2P(sub.Topic)
 			if uid1 == uid {
 				usrq = append(usrq, uid2.String())
@@ -1325,26 +1338,43 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 				usrq = append(usrq, uid1.String())
 			}
 			topq = append(topq, tname)
-
-			// grp subscription
 		} else {
-			// Convert channel names to topic names.
-			tname = t.ChnToGrp(tname)
-			topq = append(topq, tname)
+			// Group or sys subscription.
+			if tcat == t.TopicCatGrp {
+				// Maybe convert channel name to topic name.
+				tname = t.ChnToGrp(tname)
+			}
 		}
 		sub.Private = unmarshalBsonD(sub.Private)
 		join[tname] = sub
 	}
 	cur.Close(a.ctx)
+	if err != nil {
+		return nil, err
+	}
 
 	var subs []t.Subscription
-	if len(topq) > 0 || len(usrq) > 0 {
-		subs = make([]t.Subscription, 0, len(join))
+	if len(join) == 0 {
+		return subs, nil
 	}
 
 	if len(topq) > 0 {
 		// Fetch grp & p2p topics
-		cur, err = a.db.Collection("topics").Find(a.ctx, b.M{"_id": b.M{"$in": topq}})
+		filter = b.M{"_id": b.M{"$in": topq}}
+		if !keepDeleted {
+			filter["state"] = b.M{"$ne": t.StateDeleted}
+		}
+		if !ims.IsZero() {
+			// Use cache timestamp if provided: get newer entries only.
+			filter["updatedat"] = b.M{"$gt": ims}
+
+			findOpts = nil
+			if limit > 0 && limit < len(topq) {
+				// No point in fetching more than the requested limit.
+				findOpts = mdbopts.Find().SetLimit(int64(limit))
+			}
+		}
+		cur, err = a.db.Collection("topics").Find(a.ctx, filter, findOpts)
 		if err != nil {
 			return nil, err
 		}
@@ -1352,32 +1382,45 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 		var top t.Topic
 		for cur.Next(a.ctx) {
 			if err = cur.Decode(&top); err != nil {
-				return nil, err
+				break
 			}
 			sub = join[top.Id]
-			sub.ObjHeader.MergeTimes(&top.ObjHeader)
+			sub.UpdatedAt = common.SelectEarliestUpdatedAt(sub.UpdatedAt, top.UpdatedAt, ims)
 			sub.SetState(top.State)
 			sub.SetTouchedAt(top.TouchedAt)
 			sub.SetSeqId(top.SeqId)
 			if t.GetTopicCat(sub.Topic) == t.TopicCatGrp {
-				// all done with a grp topic
 				sub.SetPublic(unmarshalBsonD(top.Public))
-				subs = append(subs, sub)
-			} else {
-				// put back the updated value of a p2p subsription, will process further below
-				join[top.Id] = sub
 			}
+			// Put back the updated value of a p2p subsription, will process further below
+			join[top.Id] = sub
+
 		}
 		cur.Close(a.ctx)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// Fetch p2p users and join to p2p tables
 	if len(usrq) > 0 {
-		filter := b.M{"_id": b.M{"$in": usrq}}
+		filter = b.M{"_id": b.M{"$in": usrq}}
 		if !keepDeleted {
 			filter["state"] = b.M{"$ne": t.StateDeleted}
 		}
-		cur, err = a.db.Collection("users").Find(a.ctx, filter)
+
+		if !ims.IsZero() {
+			// Use cache timestamp if provided: get newer entries only.
+			filter["updatedat"] = b.M{"$gt": ims}
+
+			findOpts = nil
+			if limit > 0 && limit < len(topq) {
+				// No point in fetching more than the requested limit.
+				findOpts = mdbopts.Find().SetLimit(int64(limit))
+			}
+		}
+
+		cur, err = a.db.Collection("users").Find(a.ctx, filter, findOpts)
 		if err != nil {
 			return nil, err
 		}
@@ -1385,24 +1428,33 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 		var usr t.User
 		for cur.Next(a.ctx) {
 			if err = cur.Decode(&usr); err != nil {
-				return nil, err
+				break
 			}
 
 			uid2 := t.ParseUid(usr.Id)
-			if sub, ok := join[uid.P2PName(uid2)]; ok {
-				sub.ObjHeader.MergeTimes(&usr.ObjHeader)
+			joinOn := uid.P2PName(uid2)
+			if sub, ok := join[joinOn]; ok {
+				sub.UpdatedAt = common.SelectEarliestUpdatedAt(sub.UpdatedAt, usr.UpdatedAt, ims)
 				sub.SetState(usr.State)
 				sub.SetPublic(unmarshalBsonD(usr.Public))
 				sub.SetWith(uid2.UserId())
 				sub.SetDefaultAccess(usr.Access.Auth, usr.Access.Anon)
 				sub.SetLastSeenAndUA(usr.LastSeen, usr.UserAgent)
-				subs = append(subs, sub)
+				join[joinOn] = sub
 			}
 		}
 		cur.Close(a.ctx)
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	return subs, nil
+	subs = make([]t.Subscription, 0, len(join))
+	for _, sub := range join {
+		subs = append(subs, sub)
+	}
+
+	return common.SelectEarliestUpdatedSubs(subs, opts, a.maxResults), nil
 }
 
 // UsersForTopic loads users' subscriptions for a given topic. Public is loaded.
@@ -1448,12 +1500,15 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 	usrq := make([]interface{}, 0, 16)
 	for cur.Next(a.ctx) {
 		if err = cur.Decode(&sub); err != nil {
-			return nil, err
+			break
 		}
 		join[sub.User] = sub
 		usrq = append(usrq, sub.User)
 	}
 	cur.Close(a.ctx)
+	if err != nil {
+		return nil, err
+	}
 
 	if len(usrq) > 0 {
 		subs = make([]t.Subscription, 0, len(usrq))
@@ -1469,7 +1524,7 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 		var usr t.User
 		for cur.Next(a.ctx) {
 			if err = cur.Decode(&usr); err != nil {
-				return nil, err
+				break
 			}
 			if sub, ok := join[usr.Id]; ok {
 				sub.ObjHeader.MergeTimes(&usr.ObjHeader)
@@ -1479,6 +1534,9 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 			}
 		}
 		cur.Close(a.ctx)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	if t.GetTopicCat(topic) == t.TopicCatP2P && len(subs) > 0 {
@@ -1520,15 +1578,14 @@ func (a *adapter) OwnTopics(uid t.Uid) ([]string, error) {
 	var res map[string]string
 	var names []string
 	for cur.Next(a.ctx) {
-		if err := cur.Decode(&res); err == nil {
-			names = append(names, res["_id"])
-		} else {
-			return nil, err
+		if err = cur.Decode(&res); err != nil {
+			break
 		}
+		names = append(names, res["_id"])
 	}
 	cur.Close(a.ctx)
 
-	return names, nil
+	return names, err
 }
 
 // ChannelsForUser loads a slice of topic names where the user is a channel reader and notifications (P) are enabled.
@@ -1548,15 +1605,14 @@ func (a *adapter) ChannelsForUser(uid t.Uid) ([]string, error) {
 	var res map[string]string
 	var names []string
 	for cur.Next(a.ctx) {
-		if err := cur.Decode(&res); err == nil {
-			names = append(names, res["topic"])
-		} else {
-			return nil, err
+		if err = cur.Decode(&res); err != nil {
+			break
 		}
+		names = append(names, res["topic"])
 	}
 	cur.Close(a.ctx)
 
-	return names, nil
+	return names, err
 }
 
 // TopicShare creates topic subscriptions

@@ -118,7 +118,7 @@ func initTopics() {
 	topics = append(topics, &types.Topic{
 		ObjHeader: types.ObjHeader{
 			Id:        "grpgRXf0rU4uR4",
-			CreatedAt: now,
+			CreatedAt: now.Add(10 * time.Minute),
 			UpdatedAt: now,
 		},
 		TouchedAt: now,
@@ -169,7 +169,7 @@ func initSubs() {
 	subs = append(subs, &types.Subscription{
 		ObjHeader: types.ObjHeader{
 			CreatedAt: now,
-			UpdatedAt: now,
+			UpdatedAt: now.Add(10 * time.Minute),
 		},
 		User:      users[0].Id,
 		Topic:     topics[0].Id,
@@ -181,7 +181,7 @@ func initSubs() {
 	subs = append(subs, &types.Subscription{
 		ObjHeader: types.ObjHeader{
 			CreatedAt: now,
-			UpdatedAt: now,
+			UpdatedAt: now.Add(15 * time.Minute),
 		},
 		User:      users[1].Id,
 		Topic:     topics[0].Id,
@@ -205,7 +205,7 @@ func initSubs() {
 	subs = append(subs, &types.Subscription{
 		ObjHeader: types.ObjHeader{
 			CreatedAt: now,
-			UpdatedAt: now,
+			UpdatedAt: now.Add(20 * time.Minute),
 		},
 		User:      users[1].Id,
 		Topic:     topics[1].Id,
@@ -217,7 +217,7 @@ func initSubs() {
 	subs = append(subs, &types.Subscription{
 		ObjHeader: types.ObjHeader{
 			CreatedAt: now,
-			UpdatedAt: now,
+			UpdatedAt: now.Add(30 * time.Minute),
 		},
 		User:      users[2].Id,
 		Topic:     topics[2].Id,
@@ -229,7 +229,7 @@ func initSubs() {
 	subs = append(subs, &types.Subscription{
 		ObjHeader: types.ObjHeader{
 			CreatedAt: now,
-			UpdatedAt: now,
+			UpdatedAt: now.Add(40 * time.Minute),
 		},
 		User:      users[2].Id,
 		Topic:     topics[3].Id,
@@ -317,8 +317,8 @@ func initFileDefs() {
 	files = append(files, &types.FileDef{
 		ObjHeader: types.ObjHeader{
 			Id:        uGen.GetStr(),
-			CreatedAt: now,
-			UpdatedAt: now,
+			CreatedAt: now.Add(2 * time.Minute),
+			UpdatedAt: now.Add(2 * time.Minute),
 		},
 		Status:   types.UploadStarted,
 		User:     users[0].Id,
@@ -326,7 +326,8 @@ func initFileDefs() {
 	})
 }
 func initData() {
-	now = types.TimeNow()
+	// Use fixed timestamp to make tests more predictable
+	now = time.Date(2021, time.June, 12, 11, 39, 24, 15, time.Local).UTC().Round(time.Millisecond)
 	initUsers()
 	initCreds()
 	initAuthRecords()
