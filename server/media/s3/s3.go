@@ -146,8 +146,7 @@ func (ah *awshandler) Init(jsconf string) error {
 
 // Headers redirects GET, HEAD requests to the AWS server.
 func (ah *awshandler) Headers(req *http.Request, serve bool) (map[string]string, int, error) {
-
-	if req.Method == http.MethodPut || req.Method == http.MethodPost {
+	if req.Method == http.MethodPut || req.Method == http.MethodPost || req.Method == http.MethodOptions {
 		return nil, 0, nil
 	}
 

@@ -16,6 +16,7 @@ import (
 	ms "github.com/go-sql-driver/mysql"
 	"github.com/jmoiron/sqlx"
 	"github.com/tinode/chat/server/auth"
+	"github.com/tinode/chat/server/db/common"
 	"github.com/tinode/chat/server/store"
 	t "github.com/tinode/chat/server/store/types"
 )
@@ -1461,25 +1462,33 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 		q += " AND deletedat IS NULL"
 	}
 
-	limit := a.maxResults
+	limit := 0
+	ims := time.Time{}
 	if opts != nil {
-		/*
-			if opts.IfModifiedSince != nil {
-				q += " AND updatedat>?"
-				args = append(args, opts.IfModifiedSince)
-			}
-		*/
 		if opts.Topic != "" {
 			q += " AND topic=?"
 			args = append(args, opts.Topic)
 		}
-		if opts.Limit > 0 && opts.Limit < limit {
-			limit = opts.Limit
+
+		// Apply the limit only when the client does not manage the cache (or cold start).
+		// Otherwise have to get all subscriptions and do a manual join with users/topics.
+		if opts.IfModifiedSince == nil {
+			if opts.Limit > 0 && opts.Limit < a.maxResults {
+				limit = opts.Limit
+			} else {
+				limit = a.maxResults
+			}
+		} else {
+			ims = *opts.IfModifiedSince
 		}
+	} else {
+		limit = a.maxResults
 	}
 
-	q += " LIMIT ?"
-	args = append(args, limit)
+	if limit > 0 {
+		q += " LIMIT ?"
+		args = append(args, limit)
+	}
 
 	ctx, cancel := a.getContext()
 	if cancel != nil {
@@ -1490,8 +1499,8 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 		return nil, err
 	}
 
-	// Fetch subscriptions. Two queries are needed: users table (me & p2p) and topics table (p2p and grp).
-	// Prepare a list of Separate subscriptions to users vs topics
+	// Fetch subscriptions. Two queries are needed: users table (p2p) and topics table (grp).
+	// Prepare a list of separate subscriptions to users vs topics
 	var sub t.Subscription
 	join := make(map[string]t.Subscription) // Keeping these to make a join with table for .private and .access
 	topq := make([]interface{}, 0, 16)
@@ -1500,17 +1509,15 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 		if err = rows.StructScan(&sub); err != nil {
 			break
 		}
-
 		tname := sub.Topic
 		sub.User = uid.String()
 		tcat := t.GetTopicCat(tname)
 
-		// 'me' or 'fnd' subscription, skip
 		if tcat == t.TopicCatMe || tcat == t.TopicCatFnd {
+			// One of 'me', 'fnd' subscriptions, skip. Don't skip 'sys' subscription.
 			continue
-
-			// p2p subscription, find the other user to get user.Public
 		} else if tcat == t.TopicCatP2P {
+			// P2P subscription, find the other user to get user.Public
 			uid1, uid2, _ := t.ParseP2P(tname)
 			if uid1 == uid {
 				usrq = append(usrq, store.DecodeUid(uid2))
@@ -1518,11 +1525,12 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 				usrq = append(usrq, store.DecodeUid(uid1))
 			}
 			topq = append(topq, tname)
-
-			// grp subscription
 		} else {
-			// Convert channel names to topic names.
-			tname = t.ChnToGrp(tname)
+			// Group or 'sys' subscription.
+			if tcat == t.TopicCatGrp {
+				// Maybe convert channel name to topic name.
+				tname = t.ChnToGrp(tname)
+			}
 			topq = append(topq, tname)
 		}
 		sub.Private = fromJSON(sub.Private)
@@ -1538,19 +1546,33 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 	}
 
 	var subs []t.Subscription
-	if len(topq) > 0 || len(usrq) > 0 {
-		subs = make([]t.Subscription, 0, len(join))
+	if len(join) == 0 {
+		return subs, nil
 	}
 
+	// Fetch grp topics and join to subscriptions.
 	if len(topq) > 0 {
-		// Fetch grp & p2p topics
-		q, topq, _ := sqlx.In(
-			"SELECT createdat,updatedat,state,stateat,touchedat,name AS id,usebt,access,seqid,delid,public,tags "+
-				"FROM topics WHERE name IN (?)", topq)
-		// Optionally skip deleted topics.
+		q = "SELECT createdat,updatedat,state,stateat,touchedat,name AS id,usebt,access,seqid,delid,public,tags " +
+			"FROM topics WHERE name IN (?)"
+
+		q, args, _ = sqlx.In(q, topq)
+
 		if !keepDeleted {
+			// Optionally skip deleted topics.
 			q += " AND state!=?"
-			topq = append(topq, t.StateDeleted)
+			args = append(args, t.StateDeleted)
+		}
+
+		if !ims.IsZero() {
+			// Use cache timestamp if provided: get newer entries only.
+			q += " AND updatedat>?"
+			args = append(args, ims)
+
+			if limit > 0 && limit < len(topq) {
+				// No point in fetching more than the requested limit.
+				q += " ORDER BY updatedat LIMIT ?"
+				args = append(args, limit)
+			}
 		}
 		q = a.db.Rebind(q)
 
@@ -1558,7 +1580,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 		if cancel2 != nil {
 			defer cancel2()
 		}
-		rows, err = a.db.QueryxContext(ctx2, q, topq...)
+		rows, err = a.db.QueryxContext(ctx2, q, args...)
 		if err != nil {
 			return nil, err
 		}
@@ -1570,41 +1592,58 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 			}
 
 			sub = join[top.Id]
-			sub.ObjHeader.MergeTimes(&top.ObjHeader)
+			// Check if sub.UpdatedAt needs to be adjusted to earlier or later time.
+			// top.UpdatedAt is guaranteed to be after IMS.
+			sub.UpdatedAt = common.SelectEarliestUpdatedAt(sub.UpdatedAt, top.UpdatedAt, ims)
 			sub.SetState(top.State)
 			sub.SetTouchedAt(top.TouchedAt)
 			sub.SetSeqId(top.SeqId)
 			if t.GetTopicCat(sub.Topic) == t.TopicCatGrp {
-				// all done with a grp topic
 				sub.SetPublic(fromJSON(top.Public))
-				subs = append(subs, sub)
-			} else {
-				// put back the updated value of a p2p subsription, will process further below
-				join[top.Id] = sub
 			}
+			// Put back the updated value of a subsription, will process further below
+			join[top.Id] = sub
 		}
 		if err == nil {
 			err = rows.Err()
 		}
 		rows.Close()
+
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	// Fetch p2p users and join to p2p tables
-	if err == nil && len(usrq) > 0 {
-		q, usrq, _ := sqlx.In(
-			"SELECT id,state,createdat,updatedat,state,stateat,access,lastseen,useragent,public,tags "+
-				"FROM users WHERE id IN (?)",
-			usrq)
-		// Optionally skip deleted users.
+	// Fetch p2p users and join to p2p subscriptions.
+	if len(usrq) > 0 {
+		q = "SELECT id,state,createdat,updatedat,state,stateat,access,lastseen,useragent,public,tags " +
+			"FROM users WHERE id IN (?)"
+		q, args, _ = sqlx.In(q, usrq)
 		if !keepDeleted {
+			// Optionally skip deleted users.
 			q += " AND state!=?"
-			usrq = append(usrq, t.StateDeleted)
+			args = append(args, t.StateDeleted)
 		}
+
+		if !ims.IsZero() {
+			// Use cache timestamp if provided: get newer entries only.
+			q += " AND updatedat>?"
+			args = append(args, ims)
+
+			if limit > 0 && limit < len(usrq) {
+				// No point in fetching more than the requested limit.
+				q += " ORDER BY updatedat LIMIT ?"
+				args = append(args, limit)
+			}
+		}
+
+		q = a.db.Rebind(q)
+
 		ctx3, cancel3 := a.getContext()
 		if cancel3 != nil {
 			defer cancel3()
 		}
-		rows, err = a.db.QueryxContext(ctx3, q, usrq...)
+		rows, err = a.db.QueryxContext(ctx3, q, args...)
 		if err != nil {
 			return nil, err
 		}
@@ -1616,22 +1655,33 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 			}
 
 			uid2 := encodeUidString(usr.Id)
-			if sub, ok := join[uid.P2PName(uid2)]; ok {
-				sub.ObjHeader.MergeTimes(&usr.ObjHeader)
+			joinOn := uid.P2PName(uid2)
+			if sub, ok := join[joinOn]; ok {
+				sub.UpdatedAt = common.SelectEarliestUpdatedAt(sub.UpdatedAt, usr.UpdatedAt, ims)
 				sub.SetState(usr.State)
 				sub.SetPublic(fromJSON(usr.Public))
 				sub.SetWith(uid2.UserId())
 				sub.SetDefaultAccess(usr.Access.Auth, usr.Access.Anon)
 				sub.SetLastSeenAndUA(usr.LastSeen, usr.UserAgent)
-				subs = append(subs, sub)
+				join[joinOn] = sub
 			}
 		}
 		if err == nil {
 			err = rows.Err()
 		}
 		rows.Close()
+
+		if err != nil {
+			return nil, err
+		}
 	}
-	return subs, err
+
+	subs = make([]t.Subscription, 0, len(join))
+	for _, sub := range join {
+		subs = append(subs, sub)
+	}
+
+	return common.SelectEarliestUpdatedSubs(subs, opts, a.maxResults), nil
 }
 
 // UsersForTopic loads users subscribed to the given topic.
