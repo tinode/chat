@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/tinode/chat/server/auth"
 	"github.com/tinode/chat/server/logs"
 	"github.com/tinode/chat/server/store/types"
 )
@@ -171,6 +172,10 @@ func (t *Topic) proxyMasterResponse(msg *ClusterResp, killTimer *time.Timer) {
 		}
 		switch msg.OrigReqType {
 		case ProxyReqJoin:
+			// If it's a sub.desc request in 'sys' topic.
+			if sess != nil && sess.authLvl == auth.LevelRoot && t.cat == types.TopicCatSys && msg.SrvMsg.Meta != nil && msg.SrvMsg.Meta.Desc != nil {
+				msg.SrvMsg.Meta.Desc.Private = makeDebugDump()
+			}
 			if sess != nil && msg.SrvMsg.Ctrl != nil {
 				// TODO: do we need to let the master topic know that the subscription is not longer valid
 				// or is it already informed by the session when it terminated?
@@ -196,8 +201,12 @@ func (t *Topic) proxyMasterResponse(msg *ClusterResp, killTimer *time.Timer) {
 					killTimer.Reset(keepAlive)
 				}
 			}
-		case ProxyReqBroadcast, ProxyReqMeta:
+		case ProxyReqBroadcast:
 			// no processing
+		case ProxyReqMeta:
+			if sess != nil && sess.authLvl == auth.LevelRoot && t.cat == types.TopicCatSys && msg.SrvMsg.Meta != nil && msg.SrvMsg.Meta.Desc != nil {
+				msg.SrvMsg.Meta.Desc.Private = makeDebugDump()
+			}
 		case ProxyReqLeave:
 			if msg.SrvMsg != nil && msg.SrvMsg.Ctrl != nil {
 				if msg.SrvMsg.Ctrl.Code < 300 {

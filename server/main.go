@@ -17,6 +17,7 @@ import (
 	"os"
 	"runtime"
 	"runtime/pprof"
+	"sort"
 	"strings"
 	"time"
 
@@ -250,6 +251,88 @@ type configType struct {
 	Auth      map[string]json.RawMessage  `json:"auth_config"`
 	Validator map[string]*validatorConfig `json:"acc_validation"`
 	Media     *mediaConfig                `json:"media"`
+}
+
+// Session debug info.
+type DebugSession struct {
+	RemoteAddr string   `json:"remote_addr,omitempty"`
+	Ua         string   `json:"ua,omitempty"`
+	Uid        string   `json:"uid,omitempty"`
+	Sid        string   `json:"sid,omitempty"`
+	Clnode     string   `json:"clnode,omitempty"`
+	Subs       []string `json:"subs,omitempty"`
+}
+
+// Topic debug info.
+type DebugTopic struct {
+	Topic    string   `json:"topic,omitempty"`
+	Xorig    string   `json:"xorig,omitempty"`
+	IsProxy  bool     `json:"is_proxy,omitempty"`
+	Cat      int      `json:"cat,omitempty"`
+	PerUser  []string `json:"per_user,omitempty"`
+	PerSubs  []string `json:"per_subs,omitempty"`
+	Sessions []string `json:"sessions,omitempty"`
+}
+
+// Server internal state dump for debugging.
+type DebugDump struct {
+	Sessions []DebugSession `json:"sessions,omitempty"`
+	Topics   []DebugTopic   `json:"topics,omitempty"`
+}
+
+func makeDebugDump() *DebugDump {
+	result := &DebugDump{
+		Sessions: make([]DebugSession, 0, len(globals.sessionStore.sessCache)),
+		Topics:   make([]DebugTopic, 0, 10),
+	}
+	// Sessions.
+	globals.sessionStore.Range(func(sid string, s *Session) bool {
+		keys := make([]string, 0, len(s.subs))
+		for tn := range s.subs {
+			keys = append(keys, tn)
+		}
+		sort.Strings(keys)
+		var clnode string
+		if s.clnode != nil {
+			clnode = s.clnode.name
+		}
+		result.Sessions = append(result.Sessions, DebugSession{
+			RemoteAddr: s.remoteAddr,
+			Ua:         s.userAgent,
+			Uid:        s.uid.String(),
+			Sid:        sid,
+			Clnode:     clnode,
+			Subs:       keys,
+		})
+		return true
+	})
+	// Topics.
+	globals.hub.topics.Range(func(_, t interface{}) bool {
+		topic := t.(*Topic)
+		psd := make([]string, 0, len(topic.sessions))
+		for s := range topic.sessions {
+			psd = append(psd, s.sid)
+		}
+		pud := make([]string, 0, len(topic.perUser))
+		for uid := range topic.perUser {
+			pud = append(pud, uid.String())
+		}
+		ps := make([]string, 0, len(topic.perSubs))
+		for key := range topic.perSubs {
+			ps = append(ps, key)
+		}
+		result.Topics = append(result.Topics, DebugTopic{
+			Topic:    topic.name,
+			Xorig:    topic.xoriginal,
+			IsProxy:  topic.isProxy,
+			Cat:      int(topic.cat),
+			PerUser:  pud,
+			PerSubs:  ps,
+			Sessions: psd,
+		})
+		return true
+	})
+	return result
 }
 
 func main() {

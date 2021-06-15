@@ -1899,6 +1899,11 @@ func (t *Topic) replyGetDesc(sess *Session, asUid types.Uid, asChan bool, opts *
 		}
 	}
 
+	if t.cat == types.TopicCatSys && sess.authLvl == auth.LevelRoot && !sess.isCluster() {
+		// Only serve debug data for non-cluster requests.
+		desc.Private = makeDebugDump()
+	}
+
 	sess.queueOut(&ServerComMessage{
 		Meta: &MsgServerMeta{
 			Id:        id,
