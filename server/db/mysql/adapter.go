@@ -2807,8 +2807,11 @@ func (a *adapter) CredUpsert(cred *t.Credential) (bool, error) {
 		synth = cred.User + ":" + synth
 
 		// Adding new unvalidated credential. Deactivate all unvalidated records of this user and method.
-		_, err = tx.Exec("UPDATE credentials SET deletedat=? WHERE userid=? AND method=? AND done=false",
+		_, err = tx.Exec("UPDATE credentials SET deletedat=? WHERE userid=? AND method=? AND done=FALSE",
 			now, userId, cred.Method)
+		if err != nil {
+			return false, err
+		}
 		// Assume that the record exists and try to update it: undelete, update timestamp and response value.
 		res, err := tx.Exec("UPDATE credentials SET updatedat=?,deletedat=NULL,resp=?,done=0 WHERE synthetic=?",
 			cred.UpdatedAt, cred.Resp, synth)
