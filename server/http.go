@@ -14,11 +14,13 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"os/signal"
+	"sort"
 	"strconv"
 	"strings"
 	"syscall"
@@ -365,4 +367,62 @@ func authHttpRequest(req *http.Request) (types.Uid, []byte, error) {
 		}
 	}
 	return uid, nil, nil
+}
+
+func serveStatus(wrt http.ResponseWriter, req *http.Request) {
+	// Disable caching.
+	wrt.Header().Set("Cache-Control", "no-cache, no-store, private, max-age=0")
+	wrt.Header().Set("Expires", time.Unix(0, 0).Format(http.TimeFormat))
+	wrt.Header().Set("Pragma", "no-cache")
+	wrt.Header().Set("X-Accel-Expires", "0")
+
+	fmt.Fprintf(wrt, "<html><head>")
+	fmt.Fprintf(wrt, "<title>Server Status</title>")
+	fmt.Fprintf(wrt, "<style>tr:nth-child(even) { background: #f2f2f2 }</style>")
+	fmt.Fprintf(wrt, "</head>")
+
+	now := time.Now()
+	fmt.Fprintf(wrt, "<body>")
+	fmt.Fprintf(wrt, "<h1>%s</h1><div>Version: %s, build: %s. Present time: %s</div>", "Tinode Server", currentVersion, buildstamp, now.Format(time.RFC1123))
+	fmt.Fprintf(wrt, "<a href='/status'>Update</a>")
+	fmt.Fprintf(wrt, "<br><hr>")
+
+	fmt.Fprintf(wrt, "<div>Sessions: %d</div>", len(globals.sessionStore.sessCache))
+	fmt.Fprintf(wrt, "<table>")
+	fmt.Fprintf(wrt, "<tr><th>remoteAddr</th><th>UA</th><th>uid</th><th>sid</th><th>clnode</th><th>subs</th></tr>")
+	globals.sessionStore.Range(func(sid string, s *Session) bool {
+		keys := make([]string, 0, len(s.subs))
+		for tn := range s.subs {
+			keys = append(keys, tn)
+		}
+		sort.Strings(keys)
+		l := strings.Join(keys, ",")
+		fmt.Fprintf(wrt, "<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%+v</td><td>%s</td></tr>", s.remoteAddr, s.userAgent, s.uid.String(), sid, s.clnode, l)
+		return true
+	})
+	fmt.Fprintf(wrt, "</table>")
+	// If this server is a part of a cluster.
+	if globals.cluster != nil {
+		fmt.Fprintf(wrt, "<div>Cluster node: %s", globals.cluster.thisNodeName)
+		fmt.Fprintf(wrt, "</div>")
+	}
+
+	fmt.Fprint(wrt, "<br><hr>")
+	fmt.Fprintf(wrt, "<div>")
+	fmt.Fprintf(wrt, "<div>Topics: %d</div>", globals.hub.numTopics)
+	fmt.Fprintf(wrt, "<table>")
+
+	fmt.Fprintf(wrt, "<tr><th>topicId</th><th>xorig</th><th>isProxy</th><th>cat</th><th>perUser</th><th>perSubs</th><th>sessions</th></tr>")
+	globals.hub.topics.Range(func(_, t interface{}) bool {
+		topic := t.(*Topic)
+		var sd []string
+		for s, psd := range topic.sessions {
+			sd = append(sd, fmt.Sprintf("%s: %+v", s.sid, psd))
+		}
+		fmt.Fprintf(wrt, "<tr><td>%s</td><td>%s</td><td>%t</td><td>%d</td><td>%+v</td><td>%+v</td><td>%s</td></tr>", topic.name, topic.xoriginal, topic.isProxy, topic.cat, topic.perUser, topic.perSubs, strings.Join(sd, " "))
+		return true
+	})
+	fmt.Fprintf(wrt, "</div>")
+
+	fmt.Fprintf(wrt, "</body></html>")
 }
