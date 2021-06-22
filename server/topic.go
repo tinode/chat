@@ -1255,6 +1255,8 @@ func (t *Topic) subscriptionReply(asChan bool, join *sessionJoin) error {
 	// Then this name changes. Report back the original name here.
 	if msgsub.Created && join.pkt.Original != toriginal {
 		params["tmpname"] = join.pkt.Original
+		// The new123ABC name is no longer useful after this.
+		join.pkt.Original = toriginal
 	}
 
 	if len(params) == 0 {

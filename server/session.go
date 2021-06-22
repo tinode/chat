@@ -463,18 +463,17 @@ func (s *Session) dispatchRaw(raw []byte) {
 func (s *Session) dispatch(msg *ClientComMessage) {
 	now := types.TimeNow()
 	atomic.StoreInt64(&s.lastAction, now.UnixNano())
-	msg.Timestamp = now
 
 	if msg.AsUser == "" {
 		msg.AsUser = s.uid.UserId()
 		msg.AuthLvl = int(s.authLvl)
 	} else if s.authLvl != auth.LevelRoot {
 		// Only root user can set non-default msg.from && msg.authLvl values.
-		s.queueOut(ErrPermissionDenied("", "", msg.Timestamp))
+		s.queueOut(ErrPermissionDenied("", "", now))
 		logs.Warn.Println("s.dispatch: non-root asigned msg.from", s.sid)
 		return
 	} else if fromUid := types.ParseUserId(msg.AsUser); fromUid.IsZero() {
-		s.queueOut(ErrMalformed("", "", msg.Timestamp))
+		s.queueOut(ErrMalformed("", "", now))
 		logs.Warn.Println("s.dispatch: malformed msg.from: ", msg.AsUser, s.sid)
 		return
 	} else if auth.Level(msg.AuthLvl) == auth.LevelNone {
@@ -491,6 +490,8 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 		// Plugin requested to silently drop the request.
 		return
 	}
+
+	msg.Timestamp = now
 
 	var handler func(*ClientComMessage)
 	var uaRefresh bool
