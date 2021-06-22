@@ -900,7 +900,8 @@ func (a *adapter) CredUpsert(cred *t.Credential) (bool, error) {
 		if result1 != (t.Credential{}) {
 			// Someone has already validated this credential.
 			return false, t.ErrDuplicate
-		} else if err != nil && err != mdb.ErrNoDocuments { // if no result -> continue
+		}
+		if err != nil && err != mdb.ErrNoDocuments { // if no result -> continue
 			return false, err
 		}
 
@@ -931,7 +932,8 @@ func (a *adapter) CredUpsert(cred *t.Credential) (bool, error) {
 
 			// The record was updated, all is fine.
 			return false, nil
-		} else if err != nil && err != mdb.ErrNoDocuments {
+		}
+		if err != nil && err != mdb.ErrNoDocuments {
 			return false, err
 		}
 	} else {
@@ -964,9 +966,8 @@ func (a *adapter) CredGetActive(uid t.Uid, method string) (*t.Credential, error)
 	if err := a.db.Collection("credentials").FindOne(a.ctx, filter).Decode(&cred); err != nil {
 		if err == mdb.ErrNoDocuments { // Cred not found
 			return nil, t.ErrNotFound
-		} else {
-			return nil, err
 		}
+		return nil, err
 	}
 
 	return &cred, nil
