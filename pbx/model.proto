@@ -91,6 +91,7 @@ message SetDesc {
 	DefaultAcsMode default_acs = 1;
 	bytes public = 2;
 	bytes private = 3;
+	bytes trusted = 4;
 }
 
 message GetOpts {
