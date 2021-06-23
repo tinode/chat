@@ -9,6 +9,7 @@
 	"max_subscriber_count": 32,
 	"max_tag_count": 16,
 	"expvar": "/stats/expvar/",
+	"server_status": "$SERVER_STATUS_PATH",
 
 	"media": {
 		"use_handler": "$MEDIA_HANDLER",
