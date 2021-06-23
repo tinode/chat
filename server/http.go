@@ -384,7 +384,6 @@ func serveStatus(wrt http.ResponseWriter, req *http.Request) {
 	now := time.Now()
 	fmt.Fprintf(wrt, "<body>")
 	fmt.Fprintf(wrt, "<h1>%s</h1><div>Version: %s, build: %s. Present time: %s</div>", "Tinode Server", currentVersion, buildstamp, now.Format(time.RFC1123))
-	fmt.Fprintf(wrt, "<a href='/status'>Update</a>")
 	fmt.Fprintf(wrt, "<br><hr>")
 
 	fmt.Fprintf(wrt, "<div>Sessions: %d</div>", len(globals.sessionStore.sessCache))
