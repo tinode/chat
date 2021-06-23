@@ -150,6 +150,16 @@ func (ss *SessionStore) Delete(s *Session) {
 	statsSet("LiveSessions", int64(len(ss.sessCache)))
 }
 
+func (ss *SessionStore) Range(f func(sid string, s *Session) bool) {
+	ss.lock.Lock()
+	for sid, s := range ss.sessCache {
+		if !f(sid, s) {
+			break
+		}
+	}
+	ss.lock.Unlock()
+}
+
 // Shutdown terminates sessionStore. No need to clean up.
 // Don't send to clustered sessions, their servers are not being shut down.
 func (ss *SessionStore) Shutdown() {

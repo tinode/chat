@@ -111,6 +111,9 @@ ENV STORE_USE_ADAPTER=$TARGET_DB
 # If 0, default value wll be used: # of nodes x 5.
 ENV CLUSTER_NUM_PROXY_EVENT_GOROUTINES=0
 
+# Url path for exposing the server's internal status. E.g. '/status'
+ENV SERVER_STATUS_PATH=''
+
 # Install root certificates, they are needed for email validator to work
 # with the TLS SMTP servers like Gmail or Mailjet. Also add bash and grep.
 RUN apk update && \
