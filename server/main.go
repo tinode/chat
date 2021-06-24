@@ -234,6 +234,8 @@ type configType struct {
 	MaxTagCount int `json:"max_tag_count"`
 	// URL path for exposing runtime stats. Disabled if the path is blank.
 	ExpvarPath string `json:"expvar"`
+	// URL path for internal server status. Disabled if the path is blank.
+	ServerStatusPath string `json:"server_status"`
 	// Take IP address of the client from HTTP header 'X-Forwarded-For'.
 	// Useful when tinode is behind a proxy. If missing, fallback to default RemoteAddr.
 	UseXForwardedFor bool `json:"use_x_forwarded_for"`
@@ -267,6 +269,7 @@ func main() {
 	tlsEnabled := flag.Bool("tls_enabled", false, "Override config value for enabling TLS.")
 	clusterSelf := flag.String("cluster_self", "", "Override the name of the current cluster node.")
 	expvarPath := flag.String("expvar", "", "Override the URL path where runtime stats are exposed. Use '-' to disable.")
+	serverStatusPath := flag.String("server_status", "", "Override the URL path where the server's internal status is displayed. Use '-' to disable.")
 	pprofFile := flag.String("pprof", "", "File name to save profiling info to. Disabled if not set.")
 	pprofUrl := flag.String("pprof_url", "", "Debugging only! URL path for exposing profiling info. Disabled if not set.")
 	flag.Parse()
@@ -620,6 +623,15 @@ func main() {
 		}
 	}
 	logs.Info.Printf("API served from root URL path '%s'", config.ApiPath)
+
+	sspath := *serverStatusPath
+	if sspath == "" || sspath == "-" {
+		sspath = config.ServerStatusPath
+	}
+	if sspath != "" && sspath != "-" {
+		logs.Info.Printf("Server status is available at '%s'", sspath)
+		mux.HandleFunc(sspath, serveStatus)
+	}
 
 	// Handle websocket clients.
 	mux.HandleFunc(config.ApiPath+"v0/channels", serveWebSocket)

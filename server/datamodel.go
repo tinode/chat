@@ -250,7 +250,7 @@ type MsgClientLeave struct {
 	Unsub bool   `json:"unsub,omitempty"`
 }
 
-// MsgClientPub is client's request to publish data to topic subscribers {pub}
+// MsgClientPub is client's request to publish data to topic subscribers {pub}.
 type MsgClientPub struct {
 	Id      string                 `json:"id,omitempty"`
 	Topic   string                 `json:"topic"`
@@ -341,7 +341,7 @@ type ClientComMessage struct {
  * Server to client messages.
  ****************************************************************/
 
-// MsgLastSeenInfo contains info on user's appearance online - when & user agent
+// MsgLastSeenInfo contains info on user's appearance online - when & user agent.
 type MsgLastSeenInfo struct {
 	// Timestamp of user's last appearance online.
 	When *time.Time `json:"when,omitempty"`
@@ -745,7 +745,7 @@ type MsgServerInfo struct {
 	SkipTopic string `json:"-"`
 }
 
-// Deep copy
+// Deep copy.
 func (src *MsgServerInfo) copy() *MsgServerInfo {
 	if src == nil {
 		return nil
@@ -754,7 +754,7 @@ func (src *MsgServerInfo) copy() *MsgServerInfo {
 	return &dst
 }
 
-// Basic description
+// Basic description.
 func (src *MsgServerInfo) describe() string {
 	s := src.Topic
 	if src.Src != "" {
@@ -843,12 +843,12 @@ func (src *ServerComMessage) describe() string {
 
 // Generators of server-side error messages {ctrl}.
 
-// NoErr indicates successful completion (200)
+// NoErr indicates successful completion (200).
 func NoErr(id, topic string, ts time.Time) *ServerComMessage {
 	return NoErrParams(id, topic, ts, nil)
 }
 
-// NoErrExplicitTs indicates successful completion with explicit server and incoming request timestamps (200)
+// NoErrExplicitTs indicates successful completion with explicit server and incoming request timestamps (200).
 func NoErrExplicitTs(id, topic string, serverTs, incomingReqTs time.Time) *ServerComMessage {
 	return NoErrParamsExplicitTs(id, topic, serverTs, incomingReqTs, nil)
 }
@@ -858,13 +858,13 @@ func NoErrReply(msg *ClientComMessage, ts time.Time) *ServerComMessage {
 	return NoErrExplicitTs(msg.Id, msg.Original, ts, msg.Timestamp)
 }
 
-// NoErrParams indicates successful completion with additional parameters (200)
+// NoErrParams indicates successful completion with additional parameters (200).
 func NoErrParams(id, topic string, ts time.Time, params interface{}) *ServerComMessage {
 	return NoErrParamsExplicitTs(id, topic, ts, ts, params)
 }
 
 // NoErrParamsExplicitTs indicates successful completion with additional parameters
-// and explicit server and incoming request timestamps (200)
+// and explicit server and incoming request timestamps (200).
 func NoErrParamsExplicitTs(id, topic string, serverTs, incomingReqTs time.Time, params interface{}) *ServerComMessage {
 	return &ServerComMessage{
 		Ctrl: &MsgServerCtrl{
@@ -881,7 +881,7 @@ func NoErrParamsExplicitTs(id, topic string, serverTs, incomingReqTs time.Time, 
 }
 
 // NoErrParamsReply indicates successful completion with additional parameters
-// and explicit server and incoming request timestamps (200)
+// and explicit server and incoming request timestamps (200).
 func NoErrParamsReply(msg *ClientComMessage, ts time.Time, params interface{}) *ServerComMessage {
 	return NoErrParamsExplicitTs(msg.Id, msg.Original, ts, msg.Timestamp, params)
 }

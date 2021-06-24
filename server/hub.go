@@ -78,6 +78,9 @@ type Hub struct {
 	// Topics must be indexed by name
 	topics *sync.Map
 
+	// Current number of loaded topics
+	numTopics int
+
 	// Channel for routing messages between topics, buffered at 4096
 	route chan *ServerComMessage
 
@@ -105,10 +108,12 @@ func (h *Hub) topicGet(name string) *Topic {
 }
 
 func (h *Hub) topicPut(name string, t *Topic) {
+	h.numTopics++
 	h.topics.Store(name, t)
 }
 
 func (h *Hub) topicDel(name string) {
+	h.numTopics--
 	h.topics.Delete(name)
 }
 
@@ -485,7 +490,6 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 					// Tell user2 that user1 is offline but let him keep sending updates in case user1 resubscribes.
 					presSingleUserOfflineOffline(uid2, uname1, "off", nilPresParams, "")
 				}
-
 			} else {
 				// Case 1.2.1.1: owner, delete the group topic from db.
 				// Only group topics have owners.
@@ -500,7 +504,6 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 
 			sess.queueOut(NoErrReply(msg, now))
 		}
-
 	} else {
 		// Case 2: just unregister.
 		// If t is nil, it's not registered, no action is needed
@@ -537,9 +540,7 @@ func (h *Hub) stopTopicsForUser(uid types.Uid, reason int, alldone chan<- bool) 
 		topic := t.(*Topic)
 		if _, isMember := topic.perUser[uid]; (topic.cat != types.TopicCatGrp && isMember) ||
 			topic.owner == uid {
-
 			topic.markDeleted()
-
 			h.topics.Delete(name)
 
 			// This call is non-blocking unless some other routine tries to stop it at the same time.

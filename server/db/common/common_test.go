@@ -54,30 +54,30 @@ func TestSelectEarliestUpdatedSubs(t *testing.T) {
 func TestSelectEarliestUpdatedAt(t *testing.T) {
 	t1 := time.Date(2021, time.June, 3, 10, 20, 0, 0, time.Local)
 	t2 := time.Date(2021, time.June, 3, 11, 20, 0, 0, time.Local)
-	ims_zero := time.Time{}
+	imsZero := time.Time{}
 	// IMS older that t1
-	ims_old := time.Date(2021, time.June, 3, 10, 10, 0, 0, time.Local)
+	imsOld := time.Date(2021, time.June, 3, 10, 10, 0, 0, time.Local)
 
 	// IMS newer than t1
-	ims_new := time.Date(2021, time.June, 3, 10, 30, 0, 0, time.Local)
+	imsNew := time.Date(2021, time.June, 3, 10, 30, 0, 0, time.Local)
 
-	ts := SelectEarliestUpdatedAt(t1, t2, ims_zero)
+	ts := SelectEarliestUpdatedAt(t1, t2, imsZero)
 	if ts != t2 {
 		t.Error("Should return newer time when IMS is zero, got older")
 	}
-	ts = SelectEarliestUpdatedAt(t2, t1, ims_zero)
+	ts = SelectEarliestUpdatedAt(t2, t1, imsZero)
 	if ts != t2 {
 		t.Error("Should return newer time when IMS is zero, got older (2)")
 	}
-	ts = SelectEarliestUpdatedAt(t1, t2, ims_old)
+	ts = SelectEarliestUpdatedAt(t1, t2, imsOld)
 	if ts != t1 {
 		t.Error("Should return older time when IMS old, got newer")
 	}
-	ts = SelectEarliestUpdatedAt(t2, t1, ims_old)
+	ts = SelectEarliestUpdatedAt(t2, t1, imsOld)
 	if ts != t1 {
 		t.Error("Should return older time when IMS old, got newer (2)")
 	}
-	ts = SelectEarliestUpdatedAt(t1, t2, ims_new)
+	ts = SelectEarliestUpdatedAt(t1, t2, imsNew)
 	if ts != t2 {
 		t.Error("Should return newer time when IMS is between dates, got older")
 	}
