@@ -150,6 +150,7 @@ func (ss *SessionStore) Delete(s *Session) {
 	statsSet("LiveSessions", int64(len(ss.sessCache)))
 }
 
+// Range calls given function for all sessions. It stops if the function returns false.
 func (ss *SessionStore) Range(f func(sid string, s *Session) bool) {
 	ss.lock.Lock()
 	for sid, s := range ss.sessCache {
