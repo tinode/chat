@@ -324,6 +324,7 @@ func (a *adapter) CreateDb(reset bool) error {
 			lastseen  DATETIME,
 			useragent VARCHAR(255) DEFAULT '',
 			public    JSON,
+			trusted   JSON,
 			tags      JSON,
 			PRIMARY KEY(id),
 			INDEX users_state_stateat(state, stateat)
@@ -396,6 +397,7 @@ func (a *adapter) CreateDb(reset bool) error {
 			seqid     INT NOT NULL DEFAULT 0,
 			delid     INT DEFAULT 0,
 			public    JSON,
+			trusted   JSON,
 			tags      JSON,
 			PRIMARY KEY(id),
 			UNIQUE INDEX topics_name(name),
@@ -689,6 +691,14 @@ func (a *adapter) UpgradeDb() error {
 
 	if a.version == 111 {
 		// Perform database upgrade from version 111 to version 112.
+		if _, err := a.db.Exec("ALTER TABLE users ADD trusted JSON AFTER public"); err != nil {
+			return err
+		}
+
+		if _, err := a.db.Exec("ALTER TABLE topic ADD trusted JSON AFTER public"); err != nil {
+			return err
+		}
+
 		if _, err := a.db.Exec("ALTER TABLE fileuploads ADD topic VARCHAR(25) AFTER size"); err != nil {
 			return err
 		}
@@ -787,11 +797,11 @@ func (a *adapter) UserCreate(user *t.User) error {
 	}()
 
 	decoded_uid := store.DecodeUid(user.Uid())
-	if _, err = tx.Exec("INSERT INTO users(id,createdat,updatedat,state,access,public,tags) VALUES(?,?,?,?,?,?,?)",
+	if _, err = tx.Exec("INSERT INTO users(id,createdat,updatedat,state,access,public,trusted,tags) VALUES(?,?,?,?,?,?,?,?)",
 		decoded_uid,
 		user.CreatedAt, user.UpdatedAt,
 		user.State, user.Access,
-		toJSON(user.Public), user.Tags); err != nil {
+		toJSON(user.Public), toJSON(user.Trusted), user.Tags); err != nil {
 		return err
 	}
 
@@ -944,6 +954,7 @@ func (a *adapter) UserGet(uid t.Uid) (*t.User, error) {
 	if err == nil {
 		user.SetUid(uid)
 		user.Public = fromJSON(user.Public)
+		user.Trusted = fromJSON(user.Trusted)
 		return &user, nil
 	}
 
@@ -987,6 +998,7 @@ func (a *adapter) UserGetAll(ids ...t.Uid) ([]t.User, error) {
 
 		user.SetUid(encodeUidString(user.Id))
 		user.Public = fromJSON(user.Public)
+		user.Trusted = fromJSON(user.Trusted)
 
 		users = append(users, user)
 	}
@@ -1321,10 +1333,10 @@ func (a *adapter) UserUnreadCount(uid t.Uid) (int, error) {
 // *****************************
 
 func (a *adapter) topicCreate(tx *sqlx.Tx, topic *t.Topic) error {
-	_, err := tx.Exec("INSERT INTO topics(createdat,updatedat,touchedat,state,name,usebt,owner,access,public,tags) "+
-		"VALUES(?,?,?,?,?,?,?,?,?,?)",
+	_, err := tx.Exec("INSERT INTO topics(createdat,updatedat,touchedat,state,name,usebt,owner,access,public,trusted,tags) "+
+		"VALUES(?,?,?,?,?,?,?,?,?,?,?)",
 		topic.CreatedAt, topic.UpdatedAt, topic.TouchedAt, topic.State, topic.Id, topic.UseBt,
-		store.DecodeUid(t.ParseUid(topic.Owner)), topic.Access, toJSON(topic.Public), topic.Tags)
+		store.DecodeUid(t.ParseUid(topic.Owner)), topic.Access, toJSON(topic.Public), toJSON(topic.Trusted), topic.Tags)
 	if err != nil {
 		return err
 	}
@@ -1432,7 +1444,7 @@ func (a *adapter) TopicGet(topic string) (*t.Topic, error) {
 	// Fetch topic by name
 	var tt = new(t.Topic)
 	err := a.db.GetContext(ctx, tt,
-		"SELECT createdat,updatedat,state,stateat,touchedat,name AS id,usebt,access,owner,seqid,delid,public,tags "+
+		"SELECT createdat,updatedat,state,stateat,touchedat,name AS id,usebt,access,owner,seqid,delid,public,trusted,tags "+
 			"FROM topics WHERE name=?",
 		topic)
 
@@ -1446,6 +1458,7 @@ func (a *adapter) TopicGet(topic string) (*t.Topic, error) {
 
 	tt.Owner = encodeUidString(tt.Owner).String()
 	tt.Public = fromJSON(tt.Public)
+	tt.Trusted = fromJSON(tt.Trusted)
 
 	return tt, nil
 }
@@ -1517,7 +1530,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 			// One of 'me', 'fnd' subscriptions, skip. Don't skip 'sys' subscription.
 			continue
 		} else if tcat == t.TopicCatP2P {
-			// P2P subscription, find the other user to get user.Public
+			// P2P subscription, find the other user to get user.Public and user.Trusted.
 			uid1, uid2, _ := t.ParseP2P(tname)
 			if uid1 == uid {
 				usrq = append(usrq, store.DecodeUid(uid2))
@@ -1600,6 +1613,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 			sub.SetSeqId(top.SeqId)
 			if t.GetTopicCat(sub.Topic) == t.TopicCatGrp {
 				sub.SetPublic(fromJSON(top.Public))
+				sub.SetTrusted(fromJSON(top.Trusted))
 			}
 			// Put back the updated value of a subsription, will process further below
 			join[top.Id] = sub
@@ -1660,6 +1674,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 				sub.UpdatedAt = common.SelectEarliestUpdatedAt(sub.UpdatedAt, usr.UpdatedAt, ims)
 				sub.SetState(usr.State)
 				sub.SetPublic(fromJSON(usr.Public))
+				sub.SetTrusted(fromJSON(usr.Trusted))
 				sub.SetWith(uid2.UserId())
 				sub.SetDefaultAccess(usr.Access.Auth, usr.Access.Anon)
 				sub.SetLastSeenAndUA(usr.LastSeen, usr.UserAgent)
@@ -1692,7 +1707,7 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 
 	// Fetch all subscribed users. The number of users is not large
 	q := `SELECT s.createdat,s.updatedat,s.deletedat,s.userid,s.topic,s.delid,s.recvseqid,
-		s.readseqid,s.modewant,s.modegiven,u.public,s.private
+		s.readseqid,s.modewant,s.modegiven,u.public,u.trusted,s.private
 		FROM subscriptions AS s JOIN users AS u ON s.userid=u.id 
 		WHERE s.topic=?`
 	args := []interface{}{topic}
@@ -1742,19 +1757,20 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 	// Fetch subscriptions
 	var sub t.Subscription
 	var subs []t.Subscription
-	var public interface{}
+	var public, trusted interface{}
 	for rows.Next() {
 		if err = rows.Scan(
 			&sub.CreatedAt, &sub.UpdatedAt, &sub.DeletedAt,
 			&sub.User, &sub.Topic, &sub.DelId, &sub.RecvSeqId,
 			&sub.ReadSeqId, &sub.ModeWant, &sub.ModeGiven,
-			&public, &sub.Private); err != nil {
+			&public, &trusted, &sub.Private); err != nil {
 			break
 		}
 
 		sub.User = encodeUidString(sub.User).String()
 		sub.Private = fromJSON(sub.Private)
 		sub.SetPublic(fromJSON(public))
+		sub.SetTrusted(fromJSON(trusted))
 		subs = append(subs, sub)
 	}
 	if err == nil {
@@ -1767,10 +1783,14 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 		if len(subs) == 1 {
 			// The other user is deleted, nothing we can do.
 			subs[0].SetPublic(nil)
+			subs[0].SetTrusted(nil)
 		} else {
-			pub := subs[0].GetPublic()
+			tmp := subs[0].GetPublic()
 			subs[0].SetPublic(subs[1].GetPublic())
-			subs[1].SetPublic(pub)
+			subs[1].SetPublic(tmp)
+			tmp = subs[0].GetTrusted()
+			subs[0].SetTrusted(subs[1].GetTrusted())
+			subs[1].SetTrusted(tmp)
 		}
 
 		// Remove deleted and unneeded subscriptions
@@ -2040,7 +2060,7 @@ func (a *adapter) SubsForUser(forUser t.Uid) ([]t.Subscription, error) {
 }
 
 // SubsForTopic fetches all subsciptions for a topic. Does NOT load Public value.
-// The difference between UsersForTopic vs SubsForTopic is that the former loads user.public,
+// The difference between UsersForTopic vs SubsForTopic is that the former loads user.public+trusted,
 // the latter does not.
 func (a *adapter) SubsForTopic(topic string, keepDeleted bool, opts *t.QueryOpt) ([]t.Subscription, error) {
 	q := `SELECT createdat,updatedat,deletedat,userid AS user,topic,delid,recvseqid,
@@ -2221,10 +2241,10 @@ func (a *adapter) FindUsers(uid t.Uid, req [][]string, opt []string) ([]t.Subscr
 		index[tag] = struct{}{}
 	}
 
-	query := "SELECT u.id,u.createdat,u.updatedat,u.access,u.public,u.tags,COUNT(*) AS matches " +
+	query := "SELECT u.id,u.createdat,u.updatedat,u.access,u.public,u.trusted,u.tags,COUNT(*) AS matches " +
 		"FROM users AS u LEFT JOIN usertags AS t ON t.userid=u.id " +
 		"WHERE u.state=? AND t.tag IN (?" + strings.Repeat(",?", len(allReq)+len(opt)-1) + ") " +
-		"GROUP BY u.id,u.createdat,u.updatedat,u.access,u.public,u.tags "
+		"GROUP BY u.id,u.createdat,u.updatedat,u.access,u.public,u.trusted,u.tags "
 	if len(allReq) > 0 {
 		query += "HAVING"
 		first := true
@@ -2257,7 +2277,7 @@ func (a *adapter) FindUsers(uid t.Uid, req [][]string, opt []string) ([]t.Subscr
 	}
 
 	var userId int64
-	var public interface{}
+	var public, trusted interface{}
 	var access t.DefaultAccess
 	var userTags t.StringSlice
 	var ignored int
@@ -2265,7 +2285,8 @@ func (a *adapter) FindUsers(uid t.Uid, req [][]string, opt []string) ([]t.Subscr
 	var subs []t.Subscription
 	thisUser := store.DecodeUid(uid)
 	for rows.Next() {
-		if err = rows.Scan(&userId, &sub.CreatedAt, &sub.UpdatedAt, &access, &public, &userTags, &ignored); err != nil {
+		if err = rows.Scan(&userId, &sub.CreatedAt, &sub.UpdatedAt, &access,
+			&public, &trusted, &userTags, &ignored); err != nil {
 			subs = nil
 			break
 		}
@@ -2276,6 +2297,7 @@ func (a *adapter) FindUsers(uid t.Uid, req [][]string, opt []string) ([]t.Subscr
 		}
 		sub.User = store.EncodeUid(userId).String()
 		sub.SetPublic(fromJSON(public))
+		sub.SetTrusted(fromJSON(trusted))
 		sub.SetDefaultAccess(access.Auth, access.Anon)
 		foundTags := make([]string, 0, 1)
 		for _, tag := range userTags {
@@ -2310,10 +2332,10 @@ func (a *adapter) FindTopics(req [][]string, opt []string) ([]t.Subscription, er
 		index[tag] = struct{}{}
 	}
 
-	query := "SELECT t.name AS topic,t.createdat,t.updatedat,t.usebt,t.access,t.public,t.tags,COUNT(*) AS matches " +
+	query := "SELECT t.name AS topic,t.createdat,t.updatedat,t.usebt,t.access,t.public,t.trusted,t.tags,COUNT(*) AS matches " +
 		"FROM topics AS t LEFT JOIN topictags AS tt ON t.name=tt.topic " +
 		"WHERE t.state=? AND tt.tag IN (?" + strings.Repeat(",?", len(allReq)+len(opt)-1) + ") " +
-		"GROUP BY t.name,t.createdat,t.updatedat,t.usebt,t.access,t.public,t.tags "
+		"GROUP BY t.name,t.createdat,t.updatedat,t.usebt,t.access,t.public,t.trusted,t.tags "
 	if len(allReq) > 0 {
 		query += "HAVING"
 		first := true
@@ -2344,7 +2366,7 @@ func (a *adapter) FindTopics(req [][]string, opt []string) ([]t.Subscription, er
 	}
 
 	var access t.DefaultAccess
-	var public interface{}
+	var public, trusted interface{}
 	var topicTags t.StringSlice
 	var ignored int
 	var isChan int
@@ -2352,7 +2374,7 @@ func (a *adapter) FindTopics(req [][]string, opt []string) ([]t.Subscription, er
 	var subs []t.Subscription
 	for rows.Next() {
 		if err = rows.Scan(&sub.Topic, &sub.CreatedAt, &sub.UpdatedAt, &isChan, &access,
-			&public, &topicTags, &ignored); err != nil {
+			&public, &trusted, &topicTags, &ignored); err != nil {
 			subs = nil
 			break
 		}
@@ -2361,6 +2383,7 @@ func (a *adapter) FindTopics(req [][]string, opt []string) ([]t.Subscription, er
 			sub.Topic = t.GrpToChn(sub.Topic)
 		}
 		sub.SetPublic(fromJSON(public))
+		sub.SetTrusted(fromJSON(trusted))
 		sub.SetDefaultAccess(access.Auth, access.Anon)
 		foundTags := make([]string, 0, 1)
 		for _, tag := range topicTags {
@@ -3293,7 +3316,7 @@ func decodeUidString(str string) int64 {
 func updateByMap(update map[string]interface{}) (cols []string, args []interface{}) {
 	for col, arg := range update {
 		col = strings.ToLower(col)
-		if col == "public" || col == "private" {
+		if col == "public" || col == "trusted" || col == "private" {
 			arg = toJSON(arg)
 		}
 		cols = append(cols, col+"=?")

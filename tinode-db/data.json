@@ -7,6 +7,7 @@
    "passhash": "alice123",
    "private": {"comment": "some comment 123"},
    "public": {"fn": "Alice Johnson", "photo": "alice-128.jpg", "type": "jpg"},
+   "trusted": {"verified": true},
    "tags": ["Alice"],
    "state": "ok",
    "status": {
@@ -112,6 +113,7 @@
    "authLevel": "root",
    "private": {"comment": "No one knowns that Xena exists"},
    "public": {"fn": "Xena Pacifist Peasant", "photo": "xena-128.jpg", "type": "jpg"},
+   "trusted": {"staff": true},
    "state": "",
    "status": "Just a simple peaceful agriculture specialist",
    "username": "xena",
@@ -147,6 +149,7 @@
    "owner": "xena",
    "tags": ["support","public"],
    "public": {"fn": "Support", "photo": "support-128.jpg", "type": "jpg"},
+   "trusted": {"staff": true},
    "access": {"auth": "JRWP", "anon": "JW"}
   },
   {
@@ -156,6 +159,7 @@
    "channel": true,
    "tags": ["coffee","channel"],
    "public": {"fn": "Coffee Channel", "photo": "chan-128.jpg", "type": "jpg"},
+   "trusted": {"verified": true},
    "access": {"auth": "RWPD", "anon": "N"}
   }
  ],

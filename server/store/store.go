@@ -401,7 +401,7 @@ func (usersMapper) UpdateState(uid types.Uid, state types.ObjState) error {
 }
 
 // GetSubs loads *all* subscriptions for the given user.
-// Does not load Public or Private, does not load deleted subscriptions.
+// Does not load Public/Trusted or Private, does not load deleted subscriptions.
 func (usersMapper) GetSubs(id types.Uid) ([]types.Subscription, error) {
 	return adp.SubsForUser(id)
 }
@@ -430,12 +430,12 @@ func (usersMapper) FindSubs(id types.Uid, required [][]string, optional []string
 	return allSubs, nil
 }
 
-// GetTopics load a list of user's subscriptions with Public field copied to subscription
+// GetTopics load a list of user's subscriptions with Public+Trusted fields copied to subscription
 func (usersMapper) GetTopics(id types.Uid, opts *types.QueryOpt) ([]types.Subscription, error) {
 	return adp.TopicsForUser(id, false, opts)
 }
 
-// GetTopicsAny load a list of user's subscriptions with Public field copied to subscription.
+// GetTopicsAny load a list of user's subscriptions with Public+Trusted fields copied to subscription.
 // Deleted topics are returned too.
 func (usersMapper) GetTopicsAny(id types.Uid, opts *types.QueryOpt) ([]types.Subscription, error) {
 	return adp.TopicsForUser(id, true, opts)
@@ -552,26 +552,26 @@ func (topicsMapper) Get(topic string) (*types.Topic, error) {
 	return adp.TopicGet(topic)
 }
 
-// GetUsers loads subscriptions for topic plus loads user.Public.
+// GetUsers loads subscriptions for topic plus loads user.Public+Trusted.
 // Deleted subscriptions are not loaded.
 func (topicsMapper) GetUsers(topic string, opts *types.QueryOpt) ([]types.Subscription, error) {
 	return adp.UsersForTopic(topic, false, opts)
 }
 
-// GetUsersAny loads subscriptions for topic plus loads user.Public. It's the same as GetUsers,
+// GetUsersAny loads subscriptions for topic plus loads user.Public+Trusted. It's the same as GetUsers,
 // except it loads deleted subscriptions too.
 func (topicsMapper) GetUsersAny(topic string, opts *types.QueryOpt) ([]types.Subscription, error) {
 	return adp.UsersForTopic(topic, true, opts)
 }
 
-// GetSubs loads a list of subscriptions to the given topic, user.Public and deleted
+// GetSubs loads a list of subscriptions to the given topic, user.Public+Trusted and deleted
 // subscriptions are not loaded. Suspended subscriptions are loaded.
 func (topicsMapper) GetSubs(topic string, opts *types.QueryOpt) ([]types.Subscription, error) {
 	return adp.SubsForTopic(topic, false, opts)
 }
 
 // GetSubsAny loads a list of subscriptions to the given topic including deleted subscription.
-// user.Public is not loaded
+// user.Public/Trusted are not loaded
 func (topicsMapper) GetSubsAny(topic string, opts *types.QueryOpt) ([]types.Subscription, error) {
 	return adp.SubsForTopic(topic, true, opts)
 }

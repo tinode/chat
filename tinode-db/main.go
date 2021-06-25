@@ -33,6 +33,11 @@ type tPrivate struct {
 	Comment string `json:"comment"`
 }
 
+type tTrusted struct {
+	Verified bool `json:"verified"`
+	Staff    bool `json:"staff"`
+}
+
 // DefAccess is default access mode.
 type DefAccess struct {
 	Auth string `json:"auth"`
@@ -69,6 +74,7 @@ type User struct {
 	Password    string      `json:"passhash"`
 	Private     tPrivate    `json:"private"`
 	Public      theCard     `json:"public"`
+	Trusted     tTrusted    `json:"trusted"`
 	State       string      `json:"state"`
 	Status      interface{} `json:"status"`
 	AddressBook []string    `json:"addressBook"`
@@ -90,6 +96,7 @@ type GroupTopic struct {
 	Owner        string    `json:"owner"`
 	Channel      bool      `json:"channel"`
 	Public       theCard   `json:"public"`
+	Trusted      tTrusted  `json:"trusted"`
 	Access       DefAccess `json:"access"`
 	Tags         []string  `json:"tags"`
 	OwnerPrivate tPrivate  `json:"ownerPrivate"`

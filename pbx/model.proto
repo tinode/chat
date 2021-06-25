@@ -308,6 +308,7 @@ message TopicDesc {
 	bytes private = 11;
 	string state = 12;
 	int64 state_at = 13;
+	bytes trusted = 14;
 }
 
 // MsgTopicSub: topic subscription details, sent in Meta message
@@ -321,6 +322,7 @@ message TopicSub {
 	int32 read_id = 5;
 	int32 recv_id = 6;
 	bytes public  = 7;
+	bytes trusted = 16; // 16!
 	bytes private = 8;
 
 	// Response to non-'me' topic

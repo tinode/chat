@@ -44,8 +44,9 @@ func genDb(data *Data) {
 				Auth: types.ModeCAuth,
 				Anon: types.ModeNone,
 			},
-			Tags:   uu.Tags,
-			Public: parsePublic(&uu.Public, data.datapath),
+			Tags:    uu.Tags,
+			Public:  parsePublic(&uu.Public, data.datapath),
+			Trusted: &uu.Trusted,
 		}
 		user.CreatedAt = getCreatedTime(uu.CreatedAt)
 
@@ -145,9 +146,11 @@ func genDb(data *Data) {
 				Auth: accessAuth,
 				Anon: accessAnon,
 			},
-			UseBt:  gt.Channel,
-			Tags:   gt.Tags,
-			Public: parsePublic(&gt.Public, data.datapath)}
+			UseBt:   gt.Channel,
+			Tags:    gt.Tags,
+			Public:  parsePublic(&gt.Public, data.datapath),
+			Trusted: &gt.Trusted,
+		}
 		var owner types.Uid
 		if gt.Owner != "" {
 			owner = types.ParseUid(nameIndex[gt.Owner])

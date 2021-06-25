@@ -62,6 +62,8 @@ type Topic struct {
 
 	// Topic's public data
 	public interface{}
+	// Topic's trusted data
+	trusted interface{}
 
 	// Topic's per-subscriber data
 	perUser map[types.Uid]perUserData
@@ -134,6 +136,7 @@ type perUserData struct {
 
 	// P2P only:
 	public    interface{}
+	trusted   interface{}
 	topicName string
 	deleted   bool
 
@@ -349,7 +352,7 @@ func (t *Topic) handleMetaGet(meta *metaReq, asUid types.Uid, asChan bool, authL
 
 func (t *Topic) handleMetaSet(meta *metaReq, asUid types.Uid, asChan bool, authLevel auth.Level) {
 	if meta.pkt.MetaWhat&constMsgMetaDesc != 0 {
-		if err := t.replySetDesc(meta.sess, asUid, asChan, meta.pkt); err == nil {
+		if err := t.replySetDesc(meta.sess, asUid, asChan, authLevel, meta.pkt); err == nil {
 			// Notify plugins of the update
 			pluginTopic(t, plgActUpd)
 		} else {
@@ -1845,10 +1848,13 @@ func (t *Topic) replyGetDesc(sess *Session, asUid types.Uid, asChan bool, opts *
 	}
 
 	if ifUpdated {
-		if t.public != nil {
+		if t.public != nil || t.trusted != nil {
+			// Not a p2p topic.
 			desc.Public = t.public
+			desc.Trusted = t.trusted
 		} else if full && t.cat == types.TopicCatP2P {
 			desc.Public = pud.public
+			desc.Trusted = pud.trusted
 		}
 	}
 
@@ -1913,9 +1919,10 @@ func (t *Topic) replyGetDesc(sess *Session, asUid types.Uid, asChan bool, opts *
 	return nil
 }
 
-// replySetDesc updates topic metadata, saves it to DB,
-// replies to the caller as {ctrl} message, generates {pres} update if necessary
-func (t *Topic) replySetDesc(sess *Session, asUid types.Uid, asChan bool, msg *ClientComMessage) error {
+// replySetDesc updates topic metadata, saves it to DB, replies to the caller as {ctrl} message,
+// generates {pres} update if necessary.
+func (t *Topic) replySetDesc(sess *Session, asUid types.Uid, asChan bool,
+	authLevel auth.Level, msg *ClientComMessage) error {
 	now := types.TimeNow()
 
 	assignAccess := func(upd map[string]interface{}, mode *MsgDefaultAcsMode) error {
@@ -1973,18 +1980,30 @@ func (t *Topic) replySetDesc(sess *Session, asUid types.Uid, asChan bool, msg *C
 	// Change to subscription.
 	sub := make(map[string]interface{})
 	if set := msg.Set; set.Desc != nil {
+		if set.Desc.Trusted != nil && authLevel != auth.LevelRoot {
+			// Only ROOT can change Trusted.
+			sess.queueOut(ErrPermissionDeniedReply(msg, now))
+			return errors.New("attempt to change Trusted by non-root")
+		}
+
 		switch t.cat {
 		case types.TopicCatMe:
 			// Update current user
 			err = assignAccess(core, set.Desc.DefaultAcs)
 			sendCommon = assignGenericValues(core, "Public", t.public, set.Desc.Public)
+			sendCommon = assignGenericValues(core, "Trusted", t.trusted, set.Desc.Trusted) || sendCommon
 		case types.TopicCatFnd:
 			// set.Desc.DefaultAcs is ignored.
+			if set.Desc.Trusted != nil {
+				// 'fnd' does not support Trusted.
+				sess.queueOut(ErrPermissionDeniedReply(msg, now))
+				return errors.New("attempt to assign Trusted in fnd topic")
+			}
 			// Do not send presence if fnd.Public has changed.
 			assignGenericValues(core, "Public", t.fndGetPublic(sess), set.Desc.Public)
 		case types.TopicCatP2P:
 			// Reject direct changes to P2P topics.
-			if set.Desc.Public != nil || set.Desc.DefaultAcs != nil {
+			if set.Desc.Public != nil || set.Desc.Trusted != nil || set.Desc.DefaultAcs != nil {
 				sess.queueOut(ErrPermissionDeniedReply(msg, now))
 				return errors.New("incorrect attempt to change metadata of a p2p topic")
 			}
@@ -1993,7 +2012,8 @@ func (t *Topic) replySetDesc(sess *Session, asUid types.Uid, asChan bool, msg *C
 			if t.owner == asUid {
 				err = assignAccess(core, set.Desc.DefaultAcs)
 				sendCommon = assignGenericValues(core, "Public", t.public, set.Desc.Public)
-			} else if set.Desc.DefaultAcs != nil || set.Desc.Public != nil {
+				sendCommon = assignGenericValues(core, "Trusted", t.trusted, set.Desc.Trusted) || sendCommon
+			} else if set.Desc.DefaultAcs != nil || set.Desc.Public != nil || set.Desc.Trusted != nil {
 				// This is a request from non-owner
 				sess.queueOut(ErrPermissionDeniedReply(msg, now))
 				return errors.New("attempt to change public or permissions by non-owner")
@@ -2047,6 +2067,9 @@ func (t *Topic) replySetDesc(sess *Session, asUid types.Uid, asChan bool, msg *C
 		if public, ok := core["Public"]; ok {
 			t.public = public
 		}
+		if trusted, ok := core["Trusted"]; ok {
+			t.trusted = trusted
+		}
 	} else if t.cat == types.TopicCatFnd {
 		// Assign per-session fnd.Public.
 		t.fndSetPublic(sess, core["Public"])
@@ -2061,7 +2084,7 @@ func (t *Topic) replySetDesc(sess *Session, asUid types.Uid, asChan bool, msg *C
 	}
 
 	if sendCommon || sendPriv {
-		// t.public, t.accessAuth/Anon have changed, make an announcement
+		// t.public/t.trusted, t.accessAuth/Anon have changed, make an announcement
 		if sendCommon {
 			if t.cat == types.TopicCatMe {
 				t.presUsersOfInterest("upd", "")
@@ -2120,7 +2143,7 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 				req.Topic = uid2.P2PName(asUid)
 			}
 		}
-		// Fetch user's subscriptions, with Topic.Public denormalized into subscription.
+		// Fetch user's subscriptions, with Topic.Public+Topic.Trusted denormalized into subscription.
 		if ifModified.IsZero() {
 			// No cache management. Skip deleted subscriptions.
 			subs, err = store.Users.GetTopics(asUid, msgOpts2storeOpts(req))
@@ -2341,8 +2364,9 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 
 				// Returning public and private only if they have changed since ifModified
 				if sendPubPriv {
-					// 'sub' has nil 'public' in p2p topics which is OK.
+					// 'sub' has nil 'public'/'trusted' in P2P topics which is OK.
 					mts.Public = sub.GetPublic()
+					mts.Trusted = sub.GetTrusted()
 					// Reporting 'private' only if it's user's own subscription.
 					if uid == asUid {
 						mts.Private = sub.Private
