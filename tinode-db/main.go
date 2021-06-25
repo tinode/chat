@@ -34,8 +34,12 @@ type tPrivate struct {
 }
 
 type tTrusted struct {
-	Verified bool `json:"verified"`
-	Staff    bool `json:"staff"`
+	Verified bool `json:"verified,omitempty"`
+	Staff    bool `json:"staff,omitempty"`
+}
+
+func (t tTrusted) IsZero() bool {
+	return !t.Verified && !t.Staff
 }
 
 // DefAccess is default access mode.
