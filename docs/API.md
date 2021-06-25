@@ -272,9 +272,9 @@ Credentials are initially assigned at registration time by sending an `{acc}` me
 
 ### Access Control
 
-Access control manages user's access to topics through access control lists (ACLs) or bearer tokens (_bearer tokens are not implemented as of version 0.15_).
+Access control manages user's access to topics through access control lists (ACLs). The access is assigned individually to each user-topic pair (subscription).
 
-Access control is mostly usable for group topics. Its usability for `me` and P2P topics is limited to managing presence notifications and banning uses from initiating or continuing P2P conversations.
+Access control is mostly usable for group topics. Its usability for `me` and P2P topics is limited to managing presence notifications and banning uses from initiating or continuing P2P conversations. All channel readers are given the same permissions.
 
 User's access to a topic is defined by two sets of permissions: user's desired permissions "want", and permissions granted to user by topic's manager(s) "given". Each permission is represented by a bit in a bitmap. It can be either present or absent. The actual access is determined as a bitwise AND of wanted and given permissions. The permissions are communicated in messages as a set of ASCII characters, where presence of a character means a set permission bit:
 
@@ -288,11 +288,12 @@ User's access to a topic is defined by two sets of permissions: user's desired p
 * Delete: `D`, permission to hard-delete messages; only owners can completely delete topics
 * Owner: `O`, user is the topic owner; the owner can assign any other permission to any topic member, change topic description, delete topic; topic may have a single owner only; some topics have no owner
 
-Topic's default access is established at the topic creation time by `{sub.desc.defacs}` and can be subsequently modified by the owner by sending `{set}` messages. Default access is defined for two categories of users: authenticated and anonymous. This value is applied as a default "given" permission to all new subscriptions.
+When a user subscribes to a topic or starts a chat with another user, the access permissions are either set explicitly or assigned by default `defacs`. Access permissions can be modified by sending `{set}` messages.
 
-Client may replace explicit permissions in `{sub}` and `{set}` messages with an empty string to tell Tinode to use default permissions. If client specifies no default access permissions at topic creation time, authenticated users will receive a `RWP` permission, anonymous users will receive an empty permission which means every subscription request must be explicitly approved by the topic manager.
+A client may set explicit permissions in `{sub}` and `{set}` messages. If the permissions are missing or set to an empty string (not `N`!), Tinode will use default permissions `defacs` assigned earlir. If no default permissions are found, the authenticated users in group topics will receive a `JRWPS` access, in P2P topics will get `JRWPA`; anonymous users will receive `N` (no access) which means every subscription request must be explicitly approved by the topic manager.
 
-Access permissions can be assigned on a per-user basis by `{set}` messages.
+Default access is defined for two categories of users: authenticated and anonymous. The default access value is applied as a "given" permission to all new subscriptions. Topic's default access is established at the topic creation time by `{sub.desc.defacs}` and can be subsequently modified by the owner by sending `{set}` messages. Likewise, user's default access is established at the account creation time by `{acc.desc.defacs}` and can be modified by the user by sending a `{set}` message to `me` topic.
+
 
 ## Topics
 
@@ -448,13 +449,13 @@ Topics and subscriptions have `trusted`, `public`, and `private` fields. General
 
 ### Trusted
 
-The format of the optional `trusted` field in group and peer to peer topics is a set of key-value pairs; `fnd` and `sys` topics do not have the `trusted`. The following keys are currently defined:
+The format of the optional `trusted` field in group and peer to peer topics is a set of key-value pairs; `fnd` and `sys` topics do not have the `trusted`. The following optional keys are currently defined:
 ```js
 trusted: {
-  vip: true, // boolean, an indicator of a special user or topic, such as a
-             // verified user or a staff member.
-  danger: "some comment", // string, an indicator that the user or topic are
-             // in some ways dangerous or suspicious.
+  verified: true, // boolean, an indicator of a verified/trustworthy user or topic.
+  staff: true,    // boolean, an indicator that the user or topic
+                  // is a part of/belongs to the server administation.
+  danger: true    // boolean, an indicator that the user or topic are untrustworthy.
 }
 ```
 
