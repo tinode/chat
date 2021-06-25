@@ -695,7 +695,7 @@ func (a *adapter) UpgradeDb() error {
 			return err
 		}
 
-		if _, err := a.db.Exec("ALTER TABLE topic ADD trusted JSON AFTER public"); err != nil {
+		if _, err := a.db.Exec("ALTER TABLE topics ADD trusted JSON AFTER public"); err != nil {
 			return err
 		}
 
