@@ -378,7 +378,7 @@ func serveStatus(wrt http.ResponseWriter, req *http.Request) {
 
 	fmt.Fprintf(wrt, "<html><head>")
 	fmt.Fprintf(wrt, "<title>Server Status</title>")
-	fmt.Fprintf(wrt, "<style>tr:nth-child(even) { background: #f2f2f2 }</style>")
+	fmt.Fprintf(wrt, "<style>table { width: 100%%; border: 1px; table-layout: fixed } .tc { display: inline-block; position: relative; width: 100%%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: top; font-size: 14; } .tc:hover {  z-index: 1; width: auto; max-width: 600px; background-color: #FFFFCC; white-space: normal; } tr:nth-child(even) { background: #f2f2f2 }</style>")
 	fmt.Fprintf(wrt, "</head>")
 
 	now := time.Now()
@@ -388,6 +388,16 @@ func serveStatus(wrt http.ResponseWriter, req *http.Request) {
 
 	fmt.Fprintf(wrt, "<div>Sessions: %d</div>", len(globals.sessionStore.sessCache))
 	fmt.Fprintf(wrt, "<table>")
+
+	fmt.Fprintf(wrt, "<colgroup>")
+	fmt.Fprintf(wrt, "<col span='1' style='width: 130px;'>")
+	fmt.Fprintf(wrt, "<col span='1' style='width: 200px;'>")
+	fmt.Fprintf(wrt, "<col span='1' style='width: 90px;'>")
+	fmt.Fprintf(wrt, "<col span='1' style='width: 90px;'>")
+	fmt.Fprintf(wrt, "<col span='1' >")
+	fmt.Fprintf(wrt, "<col span='1' >")
+	fmt.Fprintf(wrt, "</colgroup>")
+
 	fmt.Fprintf(wrt, "<tr><th>remoteAddr</th><th>UA</th><th>uid</th><th>sid</th><th>clnode</th><th>subs</th></tr>")
 	globals.sessionStore.Range(func(sid string, s *Session) bool {
 		keys := make([]string, 0, len(s.subs))
@@ -396,7 +406,7 @@ func serveStatus(wrt http.ResponseWriter, req *http.Request) {
 		}
 		sort.Strings(keys)
 		l := strings.Join(keys, ",")
-		fmt.Fprintf(wrt, "<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%+v</td><td>%s</td></tr>", s.remoteAddr, s.userAgent, s.uid.String(), sid, s.clnode, l)
+		fmt.Fprintf(wrt, "<tr><td><div class='tc'>%s</div></td><td><div class='tc'>%s</div></td><td><div class='tc'>%s</div></td><td><div class='tc'>%s</div></td><td><div class='tc'>%+v</div></td><td><div class='tc'>%s</div></td></tr>", s.remoteAddr, s.userAgent, s.uid.String(), sid, s.clnode, l)
 		return true
 	})
 	fmt.Fprintf(wrt, "</table>")
@@ -411,6 +421,16 @@ func serveStatus(wrt http.ResponseWriter, req *http.Request) {
 	fmt.Fprintf(wrt, "<div>Topics: %d</div>", globals.hub.numTopics)
 	fmt.Fprintf(wrt, "<table>")
 
+	fmt.Fprintf(wrt, "<colgroup>")
+	fmt.Fprintf(wrt, "<col span='1' style='width: 190px;'>")
+	fmt.Fprintf(wrt, "<col span='1' style='width: 100px;'>")
+	fmt.Fprintf(wrt, "<col span='1' style='width: 60px;'>")
+	fmt.Fprintf(wrt, "<col span='1' style='width: 30px;'>")
+	fmt.Fprintf(wrt, "<col span='1' >")
+	fmt.Fprintf(wrt, "<col span='1' >")
+	fmt.Fprintf(wrt, "<col span='1' >")
+	fmt.Fprintf(wrt, "</colgroup>")
+
 	fmt.Fprintf(wrt, "<tr><th>topicId</th><th>xorig</th><th>isProxy</th><th>cat</th><th>perUser</th><th>perSubs</th><th>sessions</th></tr>")
 	globals.hub.topics.Range(func(_, t interface{}) bool {
 		topic := t.(*Topic)
@@ -418,7 +438,7 @@ func serveStatus(wrt http.ResponseWriter, req *http.Request) {
 		for s, psd := range topic.sessions {
 			sd = append(sd, fmt.Sprintf("%s: %+v", s.sid, psd))
 		}
-		fmt.Fprintf(wrt, "<tr><td>%s</td><td>%s</td><td>%t</td><td>%d</td><td>%+v</td><td>%+v</td><td>%s</td></tr>", topic.name, topic.xoriginal, topic.isProxy, topic.cat, topic.perUser, topic.perSubs, strings.Join(sd, " "))
+		fmt.Fprintf(wrt, "<tr><td><div class='tc'>%s</div></td><td><div class='tc'>%s</div></td><td><div class='tc'>%t</div></td><td><div class='tc'>%d</div></td><td><div class='tc'>%+v</div></td><td><div class='tc'>%+v</div></td><td><div class='tc'>%s</div></td></tr>", topic.name, topic.xoriginal, topic.isProxy, topic.cat, topic.perUser, topic.perSubs, strings.Join(sd, " "))
 		return true
 	})
 	fmt.Fprintf(wrt, "</div>")
