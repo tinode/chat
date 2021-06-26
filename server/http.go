@@ -14,7 +14,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net"
 	"net/http"
 	"net/url"
@@ -369,79 +368,93 @@ func authHttpRequest(req *http.Request) (types.Uid, []byte, error) {
 	return uid, nil, nil
 }
 
+// Session debug info.
+type DebugSession struct {
+	RemoteAddr string   `json:"remote_addr,omitempty"`
+	Ua         string   `json:"ua,omitempty"`
+	Uid        string   `json:"uid,omitempty"`
+	Sid        string   `json:"sid,omitempty"`
+	Clnode     string   `json:"clnode,omitempty"`
+	Subs       []string `json:"subs,omitempty"`
+}
+
+// Topic debug info.
+type DebugTopic struct {
+	Topic    string   `json:"topic,omitempty"`
+	Xorig    string   `json:"xorig,omitempty"`
+	IsProxy  bool     `json:"is_proxy,omitempty"`
+	Cat      int      `json:"cat,omitempty"`
+	PerUser  []string `json:"per_user,omitempty"`
+	PerSubs  []string `json:"per_subs,omitempty"`
+	Sessions []string `json:"sessions,omitempty"`
+}
+
+// Server internal state dump for debugging.
+type DebugDump struct {
+	Version   string         `json:"server_version,omitempty"`
+	Build     string         `json:"build_id,omitempty"`
+	Timestamp time.Time      `json:"ts,omitempty"`
+	Sessions  []DebugSession `json:"sessions,omitempty"`
+	Topics    []DebugTopic   `json:"topics,omitempty"`
+}
+
 func serveStatus(wrt http.ResponseWriter, req *http.Request) {
-	// Disable caching.
-	wrt.Header().Set("Cache-Control", "no-cache, no-store, private, max-age=0")
-	wrt.Header().Set("Expires", time.Unix(0, 0).Format(http.TimeFormat))
-	wrt.Header().Set("Pragma", "no-cache")
-	wrt.Header().Set("X-Accel-Expires", "0")
+	wrt.Header().Set("Content-Type", "application/json")
 
-	fmt.Fprintf(wrt, "<html><head>")
-	fmt.Fprintf(wrt, "<title>Server Status</title>")
-	fmt.Fprintf(wrt, "<style>table { width: 100%%; border: 1px; table-layout: fixed } .tc { display: inline-block; position: relative; width: 100%%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: top; font-size: 14; } .tc:hover {  z-index: 1; width: auto; max-width: 600px; background-color: #FFFFCC; white-space: normal; } tr:nth-child(even) { background: #f2f2f2 }</style>")
-	fmt.Fprintf(wrt, "</head>")
-
-	now := time.Now()
-	fmt.Fprintf(wrt, "<body>")
-	fmt.Fprintf(wrt, "<h1>%s</h1><div>Version: %s, build: %s. Present time: %s</div>", "Tinode Server", currentVersion, buildstamp, now.Format(time.RFC1123))
-	fmt.Fprintf(wrt, "<br><hr>")
-
-	fmt.Fprintf(wrt, "<div>Sessions: %d</div>", len(globals.sessionStore.sessCache))
-	fmt.Fprintf(wrt, "<table>")
-
-	fmt.Fprintf(wrt, "<colgroup>")
-	fmt.Fprintf(wrt, "<col span='1' style='width: 130px;'>")
-	fmt.Fprintf(wrt, "<col span='1' style='width: 200px;'>")
-	fmt.Fprintf(wrt, "<col span='1' style='width: 90px;'>")
-	fmt.Fprintf(wrt, "<col span='1' style='width: 90px;'>")
-	fmt.Fprintf(wrt, "<col span='1' >")
-	fmt.Fprintf(wrt, "<col span='1' >")
-	fmt.Fprintf(wrt, "</colgroup>")
-
-	fmt.Fprintf(wrt, "<tr><th>remoteAddr</th><th>UA</th><th>uid</th><th>sid</th><th>clnode</th><th>subs</th></tr>")
+	result := &DebugDump{
+		Version:   currentVersion,
+		Build:     buildstamp,
+		Timestamp: time.Now(),
+		Sessions:  make([]DebugSession, 0, len(globals.sessionStore.sessCache)),
+		Topics:    make([]DebugTopic, 0, 10),
+	}
+	// Sessions.
 	globals.sessionStore.Range(func(sid string, s *Session) bool {
 		keys := make([]string, 0, len(s.subs))
 		for tn := range s.subs {
 			keys = append(keys, tn)
 		}
 		sort.Strings(keys)
-		l := strings.Join(keys, ",")
-		fmt.Fprintf(wrt, "<tr><td><div class='tc'>%s</div></td><td><div class='tc'>%s</div></td><td><div class='tc'>%s</div></td><td><div class='tc'>%s</div></td><td><div class='tc'>%+v</div></td><td><div class='tc'>%s</div></td></tr>", s.remoteAddr, s.userAgent, s.uid.String(), sid, s.clnode, l)
+		var clnode string
+		if s.clnode != nil {
+			clnode = s.clnode.name
+		}
+		result.Sessions = append(result.Sessions, DebugSession{
+			RemoteAddr: s.remoteAddr,
+			Ua:         s.userAgent,
+			Uid:        s.uid.String(),
+			Sid:        sid,
+			Clnode:     clnode,
+			Subs:       keys,
+		})
 		return true
 	})
-	fmt.Fprintf(wrt, "</table>")
-	// If this server is a part of a cluster.
-	if globals.cluster != nil {
-		fmt.Fprintf(wrt, "<div>Cluster node: %s", globals.cluster.thisNodeName)
-		fmt.Fprintf(wrt, "</div>")
-	}
-
-	fmt.Fprint(wrt, "<br><hr>")
-	fmt.Fprintf(wrt, "<div>")
-	fmt.Fprintf(wrt, "<div>Topics: %d</div>", globals.hub.numTopics)
-	fmt.Fprintf(wrt, "<table>")
-
-	fmt.Fprintf(wrt, "<colgroup>")
-	fmt.Fprintf(wrt, "<col span='1' style='width: 190px;'>")
-	fmt.Fprintf(wrt, "<col span='1' style='width: 100px;'>")
-	fmt.Fprintf(wrt, "<col span='1' style='width: 60px;'>")
-	fmt.Fprintf(wrt, "<col span='1' style='width: 30px;'>")
-	fmt.Fprintf(wrt, "<col span='1' >")
-	fmt.Fprintf(wrt, "<col span='1' >")
-	fmt.Fprintf(wrt, "<col span='1' >")
-	fmt.Fprintf(wrt, "</colgroup>")
-
-	fmt.Fprintf(wrt, "<tr><th>topicId</th><th>xorig</th><th>isProxy</th><th>cat</th><th>perUser</th><th>perSubs</th><th>sessions</th></tr>")
+	// Topics.
 	globals.hub.topics.Range(func(_, t interface{}) bool {
 		topic := t.(*Topic)
-		var sd []string
-		for s, psd := range topic.sessions {
-			sd = append(sd, fmt.Sprintf("%s: %+v", s.sid, psd))
+		psd := make([]string, 0, len(topic.sessions))
+		for s := range topic.sessions {
+			psd = append(psd, s.sid)
 		}
-		fmt.Fprintf(wrt, "<tr><td><div class='tc'>%s</div></td><td><div class='tc'>%s</div></td><td><div class='tc'>%t</div></td><td><div class='tc'>%d</div></td><td><div class='tc'>%+v</div></td><td><div class='tc'>%+v</div></td><td><div class='tc'>%s</div></td></tr>", topic.name, topic.xoriginal, topic.isProxy, topic.cat, topic.perUser, topic.perSubs, strings.Join(sd, " "))
+		pud := make([]string, 0, len(topic.perUser))
+		for uid := range topic.perUser {
+			pud = append(pud, uid.String())
+		}
+		ps := make([]string, 0, len(topic.perSubs))
+		for key := range topic.perSubs {
+			ps = append(ps, key)
+		}
+		result.Topics = append(result.Topics, DebugTopic{
+			Topic:    topic.name,
+			Xorig:    topic.xoriginal,
+			IsProxy:  topic.isProxy,
+			Cat:      int(topic.cat),
+			PerUser:  pud,
+			PerSubs:  ps,
+			Sessions: psd,
+		})
 		return true
 	})
-	fmt.Fprintf(wrt, "</div>")
 
-	fmt.Fprintf(wrt, "</body></html>")
+	json.NewEncoder(wrt).Encode(result)
 }
