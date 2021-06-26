@@ -404,7 +404,7 @@ func serveStatus(wrt http.ResponseWriter, req *http.Request) {
 	result := &DebugDump{
 		Version:   currentVersion,
 		Build:     buildstamp,
-		Timestamp: time.Now(),
+		Timestamp: types.TimeNow(),
 		Sessions:  make([]DebugSession, 0, len(globals.sessionStore.sessCache)),
 		Topics:    make([]DebugTopic, 0, 10),
 	}
