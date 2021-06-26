@@ -454,7 +454,7 @@ The format of the optional `trusted` field in group and peer to peer topics is a
 trusted: {
   verified: true, // boolean, an indicator of a verified/trustworthy user or topic.
   staff: true,    // boolean, an indicator that the user or topic
-                  // is a part of/belongs to the server administation.
+                  // is a part of/belongs to the server administration.
   danger: true    // boolean, an indicator that the user or topic are untrustworthy.
 }
 ```
