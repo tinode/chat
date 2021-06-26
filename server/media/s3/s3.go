@@ -35,6 +35,9 @@ type awsconfig struct {
 	AccessKeyId     string   `json:"access_key_id"`
 	SecretAccessKey string   `json:"secret_access_key"`
 	Region          string   `json:"region"`
+	DisableSSL      bool     `json:"disable_ssl"`
+	ForcePathStyle  bool     `json:"force_path_style"`
+	Endpoint        string   `json:"endpoint"`
 	BucketName      string   `json:"bucket"`
 	CorsOrigins     []string `json:"cors_origins"`
 	ServeURL        string   `json:"serve_url"`
@@ -85,8 +88,11 @@ func (ah *awshandler) Init(jsconf string) error {
 
 	var sess *session.Session
 	if sess, err = session.NewSession(&aws.Config{
-		Region:      aws.String(ah.conf.Region),
-		Credentials: credentials.NewStaticCredentials(ah.conf.AccessKeyId, ah.conf.SecretAccessKey, ""),
+		Region:           aws.String(ah.conf.Region),
+		DisableSSL:       aws.Bool(ah.conf.DisableSSL),
+		S3ForcePathStyle: aws.Bool(ah.conf.ForcePathStyle),
+		Endpoint:         aws.String(ah.conf.Endpoint),
+		Credentials:      credentials.NewStaticCredentials(ah.conf.AccessKeyId, ah.conf.SecretAccessKey, ""),
 	}); err != nil {
 		return err
 	}
