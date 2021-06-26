@@ -1565,7 +1565,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 
 	// Fetch grp topics and join to subscriptions.
 	if len(topq) > 0 {
-		q = "SELECT createdat,updatedat,state,stateat,touchedat,name AS id,usebt,access,seqid,delid,public,tags " +
+		q = "SELECT createdat,updatedat,state,stateat,touchedat,name AS id,usebt,access,seqid,delid,public,trusted,tags " +
 			"FROM topics WHERE name IN (?)"
 
 		q, args, _ = sqlx.In(q, topq)
@@ -1630,7 +1630,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 
 	// Fetch p2p users and join to p2p subscriptions.
 	if len(usrq) > 0 {
-		q = "SELECT id,state,createdat,updatedat,state,stateat,access,lastseen,useragent,public,tags " +
+		q = "SELECT id,state,createdat,updatedat,state,stateat,access,lastseen,useragent,public,trusted,tags " +
 			"FROM users WHERE id IN (?)"
 		q, args, _ = sqlx.In(q, usrq)
 		if !keepDeleted {
