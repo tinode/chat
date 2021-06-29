@@ -260,7 +260,12 @@ func largeFileReceive(wrt http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	writeHttpResponse(NoErrParams(msgID, "", now, map[string]string{"url": url}), nil)
+	params := map[string]string{"url": url}
+	if globals.mediaGcPeriod > 0 {
+		// How long this file is guaranteed to exist without being attached to a message or a topic.
+		params["expires"] = now.Add(globals.mediaGcPeriod).UTC().Round(time.Millisecond)
+	}
+	writeHttpResponse(NoErrParams(msgID, "", now, params), nil)
 }
 
 // largeFileRunGarbageCollection runs every 'period' and deletes up to 'blockSize' unused files.
