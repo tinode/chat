@@ -8,6 +8,8 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"errors"
+	"github.com/mgi-vn/common/pkg/middleware/identity"
+	"os"
 	"time"
 
 	"github.com/tinode/chat/server/auth"
@@ -37,6 +39,30 @@ type tokenLayout struct {
 	// Bitmap with feature bits.
 	Features uint16
 }
+
+// Get default modeWant for the given topic category
+func getDefaultAccess(cat types.TopicCat, authUser, isChan bool) types.AccessMode {
+	if !authUser {
+		return types.ModeNone
+	}
+
+	switch cat {
+	case types.TopicCatP2P:
+		return types.ModeCP2P
+	case types.TopicCatFnd:
+		return types.ModeNone
+	case types.TopicCatGrp:
+		if isChan {
+			return types.ModeCChnWriter
+		}
+		return types.ModeCPublic
+	case types.TopicCatMe:
+		return types.ModeCSelf
+	default:
+		panic("Unknown topic category")
+	}
+}
+
 
 // Init initializes the authenticator: parses the config and sets salt, serial number and lifetime.
 func (ta *authenticator) Init(jsonconf json.RawMessage, name string) error {
@@ -86,6 +112,84 @@ func (authenticator) UpdateRecord(rec *auth.Rec, secret []byte, remoteAddr strin
 func (ta *authenticator) Authenticate(token []byte, remoteAddr string) (*auth.Rec, []byte, error) {
 	var tl tokenLayout
 	dataSize := binary.Size(&tl)
+
+	//Handle keycloak token
+	if len(token) > dataSize+sha256.Size {
+		keycloakUrl := os.Getenv("KEYCLOAK_URL")
+		keycloakClientId := os.Getenv("KEYCLOAK_CLIENT_ID")
+		keycloakSecret := os.Getenv("KEYCLOAK_SECRET")
+		keycloakRealm := os.Getenv("KEYCLOAK_REALM")
+
+		k := identity.NewKeycloak(keycloakUrl, keycloakClientId, keycloakSecret, keycloakRealm)
+		userInfo, err := k.Introspect(string(token))
+
+		if err != nil {
+			return nil, nil, types.ErrFailed
+		}
+		if userInfo.Active == false {
+			return nil, nil, types.ErrPermissionDenied
+		}
+
+		uid, authLvl, _, expires, err := store.Users.GetAuthUniqueRecord(ta.name, userInfo.Username)
+
+		var lifetime time.Duration
+		if !expires.IsZero() {
+			lifetime = time.Until(expires)
+		}
+
+		if uid.IsZero() {
+			// Create account, get UID, report UID back to the server.
+			var tags []string
+			tags = append(tags, ta.name + ":" + userInfo.Username)
+			publicFields := map[string]interface{}{
+				"fn": userInfo.Username,
+			}
+			user := types.User{
+				Tags: tags,
+				Public: publicFields,
+			}
+
+			var private interface{}
+
+			// Assign default access values in case the acc creator has not provided them
+			user.Access.Auth = getDefaultAccess(types.TopicCatP2P, true, false) |
+				getDefaultAccess(types.TopicCatGrp, true, false)
+			user.Access.Anon = getDefaultAccess(types.TopicCatP2P, false, false) |
+				getDefaultAccess(types.TopicCatGrp, false, false)
+
+			newUser, err := store.Users.Create(&user, private)
+
+			if err != nil {
+				panic(err)
+				return nil, nil, types.ErrFailed
+			}
+
+			emptyPass := []byte(userInfo.Username)
+			newUid := newUser.Uid()
+
+			err = store.Users.AddAuthRecord(newUid, 20, ta.name, userInfo.Username, emptyPass, expires)
+
+			if err != nil {
+				return nil, nil, types.ErrFailed
+			}
+
+			return &auth.Rec{
+				Uid:       newUid,
+				AuthLevel: 20,
+				Lifetime:  auth.Duration(lifetime),
+				Features:  0,
+				State:     types.StateUndefined}, nil, nil
+
+		}
+
+		return &auth.Rec{
+			Uid:       uid,
+			AuthLevel: authLvl,
+			Lifetime:  auth.Duration(lifetime),
+			Features:  0,
+			State:     types.StateUndefined}, nil, nil
+	}
+
 	if len(token) < dataSize+sha256.Size {
 		// Token is too short
 		return nil, nil, types.ErrMalformed
