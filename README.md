@@ -91,9 +91,9 @@ When you register a new account you are asked for an email address to send valid
 * Websocket, long polling, and [gRPC](https://grpc.io/) over TCP or Unix sockets.
 * JSON or [protobuf version 3](https://developers.google.com/protocol-buffers/) wire protocols.
 * User search/discovery.
-* Rich formatting of messages markdown-style: \*style\* &rarr; **style**.
-* Inline images, file attachments.
+* Rich formatting of messages markdown-style: \*style\* &rarr; **style**, with inline images, file attachments.
 * Forms and templated responses suitable for chatbots.
+* Verified/staff/untrusted account markers.
 * Message status notifications: message delivery to server; received and read notifications; typing notifications.
 * Most recent message preview in contact list.
 * Ability to block unwanted communication server-side.
