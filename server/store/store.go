@@ -1002,6 +1002,11 @@ func (fileMapper) FinishUpload(fd *types.FileDef, success bool, size int64) (*ty
 	return adp.FileFinishUpload(fd, success, size)
 }
 
+// SetOwner assigns a user ID to a file uploaded during account registration.
+func (fileMapper) SetOwner(fd *types.FileDef) error {
+	return adp.FileSetOwner(fd)
+}
+
 // Get fetches a file record for a unique file id.
 func (fileMapper) Get(fid string) (*types.FileDef, error) {
 	return adp.FileGet(fid)

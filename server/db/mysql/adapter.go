@@ -517,15 +517,16 @@ func (a *adapter) CreateDb(reset bool) error {
 			id        BIGINT NOT NULL,
 			createdat DATETIME(3) NOT NULL,
 			updatedat DATETIME(3) NOT NULL,
-			userid    BIGINT NOT NULL,
+			userid    BIGINT,
 			status    INT NOT NULL,
 			mimetype  VARCHAR(255) NOT NULL,
 			size      BIGINT NOT NULL,
 			topic     VARCHAR(25),
 			location  VARCHAR(2048) NOT NULL,
 			PRIMARY KEY(id),
-			INDEX fileuploads_topic(topic),
-			INDEX fileuploads_status(status)
+			INDEX fileuploads_userid(userid),
+			INDEX fileuploads_status(status),
+			INDEX fileuploads_topic(topic)
 		)`); err != nil {
 		return err
 	}
@@ -703,11 +704,20 @@ func (a *adapter) UpgradeDb() error {
 			return err
 		}
 
-		if _, err := a.db.Exec("ALTER TABLE fileuploads ADD INDEX fileuploads_topic(topic)"); err != nil {
+		// Remove NOT NULL constraint, so an avatar upload can be done at registration.
+		if _, err := a.db.Exec("ALTER TABLE fileuploads MODIFY userid BIGINT"); err != nil {
+			return err
+		}
+
+		if _, err := a.db.Exec("ALTER TABLE fileuploads ADD INDEX fileuploads_userid(userid)"); err != nil {
 			return err
 		}
 
 		if _, err := a.db.Exec("ALTER TABLE fileuploads ADD INDEX fileuploads_status(status)"); err != nil {
+			return err
+		}
+
+		if _, err := a.db.Exec("ALTER TABLE fileuploads ADD INDEX fileuploads_topic(topic)"); err != nil {
 			return err
 		}
 
@@ -3096,10 +3106,14 @@ func (a *adapter) FileStartUpload(fd *t.FileDef) error {
 	if fd.Topic != "" {
 		topic = fd.Topic
 	}
+	var user interface{}
+	if fd.User != "" {
+		user = store.DecodeUid(t.ParseUid(fd.User))
+	}
 	_, err := a.db.ExecContext(ctx, "INSERT INTO fileuploads(id,createdat,updatedat,userid,status,mimetype,size,topic,location)"+
 		" VALUES(?,?,?,?,?,?,?,?,?)",
-		store.DecodeUid(fd.Uid()), fd.CreatedAt, fd.UpdatedAt,
-		store.DecodeUid(t.ParseUid(fd.User)), fd.Status, fd.MimeType, fd.Size, topic, fd.Location)
+		store.DecodeUid(fd.Uid()), fd.CreatedAt, fd.UpdatedAt, user,
+		fd.Status, fd.MimeType, fd.Size, topic, fd.Location)
 	return err
 }
 
@@ -3153,6 +3167,27 @@ func (a *adapter) FileFinishUpload(fd *t.FileDef, success bool, size int64) (*t.
 	return fd, tx.Commit()
 }
 
+// FileSetOwner assigns an owner to a previously uploaded file.
+func (a *adapter) FileSetOwner(fd *t.FileDef) error {
+	var user interface{}
+	if fd.User != "" {
+		user = store.DecodeUid(t.ParseUid(fd.User))
+	}
+	now := t.TimeNow()
+	resp, err := a.db.ExecContext(ctx, "UPDATE fileuploads SET updatedat=?,userid=? WHERE id=?", now, user,
+		store.DecodeUid(fd.Uid()))
+	if err != nil {
+		return err
+	}
+
+	if resp.RowsAffected() == 0 {
+		return t.ErrNotFound
+	}
+
+	fd.UpdatedAt = now
+	return nil
+}
+
 // FileGet fetches a record of a specific file
 func (a *adapter) FileGet(fid string) (*t.FileDef, error) {
 	id := t.ParseUid(fid)
@@ -3197,16 +3232,16 @@ func (a *adapter) FileDeleteUnused(olderThan time.Time, limit int) ([]string, er
 		}
 	}()
 
-	// Grbage collecting entries which as either marked as deleted, or lack message references.
+	// Garbage collecting entries which as either marked as deleted, or lack message references, or have no user assigned.
 	query := "SELECT fu.id,fu.location FROM fileuploads AS fu LEFT JOIN filemsglinks AS fml ON fml.fileid=fu.id " +
-		"WHERE fml.id IS NULL OR fu.status=? "
+		"WHERE fml.id IS NULL OR fu.status=? OR fu.userid IS NULL"
 	args := []interface{}{t.UploadDeleted}
 	if !olderThan.IsZero() {
-		query += "AND fu.updatedat<? "
+		query += " AND fu.updatedat<?"
 		args = append(args, olderThan)
 	}
 	if limit > 0 {
-		query += "LIMIT ?"
+		query += " LIMIT ?"
 		args = append(args, limit)
 	}
 

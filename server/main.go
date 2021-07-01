@@ -168,6 +168,8 @@ var globals struct {
 
 	// Maximum allowed upload size.
 	maxFileUploadSize int64
+	// Periodicity of a garbage collector for abandoned media uploads.
+	mediaGcPeriod time.Duration
 
 	// Prioritize X-Forwarded-For header as the source of IP address of the client.
 	useXForwardedFor bool
@@ -520,8 +522,8 @@ func main() {
 				}
 			}
 			if config.Media.GcPeriod > 0 && config.Media.GcBlockSize > 0 {
-				stopFilesGc := largeFileRunGarbageCollection(time.Second*time.Duration(config.Media.GcPeriod),
-					config.Media.GcBlockSize)
+				globals.mediaGcPeriod = time.Second * time.Duration(config.Media.GcPeriod)
+				stopFilesGc := largeFileRunGarbageCollection(globals.mediaGcPeriod, config.Media.GcBlockSize)
 				defer func() {
 					stopFilesGc <- true
 					logs.Info.Println("Stopped files garbage collector")

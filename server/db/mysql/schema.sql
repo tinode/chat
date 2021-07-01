@@ -191,7 +191,7 @@ CREATE TABLE fileuploads(
 	id			BIGINT NOT NULL,
 	createdat	DATETIME(3) NOT NULL,
 	updatedat	DATETIME(3) NOT NULL,
-	userid		BIGINT NOT NULL,
+	userid		BIGINT,
 	status		INT NOT NULL,
 	mimetype	VARCHAR(255) NOT NULL,
 	size		BIGINT NOT NULL,
@@ -199,8 +199,9 @@ CREATE TABLE fileuploads(
 	location	VARCHAR(2048) NOT NULL,
 	
 	PRIMARY KEY(id),
-	INDEX fileuploads_topic(topic),
-	INDEX fileuploads_status(status)
+	INDEX fileuploads_userid(userid),
+	INDEX fileuploads_status(status),
+	INDEX fileuploads_topic(topic)
 );
 
 # Links between uploaded files and messages or topics.
