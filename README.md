@@ -24,6 +24,14 @@ See [general instructions](./INSTALL.md) or [docker-specific instructions](./doc
 * For support, general questions, discussions post to [https://groups.google.com/d/forum/tinode](https://groups.google.com/d/forum/tinode).
 * For bugs and feature requests [open an issue](https://github.com/tinode/chat/issues/new/choose).
 
+## Helping out
+
+* Consider buying paid support: https://tinode.co/support.html
+* If you are a software developer, send us your pull requests with bug fixes and feature requests.
+* If you use the app and discover bugs or missing features, please let us know by filing bug reports and feature requests.
+* If you speak a language other than English, you can translate the apps into your language.
+* If you are a UI/UX expert, help us polish the app UI.
+* Let people know about Tinode: write a blog post or an article about Tinode, share your findings and experiences at a conference, install it at work and let your colleagues use it.
 
 ## Public service
 
@@ -33,11 +41,9 @@ A [public Tinode service](https://web.tinode.co/) is now available. You can use 
 
 TinodeWeb, a single page web app, is available at https://web.tinode.co/ ([source](https://github.com/tinode/webapp/)). See screenshots below. Currently available in English, Simplified Chinese, Korean, Russian, Spanish. More translations are welcome.
 
-
 ### Android
 
 [Tinode for Android](https://play.google.com/store/apps/details?id=co.tinode.tindroidx) a.k.a Tindroid is stable and functional ([source](https://github.com/tinode/tindroid)). See the screenshots below. A [debug APK](https://github.com/tinode/tindroid/releases/latest) is also provided for convenience. Currently available in English, Simplified Chinese, Korean, Russian, Spanish. More translations are welcome.
-
 
 ### iOS
 
@@ -107,7 +113,7 @@ When you register a new account you are asked for an email address to send valid
 
 ### Translations
 
-All client software has support for internationalization. Translations are provided on all platforms for English, Simplified Chinese, Spanish. On all but iOS: Russian, Korean, German. More translations are welcome. Particularly interested in Arabic, Vietnamese, Persian, Indonesian, Portuguese, Hindi, Bengali.
+All client software has support for internationalization. Translations are provided on all platforms for English, Simplified Chinese, Spanish. On all but iOS: Russian, Korean, German, webapp also has Romanian. More translations are welcome. Particularly interested in Arabic, Vietnamese, Persian, Indonesian, Portuguese, Hindi, Bengali.
 
 ## Third-Party Licenses
 
