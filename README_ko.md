@@ -1,5 +1,8 @@
 # Tinode 인스턴트 메시징 서버
 
+## This document is outdated. For up to date info use [README.md](./README.md)
+
+
 <img src="docs/logo.svg" align="left" width=128 height=128> 인스턴트 메시징 서버. C++, C#, [Go](http://golang.org), Java, Node, PHP, Python, Ruby, Objective-C 등에 대한 [gRPC](https://grpc.io/) 클라이언트 지원은 물론 순수Go(라이선스 [GPL 3.0](http://www.gnu.org/licenses/gpl-3.0.en.html))의 백엔드와 Java,Javasript 및 Swift의 클라이언트 측 바인딩(라이선스 [Apache 2.0](http://www.apache.org/licenses/LICENSE-2.0)). 와이어 전송은 사용자 정의 바인딩을 위해 웹소켓을 통한 JSON(롱 폴링도 가능) 즉, gRPC와 [protobuf](https://developers.google.com/protocol-buffers/). 영구 저장소 [RethinkDB](http://rethinkdb.com/), MySQL 및 MongoDB(실험적). 지원되지 않는 타사 [DynamoDB adapter](https://github.com/riandyrn/chat/tree/master/server/db/dynamodb) adapter도 있습니다. 사용자 정의 어댑터를 작성하여 다른 데이터베이스를 지원할 수 있습니다.
 
 Tinode는 XMPP/ Jabber 가 아닙니다. Tinode는 XMPP와 호환되지 않습니다. XMPP를 대체하기 위한 것입니다. 표면적으로는 오픈소스 WhatsApp 또는 Telegram과 매우 유사합니다.
