@@ -25,7 +25,7 @@ type Handler interface {
 	// Headers checks if the handler wants to provide additional HTTP headers for the request.
 	// It could be CORS headers, redirect to serve files from another URL, cache-control headers.
 	// It returns headers as a map, HTTP status code to stop processing or 0 to continue, error.
-	Headers(req *http.Request, serve bool) (map[string]string, int, error)
+	Headers(req *http.Request, serve bool) (http.Header, int, error)
 
 	// Upload processes request for file upload.
 	Upload(fdef *types.FileDef, file io.ReadSeeker) (string, error)
@@ -49,4 +49,84 @@ func GetIdFromUrl(url, serveUrl string) types.Uid {
 	}
 
 	return types.ParseUid(strings.Split(fname, ".")[0])
+}
+
+// matchCORSOrigin compares origin from the HTTP request to a list of allowed origins.
+func matchCORSOrigin(allowed []string, origin string) string {
+	if origin == "" {
+		// Request has no Origin header.
+		return ""
+	}
+
+	if len(allowed) == 0 {
+		// Not configured
+		return ""
+	}
+
+	if allowed[0] == "*" {
+		return "*"
+	}
+
+	for _, val := range allowed {
+		if val == origin {
+			return origin
+		}
+	}
+
+	return ""
+}
+
+func matchCORSMethod(allowMethods []string, method string) bool {
+	if method == "" {
+		// Request has no Method header.
+		return false
+	}
+
+	method = strings.ToUpper(method)
+	for _, mm := range allowMethods {
+		if mm == method {
+			return true
+		}
+	}
+
+	return false
+}
+
+// CORSHandler is the default preflight OPTIONS processor for use by media handlers.
+func CORSHandler(req *http.Request, allowedOrigins []string, serve bool) (http.Header, int) {
+	if req.Method != http.MethodOptions {
+		// Not an OPTIONS request. No special handling for all other requests.
+		return nil, 0
+	}
+
+	headers := map[string][]string{
+		// Always add Vary because of possible intermediate caches.
+		"Vary": []string{"Origin", "Access-Control-Request-Method"},
+	}
+
+	allowedOrigin := matchCORSOrigin(allowedOrigins, req.Header.Get("Origin"))
+	if allowedOrigin == "" {
+		// CORS policy does not match the origin.
+		return headers, http.StatusOK
+	}
+
+	var allowMethods []string
+	if serve {
+		allowMethods = []string{http.MethodGet, http.MethodHead, http.MethodOptions}
+	} else {
+		allowMethods = []string{http.MethodPost, http.MethodPut, http.MethodHead, http.MethodOptions}
+	}
+
+	if !matchCORSMethod(allowMethods, req.Header.Get("Access-Control-Request-Method")) {
+		// CORS policy does not allow this method.
+		return headers, http.StatusOK
+	}
+
+	headers["Access-Control-Allow-Origin"] = []string{allowedOrigin}
+	headers["Access-Control-Allow-Headers"] = []string{"*"}
+	headers["Access-Control-Allow-Methods"] = []string{strings.Join(allowMethods, ",")}
+	headers["Access-Control-Max-Age"] = []string{"86400"}
+	headers["Access-Control-Allow-Credentials"] = []string{"true"}
+
+	return headers, http.StatusOK
 }

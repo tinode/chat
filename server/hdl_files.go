@@ -73,8 +73,10 @@ func largeFileServe(wrt http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	for name, value := range headers {
-		wrt.Header().Set(name, value)
+	for name, values := range headers {
+		for _, value := range values {
+			wrt.Header().Add(name, value)
+		}
 	}
 
 	if statusCode != 0 {
@@ -172,8 +174,10 @@ func largeFileReceive(wrt http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	for name, value := range headers {
-		wrt.Header().Set(name, value)
+	for name, values := range headers {
+		for _, value := range values {
+			wrt.Header().Add(name, value)
+		}
 	}
 
 	if statusCode != 0 {
