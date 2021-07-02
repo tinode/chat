@@ -3169,6 +3169,10 @@ func (a *adapter) FileFinishUpload(fd *t.FileDef, success bool, size int64) (*t.
 
 // FileSetOwner assigns an owner to a previously uploaded file.
 func (a *adapter) FileSetOwner(fd *t.FileDef) error {
+	ctx, cancel := a.getContext()
+	if cancel != nil {
+		defer cancel()
+	}
 	var user interface{}
 	if fd.User != "" {
 		user = store.DecodeUid(t.ParseUid(fd.User))
@@ -3180,7 +3184,11 @@ func (a *adapter) FileSetOwner(fd *t.FileDef) error {
 		return err
 	}
 
-	if resp.RowsAffected() == 0 {
+	rows, err := resp.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows <= 0 {
 		return t.ErrNotFound
 	}
 

@@ -347,8 +347,13 @@ func pbCliSerialize(msg *ClientComMessage) *pbx.ClientMsg {
 		return nil
 	}
 
-	pkt.OnBehalfOf = msg.AsUser
-	pkt.AuthLevel = pbx.AuthLevel(msg.AuthLvl)
+	if msg.Extra != nil {
+		pkt.Extra = &pbx.ClientExtra{
+			Attachments: msg.Extra.Attachments,
+			OnBehalfOf:  msg.Extra.AsUser,
+			AuthLevel:   pbx.AuthLevel(msg.AuthLvl),
+		}
+	}
 
 	return &pkt
 }
@@ -454,8 +459,11 @@ func pbCliDeserialize(pkt *pbx.ClientMsg) *ClientComMessage {
 		}
 	}
 
-	msg.AsUser = pkt.GetOnBehalfOf()
-	msg.AuthLvl = int(pkt.GetAuthLevel())
+	if extra := pkt.GetExtra(); extra != nil {
+		msg.Extra.Attachments = extra.GetAttachments()
+		msg.AsUser = extra.GetOnBehalfOf()
+		msg.AuthLvl = int(extra.GetAuthLevel())
+	}
 
 	return &msg
 }

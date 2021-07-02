@@ -128,7 +128,7 @@ type MsgClientAcc struct {
 	State string `json:"status,omitempty"`
 	// Authentication level of the user when UserID is set and not equal to the current user.
 	// Either "", "auth" or "anon". Default: ""
-	AuthLevel string
+	AuthLevel string `json:"authlevel,omitempty"`
 	// Authentication token for resetting the password and maybe other one-time actions.
 	Token []byte `json:"token,omitempty"`
 	// The initial authentication scheme the account can use
@@ -306,6 +306,16 @@ type MsgClientNote struct {
 	Unread int `json:"unread,omitempty"`
 }
 
+// MsgClientExtra is not a stand-alone message but extra data which augments the main payload.
+type MsgClientExtra struct {
+	// Array of out-of-band attachments which have to be exempted from GC.
+	Attachments []string `json:"attachments,omitempty"`
+	// Alternative user ID set by the root user (on behalf of user ID).
+	AsUser string `json:"obo,omitempty"`
+	// Altered authentication level set by the root user.
+	AuthLevel string `json:"authlevel,omitempty"`
+}
+
 // ClientComMessage is a wrapper for client messages.
 type ClientComMessage struct {
 	Hi    *MsgClientHi    `json:"hi"`
@@ -318,6 +328,8 @@ type ClientComMessage struct {
 	Set   *MsgClientSet   `json:"set"`
 	Del   *MsgClientDel   `json:"del"`
 	Note  *MsgClientNote  `json:"note"`
+	// Optional data.
+	Extra *MsgClientExtra `json:"extra"`
 
 	// Internal fields, routed only within the cluster.
 
