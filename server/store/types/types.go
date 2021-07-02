@@ -359,6 +359,9 @@ func TimeNow() time.Time {
 	return time.Now().UTC().Round(time.Millisecond)
 }
 
+// TimeFormatRFC3339 is a format string for writing timestamps as RFC3339.
+const TimeFormatRFC3339 = "2006-01-02T15:04:05.999"
+
 // InitTimes initializes time.Time variables in the header to current time.
 func (h *ObjHeader) InitTimes() {
 	if h.CreatedAt.IsZero() {

@@ -263,7 +263,7 @@ func largeFileReceive(wrt http.ResponseWriter, req *http.Request) {
 	params := map[string]string{"url": url}
 	if globals.mediaGcPeriod > 0 {
 		// How long this file is guaranteed to exist without being attached to a message or a topic.
-		params["expires"] = now.Add(globals.mediaGcPeriod).UTC().Round(time.Millisecond)
+		params["expires"] = now.Add(globals.mediaGcPeriod).Format(types.TimeFormatRFC3339)
 	}
 	writeHttpResponse(NoErrParams(msgID, "", now, params), nil)
 }

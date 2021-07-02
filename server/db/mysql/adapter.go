@@ -2670,7 +2670,7 @@ func (a *adapter) MessageDeleteList(topic string, toDel *t.DelMessage) (err erro
 func (a *adapter) MessageAttachments(msgId t.Uid, fids []string) error {
 	var args []interface{}
 	var values []string
-	strNow := t.TimeNow().Format("2006-01-02T15:04:05.999")
+	strNow := t.TimeNow().Format(t.TimeFormatRFC3339)
 	// createdat,fileid,msgid
 	val := "('" + strNow + "',?," + strconv.FormatInt(int64(msgId), 10) + ")"
 	for _, fid := range fids {
