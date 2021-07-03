@@ -3,14 +3,20 @@ package token
 
 import (
 	"bytes"
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
-	"github.com/mgi-vn/common/pkg/middleware/identity"
 	"os"
 	"time"
+
+	"github.com/mgi-vn/common/pkg/middleware/identity"
+	pb "github.com/mgi-vn/proto-service/gen/go"
+	"github.com/opentracing/opentracing-go/log"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 
 	"github.com/tinode/chat/server/auth"
 	"github.com/tinode/chat/server/store"
@@ -63,7 +69,6 @@ func getDefaultAccess(cat types.TopicCat, authUser, isChan bool) types.AccessMod
 	}
 }
 
-
 // Init initializes the authenticator: parses the config and sets salt, serial number and lifetime.
 func (ta *authenticator) Init(jsonconf json.RawMessage, name string) error {
 	if ta.name != "" {
@@ -115,22 +120,25 @@ func (ta *authenticator) Authenticate(token []byte, remoteAddr string) (*auth.Re
 
 	//Handle keycloak token
 	if len(token) > dataSize+sha256.Size {
-		keycloakUrl := os.Getenv("KEYCLOAK_URL")
-		keycloakClientId := os.Getenv("KEYCLOAK_CLIENT_ID")
-		keycloakSecret := os.Getenv("KEYCLOAK_SECRET")
-		keycloakRealm := os.Getenv("KEYCLOAK_REALM")
+		secretAuthKey := os.Getenv("SECRET_AUTH_KEY")
 
-		k := identity.NewKeycloak(keycloakUrl, keycloakClientId, keycloakSecret, keycloakRealm)
-		userInfo, err := k.Introspect(string(token))
-
-		if err != nil {
+		authMiddleware := identity.NewAuth(secretAuthKey)
+		userID, err := authMiddleware.ValidateToken(string(token))
+		if err != nil || userID == "" {
+			log.Error(err)
 			return nil, nil, types.ErrFailed
 		}
-		if userInfo.Active == false {
+
+		userInfo, err := ta.GetUserInfo(context.Background(), string(token))
+		if err != nil {
+			log.Error(err)
+			return nil, nil, types.ErrFailed
+		}
+		if userInfo.IsEnabled == 0 {
 			return nil, nil, types.ErrPermissionDenied
 		}
 
-		uid, authLvl, _, expires, err := store.Users.GetAuthUniqueRecord(ta.name, userInfo.Username)
+		uid, authLvl, _, expires, err := store.Users.GetAuthUniqueRecord(ta.name, userInfo.Id)
 
 		var lifetime time.Duration
 		if !expires.IsZero() {
@@ -140,12 +148,12 @@ func (ta *authenticator) Authenticate(token []byte, remoteAddr string) (*auth.Re
 		if uid.IsZero() {
 			// Create account, get UID, report UID back to the server.
 			var tags []string
-			tags = append(tags, ta.name + ":" + userInfo.Username)
+			tags = append(tags, ta.name+":"+userInfo.Id)
 			publicFields := map[string]interface{}{
-				"fn": userInfo.Username,
+				"fn": userInfo.Id,
 			}
 			user := types.User{
-				Tags: tags,
+				Tags:   tags,
 				Public: publicFields,
 			}
 
@@ -164,10 +172,10 @@ func (ta *authenticator) Authenticate(token []byte, remoteAddr string) (*auth.Re
 				return nil, nil, types.ErrFailed
 			}
 
-			emptyPass := []byte(userInfo.Username)
+			emptyPass := []byte(userInfo.Id)
 			newUid := newUser.Uid()
 
-			err = store.Users.AddAuthRecord(newUid, 20, ta.name, userInfo.Username, emptyPass, expires)
+			err = store.Users.AddAuthRecord(newUid, 20, ta.name, userInfo.Id, emptyPass, expires)
 
 			if err != nil {
 				return nil, nil, types.ErrFailed
@@ -233,6 +241,30 @@ func (ta *authenticator) Authenticate(token []byte, remoteAddr string) (*auth.Re
 		Lifetime:  auth.Duration(time.Until(expires)),
 		Features:  auth.Feature(tl.Features),
 		State:     types.StateUndefined}, nil, nil
+}
+
+func (ta *authenticator) GetUserInfo(ctx context.Context, token string) (*pb.UserInfo, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	authServiceAddress := os.Getenv("AUTH_SERVICE_ADDRESS")
+
+	conn, err := grpc.DialContext(ctx, authServiceAddress, grpc.WithInsecure())
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Close()
+
+	client := pb.NewUserSvcClient(conn)
+	m := metadata.New(map[string]string{"token": token})
+	newCtx := metadata.NewOutgoingContext(ctx, m)
+	r, err := client.GetUserInfo(newCtx, &pb.GetUserInfoReq{})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return r.GetUserInfo(), nil
 }
 
 // GenSecret generates a new token.

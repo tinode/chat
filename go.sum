@@ -67,6 +67,8 @@ github.com/gobuffalo/packr/v2 v2.0.9/go.mod h1:emmyGweYTm6Kdper+iywB6YK5YzuKchGt
 github.com/gobuffalo/packr/v2 v2.2.0/go.mod h1:CaAwI0GPIAv+5wKLtv8Afwl+Cm78K/I/VCm/3ptBN+0=
 github.com/gobuffalo/syncx v0.0.0-20190224160051-33c29581e754/go.mod h1:HhnNqWY95UYwwW3uSASeV7vtgYkT2t16hJgV3AEPUpw=
 github.com/gogo/protobuf v1.1.1/go.mod h1:r8qH/GZQm5c6nD/R0oafs1akxWv10x8SbQlK7atdtwQ=
+github.com/golang-jwt/jwt v3.2.1+incompatible h1:73Z+4BJcrTC+KczS6WvTPvRGOp1WmfEP4Q1lOd9Z/+c=
+github.com/golang-jwt/jwt v3.2.1+incompatible/go.mod h1:8pz2t5EyA70fFQQSrl6XZXzqecmYZeUEB8OUGHkxJ+I=
 github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b/go.mod h1:SBH7ygxi8pfUlaOkMMuAQtPIUF8ecWP5IEl/CR7VP2Q=
 github.com/golang/mock v1.1.1/go.mod h1:oTYuIxOrZwtPieC+H1uAHpcLFnEyAGVDL/k47Jfbm0A=
 github.com/golang/mock v1.2.0 h1:28o5sBqPkBsMGnC6b4MvE2TzSr5/AT4c/1fLqVGIwlk=
@@ -146,6 +148,10 @@ github.com/matttproud/golang_protobuf_extensions v1.0.1 h1:4hp9jkHxhMHkqkrB3Ix0j
 github.com/matttproud/golang_protobuf_extensions v1.0.1/go.mod h1:D8He9yQNgCq6Z5Ld7szi9bcBfOoFv/3dc6xSMkL2PC0=
 github.com/mgi-vn/common v0.0.0-20210628204620-0d4752265d54 h1:lFLKhf8gYeBanxjNIWe67XdID64b3bSzodbqvKm5VSo=
 github.com/mgi-vn/common v0.0.0-20210628204620-0d4752265d54/go.mod h1:Aga86LpezerPC06m11ZBhKcrc88mBs8VCBeCLi6MHrM=
+github.com/mgi-vn/common v0.0.0-20210701205721-6119d2415e59 h1:Us/Y+pfmGEXWZlsTZ2g+eiDPPxLZrXfXCnz6U+zwNWY=
+github.com/mgi-vn/common v0.0.0-20210701205721-6119d2415e59/go.mod h1:aYYzcLYc9Hwez5NiJ2dgplElWYdw1Ks1Li9doRUxHt8=
+github.com/mgi-vn/proto-service v0.0.0-20210702110256-5cdffd67542d h1:xe4rGnvQSalH9DC0Kn7gi1yxud2jdTEjKde7cOom4wk=
+github.com/mgi-vn/proto-service v0.0.0-20210702110256-5cdffd67542d/go.mod h1:BLuck5nbyx1mIMbbhHQuoQ1A8a+5Sdqr709fqLvplYI=
 github.com/modern-go/concurrent v0.0.0-20180228061459-e0a39a4cb421/go.mod h1:6dJC0mAP4ikYIbvyc7fijjWJddQyLn8Ig3JB5CqoB9Q=
 github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd/go.mod h1:6dJC0mAP4ikYIbvyc7fijjWJddQyLn8Ig3JB5CqoB9Q=
 github.com/modern-go/reflect2 v0.0.0-20180701023420-4b7aa43c6742/go.mod h1:bx2lNnkwVCuqBIxFjflWJWanXIb3RllmbCylyMrvgv0=
