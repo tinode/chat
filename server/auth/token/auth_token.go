@@ -9,12 +9,12 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"errors"
+	"log"
 	"os"
 	"time"
 
 	"github.com/mgi-vn/common/pkg/middleware/identity"
 	pb "github.com/mgi-vn/proto-service/gen/go"
-	"github.com/opentracing/opentracing-go/log"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 
@@ -125,13 +125,13 @@ func (ta *authenticator) Authenticate(token []byte, remoteAddr string) (*auth.Re
 		authMiddleware := identity.NewAuth(secretAuthKey)
 		userID, err := authMiddleware.ValidateToken(string(token))
 		if err != nil || userID == "" {
-			log.Error(err)
+			log.Printf("Validate token failed: %s\n", err)
 			return nil, nil, types.ErrFailed
 		}
 
 		userInfo, err := ta.GetUserInfo(context.Background(), string(token))
 		if err != nil {
-			log.Error(err)
+			log.Printf("Cannot get user info: %s\n", err)
 			return nil, nil, types.ErrFailed
 		}
 		if userInfo.IsEnabled == 0 {
