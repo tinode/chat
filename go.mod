@@ -13,8 +13,10 @@ require (
 	github.com/gorilla/websocket v1.4.2
 	github.com/jmoiron/sqlx v1.2.0
 	github.com/joho/godotenv v1.3.0
-	github.com/mgi-vn/common v0.0.0-20210628204620-0d4752265d54
+	github.com/mgi-vn/common v0.0.0-20210701205721-6119d2415e59
+	github.com/mgi-vn/proto-service v0.0.0-20210702110256-5cdffd67542d
 	github.com/nyaruka/phonenumbers v1.0.56
+	github.com/opentracing/opentracing-go v1.1.0
 	github.com/prometheus/client_golang v1.5.1
 	github.com/prometheus/common v0.9.1
 	github.com/tinode/jsonco v1.0.0
