@@ -31,7 +31,8 @@ See [general instructions](./INSTALL.md) or [docker-specific instructions](./doc
 * If you use the app and discover bugs or missing features, please let us know by filing bug reports and feature requests.
 * If you speak a language other than English, you can translate the apps into your language.
 * If you are a UI/UX expert, help us polish the app UI.
-* Let people know about Tinode: write a blog post or an article about Tinode, share your findings and experiences at a conference, install it at work and let your colleagues use it.
+* Let people know about Tinode: write a blog post or an article about Tinode, share your findings and experiences at conferences.
+* Use it: install it for your colleagues or friends at work or at home.
 
 ## Public service
 
