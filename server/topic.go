@@ -925,7 +925,6 @@ func (t *Topic) procDataReq(asUid types.Uid, msg *ServerComMessage) (*push.Recei
 
 	if userFound {
 		userData.readID = t.lastID
-		userData.readID = t.lastID
 		t.perUser[asUser] = userData
 	}
 
