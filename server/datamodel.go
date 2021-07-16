@@ -310,7 +310,7 @@ type MsgClientNote struct {
 type MsgClientExtra struct {
 	// Array of out-of-band attachments which have to be exempted from GC.
 	Attachments []string `json:"attachments,omitempty"`
-	// Alternative user ID set by the root user (on behalf of user ID).
+	// Alternative user ID set by the root user (obo = On Behalf Of).
 	AsUser string `json:"obo,omitempty"`
 	// Altered authentication level set by the root user.
 	AuthLevel string `json:"authlevel,omitempty"`
