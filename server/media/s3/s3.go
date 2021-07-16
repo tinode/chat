@@ -151,9 +151,13 @@ func (ah *awshandler) Init(jsconf string) error {
 }
 
 // Headers redirects GET, HEAD requests to the AWS server.
-func (ah *awshandler) Headers(req *http.Request, serve bool) (map[string]string, int, error) {
-	if req.Method == http.MethodPut || req.Method == http.MethodPost || req.Method == http.MethodOptions {
+func (ah *awshandler) Headers(req *http.Request, serve bool) (http.Header, int, error) {
+	if req.Method == http.MethodPut || req.Method == http.MethodPost {
 		return nil, 0, nil
+	}
+
+	if headers, status := media.CORSHandler(req, ah.conf.CorsOrigins, serve); status != 0 {
+		return headers, status, nil
 	}
 
 	fid := ah.GetIdFromUrl(req.URL.String())
@@ -184,10 +188,10 @@ func (ah *awshandler) Headers(req *http.Request, serve bool) (map[string]string,
 		// Return presigned URL. The URL will stop working after a short period of time to prevent use of Tinode
 		// as a free file server.
 		url, err := awsReq.Presign(time.Second * presignDuration)
-		headers := map[string]string{
-			"Location":      url,
-			"Content-Type":  "application/json; charset=utf-8",
-			"Cache-Control": "no-cache, no-store, must-revalidate",
+		headers := map[string][]string{
+			"Location":      []string{url},
+			"Content-Type":  []string{"application/json; charset=utf-8"},
+			"Cache-Control": []string{"no-cache, no-store, must-revalidate"},
 		}
 		return headers, http.StatusTemporaryRedirect, err
 	}
