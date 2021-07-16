@@ -906,15 +906,15 @@ func (t *Topic) procDataReq(asUid types.Uid, msg *ServerComMessage) (*push.Recei
 		t.lastID = msg.Data.SeqId
 	} else {
 		// Save to DB at master topic.
-		if err := store.Messages.Save(&types.Message{
-			ObjHeader: types.ObjHeader{CreatedAt: msg.Data.Timestamp},
-			SeqId:     t.lastID + 1,
-			Topic:     t.name,
-			From:      asUser.String(),
-			Head:      msg.Data.Head,
-			Content:   msg.Data.Content,
-		}, (userData.modeGiven & userData.modeWant).IsReader()); err != nil {
-
+		if err := store.Messages.Save(
+			&types.Message{
+				ObjHeader: types.ObjHeader{CreatedAt: msg.Data.Timestamp},
+				SeqId:     t.lastID + 1,
+				Topic:     t.name,
+				From:      asUser.String(),
+				Head:      msg.Data.Head,
+				Content:   msg.Data.Content,
+			}, attachments, (userData.modeGiven & userData.modeWant).IsReader()); err != nil {
 			logs.Warn.Printf("topic[%s]: failed to save message: %v", t.name, err)
 			msg.sess.queueOut(ErrUnknown(msg.Id, t.original(asUid), msg.Timestamp))
 

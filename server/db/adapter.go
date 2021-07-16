@@ -155,8 +155,6 @@ type Adapter interface {
 	MessageDeleteList(topic string, toDel *t.DelMessage) error
 	// MessageGetDeleted returns a list of deleted message Ids.
 	MessageGetDeleted(topic string, forUser t.Uid, opts *t.QueryOpt) ([]t.DelMessage, error)
-	// MessageAttachments connects given message to a list of file record IDs.
-	MessageAttachments(msgId t.Uid, fids []string) error
 
 	// Devices (for push notifications)
 
@@ -181,4 +179,6 @@ type Adapter interface {
 	// unused records with UpdatedAt before olderThan.
 	// Returns array of FileDef.Location of deleted filerecords so actual files can be deleted too.
 	FileDeleteUnused(olderThan time.Time, limit int) ([]string, error)
+	// FileLinkAttachments connects given topic or message to the file record IDs from the list.
+	FileLinkAttachments(topic string, msgId t.Uid, fids []string) error
 }

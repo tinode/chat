@@ -2083,31 +2083,6 @@ func (a *adapter) MessageDeleteList(topic string, toDel *t.DelMessage) error {
 	return err
 }
 
-// MessageAttachments adds attachments to a message.
-func (a *adapter) MessageAttachments(msgId t.Uid, fids []string) error {
-	now := t.TimeNow()
-	_, err := rdb.DB(a.dbName).Table("messages").Get(msgId.String()).
-		Update(map[string]interface{}{
-			"UpdatedAt":   now,
-			"Attachments": fids,
-		}).RunWrite(a.conn)
-	if err != nil {
-		return err
-	}
-
-	ids := make([]interface{}, len(fids))
-	for i, id := range fids {
-		ids[i] = id
-	}
-	_, err = rdb.DB(a.dbName).Table("fileuploads").GetAll(ids...).
-		Update(map[string]interface{}{
-			"UpdatedAt": now,
-			"UseCount":  rdb.Row.Field("UseCount").Default(0).Add(1),
-		}).RunWrite(a.conn)
-
-	return err
-}
-
 func deviceHasher(deviceID string) string {
 	// Generate custom key as [64-bit hash of device id] to ensure predictable
 	// length of the key
@@ -2502,6 +2477,31 @@ func (a *adapter) FileDeleteUnused(olderThan time.Time, limit int) ([]string, er
 	_, err = q.Delete().RunWrite(a.conn)
 
 	return locations, err
+}
+
+// FileLinkAttachments connects given topic or message to the file record IDs from the list.
+func (a *adapter) FileLinkAttachments(topic string, msgId t.Uid, fids []string) error {
+	now := t.TimeNow()
+	_, err := rdb.DB(a.dbName).Table("messages").Get(msgId.String()).
+		Update(map[string]interface{}{
+			"UpdatedAt":   now,
+			"Attachments": fids,
+		}).RunWrite(a.conn)
+	if err != nil {
+		return err
+	}
+
+	ids := make([]interface{}, len(fids))
+	for i, id := range fids {
+		ids[i] = id
+	}
+	_, err = rdb.DB(a.dbName).Table("fileuploads").GetAll(ids...).
+		Update(map[string]interface{}{
+			"UpdatedAt": now,
+			"UseCount":  rdb.Row.Field("UseCount").Default(0).Add(1),
+		}).RunWrite(a.conn)
+
+	return err
 }
 
 // Given a select query against 'messages' table, decrement corresponding use counter in 'fileuploads' table.

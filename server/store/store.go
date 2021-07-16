@@ -648,33 +648,13 @@ type messagesMapper struct{}
 var Messages MessagesPersistenceInterface
 
 // Save message
-func (messagesMapper) Save(msg *types.Message, readBySender bool) error {
+func (messagesMapper) Save(msg *types.Message, attachments []string, readBySender bool) error {
 	msg.InitTimes()
 	msg.SetUid(Store.GetUid())
 	// Increment topic's or user's SeqId
 	err := adp.TopicUpdateOnMessage(msg.Topic, msg)
 	if err != nil {
 		return err
-	}
-
-	// Check if the message has attachments. If so, link earlier uploaded files to message.
-	var attachments []string
-	if header, ok := msg.Head["attachments"]; ok {
-		// The header is typed as []interface{}, convert to []string
-		if arr, ok := header.([]interface{}); ok {
-			for _, val := range arr {
-				if url, ok := val.(string); ok {
-					// Convert attachment URLs to file IDs.
-					if fid := mediaHandler.GetIdFromUrl(url); !fid.IsZero() {
-						attachments = append(attachments, fid.String())
-					}
-				}
-			}
-		}
-
-		if len(attachments) == 0 {
-			delete(msg.Head, "attachments")
-		}
 	}
 
 	err = adp.MessageSave(msg)
@@ -696,7 +676,7 @@ func (messagesMapper) Save(msg *types.Message, readBySender bool) error {
 	}
 
 	if len(attachments) > 0 {
-		return adp.MessageAttachments(msg.Uid(), attachments)
+		return adp.FileLinkAttachments("", msg.Uid(), attachments)
 	}
 
 	return nil

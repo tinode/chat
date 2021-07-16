@@ -2160,29 +2160,6 @@ func (a *adapter) MessageGetDeleted(topic string, forUser t.Uid, opts *t.QueryOp
 	return dmsgs, nil
 }
 
-// MessageAttachments connects given message to a list of file record IDs.
-func (a *adapter) MessageAttachments(msgId t.Uid, fids []string) error {
-	now := t.TimeNow()
-	_, err := a.db.Collection("messages").UpdateOne(a.ctx,
-		b.M{"_id": msgId.String()},
-		b.M{"$set": b.M{"updatedat": now, "attachments": fids}})
-	if err != nil {
-		return err
-	}
-
-	ids := make([]interface{}, len(fids))
-	for i, id := range fids {
-		ids[i] = id
-	}
-	_, err = a.db.Collection("fileuploads").UpdateMany(a.ctx,
-		b.M{"_id": b.M{"$in": ids}},
-		b.M{
-			"$set": b.M{"updatedat": now},
-			"$inc": b.M{"usecount": 1}})
-
-	return err
-}
-
 // Devices (for push notifications).
 
 // DeviceUpsert creates or updates a device record.
@@ -2383,6 +2360,29 @@ func (a *adapter) fileDecrementUseCounter(ctx context.Context, msgFilter b.M) er
 	_, err = a.db.Collection("fileuploads").UpdateMany(ctx,
 		b.M{"_id": b.M{"$in": fileIds}},
 		b.M{"$inc": b.M{"usecount": -1}})
+
+	return err
+}
+
+// FileLinkAttachments connects given topic or message to the file record IDs from the list.
+func (a *adapter) FileLinkAttachments(topic string, msgId t.Uid, fids []string) error {
+	now := t.TimeNow()
+	_, err := a.db.Collection("messages").UpdateOne(a.ctx,
+		b.M{"_id": msgId.String()},
+		b.M{"$set": b.M{"updatedat": now, "attachments": fids}})
+	if err != nil {
+		return err
+	}
+
+	ids := make([]interface{}, len(fids))
+	for i, id := range fids {
+		ids[i] = id
+	}
+	_, err = a.db.Collection("fileuploads").UpdateMany(a.ctx,
+		b.M{"_id": b.M{"$in": ids}},
+		b.M{
+			"$set": b.M{"updatedat": now},
+			"$inc": b.M{"usecount": 1}})
 
 	return err
 }

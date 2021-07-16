@@ -171,6 +171,10 @@ func replyCreateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 		return
 	}
 
+	if msg.Extra != nil && len(msg.Extra.Attachments) > 0 {
+		store.Files.LinkAttachments(user.Uid().UserId(), types.ZeroUid, msg.Extra.Attachments)
+	}
+
 	var reply *ServerComMessage
 	if msg.Acc.Login {
 		// Process user's login request.
@@ -184,6 +188,7 @@ func replyCreateUser(s *Session, msg *ClientComMessage, rec *auth.Rec) {
 			"authlvl": rec.AuthLevel.String(),
 		}
 	}
+
 	params := reply.Ctrl.Params.(map[string]interface{})
 	params["desc"] = &MsgTopicDesc{
 		CreatedAt: &user.CreatedAt,
