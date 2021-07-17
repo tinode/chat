@@ -3055,18 +3055,15 @@ func (a *adapter) FileStartUpload(fd *t.FileDef) error {
 	if cancel != nil {
 		defer cancel()
 	}
-	var topic interface{}
-	if fd.Topic != "" {
-		topic = fd.Topic
-	}
 	var user interface{}
 	if fd.User != "" {
 		user = store.DecodeUid(t.ParseUid(fd.User))
 	}
-	_, err := a.db.ExecContext(ctx, "INSERT INTO fileuploads(id,createdat,updatedat,userid,status,mimetype,size,topic,location)"+
-		" VALUES(?,?,?,?,?,?,?,?,?)",
+	_, err := a.db.ExecContext(ctx,
+		"INSERT INTO fileuploads(id,createdat,updatedat,userid,status,mimetype,size,location) "+
+			"VALUES(?,?,?,?,?,?,?,?,?)",
 		store.DecodeUid(fd.Uid()), fd.CreatedAt, fd.UpdatedAt, user,
-		fd.Status, fd.MimeType, fd.Size, topic, fd.Location)
+		fd.Status, fd.MimeType, fd.Size, fd.Location)
 	return err
 }
 
@@ -3088,15 +3085,6 @@ func (a *adapter) FileFinishUpload(fd *t.FileDef, success bool, size int64) (*t.
 
 	now := t.TimeNow()
 	if success {
-		if fd.Topic != "" {
-			// Mark the old completed record for garbage collection (if present).
-			_, err = tx.ExecContext(ctx, "UPDATE fileuploads SET updatedat=?,status=? WHERE topic=? AND status=?",
-				now, t.UploadDeleted, fd.Topic, t.UploadCompleted)
-			if err != nil {
-				return nil, err
-			}
-		}
-
 		_, err = tx.ExecContext(ctx, "UPDATE fileuploads SET updatedat=?,status=?,size=? WHERE id=?",
 			now, t.UploadCompleted, size, store.DecodeUid(fd.Uid()))
 		if err != nil {
@@ -3118,35 +3106,6 @@ func (a *adapter) FileFinishUpload(fd *t.FileDef, success bool, size int64) (*t.
 	fd.UpdatedAt = now
 
 	return fd, tx.Commit()
-}
-
-// FileSetOwner assigns an owner to a previously uploaded file.
-func (a *adapter) FileSetOwner(fd *t.FileDef) error {
-	ctx, cancel := a.getContext()
-	if cancel != nil {
-		defer cancel()
-	}
-	var user interface{}
-	if fd.User != "" {
-		user = store.DecodeUid(t.ParseUid(fd.User))
-	}
-	now := t.TimeNow()
-	resp, err := a.db.ExecContext(ctx, "UPDATE fileuploads SET updatedat=?,userid=? WHERE id=?", now, user,
-		store.DecodeUid(fd.Uid()))
-	if err != nil {
-		return err
-	}
-
-	rows, err := resp.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if rows <= 0 {
-		return t.ErrNotFound
-	}
-
-	fd.UpdatedAt = now
-	return nil
 }
 
 // FileGet fetches a record of a specific file
@@ -3246,12 +3205,12 @@ func (a *adapter) FileDeleteUnused(olderThan time.Time, limit int) ([]string, er
 
 // FileLinkAttachments connects given topic or message to the file record IDs from the list.
 func (a *adapter) FileLinkAttachments(topic string, msgId t.Uid, fids []string) error {
-	if len(fids) == 0 {
+	if len(fids) == 0 || (topic == "" && msgId.IsZero()) {
 		return t.ErrMalformed
 	}
 
 	// Decoded ids
-	var dids []int64
+	var dids []interface{}
 	for _, fid := range fids {
 		id := t.ParseUid(fid)
 		if id.IsZero() {
@@ -3281,16 +3240,31 @@ func (a *adapter) FileLinkAttachments(topic string, msgId t.Uid, fids []string) 
 		}
 	}()
 
-	_, err = tx.Exec("INSERT INTO filemsglinks(createdat,fileid,msgid) VALUES (?,?,?)"+
-		strings.Repeat(",(?,?,?)", len(dids)-1), args...)
-	if err != nil {
-		return err
-	}
+	if !msgId.IsZero() {
+		_, err = tx.Exec("INSERT INTO filemsglinks(createdat,fileid,msgid) VALUES (?,?,?)"+
+			strings.Repeat(",(?,?,?)", len(dids)-1), args...)
+		if err != nil {
+			return err
+		}
 
-	_, err = tx.Exec("UPDATE fileuploads SET updatedat=? WHERE id IN (?"+
-		strings.Repeat(",?", len(dids)-1)+")", now, dids...)
-	if err != nil {
-		return err
+		_, err = tx.Exec("UPDATE fileuploads SET updatedat=? WHERE id IN (?"+
+			strings.Repeat(",?", len(dids)-1)+")", append([]interface{}{now}, dids...)...)
+		if err != nil {
+			return err
+		}
+	} else {
+		// Mark earlier uploads on the same topic as deleted allowing them to be garbage-collected.
+		_, err = tx.Exec("UPDATE fileuploads SET updatedat=?,status=? WHERE topic=? AND status=?",
+			now, t.UploadDeleted, topic, t.UploadCompleted)
+		if err != nil {
+			return err
+		}
+
+		_, err = tx.Exec("UPDATE fileuploads SET updatedat=?,topic=? WHERE id IN (?"+
+			strings.Repeat(",?", len(dids)-1)+")", append([]interface{}{now, topic}, dids...)...)
+		if err != nil {
+			return err
+		}
 	}
 
 	return tx.Commit()

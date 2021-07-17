@@ -203,20 +203,6 @@ func largeFileReceive(wrt http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// If it's a topic avatar, make sure the user can upload it.
-	topic := req.FormValue("topic")
-	if topic == "me" {
-		topic = uid.String()
-	} else if topic != "" {
-		if ok, err := store.Users.IsOwner(uid, topic); !ok {
-			if err == nil {
-				err = types.ErrPermissionDenied
-			}
-			writeHttpResponse(decodeStoreError(err, msgID, "", now, nil), err)
-			return
-		}
-	}
-
 	file, _, err := req.FormFile("file")
 	if err != nil {
 		if strings.Contains(err.Error(), "request body too large") {
@@ -237,7 +223,6 @@ func largeFileReceive(wrt http.ResponseWriter, req *http.Request) {
 			Id: store.Store.GetUidString(),
 		},
 		User:     uid.String(),
-		Topic:    topic,
 		MimeType: http.DetectContentType(buff),
 	}
 	fdef.InitTimes()

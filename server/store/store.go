@@ -635,7 +635,7 @@ func (subsMapper) Delete(topic string, user types.Uid) error {
 
 // MessagesPersistenceInterface is an interface which defines methods for persistent storage of messages.
 type MessagesPersistenceInterface interface {
-	Save(msg *types.Message, readBySender bool) error
+	Save(msg *types.Message, attachments []string, readBySender bool) error
 	DeleteList(topic string, delID int, forUser types.Uid, ranges []types.Range) error
 	GetAll(topic string, forUser types.Uid, opt *types.QueryOpt) ([]types.Message, error)
 	GetDeleted(topic string, forUser types.Uid, opt *types.QueryOpt) ([]types.Range, int, error)
@@ -981,11 +981,6 @@ func (fileMapper) StartUpload(fd *types.FileDef) error {
 // FinishUpload marks started upload as successfully finished or failed.
 func (fileMapper) FinishUpload(fd *types.FileDef, success bool, size int64) (*types.FileDef, error) {
 	return adp.FileFinishUpload(fd, success, size)
-}
-
-// SetOwner assigns a user ID to a file uploaded during account registration.
-func (fileMapper) SetOwner(fd *types.FileDef) error {
-	return adp.FileSetOwner(fd)
 }
 
 // Get fetches a file record for a unique file id.
