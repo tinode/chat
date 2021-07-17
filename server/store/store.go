@@ -963,6 +963,7 @@ type FilePersistenceInterface interface {
 	FinishUpload(fd *types.FileDef, success bool, size int64) (*types.FileDef, error)
 	Get(fid string) (*types.FileDef, error)
 	DeleteUnused(olderThan time.Time, limit int) error
+	LinkAttachments(topic string, msgId types.Uid, attachments []string) error
 }
 
 // fileMapper is concrete type which implements FilePersistenceInterface.
@@ -1000,6 +1001,22 @@ func (fileMapper) DeleteUnused(olderThan time.Time, limit int) error {
 	}
 	if len(toDel) > 0 {
 		return Store.GetMediaHandler().Delete(toDel)
+	}
+	return nil
+}
+
+// LinkAttachments connects earlier uploaded attachments to a message or topic to prevent it
+// from being garbage collected.
+func (fileMapper) LinkAttachments(topic string, msgId types.Uid, attachments []string) error {
+	// Convert attachment URLs to file IDs.
+	var fids []string
+	for _, url := range attachments {
+		if fid := mediaHandler.GetIdFromUrl(url); !fid.IsZero() {
+			fids = append(fids, fid.String())
+		}
+	}
+	if len(fids) > 0 {
+		return adp.FileLinkAttachments(topic, msgId, attachments)
 	}
 	return nil
 }

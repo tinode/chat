@@ -2056,6 +2056,10 @@ func (t *Topic) replySetDesc(sess *Session, asUid types.Uid, asChan bool,
 		return err
 	}
 
+	if len(core) > 0 && msg.Extra != nil && len(msg.Extra.Attachments > 0) {
+		store.Files.LinkAttachments(t.name, types.ZeroUid, msg.Extra.Attachments)
+	}
+
 	// Update values cached in the topic object
 	if t.cat == types.TopicCatMe || t.cat == types.TopicCatGrp {
 		if tmp, ok := core["Access"]; ok {

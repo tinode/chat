@@ -3246,21 +3246,25 @@ func (a *adapter) FileDeleteUnused(olderThan time.Time, limit int) ([]string, er
 
 // FileLinkAttachments connects given topic or message to the file record IDs from the list.
 func (a *adapter) FileLinkAttachments(topic string, msgId t.Uid, fids []string) error {
-	var args []interface{}
-	var values []string
-	strNow := t.TimeNow().Format(t.TimeFormatRFC3339)
-	// createdat,fileid,msgid
-	val := "('" + strNow + "',?," + strconv.FormatInt(int64(msgId), 10) + ")"
+	if len(fids) == 0 {
+		return t.ErrMalformed
+	}
+
+	// Decoded ids
+	var dids []int64
 	for _, fid := range fids {
 		id := t.ParseUid(fid)
 		if id.IsZero() {
 			return t.ErrMalformed
 		}
-		values = append(values, val)
-		args = append(args, store.DecodeUid(id))
+		dids = append(dids, store.DecodeUid(id))
 	}
-	if len(args) == 0 {
-		return t.ErrMalformed
+
+	var args []interface{}
+	now := t.TimeNow()
+	for _, id := range dids {
+		// createdat,fileid,msgid
+		args = append(args, now, id, int64(msgId))
 	}
 
 	ctx, cancel := a.getContextForTx()
@@ -3277,13 +3281,14 @@ func (a *adapter) FileLinkAttachments(topic string, msgId t.Uid, fids []string) 
 		}
 	}()
 
-	_, err = tx.Exec("INSERT INTO filemsglinks(createdat,fileid,msgid) VALUES "+strings.Join(values, ","), args...)
+	_, err = tx.Exec("INSERT INTO filemsglinks(createdat,fileid,msgid) VALUES (?,?,?)"+
+		strings.Repeat(",(?,?,?)", len(dids)-1), args...)
 	if err != nil {
 		return err
 	}
 
-	_, err = tx.Exec("UPDATE fileuploads SET updatedat='"+strNow+"' WHERE id IN (?"+
-		strings.Repeat(",?", len(args)-1)+")", args...)
+	_, err = tx.Exec("UPDATE fileuploads SET updatedat=? WHERE id IN (?"+
+		strings.Repeat(",?", len(dids)-1)+")", now, dids...)
 	if err != nil {
 		return err
 	}
