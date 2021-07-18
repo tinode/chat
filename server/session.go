@@ -465,6 +465,7 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 	atomic.StoreInt64(&s.lastAction, now.UnixNano())
 
 	if msg.Extra == nil || msg.Extra.AsUser == "" {
+		// Use current user's ID and auth level.
 		msg.AsUser = s.uid.UserId()
 		msg.AuthLvl = int(s.authLvl)
 	} else if s.authLvl != auth.LevelRoot {
@@ -473,12 +474,21 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 		logs.Warn.Println("s.dispatch: non-root asigned msg.from", s.sid)
 		return
 	} else if fromUid := types.ParseUserId(msg.Extra.AsUser); fromUid.IsZero() {
+		// Invalid msg.Extra.AsUser.
 		s.queueOut(ErrMalformed("", "", now))
 		logs.Warn.Println("s.dispatch: malformed msg.from: ", msg.Extra.AsUser, s.sid)
 		return
-	} else if auth.ParseAuthLevel(msg.Extra.AuthLevel) == auth.LevelNone {
-		// AuthLvl is not set by caller, assign default LevelAuth.
-		msg.AuthLvl = int(auth.LevelAuth)
+	} else {
+		// Use provided msg.Extra.AsUser
+		msg.AsUser = msg.Extra.AsUser
+
+		// Assign auth level, if one is provided. Ignore invalid strings.
+		if authLvl := auth.ParseAuthLevel(msg.Extra.AuthLevel); authLvl == auth.LevelNone {
+			// AuthLvl is not set by the caller, assign default LevelAuth.
+			msg.AuthLvl = int(auth.LevelAuth)
+		} else {
+			msg.AuthLvl = int(authLvl)
+		}
 	}
 
 	var resp *ServerComMessage
