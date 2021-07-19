@@ -3234,16 +3234,19 @@ func (t *Topic) pushForData(fromUid types.Uid, data *MsgServerData) *push.Receip
 	}
 
 	for uid, pud := range t.perUser {
-		// Send only to those who have notifications enabled, exclude the originating user.
-		if uid == fromUid {
-			continue
+		online := pud.online
+		if uid == fromUid && online == 0 {
+			// Make sure the sender's devices receive a silent push.
+			online = 1
 		}
+
+		// Send only to those who have notifications enabled.
 		mode := pud.modeWant & pud.modeGiven
 		if mode.IsPresencer() && mode.IsReader() && !pud.deleted && !pud.isChan {
 			receipt.To[uid] = push.Recipient{
-				// Number of sessions this data message will be delivered to.
+				// Number of attached sessions the data message will be delivered to.
 				// Push notifications sent to users with non-zero online sessions will be marked silent.
-				Delivered: pud.online,
+				Delivered: online,
 			}
 		}
 	}
