@@ -1218,8 +1218,8 @@ func (s *Session) del(msg *ClientComMessage) {
 	}
 }
 
-// Broadcast a transient {ping} message to active topic subscribers
-// Not reporting any errors
+// Broadcast a transient message to active topic subscribers.
+// Not reporting any errors.
 func (s *Session) note(msg *ClientComMessage) {
 	if s.ver == 0 || msg.AsUser == "" {
 		// Silently ignore the message: have not received {hi} or don't know who sent the message.

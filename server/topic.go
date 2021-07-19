@@ -905,6 +905,9 @@ func (t *Topic) procDataReq(asUid types.Uid, msg *ServerComMessage) (*push.Recei
 	if t.isProxy {
 		t.lastID = msg.Data.SeqId
 	} else {
+		// FIXME: this is just a dummy var which has to be passed from the caller.
+		var attachments []string
+
 		// Save to DB at master topic.
 		if err := store.Messages.Save(
 			&types.Message{
