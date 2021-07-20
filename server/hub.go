@@ -64,8 +64,6 @@ type topicUnreg struct {
 type metaReq struct {
 	// Packet containing details of the Get/Set/Del request.
 	pkt *ClientComMessage
-	// Session which originated the request.
-	sess *Session
 	// UID of the user being affected. Could be zero.
 	forUser types.Uid
 	// New topic state value. Only types.StateSuspended is supported at this time.
@@ -185,7 +183,8 @@ func (h *Hub) run() {
 					// Indicates a proxy topic.
 					isProxy:   globals.cluster.isRemoteTopic(join.pkt.RcptTo),
 					sessions:  make(map[*Session]perSessionData),
-					broadcast: make(chan *ServerComMessage, 256),
+					broadcast: make(chan *ClientComMessage, 192),
+					presence:  make(chan *ServerComMessage, 64),
 					reg:       make(chan *sessionJoin, 256),
 					unreg:     make(chan *sessionLeave, 256),
 					meta:      make(chan *metaReq, 64),
@@ -264,12 +263,12 @@ func (h *Hub) run() {
 				// Metadata read or update from a user who is not attached to the topic.
 				if meta.pkt.Get != nil {
 					if meta.pkt.MetaWhat == constMsgMetaDesc {
-						go replyOfflineTopicGetDesc(meta.sess, meta.pkt)
+						go replyOfflineTopicGetDesc(meta.pkt.sess, meta.pkt)
 					} else {
-						go replyOfflineTopicGetSub(meta.sess, meta.pkt)
+						go replyOfflineTopicGetSub(meta.pkt.sess, meta.pkt)
 					}
 				} else if meta.pkt.Set != nil {
-					go replyOfflineTopicSetSub(meta.sess, meta.pkt)
+					go replyOfflineTopicSetSub(meta.pkt.sess, meta.pkt)
 				}
 			}
 
@@ -412,9 +411,9 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 			} else {
 				// Case 1.1.2: requester is NOT the owner
 				msg.MetaWhat = constMsgDelTopic
+				msg.sess = sess
 				t.meta <- &metaReq{
-					pkt:  msg,
-					sess: sess,
+					pkt: msg,
 				}
 			}
 		} else {

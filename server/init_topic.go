@@ -87,7 +87,7 @@ func topicInit(t *Topic, join *sessionJoin, h *Hub) {
 		for len(t.meta) > 0 {
 			msg := <-t.meta
 			if msg.pkt.Id != "" {
-				msg.sess.queueOut(ErrLockedReply(msg.pkt, timestamp))
+				msg.pkt.sess.queueOut(ErrLockedReply(msg.pkt, timestamp))
 			}
 		}
 		if len(t.exit) > 0 {

@@ -83,7 +83,9 @@ type Topic struct {
 	sessions map[*Session]perSessionData
 
 	// Requests to broadcast messages from sessions or other topics. Buffered = 256
-	broadcast chan *ServerComMessage
+	broadcast chan *ClientComMessage
+	// Channel for receiving presence notifications. Buffered = 256
+	presence chan *ServerComMessage
 	// Channel for receiving {get}/{set} requests, buffered = 32
 	meta chan *metaReq
 	// Subscribe requests from sessions, buffered = 32
@@ -318,33 +320,33 @@ func (t *Topic) registerSession(join *sessionJoin) {
 
 func (t *Topic) handleMetaGet(meta *metaReq, asUid types.Uid, asChan bool, authLevel auth.Level) {
 	if meta.pkt.MetaWhat&constMsgMetaDesc != 0 {
-		if err := t.replyGetDesc(meta.sess, asUid, asChan, meta.pkt.Get.Desc, meta.pkt); err != nil {
+		if err := t.replyGetDesc(meta.pkt.sess, asUid, asChan, meta.pkt.Get.Desc, meta.pkt); err != nil {
 			logs.Warn.Printf("topic[%s] meta.Get.Desc failed: %s", t.name, err)
 		}
 	}
 	if meta.pkt.MetaWhat&constMsgMetaSub != 0 {
-		if err := t.replyGetSub(meta.sess, asUid, authLevel, asChan, meta.pkt); err != nil {
+		if err := t.replyGetSub(meta.pkt.sess, asUid, authLevel, asChan, meta.pkt); err != nil {
 			logs.Warn.Printf("topic[%s] meta.Get.Sub failed: %s", t.name, err)
 		}
 	}
 	if meta.pkt.MetaWhat&constMsgMetaData != 0 {
-		if err := t.replyGetData(meta.sess, asUid, asChan, meta.pkt.Get.Data, meta.pkt); err != nil {
+		if err := t.replyGetData(meta.pkt.sess, asUid, asChan, meta.pkt.Get.Data, meta.pkt); err != nil {
 			logs.Warn.Printf("topic[%s] meta.Get.Data failed: %s", t.name, err)
 		}
 	}
 	if meta.pkt.MetaWhat&constMsgMetaDel != 0 {
-		if err := t.replyGetDel(meta.sess, asUid, meta.pkt.Get.Del, meta.pkt); err != nil {
+		if err := t.replyGetDel(meta.pkt.sess, asUid, meta.pkt.Get.Del, meta.pkt); err != nil {
 			logs.Warn.Printf("topic[%s] meta.Get.Del failed: %s", t.name, err)
 		}
 	}
 	if meta.pkt.MetaWhat&constMsgMetaTags != 0 {
-		if err := t.replyGetTags(meta.sess, asUid, meta.pkt); err != nil {
+		if err := t.replyGetTags(meta.pkt.sess, asUid, meta.pkt); err != nil {
 			logs.Warn.Printf("topic[%s] meta.Get.Tags failed: %s", t.name, err)
 		}
 	}
 	if meta.pkt.MetaWhat&constMsgMetaCred != 0 {
 		logs.Warn.Printf("topic[%s] handle getCred", t.name)
-		if err := t.replyGetCreds(meta.sess, asUid, meta.pkt); err != nil {
+		if err := t.replyGetCreds(meta.pkt.sess, asUid, meta.pkt); err != nil {
 			logs.Warn.Printf("topic[%s] meta.Get.Creds failed: %s", t.name, err)
 		}
 	}
@@ -352,7 +354,7 @@ func (t *Topic) handleMetaGet(meta *metaReq, asUid types.Uid, asChan bool, authL
 
 func (t *Topic) handleMetaSet(meta *metaReq, asUid types.Uid, asChan bool, authLevel auth.Level) {
 	if meta.pkt.MetaWhat&constMsgMetaDesc != 0 {
-		if err := t.replySetDesc(meta.sess, asUid, asChan, authLevel, meta.pkt); err == nil {
+		if err := t.replySetDesc(meta.pkt.sess, asUid, asChan, authLevel, meta.pkt); err == nil {
 			// Notify plugins of the update
 			pluginTopic(t, plgActUpd)
 		} else {
@@ -360,17 +362,17 @@ func (t *Topic) handleMetaSet(meta *metaReq, asUid types.Uid, asChan bool, authL
 		}
 	}
 	if meta.pkt.MetaWhat&constMsgMetaSub != 0 {
-		if err := t.replySetSub(meta.sess, meta.pkt, asChan); err != nil {
+		if err := t.replySetSub(meta.pkt.sess, meta.pkt, asChan); err != nil {
 			logs.Warn.Printf("topic[%s] meta.Set.Sub failed: %v", t.name, err)
 		}
 	}
 	if meta.pkt.MetaWhat&constMsgMetaTags != 0 {
-		if err := t.replySetTags(meta.sess, asUid, meta.pkt); err != nil {
+		if err := t.replySetTags(meta.pkt.sess, asUid, meta.pkt); err != nil {
 			logs.Warn.Printf("topic[%s] meta.Set.Tags failed: %v", t.name, err)
 		}
 	}
 	if meta.pkt.MetaWhat&constMsgMetaCred != 0 {
-		if err := t.replySetCred(meta.sess, asUid, authLevel, meta.pkt); err != nil {
+		if err := t.replySetCred(meta.pkt.sess, asUid, authLevel, meta.pkt); err != nil {
 			logs.Warn.Printf("topic[%s] meta.Set.Cred failed: %v", t.name, err)
 		}
 	}
@@ -380,13 +382,13 @@ func (t *Topic) handleMetaDel(meta *metaReq, asUid types.Uid, asChan bool, authL
 	var err error
 	switch meta.pkt.MetaWhat {
 	case constMsgDelMsg:
-		err = t.replyDelMsg(meta.sess, asUid, asChan, meta.pkt)
+		err = t.replyDelMsg(meta.pkt.sess, asUid, asChan, meta.pkt)
 	case constMsgDelSub:
-		err = t.replyDelSub(meta.sess, asUid, meta.pkt)
+		err = t.replyDelSub(meta.pkt.sess, asUid, meta.pkt)
 	case constMsgDelTopic:
-		err = t.replyDelTopic(meta.sess, asUid, meta.pkt)
+		err = t.replyDelTopic(meta.pkt.sess, asUid, meta.pkt)
 	case constMsgDelCred:
-		err = t.replyDelCred(meta.sess, asUid, authLevel, meta.pkt)
+		err = t.replyDelCred(meta.pkt.sess, asUid, authLevel, meta.pkt)
 	}
 
 	if err != nil {
@@ -403,7 +405,7 @@ func (t *Topic) handleMeta(meta *metaReq) {
 	asChan, err := t.verifyChannelAccess(meta.pkt.Original)
 	if err != nil {
 		// User should not be able to address non-channel topic as channel.
-		meta.sess.queueOut(ErrNotFoundReply(meta.pkt, types.TimeNow()))
+		meta.pkt.sess.queueOut(ErrNotFoundReply(meta.pkt, types.TimeNow()))
 		return
 	}
 	switch {
@@ -514,8 +516,19 @@ func (t *Topic) runLocal(hub *Hub) {
 			t.unregisterSession(leave)
 
 		case msg := <-t.broadcast:
-			// Content message intended for broadcasting to recipients
-			t.handleBroadcast(msg)
+			// Content message intended for broadcasting to recipients.
+			if msg.Pub != nil {
+				t.handlePubBroadcast(msg)
+			} else if msg.Note != nil {
+				t.handleNoteBroadcast(msg)
+				// TODO(gene): maybe remove this
+			} else {
+				logs.Err.Panic("topic: wrong message type for broadcasting", t.name)
+			}
+
+		case pres := <-t.presence:
+			// Presence notification.
+			t.handlePresence(pres)
 
 		case meta := <-t.meta:
 			t.handleMeta(meta)
@@ -884,54 +897,61 @@ func (t *Topic) sendSubNotifications(asUid types.Uid, sid, userAgent string) {
 	}
 }
 
-// Pre-rpocess {data} broadcast request.
-func (t *Topic) procDataReq(asUid types.Uid, msg *ServerComMessage) (*push.Receipt, bool) {
-	if t.isReadOnly() {
-		msg.sess.queueOut(ErrPermissionDenied(msg.Id, t.original(asUid), msg.Timestamp))
-		return nil, false
+// handlePubBroadcast fans out {pub} -> {data} messages to recipients in a master topic.
+// This is a NON-proxy broadcast.
+func (t *Topic) handlePubBroadcast(msg *ClientComMessage) {
+	asUid := types.ParseUserId(msg.AsUser)
+	if t.isInactive() {
+		// Ignore broadcast - topic is paused or being deleted.
+		msg.sess.queueOut(ErrLocked(msg.Id, t.original(asUid), msg.Timestamp))
+		return
 	}
 
-	asUser := types.ParseUserId(msg.Data.From)
-	userData, userFound := t.perUser[asUser]
+	pud, userFound := t.perUser[asUid]
 	// Anyone is allowed to post to 'sys' topic.
 	if t.cat != types.TopicCatSys {
 		// If it's not 'sys' check write permission.
-		if !(userData.modeWant & userData.modeGiven).IsWriter() {
+		if !(pud.modeWant & pud.modeGiven).IsWriter() {
 			msg.sess.queueOut(ErrPermissionDenied(msg.Id, t.original(asUid), msg.Timestamp))
-			return nil, false
+			return
 		}
+	}
+
+	if t.isReadOnly() {
+		msg.sess.queueOut(ErrPermissionDenied(msg.Id, t.original(asUid), msg.Timestamp))
+		return
 	}
 
 	if t.isProxy {
 		t.lastID = msg.Data.SeqId
 	} else {
-		// FIXME: this is just a dummy var which has to be passed from the caller.
-		var attachments []string
-
 		// Save to DB at master topic.
+		var attachments []string
+		if msg.Extra != nil && len(msg.Extra.Attachments) > 0 {
+			attachments = msg.Extra.Attachments
+		}
 		if err := store.Messages.Save(
 			&types.Message{
-				ObjHeader: types.ObjHeader{CreatedAt: msg.Data.Timestamp},
+				ObjHeader: types.ObjHeader{CreatedAt: msg.Timestamp},
 				SeqId:     t.lastID + 1,
 				Topic:     t.name,
-				From:      asUser.String(),
-				Head:      msg.Data.Head,
-				Content:   msg.Data.Content,
-			}, attachments, (userData.modeGiven & userData.modeWant).IsReader()); err != nil {
+				From:      asUid.String(),
+				Head:      msg.Pub.Head,
+				Content:   msg.Pub.Content,
+			}, attachments, (pud.modeGiven & pud.modeWant).IsReader()); err != nil {
 			logs.Warn.Printf("topic[%s]: failed to save message: %v", t.name, err)
 			msg.sess.queueOut(ErrUnknown(msg.Id, t.original(asUid), msg.Timestamp))
 
-			return nil, false
+			return
 		}
 
 		t.lastID++
-		t.touched = msg.Data.Timestamp
-		msg.Data.SeqId = t.lastID
+		t.touched = msg.Timestamp
 	}
 
 	if userFound {
-		userData.readID = t.lastID
-		t.perUser[asUser] = userData
+		pud.readID = t.lastID
+		t.perUser[asUid] = pud
 	}
 
 	if msg.Id != "" && msg.sess != nil {
@@ -940,26 +960,84 @@ func (t *Topic) procDataReq(asUid types.Uid, msg *ServerComMessage) (*push.Recei
 		msg.sess.queueOut(reply)
 	}
 
-	var pushRcpt *push.Receipt
-	if !t.isProxy {
-		pushRcpt = t.pushForData(asUser, msg.Data)
+	data := &ServerComMessage{
+		Data: &MsgServerData{
+			Topic:     msg.Original,
+			From:      msg.AsUser,
+			Timestamp: msg.Timestamp,
+			SeqId:     t.lastID,
+			Head:      msg.Pub.Head,
+			Content:   msg.Pub.Content,
+		},
+		// Internal-only values.
+		Id:        msg.Id,
+		RcptTo:    msg.RcptTo,
+		AsUser:    msg.AsUser,
+		Timestamp: msg.Timestamp,
+		sess:      msg.sess,
+	}
+	if msg.Pub.NoEcho {
+		data.SkipSid = msg.sess.sid
+	}
 
+	if !t.isProxy {
 		// Message sent: notify offline 'R' subscrbers on 'me'.
-		t.presSubsOffline("msg", &presParams{seqID: t.lastID, actor: msg.Data.From},
+		t.presSubsOffline("msg", &presParams{seqID: t.lastID, actor: msg.AsUser},
 			&presFilters{filterIn: types.ModeRead}, nilPresFilters, "", true)
 
 		// Tell the plugins that a message was accepted for delivery
-		pluginMessage(msg.Data, plgActCreate)
+		pluginMessage(data.Data, plgActCreate)
 	}
-	return pushRcpt, true
+
+	t.broadcastToSessions(data)
+
+	if !t.isProxy {
+		// usersPush will update unread message count and send push notification.
+		pushRcpt := t.pushForData(asUid, data.Data)
+		usersPush(pushRcpt)
+	}
 }
 
-// Pre-rpocess {info} broadcast request.
-func (t *Topic) procInfoReq(asUid types.Uid, msg *ServerComMessage) bool {
-	if msg.Info.SeqId > t.lastID {
-		// Drop bogus read notification
-		return false
+// handleInfoBroadcast fans out {note} -> {info} messages to recipients in a master topic.
+// This is a NON-proxy broadcast (at master topic).
+func (t *Topic) handleNoteBroadcast(msg *ClientComMessage) {
+	if t.isInactive() {
+		// Ignore broadcast - topic is paused or being deleted.
+		return
 	}
+
+	if msg.Note.SeqId > t.lastID {
+		// Drop bogus read notification
+		return
+	}
+
+	// No need to process {info} sent to 'me' topic.
+	if msg.Info.Src == "" {
+		asUid := types.ParseUserId(msg.AsUser)
+		if success := t.procInfoReq(asUid, msg); !success {
+			return
+		}
+	}
+
+	info := &ServerComMessage{
+		Info: &MsgServerInfo{
+			Topic: msg.Original,
+			From:  msg.AsUser,
+			What:  msg.Note.What,
+			SeqId: msg.Note.SeqId,
+		},
+		RcptTo:    msg.RcptTo,
+		AsUser:    msg.AsUser,
+		Timestamp: msg.Timestamp,
+		SkipSid:   msg.sess.sid,
+		sess:      msg.sess,
+	}
+
+	t.broadcastToSessions(info)
+}
+
+// Pre-process {info} broadcast request.
+func (t *Topic) procInfoReq(asUid types.Uid, msg *ServerComMessage) bool {
 
 	asChan, err := t.verifyChannelAccess(msg.Info.Topic)
 	if err != nil {
@@ -1057,44 +1135,28 @@ func (t *Topic) procInfoReq(asUid types.Uid, msg *ServerComMessage) bool {
 	return true
 }
 
-// handleBroadcast fans out broadcastable messages to recipients in topic and proxy_topic.
-func (t *Topic) handleBroadcast(msg *ServerComMessage) {
+// handlePresence fans out {pres} messages to recipients in topic.
+func (t *Topic) handlePresence(msg *ServerComMessage) {
 	asUid := types.ParseUserId(msg.AsUser)
 	if t.isInactive() {
 		// Ignore broadcast - topic is paused or being deleted.
-		if msg.Data != nil {
-			msg.sess.queueOut(ErrLocked(msg.Id, t.original(asUid), msg.Timestamp))
-		}
 		return
 	}
 
-	var pushRcpt *push.Receipt
-	if msg.Data != nil {
-		var success bool
-		if pushRcpt, success = t.procDataReq(asUid, msg); !success {
-			return
-		}
-	} else if msg.Pres != nil {
-		what := t.procPresReq(msg.Pres.Src, msg.Pres.What, msg.Pres.WantReply)
-		if t.xoriginal != msg.Pres.Topic || what == "" {
-			// This is just a request for status, don't forward it to sessions
-			return
-		}
-
-		// "what" may have changed, i.e. unset or "+command" removed ("on+en" -> "on")
-		msg.Pres.What = what
-	} else if msg.Info != nil {
-		// No need to process {info} sent to 'me' topic.
-		if msg.Info.Src == "" {
-			if success := t.procInfoReq(asUid, msg); !success {
-				return
-			}
-		}
-	} else {
-		// TODO(gene): remove this
-		logs.Err.Panic("topic: wrong message type for broadcasting", t.name)
+	what := t.procPresReq(msg.Pres.Src, msg.Pres.What, msg.Pres.WantReply)
+	if t.xoriginal != msg.Pres.Topic || what == "" {
+		// This is just a request for status, don't forward it to sessions
+		return
 	}
 
+	// "what" may have changed, i.e. unset or "+command" removed ("on+en" -> "on")
+	msg.Pres.What = what
+
+	t.broadcastToSessions(msg)
+}
+
+// broadcastToSessions writes message to attached sessions.
+func (t *Topic) broadcastToSessions(msg *ServerComMessage) {
 	// List of sessions to be dropped.
 	var dropSessions []*Session
 	// Broadcast the message. Only {data}, {pres}, {info} are broadcastable.
@@ -1165,11 +1227,6 @@ func (t *Topic) handleBroadcast(msg *ServerComMessage) {
 			logs.Warn.Printf("topic[%s]: connection stuck, detaching - %s", t.name, sess.sid)
 			dropSessions = append(dropSessions, sess)
 		}
-	}
-
-	if !t.isProxy && pushRcpt != nil {
-		// usersPush will update unread message count and send push notification.
-		usersPush(pushRcpt)
 	}
 
 	// Drop "bad" sessions.

@@ -143,7 +143,7 @@ func (t *Topic) handleProxyLeaveRequest(leave *sessionLeave, killTimer *time.Tim
 	return result
 }
 
-// Proxy topic handler of a master topic response to earlier request.
+// Proxy topic handler of a master topic response to an earlier request.
 func (t *Topic) proxyMasterResponse(msg *ClusterResp, killTimer *time.Timer) {
 	// Kills topic after a period of inactivity.
 	keepAlive := idleProxyTopicTimeout

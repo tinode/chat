@@ -517,10 +517,10 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 
 	case ProxyReqMeta:
 		if t := globals.hub.topicGet(msg.RcptTo); t != nil {
+			msg.CliMsg.sess = sess
 			select {
 			case t.meta <- &metaReq{
-				pkt:  msg.CliMsg,
-				sess: sess,
+				pkt: msg.CliMsg,
 			}:
 			default:
 				sess.queueOut(ErrUnknownReply(msg.CliMsg, msg.CliMsg.Timestamp))

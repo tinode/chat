@@ -163,7 +163,7 @@ type Session struct {
 // Subscription is a mapper of sessions to topics.
 type Subscription struct {
 	// Channel to communicate with the topic, copy of Topic.broadcast
-	broadcast chan<- *ServerComMessage
+	broadcast chan<- *ClientComMessage
 
 	// Session sends a signal to Topic when this session is unsubscribed
 	// This is a copy of Topic.unreg
@@ -701,28 +701,10 @@ func (s *Session) publish(msg *ClientComMessage) {
 		}
 	}
 
-	data := &ServerComMessage{
-		Data: &MsgServerData{
-			Topic:     msg.Original,
-			From:      msg.AsUser,
-			Timestamp: msg.Timestamp,
-			Head:      msg.Pub.Head,
-			Content:   msg.Pub.Content,
-		},
-		// Internal-only values.
-		Id:        msg.Id,
-		RcptTo:    msg.RcptTo,
-		AsUser:    msg.AsUser,
-		Timestamp: msg.Timestamp,
-		sess:      s,
-	}
-	if msg.Pub.NoEcho {
-		data.SkipSid = s.sid
-	}
 	if sub := s.getSub(msg.RcptTo); sub != nil {
 		// This is a post to a subscribed topic. The message is sent to the topic only
 		select {
-		case sub.broadcast <- data:
+		case sub.broadcast <- msg:
 		default:
 			// Reply with a 500 to the user.
 			s.queueOut(ErrUnknownReply(msg, msg.Timestamp))
@@ -1075,9 +1057,9 @@ func (s *Session) get(msg *ClientComMessage) {
 	msg.MetaWhat = parseMsgClientMeta(msg.Get.What)
 
 	sub := s.getSub(msg.RcptTo)
+	msg.sess = s
 	meta := &metaReq{
-		pkt:  msg,
-		sess: s,
+		pkt: msg,
 	}
 
 	if meta.pkt.MetaWhat == 0 {
@@ -1115,9 +1097,9 @@ func (s *Session) set(msg *ClientComMessage) {
 		return
 	}
 
+	msg.sess = s
 	meta := &metaReq{
-		pkt:  msg,
-		sess: s,
+		pkt: msg,
 	}
 
 	if msg.Set.Desc != nil {
@@ -1186,10 +1168,10 @@ func (s *Session) del(msg *ClientComMessage) {
 	sub := s.getSub(msg.RcptTo)
 	if sub != nil && msg.MetaWhat != constMsgDelTopic {
 		// Session is attached, deleting subscription or messages. Send to topic.
+		msg.sess = s
 		select {
 		case sub.meta <- &metaReq{
-			pkt:  msg,
-			sess: s,
+			pkt: msg,
 		}:
 		default:
 			// Reply with a 500 to the user.
@@ -1247,23 +1229,10 @@ func (s *Session) note(msg *ClientComMessage) {
 		return
 	}
 
-	response := &ServerComMessage{
-		Info: &MsgServerInfo{
-			Topic: msg.Original,
-			From:  msg.AsUser,
-			What:  msg.Note.What,
-			SeqId: msg.Note.SeqId,
-		},
-		RcptTo:    msg.RcptTo,
-		AsUser:    msg.AsUser,
-		Timestamp: msg.Timestamp,
-		SkipSid:   s.sid,
-		sess:      s,
-	}
 	if sub := s.getSub(msg.RcptTo); sub != nil {
 		// Pings can be sent to subscribed topics only
 		select {
-		case sub.broadcast <- response:
+		case sub.broadcast <- msg:
 		default:
 			// Reply with a 500 to the user.
 			s.queueOut(ErrUnknownReply(msg, msg.Timestamp))
