@@ -207,7 +207,7 @@ func (t *Topic) procPresReq(fromUserID, what string, wantReply bool) string {
 	// B[online, A:on] to A[online, B:off]: {pres B on}
 	// A[online, B:on] to B[online, A:on]: {pres A on} <<-- unnecessary, that's why wantReply is needed
 	if (onlineUpdate || reqReply) && wantReply {
-		globals.hub.route <- &ServerComMessage{
+		globals.hub.routeSrv <- &ServerComMessage{
 			// Topic is 'me' even for group topics; group topics will use 'me' as a signal to drop the message
 			// without forwarding to sessions
 			Pres:   &MsgServerPres{Topic: "me", What: replyAs, Src: t.name, WantReply: reqReply},
@@ -256,7 +256,7 @@ func (t *Topic) presUsersOfInterest(what, ua string) {
 			continue
 		}
 
-		globals.hub.route <- &ServerComMessage{
+		globals.hub.routeSrv <- &ServerComMessage{
 			Pres: &MsgServerPres{
 				Topic:     notifyOn,
 				What:      what,
@@ -284,7 +284,7 @@ func presUsersOfInterestOffline(uid types.Uid, subs []types.Subscription, what s
 			continue
 		}
 
-		globals.hub.route <- &ServerComMessage{
+		globals.hub.routeSrv <- &ServerComMessage{
 			Pres:   &MsgServerPres{Topic: notifyOn, What: what, Src: uid.UserId(), WantReply: false},
 			RcptTo: subs[i].Topic,
 		}
@@ -313,7 +313,7 @@ func (t *Topic) presSubsOnline(what, src string, params *presParams, filter *pre
 		target = ""
 	}
 
-	globals.hub.route <- &ServerComMessage{
+	globals.hub.routeSrv <- &ServerComMessage{
 		Pres: &MsgServerPres{
 			Topic:       t.xoriginal,
 			What:        what,
@@ -440,7 +440,7 @@ func (t *Topic) presSubsOffline(what string, params *presParams,
 			target = ""
 		}
 
-		globals.hub.route <- &ServerComMessage{
+		globals.hub.routeSrv <- &ServerComMessage{
 			Pres: &MsgServerPres{
 				Topic:       "me",
 				What:        what,
@@ -473,7 +473,7 @@ func (t *Topic) infoSubsOffline(from types.Uid, what string, seq int, skipSid st
 			continue
 		}
 
-		globals.hub.route <- &ServerComMessage{
+		globals.hub.routeSrv <- &ServerComMessage{
 			Info: &MsgServerInfo{
 				Topic:     "me",
 				Src:       t.original(uid),
@@ -518,7 +518,7 @@ func presSubsOfflineOffline(topic string, cat types.TopicCat, subs []types.Subsc
 			target = ""
 		}
 
-		globals.hub.route <- &ServerComMessage{
+		globals.hub.routeSrv <- &ServerComMessage{
 			Pres: &MsgServerPres{
 				Topic:     "me",
 				What:      what,
@@ -563,7 +563,7 @@ func (t *Topic) presSingleUserOffline(uid types.Uid, mode types.AccessMode,
 			target = ""
 		}
 
-		globals.hub.route <- &ServerComMessage{
+		globals.hub.routeSrv <- &ServerComMessage{
 			Pres: &MsgServerPres{
 				Topic:     "me",
 				What:      what,
@@ -597,7 +597,7 @@ func presSingleUserOfflineOffline(uid types.Uid, original, what string, params *
 		target = ""
 	}
 
-	globals.hub.route <- &ServerComMessage{
+	globals.hub.routeSrv <- &ServerComMessage{
 		Pres: &MsgServerPres{
 			Topic:     "me",
 			What:      what,

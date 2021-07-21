@@ -277,11 +277,11 @@ func (t *Topic) computePerUserAcsUnion() {
 
 // unregisterSession implements all logic following receipt of a leave
 // request via the Topic.unreg channel.
-func (t *Topic) unregisterSession(leave *sessionLeave) {
-	t.handleLeaveRequest(leave)
-	if leave.pkt != nil && leave.sess.inflightReqs != nil {
+func (t *Topic) unregisterSession(msg *ClientComMessage, sess *Session) {
+	t.handleLeaveRequest(msg, sess)
+	if msg != nil && sess.inflightReqs != nil {
 		// If it's a client initiated request.
-		leave.sess.inflightReqs.Done()
+		sess.inflightReqs.Done()
 	}
 
 	// If there are no more subscriptions to this topic, start a kill timer
@@ -513,7 +513,7 @@ func (t *Topic) runLocal(hub *Hub) {
 			t.registerSession(join)
 
 		case leave := <-t.unreg:
-			t.unregisterSession(leave)
+			t.unregisterSession(leave.pkt, leave.sess)
 
 		case msg := <-t.broadcast:
 			// Content message intended for broadcasting to recipients.
@@ -616,47 +616,47 @@ func (t *Topic) handleSubscription(join *sessionJoin) error {
 }
 
 // handleLeaveRequest processes a session leave request.
-func (t *Topic) handleLeaveRequest(leave *sessionLeave) {
+func (t *Topic) handleLeaveRequest(msg *ClientComMessage, sess *Session) {
 	// Remove connection from topic; session may continue to function
 	now := types.TimeNow()
 
 	// userId.IsZero() == true when the entire session is being dropped.
 	var asUid types.Uid
 	var asChan bool
-	if leave.pkt != nil {
-		asUid = types.ParseUserId(leave.pkt.AsUser)
+	if msg != nil {
+		asUid = types.ParseUserId(msg.AsUser)
 		var err error
-		asChan, err = t.verifyChannelAccess(leave.pkt.Original)
+		asChan, err = t.verifyChannelAccess(msg.Original)
 		if err != nil {
 			// Group topic cannot be addressed as channel unless channel functionality is enabled.
-			leave.sess.queueOut(ErrNotFoundReply(leave.pkt, now))
+			sess.queueOut(ErrNotFoundReply(msg, now))
 		}
 	}
 
 	if t.isInactive() {
-		if !asUid.IsZero() && leave.pkt != nil {
-			leave.sess.queueOut(ErrLockedReply(leave.pkt, now))
+		if !asUid.IsZero() && msg != nil {
+			sess.queueOut(ErrLockedReply(msg, now))
 		}
 		return
-	} else if leave.pkt != nil && leave.pkt.Leave.Unsub {
+	} else if msg != nil && msg.Leave.Unsub {
 		// User wants to leave and unsubscribe.
 		// asUid must not be Zero.
-		if err := t.replyLeaveUnsub(leave.sess, leave.pkt, asUid); err != nil {
-			logs.Err.Println("failed to unsub", err, leave.sess.sid)
+		if err := t.replyLeaveUnsub(sess, msg, asUid); err != nil {
+			logs.Err.Println("failed to unsub", err, sess.sid)
 			return
 		}
-	} else if pssd, _ := t.remSession(leave.sess, asUid); pssd != nil {
+	} else if pssd, _ := t.remSession(sess, asUid); pssd != nil {
 		if pssd.isChanSub != asChan {
 			// Cannot address non-channel subscription as channel and vice versa.
-			if leave.pkt != nil {
+			if msg != nil {
 				// Group topic cannot be addressed as channel unless channel functionality is enabled.
-				leave.sess.queueOut(ErrNotFoundReply(leave.pkt, now))
+				sess.queueOut(ErrNotFoundReply(msg, now))
 			}
 			return
 		}
 
 		var uid types.Uid
-		if leave.sess.isProxy() {
+		if sess.isProxy() {
 			// Multiplexing session, multiple UIDs.
 			uid = asUid
 		} else {
@@ -669,7 +669,7 @@ func (t *Topic) handleLeaveRequest(leave *sessionLeave) {
 		if !uid.IsZero() {
 			// UID not zero: one user removed.
 			pud = t.perUser[uid]
-			if !leave.sess.background {
+			if !sess.background {
 				pud.online--
 				t.perUser[uid] = pud
 			}
@@ -681,8 +681,8 @@ func (t *Topic) handleLeaveRequest(leave *sessionLeave) {
 				pud.online--
 				t.perUser[uid] = pud
 			}
-		} else if !leave.sess.isCluster() {
-			logs.Warn.Panic("cannot determine uid: leave req=", leave)
+		} else if !sess.isCluster() {
+			logs.Warn.Panic("cannot determine uid: leave req", msg, sess)
 		}
 
 		switch t.cat {
@@ -690,7 +690,7 @@ func (t *Topic) handleLeaveRequest(leave *sessionLeave) {
 			mrs := t.mostRecentSession()
 			if mrs == nil {
 				// Last session
-				mrs = leave.sess
+				mrs = sess
 			} else {
 				// Change UA to the most recent live session and announce it. Don't block.
 				select {
@@ -714,7 +714,7 @@ func (t *Topic) handleLeaveRequest(leave *sessionLeave) {
 		case types.TopicCatFnd:
 			// FIXME: this does not work correctly in case of a multiplexing session.
 			// Remove ephemeral query.
-			t.fndRemovePublic(leave.sess)
+			t.fndRemovePublic(sess)
 		case types.TopicCatGrp:
 			// Subscriber is going offline in the topic: notify other subscribers who are currently online.
 			readFilter := &presFilters{filterIn: types.ModeRead}
@@ -743,8 +743,8 @@ func (t *Topic) handleLeaveRequest(leave *sessionLeave) {
 
 		if !uid.IsZero() {
 			// Respond if contains an id.
-			if leave.pkt != nil {
-				leave.sess.queueOut(NoErrReply(leave.pkt, now))
+			if msg != nil {
+				sess.queueOut(NoErrReply(msg, now))
 			}
 		}
 	}
@@ -922,32 +922,28 @@ func (t *Topic) handlePubBroadcast(msg *ClientComMessage) {
 		return
 	}
 
-	if t.isProxy {
-		t.lastID = msg.Data.SeqId
-	} else {
-		// Save to DB at master topic.
-		var attachments []string
-		if msg.Extra != nil && len(msg.Extra.Attachments) > 0 {
-			attachments = msg.Extra.Attachments
-		}
-		if err := store.Messages.Save(
-			&types.Message{
-				ObjHeader: types.ObjHeader{CreatedAt: msg.Timestamp},
-				SeqId:     t.lastID + 1,
-				Topic:     t.name,
-				From:      asUid.String(),
-				Head:      msg.Pub.Head,
-				Content:   msg.Pub.Content,
-			}, attachments, (pud.modeGiven & pud.modeWant).IsReader()); err != nil {
-			logs.Warn.Printf("topic[%s]: failed to save message: %v", t.name, err)
-			msg.sess.queueOut(ErrUnknown(msg.Id, t.original(asUid), msg.Timestamp))
-
-			return
-		}
-
-		t.lastID++
-		t.touched = msg.Timestamp
+	// Save to DB at master topic.
+	var attachments []string
+	if msg.Extra != nil && len(msg.Extra.Attachments) > 0 {
+		attachments = msg.Extra.Attachments
 	}
+	if err := store.Messages.Save(
+		&types.Message{
+			ObjHeader: types.ObjHeader{CreatedAt: msg.Timestamp},
+			SeqId:     t.lastID + 1,
+			Topic:     t.name,
+			From:      asUid.String(),
+			Head:      msg.Pub.Head,
+			Content:   msg.Pub.Content,
+		}, attachments, (pud.modeGiven & pud.modeWant).IsReader()); err != nil {
+		logs.Warn.Printf("topic[%s]: failed to save message: %v", t.name, err)
+		msg.sess.queueOut(ErrUnknown(msg.Id, t.original(asUid), msg.Timestamp))
+
+		return
+	}
+
+	t.lastID++
+	t.touched = msg.Timestamp
 
 	if userFound {
 		pud.readID = t.lastID
@@ -980,22 +976,18 @@ func (t *Topic) handlePubBroadcast(msg *ClientComMessage) {
 		data.SkipSid = msg.sess.sid
 	}
 
-	if !t.isProxy {
-		// Message sent: notify offline 'R' subscrbers on 'me'.
-		t.presSubsOffline("msg", &presParams{seqID: t.lastID, actor: msg.AsUser},
-			&presFilters{filterIn: types.ModeRead}, nilPresFilters, "", true)
+	// Message sent: notify offline 'R' subscrbers on 'me'.
+	t.presSubsOffline("msg", &presParams{seqID: t.lastID, actor: msg.AsUser},
+		&presFilters{filterIn: types.ModeRead}, nilPresFilters, "", true)
 
-		// Tell the plugins that a message was accepted for delivery
-		pluginMessage(data.Data, plgActCreate)
-	}
+	// Tell the plugins that a message was accepted for delivery
+	pluginMessage(data.Data, plgActCreate)
 
 	t.broadcastToSessions(data)
 
-	if !t.isProxy {
-		// usersPush will update unread message count and send push notification.
-		pushRcpt := t.pushForData(asUid, data.Data)
-		usersPush(pushRcpt)
-	}
+	// usersPush will update unread message count and send push notification.
+	pushRcpt := t.pushForData(asUid, data.Data)
+	usersPush(pushRcpt)
 }
 
 // handleInfoBroadcast fans out {note} -> {info} messages to recipients in a master topic.
@@ -1011,13 +1003,97 @@ func (t *Topic) handleNoteBroadcast(msg *ClientComMessage) {
 		return
 	}
 
-	// No need to process {info} sent to 'me' topic.
-	if msg.Info.Src == "" {
-		asUid := types.ParseUserId(msg.AsUser)
-		if success := t.procInfoReq(asUid, msg); !success {
+	asChan, err := t.verifyChannelAccess(msg.Original)
+	if err != nil {
+		// Silently drop invalid notification.
+		return
+	}
+
+	asUid := types.ParseUserId(msg.AsUser)
+	pud := t.perUser[asUid]
+	mode := pud.modeGiven & pud.modeWant
+	if pud.deleted {
+		mode = types.ModeInvalid
+	}
+
+	// Filter out "kp" from users with no 'W' permission (or people without a subscription).
+	if msg.Note.What == "kp" && (!mode.IsWriter() || t.isReadOnly()) {
+		return
+	}
+
+	// Filter out "read/recv" from users with no 'R' permission (or people without a subscription).
+	if (msg.Note.What == "read" || msg.Note.What == "recv") && !mode.IsReader() {
+		return
+	}
+
+	var read, recv, unread, seq int
+
+	if msg.Note.What == "read" {
+		if msg.Note.SeqId <= pud.readID {
+			// No need to report stale or bogus read status.
 			return
 		}
+
+		// The number of unread messages has decreased, negative value.
+		unread = pud.readID - msg.Note.SeqId
+		pud.readID = msg.Note.SeqId
+		if pud.readID > pud.recvID {
+			pud.recvID = pud.readID
+		}
+		read = pud.readID
+		seq = read
+	} else if msg.Note.What == "recv" {
+		if msg.Note.SeqId <= pud.recvID {
+			// Stale or bogus recv status.
+			return
+		}
+
+		pud.recvID = msg.Note.SeqId
+		if pud.readID > pud.recvID {
+			pud.recvID = pud.readID
+		}
+		recv = pud.recvID
+		seq = recv
 	}
+
+	if seq > 0 {
+		topicName := t.name
+		if asChan {
+			topicName = msg.Note.Topic
+		}
+
+		upd := map[string]interface{}{}
+		if recv > 0 {
+			upd["RecvSeqId"] = recv
+		}
+		if read > 0 {
+			upd["ReadSeqId"] = read
+		}
+		if err := store.Subs.Update(topicName, asUid, upd); err != nil {
+			logs.Warn.Printf("topic[%s]: failed to update SeqRead/Recv counter: %v", t.name, err)
+			return
+		}
+
+		// Read/recv updated: notify user's other sessions of the change
+		t.presPubMessageCount(asUid, mode, read, recv, msg.sess.sid)
+
+		// Update cached count of unread messages (not tracking unread messages fror channels).
+		if !asChan {
+			usersUpdateUnread(asUid, unread, true)
+		}
+	}
+
+	if asChan {
+		// No need to forward {note} to other subscribers in channels
+		return
+	}
+
+	if seq > 0 {
+		t.perUser[asUid] = pud
+	}
+
+	// Read/recv/kp: notify users offline in the topic on their 'me'.
+	t.infoSubsOffline(asUid, msg.Note.What, seq, msg.sess.sid)
 
 	info := &ServerComMessage{
 		Info: &MsgServerInfo{
@@ -1034,105 +1110,6 @@ func (t *Topic) handleNoteBroadcast(msg *ClientComMessage) {
 	}
 
 	t.broadcastToSessions(info)
-}
-
-// Pre-process {info} broadcast request.
-func (t *Topic) procInfoReq(asUid types.Uid, msg *ServerComMessage) bool {
-
-	asChan, err := t.verifyChannelAccess(msg.Info.Topic)
-	if err != nil {
-		// Silently drop invalid notification.
-		return false
-	}
-
-	pud := t.perUser[asUid]
-	mode := pud.modeGiven & pud.modeWant
-	if pud.deleted {
-		mode = types.ModeInvalid
-	}
-
-	// Filter out "kp" from users with no 'W' permission (or people without a subscription)
-	if msg.Info.What == "kp" && (!mode.IsWriter() || t.isReadOnly()) {
-		return false
-	}
-
-	if (msg.Info.What == "read" || msg.Info.What == "recv") && !mode.IsReader() {
-		// Filter out "read/recv" from users with no 'R' permission (or people without a subscription)
-		return false
-	}
-
-	var read, recv, unread, seq int
-
-	if msg.Info.What == "read" {
-		if msg.Info.SeqId <= pud.readID {
-			// No need to report stale or bogus read status.
-			return false
-		}
-
-		// The number of unread messages has decreased, negative value.
-		unread = pud.readID - msg.Info.SeqId
-		pud.readID = msg.Info.SeqId
-		if pud.readID > pud.recvID {
-			pud.recvID = pud.readID
-		}
-		read = pud.readID
-		seq = read
-	} else if msg.Info.What == "recv" {
-		if msg.Info.SeqId <= pud.recvID {
-			// Stale or bogus recv status.
-			return false
-		}
-
-		pud.recvID = msg.Info.SeqId
-		if pud.readID > pud.recvID {
-			pud.recvID = pud.readID
-		}
-		recv = pud.recvID
-		seq = recv
-	}
-
-	if seq > 0 && !t.isProxy {
-		topicName := t.name
-		if asChan {
-			topicName = msg.Info.Topic
-		}
-
-		upd := map[string]interface{}{}
-		if recv > 0 {
-			upd["RecvSeqId"] = recv
-		}
-		if read > 0 {
-			upd["ReadSeqId"] = read
-		}
-		if err := store.Subs.Update(topicName, asUid, upd); err != nil {
-			logs.Warn.Printf("topic[%s]: failed to update SeqRead/Recv counter: %v", t.name, err)
-			return false
-		}
-
-		// Read/recv updated: notify user's other sessions of the change
-		t.presPubMessageCount(asUid, mode, read, recv, msg.SkipSid)
-
-		// Update cached count of unread messages (not tracking unread messages fror channels).
-		if !asChan {
-			usersUpdateUnread(asUid, unread, true)
-		}
-	}
-
-	if asChan {
-		// No need to forward {note} to other subscribers in channels
-		return false
-	}
-
-	if seq > 0 {
-		t.perUser[asUid] = pud
-	}
-
-	if !t.isProxy {
-		// Read/recv/kp: notify users offline in the topic on their 'me'.
-		t.infoSubsOffline(asUid, msg.Info.What, seq, msg.SkipSid)
-	}
-
-	return true
 }
 
 // handlePresence fans out {pres} messages to recipients in topic.
@@ -1232,7 +1209,7 @@ func (t *Topic) broadcastToSessions(msg *ServerComMessage) {
 	// Drop "bad" sessions.
 	for _, sess := range dropSessions {
 		// The whole session is being dropped, so sessionLeave.pkt is not set.
-		t.unregisterSession(&sessionLeave{sess: sess})
+		t.unregisterSession(nil, sess)
 	}
 }
 

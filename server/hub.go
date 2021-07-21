@@ -79,8 +79,11 @@ type Hub struct {
 	// Current number of loaded topics
 	numTopics int
 
-	// Channel for routing messages between topics, buffered at 4096
-	route chan *ServerComMessage
+	// Channel for routing client-side messages, buffered at 4096
+	routeCli chan *ClientComMessage
+
+	// Channel for routing server-generated messages, buffered at 4096
+	routeSrv chan *ServerComMessage
 
 	// subscribe session to topic, possibly creating a new topic, buffered at 32
 	join chan *sessionJoin
@@ -119,7 +122,8 @@ func newHub() *Hub {
 	h := &Hub{
 		topics: &sync.Map{},
 		// this needs to be buffered - hub generates invites and adds them to this queue
-		route:    make(chan *ServerComMessage, 4096),
+		routeCli: make(chan *ClientComMessage, 4096),
+		routeSrv: make(chan *ServerComMessage, 4096),
 		join:     make(chan *sessionJoin, 256),
 		unreg:    make(chan *topicUnreg, 256),
 		rehash:   make(chan bool),
@@ -223,10 +227,9 @@ func (h *Hub) run() {
 				}
 			}
 
-		case msg := <-h.route:
-			// This is a message from a connection not subscribed to topic
+		case msg := <-h.routeCli:
+			// This is a message from a session not subscribed to topic
 			// Route incoming message to topic if topic permits such routing.
-
 			if dst := h.topicGet(msg.RcptTo); dst != nil {
 				// Everything is OK, sending packet to known topic
 				if dst.broadcast != nil {
@@ -238,23 +241,34 @@ func (h *Hub) run() {
 				} else {
 					logs.Warn.Println("hub: invalid topic category for broadcast", dst.name)
 				}
+			} else if msg.Note == nil {
+				// Topic is unknown or offline.
+				// Note is silently ignored, all other messages are reported as accepted to prevent
+				// clients from guessing valid topic names.
+
+				// TODO(gene): validate topic name, discarding invalid topics.
+
+				logs.Info.Printf("Hub. Topic[%s] is unknown or offline", msg.RcptTo)
+
+				msg.sess.queueOut(NoErrAcceptedExplicitTs(msg.Id, msg.RcptTo, types.TimeNow(), msg.Timestamp))
+			}
+		case msg := <-h.routeSrv:
+			// This is a server message from a connection not subscribed to topic
+			// Route incoming message to topic if topic permits such routing.
+			if dst := h.topicGet(msg.RcptTo); dst != nil {
+				// Everything is OK, sending packet to known topic
+				select {
+				case dst.presence <- msg:
+				default:
+					logs.Err.Println("hub: topic's broadcast queue is full", dst.name)
+				}
 			} else if (strings.HasPrefix(msg.RcptTo, "usr") || strings.HasPrefix(msg.RcptTo, "grp")) &&
 				globals.cluster.isRemoteTopic(msg.RcptTo) {
 				// It is a remote topic.
 				if err := globals.cluster.routeToTopicIntraCluster(msg.RcptTo, msg, msg.sess); err != nil {
 					logs.Warn.Printf("hub: routing to '%s' failed", msg.RcptTo)
 				}
-			} else if msg.Pres == nil && msg.Info == nil {
-				// Topic is unknown or offline.
-				// Pres & Info are silently ignored, all other messages are reported as invalid.
-
-				// TODO(gene): validate topic name, discarding invalid topics
-
-				logs.Info.Printf("Hub. Topic[%s] is unknown or offline", msg.RcptTo)
-
-				msg.sess.queueOut(NoErrAcceptedExplicitTs(msg.Id, msg.RcptTo, types.TimeNow(), msg.Timestamp))
 			}
-
 		case meta := <-h.meta:
 			// Suspend/activate user's topics
 			if !meta.forUser.IsZero() {

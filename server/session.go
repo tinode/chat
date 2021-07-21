@@ -711,9 +711,9 @@ func (s *Session) publish(msg *ClientComMessage) {
 			logs.Err.Println("s.publish: sub.broadcast channel full, topic ", msg.RcptTo, s.sid)
 		}
 	} else if msg.RcptTo == "sys" {
-		// Publishing to "sys" topic requires no subsription.
+		// Publishing to "sys" topic requires no subscription.
 		select {
-		case globals.hub.route <- data:
+		case globals.hub.routeCli <- msg:
 		default:
 			// Reply with a 500 to the user.
 			s.queueOut(ErrUnknownReply(msg, msg.Timestamp))
@@ -1243,7 +1243,7 @@ func (s *Session) note(msg *ClientComMessage) {
 		// from the server (and detached from the topic) and acknowledges receipt.
 		// Hub will forward to topic, if appropriate.
 		select {
-		case globals.hub.route <- response:
+		case globals.hub.routeCli <- msg:
 		default:
 			// Reply with a 500 to the user.
 			s.queueOut(ErrUnknownReply(msg, msg.Timestamp))

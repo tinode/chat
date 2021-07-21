@@ -158,7 +158,7 @@ func (t *Topic) proxyMasterResponse(msg *ClusterResp, killTimer *time.Timer) {
 		switch {
 		case msg.SrvMsg.Pres != nil || msg.SrvMsg.Data != nil || msg.SrvMsg.Info != nil:
 			// Regular broadcast.
-			t.handleBroadcast(msg.SrvMsg)
+			t.handleProxyBroadcast(msg.SrvMsg)
 		case msg.SrvMsg.Ctrl != nil:
 			// Ctrl broadcast. E.g. for user eviction.
 			t.proxyCtrlBroadcast(msg.SrvMsg)
@@ -220,6 +220,20 @@ func (t *Topic) proxyMasterResponse(msg *ClusterResp, killTimer *time.Timer) {
 			logs.Err.Println("topic proxy: timeout")
 		}
 	}
+}
+
+// handleProxyBroadcast broadcasts a Data, Info or Pres message to sessions attached to this proxy topic.
+func (t *Topic) handleProxyBroadcast(msg *ServerComMessage) {
+	if t.isInactive() {
+		// Ignore broadcast - topic is paused or being deleted.
+		return
+	}
+
+	if msg.Data != nil {
+		t.lastID = msg.Data.SeqId
+	}
+
+	t.broadcastToSessions(msg)
 }
 
 // proxyCtrlBroadcast broadcasts a ctrl command to certain sessions attached to this proxy topic.

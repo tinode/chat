@@ -1947,7 +1947,7 @@ func TestUnregisterSessionSimple(t *testing.T) {
 		},
 		sess: s,
 	}
-	helper.topic.unregisterSession(leave)
+	helper.topic.unregisterSession(leave.pkt, leave.sess)
 
 	helper.finish()
 
@@ -2002,7 +2002,7 @@ func TestUnregisterSessionInactiveTopic(t *testing.T) {
 	// Deactivate topic.
 	helper.topic.markDeleted()
 
-	helper.topic.unregisterSession(leave)
+	helper.topic.unregisterSession(leave.pkt, leave.sess)
 	helper.finish()
 
 	if len(helper.topic.sessions) != 1 {
@@ -2063,7 +2063,7 @@ func TestUnregisterSessionUnsubscribe(t *testing.T) {
 		},
 		sess: helper.sessions[0],
 	}
-	helper.topic.unregisterSession(leave)
+	helper.topic.unregisterSession(leave.pkt, leave.sess)
 	helper.finish()
 
 	if len(helper.topic.sessions) != 2 {
@@ -2154,7 +2154,7 @@ func TestUnregisterSessionOwnerCannotUnsubscribe(t *testing.T) {
 		sess: s,
 	}
 
-	helper.topic.unregisterSession(leave)
+	helper.topic.unregisterSession(leave.pkt, leave.sess)
 	helper.finish()
 
 	if len(helper.topic.sessions) != 3 {
@@ -2200,7 +2200,7 @@ func TestUnregisterSessionUnsubDeleteCallFails(t *testing.T) {
 	// DB call fails.
 	helper.ss.EXPECT().Delete(topicName, uid).Return(types.ErrInternal)
 
-	helper.topic.unregisterSession(leave)
+	helper.topic.unregisterSession(leave.pkt, leave.sess)
 	helper.finish()
 
 	if len(helper.topic.sessions) != 3 {

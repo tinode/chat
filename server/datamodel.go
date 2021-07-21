@@ -745,7 +745,7 @@ type MsgServerInfo struct {
 	// Topic to send event to.
 	Topic string `json:"topic"`
 	// Topic where the even has occurred (set only when Topic='me').
-	Src0 string `json:"src,omitempty"`
+	Src string `json:"src,omitempty"`
 	// ID of the user who originated the message.
 	From string `json:"from"`
 	// The event being reported: "rcpt" - message received, "read" - message read, "kp" - typing notification.

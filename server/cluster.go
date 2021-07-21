@@ -535,7 +535,7 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 		// sess could be nil
 		msg.SrvMsg.sess = sess
 		select {
-		case globals.hub.route <- msg.SrvMsg:
+		case globals.hub.routeSrv <- msg.SrvMsg:
 		default:
 			logs.Err.Println("cluster: route req failed - hub.route queue full")
 		}
@@ -601,7 +601,7 @@ func (c *Cluster) Route(msg *ClusterRoute, rejected *bool) error {
 		*rejected = true
 		return nil
 	}
-	globals.hub.route <- msg.SrvMsg
+	globals.hub.routeSrv <- msg.SrvMsg
 	return nil
 }
 
