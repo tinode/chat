@@ -519,9 +519,7 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 		if t := globals.hub.topicGet(msg.RcptTo); t != nil {
 			msg.CliMsg.sess = sess
 			select {
-			case t.meta <- &metaReq{
-				pkt: msg.CliMsg,
-			}:
+			case t.meta <- msg.CliMsg:
 			default:
 				sess.queueOut(ErrUnknownReply(msg.CliMsg, msg.CliMsg.Timestamp))
 				logs.Warn.Println("cluster: meta req failed - topic.meta queue full, topic ", msg.CliMsg.RcptTo,

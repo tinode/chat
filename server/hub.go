@@ -61,10 +61,8 @@ type topicUnreg struct {
 	done chan<- bool
 }
 
-type metaReq struct {
-	// Packet containing details of the Get/Set/Del request.
-	pkt *ClientComMessage
-	// UID of the user being affected. Could be zero.
+type userStatusReq struct {
+	// UID of the user being affected.
 	forUser types.Uid
 	// New topic state value. Only types.StateSuspended is supported at this time.
 	state types.ObjState
@@ -82,6 +80,9 @@ type Hub struct {
 	// Channel for routing client-side messages, buffered at 4096
 	routeCli chan *ClientComMessage
 
+	// Process get.info requests for topic not subscribed to, buffered 128.
+	meta chan *ClientComMessage
+
 	// Channel for routing server-generated messages, buffered at 4096
 	routeSrv chan *ServerComMessage
 
@@ -91,8 +92,8 @@ type Hub struct {
 	// Remove topic from hub, possibly deleting it afterwards, buffered at 32
 	unreg chan *topicUnreg
 
-	// Process get.info requests for topic not subscribed to, buffered 128
-	meta chan *metaReq
+	// Channel for suspending/resuming users, buffered 128.
+	userStatus chan *userStatusReq
 
 	// Cluster request to rehash topics, unbuffered
 	rehash chan bool
@@ -121,14 +122,15 @@ func (h *Hub) topicDel(name string) {
 func newHub() *Hub {
 	h := &Hub{
 		topics: &sync.Map{},
-		// this needs to be buffered - hub generates invites and adds them to this queue
-		routeCli: make(chan *ClientComMessage, 4096),
-		routeSrv: make(chan *ServerComMessage, 4096),
-		join:     make(chan *sessionJoin, 256),
-		unreg:    make(chan *topicUnreg, 256),
-		rehash:   make(chan bool),
-		meta:     make(chan *metaReq, 128),
-		shutdown: make(chan chan<- bool),
+		// TODO: verify if these channels have to be buffered.
+		routeCli:   make(chan *ClientComMessage, 4096),
+		routeSrv:   make(chan *ServerComMessage, 4096),
+		join:       make(chan *sessionJoin, 256),
+		unreg:      make(chan *topicUnreg, 256),
+		rehash:     make(chan bool),
+		meta:       make(chan *ClientComMessage, 128),
+		userStatus: make(chan *userStatusReq, 128),
+		shutdown:   make(chan chan<- bool),
 	}
 
 	statsRegisterInt("LiveTopics")
@@ -191,7 +193,7 @@ func (h *Hub) run() {
 					presence:  make(chan *ServerComMessage, 64),
 					reg:       make(chan *sessionJoin, 256),
 					unreg:     make(chan *sessionLeave, 256),
-					meta:      make(chan *metaReq, 64),
+					meta:      make(chan *ClientComMessage, 64),
 					perUser:   make(map[types.Uid]perUserData),
 					exit:      make(chan *shutDown, 1),
 				}
@@ -269,22 +271,21 @@ func (h *Hub) run() {
 					logs.Warn.Printf("hub: routing to '%s' failed", msg.RcptTo)
 				}
 			}
-		case meta := <-h.meta:
-			// Suspend/activate user's topics
-			if !meta.forUser.IsZero() {
-				go h.topicsStateForUser(meta.forUser, meta.state == types.StateSuspended)
-			} else {
-				// Metadata read or update from a user who is not attached to the topic.
-				if meta.pkt.Get != nil {
-					if meta.pkt.MetaWhat == constMsgMetaDesc {
-						go replyOfflineTopicGetDesc(meta.pkt.sess, meta.pkt)
-					} else {
-						go replyOfflineTopicGetSub(meta.pkt.sess, meta.pkt)
-					}
-				} else if meta.pkt.Set != nil {
-					go replyOfflineTopicSetSub(meta.pkt.sess, meta.pkt)
+		case msg := <-h.meta:
+			// Metadata read or update from a user who is not attached to the topic.
+			if msg.Get != nil {
+				if msg.MetaWhat == constMsgMetaDesc {
+					go replyOfflineTopicGetDesc(msg.sess, msg)
+				} else {
+					go replyOfflineTopicGetSub(msg.sess, msg)
 				}
+			} else if msg.Set != nil {
+				go replyOfflineTopicSetSub(msg.sess, msg)
 			}
+
+		case status := <-h.userStatus:
+			// Suspend/activate user's topics.
+			go h.topicsStateForUser(status.forUser, status.state == types.StateSuspended)
 
 		case unreg := <-h.unreg:
 			reason := StopNone
@@ -426,9 +427,7 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 				// Case 1.1.2: requester is NOT the owner
 				msg.MetaWhat = constMsgDelTopic
 				msg.sess = sess
-				t.meta <- &metaReq{
-					pkt: msg,
-				}
+				t.meta <- msg
 			}
 		} else {
 			// Case 1.2: topic is offline.

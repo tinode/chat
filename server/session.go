@@ -170,7 +170,7 @@ type Subscription struct {
 	done chan<- *sessionLeave
 
 	// Channel to send {meta} requests, copy of Topic.meta
-	meta chan<- *metaReq
+	meta chan<- *ClientComMessage
 
 	// Channel to ping topic with session's updates
 	supd chan<- *sessionUpdate
@@ -596,6 +596,7 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 		return
 	}
 
+	msg.sess = s
 	handler(msg)
 
 	// Notify 'me' topic that this session is currently active.
@@ -1057,26 +1058,21 @@ func (s *Session) get(msg *ClientComMessage) {
 	msg.MetaWhat = parseMsgClientMeta(msg.Get.What)
 
 	sub := s.getSub(msg.RcptTo)
-	msg.sess = s
-	meta := &metaReq{
-		pkt: msg,
-	}
-
-	if meta.pkt.MetaWhat == 0 {
+	if msg.MetaWhat == 0 {
 		s.queueOut(ErrMalformedReply(msg, msg.Timestamp))
 		logs.Warn.Println("s.get: invalid Get message action", msg.Get.What)
 	} else if sub != nil {
 		select {
-		case sub.meta <- meta:
+		case sub.meta <- msg:
 		default:
 			// Reply with a 500 to the user.
 			s.queueOut(ErrUnknownReply(msg, msg.Timestamp))
 			logs.Err.Println("s.get: sub.meta channel full, topic ", msg.RcptTo, s.sid)
 		}
-	} else if meta.pkt.MetaWhat&(constMsgMetaDesc|constMsgMetaSub) != 0 {
+	} else if msg.MetaWhat&(constMsgMetaDesc|constMsgMetaSub) != 0 {
 		// Request some minimal info from a topic not currently attached to.
 		select {
-		case globals.hub.meta <- meta:
+		case globals.hub.meta <- msg:
 		default:
 			// Reply with a 500 to the user.
 			s.queueOut(ErrUnknownReply(msg, msg.Timestamp))
@@ -1097,42 +1093,37 @@ func (s *Session) set(msg *ClientComMessage) {
 		return
 	}
 
-	msg.sess = s
-	meta := &metaReq{
-		pkt: msg,
-	}
-
 	if msg.Set.Desc != nil {
-		meta.pkt.MetaWhat = constMsgMetaDesc
+		msg.MetaWhat = constMsgMetaDesc
 	}
 	if msg.Set.Sub != nil {
-		meta.pkt.MetaWhat |= constMsgMetaSub
+		msg.MetaWhat |= constMsgMetaSub
 	}
 	if msg.Set.Tags != nil {
-		meta.pkt.MetaWhat |= constMsgMetaTags
+		msg.MetaWhat |= constMsgMetaTags
 	}
 	if msg.Set.Cred != nil {
-		meta.pkt.MetaWhat |= constMsgMetaCred
+		msg.MetaWhat |= constMsgMetaCred
 	}
 
-	if meta.pkt.MetaWhat == 0 {
+	if msg.MetaWhat == 0 {
 		s.queueOut(ErrMalformedReply(msg, msg.Timestamp))
 		logs.Warn.Println("s.set: nil Set action")
 	} else if sub := s.getSub(msg.RcptTo); sub != nil {
 		select {
-		case sub.meta <- meta:
+		case sub.meta <- msg:
 		default:
 			// Reply with a 500 to the user.
 			s.queueOut(ErrUnknownReply(msg, msg.Timestamp))
 			logs.Err.Println("s.set: sub.meta channel full, topic ", msg.RcptTo, s.sid)
 		}
-	} else if meta.pkt.MetaWhat&(constMsgMetaTags|constMsgMetaCred) != 0 {
-		logs.Warn.Println("s.set: can Set tags/creds for subscribed topics only", meta.pkt.MetaWhat)
+	} else if msg.MetaWhat&(constMsgMetaTags|constMsgMetaCred) != 0 {
+		logs.Warn.Println("s.set: can Set tags/creds for subscribed topics only", msg.MetaWhat)
 		s.queueOut(ErrPermissionDeniedReply(msg, msg.Timestamp))
 	} else {
 		// Desc.Private and Sub updates are possible without the subscription.
 		select {
-		case globals.hub.meta <- meta:
+		case globals.hub.meta <- msg:
 		default:
 			// Reply with a 500 to the user.
 			s.queueOut(ErrUnknownReply(msg, msg.Timestamp))
@@ -1165,14 +1156,11 @@ func (s *Session) del(msg *ClientComMessage) {
 		logs.Warn.Println("s.del: invalid Del action", msg.Del.What, s.sid)
 		return
 	}
-	sub := s.getSub(msg.RcptTo)
-	if sub != nil && msg.MetaWhat != constMsgDelTopic {
+
+	if sub := s.getSub(msg.RcptTo); sub != nil && msg.MetaWhat != constMsgDelTopic {
 		// Session is attached, deleting subscription or messages. Send to topic.
-		msg.sess = s
 		select {
-		case sub.meta <- &metaReq{
-			pkt: msg,
-		}:
+		case sub.meta <- msg:
 		default:
 			// Reply with a 500 to the user.
 			s.queueOut(ErrUnknownReply(msg, msg.Timestamp))

@@ -567,7 +567,7 @@ func changeUserState(s *Session, uid types.Uid, user *types.User, msg *ClientCom
 	}
 
 	// Update state of all loaded in memory user's p2p & grp-owner topics.
-	globals.hub.meta <- &metaReq{forUser: uid, state: state, sess: s}
+	globals.hub.userStatus <- &userStatusReq{forUser: uid, state: state}
 	user.State = state
 
 	return true, err

@@ -47,9 +47,9 @@ func (t *Topic) runProxy(hub *Hub) {
 				logs.Warn.Println("proxy topic: route broadcast request from proxy to master failed:", err)
 			}
 
-		case meta := <-t.meta:
+		case msg := <-t.meta:
 			// Request to get/set topic metadata
-			if err := globals.cluster.routeToTopicMaster(ProxyReqMeta, meta.pkt, t.name, meta.sess); err != nil {
+			if err := globals.cluster.routeToTopicMaster(ProxyReqMeta, msg, t.name, msg.sess); err != nil {
 				logs.Warn.Println("proxy topic: route meta request from proxy to master failed:", err)
 			}
 

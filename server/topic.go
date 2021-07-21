@@ -87,7 +87,7 @@ type Topic struct {
 	// Channel for receiving presence notifications. Buffered = 256
 	presence chan *ServerComMessage
 	// Channel for receiving {get}/{set} requests, buffered = 32
-	meta chan *metaReq
+	meta chan *ClientComMessage
 	// Subscribe requests from sessions, buffered = 32
 	reg chan *sessionJoin
 	// Unsubscribe requests from sessions, buffered = 32
@@ -318,77 +318,77 @@ func (t *Topic) registerSession(join *sessionJoin) {
 	}
 }
 
-func (t *Topic) handleMetaGet(meta *metaReq, asUid types.Uid, asChan bool, authLevel auth.Level) {
-	if meta.pkt.MetaWhat&constMsgMetaDesc != 0 {
-		if err := t.replyGetDesc(meta.pkt.sess, asUid, asChan, meta.pkt.Get.Desc, meta.pkt); err != nil {
+func (t *Topic) handleMetaGet(msg *ClientComMessage, asUid types.Uid, asChan bool, authLevel auth.Level) {
+	if msg.MetaWhat&constMsgMetaDesc != 0 {
+		if err := t.replyGetDesc(msg.sess, asUid, asChan, msg.Get.Desc, msg); err != nil {
 			logs.Warn.Printf("topic[%s] meta.Get.Desc failed: %s", t.name, err)
 		}
 	}
-	if meta.pkt.MetaWhat&constMsgMetaSub != 0 {
-		if err := t.replyGetSub(meta.pkt.sess, asUid, authLevel, asChan, meta.pkt); err != nil {
+	if msg.MetaWhat&constMsgMetaSub != 0 {
+		if err := t.replyGetSub(msg.sess, asUid, authLevel, asChan, msg); err != nil {
 			logs.Warn.Printf("topic[%s] meta.Get.Sub failed: %s", t.name, err)
 		}
 	}
-	if meta.pkt.MetaWhat&constMsgMetaData != 0 {
-		if err := t.replyGetData(meta.pkt.sess, asUid, asChan, meta.pkt.Get.Data, meta.pkt); err != nil {
+	if msg.MetaWhat&constMsgMetaData != 0 {
+		if err := t.replyGetData(msg.sess, asUid, asChan, msg.Get.Data, msg); err != nil {
 			logs.Warn.Printf("topic[%s] meta.Get.Data failed: %s", t.name, err)
 		}
 	}
-	if meta.pkt.MetaWhat&constMsgMetaDel != 0 {
-		if err := t.replyGetDel(meta.pkt.sess, asUid, meta.pkt.Get.Del, meta.pkt); err != nil {
+	if msg.MetaWhat&constMsgMetaDel != 0 {
+		if err := t.replyGetDel(msg.sess, asUid, msg.Get.Del, msg); err != nil {
 			logs.Warn.Printf("topic[%s] meta.Get.Del failed: %s", t.name, err)
 		}
 	}
-	if meta.pkt.MetaWhat&constMsgMetaTags != 0 {
-		if err := t.replyGetTags(meta.pkt.sess, asUid, meta.pkt); err != nil {
+	if msg.MetaWhat&constMsgMetaTags != 0 {
+		if err := t.replyGetTags(msg.sess, asUid, msg); err != nil {
 			logs.Warn.Printf("topic[%s] meta.Get.Tags failed: %s", t.name, err)
 		}
 	}
-	if meta.pkt.MetaWhat&constMsgMetaCred != 0 {
+	if msg.MetaWhat&constMsgMetaCred != 0 {
 		logs.Warn.Printf("topic[%s] handle getCred", t.name)
-		if err := t.replyGetCreds(meta.pkt.sess, asUid, meta.pkt); err != nil {
+		if err := t.replyGetCreds(msg.sess, asUid, msg); err != nil {
 			logs.Warn.Printf("topic[%s] meta.Get.Creds failed: %s", t.name, err)
 		}
 	}
 }
 
-func (t *Topic) handleMetaSet(meta *metaReq, asUid types.Uid, asChan bool, authLevel auth.Level) {
-	if meta.pkt.MetaWhat&constMsgMetaDesc != 0 {
-		if err := t.replySetDesc(meta.pkt.sess, asUid, asChan, authLevel, meta.pkt); err == nil {
+func (t *Topic) handleMetaSet(msg *ClientComMessage, asUid types.Uid, asChan bool, authLevel auth.Level) {
+	if msg.MetaWhat&constMsgMetaDesc != 0 {
+		if err := t.replySetDesc(msg.sess, asUid, asChan, authLevel, msg); err == nil {
 			// Notify plugins of the update
 			pluginTopic(t, plgActUpd)
 		} else {
 			logs.Warn.Printf("topic[%s] meta.Set.Desc failed: %v", t.name, err)
 		}
 	}
-	if meta.pkt.MetaWhat&constMsgMetaSub != 0 {
-		if err := t.replySetSub(meta.pkt.sess, meta.pkt, asChan); err != nil {
+	if msg.MetaWhat&constMsgMetaSub != 0 {
+		if err := t.replySetSub(msg.sess, msg, asChan); err != nil {
 			logs.Warn.Printf("topic[%s] meta.Set.Sub failed: %v", t.name, err)
 		}
 	}
-	if meta.pkt.MetaWhat&constMsgMetaTags != 0 {
-		if err := t.replySetTags(meta.pkt.sess, asUid, meta.pkt); err != nil {
+	if msg.MetaWhat&constMsgMetaTags != 0 {
+		if err := t.replySetTags(msg.sess, asUid, msg); err != nil {
 			logs.Warn.Printf("topic[%s] meta.Set.Tags failed: %v", t.name, err)
 		}
 	}
-	if meta.pkt.MetaWhat&constMsgMetaCred != 0 {
-		if err := t.replySetCred(meta.pkt.sess, asUid, authLevel, meta.pkt); err != nil {
+	if msg.MetaWhat&constMsgMetaCred != 0 {
+		if err := t.replySetCred(msg.sess, asUid, authLevel, msg); err != nil {
 			logs.Warn.Printf("topic[%s] meta.Set.Cred failed: %v", t.name, err)
 		}
 	}
 }
 
-func (t *Topic) handleMetaDel(meta *metaReq, asUid types.Uid, asChan bool, authLevel auth.Level) {
+func (t *Topic) handleMetaDel(msg *ClientComMessage, asUid types.Uid, asChan bool, authLevel auth.Level) {
 	var err error
-	switch meta.pkt.MetaWhat {
+	switch msg.MetaWhat {
 	case constMsgDelMsg:
-		err = t.replyDelMsg(meta.pkt.sess, asUid, asChan, meta.pkt)
+		err = t.replyDelMsg(msg.sess, asUid, asChan, msg)
 	case constMsgDelSub:
-		err = t.replyDelSub(meta.pkt.sess, asUid, meta.pkt)
+		err = t.replyDelSub(msg.sess, asUid, msg)
 	case constMsgDelTopic:
-		err = t.replyDelTopic(meta.pkt.sess, asUid, meta.pkt)
+		err = t.replyDelTopic(msg.sess, asUid, msg)
 	case constMsgDelCred:
-		err = t.replyDelCred(meta.pkt.sess, asUid, authLevel, meta.pkt)
+		err = t.replyDelCred(msg.sess, asUid, authLevel, msg)
 	}
 
 	if err != nil {
@@ -398,28 +398,28 @@ func (t *Topic) handleMetaDel(meta *metaReq, asUid types.Uid, asChan bool, authL
 
 // handleMeta implements logic handling meta requests
 // received via the Topic.meta channel.
-func (t *Topic) handleMeta(meta *metaReq) {
+func (t *Topic) handleMeta(msg *ClientComMessage) {
 	// Request to get/set topic metadata
-	asUid := types.ParseUserId(meta.pkt.AsUser)
-	authLevel := auth.Level(meta.pkt.AuthLvl)
-	asChan, err := t.verifyChannelAccess(meta.pkt.Original)
+	asUid := types.ParseUserId(msg.AsUser)
+	authLevel := auth.Level(msg.AuthLvl)
+	asChan, err := t.verifyChannelAccess(msg.Original)
 	if err != nil {
 		// User should not be able to address non-channel topic as channel.
-		meta.pkt.sess.queueOut(ErrNotFoundReply(meta.pkt, types.TimeNow()))
+		msg.sess.queueOut(ErrNotFoundReply(msg, types.TimeNow()))
 		return
 	}
 	switch {
-	case meta.pkt.Get != nil:
+	case msg.Get != nil:
 		// Get request
-		t.handleMetaGet(meta, asUid, asChan, authLevel)
+		t.handleMetaGet(msg, asUid, asChan, authLevel)
 
-	case meta.pkt.Set != nil:
+	case msg.Set != nil:
 		// Set request
-		t.handleMetaSet(meta, asUid, asChan, authLevel)
+		t.handleMetaSet(msg, asUid, asChan, authLevel)
 
-	case meta.pkt.Del != nil:
+	case msg.Del != nil:
 		// Del request
-		t.handleMetaDel(meta, asUid, asChan, authLevel)
+		t.handleMetaDel(msg, asUid, asChan, authLevel)
 	}
 }
 
@@ -1114,7 +1114,6 @@ func (t *Topic) handleNoteBroadcast(msg *ClientComMessage) {
 
 // handlePresence fans out {pres} messages to recipients in topic.
 func (t *Topic) handlePresence(msg *ServerComMessage) {
-	asUid := types.ParseUserId(msg.AsUser)
 	if t.isInactive() {
 		// Ignore broadcast - topic is paused or being deleted.
 		return
