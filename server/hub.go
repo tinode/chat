@@ -258,7 +258,6 @@ func (h *Hub) run() {
 			// This is a server message from a connection not subscribed to topic
 			// Route incoming message to topic if topic permits such routing.
 			if dst := h.topicGet(msg.RcptTo); dst != nil {
-				logs.Info.Printf("hub %#v", msg)
 				// Everything is OK, sending packet to known topic
 				select {
 				case dst.serverMsg <- msg:

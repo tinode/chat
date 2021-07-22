@@ -516,30 +516,10 @@ func (t *Topic) runLocal(hub *Hub) {
 			t.unregisterSession(leave.pkt, leave.sess)
 
 		case msg := <-t.clientMsg:
-			// Content message intended for broadcasting to recipients.
-			if msg.Pub != nil {
-				t.handlePubBroadcast(msg)
-			} else if msg.Note != nil {
-				t.handleNoteBroadcast(msg)
-			} else {
-				// TODO(gene): maybe remove this panic.
-				logs.Err.Panic("topic: wrong client message type for broadcasting", t.name)
-			}
+			t.handleClientMsg(msg)
 
 		case msg := <-t.serverMsg:
-			// Server-generated message: {info} or {pres}.
-			if t.isInactive() {
-				// Ignore message - the topic is paused or being deleted.
-				continue
-			}
-			if msg.Pres != nil {
-				t.handlePresence(msg)
-			} else if msg.Info != nil {
-				t.broadcastToSessions(msg)
-			} else {
-				// TODO(gene): maybe remove this panic.
-				logs.Err.Panic("topic: wrong server message type for broadcasting", t.name)
-			}
+			t.handleServerMsg(msg)
 
 		case meta := <-t.meta:
 			t.handleMeta(meta)
@@ -557,6 +537,35 @@ func (t *Topic) runLocal(hub *Hub) {
 			t.handleTopicTermination(sd)
 			return
 		}
+	}
+}
+
+// handleClientMsg is the top-level handler of messages received by the topic from sessions.
+func (t *Topic) handleClientMsg(msg *ClientComMessage) {
+	if msg.Pub != nil {
+		t.handlePubBroadcast(msg)
+	} else if msg.Note != nil {
+		t.handleNoteBroadcast(msg)
+	} else {
+		// TODO(gene): maybe remove this panic.
+		logs.Err.Panic("topic: wrong client message type for broadcasting", t.name)
+	}
+}
+
+// handleServerMsg is the top-level handler of messages generated at the server.
+func (t *Topic) handleServerMsg(msg *ServerComMessage) {
+	// Server-generated message: {info} or {pres}.
+	if t.isInactive() {
+		// Ignore message - the topic is paused or being deleted.
+		return
+	}
+	if msg.Pres != nil {
+		t.handlePresence(msg)
+	} else if msg.Info != nil {
+		t.broadcastToSessions(msg)
+	} else {
+		// TODO(gene): maybe remove this panic.
+		logs.Err.Panic("topic: wrong server message type for broadcasting", t.name)
 	}
 }
 
