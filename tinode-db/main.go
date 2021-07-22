@@ -227,7 +227,7 @@ func main() {
 	err := store.Store.Open(1, config.StoreConfig)
 	defer store.Store.Close()
 
-	log.Println("Database", store.Store.GetAdapterName(), store.Store.GetAdapterVersion())
+	log.Println("Database adapter:", store.Store.GetAdapterName(), ", version:", store.Store.GetAdapterVersion())
 
 	if err != nil {
 		if strings.Contains(err.Error(), "Database not initialized") {
