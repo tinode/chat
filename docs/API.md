@@ -67,7 +67,7 @@
 
 ## How it Works?
 
-Tinode is an IM router and a store. Conceptually it loosely follows a publish-subscribe model.
+Tinode is an IM router and a store. Conceptually it loosely follows a [publish-subscribe](https://en.wikipedia.org/wiki/Publish%E2%80%93subscribe_pattern) model.
 
 Server connects sessions, users, and topics. Session is a network connection between a client application and the server. User represents a human being who connects to the server with a session. Topic is a named communication channel which routes content between sessions.
 
