@@ -41,11 +41,14 @@ func (t *Topic) runProxy(hub *Hub) {
 				leave.sess.inflightReqs.Done()
 			}
 
-		case msg := <-t.broadcast:
+		case msg := <-t.clientMsg:
 			// Content message intended for broadcasting to recipients
 			if err := globals.cluster.routeToTopicMaster(ProxyReqBroadcast, msg, t.name, msg.sess); err != nil {
 				logs.Warn.Println("proxy topic: route broadcast request from proxy to master failed:", err)
 			}
+
+		case <-t.serverMsg:
+			// FIXME: should something be done here?
 
 		case msg := <-t.meta:
 			// Request to get/set topic metadata
@@ -183,7 +186,7 @@ func (t *Topic) proxyMasterResponse(msg *ClusterResp, killTimer *time.Timer) {
 						// Successful subscriptions.
 						t.addSession(session, msg.SrvMsg.uid, types.IsChannel(msg.SrvMsg.Ctrl.Topic))
 						session.addSub(t.name, &Subscription{
-							broadcast: t.broadcast,
+							broadcast: t.clientMsg,
 							done:      t.unreg,
 							meta:      t.meta,
 							supd:      t.supd,

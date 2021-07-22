@@ -210,7 +210,12 @@ func (t *Topic) procPresReq(fromUserID, what string, wantReply bool) string {
 		globals.hub.routeSrv <- &ServerComMessage{
 			// Topic is 'me' even for group topics; group topics will use 'me' as a signal to drop the message
 			// without forwarding to sessions
-			Pres:   &MsgServerPres{Topic: "me", What: replyAs, Src: t.name, WantReply: reqReply},
+			Pres: &MsgServerPres{
+				Topic:     "me",
+				What:      replyAs,
+				Src:       t.name,
+				WantReply: reqReply,
+			},
 			RcptTo: fromUserID,
 		}
 	}
@@ -285,7 +290,12 @@ func presUsersOfInterestOffline(uid types.Uid, subs []types.Subscription, what s
 		}
 
 		globals.hub.routeSrv <- &ServerComMessage{
-			Pres:   &MsgServerPres{Topic: notifyOn, What: what, Src: uid.UserId(), WantReply: false},
+			Pres: &MsgServerPres{
+				Topic:     notifyOn,
+				What:      what,
+				Src:       uid.UserId(),
+				WantReply: false,
+			},
 			RcptTo: subs[i].Topic,
 		}
 	}

@@ -72,8 +72,8 @@ func topicInit(t *Topic, join *sessionJoin, h *Hub) {
 		}
 
 		// Reject all other pending requests
-		for len(t.broadcast) > 0 {
-			msg := <-t.broadcast
+		for len(t.clientMsg) > 0 {
+			msg := <-t.clientMsg
 			if msg.Id != "" {
 				msg.sess.queueOut(ErrLockedExplicitTs(msg.Id, t.xoriginal, timestamp, join.pkt.Timestamp))
 			}

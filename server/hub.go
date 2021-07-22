@@ -189,8 +189,8 @@ func (h *Hub) run() {
 					// Indicates a proxy topic.
 					isProxy:   globals.cluster.isRemoteTopic(join.pkt.RcptTo),
 					sessions:  make(map[*Session]perSessionData),
-					broadcast: make(chan *ClientComMessage, 192),
-					presence:  make(chan *ServerComMessage, 64),
+					clientMsg: make(chan *ClientComMessage, 192),
+					serverMsg: make(chan *ServerComMessage, 64),
 					reg:       make(chan *sessionJoin, 256),
 					unreg:     make(chan *sessionLeave, 256),
 					meta:      make(chan *ClientComMessage, 64),
@@ -234,9 +234,9 @@ func (h *Hub) run() {
 			// Route incoming message to topic if topic permits such routing.
 			if dst := h.topicGet(msg.RcptTo); dst != nil {
 				// Everything is OK, sending packet to known topic
-				if dst.broadcast != nil {
+				if dst.clientMsg != nil {
 					select {
-					case dst.broadcast <- msg:
+					case dst.clientMsg <- msg:
 					default:
 						logs.Err.Println("hub: topic's broadcast queue is full", dst.name)
 					}
@@ -258,9 +258,10 @@ func (h *Hub) run() {
 			// This is a server message from a connection not subscribed to topic
 			// Route incoming message to topic if topic permits such routing.
 			if dst := h.topicGet(msg.RcptTo); dst != nil {
+				logs.Info.Printf("hub %#v", msg)
 				// Everything is OK, sending packet to known topic
 				select {
-				case dst.presence <- msg:
+				case dst.serverMsg <- msg:
 				default:
 					logs.Err.Println("hub: topic's broadcast queue is full", dst.name)
 				}

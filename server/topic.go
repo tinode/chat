@@ -82,10 +82,10 @@ type Topic struct {
 	// subscribed on behalf of another user.
 	sessions map[*Session]perSessionData
 
-	// Requests to broadcast messages from sessions or other topics. Buffered = 256
-	broadcast chan *ClientComMessage
-	// Channel for receiving presence notifications. Buffered = 256
-	presence chan *ServerComMessage
+	// Channel for receiving client messages from sessions or other topics, buffered = 256.
+	clientMsg chan *ClientComMessage
+	// Channel for receiving server messages generated on the server or received from other cluster nodes, buffered = 256.
+	serverMsg chan *ServerComMessage
 	// Channel for receiving {get}/{set} requests, buffered = 32
 	meta chan *ClientComMessage
 	// Subscribe requests from sessions, buffered = 32
@@ -515,20 +515,31 @@ func (t *Topic) runLocal(hub *Hub) {
 		case leave := <-t.unreg:
 			t.unregisterSession(leave.pkt, leave.sess)
 
-		case msg := <-t.broadcast:
+		case msg := <-t.clientMsg:
 			// Content message intended for broadcasting to recipients.
 			if msg.Pub != nil {
 				t.handlePubBroadcast(msg)
 			} else if msg.Note != nil {
 				t.handleNoteBroadcast(msg)
-				// TODO(gene): maybe remove this
 			} else {
-				logs.Err.Panic("topic: wrong message type for broadcasting", t.name)
+				// TODO(gene): maybe remove this panic.
+				logs.Err.Panic("topic: wrong client message type for broadcasting", t.name)
 			}
 
-		case pres := <-t.presence:
-			// Presence notification.
-			t.handlePresence(pres)
+		case msg := <-t.serverMsg:
+			// Server-generated message: {info} or {pres}.
+			if t.isInactive() {
+				// Ignore message - the topic is paused or being deleted.
+				continue
+			}
+			if msg.Pres != nil {
+				t.handlePresence(msg)
+			} else if msg.Info != nil {
+				t.broadcastToSessions(msg)
+			} else {
+				// TODO(gene): maybe remove this panic.
+				logs.Err.Panic("topic: wrong server message type for broadcasting", t.name)
+			}
 
 		case meta := <-t.meta:
 			t.handleMeta(meta)
@@ -990,7 +1001,7 @@ func (t *Topic) handlePubBroadcast(msg *ClientComMessage) {
 	usersPush(pushRcpt)
 }
 
-// handleInfoBroadcast fans out {note} -> {info} messages to recipients in a master topic.
+// handleNoteBroadcast fans out {note} -> {info} messages to recipients in a master topic.
 // This is a NON-proxy broadcast (at master topic).
 func (t *Topic) handleNoteBroadcast(msg *ClientComMessage) {
 	if t.isInactive() {
@@ -1114,11 +1125,6 @@ func (t *Topic) handleNoteBroadcast(msg *ClientComMessage) {
 
 // handlePresence fans out {pres} messages to recipients in topic.
 func (t *Topic) handlePresence(msg *ServerComMessage) {
-	if t.isInactive() {
-		// Ignore broadcast - topic is paused or being deleted.
-		return
-	}
-
 	what := t.procPresReq(msg.Pres.Src, msg.Pres.What, msg.Pres.WantReply)
 	if t.xoriginal != msg.Pres.Topic || what == "" {
 		// This is just a request for status, don't forward it to sessions
@@ -1267,7 +1273,7 @@ func (t *Topic) subscriptionReply(asChan bool, join *sessionJoin) error {
 	if hasJoined {
 		// Subscription successfully created. Link topic to session.
 		join.sess.addSub(t.name, &Subscription{
-			broadcast: t.broadcast,
+			broadcast: t.clientMsg,
 			done:      t.unreg,
 			meta:      t.meta,
 			supd:      t.supd,
