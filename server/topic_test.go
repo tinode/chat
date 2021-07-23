@@ -366,9 +366,10 @@ func TestHandleBroadcastDataGroup(t *testing.T) {
 }
 
 func TestHandleBroadcastDataMissingWritePermission(t *testing.T) {
+	topicName := "p2p-test"
 	numUsers := 2
 	helper := TopicTestHelper{}
-	helper.setUp(t, numUsers, types.TopicCatP2P, "p2p-test", true)
+	helper.setUp(t, numUsers, types.TopicCatP2P, topicName, true)
 	defer helper.tearDown()
 
 	// Remove W permission for uid1.
@@ -380,7 +381,8 @@ func TestHandleBroadcastDataMissingWritePermission(t *testing.T) {
 	// Make test message.
 	from := helper.uids[0].UserId()
 	msg := &ClientComMessage{
-		AsUser: from,
+		AsUser:   from,
+		Original: from,
 		Pub: &MsgClientPub{
 			Topic:   "p2p",
 			Content: "test",
@@ -625,7 +627,8 @@ func TestHandleBroadcastInfoBogusNotification(t *testing.T) {
 	to := helper.uids[1]
 
 	msg := &ClientComMessage{
-		AsUser: from.UserId(),
+		AsUser:   from.UserId(),
+		Original: to.UserId(),
 		Note: &MsgClientNote{
 			Topic: to.UserId(),
 			What:  "read",
@@ -672,7 +675,8 @@ func TestHandleBroadcastInfoFilterOutRecvWithoutRPermission(t *testing.T) {
 	helper.topic.perUser[from] = pud
 
 	msg := &ClientComMessage{
-		AsUser: from.UserId(),
+		AsUser:   from.UserId(),
+		Original: to.UserId(),
 		Note: &MsgClientNote{
 			Topic: to.UserId(),
 			What:  "recv",
@@ -719,7 +723,8 @@ func TestHandleBroadcastInfoFilterOutKpWithoutWPermission(t *testing.T) {
 	helper.topic.perUser[from] = pud
 
 	msg := &ClientComMessage{
-		AsUser: from.UserId(),
+		AsUser:   from.UserId(),
+		Original: to.UserId(),
 		Note: &MsgClientNote{
 			Topic: to.UserId(),
 			What:  "kp",
@@ -766,7 +771,8 @@ func TestHandleBroadcastInfoDuplicatedRead(t *testing.T) {
 	helper.topic.perUser[from] = pud
 
 	msg := &ClientComMessage{
-		AsUser: from.UserId(),
+		AsUser:   from.UserId(),
+		Original: to.UserId(),
 		Note: &MsgClientNote{
 			Topic: to.UserId(),
 			What:  "read",
@@ -810,7 +816,8 @@ func TestHandleBroadcastInfoDbError(t *testing.T) {
 	helper.ss.EXPECT().Update(topicName, from, map[string]interface{}{"ReadSeqId": readId}).Return(types.ErrInternal)
 
 	msg := &ClientComMessage{
-		AsUser: from.UserId(),
+		AsUser:   from.UserId(),
+		Original: to.UserId(),
 		Note: &MsgClientNote{
 			Topic: to.UserId(),
 			What:  "read",

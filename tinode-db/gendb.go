@@ -327,7 +327,8 @@ func genDb(data *Data) {
 					SeqId:     seqId,
 					Topic:     topic,
 					From:      from.String(),
-					Content:   str}, true); err != nil {
+					Content:   str,
+				}, nil, true); err != nil {
 					log.Fatal("Failed to insert message: ", err)
 				}
 
@@ -348,8 +349,8 @@ func genDb(data *Data) {
 					SeqId:     1,
 					Topic:     nameIndex[gt.Name],
 					From:      nameIndex[gt.Owner],
-					Content:   data.Messages[0]}, true); err != nil {
-
+					Content:   data.Messages[0],
+				}, nil, true); err != nil {
 					log.Fatal("Failed to insert message: ", err)
 				}
 			}
@@ -367,8 +368,8 @@ func genDb(data *Data) {
 					SeqId:     1,
 					Topic:     nameIndex[sub.pair],
 					From:      nameIndex[sub.Users[0].Name],
-					Content:   data.Messages[0]}, true); err != nil {
-
+					Content:   data.Messages[0],
+				}, nil, true); err != nil {
 					log.Fatal("Failed to insert message: ", err)
 				}
 			}
@@ -391,7 +392,8 @@ func genDb(data *Data) {
 						Topic:     nameIndex[sub.pair],
 						Head:      types.MessageHeaders{"mime": "text/x-drafty"},
 						From:      from,
-						Content:   form}, true); err != nil {
+						Content:   form,
+					}, nil, true); err != nil {
 						log.Fatal("Failed to insert form: ", err)
 					}
 				}
