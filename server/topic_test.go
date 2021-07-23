@@ -861,7 +861,8 @@ func TestHandleBroadcastInfoInvalidChannelAccess(t *testing.T) {
 	}
 
 	msg := &ClientComMessage{
-		AsUser: from.UserId(),
+		Original: chanName,
+		AsUser:   from.UserId(),
 		Note: &MsgClientNote{
 			Topic: chanName,
 			What:  "read",
@@ -912,7 +913,8 @@ func TestHandleBroadcastInfoChannelProcessing(t *testing.T) {
 	helper.ss.EXPECT().Update(chanName, from, map[string]interface{}{"ReadSeqId": readId}).Return(nil)
 
 	msg := &ClientComMessage{
-		AsUser: from.UserId(),
+		AsUser:   from.UserId(),
+		Original: chanName,
 		Note: &MsgClientNote{
 			Topic: chanName,
 			What:  "read",
