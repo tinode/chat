@@ -77,6 +77,7 @@ run-server() {
 }
 
 send-requests() {
+  local expect=12
   local port=$1
   local id=$2
   local outfile=$(mktemp /tmp/tinode-${id}.txt)
@@ -85,7 +86,10 @@ send-requests() {
   python3 tn-cli.py --host=localhost:${port} --no-login < sample-script.txt > $outfile || fail "Test script failed (instance port ${port})"
   popd
   num_positive_responses=`grep -c '<= 20[0-9]' $outfile`
-  if [ $num_positive_responses -ne 10 ]; then fail "Instance ${port}: unexpected number of 20* responses: ${num_positive_responses}. Log file ${outfile}"; fi
+  if [ $num_positive_responses -ne expect ]
+  then
+    fail "Instance ${port}: unexpected number of 20X responses: ${num_positive_responses} (expected ${expected}). Log file ${outfile}"
+  fi
   rm $outfile
 }
 
