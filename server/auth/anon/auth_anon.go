@@ -4,6 +4,7 @@ package anon
 
 import (
 	"encoding/json"
+	"errors"
 	"time"
 
 	"github.com/tinode/chat/server/auth"
@@ -12,11 +13,27 @@ import (
 )
 
 // authenticator is the singleton instance of the anonymous authorizer.
-type authenticator struct{}
+type authenticator struct {
+	name string
+}
 
 // Init is a noop, always returns success.
-func (authenticator) Init(_ json.RawMessage, _ string) error {
+func (a *authenticator) Init(_ json.RawMessage, name string) error {
+	if name == "" {
+		return errors.New("auth_anonymous: authenticator name cannot be blank")
+	}
+
+	if a.name != "" {
+		return errors.New("auth_anonymous: already initialized as " + a.name + "; " + name)
+	}
+
+	a.name = name
 	return nil
+}
+
+// IsInitialized returns true if the handler is initialized.
+func (a *authenticator) IsInitialized() bool {
+	return a.name != ""
 }
 
 // AddRecord checks authLevel and assigns default LevelAnon. Otherwise it
