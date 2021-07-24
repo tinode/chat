@@ -27,8 +27,8 @@ See [general instructions](./INSTALL.md) or [docker-specific instructions](./doc
 ## Helping out
 
 * Consider buying paid support: https://tinode.co/support.html
-* If you are a software developer, send us your pull requests with bug fixes and feature requests.
-* If you use the app and discover bugs or missing features, please let us know by filing bug reports and feature requests.
+* If you are a software developer, send us your pull requests with bug fixes and new features.
+* If you use the app and discover bugs or missing features, let us know by filing bug reports and feature requests. Vote for existing [feature requests](https://github.com/tinode/chat/issues?q=is%3Aissue+is%3Aopen+label%3A%22feature+request%22) you find most valuable.
 * If you speak a language other than English, you can translate the apps into your language.
 * If you are a UI/UX expert, help us polish the app UI.
 * Let people know about Tinode: write a blog post or an article about Tinode, share your findings and experiences at conferences.
@@ -111,6 +111,7 @@ When you register a new account you are asked for an email address to send valid
 * Previews of attached videos, documents, links.
 * Hot standby.
 * Different levels of message persistence (from strict persistence to "store until delivered" to purely ephemeral messaging).
+* Message encryption at rest.
 
 ### Translations
 
