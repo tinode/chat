@@ -47,8 +47,9 @@ func (t *Topic) runProxy(hub *Hub) {
 				logs.Warn.Println("proxy topic: route broadcast request from proxy to master failed:", err)
 			}
 
-		case <-t.serverMsg:
+		case msg := <-t.serverMsg:
 			// FIXME: should something be done here?
+			logs.Err.Printf("ERROR!!! Unexpected server-side message in proxy topic %#v", msg)
 
 		case msg := <-t.meta:
 			// Request to get/set topic metadata
@@ -146,7 +147,7 @@ func (t *Topic) handleProxyLeaveRequest(leave *sessionLeave, killTimer *time.Tim
 	return result
 }
 
-// Proxy topic handler of a master topic response to an earlier request.
+// proxyMasterResponse at proxy topic processes a master topic response to an earlier request.
 func (t *Topic) proxyMasterResponse(msg *ClusterResp, killTimer *time.Timer) {
 	// Kills topic after a period of inactivity.
 	keepAlive := idleProxyTopicTimeout

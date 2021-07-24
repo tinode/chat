@@ -531,9 +531,9 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 
 	case ProxyReqBroadcast:
 		// sess could be nil
-		msg.SrvMsg.sess = sess
+		msg.CliMsg.sess = sess
 		select {
-		case globals.hub.routeSrv <- msg.SrvMsg:
+		case globals.hub.routeCli <- msg.CliMsg:
 		default:
 			logs.Err.Println("cluster: route req failed - hub.route queue full")
 		}
@@ -775,7 +775,7 @@ func (c *Cluster) isPartitioned() bool {
 	return result
 }
 
-func (c *Cluster) makeClusterReq(reqType ProxyReqType, payload interface{}, topic string, sess *Session) *ClusterReq {
+func (c *Cluster) makeClusterReq(reqType ProxyReqType, msg *ClientComMessage, topic string, sess *Session) *ClusterReq {
 	req := &ClusterReq{
 		Node:        c.thisNodeName,
 		Signature:   c.ring.Signature(),
@@ -786,22 +786,9 @@ func (c *Cluster) makeClusterReq(reqType ProxyReqType, payload interface{}, topi
 
 	var uid types.Uid
 
-	switch pl := payload.(type) {
-	case *ClientComMessage:
-		if pl != nil {
-			// See here why pl could be nil even if we have an explicit nil case:
-			// https://golang.org/doc/faq#nil_error
-			req.CliMsg = pl
-			uid = types.ParseUserId(req.CliMsg.AsUser)
-		}
-	case *ServerComMessage:
-		if pl != nil {
-			req.SrvMsg = pl
-			uid = types.ParseUserId(req.SrvMsg.AsUser)
-		}
-	case nil:
-	default:
-		panic("cluster: unknown payload in makeClusterReq")
+	if msg != nil {
+		req.CliMsg = msg
+		uid = types.ParseUserId(req.CliMsg.AsUser)
 	}
 
 	if sess != nil {
@@ -827,7 +814,7 @@ func (c *Cluster) makeClusterReq(reqType ProxyReqType, payload interface{}, topi
 }
 
 // Forward client request message from the Topic Proxy to the Topic Master (cluster node which owns the topic).
-func (c *Cluster) routeToTopicMaster(reqType ProxyReqType, payload interface{}, topic string, sess *Session) error {
+func (c *Cluster) routeToTopicMaster(reqType ProxyReqType, msg *ClientComMessage, topic string, sess *Session) error {
 	if c == nil {
 		// Cluster may be nil due to shutdown.
 		return nil
@@ -845,7 +832,7 @@ func (c *Cluster) routeToTopicMaster(reqType ProxyReqType, payload interface{}, 
 		return errors.New("node for topic not found")
 	}
 
-	req := c.makeClusterReq(reqType, payload, topic, sess)
+	req := c.makeClusterReq(reqType, msg, topic, sess)
 	return n.proxyToMaster(req)
 }
 

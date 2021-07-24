@@ -460,9 +460,11 @@ func pbCliDeserialize(pkt *pbx.ClientMsg) *ClientComMessage {
 	}
 
 	if extra := pkt.GetExtra(); extra != nil {
-		msg.Extra.Attachments = extra.GetAttachments()
-		msg.AsUser = extra.GetOnBehalfOf()
-		msg.AuthLvl = int(extra.GetAuthLevel())
+		msg.Extra = &MsgClientExtra{
+			Attachments: extra.GetAttachments(),
+			AsUser:      extra.GetOnBehalfOf(),
+			AuthLevel:   extra.GetAuthLevel().String(),
+		}
 	}
 
 	return &msg

@@ -332,7 +332,8 @@ def accMsg(id, cmd, ignored):
         scheme=cmd.scheme, secret=cmd.secret, login=cmd.do_login, tags=cmd.tags.split(",") if cmd.tags else None,
         desc=pb.SetDesc(default_acs=pb.DefaultAcsMode(auth=cmd.auth, anon=cmd.anon),
             public=cmd.public, private=cmd.private),
-        cred=parse_cred(cmd.cred)), on_behalf_of=tn_globals.DefaultUser)
+        cred=parse_cred(cmd.cred)),
+        extra=pb.ClientExtra(on_behalf_of=tn_globals.DefaultUser))
 
 # {login}
 def loginMsg(id, cmd, args):
@@ -374,13 +375,15 @@ def subMsg(id, cmd, ignored):
                 default_acs=pb.DefaultAcsMode(auth=cmd.auth, anon=cmd.anon)),
             sub=pb.SetSub(mode=cmd.mode),
             tags=cmd.tags.split(",") if cmd.tags else None),
-        get_query=cmd.get_query), on_behalf_of=tn_globals.DefaultUser)
+        get_query=cmd.get_query),
+        extra=pb.ClientExtra(on_behalf_of=tn_globals.DefaultUser))
 
 # {leave}
 def leaveMsg(id, cmd, ignored):
     if not cmd.topic:
         cmd.topic = tn_globals.DefaultTopic
-    return pb.ClientMsg(leave=pb.ClientLeave(id=str(id), topic=cmd.topic, unsub=cmd.unsub), on_behalf_of=tn_globals.DefaultUser)
+    return pb.ClientMsg(leave=pb.ClientLeave(id=str(id), topic=cmd.topic, unsub=cmd.unsub),
+        extra=pb.ClientExtra(on_behalf_of=tn_globals.DefaultUser))
 
 # {pub}
 def pubMsg(id, cmd, ignored):
@@ -406,7 +409,8 @@ def pubMsg(id, cmd, ignored):
         return None
 
     return pb.ClientMsg(pub=pb.ClientPub(id=str(id), topic=cmd.topic, no_echo=True,
-        head=head, content=encode_to_bytes(content)), on_behalf_of=tn_globals.DefaultUser)
+        head=head, content=encode_to_bytes(content)),
+        extra=pb.ClientExtra(on_behalf_of=tn_globals.DefaultUser))
 
 # {get}
 def getMsg(id, cmd, ignored):
@@ -425,7 +429,8 @@ def getMsg(id, cmd, ignored):
     if cmd.cred:
         what.append("cred")
     return pb.ClientMsg(get=pb.ClientGet(id=str(id), topic=cmd.topic,
-        query=pb.GetQuery(what=" ".join(what))), on_behalf_of=tn_globals.DefaultUser)
+        query=pb.GetQuery(what=" ".join(what))),
+        extra=pb.ClientExtra(on_behalf_of=tn_globals.DefaultUser))
 
 # {set}
 def setMsg(id, cmd, ignored):
@@ -449,7 +454,8 @@ def setMsg(id, cmd, ignored):
                 public=cmd.public, private=cmd.private),
         sub=pb.SetSub(user_id=cmd.user, mode=cmd.mode),
         tags=cmd.tags.split(",") if cmd.tags else None,
-        cred=cred)), on_behalf_of=tn_globals.DefaultUser)
+        cred=cred)),
+        extra=pb.ClientExtra(on_behalf_of=tn_globals.DefaultUser))
 
 # {del}
 def delMsg(id, cmd, ignored):
@@ -536,7 +542,7 @@ def delMsg(id, cmd, ignored):
         stdoutln("Unrecognized delete option '", cmd.what, "'")
         return None
 
-    msg = pb.ClientMsg(on_behalf_of=tn_globals.DefaultUser)
+    msg = pb.ClientMsg(extra=pb.ClientExtra(on_behalf_of=tn_globals.DefaultUser))
     # Field named 'del' conflicts with the keyword 'del. This is a work around.
     xdel = getattr(msg, 'del')
     """
@@ -573,7 +579,8 @@ def noteMsg(id, cmd, ignored):
     elif what == 'recv':
         enum_what = pb.RECV
         cmd.seq = int(cmd.seq)
-    return pb.ClientMsg(note=pb.ClientNote(topic=cmd.topic, what=enum_what, seq_id=cmd.seq), on_behalf_of=tn_globals.DefaultUser)
+    return pb.ClientMsg(note=pb.ClientNote(topic=cmd.topic, what=enum_what, seq_id=cmd.seq),
+        extra=pb.ClientExtra(on_behalf_of=tn_globals.DefaultUser))
 
 # Upload file out of band over HTTP(S) (not gRPC).
 def upload(id, cmd, args):
@@ -1147,6 +1154,7 @@ if __name__ == '__main__':
     secret = None
 
     if not args.no_login:
+        print("LOGGING IN")
         if args.login_token:
             """Use token to login"""
             schema = 'token'
@@ -1166,6 +1174,8 @@ if __name__ == '__main__':
             secret = read_cookie()
             if not secret:
                 schema = None
+    else:
+        print("NO LOGIN")
 
     # Attempt to load the macro file if available.
     macros = None
