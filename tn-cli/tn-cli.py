@@ -1154,7 +1154,6 @@ if __name__ == '__main__':
     secret = None
 
     if not args.no_login:
-        print("LOGGING IN")
         if args.login_token:
             """Use token to login"""
             schema = 'token'
@@ -1174,8 +1173,6 @@ if __name__ == '__main__':
             secret = read_cookie()
             if not secret:
                 schema = None
-    else:
-        print("NO LOGIN")
 
     # Attempt to load the macro file if available.
     macros = None
