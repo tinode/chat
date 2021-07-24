@@ -112,6 +112,7 @@ When you register a new account you are asked for an email address to send valid
 * Hot standby.
 * Different levels of message persistence (from strict persistence to "store until delivered" to purely ephemeral messaging).
 * Message encryption at rest.
+* Full text search in messages.
 
 ### Translations
 
