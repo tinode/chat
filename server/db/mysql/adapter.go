@@ -1851,24 +1851,6 @@ func (a *adapter) OwnTopics(uid t.Uid) ([]string, error) {
 	return a.topicNamesForUser(uid, "SELECT name FROM topics WHERE owner=?")
 }
 
-// IsOwner checks if the user is the owner of the given topic.
-func (a *adapter) IsOwner(uid t.Uid, topic string) (bool, error) {
-	ctx, cancel := a.getContext()
-	if cancel != nil {
-		defer cancel()
-	}
-	rows, err := a.db.QueryxContext(ctx, "SELECT id FROM topics WHERE owner=? AND name=? AND state=?",
-		store.DecodeUid(uid), topic, t.StateOK)
-	if err != nil {
-		return false, err
-	}
-
-	found := rows.Next()
-	rows.Close()
-
-	return found, rows.Err()
-}
-
 // ChannelsForUser loads a slice of topic names where the user is a channel reader and notifications (P) are enabled.
 func (a *adapter) ChannelsForUser(uid t.Uid) ([]string, error) {
 	return a.topicNamesForUser(uid,

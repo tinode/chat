@@ -33,7 +33,7 @@ const (
 	defaultHost     = "localhost:28015"
 	defaultDatabase = "tinode"
 
-	adpVersion = 111
+	adpVersion = 112
 
 	adapterName = "rethinkdb"
 
@@ -389,6 +389,10 @@ func (a *adapter) CreateDb(reset bool) error {
 	if _, err := rdb.DB(a.dbName).Table("fileuploads").IndexCreate("User").RunWrite(a.conn); err != nil {
 		return err
 	}
+	// A secondary index on fileuploads.Topic to be able to delete earlier records by topic.
+	if _, err := rdb.DB(a.dbName).Table("fileuploads").IndexCreate("Topic").RunWrite(a.conn); err != nil {
+		return err
+	}
 	// A secondary index on fileuploads.UseCount to be able to delete unused records at once.
 	if _, err := rdb.DB(a.dbName).Table("fileuploads").IndexCreate("UseCount").RunWrite(a.conn); err != nil {
 		return err
@@ -532,6 +536,16 @@ func (a *adapter) UpgradeDb() error {
 		}
 
 		if err := bumpVersion(a, 111); err != nil {
+			return err
+		}
+	}
+
+	if a.version == 111 {
+		// A secondary index on fileuploads.Topic to be able to delete earlier records by topic.
+		if _, err := rdb.DB(a.dbName).Table("fileuploads").IndexCreate("Topic").RunWrite(a.conn); err != nil {
+			return err
+		}
+		if err := bumpVersion(a, 112); err != nil {
 			return err
 		}
 	}
@@ -1200,6 +1214,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 			sub.SetSeqId(top.SeqId)
 			if t.GetTopicCat(sub.Topic) == t.TopicCatGrp {
 				sub.SetPublic(top.Public)
+				sub.SetTrusted(top.Trusted)
 			}
 			// Put back the updated value of a subsription, will process further below.
 			join[top.Id] = sub
@@ -1243,6 +1258,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 				sub.UpdatedAt = common.SelectEarliestUpdatedAt(sub.UpdatedAt, usr.UpdatedAt, ims)
 				sub.SetState(usr.State)
 				sub.SetPublic(usr.Public)
+				sub.SetTrusted(usr.Trusted)
 				sub.SetWith(uid2.UserId())
 				sub.SetDefaultAccess(usr.Access.Auth, usr.Access.Anon)
 				sub.SetLastSeenAndUA(usr.LastSeen, usr.UserAgent)
@@ -1328,6 +1344,7 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 			if sub, ok := join[usr.Id]; ok {
 				sub.ObjHeader.MergeTimes(&usr.ObjHeader)
 				sub.SetPublic(usr.Public)
+				sub.SetTrusted(usr.Trusted)
 				subs = append(subs, sub)
 			}
 		}
@@ -1339,10 +1356,15 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 		if len(subs) == 1 {
 			// User is deleted. Nothing we can do.
 			subs[0].SetPublic(nil)
+			subs[0].SetTrusted(nil)
 		} else {
-			pub := subs[0].GetPublic()
+			tmp := subs[0].GetPublic()
 			subs[0].SetPublic(subs[1].GetPublic())
-			subs[1].SetPublic(pub)
+			subs[1].SetPublic(tmp)
+
+			tmp = subs[0].GetTrusted()
+			subs[0].SetTrusted(subs[1].GetTrusted())
+			subs[1].SetTrusted(tmp)
 		}
 
 		// Remove deleted and unneeded subscriptions
@@ -1744,7 +1766,7 @@ func (a *adapter) FindUsers(uid t.Uid, req [][]string, opt []string) ([]t.Subscr
 		Table("users").
 		GetAllByIndex("Tags", allTags...).
 		Filter(rdb.Row.Field("State").Eq(t.StateOK)).
-		Pluck("Id", "Access", "CreatedAt", "UpdatedAt", "Public", "Tags").
+		Pluck("Id", "Access", "CreatedAt", "UpdatedAt", "Public", "Trusted", "Tags").
 		Group("Id").
 		Ungroup().
 		Map(func(row rdb.Term) rdb.Term {
@@ -1780,6 +1802,7 @@ func (a *adapter) FindUsers(uid t.Uid, req [][]string, opt []string) ([]t.Subscr
 		sub.UpdatedAt = user.UpdatedAt
 		sub.User = user.Id
 		sub.SetPublic(user.Public)
+		sub.SetTrusted(user.Trusted)
 		sub.SetDefaultAccess(user.Access.Auth, user.Access.Anon)
 		tags := make([]string, 0, 1)
 		for _, tag := range user.Tags {
@@ -1816,7 +1839,7 @@ func (a *adapter) FindTopics(req [][]string, opt []string) ([]t.Subscription, er
 		Table("topics").
 		GetAllByIndex("Tags", allTags...).
 		Filter(rdb.Row.Field("State").Eq(t.StateOK)).
-		Pluck("Id", "Access", "CreatedAt", "UpdatedAt", "UseBt", "Public", "Tags").
+		Pluck("Id", "Access", "CreatedAt", "UpdatedAt", "UseBt", "Public", "Trusted", "Tags").
 		Group("Id").
 		Ungroup().
 		Map(func(row rdb.Term) rdb.Term {
@@ -1855,6 +1878,7 @@ func (a *adapter) FindTopics(req [][]string, opt []string) ([]t.Subscription, er
 			sub.Topic = topic.Id
 		}
 		sub.SetPublic(topic.Public)
+		sub.SetPublic(topic.Trusted)
 		sub.SetDefaultAccess(topic.Access.Auth, topic.Access.Anon)
 		tags := make([]string, 0, 1)
 		for _, tag := range topic.Tags {
@@ -2414,17 +2438,30 @@ func (a *adapter) FileStartUpload(fd *t.FileDef) error {
 }
 
 // FileFinishUpload marks file upload as completed, successfully or otherwise
-func (a *adapter) FileFinishUpload(fid string, status int, size int64) (*t.FileDef, error) {
-	if _, err := rdb.DB(a.dbName).Table("fileuploads").Get(fid).
-		Update(map[string]interface{}{
-			"UpdatedAt": t.TimeNow(),
-			"Status":    status,
-			"Size":      size,
-		}).RunWrite(a.conn); err != nil {
+func (a *adapter) FileFinishUpload(fd *t.FileDef, success bool, size int64) (*t.FileDef, error) {
+	now := t.TimeNow()
+	if success {
+		if _, err := rdb.DB(a.dbName).Table("fileuploads").Get(fd.Uid()).
+			Update(map[string]interface{}{
+				"UpdatedAt": now,
+				"Status":    t.UploadCompleted,
+				"Size":      size,
+			}).RunWrite(a.conn); err != nil {
 
-		return nil, err
+			return nil, err
+		}
+		fd.Status = t.UploadCompleted
+		fd.Size = size
+	} else {
+		if _, err := rdb.DB(a.dbName).Table("fileuploads").Get(fd.Uid()).Delete().RunWrite(a.conn); err != nil {
+			return nil, err
+		}
+		fd.Status = t.UploadFailed
+		fd.Size = 0
 	}
-	return a.FileGet(fid)
+	fd.UpdatedAt = now
+
+	return fd, nil
 }
 
 // FileGet fetches a record of a specific file
@@ -2446,6 +2483,52 @@ func (a *adapter) FileGet(fid string) (*t.FileDef, error) {
 
 	return &fd, nil
 
+}
+
+// FileLinkAttachments connects given topic or message to the file record IDs from the list.
+func (a *adapter) FileLinkAttachments(topic string, msgId t.Uid, fids []string) error {
+	if len(fids) == 0 || (topic == "" && msgId.IsZero()) {
+		return t.ErrMalformed
+	}
+
+	now := t.TimeNow()
+	if !msgId.IsZero() {
+		_, err := rdb.DB(a.dbName).Table("messages").Get(msgId.String()).
+			Update(map[string]interface{}{
+				"UpdatedAt":   now,
+				"Attachments": fids,
+			}).RunWrite(a.conn)
+		if err != nil {
+			return err
+		}
+
+		ids := make([]interface{}, len(fids))
+		for i, id := range fids {
+			ids[i] = id
+		}
+		_, err = rdb.DB(a.dbName).Table("fileuploads").GetAll(ids...).
+			Update(map[string]interface{}{
+				"UpdatedAt": now,
+				"UseCount":  rdb.Row.Field("UseCount").Default(0).Add(1),
+			}).RunWrite(a.conn)
+		return err
+	}
+
+	// Mark earlier upload on the same topic as deleted making it available for garbage collection.
+	_, err := rdb.DB(a.dbName).Table("fileuploads").GetAllByIndex("Topic", topic).
+		Filter(rdb.Row.Field("UseCount").Gt(0)).
+		Update(map[string]interface{}{
+			"UpdatedAt": now,
+			"UseCount":  rdb.Row.Field("UseCount").Default(0).Sub(1),
+		}).RunWrite(a.conn)
+
+	_, err = rdb.DB(a.dbName).Table("fileuploads").GetAllByIndex("Topic", topic).
+		Update(map[string]interface{}{
+			"UpdatedAt": now,
+			"UseCount":  rdb.Row.Field("UseCount").Default(0).Add(1),
+		}).RunWrite(a.conn)
+
+	return err
 }
 
 // FileDeleteUnused deletes orphaned file uploads.
@@ -2477,31 +2560,6 @@ func (a *adapter) FileDeleteUnused(olderThan time.Time, limit int) ([]string, er
 	_, err = q.Delete().RunWrite(a.conn)
 
 	return locations, err
-}
-
-// FileLinkAttachments connects given topic or message to the file record IDs from the list.
-func (a *adapter) FileLinkAttachments(topic string, msgId t.Uid, fids []string) error {
-	now := t.TimeNow()
-	_, err := rdb.DB(a.dbName).Table("messages").Get(msgId.String()).
-		Update(map[string]interface{}{
-			"UpdatedAt":   now,
-			"Attachments": fids,
-		}).RunWrite(a.conn)
-	if err != nil {
-		return err
-	}
-
-	ids := make([]interface{}, len(fids))
-	for i, id := range fids {
-		ids[i] = id
-	}
-	_, err = rdb.DB(a.dbName).Table("fileuploads").GetAll(ids...).
-		Update(map[string]interface{}{
-			"UpdatedAt": now,
-			"UseCount":  rdb.Row.Field("UseCount").Default(0).Add(1),
-		}).RunWrite(a.conn)
-
-	return err
 }
 
 // Given a select query against 'messages' table, decrement corresponding use counter in 'fileuploads' table.
