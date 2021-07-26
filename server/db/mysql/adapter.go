@@ -474,7 +474,7 @@ func (a *adapter) CreateDb(reset bool) error {
 	if _, err = tx.Exec(
 		`CREATE TABLE dellog(
 			id         INT NOT NULL AUTO_INCREMENT,
-			topic      VARCHAR(25) NOT NULL,
+			topic      CHAR(25) NOT NULL,
 			deletedfor BIGINT NOT NULL DEFAULT 0,
 			delid      INT NOT NULL,
 			low        INT NOT NULL,
@@ -535,12 +535,12 @@ func (a *adapter) CreateDb(reset bool) error {
 			createdat	DATETIME(3) NOT NULL,
 			fileid		BIGINT NOT NULL,
 			msgid		INT,
-			topic		VARCHAR(25),
+			topic		CHAR(25),
 			userid		BIGINT,
 			PRIMARY KEY(id),
 			FOREIGN KEY(fileid) REFERENCES fileuploads(id) ON DELETE CASCADE,
 			FOREIGN KEY(msgid) REFERENCES messages(id) ON DELETE CASCADE,
-			FOREIGN KEY(topic) REFERENCES topics(id) ON DELETE CASCADE,
+			FOREIGN KEY(topic) REFERENCES topics(name) ON DELETE CASCADE,
 			FOREIGN KEY(userid) REFERENCES users(id) ON DELETE CASCADE
 		)`); err != nil {
 		return err
@@ -715,7 +715,7 @@ func (a *adapter) UpgradeDb() error {
 			return err
 		}
 
-		if _, err := a.db.Exec("ALTER TABLE filemsglinks ADD topic VARCHAR(25)"); err != nil {
+		if _, err := a.db.Exec("ALTER TABLE filemsglinks ADD topic CHAR(25)"); err != nil {
 			return err
 		}
 

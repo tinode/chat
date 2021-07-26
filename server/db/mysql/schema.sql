@@ -151,7 +151,7 @@ CREATE TABLE messages(
 # Deletion log
 CREATE TABLE dellog(
 	id			INT NOT NULL AUTO_INCREMENT,
-	topic		VARCHAR(25) NOT NULL,
+	topic		CHAR(25) NOT NULL,
 	deletedfor	BIGINT NOT NULL DEFAULT 0,
 	delid		INT NOT NULL,
 	low			INT NOT NULL,
@@ -207,7 +207,7 @@ CREATE TABLE filemsglinks(
 	createdat	DATETIME(3) NOT NULL,
 	fileid		BIGINT NOT NULL,
 	msgid		INT,
-	topicid		INT,
+	topic		CHAR(25),
 	userid		BIGINT,
 
 	PRIMARY KEY(id),
