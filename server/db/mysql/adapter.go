@@ -3187,6 +3187,25 @@ func (a *adapter) FileLinkAttachments(topic string, userId, msgId t.Uid, fids []
 	if len(fids) == 0 || (topic == "" && msgId.IsZero() && userId.IsZero()) {
 		return t.ErrMalformed
 	}
+	now := t.TimeNow()
+
+	var args []interface{}
+	var linkId interface{}
+	var linkBy string
+	if !msgId.IsZero() {
+		linkBy = "msgid"
+		linkId = int64(msgId)
+	} else if topic != "" {
+		linkBy = "topic"
+		linkId = topic
+		// Only one attachment per topic is permitted at this time.
+		fids = fids[0:1]
+	} else {
+		linkBy = "userid"
+		linkId = store.DecodeUid(userId)
+		// Only one attachment per user is permitted at this time.
+		fids = fids[0:1]
+	}
 
 	// Decoded ids
 	var dids []interface{}
@@ -3196,21 +3215,6 @@ func (a *adapter) FileLinkAttachments(topic string, userId, msgId t.Uid, fids []
 			return t.ErrMalformed
 		}
 		dids = append(dids, store.DecodeUid(id))
-	}
-
-	var args []interface{}
-	now := t.TimeNow()
-	var linkId interface{}
-	var linkBy string
-	if !msgId.IsZero() {
-		linkBy = "msgid"
-		linkId = int64(msgId)
-	} else if topic != "" {
-		linkBy = "topic"
-		linkId = topic
-	} else {
-		linkBy = "userid"
-		linkId = store.DecodeUid(userId)
 	}
 
 	for _, id := range dids {

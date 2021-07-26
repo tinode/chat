@@ -719,7 +719,7 @@ func (a *adapter) AuthGetUniqueRecord(unique string) (t.Uid, auth.Level, []byte,
 
 // UserGet fetches a single user by user id. If user is not found it returns (nil, nil)
 func (a *adapter) UserGet(uid t.Uid) (*t.User, error) {
-	cursor, err := rdb.DB(a.dbName).Table("users").GetAll(uid.String()).
+	cursor, err := rdb.DB(a.dbName).Table("users").Get(uid.String()).
 		Filter(rdb.Row.Field("State").Eq(t.StateDeleted).Not()).Run(a.conn)
 	if err != nil {
 		return nil, err
@@ -778,7 +778,7 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 		// Delete topics where the user is the owner:
 
 		// 1. Delete dellog
-		// 2. Decrement fileuploads.
+		// 2. Decrement use counter of fileuploads: topic itself and messages.
 		// 3. Delete all messages.
 		// 4. Delete subscriptions.
 		if _, err = rdb.DB(a.dbName).Table("topics").GetAllByIndex("Owner", uid.String()).ForEach(
@@ -789,7 +789,12 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 						[]interface{}{topic.Field("Id"), rdb.MinVal},
 						[]interface{}{topic.Field("Id"), rdb.MaxVal},
 						rdb.BetweenOpts{Index: "Topic_DelId"}).Delete(),
-					// Decrement fileuploads UseCounter
+					// Decrement topic attachment UseCounter
+					rdb.DB(a.dbName).Table("fileuploads").GetAll(topic.Field("Attachments")).
+						Update(func(fu rdb.Term) interface{} {
+							return map[string]interface{}{"UseCount": fu.Field("UseCount").Default(1).Sub(1)}
+						}),
+					// Decrement message attachments UseCounter
 					rdb.DB(a.dbName).Table("fileuploads").GetAll(
 						rdb.Args(
 							rdb.DB(a.dbName).Table("messages").Between(
@@ -833,8 +838,16 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 		if err = a.CredDel(uid, "", ""); err != nil && err != t.ErrNotFound {
 			return err
 		}
+
+		q := rdb.DB(a.dbName).Table("users").Get(uid.String())
+
+		// Unlink user's attachment.
+		if err = a.fileDecrementUseCounter(q); err != nil {
+			return err
+		}
+
 		// And finally delete the user.
-		_, err = rdb.DB(a.dbName).Table("users").Get(uid.String()).Delete().RunWrite(a.conn)
+		_, err = q.Delete().RunWrite(a.conn)
 	} else {
 		// Disable user's subscriptions.
 		if err = a.subsDelForUser(uid, false); err != nil {
@@ -1459,7 +1472,9 @@ func (a *adapter) TopicDelete(topic string, hard bool) error {
 
 	q := rdb.DB(a.dbName).Table("topics").Get(topic)
 	if hard {
-		_, err = q.Delete().RunWrite(a.conn)
+		if err = a.fileDecrementUseCounter(q); err == nil {
+			_, err = q.Delete().RunWrite(a.conn)
+		}
 	} else {
 		now := t.TimeNow()
 		_, err = q.Update(map[string]interface{}{
@@ -2487,12 +2502,61 @@ func (a *adapter) FileGet(fid string) (*t.FileDef, error) {
 
 // FileLinkAttachments connects given topic or message to the file record IDs from the list.
 func (a *adapter) FileLinkAttachments(topic string, userId, msgId t.Uid, fids []string) error {
-	if len(fids) == 0 || (topic == "" && msgId.IsZero()) {
+	if len(fids) == 0 || (topic == "" && userId.IsZero() && msgId.IsZero()) {
 		return t.ErrMalformed
 	}
 
 	now := t.TimeNow()
-	if !msgId.IsZero() {
+	var cursor *rdb.Cursor
+	var err error
+
+	if msgId.IsZero() {
+		// Only one link per user or topic is permitted.
+		fids = fids[0:1]
+
+		// Topics and users and mutable. Must unlink the previous attachments first.
+		var table string
+		var linkId string
+		if topic != "" {
+			table = "topics"
+			linkId = topic
+		} else {
+			table = "users"
+			linkId = userId.String()
+		}
+
+		// Find the old attachment.
+		cursor, err = rdb.DB(a.dbName).Table(table).Get(linkId).Field("Attachments").Run(a.conn)
+		if err != nil {
+			return err
+		}
+		defer cursor.Close()
+
+		if !cursor.IsNil() {
+			var attachments []string
+			if err = cursor.One(&attachments); err != nil {
+				return err
+			}
+
+			if len(attachments) > 0 {
+				// Decrement the use count of old attachment.
+				if _, err = rdb.DB(a.dbName).Table("fileuploads").Get(attachments[0]).
+					Update(map[string]interface{}{
+						"UpdatedAt": now,
+						"UseCount":  rdb.Row.Field("UseCount").Default(1).Sub(1),
+					}).RunWrite(a.conn); err != nil {
+					return err
+				}
+			}
+		}
+
+		_, err = rdb.DB(a.dbName).Table(table).Get(linkId).
+			Update(map[string]interface{}{
+				"UpdatedAt":   now,
+				"Attachments": fids,
+			}).RunWrite(a.conn)
+	} else {
+		// Messages are immutable. Just save the IDs.
 		_, err := rdb.DB(a.dbName).Table("messages").Get(msgId.String()).
 			Update(map[string]interface{}{
 				"UpdatedAt":   now,
@@ -2501,28 +2565,14 @@ func (a *adapter) FileLinkAttachments(topic string, userId, msgId t.Uid, fids []
 		if err != nil {
 			return err
 		}
-
-		ids := make([]interface{}, len(fids))
-		for i, id := range fids {
-			ids[i] = id
-		}
-		_, err = rdb.DB(a.dbName).Table("fileuploads").GetAll(ids...).
-			Update(map[string]interface{}{
-				"UpdatedAt": now,
-				"UseCount":  rdb.Row.Field("UseCount").Default(0).Add(1),
-			}).RunWrite(a.conn)
-		return err
 	}
 
-	// Mark earlier upload on the same topic as deleted making it available for garbage collection.
-	_, err := rdb.DB(a.dbName).Table("fileuploads").GetAllByIndex("Topic", topic).
-		Filter(rdb.Row.Field("UseCount").Gt(0)).
-		Update(map[string]interface{}{
-			"UpdatedAt": now,
-			"UseCount":  rdb.Row.Field("UseCount").Default(0).Sub(1),
-		}).RunWrite(a.conn)
+	ids := make([]interface{}, len(fids))
+	for i, id := range fids {
+		ids[i] = id
+	}
 
-	_, err = rdb.DB(a.dbName).Table("fileuploads").GetAllByIndex("Topic", topic).
+	_, err = rdb.DB(a.dbName).Table("fileuploads").GetAll(ids...).
 		Update(map[string]interface{}{
 			"UpdatedAt": now,
 			"UseCount":  rdb.Row.Field("UseCount").Default(0).Add(1),
@@ -2541,16 +2591,16 @@ func (a *adapter) FileDeleteUnused(olderThan time.Time, limit int) ([]string, er
 		q = q.Limit(limit)
 	}
 
-	cursor, err := q.Pluck("Location").Run(a.conn)
+	cursor, err := q.Field("Location").Run(a.conn)
 	if err != nil {
 		return nil, err
 	}
 	defer cursor.Close()
 
 	var locations []string
-	var loc map[string]string
+	var loc string
 	for cursor.Next(&loc) {
-		locations = append(locations, loc["Location"])
+		locations = append(locations, loc)
 	}
 
 	if err = cursor.Err(); err != nil {
