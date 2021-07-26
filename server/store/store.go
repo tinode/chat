@@ -670,7 +670,7 @@ func (messagesMapper) Save(msg *types.Message, attachments []string, readBySende
 	}
 
 	if len(attachments) > 0 {
-		return adp.FileLinkAttachments("", msg.Uid(), attachments)
+		return adp.FileLinkAttachments("", types.ZeroUid, msg.Uid(), attachments)
 	}
 
 	return nil
@@ -1004,8 +1004,14 @@ func (fileMapper) LinkAttachments(topic string, msgId types.Uid, attachments []s
 			fids = append(fids, fid.String())
 		}
 	}
+
 	if len(fids) > 0 {
-		return adp.FileLinkAttachments(topic, msgId, attachments)
+		userId := types.ZeroUid
+		if types.GetTopicCat(topic) == types.TopicCatMe {
+			userId = types.ParseUserId(topic)
+			topic = ""
+		}
+		return adp.FileLinkAttachments(topic, userId, msgId, attachments)
 	}
 	return nil
 }

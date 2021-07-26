@@ -195,13 +195,10 @@ CREATE TABLE fileuploads(
 	status		INT NOT NULL,
 	mimetype	VARCHAR(255) NOT NULL,
 	size		BIGINT NOT NULL,
-	topic		VARCHAR(25),
 	location	VARCHAR(2048) NOT NULL,
 	
 	PRIMARY KEY(id),
-	INDEX fileuploads_userid(userid),
-	INDEX fileuploads_status(status),
-	INDEX fileuploads_topic(topic)
+	INDEX fileuploads_status(status)
 );
 
 # Links between uploaded files and messages or topics.
@@ -209,9 +206,13 @@ CREATE TABLE filemsglinks(
 	id			INT NOT NULL AUTO_INCREMENT,
 	createdat	DATETIME(3) NOT NULL,
 	fileid		BIGINT NOT NULL,
-	msgid		INT NOT NULL,
-	
+	msgid		INT,
+	topicid		INT,
+	userid		BIGINT,
+
 	PRIMARY KEY(id),
 	FOREIGN KEY(fileid) REFERENCES fileuploads(id) ON DELETE CASCADE,
-	FOREIGN KEY(msgid) REFERENCES messages(id) ON DELETE CASCADE
+	FOREIGN KEY(msgid) REFERENCES messages(id) ON DELETE CASCADE,
+	FOREIGN KEY(topicid) REFERENCES topics(id) ON DELETE CASCADE,
+	FOREIGN KEY(userid) REFERENCES users(id) ON DELETE CASCADE
 );

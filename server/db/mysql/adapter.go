@@ -521,26 +521,27 @@ func (a *adapter) CreateDb(reset bool) error {
 			status    INT NOT NULL,
 			mimetype  VARCHAR(255) NOT NULL,
 			size      BIGINT NOT NULL,
-			topic     VARCHAR(25),
 			location  VARCHAR(2048) NOT NULL,
 			PRIMARY KEY(id),
-			INDEX fileuploads_userid(userid),
-			INDEX fileuploads_status(status),
-			INDEX fileuploads_topic(topic)
+			INDEX fileuploads_status(status)
 		)`); err != nil {
 		return err
 	}
 
-	// Links between uploaded files and the messages they are attached to.
+	// Links between uploaded files and the topics, users or messages they are attached to.
 	if _, err = tx.Exec(
 		`CREATE TABLE filemsglinks(
 			id			INT NOT NULL AUTO_INCREMENT,
 			createdat	DATETIME(3) NOT NULL,
 			fileid		BIGINT NOT NULL,
-			msgid 		INT NOT NULL,
+			msgid		INT,
+			topic		VARCHAR(25),
+			userid		BIGINT,
 			PRIMARY KEY(id),
 			FOREIGN KEY(fileid) REFERENCES fileuploads(id) ON DELETE CASCADE,
-			FOREIGN KEY(msgid) REFERENCES messages(id) ON DELETE CASCADE
+			FOREIGN KEY(msgid) REFERENCES messages(id) ON DELETE CASCADE,
+			FOREIGN KEY(topic) REFERENCES topics(id) ON DELETE CASCADE,
+			FOREIGN KEY(userid) REFERENCES users(id) ON DELETE CASCADE
 		)`); err != nil {
 		return err
 	}
@@ -700,16 +701,8 @@ func (a *adapter) UpgradeDb() error {
 			return err
 		}
 
-		if _, err := a.db.Exec("ALTER TABLE fileuploads ADD topic VARCHAR(25) AFTER size"); err != nil {
-			return err
-		}
-
 		// Remove NOT NULL constraint, so an avatar upload can be done at registration.
 		if _, err := a.db.Exec("ALTER TABLE fileuploads MODIFY userid BIGINT"); err != nil {
-			return err
-		}
-
-		if _, err := a.db.Exec("ALTER TABLE fileuploads ADD INDEX fileuploads_userid(userid)"); err != nil {
 			return err
 		}
 
@@ -717,7 +710,24 @@ func (a *adapter) UpgradeDb() error {
 			return err
 		}
 
-		if _, err := a.db.Exec("ALTER TABLE fileuploads ADD INDEX fileuploads_topic(topic)"); err != nil {
+		// Remove NOT NULL constraint to enable links to users and topics.
+		if _, err := a.db.Exec("ALTER TABLE fileuploads MODIFY msgid INT"); err != nil {
+			return err
+		}
+
+		if _, err := a.db.Exec("ALTER TABLE filemsglinks ADD topic VARCHAR(25)"); err != nil {
+			return err
+		}
+
+		if _, err := a.db.Exec("ALTER TABLE filemsglinks ADD userid BIGINT"); err != nil {
+			return err
+		}
+
+		if _, err := a.db.Exec("ALTER TABLE filemsglinks ADD FOREIGN KEY(topic) REFERENCES topics(name) ON DELETE CASCADE"); err != nil {
+			return err
+		}
+
+		if _, err := a.db.Exec("ALTER TABLE filemsglinks ADD FOREIGN KEY(userid) REFERENCES users(id) ON DELETE CASCADE"); err != nil {
 			return err
 		}
 
@@ -1085,13 +1095,6 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 			return err
 		}
 
-		// Mark topics' avatar for deletion.
-		if _, err = tx.Exec("UPDATE fileuploads AS fu LEFT JOIN topics AS t ON t.name=fu.topic "+
-			"SET fu.updatedat=?,fu.status=? WHERE t.owner=? AND fu.status=?",
-			now, t.UploadDeleted, decoded_uid, t.UploadCompleted); err != nil {
-			return err
-		}
-
 		// And finally delete the topics.
 		if _, err = tx.Exec("DELETE FROM topics WHERE owner=?", decoded_uid); err != nil {
 			return err
@@ -1108,12 +1111,6 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 		}
 
 		if _, err = tx.Exec("DELETE FROM usertags WHERE userid=?", decoded_uid); err != nil {
-			return err
-		}
-
-		// Mark user's avatar for deletion.
-		if _, err = tx.Exec("UPDATE fileuploads SET updatedat=?,status=? WHERE topic=? AND status=?",
-			now, t.UploadDeleted, uid.UserId(), t.UploadCompleted); err != nil {
 			return err
 		}
 
@@ -3043,7 +3040,7 @@ func (a *adapter) FileStartUpload(fd *t.FileDef) error {
 	}
 	_, err := a.db.ExecContext(ctx,
 		"INSERT INTO fileuploads(id,createdat,updatedat,userid,status,mimetype,size,location) "+
-			"VALUES(?,?,?,?,?,?,?,?,?)",
+			"VALUES(?,?,?,?,?,?,?,?)",
 		store.DecodeUid(fd.Uid()), fd.CreatedAt, fd.UpdatedAt, user,
 		fd.Status, fd.MimeType, fd.Size, fd.Location)
 	return err
@@ -3102,7 +3099,7 @@ func (a *adapter) FileGet(fid string) (*t.FileDef, error) {
 		defer cancel()
 	}
 	var fd t.FileDef
-	err := a.db.GetContext(ctx, &fd, "SELECT id,createdat,updatedat,userid AS user,status,mimetype,size,topic,location "+
+	err := a.db.GetContext(ctx, &fd, "SELECT id,createdat,updatedat,userid AS user,status,mimetype,size,location "+
 		"FROM fileuploads WHERE id=?", store.DecodeUid(id))
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -3136,7 +3133,7 @@ func (a *adapter) FileDeleteUnused(olderThan time.Time, limit int) ([]string, er
 
 	// Garbage collecting entries which as either marked as deleted, or lack message references, or have no user assigned.
 	query := "SELECT fu.id,fu.location FROM fileuploads AS fu LEFT JOIN filemsglinks AS fml ON fml.fileid=fu.id " +
-		"WHERE fml.id IS NULL OR fu.status=? OR fu.userid IS NULL"
+		"WHERE fml.id IS NULL"
 	args := []interface{}{t.UploadDeleted}
 	if !olderThan.IsZero() {
 		query += " AND fu.updatedat<?"
@@ -3186,8 +3183,8 @@ func (a *adapter) FileDeleteUnused(olderThan time.Time, limit int) ([]string, er
 }
 
 // FileLinkAttachments connects given topic or message to the file record IDs from the list.
-func (a *adapter) FileLinkAttachments(topic string, msgId t.Uid, fids []string) error {
-	if len(fids) == 0 || (topic == "" && msgId.IsZero()) {
+func (a *adapter) FileLinkAttachments(topic string, userId, msgId t.Uid, fids []string) error {
+	if len(fids) == 0 || (topic == "" && msgId.IsZero() && userId.IsZero()) {
 		return t.ErrMalformed
 	}
 
@@ -3203,9 +3200,22 @@ func (a *adapter) FileLinkAttachments(topic string, msgId t.Uid, fids []string) 
 
 	var args []interface{}
 	now := t.TimeNow()
+	var linkId interface{}
+	var linkBy string
+	if !msgId.IsZero() {
+		linkBy = "msgid"
+		linkId = int64(msgId)
+	} else if topic != "" {
+		linkBy = "topic"
+		linkId = topic
+	} else {
+		linkBy = "userid"
+		linkId = store.DecodeUid(userId)
+	}
+
 	for _, id := range dids {
-		// createdat,fileid,msgid
-		args = append(args, now, id, int64(msgId))
+		// createdat,fileid,[msgid|topic|userid]
+		args = append(args, now, id, linkId)
 	}
 
 	ctx, cancel := a.getContextForTx()
@@ -3222,31 +3232,19 @@ func (a *adapter) FileLinkAttachments(topic string, msgId t.Uid, fids []string) 
 		}
 	}()
 
-	if !msgId.IsZero() {
-		_, err = tx.Exec("INSERT INTO filemsglinks(createdat,fileid,msgid) VALUES (?,?,?)"+
-			strings.Repeat(",(?,?,?)", len(dids)-1), args...)
+	// Unlink earlier uploads on the same topic or user allowing them to be garbage-collected.
+	if msgId.IsZero() {
+		sql := "DELETE FROM filemsglinks WHERE " + linkBy + "=?"
+		_, err = tx.Exec(sql, linkId)
 		if err != nil {
 			return err
 		}
+	}
 
-		_, err = tx.Exec("UPDATE fileuploads SET updatedat=? WHERE id IN (?"+
-			strings.Repeat(",?", len(dids)-1)+")", append([]interface{}{now}, dids...)...)
-		if err != nil {
-			return err
-		}
-	} else {
-		// Mark earlier uploads on the same topic as deleted allowing them to be garbage-collected.
-		_, err = tx.Exec("UPDATE fileuploads SET updatedat=?,status=? WHERE topic=? AND status=?",
-			now, t.UploadDeleted, topic, t.UploadCompleted)
-		if err != nil {
-			return err
-		}
-
-		_, err = tx.Exec("UPDATE fileuploads SET updatedat=?,topic=? WHERE id IN (?"+
-			strings.Repeat(",?", len(dids)-1)+")", append([]interface{}{now, topic}, dids...)...)
-		if err != nil {
-			return err
-		}
+	sql := "INSERT INTO filemsglinks(createdat,fileid," + linkBy + ") VALUES (?,?,?)"
+	_, err = tx.Exec(sql+strings.Repeat(",(?,?,?)", len(dids)-1), args...)
+	if err != nil {
+		return err
 	}
 
 	return tx.Commit()

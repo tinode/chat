@@ -176,5 +176,5 @@ type Adapter interface {
 	// Returns array of FileDef.Location of deleted filerecords so actual files can be deleted too.
 	FileDeleteUnused(olderThan time.Time, limit int) ([]string, error)
 	// FileLinkAttachments connects given topic or message to the file record IDs from the list.
-	FileLinkAttachments(topic string, msgId t.Uid, fids []string) error
+	FileLinkAttachments(topic string, userId, msgId t.Uid, fids []string) error
 }

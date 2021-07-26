@@ -2486,7 +2486,7 @@ func (a *adapter) FileGet(fid string) (*t.FileDef, error) {
 }
 
 // FileLinkAttachments connects given topic or message to the file record IDs from the list.
-func (a *adapter) FileLinkAttachments(topic string, msgId t.Uid, fids []string) error {
+func (a *adapter) FileLinkAttachments(topic string, userId, msgId t.Uid, fids []string) error {
 	if len(fids) == 0 || (topic == "" && msgId.IsZero()) {
 		return t.ErrMalformed
 	}
