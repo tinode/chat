@@ -1465,11 +1465,11 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 
 	// Fetch subscriptions. Two queries are needed: users table (p2p) and topics table (grp).
 	// Prepare a list of separate subscriptions to users vs topics
-	var sub t.Subscription
 	join := make(map[string]t.Subscription) // Keeping these to make a join with table for .private and .access
 	topq := make([]interface{}, 0, 16)
 	usrq := make([]interface{}, 0, 16)
 	for rows.Next() {
+		var sub t.Subscription
 		if err = rows.StructScan(&sub); err != nil {
 			break
 		}
@@ -1485,8 +1485,10 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 			uid1, uid2, _ := t.ParseP2P(tname)
 			if uid1 == uid {
 				usrq = append(usrq, store.DecodeUid(uid2))
+				sub.SetWith(uid2.UserId())
 			} else {
 				usrq = append(usrq, store.DecodeUid(uid1))
+				sub.SetWith(uid1.UserId())
 			}
 			topq = append(topq, tname)
 		} else {
@@ -1551,6 +1553,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 
 		var top t.Topic
 		for rows.Next() {
+			var sub t.Subscription
 			if err = rows.StructScan(&top); err != nil {
 				break
 			}
@@ -1612,21 +1615,20 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 			return nil, err
 		}
 
-		var usr t.User
 		for rows.Next() {
-			if err = rows.StructScan(&usr); err != nil {
+			var usr2 t.User
+			if err = rows.StructScan(&usr2); err != nil {
 				break
 			}
 
-			uid2 := encodeUidString(usr.Id)
+			uid2 := encodeUidString(usr2.Id)
 			joinOn := uid.P2PName(uid2)
 			if sub, ok := join[joinOn]; ok {
-				sub.UpdatedAt = common.SelectEarliestUpdatedAt(sub.UpdatedAt, usr.UpdatedAt, ims)
-				sub.SetState(usr.State)
-				sub.SetPublic(fromJSON(usr.Public))
-				sub.SetWith(uid2.UserId())
-				sub.SetDefaultAccess(usr.Access.Auth, usr.Access.Anon)
-				sub.SetLastSeenAndUA(usr.LastSeen, usr.UserAgent)
+				sub.UpdatedAt = common.SelectEarliestUpdatedAt(sub.UpdatedAt, usr2.UpdatedAt, ims)
+				sub.SetState(usr2.State)
+				sub.SetPublic(fromJSON(usr2.Public))
+				sub.SetDefaultAccess(usr2.Access.Auth, usr2.Access.Anon)
+				sub.SetLastSeenAndUA(usr2.LastSeen, usr2.UserAgent)
 				join[joinOn] = sub
 			}
 		}

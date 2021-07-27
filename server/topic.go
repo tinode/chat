@@ -2153,7 +2153,7 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 							return errors.New("attempt to search by restricted tags")
 						}
 
-						// FIXME: allow root to find suspended users and topics.
+						// TODO: allow root to find suspended users and topics.
 						subs, err = store.Users.FindSubs(asUid, req, opt)
 						if err != nil {
 							sess.queueOut(decodeStoreErrorExplicitTs(err, id, msg.Original, now, incomingReqTs, nil))
@@ -2299,6 +2299,14 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 					if t.cat == types.TopicCatGrp {
 						pud := t.perUser[uid]
 						mts.Online = pud.online > 0 && presencer
+					} else if t.cat == types.TopicCatP2P {
+						lastSeen := sub.GetLastSeen()
+						if !lastSeen.IsZero() {
+							mts.LastSeen = &MsgLastSeenInfo{
+								When:      &lastSeen,
+								UserAgent: sub.GetUserAgent(),
+							}
+						}
 					}
 				}
 			}
