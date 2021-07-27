@@ -1592,17 +1592,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 			args = append(args, t.StateDeleted)
 		}
 
-		if !ims.IsZero() {
-			// Use cache timestamp if provided: get newer entries only.
-			q += " AND updatedat>?"
-			args = append(args, ims)
-
-			if limit > 0 && limit < len(usrq) {
-				// No point in fetching more than the requested limit.
-				q += " ORDER BY updatedat LIMIT ?"
-				args = append(args, limit)
-			}
-		}
+		// Ignoring ims: we need all users to get LastSeen and UserAgent.
 
 		q = a.db.Rebind(q)
 

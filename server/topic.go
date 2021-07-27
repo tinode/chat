@@ -134,6 +134,8 @@ type perUserData struct {
 
 	// P2P only:
 	public    interface{}
+	lastSeen  time.Time
+	lastUA    string
 	topicName string
 	deleted   bool
 
@@ -1875,9 +1877,24 @@ func (t *Topic) replyGetDesc(sess *Session, asUid types.Uid, asChan bool, opts *
 			desc.State = types.StateOK.String()
 		}
 
-		if t.cat == types.TopicCatGrp && (pud.modeGiven & pud.modeWant).IsPresencer() {
-			desc.Online = t.isOnline()
+		if (pud.modeGiven & pud.modeWant).IsPresencer() {
+			if t.cat == types.TopicCatGrp {
+				desc.Online = t.isOnline()
+			} else if t.cat == types.TopicCatP2P {
+				// This is the timestamp when the other user logged off last time.
+				// It does not change while the topic is loaded into memory and that's OK most of the time
+				// because to stay in memory at least one of the users must be connected to topic.
+				// FIXME(gene): it breaks when user A stays active in one session and connects-disconnects
+				// from another session. The second session will not see correct LastSeen time and UserAgent.
+				if !pud.lastSeen.IsZero() {
+					desc.LastSeen = &MsgLastSeenInfo{
+						When:      &pud.lastSeen,
+						UserAgent: pud.lastUA,
+					}
+				}
+			}
 		}
+
 		if ifUpdated {
 			desc.Private = pud.private
 		}
@@ -2299,14 +2316,6 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 					if t.cat == types.TopicCatGrp {
 						pud := t.perUser[uid]
 						mts.Online = pud.online > 0 && presencer
-					} else if t.cat == types.TopicCatP2P {
-						lastSeen := sub.GetLastSeen()
-						if !lastSeen.IsZero() {
-							mts.LastSeen = &MsgLastSeenInfo{
-								When:      &lastSeen,
-								UserAgent: sub.GetUserAgent(),
-							}
-						}
 					}
 				}
 			}
