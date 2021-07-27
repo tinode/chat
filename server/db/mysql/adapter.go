@@ -3134,7 +3134,7 @@ func (a *adapter) FileDeleteUnused(olderThan time.Time, limit int) ([]string, er
 	// Garbage collecting entries which as either marked as deleted, or lack message references, or have no user assigned.
 	query := "SELECT fu.id,fu.location FROM fileuploads AS fu LEFT JOIN filemsglinks AS fml ON fml.fileid=fu.id " +
 		"WHERE fml.id IS NULL"
-	args := []interface{}{t.UploadDeleted}
+	var args []interface{}
 	if !olderThan.IsZero() {
 		query += " AND fu.updatedat<?"
 		args = append(args, olderThan)
