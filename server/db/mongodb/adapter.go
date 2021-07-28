@@ -547,6 +547,7 @@ func (a *adapter) UserGet(id t.Uid) (*t.User, error) {
 		}
 	}
 	user.Public = unmarshalBsonD(user.Public)
+	user.Trusted = unmarshalBsonD(user.Trusted)
 	return &user, nil
 }
 
@@ -571,6 +572,7 @@ func (a *adapter) UserGetAll(ids ...t.Uid) ([]t.User, error) {
 			return nil, err
 		}
 		user.Public = unmarshalBsonD(user.Public)
+		user.Trusted = unmarshalBsonD(user.Trusted)
 		users = append(users, user)
 	}
 	return users, nil
@@ -1268,11 +1270,12 @@ func (a *adapter) TopicGet(topic string) (*t.Topic, error) {
 		return nil, err
 	}
 	tpc.Public = unmarshalBsonD(tpc.Public)
+	tpc.Trusted = unmarshalBsonD(tpc.Trusted)
 	return tpc, nil
 }
 
 // TopicsForUser loads user's contact list: p2p and grp topics, except for 'me' & 'fnd' subscriptions.
-// Reads and denormalizes Public value.
+// Reads and denormalizes Public & Trusted values.
 func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) ([]t.Subscription, error) {
 	// Fetch user's subscriptions
 	filter := b.M{"user": uid.String()}
@@ -1394,6 +1397,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 			sub.SetSeqId(top.SeqId)
 			if t.GetTopicCat(sub.Topic) == t.TopicCatGrp {
 				sub.SetPublic(unmarshalBsonD(top.Public))
+				sub.SetTrusted(unmarshalBsonD(top.Trusted))
 			}
 			// Put back the updated value of a p2p subsription, will process further below
 			join[top.Id] = sub
@@ -1419,21 +1423,20 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 			return nil, err
 		}
 
-		var usr t.User
+		var usr2 t.User
 		for cur.Next(a.ctx) {
-			if err = cur.Decode(&usr); err != nil {
+			if err = cur.Decode(&usr2); err != nil {
 				break
 			}
 
-			uid2 := t.ParseUid(usr.Id)
-			joinOn := uid.P2PName(uid2)
+			joinOn := uid.P2PName(t.ParseUid(usr2.Id))
 			if sub, ok := join[joinOn]; ok {
-				sub.UpdatedAt = common.SelectEarliestUpdatedAt(sub.UpdatedAt, usr.UpdatedAt, ims)
-				sub.SetState(usr.State)
-				sub.SetPublic(unmarshalBsonD(usr.Public))
-				sub.SetWith(uid2.UserId())
-				sub.SetDefaultAccess(usr.Access.Auth, usr.Access.Anon)
-				sub.SetLastSeenAndUA(usr.LastSeen, usr.UserAgent)
+				sub.UpdatedAt = common.SelectEarliestUpdatedAt(sub.UpdatedAt, usr2.UpdatedAt, ims)
+				sub.SetState(usr2.State)
+				sub.SetPublic(unmarshalBsonD(usr2.Public))
+				sub.SetTrusted(unmarshalBsonD(usr2.Trusted))
+				sub.SetDefaultAccess(usr2.Access.Auth, usr2.Access.Anon)
+				sub.SetLastSeenAndUA(usr2.LastSeen, usr2.UserAgent)
 				join[joinOn] = sub
 			}
 		}
@@ -1451,7 +1454,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 	return common.SelectEarliestUpdatedSubs(subs, opts, a.maxResults), nil
 }
 
-// UsersForTopic loads users' subscriptions for a given topic. Public is loaded.
+// UsersForTopic loads users' subscriptions for a given topic. Public & Trusted are loaded.
 func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt) ([]t.Subscription, error) {
 	tcat := t.GetTopicCat(topic)
 
@@ -1469,7 +1472,7 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 	var oneUser t.Uid
 	if opts != nil {
 		// Ignore IfModifiedSince - we must return all entries
-		// Those unmodified will be stripped of Public & Private.
+		// Those unmodified will be stripped of Public, Trusted & Private.
 
 		if !opts.User.IsZero() {
 			if tcat != t.TopicCatP2P {
@@ -1515,15 +1518,16 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 			return nil, err
 		}
 
-		var usr t.User
+		var usr2 t.User
 		for cur.Next(a.ctx) {
-			if err = cur.Decode(&usr); err != nil {
+			if err = cur.Decode(&usr2); err != nil {
 				break
 			}
-			if sub, ok := join[usr.Id]; ok {
-				sub.ObjHeader.MergeTimes(&usr.ObjHeader)
+			if sub, ok := join[usr2.Id]; ok {
+				sub.ObjHeader.MergeTimes(&usr2.ObjHeader)
 				sub.Private = unmarshalBsonD(sub.Private)
-				sub.SetPublic(unmarshalBsonD(usr.Public))
+				sub.SetPublic(unmarshalBsonD(usr2.Public))
+				sub.SetTrusted(unmarshalBsonD(usr2.Trusted))
 				subs = append(subs, sub)
 			}
 		}
@@ -1538,10 +1542,15 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 		if len(subs) == 1 {
 			// User is deleted. Nothing we can do.
 			subs[0].SetPublic(nil)
+			subs[0].SetTrusted(nil)
 		} else {
-			pub := subs[0].GetPublic()
+			tmp := subs[0].GetPublic()
 			subs[0].SetPublic(subs[1].GetPublic())
-			subs[1].SetPublic(pub)
+			subs[1].SetPublic(tmp)
+
+			tmp = subs[0].GetTrusted()
+			subs[0].SetTrusted(subs[1].GetTrusted())
+			subs[1].SetTrusted(tmp)
 		}
 
 		// Remove deleted and unneeded subscriptions
@@ -1702,7 +1711,7 @@ func (a *adapter) SubscriptionGet(topic string, user t.Uid) (*t.Subscription, er
 	return sub, nil
 }
 
-// SubsForUser loads all subscriptions of a given user. It does NOT load Public or Private values,
+// SubsForUser loads all subscriptions of a given user. It does NOT load Public, Trusted or Private values,
 // does not load deleted subs.
 func (a *adapter) SubsForUser(user t.Uid) ([]t.Subscription, error) {
 	filter := b.M{"user": user.String(), "deletedat": b.M{"$exists": false}}
@@ -1726,7 +1735,7 @@ func (a *adapter) SubsForUser(user t.Uid) ([]t.Subscription, error) {
 	return subs, cur.Err()
 }
 
-// SubsForTopic gets a list of subscriptions to a given topic. Does NOT load Public value.
+// SubsForTopic gets a list of subscriptions to a given topic. Does NOT load Public & Trusted values.
 func (a *adapter) SubsForTopic(topic string, keepDeleted bool, opts *t.QueryOpt) ([]t.Subscription, error) {
 	filter := b.M{"topic": topic}
 	if !keepDeleted {
@@ -1736,7 +1745,7 @@ func (a *adapter) SubsForTopic(topic string, keepDeleted bool, opts *t.QueryOpt)
 	limit := a.maxResults
 	if opts != nil {
 		// Ignore IfModifiedSince - we must return all entries
-		// Those unmodified will be stripped of Public & Private.
+		// Those unmodified will be stripped of Public, Trusted & Private.
 
 		if !opts.User.IsZero() {
 			filter["user"] = opts.User.String()
@@ -1852,7 +1861,7 @@ func (a *adapter) getFindPipeline(req [][]string, opt []string) (map[string]stru
 			"state": b.M{"$ne": t.StateDeleted},
 		}},
 
-		b.M{"$project": b.M{"_id": 1, "access": 1, "createdat": 1, "updatedat": 1, "public": 1, "tags": 1}},
+		b.M{"$project": b.M{"_id": 1, "access": 1, "createdat": 1, "updatedat": 1, "public": 1, "trusted": 1, "tags": 1}},
 
 		b.M{"$unwind": "$tags"},
 
@@ -1864,6 +1873,7 @@ func (a *adapter) getFindPipeline(req [][]string, opt []string) (map[string]stru
 			"createdat":        b.M{"$first": "$createdat"},
 			"updatedat":        b.M{"$first": "$updatedat"},
 			"public":           b.M{"$first": "$public"},
+			"trusted":          b.M{"$first": "$trusted"},
 			"tags":             b.M{"$addToSet": "$tags"},
 			"matchedTagsCount": b.M{"$sum": 1},
 		}},
@@ -1909,6 +1919,7 @@ func (a *adapter) FindUsers(uid t.Uid, req [][]string, opt []string) ([]t.Subscr
 		sub.UpdatedAt = user.UpdatedAt
 		sub.User = user.Id
 		sub.SetPublic(unmarshalBsonD(user.Public))
+		sub.SetTrusted(unmarshalBsonD(user.Trusted))
 		sub.SetDefaultAccess(user.Access.Auth, user.Access.Anon)
 		tags := make([]string, 0, 1)
 		for _, tag := range user.Tags {
@@ -1948,6 +1959,7 @@ func (a *adapter) FindTopics(req [][]string, opt []string) ([]t.Subscription, er
 			sub.Topic = topic.Id
 		}
 		sub.SetPublic(unmarshalBsonD(topic.Public))
+		sub.SetTrusted(unmarshalBsonD(topic.Trusted))
 		sub.SetDefaultAccess(topic.Access.Auth, topic.Access.Anon)
 		tags := make([]string, 0, 1)
 		for _, tag := range topic.Tags {
@@ -2274,18 +2286,32 @@ func (a *adapter) FileStartUpload(fd *t.FileDef) error {
 }
 
 // FileFinishUpload marks file upload as completed, successfully or otherwise.
-func (a *adapter) FileFinishUpload(fid string, status int, size int64) (*t.FileDef, error) {
-	if _, err := a.db.Collection("fileuploads").UpdateOne(a.ctx,
-		b.M{"_id": fid},
-		b.M{"$set": b.M{
-			"updatedat": t.TimeNow(),
-			"status":    status,
-			"size":      size}}); err != nil {
+func (a *adapter) FileFinishUpload(fd *t.FileDef, success bool, size int64) (*t.FileDef, error) {
+	now := t.TimeNow()
+	if success {
+		if _, err := a.db.Collection("fileuploads").UpdateOne(a.ctx,
+			b.M{"_id": fd.Id},
+			b.M{"$set": b.M{
+				"updatedat": now,
+				"status":    t.UploadCompleted,
+				"size":      size,
+			}}); err != nil {
 
-		return nil, err
+			return nil, err
+		}
+		fd.Status = t.UploadCompleted
+		fd.Size = size
+	} else {
+		if _, err := a.db.Collection("fileuploads").DeleteOne(a.ctx, b.M{"_id": fd.Id}); err != nil {
+			return nil, err
+		}
+		fd.Status = t.UploadFailed
+		fd.Size = 0
 	}
 
-	return a.FileGet(fid)
+	fd.UpdatedAt = now
+
+	return fd, nil
 }
 
 // FileGet fetches a record of a specific file
@@ -2358,7 +2384,7 @@ func (a *adapter) fileDecrementUseCounter(ctx context.Context, msgFilter b.M) er
 }
 
 // FileLinkAttachments connects given topic or message to the file record IDs from the list.
-func (a *adapter) FileLinkAttachments(topic string, msgId t.Uid, fids []string) error {
+func (a *adapter) FileLinkAttachments(topic string, userId, msgId t.Uid, fids []string) error {
 	now := t.TimeNow()
 	_, err := a.db.Collection("messages").UpdateOne(a.ctx,
 		b.M{"_id": msgId.String()},

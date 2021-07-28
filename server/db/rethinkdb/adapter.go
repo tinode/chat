@@ -1257,18 +1257,16 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 			return nil, err
 		}
 
-		var usr t.User
-		for cursor.Next(&usr) {
-			uid2 := t.ParseUid(usr.Id)
-			joinOn := uid.P2PName(uid2)
+		var usr2 t.User
+		for cursor.Next(&usr2) {
+			joinOn := uid.P2PName(t.ParseUid(usr2.Id))
 			if sub, ok := join[joinOn]; ok {
-				sub.UpdatedAt = common.SelectEarliestUpdatedAt(sub.UpdatedAt, usr.UpdatedAt, ims)
-				sub.SetState(usr.State)
-				sub.SetPublic(usr.Public)
-				sub.SetTrusted(usr.Trusted)
-				sub.SetWith(uid2.UserId())
-				sub.SetDefaultAccess(usr.Access.Auth, usr.Access.Anon)
-				sub.SetLastSeenAndUA(usr.LastSeen, usr.UserAgent)
+				sub.UpdatedAt = common.SelectEarliestUpdatedAt(sub.UpdatedAt, usr2.UpdatedAt, ims)
+				sub.SetState(usr2.State)
+				sub.SetPublic(usr2.Public)
+				sub.SetTrusted(usr2.Trusted)
+				sub.SetDefaultAccess(usr2.Access.Auth, usr2.Access.Anon)
+				sub.SetLastSeenAndUA(usr2.LastSeen, usr2.UserAgent)
 				join[joinOn] = sub
 			}
 		}

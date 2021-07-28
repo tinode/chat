@@ -1668,8 +1668,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 				break
 			}
 
-			uid2 := encodeUidString(usr2.Id)
-			joinOn := uid.P2PName(uid2)
+			joinOn := uid.P2PName(encodeUidString(usr2.Id))
 			if sub, ok := join[joinOn]; ok {
 				sub.UpdatedAt = common.SelectEarliestUpdatedAt(sub.UpdatedAt, usr2.UpdatedAt, ims)
 				sub.SetState(usr2.State)
