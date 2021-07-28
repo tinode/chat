@@ -415,6 +415,9 @@ type MsgTopicDesc struct {
 	// If the group topic is online.
 	Online bool `json:"online,omitempty"`
 
+	// P2P other user's last online timestamp & user agent
+	LastSeen *MsgLastSeenInfo `json:"seen,omitempty"`
+
 	DefaultAcs *MsgDefaultAcsMode `json:"defacs,omitempty"`
 	// Actual access mode
 	Acs *MsgAccessMode `json:"acs,omitempty"`
@@ -506,7 +509,7 @@ type MsgTopicSub struct {
 	// Id of the latest Delete operation
 	DelId int `json:"clear,omitempty"`
 
-	// P2P topics only:
+	// P2P topics in 'me' {get subs} response:
 
 	// Other user's last online timestamp & user agent
 	LastSeen *MsgLastSeenInfo `json:"seen,omitempty"`

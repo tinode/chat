@@ -137,8 +137,12 @@ type perUserData struct {
 	modeGiven types.AccessMode
 
 	// P2P only:
-	public    interface{}
-	trusted   interface{}
+	public  interface{}
+	trusted interface{}
+
+	lastSeen time.Time
+	lastUA   string
+
 	topicName string
 	deleted   bool
 
@@ -1932,9 +1936,24 @@ func (t *Topic) replyGetDesc(sess *Session, asUid types.Uid, asChan bool, opts *
 			desc.State = types.StateOK.String()
 		}
 
-		if t.cat == types.TopicCatGrp && (pud.modeGiven & pud.modeWant).IsPresencer() {
-			desc.Online = t.isOnline()
+		if (pud.modeGiven & pud.modeWant).IsPresencer() {
+			if t.cat == types.TopicCatGrp {
+				desc.Online = t.isOnline()
+			} else if t.cat == types.TopicCatP2P {
+				// This is the timestamp when the other user logged off last time.
+				// It does not change while the topic is loaded into memory and that's OK most of the time
+				// because to stay in memory at least one of the users must be connected to topic.
+				// FIXME(gene): it breaks when user A stays active in one session and connects-disconnects
+				// from another session. The second session will not see correct LastSeen time and UserAgent.
+				if !pud.lastSeen.IsZero() {
+					desc.LastSeen = &MsgLastSeenInfo{
+						When:      &pud.lastSeen,
+						UserAgent: pud.lastUA,
+					}
+				}
+			}
 		}
+
 		if ifUpdated {
 			desc.Private = pud.private
 		}
@@ -2231,7 +2250,7 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 							return errors.New("attempt to search by restricted tags")
 						}
 
-						// FIXME: allow root to find suspended users and topics.
+						// TODO: allow root to find suspended users and topics.
 						subs, err = store.Users.FindSubs(asUid, req, opt)
 						if err != nil {
 							sess.queueOut(decodeStoreErrorExplicitTs(err, id, msg.Original, now, incomingReqTs, nil))

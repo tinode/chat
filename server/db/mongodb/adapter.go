@@ -1335,8 +1335,10 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 			uid1, uid2, _ := t.ParseP2P(sub.Topic)
 			if uid1 == uid {
 				usrq = append(usrq, uid2.String())
+				sub.SetWith(uid2.UserId())
 			} else {
 				usrq = append(usrq, uid1.String())
+				sub.SetWith(uid1.UserId())
 			}
 			topq = append(topq, tname)
 		} else {
@@ -1410,16 +1412,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 			filter["state"] = b.M{"$ne": t.StateDeleted}
 		}
 
-		if !ims.IsZero() {
-			// Use cache timestamp if provided: get newer entries only.
-			filter["updatedat"] = b.M{"$gt": ims}
-
-			findOpts = nil
-			if limit > 0 && limit < len(topq) {
-				// No point in fetching more than the requested limit.
-				findOpts = mdbopts.Find().SetLimit(int64(limit))
-			}
-		}
+		// Ignoring ims: we need all users to get LastSeen and UserAgent.
 
 		cur, err = a.db.Collection("users").Find(a.ctx, filter, findOpts)
 		if err != nil {
