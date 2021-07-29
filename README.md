@@ -40,15 +40,15 @@ A [public Tinode service](https://web.tinode.co/) is now available. You can use 
 
 ### Web
 
-TinodeWeb, a single page web app, is available at https://web.tinode.co/ ([source](https://github.com/tinode/webapp/)). See screenshots below. Currently available in English, Simplified Chinese, Korean, Russian, Spanish. More translations are welcome.
+TinodeWeb, a single page web app, is available at https://web.tinode.co/ ([source](https://github.com/tinode/webapp/)). See screenshots below. Currently available in English, Simplified Chinese, Traditional Chinese, Korean, Russian, Spanish. More translations are welcome.
 
 ### Android
 
-[Tinode for Android](https://play.google.com/store/apps/details?id=co.tinode.tindroidx) a.k.a Tindroid is stable and functional ([source](https://github.com/tinode/tindroid)). See the screenshots below. A [debug APK](https://github.com/tinode/tindroid/releases/latest) is also provided for convenience. Currently available in English, Simplified Chinese, Korean, Russian, Spanish. More translations are welcome.
+[Tinode for Android](https://play.google.com/store/apps/details?id=co.tinode.tindroidx) a.k.a Tindroid is stable and functional ([source](https://github.com/tinode/tindroid)). See the screenshots below. A [debug APK](https://github.com/tinode/tindroid/releases/latest) is also provided for convenience. Currently available in English, Simplified Chinese, Traditional Chinese, Korean, Russian, Spanish. More translations are welcome.
 
 ### iOS
 
-[Tinode for iOS](https://apps.apple.com/app/reference-to-tinodios-here/id123) a.k.a. Tinodios is stable and functional ([source](https://github.com/tinode/ios)). See the screenshots below. Currently available in English, Simplified Chinese, Spanish. More translations are welcome.
+[Tinode for iOS](https://apps.apple.com/app/reference-to-tinodios-here/id123) a.k.a. Tinodios is stable and functional ([source](https://github.com/tinode/ios)). See the screenshots below. Currently available in English, Simplified Chinese, Traditional Chinese, Spanish. More translations are welcome.
 
 
 ## Demo/Sandbox
@@ -116,7 +116,7 @@ When you register a new account you are asked for an email address to send valid
 
 ### Translations
 
-All client software has support for internationalization. Translations are provided on all platforms for English, Simplified Chinese, Spanish. On all but iOS: Russian, Korean, German, webapp also has Romanian. More translations are welcome. Particularly interested in Arabic, Vietnamese, Persian, Indonesian, Portuguese, Hindi, Bengali.
+All client software has support for internationalization. Translations are provided on all platforms for English, Simplified Chinese, Spanish, Traditional Chinese. On all but iOS: Russian, Korean, German, webapp also has Romanian. More translations are welcome. Particularly interested in Arabic, Vietnamese, Persian, Indonesian, Portuguese, Hindi, Bengali.
 
 ## Third-Party Licenses
 

@@ -780,7 +780,7 @@ func pbTopicDescSerialize(desc *MsgTopicDesc) *pbx.TopicDesc {
 	if desc == nil {
 		return nil
 	}
-	return &pbx.TopicDesc{
+	out := &pbx.TopicDesc{
 		CreatedAt: timeToInt64(desc.CreatedAt),
 		UpdatedAt: timeToInt64(desc.UpdatedAt),
 		TouchedAt: timeToInt64(desc.TouchedAt),
@@ -795,13 +795,18 @@ func pbTopicDescSerialize(desc *MsgTopicDesc) *pbx.TopicDesc {
 		Trusted:   interfaceToBytes(desc.Trusted),
 		Private:   interfaceToBytes(desc.Private),
 	}
+	if desc.LastSeen != nil {
+		out.LastSeenTime = timeToInt64(desc.LastSeen.When)
+		out.LastSeenUserAgent = desc.LastSeen.UserAgent
+	}
+	return out
 }
 
 func pbTopicDescDeserialize(desc *pbx.TopicDesc) *MsgTopicDesc {
 	if desc == nil {
 		return nil
 	}
-	return &MsgTopicDesc{
+	out := &MsgTopicDesc{
 		CreatedAt:  int64ToTime(desc.GetCreatedAt()),
 		UpdatedAt:  int64ToTime(desc.GetUpdatedAt()),
 		TouchedAt:  int64ToTime(desc.GetTouchedAt()),
@@ -816,6 +821,14 @@ func pbTopicDescDeserialize(desc *pbx.TopicDesc) *MsgTopicDesc {
 		Trusted:    bytesToInterface(desc.Trusted),
 		Private:    bytesToInterface(desc.Private),
 	}
+
+	if desc.GetLastSeenTime() > 0 {
+		out.LastSeen = &MsgLastSeenInfo{
+			When:      int64ToTime(desc.GetLastSeenTime()),
+			UserAgent: desc.GetLastSeenUserAgent(),
+		}
+	}
+	return out
 }
 
 func pbTopicSerialize(topic *Topic) *pbx.TopicDesc {

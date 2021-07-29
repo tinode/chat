@@ -315,6 +315,10 @@ message TopicDesc {
 	string state = 12;
 	int64 state_at = 13;
 	bytes trusted = 14;
+
+	// P2P only: other user's last online timestamp & user agent
+	int64 last_seen_time = 15;
+	string last_seen_user_agent = 16;
 }
 
 // MsgTopicSub: topic subscription details, sent in Meta message
