@@ -27,8 +27,8 @@ type Handler interface {
 	// It returns headers as a map, HTTP status code to stop processing or 0 to continue, error.
 	Headers(req *http.Request, serve bool) (http.Header, int, error)
 
-	// Upload processes request for file upload.
-	Upload(fdef *types.FileDef, file io.ReadSeeker) (string, error)
+	// Upload processes request for file upload. Returns file URL, file size, error.
+	Upload(fdef *types.FileDef, file io.ReadSeeker) (string, int64, error)
 
 	// Download processes request for file download.
 	Download(url string) (*types.FileDef, ReadSeekCloser, error)

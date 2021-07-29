@@ -153,8 +153,6 @@ type Adapter interface {
 	MessageDeleteList(topic string, toDel *t.DelMessage) error
 	// MessageGetDeleted returns a list of deleted message Ids.
 	MessageGetDeleted(topic string, forUser t.Uid, opts *t.QueryOpt) ([]t.DelMessage, error)
-	// MessageAttachments connects given message to a list of file record IDs.
-	MessageAttachments(msgId t.Uid, fids []string) error
 
 	// Devices (for push notifications)
 
@@ -167,14 +165,16 @@ type Adapter interface {
 
 	// File upload records. The files are stored outside of the database.
 
-	// FileStartUpload initializes a file upload
+	// FileStartUpload initializes a file upload.
 	FileStartUpload(fd *t.FileDef) error
 	// FileFinishUpload marks file upload as completed, successfully or otherwise.
-	FileFinishUpload(fid string, status int, size int64) (*t.FileDef, error)
+	FileFinishUpload(fd *t.FileDef, success bool, size int64) (*t.FileDef, error)
 	// FileGet fetches a record of a specific file
 	FileGet(fid string) (*t.FileDef, error)
 	// FileDeleteUnused deletes records where UseCount is zero. If olderThan is non-zero, deletes
 	// unused records with UpdatedAt before olderThan.
 	// Returns array of FileDef.Location of deleted filerecords so actual files can be deleted too.
 	FileDeleteUnused(olderThan time.Time, limit int) ([]string, error)
+	// FileLinkAttachments connects given topic or message to the file record IDs from the list.
+	FileLinkAttachments(topic string, userId, msgId t.Uid, fids []string) error
 }

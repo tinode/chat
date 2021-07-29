@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"math/rand"
 	"net/http"
 	"strings"
 	"time"
@@ -211,41 +212,65 @@ func largeFileReceive(wrt http.ResponseWriter, req *http.Request) {
 		}
 		return
 	}
-	fdef := types.FileDef{}
-	fdef.Id = store.Store.GetUidString()
-	fdef.InitTimes()
-	fdef.User = uid.String()
 
 	buff := make([]byte, 512)
 	if _, err = file.Read(buff); err != nil {
 		writeHttpResponse(ErrUnknown(msgID, "", now), err)
 		return
 	}
+	fdef := &types.FileDef{
+		ObjHeader: types.ObjHeader{
+			Id: store.Store.GetUidString(),
+		},
+		User:     uid.String(),
+		MimeType: http.DetectContentType(buff),
+	}
+	fdef.InitTimes()
 
-	fdef.MimeType = http.DetectContentType(buff)
 	if _, err = file.Seek(0, io.SeekStart); err != nil {
 		writeHttpResponse(ErrUnknown(msgID, "", now), err)
 		return
 	}
 
-	url, err := mh.Upload(&fdef, file)
+	url, size, err := mh.Upload(fdef, file)
 	if err != nil {
+		logs.Info.Println("Upload failed", file, "key", fdef.Location, err)
+		store.Files.FinishUpload(fdef, false, 0)
 		writeHttpResponse(decodeStoreError(err, msgID, "", now, nil), err)
 		return
 	}
 
-	writeHttpResponse(NoErrParams(msgID, "", now, map[string]string{"url": url}), nil)
+	fdef, err = store.Files.FinishUpload(fdef, true, size)
+	if err != nil {
+		logs.Info.Println("Upload failed", file, "key", fdef.Location, err)
+		// Best effort cleanup.
+		mh.Delete([]string{fdef.Location})
+		writeHttpResponse(decodeStoreError(err, msgID, "", now, nil), err)
+		return
+	}
+
+	params := map[string]string{"url": url}
+	if globals.mediaGcPeriod > 0 {
+		// How long this file is guaranteed to exist without being attached to a message or a topic.
+		params["expires"] = now.Add(globals.mediaGcPeriod).Format(types.TimeFormatRFC3339)
+	}
+	writeHttpResponse(NoErrParams(msgID, "", now, params), nil)
 }
 
-func largeFileRunGarbageCollection(period time.Duration, block int) chan<- bool {
-	// Unbuffered stop channel. Whoever stops it must wait for the process to finish.
+// largeFileRunGarbageCollection runs every 'period' and deletes up to 'blockSize' unused files.
+// Returns channel which can be used to stop the process.
+func largeFileRunGarbageCollection(period time.Duration, blockSize int) chan<- bool {
+	// Unbuffered stop channel. Whomever stops the gc must wait for the process to finish.
 	stop := make(chan bool)
 	go func() {
-		gcTimer := time.Tick(period)
+		// Add some randomness to the tick period to desynchronize runs on cluster nodes:
+		// 0.75 * period + rand(0, 0.5) * period.
+		period = (period >> 1) + (period >> 2) + time.Duration(rand.Intn(int(period>>1)))
+		gcTicker := time.Tick(period)
 		for {
 			select {
-			case <-gcTimer:
-				if err := store.Files.DeleteUnused(time.Now().Add(-time.Hour), block); err != nil {
+			case <-gcTicker:
+				if err := store.Files.DeleteUnused(time.Now().Add(-time.Hour), blockSize); err != nil {
 					logs.Warn.Println("media gc:", err)
 				}
 			case <-stop:

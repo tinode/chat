@@ -312,21 +312,20 @@ The table stores records of uploaded files. The files themselves are stored outs
 * `Status` upload status: 0 pending, 1 completed, -1 failed.
 
 Indexes:
- * `Id` file name, primary key
- * `User` index
+ * `Id` primary key
  * `UseCount` index
 
 Sample:
 ```js
 {
   "CreatedAt": Sun Jun 10 2018 16:38:45 GMT+00:00 ,
-  "Id":  "sFmjlQ_kA6A" ,
-  "Location":  "uploads/sFmjlQ_kA6A" ,
-  "MimeType":  "image/jpeg" ,
+  "Id": "sFmjlQ_kA6A" ,
+  "Location": "uploads/sFmjlQ_kA6A" ,
+  "MimeType": "image/jpeg" ,
   "Size": 54961090 ,
   "UseCount": 3,
-  "Status": 1 ,
+  "Status": 1,
   "UpdatedAt": Sun Jun 10 2018 16:38:45 GMT+00:00 ,
-  "User":  "7j-RR1V7O3Y"
+  "User": "7j-RR1V7O3Y"
 }
 ```

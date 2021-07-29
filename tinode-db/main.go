@@ -23,7 +23,7 @@ type configType struct {
 	StoreConfig json.RawMessage `json:"store_config"`
 }
 
-type vCardy struct {
+type theCard struct {
 	Fn    string `json:"fn"`
 	Photo string `json:"photo"`
 	Type  string `json:"type"`
@@ -31,6 +31,15 @@ type vCardy struct {
 
 type tPrivate struct {
 	Comment string `json:"comment"`
+}
+
+type tTrusted struct {
+	Verified bool `json:"verified,omitempty"`
+	Staff    bool `json:"staff,omitempty"`
+}
+
+func (t tTrusted) IsZero() bool {
+	return !t.Verified && !t.Staff
 }
 
 // DefAccess is default access mode.
@@ -68,7 +77,8 @@ type User struct {
 	Username    string      `json:"username"`
 	Password    string      `json:"passhash"`
 	Private     tPrivate    `json:"private"`
-	Public      vCardy      `json:"public"`
+	Public      theCard     `json:"public"`
+	Trusted     tTrusted    `json:"trusted"`
 	State       string      `json:"state"`
 	Status      interface{} `json:"status"`
 	AddressBook []string    `json:"addressBook"`
@@ -89,7 +99,8 @@ type GroupTopic struct {
 	Name         string    `json:"name"`
 	Owner        string    `json:"owner"`
 	Channel      bool      `json:"channel"`
-	Public       vCardy    `json:"public"`
+	Public       theCard   `json:"public"`
+	Trusted      tTrusted  `json:"trusted"`
 	Access       DefAccess `json:"access"`
 	Tags         []string  `json:"tags"`
 	OwnerPrivate tPrivate  `json:"ownerPrivate"`

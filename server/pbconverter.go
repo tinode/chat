@@ -347,8 +347,13 @@ func pbCliSerialize(msg *ClientComMessage) *pbx.ClientMsg {
 		return nil
 	}
 
-	pkt.OnBehalfOf = msg.AsUser
-	pkt.AuthLevel = pbx.AuthLevel(msg.AuthLvl)
+	if msg.Extra != nil {
+		pkt.Extra = &pbx.ClientExtra{
+			Attachments: msg.Extra.Attachments,
+			OnBehalfOf:  msg.Extra.AsUser,
+			AuthLevel:   pbx.AuthLevel(msg.AuthLvl),
+		}
+	}
 
 	return &pkt
 }
@@ -454,8 +459,13 @@ func pbCliDeserialize(pkt *pbx.ClientMsg) *ClientComMessage {
 		}
 	}
 
-	msg.AsUser = pkt.GetOnBehalfOf()
-	msg.AuthLvl = int(pkt.GetAuthLevel())
+	if extra := pkt.GetExtra(); extra != nil {
+		msg.Extra = &MsgClientExtra{
+			Attachments: extra.GetAttachments(),
+			AsUser:      extra.GetOnBehalfOf(),
+			AuthLevel:   extra.GetAuthLevel().String(),
+		}
+	}
 
 	return &msg
 }
@@ -584,10 +594,11 @@ func pbSetDescSerialize(in *MsgSetDesc) *pbx.SetDesc {
 		return nil
 	}
 
-	if in.DefaultAcs != nil || in.Public != nil || in.Private != nil {
+	if in.DefaultAcs != nil || in.Public != nil || in.Trusted != nil || in.Private != nil {
 		return &pbx.SetDesc{
 			DefaultAcs: pbDefaultAcsSerialize(in.DefaultAcs),
 			Public:     interfaceToBytes(in.Public),
+			Trusted:    interfaceToBytes(in.Trusted),
 			Private:    interfaceToBytes(in.Private),
 		}
 	}
@@ -602,12 +613,14 @@ func pbSetDescDeserialize(in *pbx.SetDesc) *MsgSetDesc {
 
 	defacs := pbDefaultAcsDeserialize(in.GetDefaultAcs())
 	public := in.GetPublic()
+	trusted := in.GetTrusted()
 	private := in.GetPrivate()
 
-	if defacs != nil || public != nil || private != nil {
+	if defacs != nil || public != nil || private != nil || trusted != nil {
 		return &MsgSetDesc{
 			DefaultAcs: defacs,
 			Public:     bytesToInterface(public),
+			Trusted:    bytesToInterface(trusted),
 			Private:    bytesToInterface(private),
 		}
 	}
@@ -779,6 +792,7 @@ func pbTopicDescSerialize(desc *MsgTopicDesc) *pbx.TopicDesc {
 		RecvId:    int32(desc.RecvSeqId),
 		DelId:     int32(desc.DelId),
 		Public:    interfaceToBytes(desc.Public),
+		Trusted:   interfaceToBytes(desc.Trusted),
 		Private:   interfaceToBytes(desc.Private),
 	}
 }
@@ -799,6 +813,7 @@ func pbTopicDescDeserialize(desc *pbx.TopicDesc) *MsgTopicDesc {
 		RecvSeqId:  int(desc.RecvId),
 		DelId:      int(desc.DelId),
 		Public:     bytesToInterface(desc.Public),
+		Trusted:    bytesToInterface(desc.Trusted),
 		Private:    bytesToInterface(desc.Private),
 	}
 }
@@ -814,9 +829,10 @@ func pbTopicSerialize(topic *Topic) *pbx.TopicDesc {
 			Auth: topic.accessAuth.String(),
 			Anon: topic.accessAnon.String(),
 		},
-		SeqId:  int32(topic.lastID),
-		DelId:  int32(topic.delID),
-		Public: interfaceToBytes(topic.public),
+		SeqId:   int32(topic.lastID),
+		DelId:   int32(topic.delID),
+		Public:  interfaceToBytes(topic.public),
+		Trusted: interfaceToBytes(topic.trusted),
 	}
 }
 
@@ -841,6 +857,7 @@ func pbTopicSubSerialize(sub *MsgTopicSub) *pbx.TopicSub {
 		ReadId:    int32(sub.ReadSeqId),
 		RecvId:    int32(sub.RecvSeqId),
 		Public:    interfaceToBytes(sub.Public),
+		Trusted:   interfaceToBytes(sub.Trusted),
 		Private:   interfaceToBytes(sub.Private),
 		UserId:    sub.User,
 		Topic:     sub.Topic,
@@ -869,6 +886,7 @@ func pbTopicSubSliceDeserialize(subs []*pbx.TopicSub) []MsgTopicSub {
 			ReadSeqId: int(subs[i].GetReadId()),
 			RecvSeqId: int(subs[i].GetRecvId()),
 			Public:    bytesToInterface(subs[i].GetPublic()),
+			Trusted:   bytesToInterface(subs[i].GetTrusted()),
 			Private:   bytesToInterface(subs[i].GetPrivate()),
 			User:      subs[i].GetUserId(),
 			Topic:     subs[i].GetTopic(),
@@ -907,6 +925,7 @@ func pbSubSliceDeserialize(subs []*pbx.TopicSub) []types.Subscription {
 			Private:   bytesToInterface(subs[i].GetPrivate()),
 		}
 		out[i].SetPublic(bytesToInterface(subs[i].GetPublic()))
+		out[i].SetTrusted(bytesToInterface(subs[i].GetTrusted()))
 		if acs := subs[i].GetAcs(); acs != nil {
 			out[i].ModeGiven.UnmarshalText([]byte(acs.GetGiven()))
 			out[i].ModeWant.UnmarshalText([]byte(acs.GetWant()))

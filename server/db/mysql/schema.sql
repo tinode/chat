@@ -151,7 +151,7 @@ CREATE TABLE messages(
 # Deletion log
 CREATE TABLE dellog(
 	id			INT NOT NULL AUTO_INCREMENT,
-	topic		VARCHAR(25) NOT NULL,
+	topic		CHAR(25) NOT NULL,
 	deletedfor	BIGINT NOT NULL DEFAULT 0,
 	delid		INT NOT NULL,
 	low			INT NOT NULL,
@@ -190,24 +190,29 @@ CREATE TABLE credentials(
 CREATE TABLE fileuploads(
 	id			BIGINT NOT NULL,
 	createdat	DATETIME(3) NOT NULL,
-	updatedat	DATETIME(3) NOT NULL,	
-	userid		BIGINT NOT NULL,
+	updatedat	DATETIME(3) NOT NULL,
+	userid		BIGINT,
 	status		INT NOT NULL,
 	mimetype	VARCHAR(255) NOT NULL,
 	size		BIGINT NOT NULL,
 	location	VARCHAR(2048) NOT NULL,
 	
-	PRIMARY KEY(id)
+	PRIMARY KEY(id),
+	INDEX fileuploads_status(status)
 );
 
-# Links between uploaded files and messages.
+# Links between uploaded files and messages or topics.
 CREATE TABLE filemsglinks(
 	id			INT NOT NULL AUTO_INCREMENT,
 	createdat	DATETIME(3) NOT NULL,
 	fileid		BIGINT NOT NULL,
-	msgid		INT NOT NULL,
-	
+	msgid		INT,
+	topic		CHAR(25),
+	userid		BIGINT,
+
 	PRIMARY KEY(id),
 	FOREIGN KEY(fileid) REFERENCES fileuploads(id) ON DELETE CASCADE,
-	FOREIGN KEY(msgid) REFERENCES messages(id) ON DELETE CASCADE
+	FOREIGN KEY(msgid) REFERENCES messages(id) ON DELETE CASCADE,
+	FOREIGN KEY(topicid) REFERENCES topics(id) ON DELETE CASCADE,
+	FOREIGN KEY(userid) REFERENCES users(id) ON DELETE CASCADE
 );
