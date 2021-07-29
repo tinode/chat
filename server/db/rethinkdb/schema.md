@@ -305,7 +305,6 @@ The table stores records of uploaded files. The files themselves are stored outs
 * `CreatedAt` timestamp when the record was created
 * `UpdatedAt` timestamp of when th upload has cmpleted or failed
 * `User` id of the user who uploaded this file.
-* `Topic` name of the topic associated with the upload.
 * `Location` actual location of the file on the server.
 * `MimeType` file content type as a [Mime](https://en.wikipedia.org/wiki/MIME) string.
 * `Size` size of the file in bytes. Could be 0 if upload has not completed yet.
@@ -314,8 +313,6 @@ The table stores records of uploaded files. The files themselves are stored outs
 
 Indexes:
  * `Id` primary key
- * `User` index
- * `Topic` index
  * `UseCount` index
 
 Sample:
@@ -329,7 +326,6 @@ Sample:
   "UseCount": 3,
   "Status": 1,
   "UpdatedAt": Sun Jun 10 2018 16:38:45 GMT+00:00 ,
-  "User": "7j-RR1V7O3Y",
-  "Topic": "grpGx7fpjQwVC0"
+  "User": "7j-RR1V7O3Y"
 }
 ```

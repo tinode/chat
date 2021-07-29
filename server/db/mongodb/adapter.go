@@ -40,7 +40,7 @@ const (
 	defaultHost     = "localhost:27017"
 	defaultDatabase = "tinode"
 
-	adpVersion  = 111
+	adpVersion  = 112
 	adapterName = "mongodb"
 
 	defaultMaxResults = 1024
@@ -373,11 +373,6 @@ func (a *adapter) CreateDb(reset bool) error {
 		},
 
 		// Records of file uploads. See types.FileDef.
-		// Index on 'fileuploads.user' to be able to get records by user id.
-		{
-			Collection: "fileuploads",
-			Field:      "user",
-		},
 		// Index on 'fileuploads.usecount' to be able to delete unused records at once.
 		{
 			Collection: "fileuploads",
@@ -488,6 +483,13 @@ func (a *adapter) UpgradeDb() error {
 		}
 
 		if err := bumpVersion(a, 111); err != nil {
+			return err
+		}
+	}
+
+	if a.version == 111 {
+		// Just bump the version to keep in line with MySQL.
+		if err := bumpVersion(a, 112); err != nil {
 			return err
 		}
 	}
@@ -635,7 +637,13 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 				// Decrement fileuploads UseCounter
 				// First get array of attachments IDs that were used in messages of topics from topicIds
 				// Then decrement the usecount field of these file records
-				err := a.fileDecrementUseCounter(sc, b.M{"topic": b.M{"$in": topicIds}})
+				err = a.decFileUseCounter(sc, "messages", b.M{"topic": b.M{"$in": topicIds}})
+				if err != nil {
+					return err
+				}
+
+				// Decrement use counter for topic avatars
+				err = a.decFileUseCounter(sc, "topics", b.M{"_id": b.M{"$in": topicIds}})
 				if err != nil {
 					return err
 				}
@@ -691,6 +699,11 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 
 			// Delete credentials.
 			if err = a.credDel(sc, uid, "", ""); err != nil && err != t.ErrNotFound {
+				return err
+			}
+
+			// Delete avatar (decrement use counter).
+			if err = a.decFileUseCounter(sc, "users", b.M{"_id": forUser}); err != nil {
 				return err
 			}
 
@@ -1651,22 +1664,22 @@ func (a *adapter) TopicDelete(topic string, hard bool) error {
 		return err
 	}
 
+	filter := b.M{"_id": topic}
 	if hard {
 		if err = a.MessageDeleteList(topic, nil); err != nil {
 			return err
 		}
-	}
-
-	filter := b.M{"_id": topic}
-	if hard {
+		if err = a.decFileUseCounter(a.ctx, "topics", filter); err != nil {
+			return err
+		}
 		_, err = a.db.Collection("topics").DeleteOne(a.ctx, filter)
 	} else {
-		now := t.TimeNow()
 		_, err = a.db.Collection("topics").UpdateOne(a.ctx, filter, b.M{"$set": b.M{
 			"state":   t.StateDeleted,
-			"stateat": now,
+			"stateat": t.TimeNow(),
 		}})
 	}
+
 	return err
 }
 
@@ -2044,7 +2057,7 @@ func (a *adapter) messagesHardDelete(topic string) error {
 		return err
 	}
 
-	if err = a.fileDecrementUseCounter(a.ctx, filter); err != nil {
+	if err = a.decFileUseCounter(a.ctx, "messages", filter); err != nil {
 		return err
 	}
 
@@ -2089,7 +2102,7 @@ func (a *adapter) MessageDeleteList(topic string, toDel *t.DelMessage) error {
 	}
 
 	if toDel.DeletedFor == "" {
-		if err = a.fileDecrementUseCounter(a.ctx, filter); err != nil {
+		if err = a.decFileUseCounter(a.ctx, "messages", filter); err != nil {
 			return err
 		}
 		// Hard-delete individual messages. Message is not deleted but all fields with content
@@ -2289,6 +2302,7 @@ func (a *adapter) FileStartUpload(fd *t.FileDef) error {
 func (a *adapter) FileFinishUpload(fd *t.FileDef, success bool, size int64) (*t.FileDef, error) {
 	now := t.TimeNow()
 	if success {
+		// Mark upload as completed.
 		if _, err := a.db.Collection("fileuploads").UpdateOne(a.ctx,
 			b.M{"_id": fd.Id},
 			b.M{"$set": b.M{
@@ -2302,6 +2316,7 @@ func (a *adapter) FileFinishUpload(fd *t.FileDef, success bool, size int64) (*t.
 		fd.Status = t.UploadCompleted
 		fd.Size = size
 	} else {
+		// Remove record: it's now useless.
 		if _, err := a.db.Collection("fileuploads").DeleteOne(a.ctx, b.M{"_id": fd.Id}); err != nil {
 			return nil, err
 		}
@@ -2364,33 +2379,85 @@ func (a *adapter) FileDeleteUnused(olderThan time.Time, limit int) ([]string, er
 }
 
 // Given a filter query against 'messages' collection, decrement corresponding use counter in 'fileuploads' table.
-func (a *adapter) fileDecrementUseCounter(ctx context.Context, msgFilter b.M) error {
+func (a *adapter) decFileUseCounter(ctx context.Context, collection string, msgFilter b.M) error {
 	// Copy msgFilter
 	filter := b.M{}
 	for k, v := range msgFilter {
 		filter[k] = v
 	}
 	filter["attachments"] = b.M{"$exists": true}
-	fileIds, err := a.db.Collection("messages").Distinct(ctx, "attachments", filter)
+	fileIds, err := a.db.Collection(collection).Distinct(ctx, "attachments", filter)
 	if err != nil {
 		return err
 	}
 
-	_, err = a.db.Collection("fileuploads").UpdateMany(ctx,
-		b.M{"_id": b.M{"$in": fileIds}},
-		b.M{"$inc": b.M{"usecount": -1}})
+	if len(fileIds) > 0 {
+		_, err = a.db.Collection("fileuploads").UpdateMany(ctx,
+			b.M{"_id": b.M{"$in": fileIds}},
+			b.M{"$inc": b.M{"usecount": -1}})
+	}
 
 	return err
 }
 
 // FileLinkAttachments connects given topic or message to the file record IDs from the list.
 func (a *adapter) FileLinkAttachments(topic string, userId, msgId t.Uid, fids []string) error {
+	if len(fids) == 0 || (topic == "" && userId.IsZero() && msgId.IsZero()) {
+		return t.ErrMalformed
+	}
+
 	now := t.TimeNow()
-	_, err := a.db.Collection("messages").UpdateOne(a.ctx,
-		b.M{"_id": msgId.String()},
-		b.M{"$set": b.M{"updatedat": now, "attachments": fids}})
-	if err != nil {
-		return err
+	var err error
+
+	if msgId.IsZero() {
+		// Only one link per user or topic is permitted.
+		fids = fids[0:1]
+
+		// Topics and users and mutable. Must unlink the previous attachments first.
+		var table string
+		var linkId string
+		if topic != "" {
+			table = "topics"
+			linkId = topic
+		} else {
+			table = "users"
+			linkId = userId.String()
+		}
+
+		// Find the old attachment.
+		var attachments map[string][]string
+		findOpts := mdbopts.FindOne().SetProjection(b.M{"attachments": 1, "_id": 0})
+		err = a.db.Collection(table).FindOne(a.ctx, b.M{"_id": linkId}, findOpts).Decode(&attachments)
+		if err != nil {
+			return err
+		}
+
+		if len(attachments["attachments"]) > 0 {
+			// Decrement the use count of old attachment.
+			if _, err = a.db.Collection("fileuploads").UpdateOne(a.ctx,
+				b.M{"_id": attachments["attachments"][0]},
+				b.M{
+					"$set": b.M{"updatedat": now},
+					"$inc": b.M{"usecount": -1},
+				},
+			); err != nil {
+				return err
+			}
+		}
+
+		_, err = a.db.Collection(table).UpdateOne(a.ctx,
+			b.M{"_id": linkId},
+			b.M{"$set": b.M{"updatedat": now, "attachments": fids}})
+		if err != nil {
+			return err
+		}
+	} else {
+		_, err = a.db.Collection("messages").UpdateOne(a.ctx,
+			b.M{"_id": msgId.String()},
+			b.M{"$set": b.M{"updatedat": now, "attachments": fids}})
+		if err != nil {
+			return err
+		}
 	}
 
 	ids := make([]interface{}, len(fids))
@@ -2401,7 +2468,9 @@ func (a *adapter) FileLinkAttachments(topic string, userId, msgId t.Uid, fids []
 		b.M{"_id": b.M{"$in": ids}},
 		b.M{
 			"$set": b.M{"updatedat": now},
-			"$inc": b.M{"usecount": 1}})
+			"$inc": b.M{"usecount": 1},
+		},
+	)
 
 	return err
 }

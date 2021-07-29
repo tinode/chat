@@ -385,14 +385,6 @@ func (a *adapter) CreateDb(reset bool) error {
 	if _, err := rdb.DB(a.dbName).TableCreate("fileuploads", rdb.TableCreateOpts{PrimaryKey: "Id"}).RunWrite(a.conn); err != nil {
 		return err
 	}
-	// A secondary index on fileuploads.User to be able to get records by user id.
-	if _, err := rdb.DB(a.dbName).Table("fileuploads").IndexCreate("User").RunWrite(a.conn); err != nil {
-		return err
-	}
-	// A secondary index on fileuploads.Topic to be able to delete earlier records by topic.
-	if _, err := rdb.DB(a.dbName).Table("fileuploads").IndexCreate("Topic").RunWrite(a.conn); err != nil {
-		return err
-	}
 	// A secondary index on fileuploads.UseCount to be able to delete unused records at once.
 	if _, err := rdb.DB(a.dbName).Table("fileuploads").IndexCreate("UseCount").RunWrite(a.conn); err != nil {
 		return err
@@ -541,10 +533,7 @@ func (a *adapter) UpgradeDb() error {
 	}
 
 	if a.version == 111 {
-		// A secondary index on fileuploads.Topic to be able to delete earlier records by topic.
-		if _, err := rdb.DB(a.dbName).Table("fileuploads").IndexCreate("Topic").RunWrite(a.conn); err != nil {
-			return err
-		}
+		// Just bump the version to keep up with MySQL.
 		if err := bumpVersion(a, 112); err != nil {
 			return err
 		}
@@ -842,7 +831,7 @@ func (a *adapter) UserDelete(uid t.Uid, hard bool) error {
 		q := rdb.DB(a.dbName).Table("users").Get(uid.String())
 
 		// Unlink user's attachment.
-		if err = a.fileDecrementUseCounter(q); err != nil {
+		if err = a.decFileUseCounter(q); err != nil {
 			return err
 		}
 
@@ -1464,7 +1453,7 @@ func (a *adapter) TopicDelete(topic string, hard bool) error {
 
 	q := rdb.DB(a.dbName).Table("topics").Get(topic)
 	if hard {
-		if err = a.fileDecrementUseCounter(q); err == nil {
+		if err = a.decFileUseCounter(q); err == nil {
 			_, err = q.Delete().RunWrite(a.conn)
 		}
 	} else {
@@ -2030,7 +2019,7 @@ func (a *adapter) messagesHardDelete(topic string) error {
 		[]interface{}{topic, rdb.MaxVal},
 		rdb.BetweenOpts{Index: "Topic_SeqId"})
 
-	if err = a.fileDecrementUseCounter(q); err != nil {
+	if err = a.decFileUseCounter(q); err != nil {
 		return err
 	}
 
@@ -2079,7 +2068,7 @@ func (a *adapter) MessageDeleteList(topic string, toDel *t.DelMessage) error {
 		query = query.Filter(rdb.Row.HasFields("DelId").Not())
 		if toDel.DeletedFor == "" {
 			// First decrement use counter for attachments.
-			if err = a.fileDecrementUseCounter(query); err == nil {
+			if err = a.decFileUseCounter(query); err == nil {
 				// Hard-delete individual messages. Message is not deleted but all fields with personal content
 				// are removed.
 				_, err = query.Replace(rdb.Row.Without("Head", "From", "Content", "Attachments").Merge(
@@ -2499,7 +2488,6 @@ func (a *adapter) FileLinkAttachments(topic string, userId, msgId t.Uid, fids []
 	}
 
 	now := t.TimeNow()
-	var cursor *rdb.Cursor
 	var err error
 
 	if msgId.IsZero() {
@@ -2518,6 +2506,7 @@ func (a *adapter) FileLinkAttachments(topic string, userId, msgId t.Uid, fids []
 		}
 
 		// Find the old attachment.
+		var cursor *rdb.Cursor
 		cursor, err = rdb.DB(a.dbName).Table(table).Get(linkId).Field("Attachments").Run(a.conn)
 		if err != nil {
 			return err
@@ -2547,6 +2536,9 @@ func (a *adapter) FileLinkAttachments(topic string, userId, msgId t.Uid, fids []
 				"UpdatedAt":   now,
 				"Attachments": fids,
 			}).RunWrite(a.conn)
+		if err != nil {
+			return err
+		}
 	} else {
 		// Messages are immutable. Just save the IDs.
 		_, err := rdb.DB(a.dbName).Table("messages").Get(msgId.String()).
@@ -2605,7 +2597,7 @@ func (a *adapter) FileDeleteUnused(olderThan time.Time, limit int) ([]string, er
 }
 
 // Given a select query against 'messages' table, decrement corresponding use counter in 'fileuploads' table.
-func (a *adapter) fileDecrementUseCounter(msgQuery rdb.Term) error {
+func (a *adapter) decFileUseCounter(msgQuery rdb.Term) error {
 	/*
 		r.db("test").table("one")
 			.getAll(
