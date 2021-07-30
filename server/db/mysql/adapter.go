@@ -711,7 +711,7 @@ func (a *adapter) UpgradeDb() error {
 		}
 
 		// Remove NOT NULL constraint to enable links to users and topics.
-		if _, err := a.db.Exec("ALTER TABLE fileuploads MODIFY msgid INT"); err != nil {
+		if _, err := a.db.Exec("ALTER TABLE filemsglinks MODIFY msgid INT"); err != nil {
 			return err
 		}
 
