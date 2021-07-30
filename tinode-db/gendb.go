@@ -318,7 +318,6 @@ func genDb(data *Data) {
 				if timestamp.After(now) {
 					now = timestamp
 				}
-
 				if err = store.Messages.Save(&types.Message{
 					ObjHeader: types.ObjHeader{CreatedAt: timestamp},
 					SeqId:     seqId,
