@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"errors"
 	"hash/fnv"
-	"log"
 	"strconv"
 	"strings"
 	"time"
@@ -712,9 +711,7 @@ func (a *adapter) UpgradeDb() error {
 		}
 
 		// Remove NOT NULL constraint to enable links to users and topics.
-		log.Println("ALTER TABLE filemsglinks MODIFY msgid INT")
 		if _, err := a.db.Exec("ALTER TABLE filemsglinks MODIFY msgid INT"); err != nil {
-			log.Println("ALTER TABLE filemsglinks MODIFY msgid INT", err)
 			return err
 		}
 
