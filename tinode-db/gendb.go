@@ -315,6 +315,10 @@ func genDb(data *Data) {
 				str := data.Messages[i%len(data.Messages)]
 				// Max time between messages is 2 hours, averate - 1 hour, time is increasing as seqId increases
 				timestamp = timestamp.Add(time.Microsecond * time.Duration(rand.Intn(increment)))
+				if timestamp.After(now) {
+					now = timestamp
+				}
+
 				if err = store.Messages.Save(&types.Message{
 					ObjHeader: types.ObjHeader{CreatedAt: timestamp},
 					SeqId:     seqId,
