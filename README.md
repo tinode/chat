@@ -124,7 +124,7 @@ All client software has support for [internationalization](docs/translations.md)
 | German |   | &check; | &check; |   |
 | Korean |   | &check; | &check; |   |
 | Romanian |   | &check; |   |   |
-| Russian | &check; | &check; | &check; |   |
+| Russian | &check; | &check; | &check; | &check; |
 | Spanish |   | &check; | &check; | &check; |
 
 More translations are [welcome](docs/translations.md). Particularly interested in Arabic, Vietnamese, Persian, Indonesian, Portuguese, Hindi, Bengali.
