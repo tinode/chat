@@ -117,7 +117,7 @@ When you register a new account you are asked for an email address to send valid
 All client software has support for internationalization. The following translations are provided:
 
 | Language | Server | Webapp | Android | iOS |
-| --- | --- | --- | --- | --- |
+| --- | :---: | :---: | :---: | :---: |
 | English | &check; | &check; | &check; | &check; |
 | Chinese (traditional) |   | &check; | &check; | &check; |
 | Chinese (simplified) |   | &check; | &check; | &check; |
