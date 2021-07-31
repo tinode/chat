@@ -43,7 +43,7 @@ Please send a pull request with the new files. If you don't know how to create a
 
 A single file needs to be translated: [/tinode/tindroid/app/src/main/res/values/strings.xml](https://github.com/tinode/tindroid/blob/master/app/src/main/res/values/strings.xml)
 
-Create a new directory `values-XX` in [app/src/main/res](https://github.com/tinode/tindroid/tree/master/app/src/main/res), where `XX` is a two-letter [ISO-631-1](https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes) code , optionally followed by a two letter [ISO 3166-1-alpha-2](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2) region code (preceded by lowercase r). For example `values-pt.xml` would hold Portuguese translations while `values-pt-rBR.xml` Brazilian Portuguese translations.
+Create a new directory `values-XX` in [app/src/main/res](https://github.com/tinode/tindroid/tree/master/app/src/main/res), where `XX` is a two-letter [ISO-631-1](https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes) code , optionally followed by a two letter [ISO 3166-1-alpha-2](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2) region code (preceded by lowercase r). For example `values-pt.xml` would hold general Portuguese translations while `values-pt-rBR.xml` is for Brazilian Portuguese translations.
 
 Make a copy of the file with English strings, place it to the new directory. Translate all the strings not marked with `translatable="false"` (the strings with `translatable="false"` don't need to be included at all) then send a pull request with the new file. If you don't know how to create a pull request then just sent the file in any way you can.
 

@@ -114,7 +114,7 @@ When you register a new account you are asked for an email address to send valid
 
 ### Translations
 
-All client software has support for internationalization. The following translations are provided:
+All client software has support for [internationalization](docs/translations.md). The following translations are provided:
 
 | Language | Server | Webapp | Android | iOS |
 | --- | :---: | :---: | :---: | :---: |
@@ -127,7 +127,7 @@ All client software has support for internationalization. The following translat
 | Russian | &check; | &check; | &check; |   |
 | Spanish |   | &check; | &check; | &check; |
 
-More translations are welcome. Particularly interested in Arabic, Vietnamese, Persian, Indonesian, Portuguese, Hindi, Bengali.
+More translations are [welcome](docs/translations.md). Particularly interested in Arabic, Vietnamese, Persian, Indonesian, Portuguese, Hindi, Bengali.
 
 ## Third-Party Licenses
 
