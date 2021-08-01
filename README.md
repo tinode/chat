@@ -116,7 +116,20 @@ When you register a new account you are asked for an email address to send valid
 
 ### Translations
 
-All client software has support for internationalization. Translations are provided on all platforms for English, Simplified Chinese, Spanish, Traditional Chinese. On all but iOS: Russian, Korean, German, webapp also has Romanian. More translations are welcome. Particularly interested in Arabic, Vietnamese, Persian, Indonesian, Portuguese, Hindi, Bengali.
+All client software has support for [internationalization](docs/translations.md). The following translations are provided:
+
+| Language | Server | Webapp | Android | iOS |
+| --- | :---: | :---: | :---: | :---: |
+| English | &check; | &check; | &check; | &check; |
+| Chinese (traditional) |   | &check; | &check; | &check; |
+| Chinese (simplified) |   | &check; | &check; | &check; |
+| German |   | &check; | &check; |   |
+| Korean |   | &check; | &check; |   |
+| Romanian |   | &check; |   |   |
+| Russian | &check; | &check; | &check; | &check; |
+| Spanish |   | &check; | &check; | &check; |
+
+More translations are [welcome](docs/translations.md). Particularly interested in Arabic, Vietnamese, Persian, Indonesian, Portuguese, Hindi, Bengali.
 
 ## Third-Party Licenses
 
