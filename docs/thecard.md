@@ -19,6 +19,7 @@ When `JSON` is used to represent `theCard` data, it does it differently than [jC
     height: 512, // integer, image height in pixels.
     size: 123456 // integer, image size in bytes.
   },
+  note: "Some notes", // string, description of a person or a topic.
   //
   // None of the following fields are implemented by any known client:
   //
@@ -29,7 +30,7 @@ When `JSON` is used to represent `theCard` data, it does it differently than [jC
     prefix: "Dr.", // prefix, such as honorary title or gender designation.
     suffix: "Jr.", // suffix, such as 'Jr' or 'II'.
   },
-  org: { // object, organisation the person or topic belongs to.
+  org: { // object, organization the person or topic belongs to.
     fn: "Most Evil Corp", // string, formatted name of the organisation.
     title: "CEO", // string, person's job title at the organisation.
   },
@@ -62,7 +63,6 @@ When `JSON` is used to represent `theCard` data, it does it differently than [jC
     m: 1, // integer, month 1..12
     d: 15 // integer, day 1..31
   },
-  note: "Some notes", // string, notes about the person or topic.
 }
 ```
 
