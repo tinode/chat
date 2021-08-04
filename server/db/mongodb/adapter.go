@@ -343,25 +343,25 @@ func (a *adapter) CreateDb(reset bool) error {
 		// Compound index of 'topic - seqid' for selecting messages in a topic.
 		{
 			Collection: "messages",
-			IndexOpts:  mdb.IndexModel{Keys: b.M{"topic": 1, "seqid": 1}},
+			IndexOpts:  mdb.IndexModel{Keys: b.D{{"topic", 1}, {"seqid", 1}}},
 		},
 		// Compound index of hard-deleted messages
 		{
 			Collection: "messages",
-			IndexOpts:  mdb.IndexModel{Keys: b.M{"topic": 1, "delid": 1}},
+			IndexOpts:  mdb.IndexModel{Keys: b.D{{"topic", 1}, {"delid", 1}}},
 		},
 		// Compound multi-index of soft-deleted messages: each message gets multiple compound index entries like
 		// 		 [topic, user1, delid1], [topic, user2, delid2],...
 		{
 			Collection: "messages",
-			IndexOpts:  mdb.IndexModel{Keys: b.M{"topic": 1, "deletedfor.user": 1, "deletedfor.delid": 1}},
+			IndexOpts:  mdb.IndexModel{Keys: b.D{{"topic", 1}, {"deletedfor.user", 1}, {"deletedfor.delid", 1}}},
 		},
 
 		// Log of deleted messages
 		// Compound index of 'topic - delid'
 		{
 			Collection: "dellog",
-			IndexOpts:  mdb.IndexModel{Keys: b.M{"topic": 1, "delid": 1}},
+			IndexOpts:  mdb.IndexModel{Keys: b.D{{"topic", 1}, {"delid", 1}}},
 		},
 
 		// User credentials - contact information such as "email:jdoe@example.com" or "tel:+18003287448":
@@ -1331,11 +1331,11 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 
 	// Fetch subscriptions. Two queries are needed: users table (me & p2p) and topics table (p2p and grp).
 	// Prepare a list of Separate subscriptions to users vs topics
-	var sub t.Subscription
 	join := make(map[string]t.Subscription) // Keeping these to make a join with table for .private and .access
 	topq := make([]string, 0, 16)
 	usrq := make([]string, 0, 16)
 	for cur.Next(a.ctx) {
+		var sub t.Subscription
 		if err = cur.Decode(&sub); err != nil {
 			break
 		}
@@ -1363,6 +1363,7 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 				// Maybe convert channel name to topic name.
 				tname = t.ChnToGrp(tname)
 			}
+			topq = append(topq, tname)
 		}
 		sub.Private = unmarshalBsonD(sub.Private)
 		join[tname] = sub
@@ -1398,12 +1399,12 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 			return nil, err
 		}
 
-		var top t.Topic
 		for cur.Next(a.ctx) {
+			var top t.Topic
 			if err = cur.Decode(&top); err != nil {
 				break
 			}
-			sub = join[top.Id]
+			sub := join[top.Id]
 			sub.UpdatedAt = common.SelectEarliestUpdatedAt(sub.UpdatedAt, top.UpdatedAt, ims)
 			sub.SetState(top.State)
 			sub.SetTouchedAt(top.TouchedAt)
@@ -1414,7 +1415,6 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 			}
 			// Put back the updated value of a p2p subsription, will process further below
 			join[top.Id] = sub
-
 		}
 		cur.Close(a.ctx)
 		if err != nil {
@@ -1436,8 +1436,8 @@ func (a *adapter) TopicsForUser(uid t.Uid, keepDeleted bool, opts *t.QueryOpt) (
 			return nil, err
 		}
 
-		var usr2 t.User
 		for cur.Next(a.ctx) {
+			var usr2 t.User
 			if err = cur.Decode(&usr2); err != nil {
 				break
 			}
@@ -1504,11 +1504,11 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 	}
 
 	// Fetch subscriptions
-	var sub t.Subscription
 	var subs []t.Subscription
 	join := make(map[string]t.Subscription)
 	usrq := make([]interface{}, 0, 16)
 	for cur.Next(a.ctx) {
+		var sub t.Subscription
 		if err = cur.Decode(&sub); err != nil {
 			break
 		}
@@ -1531,9 +1531,10 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 			return nil, err
 		}
 
-		var usr2 t.User
 		for cur.Next(a.ctx) {
+			var usr2 t.User
 			if err = cur.Decode(&usr2); err != nil {
+
 				break
 			}
 			if sub, ok := join[usr2.Id]; ok {
@@ -1591,9 +1592,9 @@ func (a *adapter) OwnTopics(uid t.Uid) ([]string, error) {
 		return nil, err
 	}
 
-	var res map[string]string
 	var names []string
 	for cur.Next(a.ctx) {
+		var res map[string]string
 		if err = cur.Decode(&res); err != nil {
 			break
 		}
@@ -1618,9 +1619,9 @@ func (a *adapter) ChannelsForUser(uid t.Uid) ([]string, error) {
 		return nil, err
 	}
 
-	var res map[string]string
 	var names []string
 	for cur.Next(a.ctx) {
+		var res map[string]string
 		if err = cur.Decode(&res); err != nil {
 			break
 		}
@@ -1736,8 +1737,8 @@ func (a *adapter) SubsForUser(user t.Uid) ([]t.Subscription, error) {
 	defer cur.Close(a.ctx)
 
 	var subs []t.Subscription
-	var ss t.Subscription
 	for cur.Next(a.ctx) {
+		var ss t.Subscription
 		if err := cur.Decode(&ss); err != nil {
 			return nil, err
 		}
@@ -1776,8 +1777,8 @@ func (a *adapter) SubsForTopic(topic string, keepDeleted bool, opts *t.QueryOpt)
 	defer cur.Close(a.ctx)
 
 	var subs []t.Subscription
-	var ss t.Subscription
 	for cur.Next(a.ctx) {
+		var ss t.Subscription
 		if err := cur.Decode(&ss); err != nil {
 			return nil, err
 		}
@@ -1917,10 +1918,10 @@ func (a *adapter) FindUsers(uid t.Uid, req [][]string, opt []string) ([]t.Subscr
 	}
 	defer cur.Close(a.ctx)
 
-	var user t.User
-	var sub t.Subscription
 	var subs []t.Subscription
 	for cur.Next(a.ctx) {
+		var user t.User
+		var sub t.Subscription
 		if err = cur.Decode(&user); err != nil {
 			return nil, err
 		}
@@ -1956,10 +1957,10 @@ func (a *adapter) FindTopics(req [][]string, opt []string) ([]t.Subscription, er
 	}
 	defer cur.Close(a.ctx)
 
-	var topic t.Topic
-	var sub t.Subscription
 	var subs []t.Subscription
 	for cur.Next(a.ctx) {
+		var topic t.Topic
+		var sub t.Subscription
 		if err = cur.Decode(&topic); err != nil {
 			return nil, err
 		}
@@ -2022,7 +2023,7 @@ func (a *adapter) MessageGetAll(topic string, forUser t.Uid, opts *t.QueryOpt) (
 	} else {
 		filter["seqid"] = b.M{"$gte": lower, "$lt": upper}
 	}
-	findOpts := mdbopts.Find().SetSort(b.M{"topic": -1, "seqid": -1})
+	findOpts := mdbopts.Find().SetSort(b.D{{"topic", -1}, {"seqid", -1}})
 	findOpts.SetLimit(int64(limit))
 
 	cur, err := a.db.Collection("messages").Find(a.ctx, filter, findOpts)
@@ -2161,7 +2162,7 @@ func (a *adapter) MessageGetDeleted(topic string, forUser t.Uid, opts *t.QueryOp
 		filter["delid"] = b.M{"$gte": lower, "$lt": upper}
 	}
 	findOpts := mdbopts.Find().
-		SetSort(b.M{"topic": 1, "delid": 1}).
+		SetSort(b.D{{"topic", 1}, {"delid", 1}}).
 		SetLimit(int64(limit))
 
 	cur, err := a.db.Collection("dellog").Find(a.ctx, filter, findOpts)
@@ -2365,9 +2366,9 @@ func (a *adapter) FileDeleteUnused(olderThan time.Time, limit int) ([]string, er
 	}
 	defer cur.Close(a.ctx)
 
-	var result map[string]string
 	var locations []string
 	for cur.Next(a.ctx) {
+		var result map[string]string
 		if err := cur.Decode(&result); err != nil {
 			return nil, err
 		}
