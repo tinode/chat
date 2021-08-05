@@ -315,6 +315,7 @@ message TopicDesc {
 	string state = 12;
 	int64 state_at = 13;
 	bytes trusted = 14;
+	bool is_chan = 17; // 17!
 
 	// P2P only: other user's last online timestamp & user agent
 	int64 last_seen_time = 15;
@@ -361,7 +362,6 @@ message DelValues {
 	int32 del_id = 1;
 	repeated SeqRange del_seq = 2;
 }
-
 
 // {ctrl} message
 message ServerCtrl {

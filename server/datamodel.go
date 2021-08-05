@@ -415,6 +415,9 @@ type MsgTopicDesc struct {
 	// If the group topic is online.
 	Online bool `json:"online,omitempty"`
 
+	// If the topic can be accessed as a channel
+	IsChan bool `json:"chan,omitempty"`
+
 	// P2P other user's last online timestamp & user agent
 	LastSeen *MsgLastSeenInfo `json:"seen,omitempty"`
 

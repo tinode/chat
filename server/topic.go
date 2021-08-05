@@ -1899,6 +1899,8 @@ func (t *Topic) replyGetDesc(sess *Session, asUid types.Uid, asChan bool, opts *
 
 	if t.cat == types.TopicCatMe {
 		full = true
+	} else if t.cat == types.TopicCatGrp {
+		desc.IsChan = t.isChan
 	}
 
 	if ifUpdated {
