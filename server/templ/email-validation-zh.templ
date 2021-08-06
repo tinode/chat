@@ -1,0 +1,61 @@
+{{/*
+  CHINESE
+
+  定义用户注册邮件确认文案的模版。
+  语法参阅 https://golang.org/pkg/text/template/ 。
+
+  模版必须包含以下内容:
+   - 'subject'：邮件主题
+   - 以下一项或两项：
+     - 'body_html': 包含请求头"Content-type: text/html"的HTML格式消息内容。
+     - 'body_plain': 包含请求头"Content-type: text/plain"的文本格式消息内容。
+
+   如果同时包含 body_html 和 body_plain，则都作为 'multipart/alternative' 消息的一部分发送。
+*/}}
+
+{{define "subject" -}}
+Tinode 注册: 确认邮件
+{{- end}}
+
+{{define "body_html" -}}
+<html>
+<body>
+
+<p>您好！</p>
+
+<p>您收到此消息是因为您注册了<a href="{{.HostUrl}}">Tinode</a>。</p>
+
+<p><a href="{{.HostUrl}}#cred?method=email&code={{.Code}}&token={{.Token}}">确认注册</a>
+或者跳转至链接
+<a href="{{.HostUrl}}#cred?what=email">{{.HostUrl}}#cred?method=email</a>
+并输入验证码：</p>
+<blockquote>{{.Code}}</blockquote>
+<p>您可能需要输入登录名和密码。</p>
+
+<p>如果您没有注册Tinode，请忽略这条消息。</p>
+
+<p><a href="https://tinode.co/">Tinode 团队</a></p>
+
+</body>
+</html>
+{{- end}}
+
+{{define "body_plain" -}}
+
+您好！
+
+您收到此消息是因为您注册了 Tinode ({{.HostUrl}})。
+
+点击链接 {{.HostUrl}}#cred?method=email&code={{.Code}}&token={{.Token}} 确认注册或者跳转至链接 {{.HostUrl}}#cred?what=email
+并输入验证码：
+
+	{{.Code}}
+
+您可能需要输入登录名和密码。
+
+如果您没有注册Tinode，请忽略这条消息。
+
+Tinode 团队
+https://tinode.co/
+
+{{- end}}
