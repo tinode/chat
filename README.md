@@ -119,8 +119,8 @@ All client software has support for [internationalization](docs/translations.md)
 | Language | Server | Webapp | Android | iOS |
 | --- | :---: | :---: | :---: | :---: |
 | English | &check; | &check; | &check; | &check; |
+| Chinese (simplified) | &check; | &check; | &check; | &check; |
 | Chinese (traditional) |   | &check; | &check; | &check; |
-| Chinese (simplified) |   | &check; | &check; | &check; |
 | German |   | &check; | &check; |   |
 | Korean |   | &check; | &check; |   |
 | Romanian |   | &check; |   |   |
