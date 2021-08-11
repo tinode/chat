@@ -2287,7 +2287,7 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 					}
 
 					lastSeen := sub.GetLastSeen()
-					if !lastSeen.IsZero() && !mts.Online {
+					if lastSeen != nil && !mts.Online {
 						mts.LastSeen = &MsgLastSeenInfo{
 							When:      lastSeen,
 							UserAgent: sub.GetUserAgent(),
