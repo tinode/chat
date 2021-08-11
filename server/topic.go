@@ -137,10 +137,9 @@ type perUserData struct {
 	modeGiven types.AccessMode
 
 	// P2P only:
-	public  interface{}
-	trusted interface{}
-
-	lastSeen time.Time
+	public   interface{}
+	trusted  interface{}
+	lastSeen *time.Time
 	lastUA   string
 
 	topicName string
@@ -1888,7 +1887,8 @@ func (t *Topic) replyGetDesc(sess *Session, asUid types.Uid, asChan bool, opts *
 	ifUpdated := opts == nil || opts.IfModifiedSince == nil || opts.IfModifiedSince.Before(t.updated)
 
 	desc := &MsgTopicDesc{}
-	if !ifUpdated {
+	if opts == nil || opts.IfModifiedSince == nil {
+		// Send CreatedAt only when the user requests full information (nothing is cached at the client).
 		desc.CreatedAt = &t.created
 	}
 	if !t.updated.IsZero() {
@@ -1897,9 +1897,8 @@ func (t *Topic) replyGetDesc(sess *Session, asUid types.Uid, asChan bool, opts *
 
 	pud, full := t.perUser[asUid]
 
-	if t.cat == types.TopicCatMe {
-		full = true
-	} else if t.cat == types.TopicCatGrp {
+	full = full || t.cat == types.TopicCatMe
+	if t.cat == types.TopicCatGrp {
 		desc.IsChan = t.isChan
 	}
 
@@ -1947,9 +1946,9 @@ func (t *Topic) replyGetDesc(sess *Session, asUid types.Uid, asChan bool, opts *
 				// because to stay in memory at least one of the users must be connected to topic.
 				// FIXME(gene): it breaks when user A stays active in one session and connects-disconnects
 				// from another session. The second session will not see correct LastSeen time and UserAgent.
-				if !pud.lastSeen.IsZero() {
+				if pud.lastSeen != nil {
 					desc.LastSeen = &MsgLastSeenInfo{
-						When:      &pud.lastSeen,
+						When:      pud.lastSeen,
 						UserAgent: pud.lastUA,
 					}
 				}
@@ -2370,9 +2369,9 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 					}
 
 					lastSeen := sub.GetLastSeen()
-					if !lastSeen.IsZero() && !mts.Online {
+					if lastSeen != nil && !mts.Online {
 						mts.LastSeen = &MsgLastSeenInfo{
-							When:      &lastSeen,
+							When:      lastSeen,
 							UserAgent: sub.GetUserAgent(),
 						}
 					}

@@ -1339,6 +1339,7 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 				sub.ObjHeader.MergeTimes(&usr.ObjHeader)
 				sub.SetPublic(usr.Public)
 				sub.SetTrusted(usr.Trusted)
+				sub.SetLastSeenAndUA(usr.LastSeen, usr.UserAgent)
 				subs = append(subs, sub)
 			}
 		}
@@ -1346,11 +1347,12 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 	}
 
 	if t.GetTopicCat(topic) == t.TopicCatP2P && len(subs) > 0 {
-		// Swap public values of P2P topics as expected.
+		// Swap public values & lastSeen of P2P topics as expected.
 		if len(subs) == 1 {
 			// User is deleted. Nothing we can do.
 			subs[0].SetPublic(nil)
 			subs[0].SetTrusted(nil)
+			subs[0].SetLastSeenAndUA(nil, "")
 		} else {
 			tmp := subs[0].GetPublic()
 			subs[0].SetPublic(subs[1].GetPublic())
@@ -1359,6 +1361,11 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 			tmp = subs[0].GetTrusted()
 			subs[0].SetTrusted(subs[1].GetTrusted())
 			subs[1].SetTrusted(tmp)
+
+			lastSeen := subs[0].GetLastSeen()
+			userAgent := subs[0].GetUserAgent()
+			subs[0].SetLastSeenAndUA(subs[1].GetLastSeen(), subs[1].GetUserAgent())
+			subs[1].SetLastSeenAndUA(lastSeen, userAgent)
 		}
 
 		// Remove deleted and unneeded subscriptions
