@@ -45,10 +45,10 @@ type TopicTestHelper struct {
 	topic *Topic
 
 	// Mock objects.
-	mm *mock_store.MockMessagesObjMapperInterface
-	uu *mock_store.MockUsersObjMapperInterface
-	tt *mock_store.MockTopicsObjMapperInterface
-	ss *mock_store.MockSubsObjMapperInterface
+	mm *mock_store.MockMessagesPersistenceInterface
+	uu *mock_store.MockUsersPersistenceInterface
+	tt *mock_store.MockTopicsPersistenceInterface
+	ss *mock_store.MockSubsPersistenceInterface
 }
 
 func (b *TopicTestHelper) finish() {
@@ -59,7 +59,8 @@ func (b *TopicTestHelper) finish() {
 	}
 	b.sessWg.Wait()
 	// Hub loop.
-	close(b.hub.route)
+	close(b.hub.routeSrv)
+	close(b.hub.routeCli)
 	<-b.hubDone
 }
 
@@ -88,10 +89,10 @@ func (b *TopicTestHelper) setUp(t *testing.T, numUsers int, cat types.TopicCat, 
 
 	// Mocks.
 	b.ctrl = gomock.NewController(t)
-	b.mm = mock_store.NewMockMessagesObjMapperInterface(b.ctrl)
-	b.uu = mock_store.NewMockUsersObjMapperInterface(b.ctrl)
-	b.tt = mock_store.NewMockTopicsObjMapperInterface(b.ctrl)
-	b.ss = mock_store.NewMockSubsObjMapperInterface(b.ctrl)
+	b.mm = mock_store.NewMockMessagesPersistenceInterface(b.ctrl)
+	b.uu = mock_store.NewMockUsersPersistenceInterface(b.ctrl)
+	b.tt = mock_store.NewMockTopicsPersistenceInterface(b.ctrl)
+	b.ss = mock_store.NewMockSubsPersistenceInterface(b.ctrl)
 	store.Messages = b.mm
 	store.Users = b.uu
 	store.Topics = b.tt
@@ -108,7 +109,8 @@ func (b *TopicTestHelper) setUp(t *testing.T, numUsers int, cat types.TopicCat, 
 
 	// Hub.
 	b.hub = &Hub{
-		route: make(chan *ServerComMessage, 10),
+		routeCli: make(chan *ClientComMessage, 10),
+		routeSrv: make(chan *ServerComMessage, 10),
 	}
 	globals.hub = b.hub
 	b.hubMessages = make(map[string][]*ServerComMessage)
@@ -172,7 +174,7 @@ func (s *Session) testWriteLoop(results *Responses, wg *sync.WaitGroup) {
 
 func (h *Hub) testHubLoop(t *testing.T, results map[string][]*ServerComMessage, done chan bool) {
 	t.Helper()
-	for msg := range h.route {
+	for msg := range h.routeSrv {
 		if msg.RcptTo == "" {
 			t.Fatal("Hub.route received a message without addressee.")
 			break
@@ -187,20 +189,20 @@ func TestHandleBroadcastDataP2P(t *testing.T) {
 	helper := TopicTestHelper{}
 	helper.setUp(t, numUsers, types.TopicCatP2P, "p2p-test" /*attach=*/, true)
 	defer helper.tearDown()
-	helper.mm.EXPECT().Save(gomock.Any(), gomock.Any()).Return(nil)
+	helper.mm.EXPECT().Save(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 
 	from := helper.uids[0].UserId()
-	msg := &ServerComMessage{
-		AsUser: from,
-		Data: &MsgServerData{
+	msg := &ClientComMessage{
+		AsUser:   from,
+		Original: from,
+		Pub: &MsgClientPub{
 			Topic:   "p2p",
-			From:    from,
 			Content: "test",
+			NoEcho:  true,
 		},
-		sess:    helper.sessions[0],
-		SkipSid: helper.sessions[0].sid,
+		sess: helper.sessions[0],
 	}
-	helper.topic.handleBroadcast(msg)
+	helper.topic.handleClientMsg(msg)
 	helper.finish()
 
 	// Message uid1 -> uid2.
@@ -217,12 +219,18 @@ func TestHandleBroadcastDataP2P(t *testing.T) {
 			if r.Data == nil {
 				t.Fatalf("Response[0] must have a ctrl message")
 			}
+			if r.Data.Topic != from {
+				t.Errorf("Response[0] topic: expected '%s', got '%s'", from, r.Data.Topic)
+			}
 			if r.Data.Content.(string) != "test" {
 				t.Errorf("Response[0] content: expected 'test', got '%s'", r.Data.Content.(string))
 			}
+			if r.Data.From != from {
+				t.Errorf("Response[0] from: expected '%s', got '%s'", from, r.Data.From)
+			}
 		}
 	}
-	// Checking presence messages routed through huhelper.
+	// Checking presence messages routed through the helper.
 	if len(helper.hubMessages) != 2 {
 		t.Fatal("Huhelper.route expected exactly two recipients routed via huhelper.")
 	}
@@ -263,7 +271,7 @@ func TestHandleBroadcastDataGroup(t *testing.T) {
 		store.Messages = nil
 		helper.tearDown()
 	}()
-	helper.mm.EXPECT().Save(gomock.Any(), gomock.Any()).Return(nil)
+	helper.mm.EXPECT().Save(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 
 	// User 3 isn't allowed to read.
 	pu3 := helper.topic.perUser[helper.uids[3]]
@@ -272,21 +280,21 @@ func TestHandleBroadcastDataGroup(t *testing.T) {
 	helper.topic.perUser[helper.uids[3]] = pu3
 
 	from := helper.uids[0].UserId()
-	msg := &ServerComMessage{
-		AsUser: from,
-		Data: &MsgServerData{
-			Topic:   "group",
-			From:    from,
+	msg := &ClientComMessage{
+		AsUser:   from,
+		Original: topicName,
+		Pub: &MsgClientPub{
+			Topic:   topicName,
 			Content: "test",
+			NoEcho:  true,
 		},
-		sess:    helper.sessions[0],
-		SkipSid: helper.sessions[0].sid,
+		sess: helper.sessions[0],
 	}
 
 	if helper.topic.lastID != 0 {
 		t.Errorf("Topic.lastID: expected 0, found %d", helper.topic.lastID)
 	}
-	helper.topic.handleBroadcast(msg)
+	helper.topic.handleClientMsg(msg)
 	helper.finish()
 
 	if helper.topic.lastID != 1 {
@@ -309,6 +317,12 @@ func TestHandleBroadcastDataGroup(t *testing.T) {
 		r := m.messages[0].(*ServerComMessage)
 		if r.Data == nil {
 			t.Fatalf("Response[0] must have a ctrl message")
+		}
+		if r.Data.Topic != topicName {
+			t.Errorf("Response[0] topic: expected '%s', got '%s'", topicName, r.Data.Topic)
+		}
+		if r.Data.From != from {
+			t.Errorf("Response[0] from: expected '%s', got '%s'", from, r.Data.From)
 		}
 		if r.Data.Content.(string) != "test" {
 			t.Errorf("Response[0] content: expected 'test', got '%s'", r.Data.Content.(string))
@@ -352,9 +366,10 @@ func TestHandleBroadcastDataGroup(t *testing.T) {
 }
 
 func TestHandleBroadcastDataMissingWritePermission(t *testing.T) {
+	topicName := "p2p-test"
 	numUsers := 2
 	helper := TopicTestHelper{}
-	helper.setUp(t, numUsers, types.TopicCatP2P, "p2p-test", true)
+	helper.setUp(t, numUsers, types.TopicCatP2P, topicName, true)
 	defer helper.tearDown()
 
 	// Remove W permission for uid1.
@@ -365,18 +380,17 @@ func TestHandleBroadcastDataMissingWritePermission(t *testing.T) {
 
 	// Make test message.
 	from := helper.uids[0].UserId()
-	msg := &ServerComMessage{
-		AsUser: from,
-		Data: &MsgServerData{
+	msg := &ClientComMessage{
+		AsUser:   from,
+		Original: from,
+		Pub: &MsgClientPub{
 			Topic:   "p2p",
-			From:    from,
 			Content: "test",
 		},
-		sess:    helper.sessions[0],
-		SkipSid: helper.sessions[0].sid,
+		sess: helper.sessions[0],
 	}
 
-	helper.topic.handleBroadcast(msg)
+	helper.topic.handleClientMsg(msg)
 	helper.finish()
 
 	// Message uid1 -> uid2.
@@ -407,25 +421,23 @@ func TestHandleBroadcastDataDbError(t *testing.T) {
 	defer helper.tearDown()
 
 	// DB returns an error.
-	helper.mm.EXPECT().Save(gomock.Any(), gomock.Any()).Return(types.ErrInternal)
+	helper.mm.EXPECT().Save(gomock.Any(), gomock.Any(), gomock.Any()).Return(types.ErrInternal)
 
 	// Make test message.
 	from := helper.uids[0].UserId()
-	msg := &ServerComMessage{
+	msg := &ClientComMessage{
 		AsUser: from,
-		Data: &MsgServerData{
+		Pub: &MsgClientPub{
 			Topic:   "p2p",
-			From:    from,
 			Content: "test",
 		},
-		sess:    helper.sessions[0],
-		SkipSid: helper.sessions[0].sid,
+		sess: helper.sessions[0],
 	}
 
 	if helper.topic.lastID != 0 {
 		t.Errorf("Topic.lastID: expected 0, found %d", helper.topic.lastID)
 	}
-	helper.topic.handleBroadcast(msg)
+	helper.topic.handleClientMsg(msg)
 	helper.finish()
 
 	if helper.topic.lastID != 0 {
@@ -460,21 +472,19 @@ func TestHandleBroadcastDataInactiveTopic(t *testing.T) {
 
 	// Make test message.
 	from := helper.uids[0].UserId()
-	msg := &ServerComMessage{
+	msg := &ClientComMessage{
 		AsUser: from,
-		Data: &MsgServerData{
+		Pub: &MsgClientPub{
 			Topic:   "p2p",
-			From:    from,
 			Content: "test",
 		},
-		sess:    helper.sessions[0],
-		SkipSid: helper.sessions[0].sid,
+		sess: helper.sessions[0],
 	}
 
 	// Deactivate topic.
 	helper.topic.markDeleted()
 
-	helper.topic.handleBroadcast(msg)
+	helper.topic.handleClientMsg(msg)
 	helper.finish()
 
 	// Message uid1 -> uid2.
@@ -513,19 +523,16 @@ func TestHandleBroadcastInfoP2P(t *testing.T) {
 
 	helper.ss.EXPECT().Update(topicName, from, map[string]interface{}{"ReadSeqId": readId}).Return(nil)
 
-	msg := &ServerComMessage{
+	msg := &ClientComMessage{
 		AsUser: from.UserId(),
-		Info: &MsgServerInfo{
+		Note: &MsgClientNote{
 			Topic: to.UserId(),
-			Src:   "",
-			From:  from.UserId(),
 			What:  "read",
 			SeqId: readId,
 		},
-		sess:    helper.sessions[0],
-		SkipSid: helper.sessions[0].sid,
+		sess: helper.sessions[0],
 	}
-	helper.topic.handleBroadcast(msg)
+	helper.topic.handleClientMsg(msg)
 	helper.finish()
 
 	// Topic metadata.
@@ -619,19 +626,17 @@ func TestHandleBroadcastInfoBogusNotification(t *testing.T) {
 	from := helper.uids[0]
 	to := helper.uids[1]
 
-	msg := &ServerComMessage{
-		AsUser: from.UserId(),
-		Info: &MsgServerInfo{
+	msg := &ClientComMessage{
+		AsUser:   from.UserId(),
+		Original: to.UserId(),
+		Note: &MsgClientNote{
 			Topic: to.UserId(),
-			Src:   "",
-			From:  from.UserId(),
 			What:  "read",
 			SeqId: readId,
 		},
-		sess:    helper.sessions[0],
-		SkipSid: helper.sessions[0].sid,
+		sess: helper.sessions[0],
 	}
-	helper.topic.handleBroadcast(msg)
+	helper.topic.handleClientMsg(msg)
 	helper.finish()
 
 	// Read id should not be updated.
@@ -669,19 +674,17 @@ func TestHandleBroadcastInfoFilterOutRecvWithoutRPermission(t *testing.T) {
 	pud.modeGiven = types.ModeWrite | types.ModeJoin
 	helper.topic.perUser[from] = pud
 
-	msg := &ServerComMessage{
-		AsUser: from.UserId(),
-		Info: &MsgServerInfo{
+	msg := &ClientComMessage{
+		AsUser:   from.UserId(),
+		Original: to.UserId(),
+		Note: &MsgClientNote{
 			Topic: to.UserId(),
-			Src:   "",
-			From:  from.UserId(),
 			What:  "recv",
 			SeqId: readId,
 		},
-		sess:    helper.sessions[0],
-		SkipSid: helper.sessions[0].sid,
+		sess: helper.sessions[0],
 	}
-	helper.topic.handleBroadcast(msg)
+	helper.topic.handleClientMsg(msg)
 	helper.finish()
 
 	// Read id should not be updated.
@@ -719,19 +722,17 @@ func TestHandleBroadcastInfoFilterOutKpWithoutWPermission(t *testing.T) {
 	pud.modeGiven = types.ModeRead | types.ModeJoin
 	helper.topic.perUser[from] = pud
 
-	msg := &ServerComMessage{
-		AsUser: from.UserId(),
-		Info: &MsgServerInfo{
+	msg := &ClientComMessage{
+		AsUser:   from.UserId(),
+		Original: to.UserId(),
+		Note: &MsgClientNote{
 			Topic: to.UserId(),
-			Src:   "",
-			From:  from.UserId(),
 			What:  "kp",
 			SeqId: readId,
 		},
-		sess:    helper.sessions[0],
-		SkipSid: helper.sessions[0].sid,
+		sess: helper.sessions[0],
 	}
-	helper.topic.handleBroadcast(msg)
+	helper.topic.handleClientMsg(msg)
 	helper.finish()
 
 	// Read id should not be updated.
@@ -769,19 +770,17 @@ func TestHandleBroadcastInfoDuplicatedRead(t *testing.T) {
 	pud.readID = 8
 	helper.topic.perUser[from] = pud
 
-	msg := &ServerComMessage{
-		AsUser: from.UserId(),
-		Info: &MsgServerInfo{
+	msg := &ClientComMessage{
+		AsUser:   from.UserId(),
+		Original: to.UserId(),
+		Note: &MsgClientNote{
 			Topic: to.UserId(),
-			Src:   "",
-			From:  from.UserId(),
 			What:  "read",
 			SeqId: readId,
 		},
-		sess:    helper.sessions[0],
-		SkipSid: helper.sessions[0].sid,
+		sess: helper.sessions[0],
 	}
-	helper.topic.handleBroadcast(msg)
+	helper.topic.handleClientMsg(msg)
 	helper.finish()
 
 	// Read id should not be updated.
@@ -816,19 +815,17 @@ func TestHandleBroadcastInfoDbError(t *testing.T) {
 
 	helper.ss.EXPECT().Update(topicName, from, map[string]interface{}{"ReadSeqId": readId}).Return(types.ErrInternal)
 
-	msg := &ServerComMessage{
-		AsUser: from.UserId(),
-		Info: &MsgServerInfo{
+	msg := &ClientComMessage{
+		AsUser:   from.UserId(),
+		Original: to.UserId(),
+		Note: &MsgClientNote{
 			Topic: to.UserId(),
-			Src:   "",
-			From:  from.UserId(),
 			What:  "read",
 			SeqId: readId,
 		},
-		sess:    helper.sessions[0],
-		SkipSid: helper.sessions[0].sid,
+		sess: helper.sessions[0],
 	}
-	helper.topic.handleBroadcast(msg)
+	helper.topic.handleClientMsg(msg)
 	helper.finish()
 
 	// Read id should not be updated.
@@ -870,19 +867,17 @@ func TestHandleBroadcastInfoInvalidChannelAccess(t *testing.T) {
 		helper.topic.perUser[uid] = pud
 	}
 
-	msg := &ServerComMessage{
-		AsUser: from.UserId(),
-		Info: &MsgServerInfo{
+	msg := &ClientComMessage{
+		Original: chanName,
+		AsUser:   from.UserId(),
+		Note: &MsgClientNote{
 			Topic: chanName,
-			Src:   "",
-			From:  from.UserId(),
 			What:  "read",
 			SeqId: readId,
 		},
-		sess:    helper.sessions[0],
-		SkipSid: helper.sessions[0].sid,
+		sess: helper.sessions[0],
 	}
-	helper.topic.handleBroadcast(msg)
+	helper.topic.handleClientMsg(msg)
 	helper.finish()
 
 	// Read id should not be updated.
@@ -924,19 +919,17 @@ func TestHandleBroadcastInfoChannelProcessing(t *testing.T) {
 
 	helper.ss.EXPECT().Update(chanName, from, map[string]interface{}{"ReadSeqId": readId}).Return(nil)
 
-	msg := &ServerComMessage{
-		AsUser: from.UserId(),
-		Info: &MsgServerInfo{
+	msg := &ClientComMessage{
+		AsUser:   from.UserId(),
+		Original: chanName,
+		Note: &MsgClientNote{
 			Topic: chanName,
-			Src:   "",
-			From:  from.UserId(),
 			What:  "read",
 			SeqId: readId,
 		},
-		sess:    helper.sessions[0],
-		SkipSid: helper.sessions[0].sid,
+		sess: helper.sessions[0],
 	}
-	helper.topic.handleBroadcast(msg)
+	helper.topic.handleClientMsg(msg)
 	helper.finish()
 
 	// Topic metadata.
@@ -1000,7 +993,7 @@ func TestHandleBroadcastPresMe(t *testing.T) {
 			What:  "on",
 		},
 	}
-	helper.topic.handleBroadcast(msg)
+	helper.topic.handleServerMsg(msg)
 	helper.finish()
 
 	// Topic metadata.
@@ -1059,7 +1052,7 @@ func TestHandleBroadcastPresInactiveTopic(t *testing.T) {
 	// Deactivate topic.
 	helper.topic.markDeleted()
 
-	helper.topic.handleBroadcast(msg)
+	helper.topic.handleServerMsg(msg)
 	helper.finish()
 
 	// Topic metadata.
@@ -1112,7 +1105,7 @@ func NoChangeInStatusTest(t *testing.T, subscriptionStatus int, what string) *To
 		},
 	}
 
-	helper.topic.handleBroadcast(msg)
+	helper.topic.handleServerMsg(msg)
 	helper.finish()
 
 	// Topic metadata.
@@ -1947,7 +1940,7 @@ func TestUnregisterSessionSimple(t *testing.T) {
 		},
 		sess: s,
 	}
-	helper.topic.unregisterSession(leave)
+	helper.topic.unregisterSession(leave.pkt, leave.sess)
 
 	helper.finish()
 
@@ -2002,7 +1995,7 @@ func TestUnregisterSessionInactiveTopic(t *testing.T) {
 	// Deactivate topic.
 	helper.topic.markDeleted()
 
-	helper.topic.unregisterSession(leave)
+	helper.topic.unregisterSession(leave.pkt, leave.sess)
 	helper.finish()
 
 	if len(helper.topic.sessions) != 1 {
@@ -2063,7 +2056,7 @@ func TestUnregisterSessionUnsubscribe(t *testing.T) {
 		},
 		sess: helper.sessions[0],
 	}
-	helper.topic.unregisterSession(leave)
+	helper.topic.unregisterSession(leave.pkt, leave.sess)
 	helper.finish()
 
 	if len(helper.topic.sessions) != 2 {
@@ -2154,7 +2147,7 @@ func TestUnregisterSessionOwnerCannotUnsubscribe(t *testing.T) {
 		sess: s,
 	}
 
-	helper.topic.unregisterSession(leave)
+	helper.topic.unregisterSession(leave.pkt, leave.sess)
 	helper.finish()
 
 	if len(helper.topic.sessions) != 3 {
@@ -2200,7 +2193,7 @@ func TestUnregisterSessionUnsubDeleteCallFails(t *testing.T) {
 	// DB call fails.
 	helper.ss.EXPECT().Delete(topicName, uid).Return(types.ErrInternal)
 
-	helper.topic.unregisterSession(leave)
+	helper.topic.unregisterSession(leave.pkt, leave.sess)
 	helper.finish()
 
 	if len(helper.topic.sessions) != 3 {
@@ -2232,13 +2225,11 @@ func TestHandleMetaChanErr(t *testing.T) {
 	// the topic is referenced as "chn".
 	helper.topic.isChan = false
 	// Empty message since this request should trigger an error anyway.
-	meta := &metaReq{
-		pkt: &ClientComMessage{
-			AsUser:   helper.uids[0].UserId(),
-			Original: chanName,
-			MetaWhat: constMsgMetaDesc | constMsgMetaSub | constMsgMetaData | constMsgMetaDel,
-		},
-		sess: helper.sessions[0],
+	meta := &ClientComMessage{
+		AsUser:   helper.uids[0].UserId(),
+		Original: chanName,
+		MetaWhat: constMsgMetaDesc | constMsgMetaSub | constMsgMetaData | constMsgMetaDel,
+		sess:     helper.sessions[0],
 	}
 	helper.topic.handleMeta(meta)
 	helper.finish()
@@ -2263,23 +2254,21 @@ func TestHandleMetaGet(t *testing.T) {
 	helper.mm.EXPECT().GetDeleted(topicName, uid, gomock.Any()).Return([]types.Range{}, 0, nil)
 	helper.uu.EXPECT().GetTopics(uid, gomock.Any()).Return([]types.Subscription{}, nil)
 
-	meta := &metaReq{
-		pkt: &ClientComMessage{
-			Get: &MsgClientGet{
-				Id:    "id456",
-				Topic: topicName,
-				MsgGetQuery: MsgGetQuery{
-					What: "desc sub data del",
-					Desc: &MsgGetOpts{},
-					Sub:  &MsgGetOpts{},
-					Data: &MsgGetOpts{},
-					Del:  &MsgGetOpts{},
-				},
+	meta := &ClientComMessage{
+		Get: &MsgClientGet{
+			Id:    "id456",
+			Topic: topicName,
+			MsgGetQuery: MsgGetQuery{
+				What: "desc sub data del",
+				Desc: &MsgGetOpts{},
+				Sub:  &MsgGetOpts{},
+				Data: &MsgGetOpts{},
+				Del:  &MsgGetOpts{},
 			},
-			AsUser:   uid.UserId(),
-			MetaWhat: constMsgMetaDesc | constMsgMetaSub | constMsgMetaData | constMsgMetaDel,
 		},
-		sess: helper.sessions[0],
+		AsUser:   uid.UserId(),
+		MetaWhat: constMsgMetaDesc | constMsgMetaSub | constMsgMetaData | constMsgMetaDel,
+		sess:     helper.sessions[0],
 	}
 	helper.topic.handleMeta(meta)
 	helper.finish()
@@ -2346,22 +2335,20 @@ func TestHandleMetaSetDescMePublicPrivate(t *testing.T) {
 		helper.ss.EXPECT().Update(topicName, uid, map[string]interface{}{"Private": "new private"}).Return(nil),
 	)
 
-	meta := &metaReq{
-		pkt: &ClientComMessage{
-			Set: &MsgClientSet{
-				Id:    "id456",
-				Topic: topicName,
-				MsgSetQuery: MsgSetQuery{
-					Desc: &MsgSetDesc{
-						Public:  "new public",
-						Private: "new private",
-					},
+	meta := &ClientComMessage{
+		Set: &MsgClientSet{
+			Id:    "id456",
+			Topic: topicName,
+			MsgSetQuery: MsgSetQuery{
+				Desc: &MsgSetDesc{
+					Public:  "new public",
+					Private: "new private",
 				},
 			},
-			AsUser:   uid.UserId(),
-			MetaWhat: constMsgMetaDesc,
 		},
-		sess: helper.sessions[0],
+		AsUser:   uid.UserId(),
+		MetaWhat: constMsgMetaDesc,
+		sess:     helper.sessions[0],
 	}
 	helper.topic.handleMeta(meta)
 	helper.finish()

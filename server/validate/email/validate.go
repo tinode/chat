@@ -18,7 +18,6 @@ import (
 	"strconv"
 	"strings"
 	textt "text/template"
-	"time"
 
 	"github.com/tinode/chat/server/logs"
 	"github.com/tinode/chat/server/store"
@@ -236,9 +235,6 @@ func (v *validator) Init(jsonconf string) error {
 		}
 	}
 
-	// Initialize random number generator.
-	rand.Seed(time.Now().UnixNano())
-
 	hostUrl, err := url.Parse(v.HostUrl)
 	if err != nil {
 		return err
@@ -322,7 +318,8 @@ func (v *validator) Request(user t.Uid, email, lang, resp string, tmpToken []byt
 	token := make([]byte, base64.URLEncoding.EncodedLen(len(tmpToken)))
 	base64.URLEncoding.Encode(token, tmpToken)
 
-	// Generate expected response as a random numeric string between 0 and 999999
+	// Generate expected response as a random numeric string between 0 and 999999.
+	// The PRNG is already initialized in main.go. No need to initialize it here again.
 	resp = strconv.FormatInt(int64(rand.Intn(maxCodeValue)), 10)
 	resp = strings.Repeat("0", codeLength-len(resp)) + resp
 

@@ -61,12 +61,8 @@ type topicUnreg struct {
 	done chan<- bool
 }
 
-type metaReq struct {
-	// Packet containing details of the Get/Set/Del request.
-	pkt *ClientComMessage
-	// Session which originated the request.
-	sess *Session
-	// UID of the user being affected. Could be zero.
+type userStatusReq struct {
+	// UID of the user being affected.
 	forUser types.Uid
 	// New topic state value. Only types.StateSuspended is supported at this time.
 	state types.ObjState
@@ -81,8 +77,14 @@ type Hub struct {
 	// Current number of loaded topics
 	numTopics int
 
-	// Channel for routing messages between topics, buffered at 4096
-	route chan *ServerComMessage
+	// Channel for routing client-side messages, buffered at 4096
+	routeCli chan *ClientComMessage
+
+	// Process get.info requests for topic not subscribed to, buffered 128.
+	meta chan *ClientComMessage
+
+	// Channel for routing server-generated messages, buffered at 4096
+	routeSrv chan *ServerComMessage
 
 	// subscribe session to topic, possibly creating a new topic, buffered at 32
 	join chan *sessionJoin
@@ -90,8 +92,8 @@ type Hub struct {
 	// Remove topic from hub, possibly deleting it afterwards, buffered at 32
 	unreg chan *topicUnreg
 
-	// Process get.info requests for topic not subscribed to, buffered 128
-	meta chan *metaReq
+	// Channel for suspending/resuming users, buffered 128.
+	userStatus chan *userStatusReq
 
 	// Cluster request to rehash topics, unbuffered
 	rehash chan bool
@@ -120,13 +122,15 @@ func (h *Hub) topicDel(name string) {
 func newHub() *Hub {
 	h := &Hub{
 		topics: &sync.Map{},
-		// this needs to be buffered - hub generates invites and adds them to this queue
-		route:    make(chan *ServerComMessage, 4096),
-		join:     make(chan *sessionJoin, 256),
-		unreg:    make(chan *topicUnreg, 256),
-		rehash:   make(chan bool),
-		meta:     make(chan *metaReq, 128),
-		shutdown: make(chan chan<- bool),
+		// TODO: verify if these channels have to be buffered.
+		routeCli:   make(chan *ClientComMessage, 4096),
+		routeSrv:   make(chan *ServerComMessage, 4096),
+		join:       make(chan *sessionJoin, 256),
+		unreg:      make(chan *topicUnreg, 256),
+		rehash:     make(chan bool),
+		meta:       make(chan *ClientComMessage, 128),
+		userStatus: make(chan *userStatusReq, 128),
+		shutdown:   make(chan chan<- bool),
 	}
 
 	statsRegisterInt("LiveTopics")
@@ -185,10 +189,11 @@ func (h *Hub) run() {
 					// Indicates a proxy topic.
 					isProxy:   globals.cluster.isRemoteTopic(join.pkt.RcptTo),
 					sessions:  make(map[*Session]perSessionData),
-					broadcast: make(chan *ServerComMessage, 256),
+					clientMsg: make(chan *ClientComMessage, 192),
+					serverMsg: make(chan *ServerComMessage, 64),
 					reg:       make(chan *sessionJoin, 256),
 					unreg:     make(chan *sessionLeave, 256),
-					meta:      make(chan *metaReq, 64),
+					meta:      make(chan *ClientComMessage, 64),
 					perUser:   make(map[types.Uid]perUserData),
 					exit:      make(chan *shutDown, 1),
 				}
@@ -224,20 +229,40 @@ func (h *Hub) run() {
 				}
 			}
 
-		case msg := <-h.route:
-			// This is a message from a connection not subscribed to topic
+		case msg := <-h.routeCli:
+			// This is a message from a session not subscribed to topic
 			// Route incoming message to topic if topic permits such routing.
-
 			if dst := h.topicGet(msg.RcptTo); dst != nil {
 				// Everything is OK, sending packet to known topic
-				if dst.broadcast != nil {
+				if dst.clientMsg != nil {
 					select {
-					case dst.broadcast <- msg:
+					case dst.clientMsg <- msg:
 					default:
 						logs.Err.Println("hub: topic's broadcast queue is full", dst.name)
 					}
 				} else {
 					logs.Warn.Println("hub: invalid topic category for broadcast", dst.name)
+				}
+			} else if msg.Note == nil {
+				// Topic is unknown or offline.
+				// Note is silently ignored, all other messages are reported as accepted to prevent
+				// clients from guessing valid topic names.
+
+				// TODO(gene): validate topic name, discarding invalid topics.
+
+				logs.Info.Printf("Hub. Topic[%s] is unknown or offline", msg.RcptTo)
+
+				msg.sess.queueOut(NoErrAcceptedExplicitTs(msg.Id, msg.RcptTo, types.TimeNow(), msg.Timestamp))
+			}
+		case msg := <-h.routeSrv:
+			// This is a server message from a connection not subscribed to topic
+			// Route incoming message to topic if topic permits such routing.
+			if dst := h.topicGet(msg.RcptTo); dst != nil {
+				// Everything is OK, sending packet to known topic
+				select {
+				case dst.serverMsg <- msg:
+				default:
+					logs.Err.Println("hub: topic's broadcast queue is full", dst.name)
 				}
 			} else if (strings.HasPrefix(msg.RcptTo, "usr") || strings.HasPrefix(msg.RcptTo, "grp")) &&
 				globals.cluster.isRemoteTopic(msg.RcptTo) {
@@ -245,33 +270,22 @@ func (h *Hub) run() {
 				if err := globals.cluster.routeToTopicIntraCluster(msg.RcptTo, msg, msg.sess); err != nil {
 					logs.Warn.Printf("hub: routing to '%s' failed", msg.RcptTo)
 				}
-			} else if msg.Pres == nil && msg.Info == nil {
-				// Topic is unknown or offline.
-				// Pres & Info are silently ignored, all other messages are reported as invalid.
-
-				// TODO(gene): validate topic name, discarding invalid topics
-
-				logs.Info.Printf("Hub. Topic[%s] is unknown or offline", msg.RcptTo)
-
-				msg.sess.queueOut(NoErrAcceptedExplicitTs(msg.Id, msg.RcptTo, types.TimeNow(), msg.Timestamp))
 			}
-
-		case meta := <-h.meta:
-			// Suspend/activate user's topics
-			if !meta.forUser.IsZero() {
-				go h.topicsStateForUser(meta.forUser, meta.state == types.StateSuspended)
-			} else {
-				// Metadata read or update from a user who is not attached to the topic.
-				if meta.pkt.Get != nil {
-					if meta.pkt.MetaWhat == constMsgMetaDesc {
-						go replyOfflineTopicGetDesc(meta.sess, meta.pkt)
-					} else {
-						go replyOfflineTopicGetSub(meta.sess, meta.pkt)
-					}
-				} else if meta.pkt.Set != nil {
-					go replyOfflineTopicSetSub(meta.sess, meta.pkt)
+		case msg := <-h.meta:
+			// Metadata read or update from a user who is not attached to the topic.
+			if msg.Get != nil {
+				if msg.MetaWhat == constMsgMetaDesc {
+					go replyOfflineTopicGetDesc(msg.sess, msg)
+				} else {
+					go replyOfflineTopicGetSub(msg.sess, msg)
 				}
+			} else if msg.Set != nil {
+				go replyOfflineTopicSetSub(msg.sess, msg)
 			}
+
+		case status := <-h.userStatus:
+			// Suspend/activate user's topics.
+			go h.topicsStateForUser(status.forUser, status.state == types.StateSuspended)
 
 		case unreg := <-h.unreg:
 			reason := StopNone
@@ -412,10 +426,8 @@ func (h *Hub) topicUnreg(sess *Session, topic string, msg *ClientComMessage, rea
 			} else {
 				// Case 1.1.2: requester is NOT the owner
 				msg.MetaWhat = constMsgDelTopic
-				t.meta <- &metaReq{
-					pkt:  msg,
-					sess: sess,
-				}
+				msg.sess = sess
+				t.meta <- msg
 			}
 		} else {
 			// Case 1.2: topic is offline.
@@ -588,6 +600,7 @@ func replyOfflineTopicGetDesc(sess *Session, msg *ClientComMessage) {
 		desc.CreatedAt = &stopic.CreatedAt
 		desc.UpdatedAt = &stopic.UpdatedAt
 		desc.Public = stopic.Public
+		desc.Trusted = stopic.Trusted
 		if stopic.Owner == msg.AsUser {
 			desc.DefaultAcs = &MsgDefaultAcsMode{
 				Auth: stopic.Access.Auth.String(),
@@ -629,6 +642,7 @@ func replyOfflineTopicGetDesc(sess *Session, msg *ClientComMessage) {
 		desc.CreatedAt = &suser.CreatedAt
 		desc.UpdatedAt = &suser.UpdatedAt
 		desc.Public = suser.Public
+		desc.Trusted = suser.Trusted
 		if sess.authLvl == auth.LevelRoot {
 			desc.State = suser.State.String()
 		}

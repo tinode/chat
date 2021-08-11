@@ -199,9 +199,10 @@ func (ah *awshandler) Headers(req *http.Request, serve bool) (http.Header, int, 
 }
 
 // Upload processes request for a file upload. The file is given as io.Reader.
-func (ah *awshandler) Upload(fdef *types.FileDef, file io.ReadSeeker) (string, error) {
+func (ah *awshandler) Upload(fdef *types.FileDef, file io.ReadSeeker) (string, int64, error) {
 	var err error
 
+	// Using String32 just for consistency with the file handler.
 	key := fdef.Uid().String32()
 	fdef.Location = key
 
@@ -209,7 +210,7 @@ func (ah *awshandler) Upload(fdef *types.FileDef, file io.ReadSeeker) (string, e
 
 	if err = store.Files.StartUpload(fdef); err != nil {
 		logs.Warn.Println("failed to create file record", fdef.Id, err)
-		return "", err
+		return "", 0, err
 	}
 
 	rc := readerCounter{reader: file}
@@ -220,18 +221,7 @@ func (ah *awshandler) Upload(fdef *types.FileDef, file io.ReadSeeker) (string, e
 	})
 
 	if err != nil {
-		store.Files.FinishUpload(fdef.Id, false, 0)
-		return "", err
-	}
-
-	fdef, err = store.Files.FinishUpload(fdef.Id, true, rc.count)
-	if err != nil {
-		// Best effort. Error ignored.
-		ah.svc.DeleteObject(&s3.DeleteObjectInput{
-			Bucket: aws.String(ah.conf.BucketName),
-			Key:    aws.String(key),
-		})
-		return "", err
+		return "", 0, err
 	}
 
 	fname := fdef.Id
@@ -240,9 +230,7 @@ func (ah *awshandler) Upload(fdef *types.FileDef, file io.ReadSeeker) (string, e
 		fname += ext[0]
 	}
 
-	logs.Info.Println("aws upload success ", fname, "key", key, "id", fdef.Id)
-
-	return ah.conf.ServeURL + fname, nil
+	return ah.conf.ServeURL + fname, rc.count, nil
 }
 
 // Download processes request for file download.

@@ -842,7 +842,7 @@ func TestDeviceUpsert(t *testing.T) {
 
 func TestMessageAttachments(t *testing.T) {
 	fids := []string{files[0].Id, files[1].Id}
-	err := adp.MessageAttachments(types.ParseUid(msgs[1].Id), fids)
+	err := adp.FileLinkAttachments("", types.ZeroUid, types.ParseUid(msgs[1].Id), fids)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -867,7 +867,7 @@ func TestMessageAttachments(t *testing.T) {
 }
 
 func TestFileFinishUpload(t *testing.T) {
-	got, err := adp.FileFinishUpload(files[0].Id, types.UploadCompleted, 22222)
+	got, err := adp.FileFinishUpload(files[0], true, 22222)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -27,9 +27,9 @@ See [general instructions](./INSTALL.md) or [docker-specific instructions](./doc
 ## Helping out
 
 * Consider buying paid support: https://tinode.co/support.html
-* If you are a software developer, send us your pull requests with bug fixes and feature requests.
-* If you use the app and discover bugs or missing features, please let us know by filing bug reports and feature requests.
-* If you speak a language other than English, you can translate the apps into your language.
+* If you are a software developer, send us your pull requests with bug fixes and new features.
+* If you use the app and discover bugs or missing features, let us know by filing bug reports and feature requests. Vote for existing [feature requests](https://github.com/tinode/chat/issues?q=is%3Aissue+is%3Aopen+sort%3Areactions-%2B1-desc+label%3A%22feature+request%22) you find most valuable.
+* If you speak a language other than English, translate the apps into your language.
 * If you are a UI/UX expert, help us polish the app UI.
 * Let people know about Tinode: write a blog post or an article about Tinode, share your findings and experiences at conferences.
 * Use it: install it for your colleagues or friends at work or at home.
@@ -92,9 +92,9 @@ When you register a new account you are asked for an email address to send valid
 * Websocket, long polling, and [gRPC](https://grpc.io/) over TCP or Unix sockets.
 * JSON or [protobuf version 3](https://developers.google.com/protocol-buffers/) wire protocols.
 * User search/discovery.
-* Rich formatting of messages markdown-style: \*style\* &rarr; **style**.
-* Inline images, file attachments.
+* Rich formatting of messages markdown-style: \*style\* &rarr; **style**, with inline images, file attachments.
 * Forms and templated responses suitable for chatbots.
+* Verified/staff/untrusted account markers.
 * Message status notifications: message delivery to server; received and read notifications; typing notifications.
 * Most recent message preview in contact list.
 * Ability to block unwanted communication server-side.
@@ -111,6 +111,8 @@ When you register a new account you are asked for an email address to send valid
 * Previews of attached videos, documents, links.
 * Hot standby.
 * Different levels of message persistence (from strict persistence to "store until delivered" to purely ephemeral messaging).
+* Message encryption at rest.
+* Full text search in messages.
 
 ### Translations
 

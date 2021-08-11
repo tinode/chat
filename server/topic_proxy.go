@@ -41,15 +41,19 @@ func (t *Topic) runProxy(hub *Hub) {
 				leave.sess.inflightReqs.Done()
 			}
 
-		case msg := <-t.broadcast:
+		case msg := <-t.clientMsg:
 			// Content message intended for broadcasting to recipients
 			if err := globals.cluster.routeToTopicMaster(ProxyReqBroadcast, msg, t.name, msg.sess); err != nil {
 				logs.Warn.Println("proxy topic: route broadcast request from proxy to master failed:", err)
 			}
 
-		case meta := <-t.meta:
+		case msg := <-t.serverMsg:
+			// FIXME: should something be done here?
+			logs.Err.Printf("ERROR!!! Unexpected server-side message in proxy topic %#v", msg)
+
+		case msg := <-t.meta:
 			// Request to get/set topic metadata
-			if err := globals.cluster.routeToTopicMaster(ProxyReqMeta, meta.pkt, t.name, meta.sess); err != nil {
+			if err := globals.cluster.routeToTopicMaster(ProxyReqMeta, msg, t.name, msg.sess); err != nil {
 				logs.Warn.Println("proxy topic: route meta request from proxy to master failed:", err)
 			}
 
@@ -143,7 +147,7 @@ func (t *Topic) handleProxyLeaveRequest(leave *sessionLeave, killTimer *time.Tim
 	return result
 }
 
-// Proxy topic handler of a master topic response to earlier request.
+// proxyMasterResponse at proxy topic processes a master topic response to an earlier request.
 func (t *Topic) proxyMasterResponse(msg *ClusterResp, killTimer *time.Timer) {
 	// Kills topic after a period of inactivity.
 	keepAlive := idleProxyTopicTimeout
@@ -158,7 +162,7 @@ func (t *Topic) proxyMasterResponse(msg *ClusterResp, killTimer *time.Timer) {
 		switch {
 		case msg.SrvMsg.Pres != nil || msg.SrvMsg.Data != nil || msg.SrvMsg.Info != nil:
 			// Regular broadcast.
-			t.handleBroadcast(msg.SrvMsg)
+			t.handleProxyBroadcast(msg.SrvMsg)
 		case msg.SrvMsg.Ctrl != nil:
 			// Ctrl broadcast. E.g. for user eviction.
 			t.proxyCtrlBroadcast(msg.SrvMsg)
@@ -183,7 +187,7 @@ func (t *Topic) proxyMasterResponse(msg *ClusterResp, killTimer *time.Timer) {
 						// Successful subscriptions.
 						t.addSession(session, msg.SrvMsg.uid, types.IsChannel(msg.SrvMsg.Ctrl.Topic))
 						session.addSub(t.name, &Subscription{
-							broadcast: t.broadcast,
+							broadcast: t.clientMsg,
 							done:      t.unreg,
 							meta:      t.meta,
 							supd:      t.supd,
@@ -220,6 +224,20 @@ func (t *Topic) proxyMasterResponse(msg *ClusterResp, killTimer *time.Timer) {
 			logs.Err.Println("topic proxy: timeout")
 		}
 	}
+}
+
+// handleProxyBroadcast broadcasts a Data, Info or Pres message to sessions attached to this proxy topic.
+func (t *Topic) handleProxyBroadcast(msg *ServerComMessage) {
+	if t.isInactive() {
+		// Ignore broadcast - topic is paused or being deleted.
+		return
+	}
+
+	if msg.Data != nil {
+		t.lastID = msg.Data.SeqId
+	}
+
+	t.broadcastToSessions(msg)
 }
 
 // proxyCtrlBroadcast broadcasts a ctrl command to certain sessions attached to this proxy topic.

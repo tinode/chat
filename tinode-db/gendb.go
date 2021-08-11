@@ -47,6 +47,9 @@ func genDb(data *Data) {
 			Tags:   uu.Tags,
 			Public: parsePublic(&uu.Public, data.datapath),
 		}
+		if !uu.Trusted.IsZero() {
+			user.Trusted = uu.Trusted
+		}
 		user.CreatedAt = getCreatedTime(uu.CreatedAt)
 
 		user.Tags = make([]string, 0)
@@ -147,7 +150,11 @@ func genDb(data *Data) {
 			},
 			UseBt:  gt.Channel,
 			Tags:   gt.Tags,
-			Public: parsePublic(&gt.Public, data.datapath)}
+			Public: parsePublic(&gt.Public, data.datapath),
+		}
+		if !gt.Trusted.IsZero() {
+			topic.Trusted = gt.Trusted
+		}
 		var owner types.Uid
 		if gt.Owner != "" {
 			owner = types.ParseUid(nameIndex[gt.Owner])
@@ -323,7 +330,8 @@ func genDb(data *Data) {
 					SeqId:     seqId,
 					Topic:     topic,
 					From:      from.String(),
-					Content:   str}, true); err != nil {
+					Content:   str,
+				}, nil, true); err != nil {
 					log.Fatal("Failed to insert message: ", err)
 				}
 
@@ -344,8 +352,8 @@ func genDb(data *Data) {
 					SeqId:     1,
 					Topic:     nameIndex[gt.Name],
 					From:      nameIndex[gt.Owner],
-					Content:   data.Messages[0]}, true); err != nil {
-
+					Content:   data.Messages[0],
+				}, nil, true); err != nil {
 					log.Fatal("Failed to insert message: ", err)
 				}
 			}
@@ -363,8 +371,8 @@ func genDb(data *Data) {
 					SeqId:     1,
 					Topic:     nameIndex[sub.pair],
 					From:      nameIndex[sub.Users[0].Name],
-					Content:   data.Messages[0]}, true); err != nil {
-
+					Content:   data.Messages[0],
+				}, nil, true); err != nil {
 					log.Fatal("Failed to insert message: ", err)
 				}
 			}
@@ -387,7 +395,8 @@ func genDb(data *Data) {
 						Topic:     nameIndex[sub.pair],
 						Head:      types.MessageHeaders{"mime": "text/x-drafty"},
 						From:      from,
-						Content:   form}, true); err != nil {
+						Content:   form,
+					}, nil, true); err != nil {
 						log.Fatal("Failed to insert form: ", err)
 					}
 				}
@@ -413,13 +422,13 @@ type photoStruct struct {
 	Data []byte `json:"data" db:"data"`
 }
 
-type vcard struct {
+type card struct {
 	Fn    string       `json:"fn" db:"fn"`
 	Photo *photoStruct `json:"photo,omitempty" db:"photo"`
 }
 
 // {"fn": "Alice Johnson", "photo": "alice-128.jpg"}
-func parsePublic(public *vCardy, path string) *vcard {
+func parsePublic(public *theCard, path string) *card {
 	var photo *photoStruct
 	var err error
 
@@ -439,5 +448,5 @@ func parsePublic(public *vCardy, path string) *vcard {
 		}
 	}
 
-	return &vcard{Fn: public.Fn, Photo: photo}
+	return &card{Fn: public.Fn, Photo: photo}
 }

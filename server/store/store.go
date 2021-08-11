@@ -240,8 +240,8 @@ func (s storeObj) DbStats() func() interface{} {
 	return adp.Stats
 }
 
-// UsersObjMapper is a users struct to hold methods for persistence mapping for the User object.
-type UsersObjMapperInterface interface {
+// UsersPersistenceInterface is an interface which defines methods for persistent storage of user records.
+type UsersPersistenceInterface interface {
 	Create(user *types.User, private interface{}) (*types.User, error)
 	GetAuthRecord(user types.Uid, scheme string) (string, auth.Level, []byte, time.Time, error)
 	GetAuthUniqueRecord(scheme, unique string) (types.Uid, auth.Level, []byte, time.Time, error)
@@ -271,13 +271,14 @@ type UsersObjMapperInterface interface {
 	GetUnreadCount(id types.Uid) (int, error)
 }
 
-type UsersObjMapper struct{}
+// usersMapper is a concrete type which implements UsersPersistenceInterface.
+type usersMapper struct{}
 
-// Users is the ancor for storing/retrieving User objects
-var Users UsersObjMapperInterface
+// Users is a singleton ancor object exporting UsersPersistenceInterface methods.
+var Users UsersPersistenceInterface
 
 // Create inserts User object into a database, updates creation time and assigns UID
-func (UsersObjMapper) Create(user *types.User, private interface{}) (*types.User, error) {
+func (usersMapper) Create(user *types.User, private interface{}) (*types.User, error) {
 
 	user.SetUid(Store.GetUid())
 	user.InitTimes()
@@ -318,7 +319,7 @@ func (UsersObjMapper) Create(user *types.User, private interface{}) (*types.User
 
 // GetAuthRecord takes a user ID and a authentication scheme name, fetches unique scheme-dependent identifier and
 // authentication secret.
-func (UsersObjMapper) GetAuthRecord(user types.Uid, scheme string) (string, auth.Level, []byte, time.Time, error) {
+func (usersMapper) GetAuthRecord(user types.Uid, scheme string) (string, auth.Level, []byte, time.Time, error) {
 	unique, authLvl, secret, expires, err := adp.AuthGetRecord(user, scheme)
 	if err == nil {
 		parts := strings.Split(unique, ":")
@@ -329,56 +330,56 @@ func (UsersObjMapper) GetAuthRecord(user types.Uid, scheme string) (string, auth
 
 // GetAuthUniqueRecord takes a unique identifier and a authentication scheme name, fetches user ID and
 // authentication secret.
-func (UsersObjMapper) GetAuthUniqueRecord(scheme, unique string) (types.Uid, auth.Level, []byte, time.Time, error) {
+func (usersMapper) GetAuthUniqueRecord(scheme, unique string) (types.Uid, auth.Level, []byte, time.Time, error) {
 	return adp.AuthGetUniqueRecord(scheme + ":" + unique)
 }
 
 // AddAuthRecord creates a new authentication record for the given user.
-func (UsersObjMapper) AddAuthRecord(uid types.Uid, authLvl auth.Level, scheme, unique string, secret []byte,
+func (usersMapper) AddAuthRecord(uid types.Uid, authLvl auth.Level, scheme, unique string, secret []byte,
 	expires time.Time) error {
 
 	return adp.AuthAddRecord(uid, scheme, scheme+":"+unique, authLvl, secret, expires)
 }
 
 // UpdateAuthRecord updates authentication record with a new secret and expiration time.
-func (UsersObjMapper) UpdateAuthRecord(uid types.Uid, authLvl auth.Level, scheme, unique string,
+func (usersMapper) UpdateAuthRecord(uid types.Uid, authLvl auth.Level, scheme, unique string,
 	secret []byte, expires time.Time) error {
 
 	return adp.AuthUpdRecord(uid, scheme, scheme+":"+unique, authLvl, secret, expires)
 }
 
 // DelAuthRecords deletes user's auth records of the given scheme.
-func (UsersObjMapper) DelAuthRecords(uid types.Uid, scheme string) error {
+func (usersMapper) DelAuthRecords(uid types.Uid, scheme string) error {
 	return adp.AuthDelScheme(uid, scheme)
 }
 
 // Get returns a user object for the given user id
-func (UsersObjMapper) Get(uid types.Uid) (*types.User, error) {
+func (usersMapper) Get(uid types.Uid) (*types.User, error) {
 	return adp.UserGet(uid)
 }
 
 // GetAll returns a slice of user objects for the given user ids
-func (UsersObjMapper) GetAll(uid ...types.Uid) ([]types.User, error) {
+func (usersMapper) GetAll(uid ...types.Uid) ([]types.User, error) {
 	return adp.UserGetAll(uid...)
 }
 
 // GetByCred returns user ID for the given validated credential.
-func (UsersObjMapper) GetByCred(method, value string) (types.Uid, error) {
+func (usersMapper) GetByCred(method, value string) (types.Uid, error) {
 	return adp.UserGetByCred(method, value)
 }
 
 // Delete deletes user records.
-func (UsersObjMapper) Delete(id types.Uid, hard bool) error {
+func (usersMapper) Delete(id types.Uid, hard bool) error {
 	return adp.UserDelete(id, hard)
 }
 
 // UpdateLastSeen updates LastSeen and UserAgent.
-func (UsersObjMapper) UpdateLastSeen(uid types.Uid, userAgent string, when time.Time) error {
+func (usersMapper) UpdateLastSeen(uid types.Uid, userAgent string, when time.Time) error {
 	return adp.UserUpdate(uid, map[string]interface{}{"LastSeen": when, "UserAgent": userAgent})
 }
 
 // Update is a general-purpose update of user data.
-func (UsersObjMapper) Update(uid types.Uid, update map[string]interface{}) error {
+func (usersMapper) Update(uid types.Uid, update map[string]interface{}) error {
 	if _, ok := update["UpdatedAt"]; !ok {
 		update["UpdatedAt"] = types.TimeNow()
 	}
@@ -386,12 +387,12 @@ func (UsersObjMapper) Update(uid types.Uid, update map[string]interface{}) error
 }
 
 // UpdateTags either adds, removes, or resets tags to the given slices.
-func (UsersObjMapper) UpdateTags(uid types.Uid, add, remove, reset []string) ([]string, error) {
+func (usersMapper) UpdateTags(uid types.Uid, add, remove, reset []string) ([]string, error) {
 	return adp.UserUpdateTags(uid, add, remove, reset)
 }
 
 // UpdateState changes user's state and state of some topics associated with the user.
-func (UsersObjMapper) UpdateState(uid types.Uid, state types.ObjState) error {
+func (usersMapper) UpdateState(uid types.Uid, state types.ObjState) error {
 	update := map[string]interface{}{
 		"State":   state,
 		"StateAt": types.TimeNow()}
@@ -399,8 +400,8 @@ func (UsersObjMapper) UpdateState(uid types.Uid, state types.ObjState) error {
 }
 
 // GetSubs loads *all* subscriptions for the given user.
-// Does not load Public or Private, does not load deleted subscriptions.
-func (UsersObjMapper) GetSubs(id types.Uid) ([]types.Subscription, error) {
+// Does not load Public/Trusted or Private, does not load deleted subscriptions.
+func (usersMapper) GetSubs(id types.Uid) ([]types.Subscription, error) {
 	return adp.SubsForUser(id)
 }
 
@@ -408,7 +409,7 @@ func (UsersObjMapper) GetSubs(id types.Uid) ([]types.Subscription, error) {
 // `required` specifies an AND of ORs for required terms:
 // at least one element of every sublist in `required` must be present in the object's tags list.
 // `optional` specifies a list of optional terms.
-func (UsersObjMapper) FindSubs(id types.Uid, required [][]string, optional []string) ([]types.Subscription, error) {
+func (usersMapper) FindSubs(id types.Uid, required [][]string, optional []string) ([]types.Subscription, error) {
 	usubs, err := adp.FindUsers(id, required, optional)
 	if err != nil {
 		return nil, err
@@ -428,65 +429,65 @@ func (UsersObjMapper) FindSubs(id types.Uid, required [][]string, optional []str
 	return allSubs, nil
 }
 
-// GetTopics load a list of user's subscriptions with Public field copied to subscription
-func (UsersObjMapper) GetTopics(id types.Uid, opts *types.QueryOpt) ([]types.Subscription, error) {
+// GetTopics load a list of user's subscriptions with Public+Trusted fields copied to subscription
+func (usersMapper) GetTopics(id types.Uid, opts *types.QueryOpt) ([]types.Subscription, error) {
 	return adp.TopicsForUser(id, false, opts)
 }
 
-// GetTopicsAny load a list of user's subscriptions with Public field copied to subscription.
+// GetTopicsAny load a list of user's subscriptions with Public+Trusted fields copied to subscription.
 // Deleted topics are returned too.
-func (UsersObjMapper) GetTopicsAny(id types.Uid, opts *types.QueryOpt) ([]types.Subscription, error) {
+func (usersMapper) GetTopicsAny(id types.Uid, opts *types.QueryOpt) ([]types.Subscription, error) {
 	return adp.TopicsForUser(id, true, opts)
 }
 
 // GetOwnTopics returns a slice of group topic names where the user is the owner.
-func (UsersObjMapper) GetOwnTopics(id types.Uid) ([]string, error) {
+func (usersMapper) GetOwnTopics(id types.Uid) ([]string, error) {
 	return adp.OwnTopics(id)
 }
 
 // GetChannels returns a slice of group topic names where the user is a channel reader.
-func (UsersObjMapper) GetChannels(id types.Uid) ([]string, error) {
+func (usersMapper) GetChannels(id types.Uid) ([]string, error) {
 	return adp.ChannelsForUser(id)
 }
 
 // UpsertCred adds or updates a credential validation request. Return true if the record was inserted, false if updated.
-func (UsersObjMapper) UpsertCred(cred *types.Credential) (bool, error) {
+func (usersMapper) UpsertCred(cred *types.Credential) (bool, error) {
 	cred.InitTimes()
 	return adp.CredUpsert(cred)
 }
 
 // ConfirmCred marks credential method as confirmed.
-func (UsersObjMapper) ConfirmCred(id types.Uid, method string) error {
+func (usersMapper) ConfirmCred(id types.Uid, method string) error {
 	return adp.CredConfirm(id, method)
 }
 
 // FailCred increments fail count for the given credential method.
-func (UsersObjMapper) FailCred(id types.Uid, method string) error {
+func (usersMapper) FailCred(id types.Uid, method string) error {
 	return adp.CredFail(id, method)
 }
 
 // GetActiveCred gets a the currently active credential for the given user and method.
-func (UsersObjMapper) GetActiveCred(id types.Uid, method string) (*types.Credential, error) {
+func (usersMapper) GetActiveCred(id types.Uid, method string) (*types.Credential, error) {
 	return adp.CredGetActive(id, method)
 }
 
 // GetAllCreds returns credentials of the given user, all or validated only.
-func (UsersObjMapper) GetAllCreds(id types.Uid, method string, validatedOnly bool) ([]types.Credential, error) {
+func (usersMapper) GetAllCreds(id types.Uid, method string, validatedOnly bool) ([]types.Credential, error) {
 	return adp.CredGetAll(id, method, validatedOnly)
 }
 
 // DelCred deletes user's credentials. If method is "", all credentials are deleted.
-func (UsersObjMapper) DelCred(id types.Uid, method, value string) error {
+func (usersMapper) DelCred(id types.Uid, method, value string) error {
 	return adp.CredDel(id, method, value)
 }
 
 // GetUnreadCount returs user's total count of unread messages in all topics with the R permissions
-func (UsersObjMapper) GetUnreadCount(id types.Uid) (int, error) {
+func (usersMapper) GetUnreadCount(id types.Uid) (int, error) {
 	return adp.UserUnreadCount(id)
 }
 
-// TopicsObjMapper is a struct to hold methods for persistence mapping for the topic object.
-type TopicsObjMapperInterface interface {
+// TopicsPersistenceInterface is an interface which defines methods for persistent storage of topics.
+type TopicsPersistenceInterface interface {
 	Create(topic *types.Topic, owner types.Uid, private interface{}) error
 	CreateP2P(initiator, invited *types.Subscription) error
 	Get(topic string) (*types.Topic, error)
@@ -498,13 +499,15 @@ type TopicsObjMapperInterface interface {
 	OwnerChange(topic string, newOwner types.Uid) error
 	Delete(topic string, hard bool) error
 }
-type TopicsObjMapper struct{}
 
-// Topics is an instance of TopicsObjMapper to map methods to.
-var Topics TopicsObjMapperInterface
+// topicsMapper is a concrete type implementing TopicsPersistenceInterface.
+type topicsMapper struct{}
+
+// Topics is a singleton ancor object exporting TopicsPersistenceInterface methods.
+var Topics TopicsPersistenceInterface
 
 // Create creates a topic and owner's subscription to it.
-func (TopicsObjMapper) Create(topic *types.Topic, owner types.Uid, private interface{}) error {
+func (topicsMapper) Create(topic *types.Topic, owner types.Uid, private interface{}) error {
 
 	topic.InitTimes()
 	topic.TouchedAt = topic.CreatedAt
@@ -529,7 +532,7 @@ func (TopicsObjMapper) Create(topic *types.Topic, owner types.Uid, private inter
 }
 
 // CreateP2P creates a P2P topic by generating two user's subsciptions to each other.
-func (TopicsObjMapper) CreateP2P(initiator, invited *types.Subscription) error {
+func (topicsMapper) CreateP2P(initiator, invited *types.Subscription) error {
 	initiator.InitTimes()
 	initiator.SetTouchedAt(initiator.CreatedAt)
 	invited.InitTimes()
@@ -539,36 +542,36 @@ func (TopicsObjMapper) CreateP2P(initiator, invited *types.Subscription) error {
 }
 
 // Get a single topic with a list of relevant users de-normalized into it
-func (TopicsObjMapper) Get(topic string) (*types.Topic, error) {
+func (topicsMapper) Get(topic string) (*types.Topic, error) {
 	return adp.TopicGet(topic)
 }
 
-// GetUsers loads subscriptions for topic plus loads user.Public.
+// GetUsers loads subscriptions for topic plus loads user.Public+Trusted.
 // Deleted subscriptions are not loaded.
-func (TopicsObjMapper) GetUsers(topic string, opts *types.QueryOpt) ([]types.Subscription, error) {
+func (topicsMapper) GetUsers(topic string, opts *types.QueryOpt) ([]types.Subscription, error) {
 	return adp.UsersForTopic(topic, false, opts)
 }
 
-// GetUsersAny loads subscriptions for topic plus loads user.Public. It's the same as GetUsers,
+// GetUsersAny loads subscriptions for topic plus loads user.Public+Trusted. It's the same as GetUsers,
 // except it loads deleted subscriptions too.
-func (TopicsObjMapper) GetUsersAny(topic string, opts *types.QueryOpt) ([]types.Subscription, error) {
+func (topicsMapper) GetUsersAny(topic string, opts *types.QueryOpt) ([]types.Subscription, error) {
 	return adp.UsersForTopic(topic, true, opts)
 }
 
-// GetSubs loads a list of subscriptions to the given topic, user.Public and deleted
+// GetSubs loads a list of subscriptions to the given topic, user.Public+Trusted and deleted
 // subscriptions are not loaded. Suspended subscriptions are loaded.
-func (TopicsObjMapper) GetSubs(topic string, opts *types.QueryOpt) ([]types.Subscription, error) {
+func (topicsMapper) GetSubs(topic string, opts *types.QueryOpt) ([]types.Subscription, error) {
 	return adp.SubsForTopic(topic, false, opts)
 }
 
 // GetSubsAny loads a list of subscriptions to the given topic including deleted subscription.
-// user.Public is not loaded
-func (TopicsObjMapper) GetSubsAny(topic string, opts *types.QueryOpt) ([]types.Subscription, error) {
+// user.Public/Trusted are not loaded
+func (topicsMapper) GetSubsAny(topic string, opts *types.QueryOpt) ([]types.Subscription, error) {
 	return adp.SubsForTopic(topic, true, opts)
 }
 
 // Update is a generic topic update.
-func (TopicsObjMapper) Update(topic string, update map[string]interface{}) error {
+func (topicsMapper) Update(topic string, update map[string]interface{}) error {
 	if _, ok := update["UpdatedAt"]; !ok {
 		update["UpdatedAt"] = types.TimeNow()
 	}
@@ -576,29 +579,31 @@ func (TopicsObjMapper) Update(topic string, update map[string]interface{}) error
 }
 
 // OwnerChange replaces the old topic owner with the new owner.
-func (TopicsObjMapper) OwnerChange(topic string, newOwner types.Uid) error {
+func (topicsMapper) OwnerChange(topic string, newOwner types.Uid) error {
 	return adp.TopicOwnerChange(topic, newOwner)
 }
 
 // Delete deletes topic, messages, attachments, and subscriptions.
-func (TopicsObjMapper) Delete(topic string, hard bool) error {
+func (topicsMapper) Delete(topic string, hard bool) error {
 	return adp.TopicDelete(topic, hard)
 }
 
-// SubsObjMapper is A struct to hold methods for persistence mapping for the Subscription object.
-type SubsObjMapperInterface interface {
+// SubsPersistenceInterface is an interface which defines methods for persistent storage of subscriptions.
+type SubsPersistenceInterface interface {
 	Create(subs ...*types.Subscription) error
 	Get(topic string, user types.Uid) (*types.Subscription, error)
 	Update(topic string, user types.Uid, update map[string]interface{}) error
 	Delete(topic string, user types.Uid) error
 }
-type SubsObjMapper struct{}
 
-// Subs is an instance of SubsObjMapper to map methods to.
-var Subs SubsObjMapperInterface
+// subsMapper is a concrete type implementing SubsPersistenceInterface.
+type subsMapper struct{}
+
+// Subs is a singleton ancor object exporting SubsPersistenceInterface.
+var Subs SubsPersistenceInterface
 
 // Create creates multiple subscriptions
-func (SubsObjMapper) Create(subs ...*types.Subscription) error {
+func (subsMapper) Create(subs ...*types.Subscription) error {
 	for _, sub := range subs {
 		sub.InitTimes()
 	}
@@ -607,62 +612,43 @@ func (SubsObjMapper) Create(subs ...*types.Subscription) error {
 }
 
 // Get given subscription
-func (SubsObjMapper) Get(topic string, user types.Uid) (*types.Subscription, error) {
+func (subsMapper) Get(topic string, user types.Uid) (*types.Subscription, error) {
 	return adp.SubscriptionGet(topic, user)
 }
 
 // Update values of topic's subscriptions.
-func (SubsObjMapper) Update(topic string, user types.Uid, update map[string]interface{}) error {
+func (subsMapper) Update(topic string, user types.Uid, update map[string]interface{}) error {
 	update["UpdatedAt"] = types.TimeNow()
 	return adp.SubsUpdate(topic, user, update)
 }
 
 // Delete deletes a subscription
-func (SubsObjMapper) Delete(topic string, user types.Uid) error {
+func (subsMapper) Delete(topic string, user types.Uid) error {
 	return adp.SubsDelete(topic, user)
 }
 
-// MessagesObjMapper is a struct to hold methods for persistence mapping for the Message object.
-type MessagesObjMapperInterface interface {
-	Save(msg *types.Message, readBySender bool) error
+// MessagesPersistenceInterface is an interface which defines methods for persistent storage of messages.
+type MessagesPersistenceInterface interface {
+	Save(msg *types.Message, attachments []string, readBySender bool) error
 	DeleteList(topic string, delID int, forUser types.Uid, ranges []types.Range) error
 	GetAll(topic string, forUser types.Uid, opt *types.QueryOpt) ([]types.Message, error)
 	GetDeleted(topic string, forUser types.Uid, opt *types.QueryOpt) ([]types.Range, int, error)
 }
 
-type MessagesObjMapper struct{}
+// messagesMapper is a concrete type implementing MessagesPersistenceInterface.
+type messagesMapper struct{}
 
-// Messages is an instance of MessagesObjMapper to map methods to.
-var Messages MessagesObjMapperInterface
+// Messages is a singleton ancor object for exporting MessagesPersistenceInterface.
+var Messages MessagesPersistenceInterface
 
 // Save message
-func (MessagesObjMapper) Save(msg *types.Message, readBySender bool) error {
+func (messagesMapper) Save(msg *types.Message, attachments []string, readBySender bool) error {
 	msg.InitTimes()
 	msg.SetUid(Store.GetUid())
 	// Increment topic's or user's SeqId
 	err := adp.TopicUpdateOnMessage(msg.Topic, msg)
 	if err != nil {
 		return err
-	}
-
-	// Check if the message has attachments. If so, link earlier uploaded files to message.
-	var attachments []string
-	if header, ok := msg.Head["attachments"]; ok {
-		// The header is typed as []interface{}, convert to []string
-		if arr, ok := header.([]interface{}); ok {
-			for _, val := range arr {
-				if url, ok := val.(string); ok {
-					// Convert attachment URLs to file IDs.
-					if fid := mediaHandler.GetIdFromUrl(url); !fid.IsZero() {
-						attachments = append(attachments, fid.String())
-					}
-				}
-			}
-		}
-
-		if len(attachments) == 0 {
-			delete(msg.Head, "attachments")
-		}
 	}
 
 	err = adp.MessageSave(msg)
@@ -684,14 +670,14 @@ func (MessagesObjMapper) Save(msg *types.Message, readBySender bool) error {
 	}
 
 	if len(attachments) > 0 {
-		return adp.MessageAttachments(msg.Uid(), attachments)
+		return adp.FileLinkAttachments("", types.ZeroUid, msg.Uid(), attachments)
 	}
 
 	return nil
 }
 
 // DeleteList deletes multiple messages defined by a list of ranges.
-func (MessagesObjMapper) DeleteList(topic string, delID int, forUser types.Uid, ranges []types.Range) error {
+func (messagesMapper) DeleteList(topic string, delID int, forUser types.Uid, ranges []types.Range) error {
 	var toDel *types.DelMessage
 	if delID > 0 {
 		toDel = &types.DelMessage{
@@ -728,12 +714,12 @@ func (MessagesObjMapper) DeleteList(topic string, delID int, forUser types.Uid, 
 }
 
 // GetAll returns multiple messages.
-func (MessagesObjMapper) GetAll(topic string, forUser types.Uid, opt *types.QueryOpt) ([]types.Message, error) {
+func (messagesMapper) GetAll(topic string, forUser types.Uid, opt *types.QueryOpt) ([]types.Message, error) {
 	return adp.MessageGetAll(topic, forUser, opt)
 }
 
 // GetDeleted returns the ranges of deleted messages and the largest DelId reported in the list.
-func (MessagesObjMapper) GetDeleted(topic string, forUser types.Uid, opt *types.QueryOpt) ([]types.Range, int, error) {
+func (messagesMapper) GetDeleted(topic string, forUser types.Uid, opt *types.QueryOpt) ([]types.Range, int, error) {
 	dmsgs, err := adp.MessageGetDeleted(topic, forUser, opt)
 	if err != nil {
 		return nil, 0, err
@@ -892,19 +878,22 @@ func (storeObj) GetValidator(name string) validate.Validator {
 	return validators[strings.ToLower(name)]
 }
 
-// DeviceMapper is a struct to map methods used for handling device IDs, used to generate push notifications.
-type DeviceMapperInterface interface {
+// DevicePersistenceInterface is an interface which defines methods used for handling device IDs.
+// Mostly used to generate push notifications.
+type DevicePersistenceInterface interface {
 	Update(uid types.Uid, oldDeviceID string, dev *types.DeviceDef) error
 	GetAll(uid ...types.Uid) (map[types.Uid][]types.DeviceDef, int, error)
 	Delete(uid types.Uid, deviceID string) error
 }
-type DeviceMapper struct{}
 
-// Devices is an instance of DeviceMapper to map methods to.
-var Devices DeviceMapperInterface
+// deviceMapper is a concrete type implementing DevicePersistenceInterface.
+type deviceMapper struct{}
+
+// Devices is a singleton instance of DevicePersistenceInterface to map methods to.
+var Devices DevicePersistenceInterface
 
 // Update updates a device record.
-func (DeviceMapper) Update(uid types.Uid, oldDeviceID string, dev *types.DeviceDef) error {
+func (deviceMapper) Update(uid types.Uid, oldDeviceID string, dev *types.DeviceDef) error {
 	// If the old device Id is specified and it's different from the new ID, delete the old id
 	if oldDeviceID != "" && (dev == nil || dev.DeviceId != oldDeviceID) {
 		if err := adp.DeviceDelete(uid, oldDeviceID); err != nil {
@@ -921,12 +910,12 @@ func (DeviceMapper) Update(uid types.Uid, oldDeviceID string, dev *types.DeviceD
 
 // GetAll returns all known device IDs for a given list of user IDs.
 // The second return parameter is the count of found device IDs.
-func (DeviceMapper) GetAll(uid ...types.Uid) (map[types.Uid][]types.DeviceDef, int, error) {
+func (deviceMapper) GetAll(uid ...types.Uid) (map[types.Uid][]types.DeviceDef, int, error) {
 	return adp.DeviceGetAll(uid...)
 }
 
 // Delete deletes device record for a given user.
-func (DeviceMapper) Delete(uid types.Uid, deviceID string) error {
+func (deviceMapper) Delete(uid types.Uid, deviceID string) error {
 	return adp.DeviceDelete(uid, deviceID)
 }
 
@@ -962,40 +951,39 @@ func (storeObj) UseMediaHandler(name, config string) error {
 	return mediaHandler.Init(config)
 }
 
-// FileMapper is a struct to map methods used for file handling.
-type FileMapperInterface interface {
+// FilePersistenceInterface is an interface wchich defines methods used for file handling (records or uploaded files).
+type FilePersistenceInterface interface {
 	StartUpload(fd *types.FileDef) error
-	FinishUpload(fid string, success bool, size int64) (*types.FileDef, error)
+	FinishUpload(fd *types.FileDef, success bool, size int64) (*types.FileDef, error)
 	Get(fid string) (*types.FileDef, error)
 	DeleteUnused(olderThan time.Time, limit int) error
+	LinkAttachments(topic string, msgId types.Uid, attachments []string) error
 }
-type FileMapper struct{}
 
-// Files is an instance of FileMapper to be used for handling file uploads.
-var Files FileMapperInterface
+// fileMapper is concrete type which implements FilePersistenceInterface.
+type fileMapper struct{}
+
+// Files is a sigleton instance of FilePersistenceInterface to be used for handling file uploads.
+var Files FilePersistenceInterface
 
 // StartUpload records that the given user initiated a file upload
-func (FileMapper) StartUpload(fd *types.FileDef) error {
+func (fileMapper) StartUpload(fd *types.FileDef) error {
 	fd.Status = types.UploadStarted
 	return adp.FileStartUpload(fd)
 }
 
-// FinishUpload marks started upload as successfully finished.
-func (FileMapper) FinishUpload(fid string, success bool, size int64) (*types.FileDef, error) {
-	status := types.UploadCompleted
-	if !success {
-		status = types.UploadFailed
-	}
-	return adp.FileFinishUpload(fid, status, size)
+// FinishUpload marks started upload as successfully finished or failed.
+func (fileMapper) FinishUpload(fd *types.FileDef, success bool, size int64) (*types.FileDef, error) {
+	return adp.FileFinishUpload(fd, success, size)
 }
 
 // Get fetches a file record for a unique file id.
-func (FileMapper) Get(fid string) (*types.FileDef, error) {
+func (fileMapper) Get(fid string) (*types.FileDef, error) {
 	return adp.FileGet(fid)
 }
 
-// DeleteUnused removes unused attachments.
-func (FileMapper) DeleteUnused(olderThan time.Time, limit int) error {
+// DeleteUnused removes unused attachments and avatars.
+func (fileMapper) DeleteUnused(olderThan time.Time, limit int) error {
 	toDel, err := adp.FileDeleteUnused(olderThan, limit)
 	if err != nil {
 		return err
@@ -1006,12 +994,34 @@ func (FileMapper) DeleteUnused(olderThan time.Time, limit int) error {
 	return nil
 }
 
+// LinkAttachments connects earlier uploaded attachments to a message or topic to prevent it
+// from being garbage collected.
+func (fileMapper) LinkAttachments(topic string, msgId types.Uid, attachments []string) error {
+	// Convert attachment URLs to file IDs.
+	var fids []string
+	for _, url := range attachments {
+		if fid := mediaHandler.GetIdFromUrl(url); !fid.IsZero() {
+			fids = append(fids, fid.String())
+		}
+	}
+
+	if len(fids) > 0 {
+		userId := types.ZeroUid
+		if types.GetTopicCat(topic) == types.TopicCatMe {
+			userId = types.ParseUserId(topic)
+			topic = ""
+		}
+		return adp.FileLinkAttachments(topic, userId, msgId, attachments)
+	}
+	return nil
+}
+
 func init() {
 	Store = storeObj{}
-	Users = UsersObjMapper{}
-	Topics = TopicsObjMapper{}
-	Subs = SubsObjMapper{}
-	Messages = MessagesObjMapper{}
-	Devices = DeviceMapper{}
-	Files = FileMapper{}
+	Users = usersMapper{}
+	Topics = topicsMapper{}
+	Subs = subsMapper{}
+	Messages = messagesMapper{}
+	Devices = deviceMapper{}
+	Files = fileMapper{}
 }

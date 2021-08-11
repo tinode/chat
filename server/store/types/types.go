@@ -359,6 +359,9 @@ func TimeNow() time.Time {
 	return time.Now().UTC().Round(time.Millisecond)
 }
 
+// TimeFormatRFC3339 is a format string for writing timestamps as RFC3339.
+const TimeFormatRFC3339 = "2006-01-02T15:04:05.999"
+
 // InitTimes initializes time.Time variables in the header to current time.
 func (h *ObjHeader) InitTimes() {
 	if h.CreatedAt.IsZero() {
@@ -492,7 +495,8 @@ type User struct {
 	// User agent provided when accessing the topic last time
 	UserAgent string
 
-	Public interface{}
+	Public  interface{}
+	Trusted interface{}
 
 	// Unique indexed tags (email, phone) for finding this user. Stored on the
 	// 'users' as well as indexed in 'tagunique'
@@ -890,6 +894,8 @@ type Subscription struct {
 	// Deserialized public value from topic or user (depends on context)
 	// In case of P2P topics this is the Public value of the other user.
 	public interface{}
+	// In case of P2P topics this is the Trusted value of the other user.
+	trusted interface{}
 	// deserialized SeqID from user or topic
 	seqId int
 	// Deserialized TouchedAt from topic
@@ -906,14 +912,24 @@ type Subscription struct {
 	state ObjState
 }
 
-// SetPublic assigns to public, otherwise not accessible from outside the package.
+// SetPublic assigns a value to `public`, otherwise not accessible from outside the package.
 func (s *Subscription) SetPublic(pub interface{}) {
 	s.public = pub
 }
 
-// GetPublic reads value of public.
+// GetPublic reads value of `public`.
 func (s *Subscription) GetPublic() interface{} {
 	return s.public
+}
+
+// SetTrusted assigns a value to `trusted`, otherwise not accessible from outside the package.
+func (s *Subscription) SetTrusted(tstd interface{}) {
+	s.trusted = tstd
+}
+
+// GetTrusted reads value of `trusted`.
+func (s *Subscription) GetTrusted() interface{} {
+	return s.trusted
 }
 
 // SetWith sets other user for P2P subscriptions.
@@ -1040,7 +1056,8 @@ type Topic struct {
 	// If messages were deleted, sequential id of the last operation to delete them
 	DelId int
 
-	Public interface{}
+	Public  interface{}
+	Trusted interface{}
 
 	// Indexed tags for finding this topic.
 	Tags StringSlice
@@ -1282,6 +1299,8 @@ const (
 	UploadCompleted
 	// UploadFailed indicates that the upload has failed.
 	UploadFailed
+	// UploadDeleted indicates that the upload is no longer needed and can be deleted.
+	UploadDeleted
 )
 
 // FileDef is a stored record of a file upload
