@@ -852,6 +852,14 @@ type Credential struct {
 	Retries int
 }
 
+// LastSeenUA is a timestamp and a user agent of when the user was last seen.
+type LastSeenUA struct {
+	// When is the timestamp when the user was last online.
+	When time.Time
+	// UserAgent is the client UA of the last online access.
+	UserAgent string
+}
+
 // Subscription to a topic
 type Subscription struct {
 	ObjHeader `bson:",inline"`
@@ -886,10 +894,8 @@ type Subscription struct {
 	seqId int
 	// Deserialized TouchedAt from topic
 	touchedAt time.Time
-	// timestamp when the user was last online
-	lastSeen time.Time
-	// user agent string of the last online access
-	userAgent string
+	// Timestamp & user agent of when the user was last online.
+	lastSeenUA *LastSeenUA
 
 	// P2P only. ID of the other user
 	with string
@@ -947,21 +953,31 @@ func (s *Subscription) SetSeqId(id int) {
 }
 
 // GetLastSeen returns lastSeen.
-func (s *Subscription) GetLastSeen() time.Time {
-	return s.lastSeen
+func (s *Subscription) GetLastSeen() *time.Time {
+	if s.lastSeenUA != nil {
+		return &s.lastSeenUA.When
+	}
+	return nil
 }
 
 // GetUserAgent returns userAgent.
 func (s *Subscription) GetUserAgent() string {
-	return s.userAgent
+	if s.lastSeenUA != nil {
+		return s.lastSeenUA.UserAgent
+	}
+	return ""
 }
 
 // SetLastSeenAndUA updates lastSeen time and userAgent.
 func (s *Subscription) SetLastSeenAndUA(when *time.Time, ua string) {
-	if when != nil {
-		s.lastSeen = *when
+	if when != nil && !when.IsZero() {
+		s.lastSeenUA = &LastSeenUA{
+			When:      *when,
+			UserAgent: ua,
+		}
+	} else {
+		s.lastSeenUA = nil
 	}
-	s.userAgent = ua
 }
 
 // SetDefaultAccess updates default access values.

@@ -1648,7 +1648,7 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 
 	// Fetch all subscribed users. The number of users is not large
 	q := `SELECT s.createdat,s.updatedat,s.deletedat,s.userid,s.topic,s.delid,s.recvseqid,
-		s.readseqid,s.modewant,s.modegiven,u.public,s.private
+		s.readseqid,s.modewant,s.modegiven,u.public,u.lastseen,u.useragent,s.private
 		FROM subscriptions AS s JOIN users AS u ON s.userid=u.id 
 		WHERE s.topic=?`
 	args := []interface{}{topic}
@@ -1699,18 +1699,21 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 	var sub t.Subscription
 	var subs []t.Subscription
 	var public interface{}
+	var lastSeen sql.NullTime
+	var userAgent string
 	for rows.Next() {
 		if err = rows.Scan(
 			&sub.CreatedAt, &sub.UpdatedAt, &sub.DeletedAt,
 			&sub.User, &sub.Topic, &sub.DelId, &sub.RecvSeqId,
 			&sub.ReadSeqId, &sub.ModeWant, &sub.ModeGiven,
-			&public, &sub.Private); err != nil {
+			&public, &lastSeen, &userAgent, &sub.Private); err != nil {
 			break
 		}
 
 		sub.User = encodeUidString(sub.User).String()
 		sub.Private = fromJSON(sub.Private)
 		sub.SetPublic(fromJSON(public))
+		sub.SetLastSeenAndUA(&lastSeen.Time, userAgent)
 		subs = append(subs, sub)
 	}
 	if err == nil {
@@ -1719,14 +1722,20 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 	rows.Close()
 
 	if err == nil && tcat == t.TopicCatP2P && len(subs) > 0 {
-		// Swap public values of P2P topics as expected.
+		// Swap public & lastSeen values of P2P topics as expected.
 		if len(subs) == 1 {
 			// The other user is deleted, nothing we can do.
 			subs[0].SetPublic(nil)
+			subs[0].SetLastSeenAndUA(nil, "")
 		} else {
 			pub := subs[0].GetPublic()
 			subs[0].SetPublic(subs[1].GetPublic())
 			subs[1].SetPublic(pub)
+
+			lastSeen := subs[0].GetLastSeen()
+			userAgent = subs[0].GetUserAgent()
+			subs[0].SetLastSeenAndUA(subs[1].GetLastSeen(), subs[1].GetUserAgent())
+			subs[1].SetLastSeenAndUA(lastSeen, userAgent)
 		}
 
 		// Remove deleted and unneeded subscriptions
