@@ -952,10 +952,6 @@ func (s *Subscription) SetTouchedAt(touchedAt time.Time) {
 	if touchedAt.After(s.touchedAt) {
 		s.touchedAt = touchedAt
 	}
-
-	if s.touchedAt.Before(s.UpdatedAt) {
-		s.touchedAt = s.UpdatedAt
-	}
 }
 
 // GetSeqId returns seqId.
