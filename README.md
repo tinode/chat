@@ -97,10 +97,10 @@ When you register a new account you are asked for an email address to send valid
   * Support for custom authentication backends.
   * Ability to block unwanted communication server-side.
   * Anonymous users (important for use cases related to tech support over chat).
-  * Storage and out of band transfer of large objects like images or document files using local file system or Amazon S3.
   * Plugins to extend functionality, for example, to support moderation or chatbots.
 * Performance, reliability and development:
   * Sharded clustering with failover.
+  * Storage and out of band transfer of large objects like images or document files using local file system or Amazon S3.
   * JSON or [protobuf version 3](https://developers.google.com/protocol-buffers/) wire protocols.
   * Bindings for various programming languages:
     * Javascript with no external dependencies.
@@ -136,7 +136,7 @@ All client software has support for [internationalization](docs/translations.md)
 | Russian | &check; | &check; | &check; | &check; |
 | Spanish |   | &check; | &check; | &check; |
 
-More translations are [welcome](docs/translations.md). Particularly interested in Arabic, Vietnamese, Persian, Indonesian, Portuguese, Hindi, Bengali.
+More translations are [welcome](docs/translations.md). Particularly interested in Arabic, Vietnamese, Persian, Indonesian, Portuguese, Hindi, Bengali, Turkish.
 
 ## Third-Party Licenses
 
