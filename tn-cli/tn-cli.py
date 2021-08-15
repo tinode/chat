@@ -78,6 +78,12 @@ RE_INDEX = re.compile(r"(\w+)\[(\w+)\]")
 # Macros module (may be None).
 macros = None
 
+# String used as a delete marker. I.e. when a value needs to be deleted, use this string
+DELETE_MARKER = 'DEL!'
+
+# Unicode DEL character used internally by Tinode when a value needs to be deleted.
+TINODE_DEL = '␡'
+
 # Python is retarded.
 class dotdict(dict):
     """dot.notation access to dictionary attributes"""
@@ -86,20 +92,25 @@ class dotdict(dict):
     __delattr__ = dict.__delitem__
 
 
-# Pack user's name and avatar into a theCard.
-def makeTheCard(fn, photofile):
+# Pack name, description, and avatar into a theCard.
+def makeTheCard(fn, note, photofile):
     card = None
 
-    if (fn != None and fn.strip() != "") or photofile != None:
+    if (fn != None and fn.strip() != "") or photofile != None or note != None:
         card = {}
         if fn != None:
-            card['fn'] = fn.strip()
+            fn = fn.strip()
+            card['fn'] = TINODE_DEL if fn == DELETE_MARKER or fn == '' else fn
+
+        if note != None:
+            note = note.strip()
+            card['note'] = TINODE_DEL if note == DELETE_MARKER or note == '' else note
 
         if photofile != None:
-            if photofile == '':
+            if photofile == '' or photofile == DELETE_MARKER:
                 # Delete the avatar.
                 card['photo'] = {
-                    'data': '␡'
+                    'data': TINODE_DEL
                 }
             else:
                 try:
@@ -200,6 +211,20 @@ def parse_cred(cred):
             result.append(pb.ClientCred(method=parts[0] if len(parts) > 0 else None,
                 value=parts[1] if len(parts) > 1 else None,
                 response=parts[2] if len(parts) > 2 else None))
+
+    return result
+
+# Parse trusted values: [staff,rm-verified].
+def parse_trusted(trusted):
+    result = None
+    if trusted != None:
+        result = {}
+        for t in trusted.split(","):
+            t = t.strip()
+            if t.startswith("rm-"):
+                result[t[3:]] = TINODE_DEL
+            else:
+                result[t] = True
 
     return result
 
@@ -326,12 +351,12 @@ def accMsg(id, cmd, ignored):
     elif cmd.suspend == 'false':
         state = 'ok'
 
-    cmd.public = encode_to_bytes(makeTheCard(cmd.fn, cmd.photo))
+    cmd.public = encode_to_bytes(makeTheCard(cmd.fn, cmd.note, cmd.photo))
     cmd.private = encode_to_bytes(cmd.private)
     return pb.ClientMsg(acc=pb.ClientAcc(id=str(id), user_id=cmd.user, state=state,
         scheme=cmd.scheme, secret=cmd.secret, login=cmd.do_login, tags=cmd.tags.split(",") if cmd.tags else None,
         desc=pb.SetDesc(default_acs=pb.DefaultAcsMode(auth=cmd.auth, anon=cmd.anon),
-            public=cmd.public, private=cmd.private),
+            public=cmd.public, private=cmd.private, trusted=parse_trusted(cmd.trusted)),
         cred=parse_cred(cmd.cred)),
         extra=pb.ClientExtra(on_behalf_of=tn_globals.DefaultUser))
 
@@ -367,11 +392,11 @@ def subMsg(id, cmd, ignored):
         cmd.topic = tn_globals.DefaultTopic
     if cmd.get_query:
         cmd.get_query = pb.GetQuery(what=" ".join(cmd.get_query.split(",")))
-    cmd.public = encode_to_bytes(makeTheCard(cmd.fn, cmd.photo))
-    cmd.private = encode_to_bytes(cmd.private)
+    cmd.public = encode_to_bytes(makeTheCard(cmd.fn, cmd.note, cmd.photo))
+    cmd.private = TINODE_DEL if cmd.private == DELETE_MARKER else encode_to_bytes(cmd.private)
     return pb.ClientMsg(sub=pb.ClientSub(id=str(id), topic=cmd.topic,
         set_query=pb.SetQuery(
-            desc=pb.SetDesc(public=cmd.public, private=cmd.private,
+            desc=pb.SetDesc(public=cmd.public, private=cmd.private, trusted=parse_trusted(cmd.trusted),
                 default_acs=pb.DefaultAcsMode(auth=cmd.auth, anon=cmd.anon)),
             sub=pb.SetSub(mode=cmd.mode),
             tags=cmd.tags.split(",") if cmd.tags else None),
@@ -438,10 +463,10 @@ def setMsg(id, cmd, ignored):
         cmd.topic = tn_globals.DefaultTopic
 
     if cmd.public == None:
-        cmd.public = encode_to_bytes(makeTheCard(cmd.fn, cmd.photo))
+        cmd.public = encode_to_bytes(makeTheCard(cmd.fn, cmd.note, cmd.photo))
     else:
-        cmd.public = encode_to_bytes(cmd.public)
-    cmd.private = encode_to_bytes(cmd.private)
+        cmd.public = TINODE_DEL if cmd.public == DELETE_MARKER else encode_to_bytes(cmd.public)
+    cmd.private = TINODE_DEL if cmd.private == DELETE_MARKER else encode_to_bytes(cmd.private)
     cred = parse_cred(cmd.cred)
     if cred:
         if len(cred) > 1:
@@ -451,7 +476,7 @@ def setMsg(id, cmd, ignored):
     return pb.ClientMsg(set=pb.ClientSet(id=str(id), topic=cmd.topic,
         query=pb.SetQuery(
             desc=pb.SetDesc(default_acs=pb.DefaultAcsMode(auth=cmd.auth, anon=cmd.anon),
-                public=cmd.public, private=cmd.private),
+                public=cmd.public, private=cmd.private, trusted=parse_trusted(cmd.trusted)),
         sub=pb.SetSub(user_id=cmd.user, mode=cmd.mode),
         tags=cmd.tags.split(",") if cmd.tags else None,
         cred=cred)),
@@ -603,7 +628,6 @@ def upload(id, cmd, args):
     return None
 
 
-
 # Given an array of parts, parse commands and arguments
 def parse_cmd(parts):
     parser = None
@@ -619,6 +643,8 @@ def parse_cmd(parts):
         parser.add_argument('--fn', default=None, help='user\'s human name')
         parser.add_argument('--photo', default=None, help='avatar file name')
         parser.add_argument('--private', default=None, help='user\'s private info')
+        parser.add_argument('--note', default=None, help='user\'s description')
+        parser.add_argument('--trusted', default=None, help='trusted markers: verified, staff, danger, prepend with rm- to remove, e.g. rm-verified')
         parser.add_argument('--auth', default=None, help='default access mode for authenticated users')
         parser.add_argument('--anon', default=None, help='default access mode for anonymous users')
         parser.add_argument('--cred', default=None, help='credentials, comma separated list in method:value format, e.g. email:test@example.com,tel:12345')
@@ -646,6 +672,8 @@ def parse_cmd(parts):
         parser.add_argument('--fn', default=None, help='topic\'s user-visible name')
         parser.add_argument('--photo', default=None, help='avatar file name')
         parser.add_argument('--private', default=None, help='topic\'s private info')
+        parser.add_argument('--note', default=None, help='topic\'s description')
+        parser.add_argument('--trusted', default=None, help='trusted markers: verified, staff, danger')
         parser.add_argument('--auth', default=None, help='default access mode for authenticated users')
         parser.add_argument('--anon', default=None, help='default access mode for anonymous users')
         parser.add_argument('--mode', default=None, help='new value of access mode')
@@ -680,8 +708,10 @@ def parse_cmd(parts):
         parser.add_argument('topic', help='topic to update')
         parser.add_argument('--fn', help='topic\'s title')
         parser.add_argument('--photo', help='avatar file name')
-        parser.add_argument('--public', help='topic\'s public info, alternative to fn+photo')
+        parser.add_argument('--public', help='topic\'s public info, alternative to fn+photo+note')
         parser.add_argument('--private', help='topic\'s private info')
+        parser.add_argument('--note', default=None, help='topic\'s description')
+        parser.add_argument('--trusted', default=None, help='trusted markers: verified, staff, danger')
         parser.add_argument('--auth', help='default access mode for authenticated users')
         parser.add_argument('--anon', help='default access mode for anonymous users')
         parser.add_argument('--user', help='ID of the account to update')
@@ -748,6 +778,10 @@ def parse_input(cmd):
     elif parts[0] == ".verbose":
         parser = argparse.ArgumentParser(prog=parts[0], description='Toggle logging verbosity')
 
+    elif parts[0] == ".delmark":
+        parser = argparse.ArgumentParser(prog=parts[0], description='Use custom delete maker instead of default DEL!')
+        parser.add_argument('delmark', help='marker to use')
+
     else:
         parser = parse_cmd(parts)
 
@@ -755,6 +789,7 @@ def parse_input(cmd):
         printout("Unrecognized:", parts[0])
         printout("Possible commands:")
         printout("\t.await\t\t- wait for completion of an operation")
+        printout("\t.delmark\t\t- custom delete marker to use instead of default DEL!")
         printout("\t.exit\t\t- exit the program (also .quit)")
         printout("\t.log\t\t- write value of a variable to stdout")
         printout("\t.must\t\t- wait for completion of an operation, terminate on failure")
@@ -850,6 +885,11 @@ def serialize_cmd(string, id, args):
         elif cmd.cmd == ".verbose":
             tn_globals.Verbose = not tn_globals.Verbose
             stdoutln("Logging is {}".format("verbose" if tn_globals.Verbose else "normal"))
+            return None, None
+
+        elif cmd.cmd == ".delmark":
+            DELETE_MARKER = cmd.delmark
+            stdoutln("Using {} as delete marker".format(DELETE_MARKER))
             return None, None
 
         elif cmd.cmd == "upload":

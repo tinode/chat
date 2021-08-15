@@ -50,6 +50,7 @@ python tn-cli.py < sample-script.txt
 ### Local (non-networking)
 
 * `.await` - issue a gRPC call and wait for completion, optionally assign result to a variable.
+* `.delmark` - use custom delete marker instead of default `DEL!`; needed when some value is to be removed rather than set to blank.
 * `.exit` - terminate execution and exit the CLI; also `.quit`.
 * `.log` - write a value of a variable to `stdout`.
 * `.must` - issue a gRPC call and wait for completion, optionally assign result to a variable; raise an exception if result is not a success.
@@ -85,7 +86,7 @@ Macros are high-level wrappers for series of gRPC calls. Currently, the followin
 * `useradd` - create a new user account
 * `userdel` - delete user account (requires root privileges)
 * `usermod` - modify user account (requires root privileges)
-* `vcard` - print user's public and private info (requires root privileges)
+* `thecard` - print user's public and private info (requires root privileges)
 
 You can define your own macros in [macros.py](macros.py) or create a separate python module (you can load it via `--load-macros`).
 Refer to [macros.py](macros.py) for examples.
