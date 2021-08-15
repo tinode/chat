@@ -522,40 +522,44 @@ If `307 Temporary Redirect` is returned, the client must retry the upload at the
 
 The `ctrl.params.url` contains the path to the uploaded file at the current server. It could be either the full path like `/v0/file/s/mfHLxDWFhfU.pdf`, a relative path like `./mfHLxDWFhfU.pdf`, or just the file name `mfHLxDWFhfU.pdf`. Anything but the full path is interpreted against the default *download* endpoint `/v0/file/s/`. For instance, if `mfHLxDWFhfU.pdf` is returned then the file is located at `http(s)://current-tinode-server/v0/file/s/mfHLxDWFhfU.pdf`.
 
-Once the URL of the file is received, either immediately or after following the redirect, the client may use the URL to send a `{pub}` message with the uploaded file as an attachment. The URL should be used to produce a [Drafty](./drafty.md)-formatted `pub.content` field and also should be referenced in the `pub.head.attachments`:
+Once the URL of the file is received, either immediately or after following the redirect, the client may use the URL to send a `{pub}` message with the uploaded file as an attachment, or, if the file is an image, as an avatar image for a topic or user profile (see [theCard](./thecard.md)). For example, the URL can be used in a [Drafty](./drafty.md)-formatted `pub.content` field:
 
 ```js
-pub: {
-  id: "121103",
-  topic: "grpnG99YhENiQU",
-  head: {
-    attachments: ["/v0/file/s/sJOD_tZDPz0.jpg"],
-    mime: "text/x-drafty"
-  },
-  content: {
-    ent: [
-    {
-      data: {
-      mime: "image/jpeg",
-      name: "roses-are-red.jpg",
-      ref:  "/v0/file/s/sJOD_tZDPz0.jpg",
-      size: 437265
+{
+  pub: {
+    id: "121103",
+    topic: "grpnG99YhENiQU",
+    head: {
+      mime: "text/x-drafty"
     },
-      tp: "EX"
+    content: {
+      ent: [
+      {
+        data: {
+        mime: "image/jpeg",
+        name: "roses-are-red.jpg",
+        ref:  "/v0/file/s/sJOD_tZDPz0.jpg",
+        size: 437265
+      },
+        tp: "EX"
+      }
+    ],
+    fmt: [
+      {
+        at: -1,
+      key:0,
+      len:1
+      }
+    ]
     }
-  ],
-  fmt: [
-    {
-      at: -1,
-    key:0,
-    len:1
-    }
-  ]
+  },
+  extra: {
+    attachments: ["/v0/file/s/sJOD_tZDPz0.jpg"]
   }
 }
 ```
 
-It's important to list the URLs in the `head.attachments` field. Tinode server uses this field to maintain the uploaded file's use counter. Once the counter drops to zero for the given file (for instance, because a message with the shared URL was deleted or because the client failed to include the URL in the `head.attachments` field), the server will garbage collect the file. Only relative URLs should be used. Absolute URLs in the `head.attachments` field are ignored. The URL value is expected to be the `ctrl.params.url` returned in response to upload.
+It's important to list the used URLs in the `extra: attachments[...]` field. Tinode server uses this field to maintain the uploaded file's use counter. Once the counter drops to zero for the given file (for instance, because a message with the shared URL was deleted or because the client failed to include the URL in the `extra.attachments` field), the server will garbage collect the file. Only relative URLs should be used. Absolute URLs in the `extra.attachments` field are ignored. The URL value is expected to be the `ctrl.params.url` returned in response to upload.
 
 ### Downloading
 
@@ -606,6 +610,21 @@ data needs to be cleared, use a string with a single Unicode DEL character "&#x2
 Any unrecognized fields are silently ignored by the server.
 
 ### Client to Server Messages
+
+Every client to server message contains the main payload described in the sections below and an optional top-level field `extra`:
+```js
+{
+  abc: { ... }, // Main payload, see sections below.
+  extra: {
+    attachments: ["/v0/file/s/sJOD_tZDPz0.jpg"], // Array of out-of-band attachments which have to be exempted from GC.
+    obo: "usr2il9suCbuko", // Alternative user ID set by the root user (obo = On Behalf Of).
+    authlevel: "auth"  // Altered authentication level set by the root user.
+  }
+}
+```
+The `attachments` array lists URLs of files uploaded out of band. Such listing increments use counter of these files. Once the use counter drops to 0, the files will be automatically deleted.
+The `obo` can be set by the `root` user. If the `obo` is set, the server will treat the message as if it came from the sepcified user as opposite to the actual sender.
+The `authlevel` is supplementary to the `obo` and permits setting custom authentication level for the user. A an `"auth"` level is used if the field is unset.
 
 #### `{hi}`
 
