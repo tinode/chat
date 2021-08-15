@@ -75,11 +75,11 @@ When you register a new account you are asked for an email address to send valid
 
 ### Supported
 
-* Multiple platforms:
-  * [Android](https://github.com/tinode/tindroid/)
-  * [iOS](https://github.com/tinode/ios)
-  * [Web](https://github.com/tinode/webapp/)
-  * Scriptable [command line](tn-cli/)
+* Multiple native platforms:
+  * [Android](https://github.com/tinode/tindroid/) (Java)
+  * [iOS](https://github.com/tinode/ios) (Swift)
+  * [Web](https://github.com/tinode/webapp/) (React.js)
+  * Scriptable [command line](tn-cli/) (Python)
 * User features:
   * One-on-one and group messaging.
   * Channels with an unlimited number of read-only subscribers.
