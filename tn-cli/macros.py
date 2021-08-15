@@ -49,7 +49,7 @@ class Macro:
 class Usermod(Macro):
     """Modifies user account. The following modes are available:
     * suspend/unsuspend account.
-    * change user's VCard (public name, avatar, private comment).
+    * change user's theCard (public name, description, avatar, private comment).
 
     This macro requires root privileges."""
 
@@ -84,7 +84,7 @@ class Usermod(Macro):
             if cmd.unsuspend:
                 new_cmd += ' --suspend false'
             return [new_cmd]
-        # Change VCard.
+        # Change theCard.
         varname = cmd.varname if hasattr(cmd, 'varname') and cmd.varname else '$temp'
         set_cmd = '.must ' + varname + ' set me'
         if cmd.name is not None:
@@ -303,10 +303,10 @@ class Thecard(Macro):
     """Prints user's theCard."""
 
     def name(self):
-        return "vcard"
+        return "thecard"
 
     def description(self):
-        return "Print user's VCard for a user (requires root privileges)"
+        return "Print theCard for a user (requires root privileges)"
 
     def add_parser_args(self):
         self.parser.add_argument('userid', help='User id')

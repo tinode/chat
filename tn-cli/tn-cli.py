@@ -789,7 +789,7 @@ def parse_input(cmd):
         printout("Unrecognized:", parts[0])
         printout("Possible commands:")
         printout("\t.await\t\t- wait for completion of an operation")
-        printout("\t.delmark\t\t- custom delete marker to use instead of default DEL!")
+        printout("\t.delmark\t- custom delete marker to use instead of default DEL!")
         printout("\t.exit\t\t- exit the program (also .quit)")
         printout("\t.log\t\t- write value of a variable to stdout")
         printout("\t.must\t\t- wait for completion of an operation, terminate on failure")
