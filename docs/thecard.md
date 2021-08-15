@@ -2,7 +2,7 @@
 
 Tinode uses `theCard` to store and transmit descriptions of people and topics.
 
-_The format used to be called `vCard`, the same as [vCard](https://en.wikipedia.org/wiki/VCard) while being incompatible. That caused some confusion and prompted renaming the format to `theCard`. There are references to `vcard` and `vCard` troughout the code and documentation. It should be assumed that in all those cases it's meant to be `theCard` unless explicitly stated otherwise._
+_The format used to be called `vCard`, the same as [vCard](https://www.rfc-editor.org/rfc/rfc6350.txt) while being incompatible. That caused some confusion and prompted renaming the format to `theCard`. There are references to `vcard` and `vCard` troughout the code and documentation. It should be assumed that in all those cases it's meant to be `theCard` unless explicitly stated otherwise._
 
 When `JSON` is used to represent `theCard` data, it does it differently than [jCard](https://tools.ietf.org/html/rfc7095). `theCard` and `jCard` are incompatible. The main difference is that `theCard` uses objects to represent logically related data while `jCard` uses ordered arrays.
 
@@ -67,4 +67,4 @@ When `JSON` is used to represent `theCard` data, it does it differently than [jC
 ```
 
 All fields are optional. Tinode clients currently use only `fn` and `photo` fields. If other fields are needed in the future,
-then they will be adopted from the correspondent vCard fields.
+then they will be adopted from the correspondent [vCard](https://www.rfc-editor.org/rfc/rfc6350.txt) fields.
