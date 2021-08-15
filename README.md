@@ -189,3 +189,5 @@ Words 'chat' and 'instant messaging' in Chinese, Russian, Persian and a few othe
 * mensageiro instantâneo
 * pesan instan
 * mensajería instantánea
+* চ্যাট ইন্সট্যান্ট মেসেজিং
+* चैट त्वरित संदेश
