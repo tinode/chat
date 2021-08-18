@@ -85,7 +85,7 @@ type Adapter interface {
 	AuthDelScheme(user t.Uid, scheme string) error
 	// AuthDelAllRecords deletes all records of a given user.
 	AuthDelAllRecords(uid t.Uid) (int, error)
-	// AuthUpdRecord modifies an authentication record.
+	// AuthUpdRecord modifies an authentication record. Only non-default/non-zero values are updated.
 	AuthUpdRecord(user t.Uid, scheme, unique string, authLvl auth.Level, secret []byte, expires time.Time) error
 
 	// Topic management

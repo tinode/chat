@@ -87,6 +87,7 @@ type PersistentStorageInterface interface {
 	Open(workerId int, jsonconf json.RawMessage) error
 	Close() error
 	IsOpen() bool
+	GetAdapter() adapter.Adapter
 	GetAdapterName() string
 	GetAdapterVersion() int
 	GetDbVersion() int
@@ -135,6 +136,11 @@ func (storeObj) IsOpen() bool {
 	}
 
 	return false
+}
+
+// GetAdapter returns the currently configured adapter.
+func (storeObj) GetAdapter() adapter.Adapter {
+	return adp
 }
 
 // GetAdapterName returns the name of the current adater.

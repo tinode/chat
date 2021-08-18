@@ -57,7 +57,13 @@ See more info at https://github.com/tinode/ios/#push_notifications
 
 
 ### Q: How to create a `root` user?<br/>
-**A**: The `root` access can be granted to a user only by executing a database query. First create or choose the user you want to promote to `root` then execute the query:
+**A**: starting with Tinode version 0.18.0 the root user can be created by running the following command:
+```sh
+./tinode-db -auth=ROOT -uid=usrAbcDef123 -scheme=basic
+```
+Where `usrAbcDef123` is ID of the user to update.
+
+For older versions the `root` access can be granted to a user only by executing a database query. First create or choose the user you want to promote to `root` then execute the query:
 * RethinkDB:
 ```js
 r.db('tinode').table('auth').get('basic:login-of-the-user-to-make-root').update({authLvl: 30})

@@ -1200,12 +1200,18 @@ func (a *adapter) AuthUpdRecord(uid t.Uid, scheme, unique string,
 	}
 
 	if record.Unique == unique {
+		upd := b.M{
+			"authlvl": authLvl,
+		}
+		if len(secret) > 0 {
+			upd["secret"] = secret
+		}
+		if !expires.IsZero() {
+			upd["expires"] = expires
+		}
 		_, err = a.db.Collection("auth").UpdateOne(a.ctx,
 			b.M{"_id": unique},
-			b.M{"$set": b.M{
-				"authlvl": authLvl,
-				"secret":  secret,
-				"expires": expires}})
+			b.M{"$set": upd})
 	} else {
 		err = a.AuthAddRecord(uid, scheme, unique, authLvl, secret, expires)
 		if err == nil {
@@ -1539,9 +1545,9 @@ func (a *adapter) UsersForTopic(topic string, keepDeleted bool, opts *t.QueryOpt
 			if sub, ok := join[usr2.Id]; ok {
 				sub.ObjHeader.MergeTimes(&usr2.ObjHeader)
 				sub.Private = unmarshalBsonD(sub.Private)
-				sub.SetPublic(unmarshalBsonD(usr.Public))
+				sub.SetPublic(unmarshalBsonD(usr2.Public))
 				sub.SetTrusted(unmarshalBsonD(usr2.Trusted))
-				sub.SetLastSeenAndUA(usr.LastSeen, usr.UserAgent)
+				sub.SetLastSeenAndUA(usr2.LastSeen, usr2.UserAgent)
 
 				subs = append(subs, sub)
 			}

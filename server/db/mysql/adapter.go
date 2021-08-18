@@ -881,20 +881,33 @@ func (a *adapter) AuthDelAllRecords(user t.Uid) (int, error) {
 	return int(count), nil
 }
 
-// Update user's authentication secret
+// Update user's authentication unique, secret, auth level.
 func (a *adapter) AuthUpdRecord(uid t.Uid, scheme, unique string, authLvl auth.Level,
 	secret []byte, expires time.Time) error {
-	var exp *time.Time
-	if !expires.IsZero() {
-		exp = &expires
+
+	params := []string{"authLvl=?"}
+	args := []interface{}{authLvl}
+
+	if unique != "" {
+		params = append(params, "uname=?")
+		args = append(args, unique)
 	}
+	if len(secret) > 0 {
+		params = append(params, "secret=?")
+		args = append(args, secret)
+	}
+	if !expires.IsZero() {
+		params = append(params, "expires=?")
+		args = append(args, expires)
+	}
+	args = append(args, store.DecodeUid(uid), scheme)
 
 	ctx, cancel := a.getContext()
 	if cancel != nil {
 		defer cancel()
 	}
-	_, err := a.db.ExecContext(ctx, "UPDATE auth SET uname=?,authLvl=?,secret=?,expires=? WHERE userid=? AND scheme=?",
-		unique, authLvl, secret, exp, store.DecodeUid(uid), scheme)
+	sql := "UPDATE auth SET " + strings.Join(params, ",") + " WHERE userid=? AND scheme=?"
+	_, err := a.db.ExecContext(ctx, sql, args...)
 	if isDupe(err) {
 		return t.ErrDuplicate
 	}

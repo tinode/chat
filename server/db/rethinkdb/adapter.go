@@ -61,6 +61,15 @@ type configType struct {
 	HostDecayDuration int         `json:"host_decay_duration,omitempty"`
 }
 
+type authRecord struct {
+	Unique  string     `json:"unique"`
+	UserId  string     `json:"userid"`
+	Scheme  string     `json:"scheme"`
+	AuthLvl auth.Level `json:"authLvl"`
+	Secret  []byte     `json:"secret"`
+	Expires time.Time  `json:"expires"`
+}
+
 // Open initializes rethinkdb session
 func (a *adapter) Open(jsonconfig json.RawMessage) error {
 	if a.conn != nil {
@@ -572,13 +581,13 @@ func (a *adapter) AuthAddRecord(uid t.Uid, scheme, unique string, authLvl auth.L
 	secret []byte, expires time.Time) error {
 
 	_, err := rdb.DB(a.dbName).Table("auth").Insert(
-		map[string]interface{}{
-			"unique":  unique,
-			"userid":  uid.String(),
-			"scheme":  scheme,
-			"authLvl": authLvl,
-			"secret":  secret,
-			"expires": expires}).RunWrite(a.conn)
+		&authRecord{
+			Unique:  unique,
+			UserId:  uid.String(),
+			Scheme:  scheme,
+			AuthLvl: authLvl,
+			Secret:  secret,
+			Expires: expires}).RunWrite(a.conn)
 	if err != nil {
 		if rdb.IsConflictErr(err) {
 			return t.ErrDuplicate
@@ -625,21 +634,31 @@ func (a *adapter) AuthUpdRecord(uid t.Uid, scheme, unique string, authLvl auth.L
 		// If the record is not found, don't update it
 		return t.ErrNotFound
 	}
-	var record struct {
-		Unique string `json:"unique"`
-	}
+
+	var record authRecord
 	if err = cursor.One(&record); err != nil {
 		return err
 	}
 	if record.Unique == unique {
 		// Unique has not changed
-		_, err = rdb.DB(a.dbName).Table("auth").Get(unique).Update(
-			map[string]interface{}{
-				"authLvl": authLvl,
-				"secret":  secret,
-				"expires": expires}).RunWrite(a.conn)
+		upd := map[string]interface{}{
+			"authLvl": authLvl,
+		}
+		if len(secret) > 0 {
+			upd["secret"] = secret
+		}
+		if !expires.IsZero() {
+			upd["expires"] = expires
+		}
+		_, err = rdb.DB(a.dbName).Table("auth").Get(unique).Update(upd).RunWrite(a.conn)
 	} else {
 		// Unique has changed. Insert-Delete.
+		if len(secret) == 0 {
+			secret = record.Secret
+		}
+		if expires.IsZero() {
+			expires = record.Expires
+		}
 		err = a.AuthAddRecord(uid, scheme, unique, authLvl, secret, expires)
 		if err == nil {
 			// We can't do much with the error here. No support for transactions :(

@@ -158,7 +158,7 @@ func (a *authenticator) UpdateRecord(rec *auth.Rec, secret []byte, remoteAddr st
 		return nil, err
 	}
 
-	login, _, _, _, err := store.Users.GetAuthRecord(rec.Uid, a.name)
+	login, authLevel, _, _, err := store.Users.GetAuthRecord(rec.Uid, a.name)
 	if err != nil {
 		return nil, err
 	}
@@ -191,7 +191,7 @@ func (a *authenticator) UpdateRecord(rec *auth.Rec, secret []byte, remoteAddr st
 	if rec.Lifetime > 0 {
 		expires = types.TimeNow().Add(time.Duration(rec.Lifetime))
 	}
-	err = store.Users.UpdateAuthRecord(rec.Uid, auth.LevelAuth, a.name, uname, passhash, expires)
+	err = store.Users.UpdateAuthRecord(rec.Uid, authLevel, a.name, uname, passhash, expires)
 	if err != nil {
 		return nil, err
 	}
