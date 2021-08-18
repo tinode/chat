@@ -907,9 +907,13 @@ func (a *adapter) AuthUpdRecord(uid t.Uid, scheme, unique string, authLvl auth.L
 		defer cancel()
 	}
 	sql := "UPDATE auth SET " + strings.Join(params, ",") + " WHERE userid=? AND scheme=?"
-	_, err := a.db.ExecContext(ctx, sql, args...)
+	resp, err := a.db.ExecContext(ctx, sql, args...)
 	if isDupe(err) {
 		return t.ErrDuplicate
+	}
+
+	if count, _ := resp.RowsAffected(); count <= 0 {
+		return t.ErrNotFound
 	}
 
 	return err

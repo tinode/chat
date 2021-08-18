@@ -187,7 +187,7 @@ func main() {
 	upgrade := flag.Bool("upgrade", false, "perform database version upgrade")
 	noInit := flag.Bool("no_init", false, "check that database exists but don't create if missing")
 	uid := flag.String("uid", "", "ID of the user to update")
-	scheme := flag.String("scheme", "", "User's authentication scheme to update")
+	scheme := flag.String("scheme", "basic", "User's authentication scheme to update")
 	authLevel := flag.String("auth", "", "change user's authentication level (one of ROOT, AUTH, ANON)")
 	datafile := flag.String("data", "", "name of file with sample data to load")
 	conffile := flag.String("config", "./tinode.conf", "config of the database connection")
@@ -263,14 +263,14 @@ func main() {
 		}
 		userId := types.ParseUserId(*uid)
 		if userId.IsZero() {
-			log.Fatalf("Must specify user ID to update level: '%s'", *uid)
+			log.Fatalf("Must specify a valid user ID to update level: '%s'", *uid)
 		}
 		if *scheme == "" {
 			log.Fatalln("Must specify user's authentication scheme to update level")
 		}
 		adapter := store.Store.GetAdapter()
 		if err := adapter.AuthUpdRecord(userId, *scheme, "", level, nil, time.Time{}); err != nil {
-			log.Fatalln("Failed to update user's auth level", err)
+			log.Fatalln("Failed to update user's auth level:", err)
 		}
 		log.Printf("User's %s level set to %s for scheme %s.", *uid, level.String(), *scheme)
 		os.Exit(0)

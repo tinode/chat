@@ -1196,6 +1196,9 @@ func (a *adapter) AuthUpdRecord(uid t.Uid, scheme, unique string,
 	findOpts := mdbopts.FindOne().SetProjection(b.M{"_id": 1})
 	filter := b.M{"userid": uid.String(), "scheme": scheme}
 	if err = a.db.Collection("auth").FindOne(a.ctx, filter, findOpts).Decode(&record); err != nil {
+		if err == mdb.ErrNoDocuments {
+			err = t.ErrNotFound
+		}
 		return err
 	}
 
