@@ -20,6 +20,7 @@ Alternatively, you can instruct the docker container to save the logs to a direc
  * _Tinode Push Gateway_ requires minimum configuration changes by sending pushes on behalf of Tinode.
  * _Google FCM_ does not rely on Tinode infrastructure for pushes but requires you to recompile mobile apps (iOS and Android).
 
+
 ### Q: How to setup push notifications with Tinode Push Gateway?<br/>
 **A**: Enabling TNPG push notifications requires two steps:
  * register at console.tinode.co and obtain a TNPG token.
@@ -57,13 +58,14 @@ See more info at https://github.com/tinode/ios/#push_notifications
 
 
 ### Q: How to create a `root` user?<br/>
-**A**: starting with Tinode version 0.18.0 the root access can be granted to a user by running the following command:
+**A**: Starting with Tinode version 0.18 the `root` access can be granted to a user by running the following command:
 ```sh
 ./tinode-db -auth=ROOT -uid=usrAbcDef123 -scheme=basic
 ```
-Where `usrAbcDef123` is ID of the user to update.
+Where `usrAbcDef123` is the ID of the user to update.
 
-For older versions the `root` access can be granted to a user only by executing a database query. First create or choose the user you want to promote to `root` then execute the query:
+In version 0.17 and older the `root` access can be granted to a user only by executing a database query.
+First create or choose the user you want to promote to `root` then execute the query:
 * RethinkDB:
 ```js
 r.db('tinode').table('auth').get('basic:login-of-the-user-to-make-root').update({authLvl: 30})
@@ -80,7 +82,7 @@ db.getCollection('auth').updateOne({_id: 'basic:login-of-the-user-to-make-root'}
 The test database has a stock user `xena` which has root access.
 
 
-### Q: Once the number of connection reaches about 1000 per node, all kinds of problems start. Is this a bug?<br/>
+### Q: Once the number of network connections reaches about 1000 per node, all kinds of problems start. Is this a bug?<br/>
 **A**: It is likely not a bug. To ensure good server performance Linux limits the total number of open file descriptors (live network connections, open files) for each process at the kernel level. The default limit is usually 1024. There are other possible restrictions on the number of file descriptors. The problems you are experiencing are likely caused by exceeding one of the Linux-imposed limits. Please seek assistance of a system administrator.
 
 
