@@ -1,0 +1,53 @@
+{{/*
+  SPANISH
+
+  See explanation in ./email-validation-en.templ
+*/}}
+
+{{define "subject" -}}
+Registro Tinode: Correo de confirmación
+{{- end}}
+
+{{define "body_html" -}}
+<html>
+<body>
+
+<p>Hola.</p>
+
+<p>Estás recibiendo este correo porque alguien uso tu correo para registrarse en
+<a href="{{.HostUrl}}">Tinode</a>.</p>
+
+<p><a href="{{.HostUrl}}#cred?method=email&code={{.Code}}&token={{.Token}}">Clic</a> para confirmar
+o ve a
+<a href="{{.HostUrl}}#cred?what=email">{{.HostUrl}}#cred?method=email</a>
+e ingresa el siguiente código:</p>
+<blockquote>{{.Code}}</blockquote>
+<p>Necesitas ingresar tu usuario y contraseña.</p>
+
+<p>Si tú no te registraste en Tinode solo ignora este mensaje.</p>
+
+<p><a href="https://tinode.co/">Equipo de Tinode</a></p>
+
+</body>
+</html>
+{{- end}}
+
+{{define "body_plain" -}}
+
+Hola.
+
+Estás recibiendo este correo porque alguien uso tu correo para registrarse en Tinode ({{.HostUrl}}).
+
+Da clic en el enlace {{.HostUrl}}#cred?method=email&code={{.Code}}&token={{.Token}} para confirmar o ve a {{.HostUrl}}#cred?what=email
+e ingresa el siguiente código:
+
+	{{.Code}}
+
+Necesitas ingresar tu usuario y contraseña.
+
+Si tú no te registraste en Tinode solo ignora este mensaje.
+
+Equipo de Tinode
+https://tinode.co/
+
+{{- end}}
