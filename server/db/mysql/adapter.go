@@ -867,8 +867,8 @@ func (a *adapter) AuthGetRecord(uid t.Uid, scheme string) (string, auth.Level, [
 	if err := a.db.GetContext(ctx, &record, "SELECT uname,secret,expires,authlvl FROM auth WHERE userid=? AND scheme=?",
 		store.DecodeUid(uid), scheme); err != nil {
 		if err == sql.ErrNoRows {
-			// Nothing found - clear the error
-			err = nil
+			// Nothing found - use standard error.
+			err = t.ErrNotFound
 		}
 		return "", 0, nil, expires, err
 	}

@@ -1121,7 +1121,7 @@ func (a *adapter) AuthGetRecord(uid t.Uid, scheme string) (string, auth.Level, [
 	err := a.db.Collection("auth").FindOne(a.ctx, filter, findOpts).Decode(&record)
 	if err != nil {
 		if err == mdb.ErrNoDocuments {
-			return "", 0, nil, time.Time{}, t.ErrNotFound
+			err = t.ErrNotFound
 		}
 		return "", 0, nil, time.Time{}, err
 	}
