@@ -948,7 +948,8 @@ func (s *Session) login(msg *ClientComMessage) {
 }
 
 // authSecretReset resets an authentication secret;
-//  params: "auth-method-to-reset:credential-method:credential-value".
+// params: "auth-method-to-reset:credential-method:credential-value",
+// for example: "basic:email:alice@example.com".
 func (s *Session) authSecretReset(params []byte) error {
 	var authScheme, credMethod, credValue string
 	if parts := strings.Split(string(params), ":"); len(parts) == 3 {

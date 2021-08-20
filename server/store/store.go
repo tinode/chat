@@ -329,8 +329,13 @@ func (usersMapper) GetAuthRecord(user types.Uid, scheme string) (string, auth.Le
 	unique, authLvl, secret, expires, err := adp.AuthGetRecord(user, scheme)
 	if err == nil {
 		parts := strings.Split(unique, ":")
-		unique = parts[1]
+		if len(parts) > 1 {
+			unique = parts[1]
+		} else {
+			err = types.ErrInternal
+		}
 	}
+
 	return unique, authLvl, secret, expires, err
 }
 
