@@ -3,12 +3,20 @@ package token
 
 import (
 	"bytes"
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
+	"log"
+	"os"
 	"time"
+
+	"github.com/mgi-vn/common/pkg/middleware/identity"
+	pb "github.com/mgi-vn/proto-service/gen/go"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 
 	"github.com/tinode/chat/server/auth"
 	"github.com/tinode/chat/server/store"
@@ -36,6 +44,29 @@ type tokenLayout struct {
 	SerialNumber uint16
 	// Bitmap with feature bits.
 	Features uint16
+}
+
+// Get default modeWant for the given topic category
+func getDefaultAccess(cat types.TopicCat, authUser, isChan bool) types.AccessMode {
+	if !authUser {
+		return types.ModeNone
+	}
+
+	switch cat {
+	case types.TopicCatP2P:
+		return types.ModeCP2P
+	case types.TopicCatFnd:
+		return types.ModeNone
+	case types.TopicCatGrp:
+		if isChan {
+			return types.ModeCChnWriter
+		}
+		return types.ModeCPublic
+	case types.TopicCatMe:
+		return types.ModeCSelf
+	default:
+		panic("Unknown topic category")
+	}
 }
 
 // Init initializes the authenticator: parses the config and sets salt, serial number and lifetime.
@@ -95,6 +126,87 @@ func (authenticator) UpdateRecord(rec *auth.Rec, secret []byte, remoteAddr strin
 func (ta *authenticator) Authenticate(token []byte, remoteAddr string) (*auth.Rec, []byte, error) {
 	var tl tokenLayout
 	dataSize := binary.Size(&tl)
+
+	//Handle keycloak token
+	if len(token) > dataSize+sha256.Size {
+		secretAuthKey := os.Getenv("SECRET_AUTH_KEY")
+
+		authMiddleware := identity.NewAuth(secretAuthKey)
+		userID, err := authMiddleware.ValidateToken(string(token))
+		if err != nil || userID == "" {
+			log.Printf("Validate token failed: %s\n", err)
+			return nil, nil, types.ErrFailed
+		}
+
+		userInfo, err := ta.GetUserInfo(context.Background(), string(token))
+		if err != nil {
+			log.Printf("Cannot get user info: %s\n", err)
+			return nil, nil, types.ErrFailed
+		}
+		if userInfo.IsEnabled == 0 {
+			return nil, nil, types.ErrPermissionDenied
+		}
+
+		uid, authLvl, _, expires, err := store.Users.GetAuthUniqueRecord(ta.name, userInfo.Id)
+
+		var lifetime time.Duration
+		if !expires.IsZero() {
+			lifetime = time.Until(expires)
+		}
+
+		if uid.IsZero() {
+			// Create account, get UID, report UID back to the server.
+			var tags []string
+			tags = append(tags, ta.name+":"+userInfo.Id)
+			publicFields := map[string]interface{}{
+				"fn": userInfo.Id,
+			}
+			user := types.User{
+				Tags:   tags,
+				Public: publicFields,
+			}
+
+			var private interface{}
+
+			// Assign default access values in case the acc creator has not provided them
+			user.Access.Auth = getDefaultAccess(types.TopicCatP2P, true, false) |
+				getDefaultAccess(types.TopicCatGrp, true, false)
+			user.Access.Anon = getDefaultAccess(types.TopicCatP2P, false, false) |
+				getDefaultAccess(types.TopicCatGrp, false, false)
+
+			newUser, err := store.Users.Create(&user, private)
+
+			if err != nil {
+				panic(err)
+				return nil, nil, types.ErrFailed
+			}
+
+			emptyPass := []byte(userInfo.Id)
+			newUid := newUser.Uid()
+
+			err = store.Users.AddAuthRecord(newUid, 20, ta.name, userInfo.Id, emptyPass, expires)
+
+			if err != nil {
+				return nil, nil, types.ErrFailed
+			}
+
+			return &auth.Rec{
+				Uid:       newUid,
+				AuthLevel: 20,
+				Lifetime:  auth.Duration(lifetime),
+				Features:  0,
+				State:     types.StateUndefined}, nil, nil
+
+		}
+
+		return &auth.Rec{
+			Uid:       uid,
+			AuthLevel: authLvl,
+			Lifetime:  auth.Duration(lifetime),
+			Features:  0,
+			State:     types.StateUndefined}, nil, nil
+	}
+
 	if len(token) < dataSize+sha256.Size {
 		// Token is too short
 		return nil, nil, types.ErrMalformed
@@ -138,6 +250,30 @@ func (ta *authenticator) Authenticate(token []byte, remoteAddr string) (*auth.Re
 		Lifetime:  auth.Duration(time.Until(expires)),
 		Features:  auth.Feature(tl.Features),
 		State:     types.StateUndefined}, nil, nil
+}
+
+func (ta *authenticator) GetUserInfo(ctx context.Context, token string) (*pb.UserInfo, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	authServiceAddress := os.Getenv("AUTH_SERVICE_ADDRESS")
+
+	conn, err := grpc.DialContext(ctx, authServiceAddress, grpc.WithInsecure())
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Close()
+
+	client := pb.NewUserSvcClient(conn)
+	m := metadata.New(map[string]string{"token": token})
+	newCtx := metadata.NewOutgoingContext(ctx, m)
+	r, err := client.GetUserInfo(newCtx, &pb.GetUserInfoReq{})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return r.GetUserInfo(), nil
 }
 
 // GenSecret generates a new token.

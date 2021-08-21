@@ -25,6 +25,9 @@ import (
 	// For stripping comments from JSON config
 	jcr "github.com/tinode/jsonco"
 
+	// Load dotenv environment variables file
+	_ "github.com/joho/godotenv/autoload"
+
 	// Authenticators
 	"github.com/tinode/chat/server/auth"
 	_ "github.com/tinode/chat/server/auth/anon"

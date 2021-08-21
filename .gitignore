@@ -1,0 +1,10 @@
+# dotenv environment variables file
+.env
+
+# JetBrains IDE
+.idea
+
+.vscode
+
+.DS_Store
+
