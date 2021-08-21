@@ -35,6 +35,9 @@ type awsconfig struct {
 	AccessKeyId     string   `json:"access_key_id"`
 	SecretAccessKey string   `json:"secret_access_key"`
 	Region          string   `json:"region"`
+	DisableSSL      bool     `json:"disable_ssl"`
+	ForcePathStyle  bool     `json:"force_path_style"`
+	Endpoint        string   `json:"endpoint"`
 	BucketName      string   `json:"bucket"`
 	CorsOrigins     []string `json:"cors_origins"`
 	ServeURL        string   `json:"serve_url"`
@@ -85,8 +88,11 @@ func (ah *awshandler) Init(jsconf string) error {
 
 	var sess *session.Session
 	if sess, err = session.NewSession(&aws.Config{
-		Region:      aws.String(ah.conf.Region),
-		Credentials: credentials.NewStaticCredentials(ah.conf.AccessKeyId, ah.conf.SecretAccessKey, ""),
+		Region:           aws.String(ah.conf.Region),
+		DisableSSL:       aws.Bool(ah.conf.DisableSSL),
+		S3ForcePathStyle: aws.Bool(ah.conf.ForcePathStyle),
+		Endpoint:         aws.String(ah.conf.Endpoint),
+		Credentials:      credentials.NewStaticCredentials(ah.conf.AccessKeyId, ah.conf.SecretAccessKey, ""),
 	}); err != nil {
 		return err
 	}
@@ -145,9 +151,13 @@ func (ah *awshandler) Init(jsconf string) error {
 }
 
 // Headers redirects GET, HEAD requests to the AWS server.
-func (ah *awshandler) Headers(req *http.Request, serve bool) (map[string]string, int, error) {
-	if req.Method == http.MethodPut || req.Method == http.MethodPost || req.Method == http.MethodOptions {
+func (ah *awshandler) Headers(req *http.Request, serve bool) (http.Header, int, error) {
+	if req.Method == http.MethodPut || req.Method == http.MethodPost {
 		return nil, 0, nil
+	}
+
+	if headers, status := media.CORSHandler(req, ah.conf.CorsOrigins, serve); status != 0 {
+		return headers, status, nil
 	}
 
 	fid := ah.GetIdFromUrl(req.URL.String())
@@ -178,10 +188,10 @@ func (ah *awshandler) Headers(req *http.Request, serve bool) (map[string]string,
 		// Return presigned URL. The URL will stop working after a short period of time to prevent use of Tinode
 		// as a free file server.
 		url, err := awsReq.Presign(time.Second * presignDuration)
-		headers := map[string]string{
-			"Location":      url,
-			"Content-Type":  "application/json; charset=utf-8",
-			"Cache-Control": "no-cache, no-store, must-revalidate",
+		headers := map[string][]string{
+			"Location":      []string{url},
+			"Content-Type":  []string{"application/json; charset=utf-8"},
+			"Cache-Control": []string{"no-cache, no-store, must-revalidate"},
 		}
 		return headers, http.StatusTemporaryRedirect, err
 	}

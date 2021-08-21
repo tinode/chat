@@ -134,6 +134,8 @@ type perUserData struct {
 
 	// P2P only:
 	public    interface{}
+	lastSeen  *time.Time
+	lastUA    string
 	topicName string
 	deleted   bool
 
@@ -924,7 +926,6 @@ func (t *Topic) procDataReq(asUid types.Uid, msg *ServerComMessage) (*push.Recei
 	}
 
 	if userFound {
-		userData.readID = t.lastID
 		userData.readID = t.lastID
 		t.perUser[asUser] = userData
 	}
@@ -1831,7 +1832,8 @@ func (t *Topic) replyGetDesc(sess *Session, asUid types.Uid, asChan bool, opts *
 	ifUpdated := opts == nil || opts.IfModifiedSince == nil || opts.IfModifiedSince.Before(t.updated)
 
 	desc := &MsgTopicDesc{}
-	if !ifUpdated {
+	if opts == nil || opts.IfModifiedSince == nil {
+		// Send CreatedAt only when the user requests full information (nothing is cached at the client).
 		desc.CreatedAt = &t.created
 	}
 	if !t.updated.IsZero() {
@@ -1840,9 +1842,7 @@ func (t *Topic) replyGetDesc(sess *Session, asUid types.Uid, asChan bool, opts *
 
 	pud, full := t.perUser[asUid]
 
-	if t.cat == types.TopicCatMe {
-		full = true
-	}
+	full = full || t.cat == types.TopicCatMe
 
 	if ifUpdated {
 		if t.public != nil {
@@ -1876,9 +1876,24 @@ func (t *Topic) replyGetDesc(sess *Session, asUid types.Uid, asChan bool, opts *
 			desc.State = types.StateOK.String()
 		}
 
-		if t.cat == types.TopicCatGrp && (pud.modeGiven & pud.modeWant).IsPresencer() {
-			desc.Online = t.isOnline()
+		if (pud.modeGiven & pud.modeWant).IsPresencer() {
+			if t.cat == types.TopicCatGrp {
+				desc.Online = t.isOnline()
+			} else if t.cat == types.TopicCatP2P {
+				// This is the timestamp when the other user logged off last time.
+				// It does not change while the topic is loaded into memory and that's OK most of the time
+				// because to stay in memory at least one of the users must be connected to topic.
+				// FIXME(gene): it breaks when user A stays active in one session and connects-disconnects
+				// from another session. The second session will not see correct LastSeen time and UserAgent.
+				if pud.lastSeen != nil {
+					desc.LastSeen = &MsgLastSeenInfo{
+						When:      pud.lastSeen,
+						UserAgent: pud.lastUA,
+					}
+				}
+			}
 		}
+
 		if ifUpdated {
 			desc.Private = pud.private
 		}
@@ -2154,7 +2169,7 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 							return errors.New("attempt to search by restricted tags")
 						}
 
-						// FIXME: allow root to find suspended users and topics.
+						// TODO: allow root to find suspended users and topics.
 						subs, err = store.Users.FindSubs(asUid, req, opt)
 						if err != nil {
 							sess.queueOut(decodeStoreErrorExplicitTs(err, id, msg.Original, now, incomingReqTs, nil))
@@ -2272,9 +2287,9 @@ func (t *Topic) replyGetSub(sess *Session, asUid types.Uid, authLevel auth.Level
 					}
 
 					lastSeen := sub.GetLastSeen()
-					if !lastSeen.IsZero() && !mts.Online {
+					if lastSeen != nil && !mts.Online {
 						mts.LastSeen = &MsgLastSeenInfo{
-							When:      &lastSeen,
+							When:      lastSeen,
 							UserAgent: sub.GetUserAgent(),
 						}
 					}
@@ -3204,16 +3219,19 @@ func (t *Topic) pushForData(fromUid types.Uid, data *MsgServerData) *push.Receip
 	}
 
 	for uid, pud := range t.perUser {
-		// Send only to those who have notifications enabled, exclude the originating user.
-		if uid == fromUid {
-			continue
+		online := pud.online
+		if uid == fromUid && online == 0 {
+			// Make sure the sender's devices receive a silent push.
+			online = 1
 		}
+
+		// Send only to those who have notifications enabled.
 		mode := pud.modeWant & pud.modeGiven
 		if mode.IsPresencer() && mode.IsReader() && !pud.deleted && !pud.isChan {
 			receipt.To[uid] = push.Recipient{
-				// Number of sessions this data message will be delivered to.
+				// Number of attached sessions the data message will be delivered to.
 				// Push notifications sent to users with non-zero online sessions will be marked silent.
-				Delivered: pud.online,
+				Delivered: online,
 			}
 		}
 	}
