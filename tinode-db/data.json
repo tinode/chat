@@ -99,6 +99,7 @@
    "tel": "+17025550010",
    "passhash": "(random)",
    "private": {"comment": "I'm a chatbot short and stout"},
+   "trusted": {"staff": true},
    "public": {"fn": "Tino the Chatbot", "photo": "tino-128.jpg", "type": "jpg"},
    "state": "",
    "status": "Chatting nonsensically",
