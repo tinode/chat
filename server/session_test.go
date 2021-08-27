@@ -224,7 +224,7 @@ func TestDispatchSubscribe(t *testing.T) {
 	go s.testWriteLoop(&r, &wg)
 
 	hub := &Hub{
-		join: make(chan *sessionJoin, 10),
+		join: make(chan *ClientComMessage, 10),
 	}
 	globals.hub = hub
 
@@ -255,7 +255,7 @@ func TestDispatchSubscribe(t *testing.T) {
 		if join.sess != s {
 			t.Error("Hub.join request: sess field expected to be the session under test.")
 		}
-		if join.pkt != msg {
+		if join != msg {
 			t.Error("Hub.join request: subscribe message expected to be the original subscribe message.")
 		}
 	} else {
@@ -314,7 +314,7 @@ func TestDispatchSubscribeJoinChannelFull(t *testing.T) {
 
 	hub := &Hub{
 		// Make it unbuffered with no readers - so emit operation fails immediately.
-		join: make(chan *sessionJoin),
+		join: make(chan *ClientComMessage),
 	}
 	globals.hub = hub
 

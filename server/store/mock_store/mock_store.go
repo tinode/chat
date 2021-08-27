@@ -11,6 +11,7 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	auth "github.com/tinode/chat/server/auth"
+	adapter "github.com/tinode/chat/server/db"
 	media "github.com/tinode/chat/server/media"
 	types "github.com/tinode/chat/server/store/types"
 	validate "github.com/tinode/chat/server/validate"
@@ -65,6 +66,20 @@ func (m *MockPersistentStorageInterface) DbStats() func() interface{} {
 func (mr *MockPersistentStorageInterfaceMockRecorder) DbStats() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DbStats", reflect.TypeOf((*MockPersistentStorageInterface)(nil).DbStats))
+}
+
+// GetAdapter mocks base method.
+func (m *MockPersistentStorageInterface) GetAdapter() adapter.Adapter {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetAdapter")
+	ret0, _ := ret[0].(adapter.Adapter)
+	return ret0
+}
+
+// GetAdapter indicates an expected call of GetAdapter.
+func (mr *MockPersistentStorageInterfaceMockRecorder) GetAdapter() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAdapter", reflect.TypeOf((*MockPersistentStorageInterface)(nil).GetAdapter))
 }
 
 // GetAdapterName mocks base method.
@@ -617,21 +632,6 @@ func (m *MockUsersPersistenceInterface) GetUnreadCount(id types.Uid) (int, error
 func (mr *MockUsersPersistenceInterfaceMockRecorder) GetUnreadCount(id interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUnreadCount", reflect.TypeOf((*MockUsersPersistenceInterface)(nil).GetUnreadCount), id)
-}
-
-// IsOwner mocks base method.
-func (m *MockUsersPersistenceInterface) IsOwner(id types.Uid, topic string) (bool, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "IsOwner", id, topic)
-	ret0, _ := ret[0].(bool)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// IsOwner indicates an expected call of IsOwner.
-func (mr *MockUsersPersistenceInterfaceMockRecorder) IsOwner(id, topic interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsOwner", reflect.TypeOf((*MockUsersPersistenceInterface)(nil).IsOwner), id, topic)
 }
 
 // Update mocks base method.

@@ -1224,15 +1224,13 @@ func TestRegisterSessionMe(t *testing.T) {
 	}
 
 	for i, s := range helper.sessions {
-		join := &sessionJoin{
-			pkt: &ClientComMessage{
-				Sub: &MsgClientSub{
-					Id:    fmt.Sprintf("id456-%d", i),
-					Topic: "me",
-				},
-				AsUser: uid.UserId(),
+		join := &ClientComMessage{
+			Sub: &MsgClientSub{
+				Id:    fmt.Sprintf("id456-%d", i),
+				Topic: "me",
 			},
-			sess: s,
+			AsUser: uid.UserId(),
+			sess:   s,
 		}
 		helper.topic.registerSession(join)
 	}
@@ -1274,15 +1272,13 @@ func TestRegisterSessionInactiveTopic(t *testing.T) {
 	uid := helper.uids[0]
 
 	s := helper.sessions[0]
-	join := &sessionJoin{
-		pkt: &ClientComMessage{
-			Sub: &MsgClientSub{
-				Id:    "id456",
-				Topic: "me",
-			},
-			AsUser: uid.UserId(),
+	join := &ClientComMessage{
+		Sub: &MsgClientSub{
+			Id:    "id456",
+			Topic: "me",
 		},
-		sess: s,
+		AsUser: uid.UserId(),
+		sess:   s,
 	}
 
 	// Deactivate topic.
@@ -1320,22 +1316,20 @@ func TestRegisterSessionUserSpecifiedInSetMessage(t *testing.T) {
 	uid := helper.uids[0]
 
 	s := helper.sessions[0]
-	join := &sessionJoin{
-		pkt: &ClientComMessage{
-			Original: topicName,
-			Sub: &MsgClientSub{
-				Id:    "id456",
-				Topic: topicName,
-				Set: &MsgSetQuery{
-					Sub: &MsgSetSub{
-						// Specify the user. This should result in an error.
-						User: "foo",
-					},
+	join := &ClientComMessage{
+		Original: topicName,
+		Sub: &MsgClientSub{
+			Id:    "id456",
+			Topic: topicName,
+			Set: &MsgSetQuery{
+				Sub: &MsgSetSub{
+					// Specify the user. This should result in an error.
+					User: "foo",
 				},
 			},
-			AsUser: uid.UserId(),
 		},
-		sess: s,
+		AsUser: uid.UserId(),
+		sess:   s,
 	}
 
 	helper.topic.registerSession(join)
@@ -1370,22 +1364,20 @@ func TestRegisterSessionInvalidWantStrInSetMessage(t *testing.T) {
 	uid := helper.uids[0]
 
 	s := helper.sessions[0]
-	join := &sessionJoin{
-		pkt: &ClientComMessage{
-			Original: topicName,
-			Sub: &MsgClientSub{
-				Id:    "id456",
-				Topic: topicName,
-				Set: &MsgSetQuery{
-					Sub: &MsgSetSub{
-						// Specify the user. This should result in an error.
-						Mode: "Invalid mode string",
-					},
+	join := &ClientComMessage{
+		Original: topicName,
+		Sub: &MsgClientSub{
+			Id:    "id456",
+			Topic: topicName,
+			Set: &MsgSetQuery{
+				Sub: &MsgSetSub{
+					// Specify the user. This should result in an error.
+					Mode: "Invalid mode string",
 				},
 			},
-			AsUser: uid.UserId(),
 		},
-		sess: s,
+		AsUser: uid.UserId(),
+		sess:   s,
 	}
 
 	helper.topic.registerSession(join)
@@ -1429,16 +1421,14 @@ func TestRegisterSessionMaxSubscriberCountExceeded(t *testing.T) {
 	helper.sessions = append(helper.sessions, s)
 	helper.results = append(helper.results, r)
 
-	join := &sessionJoin{
-		pkt: &ClientComMessage{
-			Original: topicName,
-			Sub: &MsgClientSub{
-				Id:    "id456",
-				Topic: topicName,
-			},
-			AsUser: uid.UserId(),
+	join := &ClientComMessage{
+		Original: topicName,
+		Sub: &MsgClientSub{
+			Id:    "id456",
+			Topic: topicName,
 		},
-		sess: s,
+		AsUser: uid.UserId(),
+		sess:   s,
 	}
 
 	helper.topic.registerSession(join)
@@ -1478,16 +1468,14 @@ func TestRegisterSessionLowAuthLevelWithSysTopic(t *testing.T) {
 	helper.sessions = append(helper.sessions, s)
 	helper.results = append(helper.results, r)
 
-	join := &sessionJoin{
-		pkt: &ClientComMessage{
-			Original: topicName,
-			Sub: &MsgClientSub{
-				Id:    "id456",
-				Topic: topicName,
-			},
-			AsUser: uid.UserId(),
+	join := &ClientComMessage{
+		Original: topicName,
+		Sub: &MsgClientSub{
+			Id:    "id456",
+			Topic: topicName,
 		},
-		sess: s,
+		AsUser: uid.UserId(),
+		sess:   s,
 	}
 
 	helper.topic.registerSession(join)
@@ -1529,16 +1517,14 @@ func TestRegisterSessionNewChannelGetSubDbError(t *testing.T) {
 	helper.sessions = append(helper.sessions, s)
 	helper.results = append(helper.results, r)
 
-	join := &sessionJoin{
-		pkt: &ClientComMessage{
-			Original: chanName,
-			Sub: &MsgClientSub{
-				Id:    "id456",
-				Topic: chanName,
-			},
-			AsUser: uid.UserId(),
+	join := &ClientComMessage{
+		Original: chanName,
+		Sub: &MsgClientSub{
+			Id:    "id456",
+			Topic: chanName,
 		},
-		sess: s,
+		AsUser: uid.UserId(),
+		sess:   s,
 	}
 
 	helper.ss.EXPECT().Get(chanName, uid).Return(nil, types.ErrInternal)
@@ -1579,17 +1565,15 @@ func TestRegisterSessionCreateSubFailed(t *testing.T) {
 	helper.sessions = append(helper.sessions, s)
 	helper.results = append(helper.results, r)
 
-	join := &sessionJoin{
-		pkt: &ClientComMessage{
-			Original: topicName,
-			Sub: &MsgClientSub{
-				Id:    "id456",
-				Topic: topicName,
-			},
-			AsUser:  uid.UserId(),
-			AuthLvl: int(auth.LevelAuth),
+	join := &ClientComMessage{
+		Original: topicName,
+		Sub: &MsgClientSub{
+			Id:    "id456",
+			Topic: topicName,
 		},
-		sess: s,
+		AsUser:  uid.UserId(),
+		AuthLvl: int(auth.LevelAuth),
+		sess:    s,
 	}
 
 	helper.ss.EXPECT().Create(gomock.Any()).Return(types.ErrInternal)
@@ -1631,17 +1615,15 @@ func TestRegisterSessionAsChanUserNotChanSubcriber(t *testing.T) {
 	r := helper.results[0]
 
 	// User is not a channel subscriber (userData.isChan is false).
-	join := &sessionJoin{
-		pkt: &ClientComMessage{
-			Original: chanName,
-			Sub: &MsgClientSub{
-				Id:    "id456",
-				Topic: chanName,
-			},
-			AsUser:  uid.UserId(),
-			AuthLvl: int(auth.LevelAuth),
+	join := &ClientComMessage{
+		Original: chanName,
+		Sub: &MsgClientSub{
+			Id:    "id456",
+			Topic: chanName,
 		},
-		sess: s,
+		AsUser:  uid.UserId(),
+		AuthLvl: int(auth.LevelAuth),
+		sess:    s,
 	}
 
 	helper.topic.registerSession(join)
@@ -1683,23 +1665,21 @@ func TestRegisterSessionOwnerBansHimself(t *testing.T) {
 	pud.modeGiven |= types.ModeOwner
 	helper.topic.perUser[uid] = pud
 
-	join := &sessionJoin{
-		pkt: &ClientComMessage{
-			Original: topicName,
-			Sub: &MsgClientSub{
-				Id:    "id456",
-				Topic: topicName,
-				Set: &MsgSetQuery{
-					Sub: &MsgSetSub{
-						// No O permission.
-						Mode: "JPRW",
-					},
+	join := &ClientComMessage{
+		Original: topicName,
+		Sub: &MsgClientSub{
+			Id:    "id456",
+			Topic: topicName,
+			Set: &MsgSetQuery{
+				Sub: &MsgSetSub{
+					// No O permission.
+					Mode: "JPRW",
 				},
 			},
-			AsUser:  uid.UserId(),
-			AuthLvl: int(auth.LevelAuth),
 		},
-		sess: s,
+		AsUser:  uid.UserId(),
+		AuthLvl: int(auth.LevelAuth),
+		sess:    s,
 	}
 
 	helper.topic.registerSession(join)
@@ -1741,23 +1721,21 @@ func TestRegisterSessionInvalidOwnershipTransfer(t *testing.T) {
 	pud.modeGiven = types.ModeCPublic
 	helper.topic.perUser[uid] = pud
 
-	join := &sessionJoin{
-		pkt: &ClientComMessage{
-			Original: topicName,
-			Sub: &MsgClientSub{
-				Id:    "id456",
-				Topic: topicName,
-				Set: &MsgSetQuery{
-					Sub: &MsgSetSub{
-						// Want ownership.
-						Mode: "JPRWSO",
-					},
+	join := &ClientComMessage{
+		Original: topicName,
+		Sub: &MsgClientSub{
+			Id:    "id456",
+			Topic: topicName,
+			Set: &MsgSetQuery{
+				Sub: &MsgSetSub{
+					// Want ownership.
+					Mode: "JPRWSO",
 				},
 			},
-			AsUser:  uid.UserId(),
-			AuthLvl: int(auth.LevelAuth),
 		},
-		sess: s,
+		AsUser:  uid.UserId(),
+		AuthLvl: int(auth.LevelAuth),
+		sess:    s,
 	}
 
 	helper.topic.registerSession(join)
@@ -1800,21 +1778,20 @@ func TestRegisterSessionMetadataUpdateFails(t *testing.T) {
 
 	// Want ownership.
 	newWant := "JRWP"
-	join := &sessionJoin{
-		pkt: &ClientComMessage{
-			Original: topicName,
-			Sub: &MsgClientSub{
-				Id:    "id456",
-				Topic: topicName,
-				Set: &MsgSetQuery{
-					Sub: &MsgSetSub{
-						Mode: newWant,
-					},
+	join := &ClientComMessage{
+		Original: topicName,
+		Sub: &MsgClientSub{
+			Id:    "id456",
+			Topic: topicName,
+			Set: &MsgSetQuery{
+				Sub: &MsgSetSub{
+					Mode: newWant,
 				},
 			},
-			AsUser:  uid.UserId(),
-			AuthLvl: int(auth.LevelAuth),
 		},
+		AsUser:  uid.UserId(),
+		AuthLvl: int(auth.LevelAuth),
+
 		sess: s,
 	}
 	// DB call fails.
@@ -1860,22 +1837,20 @@ func TestRegisterSessionOwnerChangeDbCallFails(t *testing.T) {
 
 	// Want ownership.
 	newWant := "JRWPASO"
-	join := &sessionJoin{
-		pkt: &ClientComMessage{
-			Original: topicName,
-			Sub: &MsgClientSub{
-				Id:    "id456",
-				Topic: topicName,
-				Set: &MsgSetQuery{
-					Sub: &MsgSetSub{
-						Mode: newWant,
-					},
+	join := &ClientComMessage{
+		Original: topicName,
+		Sub: &MsgClientSub{
+			Id:    "id456",
+			Topic: topicName,
+			Set: &MsgSetQuery{
+				Sub: &MsgSetSub{
+					Mode: newWant,
 				},
 			},
-			AsUser:  uid.UserId(),
-			AuthLvl: int(auth.LevelAuth),
 		},
-		sess: s,
+		AsUser:  uid.UserId(),
+		AuthLvl: int(auth.LevelAuth),
+		sess:    s,
 	}
 	helper.ss.EXPECT().Update(topicName, uid, gomock.Any()).Return(nil).Times(2)
 	// OwnerChange call fails.

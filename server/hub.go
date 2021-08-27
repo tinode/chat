@@ -29,15 +29,6 @@ var requestLatencyDistribution = []float64{1, 2, 3, 4, 5, 6, 8, 10, 13, 16, 20, 
 var outgoingMessageSizeDistribution = []float64{1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 16384,
 	65536, 262144, 1048576, 4194304, 16777216, 67108864, 268435456, 1073741824, 4294967296}
 
-/*
-// Request to hub to subscribe session to topic
-type sessionJoin struct {
-	// Message, containing request details.
-	pkt *ClientComMessage
-	// Session to attach to topic.
-	sess *Session
-}
-*/
 
 // Session wants to leave the topic
 type sessionLeave struct {
