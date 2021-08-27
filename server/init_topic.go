@@ -312,6 +312,7 @@ func initTopicP2P(t *Topic, sreg *sessionJoin) error {
 			// Invited user does not exist
 			return types.ErrUserNotFound
 		}
+
 		// User records are unsorted, make sure we know who is who.
 		if users[0].Uid() == userID1 {
 			u1, u2 = 0, 1
@@ -361,6 +362,7 @@ func initTopicP2P(t *Topic, sreg *sessionJoin) error {
 			// Swap Public+Trusted to match swapped Public+Trusted in subs returned from store.Topics.GetSubs
 			sub2.SetPublic(users[u1].Public)
 			sub2.SetTrusted(users[u1].Trusted)
+
 			// Mark the entire topic as new.
 			pktsub.Created = true
 		}
@@ -463,7 +465,7 @@ func initTopicP2P(t *Topic, sreg *sessionJoin) error {
 			}
 		}
 
-		// Publics are already swapped.
+		// Public and Trusted are already swapped.
 		userData.public = sub1.GetPublic()
 		userData.trusted = sub1.GetTrusted()
 		userData.topicName = userID2.UserId()
@@ -476,6 +478,7 @@ func initTopicP2P(t *Topic, sreg *sessionJoin) error {
 
 		t.perUser[userID2] = perUserData{
 			public:    sub2.GetPublic(),
+			trusted:   sub2.GetTrusted(),
 			topicName: userID1.UserId(),
 			modeWant:  sub2.ModeWant,
 			modeGiven: sub2.ModeGiven,
