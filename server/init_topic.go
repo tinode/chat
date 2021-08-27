@@ -18,10 +18,10 @@ import (
 )
 
 // topicInit reads an existing topic from database or creates a new topic
-func topicInit(t *Topic, join *sessionJoin, h *Hub) {
+func topicInit(t *Topic, join *ClientComMessage, h *Hub) {
 	var subscribeReqIssued bool
 	defer func() {
-		if !subscribeReqIssued && join.pkt.Sub != nil && join.sess.inflightReqs != nil {
+		if !subscribeReqIssued && join.Sub != nil && join.sess.inflightReqs != nil {
 			// If it was a client initiated subscribe request and we failed it.
 			join.sess.inflightReqs.Done()
 		}
@@ -60,10 +60,10 @@ func topicInit(t *Topic, join *sessionJoin, h *Hub) {
 	// Failed to create or load the topic.
 	if err != nil {
 		// Remove topic from cache to prevent hub from forwarding more messages to it.
-		h.topicDel(join.pkt.RcptTo)
+		h.topicDel(join.RcptTo)
 
-		logs.Err.Println("init_topic: failed to load or create topic:", join.pkt.RcptTo, err)
-		join.sess.queueOut(decodeStoreErrorExplicitTs(err, join.pkt.Id, t.xoriginal, timestamp, join.pkt.Timestamp, nil))
+		logs.Err.Println("init_topic: failed to load or create topic:", join.RcptTo, err)
+		join.sess.queueOut(decodeStoreErrorExplicitTs(err, join.Id, t.xoriginal, timestamp, join.Timestamp, nil))
 
 		// Re-queue pending requests to join the topic.
 		for len(t.reg) > 0 {
@@ -75,7 +75,7 @@ func topicInit(t *Topic, join *sessionJoin, h *Hub) {
 		for len(t.clientMsg) > 0 {
 			msg := <-t.clientMsg
 			if msg.Id != "" {
-				msg.sess.queueOut(ErrLockedExplicitTs(msg.Id, t.xoriginal, timestamp, join.pkt.Timestamp))
+				msg.sess.queueOut(ErrLockedExplicitTs(msg.Id, t.xoriginal, timestamp, join.Timestamp))
 			}
 		}
 		for len(t.unreg) > 0 {
@@ -102,7 +102,7 @@ func topicInit(t *Topic, join *sessionJoin, h *Hub) {
 
 	// prevent newly initialized topics to go live while shutdown in progress
 	if globals.shuttingDown {
-		h.topicDel(join.pkt.RcptTo)
+		h.topicDel(join.RcptTo)
 		return
 	}
 
@@ -116,7 +116,7 @@ func topicInit(t *Topic, join *sessionJoin, h *Hub) {
 	usersRegisterTopic(t, true)
 
 	// Topic will check access rights, send invite to p2p user, send {ctrl} message to the initiator session
-	if join.pkt.Sub != nil {
+	if join.Sub != nil {
 		subscribeReqIssued = true
 		t.reg <- join
 	}
@@ -130,7 +130,7 @@ func topicInit(t *Topic, join *sessionJoin, h *Hub) {
 }
 
 // Initialize 'me' topic.
-func initTopicMe(t *Topic, sreg *sessionJoin) error {
+func initTopicMe(t *Topic, sreg *ClientComMessage) error {
 	t.cat = types.TopicCatMe
 
 	user, err := store.Users.Get(types.ParseUserId(t.name))
@@ -180,10 +180,10 @@ func initTopicMe(t *Topic, sreg *sessionJoin) error {
 }
 
 // Initialize 'fnd' topic
-func initTopicFnd(t *Topic, sreg *sessionJoin) error {
+func initTopicFnd(t *Topic, sreg *ClientComMessage) error {
 	t.cat = types.TopicCatFnd
 
-	uid := types.ParseUserId(sreg.pkt.AsUser)
+	uid := types.ParseUserId(sreg.AsUser)
 	if uid.IsZero() {
 		return types.ErrNotFound
 	}
@@ -219,8 +219,8 @@ func initTopicFnd(t *Topic, sreg *sessionJoin) error {
 
 // Load or create a P2P topic.
 // There is a reace condition when two users try to create a p2p topic at the same time.
-func initTopicP2P(t *Topic, sreg *sessionJoin) error {
-	pktsub := sreg.pkt.Sub
+func initTopicP2P(t *Topic, sreg *ClientComMessage) error {
+	pktsub := sreg.Sub
 
 	// Handle the following cases:
 	// 1. Neither topic nor subscriptions exist: create a new p2p topic & subscriptions.
@@ -298,7 +298,7 @@ func initTopicP2P(t *Topic, sreg *sessionJoin) error {
 
 		// Fetching records for both users.
 		// Requester.
-		userID1 := types.ParseUserId(sreg.pkt.AsUser)
+		userID1 := types.ParseUserId(sreg.AsUser)
 		// The other user.
 		userID2 := types.ParseUserId(t.xoriginal)
 
@@ -373,7 +373,7 @@ func initTopicP2P(t *Topic, sreg *sessionJoin) error {
 		if sub1 == nil {
 
 			// Set user1's ModeGiven from user2's default values
-			userData.modeGiven = selectAccessMode(auth.Level(sreg.pkt.AuthLvl),
+			userData.modeGiven = selectAccessMode(auth.Level(sreg.AuthLvl),
 				users[u2].Access.Anon,
 				users[u2].Access.Auth,
 				types.ModeCP2P)
@@ -430,7 +430,7 @@ func initTopicP2P(t *Topic, sreg *sessionJoin) error {
 
 		if !user1only {
 			// sub2 is being created, assign sub2.modeWant to what user2 gave to user1 (sub1.modeGiven)
-			sub2.ModeWant = selectAccessMode(auth.Level(sreg.pkt.AuthLvl),
+			sub2.ModeWant = selectAccessMode(auth.Level(sreg.AuthLvl),
 				users[u2].Access.Anon,
 				users[u2].Access.Auth,
 				types.ModeCP2P)
@@ -495,16 +495,16 @@ func initTopicP2P(t *Topic, sreg *sessionJoin) error {
 }
 
 // Create a new group topic
-func initTopicNewGrp(t *Topic, sreg *sessionJoin, isChan bool) error {
+func initTopicNewGrp(t *Topic, sreg *ClientComMessage, isChan bool) error {
 	timestamp := types.TimeNow()
-	pktsub := sreg.pkt.Sub
+	pktsub := sreg.Sub
 
 	t.cat = types.TopicCatGrp
 	t.isChan = isChan
 
 	// Generic topics have parameters stored in the topic object
-	t.owner = types.ParseUserId(sreg.pkt.AsUser)
-	authLevel := auth.Level(sreg.pkt.AuthLvl)
+	t.owner = types.ParseUserId(sreg.AsUser)
+	authLevel := auth.Level(sreg.AuthLvl)
 
 	t.accessAuth = getDefaultAccess(t.cat, true, isChan)
 	t.accessAnon = getDefaultAccess(t.cat, false, isChan)
@@ -588,7 +588,7 @@ func initTopicNewGrp(t *Topic, sreg *sessionJoin, isChan bool) error {
 	// t.lastId & t.delId are not set for new topics
 
 	stopic := &types.Topic{
-		ObjHeader: types.ObjHeader{Id: sreg.pkt.RcptTo, CreatedAt: timestamp},
+		ObjHeader: types.ObjHeader{Id: sreg.RcptTo, CreatedAt: timestamp},
 		Access:    types.DefaultAccess{Auth: t.accessAuth, Anon: t.accessAnon},
 		Tags:      tags,
 		UseBt:     isChan,

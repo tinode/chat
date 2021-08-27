@@ -23,8 +23,8 @@ func (t *Topic) runProxy(hub *Hub) {
 		case join := <-t.reg:
 			// Request to add a connection to this topic
 			if t.isInactive() {
-				join.sess.queueOut(ErrLockedReply(join.pkt, types.TimeNow()))
-			} else if err := globals.cluster.routeToTopicMaster(ProxyReqJoin, join.pkt, t.name, join.sess); err != nil {
+				join.sess.queueOut(ErrLockedReply(join, types.TimeNow()))
+			} else if err := globals.cluster.routeToTopicMaster(ProxyReqJoin, join, t.name, join.sess); err != nil {
 				// Response (ctrl message) will be handled when it's received via the proxy channel.
 				logs.Warn.Println("proxy topic: route join request from proxy to master failed:", err)
 			}

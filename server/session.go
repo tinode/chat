@@ -628,11 +628,9 @@ func (s *Session) subscribe(msg *ClientComMessage) {
 		s.queueOut(InfoAlreadySubscribed(msg.Id, msg.Original, msg.Timestamp))
 	} else {
 		s.inflightReqs.Add(1)
+		msg.sess = s
 		select {
-		case globals.hub.join <- &sessionJoin{
-			pkt:  msg,
-			sess: s,
-		}:
+		case globals.hub.join <- msg:
 		default:
 			// Reply with a 500 to the user.
 			s.queueOut(ErrUnknownReply(msg, msg.Timestamp))

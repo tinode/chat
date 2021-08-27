@@ -492,12 +492,9 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 
 	switch msg.ReqType {
 	case ProxyReqJoin:
-		join := &sessionJoin{
-			pkt:  msg.CliMsg,
-			sess: sess,
-		}
+		msg.CliMsg.sess = sess
 		select {
-		case globals.hub.join <- join:
+		case globals.hub.join <- msg.CliMsg:
 		default:
 			// Reply with a 500 to the user.
 			sess.queueOut(ErrUnknownReply(msg.CliMsg, msg.CliMsg.Timestamp))

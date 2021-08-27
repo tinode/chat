@@ -89,7 +89,7 @@ type Topic struct {
 	// Channel for receiving {get}/{set} requests, buffered = 32
 	meta chan *ClientComMessage
 	// Subscribe requests from sessions, buffered = 32
-	reg chan *sessionJoin
+	reg chan *ClientComMessage
 	// Unsubscribe requests from sessions, buffered = 32
 	unreg chan *sessionLeave
 	// Session updates: background sessions coming online, User Agent changes. Buffered = 32
@@ -295,16 +295,16 @@ func (t *Topic) unregisterSession(msg *ClientComMessage, sess *Session) {
 
 // registerSession handles a session join (registration) request
 // received via the Topic.reg channel.
-func (t *Topic) registerSession(join *sessionJoin) {
+func (t *Topic) registerSession(join *ClientComMessage) {
 	// Request to add a connection to this topic
 	if t.isInactive() {
-		join.sess.queueOut(ErrLockedReply(join.pkt, types.TimeNow()))
+		join.sess.queueOut(ErrLockedReply(join, types.TimeNow()))
 	} else {
 		// The topic is alive, so stop the kill timer, if it's ticking. We don't want the topic to die
 		// while processing the call.
 		t.killTimer.Stop()
 		if err := t.handleSubscription(join); err == nil {
-			if join.pkt.Sub.Created {
+			if join.Sub.Created {
 				// Call plugins with the new topic
 				pluginTopic(t, plgActCreate)
 			}
@@ -573,17 +573,17 @@ func (t *Topic) handleServerMsg(msg *ServerComMessage) {
 }
 
 // Session subscribed to a topic, created == true if topic was just created and {pres} needs to be announced
-func (t *Topic) handleSubscription(join *sessionJoin) error {
-	asUid := types.ParseUserId(join.pkt.AsUser)
-	authLevel := auth.Level(join.pkt.AuthLvl)
-	asChan, err := t.verifyChannelAccess(join.pkt.Original)
+func (t *Topic) handleSubscription(join *ClientComMessage) error {
+	asUid := types.ParseUserId(join.AsUser)
+	authLevel := auth.Level(join.AuthLvl)
+	asChan, err := t.verifyChannelAccess(join.Original)
 	if err != nil {
 		// User should not be able to address non-channel topic as channel.
-		join.sess.queueOut(ErrNotFoundReply(join.pkt, types.TimeNow()))
+		join.sess.queueOut(ErrNotFoundReply(join, types.TimeNow()))
 		return err
 	}
 
-	msgsub := join.pkt.Sub
+	msgsub := join.Sub
 	getWhat := 0
 	if msgsub.Get != nil {
 		getWhat = parseMsgClientMeta(msgsub.Get.What)
@@ -595,42 +595,42 @@ func (t *Topic) handleSubscription(join *sessionJoin) error {
 
 	if getWhat&constMsgMetaDesc != 0 {
 		// Send get.desc as a {meta} packet.
-		if err := t.replyGetDesc(join.sess, asUid, asChan, msgsub.Get.Desc, join.pkt); err != nil {
+		if err := t.replyGetDesc(join.sess, asUid, asChan, msgsub.Get.Desc, join); err != nil {
 			logs.Warn.Printf("topic[%s] handleSubscription Get.Desc failed: %v sid=%s", t.name, err, join.sess.sid)
 		}
 	}
 
 	if getWhat&constMsgMetaSub != 0 {
 		// Send get.sub response as a separate {meta} packet
-		if err := t.replyGetSub(join.sess, asUid, authLevel, asChan, join.pkt); err != nil {
+		if err := t.replyGetSub(join.sess, asUid, authLevel, asChan, join); err != nil {
 			logs.Warn.Printf("topic[%s] handleSubscription Get.Sub failed: %v sid=%s", t.name, err, join.sess.sid)
 		}
 	}
 
 	if getWhat&constMsgMetaTags != 0 {
 		// Send get.tags response as a separate {meta} packet
-		if err := t.replyGetTags(join.sess, asUid, join.pkt); err != nil {
+		if err := t.replyGetTags(join.sess, asUid, join); err != nil {
 			logs.Warn.Printf("topic[%s] handleSubscription Get.Tags failed: %v sid=%s", t.name, err, join.sess.sid)
 		}
 	}
 
 	if getWhat&constMsgMetaCred != 0 {
 		// Send get.tags response as a separate {meta} packet
-		if err := t.replyGetCreds(join.sess, asUid, join.pkt); err != nil {
+		if err := t.replyGetCreds(join.sess, asUid, join); err != nil {
 			logs.Warn.Printf("topic[%s] handleSubscription Get.Cred failed: %v sid=%s", t.name, err, join.sess.sid)
 		}
 	}
 
 	if getWhat&constMsgMetaData != 0 {
 		// Send get.data response as {data} packets
-		if err := t.replyGetData(join.sess, asUid, asChan, msgsub.Get.Data, join.pkt); err != nil {
+		if err := t.replyGetData(join.sess, asUid, asChan, msgsub.Get.Data, join); err != nil {
 			logs.Warn.Printf("topic[%s] handleSubscription Get.Data failed: %v sid=%s", t.name, err, join.sess.sid)
 		}
 	}
 
 	if getWhat&constMsgMetaDel != 0 {
 		// Send get.del response as a separate {meta} packet
-		if err := t.replyGetDel(join.sess, asUid, msgsub.Get.Del, join.pkt); err != nil {
+		if err := t.replyGetDel(join.sess, asUid, msgsub.Get.Del, join); err != nil {
 			logs.Warn.Printf("topic[%s] handleSubscription Get.Del failed: %v sid=%s", t.name, err, join.sess.sid)
 		}
 	}
@@ -811,7 +811,7 @@ func (t *Topic) channelSubUnsub(uid types.Uid, sub bool) {
 // Send push notification to the P2P counterpart.
 // In case of a new channel subscription subscribe user to an FCM topic.
 // These notifications are always sent immediately even if background is requested.
-func (t *Topic) sendImmediateSubNotifications(asUid types.Uid, acs *MsgAccessMode, sreg *sessionJoin) {
+func (t *Topic) sendImmediateSubNotifications(asUid types.Uid, acs *MsgAccessMode, sreg *ClientComMessage) {
 	modeWant, _ := types.ParseAcs([]byte(acs.Want))
 	modeGiven, _ := types.ParseAcs([]byte(acs.Given))
 	mode := modeWant & modeGiven
@@ -825,7 +825,7 @@ func (t *Topic) sendImmediateSubNotifications(asUid types.Uid, acs *MsgAccessMod
 		}
 
 		// Inform the other user that the topic was just created.
-		if sreg.pkt.Sub.Created {
+		if sreg.Sub.Created {
 			t.presSingleUserOffline(uid2, mode2, "acs", &presParams{
 				dWant:  pud2.modeWant.String(),
 				dGiven: pud2.modeGiven.String(),
@@ -833,7 +833,7 @@ func (t *Topic) sendImmediateSubNotifications(asUid types.Uid, acs *MsgAccessMod
 			}, "", false)
 		}
 
-		if sreg.pkt.Sub.Newsub {
+		if sreg.Sub.Newsub {
 			// Notify current user's 'me' topic to accept notifications from user2
 			t.presSingleUserOffline(asUid, mode, "?none+en", nilPresParams, "", false)
 
@@ -854,7 +854,7 @@ func (t *Topic) sendImmediateSubNotifications(asUid types.Uid, acs *MsgAccessMod
 			}
 		}
 	} else if t.cat == types.TopicCatGrp {
-		if sreg.pkt.Sub.Newsub {
+		if sreg.Sub.Newsub {
 			// For new subscriptions, notify other group members.
 			if pushRcpt := t.pushForGroupSub(asUid, types.TimeNow()); pushRcpt != nil {
 				usersPush(pushRcpt)
@@ -863,7 +863,7 @@ func (t *Topic) sendImmediateSubNotifications(asUid types.Uid, acs *MsgAccessMod
 	}
 
 	// newsub could be true only for p2p and group topics, no need to check topic category explicitly.
-	if sreg.pkt.Sub.Newsub {
+	if sreg.Sub.Newsub {
 		// Notify creator's other sessions that the subscription (or the entire topic) was created.
 		t.presSingleUserOffline(asUid, mode, "acs",
 			&presParams{
@@ -873,7 +873,7 @@ func (t *Topic) sendImmediateSubNotifications(asUid types.Uid, acs *MsgAccessMod
 			},
 			sreg.sess.sid, false)
 
-		if t.isChan && types.IsChannel(sreg.pkt.Original) {
+		if t.isChan && types.IsChannel(sreg.Original) {
 			t.channelSubUnsub(asUid, true)
 		}
 	}
@@ -1231,10 +1231,10 @@ func (t *Topic) broadcastToSessions(msg *ServerComMessage) {
 }
 
 // subscriptionReply generates a response to a subscription request
-func (t *Topic) subscriptionReply(asChan bool, join *sessionJoin) error {
+func (t *Topic) subscriptionReply(asChan bool, msg *ClientComMessage) error {
 	// The topic is already initialized by the Hub
 
-	msgsub := join.pkt.Sub
+	msgsub := msg.Sub
 
 	// For newly created topics report topic creation time.
 	var now time.Time
@@ -1244,7 +1244,7 @@ func (t *Topic) subscriptionReply(asChan bool, join *sessionJoin) error {
 		now = types.TimeNow()
 	}
 
-	asUid := types.ParseUserId(join.pkt.AsUser)
+	asUid := types.ParseUserId(msg.AsUser)
 
 	if !msgsub.Newsub && (t.cat == types.TopicCatP2P || t.cat == types.TopicCatGrp || t.cat == types.TopicCatSys) {
 		// Check if this is a new subscription.
@@ -1257,7 +1257,7 @@ func (t *Topic) subscriptionReply(asChan bool, join *sessionJoin) error {
 	if msgsub.Set != nil {
 		if msgsub.Set.Sub != nil {
 			if msgsub.Set.Sub.User != "" {
-				join.sess.queueOut(ErrMalformedReply(join.pkt, now))
+				msg.sess.queueOut(ErrMalformedReply(msg, now))
 				return errors.New("user id must not be specified")
 			}
 			mode = msgsub.Set.Sub.Mode
@@ -1271,7 +1271,7 @@ func (t *Topic) subscriptionReply(asChan bool, join *sessionJoin) error {
 	var err error
 	var modeChanged *MsgAccessMode
 	// Create new subscription or modify an existing one.
-	if modeChanged, err = t.thisUserSub(join.sess, join.pkt, asUid, asChan, mode, private); err != nil {
+	if modeChanged, err = t.thisUserSub(msg.sess, msg, asUid, asChan, mode, private); err != nil {
 		return err
 	}
 
@@ -1284,16 +1284,16 @@ func (t *Topic) subscriptionReply(asChan bool, join *sessionJoin) error {
 
 	if hasJoined {
 		// Subscription successfully created. Link topic to session.
-		join.sess.addSub(t.name, &Subscription{
+		msg.sess.addSub(t.name, &Subscription{
 			broadcast: t.clientMsg,
 			done:      t.unreg,
 			meta:      t.meta,
 			supd:      t.supd,
 		})
-		t.addSession(join.sess, asUid, asChan)
+		t.addSession(msg.sess, asUid, asChan)
 
 		// The user is online in the topic. Increment the counter if notifications are not deferred.
-		if !join.sess.background {
+		if !msg.sess.background {
 			userData := t.perUser[asUid]
 			userData.online++
 			t.perUser[asUid] = userData
@@ -1309,27 +1309,27 @@ func (t *Topic) subscriptionReply(asChan bool, join *sessionJoin) error {
 
 	// When a group topic is created, it's given a temporary name by the client.
 	// Then this name changes. Report back the original name here.
-	if msgsub.Created && join.pkt.Original != toriginal {
-		params["tmpname"] = join.pkt.Original
+	if msgsub.Created && msg.Original != toriginal {
+		params["tmpname"] = msg.Original
 		// The new123ABC name is no longer useful after this.
-		join.pkt.Original = toriginal
+		msg.Original = toriginal
 	}
 
 	if len(params) == 0 {
 		// Don't send empty params '{}'
-		join.sess.queueOut(NoErr(join.pkt.Id, toriginal, now))
+		msg.sess.queueOut(NoErr(msg.Id, toriginal, now))
 	} else {
-		join.sess.queueOut(NoErrParams(join.pkt.Id, toriginal, now, params))
+		msg.sess.queueOut(NoErrParams(msg.Id, toriginal, now, params))
 	}
 
 	// Some notifications are always sent immediately.
 	if modeChanged != nil {
-		t.sendImmediateSubNotifications(asUid, modeChanged, join)
+		t.sendImmediateSubNotifications(asUid, modeChanged, msg)
 	}
 
-	if !join.sess.background && hasJoined {
+	if !msg.sess.background && hasJoined {
 		// Other notifications are also sent immediately for foreground sessions.
-		t.sendSubNotifications(asUid, join.sess.sid, join.sess.userAgent)
+		t.sendSubNotifications(asUid, msg.sess.sid, msg.sess.userAgent)
 	}
 
 	return nil

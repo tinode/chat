@@ -29,6 +29,7 @@ var requestLatencyDistribution = []float64{1, 2, 3, 4, 5, 6, 8, 10, 13, 16, 20, 
 var outgoingMessageSizeDistribution = []float64{1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 16384,
 	65536, 262144, 1048576, 4194304, 16777216, 67108864, 268435456, 1073741824, 4294967296}
 
+/*
 // Request to hub to subscribe session to topic
 type sessionJoin struct {
 	// Message, containing request details.
@@ -36,6 +37,7 @@ type sessionJoin struct {
 	// Session to attach to topic.
 	sess *Session
 }
+*/
 
 // Session wants to leave the topic
 type sessionLeave struct {
@@ -87,7 +89,7 @@ type Hub struct {
 	routeSrv chan *ServerComMessage
 
 	// subscribe session to topic, possibly creating a new topic, buffered at 32
-	join chan *sessionJoin
+	join chan *ClientComMessage
 
 	// Remove topic from hub, possibly deleting it afterwards, buffered at 32
 	unreg chan *topicUnreg
@@ -125,7 +127,7 @@ func newHub() *Hub {
 		// TODO: verify if these channels have to be buffered.
 		routeCli:   make(chan *ClientComMessage, 4096),
 		routeSrv:   make(chan *ServerComMessage, 4096),
-		join:       make(chan *sessionJoin, 256),
+		join:       make(chan *ClientComMessage, 256),
 		unreg:      make(chan *topicUnreg, 256),
 		rehash:     make(chan bool),
 		meta:       make(chan *ClientComMessage, 128),
@@ -160,7 +162,7 @@ func newHub() *Hub {
 
 	if !globals.cluster.isRemoteTopic("sys") {
 		// Initialize system 'sys' topic. There is only one sys topic per cluster.
-		h.join <- &sessionJoin{pkt: &ClientComMessage{RcptTo: "sys", Original: "sys"}}
+		h.join <- &ClientComMessage{RcptTo: "sys", Original: "sys"}
 	}
 
 	return h
@@ -180,18 +182,18 @@ func (h *Hub) run() {
 			// 2. Check access rights and reject, if appropriate
 			// 3. Attach session to the topic
 			// Is the topic already loaded?
-			t := h.topicGet(join.pkt.RcptTo)
+			t := h.topicGet(join.RcptTo)
 			if t == nil {
 				// Topic does not exist or not loaded.
 				t = &Topic{
-					name:      join.pkt.RcptTo,
-					xoriginal: join.pkt.Original,
+					name:      join.RcptTo,
+					xoriginal: join.Original,
 					// Indicates a proxy topic.
-					isProxy:   globals.cluster.isRemoteTopic(join.pkt.RcptTo),
+					isProxy:   globals.cluster.isRemoteTopic(join.RcptTo),
 					sessions:  make(map[*Session]perSessionData),
 					clientMsg: make(chan *ClientComMessage, 192),
 					serverMsg: make(chan *ServerComMessage, 64),
-					reg:       make(chan *sessionJoin, 256),
+					reg:       make(chan *ClientComMessage, 256),
 					unreg:     make(chan *sessionLeave, 256),
 					meta:      make(chan *ClientComMessage, 64),
 					perUser:   make(map[types.Uid]perUserData),
@@ -210,7 +212,7 @@ func (h *Hub) run() {
 				// Topic is created in suspended state because it's not yet configured.
 				t.markPaused(true)
 				// Save topic now to prevent race condition.
-				h.topicPut(join.pkt.RcptTo, t)
+				h.topicPut(join.RcptTo, t)
 
 				// Configure the topic.
 				go topicInit(t, join, h)
@@ -223,8 +225,8 @@ func (h *Hub) run() {
 					if join.sess.inflightReqs != nil {
 						join.sess.inflightReqs.Done()
 					}
-					join.sess.queueOut(ErrServiceUnavailableReply(join.pkt, join.pkt.Timestamp))
-					logs.Err.Println("hub.join loop: topic's reg queue full", join.pkt.RcptTo, join.sess.sid,
+					join.sess.queueOut(ErrServiceUnavailableReply(join, join.Timestamp))
+					logs.Err.Println("hub.join loop: topic's reg queue full", join.RcptTo, join.sess.sid,
 						" - total queue len:", len(t.reg))
 				}
 			}
@@ -322,7 +324,7 @@ func (h *Hub) run() {
 				// Yes, 'sys' has migrated here. Initialize it.
 				// The h.join is unbuffered. We must call from another goroutine. Otherwise deadlock.
 				go func() {
-					h.join <- &sessionJoin{pkt: &ClientComMessage{RcptTo: "sys", Original: "sys"}}
+					h.join <- &ClientComMessage{RcptTo: "sys", Original: "sys"}
 				}()
 			}
 
