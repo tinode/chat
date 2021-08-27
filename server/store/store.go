@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tinode/chat/server/logs"
+
 	"github.com/tinode/chat/server/auth"
 	"github.com/tinode/chat/server/db"
 	"github.com/tinode/chat/server/media"
@@ -964,10 +966,16 @@ func (storeObj) UseMediaHandler(name, config string) error {
 
 // FilePersistenceInterface is an interface wchich defines methods used for file handling (records or uploaded files).
 type FilePersistenceInterface interface {
+	// StartUpload records that the given user initiated a file upload
 	StartUpload(fd *types.FileDef) error
+	// FinishUpload marks started upload as successfully finished.
 	FinishUpload(fd *types.FileDef, success bool, size int64) (*types.FileDef, error)
+	// Get fetches a file record for a unique file id.
 	Get(fid string) (*types.FileDef, error)
+	// DeleteUnused removes unused attachments.
 	DeleteUnused(olderThan time.Time, limit int) error
+	// LinkAttachments connects earlier uploaded attachments to a message or topic to prevent it
+	// from being garbage collected.
 	LinkAttachments(topic string, msgId types.Uid, attachments []string) error
 }
 
@@ -1000,6 +1008,7 @@ func (fileMapper) DeleteUnused(olderThan time.Time, limit int) error {
 		return err
 	}
 	if len(toDel) > 0 {
+		logs.Warn.Println("deleteting media", toDel)
 		return Store.GetMediaHandler().Delete(toDel)
 	}
 	return nil
