@@ -489,10 +489,11 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 			uid:         msg.Sess.Uid,
 		}
 	}
+	// sess could be nil
+	msg.CliMsg.sess = sess
 
 	switch msg.ReqType {
 	case ProxyReqJoin:
-		msg.CliMsg.sess = sess
 		select {
 		case globals.hub.join <- msg.CliMsg:
 		default:
@@ -504,17 +505,13 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 
 	case ProxyReqLeave:
 		if t := globals.hub.topicGet(msg.RcptTo); t != nil {
-			t.unreg <- &sessionLeave{
-				pkt:  msg.CliMsg,
-				sess: sess,
-			}
+			t.unreg <- msg.CliMsg
 		} else {
 			logs.Warn.Println("cluster: leave request for unknown topic", msg.RcptTo)
 		}
 
 	case ProxyReqMeta:
 		if t := globals.hub.topicGet(msg.RcptTo); t != nil {
-			msg.CliMsg.sess = sess
 			select {
 			case t.meta <- msg.CliMsg:
 			default:
@@ -527,8 +524,6 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 		}
 
 	case ProxyReqBroadcast:
-		// sess could be nil
-		msg.CliMsg.sess = sess
 		select {
 		case globals.hub.routeCli <- msg.CliMsg:
 		default:
@@ -536,6 +531,7 @@ func (c *Cluster) TopicMaster(msg *ClusterReq, rejected *bool) error {
 		}
 
 	case ProxyReqBgSession, ProxyReqMeUserAgent:
+		// sess could be nil
 		if t := globals.hub.topicGet(msg.RcptTo); t != nil {
 			if t.supd == nil {
 				logs.Err.Panicln("cluster: invalid topic category in session update", t.name, msg.ReqType)

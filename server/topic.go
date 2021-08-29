@@ -84,14 +84,14 @@ type Topic struct {
 
 	// Channel for receiving client messages from sessions or other topics, buffered = 256.
 	clientMsg chan *ClientComMessage
-	// Channel for receiving server messages generated on the server or received from other cluster nodes, buffered = 256.
+	// Channel for receiving server messages generated on the server or received from other cluster nodes, buffered = 64.
 	serverMsg chan *ServerComMessage
-	// Channel for receiving {get}/{set} requests, buffered = 32
+	// Channel for receiving {get}/{set} requests, buffered = 64
 	meta chan *ClientComMessage
-	// Subscribe requests from sessions, buffered = 32
+	// Subscribe requests from sessions, buffered = 256
 	reg chan *ClientComMessage
-	// Unsubscribe requests from sessions, buffered = 32
-	unreg chan *sessionLeave
+	// Unsubscribe requests from sessions, buffered = 256
+	unreg chan *ClientComMessage
 	// Session updates: background sessions coming online, User Agent changes. Buffered = 32
 	supd chan *sessionUpdate
 	// Channel to terminate topic  -- either the topic is deleted or system is being shut down. Buffered = 1.
@@ -280,11 +280,11 @@ func (t *Topic) computePerUserAcsUnion() {
 
 // unregisterSession implements all logic following receipt of a leave
 // request via the Topic.unreg channel.
-func (t *Topic) unregisterSession(msg *ClientComMessage, sess *Session) {
-	t.handleLeaveRequest(msg, sess)
-	if msg != nil && sess.inflightReqs != nil {
+func (t *Topic) unregisterSession(msg *ClientComMessage) {
+	t.handleLeaveRequest(msg, msg.sess)
+	if msg.init && msg.sess.inflightReqs != nil {
 		// If it's a client initiated request.
-		sess.inflightReqs.Done()
+		msg.sess.inflightReqs.Done()
 	}
 
 	// If there are no more subscriptions to this topic, start a kill timer
@@ -515,8 +515,8 @@ func (t *Topic) runLocal(hub *Hub) {
 		case msg := <-t.reg:
 			t.registerSession(msg)
 
-		case leave := <-t.unreg:
-			t.unregisterSession(leave.pkt, leave.sess)
+		case msg := <-t.unreg:
+			t.unregisterSession(msg)
 
 		case msg := <-t.clientMsg:
 			t.handleClientMsg(msg)
@@ -645,7 +645,7 @@ func (t *Topic) handleLeaveRequest(msg *ClientComMessage, sess *Session) {
 
 	var asUid types.Uid
 	var asChan bool
-	if msg != nil {
+	if msg.init {
 		asUid = types.ParseUserId(msg.AsUser)
 		var err error
 		asChan, err = t.verifyChannelAccess(msg.Original)
@@ -656,11 +656,11 @@ func (t *Topic) handleLeaveRequest(msg *ClientComMessage, sess *Session) {
 	}
 
 	if t.isInactive() {
-		if !asUid.IsZero() && msg != nil {
+		if !asUid.IsZero() && msg.init {
 			sess.queueOut(ErrLockedReply(msg, now))
 		}
 		return
-	} else if msg != nil && msg.Leave.Unsub {
+	} else if msg.init && msg.Leave.Unsub {
 		// User wants to leave and unsubscribe.
 		// asUid must not be Zero.
 		if err := t.replyLeaveUnsub(sess, msg, asUid); err != nil {
@@ -670,7 +670,7 @@ func (t *Topic) handleLeaveRequest(msg *ClientComMessage, sess *Session) {
 	} else if pssd, _ := t.remSession(sess, asUid); pssd != nil {
 		if pssd.isChanSub != asChan {
 			// Cannot address non-channel subscription as channel and vice versa.
-			if msg != nil {
+			if msg.init {
 				// Group topic cannot be addressed as channel unless channel functionality is enabled.
 				sess.queueOut(ErrNotFoundReply(msg, now))
 			}
@@ -765,7 +765,7 @@ func (t *Topic) handleLeaveRequest(msg *ClientComMessage, sess *Session) {
 
 		if !uid.IsZero() {
 			// Respond if contains an id.
-			if msg != nil {
+			if msg.init {
 				sess.queueOut(NoErrReply(msg, now))
 			}
 		}
@@ -1224,8 +1224,8 @@ func (t *Topic) broadcastToSessions(msg *ServerComMessage) {
 
 	// Drop "bad" sessions.
 	for _, sess := range dropSessions {
-		// The whole session is being dropped, so sessionLeave.pkt is not set.
-		t.unregisterSession(nil, sess)
+		// The whole session is being dropped, so ClientComMessage.init is not set.
+		t.unregisterSession(&ClientComMessage{sess: sess})
 	}
 }
 
@@ -3041,7 +3041,7 @@ func (t *Topic) replyLeaveUnsub(sess *Session, msg *ClientComMessage, asUid type
 	}
 
 	if t.owner == asUid {
-		if msg != nil {
+		if msg.init {
 			sess.queueOut(ErrPermissionDeniedReply(msg, now))
 		}
 		return errors.New("replyLeaveUnsub: owner cannot unsubscribe")
@@ -3049,7 +3049,7 @@ func (t *Topic) replyLeaveUnsub(sess *Session, msg *ClientComMessage, asUid type
 
 	var err error
 	var asChan bool
-	if msg != nil {
+	if msg.init {
 		asChan, err = t.verifyChannelAccess(msg.Original)
 		if err != nil {
 			sess.queueOut(ErrNotFoundReply(msg, now))
@@ -3068,7 +3068,7 @@ func (t *Topic) replyLeaveUnsub(sess *Session, msg *ClientComMessage, asUid type
 	}
 
 	if err != nil {
-		if msg != nil {
+		if msg.init {
 			if err == types.ErrNotFound {
 				sess.queueOut(InfoNoActionReply(msg, now))
 				err = nil
@@ -3079,7 +3079,7 @@ func (t *Topic) replyLeaveUnsub(sess *Session, msg *ClientComMessage, asUid type
 		return err
 	}
 
-	if msg != nil {
+	if msg.init {
 		sess.queueOut(NoErrReply(msg, now))
 	}
 

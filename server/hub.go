@@ -186,7 +186,7 @@ func (h *Hub) run() {
 					clientMsg: make(chan *ClientComMessage, 192),
 					serverMsg: make(chan *ServerComMessage, 64),
 					reg:       make(chan *ClientComMessage, 256),
-					unreg:     make(chan *sessionLeave, 256),
+					unreg:     make(chan *ClientComMessage, 256),
 					meta:      make(chan *ClientComMessage, 64),
 					perUser:   make(map[types.Uid]perUserData),
 					exit:      make(chan *shutDown, 1),

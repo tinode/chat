@@ -1905,17 +1905,16 @@ func TestUnregisterSessionSimple(t *testing.T) {
 
 	s := helper.sessions[0]
 	r := helper.results[0]
-	leave := &sessionLeave{
-		pkt: &ClientComMessage{
-			Leave: &MsgClientLeave{
-				Id:    "id456",
-				Topic: topicName,
-			},
-			AsUser: uid.UserId(),
+	leave := &ClientComMessage{
+		Leave: &MsgClientLeave{
+			Id:    "id456",
+			Topic: topicName,
 		},
-		sess: s,
+		AsUser: uid.UserId(),
+		sess:   s,
+		init:   true,
 	}
-	helper.topic.unregisterSession(leave.pkt, leave.sess)
+	helper.topic.unregisterSession(leave)
 
 	helper.finish()
 
@@ -1956,21 +1955,20 @@ func TestUnregisterSessionInactiveTopic(t *testing.T) {
 
 	s := helper.sessions[0]
 	r := helper.results[0]
-	leave := &sessionLeave{
-		pkt: &ClientComMessage{
-			Leave: &MsgClientLeave{
-				Id:    "id456",
-				Topic: topicName,
-			},
-			AsUser: uid.UserId(),
+	leave := &ClientComMessage{
+		Leave: &MsgClientLeave{
+			Id:    "id456",
+			Topic: topicName,
 		},
-		sess: s,
+		AsUser: uid.UserId(),
+		sess:   s,
+		init:   true,
 	}
 
 	// Deactivate topic.
 	helper.topic.markDeleted()
 
-	helper.topic.unregisterSession(leave.pkt, leave.sess)
+	helper.topic.unregisterSession(leave)
 	helper.finish()
 
 	if len(helper.topic.sessions) != 1 {
@@ -2020,18 +2018,17 @@ func TestUnregisterSessionUnsubscribe(t *testing.T) {
 		t.Errorf("Number of online sessions: expected 3 vs found %d", online)
 	}
 
-	leave := &sessionLeave{
-		pkt: &ClientComMessage{
-			Leave: &MsgClientLeave{
-				Id:    "id456",
-				Topic: topicName,
-				Unsub: true,
-			},
-			AsUser: uid.UserId(),
+	leave := &ClientComMessage{
+		Leave: &MsgClientLeave{
+			Id:    "id456",
+			Topic: topicName,
+			Unsub: true,
 		},
-		sess: helper.sessions[0],
+		AsUser: uid.UserId(),
+		sess:   helper.sessions[0],
+		init:   true,
 	}
-	helper.topic.unregisterSession(leave.pkt, leave.sess)
+	helper.topic.unregisterSession(leave)
 	helper.finish()
 
 	if len(helper.topic.sessions) != 2 {
@@ -2110,19 +2107,18 @@ func TestUnregisterSessionOwnerCannotUnsubscribe(t *testing.T) {
 	s := helper.sessions[0]
 	r := helper.results[0]
 
-	leave := &sessionLeave{
-		pkt: &ClientComMessage{
-			Leave: &MsgClientLeave{
-				Id:    "id456",
-				Topic: topicName,
-				Unsub: true,
-			},
-			AsUser: uid.UserId(),
+	leave := &ClientComMessage{
+		Leave: &MsgClientLeave{
+			Id:    "id456",
+			Topic: topicName,
+			Unsub: true,
 		},
-		sess: s,
+		AsUser: uid.UserId(),
+		sess:   s,
+		init:   true,
 	}
 
-	helper.topic.unregisterSession(leave.pkt, leave.sess)
+	helper.topic.unregisterSession(leave)
 	helper.finish()
 
 	if len(helper.topic.sessions) != 3 {
@@ -2154,21 +2150,20 @@ func TestUnregisterSessionUnsubDeleteCallFails(t *testing.T) {
 	s := helper.sessions[1]
 	r := helper.results[1]
 
-	leave := &sessionLeave{
-		pkt: &ClientComMessage{
-			Leave: &MsgClientLeave{
-				Id:    "id456",
-				Topic: topicName,
-				Unsub: true,
-			},
-			AsUser: uid.UserId(),
+	leave := &ClientComMessage{
+		Leave: &MsgClientLeave{
+			Id:    "id456",
+			Topic: topicName,
+			Unsub: true,
 		},
-		sess: s,
+		AsUser: uid.UserId(),
+		sess:   s,
+		init:   true,
 	}
 	// DB call fails.
 	helper.ss.EXPECT().Delete(topicName, uid).Return(types.ErrInternal)
 
-	helper.topic.unregisterSession(leave.pkt, leave.sess)
+	helper.topic.unregisterSession(leave)
 	helper.finish()
 
 	if len(helper.topic.sessions) != 3 {

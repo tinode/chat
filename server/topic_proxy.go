@@ -32,13 +32,13 @@ func (t *Topic) runProxy(hub *Hub) {
 				join.sess.inflightReqs.Done()
 			}
 
-		case leave := <-t.unreg:
-			if !t.handleProxyLeaveRequest(leave, killTimer) {
-				logs.Warn.Println("Failed to update proxy topic state for leave request", leave.sess.sid)
+		case msg := <-t.unreg:
+			if !t.handleProxyLeaveRequest(msg, killTimer) {
+				logs.Warn.Println("Failed to update proxy topic state for leave request", msg.sess.sid)
 			}
-			if leave.pkt != nil && leave.sess.inflightReqs != nil {
+			if msg.init && msg.sess.inflightReqs != nil {
 				// If it's a client initiated request.
-				leave.sess.inflightReqs.Done()
+				msg.sess.inflightReqs.Done()
 			}
 
 		case msg := <-t.clientMsg:
@@ -107,15 +107,15 @@ func (t *Topic) runProxy(hub *Hub) {
 // Takes a session leave request, forwards it to the topic master and
 // modifies the local state accordingly.
 // Returns whether the operation was successful.
-func (t *Topic) handleProxyLeaveRequest(leave *sessionLeave, killTimer *time.Timer) bool {
+func (t *Topic) handleProxyLeaveRequest(msg *ClientComMessage, killTimer *time.Timer) bool {
 	// Detach session from topic; session may continue to function.
 	var asUid types.Uid
-	if leave.pkt != nil {
-		asUid = types.ParseUserId(leave.pkt.AsUser)
+	if msg.init {
+		asUid = types.ParseUserId(msg.AsUser)
 	}
 
 	if asUid.IsZero() {
-		if pssd, ok := t.sessions[leave.sess]; ok {
+		if pssd, ok := t.sessions[msg.sess]; ok {
 			asUid = pssd.uid
 		} else {
 			logs.Warn.Println("proxy topic: leave request sent for unknown session")
@@ -125,19 +125,16 @@ func (t *Topic) handleProxyLeaveRequest(leave *sessionLeave, killTimer *time.Tim
 	// Remove the session from the topic without waiting for a response from the master node
 	// because by the time the response arrives this session may be already gone from the session store
 	// and we won't be able to find and remove it by its sid.
-	_, result := t.remSession(leave.sess, asUid)
-	var pkt *ClientComMessage
-	if leave.pkt == nil {
+	_, result := t.remSession(msg.sess, asUid)
+	if !msg.init {
 		// Explicitly specify the uid because the master multiplex session needs to know which
 		// of its multiple hosted sessions to delete.
-		pkt = &ClientComMessage{
-			AsUser: asUid.UserId(),
-			Leave:  &MsgClientLeave{},
-		}
-	} else {
-		pkt = leave.pkt
+		msg.AsUser = asUid.UserId()
+		msg.Leave = &MsgClientLeave{}
+		msg.init = true
 	}
-	if err := globals.cluster.routeToTopicMaster(ProxyReqLeave, pkt, t.name, leave.sess); err != nil {
+
+	if err := globals.cluster.routeToTopicMaster(ProxyReqLeave, msg, t.name, msg.sess); err != nil {
 		logs.Warn.Println("proxy topic: route broadcast request from proxy to master failed:", err)
 	}
 	if len(t.sessions) == 0 {

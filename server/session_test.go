@@ -355,7 +355,7 @@ func TestDispatchLeave(t *testing.T) {
 
 	destUid := types.Uid(2)
 	topicName := uid.P2PName(destUid)
-	leave := make(chan *sessionLeave, 1)
+	leave := make(chan *ClientComMessage, 1)
 	s.subs = make(map[string]*Subscription)
 	s.subs[topicName] = &Subscription{
 		done: leave,
@@ -381,7 +381,7 @@ func TestDispatchLeave(t *testing.T) {
 		if req.sess != s {
 			t.Error("Leave request: sess field expected to be the session under test.")
 		}
-		if req.pkt != msg {
+		if req != msg {
 			t.Error("Leave request: leave message expected to be the original leave message.")
 		}
 	} else {

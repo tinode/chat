@@ -67,26 +67,25 @@ func topicInit(t *Topic, join *ClientComMessage, h *Hub) {
 
 		// Re-queue pending requests to join the topic.
 		for len(t.reg) > 0 {
-			reg := <-t.reg
-			h.join <- reg
+			h.join <- (<-t.reg)
 		}
 
 		// Reject all other pending requests
 		for len(t.clientMsg) > 0 {
 			msg := <-t.clientMsg
-			if msg.Id != "" {
+			if msg.init {
 				msg.sess.queueOut(ErrLockedExplicitTs(msg.Id, t.xoriginal, timestamp, join.Timestamp))
 			}
 		}
 		for len(t.unreg) > 0 {
 			msg := <-t.unreg
-			if msg.pkt != nil {
-				msg.sess.queueOut(ErrLockedReply(msg.pkt, timestamp))
+			if msg.init {
+				msg.sess.queueOut(ErrLockedReply(msg, timestamp))
 			}
 		}
 		for len(t.meta) > 0 {
 			msg := <-t.meta
-			if msg.Id != "" {
+			if msg.init {
 				msg.sess.queueOut(ErrLockedReply(msg, timestamp))
 			}
 		}
