@@ -295,16 +295,16 @@ func (t *Topic) unregisterSession(msg *ClientComMessage, sess *Session) {
 
 // registerSession handles a session join (registration) request
 // received via the Topic.reg channel.
-func (t *Topic) registerSession(join *ClientComMessage) {
+func (t *Topic) registerSession(msg *ClientComMessage) {
 	// Request to add a connection to this topic
 	if t.isInactive() {
-		join.sess.queueOut(ErrLockedReply(join, types.TimeNow()))
+		msg.sess.queueOut(ErrLockedReply(msg, types.TimeNow()))
 	} else {
 		// The topic is alive, so stop the kill timer, if it's ticking. We don't want the topic to die
 		// while processing the call.
 		t.killTimer.Stop()
-		if err := t.handleSubscription(join); err == nil {
-			if join.Sub.Created {
+		if err := t.handleSubscription(msg); err == nil {
+			if msg.Sub.Created {
 				// Call plugins with the new topic
 				pluginTopic(t, plgActCreate)
 			}
@@ -313,11 +313,11 @@ func (t *Topic) registerSession(join *ClientComMessage) {
 				// Failed to subscribe, the topic is still inactive
 				t.killTimer.Reset(idleMasterTopicTimeout)
 			}
-			logs.Warn.Printf("topic[%s] subscription failed %v, sid=%s", t.name, err, join.sess.sid)
+			logs.Warn.Printf("topic[%s] subscription failed %v, sid=%s", t.name, err, msg.sess.sid)
 		}
 	}
-	if join.sess.inflightReqs != nil {
-		join.sess.inflightReqs.Done()
+	if msg.sess.inflightReqs != nil {
+		msg.sess.inflightReqs.Done()
 	}
 }
 
@@ -512,8 +512,8 @@ func (t *Topic) runLocal(hub *Hub) {
 
 	for {
 		select {
-		case join := <-t.reg:
-			t.registerSession(join)
+		case msg := <-t.reg:
+			t.registerSession(msg)
 
 		case leave := <-t.unreg:
 			t.unregisterSession(leave.pkt, leave.sess)
@@ -573,65 +573,65 @@ func (t *Topic) handleServerMsg(msg *ServerComMessage) {
 }
 
 // Session subscribed to a topic, created == true if topic was just created and {pres} needs to be announced
-func (t *Topic) handleSubscription(join *ClientComMessage) error {
-	asUid := types.ParseUserId(join.AsUser)
-	authLevel := auth.Level(join.AuthLvl)
-	asChan, err := t.verifyChannelAccess(join.Original)
+func (t *Topic) handleSubscription(msg *ClientComMessage) error {
+	asUid := types.ParseUserId(msg.AsUser)
+	authLevel := auth.Level(msg.AuthLvl)
+	asChan, err := t.verifyChannelAccess(msg.Original)
 	if err != nil {
 		// User should not be able to address non-channel topic as channel.
-		join.sess.queueOut(ErrNotFoundReply(join, types.TimeNow()))
+		msg.sess.queueOut(ErrNotFoundReply(msg, types.TimeNow()))
 		return err
 	}
 
-	msgsub := join.Sub
+	msgsub := msg.Sub
 	getWhat := 0
 	if msgsub.Get != nil {
 		getWhat = parseMsgClientMeta(msgsub.Get.What)
 	}
 
-	if err := t.subscriptionReply(asChan, join); err != nil {
+	if err := t.subscriptionReply(asChan, msg); err != nil {
 		return err
 	}
 
 	if getWhat&constMsgMetaDesc != 0 {
 		// Send get.desc as a {meta} packet.
-		if err := t.replyGetDesc(join.sess, asUid, asChan, msgsub.Get.Desc, join); err != nil {
-			logs.Warn.Printf("topic[%s] handleSubscription Get.Desc failed: %v sid=%s", t.name, err, join.sess.sid)
+		if err := t.replyGetDesc(msg.sess, asUid, asChan, msgsub.Get.Desc, msg); err != nil {
+			logs.Warn.Printf("topic[%s] handleSubscription Get.Desc failed: %v sid=%s", t.name, err, msg.sess.sid)
 		}
 	}
 
 	if getWhat&constMsgMetaSub != 0 {
 		// Send get.sub response as a separate {meta} packet
-		if err := t.replyGetSub(join.sess, asUid, authLevel, asChan, join); err != nil {
-			logs.Warn.Printf("topic[%s] handleSubscription Get.Sub failed: %v sid=%s", t.name, err, join.sess.sid)
+		if err := t.replyGetSub(msg.sess, asUid, authLevel, asChan, msg); err != nil {
+			logs.Warn.Printf("topic[%s] handleSubscription Get.Sub failed: %v sid=%s", t.name, err, msg.sess.sid)
 		}
 	}
 
 	if getWhat&constMsgMetaTags != 0 {
 		// Send get.tags response as a separate {meta} packet
-		if err := t.replyGetTags(join.sess, asUid, join); err != nil {
-			logs.Warn.Printf("topic[%s] handleSubscription Get.Tags failed: %v sid=%s", t.name, err, join.sess.sid)
+		if err := t.replyGetTags(msg.sess, asUid, msg); err != nil {
+			logs.Warn.Printf("topic[%s] handleSubscription Get.Tags failed: %v sid=%s", t.name, err, msg.sess.sid)
 		}
 	}
 
 	if getWhat&constMsgMetaCred != 0 {
 		// Send get.tags response as a separate {meta} packet
-		if err := t.replyGetCreds(join.sess, asUid, join); err != nil {
-			logs.Warn.Printf("topic[%s] handleSubscription Get.Cred failed: %v sid=%s", t.name, err, join.sess.sid)
+		if err := t.replyGetCreds(msg.sess, asUid, msg); err != nil {
+			logs.Warn.Printf("topic[%s] handleSubscription Get.Cred failed: %v sid=%s", t.name, err, msg.sess.sid)
 		}
 	}
 
 	if getWhat&constMsgMetaData != 0 {
 		// Send get.data response as {data} packets
-		if err := t.replyGetData(join.sess, asUid, asChan, msgsub.Get.Data, join); err != nil {
-			logs.Warn.Printf("topic[%s] handleSubscription Get.Data failed: %v sid=%s", t.name, err, join.sess.sid)
+		if err := t.replyGetData(msg.sess, asUid, asChan, msgsub.Get.Data, msg); err != nil {
+			logs.Warn.Printf("topic[%s] handleSubscription Get.Data failed: %v sid=%s", t.name, err, msg.sess.sid)
 		}
 	}
 
 	if getWhat&constMsgMetaDel != 0 {
 		// Send get.del response as a separate {meta} packet
-		if err := t.replyGetDel(join.sess, asUid, msgsub.Get.Del, join); err != nil {
-			logs.Warn.Printf("topic[%s] handleSubscription Get.Del failed: %v sid=%s", t.name, err, join.sess.sid)
+		if err := t.replyGetDel(msg.sess, asUid, msgsub.Get.Del, msg); err != nil {
+			logs.Warn.Printf("topic[%s] handleSubscription Get.Del failed: %v sid=%s", t.name, err, msg.sess.sid)
 		}
 	}
 
@@ -643,7 +643,6 @@ func (t *Topic) handleLeaveRequest(msg *ClientComMessage, sess *Session) {
 	// Remove connection from topic; session may continue to function
 	now := types.TimeNow()
 
-	// userId.IsZero() == true when the entire session is being dropped.
 	var asUid types.Uid
 	var asChan bool
 	if msg != nil {

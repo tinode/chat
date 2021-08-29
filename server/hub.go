@@ -29,7 +29,7 @@ var requestLatencyDistribution = []float64{1, 2, 3, 4, 5, 6, 8, 10, 13, 16, 20, 
 var outgoingMessageSizeDistribution = []float64{1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 16384,
 	65536, 262144, 1048576, 4194304, 16777216, 67108864, 268435456, 1073741824, 4294967296}
 
-
+/*
 // Session wants to leave the topic
 type sessionLeave struct {
 	// Message, containing request details. Could be nil.
@@ -37,6 +37,7 @@ type sessionLeave struct {
 	// Session which initiated the request
 	sess *Session
 }
+*/
 
 // Request to hub to remove the topic
 type topicUnreg struct {
@@ -79,7 +80,7 @@ type Hub struct {
 	// Channel for routing server-generated messages, buffered at 4096
 	routeSrv chan *ServerComMessage
 
-	// subscribe session to topic, possibly creating a new topic, buffered at 32
+	// subscribe session to topic, possibly creating a new topic, buffered at 256
 	join chan *ClientComMessage
 
 	// Remove topic from hub, possibly deleting it afterwards, buffered at 32
