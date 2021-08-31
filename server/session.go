@@ -167,7 +167,7 @@ type Subscription struct {
 
 	// Session sends a signal to Topic when this session is unsubscribed
 	// This is a copy of Topic.unreg
-	done chan<- *sessionLeave
+	done chan<- *ClientComMessage
 
 	// Channel to send {meta} requests, copy of Topic.meta
 	meta chan<- *ClientComMessage
@@ -227,8 +227,8 @@ func (s *Session) unsubAll() {
 
 	for _, sub := range s.subs {
 		// sub.done is the same as topic.unreg
-		// Leave message is not set because the whole session is being dropped.
-		sub.done <- &sessionLeave{sess: s}
+		// The whole session is being dropped.
+		sub.done <- &ClientComMessage{sess: s}
 	}
 }
 
@@ -597,6 +597,7 @@ func (s *Session) dispatch(msg *ClientComMessage) {
 	}
 
 	msg.sess = s
+	msg.init = true
 	handler(msg)
 
 	// Notify 'me' topic that this session is currently active.
@@ -629,10 +630,7 @@ func (s *Session) subscribe(msg *ClientComMessage) {
 	} else {
 		s.inflightReqs.Add(1)
 		select {
-		case globals.hub.join <- &sessionJoin{
-			pkt:  msg,
-			sess: s,
-		}:
+		case globals.hub.join <- msg:
 		default:
 			// Reply with a 500 to the user.
 			s.queueOut(ErrUnknownReply(msg, msg.Timestamp))
@@ -662,10 +660,7 @@ func (s *Session) leave(msg *ClientComMessage) {
 			// Unlink from topic, topic will send a reply.
 			s.delSub(msg.RcptTo)
 			s.inflightReqs.Add(1)
-			sub.done <- &sessionLeave{
-				pkt:  msg,
-				sess: s,
-			}
+			sub.done <- msg
 		}
 	} else if !msg.Leave.Unsub {
 		// Session is not attached to the topic, wants to leave - fine, no change

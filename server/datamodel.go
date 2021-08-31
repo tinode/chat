@@ -350,6 +350,8 @@ type ClientComMessage struct {
 
 	// Originating session to send an aknowledgement to.
 	sess *Session
+	// The message is initialized (true) as opposite to being used as a wrapper for session.
+	init bool
 }
 
 /****************************************************************
