@@ -227,7 +227,7 @@ func (s *Session) unsubAll() {
 
 	for _, sub := range s.subs {
 		// sub.done is the same as topic.unreg
-		// Еhe whole session is being dropped.
+		// The whole session is being dropped.
 		sub.done <- &ClientComMessage{sess: s}
 	}
 }
