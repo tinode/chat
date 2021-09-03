@@ -169,6 +169,9 @@ func Preview(content interface{}, length int) (string, error) {
 			}
 
 			if s.at < textLen {
+				if s.end > textLen {
+					s.end = textLen
+				}
 				styles = append(styles, s)
 				if s.tp == "" {
 					if s.key < 0 {

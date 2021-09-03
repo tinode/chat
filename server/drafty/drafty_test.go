@@ -97,10 +97,10 @@ func TestToPlainText(t *testing.T) {
 func TestPreview(t *testing.T) {
 	expect := []string{
 		`{"ent":[{"data":{"height":80,"mime":"image/jpeg","name":"hello.jpg","width":100},"tp":"EX"}],"fmt":[{"at":-1,"key":0}]}`,
-		`{"ent":[{"tp":"LN"}],"fmt":[{"key":0,"len":22}],"txt":"https://api.tin"}`,
-		`{"ent":[{"tp":"LN"}],"fmt":[{"key":0,"len":22}],"txt":"https://api.tin"}`,
+		`{"ent":[{"tp":"LN"}],"fmt":[{"key":0,"len":15}],"txt":"https://api.tin"}`,
+		`{"ent":[{"tp":"LN"}],"fmt":[{"key":0,"len":15}],"txt":"https://api.tin"}`,
 		`{"ent":[{"data":{"height":213,"mime":"image/jpeg","name":"roses.jpg","width":638},"tp":"IM"}],"fmt":[{"key":0,"len":1}],"txt":" "}`,
-		`{"fmt":[{"at":5,"len":4,"tp":"ST"},{"at":13,"len":9,"tp":"EM"}],"txt":"This text is fo"}`,
+		`{"fmt":[{"at":5,"len":4,"tp":"ST"},{"at":13,"len":2,"tp":"EM"}],"txt":"This text is fo"}`,
 		`{"fmt":[{"len":14,"tp":"ST"}],"txt":"мультибайтовый "}`,
 	}
 	for i := range validInputs {
