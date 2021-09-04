@@ -4,7 +4,6 @@ package drafty
 import (
 	"encoding/json"
 	"errors"
-	"log"
 	"sort"
 	"unicode/utf8"
 )
@@ -255,9 +254,7 @@ func copyLight(in interface{}) map[string]interface{} {
 }
 
 func ToPlainText(content interface{}) (string, error) {
-	log.Println("-- handling:", content)
 	result, err := iterate(content, plainTextFormatter, nil)
-	log.Println("iterated:", result, err)
 	if err != nil {
 		return "", err
 	}
@@ -267,86 +264,6 @@ func ToPlainText(content interface{}) (string, error) {
 	}
 	return text, nil
 }
-
-/*
-// ToPlainText converts message payload from Drafy to string.
-// If content is a plain string, then it's returned unchanged. If content is not recognized
-// as either Drafy (as a map[string]interface{}) or as a string, an error is returned.
-func ToPlainText(content interface{}) (string, error) {
-	if content == nil {
-		return "", nil
-	}
-
-	var drafty map[string]interface{}
-
-	switch data := content.(type) {
-	case string:
-		return data, nil
-	case map[string]interface{}:
-		drafty = data
-	default:
-		return "", errUnrecognizedContent
-	}
-
-	txt, txtOK := drafty["txt"].(string)
-	fmt, fmtOK := drafty["fmt"].([]interface{})
-	ent, entOK := drafty["ent"].([]interface{})
-
-	// At least one must be set.
-	if !txtOK && !fmtOK && !entOK {
-		return "", errUnrecognizedContent
-	}
-
-	if fmt == nil {
-		if txtOK {
-			return txt, nil
-		}
-		return "", errUnrecognizedContent
-	}
-
-	textLen := utf8.RuneCountInString(txt)
-
-	var spans []*span
-	for i := range fmt {
-		s := span{}
-		if err := s.fromMap(fmt[i]); err != nil {
-			return "", err
-		}
-		if s.end > textLen {
-			return "", errInvalidContent
-		}
-
-		// Denormalize entities into spans.
-		if s.tp == "" && entOK {
-			if s.key < 0 || s.key >= len(ent) {
-				return "", errInvalidContent
-			}
-
-			e, _ := ent[s.key].(map[string]interface{})
-			if e == nil {
-				continue
-			}
-			s.data, _ = e["data"].(map[string]interface{})
-			s.tp, _ = e["tp"].(string)
-		}
-		if s.tp == "" && s.at == 0 && s.end == 0 && s.key == 0 {
-			return "", errUnrecognizedContent
-		}
-		spans = append(spans, &s)
-	}
-
-	// Sort spans first by start index (asc) then by length (desc).
-	sort.Slice(spans, func(i, j int) bool {
-		if spans[i].at == spans[j].at {
-			// longer one comes first
-			return spans[i].end > spans[j].end
-		}
-		return spans[i].at < spans[j].at
-	})
-
-	return forEach([]rune(txt), 0, textLen, spans)
-}
-*/
 
 type iteratorContent interface{}
 type iterationHandler func(content interface{}, tp string, data map[string]interface{},
@@ -429,7 +346,6 @@ func iterate(content interface{}, handler iterationHandler, state interface{}) (
 	})
 
 	children, err := forEach([]rune(txt), 0, textLen, spans, handler, state)
-	log.Println("children: ", children, err)
 	if err != nil {
 		return nil, err
 	}
@@ -544,15 +460,13 @@ func plainTextFormatter(value interface{}, tp string, data map[string]interface{
 		for _, block := range text {
 			concat += block.(string)
 		}
-		return concat, nil
+		return plainTextFormatter(concat, tp, data, nil)
 	default:
-		log.Printf("formatter-unknown %#v", text)
 		return nil, errInvalidContent
 	}
 }
 
 func nullableMapGet(data map[string]interface{}, key string) (string, bool) {
-	log.Println("nullableMapGet", key, data)
 	if data == nil {
 		return "", false
 	}

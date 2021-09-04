@@ -55,20 +55,15 @@ var invalidInputs = []string{
 	}`,
 	`{
 		"ent":[{"data": true, "tp": "ST"}],
-		"fmt":[{"len":1,"key":42}],
+		"fmt":[{"len":1,"key":42, "at":"33"}],
 		"txt":"123"
 	}`,
 	`{
 		"txt":true
 	}`,
 	`{
-		"ent":["tp":"LN"}],
-		"fmt":[{"len":22}],
-		"txt":"https://api.tinode.co/"
-	}`,
-	`{
 		"invalid":[{"data": true, "tp": "ST"}],
-		"content":[{"len":1,"key":42}],
+		"content":[{"len":1, "key":42}]
 	}`,
 }
 
@@ -80,11 +75,14 @@ func TestToPlainText(t *testing.T) {
 		"[IMAGE 'roses.jpg']",
 		"This *text* is _formatted_ and ~deleted *too*~",
 		"*мультибайтовый* _юникод_",
+		"https://api.tinode.co/",
 	}
 
 	for i := range validInputs {
 		var val interface{}
-		json.Unmarshal([]byte(validInputs[i]), &val)
+		if err := json.Unmarshal([]byte(validInputs[i]), &val); err != nil {
+			t.Errorf("Failed to parse input %d '%s': %s", i, validInputs[i], err)
+		}
 		res, err := ToPlainText(val)
 		if err != nil {
 			t.Errorf("%d failed with error: %s", i, err)
@@ -95,10 +93,13 @@ func TestToPlainText(t *testing.T) {
 
 	for i := range invalidInputs {
 		var val interface{}
-		json.Unmarshal([]byte(invalidInputs[i]), &val)
+		if err := json.Unmarshal([]byte(invalidInputs[i]), &val); err != nil {
+			// Don't make it an error: we are not testing validity of json.Unmarshal.
+			t.Logf("Failed to parse input %d '%s': %s", i, invalidInputs[i], err)
+		}
 		res, err := ToPlainText(val)
 		if err == nil {
-			t.Errorf("invalid input %d did not cause an error '%s'", i, res)
+			t.Errorf("invalid input %d '%s' did not cause an error '%s'", i, invalidInputs[i], res)
 		}
 	}
 }
@@ -114,13 +115,13 @@ func TestPreview(t *testing.T) {
 	}
 	for i := range validInputs {
 		var val interface{}
-		json.Unmarshal([]byte(validInputs[i]), &val)
+		if err := json.Unmarshal([]byte(validInputs[i]), &val); err != nil {
+			t.Errorf("Failed to parse input %d '%s': %s", i, validInputs[i], err)
+		}
 		res, err := Preview(val, 15)
 		if err != nil {
-			t.Error(err)
-		}
-
-		if res != expect[i] {
+			t.Errorf("%d failed with error: %s", i, err)
+		} else if res != expect[i] {
 			t.Errorf("%d output '%s' does not match '%s'", i, res, expect[i])
 		}
 	}
@@ -129,7 +130,10 @@ func TestPreview(t *testing.T) {
 	testsToFail := []int{0, 3, 5}
 	for _, i := range testsToFail {
 		var val interface{}
-		json.Unmarshal([]byte(invalidInputs[i]), &val)
+		if err := json.Unmarshal([]byte(invalidInputs[i]), &val); err != nil {
+			// Don't make it an error: we are not testing validity of json.Unmarshal.
+			t.Logf("Failed to parse input %d '%s': %s", i, invalidInputs[i], err)
+		}
 		res, err := Preview(val, 15)
 		if err == nil {
 			t.Errorf("invalid input %d did not cause an error '%s'", testsToFail[i], res)
