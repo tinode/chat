@@ -61,6 +61,15 @@ var invalidInputs = []string{
 	`{
 		"txt":true
 	}`,
+	`{
+		"ent":["tp":"LN"}],
+		"fmt":[{"len":22}],
+		"txt":"https://api.tinode.co/"
+	}`,
+	`{
+		"invalid":[{"data": true, "tp": "ST"}],
+		"content":[{"len":1,"key":42}],
+	}`,
 }
 
 func TestToPlainText(t *testing.T) {
@@ -78,7 +87,7 @@ func TestToPlainText(t *testing.T) {
 		json.Unmarshal([]byte(validInputs[i]), &val)
 		res, err := ToPlainText(val)
 		if err != nil {
-			t.Error(err)
+			t.Errorf("%d failed with error: %s", i, err)
 		} else if res != expect[i] {
 			t.Errorf("%d output '%s' does not match '%s'", i, res, expect[i])
 		}

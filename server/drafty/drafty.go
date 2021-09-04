@@ -4,8 +4,8 @@ package drafty
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"sort"
-	"strings"
 	"unicode/utf8"
 )
 
@@ -20,6 +20,13 @@ type span struct {
 	end  int
 	key  int
 	data map[string]interface{}
+}
+
+type node struct {
+	tp       string
+	content  string
+	data     map[string]interface{}
+	children []*node
 }
 
 func (s *span) fromMap(in interface{}) error {
@@ -247,8 +254,23 @@ func copyLight(in interface{}) map[string]interface{} {
 	return result
 }
 
+func ToPlainText(content interface{}) (string, error) {
+	log.Println("-- handling:", content)
+	result, err := iterate(content, plainTextFormatter, nil)
+	log.Println("iterated:", result, err)
+	if err != nil {
+		return "", err
+	}
+	text, ok := result.(string)
+	if !ok {
+		return "", errInvalidContent
+	}
+	return text, nil
+}
+
+/*
 // ToPlainText converts message payload from Drafy to string.
-// If content is plain string, then it's returned unchanged. If content is not recognized
+// If content is a plain string, then it's returned unchanged. If content is not recognized
 // as either Drafy (as a map[string]interface{}) or as a string, an error is returned.
 func ToPlainText(content interface{}) (string, error) {
 	if content == nil {
@@ -322,24 +344,126 @@ func ToPlainText(content interface{}) (string, error) {
 		return spans[i].at < spans[j].at
 	})
 
-	return forEach([]rune(txt), 0, textLen, spans), nil
+	return forEach([]rune(txt), 0, textLen, spans)
+}
+*/
+
+type iteratorContent interface{}
+type iterationHandler func(content interface{}, tp string, data map[string]interface{},
+	state interface{}) (iteratorContent, error)
+
+// Call handler for each styled or unstyled text span.
+// - content: a string or a drafty document.
+// - handler: function to call for each styled or unstyled span.
+// - context: handler's context.
+func iterate(content interface{}, handler iterationHandler, state interface{}) (iteratorContent, error) {
+	if content == nil {
+		return handler("", "", nil, state)
+	}
+
+	var drafty map[string]interface{}
+
+	switch data := content.(type) {
+	case string:
+		return handler(data, "", nil, state)
+	case map[string]interface{}:
+		drafty = data
+	default:
+		return nil, errUnrecognizedContent
+	}
+
+	txt, txtOK := drafty["txt"].(string)
+	fmt, fmtOK := drafty["fmt"].([]interface{})
+	ent, entOK := drafty["ent"].([]interface{})
+
+	// At least one must be set.
+	if !txtOK && !fmtOK && !entOK {
+		return nil, errUnrecognizedContent
+	}
+
+	if fmt == nil {
+		if txtOK {
+			return handler(txt, "", nil, state)
+		}
+		return nil, errUnrecognizedContent
+	}
+
+	textLen := utf8.RuneCountInString(txt)
+
+	var spans []*span
+	for i := range fmt {
+		s := span{}
+		if err := s.fromMap(fmt[i]); err != nil {
+			return nil, err
+		}
+		if s.end > textLen {
+			return nil, errInvalidContent
+		}
+
+		// Denormalize entities into spans.
+		if s.tp == "" && entOK {
+			if s.key < 0 || s.key >= len(ent) {
+				return nil, errInvalidContent
+			}
+
+			e, _ := ent[s.key].(map[string]interface{})
+			if e == nil {
+				continue
+			}
+			s.data, _ = e["data"].(map[string]interface{})
+			s.tp, _ = e["tp"].(string)
+		}
+		if s.tp == "" && s.at == 0 && s.end == 0 && s.key == 0 {
+			return nil, errUnrecognizedContent
+		}
+		spans = append(spans, &s)
+	}
+
+	// Sort spans first by start index (asc) then by length (desc).
+	sort.Slice(spans, func(i, j int) bool {
+		if spans[i].at == spans[j].at {
+			// longer one comes first
+			return spans[i].end > spans[j].end
+		}
+		return spans[i].at < spans[j].at
+	})
+
+	children, err := forEach([]rune(txt), 0, textLen, spans, handler, state)
+	log.Println("children: ", children, err)
+	if err != nil {
+		return nil, err
+	}
+	return handler(children, "", nil, state)
 }
 
-func forEach(line []rune, start, end int, spans []*span) string {
-	// Process ranges calling formatter for each range.
-	var result []string
+func forEach(line []rune, start, end int, spans []*span, handler iterationHandler, state interface{}) ([]iteratorContent, error) {
+	var result []iteratorContent
+	var content iteratorContent
+
+	var err error
+	// Process ranges calling iterator for each range.
 	for i := 0; i < len(spans); i++ {
 		sp := spans[i]
 
 		if sp.at < 0 {
 			// Attachment
-			result = append(result, formatter(sp.tp, sp.data, ""))
+			if content, err = handler("", sp.tp, sp.data, state); err != nil {
+				return nil, err
+			}
+			if content != nil {
+				result = append(result, content)
+			}
 			continue
 		}
 
 		// Add un-styled range before the styled span starts.
 		if start < sp.at {
-			result = append(result, formatter("", nil, string(line[start:sp.at])))
+			if content, err = handler(string(line[start:sp.at]), "", nil, state); err != nil {
+				return nil, err
+			}
+			if content != nil {
+				result = append(result, content)
+			}
 			start = sp.at
 		}
 		// Get all spans which are within current span.
@@ -351,42 +475,87 @@ func forEach(line []rune, start, end int, spans []*span) string {
 
 		tag := tags[sp.tp]
 		if tag.isVoid {
-			result = append(result, formatter(sp.tp, sp.data, ""))
+			content, err = handler("", sp.tp, sp.data, state)
 		} else {
-			result = append(result, formatter(sp.tp, sp.data, forEach(line, start, sp.end, subspans)))
+			content, err = forEach(line, start, sp.end, subspans, handler, state)
+			if err != nil {
+				return nil, err
+			}
+			content, err = handler(content, sp.tp, sp.data, state)
+		}
+		if err != nil {
+			return nil, err
+		}
+		if content != nil {
+			result = append(result, content)
 		}
 		start = sp.end
 	}
 
-	// Add the last unformatted range.
+	// Add the remaining unformatted range.
 	if start < end {
-		result = append(result, formatter("", nil, string(line[start:end])))
+		if content, err = handler(string(line[start:end]), "", nil, state); err != nil {
+			return nil, err
+		}
+
+		if content != nil {
+			result = append(result, content)
+		}
 	}
 
-	return strings.Join(result, "")
+	return result, nil
 }
 
-func formatter(tp string, data map[string]interface{}, value string) string {
-	switch tp {
-	case "ST", "EM", "DL", "CO":
-		return tags[tp].dec + value + tags[tp].dec
-	case "LN":
-		url, _ := data["url"].(string)
-		if url != value {
-			return "[" + value + "](" + url + ")"
+// Convert a single style to plan text.
+func plainTextFormatter(value interface{}, tp string, data map[string]interface{},
+	_ interface{}) (iteratorContent, error) {
+	switch text := value.(type) {
+	case string:
+		switch tp {
+		case "ST", "EM", "DL", "CO":
+			return tags[tp].dec + text + tags[tp].dec, nil
+		case "LN":
+			if url, ok := nullableMapGet(data, "url"); ok && url != text {
+				return "[" + text + "](" + url + ")", nil
+			}
+			return value, nil
+		case "MN", "HT":
+			return text, nil
+		case "BR":
+			return "\n", nil
+		case "IM":
+			name, ok := nullableMapGet(data, "name")
+			if !ok || name == "" {
+				name = "?"
+			}
+			return "[IMAGE '" + name + "']", nil
+		case "EX":
+			name, ok := nullableMapGet(data, "name")
+			if !ok || name == "" {
+				name = "?"
+			}
+			return "[FILE '" + name + "']", nil
+		default:
+			return text, nil
 		}
-		return value
-	case "MN", "HT":
-		return value
-	case "BR":
-		return "\n"
-	case "IM":
-		name, _ := data["name"].(string)
-		return "[IMAGE '" + name + "']"
-	case "EX":
-		name, _ := data["name"].(string)
-		return "[FILE '" + name + "']"
+
+	case []iteratorContent:
+		var concat string
+		for _, block := range text {
+			concat += block.(string)
+		}
+		return concat, nil
 	default:
-		return value
+		log.Printf("formatter-unknown %#v", text)
+		return nil, errInvalidContent
 	}
+}
+
+func nullableMapGet(data map[string]interface{}, key string) (string, bool) {
+	log.Println("nullableMapGet", key, data)
+	if data == nil {
+		return "", false
+	}
+	str, ok := data[key].(string)
+	return str, ok
 }
