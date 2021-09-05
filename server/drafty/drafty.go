@@ -4,8 +4,8 @@ package drafty
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"sort"
-	"unicode/utf8"
 )
 
 const (
@@ -33,7 +33,8 @@ type entity struct {
 }
 
 type document struct {
-	Txt string   `json:"txt,omitempty"`
+	Txt string `json:"txt,omitempty"`
+	txt []rune
 	Fmt []style  `json:"fmt,omitempty"`
 	Ent []entity `json:"ent,omitempty"`
 }
@@ -46,13 +47,10 @@ type span struct {
 	data map[string]interface{}
 }
 
-type previewState struct {
-	// New length of the document.
-	length int
-	// Mapping of old entity keys to new to prevent entity duplication.
-	keymap map[int]int
-	// The document itself.
-	preview *document
+type node struct {
+	txt      []rune
+	sp       *span
+	children []*node
 }
 
 // Preview shortens Drafty to the specified length (in runes), removes quoted text and large content from entities
@@ -70,19 +68,30 @@ func Preview(content interface{}, length int) (string, error) {
 	if len(txt) > length {
 		txt = txt[:length]
 	}
-	state := previewState{
-		length: length,
-		keymap: make(map[int]int),
-		preview: &document{
-			Txt: string(txt),
-			Fmt: make([]style, 0, len(doc.Fmt)),
-			Ent: make([]entity, 0, len(doc.Ent)),
-		},
+	/*
+		state := previewState{
+			length: length,
+			keymap: make(map[int]int),
+			preview: &document{
+				Txt: string(txt),
+				Fmt: make([]style, 0, len(doc.Fmt)),
+				Ent: make([]entity, 0, len(doc.Ent)),
+			},
+		}
+	*/
+
+	tree, err := iterate(doc, previewFormatter, nil)
+	if err != nil {
+		return "", err
 	}
-
-	iterate(doc, previewFormatter, &state)
-
-	data, err := json.Marshal(state.preview)
+	preview := &document{
+		txt: txt,
+		Fmt: make([]style, 0, len(doc.Fmt)),
+		Ent: make([]entity, 0, len(doc.Ent)),
+	}
+	previewTreeToDrafty(tree.(*node), preview)
+	preview.Txt = string(preview.txt)
+	data, err := json.Marshal(preview)
 	return string(data), err
 }
 
@@ -99,14 +108,14 @@ func ToPlainText(content interface{}) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	text, ok := result.(string)
-	if !ok {
-		return "", errInvalidContent
+
+	if text, ok := result.(string); ok {
+		return text, nil
 	}
-	return text, nil
+	return "", errInvalidContent
 }
 
-func (s *span) fromStyle(in *style) error {
+func (s *span) styleToSpan(in *style) error {
 	s.tp = in.Tp
 	s.at = in.At
 	s.end = in.Length
@@ -123,24 +132,6 @@ func (s *span) fromStyle(in *style) error {
 	}
 
 	return nil
-}
-
-func (s *span) toMap() map[string]interface{} {
-	out := make(map[string]interface{})
-
-	if s.tp != "" {
-		out["tp"] = s.tp
-	} else {
-		out["key"] = s.key
-	}
-	if s.at != 0 {
-		out["at"] = s.at
-	}
-	if s.end != s.at {
-		out["len"] = s.end - s.at
-	}
-
-	return out
 }
 
 type spanfmt struct {
@@ -192,15 +183,15 @@ type iterationHandler func(content interface{}, sp *span, state interface{}) (it
 // - context: handler's context.
 func iterate(drafty *document, handler iterationHandler, state interface{}) (iteratorContent, error) {
 	if len(drafty.Fmt) == 0 {
-		return handler(drafty.Txt, nil, state)
+		return handler(drafty.txt, nil, state)
 	}
 
-	textLen := utf8.RuneCountInString(drafty.Txt)
+	textLen := len(drafty.txt)
 
 	var spans []*span
 	for i := range drafty.Fmt {
 		s := span{}
-		if err := s.fromStyle(&drafty.Fmt[i]); err != nil {
+		if err := s.styleToSpan(&drafty.Fmt[i]); err != nil {
 			return nil, err
 		}
 		if s.at < -1 || s.end > textLen {
@@ -245,11 +236,11 @@ func iterate(drafty *document, handler iterationHandler, state interface{}) (ite
 	}
 
 	// Iterate over spans.
-	children, err := forEach([]rune(drafty.Txt), 0, textLen, filtered, handler, state)
+	tree, err := forEach(drafty.txt, 0, textLen, filtered, handler, state)
 	if err != nil {
 		return nil, err
 	}
-	return handler(children, nil, state)
+	return handler(tree, nil, state)
 }
 
 func forEach(line []rune, start, end int, spans []*span, handler iterationHandler, state interface{}) ([]iteratorContent, error) {
@@ -263,7 +254,7 @@ func forEach(line []rune, start, end int, spans []*span, handler iterationHandle
 
 		if sp.at < 0 {
 			// Attachment
-			if content, err = handler("", sp, state); err != nil {
+			if content, err = handler(nil, sp, state); err != nil {
 				return nil, err
 			}
 			if content != nil {
@@ -274,7 +265,7 @@ func forEach(line []rune, start, end int, spans []*span, handler iterationHandle
 
 		// Add un-styled range before the styled span starts.
 		if start < sp.at {
-			if content, err = handler(string(line[start:sp.at]), nil, state); err != nil {
+			if content, err = handler(line[start:sp.at], nil, state); err != nil {
 				return nil, err
 			}
 			if content != nil {
@@ -291,7 +282,7 @@ func forEach(line []rune, start, end int, spans []*span, handler iterationHandle
 
 		tag := tags[sp.tp]
 		if tag.isVoid {
-			content, err = handler("", sp, state)
+			content, err = handler(nil, sp, state)
 		} else {
 			content, err = forEach(line, start, sp.end, subspans, handler, state)
 			if err != nil {
@@ -310,7 +301,7 @@ func forEach(line []rune, start, end int, spans []*span, handler iterationHandle
 
 	// Add the remaining unformatted range.
 	if start < end {
-		if content, err = handler(string(line[start:end]), nil, state); err != nil {
+		if content, err = handler(line[start:end], nil, state); err != nil {
 			return nil, err
 		}
 
@@ -324,22 +315,25 @@ func forEach(line []rune, start, end int, spans []*span, handler iterationHandle
 
 // Convert a uniform style to plan text.
 func plainTextFormatter(value interface{}, s *span, _ interface{}) (iteratorContent, error) {
-	switch text := value.(type) {
+	if value == nil {
+		value = ""
+	}
+	switch content := value.(type) {
 	case string:
 		if s == nil {
-			return text, nil
+			return content, nil
 		}
 
 		switch s.tp {
 		case "ST", "EM", "DL", "CO":
-			return tags[s.tp].dec + text + tags[s.tp].dec, nil
+			return tags[s.tp].dec + content + tags[s.tp].dec, nil
 		case "LN":
-			if url, ok := nullableMapGet(s.data, "url"); ok && url != text {
-				return "[" + text + "](" + url + ")", nil
+			if url, ok := nullableMapGet(s.data, "url"); ok && url != content {
+				return "[" + content + "](" + url + ")", nil
 			}
-			return value, nil
+			return content, nil
 		case "MN", "HT":
-			return text, nil
+			return content, nil
 		case "BR":
 			return "\n", nil
 		case "IM":
@@ -355,15 +349,16 @@ func plainTextFormatter(value interface{}, s *span, _ interface{}) (iteratorCont
 			}
 			return "[FILE '" + name + "']", nil
 		default:
-			return text, nil
+			return content, nil
 		}
-
+	case []rune:
+		return plainTextFormatter(string(content), s, nil)
 	case []iteratorContent:
-		var concat string
-		for _, block := range text {
-			concat += block.(string)
+		var text string
+		for _, block := range content {
+			text += block.(string)
 		}
-		return plainTextFormatter(concat, s, nil)
+		return plainTextFormatter(text, s, nil)
 	default:
 		return nil, errUnrecognizedContent
 	}
@@ -371,10 +366,57 @@ func plainTextFormatter(value interface{}, s *span, _ interface{}) (iteratorCont
 
 // Preview formatter converts
 func previewFormatter(value interface{}, s *span, state interface{}) (iteratorContent, error) {
-	if s == nil {
-		return nil, nil
+	switch content := value.(type) {
+	case nil:
+		if s == nil {
+			// Blank element
+			return nil, nil
+		}
+		return &node{sp: s}, nil
+	case []rune:
+		return &node{txt: content, sp: s}, nil
+	case *node:
+		return &node{sp: s, children: []*node{content}}, nil
+	case []iteratorContent:
+		var children []*node
+		for _, block := range content {
+			children = append(children, block.(*node))
+		}
+		return &node{sp: s, children: children}, nil
+	default:
+		log.Printf("unknown %#+v", content)
+		return nil, errUnrecognizedContent
+	}
+}
+
+// Reassemble drafty document from a tree of style spans.
+func previewTreeToDrafty(n *node, doc *document) {
+	at := len(doc.Txt)
+	if len(n.children) > 0 {
+		for _, c := range n.children {
+			previewTreeToDrafty(c, doc)
+		}
+		if n.sp != nil {
+			if n.sp.at < 0 {
+				doc.Fmt = append(doc.Fmt, style{Tp: n.sp.tp, At: -1})
+			} else {
+				doc.Fmt = append(doc.Fmt, style{Tp: n.sp.tp, At: at, Length: len(doc.Txt) - at})
+			}
+		}
+		return
 	}
 
+	doc.txt = append(doc.txt, n.txt...)
+	if n.sp != nil {
+		if n.sp.at < 0 {
+			doc.Fmt = append(doc.Fmt, style{Tp: n.sp.tp, At: -1})
+		} else {
+			doc.Fmt = append(doc.Fmt, style{Tp: n.sp.tp, At: at, Length: len(doc.Txt) - at})
+		}
+	}
+}
+
+/*
 	context := state.(*previewState)
 	if s.at >= context.length {
 		return nil, nil
@@ -405,6 +447,7 @@ func previewFormatter(value interface{}, s *span, state interface{}) (iteratorCo
 	context.preview.Fmt = append(context.preview.Fmt, st)
 	return nil, nil
 }
+*/
 
 func nullableMapGet(data map[string]interface{}, key string) (string, bool) {
 	if data == nil {
@@ -423,12 +466,12 @@ func decodeAsDrafty(content interface{}) (*document, error) {
 
 	switch tmp := content.(type) {
 	case string:
-		drafty = &document{Txt: tmp}
+		drafty = &document{txt: []rune(tmp)}
 	case map[string]interface{}:
 		drafty = &document{}
 		correct := 0
 		if txt, ok := tmp["txt"].(string); ok {
-			drafty.Txt = txt
+			drafty.txt = []rune(txt)
 			correct++
 		}
 		if ifmt, ok := tmp["fmt"].([]interface{}); ok {
@@ -575,4 +618,14 @@ func getByteSliceSize(data map[string]interface{}, key string) int {
 		return len(val)
 	}
 	return -1
+}
+
+func isFixedLengthType(x interface{}) bool {
+	switch x.(type) {
+	case nil, bool, int, int8, int16, int32, int64, uint, uint8, uint16,
+		uint32, uint64, float32, float64, complex64, complex128:
+		return true
+	default:
+		return false
+	}
 }
