@@ -26,6 +26,10 @@ var validInputs = []string{
 		"txt":" "
 	}`,
 	`{
+		"txt":"This text has staggered formats",
+		"fmt":[{"at":5,"len":8,"tp":"EM"},{"at":10,"len":13,"tp":"ST"}]
+	}`,
+	`{
 		"txt":"This text is formatted and deleted too",
 		"fmt":[{"at":5,"len":4,"tp":"ST"},{"at":13,"len":9,"tp":"EM"},{"at":35,"len":3,"tp":"ST"},{"at":27,"len":11,"tp":"DL"}]
 	}`,
@@ -73,6 +77,7 @@ func TestToPlainText(t *testing.T) {
 		"[https://api.tinode.co/](https://www.youtube.com/watch?v=dQw4w9WgXcQ)",
 		"https://api.tinode.co/",
 		"[IMAGE 'roses.jpg']",
+		"This _text has_ staggered formats",
 		"This *text* is _formatted_ and ~deleted *too*~",
 		"*мультибайтовый* _юникод_",
 		"https://api.tinode.co/",
@@ -106,12 +111,13 @@ func TestToPlainText(t *testing.T) {
 
 func TestPreview(t *testing.T) {
 	expect := []string{
-		`{"ent":[{"data":{"height":80,"mime":"image/jpeg","name":"hello.jpg","width":100},"tp":"EX"}],"fmt":[{"at":-1,"key":0}]}`,
-		`{"ent":[{"tp":"LN"}],"fmt":[{"key":0,"len":15}],"txt":"https://api.tin"}`,
-		`{"ent":[{"tp":"LN"}],"fmt":[{"key":0,"len":15}],"txt":"https://api.tin"}`,
-		`{"ent":[{"data":{"height":213,"mime":"image/jpeg","name":"roses.jpg","width":638},"tp":"IM"}],"fmt":[{"key":0,"len":1}],"txt":" "}`,
-		`{"fmt":[{"at":5,"len":4,"tp":"ST"},{"at":13,"len":2,"tp":"EM"}],"txt":"This text is fo"}`,
-		`{"fmt":[{"len":14,"tp":"ST"}],"txt":"мультибайтовый "}`,
+		`{"fmt":[{"at":-1}],"ent":[{"tp":"EX","data":{"height":80,"mime":"image/jpeg","name":"hello.jpg","width":100}}]}`,
+		`{"txt":"https://api.tin","fmt":[{"len":15}],"ent":[{"tp":"LN","data":{"url":"https://www.youtube.com/watch?v=dQw4w9WgXcQ"}}]}`,
+		`{"txt":"https://api.tin","fmt":[{"len":15}],"ent":[{"tp":"LN","data":{"url":"https://api.tinode.co/"}}]}`,
+		`{"txt":" ","fmt":[{"len":1}],"ent":[{"tp":"IM","data":{"height":213,"mime":"image/jpeg","name":"roses.jpg","width":638}}]}`,
+		`{"txt":"This text has s","fmt":[{"tp":"EM","at":5,"len":8}]}`,
+		`{"txt":"This text is fo","fmt":[{"tp":"ST","at":5,"len":4},{"tp":"EM","at":13,"len":2}]}`,
+		`{"txt":"мультибайтовый ","fmt":[{"tp":"ST","len":14}]}`,
 	}
 	for i := range validInputs {
 		var val interface{}
@@ -127,7 +133,7 @@ func TestPreview(t *testing.T) {
 	}
 
 	// Only some invalid input should fail these tests.
-	testsToFail := []int{0, 3, 5}
+	testsToFail := []int{3, 4, 5, 6}
 	for _, i := range testsToFail {
 		var val interface{}
 		if err := json.Unmarshal([]byte(invalidInputs[i]), &val); err != nil {

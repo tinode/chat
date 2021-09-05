@@ -8,10 +8,35 @@ import (
 	"unicode/utf8"
 )
 
+const (
+	// Maximum size of style payload in preview, in bytes.
+	maxDataSize = 128
+	// Maximum count of payload fields in preview.
+	maxDataCount = 16
+)
+
 var (
 	errUnrecognizedContent = errors.New("content unrecognized")
 	errInvalidContent      = errors.New("invalid format")
 )
+
+type style struct {
+	Tp     string `json:"tp,omitempty"`
+	At     int    `json:"at,omitempty"`
+	Length int    `json:"len,omitempty"`
+	Key    int    `json:"key,omitempty"`
+}
+
+type entity struct {
+	Tp   string                 `json:"tp,omitempty"`
+	Data map[string]interface{} `json:"data,omitempty"`
+}
+
+type document struct {
+	Txt string   `json:"txt,omitempty"`
+	Fmt []style  `json:"fmt,omitempty"`
+	Ent []entity `json:"ent,omitempty"`
+}
 
 type span struct {
 	tp   string
@@ -21,69 +46,83 @@ type span struct {
 	data map[string]interface{}
 }
 
-type node struct {
-	tp       string
-	content  string
-	data     map[string]interface{}
-	children []*node
+type previewState struct {
+	// New length of the document.
+	length int
+	// Mapping of old entity keys to new to prevent entity duplication.
+	keymap map[int]int
+	// The document itself.
+	preview *document
 }
 
-func (s *span) fromMap(in interface{}) error {
-	m, _ := in.(map[string]interface{})
-	if m == nil {
-		return errUnrecognizedContent
-	}
-
-	s.tp, _ = m["tp"].(string)
-	var err error
-
-	s.at, err = intFromNumeric(m["at"])
+// Preview shortens Drafty to the specified length (in runes), removes quoted text and large content from entities
+// making them suitable for a one-line preview, for example for showing in push notifications.
+// The return value is a Drafty document encoded as JSON string.
+func Preview(content interface{}, length int) (string, error) {
+	doc, err := decodeAsDrafty(content)
 	if err != nil {
-		return err
+		return "", err
+	}
+	if doc == nil {
+		return "", nil
+	}
+	txt := []rune(doc.Txt)
+	if len(txt) > length {
+		txt = txt[:length]
+	}
+	state := previewState{
+		length: length,
+		keymap: make(map[int]int),
+		preview: &document{
+			Txt: string(txt),
+			Fmt: make([]style, 0, len(doc.Fmt)),
+			Ent: make([]entity, 0, len(doc.Ent)),
+		},
 	}
 
-	s.end, err = intFromNumeric(m["len"])
+	iterate(doc, previewFormatter, &state)
+
+	data, err := json.Marshal(state.preview)
+	return string(data), err
+}
+
+func ToPlainText(content interface{}) (string, error) {
+	doc, err := decodeAsDrafty(content)
 	if err != nil {
-		return err
+		return "", err
 	}
+	if doc == nil {
+		return "", nil
+	}
+
+	result, err := iterate(doc, plainTextFormatter, nil)
+	if err != nil {
+		return "", err
+	}
+	text, ok := result.(string)
+	if !ok {
+		return "", errInvalidContent
+	}
+	return text, nil
+}
+
+func (s *span) fromStyle(in *style) error {
+	s.tp = in.Tp
+	s.at = in.At
+	s.end = in.Length
 	if s.end < 0 {
 		return errInvalidContent
 	}
 	s.end += s.at
 
 	if s.tp == "" {
-		s.key, err = intFromNumeric(m["key"])
-		if err != nil {
-			return err
-		}
+		s.key = in.Key
 		if s.key < 0 {
 			return errInvalidContent
 		}
 	}
 
 	return nil
-}
-
-func intFromNumeric(num interface{}) (int, error) {
-	if num == nil {
-		return 0, nil
-	}
-	switch i := num.(type) {
-	case int:
-		return i, nil
-	case int16:
-		return int(i), nil
-	case int32:
-		return int(i), nil
-	case int64:
-		return int(i), nil
-	case float32:
-		return int(i), nil
-	case float64:
-		return int(i), nil
-	default:
-		return 0, errInvalidContent
-	}
 }
 
 func (s *span) toMap() map[string]interface{} {
@@ -122,213 +161,60 @@ var tags = map[string]spanfmt{
 	"EX": {"", true},
 }
 
-// Preview shortens Drafty to the specified length (in runes) and removes large content from entities making them
-// suitable for a one-line preview, for example for showing in push notifications.
-func Preview(content interface{}, length int) (string, error) {
-	if content == nil {
-		return "", nil
-	}
-
-	var original map[string]interface{}
-
-	switch tmp := content.(type) {
-	case string:
-		return tmp, nil
-	case map[string]interface{}:
-		original = tmp
-	default:
-		return "", errUnrecognizedContent
-	}
-
-	txt, txtOK := original["txt"].(string)
-	fmt, fmtOK := original["fmt"].([]interface{})
-	ent, entOK := original["ent"].([]interface{})
-
-	// At least one must be set.
-	if !txtOK && !fmtOK && !entOK {
-		return "", errUnrecognizedContent
-	}
-
-	var textLen int
-	preview := make(map[string]interface{})
-	if txtOK {
-		runes := []rune(txt)
-		textLen = len(runes)
-		if textLen > length {
-			txt = string(runes[:length])
-			textLen = length
-		}
-
-		preview["txt"] = txt
-	}
-
-	if len(fmt) > 0 {
-		// Old key to new key entity mapping.
-		entRefs := make(map[int]int)
-
-		// Cache styles which start within the new length of the text and save entity keys as set.
-		var styles []span
-		for i := range fmt {
-			s := span{}
-			if err := s.fromMap(fmt[i]); err != nil {
-				return "", err
-			}
-
-			if s.at < textLen {
-				if s.end > textLen {
-					s.end = textLen
-				}
-				styles = append(styles, s)
-				if s.tp == "" {
-					if s.key < 0 {
-						return "", errUnrecognizedContent
-					}
-
-					if _, ok := entRefs[s.key]; !ok {
-						entRefs[s.key] = len(entRefs)
-					}
-				}
-			}
-		}
-
-		// Allocate space for copying styles and entities.
-		var previewFmt []map[string]interface{}
-		var previewEnt []map[string]interface{}
-		if len(entRefs) > 0 {
-			previewEnt = make([]map[string]interface{}, len(entRefs))
-		}
-		for _, old := range styles {
-			style := span{at: old.at, end: old.end}
-			if old.tp != "" {
-				style.tp = old.tp
-			} else if old.key >= 0 && len(ent) > old.key {
-				if key, ok := entRefs[old.key]; ok {
-					style.key = key
-					previewEnt[style.key] = copyLight(ent[old.key])
-				} else {
-					continue
-				}
-			} else {
-				continue
-			}
-			previewFmt = append(previewFmt, style.toMap())
-		}
-
-		if len(previewFmt) > 0 {
-			preview["fmt"] = previewFmt
-		}
-		if len(previewEnt) > 0 {
-			preview["ent"] = previewEnt
-		}
-	}
-
-	data, err := json.Marshal(preview)
-
-	return string(data), err
-}
-
-var lightData = []string{"mime", "name", "width", "height", "size"}
+var lightFields = []string{"mime", "name", "width", "height", "size", "url", "ref"}
 
 func copyLight(in interface{}) map[string]interface{} {
-	ent, ok := in.(map[string]interface{})
+	data, ok := in.(map[string]interface{})
 	if !ok {
 		return nil
 	}
 
-	tp, _ := ent["tp"].(string)
-	data, _ := ent["data"].(map[string]interface{})
-	result := map[string]interface{}{"tp": tp}
-	var dc map[string]interface{}
+	result := map[string]interface{}{}
 	if len(data) > 0 {
-		dc = make(map[string]interface{})
-		for _, key := range lightData {
+		for _, key := range lightFields {
 			if val, ok := data[key]; ok {
-				dc[key] = val
+				result[key] = val
 			}
 		}
-		if len(dc) != 0 {
-			result["data"] = dc
+		if len(result) == 0 {
+			result = nil
 		}
 	}
 	return result
 }
 
-func ToPlainText(content interface{}) (string, error) {
-	result, err := iterate(content, plainTextFormatter, nil)
-	if err != nil {
-		return "", err
-	}
-	text, ok := result.(string)
-	if !ok {
-		return "", errInvalidContent
-	}
-	return text, nil
-}
-
 type iteratorContent interface{}
-type iterationHandler func(content interface{}, tp string, data map[string]interface{},
-	state interface{}) (iteratorContent, error)
+type iterationHandler func(content interface{}, sp *span, state interface{}) (iteratorContent, error)
 
 // Call handler for each styled or unstyled text span.
-// - content: a string or a drafty document.
+// - content: a drafty document to process.
 // - handler: function to call for each styled or unstyled span.
 // - context: handler's context.
-func iterate(content interface{}, handler iterationHandler, state interface{}) (iteratorContent, error) {
-	if content == nil {
-		return handler("", "", nil, state)
+func iterate(drafty *document, handler iterationHandler, state interface{}) (iteratorContent, error) {
+	if len(drafty.Fmt) == 0 {
+		return handler(drafty.Txt, nil, state)
 	}
 
-	var drafty map[string]interface{}
-
-	switch data := content.(type) {
-	case string:
-		return handler(data, "", nil, state)
-	case map[string]interface{}:
-		drafty = data
-	default:
-		return nil, errUnrecognizedContent
-	}
-
-	txt, txtOK := drafty["txt"].(string)
-	fmt, fmtOK := drafty["fmt"].([]interface{})
-	ent, entOK := drafty["ent"].([]interface{})
-
-	// At least one must be set.
-	if !txtOK && !fmtOK && !entOK {
-		return nil, errUnrecognizedContent
-	}
-
-	if fmt == nil {
-		if txtOK {
-			return handler(txt, "", nil, state)
-		}
-		return nil, errUnrecognizedContent
-	}
-
-	textLen := utf8.RuneCountInString(txt)
+	textLen := utf8.RuneCountInString(drafty.Txt)
 
 	var spans []*span
-	for i := range fmt {
+	for i := range drafty.Fmt {
 		s := span{}
-		if err := s.fromMap(fmt[i]); err != nil {
+		if err := s.fromStyle(&drafty.Fmt[i]); err != nil {
 			return nil, err
 		}
-		if s.end > textLen {
+		if s.at < -1 || s.end > textLen {
 			return nil, errInvalidContent
 		}
 
 		// Denormalize entities into spans.
-		if s.tp == "" && entOK {
-			if s.key < 0 || s.key >= len(ent) {
+		if s.tp == "" && len(drafty.Ent) > 0 {
+			if s.key < 0 || s.key >= len(drafty.Ent) {
 				return nil, errInvalidContent
 			}
 
-			e, _ := ent[s.key].(map[string]interface{})
-			if e == nil {
-				continue
-			}
-			s.data, _ = e["data"].(map[string]interface{})
-			s.tp, _ = e["tp"].(string)
+			s.data = drafty.Ent[s.key].Data
+			s.tp = drafty.Ent[s.key].Tp
 		}
 		if s.tp == "" && s.at == 0 && s.end == 0 && s.key == 0 {
 			return nil, errUnrecognizedContent
@@ -345,11 +231,25 @@ func iterate(content interface{}, handler iterationHandler, state interface{}) (
 		return spans[i].at < spans[j].at
 	})
 
-	children, err := forEach([]rune(txt), 0, textLen, spans, handler, state)
+	// Drop overlapping spans like '_first *second_ third*'.
+	var filtered []*span
+	end := -2
+	for _, span := range spans {
+		if span.at < end && span.end > end {
+			continue
+		}
+		filtered = append(filtered, span)
+		if span.end > end {
+			end = span.end
+		}
+	}
+
+	// Iterate over spans.
+	children, err := forEach([]rune(drafty.Txt), 0, textLen, filtered, handler, state)
 	if err != nil {
 		return nil, err
 	}
-	return handler(children, "", nil, state)
+	return handler(children, nil, state)
 }
 
 func forEach(line []rune, start, end int, spans []*span, handler iterationHandler, state interface{}) ([]iteratorContent, error) {
@@ -363,7 +263,7 @@ func forEach(line []rune, start, end int, spans []*span, handler iterationHandle
 
 		if sp.at < 0 {
 			// Attachment
-			if content, err = handler("", sp.tp, sp.data, state); err != nil {
+			if content, err = handler("", sp, state); err != nil {
 				return nil, err
 			}
 			if content != nil {
@@ -374,7 +274,7 @@ func forEach(line []rune, start, end int, spans []*span, handler iterationHandle
 
 		// Add un-styled range before the styled span starts.
 		if start < sp.at {
-			if content, err = handler(string(line[start:sp.at]), "", nil, state); err != nil {
+			if content, err = handler(string(line[start:sp.at]), nil, state); err != nil {
 				return nil, err
 			}
 			if content != nil {
@@ -391,13 +291,13 @@ func forEach(line []rune, start, end int, spans []*span, handler iterationHandle
 
 		tag := tags[sp.tp]
 		if tag.isVoid {
-			content, err = handler("", sp.tp, sp.data, state)
+			content, err = handler("", sp, state)
 		} else {
 			content, err = forEach(line, start, sp.end, subspans, handler, state)
 			if err != nil {
 				return nil, err
 			}
-			content, err = handler(content, sp.tp, sp.data, state)
+			content, err = handler(content, sp, state)
 		}
 		if err != nil {
 			return nil, err
@@ -410,7 +310,7 @@ func forEach(line []rune, start, end int, spans []*span, handler iterationHandle
 
 	// Add the remaining unformatted range.
 	if start < end {
-		if content, err = handler(string(line[start:end]), "", nil, state); err != nil {
+		if content, err = handler(string(line[start:end]), nil, state); err != nil {
 			return nil, err
 		}
 
@@ -422,16 +322,19 @@ func forEach(line []rune, start, end int, spans []*span, handler iterationHandle
 	return result, nil
 }
 
-// Convert a single style to plan text.
-func plainTextFormatter(value interface{}, tp string, data map[string]interface{},
-	_ interface{}) (iteratorContent, error) {
+// Convert a uniform style to plan text.
+func plainTextFormatter(value interface{}, s *span, _ interface{}) (iteratorContent, error) {
 	switch text := value.(type) {
 	case string:
-		switch tp {
+		if s == nil {
+			return text, nil
+		}
+
+		switch s.tp {
 		case "ST", "EM", "DL", "CO":
-			return tags[tp].dec + text + tags[tp].dec, nil
+			return tags[s.tp].dec + text + tags[s.tp].dec, nil
 		case "LN":
-			if url, ok := nullableMapGet(data, "url"); ok && url != text {
+			if url, ok := nullableMapGet(s.data, "url"); ok && url != text {
 				return "[" + text + "](" + url + ")", nil
 			}
 			return value, nil
@@ -440,13 +343,13 @@ func plainTextFormatter(value interface{}, tp string, data map[string]interface{
 		case "BR":
 			return "\n", nil
 		case "IM":
-			name, ok := nullableMapGet(data, "name")
+			name, ok := nullableMapGet(s.data, "name")
 			if !ok || name == "" {
 				name = "?"
 			}
 			return "[IMAGE '" + name + "']", nil
 		case "EX":
-			name, ok := nullableMapGet(data, "name")
+			name, ok := nullableMapGet(s.data, "name")
 			if !ok || name == "" {
 				name = "?"
 			}
@@ -460,10 +363,47 @@ func plainTextFormatter(value interface{}, tp string, data map[string]interface{
 		for _, block := range text {
 			concat += block.(string)
 		}
-		return plainTextFormatter(concat, tp, data, nil)
+		return plainTextFormatter(concat, s, nil)
 	default:
-		return nil, errInvalidContent
+		return nil, errUnrecognizedContent
 	}
+}
+
+// Preview formatter converts
+func previewFormatter(value interface{}, s *span, state interface{}) (iteratorContent, error) {
+	if s == nil {
+		return nil, nil
+	}
+
+	context := state.(*previewState)
+	if s.at >= context.length {
+		return nil, nil
+	}
+
+	st := style{
+		At: s.at,
+	}
+	st.Length = s.end - s.at
+	if st.At+st.Length > context.length {
+		st.Length = context.length - st.At
+	}
+
+	if s.data != nil {
+		// The span has an entity.
+		if key, ok := context.keymap[s.key]; !ok {
+			// New entity.
+			st.Key = len(context.preview.Ent)
+			context.keymap[s.key] = st.Key
+			context.preview.Ent = append(context.preview.Ent, entity{Tp: s.tp, Data: copyLight(s.data)})
+		} else {
+			// Entity already added.
+			st.Key = key
+		}
+	} else {
+		st.Tp = s.tp
+	}
+	context.preview.Fmt = append(context.preview.Fmt, st)
+	return nil, nil
 }
 
 func nullableMapGet(data map[string]interface{}, key string) (string, bool) {
@@ -472,4 +412,167 @@ func nullableMapGet(data map[string]interface{}, key string) (string, bool) {
 	}
 	str, ok := data[key].(string)
 	return str, ok
+}
+
+func decodeAsDrafty(content interface{}) (*document, error) {
+	if content == nil {
+		return nil, nil
+	}
+
+	var drafty *document
+
+	switch tmp := content.(type) {
+	case string:
+		drafty = &document{Txt: tmp}
+	case map[string]interface{}:
+		drafty = &document{}
+		correct := 0
+		if txt, ok := tmp["txt"].(string); ok {
+			drafty.Txt = txt
+			correct++
+		}
+		if ifmt, ok := tmp["fmt"].([]interface{}); ok {
+			for i := range ifmt {
+				st, err := decodeAsStyle(ifmt[i])
+				if err != nil {
+					return nil, err
+				}
+				if st != nil {
+					drafty.Fmt = append(drafty.Fmt, *st)
+				}
+				correct++
+			}
+		}
+		if ient, ok := tmp["ent"].([]interface{}); ok {
+			for i := range ient {
+				ent, err := decodeAsEntity(ient[i])
+				if err != nil {
+					return nil, err
+				}
+				if ent != nil {
+					drafty.Ent = append(drafty.Ent, *ent)
+				}
+				correct++
+			}
+		}
+		// At least one drafty element must be present.
+		if correct == 0 {
+			return nil, errUnrecognizedContent
+		}
+	default:
+		return nil, errUnrecognizedContent
+	}
+
+	return drafty, nil
+}
+
+func decodeAsStyle(content interface{}) (*style, error) {
+	if content == nil {
+		return nil, nil
+	}
+
+	tmp, ok := content.(map[string]interface{})
+	if !ok {
+		return nil, errUnrecognizedContent
+	}
+
+	var err error
+	st := &style{}
+	st.Tp, _ = tmp["tp"].(string)
+
+	st.At, err = intFromNumeric(tmp["at"])
+	if err != nil {
+		return nil, err
+	}
+
+	st.Length, err = intFromNumeric(tmp["len"])
+	if err != nil {
+		return nil, err
+	}
+
+	if st.Tp == "" {
+		st.Key, err = intFromNumeric(tmp["key"])
+		if err != nil {
+			return nil, err
+		}
+		if st.Key < 0 {
+			return nil, errInvalidContent
+		}
+	}
+
+	return st, nil
+}
+
+func decodeAsEntity(content interface{}) (*entity, error) {
+	if content == nil {
+		return nil, nil
+	}
+
+	tmp, ok := content.(map[string]interface{})
+	if !ok {
+		return nil, errUnrecognizedContent
+	}
+
+	ent := &entity{}
+
+	ent.Tp, _ = tmp["tp"].(string)
+	if ent.Tp == "" {
+		return nil, errInvalidContent
+	}
+
+	ent.Data, _ = tmp["data"].(map[string]interface{})
+
+	return ent, nil
+}
+
+func intFromNumeric(num interface{}) (int, error) {
+	if num == nil {
+		return 0, nil
+	}
+	switch i := num.(type) {
+	case int:
+		return i, nil
+	case int16:
+		return int(i), nil
+	case int32:
+		return int(i), nil
+	case int64:
+		return int(i), nil
+	case float32:
+		return int(i), nil
+	case float64:
+		return int(i), nil
+	default:
+		return 0, errInvalidContent
+	}
+}
+
+// Check that the given field is indeed integer.
+func getIntSize(data map[string]interface{}, key string) int {
+	val, ok := data[key]
+	if ok {
+		_, err := intFromNumeric(val)
+		if err == nil {
+			return 4
+		}
+	}
+	return -1
+}
+
+// Check that the given field is indeed string and get its size in bytes.
+func getStringSize(data map[string]interface{}, key string) int {
+	val, ok := data[key].(string)
+	if ok {
+		return len(val)
+	}
+	return -1
+}
+
+// Check that the given field is indeed a byte slice and get its size.
+func getByteSliceSize(data map[string]interface{}, key string) int {
+	val, ok := data[key].([]byte)
+	if ok {
+		return len(val)
+	}
+	return -1
 }
