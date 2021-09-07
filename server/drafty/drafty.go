@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log"
 	"sort"
+	"strings"
 )
 
 const (
@@ -53,6 +54,37 @@ type node struct {
 	children []*node
 }
 
+func (n *node) String() string {
+	str := "{"
+	if n == nil {
+		str = "nil"
+	} else {
+		if n.sp != nil {
+			str = n.sp.tp + ":"
+		}
+
+		if n.txt != nil {
+			str += "'" + string(n.txt) + "'"
+		} else if len(n.children) > 0 {
+			str += "["
+			var sub []string
+			for _, c := range n.children {
+				sub = append(sub, c.String())
+			}
+			str += strings.Join(sub, ",") + "]"
+		} else if n.sp != nil && n.sp.at < 0 {
+			// An attachment.
+			str += "(att)"
+		}
+	}
+	return str + "}"
+}
+
+type previewState struct {
+	length int
+	keymap map[int]int
+}
+
 // Preview shortens Drafty to the specified length (in runes), removes quoted text and large content from entities
 // making them suitable for a one-line preview, for example for showing in push notifications.
 // The return value is a Drafty document encoded as JSON string.
@@ -64,32 +96,26 @@ func Preview(content interface{}, length int) (string, error) {
 	if doc == nil {
 		return "", nil
 	}
-	txt := []rune(doc.Txt)
-	if len(txt) > length {
-		txt = txt[:length]
-	}
-	/*
-		state := previewState{
-			length: length,
-			keymap: make(map[int]int),
-			preview: &document{
-				Txt: string(txt),
-				Fmt: make([]style, 0, len(doc.Fmt)),
-				Ent: make([]entity, 0, len(doc.Ent)),
-			},
-		}
-	*/
 
-	tree, err := iterate(doc, previewFormatter, nil)
+	state := previewState{
+		length: length,
+	}
+	tree, err := iterate(doc, previewFormatter, &state)
 	if err != nil {
 		return "", err
 	}
+	if tree == nil {
+		return "", nil
+	}
+
+	log.Println("T:", tree.(*node).String())
+
 	preview := &document{
-		txt: txt,
+		// txt: txt,
 		Fmt: make([]style, 0, len(doc.Fmt)),
 		Ent: make([]entity, 0, len(doc.Ent)),
 	}
-	previewTreeToDrafty(tree.(*node), preview)
+	treeToDrafty(tree.(*node), preview)
 	preview.Txt = string(preview.txt)
 	data, err := json.Marshal(preview)
 	return string(data), err
@@ -143,13 +169,14 @@ var tags = map[string]spanfmt{
 	"ST": {"*", false},
 	"EM": {"_", false},
 	"DL": {"~", false},
-	"CO": {"", false},
+	"CO": {"`", false},
 	"BR": {"\n", true},
 	"LN": {"", false},
 	"MN": {"", false},
 	"HT": {"", false},
-	"IM": {"", true},
+	"IM": {"", false},
 	"EX": {"", true},
+	"QQ": {"", false},
 }
 
 var lightFields = []string{"mime", "name", "width", "height", "size", "url", "ref"}
@@ -240,6 +267,7 @@ func iterate(drafty *document, handler iterationHandler, state interface{}) (ite
 	if err != nil {
 		return nil, err
 	}
+
 	return handler(tree, nil, state)
 }
 
@@ -366,17 +394,31 @@ func plainTextFormatter(value interface{}, s *span, _ interface{}) (iteratorCont
 
 // Preview formatter converts
 func previewFormatter(value interface{}, s *span, state interface{}) (iteratorContent, error) {
+	if s != nil && s.tp == "QQ2" {
+		// Skip quoted text
+		return nil, nil
+	}
+
+	ctx := state.(*previewState)
+
 	switch content := value.(type) {
 	case nil:
-		if s == nil {
-			// Blank element
+		if s == nil || s.end > s.at {
+			// Blank or dangling element.
 			return nil, nil
 		}
 		return &node{sp: s}, nil
 	case []rune:
+		ln := len(content)
+		if ctx.length <= 0 && ln > 0 {
+			return nil, nil
+		}
+		if ln > ctx.length {
+			content = content[:ctx.length]
+			ln = ctx.length
+		}
+		ctx.length -= ln
 		return &node{txt: content, sp: s}, nil
-	case *node:
-		return &node{sp: s, children: []*node{content}}, nil
 	case []iteratorContent:
 		var children []*node
 		for _, block := range content {
@@ -390,29 +432,37 @@ func previewFormatter(value interface{}, s *span, state interface{}) (iteratorCo
 }
 
 // Reassemble drafty document from a tree of style spans.
-func previewTreeToDrafty(n *node, doc *document) {
-	at := len(doc.Txt)
+func treeToDrafty(n *node, doc *document) {
+	at := len(doc.txt)
 	if len(n.children) > 0 {
-		for _, c := range n.children {
-			previewTreeToDrafty(c, doc)
+		for _, child := range n.children {
+			treeToDrafty(child, doc)
 		}
-		if n.sp != nil {
-			if n.sp.at < 0 {
-				doc.Fmt = append(doc.Fmt, style{Tp: n.sp.tp, At: -1})
-			} else {
-				doc.Fmt = append(doc.Fmt, style{Tp: n.sp.tp, At: at, Length: len(doc.Txt) - at})
-			}
-		}
-		return
+	} else {
+		doc.txt = append(doc.txt, n.txt...)
 	}
+	end := len(doc.txt)
 
-	doc.txt = append(doc.txt, n.txt...)
 	if n.sp != nil {
+		fmt := style{}
 		if n.sp.at < 0 {
-			doc.Fmt = append(doc.Fmt, style{Tp: n.sp.tp, At: -1})
+			fmt.At = -1
+		} else if at < end || tags[n.sp.tp].isVoid {
+			fmt.At = at
+			fmt.Length = end - at
 		} else {
-			doc.Fmt = append(doc.Fmt, style{Tp: n.sp.tp, At: at, Length: len(doc.Txt) - at})
+			return
 		}
+
+		if n.sp.data != nil {
+			ent := entity{Tp: n.sp.tp, Data: copyLight(n.sp.data)}
+			fmt.Key = len(doc.Ent)
+			doc.Ent = append(doc.Ent, ent)
+		} else {
+			fmt.Tp = n.sp.tp
+		}
+
+		doc.Fmt = append(doc.Fmt, fmt)
 	}
 }
 
@@ -471,6 +521,7 @@ func decodeAsDrafty(content interface{}) (*document, error) {
 		drafty = &document{}
 		correct := 0
 		if txt, ok := tmp["txt"].(string); ok {
+			drafty.Txt = txt
 			drafty.txt = []rune(txt)
 			correct++
 		}

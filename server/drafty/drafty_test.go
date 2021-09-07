@@ -6,6 +6,11 @@ import (
 )
 
 var validInputs = []string{
+	`"This is a plain text string."`,
+	`{
+		"txt":"This is a string with a line break.",
+		"fmt":[{"at":9,"tp":"BR"}]
+	}`,
 	`{
 		"ent":[{"data":{"mime":"image/jpeg","name":"hello.jpg","val":"<38992, bytes: ...>","width":100, "height":80},"tp":"EX"}],
 		"fmt":[{"at":-1, "key":0}]
@@ -78,6 +83,8 @@ var invalidInputs = []string{
 
 func TestToPlainText(t *testing.T) {
 	expect := []string{
+		"This is a plain text string.",
+		"This is a\n string with a line break.",
 		"[FILE 'hello.jpg']",
 		"[https://api.tinode.co/](https://www.youtube.com/watch?v=dQw4w9WgXcQ)",
 		"https://api.tinode.co/",
@@ -116,6 +123,8 @@ func TestToPlainText(t *testing.T) {
 
 func TestPreview(t *testing.T) {
 	expect := []string{
+		`{"txt":"This is a plain"}`,
+		`{"txt":"This is a strin","fmt":[{"at":9,"tp":"BR"}]}`,
 		`{"fmt":[{"at":-1}],"ent":[{"tp":"EX","data":{"height":80,"mime":"image/jpeg","name":"hello.jpg","width":100}}]}`,
 		`{"txt":"https://api.tin","fmt":[{"len":15}],"ent":[{"tp":"LN","data":{"url":"https://www.youtube.com/watch?v=dQw4w9WgXcQ"}}]}`,
 		`{"txt":"https://api.tin","fmt":[{"len":15}],"ent":[{"tp":"LN","data":{"url":"https://api.tinode.co/"}}]}`,
