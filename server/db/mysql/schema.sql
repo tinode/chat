@@ -1,3 +1,13 @@
+# THIS SCHEMA FILE IS FOR REFERENCE/DOCUMENTATION ONLY!
+# DO NOT USE IT TO INITIALIZE THE DATABASE.
+# Read installation instructions first.
+
+# The following line will produce an intentional error.
+
+'READ INSTALLATION INSTRUCTIONS!';
+
+# The actual schema is below.
+
 DROP DATABASE IF EXISTS tinode;
 
 CREATE DATABASE tinode CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
