@@ -53,36 +53,6 @@ type node struct {
 	children []*node
 }
 
-func (n *node) String() string {
-	str := "{"
-	if n == nil {
-		str = "nil"
-	} else {
-		if n.sp != nil {
-			str += n.sp.tp
-			if n.sp.data != nil {
-				str += ":data"
-			}
-			str += ":"
-		}
-
-		if n.txt != nil {
-			str += "'" + string(n.txt) + "'"
-		} else if len(n.children) > 0 {
-			str += "["
-			var sub []string
-			for _, c := range n.children {
-				sub = append(sub, c.String())
-			}
-			str += strings.Join(sub, ",") + "]"
-		} else if n.sp != nil && n.sp.at < 0 {
-			// An attachment.
-			str += "(att)"
-		}
-	}
-	return str + "}"
-}
-
 type previewState struct {
 	drafty    *document
 	maxLength int
@@ -158,6 +128,7 @@ func PlainText(content interface{}) (string, error) {
 	return strings.TrimSpace(string(state.txt)), nil
 }
 
+// styleToSpan converts Drafty style to internal representation.
 func (s *span) styleToSpan(in *style) error {
 	s.tp = in.Tp
 	s.at = in.At
@@ -182,6 +153,7 @@ type spanfmt struct {
 	isVoid bool
 }
 
+// Plain text formatting of the Drafty tags.
 var tags = map[string]spanfmt{
 	"ST": {"*", false},
 	"EM": {"_", false},
@@ -196,6 +168,7 @@ var tags = map[string]spanfmt{
 	"QQ": {"", false},
 }
 
+// Type of the formatter to apply to tree nodes.
 type formatter func(n *node, state interface{}) error
 
 // toTree converts a drafty document into a tree of formatted spans.
