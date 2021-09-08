@@ -26,6 +26,11 @@ var validInputs = []string{
 		"txt":"https://api.tinode.co/"
 	}`,
 	`{
+		"ent":[{"data":{"url":"http://tinode.co"},"tp":"LN"}],
+		"fmt":[{"at":9,"len":3}, {"at":4,"len":3}],
+		"txt":"Url one, two"
+	}`,
+	`{
 		"ent":[{"data":{"height":213,"mime":"image/jpeg","name":"roses.jpg","val":"<38992, bytes: ...>","width":638},"tp":"IM"}],
 		"fmt":[{"len":1}],
 		"txt":" "
@@ -81,18 +86,19 @@ var invalidInputs = []string{
 	}`,
 }
 
-func TestToPlainText(t *testing.T) {
+func TestPlainText(t *testing.T) {
 	expect := []string{
 		"This is a plain text string.",
 		"This is a\n string with a line break.",
 		"[FILE 'hello.jpg']",
 		"[https://api.tinode.co/](https://www.youtube.com/watch?v=dQw4w9WgXcQ)",
 		"https://api.tinode.co/",
+		"Url [one](http://tinode.co), [two](http://tinode.co)",
 		"[IMAGE 'roses.jpg']",
 		"This _text has_ staggered formats",
 		"This *text* is _formatted_ and ~deleted *too*~",
 		"*мультибайтовый* _юникод_",
-		"some result",
+		"This is a test",
 	}
 
 	for i := range validInputs {
@@ -100,7 +106,7 @@ func TestToPlainText(t *testing.T) {
 		if err := json.Unmarshal([]byte(validInputs[i]), &val); err != nil {
 			t.Errorf("Failed to parse input %d '%s': %s", i, validInputs[i], err)
 		}
-		res, err := ToPlainText(val)
+		res, err := PlainText(val)
 		if err != nil {
 			t.Errorf("%d failed with error: %s", i, err)
 		} else if res != expect[i] {
@@ -114,7 +120,7 @@ func TestToPlainText(t *testing.T) {
 			// Don't make it an error: we are not testing validity of json.Unmarshal.
 			t.Logf("Failed to parse input %d '%s': %s", i, invalidInputs[i], err)
 		}
-		res, err := ToPlainText(val)
+		res, err := PlainText(val)
 		if err == nil {
 			t.Errorf("invalid input %d '%s' did not cause an error '%s'", i, invalidInputs[i], res)
 		}
@@ -124,15 +130,16 @@ func TestToPlainText(t *testing.T) {
 func TestPreview(t *testing.T) {
 	expect := []string{
 		`{"txt":"This is a plain"}`,
-		`{"txt":"This is a strin","fmt":[{"at":9,"tp":"BR"}]}`,
+		`{"txt":"This is a strin","fmt":[{"tp":"BR","at":9}]}`,
 		`{"fmt":[{"at":-1}],"ent":[{"tp":"EX","data":{"height":80,"mime":"image/jpeg","name":"hello.jpg","width":100}}]}`,
 		`{"txt":"https://api.tin","fmt":[{"len":15}],"ent":[{"tp":"LN","data":{"url":"https://www.youtube.com/watch?v=dQw4w9WgXcQ"}}]}`,
 		`{"txt":"https://api.tin","fmt":[{"len":15}],"ent":[{"tp":"LN","data":{"url":"https://api.tinode.co/"}}]}`,
+		`{"txt":"Url one, two","fmt":[{"at":4,"len":3},{"at":9,"len":3}],"ent":[{"tp":"LN","data":{"url":"http://tinode.co"}}]}`,
 		`{"txt":" ","fmt":[{"len":1}],"ent":[{"tp":"IM","data":{"height":213,"mime":"image/jpeg","name":"roses.jpg","width":638}}]}`,
 		`{"txt":"This text has s","fmt":[{"tp":"EM","at":5,"len":8}]}`,
 		`{"txt":"This text is fo","fmt":[{"tp":"ST","at":5,"len":4},{"tp":"EM","at":13,"len":2}]}`,
 		`{"txt":"мультибайтовый ","fmt":[{"tp":"ST","len":14}]}`,
-		`some result`,
+		`{"txt":"This is a test"}`,
 	}
 	for i := range validInputs {
 		var val interface{}
