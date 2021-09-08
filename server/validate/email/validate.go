@@ -42,7 +42,7 @@ type validator struct {
 	// Password to use for SMTP authentication.
 	SenderPassword string `json:"sender_password"`
 	// Optional to use for PLAIN, LOGIN or MD5 mechanism
-	Mechanism string `json:"mechanism"`
+	AuthMechanism string `json:"auth_mechanism"`
 	// Optional response which bypasses the validation.
 	DebugResponse string `json:"debug_response"`
 	// Number of validation attempts before email is locked.
@@ -121,27 +121,24 @@ func isTemplateValid(templ *textt.Template) error {
 	}
 	return nil
 }
-type SMPTLogin struct {
+
+type loginAuth struct {
 	username, password string
 }
 
-func LoginAuth(username, password string) smtp.Auth {
-	return &SMPTLogin{username, password}
-}
-
-func (a *SMPTLogin) Start(server *smtp.ServerInfo) (string, []byte, error) {
+func (a *loginAuth) Start(server *smtp.ServerInfo) (string, []byte, error) {
 	return "LOGIN", []byte(a.username), nil
 }
 
-func (a *SMPTLogin) Next(fromServer []byte, more bool) ([]byte, error) {
+func (a *loginAuth) Next(fromServer []byte, more bool) ([]byte, error) {
 	if more {
-		switch string(fromServer) {
-		case "Username:":
+		switch strings.ToLower(string(fromServer)) {
+		case "username:":
 			return []byte(a.username), nil
-		case "Password:":
+		case "password:":
 			return []byte(a.password), nil
 		default:
-			return nil, errors.New("Unknown from server")
+			return nil, errors.New("Unknown server response in LOGIN AUTH")
 		}
 	}
 	return nil, nil
@@ -196,14 +193,16 @@ func (v *validator) Init(jsonconf string) error {
 
 	// Enable auth if login is provided.
 	if v.Login != "" {
-		mechanism := strings.ToLower(v.Mechanism)
+		mechanism := strings.ToLower(v.AuthMechanism)
 		switch mechanism {
 		case "md5":
 			v.auth = smtp.CRAMMD5Auth(v.Login, v.SenderPassword)
 		case "login":
-			v.auth = LoginAuth(v.Login, v.SenderPassword)
-		default:
+			v.auth = &loginAuth{v.Login, v.SenderPassword}
+		case "", "plain":
 			v.auth = smtp.PlainAuth("", v.Login, v.SenderPassword, v.SMTPAddr)
+		default:
+			return errors.New("Bad Auth Mechanism for SMTP")
 		}
 	}
 
