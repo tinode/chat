@@ -41,7 +41,7 @@ type validator struct {
 	Login string `json:"login"`
 	// Password to use for SMTP authentication.
 	SenderPassword string `json:"sender_password"`
-	// Optional to use for PLAIN, LOGIN or MD5 mechanism
+	// Authentication mechanism to use, optional. One of "login", "md5", "plain" (default).
 	AuthMechanism string `json:"auth_mechanism"`
 	// Optional response which bypasses the validation.
 	DebugResponse string `json:"debug_response"`
