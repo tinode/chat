@@ -41,6 +41,8 @@ type validator struct {
 	Login string `json:"login"`
 	// Password to use for SMTP authentication.
 	SenderPassword string `json:"sender_password"`
+	// Authentication mechanism to use, optional. One of "login", "md5", "plain" (default).
+	AuthMechanism string `json:"auth_mechanism"`
 	// Optional response which bypasses the validation.
 	DebugResponse string `json:"debug_response"`
 	// Number of validation attempts before email is locked.
@@ -120,6 +122,28 @@ func isTemplateValid(templ *textt.Template) error {
 	return nil
 }
 
+type loginAuth struct {
+	username, password string
+}
+
+func (a *loginAuth) Start(server *smtp.ServerInfo) (string, []byte, error) {
+	return "LOGIN", []byte(a.username), nil
+}
+
+func (a *loginAuth) Next(fromServer []byte, more bool) ([]byte, error) {
+	if more {
+		switch strings.ToLower(string(fromServer)) {
+		case "username:":
+			return []byte(a.username), nil
+		case "password:":
+			return []byte(a.password), nil
+		default:
+			return nil, errors.New("Unknown server response in LOGIN AUTH")
+		}
+	}
+	return nil, nil
+}
+
 type emailContent struct {
 	subject string
 	html    string
@@ -169,7 +193,17 @@ func (v *validator) Init(jsonconf string) error {
 
 	// Enable auth if login is provided.
 	if v.Login != "" {
-		v.auth = smtp.PlainAuth("", v.Login, v.SenderPassword, v.SMTPAddr)
+		mechanism := strings.ToLower(v.AuthMechanism)
+		switch mechanism {
+		case "md5":
+			v.auth = smtp.CRAMMD5Auth(v.Login, v.SenderPassword)
+		case "login":
+			v.auth = &loginAuth{v.Login, v.SenderPassword}
+		case "", "plain":
+			v.auth = smtp.PlainAuth("", v.Login, v.SenderPassword, v.SMTPAddr)
+		default:
+			return errors.New("Bad Auth Mechanism for SMTP")
+		}
 	}
 
 	// Optionally resolve paths against the location of this executable file.
