@@ -153,19 +153,14 @@ type spanfmt struct {
 	isVoid bool
 }
 
-// Plain text formatting of the Drafty tags.
+// Plain text formatting of the Drafty tags. Only non-blank tags need to be listed.
 var tags = map[string]spanfmt{
-	"ST": {"*", false},
-	"EM": {"_", false},
-	"DL": {"~", false},
-	"CO": {"`", false},
 	"BR": {"\n", true},
-	"LN": {"", false},
-	"MN": {"", false},
-	"HT": {"", false},
-	"IM": {"", false},
+	"CO": {"`", false},
+	"DL": {"~", false},
+	"EM": {"_", false},
 	"EX": {"", true},
-	"QQ": {"", false},
+	"ST": {"*", false},
 }
 
 // Type of the formatter to apply to tree nodes.
