@@ -123,22 +123,24 @@ func isTemplateValid(templ *textt.Template) error {
 }
 
 type loginAuth struct {
-	username, password string
+	username, password []byte
 }
 
+// Start begins an authentication with a server. Exported only to satisfy the interface definition.
 func (a *loginAuth) Start(server *smtp.ServerInfo) (string, []byte, error) {
 	return "LOGIN", []byte(a.username), nil
 }
 
+// Next continues the authentication. Exported only to satisfy the interface definition.
 func (a *loginAuth) Next(fromServer []byte, more bool) ([]byte, error) {
 	if more {
 		switch strings.ToLower(string(fromServer)) {
 		case "username:":
-			return []byte(a.username), nil
+			return a.username, nil
 		case "password:":
-			return []byte(a.password), nil
+			return a.password, nil
 		default:
-			return nil, errors.New("unknown server response in LOGIN AUTH")
+			return nil, fmt.Errorf("LOGIN AUTH unknown server response '%s'", string(fromServer))
 		}
 	}
 	return nil, nil
@@ -198,7 +200,7 @@ func (v *validator) Init(jsonconf string) error {
 		case "cram-md5":
 			v.auth = smtp.CRAMMD5Auth(v.Login, v.SenderPassword)
 		case "login":
-			v.auth = &loginAuth{v.Login, v.SenderPassword}
+			v.auth = &loginAuth{[]byte(v.Login), []byte(v.SenderPassword)}
 		case "", "plain":
 			v.auth = smtp.PlainAuth("", v.Login, v.SenderPassword, v.SMTPAddr)
 		default:
