@@ -320,6 +320,12 @@ func plainTextFormatter(n *node, ctx interface{}) error {
 		state.txt += text
 	case "BR":
 		state.txt += "\n"
+	case "IC":
+		name, ok := nullableMapGet(n.sp.data, "name")
+		if !ok || name == "" {
+			name = "?"
+		}
+		state.txt += "[ICON:" + name + " " + text + "]"
 	case "IM":
 		name, ok := nullableMapGet(n.sp.data, "name")
 		if !ok || name == "" {
